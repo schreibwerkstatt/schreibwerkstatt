@@ -1805,3 +1805,28 @@ test('Checkbox-Zeile: Kasten sitzt auf der Mitte der ersten Textzeile', async ({
       .toBeLessThanOrEqual(2);
   }
 });
+
+test('Speichern im Fokus frischt den Wiederaufnahme-Snapshot auf (TTL ab letzter Aktivität)', async ({ page }) => {
+  await page.evaluate(() => { window.harness.currentPage = { id: 7 }; });
+  await enter(page);
+  const result = await page.evaluate(() => {
+    // Snapshot künstlich altern lassen: Eintritt vor 59 Minuten.
+    const old = Date.now() - 59 * 60 * 1000;
+    sessionStorage.setItem('focus.snapshot', JSON.stringify({ pageId: 7, ts: old }));
+    window.harness.refreshFocusSnapshot();
+    const snap = JSON.parse(sessionStorage.getItem('focus.snapshot'));
+    return { pageId: snap.pageId, fresh: Date.now() - snap.ts < 5000 };
+  });
+  expect(result.pageId).toBe(7);
+  expect(result.fresh).toBe(true);
+
+  // Ausserhalb des Fokusmodus schreibt der Refresh nichts (der Exit hat den
+  // Snapshot gelöscht, ein später eintreffender Save darf ihn nicht neu anlegen).
+  await page.evaluate(() => window.harness.exitFocusMode());
+  await page.waitForFunction(() => window.harness._focusState === 'idle');
+  const after = await page.evaluate(() => {
+    window.harness.refreshFocusSnapshot();
+    return sessionStorage.getItem('focus.snapshot');
+  });
+  expect(after).toBe(null);
+});

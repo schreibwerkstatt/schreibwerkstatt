@@ -44,6 +44,12 @@ export function registerEditorFocusCard() {
       // Standalone-Pfad); hier steht nur der Alpine-Trigger.
       this.$watch(() => window.__app?.focusGranularity, (g) => this.applyFocusGranularity(g));
 
+      // Jeder Save im Fokus (Server oder lokaler Entwurf) frischt den
+      // Wiederaufnahme-Snapshot auf — die TTL läuft ab der letzten
+      // Speicher-Aktivität, nicht ab dem Eintritt (siehe refreshFocusSnapshot).
+      this.$watch(() => window.__app?.lastAutosaveAt, () => this.refreshFocusSnapshot());
+      this.$watch(() => window.__app?.lastDraftSavedAt, () => this.refreshFocusSnapshot());
+
       // Auto-Restore: Reload (z.B. via Session-Banner-Relogin oder manuelles
       // F5) soll den Fokusmodus wieder einnehmen, wenn die ursprüngliche Seite
       // geladen ist. Snapshot wird beim Eintritt in editor/focus.js geschrieben

@@ -159,6 +159,20 @@ export const focusCardMethods = {
   focusUndo() { editorHost()?.notebookUndo?.(); },
   focusRedo() { editorHost()?.notebookRedo?.(); },
 
+  // Snapshot-Zeitstempel auffrischen, solange im Fokus gespeichert wird. Die
+  // TTL (storage.js) zählt damit ab der letzten Speicher-Aktivität, nicht ab
+  // dem Eintritt. Aufrufer ist der `$watch` der SPA-Karte auf die beiden
+  // Save-Zeitstempel (Server-Save und lokaler Entwurf).
+  //
+  // Why: der Snapshot ist für den Reload nach abgelaufener Sitzung da
+  // (Session-Banner → neu anmelden), und der kommt typischerweise erst nach
+  // langem Schreiben. Mit der TTL ab Eintritt war er nach einer Stunde im
+  // Fokus genau dann verfallen, wenn er gebraucht wurde.
+  refreshFocusSnapshot() {
+    if (this._focusState !== 'active') return;
+    writeFocusSnapshot(editorHost()?.currentPage?.id);
+  },
+
   // Granularität live umschalten, ohne exit/enter: Cardroot-Klasse tauschen und
   // das Overlay neu rechnen. Aufrufer sind der `$watch` der SPA-Karte und
   // `setGranularity` einer fremden Schale — beide über diesen einen Weg, damit

@@ -103,3 +103,13 @@ test('readFocusSnapshot: genau an der TTL-Grenze noch gültig', () => {
     assert.equal(readFocusSnapshot()?.pageId, 7);
   } finally { Date.now = realNow; }
 });
+
+// --- Snapshot-Refresh: Verdrahtung in der SPA-Karte -------------------------
+// Quelltext-Guard: die TTL läuft ab der letzten Speicher-Aktivität. Das
+// Verhalten von `refreshFocusSnapshot` selbst prüft focus-editor.spec.js.
+test('editor-focus-card.js frischt den Snapshot bei beiden Save-Zeitstempeln auf', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../../public/js/cards/editor-focus-card.js', import.meta.url), 'utf8');
+  assert.match(src, /\$watch\(\(\) => window\.__app\?\.lastAutosaveAt, \(\) => this\.refreshFocusSnapshot\(\)\)/);
+  assert.match(src, /\$watch\(\(\) => window\.__app\?\.lastDraftSavedAt, \(\) => this\.refreshFocusSnapshot\(\)\)/);
+});
