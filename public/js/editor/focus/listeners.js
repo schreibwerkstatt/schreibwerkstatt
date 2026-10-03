@@ -265,6 +265,12 @@ export function installFocusListeners({ ctrl, container }) {
     if (!isActive()) return;
     const app = editorHost();
     if (e.key === 'Escape') {
+      // Laufende Composition (IME, Tote Taste wie `^`/`´`): Escape bricht dort
+      // die Eingabe ab und gehört dem Eingabesystem, nicht dem Exit. Bewusst
+      // nur `e.isComposing` und nicht `ctx.composing`: das Event-Flag gilt
+      // genau für diesen Tastendruck, während ein verpasstes `compositionend`
+      // den ctx-Zustand hängen lassen und Escape dann dauerhaft sperren würde.
+      if (e.isComposing) return;
       // Offene Popover haben Vorrang: Escape schliesst erst sie.
       if (app?._synonymMenuOpen || app?._synonymPickerOpen) return;
       if (app?._figurLookupOpen) { app.closeFigurLookup?.(); return; }

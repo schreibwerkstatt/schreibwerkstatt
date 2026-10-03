@@ -14,7 +14,7 @@ Tastengriffe **innerhalb** des Fokusmodus ([listeners.js](../public/js/editor/fo
 
 | Griff | Wirkung |
 |---|---|
-| `Escape` | Speichern + verlassen. Vorrang: offene Popover (Synonym-Menü/-Picker → nur blocken, Figur-Lookup → schliessen), laufender Save (Invariante 16) |
+| `Escape` | Speichern + verlassen. Vorrang: laufende Composition (IME, Tote Taste — `e.isComposing`, Escape bricht dort nur die Eingabe ab), offene Popover (Synonym-Menü/-Picker → nur blocken, Figur-Lookup → schliessen), laufender Save (Invariante 16) |
 | `Cmd/Ctrl+Shift+E` | Speichern + verlassen, dieselbe Vorrang-Regel. Erreicht den Exit über **zwei** Listener (Invariante 16) |
 | `Cmd/Ctrl+L` | Schreibzeile auf den Anker zurückholen (`_focusUpdateActive(true)`). Vim/emacs-Konvention; der Browser-Default (Adressleiste) wird unterdrückt, weil der User ohnehin im Editor bleiben wollte |
 | `Cmd/Ctrl+Z` | Undo — **ein Schritt der eigenen Historie**, nicht der des Browsers (Invariante 19). Hängt am Container (`onHistoryKey`), nicht am Window |

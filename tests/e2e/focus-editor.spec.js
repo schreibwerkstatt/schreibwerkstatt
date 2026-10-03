@@ -1830,3 +1830,18 @@ test('Speichern im Fokus frischt den Wiederaufnahme-Snapshot auf (TTL ab letzter
   });
   expect(after).toBe(null);
 });
+
+test('Escape während einer Composition (IME/Tote Taste) verlässt den Fokusmodus nicht', async ({ page }) => {
+  await enter(page);
+  await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', isComposing: true, bubbles: true, cancelable: true }));
+  });
+  await page.waitForTimeout(50);
+  expect(await page.evaluate(() => window.harness._focusState)).toBe('active');
+
+  // Gegenprobe: dasselbe Escape ohne Composition verlässt den Modus.
+  await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  });
+  await page.waitForFunction(() => window.harness._focusState === 'idle');
+});
