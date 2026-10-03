@@ -53,7 +53,7 @@ export function isFocusToggleChord(e) {
 }
 
 // Vorrang-Regel aus Invariante 16: ein laufender Save und offene Popover gehen
-// dem Verlassen per Tastatur vor. Geteilt von den BEIDEN Wegen, auf denen der
+// dem sofortigen Verlassen per Tastatur vor. Geteilt von den BEIDEN Wegen, auf denen der
 // Toggle-Chord im Fokusmodus ankommt — dem Body-Listener
 // (trampoline.js#handleFocusHotkey) und dem Container-Listener
 // (listeners.js#onKey). Ein Guard in nur einem der beiden wäre wirkungslos: der
@@ -65,8 +65,24 @@ export function isFocusToggleChord(e) {
 // Liste erweitert, zieht ihn mit.
 export function isFocusExitBlocked(app) {
   if (!app) return false;
-  return !!(app._synonymMenuOpen || app._synonymPickerOpen || app._figurLookupOpen || app.editSaving);
+  return isFocusPopoverOpen(app) || !!app.editSaving;
 }
+
+// Der Popover-Teil der Vorrang-Regel. Getrennt, weil die beiden Ursachen
+// unterschiedlich ausgehen: ein offenes Popover verwirft den Exit-Griff (der
+// User liest gerade Vorschläge), ein laufender Save merkt ihn nur vor —
+// listeners.js#deferExitUntilSaved verlässt den Modus, sobald der Save durch ist.
+export function isFocusPopoverOpen(app) {
+  if (!app) return false;
+  return !!(app._synonymMenuOpen || app._synonymPickerOpen || app._figurLookupOpen);
+}
+
+// Vorgemerkter Exit während eines laufenden Saves: Abfrage-Takt und Deckel.
+// Nach dem Deckel wird der Exit verworfen — ein Save, der so lange hängt, ist
+// ein Netzwerkproblem, und ein Modus-Wechsel Sekunden nach dem Tastendruck
+// käme für den User aus dem Nichts.
+export const EXIT_DEFER_POLL_MS = 50;
+export const EXIT_DEFER_MAX_MS = 10000;
 
 export const HAS_IO = typeof IntersectionObserver !== 'undefined';
 export const HAS_MO = typeof MutationObserver !== 'undefined';

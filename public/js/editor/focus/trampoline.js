@@ -33,7 +33,9 @@ export const focusMethods = {
     // Vorrang-Regel (Invariante 16) vor dem `preventDefault`: dieser Listener
     // ist der zweite Weg, auf dem der Chord im Fokusmodus ankommt — der erste
     // ist listeners.js#onKey. Fehlt der Guard hier, verlässt der Chord den
-    // Modus mitten im Save trotzdem, obwohl onKey ihn korrekt abgelehnt hat.
+    // Modus mitten im Save trotzdem, obwohl onKey ihn korrekt zurückgestellt
+    // hat. Das Vormerken bis zum Save-Ende übernimmt onKey allein; hier wird
+    // nur nicht vorzeitig verlassen.
     if (this.focusActive && isFocusExitBlocked(this)) return;
     event.preventDefault();
     if (this.focusActive) {

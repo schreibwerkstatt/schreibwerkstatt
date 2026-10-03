@@ -137,6 +137,7 @@ export const focusCardMethods = {
       clearTimeout(ctx.pointerTimer);
       clearTimeout(ctx.vvTimer);
       clearTimeout(ctx.cursorTimer);
+      clearTimeout(ctx.exitTimer);
       this._focusListeners = null;
     }
     if (this._focusRaf) { cancelAnimationFrame(this._focusRaf); this._focusRaf = null; }

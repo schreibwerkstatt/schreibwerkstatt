@@ -730,28 +730,32 @@ test('Re-Entry-Race: zweiter enterFocusMode() im gleichen Tick wird ignoriert', 
   expect(state).toBe('active');
 });
 
-test('Escape während editSaving wird ignoriert (kein Exit mitten im Save)', async ({ page }) => {
+test('Escape während editSaving wird vorgemerkt: kein Exit mitten im Save, Exit danach', async ({ page }) => {
   await enter(page);
   await page.evaluate(() => { window.harness.editSaving = true; });
   await page.keyboard.press('Escape');
-  await page.waitForTimeout(50);
+  await page.waitForTimeout(200);
   const still = await page.evaluate(() => ({
     focusActive: window.harness.focusActive,
     state: window.harness._focusState,
   }));
   expect(still.focusActive).toBe(true);
   expect(still.state).toBe('active');
+
+  // Save fertig → der vorgemerkte Exit läuft ohne zweiten Tastendruck.
   await page.evaluate(() => { window.harness.editSaving = false; });
+  await page.waitForFunction(() => window.harness._focusState === 'idle', null, { timeout: 2000 });
+  expect(await page.evaluate(() => window.harness.focusActive)).toBe(false);
 });
 
-test('Toggle-Chord während editSaving wird ignoriert (Invariante 16 gilt für beide Exit-Wege)', async ({ page }) => {
+test('Toggle-Chord während editSaving wird vorgemerkt (Invariante 16 gilt für beide Exit-Wege)', async ({ page }) => {
   // Escape hatte den Guard, der Chord nicht: er riss den Editor mitten im PUT
   // ab — `exitFocusMode` überspringt dann seinen eigenen Save (`!editSaving`)
   // und räumt die Listener trotzdem weg.
   await enter(page);
   await page.evaluate(() => { window.harness.editSaving = true; });
   await page.keyboard.press('Control+Shift+E');
-  await page.waitForTimeout(50);
+  await page.waitForTimeout(200);
   const still = await page.evaluate(() => ({
     focusActive: window.harness.focusActive,
     state: window.harness._focusState,
@@ -761,11 +765,34 @@ test('Toggle-Chord während editSaving wird ignoriert (Invariante 16 gilt für b
   expect(still.state).toBe('active');
   expect(still.listeners).toBe(true);
 
-  // Gegenprobe: ohne laufenden Save verlässt derselbe Griff den Modus.
   await page.evaluate(() => { window.harness.editSaving = false; });
-  await page.keyboard.press('Control+Shift+E');
-  await page.waitForFunction(() => window.harness._focusState === 'idle');
+  await page.waitForFunction(() => window.harness._focusState === 'idle', null, { timeout: 2000 });
   expect(await page.evaluate(() => window.harness.focusActive)).toBe(false);
+});
+
+test('Vorgemerkter Exit verfällt, wenn währenddessen ein Popover aufgeht', async ({ page }) => {
+  await enter(page);
+  await page.evaluate(() => { window.harness.editSaving = true; });
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => { window.harness._synonymMenuOpen = true; window.harness.editSaving = false; });
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => window.harness._focusState)).toBe('active');
+  await page.evaluate(() => { window.harness._synonymMenuOpen = false; });
+  await page.waitForTimeout(200);
+  // Die Vormerkung ist verbraucht, nicht bloss pausiert.
+  expect(await page.evaluate(() => window.harness._focusState)).toBe('active');
+});
+
+test('Vorgemerkter Exit: Teardown räumt den Abfrage-Timer ab', async ({ page }) => {
+  await enter(page);
+  await page.evaluate(() => { window.harness.editSaving = true; });
+  await page.keyboard.press('Escape');
+  const hadTimer = await page.evaluate(() => window.harness._focusListeners.exitTimer !== 0);
+  expect(hadTimer).toBe(true);
+  // Exit auf anderem Weg (z. B. Abbrechen-Knopf) während der Wartezeit.
+  await page.evaluate(() => { window.harness._focusTeardown(); window.harness._focusState = 'idle'; window.harness.editSaving = false; });
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => window.harness._focusState)).toBe('idle');
 });
 
 test('Blur des Editors entfernt aktive Markierung', async ({ page }) => {

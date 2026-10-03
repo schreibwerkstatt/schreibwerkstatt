@@ -10,7 +10,8 @@
 import {
   BLOCK_TAGS, FOCUS_BLOCK_SEL,
   POINTER_GRACE_MS, POINTER_GRACE_TOUCH_MS,
-  HAS_IO, HAS_MO, isFocusToggleChord, isFocusExitBlocked,
+  HAS_IO, HAS_MO, isFocusToggleChord, isFocusExitBlocked, isFocusPopoverOpen,
+  EXIT_DEFER_POLL_MS, EXIT_DEFER_MAX_MS,
 } from './constants.js';
 import { findBlockFromNode, resolveGutterCaretPoint, caretRangeAtPoint, blockLineRects } from './dom-blocks.js';
 import { applyBlockMarks, repairBlockMarks } from './recenter.js';
@@ -45,6 +46,8 @@ function makeCtx(container) {
     scrollBox: null,
     vvTimer: 0,
     cursorTimer: 0,
+    // Vorgemerkter Exit während eines laufenden Saves (deferExitUntilSaved).
+    exitTimer: 0,
     // Short-circuit-Cache für den Recenter: bleibt der aktive Block gleich
     // (häufigster Fall beim Tippen), entfällt das Satz-Highlight.
     // _lastGranularity invalidiert bei Live-Mode-Switch.
@@ -253,6 +256,34 @@ export function installFocusListeners({ ctrl, container }) {
     if (isActive()) ctrl._focusUpdateActive(!ctx.pointerIntent);
   };
 
+  // Exit-Griff während eines laufenden Saves: nicht verwerfen, sondern
+  // vormerken und ausführen, sobald `editSaving` fällt. Ein Autosave nach einer
+  // Tipp-Pause fällt oft genau auf den Moment, in dem der User Escape drückt —
+  // verschluckt sah das aus, als reagiere die Taste nicht.
+  //
+  // Abgefragt statt auf ein Save-Ende-Event gewartet: die Save-Pipeline gehört
+  // dem Host (Notebook-Karte bzw. fremde Schale) und meldet ihr Ende nur über
+  // das Flag. Ein Popover, das in der Wartezeit aufgeht, oder ein Exit auf
+  // anderem Weg (`isActive()` fällt) verwirft die Vormerkung; ebenso der
+  // Deckel `EXIT_DEFER_MAX_MS`. Mehrfaches Drücken legt keinen zweiten Timer an.
+  // Der Timer liegt im ctx, `_focusTeardown` räumt ihn ab.
+  const deferExitUntilSaved = () => {
+    if (ctx.exitTimer) return;
+    const deadline = Date.now() + EXIT_DEFER_MAX_MS;
+    const poll = () => {
+      ctx.exitTimer = 0;
+      if (!isActive()) return;
+      const app = editorHost();
+      if (isFocusPopoverOpen(app)) return;
+      if (app?.editSaving) {
+        if (Date.now() < deadline) ctx.exitTimer = setTimeout(poll, EXIT_DEFER_POLL_MS);
+        return;
+      }
+      ctrl.exitFocusMode();
+    };
+    ctx.exitTimer = setTimeout(poll, EXIT_DEFER_POLL_MS);
+  };
+
   // Beide Verlassen-Wege — Escape und der Toggle-Chord — münden in
   // `exitFocusMode`, also in „speichern und zurück".
   //
@@ -274,15 +305,20 @@ export function installFocusListeners({ ctrl, container }) {
       // Offene Popover haben Vorrang: Escape schliesst erst sie.
       if (app?._synonymMenuOpen || app?._synonymPickerOpen) return;
       if (app?._figurLookupOpen) { app.closeFigurLookup?.(); return; }
-      if (app?.editSaving) return;   // während Save-Request kein Exit
       e.preventDefault();
+      // Während Save-Request kein sofortiger Exit — vormerken.
+      if (app?.editSaving) { deferExitUntilSaved(); return; }
       ctrl.exitFocusMode();
     } else if (isFocusToggleChord(e)) {
       // Dieselbe Vorrang-Regel wie bei Escape (Invariante 16): laufender Save
       // und offene Popover gehen vor. Ohne den Guard riss der Chord den Editor
       // mitten im PUT ab — `exitFocusMode` überspringt dann seinen eigenen Save
-      // (`!app.editSaving`) und räumt die Listener trotzdem weg.
-      if (isFocusExitBlocked(app)) return;
+      // (`!app.editSaving`) und räumt die Listener trotzdem weg. Ein offenes
+      // Popover verwirft den Griff, ein laufender Save merkt ihn vor.
+      if (isFocusExitBlocked(app)) {
+        if (!isFocusPopoverOpen(app)) { e.preventDefault(); deferExitUntilSaved(); }
+        return;
+      }
       e.preventDefault();
       ctrl.exitFocusMode();
     } else if ((e.key === 'l' || e.key === 'L') && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {

@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 
 const { GRANULARITIES, normGranularity, applyGranularity } =
   await import('../../public/js/editor/focus/chrome.js');
-const { isFocusToggleChord, isFocusExitBlocked } =
+const { isFocusToggleChord, isFocusExitBlocked, isFocusPopoverOpen } =
   await import('../../public/js/editor/focus/constants.js');
 
 // trampoline.js dispatcht aufs window — Stub vor dem Import, damit der
@@ -134,6 +134,16 @@ test('isFocusExitBlocked: ruhiger Zustand und fehlender Host → nicht geblockt'
   assert.equal(isFocusExitBlocked({}), false);
   assert.equal(isFocusExitBlocked({ editSaving: false, _figurLookupOpen: false }), false);
   assert.equal(isFocusExitBlocked(null), false);
+});
+
+test('isFocusPopoverOpen: nur die Popover, nicht der laufende Save', () => {
+  for (const flag of ['_synonymMenuOpen', '_synonymPickerOpen', '_figurLookupOpen']) {
+    assert.equal(isFocusPopoverOpen({ [flag]: true }), true, `${flag} fehlt`);
+  }
+  // Ein laufender Save allein ist kein Popover: der Exit wird dort vorgemerkt,
+  // nicht verworfen (listeners.js#deferExitUntilSaved).
+  assert.equal(isFocusPopoverOpen({ editSaving: true }), false);
+  assert.equal(isFocusPopoverOpen(null), false);
 });
 
 // --- handleFocusHotkey: der zweite Chord-Pfad respektiert die Vorrang-Regel ---
