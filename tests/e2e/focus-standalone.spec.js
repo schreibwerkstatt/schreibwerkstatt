@@ -118,3 +118,68 @@ test('kein redundanter Save bei ungeänderter Seite (Gate via isNoChange)', asyn
   expect(result.afterDestroy).toBe(0);
   expect(result.dirty).toBe(false);
 });
+
+// Langsame Bridge: jeder savePage-Aufruf wartet, bis der Test ihn freigibt.
+// Misst nebenbei die maximale Zahl gleichzeitig laufender Saves.
+async function installSlowBridge(page) {
+  await page.evaluate(() => {
+    const st = { running: 0, maxRunning: 0, release: [] };
+    window.__slow = st;
+    window.__bridge.savePage = (p) => new Promise((resolve) => {
+      st.running++;
+      st.maxRunning = Math.max(st.maxRunning, st.running);
+      window.__saveLog.push({ id: p.id, name: p.name, html: p.html });
+      st.release.push(() => { st.running--; resolve({}); });
+    });
+  });
+}
+
+async function typeAtFirstParagraph(page, text) {
+  await page.evaluate(() => {
+    const c = document.querySelector('.focus-editor__content');
+    c.focus();
+    const p = c.querySelector('p');
+    const sel = window.getSelection(); const r = document.createRange();
+    r.selectNodeContents(p); r.collapse(false); sel.removeAllRanges(); sel.addRange(r);
+  });
+  await page.keyboard.type(text);
+}
+
+test('Saves laufen nacheinander: kein zweiter savePage, solange einer läuft', async ({ page }) => {
+  await installSlowBridge(page);
+  await typeAtFirstParagraph(page, ' EINS');
+  await page.evaluate(() => { window.__saveLog.length = 0; window.__p1 = window.__standalone.save(); });
+  await page.waitForFunction(() => window.__slow.running === 1);
+  await typeAtFirstParagraph(page, ' ZWEI');
+  // Zweiter Save (wie Escape/destroy während des ersten) — darf nicht parallel starten.
+  await page.evaluate(() => { window.__p2 = window.__standalone.save(); });
+  await page.waitForTimeout(100);
+  expect(await page.evaluate(() => window.__slow.running)).toBe(1);
+
+  // Ersten freigeben → Folgelauf startet mit dem neuen Stand.
+  await page.evaluate(() => window.__slow.release.shift()());
+  await page.waitForFunction(() => window.__slow.release.length === 1);
+  await page.evaluate(() => window.__slow.release.shift()());
+  await page.evaluate(() => Promise.all([window.__p1, window.__p2]));
+
+  const r = await page.evaluate(() => ({ max: window.__slow.maxRunning, log: window.__saveLog.map(e => e.html) }));
+  expect(r.max).toBe(1);
+  expect(r.log[r.log.length - 1]).toContain('ZWEI');
+});
+
+test('Seitenwechsel während eines Saves: originalHtml gehört danach der neuen Seite', async ({ page }) => {
+  await installSlowBridge(page);
+  await typeAtFirstParagraph(page, ' ALT');
+  await page.evaluate(() => { window.__p = window.__standalone.save(); });
+  await page.waitForFunction(() => window.__slow.running === 1);
+  await page.evaluate(() => window.__standalone.setPage({ id: 43, name: 'Neu', html: '<p>Neue Seite</p>' }));
+  await page.evaluate(() => window.__slow.release.shift()());
+  await page.evaluate(() => window.__p);
+  const r = await page.evaluate(() => ({
+    original: window.__standalone.host.originalHtml,
+    pageId: window.__standalone.host.currentPage.id,
+  }));
+  expect(r.pageId).toBe(43);
+  expect(r.original).toContain('Neue Seite');
+  expect(r.original).not.toContain('ALT');
+});

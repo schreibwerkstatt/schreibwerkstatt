@@ -34,8 +34,11 @@
       savePage: async (p) => { saveLog.push({ id: p.id, name: p.name, html: p.html }); return { updated_at: '2026-01-01T00:00:00.000Z' }; },
     };
     window.__saveLog = saveLog;
+    // Tests tauschen savePage aus (langsam, fehlschlagend) — der Host ruft
+    // `bridge.savePage` bei jedem Save frisch nach.
+    window.__bridge = bridge;
 
-    window.__standalone = await mountStandaloneFocus({ mount: document.getElementById('mount'), bridge, autosaveMs: 150 });
+    window.__standalone = await mountStandaloneFocus({ mount: document.getElementById('mount'), bridge, autosaveMs: 150, retryMs: 300 });
     window.standaloneReady = true;
   </script>
 </body>

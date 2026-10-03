@@ -49,10 +49,47 @@ function ensureScaffold(mount) {
   return focusEl.querySelector('.focus-editor__content');
 }
 
+// Ein Save-Durchlauf. Nur über `host.quickSave` aufrufen — der serialisiert.
+async function saveOnce(host, bridge) {
+  // Seite beim Start festhalten: wechselt die Schale während des Saves die
+  // Seite (`setPage`), gehört das Ergebnis nicht mehr zum offenen Stand.
+  const page = host.currentPage;
+  if (!page) return;
+  const content = document.querySelector('.focus-editor.is-active .focus-editor__content');
+  // stripLektoratMarks wie im Notebook-Editor (saveEdit): transiente
+  // Fokus-Markup (`focus-paragraph-active`, leerer Auto-Trailing-<p>) raus,
+  // bevor verglichen + persistiert wird.
+  const html = content ? stripLektoratMarks(content.innerHTML) : host.originalHtml;
+  // Inhaltsgleich → kein PUT. quickSave feuert auch bei Escape/Seitenwechsel/
+  // destroy, nicht nur beim Tippen; die Fokus-Engine normalisiert das DOM
+  // beim Mount (Block-Wrap, Schluss-<p>), sodass roher innerHTML nie
+  // byte-gleich zum geladenen Stand ist. Ohne diesen Gate bumpt jeder
+  // Öffnen/Wechsel updated_at unnötig. isNoChange bringt beide Seiten via
+  // normalizeForCompare auf dieselbe Normalform.
+  if (isNoChange(html, host.originalHtml)) { host.editDirty = false; return; }
+  host.editSaving = true;
+  try {
+    await bridge.savePage({ id: page.id, name: page.name, html });
+    // Seite inzwischen gewechselt: `originalHtml` gehört schon der neuen
+    // Seite und darf nicht mit dem alten Stand überschrieben werden (der
+    // nächste Vergleich hielte die frisch geladene Seite sonst für geändert).
+    if (host.currentPage?.id === page.id) {
+      host.originalHtml = html;
+      host.editDirty = false;
+    }
+  } finally {
+    host.editSaving = false;
+  }
+}
+
 // Bridge-gestützter Host. Erfüllt den editor-host-Vertrag; alles, was der
 // Standalone-Modus nicht kennt (Synonyme, Figur-Lookup, Online-Retry,
 // Normal-Editor-Roundtrip), ist no-op.
 function makeHost(bridge, scheduleSave) {
+  // Serialisierung der Saves (siehe quickSave): das laufende Promise und die
+  // Vormerkung eines Folgelaufs.
+  let inflight = null;
+  let again = false;
   return {
     // Lesefelder
     editMode: true,
@@ -80,28 +117,22 @@ function makeHost(bridge, scheduleSave) {
     focusCountCharsDelta: '',
     // Schreibmarkierung → debounced Save über die Bridge.
     _markEditDirty() { this.editDirty = true; scheduleSave(); },
-    async quickSave() {
-      if (!this.currentPage) return;
-      const content = document.querySelector('.focus-editor.is-active .focus-editor__content');
-      // stripLektoratMarks wie im Notebook-Editor (saveEdit): transiente
-      // Fokus-Markup (`focus-paragraph-active`, leerer Auto-Trailing-<p>) raus,
-      // bevor verglichen + persistiert wird.
-      const html = content ? stripLektoratMarks(content.innerHTML) : this.originalHtml;
-      // Inhaltsgleich → kein PUT. quickSave feuert auch bei Escape/Seitenwechsel/
-      // destroy, nicht nur beim Tippen; die Fokus-Engine normalisiert das DOM
-      // beim Mount (Block-Wrap, Schluss-<p>), sodass roher innerHTML nie
-      // byte-gleich zum geladenen Stand ist. Ohne diesen Gate bumpt jeder
-      // Öffnen/Wechsel updated_at unnötig. isNoChange bringt beide Seiten via
-      // normalizeForCompare auf dieselbe Normalform.
-      if (isNoChange(html, this.originalHtml)) { this.editDirty = false; return; }
-      this.editSaving = true;
-      try {
-        await bridge.savePage({ id: this.currentPage.id, name: this.currentPage.name, html });
-        this.originalHtml = html;
-        this.editDirty = false;
-      } finally {
-        this.editSaving = false;
-      }
+    // Saves laufen strikt nacheinander. Autosave-Timer, Escape, `save()` und
+    // `destroy()` können sich überlappen; parallel abgesetzt entschiede die
+    // Bridge über die Reihenfolge, und ein später fertig werdender älterer
+    // Stand überschriebe den neueren. Ein Aufruf während eines laufenden Saves
+    // merkt nur einen Folgelauf vor und bekommt dasselbe Promise — es löst
+    // erst auf, wenn auch der Folgelauf (mit dem dann aktuellen DOM) durch ist.
+    quickSave() {
+      if (inflight) { again = true; return inflight; }
+      inflight = (async () => {
+        try {
+          do { again = false; await saveOnce(this, bridge); } while (again);
+        } finally {
+          inflight = null;
+        }
+      })();
+      return inflight;
     },
     // cancelEdit (Verwerfen) existiert standalone nicht: es gibt keinen
     // Lese-Modus zum Zurückfallen. Escape läuft über exitFocusMode, das der
