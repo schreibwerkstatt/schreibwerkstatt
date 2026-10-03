@@ -47,8 +47,8 @@ export function insertSoftBreak(container) {
   if (!sel || sel.rangeCount === 0) return false;
   if (!container || !container.contains(sel.getRangeAt(0).startContainer)) return false;
 
-  // Auswahl zuerst löschen — eigener Undo-Eintrag, danach ist der Caret
-  // kollabiert und die beiden Zweige unten greifen wie bei leerer Auswahl.
+  // Auswahl zuerst löschen, danach ist der Caret kollabiert und die beiden
+  // Zweige unten greifen wie bei leerer Auswahl.
   if (!sel.isCollapsed) document.execCommand('delete');
   // Links steht schon ein <br> → kein zweiter (siehe brLeftOfCaret).
   if (brLeftOfCaret(sel)) return true;
@@ -56,9 +56,10 @@ export function insertSoftBreak(container) {
   const doc = container.ownerDocument || document;
   const block = findBlock(sel.getRangeAt(0).startContainer, container) || container;
 
-  // Regelfall mitten im Text: execCommand hält den nativen Undo-Stack intakt
-  // (im Fokusmodus der einzige — die Toolbar-Undo-Kette ist dort abgeschaltet)
-  // und feuert sein eigenes `input`-Event.
+  // Regelfall mitten im Text: execCommand feuert sein eigenes `input`-Event.
+  // Rückgängig machbar ist der Umbruch in beiden Zweigen über die eigene
+  // Undo-Historie des Fokusmodus (Invariante 19): sie hängt am `input`-Event,
+  // nicht am nativen Stack — Cmd/Ctrl+Z erreicht den Browser dort gar nicht.
   //
   // Am Blockende ist dieser Weg versperrt, und zwar nicht harmlos: `insertHTML`
   // fügt dort nichts ein UND setzt den Caret in den nächsten Absatz (gemessen,
@@ -92,7 +93,7 @@ export function insertSoftBreak(container) {
   // Manuelle DOM-Mutation feuert kein `input` — synthetisch nachreichen, sonst
   // bleibt die Seite un-dirty, die Absatz-Markierung unrepariert und der
   // Typewriter unrecentert. `dispatchEvent` ist synchron, die Mark-Reparatur
-  // läuft also im selben Task (Invariante 15b).
+  // läuft also im selben Task (Invariante 18).
   container.dispatchEvent(new Event('input', { bubbles: true }));
   return true;
 }
