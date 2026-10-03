@@ -31,6 +31,8 @@ import { handleEditorPastePlain, handleEditorCopy, handleEditorCut } from '../sh
 import { createEditHistory } from '../shared/edit-history.js';
 
 const DEFAULT_AUTOSAVE_MS = 1500;
+// Abstand für den Neuversuch nach einem fehlgeschlagenen Save.
+const DEFAULT_RETRY_MS = 5000;
 
 // Baut die DOM-Schicht, die die Engine erwartet: ein `.focus-editor` mit
 // `.focus-editor__content[contenteditable]`. Idempotent — vorhandene Struktur
@@ -160,7 +162,7 @@ function makeHost(bridge, scheduleSave) {
 // verbraucht das Tastenkuerzel, bevor die WebView ein `keydown` sieht
 // (nachgemessen). Die Schale verdrahtet ihre Menuepunkte darum hierauf — analog
 // zum Format-Menue (Cmd+B/I/U).
-export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT_AUTOSAVE_MS }) {
+export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT_AUTOSAVE_MS, retryMs = DEFAULT_RETRY_MS }) {
   if (!mount) throw new Error('mountStandaloneFocus: mount element required');
   if (!bridge || typeof bridge.loadPage !== 'function' || typeof bridge.savePage !== 'function') {
     throw new Error('mountStandaloneFocus: bridge mit loadPage/savePage erforderlich');
@@ -169,10 +171,25 @@ export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT
   const content = ensureScaffold(mount);
 
   let saveTimer = 0;
-  const scheduleSave = () => {
+  let destroyed = false;
+  const scheduleSave = (delay = autosaveMs) => {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => { host.quickSave().catch(() => {}); }, autosaveMs);
+    saveTimer = setTimeout(runAutosave, delay);
   };
+  // Ein fehlgeschlagener Save wird nach `retryMs` wiederholt, statt bis zum
+  // nächsten Tastendruck liegen zu bleiben — wer nach dem letzten Satz nichts
+  // mehr tippt, hätte sonst ungesicherten Text, ohne es zu merken. Hat eine
+  // Eingabe den Timer inzwischen neu gestellt, gilt deren Takt. Beim nächsten
+  // Lauf greift der isNoChange-Gate, ein bereits gesicherter Stand geht also
+  // nicht doppelt raus.
+  const retryAfterFailure = (err) => {
+    console.error('[focus:standalone:save]', err);
+    if (!destroyed && !saveTimer) scheduleSave(retryMs);
+  };
+  function runAutosave() {
+    saveTimer = 0;
+    host.quickSave().catch(retryAfterFailure);
+  }
 
   const host = makeHost(bridge, scheduleSave);
   setEditorHost(host);
@@ -224,7 +241,7 @@ export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT
     _focusAutoAddedP: null,
     $nextTick: (fn) => Promise.resolve().then(fn),
     async exitFocusMode() {
-      try { await host.quickSave(); } catch (_) {}
+      try { await host.quickSave(); } catch (err) { retryAfterFailure(err); }
     },
     // Ueberschreibt die SPA-Defaults aus focusCardMethods (die auf die
     // Notebook-Karte zeigen, die es hier nicht gibt). Aufrufer ist der
@@ -283,6 +300,7 @@ export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT
     // beim bisherigen synchronen Verhalten.
     setPage(next) {
       clearTimeout(saveTimer);
+      saveTimer = 0;
       const savedPrev = savePreviousPage(next);
       controller._focusTeardown();
       controller._focusState = 'idle';
@@ -321,11 +339,15 @@ export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT
     // Sofort speichern (z.B. vor Fenster-Schliessen / Seitenwechsel).
     async save() {
       clearTimeout(saveTimer);
-      await host.quickSave();
+      saveTimer = 0;
+      try { await host.quickSave(); }
+      catch (err) { retryAfterFailure(err); throw err; }
     },
     // Sauberes Herunterfahren: speichern, Engine-Listener abräumen, Host lösen.
     async destroy() {
+      destroyed = true;
       clearTimeout(saveTimer);
+      saveTimer = 0;
       try { await host.quickSave(); } catch (_) {}
       history.clear();          // offener Debounce-Timer mit weg (Leak-Freiheit)
       controller._focusTeardown();

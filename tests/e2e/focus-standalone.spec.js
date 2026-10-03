@@ -216,3 +216,34 @@ test('setPage auf dieselbe Seite (Sync-Pull) speichert nicht', async ({ page }) 
   await page.waitForTimeout(300);
   expect(await page.evaluate(() => window.__saveLog.length)).toBe(0);
 });
+
+test('Fehlgeschlagener Autosave wird ohne weiteren Tastendruck wiederholt', async ({ page, consoleGuard }) => {
+  consoleGuard.ignore(/\[focus:standalone:save\]/);   // der Fehlschlag ist Testgegenstand
+  await page.evaluate(() => {
+    const orig = window.__bridge.savePage;
+    let calls = 0;
+    window.__bridge.savePage = async (p) => {
+      calls++;
+      if (calls === 1) throw new Error('Bridge kurz nicht erreichbar');
+      return orig(p);
+    };
+    window.__saveLog.length = 0;
+  });
+  await typeAtFirstParagraph(page, ' NACHHOLEN');
+  // Autosave (150 ms) scheitert, Neuversuch (retryMs 300 im Harness) gelingt.
+  await page.waitForFunction(() => window.__saveLog.some(e => e.html.includes('NACHHOLEN')), null, { timeout: 3000 });
+  await page.waitForFunction(() => window.__standalone.host.editDirty === false);
+});
+
+test('Nach destroy() wird ein fehlgeschlagener Save nicht wiederholt', async ({ page, consoleGuard }) => {
+  consoleGuard.ignore(/\[focus:standalone:save\]/);
+  await page.evaluate(() => {
+    window.__bridge.savePage = async () => { throw new Error('dauerhaft kaputt'); };
+  });
+  await typeAtFirstParagraph(page, ' WEG');
+  await page.evaluate(() => { window.__calls = 0; const f = window.__bridge.savePage; window.__bridge.savePage = async (p) => { window.__calls++; return f(p); }; });
+  await page.evaluate(async () => { await window.__standalone.destroy(); });
+  const afterDestroy = await page.evaluate(() => window.__calls);
+  await page.waitForTimeout(800);
+  expect(await page.evaluate(() => window.__calls)).toBe(afterDestroy);
+});
