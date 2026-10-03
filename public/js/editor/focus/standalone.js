@@ -134,6 +134,8 @@ function makeHost(bridge, scheduleSave) {
       })();
       return inflight;
     },
+    // Erfüllt sich, sobald kein Save mehr läuft (auch nach einem Fehlschlag).
+    _whenSaveIdle() { return inflight ? inflight.catch(() => {}) : Promise.resolve(); },
     // cancelEdit (Verwerfen) existiert standalone nicht: es gibt keinen
     // Lese-Modus zum Zurückfallen. Escape läuft über exitFocusMode, das der
     // Controller unten überschreibt (speichern, im Editor bleiben).
@@ -248,16 +250,40 @@ export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT
 
   controller.enterFocusMode();
 
+  // Ungespeichertes der offenen Seite sichern, bevor `setPage` auf eine ANDERE
+  // Seite wechselt (siehe dort). HTML und Seite werden jetzt festgehalten —
+  // der DOM gehört gleich der neuen Seite —, der Save läuft hinter einem
+  // laufenden quickSave, damit er dessen älteren Stand nicht überholt.
+  const savePreviousPage = (next) => {
+    const prev = host.currentPage;
+    if (!prev || (next && next.id === prev.id)) return Promise.resolve();
+    const html = stripLektoratMarks(content.innerHTML);
+    if (isNoChange(html, host.originalHtml)) return Promise.resolve();
+    return host._whenSaveIdle()
+      .then(() => bridge.savePage({ id: prev.id, name: prev.name, html }))
+      .catch((err) => { console.error('[focus:standalone:setPage-save]', err); });
+  };
+
   return {
     host,
     controller,
-    // Inhalt OHNE Speichern austauschen — für fremde Schalen, die die Seite
-    // wechseln (nativer Picker) oder einen frischeren Server-Stand still
-    // einspielen (Sync-Pull der sauberen offenen Seite). Bewusst KEIN Save:
-    // der neue Stand IST bereits die Quelle der Wahrheit; ein Save würde ihn
-    // mit dem alten Inhalt überschreiben. Fokus-Engine wird neu aufgesetzt.
+    // Inhalt austauschen — für fremde Schalen, die die Seite wechseln
+    // (nativer Picker) oder einen frischeren Server-Stand still einspielen
+    // (Sync-Pull der sauberen offenen Seite). Fokus-Engine wird neu aufgesetzt.
+    //
+    // Gleiche Seite: KEIN Save. Der neue Stand IST bereits die Quelle der
+    // Wahrheit; ein Save würde ihn mit dem alten Inhalt überschreiben.
+    //
+    // Andere Seite: Ungespeichertes der bisherigen Seite wird vorher gesichert.
+    // Der offene Autosave-Timer fiele sonst mit `clearTimeout` weg und die
+    // letzten Sekunden Tippen wären verloren, wenn die Schale nicht selbst
+    // vorher `save()` gerufen hat. Der Stand wird hier synchron festgehalten
+    // und hinter einem laufenden Save eingereiht (Reihenfolge wie bei
+    // quickSave). Rückgabe: Promise dieses Saves — wer sie ignoriert, bleibt
+    // beim bisherigen synchronen Verhalten.
     setPage(next) {
       clearTimeout(saveTimer);
+      const savedPrev = savePreviousPage(next);
       controller._focusTeardown();
       controller._focusState = 'idle';
       content.innerHTML = (next && next.html) || '<p><br></p>';
@@ -273,6 +299,7 @@ export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT
       // die Schritte weg, die er zurückholen will.
       history.reset(content.innerHTML);
       controller.enterFocusMode();
+      return savedPrev;
     },
     // Programmatische Undo/Redo-Einstiegspunkte fuer das AppKit-Menue der
     // Schale (Cmd+Z erreicht die WebView nicht, siehe Modulkopf).

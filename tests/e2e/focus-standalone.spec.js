@@ -172,9 +172,17 @@ test('Seitenwechsel während eines Saves: originalHtml gehört danach der neuen 
   await typeAtFirstParagraph(page, ' ALT');
   await page.evaluate(() => { window.__p = window.__standalone.save(); });
   await page.waitForFunction(() => window.__slow.running === 1);
-  await page.evaluate(() => window.__standalone.setPage({ id: 43, name: 'Neu', html: '<p>Neue Seite</p>' }));
-  await page.evaluate(() => window.__slow.release.shift()());
-  await page.evaluate(() => window.__p);
+  // setPage sichert die alte Seite hinter dem laufenden Save — nicht darauf
+  // warten, sondern alle anstehenden Saves der langsamen Bridge freigeben.
+  await page.evaluate(() => { window.__sp = window.__standalone.setPage({ id: 43, name: 'Neu', html: '<p>Neue Seite</p>' }); });
+  await page.evaluate(async () => {
+    let done = false;
+    Promise.all([window.__p, window.__sp]).then(() => { done = true; });
+    while (!done) {
+      while (window.__slow.release.length) window.__slow.release.shift()();
+      await new Promise(r => setTimeout(r, 10));
+    }
+  });
   const r = await page.evaluate(() => ({
     original: window.__standalone.host.originalHtml,
     pageId: window.__standalone.host.currentPage.id,
@@ -182,4 +190,29 @@ test('Seitenwechsel während eines Saves: originalHtml gehört danach der neuen 
   expect(r.pageId).toBe(43);
   expect(r.original).toContain('Neue Seite');
   expect(r.original).not.toContain('ALT');
+});
+
+test('setPage auf eine andere Seite sichert vorher Ungespeichertes der bisherigen', async ({ page }) => {
+  await typeAtFirstParagraph(page, ' LETZTEWORTE');
+  // Sofort wechseln — der 150-ms-Autosave ist noch nicht gelaufen.
+  await page.evaluate(async () => {
+    window.__saveLog.length = 0;
+    await window.__standalone.setPage({ id: 43, name: 'Neu', html: '<p>Neue Seite</p>' });
+  });
+  const log = await page.evaluate(() => window.__saveLog);
+  const prev = log.find(e => e.id === 42);
+  expect(prev, 'alte Seite wurde nicht gesichert').toBeTruthy();
+  expect(prev.html).toContain('LETZTEWORTE');
+  // Der neue Stand landet NICHT unter der alten ID.
+  expect(log.some(e => e.id === 42 && e.html.includes('Neue Seite'))).toBe(false);
+});
+
+test('setPage auf dieselbe Seite (Sync-Pull) speichert nicht', async ({ page }) => {
+  await typeAtFirstParagraph(page, ' LOKAL');
+  await page.evaluate(async () => {
+    window.__saveLog.length = 0;
+    await window.__standalone.setPage({ id: 42, name: 'Testseite', html: '<p>Server-Stand</p>' });
+  });
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__saveLog.length)).toBe(0);
 });
