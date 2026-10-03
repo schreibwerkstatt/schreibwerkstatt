@@ -11,10 +11,10 @@ Code: [public/js/cards/book-organizer-card.js](../public/js/cards/book-organizer
 | `book-organizer/constants.js` | `MAX_CHAPTER_DEPTH` (Frontend-Spiegel von db/book-order.js), `COLLAPSE_THRESHOLD`. Einziges Modul, das mehrere Slices importieren. |
 | `book-organizer/dnd.js` | Sortable-Setup, `_onChapterDrop`/`_onPageDrop`, `_reattachSortables`, `_setSubtreeDepth` + die Struktur-Moves `movePageToChapter` (Combobox), `promoteChapter`/`demoteChapter`. |
 | `book-organizer/persist.js` | `_rerender`, `_snapshotFromNav`, `_snapshotWorkstate`, `_runMutation`, `_persistOrder`, `_applyMirror`, `_buildTreeFromWorkstate`. |
-| `book-organizer/mirror.js` | In-Place-Spiegelung `workTree`/`soloPages` → `nav.tree`/`nav.pages` + Depth-First-Reordering + Order-Maps + Chapter-Stats. |
-| `book-organizer/crud.js` | Create/Rename/Delete für Kapitel + Seiten + `movePageToBook`, jeweils Server-Call + Mirror + History-Push. |
-| `book-organizer/history.js` | Undo/Redo-Stacks (FIFO max 10), Record-Typen, `_applyInverse`/`_applyForward`. |
-| `book-organizer/view.js` | Collapse-State pro Kapitel, Suchfilter (`filteredWorkTree`/`filteredSoloPages`), Combobox-Optionen, Jump-to-Chapter, `_findChapter`, Kapitel-Längenverteilung, Zahlen-Formatter (`_fmtNum`/`_fmtDec1` über `numberFormat`). |
+| `book-organizer/mirror.js` | In-Place-Spiegelung `workTree`/`soloPages` → `nav.tree`/`nav.pages` + Depth-First-Reordering + Chapter-Stats. Order-Maps baut der Root (`_rebuildOrderMaps` → [tree/build.js](../public/js/book/tree/build.js)#`_rebuildTreeOrderMaps`). |
+| `book-organizer/crud.js` | Create/Rename/Delete für Kapitel + Seiten + `movePageToBook`, jeweils Server-Call + Mirror + History-Push; Rename-Tracking (`_trackRename`). |
+| `book-organizer/history.js` | Undo/Redo-Stacks (FIFO max 10), Record-Typen, `_applyInverse`/`_applyForward`, Stale-Prüfung, Lösch-Undo über den Papierkorb. |
+| `book-organizer/view.js` | Collapse-State pro Kapitel, Suchfilter (`filteredWorkTree`/`filteredSoloPages`), Combobox-Optionen, Lazy-Zeilen-Comboboxen (`isRowCombo`/`openRowCombo`/`closeRowCombo`), Jump-to-Chapter, `_findChapter`, Kapitel-Längenverteilung, Zahlen-Formatter (`_fmtNum`/`_fmtDec1` über `numberFormat`). |
 | `book-organizer/redaktion.js` | Redaktions-Stufe pro Beitrag (nur journalistische Bücher, Gate `redaktionEnabled` vom Server): laden, setzen, Plakette + Stale-Hinweis. Siehe [journalismus.md](journalismus.md). |
 
 Spread-Reihenfolge in der Facade: dnd → persist → mirror → crud → history → view → redaktion. Slices teilen `this`-State, kein Cross-Import zwischen Slices — geteilte Konstanten kommen aus `constants.js`.
@@ -36,6 +36,8 @@ soloPages        // [{ id, name, chapter_id: 0 }]                      — Seite
 chapterOpen      // { [chapter_id]: bool }                             — Per-Kapitel-Collapse-State
 organizerSearch  // String — Filter (UI-only, kein Server-Call)
 jumpToChapterId  // String — Wert der Jump-Combobox
+activeRowCombo   // '<pageId>:<kind>' der montierten Zeilen-Combobox oder null
+_renamesInFlight // Promise laufender Umbenennungen (Undo/Redo warten darauf)
 _sortables       // Sortable-Instanzen (DnD-Lebenszyklus)
 _undoStack       // Record[]
 _redoStack       // Record[]
@@ -61,7 +63,7 @@ Der buch-skopierte Teil des States kommt aus **einer** Factory `freshState()` in
 - **`onCardRefresh`** — nur `_rerender()`. **Kein `loadPages`** — Drag/Rename/CRUD mutieren `nav.tree` in-place, Server-Stand und Card-State sind synchron. `loadPages` würde Sidebar-Tree clearen und neu fetchen → Flicker.
 - **`onViewReset`** — Sortable destroyen + State leeren.
 - **`chapter:added`-Listener** (`EVT.CHAPTER_ADDED`) — ein Kapitel wurde ausserhalb der Karte angelegt (Sidebar-Kontextmenü, Leeres-Buch-CTA; [tree/load.js](../public/js/book/tree/load.js)#`createChapter` hängt es in-place in `nav.tree`, kein Reload). Bei sichtbarer Karte → `_rerender()`. Ohne das fehlte das Kapitel im Workstate, und der nächste Order-PUT scheiterte am Server mit `MISSING_CHAPTER`. Neue Seiten von ausserhalb brauchen kein Pendant: jeder lokale Anlage-Pfad öffnet die Seite per `selectPage`, was die Karte schliesst; Remote-Anlagen kommen über den Catch-up als `pages:loaded`.
-- **`pages:loaded`- + `page:removed`-Listener** — separat über `extraListeners`. Beide greifen nur, wenn die Karte sichtbar ist: `pages:loaded` nach echten Server-Reloads (Buchwechsel, `loadPages`) → `_rerender()`; `page:removed` immer dann, wenn eine Seite aus dem Store verschwindet — **lokales Löschen (`deletePageById`), Remote-Delete aus dem Collab-Feed, Move in ein anderes Buch**. In allen drei Fällen hat `tree/load.js#_removePageFromTree` `nav.tree`/`nav.pages` bereits in-place bereinigt (ohne Reload); der Listener zieht die daraus **abgeleiteten** Sichten nach: `_rebuildPageOrderMaps()`, `_invalidateDiaryCache()`, `_rerender()` (Workstate-Snapshot). Ohne das bliebe die Zeile stehen bzw. zeigten Order-Maps und Diary-Kalender auf eine Seite, die es nicht mehr gibt. **Kein `$watch(nav.tree)`** — eigene Reassignments im Tree würden Selbst-Reentry erzeugen.
+- **`pages:loaded`- + `page:removed`-Listener** — separat über `extraListeners`. Beide greifen nur, wenn die Karte sichtbar ist: `pages:loaded` nach echten Server-Reloads (Buchwechsel, `loadPages`) → `_rerender()`; `page:removed` immer dann, wenn eine Seite aus dem Store verschwindet — **lokales Löschen (`deletePageById`), Remote-Delete aus dem Collab-Feed, Move in ein anderes Buch**. In allen drei Fällen hat `tree/load.js#_removePageFromTree` `nav.tree`/`nav.pages`, die Order-Maps und (über eine neue `nav.pages`-Identität) den Tagebuch-Kalender-Cache bereits nachgezogen — unabhängig davon, ob der Organizer offen ist. Der Listener holt nur noch den Workstate der Karte nach (`_rerender()`). **Kein `$watch(nav.tree)`** — eigene Reassignments im Tree würden Selbst-Reentry erzeugen.
 
 Tastatur (window-Listener via Lifecycle-Signal): Cmd/Ctrl+Z → `historyUndo`, Cmd/Ctrl+Shift+Z bzw. Cmd/Ctrl+Y → `historyRedo`. **Greift nicht** in INPUT/TEXTAREA/contenteditable (native Edit-Undo der Rename-Felder und Editoren soll funktionieren) und nur bei sichtbarer Karte.
 
@@ -97,9 +99,9 @@ History-Push (nur bei ok)
 | `'chapters'` | Kapitel-Struktur geändert (DnD auf jeder Tiefe, promote/demote, Kapitel-Delete) | `_mirrorChapterOrderInRoot()` |
 | `'pages'` | Seiten-Zugehörigkeit/-Reihenfolge (Page-DnD, Move-Combobox) | `_mirrorPageMembershipInRoot(affectedChapters)` |
 | `'both'` | History-Replay — ein Snapshot kann beides enthalten | Chapter-Struktur zuerst, dann Page-Membership über alle Kapitel |
-| `'reload'` | volles `loadPages()` | **nur** `createSubchapter` |
+| `'reload'` | volles `loadPages()` | Lösch-Undo (Papierkorb-Restore) und der Rückfall in `createSubchapter`, wenn der Parent während des Namens-Dialogs aus dem Workstate verschwunden ist |
 
-`'reload'` ist bewusst der Ausnahmefall: ein **neues** Sub-Kapitel existiert im Workstate noch nicht, seine Einsortierungsposition im flachen `nav.tree` ist daraus nicht ableitbar. Alle anderen Pfade (auch Cross-Level-Moves und Seiten in Sub-Kapiteln) spiegeln granular und flackern deshalb nicht.
+`'reload'` ist bewusst der Ausnahmefall. Eine aus dem Papierkorb wiederhergestellte Seite bringt Inhalt und Stats mit, die nur der Server-Tree kennt (gleich wie die Papierkorb-Sektion der Fassungen-Karte). Ein neues Sub-Kapitel braucht dagegen keinen Reload: es wird in `parent.subchapters` angehängt (der Server hängt es ebenfalls ans Ende der Geschwister) und in `nav.tree` gepusht; `_mirrorChapterOrderInRoot` sortiert es über den Depth-First-Rang an die richtige Stelle. Alle übrigen Pfade spiegeln granular und flackern deshalb nicht.
 
 ## In-Place-Mirror
 
@@ -119,12 +121,13 @@ Ausserhalb des Organizers gilt dasselbe: die Kapitel-Anlage in der Sidebar und d
 
 ### Mirror-Helper
 
-- **`_mirrorChapterOrderInRoot()`** — Kapitel-Struktur. Schreibt `priority` (Position im Parent), `depth`, `parent_id` und `hasChildren` auf **alle** Kapitel-Items in `nav.tree`, ruft `_reorderNavTree`, rebuildt `_chapterOrderMap`, resortiert `nav.pages`, rebuildt `_pageOrderMap`/`_pageIdOrderMap`, ruft `_refreshChapterStats()`. Deckt damit auch Cross-Level-Moves ab.
-- **`_mirrorPageMembershipInRoot(affectedChapterIds)`** — Page-Zugehörigkeit. Sammelt `chapter_id`/`priority`/`name` **rekursiv** über alle Tiefen (Seiten in Sub-Kapiteln müssen mit) und spiegelt sie auf `nav.pages`; rebuildt die `pages`-Arrays der betroffenen Tree-Einträge (`null` = alle Kapitel), dann Solo-Entries, Reorder, Resort, Maps, Stats.
+- **`_mirrorChapterOrderInRoot()`** — Kapitel-Struktur. Schreibt `priority` (Position im Parent), `depth`, `parent_id` und `hasChildren` auf **alle** Kapitel-Items in `nav.tree`, ruft `_reorderNavTree`, resortiert `nav.pages`, baut die Order-Maps neu (`_rebuildOrderMaps`), ruft `_refreshChapterStats()`. Deckt damit auch Cross-Level-Moves ab.
+- **`_mirrorPageMembershipInRoot(affectedChapterIds)`** — Page-Zugehörigkeit. Sammelt `chapter_id`/`priority` **rekursiv** über alle Tiefen (Seiten in Sub-Kapiteln müssen mit) und spiegelt sie auf `nav.pages`; rebuildt die `pages`-Arrays der betroffenen Tree-Einträge (`null` = alle Kapitel), dann Solo-Entries, Reorder, Resort, Maps, Stats. **Keine Namen**: ein Move ändert keinen Namen, und ein History-Snapshot trägt die Namen von damals.
+- **`_rebuildOrderMaps()`** — delegiert an den Root-Builder `_rebuildTreeOrderMaps` (SSoT). Die Namens-Indexe behalten das **erste** Vorkommen eines Namens (gleichnamige Kapitel sortieren dort ein, wo der Name zuerst auftaucht).
 - **`_rebuildSoloEntries()`** — Solo-Tree-Items löschen + frisch nach `soloPages`-Reihenfolge anlegen (`_buildSoloEntry`, Shape muss zu `tree/load.js` passen); `_reorderNavTree` schiebt sie anschliessend vor die Kapitel.
 - **`_resortRootPages()`** — `nav.pages` nach Kapitel-DFS-Rang + Page-Position. Kapitellose Seiten zuerst (Rang `-1`).
 
-`_mirrorCreatedChapter`/`_mirrorCreatedPage` (CRUD-Slice) übernehmen die Spiegelung für neu angelegte Items. Bei neu angelegter Seite in frisch erstelltem Kapitel wird `treeCh.pages` **per Reassignment** statt `push` aktualisiert — Alpine-Reaktivität greift bei nested Arrays nicht immer zuverlässig, wenn das Parent-Item kürzlich selbst gepusht wurde.
+`_mirrorCreatedChapter`/`_mirrorCreatedPage` (CRUD-Slice) übernehmen die Spiegelung für neu angelegte Items; das Tree-Item eines neuen Kapitels baut `_buildChapterEntry` (Shape wie tree/build.js). Neue Kapitel (Top-Level wie Sub-Kapitel) starten **aufgeklappt** — ein zugeklapptes leeres Kapitel hätte keine Seitenliste im DOM und damit kein Drop-Ziel. Bei neu angelegter Seite in frisch erstelltem Kapitel wird `treeCh.pages` **per Reassignment** statt `push` aktualisiert — Alpine-Reaktivität greift bei nested Arrays nicht immer zuverlässig, wenn das Parent-Item kürzlich selbst gepusht wurde.
 
 ## Snapshot-Quelle
 
@@ -159,7 +162,11 @@ Der drift-anfällige SortableJS-Kern (Prototype-Patch, Revert, Präzisions-Tunin
 
 ## Seite in anderes Buch verschieben (`movePageToBook`)
 
-Zweite Combobox „In anderes Buch…" pro Seitenzeile (`bookMoveOptions()` = alle zugänglichen Bücher ausser dem aktuellen). Re-Parent unter Beibehaltung der `page_id` über `POST /content/pages/:id/move` (Facade `contentStore.movePage` → `localdb.movePage`, eine Transaction): `pages.book_id`/`chapter_id` umgehängt, seiten-intrinsische Daten ziehen mit (Revisionen/Stats/Lektorat-Befunde/Schreibzeit/Seiten-Chat/Page-Share — `book_id` nachgeführt), **buchwelt-bezogene Analyse der Quelle wird gekappt** (Figuren-Erwähnungen/Zeitstrahl-Links/Erst-Erwähnungen/Szenen-+Event-Anker/Recherche-Links/Lektorat-Cache; im Zielbuch via Komplettanalyse neu aufgebaut), Integrations-Spiegel (Blog/HubSpot) + Locks/Presence gelöscht. `book_order` beider Bücher heilt der Facade-Wrapper via `ensureTree`/`reconcile` (gleiche Konvention wie create/delete). Editor-Recht auf **beiden** Büchern + fremder Page-Lock blockiert (423). UI: Bestätigungs-Modal mit Kappen-Warnung; danach lokales `_forgetPageLocally` → Root-`_removePageFromTree` (SSoT, dispatcht `page:removed`) — die Seite verlässt dieses Buch, landet im Zielbuch top-level. **Nicht** via Undo/Redo reversibel → History-Clear. Die geteilte Aktions-Spalte (Sync-Badges + beide Move-Comboboxen + Löschen) ist SSoT in [public/partials/organizer-page-actions.html](../public/partials/organizer-page-actions.html) (string-Include `<!-- @include organizer-page-actions -->`, 4× geklont über Solo-Liste + 3 Kapitel-Tiefen; aktuelles Kapitel aus `page.chapter_id`).
+Zweite Combobox „In anderes Buch…" pro Seitenzeile (`bookMoveOptions()` = alle zugänglichen Bücher ausser dem aktuellen). Re-Parent unter Beibehaltung der `page_id` über `POST /content/pages/:id/move` (Facade `contentStore.movePage` → `localdb.movePage`, eine Transaction): `pages.book_id`/`chapter_id` umgehängt, seiten-intrinsische Daten ziehen mit (Revisionen/Stats/Lektorat-Befunde/Schreibzeit/Seiten-Chat/Page-Share — `book_id` nachgeführt), **buchwelt-bezogene Analyse der Quelle wird gekappt** (Figuren-Erwähnungen/Zeitstrahl-Links/Erst-Erwähnungen/Szenen-+Event-Anker/Recherche-Links/Lektorat-Cache; im Zielbuch via Komplettanalyse neu aufgebaut), Integrations-Spiegel (Blog/HubSpot) + Locks/Presence gelöscht. `book_order` beider Bücher heilt der Facade-Wrapper via `ensureTree`/`reconcile` (gleiche Konvention wie create/delete). Editor-Recht auf **beiden** Büchern + fremder Page-Lock blockiert (423). UI: Bestätigungs-Modal mit Kappen-Warnung; danach lokales `_forgetPageLocally` → Root-`_removePageFromTree` (SSoT, dispatcht `page:removed`) — die Seite verlässt dieses Buch, landet im Zielbuch top-level. **Nicht** via Undo/Redo reversibel → History-Clear. Als Ziele bietet `bookMoveOptions()` nur Bücher an, in die der User schreiben darf (`role` owner/editor aus `/content/books`), ohne archivierte — sonst scheiterte der Move erst nach der Rückfrage mit 403. Die geteilte Aktions-Spalte (Sync-Badges + Redaktions-Stufe + beide Move-Comboboxen + Löschen) ist SSoT in [public/partials/organizer-page-actions.html](../public/partials/organizer-page-actions.html) (string-Include `<!-- @include organizer-page-actions -->`, 4× geklont über Solo-Liste + 3 Kapitel-Tiefen; aktuelles Kapitel aus `page.chapter_id`).
+
+### Zeilen-Comboboxen (lazy)
+
+Die drei Comboboxen einer Seitenzeile („Verschieben nach", „In anderes Buch", Redaktions-Stufe) sind **nicht** dauerhaft montiert. Sichtbar ist ein gleich aussehender Platzhalter-Trigger (`.combobox-wrap > .combobox-trigger`, `data-row-combo="<pageId>:<kind>"`); der Klick setzt `activeRowCombo`, ein `x-if` montiert die echte Combobox mit `autoOpen: true`, und ihr `combobox-close`-Event baut sie über `closeRowCombo` wieder ab (Fokus zurück auf den Platzhalter, wenn er in der Combobox lag). Es ist höchstens eine Zeilen-Combobox gleichzeitig montiert. **Why:** jede Combobox ist eine Alpine-Komponente mit zwei globalen Listenern (document-`mousedown`, window-`scroll`) und einem Options-`x-effect`; drei pro Zeile hiessen bei mehreren hundert Seiten über tausend Instanzen, und jede Kapitel-Umbenennung liesse alle Options-Effekte neu laufen.
 
 ## Undo/Redo
 
@@ -171,27 +178,32 @@ Records (siehe `history.js`):
 { kind: 'rename-page',     id, oldName, newName }
 { kind: 'create-chapter',  id, name }
 { kind: 'create-page',     id, chapterId, name }
+{ kind: 'delete-page',     pageId, name, chapterId, index }
 ```
 
 `HISTORY_MAX = 10` pro Stack, FIFO-Drop bei Überlauf.
 
-**Reorder-Undo** (`_applyReorderSnapshot`) rebuildet workstate aus dem `before`-Snapshot, ruft `_reattachSortables()` und persistiert dann über den normalen `_persistOrder({ mirror: 'both' })`-Pfad — kein eigener `saveOrder`-Aufruf. `'both'` läuft beide Mirror-Pfade nacheinander (Chapter-Struktur zuerst, dann Page-Membership über **alle** Kapitel mit aktualisierten Prios), weil ein Snapshot beides enthalten kann. Snapshot-Deep-Clone via `JSON.parse(JSON.stringify(…))` — `structuredClone` wirft auf Alpine-Proxys.
+**Reorder-Undo** (`_applyReorderSnapshot`) rebuildet workstate aus dem `before`-Snapshot, ruft `_reattachSortables()` und persistiert dann über den normalen `_persistOrder({ mirror: 'both' })`-Pfad — kein eigener `saveOrder`-Aufruf. Die **Namen** übernimmt er aus dem aktuellen Workstate (`_currentNames`), nicht aus dem Snapshot: eine Umbenennung anderswo (Sidebar, Editor, Collab) läuft nicht durch die History und würde sonst lokal zurückgedreht, während der Server den neuen Namen hat. `'both'` läuft beide Mirror-Pfade nacheinander (Chapter-Struktur zuerst, dann Page-Membership über **alle** Kapitel mit aktualisierten Prios), weil ein Snapshot beides enthalten kann. Snapshot-Deep-Clone via `JSON.parse(JSON.stringify(…))` — `structuredClone` wirft auf Alpine-Proxys.
 
-**Create-Undo** löscht das frisch erstellte Kapitel/Seite via `_deleteChapterRaw`/`_deletePageRaw`. **Redo-Stack wird komplett invalidiert** — beim erneuten Anlegen würde der Server eine neue ID vergeben, andere Records im Redo-Stack referenzieren aber die alten IDs (z.B. Reorder-Snapshots mit alten `chapter.id`). Saubere Wiederherstellung müsste der User manuell auslösen.
+**Create-Undo** löscht das frisch erstellte Kapitel/Seite via `_deleteChapterRaw`/`_deletePageRaw` — **nur solange es leer ist**: die History überlebt das Schliessen der Karte, und ein Strg+Z Stunden später löschte sonst kommentarlos geschriebenen Text. Hat die Seite inzwischen Zeichen (`tokEsts[id].chars`) bzw. das Kapitel Seiten oder Sub-Kapitel, verwirft `_staleReason` die History mit `bookOrganizer.historyHasContent`. **Redo-Stack wird nach einem Create-Undo komplett invalidiert** — beim erneuten Anlegen würde der Server eine neue ID vergeben, andere Records im Redo-Stack referenzieren aber die alten IDs.
 
-**Delete (Kapitel/Seite) ist nicht reversibel.** Hard-Delete in SQLite, keine Content-Snapshots. `deleteChapter`/`deletePage` rufen `_clearHistory()` und blocken damit Undo komplett, statt einen inkonsistenten Stack zu hinterlassen. `deleteChapter` verweigert ausserdem nicht-leere Kapitel und Kapitel, deren Seite gerade im Editor offen ist.
+**Seiten-Delete ist umkehrbar.** Der Server sichert gelöschte Seiten im Papierkorb (`page_deletions`, [localdb-delete.js](../lib/content-store/backends/localdb-delete.js)). `deletePage` merkt sich Kapitel + Index **vor** dem Löschen und pusht einen `delete-page`-Record. Undo (`_restoreDeletedPage`) sucht den Papierkorb-Eintrag über die `page_id`, stellt die Seite wieder her (**neue** `page_id`), setzt sie an die alte Stelle, speichert die Reihenfolge und lädt den Store neu (`'reload'`). `_remapPageId` schreibt die alte ID in beiden Stacks auf die neue um (Reorder-Snapshots, Rename/Create, weitere Deletes), sonst würden ältere Records beim Einspielen als veraltet verworfen. Redo (`_redoDeletePage`) löscht erneut ohne Rückfrage und merkt die Position neu.
 
-**Stale-Schutz.** Fremd-Änderungen (Sidebar, Collab-Feed, Catch-up) ändern den Bestand an Kapiteln/Seiten, ohne durch die History zu laufen. Vor jedem Einspielen prüft `_isRecordStale(rec, dir)`: Reorder-Snapshot muss exakt dieselben Kapitel-/Seiten-IDs wie der aktuelle Workstate enthalten, Rename/Create-Ziel muss noch existieren. Passt er nicht, leert `_dropStaleHistory()` beide Stacks und meldet `bookOrganizer.historyStale` — statt einen Tree mit fehlenden/toten IDs zu schicken, den der Server ablehnt (Fehlerpfad = voller `loadPages`).
+**Kapitel-Delete und Cross-Book-Move sind nicht reversibel** und rufen `_clearHistory()`. `deleteChapter` verweigert nicht-leere Kapitel (Server: harter DELETE, Seiten/Sub-Kapitel verlören nur die Zuordnung).
 
-`_inHistoryFlight` blockt parallele Undo/Redo-Calls. `_pushUndo` während eines Replay-Schritts ist no-op (sonst würde der Replay sich selbst in den Stack pushen).
+**Stale-Schutz.** Fremd-Änderungen (Sidebar, Collab-Feed, Catch-up) ändern den Bestand an Kapiteln/Seiten, ohne durch die History zu laufen. Vor jedem Einspielen liefert `_staleReason(rec, dir)` `null` oder die Meldung, mit der verworfen wird: Reorder-Snapshot muss exakt dieselben Kapitel-/Seiten-IDs wie der aktuelle Workstate enthalten, Rename/Create-Ziel muss noch existieren (Create zusätzlich leer sein), Delete-Undo verlangt eine fehlende, Delete-Redo eine vorhandene Seite. Passt er nicht, leert `_dropStaleHistory(reason)` beide Stacks und meldet `reason` — statt einen Tree mit fehlenden/toten IDs zu schicken, den der Server ablehnt (Fehlerpfad = voller `loadPages`).
 
-`_applyForward` für Reorder spielt das `after`-Snapshot ein. Für Rename ruft es `_doRenameChapter/_doRenamePage` mit `newName`. Create-Forward gibt es nicht — `_pushRedo` wird in `historyUndo` für Create-Records explizit übersprungen.
+`_inHistoryFlight` blockt parallele Undo/Redo-Calls. `_pushUndo` während eines Replay-Schritts ist no-op (sonst würde der Replay sich selbst in den Stack pushen). Undo/Redo warten zuerst auf laufende Umbenennungen (`_renamesInFlight`, gesetzt von `_trackRename`): ein Klick auf „Rückgängig" blurt das Namensfeld und startet die Umbenennung asynchron — ohne Warten nähme der Undo den vorherigen Record, und der später gepushte Rename-Record leerte den Redo-Stack. Umbenennen setzt bewusst **nicht** `organizerSaving`: der Flag disabled alle Namensfelder, ein Blur durch Klick ins nächste Feld verlöre sofort den Fokus.
+
+`_applyForward` für Reorder spielt das `after`-Snapshot ein. Für Rename ruft es `_doRenameChapter/_doRenamePage` mit `newName`, für Delete `_redoDeletePage`. Create-Forward gibt es nicht — `_pushRedo` wird in `historyUndo` für Create-Records explizit übersprungen.
 
 ## View-State
 
 `_recomputeInitialOpenState` (in `view.js`): beim allerersten Snapshot wird `COLLAPSE_THRESHOLD` (8, aus `constants.js`) geprüft. Mehr als 8 Kapitel → alles zu, sonst alles auf. Bei späteren `pages:loaded`-Re-Snapshots bleibt der User-Zustand erhalten, nur neue/entfernte Kapitel-IDs werden ergänzt bzw. entfernt.
 
-`toggleChapter`/`expandAll`/`collapseAll` weisen `chapterOpen` jeweils ein **neues Objekt** zu (Alpine-Reaktivität für Object-Props) und rufen `_reattachSortables()`; `expandAll`/`collapseAll` teilen `_setAllChaptersOpen(bool)`.
+`toggleChapter`/`expandAll`/`collapseAll`/`jumpToChapter` weisen `chapterOpen` jeweils ein **neues Objekt** zu (Alpine-Reaktivität für Object-Props) und rufen `_reattachSortables()` — Aufklappen erzeugt `x-if`-gatete Seiten-/Sub-Kapitel-Listen, die sonst kein Sortable hätten; `expandAll`/`collapseAll` teilen `_setAllChaptersOpen(bool)`.
+
+Suche: ein Kapitel mit Namens-Treffer bleibt komplett sichtbar (alle Seiten und Sub-Kapitel, als Kontext); ohne Namens-Treffer zeigt es nur passende Seiten und die Sub-Kapitel, in denen etwas passt.
 
 `filteredWorkTree`/`filteredSoloPages` sind **Methoden, keine Getter**. Beim `{...viewMethods}`-Spread in der Facade würden Getter-Definitionen aufgerufen (`this` = POJO, `workTree` = undefined) und das Ergebnis als statisches Property eingefroren. Methoden bleiben durch Spread reaktiv.
 
@@ -206,7 +218,9 @@ Records (siehe `history.js`):
 - **Page-Membership-Mirror rekursiert über alle Tiefen.** Seiten in Sub-Kapiteln dürfen nicht durchs Raster fallen.
 - **Drop-Handler revertieren Sortables DOM-Move zuerst** (`revertSortable(evt)`, geteiltes Modul), dann mutieren sie das Modell. Indizes/Parent/Tiefe kommen aus dem `evt`, nicht aus dem DOM. Alpine bleibt alleiniger DOM-Besitzer.
 - **Snapshots via `JSON.parse(JSON.stringify(…))`**, nicht `structuredClone`.
-- **Delete clear't History.** Create-Undo invalidiert Redo-Stack. Record, der nicht mehr zum Bestand passt, leert die History vor dem Einspielen (`_isRecordStale`).
+- **Seiten-Delete ist ein History-Record** (Undo über den Papierkorb, neue ID → `_remapPageId`). Kapitel-Delete und Cross-Book-Move clearen die History. Create-Undo nur auf leere Ziele und invalidiert den Redo-Stack. Record, der nicht mehr zum Bestand passt, leert die History vor dem Einspielen (`_staleReason`).
+- **Reorder-Replay übernimmt aktuelle Namen**, der Page-Membership-Mirror schreibt keine Namen.
+- **Zeilen-Comboboxen nur lazy** (Platzhalter-Trigger + `activeRowCombo`), nie eine echte Combobox pro Zeile dauerhaft montieren.
 - **Suche disabled Sortable**, nicht das Suchfeld.
 - **`x-ignore` aufs Drag-Item** während des Drags (Alpine-MutationObserver-Schutz).
 - **Move-Combobox via `movePageToChapter`** — gleiche Persist-Sequenz wie DnD, kein Direct-Mutate.
@@ -218,7 +232,7 @@ Records (siehe `history.js`):
 2. `root.loadPages()` — defensiver Resync, weil Server möglicherweise partiell mutiert ist (z.B. Atomic-PUT fehlgeschlagen, aber DB-Trigger lief schon teilweise).
 3. `organizerSaving=false`, `organizerStatus=''` im `finally`.
 
-Rename-Pfad ist anders: kein `_runMutation`-Wrapper, sondern direkter `try/catch` in `_doRenameChapter`/`_doRenamePage`. Bei Fehler wird das `<input>`-Element auf den alten Namen zurückgesetzt (`inputEl.value = ch.name`).
+Rename-Pfad ist anders: kein `_runMutation`-Wrapper, sondern direkter `try/catch` in `_doRenameChapter`/`_doRenamePage`. Bei Fehler wird das `<input>`-Element auf den alten Namen zurückgesetzt (`inputEl.value = ch.name`). Bei Erfolg feuert der Rename selbst `_signalXrefsChanged()` (sonst Aufgabe von `_runMutation`) — der Querverweis-Picker zeigt sonst den alten Titel. Escape im Namensfeld setzt den Wert zurück und blurt; der Blur-Handler sieht dann keinen geänderten Namen.
 
 ## Neue Mutation hinzufügen
 
@@ -226,7 +240,7 @@ Rename-Pfad ist anders: kein `_runMutation`-Wrapper, sondern direkter `try/catch
 2. `_snapshotWorkstate()` vor lokaler Mutation aufrufen (für History-Record).
 3. Lokal mutieren (workTree/soloPages in-place).
 4. Reorder/Move: `_persistOrder({ mirror, affectedChapters })` — Modus-Tabelle oben. CRUD: `_runMutation(async () => { contentRepo.xxx(); _mirrorXxx(); })`.
-5. Bei Erfolg: passenden `_recordXxx`-Helper in `history.js` rufen. Wenn Operation nicht reversibel ist (Delete, Cross-Book-Move): `_clearHistory()`.
-6. Ändert die Operation Page-Membership → `mirror: 'pages'` + `affectedChapters`; ändert sie Kapitel-Struktur → `mirror: 'chapters'`. Nur ein **neu angelegtes** Kapitel rechtfertigt `'reload'`.
+5. Bei Erfolg: passenden `_recordXxx`-Helper in `history.js` rufen. Wenn Operation nicht reversibel ist (Kapitel-Delete, Cross-Book-Move): `_clearHistory()`. Vergibt die Umkehrung neue IDs (wie der Papierkorb-Restore), die alten in den Stacks nachziehen (`_remapPageId`).
+6. Ändert die Operation Page-Membership → `mirror: 'pages'` + `affectedChapters`; ändert sie Kapitel-Struktur → `mirror: 'chapters'`. `'reload'` nur, wenn der Client den neuen Stand nicht kennt (Inhalt/Stats einer wiederhergestellten Seite).
 7. Wenn die Operation DOM-Container umbaut (Kapitel wechselt Ebene, Item verschwindet): `await this._reattachSortables()` am Ende.
 8. Bei UI-Pfaden mit nestedem Reassignment (Page in neues Kapitel pushen): `treeCh.pages = [...treeCh.pages, p]` statt `push` — Alpine-Reaktivität.

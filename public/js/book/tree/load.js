@@ -553,6 +553,11 @@ export const treeLoadMethods = {
     // die Positionen aller nachfolgenden Seiten.
     this._rebuildTreeOrderMaps();
     this._refreshChapterStats();
+    // Neue Array-Identitaet fuer nav.pages: der Tagebuch-Kalender cacht
+    // identity-gated (diary-calendar.js, `cache.pagesRef`), der splice oben
+    // laesst die Identitaet stehen — ohne das zeigte er die geloeschte Seite
+    // weiter an, egal von wo geloescht wurde.
+    nav.pages = [...nav.pages];
     window.dispatchEvent(new CustomEvent(EVT.PAGE_REMOVED, { detail: { pageId: id } }));
   },
 };

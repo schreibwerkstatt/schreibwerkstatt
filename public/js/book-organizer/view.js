@@ -63,15 +63,16 @@ export const viewMethods = {
   },
 
   // Rekursiver Suchfilter: zeigt Kapitel, wenn Name-Match ODER ein Sub-/Page
-  // tief drunter matched. Sub-Tree bleibt fuer Kontext sichtbar (alle Pages des
-  // matched Kapitels, alle matchenden Pages sonst).
+  // tief drunter matched. Ein Kapitel mit Name-Match bleibt komplett sichtbar
+  // (alle Seiten UND alle Sub-Kapitel, als Kontext); sonst nur die passenden
+  // Seiten und die Sub-Kapitel, in denen etwas passt.
   _filterChapter(ch, q) {
-    const nameMatch = ch.name.toLowerCase().includes(q);
-    const pages = nameMatch ? ch.pages : ch.pages.filter(p => p.name.toLowerCase().includes(q));
+    if (ch.name.toLowerCase().includes(q)) return ch;
+    const pages = ch.pages.filter(p => p.name.toLowerCase().includes(q));
     const subs = (ch.subchapters || [])
       .map(s => this._filterChapter(s, q))
       .filter(Boolean);
-    if (!nameMatch && pages.length === 0 && subs.length === 0) return null;
+    if (pages.length === 0 && subs.length === 0) return null;
     return { ...ch, pages, subchapters: subs };
   },
 
@@ -150,8 +151,10 @@ export const viewMethods = {
       cur = this._findChapter(cur.id)?.parent || null;
     }
     this.chapterOpen = opens;
-    await this.$nextTick();
-    this.$root.querySelector(`[data-chapter-id="${chId}"]`)
+    // Aufklappen erzeugt x-if-gatete Seiten-/Sub-Kapitel-Listen → Sortable neu
+    // binden (wie toggleChapter), sonst ist DnD dort tot. Wartet den nextTick ab.
+    await this._reattachSortables();
+    this._cardRoot().querySelector(`[data-chapter-id="${chId}"]`)
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     this.jumpToChapterId = '';
   },
@@ -187,14 +190,47 @@ export const viewMethods = {
     return this._chapterOptions();
   },
 
-  // Options-Array fuer die „In anderes Buch"-Combobox: alle zugaenglichen
-  // Buecher ausser dem aktuellen. ACL aufs Ziel erzwingt der Server (editor).
+  // Options-Array fuer die „In anderes Buch"-Combobox: Buecher, in die der User
+  // schreiben darf (`role` aus /content/books), ohne das aktuelle und ohne
+  // archivierte. Der Server erzwingt die ACL ohnehin (editor auf beiden) — hier
+  // geht es darum, kein Ziel anzubieten, das erst NACH der Rueckfrage mit 403
+  // scheitert.
+  // Memo, weil jede Seitenzeile die Liste fuer ihr `x-if` abfragt.
   bookMoveOptions() {
     const nav = Alpine.store('nav');
-    const cur = String(nav.selectedBookId);
-    return (nav.books || [])
-      .filter(b => String(b.id) !== cur)
-      .map(b => ({ value: b.id, label: b.name || ('#' + b.id) }));
+    return this._memo('bookMoveOpts', [nav.books, nav.selectedBookId], () => {
+      const cur = String(nav.selectedBookId);
+      return (nav.books || [])
+        .filter(b => String(b.id) !== cur && !b.archived
+          && (b.role == null || b.role === 'owner' || b.role === 'editor'))
+        .map(b => ({ value: b.id, label: b.name || ('#' + b.id) }));
+    });
+  },
+
+  // Zeilen-Comboboxen („Verschieben nach", „In anderes Buch", Redaktions-Stufe)
+  // montieren erst beim Klick auf ihren Platzhalter-Trigger und bauen sich beim
+  // Schliessen wieder ab (organizer-page-actions.html). Pro Zeile drei echte
+  // Comboboxen waeren bei hunderten Seiten tausend Alpine-Komponenten mit je
+  // zwei globalen Listenern, und jede Kapitel-Umbenennung liesse alle
+  // Options-Effekte neu laufen. Es ist hoechstens EINE offen: `activeRowCombo`.
+  isRowCombo(pageId, kind) {
+    return this.activeRowCombo === pageId + ':' + kind;
+  },
+
+  openRowCombo(pageId, kind) {
+    this.activeRowCombo = pageId + ':' + kind;
+  },
+
+  // Fokus nur zuruecksetzen, wenn er in der Combobox lag (Escape/Enter) — beim
+  // Klick ausserhalb gehoert er dem angeklickten Element.
+  closeRowCombo(pageId, kind, ev) {
+    const key = pageId + ':' + kind;
+    if (this.activeRowCombo !== key) return;
+    const hadFocus = !!ev?.target?.contains?.(document.activeElement);
+    this.activeRowCombo = null;
+    if (hadFocus) {
+      this.$nextTick(() => this._cardRoot().querySelector(`[data-row-combo="${key}"]`)?.focus());
+    }
   },
 
   // Promote-Validierung: Kapitel auf Top-Level (depth=1) hat keinen Parent.

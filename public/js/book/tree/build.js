@@ -90,11 +90,18 @@ export const treeBuildMethods = {
   // Eigene Methode, weil auch Pfade, die den Baum punktuell aendern
   // (_removePageFromTree), die Maps konsistent halten muessen — ein
   // uebriggebliebener Eintrag zeigt sonst auf eine tote Position.
+  //
+  // Beide Namens-Indexe behalten das ERSTE Vorkommen eines Namens: die
+  // Konsumenten kennen nur Namen (KI-Ausgaben wie Figuren-Kapitellisten), und
+  // gleichnamige Kapitel („Szene 1" in mehreren Teilen) sollen dort einsortieren,
+  // wo der Name im Buch zuerst auftaucht — nicht beim letzten Treffer.
   _rebuildTreeOrderMaps() {
     const chapterMap = new Map();
     let chIdx = 0;
     for (const item of this.$store.nav.tree) {
-      if (item.type === 'chapter' && !item.solo) chapterMap.set(item.name, chIdx++);
+      if (item.type !== 'chapter' || item.solo) continue;
+      if (!chapterMap.has(item.name)) chapterMap.set(item.name, chIdx);
+      chIdx++;
     }
     const nameMap = new Map();
     const idMap = new Map();

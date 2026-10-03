@@ -67,9 +67,8 @@ export const mirrorMethods = {
       it.hasChildren = m.hasChildren;
     }
     this._reorderNavTree();
-    this._rebuildChapterOrderMap();
     this._resortRootPages();
-    this._rebuildPageOrderMaps();
+    this._rebuildOrderMaps();
     this._refreshChapterStats();
   },
 
@@ -77,21 +76,23 @@ export const mirrorMethods = {
   // den Rebuild der treeCh.pages-Arrays ein; null = alle Kapitel (History-Replay).
   _mirrorPageMembershipInRoot(affectedChapterIds = null) {
     const nav = Alpine.store('nav');
-    // Fuer jede Page im Workstate: chapter_id + priority + name auf nav.pages
+    // Fuer jede Page im Workstate: chapter_id + priority auf nav.pages
     // spiegeln. Rekursiv — Seiten in Sub-Kapiteln muessen mit, sonst bleibt
-    // nav.pages nach einem Move in der Tiefe stale.
+    // nav.pages nach einem Move in der Tiefe stale. Bewusst OHNE `name`: ein
+    // Move aendert keinen Namen, und ein History-Snapshot traegt die Namen von
+    // damals — nach einer Umbenennung anderswo schriebe er den alten zurueck.
     const updates = new Map();
     const collect = (list) => {
       for (const c of list) {
         c.pages.forEach((p, i) => {
-          updates.set(p.id, { chapter_id: c.id, priority: i + 1, name: p.name });
+          updates.set(p.id, { chapter_id: c.id, priority: i + 1 });
         });
         collect(c.subchapters || []);
       }
     };
     collect(this.workTree);
     this.soloPages.forEach((p, i) => {
-      updates.set(p.id, { chapter_id: 0, priority: i + 1, name: p.name });
+      updates.set(p.id, { chapter_id: 0, priority: i + 1 });
     });
     const chapterName = new Map();
     for (const it of nav.tree) {
@@ -102,7 +103,6 @@ export const mirrorMethods = {
       if (!u) continue;
       p.chapter_id = u.chapter_id || 0;
       p.priority = u.priority;
-      p.name = u.name;
       p.chapterName = u.chapter_id ? (chapterName.get(u.chapter_id) || p.chapterName) : null;
     }
     // Betroffene Kapitel: pages-Array im Tree-Eintrag aus nav.pages neu filtern.
@@ -121,7 +121,7 @@ export const mirrorMethods = {
     this._rebuildSoloEntries();
     this._reorderNavTree();
     this._resortRootPages();
-    this._rebuildPageOrderMaps();
+    this._rebuildOrderMaps();
     this._refreshChapterStats();
   },
 
@@ -169,27 +169,10 @@ export const mirrorMethods = {
     });
   },
 
-  _rebuildChapterOrderMap() {
-    const nav = Alpine.store('nav');
-    const map = new Map();
-    let idx = 0;
-    for (const it of nav.tree) {
-      if (it.type === 'chapter' && !it.solo) map.set(it.name, idx++);
-    }
-    window.__app._chapterOrderMap = map;
-  },
-
-  _rebuildPageOrderMaps() {
-    const nav = Alpine.store('nav');
-    const nameMap = new Map();
-    const idMap = new Map();
-    for (let i = 0; i < nav.pages.length; i++) {
-      const p = nav.pages[i];
-      if (!nameMap.has(p.name)) nameMap.set(p.name, i);
-      idMap.set(p.id, i);
-    }
-    window.__app._pageOrderMap = nameMap;
-    window.__app._pageIdOrderMap = idMap;
+  // Sortier-Indexe (`_chapterOrderMap`/`_pageOrderMap`/`_pageIdOrderMap`) —
+  // SSoT ist der Root-Builder aus tree/build.js, kein Nachbau hier.
+  _rebuildOrderMaps() {
+    window.__app._rebuildTreeOrderMaps?.();
   },
 
   _refreshChapterStats() {

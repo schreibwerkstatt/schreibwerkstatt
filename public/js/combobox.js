@@ -21,8 +21,15 @@
 // genutzt, damit Spezialisierungen die volle Combobox-Mechanik erben statt
 // sie zu reimplementieren. cfg-Form deckt sich mit der Object-Variante von
 // `combobox(...)` aus den Templates: { placeholder, emptyLabel, compact,
-// multiple, transient, footer }. Sowohl `placeholder` als auch `emptyLabel`
-// duerfen Funktionen sein (fuer reaktive i18n-Aufloesung).
+// multiple, transient, footer, autoOpen }. Sowohl `placeholder` als auch
+// `emptyLabel` duerfen Funktionen sein (fuer reaktive i18n-Aufloesung).
+//
+// `autoOpen` klappt die Liste direkt nach dem Mount auf. Zusammen mit dem
+// `combobox-close`-Event (feuert, wenn eine offene Liste schliesst) erlaubt das
+// Listen mit vielen Zeilen, die echte Combobox erst beim Klick auf einen
+// gleich aussehenden Platzhalter-Trigger zu montieren und danach wieder
+// abzubauen — jede Instanz kostet eine Alpine-Komponente plus zwei globale
+// Listener (Buchorganizer: organizer-page-actions.html).
 export function comboboxData(cfg = {}) {
   if (cfg.compact === undefined) cfg.compact = true;
   return {
@@ -37,6 +44,7 @@ export function comboboxData(cfg = {}) {
       _compact: cfg.compact !== false,
       _multiple: !!cfg.multiple,
       _transient: !!cfg.transient,
+      _autoOpen: !!cfg.autoOpen,
       _footer: (cfg.footer && typeof cfg.footer.action === 'function') ? cfg.footer : null,
       _onOutside: null,
       _onScroll: null,
@@ -144,7 +152,19 @@ export function comboboxData(cfg = {}) {
         const trig = this._rootEl.querySelector('.combobox-trigger');
         const w = trig ? Math.max(trig.offsetWidth, this._compact ? 180 : 0) : 0;
         this.ddWidth = w ? w + 'px' : null;
-        this.$nextTick(() => {
+        // Erst fokussieren, wenn das Dropdown wirklich sichtbar ist: Alpines
+        // `x-show` blendet verzoegert ein (eigener Timer, bei frisch montierten
+        // Comboboxen auch erst nach einem Frame). Ein focus() auf das noch
+        // `display: none`-Suchfeld verpufft — der Fokus bliebe auf dem Trigger
+        // (bzw. auf <body>, wenn der Trigger dabei verschwindet), und Tippen
+        // filterte nicht. Darum pro Frame pruefen, mit Obergrenze.
+        const focusWhenShown = (framesLeft) => {
+          if (!this.open) return;
+          const dd = this._rootEl.querySelector('.combobox-dropdown');
+          if (dd?.style.display === 'none' && framesLeft > 0) {
+            requestAnimationFrame(() => focusWhenShown(framesLeft - 1));
+            return;
+          }
           // Auf Mobile/Touch NICHT auto-fokussieren: der Fokus oeffnet die
           // Bildschirm-Tastatur, deren resize das am Trigger verankerte Dropdown
           // verschieben wuerde. Die Liste ist auch ohne Fokus voll bedienbar.
@@ -152,13 +172,16 @@ export function comboboxData(cfg = {}) {
           // Aktuell gewaehlten Eintrag beim Oeffnen in den sichtbaren Bereich
           // scrollen, damit lange Listen nicht am Anfang stehen bleiben.
           this._scrollHl();
-        });
+        };
+        this.$nextTick(() => focusWhenShown(10));
       },
       close() {
+        const wasOpen = this.open;
         this.open = false;
         this.query = '';
         this.highlighted = -1;
         this.ddWidth = null;
+        if (wasOpen) this.$dispatch('combobox-close');
       },
       select(val) {
         if (this._multiple) {
@@ -298,6 +321,7 @@ export function comboboxData(cfg = {}) {
         // die Combobox innerhalb eines spaet hydratisierten Subtrees liegt
         // (template x-if mit nested x-data-Wrappern, Beispiel pdfExportCard).
         window.Alpine.initTree(this._rootEl);
+        if (this._autoOpen) this.$nextTick(() => this.toggle());
       },
       destroy() {
         if (this._onOutside) {

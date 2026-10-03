@@ -45,6 +45,11 @@
   die Stufe, die transiente Combobox SETZT sie. Ein einzelnes gebundenes
   Auswahlfeld waere schmaler, koennte aber den Stale-Zustand nicht ausdruecken —
   und genau der ist der Grund fuer die Spalte.
+
+  Alle drei Zeilen-Comboboxen sind „lazy": sichtbar ist ein gleich aussehender
+  Platzhalter-Trigger, die echte Combobox montiert erst beim Klick (autoOpen)
+  und baut sich beim Schliessen wieder ab (view.js#isRowCombo/openRowCombo/
+  closeRowCombo). Grund: drei echte Instanzen pro Seitenzeile skalieren nicht.
 -->
 <template x-if="redaktionEnabled">
   <span class="organizer-redaktion display-contents">
@@ -55,21 +60,65 @@
             :data-tip="redaktionTip(page.id)"
             x-text="redaktionLabel(redaktionOf(page.id).status)"></span>
     </template>
-    <div class="organizer-redaktion-combo"
-         x-data="combobox({ placeholder: $app.t('redaktion.setStatus'), transient: true })"
-         x-effect="options = redaktionOptions()"
-         @combobox-change="setRedaktion(page.id, $event.detail)"></div>
+    <template x-if="!isRowCombo(page.id, 'redaktion')">
+      <div class="combobox-wrap combobox-wrap--compact organizer-redaktion-combo">
+        <button type="button" class="combobox-trigger" aria-haspopup="listbox" aria-expanded="false"
+                :data-row-combo="page.id + ':redaktion'"
+                @click="openRowCombo(page.id, 'redaktion')"
+                :aria-label="$app.t('redaktion.setStatus')">
+          <span class="combobox-value" x-text="$app.t('redaktion.setStatus')"></span>
+          <svg class="combobox-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M1.5 3.5L5 7L8.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </template>
+    <template x-if="isRowCombo(page.id, 'redaktion')">
+      <div class="organizer-redaktion-combo"
+           x-data="combobox({ placeholder: $app.t('redaktion.setStatus'), transient: true, autoOpen: true })"
+           x-effect="options = redaktionOptions()"
+           @combobox-change="setRedaktion(page.id, $event.detail)"
+           @combobox-close="closeRowCombo(page.id, 'redaktion', $event)"></div>
+    </template>
   </span>
 </template>
-<div class="organizer-move-combo"
-     x-data="combobox({ placeholder: $app.t('bookOrganizer.moveTo'), transient: true })"
-     x-effect="options = chapterMoveOptions(page.chapter_id || 0)"
-     @combobox-change="movePageToChapter(page.id, $event.detail)"></div>
-<template x-if="bookMoveOptions().length">
+<template x-if="!isRowCombo(page.id, 'chapter')">
+  <div class="combobox-wrap combobox-wrap--compact organizer-move-combo">
+    <button type="button" class="combobox-trigger" aria-haspopup="listbox" aria-expanded="false"
+            :data-row-combo="page.id + ':chapter'"
+            @click="openRowCombo(page.id, 'chapter')"
+            :aria-label="$app.t('bookOrganizer.moveTo')">
+      <span class="combobox-value" x-text="$app.t('bookOrganizer.moveTo')"></span>
+      <svg class="combobox-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M1.5 3.5L5 7L8.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+</template>
+<template x-if="isRowCombo(page.id, 'chapter')">
   <div class="organizer-move-combo"
-       x-data="combobox({ placeholder: $app.t('bookOrganizer.moveToBook'), transient: true })"
-       x-effect="options = bookMoveOptions()"
-       @combobox-change="movePageToBook(page.id, $event.detail)"></div>
+       x-data="combobox({ placeholder: $app.t('bookOrganizer.moveTo'), transient: true, autoOpen: true })"
+       x-effect="options = chapterMoveOptions(page.chapter_id || 0)"
+       @combobox-change="movePageToChapter(page.id, $event.detail)"
+       @combobox-close="closeRowCombo(page.id, 'chapter', $event)"></div>
+</template>
+<template x-if="bookMoveOptions().length">
+  <span class="display-contents">
+    <template x-if="!isRowCombo(page.id, 'book')">
+      <div class="combobox-wrap combobox-wrap--compact organizer-move-combo">
+        <button type="button" class="combobox-trigger" aria-haspopup="listbox" aria-expanded="false"
+                :data-row-combo="page.id + ':book'"
+                @click="openRowCombo(page.id, 'book')"
+                :aria-label="$app.t('bookOrganizer.moveToBook')">
+          <span class="combobox-value" x-text="$app.t('bookOrganizer.moveToBook')"></span>
+          <svg class="combobox-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M1.5 3.5L5 7L8.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </template>
+    <template x-if="isRowCombo(page.id, 'book')">
+      <div class="organizer-move-combo"
+           x-data="combobox({ placeholder: $app.t('bookOrganizer.moveToBook'), transient: true, autoOpen: true })"
+           x-effect="options = bookMoveOptions()"
+           @combobox-change="movePageToBook(page.id, $event.detail)"
+           @combobox-close="closeRowCombo(page.id, 'book', $event)"></div>
+    </template>
+  </span>
 </template>
 <button type="button" class="organizer-delete-btn" @click="deletePage(page.id)" :disabled="organizerSaving"
         :data-tip="$app.t('bookOrganizer.deletePage')" :aria-label="$app.t('bookOrganizer.deletePage')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>

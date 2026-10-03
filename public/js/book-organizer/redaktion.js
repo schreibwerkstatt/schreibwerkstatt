@@ -24,10 +24,15 @@ export const redaktionMethods = {
     if (!bookId) { this.redaktionEnabled = false; return; }
     try {
       const r = await fetchJson(`/redaktion/${bookId}`);
+      // Buchwechsel waehrend des Fetches: die Antwort gehoert zum alten Buch und
+      // wuerde die Spalte (an/aus) des neuen falsch setzen. Der Lauf fuers neue
+      // Buch kommt ueber `pages:loaded`.
+      if (Alpine.store('nav').selectedBookId !== bookId) return;
       this.redaktionEnabled = !!r.enabled;
       this.redaktionByPage = r.pages || {};
       this.redaktionCounts = r.counts || null;
     } catch (_) {
+      if (Alpine.store('nav').selectedBookId !== bookId) return;
       this.redaktionEnabled = false;
       this.redaktionByPage = {};
       this.redaktionCounts = null;

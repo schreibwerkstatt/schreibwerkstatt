@@ -22,12 +22,15 @@ const rootStub = {
   _refreshChapterStats() {},
 };
 globalThis.Alpine = { store: (n) => (n === 'nav' ? navStore : { uiLocale: 'de' }) };
-globalThis.window = { __app: rootStub };
+globalThis.window = { __app: rootStub, dispatchEvent() {} };
 
 const { persistMethods } = await import('../../public/js/book-organizer/persist.js');
 const { mirrorMethods } = await import('../../public/js/book-organizer/mirror.js');
 const { dndMethods } = await import('../../public/js/book-organizer/dnd.js');
 const { historyMethods } = await import('../../public/js/book-organizer/history.js');
+const { crudMethods } = await import('../../public/js/book-organizer/crud.js');
+const { contentRepo } = await import('../../public/js/repo/content.js');
+const { treeBuildMethods } = await import('../../public/js/book/tree/build.js');
 const { viewMethods, _computeChapterLengthDist } = await import('../../public/js/book-organizer/view.js');
 const { MAX_CHAPTER_DEPTH } = await import('../../public/js/book-organizer/constants.js');
 const { insertChapterItem } = await import('../../public/js/book/tree/load.js');
@@ -46,7 +49,7 @@ function makeCard() {
     _redoStack: [],
     _inHistoryFlight: false,
     async $nextTick() {},
-  }, persistMethods, mirrorMethods, dndMethods, viewMethods, historyMethods);
+  }, persistMethods, mirrorMethods, dndMethods, viewMethods, historyMethods, crudMethods);
 }
 
 // nav.tree-Fixture: Kapitel 1 „Eins" mit Sub 11 „Eins.A", Kapitel 2 „Zwei".
@@ -393,7 +396,9 @@ test('historyUndo eines create invalidiert den Redo-Stack', async () => {
   card._applyInverse = async () => true;
   const snap = card._snapshotWorkstate();
   card._pushUndo({ kind: 'reorder', before: snap, after: snap });
-  card._pushUndo({ kind: 'create-chapter', id: 2, name: 'Zwei' }, { clearRedo: false });
+  // Frisch angelegtes Kapitel ist leer — nur dann ist der Create-Undo erlaubt.
+  card.workTree.push({ id: 3, name: 'Neu', depth: 1, parent_id: null, pages: [], subchapters: [] });
+  card._pushUndo({ kind: 'create-chapter', id: 3, name: 'Neu' }, { clearRedo: false });
 
   await card.historyUndo();
   assert.equal(card._redoStack.length, 0, 'kein Redo nach create-Undo (neue ID beim Wiederanlegen)');
@@ -459,10 +464,182 @@ test('Reorder-Undo mit gleichem Bestand, anderer Reihenfolge ist nicht stale', a
 
 test('Rename-/Create-Record auf verschwundenes Ziel ist stale', () => {
   const card = makeSeededCard();
-  assert.equal(card._isRecordStale({ kind: 'rename-page', id: 901 }, 'undo'), false);
-  assert.equal(card._isRecordStale({ kind: 'rename-page', id: 4711 }, 'undo'), true);
-  assert.equal(card._isRecordStale({ kind: 'rename-chapter', id: 11 }, 'redo'), false);
-  assert.equal(card._isRecordStale({ kind: 'create-chapter', id: 4711 }, 'undo'), true);
+  assert.equal(card._staleReason({ kind: 'rename-page', id: 901 }, 'undo'), null);
+  assert.equal(card._staleReason({ kind: 'rename-page', id: 4711 }, 'undo')?.key, 'bookOrganizer.historyStale');
+  assert.equal(card._staleReason({ kind: 'rename-chapter', id: 11 }, 'redo'), null);
+  assert.equal(card._staleReason({ kind: 'create-chapter', id: 4711 }, 'undo')?.key, 'bookOrganizer.historyStale');
+});
+
+// Der Verlauf ueberlebt das Schliessen der Karte. Ein Create-Undo Stunden
+// spaeter darf keinen inzwischen geschriebenen Text loeschen.
+test('Create-Undo verweigert, sobald die Seite Inhalt bzw. das Kapitel Seiten hat', async () => {
+  const card = makeSeededCard();
+  rootStub.tokEsts = { 902: { chars: 0 } };
+  assert.equal(card._staleReason({ kind: 'create-page', id: 902 }, 'undo'), null, 'leere Seite: Undo erlaubt');
+  rootStub.tokEsts = { 902: { chars: 1200 } };
+  const r = card._staleReason({ kind: 'create-page', id: 902 }, 'undo');
+  assert.equal(r?.key, 'bookOrganizer.historyHasContent');
+  assert.deepEqual(r.params, { name: 'S2' });
+  assert.equal(card._staleReason({ kind: 'create-chapter', id: 2 }, 'undo')?.key,
+    'bookOrganizer.historyHasContent', 'Kapitel mit Seiten');
+  assert.equal(card._staleReason({ kind: 'create-chapter', id: 1 }, 'undo')?.key,
+    'bookOrganizer.historyHasContent', 'Kapitel mit Sub-Kapitel');
+
+  let deleted = false;
+  card._applyInverse = async () => { deleted = true; return true; };
+  card._pushUndo({ kind: 'create-page', id: 902, chapterId: 1, name: 'S2' });
+  await card.historyUndo();
+  assert.equal(deleted, false, 'Seite mit Inhalt wird nicht geloescht');
+  assert.equal(card._undoStack.length, 0);
+  rootStub.tokEsts = {};
+});
+
+test('Delete-Record: Undo nur solange die Seite fehlt, Redo nur solange sie da ist', () => {
+  const card = makeSeededCard();
+  const rec = { kind: 'delete-page', pageId: 4711, name: 'Weg', chapterId: 1, index: 0 };
+  assert.equal(card._staleReason(rec, 'undo'), null);
+  assert.equal(card._staleReason(rec, 'redo')?.key, 'bookOrganizer.historyStale');
+  const back = { ...rec, pageId: 901 };
+  assert.equal(card._staleReason(back, 'undo')?.key, 'bookOrganizer.historyStale');
+  assert.equal(card._staleReason(back, 'redo'), null);
+});
+
+// Snapshot traegt die Namen von damals. Eine Umbenennung anderswo darf ein
+// Reorder-Undo weder in der Karte noch in nav.pages zuruecksetzen.
+test('Reorder-Undo uebernimmt die aktuellen Namen statt der aus dem Snapshot', async () => {
+  const card = makeSeededCard();
+  const before = card._snapshotWorkstate();
+  card.workTree[0].pages.reverse();
+  // Umbenennung ausserhalb des Organizers (Sidebar/Editor) nach dem Reorder.
+  card.workTree[0].pages.find(p => p.id === 901).name = 'S1 neu';
+  card.workTree[0].name = 'Eins neu';
+  navStore.pages.find(p => p.id === 901).name = 'S1 neu';
+  card._reattachSortables = async () => {};
+  card._persistOrder = async ({ mirror }) => { card._applyMirror(mirror); return true; };
+
+  await card._applyReorderSnapshot(before);
+
+  assert.deepEqual(card.workTree[0].pages.map(p => p.id), [901, 902], 'Reihenfolge aus dem Snapshot');
+  assert.equal(card.workTree[0].pages[0].name, 'S1 neu', 'Seitenname aktuell');
+  assert.equal(card.workTree[0].name, 'Eins neu', 'Kapitelname aktuell');
+  assert.equal(navStore.pages.find(p => p.id === 901).name, 'S1 neu', 'Mirror schreibt keinen alten Namen');
+});
+
+test('Page-Membership-Mirror schreibt keine Namen nach nav.pages', () => {
+  const card = makeSeededCard();
+  card.workTree[0].pages[0].name = 'Veraltet';
+  card._mirrorPageMembershipInRoot(null);
+  assert.equal(navStore.pages.find(p => p.id === 901).name, 'S1');
+});
+
+test('_remapPageId zieht die neue ID durch Snapshots und Records', () => {
+  const card = makeSeededCard();
+  const snap = card._snapshotWorkstate();
+  card._undoStack = [
+    { kind: 'reorder', before: snap, after: card._snapshotWorkstate() },
+    { kind: 'rename-page', id: 901, oldName: 'a', newName: 'b' },
+  ];
+  card._redoStack = [{ kind: 'delete-page', pageId: 901, name: 'S1', chapterId: 1, index: 0 }];
+  const extra = { kind: 'delete-page', pageId: 901 };
+  card._remapPageId(901, 5000, extra);
+  assert.deepEqual(card._undoStack[0].before.workTree[0].pages.map(p => p.id), [5000, 902]);
+  assert.deepEqual(card._undoStack[0].after.workTree[0].pages.map(p => p.id), [5000, 902]);
+  assert.equal(card._undoStack[1].id, 5000);
+  assert.equal(card._redoStack[0].pageId, 5000);
+  assert.equal(extra.pageId, 5000);
+});
+
+test('Delete-Undo stellt aus dem Papierkorb wieder her, an die alte Stelle, mit neuer ID', async () => {
+  const card = makeSeededCard();
+  // Seite 901 (Index 0 in Kapitel 1) ist geloescht — Workstate ohne sie.
+  card.workTree[0].pages.shift();
+  const orig = { ...contentRepo };
+  let savedTree = null;
+  let reloaded = 0;
+  contentRepo.listTrash = async () => ({ items: [{ id: 77, page_id: 901, name: 'S1' }] });
+  contentRepo.restoreFromTrash = async (bookId, delId) => {
+    assert.equal(delId, 77);
+    return { ok: true, page: { id: 5001, name: 'S1', chapter_id: 1 } };
+  };
+  contentRepo.saveOrder = async (bookId, tree) => { savedTree = tree; };
+  rootStub.loadPages = async () => { reloaded++; };
+  try {
+    const rec = { kind: 'delete-page', pageId: 901, name: 'S1', chapterId: 1, index: 0 };
+    card._undoStack = [{ kind: 'rename-page', id: 901, oldName: 'x', newName: 'S1' }, rec];
+    await card.historyUndo();
+    assert.deepEqual(card.workTree[0].pages.map(p => p.id), [5001, 902], 'alte Position');
+    const ch1 = savedTree.find(n => n.type === 'chapter' && n.id === 1);
+    assert.deepEqual(ch1.children.filter(c => c.type === 'page').map(c => c.id), [5001, 902]);
+    assert.equal(reloaded, 1, 'Store wird nach dem Restore neu geladen');
+    assert.equal(card._undoStack[0].id, 5001, 'aelterer Record auf neue ID umgeschrieben');
+    assert.equal(card._redoStack[0].pageId, 5001, 'Redo loescht die neue Seite');
+  } finally {
+    Object.assign(contentRepo, orig);
+    delete rootStub.loadPages;
+  }
+});
+
+// Klick auf „Rueckgaengig" blurt das Namensfeld → Rename startet asynchron.
+// Undo muss warten, sonst nimmt es den VORHERIGEN Record und der spaeter
+// gepushte Rename-Record leert den Redo-Stack.
+test('historyUndo wartet auf laufende Umbenennungen', async () => {
+  const card = makeSeededCard();
+  const undone = [];
+  card._applyInverse = async (rec) => { undone.push(rec.kind); return true; };
+  const snap = card._snapshotWorkstate();
+  card._pushUndo({ kind: 'reorder', before: snap, after: snap });
+  let finish;
+  card._trackRename(new Promise(res => { finish = res; }).then(() => {
+    card._recordRenamePage(901, 'S1', 'S1b');
+  }));
+  const p = card.historyUndo();
+  finish();
+  await p;
+  assert.deepEqual(undone, ['rename-page'], 'die Umbenennung ist der juengste Schritt');
+  assert.equal(card._undoStack.length, 1, 'Reorder bleibt undo-bar');
+});
+
+test('Suche: Kapitel mit Namens-Treffer behaelt alle Sub-Kapitel', () => {
+  const card = makeSeededCard();
+  card.organizerSearch = 'eins';
+  const f = card.filteredWorkTree();
+  assert.deepEqual(f.map(c => c.id), [1]);
+  assert.deepEqual(f[0].subchapters.map(c => c.id), [11]);
+  card.organizerSearch = 'sub1';
+  const g = card.filteredWorkTree();
+  assert.deepEqual(g[0].pages, [], 'ohne Namens-Treffer nur passende Seiten');
+  assert.deepEqual(g[0].subchapters[0].pages.map(p => p.id), [911]);
+});
+
+test('bookMoveOptions bietet nur schreibbare, nicht archivierte fremde Buecher an', () => {
+  const card = makeCard();
+  navStore.books = [
+    { id: 7, name: 'Aktuell', role: 'owner' },
+    { id: 8, name: 'Eigenes', role: 'owner' },
+    { id: 9, name: 'Mitautor', role: 'editor' },
+    { id: 10, name: 'Nur lesen', role: 'viewer' },
+    { id: 11, name: 'Lektorat', role: 'lektor' },
+    { id: 12, name: 'Archiv', role: 'owner', archived: true },
+  ];
+  assert.deepEqual(card.bookMoveOptions().map(o => o.value), [8, 9]);
+  navStore.books = [];
+});
+
+test('_rebuildTreeOrderMaps: gleichnamige Kapitel zeigen auf das erste Vorkommen', () => {
+  const ctx = {
+    $store: { nav: {
+      tree: [
+        { type: 'chapter', id: 1, name: 'Teil A', solo: false },
+        { type: 'chapter', id: 11, name: 'Szene 1', solo: false },
+        { type: 'chapter', id: 2, name: 'Teil B', solo: false },
+        { type: 'chapter', id: 21, name: 'Szene 1', solo: false },
+      ],
+      pages: [],
+    } },
+  };
+  treeBuildMethods._rebuildTreeOrderMaps.call(ctx);
+  assert.equal(ctx._chapterOrderMap.get('Szene 1'), 1);
+  assert.equal(ctx._chapterOrderMap.get('Teil B'), 2, 'Index zaehlt weiter');
 });
 
 test('_fmtDec1 formatiert eine Nachkommastelle in der UI-Locale', () => {

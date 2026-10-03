@@ -34,6 +34,7 @@ const freshState = () => ({
   chapterOpen: {},   // { [chapter_id]: bool } — per-Buch UI-Sicht
   organizerSearch: '',
   jumpToChapterId: '',
+  activeRowCombo: null, // '<pageId>:<kind>' der gerade montierten Zeilen-Combobox
   organizerStatus: '',
   organizerSaving: false,
   // Redaktions-Status (Slice book-organizer/redaktion.js). `redaktionEnabled`
@@ -46,6 +47,7 @@ const freshState = () => ({
   _undoStack: [],
   _redoStack: [],
   _inHistoryFlight: false,
+  _renamesInFlight: null, // Promise laufender Umbenennungen (crud.js#_trackRename)
   _memos: {},        // Cache für chapterLengthDist (siehe view.js#_memo)
 });
 
@@ -57,8 +59,10 @@ export function registerBookOrganizerCard() {
     _sortables: [],
     _lifecycle: null,
     _onHistoryKeydown: null,
+    _cardEl: null,     // Karten-Wurzel fuer DOM-Abfragen (dnd.js#_cardRoot)
 
     init() {
+      this._cardEl = this.$el;
       // Kein `resetState` im Lifecycle-Cfg (auch nicht als Factory, die der
       // Helper inzwischen unterstuetzt): beide Reset-Pfade sind hier
       // ueberschrieben, weil sie zusaetzlich Sortable destroyen muessen — ein
@@ -102,15 +106,11 @@ export function registerBookOrganizerCard() {
           } },
           // Seite ist aus dem Store verschwunden — durch ein Loeschen (Root:
           // `deletePageById`), einen Remote-Delete aus dem Collab-Feed oder einen
-          // Move in ein anderes Buch. `_removePageFromTree` hat nav.tree/nav.pages
-          // schon bereinigt (In-Place, kein Reload → kein pages:loaded); hier
-          // folgen die daraus ABGELEITETEN Sichten, sonst bleibt die Zeile stehen
-          // bzw. zeigen Order-Maps und Diary-Kalender auf eine Seite, die es
-          // nicht mehr gibt.
+          // Move in ein anderes Buch. `_removePageFromTree` hat nav.tree/nav.pages,
+          // Order-Maps und Diary-Cache schon nachgezogen (In-Place, kein Reload →
+          // kein pages:loaded); hier fehlt nur noch der Workstate der Karte.
           { type: EVT.PAGE_REMOVED, handler: async () => {
             if (!window.__app.showBookOrganizerCard) return;
-            this._rebuildPageOrderMaps();
-            this._invalidateDiaryCache();
             await this._rerender();
           } },
           // Kapitel ausserhalb angelegt (Sidebar-Kontextmenü) — in-place in

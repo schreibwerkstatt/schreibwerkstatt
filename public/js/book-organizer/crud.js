@@ -13,9 +13,23 @@ export const crudMethods = {
       return;
     }
     const oldName = ch.name;
-    this._doRenameChapter(id, newName, ev.target).then(ok => {
+    this._trackRename(this._doRenameChapter(id, newName, ev.target).then(ok => {
       if (ok) this._recordRenameChapter(id, oldName, newName);
-    });
+    }));
+  },
+
+  // Umbenennen laeuft ohne `organizerSaving` — der Flag disabled alle Name-
+  // Inputs, und ein Blur durch Klick ins NAECHSTE Feld verloere sonst sofort den
+  // Fokus. Stattdessen merkt sich die Karte die laufenden Renames; Undo/Redo
+  // warten darauf (history.js), damit der Record der Umbenennung im Stack liegt,
+  // bevor einer herausgenommen wird. Ohne das nahm ein Klick auf „Rueckgaengig"
+  // (Blur → Rename startet) den VORHERIGEN Record, und der spaeter gepushte
+  // Rename-Record leerte den Redo-Stack.
+  _trackRename(promise) {
+    const all = Promise.all([this._renamesInFlight, promise]);
+    this._renamesInFlight = all;
+    all.finally(() => { if (this._renamesInFlight === all) this._renamesInFlight = null; });
+    return promise;
   },
 
   async _doRenameChapter(id, newName, inputEl) {
@@ -29,7 +43,8 @@ export const crudMethods = {
       for (const it of Alpine.store('nav').tree) {
         if (it.type === 'chapter' && !it.solo && it.id === id) it.name = newName;
       }
-      this._rebuildChapterOrderMap();
+      this._rebuildOrderMaps();
+      this._signalXrefsChanged();
       return true;
     } catch (e) {
       root.setStatus(root.t('bookOrganizer.saveFailed', { detail: e.message }));
@@ -47,9 +62,9 @@ export const crudMethods = {
       return;
     }
     const oldName = page.name;
-    this._doRenamePage(id, newName, ev.target).then(ok => {
+    this._trackRename(this._doRenamePage(id, newName, ev.target).then(ok => {
       if (ok) this._recordRenamePage(id, oldName, newName);
-    });
+    }));
   },
 
   async _doRenamePage(id, newName, inputEl) {
@@ -65,9 +80,10 @@ export const crudMethods = {
       for (const it of nav.tree) {
         if (it.type === 'chapter' && it.solo && it.pages?.[0]?.id === id) it.name = newName;
       }
-      // Pages-Maps neu aufbauen (Reihenfolge unverändert, aber Name-Index drin).
-      this._rebuildPageOrderMaps();
+      // Order-Maps neu aufbauen (Reihenfolge unverändert, aber Name-Index drin).
+      this._rebuildOrderMaps();
       this._invalidateDiaryCache();
+      this._signalXrefsChanged();
       return true;
     } catch (e) {
       root.setStatus(root.t('bookOrganizer.saveFailed', { detail: e.message }));
@@ -94,6 +110,9 @@ export const crudMethods = {
       if (!created?.id) return;
       createdId = created.id;
       this._mirrorCreatedChapter(created, name);
+      // Aufgeklappt anlegen (wie createSubchapter): ein zugeklapptes leeres
+      // Kapitel hat keine Seitenliste im DOM, also auch kein Drop-Ziel.
+      this.chapterOpen = { ...this.chapterOpen, [created.id]: true };
       await this._rerender();
     }, 'bookOrganizer.createFailed');
     if (ok && createdId != null) this._recordCreateChapter(createdId, name);
@@ -146,20 +165,26 @@ export const crudMethods = {
     // Neues Top-Level-Kapitel steht in Depth-First-Reihenfolge am Ende — push
     // trifft die richtige Position, kein Re-Sort (der wuerde Sub-Kapitel aus
     // ihrem Parent reissen, siehe mirror.js Ordnungs-Invariante).
-    nav.tree.push({
+    nav.tree.push(this._buildChapterEntry(created, name, { depth: 1, parentId: null }));
+    this._rebuildOrderMaps();
+    this._refreshChapterStats();
+  },
+
+  // Tree-Item eines neuen Kapitels. Shape muss zu tree/build.js passen.
+  _buildChapterEntry(created, name, { depth, parentId }) {
+    return {
       type: 'chapter',
       id: created.id,
       name: created.name || name,
       priority: created.priority ?? Number.MAX_SAFE_INTEGER,
-      depth: 1,
-      parent_id: null,
+      depth,
+      parent_id: parentId,
+      excluded: false,
       hasChildren: false,
       open: true,
       solo: false,
       pages: [],
-    });
-    this._rebuildChapterOrderMap();
-    this._refreshChapterStats();
+    };
   },
 
   _mirrorCreatedPage(created, chapterId) {
@@ -193,7 +218,7 @@ export const crudMethods = {
     // Reassignment statt Index-Assign: der `tokTotals`-Memo haengt an der
     // Identitaet von `tokEsts` (app/app-root-getters.js).
     window.__app.tokEsts = { ...window.__app.tokEsts, [newPage.id]: { tok: 0, words: 0, chars: 0 } };
-    this._rebuildPageOrderMaps();
+    this._rebuildOrderMaps();
     this._invalidateDiaryCache();
     this._refreshChapterStats();
   },
@@ -208,10 +233,6 @@ export const crudMethods = {
     }
     if ((ch.subchapters?.length || 0) > 0) {
       root.setStatus(root.t('bookOrganizer.chapterHasSubchapters', { name: ch.name }));
-      return;
-    }
-    if (root.currentPage && root.currentPage.chapter_id === id) {
-      root.setStatus(root.t('bookOrganizer.pageInEditorWarn'));
       return;
     }
     const ok = await root.appConfirm({
@@ -270,31 +291,53 @@ export const crudMethods = {
       });
       if (!created?.id) return;
       createdId = created.id;
-      this.chapterOpen = { ...this.chapterOpen, [parent.id]: true, [created.id]: true };
-      // Einziger verbleibende fullReload-Pfad: das neue Kapitel existiert im
-      // Workstate noch nicht, seine Einsortierungsposition im flachen nav.tree
-      // ist daraus nicht ableitbar. pages:loaded triggert anschliessend
-      // _rerender via Card-Listener und befuellt workTree.
-      await this._applyMirror('reload');
+      this.chapterOpen = { ...this.chapterOpen, [parentChapterId]: true, [created.id]: true };
+      // Parent NACH dem Prompt neu suchen: waehrend des Dialogs kann ein
+      // `pages:loaded` den Workstate ersetzt haben. Fehlt er, bleibt nur der
+      // volle Resync.
+      const parentNow = this._findChapter(parentChapterId)?.node;
+      if (!parentNow) { await this._applyMirror('reload'); return; }
+      // Server haengt das Kapitel ans Ende der Geschwister (localdb#createChapter)
+      // — dieselbe Stelle im Workstate. Den Platz im flachen nav.tree bestimmt
+      // anschliessend `_reorderNavTree` ueber den Depth-First-Rang.
+      parentNow.subchapters = [...(parentNow.subchapters || []), {
+        id: created.id,
+        name: created.name || name,
+        depth: parentNow.depth + 1,
+        parent_id: parentNow.id,
+        pages: [],
+        subchapters: [],
+      }];
+      Alpine.store('nav').tree.push(this._buildChapterEntry(created, name,
+        { depth: parentNow.depth + 1, parentId: parentNow.id }));
+      this._mirrorChapterOrderInRoot();
+      await this._reattachSortables();
     }, 'bookOrganizer.createFailed');
     if (ok && createdId != null) this._recordCreateChapter(createdId, name);
   },
 
-  // Der Organizer loescht die Seite NICHT, die im Editor offen ist — dort raeumt
-  // `deleteCurrentPage` Editor-State und Kapitel-Rueckfall mit ab, was diese
-  // Karte nicht kann. Bewusste Weigerung statt stiller Teil-Loeschung.
+  // Gelöschte Seiten landen im Papierkorb (page_deletions) — darum ist das
+  // Loeschen ueber die History umkehrbar: Undo stellt sie wieder her und setzt
+  // sie an ihre alte Stelle (history.js#_restoreDeletedPage). Position VOR dem
+  // Loeschen merken, danach ist die Seite aus dem Workstate verschwunden.
   async deletePage(id) {
     const root = window.__app;
-    if (root.currentPage && root.currentPage.id === id) {
-      root.setStatus(root.t('bookOrganizer.pageInEditorWarn'));
-      return;
-    }
     const page = this._findPage(id);
     if (!page) return;
-    const ok = await this._deletePageRaw(id, { name: page.name, confirm: true });
-    // Delete ist nicht reversibel → History invalidieren. Nur nach echtem
-    // Loeschen: ein Abbruch in der Rueckfrage darf den Undo-Stack nicht raeumen.
-    if (ok) this._clearHistory();
+    const pos = this._pagePosition(id);
+    const name = page.name;
+    const ok = await this._deletePageRaw(id, { name, confirm: true });
+    if (!ok) return;
+    this._recordDeletePage(id, name, pos.chapterId, pos.index);
+    root.setStatus(root.t('bookOrganizer.deletedUndoHint', { name }), false, 5000);
+  },
+
+  // Kapitel + Index einer Seite im Workstate (0 = ohne Kapitel).
+  _pagePosition(id) {
+    const page = this._findPage(id);
+    const chapterId = page?.chapter_id || 0;
+    const bucket = this._pagesBucket(chapterId) || [];
+    return { chapterId, index: Math.max(0, bucket.findIndex(p => p.id === id)) };
   },
 
   // Ohne Rueckfrage per Default — der History-Undo eines `create-page` loescht
@@ -336,10 +379,6 @@ export const crudMethods = {
     if (!targetBookId) return;
     const page = this._findPage(pageId);
     if (!page) return;
-    if (root.currentPage && root.currentPage.id === pageId) {
-      root.setStatus(root.t('bookOrganizer.pageInEditorWarn'));
-      return;
-    }
     const book = (nav.books || []).find(b => String(b.id) === String(targetBookId));
     const bookName = book?.name || ('#' + targetBookId);
     const ok = await root.appConfirm({

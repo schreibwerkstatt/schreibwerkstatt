@@ -14,6 +14,16 @@ import {
 import { MAX_CHAPTER_DEPTH } from './constants.js';
 
 export const dndMethods = {
+  // Karten-Wurzel fuer DOM-Abfragen. NICHT `this.$root`: Alpine loest `$root`
+  // zur naechsten x-data-Wurzel des AUFRUFENDEN Elements auf. Kommt der Aufruf
+  // aus einer Unterkomponente (Zeilen-Combobox → movePageToBook, klappbare
+  // Laengenverteilung → jumpToChapter), saehe `_initSortables` nur deren DOM,
+  // faende keine Listen, und die Karte stuende ohne DnD da. `_cardEl` setzt
+  // die Karte in init().
+  _cardRoot() {
+    return this._cardEl || this.$root;
+  },
+
   _destroySortables() {
     for (const s of this._sortables) { try { s.destroy(); } catch {} }
     this._sortables = [];
@@ -54,7 +64,7 @@ export const dndMethods = {
     // Eine Chapter-Liste pro Tiefe — alle teilen die `chapters`-Gruppe, damit
     // Kapitel zwischen Levels per DnD wandern koennen. Drop-Ziel-Validierung
     // (max-depth, kein-eigener-Subtree) im onMove-Hook.
-    const chapterLists = this.$root.querySelectorAll('[data-organizer="chapter-list"]');
+    const chapterLists = this._cardRoot().querySelectorAll('[data-organizer="chapter-list"]');
     for (const el of chapterLists) {
       this._sortables.push(new Sortable(el, {
         ...baseOpts,
@@ -67,7 +77,7 @@ export const dndMethods = {
         onEnd: (evt) => { unmarkDragIgnore(evt); this._onChapterDrop(evt); },
       }));
     }
-    const pageLists = this.$root.querySelectorAll('[data-organizer="page-list"]');
+    const pageLists = this._cardRoot().querySelectorAll('[data-organizer="page-list"]');
     for (const el of pageLists) {
       this._sortables.push(new Sortable(el, {
         ...baseOpts,

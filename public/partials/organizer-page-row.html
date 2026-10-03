@@ -9,6 +9,7 @@
   <input type="text" class="organizer-name" :value="page.name"
          @blur="onRenamePage(page.id, $event)"
          @keydown.enter.prevent="$event.target.blur()"
+         @keydown.escape.stop.prevent="$event.target.value = page.name; $event.target.blur()"
          :disabled="organizerSaving"
          autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other" data-spellcheck="spelling"
          :aria-label="$app.t('bookOrganizer.renamePage')">

@@ -80,17 +80,20 @@ export const persistMethods = {
       this.organizerSaving = false;
       this.organizerStatus = '';
     }
-    // Jede Organizer-Mutation verschiebt die Ziele von Querverweisen: Umsortieren
-    // aendert die Kapitelnummern, Umbenennen den Titel im Ziel-Picker, Loeschen
-    // die Verfuegbarkeit. Der Picker cacht die Zielliste je Buch — ohne dieses
-    // Signal zeigte er bis zum Buchwechsel veraltete Nummern.
-    // Bewusst HIER und nicht bei `pages:loaded`: das feuert auch bei jeder
-    // Navigation und wuerde den Cache sinnlos machen.
-    if (ok) {
-      const bookId = window.Alpine?.store('nav')?.selectedBookId ?? null;
-      window.dispatchEvent(new CustomEvent(EVT.XREFS_CHANGED, { detail: { bookId } }));
-    }
+    if (ok) this._signalXrefsChanged();
     return ok;
+  },
+
+  // Jede Organizer-Mutation verschiebt die Ziele von Querverweisen: Umsortieren
+  // aendert die Kapitelnummern, Umbenennen den Titel im Ziel-Picker, Loeschen
+  // die Verfuegbarkeit. Der Picker cacht die Zielliste je Buch — ohne dieses
+  // Signal zeigte er bis zum Buchwechsel veraltete Nummern. Aufrufer:
+  // `_runMutation` und die Rename-Pfade (die laufen ohne den Wrapper).
+  // Bewusst NICHT bei `pages:loaded`: das feuert auch bei jeder Navigation und
+  // wuerde den Cache sinnlos machen.
+  _signalXrefsChanged() {
+    const bookId = window.Alpine?.store('nav')?.selectedBookId ?? null;
+    window.dispatchEvent(new CustomEvent(EVT.XREFS_CHANGED, { detail: { bookId } }));
   },
 
   // Single-Tree-PUT. Statt per-Item update fuer alle veraenderten Items wird

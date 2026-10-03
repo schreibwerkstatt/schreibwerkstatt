@@ -213,3 +213,244 @@ test('Sidebar-Kapitelanlage bei offenem Organizer landet im Workstate und im Ord
     await contentRepo.deleteChapter(id);
   }, chapterId);
 });
+
+// ── Eigene Fixtures fuer die folgenden Tests ─────────────────────────────────
+// Kapitel + Seiten frisch anlegen, damit die Tests nicht von der Seed-Struktur
+// abhaengen (Kapitelzahl entscheidet z.B. ueber den Start-Zuklapp-Zustand).
+async function seedChapter(page, bookId, name, pageNames) {
+  return page.evaluate(async ({ bid, n, pn }) => {
+    const { contentRepo } = await import('/js/repo/content.js');
+    const ch = await contentRepo.createChapter({ book_id: parseInt(bid, 10), name: n });
+    const pages = [];
+    for (const p of pn) {
+      pages.push((await contentRepo.createPage({ book_id: parseInt(bid, 10), chapter_id: ch.id, name: p, html: '<p>x</p>' })).id);
+    }
+    await window.__app.loadPages();
+    return { chapterId: ch.id, pageIds: pages };
+  }, { bid: bookId, n: name, pn: pageNames });
+}
+
+async function cleanupChapter(page, chapterId) {
+  await page.evaluate(async (cid) => {
+    const { contentRepo } = await import('/js/repo/content.js');
+    const nav = window.Alpine.store('nav');
+    for (const p of nav.pages.filter((x) => x.chapter_id === cid)) {
+      try { await contentRepo.deletePage(p.id); } catch {}
+    }
+    try { await contentRepo.deleteChapter(cid); } catch {}
+  }, chapterId);
+}
+
+const organizerData = (page, fn, arg) => page.evaluate(({ src, a }) => {
+  const ctx = window.Alpine.$data(document.querySelector('.card--organizer'));
+  // eslint-disable-next-line no-new-func
+  return new Function('ctx', 'a', `return (async () => { ${src} })()`)(ctx, a);
+}, { src: fn, a: arg });
+
+// Aufklappen erzeugt x-if-gatete Seitenlisten. Der Sprung zum Kapitel muss
+// Sortable daran binden — sonst ist DnD in genau dem Kapitel tot, zu dem der
+// User gerade gesprungen ist.
+test('Sprung zu einem zugeklappten Kapitel bindet Sortable an seine Seitenliste', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const { chapterId } = await seedChapter(page, bookId, 'Sprungziel', ['J1', 'J2']);
+  await openOrganizer(page);
+
+  await organizerData(page, 'ctx.collapseAll(); await ctx.$nextTick();');
+  await expect(page.locator(`.card--organizer ul[data-organizer="page-list"][data-chapter-id="${chapterId}"]`)).toHaveCount(0);
+
+  await organizerData(page, 'await ctx.jumpToChapter(String(a));', chapterId);
+  const ul = page.locator(`.card--organizer ul[data-organizer="page-list"][data-chapter-id="${chapterId}"]`);
+  await expect(ul).toHaveCount(1);
+  const bound = await organizerData(page, `
+    const ul = document.querySelector('.card--organizer ul[data-organizer="page-list"][data-chapter-id="' + a + '"]');
+    return ctx._sortables.some((s) => s.el === ul);`, chapterId);
+  expect(bound, 'Sortable-Instanz an der neu sichtbaren Liste').toBe(true);
+  guard.assertClean('jump binds sortable');
+  await cleanupChapter(page, chapterId);
+});
+
+// Der Tagebuch-Kalender cacht identity-gated auf nav.pages. Das Loeschen muss
+// die Identitaet erneuern — auch wenn der Organizer gar nicht offen ist.
+test('Loeschen erneuert nav.pages-Identitaet auch bei geschlossenem Organizer', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const { chapterId, pageIds } = await seedChapter(page, bookId, 'Kalender-Cache', ['K1']);
+  const res = await page.evaluate(async (id) => {
+    const nav = window.Alpine.store('nav');
+    const before = nav.pages;
+    const shown = window.__app.showBookOrganizerCard;
+    const ok = await window.__app.deletePageById(id, { confirm: false });
+    return { ok, shown, changed: nav.pages !== before, has: nav.pages.some((p) => p.id === id) };
+  }, pageIds[0]);
+  expect(res.shown, 'Organizer ist zu').toBeFalsy();
+  expect(res.ok).toBe(true);
+  expect(res.has).toBe(false);
+  expect(res.changed, 'neue Array-Identitaet invalidiert den Kalender-Cache').toBe(true);
+  guard.assertClean('delete renews pages identity');
+  await cleanupChapter(page, chapterId);
+});
+
+// Zeilen-Comboboxen montieren erst beim Klick (Leistung bei vielen Seiten):
+// vorher nur ein Platzhalter-Trigger, nachher genau eine echte Instanz, die sich
+// beim Schliessen wieder abbaut und den Fokus an den Platzhalter zurueckgibt.
+test('Zeilen-Combobox montiert erst beim Klick und verschiebt die Seite', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const a = await seedChapter(page, bookId, 'Lazy-Quelle', ['L1']);
+  const b = await seedChapter(page, bookId, 'Lazy-Ziel', []);
+  await openOrganizer(page);
+
+  const realCombos = page.locator('.card--organizer .organizer-page .combobox-dropdown');
+  await expect(realCombos).toHaveCount(0);
+
+  const key = `${a.pageIds[0]}:chapter`;
+  const trigger = page.locator(`.card--organizer [data-row-combo="${key}"]`);
+  await trigger.click();
+  await expect(realCombos).toHaveCount(1);
+  await expect(page.locator('.card--organizer .organizer-page .combobox-dropdown')).toBeVisible();
+  // Fokus im Suchfeld (combobox.js#toggle fokussiert einen Frame nach dem
+  // Einblenden) — Voraussetzung dafuer, dass Escape/Tippen die Liste erreicht.
+  await expect(page.locator('.card--organizer .organizer-page .combobox-search')).toBeFocused();
+
+  await page.keyboard.press('Escape');
+  await expect(realCombos).toHaveCount(0);
+  await expect(page.locator(`.card--organizer [data-row-combo="${key}"]`)).toBeFocused();
+
+  await page.locator(`.card--organizer [data-row-combo="${key}"]`).click();
+  await page.locator('.card--organizer .organizer-page .combobox-option', { hasText: 'Lazy-Ziel' }).click();
+  await expect.poll(() => page.evaluate((id) =>
+    window.Alpine.store('nav').pages.find((p) => p.id === id)?.chapter_id, a.pageIds[0])).toBe(b.chapterId);
+  await expect(realCombos).toHaveCount(0);
+  guard.assertClean('lazy row combobox');
+  await cleanupChapter(page, a.chapterId);
+  await cleanupChapter(page, b.chapterId);
+});
+
+// Neues Sub-Kapitel ohne loadPages (kein Flackern): Workstate und Sidebar-Tree
+// werden in-place nachgezogen, Depth-First-Ordnung bleibt erhalten.
+test('Sub-Kapitel-Anlage spiegelt in-place ohne loadPages', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const parent = await seedChapter(page, bookId, 'Eltern', ['E1']);
+  await openOrganizer(page);
+
+  const res = await organizerData(page, `
+    const root = window.__app;
+    root.appPrompt = async () => 'Kind-Neu';
+    const orig = root.loadPages.bind(root);
+    let reloads = 0;
+    root.loadPages = async (...x) => { reloads++; return orig(...x); };
+    await ctx.createSubchapter(a);
+    root.loadPages = orig;
+    const tree = window.Alpine.store('nav').tree;
+    const pi = tree.findIndex((t) => t.id === a);
+    const child = tree[pi + 1];
+    return { reloads, childName: child?.name, childParent: child?.parent_id, childDepth: child?.depth,
+             parentHasChildren: tree[pi].hasChildren,
+             inWork: ctx._findChapter(a).node.subchapters.map((c) => c.name),
+             childId: child?.id };`, parent.chapterId);
+  expect(res.reloads, 'kein loadPages').toBe(0);
+  expect(res.childName).toBe('Kind-Neu');
+  expect(res.childParent).toBe(parent.chapterId);
+  expect(res.childDepth).toBe(2);
+  expect(res.parentHasChildren).toBe(true);
+  expect(res.inWork).toEqual(['Kind-Neu']);
+  await expect(page.locator(`.card--organizer .organizer-chapter[data-chapter-id="${res.childId}"]`)).toBeVisible();
+
+  // Server-Stand passt: ein Order-PUT ueber den Workstate geht durch.
+  const ok = await organizerData(page, 'return ctx._persistOrder({ mirror: "chapters" });');
+  expect(ok).toBe(true);
+  guard.assertClean('subchapter in place');
+  await page.evaluate(async (id) => {
+    const { contentRepo } = await import('/js/repo/content.js');
+    await contentRepo.deleteChapter(id);
+  }, res.childId);
+  await cleanupChapter(page, parent.chapterId);
+});
+
+test('Escape im Namensfeld verwirft die Umbenennung', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const { chapterId, pageIds } = await seedChapter(page, bookId, 'Esc-Kapitel', ['Esc-Seite']);
+  await openOrganizer(page);
+
+  const input = page.locator(`.card--organizer .organizer-page[data-page-id="${pageIds[0]}"] input.organizer-name`);
+  await input.click();
+  await input.fill('Verworfen');
+  await input.press('Escape');
+  await expect(input).toHaveValue('Esc-Seite');
+  await expect(page.locator('.card--organizer')).toBeVisible();
+  await page.waitForTimeout(300);
+  const serverName = await page.evaluate(async (id) => (await (await fetch('/content/pages/' + id)).json()).name, pageIds[0]);
+  expect(serverName).toBe('Esc-Seite');
+  guard.assertClean('escape rename');
+  await cleanupChapter(page, chapterId);
+});
+
+// Geloeschte Seiten liegen im Papierkorb. Undo stellt sie wieder her — neue ID,
+// alte Position, gleicher Inhalt — und Redo loescht sie erneut.
+test('Undo nach Seiten-Loeschen stellt die Seite an alter Stelle wieder her', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const { chapterId, pageIds } = await seedChapter(page, bookId, 'Undo-Delete', ['U1', 'U2', 'U3']);
+  await openOrganizer(page);
+
+  const res = await organizerData(page, `
+    window.__app.appConfirm = async () => true;
+    await ctx.deletePage(a.victim);
+    await new Promise((r) => setTimeout(r, 300));
+    const afterDelete = ctx._findChapter(a.cid).node.pages.map((p) => p.name);
+    await ctx.historyUndo();
+    await new Promise((r) => setTimeout(r, 500));
+    const restored = ctx._findChapter(a.cid).node.pages;
+    return { afterDelete, names: restored.map((p) => p.name), newId: restored[1]?.id,
+             redo: ctx._redoStack.length };`, { victim: pageIds[1], cid: chapterId });
+  expect(res.afterDelete).toEqual(['U1', 'U3']);
+  expect(res.names, 'alte Position').toEqual(['U1', 'U2', 'U3']);
+  expect(res.newId).not.toBe(pageIds[1]);
+  expect(res.redo).toBe(1);
+  const html = await page.evaluate(async (id) => (await (await fetch('/content/pages/' + id)).json()).html, res.newId);
+  expect(html).toContain('x');
+
+  const redo = await organizerData(page, `
+    await ctx.historyRedo();
+    await new Promise((r) => setTimeout(r, 300));
+    return ctx._findChapter(a).node.pages.map((p) => p.name);`, chapterId);
+  expect(redo).toEqual(['U1', 'U3']);
+  guard.assertClean('undo delete via trash');
+  await cleanupChapter(page, chapterId);
+});
+
+// Aufrufe aus Unterkomponenten (hier: Zeile der klappbaren Laengenverteilung,
+// eigenes x-data) duerfen Sortable nicht an deren DOM binden. `this.$root` waere
+// dort die Unterkomponente — `_initSortables` faende keine Listen, und nach dem
+// Sprung stuende die ganze Karte ohne DnD da.
+test('Sprung aus der Laengenverteilung laesst DnD auf der ganzen Karte intakt', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  await selectSeededBook(page);
+  await openOrganizer(page);
+  await organizerData(page, 'ctx.collapseAll(); await ctx.$nextTick();');
+
+  const tile = page.locator('.card--organizer .organizer-lengthdist');
+  await expect(tile).toBeVisible();
+  await tile.locator('.collapsible-toggle').click();
+  const row = tile.locator('.overview-chapter-row').first();
+  await row.click();
+  await page.waitForTimeout(300);
+
+  const res = await organizerData(page, `
+    const lists = [...document.querySelectorAll('.card--organizer [data-organizer]')];
+    return { lists: lists.length,
+             bound: lists.filter((el) => ctx._sortables.some((s) => s.el === el)).length };`);
+  expect(res.lists).toBeGreaterThan(0);
+  expect(res.bound, 'jede Liste der Karte hat eine Sortable-Instanz').toBe(res.lists);
+  guard.assertClean('lengthdist jump keeps dnd');
+});

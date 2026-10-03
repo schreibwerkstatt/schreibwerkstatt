@@ -55,7 +55,10 @@ function register(router) {
     catch (e) { _fail(res, e, 'PUT /content/chapters/:id'); }
   });
 
-  // DELETE /content/chapters/:chapter_id — Kapitel + seine Seiten in den Papierkorb.
+  // DELETE /content/chapters/:chapter_id — loescht das Kapitel hart (kein
+  // Papierkorb). Seine Seiten und Sub-Kapitel bleiben erhalten und verlieren nur
+  // die Zuordnung (FK `ON DELETE SET NULL` auf pages.chapter_id bzw.
+  // chapters.parent_chapter_id). Der Buchorganizer loescht nur leere Kapitel.
   router.delete('/chapters/:chapter_id', async (req, res) => {
     const chapterId = toIntId(req.params.chapter_id);
     if (!chapterId) return res.status(400).json({ error_code: 'INVALID_CHAPTER_ID' });
