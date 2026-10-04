@@ -104,7 +104,7 @@ test('Referenz-Slot: Quellen-Tab zeigt Belege der Seite und verlinkt ins Quellen
   await openQuellenTab(page, idx.first);
   const rowA = rowByTitle(page, TITLE_A);
   await expect(rowA).toBeVisible();
-  await expect(rowA).toContainText('Auf dieser Seite');
+  await expect(rowA).toContainText('In diesem Abschnitt');
   await expect(rowByTitle(page, TITLE_B)).toHaveCount(0);
 
   // Invariante 3: Buch-Scope zeigt beide (Scope-Umschalter im Karten-Header).

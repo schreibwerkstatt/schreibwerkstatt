@@ -167,11 +167,12 @@ function _handleChatPost(req, res, { jobType, kind, labelFn, runFn, preflight, c
 
   // ACL-Guard. Page-Chat: lektor+. Buch-Chat: editor+, ausser
   // book_settings.allow_lektor_book_chat=1 setzt es auf lektor+.
-  // Recherche-/Plot-Chat: editor+ (Recherche-Board und Plot-Werkstatt sind editor-scoped).
+  // Recherche-/Plot-/Ideen-Chat: editor+ (Recherche-Board, Plot-Werkstatt und
+  // Ideen-Board sind editor-scoped).
   let minRole = 'lektor';
   if (jobType === 'book-chat') {
     minRole = getBookSettings(session.book_id)?.allow_lektor_book_chat ? 'lektor' : 'editor';
-  } else if (jobType === 'research-chat' || jobType === 'plot-chat') {
+  } else if (jobType === 'research-chat' || jobType === 'plot-chat' || jobType === 'ideen-chat') {
     minRole = 'editor';
   }
   if (!guardBook(req, res, session.book_id, minRole)) return;

@@ -15,7 +15,7 @@ Browser → NGINX (HTTPS) → Express (Port 3737)
   /ollama          → Ollama /api/chat (NDJSON → SSE normalisiert)
   /jobs/*          → Hintergrund-Jobs (Status-Polling, alle KI-Analysen)
   /events/stream   → SSE-Push der SPA: Job-Kanal + Buch-Abo (Anstösse für Collab-Changes/-Presence)
-  /chat/*          → Seiten-Chat (SSE-Streaming) + Buch-Chat-Sessions
+  /chat/*          → Abschnitts-Chat (SSE-Streaming) + Buch-Chat-Sessions
   /history/*       → Job-Verlauf (SQLite)
   /figures/*       → Figuren-CRUD (SQLite)
   /figures/:id/alter → Alterstabelle lesen (abgeleiteter Alters-Index, read-only, ab `viewer`)

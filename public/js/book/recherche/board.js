@@ -3,6 +3,8 @@
 
 import { fetchJson } from '../../utils.js';
 import { toggleWrapFullscreen } from '../../fullscreen.js';
+import { computePopoverPos, refinePopoverPos } from '../../popover-anchor.js';
+import { attachDismiss, detachDismiss } from '../../cards/dismiss.js';
 import { KINDS, LINK_KINDS, emptyDraft as _emptyDraft } from './shared.js';
 
 export const rechercheBoardMethods = {
@@ -124,6 +126,36 @@ export const rechercheBoardMethods = {
     } catch {
       this.errorMessage = window.__app.t('recherche.error.fullscreen');
     }
+  },
+
+  // ── Aktionsmenü (recherche-item-menu.html) ───────────────────────────────
+  // Ein Menü für Liste, Detail-Dialog und Board-Karte; `key` = `${menuCtx}:${id}`.
+  // Fixed am Trigger verankert statt absolut im Container: der Detail-Dialog und
+  // die Listen-Container klippen per Overflow, ein kurzer Inhalt schnitt das
+  // lange Menü sonst ab. Das Menü ist das Geschwister des Triggers — ein x-ref
+  // taugt im x-for nicht (letzte Instanz gewinnt).
+  toggleItemMenu(ev, key) {
+    if (this.menuOpenId === key) { this.closeItemMenu(); return; }
+    const trigger = ev.currentTarget;
+    const rect = trigger.getBoundingClientRect();
+    this.menuPos = computePopoverPos(rect, 220, 400);
+    this.menuOpenId = key;
+    if (!this._itemMenuDismiss) {
+      // Scroll schliesst — ausser im Menü selbst (max-height + interner Scroll).
+      const ctrl = attachDismiss(() => this.closeItemMenu(), { scroll: false });
+      window.addEventListener('scroll', (e) => {
+        if (!e.target?.closest?.('.research-item-menu')) this.closeItemMenu();
+      }, { capture: true, passive: true, signal: ctrl.signal });
+      this._itemMenuDismiss = ctrl;
+    }
+    this.$nextTick(() => {
+      const pos = refinePopoverPos(trigger.nextElementSibling, rect);
+      if (pos) this.menuPos = pos;
+    });
+  },
+  closeItemMenu() {
+    this.menuOpenId = null;
+    detachDismiss(this, '_itemMenuDismiss');
   },
 
   // ── Filter ───────────────────────────────────────────────────────────────

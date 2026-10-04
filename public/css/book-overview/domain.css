@@ -108,6 +108,16 @@
 .overview-stacked-key--imbuch::before    { background: var(--color-success); }
 .overview-stacked-key--verworfen::before { background: var(--color-muted); }
 
+/* ── Ideen-Snapshot: Stufen-Segmente (offen → in Arbeit → erledigt, verworfen) ─ */
+.overview-stacked-seg--idee-offen     { background: var(--color-accent); }
+.overview-stacked-seg--idee-in_arbeit { background: var(--color-warn-text); }
+.overview-stacked-seg--idee-erledigt  { background: var(--color-success); }
+.overview-stacked-seg--idee-verworfen { background: var(--color-muted); }
+.overview-stacked-key--idee-offen::before     { background: var(--color-accent); }
+.overview-stacked-key--idee-in_arbeit::before { background: var(--color-warn-text); }
+.overview-stacked-key--idee-erledigt::before  { background: var(--color-success); }
+.overview-stacked-key--idee-verworfen::before { background: var(--color-muted); }
+
 .overview-plot-meta {
   display: flex;
   flex-wrap: wrap;

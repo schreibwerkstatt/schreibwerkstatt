@@ -1,9 +1,10 @@
 'use strict';
-// ideen-Tabelle: CRUD + User-Isolation + Scope-XOR (page_id XOR chapter_id)
+// ideen-Tabelle: CRUD + User-Isolation + Anker-CHECK (hoechstens page_id ODER
+// chapter_id; keins = Buch-Idee)
 // gegen frische In-Memory-DB. Wir replizieren das Migrations-DDL hier, damit
 // der Test ohne schreibwerkstatt.db läuft.
 //
-// Gegenstand sind hier die reinen Tabellen-Zusagen (XOR-CHECK, Stufen-CHECK,
+// Gegenstand sind hier die reinen Tabellen-Zusagen (Anker-CHECK, Stufen-CHECK,
 // Ownership im WHERE). Die Datenschicht darüber (db/ideen.js: Board-Abfrage,
 // Verknüpfungen, Rückwärts-Lesung) prüft tests/unit/ideen-db.test.js gegen das
 // ECHTE migrierte Schema — dort, wo FK-Kanten und Indexe mitwirken.
@@ -28,8 +29,7 @@ function freshDb() {
       status_at   TEXT,
       created_at  TEXT NOT NULL,
       updated_at  TEXT NOT NULL,
-      CHECK ((page_id IS NOT NULL AND chapter_id IS NULL)
-          OR (page_id IS NULL AND chapter_id IS NOT NULL))
+      CHECK (page_id IS NULL OR chapter_id IS NULL)
     )
   `).run();
   return db;
@@ -100,7 +100,7 @@ test('ideen: DELETE nur eigene Zeilen (Ownership-Pattern)', () => {
   assert.equal(r2.changes, 1);
 });
 
-test('ideen: Scope-XOR — Kapitel-Idee mit chapter_id alleine erlaubt', () => {
+test('ideen: Anker-CHECK — Kapitel-Idee mit chapter_id alleine erlaubt', () => {
   const db = freshDb();
   const now = new Date().toISOString();
   db.prepare(`INSERT INTO ideen (book_id, chapter_id, user_email, content, created_at, updated_at)
@@ -110,7 +110,7 @@ test('ideen: Scope-XOR — Kapitel-Idee mit chapter_id alleine erlaubt', () => {
   assert.equal(row.chapter_id, 5);
 });
 
-test('ideen: Scope-XOR — beide gesetzt → CHECK schlägt fehl', () => {
+test('ideen: Anker-CHECK — beide gesetzt → CHECK schlägt fehl', () => {
   const db = freshDb();
   const now = new Date().toISOString();
   assert.throws(() => {
@@ -119,13 +119,14 @@ test('ideen: Scope-XOR — beide gesetzt → CHECK schlägt fehl', () => {
   }, /CHECK constraint failed/);
 });
 
-test('ideen: Scope-XOR — keins gesetzt → CHECK schlägt fehl', () => {
+test('ideen: keins gesetzt → Buch-Idee erlaubt', () => {
   const db = freshDb();
   const now = new Date().toISOString();
-  assert.throws(() => {
-    db.prepare(`INSERT INTO ideen (book_id, user_email, content, created_at, updated_at)
-                VALUES (1, 'u@x.de', 'Keins', ?, ?)`).run(now, now);
-  }, /CHECK constraint failed/);
+  db.prepare(`INSERT INTO ideen (book_id, user_email, content, created_at, updated_at)
+              VALUES (1, 'u@x.de', 'Buch-Idee', ?, ?)`).run(now, now);
+  const row = db.prepare('SELECT page_id, chapter_id FROM ideen WHERE user_email = ?').get('u@x.de');
+  assert.equal(row.page_id, null);
+  assert.equal(row.chapter_id, null);
 });
 
 test('ideen: Counts pro kind (page vs chapter)', () => {

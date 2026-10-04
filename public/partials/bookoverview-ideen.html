@@ -1,0 +1,45 @@
+<!-- Ideen-Board-Snapshot: offene Pendenzen (Zahl) + Verteilung auf die Stufen +
+     Buch-Ideen ohne Ort + Ideen mit planerischer Verknüpfung. Datenquelle:
+     /ideen/board?book_id (nur die eigenen Ideen), Aggregat overviewIdeenStats().
+     Klick → Ideen-Board. Reader ohne Editor-Recht sehen das Tile nicht
+     (overviewIdeen=null via 403, siehe load.js). -->
+<template x-if="overviewHasIdeen()">
+  <div class="overview-tile internal-link"
+       @click="$app.toggleIdeenBoardCard()"
+       :aria-label="$app.t('overview.ideen') + ': ' + _fmtNum(overviewIdeenStats().open) + ' ' + $app.t('overview.unit.ideenOpen')">
+    <div class="overview-tile-label" x-text="$app.t('overview.ideen')"></div>
+    <div class="overview-fig-row">
+      <span class="overview-fig-count" x-text="_fmtNum(overviewIdeenStats().open)"></span>
+      <span class="overview-fig-count-unit" x-text="$app.t('overview.unit.ideenOpen')"></span>
+    </div>
+    <div class="overview-plot-meta">
+      <span x-show="overviewIdeenStats().ohneOrt > 0"
+            :data-tip="$app.t('overview.ideenOhneOrtTip')"
+            x-text="$app.t('overview.ideenOhneOrt', { n: overviewIdeenStats().ohneOrt })"></span>
+      <span x-show="overviewIdeenStats().verknuepft > 0"
+            :data-tip="$app.t('overview.ideenVerknuepftTip')"
+            x-text="$app.t('overview.ideenVerknuepft', { n: overviewIdeenStats().verknuepft })"></span>
+    </div>
+
+    <div class="overview-stacked-bar"
+         :data-tip="$app.t('overview.ideenStatusBreakdown', {
+           offen: overviewIdeenStats().by.offen,
+           inArbeit: overviewIdeenStats().by.in_arbeit,
+           erledigt: overviewIdeenStats().by.erledigt,
+           verworfen: overviewIdeenStats().by.verworfen
+         })">
+      <template x-for="st in ['offen', 'in_arbeit', 'erledigt', 'verworfen']" :key="st">
+        <div class="overview-stacked-seg" :class="'overview-stacked-seg--idee-' + st"
+             :style="{ flex: overviewIdeenStats().by[st] }"
+             x-show="overviewIdeenStats().by[st] > 0"></div>
+      </template>
+    </div>
+    <div class="overview-stacked-legend">
+      <template x-for="st in ['offen', 'in_arbeit', 'erledigt', 'verworfen']" :key="st">
+        <span class="overview-stacked-key" :class="'overview-stacked-key--idee-' + st"
+              x-show="overviewIdeenStats().by[st] > 0"
+              x-text="overviewIdeenStats().by[st] + ' ' + $app.t('ideen.status.' + st)"></span>
+      </template>
+    </div>
+  </div>
+</template>

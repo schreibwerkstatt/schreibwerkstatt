@@ -143,7 +143,7 @@ rest:
       - name: Schreibwerkstatt Pages
         unique_id: sw_pages
         icon: mdi:file-document-multiple
-        unit_of_measurement: Seiten
+        unit_of_measurement: Abschnitte
         value_template: >
           {{ ((value | regex_findall('sw_pages (\d+)')) + ['0']) | first | int(0) }}
         state_class: measurement

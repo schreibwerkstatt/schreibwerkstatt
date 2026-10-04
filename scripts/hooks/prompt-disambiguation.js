@@ -8,7 +8,7 @@
 //
 // Drei betroffene Harte Regeln (je drei unabhaengige Auspraegungen):
 //   • Editor-Spezifikation     → Notebook- / Focus- / Bucheditor
-//   • Chat-Spezifikation       → Seiten- / Buch- / Recherche- / Plot-Chat
+//   • Chat-Spezifikation       → Seiten- / Buch- / Recherche- / Plot- / Ideen-Chat
 //   • Kommentar-Oberflaeche    → Share-Reader / Notebook-Leseansicht / Bucheditor
 //
 // Logik pro Kategorie: feuert nur, wenn der GENERISCHE Sammelbegriff vorkommt
@@ -31,11 +31,12 @@ const CATEGORIES = [
   {
     key: 'chat',
     generic: [/\bchat\b/i, /\bchats\b/i],
-    specifiers: [/seiten[-\s]?chat/i, /page[-\s]?chat/i, /buch[-\s]?chat/i, /book[-\s]?chat/i, /recherche[-\s]?chat/i, /research[-\s]?chat/i, /plot[-\s]?chat/i],
-    hint: 'Chat mehrdeutig → die App hat VIER unabhaengige Chats: Seiten-Chat (kind="page", '
+    specifiers: [/abschnitts?[-\s]?chat/i, /section[-\s]?chat/i, /seiten[-\s]?chat/i, /page[-\s]?chat/i, /buch[-\s]?chat/i, /book[-\s]?chat/i, /recherche[-\s]?chat/i, /research[-\s]?chat/i, /plot[-\s]?chat/i, /ideen[-\s]?chat/i, /ideas?[-\s]?chat/i],
+    hint: 'Chat mehrdeutig → die App hat FUENF unabhaengige Chats: Abschnitts-Chat (Code: Seiten-Chat, kind="page", '
       + 'Textersetzungs-Vorschlaege), Buch-Chat (kind="book", agentisch read-only, BOOK_CHAT_TOOLS), '
       + 'Recherche-Chat (kind="research", Claude-only mit Web-Suche) und Plot-Chat (kind="plot", '
-      + 'Panel der Plot-Werkstatt, Board-Vorschlaege einzeln uebernehmen). '
+      + 'Panel der Plot-Werkstatt, Board-Vorschlaege einzeln uebernehmen) und Ideen-Chat (kind="ideen", '
+      + 'Panel im Ideen-Board, Erledigt-Check mit Textbeleg, Ideen-Vorschlaege einzeln uebernehmen). '
       + 'Zuerst klaeren, welcher gemeint ist (Harte Regel "Chat-Spezifikation Pflicht").',
   },
   {

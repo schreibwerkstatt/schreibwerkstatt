@@ -1,0 +1,23 @@
+<!-- Stufen pro Buch (Fragment, string-seitiger @include aus ideen-board.html;
+     Scope = ideenBoardCard). Gespeichert in book_settings.ideen_stages, gilt
+     buchweit: `offen` und `erledigt` sind fest, die uebrigen schaltet das Buch
+     zu. Abschalten heisst „nicht mehr anbieten" — Ideen, die schon dort stehen,
+     behalten ihre Spalte, bis sie leer ist. -->
+<div class="card-section ideen-board-stages" x-show="stagesOpen" x-cloak>
+  <span class="ideen-board-stages-label" x-text="$app.t('ideenBoard.stages.label')"></span>
+  <label class="filter-toggle">
+    <input type="checkbox" checked disabled>
+    <span x-text="statusLabel('offen')"></span>
+  </label>
+  <template x-for="st in optionalStages()" :key="st">
+    <label class="filter-toggle">
+      <input type="checkbox" :checked="isStageActive(st)" :disabled="busy" @change="toggleStage(st)">
+      <span x-text="statusLabel(st)"></span>
+    </label>
+  </template>
+  <label class="filter-toggle">
+    <input type="checkbox" checked disabled>
+    <span x-text="statusLabel('erledigt')"></span>
+  </label>
+  <p class="card-form-hint" x-text="$app.t('ideenBoard.stages.hint')"></p>
+</div>

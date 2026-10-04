@@ -21,7 +21,9 @@
 //   title     Tooltip übersteuern.
 //   count     Zusatz „×N" hinter dem Label (Erwähnungen).
 //   static    true = nicht klickbar (reine Anzeige, z.B. im Editierfeld mit X).
-//   inherited true = abgeleitet statt gesetzt (Plot: vom Strang geerbt) → gestrichelt.
+//   inherited true = abgeleitet statt gesetzt (Plot: vom Strang geerbt) → gestrichelt
+//             + Zusatz „· Strang“ im Badge; `title` erklärt die Herkunft (Tooltip
+//             bzw. erste Meta-Zeile der Vorschau).
 //   onOpen    eigene Klick-Aktion statt Navigation (z.B. Filter setzen).
 //   page_id / chapter_id   nur `idee`: Anker der Idee.
 //   preview   false = keine Hover-Vorschau (z.B. wo die Zeile das Objekt schon zeigt).
@@ -165,8 +167,14 @@ export function resolveEntityRef(spec, app) {
     resolved,
     clickable,
     inherited: !!spec.inherited,
+    origin: spec.inherited ? t(app, 'entityRef.inherited') : null,
     // Lazy: gebaut erst beim Aufgehen, damit die Vorschau den aktuellen Katalog zeigt.
-    preview: hasPreview ? () => buildEntityPreview(type, target, app) : null,
+    preview: hasPreview ? () => {
+      const p = buildEntityPreview(type, target, app);
+      // Die Vorschau ersetzt den Tooltip — die Herkunft darf dabei nicht verschwinden.
+      if (p && spec.inherited && spec.title) p.meta = [String(spec.title), ...(p.meta || [])];
+      return p;
+    } : null,
     open: clickable
       ? () => (typeof spec.onOpen === 'function' ? spec.onOpen() : def.open(app, target, spec))
       : null,
@@ -189,6 +197,12 @@ function render(el, model) {
   label.className = 'entity-ref__label';
   label.textContent = model.label;
   const parts = [kind, label];
+  if (model.origin) {
+    const origin = document.createElement('span');
+    origin.className = 'entity-ref__origin';
+    origin.textContent = model.origin;
+    parts.push(origin);
+  }
   if (model.count) {
     const count = document.createElement('span');
     count.className = 'entity-ref__count';

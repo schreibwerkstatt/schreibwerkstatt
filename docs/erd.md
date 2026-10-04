@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 312, 175 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram` + `search_meta`).
+Stand: Schema-Version 319, 175 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -43,6 +43,8 @@ erDiagram
   research_items ||--o{ idea_links   : "linked from"
   plot_beats ||--o{ idea_links       : "linked from"
   motifs ||--o{ idea_links           : "linked from"
+  draft_figures ||--o{ idea_links    : "linked from"
+  plot_threads ||--o{ idea_links     : "linked from"
   books ||--o{ book_source_links     : uses
   sources ||--o{ book_source_links   : "used by"
   sources ||--o{ source_tags         : tagged
@@ -463,22 +465,25 @@ erDiagram
   ideen {
     INTEGER id          PK
     INTEGER book_id     FK
-    INTEGER page_id     FK "ON DELETE CASCADE, XOR mit chapter_id — SET NULL wuerde den XOR-CHECK verletzen"
-    INTEGER chapter_id  FK "ON DELETE CASCADE, XOR mit page_id — SET NULL wuerde den XOR-CHECK verletzen"
+    INTEGER page_id     FK "ON DELETE CASCADE, hoechstens einer mit chapter_id — beide NULL = Buch-Idee"
+    INTEGER chapter_id  FK "ON DELETE CASCADE, hoechstens einer mit page_id"
     TEXT    user_email
     TEXT    content
     TEXT    status      "offen|in_arbeit|erledigt|verworfen — eine Spalte, ein CHECK"
     TEXT    status_at
+    INTEGER sort_order  "manuelle Reihenfolge in der Board-Zelle (Bahn × Stufe), 0 = nie einsortiert"
     TEXT    created_at
     TEXT    updated_at
   }
   idea_links {
     INTEGER id          PK
     INTEGER idea_id     FK "ON DELETE CASCADE"
-    TEXT    target_kind "research|beat|motif"
+    TEXT    target_kind "research|beat|motif|draft|thread"
     INTEGER research_id FK "ON DELETE CASCADE, genau eins gesetzt passend zu target_kind"
     INTEGER beat_id     FK "ON DELETE CASCADE"
     INTEGER motif_id    FK "ON DELETE CASCADE"
+    INTEGER draft_figure_id FK "ON DELETE CASCADE (Werkstatt-Figur)"
+    INTEGER thread_id   FK "ON DELETE CASCADE (Plot-Strang)"
     TEXT    created_at
     %% partielle UNIQUE-Indexe je Ziel-Art: dieselbe Kante nur einmal
   }
@@ -513,6 +518,7 @@ erDiagram
     INTEGER table_numbering          "0|1, Tabellen kapitelweise nummerieren („Tab. 3.2\") — eigener Zähler neben den Abbildungen"
     TEXT    research_profile         "Freitext-Steuerung des Recherche-Chats (Fachgebiet, Quellenarten, Zitierwünsche) — geht als VORRANGIGE ANGABEN in dessen System-Prompt"
     TEXT    research_domains         "Domain-Eingrenzung der Web-Suche, eine pro Zeile (NULL/leer = offenes Web) → `allowed_domains` am web_search-Werkzeug"
+    TEXT    ideen_stages             "aktive Ideen-Stufen, Komma-Text in kanonischer Reihenfolge (offen + erledigt immer; in_arbeit/verworfen zuschaltbar; NULL = alle vier)"
     TEXT    updated_at
   }
   book_snapshots {
@@ -839,6 +845,8 @@ erDiagram
     TEXT    user_email
     TEXT    updated_at
     INTEGER stale        "1 = in letzter Komplettanalyse nicht mehr erkannt; Reconcile behält id + markiert statt zu löschen"
+    INTEGER manually_edited "0|1, Autor hat Stammdaten im Katalog-PUT geaendert/angelegt → Analyse ueberschreibt kuratierte Felder + Eigenschaften nicht"
+    TEXT    ki_name      "Name aus der letzten Komplettanalyse; Cross-Run-Match laeuft ueber COALESCE(ki_name, name)"
   }
   figure_tags {
     INTEGER figure_id PK,FK
@@ -854,6 +862,7 @@ erDiagram
     INTEGER machtverhaltnis
     TEXT    belege
     TEXT    user_email      "UNIQUE(book_id, from_fig_id, to_fig_id, typ, user_email)"
+    TEXT    origin          "ki|manual — Komplettanalyse baut nur 'ki' neu auf, 'manual' (Katalog-PUT) ueberlebt"
   }
   figure_appearances {
     INTEGER figure_id   FK
@@ -1506,8 +1515,8 @@ erDiagram
   chat_sessions {
     INTEGER id              PK
     INTEGER book_id         FK
-    TEXT    kind            "page|book|research|plot"
-    INTEGER page_id         FK "NULL bei kind=book/research/plot"
+    TEXT    kind            "page|book|research|plot|ideen"
+    INTEGER page_id         FK "NULL bei kind=book/research/plot/ideen"
     TEXT    user_email
     TEXT    title           "KI-Titel für History-Eintrag (NULL → Vorschau-Fallback)"
     TEXT    created_at
@@ -2381,6 +2390,7 @@ erDiagram
     INTEGER book_id         PK "FK books, CASCADE — 1:1 zum Buch"
     TEXT    scanned_at
     INTEGER lexicon_version     "Rechenregel-Version (LEXICON_VERSION)"
+    TEXT    language            "de|en — Sprache DIESES Scans; Referenz + Vergleichs-Mediane nur gleicher Sprache"
     TEXT    content_sig         "Hash Seiten+Reihenfolge — Textstand, geht in input_sig der ANDEREN Buecher"
     TEXT    input_sig           "Hash Text+Namen+Referenz-Textstaende → Delta-Skip"
     INTEGER pages

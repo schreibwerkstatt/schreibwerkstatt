@@ -214,7 +214,7 @@ function _buildMotivContextBlock(ctx) {
     if (m.sollFiguren?.length) soll.push(`Figuren: ${m.sollFiguren.join(', ')}`);
     if (m.sollKapitel?.length) soll.push(`Kapitel: ${m.sollKapitel.join(', ')}`);
     if (m.sollBeats)  soll.push(`${m.sollBeats} Beat(s)`);
-    if (m.sollSeiten) soll.push(`${m.sollSeiten} Seite(n)`);
+    if (m.sollSeiten) soll.push(`${m.sollSeiten} Abschnitt(e)`);
     const sollStr = soll.length ? `geplant verankert an ${soll.join('; ')}` : 'keine konkrete Verankerung geplant';
     return `- «${m.name}»${thema}${desc}\n    Soll: ${sollStr} · Ist: ${m.istFunde} Fundstelle(n) im Text`;
   });
@@ -233,6 +233,81 @@ tatsächlichen Textes, nicht die Treue zum Plan. Wo diese Daten schweigen, NICHT
 
 ${parts.join('\n\n')}
 === ENDE THEMEN & MOTIVE ===
+`;
+}
+
+/** Achse, auf die die Plot-Planung zielt — wie _strukturAchse eine bestehende
+ *  Achse des Profils, keine neue (ein Achsen-Key ist eine Persistenz-Konstante). */
+function _planAchse(axes) {
+  const keys = axes.map(a => a.key);
+  return ['dramaturgie', 'kohaerenz', 'argumentation', 'komposition'].find(k => keys.includes(k)) || keys[0];
+}
+
+/**
+ * Baut den Block „Geplante Handlung" fuer die KAPITELbewertung: die Beats der
+ * Plot-Werkstatt, die auf dieses Kapitel zielen.
+ *
+ * Wie der Motiv-Block ist das AUTOR-ABSICHT, keine Textwahrheit. Drei Rahmungen
+ * sind Pflicht:
+ *  · Abweichung vom Plan ist kein Fehler — bewertet wird die Wirkung des Textes.
+ *  · Der Ist-Befund der Verankerung ist eine Suche, kein Beweis: „0 Fundstellen"
+ *    heisst „nicht wiedergefunden", nicht „fehlt sicher".
+ *  · Ohne Verankerungslauf ist das Ist UNBEKANNT — dann nichts daraus ableiten.
+ */
+function _buildPlanContextBlock(ctx, { achse } = {}) {
+  if (!ctx || !ctx.beats?.length) return '';
+  const lines = ctx.beats.map(b => {
+    const ort = [b.akt && `Akt: ${b.akt}`, b.strang && `Strang: ${b.strang}`].filter(Boolean).join(' · ');
+    const meta = [
+      b.status === 'im_buch' ? 'als eingearbeitet markiert' : 'noch geplant',
+      b.figuren?.length ? `Figuren: ${b.figuren.join(', ')}` : '',
+      b.orte?.length ? `Orte: ${b.orte.join(', ')}` : '',
+      b.intensitaet ? `Spannung ${b.intensitaet}/5` : '',
+      b.im_text == null ? '' : `im Text wiedergefunden: ${b.im_text}×`,
+    ].filter(Boolean).join(' · ');
+    return `- «${b.titel}»${ort ? ` [${ort}]` : ''}${b.beschreibung ? ` – ${b.beschreibung}` : ''}\n    ${meta}`;
+  });
+  const gekappt = ctx.gesamt > ctx.beats.length ? `\n(${ctx.gesamt - ctx.beats.length} weitere Beats nicht gelistet.)` : '';
+  const ist = ctx.verankert
+    ? `"im Text wiedergefunden" ist eine semantische Suche nach dem Beat im Buchtext, kein Beweis:
+0× heisst "nicht wiedergefunden", nicht "fehlt sicher". Ein als eingearbeitet markierter Beat mit 0×
+ist ein Hinweis, den Text darauf zu prüfen; ein noch geplanter Beat mit Treffern ist offenbar schon geschrieben.`
+    : `Für diese Beats liegt kein Abgleich mit dem Text vor — ob sie umgesetzt sind, ist UNBEKANNT.
+Leite es ausschliesslich aus dem Kapiteltext ab.`;
+  return `
+=== GEPLANTE HANDLUNG AUS DER PLOT-WERKSTATT (Absicht des Autors, KEINE Textwahrheit) ===
+Das Folgende sind die Handlungspunkte (Beats), die der Autor für dieses Kapitel GEPLANT hat,
+in Lesereihenfolge des Plans. Nutze sie auf der Achse "${achse}": Löst das Kapitel ein, was es
+laut Plan leisten soll, und trägt es die geplanten Wendungen dramaturgisch? Weicht der Text
+bewusst vom Plan ab, ist das KEIN Fehler — bewerte die Wirkung des tatsächlichen Textes, nicht
+die Treue zum Plan. Erfinde keine Inhalte aus dem Plan in den Text hinein.
+${ist}
+
+${lines.join('\n')}${gekappt}
+=== ENDE GEPLANTE HANDLUNG ===
+`;
+}
+
+/**
+ * Baut den Block „Offene Pendenzen des Autors" fuer die KAPITELbewertung.
+ *
+ * Die Pendenzen sind dem Autor BEKANNT. Eine Empfehlung, die eine davon nur
+ * wiederholt, ist Rauschen; bestaetigen oder schaerfen darf die Bewertung sie.
+ * Sie sind keine Textwahrheit und kein Massstab fuer die Note.
+ */
+function _buildIdeenContextBlock(ctx) {
+  if (!ctx || !ctx.ideen?.length) return '';
+  const lines = ctx.ideen.map(i => `- [${i.ort}] «${i.content}»`);
+  const gekappt = ctx.gesamt > ctx.ideen.length ? `\n(${ctx.gesamt - ctx.ideen.length} weitere nicht gelistet.)` : '';
+  return `
+=== OFFENE PENDENZEN DES AUTORS ZU DIESEM KAPITEL (ihm bekannt, KEINE Textwahrheit) ===
+Diese Punkte hat der Autor selbst als noch offen notiert. Wiederhole sie NICHT als neue
+Empfehlung. Trifft deine Beobachtung eine davon, darfst du sie bestätigen oder präzisieren
+und das kenntlich machen ("wie bereits notiert: …"). Beeinflussen sie die Note nicht — bewertet
+wird der Text.
+
+${lines.join('\n')}${gekappt}
+=== ENDE PENDENZEN ===
 `;
 }
 
@@ -321,4 +396,5 @@ export {
   _buildReviewSchwerpunktBlock, _buildChapterPositionBlock,
   _buildKomplettContextBlock, _strukturAchse, _buildStrukturContextBlock,
   _buildMotivContextBlock, _weltAchse, _buildWeltContextBlock,
+  _planAchse, _buildPlanContextBlock, _buildIdeenContextBlock,
 };

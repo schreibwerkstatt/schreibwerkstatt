@@ -29,8 +29,8 @@
     },
     {
       "kind": "verbessert",
-      "de": "Vorlesen: Neue Knöpfe für den vorherigen Satz und das Lesetempo. Ein Klick in den Text springt dorthin, Leertaste pausiert, und am Seitenende geht es auf Wunsch mit der nächsten Seite weiter.",
-      "en": "Read aloud: new buttons for the previous sentence and reading speed. Clicking the text jumps there, Space pauses, and at the end of a page it can continue with the next one."
+      "de": "Vorlesen: Neue Knöpfe für den vorherigen Satz und das Lesetempo. Ein Klick in den Text springt dorthin, Leertaste pausiert, und am Ende eines Abschnitts geht es auf Wunsch mit dem nächsten weiter.",
+      "en": "Read aloud: new buttons for the previous sentence and reading speed. Clicking the text jumps there, Space pauses, and at the end of a section it can continue with the next one."
     },
     {
       "kind": "verbessert",
@@ -59,8 +59,8 @@
     },
     {
       "kind": "verbessert",
-      "de": "Seiten-Chat und Buch-Chat: Die Antworten beziehen passende Stellen aus dem übrigen Buch mit ein, etwa Szenen, Figuren und Welt-Fakten.",
-      "en": "Page chat and book chat: answers now draw on matching passages from the rest of the book, such as scenes, characters and world facts."
+      "de": "Abschnitts-Chat und Buch-Chat: Die Antworten beziehen passende Stellen aus dem übrigen Buch mit ein, etwa Szenen, Figuren und Welt-Fakten.",
+      "en": "Section chat and book chat: answers now draw on matching passages from the rest of the book, such as scenes, characters and world facts."
     },
     {
       "kind": "verbessert",

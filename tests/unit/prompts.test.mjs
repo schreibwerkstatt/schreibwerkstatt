@@ -432,3 +432,26 @@ test('Provider-Varianten: PROMPTS_VERSION unterscheidet sich (Cache-Trennung)', 
   assert.ok(cloud.PROMPTS_VERSION && local.PROMPTS_VERSION);
   assert.notEqual(cloud.PROMPTS_VERSION, local.PROMPTS_VERSION);
 });
+
+test('KOMPLETT_EXTRACT_VERSION: hängt nur an den Extraktions-Prompts, nicht an Chat/Lektorat', async () => {
+  // Der Phase-1-Cache der Komplettanalyse (teuerste Phase) darf nicht bei jeder
+  // Prompt-Änderung der App verfallen — nur bei einer Änderung der Extraktion.
+  const base = await freshPrompts('claude');
+  const v0 = { all: base.PROMPTS_VERSION, extract: base.KOMPLETT_EXTRACT_VERSION };
+  assert.ok(v0.extract && v0.extract !== v0.all);
+
+  const chatOnly = structuredClone(cfg);
+  for (const loc of Object.values(chatOnly.locales)) loc.systemPrompts.chat += ' Zusatz.';
+  const mChat = await import(`${promptsUrl}?t=${Date.now()}_${Math.random()}`);
+  mChat.configurePrompts(chatOnly, 'claude');
+  assert.notEqual(mChat.PROMPTS_VERSION, v0.all, 'Chat-Änderung bewegt den Gesamt-Hash');
+  assert.equal(mChat.KOMPLETT_EXTRACT_VERSION, v0.extract, 'Chat-Änderung lässt den Extraktions-Cache gültig');
+
+  const figOnly = structuredClone(cfg);
+  for (const loc of Object.values(figOnly.locales)) loc.systemPrompts.figuren += ' Zusatz.';
+  const mFig = await import(`${promptsUrl}?t=${Date.now()}_${Math.random()}`);
+  mFig.configurePrompts(figOnly, 'claude');
+  assert.notEqual(mFig.KOMPLETT_EXTRACT_VERSION, v0.extract, 'Figuren-Prompt (A2) invalidiert den Extraktions-Cache');
+  // Zustand für Folgetests zurücksetzen.
+  await freshPrompts('claude');
+});

@@ -274,6 +274,15 @@ function getContinuityIssueBookId(issueId) {
   return row ? row.book_id : null;
 }
 
+/** Besitz-Achse eines Issues (`{ book_id, user_email }`) oder null wenn unbekannt.
+ *  Kontinuitaets-Checks sind pro (Buch, User) gefuehrt — die Triage-Routen pruefen
+ *  darum neben der Buch-Rolle auch, dass das Issue zum Check des anfragenden Users gehoert. */
+function getContinuityIssueScope(issueId) {
+  const id = parseInt(issueId);
+  if (!id) return null;
+  return db.prepare('SELECT book_id, user_email FROM continuity_issues WHERE id = ?').get(id) || null;
+}
+
 /** Setzt das resolved-Flag eines Kontinuitaets-Issues. resolved_at = jetzt bzw.
  *  null beim Wiederoeffnen. Gibt true zurueck, wenn eine Zeile betroffen war. */
 function setContinuityIssueResolved(issueId, resolved) {
@@ -303,6 +312,7 @@ module.exports = {
   saveFaktencheckIssues,
   getLatestContinuityCheck,
   getContinuityIssueBookId,
+  getContinuityIssueScope,
   setContinuityIssueResolved,
   setContinuityIssueDismissed,
 };

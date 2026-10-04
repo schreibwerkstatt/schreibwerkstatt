@@ -9,6 +9,7 @@ const pageRevisions = require('../../../db/page-revisions');
 const { _truncateResult, _findFigure, resultCapFor } = require('./shared');
 const { isIdeeStatus, isOpenIdeeStatus, normalizeIdeeStatus } = require('../../../lib/ideen-status');
 const { listLocationChaptersWithNames } = require('../../../db/book-chat/text');
+const { attachLinks: attachIdeaLinks } = require('../../../db/ideen');
 const {
   listChaptersWithStats, listPagesWithStats, getPageHeader, listIdeenWithPlaces,
   listLocationsWithFirstPage, listLocationChaptersForLocations,
@@ -110,7 +111,7 @@ function _listChaptersHint(totalChars, inputBudgetChars) {
   }
   if (totalChars > 0 && totalChars < 60000) {
     return 'Eher kleines Buch – du kannst ganze Kapitel via get_chapter_text (gebündelt) oder '
-      + `Seiten via get_pages laden, WENN die Frage Lektüre statt Stichwort-Suche verlangt. ${cheapFirst}`;
+      + `Abschnitte via get_pages laden, WENN die Frage Lektüre statt Stichwort-Suche verlangt. ${cheapFirst}`;
   }
   return undefined;
 }
@@ -137,7 +138,10 @@ function tool_list_ideen(input, ctx) {
   if (!rows.length) return { ideen: [], total: 0 };
 
   const total = rows.length;
-  const limited = rows.slice(0, limit).map(r => ({
+  // Verknuepfungen (Beat / Motiv / Recherche-Fundstueck …) nur fuer die gezeigten
+  // Zeilen nachladen — Label per JOIN zur Lesezeit (db/ideen.js#attachLinks).
+  const shown = attachIdeaLinks(rows.slice(0, limit));
+  const limited = shown.map(r => ({
     id: r.id,
     scope: r.scope,
     content: r.content && r.content.length > IDEEN_CONTENT_CHARS
@@ -151,6 +155,9 @@ function tool_list_ideen(input, ctx) {
     page_name: r.page_name || null,
     chapter_id: r.effective_chapter_id ?? null,
     chapter_name: r.chapter_name || null,
+    ...(r.links?.length
+      ? { verknuepft: r.links.map(l => ({ art: l.target_kind, id: l.target_id, label: l.label })) }
+      : {}),
   }));
 
   const offen = rows.filter(r => isOpenIdeeStatus(r.status)).length;
@@ -474,7 +481,7 @@ function tool_list_revisions(input, ctx) {
 
   const pageRow = getPageHeader(pageId);
   if (!pageRow || pageRow.book_id !== ctx.bookId) {
-    return { error: 'Seite nicht im aktuellen Buch.' };
+    return { error: 'Abschnitt nicht im aktuellen Buch.' };
   }
 
   const limit = Math.min(Math.max(1, input?.limit || LIST_REVISIONS_DEFAULT_LIMIT), LIST_REVISIONS_MAX_LIMIT);

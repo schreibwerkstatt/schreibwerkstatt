@@ -21,8 +21,8 @@ test('Ideen-Section: mit Ideen erscheint Block + Hinweis', () => {
     { scope: 'chapter', content: 'Verbindung zu Kapitel 3 hinterfragen.', created_at: '2026-04-25T11:00:00.000Z' },
   ];
   const out = joinBlocks(buildChatSystemPrompt('Seite A', 'Inhalt.', [], null, null, null, ideen));
-  assert.ok(out.includes('=== OFFENE IDEEN (Notizen des Autors für diese Seite + das umliegende Kapitel) ==='));
-  assert.ok(out.includes('[Seite] Szene mit Storm einfügen.'));
+  assert.ok(out.includes('=== OFFENE IDEEN (Notizen des Autors für diesen Abschnitt + das umliegende Kapitel) ==='));
+  assert.ok(out.includes('[Abschnitt] Szene mit Storm einfügen.'));
   assert.ok(out.includes('[Kapitel] Verbindung zu Kapitel 3 hinterfragen.'));
   assert.ok(out.includes('2026-04-25')); // Datum sichtbar
   assert.ok(out.includes('wandle sie aber nicht eigenmächtig in vorschlaege-Einträge'));

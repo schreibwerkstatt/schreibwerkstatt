@@ -113,13 +113,13 @@
 <div class="history-bar" x-show="consistencyRuns.length > 0" x-cloak>
   <div class="history-heading" x-text="$app.t('plot.consistency.runs', { count: consistencyRuns.length })"></div>
   <template x-for="r in consistencyRuns" :key="r.id">
-    <div class="history-item" :class="{ 'history-item--open': selectedRunId === r.id }"
+    <div class="history-item hover-reveal-host" :class="{ 'history-item--open': selectedRunId === r.id }"
          @click="openConsistencyRun(r.id)">
       <span class="history-date" x-text="formatRunDate(r.created_at)"></span>
       <span class="tag" x-text="$app.t('plot.consistency.konfliktCount', { n: r.konflikt_count })"></span>
       <span x-show="r.model" class="tag" x-text="r.model"></span>
       <span class="history-chevron" :class="{ open: selectedRunId === r.id }" aria-hidden="true"></span>
-      <button type="button" class="history-item-delete"
+      <button type="button" class="history-item-delete hover-reveal"
               @click.stop="deleteConsistencyRun(r.id)"
               :data-tip="$app.t('common.deleteEntry')"
               :aria-label="$app.t('common.deleteEntry')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
@@ -135,7 +135,7 @@
   <template x-for="r in brainstormRuns" :key="r.id">
     <!-- Lauf eines archivierten Akts: kein Panel im Archiv → Hinweis statt
          stillem Nichts (openBrainstormRunChecked, board-ui.js). -->
-    <div class="history-item" :class="{ 'history-item--open': selectedBrainstormRunId === r.id, 'history-item--disabled': r.act_id === null || brainstormRunActArchived(r) }"
+    <div class="history-item hover-reveal-host" :class="{ 'history-item--open': selectedBrainstormRunId === r.id, 'history-item--disabled': r.act_id === null || brainstormRunActArchived(r) }"
          :data-tip="brainstormRunActArchived(r) ? $app.t('plot.brainstorm.actArchived') : null"
          @click="r.act_id !== null && openBrainstormRunChecked(r)">
       <span class="history-date" x-text="formatRunDate(r.created_at)"></span>
@@ -146,7 +146,7 @@
       <span class="tag" x-text="$app.t('plot.brainstorm.vorschlagCount', { n: r.vorschlag_count })"></span>
       <span x-show="r.model" class="tag" x-text="r.model"></span>
       <span class="history-chevron" :class="{ open: selectedBrainstormRunId === r.id }" aria-hidden="true" x-show="r.act_id !== null"></span>
-      <button type="button" class="history-item-delete"
+      <button type="button" class="history-item-delete hover-reveal"
               @click.stop="deleteBrainstormRun(r.id)"
               :data-tip="$app.t('common.deleteEntry')"
               :aria-label="$app.t('common.deleteEntry')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>

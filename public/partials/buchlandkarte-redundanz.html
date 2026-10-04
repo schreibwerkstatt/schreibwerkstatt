@@ -1,40 +1,34 @@
-<!-- Redundanz-Radar: buchweite Doppelungs-Suche über dem Embedding-Index -->
+<!-- Buchlandkarte, Tab „Doppelungen" (Redundanz-Radar): buchweite Doppelungs-Suche über dem Embedding-Index -->
 <!--
   Alpine.data-Sub-Komponente — siehe public/js/cards/redundanz-card.js.
-  `showRedundanzCard` + `toggleRedundanzCard` bleiben im Root (Hash-Router,
-  Exklusivität). Rein rückwärtsgewandt: findet quasi-doppelte Seiten-Passagen,
-  schreibt nie in den Buchtext. Setzt einen gebauten Semantik-Index voraus.
-  Doku: docs/redundanz.md.
+  Eingebunden in buchlandkarte.html (Tab-Hülle). Rein rückwärtsgewandt: findet
+  quasi-doppelte Seiten-Passagen, schreibt nie in den Buchtext. Setzt einen
+  gebauten Semantik-Index voraus. Doku: docs/redundanz.md.
 -->
-<div class="card card--redundanz" x-data="redundanzCard" x-show="$app.showRedundanzCard" x-cloak>
-  <div class="card-header">
-    <div class="card-header-titlebar">
-      <span class="card-eyebrow" x-text="$app.selectedBookName"></span>
-      <span class="card-title" x-text="$app.t('redundanz.title')"></span>
+<div class="buchlandkarte-panel" x-data="redundanzCard" x-show="$app.buchlandkarteTab === 'redundanz'"
+     role="tabpanel" id="buchlandkarte-panel-redundanz" aria-labelledby="buchlandkarte-tab-redundanz">
+  <div class="buchlandkarte-toolbar" x-show="redundanzAvailable && redundanzHasIndex">
+    <div class="tabs redundanz-threshold">
+      <button type="button" class="tabs-btn"
+              :class="{ 'tabs-btn--active': redundanzThreshold === 'strict' }"
+              :disabled="redundanzLoading"
+              @click="setRedundanzThreshold('strict')"
+              x-text="$app.t('redundanz.threshold.strict')"></button>
+      <button type="button" class="tabs-btn"
+              :class="{ 'tabs-btn--active': redundanzThreshold === 'medium' }"
+              :disabled="redundanzLoading"
+              @click="setRedundanzThreshold('medium')"
+              x-text="$app.t('redundanz.threshold.medium')"></button>
+      <button type="button" class="tabs-btn"
+              :class="{ 'tabs-btn--active': redundanzThreshold === 'loose' }"
+              :disabled="redundanzLoading"
+              @click="setRedundanzThreshold('loose')"
+              x-text="$app.t('redundanz.threshold.loose')"></button>
     </div>
-    <div class="card-actions" x-show="redundanzAvailable && redundanzHasIndex">
-      <div class="tabs">
-        <button type="button" class="tabs-btn"
-                :class="{ 'tabs-btn--active': redundanzThreshold === 'strict' }"
-                :disabled="redundanzLoading"
-                @click="setRedundanzThreshold('strict')"
-                x-text="$app.t('redundanz.threshold.strict')"></button>
-        <button type="button" class="tabs-btn"
-                :class="{ 'tabs-btn--active': redundanzThreshold === 'medium' }"
-                :disabled="redundanzLoading"
-                @click="setRedundanzThreshold('medium')"
-                x-text="$app.t('redundanz.threshold.medium')"></button>
-        <button type="button" class="tabs-btn"
-                :class="{ 'tabs-btn--active': redundanzThreshold === 'loose' }"
-                :disabled="redundanzLoading"
-                @click="setRedundanzThreshold('loose')"
-                x-text="$app.t('redundanz.threshold.loose')"></button>
-      </div>
-      <button type="button" class="primary" data-label-ok
-              :disabled="redundanzLoading || redundanzIndexing"
-              @click="runRedundanz()"
-              x-text="$app.t(redundanzResult ? 'redundanz.rerun' : 'redundanz.run')"></button>
-    </div>
+    <button type="button" class="primary" data-label-ok
+            :disabled="redundanzLoading || redundanzIndexing"
+            @click="runRedundanz()"
+            x-text="$app.t(redundanzResult ? 'redundanz.rerun' : 'redundanz.run')"></button>
   </div>
 
   <div class="redundanz-intro" x-show="redundanzAvailable && redundanzHasIndex">

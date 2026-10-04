@@ -13,6 +13,7 @@ const START_ERROR_KEYS = {
   FACTCHECK_NOT_ENABLED_FOR_BOOK: 'kontinuitaet.faktencheck.hint',
   FACTCHECK_CLAUDE_ONLY: 'kontinuitaet.faktencheck.claudeOnly',
   FACTCHECK_DISABLED: 'kontinuitaet.faktencheck.disabled',
+  KOMPLETT_ANALYSIS_RUNNING: 'error.KOMPLETT_ANALYSIS_RUNNING',
 };
 
 // Triage-Status eines Befunds (Filter `status`): '' = aktiv (offen + erledigt, ohne

@@ -97,6 +97,9 @@
                 @click="openMotifForFigure()"
                 :data-tip="motifUsageTip()"
                 x-text="motifUsageLabel()"></span>
+          <!-- Cross-Feature: eigene Pendenzen (Ideen) an dieser Werkstatt-Figur, read-only.
+               x-effect statt Init-Wert: die Auswahl wechselt, der Wrapper bleibt. -->
+          <div x-data="{ ideaOwnerId: null }" x-effect="ideaOwnerId = selectedDraftId"><!-- @include ideen-backlinks --></div>
         </div>
         <div class="card-actions">
           <button type="button" class="icon-btn icon-btn--ghost icon-btn--success"

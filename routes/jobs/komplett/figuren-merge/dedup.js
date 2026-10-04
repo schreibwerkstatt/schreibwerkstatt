@@ -4,14 +4,17 @@
 // ../figuren-merge.js.
 
 const { normName: _normalizeName, nameTokens: _nameTokens } = require('../../../../lib/name-normalize');
-const { figureEvidence } = require('../../../../lib/entity-match');
+const { figureEvidence, FIGURE_CONTRADICTION } = require('../../../../lib/entity-match');
 
 /** Mergt duplizierte Figuren anhand des normalisierten Namens (case-insensitive).
  *  Fängt Fälle ab, in denen kleine Modelle (Ollama/llama) die Dedup-Regel in
  *  Phase 2 nicht befolgen. Verschmilzt Kapitel, Eigenschaften und Beziehungen.
  *  Remappt beziehungen.figur_id auf die kanonische ID und entfernt Selbst-Referenzen.
  *  Zweistufig:
- *    Stufe 1: exakter normalisierter Name (titel-/whitespace-bereinigt).
+ *    Stufe 1: exakter normalisierter Name (titel-/whitespace-bereinigt) — AUSSER die
+ *             Indizien widersprechen (≤ FIGURE_CONTRADICTION: Geburtsjahr, Geschlecht,
+ *             Anrede «Herr»/«Frau»). Der Schlüssel ist ohne Anrede gebildet und darum
+ *             allein kein Beweis: «Herr Brunner» und «Frau Brunner» bleiben zwei Figuren.
  *    Stufe 2: Teilname-Match (ein Name ist Teilmenge des anderen) plus mind. 2 Indizien
  *             (Beruf, Geburtsjahr, gemeinsames Kapitel, gleiches Geschlecht, geteilte Beziehung).
  *             Strenger Schutz: verschiedene Vornamen mit gleichem Nachnamen («Paul Schmidt»
@@ -53,7 +56,8 @@ function _mergeFigurInto(canon, other) {
 /** Indizienpunkte für zwei Figuren. Rechnet `figureEvidence` (SSoT
  *  lib/entity-match.js, geteilt mit dem Cross-Run-Matching) auf der Analyse-Form:
  *  Kapitel liegen hier als [{ name }] vor, Beziehungen als [{ figur_id, name }].
- *  Negativ bei widersprüchlichem Geburtsjahr oder Geschlecht.
+ *  Negativ bei widersprüchlichem Geburtsjahr oder Geschlecht (auch über die Anrede
+ *  «Herr»/«Frau» im Namen).
  *
  *  `relationsByName`: Beziehungs-Ziele über den angereicherten Zielnamen (`bz.name`)
  *  vergleichen statt über `figur_id`. Pflicht, sobald die beiden Figuren aus
@@ -190,6 +194,17 @@ function _mergeByPartialName(figuren, idRemap) {
   return merged;
 }
 
+/** Kandidat mit gleichem Namensschlüssel für `f`: keiner, der widerspricht. Bleibt genau
+ *  einer übrig, ist er es. Bleiben mehrere (untereinander unverträgliche, sonst wären
+ *  sie verschmolzen), entscheidet nur ein eindeutiger Indizien-Spitzenreiter mit ≥ 2. */
+function _pickUnambiguous(cands, f, opts) {
+  const scored = cands.map(c => ({ c, s: _indicatorScore(c, f, opts) }))
+    .filter(x => x.s > FIGURE_CONTRADICTION);
+  if (scored.length <= 1) return scored[0]?.c || null;
+  scored.sort((x, y) => y.s - x.s);
+  return (scored[0].s >= 2 && scored[0].s > scored[1].s) ? scored[0].c : null;
+}
+
 /** Rollierender Dedup VOR Phase 2: geht chapterFiguren in Reihenfolge durch,
  *  baut eine kanonische Map (normalisierter Name → Figur) auf und entfernt
  *  Duplikate aus folgenden Kapiteln. Kapitel-Einträge werden aggregiert,
@@ -201,7 +216,14 @@ function _mergeByPartialName(figuren, idRemap) {
  *  Reduziert die Eingabegrösse für den Phase-2-Konsolidierungs-Call und fängt
  *  Fälle ab, in denen Phase 2 trotz Hinweis Duplikate stehen lässt. */
 function preMergeChapterFiguren(chapterFiguren) {
+  // normalisierter Name → [Kanon-Figuren]: mehrere, wenn gleichnamige Einträge sich
+  // widersprechen («Herr Brunner» / «Frau Brunner», verschiedene Geburtsjahre).
   const canonical = new Map();
+  const addCanon = (k, fig) => {
+    if (!canonical.has(k)) canonical.set(k, []);
+    const list = canonical.get(k);
+    if (!list.includes(fig)) list.push(fig);
+  };
   const canonicalList = [];
   const merged = chapterFiguren.map(c => ({ kapitel: c.kapitel, figuren: [] }));
   let dupesRemoved = 0;
@@ -210,13 +232,18 @@ function preMergeChapterFiguren(chapterFiguren) {
     for (const f of (chapterFiguren[ci].figuren || [])) {
       const key = _normalizeName(f.name);
       if (!key) continue;
-      let canon = canonical.get(key);
+      // Gleicher Schlüssel genügt nur ohne Widerspruch der Indizien — und nur, wenn er
+      // eindeutig ist: passt «Dr. Brunner» zu «Herr Brunner» UND «Frau Brunner», bleibt
+      // er eigenständig (Ambiguität ⇒ kein Merge), es sei denn, die Indizien zeichnen
+      // genau einen Kandidaten mit ≥ 2 Punkten aus.
+      let canon = _pickUnambiguous(canonical.get(key) || [], f, { relationsByName: true });
       let partial = false;
 
       if (!canon) {
         const tokA = _nameTokens(f.name);
         if (tokA.length) {
           for (const entry of canonicalList) {
+            if (entry.normKey === key) continue; // gleicher Schlüssel: oben entschieden
             const tokB = _nameTokens(entry.figur.name);
             if (!tokB.length) continue;
             const aInB = tokA.every(t => tokB.includes(t));
@@ -254,7 +281,7 @@ function preMergeChapterFiguren(chapterFiguren) {
           if (_nameTokens(f.name).length > _nameTokens(canon.name).length) {
             const alt = canon.name;
             canon.name = f.name;
-            canonical.set(key, canon);
+            addCanon(key, canon);
             _addAlias(canon, alt);
           } else {
             _addAlias(canon, f.name);
@@ -266,7 +293,7 @@ function preMergeChapterFiguren(chapterFiguren) {
         // die rohen Phase-1-Daten bleiben für Mode-Vote und Namens-Lookup unverändert.
         const copy = { ...f };
         merged[ci].figuren.push(copy);
-        canonical.set(key, copy);
+        addCanon(key, copy);
         canonicalList.push({ normKey: key, figur: copy });
       }
     }
@@ -291,12 +318,26 @@ function mergeDuplicateFiguren(figuren) {
   for (const group of groups.values()) {
     if (group.length === 1) { stage1.push(group[0]); continue; }
     group.sort((a, b) => (b.beschreibung?.length || 0) - (a.beschreibung?.length || 0));
-    const canon = { ...group[0] };
-    for (const other of group.slice(1)) {
-      idRemap[other.id] = canon.id;
-      _mergeFigurInto(canon, other);
+    // Gleicher Schlüssel, aber widersprüchliche Indizien → eigene Untergruppe. Paarweise
+    // auf den Ausgangsfiguren geprüft (nicht auf dem wachsenden Kanon, der nach dem
+    // ersten Merge Felder des Partners trägt).
+    // Passt eine Figur zu mehreren Untergruppen («Brunner» ohne Anrede neben «Herr …»
+    // und «Frau …»), ist offen, wen sie meint → eigene Untergruppe (wie _mergeByPartialName).
+    const subgroups = [];
+    for (const f of group) {
+      const fits = subgroups.filter(members =>
+        members.every(m => _indicatorScore(m, f) > FIGURE_CONTRADICTION));
+      if (fits.length === 1) fits[0].push(f); else subgroups.push([f]);
     }
-    stage1.push(canon);
+    for (const members of subgroups) {
+      if (members.length === 1) { stage1.push(members[0]); continue; }
+      const canon = { ...members[0] };
+      for (const other of members.slice(1)) {
+        idRemap[other.id] = canon.id;
+        _mergeFigurInto(canon, other);
+      }
+      stage1.push(canon);
+    }
   }
   const stage1Saved = figuren.length - stage1.length;
 

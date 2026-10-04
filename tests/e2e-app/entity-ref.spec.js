@@ -111,3 +111,30 @@ test('Hover zeigt die Vorschau mit Katalog-Kontext, Verlassen schliesst sie', as
   await page.waitForTimeout(700);
   await expect(pop).toBeHidden();
 });
+
+test('geerbte Referenz: gleiches Label, Zusatz „Strang", Herkunft in der Vorschau', async ({ page }) => {
+  await bootApp(page);
+  await selectSeededBook(page);
+  await mountRefs(page, [
+    "{ type: 'figur', id: 4711 }",
+    "{ type: 'figur', id: 4711, inherited: true, title: 'Vom Strang geerbt' }",
+  ]);
+  const refs = page.locator('#entity-ref-probe .entity-ref');
+  const direct = refs.nth(0);
+  const inherited = refs.nth(1);
+
+  await expect(inherited).toHaveClass(/entity-ref--inherited/);
+  await expect(direct.locator('.entity-ref__origin')).toHaveCount(0);
+  await expect(inherited.locator('.entity-ref__origin')).toHaveText(
+    await page.evaluate(() => window.__app.t('entityRef.inherited')));
+  // Label sieht aus wie bei jeder Referenz — die Herkunft trägt der Zusatz, nicht die Schrift.
+  const style = el => { const s = getComputedStyle(el); return `${s.fontStyle}|${s.color}`; };
+  expect(await inherited.locator('.entity-ref__label').evaluate(style))
+    .toBe(await direct.locator('.entity-ref__label').evaluate(style));
+
+  // Figur hat eine Vorschau statt Tooltip: die Herkunft steht dort als erste Meta-Zeile.
+  await inherited.hover();
+  const pop = page.locator('.entity-ref-preview');
+  await expect(pop).toBeVisible();
+  await expect(pop.locator('.entity-ref-preview__meta')).toContainText('Vom Strang geerbt');
+});

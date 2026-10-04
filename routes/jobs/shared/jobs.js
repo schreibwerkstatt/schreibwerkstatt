@@ -318,6 +318,7 @@ const JOB_TYPE_LABELS = {
   'book-map':              'job.label.bookMap',
   'research-chat':         'job.label.researchChat',
   'plot-chat':             'job.label.plotChat',
+  'ideen-chat':            'job.label.ideenChat',
   'research-link':         'job.label.researchLink',
   'research-link-check':   'job.label.researchLinkCheck',
   'research-crosscheck':   'job.label.researchCrosscheck',

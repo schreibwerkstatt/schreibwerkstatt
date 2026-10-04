@@ -46,6 +46,7 @@ import { formatMethods } from './book-overview/format.js';
 import { diaryMethods } from './book-overview/diary.js';
 import { projectionMethods } from './book-overview/projection.js';
 import { plotMethods } from './book-overview/plot.js';
+import { ideenMethods } from './book-overview/ideen.js';
 import { motivMethods } from './book-overview/motiv.js';
 import { wortschatzMethods } from './book-overview/wortschatz.js';
 
@@ -65,6 +66,7 @@ export const bookOverviewMethods = {
   ...recentMethods,
   ...formatMethods,
   ...plotMethods,
+  ...ideenMethods,
   ...motivMethods,
   ...wortschatzMethods,
 };

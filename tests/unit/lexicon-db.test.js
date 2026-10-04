@@ -23,10 +23,10 @@ function seedBook(bookId, owner) {
   db.prepare('INSERT INTO books (book_id, name, created_at, updated_at, owner_email) VALUES (?,?,?,?,?)')
     .run(bookId, `Buch ${bookId}`, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', owner);
 }
-function seedLexicon(bookId, { freq, tokens = 10000, version = 3, sig = `s${bookId}`, mtld = 80 }) {
+function seedLexicon(bookId, { freq, tokens = 10000, version = 3, sig = `s${bookId}`, mtld = 80, language = 'de' }) {
   lexiconDb.replaceBookLexicon(bookId, {
     stats: {
-      version, content_sig: sig, tokens, types: 1, mtld, mattr: 0.7, mattr_window: 1000,
+      version, language, content_sig: sig, tokens, types: 1, mtld, mattr: 0.7, mattr_window: 1000,
       lex_density: 0.55, hapax_ratio: 0.5, freq_json: JSON.stringify(freq),
     },
     terms: [], phrases: [],
@@ -44,7 +44,7 @@ test('loadReferenceCorpus: Schranke summiert pro Buch, in dem der Term fehlt', (
   seedLexicon(2, { freq: { haus: 10, baum: 3 } });
   seedLexicon(3, { freq: { haus: 7, baum: 4 } });
   seedLexicon(4, { freq: { haus: 3, wald: 5 } });
-  const ref = lexiconDb.loadReferenceCorpus(1, 3);
+  const ref = lexiconDb.loadReferenceCorpus(1, 3, 'de');
   assert.equal(ref.books, 3);
   assert.equal(ref.total, 30000);
   // Fehlt überall: je Buch bis zu dessen Kappung (3 + 4 + 3), nicht max = 4.
@@ -58,20 +58,43 @@ test('loadReferenceCorpus: Schranke summiert pro Buch, in dem der Term fehlt', (
 test('loadReferenceCorpus: fremde Bücher und alte Analyse-Versionen zählen nicht', () => {
   seedLexicon(9, { freq: { haus: 1000 } });
   seedLexicon(4, { freq: { haus: 999 }, version: 2 });
-  const ref = lexiconDb.loadReferenceCorpus(1, 3);
+  const ref = lexiconDb.loadReferenceCorpus(1, 3, 'de');
   assert.equal(ref.books, 2, 'Buch 4 hat eine alte Version, Buch 9 einen anderen Besitzer');
   assert.equal(ref.freq.get('haus'), 17);
-  assert.equal(lexiconDb.referenceFingerprint(1, 3), '2:s2,3:s3');
-  const peers = lexiconDb.loadPeerStats(1, 3);
+  assert.equal(lexiconDb.referenceFingerprint(1, 3, 'de'), '2:s2,3:s3');
+  const peers = lexiconDb.loadPeerStats(1, 3, 'de');
   assert.equal(peers.books, 2);
 });
 
 test('loadReferenceCorpus: unlesbare Tabelle bläht den Nenner nicht auf', () => {
   db.prepare("UPDATE book_lexicon SET freq_json = '{kaputt' WHERE book_id = 3").run();
-  const ref = lexiconDb.loadReferenceCorpus(1, 3);
+  const ref = lexiconDb.loadReferenceCorpus(1, 3, 'de');
   assert.equal(ref.books, 1);
   assert.equal(ref.total, 10000);
   seedLexicon(3, { freq: { haus: 7, baum: 4 } });
+});
+
+test('loadReferenceCorpus: nur Bücher derselben Sprache', () => {
+  seedBook(5, AUTOR);
+  seedLexicon(5, { freq: { house: 50 }, language: 'en' });
+  const de = lexiconDb.loadReferenceCorpus(1, 3, 'de');
+  assert.equal(de.freq.has('house'), false, 'englisches Buch darf nicht in die deutsche Referenz');
+  const en = lexiconDb.loadReferenceCorpus(1, 3, 'en');
+  assert.equal(en.books, 1);
+  assert.equal(en.freq.get('house'), 50);
+  assert.equal(lexiconDb.referenceFingerprint(1, 3, 'en'), '5:s5');
+  assert.equal(lexiconDb.loadPeerStats(1, 3, 'en').books, 1);
+  assert.equal(lexiconDb.loadPeerStats(1, 3, 'de').books, 2, 'Buch 4 hat noch die alte Version');
+});
+
+test('bookLanguage: Buch-Einstellung, sonst Default des Besitzers, sonst de', () => {
+  db.prepare("INSERT INTO book_access (book_id, user_email, role) VALUES (1, ?, 'owner')").run(AUTOR);
+  assert.equal(lexiconDb.bookLanguage(1), 'de');
+  db.prepare("UPDATE app_users SET default_language = 'en' WHERE email = ?").run(AUTOR);
+  assert.equal(lexiconDb.bookLanguage(1), 'en');
+  require('../../db/book-settings').saveBookSettings(1, 'de', 'CH', null, null);
+  assert.equal(lexiconDb.bookLanguage(1), 'de');
+  db.prepare("UPDATE app_users SET default_language = NULL WHERE email = ?").run(AUTOR);
 });
 
 test('stampLexiconHistory: Tageszeile bekommt die Kennzahlen, MATTR nur mit vollem Fenster', () => {

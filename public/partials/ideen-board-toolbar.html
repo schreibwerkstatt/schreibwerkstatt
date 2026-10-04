@@ -1,0 +1,33 @@
+<!-- Filterleiste des Ideen-Boards (Fragment, string-seitiger @include aus
+     ideen-board.html; Scope = ideenBoardCard). Kapitel eingrenzen, Stufen
+     ein-/ausblenden, Volltext (sortiert wird pro Spalte im Spaltenkopf). Der Zaehler rechts
+     sagt, wie viel gerade versteckt ist — ohne ihn waere eine ausgeblendete
+     Pendenz von einer verlorenen nicht zu unterscheiden. -->
+<div class="filter-bar ideen-board-toolbar" x-show="!loading && totalCount() > 0">
+  <div x-data="combobox($app.t('ideenBoard.filterChapter'), $app.t('ideenBoard.filterChapterAll'))"
+       x-modelable="value" x-model="filterChapterId"
+       x-effect="options = chapterOptions()"></div>
+
+  <span class="filter-search-wrap">
+    <input type="text" class="filter-search-input filter-search-input--wide" x-model="query"
+           :placeholder="$app.t('ideenBoard.search')" :aria-label="$app.t('ideenBoard.search')">
+    <button type="button" class="search-clear--icon" x-show="query" @click="query = ''"
+            :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+    </button>
+  </span>
+
+  <label class="filter-toggle">
+    <input type="checkbox" x-model="showErledigt">
+    <span x-text="$app.t('ideenBoard.showErledigt')"></span>
+  </label>
+
+  <label class="filter-toggle" x-show="statuses().includes('verworfen')">
+    <input type="checkbox" x-model="showVerworfen">
+    <span x-text="$app.t('ideenBoard.showVerworfen')"></span>
+  </label>
+
+  <!-- Der Zaehler nennt das AUSGEBLENDETE mit: eine versteckte Pendenz ist
+       sonst von einer verlorenen nicht zu unterscheiden. -->
+  <span class="filter-count" x-text="countLabel()"></span>
+</div>

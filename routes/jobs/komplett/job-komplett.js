@@ -19,13 +19,14 @@ const appUsers = require('../../../db/app-users');
 const bookAccess = require('../../../db/book-access');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, contentHttpError,
-  aiCall, getPrompts, getBookPrompts,
+  getPrompts, getBookPrompts,
   loadOrderedBookContents, loadPageContents, groupByChapter, buildSinglePassBookText, cleanPageTextForAi,
   chunkLimitsFor, resolveExtractSinglePassLimit, BATCH_SIZE, jobAbortControllers,
   _modelName, fmtTok, tps,
   createJob, enqueueJob, findActiveJobId,
   summarizeCostByPhase, formatCostByPhase,
 } = require('../shared');
+const { makeKomplettCall } = require('./call');
 const { providerClass, maxParallelCalls, resolveProvider } = require('../../../lib/ai');
 const contentStore = require('../../../lib/content-store');
 const appSettings = require('../../../lib/app-settings');
@@ -69,13 +70,9 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
   const email = userEmail || null;
   const log = makeJobLogger(jobId);
   const pt = makePhaseTimer(log);
-  // call akzeptiert optional ein JSON-Schema als letztes Argument (11. Position in aiCall).
-  // Schemas werden nur von lokalen Providern (ollama/llama) verwendet – Claude ignoriert sie.
-  // WICHTIG: effektiven (aufgelösten) Provider binden, nicht die rohe `provider`-Variable.
-  // Wird der Job ohne expliziten Provider gestartet (Regelfall), ist `provider` undefined →
-  // getContextConfigFor(undefined) fiele in aiCall auf 'claude' zurück und würde das Output-
-  // Ceiling fälschlich auf ai.claude.max_tokens_out kappen, während callAI intern den echten
-  // Provider auflöst und z.B. openai-compat/ollama anspricht → vorzeitige Truncation.
+  // WICHTIG: effektiven (aufgelösten) Provider binden, nicht die rohe `provider`-Variable:
+  // ohne expliziten Provider fiele aiCall auf 'claude' zurück und kappte das Output-Ceiling
+  // auf ai.claude.max_tokens_out, während callAI den echten Provider anspricht (Truncation).
   const effectiveProvider = provider || resolveProvider({ userEmail });
   // Strategie-Entscheidungen dieser Pipeline haengen an der KLASSE, nicht am Namen
   // (SSoT: lib/ai/config.js#providerClass) — ein gehostetes Frontier-Modell ueber
@@ -112,8 +109,8 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
   // welcher der beiden Hebel das Geld kostet.
   const gapTier = relabel(extractTier, COST_LABEL.extractGap);
   const coverageTier = relabel(extractTier, COST_LABEL.coverage);
-  const call = (jobId_, tok_, prompt_, system_, fromPct, toPct, expectedChars, outputRatio, maxTokens, schema, tier) =>
-    aiCall(jobId_, tok_, prompt_, system_, fromPct, toPct, expectedChars, outputRatio, maxTokens, effectiveProvider, schema, tier);
+  // Geteilter Buch-Präfix → kein Schema (Cache-Regel, siehe ./call.js).
+  const call = makeKomplettCall(effectiveProvider);
   // Per-Provider-Skalierung aus dessen `ai.<p>.context_window` (lib/ai.js#getContextConfigFor).
   // Bei Claude 200K-Kontext ≈ 420K Zeichen Single-Pass – reicht für fast alle Bücher.
   // Gegen das EIGENE Output-Cap dieser Pipeline gerechnet, nicht gegen das provider-weite:
@@ -240,7 +237,12 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
       ? `:esp${extractCapChars}:cf${coverageFeedbackEnabled ? 1 : 0}:cac${coverageAuditChapters}:sb${sceneBackfillEnabled ? 1 : 0}:sbm${sceneBackfillMinChars}`
       : '';
     const effortAug = extractTier.effort ? `:ee${extractTier.effort}` : '';
-    const cacheVersion = `${cacheModel}:${prompts.PROMPTS_VERSION || ''}:cp${completenessPasses}${singlePassAug}${effortAug}`;
+    // Version NUR aus den Extraktions-Prompts/-Schemas (KOMPLETT_EXTRACT_VERSION). Basis-
+    // Chunks des Multi-Pass ohne cp/Single-Pass-Erweiterungen: ein Toggle daran soll nicht
+    // alle Kapitel neu bezahlen (der :gap-Key trägt cp selbst, phases/extraktion.js).
+    const extractVersion = prompts.KOMPLETT_EXTRACT_VERSION || prompts.PROMPTS_VERSION || '';
+    const chunkCacheVersion = `${cacheModel}:${extractVersion}${effortAug}`;
+    const cacheVersion = `${cacheModel}:${extractVersion}:cp${completenessPasses}${singlePassAug}${effortAug}`;
     // Buch-weite Signatur (Seitenstand + Settings + Modell/Prompt-Version) – dieselbe
     // Gate wie der chapter_extract_cache. Validiert den Checkpoint-Resume.
     const bookPagesSig = buildBookPagesSig(pageContents, getBookSettings(bookIdInt, email), cacheVersion);
@@ -252,7 +254,7 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
     const ctx = {
       jobId, bookIdInt, bookName, email, call, tok, log,
       effectiveProvider, singlePassLimit, extractSinglePassLimit, perChunkLimit,
-      cacheVersion, bookPagesSig, prompts, sys,
+      cacheVersion, chunkCacheVersion, bookPagesSig, prompts, sys,
       idMaps, pageContents, groups, groupOrder, totalChars, fullBookText, warnings, completenessPasses,
       extractTier, gapTier, coverageTier,
       coverageFeedbackEnabled, coverageAuditChapters, sceneBackfillEnabled, sceneBackfillMinChars, figureBatchSize,
@@ -290,7 +292,8 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
       // Umschalten erst beim naechsten Seiten-Edit.
       matchJudge: isJudgeEnabled(effectiveProvider),
     };
-    const consolidationSig = buildConsolidationSig(p1, cacheVersion, consolFlags);
+    // Konsolidierung hängt an allen Komplett-Prompts → zusätzlich der Gesamt-Hash.
+    const consolidationSig = buildConsolidationSig(p1, `${cacheVersion}|${prompts.PROMPTS_VERSION || ''}`, consolFlags);
     const consolMarker = loadCheckpoint(CONSOLIDATION_CP_TYPE, bookIdInt, email);
     const figuresPresent = db.prepare(
       'SELECT COUNT(*) AS c FROM figures WHERE book_id = ? AND user_email IS ?'

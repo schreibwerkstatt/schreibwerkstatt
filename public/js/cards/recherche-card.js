@@ -87,6 +87,7 @@ export function registerRechercheCard() {
     showArchived: false,
 
     menuOpenId: null,
+    menuPos: { top: 0, left: 0 },
 
     // Native-Fullscreen-Status (gespiegelt vom fullscreenchange-Listener) —
     // mehr Platz fürs Karten-Board. Toggle in rechercheMethods.toggleRechercheFullscreen.
@@ -247,6 +248,7 @@ export function registerRechercheCard() {
 
     destroy() {
       this._destroyStatusSortables();
+      this.closeItemMenu();
       this._lifecycle?.destroy();
     },
 

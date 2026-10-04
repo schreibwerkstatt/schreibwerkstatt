@@ -14,4 +14,4 @@ export const ideenBoardMethods = {
   ...ideenLinkMethods,
 };
 
-export { buildLaneOrder, buildBoard, chapterFilterOptions, statusTotals } from './ideen-board/model.js';
+export { buildLaneOrder, buildBoard, chapterFilterOptions, statusTotals, boardColumns } from './ideen-board/model.js';

@@ -122,7 +122,7 @@ async function runLexiconScanJob(jobId, bookId, userEmail, opts = {}) {
       // Kein Text → alte Analyse räumen und ehrlich leer melden, statt die
       // Zahlen des letzten Stands stehen zu lassen.
       lexiconDb.replaceBookLexicon(bookId, {
-        stats: { version: LEXICON_VERSION, pages: 0, segments: 0, tokens: 0, types: 0, hapax: 0, hapax_listed: 0 },
+        stats: { version: LEXICON_VERSION, language: lexiconDb.bookLanguage(bookId), pages: 0, segments: 0, tokens: 0, types: 0, hapax: 0, hapax_listed: 0 },
         terms: [], phrases: [],
       });
       completeJob(jobId, { tokens: 0, types: 0, terms: 0, phrases: 0, skipped: false }, null, '0 Seiten');
@@ -132,9 +132,12 @@ async function runLexiconScanJob(jobId, bookId, userEmail, opts = {}) {
     const metas = flat.map(f => ({ id: f.page.id, chapterId: f.chapterId, updated_at: f.page.updated_at }));
     const sig = computeContentSig(metas.map(m => ({ page_id: m.id, updated_at: m.updated_at })));
     const names = _loadNames(bookId);
+    // Die Sprache wählt Funktionswörter, Referenz und Vergleichs-Mediane — und geht
+    // in die Signatur, sonst bliebe ein umgestelltes Buch als „unverändert" stehen.
+    const language = lexiconDb.bookLanguage(bookId);
     const inputSig = computeInputSig(
       sig, names.stopwords, names.figures.map(f => `${f.id}:${f.name}:${f.kurzname || ''}`),
-      lexiconDb.referenceFingerprint(bookId, LEXICON_VERSION),
+      `${language}:${lexiconDb.referenceFingerprint(bookId, LEXICON_VERSION, language)}`,
     );
     const prev = lexiconDb.getLexiconSignature(bookId);
     if (!opts.force && prev && prev.input_sig === inputSig && prev.lexicon_version === LEXICON_VERSION) {
@@ -157,8 +160,9 @@ async function runLexiconScanJob(jobId, bookId, userEmail, opts = {}) {
     }
 
     updateJob(jobId, { statusText: 'job.phase.lexiconMeasure' });
-    const reference = lexiconDb.loadReferenceCorpus(bookId, LEXICON_VERSION);
+    const reference = lexiconDb.loadReferenceCorpus(bookId, LEXICON_VERSION, language);
     const result = await analyzeBook(pages, {
+      language,
       nameStopwords: names.stopwords,
       reference,
       idiolect: {
@@ -183,7 +187,7 @@ async function runLexiconScanJob(jobId, bookId, userEmail, opts = {}) {
     const s = result.stats;
     const byKind = { freq: 0, key: 0, hapax: 0 };
     for (const t of result.terms) byKind[t.kind || 'freq']++;
-    log.info(`Wortschatz: ${s.tokens} Token, ${s.types} Types, MATTR ${s.mattr} (Fenster ${s.mattr_window}), `
+    log.info(`Wortschatz (${language}): ${s.tokens} Token, ${s.types} Types, MATTR ${s.mattr} (Fenster ${s.mattr_window}), `
       + `MTLD ${s.mtld}, Yule K ${s.yule_k}, β ${s.heaps_beta}, Dichte ${s.lex_density}, `
       + `${byKind.freq} Terme + ${byKind.key} auffällige + ${byKind.hapax}/${s.hapax_listed} Einmalwörter, `
       + `${result.phrases.length} Wendungen, ${result.chapters.length} Kapitel, `

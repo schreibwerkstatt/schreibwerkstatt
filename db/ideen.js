@@ -1,6 +1,7 @@
 'use strict';
-// Datenschicht der Ideen: Notizen und Pendenzen an einer Seite ODER einem
-// Kapitel, plus die Bruecke `idea_links` zu Recherche/Beat/Motiv.
+// Datenschicht der Ideen: Notizen und Pendenzen an einer Seite, einem Kapitel
+// oder (ohne Anker) nur am Buch, plus die Bruecke `idea_links` zu Recherche/Beat/Strang/
+// Motiv/Werkstatt-Figur.
 //
 // Warum als eigenes db/-Modul und nicht weiter als SQL im Handler: die Ausgabe
 // einer Idee traegt Seiten- und Kapitelnamen, und der ist ein Namens-JOIN auf
@@ -31,12 +32,14 @@ const LINK_TARGETS = {
   research: { col: 'research_id', table: 'research_items', pk: 'id', nameCol: 'title', bookCol: 'book_id' },
   beat:     { col: 'beat_id',     table: 'plot_beats',     pk: 'id', nameCol: 'titel', bookCol: 'book_id' },
   motif:    { col: 'motif_id',    table: 'motifs',         pk: 'id', nameCol: 'name',  bookCol: 'book_id' },
+  draft:    { col: 'draft_figure_id', table: 'draft_figures', pk: 'id', nameCol: 'name', bookCol: 'book_id' },
+  thread:   { col: 'thread_id',   table: 'plot_threads',   pk: 'id', nameCol: 'name',  bookCol: 'book_id' },
 };
 
 const SELECT_ROW = `
   SELECT i.id, i.book_id, i.page_id, p.page_name,
          i.chapter_id, c.chapter_name,
-         i.content, i.status, i.status_at, i.created_at, i.updated_at
+         i.content, i.status, i.status_at, i.sort_order, i.created_at, i.updated_at
     FROM ideen i
     LEFT JOIN pages    p ON p.page_id    = i.page_id
     LEFT JOIN chapters c ON c.chapter_id = i.chapter_id
@@ -191,6 +194,19 @@ function listIdeaLinkTargets(bookId, userEmail) {
        WHERE book_id = ? AND user_email = ?
        ORDER BY position, id
     `).all(bid, userEmail).map(r => ({ id: r.id, label: r.label || '' })),
+    // Werkstatt-Figuren und Stränge gehoeren wie Beats und Motive dem User.
+    draft: db.prepare(`
+      SELECT id, name AS label
+        FROM draft_figures
+       WHERE book_id = ? AND user_email = ?
+       ORDER BY name COLLATE NOCASE, id
+    `).all(bid, userEmail).map(r => ({ id: r.id, label: r.label || '' })),
+    thread: db.prepare(`
+      SELECT id, name AS label
+        FROM plot_threads
+       WHERE book_id = ? AND user_email = ?
+       ORDER BY position, id
+    `).all(bid, userEmail).map(r => ({ id: r.id, label: r.label || '' })),
   };
 }
 
@@ -242,7 +258,7 @@ function listBoardIdeen(bookId, userEmail) {
            i.chapter_id, c.chapter_name,
            COALESCE(i.chapter_id, p.chapter_id) AS lane_chapter_id,
            COALESCE(c.chapter_name, pc.chapter_name) AS lane_chapter_name,
-           i.content, i.status, i.status_at, i.created_at, i.updated_at
+           i.content, i.status, i.status_at, i.sort_order, i.created_at, i.updated_at
       FROM ideen i
       LEFT JOIN pages    p  ON p.page_id     = i.page_id
       LEFT JOIN chapters c  ON c.chapter_id  = i.chapter_id
@@ -285,12 +301,29 @@ function updateIdee(id, userEmail, fields) {
   return db.prepare(`UPDATE ideen SET ${sets.join(', ')} WHERE id = ? AND user_email = ?`).run(...vals).changes;
 }
 
+/**
+ * Manuelle Reihenfolge einer Board-Zelle (Bahn × Stufe) setzen: `ids` in
+ * Anzeige-Reihenfolge bekommen `sort_order` 1..n. Ganz oder gar nicht — gehoert
+ * eine ID nicht diesem User in diesem Buch, wird nichts geschrieben (`false`).
+ * Welche Ideen eine Zelle bilden, entscheidet das Board; hier wird nur
+ * sichergestellt, dass niemand fremde Zeilen umordnet. `updated_at` bleibt
+ * stehen: Umsortieren aendert die Idee nicht.
+ */
+const reorderIdeen = db.transaction((bookId, userEmail, ids) => {
+  const own = db.prepare('SELECT 1 FROM ideen WHERE id = ? AND book_id = ? AND user_email = ?');
+  for (const id of ids) if (!own.get(id, bookId, userEmail)) return false;
+  const upd = db.prepare('UPDATE ideen SET sort_order = ? WHERE id = ? AND user_email = ?');
+  ids.forEach((id, i) => upd.run(i + 1, id, userEmail));
+  return true;
+});
+
 function deleteIdee(id, userEmail) {
   return db.prepare('DELETE FROM ideen WHERE id = ? AND user_email = ?').run(id, userEmail).changes;
 }
 
 module.exports = {
   LINK_TARGETS,
+  attachLinks,
   getIdee,
   getIdeeOwned,
   listIdeenForScope,
@@ -298,6 +331,7 @@ module.exports = {
   openIdeenCounts,
   createIdee,
   updateIdee,
+  reorderIdeen,
   deleteIdee,
   addIdeaLink,
   removeIdeaLink,

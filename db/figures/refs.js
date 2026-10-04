@@ -1,21 +1,33 @@
 const { db } = require('../connection');
 require('../migrations');
+const { isUngroupedChapterName } = require('../../lib/ungrouped-chapter');
 
 // Gerichtete Beziehungstypen und ihre Inverse. A→B elternteil ≡ B→A kind,
 // A→B mentor ≡ B→A schuetzling. Für Dedup-Zwecke als identisch betrachtet.
 const RELATION_INVERSES = { elternteil: 'kind', kind: 'elternteil', mentor: 'schuetzling', schuetzling: 'mentor', vorgesetzter: 'untergebener', untergebener: 'vorgesetzter' };
 
+/** Richtungsfreier Schlüssel einer Beziehung: ungeordnetes Paar + Typ, wobei ein
+ *  gerichteter Typ beim Umdrehen auf sein Inverses fällt (A elternteil B ≡ B kind A).
+ *  Taugt für fig_ids (TEXT) wie für figures.id (INTEGER). */
+function relationKey(from, to, typ) {
+  if (from < to) return `${from}|${to}|${typ}`;
+  return `${to}|${from}|${RELATION_INVERSES[typ] || typ}`;
+}
+
 /** Dedupliziert Relations pro ungeordnetem Paar (A,B). Erste gewinnt.
  *  Eliminiert damit auch widersprüchliche typs (z.B. elternteil + kind auf dem
- *  gleichen Paar) sowie inverse Dubletten (A elternteil B + B kind A). */
-function dedupRelations(relations, validIds) {
+ *  gleichen Paar) sowie inverse Dubletten (A elternteil B + B kind A).
+ *  `opts.byTyp`: nur Dubletten gleichen (bzw. inversen) Typs fallen — der Katalog-PUT
+ *  darf mehrere Beziehungen verschiedenen Typs auf einem Paar führen (eine vom Autor
+ *  angelegte neben der der Analyse). */
+function dedupRelations(relations, validIds, opts = {}) {
   const seen = new Set();
   const result = [];
   for (const r of relations) {
     if (!r.from || !r.to || r.from === r.to) continue;
     if (validIds && (!validIds.has(r.from) || !validIds.has(r.to))) continue;
     const [a, b] = r.from < r.to ? [r.from, r.to] : [r.to, r.from];
-    const key = `${a}|${b}`;
+    const key = opts.byTyp ? relationKey(r.from, r.to, r.typ) : `${a}|${b}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(r);
@@ -93,7 +105,7 @@ function enrichBelegWithIds(beleg, idMaps) {
     kapitel = a;   // unauflösbar – bereinigter Rohname dient nur der Anzeige
   }
   const chId = (kapitel && chMap[kapitel]) ?? null;
-  const effSeite = (seite && seite !== kapitel && seite !== 'Sonstige Seiten')
+  const effSeite = (seite && seite !== kapitel && !isUngroupedChapterName(seite))
     ? seite : null;
   const pId = effSeite
     ? (idMaps?.pageNameToIdByChapter?.[chId ?? 0]?.[effSeite] ?? null)
@@ -118,6 +130,7 @@ function _arcToFlat(arc) {
 
 module.exports = {
   RELATION_INVERSES,
+  relationKey,
   dedupRelations,
   figIdMaps,
   _cleanRefName,

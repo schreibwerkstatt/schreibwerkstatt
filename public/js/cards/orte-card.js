@@ -17,6 +17,7 @@ import { orteEditMethods, closedOrtEdit } from '../book/orte-edit.js';
 import { orteInsightMethods } from '../book/orte-insights.js';
 import { lsGet, lsSet } from '../safe-storage.js';
 import { formatLastRun } from '../utils/date.js';
+import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 
 export function registerOrteCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -52,6 +53,7 @@ export function registerOrteCard() {
     _lifecycle: null,
     // Pflege-Formular (book/orte-edit.js): { mode: null|'new'|'edit', id, draft, busy, error }.
     ortEdit: closedOrtEdit(),
+    plotBacklinks: {},        // loc_id → Beats der Plot-Werkstatt (Detail „Im Plot“), non-fatal
     ortMergeTarget: '',       // Ziel-loc_id der «Zusammenführen mit …»-Auswahl im Detail
 
     init() {
@@ -73,10 +75,10 @@ export function registerOrteCard() {
         name: 'orte',
         showFlag: 'showOrteCard',
         timerKeys: ['_ortePollTimer', '_geocodeJobTimer', '_orteMapStatusTimer'],
-        resetState: { orteLoading: false, orteProgress: 0, orteStatus: '', orteRealEnabled: false, geocodingId: null, geocodingAll: false, highlightOrtId: null, orteMapStatus: '', ortMergeTarget: '' },
-        load: (root) => root.loadOrte(Alpine.store('nav').selectedBookId),
+        resetState: { plotBacklinks: {}, orteLoading: false, orteProgress: 0, orteStatus: '', orteRealEnabled: false, geocodingId: null, geocodingAll: false, highlightOrtId: null, orteMapStatus: '', ortMergeTarget: '' },
+        load: (root) => { this.loadPlotBacklinks('location'); return root.loadOrte(Alpine.store('nav').selectedBookId); },
         onShow: async (root) => {
-          const tasks = [root.loadOrte(Alpine.store('nav').selectedBookId), this.loadOrteReal()];
+          const tasks = [root.loadOrte(Alpine.store('nav').selectedBookId), this.loadOrteReal(), this.loadPlotBacklinks('location')];
           if (!root.$store.catalog.szenen.length) tasks.push(root.loadSzenen(Alpine.store('nav').selectedBookId));
           await Promise.all(tasks);
         },
@@ -174,5 +176,6 @@ export function registerOrteCard() {
     ...orteMapMethods,
     ...orteEditMethods,
     ...orteInsightMethods,
+    ...plotBacklinkMethods,
   }));
 }

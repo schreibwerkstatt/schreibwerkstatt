@@ -260,13 +260,13 @@ export function _buildFachWiederholungBlock(sw = []) {
 Wiederholung-Regeln (typ: «wiederholung»):
 - VORRANG-REGEL: Fachbegriffe, definierte Termini, Variablen-/Konstrukt-Namen, Eigennamen von Verfahren, Institutionen und Instrumenten werden NIE als Wiederholung gemeldet — sie MÜSSEN im ganzen Text identisch bleiben. Ein Synonym dafür wäre ein Fehler (typ «begriffsinkonsistenz»), keine Verbesserung.
 - Gemeldet wird nur die Wiederholung NICHT-terminologischer Inhaltswörter, die den Text schwerfällig macht: allgemeine Verben, Adjektive, Rahmen-Substantive («Aspekt», «Bereich», «Rahmen», «Zusammenhang») sowie identische Satzeinleitungen in Folge.
-- Schwelle: mind. 3× auf der Seite ODER 2× im selben oder direkt aufeinanderfolgenden Absatz.
+- Schwelle: mind. 3× im Abschnitt ODER 2× im selben oder direkt aufeinanderfolgenden Absatz.
 - LEMMA-/STAMMBASIERT zählen, nicht nach Wortform. Wortformen desselben Lemmas separat aufzulisten ist verboten.
 - Keine Pronomen, Hilfsverben, Artikel, Konjunktionen, Präpositionen, Eigennamen${swNote}
 - Nicht melden in direkten Zitaten und in Tabellen-/Abbildungslegenden.
 - «original»: vollständiger Satz zeichengenau aus dem Text.
 - «korrektur»: derselbe Satz mit dem besten Synonym — exakt gleiche grammatische Form, Aussage unverändert präzise.
-- «erklaerung»: EIN Satz, nennt das wiederholte Wort bzw. den Stamm («Rahmen-Substantiv «Bereich» dreimal auf der Seite»).
+- «erklaerung»: EIN Satz, nennt das wiederholte Wort bzw. den Stamm («Rahmen-Substantiv «Bereich» dreimal im Abschnitt»).
 - Selbsttest vor jedem Eintrag: Ist das Wort ein Fachbegriff dieser Arbeit? Wenn ja oder unklar → weglassen.`;
 }
 
@@ -299,17 +299,17 @@ export function _buildFachAufgabe(profil, stilOnly) {
   const objektivHinweis = stilOnly
     ? ' WICHTIG: Rechtschreibung, Grammatik und Zeichensetzung/Interpunktion werden in einem SEPARATEN Pass geprüft und dürfen hier NICHT gemeldet werden.'
     : '';
-  const gemeinsam = 'Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Abschnitte oder die letzten Sätze.';
+  const gemeinsam = 'Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze.';
   if (profil === 'journalistisch') {
     return `${gemeinsam} Der Text ist ein JOURNALISTISCHER BEITRAG und wird nach den Massstäben redaktioneller Prosa geprüft, nicht nach denen literarischen Erzählens und nicht nach denen wissenschaftlicher Prosa.${stilOnly ? '' : ' Prüfe Rechtschreibung, Grammatik und Zeichensetzung/Interpunktion (insbesondere Kommasetzung) Satz für Satz und gründlich – das sind objektive Fehler.'} Prüfe ausserdem: den Modus der indirekten Rede, die Zuschreibung fremder Aussagen, die Trennung von Nachricht und Meinung, unübersetzte Amts- und PR-Sprache, Klarheit und Satzbau, Wortwiederholungen, schwache Verben, Füllwörter, abgegriffene Nachrichtenfloskeln, KI-Geruch, vermeidbares Passiv, wechselnde Terminologie, Pleonasmen und Tempus-Konsistenz (Zuständigkeit und Details der einzelnen Typen siehe Regelblöcke unten).
-AUSDRÜCKLICH KEIN MANGEL und NICHT zu melden: kurze Hauptsätze, Alltagssprache, die wörtliche Wiederholung eines Eigennamens, dichte Zahlen- und Namensnennung, sachlich-nüchterner Ton, fehlende Szenen, fehlende Figurenarbeit, fehlende Bildsprache. Wörtliche Zitate sind unantastbar – siehe ZITAT-TREUE.${objektivHinweis} Bewerte ausserdem die Abschnitte der Seite.`;
+AUSDRÜCKLICH KEIN MANGEL und NICHT zu melden: kurze Hauptsätze, Alltagssprache, die wörtliche Wiederholung eines Eigennamens, dichte Zahlen- und Namensnennung, sachlich-nüchterner Ton, fehlende Szenen, fehlende Figurenarbeit, fehlende Bildsprache. Wörtliche Zitate sind unantastbar – siehe ZITAT-TREUE.${objektivHinweis} Bewerte ausserdem die Teilabschnitte des Abschnitts.`;
   }
   if (profil === 'wissenschaft') {
     return `${gemeinsam} Der Text ist Teil einer WISSENSCHAFTLICHEN ARBEIT und wird nach den Maßstäben wissenschaftlicher Prosa geprüft, nicht nach denen literarischen Erzählens.${stilOnly ? '' : ' Prüfe Rechtschreibung, Grammatik und Zeichensetzung/Interpunktion (insbesondere Kommasetzung) Satz für Satz und gründlich – das sind objektive Fehler.'} Prüfe ausserdem: unbelegte Behauptungen, Begriffsdisziplin, konsistente Autorenreferenz, Tempus-Konvention der Abschnitte, gestapeltes Hedging, Satzbau, Wortwiederholungen ausserhalb der Fachterminologie, Füllwörter, Pleonasmen und sonstige sprachliche Schwächen (Zuständigkeit und Details der einzelnen Typen siehe Regelblöcke unten).
-AUSDRÜCKLICH KEIN MANGEL und NICHT zu melden: Nominalstil und Substantivierungen, sachlich-distanzierter Ton, Passivkonstruktionen, Fachterminologie und Fremdwörter, unpersönliche Formulierung, wiederholte Fachbegriffe, fehlende Szenen, fehlende Bildsprache, fehlende Figuren- oder Spannungsarbeit. Erzählerische Stilmittel sind hier nicht das Ziel; verlange sie nicht und rechne ihr Fehlen nicht als Schwäche.${objektivHinweis} Bewerte ausserdem die Abschnitte der Seite.`;
+AUSDRÜCKLICH KEIN MANGEL und NICHT zu melden: Nominalstil und Substantivierungen, sachlich-distanzierter Ton, Passivkonstruktionen, Fachterminologie und Fremdwörter, unpersönliche Formulierung, wiederholte Fachbegriffe, fehlende Szenen, fehlende Bildsprache, fehlende Figuren- oder Spannungsarbeit. Erzählerische Stilmittel sind hier nicht das Ziel; verlange sie nicht und rechne ihr Fehlen nicht als Schwäche.${objektivHinweis} Bewerte ausserdem die Teilabschnitte des Abschnitts.`;
   }
   return `${gemeinsam} Der Text ist SACHTEXT (Sachbuch, Essay oder Blog) und wird nach den Maßstäben argumentierender Prosa geprüft, nicht nach denen literarischen Erzählens.${stilOnly ? '' : ' Prüfe Rechtschreibung, Grammatik und Zeichensetzung/Interpunktion (insbesondere Kommasetzung) Satz für Satz und gründlich – das sind objektive Fehler.'} Prüfe ausserdem: Klarheit und Satzbau, Wortwiederholungen ausserhalb der Fachbegriffe, schwache Verben, Füllwörter, abgegriffene Phrasen, KI-Geruch, vermeidbares Passiv, gestapelte Absicherungsfloskeln, wechselnde Terminologie für dieselbe Sache, Pleonasmen und Tempus-Konsistenz (Zuständigkeit und Details der einzelnen Typen siehe Regelblöcke unten).
-AUSDRÜCKLICH KEIN MANGEL und NICHT zu melden: fehlende Szenen, fehlende Figurenarbeit, abstraktes Benennen statt szenischem Zeigen, Wahrnehmungsverben, sachlicher Ton, Fachterminologie, wo sie präzisiert.${objektivHinweis} Bewerte ausserdem die Abschnitte der Seite.`;
+AUSDRÜCKLICH KEIN MANGEL und NICHT zu melden: fehlende Szenen, fehlende Figurenarbeit, abstraktes Benennen statt szenischem Zeigen, Wahrnehmungsverben, sachlicher Ton, Fachterminologie, wo sie präzisiert.${objektivHinweis} Bewerte ausserdem die Teilabschnitte des Abschnitts.`;
 }
 
 export function _buildFachSeverityBlock(stilistischeTypen, mechanischeTypen, stylisticCap = 10) {
@@ -370,16 +370,16 @@ Bevor du die JSON-Antwort ausgibst, gehe deine gesammelten Findings einmal durch
 export function _buildFachAbschnittRegelnBlock(profil = 'wissenschaft') {
   if (profil === 'journalistisch') {
     return `
-Abschnitts-Regeln (Feld «szenen»):
-- Ein Abschnitt ist hier ein Textbaustein mit eigener Funktion (Vorspann/Lead, Aufhänger, Hauptteil, Hintergrund/Einordnung, O-Ton-Block, Gegenposition, Schluss) – KEINE Szene.
-- Enthält die Seite keine abgrenzbaren Bausteine (z.B. reine Meldung von drei Sätzen, Bildlegende, Faktenkasten): «szenen» als leeres Array zurückgeben.
+Teilabschnitts-Regeln (Feld «szenen»):
+- Ein Teilabschnitt ist hier ein Textbaustein mit eigener Funktion (Vorspann/Lead, Aufhänger, Hauptteil, Hintergrund/Einordnung, O-Ton-Block, Gegenposition, Schluss) – KEINE Szene.
+- Enthält der Abschnitt keine abgrenzbaren Bausteine (z.B. reine Meldung von drei Sätzen, Bildlegende, Faktenkasten): «szenen» als leeres Array zurückgeben.
 - wertung: «stark» = Baustein trägt seine Funktion, «mittel» = Funktion unklar oder Information fehlt, «schwach» = Baustein steht ohne erkennbaren Zweck.
 - kommentar: 1-2 Sätze zu Funktion, Informationswert und Anschluss an den vorigen Baustein. KEINE Einzelstellen-Kritik aus dem «fehler»-Array wiederholen.`;
   }
   return `
-Abschnitts-Regeln (Feld «szenen»):
-- Ein Abschnitt ist hier ein Argumentations- oder Darstellungsschritt mit eigener Funktion (Fragestellung, Herleitung, Methodenschritt, Befund, Deutung, Zwischenfazit) – KEINE Szene.
-- Enthält die Seite keine abgrenzbaren Schritte (z.B. reine Tabelle, Literaturliste, Fussnotenblock): «szenen» als leeres Array zurückgeben.
+Teilabschnitts-Regeln (Feld «szenen»):
+- Ein Teilabschnitt ist hier ein Argumentations- oder Darstellungsschritt mit eigener Funktion (Fragestellung, Herleitung, Methodenschritt, Befund, Deutung, Zwischenfazit) – KEINE Szene.
+- Enthält der Abschnitt keine abgrenzbaren Schritte (z.B. reine Tabelle, Literaturliste, Fussnotenblock): «szenen» als leeres Array zurückgeben.
 - wertung: «stark» = Schritt trägt und ist nachvollziehbar, «mittel» = Lücke in Herleitung oder Beleg, «schwach» = Aussage steht nicht.
 - kommentar: 1-2 Sätze zu Nachvollziehbarkeit, Beleglage und Anschluss an den vorigen Schritt. KEINE Einzelstellen-Kritik aus dem «fehler»-Array wiederholen.`;
 }

@@ -2,7 +2,7 @@
 // Beat-Zeilen mit Substanz, Spannungsverlauf, Vorlauf-Block (Delta-Check),
 // Kürzungs-Hinweise, Daten-Regel und Ausgabesprache. Pure Funktionen.
 
-import { _trunc, _truncWord } from './lines.js';
+import { _trunc, _truncWord, _ideenMarker } from './lines.js';
 
 const STATUS_LABEL = {
   geplant: 'geplant',
@@ -97,7 +97,8 @@ function _beatLine(b, threadInfo, anchorMap, descMax) {
   const mot = mots.length ? ` ⟨Motive: ${mots.join(', ')}⟩` : '';
   const int = Number.isInteger(b.intensitaet) ? ` ⟨Intensität: ${b.intensitaet}/5⟩` : '';
   const besch = (b.beschreibung || '').trim() ? `\n      «${_truncWord(b.beschreibung, descMax)}»` : '';
-  return `  - [#${b.id}] ${b.titel} [${st}]${kap}${zeit}${ort}${fig}${wf}${mot}${int}${str}${_beatAnchorMarker(b, anchorMap)}${besch}`;
+  const ideen = _ideenMarker(b.ideen);
+  return `  - [#${b.id}] ${b.titel} [${st}]${kap}${zeit}${ort}${fig}${wf}${mot}${int}${str}${_beatAnchorMarker(b, anchorMap)}${besch}${ideen ? `\n      ${ideen}` : ''}`;
 }
 
 function _actBlock(act, beats, threadInfo, anchorMap, laneRank, descMax) {

@@ -25,6 +25,7 @@ import { BOOK_COLORS } from '../cards/my-stats-chart-methods.js';
 import { startPoll } from '../cards/job-helpers.js';
 import { tRaw } from '../i18n.js';
 import { createChartHolder, cssVar } from '../cards/chart-holder.js';
+import { dateTimeFormat } from '../utils.js';
 
 // Ausserhalb von Alpine gehalten, damit der Reaktivitäts-Proxy die Chart.js-
 // Instanz nicht beschädigt (gleiche Begründung wie in book/bookstats.js).
@@ -41,6 +42,33 @@ const R_MAX_BONUS = 4;
 // „0% der Streuung" darunter waere kein Ergebnis, sondern eine Irritation.
 const MIN_MAP_POINTS = 3;
 
+// Abgeblendete Kapitel bei aktiver Hervorhebung: Alpha-Suffix der Hex-Farbe.
+const ALPHA_ON = 'cc';
+const ALPHA_OFF = '22';
+
+// Letztes Ergebnis je Buch für die Dauer der Browser-Sitzung (Modul-State,
+// kein localStorage): Schliessen der Karte oder ein Buchwechsel kostet sonst
+// einen neuen Lauf. Kein persistierter Index — das Ergebnis bleibt nur so lange
+// wie der Tab, und „Neu zeichnen" holt den aktuellen Stand.
+const _resultCache = new Map();
+
+// Kapitelfarbe nach Gliederungs-Position. Die ersten zwölf aus der App-Palette,
+// danach Goldener-Winkel-Farbtöne — sonst trügen Kapitel 1 und 13 dieselbe
+// Farbe und die Karte zeigte eine Überlagerung, die es nicht gibt.
+function _chapterColor(ix) {
+  if (ix < BOOK_COLORS.length) return BOOK_COLORS[ix];
+  const hue = ((ix - BOOK_COLORS.length) * 137.508 + 20) % 360;
+  return _hslHex(hue, 0.55, 0.52);
+}
+
+function _hslHex(h, s, l) {
+  const k = (n) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+  const hex = (v) => Math.round(v * 255).toString(16).padStart(2, '0');
+  return '#' + hex(f(0)) + hex(f(8)) + hex(f(4));
+}
+
 /** Vom destroy() der Karte gerufen: Modul-State freigeben. */
 export function _destroyBookMapChart() {
   _map.destroy();
@@ -54,7 +82,7 @@ export function _disconnectBookMapThemeObserver() {
 // graph-kit.js#observeThemeChange).
 function _ensureThemeObserver(component) {
   _map.ensureThemeRedraw(() => {
-    if (!window.__app?.showBuchlandkarteCard) return;
+    if (!window.__app?.showBuchlandkarteCard || window.__app.buchlandkarteTab !== 'map') return;
     _destroyBookMapChart();
     component.renderBookMap();
   });
@@ -80,15 +108,44 @@ export const buchlandkarteMethods = {
 
   // ── Index-Frische ─────────────────────────────────────────────────────────
 
+  // Scheitert die Abfrage (Netz, 500), ist der Index-Stand UNBEKANNT — nicht
+  // „kein Index". `bookMapIndexError` hält den Lauf offen; der Job selbst
+  // meldet ein leeres Ergebnis, falls wirklich nichts da ist.
   async loadBookMapIndexStatus() {
     const bookId = Alpine.store('nav').selectedBookId;
+    this.bookMapIndexError = false;
     if (!bookId || !this.$store.config?.semanticSearchEnabled) { this.bookMapIndexInfo = null; return; }
     try {
       const r = await fetch('/search/semantic/status?book_id=' + encodeURIComponent(bookId), { credentials: 'same-origin' });
-      if (!r.ok) { this.bookMapIndexInfo = null; return; }
+      if (!r.ok) { this.bookMapIndexInfo = null; this.bookMapIndexError = r.status !== 401; return; }
       const j = await r.json();
       this.bookMapIndexInfo = j.enabled ? j : null;
-    } catch { this.bookMapIndexInfo = null; }
+    } catch { this.bookMapIndexInfo = null; this.bookMapIndexError = true; }
+  },
+
+  /** Zuletzt berechnete Karte dieses Buchs aus dem Sitzungs-Cache zeigen. */
+  restoreBookMapResult() {
+    const bookId = Alpine.store('nav').selectedBookId;
+    if (!bookId || this.bookMapResult || this.bookMapLoading) return;
+    const cached = _resultCache.get(String(bookId));
+    if (!cached) return;
+    this.bookMapResult = cached;
+    this.$nextTick(() => this.renderBookMap());
+  },
+
+  /** Meta-Zeile zum Index-Stand der berechneten Karte (leer, wenn nichts zu sagen ist). */
+  bookMapIndexNote() {
+    const res = this.bookMapResult;
+    if (!res) return '';
+    const t = (k, p) => window.__app?.t?.(k, p) || k;
+    const parts = [];
+    if (res.lastIndexedAt) {
+      const when = dateTimeFormat(Alpine.store('shell')?.uiLocale, { dateStyle: 'short', timeStyle: 'short' })
+        .format(new Date(res.lastIndexedAt));
+      parts.push(t('buchlandkarte.meta.indexedAt', { when }));
+    }
+    if (res.missingPages > 0) parts.push(t('buchlandkarte.meta.missing', { n: res.missingPages, total: res.totalPages }));
+    return parts.join(' · ');
   },
 
   // ── Lauf ──────────────────────────────────────────────────────────────────
@@ -101,6 +158,7 @@ export const buchlandkarteMethods = {
     this.bookMapLoading = true;
     this.bookMapProgress = 0;
     this.bookMapResult = null;
+    this.bookMapFocusChapter = null;
     _destroyBookMapChart();
     this.bookMapStatus = window.__app?.t?.('buchlandkarte.running') || '';
     try {
@@ -138,6 +196,8 @@ export const buchlandkarteMethods = {
         this.bookMapLoading = false;
         this.bookMapProgress = 100;
         this.bookMapResult = j.result || { pages: [], chapters: [], outliers: [] };
+        const bookId = Alpine.store('nav').selectedBookId;
+        if (bookId && j.result) _resultCache.set(String(bookId), j.result);
         this.bookMapStatus = '';
         // Canvas existiert erst, wenn das Ergebnis-Template gerendert ist.
         this.$nextTick(() => this.renderBookMap());
@@ -152,7 +212,9 @@ export const buchlandkarteMethods = {
   /**
    * Punkte nach Kapitel in Chart.js-Datasets gruppieren. Reihenfolge = Buch-
    * Reihenfolge (aus der Navigationsliste), damit die Legende der Gliederung
-   * folgt und die Farbe eines Kapitels über Läufe hinweg dieselbe bleibt.
+   * folgt. Die Farbe hängt an der Position des Kapitels in der GLIEDERUNG,
+   * nicht an der Zahl der Kapitel mit Punkten — sonst verschöbe die erste
+   * indizierte Seite eines frühen Kapitels alle Farben dahinter.
    * Seiten ohne Kapitel kommen als letzte, neutral gefärbte Gruppe.
    */
   _bookMapDatasets(pages) {
@@ -184,15 +246,17 @@ export const buchlandkarteMethods = {
     for (const chapterId of order) {
       const key = chapterId == null ? '' : String(chapterId);
       const pts = groups.get(key);
+      const color = chapterId == null ? muted : _chapterColor(colorIx++);
       if (!pts?.length) continue;
-      const color = chapterId == null ? muted : BOOK_COLORS[colorIx++ % BOOK_COLORS.length];
       out.push({
         label: this.bookMapChapterName(chapterId),
+        chapterId: chapterId ?? null,
+        _color: color,
         data: pts.map(pt => ({
           x: pt.x, y: pt.y, pageId: pt.id,
           r: R_BASE + Math.min(R_MAX_BONUS, Math.max(0, (pt.chunks || 1) - 1)),
         })),
-        backgroundColor: color + 'cc',
+        backgroundColor: color + ALPHA_ON,
         borderColor: color,
         borderWidth: 1,
         pointRadius: ctx => ctx.raw?.r ?? R_BASE,
@@ -253,6 +317,38 @@ export const buchlandkarteMethods = {
     }));
     // Für Screenreader und als Titel-Attribut: das Canvas selbst ist stumm.
     canvas.setAttribute('aria-label', t('buchlandkarte.canvasAria', { n: res.pages.length }));
+    // Nach Theme-Redraw oder Cache-Restore die Hervorhebung wieder anlegen.
+    this._applyBookMapFocus();
+  },
+
+  // ── Hervorhebung ──────────────────────────────────────────────────────────
+
+  /**
+   * Kapitel hervorheben: es selbst und sein nächstes Kapitel in voller Farbe,
+   * alle anderen abgeblendet — so wird „liegen die zwei Wolken übereinander?"
+   * sichtbar statt nur als Zahl. Zweiter Klick hebt die Hervorhebung auf.
+   */
+  bookMapToggleFocus(chapterId) {
+    this.bookMapFocusChapter = this.bookMapFocusChapter === chapterId ? null : chapterId;
+    this._applyBookMapFocus();
+  },
+
+  bookMapIsFocused(chapterId) {
+    return this.bookMapFocusChapter != null && this.bookMapFocusChapter === chapterId;
+  },
+
+  _applyBookMapFocus() {
+    const chart = _map.get();
+    if (!chart) return;
+    const focus = this.bookMapFocusChapter;
+    const nearest = focus == null ? null
+      : (this.bookMapResult?.chapters || []).find(c => c.chapterId === focus)?.nearestChapterId ?? null;
+    for (const ds of chart.data.datasets) {
+      const on = focus == null || ds.chapterId === focus || (nearest != null && ds.chapterId === nearest);
+      ds.backgroundColor = ds._color + (on ? ALPHA_ON : ALPHA_OFF);
+      ds.borderColor = on ? ds._color : ds._color + ALPHA_OFF;
+    }
+    chart.update('none');
   },
 
   // ── Kennzahlen-Zeilen fürs Template ───────────────────────────────────────
@@ -267,7 +363,35 @@ export const buchlandkarteMethods = {
       cohesionPct: c.cohesion == null ? null : Math.round(c.cohesion * 100),
       spreadPct: c.spread == null ? null : Math.round(c.spread * 100),
       nearestPct: c.nearestScore == null ? null : Math.round(c.nearestScore * 100),
+      ...this._bookMapSplitInfo(c.split),
     }));
+  },
+
+  /**
+   * Teilungsbefund fürs Template. Liegen die zwei Gruppen in der Gliederung
+   * hintereinander, ist der Bruch eine konkrete Seite („ab hier ein anderes
+   * Thema") — das ist der Teilungsvorschlag. Wechseln sie sich ab, gibt es
+   * keinen Schnitt, nur zwei verflochtene Themen.
+   */
+  _bookMapSplitInfo(split) {
+    if (!split?.groups?.length) return { splitText: '', splitPageId: null, splitPageName: '' };
+    const t = (k, p) => window.__app?.t?.(k, p) || k;
+    const pos = new Map((Alpine.store('nav').pages || []).map((p, i) => [String(p.id), i]));
+    const at = (id) => pos.get(String(id));
+    const [ga, gb] = split.groups;
+    const a = ga.map(at);
+    const b = gb.map(at);
+    const params = { a: ga.length, b: gb.length };
+    if (![...a, ...b].every(v => v != null)) return { splitText: t('buchlandkarte.split.mixed', params), splitPageId: null, splitPageName: '' };
+    const [first, second] = Math.max(...a) < Math.min(...b) ? [ga, gb]
+      : Math.max(...b) < Math.min(...a) ? [gb, ga] : [null, null];
+    if (!first) return { splitText: t('buchlandkarte.split.mixed', params), splitPageId: null, splitPageName: '' };
+    const breakId = second.reduce((m, id) => (at(id) < at(m) ? id : m), second[0]);
+    return {
+      splitText: t('buchlandkarte.split.contiguous', { a: first.length, b: second.length }),
+      splitPageId: breakId,
+      splitPageName: this.bookMapPageName(breakId),
+    };
   },
 
   bookMapOutlierRows() {

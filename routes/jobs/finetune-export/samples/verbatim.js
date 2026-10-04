@@ -81,7 +81,7 @@ function buildVerbatimSamples(ctx) {
     if (bookName) locParts.push(langIsEn ? `from «${bookName}»` : `aus «${bookName}»`);
     if (p.chapter) locParts.push(langIsEn ? `chapter «${p.chapter}»` : `Kapitel «${p.chapter}»`);
     const suffix = locParts.length ? ' (' + locParts.join(', ') + ')' : '';
-    const noun = (langIsEn ? `the page «${p.title}»` : `die Seite «${p.title}»`) + suffix;
+    const noun = (langIsEn ? `the section «${p.title}»` : `den Abschnitt «${p.title}»`) + suffix;
     emitChunked(p.text, noun, 'verbPage|' + p.id, 'ch:' + (p.chapter_id ?? 0));
   }
 

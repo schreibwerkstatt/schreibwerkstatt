@@ -250,7 +250,7 @@ function listFigurenWithDetails(bookId, userEmail) {
     ORDER BY fe.figure_id, fe.sort_order`).all(bookId, em);
   const rels = db.prepare(`
     SELECT ff.fig_id AS from_fig_id, ft.fig_id AS to_fig_id,
-           r.typ, r.beschreibung, r.machtverhaltnis, r.belege
+           r.typ, r.beschreibung, r.machtverhaltnis, r.belege, r.origin
     FROM figure_relations r
     JOIN figures ff ON ff.id = r.from_fig_id
     JOIN figures ft ON ft.id = r.to_fig_id
@@ -315,6 +315,7 @@ function listFigurenWithDetails(bookId, userEmail) {
       beschreibung: r.beschreibung,
       machtverhaltnis: r.machtverhaltnis ?? null,
       belege: _parseJsonArray(r.belege),
+      origin: r.origin,
     });
   }
 
@@ -334,6 +335,7 @@ function listFigurenWithDetails(bookId, userEmail) {
     return {
       id: f.fig_id,
       stale: !!f.stale,
+      manually_edited: !!f.manually_edited,
       name: f.name,
       kurzname: f.kurzname,
       typ: f.typ,

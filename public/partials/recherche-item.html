@@ -8,7 +8,7 @@
      Aktionsmenue und Verknuepfungs-/Tag-Block sind eigene Fragmente, weil der
      Detail-Dialog sie wortgleich mitbenutzt. -->
     <template x-for="item in items" :key="item.id">
-      <div class="research-item" :data-research-id="item.id" :class="{ 'research-item--pinned': item.pinned, 'research-item--archived': item.archived, 'research-item--open': detailItemId === item.id, 'research-item--selected': bulkMode && isBulkSelected(item) }">
+      <div class="research-item hover-reveal-host" :data-research-id="item.id" :class="{ 'research-item--pinned': item.pinned, 'research-item--archived': item.archived, 'research-item--open': detailItemId === item.id, 'research-item--selected': bulkMode && isBulkSelected(item) }">
         <div class="research-item-body research-item-body--clickable" @click="onItemBodyClick(item, $event)">
           <div class="research-item-head">
             <!-- Mehrfachauswahl: Checkbox nur im Auswahl-Modus (bulk.js). -->
@@ -27,7 +27,7 @@
             <span class="research-status-badge" :class="'research-status-badge--' + itemStatus(item)"
                   x-show="showStatusBadge(item)" x-cloak
                   :data-tip="statusTip(item)" x-text="statusLabel(itemStatus(item))"></span>
-            <div class="research-item-actions" x-data="{ menuCtx: 'list' }">
+            <div class="research-item-actions hover-reveal" x-data="{ menuCtx: 'list' }">
               <button type="button" class="icon-btn" @click="openDetail(item, { edit: true })" :disabled="busy" :data-tip="$app.t('recherche.edit')" :aria-label="$app.t('recherche.edit')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg></button>
               <!-- @include recherche-item-menu -->
             </div>

@@ -1,7 +1,19 @@
 @layer components {
 /* === Buchlandkarte ===
-   Punktwolke der Seiten (Chart.js-Scatter) plus zwei Kennzahl-Tabellen.
-   Akzentfarbe kommt über --card-accent (card-accents.css), nicht hier. */
+   Tab-Hülle mit zwei Panels: Landkarte (Chart.js-Scatter plus zwei
+   Kennzahl-Tabellen, hier) und Doppelungen (redundanz.css). Akzentfarbe kommt
+   über --card-accent (card-accents.css), nicht hier. */
+
+/* Aktionszeile je Panel: die Lauf-Knöpfe gehören zur Sub-Komponente, die
+   Kopfzeile der Hülle trägt nur die Tabs. */
+.buchlandkarte-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
 
 .buchlandkarte-intro,
 .buchlandkarte-section-hint {
@@ -81,5 +93,28 @@
   color: var(--color-muted);
   font-size: var(--font-size-xs);
 }
+
+/* Kapitelname als Schalter für die Hervorhebung auf der Karte. Sieht aus wie
+   Text, damit die Tabelle ruhig bleibt; das Signal kommt über die Zeile. */
+.buchlandkarte-focus-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.buchlandkarte-focus-btn:hover { text-decoration: underline dotted; }
+.buchlandkarte-focus-btn[aria-pressed="true"] { font-weight: 600; }
+.buchlandkarte-table tbody tr.buchlandkarte-row--focus { background: var(--color-hover); }
+
+/* Teilungsbefund unter dem Kapitelnamen. */
+.buchlandkarte-split {
+  margin-top: var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-warn-text);
+}
+.buchlandkarte-split .entity-ref { margin-left: var(--space-3); }
 
 }

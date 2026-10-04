@@ -1,0 +1,159 @@
+<!-- Ideen-Chat-Panel des Ideen-Boards (jeder Provider; agentisch oder klassisch).
+     Prüft Pendenzen gegen den Text, sucht Buch-Ideen einen Ort, räumt Dubletten
+     auf; Änderungen kommen als Vorschläge, die der User EINZELN übernimmt oder
+     verwirft (Vorschlagskarten wie im Plot-Chat).
+     Scope + Methoden aus ideenBoardCard (chat/ideen-chat.js, chat/ideen-chat-proposals.js).
+     Deep-Doc: docs/ideen-chat.md -->
+<div x-show="ideenChatOpen" x-cloak class="ideen-chat">
+  <div class="card-section-head">
+    <span class="ideen-chat-title" x-text="$app.t('ideenBoard.chat.heading')"></span>
+    <div class="ideen-chat-head-actions">
+      <button type="button" class="icon-btn icon-btn--ghost" @click="startNewIdeenChatSession()" :disabled="ideenChatLoading" :data-tip="$app.t('chat.newSessionTitle')" :aria-label="$app.t('chat.newSession')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg></button>
+      <button type="button" class="icon-btn icon-btn--ghost" @click="ideenChatOpen = false" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+    </div>
+  </div>
+
+  <div x-show="ideenChatProgress > 0 && isIdeenChatSessionRunning(ideenChatSessionId)" class="progress-bar-wrap">
+    <div class="progress-bar" :style="{ '--progress': ideenChatProgress + '%' }"></div>
+  </div>
+  <div x-show="ideenChatStatus" class="card-status" x-html="ideenChatStatus"></div>
+
+  <div id="ideen-chat-messages" class="chat-messages ideen-chat-messages">
+    <!-- Leeres Gespräch: Erklärung + drei Schnellstart-Aufträge (die Kernaufgaben). -->
+    <div x-show="ideenChatMessages.length === 0 && !ideenChatLoading" class="chat-empty">
+      <div x-text="$app.t('ideenBoard.chat.empty')"></div>
+      <div class="ideen-chat-starters">
+        <button type="button" class="btn-compact" @click="askIdeenChat('ideenBoard.chat.starter.erledigt')" x-text="$app.t('ideenBoard.chat.starter.erledigtLabel')"></button>
+        <button type="button" class="btn-compact" @click="askIdeenChat('ideenBoard.chat.starter.orte')" x-text="$app.t('ideenBoard.chat.starter.orteLabel')"></button>
+        <button type="button" class="btn-compact" @click="askIdeenChat('ideenBoard.chat.starter.dubletten')" x-text="$app.t('ideenBoard.chat.starter.dublettenLabel')"></button>
+      </div>
+    </div>
+
+    <template x-for="(msg, msgIdx) in ideenChatMessages" :key="msgIdx">
+      <div :class="'chat-msg chat-msg--' + msg.role">
+        <div class="chat-msg-bubble">
+          <div x-show="msg.role === 'user'" class="chat-msg-text" x-text="msg.content"></div>
+          <div x-show="msg.role === 'assistant'" class="chat-msg-text" x-html="_renderChatMarkdown(msg.content)"></div>
+
+          <template x-if="msg.role === 'assistant' && msg.context_info">
+            <div class="chat-context-info">
+              <template x-for="(entry, ei) in _toolSummary(msg.context_info.tool_calls, { skip: ['final_answer'] })" :key="ei">
+                <span class="chat-context-badge" x-text="entry.name + (entry.count > 1 ? ' ×' + entry.count : '')"></span>
+              </template>
+              <span class="chat-context-badge" x-show="ideenChatCostLabel(msg)" x-text="ideenChatCostLabel(msg)"></span>
+            </div>
+          </template>
+
+          <!-- Vorschläge an die Ideen: jeder einzeln übernehmen/verwerfen -->
+          <template x-if="msg.role === 'assistant' && ideenProposals(msg).length">
+            <div class="chat-vorschlaege ideen-chat-proposals">
+              <template x-for="(p, pi) in ideenProposals(msg)" :key="pi">
+                <div class="chat-vorschlag"
+                     :class="{ 'chat-vorschlag--applied': ideenProposalStatus(msg, pi).state === 'applied', 'chat-vorschlag--discarded': ideenProposalStatus(msg, pi).state === 'discarded', 'chat-vorschlag--stale': ideenProposalStatus(msg, pi).state === 'open' && (ideenProposalStatus(msg, pi).stale || ideenProposalStatus(msg, pi).blocked) }">
+                  <div class="chat-vorschlag-header">
+                    <span class="chat-vorschlag-label"
+                          x-text="ideenProposalStatus(msg, pi).state === 'applied' ? $app.t('ideenBoard.chat.applied') : ideenProposalStatus(msg, pi).state === 'discarded' ? $app.t('chat.discarded') : ideenProposalTypeLabel(p)"></span>
+                    <span class="chat-vorschlag-actions">
+                      <button type="button" class="chat-vorschlag-btn" x-show="ideenProposalStatus(msg, pi).state === 'open'"
+                              @click="applyIdeenProposal(msg, pi)" :disabled="!!p._applying || !!ideenProposalStatus(msg, pi).blocked || busy"
+                              :data-tip="ideenProposalBlockedText(msg, pi) || null">
+                        <span x-show="p._applying" class="spinner"></span>
+                        <span x-text="p._applying ? $app.t('common.saving') : (ideenProposalStatus(msg, pi).removed ? $app.t('ideenBoard.chat.reapply') : $app.t('chat.apply'))"></span>
+                      </button>
+                      <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" x-show="ideenProposalStatus(msg, pi).state !== 'applied'"
+                              @click="discardIdeenProposal(msg, pi, ideenProposalStatus(msg, pi).state !== 'discarded')" :disabled="!!p._applying"
+                              x-text="ideenProposalStatus(msg, pi).state === 'discarded' ? $app.t('chat.restore') : $app.t('chat.discard')"></button>
+                    </span>
+                  </div>
+
+                  <!-- Neue Idee -->
+                  <template x-if="p.type === 'idee_create'">
+                    <div class="chat-vorschlag-diff">
+                      <div class="ideen-chat-proposal-text" x-text="p.fields?.content"></div>
+                      <div class="ideen-chat-proposal-meta">
+                        <span x-text="p.labels?.anchor ? $app.t('ideenBoard.chat.meta.anchor', { name: p.labels.anchor }) : $app.t('ideenBoard.chat.meta.bookAnchor')"></span>
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- Idee ändern: Feld für Feld vorher → nachher, dazu der geprüfte Textbeleg -->
+                  <template x-if="p.type === 'idee_update'">
+                    <div class="chat-vorschlag-diff">
+                      <div class="chat-vorschlag-title" x-text="p.labels?.idee"></div>
+                      <template x-for="row in ideenProposalRows(p)" :key="row.key">
+                        <div class="ideen-chat-proposal-row">
+                          <span class="ideen-chat-proposal-field" x-text="$app.t('ideenBoard.chat.field.' + row.key)"></span>
+                          <template x-if="row.diff">
+                            <span class="chat-word-diff"><template x-for="(part, di) in row.diff" :key="di"><span :class="'chat-word-diff__' + part.t" x-text="part.v"></span></template></span>
+                          </template>
+                          <template x-if="!row.diff">
+                            <span><span class="finding-original" x-text="row.status ? statusLabel(row.before) : (row.before || $app.t('ideenBoard.chat.meta.bookAnchorShort'))"></span> <span class="finding-korrektur" x-text="row.status ? statusLabel(row.after) : row.after"></span></span>
+                          </template>
+                        </div>
+                      </template>
+                      <div x-show="p.beleg?.text" class="ideen-chat-beleg">
+                        <span class="ideen-chat-proposal-field" x-text="$app.t('ideenBoard.chat.field.beleg')"></span>
+                        <span>
+                          <q x-text="p.beleg?.text"></q>
+                          <button type="button" class="entity-ref" x-show="p.beleg?.page_id"
+                                  x-entity-ref="{ type: 'seite', id: p.beleg?.page_id, label: p.labels?.beleg_page }"></button>
+                        </span>
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- Verknüpfung -->
+                  <template x-if="p.type === 'link_create'">
+                    <div class="chat-vorschlag-diff">
+                      <div class="chat-vorschlag-title" x-text="p.labels?.idee"></div>
+                      <div class="ideen-chat-proposal-meta">
+                        <span x-text="$app.t('ideenBoard.chat.meta.link', { kind: ideenProposalLinkKind(p), name: p.labels?.target || '' })"></span>
+                      </div>
+                    </div>
+                  </template>
+
+                  <div x-show="p.begruendung" class="chat-vorschlag-begruendung" x-text="p.begruendung"></div>
+                  <div x-show="ideenProposalStatus(msg, pi).state === 'open' && ideenProposalStatus(msg, pi).blocked" class="ideen-chat-proposal-note" x-text="ideenProposalBlockedText(msg, pi)"></div>
+                  <div x-show="ideenProposalStatus(msg, pi).state === 'open' && !ideenProposalStatus(msg, pi).blocked && ideenProposalStatus(msg, pi).stale" class="ideen-chat-proposal-note" x-text="$app.t('ideenBoard.chat.stale')"></div>
+                  <div x-show="ideenProposalStatus(msg, pi).removed" class="ideen-chat-proposal-note" x-text="$app.t('ideenBoard.chat.removed')"></div>
+                  <div x-show="p._error" class="chat-vorschlag-error" x-text="p._error"></div>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <div x-show="msg.role === 'assistant' && _chatTokenInfo(msg)" class="chat-token-info" :title="_chatTokenTitle(msg)" x-text="_chatTokenInfo(msg)"></div>
+          <!-- @include chat-feedback -->
+        </div>
+      </div>
+    </template>
+
+    <div x-show="isIdeenChatSessionRunning(ideenChatSessionId)" class="chat-skeleton-wrapper">
+      <div class="chat-skeleton"></div>
+    </div>
+  </div>
+
+  <div class="chat-input-row">
+    <textarea class="chat-input ideen-chat-input" x-model="ideenChatInput" rows="1"
+              :placeholder="$app.t('ideenBoard.chat.placeholder')" :aria-label="$app.t('ideenBoard.chat.placeholder')"
+              :disabled="ideenChatLoading" data-spellcheck="spelling"
+              @keydown.enter="if(!$event.isComposing && $event.keyCode !== 229 && !$event.shiftKey && !$event.ctrlKey && !$event.metaKey) { $event.preventDefault(); sendIdeenChatMessage(); }"></textarea>
+    <button type="button" class="chat-send-btn" @click="sendIdeenChatMessage()" :disabled="ideenChatLoading || !ideenChatInput.trim()" :aria-label="$app.t('chat.send')">
+      <span x-show="ideenChatLoading" class="spinner"></span>
+      <svg x-show="!ideenChatLoading" class="icon" aria-hidden="true"><use href="/icons.svg#arrow-up"/></svg>
+    </button>
+  </div>
+  <div class="chat-input-hint" x-text="$app.t('ideenBoard.chat.hint')"></div>
+
+  <!-- Session-Historie -->
+  <div x-show="ideenChatSessions.length > 0" class="card-history-section">
+    <div class="chat-history-title" x-text="$app.t('chat.history')"></div>
+    <template x-for="s in ideenChatSessions" :key="s.id">
+      <div class="chat-session-item hover-reveal-host" :class="s.id === ideenChatSessionId ? 'chat-session-item--active' : ''" @click="loadIdeenChatSession(s.id)">
+        <div class="chat-session-preview" x-text="(s.title || s.preview || $app.t('ideenBoard.chat.untitled')).slice(0, 80)"></div>
+        <div class="chat-session-meta"><span x-show="isIdeenChatSessionRunning(s.id)" class="spinner chat-session-running" role="status" :aria-label="$app.t('chat.sessionRunning')" :data-tip="$app.t('chat.sessionRunning')"></span><span x-text="$app.formatDate(s.last_message_at)"></span></div>
+        <button type="button" class="chat-session-delete btn-card-close hover-reveal" :disabled="isIdeenChatSessionRunning(s.id)" @click.stop="deleteIdeenChatSession(s.id)" :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
+      </div>
+    </template>
+  </div>
+</div>

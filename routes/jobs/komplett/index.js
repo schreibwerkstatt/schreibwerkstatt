@@ -4,13 +4,13 @@ const {
   deleteChapterExtractCache,
   deleteCheckpoint,
   getLatestContinuityCheck,
-  getContinuityIssueBookId,
   setContinuityIssueResolved,
   setContinuityIssueDismissed,
   getChapterNarrativeProfile,
   getKomplettScope, saveKomplettScope,
   } = require('../../../db/schema');
 const { getNarrativeReport, getAutorenBefund } = require('../../../db/narrative-report');
+const { getContinuityIssueScope } = require('../../../db/continuity');
 const { getBookSettings } = require('../../../db/schema');
 const { toIntId } = require('../../../lib/validate');
 const { resolveProvider, effectiveProviderClass } = require('../../../lib/ai');
@@ -24,6 +24,43 @@ const logger = require('../../../logger');
 const komplettRouter = express.Router();
 // :book_id-Routes (GET kontinuitaet, DELETE chapter-cache) sind viewer+ resp. editor+.
 komplettRouter.param('book_id', aclParamGuard('viewer'));
+
+// Teil-Jobs, die die Komplettanalyse selbst enthält (P8 Kontinuität, Phase Erzählprofil).
+// Läuft für Buch + User schon eine Komplettanalyse, startet der Standalone-Lauf nicht
+// parallel: zwei Läufe schrieben denselben Check/dasselbe Profil, und der Standalone-
+// Lauf läse den Katalog, während die Komplettanalyse ihn neu schreibt.
+//  - enthält der laufende Umfang den Schritt → deren Job-ID zurück (`existing: true`,
+//    `komplett: true`) — derselbe Vertrag wie die Dedup gegen den eigenen Typ; der
+//    Client pollt bis «fertig» und lädt dann das Ergebnis, das die Komplettanalyse schreibt.
+//  - ist der Schritt abgewählt → 409 KOMPLETT_ANALYSIS_RUNNING (nach dem Lauf erneut).
+// Der laufende Umfang ist der zuletzt gespeicherte: POST /komplett-analyse schreibt ihn
+// vor dem Start (saveKomplettScope), der Nacht-Cron läuft ohne Umfang (= alles) — dort
+// antwortet die Route bei abgewähltem Schritt konservativ mit 409.
+function _komplettDedup(res, bookId, userEmail, step) {
+  const komplettId = findActiveJobId('komplett-analyse', bookId, userEmail);
+  if (!komplettId) return false;
+  const scope = normalizeKomplettScope(getKomplettScope(bookId, userEmail));
+  if (scope[step]) res.json({ jobId: komplettId, existing: true, komplett: true });
+  else res.status(409).json({ error_code: 'KOMPLETT_ANALYSIS_RUNNING', jobId: komplettId, params: { jobId: komplettId } });
+  return true;
+}
+
+// Triage-Vorspann der Issue-Routen: Issue laden, Buch-Rolle editor+ (guardBook — setzt
+// zugleich den `book`-Slot des Log-Contexts, lib/acl.js), Besitz (Checks sind pro
+// Buch + User geführt; ein fremdes Issue ist für den Anfragenden nicht existent → 404
+// wie ein unbekanntes). Antwortet selbst und liefert null, sonst die Issue-ID.
+function _issueForTriage(req, res) {
+  const issueId = toIntId(req.params.issue_id);
+  if (!issueId) { res.status(400).json({ error_code: 'INVALID_ISSUE_ID' }); return null; }
+  const scope = getContinuityIssueScope(issueId);
+  if (!scope) { res.status(404).json({ error_code: 'ISSUE_NOT_FOUND' }); return null; }
+  if (!guardBook(req, res, scope.book_id, 'editor')) return null;
+  if ((scope.user_email || null) !== (sessionEmail(req) || null)) {
+    res.status(404).json({ error_code: 'ISSUE_NOT_FOUND' });
+    return null;
+  }
+  return issueId;
+}
 
 // ── Routen ────────────────────────────────────────────────────────────────────
 komplettRouter.post('/komplett-analyse', jsonBody, (req, res) => {
@@ -71,6 +108,7 @@ komplettRouter.post('/kontinuitaet', jsonBody, (req, res) => {
   // Dieselbe Entscheidung wie `/config` komplett.continuity und das Ueberspringen der
   // Phase im Job; dieser Guard erzwingt sie serverseitig (Defense-in-depth).
   if (effectiveProviderClass({ userEmail }) !== 'cloud') return res.status(400).json({ error_code: 'CONTINUITY_PROVIDER_UNSUPPORTED' });
+  if (_komplettDedup(res, book_id, userEmail, 'kontinuitaet')) return;
   const existing = findActiveJobId('kontinuitaet', book_id, userEmail);
   if (existing) return res.json({ jobId: existing, existing: true });
   const label = book_name ? 'job.label.kontinuitaetBook' : 'job.label.kontinuitaet';
@@ -84,14 +122,11 @@ komplettRouter.get('/kontinuitaet/:book_id', (req, res) => {
   res.json(getLatestContinuityCheck(req.bookId, sessionEmail(req)));
 });
 
-// Issue als erledigt/offen markieren (editor+). book_id wird aus dem Issue
-// aufgeloest, da kein :book_id-Param vorliegt -> manuelle ACL statt aclParamGuard.
+// Issue als erledigt/offen markieren (editor+, eigener Check). book_id wird aus dem
+// Issue aufgeloest, da kein :book_id-Param vorliegt -> _issueForTriage statt aclParamGuard.
 komplettRouter.post('/kontinuitaet/issue/:issue_id/resolved', jsonBody, (req, res) => {
-  const issueId = toIntId(req.params.issue_id);
-  if (!issueId) return res.status(400).json({ error_code: 'INVALID_ISSUE_ID' });
-  const bookId = getContinuityIssueBookId(issueId);
-  if (!bookId) return res.status(404).json({ error_code: 'ISSUE_NOT_FOUND' });
-  if (!guardBook(req, res, bookId, 'editor')) return;
+  const issueId = _issueForTriage(req, res);
+  if (!issueId) return;
   const resolved = !!req.body?.resolved;
   setContinuityIssueResolved(issueId, resolved);
   res.json({ ok: true, resolved });
@@ -101,11 +136,8 @@ komplettRouter.post('/kontinuitaet/issue/:issue_id/resolved', jsonBody, (req, re
 // „erledigt" übernehmen spätere Läufe diesen Status für denselben Befund
 // (db/continuity.js#_priorTriaged + lib/continuity-carryover.js).
 komplettRouter.post('/kontinuitaet/issue/:issue_id/dismissed', jsonBody, (req, res) => {
-  const issueId = toIntId(req.params.issue_id);
-  if (!issueId) return res.status(400).json({ error_code: 'INVALID_ISSUE_ID' });
-  const bookId = getContinuityIssueBookId(issueId);
-  if (!bookId) return res.status(404).json({ error_code: 'ISSUE_NOT_FOUND' });
-  if (!guardBook(req, res, bookId, 'editor')) return;
+  const issueId = _issueForTriage(req, res);
+  if (!issueId) return;
   const dismissed = !!req.body?.dismissed;
   setContinuityIssueDismissed(issueId, dismissed);
   res.json({ ok: true, dismissed });
@@ -143,6 +175,7 @@ komplettRouter.post('/erzaehlprofil', jsonBody, (req, res) => {
   // Erzählprofil braucht die Cloud-Klasse (Single-Pass). Serverseitiger Guard analog
   // Kontinuität (Defense-in-depth), gleiche Entscheidung wie `/config`.
   if (effectiveProviderClass({ userEmail }) !== 'cloud') return res.status(400).json({ error_code: 'NARRATIVE_PROFILE_PROVIDER_UNSUPPORTED' });
+  if (_komplettDedup(res, book_id, userEmail, 'erzaehlprofil')) return;
   const existing = findActiveJobId('erzaehlprofil', book_id, userEmail);
   if (existing) return res.json({ jobId: existing, existing: true });
   const label = book_name ? 'job.label.erzaehlprofilBook' : 'job.label.erzaehlprofil';
@@ -154,15 +187,15 @@ komplettRouter.post('/erzaehlprofil', jsonBody, (req, res) => {
 
 // Kapitel-Erzählprofil (aus der Komplettanalyse-Phase «Erzählprofil») – viewer+.
 komplettRouter.get('/erzaehlprofil/:book_id', (req, res) => {
-  const bookId = toIntId(req.params.book_id);
-  if (!bookId) return res.status(400).json({ error_code: 'INVALID_BOOK_ID' });
+  const bookId = req.bookId;
   const userEmail = sessionEmail(req);
   const profile = getChapterNarrativeProfile(bookId, userEmail);
   // Deterministischer Buch-Befund (read-time, pure Engine über die Katalog-Zeilen) +
   // gespeicherter KI-Dach-Befund (Autoren-Befund). Beides an dieselbe Antwort gehängt,
-  // damit die Karte alles in einem Fetch bekommt.
+  // damit die Karte alles in einem Fetch bekommt. Unter der Kapitel-Schwelle trägt der
+  // Befund nur `tooFewChapters` — dann auch keinen (älteren) Autoren-Befund zeigen.
   const befund = profile.chapters.length ? getNarrativeReport(bookId, userEmail) : null;
-  const autorenBefund = getAutorenBefund(bookId, userEmail);
+  const autorenBefund = (befund && !befund.tooFewChapters) ? getAutorenBefund(bookId, userEmail) : null;
   res.json({ ...profile, befund, autorenBefund });
 });
 

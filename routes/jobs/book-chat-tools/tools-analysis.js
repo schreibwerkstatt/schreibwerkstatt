@@ -395,7 +395,7 @@ function tool_find_repetitions(input, ctx) {
   }
   const pages = listPagesWithBody(ctx.bookId, filter);
   if (!pages.length) {
-    return { results: [], hint: 'Keine Seiten mit body_html im gewaehlten Scope. Sync ausfuehren.' };
+    return { results: [], hint: 'Keine Abschnitte mit body_html im gewaehlten Scope. Sync ausfuehren.' };
   }
 
   const totalFreq = new Map();

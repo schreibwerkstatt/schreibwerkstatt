@@ -143,3 +143,28 @@ test('Schalter „Admins einbeziehen“ steuert includeAdmins im Request', async
   await toggle.click();
   expect(new URL((await req2).url()).searchParams.get('includeAdmins')).toBe('1');
 });
+
+test('Chat-Tab: Bewertungs-Filter schickt feedback=down und zeigt die Bewertung', async ({ page }) => {
+  await bootApp(page);
+  // Liste der Daumen-runter-Antworten: nur Metadaten, die Spalte zeigt 👎.
+  await page.route(u => new URL(u).pathname === '/admin/usage/chat', route => {
+    const fb = new URL(route.request().url()).searchParams.get('feedback');
+    const rows = fb === 'down'
+      ? [{ id: 1, sessionId: 1, userEmail: 'anna@ex.com', createdAt: '2026-10-01T10:00:00.000Z',
+           sessionKind: 'book', bookId: 7, model: 'm-x', feedback: -1,
+           tokensIn: 10, tokensOut: 5, cacheReadIn: 0, usd: 0.01 }]
+      : [];
+    return route.fulfill({ json: { rows, total: rows.length } });
+  });
+  const first = page.waitForRequest(r => new URL(r.url()).pathname === '/admin/usage/chat');
+  await page.evaluate(() => { location.hash = '#admin/usage/chat'; });
+  await first;
+  const pane = page.locator('[x-show="adminUsageTab === \'chat\'"]');
+  await expect(pane.locator('.admin-usage-filter label')).toHaveCount(2);
+  const req = page.waitForRequest(r => new URL(r.url()).pathname === '/admin/usage/chat'
+    && new URL(r.url()).searchParams.get('feedback') === 'down');
+  await page.evaluate(() => { Alpine.$data(document.querySelector('.card--admin-usage')).adminUsageChatFeedback = 'down'; });
+  await req;
+  await expect(pane.locator('table.data-table tbody tr').last()).toContainText('👎');
+  await expect(pane.locator('table.data-table tbody tr').last()).toContainText('m-x');
+});

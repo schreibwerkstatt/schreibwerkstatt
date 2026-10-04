@@ -75,11 +75,25 @@
 .ideen-board {
   --ideen-lane-w: 11rem;
   --ideen-col-w: 13rem;
+  --ideen-cols: 4;
   display: grid;
-  grid-template-columns: var(--ideen-lane-w) repeat(4, minmax(var(--ideen-col-w), 1fr));
+  grid-template-columns: var(--ideen-lane-w) repeat(var(--ideen-cols), minmax(var(--ideen-col-w), 1fr));
   gap: var(--space-xs);
   overflow-x: auto;
   padding-bottom: var(--space-sm);
+}
+
+/* Spaltenzahl = aktive Stufen des Buches (+ abgeschaltete, die noch Ideen
+   tragen) — die Klasse setzt das Template aus `statuses().length`. */
+.ideen-board--cols-2 { --ideen-cols: 2; }
+.ideen-board--cols-3 { --ideen-cols: 3; }
+.ideen-board--cols-4 { --ideen-cols: 4; }
+
+/* Abgeschaltete Stufe, die noch Ideen traegt: zurueckgenommen und gestrichelt,
+   damit sichtbar ist, dass hier nichts mehr hinein soll. */
+.ideen-board-head-col--inactive {
+  border-bottom-style: dashed;
+  color: var(--color-muted);
 }
 
 /* Kopfzeile + Bahnzeile spannen das ganze Raster und geben ihre Kinder an das
@@ -105,8 +119,22 @@
 }
 .ideen-board-head-col {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-xs);
+}
+/* Sortierung pro Spalte (.seg-toggle aus book/book-settings.css + Reset-Knopf),
+   rechtsbuendig im Spaltenkopf; bricht bei schmaler Spalte unter den Titel. */
+.ideen-board-col-sort {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+.ideen-board-col-sort .seg-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
 }
 
 /* Stufen-Farben: offen neutral, in Arbeit warnend-warm, erledigt ok, verworfen
@@ -146,14 +174,19 @@
 }
 .ideen-board-lane-title:disabled { cursor: default; color: var(--color-muted); }
 /* Kapitel-Bahnen heben sich ab: sie sind die groebere Ebene und ordnen die
-   Seiten-Bahnen darunter. */
+   Abschnitts-Bahnen darunter. Die Gliederung zeigt der Einzug nach Tiefe
+   (Kapitel 1..3, Abschnitt eine Stufe unter seinem Kapitel) — eine
+   Abschnitts-Bahn wiederholt den Kapitelnamen darum nicht. Eine Solo-Seite hat
+   Tiefe 1 und steht buendig. */
 .ideen-board-row--chapter .ideen-board-lane-title { color: var(--card-accent); }
-.ideen-board-row--page    .ideen-board-lane       { padding-left: var(--space-md); }
+.ideen-board-row--depth-2 .ideen-board-lane { padding-left: var(--space-md); }
+.ideen-board-row--depth-3 .ideen-board-lane { padding-left: calc(2 * var(--space-md)); }
+.ideen-board-row--depth-4 .ideen-board-lane { padding-left: calc(3 * var(--space-md)); }
 
-.ideen-board-lane-chapter,
 .ideen-board-lane-count {
   font-size: var(--font-size-micro);
   color: var(--color-muted);
+  margin-inline-start: auto;
 }
 
 /* ── Klapp-Griffe ───────────────────────────────────────────────────────── */
@@ -204,7 +237,6 @@
   gap: var(--space-xs);
   width: 100%;
 }
-.ideen-board-lane-count { margin-inline-start: auto; }
 
 /* Kapitel-Zeilen sind die groebere Ebene und stehen auch dann, wenn nur ihre
    Seiten Ideen tragen (sie sind der Griff, an dem das Kapitel zuklappt). Ein
@@ -251,6 +283,16 @@ body.ideen-dnd-active .ideen-board-cell {
   outline-offset: var(--space-3);
 }
 
+/* Drag einer Buch-Idee: das Inhaltsverzeichnis der Sidebar ist Drop-Ziel
+   (ideen-board/tree-drop.js). Der Eintrag unter dem Zeiger wird markiert —
+   das Board selbst zeigt nur belegte Bahnen, die Sidebar jeden Anker. */
+body.ideen-tree-drop-active .page-tree .tree-drop-target {
+  background: var(--color-accent-bg);
+  outline: 1px dashed var(--color-accent);
+  outline-offset: -1px;
+  border-radius: var(--radius-sm);
+}
+
 /* ── Karte ──────────────────────────────────────────────────────────────── */
 .idee-board-card {
   display: flex;
@@ -268,7 +310,7 @@ body.ideen-dnd-active .ideen-board-cell {
 }
 .idee-board-card--verworfen { opacity: var(--opacity-muted); }
 
-/* Textzeile: Griff links, Inhalt (Text bzw. Edit + Verknuepfungs-Chips) rechts.
+/* Textzeile: Griff links, Inhalt (Text bzw. Edit) rechts.
    Der Griff steht neben dem Text und nicht in einer eigenen Kopfzeile — er waere
    dort das einzige dauerhaft sichtbare Element und damit ein leerer Streifen
    ueber jeder Notiz. `flex-start` haelt ihn an der ERSTEN Zeile, auch wenn der
@@ -278,8 +320,8 @@ body.ideen-dnd-active .ideen-board-cell {
   align-items: flex-start;
   gap: var(--space-3);
 }
-/* Eigener Fluss statt des Karten-Gaps: Text und Verknuepfungs-Chips liegen
-   jetzt zusammen in dieser Spalte, nicht mehr als Geschwister der Karte. */
+/* Text- bzw. Edit-Spalte rechts vom Griff. Die Verknuepfungs-Chips stehen
+   NICHT hier, sondern als Geschwister darunter — buendig mit der Kartenkante. */
 .idee-board-card-main {
   flex: 1 1 auto;
   min-width: 0;
@@ -317,12 +359,12 @@ body.ideen-dnd-active .ideen-board-cell {
 .idee-board-edit { display: flex; flex-direction: column; gap: var(--space-xs); }
 
 /* Aktionen schweben in der oberen rechten Ecke und erscheinen erst auf
-   Zuwendung — eine Kanban-Notiz mit drei dauerhaft sichtbaren Knoepfen liest
-   sich als Werkzeugleiste. Absolut statt in einer eigenen Zeile: eine Kopfzeile
-   nur fuer sie waere im Ruhezustand ein leerer Streifen, und neben den
-   Stufen-Knoepfen nehmen sie so viel Breite, dass deren drei Wortmarken in einer
-   13rem-Spalte dreizeilig umbrechen. Der eigene Kartenhintergrund haelt sie beim
-   Ueberfahren lesbar. `:focus-within` haelt den Tastaturweg offen. */
+   Zuwendung (`.hover-reveal`, components/hover-reveal.css) — eine Kanban-Notiz
+   mit vier dauerhaft sichtbaren Knoepfen liest sich als Werkzeugleiste. Absolut
+   statt in einer eigenen Zeile: eine Kopfzeile nur fuer sie waere im
+   Ruhezustand ein leerer Streifen, und neben den Stufen-Knoepfen nehmen sie so
+   viel Breite, dass deren drei Wortmarken in einer 13rem-Spalte dreizeilig
+   umbrechen. Der eigene Kartenhintergrund haelt sie beim Ueberfahren lesbar. */
 .idee-board-card-actions {
   position: absolute;
   top: var(--space-3);
@@ -332,25 +374,21 @@ body.ideen-dnd-active .ideen-board-cell {
   background: var(--color-card-bg);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
-  opacity: 0;
-  transition: opacity 0.12s ease;
 }
-.idee-board-card:hover .idee-board-card-actions,
-.idee-board-card:focus-within .idee-board-card-actions { opacity: 1; }
+/* Touch zeigt die Aktionen immer — schwebend laegen sie dauerhaft ueber der
+   ersten Textzeile. Dort stehen sie darum als eigene Zeile oben rechts. */
+@media (hover: none) {
+  .idee-board-card-actions { position: static; align-self: flex-end; box-shadow: none; }
+}
 
 /* Stufen-Knoepfe: der tastaturerreichbare Weg neben dem Drag. Sie erscheinen mit
-   den Aktionen, damit die Karte im Ruhezustand nur ihren Text zeigt, behalten
-   ihren Platz aber auch unsichtbar — sonst springt das Board beim Ueberfahren
-   einer Karte. */
+   den Aktionen (`.hover-reveal`), damit die Karte im Ruhezustand nur ihren Text
+   zeigt; ihren Platz behalten sie auch unsichtbar. */
 .idee-board-steps {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
-  opacity: 0;
-  transition: opacity 0.12s ease;
 }
-.idee-board-card:hover .idee-board-steps,
-.idee-board-card:focus-within .idee-board-steps { opacity: 1; }
 .idee-board-step {
   font-size: var(--font-size-micro);
   line-height: 1.4;
@@ -461,3 +499,19 @@ body.ideen-dnd-active .ideen-board-cell {
   }
 }
 }
+
+/* ── Stufen pro Buch ────────────────────────────────────────────────────── */
+.ideen-board-stages-toggle { margin-left: auto; }
+.ideen-board-stages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+}
+.ideen-board-stages-label {
+  font-size: var(--font-size-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+.ideen-board-stages .card-form-hint { flex-basis: 100%; margin: 0; }

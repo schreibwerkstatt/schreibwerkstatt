@@ -153,7 +153,7 @@
                               x-entity-ref="{ type: row.lane.thread.fig_id ? 'figur' : 'werkstatt', id: row.lane.thread.fig_id || row.lane.thread.draft_figure_id, label: row.lane.thread.fig_id ? undefined : draftFigurenById.get(row.lane.thread.draft_figure_id)?.name }"></button>
                       <button type="button" class="entity-ref" x-show="row.lane.thread.chapter_id" x-entity-ref="{ type: 'kapitel', id: row.lane.thread.chapter_id, name: row.lane.thread.chapter_name }"></button>
                     </span>
-                    <span class="plot-swim-lane-ownacts" x-show="threadHasOwnActs(row.lane.id)" x-text="$app.t('plot.thread.ownActs')"></span>
+                    <span class="plot-swim-lane-ownacts" x-show="threadHasOwnActs(row.lane.id)" x-text="$app.t('plot.thread.ownActs')"></span><div x-data="{ ideaOwnerId: row.lane.thread.id, ideaSource: 'threadIdeaBacklinks' }"><!-- @include ideen-backlinks --></div>
                   </div>
                   <button type="button" class="icon-btn icon-btn--ghost plot-icon-btn"
                           :class="{ 'is-active': threadActionsOpenId === row.lane.id }"

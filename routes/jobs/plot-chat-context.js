@@ -13,6 +13,7 @@ const { db } = require('../../db/schema');
 const { listActs, listThreads, listBeats } = require('../../db/plot');
 const { listDraftFigures } = require('../../db/draft-figures');
 const { listFigureNamesForUser } = require('../../db/book-chat/figures');
+const { ideaNotesByTarget } = require('../../lib/idea-context');
 
 const DESC_PREVIEW = 300;
 
@@ -34,6 +35,9 @@ function loadBoardState(bookId, userEmail, chapterNames = new Map()) {
     beatById: new Map(beats.map(b => [b.id, b])),
     figNameById: new Map(figures.map(f => [f.fig_id, f.name || f.kurzname || f.fig_id])),
     draftNameById: new Map(drafts.map(d => [d.id, d.name])),
+    // Pendenzen des Autors je Beat (offen / verworfen) — siehe lib/idea-context.js.
+    ideasByBeat: ideaNotesByTarget('beat', bookId, userEmail),
+    ideasByThread: ideaNotesByTarget('thread', bookId, userEmail),
   };
 }
 
@@ -43,7 +47,7 @@ function _actScopeLabel(act, state) {
   return `nur Strang «${t?.name || '?'}» [#${act.thread_id}]`;
 }
 
-function _beatLine(b, state) {
+function _beatLine(b, state, ideenMarker) {
   const parts = [`[#${b.id}] «${b.titel}»`, b.status === 'im_buch' ? 'im Buch' : 'geplant'];
   if (b.verworfen) parts.push('VERWORFEN');
   if (b.thread_id != null) parts.push(`Strang «${state.threadById.get(b.thread_id)?.name || '?'}» [#${b.thread_id}]`);
@@ -58,6 +62,8 @@ function _beatLine(b, state) {
   const lines = [`  - ${parts.join(' · ')}`];
   const desc = String(b.beschreibung || '').replace(/\s+/g, ' ').trim();
   if (desc) lines.push(`      ${desc.length > DESC_PREVIEW ? desc.slice(0, DESC_PREVIEW) + '…' : desc}`);
+  const ideen = ideenMarker ? ideenMarker(state.ideasByBeat?.get(b.id)) : '';
+  if (ideen) lines.push(`      ${ideen}`);
   return lines.join('\n');
 }
 
@@ -66,7 +72,7 @@ function _beatLine(b, state) {
  * Beats je Zelle nach sort_order) — die Reihenfolge IST die Chronologie, nach der
  * das Modell Kausalität und Bögen beurteilt.
  */
-function boardOutline(state) {
+function boardOutline(state, { ideenMarker = null } = {}) {
   if (!state.acts.length) return '';
   const out = [];
   if (state.threads.length) {
@@ -74,7 +80,8 @@ function boardOutline(state) {
     for (const t of state.threads) {
       const figur = t.fig_id ? state.figNameById.get(t.fig_id)
         : (t.draft_figure_id ? state.draftNameById.get(t.draft_figure_id) : null);
-      out.push(`- [#${t.id}] «${t.name}»${figur ? ` · Hauptfigur ${figur}` : ''}${t.chapter_name ? ` · Kapitel «${t.chapter_name}»` : ''}`);
+      const ideen = ideenMarker ? ideenMarker(state.ideasByThread?.get(t.id)) : '';
+      out.push(`- [#${t.id}] «${t.name}»${figur ? ` · Hauptfigur ${figur}` : ''}${t.chapter_name ? ` · Kapitel «${t.chapter_name}»` : ''}${ideen ? ` ${ideen}` : ''}`);
     }
     out.push('');
   }
@@ -90,7 +97,7 @@ function boardOutline(state) {
         .filter(b => b.act_id === a.id)
         .sort((x, y) => ((x.thread_id ?? -1) - (y.thread_id ?? -1)) || (x.sort_order - y.sort_order) || (x.id - y.id));
       if (!beats.length) out.push('  (keine Beats)');
-      for (const b of beats) out.push(_beatLine(b, state));
+      for (const b of beats) out.push(_beatLine(b, state, ideenMarker));
     }
   }
   return out.join('\n');

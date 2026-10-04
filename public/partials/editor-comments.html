@@ -48,7 +48,7 @@
 
     <div class="comment-rail__layer">
       <template x-for="thread in commentThreads" :key="thread.root.id">
-        <div class="comment-rail__thread"
+        <div class="comment-rail__thread hover-reveal-host"
              :data-root-id="thread.root.id"
              :class="{ 'comment-rail__thread--selected': commentSelectedRootId === thread.root.id,
                        'comment-rail__thread--resolved': thread.root.resolved_at }">
@@ -86,7 +86,7 @@
     <div class="comment-rail__section-title" x-text="$app.t('share.comments.general')"></div>
     <div class="comment-rail__general-grid">
       <template x-for="thread in commentGeneralThreads" :key="thread.root.id">
-        <div class="comment-rail__thread comment-rail__thread--general"
+        <div class="comment-rail__thread comment-rail__thread--general hover-reveal-host"
              :class="{ 'comment-rail__thread--selected': commentSelectedRootId === thread.root.id,
                        'comment-rail__thread--resolved': thread.root.resolved_at }">
           <!-- @include comment-thread-body -->

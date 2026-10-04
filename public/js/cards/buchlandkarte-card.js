@@ -1,7 +1,8 @@
-// Alpine.data('buchlandkarteCard') — Buchlandkarte (Seiten als Punktwolke über
-// dem Embedding-Index). Job-Polling implementiert die Karte selbst (manueller
-// Flow, wie beim Redundanz-Radar). Fachlicher State lebt hier; der
-// showBuchlandkarteCard-Flag bleibt im Root (Exklusivität).
+// Alpine.data('buchlandkarteCard') — Tab „Landkarte" der Buchlandkarte (Seiten
+// als Punktwolke über dem Embedding-Index; Hülle: partials/buchlandkarte.html,
+// zweiter Tab = redundanz-card.js). Job-Polling implementiert das Panel selbst
+// (manueller Flow). Fachlicher State lebt hier; showBuchlandkarteCard +
+// buchlandkarteTab bleiben im Root (Exklusivität, Hash-Router).
 
 import {
   buchlandkarteMethods, _destroyBookMapChart, _disconnectBookMapThemeObserver,
@@ -16,6 +17,11 @@ export function registerBuchlandkarteCard() {
     bookMapProgress: 0,
     bookMapStatus: '',
     bookMapIndexInfo: null,
+    // Status-Abfrage gescheitert: dann ist unbekannt, ob ein Index existiert —
+    // die Karte darf weder „kein Index" behaupten noch den Lauf sperren.
+    bookMapIndexError: false,
+    // Hervorgehobenes Kapitel (Klick in der Kapitel-Tabelle); null = alle.
+    bookMapFocusChapter: null,
     _bookMapPollTimer: null,
     _lifecycle: null,
 
@@ -29,6 +35,9 @@ export function registerBuchlandkarteCard() {
       const bk = this.bookMapIndexInfo?.byKind || [];
       return bk.some(k => k.kind === 'page' && k.chunks > 0);
     },
+    get bookMapCanRun() {
+      return this.bookMapAvailable && (this.bookMapHasIndex || this.bookMapIndexError);
+    },
 
     init() {
       const doReset = (ctx) => {
@@ -39,6 +48,8 @@ export function registerBuchlandkarteCard() {
         ctx.bookMapProgress = 0;
         ctx.bookMapStatus = '';
         ctx.bookMapIndexInfo = null;
+        ctx.bookMapIndexError = false;
+        ctx.bookMapFocusChapter = null;
       };
 
       this._lifecycle = setupCardLifecycle(this, {
@@ -47,13 +58,21 @@ export function registerBuchlandkarteCard() {
         timerKeys: ['_bookMapPollTimer'],
         onShow: async () => {
           if (this.bookMapAvailable) await this.loadBookMapIndexStatus();
+          this.restoreBookMapResult();
         },
         onBookChanged: async (e, ctx, root) => {
           doReset(ctx);
           if (!root.showBuchlandkarteCard) return;
           if (ctx.bookMapAvailable) await ctx.loadBookMapIndexStatus();
+          ctx.restoreBookMapResult();
         },
         onViewReset: (e, ctx) => doReset(ctx),
+      });
+
+      // Im versteckten Tab hat das Canvas keine Grösse — beim Wechsel auf die
+      // Landkarte neu zeichnen, statt auf den ResizeObserver von Chart.js zu hoffen.
+      this.$watch(() => window.__app?.buchlandkarteTab, (tab) => {
+        if (tab === 'map' && this.bookMapResult) this.$nextTick(() => this.renderBookMap());
       });
     },
 

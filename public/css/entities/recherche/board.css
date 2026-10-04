@@ -204,8 +204,18 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   gap: var(--space-2xs);
 }
 
-/* Aktionsmenü nutzt das App-Standard-Pattern (.context-menu--dropdown).
+/* Aktionsmenü nutzt das App-Standard-Pattern (.context-menu--dropdown), aber
+   fixed statt absolut: top/left setzt board.js#toggleItemMenu aus dem Trigger-
+   Rect (popover-anchor.js). So klippt weder der Overflow des Detail-Dialogs
+   noch der eines Listen-Containers das lange Menü. max-height + interner
+   Scroll für Viewports, die kürzer sind als das Menü.
    Nur der native File-Input des Upload-Eintrags wird versteckt. */
+.context-menu--dropdown.research-item-menu {
+  position: fixed;
+  right: auto;
+  max-height: calc(100dvh - 2 * var(--space-xs));
+  overflow-y: auto;
+}
 .research-menu-upload input[type="file"] { display: none; }
 
 /* Vorschaubild: Button (öffnet die Detailansicht) als blosse Hülle ums <img>.

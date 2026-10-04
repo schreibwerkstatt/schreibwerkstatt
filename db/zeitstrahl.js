@@ -10,6 +10,7 @@ require('./migrations');
 // TEXT-fig_id → INTEGER figures.id: der Lookup liegt bei den Figuren
 // (db/figures/refs.js), nicht als eigene Kopie hier.
 const { figIdMaps } = require('./figures/refs');
+const { isUngroupedChapterName } = require('../lib/ungrouped-chapter');
 const { inClause } = require('../lib/validate');
 const { NOW_ISO_SQL } = require('./now');
 const { requireUserEmail: _requireUserEmail } = require('./write-helpers');
@@ -81,7 +82,7 @@ function saveZeitstrahlEvents(bookId, userEmail, ereignisse, chNameToId = {}, pa
       j = 0;
       if (pageNameToIdByChapter) {
         for (const seite of seitenArr) {
-          if (!seite || kapitelArr.includes(seite) || seite === 'Sonstige Seiten') continue;
+          if (!seite || kapitelArr.includes(seite) || isUngroupedChapterName(seite)) continue;
           let pid = null;
           for (const chId of chapIds) {
             pid = pageNameToIdByChapter[chId]?.[seite] ?? null;

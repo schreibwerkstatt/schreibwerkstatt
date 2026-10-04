@@ -8,7 +8,7 @@
 // die Karte ist Claude-only, das Profil existiert also immer, wenn der Befund gezeigt wird.
 const { db } = require('./connection');
 const { NOW_ISO_SQL } = require('./now');
-const { computeNarrativeReport } = require('../lib/narrative-report');
+const { computeNarrativeReport, NARRATIVE_REPORT_THRESHOLDS } = require('../lib/narrative-report');
 const { getBookSettings } = require('./schema');
 require('./migrations');
 
@@ -21,7 +21,7 @@ function gatherNarrativeReportData(bookId, userEmail) {
     SELECT p.chapter_id, c.chapter_name AS kapitel, p.sort_order
       FROM chapter_narrative_profile p
       LEFT JOIN chapters c ON c.chapter_id = p.chapter_id
-     WHERE p.book_id = ? AND p.user_email IS ?
+     WHERE p.book_id = ? AND p.user_email IS ? AND p.chapter_id IS NOT NULL
      ORDER BY p.sort_order, p.id
   `).all(bookIdInt, email);
 
@@ -100,9 +100,17 @@ function gatherNarrativeReportData(bookId, userEmail) {
   };
 }
 
-/** Deterministischer Buch-Befund eines Buchs (read-time, pure Engine über gesammelte Zeilen). */
+/** Deterministischer Buch-Befund eines Buchs (read-time, pure Engine über gesammelte Zeilen).
+ *  Unter MIN_CHAPTERS_FOR_REPORT Kapiteln nur `{ tooFewChapters, chapterCount, minChapters }`:
+ *  Präsenz-, Lücken- und Spannen-Befunde über eine Handvoll grosser Kapitel sind Artefakte
+ *  der Gliederung (jeder Ort ist «einmalig», kaum eine Figur erreicht drei Kapitel). */
 function getNarrativeReport(bookId, userEmail) {
-  return computeNarrativeReport(gatherNarrativeReportData(bookId, userEmail));
+  const data = gatherNarrativeReportData(bookId, userEmail);
+  const minChapters = NARRATIVE_REPORT_THRESHOLDS.MIN_CHAPTERS_FOR_REPORT;
+  if (data.chapters.length < minChapters) {
+    return { tooFewChapters: true, chapterCount: data.chapters.length, minChapters };
+  }
+  return computeNarrativeReport(data);
 }
 
 // ── KI-Dach-Befund (Autoren-Befund) — persistiert je (Buch, User) ────────────────
@@ -118,6 +126,12 @@ function saveAutorenBefund(bookId, userEmail, report) {
   `).run(bookIdInt, email, json);
 }
 
+/** Entfernt einen gespeicherten Autoren-Befund (Buch unter der Kapitel-Schwelle). */
+function deleteAutorenBefund(bookId, userEmail) {
+  db.prepare('DELETE FROM narrative_report WHERE book_id = ? AND user_email IS ?')
+    .run(parseInt(bookId), userEmail || null);
+}
+
 /** Liest den gespeicherten Autoren-Befund + Zeitstempel; null wenn keiner existiert. */
 function getAutorenBefund(bookId, userEmail) {
   const bookIdInt = parseInt(bookId);
@@ -131,4 +145,4 @@ function getAutorenBefund(bookId, userEmail) {
   } catch { return null; }
 }
 
-module.exports = { getNarrativeReport, gatherNarrativeReportData, saveAutorenBefund, getAutorenBefund };
+module.exports = { getNarrativeReport, gatherNarrativeReportData, saveAutorenBefund, deleteAutorenBefund, getAutorenBefund };

@@ -119,6 +119,62 @@ function listWorldFactsWithChapterNames(bookId, userEmail, kategorien) {
   `).all(bookId, userEmail, ...kategorien);
 }
 
+// ── Attribut-Widerspruchs-Detektor (F4, routes/jobs/komplett/attribute-check.js) ──
+
+/** Tod-Ereignisse der Figuren eines Buchs mit Figur- und Kapitelname. Nur Ereignisse MIT
+ *  Kapitel (inner JOIN) — ohne Kapitel lässt sich kein „später" bestimmen. */
+function listFigureDeathsWithChapterNames(bookId, userEmail) {
+  return db.prepare(`
+    SELECT fe.figure_id, f.name AS fig_name, fe.ereignis, fe.chapter_id, fe.page_id, c.chapter_name
+      FROM figure_events fe
+      JOIN figures f ON f.id = fe.figure_id
+      JOIN chapters c ON c.chapter_id = fe.chapter_id
+     WHERE f.book_id = ? AND f.user_email IS ? AND fe.subtyp = 'tod'
+     ORDER BY fe.sort_order, fe.id
+  `).all(bookId, userEmail);
+}
+
+const _stmtFigureScenesWithChapter = db.prepare(`
+  SELECT fs.titel, fs.kommentar, fs.chapter_id, fs.page_id, c.chapter_name
+    FROM scene_figures sf
+    JOIN figure_scenes fs ON fs.id = sf.scene_id
+    JOIN chapters c ON c.chapter_id = fs.chapter_id
+   WHERE sf.figure_id = ? AND fs.stale = 0
+   ORDER BY fs.sort_order, fs.id
+`);
+
+/** Nicht-veraltete Szenen, in denen eine Figur mitwirkt, mit Kapitelname (nur Szenen MIT Kapitel). */
+function listFigureScenesWithChapterNames(figureId) {
+  return _stmtFigureScenesWithChapter.all(figureId);
+}
+
+/** Sicher datierte Geburt-/Tod-Ereignisse der Figuren eines Buchs mit Figur- und
+ *  Kapitelname (Kapitel optional → chapter_name NULL). */
+function listDatedLifeEventsWithChapterNames(bookId, userEmail) {
+  return db.prepare(`
+    SELECT fe.figure_id, f.name AS fig_name, fe.subtyp, fe.datum_year AS year, fe.ereignis, c.chapter_name
+      FROM figure_events fe
+      JOIN figures f ON f.id = fe.figure_id
+      LEFT JOIN chapters c ON c.chapter_id = fe.chapter_id
+     WHERE f.book_id = ? AND f.user_email IS ? AND fe.datum_unsicher = 0
+       AND fe.datum_year IS NOT NULL AND fe.subtyp IN ('geburt','tod')
+     ORDER BY fe.sort_order, fe.id
+  `).all(bookId, userEmail);
+}
+
+/** Welt-Fakten MIT Subjekt (alle Kategorien) mit Kapitelname, eine Zeile je
+ *  Fakt-Kapitel-Bezug (Fakten ohne Kapitel mit chapter_name NULL). */
+function listSubjectWorldFactsWithChapterNames(bookId, userEmail) {
+  return db.prepare(`
+    SELECT wf.id, wf.subjekt, wf.kategorie, wf.fakt, c.chapter_name
+      FROM world_facts wf
+      LEFT JOIN world_fact_chapters wfc ON wfc.fact_id = wf.id
+      LEFT JOIN chapters c ON c.chapter_id = wfc.chapter_id
+     WHERE wf.book_id = ? AND wf.user_email IS ? AND wf.subjekt IS NOT NULL AND TRIM(wf.subjekt) != ''
+     ORDER BY wf.sort_order, wf.id
+  `).all(bookId, userEmail);
+}
+
 module.exports = {
   listChaptersForBook,
   chapterIdsByName,
@@ -129,4 +185,8 @@ module.exports = {
   listScenesWithChapterNames,
   listSongChaptersWithNames,
   listWorldFactsWithChapterNames,
+  listFigureDeathsWithChapterNames,
+  listFigureScenesWithChapterNames,
+  listDatedLifeEventsWithChapterNames,
+  listSubjectWorldFactsWithChapterNames,
 };

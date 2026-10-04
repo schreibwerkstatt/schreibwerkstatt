@@ -236,6 +236,11 @@
   cursor: pointer;
 }
 .collapsible-toggle:hover { color: var(--color-text); }
+/* Kein Press-Scale: `button:active { transform: scale(0.98) }` zieht bei einem
+   breiten Toggle (`.plot-tension-toggle`, `width: 100%`) die linke Kante um
+   ~1 % der Breite nach innen — der Chevron am Rand wandert unter dem Zeiger
+   weg, mouseup landet ausserhalb des Buttons und der Click feuert nicht. */
+.collapsible-toggle:active { transform: none; }
 
 /* === Klappbarer Section-Wrap (gehört zum collapsible-toggle) ===
    Block-level Container, der Toggle + Section zusammenhält. Toggle bleibt

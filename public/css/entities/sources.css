@@ -103,6 +103,11 @@
 }
 
 .sources-cell-actions { white-space: nowrap; }
+/* Einblenden: `.hover-reveal` (components/hover-reveal.css); die Zeile im
+   Bearbeiten-Modus zeigt ihre Aktionen immer. */
+@media (hover: hover) {
+  .sources-row--active .hover-reveal { opacity: 1; }
+}
 .sources-row-actions {
   display: flex;
   align-items: center;

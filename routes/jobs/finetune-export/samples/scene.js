@@ -73,10 +73,10 @@ function buildSceneSamples(ctx) {
     const metaParts = [];
     if (bookName) metaParts.push(langIsEn ? `Book: «${bookName}»` : `Buch: «${bookName}»`);
     if (p.chapter) metaParts.push(langIsEn ? `Chapter: «${p.chapter}»` : `Kapitel: «${p.chapter}»`);
-    if (p.title)   metaParts.push(langIsEn ? `Page: «${p.title}»` : `Seite: «${p.title}»`);
+    if (p.title)   metaParts.push(langIsEn ? `Section: «${p.title}»` : `Abschnitt: «${p.title}»`);
     const instr = (langIsEn
-      ? 'Write the content of this page:\n'
-      : 'Schreibe den Inhalt dieser Seite:\n') + metaParts.join('\n');
+      ? 'Write the content of this section:\n'
+      : 'Schreibe den Inhalt dieses Abschnitts:\n') + metaParts.join('\n');
     samples.push({
       id: 'page|' + p.id,
       type: 'scene',
@@ -164,8 +164,8 @@ function buildSceneSamples(ctx) {
         messages: [
           { role: 'system', content: unifiedSys },
           { role: 'user', content: (langIsEn
-            ? 'Here are the previous pages. Write the next page:\n\n'
-            : 'Hier die vorherigen Seiten. Schreibe die nächste Seite:\n\n') + ctxCapped },
+            ? 'Here are the previous sections. Write the next section:\n\n'
+            : 'Hier die vorherigen Abschnitte. Schreibe den nächsten Abschnitt:\n\n') + ctxCapped },
           { role: 'assistant', content: completion },
         ],
       });

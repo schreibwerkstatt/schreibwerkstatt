@@ -128,22 +128,12 @@
 }
 .comment-rail__author { font-weight: var(--fw-semibold, 600); color: var(--cr-text, var(--color-text)); }
 .comment-rail__time { color: var(--cr-muted, var(--color-muted)); }
-/* Aktionen (Erledigen/Löschen am Root + Löschen je Antwort) folgen dem
-   Google-Docs-Muster: blenden auf Thread-Hover ODER bei Auswahl ein (auf Touch
-   ohne Hover bleibt die Auswahl der Auslöser). Immer im DOM (kein x-show) und
-   platzhaltend, damit das Einblenden keinen Layout-Sprung erzeugt;
-   visibility:hidden macht sie zugleich nicht-anklickbar, solange verborgen. */
-.comment-rail__thread-actions,
-.comment-rail__reply-del {
-  visibility: hidden;
-  opacity: 0;
-  transition: opacity var(--transition-fast, 0.1s ease);
-}
-.comment-rail__thread:hover :is(.comment-rail__thread-actions, .comment-rail__reply-del),
-.comment-rail__thread--selected :is(.comment-rail__thread-actions, .comment-rail__reply-del),
-.comment-rail__thread:focus-within :is(.comment-rail__thread-actions, .comment-rail__reply-del) {
-  visibility: visible;
-  opacity: 1;
+/* Aktionen (Erledigen/Löschen am Root + Löschen je Antwort, im Share-Reader
+   die Self-Service-Knöpfe) blenden über `.hover-reveal` ein
+   (components/hover-reveal.css: Hover, Tastatur-Fokus, auf Touch immer).
+   Delta der Leiste: die Auswahl eines Threads blendet sie ebenfalls ein. */
+@media (hover: hover) {
+  .comment-rail__thread--selected .hover-reveal { opacity: 1; }
 }
 .comment-rail__resolved {
   font-size: 11px;

@@ -171,10 +171,10 @@
   <div x-show="plotChatSessions.length > 0" class="card-history-section">
     <div class="chat-history-title" x-text="$app.t('chat.history')"></div>
     <template x-for="s in plotChatSessions" :key="s.id">
-      <div class="chat-session-item" :class="s.id === plotChatSessionId ? 'chat-session-item--active' : ''" @click="loadPlotChatSession(s.id)">
+      <div class="chat-session-item hover-reveal-host" :class="s.id === plotChatSessionId ? 'chat-session-item--active' : ''" @click="loadPlotChatSession(s.id)">
         <div class="chat-session-preview" x-text="(s.title || s.preview || $app.t('plot.chat.untitled')).slice(0, 80)"></div>
         <div class="chat-session-meta"><span x-show="isPlotChatSessionRunning(s.id)" class="spinner chat-session-running" role="status" :aria-label="$app.t('chat.sessionRunning')" :data-tip="$app.t('chat.sessionRunning')"></span><span x-text="$app.formatDate(s.last_message_at)"></span></div>
-        <button type="button" class="chat-session-delete btn-card-close" :disabled="isPlotChatSessionRunning(s.id)" @click.stop="deletePlotChatSession(s.id)" :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
+        <button type="button" class="chat-session-delete btn-card-close hover-reveal" :disabled="isPlotChatSessionRunning(s.id)" @click.stop="deletePlotChatSession(s.id)" :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
       </div>
     </template>
   </div>

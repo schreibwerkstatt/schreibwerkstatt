@@ -12,7 +12,7 @@ Gilt zusaetzlich zur Root-[CLAUDE.md](../../../CLAUDE.md).
 
 Der Frontend-Scope ist in **Alpine.data-Sub-Komponenten** aufgeteilt:
 - **Root** (`x-data="lektorat"` am `<body>`): Navigations-/Session-/i18n-Methoden (der State dazu liegt in `$store.nav`/`$store.session`/`$store.shell`), `showXxxCard`-Flags (Single Source of Truth für Hash-Router + Exklusivität), Job-Queue-Footer, globale Cross-Cutting-Methoden (`t`, `loadFiguren`, `selectPage`, `gotoStelle` …).
-- **Sub-Komponenten** in [public/js/cards/](../../../public/js/cards/) — eine pro UI-Karte. Buchebene: Figuren, Orte, Szenen, Ereignisse, Stil, Fehler-Heatmap, BookStats, BookSettings, UserSettings, Kontinuität, Ideen, Finetune-Export, PDF-Export, Buch-Overview, Buch-Chat, Buch-Review, Kapitel-Review, Palette. Editor-Subs: editor-find, editor-synonyme, editor-figur-lookup, editor-toolbar, editor-focus, editor-entities, lektorat-findings, page-history. Plus Seiten-Chat. Jede besitzt fachlichen State + Lifecycle.
+- **Sub-Komponenten** in [public/js/cards/](../../../public/js/cards/) — eine pro UI-Karte. Buchebene: Figuren, Orte, Szenen, Ereignisse, Stil, Fehler-Heatmap, BookStats, BookSettings, UserSettings, Kontinuität, Ideen, Finetune-Export, PDF-Export, Buch-Overview, Buch-Chat, Buch-Review, Kapitel-Review, Palette. Editor-Subs: editor-find, editor-synonyme, editor-figur-lookup, editor-toolbar, editor-focus, editor-entities, lektorat-findings, page-history. Plus Abschnitts-Chat. Jede besitzt fachlichen State + Lifecycle.
 - **Im Root** verbleibt: `page-view`, `editor/edit`, `editor/utils`, Hash-Router, Auto-Save, Selection-Management, Navigation. Editor-UI-Slices laufen als eigene Cards mit Trampoline-Events aus dem Root (z.B. `editor:focus:toggle`).
 
 **Neue Karte anlegen:**
@@ -62,7 +62,7 @@ Immer nur eine Hauptansicht aktiv. Buchebenen-Features und Seitenebenen-Features
 - `selectPage()` ruft `_closeOtherMainCards()` (kein keep) — schliesst alle Buchkarten bevor der Editor öffnet. **Niemals Show-Flags in `selectPage` hand-pflegen** — drift-anfällig (neue Karte vergessen → bleibt beim Seitenklick offen). Helper ist SSoT für „alle Buchkarten zu".
 - Jede neue Buchkarte braucht einen `EXCLUSIVE_CARDS`-Eintrag in [public/js/cards/feature-registry.js](../../../public/js/cards/feature-registry.js) (mindestens `{ key, flag, toggle, partial }`). `_closeOtherMainCards`, `resetView`, `_maybeOpenBookOverview` und die Toggle-Generierung lesen ausschliesslich daraus — keine Hand-Pflege in `app-view/` mehr.
 - Sub-Komponenten haben **keine** eigenen `showXxxCard`-Flags — der Root ist SSoT. Subs hören auf `$watch(() => window.__app.showXxxCard)`.
-- Seiten-Chat ist eine Ausnahme: läuft neben dem Editor, kein `_closeOtherMainCards` beim Öffnen.
+- Abschnitts-Chat ist eine Ausnahme: läuft neben dem Editor, kein `_closeOtherMainCards` beim Öffnen.
 
 ### Scroll-to bei Karten-Toggle
 

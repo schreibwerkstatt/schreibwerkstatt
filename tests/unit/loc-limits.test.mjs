@@ -65,7 +65,7 @@ const CATEGORIES = [
     ext: '.html',
     cap: 250,
     allow: {
-      'public/partials/admin-usage.html': 458,
+      'public/partials/admin-usage.html': 391,
       'public/partials/figur-werkstatt.html': 406,
       'public/partials/book-editor.html': 358,
       'public/partials/epub-export.html': 321,
@@ -100,7 +100,7 @@ const CATEGORIES = [
       'lib/export-builders/docx.js': 898,
       'lib/page-index.js': 686,
       'lib/content-store/backends/localdb.js': 635,
-      'routes/jobs/komplett/phases/extraktion.js': 932,
+      'routes/jobs/komplett/phases/extraktion.js': 657,
       'routes/usersettings.js': 641,
     },
   },

@@ -165,7 +165,7 @@ function loadFinetuneData({ bookIdInt, userEmail, pageContents, langIsEn }) {
   for (const k of chapterKeys) {
     const pages = pagesByChapter.get(k) || [];
     chapterFullTextByKey.set(k, pages.map(p => p.text).join('\n\n'));
-    chapterNameByKey.set(k, pages[0]?.chapter || (k === 0 ? (langIsEn ? 'Unassigned pages' : 'Sonstige Seiten') : `Kapitel ${k}`));
+    chapterNameByKey.set(k, pages[0]?.chapter || (k === 0 ? (langIsEn ? 'Unassigned sections' : 'Sonstige Abschnitte') : `Kapitel ${k}`));
   }
 
   const sceneRows = db.prepare(`

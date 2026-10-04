@@ -69,7 +69,7 @@ Alle KI-Konfig liegt in der `app_settings`-Tabelle. Admin-PUT via `/admin/settin
 | `ai.openai-compat.retry_max` | 3 | – | Retry-Versuche bei 408/429/5xx mit Exponential-Backoff |
 | `ai.openai-compat.{model,context_window,max_tokens_out,timeout_ms}.komplett` | leer / 0 | – | Per-Job-Overrides der Komplettanalyse (leer/0 = folgt global), siehe „Per-Job-Konfiguration“ |
 | `ai.chars_per_token` | provider-default (3 Claude / 4 lokal) | – | Tokenizer-Heuristik (Boot-frozen). Gesetzt gilt der Wert fuer **alle** Provider — leer lassen, wenn Claude und ein lokales Modell nebeneinander laufen |
-| `ai.chat_temperature` | – | – | Override nur für Seiten-/Buch-Chat |
+| `ai.chat_temperature` | – | – | Override nur für Abschnitts-/Buch-Chat |
 
 | Provider | Streaming | Tool-Use | Caching |
 |----------|-----------|----------|---------|
@@ -156,7 +156,7 @@ const { text, truncated, tokensIn, tokensOut, cacheReadIn, cacheCreationIn } = a
   maxTokensOverride,                     // optional, gedeckelt durch MODEL_TOKEN
   signal,                                // AbortController.signal
   provider,                              // optional, default API_PROVIDER
-  jsonSchema,                            // optional, GBNF-Constrained nur lokal
+  jsonSchema,                            // optional: Grammar (lokal) bzw. Structured Outputs (Claude, s.u.)
 );
 ```
 
@@ -167,6 +167,10 @@ const { text, truncated, tokensIn, tokensOut, cacheReadIn, cacheCreationIn } = a
 // Claude: zwei cache_control-Blöcke (1h-Buch + 5min-Phase)
 // Lokal:  zu einem String geflattet
 ```
+
+Die TTLs müssen von vorne nach hinten **nicht steigen**: die API lehnt einen längeren TTL hinter einem kürzeren ab. Wer einen Block auf 5 min setzt, setzt darum alle dahinter mit (Muster [routes/jobs/komplett/call.js](../routes/jobs/komplett/call.js)#`withTtl`).
+
+**TTL nach Leserzahl wählen.** Ein 1h-Write kostet 2× den Input-Preis, ein 5-min-Write 1.25×, ein Read 0.1×. Der 1h-Block lohnt sich nur, wenn mehrere Calls ihn lesen (Komplettanalyse: viele Pässe über denselben Buchblock); ein Job mit einem einzigen Leser schickt den Block mit 5-min-TTL (Standalone-Kontinuität und -Erzählprofil, [docs/komplett.md](komplett.md#caching--resume)).
 
 **`callAIChat(messages, ...)`** — Multi-Turn-Variante mit Messages-Array.
 
@@ -209,9 +213,15 @@ if (!parsed.fehler) throw new Error('Pflichtfeld `fehler` fehlt.');
 Optionales 7. Argument `jsonSchema`:
 - **OpenAI-kompatibel**: `response_format: { type: 'json_schema', json_schema: { strict: true, schema } }` → GBNF-Grammar erzwingt Schema-Konformität + korrekt escapete Strings.
 - **Ollama**: `format: <schema>` mit demselben Effekt.
-- **Claude**: ignoriert (Claude nutzt prompt-basierte Schema-Validierung).
+- **Claude**: Structured Outputs, mit Ausnahme für den 1h-Präfix — siehe nächster Abschnitt.
 
 Fixt die "unescaped `"` im String"-Klasse von Bugs, die mistral-small3.2 ohne Schema produziert.
+
+## Structured Outputs (Claude)
+
+Bei einem Modell mit Structured-Output-Support (`_claudeSupportsStructuredOutputs` in [lib/ai/config.js](../lib/ai/config.js): Opus 4.7+/Sonnet 5/Fable/Haiku 4.5/Legacy-Opus 4.5/4.1 — **nicht** Sonnet 4.6/4.5) sendet `_callClaude` ([lib/ai/claude.js](../lib/ai/claude.js)) das `jsonSchema` als `output_config.format` (`type: 'json_schema'`), neben dem Effort im selben `output_config`-Objekt. Das garantiert schema-valides JSON (kein Prosa-Leak durch adaptive Thinking, kein `jsonrepair`-Partial). Lehnt die API das Format ab (400 mit Schema-Hinweis → `AI_STRUCTURED_OUTPUT_UNSUPPORTED`), wiederholt `_callClaude` den Call **einmalig** ohne `output_config.format`, statt ihn non-retryable zu verwerfen.
+
+**Kein Schema, wenn der vorderste System-Block als geteilter 1h-Präfix markiert ist** (`{ sharedPrefix: true, ttl: '1h' }`, `_isSharedPrefixSystem`). Das Schema bleibt dabei am Call — andere Provider brauchen es als Grammar, der Aufrufer für die Pflichtfeld-Prüfung —, nur Claude bekommt kein `output_config.format`. JSON erzwingen dort der Systemprompt (`JSON_ONLY` + Schema-Text) und der `truncated`-Check vor `parseJSON`. **Why:** Structured-Output-Schemas gehören zum Cache-Präfix. Lesen mehrere Pässe mit verschiedenen Schemas denselben 1h-Block (der Buchtext der Komplettanalyse), bricht jedes andere Schema den Cache, und jeder Pass schreibt den ganzen Block neu in den 1h-Cache (2× Input-Preis). Gemessen auf Prod: ~13 Buch-Writes pro Komplettanalyse-Lauf statt einem, rund 61 statt 18 USD pro Lauf. Die Regel hängt an der ausdrücklichen Markierung, nicht an der TTL: auch die `SYSTEM_*_BLOCKS` eines Buchs mit Autoren-Kontext beginnen mit einem 1h-Block (`_toCacheBlocks` in [public/js/prompts/core.js](../public/js/prompts/core.js)); ihre Calls (Lektorat, Review, Verify, F4-Urteil …) behalten Structured Outputs. Markiert sind nur der Buch- und der Kapiteltext-Block der Komplettanalyse. Gegated: [tests/unit/claude-shared-prefix-format.test.js](../tests/unit/claude-shared-prefix-format.test.js).
 
 ## Retries (nur Claude)
 
@@ -373,4 +383,4 @@ Der eigene Zugang schlägt die Admin-Zuweisung; die Kosten landen weiter im Ledg
 
 ## Chat-Temperatur
 
-`ai.chat_temperature` (app_settings) überschreibt Provider-Defaults nur für Seiten-Chat und Buch-Chat. Andere Job-Typen (Review, Lektorat, Komplett) bleiben deterministisch (Provider-Defaults: Ollama 0.2, Llama 0.1).
+`ai.chat_temperature` (app_settings) überschreibt Provider-Defaults nur für Abschnitts-Chat und Buch-Chat. Andere Job-Typen (Review, Lektorat, Komplett) bleiben deterministisch (Provider-Defaults: Ollama 0.2, Llama 0.1).

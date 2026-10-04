@@ -42,12 +42,14 @@ test('remapSzenen: Markdown-Präfix gestrippt, Kapitelname-als-Seite → null', 
     { kapitel: 'Kapitel Eins', szenen: [
       { titel: 'A', seite: '### Seite Eins', figuren_namen: [], orte_namen: [] },
       { titel: 'B', seite: 'Kapitel Eins', figuren_namen: [], orte_namen: [] },        // == Kapitel → null
-      { titel: 'C', seite: 'Sonstige Seiten', figuren_namen: [], orte_namen: [] },      // Fallback-Marker → null
+      { titel: 'C', seite: 'Sonstige Abschnitte', figuren_namen: [], orte_namen: [] },  // Fallback-Marker → null
+      { titel: 'D', seite: 'Sonstige Seiten', figuren_namen: [], orte_namen: [] },      // früherer Marker → null
     ] },
   ], FIG, FIG_LOWER, ORT, ORT_LOWER, CH, noopLog);
   assert.equal(out[0].seite, 'Seite Eins');
   assert.equal(out[1].seite, null);
   assert.equal(out[2].seite, null);
+  assert.equal(out[3].seite, null);
 });
 
 test('remapSzenen: Objekt-Refs werden auf Namen reduziert', () => {

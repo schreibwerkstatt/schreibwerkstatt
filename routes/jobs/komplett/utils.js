@@ -72,7 +72,14 @@ function _remapFigNames(names, figNameToId, figNameToIdLower) {
  * damit der Cache-Prefix-Match greift (erster cache_control-Breakpoint).
  */
 function buildBookSystemBlockText(bookName, pageCount, fullBookText) {
-  return `Buch: «${bookName}»\n\nBuchtext (${pageCount} Seiten):\n\n${fullBookText}`;
+  return `Buch: «${bookName}»\n\nBuchtext (${pageCount} Abschnitte):\n\n${fullBookText}`;
+}
+
+/** Multi-Pass-Pendant zu buildBookSystemBlockText: der Kapiteltext eines Chunks als
+ *  vorderster System-Block, damit Basis- und Gap-Pass desselben Chunks ihn aus dem
+ *  Cache lesen statt ihn im User-Turn je Pass neu zu bezahlen. */
+function buildChapterSystemBlockText(bookName, chapterName, pageCount, chText) {
+  return `Buch: «${bookName}»\n\nKapitel «${chapterName}» (${pageCount} Abschnitte):\n\n${chText}`;
 }
 
 /**
@@ -281,7 +288,7 @@ function buildConsolidationSig(chapters, cacheVersion, flags = {}) {
 
 module.exports = {
   _refToString, _remapFigNames, extractField, consolidationFitsCap,
-  buildBookSystemBlockText, buildBookPagesSig, bookSettingsSigPart,
+  buildBookSystemBlockText, buildChapterSystemBlockText, buildBookPagesSig, bookSettingsSigPart,
   _stelleQuote,
   makePhaseTimer,
   runNonCritical, buildFigNameLookup,

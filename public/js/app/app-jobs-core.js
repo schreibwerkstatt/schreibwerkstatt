@@ -20,8 +20,8 @@ const JOB_NAV_CARD = {
   'faktencheck':       'weltfakten',
   'erzaehlprofil':     'erzaehlprofil',
   'kontinuitaet':      'kontinuitaet',
-  'redundancy':        'redundanz',
-  'embed-index':       'redundanz',
+  'redundancy':        'buchlandkarte',
+  'embed-index':       'buchlandkarte',
   'stilprofil':        'stil',
   'autorenprofil':     'autorenprofil',
   'motif-brainstorm':  'motiv',
@@ -30,6 +30,7 @@ const JOB_NAV_CARD = {
   'plot-brainstorm':   'plot',
   'plot-consistency':  'plot',
   'plot-chat':         'plot',
+  'ideen-chat':        'ideenBoard',
   'book-chat':         'bookChat',
   'research-chat':     'recherche',
   'research-link':     'recherche',
@@ -42,6 +43,12 @@ const JOB_NAV_CARD = {
   'epub-export':       'epubExport',
   'docx-export':       'docxExport',
   'folder-import':     'folderImport',
+};
+
+// Job-Typen, deren Zielkarte Tabs hat: Root-Feld → Tab, vor dem Sprung gesetzt.
+const JOB_NAV_TAB = {
+  'redundancy':  ['buchlandkarteTab', 'redundanz'],
+  'embed-index': ['buchlandkarteTab', 'redundanz'],
 };
 
 // Auto-Open für Reconnect-Pfade: nur wenn keine Hauptkarte/Editor offen ist.
@@ -361,6 +368,8 @@ export const appJobsCoreMethods = {
     if (!cardKey) return;
     const entry = EXCLUSIVE_CARDS.find(c => c.key === cardKey);
     if (!entry) return;
+    const tab = JOB_NAV_TAB[job.type];
+    if (tab) this[tab[0]] = tab[1];
     if (this[entry.flag]) this._scrollToCardByKey?.(cardKey);
     else if (this[entry.toggle]) await this[entry.toggle]();
   },

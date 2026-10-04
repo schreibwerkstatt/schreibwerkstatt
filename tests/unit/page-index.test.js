@@ -13,6 +13,7 @@ const {
   computeStyleStats,
   computeFigureMentions,
   tokenizeNamesForStopwords,
+  findDialogRanges,
 } = require('../../lib/page-index');
 
 test('Pronomen: Ich-Erzähler narrativ vs. Dialog getrennt gezählt', () => {
@@ -63,6 +64,22 @@ test('Dialog-Marker: DE einfach \u201A\u2026\u2018', () => {
   const { pronoun_counts, dialog_chars } = computePronounsAndDialog(text);
   assert.ok(dialog_chars > 0, 'dialog_chars > 0 für DE einfach');
   assert.equal(pronoun_counts.sie_sg.dlg, 1);
+});
+
+test('Dialog-Marker: engl. einfach \u2018\u2026\u2019 — Apostroph schliesst nicht', () => {
+  const said = (t) => findDialogRanges(t).map(([a, b]) => t.slice(a, b));
+  assert.deepEqual(said('\u2018Come here,\u2019 said Anna. \u2018I don\u2019t know.\u2019'),
+    ['\u2018Come here,\u2019', '\u2018I don\u2019t know.\u2019']);
+  // Besitz-Apostroph mitten in der Rede: der Schluss mit Satzzeichen gewinnt.
+  assert.deepEqual(said('He said, \u2018It\u2019s James\u2019 hat, isn\u2019t it?\u2019 and left.'),
+    ['\u2018It\u2019s James\u2019 hat, isn\u2019t it?\u2019']);
+  // Einwort-Zitat ohne Satzzeichen, danach weitere Rede: nicht zusammenkleben.
+  assert.deepEqual(said('She wrote \u2018never\u2019 twice, he said. \u2018Go.\u2019'),
+    ['\u2018never\u2019', '\u2018Go.\u2019']);
+  // Apostroph allein ist kein Dialog — auch nicht im Deutschen.
+  assert.deepEqual(said('The boys\u2019 house was empty.'), []);
+  assert.deepEqual(said('Hans\u2019 Hut lag da. Anna\u2019s dog barked.'), []);
+  assert.deepEqual(said('\u2018Unclosed and the paragraph ends'), []);
 });
 
 test('Speech-Verb + Colon ohne Quotes: "Er sagte: Ich komme."', () => {
@@ -148,6 +165,14 @@ test('computeStyleStats: Wiederholungs-Score klammert Eigennamen via extraStopwo
   // "anna" sollte in der gefilterten Top-Liste fehlen, in der ungefilterten vorhanden sein.
   assert.ok(repWithout.top.some(t => t.word === 'anna'));
   assert.ok(!repWith.top.some(t => t.word === 'anna'));
+});
+
+test('computeStyleStats: Wiederholungs-Score nimmt die Stoppwörter der Buchsprache', () => {
+  const text = 'They would wait. They would listen. They would leave.';
+  const words = (opts) => JSON.parse(computeStyleStats(text, opts).repetition_data).top.map(t => t.word);
+  assert.ok(words().includes('would'), 'deutsche Liste kennt "would" nicht');
+  assert.ok(!words({ language: 'en' }).includes('would'));
+  assert.ok(!words({ language: 'en' }).includes('they'));
 });
 
 test('computeFigureMentions: Vollname-Match + Token-Match gewichtet', () => {

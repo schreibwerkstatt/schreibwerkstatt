@@ -41,7 +41,7 @@ export function buildObjektivLektoratPrompt(text, {
 
   const metaParts = [];
   if (chapterName) metaParts.push(en ? `Chapter: «${chapterName}»` : `Kapitel: «${chapterName}»`);
-  if (pageName)    metaParts.push(en ? `Page: «${pageName}»` : `Seite: «${pageName}»`);
+  if (pageName)    metaParts.push(en ? `Section: «${pageName}»` : `Abschnitt: «${pageName}»`);
   const metaBlock = metaParts.length ? `\n${en ? 'Location in the book' : 'Verortung im Buch'}: ${metaParts.join(' · ')}\n` : '';
 
   const typEnum = objektivTypen.join('|');

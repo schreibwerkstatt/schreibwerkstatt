@@ -187,6 +187,20 @@ export function _weltgesetzeLines(weltgesetze) {
     .join('\n');
 }
 
+// Pendenzen des Autors an einem planenden Objekt (Ideen-Board, `idea_links`):
+// offene sind ihm bekannt, verworfene hat er abgelehnt. SSoT der Textform — auch
+// der Plot-Chat (routes/jobs/plot-chat-context.js) holt sie über die Facade
+// (`ideenMarker`); die Daten liefert lib/idea-context.js#ideaNotesByTarget.
+export function _ideenMarker(ideen) {
+  if (!ideen || !ideen.length) return '';
+  const offen = ideen.filter(i => i.status !== 'verworfen').map(i => `«${i.content}»`);
+  const verw = ideen.filter(i => i.status === 'verworfen').map(i => `«${i.content}»`);
+  const parts = [];
+  if (offen.length) parts.push(`offene Pendenz des Autors (ihm bekannt, nicht als neuen Befund melden): ${offen.join('; ')}`);
+  if (verw.length) parts.push(`vom Autor VERWORFEN (nicht erneut vorschlagen): ${verw.join('; ')}`);
+  return `⟨${parts.join(' · ')}⟩`;
+}
+
 // Handlungsstränge (Swimlanes) als Block: Name + optional gebundene Hauptfigur +
 // gebundenes Kapitel. Beats der Lane erben Figur + Kapitel implizit.
 export function _straengeLines(threads) {
@@ -194,7 +208,8 @@ export function _straengeLines(threads) {
     .map(t => {
       const fig = t.figur ? ` (Hauptfigur: ${t.figur})` : '';
       const kap = t.kapitel ? ` (Kapitel: ${t.kapitel})` : '';
-      return `- ${t.name}${fig}${kap}`;
+      const ideen = _ideenMarker(t.ideen);
+      return `- ${t.name}${fig}${kap}${ideen ? ` ${ideen}` : ''}`;
     })
     .join('\n');
 }

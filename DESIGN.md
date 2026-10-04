@@ -25,6 +25,7 @@ Token-Referenz (Farben, Radien, Spacing, Schriftgrössen): [public/css/tokens.cs
 - [Action-Icon-Library](#action-icon-library-verbindlich) — **verbindlich**: Vokabular für alle Aktions-Buttons (icon-only vs. Label), Guard-Test
 - [Icon-System](#icon-system-lucide-sprite) — `<svg class="icon"><use href="/icons.svg#name"/></svg>` (Lucide-Sprite)
 - [Icon-Button](#icon-button-icon-btn) — generischer Icon-only Button (`.icon-btn` outlined + `--ghost`), SSoT für Canvas-/Header-/Board-Cluster
+- [Hover-Reveal](#hover-reveal-item-aktionen-auf-zuwendung) — Item-Aktionen (Board-Karte, Kommentar-Thread) erst auf Hover/Fokus, auf Touch immer
 - [Toolbar-Action-Group](#toolbar-action-group-segmentierter-icon-cluster-neben-form-feldern) — segmentierte Icon-Reihe bündig mit Search/Combobox
 - [Icon-Button-Count-Badge](#icon-button-count-badge-icon-btn-badge) — Counter oben rechts auf Icon-Button
 - [Badges & Tags](#badges--tags) — eckig, Severity, Hue-Palette
@@ -256,7 +257,7 @@ Eine eigenständige, per-Boolean klappbare Sektion nutzt **`Alpine.data('collaps
 - **Button-Klasse:** `icon-btn icon-btn--ghost` (transparent bis Hover, einheitliche 28×28-Chips). **Nicht** der umrandete `.icon-btn` (default/outlined) für Header-Cluster.
 - **Aktiver Toggle** (Panel offen, Fullscreen ein): `:class="{ 'is-active': … }"` + `:aria-pressed` — nicht eine eigene `.primary`/`.active`-Klasse.
 - **Schliessen im Cluster:** liegt der Close-Button mit weiteren Aktionen in derselben `.card-actions`-Reihe, ist er ebenfalls `icon-btn icon-btn--ghost` mit `#x`-Sprite (nicht der abgesetzte `.btn-card-close`, der nur für den allein-stehenden, absolut positionierten Header-Close gilt — siehe [Action-Icon-Library](#action-icon-library-verbindlich) „Schliessen").
-- **Close-Handler einer Hauptkarte: immer `@click="$app.closeCard('<key>')"`** (`<key>` = `EXCLUSIVE_CARDS`-Key), **nie** `$app.toggleXxxCard()`. Der Toggle deutet den zweiten Aufruf bei Karten mit `onReclick: 'refresh'` als Neuladen — das `x` würde dort nur die Liste refreshen und die Karte offen stehen lassen. `closeCard` ([app-view/cards.js](public/js/app/app-view/cards.js)) schliesst hart und landet danach auf der Buchübersicht, statt eine leere Spalte zu hinterlassen. Ausgenommen sind Karten neben dem Editor (Seiten-Chat, Ideen, Referenz — eigener Slot, kein Landing) und die Teilen-Karte (`closeShareLinks` kehrt zur Ausgangsansicht zurück).
+- **Close-Handler einer Hauptkarte: immer `@click="$app.closeCard('<key>')"`** (`<key>` = `EXCLUSIVE_CARDS`-Key), **nie** `$app.toggleXxxCard()`. Der Toggle deutet den zweiten Aufruf bei Karten mit `onReclick: 'refresh'` als Neuladen — das `x` würde dort nur die Liste refreshen und die Karte offen stehen lassen. `closeCard` ([app-view/cards.js](public/js/app/app-view/cards.js)) schliesst hart und landet danach auf der Buchübersicht, statt eine leere Spalte zu hinterlassen. Ausgenommen sind Karten neben dem Editor (Abschnitts-Chat, Ideen, Referenz — eigener Slot, kein Landing) und die Teilen-Karte (`closeShareLinks` kehrt zur Ausgangsansicht zurück).
 - **Mobile (`≤700px`):** Header mit `.card-header-titlebar` bleibt eine **Zeile** — die Aktionen (`.card-actions` / `.card-header-aside`) bleiben oben rechts verankert, die Titelspalte schrumpft und der Titel bricht bei Bedarf um (nicht die Icons in eine eigene Zeile drücken). Geregelt zentral über `.card-header:has(.card-header-titlebar)` in [card-form.css](public/css/components/card-form/card-shell.css) — pro Karte nichts deklarieren. Reine Text-Button-Leisten **ohne** Titelspalte (`.card-header > .card-actions`, z.B. Export/Admin) sind ausgenommen und behalten den Full-Width-Stack.
 
 Referenz-Cluster: [public/partials/recherche.html](public/partials/recherche.html) (Chat / Vollbild / Schliessen als Ghost-Trio).
@@ -557,10 +558,10 @@ mit `myCardOptions() { return this.cardData.map(...); }` am Karten-Scope.
 ```
 
 - **Element leer lassen.** Die Direktive schreibt Typ-Präfix (`entityRef.kind.<typ>`) + Label hinein und setzt `entity-ref--<typ>` (Farbakzent am linken Rand + Präfix, aus den `--card-accent-*`-Hues). Typ ist an Text **und** Farbe erkennbar.
-- **Label-Regeln liegen in `TYPES`**, nicht im Template: Figur = `kurzname || name` (voller Name als Tooltip), Seite mit Tooltip „Kapitel › Seite", Ort/Szene aus dem Katalog. Typen ohne Frontend-Katalog (Werkstatt-Figur, Motiv, Beat, Recherche, Idee, Quelle) bekommen `label` vom Aufrufer.
+- **Label-Regeln liegen in `TYPES`**, nicht im Template: Figur = `kurzname || name` (voller Name als Tooltip), Abschnitt mit Tooltip „Kapitel › Abschnitt", Ort/Szene aus dem Katalog. Typen ohne Frontend-Katalog (Werkstatt-Figur, Motiv, Beat, Recherche, Idee, Quelle) bekommen `label` vom Aufrufer.
 - **Sprungziel liegt in `TYPES`**: Kapitel → **immer Kapitelbewertung** (`openChapterById`; erste Seite nur, wo das Buch keine Kapitelbewertung hat), Seite → Editor, Figur/Ort/Szene/Ereignis/Song → Katalog-Karte, Werkstatt-Figur → Figuren-Werkstatt, Motiv → Motiv-Werkstatt, Beat/Strang → Plot, Recherche/Quelle/Idee → Hash-Router. Kein `@click` am Element; ein Klick stoppt die Propagation (Referenzen sitzen oft in klickbaren Zeilen).
 - **Hover-Vorschau** für Typen mit Frontend-Katalog — Kapitel, Seite, Figur, Ort, Szene: Überfahren (ca. 450 ms) oder Tastatur-Fokus öffnet ein Popover mit Kontext aus den geladenen Katalogen, ohne Fetch. Inhalt je Typ in [public/js/entity-ref-preview.js](public/js/entity-ref-preview.js) (`PREVIEW_BUILDERS`): Figur = voller Name, Typ/Beruf, Beschreibung, Rolle, Kapitel, Erste Erwähnung, Eigenschaften; Ort = Typ/Land, Beschreibung, Stimmung, Kapitel, Figuren; Szene = Kapitel › Seite + Wertung, Kommentar, Figuren, Orte; Kapitel = Elternkapitel, Textanfang, Umfang, Seiten, Szenen, Figuren nach Häufigkeit dort; Seite = Kapitel, Textauszug (`preview_text`), Umfang, Lektorat-Stand, Szenen und deren Figuren. Leere Felder fallen weg. Layer: [public/js/entity-ref-popover.js](public/js/entity-ref-popover.js) — **ein** geteiltes Element, reine Anzeige (`pointer-events: none`, Klick bleibt der Sprung), kein Popover auf Touch, Ebene per `mountInTopLayer`, Position per `computePopoverPos` mit gemessener Grösse. Wo eine Vorschau existiert, entfällt der `data-tip`-Tooltip. Neuer Typ mit Vorschau → Builder in `PREVIEW_BUILDERS`, sonst nichts.
-- **Optionen:** `static: true` (nur Anzeige), `preview: false` (keine Hover-Vorschau, z.B. wo die Zeile das Objekt schon ausbreitet), `inherited: true` (abgeleitet → gestrichelt, Plot-Vererbung), `count: n` (Zusatz „×n" ab 2), `title` (Tooltip übersteuern), `onOpen: () => …` (eigene Aktion statt Navigation — nur, wenn der Klick bewusst etwas anderes tut, z.B. einen Filter setzen), `kapitel` (bei `seite` ohne ID: Kapitelname zur Auflösung).
+- **Optionen:** `static: true` (nur Anzeige), `preview: false` (keine Hover-Vorschau, z.B. wo die Zeile das Objekt schon ausbreitet), `inherited: true` (abgeleitet, Plot-Vererbung → Zusatz „· Strang“ im Badge + gestrichelter Rand; `title` nennt die Herkunft und steht bei Typen mit Vorschau als erste Meta-Zeile im Popover), `count: n` (Zusatz „×n" ab 2), `title` (Tooltip übersteuern), `onOpen: () => …` (eigene Aktion statt Navigation — nur, wenn der Klick bewusst etwas anderes tut, z.B. einen Filter setzen), `kapitel` (bei `seite` ohne ID: Kapitelname zur Auflösung).
 - **Nicht auflösbar** (Name ohne Treffer, gelöschtes Objekt) → `entity-ref--unresolved`, abgeschaltet, Rohtext als Label. Ein Klick endet nie im Nichts.
 - **Englische Verknüpfungs-Kinds** (`figure`, `chapter`, `location`, `thread` … aus `research_links`/`idea_links`) direkt als `type` durchreichen — `KIND_ALIASES` bildet sie ab.
 - **Keine Referenz** ist ein Wert ohne Objekt dahinter (erzählte Zeit, Tag, Status, Typ-Badge eines Eintrags) — der bleibt `.tag`/`.badge`. Manuskript-Marker (`span.cite`, `span.xref`) und Editor-Hervorhebungen sind eigene SSoTs, keine `entity-ref`.
@@ -599,6 +600,7 @@ Betrifft jeden Knopf mit eigenem `transform`. Wer den Druck-Effekt gar nicht wil
 - [Icon-System](#icon-system-lucide-sprite) — Lucide-Sprite `<svg class="icon"><use href="/icons.svg#name"/></svg>`. **Einzige** Icon-Quelle.
 - [Icon-Button](#icon-button-icon-btn) — `.icon-btn` (outlined) / `.icon-btn--ghost` (transparent bis Hover) für Icon-only-Aktionen. `.icon-btn--success` (grüner Bestätigungs-Akzent).
 - [Icon-Button-Count-Badge](#icon-button-count-badge-icon-btn-badge) — Zähler oben rechts (`.icon-btn-badge`); Achtungs-Punkt ohne Zahl via `.icon-btn--attention`.
+- [Hover-Reveal](#hover-reveal-item-aktionen-auf-zuwendung) — Item-Aktionen erst auf Zuwendung (`.hover-reveal-host` / `.hover-reveal`).
 - [Toolbar-Action-Group](#toolbar-action-group-segmentierter-icon-cluster-neben-form-feldern) — segmentierte Icon-Reihe.
 - [Context-Menu → Dropdown-Variante](#context-menu-rechtsklick-popover) — `⋯`-Overflow (`.context-menu--dropdown`) für sekundäre Aktionen, Einträge mit `.context-menu-item--icon`.
 - [Sofort-Tooltip](#sofort-tooltip-data-tip--default-variante) — `data-tip` (Pflicht bei Icon-only) + `aria-label`.
@@ -649,7 +651,7 @@ Niemals `x-text` für Icon-Buttons mit zwei Zuständen — `x-text` setzt `textC
 - Viewport: `maximize`, `maximize-2`, `minimize-2`, `scan`
 - Editor: `separator-horizontal` (Trennlinie), `move-horizontal` (Fit-Width), `pilcrow` (Steuerzeichen), `heading` (Titel-Kopf des Beitrags ein-/ausblenden — nur publizistische Bücher)
 - Feedback: `thumbs-up` / `thumbs-down` (Daumen unter einer Chat-Antwort, `.icon-btn--ghost` mit `:aria-pressed` — [chat-feedback.html](public/partials/chat-feedback.html))
-- Seiten-Actions: `spell-check` (Lektorat/Prüfen), `pencil` (Bearbeiten), `maximize` (Fokus-Editor), `message-square` (Seiten-Chat), `lightbulb` (Ideen), `share-2` (Seite teilen)
+- Seiten-Actions: `spell-check` (Lektorat/Prüfen), `pencil` (Bearbeiten), `maximize` (Fokus-Editor), `message-square` (Abschnitts-Chat), `lightbulb` (Ideen), `share-2` (Seite teilen)
 - Sidebar / Navigation: `rotate-cw` (Seiten neu laden), `list-tree` (Buch organisieren), `download` (Export), `book-open` (Seite öffnen)
 - Clients: `laptop-minimal` (macOS-App), `smartphone` (Android-App), `puzzle` (Chrome-Erweiterung) — je einmal pro Client und Oberfläche: im CTA-Button der Landing-Client-Sektion und im Zeilen-Kopf der Profil-Download-Zeile. Die Landing lädt dafür `css/components/icons.css` mit (pre-auth erlaubt über den `/css/`-Prefix, Sprite über `/icons.svg` in `PUBLIC_ASSETS`).
 - **Schliessen: immer `x`** (Lucide) — alle Karten-/Panel-/Overlay-Close-Buttons rendern das `x`-Sprite-Icon, nie ein `×`/`&#x2715;`-Glyph oder ein Text-„Schliessen". Basis ist das Primitive **`.btn-close`** ([components/btn-close.css](public/css/components/btn-close.css)): es trägt den invarianten Kern (randlose Fläche, `inline-flex`-Zentrierung, Ruhefarbe, Hover), die Varianz läuft über `--close-size` / `--close-pad` / `--close-color`. Adoptiert: `.figur-lookup-close`, `.synonym-picker-close`, `.heatmap-detail-close`. Noch mit eigener Vollkopie und **bei Berührung nachzuziehen**: `.btn-card-close`, `.edit-find-close`, `.book-editor-find-close`, `.entity-popover-close`, `.job-toast-close`, `.revision-viewer__close`, `.shortcuts-close` — beim Umstellen den dort bestehenden `font-size`/`padding`-Wert als `--close-size`/`--close-pad` mitnehmen, nicht auf den Default vereinheitlichen. Destruktives Entfernen (Chips, Session/Seite/Kapitel löschen) ist **kein** Schliessen — eigene Semantik.
@@ -767,6 +769,43 @@ Neue Aktionen erweitern diese Tabelle und das Sprite (siehe [Icon-System](#icon-
 - **Klassen-Präfix** `icon-btn` — das Pattern teilt sich Vokabular über alle Features (Graph, Header, Board, Toolbar). Nicht in `toolbar-btn`/`*-icon-btn`-Basis o.ä. umbenennen oder forken.
 
 **Beispiele:** [public/partials/figuren.html:86-100](public/partials/figuren.html#L86), [public/partials/figur-werkstatt.html:210-233](public/partials/figur-werkstatt.html#L210).
+
+---
+
+## Hover-Reveal (Item-Aktionen auf Zuwendung)
+
+**Use:** Aktionen an einem **Item in einer Sammlung** — Karte auf einem Board, Thread in einer Kommentarleiste —, die im Ruhezustand verborgen sind und erscheinen, sobald man sich dem Item zuwendet. Viele Items mit je drei dauerhaft sichtbaren Knöpfen lesen sich als Werkzeugleiste statt als Inhalt. Einzige sanktionierte Mechanik dafür; kein feature-eigenes `opacity: 0` + `:hover`.
+
+**Markup:**
+```html
+<div class="idee-board-card hover-reveal-host">
+  <div class="idee-board-card-actions hover-reveal">
+    <button type="button" class="icon-btn icon-btn--ghost" :data-tip="…" :aria-label="…">…</button>
+  </div>
+  …
+</div>
+```
+
+**Klassen** [components/hover-reveal.css](public/css/components/hover-reveal.css): `.hover-reveal-host` am Item, `.hover-reveal` an jeder Aktionsgruppe darin (mehrere pro Host erlaubt, auch einzelne Buttons).
+
+**Regeln:**
+- **Nur Opacity, nie `visibility`/`display`.** Verborgene Knöpfe bleiben per Tab erreichbar, `:focus-within` blendet sie dann ein, und sie halten ihren Platz — das Einblenden verschiebt kein Layout.
+- **Nur auf Hover-Geräten** (`@media (hover: hover)`). Touch zeigt die Aktionen immer — sonst wären sie unsichtbar und trotzdem antippbar. Liegen sie schwebend über dem Inhalt, braucht das Feature unter `@media (hover: none)` einen Platz im Fluss (Beispiel: `.idee-board-card-actions` wird dort `position: static`).
+- **Eigener Auswahl-Zustand = Delta beim Konsumenten**, nicht im Kern: `.comment-rail__thread--selected .hover-reveal { opacity: 1; }` (in `@media (hover: hover)`). Ebenso eine Zeile im Bearbeiten-Modus (`.sources-row--active`).
+- **Offenes Menü hält die Gruppe sichtbar** — der Kern blendet `.hover-reveal:has([aria-expanded="true"])` ein. Ein Menü-Trigger in der Gruppe trägt darum `aria-haspopup="menu"` + `:aria-expanded` (Muster [recherche-item-menu.html](public/partials/recherche-item-menu.html)); sonst verschwindet das Dropdown, sobald der Zeiger die Zeile verlässt.
+- **Kein eigenes `opacity` auf dem Ziel.** Eine Feature-Regel mit `opacity` auf demselben Element überschreibt den Kern (gleiche Spezifität, spätere Datei) — das Ziel bleibt dann dauerhaft sichtbar oder gedimmt. Gedimmt-bis-Hover am Knopf selbst ist keine zweite Variante dieses Musters.
+- **Zustands-Umschalter bleiben sichtbar, solange sie aktiv sind.** Ein Knopf, der einen Zustand anzeigt (Anheften, Archivieren, Fertig in „Meine Bücher"), ist Information, keine Aktion — versteckt wäre der Zustand unsichtbar. Solche Zeilen bekommen kein Hover-Reveal, oder der aktive Knopf liegt ausserhalb der `.hover-reveal`-Gruppe.
+- **Inhalt aus der [Action-Icon-Library](#action-icon-library-verbindlich):** `icon-btn icon-btn--ghost` mit `data-tip` + `aria-label`; Text-Knöpfe nur, wo die Fläche sie schon führt (Stufen-Knöpfe am Ideen-Board, Self-Service im Share-Reader).
+- **Nicht für:** Header-Cluster einer Karte (`.card-actions` bleibt sichtbar), Editor-Toolbars, die einzige oder primäre Aktion einer Fläche — was man tun *soll*, sucht man nicht.
+
+- **Nicht für Werkzeug-Zeilen**, in denen jede Zeile bearbeitet wird (Buchorganizer, Admin-Tabellen, Formular-Wiederholfelder), und nicht für Entfernen-Kreuze an Chips (`entity-ref-remove`, `export-chip-remove`) — dort ist die Entfernbarkeit selbst die Aussage.
+
+**Konsumenten:**
+- Boards: Ideen-Board (Kartenaktionen + Stufen-Knöpfe, [ideen-board.html](public/partials/ideen-board.html)), Plot-Beat-Karte (Verwerfen/Löschen, [plot-beat-cell.html](public/partials/plot-beat-cell.html)), Recherche-Status-Board ([recherche-status-board.html](public/partials/recherche-status-board.html)).
+- Listen: Recherche-Liste ([recherche-item.html](public/partials/recherche-item.html)), Quellen-Tabelle ([sources.html](public/partials/sources.html)), Motiv-Themen ([motiv-panel.html](public/partials/motiv-panel.html)), Titel-Varianten ([titelwerkstatt.html](public/partials/titelwerkstatt.html)).
+- Verläufe (`.history-item` + `.history-item-delete`): Prüf-Verlauf der Seite, Tagebuch-Rückblick, Motiv-Brainstorm/-Befunde, Plot-KI-Läufe, Figur-Werkstatt-Läufe.
+- Sitzungslisten (`.chat-session-item` + `.chat-session-delete`) aller fünf Chats: Abschnitts-, Buch-, Plot-, Recherche- und Ideen-Chat.
+- Kommentar-Threads: Notebook-Leseansicht + Bucheditor ([comment-thread-body.html](public/partials/comment-thread-body.html)) und Share-Reader ([share-reader/thread-render.js](public/js/share-reader/thread-render.js)).
 
 ---
 
@@ -2807,7 +2846,7 @@ Eigene Shades bewusst nicht aliased — Achsen optisch trennen. Regel: Lektorats
 - Position: fixed bottom-right (`--z-toast` = 12000). Mobile (<600px): full-width unten.
 - Animation: 160 ms Fade+Slide; bei `prefers-reduced-motion: reduce` nur Fade.
 
-**Trigger:** Root-Handler `_onJobFinished` ([app-jobs-core.js](public/js/app-jobs-core.js)) ruft `_maybeShowJobToast(detail)` für eine Whitelist langlaufender Job-Typen (`komplett-analyse`, `kontinuitaet`, `review`, `kapitel-review`, `figuren`, `book-chat`, `finetune-export`, `pdf-export`, `batch-check`, `werkstatt-brainstorm`, `werkstatt-consistency`). `type === 'check'` (Seiten-Lektorat) ist absichtlich ausgenommen — feuert pro Seitenklick und hat sein eigenes Sidebar-Signal. `status === 'cancelled'` erzeugt keinen Toast.
+**Trigger:** Root-Handler `_onJobFinished` ([app-jobs-core.js](public/js/app-jobs-core.js)) ruft `_maybeShowJobToast(detail)` für eine Whitelist langlaufender Job-Typen (`komplett-analyse`, `kontinuitaet`, `review`, `kapitel-review`, `figuren`, `book-chat`, `finetune-export`, `pdf-export`, `batch-check`, `werkstatt-brainstorm`, `werkstatt-consistency`). `type === 'check'` (Abschnitts-Lektorat) ist absichtlich ausgenommen — feuert pro Seitenklick und hat sein eigenes Sidebar-Signal. `status === 'cancelled'` erzeugt keinen Toast.
 
 **Auto-Dismiss:** 4500 ms via `_jobToastTimer`. Close-Button setzt Toast sofort auf `null`.
 
@@ -2917,7 +2956,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 |------|--------|
 | [tokens.css](public/css/tokens.css) | Cascade-Layer-Order, `@font-face`, `@import` der Token-Module aus `tokens/`. Slim Facade — keine Tokens direkt drin. Unlayered. |
 | [card-accents.css](public/css/card-accents.css) | `.card--<key> { --card-accent: var(--card-accent-<key>); }` — SSoT für Karten-Akzentfarben (alle Karten). |
-| [chat.css](public/css/chat.css) | Seiten-/Buch-Chat. |
+| [chat.css](public/css/chat.css) | Abschnitts-/Buch-Chat. |
 | [search.css](public/css/search.css) | Volltext-Suche, Buchwahl. |
 | [tokens-est.css](public/css/tokens-est.css) | Token-Schätzung Inline-Badges + Tooltip. Nur das — der Figuren-Bestand, den die Datei entgegen ihrem Namen lange mittrug, liegt in `entities/figuren*.css`. |
 | [landing.css](public/css/landing.css) | Landing-/Register-/Login-Seiten (kein SPA-Bundle). |
@@ -2960,6 +2999,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [components/card-form/card-actions.css](public/css/components/card-form/card-actions.css) | `.card-actions*`, `.action-group`/`.action-sep`, `.btn-card-close`. |
 | [components/combobox.css](public/css/components/combobox.css) | `.combobox-*` — Searchable-Select-Komponente (Trigger, Dropdown, Optionen, Gruppen-Header, Compact-Variante, Footer-Button). |
 | [components/buttons-badges.css](public/css/components/buttons-badges.css) | `<button>` Hierarchie, `.badge-*`, `.avatar-*`, `.btn-group`, `.btn-compact`. |
+| [components/hover-reveal.css](public/css/components/hover-reveal.css) | `.hover-reveal-host` + `.hover-reveal` — Item-Aktionen erst auf Hover/Fokus/offenes Menü, auf Touch immer (Boards, Listen, Verläufe, Chat-Sitzungen, Kommentar-Threads). |
 | [components/icon-btn.css](public/css/components/icon-btn.css) | `.icon-btn` (outlined) + `.icon-btn--ghost` — SSoT für alle Icon-only Buttons (Graph/Map/Mindmap-Toolbars, Header-Cluster, Plot-Board, Action-Groups). Feature-Marker setzen nur Deltas darauf. |
 | [components/tabs.css](public/css/components/tabs.css) | `.tabs` / `.tabs-btn` + `--active`/`--scrollable`/`--fullwidth`. Basis scrollt horizontal (Scrollbalken versteckt, Rand-Schatten als Signal). |
 | [components/device-tokens.css](public/css/components/device-tokens.css) | `.device-tokens-*` — Token-Verwaltung in User-Settings (Reveal-Block für Klartext-Token einmalig nach Create, Row-List statt Table). |
@@ -3050,12 +3090,13 @@ Drei Editoren leben in eigenen Subfoldern (`book/`, `focus/`, `notebook/`); edit
 | [entities/entity-grid.css](public/css/entities/entity-grid.css) | Entity-Grid (Matrix-Ansicht für Szenen + Schauplätze): sortierbare Tabelle, View-Toggle (`.entity-view-toggle`, `.entity-grid-*`). |
 | [entities/ideen.css](public/css/entities/ideen.css) | Ideen-Karte. |
 | [entities/ideen-board.css](public/css/entities/ideen-board.css) | Ideen-Board (Raster Bahn × Stufe) + das geteilte Chip-Vokabular der Ideen-Verknüpfungen. |
+| [entities/ideen-chat.css](public/css/entities/ideen-chat.css) | Ideen-Board: Ideen-Chat — Spalten-Layout `.ideen-split` (gleiche Geometrie wie `.plot-split`) und das Panel `.ideen-chat*` samt Schnellstart-Knöpfen und Beleg-Zeile; Vorschlagskarten über die geteilten `.chat-vorschlag*`-Klassen. |
 | [entities/entity-list.css](public/css/entities/entity-list.css) | `.entity-list` / `-row`, `.severity-tag*`, `.collapsible-*`, Skeleton, `.ort-*` Schauplätze. |
 | [entities/orte-map.css](public/css/entities/orte-map.css) | Orte-Karte View-Mode `map` (Geo-Karte via Leaflet): `.ort-map*` Container + Geocode-Liste. Nur bei `book_settings.orte_real`. |
 | [entities/recherche/board.css](public/css/entities/recherche/board.css) | Recherche-/Wissensboard (Board-Teil): Toolbar/Filter, Anlege-/Edit-Formular, einspaltige Schnipsel-Liste (`.recherche-list` + `.research-item`), Kind-Badges, Verknüpfungs-/Tag-Chips, KI-Vorschläge, Link-Picker, Link-Zeile (`.research-item-url-row`: Link + „als Quelle übernehmen"-`.icon-btn--ghost`, auf 22px kontext-verkleinert über `.research-url-tosource`, weil 28px die Zeilenhöhe einer `font-size-sm`-Liste bestimmen würde). Native-Vollbild (`.card--recherche:fullscreen`, Toggle via `fullscreen.js` wie Plot-Board) → Liste zentriert mit Lese-Maximalbreite. |
 | [entities/recherche/status-board.css](public/css/entities/recherche/status-board.css) | Recherche-Board, Ansicht „Status": Kanban ueber die Einarbeitungs-Stufen (`.research-status-board` mit vier gleich breiten Spalten, `.research-status-column--<status>` traegt die semantische Stufen-Farbe als `--status-accent`), Karte (`.research-status-card` + Drag-Griff `.research-status-grip`, SortableJS-Zustaende), Stelle-im-Buch-Chips, „eingearbeitet ohne Stelle"-Befund und die Status-Plakette (`.research-status-badge`) fuer Liste + Detailansicht. Laedt NACH board.css und benutzt dessen Vokabular (Kind-Badge, Titel-Button, Link-Chip) weiter. Mobile (≤700px) stapelt die Spalten. |
 | [entities/recherche/dialog.css](public/css/entities/recherche/dialog.css) | Geteilte `<dialog>`-Shell der Recherche-Karte (`.research-dialog*`) für Detailansicht **und** Anlegen-Modal: Panelbreite, stehender `__head`, scrollender `__scroll`, `__bar`-Fussleiste, Mobile als vollflächiges Blatt. `__text` setzt den Volltext in Lesegrösse mit begrenztem Satzspiegel, `__figure`/`__image` zeigen das Bild gross (bis 60vh), `__doc`/`__figcaption` tragen die Anhang-Aktionen. Dazu `textarea.recherche-input--tall` fürs Redigieren langer Funde. |
-| [entities/recherche/chat.css](public/css/entities/recherche/chat.css) | Recherche-Chat derselben Karte: Spalten-Layout `.recherche-split` (ab 1280px Board links / Chat rechts als sticky Spalte `clamp(420px, 32vw, 620px)` — breiter als der 420px-Seiten-Chat, weil Web-Such-Antworten und Fundstück-Vorschläge mehr Zeilenbreite brauchen; darunter Flex-Spalte mit `order: -1`, Chat über dem Board) plus das Panel selbst (`.research-chat*`: Kopf, Nachrichtenhöhe, Quellenliste, Suchbegriffe `.research-chat-queries`, Speicher-Vorschläge mit Aktionsspalte + Bearbeiten-Formular, Kontext-Chip `.research-chat-context-chip`). |
+| [entities/recherche/chat.css](public/css/entities/recherche/chat.css) | Recherche-Chat derselben Karte: Spalten-Layout `.recherche-split` (ab 1280px Board links / Chat rechts als sticky Spalte `clamp(420px, 32vw, 620px)` — breiter als der 420px-Abschnitts-Chat, weil Web-Such-Antworten und Fundstück-Vorschläge mehr Zeilenbreite brauchen; darunter Flex-Spalte mit `order: -1`, Chat über dem Board) plus das Panel selbst (`.research-chat*`: Kopf, Nachrichtenhöhe, Quellenliste, Suchbegriffe `.research-chat-queries`, Speicher-Vorschläge mit Aktionsspalte + Bearbeiten-Formular, Kontext-Chip `.research-chat-context-chip`). |
 | [entities/sources.css](public/css/entities/sources.css) | Quellenverzeichnis-Karte: Toolbar/Filter-Bar (Compact-Höhen-Scope für `.filter-search-input`), Quellen-Tabelle (`.sources-table` via `sortableTable`), Zitier-Badge (`.sources-cite-badge`, Hue aus `--card-accent`), Detail-Formular, Fundstellen-Panel, Zitat-Kennzahlen-Reihe (`.sources-quote-stats` / `-stat` / `-stat-value` / `-stat-label` / `-stats-hint`: Zitat-Anteil + wörtlich/Paraphrase/belegte Quellen — schlichte Wert/Label-Reihe am Tabellenfuss, bewusst kein Tile-Grid). Enthält ausserdem `.sources-preview` (hängend eingerückte Formatter-Vorschau) — **geteilt** mit dem Quellen-Tab der Bucheinstellungen. |
 | [entities/ereignisse-subtyp.css](public/css/entities/ereignisse-subtyp.css) | Event-Subtyp-Badges + Marker-Farbe im Zeitstrahl: Mapping `.gz-item--subtyp-<typ>` auf die gemeinsame `--gz-subtyp-color`-Prop (SSoT der Hues = `--card-accent-event-*` in `tokens/colors.css`), konsumiert von Marker (`.gz-marker`) und Badge. |
 | [entities/ereignisse-span.css](public/css/entities/ereignisse-span.css) | Spannen-Events im Zeitstrahl: `.gz-item--span` verlängert den Marker vertikal proportional zur Jahr-Differenz (CSS-Custom-Prop `--span-years`); reine Punkt-Events unverändert. |
@@ -3277,6 +3318,7 @@ Wenn die Karte zusätzlich Inline-Inputs braucht (z.B. „Neue Figur — Name ei
             <span class="plot-beat-title">…</span>                    <!-- Klick = Edit-Modus -->
             <span class="plot-beat-intensity">…Pips 1–5…</span>
           </div>
+          <div class="plot-beat-actions hover-reveal">…Verwerfen · Löschen…</div>  <!-- schwebt oben rechts -->
           <!-- Status erscheint NICHT als Badge — nur die linke Border-Farbe signalisiert ihn. -->
         </div>
       </div>

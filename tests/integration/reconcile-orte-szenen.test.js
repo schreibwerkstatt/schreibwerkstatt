@@ -116,3 +116,65 @@ test('Szene: Re-Analyse behaelt die DB-id (Match per Kapitel+Titel) und den Rech
   const revived = db.prepare('SELECT stale FROM figure_scenes WHERE id = ?').get(id1);
   assert.equal(revived.stale, 0, 'wiederaufgetauchte Szene wird revived');
 });
+
+// ── Robustheit des Schreibpfads ─────────────────────────────────────────────
+
+test('Ort: doppeltes Kapitel im kapitel-Array bricht die Transaktion nicht (hoehere Haeufigkeit gewinnt)', () => {
+  db.prepare('DELETE FROM locations WHERE book_id = ?').run(BOOK);
+  db.prepare('DELETE FROM chapters WHERE book_id = ?').run(BOOK);
+  const { lastInsertRowid: chapId } = db.prepare(
+    `INSERT INTO chapters (book_id, chapter_name, updated_at) VALUES (?, ?, '2026-01-01T00:00:00.000Z')`
+  ).run(BOOK, 'Kapitel Eins');
+  const orte = [{ id: 'ort_1', name: 'Burg Falkenstein',
+    kapitel: ['Kapitel Eins', { name: 'Kapitel Eins', haeufigkeit: 3 }] }];
+  assert.doesNotThrow(() => dbSchema.saveOrteToDb(BOOK, orte, EMAIL, { 'Kapitel Eins': chapId }, {},
+    { matchBy: 'name', onMissing: 'stale' }));
+  const rows = db.prepare(`SELECT lc.haeufigkeit FROM location_chapters lc
+    JOIN locations l ON l.id = lc.location_id WHERE l.book_id = ?`).all(BOOK);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].haeufigkeit, 3);
+});
+
+test('Szene: Within-Run-Dedup behaelt die Ort-Links der aufgegangenen Szene', () => {
+  db.prepare('DELETE FROM figure_scenes WHERE book_id = ?').run(BOOK);
+  db.prepare('DELETE FROM locations WHERE book_id = ?').run(BOOK);
+  db.prepare('DELETE FROM chapters WHERE book_id = ?').run(BOOK);
+  const { lastInsertRowid: chapId } = db.prepare(
+    `INSERT INTO chapters (book_id, chapter_name, updated_at) VALUES (?, ?, '2026-01-01T00:00:00.000Z')`
+  ).run(BOOK, 'Kapitel Eins');
+  dbSchema.saveOrteToDb(BOOK, [{ id: 'ort_1', name: 'Bahnhof Olten' }, { id: 'ort_2', name: 'Buffet' }],
+    EMAIL, {}, {}, { matchBy: 'name', onMissing: 'stale' });
+  const locIdToDbId = Object.fromEntries(db.prepare('SELECT loc_id, id FROM locations WHERE book_id = ?')
+    .all(BOOK).map(r => [r.loc_id, r.id]));
+  const idMaps = { chNameToId: { 'Kapitel Eins': chapId }, pageNameToIdByChapter: {} };
+  const szenen = [
+    { kapitel: 'Kapitel Eins', seite: null, titel: 'Ankunft', wertung: null, kommentar: null,
+      fig_ids: [], ort_ids: ['ort_1'], sort_order: 0 },
+    { kapitel: 'Kapitel Eins', seite: null, titel: 'Ankunft', wertung: null, kommentar: 'zweiter Pass',
+      fig_ids: [], ort_ids: ['ort_2'], sort_order: 1 },
+  ];
+  saveSzenenAndEvents(BOOK, EMAIL, szenen, [], locIdToDbId, idMaps, log, null);
+  const scenes = db.prepare('SELECT id FROM figure_scenes WHERE book_id = ?').all(BOOK);
+  assert.equal(scenes.length, 1, 'gleicher Titel im selben Kapitel ⇒ eine Szene');
+  const locs = db.prepare('SELECT location_id FROM scene_locations WHERE scene_id = ?').all(scenes[0].id)
+    .map(r => r.location_id).sort();
+  assert.deepEqual(locs, [locIdToDbId.ort_1, locIdToDbId.ort_2].sort());
+});
+
+test('Kontinuitaet: Befunde des Attribut-Detektors (_source attr) sind von der Zitat-Belegpruefung ausgenommen', () => {
+  const { saveKontinuitaetResult } = require('../../routes/jobs/komplett/remap');
+  const pageContents = [{ id: 1, title: 'S1', chapter: 'Kapitel Eins', chapter_id: null,
+    text: 'Anna wurde im Jahr 1952 geboren und zog nach Olten.' }];
+  const probleme = [
+    { schwere: 'mittel', typ: 'zeitlinie', beschreibung: 'Geburtsjahr widerspricht sich.',
+      stelle_a: 'Geburtsjahr: «1952 laut Dossier» (Kapitel 1)', stelle_b: 'Geburtsjahr: «1955 laut Akte» (Kapitel 3)',
+      empfehlung: 'Angleichen.', figuren: [], kapitel: [], _source: 'attr' },
+    { schwere: 'mittel', typ: 'zeitlinie', beschreibung: 'Erfundenes Zitat.',
+      stelle_a: '«Anna war nie in Olten gewesen»', stelle_b: '«Sie blieb in Bern»',
+      empfehlung: 'Pruefen.', figuren: [], kapitel: [] },
+  ];
+  const out = saveKontinuitaetResult(BOOK, EMAIL, { zusammenfassung: 'x', probleme }, {}, {}, 'claude', log,
+    { pageContents, requireQuoteEvidence: true });
+  assert.equal(out.length, 1, 'erfundenes Buchzitat faellt, Attribut-Befund bleibt');
+  assert.equal(out[0].beschreibung, 'Geburtsjahr widerspricht sich.');
+});

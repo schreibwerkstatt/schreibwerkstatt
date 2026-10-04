@@ -6,7 +6,7 @@
 const { db, getBookSettings } = require('../../../db/schema');
 const appSettings = require('../../../lib/app-settings');
 const { providerClass } = require('../../../lib/ai');
-const { updateJob, settledAll, jobAbortControllers } = require('../shared');
+const { updateJob, settledAll, jobAbortControllers, i18nError } = require('../shared');
 const { _stelleQuote, _refToString } = require('./utils');
 const { COST_LABEL, costTier } = require('./cost-labels');
 const rerank = require('../../../lib/rerank');
@@ -22,6 +22,12 @@ const { buildPageIndex, buildFactIndex, locateStelle, excerptOnPage } = require(
 // mit echtem Kontext bestätigen oder verwerfen. Single-Pass braucht das nicht
 // (hat den Volltext bereits beim Check).
 const _VERIFY_RADIUS = 1500;
+// Ausgabe-Deckel des Verify-Urteils. Adaptives Thinking zählt gegen max_tokens — ein
+// knapper Deckel schneidet das Urteil ab, der Befund bliebe dann ungeprüft (keep).
+// Effort 'low' hält das Denken kurz; ausserhalb Claudes ignorieren die Provider den
+// Effort (lib/ai/core.js), auf Modellen ohne Effort klemmt _claudeOutputConfigParams.
+const _VERIFY_MAX_TOKENS = 4000;
+const _VERIFY_EFFORT = 'low';
 
 // Textfenster rund um das Zitat aus den im Problem referenzierten Kapiteln.
 // Whitespace-normalisiert (matcht den Single-Pass-/Fakten-Textfluss); findet das
@@ -156,9 +162,14 @@ async function verifyKontinuitaetProbleme(ctx, result, fromPct, toPct, { chapter
     try {
       const v = await call(jobId, tok,
         prompts.buildKontinuitaetVerifyPrompt(bookName, p, exA.text, exB.text),
-        sys.SYSTEM_KONTINUITAET_BLOCKS, null, null, 400, 0.3, 600, prompts.SCHEMA_KONTINUITAET_VERIFY,
-        costTier(COST_LABEL.kontinuitaet));
-      return { p, keep: v?.bestaetigt !== false };
+        sys.SYSTEM_KONTINUITAET_BLOCKS, null, null, 400, 0.3, _VERIFY_MAX_TOKENS, prompts.SCHEMA_KONTINUITAET_VERIFY,
+        { ...costTier(COST_LABEL.kontinuitaet), effort: _VERIFY_EFFORT });
+      const keep = v?.bestaetigt !== false;
+      if (!keep) {
+        const grund = String(v?.grund || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+        log.info(`Kontinuität Verify verwirft «${String(p.beschreibung || '').slice(0, 120)}»: ${grund || '(kein Grund angegeben)'}`);
+      }
+      return { p, keep };
     } catch (e) {
       if (e.name === 'AbortError') throw e;
       log.warn(`Kontinuität Verify übersprungen: ${e.message}`);
@@ -333,6 +344,10 @@ async function resolveRemapNames(ctx, { chapterSzenen, chapterAssignments, figur
       prompts.buildNameResolutionPrompt(bookName, unknownList, catalogNames),
       sys.SYSTEM_FIGUREN_BLOCKS, null, null, 800, 0.2, null, prompts.SCHEMA_NAME_RESOLUTION,
       costTier(COST_LABEL.match));
+    // Pflichtfeld: ohne `zuordnungen`-Array hat das Modell nicht wie verlangt geantwortet
+    // — als Fehler melden (gleicher non-fataler Ausgang unten), nicht still als
+    // «nichts zuzuordnen» weiterlaufen.
+    if (!Array.isArray(res?.zuordnungen)) throw i18nError('job.error.nameResolutionMissing');
   } catch (e) {
     if (e.name === 'AbortError') throw e;
     log.warn(`Remap-Rescue Namensauflösung fehlgeschlagen (ignoriert): ${e.message}`);
@@ -340,7 +355,7 @@ async function resolveRemapNames(ctx, { chapterSzenen, chapterAssignments, figur
   }
   const catalogByLower = new Map((figuren || []).map(f => [String(f.name || '').toLowerCase(), f.id]));
   let added = 0;
-  for (const z of (res?.zuordnungen || [])) {
+  for (const z of res.zuordnungen) {
     const name = _refToString(z?.name);
     const treffer = _refToString(z?.treffer);
     if (!name || !treffer) continue;

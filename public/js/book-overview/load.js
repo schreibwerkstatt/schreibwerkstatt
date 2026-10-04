@@ -35,6 +35,7 @@ export function initialOverviewState() {
     overviewBuchtyp: null,
     overviewRueckblickCoverage: null,
     overviewPlot: null,
+    overviewIdeen: null,      // eigene Ideen des Buchs (Ideen-Tile); null = nicht ladbar (403)
     overviewMotifs: null,
     overviewLexiconData: null,
     overviewLoadErrors: [],
@@ -80,7 +81,7 @@ export const loadMethods = {
       // Wortschatz (/lexicon) ebenfalls still: ein fehlender Scan ist dort kein
       // Fehler (Antwort mit `stats: null`), und ein Ausfall soll das Tile nur
       // ausblenden statt den Banner fuer die ganze Uebersicht zu ziehen.
-      const [shared, coverage, heat, reviews, recent, figuren, szenen, orte, songs, lektoratTime, plot, motifs, lexicon] = await Promise.all([
+      const [shared, coverage, heat, reviews, recent, figuren, szenen, orte, songs, lektoratTime, plot, motifs, lexicon, ideenBoard] = await Promise.all([
         this._loadSharedBookStats(bookId, opts),
         fetchJsonRetry(`/history/coverage/${bookId}`).catch(guard('coverage', null)),
         fetchJsonRetry(`/history/fehler-heatmap/${bookId}?mode=open`).catch(guard('heat', null)),
@@ -94,6 +95,8 @@ export const loadMethods = {
         fetchJsonRetry(`/plot?book_id=${bookId}`).catch(() => null),
         fetchJsonRetry(`/motifs?book_id=${bookId}`).catch(() => null),
         fetchJsonRetry(`/lexicon/${bookId}?summary=1`).catch(() => null),
+        // Ideen: optional wie Plot (Editor+, user-privat) — stiller Catch.
+        fetchJsonRetry(`/ideen/board?book_id=${bookId}`).catch(() => null),
       ]);
       if (this.overviewBookId !== bookId) return;
       const settings = shared?.settings || null;
@@ -126,6 +129,7 @@ export const loadMethods = {
       this.overviewGoalDeadline = settings?.goal_deadline || null;
       this.overviewBuchtyp = settings?.buchtyp || null;
       this.overviewPlot = plot && Array.isArray(plot.beats) ? plot : null;
+      this.overviewIdeen = ideenBoard && Array.isArray(ideenBoard.ideen) ? ideenBoard.ideen : null;
       this.overviewMotifs = motifs && Array.isArray(motifs.motifs) ? motifs : null;
       this.overviewLexiconData = lexicon && typeof lexicon === 'object' && !Array.isArray(lexicon) ? lexicon : null;
       this._memos = {};

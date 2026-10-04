@@ -6,11 +6,17 @@
 import { ideenMethods } from '../book/ideen.js';
 import { ideenLinkMethods } from '../book/ideen-links.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { IDEE_STATUSES } from '../book/ideen-shared.js';
+import { EVT } from '../events.js';
 
 export function registerIdeenCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('ideenCard', () => ({
     ideen: [],
+    // Aktive Stufen des Buches (book_settings.ideen_stages), je Buch einmal
+    // geladen (_loadStages in book/ideen.js).
+    stages: [...IDEE_STATUSES],
+    _stagesBookId: null,
     newContent: '',
     editingId: null,
     editingDraft: '',
@@ -52,7 +58,10 @@ export function registerIdeenCard() {
         },
         onBookChanged: () => this.resetIdeen(),
         onViewReset: () => this.resetIdeen(),
-        extraListeners: [{ type: 'ideen:reset', handler: () => this.resetIdeen() }],
+        extraListeners: [
+          { type: 'ideen:reset', handler: () => this.resetIdeen() },
+          { type: EVT.IDEEN_STAGES_CHANGED, handler: (e) => this._onStagesChanged(e) },
+        ],
       });
 
       // Page-Modus: Seitenwechsel triggert Reload (wenn offen).

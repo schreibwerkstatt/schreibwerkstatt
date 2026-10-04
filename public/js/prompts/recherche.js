@@ -113,7 +113,7 @@ export function buildResearchProposalMemoryBlock(list = []) {
 // ctx = { kind: 'page'|'chapter', name, excerpt, items: [{id, kind, title, status}] }
 export function buildResearchWritingContextBlock(ctx) {
   if (!ctx) return '';
-  const where = ctx.kind === 'chapter' ? `Kapitel «${ctx.name}»` : `Seite «${ctx.name}»`;
+  const where = ctx.kind === 'chapter' ? `Kapitel «${ctx.name}»` : `Abschnitt «${ctx.name}»`;
   const lines = [
     `SCHREIBKONTEXT DIESER FRAGE: Der Autor recherchiert für ${where}. Richte Suche und Vorschläge auf das aus, was diese Stelle braucht (Zeit, Ort, Sachverhalte, Figuren darin). Gespeicherte Vorschläge werden mit dieser Stelle verknüpft.`,
   ];
@@ -205,15 +205,15 @@ export const RESEARCH_CHAT_TOOLS = [
   { type: 'web_search_20250305', name: 'web_search', max_uses: 6 },
   {
     name: 'list_research_items',
-    description: 'Listet die vorhandenen Recherche-Einträge des Buchs (id, kind, status, Titel, Kurztext, Tags, `stellen` = verknüpfte Kapitel/Seiten, `bezug` = Figuren/Orte/Szenen, ob ein PDF/Dokument angehängt ist). Optional nach kind/status/Kapitel/Seite filtern oder mit q volltextsuchen. Nutze dies zuerst, um zu sehen, was schon gesammelt wurde.',
+    description: 'Listet die vorhandenen Recherche-Einträge des Buchs (id, kind, status, Titel, Kurztext, Tags, `stellen` = verknüpfte Kapitel/Abschnitte, `bezug` = Figuren/Orte/Szenen, ob ein PDF/Dokument angehängt ist). Optional nach kind/status/Kapitel/Abschnitt filtern oder mit q volltextsuchen. Nutze dies zuerst, um zu sehen, was schon gesammelt wurde.',
     input_schema: {
       type: 'object',
       properties: {
         kind: { type: 'string', enum: ['note', 'link', 'quote', 'fact', 'image', 'document', 'transcript'], description: 'Optionaler Typfilter.' },
         q: { type: 'string', description: 'Optionale Volltextsuche über die Einträge.' },
         status: { type: 'string', enum: ['offen', 'in_arbeit', 'eingearbeitet', 'verworfen'], description: 'Optional: nur Einträge dieser Einarbeitungs-Stufe.' },
-        chapter_id: { type: 'integer', description: 'Optional: nur Einträge an diesem Kapitel oder einer seiner Seiten.' },
-        page_id: { type: 'integer', description: 'Optional: nur Einträge an dieser Seite.' },
+        chapter_id: { type: 'integer', description: 'Optional: nur Einträge an diesem Kapitel oder einem seiner Abschnitte.' },
+        page_id: { type: 'integer', description: 'Optional: nur Einträge an diesem Abschnitt.' },
       },
       required: [],
     },

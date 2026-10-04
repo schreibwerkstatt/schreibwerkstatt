@@ -165,7 +165,7 @@ function getJobRuns({ emails, email, from, to, limit = 50, offset = 0, includeAd
   const rows = db.prepare(listSql).all(...args).map(r => ({
     id: r.id, jobId: r.job_id, userEmail: r.user_email, type: r.type, bookId: r.book_id, label: r.label,
     status: r.status, queuedAt: r.queued_at, startedAt: r.started_at, endedAt: r.ended_at,
-    provider: r.provider, model: r.model,
+    provider: r.provider, model: r.model, feedback: r.feedback ?? null,
     tokensIn: r.tokens_in, tokensOut: r.tokens_out,
     cacheReadIn: r.cache_read_in, cacheCreationIn: r.cache_creation_in,
     usd: _cost(r),
@@ -176,7 +176,11 @@ function getJobRuns({ emails, email, from, to, limit = 50, offset = 0, includeAd
 
 // ── Chat-Messages (paginiert; mit/ohne User-Filter) ─────────────────────────
 
-function _buildChatQuery({ emailCount, includeWhere }) {
+// Feedback-Filter der Chat-Liste: nur Antworten mit Daumen runter bzw. hoch
+// (`chat_messages.feedback`, db/chat-quality.js). Unbekannte Werte = kein Filter.
+const CHAT_FEEDBACK_FILTERS = { down: 'cm.feedback = -1', up: 'cm.feedback = 1' };
+
+function _chatWhere({ emailCount, includeWhere, feedback }) {
   const where = [
     "cm.created_at >= ?", "cm.created_at < ?", "cm.role = 'assistant'",
   ];
@@ -185,32 +189,29 @@ function _buildChatQuery({ emailCount, includeWhere }) {
     where.push(`cs.user_email IN (${placeholders})`);
   }
   if (includeWhere) where.push(includeWhere);
+  if (CHAT_FEEDBACK_FILTERS[feedback]) where.push(CHAT_FEEDBACK_FILTERS[feedback]);
+  return where.join(' AND ');
+}
+
+function _buildChatQuery(opts) {
   return `
     SELECT cm.id, cm.session_id, cs.user_email, cm.created_at,
            cs.kind AS session_kind, cs.book_id, cs.page_id,
-           cm.provider, cm.model,
+           cm.provider, cm.model, cm.feedback,
            cm.tokens_in, cm.tokens_out, cm.cache_read_in, cm.cache_creation_in, cm.cache_creation_1h_in
       FROM chat_messages cm
       JOIN chat_sessions cs ON cs.id = cm.session_id
-     WHERE ${where.join(' AND ')}
+     WHERE ${_chatWhere(opts)}
      ORDER BY cm.created_at DESC
      LIMIT ? OFFSET ?`;
 }
 
-function _buildChatCountQuery({ emailCount, includeWhere }) {
-  const where = [
-    "cm.created_at >= ?", "cm.created_at < ?", "cm.role = 'assistant'",
-  ];
-  if (emailCount > 0) {
-    const placeholders = new Array(emailCount).fill('?').join(',');
-    where.push(`cs.user_email IN (${placeholders})`);
-  }
-  if (includeWhere) where.push(includeWhere);
+function _buildChatCountQuery(opts) {
   return `
     SELECT COUNT(*) AS n
       FROM chat_messages cm
       JOIN chat_sessions cs ON cs.id = cm.session_id
-     WHERE ${where.join(' AND ')}`;
+     WHERE ${_chatWhere(opts)}`;
 }
 
 function _adminChatWhereClause(set) {
@@ -219,20 +220,21 @@ function _adminChatWhereClause(set) {
   return `cs.user_email NOT IN (${list})`;
 }
 
-function getChatMessages({ emails, email, from, to, limit = 50, offset = 0, includeAdmins = false } = {}) {
+// `feedback`: 'down' | 'up' | leer — nur bewertete Antworten (Metadaten, nie Text).
+function getChatMessages({ emails, email, from, to, limit = 50, offset = 0, includeAdmins = false, feedback = null } = {}) {
   const list = Array.isArray(emails) ? emails : (email ? [email] : []);
   const { fromIso, toIso } = _resolveRange({ from, to });
   const lim = Math.max(1, Math.min(500, Number(limit) || 50));
   const off = Math.max(0, Number(offset) || 0);
   const adminFilter = list.length ? null : _adminChatWhereClause(_excludedEmails(includeAdmins));
-  const listSql  = _buildChatQuery({ emailCount: list.length, includeWhere: adminFilter });
-  const countSql = _buildChatCountQuery({ emailCount: list.length, includeWhere: adminFilter });
+  const listSql  = _buildChatQuery({ emailCount: list.length, includeWhere: adminFilter, feedback });
+  const countSql = _buildChatCountQuery({ emailCount: list.length, includeWhere: adminFilter, feedback });
   const args = [fromIso, toIso, ...list, lim, off];
   const countArgs = [fromIso, toIso, ...list];
   const rows = db.prepare(listSql).all(...args).map(r => ({
     id: r.id, sessionId: r.session_id, userEmail: r.user_email, createdAt: r.created_at,
     sessionKind: r.session_kind, bookId: r.book_id, pageId: r.page_id,
-    provider: r.provider, model: r.model,
+    provider: r.provider, model: r.model, feedback: r.feedback ?? null,
     tokensIn: r.tokens_in, tokensOut: r.tokens_out,
     cacheReadIn: r.cache_read_in, cacheCreationIn: r.cache_creation_in,
     usd: _cost(r),

@@ -381,16 +381,8 @@
   gap: 12px;
   margin-top: 8px;
 }
-/* Auf Hover-Geräten erst bei Hover, Auswahl oder Tastatur-Fokus einblenden
-   (Google-Docs-Muster wie die SPA-Leisten). Nur Opacity, nicht visibility —
-   sonst wären die Knöpfe per Tab nicht erreichbar und :focus-within griffe nie.
-   Touch-Geräte zeigen sie immer. */
-@media (hover: hover) {
-  .share-thread__actions { opacity: 0; transition: opacity 0.12s ease; }
-  .comment-rail__thread:hover .share-thread__actions,
-  .comment-rail__thread--selected .share-thread__actions,
-  .comment-rail__thread:focus-within .share-thread__actions { opacity: 1; }
-}
+/* Einblenden auf Hover/Auswahl/Fokus: `.hover-reveal` (components/hover-reveal.css)
+   plus Auswahl-Delta in components/comment-rail.css. */
 /* Nur auswählbare Karten (verankert, Stelle auffindbar) zeigen den Hand-Zeiger;
    allgemeine Threads haben keine Klick-Aktion auf der Karte. */
 .share-thread { cursor: default; }

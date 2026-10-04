@@ -1,6 +1,7 @@
 const { db } = require('../connection');
 const { figIdMaps, _cleanRefName, enrichBelegWithIds } = require('./refs');
 require('../migrations');
+const { isUngroupedChapterName } = require('../../lib/ungrouped-chapter');
 
 // Ersetzt alle Lebensereignisse für ein Buch/User anhand von fig_id-basierten Assignments.
 // assignments: [{ fig_id: "fig_1", lebensereignisse: [...] }]
@@ -37,8 +38,8 @@ function updateFigurenEvents(bookId, assignments, userEmail, idMaps) {
         const evSeite = _cleanRefName(ev.seite);
         const chId = (evKapitel && idMaps?.chNameToId?.[evKapitel]) ?? null;
         // LLM-Halluzination: seite === kapitel (Kapitelname statt Seitentitel)
-        // oder chMap-Fallback «Sonstige Seiten» → seite nullen.
-        const effSeite = (evSeite && evSeite !== evKapitel && evSeite !== 'Sonstige Seiten')
+        // oder Ersatzname für Abschnitte ohne Kapitel → seite nullen.
+        const effSeite = (evSeite && evSeite !== evKapitel && !isUngroupedChapterName(evSeite))
           ? evSeite : null;
         const pageId = effSeite
           ? (idMaps?.pageNameToIdByChapter?.[chId ?? 0]?.[effSeite] ?? null)
@@ -61,10 +62,12 @@ function updateFigurenEvents(bookId, assignments, userEmail, idMaps) {
 // Sozialschicht + Machtverhältnis für bestehende Figuren/Beziehungen nachträglich setzen.
 // figurenSoziogramm: [{ fig_id, sozialschicht }]
 // beziehungenMacht:  [{ from_fig_id, to_fig_id, machtverhaltnis }]
+// Vom Autor gepflegte Figuren (manually_edited) und Beziehungen (origin='manual')
+// fasst die Analyse nicht an — gleiche Regel wie saveFigurenToDb.
 function updateFigurenSoziogramm(bookId, figurenSoziogramm, beziehungenMacht, userEmail) {
   db.transaction(() => {
     const updFig = db.prepare(
-      'UPDATE figures SET sozialschicht = ? WHERE book_id = ? AND fig_id = ? AND user_email IS ?'
+      'UPDATE figures SET sozialschicht = ? WHERE book_id = ? AND fig_id = ? AND user_email IS ? AND manually_edited = 0'
     );
     for (const f of (figurenSoziogramm || [])) {
       updFig.run(f.sozialschicht || null, bookId, f.fig_id, userEmail || null);
@@ -72,7 +75,7 @@ function updateFigurenSoziogramm(bookId, figurenSoziogramm, beziehungenMacht, us
     // figure_relations.from_fig_id/to_fig_id sind INTEGER (figures.id) — Lookup TEXT → INTEGER.
     const { byFigId: figIdToRowId } = figIdMaps(bookId, userEmail);
     const updRel = db.prepare(
-      'UPDATE figure_relations SET machtverhaltnis = ? WHERE book_id = ? AND from_fig_id = ? AND to_fig_id = ? AND user_email IS ?'
+      "UPDATE figure_relations SET machtverhaltnis = ? WHERE book_id = ? AND from_fig_id = ? AND to_fig_id = ? AND user_email IS ? AND origin = 'ki'"
     );
     for (const bz of (beziehungenMacht || [])) {
       const fromId = figIdToRowId[bz.from_fig_id];

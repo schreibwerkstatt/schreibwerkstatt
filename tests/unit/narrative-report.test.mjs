@@ -155,6 +155,36 @@ test('Fallengelassenes Motiv: früh eingeführt, nie in 2. Hälfte', () => {
   assert.ok(!dropped.includes('Schuld'));
 });
 
+test('Fallengelassenes Motiv: einmal gesetztes Symbol ist kein fallengelassenes Motiv', () => {
+  const r = computeNarrativeReport({
+    chapters: chapters(12),
+    themes: [{ chapter_id: 1, thema: 'der Beton-Kubus', typ: 'symbol' }],
+  });
+  assert.deepEqual(r.droppedMotifs, []);
+});
+
+test('computed: «nicht berechnet» ist von «leer» unterscheidbar', () => {
+  // Eine einzige Hauptfigur → Begegnungslücken nicht berechenbar.
+  const one = computeNarrativeReport({
+    chapters: chapters(12),
+    figures: [{ id: 1, name: 'Ilona' }],
+    appearances: [1, 3, 5].map(ch => ({ figure_id: 1, chapter_id: ch })),
+  });
+  assert.equal(one.computed.encounters, false);
+  assert.equal(one.computed.eventDeserts, false, 'ohne datierte Ereignisse');
+  assert.equal(one.computed.spans, true);
+  // Zwei Hauptfiguren, die sich in einer Szene treffen → berechnet, aber leer.
+  const two = computeNarrativeReport({
+    chapters: chapters(12),
+    figures: [{ id: 1, name: 'A' }, { id: 2, name: 'B' }],
+    appearances: [1, 2, 3].flatMap(ch => [{ figure_id: 1, chapter_id: ch }, { figure_id: 2, chapter_id: ch }]),
+    sceneFigures: [{ scene_id: 9, figure_id: 1 }, { scene_id: 9, figure_id: 2 }],
+  });
+  assert.equal(two.computed.encounters, true);
+  assert.deepEqual(two.encounters, []);
+  assert.equal(computeNarrativeReport({ chapters: chapters(5) }).computed.spans, false);
+});
+
 test('Schauplatz: Einmal-Ort landet in oneOff', () => {
   const n = 8;
   const r = computeNarrativeReport({

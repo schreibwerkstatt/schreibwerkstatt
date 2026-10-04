@@ -66,6 +66,9 @@ export const EVT = {
   // Umbauen im Buchorganizer und beim Einfügen/Löschen einer Abbildung. Der
   // Ziel-Picker cacht sie je Buch und verwirft sie darauf.
   XREFS_CHANGED: 'xrefs:changed',               // detail: { bookId }
+  // Ideen-Board hat die aktiven Stufen des Buches umgeschaltet; die Ideen-Karte
+  // zieht ihr Status-Menue nach (book_settings.ideen_stages).
+  IDEEN_STAGES_CHANGED: 'ideen:stages-changed', // detail: { bookId, stages }
 
   // ── Semantische Suche ────────────────────────────────────────────────────
   SEARCH_SIMILAR: 'search:similar',             // detail: { kind, id, label }

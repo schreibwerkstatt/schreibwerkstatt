@@ -114,3 +114,51 @@ test('Vollbild: Tooltip und Palette erreichen den Top-Layer', async ({ page }) =
   expect(pal.hitInOverlay, 'Palette ist im Vollbild anklickbar').toBe(true);
   expect(pal.stillFullscreen, 'Palette beendet das Vollbild nicht').toBe(true);
 });
+
+// Ideen-Board: Vollbild ueber den Kopf-Knopf, der Verknuepfungs-Picker ist nach
+// <body> teleportiert (geteilt mit der Ideen-Karte) und wird beim Oeffnen ins
+// Vollbild-Element umgehaengt (ideen-links.js#openLinkPicker).
+test('ideen-board: Vollbild-Knopf und Verknuepfungs-Picker im Top-Layer', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const ideeId = await page.evaluate(async (id) => {
+    const tree = await fetch(`/content/books/${id}/tree`).then(r => r.json());
+    const pageId = tree.chapters?.[0]?.pages?.[0]?.id;
+    const idee = await fetch('/ideen', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ book_id: id, page_id: pageId, content: 'Im Vollbild verknuepfen' }),
+    }).then(r => r.json());
+    return idee.id;
+  }, bookId);
+
+  try {
+    await page.evaluate((id) => { location.hash = `#book/${id}/ideen`; }, bookId);
+    const boardCard = page.locator('#ideen-board-card');
+    await expect(boardCard).toBeVisible();
+    await page.waitForTimeout(1000); // cardFadeIn (Transform = Containing-Block)
+
+    await boardCard.getByRole('button', { name: 'Board im Vollbild anzeigen (Esc beendet)' }).click();
+    await page.waitForFunction(() => document.fullscreenElement?.id === 'ideen-board-card');
+    await expect(boardCard.getByRole('button', { name: 'Vollbild beenden' })).toHaveAttribute('aria-pressed', 'true');
+
+    const card = boardCard.locator(`[data-idee-card-id="${ideeId}"]`);
+    await card.hover();
+    await card.getByRole('button', { name: 'Verknüpfen' }).click();
+    const popover = page.locator('.idee-link-popover');
+    await expect(popover).toBeVisible();
+
+    const res = await page.evaluate(() => {
+      const o = document.querySelector('.idee-link-popover');
+      const r = o.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + 10);
+      return { inCard: document.getElementById('ideen-board-card').contains(o), hitInPopover: !!(hit && o.contains(hit)) };
+    });
+    expect(res.inCard, 'Picker liegt im Vollbild-Teilbaum').toBe(true);
+    expect(res.hitInPopover, 'Picker ist im Vollbild anklickbar').toBe(true);
+
+    await page.evaluate(() => document.exitFullscreen());
+    await expect(boardCard.getByRole('button', { name: 'Board im Vollbild anzeigen (Esc beendet)' })).toHaveAttribute('aria-pressed', 'false');
+  } finally {
+    await page.evaluate((id) => fetch(`/ideen/${id}`, { method: 'DELETE' }), ideeId);
+  }
+});

@@ -13,9 +13,23 @@ export const IDEE_STATUSES = ['offen', 'in_arbeit', 'erledigt', 'verworfen'];
 // Sidebar-Plakette und die Zaehler — `verworfen` gehoert nicht dazu.
 export const IDEE_OPEN_STATUSES = ['offen', 'in_arbeit'];
 
+// Pro Buch schaltbare Stufen (`book_settings.ideen_stages`): `offen` und
+// `erledigt` sind immer da, die uebrigen schaltet das Buch zu.
+export const IDEE_FIXED_STATUSES = ['offen', 'erledigt'];
+export const IDEE_OPTIONAL_STATUSES = IDEE_STATUSES.filter(s => !IDEE_FIXED_STATUSES.includes(s));
+
+// Aktive Stufen in kanonischer Reihenfolge — Spiegel von
+// lib/ideen-status.js#normalizeIdeeStages. NULL = nie eingestellt = alle.
+export function normalizeIdeeStages(v) {
+  if (v == null) return [...IDEE_STATUSES];
+  const list = Array.isArray(v) ? v : String(v).split(',');
+  const wanted = new Set(list.map(s => String(s).trim()));
+  return IDEE_STATUSES.filter(s => IDEE_FIXED_STATUSES.includes(s) || wanted.has(s));
+}
+
 // Verknuepfungs-Ziele einer Idee (`idea_links.target_kind`), Reihenfolge =
 // Anzeige in Picker und Chips.
-export const IDEA_LINK_KINDS = ['research', 'beat', 'motif'];
+export const IDEA_LINK_KINDS = ['research', 'beat', 'thread', 'motif', 'draft'];
 
 // Unbekannter/leerer Wert zaehlt als erste Stufe — dieselbe Regel wie
 // `itemStatus` im Recherche-Board: eine Idee faellt nie aus dem Board, nur weil
@@ -29,9 +43,19 @@ export function isOpenIdee(idee) {
   return IDEE_OPEN_STATUSES.includes(ideeStatus(idee));
 }
 
-// Der Anker einer Idee als Bahn-Schluessel. Genau EIN Anker ist gesetzt
-// (XOR-CHECK im Schema); ohne Anker gaebe es die Zeile nicht.
+// Bahn der Ideen ohne Anker: sie gehoeren nur dem Buch, bis der Autor sie
+// einer Seite oder einem Kapitel zuordnet.
+export const LANE_BOOK = 'book:0';
+
+// Der Anker einer Idee als Bahn-Schluessel. Hoechstens EIN Anker ist gesetzt
+// (CHECK im Schema); keiner heisst Buch-Idee.
 export function ideeLaneKey(idee) {
   if (!idee) return '';
-  return idee.page_id != null ? `page:${idee.page_id}` : `chapter:${idee.chapter_id}`;
+  if (idee.page_id != null) return `page:${idee.page_id}`;
+  if (idee.chapter_id != null) return `chapter:${idee.chapter_id}`;
+  return LANE_BOOK;
+}
+
+export function isBookIdee(idee) {
+  return !!idee && idee.page_id == null && idee.chapter_id == null;
 }

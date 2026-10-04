@@ -32,6 +32,7 @@ import { formatEventDateParts } from './ereignisse/date.js';
 import { subtypIcon } from './ereignisse/subtyp.js';
 import { typRank, compareNames } from '../book/figur-typen.js';
 import { memoMethods } from './card-memo.js';
+import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 
 // Pure Filter+Sort der Figurenliste. Aus dem memoized Wrapper extrahiert, damit
 // sie ohne Alpine-Root testbar bleibt. `chapterMap` = Kapitel-Name → Reihenfolge-
@@ -83,6 +84,8 @@ export function computeFigurenSeiten(figuren, kapitel) {
 export function registerFigurenCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('figurenCard', () => ({
+    // Map fig_id → Beats der Plot-Werkstatt (Detail „Im Plot“); non-fatal geladen.
+    plotBacklinks: {},
     // Anzeige-Datum eines Lebensereignisses (Figuren-Detail, Zeitstrahl-Block).
     formatEventDate(ev) {
       return formatEventDateParts(ev, (k, p) => window.__app.t(k, p));
@@ -137,6 +140,7 @@ export function registerFigurenCard() {
         load: async (root) => {
           this._memos = {};
           if (this.figurenGraphModus === 'alter') this.ensureFigurenAlter();
+          this.loadPlotBacklinks('figure');
           await root.loadFiguren(Alpine.store('nav').selectedBookId);
           await this.$nextTick();
           this.renderFigurGraph();
@@ -156,6 +160,8 @@ export function registerFigurenCard() {
           if (!root.showFiguresCard) return;
           const bookId = Alpine.store('nav').selectedBookId;
           if (!bookId) return;
+          ctx.plotBacklinks = {};
+          ctx.loadPlotBacklinks('figure');
           await root.loadFiguren(bookId);
           // Schneller Folge-Buchwechsel: Ergebnis verwerfen, der neue
           // book:changed-Handler rendert.
@@ -322,5 +328,6 @@ export function registerFigurenCard() {
     ...presenceMethods,
     ...figurenAlterMethods,
     ...figurenLebenslaufMethods,
+    ...plotBacklinkMethods,
   }));
 }

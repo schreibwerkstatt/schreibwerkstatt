@@ -1,0 +1,111 @@
+{
+  "version": "4.18.0",
+  "date": "2026-10-04",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Ideen-Board, Knopf „Ideen-Chat“: Ein Chat prüft offene Ideen gegen den Text, sucht Ideen ohne Ort einen Abschnitt und findet Dubletten. Jeder Vorschlag wird einzeln übernommen.",
+      "en": "Ideas board, “Ideas chat” button: a chat checks open ideas against the text, finds a section for ideas without a place and spots duplicates. Each suggestion is accepted individually."
+    },
+    {
+      "kind": "neu",
+      "de": "Ideen-Board: Ideen können am ganzen Buch hängen, ohne Kapitel oder Abschnitt, und werden später per Ziehen oder Knopf zugeordnet. Die Zeile „Ganzes Buch“ sammelt sie.",
+      "en": "Ideas board: ideas can belong to the whole book without a chapter or section and be assigned later by dragging or with a button. The “Whole book” row collects them."
+    },
+    {
+      "kind": "neu",
+      "de": "Ideen-Board, Knopf „Spalten“: pro Buch festlegen, ob die Stufen „In Arbeit“ und „Verworfen“ angezeigt werden. Offen und Erledigt gibt es immer.",
+      "en": "Ideas board, “Columns” button: choose per book whether the “In progress” and “Discarded” stages are shown. Open and Done are always there."
+    },
+    {
+      "kind": "neu",
+      "de": "Ideen-Board: Jede Spalte lässt sich einzeln nach Datum oder A–Z sortieren oder von Hand ordnen. Ein Klick stellt die ursprüngliche Reihenfolge wieder her.",
+      "en": "Ideas board: each column can be sorted on its own by date or A–Z, or ordered by hand. One click restores the original order."
+    },
+    {
+      "kind": "neu",
+      "de": "Ideen-Board: Ein neuer Knopf zeigt das Board im Vollbild. Esc kehrt zur normalen Ansicht zurück.",
+      "en": "Ideas board: a new button shows the board in full screen. Esc returns to the normal view."
+    },
+    {
+      "kind": "neu",
+      "de": "Ideen lassen sich jetzt auch mit einer Werkstatt-Figur oder einem Handlungsstrang verknüpfen. Die Buchübersicht zeigt, wie viele Ideen noch ohne Ort sind und wie viele an Plot, Motiv oder Recherche hängen.",
+      "en": "Ideas can now also be linked to a workshop character or a plot thread. The book overview shows how many ideas still have no place and how many are tied to plot, motif or research."
+    },
+    {
+      "kind": "neu",
+      "de": "Figuren-, Orte- und Szenen-Karte: In der Detailansicht zeigt die Zeile „Im Plot“, welche Beats der Plot-Werkstatt dort hängen. Ein Klick öffnet den Beat im Board.",
+      "en": "Characters, places and scenes cards: in the detail view, the “In plot” row shows which beats from the plot workshop belong there. A click opens the beat on the board."
+    },
+    {
+      "kind": "neu",
+      "de": "Plot-Werkstatt: Beats lassen sich direkt auf der Karte verschieben, verwerfen oder löschen, ohne sie zu öffnen. Im Bearbeiten sind „Einordnung“ und „Beat-Bezüge“ einklappbar.",
+      "en": "Plot workshop: beats can be moved, discarded or deleted right on the card without opening them. When editing, “Context” and “Beat links” can be collapsed."
+    },
+    {
+      "kind": "neu",
+      "de": "Wortschatz-Karte: Englische Bücher werden jetzt mit englischen Funktionswörtern ausgewertet und nur mit anderen englischen Büchern verglichen.",
+      "en": "Vocabulary card: English books are now analysed with English function words and compared only with other English books."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figuren-Karte: Von Hand geänderte oder angelegte Figuren und Beziehungen bleiben bei der nächsten Komplettanalyse erhalten. Auch eine umbenannte Figur wird wiedererkannt.",
+      "en": "Characters card: characters and relationships you edited or created by hand are kept by the next full analysis. A renamed character is recognised as well."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buchlandkarte: Das Redundanz-Radar ist jetzt der Reiter „Doppelungen“ der Buchlandkarte. Die Landkarte zeigt zudem, welche Abschnitte fehlen oder seit dem letzten Stand geändert wurden.",
+      "en": "Book map: the redundancy radar is now the book map’s “Duplicates” tab. The map also shows which sections are missing or have changed since it was last updated."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Überall in der App heisst die Gliederungseinheit jetzt „Abschnitt“ statt „Seite“. „Seite“ meint nur noch Druck- und PDF-Seiten.",
+      "en": "Throughout the app, the unit of text is now called a “section” instead of a “page”. “Page” now only means printed and PDF pages."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Komplettanalyse: Figuren, die unter Spitznamen oder Beinamen auftreten, werden zuverlässiger als dieselbe Person erkannt. Orte und Szenen erscheinen seltener doppelt.",
+      "en": "Full analysis: characters who appear under nicknames or epithets are more reliably recognised as the same person. Places and scenes appear twice less often."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Wortschatz-Karte: Jede Kennzahl erklärt jetzt in einer Notiz, was sie misst, und nennt im Tooltip ihre Fachquelle.",
+      "en": "Vocabulary card: each metric now explains in a note what it measures and names its source in the tooltip."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Erzählprofil: Der Struktur-Befund erscheint erst ab einer Mindestzahl an Kapiteln. Bei sehr kurzen Büchern gibt es so keine irreführenden Aussagen mehr.",
+      "en": "Narrative profile: the structure findings only appear once the book has a minimum number of chapters. Very short books no longer get misleading statements."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Administration, Nutzung: Chat-Verläufe lassen sich nach Bewertung filtern, etwa nur Antworten mit Daumen runter.",
+      "en": "Administration, usage: chat histories can be filtered by rating, for example only answers with a thumbs down."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Kommentare, Chat-Nachrichten, Recherche-Fundstücke, Quellen, Beats und Verlaufseinträge zeigen ihre Knöpfe erst beim Überfahren. Die Ansichten wirken so ruhiger.",
+      "en": "Comments, chat messages, research items, sources, beats and history entries only show their buttons on hover. The views look calmer."
+    },
+    {
+      "kind": "behoben",
+      "de": "Plot-Werkstatt: Ein Klick auf den Pfeil am Rand des Spannungsbogens klappte ihn bei breitem Fenster manchmal nicht zu.",
+      "en": "Plot workshop: clicking the arrow at the edge of the tension arc sometimes failed to collapse it in a wide window."
+    },
+    {
+      "kind": "behoben",
+      "de": "Inhaltsverzeichnis: Das Kontextmenü eines Kapitels oder Abschnitts wurde in der Plot-Werkstatt teilweise vom Board überdeckt.",
+      "en": "Table of contents: the context menu of a chapter or section was partly hidden behind the board in the plot workshop."
+    },
+    {
+      "kind": "behoben",
+      "de": "Recherche-Board: Das Aktionsmenü eines Fundstücks wurde in kurzen Listen und im Detail-Dialog abgeschnitten oder sprang beim Überfahren. Jetzt steht es ruhig und ganz sichtbar.",
+      "en": "Research board: the action menu of a research item was cut off in short lists and in the detail dialog, or jumped on hover. It now stays put and fully visible."
+    },
+    {
+      "kind": "behoben",
+      "de": "Plot-Chat und Ideen-Chat: Die Fortschrittsanzeige stand während einer Antwort still oder zeigte null. Sie zählt jetzt laufend mit.",
+      "en": "Plot chat and ideas chat: the progress display stood still or showed zero while an answer was being written. It now counts up as it goes."
+    }
+  ]
+}

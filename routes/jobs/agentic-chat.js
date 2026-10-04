@@ -139,8 +139,8 @@ function makeAgenticChatJob(config) {
         genMs: 0, lastModel: null, webSearches: 0, webResults: [], webQueries: [],
       };
       // Token-Summen fortschreiben + UI mit echten Provider-Zahlen nachziehen
-      // (onProgress liefert nur chars-basierte Schätzung, die bei reinen
-      // Tool-Use-Iterationen ohne Text-Stream 0 bleibt). Zählt zudem
+      // (onProgress liefert nur eine chars-basierte Schätzung über Text und
+      // Werkzeug-Eingaben, ohne Denk-Tokens). Zählt zudem
       // web_search-Nutzung (server_tool_use-Blöcke, nur Claude-Web-Suche) und
       // sammelt die web_search_result-Trefferdokumente in Auftrittsreihenfolge
       // (für klickbare Zitat-Quellen im Recherche-Chat). NICHT dedupen: das

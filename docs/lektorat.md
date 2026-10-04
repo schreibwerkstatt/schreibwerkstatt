@@ -1,6 +1,6 @@
 # Lektorat
 
-KI-Prüfung einer Seite (Seiten-Lektorat, Job `check`) oder aller Seiten eines Buchs (Buch-Lektorat, Job `batch-check`). Ergebnis: eine Liste von Befunden (`fehler`) mit zeichengenauem `original`, Vorschlag `korrektur` und `erklaerung`, dazu `szenen`, `stilanalyse`, `fazit`. Befunde landen in `page_checks` (History) und werden in der Notebook-Leseansicht markiert, ausgewählt und übernommen.
+KI-Prüfung einer Seite (Abschnitts-Lektorat, Job `check`) oder aller Seiten eines Buchs (Buch-Lektorat, Job `batch-check`). Ergebnis: eine Liste von Befunden (`fehler`) mit zeichengenauem `original`, Vorschlag `korrektur` und `erklaerung`, dazu `szenen`, `stilanalyse`, `fazit`. Befunde landen in `page_checks` (History) und werden in der Notebook-Leseansicht markiert, ausgewählt und übernommen.
 
 ## Pipeline (Server)
 
@@ -18,7 +18,7 @@ KI-Prüfung einer Seite (Seiten-Lektorat, Job `check`) oder aller Seiten eines B
 
 ### Pflicht-Invarianten
 
-- **Ein Kern für beide Jobs.** Seiten- und Buch-Lektorat prüfen jede Seite über `checkOnePage` — gleicher Prompt, gleiche Cache-Signatur, gleiche Nachbearbeitung. Eine Seite, die das Buch-Lektorat geprüft hat, ist für das Seiten-Lektorat ein Cache-Treffer und umgekehrt (gegated: [tests/integration/cache-extras.test.js](../tests/integration/cache-extras.test.js)). Ein Kontext-Input, der nur in einem der Jobs geladen wird, gehört nicht in den Job, sondern in `checkOnePage`.
+- **Ein Kern für beide Jobs.** Abschnitts- und Buch-Lektorat prüfen jede Seite über `checkOnePage` — gleicher Prompt, gleiche Cache-Signatur, gleiche Nachbearbeitung. Eine Seite, die das Buch-Lektorat geprüft hat, ist für das Abschnitts-Lektorat ein Cache-Treffer und umgekehrt (gegated: [tests/integration/cache-extras.test.js](../tests/integration/cache-extras.test.js)). Ein Kontext-Input, der nur in einem der Jobs geladen wird, gehört nicht in den Job, sondern in `checkOnePage`.
 - **Cache-Signatur deckt jeden Input ab**, der den Output formt: Seitentext + `updated_at`, Kapitelkontext (Figuren, Beziehungen, Schauplätze, Motive), `narrativeLabels` (Perspektive, Tempus, **Buchtyp** — wählt das Typ-Profil), Textsorte, Stil-/Regel-Strings, Nachbarauszüge, Modell + `PROMPTS_VERSION` + Effort, Lauf-Parameter aus `_runSig` (Stil-Cap, Split/K/Schwelle). Neuer Input ⇒ in die Signatur.
 - **Nachbearbeitung läuft auch auf dem Cache-Pfad** (`finalizeFehler`), damit eine Profil- oder Filter-Änderung alte Cache-Zeilen nicht durchlässt.
 - **Selbst-Widerruf-Filter nur auf eindeutige Widerrufsformen** (`NON_ERROR_RE`: «kein Fehler», «Korrektur entfällt», «ist vertretbar», «is in fact correct» …). Blosse Abschwächer wie «möglicherweise» stehen auch in echten Befunden und dürfen keinen Eintrag kippen (gegated: [tests/unit/lektorat-dedup.test.js](../tests/unit/lektorat-dedup.test.js)).

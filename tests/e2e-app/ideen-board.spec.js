@@ -16,22 +16,50 @@ const COLUMNS = ['offen', 'in_arbeit', 'erledigt', 'verworfen'];
 // exakte Zeilen — plot-dnd.spec.js etwa erwartet genau seine drei Beats auf dem
 // Board. Was dieses Spec an PLOT-Daten anlegt, raeumt es darum wieder weg;
 // Loeschen des Akts nimmt seine Beats mit (CASCADE), und mit dem Beat faellt
-// auch die Ideen-Kante. Die Ideen selbst bleiben stehen: sie zaehlt niemand.
+// auch die Ideen-Kante. Auch die Ideen raeumt es weg: ideen-stages.spec.js
+// zaehlt Spalten, und eine Idee, die hier in „In Arbeit"/„Verworfen" liegen
+// bliebe, hielte dort die abgeschaltete Stufe sichtbar. Weggeraeumt wird alles,
+// was nach dem Start dieses Specs dazugekommen ist.
 const createdActIds = [];
+let preexistingIdeeIds = null;
 
-test.afterAll(async ({ browser }) => {
-  if (!createdActIds.length) return;
+async function withSeededPage(browser, fn) {
   const page = await browser.newPage();
   try {
     await page.goto('/');
     await page.waitForFunction(() => window.__app && window.Alpine.store('nav').selectedBookId);
-    await page.evaluate(
-      (ids) => Promise.all(ids.map(id => fetch(`/plot/acts/${id}`, { method: 'DELETE' }))),
-      createdActIds,
-    );
+    return await fn(page);
   } finally {
     await page.close();
   }
+}
+
+const boardIdeeIds = (page) => page.evaluate(async () => {
+  const bookId = window.Alpine.store('nav').selectedBookId;
+  const data = await fetch(`/ideen/board?book_id=${bookId}`).then(r => r.json());
+  return data.ideen.map(i => i.id);
+});
+
+test.beforeAll(async ({ browser }) => {
+  preexistingIdeeIds = await withSeededPage(browser, boardIdeeIds);
+});
+
+test.afterAll(async ({ browser }) => {
+  await withSeededPage(browser, async (page) => {
+    if (createdActIds.length) {
+      await page.evaluate(
+        (ids) => Promise.all(ids.map(id => fetch(`/plot/acts/${id}`, { method: 'DELETE' }))),
+        createdActIds,
+      );
+    }
+    if (!preexistingIdeeIds) return;
+    const keep = new Set(preexistingIdeeIds);
+    const stale = (await boardIdeeIds(page)).filter(id => !keep.has(id));
+    await page.evaluate(
+      (ids) => Promise.all(ids.map(id => fetch(`/ideen/${id}`, { method: 'DELETE' }))),
+      stale,
+    );
+  });
 });
 
 test('ideen-board: Bahnen aus dem Baum, Stufen-Spalten, Filter blendet aus und sagt es', async ({ page }) => {
@@ -383,4 +411,189 @@ test('ideen-board: Kapitel und Bahnen klappen — und der Stand ueberlebt den Re
   // Die Bahn bleibt stehen und zaehlt, was sie verbirgt.
   await expect(pageRow.locator(`[data-idee-lane="page:${made.pageId}"]`).first()).toBeAttached();
   await expect(pageRow.locator('.ideen-board-folded').first()).toBeVisible();
+});
+
+// Buch-Ideen: der Einfall ohne Ort. Hier gegen die echte App, weil die Aussage
+// an der Oberflaeche haengt — dass das Anlegen-Feld das Buch VORWAEHLT (kein
+// Pflicht-Picker vor dem Festhalten) und dass „Zuordnen" die Karte aus der
+// Buch-Bahn in die Bahn ihres neuen Ankers traegt.
+test('ideen-board: Idee ohne Stelle festhalten und spaeter einem Kapitel zuordnen', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const chapter = await page.evaluate(async (id) => {
+    const tree = await fetch(`/content/books/${id}/tree`).then(r => r.json());
+    return { id: tree.chapters[0].id, name: tree.chapters[0].name };
+  }, bookId);
+
+  await page.evaluate((id) => { location.hash = `#book/${id}/ideen`; }, bookId);
+  const card = page.locator('#ideen-board-card');
+  await expect(card).toBeVisible();
+
+  await card.locator('.ideen-board-add-input').fill('Vielleicht ein Prolog aus Sicht der Schwester');
+  await card.locator('.ideen-board-add-input').press('Enter');
+
+  const bookCell = card.locator('[data-idee-lane="book:0"][data-idee-status-cell="offen"]');
+  const ideeCard = bookCell.locator('.idee-board-card', { hasText: 'Prolog aus Sicht der Schwester' });
+  await expect(ideeCard).toHaveCount(1);
+  const ideeId = await ideeCard.getAttribute('data-idee-card-id');
+
+  await ideeCard.hover();
+  await ideeCard.getByRole('button', { name: 'Kapitel oder Abschnitt zuordnen' }).click();
+  const panel = card.locator('.ideen-board-add').filter({ hasText: 'Idee zuordnen' });
+  await panel.locator('.combobox-trigger').click();
+  await page.locator('.combobox-option:visible', { hasText: chapter.name }).first().click();
+  await panel.getByRole('button', { name: 'Zuordnen', exact: true }).click();
+
+  await expect(card.locator(`[data-idee-lane="chapter:${chapter.id}"] [data-idee-card-id="${ideeId}"]`)).toHaveCount(1);
+  await expect(card.locator('[data-idee-lane="book:0"]')).toHaveCount(0);
+
+  await page.evaluate((id) => fetch(`/ideen/${id}`, { method: 'DELETE' }), ideeId);
+});
+
+// Manuelle Reihenfolge: nur solange die Spalte in ihrer urspruenglichen Position
+// steht, zieht man INNERHALB der Spalte, und der Stand liegt danach auf dem
+// Server (ideen.sort_order). Sortieren und Reset wirken nur auf diese Spalte.
+test('ideen-board: manuell sortieren per Drag in der Spalte, gespeichert', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+
+  const made = await page.evaluate(async (id) => {
+    const tree = await fetch(`/content/books/${id}/tree`).then(r => r.json());
+    const pageId = tree.chapters?.[0]?.pages?.[0]?.id;
+    const ids = [];
+    for (const content of ['Reihe eins', 'Reihe zwei', 'Reihe drei']) {
+      const r = await fetch('/ideen', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ book_id: id, page_id: pageId, content }),
+      }).then(x => x.json());
+      ids.push(r.id);
+    }
+    return { pageId, ids };
+  }, bookId);
+  const [one, two, three] = made.ids;
+
+  await page.evaluate((id) => { location.hash = `#book/${id}/ideen`; }, bookId);
+  const boardCard = page.locator('#ideen-board-card');
+  await expect(boardCard).toBeVisible();
+
+  const cell = boardCard.locator(`[data-idee-lane="page:${made.pageId}"][data-idee-status-cell="offen"]`);
+  const order = () => cell.locator('[data-idee-card-id]').evaluateAll(
+    els => els.map(e => Number(e.dataset.ideeCardId)));
+  // Nie einsortiert: die neueste oben.
+  await expect.poll(async () => (await order()).filter(i => [one, two, three].includes(i)))
+    .toEqual([three, two, one]);
+  await page.waitForTimeout(400);
+
+  // „eins" (unten) vor „drei" (oben) ziehen.
+  const grip = await cell.locator(`[data-idee-card-id="${one}"] .idee-board-grip`).boundingBox();
+  const top = await cell.locator(`[data-idee-card-id="${three}"]`).boundingBox();
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2 + 4, grip.y + grip.height / 2 - 10, { steps: 4 });
+  await page.mouse.move(top.x + top.width / 2, top.y + 4, { steps: 12 });
+  await page.waitForTimeout(150);
+  await page.mouse.up();
+
+  await expect.poll(async () => (await order()).filter(i => [one, two, three].includes(i)))
+    .toEqual([one, three, two]);
+  const saved = await page.evaluate(async (id) => {
+    const r = await fetch(`/ideen/board?book_id=${id}`).then(x => x.json());
+    return Object.fromEntries(r.ideen.map(i => [i.id, i.sort_order]));
+  }, bookId);
+  expect(saved[one]).toBeLessThan(saved[three]);
+  expect(saved[three]).toBeLessThan(saved[two]);
+
+  // Spalte „offen" nach Titel sortieren, dann zuruecksetzen: die gezogene
+  // Reihenfolge kommt wieder.
+  const head = boardCard.locator('.ideen-board-head-col--offen');
+  await head.locator('.seg-toggle button').nth(1).click();
+  await expect.poll(async () => (await order()).filter(i => [one, two, three].includes(i)))
+    .toEqual([three, one, two]);
+  await head.locator('.seg-toggle button').nth(1).click();
+  await expect.poll(async () => (await order()).filter(i => [one, two, three].includes(i)))
+    .toEqual([two, one, three]);
+  await head.locator('.ideen-board-col-sort .icon-btn').click();
+  await expect.poll(async () => (await order()).filter(i => [one, two, three].includes(i)))
+    .toEqual([one, three, two]);
+  await expect(head.locator('.ideen-board-col-sort .icon-btn')).toBeHidden();
+});
+
+// Zuordnen per Drag: eine Buch-Idee darf — als einzige — die Zeile wechseln.
+// Zwei Ziele: die Bahn eines Kapitels/Abschnitts im Board (setzt Anker UND
+// Stufe der Zielspalte) und ein Eintrag im Inhaltsverzeichnis der Sidebar (dort
+// stehen auch Anker ohne eigene Bahn; die Stufe bleibt).
+async function dragGripTo(page, grip, x, y) {
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2 + 8, grip.y + grip.height / 2 + 14, { steps: 4 });
+  await page.mouse.move(x, y, { steps: 12 });
+  await page.waitForTimeout(120);
+  await page.mouse.up();
+}
+
+test('ideen-board: Buch-Idee per Drag einem Abschnitt bzw. Kapitel zuordnen', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const made = await page.evaluate(async (id) => {
+    const tree = await fetch(`/content/books/${id}/tree`).then(r => r.json());
+    const chapterId = tree.chapters[0].id;
+    const pageId = tree.chapters[0].pages[0].id;
+    const post = (body) => fetch('/ideen', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ book_id: id, ...body }),
+    }).then(r => r.json());
+    const anchored = await post({ page_id: pageId, content: 'Verankert, gibt der Seite eine Bahn' });
+    const toLane = await post({ content: 'Buch-Idee fuer die Abschnitts-Bahn' });
+    const toTree = await post({ content: 'Buch-Idee fuers Inhaltsverzeichnis' });
+    return { chapterId, pageId, anchored: anchored.id, toLane: toLane.id, toTree: toTree.id };
+  }, bookId);
+  const anchorOf = (ideeId) => page.evaluate(async (args) => {
+    const data = await fetch(`/ideen/board?book_id=${args.bookId}`).then(r => r.json());
+    const i = data.ideen.find(x => x.id === args.ideeId);
+    return i && { page_id: i.page_id, chapter_id: i.chapter_id, status: i.status };
+  }, { bookId, ideeId });
+
+  await page.evaluate((id) => { location.hash = `#book/${id}/ideen`; }, bookId);
+  const card = page.locator('#ideen-board-card');
+  await expect(card.locator(`[data-idee-card-id="${made.toLane}"]`)).toBeVisible();
+  await page.waitForTimeout(400);
+
+  // ── Board: in die Abschnitts-Bahn, Spalte „in Arbeit" ──────────────────
+  const target = card.locator(`[data-idee-lane="page:${made.pageId}"][data-idee-status-cell="in_arbeit"]`);
+  let grip = await card.locator(`[data-idee-card-id="${made.toLane}"] .idee-board-grip`).boundingBox();
+  let drop = await target.boundingBox();
+  await dragGripTo(page, grip, drop.x + drop.width / 2, drop.y + 24);
+  await expect(target.locator(`[data-idee-card-id="${made.toLane}"]`)).toHaveCount(1, { timeout: 10000 });
+  expect(await anchorOf(made.toLane)).toEqual({ page_id: made.pageId, chapter_id: null, status: 'in_arbeit' });
+
+  // ── Verankert bleibt verankert: quer zur Bahn nimmt das Board nichts an ──
+  await page.waitForTimeout(400);
+  const bookCell = card.locator('[data-idee-lane="book:0"][data-idee-status-cell="in_arbeit"]');
+  grip = await card.locator(`[data-idee-card-id="${made.anchored}"] .idee-board-grip`).boundingBox();
+  drop = await bookCell.boundingBox();
+  await dragGripTo(page, grip, drop.x + drop.width / 2, drop.y + 24);
+  await page.waitForTimeout(300);
+  expect(await anchorOf(made.anchored)).toEqual({ page_id: made.pageId, chapter_id: null, status: 'offen' });
+
+  // ── Sidebar: auf den Kapitel-Eintrag im Inhaltsverzeichnis ─────────────
+  await page.waitForTimeout(400);
+  const treeItem = page.locator(`.page-tree [data-tree-key="c${made.chapterId}"]`);
+  await expect(treeItem).toBeVisible();
+  grip = await card.locator(`[data-idee-card-id="${made.toTree}"] .idee-board-grip`).boundingBox();
+  drop = await treeItem.boundingBox();
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2 + 8, grip.y + grip.height / 2 + 14, { steps: 4 });
+  await page.mouse.move(drop.x + drop.width / 2, drop.y + drop.height / 2, { steps: 12 });
+  // Das Ziel ist waehrend des Zugs markiert — sonst wuesste niemand, dass die
+  // Sidebar annimmt.
+  await expect(treeItem).toHaveClass(/tree-drop-target/);
+  await page.mouse.up();
+  await expect(card.locator(`[data-idee-lane="chapter:${made.chapterId}"] [data-idee-card-id="${made.toTree}"]`))
+    .toHaveCount(1, { timeout: 10000 });
+  expect(await anchorOf(made.toTree)).toEqual({ page_id: null, chapter_id: made.chapterId, status: 'offen' });
+  await expect(page.locator('.tree-drop-target')).toHaveCount(0);
+
+  await page.evaluate((ids) => Promise.all(ids.map(id => fetch(`/ideen/${id}`, { method: 'DELETE' }))),
+    [made.anchored, made.toLane, made.toTree]);
 });

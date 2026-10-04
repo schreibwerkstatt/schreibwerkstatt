@@ -6,7 +6,7 @@
 export const BOOK_CHAT_TOOLS = [
   {
     name: 'list_chapters',
-    description: 'Liefert die Kapitel- und Seitenliste: vorne total_chapters/total_pages/total_words/hint, dann pro Kapitel chapter_id, Name, Wortzahl und pages als Tupel [page_id, page_name, words] (siehe page_format). Bei grossen Büchern paginiert: steht next_offset im Ergebnis, mit offset=next_offset weiterblättern. Nutze dies für einen Überblick – und um page_ids für get_pages zu bekommen. Nicht nutzen für Detailstatistik eines einzelnen Kapitels (Dialoganteil, Top-Figuren-Erwähnungen) – dafür `get_stil_metrics` (scope=chapter, include_figures).',
+    description: 'Liefert die Kapitel- und Abschnittsliste: vorne total_chapters/total_pages/total_words/hint, dann pro Kapitel chapter_id, Name, Wortzahl und pages (= Abschnitte) als Tupel [page_id, page_name, words] (siehe page_format). Bei grossen Büchern paginiert: steht next_offset im Ergebnis, mit offset=next_offset weiterblättern. Nutze dies für einen Überblick – und um page_ids für get_pages zu bekommen. Nicht nutzen für Detailstatistik eines einzelnen Kapitels (Dialoganteil, Top-Figuren-Erwähnungen) – dafür `get_stil_metrics` (scope=chapter, include_figures).',
     input_schema: {
       type: 'object',
       properties: {
@@ -46,7 +46,7 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'get_figure_mentions',
-    description: 'Wo und wie oft wird eine Figur erwähnt? Antwort nach Kapitel und Seite, mit Count je Seite. Liefert ausserdem `first_appearance`, `last_appearance`, `total_mentions`, `pages_with_mention` – deckt Arc-Tracking-Fragen ("wann zuerst, wann zuletzt?", "wie lange präsent?") direkt ab. Leichtgewichtig – nur Auftrittsverteilung. Nicht nutzen für Profil, Beziehungen oder Lebensereignisse von X – dafür `get_figure_profile`. Gib figur_id (bevorzugt) ODER figur_name an.',
+    description: 'Wo und wie oft wird eine Figur erwähnt? Antwort nach Kapitel und Abschnitt, mit Count je Abschnitt. Liefert ausserdem `first_appearance`, `last_appearance`, `total_mentions`, `pages_with_mention` – deckt Arc-Tracking-Fragen ("wann zuerst, wann zuletzt?", "wie lange präsent?") direkt ab. Leichtgewichtig – nur Auftrittsverteilung. Nicht nutzen für Profil, Beziehungen oder Lebensereignisse von X – dafür `get_figure_profile`. Gib figur_id (bevorzugt) ODER figur_name an.',
     input_schema: {
       type: 'object',
       properties: {
@@ -58,14 +58,14 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'search_passages',
-    description: 'Durchsucht den Buch-Volltext via FTS5 (Literal-Pfad, bm25-sortiert) und liefert exakte Treffer-Offsets + Snippets. Standard: case-insensitive Literal-Suche; mit regex=true als JavaScript-Regex (umgeht FTS5 und scannt alle Seiten direkt). Mit chapter_id/page_id auf ein Kapitel oder eine Seite einschränken. Offsets sind kompatibel mit `quote_passage`. Nutze dies für "wo kommt X vor?"-Fragen über das ganze Buch, wenn X ein KONKRETES Wort/Name/eine Phrase ist. NICHT nutzen, um Stellen nach einer Eigenschaft zu finden, die nicht im Wortlaut steht — rate dann keine Stichwörter: Beispiele für ein Stilmittel, eine Stimmung, ein Motiv, „Stellen über X“ in eigenen Worten → zuerst `search_similar`; Auswahl oder Vollständigkeit über den ganzen Text (lustigste Stelle, ALLE Stellen zu X, Zusammenfassung) → Kapitel lesen via `get_chapter_text` (gebündelt). Auch nicht nutzen, wenn du bereits page_ids kennst und den vollen Seitentext brauchst (→ `get_pages` / `get_chapter_text`) oder für Figuren-Auftritte (→ `get_figure_mentions`).',
+    description: 'Durchsucht den Buch-Volltext via FTS5 (Literal-Pfad, bm25-sortiert) und liefert exakte Treffer-Offsets + Snippets. Standard: case-insensitive Literal-Suche; mit regex=true als JavaScript-Regex (umgeht FTS5 und scannt alle Abschnitte direkt). Mit chapter_id/page_id auf ein Kapitel oder einen Abschnitt einschränken. Offsets sind kompatibel mit `quote_passage`. Nutze dies für "wo kommt X vor?"-Fragen über das ganze Buch, wenn X ein KONKRETES Wort/Name/eine Phrase ist. NICHT nutzen, um Stellen nach einer Eigenschaft zu finden, die nicht im Wortlaut steht — rate dann keine Stichwörter: Beispiele für ein Stilmittel, eine Stimmung, ein Motiv, „Stellen über X“ in eigenen Worten → zuerst `search_similar`; Auswahl oder Vollständigkeit über den ganzen Text (lustigste Stelle, ALLE Stellen zu X, Zusammenfassung) → Kapitel lesen via `get_chapter_text` (gebündelt). Auch nicht nutzen, wenn du bereits page_ids kennst und den vollen Abschnittstext brauchst (→ `get_pages` / `get_chapter_text`) oder für Figuren-Auftritte (→ `get_figure_mentions`).',
     input_schema: {
       type: 'object',
       properties: {
-        pattern:     { type: 'string',  description: 'Suchmuster (literal oder Regex). Im Literal-Modus ist dies eine PHRASEN-Suche, KEINE Stichwort-ODER-Suche: mehrere Wörter werden als exakte Wortfolge gesucht (FTS5 filtert die Seiten nur vor). „lustig komisch witzig" matcht also nur diese Wortfolge, nicht Seiten, die irgendeines der Wörter enthalten. Suche nach EINEM konkreten Wort/Namen/einer festen Phrase; für Stellen nach Sinn ist das Tool ungeeignet (→ `search_similar`). Mehrere Alternativen brauchst du regex=true (z.B. `lustig|komisch|witzig`).' },
-        regex:       { type: 'boolean', description: 'true = pattern als JavaScript-Regex interpretieren, scannt alle Buchseiten ohne FTS5-Vorfilter. Default: false.' },
+        pattern:     { type: 'string',  description: 'Suchmuster (literal oder Regex). Im Literal-Modus ist dies eine PHRASEN-Suche, KEINE Stichwort-ODER-Suche: mehrere Wörter werden als exakte Wortfolge gesucht (FTS5 filtert die Abschnitte nur vor). „lustig komisch witzig" matcht also nur diese Wortfolge, nicht Abschnitte, die irgendeines der Wörter enthalten. Suche nach EINEM konkreten Wort/Namen/einer festen Phrase; für Stellen nach Sinn ist das Tool ungeeignet (→ `search_similar`). Mehrere Alternativen brauchst du regex=true (z.B. `lustig|komisch|witzig`).' },
+        regex:       { type: 'boolean', description: 'true = pattern als JavaScript-Regex interpretieren, scannt alle Abschnitte des Buchs ohne FTS5-Vorfilter. Default: false.' },
         chapter_id:  { type: 'integer', description: 'Optional: Suche auf ein Kapitel einschränken.' },
-        page_id:     { type: 'integer', description: 'Optional: Suche auf eine einzelne Seite einschränken (überschreibt chapter_id-Wirkung).' },
+        page_id:     { type: 'integer', description: 'Optional: Suche auf einen einzelnen Abschnitt einschränken (überschreibt chapter_id-Wirkung).' },
         max_results: { type: 'integer', description: 'Maximale Anzahl Treffer (default 10, max 30).' },
       },
       required: ['pattern'],
@@ -73,12 +73,12 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'search_similar',
-    description: 'Semantische Ähnlichkeitssuche (Embeddings) über das ganze Buch: findet Passagen, Szenen, Figuren, Orte und Welt-Fakten, die einem Suchtext BEDEUTUNGSMÄSSIG nahestehen — auch mit anderen Wörtern. ERSTE WAHL für Suchen nach Eigenschaft oder Sinn: Beispiele für ein Stilmittel, eine Stimmung, ein Motiv, „Stellen über X“ als Umschreibung („wo herrscht dieselbe resignierte Stimmung“, „Szenen wie ein Abschied am Bahnhof“). Für konkrete Wörter/Namen → `search_passages`; für Superlative oder Vollständigkeit über den ganzen Text (lustigste Stelle, ALLE Stellen, Zusammenfassung) → Kapitel lesen via `get_chapter_text`. Liefert nach Relevanz sortierte Treffer {kind,entity_id,title,snippet,score}; der Ausschnitt ist um den passendsten Satz zentriert. Seiten-Treffer tragen zusätzlich chapter_name und, wenn die Stelle im aktuellen Seitentext gefunden wird, offset/length (kompatibel mit `quote_passage`, dort max. 800 Zeichen). Der Ausschnitt ist oft schon die Antwort — dann NICHT noch `get_pages`/`get_chapter_text` nachschieben. Rein rückwärtsgewandt — findet Bestehendes, erfindet nichts.',
+    description: 'Semantische Ähnlichkeitssuche (Embeddings) über das ganze Buch: findet Passagen, Szenen, Figuren, Orte und Welt-Fakten, die einem Suchtext BEDEUTUNGSMÄSSIG nahestehen — auch mit anderen Wörtern. ERSTE WAHL für Suchen nach Eigenschaft oder Sinn: Beispiele für ein Stilmittel, eine Stimmung, ein Motiv, „Stellen über X“ als Umschreibung („wo herrscht dieselbe resignierte Stimmung“, „Szenen wie ein Abschied am Bahnhof“). Für konkrete Wörter/Namen → `search_passages`; für Superlative oder Vollständigkeit über den ganzen Text (lustigste Stelle, ALLE Stellen, Zusammenfassung) → Kapitel lesen via `get_chapter_text`. Liefert nach Relevanz sortierte Treffer {kind,entity_id,title,snippet,score}; der Ausschnitt ist um den passendsten Satz zentriert. Abschnitts-Treffer (kind=page) tragen zusätzlich chapter_name und, wenn die Stelle im aktuellen Abschnittstext gefunden wird, offset/length (kompatibel mit `quote_passage`, dort max. 800 Zeichen). Der Ausschnitt ist oft schon die Antwort — dann NICHT noch `get_pages`/`get_chapter_text` nachschieben. Rein rückwärtsgewandt — findet Bestehendes, erfindet nichts.',
     input_schema: {
       type: 'object',
       properties: {
         query:   { type: 'string',  description: 'Freitext, dessen Bedeutung gesucht wird (eine Beschreibung, ein Beispielsatz, ein Motiv). Für Stichwortsuche stattdessen `search_passages`.' },
-        kinds:   { type: 'array', items: { type: 'string', enum: ['page', 'scene', 'figure', 'location', 'fact', 'research'] }, description: 'Optional: auf Treffertypen einschränken (Seiten/Szenen/Figuren/Orte/Welt-Fakten; `research` = Recherche-Material des Autors, nur auf ausdrücklichen Wunsch). Default: alle ausser research.' },
+        kinds:   { type: 'array', items: { type: 'string', enum: ['page', 'scene', 'figure', 'location', 'fact', 'research'] }, description: 'Optional: auf Treffertypen einschränken (Abschnitte [page]/Szenen/Figuren/Orte/Welt-Fakten; `research` = Recherche-Material des Autors, nur auf ausdrücklichen Wunsch). Default: alle ausser research.' },
         limit:   { type: 'integer', description: 'Maximale Trefferzahl (default 20, max 50). Bei grossem snippet_chars kleiner wählen (z.B. 6–10) — sonst kürzt der Server die Liste.' },
         snippet_chars: { type: 'integer', description: 'Länge des Textausschnitts pro Treffer (default 700, max 1500 ≈ eine ganze indizierte Passage). Bei Suchen nach Eigenschaft/Stimmung/Stilmittel gross wählen (1200–1500) und limit klein (6–10) — der Ausschnitt soll die Stelle selbst zeigen und ersetzt ein teures get_pages danach.' },
       },
@@ -87,25 +87,25 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'get_pages',
-    description: 'Lädt den vollen Text bestimmter Seiten (bei Bedarf für Zitate oder Detail-Analyse). Bis zu 20 Seiten pro Aufruf – bei kleinen Büchern kannst du in einem Call das ganze Buch laden (Page-IDs vorher via list_chapters holen). Falls für die Seite ein gespeichertes Lektorat existiert, kommt es als latest_check {checked_at, error_count, fazit, stilanalyse} mit. Schwergewichtig (Volltext) – nicht nutzen für blosse Trefferlisten oder „wo kommt X vor?", dafür `search_passages` / `get_figure_mentions`. Für ein ganzes Kapitel bequemer: `get_chapter_text`. Nicht zur Massen-Inspektion ganzer Bücher aufrufen, wenn ein Aggregat-Tool (z.B. `get_stil_metrics`, `get_lektorat_hotspots`) die Frage direkt beantwortet.',
+    description: 'Lädt den vollen Text bestimmter Abschnitte (bei Bedarf für Zitate oder Detail-Analyse). Bis zu 20 Abschnitte pro Aufruf – bei kleinen Büchern kannst du in einem Call das ganze Buch laden (page_ids vorher via list_chapters holen). Falls für den Abschnitt ein gespeichertes Lektorat existiert, kommt es als latest_check {checked_at, error_count, fazit, stilanalyse} mit. Schwergewichtig (Volltext) – nicht nutzen für blosse Trefferlisten oder „wo kommt X vor?", dafür `search_passages` / `get_figure_mentions`. Für ein ganzes Kapitel bequemer: `get_chapter_text`. Nicht zur Massen-Inspektion ganzer Bücher aufrufen, wenn ein Aggregat-Tool (z.B. `get_stil_metrics`, `get_lektorat_hotspots`) die Frage direkt beantwortet.',
     input_schema: {
       type: 'object',
       properties: {
         ids:                { type: 'array', items: { type: 'integer' }, description: 'Liste der page_ids (aus list_chapters oder anderen Tool-Ergebnissen).' },
-        max_chars_per_page: { type: 'integer', description: 'Harte Kürzung pro Seite. Server clamped automatisch an das Kontextfenster – nur setzen, wenn explizit weniger gewünscht.' },
+        max_chars_per_page: { type: 'integer', description: 'Harte Kürzung pro Abschnitt. Server clamped automatisch an das Kontextfenster – nur setzen, wenn explizit weniger gewünscht.' },
       },
       required: ['ids'],
     },
   },
   {
     name: 'get_chapter_text',
-    description: 'Lädt den Volltext aller Seiten eines Kapitels in einem Call (max 20 Seiten, automatische Sortierung nach page_id). Spart die Sequenz list_chapters → get_pages. Liefert pages[{page_id,page_name,text,truncated}] + total_pages. Ideal für "fasse Kapitel X zusammen", "wie endet Kapitel 3?", "welche Szenen sind in Kapitel 2?". Falls das Kapitel >20 Seiten hat, kommt `dropped` zurück — restliche Seiten dann gezielt via `get_pages` nachladen.',
+    description: 'Lädt den Volltext aller Abschnitte eines Kapitels in einem Call (max 20 Abschnitte, automatische Sortierung nach page_id). Spart die Sequenz list_chapters → get_pages. Liefert pages[{page_id,page_name,text,truncated}] + total_pages. Ideal für "fasse Kapitel X zusammen", "wie endet Kapitel 3?", "welche Szenen sind in Kapitel 2?". Falls das Kapitel >20 Abschnitte hat, kommt `dropped` zurück — restliche Abschnitte dann gezielt via `get_pages` nachladen.',
     input_schema: {
       type: 'object',
       properties: {
         chapter_id:         { type: 'integer', description: 'Kapitel-ID aus list_chapters (Pflicht).' },
-        max_pages:          { type: 'integer', description: 'Anzahl Seiten max. (1-20, Default: alle Seiten des Kapitels bis 20).' },
-        max_chars_per_page: { type: 'integer', description: 'Harte Kürzung pro Seite. Server clamped automatisch ans Kontextfenster.' },
+        max_pages:          { type: 'integer', description: 'Anzahl Abschnitte max. (1-20, Default: alle Abschnitte des Kapitels bis 20).' },
+        max_chars_per_page: { type: 'integer', description: 'Harte Kürzung pro Abschnitt. Server clamped automatisch ans Kontextfenster.' },
       },
       required: ['chapter_id'],
     },
@@ -138,7 +138,7 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'get_figure_profile',
-    description: 'Vollständiges Profil einer Figur: Stammdaten (Typ, Geburtstag, Beruf, Rolle, Motivation, Konflikt, Entwicklung, Sozialschicht, Präsenz), Tags, Schlüsselzitate, alle Lebensereignisse (mit Kapitel/Seite), Szenen, Kapitel-Auftritte und alle Beziehungen (beide Richtungen). Schwergewichtig — für "was weißt du über X?" oder Detail-Analyse einer Figur. Enthält bereits Beziehungen – kein zusätzliches `get_figure_relations` nötig. Nicht nutzen, wenn nur Auftrittsverteilung gefragt ist (→ `get_figure_mentions`) oder nur Kanten zwischen mehreren Figuren (→ `get_figure_relations` ohne Filter). Gib figur_id (bevorzugt) ODER figur_name an.',
+    description: 'Vollständiges Profil einer Figur: Stammdaten (Typ, Geburtstag, Beruf, Rolle, Motivation, Konflikt, Entwicklung, Sozialschicht, Präsenz), Tags, Schlüsselzitate, alle Lebensereignisse (mit Kapitel/Abschnitt), Szenen, Kapitel-Auftritte und alle Beziehungen (beide Richtungen). Schwergewichtig — für "was weißt du über X?" oder Detail-Analyse einer Figur. Enthält bereits Beziehungen – kein zusätzliches `get_figure_relations` nötig. Nicht nutzen, wenn nur Auftrittsverteilung gefragt ist (→ `get_figure_mentions`) oder nur Kanten zwischen mehreren Figuren (→ `get_figure_relations` ohne Filter). Gib figur_id (bevorzugt) ODER figur_name an.',
     input_schema: {
       type: 'object',
       properties: {
@@ -164,7 +164,7 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'get_timeline',
-    description: 'Liefert den konsolidierten Zeitstrahl (zeitstrahl_events) chronologisch nach sort_order: Datum, Ereignis, Typ, Bedeutung, betroffene Kapitel/Seiten/Figuren. Mit figur_id/figur_name filtert auf Ereignisse, an denen diese Figur beteiligt ist. Mit typ filtert auf Ereignistyp (z.B. "persoenlich", "historisch"). Ideal für "wann passiert was?", "biografische Timeline von X".',
+    description: 'Liefert den konsolidierten Zeitstrahl (zeitstrahl_events) chronologisch nach sort_order: Datum, Ereignis, Typ, Bedeutung, betroffene Kapitel/Abschnitte/Figuren. Mit figur_id/figur_name filtert auf Ereignisse, an denen diese Figur beteiligt ist. Mit typ filtert auf Ereignistyp (z.B. "persoenlich", "historisch"). Ideal für "wann passiert was?", "biografische Timeline von X".',
     input_schema: {
       type: 'object',
       properties: {
@@ -192,14 +192,14 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'list_ideen',
-    description: 'Listet die Notizen/Ideen/Pendenzen, die der User zu einzelnen Seiten oder ganzen Kapiteln gespeichert hat (mit Kapitel-/Seitenkontext). Jede Idee hat `scope: "page"` oder `"chapter"` und einen `status`: offen → in_arbeit → erledigt, daneben verworfen. VERWORFEN heisst: der Autor hat sie geprüft und sich dagegen entschieden — schlage sie nicht erneut vor. Ideal um offene Anmerkungen aufzugreifen, oder zu beantworten "was wollte ich an Kapitel X noch ändern?". Filterbar nach status bzw. offen_only, page_id, chapter_id (Chapter-Filter umfasst sowohl direkt-am-Kapitel-Ideen als auch Ideen zu Seiten des Kapitels). Noch offene Ideen erscheinen zuerst.',
+    description: 'Listet die Notizen/Ideen/Pendenzen, die der User zu einzelnen Abschnitten oder ganzen Kapiteln gespeichert hat (mit Kapitel-/Abschnittskontext). Jede Idee hat `scope: "page"` (Abschnitt), `"chapter"` oder `"book"` (noch keiner Stelle zugeordnet) und einen `status`: offen → in_arbeit → erledigt, daneben verworfen. VERWORFEN heisst: der Autor hat sie geprüft und sich dagegen entschieden — schlage sie nicht erneut vor. Ideal um offene Anmerkungen aufzugreifen, oder zu beantworten "was wollte ich an Kapitel X noch ändern?". Filterbar nach status bzw. offen_only, page_id, chapter_id (Chapter-Filter umfasst sowohl direkt-am-Kapitel-Ideen als auch Ideen zu Abschnitten des Kapitels). Noch offene Ideen erscheinen zuerst. `verknuepft` nennt, woran eine Idee planerisch hängt (art = beat/motif/research/…, mit id + label) — beantwortet "welche Pendenzen hängen an Beat/Motiv/Fundstück X?".',
     input_schema: {
       type: 'object',
       properties: {
         status:     { type: 'string', enum: ['offen', 'in_arbeit', 'erledigt', 'verworfen'], description: 'Nur Ideen dieser Stufe.' },
         offen_only: { type: 'boolean', description: 'true = nur noch offene (offen ODER in_arbeit). Abkürzung statt zweier status-Aufrufe.' },
-        page_id:    { type: 'integer', description: 'Nur Ideen zu dieser Seite.' },
-        chapter_id: { type: 'integer', description: 'Nur Ideen zu diesem Kapitel (direkt-am-Kapitel + Seiten des Kapitels).' },
+        page_id:    { type: 'integer', description: 'Nur Ideen zu diesem Abschnitt.' },
+        chapter_id: { type: 'integer', description: 'Nur Ideen zu diesem Kapitel (direkt-am-Kapitel + Abschnitte des Kapitels).' },
         limit:      { type: 'integer', description: 'Maximale Anzahl (default 50, max 200).' },
       },
       required: [],
@@ -207,15 +207,15 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'list_research_items',
-    description: 'Listet das Recherche-Board des Buchs: vom Autor gesammelte Fakten, Zitate, Links, Notizen, PDFs und Interviews (id, kind, status, Titel, Kurztext, Tags). `stellen` nennt die Kapitel/Seiten, mit denen ein Fundstück verknüpft ist, `bezug` die Figuren/Orte/Szenen. `status`: offen → in_arbeit → eingearbeitet, daneben verworfen (geprüft, bewusst nicht verwendet). Beantwortet "was habe ich zu X recherchiert?", "welche Fakten gehören zu Kapitel 3?", "was ist noch nicht eingearbeitet?". Filter: q (Volltext), kind, status, chapter_id (Kapitel + seine Seiten), page_id. Das Board ist Material des Autors, KEIN Manuskripttext — zitiere daraus nie als Buchstelle.',
+    description: 'Listet das Recherche-Board des Buchs: vom Autor gesammelte Fakten, Zitate, Links, Notizen, PDFs und Interviews (id, kind, status, Titel, Kurztext, Tags). `stellen` nennt die Kapitel/Abschnitte, mit denen ein Fundstück verknüpft ist, `bezug` die Figuren/Orte/Szenen. `status`: offen → in_arbeit → eingearbeitet, daneben verworfen (geprüft, bewusst nicht verwendet). Beantwortet "was habe ich zu X recherchiert?", "welche Fakten gehören zu Kapitel 3?", "was ist noch nicht eingearbeitet?". Filter: q (Volltext), kind, status, chapter_id (Kapitel + seine Abschnitte), page_id. Das Board ist Material des Autors, KEIN Manuskripttext — zitiere daraus nie als Buchstelle.',
     input_schema: {
       type: 'object',
       properties: {
         q:          { type: 'string', description: 'Optionale Volltextsuche.' },
         kind:       { type: 'string', enum: ['note', 'link', 'quote', 'fact', 'image', 'document', 'transcript'], description: 'Optionaler Typfilter.' },
         status:     { type: 'string', enum: ['offen', 'in_arbeit', 'eingearbeitet', 'verworfen'], description: 'Nur Fundstücke dieser Stufe.' },
-        chapter_id: { type: 'integer', description: 'Nur Fundstücke an diesem Kapitel oder an einer seiner Seiten.' },
-        page_id:    { type: 'integer', description: 'Nur Fundstücke an dieser Seite.' },
+        chapter_id: { type: 'integer', description: 'Nur Fundstücke an diesem Kapitel oder an einem seiner Abschnitte.' },
+        page_id:    { type: 'integer', description: 'Nur Fundstücke an diesem Abschnitt.' },
       },
       required: [],
     },
@@ -231,24 +231,24 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'get_lektorat_hotspots',
-    description: 'Aggregat über page_checks (letzter Check pro Seite): pro Kapitel total/avg/max Fehleranzahl plus Top-N-Seiten mit den meisten Fehlern (inkl. fazit-Snippet). Beantwortet "wo sind die schwersten Lektorat-Probleme?", "welche Kapitel brauchen am meisten Arbeit?". Schneller Überblick. Nutze danach `get_lektorat_findings` für die konkreten Findings einer Seite/eines Kapitels. Nicht nutzen für Stil-/Lesbarkeitsmetriken (Passiv-Anteil, LIX, Dialoganteil) – dafür `get_stil_metrics`. Hotspots zählen Fehler-Findings; Metriken messen Satzstruktur.',
+    description: 'Aggregat über page_checks (letzter Check pro Abschnitt): pro Kapitel total/avg/max Fehleranzahl plus Top-N-Abschnitte mit den meisten Fehlern (inkl. fazit-Snippet). Beantwortet "wo sind die schwersten Lektorat-Probleme?", "welche Kapitel brauchen am meisten Arbeit?". Schneller Überblick. Nutze danach `get_lektorat_findings` für die konkreten Findings eines Abschnitts/Kapitels. Nicht nutzen für Stil-/Lesbarkeitsmetriken (Passiv-Anteil, LIX, Dialoganteil) – dafür `get_stil_metrics`. Hotspots zählen Fehler-Findings; Metriken messen Satzstruktur.',
     input_schema: {
       type: 'object',
       properties: {
-        chapter_id: { type: 'integer', description: 'Nur Seiten dieses Kapitels.' },
-        min_errors: { type: 'integer', description: 'Mindest-Fehleranzahl pro Seite (default 0).' },
-        limit:      { type: 'integer', description: 'Anzahl Top-Seiten (default 20, max 100).' },
+        chapter_id: { type: 'integer', description: 'Nur Abschnitte dieses Kapitels.' },
+        min_errors: { type: 'integer', description: 'Mindest-Fehleranzahl pro Abschnitt (default 0).' },
+        limit:      { type: 'integer', description: 'Anzahl Top-Abschnitte (default 20, max 100).' },
       },
       required: [],
     },
   },
   {
     name: 'get_lektorat_findings',
-    description: 'Konkrete Lektorat-Findings (Einzelbefunde, nicht nur Aggregat). Liefert findings[{page_id,page_name,chapter_id,chapter_name,checked_at,typ,original,korrektur,erklaerung,offset?,length?}] aus dem letzten Check pro Seite. Plus by_typ-Verteilung und total_findings. Filterbar nach page_id, chapter_id und typ (z.B. "stil","grammatik","rechtschreibung","interpunktion","fluss","wortwahl"). Ideal für "welche Stilfehler gibt es im Kapitel?", "zeig mir konkrete Lektorat-Vorschläge zu Seite X", "wo wurden Grammatikfehler gefunden?". Vorlauf: `get_lektorat_hotspots` für Überblick, dann hier ins Detail.',
+    description: 'Konkrete Lektorat-Findings (Einzelbefunde, nicht nur Aggregat). Liefert findings[{page_id,page_name,chapter_id,chapter_name,checked_at,typ,original,korrektur,erklaerung,offset?,length?}] aus dem letzten Check pro Abschnitt. Plus by_typ-Verteilung und total_findings. Filterbar nach page_id, chapter_id und typ (z.B. "stil","grammatik","rechtschreibung","interpunktion","fluss","wortwahl"). Ideal für "welche Stilfehler gibt es im Kapitel?", "zeig mir konkrete Lektorat-Vorschläge zu Abschnitt X", "wo wurden Grammatikfehler gefunden?". Vorlauf: `get_lektorat_hotspots` für Überblick, dann hier ins Detail.',
     input_schema: {
       type: 'object',
       properties: {
-        page_id:    { type: 'integer', description: 'Nur Findings dieser Seite.' },
+        page_id:    { type: 'integer', description: 'Nur Findings dieses Abschnitts.' },
         chapter_id: { type: 'integer', description: 'Nur Findings dieses Kapitels (ignoriert wenn page_id gesetzt).' },
         typ:        { type: 'string',  description: 'Optional: Filter nach Fehler-Typ (case-insensitive, z.B. "stil").' },
         limit:      { type: 'integer', description: 'Max. Findings im Output (default 30, max 100). Aggregate (by_typ, total_findings) zählen alle Treffer.' },
@@ -258,7 +258,7 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'get_stil_metrics',
-    description: 'Stil- und Lesbarkeitsmetriken aus page_stats. Drei Modi via scope: "book" (Aggregat über das ganze Buch), "chapter" (Aufschlüsselung pro Kapitel, optional gefiltert via chapter_id), "page" (Top-N-Seiten nach einer Metrik). Liefert words/chars/sentences/dialog_chars/dialog_ratio_percent/filler_count/passive_count/adverb_count/avg_sentence_len/sentence_len_p90/lix/flesch_de. Mit `include_figures=true` (nur scope=chapter) kommen pro Kapitel Top-5-Figuren-Erwähnungen mit. Ideal für "wie viel Passiv im Buch?", "welche Kapitel haben am meisten Dialog?", "welche Seiten haben höchsten LIX?", "wer ist in Kapitel X am häufigsten?". Nicht nutzen für Fehleranzahl/Lektorat-Hotspots – dafür `get_lektorat_hotspots`.',
+    description: 'Stil- und Lesbarkeitsmetriken aus page_stats. Drei Modi via scope: "book" (Aggregat über das ganze Buch), "chapter" (Aufschlüsselung pro Kapitel, optional gefiltert via chapter_id), "page" (Top-N-Abschnitte nach einer Metrik). Liefert words/chars/sentences/dialog_chars/dialog_ratio_percent/filler_count/passive_count/adverb_count/avg_sentence_len/sentence_len_p90/lix/flesch_de. Mit `include_figures=true` (nur scope=chapter) kommen pro Kapitel Top-5-Figuren-Erwähnungen mit. Ideal für "wie viel Passiv im Buch?", "welche Kapitel haben am meisten Dialog?", "welche Abschnitte haben höchsten LIX?", "wer ist in Kapitel X am häufigsten?". Nicht nutzen für Fehleranzahl/Lektorat-Hotspots – dafür `get_lektorat_hotspots`.',
     input_schema: {
       type: 'object',
       properties: {
@@ -271,7 +271,7 @@ export const BOOK_CHAT_TOOLS = [
           description: 'Nur für scope=page: nach welcher Metrik sortiert wird. Default: passive_count.',
         },
         order:           { type: 'string', enum: ['asc', 'desc'], description: 'Nur für scope=page: Sortier-Richtung. Default: desc (höchster Wert zuerst).' },
-        limit:           { type: 'integer', description: 'Nur für scope=page: Anzahl Seiten (default 10, max 50).' },
+        limit:           { type: 'integer', description: 'Nur für scope=page: Anzahl Abschnitte (default 10, max 50).' },
       },
       required: [],
     },
@@ -289,7 +289,7 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'get_location_profile',
-    description: 'Tiefes Einzel-Ort-Profil (Pendant zu get_figure_profile): Stammdaten (Typ, Beschreibung, Stimmung, erste Erwähnung) + alle Kapitel mit Häufigkeit + `last_chapter` (Arc-Ende) + alle assoziierten Figuren + alle Szenen, die an diesem Ort spielen (mit Titel, Wertung, Kapitel/Seite). Für "erzähl mir alles über den Wald", "welche Szenen spielen im Schloss?", "wer war je am Hafen?". Auswahl per `loc_id` (aus list_locations) oder `name` (exakt oder Substring).',
+    description: 'Tiefes Einzel-Ort-Profil (Pendant zu get_figure_profile): Stammdaten (Typ, Beschreibung, Stimmung, erste Erwähnung) + alle Kapitel mit Häufigkeit + `last_chapter` (Arc-Ende) + alle assoziierten Figuren + alle Szenen, die an diesem Ort spielen (mit Titel, Wertung, Kapitel/Abschnitt). Für "erzähl mir alles über den Wald", "welche Szenen spielen im Schloss?", "wer war je am Hafen?". Auswahl per `loc_id` (aus list_locations) oder `name` (exakt oder Substring).',
     input_schema: {
       type: 'object',
       properties: {
@@ -327,12 +327,12 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'list_scenes',
-    description: 'Listet Szenen aus dem Szenenkatalog (figure_scenes) mit Titel, Wertung, Kommentar, Kapitel/Seite, beteiligten Figuren und Orten. Filterbar nach chapter_id, page_id, figur_id/figur_name (Figur ist in der Szene), loc_id (Ort der Szene). Ideal für "welche Szenen spielt X?", "Szenen in Kapitel 3", "Szenen im Wald".',
+    description: 'Listet Szenen aus dem Szenenkatalog (figure_scenes) mit Titel, Wertung, Kommentar, Kapitel/Abschnitt, beteiligten Figuren und Orten. Filterbar nach chapter_id, page_id, figur_id/figur_name (Figur ist in der Szene), loc_id (Ort der Szene). Ideal für "welche Szenen spielt X?", "Szenen in Kapitel 3", "Szenen im Wald".',
     input_schema: {
       type: 'object',
       properties: {
         chapter_id: { type: 'integer', description: 'Nur Szenen dieses Kapitels.' },
-        page_id:    { type: 'integer', description: 'Nur Szenen dieser Seite.' },
+        page_id:    { type: 'integer', description: 'Nur Szenen dieses Abschnitts.' },
         figur_id:   { type: 'string',  description: 'Nur Szenen mit dieser Figur (fig_id).' },
         figur_name: { type: 'string',  description: 'Alternative: Name/Kurzname.' },
         loc_id:     { type: 'string',  description: 'Nur Szenen an diesem Ort (loc_id).' },
@@ -362,7 +362,7 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'get_plot_board',
-    description: 'Liefert das geplante Beat-Board der Plot-Werkstatt: Akte (Spalten) → Beats (Handlungspunkte) mit Titel, Beschreibung, Status (geplant = Idee / im_buch = eingearbeitet; verworfen ist ein separates Flag), verknüpftem Zielkapitel, Strang (thread, falls Swimlanes angelegt) und beteiligten Figuren (Katalog + Werkstatt). Bei mehreren Hauptfiguren legt der User optional Handlungsstränge (threads, Swimlanes) an — parallele Erzähllinien, oft je Hauptfigur; das Top-Level-Feld threads listet sie (mit gebundener Hauptfigur), und jeder Beat trägt sein thread-Feld (Strang-Name oder null). Das ist die VORWÄRTSGERICHTETE Planung des Users (was er vorhat), getrennt von der rückwärtsgewandten Szenen-/Ereignis-Analyse des geschriebenen Texts. Beantwortet "wie ist die Handlung geplant?", "welche Beats sind noch nicht geschrieben (status=geplant)?", "welcher Beat gehört zu Kapitel X?", "wie entwickelt sich Strang/Hauptfigur Y?", "passt der Plot zum bisherigen Buch?". Pro Buch + User. Leeres Board heisst nur: keine separate Plot-Planung angelegt – nicht, dass das Buch keine Handlung hat. Für den GESCHRIEBENEN Text nutze list_scenes/get_timeline statt dieses Tools.',
+    description: 'Liefert das geplante Beat-Board der Plot-Werkstatt: Akte (Spalten) → Beats (Handlungspunkte) mit Titel, Beschreibung, Status (geplant = Idee / im_buch = eingearbeitet; verworfen ist ein separates Flag), verknüpftem Zielkapitel, Strang (thread, falls Swimlanes angelegt) beteiligten Figuren (Katalog + Werkstatt) sowie — wo gepflegt — Schauplätzen (orte), Motiven (motive), geplanter Spannung (intensitaet 1–5), erzählter Zeit (zeit) und ausgehenden Beat-Kanten (beziehungen: Setup/Payoff bereitet-vor/zahlt-ein, Kausalität fuehrt-zu/motiviert/blockiert/spiegelt). Bei mehreren Hauptfiguren legt der User optional Handlungsstränge (threads, Swimlanes) an — parallele Erzähllinien, oft je Hauptfigur; das Top-Level-Feld threads listet sie (mit gebundener Hauptfigur), und jeder Beat trägt sein thread-Feld (Strang-Name oder null). Das ist die VORWÄRTSGERICHTETE Planung des Users (was er vorhat), getrennt von der rückwärtsgewandten Szenen-/Ereignis-Analyse des geschriebenen Texts. Beantwortet "wie ist die Handlung geplant?", "welche Beats sind noch nicht geschrieben (status=geplant)?", "welcher Beat gehört zu Kapitel X?", "wie entwickelt sich Strang/Hauptfigur Y?", "passt der Plot zum bisherigen Buch?", "wo wird Setup X eingelöst?", "welche Beats spielen an Ort Y?". Pro Buch + User. Leeres Board heisst nur: keine separate Plot-Planung angelegt – nicht, dass das Buch keine Handlung hat. Für den GESCHRIEBENEN Text nutze list_scenes/get_timeline statt dieses Tools.',
     input_schema: {
       type: 'object',
       properties: {
@@ -374,12 +374,12 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'get_motifs',
-    description: 'Liefert die Motiv-Werkstatt-Konstellation dieses Users: Themen (abstrakte Cluster wie "Schuld & Vergebung") → Motive (konkrete wiederkehrende Naben wie Wasser, Spiegel, ein Lied) mit Beschreibung, trigger_terms, Beziehungen (Motiv↔Motiv, z.B. verstärkt/kontrastiert) und dem Soll/Ist-Abgleich pro Motiv. soll = wo das Motiv laut PLAN tragen soll (verknüpfte Figuren/Beats/Kapitel/Seiten). ist_count = wie oft die KI-Motiverkennung es REAL im Text fand. geist=true = geplant, aber 0 Fundstellen (fallengelassenes oder noch nicht geschriebenes Motiv). Beantwortet "welche Motive/Themen plant der User?", "welche geplanten Motive fehlen im Text (Geister)?", "wie hängen die Motive zusammen?", "trägt Motiv X laut Plan, wo es soll?". Rein rückwärtsgewandt/planend — nie generativ im Buchtext. Pro Buch + User. Fundstellen-Detail eines Motivs über get_motif_occurrences. Leere Werkstatt heisst nur: keine Motiv-Planung angelegt.',
+    description: 'Liefert die Motiv-Werkstatt-Konstellation dieses Users: Themen (abstrakte Cluster wie "Schuld & Vergebung") → Motive (konkrete wiederkehrende Naben wie Wasser, Spiegel, ein Lied) mit Beschreibung, trigger_terms, Beziehungen (Motiv↔Motiv, z.B. verstärkt/kontrastiert) und dem Soll/Ist-Abgleich pro Motiv. soll = wo das Motiv laut PLAN tragen soll (verknüpfte Figuren/Beats/Kapitel/Abschnitte). ist_count = wie oft die KI-Motiverkennung es REAL im Text fand. geist=true = geplant, aber 0 Fundstellen (fallengelassenes oder noch nicht geschriebenes Motiv). Beantwortet "welche Motive/Themen plant der User?", "welche geplanten Motive fehlen im Text (Geister)?", "wie hängen die Motive zusammen?", "trägt Motiv X laut Plan, wo es soll?". Rein rückwärtsgewandt/planend — nie generativ im Buchtext. Pro Buch + User. Fundstellen-Detail eines Motivs über get_motif_occurrences. Leere Werkstatt heisst nur: keine Motiv-Planung angelegt.',
     input_schema: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'get_motif_occurrences',
-    description: 'Liefert die realen Fundstellen (Ist) eines Motivs im Text: wo die KI-Motiverkennung es fand — nach Seite (mit Kapitel) oder Szene, mit Textausschnitt (snippet), Score und source (semantic = Embedding-Ähnlichkeit, trigger = wörtlicher trigger_terms-Treffer via FTS). Beantwortet "wo genau taucht das Wasser-Motiv auf?", "in welchen Kapiteln trägt Motiv X?". Auswahl per `motif_id` oder `motif_name` (aus get_motifs; exakt oder Substring, case-insensitive). Keine Fundstellen = Geist-Motiv oder Scan lief noch nicht.',
+    description: 'Liefert die realen Fundstellen (Ist) eines Motivs im Text: wo die KI-Motiverkennung es fand — nach Abschnitt (mit Kapitel) oder Szene, mit Textausschnitt (snippet), Score und source (semantic = Embedding-Ähnlichkeit, trigger = wörtlicher trigger_terms-Treffer via FTS). Beantwortet "wo genau taucht das Wasser-Motiv auf?", "in welchen Kapiteln trägt Motiv X?". Auswahl per `motif_id` oder `motif_name` (aus get_motifs; exakt oder Substring, case-insensitive). Keine Fundstellen = Geist-Motiv oder Scan lief noch nicht.',
     input_schema: {
       type: 'object',
       properties: {
@@ -432,7 +432,7 @@ export const BOOK_CHAT_TOOLS = [
       type: 'object',
       properties: {
         chapter_id: { type: 'integer', description: 'Nur Dialoge dieses Kapitels.' },
-        page_id:    { type: 'integer', description: 'Nur Dialoge dieser Seite.' },
+        page_id:    { type: 'integer', description: 'Nur Dialoge dieses Abschnitts.' },
         figur_id:   { type: 'string',  description: 'Nur Dialoge im Umfeld dieser Figur (fig_id).' },
         figur_name: { type: 'string',  description: 'Alternative: Name/Kurzname.' },
         min_length: { type: 'integer', description: 'Minimale Dialog-Länge in Zeichen (default 4).' },
@@ -443,11 +443,11 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'list_revisions',
-    description: 'Listet die gespeicherten Revisionen einer Seite (neueste zuerst): rev_id, created_at, source (focus/main/book/chat-apply/lektorat-apply/import/conflict), chars, words, summary. Plus total_revisions. Voraussetzung, um gezielt `diff_page_revisions` zwischen bestimmten Revisionen zu rufen, statt nur den Default-Pfad (zwei jüngste) zu nehmen.',
+    description: 'Listet die gespeicherten Revisionen eines Abschnitts (neueste zuerst): rev_id, created_at, source (focus/main/book/chat-apply/lektorat-apply/import/conflict), chars, words, summary. Plus total_revisions. Voraussetzung, um gezielt `diff_page_revisions` zwischen bestimmten Revisionen zu rufen, statt nur den Default-Pfad (zwei jüngste) zu nehmen.',
     input_schema: {
       type: 'object',
       properties: {
-        page_id: { type: 'integer', description: 'Seiten-ID (Pflicht).' },
+        page_id: { type: 'integer', description: 'Abschnitts-ID (Pflicht).' },
         limit:   { type: 'integer', description: 'Maximale Anzahl Revisionen (default 20, max 100).' },
       },
       required: ['page_id'],
@@ -455,11 +455,11 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'diff_page_revisions',
-    description: 'Vergleicht zwei Revisionen einer Seite (Plain-Text-Word-Diff). Ohne from_rev_id/to_rev_id: die zwei jüngsten Revisionen. Liefert summary{add,del,change}, chars_delta und blocks[{kind:add/del/change, text|from/to}]. Beantwortet "was hat sich an Seite X seit letztem Edit geändert?", "wie hat sich der Text entwickelt?". Für gezielten Vergleich vorher `list_revisions` rufen, um rev_ids zu holen.',
+    description: 'Vergleicht zwei Revisionen eines Abschnitts (Plain-Text-Word-Diff). Ohne from_rev_id/to_rev_id: die zwei jüngsten Revisionen. Liefert summary{add,del,change}, chars_delta und blocks[{kind:add/del/change, text|from/to}]. Beantwortet "was hat sich an Abschnitt X seit letztem Edit geändert?", "wie hat sich der Text entwickelt?". Für gezielten Vergleich vorher `list_revisions` rufen, um rev_ids zu holen.',
     input_schema: {
       type: 'object',
       properties: {
-        page_id:     { type: 'integer', description: 'Seiten-ID (Pflicht).' },
+        page_id:     { type: 'integer', description: 'Abschnitts-ID (Pflicht).' },
         from_rev_id: { type: 'integer', description: 'Optional: ältere Revision-ID (Default: zweitneueste).' },
         to_rev_id:   { type: 'integer', description: 'Optional: neuere Revision-ID (Default: neueste).' },
       },
@@ -468,11 +468,11 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'quote_passage',
-    description: 'Liefert ein zeichengenaues Zitat aus einer Seite (offset+length im Plain-Text, kompatibel mit den offsets aus `search_passages` und `get_dialogue`). Liefert page_name, chapter_name, quote (exakte Passage), before/after-Kontext und page_chars. Nutze dies vor JEDEM wörtlichen Zitat in der finalen Antwort – nie aus Erinnerung paraphrasieren oder aus get_pages-Ausschnitten Quotes zusammenkürzen. Wenn du nur Pattern + page_id kennst (kein offset): nimm `quote_match`. Max length: 800 Zeichen; max context_chars: 300.',
+    description: 'Liefert ein zeichengenaues Zitat aus einem Abschnitt (offset+length im Plain-Text, kompatibel mit den offsets aus `search_passages` und `get_dialogue`). Liefert page_name, chapter_name, quote (exakte Passage), before/after-Kontext und page_chars. Nutze dies vor JEDEM wörtlichen Zitat in der finalen Antwort – nie aus Erinnerung paraphrasieren oder aus get_pages-Ausschnitten Quotes zusammenkürzen. Wenn du nur Pattern + page_id kennst (kein offset): nimm `quote_match`. Max length: 800 Zeichen; max context_chars: 300.',
     input_schema: {
       type: 'object',
       properties: {
-        page_id:       { type: 'integer', description: 'Seiten-ID (Pflicht).' },
+        page_id:       { type: 'integer', description: 'Abschnitts-ID (Pflicht).' },
         offset:        { type: 'integer', description: 'Start-Offset im Plain-Text (Pflicht, >=0).' },
         length:        { type: 'integer', description: 'Länge in Zeichen (Pflicht, 1-800).' },
         context_chars: { type: 'integer', description: 'Vor-/Nach-Kontext (default 80, max 300, 0 = ohne).' },
@@ -482,12 +482,12 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'quote_match',
-    description: 'Bequemes Pendant zu `quote_passage`: Server sucht den Pattern (case-insensitive Literal-Substring) selbst auf der Seite und gibt das zeichengenaue Zitat + offset/length zurück. Spart die Sequenz search_passages → quote_passage, wenn du nur ein Pattern und eine page_id hast. Liefert quote, offset, length, before/after, occurrence und total_matches. Bei mehreren Treffern: `occurrence` (1-basiert) wählt den n-ten Treffer; ohne Angabe der erste. Max pattern-Länge: 800. Nicht für Regex – nur Literal. Für Buch-weite Suche ohne bekannte page_id zuerst `search_passages` rufen.',
+    description: 'Bequemes Pendant zu `quote_passage`: Server sucht den Pattern (case-insensitive Literal-Substring) selbst im Abschnitt und gibt das zeichengenaue Zitat + offset/length zurück. Spart die Sequenz search_passages → quote_passage, wenn du nur ein Pattern und eine page_id hast. Liefert quote, offset, length, before/after, occurrence und total_matches. Bei mehreren Treffern: `occurrence` (1-basiert) wählt den n-ten Treffer; ohne Angabe der erste. Max pattern-Länge: 800. Nicht für Regex – nur Literal. Für Buch-weite Suche ohne bekannte page_id zuerst `search_passages` rufen.',
     input_schema: {
       type: 'object',
       properties: {
-        page_id:       { type: 'integer', description: 'Seiten-ID (Pflicht).' },
-        pattern:       { type: 'string',  description: 'Literaler Substring, der zitiert werden soll (case-insensitive, max 800 Zeichen). Das gefundene Zitat hat die Original-Schreibweise aus dem Seitentext.' },
+        page_id:       { type: 'integer', description: 'Abschnitts-ID (Pflicht).' },
+        pattern:       { type: 'string',  description: 'Literaler Substring, der zitiert werden soll (case-insensitive, max 800 Zeichen). Das gefundene Zitat hat die Original-Schreibweise aus dem Abschnittstext.' },
         occurrence:    { type: 'integer', description: 'Wenn das Pattern mehrfach vorkommt: welches Vorkommen (1-basiert)? Default: 1.' },
         context_chars: { type: 'integer', description: 'Vor-/Nach-Kontext (default 80, max 300, 0 = ohne).' },
       },
@@ -515,14 +515,14 @@ export const BOOK_CHAT_TOOLS = [
         antwort: { type: 'string', description: 'Antwort an den User als Freitext, Markdown erlaubt. Pflichtfeld.' },
         zitate: {
           type: 'array',
-          description: 'Optional: alle wörtlichen Zitate, die in der antwort vorkommen, je mit page_id, offset, length und exakt dem zitierten Text. Halluzinationsschutz — der Server prüft, ob text.slice(offset, offset+length) == quote im aktuellen Seitentext.',
+          description: 'Optional: alle wörtlichen Zitate, die in der antwort vorkommen, je mit page_id, offset, length und exakt dem zitierten Text. Halluzinationsschutz — der Server prüft, ob text.slice(offset, offset+length) == quote im aktuellen Abschnittstext.',
           items: {
             type: 'object',
             properties: {
-              page_id: { type: 'integer', description: 'Seiten-ID des Zitats.' },
+              page_id: { type: 'integer', description: 'Abschnitts-ID des Zitats.' },
               offset:  { type: 'integer', description: 'Start-Offset im Plain-Text (>=0).' },
               length:  { type: 'integer', description: 'Länge des Zitats in Zeichen (>0).' },
-              quote:   { type: 'string',  description: 'Der exakt zitierte Text (zeichengenau zum Seiteninhalt).' },
+              quote:   { type: 'string',  description: 'Der exakt zitierte Text (zeichengenau zum Abschnittsinhalt).' },
             },
             required: ['page_id', 'offset', 'length', 'quote'],
           },

@@ -107,6 +107,43 @@ test('Tool-Modus: Argumente werden über mehrere Deltas akkumuliert, zwei parall
   } finally { ctx.teardown(); ep.close(); }
 });
 
+test('Tool-Modus: ohne usage-Chunk schätzt tokensOut die Werkzeug-Argumente mit', async () => {
+  // Plot-/Ideen-Chat antworten fast ganz über final_answer — eine Schätzung nur über
+  // den (leeren) Text ergäbe ~0 Output-Tokens, tok/s und Kosten liefen ins Leere.
+  const antwort = 'Der Beat passt, aber die Wendung kommt zu früh. '.repeat(4);
+  const args = JSON.stringify({ antwort });
+  const ep = await fakeEndpoint((body, res) => sse(res, [
+    { choices: [{ index: 0, delta: { reasoning_content: 'abcd'.repeat(10) } }] },
+    { choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'ccccccccc', function: { name: 'final_answer', arguments: args.slice(0, 30) } }] } }] },
+    { choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: args.slice(30) } }] } }] },
+    { choices: [{ index: 0, finish_reason: 'tool_calls' }] },
+  ]));
+  const ctx = _bootstrap(ep.url);
+  const seen = [];
+  try {
+    const r = await ctx.ai.callAIWithTools([{ role: 'user', content: 'x' }], SYSTEM, TOOLS, p => seen.push(p.chars), null, null, 'openai-compat');
+    assert.equal(r.toolUses[0].input.antwort, antwort);
+    assert.equal(r.text, '');
+    const cpt = ctx.ai.getContextConfigFor('openai-compat').charsPerToken || 4;
+    assert.equal(r.tokensOut, Math.ceil((args.length + 40) / cpt));
+    // Live-Fortschritt wächst mit den Argumenten, nicht erst am Ende.
+    assert.deepEqual(seen.slice(-2), [30, args.length]);
+  } finally { ctx.teardown(); ep.close(); }
+});
+
+test('Tool-Modus: usage-Chunk schlägt die Schätzung', async () => {
+  const ep = await fakeEndpoint((body, res) => sse(res, [
+    { choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'ddddddddd', function: { name: 'final_answer', arguments: '{"antwort":"ok"}' } }] } }] },
+    { choices: [{ index: 0, finish_reason: 'tool_calls' }], usage: { prompt_tokens: 500, completion_tokens: 77 } },
+  ]));
+  const ctx = _bootstrap(ep.url);
+  try {
+    const r = await ctx.ai.callAIWithTools([{ role: 'user', content: 'x' }], SYSTEM, TOOLS, null, null, null, 'openai-compat');
+    assert.equal(r.tokensOut, 77);
+    assert.equal(r.tokensIn, 500);
+  } finally { ctx.teardown(); ep.close(); }
+});
+
 test('Tool-Modus: Prosa-Abschluss bleibt Prosa (stopReason end_turn)', async () => {
   const ep = await fakeEndpoint((body, res) => sse(res, [
     { choices: [{ index: 0, delta: { content: 'Anna ist 34 Jahre alt.' } }] },

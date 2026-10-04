@@ -32,8 +32,8 @@ Antworte mit diesem JSON-Schema:
   ${FAKTEN_SCHEMA},
   "szenen": [
     {
-      "seite": "NUR der reine Seitentitel aus einem ### Header – OHNE die ###-Markierung und OHNE führende Leerzeichen. Beispiel: aus «### Was macht Adrian?» wird «Was macht Adrian?». NIEMALS den Kapitelnamen als seite. Leer wenn kein passender ### Header identifizierbar.",
-      "kapitel": "NUR der reine Kapitelname aus dem ## Header – OHNE die ##-Markierung. Beispiel: aus «## Der Vater» wird «Der Vater». Nicht der ### Seiten-Header. Leer wenn unklar.",
+      "seite": "NUR der reine Abschnittstitel aus einem ### Header – OHNE die ###-Markierung und OHNE führende Leerzeichen. Beispiel: aus «### Was macht Adrian?» wird «Was macht Adrian?». NIEMALS den Kapitelnamen als seite. Leer wenn kein passender ### Header identifizierbar.",
+      "kapitel": "NUR der reine Kapitelname aus dem ## Header – OHNE die ##-Markierung. Beispiel: aus «## Der Vater» wird «Der Vater». Nicht der ### Abschnitts-Header. Leer wenn unklar.",
       "titel": "Kurze Szenenbezeichnung (1 Satz)",
       "wertung": "stark|mittel|schwach",
       "kommentar": "Begründung der wertung + Verbesserungshinweis (2-3 Sätze): WARUM ist die Szene stark/mittel/schwach – konkret festgemacht an Spannung, Tempo, Figurenentwicklung, Konflikt/Ziel, Dialog oder Struktur. Bei «mittel»/«schwach» mindestens einen konkreten, umsetzbaren Verbesserungshinweis nennen; bei «stark» benennen, was sie trägt.",
@@ -60,8 +60,8 @@ Antworte mit diesem JSON-Schema:
           "ereignis": "Was passierte – neutral und kanonisch formuliert, NICHT aus der Figurenperspektive. Ereignisse die mehrere Figuren betreffen MÜSSEN bei allen beteiligten Figuren identisch formuliert sein (z.B. 'Geburt von Maria' für Vater, Mutter und Kind – nicht 'Geburt seiner Tochter' oder 'Eigene Geburt').",
           "typ": "persoenlich|extern",
           "bedeutung": "Bedeutung für diese Figur (1 Satz, leer wenn nicht klar)",
-          "seite": "NUR der reine Seitentitel aus einem ### Header – OHNE ###-Markierung. NIE der Kapitelname. Leer wenn unklar.",
-          "kapitel": "NUR der reine Kapitelname aus dem ## Header – OHNE ##-Markierung. Nicht der ### Seiten-Header. Leer wenn unklar."
+          "seite": "NUR der reine Abschnittstitel aus einem ### Header – OHNE ###-Markierung. NIE der Kapitelname. Leer wenn unklar.",
+          "kapitel": "NUR der reine Kapitelname aus dem ## Header – OHNE ##-Markierung. Nicht der ### Abschnitts-Header. Leer wenn unklar."
         }
       ]
     }
@@ -75,7 +75,7 @@ Kernregeln:
 - IDs eindeutig (fig_1, ort_1, song_1, …); Beziehungen nur zwischen IDs aus dieser Liste.
 - KONSERVATIV: Nur aufnehmen was im Text eindeutig belegt ist. Im Zweifel weglassen.
 - Keine historischen/realen Personen die nur erwähnt werden.
-- kapitel[].name: immer der Kapitelname (aus dem ## Header oder dem Prompt-Kontext), niemals Seitentitel.
+- kapitel[].name: immer der Kapitelname (aus dem ## Header oder dem Prompt-Kontext), niemals Abschnittstitel.
 - figuren_namen / orte_namen / figur_name: Klarnamen exakt wie im Text.
 - Songs: nur mit konkretem Titel oder Interpret aufnehmen; kontext_typ Pflicht.
 - Ereignisse: datum_label = Original-String, datum_year/month/day strukturiert (jeweils null wenn unbekannt). Ist das Jahr nicht explizit, aber aus dem Kontext erschliessbar (verankerte Jahreszahl + relative Angaben, Lebensspanne, Epoche), das abgeleitete Jahr trotzdem in datum_year eintragen und datum_unsicher=true setzen; sonst datum_unsicher=false. subtyp aus Whitelist; im Zweifel 'sonstiges'. Gleiches Ereignis bei allen beteiligten Figuren identisch formulieren.
@@ -97,7 +97,7 @@ ${FAKTEN_RULES}
 
 Szenen-Regeln:
 - Eine Szene ist ein abgegrenzter Handlungsabschnitt mit eigenem Anfang und Ende
-- seite: NUR der reine Seitentitel, OHNE die «### »-Markierung am Anfang. Aus «### Was macht Adrian?» wird «Was macht Adrian?». Wortwörtlich sonst (Gross-/Kleinschreibung, Satzzeichen). Leer lassen wenn kein passender ### Header identifizierbar. Der Kapitelname ist NIE ein gültiger Wert für seite.
+- seite: NUR der reine Abschnittstitel, OHNE die «### »-Markierung am Anfang. Aus «### Was macht Adrian?» wird «Was macht Adrian?». Wortwörtlich sonst (Gross-/Kleinschreibung, Satzzeichen). Leer lassen wenn kein passender ### Header identifizierbar. Der Kapitelname ist NIE ein gültiger Wert für seite.
 - kapitel: NUR der reine Kapitelname aus dem ## Header, OHNE die «## »-Markierung.
 - figuren_namen: aktiv beteiligte Figuren – Namen exakt wie im Text (vollständiger Name oder Spitzname); leeres Array wenn keine Figur beteiligt
 - orte_namen: Schauplatz der Szene – exakter Name wie im Text; leeres Array wenn kein konkreter Ort erwähnt
@@ -140,7 +140,7 @@ Kernregeln:
 - Eindeutige IDs (fig_1, fig_2, …); Beziehungen nur zwischen IDs dieser Liste.
 - KONSERVATIV: Nur was im Text eindeutig belegt ist.
 - Keine historischen/realen Personen die nur erwähnt werden.
-- kapitel[].name: aus ## Header oder Prompt-Kontext. Nie Seitentitel.
+- kapitel[].name: aus ## Header oder Prompt-Kontext. Nie Abschnittstitel.
 - figur_name: Klarname exakt wie im Text.
 - Ereignisse: datum_label = Original-String, datum_year/month/day strukturiert (null wenn unbekannt). subtyp aus Whitelist; im Zweifel 'sonstiges'.
 - Leere Arrays wenn nichts gefunden.`;
@@ -171,7 +171,7 @@ Kernregeln:
 - Eindeutige IDs (fig_1, fig_2, …).
 - KONSERVATIV: Nur was im Text eindeutig belegt ist.
 - Keine historischen/realen Personen die nur erwähnt werden.
-- kapitel[].name: aus ## Header oder Prompt-Kontext. Nie Seitentitel.
+- kapitel[].name: aus ## Header oder Prompt-Kontext. Nie Abschnittstitel.
 - Leere Arrays wenn nichts gefunden.`;
   }
   return `${schemaPart}
@@ -206,8 +206,8 @@ function buildKomplettSchemaOrteSzenen(_kontext = '') {
   ${_schemaBody(SONGS_SCHEMA)},${faktenSchemaLine}
   "szenen": [
     {
-      "seite": "NUR der reine Seitentitel aus einem ### Header – OHNE ###-Markierung (Beispiel: aus «### Was macht Adrian?» wird «Was macht Adrian?»). NIE der Kapitelname. Leer wenn unklar.",
-      "kapitel": "NUR der reine Kapitelname aus dem ## Header – OHNE ##-Markierung. Nicht der ### Seiten-Header. Leer wenn unklar.",
+      "seite": "NUR der reine Abschnittstitel aus einem ### Header – OHNE ###-Markierung (Beispiel: aus «### Was macht Adrian?» wird «Was macht Adrian?»). NIE der Kapitelname. Leer wenn unklar.",
+      "kapitel": "NUR der reine Kapitelname aus dem ## Header – OHNE ##-Markierung. Nicht der ### Abschnitts-Header. Leer wenn unklar.",
       "titel": "Kurze Szenenbezeichnung (1 Satz)",
       "wertung": "stark|mittel|schwach",
       "kommentar": "Begründung der wertung + Verbesserungshinweis (2-3 Sätze): WARUM ist die Szene stark/mittel/schwach – konkret festgemacht an Spannung, Tempo, Figurenentwicklung, Konflikt/Ziel, Dialog oder Struktur. Bei «mittel»/«schwach» mindestens einen konkreten, umsetzbaren Verbesserungshinweis nennen; bei «stark» benennen, was sie trägt.",

@@ -128,7 +128,13 @@ export const erzaehlprofilMethods = {
   // Deterministischer Struktur-Befund (read-time server-berechnet) + KI-Dach-Befund
   // (Autoren-Befund). Beide hängen an der GET-Antwort. Rein diagnostisch.
   erzaehlprofilBefund() {
-    return this.erzaehlprofilResult?.befund || null;
+    const b = this.erzaehlprofilResult?.befund || null;
+    return (b && !b.tooFewChapters) ? b : null;
+  },
+  // Buch unter der Kapitel-Schwelle: kein Befund, nur ein Hinweis mit der Schwelle.
+  erzaehlprofilBefundTooFew() {
+    const b = this.erzaehlprofilResult?.befund;
+    return b?.tooFewChapters ? b : null;
   },
   erzaehlprofilAutorenBefund() {
     const a = this.erzaehlprofilResult?.autorenBefund || null;

@@ -1,0 +1,24 @@
+@layer components {
+/* === Hover-Reveal: Aktionen erst auf Zuwendung ===========================
+   SSoT für Item-Aktionen, die im Ruhezustand verborgen sind und beim Überfahren
+   des Items erscheinen (Board-Karten, Kommentar-Threads). Markup:
+     <div class="… hover-reveal-host"> … <div class="… hover-reveal">…</div></div>
+   - Nur Opacity, nie visibility/display: verborgene Knöpfe bleiben per Tab
+     erreichbar, `:focus-within` blendet sie dann ein, und sie halten ihren
+     Platz — das Einblenden erzeugt keinen Layout-Sprung.
+   - Ein offenes Menü darin (Trigger mit `aria-expanded="true"`) hält die
+     Gruppe sichtbar, auch wenn der Zeiger das Item verlässt.
+   - Nur auf Hover-Geräten. Touch kennt kein Hover; dort stehen die Aktionen
+     immer da, statt unsichtbar und doch antippbar zu sein.
+   - Konsumenten mit eigenem Auswahl-Zustand ergänzen ihn als Delta, z.B.
+     `.comment-rail__thread--selected .hover-reveal { opacity: 1; }`. */
+@media (hover: hover) {
+  .hover-reveal {
+    opacity: 0;
+    transition: opacity var(--transition-base, 0.12s ease);
+  }
+  .hover-reveal-host:hover .hover-reveal,
+  .hover-reveal-host:focus-within .hover-reveal,
+  .hover-reveal:has([aria-expanded="true"]) { opacity: 1; }
+}
+}

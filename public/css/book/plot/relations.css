@@ -21,6 +21,14 @@
     font-size: var(--font-size-micro);
   }
   .plot-beat-rel-typ { flex: none; font-weight: var(--fw-semibold); color: var(--card-accent); }
+  /* Ziel-Titel sind Beat-Titel beliebiger Länge: der Chip darf unter seine
+     nowrap-Inhaltsbreite schrumpfen (min-width: 0) und umbrechen, statt aus
+     der schmalen Board-Zelle zu laufen. Gilt nur hier — andere Referenz-Reihen
+     behalten die einzeilige Ellipsis aus entity-ref.css. */
+  .plot-beat-rel > .entity-ref,
+  .plot-beat-rel > .entity-ref-group,
+  .plot-beat-rel > .entity-ref-group > .entity-ref { min-width: 0; white-space: normal; }
+  .plot-beat-rel .entity-ref__label { overflow-wrap: anywhere; }
 
   /* Beziehungs-Editor: Typ-Combobox + Ziel-Combobox + „Verknüpfen"-Button in einer
      Zeile (umbrechend auf schmalen Spalten). Darunter die bestehenden Kanten

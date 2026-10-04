@@ -39,6 +39,7 @@
     </template>
   </span>
 </div>
+<div x-data="{ beatOwnerId: o.id }"><!-- @include plot-backlinks --></div>
 
 <!-- Präsenz über die Kapitel (Zelle = Kapitel, Intensität = Szenen dort) -->
 <template x-if="ortPresence(o)">

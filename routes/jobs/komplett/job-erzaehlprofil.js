@@ -7,10 +7,11 @@
 const { db } = require('../../../db/schema');
 const {
   makeJobLogger, updateJob, completeJob, failJob, contentHttpError,
-  aiCall, getPrompts, getBookPrompts,
+  getPrompts, getBookPrompts,
   loadOrderedBookContents, loadPageContents, groupByChapter, buildSinglePassBookText, cleanPageTextForAi,
-  chunkLimitsFor, BATCH_SIZE, jobAbortControllers, tps,
+  chunkLimitsFor, BATCH_SIZE, jobAbortControllers, tps, summarizeCostByPhase,
 } = require('../shared');
+const { makeKomplettCall } = require('./call');
 const appSettings = require('../../../lib/app-settings');
 const { setContext } = require('../../../lib/log-context');
 const { makePhaseTimer } = require('./utils');
@@ -32,8 +33,8 @@ async function runErzaehlprofilJob(jobId, bookId, bookName, userEmail, provider 
     log.info(`Erzählprofil-Override (${effectiveProvider}): ${JSON.stringify(overrides.aiJob)} (global model=${appSettings.get(`ai.${effectiveProvider}.model`)}).`);
   }
   // `tier` (Kostenklasse für job.result.costByPhase) wie in runKomplettAnalyseJob durchreichen.
-  const call = (jobId_, tok_, prompt_, system_, fromPct, toPct, expectedChars, outputRatio, maxTokens, schema, tier) =>
-    aiCall(jobId_, tok_, prompt_, system_, fromPct, toPct, expectedChars, outputRatio, maxTokens, effectiveProvider, schema, tier);
+  // Geteilter Buch-Präfix → kein Schema (Cache-Regel, siehe ./call.js).
+  const call = makeKomplettCall(effectiveProvider);
   const { singlePass: singlePassLimit } = chunkLimitsFor(effectiveProvider);
   const prompts = await getPrompts(userEmail);
   const sys = await getBookPrompts(bookId, email);
@@ -80,12 +81,18 @@ async function runErzaehlprofilJob(jobId, bookId, bookName, userEmail, provider 
       jobId, bookIdInt, bookName, email, call, tok, log, effectiveProvider,
       singlePassLimit, totalChars, fullBookText, pageContents, groups, groupOrder,
       idMaps: { chNameToId }, prompts, sys,
+      // Einziger Leser des Buchblocks → 5-min-Write statt 1h (../call.js#withTtl).
+      bookBlockTtl: '5m',
     };
     const saved = await runErzaehlprofil(ctx, { figNameToId, fromPct: 55, toPct: 98 });
     pt.mark('Erzählprofil');
     log.info(`Phasen-Timing: ${pt.summary()}`);
     if (!saved) { completeJob(jobId, { empty: true }, tps(tok), 'keine Kapitel'); return; }
-    completeJob(jobId, { count: saved, tokensIn: tok.in, tokensOut: tok.out }, tps(tok), `${saved} Kapitel`);
+    const costByPhase = summarizeCostByPhase(tok);
+    completeJob(jobId, {
+      count: saved, tokensIn: tok.in, tokensOut: tok.out,
+      ...(costByPhase ? { costByPhase } : {}),
+    }, tps(tok), `${saved} Kapitel`);
   } catch (e) {
     if (e.name !== 'AbortError') log.error(`Fehler: ${e.message}`);
     failJob(jobId, e);

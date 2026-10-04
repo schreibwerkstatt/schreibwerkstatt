@@ -30,7 +30,7 @@ async function _runP8(ctx, { kontMultiPass, figKompakt, orteKompakt, chapterFakt
   try {
     if (!kontMultiPass) {
       log.info(`Kontinuität Single-Pass: ${fullBookText.length} Zeichen, ${figKompakt.length} Figuren, ${orteKompakt.length} Orte`);
-      const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, fullBookText), ttl: '1h' };
+      const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, fullBookText), ttl: '1h', sharedPrefix: true };
       return await retryOnTransientAi(() => call(jobId, tok,
         prompts.buildKontinuitaetSinglePassPrompt(bookName, null, figKompakt, orteKompakt, narrativeLabels(getBookSettings(bookIdInt, email)), anachronismus),
         [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KONTINUITAET_BLOCKS, '1h')],
@@ -126,7 +126,7 @@ async function runKontinuitaetPhase(ctx, {
 
   // ── F4: Attribut-Widerspruchs-Detektor (non-critical, nur Cloud-Klasse) ──────
   // Deterministisch gefundene Cross-Chapter-Widersprüche (Lebensereignis-Jahre, Welt-Fakten),
-  // die der fakten-basierte P8 pro Kapitel übersieht; das Modell (Konsolidierungs-Tier) urteilt.
+  // die der fakten-basierte P8 pro Kapitel übersieht; das Modell urteilt (Effort low, attribute-check.js).
   // Bereits geurteilt → NICHT durch die verify-Stufe schleusen, sondern nach ihr einmischen.
   // Mit abgewähltem P8 entfällt er mit: er ist ein ERGÄNZENDER Kontinuitäts-Detektor
   // (seine Befunde werden in denselben Check geschrieben) — ihn allein laufen zu
@@ -149,7 +149,8 @@ async function runKontinuitaetPhase(ctx, {
     // Single-Pass (Cloud, voller Buchtext im Prompt): Beleg-Zitate gegen den Text
     // prüfen. Multi-Pass hat die separate verify-Stufe; der Fakten-Pfad zitiert
     // Fakt-Aussagen → requireQuoteEvidence dort aus, die Seiten-Anker kommen über
-    // die Fakten. Die F4-Befunde tragen keine «»-Zitate → von der Beleg-Prüfung unberührt.
+    // die Fakten. F4-Befunde (`_source: 'attr'`) nimmt saveKontinuitaetResult von der
+    // Beleg-Prüfung aus: ihre Stellen sind aus Katalogdaten gebaut, nicht zitiert.
     saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, idMaps.chNameToId, effectiveProvider, log,
       { pageContents, requireQuoteEvidence: !kontMultiPass, chapterFacts: kontMultiPass ? chapterFakten : null });
   } else if (attrFindings.length) {

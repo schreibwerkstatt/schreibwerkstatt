@@ -6,6 +6,7 @@ import { figurWerkstattMethods } from '../figur-werkstatt.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { attachFullscreenSync } from '../fullscreen.js';
 import { befundSeverityMethods } from '../utils/befund-severity.js';
+import { ideenBacklinkMethods } from '../book/ideen-backlinks.js';
 
 export function registerFigurWerkstattCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -51,6 +52,9 @@ export function registerFigurWerkstattCard() {
     // Cross-Feature: Plot-Beteiligung der ausgewählten Figur ({ beatCount,
     // activeBeatCount, threads }) fürs „in N Beats geplant"-Badge → Navigation Plot.
     plotUsage: null,
+    // Cross-Feature: eigene Ideen je Werkstatt-Figur (idea_links target_kind 'draft'),
+    // geladen in loadDrafts (non-fatal) — Map draft_id → Ideen-Anrisse.
+    ideaBacklinks: {},
     // Cross-Feature: Motiv-Beteiligung der ausgewählten Figur ({ motifCount,
     // belegteCount, motifs }) fürs „trägt N Motive"-Badge → Motiv-Werkstatt.
     motifUsage: null,
@@ -215,5 +219,6 @@ export function registerFigurWerkstattCard() {
     ...figurWerkstattMethods,
     // Schwere-Plakette der Konflikte + Bogen-Befunde (Befund-Skala, nicht Szenen-Stärke).
     ...befundSeverityMethods,
+    ...ideenBacklinkMethods,
   }));
 }

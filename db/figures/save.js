@@ -1,7 +1,7 @@
 const { db } = require('../connection');
 const { NOW_ISO_SQL } = require('../now');
 const { matchFiguren } = require('../../lib/entity-match');
-const { dedupRelations, _cleanRefName, resolveErstePageId, enrichBelegWithIds, _arcToFlat } = require('./refs');
+const { dedupRelations, relationKey, _cleanRefName, resolveErstePageId, enrichBelegWithIds, _arcToFlat } = require('./refs');
 require('../migrations');
 
 // Cross-Run-Matching (Bestand ↔ neue Analyse-Figuren) liegt in
@@ -39,8 +39,11 @@ function _figMatchCandidateFromIncoming(f) {
 // `hint` = Map(fig_id → figures.id) der bestaetigten Paare.
 function planFigurenMatch(bookId, figuren, userEmail, hint = null) {
   const em = userEmail || null;
+  // Gematcht wird gegen den Namen, den die Analyse zuletzt geliefert hat (`ki_name`):
+  // eine vom Autor umbenannte Figur heisst im Text weiter so. Ohne ki_name (im Katalog
+  // angelegt) matcht sie ueber ihren eigenen Namen. Muster: locations-write.js.
   const existingRows = db.prepare(
-    'SELECT id, fig_id, name, kurzname, beruf, geburtstag, geschlecht, typ FROM figures WHERE book_id = ? AND user_email IS ?'
+    'SELECT id, fig_id, COALESCE(ki_name, name) AS name, kurzname, beruf, geburtstag, geschlecht, typ FROM figures WHERE book_id = ? AND user_email IS ?'
   ).all(bookId, em);
   const chapRows = db.prepare(`
     SELECT fa.figure_id AS fid, c.chapter_name AS cname
@@ -78,6 +81,66 @@ function _figFields(f, idMaps) {
   return { zitate, ersteErwaehnung, erstPageId, arcJson, entwicklungFlat };
 }
 
+// Vom Autor kuratierte Stammdaten. Bei `manually_edited = 1` gewinnt der Bestand gegen
+// die Analyse (dazu die Eigenschaften/figure_tags); die Analyse liefert dann nur noch
+// die abgeleiteten Felder: fig_id, erste_erwaehnung(+_page_id), schluesselzitate,
+// sort_order, stale — und ausserhalb dieser Tabelle Kapitel-Auftritte, Szenen,
+// Lebensereignisse (eigene manually_edited-Achse) und Statistik.
+const CURATED_FIELDS = [
+  'name', 'kurzname', 'typ', 'geburtstag', 'geschlecht', 'beruf', 'wohnadresse',
+  'aeusseres', 'stimme', 'hintergrund', 'beschreibung', 'sozialschicht', 'praesenz',
+  'rolle', 'motivation', 'konflikt', 'entwicklung', 'arc',
+];
+
+// Alle persistierbaren Spalten einer Figur als benannte Parameter.
+function _figColumns(f, v, sortOrder) {
+  return {
+    fig_id: f.id, name: f.name, kurzname: f.kurzname || null, typ: f.typ || null,
+    geburtstag: f.geburtstag || null, geschlecht: f.geschlecht || null, beruf: f.beruf || null,
+    wohnadresse: f.wohnadresse || null, aeusseres: f.aeusseres || null, stimme: f.stimme || null,
+    hintergrund: f.hintergrund || null, beschreibung: f.beschreibung || null,
+    sozialschicht: f.sozialschicht || null, praesenz: f.praesenz || null, rolle: f.rolle || null,
+    motivation: f.motivation || null, konflikt: f.konflikt || null,
+    entwicklung: v.entwicklungFlat, arc: v.arcJson,
+    erste_erwaehnung: v.ersteErwaehnung, erste_erwaehnung_page_id: v.erstPageId,
+    schluesselzitate: v.zitate, sort_order: sortOrder,
+  };
+}
+
+const _txt = (x) => (x == null || x === '' ? null : String(x));
+
+// Entwicklungsbogen kanonisch (gleiche Lesart wie queries.js#_parseArc): GET liefert
+// den geparsten Bogen, PUT schreibt ihn neu serialisiert — ein unveraenderter
+// Round-Trip darf nicht als Autorenaenderung zaehlen.
+function _normArc(raw) {
+  if (raw == null || raw === '') return null;
+  let a = raw;
+  if (typeof raw === 'string') {
+    try { a = JSON.parse(raw); } catch { a = { ende: raw }; }
+  }
+  if (!a || typeof a !== 'object') return null;
+  const c = {
+    typ: a.typ || '', anfang: a.anfang || '',
+    wendepunkte: Array.isArray(a.wendepunkte) ? a.wendepunkte : [], ende: a.ende || '',
+  };
+  return (c.typ || c.anfang || c.ende || c.wendepunkte.length) ? JSON.stringify(c) : null;
+}
+
+// Hat der Katalog-PUT kuratierte Felder oder Eigenschaften einer Bestands-Figur
+// geaendert? `f` ist die eingehende Figur (Round-Trip der GET-Form), `prev` die Zeile.
+function _curatedChanged(prev, prevTags, f, cols) {
+  for (const k of CURATED_FIELDS) {
+    if (k === 'arc') { if (_normArc(prev.arc) !== _normArc(cols.arc)) return true; continue; }
+    // entwicklung: roh vergleichen — cols.entwicklung leitet ein leeres Feld aus dem
+    // Bogen ab, das waere ein Scheinunterschied.
+    const next = k === 'entwicklung' ? f.entwicklung : cols[k];
+    if (_txt(prev[k]) !== _txt(next)) return true;
+  }
+  const a = [...new Set(prevTags || [])].sort();
+  const b = [...new Set((f.eigenschaften || []).filter(Boolean))].sort();
+  return a.length !== b.length || a.some((t, i) => t !== b[i]);
+}
+
 // Schreibt die Tags einer Figur (Caller löscht vorab bei Re-Write).
 // Kapitel-Vorkommen gehören NICHT hierher: `figure_appearances` ist ein abgeleiteter
 // Index aus drei Quellen und wird von rebuildFigureAppearances geschrieben, sobald alle
@@ -112,11 +175,14 @@ function _collectRelations(f, idMaps, out) {
  *   - **Reconcile identity** (`{ reconcile: true }`; Komplettanalyse): matcht per
  *     Name/Indizien, weil die `fig_id` pro Analyse-Lauf frisch vergeben und NICHT
  *     identitätsstabil ist. Matched → `stale=0` (re-detektiert). Verschwundene →
- *     `stale=1` statt Löschen (`onMissing: 'stale'`).
+ *     `stale=1` statt Löschen (`onMissing: 'stale'`). Vom Autor gepflegte Figuren
+ *     (`manually_edited=1`) behalten ihre kuratierten Felder (CURATED_FIELDS) und
+ *     Eigenschaften; Beziehungen mit `origin='manual'` bleiben stehen.
  *   - **Reconcile figId** (`{ reconcile: true, matchBy: 'figId', onMissing: 'delete' }`;
  *     Manual-Edit-CRUD `PUT /figures/:book_id`): matcht per exakter `fig_id` (round-trippt
  *     stabil durch GET→PUT), behaltene Figuren behalten `id` + ihren stale-Stand;
- *     im Katalog entfernte werden gelöscht (User autoritativ).
+ *     im Katalog entfernte werden gelöscht (User autoritativ). Setzt die Schutz-
+ *     Markierungen (`manually_edited`, Beziehungs-`origin`) aus dem Diff zum Bestand.
  *   - **Legacy Full-Replace** (Default, kein `reconcile`; Buch-Import): löscht alle
  *     Figuren + Beziehungen und legt sie neu an. Korrekt für frische Bücher, wo es
  *     nichts zu reconcilen gibt. */
@@ -138,8 +204,8 @@ function saveFigurenToDb(bookId, figuren, userEmail, idMaps, opts = {}) {
       INSERT INTO figures
         (book_id, fig_id, name, kurzname, typ, geburtstag, geschlecht, beruf, wohnadresse, aeusseres, stimme, hintergrund,
          beschreibung, sozialschicht, praesenz, rolle, motivation, konflikt, entwicklung, arc,
-         erste_erwaehnung, erste_erwaehnung_page_id, schluesselzitate, sort_order, user_email, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})`);
+         erste_erwaehnung, erste_erwaehnung_page_id, schluesselzitate, sort_order, user_email, ki_name, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})`);
     const insTag = db.prepare('INSERT OR IGNORE INTO figure_tags (figure_id, tag) VALUES (?, ?)');
     const insRel = db.prepare('INSERT INTO figure_relations (book_id, from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, belege, user_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
 
@@ -157,7 +223,7 @@ function saveFigurenToDb(bookId, figuren, userEmail, idMaps, opts = {}) {
         f.beschreibung || null, f.sozialschicht || null,
         f.praesenz || null, f.rolle || null, f.motivation || null, f.konflikt || null,
         v.entwicklungFlat, v.arcJson, v.ersteErwaehnung, v.erstPageId, v.zitate,
-        i, em
+        i, em, f.name
       );
       figIdToRowId[f.id] = fid;
       _writeFigTags(insTag, fid, f);
@@ -189,22 +255,24 @@ function _matchFigurenByFigId(existingRows, incoming) {
 // Reconcile-Pfad: siehe saveFigurenToDb-Doku.
 //   matchBy 'identity' (Default, Komplettanalyse): Name/Indizien-Match; matched →
 //     stale=0 (re-detektiert = aktiv); fig_id wird auf den frischen Lauf-Wert gesetzt.
+//     Bei manually_edited=1 bleiben die kuratierten Felder + Eigenschaften stehen.
+//     Beziehungen: nur origin='ki' wird neu aufgebaut, 'manual' bleibt.
 //   matchBy 'figId' (Manual-Edit): exakter fig_id-Match; matched behält seinen
-//     stale-Stand (User kuratiert, kein Re-Detektions-Signal).
+//     stale-Stand (User kuratiert, kein Re-Detektions-Signal). Geänderte oder neu
+//     angelegte Figuren → manually_edited=1; neue/geänderte Beziehungen → 'manual'.
 function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
   const onMissing = opts.onMissing === 'stale' ? 'stale' : 'delete';
   const matchBy = opts.matchBy === 'figId' ? 'figId' : 'identity';
-  const keepStale = matchBy === 'figId';
+  const manual = matchBy === 'figId';
   db.transaction(() => {
     // 1./2. Bestand + Match: auch stale-Figuren sind Match-Kandidaten — eine
-    //    wiederaufgetauchte Figur soll revived werden.
-    // 2. Bestand laden + Match neue → bestehende. Der identity-Pfad geht durch
+    //    wiederaufgetauchte Figur soll revived werden. Der identity-Pfad geht durch
     //    planFigurenMatch (dieselbe Funktion, die der Job vor dem Judge ruft).
     let existingRows;
     let matchOf;
-    if (matchBy === 'figId') {
+    if (manual) {
       existingRows = db.prepare(
-        'SELECT id, fig_id, name, kurzname, beruf, geburtstag, geschlecht, typ FROM figures WHERE book_id = ? AND user_email IS ?'
+        'SELECT id, fig_id FROM figures WHERE book_id = ? AND user_email IS ?'
       ).all(bookId, em);
       matchOf = _matchFigurenByFigId(existingRows, figuren);
     } else {
@@ -213,6 +281,17 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
       matchOf = plan.matchOf;
     }
     const matchedExisting = new Set([...matchOf.values()]);
+    // Volle Bestandszeilen (kuratierte Felder + manually_edited) und Eigenschaften.
+    const prevById = new Map(db.prepare(
+      'SELECT * FROM figures WHERE book_id = ? AND user_email IS ?'
+    ).all(bookId, em).map(r => [r.id, r]));
+    const prevTags = new Map();
+    for (const t of db.prepare(`
+      SELECT ft.figure_id, ft.tag FROM figure_tags ft JOIN figures f ON f.id = ft.figure_id
+      WHERE f.book_id = ? AND f.user_email IS ?`).all(bookId, em)) {
+      if (!prevTags.has(t.figure_id)) prevTags.set(t.figure_id, []);
+      prevTags.get(t.figure_id).push(t.tag);
+    }
 
     // 3. Verschwundene (nicht wiedergefundene) Bestands-Figuren behandeln.
     const missing = existingRows.filter(ex => !matchedExisting.has(ex.id));
@@ -232,76 +311,110 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
     const tmpRename = db.prepare("UPDATE figures SET fig_id = 'tmp_' || id WHERE id = ?");
     for (const exId of matchedExisting) tmpRename.run(exId);
 
-    // 5. Reine Analyse-Beziehungen komplett neu aufbauen (keine externen FKs darauf).
-    db.prepare('DELETE FROM figure_relations WHERE book_id = ? AND user_email IS ?').run(bookId, em);
+    // 5. Bestand der Beziehungen NACH dem Löschen verschwundener Figuren (CASCADE)
+    //    festhalten; geschrieben wird in Schritt 7.
+    const prevRels = db.prepare(
+      'SELECT from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, origin FROM figure_relations WHERE book_id = ? AND user_email IS ?'
+    ).all(bookId, em);
 
+    const _cols = `fig_id, name, kurzname, typ, geburtstag, geschlecht, beruf, wohnadresse, aeusseres,
+        stimme, hintergrund, beschreibung, sozialschicht, praesenz, rolle, motivation, konflikt,
+        entwicklung, arc, erste_erwaehnung, erste_erwaehnung_page_id, schluesselzitate, sort_order`.split(',').map(c => c.trim());
     const insFig = db.prepare(`
-      INSERT INTO figures
-        (book_id, fig_id, name, kurzname, typ, geburtstag, geschlecht, beruf, wohnadresse, aeusseres, stimme, hintergrund,
-         beschreibung, sozialschicht, praesenz, rolle, motivation, konflikt, entwicklung, arc,
-         erste_erwaehnung, erste_erwaehnung_page_id, schluesselzitate, sort_order, user_email, stale, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ${NOW_ISO_SQL})`);
-    // Zwei UPDATE-Varianten: identity-Match setzt stale=0 (re-detektiert), figId-Match
+      INSERT INTO figures (${_cols.join(', ')}, book_id, user_email, manually_edited, ki_name, stale, updated_at)
+      VALUES (${_cols.map(c => '@' + c).join(', ')}, @book_id, @user_email, @manually_edited, @ki_name, 0, ${NOW_ISO_SQL})`);
+    // identity-Match setzt stale=0 (re-detektiert) und den ki_name des Laufs; figId-Match
     // lässt stale unangetastet (User kuratiert; eine orphan-Figur bleibt orphan).
-    const _updCols = `
-        fig_id = ?, name = ?, kurzname = ?, typ = ?, geburtstag = ?, geschlecht = ?, beruf = ?,
-        wohnadresse = ?, aeusseres = ?, stimme = ?, hintergrund = ?, beschreibung = ?, sozialschicht = ?,
-        praesenz = ?, rolle = ?, motivation = ?, konflikt = ?, entwicklung = ?, arc = ?,
-        erste_erwaehnung = ?, erste_erwaehnung_page_id = ?, schluesselzitate = ?, sort_order = ?`;
-    const updFigResetStale = db.prepare(`UPDATE figures SET ${_updCols}, stale = 0, updated_at = ${NOW_ISO_SQL} WHERE id = ?`);
-    const updFigKeepStale  = db.prepare(`UPDATE figures SET ${_updCols}, updated_at = ${NOW_ISO_SQL} WHERE id = ?`);
-    const updFig = keepStale ? updFigKeepStale : updFigResetStale;
+    const updFig = db.prepare(`
+      UPDATE figures SET ${_cols.map(c => `${c} = @${c}`).join(', ')},
+        manually_edited = @manually_edited, ki_name = COALESCE(@ki_name, ki_name),
+        ${manual ? '' : 'stale = 0, '}updated_at = ${NOW_ISO_SQL}
+      WHERE id = @id`);
     const delTag = db.prepare('DELETE FROM figure_tags WHERE figure_id = ?');
     const insTag = db.prepare('INSERT OR IGNORE INTO figure_tags (figure_id, tag) VALUES (?, ?)');
-    const insRel = db.prepare('INSERT INTO figure_relations (book_id, from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, belege, user_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
 
     const validIds = new Set(figuren.map(f => f.id));
     const allRelations = [];
     const figIdToRowId = {};
 
+    // 6. Figuren schreiben.
     for (let i = 0; i < figuren.length; i++) {
       const f = figuren[i];
-      const v = _figFields(f, idMaps);
+      const cols = _figColumns(f, _figFields(f, idMaps), i);
       const existingId = matchOf.get(i);
       let fid;
+      let writeTags = true;
       if (existingId != null) {
-        updFig.run(
-          f.id, f.name, f.kurzname || null, f.typ || null,
-          f.geburtstag || null, f.geschlecht || null, f.beruf || null,
-          f.wohnadresse || null, f.aeusseres || null, f.stimme || null, f.hintergrund || null,
-          f.beschreibung || null, f.sozialschicht || null,
-          f.praesenz || null, f.rolle || null, f.motivation || null, f.konflikt || null,
-          v.entwicklungFlat, v.arcJson, v.ersteErwaehnung, v.erstPageId, v.zitate,
-          i, existingId
-        );
+        const prev = prevById.get(existingId);
+        let edited = prev.manually_edited ? 1 : 0;
+        if (manual) {
+          if (!edited && _curatedChanged(prev, prevTags.get(existingId), f, cols)) edited = 1;
+        } else if (edited) {
+          // Autor-Stammdaten gewinnen gegen die Analyse.
+          for (const k of CURATED_FIELDS) cols[k] = prev[k];
+          writeTags = false;
+        }
+        updFig.run({ ...cols, manually_edited: edited, ki_name: manual ? null : f.name, id: existingId });
         fid = existingId;
         // Analyse-Kinder neu schreiben (CASCADE-Kinder ohne externe Refs). Die Kapitel-
         // Vorkommen bleiben hier unangetastet — sie sind ein abgeleiteter Index, den
         // rebuildFigureAppearances am Ende des Laufs komplett neu baut.
-        delTag.run(fid);
+        if (writeTags) delTag.run(fid);
       } else {
-        const r = insFig.run(
-          bookId, f.id, f.name, f.kurzname || null, f.typ || null,
-          f.geburtstag || null, f.geschlecht || null, f.beruf || null,
-          f.wohnadresse || null, f.aeusseres || null, f.stimme || null, f.hintergrund || null,
-          f.beschreibung || null, f.sozialschicht || null,
-          f.praesenz || null, f.rolle || null, f.motivation || null, f.konflikt || null,
-          v.entwicklungFlat, v.arcJson, v.ersteErwaehnung, v.erstPageId, v.zitate,
-          i, em
-        );
-        fid = r.lastInsertRowid;
+        fid = insFig.run({
+          ...cols, book_id: bookId, user_email: em,
+          // Im Katalog angelegt = vom Autor kuratiert; kein Analyse-Name.
+          manually_edited: manual ? 1 : 0, ki_name: manual ? null : f.name,
+        }).lastInsertRowid;
       }
       figIdToRowId[f.id] = fid;
-      _writeFigTags(insTag, fid, f);
+      if (writeTags) _writeFigTags(insTag, fid, f);
       _collectRelations(f, idMaps, allRelations);
     }
-    for (const r of dedupRelations(allRelations, validIds)) {
-      const fromId = figIdToRowId[r.from];
-      const toId   = figIdToRowId[r.to];
-      if (fromId == null || toId == null) continue;
-      insRel.run(bookId, fromId, toId, r.typ, r.beschreibung, r.machtverhaltnis, r.belege, em);
-    }
+
+    // 7. Beziehungen.
+    _writeRelations(bookId, em, manual, prevRels, figIdToRowId, allRelations, validIds);
   })();
+}
+
+const _relSame = (a, b) => _txt(a.beschreibung) === _txt(b.beschreibung)
+  && (a.machtverhaltnis ?? null) == (b.machtverhaltnis ?? null);
+
+// Beziehungen eines Reconcile-Laufs schreiben.
+//   Analyse (manual=false): nur origin='ki' wird neu aufgebaut; vom Autor angelegte
+//     Beziehungen ('manual') bleiben stehen, und eine KI-Beziehung, die eine manuelle
+//     auf demselben Paar mit demselben (bzw. inversen) Typ doppelt, entfällt.
+//   Katalog-PUT (manual=true): der Body ist autoritativ (Full-Replace). Eine
+//     unveränderte KI-Beziehung behält origin='ki'; neue oder in Beschreibung/
+//     Machtverhältnis geänderte werden 'manual', eine schon manuelle bleibt es.
+function _writeRelations(bookId, em, manual, prevRels, figIdToRowId, allRelations, validIds) {
+  const insRel = db.prepare(
+    'INSERT INTO figure_relations (book_id, from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, belege, user_email, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  );
+  const rows = [];
+  for (const r of dedupRelations(allRelations, validIds, { byTyp: manual })) {
+    const fromId = figIdToRowId[r.from];
+    const toId   = figIdToRowId[r.to];
+    if (fromId == null || toId == null) continue;
+    rows.push({ ...r, fromId, toId });
+  }
+  if (manual) {
+    db.prepare('DELETE FROM figure_relations WHERE book_id = ? AND user_email IS ?').run(bookId, em);
+    const prevByKey = new Map(prevRels.map(p => [`${p.from_fig_id}|${p.to_fig_id}|${p.typ}`, p]));
+    for (const r of rows) {
+      const prev = prevByKey.get(`${r.fromId}|${r.toId}|${r.typ}`);
+      const origin = prev && prev.origin === 'ki' && _relSame(prev, r) ? 'ki' : 'manual';
+      insRel.run(bookId, r.fromId, r.toId, r.typ, r.beschreibung, r.machtverhaltnis, r.belege, em, origin);
+    }
+    return;
+  }
+  db.prepare("DELETE FROM figure_relations WHERE book_id = ? AND user_email IS ? AND origin = 'ki'").run(bookId, em);
+  const manualKeys = new Set(prevRels.filter(p => p.origin === 'manual')
+    .map(p => relationKey(p.from_fig_id, p.to_fig_id, p.typ)));
+  for (const r of rows) {
+    if (manualKeys.has(relationKey(r.fromId, r.toId, r.typ))) continue;
+    insRel.run(bookId, r.fromId, r.toId, r.typ, r.beschreibung, r.machtverhaltnis, r.belege, em, 'ki');
+  }
 }
 
 module.exports = { planFigurenMatch, saveFigurenToDb };

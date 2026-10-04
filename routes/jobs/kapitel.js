@@ -17,7 +17,7 @@ const {
 } = require('./shared');
 const contentStore = require('../../lib/content-store');
 const { narrativeLabels } = require('./narrative-labels');
-const { loadChapterReviewKomplettContext, loadStrukturContext } = require('./review-context');
+const { loadChapterReviewKomplettContext, loadStrukturContext, loadChapterPlanContext, loadChapterIdeenContext } = require('./review-context');
 const { applyQuoteVerification, belegHaystack } = require('../../lib/quote-verify');
 const { toIntId } = require('../../lib/validate');
 const appSettings = require('../../lib/app-settings');
@@ -109,6 +109,18 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
       logger.info(`Struktur-Befunde: ${strukturContext.geprueft}/${strukturContext.gesamt} Beiträge im Kapitel geprüft – fliessen in die Bewertung ein.`);
     }
 
+    // Geplante Handlung (Plot-Werkstatt): Beats, die auf diese Kapitel zielen —
+    // Autor-Absicht, gegen die die Dramaturgie-Achse das Kapitel lesen kann.
+    // null ohne Plot-Planung für dieses Kapitel (Block entfällt).
+    const planContext = loadChapterPlanContext(bookIdInt, email, [...chapterIds]);
+    if (planContext) {
+      logger.info(`Plot-Planung: ${planContext.gesamt} Beat(s) zielen auf das Kapitel – fliessen in die Bewertung ein.`);
+    }
+
+    // Offene Pendenzen des Autors an diesen Kapiteln (Ideen, user-privat): die
+    // Bewertung soll Bekanntes nicht als neue Empfehlung wiederholen.
+    const ideenContext = loadChapterIdeenContext(bookIdInt, email, [...chapterIds]);
+
     // Position in der Lesereihenfolge: erlaubt dem Modell, Dramaturgie/Pacing
     // relativ zur Funktion des Kapitels im Buch zu bewerten statt absolut.
     // Gezählt wird wie die Positions-Kachel der Karte (kdPosition): alle
@@ -135,6 +147,10 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
     const optionsSig = _sigHash({
       rev: CACHE_REV, narrative, schwerpunkt: reviewSchwerpunkt, includeSubchapters,
       stilprofil: bookSettings?.stilprofil || '', komplettContext, position, strukturContext,
+      // Nur wenn vorhanden: ohne Plot-Planung bleibt die Signatur wortgleich, und
+      // bestehende Cache-Einträge dieser Kapitel treffen weiter.
+      ...(planContext ? { planContext } : {}),
+      ...(ideenContext ? { ideenContext } : {}),
     });
 
     // pages_sig: jede Seite + ihr updated_at + Sub-Tree-Kapitelmenge inkl. deren
@@ -226,7 +242,7 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
       const chText = _buildText(contents);
       updateJob(jobId, { progress: 65, statusText: 'job.phase.aiChapterReview' });
       r = await aiCall(jobId, tok,
-        buildChapterReviewPrompt(chapterName, bookName, contents.length, chText, { ...narrative, reviewSchwerpunkt, komplettContext, position, strukturContext }),
+        buildChapterReviewPrompt(chapterName, bookName, contents.length, chText, { ...narrative, reviewSchwerpunkt, komplettContext, position, strukturContext, planContext, ideenContext }),
         SYSTEM_KAPITELREVIEW,
         65, 97, 5000, 0.2, null, undefined, SCHEMA_CHAPTER_REVIEW,
       );
@@ -268,7 +284,7 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
 
       updateJob(jobId, { progress: 90, statusText: 'job.phase.finalReview' });
       r = await aiCall(jobId, tok,
-        buildChapterReviewMultiPassPrompt(chapterName, bookName, subAnalyses, contents.length, { ...narrative, reviewSchwerpunkt, komplettContext, position, strukturContext }),
+        buildChapterReviewMultiPassPrompt(chapterName, bookName, subAnalyses, contents.length, { ...narrative, reviewSchwerpunkt, komplettContext, position, strukturContext, planContext, ideenContext }),
         SYSTEM_KAPITELREVIEW,
         90, 97, 5000, 0.2, null, undefined, SCHEMA_CHAPTER_REVIEW,
       );

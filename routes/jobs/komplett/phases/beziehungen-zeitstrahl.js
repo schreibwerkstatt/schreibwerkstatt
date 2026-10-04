@@ -2,11 +2,17 @@
 // Phase 3b: kapitelübergreifende Beziehungen (Multi-Pass) · Phase 6: Zeitstrahl.
 const { addFigurenBeziehungen, saveZeitstrahlEvents } = require('../../../../db/schema');
 const { listFigureEventsForTimeline } = require('../../../../db/zeitstrahl');
-const { i18nError, updateJob } = require('../../shared');
+const { i18nError, updateJob, toSystemBlocks } = require('../../shared');
+const { buildBookSystemBlockText, consolidationFitsCap } = require('../utils');
 const { komplettMaxTokens } = require('./tokens');
-const { providerClass } = require('../../../../lib/ai');
+const { providerClass, getContextConfigFor } = require('../../../../lib/ai');
 const appSettings = require('../../../../lib/app-settings');
 const { COST_LABEL, costTier } = require('../cost-labels');
+
+// Obergrenze für den Co-Occurrence-Auszug, wenn das Buch NICHT als gecachter Block
+// mitgeht: der Auszug steht ungecacht im User-Turn. Mit der Single-Pass-Grenze als
+// Deckel war das bei grossen Casts fast das ganze Buch pro Lauf (~1,5 Mio Zeichen).
+const P3B_EXCERPT_MAX_CHARS = 200000;
 
 /**
  * Phase 3b: Kapitelübergreifende Beziehungen (nur Multi-Pass).
@@ -15,9 +21,20 @@ const { COST_LABEL, costTier } = require('../cost-labels');
  * verschiedener Kapitel hier nachträglich identifiziert.
  */
 async function runPhase3b(ctx, figuren) {
-  const { jobId, bookIdInt, email, call, tok, log, prompts, sys, singlePassLimit, bookName, fullBookText, pageContents, effectiveProvider } = ctx;
+  const { jobId, log, sys, singlePassLimit, bookName, fullBookText, pageContents, effectiveProvider } = ctx;
 
   updateJob(jobId, { progress: 56, statusText: 'job.phase.crossChapterRelations' });
+
+  // Passt das ganze Buch ins Fenster (Cloud; Extraktion nur per extract_single_pass_cap
+  // in Chunks gezwungen), geht es als derselbe 1h-Buchblock wie in P8 mit — P3b schreibt
+  // ihn, P8 liest ihn (gleiches Tier, kein Schema: ../call.js). Billiger als ein
+  // ungecachter Auszug und vollständiger.
+  if (providerClass(effectiveProvider) === 'cloud' && fullBookText && fullBookText.length <= singlePassLimit) {
+    const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, fullBookText), ttl: '1h', sharedPrefix: true };
+    log.info(`Phase 3b – ganzes Buch (${fullBookText.length} Zeichen) als gecachter Buchblock.`);
+    return _runPhase3bCall(ctx, figuren, null, [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_FIGUREN_BLOCKS, '1h')]);
+  }
+  const excerptMax = Math.min(singlePassLimit, P3B_EXCERPT_MAX_CHARS);
 
   // Welle 3 · Co-Occurrence-basierter Textauswahl: Statt fullBookText zu trunkieren
   // (was bei lokalen Modellen bis zu 2/3 des Buchs verwirft), zielen wir auf
@@ -71,7 +88,7 @@ async function runPhase3b(ctx, figuren) {
       for (const pi of sortedIdx) {
         const p = pageContents[pi];
         const chunk = `## ${p.chapter || 'Sonstige'}\n### ${p.title}\n${p.text}`;
-        if (total + chunk.length > singlePassLimit) break;
+        if (total + chunk.length > excerptMax) break;
         parts.push(chunk);
         total += chunk.length;
       }
@@ -85,12 +102,16 @@ async function runPhase3b(ctx, figuren) {
   }
 
   if (!textForPrompt) {
-    textForPrompt = fullBookText.length <= singlePassLimit ? fullBookText : fullBookText.slice(0, singlePassLimit);
+    textForPrompt = fullBookText.length <= excerptMax ? fullBookText : fullBookText.slice(0, excerptMax);
   }
+  return _runPhase3bCall(ctx, figuren, textForPrompt, sys.SYSTEM_FIGUREN_BLOCKS);
+}
 
+async function _runPhase3bCall(ctx, figuren, textForPrompt, system) {
+  const { jobId, bookIdInt, email, call, tok, log, prompts, bookName, effectiveProvider } = ctx;
   const bzResult = await call(jobId, tok,
     prompts.buildKapiteluebergreifendeBeziehungenPrompt(bookName, figuren, textForPrompt),
-    sys.SYSTEM_FIGUREN_BLOCKS, 56, 58, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_BEZIEHUNGEN,
+    system, 56, 58, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_BEZIEHUNGEN,
     costTier(COST_LABEL.figuren),
   );
   // Pflichtfeld: ein leeres Array ist gültig («keine neuen Beziehungen»), ein fehlendes
@@ -186,13 +207,30 @@ async function runZeitstrahl(ctx, opts = {}) {
     return;
   }
 
+  // Preflight wie Phase 2 (alle Provider): die Antwort schreibt jedes Ereignis neu aus,
+  // wächst also linear mit dem Input. Sprengt sie das Cap sicher, ist die Truncation
+  // bezahlt und der Fallback unten trotzdem fällig — dann gleich direkt speichern.
+  const ztPrompt = prompts.buildZeitstrahlConsolidationPrompt(zeitstrahlEvents);
+  const ztCap = komplettMaxTokens(effectiveProvider);
+  const ztFit = consolidationFitsCap({
+    promptText: ztPrompt, charsPerToken: getContextConfigFor(effectiveProvider).charsPerToken, cap: ztCap,
+  });
+  if (!ztFit.fits) {
+    saveZeitstrahlEvents(bookIdInt, email, zeitstrahlEvents, idMaps.chNameToId, idMaps.pageNameToIdByChapter);
+    log.warn(`${zeitstrahlEvents.length} Zeitstrahl-Ereignisse direkt gespeichert – erwarteter Output `
+      + `~${ztFit.estOut} Tokens über dem Cap ${ztFit.cap} (Truncation wäre sicher).`);
+    ctx.warnings?.push({ key: 'job.warn.timelineConsolidationTooLarge', params: { count: zeitstrahlEvents.length } });
+    if (!silent) updateJob(jobId, { progress: 82 });
+    return;
+  }
+
   let ztResult;
   try {
     ztResult = await call(jobId, tok,
-      prompts.buildZeitstrahlConsolidationPrompt(zeitstrahlEvents),
+      ztPrompt,
       sys.SYSTEM_ZEITSTRAHL_BLOCKS,
       silent ? null : 78, silent ? null : 82,
-      undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_ZEITSTRAHL, costTier(COST_LABEL.zeitstrahl),
+      undefined, 0.2, ztCap, prompts.SCHEMA_ZEITSTRAHL, costTier(COST_LABEL.zeitstrahl),
     );
     // Pflichtfeld: fehlt `ereignisse`, hat das Modell nicht wie verlangt geantwortet —
     // in den Fallback unten (pre-gruppierte Events), statt still nichts zu speichern.

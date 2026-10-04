@@ -39,6 +39,15 @@ Kapitelwerte brauchen einen eigenen Pass pro Kapitel (Phase 2).
 | **Heaps β** | Wachstumsexponent des Wortschatzes (V = K·N^β) | ~0,5 normal, gegen 0 = gesättigt |
 | **Lexikalische Dichte** | Inhaltswörter / Gesamttoken (Ure/Halliday) | kontextabhängig |
 
+Quellen (das UI zeigt sie als Tooltip am Label, die Erklärung als Notiz darunter):
+MATTR — Covington & McFall (2010), *Journal of Quantitative Linguistics* 17(2);
+MTLD — McCarthy & Jarvis (2010), *Behavior Research Methods* 42(2);
+Yule's K — Yule (1944), *The Statistical Study of Literary Vocabulary*;
+Heaps β — Herdan (1960) / Heaps (1978); lexikalische Dichte — Ure (1971), Halliday (1985).
+Die Formeln in [lib/lexicon/measures.js](../lib/lexicon/measures.js) folgen den
+Originaldefinitionen; Abweichungen von publizierten Werten kommen aus der
+Tokenisierung (Wortformen statt Lemmata, siehe unten), nicht aus der Formel.
+
 **Ehrliche Nullwerte statt Scheingenauigkeit.** MTLD ist unter 100 Token `NULL`,
 Heaps β unter 200 Token. Ist der Text kürzer als das MATTR-Fenster, liefert MATTR
 die einfache TTR — und `book_lexicon.mattr_window` hält fest, wie gross das Fenster
@@ -48,6 +57,31 @@ hält der Autor einen nicht vergleichbaren Wert für vergleichbar.
 **Einordnung statt nackter Zahl.** `loadPeerStats` liefert den Median jeder Kennzahl
 über die übrigen Bücher desselben Besitzers. „MTLD 78" sagt niemandem etwas, „78,
 dein Median ist 71" schon. Der MATTR-Median zählt nur Bücher mit vollem Fenster.
+
+## Sprache
+
+Die Analyse rechnet mit der Buchsprache (`book_settings.language`, `de`/`en`; ohne
+eigene Zeile der Default des **Besitzers**, `db/lexicon.js#bookLanguage`). Sie
+entscheidet drei Dinge:
+
+- **Funktionswörter** (`lib/lexicon/function-words.js#stopwordsFor`): Deutsch =
+  [lib/stopwords-de.js](../lib/stopwords-de.js) + `FUNCTION_WORDS_DE`, Englisch =
+  [lib/stopwords-en.js](../lib/stopwords-en.js) +
+  [lib/lexicon/function-words-en.js](../lib/lexicon/function-words-en.js) (inkl.
+  Kontraktionen wie „don't" — der Tokenizer hält sie als ein Token). Davon hängen
+  lexikalische Dichte und alle drei Wortlisten ab; MATTR, MTLD, Hapax-Quote, Yule's
+  K und Heaps β sind listenfrei.
+- **Referenzkorpus** (Keyness, auffällige Wörter, `novel` der Einmalwörter) und
+- **Vergleichs-Mediane**: nur Bücher **derselben Sprache**. Gegen ein deutsches
+  Korpus wäre in einem englischen Buch fast jedes Wort „auffällig", und Englisch hat
+  systematisch andere Diversitätswerte (weniger Flexion).
+
+`book_lexicon.language` hält die Sprache **des gespeicherten Scans**, nicht die
+aktuelle Einstellung — die Referenz muss wissen, womit eine Frequenztabelle gezählt
+wurde. Die Sprache geht in `input_sig`; nach einer Umstellung meldet
+`GET /lexicon/:book_id` `stale`, bis neu gescannt ist. Dieselbe Sprache wählt im
+Sync die Stoppwörter der seitenlokalen Wiederholungs-Metrik
+([lib/page-index.js](../lib/page-index.js)#computeStyleStats).
 
 ## Tokenisierung
 
@@ -182,7 +216,8 @@ eine **untere Schranke** der Auffälligkeit; nur die entscheidet über die Auswa
 Greift die Notbremse, steigt `bookMin` des Buchs und die Auswahl wird von allein
 vorsichtiger.
 
-**Nur Tabellen der aktuellen `LEXICON_VERSION`** gehen in Referenz und Vergleichs-
+**Nur Tabellen der aktuellen `LEXICON_VERSION` und derselben Sprache** (siehe
+„Sprache") gehen in Referenz und Vergleichs-
 Mediane ein: eine ältere Tabelle wurde anders tokenisiert und passt Wort für Wort
 nicht. Nach einer Versionserhöhung füllt sich die Referenz mit dem Nacht-Lauf wieder.
 
@@ -196,7 +231,7 @@ Payload, Hinweiszeile in der Karte).
 Nur ein Buch im Bestand ⇒ keine Referenz ⇒ Spalte bleibt leer und die Karte blendet
 sie aus. Das ist der korrekte Zustand, kein Fehler.
 
-## Datenmodell (Migration 261, `kind` + `hapax_listed` in 262, Ausbau in 308)
+## Datenmodell (Migration 261, `kind` + `hapax_listed` in 262, Ausbau in 308, `language` in 317)
 
 Alle Tabellen sind **abgeleitet** und werden pro Scan als Ganzes ersetzt
 (`replaceBookLexicon`, eine Transaktion). Kein Delta: die Ranglisten sind gedeckelt
@@ -359,6 +394,13 @@ je Figur. Dialog-Erkennung und Namensmuster kommen **injiziert** aus
 `buildFigureNamePatterns`) — dieselbe Regel wie Stil-Metriken und
 Figuren-Erwähnungen, ohne dass das pure Modul die DB lädt.
 
+**Erkannte Rede:** «…», »…«, „…“, “…”, "…", ‹…›, ‚…‘, Gedankenstrich am
+Zeilenanfang, „sagte: …" — und britisch ‘…’. Weil ’ zugleich Apostroph ist (don’t,
+James’, ’tis), öffnet ‘ nur nach Leerraum, Zeilenanfang oder öffnendem Zeichen, und
+ein ’ schliesst nur, wenn kein Buchstabe folgt; bevorzugt der erste Schliesser mit
+Satzzeichen davor, damit „‘It’s James’ hat, isn’t it?’" nicht nach „James’" endet.
+Gerade einfache '…' bleiben aussen vor — dort ist jeder zweite Treffer ein Apostroph.
+
 **Sprecherzuordnung vorsichtig:** ein Absatz wird einer Figur nur zugeordnet, wenn
 in seinem **Erzähltext** (alles ausserhalb der Rede) genau **eine** Figur genannt ist.
 Ein Name in der Rede („»Anna, komm!«") ist kein Sprecher. Lieber weniger Rede als
@@ -394,10 +436,12 @@ einer Figur gegen die Rede **aller anderen** Figuren (nicht gegen das Buch).
     Lieblingswort mit `count = 1`" — die drei Sorten haben verschiedene
     Auswahlregeln und verschiedene Reiter.
 12. **Skip nur über `input_sig`.** Alles, wovon das Ergebnis abhängt (Text, Namen,
-    Referenz-Textstände), gehört hinein; der Referenz-Fingerabdruck nimmt die
+    Sprache, Referenz-Textstände), gehört hinein; der Referenz-Fingerabdruck nimmt die
     `content_sig` der anderen Bücher, nie deren `input_sig`.
 13. **Was aus anderen Büchern stammt, sieht nur der Besitzer** (Keyness, `key`,
     `novel`, Mediane).
+14. **Referenz und Mediane nur gleicher Sprache.** Gefiltert über
+    `book_lexicon.language` (Sprache des Scans), nie über die aktuelle Einstellung.
 
 ## Später (nicht gebaut)
 

@@ -36,10 +36,10 @@ GEWICHTUNG: ${gewichtung}`;
 function _buildNotenskala(axes, tiers, { scope = 'book', werk = 'das Buch' } = {}) {
   const namen = axes.map(a => a.key).join(' / ');
   const rahmen = scope === 'chapter'
-    ? `Notenskala (verbindlich – bewertet das Handwerk dieses Abschnitts im Kontext des Ganzen, nicht die Reife eines ganzen Werks):`
+    ? `Notenskala (verbindlich – bewertet das Handwerk dieses Kapitels im Kontext des Ganzen, nicht die Reife eines ganzen Werks):`
     : `Notenskala (verbindlich – nicht abweichen):`;
   const kontextzeile = scope === 'chapter'
-    ? '\n- Bewerte den Abschnitt im Kontext seiner Funktion im Ganzen (siehe Position), nicht als eigenständiges Werk.'
+    ? '\n- Bewerte das Kapitel im Kontext seiner Funktion im Ganzen (siehe Position), nicht als eigenständiges Werk.'
     : '';
   return `
 ${rahmen}
@@ -60,7 +60,7 @@ ${rahmen}
  * Kategorien-Enum unterscheiden sich zwischen Buch- und Kapitelbewertung.
  */
 function _buildEmpfehlungenBlock({ kategorien, scope = 'book', werk = 'das Buch', quelle = 'Buchtext' }) {
-  const einheit = scope === 'chapter' ? 'der Abschnitt' : werk;
+  const einheit = scope === 'chapter' ? 'das Kapitel' : werk;
   const menge   = scope === 'chapter' ? '3–5' : '4–8';
   const enumStr = kategorien.map(k => `"${k}"`).join('|');
   return `
@@ -87,7 +87,7 @@ Beispielzitate – Format:
 function _buildOutputFormat(axes, { scope = 'book', kategorien, zitatQuelle = 'dem Text' }) {
   const pad = _pad(axes);
   const axisLines = axes.map(a => `  "${a.key}":${' '.repeat(pad - a.key.length)}"${a.hint}"`).join(',\n');
-  const einheit = scope === 'chapter' ? 'dieses Abschnitts' : 'des Ganzen';
+  const einheit = scope === 'chapter' ? 'dieses Kapitels' : 'des Ganzen';
   return `<output_format>
 Antworte mit diesem JSON-Schema. Feldreihenfolge einhalten – die Note kommt zuletzt.
 {
@@ -113,9 +113,9 @@ function _buildKapitelanalyseFormat(felder) {
   const all = [
     { key: 'themen',        hint: 'Hauptthemen und Inhalte.' },
     { key: 'stil',          hint: 'Sprachbeobachtungen (Wortwahl, Satzbau, Ton); bei vorgegebener Erzählform kurz Konsistenz beurteilen.' },
-    { key: 'funktion_kurz', hint: 'Funktion im Ganzen: was leistet dieser Abschnitt für das Werk, was ändert sich durch ihn, und wie schliesst er nach vorn und hinten an.' },
+    { key: 'funktion_kurz', hint: 'Funktion im Ganzen: was leistet dieses Kapitel für das Werk, was ändert sich durch es, und wie schliesst es nach vorn und hinten an.' },
     ...felder,
-    { key: 'zitate',        hint: '1–2 wörtliche, zeichengenaue Belegstellen aus DIESEM Abschnitt, je mit kind (staerke|schwaeche) und einem Kommentar-Satz. Nur echte Fundstellen – nichts erfinden, sonst leere Liste.' },
+    { key: 'zitate',        hint: '1–2 wörtliche, zeichengenaue Belegstellen aus DIESEM Kapitel, je mit kind (staerke|schwaeche) und einem Kommentar-Satz. Nur echte Fundstellen – nichts erfinden, sonst leere Liste.' },
   ];
   const pad = _pad(all);
   const lines = all.map(f => `- ${f.key}:${' '.repeat(pad - f.key.length)}${f.hint}`).join('\n');

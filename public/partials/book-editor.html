@@ -125,6 +125,9 @@
         <template x-if="block.kind === 'chapter'">
           <div class="book-editor-chapter-header">
             <span class="book-editor-chapter-name" x-text="block.name"></span>
+            <span x-show="$store.badges.chapterIdeenCounts[block.chapterId] > 0" class="ideen-count-badge internal-link"
+                  @click.stop="$app.openIdeenForChapter(block.chapterId)" x-text="$store.badges.chapterIdeenCounts[block.chapterId]"
+                  :data-tip="$app.t('ideen.openCountTitle', { n: $store.badges.chapterIdeenCounts[block.chapterId] })"></span>
           </div>
         </template>
 
@@ -140,6 +143,9 @@
                }">
             <div class="book-editor-page-header">
               <span class="book-editor-page-name" x-text="block.name"></span>
+              <span x-show="$store.badges.ideenCounts[block.pageId] > 0" class="ideen-count-badge internal-link"
+                    @click.stop="$app.openIdeenForPage(block.pageId)" x-text="$store.badges.ideenCounts[block.pageId]"
+                    :data-tip="$app.t('ideen.openCountTitle', { n: $store.badges.ideenCounts[block.pageId] })"></span>
               <span class="book-editor-page-status"
                     :class="'book-editor-page-status--' + blockStatus(block)"
                     x-text="blockStatusLine(block)"></span>
@@ -223,7 +229,7 @@
         </template>
 
       <template x-for="thread in commentThreads" :key="thread.root.id">
-        <div class="comment-rail__thread"
+        <div class="comment-rail__thread hover-reveal-host"
              :data-root-id="thread.root.id"
              :style="{ '--comment-top': (thread._railTop || 0) + 'px' }"
              :class="{ 'comment-rail__thread--selected': commentSelectedRootId === thread.root.id,
@@ -263,7 +269,7 @@
       <div class="book-editor-general__title" x-text="$app.t('share.comments.general')"></div>
       <div class="book-editor-general__grid">
         <template x-for="thread in commentGeneralThreads" :key="thread.root.id">
-          <div class="comment-rail__thread comment-rail__thread--general"
+          <div class="comment-rail__thread comment-rail__thread--general hover-reveal-host"
                :class="{ 'comment-rail__thread--selected': commentSelectedRootId === thread.root.id,
                          'comment-rail__thread--resolved': thread.root.resolved_at }">
             <!-- @include comment-thread-body -->

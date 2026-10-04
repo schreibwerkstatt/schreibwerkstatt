@@ -123,4 +123,23 @@ test('plot: Spannungsbogen klappt ohne Sprung bis auf Hoehe 0 zu und wieder auf'
   // 4) Ruhelayout unveraendert: der Abstand wanderte vom Panel-Padding an die
   //    Kinder — sichtbar darf sich dabei nichts verschoben haben.
   expect(rec.after).toEqual(rec.before);
+
+  // 5) Klick genau auf den Chevron klappt auch bei breitem Toggle. Der Toggle
+  //    ist `width: 100%`; ein Press-Scale (`button:active { scale(0.98) }`)
+  //    zoege seine linke Kante um ~1 % der Breite nach innen, der Chevron am
+  //    Rand wanderte unter dem Zeiger weg, mouseup laege ausserhalb des Buttons
+  //    und `click` feuerte auf dem gemeinsamen Vorfahren statt am Toggle.
+  //    Echte Maus statt `el.click()`: nur sie durchlaeuft :active.
+  //    Mutationsprobe: `.collapsible-toggle:active { transform: none; }` in
+  //    css/entities/entity-list.css entfernen → aria-expanded bleibt stehen.
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.waitForTimeout(300);
+  const toggle = page.locator('.card--plot .plot-tension-toggle');
+  const chevron = toggle.locator('.history-chevron');
+  for (const expected of ['false', 'true']) {
+    const box = await chevron.boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(toggle).toHaveAttribute('aria-expanded', expected);
+    await page.waitForTimeout(400);
+  }
 });

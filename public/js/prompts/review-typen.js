@@ -34,7 +34,7 @@ const AXIS = {
   struktur:        'Aufbau, Gliederung, Übergänge, Logik der Abfolge.',
   stil:            'Sprache, Satzbau, Ton, Konsistenz über das Werk.',
   thema:           'Roter Faden, durchgehende Frage / Idee, Konsequenz der Verfolgung.',
-  kohaerenz:       'Roter Faden, Übergänge zwischen Seiten/Abschnitten, Logik der Abfolge.',
+  kohaerenz:       'Roter Faden, Übergänge zwischen Abschnitten, Logik der Abfolge.',
 
   // narrativ
   plot:            'Konflikt, Stakes, Wendepunkte, Auflösung.',
@@ -70,11 +70,11 @@ const CHAPTER_AXIS_OVERRIDE = {
   dramaturgie:     'Spannungsbogen, Szenenabfolge, Aufbau, Höhepunkte.',
   pacing:          'Tempo, Längen, Leerlauf, Szenenrhythmus.',
   figuren:         'Auftreten der Figuren im Kapitel, Stimmigkeit, Entwicklung.',
-  argumentation:   'Trägt der Gedankengang dieses Abschnitts? Schlüssigkeit der Schritte, Sprünge, unausgeführte Behauptungen.',
-  belege:          'Sind die Behauptungen dieses Abschnitts gestützt? Belegdichte, Zuordnung von Aussage und Quelle.',
-  begriffe:        'Werden die im Abschnitt verwendeten Begriffe konsistent und definiert gebraucht?',
-  methode:         'Nachvollziehbarkeit des Vorgehens in diesem Abschnitt, Offenlegung der Schritte.',
-  verstaendlichkeit: 'Erklärqualität dieses Abschnitts für die Zielgruppe, Beispiele, Vorwissens-Annahmen.',
+  argumentation:   'Trägt der Gedankengang dieses Kapitels? Schlüssigkeit der Schritte, Sprünge, unausgeführte Behauptungen.',
+  belege:          'Sind die Behauptungen dieses Kapitels gestützt? Belegdichte, Zuordnung von Aussage und Quelle.',
+  begriffe:        'Werden die im Kapitel verwendeten Begriffe konsistent und definiert gebraucht?',
+  methode:         'Nachvollziehbarkeit des Vorgehens in diesem Kapitel, Offenlegung der Schritte.',
+  verstaendlichkeit: 'Erklärqualität dieses Kapitels für die Zielgruppe, Beispiele, Vorwissens-Annahmen.',
   recherche:       'Quellenlage und Zuschreibung in den Beiträgen dieses Teils.',
   textsortentreue: 'Erfüllen die Beiträge die Form ihrer jeweiligen Textsorte?',
   relevanz:        'Nachrichtenwert, Aktualität und Trennung von Nachricht und Meinung in diesem Teil.',
@@ -114,8 +114,8 @@ const PROFILE = {
       sehrGut:    'sehr gut – trägt die Handlung spürbar, Szenen sitzen.',
     },
     analyse: [
-      { key: 'dramaturgie_kurz', label: 'Dramaturgie', hint: 'Spannungskurve im Abschnitt (Aufbau, Höhepunkt, Schluss).' },
-      { key: 'figuren_kurz', label: 'Figuren', hint: 'Welche Figuren tragen den Abschnitt, wie verschiebt sich ihre Position.' },
+      { key: 'dramaturgie_kurz', label: 'Dramaturgie', hint: 'Spannungskurve im Kapitel (Aufbau, Höhepunkt, Schluss).' },
+      { key: 'figuren_kurz', label: 'Figuren', hint: 'Welche Figuren tragen das Kapitel, wie verschiebt sich ihre Position.' },
       { key: 'pacing_kurz', label: 'Pacing', hint: 'Tempo und Längen, Leerlauf vs. Verdichtung.' },
     ],
   },
@@ -126,7 +126,7 @@ const PROFILE = {
     bookAxes:    _axes(['struktur', 'stil', 'argumentation', 'belege', 'verstaendlichkeit', 'thema']),
     chapterAxes: _axes(['argumentation', 'kohaerenz', 'belege', 'verstaendlichkeit'], CHAPTER_AXIS_OVERRIDE),
     bookGewichtung:    'Argumentation, Beleglage und Struktur tragen die Gesamtnote stärker als sprachliche Einzelmängel.',
-    chapterGewichtung: 'Argumentation und Kohärenz sind die zentralen Bewertungskriterien dieses Abschnitts und fliessen stärker in die Gesamtnote ein als sprachliche Einzelmängel.',
+    chapterGewichtung: 'Argumentation und Kohärenz sind die zentralen Bewertungskriterien dieses Kapitels und fliessen stärker in die Gesamtnote ein als sprachliche Einzelmängel.',
     bookTiers: {
       mangelhaft: 'handwerklich mangelhaft – die These trägt nicht, Belege fehlen oder der Aufbau ist unbrauchbar.',
       schwach:    'Thema tragfähig, Durchführung schwach (Behauptung statt Argument, dünne Beleglage, unklarer Aufbau).',
@@ -136,13 +136,13 @@ const PROFILE = {
     chapterTiers: {
       mangelhaft: 'handwerklich mangelhaft – Gedankengang oder Beleglage gravierend defekt.',
       schwach:    'Grundgedanke trägt, Durchführung schwach (Sprünge, unbelegte Behauptungen, Redundanz).',
-      solide:     'solider Abschnitt, funktioniert, ohne herausstechende Schärfe.',
-      sehrGut:    'sehr gut – der Abschnitt bringt das Argument spürbar voran.',
+      solide:     'solides Kapitel, funktioniert, ohne herausstechende Schärfe.',
+      sehrGut:    'sehr gut – das Kapitel bringt das Argument spürbar voran.',
     },
     analyse: [
-      { key: 'argumentation_kurz', label: 'Argumentation', hint: 'Welchen Schritt macht das Argument in diesem Abschnitt.' },
-      { key: 'belege_kurz', label: 'Belege', hint: 'Beleglage: worauf stützt sich der Abschnitt, was bleibt unbelegt.' },
-      { key: 'verstaendlichkeit_kurz', label: 'Verständlichkeit', hint: 'Erklärqualität und Vorwissens-Annahmen des Abschnitts.' },
+      { key: 'argumentation_kurz', label: 'Argumentation', hint: 'Welchen Schritt macht das Argument in diesem Kapitel.' },
+      { key: 'belege_kurz', label: 'Belege', hint: 'Beleglage: worauf stützt sich das Kapitel, was bleibt unbelegt.' },
+      { key: 'verstaendlichkeit_kurz', label: 'Verständlichkeit', hint: 'Erklärqualität und Vorwissens-Annahmen des Kapitels.' },
     ],
   },
 
@@ -152,7 +152,7 @@ const PROFILE = {
     bookAxes:    _axes(['struktur', 'stil', 'argumentation', 'methode', 'belege', 'begriffe', 'beitrag']),
     chapterAxes: _axes(['argumentation', 'kohaerenz', 'belege', 'begriffe', 'methode'], CHAPTER_AXIS_OVERRIDE),
     bookGewichtung:    'Argumentation, Methode, Beleglage und Begriffsdisziplin tragen die Gesamtnote. Sprachliche Glätte ist nachrangig; Nominalstil, Passiv und wiederholte Fachtermini sind hier kein Mangel.',
-    chapterGewichtung: 'Argumentation, Beleglage und Begriffsdisziplin sind die zentralen Bewertungskriterien dieses Abschnitts.',
+    chapterGewichtung: 'Argumentation, Beleglage und Begriffsdisziplin sind die zentralen Bewertungskriterien dieses Kapitels.',
     bookTiers: {
       mangelhaft: 'wissenschaftlich mangelhaft – Fragestellung, Methode oder Beleglage gravierend defekt.',
       schwach:    'Fragestellung tragfähig, Durchführung schwach (Methode unklar, Befund und Deutung vermischt, lückenhafte Belege).',
@@ -160,15 +160,15 @@ const PROFILE = {
       sehrGut:    'sehr gut – methodisch stringent, sauber belegt, mit erkennbarem eigenem Beitrag.',
     },
     chapterTiers: {
-      mangelhaft: 'mangelhaft – der Abschnitt trägt argumentativ oder methodisch nicht.',
+      mangelhaft: 'mangelhaft – das Kapitel trägt argumentativ oder methodisch nicht.',
       schwach:    'Ansatz tragfähig, Durchführung schwach (Sprünge, unbelegte Behauptungen, schwankende Begriffe).',
-      solide:     'solider Abschnitt, korrekt und nachvollziehbar.',
-      sehrGut:    'sehr gut – der Abschnitt trägt die Argumentation der Arbeit spürbar.',
+      solide:     'solides Kapitel, korrekt und nachvollziehbar.',
+      sehrGut:    'sehr gut – das Kapitel trägt die Argumentation der Arbeit spürbar.',
     },
     analyse: [
-      { key: 'argumentation_kurz', label: 'Argumentation', hint: 'Welchen Schritt macht die Argumentation in diesem Abschnitt.' },
+      { key: 'argumentation_kurz', label: 'Argumentation', hint: 'Welchen Schritt macht die Argumentation in diesem Kapitel.' },
       { key: 'belege_kurz', label: 'Belege', hint: 'Beleglage: Dichte, Art der Quellen, unbelegte Stellen.' },
-      { key: 'begriffe_kurz', label: 'Begriffe', hint: 'Zentrale Begriffe des Abschnitts und ob sie konsistent gebraucht werden.' },
+      { key: 'begriffe_kurz', label: 'Begriffe', hint: 'Zentrale Begriffe des Kapitels und ob sie konsistent gebraucht werden.' },
     ],
   },
 
@@ -194,9 +194,9 @@ const PROFILE = {
       sehrGut:    'sehr gut – formsicher, belastbar, relevant.',
     },
     analyse: [
-      { key: 'textsorte_kurz', label: 'Textsorte', hint: 'Welche Textsorten liegen im Abschnitt vor und werden sie in ihrer Form eingelöst.' },
-      { key: 'recherche_kurz', label: 'Recherche', hint: 'Quellenlage und Zuschreibung im Abschnitt.' },
-      { key: 'relevanz_kurz', label: 'Relevanz', hint: 'Nachrichtenwert und Aktualität der Beiträge dieses Abschnitts.' },
+      { key: 'textsorte_kurz', label: 'Textsorte', hint: 'Welche Textsorten liegen im Kapitel vor und werden sie in ihrer Form eingelöst.' },
+      { key: 'recherche_kurz', label: 'Recherche', hint: 'Quellenlage und Zuschreibung im Kapitel.' },
+      { key: 'relevanz_kurz', label: 'Relevanz', hint: 'Nachrichtenwert und Aktualität der Beiträge dieses Kapitels.' },
     ],
   },
 

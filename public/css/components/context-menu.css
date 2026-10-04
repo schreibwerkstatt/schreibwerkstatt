@@ -104,11 +104,14 @@
   display: inline-flex;
 }
 
-/* Menü-Eintrag mit führendem Icon (+ optionalem Count-Badge rechts). */
-.context-menu-item--icon {
+/* Menü-Eintrag mit führendem Icon (+ optionalem Count-Badge rechts).
+   Doppelklasse (0,2,0), weil `button:has(> .icon)` (icons.css, 0,1,1) sonst
+   bei Button-Einträgen den Gap überschreibt — Label-Einträge (Datei-Upload)
+   wären dann die einzigen mit dem Menü-Abstand. */
+.context-menu-item.context-menu-item--icon {
   display: flex;
   align-items: center;
-  gap: var(--space-lg);
+  gap: var(--space-sm);
 }
 .context-menu-item--icon .icon {
   flex-shrink: 0;

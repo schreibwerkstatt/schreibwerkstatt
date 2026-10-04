@@ -162,6 +162,20 @@ test('analyzeIdiolect: zu wenig Rede → keine Zeile', () => {
   assert.deepEqual(rows, []);
 });
 
+test('analyzeIdiolect: britische einfache Anführungszeichen, Apostroph in der Rede', () => {
+  const blocks = [
+    ...Array.from({ length: 40 }, (_, i) => `‘Indeed it’s thing${i}, indeed James’ stuff${i}, indeed,’ said Anna.`),
+    ...Array.from({ length: 40 }, (_, i) => `‘Righto, item${i}, righto piece${i} righto,’ Bruno replied.`),
+  ];
+  const { rows, coverage } = analyzeIdiolect(blocks, figures, deps);
+  const anna = rows.find(r => r.figure_id === 1 || r.figure_id === 3);
+  const bruno = rows.find(r => r.figure_id === 2);
+  assert.ok(anna && bruno, 'beide Figuren bekommen eine Zeile');
+  assert.ok(anna.terms.some(t => t.term === 'indeed'));
+  assert.ok(bruno.terms.some(t => t.term === 'righto'));
+  assert.equal(coverage, 1, 'die ganze Rede bis zum Schluss-Apostroph wird erkannt');
+});
+
 // ── Eingangs-Signatur ─────────────────────────────────────────────────────────
 
 test('computeInputSig: Namen und Referenz ändern die Signatur, Reihenfolge nicht', () => {
@@ -170,4 +184,10 @@ test('computeInputSig: Namen und Referenz ändern die Signatur, Reihenfolge nich
   assert.notEqual(base, computeInputSig('abc', new Set(['anna']), ['1:Anna:'], '7:x'));
   assert.notEqual(base, computeInputSig('abc', new Set(['anna', 'bruno']), ['1:Anna:'], '7:y'));
   assert.notEqual(base, computeInputSig('abc', new Set(['anna', 'bruno']), ['1:Anna:', '2:Bruno:'], '7:x'));
+});
+
+test('buildNameStopwords: englischer Genitiv mit Apostroph', () => {
+  const set = buildNameStopwords(['Margaret'], ['margaret']);
+  assert.ok(set.has("margaret's"));
+  assert.ok(set.has('margarets'));
 });

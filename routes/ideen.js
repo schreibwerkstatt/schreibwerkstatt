@@ -4,9 +4,11 @@
 // („hier fehlt noch …"). Offene werden im Seiten-Chat als Kontext eingespielt
 // (nur offene; Seite + umliegendes Kapitel).
 //
-// Scope-Modell: jede Idee gehoert entweder zu einer Seite ODER zu einem Kapitel
-// (XOR-CHECK im Schema). Cross-Kind-Move ist nicht erlaubt — Page-Idee bleibt
-// Page-Idee, Chapter-Idee bleibt Chapter-Idee.
+// Scope-Modell: eine Idee haengt an hoechstens EINEM Anker — einer Seite, einem
+// Kapitel oder (beide NULL) nur am Buch (CHECK im Schema). Eine Buch-Idee ist ein
+// Einfall ohne Ort im Text; der Autor ordnet sie spaeter selbst einer Seite oder
+// einem Kapitel zu. Danach ist der Move within-kind: Page-Idee bleibt Page-Idee,
+// Chapter-Idee bleibt Chapter-Idee.
 //
 // Stufen-Modell: `status` (offen → in_arbeit → erledigt, daneben verworfen) ist
 // die einzige Wahrheit ueber den Bearbeitungsstand; SSoT der Stufen ist
@@ -18,12 +20,18 @@ const { toIntId } = require('../lib/validate');
 const { guardBook, sessionEmail } = require('../lib/acl');
 const { resolvePageBookId, resolveChapterBookId } = require('../lib/content-ownership');
 const { IDEE_STATUSES, isIdeeStatus, isIdeaLinkKind } = require('../lib/ideen-status');
+const { getBookIdeenStages, setBookIdeenStages } = require('../db/book-settings');
+const { setContext } = require('../lib/log-context');
 const ideenDb = require('../db/ideen');
 const searchIndex = require('../lib/search');
 const logger = require('../logger');
 
 const router = express.Router();
 const jsonBody = express.json();
+
+// Status der Ideen-Chat-Vorschläge (übernommen/verworfen) — PATCH /ideen/chat-proposal.
+// Vor `/:id` registriert, sonst griffe PATCH /:id mit id='chat-proposal'.
+router.use('/', require('./chat-proposal-status').makeChatProposalStatusRouter({ kind: 'ideen' }));
 
 const MAX_LEN = 4000;
 
@@ -66,7 +74,54 @@ router.get('/board', (req, res) => {
   const bookId = toIntId(req.query.book_id);
   if (!bookId)    return res.status(400).json({ error_code: 'INVALID_ID' });
   if (!guardBook(req, res, bookId, 'editor')) return;
-  res.json({ statuses: IDEE_STATUSES, ideen: ideenDb.listBoardIdeen(bookId, userEmail) });
+  res.json({
+    statuses: IDEE_STATUSES,
+    stages: getBookIdeenStages(bookId),
+    ideen: ideenDb.listBoardIdeen(bookId, userEmail),
+  });
+});
+
+// Aktive Stufen des Buches (book_settings.ideen_stages) — fuer die Ideen-Karte,
+// die ohne Board-Request auskommen muss. Buchweit, nicht user-privat: die
+// Stufen sind eine Eigenschaft des Buches, die Ideen darauf gehoeren dem User.
+router.get('/stages', (req, res) => {
+  const bookId = toIntId(req.query.book_id);
+  if (!bookId) return res.status(400).json({ error_code: 'INVALID_ID' });
+  setContext({ book: bookId });
+  if (!guardBook(req, res, bookId, 'editor')) return;
+  res.json({ stages: getBookIdeenStages(bookId) });
+});
+
+// Stufen umschalten. `offen` und `erledigt` kommen immer dazu, Unbekanntes
+// faellt weg (lib/ideen-status.js#normalizeIdeeStages); die Antwort traegt den
+// gespeicherten Stand. Ideen in einer abgeschalteten Stufe behalten ihren
+// Status — abgeschaltet heisst nur „nicht mehr anbieten".
+router.put('/stages', jsonBody, (req, res) => {
+  const bookId = toIntId(req.body?.book_id);
+  if (!bookId) return res.status(400).json({ error_code: 'BOOKID_REQ' });
+  if (!Array.isArray(req.body?.stages)) return res.status(400).json({ error_code: 'INVALID_STATUS' });
+  setContext({ book: bookId });
+  if (!guardBook(req, res, bookId, 'editor')) return;
+  const stages = setBookIdeenStages(bookId, req.body.stages);
+  logger.info(`[ideen] stufen book=${bookId} aktiv=${stages.join(',')}`);
+  res.json({ stages });
+});
+
+// Manuelle Reihenfolge einer Board-Zelle (Bahn × Stufe) speichern: `ids` in
+// Anzeige-Reihenfolge. Nur eigene Ideen dieses Buchs — eine fremde ID kippt den
+// ganzen Request (ORDER_MISMATCH), statt eine halbe Reihenfolge zu schreiben.
+router.put('/order', jsonBody, (req, res) => {
+  const userEmail = sessionEmail(req);
+  const bookId = toIntId(req.body?.book_id);
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(toIntId) : null;
+  if (!bookId) return res.status(400).json({ error_code: 'BOOKID_REQ' });
+  if (!ids || !ids.length || ids.some(id => !id) || new Set(ids).size !== ids.length) {
+    return res.status(400).json({ error_code: 'ORDER_REQ' });
+  }
+  setContext({ book: bookId });
+  if (!guardBook(req, res, bookId, 'editor')) return;
+  if (!ideenDb.reorderIdeen(bookId, userEmail, ids)) return res.status(400).json({ error_code: 'ORDER_MISMATCH' });
+  res.json({ ok: true });
 });
 
 // Verknuepfbare Ziele fuer den Link-Picker (Recherche / Beat / Motiv).
@@ -118,7 +173,7 @@ router.get('/', (req, res) => {
   res.json(ideenDb.listIdeenForScope(kind, scopeId, userEmail));
 });
 
-// Idee anlegen (XOR page_id / chapter_id).
+// Idee anlegen: page_id ODER chapter_id ODER keins von beiden (Buch-Idee).
 router.post('/', jsonBody, (req, res) => {
   const userEmail = sessionEmail(req);
   const bookId = toIntId(req.body?.book_id);
@@ -126,27 +181,28 @@ router.post('/', jsonBody, (req, res) => {
   const chapterId = toIntId(req.body?.chapter_id);
   const content = (req.body?.content || '').toString().trim();
   if (!bookId) return res.status(400).json({ error_code: 'BOOKID_REQ' });
-  if ((!pageId && !chapterId) || (pageId && chapterId)) {
-    return res.status(400).json({ error_code: 'INVALID_SCOPE' });
-  }
+  if (pageId && chapterId) return res.status(400).json({ error_code: 'INVALID_SCOPE' });
   if (!content)                 return res.status(400).json({ error_code: 'CONTENT_REQ' });
   if (content.length > MAX_LEN) return res.status(400).json({ error_code: 'CONTENT_TOO_LONG' });
   if (!guardBook(req, res, bookId, 'editor')) return;
 
   // Cross-Check: page/chapter muss zum Buch gehoeren.
-  const ankerBook = pageId ? resolvePageBookId(pageId) : resolveChapterBookId(chapterId);
-  if (ankerBook !== bookId) return res.status(400).json({ error_code: 'BOOK_MISMATCH' });
+  if (pageId || chapterId) {
+    const ankerBook = pageId ? resolvePageBookId(pageId) : resolveChapterBookId(chapterId);
+    if (ankerBook !== bookId) return res.status(400).json({ error_code: 'BOOK_MISMATCH' });
+  }
 
   const id = ideenDb.createIdee({ bookId, pageId, chapterId, userEmail, content });
   const row = ideenDb.getIdee(id);
   searchIndex.upsertIdea(id);
-  logger.info(`[ideen] create id=${id} ${pageId ? 'page=' + pageId : 'chapter=' + chapterId}`);
+  logger.info(`[ideen] create id=${id} ${pageId ? 'page=' + pageId : chapterId ? 'chapter=' + chapterId : 'book=' + bookId}`);
   res.json(row);
 });
 
 // Content + Status + Move aktualisieren (Felder optional einzeln).
 // Move bleibt within-kind: Page-Idee kann nur auf andere Seite, Chapter-Idee
-// nur auf anderes Kapitel.
+// nur auf anderes Kapitel. Eine Buch-Idee (kein Anker) darf auf beides — das ist
+// genau ihr Zweck: erst festhalten, spaeter einordnen.
 router.patch('/:id', jsonBody, (req, res) => {
   const existing = _ownedIdee(req, res);
   if (!existing) return;
@@ -162,6 +218,11 @@ router.patch('/:id', jsonBody, (req, res) => {
   }
   if (typeof req.body?.status !== 'undefined') {
     if (!isIdeeStatus(req.body.status)) return res.status(400).json({ error_code: 'INVALID_STATUS' });
+    // In eine abgeschaltete Stufe wird nicht gewechselt. Wer schon dort steht,
+    // darf bleiben (No-op) und herauswechseln — sonst saesse die Idee fest.
+    if (req.body.status !== existing.status && !getBookIdeenStages(existing.book_id).includes(req.body.status)) {
+      return res.status(400).json({ error_code: 'IDEE_STATUS_INACTIVE' });
+    }
     fields.status = req.body.status;
   }
 
@@ -179,11 +240,12 @@ router.patch('/:id', jsonBody, (req, res) => {
     if (existing.status !== 'offen' && existing.status !== 'in_arbeit') {
       return res.status(400).json({ error_code: 'IDEE_CLOSED' });
     }
-    if (isPage && existing.page_id === null)      return res.status(400).json({ error_code: 'KIND_MISMATCH' });
-    if (!isPage && existing.chapter_id === null)  return res.status(400).json({ error_code: 'KIND_MISMATCH' });
+    const isBookIdee = existing.page_id === null && existing.chapter_id === null;
+    if (!isBookIdee && isPage && existing.page_id === null)     return res.status(400).json({ error_code: 'KIND_MISMATCH' });
+    if (!isBookIdee && !isPage && existing.chapter_id === null) return res.status(400).json({ error_code: 'KIND_MISMATCH' });
     const targetBook = isPage ? resolvePageBookId(newId) : resolveChapterBookId(newId);
     if (targetBook !== existing.book_id) return res.status(400).json({ error_code: 'BOOK_MISMATCH' });
-    movedFrom = isPage ? existing.page_id : existing.chapter_id;
+    movedFrom = isBookIdee ? 'book' : (isPage ? existing.page_id : existing.chapter_id);
     movedTo = newId;
     movedKind = isPage ? 'page' : 'chapter';
     fields[isPage ? 'page_id' : 'chapter_id'] = newId;

@@ -1,9 +1,33 @@
-/* Plot-Werkstatt — Board-Werkzeuge: Beat verschieben ohne Drag (Beat-Edit),
+/* Plot-Werkstatt — Board-Werkzeuge: klappbare Beat-Edit-Sektionen, Beat
+   verschieben ohne Drag (Beat-Edit),
    Dichte-Modus „nur Titel", einklappbare Akte (flach + Grid) und die
    Befund-Typen/-Aktionen der Konsistenz-Liste. Lädt NACH board.css,
    widgets.css, swimlane.css und relations.css (überschreibt deren Breiten). */
 
 @layer components {
+
+  /* ── Beat-Edit: klappbare Sektionen (Einordnung, Beziehungen) ──────────── */
+  /* Button zentriert Text per UA-Default — bricht das Label in der schmalen
+     Beat-Spalte um, stuende die Folgezeile mittig statt buendig zum Chevron. */
+  .plot-beat-edit-section > .collapsible-toggle {
+    text-align: start;
+  }
+  .plot-beat-edit-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding-bottom: var(--space-2xs);
+  }
+  /* Zahl gesetzter Eintraege am zugeklappten Toggle. */
+  .plot-beat-edit-count {
+    min-width: 1.4em;
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--color-tag-bg);
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+  }
 
   /* ── Beat verschieben (plot-beat-move.html) ─────────────────────────────── */
   .plot-beat-move { display: flex; flex-direction: column; gap: var(--space-2xs); }

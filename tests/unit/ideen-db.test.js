@@ -234,3 +234,53 @@ test('Loeschen: die Seite nimmt ihre Ideen mit (CASCADE, kein CHECK-Bruch)', () 
   assert.equal(ideenDb.listBoardIdeen(1, A).length, 0);
 });
 
+
+test('Buch-Idee: ohne Anker anlegbar, im Board ohne Bahn-Kapitel, in keinem Zaehler', () => {
+  seed();
+  const id = mkIdee();
+  const row = ideenDb.getIdee(id);
+  assert.equal(row.page_id, null);
+  assert.equal(row.chapter_id, null);
+  const board = ideenDb.listBoardIdeen(1, A);
+  assert.equal(board.length, 1);
+  assert.equal(board[0].lane_chapter_id, null);
+  // Die Plaketten haengen an Seite/Kapitel — eine Buch-Idee setzt keine.
+  assert.deepEqual(ideenDb.openIdeenCounts(1, A, 'page'), {});
+  assert.deepEqual(ideenDb.openIdeenCounts(1, A, 'chapter'), {});
+});
+
+test('Buch-Idee: zuordnen auf Seite oder Kapitel setzt genau einen Anker', () => {
+  seed();
+  const a = mkIdee();
+  const b = mkIdee();
+  ideenDb.updateIdee(a, A, { page_id: 10 });
+  ideenDb.updateIdee(b, A, { chapter_id: 5 });
+  assert.equal(ideenDb.getIdee(a).page_name, 'Seite A');
+  assert.equal(ideenDb.getIdee(a).chapter_id, null);
+  assert.equal(ideenDb.getIdee(b).chapter_name, 'Kapitel 1');
+  assert.equal(ideenDb.getIdee(b).page_id, null);
+  // Beide Anker zugleich laesst der CHECK nicht zu.
+  assert.throws(() => ideenDb.updateIdee(a, A, { chapter_id: 5 }), /CHECK constraint failed/);
+});
+
+test('Manuelle Reihenfolge: neu = 0, reorderIdeen schreibt 1..n', () => {
+  seed();
+  const a = mkIdee({ pageId: 10 });
+  const b = mkIdee({ pageId: 10 });
+  const c = mkIdee({ pageId: 10 });
+  assert.equal(ideenDb.getIdee(a).sort_order, 0);
+  assert.equal(ideenDb.reorderIdeen(1, A, [c, a, b]), true);
+  const byId = new Map(ideenDb.listBoardIdeen(1, A).map(r => [r.id, r.sort_order]));
+  assert.deepEqual([byId.get(c), byId.get(a), byId.get(b)], [1, 2, 3]);
+});
+
+test('Manuelle Reihenfolge: fremde oder buchfremde ID kippt alles', () => {
+  seed();
+  const a = mkIdee({ pageId: 10 });
+  const fremd = mkIdee({ pageId: 10, userEmail: B });
+  assert.equal(ideenDb.reorderIdeen(1, A, [fremd, a]), false);
+  assert.equal(ideenDb.getIdee(a).sort_order, 0);
+  assert.equal(ideenDb.getIdee(fremd).sort_order, 0);
+  assert.equal(ideenDb.reorderIdeen(2, A, [a]), false);
+  assert.equal(ideenDb.getIdee(a).sort_order, 0);
+});

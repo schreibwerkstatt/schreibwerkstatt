@@ -4,6 +4,7 @@
 
 const { db } = require('./connection');
 const { parseDomains, serializeDomains, normalizeProfile } = require('../lib/research-profile');
+const { normalizeIdeeStages, serializeIdeeStages } = require('../lib/ideen-status');
 // Prepared Statements dieses Moduls sitzen auf migrierten Spalten — die
 // Migrationen muessen vor dem Anlegen gelaufen sein.
 require('./migrations');
@@ -44,7 +45,7 @@ const RESEARCH_DEFAULTS = Object.freeze({
   research_domains: [],
 });
 
-const _getBookSettings = db.prepare('SELECT language, region, buchtyp, buch_kontext, stilprofil, erzaehlperspektive, erzaehlzeit, is_finished, allow_lektor_book_chat, daily_goal_chars, goal_target_chars, goal_deadline, entities_enabled, orte_real, schauplatz_land, zeitlinie_real, weltfakten_real_pruefen, exclude_from_stats, citation_style, bibliography_enabled, bibliography_title, bibliography_scope, bibliography_in_blog, citation_notes, figure_numbering, table_numbering, textsorte, research_profile, research_domains FROM book_settings WHERE book_id = ?');
+const _getBookSettings = db.prepare('SELECT language, region, buchtyp, buch_kontext, stilprofil, erzaehlperspektive, erzaehlzeit, is_finished, allow_lektor_book_chat, daily_goal_chars, goal_target_chars, goal_deadline, entities_enabled, orte_real, schauplatz_land, zeitlinie_real, weltfakten_real_pruefen, exclude_from_stats, citation_style, bibliography_enabled, bibliography_title, bibliography_scope, bibliography_in_blog, citation_notes, figure_numbering, table_numbering, textsorte, research_profile, research_domains, ideen_stages FROM book_settings WHERE book_id = ?');
 const _upsertBookSettings = db.prepare(`
   INSERT INTO book_settings (book_id, language, region, buchtyp, buch_kontext, stilprofil, erzaehlperspektive, erzaehlzeit, is_finished, allow_lektor_book_chat, daily_goal_chars, goal_target_chars, goal_deadline, orte_real, schauplatz_land, zeitlinie_real, weltfakten_real_pruefen, exclude_from_stats, updated_at)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -151,16 +152,17 @@ function getBookSettings(bookId, userEmail = null) {
     textsorte: row.textsorte || null,
     research_profile: row.research_profile || null,
     research_domains: parseDomains(row.research_domains),
+    ideen_stages: normalizeIdeeStages(row.ideen_stages),
   };
   if (userEmail) {
     const u = require('./app-users').getUser(userEmail);
     if (u && (u.default_language || u.default_buchtyp)) {
       const language = u.default_language || 'de';
       const region   = u.default_region   || (language === 'en' ? 'US' : 'CH');
-      return { language, region, buchtyp: u.default_buchtyp || null, buch_kontext: null, stilprofil: null, erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 0, daily_goal_chars: null, goal_target_chars: null, goal_deadline: null, entities_enabled: 0, orte_real: 0, schauplatz_land: null, zeitlinie_real: 0, weltfakten_real_pruefen: 0, exclude_from_stats: 0, textsorte: null, ...RESEARCH_DEFAULTS, ...CITATION_DEFAULTS, ...XREF_DEFAULTS };
+      return { language, region, buchtyp: u.default_buchtyp || null, buch_kontext: null, stilprofil: null, erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 0, daily_goal_chars: null, goal_target_chars: null, goal_deadline: null, entities_enabled: 0, orte_real: 0, schauplatz_land: null, zeitlinie_real: 0, weltfakten_real_pruefen: 0, exclude_from_stats: 0, textsorte: null, ideen_stages: normalizeIdeeStages(null), ...RESEARCH_DEFAULTS, ...CITATION_DEFAULTS, ...XREF_DEFAULTS };
     }
   }
-  return { language: 'de', region: 'CH', buchtyp: null, buch_kontext: null, stilprofil: null, erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 0, daily_goal_chars: null, goal_target_chars: null, goal_deadline: null, entities_enabled: 0, orte_real: 0, schauplatz_land: null, zeitlinie_real: 0, weltfakten_real_pruefen: 0, exclude_from_stats: 0, textsorte: null, ...RESEARCH_DEFAULTS, ...CITATION_DEFAULTS, ...XREF_DEFAULTS };
+  return { language: 'de', region: 'CH', buchtyp: null, buch_kontext: null, stilprofil: null, erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 0, daily_goal_chars: null, goal_target_chars: null, goal_deadline: null, entities_enabled: 0, orte_real: 0, schauplatz_land: null, zeitlinie_real: 0, weltfakten_real_pruefen: 0, exclude_from_stats: 0, textsorte: null, ideen_stages: normalizeIdeeStages(null), ...RESEARCH_DEFAULTS, ...CITATION_DEFAULTS, ...XREF_DEFAULTS };
 }
 
 /** Locale-Key für ein Buch: z.B. "de-CH", "en-US". */
@@ -263,6 +265,31 @@ function setBookResearchSettings(bookId, { research_profile, research_domains } 
   return { research_profile: profile, research_domains: parseDomains(domains) };
 }
 
+// Ideen-Stufen, eigener Schreibpfad aus demselben Grund wie /xrefs.
+const _updateBookIdeenStages = db.prepare(`
+  INSERT INTO book_settings (book_id, ideen_stages, updated_at)
+  VALUES (?, ?, ?)
+  ON CONFLICT(book_id) DO UPDATE SET
+    ideen_stages=excluded.ideen_stages,
+    updated_at=excluded.updated_at
+`);
+
+/** Aktive Ideen-Stufen eines Buchs (docs/ideen-board.md). Normalisiert ueber
+ *  lib/ideen-status.js — `offen`/`erledigt` kommen immer dazu, Unbekanntes
+ *  faellt weg. Gibt die gespeicherte Liste zurueck. */
+function setBookIdeenStages(bookId, stages) {
+  const value = serializeIdeeStages(Array.isArray(stages) ? stages : []);
+  _updateBookIdeenStages.run(parseInt(bookId), value, new Date().toISOString());
+  return normalizeIdeeStages(value);
+}
+
+/** Aktive Ideen-Stufen eines Buchs (NULL/keine Zeile = alle). */
+const _getBookIdeenStages = db.prepare('SELECT ideen_stages FROM book_settings WHERE book_id = ?');
+function getBookIdeenStages(bookId) {
+  const row = _getBookIdeenStages.get(parseInt(bookId));
+  return normalizeIdeeStages(row ? row.ideen_stages : null);
+}
+
 /** Querverweis-Einstellungen pro Buch. Eigener Schreibpfad — beruehrt keine
  *  anderen Settings. */
 function setBookXrefSettings(bookId, { figure_numbering, table_numbering } = {}) {
@@ -323,6 +350,8 @@ module.exports = {
   setBookCitationSettings,
   setBookResearchSettings,
   setBookXrefSettings,
+  setBookIdeenStages,
+  getBookIdeenStages,
   VALID_CITATION_STYLES,
   VALID_CITATION_NOTES,
   VALID_BIBLIOGRAPHY_SCOPES,

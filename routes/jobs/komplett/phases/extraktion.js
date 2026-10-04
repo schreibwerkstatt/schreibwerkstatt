@@ -1,5 +1,6 @@
 'use strict';
 // Phase 1: Vollextraktion (Single-/Multi-Pass) + additiver Completeness-/Gap-Pass.
+// Multi-Pass (Chunks, Delta-Cache, Halbierungs-Retry): ./extraktion/multi-pass.js.
 const {
   saveCheckpoint, loadChapterExtractCache, saveChapterExtractCache, getBookSettings,
 } = require('../../../../db/schema');
@@ -7,14 +8,13 @@ const {
   i18nError, settledAll, retryOnTransientAi, splitGroupsIntoChunks, updateJob, toSystemBlocks,
 } = require('../../shared');
 const {
-  buildBookSystemBlockText, buildBookPagesSig, bookSettingsSigPart, extractField,
-  sampleChapters, computeCoverageScore,
+  buildBookSystemBlockText, buildBookPagesSig, sampleChapters, computeCoverageScore,
 } = require('../utils');
 const { mergeBeziehungenIntoFiguren, _normalizeName } = require('../figuren-merge');
 const appSettings = require('../../../../lib/app-settings');
 const { getContextConfigFor, providerClass } = require('../../../../lib/ai');
 const { komplettMaxTokens } = require('./tokens');
-const { COST_LABEL, costTier } = require('../cost-labels');
+const { extractMultiPass } = require('./extraktion/multi-pass');
 
 /** Teilt ein Array in Gruppen der Grösse `size` (≥1). */
 function _chunkArray(arr, size) {
@@ -213,7 +213,7 @@ async function runEventsPassBatched(ctx, { bookSystemBlock, claudeExtractCap, st
  * `{ flatBz, failed, batches }`.
  */
 async function runRelationsPassBatched(ctx, { bookSystemBlock, claudeExtractCap, stammFiguren }) {
-  const { jobId, bookName, call, tok, log, prompts, sys } = ctx;
+  const { jobId, bookName, call, tok, log, prompts, sys, extractTier } = ctx;
   const batchSize = Math.max(1, ctx.figureBatchSize || 20);
   const single = stammFiguren.length <= batchSize;
   const batches = single ? [stammFiguren] : _chunkArray(stammFiguren, batchSize);
@@ -221,11 +221,10 @@ async function runRelationsPassBatched(ctx, { bookSystemBlock, claudeExtractCap,
     prompts.buildFigurenBeziehungenExtraktionPrompt(
       bookName, single ? batch : stammFiguren, null, single ? null : batch.map(f => f.name).filter(Boolean)),
     [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_FIGUREN_BLOCKS, '1h')],
-    // ACHTUNG Asymmetrie: A2 traegt — anders als der E-Pass daneben — KEIN
-    // Modell-/Effort-Tier und laeuft damit auf dem Konsolidierungs-Modell. Hier
-    // steht bewusst nur das Label (behaviour-neutral), damit die Aufschluesselung
-    // die Asymmetrie ueber ihre `models`-Liste zeigt, statt sie zu kaschieren.
-    null, null, claudeExtractCap, 0.2, null, prompts.SCHEMA_BEZIEHUNGEN, costTier(COST_LABEL.extract),
+    // Extraktions-Tier wie A1/B/C/E: der Cache ist pro Modell, und ein anderer Effort
+    // kann je nach Modell den System-Cache brechen — auf einem eigenen Tier schriebe
+    // jeder A2-Batch das ganze Buch neu in den 1h-Cache, statt ihn zu lesen.
+    null, null, claudeExtractCap, 0.2, null, prompts.SCHEMA_BEZIEHUNGEN, extractTier,
   ), { log, label: `Single-Pass Beziehungen (A2)${single ? '' : ` Batch ${bi + 1}/${batches.length}`}` })),
     (batches.length > 1 ? { concurrency: _phase1Concurrency() } : {}));
   const flatBz = [];
@@ -375,7 +374,7 @@ async function extractSinglePassSplit(ctx, { claudeExtractCap }) {
 
   // Fakten als eigener Call (C): volle Modell-Aufmerksamkeit auf dichte Faktenerfassung
   // statt im 4-Array-Orte-Pass um Output-Budget zu konkurrieren.
-  const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, fullBookText), ttl: '1h' };
+  const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, fullBookText), ttl: '1h', sharedPrefix: true };
   const [stammRes, orteRes, faktenRes] = await settledAll([
     () => retryOnTransientAi(() => call(jobId, tok,
       prompts.buildExtraktionFigurenStammPrompt('Gesamtbuch', bookName, pageContents.length, null),
@@ -563,280 +562,6 @@ async function extractSinglePass(ctx, { claudeExtractCap, callExtract }) {
   } else {
     saveChapterExtractCache(bookIdInt, email, '__singlepass__', bookPagesSig, chapters, effectiveProvider);
   }
-  return { chapters, partialFailure };
-}
-
-/**
- * Multi-Pass Completeness-/Gap-Pass (nur Claude, grosse Bücher). Anders als der Single-Pass
- * bekommt hier jeder Chunk EINEN Basis-Extraktions-Durchlauf → der Long-Tail (Nebenfiguren,
- * einmal erwähnte Schauplätze/Fakten/Szenen) fällt pro Chunk systematisch durch. Dieser Pass
- * prompt't pro Chunk erneut (kombiniertes Gap-Schema), gesät mit dem GLOBAL bereits gefundenen
- * Katalog aller Chunks (Cross-Chunk-Dedup) → nur der genuine Long-Tail wird nachgezogen.
- * Loop-until-dry pro Chunk bis completenessPasses. Rein ADDITIV (mutiert `chapters` in place,
- * hängt fresh items an den jeweiligen Chunk-Eintrag). Eigener `:gap`-Cache pro Chunk → die
- * Basis-Chunk-Caches bleiben gültig. Läuft auf dem Extraktions-Tier, wird aber als eigener
- * Kosten-Bucket ausgewiesen (gapTier = extractTier + Label). NON-FATAL.
- */
-async function runMultiPassCompletenessGaps(ctx, { chunkTexts, chapters, concurrency }) {
-  const { jobId, bookIdInt, email, bookName, call, tok, log, effectiveProvider, prompts, sys, gapTier } = ctx;
-  const completenessPasses = ctx.completenessPasses || 0;
-  if (providerClass(effectiveProvider) !== 'cloud' || completenessPasses <= 0 || !chunkTexts.length) return;
-
-  const claudeExtractCap = getContextConfigFor(effectiveProvider).maxTokensOut;
-  const faktKey = (f) => `${f.subjekt || ''}: ${f.fakt || ''}`;
-  const szeneKey = (s) => `${s.titel || ''} (${s.kapitel || ''})`;
-  const STREAMS = [
-    { name: 'figuren', arr: chapters.chapterFiguren, field: 'figuren', keyOf: (f) => f.name,   isValid: (f) => f && f.name },
-    { name: 'orte',    arr: chapters.chapterOrte,    field: 'orte',    keyOf: (o) => o.name,   isValid: (o) => o && o.name },
-    { name: 'fakten',  arr: chapters.chapterFakten,  field: 'fakten',  keyOf: faktKey,          isValid: (f) => f && f.fakt },
-    { name: 'szenen',  arr: chapters.chapterSzenen,  field: 'szenen',  keyOf: szeneKey,         isValid: (s) => s && s.titel },
-  ];
-  // Global-Known (über alle Chunks) als Anzeige-Liste + Normalisierungs-Set pro Strom.
-  const knownSet = {}, knownDisp = {};
-  for (const s of STREAMS) {
-    knownSet[s.name] = new Set();
-    knownDisp[s.name] = [];
-    for (const c of (s.arr || [])) for (const it of (c[s.field] || [])) {
-      const k = _normalizeName(s.keyOf(it));
-      if (!k || knownSet[s.name].has(k)) continue;
-      knownSet[s.name].add(k); knownDisp[s.name].push(s.keyOf(it));
-    }
-  }
-
-  updateJob(jobId, { statusText: 'job.phase.completenessChunks', statusParams: { n: chunkTexts.length } });
-  const perChunk = await settledAll(chunkTexts.map(({ chunk, key, pagesSig, chText }, chunkIdx) => async () => {
-    const chunkLabel = `Gap-Chunk ${chunkIdx + 1}/${chunkTexts.length} «${chunk.name}»`;
-    const gapCacheKey = `${key}:gap`;
-    const cached = loadChapterExtractCache(bookIdInt, email, gapCacheKey, pagesSig, effectiveProvider);
-    if (cached) { log.info(`${chunkLabel} – Cache-HIT.`); return cached; }
-
-    // Chunk-lokale Akkumulatoren, gesät mit dem globalen Known-Katalog.
-    const seen = {}, disp = {}, fresh = {};
-    for (const s of STREAMS) { seen[s.name] = new Set(knownSet[s.name]); disp[s.name] = knownDisp[s.name].slice(); fresh[s.name] = []; }
-    for (let round = 1; round <= completenessPasses; round++) {
-      let res;
-      try {
-        res = await retryOnTransientAi(() => call(jobId, tok,
-          prompts.buildChunkGapPrompt(chunk.name, bookName, chunk.pages.length, chText, {
-            figuren: disp.figuren, orte: disp.orte, fakten: disp.fakten, szenen: disp.szenen,
-          }),
-          sys.SYSTEM_KOMPLETT_EXTRAKTION_BLOCKS, null, null, claudeExtractCap, 0.2, null, prompts.SCHEMA_KOMPLETT_EXTRAKTION, gapTier,
-        ), { log, label: `${chunkLabel} (Gap ${round}/${completenessPasses})` });
-      } catch (e) {
-        if (e.name === 'AbortError') throw e;
-        log.warn(`${chunkLabel} Gap-Pass ${round} fehlgeschlagen (${e.message}) – übersprungen.`);
-        break;
-      }
-      let anyNew = 0;
-      for (const s of STREAMS) {
-        for (const it of (res?.[s.field] || [])) {
-          if (!s.isValid(it)) continue;
-          const k = _normalizeName(s.keyOf(it));
-          if (!k || seen[s.name].has(k)) continue;
-          seen[s.name].add(k); disp[s.name].push(s.keyOf(it)); fresh[s.name].push(it); anyNew++;
-        }
-      }
-      log.info(`${chunkLabel} Gap ${round}: +${anyNew} neu.`);
-      if (anyNew === 0) break; // loop-until-dry
-    }
-    saveChapterExtractCache(bookIdInt, email, gapCacheKey, pagesSig, fresh, effectiveProvider);
-    return fresh;
-  }), (chunkTexts.length > concurrency ? { concurrency } : {}));
-
-  // Additiv in die per-Chunk-Kapiteleinträge mergen (extractField hält Index-Alignment zu chunkTexts).
-  const totals = { figuren: 0, orte: 0, fakten: 0, szenen: 0 };
-  for (let i = 0; i < perChunk.length; i++) {
-    if (perChunk[i].status !== 'fulfilled' || !perChunk[i].value) continue;
-    const f = perChunk[i].value;
-    for (const s of STREAMS) {
-      const items = f[s.name];
-      if (items?.length && s.arr[i]) { s.arr[i][s.field].push(...items); totals[s.name] += items.length; }
-    }
-  }
-  if (totals.figuren || totals.orte || totals.fakten || totals.szenen)
-    log.info(`Multi-Pass Completeness: +${totals.figuren} Figuren, +${totals.orte} Orte, +${totals.fakten} Fakten, +${totals.szenen} Szenen.`);
-}
-
-/**
- * Multi-Pass mit Delta-Cache (grosse Bücher / lokale Provider): Kapitel → Chunks, einzeln
- * extrahiert + pro Chunk gecacht. Gibt `{ chapters, partialFailure }` zurück — partialFailure
- * bei nicht-fataler Chunk-Truncation (Cache-Skip pro Chunk + Checkpoint-Skip).
- */
-async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, callExtract }) {
-  const { jobId, bookIdInt, bookName, email, call, tok, log, effectiveProvider, cacheVersion, prompts, sys } = ctx;
-  let partialFailure = false;
-
-  // Lokale Modelle: Kapitel über PER_CHUNK_LIMIT in Seiten-Untergruppen splitten, jeder Chunk
-  // mit eigenem KI-Call + Delta-Cache-Eintrag. Claude: singlePassLimit als Grenze → kein Split.
-  updateJob(jobId, { progress: 12, statusText: 'job.phase.extractingChunks', statusParams: { n: chunkOrder.length } });
-  // Settings-Anteil identisch zum Single-Pass-Key (buildBookPagesSig): Buchtyp/
-  // Kontext fliessen in den Extraktions-Prompt, also muss ihr Wechsel auch die
-  // Per-Chunk-Caches invalidieren – sonst liefert der Multi-Pass-Cache stale
-  // Extraktion mit den alten Autoren-Vorgaben.
-  const settingsSig = bookSettingsSigPart(getBookSettings(bookIdInt, email));
-  const chunkTexts = chunkOrder.map(chunkKey => {
-    const chunk = chunks.get(chunkKey);
-    return {
-      chunk, key: chunkKey,
-      // Kapitelname im Sig: er fliesst via buildExtraktionKomplettChapterPrompt(chunk.name)
-      // in den Prompt, steht aber nicht in page_id:updated_at. Ohne ihn liefert eine reine
-      // Kapitel-Umbenennung einen stale Cache-HIT mit altem Kapitelkontext. Rename → MISS.
-      pagesSig: chunk.pages.map(p => `${p.id}:${p.updated_at}`).sort().join('|') + `||${settingsSig}||ch:${chunk.name || ''}||${cacheVersion || ''}`,
-      chText: chunk.pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n'),
-    };
-  });
-  // Claude-Warmup laeuft seriell (settledAll(..., {warmup:true})) und schreibt
-  // den Prompt-Cache fuer die parallelen Folge-Chunks. Damit der serielle
-  // Pass keine Verzoegerung kostet, faengt der kleinste Chunk an
-  // (Seitenzahl als Proxy; bei Gleichstand stabile chunkOrder-Reihenfolge).
-  if (effectiveProvider === 'claude' && chunkTexts.length > 1) {
-    const minIdx = chunkTexts.reduce((best, ct, i, arr) =>
-      ct.chunk.pages.length < arr[best].chunk.pages.length ? i : best, 0);
-    if (minIdx > 0) {
-      const [smallest] = chunkTexts.splice(minIdx, 1);
-      chunkTexts.unshift(smallest);
-    }
-  }
-  let cacheHits = 0;
-  // Für lokale Modelle zweigeteilte Extraktion: Pass A (figuren+assignments) / Pass B
-  // (orte+fakten+szenen), Cache-Keys `${key}:figuren` / `${key}:orte` (getrennt von alten
-  // kombinierten Caches, damit die sauber neu entstehen statt fälschlich getroffen zu werden).
-  // Klassen-, nicht Namensfrage: ein gehostetes Frontier-Modell ueber openai-compat
-  // haelt den kombinierten Pass genauso durch wie Claude (lib/ai/config.js#providerClass).
-  const isSplit = providerClass(effectiveProvider) !== 'cloud';
-  // Claude-Multi-Pass: Anthropic-TPM-Burst dämpfen. warmup: Erst-Chunk seriell → schreibt
-  // Prompt-Cache, Folge-Chunks hitten ihn (~10× günstiger + kürzere Reqs). concurrency-Cap:
-  // max. ai.claude.phase1_concurrency (Default 4, belastbar gegen Tier-1/2 bei ~25k tok/Chunk).
-  const claudeConcurrency = Math.max(1, parseInt(appSettings.get('ai.claude.phase1_concurrency'), 10) || 4);
-  const settledOpts = (effectiveProvider === 'claude' && chunkTexts.length > claudeConcurrency)
-    ? { concurrency: claudeConcurrency, warmup: true }
-    : {};
-  if (settledOpts.warmup) {
-    log.info(`Phase 1 Multi-Pass – ${chunkTexts.length} Chunks, Warmup-Pass + Concurrency=${claudeConcurrency} (TPM-Schutz).`);
-  }
-  // Progress pro abgeschlossenem Chunk bumpen – nicht via aiCall-Stream: parallele Chunks
-  // würden sonst alle in 12-28 ticken und der schnellste Stream die Bar früh ans Ende clampen.
-  // Monotone Chunk-Completion-Updates = ehrlicher Verlauf.
-  let chunksDone = 0;
-  const bumpChunkProgress = () => {
-    chunksDone++;
-    updateJob(jobId, { progress: 12 + Math.round((chunksDone / chunkTexts.length) * 16) });
-  };
-  const settled = await settledAll(
-    chunkTexts.map(({ chunk, key, pagesSig, chText }, chunkIdx) => async () => {
-      const chunkLabel = `Chunk ${chunkIdx + 1}/${chunkTexts.length} «${chunk.name}»`;
-      log.info(`${chunkLabel} – ${chunk.pages.length} Seiten${isSplit ? ' (Split-Pässe)' : ''}`);
-
-      if (!isSplit) {
-        const cachedChunk = loadChapterExtractCache(bookIdInt, email, key, pagesSig, effectiveProvider);
-        if (cachedChunk) { cacheHits++; log.info(`${chunkLabel} – Cache-HIT.`); bumpChunkProgress(); return cachedChunk; }
-        log.info(`${chunkLabel} – Cache-MISS, KI-Call…`);
-        const result = await retryOnTransientAi(() => call(jobId, tok,
-          prompts.buildExtraktionKomplettChapterPrompt(chunk.name, bookName, chunk.pages.length, chText),
-          // ACHTUNG: dieser Call geht NICHT ueber callExtract (das nur der lokale
-          // Split-Pfad nutzt) und traegt darum kein Extraktions-Tier — die
-          // Basis-Extraktion des Cloud-Multi-Pass laeuft auf dem Konsolidierungs-
-          // Modell. Label-only, damit die Kosten getrennt sichtbar sind.
-          sys.SYSTEM_KOMPLETT_EXTRAKTION_BLOCKS, null, null, claudeExtractCap, 0.2, null, prompts.SCHEMA_KOMPLETT_EXTRAKTION, costTier(COST_LABEL.extract),
-        ), { log, label: chunkLabel });
-        saveChapterExtractCache(bookIdInt, email, key, pagesSig, result, effectiveProvider);
-        log.info(`${chunkLabel} – OK (fig=${result?.figuren?.length ?? 0} orte=${result?.orte?.length ?? 0} songs=${result?.songs?.length ?? 0} sz=${result?.szenen?.length ?? 0}).`);
-        bumpChunkProgress();
-        return result;
-      }
-
-      const figKey = `${key}:figuren`;
-      const ortKey = `${key}:orte`;
-      const cachedFig = loadChapterExtractCache(bookIdInt, email, figKey, pagesSig, effectiveProvider);
-      const cachedOrt = loadChapterExtractCache(bookIdInt, email, ortKey, pagesSig, effectiveProvider);
-
-      let passA = cachedFig;
-      if (passA) { cacheHits++; log.info(`${chunkLabel} Pass A (Figuren) – Cache-HIT.`); }
-      else {
-        log.info(`${chunkLabel} Pass A (Figuren) – KI-Call…`);
-        passA = await callExtract(`${chunkLabel} Pass A`,
-          prompts.buildExtraktionFigurenPassPrompt(chunk.name, bookName, chunk.pages.length, chText),
-          sys.SYSTEM_KOMPLETT_FIGUREN_PASS_BLOCKS, null, null, 8000, prompts.SCHEMA_KOMPLETT_FIGUREN_PASS);
-        saveChapterExtractCache(bookIdInt, email, figKey, pagesSig, passA, effectiveProvider);
-      }
-
-      let passB = cachedOrt;
-      if (passB) { cacheHits++; log.info(`${chunkLabel} Pass B (Orte/Szenen) – Cache-HIT.`); }
-      else {
-        log.info(`${chunkLabel} Pass B (Orte/Szenen) – KI-Call…`);
-        passB = await callExtract(`${chunkLabel} Pass B`,
-          prompts.buildExtraktionOrtePassPrompt(chunk.name, bookName, chunk.pages.length, chText),
-          sys.SYSTEM_KOMPLETT_ORTE_PASS_BLOCKS, null, null, 6000, prompts.SCHEMA_KOMPLETT_ORTE_PASS);
-        saveChapterExtractCache(bookIdInt, email, ortKey, pagesSig, passB, effectiveProvider);
-      }
-
-      const merged = {
-        figuren:     passA?.figuren     || [],
-        assignments: passA?.assignments || [],
-        orte:        passB?.orte        || [],
-        songs:       passB?.songs       || [],
-        fakten:      passB?.fakten      || [],
-        szenen:      passB?.szenen      || [],
-      };
-      log.info(`${chunkLabel} – Split-OK (fig=${merged.figuren.length} orte=${merged.orte.length} songs=${merged.songs.length} sz=${merged.szenen.length}).`);
-      bumpChunkProgress();
-      return merged;
-    }),
-    settledOpts,
-  );
-
-  for (let i = 0; i < settled.length; i++) {
-    if (settled[i].status === 'rejected')
-      log.warn(`Vollextraktion «${chunkTexts[i].chunk.name}» übersprungen: ${settled[i].reason?.message}`);
-  }
-  const chapters = {
-    chapterFiguren:     extractField(settled, chunkTexts, 'figuren'),
-    chapterOrte:        extractField(settled, chunkTexts, 'orte'),
-    chapterSongs:       extractField(settled, chunkTexts, 'songs'),
-    chapterFakten:      extractField(settled, chunkTexts, 'fakten'),
-    chapterSzenen:      extractField(settled, chunkTexts, 'szenen'),
-    chapterAssignments: extractField(settled, chunkTexts, 'assignments'),
-  };
-
-  const failedChunks = settled.filter(r => r.status === 'rejected');
-  const cacheLookups = chunkTexts.length * (isSplit ? 2 : 1);
-  log.info(`Phase 1 Multi-Pass – ${settled.length - failedChunks.length}/${settled.length} OK (${cacheHits}/${cacheLookups} Cache-Hits), fig=${chapters.chapterFiguren.reduce((s, c) => s + c.figuren.length, 0)} orte=${chapters.chapterOrte.reduce((s, c) => s + c.orte.length, 0)} songs=${chapters.chapterSongs.reduce((s, c) => s + (c.songs?.length || 0), 0)} sz=${chapters.chapterSzenen.reduce((s, c) => s + c.szenen.length, 0)}`);
-  if (failedChunks.length > 0) {
-    const failedInfo = chunkTexts
-      .map((ct, i) => ({ ct, r: settled[i] }))
-      .filter(({ r }) => r.status === 'rejected')
-      .map(({ ct, r }) => ({ name: ct.chunk.name, message: r.reason?.message || 'unbekannt' }));
-    const details = failedInfo.map(f => `${f.name}: ${f.message}`).join('; ');
-    const onlyTruncation = failedInfo.every(f => f.message === 'job.error.aiTruncated');
-    const someSucceeded = (settled.length - failedChunks.length) > 0;
-    // Truncation einzelner Chunks ist nicht-fatal, SOLANGE mindestens ein Chunk
-    // Daten lieferte: das lokale Modell dreht bei dichten Kapiteln in Wiederholungs-
-    // schleifen (kein Cap fixt das — repeat_penalty mildert es). Betroffene
-    // (Teil-)Chunks tragen dann nichts bei; wiederkehrende Figuren/Orte werden über
-    // die übrigen Chunks meist trotzdem erfasst. Andere Fehlerarten (Provider down,
-    // Parse-Fehler) ODER ein Totalausfall (0 OK) bleiben hart — dann hat Phase 1
-    // keine verlässliche Basis und der Job bricht ehrlich ab, statt ein leeres
-    // Ergebnis als „fertig" auszugeben.
-    if (onlyTruncation && someSucceeded) {
-      // Teilfehler: Checkpoint überspringen (wie der Cache-Skip oben). Sonst friert ein
-      // Crash nach Phase 1 die truncierten/fehlenden Chunks ein; der Resume lädt den
-      // lückenhaften Stand statt die nie gecachten Chunks erneut zu extrahieren.
-      partialFailure = true;
-      const skippedChapters = [...new Set(failedInfo.map(f => f.name))];
-      log.warn(`Phase 1 – ${failedChunks.length} Chunk(s) durch Truncation übersprungen (nicht-fatal): ${details}`);
-      ctx.warnings?.push({
-        key: 'job.warn.chunksTruncated',
-        params: { count: failedChunks.length, chapters: skippedChapters.join(', ') },
-      });
-    } else {
-      throw i18nError('job.error.phase1Incomplete', { count: failedChunks.length, details });
-    }
-  }
-
-  // Completeness-/Gap-Pass (nur Claude): pro Chunk den Long-Tail nachziehen, den der
-  // eine Basis-Durchlauf ausgelassen hat. Additiv, non-fatal, eigener :gap-Cache.
-  await runMultiPassCompletenessGaps(ctx, { chunkTexts, chapters, concurrency: claudeConcurrency });
-
   return { chapters, partialFailure };
 }
 

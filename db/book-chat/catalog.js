@@ -62,8 +62,8 @@ function getPageHeader(pageId) {
 // ── Ideen ────────────────────────────────────────────────────────────────────
 
 /** Ideen eines Buchs mit Seiten-/Kapitelnamen; offene zuerst, dann jüngste.
- *  Ideen hängen an einer Seite ODER einem Kapitel (XOR); `effective_chapter_id`
- *  deckt beide Quellen ab. Filter optional: `status`, `offenOnly` (offen +
+ *  Ideen hängen an einer Seite, einem Kapitel oder (ohne Anker) nur am Buch;
+ *  `effective_chapter_id` deckt Seite und Kapitel ab. Filter optional: `status`, `offenOnly` (offen +
  *  in_arbeit), `pageId`, `chapterId` (gegen effective_chapter_id). */
 function listIdeenWithPlaces(bookId, userEmail, { status = null, offenOnly = false, pageId = null, chapterId = null } = {}) {
   let sql = `
@@ -71,7 +71,9 @@ function listIdeenWithPlaces(bookId, userEmail, { status = null, offenOnly = fal
            i.page_id, p.page_name,
            COALESCE(i.chapter_id, p.chapter_id) AS effective_chapter_id,
            COALESCE(cc.chapter_name, cp.chapter_name) AS chapter_name,
-           CASE WHEN i.page_id IS NOT NULL THEN 'page' ELSE 'chapter' END AS scope
+           CASE WHEN i.page_id    IS NOT NULL THEN 'page'
+                WHEN i.chapter_id IS NOT NULL THEN 'chapter'
+                ELSE 'book' END AS scope
     FROM ideen i
     LEFT JOIN pages    p  ON p.page_id    = i.page_id
     LEFT JOIN chapters cc ON cc.chapter_id = i.chapter_id AND cc.book_id = i.book_id

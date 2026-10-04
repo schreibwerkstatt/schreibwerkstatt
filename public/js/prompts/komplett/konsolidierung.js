@@ -25,7 +25,7 @@ Antworte mit diesem JSON-Schema:
       "typ": "persoenlich|extern",
       "bedeutung": "zusammengeführte Bedeutung oder leer",
       "kapitel": ["Kapitelname1", "Kapitelname2"],
-      "seiten": ["Seite1", "Seite2"],
+      "seiten": ["Abschnitt1", "Abschnitt2"],
       "figuren": [{ "id": "fig_1", "name": "Name", "typ": "hauptfigur|nebenfigur|antagonist|mentor|randfigur|andere" }]
     }
   ]
@@ -40,12 +40,12 @@ Regeln:
 - subtyp: Eines aus der Whitelist. Default 'sonstiges'. Bei externen Welt-Events: extern_politisch|extern_wirtschaftlich|extern_natur|extern_kulturell|extern_krieg.
 - Dedupliziere figuren (gleiche id nur einmal pro Ereignis)
 - kapitel: Alle Kapitel der zusammengeführten Ereignisse beibehalten (Union der Arrays, Duplikate entfernen)
-- seiten: Alle Seiten der zusammengeführten Ereignisse beibehalten (Union der Arrays, Duplikate entfernen)
+- seiten: Alle Abschnitte der zusammengeführten Ereignisse beibehalten (Union der Arrays, Duplikate entfernen)
 - Ereignisse verschiedener Figuren zum gleichen Datum die denselben realen Vorfall beschreiben (z.B. Geburt, Heirat, Tod, Unfall, Krieg) MÜSSEN zusammengeführt werden – auch wenn die Formulierungen leicht abweichen. Führe alle beteiligten Figuren im figuren-Array zusammen.
 - Nur bei inhaltlich klar verschiedenen Vorfällen trennen
 
 Ereignisse:
-${JSON.stringify(events, null, 2)}`;
+${JSON.stringify(events)}`;
 }
 
 export function buildSongsConsolidationPrompt(bookName, chapterSongs, figurenKompakt) {
@@ -128,7 +128,7 @@ function _pairSide(side) {
   const bits = [];
   if (side.typ) bits.push(`Typ: ${side.typ}`);
   if (side.kapitel) bits.push(`Kapitel: ${side.kapitel}`);
-  if (side.seite) bits.push(`Seite: ${side.seite}`);
+  if (side.seite) bits.push(`Abschnitt: ${side.seite}`);
   if (side.figuren) bits.push(`Figuren: ${side.figuren}`);
   if (side.land) bits.push(`Land: ${side.land}`);
   if (side.geburtstag) bits.push(`Geburtsjahr: ${side.geburtstag}`);
@@ -163,6 +163,6 @@ Regeln:
 - KONSERVATIV urteilen: «gleich» nur, wenn die Angaben die Identität stützen. Im Zweifel «gleich»: false — zwei getrennte Einträge sind ein kleiner Schönheitsfehler, ein falsches Zusammenführen verschmilzt zwei echte ${label.plural} unwiderruflich.
 - Ein unterschiedlicher ORTSZUSATZ (verschiedene Stadt, verschiedenes Quartier, verschiedenes Land) bedeutet verschiedene Einträge, auch bei identischem Kern-Namen.
 - Ober- und Unterbegriff sind NICHT dasselbe: Stadt vs. Quartier, Gebäude vs. Raum darin, Figur vs. Familie.
-- Ein unspezifischer Name («Bahnhof», «die Wohnung», «Gespräch») ist nur dann dieselbe Entität wie ein spezifischer, wenn Kapitel/Seite/Figuren das klar stützen.
+- Ein unspezifischer Name («Bahnhof», «die Wohnung», «Gespräch») ist nur dann dieselbe Entität wie ein spezifischer, wenn Kapitel/Abschnitt/Figuren das klar stützen.
 - Nichts erfinden: nur die oben angegebenen Informationen verwenden, keine Annahmen über den Buchinhalt darüber hinaus.`;
 }

@@ -42,12 +42,12 @@ const _stmtFigureInBook = db.prepare('SELECT 1 FROM figures WHERE id = ? AND boo
 
 const _stmtInsertStats = db.prepare(`
   INSERT INTO book_lexicon (
-    book_id, scanned_at, lexicon_version, content_sig, input_sig,
+    book_id, scanned_at, lexicon_version, language, content_sig, input_sig,
     pages, segments, tokens, types, lemma_types, hapax, hapax_listed, dislegomena, hapax_ratio,
     mattr, mattr_window, mattr_windows, mtld, yule_k, heaps_beta, heaps_k, lex_density,
     idiolect_coverage, freq_json
   ) VALUES (
-    @book_id, ${NOW_ISO_SQL}, @lexicon_version, @content_sig, @input_sig,
+    @book_id, ${NOW_ISO_SQL}, @lexicon_version, @language, @content_sig, @input_sig,
     @pages, @segments, @tokens, @types, @lemma_types, @hapax, @hapax_listed, @dislegomena, @hapax_ratio,
     @mattr, @mattr_window, @mattr_windows, @mtld, @yule_k, @heaps_beta, @heaps_k, @lex_density,
     @idiolect_coverage, @freq_json
@@ -89,6 +89,7 @@ const _replace = db.transaction((bookId, { stats, terms, phrases, chapters, idio
   _stmtInsertStats.run({
     book_id: bookId,
     lexicon_version: stats.version ?? 0,
+    language: stats.language ?? null,
     content_sig: stats.content_sig ?? null,
     input_sig: stats.input_sig ?? null,
     pages: stats.pages ?? null,
@@ -183,7 +184,7 @@ function replaceBookLexicon(bookId, result) {
 // (bis ~5000 Terme) und hat im Lesepfad der Karte nichts zu suchen — sie würde bei
 // jedem Kartenaufruf mitgeschleppt.
 const _stmtGetStats = db.prepare(`
-  SELECT book_id, scanned_at, lexicon_version, content_sig,
+  SELECT book_id, scanned_at, lexicon_version, language, content_sig,
          pages, segments, tokens, types, lemma_types, hapax, hapax_listed, dislegomena, hapax_ratio,
          mattr, mattr_window, mattr_windows, mtld, yule_k, heaps_beta, heaps_k, lex_density,
          idiolect_coverage
@@ -299,6 +300,15 @@ function stampLexiconHistory(bookId, date, mattrWindow) {
   return _stmtStampHistory.run({ book_id: bookId, date, window: mattrWindow }).changes;
 }
 
+// Sprache, mit der das Buch gescannt wird: die Buch-Einstellung, ohne eigene Zeile
+// der Default des BESITZERS (nicht des Auslösenden — ein Lektor mit anderem
+// Default darf die Sprache des Buchs nicht umdrehen). Normalisiert auf de/en.
+function bookLanguage(bookId) {
+  const { getBookSettings } = require('./book-settings');
+  const { getOwnerEmail } = require('./book-access');
+  return getBookSettings(bookId, getOwnerEmail(bookId)).language === 'en' ? 'en' : 'de';
+}
+
 // Für den Delta-Skip im Job: nur die Signatur, ohne die ganze Zeile zu laden.
 const _stmtGetSig = db.prepare('SELECT content_sig, input_sig, lexicon_version FROM book_lexicon WHERE book_id = ?');
 function getLexiconSignature(bookId) {
@@ -309,7 +319,9 @@ function getLexiconSignature(bookId) {
 // desselben Besitzers, zu einer Tabelle verschmolzen. Bücher ohne abgeschlossenen
 // Scan (kein `freq_json`) tragen nichts bei. Nur Tabellen der AKTUELLEN
 // Analyse-Version: eine ältere wurde mit anderer Tokenisierung gezählt und passt
-// Wort für Wort nicht zu den Termen dieses Buchs.
+// Wort für Wort nicht zu den Termen dieses Buchs. Und nur Bücher derselben
+// Sprache (`language`, die Sprache des gespeicherten Scans): gegen ein deutsches
+// Referenzkorpus wäre in einem englischen Buch fast jedes Wort „auffällig".
 //
 // Rückgabe: { freq: Map<term,count>, total, books, upper(term), absentBound }
 // oder null, wenn es kein anderes gescanntes Buch gibt (dann bleibt die
@@ -329,11 +341,12 @@ const _stmtRefRows = db.prepare(`
    WHERE bl.book_id != ?
      AND bl.freq_json IS NOT NULL
      AND bl.lexicon_version = ?
+     AND bl.language = ?
      AND b.owner_email IS NOT NULL
      AND b.owner_email = (SELECT owner_email FROM books WHERE book_id = ?)
 `);
-function loadReferenceCorpus(bookId, version) {
-  const rows = _stmtRefRows.all(bookId, version, bookId);
+function loadReferenceCorpus(bookId, version, language) {
+  const rows = _stmtRefRows.all(bookId, version, language, bookId);
   if (!rows.length) return null;
   const freq = new Map();
   // Summe der Fehl-Schranken der Bücher, in denen der Term VORKOMMT — abgezogen
@@ -376,12 +389,13 @@ const _stmtRefFingerprint = db.prepare(`
    WHERE bl.book_id != ?
      AND bl.freq_json IS NOT NULL
      AND bl.lexicon_version = ?
+     AND bl.language = ?
      AND b.owner_email IS NOT NULL
      AND b.owner_email = (SELECT owner_email FROM books WHERE book_id = ?)
    ORDER BY bl.book_id
 `);
-function referenceFingerprint(bookId, version) {
-  return _stmtRefFingerprint.all(bookId, version, bookId)
+function referenceFingerprint(bookId, version, language) {
+  return _stmtRefFingerprint.all(bookId, version, language, bookId)
     .map(r => `${r.book_id}:${r.content_sig || ''}`).join(',');
 }
 
@@ -399,6 +413,7 @@ const _stmtPeerRows = db.prepare(`
     JOIN books b ON b.book_id = bl.book_id
    WHERE bl.book_id != ?
      AND bl.lexicon_version = ?
+     AND bl.language = ?
      AND b.owner_email IS NOT NULL
      AND b.owner_email = (SELECT owner_email FROM books WHERE book_id = ?)
 `);
@@ -411,8 +426,10 @@ function _median(nums) {
 }
 // Nur Bücher derselben Analyse-Version: nach einer Regeländerung (z.B. einer
 // vollständigeren Funktionswortliste) sind alte und neue Werte nicht vergleichbar.
-function loadPeerStats(bookId, version) {
-  const rows = _stmtPeerRows.all(bookId, version, bookId);
+// Und nur Bücher derselben Sprache: Englisch hat systematisch andere Werte
+// (weniger Flexion → niedrigere MATTR/MTLD), der Median wäre kein Massstab.
+function loadPeerStats(bookId, version, language) {
+  const rows = _stmtPeerRows.all(bookId, version, language, bookId);
   if (!rows.length) return null;
   const out = { books: rows.length };
   for (const key of PEER_KEYS) {
@@ -442,5 +459,5 @@ function listScanScopes() {
 module.exports = {
   replaceBookLexicon, getBookLexicon, listLexiconTerms, listLexiconHapax, listLexiconNgrams,
   listChapterLexicon, listFigureIdiolect, stampLexiconHistory,
-  getLexiconSignature, loadReferenceCorpus, referenceFingerprint, loadPeerStats, listScanScopes,
+  getLexiconSignature, bookLanguage, loadReferenceCorpus, referenceFingerprint, loadPeerStats, listScanScopes,
 };

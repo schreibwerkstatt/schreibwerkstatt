@@ -489,4 +489,7 @@ module.exports = {
   aiCall,
   toSystemBlocks,
   summarizeCostByPhase, formatCostByPhase,
+  // Kosten-Bucket für Calls, die nicht durch aiCall laufen können (Tool-Loops mit
+  // Server-Tools, z.B. der Faktencheck mit web_search). Wirft nie.
+  recordCallCost: _recordCallCost,
 };

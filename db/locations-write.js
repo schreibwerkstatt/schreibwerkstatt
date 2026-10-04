@@ -240,7 +240,12 @@ function saveOrteToDb(bookId, orte, userEmail, chNameToId = null, pageNameToIdBy
     // location_figures.figure_id ist INTEGER (figures.id) seit Mig 73 — Lookup TEXT → INT.
     const { byFigId: figIdToRowId } = figIdMaps(bookId, userEmail);
     const insLf = db.prepare('INSERT OR IGNORE INTO location_figures (location_id, figure_id) VALUES (?, ?)');
-    const insLc = db.prepare('INSERT INTO location_chapters (location_id, chapter_id, haeufigkeit) VALUES (?, ?, ?)');
+    // Upsert statt INSERT: dasselbe Kapitel kann im kapitel-Array doppelt stehen (KI-
+    // Konsolidierung, Namensvariante desselben Kapitels mit ##-Präfix) — ein zweiter
+    // INSERT liefe in PRIMARY KEY (location_id, chapter_id) und bräche die ganze
+    // Orte-Transaktion samt Job ab. Die höhere Häufigkeit gewinnt.
+    const insLc = db.prepare(`INSERT INTO location_chapters (location_id, chapter_id, haeufigkeit) VALUES (?, ?, ?)
+      ON CONFLICT(location_id, chapter_id) DO UPDATE SET haeufigkeit = MAX(COALESCE(haeufigkeit, 0), excluded.haeufigkeit)`);
 
     for (let i = 0; i < orte.length; i++) {
       const o = orte[i];

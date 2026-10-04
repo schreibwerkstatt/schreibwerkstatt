@@ -64,3 +64,27 @@ test('_withRetry: transient → Erfolg nach Retries; nicht-transient → sofort'
   );
   assert.equal(c2, 1);
 });
+
+test('_rerankBatched: Pakete ≤ batchSize, globale Indizes, absteigend gemischt', async () => {
+  const { _rerankBatched } = require('../../lib/rerank.js');
+  const docs = Array.from({ length: 70 }, (_, i) => `d${i}`);
+  const sizes = [];
+  // Score = globale Position, damit die Zusammenführung prüfbar ist.
+  const out = await _rerankBatched(docs, 32, async (part) => {
+    sizes.push(part.length);
+    return part.map((d, i) => ({ index: i, score: Number(d.slice(1)) / 100 })).reverse();
+  });
+  assert.deepEqual(sizes, [32, 32, 6]);
+  assert.equal(out.length, 70);
+  assert.deepEqual(out.slice(0, 3).map(o => o.index), [69, 68, 67]);
+  assert.ok(out.every(o => docs[o.index] === `d${Math.round(o.score * 100)}`));
+});
+
+test('_rerankBatched: Fehler in einem Paket wirft (Aufrufer fällt zurück)', async () => {
+  const { _rerankBatched } = require('../../lib/rerank.js');
+  let n = 0;
+  await assert.rejects(_rerankBatched(['a', 'b', 'c'], 2, async (part) => {
+    if (++n === 2) throw new Error('HTTP 422');
+    return part.map((_, i) => ({ index: i, score: 0.5 }));
+  }), /422/);
+});

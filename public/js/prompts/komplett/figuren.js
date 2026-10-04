@@ -96,12 +96,12 @@ Figurenliste:
 ${figInfo}
 
 Buchtext:
-${bookText}
+${bookText == null ? '(steht im System-Prompt oben)' : bookText}
 
 Antworte mit diesem JSON-Schema:
 {
   "beziehungen": [
-    { "von": "fig_1", "zu": "fig_2", "typ": "elternteil|geschwister|kind|freund|feind|kollege|bekannt|liebesbeziehung|ehepartner|ex_partner|rivale|mentor|schuetzling|patronage|geschaeft|verbuendete|komplize|vorgesetzter|untergebener|andere", "machtverhaltnis": 0, "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (ohne ##-Präfix)", "seite": "Seitentitel (ohne ###-Präfix); leer wenn = Kapitel oder unklar" }] }
+    { "von": "fig_1", "zu": "fig_2", "typ": "elternteil|geschwister|kind|freund|feind|kollege|bekannt|liebesbeziehung|ehepartner|ex_partner|rivale|mentor|schuetzling|patronage|geschaeft|verbuendete|komplize|vorgesetzter|untergebener|andere", "machtverhaltnis": 0, "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (ohne ##-Präfix)", "seite": "Abschnittstitel (ohne ###-Präfix); leer wenn = Kapitel oder unklar" }] }
   ]
 }
 
@@ -112,7 +112,7 @@ Regeln:
 - Jede Beziehung nur einmal eintragen (nicht von→zu UND zu→von für denselben Typ)
 - Keine Beziehungen die bereits in «Bekannte Beziehungen» stehen
 - machtverhaltnis: ganzzahlig im Bereich -2 bis 2 (KEIN führendes Plus-Zeichen). Machtasymmetrie: 2=Gegenüber («zu») dominiert klar, 1=Gegenüber hat leichten Vorteil, 0=symmetrisch, -1=diese Figur («von») hat leichten Vorteil, -2=diese Figur dominiert klar; weglassen oder 0 wenn unklar
-- belege: HÖCHSTENS 1 Stelle (Kapitelname + Seitentitel) an der die Beziehung sichtbar wird. seite leer lassen wenn identisch mit dem Kapitelnamen oder unklar. Seitennamen aus ### Überschriften, Kapitel aus ## Überschriften des übergebenen Textes.
+- belege: HÖCHSTENS 1 Stelle (Kapitelname + Abschnittstitel) an der die Beziehung sichtbar wird. seite leer lassen wenn identisch mit dem Kapitelnamen oder unklar. Abschnittsnamen aus ### Überschriften, Kapitel aus ## Überschriften des übergebenen Textes.
 - Leeres Array wenn keine neuen kapitelübergreifenden Beziehungen eindeutig belegt sind`;
 }
 
@@ -154,7 +154,7 @@ ${textBlock}
 Antworte mit diesem JSON-Schema:
 {
   "beziehungen": [
-    { "von": "fig_1", "zu": "fig_2", "typ": "elternteil|geschwister|kind|freund|feind|kollege|bekannt|liebesbeziehung|ehepartner|ex_partner|rivale|mentor|schuetzling|patronage|geschaeft|verbuendete|komplize|vorgesetzter|untergebener|andere",${machtField} "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (ohne ##-Präfix)", "seite": "Seitentitel (ohne ###-Präfix); leer wenn = Kapitel oder unklar" }] }
+    { "von": "fig_1", "zu": "fig_2", "typ": "elternteil|geschwister|kind|freund|feind|kollege|bekannt|liebesbeziehung|ehepartner|ex_partner|rivale|mentor|schuetzling|patronage|geschaeft|verbuendete|komplize|vorgesetzter|untergebener|andere",${machtField} "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (ohne ##-Präfix)", "seite": "Abschnittstitel (ohne ###-Präfix); leer wenn = Kapitel oder unklar" }] }
   ]
 }
 
@@ -162,7 +162,7 @@ Regeln:
 - von/zu: nur IDs aus der obigen Figurenliste
 - typ beschreibt die ROLLE von «zu» (NICHT von «von»). Beispiel: Robert hat Mutter Sandra → { von: «<Roberts id>», zu: «<Sandras id>», typ: elternteil } (Sandra IST der Elternteil von Robert). patronage=Schutzherrschaft (zu = Patron), geschaeft=wirtschaftliche Beziehung, geschwister/ehepartner/ex_partner/verbuendete/komplize=ungerichtet, vorgesetzter=«zu» ist Vorgesetzte(r) von «von», untergebener=«zu» ist «von» unterstellt, liebesbeziehung nur für nicht-eheliche romantische Bindung, übrige selbsterklärend.
 - Pro Figurenpaar höchstens EINE Beziehung – nicht von→zu UND zu→von für dasselbe Paar. Keine widersprüchlichen Angaben.${machtRule}
-- belege: HÖCHSTENS 1 Stelle (Kapitelname + Seitentitel) an der die Beziehung klar wird. seite leer lassen wenn identisch mit dem Kapitelnamen oder unklar. Seitennamen aus ### Überschriften, Kapitel aus ## Überschriften.
+- belege: HÖCHSTENS 1 Stelle (Kapitelname + Abschnittstitel) an der die Beziehung klar wird. seite leer lassen wenn identisch mit dem Kapitelnamen oder unklar. Abschnittsnamen aus ### Überschriften, Kapitel aus ## Überschriften.
 - KONSERVATIV: Nur Beziehungen die im Text eindeutig belegt sind – lieber weglassen als spekulieren.${scopeRule}
 - Leeres Array wenn keine Beziehungen eindeutig belegt sind.`;
 }

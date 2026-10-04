@@ -68,3 +68,20 @@ test('behält Empfehlung, die ihr Ziel positiv formuliert («… konsistent blei
     empfehlung: 'Alter in Kapitel 5 anpassen, damit die Zeitlinie konsistent bleibt und alles stimmig ist.',
   }), false);
 });
+
+// Verneinung mit Füllwörtern dazwischen ist KEINE Entwarnung — der Befund bleibt.
+for (const beschreibung of [
+  'Die Zeitlinie ist nicht mehr konsistent.',
+  'Die Altersangaben sind nicht ganz stimmig.',
+  'Das wirkt nicht so recht stimmig.',
+  'Die Reihenfolge ist kaum wirklich in sich stimmig.',
+  'Die Daten sind nicht zeitlich konsistent.',
+]) {
+  test(`behält verneinten Befund: «${beschreibung}»`, () => {
+    assert.equal(_isSelfCancelled({ beschreibung, empfehlung: 'Angabe in Kapitel 3 anpassen.' }), false);
+  });
+}
+
+test('droppt weiterhin positives «in sich konsistent»', () => {
+  assert.equal(_isSelfCancelled({ beschreibung: 'Die Angaben sind in sich konsistent.' }), true);
+});

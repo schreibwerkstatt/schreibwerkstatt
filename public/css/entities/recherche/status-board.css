@@ -106,6 +106,12 @@ body.research-dnd-active .research-status-cell {
   transition: transform var(--transition-fast);
 }
 .research-status-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+/* Offenes Aktionsmenü: kein Transform — er machte die Karte zum Containing-
+   Block des fixed Menüs (research-item-menu), das Menü spränge beim Hover.
+   Auch keine Transition dorthin: solange translateY(-1px) → none läuft, ist
+   der Transform noch gesetzt, das Menü sitzt kartenrelativ weit rechts und
+   das Board (overflow-x: auto) blendet kurz einen Scrollbalken ein. */
+.research-status-card:has([aria-expanded="true"]) { transform: none; transition: none; }
 .research-status-card--pinned { background: var(--color-bg); }
 .research-status-card--archived { opacity: 0.6; }
 .research-status-card--open { border-color: var(--card-accent); }

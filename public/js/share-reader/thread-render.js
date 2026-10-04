@@ -163,7 +163,7 @@ export function createThreadRenderer(deps) {
   // Bearbeiten + Löschen (nur ohne Antworten); Antwort-Beiträge: Bearbeiten +
   // Löschen. Auf Hover-Geräten erst bei Hover/Auswahl/Fokus sichtbar (CSS).
   function renderOwnActions(c, { isRoot, hasReplies, bodyEl }) {
-    const actions = el('div', 'share-thread__actions');
+    const actions = el('div', 'share-thread__actions hover-reveal');
     const status = statusEl();
 
     if (isRoot) {
@@ -227,7 +227,7 @@ export function createThreadRenderer(deps) {
 
   function renderThread(node, { activeId } = {}) {
     const { root, replies } = node;
-    const li = el('li', 'comment-rail__thread share-thread');
+    const li = el('li', 'comment-rail__thread share-thread hover-reveal-host');
     li.dataset.commentId = root.id;
     if (root.resolved) li.classList.add('comment-rail__thread--resolved');
     if (root.id === activeId) li.classList.add('comment-rail__thread--selected');

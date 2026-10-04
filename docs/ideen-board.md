@@ -2,8 +2,18 @@
 
 Ideen sind in diesem Haus zweierlei: eine **mögliche Fortsetzung** („hier könnte
 die Schwester auftauchen") und eine **Pendenz** an einer Stelle im Text („Beleg
-nachtragen, Zeitangabe prüfen"). Beides hängt an genau einem Anker — einer Seite
-**oder** einem Kapitel (XOR-CHECK in `ideen`).
+nachtragen, Zeitangabe prüfen"). Beides hängt an **höchstens einem** Anker — einer
+Seite **oder** einem Kapitel; ohne Anker gehört die Idee nur dem Buch
+(CHECK `page_id IS NULL OR chapter_id IS NULL` in `ideen`).
+
+**Buch-Ideen** sind Einfälle, die noch keinen Ort im Text haben. Sie entstehen
+ausschliesslich im Board (die Ideen-Karte ist an Seite bzw. Kapitel gebunden),
+stehen dort in der Buch-Bahn ganz oben und werden vom Autor später einer Seite
+oder einem Kapitel übergeben — per „Zuordnen" auf der Karte oder per Drag
+(siehe „Ein Drag" in § 2). Kein `kind`-Diskriminator
+daneben: die zwei nullbaren FKs beschreiben den Anker vollständig. Ein
+Seiten-Umzug in ein anderes Buch ([localdb.js](../lib/content-store/backends/localdb.js)#`movePage`)
+macht die Ideen der Seite zu Buch-Ideen des Quellbuchs, statt sie mitzunehmen.
 
 Zwei Oberflächen, dieselben Zeilen:
 
@@ -46,7 +56,7 @@ damit die Zählpfade nicht jeder für sich eine `IN`-Liste schreiben. Daran hän
 drei Dinge, und in allen dreien ist `verworfen` **nicht** offen:
 
 * die Sidebar-Plakette und `GET /ideen/counts`,
-* der Ideen-Block im **Seiten-Chat** ([jobs/shared/queries.js](../routes/jobs/shared/queries.js)#`getOpenIdeen`),
+* der Ideen-Block im **Abschnitts-Chat** ([jobs/shared/queries.js](../routes/jobs/shared/queries.js)#`getOpenIdeen`),
 * das Buch-Chat-Werkzeug `list_ideen` (`offen_only`).
 
 **Why beim Chat:** eine verworfene Idee als Absicht des Autors vorzulegen ist die
@@ -72,7 +82,45 @@ im Recherche-Board.
 ein anderes Kapitel) ist nur offen/in Arbeit erlaubt (`400 IDEE_CLOSED`): eine
 abgeschlossene Idee ist die Spur einer Entscheidung an **dieser** Stelle;
 anderswo hingehängt wäre sie eine Aussage über eine Stelle, an der sie nie stand.
-Der Move bleibt ausserdem **within-kind** (Seiten-Idee nur auf eine Seite).
+Der Move bleibt ausserdem **within-kind** (Seiten-Idee nur auf eine Seite);
+einzige Ausnahme ist die Buch-Idee, die auf Seite **oder** Kapitel darf — das ist
+ihr Zweck. Zurück ins Buch geht keine Idee: wer sie vom Ort lösen will, legt sie
+neu an.
+
+### Stufen pro Buch
+
+Nicht jedes Buch braucht vier Stufen. `book_settings.ideen_stages` hält die
+**aktiven** Stufen als Komma-Text in kanonischer Reihenfolge; **`offen` und
+`erledigt` sind immer aktiv** (ohne Anfang keine Pendenz, ohne Ende kein Abhaken),
+`in_arbeit` und `verworfen` schaltet das Buch zu. `NULL` heisst „nie eingestellt"
+und liest sich als alle vier: ein bestehendes Buch sieht sein Board unverändert.
+Normalisiert wird an **einer** Stelle, `normalizeIdeeStages` in
+[lib/ideen-status.js](../lib/ideen-status.js) (Spiegel in
+[ideen-shared.js](../public/js/book/ideen-shared.js), gegated in
+[tests/unit/ideen-stages.test.mjs](../tests/unit/ideen-stages.test.mjs)).
+
+**Buchweit, nicht user-privat.** Die Ideen gehören dem User, die Stufen dem Buch:
+schaltet ein Editor `verworfen` ab, gilt das auch für das Brett seiner
+Mitarbeiter. Darum sagt es der Hinweis neben dem Schalter.
+
+**Abschalten heisst „nicht mehr anbieten", nicht „ausblenden".** Eine Idee, die
+schon in einer abgeschalteten Stufe steht, behält ihren Status — die Einstellung
+schreibt keine einzige Idee um. Daraus folgt:
+
+* das Board zeigt die Spalte weiter, solange sie Ideen trägt (`boardColumns` in
+  [ideen-board/model.js](../public/js/book/ideen-board/model.js)), gestrichelt
+  markiert; sie geht, wenn sie leer ist — sonst verschwände eine Pendenz still,
+  sobald ihr Buch die Stufe abschaltet;
+* Drag, Stufen-Knöpfe und das Menü der Ideen-Karte bieten nur **aktive** Ziele
+  an; herausziehen geht immer;
+* der Server lehnt einen **Wechsel** in eine abgeschaltete Stufe ab
+  (`400 IDEE_STATUS_INACTIVE`); derselbe Status noch einmal ist kein Wechsel,
+  damit ein PATCH, der ihn mitschickt, nicht scheitert.
+
+Eingestellt wird im Board selbst (Schalter „Spalten" im Kopf), weil man dort
+sieht, was die Einstellung bewirkt. Die Einstellung reist im Bundle mit
+(`SETTINGS_KEYS` in [lib/book-bundle.js](../lib/book-bundle.js)) — `.swbook` und
+Fassungs-Restore.
 
 ---
 
@@ -87,14 +135,23 @@ Ein Raster: **Zeilen sind die Anker im Buch** (Bahnen — Kapitel bzw. Seite),
 `$store.nav.tree` ist die SSoT der Buch-Reihenfolge (`book_order`-Overlay), ein
 `ORDER BY position` im Ideen-SQL wäre eine zweite, stillschweigend abweichende
 Sortierung. Pro Kapitel entsteht zuerst die Kapitel-Bahn, danach die Bahnen seiner
-Seiten; eine Solo-Seite bekommt nur ihre Seiten-Bahn (eine Kapitel-Bahn dafür wäre
-eine Bahn für ein Kapitel, das es nicht gibt). Der Baum kann sich unter dem
+Seiten; eine Solo-Seite bekommt nur ihre Abschnitts-Bahn (eine Kapitel-Bahn dafür wäre
+eine Bahn für ein Kapitel, das es nicht gibt). Der Baum ist flach und depth-first;
+die Gliederung trägt jede Kapitel-Bahn als `parentId` mit. **Die Hierarchie zeigt der
+Einzug** (`ideen-board-row--depth-N`: Kapitel nach ihrer Tiefe, ein Abschnitt eine
+Stufe unter seinem Kapitel) — eine Abschnitts-Bahn wiederholt den Kapitelnamen
+nicht, ihre Kapitelzeile steht immer darüber. Vor allen steht die Buch-Bahn
+(`LANE_BOOK`, [ideen-shared.js](../public/js/book/ideen-shared.js)) für Ideen
+ohne Anker; sie ist nicht anspringbar und fällt aus jedem Kapitel-Filter. Das
+Anlegen-Feld hat sie vorgewählt, damit ein Einfall ohne Ortswahl festgehalten
+ist. Der Baum kann sich unter dem
 offenen Board ändern — darum zieht ein `$watch` die Bahnen nach.
 
 **Nur belegte Bahnen erscheinen.** Ein Board mit einer leeren Zeile je Seite des
 Buches wäre unlesbar. **Ausnahme ist die Kapitel-Bahn:** sie bleibt auch ohne
-eigene Ideen stehen, sobald eine ihrer Seiten welche trägt — sie ist die
-Gruppen-Überschrift und der Griff, an dem das Kapitel zuklappt. Ohne sie wäre
+eigene Ideen stehen, sobald ihr **Teilbaum** welche trägt (eigene Abschnitte,
+Unterkapitel, deren Abschnitte) — sie ist die Gruppen-Überschrift und der Griff,
+an dem das Kapitel zuklappt. Ohne sie wäre
 genau das Kapitel nicht klappbar, dessen Pendenzen alle auf Seiten hängen, also
 fast jedes.
 
@@ -104,7 +161,7 @@ von Bahn-Keys:
 | | was sie faltet | Griff |
 |---|---|---|
 | `collapsedLanes` | die **Karten** einer Bahn | Chevron vor dem Bahntitel |
-| `collapsedChapters` | die **Seiten-Bahnen** eines Kapitels, in dessen Zeile | „*n* Seiten" unter dem Kapiteltitel |
+| `collapsedChapters` | den **Teilbaum** eines Kapitels (Unterkapitel + Abschnitts-Bahnen), in dessen Zeile; *n* zählt die belegten Abschnitte des ganzen Teilbaums | „*n* Abschnitte" unter dem Kapiteltitel |
 
 Sie sind getrennt, weil sie Verschiedenes beantworten („zeig das Kapitel ohne
 seine Seiten" vs. „zeig die Bahn ohne ihre Notizen"). Beide liegen **pro Buch im
@@ -129,7 +186,9 @@ unterscheiden.
 **Der Kapitel-Filter misst die BAHN, nicht den Anker.** Dafür liefert der Server
 `lane_chapter_id` mit (für eine Seiten-Idee das Kapitel **ihrer Seite**). Nach
 `chapter_id` gefiltert fände „Kapitel 3" nur die Ideen, die direkt am Kapitel
-hängen — also die wenigsten.
+hängen — also die wenigsten. Der Filter erfasst den **Teilbaum** (Unterkapitel
+über die `parentId`-Kette), und wählbar ist jedes Kapitel, dessen Teilbaum Ideen
+trägt.
 
 **Zwei Haken für die zwei Schlussstufen.** `erledigt` und `verworfen` sind
 getrennt ausblendbar, beide per Default aus: das Board ist eine Pendenzenliste,
@@ -149,12 +208,60 @@ nicht**: Bahnen, Spalten und Zähler rendern dieselbe Liste desselben Requests
 **Die Kapitel-Optionen des Filters hängen nicht am Status-Filter** — sonst
 verschwände die eigene Auswahl unter der Hand, sobald man `verworfen` ausblendet.
 
-**Ein Drag trägt genau eine Aussage: den neuen Status.** Die Bahn bleibt, wie sie
-ist — sie IST der Anker im Buch, und den verschiebt man nicht per Kanban-Zug quer
-durchs Manuskript (dafür gibt es „Verschieben" auf der Ideen-Karte). Technisch:
-SortableJS-Gruppe **pro Bahn** (`idee-lane-<key>`). Eine Reihenfolge innerhalb
-einer Spalte gibt es nicht (`ideen` hat keine `sort_order`), darum wird der
-DOM-Move immer zurückgenommen (`revertSortable`) und nur der Status geschrieben.
+**Ein Drag einer verankerten Idee trägt genau eine Aussage: den neuen Status.**
+Ihre Bahn bleibt, wie sie ist — sie IST der Anker im Buch, und den verschiebt man
+nicht per Kanban-Zug quer durchs Manuskript (dafür gibt es „Verschieben" auf der
+Ideen-Karte). Technisch: SortableJS-Gruppe **pro Bahn** (`idee-lane-<key>`). Der
+DOM-Move wird immer zurückgenommen (`revertSortable`) — Alpine besitzt den DOM;
+aus ihm wird vorher nur abgelesen, wohin die Karte fiel.
+
+**Ausnahme: die offene Buch-Idee wird per Drag zugeordnet.** Sie hat noch keinen
+Anker, und ihn zu bekommen ist ihr Zweck. Zwei Ziele, ein Schreibpfad mit dem
+Picker (`_assignIdee` in [actions.js](../public/js/book/ideen-board/actions.js),
+ein PATCH):
+
+* **eine Kapitel-/Abschnitts-Bahn des Boards** — setzt den Anker und, wenn es
+  eine andere ist, die Stufe der Zielspalte. Angenommen werden nur `offen` und
+  `in_arbeit` (`_canDropAssign`): eine Idee, die beim Zuordnen gleich
+  abgeschlossen würde, hätte an ihrem Anker nie offen gestanden.
+* **ein Eintrag im Inhaltsverzeichnis der Sidebar** — das Board zeigt nur
+  belegte Bahnen, ein Kapitel oder Abschnitt ohne Ideen ist dort kein Ziel; die
+  Sidebar führt jeden Anker. Sortable kennt den Baum nicht (der Drop dort ist ein
+  Spill), darum merkt [tree-drop.js](../public/js/book/ideen-board/tree-drop.js)
+  während des Zugs den Baumeintrag unter dem Zeiger und markiert ihn
+  (`.tree-drop-target`). Die Stufe bleibt.
+
+**Die Reihenfolge der Karten wählt jede Spalte für sich**
+([model.js](../public/js/book/ideen-board/model.js)#`columnSortOf`/`nextColumnSort`).
+Im Spaltenkopf steht ein Segment-Umschalter **Datum** / **A–Z** (dem Text, Ideen
+haben keinen eigenen Titel); ein zweiter Klick aufs aktive Kriterium kehrt die
+Richtung um, Gleichstand fällt auf die `id`. Daneben holt der Reset-Knopf die
+**ursprüngliche Position** der Spalte zurück. Gehalten wird das als Map
+`columnSort` (Stufe → `{ by, dir }`) im Filter-Scope `ideenBoard`; der Reset
+**entfernt** den Eintrag, statt `manual` hineinzuschreiben — „nie umsortiert"
+und „zurückgesetzt" sind derselbe Zustand, und ein kaputter Wert aus dem
+localStorage fällt ebenfalls dorthin. Pro Spalte, weil die Stufen Verschiedenes
+fragen: offene Pendenzen ordnet man von Hand, das Erledigte liest man nach
+Datum. Die Reihenfolge der Server-Abfrage zählt dafür nicht — sortiert wird im
+Modell.
+
+**Die ursprüngliche Position ist die eine Sortierung, die eine Position ist** —
+`ideen.sort_order`, in der DB statt im localStorage, weil sie Inhalt ist und
+nicht Ansicht: wer seine Pendenzen geordnet hat, will die Ordnung auf jedem
+Gerät, und eine Ansichts-Sortierung darf sie nie überschreiben (darum kann der
+Reset sie zurückholen). Nur in einer Spalte, die so steht, zieht man
+**innerhalb** der Spalte (Sortable-Option `sort` je Zelle nach ihrer Spalte,
+umgeschaltet an den bestehenden Instanzen); in einer sortierten ordnete das
+Kriterium die Karte sofort wieder um. Ein Drop schreibt die **ganze Zelle**
+(Bahn × Stufe) als 1..n (`PUT /ideen/order`, ganz oder gar nicht); ein Zug in
+eine andere Spalte setzt zuerst den Status und nummeriert dann die Zielzelle —
+sofern die **Zielspalte** in ihrer ursprünglichen Position steht. Die Zelle umfasst den ganzen
+Bestand, auch was der Textfilter gerade ausblendet — die gezogene Idee wird nur
+vor ihren sichtbaren Nachfolger gesetzt (`cellOrderAfterDrop`), eine
+ausgeblendete verliert so nie ihren Platz. `0` heisst „nie einsortiert": eine
+neue Idee steht oben in ihrer Zelle, unter mehreren davon die neueste zuerst.
+Die ursprüngliche Position hat keine Richtung; der Reset-Knopf erscheint nur,
+solange die Spalte sortiert ist.
 Der tastaturerreichbare Weg sind die Stufen-Knöpfe auf der Karte — **derselbe
 Schreibpfad** (`setIdeeStatus`), drei Oberflächen (Board-Drag, Board-Knöpfe,
 Menü der Ideen-Karte).
@@ -166,24 +273,39 @@ Fläche horizontal, statt die Zeilen-Achse aufzugeben — untereinander gestapel
 wäre genau die Aussage des Boards weg, und dann wäre die Ideen-Karte das bessere
 Werkzeug.
 
+**Vollbild:** Knopf im Kartenkopf schaltet die ganze Karte ins Native-Vollbild
+(`.fullscreen-shell`, [fullscreen.js](../public/js/fullscreen.js), wie Plot und
+Recherche). Das Raster braucht dafür keine eigene Regel — die Spaltenbreite hängt
+am Container `.ideen-board-wrap`, nicht am Viewport. Was sonst unter `<body>`
+hängt, läge im Vollbild hinter dem `::backdrop` und wird darum zur Anzeigezeit
+umgehängt: der Drag-Ghost (`onStart`) und der Verknüpfungs-Picker
+(`mountInTopLayer` in `openLinkPicker`). Der Drop aufs Inhaltsverzeichnis entfällt
+im Vollbild — der Baum ist dann nicht zu sehen; „Zuordnen" auf der Karte bleibt.
+
 ---
 
 ## 3 · Verknüpfungen (beidseitig)
 
 `idea_links` — Brücke von einer Idee zu einem **Recherche-Fundstück**, einem
-**Plot-Beat** oder einem **Motiv**. Form ist der Zwilling von
+**Plot-Beat**, einem **Handlungsstrang** (`thread`), einem **Motiv** oder einer
+**Werkstatt-Figur** (`draft`). SSoT der Ziel-Arten: `IDEA_LINK_KINDS` in
+[lib/ideen-status.js](../lib/ideen-status.js) (Frontend-Spiegel in
+[ideen-shared.js](../public/js/book/ideen-shared.js), Drift + DB-CHECK gegated in
+[tests/unit/ideen-status.test.mjs](../tests/unit/ideen-status.test.mjs)). Form ist der Zwilling von
 `research_item_links`: sentinel-frei, genau eine `*_id` passend zum
 `target_kind`, alle anderen NULL, partielle UNIQUE-Indexe je Ziel-Art.
 
 **Warum eine eigene Tabelle** statt `research_item_links.target_kind` um `'idea'`
 zu erweitern: die Idee besitzt ihre Verknüpfungen. Sonst läge ein Drittel davon
-(Recherche) in einer fremden Tabelle und zwei Drittel (Beat, Motiv) hier — und
+(Recherche) in einer fremden Tabelle und der Rest (Beat, Motiv, …) hier — und
 die Frage „woran hängt diese Pendenz" hätte zwei Lesepfade.
 
-**Warum nur diese drei Ziele:** alle drei sind **planende** Kataloge desselben
-Buches. Eine Pendenz hängt an einem Fundstück, einem Handlungspunkt oder einem
-Motiv — nicht an einer Textstelle, denn ihre Stelle im Buch **ist** ja schon ihr
-Anker.
+**Warum nur diese Ziele:** alle sind **planende** Kataloge desselben Buches. Eine
+Pendenz hängt an einem Fundstück, einem Handlungspunkt, einem Strang, einem Motiv
+oder einer Werkstatt-Figur — nicht an einer Textstelle, denn ihre Stelle im Buch
+**ist** ja schon ihr Anker. Katalog-Figur, Ort und Szene sind bewusst **keine**
+Ziele: sie werden aus dem Text extrahiert, nicht geplant, und eine Pendenz „im
+Text" hat mit Seite/Kapitel schon ihren Ort.
 
 **Ein Ziel bleibt im Buch.** Der FK allein liesse eine Idee aus Buch A auf ein
 Motiv aus Buch B zeigen; die Buch-Prüfung liegt in
@@ -195,7 +317,8 @@ Motiv heisst sofort überall neu.
 
 ### Die Gegenrichtung
 
-Die Ideen-Plaketten **an** einem Fundstück / Beat / Motiv laufen über **einen**
+Die Ideen-Plaketten **an** einem Fundstück / Beat / Strang / Motiv / einer
+Werkstatt-Figur laufen über **einen**
 Endpunkt — `GET /ideen/links?book_id=&target_kind=` — und ein geteiltes Modul
 ([ideen-backlinks.js](../public/js/book/ideen-backlinks.js) +
 [ideen-backlinks.html](../public/partials/ideen-backlinks.html)).
@@ -216,15 +339,42 @@ ein Motiv-Katalog, der wegen einer fehlenden Beigabe gar nicht erscheint, wäre 
 schlechtere Tausch.
 
 **Der Host nennt das Ziel `ideaOwnerId`** (per `x-data` auf einem Wrapper über dem
-Include), weil die drei Karten ihre Entität verschieden benennen.
+Include), weil die Karten ihre Entität verschieden benennen. Hält eine Karte zwei
+Ziel-Arten (Plot-Karte: Beats in `ideaBacklinks`, Stränge in
+`threadIdeaBacklinks`), nennt der Wrapper zusätzlich `ideaSource`.
 
 **`.swbook` trägt die Kanten NICHT mit** ([db/book-migration-data.js](../db/book-migration-data.js)):
-keiner der drei Zielkataloge steht im Bundle. Eine mitgenommene Kante hätte auf
+keiner der Zielkataloge steht im Bundle. Eine mitgenommene Kante hätte auf
 der Zielinstanz kein Gegenüber — oder, schlimmer, träfe eine gleich nummerierte
 fremde Zeile. Alt-Bundles mit `erledigt`/`erledigt_at` werden weiter gelesen,
 geschrieben wird nur die aktuelle Form.
 
 ---
+
+### Ideen als KI-Kontext und in anderen Ansichten
+
+Die Ideen sind dem Autor **bekannt** — ein KI-Befund, der eine offene Pendenz nur
+wiederholt, ist Rauschen, und eine verworfene Idee erneut vorzuschlagen ignoriert
+seine Entscheidung. Darum lesen die planenden KI-Funktionen sie mit:
+
+- **Plot-Konsistenz, Plot-Brainstorm, Plot-Chat** — Ideen an Beats und Strängen
+  stehen direkt am Beat bzw. Strang im Prompt: offene/in Arbeit als „bekannt,
+  nicht als neuen Befund melden", verworfene als „nicht erneut vorschlagen";
+  erledigte fallen raus. Daten: [lib/idea-context.js](../lib/idea-context.js)#`ideaNotesByTarget`,
+  Textform (SSoT): [prompts/plot/lines.js](../public/js/prompts/plot/lines.js)#`_ideenMarker`
+  (Facade `ideenMarker`, auch vom Plot-Chat über `getPrompts`).
+- **Kapitelbewertung** — die offenen Ideen des Kapitels und seiner Seiten als
+  eigener Block („wiederhole sie nicht als Empfehlung, bestätigen/präzisieren
+  ist erlaubt, kein Einfluss auf die Note"), `loadChapterIdeenContext`
+  ([review-context.js](../routes/jobs/review-context.js)). Steht in der
+  `optionsSig` nur, wenn vorhanden; der Kapitel-Cache ist pro User.
+- **Buch-Chat** — `list_ideen` liefert pro Idee `verknuepft` (Ziele aus `idea_links`).
+- **Ideen-Chat** — Panel im Board selbst: prüft offene Pendenzen gegen den Text (Beleg-Pflicht für «erledigt»), sucht Buch-Ideen einen Ort, führt Dubletten zusammen. Schreibt nicht, jeder Vorschlag läuft beim Übernehmen über die Routen unten. Details: [ideen-chat.md](ideen-chat.md).
+- **Buchübersicht** — Kachel „Ideen" ([book-overview/ideen.js](../public/js/book-overview/ideen.js)):
+  offene Pendenzen, Verteilung auf die Stufen, Buch-Ideen ohne Ort, offene mit
+  Verknüpfung. Quelle `GET /ideen/board`; Viewer (403) sehen sie nicht.
+- **Bucheditor** — Zähler der offenen Ideen an Kapitel- und Seitenkopf (aus dem
+  Badges-Store, derselbe Sprung wie in der Sidebar).
 
 ## 4 · Routen
 
@@ -232,18 +382,22 @@ geschrieben wird nur die aktuelle Form.
 |---|---|
 | `GET /ideen?page_id=` / `?chapter_id=` | Ideen eines Ankers (offen zuerst) |
 | `GET /ideen/counts?book_id=&kind=` | Map Anker → Zahl **offener** Ideen (Sidebar-Plakette) |
-| `GET /ideen/board?book_id=` | alle Ideen des Buchs — Datenquelle des Boards |
+| `GET /ideen/board?book_id=` | alle Ideen des Buchs + aktive Stufen — Datenquelle des Boards |
+| `GET /ideen/stages?book_id=` · `PUT /ideen/stages` | aktive Stufen des Buchs lesen / setzen (buchweit) |
 | `GET /ideen/link-targets?book_id=` | verknüpfbare Ziele (Recherche / Beat / Motiv) |
 | `GET /ideen/links?book_id=&target_kind=` | Gegenrichtung: Map Ziel-ID → Ideen-Anrisse |
 | `POST /ideen` | anlegen (XOR `page_id`/`chapter_id`) |
 | `PATCH /ideen/:id` | `content`, `status`, Move |
+| `PUT /ideen/order` | manuelle Reihenfolge einer Board-Zelle (`ids` → `sort_order` 1..n) |
 | `POST /ideen/:id/links` · `DELETE /ideen/:id/links/:linkId` | Kante setzen / lösen |
+| `PATCH /ideen/chat-proposal` | Status eines Ideen-Chat-Vorschlags (übernommen / verworfen / wieder offen), [ideen-chat.md](ideen-chat.md) |
 | `DELETE /ideen/:id` | löschen |
 
-Alle ab Rolle `editor` auf dem Buch, alle zusätzlich auf den eigenen
-`user_email`-Bestand beschränkt. Fehlerformen: `INVALID_SCOPE`, `BOOK_MISMATCH`,
-`KIND_MISMATCH`, `IDEE_CLOSED`, `INVALID_STATUS`, `INVALID_LINK_KIND`,
-`LINK_TARGET_NOT_FOUND`, `CONTENT_REQUIRED` / `CONTENT_TOO_LONG` (4000 Zeichen).
+Alle ab Rolle `editor` auf dem Buch, alle Ideen-Routen zusätzlich auf den
+eigenen `user_email`-Bestand beschränkt (`/stages` nicht — die Stufen gehören dem
+Buch). Fehlerformen: `INVALID_SCOPE`, `BOOK_MISMATCH`,
+`KIND_MISMATCH`, `IDEE_CLOSED`, `INVALID_STATUS`, `IDEE_STATUS_INACTIVE`, `INVALID_LINK_KIND`,
+`LINK_TARGET_NOT_FOUND`, `ORDER_REQ`, `ORDER_MISMATCH`, `CONTENT_REQUIRED` / `CONTENT_TOO_LONG` (4000 Zeichen).
 
 ---
 
@@ -258,10 +412,15 @@ Alle ab Rolle `editor` auf dem Buch, alle zusätzlich auf den eigenen
    Ausblend-Zahl, `+n` je eingeklappter Zelle).
 7. **Die Bahnen-Reihenfolge kommt aus dem Baum**, nie aus einer zweiten Sortierung.
 8. **Spalten-Zähler messen den Gesamtbestand**, nicht die gefilterte Sicht.
-9. **Ein Drag setzt den Status, nie die Bahn.**
+9. **Ein Drag setzt den Status, nie die Bahn** — einzige Ausnahme ist die offene
+   Buch-Idee, deren Drag in eine Kapitel-/Abschnitts-Bahn oder aufs
+   Inhaltsverzeichnis sie zuordnet. Eine verankerte Idee wechselt nie per Drag
+   die Zeile.
 10. **Klappen ist Ansicht, kein Filter** — es bewegt weder `visible` noch
     `hiddenByFilter`, und ein zugeklapptes Kapitel behält seine Zeile (sonst wäre
     der Griff zum Aufklappen mit weg).
 11. **Ein Status-Key ist eine Persistenz-Konstante.** Ergänzen ja, umbenennen nein —
     mit Eintrag in beide Locales (`ideen.status.<key>`), sonst rendert eine
     Alt-Zeile ihren rohen Key.
+12. **`offen` und `erledigt` sind nie abschaltbar**, und eine abgeschaltete Stufe
+    schreibt keine Idee um — ihre Spalte bleibt, solange sie belegt ist.

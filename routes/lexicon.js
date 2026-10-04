@@ -41,6 +41,13 @@ function _forViewer(rows, isOwner, { dropKey = false } = {}) {
 // Die Analyse-Version wird MITGELIEFERT, nicht im Frontend gespiegelt — eine
 // Frontend-Kopie driftet unbemerkt gegen den Server. `stale` sagt der Karte, dass
 // die gespeicherte Analyse aus einer älteren Rechenregel stammt und ein Scan lohnt.
+// Veraltet ist die Analyse auch, wenn die Buchsprache seit dem Scan umgestellt
+// wurde: Funktionswörter, Referenz und Vergleich hängen an ihr.
+function _isStale(stats, bookId) {
+  return (stats.lexicon_version || 0) !== LEXICON_VERSION
+    || stats.language !== lexiconDb.bookLanguage(bookId);
+}
+
 router.get('/:book_id', (req, res) => {
   const bookId = req.bookId;
   const isOwner = req.bookRole === 'owner';
@@ -64,9 +71,9 @@ router.get('/:book_id', (req, res) => {
   if (stats && summary) {
     return res.json({
       stats,
-      peers: isOwner ? lexiconDb.loadPeerStats(bookId, LEXICON_VERSION) : null,
+      peers: isOwner ? lexiconDb.loadPeerStats(bookId, LEXICON_VERSION, stats.language) : null,
       isOwner,
-      stale: (stats.lexicon_version || 0) !== LEXICON_VERSION,
+      stale: _isStale(stats, bookId),
       thresholds,
     });
   }
@@ -88,9 +95,9 @@ router.get('/:book_id', (req, res) => {
     idiolect: lexiconDb.listFigureIdiolect(bookId, sessionEmail(req), getOwnerEmail(bookId)),
     // Vergleichs-Mediane der übrigen Bücher desselben Besitzers — eine nackte
     // Kennzahl ist für den Autor nicht interpretierbar. Nur für den Besitzer.
-    peers: isOwner ? lexiconDb.loadPeerStats(bookId, LEXICON_VERSION) : null,
+    peers: isOwner ? lexiconDb.loadPeerStats(bookId, LEXICON_VERSION, stats.language) : null,
     isOwner,
-    stale: (stats.lexicon_version || 0) !== LEXICON_VERSION,
+    stale: _isStale(stats, bookId),
     thresholds,
   });
 });

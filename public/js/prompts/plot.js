@@ -26,6 +26,7 @@ import {
 } from './plot/board.js';
 
 export { plotReadingBlocks, plotSprachRegel } from './plot/board.js';
+export { _ideenMarker as ideenMarker } from './plot/lines.js';
 
 const SEVERITY_ENUM = ['kritisch', 'stark', 'mittel', 'schwach', 'niedrig'];
 
@@ -213,9 +214,9 @@ export function buildPlotConsistencyPrompt(acts, beats, kapitel = [], szenen = [
   // „nie gescannt" → falsche Drift-Flut).
   const anchorSeg = anchorMap ? `
 TEXTBELEGE (semantische Suche über das ECHTE Manuskript): Nur "im Buch"-Beats werden gegen den Text abgeglichen; hinter ihnen stehen ⟨…⟩-Marker, die zeigen, ob und wo der Beat tatsächlich im Buchtext auftaucht. Sie sind dein wichtigster Realitätsanker — genauer als der Szenen-Index:
-- "im Buch" + „KEIN Textbeleg" → starkes Drift-Signal: der Plan behauptet etwas, das die Textsuche NICHT findet. Priorisiere das und nenne den Beat samt Seite, falls bekannt.
+- "im Buch" + „KEIN Textbeleg" → starkes Drift-Signal: der Plan behauptet etwas, das die Textsuche NICHT findet. Priorisiere das und nenne den Beat samt Abschnitt, falls bekannt.
 - "im Buch" + Textbeleg → im Text belegt; beanstande ihn NICHT als „fehlt", ausser der Beleg-Ausschnitt passt inhaltlich erkennbar nicht zum Beat.
-Der Marker ist Ähnlichkeit, kein Beweis — urteile am Beleg-Ausschnitt, nicht blind. Nenne die belegende Seite im "problem"/"vorschlag", damit die Autorin sie anspringen kann.${anchorInfo.stale ? ' HINWEIS: Der Beleg-Index ist evtl. veraltet (Beats seit dem letzten Verankerungs-Lauf geändert) — behandle fehlende Belege bei offensichtlich frisch bearbeiteten Beats mit Vorsicht.' : ''}
+Der Marker ist Ähnlichkeit, kein Beweis — urteile am Beleg-Ausschnitt, nicht blind. Nenne den belegenden Abschnitt im "problem"/"vorschlag", damit die Autorin ihn anspringen kann.${anchorInfo.stale ? ' HINWEIS: Der Beleg-Index ist evtl. veraltet (Beats seit dem letzten Verankerungs-Lauf geändert) — behandle fehlende Belege bei offensichtlich frisch bearbeiteten Beats mit Vorsicht.' : ''}
 ` : '';
   const spannLines = _spannungLines(acts, beats, threads);
   const spannSeg = spannLines

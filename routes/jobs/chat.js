@@ -1,5 +1,5 @@
 'use strict';
-// Chat-Job-Router — Facade über routes/jobs/chat/. Vier Chats teilen den
+// Chat-Job-Router — Facade über routes/jobs/chat/. Fünf Chats teilen den
 // gemeinsamen POST-Handler + das Storage-Modell, laufen aber als getrennte
 // Job-Typen (siehe docs/chats.md).
 //
@@ -8,6 +8,7 @@
 //   chat/book-chat.js — Buch-Chat (kind='book', klassisch + agentisch + Dispatch).
 //   ../research-chat  — Recherche-Chat (kind='research', Claude-only, Web-Suche).
 //   ../plot-chat      — Plot-Chat (kind='plot', Panel der Plot-Werkstatt, Vorschläge ans Board).
+//   ../ideen-chat     — Ideen-Chat (kind='ideen', Panel im Ideen-Board, Vorschläge an die Ideen).
 
 const express = require('express');
 const { toIntId } = require('../../lib/validate');
@@ -17,6 +18,7 @@ const { runChatJob } = require('./chat/page-chat');
 const { runBookChatJobDispatch } = require('./chat/book-chat');
 const { runResearchChatJob } = require('./research-chat');
 const { runPlotChatJobDispatch } = require('./plot-chat');
+const { runIdeenChatJobDispatch } = require('./ideen-chat');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const { getBookSettings } = require('../../db/schema');
 const { setContext } = require('../../lib/log-context');
@@ -70,6 +72,16 @@ chatRouter.post('/plot-chat', jsonBody, (req, res) => _handleChatPost(req, res, 
     : { key: 'job.label.plotChat', params: null },
   // Agentisch bei Providern mit Werkzeug-Protokoll, sonst klassischer JSON-Call.
   runFn: runPlotChatJobDispatch,
+}));
+
+chatRouter.post('/ideen-chat', jsonBody, (req, res) => _handleChatPost(req, res, {
+  jobType: 'ideen-chat',
+  kind: 'ideen',
+  labelFn: s => s.book_name
+    ? { key: 'job.label.ideenChatBook', params: { name: s.book_name } }
+    : { key: 'job.label.ideenChat', params: null },
+  // Agentisch bei Providern mit Werkzeug-Protokoll, sonst klassischer JSON-Call.
+  runFn: runIdeenChatJobDispatch,
 }));
 
 chatRouter.delete('/book-chat-cache', (req, res) => {

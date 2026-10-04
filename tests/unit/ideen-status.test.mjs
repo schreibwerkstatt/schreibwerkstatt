@@ -80,7 +80,7 @@ test('Verknuepfungs-Arten: DB-CHECK von idea_links nennt genau diese Arten', () 
   const { SQUASHED_SCHEMA } = require(path.join(ROOT, 'db', 'squashed-schema.js'));
   const table = SQUASHED_SCHEMA.split(/;\n/).find(p => /CREATE TABLE "?idea_links"? \(/.test(p));
   assert.ok(table, 'idea_links-Tabelle nicht im Squashed-Schema gefunden');
-  const m = table.match(/target_kind TEXT\s+NOT NULL CHECK\(target_kind IN \(([^)]*)\)\)/);
+  const m = table.match(/target_kind\s+TEXT\s+NOT NULL CHECK\(target_kind IN \(([^)]*)\)\)/);
   assert.ok(m, 'CHECK auf idea_links.target_kind nicht gefunden');
   const inCheck = m[1].split(',').map(s => s.trim().replace(/^'|'$/g, ''));
   assert.deepEqual(inCheck.sort(), [...server.IDEA_LINK_KINDS].sort());

@@ -47,7 +47,7 @@ function _toolResultCapChars(maxIter, aiCfg) {
  * Content-Store-Facade, inkl. ausgeschlossener (ein Beat darf darauf zeigen).
  */
 async function plotChatContext(session, userEmail) {
-  const { buildPlotProposalMemoryBlock, getResearchPromptContext } = await getPrompts(userEmail);
+  const { buildPlotProposalMemoryBlock, getResearchPromptContext, ideenMarker } = await getPrompts(userEmail);
   const { chaptersFlat } = await loadOrderedBookContents(session.book_id, { includeExcluded: true });
   const chapterNames = new Map((chaptersFlat || []).map(c => [c.id, c.path || c.name]));
   const state = loadBoardState(session.book_id, userEmail, chapterNames);
@@ -59,7 +59,7 @@ async function plotChatContext(session, userEmail) {
       buchKontext: settings.buch_kontext || null,
       hauptland: settings.schauplatz_land || null,
     }),
-    boardOutline: boardOutline(state),
+    boardOutline: boardOutline(state, { ideenMarker }),
     figurenOutline: figurenOutline(state),
     proposalMemory: buildPlotProposalMemoryBlock(sessionPlotProposalMemory(session.id)),
     toolCtx: {

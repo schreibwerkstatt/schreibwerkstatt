@@ -186,12 +186,11 @@
   background: none;
   color: var(--color-subtle);
   cursor: pointer;
-  opacity: var(--opacity-disabled);
-  transition: opacity var(--transition-slow), color var(--transition-slow);
   flex-shrink: 0;
   margin-left: auto;
 }
-.history-item-delete:hover { opacity: 1; color: var(--color-err-text); }
+/* Ein-/Ausblenden: `.hover-reveal` an der Zeile (components/hover-reveal.css). */
+.history-item-delete:hover { color: var(--color-err-text); }
 
 @media (max-width: 480px) {
   .history-item-delete {

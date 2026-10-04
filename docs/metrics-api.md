@@ -175,7 +175,7 @@ Die Admin-UI im Tab **API / Metrics** zeigt diese Snippets aufklappbar inkl. Hos
 
 ### Grafana
 
-Fertiges Dashboard: [grafana/schreibwerkstatt.json](grafana/schreibwerkstatt.json). Import via Grafana → *Dashboards → New → Import → Upload JSON file* → Datasource `${DS_PROMETHEUS}` auswählen. Panels: Übersicht (Build/User/Aktiv), Inhalt (Bücher/Kapitel/Seiten/Zeichen/Wörter + Korpus-Wachstum), Schreib-Aktivität heute, Job-Queue (Running/Queued/Completion-Rate/Fehler/Kumuliert), Tokens + Kosten (Cache-Hit-Ratio, Cost-Rate, Token-Rates, Provider/Model-Tabelle).
+Fertiges Dashboard: [grafana/schreibwerkstatt.json](grafana/schreibwerkstatt.json). Import via Grafana → *Dashboards → New → Import → Upload JSON file* → Datasource `${DS_PROMETHEUS}` auswählen. Panels: Übersicht (Build/User/Aktiv), Inhalt (Bücher/Kapitel/Abschnitte/Zeichen/Wörter + Korpus-Wachstum), Schreib-Aktivität heute, Job-Queue (Running/Queued/Completion-Rate/Fehler/Kumuliert), Tokens + Kosten (Cache-Hit-Ratio, Cost-Rate, Token-Rates, Provider/Model-Tabelle).
 
 ## Pflicht-Invarianten
 

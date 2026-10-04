@@ -1,0 +1,96 @@
+@layer components {
+/* Ideen-Chat des Ideen-Boards: Spalten-Layout neben dem Board + das Panel.
+   Vorschlagskarten nutzen die geteilten `.chat-vorschlag*`-Klassen (chat.css),
+   hier nur die Ideen-spezifischen Innenteile. Ergänzt entities/ideen-board.css.
+   Gleiche Geometrie wie der Plot-Chat (book/plot/chat.css). */
+
+/* ── Board + Chat nebeneinander ───────────────────────────────────────────
+   Schmal: Flex-Spalte, der Chat steht per `order` über dem Board. Breit:
+   zweispaltiges Raster; das Board behält seinen eigenen horizontalen Scroll
+   (minmax(0, 1fr) lässt die Spalte schrumpfen). */
+.ideen-split {
+  display: flex;
+  flex-direction: column;
+}
+.ideen-split > .ideen-chat-slot { order: -1; }
+.ideen-main { min-width: 0; }
+
+@media (min-width: 1280px) {
+  .ideen-split--chat {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(380px, 30vw, 560px);
+    column-gap: var(--space-md);
+    align-items: start;
+  }
+  .ideen-split--chat > .ideen-chat-slot {
+    order: 0;
+    position: sticky;
+    top: 1.5rem;
+    max-height: calc(100vh - 3rem);
+    overflow-y: auto;
+  }
+  .ideen-split--chat .ideen-chat { margin-bottom: 0; }
+  .ideen-split--chat .ideen-chat-messages { max-height: min(52vh, 38rem); }
+}
+
+/* ── Panel ─────────────────────────────────────────────────────────────── */
+.ideen-chat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--card-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+.ideen-chat-title { font-weight: var(--fw-semibold); }
+.ideen-chat-head-actions { display: flex; gap: var(--space-2xs); }
+.ideen-chat-messages { max-height: 24rem; }
+.card--ideenboard:fullscreen .ideen-chat-messages { max-height: 52vh; }
+
+/* Schnellstart-Aufträge im leeren Gespräch. */
+.ideen-chat-starters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+
+/* Vorschläge: volle Bubble-Breite statt der 88% des Abschnitts-Chats. */
+.chat-msg .ideen-chat-proposals {
+  max-width: none;
+  margin-top: var(--space-sm);
+}
+.ideen-chat-proposal-text {
+  white-space: pre-line;
+  margin-bottom: var(--space-xs);
+  overflow-wrap: anywhere;
+}
+.ideen-chat-proposal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs) var(--space-sm);
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+}
+.ideen-chat-proposal-row,
+.ideen-chat-beleg {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr);
+  gap: var(--space-sm);
+  margin-top: var(--space-2xs);
+  overflow-wrap: anywhere;
+}
+.ideen-chat-beleg q { font-style: italic; }
+.ideen-chat-proposal-field {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+}
+.ideen-chat-proposal-note {
+  color: var(--color-warn-text);
+  font-size: var(--font-size-xs);
+  margin-top: var(--space-xs);
+}
+}

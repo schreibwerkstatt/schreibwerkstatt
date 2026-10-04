@@ -1,0 +1,28 @@
+<!-- Anlegen + Zuordnen im Ideen-Board (Fragment, string-seitiger @include aus
+     ideen-board.html; Scope = ideenBoardCard). -->
+<!-- Neue Pendenz: Bahn waehlen + Text. Vorgewaehlt ist das ganze Buch (Idee
+     ohne Anker), zugeordnet wird spaeter ueber „Zuordnen" auf der Karte. -->
+<div class="card-section ideen-board-add">
+  <div class="ideen-board-add-lane"
+       x-data="entityPicker({ entity: 'custom', placeholder: $app.t('ideenBoard.addLane'), items: () => newLaneOptions() })"
+       x-modelable="value" x-model="newLaneKey"></div>
+  <input type="text" class="ideen-input ideen-board-add-input" x-model="newContent"
+         :placeholder="$app.t('ideenBoard.addPlaceholder')"
+         :aria-label="$app.t('ideenBoard.addPlaceholder')"
+         :disabled="busy" data-spellcheck="spelling"
+         @keydown.enter="if(!$event.isComposing && $event.keyCode !== 229) { $event.preventDefault(); addIdee(); }">
+  <button type="button" class="ideen-add-btn btn-compact" @click="addIdee()"
+          :disabled="busy || !newLaneKey || !(newContent || '').trim()"
+          x-text="$app.t('ideen.add')"></button>
+</div>
+
+<!-- Zuordnen einer Buch-Idee (Single-Instance ausserhalb x-for, damit der
+     Picker sauber initialisiert — gleiches Muster wie der Move der Ideen-Karte). -->
+<div class="card-section ideen-board-add" x-show="assigningId !== null" x-cloak>
+  <span class="ideen-move-label" x-text="$app.t('ideenBoard.assignTo')"></span>
+  <div class="ideen-board-add-lane"
+       x-data="entityPicker({ entity: 'custom', placeholder: $app.t('ideenBoard.addLane'), items: () => anchorLaneOptions() })"
+       x-modelable="value" x-model="assignLaneKey"></div>
+  <button type="button" class="btn-compact" @click="confirmAssign()" :disabled="busy || !assignLaneKey" x-text="$app.t('ideenBoard.assignConfirm')"></button>
+  <button type="button" class="btn-compact" @click="cancelAssign()" :disabled="busy" x-text="$app.t('ideen.cancel')"></button>
+</div>

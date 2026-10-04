@@ -196,7 +196,7 @@ test('sceneEvidence: disjunkte Figuren sprechen dagegen', () => {
 test('dedupeScenesWithinRun: Titel-Varianten derselben Szene fallen zusammen', () => {
   const { szenen } = dedupeScenesWithinRun([
     { titel: 'Ankunft', kapitel: 'K1', chapterId: 1, pageId: 7, figuren_namen: ['Mario'] },
-    { titel: 'Ankunft am Bahnhof', kapitel: 'K1', chapterId: 1, pageId: 7, figuren_namen: ['Anna'], kommentar: 'laenger' },
+    { titel: 'Ankunft am Bahnhof', kapitel: 'K1', chapterId: 1, pageId: 7, figuren_namen: ['Anna', 'Mario'], kommentar: 'laenger' },
   ]);
   assert.equal(szenen.length, 1);
   assert.equal(szenen[0].titel, 'Ankunft am Bahnhof');
@@ -208,8 +208,11 @@ test('Figuren: Geburtsjahr-Widerspruch trennt zwei Gleichnamige', () => {
   const a = { name: 'Anna Meier', geburtstag: '1943' };
   const b = { name: 'Anna Meier', geburtstag: '1978' };
   assert.ok(figureEvidence(a, b) <= -3);
-  // Exakt gleicher Name bleibt SAME (derselbe Katalog-Eintrag, Datum ist ein Datenfehler)
-  assert.equal(scoreFigurePair(a, b).verdict, SAME);
+  // Auch der exakt gleiche Name: der Widerspruch schlaegt das Namenssignal (docs/komplett.md,
+  // «verschiedene Geburtsjahre … schlagen ein starkes Namenssignal»).
+  assert.equal(scoreFigurePair(a, b).verdict, DIFFERENT);
+  // Ohne Widerspruch bleibt der gleiche Name SAME.
+  assert.equal(scoreFigurePair({ name: 'Anna Meier', geburtstag: '1943' }, { name: 'Anna Meier' }).verdict, SAME);
   // Aber bei Namensvariante schlaegt der Widerspruch durch:
   assert.equal(scoreFigurePair({ name: 'Anna', geburtstag: '1943' },
     { name: 'Anna Meier', geburtstag: '1978' }).verdict, DIFFERENT);
@@ -270,4 +273,88 @@ test('Ambiguitaet sperrt den Eintrag: kein schwaecherer Kandidat springt ein', (
   // Genau die zwei gleich starken Kandidaten gehen an den Judge, ohne Dubletten.
   const keys = [...new Set(unsure.filter(u => u.reason === 'ambiguous').map(u => u.existingId))].sort();
   assert.deepEqual(keys, [1, 2]);
+});
+
+// ── Anrede-Geschlecht ────────────────────────────────────────────────────────
+// normName schneidet Herr/Frau/Dr. ab — «Herr Brunner» und «Frau Brunner» haben denselben
+// Schluessel. Der darf allein nie verschmelzen; Dr./Prof. tragen kein Geschlecht.
+
+test('Figuren: Herr/Frau mit gleichem Nachnamen sind verschieden', () => {
+  assert.ok(figureEvidence({ name: 'Herr Brunner' }, { name: 'Frau Brunner' }) <= -3);
+  assert.equal(scoreFigurePair({ name: 'Herr Brunner' }, { name: 'Frau Brunner' }).verdict, DIFFERENT);
+  assert.equal(scoreFigurePair({ name: 'Hr. Brunner' }, { name: 'Fräulein Brunner' }).verdict, DIFFERENT);
+  // Anrede gegen gesetztes Geschlecht-Feld
+  assert.equal(scoreFigurePair({ name: 'Herr Brunner' }, { name: 'Brunner', geschlecht: 'weiblich' }).verdict, DIFFERENT);
+});
+
+test('Figuren: Dr./Prof. bleiben mit dem blossen Namen gleich, gleiche Anrede ebenso', () => {
+  assert.equal(scoreFigurePair({ name: 'Dr. Brunner' }, { name: 'Brunner' }).verdict, SAME);
+  assert.equal(scoreFigurePair({ name: 'Dr. Brunner' }, { name: 'Herr Brunner' }).verdict, SAME);
+  assert.equal(scoreFigurePair({ name: 'Herr Brunner' }, { name: 'Herrn Brunner' }).verdict, SAME);
+  // Anrede allein gibt keinen Pluspunkt
+  assert.equal(figureEvidence({ name: 'Frau Meier' }, { name: 'Frau Meier' }), 0);
+});
+
+test('matchFiguren: Frau Brunner trifft nicht den Bestand Herr Brunner', () => {
+  const { matchOf } = matchFiguren([{ id: 1, name: 'Herr Brunner' }], [{ id: 'fig_1', name: 'Frau Brunner' }]);
+  assert.equal(matchOf.size, 0);
+});
+
+// ── Szenen: gleicher Titel mit Widerspruch, Within-Run-Merge auf aufgeloesten Szenen ──
+
+test('Szenen: gleicher Titel, aber andere Seite UND andere Figuren → unsicher', () => {
+  const a = { chapter_id: 1, titel: 'Der Streit', page_id: 1, figures: ['Mario'] };
+  const b = { chapter_id: 1, titel: 'Der Streit', page_id: 9, figures: ['Anna'] };
+  assert.equal(scoreScenePair(a, b).verdict, UNSURE);
+  // Nur die Seite weicht ab (Extraktion raet sie pro Lauf neu) → bleibt SAME
+  assert.equal(scoreScenePair(a, { ...b, figures: ['Mario'] }).verdict, SAME);
+  assert.equal(scoreScenePair(a, { ...b, figures: undefined }).verdict, SAME);
+});
+
+test('dedupeScenesWithinRun: aufgeloeste Szenen vereinigen fig_ids/ort_ids, Seite + pageId wandern gemeinsam', () => {
+  const { szenen } = dedupeScenesWithinRun([
+    { titel: 'Ankunft', kapitel: 'K1', chapterId: 1, seite: null, pageId: null, fig_ids: ['fig_1'], ort_ids: ['ort_1'] },
+    { titel: 'Ankunft am Bahnhof', kapitel: 'K1', chapterId: 1, seite: 'S7', pageId: 7,
+      fig_ids: ['fig_1', 'fig_2'], ort_ids: ['ort_1', 'ort_2'] },
+  ]);
+  assert.equal(szenen.length, 1);
+  assert.deepEqual([...szenen[0].fig_ids].sort(), ['fig_1', 'fig_2']);
+  assert.deepEqual([...szenen[0].ort_ids].sort(), ['ort_1', 'ort_2']);
+  assert.equal(szenen[0].seite, 'S7');
+  assert.equal(szenen[0].pageId, 7);
+  assert.equal('figuren_namen' in szenen[0], false, 'keine leeren Namens-Arrays dazuerfinden');
+});
+
+test('dedupeScenesWithinRun: zwei gleichnamige Szenen auf verschiedenen Seiten mit anderen Figuren bleiben getrennt', () => {
+  const { szenen, unsure } = dedupeScenesWithinRun([
+    { titel: 'Der Streit', chapterId: 1, seite: 'A', pageId: 1, fig_ids: ['fig_1'], ort_ids: [] },
+    { titel: 'Der Streit', chapterId: 1, seite: 'B', pageId: 2, fig_ids: ['fig_2'], ort_ids: [] },
+  ]);
+  assert.equal(szenen.length, 2);
+  assert.equal(unsure.length, 1);
+});
+
+test('dedupeLocationsWithinRun: liefert die aufgegangenen Namen als Aliasse', () => {
+  const { orte, aliases } = dedupeLocationsWithinRun([
+    G('Mathys AG'),
+    G('Mathys AG Produktionsstätte Bettlach'),
+  ]);
+  assert.equal(orte.length, 1);
+  assert.equal(orte[0].name, 'Mathys AG Produktionsstätte Bettlach');
+  assert.deepEqual(aliases[0], ['Mathys AG']);
+});
+
+test('scoreFigurePair: Geburtsdatum-Format ist kein Widerspruch, nur ein anderes Jahr', () => {
+  const f = (name, geburtstag) => ({ name, geburtstag });
+  // Von Hand ausgeschriebenes Datum vs. KI-Jahr: dieselbe Figur (sonst Dublette im Folgelauf).
+  assert.equal(scoreFigurePair(f('Anna Meier', '1943'), f('Anna Meier', '12. Mai 1943')).verdict, SAME);
+  assert.equal(scoreFigurePair(f('Anna Meier', '1943-05-12'), f('Anna Meier', '1943')).verdict, SAME);
+  assert.equal(scoreFigurePair(f('Anna Meier', '1943'), f('Anna Meier', '1978')).verdict, DIFFERENT);
+});
+
+test('scoreFigurePair: Geschlecht nur aus bekannten Werten — englisch/abgekürzt widerspricht nicht', () => {
+  const f = (name, geschlecht) => ({ name, geschlecht });
+  assert.equal(scoreFigurePair(f('Anna Meier', 'weiblich'), f('Anna Meier', 'female')).verdict, SAME);
+  assert.equal(scoreFigurePair(f('Anna Meier', 'weiblich'), f('Anna Meier', 'irgendwas')).verdict, SAME);
+  assert.equal(scoreFigurePair(f('Kim Meier', 'weiblich'), f('Kim Meier', 'male')).verdict, DIFFERENT);
 });

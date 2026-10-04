@@ -16,12 +16,12 @@ Gilt zusaetzlich zur Root-[CLAUDE.md](../../../CLAUDE.md).
   - `blocks-fach.js` — Regel-Blöcke der Nicht-Erzähl-Profile (unbelegt, begriffsinkonsistenz, autorenform, hedging + Fach-Varianten von Stil/Wiederholung/Tempus/Aufgabe/Schwere/Selbstkontrolle)
   - `core.js` — `configureLocales`, `getLocalePromptsForBook`, alle `SYSTEM_*` Live-Exports, `PROMPTS_VERSION`, Locale-State
   - `lektorat-typen.js` — Fehlertyp-Profile pro Buchtyp (SSoT, siehe unten)
-  - `lektorat.js` — Seiten-Lektorat (Einzel + Batch) + Stil-Pass + `buildLektoratSchema` / `SCHEMA_LEKTORAT` (rebuild-pflichtig)
+  - `lektorat.js` — Abschnitts-Lektorat (Einzel + Batch) + Stil-Pass + `buildLektoratSchema` / `SCHEMA_LEKTORAT` (rebuild-pflichtig)
   - `lektorat-objektiv.js` — fokussierter Objektiv-Pass des Claude-Splits + `buildObjektivLektoratSchema`
   - `review-typen.js` — Bewertungsprofile pro Buchtyp: Achsen, Notenanker, Empfehlungs-Kategorien (SSoT, siehe unten)
   - `review.js` + `review/` — Buch-/Kapitel-Bewertung: Facade über `review/{format,context,builders,schemas}.js` (Prompts + Schema-Builder aus dem Profil)
   - `komplett.js` — Komplettanalyse-Pipeline (Extraktion, Soziogramm, Orte, Kontinuität, Zeitstrahl) + alle dynamischen Schemas
-  - `chat.js` — Seiten-Chat + Buch-Chat (klassisch + Agentic) + `BOOK_CHAT_TOOLS`
+  - `chat.js` — Abschnitts-Chat + Buch-Chat (klassisch + Agentic) + `BOOK_CHAT_TOOLS`
   - `synonym.js` — Synonym-Suche
   - `finetune.js` — Finetune-Export-Augmentation
 - **Reihenfolge in `configurePrompts`:** `_setIsLocal(provider)` → `_rebuildLektoratSchema()` → `_rebuildKomplettSchemas()` → `configureLocales(cfg)`. Schemas vor `configureLocales`, weil `_buildLocalePrompts` → `buildSystemKomplett*` den `_isLocal`-Flag liest.

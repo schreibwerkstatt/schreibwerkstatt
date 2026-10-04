@@ -188,74 +188,7 @@
   <!-- ── Chat-Tab ──────────────────────────────────────────────────────── -->
   <div x-show="adminUsageTab === 'chat'" class="admin-usage-pane">
     <div id="partial-admin-usage-chat-quality"></div>
-    <div class="admin-usage-filter">
-      <label>
-        <span x-text="$app.t('admin.usage.filter.user')"></span>
-        <div x-data="combobox({ placeholder: $app.t('admin.usage.filter.allUsers'), multiple: true })"
-             x-modelable="value" x-model="adminUsageFilterUsers"
-             x-effect="options = adminUsageUserFilterOptions()"></div>
-      </label>
-    </div>
-    <div class="admin-usage-filter-chips" x-show="adminUsageFilterUsers.length">
-      <template x-for="email in adminUsageFilterUsers" :key="email">
-        <span class="admin-usage-filter-chip">
-          <span x-text="email"></span>
-          <button type="button" class="admin-usage-filter-chip-remove"
-                  :aria-label="$app.t('common.remove')"
-                  @click="adminUsageRemoveFilterUser(email)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
-        </span>
-      </template>
-    </div>
-    <div class="table-scroll" x-show="adminUsageChatList.length">
-    <table class="data-table"
-           x-data="sortableTable({
-             rows: () => adminUsageChatList,
-             defaultKey: 'createdAt',
-             defaultDir: 'desc',
-             persistKey: 'admin.usage.chat',
-             types: { tokensIn: 'number', tokensOut: 'number', cacheReadIn: 'number',
-                      usd: 'number', bookId: 'number', createdAt: 'date' },
-           })">
-      <thead>
-        <tr>
-          <th class="sortable-th" :class="sortClass('userEmail')" :aria-sort="ariaSort('userEmail')"
-              @click="sortBy('userEmail')" x-text="$app.t('admin.users.email')"></th>
-          <th class="sortable-th" :class="sortClass('sessionKind')" :aria-sort="ariaSort('sessionKind')"
-              @click="sortBy('sessionKind')" x-text="$app.t('admin.usage.chat.kind')"></th>
-          <th class="sortable-th" :class="sortClass('model')" :aria-sort="ariaSort('model')"
-              @click="sortBy('model')" x-text="$app.t('admin.usage.job.model')"></th>
-          <th class="sortable-th" :class="sortClass('tokensIn')" :aria-sort="ariaSort('tokensIn')"
-              @click="sortBy('tokensIn')" x-text="$app.t('admin.usage.column.tokensIn')"></th>
-          <th class="sortable-th" :class="sortClass('tokensOut')" :aria-sort="ariaSort('tokensOut')"
-              @click="sortBy('tokensOut')" x-text="$app.t('admin.usage.column.tokensOut')"></th>
-          <th class="sortable-th" :class="sortClass('cacheReadIn')" :aria-sort="ariaSort('cacheReadIn')"
-              @click="sortBy('cacheReadIn')" x-text="$app.t('admin.usage.column.cacheRead')"></th>
-          <th class="sortable-th" :class="sortClass('usd')" :aria-sort="ariaSort('usd')"
-              @click="sortBy('usd')" x-text="$app.t('admin.usage.column.cost')"></th>
-          <th class="sortable-th" :class="sortClass('bookId')" :aria-sort="ariaSort('bookId')"
-              @click="sortBy('bookId')" x-text="$app.t('admin.usage.job.book')"></th>
-          <th class="sortable-th" :class="sortClass('createdAt')" :aria-sort="ariaSort('createdAt')"
-              @click="sortBy('createdAt')" x-text="$app.t('admin.usage.job.queuedAt')"></th>
-        </tr>
-      </thead>
-      <tbody>
-        <template x-for="r in sorted" :key="r.id">
-          <tr>
-            <td x-text="r.userEmail || '—'"></td>
-            <td x-text="r.sessionKind"></td>
-            <td x-text="r.model || '—'"></td>
-            <td x-text="adminUsageInt(r.tokensIn)"></td>
-            <td x-text="adminUsageInt(r.tokensOut)"></td>
-            <td x-text="adminUsageInt(r.cacheReadIn)"></td>
-            <td x-text="adminUsageMoney(r.usd)"></td>
-            <td x-text="r.bookId ? ('#' + r.bookId) : '—'"></td>
-            <td x-text="new Date(r.createdAt).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH', { timeZone: $store.shell.appTimezone })"></td>
-          </tr>
-        </template>
-      </tbody>
-    </table>
-    </div>
-    <div x-show="!adminUsageChatList.length && !adminUsageLoading" class="muted-msg" x-text="$app.t('admin.usage.empty')"></div>
+    <div id="partial-admin-usage-chat-list"></div>
   </div>
 
   <!-- ── Summary-Tab ───────────────────────────────────────────────────── -->

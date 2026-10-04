@@ -165,6 +165,10 @@ Beide Jobs bekommen zusätzlich die **Motive dieser Figur** (`_loadFigurMotive` 
 - **Consistency** bekommt den Prüfpunkt *Figur vs. ihre Motive* (widerspricht ein Motiv dem Subtext? fehlt dem zentralen Motiv die Verankerung in der Innenwelt?); **Brainstorm** eine Regel-Bullet (Ideen sollen die Motive bedienen oder brechen, nicht an ihnen vorbeigehen).
 - **Badge** `.badge--motiv` im Detail-Header (`GET /motifs/figure-usage`), Klick öffnet die Konstellation beim ersten Motiv. Der Tooltip nennt **geplant UND belegt** — „geplant" ist nicht „trägt", und ein Badge nur mit der Planzahl verschwiege genau den Unterschied.
 
+## Cross-Feature: Ideen (Pendenzen an der Figur)
+
+Eine Idee kann an einer Werkstatt-Figur hängen (`idea_links.target_kind = 'draft'`, kuratiert im Verknüpfungs-Picker der Ideen-Karte bzw. des Ideen-Boards). Die Titelzeile des Figur-Details zeigt die eigenen Ideen dazu read-only als Referenzen (Klick → Stelle der Idee im Buch), geladen in `loadDrafts` über `GET /ideen/links?target_kind=draft` (non-fatal). Details: [ideen-board.md](ideen-board.md#3--verknüpfungen-beidseitig).
+
 ## Nachträgliche Verknüpfung mit dem Figuren-Katalog
 
 `POST /draft-figures/by-id/:id/link-figure { figureId }` setzt `source_figure_id` nachträglich (`figureId: null` löst wieder); `GET /draft-figures/:book_id/link-candidates` liefert die Katalog-Figuren des Buchs, die an keinem Draft hängen.

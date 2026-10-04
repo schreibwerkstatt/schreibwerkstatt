@@ -32,6 +32,8 @@ export function registerPlotCard() {
     // Ideen-Plaketten (Gegenrichtung der Ideen-Verknuepfung, read-only).
     // Map Ziel-ID → Ideen-Anrisse; geladen in loadIdeaBacklinks (non-fatal).
     ideaBacklinks: {},
+    // Dasselbe für Stränge (Ideen mit target_kind 'thread') — zweite Map, s. ideen-backlinks.js.
+    threadIdeaBacklinks: {},
     _ideaBacklinkBookId: null,
     // Handlungsstränge (Swimlanes): optionale zweite Ordnungsachse. Leeres Array
     // = flaches Board (heutiges Verhalten). Pro Buch + User, lokal in der Karte.
@@ -95,6 +97,9 @@ export function registerPlotCard() {
     // Beat-Edit / -Add
     editingBeatId: null,
     beatDraft: { titel: '', beschreibung: '', status: 'geplant', chapter_id: '', intensitaet: null, zeit: '', figure_ids: [], draft_figure_ids: [], motif_ids: [], location_ids: [] },
+    // Klapp-Zustand der Beat-Edit-Sektionen; bleibt beim Beat-Wechsel stehen.
+    beatEditDetailsOpen: false,
+    beatEditRelOpen: false,
     addingActId: null,
     // Grid-Add-Beat: Zell-Schlüssel `${actId}:${threadId|null}` (statt addingActId).
     addingCell: null,

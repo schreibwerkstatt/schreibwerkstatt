@@ -12,8 +12,11 @@
 // nicht Attribution — auf einem geteilten Buch sieht jeder sein eigenes Brett.
 
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { attachFullscreenSync, toggleWrapFullscreen } from '../fullscreen.js';
 import { ideenBoardMethods } from '../book/ideen-board.js';
 import { buildLaneOrder } from '../book/ideen-board/model.js';
+import { LANE_BOOK, IDEE_STATUSES } from '../book/ideen-shared.js';
+import { ideenChatMethods, ideenChatState } from '../chat/ideen-chat.js';
 
 // Filterleiste pro Buch im localStorage. `showVerworfen` steht bewusst per
 // Default auf false: das Board ist eine Pendenzenliste, und was man verworfen
@@ -30,7 +33,7 @@ import { buildLaneOrder } from '../book/ideen-board/model.js';
 const IDEEN_BOARD_FILTER_SCOPES = [
   {
     scope: 'ideenBoard',
-    defaults: { filterChapterId: '', showErledigt: false, showVerworfen: false, query: '', collapsedLanes: [], collapsedChapters: [] },
+    defaults: { filterChapterId: '', showErledigt: false, showVerworfen: false, query: '', collapsedLanes: [], collapsedChapters: [], columnSort: {} },
   },
 ];
 
@@ -39,12 +42,25 @@ export function registerIdeenBoardCard() {
   window.Alpine.data('ideenBoardCard', () => ({
     ideen: [],
     laneOrder: [],
+    // Aktive Stufen des Buches (book_settings.ideen_stages, kommt mit
+    // /ideen/board). Default alle — so sieht ein Buch ohne Einstellung aus.
+    stages: [...IDEE_STATUSES],
+    // Schalter-Leiste „Spalten" unter dem Kopf.
+    stagesOpen: false,
+    // Native-Fullscreen-Status (gespiegelt vom fullscreenchange-Listener) —
+    // mehr Platz fuers Raster; die Spalten wachsen ueber den Container mit.
+    ideenBoardFullscreen: false,
 
     // Filterleiste + Klappung (Besitz: IDEEN_BOARD_FILTER_SCOPES).
     filterChapterId: '',
     showErledigt: false,
     showVerworfen: false,
     query: '',
+    // Reihenfolge der Karten pro Spalte: Map Stufe → { by, dir }
+    // (columnSortOf/nextColumnSort in ideen-board/model.js). Ohne Eintrag die
+    // urspruengliche, per Drag gespeicherte Position (ideen.sort_order). Immer
+    // als NEUES Objekt schreiben — der Default oben ist geteilt.
+    columnSort: {},
     // Bahn-Keys. Immer als NEUE Liste schreiben (toggleLaneFold/toggleChapterFold
     // in ideen-board/actions.js) — die Defaults oben sind ein geteiltes Objekt,
     // und der Board-Memo vergleicht seine Deps per Identitaet.
@@ -52,7 +68,10 @@ export function registerIdeenBoardCard() {
     collapsedChapters: [],
 
     newContent: '',
-    newLaneKey: '',
+    newLaneKey: LANE_BOOK,
+    // Zuordnen einer Buch-Idee (ohne Anker) zu Kapitel/Seite.
+    assigningId: null,
+    assignLaneKey: '',
     editingId: null,
     editingDraft: '',
 
@@ -78,15 +97,26 @@ export function registerIdeenBoardCard() {
     _memos: {},
     _lifecycle: null,
 
+    // Ideen-Chat: Panel neben dem Board (chat/ideen-chat.js). Vorschläge des Chats
+    // laufen beim Übernehmen über dieselben /ideen-Routen wie die Board-Bearbeitung.
+    ...ideenChatState(),
+
     init() {
       this._lifecycle = setupCardLifecycle(this, {
         name: 'ideenBoard',
         showFlag: 'showIdeenBoardCard',
         filterScopes: IDEEN_BOARD_FILTER_SCOPES,
-        resetState: { editingId: null, linkPickerIdeeId: null, busy: false },
+        resetState: { editingId: null, linkPickerIdeeId: null, assigningId: null, stagesOpen: false, busy: false },
         load: async () => { await this.loadBoard(); },
-        onBookChanged: () => this.resetBoard(),
-        onViewReset: () => this.resetBoard(),
+        onBookChanged: () => { this.resetBoard(); this.resetIdeenChat(); this.ideenChatOpen = false; },
+        onViewReset: () => { this.resetBoard(); this.resetIdeenChat(); this.ideenChatOpen = false; },
+      });
+
+      // Native Fullscreen-API: Status spiegeln (Toggle-Button + Esc-Exit).
+      attachFullscreenSync({
+        resolveWrap: () => this.$root,
+        signal: this._lifecycle.signal,
+        onChange: (active) => { this.ideenBoardFullscreen = active; },
       });
 
       // Der Baum traegt die Bahnen-REIHENFOLGE (SSoT book_order). Er wird
@@ -112,14 +142,32 @@ export function registerIdeenBoardCard() {
         () => this.lanes().map(l => l.lane.key).join('|'),
         () => this._ensureBoardSortables(),
       );
+
+      // Ziehen INNERHALB einer Spalte gibt es nur, solange sie in ihrer
+      // urspruenglichen Position steht; die Option wird an den bestehenden
+      // Instanzen umgeschaltet.
+      this.$watch(() => this.columnSort, () => this._applyManualSortOption());
     },
 
     destroy() {
+      this.resetIdeenChat();
       this._lifecycle?.destroy();
       this._destroyBoardSortables();
       this._detachLinkPickerListeners?.();
     },
 
+    // Ganze Karte ins Native-Vollbild. Was sonst nach <body> haengt (Drag-
+    // Ghost, Verknuepfungs-Picker), wird zur Anzeigezeit ins Vollbild-Element
+    // umgehaengt — siehe actions.js#_initBoardSortables, ideen-links.js.
+    async toggleIdeenBoardFullscreen() {
+      try {
+        await toggleWrapFullscreen(this.$root);
+      } catch {
+        this.errorMessage = window.__app.t('ideenBoard.error.fullscreen');
+      }
+    },
+
     ...ideenBoardMethods,
+    ...ideenChatMethods,
   }));
 }

@@ -264,3 +264,27 @@ test('_selectHapax: Deckel greift, Reihenfolge ist deterministisch', () => {
   // Ohne Referenz gibt es kein „sonst nie" — das Feld bleibt leer, nicht 1.
   assert.equal(_selectHapax(words, null, 1)[0].novel, null);
 });
+
+test('analyzeBook: englisches Buch filtert englische Funktionswörter', async () => {
+  const html = '<p>She would have said that there was nothing about the garden. '
+    + 'They would have known that there was something about the lantern. '
+    + "She didn't think that there would be anything about the garden lantern.</p>";
+  const en = await analyzeBook([page(1, 1, html)], { language: 'en' });
+  const de = await analyzeBook([page(1, 1, html)]);
+  const enTerms = en.terms.filter(t => t.kind === 'freq').map(t => t.term);
+  assert.equal(en.stats.language, 'en');
+  assert.equal(de.stats.language, 'de');
+  for (const fw of ['would', 'that', 'there', 'about', "didn't"]) {
+    assert.equal(enTerms.includes(fw), false, `${fw} ist ein englisches Funktionswort`);
+  }
+  assert.ok(de.terms.some(t => t.term === 'would'), 'deutsche Liste kennt "would" nicht');
+  assert.ok(en.stats.lex_density < de.stats.lex_density, 'Dichte fällt mit der richtigen Liste');
+  // Listenfreie Masse hängen nicht an der Sprache.
+  assert.equal(en.stats.mattr, de.stats.mattr);
+  assert.equal(en.stats.hapax_ratio, de.stats.hapax_ratio);
+});
+
+test('analyzeBook: unbekannte Sprache fällt auf Deutsch zurück', async () => {
+  const { stats } = await analyzeBook([page(1, 1, '<p>Der Hund bellt.</p>')], { language: 'fr' });
+  assert.equal(stats.language, 'de');
+});

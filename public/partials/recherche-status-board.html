@@ -28,7 +28,7 @@
            onStatusSortEnd ausliest. -->
       <div class="research-status-cell" :data-research-status-cell="st">
         <template x-for="item in itemsForStatus(st)" :key="item.id">
-          <div class="research-status-card" :data-research-card-id="item.id"
+          <div class="research-status-card hover-reveal-host" :data-research-card-id="item.id"
                :class="{ 'research-status-card--pinned': item.pinned, 'research-status-card--archived': item.archived, 'research-status-card--open': detailItemId === item.id }">
             <div class="research-status-card-head">
               <!-- Griff = einzige Greiffläche (SortableJS handle), damit Titel,
@@ -37,7 +37,7 @@
                 <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
               </span>
               <span class="research-kind-badge palette-badge" :class="'research-kind-badge--' + item.kind" x-text="kindLabel(item.kind)"></span>
-              <div class="research-item-actions research-status-card-actions" x-data="{ menuCtx: 'status' }">
+              <div class="research-item-actions research-status-card-actions hover-reveal" x-data="{ menuCtx: 'status' }">
                 <!-- @include recherche-item-menu -->
               </div>
             </div>

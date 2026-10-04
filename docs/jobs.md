@@ -1,6 +1,6 @@
 # Job-Queue
 
-Vertrag für Hintergrund-Jobs (alle KI-Analysen ausser Seiten-Chat-SSE). Code: [routes/jobs/shared/](../routes/jobs/shared/), Karten: [public/js/cards/job-helpers.js](../public/js/cards/job-helpers.js).
+Vertrag für Hintergrund-Jobs (alle KI-Analysen ausser Abschnitts-Chat-SSE). Code: [routes/jobs/shared/](../routes/jobs/shared/), Karten: [public/js/cards/job-helpers.js](../public/js/cards/job-helpers.js).
 
 ## Lifecycle
 

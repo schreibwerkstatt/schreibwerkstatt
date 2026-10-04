@@ -32,7 +32,7 @@ export function buildFinetuneReversePromptsPrompt({ passage, count = 4, langIsEn
         'Rules:',
         '- Each instruction in plain natural language, 4–25 words, no quotation marks around the whole instruction.',
         '- Vary phrasing: imperative ("Write …"), question ("What happens when …"), context-setting ("Imagine …"), perspective shift, action focus, character focus, location focus.',
-        '- Do not name the page or chapter title literally; describe content instead.',
+        '- Do not name the section or chapter title literally; describe content instead.',
         '- Do not invent facts not present in the passage.',
         '- Output the instructions only, no commentary.',
       ]
@@ -42,12 +42,12 @@ export function buildFinetuneReversePromptsPrompt({ passage, count = 4, langIsEn
         'Regeln:',
         '- Jede Instruction in natürlicher Sprache, 4–25 Wörter, keine Anführungszeichen um die ganze Instruction.',
         '- Variation: Imperativ ("Schreibe …"), Frage ("Was passiert, wenn …"), Kontext-Setzung ("Stell dir vor …"), Perspektivwechsel, Handlungsfokus, Figurenfokus, Ortsfokus.',
-        '- Kapitel- oder Seitentitel nicht wörtlich nennen; stattdessen den Inhalt beschreiben.',
+        '- Kapitel- oder Abschnittstitel nicht wörtlich nennen; stattdessen den Inhalt beschreiben.',
         '- Keine Fakten erfinden, die nicht in der Passage stehen.',
         '- Nur die Instructions ausgeben, kein Kommentar.',
       ];
   if (chapter) lines.push((langIsEn ? `Chapter context: ${chapter}` : `Kapitel-Kontext: ${chapter}`));
-  if (pageTitle) lines.push((langIsEn ? `Page title (do not name literally): ${pageTitle}` : `Seitentitel (nicht wörtlich nennen): ${pageTitle}`));
+  if (pageTitle) lines.push((langIsEn ? `Section title (do not name literally): ${pageTitle}` : `Abschnittstitel (nicht wörtlich nennen): ${pageTitle}`));
   lines.push('');
   lines.push(langIsEn
     ? 'Schema:\n{ "instructions": ["...", "..."] }'

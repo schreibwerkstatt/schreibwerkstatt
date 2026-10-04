@@ -8,6 +8,7 @@
 //  - PUT /plot/beats/order + /plot/acts/order: 400 mit error_code, nichts geschrieben
 //  - Strang-Figurenbindung exklusiv (THREAD_FIGURE_CONFLICT, gegenseitiges Leeren)
 //  - GET /plot/time-check: Chronologie pro Lane, geerbte Strang-Hauptfigur
+//  - GET /plot/links: Gegenrichtung je Achse, pro (Buch, User), Reader 403
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -174,4 +175,25 @@ test('GET /time-check: Chronologie pro Lane + geerbte Strang-Hauptfigur', async 
   assert.ok(!codes.some(c => c.endsWith(':B1') && c.startsWith('chronologieBruch')), codes.join(','));
   assert.ok(codes.includes('beatVorGeburt:A2'), codes.join(','));
   assert.ok(codes.includes('figurKindImBeat:A1'), codes.join(','));
+});
+
+test('GET /links: Gegenrichtung je Achse, unbekannte Achse 400, Reader 403', async () => {
+  const locId = db.prepare(`INSERT INTO locations (book_id, loc_id, name, user_email, updated_at) VALUES (?, 'loc_links', 'Bahnhof', ?, ?)`)
+    .run(BOOK, OWNER, NOW).lastInsertRowid;
+  const act = plotDb.createAct(BOOK, OWNER, { name: 'Links-Akt' });
+  plotDb.createBeat(BOOK, act.id, OWNER, { titel: 'Am Gleis', locationIds: [locId] });
+
+  const r = await call('GET', `/plot/links?book_id=${BOOK}&kind=location`);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.links.loc_links.map(b => b.titel), ['Am Gleis']);
+  // Pro (Buch, User): ein anderer Editor sieht die Beats des Autors nicht.
+  const fremd = await call('GET', `/plot/links?book_id=${BOOK}&kind=location`, null, OTHER);
+  assert.deepEqual(fremd.body.links, {});
+
+  assert.equal((await call('GET', `/plot/links?book_id=${BOOK}&kind=kapitel`)).body.error_code, 'KIND_INVALID');
+
+  const READER = 'leser@test.dev'; // viewer: nur lesen — das Board ist Editor+
+  require('../../db/app-users').createUser({ email: READER, displayName: 'Leser' });
+  require('../../db/book-access').grantAccess(BOOK, READER, 'viewer', OWNER);
+  assert.equal((await call('GET', `/plot/links?book_id=${BOOK}&kind=figure`, null, READER)).status, 403);
 });

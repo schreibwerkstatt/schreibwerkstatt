@@ -62,12 +62,12 @@ test('Zuordnung h1=Kapitel / h2=Seite kommt als Vorschau zurueck', async ({ page
   const rows = page.locator('.folder-import-mapping .folder-import-map-grid').first().locator('.folder-import-map-row');
   await expect(rows).toHaveCount(3);
   await expect(rows.nth(0).locator('.combobox-value')).toHaveText('Kapitel');
-  await expect(rows.nth(1).locator('.combobox-value')).toHaveText('Seite');
+  await expect(rows.nth(1).locator('.combobox-value')).toHaveText('Abschnitt');
 
   await page.setInputFiles('#folder-import-card .folder-import-drop input[type=file]', DOC);
   await page.getByRole('button', { name: 'Vorschau berechnen' }).click();
 
-  await expect(page.locator('.folder-import-preview-summary')).toHaveText('2 Kapitel, 4 Seiten');
+  await expect(page.locator('.folder-import-preview-summary')).toHaveText('2 Kapitel, 4 Abschnitte');
   // Die gefundenen Ebenen werden ausgewiesen — sonst raet der User seine Zuordnung.
   await expect(page.locator('.folder-import-heading-counts')).toContainText('2× Überschrift 1');
   await expect(page.locator('.folder-import-heading-counts')).toContainText('4× Überschrift 2');
@@ -79,15 +79,15 @@ test('geaenderte Zuordnung aendert die Gliederung', async ({ page }) => {
   await openManuscriptImport(page);
   await page.setInputFiles('#folder-import-card .folder-import-drop input[type=file]', DOC);
 
-  await setRole(page, 2, 'Sub-Kapitel');
+  await setRole(page, 2, 'Unterkapitel');
   // Aus 4 Seiten-Ueberschriften werden 4 Unterkapitel, die Seiten erben ihren Namen.
   await page.getByRole('button', { name: 'Vorschau berechnen' }).click();
-  await expect(page.locator('.folder-import-preview-summary')).toHaveText('6 Kapitel, 4 Seiten');
+  await expect(page.locator('.folder-import-preview-summary')).toHaveText('6 Kapitel, 4 Abschnitte');
 
   await setRole(page, 2, 'Fliesstext');
   // Ohne Seiten-Ueberschrift traegt jedes Kapitel genau eine Seite.
   await page.getByRole('button', { name: 'Vorschau berechnen' }).click();
-  await expect(page.locator('.folder-import-preview-summary')).toHaveText('2 Kapitel, 2 Seiten');
+  await expect(page.locator('.folder-import-preview-summary')).toHaveText('2 Kapitel, 2 Abschnitte');
   guard.assertClean('Manuskript-Vorschau (geaenderte Zuordnung)');
 });
 
@@ -102,7 +102,7 @@ test('Import legt Kapitel und Seiten nach der Zuordnung an', async ({ page }) =>
   await page.getByRole('button', { name: 'Import starten' }).click();
 
   await expect(page.locator('.folder-import-result')).toBeVisible({ timeout: 60000 });
-  await expect(page.locator('.folder-import-result')).toContainText('4 Seiten angelegt');
+  await expect(page.locator('.folder-import-result')).toContainText('4 Abschnitte angelegt');
   await expect(page.locator('.folder-import-result')).toContainText('2 Kapitel angelegt');
   // Die verwendete Zuordnung steht im Ergebnis — sie ist die Erklaerung dafuer,
   // warum die Gliederung so aussieht, wie sie aussieht.

@@ -112,7 +112,14 @@
     gap: var(--space-sm);
     min-height: 28px;
   }
-  .plot-column-body .plot-beats { flex: 1 1 auto; min-height: 120px; }
+  /* Ruhezustand: Drop-Zone auf Inhaltshöhe — ein Akt mit einem Beat zeigt
+     keine leere Fläche darunter. Während eines Drags (body.plot-dnd-active,
+     dnd.js) bekommt jede Spalte einen grosszügigen Drop-Floor, damit auch
+     kurze/leere Spalten treffbar bleiben (Pendant zur Swimlane-Zelle). */
+  .plot-column-body .plot-beats { flex: 1 1 auto; }
+  body.plot-dnd-active .plot-column-body .plot-beats {
+    min-height: max(120px, calc(var(--plot-drag-h, 72px) * 2));
+  }
 
   /* ── Beat-Karte ────────────────────────────────────────────────────────── */
   .plot-beat {
@@ -129,6 +136,26 @@
     transition: transform var(--transition-fast);
   }
   .plot-beat:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+
+  /* Schnellaktionen der Beat-Karte (`.hover-reveal`, components/hover-reveal.css):
+     schweben oben rechts über Intensität/Verankerung, statt der Kopfzeile dauerhaft
+     Breite zu nehmen — der Titel bräche in einer schmalen Akt-Spalte sonst früher
+     um. Der eigene Hintergrund hält sie über dem Inhalt lesbar. Touch zeigt sie
+     immer; dort stehen sie als eigene Zeile im Fluss. */
+  .plot-beat-view { position: relative; }
+  .plot-beat-actions {
+    position: absolute;
+    top: calc(-1 * var(--space-3));
+    right: calc(-1 * var(--space-3));
+    display: flex;
+    gap: var(--space-3);
+    background: var(--color-card-bg);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-sm);
+  }
+  @media (hover: none) {
+    .plot-beat-actions { position: static; justify-content: flex-end; box-shadow: none; }
+  }
 
   /* ── Drag-Griff (einzige Greiffläche; SortableJS handle) ────────────────────
      Dezent, bis die Karte gehovert wird; dann deutlich greifbar. `grab`-Cursor

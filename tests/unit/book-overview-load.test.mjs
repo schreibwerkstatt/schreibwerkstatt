@@ -51,8 +51,8 @@ test('loadBookOverview dedupes parallele Calls für gleiches Buch', async () => 
   const p3 = ctx.loadBookOverview(42);
   await Promise.all([p1, p2, p3]);
 
-  // 14 Endpoints × 1 Load (statt 3 × 14 = 42)
-  assert.equal(fetchCalls.length, 14, 'nur ein Load darf laufen');
+  // 15 Endpoints × 1 Load (statt 3 × 15 = 45)
+  assert.equal(fetchCalls.length, 15, 'nur ein Load darf laufen');
   assert.equal(ctx.overviewBookId, 42);
   fetchDelay = 0;
 });
@@ -67,8 +67,8 @@ test('loadBookOverview: zweiter Call mit anderem Buch ersetzt ersten', async () 
   const p2 = ctx.loadBookOverview(99);
   await Promise.all([p1, p2]);
 
-  // Beide Loads laufen (verschiedene Bücher), je 14 Calls.
-  assert.equal(fetchCalls.length, 28);
+  // Beide Loads laufen (verschiedene Bücher), je 15 Calls.
+  assert.equal(fetchCalls.length, 30);
   // Letztes Buch wins — overviewBookId-Guard verhindert Stale-Assign.
   assert.equal(ctx.overviewBookId, 99);
   // Stats wurden für 99 geholt, nicht für 42.
@@ -85,7 +85,7 @@ test('loadBookOverview räumt _loadingBookId nach Abschluss', async () => {
 
   // Nach Done darf erneuter Call wieder durchlaufen.
   await ctx.loadBookOverview(42);
-  assert.equal(fetchCalls.length, 28);
+  assert.equal(fetchCalls.length, 30);
 });
 
 test('overviewOrtPresence invalidiert Memo wenn tree nachgeladen wird', () => {

@@ -7,71 +7,36 @@
      Derselbe Bestand fuer Bahnen, Spalten und Zaehler — eine `/ideen/board`-
      Antwort, davor eine Filterleiste. Verschoben wird per Drag am Griff
      (SortableJS, Logik in public/js/book/ideen-board/actions.js); der
-     tastaturerreichbare Weg sind die Stufen-Knoepfe auf der Karte. Eine
-     Reihenfolge INNERHALB einer Spalte gibt es nicht: `ideen` hat keine
-     sort_order. -->
-<div class="card card--ideenboard" id="ideen-board-card" x-data="ideenBoardCard"
+     tastaturerreichbare Weg sind die Stufen-Knoepfe auf der Karte. Innerhalb
+     einer Spalte ordnet der Drag nur, solange sie in ihrer urspruenglichen
+     Position steht (`ideen.sort_order`); sortiert wird pro Spalte im Kopf. -->
+<div class="card card--ideenboard fullscreen-shell" id="ideen-board-card" x-data="ideenBoardCard"
      x-show="$app.showIdeenBoardCard" x-cloak>
   <div class="card-header card-header--subline">
     <div class="card-header-titlebar">
       <span class="card-title" x-text="$app.t('ideenBoard.title')"></span>
       <div class="card-subline" x-text="$app.t('ideenBoard.subline')"></div>
     </div>
-    <button type="button" class="btn-card-close" @click="$app.showIdeenBoardCard = false"
-            :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
-    </button>
+    <button type="button" class="btn-compact ideen-board-stages-toggle" @click="stagesOpen = !stagesOpen"
+            :aria-expanded="stagesOpen" :class="{ 'is-active': stagesOpen }"
+            :data-tip="$app.t('ideenBoard.stages.tip')" x-text="$app.t('ideenBoard.stages.toggle')"></button>
+    <!-- Ideen-Chat-Panel (chat/ideen-chat.js): Vorschläge an die Ideen, einzeln übernehmen -->
+    <button type="button" class="icon-btn icon-btn--ghost" :class="{ 'is-active': ideenChatOpen }" :aria-pressed="ideenChatOpen" @click="toggleIdeenChat()" :aria-label="$app.t('ideenBoard.chat.toggle')" :data-tip="$app.t('ideenBoard.chat.toggle')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#message-square"/></svg></button>
+    <button type="button" class="icon-btn icon-btn--ghost" :class="{ 'is-active': ideenBoardFullscreen }" :aria-pressed="ideenBoardFullscreen" @click="toggleIdeenBoardFullscreen()" :aria-label="ideenBoardFullscreen ? $app.t('ideenBoard.fullscreenExit.tip') : $app.t('ideenBoard.fullscreen.tip')" :data-tip="ideenBoardFullscreen ? $app.t('ideenBoard.fullscreenExit.tip') : $app.t('ideenBoard.fullscreen.tip')"><svg class="icon" aria-hidden="true"><use :href="ideenBoardFullscreen ? '/icons.svg#minimize-2' : '/icons.svg#maximize-2'"/></svg></button>
   </div>
 
   <div x-show="errorMessage" class="card-status card-status--error" x-text="errorMessage"></div>
 
-  <!-- Filterleiste: Kapitel eingrenzen, Verworfenes ein-/ausblenden, Volltext.
-       Der Zaehler rechts sagt, wie viel gerade versteckt ist — ohne ihn waere
-       eine ausgeblendete Pendenz von einer verlorenen nicht zu unterscheiden. -->
-  <div class="filter-bar ideen-board-toolbar" x-show="!loading && totalCount() > 0">
-    <div x-data="combobox($app.t('ideenBoard.filterChapter'), $app.t('ideenBoard.filterChapterAll'))"
-         x-modelable="value" x-model="filterChapterId"
-         x-effect="options = chapterOptions()"></div>
+  <!-- Board links, Ideen-Chat rechts daneben (ab 1280px; schmaler steht der
+       Chat per `order` über dem Board). Reine Layout-Klammer. -->
+  <div class="ideen-split" :class="{ 'ideen-split--chat': ideenChatOpen }">
+  <div class="ideen-main">
 
-    <span class="filter-search-wrap">
-      <input type="text" class="filter-search-input filter-search-input--wide" x-model="query"
-             :placeholder="$app.t('ideenBoard.search')" :aria-label="$app.t('ideenBoard.search')">
-      <button type="button" class="search-clear--icon" x-show="query" @click="query = ''"
-              :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
-      </button>
-    </span>
+  <!-- @include ideen-board-stages -->
 
-    <label class="filter-toggle">
-      <input type="checkbox" x-model="showErledigt">
-      <span x-text="$app.t('ideenBoard.showErledigt')"></span>
-    </label>
+  <!-- @include ideen-board-toolbar -->
 
-    <label class="filter-toggle">
-      <input type="checkbox" x-model="showVerworfen">
-      <span x-text="$app.t('ideenBoard.showVerworfen')"></span>
-    </label>
-
-    <!-- Der Zaehler nennt das AUSGEBLENDETE mit: eine versteckte Pendenz ist
-         sonst von einer verlorenen nicht zu unterscheiden. -->
-    <span class="filter-count" x-text="countLabel()"></span>
-  </div>
-
-  <!-- Neue Pendenz: Bahn waehlen + Text. Ohne Bahn kein Anlegen — eine Idee
-       ohne Anker gibt es im Schema nicht (XOR-CHECK Seite ODER Kapitel). -->
-  <div class="card-section ideen-board-add">
-    <div class="ideen-board-add-lane"
-         x-data="entityPicker({ entity: 'custom', placeholder: $app.t('ideenBoard.addLane'), items: () => newLaneOptions() })"
-         x-modelable="value" x-model="newLaneKey"></div>
-    <input type="text" class="ideen-input ideen-board-add-input" x-model="newContent"
-           :placeholder="$app.t('ideenBoard.addPlaceholder')"
-           :aria-label="$app.t('ideenBoard.addPlaceholder')"
-           :disabled="busy" data-spellcheck="spelling"
-           @keydown.enter="if(!$event.isComposing && $event.keyCode !== 229) { $event.preventDefault(); addIdee(); }">
-    <button type="button" class="ideen-add-btn btn-compact" @click="addIdee()"
-            :disabled="busy || !newLaneKey || !(newContent || '').trim()"
-            x-text="$app.t('ideen.add')"></button>
-  </div>
+  <!-- @include ideen-board-add -->
 
   <!-- @include ideen-link-picker -->
 
@@ -88,28 +53,52 @@
        Darum umschliesst der Container nur das Raster, in dem kein Popover
        aufgeht. Gegated: tests/e2e-app/combobox-anchoring.spec.js -->
   <div class="ideen-board-wrap">
-    <div class="ideen-board" x-show="!loading && lanes().length > 0" x-cloak>
+    <div class="ideen-board" :class="'ideen-board--cols-' + statuses().length"
+         x-show="!loading && lanes().length > 0" x-cloak>
       <!-- Spaltenkoepfe: Stufe + Gesamtzahl ueber den ganzen Bestand (nicht ueber
            die gefilterte Sicht — sonst zeigte die Spalte „verworfen" beim
            Ausblenden eine 0 und damit das Gegenteil der Wahrheit). -->
       <div class="ideen-board-head">
         <div class="ideen-board-head-lane" x-text="$app.t('ideenBoard.laneColumn')"></div>
         <template x-for="st in statuses()" :key="st">
-          <div class="ideen-board-head-col" :class="'ideen-board-head-col--' + st">
-            <span class="board-col-title" x-text="statusLabel(st)"></span>
+          <div class="ideen-board-head-col"
+               :class="'ideen-board-head-col--' + st + (isStageActive(st) ? '' : ' ideen-board-head-col--inactive')">
+            <span class="board-col-title" x-text="statusLabel(st)"
+                  :data-tip="isStageActive(st) ? null : inactiveStageTip(st)"></span>
             <span class="board-col-count" x-text="statusTotal(st)"></span>
+            <!-- Sortierung DIESER Spalte: ein Kriterium waehlen, nochmal klicken
+                 kehrt die Richtung um; der Reset holt die urspruengliche,
+                 per Drag gesetzte Position zurueck. Bewusst Knoepfe statt
+                 Combobox — im Raster darf kein verankertes Popover aufgehen
+                 (container-type, siehe Wrapper unten). -->
+            <span class="ideen-board-col-sort">
+              <span class="seg-toggle" role="group" :aria-label="$app.t('ideenBoard.sort.label')">
+                <button type="button" :class="{ 'seg-toggle--active': colSort(st).by === 'created' }" :aria-pressed="colSort(st).by === 'created'"
+                        @click="setColumnSort(st, 'created')" :data-tip="sortKeyTip(st, 'created')" :aria-label="sortKeyTip(st, 'created')">
+                  <span x-text="sortKeyLabel('created')"></span><svg class="icon" aria-hidden="true" x-show="colSort(st).by === 'created'"><use :href="sortDirIcon(st)"/></svg>
+                </button>
+                <button type="button" :class="{ 'seg-toggle--active': colSort(st).by === 'title' }" :aria-pressed="colSort(st).by === 'title'"
+                        @click="setColumnSort(st, 'title')" :data-tip="sortKeyTip(st, 'title')" :aria-label="sortKeyTip(st, 'title')">
+                  <span x-text="sortKeyLabel('title')"></span><svg class="icon" aria-hidden="true" x-show="colSort(st).by === 'title'"><use :href="sortDirIcon(st)"/></svg>
+                </button>
+              </span>
+              <button type="button" class="icon-btn icon-btn--ghost"
+                      x-show="!isColumnManual(st)" @click="resetColumnSort(st)"
+                      :data-tip="$app.t('ideenBoard.sort.reset')" :aria-label="$app.t('ideenBoard.sort.reset')">
+                <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-ccw"/></svg>
+              </button>
+            </span>
           </div>
         </template>
       </div>
 
       <template x-for="lane in lanes()" :key="lane.lane.key">
-        <div class="ideen-board-row" :class="'ideen-board-row--' + lane.lane.kind">
+        <div class="ideen-board-row" :class="'ideen-board-row--' + lane.lane.kind + ' ideen-board-row--depth-' + Math.min(lane.lane.depth || 1, 4)">
           <!-- Bahnbeschriftung mit zwei unabhaengigen Klapp-Griffen (Zustand in
                collapsedLanes/collapsedChapters, pro Buch im localStorage):
-               der Chevron vor dem Titel klappt die KARTEN dieser Bahn, der
-               Seiten-Griff darunter faltet bei einer Kapitel-Bahn ihre
-               SEITEN-BAHNEN in diese Zeile. Beides ist Ansicht, kein Filter —
-               was dabei verschwindet, steht als Zahl in den Zellen. -->
+               Chevron = KARTEN dieser Bahn, Abschnitts-Griff = TEILBAUM einer
+               Kapitel-Bahn. Ansicht, kein Filter: Verborgenes zaehlt in den
+               Zellen. Die Gliederung zeigt der Einzug (depth-N). -->
           <div class="ideen-board-lane">
             <div class="ideen-board-lane-head">
               <button type="button" class="ideen-board-fold" @click="toggleLaneFold(lane.lane)"
@@ -119,12 +108,10 @@
               </button>
               <button type="button" class="ideen-board-lane-title internal-link"
                       @click="openLane(lane.lane)"
-                      :disabled="lane.lane.kind === 'unknown'"
+                      :disabled="lane.lane.kind === 'unknown' || lane.lane.kind === 'book'"
                       :data-tip="$app.t('ideenBoard.openLane')"
                       x-text="laneLabel(lane.lane)"></button>
             </div>
-            <span class="ideen-board-lane-chapter" x-show="lane.lane.kind === 'page' && lane.lane.chapterLabel"
-                  x-text="lane.lane.chapterLabel"></span>
             <div class="ideen-board-lane-meta">
               <button type="button" class="ideen-board-pages"
                       x-show="lane.lane.kind === 'chapter' && lane.childLanes > 0"
@@ -141,21 +128,28 @@
           <template x-for="st in statuses()" :key="st">
             <!-- SortableJS-Container: haelt ausser dem x-for-Anker nur die Karten.
                  `data-idee-status-cell` traegt die Ziel-Stufe, `data-idee-lane`
-                 bindet die Drop-Gruppe an DIESE Bahn — eine Karte wechselt die
-                 Spalte, nie die Zeile (die Zeile ist ihr Anker im Buch). -->
+                 bindet die Drop-Gruppe an DIESE Bahn — eine verankerte Karte
+                 wechselt die Spalte, nie die Zeile (die Zeile ist ihr Anker im
+                 Buch). Nur eine offene Buch-Idee darf in eine Kapitel-/
+                 Abschnitts-Bahn: das ordnet sie zu. -->
             <div class="ideen-board-cell" :class="'ideen-board-cell--' + st"
                  :data-idee-status-cell="st" :data-idee-lane="lane.lane.key">
               <template x-for="idee in (lane.collapsed ? [] : lane.columns[st])" :key="idee.id">
-                <div class="idee-board-card" :class="'idee-board-card--' + st"
+                <div class="idee-board-card hover-reveal-host" :class="'idee-board-card--' + st"
                      :data-idee-card-id="idee.id">
                   <!-- Kartenaktionen schweben oben rechts und erscheinen erst auf
                        Zuwendung: in der Zeile der Stufen-Knoepfe nehmen sie so viel
                        Breite, dass deren drei Wortmarken dreizeilig umbrechen. -->
-                  <div class="idee-board-card-actions">
+                  <div class="idee-board-card-actions hover-reveal">
                     <button type="button" class="icon-btn icon-btn--ghost"
                             @click.stop="startEdit(idee)" :disabled="busy"
                             :data-tip="$app.t('ideen.edit')" :aria-label="$app.t('ideen.edit')">
                       <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+                    </button>
+                    <button type="button" class="icon-btn icon-btn--ghost" x-show="canAssign(idee)"
+                            @click.stop="startAssign(idee)" :disabled="busy"
+                            :data-tip="$app.t('ideenBoard.assign')" :aria-label="$app.t('ideenBoard.assign')">
+                      <svg class="icon" aria-hidden="true"><use href="/icons.svg#move-horizontal"/></svg>
                     </button>
                     <button type="button" class="icon-btn icon-btn--ghost"
                             @click.stop="openLinkPicker($event, idee)" :disabled="busy"
@@ -174,8 +168,7 @@
                        die einzige Greifflaeche (SortableJS handle), damit Text,
                        Chips und Knoepfe voll klickbar bleiben. -->
                   <div class="idee-board-card-body">
-                    <span class="idee-board-grip" :data-tip="$app.t('ideenBoard.drag')"
-                          :aria-label="$app.t('ideenBoard.drag')">
+                    <span class="idee-board-grip" :data-tip="dragTip(idee)" :aria-label="dragTip(idee)">
                       <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
                     </span>
                     <div class="idee-board-card-main">
@@ -194,20 +187,23 @@
                           </div>
                         </div>
                       </template>
-
-                      <!-- @include ideen-link-chips -->
                     </div>
                   </div>
+
+                  <!-- Verknuepfungs-Chips unter Griff UND Text, buendig mit der
+                       Kartenkante: neben dem Griff eingerueckt sassen sie als
+                       Fortsetzung des Textes statt als eigene Zeile. -->
+                  <!-- @include ideen-link-chips -->
 
                   <!-- Stufen-Knoepfe: derselbe Schreibpfad wie der Drag, aber mit
                        der Tastatur erreichbar. Sie stehen ueber die ganze Breite,
                        weil drei Wortmarken in einer 13rem-Spalte sonst dreizeilig
                        umbrechen. -->
-                  <div class="idee-board-steps" role="group" :aria-label="$app.t('ideenBoard.setStatus')">
+                  <div class="idee-board-steps hover-reveal" role="group" :aria-label="$app.t('ideenBoard.setStatus')">
                     <template x-for="target in statuses()" :key="target">
                       <button type="button" class="idee-board-step"
                               :class="'idee-board-step--' + target"
-                              x-show="target !== st"
+                              x-show="target !== st && isStageActive(target)"
                               @click.stop="setIdeeStatus(idee, target)" :disabled="busy"
                               :data-tip="$app.t('ideenBoard.moveTo', { status: statusLabel(target) })"
                               :aria-label="$app.t('ideenBoard.moveTo', { status: statusLabel(target) })"
@@ -229,4 +225,9 @@
       </template>
     </div>
   </div>
+  </div><!-- /.ideen-main -->
+
+  <!-- Ideen-Chat-Panel (ausgelagert; File-Limit) -->
+  <div id="partial-ideen-chat" class="ideen-chat-slot"></div>
+  </div><!-- /.ideen-split -->
 </div>

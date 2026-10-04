@@ -89,8 +89,8 @@ function buildLocationSamples(ctx) {
       pushQA('authorChat|ort-first|' + l.loc_id,
         langIsEn ? `When is ${l.name} first mentioned?` : `Wann wird ${l.name} zum ersten Mal erwähnt?`,
         langIsEn
-          ? `${l.name} is first introduced on the page «${l.erste_erwaehnung}».`
-          : `${l.name} wird zum ersten Mal auf der Seite «${l.erste_erwaehnung}» erwähnt.`);
+          ? `${l.name} is first introduced in the section «${l.erste_erwaehnung}».`
+          : `${l.name} wird zum ersten Mal im Abschnitt «${l.erste_erwaehnung}» erwähnt.`);
     }
   }
 

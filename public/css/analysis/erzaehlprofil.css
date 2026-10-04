@@ -403,9 +403,8 @@
 }
 
 .erzaehlprofil-band-name {
-  flex: 0 0 auto;
-  min-width: var(--space-20);
-  max-width: var(--space-20);
+  flex: 0 0 11rem;
+  min-width: 0;
 }
 
 .erzaehlprofil-band-cells {
@@ -436,6 +435,6 @@
 }
 
 @media (max-width: 640px) {
-  .erzaehlprofil-band-name { min-width: var(--space-14); max-width: var(--space-14); }
+  .erzaehlprofil-band-name { flex-basis: 7rem; }
 }
 }

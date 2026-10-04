@@ -25,7 +25,7 @@ const SIMPLE_HASH_VIEWS = {
   'stats':        'bookStats',
   'stil':         'stil',
   'fehler':       'fehlerHeatmap',
-  'redundanz':    'redundanz',
+  'redundanz':    'buchlandkarte',
   'landkarte':    'buchlandkarte',
   'wortschatz':   'wortschatz',
   'struktur':     'struktur',
@@ -40,6 +40,13 @@ const SIMPLE_HASH_VIEWS = {
   'organize':     'bookOrganizer',
   'bucheditor':   'bookEditor',
   'share':        'shareLinks',
+};
+
+// Hash-Views, die denselben Karten-Key mit einem anderen Tab oeffnen: der Tab
+// (Root-Feld → Wert) wird vor dem Oeffnen gesetzt.
+const HASH_VIEW_TABS = {
+  'landkarte': ['buchlandkarteTab', 'map'],
+  'redundanz': ['buchlandkarteTab', 'redundanz'],
 };
 
 export const hashApplyMethods = {
@@ -224,6 +231,8 @@ export const hashApplyMethods = {
 
       const simpleKey = SIMPLE_HASH_VIEWS[view];
       if (simpleKey) {
+        const tab = HASH_VIEW_TABS[view];
+        if (tab) this[tab[0]] = tab[1];
         const entry = EXCLUSIVE_CARDS.find(c => c.key === simpleKey);
         if (entry && !this[entry.flag]) await this[entry.toggle]();
         return;

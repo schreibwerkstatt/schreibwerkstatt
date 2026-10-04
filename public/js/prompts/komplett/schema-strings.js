@@ -26,10 +26,10 @@ export const FIGUREN_BASIS_SCHEMA = `{
       "eigenschaften": ["Eigenschaft1", "Eigenschaft2"],
       "praesenz": "zentral|regelmaessig|punktuell|randfigur",
       "arc": { "typ": "statisch|wandel|bogen", "anfang": "Zustand der Figur zu Beginn (1 Satz; leer wenn statisch)", "wendepunkte": ["Was die Figur im Verlauf verändert – je 1 Satz, in Reihenfolge der Handlung"], "ende": "Zustand am Schluss (1 Satz; leer wenn offen oder statisch)" },
-      "erste_erwaehnung": "Kapitelname oder Seitenname der ersten Erwähnung (leer wenn unklar)",
+      "erste_erwaehnung": "Kapitelname oder Abschnittsname der ersten Erwähnung (leer wenn unklar)",
       "schluesselzitate": ["Bis zu 5 charakterisierende Zitate, wörtlich aus dem Text – vollständige Sätze in Original-Interpunktion"],
       "kapitel": [{ "name": "Kapitelname" }],
-      "beziehungen": [{ "figur_id": "fig_2", "typ": "elternteil|geschwister|kind|freund|feind|kollege|bekannt|liebesbeziehung|ehepartner|ex_partner|rivale|mentor|schuetzling|patronage|geschaeft|verbuendete|komplize|vorgesetzter|untergebener|andere", "machtverhaltnis": 0, "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (ohne ##-Präfix)", "seite": "Seitentitel (ohne ###-Präfix); leer wenn = Kapitel oder unklar" }] }]
+      "beziehungen": [{ "figur_id": "fig_2", "typ": "elternteil|geschwister|kind|freund|feind|kollege|bekannt|liebesbeziehung|ehepartner|ex_partner|rivale|mentor|schuetzling|patronage|geschaeft|verbuendete|komplize|vorgesetzter|untergebener|andere", "machtverhaltnis": 0, "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (ohne ##-Präfix)", "seite": "Abschnittstitel (ohne ###-Präfix); leer wenn = Kapitel oder unklar" }] }]
     }
   ]
 }`;
@@ -46,7 +46,7 @@ export const FIGUREN_STAMM_SCHEMA = FIGUREN_BASIS_SCHEMA
 export const figurenBasisRules = (kontext = '') => `Regeln:
 - Eindeutige IDs (fig_1, fig_2, …)
 - beziehungen.figur_id: nur IDs aus dieser Liste; jede Beziehung nur einmal eintragen
-- kapitel: absteigend nach Häufigkeit; name = immer der Kapitelname (aus dem ## Kapitel-Header über dem Abschnitt oder aus dem Prompt-Kontext) – NIEMALS Seitentitel als Kapitelnamen verwenden. haeufigkeit (= Anzahl Seiten/Abschnitte mit aktivem Auftreten) NUR ergänzen wenn >1; bei Einzelauftreten weglassen.
+- kapitel: absteigend nach Häufigkeit; name = immer der Kapitelname (aus dem ## Kapitel-Header über dem Abschnitt oder aus dem Prompt-Kontext) – NIEMALS Abschnittstitel als Kapitelnamen verwenden. haeufigkeit (= Anzahl Abschnitte mit aktivem Auftreten) NUR ergänzen wenn >1; bei Einzelauftreten weglassen.
 - typ: Figuren-Archetyp. hauptfigur=trägt zentral die Handlung, antagonist=Gegenspieler, mentor=Anleiter/Lehrerin, nebenfigur=klar identifizierbarer Sekundärcharakter mit mehreren Auftritten, randfigur=tritt nur am Rand in Erscheinung (kaum mehr als Erwähnung), andere=nicht zuordenbar. NICHT mit praesenz verwechseln (Typ = Rolle, Präsenz = Handlungsgewicht).
 - praesenz: Gewichtung der Figur im Gesamtbuch. zentral=Haupthandlungsträger, regelmaessig=wiederkehrend und handlungsrelevant, punktuell=taucht in einzelnen Szenen auf, randfigur=kaum mehr als Erwähnung. Liegt der gesamte Buchtext vor, beurteile über das ganze Buch; nur bei isolierter Einzelkapitel-Analyse basiert die Einschätzung auf diesem Kapitel.
 - rolle: Funktion in der Handlung, 1-2 Sätze. Leer lassen wenn nicht belegt.
@@ -57,12 +57,12 @@ export const figurenBasisRules = (kontext = '') => `Regeln:
 - hintergrund: Vorgeschichte vor bzw. ausserhalb der Haupthandlung (Herkunft, prägende frühere Ereignisse), 1-3 Sätze. Leer wenn nicht belegt.
 - beschreibung: Charakterporträt in 4-6 Sätzen – Persönlichkeit, Wirkung auf andere, Bedeutung für die Handlung. Textnah verdichtet, keine Spekulation.
 - schluesselzitate: bis zu 5 wörtliche Zitate die die Figur charakterisieren – exakt aus dem Text, vollständige Sätze in Original-Interpunktion (kein Zeichen-Limit). Leer lassen wenn keine prägnanten Stellen gefunden.
-- erste_erwaehnung: Kapitel- oder Seitenname der ersten Erwähnung (so präzise wie belegt). Leer wenn unklar.
+- erste_erwaehnung: Kapitel- oder Abschnittsname der ersten Erwähnung (so präzise wie belegt). Leer wenn unklar.
 - wohnadresse: Wohnort oder Wohnadresse der Figur, so präzise wie textnah belegt (z.B. «Zürich», «Bahnhofstrasse 12, Bern», «kleines Bauernhaus am Waldrand»). Nur ausfüllen wenn explizit aus dem Text hervorgeht. Leer wenn nicht erwähnt – nicht spekulieren.
 - arc.typ: "statisch" = Figur bleibt über das Buch unverändert; "wandel" = klare Veränderung; "bogen" = ausgeprägter Entwicklungsbogen mit mehreren Stationen. arc.anfang/ende = Zustand zu Beginn/Schluss (je 1 Satz; bei statisch leer). arc.wendepunkte = was die Figur verändert, je 1 Satz in Handlungsreihenfolge (leeres Array bei statisch). Nur Belegtes – nicht spekulieren.
 - sozialschicht: gesellschaftliche Schicht der Figur${kontext ? ` (${kontext})` : ''} – nur vergeben wenn eindeutig belegt; wirtschaftselite=Unternehmerfamilien/Direktoren, gehobenes_buergertum=Akademiker/freie Berufe/obere Kader, mittelschicht=Angestellte/Beamte/mittlere Kader, arbeiterschicht=Fabrik-/Bauarbeiter/Servicepersonal, migrantenmilieu=Zugewanderte/zweite Generation, prekariat=Sozialhilfe/Randständige/Langzeitarbeitslose, unterwelt=kriminelles Milieu, andere=nicht eindeutig
 - beziehungen.machtverhaltnis: ganzzahlig im Bereich -2 bis 2 (KEIN führendes Plus-Zeichen). Machtasymmetrie: 2=Gegenüber (figur_id) dominiert klar, 1=Gegenüber hat leichten Vorteil, 0=symmetrisch, -1=diese Figur hat leichten Vorteil, -2=diese Figur dominiert klar; weglassen oder 0 wenn unklar
-- beziehungen.belege: HÖCHSTENS 1 Stelle (Kapitelname + Seitentitel) an der die Beziehung klar wird. Genau wie im Text stehen lassen; leer lassen wenn unsicher. seite leer lassen wenn identisch mit dem Kapitelnamen (z.B. 1 Seite pro Kapitel) oder unklar. Seitennamen aus ### Überschriften, Kapitelnamen aus ## Überschriften oder dem Prompt-Kontext.
+- beziehungen.belege: HÖCHSTENS 1 Stelle (Kapitelname + Abschnittstitel) an der die Beziehung klar wird. Genau wie im Text stehen lassen; leer lassen wenn unsicher. seite leer lassen wenn identisch mit dem Kapitelnamen (z.B. 1 Abschnitt pro Kapitel) oder unklar. Abschnittsnamen aus ### Überschriften, Kapitelnamen aus ## Überschriften oder dem Prompt-Kontext.
 - Beziehungstypen: typ beschreibt die ROLLE von figur_id (NICHT der aktuellen Figur!). Bei Figur X der Eintrag {figur_id: Y, typ: elternteil} bedeutet: Y IST der Elternteil von X. Konkretes Beispiel: Robert hat Mutter Sandra → bei Robert eintragen {figur_id: «<Sandras fig_id>», typ: elternteil, machtverhaltnis: 2}. patronage=Schutzherrschaft (figur_id = Patron), geschaeft=wirtschaftliche Beziehung, geschwister=ungerichtet, ehepartner=verheiratet/Lebenspartner (ungerichtet), ex_partner=frühere Liebes-/Ehebeziehung (ungerichtet), verbuendete=Verbündete/gemeinsame Sache jenseits blosser Freundschaft (ungerichtet), komplize=gemeinsame (oft illegale) Unternehmung (ungerichtet), vorgesetzter=figur_id ist Vorgesetzte(r), untergebener=figur_id ist unterstellt; liebesbeziehung nur für nicht-eheliche romantische Bindung. Übrige selbsterklärend
 - Pro Figurenpaar höchstens EINE Beziehung eintragen – aus der Perspektive EINER Figur. Keine widersprüchlichen Angaben (z.B. nicht gleichzeitig elternteil und kind für dasselbe Paar)
 - Nur fiktive Charaktere oder Figuren die aktiv an der Buchhandlung teilnehmen – keine Orte oder Objekte
@@ -82,7 +82,7 @@ export const ORTE_SCHEMA = `{
       "typ": "stadt|gebaeude|raum|landschaft|region|andere",
       "beschreibung": "2-3 Sätze zu Erscheinungsbild, Atmosphäre, Bedeutung für die Handlung",
       "land": "ISO-3166-1-alpha-2-Ländercode des Schauplatzes in Kleinbuchstaben (z.B. ch, de, fr, us); leer wenn nicht bestimmbar",
-      "erste_erwaehnung": "Kapitelname oder Seitenname der ersten Erwähnung (leer wenn unklar)",
+      "erste_erwaehnung": "Kapitelname oder Abschnittsname der ersten Erwähnung (leer wenn unklar)",
       "stimmung": "Grundatmosphäre in 2-3 Worten (z.B. bedrohlich, heimelig, verlassen, belebt)",
       "kapitel": ["Kapitelname"],
       "figuren_namen": ["Figurenname exakt wie im Text"]
@@ -116,7 +116,7 @@ export const SONGS_SCHEMA = `{
       "kontext_typ": "hört|spielt|erwähnt|leitmotiv|diegetisch",
       "beschreibung": "1-2 Sätze: in welcher Szene/Situation der Song auftaucht, welche Funktion er hat",
       "stimmung": "Grundatmosphäre in 2-3 Worten (z.B. melancholisch, euphorisch, beklemmend)",
-      "erste_erwaehnung": "Kapitelname oder Seitenname der ersten Erwähnung (leer wenn unklar)",
+      "erste_erwaehnung": "Kapitelname oder Abschnittsname der ersten Erwähnung (leer wenn unklar)",
       "kapitel": [{ "name": "Kapitelname", "haeufigkeit": 2 }],
       "figuren_namen": ["Figurenname exakt wie im Text"]
     }
@@ -129,7 +129,7 @@ export const SONGS_RULES = `Regeln:
 - KEINE generischen Genre-Erwähnungen ohne konkreten Titel/Interpret («Klassische Musik im Hintergrund» reicht nicht). Pflicht: mindestens titel ODER interpret.
 - kontext_typ: «hört» = Figur konsumiert (Radio, Kopfhörer, Konzert); «spielt» = Figur produziert aktiv (Instrument, Gesang); «erwähnt» = Song wird im Dialog/Erzähltext genannt, ohne dass jemand ihn hört oder spielt; «leitmotiv» = Song zieht sich als wiederkehrendes Motiv durchs Buch; «diegetisch» = Musik im Hintergrund einer Szene (Bar, Auto, Party) ohne aktive Figur-Bindung.
 - figuren_namen: Klarnamen der Figuren, die den Song hören/spielen/erwähnen – exakt wie im Text (vollständiger Name oder Spitzname, KEINE ID); leeres Array wenn keine Figur klar zuordenbar
-- kapitel: absteigend nach Häufigkeit; haeufigkeit = Anzahl Seiten/Abschnitte mit aktivem Vorkommen
+- kapitel: absteigend nach Häufigkeit; haeufigkeit = Anzahl Abschnitte mit aktivem Vorkommen
 - Klassische Stücke ohne Interpret: Komponist als interpret eintragen («Beethoven» für «Mondscheinsonate»)
 - Kein Cap – vollständige Erfassung wichtiger als Kürze`;
 
@@ -140,7 +140,7 @@ export const FAKTEN_SCHEMA = `"fakten": [
       "kategorie": "figur|ort|objekt|organisation|technik|regel|kultur|historie|zeit|soziolekt|ereignis|sonstiges",
       "subjekt": "Über wen/was geht es (Name oder Bezeichnung)",
       "fakt": "Was genau behauptet wird (1 Satz, so präzise wie möglich)",
-      "seite": "Seitenname oder Abschnittsname (leer wenn unklar)"
+      "seite": "Abschnittsname (leer wenn unklar)"
     }
   ]`;
 
@@ -240,7 +240,7 @@ export const _ASSIGNMENTS_SCHEMA_BLOCK = `"assignments": [
           "ereignis": "Was passierte – neutral formuliert. Gleiches Ereignis bei allen beteiligten Figuren identisch.",
           "typ": "persoenlich|extern",
           "bedeutung": "Bedeutung für diese Figur (1 Satz, leer wenn nicht klar)",
-          "seite": "EXAKT ein ### Seiten-Header aus dem aktuellen ## Kapitel. NIE der Kapitelname. Leer wenn unklar.",
+          "seite": "EXAKT ein ### Abschnitts-Header aus dem aktuellen ## Kapitel. NIE der Kapitelname. Leer wenn unklar.",
           "kapitel": "EXAKT der ## Kapitel-Header (nicht ###); leer wenn unklar"
         }
       ]

@@ -274,6 +274,7 @@ export const adminUsageMethods = {
     }
     qs.set('limit', '50');
     qs.set('offset', String(this.adminUsageChatOffset || 0));
+    if (this.adminUsageChatFeedback) qs.set('feedback', this.adminUsageChatFeedback);
     // Chat-Qualitaet je Chat-Art (Zeitraum, ohne User-Filter) laeuft im selben
     // Load mit — eine Sequenz pro Tab, damit eine spaete Antwort nicht ueber
     // einen neueren Zeitraum schreibt.
@@ -287,6 +288,22 @@ export const adminUsageMethods = {
         ...r, label: this._adminUsageTypeLabel(r.kind),
       }));
     });
+  },
+
+  // Optionen fuer den Bewertungs-Filter der Chat-Liste; '' (alle) liefert der
+  // Combobox ueber `emptyLabel`.
+  adminUsageFeedbackFilterOptions() {
+    const t = window.__app.t;
+    return [
+      { value: 'down', label: t('admin.usage.filter.feedbackDown') },
+      { value: 'up',   label: t('admin.usage.filter.feedbackUp') },
+    ];
+  },
+
+  adminUsageFeedbackLabel(v) {
+    if (v === -1) return window.__app.t('admin.usage.chatQuality.down');
+    if (v === 1)  return window.__app.t('admin.usage.chatQuality.up');
+    return '—';
   },
 
   // ── Tab: Abrechnung (Anthropic Cost-Report vs. Ledger) ─────────────────────

@@ -36,7 +36,7 @@ export function historyTrimNote(dropped) {
 export function formatPageChange(change) {
   if (!change) return '';
   const out = [];
-  if (change.heavy) out.push('Die Seite wurde seit Chat-Start umfangreich überarbeitet.');
+  if (change.heavy) out.push('Der Abschnitt wurde seit Chat-Start umfangreich überarbeitet.');
   for (const h of change.hunks || []) {
     const del = h.removed ? `[-${h.removed}-]` : '';
     const ins = h.added ? `{+${h.added}+}` : '';
@@ -56,10 +56,10 @@ export function formatPageChange(change) {
 export function buildPageChatBookContext(passages) {
   const list = Array.isArray(passages) ? passages.filter(p => p && p.text) : [];
   if (!list.length) return '';
-  const kindLabel = { page: 'Seite', scene: 'Szene', figure: 'Figur', location: 'Ort', fact: 'Welt-Fakt' };
+  const kindLabel = { page: 'Abschnitt', scene: 'Szene', figure: 'Figur', location: 'Ort', fact: 'Welt-Fakt' };
   const out = [
     '=== KONTEXT AUS ANDEREN TEILEN DES BUCHS (nur lesend) ===',
-    '(Automatisch geholt: die semantisch nächsten Stellen zur Frage, nicht von dieser Seite; Ausschnitte können unvollständig sein. Nutze sie, um Bezüge zum übrigen Buch herzustellen — Figurenwissen, frühere Ereignisse, Widersprüche. Änderungsvorschläge (`vorschlaege`) beziehen sich AUSSCHLIESSLICH auf den SEITENINHALT oben; `original` nie aus diesem Block nehmen.)',
+    '(Automatisch geholt: die semantisch nächsten Stellen zur Frage, nicht aus diesem Abschnitt; Ausschnitte können unvollständig sein. Nutze sie, um Bezüge zum übrigen Buch herzustellen — Figurenwissen, frühere Ereignisse, Widersprüche. Änderungsvorschläge (`vorschlaege`) beziehen sich AUSSCHLIESSLICH auf den ABSCHNITTSINHALT oben; `original` nie aus diesem Block nehmen.)',
   ];
   for (const p of list) {
     out.push(`--- ${kindLabel[p.kind] || p.kind}: «${p.title}» ---`, String(p.text).trim(), '');

@@ -16,6 +16,7 @@ const { extractPsychologie } = require('../../../lib/draft-mindmap-extract');
 const { getLatestContinuityCheck, listWorldFacts, worldFactsScanState, getBookSettings } = require('../../../db/schema');
 const { listFigureEventsWithNames, listScenesWithChapterNames } = require('../../../db/content-names');
 const logger = require('../../../logger');
+const { ideaNotesByTarget } = require('../../../lib/idea-context');
 
 // Wandelt einen echten Lade-/DB-Fehler in einen i18n-Job-Fehler um (Original als
 // `cause` für den Log). Ein leeres Ergebnis ist kein Fehler.
@@ -219,6 +220,8 @@ function _threadContext(bookId, userEmail) {
     }
     return { threads, figByFigId, draftById };
   });
+  // Pendenzen des Autors am Strang (wie am Beat, siehe commonPlotContext).
+  const ideasByThread = threads.length ? ideaNotesByTarget('thread', bookId, userEmail) : new Map();
   return threads.map(t => ({
     id: t.id,
     name: t.name,
@@ -228,6 +231,7 @@ function _threadContext(bookId, userEmail) {
       : (t.draft_figure_id ? (draftById[t.draft_figure_id] || null) : null),
     kapitel: t.chapter_name || null,
     chapter_id: t.chapter_id || null,
+    ...(ideasByThread.has(t.id) ? { ideen: ideasByThread.get(t.id) } : {}),
   }));
 }
 
@@ -300,7 +304,11 @@ async function commonPlotContext(bookId, userEmail) {
   const threads = _threadContext(bookId, userEmail);
   const allFiguren = figurenContext(bookId, userEmail);
   const allWerkstatt = _werkstattFigurenContext(bookId, userEmail);
-  const beats = enrichBeats(_loadCtx('beats', () => plotDb.listBeats(bookId, userEmail)), allFiguren, allWerkstatt);
+  // Pendenzen des Autors am Beat (offen/in Arbeit/verworfen) — der Prompt zeigt sie
+  // am Beat: bekannte Probleme nicht neu melden, Verworfenes nicht neu vorschlagen.
+  const ideasByBeat = ideaNotesByTarget('beat', bookId, userEmail);
+  const beats = enrichBeats(_loadCtx('beats', () => plotDb.listBeats(bookId, userEmail)), allFiguren, allWerkstatt)
+    .map(b => (ideasByBeat.has(b.id) ? { ...b, ideen: ideasByBeat.get(b.id) } : b));
   const linkedCh = linkedChapterIds(beats, threads);
 
   const usedFig = new Set([...beats.flatMap(b => b.fig_ids || []), ...threads.map(t => t.fig_id).filter(Boolean)]);

@@ -77,14 +77,16 @@ router.get('/jobs', (req, res) => {
   res.json(result);
 });
 
-// GET /admin/usage/chat?user=&from=&to=&limit=&offset=  (user repeatable)
+// GET /admin/usage/chat?user=&from=&to=&limit=&offset=&feedback=  (user repeatable)
+// `feedback=down|up`: nur Antworten mit Daumen runter/hoch — Metadaten, kein Text.
 router.get('/chat', (req, res) => {
   const emails = _emails(req);
   const range = _range(req);
   const limit = parseInt(req.query.limit, 10) || 50;
   const offset = parseInt(req.query.offset, 10) || 0;
-  const result = adminUsage.getChatMessages({ emails, ...range, limit, offset, includeAdmins: _includeAdmins(req) });
-  _auditView(req, 'chat', { target: emails.length ? emails.join(',') : '*all*', ...range });
+  const feedback = ['down', 'up'].includes(req.query.feedback) ? req.query.feedback : null;
+  const result = adminUsage.getChatMessages({ emails, ...range, limit, offset, feedback, includeAdmins: _includeAdmins(req) });
+  _auditView(req, 'chat', { target: emails.length ? emails.join(',') : '*all*', feedback, ...range });
   res.json(result);
 });
 

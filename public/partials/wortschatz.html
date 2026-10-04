@@ -58,7 +58,7 @@
               <span class="overview-substat-value" x-text="wsNum(wortschatzData.stats.tokens)"></span>
               <span class="overview-substat-unit" x-text="$app.t('wortschatz.kpi.tokens')"></span>
             </div>
-            <div class="overview-substat">
+            <div class="overview-substat" :data-tip="$app.t('wortschatz.kpi.hapaxNote') + ' ' + $app.t('wortschatz.kpi.source.hapax')">
               <span class="overview-substat-value" x-text="wsPercent(wortschatzData.stats.hapax_ratio)"></span>
               <span class="overview-substat-unit" x-text="$app.t('wortschatz.kpi.hapax')"></span>
             </div>
@@ -67,34 +67,37 @@
         </div>
 
         <div class="overview-tile">
-          <div class="overview-tile-label" x-text="$app.t('wortschatz.kpi.mattr')"></div>
+          <div class="overview-tile-label" :data-tip="$app.t('wortschatz.kpi.source.mattr')" x-text="$app.t('wortschatz.kpi.mattr')"></div>
           <div class="overview-hero-row">
             <span class="overview-hero-value" x-text="wsNum(wortschatzData.stats.mattr, 3)"></span>
           </div>
           <p class="wortschatz-kpi-peer" x-show="wsPeer('mattr', 3)" x-text="wsPeer('mattr', 3)"></p>
           <p class="wortschatz-kpi-warn" x-show="!wsMattrIsRobust()"
              x-text="$app.t('wortschatz.kpi.mattrShort', { window: wortschatzData.stats.mattr_window })"></p>
+          <p class="wortschatz-kpi-note" x-text="$app.t('wortschatz.kpi.mattrNote')"></p>
         </div>
 
         <div class="overview-tile">
-          <div class="overview-tile-label" x-text="$app.t('wortschatz.kpi.mtld')"></div>
+          <div class="overview-tile-label" :data-tip="$app.t('wortschatz.kpi.source.mtld')" x-text="$app.t('wortschatz.kpi.mtld')"></div>
           <div class="overview-hero-row">
             <span class="overview-hero-value" x-text="wsNum(wortschatzData.stats.mtld, 1)"></span>
           </div>
           <p class="wortschatz-kpi-peer" x-show="wsPeer('mtld', 1)" x-text="wsPeer('mtld', 1)"></p>
           <p class="wortschatz-kpi-warn" x-show="wsMtldNote()" x-text="wsMtldNote()"></p>
+          <p class="wortschatz-kpi-note" x-text="$app.t('wortschatz.kpi.mtldNote')"></p>
         </div>
 
         <div class="overview-tile">
-          <div class="overview-tile-label" x-text="$app.t('wortschatz.kpi.density')"></div>
+          <div class="overview-tile-label" :data-tip="$app.t('wortschatz.kpi.source.density')" x-text="$app.t('wortschatz.kpi.density')"></div>
           <div class="overview-hero-row">
             <span class="overview-hero-value" x-text="wsPercent(wortschatzData.stats.lex_density)"></span>
           </div>
           <p class="wortschatz-kpi-peer" x-show="wsPeer('lex_density', 1, true)" x-text="wsPeer('lex_density', 1, true)"></p>
+          <p class="wortschatz-kpi-note" x-text="$app.t('wortschatz.kpi.densityNote')"></p>
         </div>
 
         <div class="overview-tile">
-          <div class="overview-tile-label" x-text="$app.t('wortschatz.kpi.yule')"></div>
+          <div class="overview-tile-label" :data-tip="$app.t('wortschatz.kpi.source.yule')" x-text="$app.t('wortschatz.kpi.yule')"></div>
           <div class="overview-hero-row">
             <span class="overview-hero-value" x-text="wsNum(wortschatzData.stats.yule_k, 1)"></span>
           </div>
@@ -103,7 +106,7 @@
         </div>
 
         <div class="overview-tile">
-          <div class="overview-tile-label" x-text="$app.t('wortschatz.kpi.heaps')"></div>
+          <div class="overview-tile-label" :data-tip="$app.t('wortschatz.kpi.source.heaps')" x-text="$app.t('wortschatz.kpi.heaps')"></div>
           <div class="overview-hero-row">
             <span class="overview-hero-value" x-text="wsNum(wortschatzData.stats.heaps_beta, 3)"></span>
           </div>

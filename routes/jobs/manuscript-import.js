@@ -51,8 +51,8 @@ function _scheduleBufferCleanup(jobId) {
 function _fallbackNames(bookId, userEmail) {
   const en = bookId ? getBookLocale(bookId, userEmail).startsWith('en') : false;
   return en
-    ? { untitledPage: 'Page', untitledChapter: 'Chapter' }
-    : { untitledPage: 'Seite', untitledChapter: 'Kapitel' };
+    ? { untitledPage: 'Section', untitledChapter: 'Chapter' }
+    : { untitledPage: 'Abschnitt', untitledChapter: 'Kapitel' };
 }
 
 async function _parseDocument(filename, buffer) {

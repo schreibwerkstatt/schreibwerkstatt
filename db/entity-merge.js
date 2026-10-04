@@ -183,6 +183,19 @@ function mergeFigures(bookId, userEmail, sourceId, targetId) {
       'UPDATE OR IGNORE figure_relations SET to_fig_id = ? WHERE book_id = ? AND user_email IS ? AND to_fig_id = ?'
     ).run(targetId, bookId, em, sourceId).changes;
     moved.relations = relFrom + relTo;
+    // Eine vom Autor angelegte Beziehung der Quelle, die am Ziel auf eine gleiche
+    // laeuft (Rest des OR IGNORE), vererbt ihre Herkunft: sonst baute die naechste
+    // Komplettanalyse die ueberlebende 'ki'-Zeile neu auf und die Autorenarbeit fehlte.
+    const promote = db.prepare(
+      "UPDATE figure_relations SET origin = 'manual' WHERE book_id = ? AND user_email IS ? AND from_fig_id = ? AND to_fig_id = ? AND typ = ?"
+    );
+    for (const r of db.prepare(
+      "SELECT from_fig_id, to_fig_id, typ FROM figure_relations WHERE origin = 'manual' AND (from_fig_id = ? OR to_fig_id = ?)"
+    ).all(sourceId, sourceId)) {
+      const from = r.from_fig_id === sourceId ? targetId : r.from_fig_id;
+      const to   = r.to_fig_id   === sourceId ? targetId : r.to_fig_id;
+      if (from !== to) promote.run(bookId, em, from, to, r.typ);
+    }
     let relationsDropped = db.prepare(
       'DELETE FROM figure_relations WHERE from_fig_id = ? OR to_fig_id = ?'
     ).run(sourceId, sourceId).changes;
@@ -191,9 +204,10 @@ function mergeFigures(bookId, userEmail, sourceId, targetId) {
     ).run(targetId).changes;
     // Ungeordnete Paar-Dubletten GLEICHEN Typs, die nach dem Remap doppelt am Ziel
     // haengen (A→B und B→A). Nur bei gleichem Typ, damit keine Richtungsinformation
-    // eines gerichteten Beziehungstyps verloren geht.
+    // eines gerichteten Beziehungstyps verloren geht. Die vom Autor angelegte Zeile
+    // (origin='manual') gewinnt vor der der Analyse.
     const relRows = db.prepare(
-      'SELECT id, from_fig_id, to_fig_id, typ, beschreibung FROM figure_relations WHERE book_id = ? AND user_email IS ? AND (from_fig_id = ? OR to_fig_id = ?) ORDER BY id'
+      "SELECT id, from_fig_id, to_fig_id, typ, beschreibung FROM figure_relations WHERE book_id = ? AND user_email IS ? AND (from_fig_id = ? OR to_fig_id = ?) ORDER BY (origin = 'manual') DESC, id"
     ).all(bookId, em, targetId, targetId);
     const relSeen = new Set();
     for (const r of relRows) {
@@ -258,6 +272,11 @@ function mergeFigures(bookId, userEmail, sourceId, targetId) {
     const aliasName = normName(source.name) === normName(target.name) ? null : source.name;
     const filled = _fillEmpty('figures', FIG_FILL, source, target,
       aliasName ? { kurzname: aliasName } : {});
+    // Vom Autor gepflegte Stammdaten der Quelle (nachgefuellt oder nicht) bleiben
+    // geschuetzt: das Ziel erbt den Schutz vor der Komplettanalyse.
+    if (source.manually_edited && !target.manually_edited) {
+      db.prepare('UPDATE figures SET manually_edited = 1 WHERE id = ?').run(targetId);
+    }
     db.prepare('DELETE FROM figures WHERE id = ?').run(sourceId);
 
     return {

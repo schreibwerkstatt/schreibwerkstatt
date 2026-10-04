@@ -53,16 +53,16 @@ Leere Antwort trotz Vorschlägen ist kein Abbruch: `__i18n:plot.chat.proposalsOn
 
 ## Übernehmen ([public/js/chat/plot-chat-proposals.js](../public/js/chat/plot-chat-proposals.js))
 
-**Jeder Vorschlag einzeln** — wie die Änderungsvorschläge des Seiten-Chats (gleiche Karte `.chat-vorschlag*`), bewusst ohne „alle übernehmen". Je Karte: Übernehmen · Verwerfen/Wieder öffnen · nach dem Übernehmen „Im Board zeigen".
+**Jeder Vorschlag einzeln** — wie die Änderungsvorschläge des Abschnitts-Chats (gleiche Karte `.chat-vorschlag*`), bewusst ohne „alle übernehmen". Je Karte: Übernehmen · Verwerfen/Wieder öffnen · nach dem Übernehmen „Im Board zeigen".
 
 - **Gleicher Schreibweg wie jede Board-Bearbeitung:** die Übernahme ruft die normalen `/plot`-Routen (`POST /plot/beats`, `PATCH /plot/beats/:id`, `PUT /plot/beats/order`, `POST /plot/acts`, …) und schreibt dieselben Undo-Records ([book/plot/history.js](../public/js/book/plot/history.js)): neu angelegt → `create-*`, geändert → `*-fields`, verschoben → `beat-place`. **Cmd/Ctrl+Z macht eine Übernahme rückgängig.** Die Server-Validierung der Routen gilt unverändert — der Vorschlag ist kein Schreibrecht.
-- **Status persistieren:** `PATCH /plot/chat-proposal` ([routes/plot-chat-proposals.js](../routes/plot-chat-proposals.js)), Body `{ message_id, index, action: 'applied'|'discarded'|'reopen', applied_id? }` → `applied_at` + `applied_id` bzw. `status='discarded'` am Vorschlag (Lesen + Schreiben in einer Transaktion). Besitz über die Session, nur `kind='plot'`, Buch-ACL editor. Verwerfen eines übernommenen Vorschlags → `409 PROPOSAL_ALREADY_APPLIED`.
+- **Status persistieren:** `PATCH /plot/chat-proposal` ([routes/plot-chat-proposals.js](../routes/plot-chat-proposals.js), Logik in der mit dem Ideen-Chat geteilten Fabrik [routes/chat-proposal-status.js](../routes/chat-proposal-status.js)), Body `{ message_id, index, action: 'applied'|'discarded'|'reopen', applied_id? }` → `applied_at` + `applied_id` bzw. `status='discarded'` am Vorschlag (Lesen + Schreiben in einer Transaktion). Besitz über die Session, nur `kind='plot'`, Buch-ACL editor. Verwerfen eines übernommenen Vorschlags → `409 PROPOSAL_ALREADY_APPLIED`.
 - **Zustand wird gegen das Board berechnet, nicht nur gelesen** (`proposalStatus`, pure, unit-getestet):
   - übernommen, aber das Angelegte ist weg (Undo, gelöscht) → wieder offen, „Erneut übernehmen";
   - Ziel (Beat/Akt/Strang) gelöscht → blockiert mit Grund;
   - `act_ref`/`thread_ref`, deren Akt/Strang noch nicht übernommen ist → blockiert („Übernimm zuerst den neuen Akt …");
   - Beat seit dem Vorschlag geändert (`before` ≠ Board) → Hinweis, kein Block; übernommen werden nur die gezeigten Felder.
-- Beat-Änderungen zeigen Feld für Feld vorher → nachher, Titel/Beschreibung als Wort-Diff ([word-diff.js](../public/js/chat/word-diff.js), geteilt mit dem Seiten-Chat).
+- Beat-Änderungen zeigen Feld für Feld vorher → nachher, Titel/Beschreibung als Wort-Diff ([word-diff.js](../public/js/chat/word-diff.js), geteilt mit dem Abschnitts-Chat).
 
 ## Pflicht-Invarianten
 

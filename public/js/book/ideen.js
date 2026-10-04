@@ -10,7 +10,7 @@
 
 import { fetchJson } from '../utils.js';
 import { EVT } from '../events.js';
-import { IDEE_STATUSES, ideeStatus, isOpenIdee } from './ideen-shared.js';
+import { IDEE_STATUSES, ideeStatus, isOpenIdee, normalizeIdeeStages } from './ideen-shared.js';
 import { computePopoverPos, refinePopoverPos } from '../popover-anchor.js';
 import { attachDismiss, detachDismiss } from '../cards/dismiss.js';
 
@@ -36,6 +36,7 @@ export const ideenMethods = {
       this.ideen = Array.isArray(rows) ? rows : [];
       this.errorMessage = '';
       this._publishIdeenCount();
+      await this._loadStages();
     } catch (e) {
       this.errorMessage = app.t('ideen.error.load');
       this.ideen = [];
@@ -44,8 +45,31 @@ export const ideenMethods = {
     }
   },
 
+  // Aktive Stufen des Buches (book_settings.ideen_stages) — einmal je Buch.
+  // Non-fatal: ohne Antwort bleiben alle Stufen angeboten, der Server lehnt
+  // eine abgeschaltete dann mit IDEE_STATUS_INACTIVE ab.
+  async _loadStages() {
+    const bookId = Alpine.store('nav').selectedBookId;
+    if (!bookId || this._stagesBookId === bookId) return;
+    try {
+      const data = await fetchJson(`/ideen/stages?book_id=${bookId}`);
+      this.stages = normalizeIdeeStages(data?.stages);
+      this._stagesBookId = bookId;
+    } catch { /* alle Stufen bleiben angeboten */ }
+  },
+
+  // Das Board hat die Stufen umgeschaltet (Event aus ideen-board/actions.js).
+  _onStagesChanged(e) {
+    const { bookId, stages } = e?.detail || {};
+    if (!bookId || bookId !== Alpine.store('nav').selectedBookId) return;
+    this.stages = normalizeIdeeStages(stages);
+    this._stagesBookId = bookId;
+  },
+
   resetIdeen() {
     this.ideen = [];
+    this.stages = [...IDEE_STATUSES];
+    this._stagesBookId = null;
     this.newContent = '';
     this.editingId = null;
     this.editingDraft = '';
@@ -169,7 +193,7 @@ export const ideenMethods = {
   // je Ziel-Stufe auf (gleiche Bauart wie setIdeeStatus im Board).
   async setIdeeStatus(idee, status) {
     const app = window.__app;
-    if (!IDEE_STATUSES.includes(status) || ideeStatus(idee) === status) return;
+    if (!this.statuses().includes(status) || ideeStatus(idee) === status) return;
     this.busy = true;
     try {
       const row = await fetchJson(`/ideen/${idee.id}`, {
@@ -189,7 +213,9 @@ export const ideenMethods = {
     }
   },
 
-  statuses() { return IDEE_STATUSES; },
+  // Nur die AKTIVEN Stufen des Buches stehen als Ziel im Menue; das Badge zeigt
+  // weiter den echten Status, auch wenn dessen Stufe abgeschaltet ist.
+  statuses() { return this.stages || IDEE_STATUSES; },
   statusLabel(s) { return window.__app.t(`ideen.status.${s}`); },
   ideeStatus(idee) { return ideeStatus(idee); },
   isOpenIdee(idee) { return isOpenIdee(idee); },

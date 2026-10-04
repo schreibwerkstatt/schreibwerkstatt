@@ -8,6 +8,8 @@ const { NOW_ISO_SQL } = require('../../../db/now');
 const { matchScenes, dedupeScenesWithinRun } = require('../../../lib/entity-match');
 const searchIndex = require('../../../lib/search');
 const { buildPageIndex, buildFactIndex, locateStelle, quotesFabricated } = require('../../../lib/continuity-evidence');
+const { ATTR_SOURCE } = require('./attribute-check');
+const { isUngroupedChapterName } = require('../../../lib/ungrouped-chapter');
 
 /** Mappt Szenen-Klarnamen (aus Phase 1) auf konsolidierte Figuren-/Ort-IDs.
  *  Nicht auflösbare Namen (KI-Halluzination, Tippfehler, in Phase 2/3 wegkonsolidiert)
@@ -24,11 +26,11 @@ function remapSzenen(chSzenen, figNameToId, figNameToIdLower, ortNameToId, ortNa
       // LLM-Halluzination 1: Markdown-Header-Präfix («### Seitentitel» statt
       // «Seitentitel») – wortwörtlich aus der User-Message kopiert.
       // LLM-Halluzination 2: Kapitelname als Seitentitel zurückgegeben, weil der
-      // echte Titel nicht erkannt wurde. Oder chMap-Fallback «Sonstige Seiten».
+      // echte Titel nicht erkannt wurde. Oder der Ersatzname für Abschnitte ohne Kapitel.
       // In beiden Fällen `seite` nullen / strippen, damit der page_id-Lookup
       // unten trifft.
       let effSeite = (s.seite || '').replace(/^#{1,6}\s+/, '').trim() || null;
-      if (effSeite && (effSeite === effKapitel || effSeite === 'Sonstige Seiten')) {
+      if (effSeite && (effSeite === effKapitel || isUngroupedChapterName(effSeite))) {
         effSeite = null;
       }
       szenen.push({
@@ -291,8 +293,15 @@ function saveSzenenAndEvents(bookIdInt, email, szenen, assignments, locIdToDbId,
 // Die `empfehlung` schlägt laut Prompt eine Lösung vor und formuliert deren Ziel
 // legitim positiv («… damit die Zeitlinie konsistent bleibt») — dort zählen nur die
 // eindeutigen Selbst-Annullierungen.
+// Die Verneinung darf bis zu drei Füllwörter vor dem Adjektiv stehen haben («nicht
+// mehr konsistent», «nicht ganz stimmig», «kaum wirklich in sich stimmig»)
+// — sonst fiele ein echter Befund als vermeintliche Entwarnung weg.
 const SELF_CANCEL_HARD = /\b(kein(en)?\s+(echte[rns]?\s+)?widerspruch|entwarnung|wird\s+nicht\s+gemeldet|eintrag\s+entfernen)\b/i;
-const SELF_CANCEL_DESCRIPTION = /\b(kein\s+problem|das\s+ist\s+korrekt|pass(t|en)\s+zusammen|unproblematisch)\b|(?<!\b(?:nicht|kaum|wenig)\s+)\b(konsistent|stimmig)\b/i;
+const _NEG_FILLER = '(?:mehr|ganz|so|wirklich|recht|völlig|vollständig|vollkommen|durchweg|durchgehend|immer|in|sich|zeitlich|logisch|inhaltlich)';
+const SELF_CANCEL_DESCRIPTION = new RegExp(
+  '\\b(kein\\s+problem|das\\s+ist\\s+korrekt|pass(t|en)\\s+zusammen|unproblematisch)\\b'
+  + `|(?<!\\b(?:nicht|kaum|wenig)\\s+(?:${_NEG_FILLER}\\s+){0,3})\\b(konsistent|stimmig)\\b`,
+  'i');
 
 // «lässt sich erklären» ist NUR eine Selbst-Annullierung, wenn es einen Erklär-GRUND
 // nennt («… lässt sich erklären durch …») — exakt der Prompt-Wortlaut «lässt sich
@@ -334,7 +343,11 @@ function saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, chNam
   if (requireQuoteEvidence && pages.length) {
     const hayNorm = pages.map(p => p.norm).join(' ');
     const before = filtered.length;
-    filtered = filtered.filter(p => !quotesFabricated([_stelleQuote(p.stelle_a), _stelleQuote(p.stelle_b)], hayNorm));
+    // Befunde des Attribut-Detektors (F4, attribute-check.js, `_source: 'attr'`) tragen
+    // synthetische Stellen («Geburtsjahr: 1952 (Kapitel 3)», Szenentitel, Attributwerte
+    // mit Anführungszeichen) — kein Buchzitat, also auch nichts, was erfunden sein könnte.
+    filtered = filtered.filter(p => p?._source === ATTR_SOURCE
+      || !quotesFabricated([_stelleQuote(p.stelle_a), _stelleQuote(p.stelle_b)], hayNorm));
     const evDropped = before - filtered.length;
     if (evDropped > 0) log.warn(`Kontinuität: ${evDropped} Problem(e) mit erfundenem Beleg-Zitat (nicht im Buchtext) verworfen.`);
   }

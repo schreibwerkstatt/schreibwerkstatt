@@ -144,6 +144,21 @@ router.get('/figure-usage', (req, res) => {
   });
 });
 
+// Gegenrichtung der Beat-Brücken: Map Ziel-ID → nicht-verworfene Beats für EINE
+// Achse (figure = fig_id inkl. Strang-Vererbung, location = loc_id, scene =
+// figure_scenes.id aus der Beat-Verankerung). Speist die Plot-Referenzen in den
+// Detailansichten von Figuren-, Orte- und Szenen-Karte (read-only, Sprung aufs
+// Board). Editor+ wie das ganze Board; ein Reader bekommt 403 und die Karte
+// bleibt ohne Referenzen.
+const _LINK_KINDS = new Set(['figure', 'location', 'scene']);
+router.get('/links', (req, res) => {
+  const ctx = _requireBook(req, res);
+  if (!ctx) return;
+  const kind = String(req.query.kind || '');
+  if (!_LINK_KINDS.has(kind)) return res.status(400).json({ error_code: 'KIND_INVALID' });
+  res.json({ links: plotDb.plotEntityLinks(ctx.bookId, ctx.userEmail, kind, { minScore: _anchorOpts().minScore }) });
+});
+
 // Map chapter_id → Anzahl nicht-verworfener Beats im Kapitel. Speist den
 // Plot-Verknüpfungs-Indikator in der Kapitelansicht.
 router.get('/chapter-beat-counts', (req, res) => {

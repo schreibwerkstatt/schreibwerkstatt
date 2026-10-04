@@ -608,7 +608,7 @@ test('Komplettanalyse Checkpoint-Recovery: p1_full_done → überspringt Phase 1
   // berechnet — sonst verwirft die Staleness-Gate den Checkpoint und P1 läuft neu.
   const prompts = await ctx.shared.getPrompts();
   // cacheVersion-Format spiegelt job.js exakt:
-  //   model:PROMPTS_VERSION:cp<completeness_passes>:esp<cap>:cf<coverageFeedback>:cac<auditChapters>:sb<sceneBackfill>:sbm<minChars>
+  //   model:KOMPLETT_EXTRACT_VERSION:cp<completeness_passes>:esp<cap>:cf<coverageFeedback>:cac<auditChapters>:sb<sceneBackfill>:sbm<minChars>
   // (Der :esp…-Suffix nur für Claude.) beforeEach setzt completeness_passes=0 und
   // coverage_audit_chapters=0 → cf0/cac0; extract_single_pass_cap unset → esp0; scene_backfill
   // Default true → sb1, scene_backfill_min_chars Default 3000 → sbm3000.
@@ -620,7 +620,7 @@ test('Komplettanalyse Checkpoint-Recovery: p1_full_done → überspringt Phase 1
   const sceneBackfillEnabled = _s.get('ai.komplett.scene_backfill') !== false;
   const sceneBackfillMinChars = Math.max(500, parseInt(_s.get('ai.komplett.scene_backfill_min_chars'), 10) || 3000);
   const singlePassAug = `:esp${extractCapChars}:cf${coverageFeedbackEnabled ? 1 : 0}:cac${coverageAuditChapters}:sb${sceneBackfillEnabled ? 1 : 0}:sbm${sceneBackfillMinChars}`;
-  const cacheVersion = `${ctx.shared._modelName('claude')}:${prompts.PROMPTS_VERSION || ''}:cp${completenessPasses}${singlePassAug}`;
+  const cacheVersion = `${ctx.shared._modelName('claude')}:${prompts.KOMPLETT_EXTRACT_VERSION || ''}:cp${completenessPasses}${singlePassAug}`;
   const pageMeta = [
     { id: 3000, updated_at: '2026-01-01', chapter_id: 2000, chapter: 'Kapitel 1' },
     { id: 3001, updated_at: '2026-01-01', chapter_id: 2001, chapter: 'Kapitel 2' },

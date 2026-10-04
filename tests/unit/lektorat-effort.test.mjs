@@ -162,7 +162,7 @@ test('aiCall: Fortschrittsbalken rückt in der Denkphase ohne Text-Events vor', 
     },
   }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
   try {
-    const jobId = shared.createJob('check', 'think-bar', 'u@x', null);
+    const jobId = shared.createJob('check', null, null, null);
     shared.jobs.get(jobId).status = 'running';   // updateJob schreibt nur laufende Jobs
     const tok = { in: 0, out: 0, ms: 0 };
     const call = jobsAi.aiCall(jobId, tok, 'prompt', 'sys', 10, 90, 3000, 0.2, 1000, 'claude');

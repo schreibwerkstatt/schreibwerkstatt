@@ -82,8 +82,7 @@ export const hashBuildMethods = {
     else if (this.showBookStatsCard) parts.push('stats');
     else if (this.showStilCard) parts.push('stil');
     else if (this.showFehlerHeatmapCard) parts.push('fehler');
-    else if (this.showRedundanzCard) parts.push('redundanz');
-    else if (this.showBuchlandkarteCard) parts.push('landkarte');
+    else if (this.showBuchlandkarteCard) parts.push(this.buchlandkarteTab === 'redundanz' ? 'redundanz' : 'landkarte');
     else if (this.showWortschatzCard) parts.push('wortschatz');
     else if (this.showStrukturCard) parts.push('struktur');
     else if (this.showTitelwerkstattCard) parts.push('titel');

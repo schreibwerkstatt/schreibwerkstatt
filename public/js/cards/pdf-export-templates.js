@@ -83,10 +83,9 @@ const TASCHENBUCH_MODERN = {
     titleStyle: 'minimal',
     dropCap: false,
     spaceBeforeMm: 34,
-    // Ein Roman ist ein Fliesstext: die Seiten eines Kapitels laufen ohne
-    // eigene Überschrift und ohne Umbruch durch.
-    pageStructure: 'flatten',
-    pageBreakBetweenPages: false,
+    // Jede Seite ist ein Abschnitt: eigener Titel, eigene neue Seite.
+    pageStructure: 'nested',
+    pageBreakBetweenPages: true,
     titleRule: false, pageTitleRule: false,
   },
   cover: { enabled: true, fit: 'cover' },
@@ -170,8 +169,8 @@ const ROMAN_KLASSISCH = {
     titleStyle: 'centered-large',
     dropCap: true,
     spaceBeforeMm: 55,
-    pageStructure: 'flatten',
-    pageBreakBetweenPages: false,
+    pageStructure: 'nested',
+    pageBreakBetweenPages: true,
     titleRule: false, pageTitleRule: false,
   },
   cover: { enabled: true, fit: 'cover' },
@@ -230,7 +229,7 @@ const SACHBUCH = {
     breakBefore: 'right-page', breakBeforeSubchapter: true, firstChapterOnRecto: true, blankPageAfter: false,
     numbering: 'arabic', numberingMode: 'nested',
     titleStyle: 'left-rule', dropCap: false, spaceBeforeMm: 40,
-    pageStructure: 'nested', pageBreakBetweenPages: false,
+    pageStructure: 'nested', pageBreakBetweenPages: true,
     titleRule: true, pageTitleRule: false,
   },
   cover: { enabled: true, fit: 'cover' },
@@ -344,7 +343,7 @@ const MANUSKRIPT_A5 = {
     breakBefore: 'always', breakBeforeSubchapter: true, firstChapterOnRecto: false, blankPageAfter: false,
     numbering: 'arabic', numberingMode: 'nested',
     titleStyle: 'minimal', dropCap: false, spaceBeforeMm: 20,
-    pageStructure: 'nested', pageBreakBetweenPages: false,
+    pageStructure: 'nested', pageBreakBetweenPages: true,
     titleRule: false, pageTitleRule: false,
   },
   cover: { enabled: false, fit: 'cover' },
@@ -362,7 +361,7 @@ const MANUSKRIPT_A5 = {
 // ── Vorlage 6: Roman-Taschenbuch 12 × 19 cm ─────────────────────────────────
 // Das gängigste deutschsprachige Taschenbuchformat (BoD/epubli/tredition).
 // Crimson Pro mit Einzug, Kolumnentitel kursiv (Verso Werk, Recto Kapitel),
-// Kapitel ausgeschrieben («Eins», «Zwei»), Fliesstext ohne Seitenstruktur.
+// Kapitel ausgeschrieben («Eins», «Zwei»), jede Seite als Abschnitt mit Titel.
 // Satzbreite 90 mm ≈ 60 Zeichen bei 10 pt.
 const ROMAN_TB_12X19 = {
   layout: {
@@ -406,7 +405,7 @@ const ROMAN_TB_12X19 = {
     breakBefore: 'always', breakBeforeSubchapter: true, firstChapterOnRecto: true, blankPageAfter: false,
     numbering: 'word', numberingMode: 'flat',
     titleStyle: 'centered-large', dropCap: false, spaceBeforeMm: 38,
-    pageStructure: 'flatten', pageBreakBetweenPages: false,
+    pageStructure: 'nested', pageBreakBetweenPages: true,
     titleRule: false, pageTitleRule: false,
   },
   cover: { enabled: true, fit: 'cover' },

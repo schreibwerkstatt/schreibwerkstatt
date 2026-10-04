@@ -101,7 +101,7 @@ const _KONTINUITAET_FAKTEN_RULES = `Vorrang für diese Kontinuitäts-Extraktion 
 - Zustandswechsel einer Figur SIND hier Pflicht, auch wenn sie biografisch sind: Tod, schwere Verletzung/Krankheit, Genesung, Verhaftung/Freilassung, Erwerb oder Verlust eines Objekts, das Erfahren eines Geheimnisses («weiss ab jetzt, dass …»), Wechsel von Aufenthaltsort, Beruf oder Beziehung. Kategorie «figur» für den Zustand danach (z.B. «Marek: ist tot», «Lena: weiss, dass Paul der Täter ist»).
 - Handlungstragende Ereignisse mit bleibender Folge erfassen (Kategorie «ereignis» bzw. «figur»); nur alltägliche Handlungsschritte ohne Folge weglassen.
 - Wer in einer Szene anwesend ist und handelt, ist ein Fakt, sobald die Figur zuvor als tot, abwesend, gefangen oder verreist galt.
-- «seite» IMMER füllen (Seitenname aus der «### …»-Überschrift) — die Prüfung findet darüber die Originalstelle.`;
+- «seite» IMMER füllen (Abschnittsname aus der «### …»-Überschrift) — die Prüfung findet darüber die Originalstelle.`;
 
 export function buildKontinuitaetChapterFactsPrompt(chapterName, chText) {
   return `Extrahiere alle konkreten Fakten und Behauptungen aus dem Kapitel «${chapterName}» die für die Kontinuitätsprüfung relevant sind: Figuren-Zustände (lebendig/tot, Verletzungen, Wissen, Beziehungen), Ortsbeschreibungen, Zeitangaben, Objekte und deren Besitz/Zustand, sowie wichtige Handlungsereignisse.

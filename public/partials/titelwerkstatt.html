@@ -135,7 +135,7 @@
                   <!-- Varianten dieses Feldes -->
                   <ul class="tw-variants" x-show="twVariantsFor(feld).length">
                     <template x-for="v in twVariantsFor(feld)" :key="v.id">
-                      <li class="tw-variant">
+                      <li class="tw-variant hover-reveal-host">
                         <span class="badge tw-variant-src" :class="'tw-variant-src--' + v.herkunft"
                               x-text="$app.t('headline.origin.' + v.herkunft)"></span>
                         <span class="tw-variant-text" x-text="v.text"></span>
@@ -143,7 +143,7 @@
                         <button type="button" class="btn-compact" @click="twPromote(v.id)"
                                 :data-tip="$app.t('headline.promoteTip')"
                                 x-text="$app.t('headline.promote')"></button>
-                        <button type="button" class="organizer-delete-btn" @click="twDeleteVariant(v.id)"
+                        <button type="button" class="organizer-delete-btn hover-reveal" @click="twDeleteVariant(v.id)"
                                 :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')">
                           <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
                         </button>

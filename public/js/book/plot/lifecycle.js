@@ -40,6 +40,7 @@ export const lifecycleMethods = {
       // Ideen-Plaketten (eigene Pendenzen an einem Beat) — non-fatal und ohne
       // await: eine fehlende Nebenlesung darf das Board nicht aufhalten.
       this.loadIdeaBacklinks('beat');
+      this.loadIdeaBacklinks('thread', { into: 'threadIdeaBacklinks' });
     } catch (e) {
       if (stale()) return;
       this.errorMessage = app.t('plot.error.load');

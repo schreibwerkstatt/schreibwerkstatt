@@ -140,7 +140,7 @@ async function tool_search_passages(input, ctx) {
     ...(Number.isInteger(input.page_id)    ? { page_id:    input.page_id    } : {}),
     results,
     ...(orderedPages.length === 0
-      ? { note: 'Keine indizierten Seiten im Buch — Reindex oder Sync ausfuehren.' }
+      ? { note: 'Keine indizierten Abschnitte im Buch — Reindex oder Sync ausfuehren.' }
       : {}),
   });
 }
@@ -179,7 +179,7 @@ async function tool_get_pages(input, ctx) {
     // — ohne Inhalt und ohne Hinweis, dass sie existiert.
     const pageRow = getPageWithChapter(pageId);
     if (!pageRow || pageRow.book_id !== ctx.bookId) {
-      missing.push({ page_id: pageId, error: 'Seite nicht im aktuellen Buch.' });
+      missing.push({ page_id: pageId, error: 'Abschnitt nicht im aktuellen Buch.' });
       continue;
     }
     try {
@@ -255,7 +255,7 @@ async function tool_get_chapter_text(input, ctx) {
     pages:        results,
     total_pages:  pageRows.length,
     ...(missing.length ? { missing } : {}),
-    ...(dropped > 0 ? { dropped, note: `${dropped} weitere Seiten nicht geladen (max ${maxPages}).` } : {}),
+    ...(dropped > 0 ? { dropped, note: `${dropped} weitere Abschnitte nicht geladen (max ${maxPages}).` } : {}),
   });
 }
 
@@ -278,7 +278,7 @@ async function tool_quote_passage(input, ctx) {
 
   const pageRow = getPageWithChapter(pageId);
   if (!pageRow || pageRow.book_id !== ctx.bookId) {
-    return { error: 'Seite nicht im aktuellen Buch.' };
+    return { error: 'Abschnitt nicht im aktuellen Buch.' };
   }
   if (ctx.jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const pd = await contentStore.loadPage(pageId);
@@ -325,7 +325,7 @@ async function tool_quote_match(input, ctx) {
 
   const pageRow = getPageWithChapter(pageId);
   if (!pageRow || pageRow.book_id !== ctx.bookId) {
-    return { error: 'Seite nicht im aktuellen Buch.' };
+    return { error: 'Abschnitt nicht im aktuellen Buch.' };
   }
   if (ctx.jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const pd = await contentStore.loadPage(pageId);
@@ -351,7 +351,7 @@ async function tool_quote_match(input, ctx) {
   }
   if (occurrence > indices.length) {
     return {
-      error: `Nur ${indices.length} Treffer auf der Seite (occurrence=${occurrence}).`,
+      error: `Nur ${indices.length} Treffer im Abschnitt (occurrence=${occurrence}).`,
       page_id:    pageId,
       total_matches: indices.length,
     };
@@ -409,7 +409,7 @@ function tool_get_dialogue(input, ctx) {
     chapterId: Number.isInteger(input?.chapter_id) ? input.chapter_id : null,
     pageId:    Number.isInteger(input?.page_id)    ? input.page_id    : null,
   });
-  if (!pages.length) return { results: [], hint: 'Keine Seiten im Scope.' };
+  if (!pages.length) return { results: [], hint: 'Keine Abschnitte im Scope.' };
 
   const results = [];
   let totalFound = 0;

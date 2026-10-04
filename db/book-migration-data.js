@@ -235,8 +235,8 @@ function restoreAnalysis(bookId, data, ctx) {
   const insFig = db.prepare(`INSERT INTO figures
     (book_id,fig_id,name,kurzname,typ,geburtstag,geschlecht,beruf,beschreibung,sort_order,meta,updated_at,user_email,
      sozialschicht,praesenz,rolle,motivation,konflikt,entwicklung,erste_erwaehnung,erste_erwaehnung_page_id,
-     schluesselzitate,wohnadresse,aeusseres,stimme,hintergrund,arc)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+     schluesselzitate,wohnadresse,aeusseres,stimme,hintergrund,arc,manually_edited,ki_name)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   for (const r of arr('figures')) {
     const res = insFig.run(
       bookId, _uniqueKey(usedFig, r.fig_id), r.name, r.kurzname ?? null, r.typ ?? null, r.geburtstag ?? null,
@@ -245,6 +245,7 @@ function restoreAnalysis(bookId, data, ctx) {
       r.motivation ?? null, r.konflikt ?? null, r.entwicklung ?? null, r.erste_erwaehnung ?? null,
       pageOf(r.erste_erwaehnung_page_id), r.schluesselzitate ?? null, r.wohnadresse ?? null,
       r.aeusseres ?? null, r.stimme ?? null, r.hintergrund ?? null, r.arc ?? null,
+      r.manually_edited ? 1 : 0, r.ki_name ?? null,
     );
     figMap.set(r.id, res.lastInsertRowid);
   }
@@ -256,11 +257,12 @@ function restoreAnalysis(bookId, data, ctx) {
   }
 
   const insRel = db.prepare(`INSERT OR IGNORE INTO figure_relations
-    (book_id,from_fig_id,to_fig_id,typ,beschreibung,user_email,machtverhaltnis,belege)
-    VALUES (?,?,?,?,?,?,?,?)`);
+    (book_id,from_fig_id,to_fig_id,typ,beschreibung,user_email,machtverhaltnis,belege,origin)
+    VALUES (?,?,?,?,?,?,?,?,?)`);
   for (const r of arr('figureRelations')) {
     const from = figMap.get(r.from_fig_id); const to = figMap.get(r.to_fig_id);
-    if (from && to) insRel.run(bookId, from, to, r.typ, r.beschreibung ?? null, email, r.machtverhaltnis ?? null, r.belege ?? null);
+    if (from && to) insRel.run(bookId, from, to, r.typ, r.beschreibung ?? null, email, r.machtverhaltnis ?? null, r.belege ?? null,
+      r.origin === 'manual' ? 'manual' : 'ki');
   }
 
   const insApp = db.prepare('INSERT OR IGNORE INTO figure_appearances (figure_id,chapter_id,haeufigkeit) VALUES (?,?,?)');
@@ -439,7 +441,8 @@ function restoreAnalysis(bookId, data, ctx) {
     if (iid) insCic.run(iid, chapterOf(r.chapter_id), r.sort_order ?? 0);
   }
 
-  // 9) ideen (XOR page/chapter — die remappte Referenz muss gesetzt bleiben)
+  // 9) ideen (Seite, Kapitel oder ohne Anker am Buch — eine gesetzte Referenz
+  //    muss remappt werden koennen, sonst faellt die Zeile weg)
   //
   // `idea_links` reist NICHT mit: die Bruecke zeigt auf Recherche-Fundstuecke,
   // Plot-Beats und Motive; die Fundstuecke stehen nur im optionalen
@@ -459,7 +462,6 @@ function restoreAnalysis(bookId, data, ctx) {
     let pid = null; let cid = null;
     if (r.page_id != null) { pid = pageOf(r.page_id); if (!pid) continue; }
     else if (r.chapter_id != null) { cid = chapterOf(r.chapter_id); if (!cid) continue; }
-    else continue;
     const status = normalizeIdeeStatus(r.status ?? (r.erledigt ? 'erledigt' : 'offen'));
     insIdee.run(bookId, pid, cid, email, r.content, status, r.status_at ?? r.erledigt_at ?? null,
       r.created_at || _now(), r.updated_at || _now());
@@ -500,7 +502,7 @@ function restoreLektorat(bookId, data, ctx) {
 
 // Buchweite Session-Arten (page_id IS NULL). Alles andere ist eine Seiten-Session
 // und braucht eine remappte page_id (CHECK auf chat_sessions).
-const BUNDLE_SESSION_KINDS = new Set(['page', 'book', 'research', 'plot']);
+const BUNDLE_SESSION_KINDS = new Set(['page', 'book', 'research', 'plot', 'ideen']);
 
 function restoreChats(bookId, data, ctx) {
   if (!data || typeof data !== 'object') return { sessions: 0, messages: 0 };

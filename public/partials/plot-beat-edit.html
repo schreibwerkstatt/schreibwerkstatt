@@ -40,110 +40,134 @@
                 x-text="n"></button>
       </template>
     </div>
-    <label class="plot-edit-label" :id="$id('pbe-chap')" x-text="$app.t('plot.beat.chapter')"></label>
-    <div role="group" :aria-labelledby="$id('pbe-chap')"
-         x-data="entityPicker({ entity: 'chapter', placeholder: $app.t('plot.beat.chapterPlaceholder'), emptyLabel: $app.t('plot.beat.noChapter') })"
-         x-modelable="value" x-model="beatDraft.chapter_id"></div>
-    <!-- Erzaehlte Zeit: Freitext wie das Datum eines Lebensereignisses („Sommer
-         1987" so oft wie ein Datum). Die Jahreszahl zieht derselbe Parser heraus
-         wie ueberall sonst; kein numInput, weil der Wert keine Zahl IST. -->
-    <label class="plot-edit-label" :for="$id('pbe-zeit')" x-text="$app.t('plot.beat.zeit')"></label>
-    <input type="text" class="plot-edit-input" :id="$id('pbe-zeit')" x-model="beatDraft.zeit"
-           data-spellcheck="spelling"
-           :placeholder="$app.t('plot.beat.zeitPlaceholder')">
-    <!-- Figuren: eine Combobox, zwei Quellen als opt-Gruppen (Katalog =
-         Komplettanalyse, Werkstatt = Plotwerkstatt-Drafts) — spart Platz wie in
-         der Motiv-Werkstatt. Wert trägt Präfix fig:/draft:, addBeatFigureLink
-         legt in der richtigen Draft-Liste an. -->
-    <label class="plot-edit-label" :id="$id('pbe-fig')" x-show="$store.catalog.figuren.length || draftFiguren.length"
-           x-text="$app.t('plot.beat.figuren')"></label>
-    <div x-show="$store.catalog.figuren.length || draftFiguren.length" role="group" :aria-labelledby="$id('pbe-fig')"
-         x-data="combobox({ placeholder: $app.t('plot.beat.figurenPick'), transient: true })"
-         x-effect="options = [
-           ...($store.catalog.figuren||[]).map(f=>({value:'fig:'+f.id, label:(f.kurzname||f.name), group:$app.t('plot.beat.figureGroup.katalog')})),
-           ...(draftFiguren||[]).map(d=>({value:'draft:'+d.id, label:d.name, group:$app.t('plot.beat.figureGroup.werkstatt')}))
-         ]"
-         @combobox-change="addBeatFigureLink($event.detail)"></div>
-    <!-- Auswahl als Referenzen mit Entfernen-Knopf. Im Bearbeiten-Formular nicht
-         klickbar (static): ein Sprung in die Figuren-/Werkstatt-Karte verwürfe den
-         ungespeicherten Beat-Entwurf. -->
-    <div class="entity-refs plot-edit-refs" x-show="(beatDraft.figure_ids || []).length || beatWerkstattChips().length">
-      <template x-for="figId in (beatDraft.figure_ids || [])" :key="figId">
-        <span class="entity-ref-group">
-          <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: figId, static: true }"></button>
-          <button type="button" class="entity-ref-remove" :aria-label="$app.t('common.remove')"
-                  @click="toggleBeatDraftFigure(figId)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
-        </span>
-      </template>
-      <template x-for="chip in beatWerkstattChips()" :key="'d' + chip.id">
-        <span class="entity-ref-group">
-          <button type="button" class="entity-ref" x-entity-ref="{ type: 'werkstatt', id: chip.id, label: chip.label, static: true }"></button>
-          <button type="button" class="entity-ref-remove" :aria-label="$app.t('common.remove')"
-                  @click="toggleBeatDraftWerkstattFigure(chip.id)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
-        </span>
-      </template>
-    </div>
-    <!-- Motive (Motiv-Werkstatt): schreibt in dieselbe motif_beats-Brücke. Nur sichtbar,
-         wenn der Motiv-Katalog des Buchs Einträge hat. -->
-    <label class="plot-edit-label" :id="$id('pbe-motif')" x-show="motifsCatalog.length" x-text="$app.t('plot.beat.motifs')"></label>
-    <div x-show="motifsCatalog.length" role="group" :aria-labelledby="$id('pbe-motif')"
-         x-data="entityPicker({ entity: 'custom', multiple: true, placeholder: $app.t('plot.beat.motifPick'), items: () => beatMotifOptions() })"
-         x-modelable="value" x-model="beatDraft.motif_ids"></div>
-    <div class="entity-refs plot-edit-refs" x-show="beatMotifChips().length">
-      <template x-for="chip in beatMotifChips()" :key="'m' + chip.id">
-        <span class="entity-ref-group">
-          <button type="button" class="entity-ref" x-entity-ref="{ type: 'motiv', id: chip.id, label: chip.label, static: true }"></button>
-          <button type="button" class="entity-ref-remove" :aria-label="$app.t('common.remove')"
-                  @click="toggleBeatDraftMotif(chip.id)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
-        </span>
-      </template>
-    </div>
-    <!-- Schauplaetze (plot_beat_locations): WO der Handlungspunkt spielt. Vierte
-         Bruecke neben Katalog-Figur, Werkstatt-Figur und Motiv; nur sichtbar,
-         wenn das Buch ueberhaupt Orte katalogisiert hat. -->
-    <label class="plot-edit-label" :id="$id('pbe-ort')" x-show="$store.catalog.orte.length" x-text="$app.t('plot.beat.orte')"></label>
-    <div x-show="$store.catalog.orte.length" role="group" :aria-labelledby="$id('pbe-ort')"
-         x-data="entityPicker({ entity: 'ort', multiple: true, placeholder: $app.t('plot.beat.ortPick') })"
-         x-modelable="value" x-model="beatDraft.location_ids"></div>
-    <div class="entity-refs plot-edit-refs" x-show="(beatDraft.location_ids || []).length">
-      <template x-for="ortId in (beatDraft.location_ids || [])" :key="'l' + ortId">
-        <span class="entity-ref-group">
-          <button type="button" class="entity-ref" x-entity-ref="{ type: 'ort', id: ortId, static: true }"></button>
-          <button type="button" class="entity-ref-remove" :aria-label="$app.t('common.remove')"
-                  @click="toggleBeatDraftOrt(ortId)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
-        </span>
-      </template>
-    </div>
-    <!-- Beat-zu-Beat-Beziehungen (Kausalität + Setup/Payoff): Typ + Ziel-Beat wählen,
-         sofort persistiert (eigene Achse neben dem Draft-Save). Nur sinnvoll ab 2 Beats. -->
-    <label class="plot-edit-label" :id="$id('pbe-rel')" x-show="beats.length > 1" x-text="$app.t('plot.relation.label')"></label>
-    <div class="plot-rel-editor" x-show="beats.length > 1" role="group" :aria-labelledby="$id('pbe-rel')">
-      <div class="plot-rel-add">
-        <div class="plot-rel-typ"
-             x-data="combobox({ placeholder: $app.t('plot.relation.typPick') })"
-             x-modelable="value" x-model="relDraftTyp"
-             x-effect="options = relationTypes().map(tp => ({ value: tp, label: relTypeLabel(tp) }))"></div>
-        <div class="plot-rel-target"
-             x-data="combobox({ placeholder: $app.t('plot.relation.targetPick') })"
-             x-modelable="value" x-model="relDraftTarget"
-             x-effect="options = relTargetOptions(beat)"></div>
-        <button type="button" class="btn-compact" :disabled="busy || !relDraftTyp || !relDraftTarget"
-                @click="addBeatRelation(beat)" x-text="$app.t('plot.relation.add')"></button>
-      </div>
-      <!-- Bestehende Kanten: Typ als Klartext, Ziel-Beat als Referenz. Der Klick
-           scrollt nur im Board (kein Kartenwechsel) — darum hier klickbar. -->
-      <div class="entity-refs plot-edit-refs" x-show="beatRelationsOut(beat).length">
-        <template x-for="rel in beatRelationsOut(beat)" :key="rel.id">
-          <span class="plot-beat-rel">
-            <span class="plot-beat-rel-typ" x-text="relTypeLabel(rel.typ)"></span>
+    <!-- Einordnung + Beziehungen klappen ein: offen bleibt nur der Kern (Titel,
+         Beschreibung, Status, Spannung). Der Klapp-Zustand haengt an der Karte
+         (beatEditDetailsOpen/beatEditRelOpen), damit er beim Wechsel auf den
+         naechsten Beat erhalten bleibt; zugeklappt zeigt der Toggle die Zahl der
+         gesetzten Eintraege. Panel bewusst ohne x-bind="panel": x-collapse haelt
+         beim Animieren overflow:hidden, und die Combobox-/Picker-Dropdowns darin
+         rendern als eigenes Kind (DESIGN.md „Klappbarer Section-Toggle"). -->
+    <div class="plot-beat-edit-section" x-data="collapsible()" x-modelable="open" x-model="beatEditDetailsOpen">
+      <button type="button" class="collapsible-toggle" x-bind="trigger">
+        <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+        <span x-text="$app.t('plot.beat.sectionDetails')"></span>
+        <span class="plot-beat-edit-count" x-show="!open && beatDraftDetailCount()" x-text="beatDraftDetailCount()"></span>
+      </button>
+      <div class="plot-beat-edit-panel" x-show="open" x-cloak>
+        <label class="plot-edit-label" :id="$id('pbe-chap')" x-text="$app.t('plot.beat.chapter')"></label>
+        <div role="group" :aria-labelledby="$id('pbe-chap')"
+             x-data="entityPicker({ entity: 'chapter', placeholder: $app.t('plot.beat.chapterPlaceholder'), emptyLabel: $app.t('plot.beat.noChapter') })"
+             x-modelable="value" x-model="beatDraft.chapter_id"></div>
+        <!-- Erzaehlte Zeit: Freitext wie das Datum eines Lebensereignisses („Sommer
+             1987" so oft wie ein Datum). Die Jahreszahl zieht derselbe Parser heraus
+             wie ueberall sonst; kein numInput, weil der Wert keine Zahl IST. -->
+        <label class="plot-edit-label" :for="$id('pbe-zeit')" x-text="$app.t('plot.beat.zeit')"></label>
+        <input type="text" class="plot-edit-input" :id="$id('pbe-zeit')" x-model="beatDraft.zeit"
+               data-spellcheck="spelling"
+               :placeholder="$app.t('plot.beat.zeitPlaceholder')">
+        <!-- Figuren: eine Combobox, zwei Quellen als opt-Gruppen (Katalog =
+             Komplettanalyse, Werkstatt = Plotwerkstatt-Drafts) — spart Platz wie in
+             der Motiv-Werkstatt. Wert trägt Präfix fig:/draft:, addBeatFigureLink
+             legt in der richtigen Draft-Liste an. -->
+        <label class="plot-edit-label" :id="$id('pbe-fig')" x-show="$store.catalog.figuren.length || draftFiguren.length"
+               x-text="$app.t('plot.beat.figuren')"></label>
+        <div x-show="$store.catalog.figuren.length || draftFiguren.length" role="group" :aria-labelledby="$id('pbe-fig')"
+             x-data="combobox({ placeholder: $app.t('plot.beat.figurenPick'), transient: true })"
+             x-effect="options = [
+               ...($store.catalog.figuren||[]).map(f=>({value:'fig:'+f.id, label:(f.kurzname||f.name), group:$app.t('plot.beat.figureGroup.katalog')})),
+               ...(draftFiguren||[]).map(d=>({value:'draft:'+d.id, label:d.name, group:$app.t('plot.beat.figureGroup.werkstatt')}))
+             ]"
+             @combobox-change="addBeatFigureLink($event.detail)"></div>
+        <!-- Auswahl als Referenzen mit Entfernen-Knopf. Im Bearbeiten-Formular nicht
+             klickbar (static): ein Sprung in die Figuren-/Werkstatt-Karte verwürfe den
+             ungespeicherten Beat-Entwurf. -->
+        <div class="entity-refs plot-edit-refs" x-show="(beatDraft.figure_ids || []).length || beatWerkstattChips().length">
+          <template x-for="figId in (beatDraft.figure_ids || [])" :key="figId">
             <span class="entity-ref-group">
-              <button type="button" class="entity-ref"
-                      x-entity-ref="{ type: 'beat', id: rel.to_beat_id, label: relTargetTitle(rel), onOpen: () => scrollToBeat(rel.to_beat_id) }"></button>
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: figId, static: true }"></button>
               <button type="button" class="entity-ref-remove" :aria-label="$app.t('common.remove')"
-                      @click="deleteBeatRelationById(rel.id)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+                      @click="toggleBeatDraftFigure(figId)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
             </span>
-          </span>
-        </template>
+          </template>
+          <template x-for="chip in beatWerkstattChips()" :key="'d' + chip.id">
+            <span class="entity-ref-group">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'werkstatt', id: chip.id, label: chip.label, static: true }"></button>
+              <button type="button" class="entity-ref-remove" :aria-label="$app.t('common.remove')"
+                      @click="toggleBeatDraftWerkstattFigure(chip.id)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+            </span>
+          </template>
+        </div>
+        <!-- Motive (Motiv-Werkstatt): schreibt in dieselbe motif_beats-Brücke. Nur sichtbar,
+             wenn der Motiv-Katalog des Buchs Einträge hat. -->
+        <label class="plot-edit-label" :id="$id('pbe-motif')" x-show="motifsCatalog.length" x-text="$app.t('plot.beat.motifs')"></label>
+        <div x-show="motifsCatalog.length" role="group" :aria-labelledby="$id('pbe-motif')"
+             x-data="entityPicker({ entity: 'custom', multiple: true, placeholder: $app.t('plot.beat.motifPick'), items: () => beatMotifOptions() })"
+             x-modelable="value" x-model="beatDraft.motif_ids"></div>
+        <div class="entity-refs plot-edit-refs" x-show="beatMotifChips().length">
+          <template x-for="chip in beatMotifChips()" :key="'m' + chip.id">
+            <span class="entity-ref-group">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'motiv', id: chip.id, label: chip.label, static: true }"></button>
+              <button type="button" class="entity-ref-remove" :aria-label="$app.t('common.remove')"
+                      @click="toggleBeatDraftMotif(chip.id)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+            </span>
+          </template>
+        </div>
+        <!-- Schauplaetze (plot_beat_locations): WO der Handlungspunkt spielt. Vierte
+             Bruecke neben Katalog-Figur, Werkstatt-Figur und Motiv; nur sichtbar,
+             wenn das Buch ueberhaupt Orte katalogisiert hat. -->
+        <label class="plot-edit-label" :id="$id('pbe-ort')" x-show="$store.catalog.orte.length" x-text="$app.t('plot.beat.orte')"></label>
+        <div x-show="$store.catalog.orte.length" role="group" :aria-labelledby="$id('pbe-ort')"
+             x-data="entityPicker({ entity: 'ort', multiple: true, placeholder: $app.t('plot.beat.ortPick') })"
+             x-modelable="value" x-model="beatDraft.location_ids"></div>
+        <div class="entity-refs plot-edit-refs" x-show="(beatDraft.location_ids || []).length">
+          <template x-for="ortId in (beatDraft.location_ids || [])" :key="'l' + ortId">
+            <span class="entity-ref-group">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'ort', id: ortId, static: true }"></button>
+              <button type="button" class="entity-ref-remove" :aria-label="$app.t('common.remove')"
+                      @click="toggleBeatDraftOrt(ortId)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+            </span>
+          </template>
+        </div>
+      </div>
+    </div>
+    <div class="plot-beat-edit-section" x-show="beats.length > 1" x-data="collapsible()" x-modelable="open" x-model="beatEditRelOpen">
+      <button type="button" class="collapsible-toggle" :id="$id('pbe-rel')" x-bind="trigger">
+        <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+        <span x-text="$app.t('plot.relation.label')"></span>
+        <span class="plot-beat-edit-count" x-show="!open && beatRelationsOut(beat).length" x-text="beatRelationsOut(beat).length"></span>
+      </button>
+      <div class="plot-beat-edit-panel" x-show="open" x-cloak>
+        <!-- Beat-zu-Beat-Beziehungen (Kausalität + Setup/Payoff): Typ + Ziel-Beat wählen,
+             sofort persistiert (eigene Achse neben dem Draft-Save). Nur sinnvoll ab 2 Beats. -->
+        <div class="plot-rel-editor" role="group" :aria-labelledby="$id('pbe-rel')">
+          <div class="plot-rel-add">
+            <div class="plot-rel-typ"
+                 x-data="combobox({ placeholder: $app.t('plot.relation.typPick') })"
+                 x-modelable="value" x-model="relDraftTyp"
+                 x-effect="options = relationTypes().map(tp => ({ value: tp, label: relTypeLabel(tp) }))"></div>
+            <div class="plot-rel-target"
+                 x-data="combobox({ placeholder: $app.t('plot.relation.targetPick') })"
+                 x-modelable="value" x-model="relDraftTarget"
+                 x-effect="options = relTargetOptions(beat)"></div>
+            <button type="button" class="btn-compact" :disabled="busy || !relDraftTyp || !relDraftTarget"
+                    @click="addBeatRelation(beat)" x-text="$app.t('plot.relation.add')"></button>
+          </div>
+          <!-- Bestehende Kanten: Typ als Klartext, Ziel-Beat als Referenz. Der Klick
+               scrollt nur im Board (kein Kartenwechsel) — darum hier klickbar. -->
+          <div class="entity-refs plot-edit-refs" x-show="beatRelationsOut(beat).length">
+            <template x-for="rel in beatRelationsOut(beat)" :key="rel.id">
+              <span class="plot-beat-rel">
+                <span class="plot-beat-rel-typ" x-text="relTypeLabel(rel.typ)"></span>
+                <span class="entity-ref-group">
+                  <button type="button" class="entity-ref"
+                          x-entity-ref="{ type: 'beat', id: rel.to_beat_id, label: relTargetTitle(rel), onOpen: () => scrollToBeat(rel.to_beat_id) }"></button>
+                  <button type="button" class="entity-ref-remove" :aria-label="$app.t('common.remove')"
+                          @click="deleteBeatRelationById(rel.id)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+                </span>
+              </span>
+            </template>
+          </div>
+        </div>
       </div>
     </div>
     <!-- Verschieben ohne Drag (Akt/Strang/oben-unten) — eigenes Fragment, File-Limit. -->

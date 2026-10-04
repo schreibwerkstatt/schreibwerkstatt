@@ -38,7 +38,6 @@
   .card--bookoverview     { --card-accent: var(--card-accent-organize); }
   .card--bookeditor       { --card-accent: var(--card-accent-bookeditor); }
   .card--search           { --card-accent: var(--card-accent-search); }
-  .card--redundanz        { --card-accent: var(--card-accent-redundanz); }
   .card--buchlandkarte    { --card-accent: var(--card-accent-buchlandkarte); }
   .card--wortschatz       { --card-accent: var(--card-accent-wortschatz); }
   .card--struktur         { --card-accent: var(--card-accent-struktur); }

@@ -81,7 +81,7 @@ Eine View **Übersicht** mit folgenden Sektionen:
 3. **Heute** — Netto-Wörter, Kosten heute / Monat, Anthropic-Abrechnung (Glance).
 4. **Server** — Laufzeit, RAM, DB-Grösse, JS-Fehler 24h, offene Registrierungen (Glance).
 5. **Betrieb** — Jobs ok/Fehler 24h, Jobs im RAM, Geräte, Heap, Schema-Version (Glance).
-6. **Inhalte** — Bücher / Kapitel / Seiten / Zeichen / Normseiten (Glance, 5 Spalten).
+6. **Inhalte** — Bücher / Kapitel / Abschnitte / Zeichen / Normseiten (Glance, 5 Spalten).
 7. **User** — Status-Aufschlüsselung + Aktivitäts-Fenster (Glance).
 8. **Job-Queue (Live)** — Zwei Gauges mit Severity-Schwellen (grün / gelb / rot).
 9. **KI-Kosten & Tokens** — Kumulierte USD, Input-/Output-Tokens, Cache-Hit, Kosten nach Typ, Abrechnungs-Abweichung (Glance).

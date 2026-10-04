@@ -19,7 +19,6 @@ const ALLOWED_KEYS = new Set([
   'review',
   'stil',
   'fehlerHeatmap',
-  'redundanz',
   'buchlandkarte',
   'wortschatz',
   'struktur',

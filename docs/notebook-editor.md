@@ -141,8 +141,8 @@ Reihenfolge = Pflicht-Invariante #11: Draft → Snapshot → Autosave → Online
 
 **Warum `resetPage` zwingend delegiert:** Lock- und Presence-Heartbeat erneuern sich selbst (5 min bzw. 30 s) und werden ausschliesslich hier abgeräumt. Ein Teilabbau im Root liesse beide auf der verlassenen Seite weiterlaufen — andere ACL-User sähen sie für den Rest der Session als „wird bearbeitet". Gegated: [tests/unit/notebook-teardown.test.mjs](../tests/unit/notebook-teardown.test.mjs).
 
-### Programmatische Ersetzung (Seiten-Chat)
-`_applyTextReplacement(original, replacement)` ([edit/input.js](../public/js/editor/notebook/edit/input.js), Root-Forwarder in [trampoline.js](../public/js/editor/notebook/trampoline.js)) ersetzt eine Textstelle im Live-Editor: Guards gegen die Save-Normalform (`stripLektoratMarks` → `countInHtml` 0/>1 → `replaceInHtml`-No-Op/`skipReason`), `_historyPushNow` (eigener Undo-Schritt), Mount über `mountEditorHtml`, dann `_markEditDirty` (Draft/Autosave). Notebook-only: im Fokusmodus liefert sie `{ reason: 'focus' }` und fasst nichts an. Aufrufer: Seiten-Chat „Übernehmen"/„Rückgängig" ([chat/page-chat-apply.js](../public/js/chat/page-chat-apply.js)).
+### Programmatische Ersetzung (Abschnitts-Chat)
+`_applyTextReplacement(original, replacement)` ([edit/input.js](../public/js/editor/notebook/edit/input.js), Root-Forwarder in [trampoline.js](../public/js/editor/notebook/trampoline.js)) ersetzt eine Textstelle im Live-Editor: Guards gegen die Save-Normalform (`stripLektoratMarks` → `countInHtml` 0/>1 → `replaceInHtml`-No-Op/`skipReason`), `_historyPushNow` (eigener Undo-Schritt), Mount über `mountEditorHtml`, dann `_markEditDirty` (Draft/Autosave). Notebook-only: im Fokusmodus liefert sie `{ reason: 'focus' }` und fasst nichts an. Aufrufer: Abschnitts-Chat „Übernehmen"/„Rückgängig" ([chat/page-chat-apply.js](../public/js/chat/page-chat-apply.js)).
 
 ## Undo/Redo (Session-scoped, pro Seite)
 
@@ -154,7 +154,7 @@ Eigener Stack statt Browser-Stack — der kollabiert, sobald wir `innerHTML` ode
 - `startEdit` → `_historyReset(initialHtml)` legt Baseline-Snapshot.
 - `_markEditDirty` → `_historyPushSoon` (debounced 500 ms) — Tipp-Serien werden zu einem Schritt zusammengefasst. Dedup gegen Top-of-Stack.
 - Undo/Redo lösen einen offenen Debounce zuerst ein (sonst ginge die gerade getippte Strecke verloren statt rückgängig gemacht zu werden), dann Index-Schritt + Restore. Beim Redo schneidet die eingelöste Eingabe den Redo-Ast ab — ein Redo überschreibt nie frisch Getipptes. `canUndo` ist darum schon während des offenen Debounce `true`, `canRedo` dann `false`.
-- Paste/Cut (`_onEditPaste`/`_onEditCut`, auch aus dem Fokus-Container) und Seiten-Chat-Übernahme frieren den Vorher-Stand per `_historyPushNow` ein — eigener Schritt statt mit dem Getippten davor verschmolzen.
+- Paste/Cut (`_onEditPaste`/`_onEditCut`, auch aus dem Fokus-Container) und Abschnitts-Chat-Übernahme frieren den Vorher-Stand per `_historyPushNow` ein — eigener Schritt statt mit dem Getippten davor verschmolzen.
 - Gemergter Stand nach Stale-Write (`_applyMergedToEditor`) ist die **neue Baseline** (`_historyReset`): ein Undo dahinter nähme die Remote-Blöcke heraus, und der nächste Save liefe gegen das übernommene `updated_at` ohne 409 durch.
 - `cancelEdit` / `saveEdit` (non-focus) → `_historyClear` — Session-Ende = Stack-Ende. **Der Focus-Branch von `saveEdit` clearet nicht** (User schreibt weiter, Autosave alle 1,5 s — ein Clear am Save nähme genau die Schritte weg, die er zurückholen will).
 
@@ -365,7 +365,7 @@ Code: pure Helpers + CSS-Highlight-API in [public/js/editor/notebook/entities.js
 | Typ | Darstellung | Daten |
 |---|---|---|
 | Figur, Ort | Inline-Highlight via `CSS.highlights` (Register `entity-figure` / `entity-location`) | Name-Match auf `figures.name` / `locations.name` |
-| Szene, Ereignis | Collapsible „Auf dieser Seite"-Panel (zwei Sektionen: page_id + chapter_id mit page_id IS NULL) | `figure_scenes`, `figuren[].lebensereignisse` |
+| Szene, Ereignis | Collapsible „In diesem Abschnitt"-Panel (zwei Sektionen: page_id + chapter_id mit page_id IS NULL) | `figure_scenes`, `figuren[].lebensereignisse` |
 
 **Match-Engine** (`buildRanges`, pure): case-insensitiv, ganze Wörter, Unicode-aware (`\p{L}\p{M}\p{N}` + Apostroph/Bindestrich). Kollisionsregel bei gleichem Namen: Figur > Ort. Overlap-Filter (längste Treffer-Region gewinnt am selben Start-Offset). Der Match-Text trennt Blöcke (und `<br>`) mit einem `\n`, der keinem Text-Node gehört — sonst verschmölzen Absatzende und -anfang (`…Lea` + `Sie…` → `LeaSie`) und ein Name ohne Satzzeichen am Absatzende verlöre seine Wortgrenze.
 

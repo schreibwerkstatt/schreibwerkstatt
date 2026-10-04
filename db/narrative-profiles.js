@@ -14,7 +14,14 @@ const { NOW_ISO_SQL } = require('./now');
 
 // Full-Replace pro (Buch, User): die Phase regeneriert das gesamte Profil bei jedem
 // Lauf (nur wenn der Konsolidierungs-Checkpoint nicht greift). Themen als CASCADE-Kind.
-function saveChapterNarrativeProfiles(bookId, userEmail, profiles, chNameToId, figNameToId, declared) {
+//
+// Nur Einträge, die sich einem echten Kapitel zuordnen lassen, werden gespeichert:
+// Abschnitte ohne Kapitel (Vorwort o. ä., Gruppe «Sonstige Abschnitte») und vom Modell
+// verschriebene Kapitelnamen hätten sonst eine Zeile ohne chapter_id — die zählt in
+// der Kapitel-Achse des Buch-Befunds als zusätzliches Kapitel und verschiebt dessen
+// Schwellen. `p.chapter_id` (Multi-Pass kennt die ID) hat Vorrang vor dem Namens-Lookup.
+// Die Abweichung von der Soll-Erzählform wird zur Lesezeit berechnet, nicht hier.
+function saveChapterNarrativeProfiles(bookId, userEmail, profiles, chNameToId, figNameToId) {
   const bookIdInt = parseInt(bookId);
   const email = userEmail || null;
   const list = Array.isArray(profiles) ? profiles : [];
@@ -23,31 +30,26 @@ function saveChapterNarrativeProfiles(bookId, userEmail, profiles, chNameToId, f
     'SELECT id, fig_id FROM figures WHERE book_id = ? AND user_email IS ?'
   ).all(bookIdInt, email);
   const figIdToRowId = Object.fromEntries(figRows.map(r => [r.fig_id, r.id]));
-  // Soll-Erzählform aus book_settings (Keys, nicht Labels). 'gemischt' ist als Soll
-  // absichtlich tolerant → dann nie als Abweichung werten (jeder Wechsel erlaubt).
-  const declaredP = declared?.erzaehlperspektive || null;
-  const declaredT = declared?.erzaehlzeit || null;
   let saved = 0;
   db.transaction(() => {
     db.prepare('DELETE FROM chapter_narrative_profile WHERE book_id = ? AND user_email IS ?').run(bookIdInt, email);
     const insP = db.prepare(`INSERT INTO chapter_narrative_profile
       (book_id, user_email, chapter_id, perspektive, erzaehlzeit, erzaehler_figur_id, erzaehler_figur,
-       pov_konfidenz, pov_beleg, pov_abweichung, intensitaet, intensitaet_begruendung, zusammenfassung, sort_order, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})`);
+       pov_konfidenz, pov_beleg, intensitaet, intensitaet_begruendung, zusammenfassung, sort_order, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})`);
     const insT = db.prepare(
       'INSERT INTO chapter_narrative_themes (profile_id, thema, typ, belege, sort_order) VALUES (?, ?, ?, ?, ?)'
     );
-    list.forEach((p, i) => {
-      const chId = (p.kapitel != null && chNameToId?.[p.kapitel] != null) ? chNameToId[p.kapitel] : null;
+    const seen = new Set();
+    for (const p of list) {
+      const chId = p?.chapter_id != null
+        ? p.chapter_id
+        : ((p?.kapitel != null && chNameToId?.[p.kapitel] != null) ? chNameToId[p.kapitel] : null);
+      if (chId == null || seen.has(chId)) continue;
+      seen.add(chId);
       const figName = p.erzaehler_figur ? String(p.erzaehler_figur).trim() : '';
       const figTextId = figName ? (figNameToId?.[figName] || null) : null;
       const figRowId = figTextId ? (figIdToRowId[figTextId] ?? null) : null;
-      const persp = p.perspektive || null;
-      const zeit  = p.erzaehlzeit || null;
-      // Abweichung nur bei deklariertem, nicht-'gemischt'-Soll und abweichendem Ist.
-      let abw = 0;
-      if (declaredP && declaredP !== 'gemischt' && persp && persp !== declaredP) abw = 1;
-      if (declaredT && declaredT !== 'gemischt' && zeit && zeit !== declaredT) abw = 1;
       const konf  = (typeof p.pov_konfidenz === 'number' && isFinite(p.pov_konfidenz))
         ? Math.max(0, Math.min(1, p.pov_konfidenz)) : null;
       const inten = Number.isFinite(p.intensitaet)
@@ -55,8 +57,9 @@ function saveChapterNarrativeProfiles(bookId, userEmail, profiles, chNameToId, f
       // Klarnamen-Fallback nur speichern, wenn keine FK aufgelöst werden konnte
       // (Snapshot-Vermeidung – aufgelöste Namen kommen zur Lesezeit per JOIN).
       const { lastInsertRowid: pid } = insP.run(
-        bookIdInt, email, chId, persp, zeit, figRowId, figRowId ? null : (figName || null),
-        konf, p.pov_beleg || null, abw, inten, p.intensitaet_begruendung || null, p.zusammenfassung || null, i,
+        bookIdInt, email, chId, p.perspektive || null, p.erzaehlzeit || null,
+        figRowId, figRowId ? null : (figName || null),
+        konf, p.pov_beleg || null, inten, p.intensitaet_begruendung || null, p.zusammenfassung || null, saved,
       );
       const themen = Array.isArray(p.themen) ? p.themen : [];
       themen.forEach((t, j) => {
@@ -73,7 +76,7 @@ function saveChapterNarrativeProfiles(bookId, userEmail, profiles, chNameToId, f
         insT.run(pid, trimmed, (t && typeof t === 'object' && t.typ) || null, belege, j);
       });
       saved++;
-    });
+    }
   })();
   return saved;
 }
@@ -91,7 +94,7 @@ function getChapterNarrativeProfile(bookId, userEmail) {
       FROM chapter_narrative_profile p
       LEFT JOIN chapters c ON c.chapter_id = p.chapter_id
       LEFT JOIN figures  f ON f.id = p.erzaehler_figur_id
-     WHERE p.book_id = ? AND p.user_email IS ?
+     WHERE p.book_id = ? AND p.user_email IS ? AND p.chapter_id IS NOT NULL
      ORDER BY p.sort_order, p.id
   `).all(bookIdInt, email);
   const bs = getBookSettings(bookIdInt, email);
@@ -99,7 +102,7 @@ function getChapterNarrativeProfile(bookId, userEmail) {
   if (!rows.length) return { chapters: [], declared, updated_at: null };
   const themeRows = db.prepare(`
     SELECT profile_id, thema, typ, belege FROM chapter_narrative_themes
-     WHERE profile_id IN (SELECT id FROM chapter_narrative_profile WHERE book_id = ? AND user_email IS ?)
+     WHERE profile_id IN (SELECT id FROM chapter_narrative_profile WHERE book_id = ? AND user_email IS ? AND chapter_id IS NOT NULL)
      ORDER BY profile_id, sort_order, id
   `).all(bookIdInt, email);
   const parseBelege = (raw) => {

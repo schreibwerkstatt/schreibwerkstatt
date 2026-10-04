@@ -103,7 +103,7 @@ function _buildLektoratPromptBody(text, textLabel, {
   const aktiv = (t) => typen.includes(t);
   const metaParts = [];
   if (chapterName) metaParts.push(`Kapitel: «${chapterName}»`);
-  if (pageName)    metaParts.push(`Seite: «${pageName}»`);
+  if (pageName)    metaParts.push(`Abschnitt: «${pageName}»`);
   if (journal && textsorte) metaParts.push(`Textsorte: «${textsorteLabel(textsorte)}»`);
   const metaBlock = metaParts.length ? `\nVerortung im Buch: ${metaParts.join(' · ')}\n` : '';
 
@@ -187,15 +187,15 @@ function _buildLektoratPromptBody(text, textLabel, {
   // trotz Verbot mit). Der Server verwirft zusätzlich Findings, deren «original»
   // nur in einem Auszug steht (routes/jobs/lektorat-context.js#dropNeighbourFindings).
   const fortsetzung = !nextExcerpt
-    ? 'z.B. ob der Seitenanfang sauber an das Vorherige anschliesst.'
+    ? 'z.B. ob der Abschnittsanfang sauber an das Vorherige anschliesst.'
     : fach
-    ? 'z.B. ob ein Gedankengang auf der nächsten Seite weitergeht. Einen Abschnitt, der erkennbar fortgesetzt wird, nicht als unvollständig oder abgebrochen bewerten.'
-    : 'z.B. ob eine Szene auf der nächsten Seite weitergeht oder ein scheinbar abrupter Schluss bewusst offen bleibt. Eine Szene, die erkennbar fortgesetzt wird, nicht als unvollständig oder abgebrochen bewerten.';
+    ? 'z.B. ob ein Gedankengang im nächsten Abschnitt weitergeht. Einen Gedankengang, der erkennbar fortgesetzt wird, nicht als unvollständig oder abgebrochen bewerten.'
+    : 'z.B. ob eine Szene im nächsten Abschnitt weitergeht oder ein scheinbar abrupter Schluss bewusst offen bleibt. Eine Szene, die erkennbar fortgesetzt wird, nicht als unvollständig oder abgebrochen bewerten.';
   const nachbarBlock = (_isLocal || (!previousExcerpt && !nextExcerpt)) ? '' : `
 <nachbarkontext>
-Die folgenden Auszüge gehören NICHT zur geprüften Seite. Sie zeigen nur, wie der Text ${[previousExcerpt && 'davor endet', nextExcerpt && 'danach weitergeht'].filter(Boolean).join(' und ')} – als Lesekontext für Übergänge (Tempus, Perspektive, Pronomen, Anschluss) und für «stilanalyse»${fach ? '' : '/«szenen»'}: ${fortsetzung}
+Die folgenden Auszüge gehören NICHT zum geprüften Abschnitt. Sie zeigen nur, wie der Text ${[previousExcerpt && 'davor endet', nextExcerpt && 'danach weitergeht'].filter(Boolean).join(' und ')} – als Lesekontext für Übergänge (Tempus, Perspektive, Pronomen, Anschluss) und für «stilanalyse»${fach ? '' : '/«szenen»'}: ${fortsetzung}
 PFLICHT: Nichts aus diesen Auszügen bewerten oder in «fehler» aufnehmen – jedes «original» stammt ausschliesslich aus <originaltext>. Den Inhalt der Auszüge in «stilanalyse»/«fazit» nicht nacherzählen.
-${previousExcerpt ? `<vorherige_seite label="Letzter Absatz der vorherigen Seite">\n${previousExcerpt}\n</vorherige_seite>\n` : ''}${nextExcerpt ? `<naechste_seite label="Erster Absatz der nächsten Seite">\n${nextExcerpt}\n</naechste_seite>\n` : ''}</nachbarkontext>
+${previousExcerpt ? `<vorherige_seite label="Letzter Absatz des vorherigen Abschnitts">\n${previousExcerpt}\n</vorherige_seite>\n` : ''}${nextExcerpt ? `<naechste_seite label="Erster Absatz des nächsten Abschnitts">\n${nextExcerpt}\n</naechste_seite>\n` : ''}</nachbarkontext>
 `;
 
   // Typ-Enum des Laufs. Der lokale Modus reduziert zusätzlich (kein show_vs_tell,
@@ -417,16 +417,16 @@ ${journal
   const szenenRegelnBlock = _isLocal ? '' : (fach ? _buildFachAbschnittRegelnBlock(profil) : `
 Szenen-Regeln:
 - Eine Szene ist ein abgegrenzter Handlungsabschnitt mit eigenem Anfang und Ende
-- Wenn die Seite keine erkennbaren Szenen enthält (z.B. rein beschreibender Text, Exposition): «szenen» als leeres Array zurückgeben
+- Wenn der Abschnitt keine erkennbaren Szenen enthält (z.B. rein beschreibender Text, Exposition): «szenen» als leeres Array zurückgeben
 - wertung: «stark» = funktioniert gut, «mittel» = verbesserungswürdig, «schwach» = klare Schwächen`);
 
   const aufgabeSatz = _isLocal
-    ? 'Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Abschnitte oder die letzten Sätze – auf Rechtschreibfehler, Grammatikfehler, Zeichensetzungs-/Interpunktionsfehler (insbesondere Kommasetzung), stilistische Auffälligkeiten und auffällige Wortwiederholungen. Prüfe Grammatik und Zeichensetzung Satz für Satz und gründlich.'
+    ? 'Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze – auf Rechtschreibfehler, Grammatikfehler, Zeichensetzungs-/Interpunktionsfehler (insbesondere Kommasetzung), stilistische Auffälligkeiten und auffällige Wortwiederholungen. Prüfe Grammatik und Zeichensetzung Satz für Satz und gründlich.'
     : (fach
       ? _buildFachAufgabe(profil, stilOnly)
       : (stilOnly
-      ? 'Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Abschnitte oder die letzten Sätze – auf STILISTISCHE Schwächen: holprigen Satzbau, Wortwiederholungen, schwache Verben, Füll- und Filterwörter, Klischees, KI-Geruch, Show-statt-Tell, vermeidbares Passiv, Pleonasmen sowie Tempus- und Perspektivbrüche und Schauplatz-Konsistenz (Zuständigkeit und Details siehe Regelblöcke unten). WICHTIG: Objektive/mechanische Fehler – Rechtschreibung, Grammatik, Zeichensetzung/Interpunktion, Dialogformat-Typografie sowie Namens-/Figuren-Konsistenz und Anreden – werden in einem SEPARATEN Pass geprüft und dürfen hier NICHT gemeldet werden. Bewerte ausserdem die Szenen der Seite.'
-      : 'Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Abschnitte oder die letzten Sätze – auf Rechtschreibfehler, Grammatikfehler, Zeichensetzungs-/Interpunktionsfehler (insbesondere Kommasetzung), Tempus- und Perspektivbrüche, holprigen Satzbau, stilistische Auffälligkeiten und auffällige Wortwiederholungen – ebenso auf schwache Verben, Füll- und Filterwörter, Klischees, KI-Geruch, Show-statt-Tell, vermeidbares Passiv, Dialogformat-Typografie und Konsistenz von Figuren und Schauplätzen (Zuständigkeit und Details der einzelnen Typen siehe Regelblöcke unten). Prüfe Grammatik, Zeichensetzung und Erzähltempus Satz für Satz und gründlich – das sind objektive Fehler, die nicht übersehen werden dürfen. Bewerte ausserdem die Szenen der Seite.'));
+      ? 'Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze – auf STILISTISCHE Schwächen: holprigen Satzbau, Wortwiederholungen, schwache Verben, Füll- und Filterwörter, Klischees, KI-Geruch, Show-statt-Tell, vermeidbares Passiv, Pleonasmen sowie Tempus- und Perspektivbrüche und Schauplatz-Konsistenz (Zuständigkeit und Details siehe Regelblöcke unten). WICHTIG: Objektive/mechanische Fehler – Rechtschreibung, Grammatik, Zeichensetzung/Interpunktion, Dialogformat-Typografie sowie Namens-/Figuren-Konsistenz und Anreden – werden in einem SEPARATEN Pass geprüft und dürfen hier NICHT gemeldet werden. Bewerte ausserdem die Szenen des Abschnitts.'
+      : 'Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze – auf Rechtschreibfehler, Grammatikfehler, Zeichensetzungs-/Interpunktionsfehler (insbesondere Kommasetzung), Tempus- und Perspektivbrüche, holprigen Satzbau, stilistische Auffälligkeiten und auffällige Wortwiederholungen – ebenso auf schwache Verben, Füll- und Filterwörter, Klischees, KI-Geruch, Show-statt-Tell, vermeidbares Passiv, Dialogformat-Typografie und Konsistenz von Figuren und Schauplätzen (Zuständigkeit und Details der einzelnen Typen siehe Regelblöcke unten). Prüfe Grammatik, Zeichensetzung und Erzähltempus Satz für Satz und gründlich – das sind objektive Fehler, die nicht übersehen werden dürfen. Bewerte ausserdem die Szenen des Abschnitts.'));
 
   // XML-Wrapper für die strukturell trennbaren Sektionen — hilft Claude beim
   // Parsen von Aufgabe, Schema, Beispielen und Originaltext als distinkte

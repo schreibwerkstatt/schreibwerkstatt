@@ -174,14 +174,32 @@ function ensureUniqueFigIds(figuren, log = null) {
  *  Pure, testbar. */
 function applyAliasClusters(chapterFiguren, clusters, log = null) {
   const aliasMap = {};
+  // Kandidaten = die Namen, die der Alias-Pass zu sehen bekam. Ein Cluster, dessen
+  // kanonischer Name oder Alias darin nicht vorkommt, hat das Modell (teilweise)
+  // erfunden — er wird ganz verworfen: ein erfundener Kanon benennte echte Figuren
+  // auf einen Namen um, den es im Buch nicht gibt.
+  const candidates = new Set();
+  for (const ch of (chapterFiguren || [])) {
+    for (const f of (ch.figuren || [])) {
+      const k = _normalizeName(f?.name);
+      if (k) candidates.add(k);
+    }
+  }
+  const invented = [];
   for (const c of (clusters || [])) {
     const canon = _refToString(c?.kanonisch);
     if (!canon) continue;
-    for (const a of (c?.aliase || [])) {
-      const alias = _refToString(a);
-      if (!alias || _normalizeName(alias) === _normalizeName(canon)) continue;
+    const aliases = (c?.aliase || []).map(_refToString).filter(Boolean);
+    const unknown = [canon, ...aliases].filter(n => !candidates.has(_normalizeName(n)));
+    if (unknown.length) { invented.push(...unknown); continue; }
+    for (const alias of aliases) {
+      if (_normalizeName(alias) === _normalizeName(canon)) continue;
       aliasMap[alias.toLowerCase()] = canon;
     }
+  }
+  if (invented.length && log) {
+    log.warn(`Alias-Cluster: ${invented.length} Name(n) nicht unter den Kandidaten – Cluster verworfen: `
+      + `${invented.slice(0, 6).join(', ')}${invented.length > 6 ? ' …' : ''}`);
   }
   if (!Object.keys(aliasMap).length) return { renamed: 0, aliasMap };
   let renamed = 0;

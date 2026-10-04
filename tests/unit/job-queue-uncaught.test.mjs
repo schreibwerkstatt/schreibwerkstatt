@@ -25,17 +25,17 @@ async function waitFor(pred, ms = 2000) {
 }
 
 test('async-Fehler ausserhalb des Job-try → Job endet als error', async () => {
-  const id = createJob('test-uncaught', 1, null, 'x');
+  const id = createJob('test-uncaught', null, null, 'x');
   enqueueJob(id, async () => { await Promise.resolve(); throw new Error('prompts kaputt'); });
   await waitFor(() => jobs.get(id)?.status === 'error');
   assert.equal(jobs.get(id).error, 'prompts kaputt');
 });
 
 test('synchroner Throw in fn → Job endet als error, Queue laeuft weiter', async () => {
-  const id = createJob('test-sync-throw', 2, null, 'x');
+  const id = createJob('test-sync-throw', null, null, 'x');
   enqueueJob(id, () => { throw new Error('sync'); });
   await waitFor(() => jobs.get(id)?.status === 'error');
-  const id2 = createJob('test-after', 3, null, 'x');
+  const id2 = createJob('test-after', null, null, 'x');
   let ran = false;
   enqueueJob(id2, async () => { ran = true; });
   await waitFor(() => ran);
@@ -43,7 +43,7 @@ test('synchroner Throw in fn → Job endet als error, Queue laeuft weiter', asyn
 
 test('bereits terminal verbuchter Job wird nicht ueberschrieben', async () => {
   const { failJob } = require('../../routes/jobs/shared');
-  const id = createJob('test-terminal', 4, null, 'x');
+  const id = createJob('test-terminal', null, null, 'x');
   enqueueJob(id, async () => { failJob(id, new Error('erstes')); throw new Error('zweites'); });
   await waitFor(() => jobs.get(id)?.status === 'error');
   await new Promise((r) => setTimeout(r, 20));

@@ -200,12 +200,12 @@
       </span>
       <template x-for="entry in filteredRueckblickHistory()" :key="entry.id">
         <div>
-          <div class="history-item" :class="{ 'history-item--active': selectedRueckblickId === entry.id }"
+          <div class="history-item hover-reveal-host" :class="{ 'history-item--active': selectedRueckblickId === entry.id }"
                @click="openRueckblickHistory(entry)">
             <span class="rb-history-zeitraum" x-text="zeitraumLabel(entry.zeitraum)"></span>
             <span class="history-date" x-text="rueckblickEntryDate(entry.created_at)"></span>
             <span class="tag" x-show="entry.model" x-text="entry.model"></span>
-            <button type="button" class="history-item-delete" @click.stop="deleteRueckblickHistory(entry.id)"
+            <button type="button" class="history-item-delete hover-reveal" @click.stop="deleteRueckblickHistory(entry.id)"
                     :data-tip="$app.t('common.deleteEntry')" :aria-label="$app.t('common.deleteEntry')">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
             </button>

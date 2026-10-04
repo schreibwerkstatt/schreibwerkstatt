@@ -1,6 +1,9 @@
-// Alpine.data('redundanzCard') — Redundanz-Radar (buchweite Doppelungs-Suche).
-// Job-Polling implementiert die Karte selbst (manueller Flow, inkl. Wieder-
-// anhängen an einen laufenden Job beim Öffnen). Fachlicher State lebt hier; der showRedundanzCard-Flag bleibt im Root (Hash-Router, Exklusivität).
+// Alpine.data('redundanzCard') — Redundanz-Radar (buchweite Doppelungs-Suche),
+// Tab „Doppelungen" der Buchlandkarte (Hülle: partials/buchlandkarte.html).
+// Job-Polling implementiert das Panel selbst (manueller Flow, inkl. Wieder-
+// anhängen an einen laufenden Job beim Öffnen der Karte). Fachlicher State lebt
+// hier; showBuchlandkarteCard + buchlandkarteTab bleiben im Root (Hash-Router,
+// Exklusivität).
 
 import { redundanzMethods } from '../book/redundanz.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
@@ -51,14 +54,14 @@ export function registerRedundanzCard() {
 
       this._lifecycle = setupCardLifecycle(this, {
         name: 'redundanz',
-        showFlag: 'showRedundanzCard',
+        showFlag: 'showBuchlandkarteCard',
         timerKeys: ['_redundanzPollTimer', '_redundanzIndexPollTimer'],
         onShow: async () => {
           if (this.redundanzAvailable) await this.loadRedundanz();
         },
         onBookChanged: async (e, ctx, root) => {
           doReset(ctx);
-          if (!root.showRedundanzCard) return;
+          if (!root.showBuchlandkarteCard) return;
           if (ctx.redundanzAvailable) await ctx.loadRedundanz();
         },
         onViewReset: (e, ctx) => doReset(ctx),

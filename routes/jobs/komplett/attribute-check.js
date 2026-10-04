@@ -3,10 +3,27 @@
 // Komplettanalyse (phases/kontinuitaet.js) und im Standalone-Job (job-kontinuitaet.js).
 // Re-exportiert über ./job-shared.
 
-const { db } = require('../../../db/schema');
 const appSettings = require('../../../lib/app-settings');
+const {
+  listFigureDeathsWithChapterNames, listFigureScenesWithChapterNames,
+  listDatedLifeEventsWithChapterNames, listSubjectWorldFactsWithChapterNames,
+} = require('../../../db/content-names');
 const { updateJob, settledAll } = require('../shared');
 const { COST_LABEL, costTier } = require('./cost-labels');
+
+// Herkunfts-Marke jedes F4-Befunds. saveKontinuitaetResult (remap.js) überspringt für
+// so markierte Befunde die Zitat-Beleg-Prüfung: ihre Stellen sind aus Katalog-Daten
+// gebaut (Szenen-Titel, Jahr, Fakt-Aussage), keine wörtlichen Buchzitate.
+const ATTR_SOURCE = 'attr';
+// Ausgabe-Deckel des Urteils. Adaptives Thinking zählt gegen max_tokens — ein knapper
+// Deckel schneidet das Urteil ab (truncated → verworfen). Effort 'low' hält das Denken
+// kurz; ausserhalb Claudes ignorieren die Provider den Effort (lib/ai/core.js).
+const _JUDGE_MAX_TOKENS = 4000;
+const _JUDGE_EFFORT = 'low';
+// Anführungszeichen, die _stelleQuote (./utils) als Zitat-Klammer liest. Synthetische
+// Werte (Szenen-Titel) dürfen keine tragen, sonst gälten sie als Buchzitat.
+const _QUOTE_CHARS = /[«»„"“”]/g;
+function _plain(s) { return String(s || '').replace(_QUOTE_CHARS, '').replace(/\s+/g, ' ').trim(); }
 
 // ── Attribut-Widerspruchs-Detektor (F4) ─────────────────────────────────────
 // Der fakten-basierte Multi-Pass-Kontinuitätscheck sieht Fakten nur pro Kapitel → Cross-Chapter-
@@ -41,66 +58,59 @@ function _overlap(a, b) {
 
 /** Deterministische Kandidatenpaare (KEIN KI-Call). Drei Detektoren, in dieser Priorität:
  *  T) Auftritt nach dem Tod: eine Figur hat ein Tod-Ereignis in Kapitel X und handelt in
- *     einer Szene eines späteren Kapitels (Buchreihenfolge `chapterOrder`, Kapitel-IDs).
+ *     einer Szene eines späteren Kapitels (Buchreihenfolge `chapterOrder`, Kapitel-IDs) oder
+ *     auf einer späteren Seite desselben Kapitels (Seitenreihenfolge `pageOrder`, Page-IDs).
  *  A) Singuläre Lebensereignisse (geburt/tod) einer Figur mit ≥2 verschiedenen sicheren Jahren.
  *  B) Welt-Fakten gleicher Kategorie zum selben subjekt, die über dasselbe sprechen, aber
  *     verschieden lauten, in verschiedenen Kapiteln — je Subjekt das ähnlichste Paar.
  *  Gibt `[{ typ, entity, entityFigName, attribut, hinweis?, wertA:{wert,kapitel,beleg}, wertB }]`,
  *  gedeckelt auf _ATTR_CANDIDATE_CAP. */
-function buildAttributeContradictions(bookIdInt, email, { chapterOrder = null } = {}) {
+function buildAttributeContradictions(bookIdInt, email, { chapterOrder = null, pageOrder = null } = {}) {
   const candidates = [];
   const orderOf = new Map((chapterOrder || []).map((id, i) => [Number(id), i]));
+  const pageOf = new Map((pageOrder || []).map((id, i) => [Number(id), i]));
 
-  // T) Auftritt nach dem Tod.
+  // T) Auftritt nach dem Tod. Späteres Kapitel ODER dasselbe Kapitel auf einer späteren
+  //    Seite (nur wenn Tod und Szene eine Seite tragen und beide in `pageOrder` stehen).
   if (orderOf.size) {
-    const deaths = db.prepare(`
-      SELECT fe.figure_id, f.name AS fig_name, fe.ereignis, fe.chapter_id, c.chapter_name
-        FROM figure_events fe
-        JOIN figures f ON f.id = fe.figure_id
-        JOIN chapters c ON c.chapter_id = fe.chapter_id
-       WHERE f.book_id = ? AND f.user_email IS ? AND fe.subtyp = 'tod'
-    `).all(bookIdInt, email);
-    const scenesOf = db.prepare(`
-      SELECT fs.titel, fs.kommentar, fs.chapter_id, c.chapter_name
-        FROM scene_figures sf
-        JOIN figure_scenes fs ON fs.id = sf.scene_id
-        JOIN chapters c ON c.chapter_id = fs.chapter_id
-       WHERE sf.figure_id = ? AND fs.stale = 0
-    `);
+    const deaths = listFigureDeathsWithChapterNames(bookIdInt, email);
     const seenFig = new Set();
     for (const d of deaths) {
       if (seenFig.has(d.figure_id)) continue;
       const deathPos = orderOf.get(Number(d.chapter_id));
       if (deathPos == null) continue;
-      const later = scenesOf.all(d.figure_id)
-        .map(sc => ({ ...sc, pos: orderOf.get(Number(sc.chapter_id)) }))
-        .filter(sc => sc.pos != null && sc.pos > deathPos)
-        .sort((a, b) => a.pos - b.pos);
+      const deathPage = d.page_id != null ? pageOf.get(Number(d.page_id)) : undefined;
+      const later = listFigureScenesWithChapterNames(d.figure_id)
+        .map(sc => ({
+          ...sc,
+          pos: orderOf.get(Number(sc.chapter_id)),
+          pagePos: sc.page_id != null ? pageOf.get(Number(sc.page_id)) : undefined,
+        }))
+        .filter(sc => sc.pos != null && (sc.pos > deathPos
+          || (sc.pos === deathPos && deathPage != null && sc.pagePos != null && sc.pagePos > deathPage)))
+        .sort((a, b) => a.pos - b.pos || (a.pagePos ?? 0) - (b.pagePos ?? 0));
       if (!later.length) continue;
       seenFig.add(d.figure_id);
       const sc = later[0];
+      const sameChapter = sc.pos === deathPos;
       candidates.push({
         typ: 'figur',
         entity: d.fig_name,
         entityFigName: d.fig_name,
         attribut: 'Lebendig/tot',
-        hinweis: 'Wert A ist der Tod der Figur, Wert B eine Szene in einem SPÄTEREN Kapitel, in der sie mitwirkt. Kein Widerspruch ist es bei Rückblende, Erinnerung, Traum, Vision, blosser Erwähnung durch andere, Geist/Erscheinung als bewusstem Stilmittel oder einem Scheintod, den der Text auflöst.',
+        hinweis: sameChapter
+          ? 'Wert A ist der Tod der Figur, Wert B eine Szene SPÄTER IM SELBEN Kapitel (in einem folgenden Abschnitt), in der sie mitwirkt. Kein Widerspruch ist es bei Rückblende, Erinnerung, Traum, Vision, blosser Erwähnung durch andere, Geist/Erscheinung als bewusstem Stilmittel, einem Scheintod, den der Text auflöst, oder wenn die Szene das Sterben selbst zeigt.'
+          : 'Wert A ist der Tod der Figur, Wert B eine Szene in einem SPÄTEREN Kapitel, in der sie mitwirkt. Kein Widerspruch ist es bei Rückblende, Erinnerung, Traum, Vision, blosser Erwähnung durch andere, Geist/Erscheinung als bewusstem Stilmittel oder einem Scheintod, den der Text auflöst.',
         wertA: { wert: 'stirbt', kapitel: d.chapter_name || '', beleg: d.ereignis || '' },
-        wertB: { wert: `wirkt in der Szene «${sc.titel}» mit`, kapitel: sc.chapter_name || '', beleg: sc.kommentar || '' },
+        // Ohne Anführungszeichen: der Titel ist Katalog-Text, kein Buchzitat (_stelleQuote).
+        wertB: { wert: `wirkt mit in der Szene: ${_plain(sc.titel)}`, kapitel: sc.chapter_name || '', beleg: sc.kommentar || '' },
         _priority: 0,
       });
     }
   }
 
   // A) Singuläre Lebensereignisse mit Jahres-Konflikt.
-  const evRows = db.prepare(`
-    SELECT fe.figure_id, f.name AS fig_name, fe.subtyp, fe.datum_year AS year, fe.ereignis, c.chapter_name
-      FROM figure_events fe
-      JOIN figures f ON f.id = fe.figure_id
-      LEFT JOIN chapters c ON c.chapter_id = fe.chapter_id
-     WHERE f.book_id = ? AND f.user_email IS ? AND fe.datum_unsicher = 0
-       AND fe.datum_year IS NOT NULL AND fe.subtyp IN ('geburt','tod')
-  `).all(bookIdInt, email);
+  const evRows = listDatedLifeEventsWithChapterNames(bookIdInt, email);
   const byFigSubtyp = new Map();
   for (const r of evRows) {
     const key = `${r.figure_id}|${r.subtyp}`;
@@ -124,13 +134,7 @@ function buildAttributeContradictions(bookIdInt, email, { chapterOrder = null } 
   }
 
   // B) Welt-Fakten: gleiche Kategorie + gleiches subjekt, ähnliche Aussage, anderer Wortlaut.
-  const wfRows = db.prepare(`
-    SELECT wf.id, wf.subjekt, wf.kategorie, wf.fakt, c.chapter_name
-      FROM world_facts wf
-      LEFT JOIN world_fact_chapters wfc ON wfc.fact_id = wf.id
-      LEFT JOIN chapters c ON c.chapter_id = wfc.chapter_id
-     WHERE wf.book_id = ? AND wf.user_email IS ? AND wf.subjekt IS NOT NULL AND TRIM(wf.subjekt) != ''
-  `).all(bookIdInt, email);
+  const wfRows = listSubjectWorldFactsWithChapterNames(bookIdInt, email);
   const bySubjekt = new Map();
   for (const r of wfRows) {
     const key = `${_factNorm(r.kategorie)}|${_factNorm(r.subjekt)}`;
@@ -168,23 +172,27 @@ function buildAttributeContradictions(bookIdInt, email, { chapterOrder = null } 
 }
 
 /** Beurteilt die Kandidaten aus buildAttributeContradictions per KI (Konsolidierungs-Tier,
- *  kein extractTier-Override) und gibt bestätigte Widersprüche in Problem-Form zurück
- *  (kompatibel zu kontResult.probleme → wird dort eingemischt und mit gespeichert). stelle_a/
- *  stelle_b bewusst OHNE «»-Zitate, damit die Beleg-Prüfung (requireQuoteEvidence) sie nicht als
- *  erfundenes Zitat verwirft. Concurrency-Cap + Warmup wie die Verify-Stufe. Non-fatal. */
+ *  kein extractTier-Override, Effort 'low') und gibt bestätigte Widersprüche in Problem-Form
+ *  zurück (kompatibel zu kontResult.probleme → wird dort eingemischt und mit gespeichert).
+ *  Jeder Befund trägt `_source: 'attr'` (ATTR_SOURCE): seine Stellen sind aus Katalog-Daten
+ *  gebaut, keine Buchzitate — saveKontinuitaetResult nimmt ihn darum von der Zitat-Beleg-
+ *  Prüfung aus. Concurrency-Cap + Warmup wie die Verify-Stufe. Non-fatal: fehlgeschlagene
+ *  Einzel-Urteile werden geloggt und, falls `ctx.warnings` existiert, als Warnung gemeldet. */
 async function runAttributeContradictionCheck(ctx, fromPct, toPct) {
-  const { call, prompts, sys, jobId, tok, bookName, bookIdInt, email, log, groupOrder } = ctx;
-  // Buchreihenfolge der Kapitel (groupOrder-Keys = chapter_id) für „Auftritt nach dem Tod".
+  const { call, prompts, sys, jobId, tok, bookName, bookIdInt, email, log, groupOrder, pageContents, warnings } = ctx;
+  // Buchreihenfolge der Kapitel (groupOrder-Keys = chapter_id) und der Seiten (pageContents
+  // liegt in Lesereihenfolge vor) für „Auftritt nach dem Tod".
   const chapterOrder = (groupOrder || []).filter(k => k !== '__ungrouped__').map(Number).filter(Number.isFinite);
-  const candidates = buildAttributeContradictions(bookIdInt, email, { chapterOrder });
+  const pageOrder = (pageContents || []).map(p => Number(p?.id)).filter(Number.isFinite);
+  const candidates = buildAttributeContradictions(bookIdInt, email, { chapterOrder, pageOrder });
   if (!candidates.length) return [];
   updateJob(jobId, { progress: fromPct, statusText: 'job.phase.checkAttributes' });
   const claudeConcurrency = Math.max(1, parseInt(appSettings.get('ai.claude.phase1_concurrency'), 10) || 4);
   const settled = await settledAll(candidates.map((cand) => async () => {
     const v = await call(jobId, tok,
       prompts.buildAttributeContradictionJudgePrompt(bookName, cand),
-      sys.SYSTEM_KONTINUITAET_BLOCKS, null, null, 600, 0.3, 900, prompts.SCHEMA_ATTR_CONTRADICTION,
-      costTier(COST_LABEL.kontinuitaet));
+      sys.SYSTEM_KONTINUITAET_BLOCKS, null, null, 600, 0.3, _JUDGE_MAX_TOKENS, prompts.SCHEMA_ATTR_CONTRADICTION,
+      { ...costTier(COST_LABEL.kontinuitaet), effort: _JUDGE_EFFORT });
     if (v?.widerspruch !== true) return null;
     const stelle = (w) => `${cand.attribut}: ${w.wert}${w.kapitel ? ` (Kapitel ${w.kapitel})` : ''}`;
     return {
@@ -196,14 +204,24 @@ async function runAttributeContradictionCheck(ctx, fromPct, toPct) {
       empfehlung: v.empfehlung || '',
       figuren: cand.entityFigName ? [cand.entityFigName] : [],
       kapitel: [cand.wertA.kapitel, cand.wertB.kapitel].filter(Boolean),
+      _source: ATTR_SOURCE,
     };
   }), { concurrency: claudeConcurrency, warmup: true });
   const aborted = settled.find(r => r.status === 'rejected' && r.reason?.name === 'AbortError');
   if (aborted) throw aborted.reason;
+  // Fehlgeschlagene Urteile (abgeschnitten, Provider-Fehler) sind UNGEPRÜFTE Kandidaten,
+  // keine verneinten — nicht still schlucken.
+  const failed = settled.filter(r => r.status === 'rejected');
+  if (failed.length) {
+    log.warn(`Attribut-Widerspruchs-Detektor: ${failed.length}/${candidates.length} Urteile fehlgeschlagen (${failed[0].reason?.message || failed[0].reason}).`);
+    if (Array.isArray(warnings)) {
+      warnings.push({ key: 'job.warn.attributeCheckPartial', params: { failed: failed.length, total: candidates.length } });
+    }
+  }
   const findings = settled.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
   if (toPct != null) updateJob(jobId, { progress: toPct });
   log.info(`Attribut-Widerspruchs-Detektor: ${findings.length}/${candidates.length} Kandidaten als echter Widerspruch bestätigt.`);
   return findings;
 }
 
-module.exports = { buildAttributeContradictions, runAttributeContradictionCheck };
+module.exports = { buildAttributeContradictions, runAttributeContradictionCheck, ATTR_SOURCE };

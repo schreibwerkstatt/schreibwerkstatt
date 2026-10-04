@@ -4,6 +4,11 @@
   Zeigt den KI-Dach-Befund (Autoren-Befund) + die deterministischen Struktur-Befunde
   aus der GET-Antwort. Rein diagnostisch/rückwärtsgewandt, nie generativ im Text.
 -->
+<template x-if="erzaehlprofilBefundTooFew()">
+  <p class="card-hint"
+     x-text="$app.t('erzaehlprofil.befundTooFew', { n: erzaehlprofilBefundTooFew().chapterCount, min: erzaehlprofilBefundTooFew().minChapters })"></p>
+</template>
+
 <template x-if="erzaehlprofilHasReport()">
   <div class="erzaehlprofil-befund">
 

@@ -9,13 +9,27 @@ const { _remapFigNames, consolidationFitsCap } = require('../utils');
 const { komplettMaxTokens } = require('./tokens');
 const { getContextConfigFor } = require('../../../../lib/ai');
 const { COST_LABEL, costTier } = require('../cost-labels');
-const { dedupeLocationsWithinRun } = require('../../../../lib/entity-match');
+const { dedupeLocationsWithinRun, scoreLocationPair, SAME } = require('../../../../lib/entity-match');
 const { judgeEntityPairs } = require('../entity-reconcile');
+
+/** Vereinigt die Kapitel-Liste von `src` in `target.kapitel` (in place): Kapitel per
+ *  Name (String oder { name, haeufigkeit }), je Kapitel die höhere Häufigkeit. */
+function _unionKapitel(target, src) {
+  for (const kap of (src || [])) {
+    const name = typeof kap === 'object' && kap ? kap.name : kap;
+    const hit = target.kapitel.find(x => (typeof x === 'object' && x ? x.name : x) === name);
+    if (!hit) target.kapitel.push(kap);
+    else if (typeof hit === 'object' && typeof kap === 'object' && (kap.haeufigkeit || 0) > (hit.haeufigkeit || 0)) {
+      hit.haeufigkeit = kap.haeufigkeit;
+    }
+  }
+}
 
 /** Regelbasierter Orte-Merge als Fallback, wenn die KI-Konsolidierung scheitert (z.B.
  *  aiTruncated bei kleinem lokalem Modell). Flattet chapterOrte über alle Kapitel, dedupliziert
- *  nach Name (case-insensitive, erstes Vorkommen gewinnt, figuren-Refs vereinigt) und löst
- *  figuren_namen gegen die kanonische Figurenliste zu fig_ids auf – analog Single-Pass. */
+ *  nach Name (case-insensitive, erstes Vorkommen gewinnt; figuren-Refs und Kapitel vereinigt)
+ *  und löst figuren_namen gegen die kanonische Figurenliste zu fig_ids auf – analog Single-Pass.
+ *  Ohne Kapitel-Union behielte ein Ort, der in mehreren Kapiteln vorkommt, nur das erste. */
 function buildFallbackOrte(chapterOrte, figNameToId, figNameToIdLower) {
   const byName = new Map();
   for (const ch of (chapterOrte || [])) {
@@ -24,10 +38,12 @@ function buildFallbackOrte(chapterOrte, figNameToId, figNameToIdLower) {
       if (!key) continue;
       const figIds = _remapFigNames(o.figuren_namen, figNameToId, figNameToIdLower);
       if (!byName.has(key)) {
-        byName.set(key, { ...o, figuren: [...new Set(figIds)] });
+        // Kapitel-Array kopieren: der Merge unten erweitert es, chapterOrte bleibt roh.
+        byName.set(key, { ...o, figuren: [...new Set(figIds)], kapitel: (o.kapitel || []).map(k => (typeof k === 'object' && k ? { ...k } : k)) });
       } else {
         const ex = byName.get(key);
         ex.figuren = [...new Set([...ex.figuren, ...figIds])];
+        _unionKapitel(ex, o.kapitel);
         if (!ex.beschreibung && o.beschreibung) ex.beschreibung = o.beschreibung;
       }
     }
@@ -56,14 +72,7 @@ function dedupeSongsWithinRun(songs) {
       continue;
     }
     ex.figuren = [...new Set([...ex.figuren, ...(s.figuren || [])])];
-    for (const kap of (s.kapitel || [])) {
-      const name = typeof kap === 'object' && kap ? kap.name : kap;
-      const hit = ex.kapitel.find(x => (typeof x === 'object' && x ? x.name : x) === name);
-      if (!hit) ex.kapitel.push(kap);
-      else if (typeof hit === 'object' && typeof kap === 'object' && (kap.haeufigkeit || 0) > (hit.haeufigkeit || 0)) {
-        hit.haeufigkeit = kap.haeufigkeit;
-      }
-    }
+    _unionKapitel(ex, s.kapitel);
     for (const f of ['interpret', 'genre', 'kontext_typ', 'beschreibung', 'stimmung', 'erste_erwaehnung']) {
       if (!ex[f] && s[f]) ex[f] = s[f];
     }
@@ -100,6 +109,10 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
   const prefetched = opts.prefetchedOrteRaw || null;
 
   let orte;
+  // Namen, die in einem Ort aufgegangen sind (Within-Run-Dedup bzw. KI-Konsolidierung),
+  // je Ort-Index: Szenen tragen in `orte_namen` noch den Kapitel-Namen, und ohne Alias
+  // fiele ihre Ort-Verknüpfung in remapSzenen still weg.
+  let aliasesByIdx = [];
   if (isSinglePass) {
     updateJob(jobId, { progress: 43, statusText: 'job.phase.consolidatingOrte' });
     const raw = chapterOrte[0]?.orte || [];
@@ -107,7 +120,8 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
     // aber die Completeness-Gap-Pässe ziehen Schreibvarianten desselben Orts nach
     // («Frohheim-Schule Olten» / «Frohheim-Schulhaus Olten»). Konservativ per Token-
     // Teilmenge verschmelzen, bevor IDs vergeben werden — sonst landen sie als Dubletten.
-    const { orte: deduped, unsure: dedupUnsure } = dedupeLocationsWithinRun(raw);
+    const { orte: deduped, unsure: dedupUnsure, aliases: dedupAliases } = dedupeLocationsWithinRun(raw);
+    aliasesByIdx = dedupAliases || [];
     // Within-Run-Verdachtsfaelle bleiben bewusst GETRENNT und gehen NICHT an den Judge:
     // sein Hint-Mechanismus zeigt auf eine Bestands-Zeile (Cross-Run), zwei Eintraege
     // desselben Laufs zusammenzufuehren waere ein anderer Eingriff. Sie fallen beim
@@ -149,9 +163,11 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
         orteResultRaw = null;
       } else {
         try {
+          // Cap im maxTokens-Slot (9. Argument, Muster phases/extraktion.js) — im
+          // expectedChars-Slot wäre er nur eine Fortschritts-Schätzung.
           orteResultRaw = await call(jobId, tok,
             promptText,
-            sys.SYSTEM_ORTE_BLOCKS, 43, 55, cap, 0.2, null, prompts.SCHEMA_ORTE_KONSOL,
+            sys.SYSTEM_ORTE_BLOCKS, 43, 55, null, 0.2, cap, prompts.SCHEMA_ORTE_KONSOL,
             costTier(COST_LABEL.orte),
           );
         } catch (e) {
@@ -176,16 +192,19 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
       }
       orte = buildFallbackOrte(chapterOrte, figNameToId, figNameToIdLower);
       updateJob(jobId, { progress: 55 });
-    } else if (prefetched) {
+    } else {
+      // Beide KI-Pfade (parallel vorab geholt / seriell) gleich behandeln:
+      // * id IMMER neu vergeben — eine doppelte ort_N der KI liefe in
+      //   UNIQUE(book_id, loc_id, user_email) und bräche die Transaktion (wie Songs).
+      // * figuren_namen → fig_ids auflösen, sonst gingen alle Ort↔Figur-Links verloren.
       orte = orteResultRaw.orte.map((o, i) => ({
         ...o,
-        id: o.id || ('ort_' + (i + 1)),
+        id: 'ort_' + (i + 1),
         figuren: _remapFigNames(o.figuren_namen, figNameToId, figNameToIdLower),
       }));
       updateJob(jobId, { progress: 55 });
-    } else {
-      orte = orteResultRaw.orte.map((o, i) => ({ ...o, id: o.id || ('ort_' + (i + 1)) }));
     }
+    aliasesByIdx = ortAliasesFromSources(orte, chapterOrte);
   }
   // Name-Match + stale: locations.id bleibt ueber Re-Analysen stabil (FK-Refs wie
   // research_item_links.location_id ueberleben); verschwundene Orte werden als stale
@@ -208,12 +227,56 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
       matchHint: ortHint && ortHint.size ? ortHint : null });
   log.info(`${orte.length} Schauplätze gespeichert.`);
 
+  const { ortNameToId, ortNameToIdLower } = buildOrtNameLookup(orte, aliasesByIdx);
+  return { orte, ortNameToId, ortNameToIdLower };
+}
+
+/** Name → loc_id-Lookup für remapSzenen. Erst die Namen der Orte selbst, danach die
+ *  aufgegangenen Varianten (`aliasesByIdx[i]` = Namen, die in orte[i] verschmolzen sind)
+ *  — ein Alias überschreibt nie einen echten Ortsnamen. */
+function buildOrtNameLookup(orte, aliasesByIdx = []) {
   const ortNameToId = {}, ortNameToIdLower = {};
   for (const o of orte) {
+    if (!o?.name) continue;
     ortNameToId[o.name] = o.id;
     ortNameToIdLower[o.name.toLowerCase()] = o.id;
   }
-  return { orte, ortNameToId, ortNameToIdLower };
+  orte.forEach((o, i) => {
+    for (const alias of (aliasesByIdx[i] || [])) {
+      if (!alias) continue;
+      if (!(alias in ortNameToId)) ortNameToId[alias] = o.id;
+      const lk = alias.toLowerCase();
+      if (!(lk in ortNameToIdLower)) ortNameToIdLower[lk] = o.id;
+    }
+  });
+  return { ortNameToId, ortNameToIdLower };
+}
+
+/** Multi-Pass: welche Kapitel-Ortsnamen hat die Konsolidierung in einen anders benannten
+ *  Ort aufgehen lassen? Die KI-Antwort nennt ihre Quellnamen nicht; darum deterministisch
+ *  über dieselbe Verdikt-Schicht wie der Within-Run-Dedup: ein Kapitel-Name ohne exakten
+ *  Treffer wird Alias genau des EINEN konsolidierten Orts mit Verdikt SAME. Mehrdeutig
+ *  oder ohne Treffer → kein Alias (die Szene verliert dann wie bisher den Link, statt
+ *  falsch verknüpft zu werden). Reine Synonyme («die Burg» → «Festung Hohenstein»)
+ *  erkennt das nicht. */
+function ortAliasesFromSources(orte, chapterOrte) {
+  const aliases = orte.map(() => []);
+  const known = new Set(orte.map(o => String(o?.name || '').trim().toLowerCase()).filter(Boolean));
+  const seen = new Set();
+  for (const ch of (chapterOrte || [])) {
+    for (const src of (ch.orte || [])) {
+      const name = String(src?.name || '').trim();
+      const lk = name.toLowerCase();
+      if (!name || known.has(lk) || seen.has(lk)) continue;
+      seen.add(lk);
+      const hits = [];
+      orte.forEach((o, i) => {
+        if (scoreLocationPair({ name, typ: src.typ }, { name: o.name, typ: o.typ }).verdict === SAME) hits.push(i);
+      });
+      if (hits.length === 1) aliases[hits[0]].push(name);
+    }
+  }
+  return aliases;
 }
 
 /** Phase 3 Songs: Musikbibliothek konsolidieren analog zu Orten.
@@ -327,7 +390,8 @@ async function runPhase3OrteCall(ctx, chapterOrte, figurenKompaktForPrompt) {
       promptText,
       sys.SYSTEM_ORTE_BLOCKS,
       null, null,
-      cap, 0.2, null, prompts.SCHEMA_ORTE_KONSOL, costTier(COST_LABEL.orte),
+      // Cap im maxTokens-Slot (siehe runPhase3).
+      null, 0.2, cap, prompts.SCHEMA_ORTE_KONSOL, costTier(COST_LABEL.orte),
     );
   } catch (e) {
     if (e.name === 'AbortError') throw e;
@@ -339,4 +403,7 @@ async function runPhase3OrteCall(ctx, chapterOrte, figurenKompaktForPrompt) {
   }
 }
 
-module.exports = { runPhase3, runPhase3Songs, buildPrelimFigurenKompakt, runPhase3OrteCall, dedupeSongsWithinRun, buildFallbackSongs };
+module.exports = {
+  runPhase3, runPhase3Songs, buildPrelimFigurenKompakt, runPhase3OrteCall, dedupeSongsWithinRun, buildFallbackSongs,
+  buildFallbackOrte, buildOrtNameLookup, ortAliasesFromSources,
+};

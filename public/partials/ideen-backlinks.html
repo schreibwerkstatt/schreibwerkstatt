@@ -5,7 +5,10 @@
      Der Host nennt das Ziel `ideaOwnerId`, weil die drei Karten ihre Entität
      verschieden benennen (item / beat / selectedMotifId). Er setzt das per
      `x-data` auf einem Wrapper unmittelbar über dem Include-Marker:
-     `<div x-data="{ ideaOwnerId: beat.id }">` … `</div>`. (Den Marker selbst in
+     `<div x-data="{ ideaOwnerId: beat.id }">` … `</div>`. Hält die Karte zwei
+     Ziel-Arten, nennt der Wrapper zusätzlich die Map: `ideaSource: 'threadIdeaBacklinks'`.
+     Wechselt das Ziel unter demselben Wrapper (Detail einer Auswahl), die ID per
+     `x-effect` koppeln statt als Init-Wert — x-data wertet nur einmal aus. (Den Marker selbst in
      diesem Kommentar NIE ausschreiben — der Resolver würde ihn erneut
      expandieren, und sein Delimiter beendete den Kommentar vorzeitig.)
 
@@ -16,8 +19,8 @@
 
      Nur die EIGENEN Ideen: `ideen.user_email` ist Sichtbarkeits-Scope, nicht
      Attribution — der Server filtert, hier wird nichts nachgeprüft. -->
-<div class="idee-backlinks entity-refs" x-show="ideasFor(ideaOwnerId).length">
-  <template x-for="idee in ideasFor(ideaOwnerId)" :key="idee.link_id">
+<div class="idee-backlinks entity-refs" x-show="ideasFor(ideaOwnerId, $data.ideaSource).length">
+  <template x-for="idee in ideasFor(ideaOwnerId, $data.ideaSource)" :key="idee.link_id">
     <button type="button" class="entity-ref"
             x-entity-ref="{ type: 'idee', id: idee.idea_id, label: idee.content, page_id: idee.page_id, chapter_id: idee.chapter_id, title: ideaChipTip(idee) }"></button>
   </template>

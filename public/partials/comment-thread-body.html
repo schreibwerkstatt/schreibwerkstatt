@@ -21,7 +21,7 @@
     <span class="comment-rail__time" x-text="$app.formatRelativeShort(thread.root.created_at)"></span>
     <span x-show="thread.root.resolved_at" class="comment-rail__resolved"
           x-text="$app.t('share.comments.resolved')"></span>
-    <span class="comment-rail__thread-actions">
+    <span class="comment-rail__thread-actions hover-reveal">
       <button type="button" class="icon-btn icon-btn--ghost"
               :class="{ 'icon-btn--success': !thread.root.resolved_at }"
               :disabled="commentSavingResolve === thread.root.id"
@@ -51,7 +51,7 @@
             x-text="commentAvatar(r).initials"></span>
       <span class="comment-rail__author" x-text="commentAvatar(r).label"></span>
       <span class="comment-rail__time" x-text="$app.formatRelativeShort(r.created_at)"></span>
-      <button type="button" class="icon-btn icon-btn--ghost comment-rail__del comment-rail__reply-del"
+      <button type="button" class="icon-btn icon-btn--ghost comment-rail__del comment-rail__reply-del hover-reveal"
               @click="deleteBookComment(r)"
               :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>

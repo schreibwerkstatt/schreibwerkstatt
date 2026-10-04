@@ -6,7 +6,7 @@
      class="history-bar">
   <div class="history-heading" x-text="$app.t('editor.history')"></div>
   <template x-for="entry in $app.pageHistory" :key="entry.id">
-    <div class="history-item" :class="{ 'history-item--active': $app.activeHistoryEntryId === entry.id }" @click="$app.loadHistoryEntry(entry)">
+    <div class="history-item hover-reveal-host" :class="{ 'history-item--active': $app.activeHistoryEntryId === entry.id }" @click="$app.loadHistoryEntry(entry)">
       <span class="history-date" x-text="$app.formatDate(entry.checked_at)"></span>
       <span class="badge" :class="entry.error_count > 0 ? 'badge-err' : 'badge-ok'" x-text="entry.error_count > 0 ? $app.t('editor.history.errors', { n: entry.error_count }) : $app.t('editor.history.errorFree')"></span>
       <button type="button" class="btn-toggle-saved"
@@ -15,7 +15,7 @@
               :data-tip="entry.saved ? $app.t('editor.history.markOpen') : $app.t('editor.history.markDone')"
               x-text="entry.saved ? $app.t('editor.history.done') : $app.t('editor.history.open')"></button>
       <span class="tag" x-text="entry.model"></span>
-      <button type="button" class="history-item-delete" @click.stop="$app.deletePageCheck(entry.id)" :data-tip="$app.t('common.deleteEntry')" :aria-label="$app.t('common.deleteEntry')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
+      <button type="button" class="history-item-delete hover-reveal" @click.stop="$app.deletePageCheck(entry.id)" :data-tip="$app.t('common.deleteEntry')" :aria-label="$app.t('common.deleteEntry')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
     </div>
   </template>
 </div>

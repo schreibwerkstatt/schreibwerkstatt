@@ -46,15 +46,15 @@ function insertJobRun({ email, bookId = null, type = 'check', tokensIn = 0, toke
   recordJobLedger(jobId);
 }
 
-function insertChatMsg({ email, bookId, kind = 'book', tokensIn = 0, tokensOut = 0, model = 'claude-sonnet-4-6' }) {
+function insertChatMsg({ email, bookId, kind = 'book', tokensIn = 0, tokensOut = 0, model = 'claude-sonnet-4-6', feedback = null }) {
   const csResult = db.prepare(`
     INSERT INTO chat_sessions (book_id, kind, user_email, created_at, last_message_at)
     VALUES (?, ?, ?, datetime('now'), datetime('now'))
   `).run(bookId, kind, email);
   const msg = db.prepare(`
-    INSERT INTO chat_messages (session_id, role, content, tokens_in, tokens_out, provider, model, cache_read_in, cache_creation_in, created_at)
-    VALUES (?, 'assistant', 'hi', ?, ?, 'claude', ?, 0, 0, datetime('now'))
-  `).run(csResult.lastInsertRowid, tokensIn, tokensOut, model);
+    INSERT INTO chat_messages (session_id, role, content, tokens_in, tokens_out, provider, model, cache_read_in, cache_creation_in, feedback, created_at)
+    VALUES (?, 'assistant', 'hi', ?, ?, 'claude', ?, 0, 0, ?, datetime('now'))
+  `).run(csResult.lastInsertRowid, tokensIn, tokensOut, model, feedback);
   recordChatLedgerForMessage(msg.lastInsertRowid);
 }
 
@@ -177,6 +177,22 @@ test('getChatMessages: ohne email liefert alle Non-Admin-User', () => {
   const emails = new Set(r.rows.map(x => x.userEmail));
   assert.ok(emails.has('chat1@ex.com'));
   assert.ok(emails.has('chat2@ex.com'));
+});
+
+test('getChatMessages: Feedback-Filter liefert nur bewertete Antworten, ohne Text', () => {
+  seedUser('fb@ex.com');
+  seedBook(5202);
+  insertChatMsg({ email: 'fb@ex.com', bookId: 5202, feedback: -1, model: 'm-down' });
+  insertChatMsg({ email: 'fb@ex.com', bookId: 5202, feedback: 1 });
+  insertChatMsg({ email: 'fb@ex.com', bookId: 5202 });
+  const down = adminUsage.getChatMessages({ email: 'fb@ex.com', feedback: 'down' });
+  assert.equal(down.total, 1);
+  assert.equal(down.rows[0].feedback, -1);
+  assert.equal(down.rows[0].model, 'm-down');
+  assert.ok(!('content' in down.rows[0]), 'Privacy: kein Chat-Text');
+  assert.equal(adminUsage.getChatMessages({ email: 'fb@ex.com', feedback: 'up' }).total, 1);
+  assert.equal(adminUsage.getChatMessages({ email: 'fb@ex.com' }).total, 3);
+  assert.equal(adminUsage.getChatMessages({ email: 'fb@ex.com', feedback: 'bogus' }).total, 3);
 });
 
 test('listFeatureUsage + featureUsageTotals', () => {

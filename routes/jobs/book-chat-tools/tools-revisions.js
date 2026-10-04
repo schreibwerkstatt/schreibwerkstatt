@@ -43,7 +43,7 @@ function tool_diff_page_revisions(input, ctx) {
 
   const pageRow = getPageWithChapter(pageId);
   if (!pageRow || pageRow.book_id !== ctx.bookId) {
-    return { error: 'Seite nicht im aktuellen Buch.' };
+    return { error: 'Abschnitt nicht im aktuellen Buch.' };
   }
 
   let fromRev = null;
@@ -53,7 +53,7 @@ function tool_diff_page_revisions(input, ctx) {
     toRev   = pageRevisions.get(input.to_rev_id);
     if (!fromRev || !toRev) return { error: 'Revision-ID nicht gefunden.' };
     if (fromRev.page_id !== pageId || toRev.page_id !== pageId) {
-      return { error: 'Revision gehoert nicht zur Seite.' };
+      return { error: 'Revision gehoert nicht zum Abschnitt.' };
     }
   } else {
     const recent = pageRevisions.listForPage(pageId, 2);

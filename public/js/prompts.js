@@ -9,7 +9,10 @@
 import { _setIsLocal } from './prompts/state.js';
 import { _rebuildLektoratSchema } from './prompts/lektorat.js';
 import { _rebuildKomplettSchemas } from './prompts/komplett.js';
-import { configureLocales, _setPromptsContentHash, _allLocalePromptsSnapshot } from './prompts/core.js';
+import {
+  configureLocales, _setPromptsContentHash, _allLocalePromptsSnapshot,
+  _setKomplettExtractHash, _localePromptsSnapshot,
+} from './prompts/core.js';
 import * as lektoratNs from './prompts/lektorat.js';
 import * as lektoratTypenNs from './prompts/lektorat-typen.js';
 import * as textsortenNs from './prompts/textsorten.js';
@@ -89,6 +92,28 @@ function _promptsContentHash() {
     + reviewTypenNs.REVIEW_PROFIL_SIGNATUR);
 }
 
+// Teil-Hash nur über das, was die Phase-1-Extraktion der Komplettanalyse erzeugt:
+// die Extraktions-System-Prompts (alle Locales) + ihre Schemas. Speist
+// KOMPLETT_EXTRACT_VERSION (siehe prompts/core.js). PFLICHT: ein neuer Phase-1-Pass
+// mit eigenem SYSTEM_*-Prompt oder Schema gehört hier hinein, sonst invalidiert eine
+// Änderung daran den Extraktions-Cache nicht. Die User-Prompt-Builder
+// (prompts/komplett/extraktion/messages.js) stehen — wie beim Gesamt-Hash — nicht
+// darin; eine inhaltliche Änderung dort braucht einen Basis-Bump.
+const _KOMPLETT_EXTRACT_SYSTEM_KEYS = [
+  'SYSTEM_KOMPLETT_EXTRAKTION', 'SYSTEM_KOMPLETT_FIGUREN_PASS', 'SYSTEM_KOMPLETT_FIGUREN_STAMM',
+  'SYSTEM_KOMPLETT_ORTE_PASS', 'SYSTEM_KOMPLETT_FAKTEN_PASS', 'SYSTEM_KOMPLETT_EVENTS_PASS',
+  'SYSTEM_FIGUREN',
+];
+function _komplettExtractHash() {
+  return _hashContent(_localePromptsSnapshot(_KOMPLETT_EXTRACT_SYSTEM_KEYS) + JSON.stringify([
+    komplettNs.SCHEMA_KOMPLETT_EXTRAKTION, komplettNs.SCHEMA_KOMPLETT_FIGUREN_STAMM,
+    komplettNs.SCHEMA_KOMPLETT_FIGUREN_PASS,
+    komplettNs.SCHEMA_KOMPLETT_ORTE_PASS, komplettNs.SCHEMA_KOMPLETT_FAKTEN_PASS,
+    komplettNs.SCHEMA_KOMPLETT_EVENTS, komplettNs.SCHEMA_BEZIEHUNGEN,
+    komplettNs.SCHEMA_COVERAGE_AUDIT,
+  ]));
+}
+
 /**
  * Pflichtaufruf beim App-Start. Wirft bei fehlender Config.
  * @param {Object} cfg        promptConfig-Objekt (aus prompt-config.json bzw. /config)
@@ -104,10 +129,12 @@ export function configurePrompts(cfg, provider = 'claude') {
   // Nach dem Bau aller Prompts + Schemas: PROMPTS_VERSION mit Content-Hash versehen,
   // damit Wortlaut-/Schema-/Config-Drift den persistenten Cache automatisch invalidiert.
   _setPromptsContentHash(_promptsContentHash());
+  _setKomplettExtractHash(_komplettExtractHash());
 }
 
 export {
   PROMPTS_VERSION,
+  KOMPLETT_EXTRACT_VERSION,
   ERKLAERUNG_RULE,
   KORREKTUR_REGELN,
   STOPWORDS,
@@ -346,6 +373,7 @@ export {
   PLOT_SEVERITY_ENUM,
   PLOT_KONFLIKT_TYP_ENUM,
   PLOT_AKTION_REL_TYPES,
+  ideenMarker,
 } from './prompts/plot.js';
 
 export {
@@ -357,6 +385,16 @@ export {
   PLOT_CHAT_FORCE_FINAL_INSTRUCTION,
   SCHEMA_PLOT_CHAT_CLASSIC,
 } from './prompts/plot-chat.js';
+
+export {
+  buildIdeenChatSystemPrompt,
+  buildIdeenProposalMemoryBlock,
+  IDEEN_CHAT_PROPOSE_TOOLS,
+  IDEEN_CHAT_READ_TOOL_NAMES,
+  IDEEN_CHAT_SLIM_READ_TOOL_NAMES,
+  IDEEN_CHAT_FORCE_FINAL_INSTRUCTION,
+  SCHEMA_IDEEN_CHAT_CLASSIC,
+} from './prompts/ideen-chat.js';
 
 export {
   buildMotivSystemPrompt,

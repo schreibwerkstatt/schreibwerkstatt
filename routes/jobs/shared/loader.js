@@ -4,6 +4,7 @@ const contentStore = require('../../../lib/content-store');
 const { i18nError } = require('./jobs');
 const { htmlToText } = require('./ai');
 const { pagePreviewTexts } = require('../../../db/content-names');
+const { UNGROUPED_CHAPTER_NAME } = require('../../../lib/ungrouped-chapter');
 
 // Multi-Pass-Grenzen skalieren mit dem Input-Budget (context_window − max_tokens_out).
 // SINGLE_PASS_LIMIT: Schwelle, ab der in Chunks zerlegt wird. 70% des Budgets für
@@ -153,7 +154,7 @@ function groupByChapter(pageContents) {
   const groupOrder = [], groups = new Map();
   for (const p of pageContents) {
     const key = p.chapter_id != null ? String(p.chapter_id) : '__ungrouped__';
-    if (!groups.has(key)) { groupOrder.push(key); groups.set(key, { name: p.chapter || 'Sonstige Seiten', pages: [] }); }
+    if (!groups.has(key)) { groupOrder.push(key); groups.set(key, { name: p.chapter || UNGROUPED_CHAPTER_NAME, pages: [] }); }
     groups.get(key).pages.push(p);
   }
   return { groupOrder, groups };

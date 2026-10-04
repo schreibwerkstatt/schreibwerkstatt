@@ -127,6 +127,14 @@ router.post('/session/plot', jsonBody, (req, res) => createBookScopedSession(req
 
 router.get('/sessions/plot/:book_id', (req, res) => listBookScopedSessions(req, res, { kind: 'plot' }));
 
+/** Neue Ideen-Chat-Session erstellen (kind='ideen', buchweit, editor+ wie das Ideen-Board). */
+router.post('/session/ideen', jsonBody, (req, res) => createBookScopedSession(req, res, {
+  kind: 'ideen',
+  minRole: () => 'editor',
+}));
+
+router.get('/sessions/ideen/:book_id', (req, res) => listBookScopedSessions(req, res, { kind: 'ideen' }));
+
 /** Alle Sessions einer Seite (neueste zuerst, vollständig — gleiche Begründung
  *  wie bei den Buch-Sessions oben: ein Zeilen-Deckel liesse ältere Gespräche
  *  unerreichbar in der DB liegen). Leere Sessions werden ausgefiltert, der

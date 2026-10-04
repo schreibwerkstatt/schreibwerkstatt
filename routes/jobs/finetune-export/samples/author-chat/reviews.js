@@ -105,9 +105,12 @@ function buildReviewSamples(ctx) {
 
   // ── Echte Buch-Chat-Messages ──────────────────────────────────────────
   // Consecutive (user, assistant)-Paare aus Buch-Chat-Sessions (kind='book')
-  // direkt übernehmen. Das ist die authentischste Q&A-Quelle.
+  // direkt übernehmen. Das ist die authentischste Q&A-Quelle. Eine Antwort mit
+  // Daumen runter (`feedback = -1`) fällt weg: sie als Stimme des Buchs zu
+  // trainieren hiesse, genau das zu lernen, was der Autor verworfen hat.
+  // Unbewertete Antworten bleiben drin — die meisten Antworten bewertet niemand.
   const chatRows = db.prepare(`
-    SELECT cs.id AS sid, cm.role, cm.content, cm.created_at, cm.id AS mid
+    SELECT cs.id AS sid, cm.role, cm.content, cm.created_at, cm.id AS mid, cm.feedback
     FROM chat_messages cm
     JOIN chat_sessions cs ON cs.id = cm.session_id
     WHERE cs.book_id = ? AND cs.user_email = ? AND cs.kind = 'book'
@@ -118,6 +121,7 @@ function buildReviewSamples(ctx) {
     const b = chatRows[i + 1];
     if (a.sid !== b.sid) continue;
     if (a.role !== 'user' || b.role !== 'assistant') continue;
+    if (b.feedback === -1) continue;
     const q = (a.content || '').trim();
     const ans = (b.content || '').trim();
     if (q.length < 4 || ans.length < 30) continue;

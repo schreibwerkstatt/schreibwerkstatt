@@ -20,11 +20,13 @@ const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   getPrompts,
   jobAbortControllers, settledAll, tps,
+  recordCallCost, summarizeCostByPhase, formatCostByPhase,
 } = require('../shared');
 const { callAIWithTools, parseJSON, getContextConfigFor, resolveProvider } = require('../../../lib/ai');
 const appSettings = require('../../../lib/app-settings');
 const { setContext } = require('../../../lib/log-context');
 const { makePhaseTimer } = require('./utils');
+const { COST_LABEL, costTier } = require('./cost-labels');
 const { _komplettAiOverrides } = require('./job-shared');
 const { chapterIdsByName, listWorldFactsWithChapterNames } = require('../../../db/content-names');
 const retrieval = require('../../../lib/semantic-retrieval');
@@ -87,7 +89,11 @@ function buildFactCheckCandidates(bookIdInt, email) {
 // fortsetzen. Gibt den finalen Text zurück (JSON, ggf. mit Zitat-Prosa davor → parseJSON-Fallback).
 // Ein am max_tokens-Deckel abgeschnittenes Urteil wirft, BEVOR geparst wird: parseJSON
 // repariert tolerant und machte aus dem Rumpf sonst ein scheinbar vollständiges Urteil.
-async function _judgeOneFact(tok, userPrompt, systemPrompt, signal, callTools = callAIWithTools) {
+// Server-Tools (web_search) gibt es nur über callAIWithTools, nicht über aiCall — darum
+// bucht dieser Tool-Loop jede Runde selbst: Token-Summe, Cache-Zähler, Generierungszeit und
+// Kosten-Bucket (`tier.label` → tok.byPhase → job.result.costByPhase), wie aiCall es tut.
+async function _judgeOneFact(tok, userPrompt, systemPrompt, signal, callTools = callAIWithTools,
+  tier = costTier(COST_LABEL.factcheck)) {
   let messages = [{ role: 'user', content: userPrompt }];
   let text = '';
   for (let turn = 0; turn < _MAX_JUDGE_TURNS; turn++) {
@@ -95,6 +101,15 @@ async function _judgeOneFact(tok, userPrompt, systemPrompt, signal, callTools = 
     const r = await callTools(messages, systemPrompt, [WEB_SEARCH_TOOL], null, null, signal, 'claude');
     tok.in += r.tokensIn || 0;
     tok.out += r.tokensOut || 0;
+    tok.cacheRead = (tok.cacheRead || 0) + (r.cacheReadIn || 0);
+    tok.cacheCreate = (tok.cacheCreate || 0) + (r.cacheCreationIn || 0);
+    if (r.genDurationMs != null) tok.ms = (tok.ms || 0) + r.genDurationMs;
+    // Vor dem truncated-Guard: auch ein abgeschnittener Call wird berechnet.
+    recordCallCost(tok, tier, 'claude', {
+      tokensIn: r.tokensIn || 0, tokensOut: r.tokensOut || 0,
+      cacheReadIn: r.cacheReadIn || 0, cacheCreationIn: r.cacheCreationIn || 0,
+      cacheCreation1hIn: r.cacheCreation1hIn || 0, genDurationMs: r.genDurationMs,
+    });
     if (r.truncated || r.stopReason === 'max_tokens') {
       const tokIn = r.tokensIn || 0;
       const tokOut = r.tokensOut || 0;
@@ -251,12 +266,15 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
       bookIdInt, email, _factcheckModelName(effectiveProvider), probleme, figNameToId, chNameToId, summaryFallback);
     log.info(`Faktencheck gespeichert (${normalizedIssues.length} Faktenfehler von ${candidates.length} geprüften Fakten, ${researchUsed} mit Recherche-Beleg).`);
     log.info(`Phasen-Timing: ${pt.summary()}`);
+    const costByPhase = summarizeCostByPhase(tok);
+    if (costByPhase) log.info(`Kosten: ${formatCostByPhase(costByPhase)} → $${costByPhase.totalUsd.toFixed(2)}`);
     completeJob(jobId, {
       count: normalizedIssues.length,
       checked: candidates.length,
       researchEvidence: researchUsed,
       issues: normalizedIssues,
       warnings,
+      ...(costByPhase ? { costByPhase } : {}),
       tokensIn: tok.in, tokensOut: tok.out,
     }, tps(tok), `${normalizedIssues.length} Faktenfehler / ${candidates.length} geprüft${warnings.length ? ` warn=${warnings.length}` : ''}`);
   } catch (e) {

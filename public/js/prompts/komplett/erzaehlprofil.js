@@ -55,7 +55,7 @@ export function buildErzaehlprofilSinglePassPrompt(bookName, bookText) {
 
 ${_PROFIL_FELDER}
 
-WICHTIG: «kapitel» MUSS EXAKT der Kapitelname aus dem jeweiligen «## …»-Header im Text sein (keine Seitentitel, keine Nummerierung ergänzen). Gib genau EINEN Eintrag pro Kapitel aus, in Buchreihenfolge.
+WICHTIG: «kapitel» MUSS EXAKT der Kapitelname aus dem jeweiligen «## …»-Header im Text sein (keine Abschnittstitel, keine Nummerierung ergänzen). Gib genau EINEN Eintrag pro Kapitel aus, in Buchreihenfolge.
 
 Antworte mit diesem JSON-Schema:
 {
@@ -88,8 +88,9 @@ STRIKTE REGELN:
 - Jeder Befund nennt im Feld «beleg» die konkrete Kennzahl/Stelle, auf der er beruht (z.B. «Anna fehlt Kap. 4–21 (18 Kapitel)», «Spannungstief Kap. 12–16»).
 - Sei diagnostisch und rückwärtsgewandt: beschreibe, was strukturell auffällt, ggf. mit einem knappen handwerklichen Hinweis worauf zu achten ist. Schreibe KEINEN Buchtext, keine Szenen, keine Formulierungsvorschläge für das Manuskript.
 - Priorisiere: «hoch» nur für strukturell gravierende Muster (z.B. Hauptfigur verschwindet über weite Strecken, behauptete Beziehung ohne gemeinsame Szene, durchgehend flaches Pacing). Redundanzen weglassen.
+- Fehlt ein Abschnitt im JSON (z.B. «encounters», «droppedMotifs», «eventDeserts»), wurde er mangels Daten NICHT berechnet: leite daraus KEINEN Befund ab und erwähne ihn nicht. Ein vorhandenes, leeres Array heisst dagegen «geprüft, unauffällig».
 - Wenn die Befunde insgesamt unauffällig sind, gib wenige oder keine Einträge zurück und sage das in der Zusammenfassung.
-- 3–8 Befunde. Sprache: Deutsch.
+- Höchstens 8 Befunde.
 ${decl ? `\nDeklarierte Erzählform: ${decl}\n` : ''}
 Antworte mit diesem JSON-Schema:
 {

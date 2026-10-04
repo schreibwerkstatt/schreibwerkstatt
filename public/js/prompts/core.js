@@ -33,6 +33,22 @@ export function _setPromptsContentHash(hash) {
   PROMPTS_VERSION = hash ? `${PROMPTS_VERSION_BASE}-${hash}` : PROMPTS_VERSION_BASE;
 }
 
+// Engere Cache-Version NUR für die Phase-1-Extraktion der Komplettanalyse
+// (chapter_extract_cache/book_extract_cache, Phase-1-Checkpoint). Hash über die
+// Extraktions-SYSTEM_*-Prompts + Extraktions-Schemas (Facade: _komplettExtractHash).
+// Grund: PROMPTS_VERSION bewegt sich bei JEDER Prompt-Änderung der App (Lektorat,
+// Chat, Review …) — die teuerste Phase der App würde sonst nach fast jedem Release
+// komplett neu bezahlt, obwohl ihr Prompt unverändert ist.
+export let KOMPLETT_EXTRACT_VERSION = PROMPTS_VERSION_BASE;
+export function _setKomplettExtractHash(hash) {
+  KOMPLETT_EXTRACT_VERSION = hash ? `${PROMPTS_VERSION_BASE}-${hash}` : PROMPTS_VERSION_BASE;
+}
+
+/** Snapshot ausgewählter SYSTEM_*-Keys über alle Locales (Basis für Teil-Hashes). */
+export function _localePromptsSnapshot(keys) {
+  return JSON.stringify([..._localeMap.entries()].map(([loc, p]) => [loc, keys.map(k => p?.[k] ?? null)]));
+}
+
 /** Serialisierbarer Snapshot aller gebauten Locale-Prompts (alle Locales, alle
  *  SYSTEM_*-Cores inkl. eingebettetem Komplett-Schema) – Basis für den Content-Hash. */
 export function _allLocalePromptsSnapshot() {

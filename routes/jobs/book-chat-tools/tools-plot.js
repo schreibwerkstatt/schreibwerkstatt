@@ -4,7 +4,7 @@
 // zeigt, was der User VORHAT, nicht was schon im Manuskript steht. Pro Buch + User
 // skopiert (kein geteilter Katalog). Read-only, kein KI-Call.
 
-const { listActs, listThreads, listBeats } = require('../../../db/plot');
+const { listActs, listThreads, listBeats, listBeatRelations } = require('../../../db/plot');
 const { listDraftFigures } = require('../../../db/draft-figures');
 const { listFigureNamesForUser } = require('../../../db/book-chat/figures');
 const { _truncateResult } = require('./shared');
@@ -47,6 +47,13 @@ function tool_get_plot_board(input, ctx) {
   const actFilter = Number.isInteger(input?.act_id) ? input.act_id : null;
 
   const allBeats = listBeats(ctx.bookId, userEmail);
+  // Ausgehende Beat-Kanten (Setup/Payoff, Kausalität) je Quell-Beat — die Ziel-ID
+  // bleibt mit, damit das Modell den Payoff auch in einem gefilterten Snapshot findet.
+  const relsByBeat = new Map();
+  for (const r of listBeatRelations(ctx.bookId, userEmail)) {
+    if (!relsByBeat.has(r.from_beat_id)) relsByBeat.set(r.from_beat_id, []);
+    relsByBeat.get(r.from_beat_id).push({ typ: r.typ, zu_beat_id: r.to_beat_id, zu: r.to_titel });
+  }
   const figNames = _figureNameMap(ctx.bookId, userEmail);
   const draftNames = _draftFigureNameMap(ctx.bookId, userEmail);
 
@@ -97,11 +104,16 @@ function tool_get_plot_board(input, ctx) {
         : (b.beschreibung || null),
       status: b.status,
       ...(b.verworfen ? { verworfen: true } : {}),
+      ...(b.intensitaet != null ? { intensitaet: b.intensitaet } : {}),
+      ...(b.zeit ? { zeit: b.zeit } : {}),
       chapter_id: b.chapter_id || null,
       chapter_name: b.chapter_name || null,
       thread: b.thread_id != null ? (threadNameById[b.thread_id] || null) : null,
       figures,
       werkstatt_figures: (b.draft_fig_ids || []).map(did => draftNames[did]).filter(Boolean),
+      ...((b.locations || []).length ? { orte: b.locations.map(l => l.name).filter(Boolean) } : {}),
+      ...((b.motifs || []).length ? { motive: b.motifs.map(m => m.name).filter(Boolean) } : {}),
+      ...(relsByBeat.has(b.id) ? { beziehungen: relsByBeat.get(b.id) } : {}),
       ...(geerbteFigur ? { geerbte_figur: geerbteFigur } : {}),
       ...(geerbtesKapitel ? { geerbtes_kapitel: geerbtesKapitel } : {}),
     });
@@ -130,6 +142,7 @@ function tool_get_plot_board(input, ctx) {
     status_counts: statusCounts,
     ...(statusFilter ? { status_filter: statusFilter } : {}),
     status_legende: 'status = geplant (Idee, noch nicht geschrieben) oder im_buch (im Manuskript umgesetzt). verworfen ist ein separates Flag (true = ausgemustert, soll nicht mehr ins Buch) — unabhaengig vom status.',
+    felder_legende: 'Optionale Beat-Felder: intensitaet = geplante Spannung 1–5 (Spannungsbogen); zeit = WANN der Beat in der erzählten Welt spielt (Freitext); orte = Schauplätze; motive = verknüpfte Motive der Motiv-Werkstatt; beziehungen = ausgehende Kanten zu anderen Beats (typ bereitet-vor/zahlt-ein = Setup/Payoff, fuehrt-zu/motiviert/blockiert/spiegelt = Kausalität; zu_beat_id = Ziel-Beat).',
     ...(threadList.length ? { strang_hinweis: 'threads = parallele Erzähllinien (Swimlanes), oft je Hauptfigur, optional mit gebundenem Kapitel. Jeder Beat trägt sein thread-Feld (Strang-Name oder null = ohne Strang). Beats erben die Hauptfigur (geerbte_figur) und — ohne eigenes Kapitel — das Kapitel (geerbtes_kapitel) ihres Strangs implizit. Akte ohne eigener_akt_von_strang sind GETEILT (gelten für alle Stränge); ein Akt mit eigener_akt_von_strang gehört nur diesem Strang (Hybrid — dieser Strang plant mit einer eigenen Aktstruktur).' } : {}),
   });
 }

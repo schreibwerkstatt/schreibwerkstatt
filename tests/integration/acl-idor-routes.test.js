@@ -277,6 +277,54 @@ test('GET /plot, /ideen: fremdes Buch → 403, ohne Login → 401 NOT_LOGGED_IN'
   assert.equal(i.json.error_code, 'NOT_LOGGED_IN');
 });
 
+test('POST /ideen ohne Anker → Buch-Idee; Zuordnen nur auf Stellen DIESES Buchs', async () => {
+  sessionUser = ME;
+  const created = await api('POST', '/ideen', { book_id: MY_BOOK, content: 'Einfall ohne Ort' });
+  assert.equal(created.status, 200);
+  assert.equal(created.json.page_id, null);
+  assert.equal(created.json.chapter_id, null);
+  const id = created.json.id;
+
+  // Beide Anker zugleich bleibt ein Scope-Fehler.
+  const both = await api('POST', '/ideen', { book_id: MY_BOOK, page_id: MY_PAGE, chapter_id: MY_CHAPTER, content: 'x' });
+  assert.equal(both.json.error_code, 'INVALID_SCOPE');
+
+  // Fremdes Kapitel → BOOK_MISMATCH, die Idee bleibt Buch-Idee.
+  const foreign = await api('PATCH', `/ideen/${id}`, { chapter_id: FOREIGN_CHAPTER });
+  assert.equal(foreign.status, 400);
+  assert.equal(foreign.json.error_code, 'BOOK_MISMATCH');
+
+  const assigned = await api('PATCH', `/ideen/${id}`, { chapter_id: MY_CHAPTER });
+  assert.equal(assigned.status, 200);
+  assert.equal(assigned.json.chapter_id, MY_CHAPTER);
+
+  // Danach gilt within-kind: eine Kapitel-Idee wandert nicht auf eine Seite.
+  const cross = await api('PATCH', `/ideen/${id}`, { page_id: MY_PAGE });
+  assert.equal(cross.json.error_code, 'KIND_MISMATCH');
+});
+
+test('PUT /ideen/order: fremdes Buch → 403, fremde Idee kippt die ganze Reihenfolge', async () => {
+  sessionUser = ME;
+  const a = (await api('POST', '/ideen', { book_id: MY_BOOK, content: 'eins' })).json.id;
+  const b = (await api('POST', '/ideen', { book_id: MY_BOOK, content: 'zwei' })).json.id;
+  assert.equal((await api('PUT', '/ideen/order', { book_id: FOREIGN_BOOK, ids: [a, b] })).status, 403);
+
+  sessionUser = OTHER;
+  const fremd = (await api('POST', '/ideen', { book_id: FOREIGN_BOOK, content: 'fremd' })).json.id;
+  sessionUser = ME;
+  const mixed = await api('PUT', '/ideen/order', { book_id: MY_BOOK, ids: [b, fremd, a] });
+  assert.equal(mixed.status, 400);
+  assert.equal(mixed.json.error_code, 'ORDER_MISMATCH');
+
+  assert.equal((await api('PUT', '/ideen/order', { book_id: MY_BOOK, ids: [a, a] })).json.error_code, 'ORDER_REQ');
+
+  const ok = await api('PUT', '/ideen/order', { book_id: MY_BOOK, ids: [b, a] });
+  assert.equal(ok.status, 200);
+  const board = (await api('GET', `/ideen/board?book_id=${MY_BOOK}`)).json.ideen;
+  const order = new Map(board.map(i => [i.id, i.sort_order]));
+  assert.deepEqual([order.get(b), order.get(a)], [1, 2]);
+});
+
 // ── Share-API: Owner-Endpunkte ─────────────────────────────────────────────
 
 function seedComment() {

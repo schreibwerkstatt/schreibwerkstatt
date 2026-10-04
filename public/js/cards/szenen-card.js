@@ -16,6 +16,7 @@ import {
   buildKapitelLabels, wertungOf,
 } from '../book/szenen-stats.js';
 import { lsGet, lsSet } from '../safe-storage.js';
+import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 
 export function registerSzenenCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -26,7 +27,10 @@ export function registerSzenenCard() {
     viewMode: lsGet('szenen.viewMode') === 'grid' ? 'grid' : 'list', // 'list' | 'grid'
     _lifecycle: null,
     _memos: {},
+    // Map Szenen-id → Beats, deren Verankerung diese Szene trifft (Detail „Im Plot“).
+    plotBacklinks: {},
     ...memoMethods,
+    ...plotBacklinkMethods,
 
     get _filters() { return Alpine.store('catalogUi').szenenFilters; },
     get _szenen() { return Alpine.store('catalog').szenen; },
@@ -162,9 +166,10 @@ export function registerSzenenCard() {
       this._lifecycle = setupCardLifecycle(this, {
         name: 'szenen',
         showFlag: 'showSzenenCard',
-        resetState: () => ({ szenenLoading: false, szenenError: '', staleDeleting: false, _memos: {} }),
+        resetState: () => ({ plotBacklinks: {}, szenenLoading: false, szenenError: '', staleDeleting: false, _memos: {} }),
         load: async (root) => {
           this.szenenLoading = true;
+          this.loadPlotBacklinks('scene');
           try { await root.loadSzenen(Alpine.store('nav').selectedBookId); }
           finally { this.szenenLoading = false; }
         },

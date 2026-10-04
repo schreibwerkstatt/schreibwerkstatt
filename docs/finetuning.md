@@ -30,6 +30,8 @@ UI → Buch → Kachel **Fine-Tuning-Export**:
 
 **Korrekturen sind nur übernommene Lektorats-Befunde** (`page_checks.applied_errors_json`), nicht jeder KI-Vorschlag. Abgelehnte Vorschläge als Autor-Prosa zu trainieren, hiesse dem Modell genau die Formulierungen beizubringen, gegen die sich der Autor entschieden hat.
 
+**Echte Buch-Chat-Antworten mit Daumen runter fallen weg.** Autor-Chat übernimmt die (Frage, Antwort)-Paare aus Buch-Chat-Sessions ([samples/author-chat/reviews.js](../routes/jobs/finetune-export/samples/author-chat/reviews.js)); trägt die Antwort `chat_messages.feedback = -1` (siehe [docs/chats.md](chats.md)), entfällt das Paar. Unbewertete Antworten bleiben drin — die meisten bewertet niemand, ein Export nur aus Daumen-hoch-Antworten wäre fast leer. Gleiche Begründung wie bei den Korrekturen: was der Autor verworfen hat, soll das Modell nicht als seine Stimme lernen.
+
 **Dialog-Zitate** erkennt [lib/text.js](../routes/jobs/finetune-export/lib/text.js)#`extractDialogs` in allen fünf Schreibweisen: „…“, “…”, »…«, «…» und ASCII-`"…"`. Sie füttern den Dialog-Typ, „Wer sagt das?" und das Sprach-Portrait pro Figur im Autor-Chat; ohne erkannte Zitate fallen alle drei still weg.
 
 **Welt-Fakten (Autor-Chat Block 29) sind KI-extrahiert, nicht kuratiert.** `world_facts` ist ein abgeleiteter Index der Komplettanalyse mit Full-Replace — es gibt keinen Edit-Pfad. Der Sampler ([samples/author-chat/world-facts.js](../routes/jobs/finetune-export/samples/author-chat/world-facts.js)) giesst EINEN Fakt in rund ein halbes Dutzend Samples (mehrere Frage-Paraphrasen + Sammelantwort pro Subjekt + pro Kategorie + globale Welt-Übersicht). Deshalb filtert er die Fakten heraus, die der **Weltfakten-Faktencheck** (`typ='faktenfehler'` in `continuity_issues`, siehe [docs/komplett.md](komplett.md)) als real falsch belegt hat: bei Trainingsdaten ist die Vervielfachung eines Fehlers teurer als das fehlende Sample. Lief der Faktencheck nie, wird nichts gefiltert. Der Abgleich läuft über den normalisierten Text (`subjekt: fakt`) — der Befund trägt keine `fact_id`, und eine einzuführen hiesse, sie an einen Index zu hängen, den der nächste Lauf komplett ersetzt.
@@ -115,7 +117,7 @@ Tests:
 3. Szenen-Recall: „Was passiert in Kapitel «X»?"
 4. Stil-Fortsetzung aus Kapitel-Anfang.
 5. Neues Kapitel mit zwei Figuren generieren.
-6. Reverse-Lookup: „Auf welcher Seite steht: ‹Satz›?"
+6. Reverse-Lookup: „In welchem Abschnitt steht dieser Satz: ‹Satz›"
 
 ## 6. Troubleshooting
 

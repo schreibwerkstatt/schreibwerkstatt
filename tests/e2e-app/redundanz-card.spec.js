@@ -1,4 +1,5 @@
-// Redundanz-Radar-Karte gegen die ECHTE App (playwright.app.config.js).
+// Redundanz-Radar (Tab „Doppelungen" der Buchlandkarte) gegen die ECHTE App
+// (playwright.app.config.js).
 //
 // Der Smoke öffnet die Karte nur ohne Embedding-Backend — dort steht bloss der
 // „nicht konfiguriert"-Hinweis, die Ergebnis-Ansicht bleibt ungerendert. Hier
@@ -10,7 +11,7 @@
 const { test, expect } = require('../e2e/_helpers/fixtures');
 const { bootApp, selectSeededBook } = require('./_helpers/app');
 
-const CARD = '.card--redundanz';
+const CARD = '#buchlandkarte-panel-redundanz';
 
 test('redundanz: gespeichertes Ergebnis rendert, Ignorieren + Aufklappen', async ({ page }) => {
   await bootApp(page);
@@ -56,7 +57,8 @@ test('redundanz: gespeichertes Ergebnis rendert, Ignorieren + Aufklappen', async
 
   await page.evaluate(() => {
     window.Alpine.store('config').semanticSearchEnabled = true;
-    window.__app.toggleRedundanzCard();
+    window.__app.buchlandkarteTab = 'redundanz';
+    window.__app.toggleBuchlandkarteCard();
   });
   const card = page.locator(CARD);
   await expect(card).toBeVisible();
@@ -65,7 +67,7 @@ test('redundanz: gespeichertes Ergebnis rendert, Ignorieren + Aufklappen', async
   const items = card.locator('.redundanz-pair');
   await expect(items).toHaveCount(2);
   // Band folgt der Schwelle des Ergebnisses (0.88 = streng).
-  await expect(card.locator('.tabs-btn--active')).toHaveText(/Streng|Strict/);
+  await expect(card.locator('.redundanz-threshold .tabs-btn--active')).toHaveText(/Streng|Strict/);
   // Index neuer als das Ergebnis + geänderte Einträge → beide Hinweise.
   await expect(card.locator('.redundanz-stale')).toBeVisible();
   await expect(card.locator('.redundanz-meta .card-hint--warn').filter({ hasText: /neu aufgebaut|rebuilt/ })).toBeVisible();

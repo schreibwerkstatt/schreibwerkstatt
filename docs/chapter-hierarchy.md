@@ -2,6 +2,8 @@
 
 Kapitel können in Kapitel verschachtelt werden (max 3 Ebenen). SSoT der Verschachtelung lebt in `book_order.order_json` (Tree) **und** materialisiert in `chapters.parent_chapter_id` (FK, ON DELETE SET NULL). Tiefe wird nicht persistiert — sie wird bei Bedarf aus der Parent-Kette berechnet.
 
+Kapitel tragen **keinen Text** (`chapters` hat nur Name, Position, Parent) — geschrieben wird ausschliesslich in Seiten (`pages`, im UI «Abschnitt»). Ein Abschnitt kann ohne Kapitel auf oberster Ebene stehen, ein Kapitel ohne Abschnitt ist leer.
+
 ## Harte Grenzen
 
 - **`MAX_CHAPTER_DEPTH = 3`** — Konstante in [db/book-order.js](../db/book-order.js) (Backend-SSoT) + gespiegelt als Frontend-Konstante in [public/js/book-organizer/view.js](../public/js/book-organizer/view.js).

@@ -325,11 +325,11 @@
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "sw_pages",
-          "legendFormat": "Seiten",
+          "legendFormat": "Abschnitte",
           "refId": "A"
         }
       ],
-      "title": "Seiten",
+      "title": "Abschnitte",
       "type": "stat"
     },
     {

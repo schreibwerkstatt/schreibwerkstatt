@@ -1,0 +1,21 @@
+<!-- Plot-Referenzen an einer Gegenseite (Katalog-Figur, Schauplatz, Szene).
+     Fragment (string-seitiger @include) — dieselbe Frage, dieselbe Antwortform
+     auf allen drei Karten; Methoden aus public/js/book/plot-backlinks.js.
+
+     Der Host nennt das Ziel `beatOwnerId` (fig_id / loc_id / Szenen-id) und setzt
+     es per `x-data` auf einem Wrapper unmittelbar über dem Include-Marker:
+     `<div x-data="{ beatOwnerId: f.id }">` … `</div>`. (Den Marker selbst in diesem
+     Kommentar NIE ausschreiben — der Resolver würde ihn erneut expandieren.)
+
+     READ-ONLY. Kuratiert wird die Kante im Beat-Edit der Plot-Werkstatt; die
+     Szenen-Achse ist abgeleitet (Beat-Verankerung). Vom Strang geerbte Beteiligung
+     einer Hauptfigur erscheint gestrichelt (`inherited`). Klick → Beat im Board. -->
+<div class="entity-meta-row plot-backlinks" x-show="beatsFor(beatOwnerId).length">
+  <span class="entity-meta-label" x-text="$app.t('plot.backlinks.label')"></span>
+  <span class="entity-refs">
+    <template x-for="beat in beatsFor(beatOwnerId)" :key="beat.id">
+      <button type="button" class="entity-ref"
+              x-entity-ref="{ type: 'beat', id: beat.id, label: beat.titel, inherited: !!beat.inherited, title: beatChipTip(beat) }"></button>
+    </template>
+  </span>
+</div>

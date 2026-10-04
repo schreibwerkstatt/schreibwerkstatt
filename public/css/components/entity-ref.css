@@ -63,9 +63,12 @@ button.entity-ref:active { transform: none; }
 .entity-ref--static:hover .entity-ref__label { text-decoration: none; }
 .entity-ref--unresolved { border-left-style: dotted; color: var(--color-muted); }
 
-/* Abgeleitet statt direkt gesetzt (Plot: Kapitel/Figur vom Strang geerbt). */
+/* Abgeleitet statt direkt gesetzt (Plot: Kapitel/Figur vom Strang geerbt).
+   Label bleibt wie jede Referenz; die Herkunft sagt der Text-Zusatz, der
+   gestrichelte Rand ist nur das leise Zweitsignal. */
 .entity-ref--inherited { border-style: dashed; border-left-style: solid; background: transparent; }
-.entity-ref--inherited .entity-ref__label { color: var(--color-muted); font-style: italic; }
+.entity-ref__origin { flex: none; color: var(--color-muted); }
+.entity-ref__origin::before { content: "·\00a0"; content: "·\00a0" / ""; }
 
 /* „+N" — weitere, nicht einzeln gezeigte Referenzen derselben Reihe. */
 .entity-ref-more {

@@ -154,13 +154,13 @@ export function _buildWiederholungBlock(sw = []) {
     : '';
   return `
 Wiederholung-Regeln (typ: «wiederholung»):
-- Nur Inhaltswörter, die auffällig oft vorkommen: mind. 3× auf der gesamten Seite ODER 2× im selben oder direkt aufeinanderfolgenden Absatz
+- Nur Inhaltswörter, die auffällig oft vorkommen: mind. 3× im gesamten Abschnitt ODER 2× im selben oder direkt aufeinanderfolgenden Absatz
 - LEMMA-/STAMMBASIERT zählen, nicht oberflächlich nach Wortform: «lief / läuft / gelaufen / liefen» zählen alle als Wiederholung des Stamms «laufen». «Sonne / sonnig / sonnenklar» als Stamm «Sonn-». Auch Komposita mit identischem Kern zählen mit («Hauptmann / Mannschaft / Mann»). Wortformen einzelner Lemmas separat aufzulisten ist verboten.
 - Keine Pronomen, Hilfsverben, Artikel, Konjunktionen, Präpositionen, Eigennamen${swNote}
 - In direkter Rede / Dialog konservativer: Wiederholungen in Figurensprache sind oft bewusste Charakterisierung – nur melden, wenn die Wiederholung den Erzähltext (nicht die Figurenrede) betrifft, oder eine Figur derart auffällig wiederholt, dass es als Sprachfehler statt Charakterisierung wirkt.
 - «original»: vollständiger Satz zeichengenau aus dem Text (damit die Textstelle eindeutig auffindbar ist)
 - «korrektur»: derselbe Satz mit dem besten Synonym – exakt gleiche grammatische Form (Kasus, Numerus, Tempus)
-- «erklaerung»: EIN Satz, nennt das wiederholte Wort bzw. den Stamm («Stamm «laufen» dreimal auf der Seite»)
+- «erklaerung»: EIN Satz, nennt das wiederholte Wort bzw. den Stamm («Stamm «laufen» dreimal im Abschnitt»)
 - Synonym-Selbsttest vor jedem Eintrag: Klingt der Satz danach natürlich? Bedeutung erhalten? Passt zum Autorenstil?`;
 }
 
@@ -385,7 +385,7 @@ export function _buildPerspektivbruchBlock() {
   return `
 Perspektivbruch-Regeln (typ: «perspektivbruch»):
 - WENN oben ein Block «Etablierte Erzählform des Buchs» angegeben ist, ist DAS die verbindliche Referenz – primär gegen diese Vorgabe prüfen, nicht gegen Default-Annahmen über den Text. Eine Stelle, die der vorgegebenen Erzählperspektive widerspricht, ist ein Bruch (sofern nicht durch eine der Ausnahmen unten gedeckt).
-- WENN kein Erzählform-Block vorliegt: die in den ersten Absätzen der Seite etablierte Perspektive aus dem Text ableiten und gegen Abweichungen prüfen.
+- WENN kein Erzählform-Block vorliegt: die in den ersten Absätzen des Abschnitts etablierte Perspektive aus dem Text ableiten und gegen Abweichungen prüfen.
 - Stellen identifizieren, an denen die Erzählperspektive innerhalb einer Szene unbeabsichtigt wechselt
 - Typische Brüche: Wissen oder Gedanken einer Figur beschreiben, die nicht die aktuelle Perspektivfigur ist; plötzlicher Wechsel zwischen Ich-Erzähler und auktorialem Erzähler; Informationen, die der Perspektivfigur nicht zugänglich sind
 - «original»: vollständiger Satz zeichengenau aus dem Text
@@ -398,7 +398,7 @@ export function _buildTempuswechselBlock() {
   return `
 Tempuswechsel-Regeln (typ: «tempuswechsel»):
 - WENN oben ein Block «Etablierte Erzählform des Buchs» angegeben ist, ist DAS die verbindliche Referenz – primär gegen diese Vorgabe prüfen, nicht gegen Default-Annahmen. Ein Satz im Präsens innerhalb eines per Buch-Konfiguration auf Präteritum festgelegten Erzähltextes ist ein Bruch (sofern nicht durch eine der Ausnahmen unten gedeckt).
-- WENN kein Erzählform-Block vorliegt: das in den ersten Absätzen der Seite dominante Tempus aus dem Text ableiten und gegen Abweichungen prüfen.
+- WENN kein Erzählform-Block vorliegt: das in den ersten Absätzen des Abschnitts dominante Tempus aus dem Text ableiten und gegen Abweichungen prüfen.
 - VORGEHEN (Pflicht, systematisch – nicht stichprobenartig): Prüfe das finite Verb JEDES Erzählsatzes gegen das etablierte Erzähltempus. Jeder Erzählsatz, dessen finites Verb ohne dramaturgischen Grund vom etablierten Tempus abweicht, ist ein Bruch und wird gemeldet. Tempusbrüche sind ein häufig übersehener, aber objektiver Fehler – behandle sie wie einen Grammatikfehler, nicht wie eine Geschmacksfrage. Im Zweifel, ob ein Wechsel beabsichtigt ist, lieber melden (der Autor entscheidet beim Durchsehen).
 - Typisch: Erzählung im Präteritum mit plötzlichem Wechsel ins Präsens (oder umgekehrt), ohne dass ein Stilmittel erkennbar ist
 - «original»: vollständiger Satz zeichengenau aus dem Text

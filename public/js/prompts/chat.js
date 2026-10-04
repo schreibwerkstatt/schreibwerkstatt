@@ -253,43 +253,43 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
   }
 
   const page = [
-    `Aktuelle Seite: «${pageName}»`,
+    `Aktueller Abschnitt: «${pageName}»`,
     '',
   ];
 
-  page.push('=== SEITENINHALT ===', pageText, '');
+  page.push('=== ABSCHNITTSINHALT ===', pageText, '');
   if (pageChangeNote) {
     page.push(
       '=== ÄNDERUNGEN DES AUTORS SEIT CHAT-START ([-entfernt-] {+eingefügt+}) ===',
       pageChangeNote,
       '',
-      'Hinweis: Frühere Antworten und Vorschläge dieses Gesprächs beziehen sich teils auf den alten Stand. Beziehe dich auf den aktuellen Seiteninhalt oben; erwähne die Änderungen nur, wenn sie selbst Thema sind.',
+      'Hinweis: Frühere Antworten und Vorschläge dieses Gesprächs beziehen sich teils auf den alten Stand. Beziehe dich auf den aktuellen Abschnittsinhalt oben; erwähne die Änderungen nur, wenn sie selbst Thema sind.',
       '',
     );
   }
 
   if (Array.isArray(ideen) && ideen.length > 0) {
-    page.push('=== OFFENE IDEEN (Notizen des Autors für diese Seite + das umliegende Kapitel) ===');
+    page.push('=== OFFENE IDEEN (Notizen des Autors für diesen Abschnitt + das umliegende Kapitel) ===');
     for (const i of ideen) {
       const datum = i.created_at ? ` (${i.created_at.slice(0, 10)})` : '';
-      const tag = i.scope === 'chapter' ? '[Kapitel] ' : '[Seite] ';
+      const tag = i.scope === 'chapter' ? '[Kapitel] ' : '[Abschnitt] ';
       page.push(`- ${tag}${i.content}${datum}`);
     }
     page.push('');
-    page.push('Hinweis: Diese Ideen sind Notizen des Autors zu möglichen Fortsetzungen, Szenen oder inhaltlichen Ankern. [Kapitel]-Notizen gelten fürs ganze Kapitel, [Seite]-Notizen nur für diese Seite. Greife sie auf, hinterfrage oder ergänze sie konversationell — wandle sie aber nicht eigenmächtig in vorschlaege-Einträge um, solange der Autor nicht danach fragt.');
+    page.push('Hinweis: Diese Ideen sind Notizen des Autors zu möglichen Fortsetzungen, Szenen oder inhaltlichen Ankern. [Kapitel]-Notizen gelten fürs ganze Kapitel, [Abschnitt]-Notizen nur für diesen Abschnitt. Greife sie auf, hinterfrage oder ergänze sie konversationell — wandle sie aber nicht eigenmächtig in vorschlaege-Einträge um, solange der Autor nicht danach fragt.');
     page.push('');
   }
 
   if (lektorat && ((Array.isArray(lektorat.fehler) && lektorat.fehler.length > 0) || lektorat.stilanalyse || lektorat.fazit)) {
     const datum = lektorat.checked_at ? lektorat.checked_at.slice(0, 16).replace('T', ' ') : null;
-    page.push(`=== LETZTES LEKTORAT DIESER SEITE${datum ? ` (Stand ${datum})` : ''} ===`);
+    page.push(`=== LETZTES LEKTORAT DIESES ABSCHNITTS${datum ? ` (Stand ${datum})` : ''} ===`);
     page.push(JSON.stringify({
       ...(Array.isArray(lektorat.fehler) && lektorat.fehler.length > 0 ? { fehler: lektorat.fehler } : {}),
       ...(lektorat.stilanalyse ? { stilanalyse: lektorat.stilanalyse } : {}),
       ...(lektorat.fazit ? { fazit: lektorat.fazit } : {}),
     }, null, 2));
     page.push('');
-    page.push('Hinweis: Diese Beanstandungen stammen aus einem früheren Lektoratslauf. Der Seitentext kann seitdem überarbeitet worden sein — prüfe gegen den aktuellen Seiteninhalt, bevor du dich darauf beziehst. Wiederhole bereits erledigte Punkte nicht; greife noch offene Beanstandungen auf, wenn der Autor danach fragt oder daran arbeitet.');
+    page.push('Hinweis: Diese Beanstandungen stammen aus einem früheren Lektoratslauf. Der Abschnittstext kann seitdem überarbeitet worden sein — prüfe gegen den aktuellen Abschnittsinhalt, bevor du dich darauf beziehst. Wiederhole bereits erledigte Punkte nicht; greife noch offene Beanstandungen auf, wenn der Autor danach fragt oder daran arbeitet.');
     page.push('');
   }
 
@@ -299,7 +299,7 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     '  "antwort": "Deine Antwort als Freitext (Markdown erlaubt)",',
     '  "vorschlaege": [',
     '    {',
-    '      "original": "exakter Originaltext aus der Seite (zeichengenau)",',
+    '      "original": "exakter Originaltext aus dem Abschnitt (zeichengenau)",',
     '      "ersatz": "Ersatztext",',
     '      "begruendung": "kurze Begründung"',
     '    }',
@@ -309,7 +309,7 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     '',
     'VORSCHLÄGE-REGELN:',
     '- Wenn du stilistische, inhaltliche oder sprachliche Schwächen erkennst oder der Autor nach Verbesserungen fragt: liefere mindestens einen konkreten Vorschlag mit original und ersatz.',
-    '- original muss zeichengenau mit dem Seitentext übereinstimmen und darin genau einmal vorkommen (sonst etwas mehr Kontext mitnehmen).',
+    '- original muss zeichengenau mit dem Abschnittstext übereinstimmen und darin genau einmal vorkommen (sonst etwas mehr Kontext mitnehmen).',
     '- ersatz muss den Stil des Autors beibehalten.',
     '- vorschlaege ist nur dann ein leeres Array, wenn die Frage rein inhaltlich/konzeptionell ist und keine Textstelle betrifft (z.B. Plotfragen, Figurenmotivation).',
     '- titel_varianten nur, wenn der Autor nach einem Titel, einer Überschrift oder Headline fragt: dann 3 bis 5 kurze, unterschiedliche Varianten (nur der Titel, ohne Anführungszeichen oder Nummerierung). Sonst ein leeres Array.',
@@ -467,7 +467,7 @@ export function buildBookChatPreContext(passages) {
   head.push(
     '(Automatisch vorab geholt, dieselbe Pipeline wie `search_similar`; nach Ähnlichkeit sortiert, Ausschnitte können unvollständig sein.',
     'Beantworten diese Stellen die Frage, antworte direkt via `final_answer` — kein weiteres Werkzeug. Sonst arbeite von hier aus weiter:',
-    '`entity_id` einer Seite geht als page_id in `get_pages`/`quote_match`. Wörtliche Zitate IMMER über quote_match/quote_passage verifizieren, nie aus diesem Ausschnitt abschreiben.)',
+    '`entity_id` eines Abschnitts (kind page) geht als page_id in `get_pages`/`quote_match`. Wörtliche Zitate IMMER über quote_match/quote_passage verifizieren, nie aus diesem Ausschnitt abschreiben.)',
   );
   for (const p of list) {
     head.push(`--- ${p.kind}: «${p.title}» (entity_id ${p.entity_id}, score ${p.score}) ---`, p.text, '');
@@ -516,10 +516,10 @@ export function buildBookChatSystemPrompt(bookName, relevantPages, figuren, revi
       volatil.push('=== RELEVANTE TEXTSTELLEN AUS DEM BUCH ===');
       volatil.push('(Bedeutungs-relevanteste Auszüge, nach Ähnlichkeit sortiert; können unvollständig sein.)');
     } else {
-      volatil.push('=== RELEVANTE BUCHSEITEN ===');
+      volatil.push('=== RELEVANTE ABSCHNITTE AUS DEM BUCH ===');
     }
     for (const page of relevantPages) {
-      volatil.push(excerpt ? `--- Auszug aus Seite: ${page.name} ---` : `--- Seite: ${page.name} ---`);
+      volatil.push(excerpt ? `--- Auszug aus Abschnitt: ${page.name} ---` : `--- Abschnitt: ${page.name} ---`);
       volatil.push(page.text);
       volatil.push('');
     }

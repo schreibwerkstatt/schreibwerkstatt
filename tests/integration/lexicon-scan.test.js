@@ -135,3 +135,28 @@ test('GET /lexicon?summary=1: nur Kennzahlen und Vergleich, keine Ranglisten', a
   assert.equal(json.hapax, undefined);
   assert.equal(json.chapters, undefined);
 });
+
+test('Sprache: Umstellung auf Englisch → stale, Neu-Scan, eigene Sprach-Referenz', async () => {
+  const { saveBookSettings } = require('../../db/book-settings');
+  require('../../db/book-access').grantAccess(OTHER_BOOK, OWNER, 'owner', OWNER);
+  assert.equal(lexiconDb.getBookLexicon(OTHER_BOOK).language, 'de');
+  saveBookSettings(OTHER_BOOK, 'en', 'US', null, null);
+
+  const before = await get(OTHER_BOOK, OWNER);
+  assert.equal(before.json.stale, true, 'gespeicherter Scan hat die alte Sprache');
+
+  const job = await runScan(OTHER_BOOK);
+  assert.equal(job.result.skipped, false, 'die Sprache gehört zur Eingangs-Signatur');
+  assert.equal(job.result.hasReference, false, 'kein anderes englisches Buch → keine Referenz');
+  assert.equal(lexiconDb.getBookLexicon(OTHER_BOOK).language, 'en');
+
+  const after = await get(OTHER_BOOK, OWNER);
+  assert.equal(after.json.stale, false);
+  assert.equal(after.json.peers, null, 'deutsches Buch taugt nicht als Vergleich');
+
+  // Das deutsche Buch verliert seine einzige Referenz und rechnet neu.
+  const de = await runScan(BOOK);
+  assert.equal(de.result.skipped, false);
+  assert.equal(de.result.hasReference, false);
+  saveBookSettings(OTHER_BOOK, 'de', 'CH', null, null);
+});

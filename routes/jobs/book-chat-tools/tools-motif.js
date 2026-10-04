@@ -93,7 +93,7 @@ function tool_get_motifs(_input, ctx) {
     total_themes: themes.length,
     total_motifs: motifs.length,
     geister,
-    soll_ist_legende: 'soll = wo das Motiv laut Plan tragen soll (verknüpfte Figuren/Beats/Kapitel/Seiten). ist_count = wie oft die KI-Motiverkennung das Motiv real im Text fand (motif_occurrences). geist=true heisst: geplant, aber 0 Fundstellen (fallengelassen oder noch nicht geschrieben). Fundstellen-Detail pro Motiv über get_motif_occurrences.',
+    soll_ist_legende: 'soll = wo das Motiv laut Plan tragen soll (verknüpfte Figuren/Beats/Kapitel/Abschnitte). ist_count = wie oft die KI-Motiverkennung das Motiv real im Text fand (motif_occurrences). geist=true heisst: geplant, aber 0 Fundstellen (fallengelassen oder noch nicht geschrieben). Fundstellen-Detail pro Motiv über get_motif_occurrences.',
   });
 }
 

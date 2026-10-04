@@ -13,11 +13,12 @@ const {
 const { narrativeLabels } = require('../narrative-labels');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, contentHttpError,
-  aiCall, getPrompts, getBookPrompts, toSystemBlocks,
+  getPrompts, getBookPrompts, toSystemBlocks,
   loadOrderedBookContents, loadPageContents, groupByChapter, buildSinglePassBookText, cleanPageTextForAi,
   chunkLimitsFor, BATCH_SIZE, jobAbortControllers,
-  tps, retryOnTransientAi,
+  tps, retryOnTransientAi, summarizeCostByPhase,
 } = require('../shared');
+const { makeKomplettCall, withTtl } = require('./call');
 const appSettings = require('../../../lib/app-settings');
 const { providerClass, resolveProvider } = require('../../../lib/ai');
 const { setContext } = require('../../../lib/log-context');
@@ -43,8 +44,8 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
     log.info(`Kontinuität-Override (${effectiveProvider}): ${JSON.stringify(overrides.aiJob)} (global model=${appSettings.get(`ai.${effectiveProvider}.model`)}).`);
   }
   // `tier` (Kostenklasse für job.result.costByPhase) wie in runKomplettAnalyseJob durchreichen.
-  const call = (jobId_, tok_, prompt_, system_, fromPct, toPct, expectedChars, outputRatio, maxTokens, schema, tier) =>
-    aiCall(jobId_, tok_, prompt_, system_, fromPct, toPct, expectedChars, outputRatio, maxTokens, effectiveProvider, schema, tier);
+  // Geteilter Buch-Präfix → kein Schema (Cache-Regel, siehe ./call.js).
+  const call = makeKomplettCall(effectiveProvider);
   const { singlePass: singlePassLimit } = chunkLimitsFor(effectiveProvider);
   const prompts = await getPrompts(userEmail);
   const sys = await getBookPrompts(bookId, email);
@@ -115,17 +116,18 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
     // Multi-Pass-Fakten (Seiten-Anker + Verify-Belege); im Single-Pass null.
     let chapterFactsForSave = null;
     const isCloud = providerClass(effectiveProvider) === 'cloud';
-    const verifyCtx = { call, prompts, sys, jobId, tok, bookName, groups, groupOrder, log, bookIdInt, email, pageContents };
+    const verifyCtx = { call, prompts, sys, jobId, tok, bookName, groups, groupOrder, log, bookIdInt, email, pageContents, warnings };
     pt.mark('Laden');
 
     if (totalChars <= singlePassLimit) {
       updateJob(jobId, { progress: 60, statusText: 'job.phase.checkContinuity' });
-      // Buchtext als gecachter System-Block (1h), Auftrag im User-Prompt — wie P8.
+      // Buchtext als gecachter System-Block, Auftrag im User-Prompt — wie P8. Hier der
+      // einzige Leser (Verify/F4 haben eigene Systeme) → 5-min-Write statt 1h (../call.js).
       const bookText = buildSinglePassBookText(groups, groupOrder);
-      const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, bookText), ttl: '1h' };
+      const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, bookText) };
       result = await retryOnTransientAi(() => call(jobId, tok,
         prompts.buildKontinuitaetSinglePassPrompt(bookName, null, figurenKompakt, orteKompakt, narrativeLabels(getBookSettings(bookIdInt, email)), anachronismus),
-        [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KONTINUITAET_BLOCKS, '1h')], 60, 95, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_PROBLEME,
+        withTtl([bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KONTINUITAET_BLOCKS)], '5m'), 60, 95, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_PROBLEME,
         costTier(COST_LABEL.kontinuitaet),
       ), { log, label: 'Kontinuität Single-Pass' });
       pt.mark('Single-Pass Check');
@@ -236,12 +238,14 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
       { pageContents, requireQuoteEvidence: !chapterFactsForSave, chapterFacts: chapterFactsForSave });
     deleteCheckpoint('kontinuitaet', bookIdInt, email);
     log.info(`Phasen-Timing: ${pt.summary()}`);
+    const costByPhase = summarizeCostByPhase(tok);
     completeJob(jobId, {
       count: normalizedProbleme.length,
       issues: normalizedProbleme,
       zusammenfassung: result.zusammenfassung,
       warnings,
       tokensIn: tok.in, tokensOut: tok.out,
+      ...(costByPhase ? { costByPhase } : {}),
     }, tps(tok), `${normalizedProbleme.length} Probleme${warnings.length ? ` warn=${warnings.length}` : ''}`);
   } catch (e) {
     if (e.name !== 'AbortError') log.error(`Fehler: ${e.message}`);

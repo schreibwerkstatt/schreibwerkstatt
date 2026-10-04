@@ -15,6 +15,7 @@ import { EVT } from '../events.js';
 import { IDEA_LINK_KINDS } from './ideen-shared.js';
 import { computePopoverPos, refinePopoverPos } from '../popover-anchor.js';
 import { attachDismiss, detachDismiss } from '../cards/dismiss.js';
+import { mountInTopLayer } from '../fullscreen.js';
 
 // Schaetzung fuer den ersten Positions-Pass (gemessen wird danach, siehe
 // popover-anchor.js). Nah an der CSS-Breite von `.idee-link-popover`.
@@ -55,6 +56,9 @@ export const ideenLinkMethods = {
     // Hover-Tooltip des Triggers wegblenden — er hinge sonst ueber dem Popover.
     window.dispatchEvent(new CustomEvent(EVT.TOOLTIP_HIDE));
     const trigger = ev?.currentTarget;
+    // Im Vollbild des Ideen-Boards laege ein <body>-Kind hinter dem ::backdrop:
+    // zur Anzeigezeit unter den sichtbaren Host haengen (sonst No-Op).
+    mountInTopLayer(this.$refs.ideenLinkPopover, trigger);
     this._linkTriggerRect = trigger?.getBoundingClientRect?.() || null;
     if (this._linkTriggerRect) {
       this.linkPickerPos = computePopoverPos(this._linkTriggerRect, LINK_POPOVER_W, LINK_POPOVER_H);

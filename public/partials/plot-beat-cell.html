@@ -10,7 +10,20 @@
      diesen Kommentar vorzeitig (Doku-Text leckt sichtbar in jede Beat-Karte). -->
 <!-- Ansicht -->
 <template x-if="editingBeatId !== beat.id">
-  <div class="plot-beat-view">
+  <div class="plot-beat-view hover-reveal-host">
+    <!-- Schnellaktionen ohne Edit-Modus, erscheinen erst auf Zuwendung
+         (DESIGN.md „Hover-Reveal"). Bearbeiten bleibt der Klick auf den Titel. -->
+    <div class="plot-beat-actions hover-reveal">
+      <button type="button" class="icon-btn icon-btn--ghost plot-icon-btn" @click="toggleBeatVerworfen(beat)"
+              :data-tip="beat.verworfen ? $app.t('plot.beat.restore') : $app.t('plot.beat.discard')"
+              :aria-label="beat.verworfen ? $app.t('plot.beat.restore') : $app.t('plot.beat.discard')">
+        <svg class="icon" aria-hidden="true"><use :href="'/icons.svg#' + (beat.verworfen ? 'rotate-ccw' : 'minus')"/></svg>
+      </button>
+      <button type="button" class="icon-btn icon-btn--ghost plot-icon-btn plot-icon-btn--danger" @click="deleteBeat(beat)"
+              :data-tip="$app.t('plot.beat.delete')" :aria-label="$app.t('plot.beat.delete')">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+      </button>
+    </div>
     <div class="plot-beat-head">
       <!-- Drag-Griff: einzige Greiffläche für SortableJS (handle '.plot-beat-grip').
            So bleibt die übrige Karte voll klickbar (Titel→Edit, Tags→Figur

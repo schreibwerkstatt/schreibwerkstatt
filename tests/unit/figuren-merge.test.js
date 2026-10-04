@@ -237,3 +237,67 @@ test('ensureUniqueFigIds: doppelte Referenz UND ID-Kollision gemischt', () => {
   assert.equal(figuren.length, 2);
   assert.equal(new Set(figuren.map(f => f.id)).size, 2);
 });
+
+// ── Anrede-/Indizien-Widerspruch: gleicher Schlüssel allein verschmilzt nicht ──
+// normName schneidet Herr/Frau ab — «Herr Brunner» und «Frau Brunner» haben den
+// Schlüssel `brunner`. Ebenso gleicher Name mit verschiedenen Geburtsjahren.
+test('preMerge: Herr Brunner und Frau Brunner bleiben zwei Figuren, Dr. Brunner fällt auf den passenden', () => {
+  const chapterFiguren = [
+    { kapitel: 'K1', figuren: [{ id: 'a', name: 'Herr Brunner', kapitel: [{ name: 'K1' }] }] },
+    { kapitel: 'K2', figuren: [
+      { id: 'b', name: 'Frau Brunner', kapitel: [{ name: 'K2' }] },
+      { id: 'c', name: 'Frau Brunner', kapitel: [{ name: 'K2' }], beruf: 'Ärztin' },
+    ] },
+  ];
+  const { chapterFiguren: out, dupesRemoved } = preMergeChapterFiguren(chapterFiguren);
+  const names = out.flatMap(c => c.figuren.map(f => f.name));
+  assert.deepEqual(names, ['Herr Brunner', 'Frau Brunner']);
+  assert.equal(dupesRemoved, 1, 'nur die zweite «Frau Brunner» geht auf');
+  assert.equal(out[1].figuren[0].beruf, 'Ärztin');
+});
+
+test('preMerge: gleicher Name, verschiedene Geburtsjahre → NICHT zusammengeführt', () => {
+  const chapterFiguren = [
+    { kapitel: 'K1', figuren: [{ id: 'a', name: 'Anna Meier', geburtstag: '1943' }] },
+    { kapitel: 'K2', figuren: [{ id: 'b', name: 'Anna Meier', geburtstag: '1978' }] },
+  ];
+  const { chapterFiguren: out, dupesRemoved } = preMergeChapterFiguren(chapterFiguren);
+  assert.equal(dupesRemoved, 0);
+  assert.equal(out.flatMap(c => c.figuren).length, 2);
+});
+
+test('mergeDuplicate Stufe 1: Herr/Frau Brunner getrennt, Dr. Brunner ohne Widerspruch gemergt', () => {
+  const { figuren, idRemap } = mergeDuplicateFiguren([
+    { id: 'fig_1', name: 'Herr Brunner', beschreibung: 'Der Vater' },
+    { id: 'fig_2', name: 'Frau Brunner', beschreibung: 'Die Mutter' },
+    { id: 'fig_3', name: 'Dr. Brunner', geschlecht: 'männlich' },
+  ]);
+  assert.deepEqual(figuren.map(f => f.id).sort(), ['fig_1', 'fig_2']);
+  assert.equal(idRemap.fig_3, 'fig_1');
+  assert.equal(idRemap.fig_2, undefined);
+});
+
+test('mergeDuplicate Stufe 1: gleicher Name, Geburtsjahr-Widerspruch → zwei Figuren', () => {
+  const { figuren } = mergeDuplicateFiguren([
+    { id: 'fig_1', name: 'Anna Meier', geburtstag: '1943' },
+    { id: 'fig_2', name: 'Anna Meier', geburtstag: '1978' },
+  ]);
+  assert.equal(figuren.length, 2);
+});
+
+test('mergeDuplicate Stufe 1: Name ohne Anrede neben Herr UND Frau → mehrdeutig, bleibt eigenständig', () => {
+  const { figuren } = mergeDuplicateFiguren([
+    { id: 'fig_1', name: 'Herr Brunner', beschreibung: 'Der Vater, lang beschrieben' },
+    { id: 'fig_2', name: 'Frau Brunner', beschreibung: 'Die Mutter' },
+    { id: 'fig_3', name: 'Brunner' },
+  ]);
+  assert.equal(figuren.length, 3);
+});
+
+test('preMerge: Name ohne Anrede neben Herr UND Frau → nicht zugeordnet', () => {
+  const { dupesRemoved } = preMergeChapterFiguren([
+    { kapitel: 'K1', figuren: [{ id: 'a', name: 'Herr Brunner' }, { id: 'b', name: 'Frau Brunner' }] },
+    { kapitel: 'K2', figuren: [{ id: 'c', name: 'Brunner' }] },
+  ]);
+  assert.equal(dupesRemoved, 0);
+});

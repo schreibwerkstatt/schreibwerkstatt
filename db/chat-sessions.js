@@ -37,7 +37,7 @@ function deleteEmptyPageSessions(pageId, userEmail, now = Date.now()) {
   return _stmtDelEmptyPage.run(pageId, userEmail, _orphanCutoffIso(now)).changes;
 }
 
-/** Leere, aeltere buchweite Sessions (kind 'book'/'research'/'plot') loeschen. */
+/** Leere, aeltere buchweite Sessions (kind 'book'/'research'/'plot'/'ideen') loeschen. */
 function deleteEmptyBookSessions(bookId, kind, userEmail, now = Date.now()) {
   return _stmtDelEmptyBook.run(bookId, kind, userEmail, _orphanCutoffIso(now)).changes;
 }

@@ -122,7 +122,7 @@ test('Wissenschafts-Prompt bringt die vier Fach-Regelbloecke + Fach-Varianten', 
   const p = buildWissenschaft();
   for (const block of ['Beleg-Regeln (typ: «unbelegt»)', 'Begriffs-Regeln (typ: «begriffsinkonsistenz»)',
     'Autorenreferenz-Regeln (typ: «autorenform»)', 'Hedging-Regeln (typ: «hedging»)',
-    'Tempus-Regeln (typ: «tempuswechsel»)', 'Abschnitts-Regeln']) {
+    'Tempus-Regeln (typ: «tempuswechsel»)', 'Teilabschnitts-Regeln']) {
     assert.ok(p.includes(block), `Wissenschaft: Block «${block}» fehlt`);
   }
   // Die Fach-Wiederholungsregel muss Fachtermini ausnehmen, sonst arbeitet sie gegen

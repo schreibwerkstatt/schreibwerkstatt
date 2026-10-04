@@ -11,7 +11,7 @@ const { invalidateBookPageCache } = require('./jobs/chat');
 const { localIsoDate } = require('../lib/local-date');
 const searchIndex = require('../lib/search');
 const { htmlToPlainText, stripTableBlocks } = require('../lib/html-text');
-const { stampLexiconHistory } = require('../db/lexicon');
+const { stampLexiconHistory, bookLanguage } = require('../db/lexicon');
 const { MATTR_WINDOW } = require('../lib/lexicon/measures');
 
 const router = express.Router();
@@ -195,6 +195,8 @@ async function syncBook(bookId, ctx) {
     ...db.prepare('SELECT titel FROM figure_scenes WHERE book_id = ?').all(bookId).map(r => r.titel),
   ];
   const extraStopwords = tokenizeNamesForStopwords(nameSource);
+  // Buchsprache wählt die Stoppwörter der Wiederholungs-Metrik (de/en).
+  const language = bookLanguage(bookId);
 
   const previewItems = [];
   const indexItems = [];
@@ -227,7 +229,7 @@ async function syncBook(bookId, ctx) {
 
         // Stil-Index auf dem Prosatext, Figuren-Erwaehnungen auf dem Volltext:
         // eine in einer Tabellenzelle genannte Figur ist genannt.
-        const indexResult = computePageIndex(styleText, { extraStopwords });
+        const indexResult = computePageIndex(styleText, { extraStopwords, language });
         indexItems.push({ page_id: r.value.page_id, index: indexResult, fullText });
       }
     }

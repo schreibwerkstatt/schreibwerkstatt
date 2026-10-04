@@ -14,7 +14,7 @@ export const hashSetupMethods = {
       'showSourcesCard',
       'showKontinuitaetCard', 'showErzaehlprofilCard', 'showTagebuchRueckblickCard', 'showBookReviewCard', 'showBookChatCard',
       'showKapitelReviewCard', 'kapitelReviewChapterId',
-      'showBookStatsCard', 'showStilCard', 'showFehlerHeatmapCard', 'showRedundanzCard', 'showBuchlandkarteCard', 'showWortschatzCard', 'showStrukturCard', 'showTitelwerkstattCard',
+      'showBookStatsCard', 'showStilCard', 'showFehlerHeatmapCard', 'showBuchlandkarteCard', 'buchlandkarteTab', 'showWortschatzCard', 'showStrukturCard', 'showTitelwerkstattCard',
       'showBookSettingsCard', 'showUserSettingsCard', 'showMyStatsCard', 'showMyBooksCard', 'showHelpCard', 'showOnboardingCard',
       'showAdminUsersCard', 'showAdminSettingsCard', 'showAdminUsageCard', 'adminUsageTab',
       'showAdminCategoriesCard', 'showAdminBooksCard', 'showAdminLogsCard', 'showAdminParseFailsCard',

@@ -80,8 +80,8 @@ function buildEventSamples(ctx) {
     }
     if (seitenArr.length) {
       parts.push(langIsEn
-        ? `On page(s): ${seitenArr.slice(0, 5).join(', ')}.`
-        : `Auf Seite(n): ${seitenArr.slice(0, 5).join(', ')}.`);
+        ? `In section(s): ${seitenArr.slice(0, 5).join(', ')}.`
+        : `In Abschnitt(en): ${seitenArr.slice(0, 5).join(', ')}.`);
     }
     if (ev.bedeutung) parts.push((langIsEn ? 'Why it matters: ' : 'Bedeutung: ') + ev.bedeutung);
     const fullAnswer = parts.join(' ');
@@ -178,8 +178,8 @@ function buildEventSamples(ctx) {
       ? `In chapter(s): ${kapitelArr.slice(0, 5).join(', ')}.`
       : `In Kapitel: ${kapitelArr.slice(0, 5).join(', ')}.`);
     if (seitenArr.length) parts.push(langIsEn
-      ? `On page(s): ${seitenArr.slice(0, 5).join(', ')}.`
-      : `Auf Seite(n): ${seitenArr.slice(0, 5).join(', ')}.`);
+      ? `In section(s): ${seitenArr.slice(0, 5).join(', ')}.`
+      : `In Abschnitt(en): ${seitenArr.slice(0, 5).join(', ')}.`);
     if (ev.bedeutung)  parts.push((langIsEn ? 'Why it matters: ' : 'Bedeutung: ') + ev.bedeutung);
     const fullAnswer = parts.join(' ');
     enrichedEvents.push({ i, ereignis, datum: ev.datum, typ: ev.typ, bedeutung: ev.bedeutung,

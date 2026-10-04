@@ -19,6 +19,7 @@ import {
   _buildKomplettContextBlock, _buildMotivContextBlock,
   _buildStrukturContextBlock, _strukturAchse,
   _buildWeltContextBlock, _weltAchse,
+  _buildPlanContextBlock, _planAchse, _buildIdeenContextBlock,
 } from './context.js';
 
 export function buildBookReviewSinglePassPrompt(bookName, pageCount, bookText, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null, reviewSchwerpunkt = '', komplettContext = null, motivContext = null, strukturContext = null, weltContext = null } = {}) {
@@ -71,13 +72,13 @@ ${povBlock}
 Antworte mit diesem JSON-Schema:
 {
   "themen": "Hauptthemen und Inhalte in 1-2 Sätzen",
-  "stil": "Sprachbeobachtungen: Wortwahl, Satzbau, Ton in 1-2 Sätzen – falls eine Erzählform vorgegeben ist, kurz beurteilen, ob der Abschnitt diese konsistent einhält",
-  "funktion_kurz": "Funktion im Ganzen: was leistet dieser Abschnitt, wie schliesst er nach vorn und hinten an (1-2 Sätze)",
+  "stil": "Sprachbeobachtungen: Wortwahl, Satzbau, Ton in 1-2 Sätzen – falls eine Erzählform vorgegeben ist, kurz beurteilen, ob das Kapitel bzw. der Kapitelteil diese konsistent einhält",
+  "funktion_kurz": "Funktion im Ganzen: was leistet dieses Kapitel bzw. dieser Kapitelteil, wie schliesst es nach vorn und hinten an (1-2 Sätze)",
 ${felder.map(f => `  "${f.key}": "${f.hint}"`).join(',\n')},
   "staerken": ["konkrete Stärke 1", "konkrete Stärke 2"],
   "schwaechen": ["konkrete Schwäche 1", "konkrete Schwäche 2"],
   "zitate": [
-    { "kind": "staerke|schwaeche", "zitat": "wörtlich aus diesem Abschnitt", "kommentar": "was diese Stelle zeigt" }
+    { "kind": "staerke|schwaeche", "zitat": "wörtlich aus diesem Kapitel bzw. Kapitelteil", "kommentar": "was diese Stelle zeigt" }
   ]
 }
 </output_format>
@@ -90,7 +91,7 @@ ${chText}
 // Fokus: die seitenübergreifenden Achsen des Profils – Dinge, die beim
 // Seiten-Lektorat (Mikro-Fehler) und bei der Buchbewertung (Gesamtnote)
 // naturgemäss nicht erfasst werden.
-export function buildChapterReviewPrompt(chapterName, bookName, pageCount, chText, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null, reviewSchwerpunkt = '', komplettContext = null, position = null, strukturContext = null } = {}) {
+export function buildChapterReviewPrompt(chapterName, bookName, pageCount, chText, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null, reviewSchwerpunkt = '', komplettContext = null, position = null, strukturContext = null, planContext = null, ideenContext = null } = {}) {
   const axes = chapterReviewAxes(buchtyp);
   const kategorien = empfehlungKategorien(buchtyp, 'chapter');
   const werk = werkPhrase(buchtyp);
@@ -99,14 +100,16 @@ export function buildChapterReviewPrompt(chapterName, bookName, pageCount, chTex
   const positionBlock = _buildChapterPositionBlock(position);
   const kontextBlock = _buildKomplettContextBlock(komplettContext);
   const strukturBlock = _buildStrukturContextBlock(strukturContext, { achse: _strukturAchse(axes) });
+  const planBlock = _buildPlanContextBlock(planContext, { achse: _planAchse(axes) });
+  const ideenBlock = _buildIdeenContextBlock(ideenContext);
   return `<aufgabe>
 Bewerte das Kapitel «${chapterName}» aus dem Werk «${bookName}» kritisch und umfassend.
-Der Fokus liegt auf seitenübergreifenden Qualitäten – nicht auf Mikro-Fehlern (dafür gibt es das Seiten-Lektorat).
+Der Fokus liegt auf abschnittsübergreifenden Qualitäten – nicht auf Mikro-Fehlern (dafür gibt es das Abschnitts-Lektorat).
 </aufgabe>
 ${_buildAchsenBlock(axes, reviewGewichtung(buchtyp, 'chapter'))}
 ${_buildNotenskala(axes, notenTiers(buchtyp, 'chapter'), { scope: 'chapter', werk })}
 ${_buildEmpfehlungenBlock({ kategorien, scope: 'chapter', werk, quelle: 'Kapiteltext' })}
-${positionBlock}${schwerpunktBlock}${povBlock}${kontextBlock}${strukturBlock}
+${positionBlock}${schwerpunktBlock}${povBlock}${kontextBlock}${strukturBlock}${planBlock}${ideenBlock}
 ${_buildOutputFormat(axes, { scope: 'chapter', kategorien, zitatQuelle: 'dem Kapitel' })}
 <kapitelinhalt seiten="${pageCount}">
 ${chText}
@@ -133,13 +136,13 @@ export function buildBookReviewMultiPassPrompt(bookName, chapterAnalyses, totalP
   const geteilt = chapterAnalyses.length > kapitelCount;
   const synthIn = chapterAnalyses.map((ca, i) => {
     const teil = ca.teil ? `, Teil ${ca.teil.nr}/${ca.teil.von}` : '';
-    return _analyseBlock(ca, felder, `## Kapitel ${kapitelNr(ca, i)}: ${ca.name}${teil} (${ca.pageCount} Seiten)`);
+    return _analyseBlock(ca, felder, `## Kapitel ${kapitelNr(ca, i)}: ${ca.name}${teil} (${ca.pageCount} Abschnitte)`);
   }).join('\n\n');
   const grundlage = geteilt
-    ? `Grundlage sind ${chapterAnalyses.length} Analysen zu ${kapitelCount} Kapiteln (insgesamt ${totalPageCount} Seiten).
+    ? `Grundlage sind ${chapterAnalyses.length} Analysen zu ${kapitelCount} Kapiteln (insgesamt ${totalPageCount} Abschnitte).
 Lange Kapitel wurden in Teile zerlegt und je Teil analysiert ("Teil n/m" im Kopf): lies
 diese Teile als EIN Kapitel, nicht als eigenständige Kapitel.`
-    : `Grundlage sind die Analysen aller ${kapitelCount} Kapitel (insgesamt ${totalPageCount} Seiten).`;
+    : `Grundlage sind die Analysen aller ${kapitelCount} Kapitel (insgesamt ${totalPageCount} Abschnitte).`;
   return `<aufgabe>
 Bewerte ${werkAkk} «${bookName}» kritisch und umfassend.
 ${grundlage}
@@ -165,7 +168,7 @@ ${_buildOutputFormat(axes, { scope: 'book', kategorien, zitatQuelle: 'einem Bele
 // Kapitel das Input-Budget des Modells sprengt. Sub-Chunks wurden zuvor mit
 // `buildChapterAnalysisPrompt` analysiert und werden hier zu einer
 // Kapitelbewertung zusammengeführt.
-export function buildChapterReviewMultiPassPrompt(chapterName, bookName, subAnalyses, totalPageCount, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null, reviewSchwerpunkt = '', komplettContext = null, position = null, strukturContext = null } = {}) {
+export function buildChapterReviewMultiPassPrompt(chapterName, bookName, subAnalyses, totalPageCount, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null, reviewSchwerpunkt = '', komplettContext = null, position = null, strukturContext = null, planContext = null, ideenContext = null } = {}) {
   const axes = chapterReviewAxes(buchtyp);
   const kategorien = empfehlungKategorien(buchtyp, 'chapter');
   const werk = werkPhrase(buchtyp);
@@ -175,10 +178,12 @@ export function buildChapterReviewMultiPassPrompt(chapterName, bookName, subAnal
   const positionBlock = _buildChapterPositionBlock(position);
   const kontextBlock = _buildKomplettContextBlock(komplettContext);
   const strukturBlock = _buildStrukturContextBlock(strukturContext, { achse: _strukturAchse(axes) });
-  const synthIn = subAnalyses.map((ca, i) => _analyseBlock(ca, felder, `## Abschnitt ${i + 1} (${ca.pageCount} Seiten)`)).join('\n\n');
+  const planBlock = _buildPlanContextBlock(planContext, { achse: _planAchse(axes) });
+  const ideenBlock = _buildIdeenContextBlock(ideenContext);
+  const synthIn = subAnalyses.map((ca, i) => _analyseBlock(ca, felder, `## Teil ${i + 1} (${ca.pageCount} Abschnitte)`)).join('\n\n');
   return `<aufgabe>
 Bewerte das Kapitel «${chapterName}» aus dem Werk «${bookName}» kritisch und umfassend.
-Grundlage sind die Analysen von ${subAnalyses.length} Teilabschnitten des Kapitels (insgesamt ${totalPageCount} Seiten).
+Grundlage sind die Analysen von ${subAnalyses.length} Teilen des Kapitels (insgesamt ${totalPageCount} Abschnitte).
 Leite alle ${axes.length} Achsen aus der Abfolge der Teil-Analysen ab – auch wenn die einzelnen
 Ausgaben kompakt sind, MUSS die Kapitelbewertung jede Achse benennen. Wo eine Achse aus
 den Teil-Analysen nicht ableitbar ist, dies offen benennen
@@ -187,11 +192,11 @@ den Teil-Analysen nicht ableitbar ist, dies offen benennen
 ${_buildAchsenBlock(axes, reviewGewichtung(buchtyp, 'chapter'))}
 ${_buildNotenskala(axes, notenTiers(buchtyp, 'chapter'), { scope: 'chapter', werk })}
 ${_buildEmpfehlungenBlock({ kategorien, scope: 'chapter', werk, quelle: 'Kapiteltext' })}
-HINWEIS: Für "beispielzitate" nutze ausschliesslich die je Abschnitt gelieferten
+HINWEIS: Für "beispielzitate" nutze ausschliesslich die je Teil gelieferten
 "Belegzitate" – übernimm sie wörtlich, wähle 2–4 aussagekräftige aus (mind. eine
 staerke und eine schwaeche, sofern vorhanden). Erfinde keine neuen Zitate; liefern
-die Abschnitte gar keine, setze "beispielzitate" auf [].
-${positionBlock}${schwerpunktBlock}${povBlock}${kontextBlock}${strukturBlock}
+die Teile gar keine, setze "beispielzitate" auf [].
+${positionBlock}${schwerpunktBlock}${povBlock}${kontextBlock}${strukturBlock}${planBlock}${ideenBlock}
 <teil_analysen abschnitte="${subAnalyses.length}" seiten="${totalPageCount}">
 ${synthIn}
 </teil_analysen>

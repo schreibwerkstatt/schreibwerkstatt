@@ -69,6 +69,7 @@ export const HELP_EXTRAS = [
   { key: 'kapitelReview', group: 'review' },
   { key: 'researchChat',  group: 'world', needs: ['claude'] },
   { key: 'plotChat',      group: 'world', hiddenForBuchtyp: ['journalismus'] },
+  { key: 'ideenChat',     group: 'manuscript' },
   { key: 'imageGen',      group: 'tools', needs: ['claude', 'service'] },
   { key: 'comments',      group: 'tools' },
   { key: 'collab',        group: 'tools' },

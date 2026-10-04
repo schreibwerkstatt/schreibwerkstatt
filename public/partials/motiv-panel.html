@@ -13,7 +13,7 @@
         <!-- Nur x-for-Anker + Zeilen im Sortable-Container (Drop-Index sauber, h4 aussen). -->
         <div class="motiv-theme-rows" x-init="_initThemeSortable($el)">
           <template x-for="t in themes" :key="t.id">
-            <div class="motiv-theme-row" :data-theme-id="t.id">
+            <div class="motiv-theme-row hover-reveal-host" :data-theme-id="t.id">
               <span class="motiv-drag-grip" aria-hidden="true" :data-tip="$app.t('motiv.theme.dragHint')">
                 <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
               </span>
@@ -39,7 +39,7 @@
               </div>
               <button type="button" class="motiv-theme-name" @click="selectTheme(t.id)"
                       x-text="t.name" :data-tip="$app.t('motiv.theme.editTip')"></button>
-              <button type="button" class="icon-btn icon-btn--ghost" @click="deleteTheme(t)"
+              <button type="button" class="icon-btn icon-btn--ghost hover-reveal" @click="deleteTheme(t)"
                       :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')">
                 <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
               </button>

@@ -27,6 +27,7 @@
 const structure = require('./plot/structure');
 const beats = require('./plot/beats');
 const { figurePlotUsage } = require('./plot/figure-usage');
+const { plotEntityLinks } = require('./plot/entity-links');
 const relations = require('./plot/relations');
 const runs = require('./plot/runs');
 const anchor = require('./plot/anchor');
@@ -48,7 +49,7 @@ module.exports = {
   resolveMotifIds: beats.resolveMotifIds, resolveLocationIds: beats.resolveLocationIds,
   listBeatRelations: relations.listBeatRelations, getBeatRelation: relations.getBeatRelation,
   createBeatRelation: relations.createBeatRelation, deleteBeatRelation: relations.deleteBeatRelation,
-  figurePlotUsage,
+  figurePlotUsage, plotEntityLinks,
   insertPlotConsistencyRun: runs.insertPlotConsistencyRun, listPlotConsistencyRuns: runs.listPlotConsistencyRuns,
   getPlotConsistencyRun: runs.getPlotConsistencyRun, deletePlotConsistencyRun: runs.deletePlotConsistencyRun,
   insertPlotBrainstormRun: runs.insertPlotBrainstormRun, listPlotBrainstormRuns: runs.listPlotBrainstormRuns,

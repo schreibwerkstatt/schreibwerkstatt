@@ -161,6 +161,15 @@ export const beatsMethods = {
   },
   cancelEditBeat() { this.editingBeatId = null; if (window.Alpine) window.Alpine.store('nav').plotBeatId = null; },
 
+  // Zahl der gesetzten Einordnungs-Felder im Entwurf (Kapitel, Zeit, Figuren,
+  // Schauplaetze, Motive) — Badge am zugeklappten „Einordnung"-Toggle.
+  beatDraftDetailCount() {
+    const d = this.beatDraft || {};
+    return (d.chapter_id ? 1 : 0) + ((d.zeit || '').trim() ? 1 : 0)
+      + (d.figure_ids || []).length + (d.draft_figure_ids || []).length
+      + (d.location_ids || []).length + (d.motif_ids || []).length;
+  },
+
   // Panel-weite Tastaturkürzel im Beat-Editor (am .plot-beat-edit-Container, damit sie
   // auch bei Fokus in Beschreibung/Combobox greifen, nicht nur im Titelfeld): Cmd/Ctrl+S
   // committet den Beat (speichern + schliessen, wie Enter), Escape verwirft. Combobox/

@@ -46,6 +46,7 @@ export function registerAdminUsageCard() {
     adminUsageChatList: [],
     adminUsageChatTotal: 0,
     adminUsageChatOffset: 0,
+    adminUsageChatFeedback: '',   // '' | 'down' | 'up' — Filter der Chat-Liste
     // Chat-Qualitaet je Chat-Art (partials/admin-usage-chat-quality.html)
     adminUsageChatQuality: [],
 
@@ -91,6 +92,10 @@ export function registerAdminUsageCard() {
       // Multi-Select-Filter: bei jeder Array-Veraenderung Pagination zuruecksetzen
       // und (falls Jobs/Chat-Tab offen) neu laden. JSON-Stringify als Deps, weil
       // Alpine $watch auf primitiver Gleichheit prueft, nicht auf Array-Inhalt.
+      this.$watch(() => this.adminUsageChatFeedback, () => {
+        this.adminUsageChatOffset = 0;
+        if (this.adminUsageTab === 'chat') this.adminUsageLoadTab();
+      });
       this.$watch(() => JSON.stringify(this.adminUsageFilterUsers), () => {
         this.adminUsageJobsOffset = 0;
         this.adminUsageChatOffset = 0;

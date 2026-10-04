@@ -84,6 +84,8 @@ export const crudMethods = {
       if (isStale()) return;
       this.drafts = Array.isArray(rows) ? rows : [];
       this.errorMessage = '';
+      // Ideen-Plaketten je Werkstatt-Figur — non-fatal, ohne await.
+      this.loadIdeaBacklinks?.('draft');
       if (this.selectedDraftId && !this.drafts.find(d => d.id === this.selectedDraftId)) {
         this.selectedDraftId = null;
       }

@@ -50,6 +50,10 @@ const COST_LABEL = Object.freeze({
   // den Graubereich einer deterministischen Schicht.
   // Hebel: ai.komplett.entity_match_judge, ai.komplett.remap_rescue.
   match: 'match',
+  // Weltfakten-Realitätscheck (eigenständiger Job, Web-Suche je Fakt). Hebel:
+  // ai.komplett.factcheck, Buch-Opt-in weltfakten_real_pruefen. Die Web-Such-
+  // Gebühr selbst steckt NICHT in diesem Bucket (nur Tokens).
+  factcheck: 'factcheck',
 });
 
 // Sammel-Bucket für Calls ohne Label (summarizeCostByPhase in
