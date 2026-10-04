@@ -2,7 +2,7 @@
 
 Zwei Wege:
 
-- **HACS-Integration** [bedeberger/schreibwerkstatt-homeassistant](https://github.com/bedeberger/schreibwerkstatt-homeassistant) (eigenes Repo, eigene Versionen) — liest `/metrics.json`, legt alle Entities aus den Beschreibungen selbst an, inklusive je ein Gerät pro Benutzer (Scope `metrics:users`). Einrichtung über die HA-Oberfläche, Reauth bei widerrufenem Token. Vertrag: [../metrics-api.md](../metrics-api.md#json-für-home-assistant).
+- **HACS-Integration** [schreibwerkstatt/homeassistant](https://github.com/schreibwerkstatt/homeassistant) (eigenes Repo, eigene Versionen) — liest `/metrics.json`, legt alle Entities aus den Beschreibungen selbst an, inklusive je ein Gerät pro Benutzer (Scope `metrics:users`). Einrichtung über die HA-Oberfläche, Reauth bei widerrufenem Token. Vertrag: [../metrics-api.md](../metrics-api.md#json-für-home-assistant).
 - **Dieses YAML-Paket** — konsumiert `/metrics` als Prometheus-Text via Home Assistants `rest`-Integration, ohne Zusatzinstallation. Deckt die instanzweiten Kennzahlen ab, inklusive Lovelace-Dashboard mit Live-Tiles, Trends und Kosten-Tracking. Der Rest dieser Datei beschreibt diesen Weg.
 
 ## Voraussetzungen

@@ -16,7 +16,7 @@
 #
 # Auf einem frischen LXC genuegt das Skript allein — liegt es nicht in einem
 # Repo-Checkout, klont es das Repo selbst nach /root/schreibwerkstatt:
-#   curl -fsSL https://raw.githubusercontent.com/bedeberger/schreibwerkstatt/main/deploy/install-demo.sh \
+#   curl -fsSL https://raw.githubusercontent.com/schreibwerkstatt/schreibwerkstatt/main/deploy/install-demo.sh \
 #     | bash -s -- --domain demo.example.com
 #
 # Optionen:
@@ -39,7 +39,7 @@
 #     --rootfs local-lvm:12 --net0 name=eth0,bridge=vmbr0,ip=dhcp \
 #     --features nesting=1 --unprivileged 1 --onboot 1 --start 1
 #   pct exec 210 -- bash -c 'apt-get update && apt-get install -y curl'
-#   pct exec 210 -- bash -c 'curl -fsSL https://raw.githubusercontent.com/bedeberger/schreibwerkstatt/main/deploy/install-demo.sh | bash -s -- --domain demo.example.com'
+#   pct exec 210 -- bash -c 'curl -fsSL https://raw.githubusercontent.com/schreibwerkstatt/schreibwerkstatt/main/deploy/install-demo.sh | bash -s -- --domain demo.example.com'
 #
 # Reverse-Proxy: dieselbe Konfiguration wie Prod (deploy/nginx.conf bzw.
 # deploy/nginx-npmplus.conf), nur `<DOMAIN>` = Demo-Domain und Upstream-Port
@@ -52,7 +52,7 @@ INSTALL_DIR="${INSTALL_DIR:-/opt/schreibwerkstatt-demo}"
 SERVICE="${SERVICE:-schreibwerkstatt-demo}"
 PORT="${PORT:-3738}"
 RUN_USER="${RUN_USER:-swdemo}"
-REPO_URL="${REPO_URL:-https://github.com/bedeberger/schreibwerkstatt.git}"
+REPO_URL="${REPO_URL:-https://github.com/schreibwerkstatt/schreibwerkstatt.git}"
 REPO_REF="${REPO_REF:-main}"
 SRC_CACHE="${SRC_CACHE:-/root/schreibwerkstatt}"
 

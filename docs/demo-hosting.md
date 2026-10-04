@@ -111,7 +111,7 @@ Mechanik: ein **zweiter self-hosted Runner** auf der Demo-LXC, adressiert über 
 
    ```bash
    # Token holen (gilt eine Stunde) — lokal, mit gh:
-   gh api -X POST repos/bedeberger/schreibwerkstatt/actions/runners/registration-token --jq .token
+   gh api -X POST repos/schreibwerkstatt/schreibwerkstatt/actions/runners/registration-token --jq .token
 
    # auf der Demo-LXC:
    bash deploy/install-runner.sh --token <TOKEN> --label demo --name schreibwerkstatt-demo

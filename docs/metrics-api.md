@@ -108,7 +108,7 @@ Nur User mit Status `active`, Labels `{user, user_name}` (E-Mail, Anzeigename). 
 
 ## JSON für Home Assistant
 
-`GET /metrics.json` — Client-Vertrag der HACS-Integration [bedeberger/schreibwerkstatt-homeassistant](https://github.com/bedeberger/schreibwerkstatt-homeassistant) (deren `tests/fixtures/metrics.json` ist eine echte Antwort dieses Collectors); eine inkompatible Änderung bumpt `schema` ([lib/metrics/format.js](../lib/metrics/format.js)`#JSON_SCHEMA`). Neue Kennzahlen und neue Felder sind kompatibel.
+`GET /metrics.json` — Client-Vertrag der HACS-Integration [schreibwerkstatt/homeassistant](https://github.com/schreibwerkstatt/homeassistant) (deren `tests/fixtures/metrics.json` ist eine echte Antwort dieses Collectors); eine inkompatible Änderung bumpt `schema` ([lib/metrics/format.js](../lib/metrics/format.js)`#JSON_SCHEMA`). Neue Kennzahlen und neue Felder sind kompatibel.
 
 ```json
 {
