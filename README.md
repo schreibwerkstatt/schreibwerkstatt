@@ -91,4 +91,4 @@ Alle tiefergehenden Fachkonzepte, Datenmodelle und Architekturentscheidungen lie
 
 ## Lizenz
 
-**GNU Affero General Public License v3.0** (AGPL-3.0) – siehe [LICENSE](LICENSE).
+**GNU Affero General Public License v3.0 oder später** (AGPL-3.0-or-later) – siehe [LICENSE](LICENSE).
