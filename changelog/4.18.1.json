@@ -1,0 +1,16 @@
+{
+  "version": "4.18.1",
+  "date": "2026-10-04",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Mac-App: Auch in der Mac-App heisst die Gliederungseinheit jetzt «Abschnitt» statt «Seite», etwa im Abschnitts-Picker, in der Toolbar und in den Einstellungen.",
+      "en": "Mac app: the Mac app now also calls the unit of your outline a “section” instead of a “page”, for example in the section picker, the toolbar and the settings."
+    },
+    {
+      "kind": "behoben",
+      "de": "Mac-App, Toolbar: Der Tooltip zu den heute geschriebenen Wörtern zeigte statt der Zahlen einen Platzhalter.",
+      "en": "Mac app, toolbar: the tooltip for today's written words showed a placeholder instead of the numbers."
+    }
+  ]
+}
