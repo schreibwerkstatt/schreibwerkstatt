@@ -1,13 +1,11 @@
-// Bekannte Fehler des Focus-Editors — als `test.fail()` festgehalten.
+// Ein browser-eigener Scroll zwischen Tastendruck und Recenter-Frame darf den
+// geplanten Typewriter-Tick nicht verwerfen (card.js#_focusUpdateActive).
 //
-// Gefunden beim Durchspielen der Akzeptanzliste in WebKit (Safari, macOS-Client
-// in WKWebView). Bewusst NICHT behoben: der Focus-Editor ist stabilisiert, eine
-// Änderung braucht einen ausdrücklichen Auftrag (public/js/editor/CLAUDE.md).
-//
-// `test.fail()` heisst: der Test beschreibt das RICHTIGE Verhalten und schlägt
-// heute erwartungsgemäss fehl. Wer den Fehler behebt, bekommt ein „Expected to
-// fail, but passed" — dann `test.fail()` entfernen, und der Test wird zum
-// normalen Regressionsschutz.
+// Symptom ohne die Regel (WebKit: Safari, macOS-Client): nach Strg+Pos1,
+// Strg+Ende oder einem Klick nahe am Rand blieb der ERSTE getippte Buchstabe
+// am Rand stehen, erst der zweite holte die Zeile auf die Schreiblinie.
+// Chromium scrollt in der Lage nicht selbst — der Ablauf ist hier darum von
+// Hand nachgestellt und läuft in jeder Engine.
 
 const { test, expect } = require('./_helpers/fixtures');
 
@@ -23,16 +21,10 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('Browser-eigener Scroll zwischen Tastendruck und Recenter-Frame verwirft den Typewriter nicht', async ({ page }) => {
-  // Symptom in WebKit: nach Strg+Pos1, Strg+Ende oder einem Klick nahe am Rand
-  // bleibt der ERSTE getippte Buchstabe am Rand stehen, erst der zweite holt die
-  // Zeile auf die Schreiblinie. Mechanismus: der Tastendruck plant einen
-  // Typewriter-Tick (`_focusUpdateActive(true)`, gecancelter RAF). Noch vor
-  // diesem Frame scrollt WebKit selbst, um den Caret sichtbar zu machen. Dieser
-  // Scroll trägt keine prog-Marke, `onScroll` hält ihn für Lese-Scrollen und
-  // ruft `_focusUpdateActive(false, { preferCenter: true })` — das cancelt den
-  // geplanten Tick. Chromium scrollt in der Lage nicht selbst; der Ablauf ist
-  // hier darum von Hand nachgestellt und läuft in jeder Engine.
-  test.fail();
+  // Der Tastendruck plant einen Typewriter-Tick (`_focusUpdateActive(true)`).
+  // Noch vor diesem Frame scrollt der Browser selbst (WebKit: Caret sichtbar
+  // machen) — ohne prog-Marke, `onScroll` meldet ihn als Lese-Scroll
+  // (`preferCenter`). Der Caret-Tick muss trotzdem laufen.
   const r = await page.evaluate(async (sel) => {
     const c = document.querySelector(sel);
     // Caret in einen Absatz setzen (das selectionchange recentert ihn auf die

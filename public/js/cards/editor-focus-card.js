@@ -24,6 +24,8 @@ export function registerEditorFocusCard() {
     _focusGen: 0,
     _focusListeners: null,
     _focusRaf: null,
+    // Anfrage des ausstehenden Recenter-RAF ({ scroll, opts }) — siehe _focusUpdateActive.
+    _focusPending: null,
     _focusAbort: null,
     // Auto-`<p>`-Schreibslot vom Eintritt — Exit räumt ihn ab, falls leer.
     _focusAutoAddedP: null,

@@ -141,6 +141,7 @@ export const focusCardMethods = {
       this._focusListeners = null;
     }
     if (this._focusRaf) { cancelAnimationFrame(this._focusRaf); this._focusRaf = null; }
+    this._focusPending = null;
   },
 
   // Undo/Redo-Einstiegspunkte des Fokusmodus. Aufrufer ist der Tastengriff
@@ -311,13 +312,30 @@ export const focusCardMethods = {
   // erzwingen, auch wenn der Block gleich blieb (`compositionend`).
   _focusUpdateActive(scroll, opts = {}) {
     if (this._focusState !== 'active') return;
+    // Ein noch ausstehender Caret-Tick mit Typewriter-Scroll wird von einem
+    // Lese-Scroll-Tick (`preferCenter`) NICHT verworfen, sondern unverändert
+    // übernommen. Why: WebKit scrollt nach einem Tastendruck nahe am Rand
+    // (nach Strg+Pos1/Strg+Ende, Klick am Rand) selbst, um den Caret sichtbar
+    // zu machen — noch bevor der geplante Frame läuft. Dieser Scroll trägt
+    // keine prog-Marke, `onScroll` hält ihn für Lese-Scrollen, und der
+    // gecancelte RAF liess den ersten Buchstaben am Rand stehen; erst der
+    // zweite holte die Zeile auf die Schreiblinie. Ein echter Lese-Scroll
+    // innerhalb desselben Frames wie ein Tastendruck verliert dadurch nur
+    // diesen einen Frame — der nächste Scroll-Tick setzt das Spotlight wieder.
+    const pending = this._focusRaf ? this._focusPending : null;
     if (this._focusRaf) cancelAnimationFrame(this._focusRaf);
+    if (pending?.scroll && opts.preferCenter === true) {
+      scroll = true;
+      opts = pending.opts;
+    }
+    this._focusPending = { scroll, opts };
     const preferCenter = opts.preferCenter === true;
     const imeSafe = opts.imeSafe === true;
     const force = opts.force === true;
     const gen = this._focusGen;
     this._focusRaf = requestAnimationFrame(() => {
       this._focusRaf = null;
+      this._focusPending = null;
       // try/catch um den gesamten RAF-Body: ein DOM-Edge-Case (Selection über
       // Shadow-Root, obskurer Range-Fehler) darf den Editor nicht stillstellen.
       // Fehler → loggen, nächster Event-Tick versucht neu (Invariante 8).

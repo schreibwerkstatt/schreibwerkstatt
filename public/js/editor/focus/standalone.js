@@ -238,6 +238,7 @@ export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT
     _focusGen: 0,
     _focusListeners: null,
     _focusRaf: null,
+    _focusPending: null,
     _focusAutoAddedP: null,
     $nextTick: (fn) => Promise.resolve().then(fn),
     async exitFocusMode() {

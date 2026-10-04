@@ -58,8 +58,7 @@ npm run test:focus     # Harness-Suite + App-Suite (echtes CSS)
 
 Grün ist die **Untergrenze**, nicht der Beweis: die App-Suite (`focus-editor-app.spec.js`
 + `focus-acceptance-app.spec.js`, Chromium und Firefox) deckt inzwischen alle elf Griffe
-und Punkt 12 ab — die Aufschlüsselung steht in [focus-editor.md](focus-editor.md#tests),
-die bekannten WebKit-Fehler unter [Bekannte Fehler](focus-editor.md#bekannte-fehler).
+und Punkt 12 ab — die Aufschlüsselung steht in [focus-editor.md](focus-editor.md#tests).
 
 Darum bleibt diese Liste trotzdem geklickt: die Automatisierung misst Positionen und
 Einzelbilder. Zucken oder Flattern beim echten Tipptempo, echte Mobil-Tastaturen und
