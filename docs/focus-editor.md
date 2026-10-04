@@ -6,7 +6,7 @@ Heilige Kuh: jede Änderung an diesem Modul muss dieses Dokument konsultieren. D
 
 **Stale-Write-Konflikt:** Der Focus-Editor läuft auf der Notebook-Save-Pipeline (`saveEdit`/`quickSave` mit `source: 'focus'`) und erbt damit den **Block-Level-Merge** — kollisionsfreie Block-Edits zweier Geräte mergen still, echte Block-Kollisionen öffnen das Auflösungs-Modal. Details + Invarianten in [notebook-editor.md → Block-Level-Merge](notebook-editor.md#block-level-merge-bei-stale-write).
 
-Code: [public/js/editor/focus.js](../public/js/editor/focus.js) (Facade) → [public/js/editor/focus/](../public/js/editor/focus/) (Submodule), [public/js/cards/editor-focus-card.js](../public/js/cards/editor-focus-card.js) (Alpine.data-Sub), [public/css/editor/focus/focus-mode.css](../public/css/editor/focus/focus-mode.css). Tests: vollständige Liste in der [Tests-Tabelle](#tests) unten (8 Unit-, 5 E2E- und 1 App-Suite-Datei) — `npm run test:focus` fährt davon nur `focus-editor.spec.js` + `focus-editor-app.spec.js`.
+Code: [public/js/editor/focus.js](../public/js/editor/focus.js) (Facade) → [public/js/editor/focus/](../public/js/editor/focus/) (Submodule), [public/js/cards/editor-focus-card.js](../public/js/cards/editor-focus-card.js) (Alpine.data-Sub), [public/css/editor/focus/focus-mode.css](../public/css/editor/focus/focus-mode.css). Tests: vollständige Liste in der [Tests-Tabelle](#tests) unten — `npm run test:focus` fährt davon `focus-editor.spec.js` + die beiden App-Specs (`focus-editor-app.spec.js`, `focus-acceptance-app.spec.js`).
 
 Trigger: Hotkey `Cmd/Ctrl+Shift+E` (überall im Editor; aus Lesemodus → startet Edit + Fokus in einem). Body-Listener in [public/index.html](../public/index.html) routet via `handleFocusHotkey`. Verlassen: **Escape oder derselbe Hotkey — beide speichern** (Invariante 16).
 
@@ -290,24 +290,34 @@ Beim Enter springt der Caret an Buchende. `jumpToTrailingParagraph` ([dom-blocks
 | [tests/e2e/focus-standalone.spec.js](../tests/e2e/focus-standalone.spec.js) | **Standalone-Bootstrap** ([standalone.js](../public/js/editor/focus/standalone.js)) in fremder Schale OHNE `window.__app`/Alpine (Bridge-Stub via [standalone-harness.html](../tests/fixtures/standalone-harness.html)): Mount + Engine aktiv, Tippen → Autosave über Bridge, Escape speichert ohne Teardown, `destroy()` räumt ab. Beweist die Host-Portabilität. |
 | [tests/e2e-app/focus-editor-app.spec.js](../tests/e2e-app/focus-editor-app.spec.js) | **Die gefühlten Invarianten gegen die ECHTE App** (`playwright.app.config.js`, gebooteter Server + vollständiges Shell-CSS + echter Alpine-Baum): Höhenkette (Schreibfläche scrollt überhaupt), Schreibzeile ruht beim Tippen auf dem Anker, **erste** und **letzte** Zeile erreichen den Anker (Desktop + Mobile), Tipp-Recenter landet auf dem Anker, manueller Scroll verschiebt das Spotlight, Exit räumt Overlay/Listener/Marks ab, **Leerschlag an der Umbruchkante reisst das Wort nicht mit** (Invariante 11c — die Kante haengt an echter Spaltenbreite und Schriftmetrik, im Harness liegt sie woanders). **Warum zusätzlich zum Harness:** die Anker-Geometrie leitet sich aus `--focus-anchor`/`--focus-vh`/`--focus-box-h`/`--focus-box-top` gegen die echte Box-Geometrie ab — mit dem Minimal-CSS des Harness kann die komplette Suite grün bleiben, während im Editor die Zeile abdriftet. Mutationsgeprüft: abgeschalteter `runTypewriter` → 5 rote Tests, `padding-top: 0` auf der Schreibfläche → genau die zwei „erste Zeile"-Tests rot, `white-space: normal` auf den Bloecken → der Umbruchkanten-Test rot (nbsp 0→1, Blockhoehe 81→122 beim blossen Leerschlag). Dazu **Undo/Redo im SPA-Fokusmodus** (Invariante 19): der Modus fährt auf der Session-Historie der Notebook-Karte, und `Cmd/Ctrl+Z` wird im Editor verbraucht. Nur hier prüfbar — ein Fixture ohne Alpine-Root und ohne Notebook-Karte hat die Historie nicht. Mutationsgeprüft: das alte `|| app.focusActive`-Gate in `notebookUndo` → rot. |
 | [tests/e2e/focus-shell-host.spec.js](../tests/e2e/focus-shell-host.spec.js) | **Schale mit feindlichem Host-CSS** ([shell-host-harness.html](../tests/fixtures/shell-host-harness.html)): derselbe Standalone-Bootstrap, aber der Scroll liegt auf einem Vorfahr statt auf dem contenteditable und die Schale setzt `scroll-behavior: smooth` — beides unlayered, also stärker als das Bundle-CSS (Invariante 13). Prüft: Scroll-Box-Auflösung, Typewriter scrollt den Vorfahr synchron, Lese-Scroll verschiebt das Spotlight. Ergänzung zu `focus-harness.html`, das strukturell nur die heile Konstellation sieht. |
+| [tests/e2e-app/focus-acceptance-app.spec.js](../tests/e2e-app/focus-acceptance-app.spec.js) | **Akzeptanzliste gegen die echte App** (Chromium + Firefox), mit echter Tastatur/Maus: #6 Klick ohne Recenter-Sprung, #8 Granularität live (Markierung + Satz-Highlight neu gerechnet), #9 Escape speichert (Leseansicht, Server-Stand, Wortzahl), #12 Offline-Exit mit echtem `setOffline`, Escape während eines laufenden Saves (Exit erst danach, Invariante 16), Snapshot-Refresh beim Save. Arbeitet auf der LETZTEN Seed-Seite und stellt deren Inhalt nach jedem speichernden Test wieder her (geteilter Seed-Stand). Mutationsgeprüft: Vormerkung im Escape-Pfad und Snapshot-`$watch` entfernt → je der eigene Test rot. |
+| [tests/e2e/focus-known-bugs.spec.js](../tests/e2e/focus-known-bugs.spec.js) · [focus-known-bugs.webkit.spec.js](../tests/e2e/focus-known-bugs.webkit.spec.js) | Die beiden [bekannten Fehler](#bekannte-fehler) als `test.fail()`. |
 
-**Pflicht:** Bei jeder Änderung im Focus-Editor `npm test` laufen lassen (schnelle Runde: `npm run test:focus` = Harness-Suite + App-Suite). Schlägt etwas fehl, Ursache klären, nicht Tests anpassen.
+**Pflicht:** Bei jeder Änderung im Focus-Editor `npm test` laufen lassen (schnelle Runde: `npm run test:focus` = Harness-Suite + beide App-Specs). Schlägt etwas fehl, Ursache klären, nicht Tests anpassen.
 
 **Pflicht davor:** [focus-editor-acceptance.md](focus-editor-acceptance.md) in der laufenden App durchklicken (11 Handgriffe + 1 Zusatz, ~2 min). Der Editor ist ein stabilisiertes Modul — Anlass, Commit-Disziplin und Verifikationsreihenfolge regelt die harte Regel „Focus-Editor ist stabilisiert" in [CLAUDE.md](../CLAUDE.md).
 
-Was die Automatisierung von der Klickliste **nicht** abdeckt (Stand: gegen die echte App nachgemessen):
+Was die Automatisierung von der Klickliste abdeckt (Stand: gegen die echte App nachgemessen, Chromium + Firefox):
 
 | Punkt | Automatisch? |
 |---|---|
 | 1–5 (Eintritt, Tipp-Recenter, erste/letzte Zeile, Lese-Scroll) | ja — App-Suite gegen echtes Shell-CSS |
-| 6 (Klick ohne Recenter-Sprung) | ja — Harness („Pointer-Schonfrist verhindert Recenter") |
-| 7 (Doppelklick + Zieh-Auswahl) | **halb** — Doppelklick ja (Harness + WebKit-Projekt); „offene Auswahl blockt Recenter" **nein** |
-| 8 (Granularitäts-Switch) | **halb** — Klassen-Tausch ja; dass Marks/Satz-Highlight danach neu berechnet sind **nein** |
-| 9 (Escape speichert + Kennzahlen) | ja fürs Verlassen; Kennzahlen-Aktualisierung nur als Unit-Test |
-| 10 (schmales Fenster, kein H-Overflow) | **nein** |
-| 11 (Offline-Exit, Draft erhalten) | **halb** — Save-Reject-Stub im Harness; echtes `setOffline` **nein** |
+| 6 (Klick ohne Recenter-Sprung) | ja — Harness + App-Suite (`focus-acceptance-app.spec.js`, echter Mausklick) |
+| 7 (Doppelklick + Zieh-Auswahl) | ja — Doppelklick in Harness + WebKit-Projekt, „offene Auswahl blockt Recenter" in der App-Suite |
+| 8 (Granularitäts-Switch) | ja — Klassen-Tausch im Harness, Markierung + Satz-Highlight neu gerechnet in der App-Suite |
+| 9 (Escape speichert + Kennzahlen) | ja — App-Suite: Leseansicht, Server-Stand und `tokEsts`-Wortzahl |
+| 10 (schmales Fenster, kein H-Overflow) | ja — App-Suite |
+| 11 / 11a (Umbruchkante, Shift+Enter, Undo) | ja — beide Suiten, 11a zusätzlich im WebKit-Projekt |
+| 12 (Offline-Exit, Draft erhalten) | ja — App-Suite mit echtem `setOffline` |
 
-Die drei „nein"/„halb"-Lücken (7, 8, 10, 11) sind der Grund, warum die Liste weiterhin **geklickt** wird und nicht durch `npm run test:focus` ersetzbar ist.
+Was bleibt, ist das **Schreibgefühl**: Zucken oder Flattern, das nur bei echtem Tipptempo über Zeit sichtbar wird, echte iOS-/Android-Tastaturen und -IMEs, echtes Safari und der macOS-Client. Darum wird die Liste weiterhin **geklickt** — die Automatisierung misst Positionen und Einzelbilder, keinen Bewegungsablauf.
+
+## Bekannte Fehler
+
+Beide gefunden beim Durchspielen der Akzeptanzliste in WebKit; als `test.fail()` festgehalten (beschreiben das richtige Verhalten, schlagen heute erwartungsgemäss fehl — wer den Fehler behebt, bekommt „Expected to fail, but passed" und entfernt die Markierung).
+
+- **Erster Tastendruck nach einem Sprung an den Rand bleibt am Rand** (WebKit; Strg+Pos1, Strg+Ende, Klick nahe am Rand). Der Tastendruck plant einen Typewriter-Tick; noch vor diesem Frame scrollt WebKit selbst, um den Caret sichtbar zu machen. Der Scroll trägt keine prog-Marke, `onScroll` hält ihn für Lese-Scrollen und ruft `_focusUpdateActive(false, { preferCenter: true })` — das cancelt den geplanten Tick. Erst der zweite Tastendruck holt die Zeile. Mechanismus engine-unabhängig nachgestellt in [focus-known-bugs.spec.js](../tests/e2e/focus-known-bugs.spec.js) (Gegenprobe ohne den nachgestellten Scroll: grün).
+- **Shift+Enter mitten im Text teilt den Absatz** (WebKit). `insertSoftBreak` ([shared/soft-break.js](../public/js/editor/shared/soft-break.js)) nimmt dort `execCommand('insertHTML', '<br>')`; WebKit meldet das als `insertText` und schreibt `<p>Eins</p><br> zwei …` statt `<p>Eins<br> zwei …</p>`. Am Blockende (manueller Zweig) korrekt. Gegated in [focus-known-bugs.webkit.spec.js](../tests/e2e/focus-known-bugs.webkit.spec.js).
 
 ## Bewusst nicht aufgeräumt
 

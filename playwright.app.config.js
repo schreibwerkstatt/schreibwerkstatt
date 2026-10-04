@@ -71,7 +71,7 @@ module.exports = {
     // doppelt zu fahren kostete rund die Haelfte der Suite-Laufzeit.
     {
       name: 'firefox',
-      testMatch: ['**/smoke.spec.js', '**/focus-editor-app.spec.js', '**/notebook-*.spec.js'],
+      testMatch: ['**/smoke.spec.js', '**/focus-editor-app.spec.js', '**/focus-acceptance-app.spec.js', '**/notebook-*.spec.js'],
       use: { browserName: 'firefox', baseURL: `http://localhost:${PORT_FF}` },
     },
   ].filter((p) => ENGINES.includes(p.name)),

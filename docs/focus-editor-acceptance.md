@@ -56,11 +56,12 @@ mit eingeblendeter Tastatur-Simulation.
 npm run test:focus     # Harness-Suite + App-Suite (echtes CSS)
 ```
 
-Grün ist die **Untergrenze**, nicht der Beweis: die App-Suite deckt Höhenkette,
-Schreiblinie, erste/letzte Zeile, Tipp-Recenter, Spotlight-bei-Scroll und Exit-Cleanup
-ab. Punkt 6 ist im Harness gegated, Punkt 11 in beiden Suiten, Punkt 11a in `tests/e2e/focus-undo.webkit.spec.js` (WebKit) + der App-Suite (SPA); von 7, 8 und 12 jeweils nur die eine Hälfte
-(Doppelklick / Klassen-Tausch / Save-Reject-Stub), und **Punkt 10 gar nicht** —
-die Aufschlüsselung steht in [focus-editor.md](focus-editor.md#tests).
+Grün ist die **Untergrenze**, nicht der Beweis: die App-Suite (`focus-editor-app.spec.js`
++ `focus-acceptance-app.spec.js`, Chromium und Firefox) deckt inzwischen alle elf Griffe
+und Punkt 12 ab — die Aufschlüsselung steht in [focus-editor.md](focus-editor.md#tests),
+die bekannten WebKit-Fehler unter [Bekannte Fehler](focus-editor.md#bekannte-fehler).
 
-Darum bleibt diese Liste geklickt: was hier fehlt, fehlt in der Automatisierung
-genau dort, wo sich der Editor falsch anfühlen kann, ohne rot zu werden.
+Darum bleibt diese Liste trotzdem geklickt: die Automatisierung misst Positionen und
+Einzelbilder. Zucken oder Flattern beim echten Tipptempo, echte Mobil-Tastaturen und
+-IMEs, echtes Safari und der macOS-Client sieht sie nicht — genau dort kann sich der
+Editor falsch anfühlen, ohne rot zu werden.
