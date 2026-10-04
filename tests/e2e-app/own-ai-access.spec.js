@@ -26,7 +26,9 @@ test.afterEach(async ({ page }) => {
 });
 
 test('Eigener KI-Zugang: Schalter, Host-Guard, Speichern ohne Key-Echo, Entfernen', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  // Schalter vor dem ersten Dokument-Load setzen: `page.request` braucht keine
+  // geladene Seite, und ein `goto` vor `bootApp` waere eine zweite Navigation,
+  // die die Boot-Fetches der ersten abbricht (Console-Guard).
   await setEnabled(page, false);
   await bootApp(page);
   let card = await openProfile(page);

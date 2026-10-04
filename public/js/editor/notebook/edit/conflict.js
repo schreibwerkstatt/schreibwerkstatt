@@ -1,5 +1,5 @@
 // Teil von notebookEditMethods (siehe Facade edit.js).
-import { FEATURE_BLOCK_MERGE, buildResolvedHtml, checkPageConflict, clearDraft, conflictBannerFrom, conflictText, contentRepo, editorHost, isPageConflict, mergeBlocks, mergedToHtml, mountEditorHtml, readConflictBody, savePage, trackMerge, writeDraft } from './_shared.js';
+import { FEATURE_BLOCK_MERGE, buildResolvedHtml, captureBlockCaret, checkPageConflict, clearDraft, conflictBannerFrom, conflictText, contentRepo, editorHost, isPageConflict, mergeBlocks, mergedToHtml, mountEditorHtml, isNoChange, readConflictBody, restoreBlockCaret, savePage, stripLektoratMarks, trackMerge, writeDraft } from './_shared.js';
 
 export const conflictMethods = {
 
@@ -79,7 +79,7 @@ export const conflictMethods = {
     if (!conflict) return { proceed: true, saveHtml: localHtml, expectedAt };
 
     const merge = await this._attemptBlockMerge({
-      localHtml, source, pageId,
+      localHtml, source, pageId, liveLocal: true,
       remoteHtml: conflict.remoteHtml, remoteUpdatedAt: conflict.remoteUpdatedAt,
     });
     if (merge?.stale) return { proceed: false, stale: true };
@@ -128,13 +128,13 @@ export const conflictMethods = {
   //   { conflict: true } — Auflösungs-Modal offen, Aufrufer bricht ab
   //   { stale: true } — Seite inzwischen gewechselt, Aufrufer sichert nur den Draft
   //   null — kein Merge möglich → Aufrufer macht den _keepAsDraft-Fallback
-  async _retryAfterConflict({ localHtml, source, pageId, pageName, tag }) {
+  async _retryAfterConflict({ localHtml, source, pageId, pageName, tag, liveLocal = false }) {
     // `editSaving` bleibt bis zum Schluss gesetzt: während Merge-Read und
     // Re-Save darf weder der Autosave-Tick noch ein zweiter Klick einen
     // parallelen PUT absetzen. Öffnet der Merge das Auflösungs-Modal, kehren
     // alle Aufrufer sofort zurück und setzen das Flag im `finally` zurück —
     // ohne dazwischenliegendes `await`, das Modal ist bis dahin nicht klickbar.
-    const merge = await this._attemptBlockMerge({ localHtml, source, pageId });
+    const merge = await this._attemptBlockMerge({ localHtml, source, pageId, liveLocal });
     if (merge?.stale) return { stale: true };
     if (merge?.conflict) return { conflict: true };
     if (!merge?.merged) return null;
@@ -191,8 +191,10 @@ export const conflictMethods = {
   // Gemergtes HTML in den Live-Editor spiegeln, damit Folge-Edits auf dem
   // gemergten Stand aufbauen (sonst würde der nächste Save remote-Blöcke
   // wieder „zurückeditieren"). Quelle ist server-sanitiertes Page-HTML (gleiche
-  // Vertrauensstufe wie startEdit, das ebenfalls direkt setzt). Cursor springt
-  // an den Anfang — akzeptabel, der Pfad läuft nur bei echtem Multi-Device-Konflikt.
+  // Vertrauensstufe wie startEdit, das ebenfalls direkt setzt). Der Caret
+  // bleibt in seinem Block (shared/block-caret.js) — der Merge läuft auch still
+  // mitten im Tippen (Autosave, Collab-Pull), ein Sprung an den Seitenanfang
+  // risse den User aus dem Satz.
   //
   // Läuft über `mountEditorHtml` (dieselbe Pipeline wie startEdit + Undo-Restore):
   // ein gemergtes Block-Set kann auf einer `<hr>` enden oder einen kindlosen
@@ -205,7 +207,9 @@ export const conflictMethods = {
   _applyMergedToEditor(html) {
     const el = this._getEditEl();
     if (!el || el.innerHTML === html) return;
+    const caret = captureBlockCaret(el);
     mountEditorHtml(el, html);
+    restoreBlockCaret(el, caret);
     this._historyReset?.(el.innerHTML);
   },
 
@@ -235,7 +239,15 @@ export const conflictMethods = {
   //   { conflict:true } — Auflösungs-Banner geöffnet, Aufrufer bricht ab.
   //   { stale:true } — Seite während des Remote-Reads gewechselt.
   //   null — kein Merge (Flag off / leere Base / Read-Fehler) → klassischer Pfad.
-  async _attemptBlockMerge({ localHtml, source, pageId, remoteHtml = null, remoteUpdatedAt = null }) {
+  //
+  // `liveLocal`: die lokale Seite des Merge ist der Editor selbst (saveEdit,
+  // quickSave, Pull). Dann zählt der Live-Stand NACH den Reads, nicht der beim
+  // Save-Start gefangene `localHtml` — der Editor bleibt während Conflict-Check,
+  // PUT und Remote-Read beschreibbar, und `_applyMergedToEditor` überschreibt
+  // das DOM. Ein Merge mit dem alten Schnappschuss löschte, was in dieser Zeit
+  // getippt wurde. Aus bei submitConflictResolution: dort ist die lokale Seite
+  // die getroffene Auflösung, nicht das DOM.
+  async _attemptBlockMerge({ localHtml, source, pageId, remoteHtml = null, remoteUpdatedAt = null, liveLocal = false }) {
     const app = editorHost();
     if (!FEATURE_BLOCK_MERGE || !app.currentPage) return null;
     if (pageId == null) pageId = app.currentPage.id;
@@ -250,6 +262,10 @@ export const conflictMethods = {
     // Seite — nach einem Wechsel wäre der Merge gegen die falsche Base gerechnet.
     if (app.currentPage?.id !== pageId) return { stale: true };
     if (!remoteUpdatedAt) return null;
+    if (liveLocal) {
+      const el = this._getEditEl();
+      if (el) localHtml = stripLektoratMarks(el.innerHTML);
+    }
     const m = this._computeBlockMerge(localHtml, remoteHtml);
     if (!m) return null;
     if (m.conflicts.length === 0) {
@@ -263,6 +279,93 @@ export const conflictMethods = {
     this._keepAsDraft({ pageId, html: localHtml, statusKey: null });
     this._openConflictResolution({ merged: m.merged, conflicts: m.conflicts, source, remoteUpdatedAt });
     return { conflict: true };
+  },
+
+
+  // Remote-Stand der offenen Seite in die laufende Edit-Session holen, bevor
+  // der nächste Save mit dem alten Stempel in 409 läuft. Auslöser: Collab-
+  // Treffer auf der offenen Seite (app-collab.js#_onCurrentPageRemoteEdit) und
+  // das Aufwachen eines versteckten Tabs (app-view/bookscope.js#
+  // _checkEditedPageAfterWake).
+  //  - clean → Remote-HTML in den Editor, Base + Stempel vorrücken.
+  //  - dirty → 3-Way-Block-Merge über `_attemptBlockMerge`: kollisionsfrei wird
+  //    der gemergte Stand gespiegelt und die Base auf Remote vorgerückt (die
+  //    eigenen Edits bleiben als Diff dazu dirty, der Autosave speichert sie);
+  //    bei Kollision öffnet die Auflösung sofort statt erst beim Save.
+  //  - kein Merge möglich → Konflikt-Banner, der nächste Save klärt.
+  // DOM, `originalHtml` und `updated_at` immer gemeinsam: ein frischer Stempel
+  // ohne frischen Editor-Inhalt liesse den nächsten Save die Remote-Änderung
+  // still überschreiben.
+  async _pullRemoteIntoEditor(change = null) {
+    const app = editorHost();
+    const pageId = app.currentPage?.id;
+    if (!pageId || !app.editMode || app.editSaving || app.conflictResolution) return;
+    let remote;
+    try { remote = await contentRepo.loadPage(pageId, { fresh: true }); } catch { return; }
+    if (!this._stillEditing(pageId) || app.editSaving || app.conflictResolution) return;
+    if (!remote?.updated_at || remote.updated_at === app.currentPage.updated_at) return;
+    const remoteHtml = remote.html || '';
+    const el = this._getEditEl();
+    const localHtml = el ? stripLektoratMarks(el.innerHTML) : '';
+    // Am Editor-Inhalt entscheiden, nicht nur am `editDirty`-Flag: ein
+    // Tastendruck, dessen input-Event noch aussteht, ginge sonst beim
+    // Überschreiben verloren.
+    if (!app.editDirty && isNoChange(localHtml, app.originalHtml)) {
+      this._applyMergedToEditor(remoteHtml);
+      app.originalHtml = remoteHtml;
+      app.currentPage.updated_at = remote.updated_at;
+      app.updatePageView?.();
+      return;
+    }
+    const source = app.focusActive ? 'focus' : 'main';
+    const merge = await this._attemptBlockMerge({
+      localHtml, source, pageId, remoteHtml, remoteUpdatedAt: remote.updated_at, liveLocal: true,
+    });
+    if (merge?.stale || merge?.conflict) return;
+    if (merge?.merged) {
+      app.originalHtml = remoteHtml;
+      app.currentPage.updated_at = remote.updated_at;
+      app.setStatus(app.t('edit.conflict.merged.silent'), false, 5000);
+      return;
+    }
+    app.editConflict = this._conflictBannerFrom({
+      remoteUserName: change?.last_editor_name || remote.updated_by_name || null,
+      remoteUpdatedAt: remote.updated_at,
+      remoteIsSelf: !!change?.is_self,
+      remoteDevice: change?.device_label || remote.last_editor?.device_name || null,
+    });
+  },
+
+
+  // Draft-Wiederaufnahme in startEdit: ein Draft trägt seine eigene Basis
+  // (`originalHtml` + `originalUpdatedAt` beim Schreiben). Ist die Seite seither
+  // weitergeschrieben worden (anderes Gerät, anderer User), steht der Server-
+  // Stand von heute als Base und Stempel im Editor — `draft.html` direkt
+  // einzusetzen hiesse: der nächste Save läuft ohne 409 durch und nimmt die
+  // Remote-Änderung still zurück. Darum 3-Way gegen den Server-Stand, mit der
+  // Draft-Basis als gemeinsamem Vorfahren:
+  //   { html }            — Basis aktuell, oder kollisionsfrei gemergt
+  //   { html, conflict }  — echte Kollision; Aufrufer öffnet die Auflösung
+  // Ohne Draft-Basis (Alt-Draft) oder ohne Merge bleibt es beim Draft.
+  _reconcileDraftWithServer(draft) {
+    const app = editorHost();
+    const serverHtml = app.originalHtml || '';
+    const serverAt = app.currentPage?.updated_at || null;
+    if (!FEATURE_BLOCK_MERGE || !draft.originalUpdatedAt || !serverAt
+        || draft.originalUpdatedAt === serverAt || !draft.originalHtml) {
+      return { html: draft.html };
+    }
+    let m;
+    try { m = mergeBlocks(draft.originalHtml, draft.html, serverHtml); }
+    catch (e) {
+      console.warn('[draftRestore] merge failed, restore draft as-is', e);
+      return { html: draft.html };
+    }
+    if (m.conflicts.length === 0) {
+      trackMerge('silent_success');
+      return { html: mergedToHtml(m.merged), merged: true };
+    }
+    return { html: draft.html, conflict: { merged: m.merged, conflicts: m.conflicts, remoteUpdatedAt: serverAt } };
   },
 
 

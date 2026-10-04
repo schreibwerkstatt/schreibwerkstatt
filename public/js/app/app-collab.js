@@ -336,22 +336,11 @@ export const appCollabMethods = {
       return;
     }
 
-    if (this.editMode && this.editDirty) {
-      // Dirty-Editor: kein Auto-Reload — Banner setzen, naechster Save triggert
-      // die optimistische DB-Concurrency-Pruefung (Phase 2).
-      this.editConflict = {
-        remoteUserName: name,
-        remoteUpdatedAt: change.updated_at,
-        remoteIsSelf: isSelf,
-        remoteDevice: device,
-      };
-      this.setStatus(isSelf
-        ? this.t('edit.conflict.unsavedHintSelf', { device: device || this.t('presence.device.unknown') })
-        : this.t('edit.conflict.unsavedHint', { user: name || this.t('edit.conflict.unknownUser') }),
-      false, 8000);
-      return;
-    }
-    // Clean-Editor oder Read-Only: frischen Stand holen + Toast.
+    // Offene Edit-Session (Notebook wie Fokusmodus, clean wie dirty): Remote-Stand
+    // in den Editor holen — nur Stempel + Base vorzuruecken liesse den naechsten
+    // Save die Remote-Aenderung still ueberschreiben (edit/conflict.js).
+    if (this.editMode) return void this._pullRemoteIntoEditor?.(change);
+    // Lese-Ansicht: frischen Stand holen + Toast.
     this._refetchCurrentPage?.().catch(() => {});
     this._showCollabToast({
       user: name,

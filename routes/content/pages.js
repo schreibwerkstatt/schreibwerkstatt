@@ -13,6 +13,7 @@ const { toIntId } = require('../../lib/validate');
 const { resolveChapterBookId } = require('../../lib/content-ownership');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const { jsonBody, _validDeviceId, _deviceTokenLabel, _guardPage, _fail } = require('./shared');
+const logger = require('../../logger');
 
 function register(router) {
   // GET /content/pages/:page_id — Volltext + Metadaten.
@@ -63,16 +64,21 @@ function register(router) {
     try { res.json(await contentStore.savePage(pageId, req.body || {}, req)); }
     catch (e) {
       if (e.code === 'EMPTY_BODY') return res.status(400).json({ error_code: 'EMPTY_BODY' });
-      if (e.code === 'PAGE_CONFLICT') return res.status(409).json({
-        error_code: 'PAGE_CONFLICT',
-        server_updated_at: e.serverUpdatedAt || null,
-        server_editor_email: e.serverEditorEmail || null,
-        server_editor_name: e.serverEditorDisplay || e.serverEditorEmail || null,
-        // Eigenes Zweit-Geraet statt fremder User: der Editor formuliert das
-        // Konflikt-Banner danach.
-        server_is_self: !!email && e.serverEditorEmail === email,
-        server_editor_device: e.serverEditorDevice || null,
-      });
+      if (e.code === 'PAGE_CONFLICT') {
+        // Messpunkt fuer die Konflikt-Haeufigkeit: welches Geraet mit welchem
+        // Stempel gegen welchen Server-Stand lief (sonst nirgends erfasst).
+        logger.info(`PAGE_CONFLICT Seite ${pageId}: Geraet ${req.body?.device_id || '-'} erwartete ${req.body?.expected_updated_at}, Server ${e.serverUpdatedAt} (Geraet ${e.serverEditorDevice || e.serverEditorEmail || '-'}).`);
+        return res.status(409).json({
+          error_code: 'PAGE_CONFLICT',
+          server_updated_at: e.serverUpdatedAt || null,
+          server_editor_email: e.serverEditorEmail || null,
+          server_editor_name: e.serverEditorDisplay || e.serverEditorEmail || null,
+          // Eigenes Zweit-Geraet statt fremder User: der Editor formuliert das
+          // Konflikt-Banner danach.
+          server_is_self: !!email && e.serverEditorEmail === email,
+          server_editor_device: e.serverEditorDevice || null,
+        });
+      }
       _fail(res, e, 'PUT /content/pages/:id');
     }
   });

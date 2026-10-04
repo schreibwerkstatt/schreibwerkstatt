@@ -105,6 +105,14 @@ export const loadMethods = {
       // (gleiche Regel wie die Szenen-Karte, book/szenen-stats.js).
       this.overviewSzenen = Array.isArray(szenen?.szenen) ? szenen.szenen.filter(s => !s.stale) : [];
       this.overviewOrte = Array.isArray(orte?.orte) ? orte.orte : [];
+      // Die Schauplatz-Kachel zeigt ihre Top-Orte als Entitäts-Referenzen, die
+      // Name und Sprungziel aus `catalog.orte` auflösen. Den lädt sonst nur die
+      // Orte-Karte — ohne ihn stünde in der Kachel die loc_-ID. Gleiche Antwort
+      // wie loadOrte, also einspeisen, solange der Katalog leer ist.
+      if (Array.isArray(orte?.orte) && !Alpine.store('catalog').orte.length) {
+        Alpine.store('catalog').orte = orte.orte;
+        Alpine.store('catalogUi').orteUpdatedAt = orte.updated_at || null;
+      }
       this.overviewSongs = Array.isArray(songs?.songs) ? songs.songs : [];
       this.overviewLektoratTime = lektoratTime || null;
       this.overviewIsFinished = !!settings?.is_finished;

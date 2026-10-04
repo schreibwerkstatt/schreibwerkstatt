@@ -33,7 +33,7 @@
 //     lebt über den ganzen Lauf, sonst stapeln sich die Belege übereinander.
 
 const { test, expect } = require('../e2e/_helpers/fixtures');
-const { bootApp, selectSeededBook } = require('./_helpers/app');
+const { bootApp, reboot, selectSeededBook } = require('./_helpers/app');
 
 const EDIT_SEL = '#editor-card .page-content-view--editing';
 
@@ -113,8 +113,8 @@ test('Chip überlebt Speichern und Wieder-Öffnen, ohne Editor-Attribut zu persi
   expect(saved).not.toContain('contenteditable');
 
   // Neu laden und wieder in den Edit-Modus: der Chip muss atomar zurückkommen.
-  await page.reload();
-  await boot(page);
+  await reboot(page);
+  await selectSeededBook(page);
   await openPageInEdit(page, 0);
   const chip = await page.evaluate(() => {
     const el = document.querySelector('#editor-card .page-content-view--editing span.cite[data-src]');

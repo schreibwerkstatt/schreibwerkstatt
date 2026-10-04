@@ -125,6 +125,32 @@ test('_checkTreeDrift stellt dieselbe Frage nicht zweimal hintereinander', async
   } finally { globalThis.fetch = prev; }
 });
 
+// Die offene Seite ist die Ausnahme vom „nur Baum": der erste Save eines
+// Geraets, das das Buch vorher nicht offen hatte, erreicht sonst nie den Editor.
+test('_checkTreeDrift reicht eine neuere Aenderung der offenen Seite an den Collab-Pfad', async () => {
+  const prev = globalThis.fetch;
+  const run = async (changes, curStamp) => {
+    const handled = [];
+    const ctx = {
+      ...ctxWithPages([{ id: 1, updated_at: '2026-09-01T08:00:00.000Z' }]),
+      currentPage: { id: 7, updated_at: curStamp },
+      _scheduleTreeCatchUp: () => {},
+      _onCurrentPageRemoteEdit: (c) => handled.push(c),
+    };
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ changes }) });
+    await ctx._checkTreeDrift('3', { force: true });
+    return handled;
+  };
+  try {
+    const newer = { page_id: 7, updated_at: '2026-09-05T10:00:00.000Z' };
+    assert.deepEqual(await run([{ page_id: 5, updated_at: '2026-09-05T10:00:00.000Z' }, newer], '2026-09-04T10:00:00.000Z'), [newer]);
+    // Schon verarbeitet (Stempel steht auf dem Remote-Stand) → nicht noch einmal.
+    assert.deepEqual(await run([newer], '2026-09-05T10:00:00.000Z'), []);
+    // Andere Seite → bleibt beim Baum-Nachzug.
+    assert.deepEqual(await run([{ page_id: 5, updated_at: '2026-09-05T10:00:00.000Z' }], '2026-09-04T10:00:00.000Z'), []);
+  } finally { globalThis.fetch = prev; }
+});
+
 // ── Meldung → Handlung ─────────────────────────────────────────────────────
 
 function routingCtx(selectedBookId = '3') {

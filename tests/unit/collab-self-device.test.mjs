@@ -12,11 +12,13 @@ mock.timers.enable({ apis: ['setTimeout'] });
 
 // Minimal-Kontext: nur was die getesteten Methoden anfassen. `t` gibt den Key
 // samt Params zurueck, damit der Test die Key-Wahl prueft statt Wortlaut.
-function makeCtx({ currentPage = null, editMode = false, editDirty = false } = {}) {
+function makeCtx({ currentPage = null, editMode = false, editDirty = false, focusActive = false } = {}) {
   return {
     currentPage,
     editMode,
     editDirty,
+    focusActive,
+    pulled: [],
     editConflict: null,
     statusCalls: [],
     refetched: 0,
@@ -30,6 +32,7 @@ function makeCtx({ currentPage = null, editMode = false, editDirty = false } = {
     t: (key, params) => (params ? `${key}:${JSON.stringify(params)}` : key),
     setStatus(msg) { this.statusCalls.push(msg); },
     _refetchCurrentPage() { this.refetched++; return Promise.resolve(); },
+    _pullRemoteIntoEditor(ch) { this.pulled.push(ch); return Promise.resolve(); },
     ...appCollabMethods,
   };
 }
@@ -86,14 +89,23 @@ test('Offene Seite vom eigenen Geraet: Refetch + Geraete-Toast', () => {
   assert.equal(ctx.$store.collab.recentRemoteEdits.size, 0);
 });
 
-test('Dirty-Editor: Konflikt-State traegt Self-Flag + Geraet', () => {
-  const ctx = makeCtx({ currentPage: { id: 42 }, editMode: true, editDirty: true });
-  ctx._applyCollabChanges([change(42)]);
-  assert.equal(ctx.refetched, 0);
-  assert.equal(ctx.editConflict.remoteIsSelf, true);
-  assert.equal(ctx.editConflict.remoteDevice, 'MacBook');
-  assert.match(ctx.statusCalls[0], /^edit\.conflict\.unsavedHintSelf:/);
-});
+// Offene Edit-Session (Notebook wie Fokusmodus, clean wie dirty) holt den
+// Remote-Stand in den Editor statt nur Base + Stempel neu zu setzen: ein
+// frischer Stempel unter altem Editor-Inhalt liesse den naechsten Save die
+// Remote-Aenderung ueberschreiben. Banner-Texte (Self-Flag, Geraet) entstehen
+// erst dort, wenn kein Merge moeglich ist (edit/conflict.js).
+for (const focusActive of [false, true]) {
+  for (const editDirty of [false, true]) {
+    test(`${focusActive ? 'Fokusmodus' : 'Notebook-Edit'} (${editDirty ? 'dirty' : 'clean'}): Remote-Stand in den Editor, kein Refetch`, () => {
+      const ctx = makeCtx({ currentPage: { id: 42 }, editMode: true, editDirty, focusActive });
+      const ch = change(42);
+      ctx._applyCollabChanges([ch]);
+      assert.equal(ctx.refetched, 0);
+      assert.deepEqual(ctx.pulled, [ch]);
+      assert.equal(ctx.editConflict, null);
+    });
+  }
+}
 
 test('Tree-Tooltip unterscheidet Geraet und Fremd-User', () => {
   const ctx = makeCtx();

@@ -51,6 +51,8 @@ export const notebookTrampoline = {
     return card()?._applyTextReplacement(original, replacement) ?? { ok: false, reason: 'notEditing' };
   },
   _flushDraftSaveNow() { card()?._flushDraftSaveNow(); },
+  // Remote-Stand der offenen Seite in den laufenden Edit holen (Collab-Treffer, Aufwachen).
+  _pullRemoteIntoEditor(change) { return card()?._pullRemoteIntoEditor(change); },
   _stopAutosave() { card()?._stopAutosave(); },
   _uninstallOnlineRetry() { card()?._uninstallOnlineRetry(); },
   // Seitenwechsel / Karten-Schliessen (app-view/page.js#resetPage): dieselbe

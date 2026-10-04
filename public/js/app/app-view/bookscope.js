@@ -1,5 +1,5 @@
 // Teil von appViewMethods (siehe Facade app-view.js).
-import { EVT, EXCLUSIVE_CARDS, FILTER_SCOPES, computeTodayRing, computeWeekBars, computeWritingStreak, fetchJson, fetchJsonRetry, resetFilterScopes, restoreFilterScopes } from './_shared.js';
+import { EVT, EXCLUSIVE_CARDS, FILTER_SCOPES, getDeviceId, computeTodayRing, computeWeekBars, computeWritingStreak, fetchJson, fetchJsonRetry, resetFilterScopes, restoreFilterScopes } from './_shared.js';
 import { setLastBookId } from '../../local-prefs.js';
 import { localeTag } from '../../utils.js';
 
@@ -211,7 +211,10 @@ export const bookscopeMethods = {
       catch (e) { if (isNetErr(e)) needsRetry = true; }
       if (this.$store.session.sessionExpired) return;
       if (this.isAdminOnly) return;
-      if (this.editMode || this.editDirty) return;
+      if (this.editMode || this.editDirty) {
+        await this._checkEditedPageAfterWake();
+        return;
+      }
       try {
         if (!this.$store.nav.selectedBookId) {
           await this.loadBooks();
@@ -245,6 +248,33 @@ export const bookscopeMethods = {
     if (needsRetry) this._scheduleWakeRetry();
   },
 
+
+  // Notebook-Editor nach dem Aufwachen: hat ein anderes Geraet (oder ein
+  // anderer User) die offene Seite inzwischen gespeichert, haelt der Editor
+  // noch den alten `updated_at`-Stempel, und der erste Autosave liefe in
+  // 409 PAGE_CONFLICT. Der Collab-Poll faengt das nicht: er pausiert im
+  // versteckten Tab und startet nach dem Aufwachen nur, wenn das andere Geraet
+  // in den letzten 90 s noch da war. Darum hier einmal gezielt gegen den
+  // Editor-Stempel fragen und einen Treffer durch denselben Pfad schicken wie
+  // ein Poll-Treffer (edit/conflict.js#_pullRemoteIntoEditor) — im
+  // Fokusmodus ebenso, er ist derselbe Edit-Vorgang auf dem Focus-Container.
+  async _checkEditedPageAfterWake() {
+    if (!this.editMode) return;
+    const page = this.currentPage;
+    const bookId = this.$store.nav.selectedBookId;
+    if (!page?.id || !page.updated_at || !bookId) return;
+    const params = new URLSearchParams({ since: page.updated_at, device_id: getDeviceId() });
+    let data;
+    try {
+      const r = await fetch(`/content/books/${bookId}/changes?${params}`);
+      if (!r.ok) return;
+      data = await r.json();
+    } catch { return; }
+    if (!this.editMode || this.currentPage?.id !== page.id) return;
+    const changes = Array.isArray(data?.changes) ? data.changes : [];
+    const hit = changes.filter(c => c?.page_id === page.id).pop();
+    if (hit) this._onCurrentPageRemoteEdit(hit);
+  },
 
   _scheduleWakeRetry() {
     if (this._wakeRetryArmed) return;

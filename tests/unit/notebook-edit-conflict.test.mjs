@@ -27,6 +27,9 @@ globalThis.matchMedia = window.matchMedia;
 
 const { contentRepo } = await import('../../public/js/repo/content.js');
 const { notebookEditMethods } = await import('../../public/js/editor/notebook/edit.js');
+// Die submitConflictResolution-Tests stubben `_attemptBlockMerge` am geteilten
+// Objekt; die Live-Stand-Tests unten brauchen den echten.
+const realAttemptBlockMerge = notebookEditMethods._attemptBlockMerge;
 
 function mockLoadPage(impl) { contentRepo.loadPage = impl; }
 
@@ -334,4 +337,163 @@ test('saveEdit: Seitenwechsel während Conflict-Check → Draft für A, kein PUT
   assert.equal(drafts[0].pageId, 1);
   assert.equal(drafts[0].base, '<p>A-base</p>');
   assert.equal(app.originalHtml, '<p>B-base</p>');
+});
+
+// --- Merge nimmt den Live-Stand, nicht den Save-Start-Schnappschuss -----------
+// Der Editor bleibt während Conflict-Check, PUT und Remote-Read beschreibbar;
+// der Merge spiegelt sein Ergebnis danach ins DOM. Rechnet er mit dem HTML vom
+// Save-Start, ist alles weg, was in dieser Zeit getippt wurde.
+
+function mergeCtx(el) {
+  return Object.assign(Object.create(notebookEditMethods), {
+    _getEditEl: () => el,
+    _attemptBlockMerge: realAttemptBlockMerge,
+    _applyMergedToEditor(html) { el.innerHTML = html; },
+    _clearAutosaveTimers() {},
+    _filterFindingsAfterSave() {},
+    _flushDraftSaveNow() {},
+    _scheduleAutosave() {},
+  });
+}
+
+test('quickSave: während des Conflict-Checks Getipptes überlebt den Auto-Merge', async () => {
+  const app = setSwitchApp();
+  app.originalHtml = '<p data-bid="a">Anfang</p><p data-bid="b">Mitte</p>';
+  const el = document.createElement('div');
+  el.innerHTML = '<p data-bid="a">Anfang eins</p><p data-bid="b">Mitte</p>';
+  const ctx = mergeCtx(el);
+  mockLoadPage(async () => {
+    el.innerHTML = '<p data-bid="a">Anfang eins zwei</p><p data-bid="b">Mitte</p>';
+    return { updated_at: '2026-02-02T00:00:00Z', html: '<p data-bid="a">Anfang</p><p data-bid="b">Mitte remote</p>' };
+  });
+  const puts = [];
+  contentRepo.savePage = async (id, payload) => { puts.push(payload); return { updated_at: '2026-03-03T00:00:00Z' }; };
+  await ctx.quickSave();
+  assert.equal(puts.length, 1);
+  assert.equal(puts[0].html, '<p data-bid="a">Anfang eins zwei</p><p data-bid="b">Mitte remote</p>');
+  assert.equal(puts[0].expected_updated_at, '2026-02-02T00:00:00Z');
+  assert.equal(el.innerHTML, puts[0].html);
+});
+
+test('saveEdit: 409-Race — während PUT + Remote-Read Getipptes überlebt den Re-Merge', async () => {
+  const app = setSwitchApp();
+  app.originalHtml = '<p data-bid="a">Anfang</p><p data-bid="b">Mitte</p>';
+  const el = document.createElement('div');
+  el.innerHTML = '<p data-bid="a">Anfang eins</p><p data-bid="b">Mitte</p>';
+  const ctx = mergeCtx(el);
+  let reads = 0;
+  mockLoadPage(async () => {
+    reads++;
+    // 1. Read = Pre-Check (noch kein fremder Save), 2. Read = nach dem 409.
+    if (reads === 1) return { updated_at: '2026-01-01T00:00:00Z' };
+    return { updated_at: '2026-02-02T00:00:00Z', html: '<p data-bid="a">Anfang</p><p data-bid="b">Mitte remote</p>' };
+  });
+  const puts = [];
+  contentRepo.savePage = async (id, payload) => {
+    puts.push(payload);
+    if (puts.length === 1) {
+      el.innerHTML = '<p data-bid="a">Anfang eins zwei</p><p data-bid="b">Mitte</p>';
+      throw conflict409();
+    }
+    return { updated_at: '2026-03-03T00:00:00Z' };
+  };
+  await ctx.saveEdit();
+  assert.equal(puts.length, 2);
+  assert.equal(puts[1].html, '<p data-bid="a">Anfang eins zwei</p><p data-bid="b">Mitte remote</p>');
+  assert.equal(puts[1].expected_updated_at, '2026-02-02T00:00:00Z');
+});
+
+// --- Draft-Wiederaufnahme gegen weitergeschriebenen Server-Stand ---------------
+// startEdit setzt den Draft unter den Server-Stempel von heute. Ohne Merge
+// nähme der nächste Save die Remote-Änderung still zurück.
+
+function setDraftApp() {
+  const app = {
+    originalHtml: '<p data-bid="a">Anfang</p><p data-bid="b">Mitte remote</p>',
+    currentPage: { id: 3, name: 'D', updated_at: '2026-02-02T00:00:00Z' },
+  };
+  window.__app = app;
+  return app;
+}
+const draftBase = '<p data-bid="a">Anfang</p><p data-bid="b">Mitte</p>';
+
+test('_reconcileDraftWithServer: Draft-Basis = Server-Stand → Draft unverändert', () => {
+  setDraftApp();
+  const draft = { html: '<p data-bid="a">lokal</p>', originalHtml: draftBase, originalUpdatedAt: '2026-02-02T00:00:00Z' };
+  assert.deepEqual(notebookEditMethods._reconcileDraftWithServer(draft), { html: draft.html });
+});
+
+test('_reconcileDraftWithServer: Alt-Draft ohne Basis → Draft unverändert', () => {
+  setDraftApp();
+  const draft = { html: '<p data-bid="a">lokal</p>' };
+  assert.deepEqual(notebookEditMethods._reconcileDraftWithServer(draft), { html: draft.html });
+});
+
+test('_reconcileDraftWithServer: Server weitergeschrieben, andere Blöcke → kollisionsfrei gemergt', () => {
+  setDraftApp();
+  const draft = {
+    html: '<p data-bid="a">Anfang lokal</p><p data-bid="b">Mitte</p>',
+    originalHtml: draftBase, originalUpdatedAt: '2026-01-01T00:00:00Z',
+  };
+  const r = notebookEditMethods._reconcileDraftWithServer(draft);
+  assert.equal(r.html, '<p data-bid="a">Anfang lokal</p><p data-bid="b">Mitte remote</p>');
+  assert.equal(r.conflict, undefined);
+});
+
+test('_reconcileDraftWithServer: derselbe Block beidseitig geändert → Konflikt mit Server-Stempel', () => {
+  setDraftApp();
+  const draft = {
+    html: '<p data-bid="a">Anfang</p><p data-bid="b">Mitte lokal</p>',
+    originalHtml: draftBase, originalUpdatedAt: '2026-01-01T00:00:00Z',
+  };
+  const r = notebookEditMethods._reconcileDraftWithServer(draft);
+  assert.equal(r.html, draft.html, 'Editor startet mit dem Draft, die Auflösung entscheidet');
+  assert.equal(r.conflict.conflicts.length, 1);
+  assert.equal(r.conflict.conflicts[0].bid, 'b');
+  assert.equal(r.conflict.remoteUpdatedAt, '2026-02-02T00:00:00Z');
+});
+
+// --- Fallback-Draft nach gescheitertem Save sichert den Live-Stand ------------
+// Der Draft-Debounce hat während des PUT Getipptes schon gesichert; der
+// Fallback darf ihn nicht mit dem älteren Save-Start-HTML überschreiben.
+
+for (const [label, run] of [['saveEdit', (c) => c.saveEdit()], ['quickSave', (c) => c.quickSave()]]) {
+  test(`${label}: 409 ohne möglichen Merge → Draft trägt das während des PUT Getippte`, async () => {
+    const app = setSwitchApp();
+    // Leere Base → kein 3-Way möglich → Fallback-Pfad.
+    app.originalHtml = '';
+    const el = document.createElement('div');
+    el.innerHTML = '<p>erster Stand mit Text</p>';
+    const ctx = mergeCtx(el);
+    const drafts = [];
+    ctx._keepAsDraft = (o) => drafts.push(o);
+    mockLoadPage(async () => ({ updated_at: '2026-01-01T00:00:00Z', html: '<p>remote</p>' }));
+    contentRepo.savePage = async () => {
+      el.innerHTML = '<p>erster Stand mit Text und mehr</p>';
+      throw conflict409();
+    };
+    await run(ctx);
+    assert.equal(drafts.length, 1);
+    assert.equal(drafts[0].html, '<p>erster Stand mit Text und mehr</p>');
+    assert.equal(drafts[0].base, '', 'Basis bleibt die des Save-Starts');
+  });
+}
+
+test('saveEdit: Seitenwechsel während PUT + Netzfehler → Draft für A mit Save-Start-HTML', async () => {
+  const app = setSwitchApp();
+  const el = document.createElement('div');
+  el.innerHTML = '<p>A-neu mit genug Text</p>';
+  const ctx = mergeCtx(el);
+  const drafts = [];
+  ctx._keepAsDraft = (o) => drafts.push(o);
+  mockLoadPage(async () => ({ updated_at: '2026-01-01T00:00:00Z' }));
+  contentRepo.savePage = async () => {
+    switchToB(app);
+    el.innerHTML = '<p>B-Inhalt</p>';
+    throw new TypeError('Failed to fetch');
+  };
+  await ctx.saveEdit();
+  assert.equal(drafts.length, 1);
+  assert.equal(drafts[0].pageId, 1);
+  assert.equal(drafts[0].html, '<p>A-neu mit genug Text</p>', 'kein HTML von Seite B im Draft von A');
 });

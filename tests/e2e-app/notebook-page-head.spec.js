@@ -18,7 +18,7 @@
 //      gespeichert).
 
 const { test, expect } = require('../e2e/_helpers/fixtures');
-const { bootApp, selectSeededBook } = require('./_helpers/app');
+const { bootApp, reboot, selectSeededBook } = require('./_helpers/app');
 
 const HEAD = '#editor-card .page-head';
 // Das Lese-Blatt. Ohne .page-view-wrap trifft der Selektor auch das
@@ -177,8 +177,7 @@ test.describe('Notebook: Titel-Kopf des Beitrags', () => {
       });
     }, pageId);
 
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await bootApp(page);
+    await reboot(page);
     await selectSeededBook(page);
     await openPage(page, 2);
 
@@ -223,8 +222,7 @@ test.describe('Notebook: Titel-Kopf des Beitrags', () => {
     // Wieder aus, und über den Reload hinweg aus (editorPrefs).
     await page.locator(`.page-editor-toolbar button[aria-label="${TIP_OFF}"]`).first().click();
     await expect(page.locator(HEAD)).toBeHidden();
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await bootApp(page);
+    await reboot(page);
     await selectSeededBook(page);
     await openPage(page, 4);
     await expect(page.locator(HEAD)).toBeHidden();

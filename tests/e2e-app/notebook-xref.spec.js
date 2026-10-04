@@ -21,7 +21,7 @@
 // arbeitet auf einer eigenen Seite — die Smoke-DB lebt ueber den ganzen Lauf.
 
 const { test, expect } = require('../e2e/_helpers/fixtures');
-const { bootApp, selectSeededBook } = require('./_helpers/app');
+const { bootApp, reboot, selectSeededBook } = require('./_helpers/app');
 
 const EDIT_SEL = '#editor-card .page-content-view--editing';
 
@@ -110,8 +110,8 @@ test('Verweis ueberlebt Speichern und Wieder-Oeffnen, ohne Editor-Attribut zu pe
   // Invariante 2.
   expect(saved).not.toContain('contenteditable');
 
-  await page.reload();
-  await boot(page);
+  await reboot(page);
+  await selectSeededBook(page);
   await openPageInEdit(page, 0);
   const ref = await page.evaluate(() => {
     const el = document.querySelector(`${'#editor-card .page-content-view--editing'} span.xref[data-xref-id]`);

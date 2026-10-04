@@ -1,0 +1,31 @@
+{
+  "version": "4.16.2",
+  "date": "2026-10-04",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Seite bearbeiten und Fokusmodus: Speichern Sie dieselbe Seite auf einem anderen Gerät, erscheint die Änderung sofort im offenen Editor. Das gilt auch, wenn der Tab im Hintergrund lag.",
+      "en": "Page editing and focus mode: if you save the same page on another device, the change appears right away in the open editor. This also works when the tab was in the background."
+    },
+    {
+      "kind": "behoben",
+      "de": "Seite bearbeiten: Wurde eine Änderung von einem anderen Gerät eingefügt, sprang der Cursor manchmal in einen anderen Absatz. Er bleibt jetzt dort, wo Sie gerade schreiben.",
+      "en": "Page editing: when a change from another device was merged in, the cursor sometimes jumped to a different paragraph. It now stays where you are writing."
+    },
+    {
+      "kind": "behoben",
+      "de": "Seite bearbeiten: Text, den Sie während des Speicherns tippten, ging bei gleichzeitigen Änderungen von einem anderen Gerät manchmal verloren. Er bleibt jetzt erhalten.",
+      "en": "Page editing: text typed while the page was saving was sometimes lost when another device changed the page at the same time. It is now kept."
+    },
+    {
+      "kind": "behoben",
+      "de": "Seite bearbeiten: Ein wiederhergestellter Entwurf konnte inzwischen gespeicherte Änderungen von einem anderen Gerät überschreiben. Beide Stände werden jetzt zusammengeführt.",
+      "en": "Page editing: a restored draft could overwrite changes saved on another device in the meantime. Both versions are now combined."
+    },
+    {
+      "kind": "behoben",
+      "de": "Buchübersicht, Kachel Schauplätze: Statt der Ortsnamen standen manchmal interne Kennungen. Die Kachel zeigt jetzt wieder die Namen der Orte.",
+      "en": "Book overview, Locations tile: instead of place names it sometimes showed internal identifiers. The tile now shows the place names again."
+    }
+  ]
+}

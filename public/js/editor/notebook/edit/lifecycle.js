@@ -21,6 +21,18 @@ export const lifecycleMethods = {
     };
   },
 
+  // Was ein gescheiterter Save als Draft sichert: der Live-Stand, solange die
+  // Session noch auf der gepinnten Seite steht, sonst das HTML vom Save-Start.
+  // Der Editor bleibt während des PUT beschreibbar, und der Draft-Debounce hat
+  // das dort Getippte womöglich schon gesichert — `pin.html` darüber zu
+  // schreiben, ersetzte den neueren Draft durch den älteren. Die Basis bleibt
+  // `pin.baseHtml`: ohne erfolgreichen Save rückt `originalHtml` nicht vor.
+  _liveHtmlFor(pin) {
+    if (!this._stillEditing(pin.pageId)) return pin.html;
+    const el = this._getEditEl();
+    return el ? stripLektoratMarks(el.innerHTML) : pin.html;
+  },
+
   // Save über einen Seitenwechsel abgebrochen, bevor der PUT lief: die Arbeit
   // als Draft der gepinnten Seite sichern — der pendingDraft-Banner bietet sie
   // beim nächsten Besuch wieder an.
@@ -203,9 +215,16 @@ export const lifecycleMethods = {
     // Draft-Wiederherstellung: lokalen Entwurf immer übernehmen, wenn vorhanden
     // und abweichend. Kein Dialog – der User hat den Entwurf bewusst getippt,
     // ihn beim Wiedereintritt zu verwerfen wäre destruktiv.
+    // Ist die Seite seit dem Draft weitergeschrieben worden, wird er gegen den
+    // Server-Stand gemergt (edit/conflict.js#_reconcileDraftWithServer) — sonst
+    // stünde alter Text unter frischem Stempel, und der nächste Save nähme die
+    // Remote-Änderung still zurück.
     const draft = readDraft(app.currentPage.id);
+    let draftConflict = null;
     if (draft && draft.html && draft.html !== app.originalHtml) {
-      initialHtml = draft.html;
+      const restored = this._reconcileDraftWithServer(draft);
+      initialHtml = restored.html;
+      draftConflict = restored.conflict || null;
       app.editDirty = true;
       app.lastDraftSavedAt = draft.savedAt || Date.now();
     }
@@ -256,6 +275,12 @@ export const lifecycleMethods = {
     // Undo/Redo: Session-Baseline mit dem initialen Edit-Stand. Stack
     // wird bei cancel/save (non-focus) wieder geclear't.
     if (el) this._historyReset?.(el.innerHTML);
+
+    // Draft kollidiert blockweise mit dem Server-Stand: Auflösung sofort statt
+    // erst beim ersten Save. Der Draft bleibt bis zur Entscheidung liegen.
+    if (draftConflict) {
+      this._openConflictResolution({ ...draftConflict, source: app.focusActive ? 'focus' : 'main' });
+    }
 
     // Layout-Prefs (Fullscreen, Seitenbreite, Steuerzeichen, Zoom) aus
     // localStorage restoren. Fit-Width skaliert die Schrift per CSS
@@ -378,7 +403,7 @@ export const lifecycleMethods = {
           if (!this._stillEditing(pin.pageId)) { this._keepPinnedDraft(pin); return; }
           const retry = await this._retryAfterConflict({
             localHtml: newHtml, source, pageId: pin.pageId,
-            pageName: pin.pageName, tag: 'saveEdit',
+            pageName: pin.pageName, tag: 'saveEdit', liveLocal: true,
           });
           if (retry?.stale) { this._keepPinnedDraft(pin); return; }
           if (retry?.conflict) return;
@@ -389,7 +414,7 @@ export const lifecycleMethods = {
             return;
           }
           this._keepAsDraft({
-            pageId: pin.pageId, html: newHtml, banner: readConflictBody(e),
+            pageId: pin.pageId, html: this._liveHtmlFor(pin), banner: readConflictBody(e),
             base: pin.baseHtml, baseUpdatedAt: pin.baseUpdatedAt,
           });
           return;
@@ -397,7 +422,7 @@ export const lifecycleMethods = {
         console.error('[saveEdit]', e);
         // Netzwerkfehler → Draft behalten, Offline-Modus aktivieren, Auto-Retry.
         this._keepAsDraft({
-          pageId: pin.pageId, html: newHtml,
+          pageId: pin.pageId, html: this._liveHtmlFor(pin),
           statusKey: navigator.onLine ? null : 'edit.offlineSaved',
           base: pin.baseHtml, baseUpdatedAt: pin.baseUpdatedAt,
         });
@@ -479,7 +504,7 @@ export const lifecycleMethods = {
         if (!this._stillEditing(pin.pageId)) return;
         const retry = await this._retryAfterConflict({
           localHtml: newHtml, source, pageId: pin.pageId,
-          pageName: pin.pageName, tag: 'quickSave',
+          pageName: pin.pageName, tag: 'quickSave', liveLocal: true,
         });
         if (retry?.stale || retry?.conflict) return;
         if (retry) {
@@ -489,7 +514,7 @@ export const lifecycleMethods = {
         }
         const banner = readConflictBody(e);
         this._keepAsDraft({
-          pageId: pin.pageId, html: newHtml, banner, statusKey: null,
+          pageId: pin.pageId, html: this._liveHtmlFor(pin), banner, statusKey: null,
           base: pin.baseHtml, baseUpdatedAt: pin.baseUpdatedAt,
         });
         if (this._stillEditing(pin.pageId)) app.setStatus(this._conflictHintText(banner), false, 8000);

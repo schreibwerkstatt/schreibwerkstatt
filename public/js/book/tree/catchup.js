@@ -119,9 +119,10 @@ export const treeCatchUpMethods = {
   // gestern am Mac-Client geschrieben, heute im Browser geoeffnet. Die Probe
   // kostet einen indexierten Read mit 200-Zeilen-Deckel.
   //
-  // Sie zeigt bewusst KEINE Toasts — „wer hat was geaendert" ist die Aufgabe des
-  // vollen Polls, der dafuer seinen eigenen Cursor fuehrt. Hier geht es nur um
-  // die Frage, ob der Baum nachgezogen werden muss. Sie ist selbstbegrenzend:
+  // Fuer andere Seiten zeigt sie bewusst KEINE Toasts — „wer hat was geaendert"
+  // ist die Aufgabe des vollen Polls, der dafuer seinen eigenen Cursor fuehrt.
+  // Hier geht es um die Frage, ob der Baum nachgezogen werden muss; einzig die
+  // OFFENE Seite reicht sie an den Collab-Pfad weiter (siehe unten). Sie ist selbstbegrenzend:
   // nach dem Nachzug steht `_treeSince()` hinter der Aenderung.
   // `force`: ein Anstoss des Event-Streams meldet eine NEUE Aenderung — die
   // Dedup-Regel (gleiche Frage, gleicher Cursor) greift dann nicht.
@@ -142,6 +143,16 @@ export const treeCatchUpMethods = {
       if (!Array.isArray(data?.changes) || data.changes.length === 0) return;
       if (String(bookId) !== String(this.$store.nav.selectedBookId)) return;
       this._scheduleTreeCatchUp('drift');
+      // Ausnahme vom „nur Baum": die OFFENE Seite. Der erste Save eines Geraets,
+      // das das Buch vorher nicht offen hatte, erreicht sonst nie den Editor —
+      // der volle Poll, den dieser Save anstoesst, setzt seine Basis dahinter.
+      // Der Vergleich mit dem Seiten-Stempel macht es wiederholbar: nach dem
+      // Nachladen steht der Stempel auf dem Remote-Stand.
+      const cur = this.currentPage;
+      const hit = cur?.id && cur.updated_at
+        ? data.changes.filter(c => c?.page_id === cur.id && c.updated_at > cur.updated_at).pop()
+        : null;
+      if (hit) this._onCurrentPageRemoteEdit(hit);
     } catch { /* offline / Netzfehler: der naechste Tick fragt erneut */ }
   },
 
