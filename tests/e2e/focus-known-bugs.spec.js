@@ -7,8 +7,7 @@
 // `test.fail()` heisst: der Test beschreibt das RICHTIGE Verhalten und schlägt
 // heute erwartungsgemäss fehl. Wer den Fehler behebt, bekommt ein „Expected to
 // fail, but passed" — dann `test.fail()` entfernen, und der Test wird zum
-// normalen Regressionsschutz. Der WebKit-spezifische Befund (Shift+Enter teilt
-// den Absatz) steht in focus-known-bugs.webkit.spec.js.
+// normalen Regressionsschutz.
 
 const { test, expect } = require('./_helpers/fixtures');
 

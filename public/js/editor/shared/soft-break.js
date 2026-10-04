@@ -56,32 +56,29 @@ export function insertSoftBreak(container) {
   const doc = container.ownerDocument || document;
   const block = findBlock(sel.getRangeAt(0).startContainer, container) || container;
 
-  // Regelfall mitten im Text: execCommand feuert sein eigenes `input`-Event.
-  // Rückgängig machbar ist der Umbruch in beiden Zweigen über die eigene
-  // Undo-Historie des Fokusmodus (Invariante 19): sie hängt am `input`-Event,
-  // nicht am nativen Stack — Cmd/Ctrl+Z erreicht den Browser dort gar nicht.
+  // Beide Lagen setzen den Umbruch von Hand, kein execCommand:
+  //   - Mitten im Text macht WebKit aus `insertHTML('<br>')` einen
+  //     Absatzwechsel (`<p>Eins</p><br> zwei…` statt `<p>Eins<br> zwei…</p>`,
+  //     gemeldet als `insertText`) — Safari und der macOS-Client teilten den
+  //     Absatz, statt weich umzubrechen.
+  //   - Am Blockende fügt `insertHTML` in Chromium nichts ein UND setzt den
+  //     Caret in den nächsten Absatz.
+  // Rückgängig machbar bleibt der Umbruch über die eigene Undo-Historie des
+  // Fokusmodus (Invariante 19): sie hängt am `input`-Event unten, nicht am
+  // nativen Stack — Cmd/Ctrl+Z erreicht den Browser dort gar nicht.
   //
-  // Am Blockende ist dieser Weg versperrt, und zwar nicht harmlos: `insertHTML`
-  // fügt dort nichts ein UND setzt den Caret in den nächsten Absatz (gemessen,
-  // Chromium). Probieren-und-messen scheidet damit aus — die Lage muss vorher
-  // feststehen.
-  if (!caretAtBlockEnd(sel.getRangeAt(0), block)) {
-    document.execCommand('insertHTML', false, '<br>');
-    return true;
-  }
-
-  // Blockende, manuell: zwei <br>, Caret dazwischen. Ein einzelnes <br> am
-  // Blockende erzeugt keine sichtbare Leerzeile, der Caret bliebe optisch auf
-  // der alten (gemessen — die Blockhöhe wächst erst beim Paar). Genau dieses
-  // Paar erzeugt Chromiums `insertLineBreak` am Blockende auch heute schon im
-  // Notebook; an der Persistenz ändert sich also nichts: bleibt die Zeile leer,
-  // kollabiert collapseEmptyBlocks das Paar beim Save auf ein <br>.
+  // Am Blockende zwei <br>, Caret dazwischen: ein einzelnes <br> am Blockende
+  // erzeugt keine sichtbare Leerzeile, der Caret bliebe optisch auf der alten
+  // (gemessen — die Blockhöhe wächst erst beim Paar). Genau dieses Paar erzeugt
+  // Chromiums `insertLineBreak` am Blockende auch im Notebook; an der Persistenz
+  // ändert sich also nichts: bleibt die Zeile leer, kollabiert
+  // collapseEmptyBlocks das Paar beim Save auf ein <br>.
+  const atEnd = caretAtBlockEnd(sel.getRangeAt(0), block);
   const range = sel.getRangeAt(0).cloneRange();
   const br = doc.createElement('br');
-  const placeholder = doc.createElement('br');
   const frag = doc.createDocumentFragment();
   frag.appendChild(br);
-  frag.appendChild(placeholder);
+  if (atEnd) frag.appendChild(doc.createElement('br'));
   range.insertNode(frag);
 
   const after = doc.createRange();
