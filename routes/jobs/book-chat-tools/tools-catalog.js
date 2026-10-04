@@ -15,7 +15,7 @@ const {
   listLocationFiguresForLocations, listLocationFigures, getLocationIdByLocId,
   getLocationByLocId, findLocationByName, listLocationScenesWithPlaces,
   listSongsWithFirstPage, listSongChaptersForSongs, listSongFiguresForSongs,
-  listSongScenesForSongs, listScenesWithPlaces, listSceneFiguresForScenes,
+  listScenesWithPlaces, listSceneFiguresForScenes,
   listSceneLocationsForScenes, listFiguresWithMentions, listWorldFacts,
   listWorldFactChapterNames,
 } = require('../../../db/book-chat/catalog');
@@ -219,7 +219,6 @@ const SONGS_MAX_LIMIT     = 200;
 function tool_list_songs(input, ctx) {
   const userEmail = ctx.userEmail || null;
   const chapterFilter = Number.isInteger(input?.chapter_id) ? input.chapter_id : null;
-  const sceneFilter   = Number.isInteger(input?.scene_id)   ? input.scene_id   : null;
   const limit = Math.min(SONGS_MAX_LIMIT, Math.max(1, Number.isInteger(input?.limit) ? input.limit : SONGS_DEFAULT_LIMIT));
 
   let figFilterId = null;
@@ -230,7 +229,7 @@ function tool_list_songs(input, ctx) {
   }
 
   const rows = listSongsWithFirstPage(ctx.bookId, userEmail, {
-    chapterId: chapterFilter, figureId: figFilterId, sceneId: sceneFilter,
+    chapterId: chapterFilter, figureId: figFilterId,
   });
   if (!rows.length) {
     return { songs: [], total: 0, hint: 'Keine Songs für diesen Filter. Songs werden in der Musikbibliothek bzw. via Komplettanalyse erfasst.' };
@@ -240,7 +239,6 @@ function tool_list_songs(input, ctx) {
 
   const chRows = listSongChaptersForSongs(songIds);
   const fgRows = listSongFiguresForSongs(songIds);
-  const scRows = listSongScenesForSongs(songIds);
 
   const chBy = new Map();
   for (const r of chRows) {
@@ -251,11 +249,6 @@ function tool_list_songs(input, ctx) {
   for (const r of fgRows) {
     if (!fgBy.has(r.song_id)) fgBy.set(r.song_id, []);
     fgBy.get(r.song_id).push({ fig_id: r.fig_id, name: r.name || null, kontext_typ: r.kontext_typ || null });
-  }
-  const scBy = new Map();
-  for (const r of scRows) {
-    if (!scBy.has(r.song_id)) scBy.set(r.song_id, []);
-    scBy.get(r.song_id).push({ scene_id: r.scene_id, titel: r.titel || null });
   }
 
   const total = rows.length;
@@ -272,7 +265,6 @@ function tool_list_songs(input, ctx) {
     erste_erwaehnung_page_name: r.erste_erwaehnung_page_name || null,
     kapitel:                    chBy.get(r.id) || [],
     figuren:                    fgBy.get(r.id) || [],
-    szenen:                     scBy.get(r.id) || [],
   }));
 
   return _truncateResult({

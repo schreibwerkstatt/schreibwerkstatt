@@ -6,12 +6,20 @@
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { formatRelativeShort } from '../utils.js';
 import { startPoll } from './job-helpers.js';
+import { tRaw } from '../i18n.js';
 
 const DEBOUNCE_MS = 220;
 const DEFAULT_KINDS = ['page', 'chapter'];
 const ALL_KINDS = ['page', 'chapter', 'book', 'figure', 'location', 'scene', 'idea', 'research'];
 // Semantische Suche kennt nur die indizierten Kinds (Embedding-Index).
-const SEMANTIC_KINDS = ['page', 'scene', 'figure', 'research'];
+const SEMANTIC_KINDS = ['page', 'scene', 'figure', 'location', 'fact', 'research'];
+
+// Fehlercode der semantischen Route → i18n-Key. Rohe HTTP-Status oder
+// Exception-Texte erreichen den User nie.
+const SEMANTIC_ERROR_KEYS = {
+  EMBED_UNAVAILABLE: 'search.semantic.unavailable',
+  LIKE_ENTITY_NOT_FOUND: 'search.semantic.entityNotFound',
+};
 
 export function registerSearchCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -21,6 +29,7 @@ export function registerSearchCard() {
     fallback: false,
     loading: false,
     errorMessage: '',
+    notIndexed: false, // Server: Embedding-Index fehlt/unvollständig → Hinweis statt „keine Treffer“
     activeKinds: [...DEFAULT_KINDS],
     scopeMode: 'book', // 'book' | 'all'
     mode: 'fts', // 'fts' | 'semantic'
@@ -96,6 +105,7 @@ export function registerSearchCard() {
       this.hits = [];
       this.fallback = false;
       this.errorMessage = '';
+      this.notIndexed = false;
       this.loading = false;
       this.likeEntity = null;
     },
@@ -111,6 +121,7 @@ export function registerSearchCard() {
       if (m === 'semantic' && !this.semanticAvailable) return;
       this.mode = m;
       this.likeEntity = null;
+      this.notIndexed = false;
       this.activeKinds = m === 'semantic' ? [...SEMANTIC_KINDS] : [...DEFAULT_KINDS];
       if (m === 'semantic') this.loadIndexStatus();
       this.runSearch();
@@ -134,10 +145,9 @@ export function registerSearchCard() {
     get semanticEnhancedLabel() {
       if (this.mode !== 'semantic') return '';
       const c = Alpine.store('config');
-      const t = window.__app?.t;
       const parts = [];
-      if (c?.semanticHybrid) parts.push(t ? t('search.semantic.hybrid') : 'Hybrid');
-      if (c?.semanticRerank) parts.push(t ? t('search.semantic.rerank') : 'Reranking');
+      if (c?.semanticHybrid) parts.push(tRaw('search.semantic.hybrid'));
+      if (c?.semanticRerank) parts.push(tRaw('search.semantic.rerank'));
       return parts.join(' · ');
     },
 
@@ -206,7 +216,7 @@ export function registerSearchCard() {
         });
         if (seq !== this._searchSeq) return; // raced
         if (!r.ok) {
-          this.errorMessage = `${r.status}`;
+          this.errorMessage = tRaw('search.failed');
           this.hits = [];
           this.fallback = false;
           return;
@@ -217,7 +227,7 @@ export function registerSearchCard() {
       } catch (e) {
         if (e.name === 'AbortError') return;
         if (seq !== this._searchSeq) return;
-        this.errorMessage = e.message || 'error';
+        this.errorMessage = tRaw('search.failed');
         this.hits = [];
       } finally {
         if (seq === this._searchSeq) this.loading = false;
@@ -229,11 +239,11 @@ export function registerSearchCard() {
     async runSemantic({ like = null } = {}) {
       const bookId = Alpine.store('nav').selectedBookId;
       if (!this.$store.config?.semanticSearchEnabled || !bookId) {
-        this.hits = []; this.loading = false; return;
+        this.hits = []; this.notIndexed = false; this.loading = false; return;
       }
       const query = (this.q || '').trim();
       if (!like && query.length < 2) {
-        this.hits = []; this.errorMessage = ''; this.loading = false; return;
+        this.hits = []; this.errorMessage = ''; this.notIndexed = false; this.loading = false; return;
       }
       this._searchSeq += 1;
       const seq = this._searchSeq;
@@ -252,18 +262,17 @@ export function registerSearchCard() {
         if (seq !== this._searchSeq) return;
         if (!r.ok) {
           const j = await r.json().catch(() => ({}));
-          this.errorMessage = j.error_code === 'EMBED_UNAVAILABLE'
-            ? (window.__app?.t?.('search.semantic.unavailable') || 'Embedding-Endpunkt nicht erreichbar')
-            : `${r.status}`;
-          this.hits = []; return;
+          this.errorMessage = tRaw(SEMANTIC_ERROR_KEYS[j.error_code] || 'search.semantic.failed');
+          this.hits = []; this.notIndexed = false; return;
         }
         const data = await r.json();
         this.hits = Array.isArray(data.hits) ? data.hits : [];
+        this.notIndexed = !!data.notIndexed;
         this.fallback = false;
       } catch (e) {
         if (e.name === 'AbortError') return;
         if (seq !== this._searchSeq) return;
-        this.errorMessage = e.message || 'error';
+        this.errorMessage = tRaw('search.semantic.failed');
         this.hits = [];
       } finally {
         if (seq === this._searchSeq) this.loading = false;
@@ -284,6 +293,7 @@ export function registerSearchCard() {
     clearLike() {
       this.likeEntity = null;
       this.hits = [];
+      this.notIndexed = false;
     },
 
     // Embedding-Index für das aktuelle Buch (neu) aufbauen. Delta-Cache im Job
@@ -292,7 +302,7 @@ export function registerSearchCard() {
       const bookId = Alpine.store('nav').selectedBookId;
       if (!bookId || this.indexing) return;
       this.indexing = true;
-      this.indexStatus = window.__app?.t?.('search.semantic.indexStarting') || '';
+      this.indexStatus = tRaw('search.semantic.indexStarting');
       try {
         const r = await fetch('/jobs/embed-index', {
           method: 'POST', credentials: 'same-origin',
@@ -302,13 +312,13 @@ export function registerSearchCard() {
         const j = await r.json().catch(() => ({}));
         if (!r.ok || !j.jobId) {
           this.indexing = false;
-          this.indexStatus = window.__app?.t?.('search.semantic.indexError') || 'Fehler';
+          this.indexStatus = tRaw('search.semantic.indexError');
           return;
         }
         this._pollIndex(j.jobId);
-      } catch (e) {
+      } catch {
         this.indexing = false;
-        this.indexStatus = e.message || 'error';
+        this.indexStatus = tRaw('search.semantic.indexError');
       }
     },
 
@@ -320,7 +330,7 @@ export function registerSearchCard() {
         onProgress: (j) => { this.indexStatus = `${j.progress || 0}%`; },
         onDone: () => {
           this.indexing = false;
-          this.indexStatus = window.__app?.t?.('search.semantic.indexDone') || 'Fertig';
+          this.indexStatus = tRaw('search.semantic.indexDone');
           this.loadIndexStatus();
         },
         onError: () => this._indexFailed(),
@@ -330,12 +340,11 @@ export function registerSearchCard() {
 
     _indexFailed() {
       this.indexing = false;
-      this.indexStatus = window.__app?.t?.('search.semantic.indexError') || 'Fehler';
+      this.indexStatus = tRaw('search.semantic.indexError');
     },
 
     hitKindLabel(kind) {
-      const root = window.__app;
-      return root?.t ? root.t('search.kind.' + kind) : kind;
+      return tRaw('search.kind.' + kind);
     },
 
     // Treffer-Aktivierung: Hash-Router fuer page/chapter, Karten-Trigger fuer
@@ -377,6 +386,14 @@ export function registerSearchCard() {
             return root.openOrtById?.(hit.nav_id ?? hit.entity_id);
           case 'scene':
             return root.openSzeneById?.(hit.nav_id ?? hit.entity_id);
+          case 'fact': {
+            // Welt-Fakten haben keine Einzel-Ansicht: der Treffer oeffnet die
+            // Welt-Fakten-Karte des Buches (Hash-Router #book/:id/fakten).
+            const bid = Number(hit.book_id) || Alpine.store('nav').selectedBookId;
+            if (!bid) return;
+            location.hash = `#book/${bid}/fakten`;
+            return;
+          }
           case 'research': {
             // Deep-Link-Hash als SSoT (analog reference-card#openRechercheItem):
             // der Hash-Router oeffnet die Karte, setzt Exklusivitaet und

@@ -2,42 +2,68 @@
 // gespreadet). Ergebnisse stammen aus der Komplettanalyse (Phase 8) und werden
 // via _loadKontinuitaetHistory (GET) angezeigt; Anzeige + Filter + Resolve-Toggle.
 
-import { fetchJson } from '../utils.js';
+import { fetchJson, escHtml } from '../utils.js';
 import { startPoll, runningJobStatus } from '../cards/job-helpers.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { memoMethods } from '../cards/card-memo.js';
 
+// Server-Fehlercodes der Start-Routen → Hinweis in der Karte (Rest: generisch).
+const START_ERROR_KEYS = {
+  CONTINUITY_PROVIDER_UNSUPPORTED: 'kontinuitaet.error.providerUnsupported',
+  FACTCHECK_NOT_ENABLED_FOR_BOOK: 'kontinuitaet.faktencheck.hint',
+  FACTCHECK_CLAUDE_ONLY: 'kontinuitaet.faktencheck.claudeOnly',
+  FACTCHECK_DISABLED: 'kontinuitaet.faktencheck.disabled',
+};
+
+// Triage-Status eines Befunds (Filter `status`): '' = aktiv (offen + erledigt, ohne
+// „kein Fehler"), 'open' = nur offene, 'dismissed' = nur als „kein Fehler" markierte.
+function _matchesStatus(issue, status) {
+  if (status === 'dismissed') return !!issue.dismissed;
+  if (issue.dismissed) return false;
+  if (status === 'open') return !issue.resolved;
+  return true;
+}
+
 export const kontinuitaetMethods = {
-  // ── Weltfakten-Faktencheck ──────────────────────────────────────────────────
-  // Eigener KI-Job (/jobs/faktencheck): prüft extrahierte Welt-Fakten per Web-Suche
-  // gegen die reale Faktenlage. Ergebnisse (typ='faktenfehler') werden an den
-  // neuesten Kontinuitäts-Check angehängt und erscheinen in derselben Liste. Nur
-  // wenn instanzweit freigeschaltet (Karte zeigt den Button nur dann) UND das Buch
-  // opt-in hat (sonst 400 → Hinweis auf die Bucheinstellungen).
-  async faktencheckRun() {
+  // ── Prüf-Jobs starten ───────────────────────────────────────────────────────
+  // Beide Knöpfe der Karte starten einen eigenen KI-Job und teilen Fortschritt,
+  // Polling und Fehleranzeige:
+  //  - „Nur Kontinuität prüfen" (/jobs/kontinuitaet): P8 ohne die volle
+  //    Extraktions-Pipeline, auf dem vorhandenen Katalog.
+  //  - Weltfakten-Faktencheck (/jobs/faktencheck): prüft extrahierte Welt-Fakten per
+  //    Web-Suche; Ergebnisse (typ='faktenfehler') hängen am neuesten Check. Nur wenn
+  //    instanzweit freigeschaltet (Karte zeigt den Button nur dann) UND das Buch
+  //    opt-in hat.
+  kontinuitaetRun() { return this._kontinuitaetStartJob('/jobs/kontinuitaet', 'kontinuitaet.run.starting'); },
+  faktencheckRun() { return this._kontinuitaetStartJob('/jobs/faktencheck', 'kontinuitaet.faktencheck.starting'); },
+
+  async _kontinuitaetStartJob(url, startingKey) {
     const root = window.__app;
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId || this.kontinuitaetLoading) return;
     this.kontinuitaetLoading = true;
     this.kontinuitaetProgress = 1;
-    this.kontinuitaetStatus = runningJobStatus(root.t, 'kontinuitaet.faktencheck.starting');
+    this.kontinuitaetStatus = runningJobStatus(root.t, startingKey);
     const clearRunState = () => {
       this.kontinuitaetLoading = false;
       this.kontinuitaetProgress = 0;
       this.kontinuitaetStatus = '';
     };
+    const showError = (key) => {
+      clearRunState();
+      this.kontinuitaetStatus = `<span>${escHtml(root.t(key))}</span>`;
+    };
     try {
-      const resp = await fetch('/jobs/faktencheck', {
+      const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ book_id: bookId, book_name: root.selectedBookName || '' }),
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok || !data.jobId) {
-        clearRunState();
-        if (data.error_code === 'FACTCHECK_NOT_ENABLED_FOR_BOOK') {
-          this.kontinuitaetStatus = `<span>${root.t('kontinuitaet.faktencheck.hint')}</span>`;
-        }
+        // 401 behandelt der globale fetch-Wrapper (Session-Banner).
+        if (resp.status === 401) { clearRunState(); return; }
+        showError(START_ERROR_KEYS[data.error_code] || 'kontinuitaet.error.startFailed');
         return;
       }
       startPoll(this, {
@@ -50,12 +76,12 @@ export const kontinuitaetMethods = {
             Alpine.store('config').claudeMaxTokens, job.progress, job.tps, job.statusParams);
         },
         onDone: async () => { clearRunState(); await this._loadKontinuitaetHistory(); },
-        onError: async () => { clearRunState(); },
+        onError: async () => { showError('kontinuitaet.error.jobFailed'); },
         onNotFound: () => { clearRunState(); },
       });
     } catch (e) {
-      clearRunState();
-      console.error('[faktencheckRun]', e);
+      showError('kontinuitaet.error.startFailed');
+      console.error('[_kontinuitaetStartJob]', e);
     }
   },
 
@@ -110,7 +136,7 @@ export const kontinuitaetMethods = {
     const figuren = window.__app.$store.catalog.figuren || [];
     return this._memo(
       'filtered',
-      [issues, chapters, figuren, filters.figurId, filters.kapitel, filters.schwere],
+      [issues, chapters, figuren, filters.figurId, filters.kapitel, filters.schwere, filters.status],
       () => this._computeKontinuitaetIssuesFiltered(issues, chapters, figuren, filters),
     );
   },
@@ -124,6 +150,7 @@ export const kontinuitaetMethods = {
       return chapterNames.has(c) ? c : null;
     };
     return issues.filter(issue => {
+      if (!_matchesStatus(issue, filters.status || '')) return false;
       if (filters.figurId) {
         if (issue.fig_ids?.length) {
           if (!issue.fig_ids.includes(filters.figurId)) return false;
@@ -183,10 +210,8 @@ export const kontinuitaetMethods = {
     if (!issue || issue.id == null) return;
     const next = !issue.resolved;
     issue.resolved = next;
-    // `resolved` wird in place umgeschaltet, die Sortierung haengt daran
-    // (Erledigte ans Ende): den Sortier-Slot gezielt verwerfen, sonst bliebe die
-    // Zeile bis zum naechsten Laden an ihrem Platz. Der Filter liest `resolved`
-    // nicht und bleibt gueltig.
+    // `resolved` wird in place umgeschaltet; Sortierung (Erledigte ans Ende) und
+    // Status-Filter haengen daran → beide Memo-Slots verwerfen.
     this._invalidateKontinuitaetSort();
     try {
       await fetchJson('/jobs/kontinuitaet/issue/' + issue.id + '/resolved', {
@@ -201,13 +226,41 @@ export const kontinuitaetMethods = {
     }
   },
 
-  _invalidateKontinuitaetSort() {
-    if (this._memos) delete this._memos.sorted;
+  // „Kein Fehler" umschalten. Optimistisch + Rollback. Anders als „erledigt"
+  // übernehmen spätere Läufe diesen Status für denselben Befund (Server-Wiedererkennung).
+  async kontinuitaetToggleDismissed(issue) {
+    if (!issue || issue.id == null) return;
+    const next = !issue.dismissed;
+    issue.dismissed = next;
+    this._invalidateKontinuitaetSort();
+    try {
+      await fetchJson('/jobs/kontinuitaet/issue/' + issue.id + '/dismissed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dismissed: next }),
+      });
+    } catch (e) {
+      issue.dismissed = !next;
+      this._invalidateKontinuitaetSort();
+      console.error('[kontinuitaetToggleDismissed]', e);
+    }
   },
 
-  // Anzahl noch offener (nicht erledigter) Issues im aktuellen Check.
+  // Status-Wechsel in place: gefilterte UND sortierte Liste neu berechnen.
+  _invalidateKontinuitaetSort() {
+    if (this._memos) { delete this._memos.sorted; delete this._memos.filtered; }
+  },
+
+  // Anzahl offener Befunde (nicht erledigt, nicht „kein Fehler") im aktuellen Check.
   kontinuitaetOpenCount() {
-    return (this.kontinuitaetResult?.issues || []).filter(i => !i.resolved).length;
+    return (this.kontinuitaetResult?.issues || []).filter(i => !i.resolved && !i.dismissed).length;
+  },
+
+  // Befunde, die der Status-Filter zeigt — Basis der Schwere-Zähler in den Tabs,
+  // damit „Kritisch 3" auch drei sichtbare Zeilen meint.
+  kontinuitaetIssuesInStatus() {
+    const status = Alpine.store('catalogUi').kontinuitaetFilters.status || '';
+    return (this.kontinuitaetResult?.issues || []).filter(i => _matchesStatus(i, status));
   },
 
   // Menschliches Label für den Issue-Typ. Freitext-Feld (Prompt-gesteuert) → i18n-Key
@@ -215,17 +268,6 @@ export const kontinuitaetMethods = {
   kontinuitaetTypLabel(typ) {
     const t = window.__app.t('kontinuitaet.typ.' + (typ || ''));
     return t === 'kontinuitaet.typ.' + (typ || '') ? (typ || '') : t;
-  },
-
-  kontinuitaetIssuesBySchwere() {
-    if (!this.kontinuitaetResult?.issues) return { kritisch: [], mittel: [], niedrig: [] };
-    const groups = { kritisch: [], mittel: [], niedrig: [] };
-    for (const issue of this.kontinuitaetIssuesFiltered()) {
-      const s = issue.schwere || 'niedrig';
-      if (groups[s]) groups[s].push(issue);
-      else groups.niedrig.push(issue);
-    }
-    return groups;
   },
 
   kontinuitaetKapitelListe() {
@@ -264,6 +306,17 @@ export const kontinuitaetMethods = {
   kontinuitaetResolveStelle(stelle, issue, side) {
     if (!stelle) return null;
     const chapters = this._kontinuitaetChapters();
+    // Seiten-Anker aus dem Speichern (Zitat bzw. zitierter Fakt im Buchtext gefunden)
+    // ist autoritativ — er zeigt auf die Seite der Stelle, nicht auf die erste
+    // Kapitelseite. Fehlt er (Altbefund, Stelle nicht auffindbar), greift die
+    // Namensauflösung unten.
+    const anchorId = side === 'b' ? issue?.page_b_id : issue?.page_a_id;
+    if (anchorId != null) {
+      for (const c of chapters.list) {
+        const hit = (c.pages || []).find(p => p.id === anchorId);
+        if (hit) return hit;
+      }
+    }
     const chIds = issue?.chapter_ids || [];
     const idx = side === 'b' && chIds.length > 1 ? 1 : 0;
     const targetCh = chIds[idx] ? (chapters.byId.get(chIds[idx]) || null) : null;

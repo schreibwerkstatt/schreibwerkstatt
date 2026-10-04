@@ -86,7 +86,8 @@
 .heatmap-cluster-row + tr th[colspan] { /* no-op selector to keep specificity comment near */ }
 /* Senkrechte Trennlinie an Cluster-Grenzen in der Typen-Reihe und im Body. */
 .heatmap-table thead tr:nth-child(2) th.heatmap-cluster-start,
-.heatmap-table tbody td.heatmap-cluster-start {
+.heatmap-table tbody td.heatmap-cluster-start,
+.heatmap-table tfoot td.heatmap-cluster-start {
   border-left: 0.5px solid var(--color-border);
 }
 .heatmap-table .heatmap-rowhead {
@@ -94,7 +95,8 @@
   font-weight: var(--fw-medium);
 }
 /* Erste Spalte bleibt beim horizontalen Scrollen sichtbar */
-.heatmap-table tbody th.heatmap-rowhead {
+.heatmap-table tbody th.heatmap-rowhead,
+.heatmap-table tfoot th.heatmap-rowhead {
   position: sticky;
   left: 0;
   z-index: var(--z-sticky);
@@ -124,15 +126,20 @@
   font-variant-numeric: tabular-nums;
   transition: background var(--transition-slow);
 }
+/* Teilabdeckung (--heatmap-opacity < 1) blasst nur den Hintergrund ab, nicht
+   die Zahl — die muss in jeder Zelle gleich gut lesbar bleiben. */
 .heatmap-cell--tinted {
-  background: color-mix(in srgb, var(--color-err-text) var(--heatmap-t, 0%), var(--color-success));
-  opacity: var(--heatmap-opacity, 1);
+  background: color-mix(in srgb,
+    color-mix(in srgb, var(--color-err-text) var(--heatmap-t, 0%), var(--color-success))
+      calc(var(--heatmap-opacity, 1) * 100%),
+    transparent);
 }
 .heatmap-cell--primary {
   background: color-mix(in srgb, var(--color-primary) var(--heatmap-t, 0%), transparent);
 }
-.heatmap-cell--faded {
-  opacity: var(--heatmap-opacity, 1);
+/* Zu wenig (geprüfter) Text für einen Vergleich: Zahl ja, Farbe nein. */
+.heatmap-cell--lowdata {
+  color: var(--color-muted);
 }
 .heatmap-cell--empty {
   background: var(--hatch-empty);
@@ -152,12 +159,20 @@
 /* Zellen mit Befunden tragen `.internal-link`, damit sie ueber die globale
    Delegation tastatur-erreichbar sind (Tab/Enter/Space). Deren globaler
    Hover-Stil passt hier nicht: der Underline verunstaltet die Zahl, und
-   `opacity: 0.65` wuerde die Zell-Opacity ueberschreiben — die traegt die
-   Abdeckungs-Information (--heatmap-opacity). Den Hover zeigt bereits
-   `.heatmap-cell:hover` als Outline. Der Fokus-Ring bleibt unangetastet. */
+   `opacity: 0.65` liesse die Zelle beim Hover verblassen, als sei sie nur
+   teilweise geprueft. Den Hover zeigt bereits `.heatmap-cell:hover` als
+   Outline. Der Fokus-Ring bleibt unangetastet. */
 .heatmap-cell.internal-link:hover {
-  opacity: var(--heatmap-opacity, 1);
+  opacity: 1;
   text-decoration: none;
+}
+
+/* Summenzeile „ganzes Buch" (Fehler-Heatmap) */
+.heatmap-total-row th,
+.heatmap-total-row td {
+  border-top: 1px solid var(--color-border);
+  border-bottom: none;
+  font-weight: var(--fw-semibold);
 }
 
 /* Coverage-Progress in Rowhead (Fehler-Heatmap) */
@@ -183,7 +198,8 @@
     padding: var(--space-5) var(--space-6);
     font-size: var(--font-size-xs, 11px);
   }
-  .heatmap-table tbody th.heatmap-rowhead {
+  .heatmap-table tbody th.heatmap-rowhead,
+  .heatmap-table tfoot th.heatmap-rowhead {
     min-width: 110px;
     max-width: 140px;
   }
@@ -321,9 +337,13 @@
 .fehler-trend-title {
   font-weight: var(--fw-semibold);
 }
-.fehler-trend-sub {
+.fehler-trend-sub,
+.fehler-trend-note {
   font-size: var(--font-size-xs, 11px);
   color: var(--color-muted);
+}
+.fehler-trend-note {
+  margin-top: var(--space-2xs);
 }
 .fehler-trend-chart-wrap {
   position: relative;
@@ -346,6 +366,31 @@
 }
 .stil-rhythm-head {
   margin-bottom: var(--space-md);
+}
+
+/* Unter der Stil-Tabelle: ≈-Hinweis links, Wortschatz-Querverweis rechts. */
+.stil-heatmap-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-md);
+  margin-top: var(--space-sm);
+}
+.stil-wortschatz-link {
+  margin-left: auto;
+  font-size: var(--font-size-sm);
+}
+/* Im Detail-Panel der Wiederholungs-Spalte steht der Link unter den Wörtern. */
+.heatmap-detail .stil-wortschatz-link {
+  display: block;
+  margin-top: var(--space-sm);
+}
+.stil-openers-titlebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
 }
 .stil-rhythm-title {
   margin: 0;

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Share-Reader TTS Harness</title>
+  <!-- Gleiche CSS-Kette wie public/share.html fuer den Vorlese-Dock. -->
+  <link rel="stylesheet" href="/public/css/share.css">
+  <link rel="stylesheet" href="/public/css/components/floating-dock.css">
+  <link rel="stylesheet" href="/public/css/share/tts.css">
+</head>
+<body class="share-page">
+  <main class="share-main">
+    <article class="share-content" id="share-article">
+      <p>Der erste Satz steht hier und ist lang genug fuer ein eigenes Fragment.</p>
+      <p>Rosen bluehen rot im Garten hinter dem Haus<br>Veilchen bluehen blau am Wegesrand dort</p>
+      <p>Ein dritter Absatz folgt mit einem dritten ausreichend langen Satz darin.</p>
+    </article>
+  </main>
+
+  <!-- Reader-Config wie SSR: TTS an, Pausen 0 (schnelle Tests). -->
+  <script id="share-config" type="application/json">{ "token": "TESTTOKEN", "lang": "en", "i18n": { "tts_error": "ERR" }, "tts": { "enabled": true, "lang": "de", "pause": { "fragmentMs": 0, "paragraphMs": 0 } } }</script>
+
+  <!-- Audio-Mock + Fetch-Stub VOR dem Modul. `ended` loest der Test aus
+       (window.__endAudio), damit der Ablauf deterministisch bleibt. -->
+  <script>
+    window.__sent = [];
+    window.__fail = false;
+    window.__audios = [];
+    class MockAudio {
+      constructor(src) { this.src = src; this.paused = true; this.ended = false; this._l = {}; this.playbackRate = 1; window.__audios.push(this); }
+      addEventListener(ev, cb) { (this._l[ev] = this._l[ev] || []).push(cb); }
+      play() { this.paused = false; return Promise.resolve(); }
+      pause() { this.paused = true; }
+    }
+    window.Audio = MockAudio;
+    window.__endAudio = () => {
+      const a = window.__audios[window.__audios.length - 1];
+      if (a && !a.ended) { a.ended = true; (a._l.ended || []).forEach(cb => cb()); }
+    };
+    window.fetch = (url, opts) => {
+      const u = String(url);
+      if (u.includes('/tts')) {
+        window.__sent.push(JSON.parse(opts.body).text);
+        if (window.__fail) return Promise.resolve(new Response('{}', { status: 500 }));
+        return Promise.resolve(new Response(new Blob([new Uint8Array([1, 2, 3])]), { status: 200 }));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    };
+  </script>
+  <script type="module" src="/public/js/share-reader/tts.js"></script>
+</body>
+</html>

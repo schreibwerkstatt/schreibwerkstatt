@@ -23,6 +23,7 @@ const { runPlotChatJobClassic } = require('./plot-chat-classic');
 const embed = require('../../lib/embed');
 const appSettings = require('../../lib/app-settings');
 const { getSessionWithBookName } = require('../../db/chat-sessions');
+const { agentPreContext, retrievalQuery } = require('./chat/book-chat-retrieval');
 
 function _maxToolIter(provider, userEmail) {
   const base = parseInt(appSettings.get('jobs.plot_chat.max_tool_iter'), 10) || 8;
@@ -83,7 +84,7 @@ const runPlotChatJob = makeAgenticChatJob({
 
   loadSession: (sessionId, userEmail) => getSessionWithBookName(parseInt(sessionId), userEmail, 'plot'),
 
-  async prepare({ session, userEmail, aiCfg, logger, jobSignal }) {
+  async prepare({ session, userEmail, aiCfg, logger, jobSignal, message, history }) {
     const {
       buildPlotChatSystemPrompt, BOOK_CHAT_TOOLS,
       PLOT_CHAT_PROPOSE_TOOLS, PLOT_CHAT_READ_TOOL_NAMES, PLOT_CHAT_SLIM_READ_TOOL_NAMES,
@@ -98,8 +99,17 @@ const runPlotChatJob = makeAgenticChatJob({
     const tools = [...readTools, ...PLOT_CHAT_PROPOSE_TOOLS];
 
     const base = await plotChatContext(session, userEmail);
+    // Erst-Kontext wie im agentischen Buch-Chat: die semantisch nächsten Passagen zur
+    // Frage (+ letzte Runde) stehen schon in Iteration 1 im Prompt — eine Frage wie
+    // „passt der Beat zu dem, was in Kapitel 3 steht?" braucht dann oft keine
+    // Lese-Runde. Pro Frage andere Bytes → im ungecachten Block 2 am Ende (siehe
+    // buildPlotChatSystemPrompt). Non-fatal; ohne Embedding-Endpunkt kein Block.
+    const preContext = embOn
+      ? await agentPreContext(session.book_id, retrievalQuery(message, history), { signal: jobSignal, logger, userEmail })
+      : null;
     const systemPrompt = buildPlotChatSystemPrompt(session.book_name || '', {
       mode: 'agent',
+      passages: embOn ? (preContext?.hits || []) : null,
       maxToolIter,
       toolNames: tools.map(t => t.name),
       bookContext: base.bookContext,
@@ -124,6 +134,7 @@ const runPlotChatJob = makeAgenticChatJob({
         inputBudgetChars: aiCfg.inputBudgetChars,
         readToolNames: new Set(readTools.map(t => t.name)),
         proposals: [],
+        preContext: preContext ? { count: preContext.hits.length, chars: preContext.chars } : null,
       },
     };
   },
@@ -155,6 +166,7 @@ const runPlotChatJob = makeAgenticChatJob({
     ...(stopReason ? { stop_reason: stopReason } : {}),
     ...(costUsd > 0 ? { cost_usd: Math.round(costUsd * 10000) / 10000 } : {}),
     ...(ctx.proposals.length ? { proposals: ctx.proposals } : {}),
+    ...(ctx.preContext ? { pre_context: ctx.preContext } : {}),
   }),
 
   buildCompletePayload: ({ base, ctx }) => ({ ...base, proposals: ctx.proposals.length }),

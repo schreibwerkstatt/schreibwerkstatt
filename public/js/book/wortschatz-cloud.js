@@ -101,6 +101,9 @@ export const wortschatzCloudMethods = {
 
     const rows = selectCloudWords(terms, this.wsCloudMode);
     this.wsCloudLayout = [];
+    // Der Zähler gehört zum Lauf, nicht zur Karte: ein neuer Lauf (oder einer ohne
+    // Wörter) darf nicht die „n ausgelassen"-Zeile des vorigen stehen lassen.
+    this.wsCloudDropped = 0;
     if (!rows.length) { this.wsCloudBuilding = false; this.wsCloudError = false; return; }
 
     this.wsCloudBuilding = true;

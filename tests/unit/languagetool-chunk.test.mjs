@@ -1,109 +1,72 @@
-// Unit-Test fuer lib/languagetool-chunk.js: chunkText + adjustMatches.
+// Unit-Test fuer lib/languagetool-chunk.js: Absatz-Segmente, Packen zu
+// Upstream-Anfragen, Rueckverteilung der Treffer auf die Segmente.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { chunkText, adjustMatches, CHUNK_MAX } = require('../../lib/languagetool-chunk.js');
+const { splitSegments, packSegments, assignMatches, CHUNK_MAX } = require('../../lib/languagetool-chunk.js');
 
-test('chunkText: empty returns []', () => {
-  assert.deepEqual(chunkText(''), []);
-  assert.deepEqual(chunkText(null), []);
+test('splitSegments: leer -> []', () => {
+  assert.deepEqual(splitSegments(''), []);
+  assert.deepEqual(splitSegments(null), []);
 });
 
-test('chunkText: short text returns single chunk with offset 0', () => {
-  const res = chunkText('hallo welt');
-  assert.equal(res.length, 1);
-  assert.equal(res[0].text, 'hallo welt');
-  assert.equal(res[0].offset, 0);
+test('splitSegments: ein Segment pro Absatz, Offsets absolut, Leerabsaetze fallen weg', () => {
+  const text = 'Eins.\n\nZwei.\n\n\n   \n\nDrei.';
+  const segs = splitSegments(text);
+  assert.deepEqual(segs.map(s => s.text), ['Eins.', 'Zwei.', 'Drei.']);
+  for (const s of segs) assert.equal(text.slice(s.offset, s.offset + s.text.length), s.text);
 });
 
-test('chunkText: splits at paragraph boundaries (greedy)', () => {
-  const para = 'a'.repeat(30_000);
-  const text = `${para}\n\n${para}\n\n${para}`;
-  const res = chunkText(text, 50_000);
-  // Greedy: 30k+30k > 50k -> flush 30k, naechster 30k+30k > 50k -> flush 30k,
-  // letzter 30k. Drei Chunks, jeder <= 50k.
-  assert.equal(res.length, 3);
-  for (const c of res) assert.ok(c.text.length <= 50_000);
-  // Stitching: chunks aneinandergehaengt geben original.
-  let i = 0;
-  for (const c of res) {
-    assert.equal(c.offset, i);
-    i += c.text.length;
+test('splitSegments: einfacher Zeilenumbruch trennt nicht', () => {
+  assert.deepEqual(splitSegments('Zeile eins\nZeile zwei').map(s => s.text), ['Zeile eins\nZeile zwei']);
+});
+
+test('splitSegments: Absatz > max wird an Satzgrenzen geteilt, notfalls hart', () => {
+  const sentence = 'a'.repeat(9_000) + '. ';
+  const para = sentence.repeat(10);
+  const segs = splitSegments(para, 20_000);
+  assert.ok(segs.length > 1);
+  for (const s of segs) {
+    assert.ok(s.text.length <= 20_000);
+    assert.equal(para.slice(s.offset, s.offset + s.text.length), s.text);
   }
-  assert.equal(i, text.length);
+  const huge = 'b'.repeat(70_000);
+  const hs = splitSegments(huge, CHUNK_MAX);
+  assert.ok(hs.length >= 2);
+  assert.equal(hs.map(s => s.text).join(''), huge);
 });
 
-test('chunkText: greedy packs small paragraphs', () => {
-  // 10x kleine Paragraphen je 5k -> sollten zu wenigen Chunks gepackt werden.
-  const para = 'a'.repeat(5_000);
-  const text = Array(10).fill(para).join('\n\n');
-  const res = chunkText(text, 50_000);
-  assert.ok(res.length <= 2, `expected <=2 chunks, got ${res.length}`);
-  let i = 0;
-  for (const c of res) {
-    assert.equal(c.offset, i);
-    i += c.text.length;
-  }
-  assert.equal(i, text.length);
+test('packSegments: verbindet mit \\n\\n und haelt max ein', () => {
+  const segs = [{ text: 'a'.repeat(30) }, { text: 'b'.repeat(30) }, { text: 'c'.repeat(30) }];
+  const batches = packSegments(segs, 70);
+  assert.equal(batches.length, 2);
+  assert.equal(batches[0].text, 'a'.repeat(30) + '\n\n' + 'b'.repeat(30));
+  assert.deepEqual(batches[0].parts, [{ index: 0, offset: 0, length: 30 }, { index: 1, offset: 32, length: 30 }]);
+  assert.deepEqual(batches[1].parts, [{ index: 2, offset: 0, length: 30 }]);
 });
 
-test('chunkText: paragraph >max splits at sentences', () => {
-  // 80k Paragraph, viele Saetze.
-  const sent = 'Dies ist ein Satz. ';
-  const para = sent.repeat(5000); // ~95k
-  const res = chunkText(para, 50_000);
-  assert.ok(res.length >= 2);
-  for (const c of res) assert.ok(c.text.length <= 50_000);
-  // Offset-Konsistenz: sum of texts = original.
-  let i = 0;
-  for (const c of res) {
-    assert.equal(c.offset, i);
-    i += c.text.length;
-  }
-  assert.equal(i, para.length);
+test('packSegments: ein Segment > max bekommt eine eigene Anfrage', () => {
+  const batches = packSegments([{ text: 'x'.repeat(10) }, { text: 'y'.repeat(100) }], 50);
+  assert.equal(batches.length, 2);
+  assert.equal(batches[1].text.length, 100);
 });
 
-test('chunkText: extreme single-sentence triggers hard split', () => {
-  const huge = 'x'.repeat(120_000);
-  const res = chunkText(huge, 50_000);
-  assert.ok(res.length >= 3);
-  for (const c of res) assert.ok(c.text.length <= 50_000);
-  let i = 0;
-  for (const c of res) {
-    assert.equal(c.offset, i);
-    i += c.text.length;
-  }
-  assert.equal(i, huge.length);
+test('assignMatches: Offsets relativ zum Segment, grenzueberschreitende Treffer fallen weg', () => {
+  const batch = packSegments([{ text: 'Hallo Welt' }, { text: 'Zweiter Satz' }])[0];
+  const out = assignMatches(batch, [
+    { offset: 6, length: 4, rule: { id: 'A' } },           // „Welt" in Segment 0
+    { offset: 12 + 8, length: 4, rule: { id: 'B' } },      // „Satz" in Segment 1
+    { offset: 8, length: 8, rule: { id: 'C' } },           // reicht ueber den Trenner
+  ]);
+  assert.deepEqual(out.get(0).map(m => [m.rule.id, m.offset]), [['A', 6]]);
+  assert.deepEqual(out.get(1).map(m => [m.rule.id, m.offset]), [['B', 8]]);
 });
 
-test('adjustMatches: empty', () => {
-  assert.deepEqual(adjustMatches(100, []), []);
-  assert.deepEqual(adjustMatches(0, null), []);
-});
-
-test('adjustMatches: shifts offsets by chunkOffset', () => {
-  const matches = [
-    { offset: 5, length: 3, rule: { id: 'A' } },
-    { offset: 10, length: 2, rule: { id: 'B' } },
-  ];
-  const out = adjustMatches(1000, matches);
-  assert.equal(out[0].offset, 1005);
-  assert.equal(out[1].offset, 1010);
-  // Original unveraendert.
-  assert.equal(matches[0].offset, 5);
-});
-
-test('adjustMatches: zero offset returns shallow copy', () => {
-  const matches = [{ offset: 1, length: 1 }];
-  const out = adjustMatches(0, matches);
-  assert.deepEqual(out, matches);
-  assert.notStrictEqual(out, matches);
-});
-
-test('CHUNK_MAX exported', () => {
-  assert.equal(typeof CHUNK_MAX, 'number');
-  assert.equal(CHUNK_MAX, 50_000);
+test('assignMatches: Segment ohne Treffer bekommt leeres Array (cachebar)', () => {
+  const batch = packSegments([{ text: 'eins' }, { text: 'zwei' }])[0];
+  const out = assignMatches(batch, []);
+  assert.deepEqual([...out.entries()], [[0, []], [1, []]]);
 });

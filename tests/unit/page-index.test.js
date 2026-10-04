@@ -115,6 +115,29 @@ test('computeStyleStats: Füllwörter und Passiv-Formen', () => {
   assert.ok(stats.passive_count >= 1, `erwartet ≥1 Passiv (wurde), gemessen ${stats.passive_count}`);
 });
 
+test('computeStyleStats: Abkürzungen, Ordinalzahlen und Dialog-Einschübe beenden keinen Satz', () => {
+  const lens = (t) => JSON.parse(computeStyleStats(t).sentence_lens);
+  assert.deepEqual(lens('Dr. Meier kam am 3. Mai z. B. mit dem Zug.'), [10]);
+  assert.deepEqual(lens('«Komm!», rief er. Sie kam.'), [3, 2]);
+  assert.deepEqual(lens('„Komm!“ rief er. Sie kam.'), [3, 2]);
+  assert.deepEqual(lens('Er wartete … und ging. Dann Stille.'), [4, 2]);
+  assert.deepEqual(lens('Wirklich? Ja! Gut.'), [1, 1, 1]);
+  assert.deepEqual(lens('Ohne Punkt am Ende'), [4]);
+});
+
+test('computeStyleStats: Wörter mit Akzenten zerfallen nicht', () => {
+  const s = computeStyleStats('Sie ass Crème brûlée im Café.');
+  assert.deepEqual(JSON.parse(s.sentence_lens), [6]);
+});
+
+test('computeStyleStats: Seite ohne zählbaren Satz hat keinen LIX — und das ist ein Ergebnis', () => {
+  // lib/stil-heatmap.js#needsSync darf daran nicht hängen, sonst rechnete die
+  // Stil-Karte bei jedem Öffnen neu.
+  const s = computeStyleStats('1984 – 2001');
+  assert.equal(s.lix, null);
+  assert.equal(s.flesch_de, null);
+});
+
 test('computeStyleStats: Wiederholungs-Score klammert Eigennamen via extraStopwords aus', () => {
   const text = 'Anna ging. Anna sprach. Anna hörte.';
   const withoutFilter = computeStyleStats(text);

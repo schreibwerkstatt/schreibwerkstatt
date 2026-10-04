@@ -10,6 +10,7 @@
       <div x-data="settingField({ k: 'jobs.book_chat.rag_top_k', type: 'num', label: 'admin.settings.label.jobsBookChatRagTopK', num: { step: 1, min: 1, max: 200 } })"></div>
       <div x-data="settingField({ k: 'jobs.book_chat.pre_rag_top_k', type: 'num', label: 'admin.settings.label.jobsBookChatPreRagTopK', num: { step: 1, min: 0, max: 50 } })"></div>
       <div x-data="settingField({ k: 'jobs.book_chat.pre_rag_chars', type: 'num', label: 'admin.settings.label.jobsBookChatPreRagChars', num: { step: 100, min: 0, max: 200000 } })"></div>
+      <div x-data="settingField({ k: 'jobs.page_chat.pre_rag_top_k', type: 'num', label: 'admin.settings.label.jobsPageChatPreRagTopK', num: { step: 1, min: 0, max: 20 } })"></div>
       <div x-data="settingField({ k: 'jobs.research_chat.max_tool_iter', type: 'num', label: 'admin.settings.label.jobsResearchChatMaxToolIter', num: { step: 1, min: 1, max: 50 } })"></div>
       <div x-data="settingField({ k: 'jobs.plot_chat.max_tool_iter', type: 'num', label: 'admin.settings.label.jobsPlotChatMaxToolIter', num: { step: 1, min: 1, max: 50 } })"></div>
       <div x-data="settingField({ k: 'jobs.research_chat.max_web_searches', type: 'num', label: 'admin.settings.label.jobsResearchChatMaxWebSearches', num: { step: 1, min: 1, max: 100 }, help: 'admin.settings.help.jobsResearchChatMaxWebSearches' })"></div>

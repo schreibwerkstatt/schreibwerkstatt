@@ -4,6 +4,7 @@
   `showRedundanzCard` + `toggleRedundanzCard` bleiben im Root (Hash-Router,
   Exklusivität). Rein rückwärtsgewandt: findet quasi-doppelte Seiten-Passagen,
   schreibt nie in den Buchtext. Setzt einen gebauten Semantik-Index voraus.
+  Doku: docs/redundanz.md.
 -->
 <div class="card card--redundanz" x-data="redundanzCard" x-show="$app.showRedundanzCard" x-cloak>
   <div class="card-header">
@@ -30,18 +31,41 @@
                 x-text="$app.t('redundanz.threshold.loose')"></button>
       </div>
       <button type="button" class="primary" data-label-ok
-              :disabled="redundanzLoading"
+              :disabled="redundanzLoading || redundanzIndexing"
               @click="runRedundanz()"
               x-text="$app.t(redundanzResult ? 'redundanz.rerun' : 'redundanz.run')"></button>
     </div>
   </div>
 
-  <p class="card-hint" x-show="redundanzAvailable && redundanzHasIndex" x-text="$app.t('redundanz.intro')"></p>
+  <div class="redundanz-intro" x-show="redundanzAvailable && redundanzHasIndex">
+    <p class="card-hint" x-text="$app.t('redundanz.intro')"></p>
+    <label class="form-check redundanz-option">
+      <input type="checkbox" x-model="redundanzSkipAdjacent" :disabled="redundanzLoading">
+      <span>
+        <span class="form-check-title" x-text="$app.t('redundanz.skipAdjacent')"></span>
+        <span class="form-check-desc" x-text="$app.t('redundanz.skipAdjacentHint')"></span>
+      </span>
+    </label>
+  </div>
 
   <!-- Gating: Backend aus / kein Index -->
   <div x-show="!redundanzAvailable" class="muted-msg muted-msg--spaced" x-text="$app.t('redundanz.needBackend')"></div>
-  <div x-show="redundanzAvailable && !redundanzHasIndex" class="muted-msg muted-msg--spaced" x-text="$app.t('redundanz.needIndex')"></div>
+  <div x-show="redundanzAvailable && !redundanzHasIndex" class="redundanz-index-gate">
+    <p class="muted-msg" x-text="$app.t('redundanz.needIndex')"></p>
+    <button type="button" class="primary" :disabled="redundanzIndexing" @click="buildRedundanzIndex()"
+            x-text="$app.t(redundanzIndexing ? 'redundanz.indexing' : 'redundanz.buildIndex')"></button>
+  </div>
 
+  <!-- Index veraltet: Einträge seit dem letzten Index-Lauf geändert -->
+  <div x-show="redundanzAvailable && redundanzHasIndex && redundanzIndexStaleCount() > 0" class="redundanz-stale">
+    <span class="card-hint--warn" x-text="$app.t('redundanz.indexStale', { n: redundanzIndexStaleCount() })"></span>
+    <button type="button" class="redundanz-link" :disabled="redundanzIndexing || redundanzLoading" @click="buildRedundanzIndex()"
+            x-text="$app.t(redundanzIndexing ? 'redundanz.indexing' : 'redundanz.updateIndex')"></button>
+  </div>
+
+  <div x-show="redundanzIndexing && redundanzIndexProgress > 0" class="progress-bar-wrap">
+    <div class="progress-bar" :style="{ '--progress': redundanzIndexProgress + '%' }"></div>
+  </div>
   <div x-show="redundanzLoading && redundanzProgress > 0" class="progress-bar-wrap">
     <div class="progress-bar" :style="{ '--progress': redundanzProgress + '%' }"></div>
   </div>
@@ -52,26 +76,41 @@
     <div class="redundanz-result">
       <div class="redundanz-meta">
         <span x-text="$app.t('redundanz.meta.summary', { found: redundanzResult.totalFound, chunks: redundanzResult.comparedChunks })"></span>
+        <span x-text="redundanzRunInfo()"></span>
         <span x-show="redundanzResult.truncated" class="card-hint--warn" x-text="$app.t('redundanz.meta.truncated', { shown: redundanzResult.pairs.length })"></span>
         <span x-show="redundanzResult.truncatedChunks > 0" class="card-hint--warn" x-text="$app.t('redundanz.meta.cappedChunks', { n: redundanzResult.truncatedChunks })"></span>
+        <span x-show="redundanzResultOutdated()" class="card-hint--warn" x-text="$app.t('redundanz.meta.outdated')"></span>
+        <span x-show="redundanzDismissedCount > 0" class="redundanz-dismissed">
+          <span x-text="$app.t('redundanz.dismissed.count', { n: redundanzDismissedCount })"></span>
+          <button type="button" class="redundanz-link" @click="resetRedundanzDismissals()" x-text="$app.t('redundanz.dismissed.reset')"></button>
+        </span>
       </div>
 
-      <div x-show="!redundanzResult.pairs.length" class="muted-msg muted-msg--spaced" x-text="$app.t('redundanz.empty')"></div>
+      <div x-show="!redundanzVisiblePairs().length" class="muted-msg muted-msg--spaced" x-text="$app.t('redundanz.empty')"></div>
 
-      <ul class="redundanz-list" x-show="redundanzResult.pairs.length">
-        <template x-for="(pair, i) in redundanzResult.pairs" :key="i">
+      <ul class="redundanz-list" x-show="redundanzVisiblePairs().length">
+        <template x-for="pair in redundanzVisiblePairs()" :key="'p' + pair.a_id + ':' + pair.b_id">
           <li class="redundanz-pair">
-            <span class="redundanz-score" :class="redundanzScoreClass(pair.score)"
-                  x-text="Math.round(pair.score * 100) + '%'"></span>
+            <div class="redundanz-pair-head">
+              <span class="redundanz-score" :class="redundanzScoreClass(pair.score)"
+                    x-text="Math.round(pair.score * 100) + '%'"></span>
+              <button type="button" class="redundanz-link" :disabled="!!redundanzBusyKey"
+                      :data-tip="$app.t('redundanz.dismissTip')"
+                      @click="dismissRedundanzPair('page', pair)" x-text="$app.t('redundanz.dismiss')"></button>
+            </div>
             <div class="redundanz-pair-sides">
-              <div class="redundanz-side">
-                <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: pair.a_id, label: redundanzPageName(pair.a_id) }"></button>
-                <p class="redundanz-snippet" x-text="pair.a_snippet"></p>
-              </div>
-              <div class="redundanz-side">
-                <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: pair.b_id, label: redundanzPageName(pair.b_id) }"></button>
-                <p class="redundanz-snippet" x-text="pair.b_snippet"></p>
-              </div>
+              <template x-for="side in ['a', 'b']" :key="side">
+                <div class="redundanz-side">
+                  <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: pair[side + '_id'], label: redundanzPageName(pair[side + '_id']) }"></button>
+                  <p class="redundanz-snippet"
+                     :class="{ 'redundanz-snippet--open': redundanzIsOpen(pair.a_id + ':' + pair.b_id + side) }"
+                     x-text="pair[side + '_text'] || pair[side + '_snippet'] || ''"></p>
+                  <button type="button" class="redundanz-link"
+                          x-show="(pair[side + '_text'] || '').length > 300"
+                          @click="toggleRedundanzOpen(pair.a_id + ':' + pair.b_id + side)"
+                          x-text="$app.t(redundanzIsOpen(pair.a_id + ':' + pair.b_id + side) ? 'redundanz.less' : 'redundanz.more')"></button>
+                </div>
+              </template>
             </div>
           </li>
         </template>
@@ -84,10 +123,15 @@
           <p class="card-hint" x-text="$app.t('redundanz.fig.hint')"></p>
           <div x-show="!redundanzResult.figures.pairs.length" class="muted-msg muted-msg--spaced" x-text="$app.t('redundanz.fig.empty')"></div>
           <ul class="redundanz-list" x-show="redundanzResult.figures.pairs.length">
-            <template x-for="(pair, i) in redundanzResult.figures.pairs" :key="'f' + i">
+            <template x-for="pair in redundanzResult.figures.pairs" :key="'f' + pair.a_id + ':' + pair.b_id">
               <li class="redundanz-pair">
-                <span class="redundanz-score" :class="redundanzScoreClass(pair.score)"
-                      x-text="Math.round(pair.score * 100) + '%'"></span>
+                <div class="redundanz-pair-head">
+                  <span class="redundanz-score" :class="redundanzScoreClass(pair.score)"
+                        x-text="Math.round(pair.score * 100) + '%'"></span>
+                  <button type="button" class="redundanz-link" :disabled="!!redundanzBusyKey"
+                          :data-tip="$app.t('redundanz.dismissTip')"
+                          @click="dismissRedundanzPair('figure', pair)" x-text="$app.t('redundanz.dismiss')"></button>
+                </div>
                 <div class="redundanz-fig-pair">
                   <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: pair.a_fig_id, label: redundanzFigurName(pair.a_fig_id, pair.a_name) }"></button>
                   <span class="redundanz-fig-sep" aria-hidden="true">↔</span>

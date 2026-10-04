@@ -25,19 +25,14 @@
   border-left: 2px solid transparent;
 }
 .overview-chapter-row:hover { background: var(--color-hover); opacity: 1; text-decoration: none; }
-/* Min/Max-Akzent: linker Border + tönt Bar-Fill ein. */
+/* Min/Max-Akzent der Längen-Verteilung (Übersicht + Buchorganizer): nur ein
+   linker Border, neutral. Länge ist keine Wertung — ein kurzes Kapitel ist
+   nicht „schlecht", darum weder Erfolgs- noch Fehlerfarbe. */
 .overview-chapter-row--max {
-  border-left-color: var(--color-success);
-}
-.overview-chapter-row--max .overview-chapter-bar-fill {
-  background: var(--color-success);
+  border-left-color: var(--color-accent);
 }
 .overview-chapter-row--min {
-  border-left-color: var(--color-err-text);
-}
-.overview-chapter-row--min .overview-chapter-bar-fill {
-  background: var(--color-err-text);
-  opacity: var(--opacity-disabled);
+  border-left-color: var(--color-muted);
 }
 /* Worst/Best: für Tiles mit invertierter Semantik (Findings, Lektoratszeit) —
    höchster Wert = bad (rot), niedrigster = good (grün). Border-only, damit
@@ -94,12 +89,14 @@
   border-radius: var(--radius-sm);
   transition: left 0.2s ease, width 0.2s ease;
 }
+/* Längen-Verteilung: über/unter Median nur in der Deckkraft unterschieden —
+   neutral wie die Min/Max-Akzente oben. */
 .overview-chapter-bar-fill--pos {
-  background: var(--color-success);
+  background: var(--color-accent);
 }
 .overview-chapter-bar-fill--neg {
-  background: var(--color-err-text);
-  opacity: 0.7;
+  background: var(--color-accent);
+  opacity: 0.45;
 }
 /* Median-Tick: bei Diverging-Bar fix in Track-Mitte, markiert Bezugspunkt.
    Stretch top/bottom = 8px (Row-Padding 6px + halbe Liste-Gap 2px), damit

@@ -2,7 +2,7 @@
 const crypto = require('crypto');
 const express = require('express');
 const {
-  db, getBookSettings,
+  getBookSettings, insertBookReview,
   loadChapterReviewCache, saveChapterReviewCache,
   loadBookReviewCache, saveBookReviewCache,
 } = require('../../db/schema');
@@ -30,10 +30,67 @@ function _sigHash(obj) {
 }
 
 // pages_sig pro Chunk (analog Komplettanalyse): page_id:updated_at sortiert,
-// plus alle Prompt-Vars, die das Kapitelanalyse-Ergebnis beeinflussen.
-function buildChapterPagesSig(chunk, { narrativeSig, cacheVersion }) {
+// plus alle Prompt-Vars, die das Kapitelanalyse-Ergebnis beeinflussen. `teil`
+// steht drin, weil der Prompt eines Teil-Abschnitts anders lautet als der eines
+// ganzen Kapitels.
+function buildChapterPagesSig(chunk, { bookName, teil, narrativeSig, systemSig, cacheVersion }) {
   const pages = chunk.pages.map(p => `${p.id}:${p.updated_at || ''}`).sort().join('|');
-  return `${pages}||${chunk.name}||${narrativeSig}||${cacheVersion}`;
+  const teilSig = teil ? `${teil.nr}/${teil.von}` : '';
+  return `${pages}||${chunk.name}||${bookName}||${teilSig}||${narrativeSig}||${systemSig}||${cacheVersion}`;
+}
+
+// Signatur der Multi-Pass-Synthese: sie hängt nur an den Kapitel-Analysen (deren
+// Signaturen tragen den Seitenstand) und an den Prompt-Vars der Buchbewertung.
+function buildSynthesisSig(chapterSigs, { bookName, optionsSig, cacheVersion }) {
+  const h = crypto.createHash('sha1').update(chapterSigs.join('\n')).digest('hex');
+  return `multi:${h}||${bookName}||${optionsSig}||${cacheVersion}`;
+}
+
+// Zeichenlänge eines System-Prompts (String oder Cache-Block-Array).
+function _systemChars(system) {
+  if (Array.isArray(system)) return system.reduce((s, b) => s + (b?.text?.length || 0), 0);
+  return String(system || '').length;
+}
+
+// Pflichtfeld der Bewertung prüfen und normalisieren, BEVOR das Ergebnis in den
+// Cache geht — ein kaputtes Ergebnis im Cache käme sonst bei jedem Lauf wieder.
+// Skala 1.0–6.0; ein Zahl-String wird zur Zahl, sonst bleibt der Wert unberührt.
+function normalizeGesamtnote(r) {
+  const raw = r?.gesamtnote;
+  if (raw == null || raw === '') throw i18nError('job.error.gesamtnoteMissing');
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1 || n > 6) {
+    throw i18nError('job.error.gesamtnoteInvalid', { note: String(raw) });
+  }
+  r.gesamtnote = n;
+  return r;
+}
+
+// Eine leere Kapitelanalyse ginge still als «–» in die Synthese ein und
+// verzerrte die Note, ohne dass es jemand sieht.
+function assertChapterAnalysis(ca, name) {
+  const filled = (v) => typeof v === 'string' && v.trim().length > 0;
+  if (!ca || !(filled(ca.themen) || filled(ca.funktion_kurz))) {
+    throw i18nError('job.error.chapterAnalysisEmpty', { name });
+  }
+}
+
+// Ordnet jedem Chunk sein Kapitel (1-basiert in Lesereihenfolge) und — bei
+// zerlegten Kapiteln — seine Teil-Nummer zu.
+function chunkPlacement(chunkOrder, groupOrder) {
+  const base = (key) => key.replace(/__sub\d+$/, '');
+  const perGroup = new Map();
+  for (const key of chunkOrder) perGroup.set(base(key), (perGroup.get(base(key)) || 0) + 1);
+  const seen = new Map();
+  const out = new Map();
+  for (const key of chunkOrder) {
+    const g = base(key);
+    const nr = (seen.get(g) || 0) + 1;
+    seen.set(g, nr);
+    const von = perGroup.get(g);
+    out.set(key, { kapitelNr: groupOrder.indexOf(g) + 1, teil: von > 1 ? { nr, von } : null });
+  }
+  return out;
 }
 
 // pages_sig fürs ganze Buch (Single-Pass-Review).
@@ -79,15 +136,19 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
   const bookIdInt = parseInt(bookId);
   const email = userEmail || '';
   const effectiveProvider = resolveProvider({ userEmail });
-  const { singlePass: SINGLE_PASS_LIMIT, perChunk: PER_CHUNK_LIMIT } = chunkLimitsFor(effectiveProvider);
+  const { singlePass: SINGLE_PASS_LIMIT, perChunk: PER_CHUNK_LIMIT, inputBudget: INPUT_BUDGET } = chunkLimitsFor(effectiveProvider);
   // Cache-Version: Modellname + Prompts-Schema-Version. Ändert sich eins davon,
   // werden alle persistierten Review-Caches automatisch verworfen.
   const effortSuffix = applyReviewAiOverrides(effectiveProvider, logger);
   const cacheVersion = `${_modelName(effectiveProvider)}${effortSuffix}:${PROMPTS_VERSION || ''}`;
   const narrativeSig = _sigHash(narrative);
-  // Stilprofil fliesst in SYSTEM_BUCHBEWERTUNG (Referenz-Framing) → muss den
-  // Cache invalidieren, wenn der Autor das Profil ändert.
-  let optionsSig = _sigHash({ schwerpunkt: reviewSchwerpunkt, komplettContext, motivContext, narrative, stilprofil: bookSettings?.stilprofil || '' });
+  // Die System-Prompts tragen den Buch-Kontext (Freitext, Buchtyp-Zusatz, Status,
+  // Schauplatz, reale Zeitlinie, Locale) und das Stilprofil. Gehasht wird der
+  // gesendete Inhalt selbst statt einer Liste von Einstellungen — ein künftiger
+  // Kontext-Baustein kann so nicht vergessen werden.
+  const systemSigBook = _sigHash(SYSTEM_BUCHBEWERTUNG);
+  const systemSigChapter = _sigHash(SYSTEM_KAPITELANALYSE);
+  let optionsSig = _sigHash({ schwerpunkt: reviewSchwerpunkt, komplettContext, motivContext, narrative, systemSigBook });
   try {
     updateJob(jobId, { statusText: 'job.phase.loadingPages', progress: 0 });
     const { chMap, pages } = await loadOrderedBookContents(bookId)
@@ -132,22 +193,40 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
     // Kapitelanalysen. Die beiden sind nicht vergleichbar (Zusammenfassungen
     // glätten Schwächen) — das Ergebnis muss es darum mitführen.
     let basis;
+    // Kam das Endergebnis unverändert aus dem Cache? Dann ist es keine neue
+    // Bewertung und bekommt keine zweite Historien-Zeile.
+    let fromCache = false;
 
+    // Single-Pass nur, wenn der FERTIGE Prompt ins Budget passt: SINGLE_PASS_LIMIT
+    // misst nur den Buchtext, die Kontext-Blöcke (Komplettanalyse, Motive, Welt,
+    // Struktur) kommen obendrauf. Passt er nicht, Multi-Pass statt Preflight-Fehler.
+    let singlePrompt = null, bookText = null;
     if (totalChars <= SINGLE_PASS_LIMIT) {
+      bookText = buildSinglePassBookText(groups, groupOrder);
+      singlePrompt = buildBookReviewSinglePassPrompt(bookName, pageContents.length, bookText, reviewOptions);
+      const promptChars = singlePrompt.length + _systemChars(SYSTEM_BUCHBEWERTUNG);
+      if (promptChars > INPUT_BUDGET) {
+        logger.info(`Single-Pass-Prompt ${promptChars} Zeichen > Budget ${INPUT_BUDGET} – weiche auf Multi-Pass aus.`);
+        singlePrompt = null;
+      }
+    }
+
+    if (singlePrompt) {
       updateJob(jobId, { progress: 65, statusText: 'job.phase.aiBookReview' });
-      const bookText = buildSinglePassBookText(groups, groupOrder);
       const bookPagesSig = buildBookReviewPagesSig(pageContents, { bookName, optionsSig, cacheVersion });
       const cached = loadBookReviewCache(bookIdInt, email, bookPagesSig, effectiveProvider);
       if (cached) {
         logger.info(`Single-Pass-Review – Cache-HIT (pages_sig match) – spart Review-Call.`);
         updateJob(jobId, { progress: 97, statusText: 'job.phase.checkpointLoaded' });
         r = cached;
+        fromCache = true;
       } else {
         r = await aiCall(jobId, tok,
-          buildBookReviewSinglePassPrompt(bookName, pageContents.length, bookText, reviewOptions),
+          singlePrompt,
           SYSTEM_BUCHBEWERTUNG,
           65, 97, 5000, 0.2, null, undefined, SCHEMA_REVIEW,
         );
+        normalizeGesamtnote(r);
         // Belegzitate gegen den tatsächlichen Buchtext prüfen. Ein nicht
         // auffindbares Zitat ist erfunden — es hat kein Sprungziel, an dem das
         // auffallen würde, also fällt es hier still heraus.
@@ -158,6 +237,8 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
       basis = 'single';
     } else {
       const { chunkOrder, chunks } = splitGroupsIntoChunks(groups, groupOrder, PER_CHUNK_LIMIT);
+      const placement = chunkPlacement(chunkOrder, groupOrder);
+      const chapterSigs = new Array(chunkOrder.length);
       const chapterAnalyses = [];
       let completed = 0;
       let cacheHits = 0;
@@ -167,7 +248,9 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
         const chunk = chunks.get(key);
         const fromPct = 65 + Math.round((gi / chunkOrder.length) * 25);
         const toPct   = 65 + Math.round(((gi + 1) / chunkOrder.length) * 25);
-        const pagesSig = buildChapterPagesSig(chunk, { narrativeSig, cacheVersion });
+        const { kapitelNr, teil } = placement.get(key);
+        const pagesSig = buildChapterPagesSig(chunk, { bookName, teil, narrativeSig, systemSig: systemSigChapter, cacheVersion });
+        chapterSigs[gi] = pagesSig;
         const cached = loadChapterReviewCache(bookIdInt, email, key, pagesSig, effectiveProvider);
         if (cached) {
           cacheHits++;
@@ -178,7 +261,7 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
             statusParams: { current: gi + 1, total: chunkOrder.length, name: chunk.name },
           });
           logger.info(`[${completed}/${chunkOrder.length}] «${chunk.name}» – Cache-HIT`);
-          return { name: chunk.name, pageCount: chunk.pages.length, ...cached };
+          return { name: chunk.name, pageCount: chunk.pages.length, kapitelNr, teil, ...cached };
         }
         updateJob(jobId, {
           progress: fromPct,
@@ -187,10 +270,11 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
         });
         const chText = chunk.pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n');
         const ca = await aiCall(jobId, tok,
-          buildChapterAnalysisPrompt(chunk.name, bookName, chunk.pages.length, chText, narrative),
+          buildChapterAnalysisPrompt(chunk.name, bookName, chunk.pages.length, chText, { ...narrative, teil }),
           SYSTEM_KAPITELANALYSE,
           fromPct, toPct, 1500, 0.2, null, undefined, SCHEMA_CHAPTER_ANALYSIS,
         );
+        assertChapterAnalysis(ca, chunk.name);
         // Belegzitate der Zwischenstufe verifizieren, BEVOR sie in den Cache und
         // damit in die Synthese gehen: ab hier sieht keine Schicht den Volltext
         // dieses Kapitels wieder.
@@ -199,7 +283,7 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
         saveChapterReviewCache(bookIdInt, email, key, pagesSig, ca, effectiveProvider);
         completed++;
         logger.info(`[${completed}/${chunkOrder.length}] «${chunk.name}» analysiert (${chunk.pages.length} Seiten)`);
-        return { name: chunk.name, pageCount: chunk.pages.length, ...ca };
+        return { name: chunk.name, pageCount: chunk.pages.length, kapitelNr, teil, ...ca };
       });
 
       const results = await settledAll(thunks);
@@ -215,19 +299,35 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
         progress: 90,
         statusText: 'job.phase.finalReview',
       });
-      r = await aiCall(jobId, tok,
-        buildBookReviewMultiPassPrompt(bookName, chapterAnalyses, pageContents.length, reviewOptions),
-        SYSTEM_BUCHBEWERTUNG,
-        90, 97, 5000, 0.2, null, undefined, SCHEMA_REVIEW,
-      );
-      // Im Multi-Pass gibt es keinen Volltext mehr; zitierfähig sind nur die
-      // Belegzitate der Kapitelanalysen.
-      const droppedQ = applyQuoteVerification(r, belegHaystack(chapterAnalyses));
-      if (droppedQ) logger.warn(`${droppedQ} Belegzitat(e) stammen nicht aus den Kapitelanalysen – verworfen.`);
+      // Synthese-Cache: kommen alle Kapitel aus dem Cache und hat sich an den
+      // Prompt-Vars nichts geändert, ist auch die Synthese dieselbe. Teilt sich die
+      // Zeile in book_review_cache mit dem Single-Pass (ein Endergebnis pro Buch).
+      const synthSig = buildSynthesisSig(chapterSigs, { bookName, optionsSig, cacheVersion });
+      const cachedSynth = loadBookReviewCache(bookIdInt, email, synthSig, effectiveProvider);
+      if (cachedSynth) {
+        logger.info(`Multi-Pass-Synthese – Cache-HIT – spart Final-Call.`);
+        updateJob(jobId, { progress: 97, statusText: 'job.phase.checkpointLoaded' });
+        r = cachedSynth;
+        fromCache = true;
+      } else {
+        r = await aiCall(jobId, tok,
+          buildBookReviewMultiPassPrompt(bookName, chapterAnalyses, pageContents.length, reviewOptions),
+          SYSTEM_BUCHBEWERTUNG,
+          90, 97, 5000, 0.2, null, undefined, SCHEMA_REVIEW,
+        );
+        normalizeGesamtnote(r);
+        // Im Multi-Pass gibt es keinen Volltext mehr; zitierfähig sind nur die
+        // Belegzitate der Kapitelanalysen.
+        const droppedQ = applyQuoteVerification(r, belegHaystack(chapterAnalyses));
+        if (droppedQ) logger.warn(`${droppedQ} Belegzitat(e) stammen nicht aus den Kapitelanalysen – verworfen.`);
+        saveBookReviewCache(bookIdInt, email, synthSig, r, effectiveProvider);
+      }
       basis = 'multi';
     }
 
-    if (r?.gesamtnote == null) throw i18nError('job.error.gesamtnoteMissing');
+    // Auch ein Cache-Treffer läuft durch die Prüfung: Einträge aus der Zeit vor
+    // der Normalisierung können eine ungültige Note tragen.
+    normalizeGesamtnote(r);
     // Grundlage + Achsen-Profil ins Ergebnis: das Frontend rendert die Achsen
     // dieses Laufs, nicht die des heute eingestellten Buchtyps — sonst fehlen
     // einer Alt-Bewertung nach einem Buchtyp-Wechsel die Abschnitte.
@@ -235,11 +335,16 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
     r.profil = profil;
 
     const model = _modelName(effectiveProvider);
-    db.prepare('INSERT INTO book_reviews (book_id, reviewed_at, review_json, model, user_email) VALUES (?, ?, ?, ?, ?)')
-      .run(parseInt(bookId), new Date().toISOString(), JSON.stringify(r), model, userEmail || null);
+    // Cache-Treffer ohne Textänderung: steht dieselbe Bewertung schon zuoberst in
+    // der Historie, keine Duplikat-Zeile — der Client meldet «unverändert».
+    // Wurde der Eintrag inzwischen gelöscht, kommt er wieder hinein.
+    const unchanged = !insertBookReview(
+      { bookId: bookIdInt, review: r, model, userEmail },
+      { skipIfSameAsLatest: fromCache },
+    );
 
-    completeJob(jobId, { review: r, pageCount: pageContents.length, tokensIn: tok.in, tokensOut: tok.out },
-      tps(tok), `«${bookName}» ${pageContents.length} Seiten, Note ${r.gesamtnote}`);
+    completeJob(jobId, { review: r, unchanged, pageCount: pageContents.length, tokensIn: tok.in, tokensOut: tok.out },
+      tps(tok), `«${bookName}» ${pageContents.length} Seiten, Note ${r.gesamtnote}${unchanged ? ' (unverändert)' : ''}`);
   } catch (e) {
     if (e.name !== 'AbortError') logger.error(`Fehler: ${e.message}`, { stack: e.stack });
     failJob(jobId, e);
@@ -269,4 +374,4 @@ reviewRouter.post('/review', jsonBody, async (req, res) => {
   res.json({ jobId });
 });
 
-module.exports = { reviewRouter, runReviewJob };
+module.exports = { reviewRouter, runReviewJob, normalizeGesamtnote, chunkPlacement };

@@ -1,9 +1,9 @@
-'use strict';
-// Pure Satz-Segmentierung + Chunking fuer das Vorlesen (TTS / Proof-Listening).
+// Satz-Segmentierung + Chunking fuer das Vorlesen (TTS / Proof-Listening).
 // SSoT, geteilt zwischen dem Notebook-Proof-Listening (Alpine-Root,
 // editor/notebook/tts-proof.js) und dem Share-Reader-Vorlese-Dock (Vanilla,
-// share-reader/tts.js). Keine DOM-/Browser-Abhaengigkeit ausser Intl.Segmenter
-// (mit Regex-Fallback) — ohne Browser testbar.
+// share-reader/tts.js). Keine Browser-Globals beim Import (Intl.Segmenter mit
+// Regex-Fallback); die DOM-Helfer arbeiten nur auf uebergebenen Knoten — mit
+// linkedom ohne Browser testbar.
 //
 // Warum die zwei Chunk-Korrektive: sehr kurze Eingaben lassen XTTS-v2 am
 // Satzende einen erfundenen Restlaut anhaengen (Kurz-Input-Halluzination) →
@@ -99,12 +99,30 @@ export function chunkTtsRanges(ranges, text, minLen = TTS_MIN_CHUNK_CHARS, maxLe
   return coalesceTtsRanges(split, text, minLen, maxLen);
 }
 
-// Schweizer Guillemets (« ») spricht XTTS als Lautfolge aus statt sie als
-// Anfuehrung zu ignorieren. Vor der Synthese auf gerade Anfuehrungszeichen
-// normalisieren — rein fuer die Sprachausgabe; angezeigter Text +
-// Highlight-Offsets bleiben unveraendert.
+// Text fuer die Sprachausgabe aufbereiten — rein fuer den gesendeten Text;
+// angezeigter Text und Highlight-Offsets bleiben unberuehrt (die Konsumenten
+// rechnen mit `seg.startOff/endOff` im Block, nie mit diesem Ergebnis).
+//   - Guillemets (« » ‹ ›) spricht XTTS als Lautfolge aus → gerade Anfuehrung.
+//   - Zeilenumbruch (aus <br>/Blockgrenze, siehe ttsUnits) ohne Satzzeichen
+//     davor → Komma: Gedicht- und Listenzeilen bekommen eine Atempause, statt
+//     nahtlos ineinanderzulaufen.
+//   - freistehender Gedankenstrich und Auslassungspunkte → Komma bzw. am Ende
+//     Punkt: manche Engines lesen „Strich" / „Punkt Punkt Punkt" vor.
+//   - Auszeichnungsreste (* _ # ~, z. B. Szenentrenner „* * *") fallen weg.
 export function normalizeForSpeech(text) {
-  return text.replace(/[«»]/g, '"').replace(/[‹›]/g, "'");
+  return String(text ?? '')
+    .replace(/[«»]/g, '"').replace(/[‹›]/g, "'")
+    .replace(/(\S)[ \t]*\n\s*(?=\S)/gu, (_m, c) => (/[.,;:!?…"')\]–—-]/u.test(c) ? `${c} ` : `${c}, `))
+    .replace(/\s+[–—-]\s+/gu, ', ')
+    .replace(/(\p{L})—(?=\p{L})/gu, '$1, ')
+    .replace(/(?:…|\.{3})(?=["'\s]*$)/u, '.')
+    .replace(/\s*(?:…|\.{3})\s*/gu, ', ')
+    .replace(/[*_#~]+/g, ' ')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/,(\s*,)+/g, ',')
+    .replace(/^[\s,]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 // ── Sprech-Text eines Blocks (Beleg-Chips ausgelassen) ──────────────────────
@@ -114,8 +132,8 @@ export function normalizeForSpeech(text) {
 //
 // Text UND Highlight muessen dabei in EINEM Offsetraum leben — beide Konsumenten
 // bauen ihre Satz-Range aus Zeichen-Offsets in denselben Textknoten. Darum
-// liefert `ttsTextNodes` die Knotenliste, aus der beide arbeiten: `ttsBlockText`
-// verkettet sie zum Sprech-Text, und der Range-Bau der Konsumenten laeuft ueber
+// liefern `ttsUnits` die Einheitenliste, aus der alles arbeitet: `ttsBlockText`
+// verkettet sie zum Sprech-Text, `ttsBuildRange`/`ttsOffsetAt` laufen ueber
 // dieselbe Liste statt ueber einen eigenen TreeWalker. Wuerde nur der Sprechtext
 // gefiltert, driftete das Highlight um die Chip-Laenge.
 //
@@ -123,8 +141,15 @@ export function normalizeForSpeech(text) {
 // cite-html.js): der Share-Reader importiert dieses Modul und bleibt ein
 // eigenstaendiger, schlanker Modulgraph — es darf deshalb nichts aus dem
 // App-Bundle importieren, dieselbe Begruendung wie bei READER_BLOCK_SEL in
-// share-reader/tts.js. Gegen Drift gesichert durch tests/unit/tts-cite-skip.test.mjs.
+// share-reader/tts.js. Gegen Drift gesichert durch tests/unit/cite-guard-drift.test.mjs.
 export const TTS_SKIP_SEL = 'span.cite[data-src]';
+
+// Eingeblendete Korrekturvorschlaege in der Notebook-Leseansicht (Lektorat-
+// Befund bzw. Seiten-Chat-Vorschlag, public/js/book/page-view.js): das <ins>
+// steht direkt hinter dem markierten Original. Vorgelesen wird der Text, wie er
+// dasteht — nicht Fehler UND Korrektur hintereinander. Highlight und Sprechtext
+// teilen auch hier den Offsetraum (ttsUnits ueberspringt beides gleich).
+export const TTS_SKIP_DECOR_SEL = 'ins.lektorat-ins, ins.chat-mark-ins';
 
 // ── Bloecke, die gar nicht vorgelesen werden ────────────────────────────────
 // Andere Frage als TTS_SKIP_SEL: der oben ueberspringt einen INLINE-Teilbaum
@@ -156,33 +181,182 @@ export const TTS_SKIP_SEL = 'span.cite[data-src]';
 // tests/unit/table-drift.test.mjs.
 export const TTS_SKIP_BLOCK_SEL = 'pre.mermaid, .mermaid-render, table';
 
+
+// ── Vorlese-Bloecke ─────────────────────────────────────────────────────────
+// Jedes dieser Elemente ist ein eigener Vorlese-Block. Gelesen wird pro Block
+// nur sein EIGENER Text: verschachtelte Bloecke (li > ul > li, blockquote > p)
+// sind eigene Bloecke und stehen im Elternblock nur als Grenze (siehe ttsUnits).
+// So liest `<li>Punkt A<ul><li>Sub</li></ul></li>` erst „Punkt A", dann „Sub" —
+// nichts doppelt, nichts verloren. Container ohne eigenen Text (ul, blockquote
+// um <p>) liefern einfach keinen Satz.
+//
+// Enthaelt den Kern aus editor/shared/dom-block.js#TEXT_BLOCK_TAGS (Kopie, weil
+// dieses Modul pre-auth ladbar bleiben muss; gegated durch
+// tests/unit/block-sel-consolidation.test.mjs) plus `pre`/`figcaption` und die
+// reinen Container. Kein td/th/caption: Tabellen fallen ganz weg
+// (TTS_SKIP_BLOCK_SEL).
+export const TTS_BLOCK_SEL = 'p, h1, h2, h3, h4, h5, h6, blockquote, li, pre, figcaption, '
+  + 'ul, ol, dl, dt, dd, div, figure, section, article, aside, header, footer, details, summary';
+
 /** Ist `el` ein Block, der komplett uebersprungen wird? */
 export function isTtsSkippedBlock(el) {
   return !!(el && el.nodeType === 1 && el.matches && el.matches(TTS_SKIP_BLOCK_SEL));
 }
 
-// Textknoten unter `root` in Dokumentordnung, Teilbaeume von `skipSel` uebersprungen.
-export function ttsTextNodes(root, skipSel = TTS_SKIP_SEL) {
+const isEl = (n) => !!(n && n.nodeType === 1 && n.matches);
+
+// Sprech-Einheiten eines Blocks in Dokumentordnung — EIN Offsetraum fuer
+// Sprechtext, Highlight-Range und Klick-Position:
+//   { node, text }  ein Textknoten (Laenge = nodeValue.length)
+//   { sep,  text }  eine Grenze ohne eigenen Text: <br> oder ein verschachtelter
+//                   bzw. uebersprungener Block. Zaehlt als ein Zeichen ('\n'),
+//                   damit „Zeile eins<br>Zeile zwei" nicht als „einsZeile"
+//                   gesprochen wird und Segmenter dort einen Satz schliesst.
+// Beleg-Chips (`skipSel`) fallen ersatzlos weg — sie stehen mitten im Satz,
+// die Leerzeichen drumherum traegt der Text.
+export function ttsUnits(block, skipSel = TTS_SKIP_SEL) {
   const out = [];
-  if (!root) return out;
+  if (!block) return out;
   const walk = (node) => {
     const kids = node.childNodes;
     if (!kids) return;
     for (const child of kids) {
       if (child.nodeType === 3) {
-        if (child.nodeValue) out.push(child);
+        if (child.nodeValue) out.push({ node: child, text: child.nodeValue });
         continue;
       }
-      if (child.nodeType !== 1) continue;
-      if (skipSel && child.matches && child.matches(skipSel)) continue;
+      if (!isEl(child)) continue;
+      if (skipSel && child.matches(skipSel)) continue;
+      if (child.matches(TTS_SKIP_DECOR_SEL)) continue;
+      if (child.tagName === 'BR' || child.matches(TTS_BLOCK_SEL) || child.matches(TTS_SKIP_BLOCK_SEL)) {
+        out.push({ sep: child, text: '\n' });
+        continue;
+      }
       walk(child);
     }
   };
-  walk(root);
+  walk(block);
   return out;
 }
 
-// Sprech-Text eines Blocks: `textContent` minus der uebersprungenen Teilbaeume.
+// Textknoten eines Blocks (ohne Chips, ohne verschachtelte Bloecke).
+export function ttsTextNodes(root, skipSel = TTS_SKIP_SEL) {
+  return ttsUnits(root, skipSel).filter(u => u.node).map(u => u.node);
+}
+
+// Sprech-Text eines Blocks — exakt die Verkettung von ttsUnits.
 export function ttsBlockText(root, skipSel = TTS_SKIP_SEL) {
-  return ttsTextNodes(root, skipSel).map(n => n.nodeValue).join('');
+  return ttsUnits(root, skipSel).map(u => u.text).join('');
+}
+
+// Liegt `el` (oder ein Vorfahre bis `root`) in einem uebersprungenen Teilbaum?
+function insideSkipped(el, root) {
+  for (let n = el; n && n !== root; n = n.parentNode) {
+    if (!isEl(n)) continue;
+    if (n.matches(TTS_SKIP_BLOCK_SEL)) return true;
+    if (n !== el && n.matches(TTS_SKIP_SEL)) return true;
+  }
+  return false;
+}
+
+// Vorlese-Bloecke unter `root` in Dokumentordnung, `root` selbst zuerst (Text,
+// der direkt im Container steht). Bloecke in Tabellen/Diagrammen fallen weg.
+export function ttsBlocks(root) {
+  if (!root || !root.querySelectorAll) return [];
+  const list = [root, ...root.querySelectorAll(TTS_BLOCK_SEL)];
+  return list.filter(b => b === root || !insideSkipped(b, root));
+}
+
+const HAS_WORD = /[\p{L}\p{N}]/u;
+
+// Vorlese-Segmente unter `root`: pro Block die Saetze (Locale = Buchsprache),
+// gechunkt (chunkTtsRanges). Segmente ohne Buchstaben/Ziffern (Szenentrenner
+// „* * *", lose Satzzeichen) fallen weg. Ergebnis: { text, block, startOff,
+// endOff } — Offsets im Offsetraum von ttsUnits(block).
+export function collectTtsSegments(root, locale = 'de') {
+  const segs = [];
+  for (const block of ttsBlocks(root)) {
+    const text = ttsBlockText(block);
+    if (!HAS_WORD.test(text)) continue;
+    const ranges = computeTtsSentences(text, locale);
+    const base = ranges.length ? ranges : [[0, text.length]];
+    for (const [s, e] of chunkTtsRanges(base, text)) {
+      const t = text.slice(s, e).trim();
+      if (t && HAS_WORD.test(t)) segs.push({ text: t, block, startOff: s, endOff: e });
+    }
+  }
+  return segs;
+}
+
+// Hat `root` ueberhaupt vorlesbaren Text? (Dock-Sichtbarkeit: eine Seite aus
+// nur einer Tabelle oder einem Diagramm zeigt keinen Vorlese-Knopf.)
+export function hasTtsText(root) {
+  return ttsBlocks(root).some(b => HAS_WORD.test(ttsBlockText(b)));
+}
+
+// DOM-Range fuer [start, end) im Offsetraum von ttsUnits(block). Grenz-Einheiten
+// werden nie mitmarkiert: ein Satz, der an einem verschachtelten Block endet,
+// soll nicht die ganze Unterliste einfaerben.
+export function ttsBuildRange(block, start, end) {
+  if (!block || !block.isConnected) return null;
+  const doc = block.ownerDocument;
+  const units = ttsUnits(block);
+  let pos = 0;
+  let startSet = false;
+  let r;
+  try { r = doc.createRange(); } catch { return null; }
+  try {
+    for (const u of units) {
+      const len = u.text.length;
+      if (!startSet && start < pos + len) {
+        if (u.node) r.setStart(u.node, Math.max(0, start - pos));
+        else r.setStartAfter(u.sep);
+        startSet = true;
+      }
+      if (startSet && end <= pos + len) {
+        if (u.node) r.setEnd(u.node, Math.max(0, Math.min(end - pos, len)));
+        else r.setEndBefore(u.sep);
+        return r;
+      }
+      pos += len;
+    }
+    if (!startSet) return null;
+    const last = units[units.length - 1];
+    if (last.node) r.setEnd(last.node, last.text.length);
+    else r.setEndBefore(last.sep);
+    return r;
+  } catch { return null; }
+}
+
+// Offset eines DOM-Punkts (Textknoten + Offset) im Offsetraum des Blocks, oder
+// null, wenn der Punkt nicht im eigenen Text des Blocks liegt.
+export function ttsOffsetAt(block, node, offset) {
+  let pos = 0;
+  for (const u of ttsUnits(block)) {
+    if (u.node === node) return pos + Math.max(0, Math.min(offset, u.text.length));
+    if (u.sep && u.sep.contains && u.sep.contains(node)) return null;
+    pos += u.text.length;
+  }
+  return null;
+}
+
+// Index des Segments, in dem der DOM-Punkt liegt (Klick „ab hier" / Start ab
+// Markierung). -1, wenn der Punkt in keinem Segment liegt.
+export function ttsSegmentAt(segs, node, offset) {
+  if (!node || !Array.isArray(segs)) return -1;
+  let fallback = -1;
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
+    if (!s.block || !s.block.contains || !s.block.contains(node)) continue;
+    const off = ttsOffsetAt(s.block, node, offset);
+    if (off == null) {
+      // Punkt auf einem Element statt einem Textknoten: erster Satz eines
+      // Blocks, der ihn enthaelt.
+      if (node.nodeType === 1 && fallback < 0) fallback = i;
+      continue;
+    }
+    if (off < s.endOff) return i;
+    fallback = i;
+  }
+  return fallback;
 }

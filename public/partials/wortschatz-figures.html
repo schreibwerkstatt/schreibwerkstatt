@@ -1,0 +1,59 @@
+<!-- Figuren-Idiolekt der Wortschatz-Analyse: Wortschatz der wörtlichen Rede je
+     Figur. Fragment von wortschatz.html (String-Include
+     `<!-- @include wortschatz-figures -->`) — Begründung siehe wortschatz-terms.html.
+
+     Zugeordnet ist nur Rede mit eindeutiger Inquit-Formel („…«, sagte Anna."). Die
+     Abdeckung steht darum über der Tabelle — sonst liest sich der Ausschnitt als
+     die ganze Rede der Figur. -->
+<div x-show="wortschatzTab === 'figures'">
+  <p class="wortschatz-list-hint" x-text="$app.t('wortschatz.figures.hint')"></p>
+  <p class="wortschatz-list-hint" x-show="wsIdiolectCoverage()" x-text="wsIdiolectCoverage()"></p>
+  <div x-show="!wortschatzIdiolect.length" class="muted-msg muted-msg--spaced"
+       x-text="$app.t('wortschatz.figures.empty', { min: wortschatzData.thresholds.idiolectMinTokens })"></div>
+  <div class="table-scroll" x-show="wortschatzIdiolect.length">
+    <table class="wortschatz-table"
+           x-data="sortableTable({
+             rows: () => wortschatzIdiolect,
+             defaultKey: 'tokens',
+             defaultDir: 'desc',
+             persistKey: 'wortschatz.figures',
+             types: { name: 'string', utterances: 'number', tokens: 'number', mattr: 'number', mtld: 'number', avg_utterance_len: 'number' },
+           })">
+      <thead><tr>
+        <th class="sortable-th" :class="sortClass('name')" :aria-sort="ariaSort('name')"
+            @click="sortBy('name')" x-text="$app.t('wortschatz.col.figure')"></th>
+        <th class="sortable-th" :class="sortClass('utterances')" :aria-sort="ariaSort('utterances')"
+            @click="sortBy('utterances')" x-text="$app.t('wortschatz.col.utterances')"></th>
+        <th class="sortable-th" :class="sortClass('tokens')" :aria-sort="ariaSort('tokens')"
+            @click="sortBy('tokens')" x-text="$app.t('wortschatz.kpi.tokens')"></th>
+        <th class="sortable-th" :class="sortClass('avg_utterance_len')" :aria-sort="ariaSort('avg_utterance_len')"
+            @click="sortBy('avg_utterance_len')" x-text="$app.t('wortschatz.col.avgUtterance')"></th>
+        <th class="sortable-th" :class="sortClass('mattr')" :aria-sort="ariaSort('mattr')"
+            @click="sortBy('mattr')" x-text="$app.t('wortschatz.kpi.mattr')"></th>
+        <th class="sortable-th" :class="sortClass('mtld')" :aria-sort="ariaSort('mtld')"
+            @click="sortBy('mtld')" x-text="$app.t('wortschatz.kpi.mtld')"></th>
+        <th :title="$app.t('wortschatz.col.typicalTip')" x-text="$app.t('wortschatz.col.typical')"></th>
+      </tr></thead>
+      <tbody>
+        <template x-for="f in sorted" :key="f.figure_id">
+          <tr>
+            <td>
+              <button type="button" class="entity-ref"
+                      x-entity-ref="{ type: 'figur', id: f.fig_id, name: f.name }"></button>
+            </td>
+            <td class="wortschatz-num" x-text="wsNum(f.utterances)"></td>
+            <td class="wortschatz-num" x-text="wsNum(f.tokens)"></td>
+            <td class="wortschatz-num" x-text="wsNum(f.avg_utterance_len, 1)"></td>
+            <td class="wortschatz-num">
+              <span x-text="wsNum(f.mattr, 3)"></span>
+              <span class="wortschatz-approx" x-show="f.mattr != null && f.mattr_window < wortschatzData.thresholds.mattrWindow"
+                    :title="$app.t('wortschatz.chapters.mattrShortTip', { window: f.mattr_window })">*</span>
+            </td>
+            <td class="wortschatz-num" x-text="wsNum(f.mtld, 1)"></td>
+            <td class="wortschatz-reason" x-text="wsIdiolectTerms(f)"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</div>

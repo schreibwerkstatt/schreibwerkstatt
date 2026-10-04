@@ -33,14 +33,15 @@ function buildWorldFactSamples(ctx) {
   // läuft deshalb über den normalisierten Text — es gibt keine fact_id am Befund,
   // und eine einzuführen hiesse, den Befund an einen Index zu hängen, der beim
   // nächsten Lauf komplett ersetzt wird.
-  // Läuft der Faktencheck nie, ist die Menge leer und nichts wird gefiltert.
+  // Läuft der Faktencheck nie, ist die Menge leer und nichts wird gefiltert. Vom Autor
+  // als „kein Fehler" verworfene Befunde zählen nicht — der Fakt gilt dann als richtig.
   const _normFakt = (x) => String(x || '').toLowerCase().replace(/\s+/g, ' ').trim();
   const falsch = new Set(
     db.prepare(`
       SELECT ci.stelle_a
         FROM continuity_issues ci
         JOIN continuity_checks cc ON cc.id = ci.check_id
-       WHERE cc.book_id = ? AND cc.user_email IS ? AND ci.typ = 'faktenfehler'
+       WHERE cc.book_id = ? AND cc.user_email IS ? AND ci.typ = 'faktenfehler' AND ci.dismissed = 0
     `).all(bookIdInt, userEmail || null)
       .map(r => _normFakt(r.stelle_a))
       .filter(Boolean)
@@ -106,7 +107,7 @@ function buildWorldFactSamples(ctx) {
     // Reverse: Fakt → Kapitel
     if (kapitel.length) {
       pushQA('authorChat|wfactCh|' + r.id,
-        langIsEn ? `In which chapter is this established: "${fakt}"` : `In welchem Kapitel wird das etabliert: „${fakt}"`,
+        langIsEn ? `In which chapter is this established: “${fakt}”` : `In welchem Kapitel wird das etabliert: „${fakt}“`,
         kapitel.join(', '));
     }
   }

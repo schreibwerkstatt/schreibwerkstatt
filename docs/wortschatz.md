@@ -53,8 +53,17 @@ dein Median ist 71" schon. Der MATTR-Median zählt nur Bücher mit vollem Fenste
 
 SSoT: [lib/lexicon/tokenize.js](../lib/lexicon/tokenize.js).
 
-- Token = Buchstabenfolge (`\p{L}`), innere Apostrophe erlaubt („geht's" bleibt **ein**
-  Token). Einzelbuchstaben und Zahlen fallen weg — Zahlen sind kein Wortschatz.
+- Token = Buchstabenfolge (`\p{L}` plus Kombinationszeichen `\p{M}`), innere
+  Apostrophe erlaubt („geht's" bleibt **ein** Token). Einzelbuchstaben und Zahlen
+  fallen weg — Zahlen sind kein Wortschatz.
+- **Vor dem Match:** NFC-Normalisierung (ein zerlegt importiertes „é" ist sonst ein
+  abgeschnittenes Wort) und Entfernen unsichtbarer Zeichen (weiches Trennzeichen,
+  Zero-Width-Zeichen, BOM) — sie stehen mitten in Wörtern aus Word-/WordPress-
+  Importen und würden sie teilen.
+- **Apostroph-Faltung:** `’` und `ʼ` → `'`. Dieselbe Begründung wie ß → ss.
+- **Benannte HTML-Entities** dekodiert [lib/html-text.js](../lib/html-text.js) über die
+  vollständige Tabelle [lib/html-entities.js](../lib/html-entities.js) (Spiegel im
+  Frontend, Parity gegated) — sonst wird `f&uuml;r` zu „uuml".
 - **`tokens` ist bewusst kleiner als `page_stats.words`.** Dort zählt jede
   whitespace-getrennte Einheit. Kein Drift, sondern zwei verschiedene Grössen.
 - **ß → ss.** Die App läuft auf Schweizer Schreibnorm (`baseRules` in
@@ -78,10 +87,19 @@ SSoT: [lib/lexicon/tokenize.js](../lib/lexicon/tokenize.js).
 
 `lexicon_terms` hält **drei Sorten Zeile**, getrennt über `kind` — gemeinsam ist
 ihnen die Form (Wort, Zahl, Streuung, Sprungziel) und der Filter: Inhaltswörter ab
-4 Zeichen, ohne Stoppwörter ([lib/stopwords-de.js](../lib/stopwords-de.js)) und
-ohne Eigennamen (Figuren, Orte, Szenentitel via `tokenizeNamesForStopwords`) — die
-häufigste Figur führte sonst jede Liste an und ist kein Stilbefund. Für die
-lexikalische Dichte zählt ein Eigenname dagegen **mit**: dort ist er ein Inhaltswort.
+4 Zeichen, ohne Funktionswörter und ohne Eigennamen — die häufigste Figur führte
+sonst jede Liste an und ist kein Stilbefund. Für die lexikalische Dichte zählt ein
+Eigenname dagegen **mit**: dort ist er ein Inhaltswort.
+
+- **Funktionswörter:** Basisliste [lib/stopwords-de.js](../lib/stopwords-de.js) **plus**
+  die volle Liste [lib/lexicon/function-words.js](../lib/lexicon/function-words.js)
+  (alle flektierten Pronomen/Determinative, Präpositionen, Konjunktionen, Hilfs- und
+  Modalverben inkl. Konjunktiv, Partikeln). Die Basisliste bleibt knapp, weil sie
+  auch die seitenlokale Wiederholungs-Metrik speist; für die Dichte (Ure/Halliday)
+  zählt jedes fehlende Funktionswort als Inhaltswort und hebt den Wert systematisch.
+- **Eigennamen** ([lib/lexicon/names.js](../lib/lexicon/names.js)): Zerlegung wie
+  `tokenizeNamesForStopwords`, danach dieselbe Normalisierung wie der Text, dazu die
+  **Genitivform** („Annas") und Apostroph-Namen als ein Token („o'brien").
 
 **`kind='freq'` — Lieblingswörter** (Top 200 nach Häufigkeit, ab 3 Vorkommen).
 Jede Zeile trägt `chapter_spread` (in wie vielen Kapiteln) — der eigentliche
@@ -94,7 +112,7 @@ unterscheiden: ein Wort, das hier zwölfmal steht und sonst nie, ist nicht häuf
 sondern eigen — es fällt durch jeden Häufigkeitsdeckel. Die zweite Achse kommt
 **dazu**, sie verdrängt keinen Häufigkeitsplatz.
 
-Ausgewählt wird mit der **vorsichtigen** Keyness (`refFloor`, siehe unten),
+Ausgewählt wird mit der **vorsichtigen** Keyness (`refUpper`, siehe unten),
 angezeigt die schlichte. Der Unterschied ist die Existenzberechtigung der Achse:
 sobald die Keyness über die Auswahl entscheidet, greift sie ohne diese Schranke
 bevorzugt Terme, deren Wert allein aus der Kappung der Referenztabelle stammt.
@@ -154,19 +172,33 @@ Als Anzeigespalte war das eine hinnehmbare Ungenauigkeit; als Auswahlkriterium w
 es ein systematischer Fehler. Bei 3 bleibt die Abweichung auf zwei Vorkommen
 begrenzt. Ein Rangdeckel steht nur noch als Notbremse dahinter.
 
-**`refFloor` macht den Restfehler unschädlich, wo er zählt.** `loadReferenceCorpus`
-liest die tatsächliche Kappungsgrenze aus den geladenen Tabellen (Maximum über die
-Bücher) und reicht sie als `floor` weiter; `keynessFor({ refFloor })` hebt jede
-Referenzhäufigkeit darauf an und liefert damit eine **untere Schranke** der
-Auffälligkeit. Nur die entscheidet über die Auswahl. Greift die Notbremse doch
-einmal, steigt `floor` und die Auswahl wird von allein vorsichtiger.
+**`refUpper` macht den Restfehler unschädlich, wo er zählt.** Fehlt ein Term in der
+Tabelle eines Referenzbuchs, kommt er dort bis zu `bookMin` Mal vor (seltenster
+aufgenommener Term dieses Buchs). `loadReferenceCorpus` liefert `upper(term)` =
+gezählte Häufigkeit **plus die Summe** dieser Schranken über alle Bücher, in denen
+der Term fehlt — ein Maximum über die Bücher wäre keine Schranke (zehn Bücher mit je
+zwei Vorkommen sind zwanzig, nicht drei). `keynessFor({ refUpper })` rechnet damit
+eine **untere Schranke** der Auffälligkeit; nur die entscheidet über die Auswahl.
+Greift die Notbremse, steigt `bookMin` des Buchs und die Auswahl wird von allein
+vorsichtiger.
+
+**Nur Tabellen der aktuellen `LEXICON_VERSION`** gehen in Referenz und Vergleichs-
+Mediane ein: eine ältere Tabelle wurde anders tokenisiert und passt Wort für Wort
+nicht. Nach einer Versionserhöhung füllt sich die Referenz mit dem Nacht-Lauf wieder.
+
+**Sichtbar nur für den Besitzer.** Keyness, die Zeilensorte `key`, das
+Einmalwort-Merkmal `novel` und die Vergleichs-Mediane sind aus den **übrigen**,
+womöglich privaten Büchern des Besitzers abgeleitet. `GET /lexicon/:book_id` liefert
+sie nur an `owner`; ein Lektor mit Leserecht auf dieses Buch sieht die Kennzahlen
+und Listen dieses Buchs, aber keine Rückschlüsse auf die anderen (`isOwner` im
+Payload, Hinweiszeile in der Karte).
 
 Nur ein Buch im Bestand ⇒ keine Referenz ⇒ Spalte bleibt leer und die Karte blendet
 sie aus. Das ist der korrekte Zustand, kein Fehler.
 
-## Datenmodell (Migration 261, `kind` + `hapax_listed` in 262)
+## Datenmodell (Migration 261, `kind` + `hapax_listed` in 262, Ausbau in 308)
 
-Alle drei Tabellen sind **abgeleitet** und werden pro Scan als Ganzes ersetzt
+Alle Tabellen sind **abgeleitet** und werden pro Scan als Ganzes ersetzt
 (`replaceBookLexicon`, eine Transaktion). Kein Delta: die Ranglisten sind gedeckelt
 — ein Term, der aus den Top 200 fällt, müsste beim Delta-Schreiben aktiv gelöscht
 werden, und genau das vergisst man. Ein Full-Replace kann diesen Zustand nicht
@@ -177,6 +209,14 @@ erzeugen.
 | `book_lexicon` | 1:1 zum Buch (`book_id` PK, CASCADE) — Kennzahlen + `content_sig` + `freq_json` |
 | `lexicon_terms` | Wortlisten, `kind` CHECK `freq`\|`key`\|`hapax`, `UNIQUE(book_id, term)`, `first_page_id` → `pages` **SET NULL** |
 | `lexicon_ngrams` | Top-Wendungen, `UNIQUE(book_id, phrase)`, `first_page_id` **SET NULL** |
+| `chapter_lexicon` | Kapitel-Band, `chapter_id` PK → `chapters` CASCADE, `position` = Buchreihenfolge |
+| `figure_idiolect` | Idiolekt, `figure_id` PK → `figures` CASCADE, `terms_json` |
+
+`lexicon_terms.novel`/`sort_rank` halten Auswahlmerkmal und Rang der Einmalwörter —
+die Karte zeigt die Reihenfolge, nach der ausgewählt wurde, statt sie in SQL
+nachzubauen (SQLite sortiert binär, die Auswahl mit `localeCompare`). Kapitel und
+Figuren, die zwischen Analyse und Schreiben gelöscht wurden, fallen beim Schreiben
+weg (Existenz-Check wie `_safePageId`).
 
 `first_page_id` ist ein Sprungziel, kein Inhalt — darum SET NULL: verschwindet die
 Seite, bleibt die Zahl bis zum nächsten Scan gültig. Der Schreibpfad prüft
@@ -194,11 +234,28 @@ Job-Typ `lexicon-scan`, Label `job.label.lexiconScan`. In der Job-Queue, obwohl 
 kein `callAI` gibt — der Lauf kann Minuten dauern und muss abbrechbar sein (Muster
 wie `motif-scan`/`beat-anchor`).
 
-**Delta-Skip:** `content_sig` = SHA-1 über `LEXICON_VERSION` + alle
-`page_id:updated_at` **in Leserichtung**. Die Reihenfolge gehört mit hinein — eine
-Umsortierung der Kapitel verschiebt die MATTR-Fenster. Unverändert ⇒ Job endet
-sofort. **Der manuelle Knopf setzt `force`**, sonst quittiert er mit „unverändert"
-und der Autor sieht nichts passieren.
+**Delta-Skip über die Eingangs-Signatur.** Zwei Signaturen:
+
+- `content_sig` = SHA-1 über `LEXICON_VERSION` + alle `page_id:updated_at` **in
+  Leserichtung** (Umsortierung verschiebt die MATTR-Fenster). Der reine Textstand.
+- `input_sig` = SHA-1 über `content_sig` + Namensliste + Figuren + Fingerabdruck der
+  Referenz (`book_id:content_sig` der übrigen Bücher, `referenceFingerprint`).
+  **Nur sie entscheidet über den Skip.** Ohne Namen bliebe eine neu angelegte Figur
+  in den Lieblingswörtern, bis jemand eine Seite ändert; ohne Referenz bliebe ein
+  Buch, das in einer frischen Installation vor allen anderen gescannt wurde, für
+  immer ohne Keyness.
+- Der Fingerabdruck nimmt bewusst die **Text**-Signatur der anderen Bücher, nicht
+  deren `input_sig`: sonst hinge jedes Buch an den Referenzen der anderen, und zwei
+  Bücher desselben Autors würden sich gegenseitig jede Nacht neu anstossen.
+
+**Der manuelle Knopf setzt `force`**, sonst quittiert er mit „unverändert" und der
+Autor sieht nichts passieren.
+
+**Tagesverlauf:** `book_stats_history` trägt `mattr`/`mtld`/`lex_density`/
+`hapax_ratio`. Der Sync stempelt seine Tageszeile mit dem Stand des letzten Scans
+(`stampLexiconHistory`), der Scan überschreibt sie danach mit dem frischen Stand.
+MATTR nur mit vollem Fenster — der Sprung von TTR zu MATTR sähe im Verlauf sonst wie
+eine Stiländerung aus. Die Buchstatistik bietet die vier Werte als Kurven an.
 
 **Cron:** hinter `syncAllBooks()` im 23:00-Block, **nicht** in der
 `reindexAllBooks`-Kette — der Scan liest reinen Seitentext, keine Vektoren.
@@ -219,11 +276,20 @@ Route `#book/:id/wortschatz`, Lesepfad `GET /lexicon/:book_id`.
 Das Kennzahlen-Grid **wiederverwendet** `.overview-grid`/`.overview-tile` aus
 `book-overview/`; alle drei Ranglisten sind `sortableTable`.
 
+**Zweiter Leser: Wortschatz-Tile der Buch-Übersicht**
+([book-overview/wortschatz.js](../public/js/book-overview/wortschatz.js),
+[bookoverview-wortschatz.html](../public/partials/bookoverview-wortschatz.html)).
+Liest dieselbe Antwort von `GET /lexicon/:book_id` und zeigt MTLD (ersatzweise
+MATTR) mit dem Peer-Median. Dieselben Regeln wie die Karte: `null` ist „–", nie 0;
+MATTR ohne volles Fenster bekommt keine Peer-Zeile; `peers: null` heisst „kein
+Vergleich". Ohne Scan (`stats: null`) ein Hinweis-Tile. Klick öffnet die Karte nur
+ab `editor` (Rolle der Karte) — die Übersicht sieht schon ein `viewer`.
+
 Die Ranglisten liegen als Fragmente daneben (`wortschatz-terms.html`,
 `-phrases.html`, `-hapax.html`) und kommen über den **String-Include**
 (`<!-- @include … -->`) herein, nicht über den DOM-Placeholder: der Einhängepunkt
 steckt in einem `<template x-if>`, und `querySelector` steigt nicht in
-Template-Content ab. Reiter `terms` | `phrases` | `hapax`.
+Template-Content ab. Reiter `terms` | `phrases` | `hapax` | `cloud` | `chapters` | `figures`.
 
 ### Vierter Reiter: Wortwolke
 
@@ -266,6 +332,46 @@ Frontend hält **keine Kopie**. Dieselbe Regel gilt in der Stil-Karte: dort lief
 `lib/page-index.js#METRICS_VERSION` — die Karte kennt die Zahl nicht und kann
 darum nicht gegen sie driften.
 
+## Kapitel-Band (Reiter „Kapitel")
+
+[lib/lexicon/chapters.js](../lib/lexicon/chapters.js). Dieselben Diversitätsmasse
+pro Kapitel — eigener Pass über die Token-Sequenz jedes Kapitels (Seiten in
+Leserichtung aneinandergehängt), kein Aggregat über Seitenwerte. Seiten ohne Kapitel
+zählen nur buchweit.
+
+**Burrows's Delta gegen das Durchschnittskapitel:** Merkmale sind die 150 häufigsten
+Wortformen des Buchs, **mit** Funktionswörtern (sie tragen die Stilsignatur und sind
+thematisch neutral). Relative Häufigkeiten je Kapitel werden über die Kapitel
+z-standardisiert; Delta = Mittel der |z|. Gerechnet nur für Kapitel ab
+`DELTA_MIN_TOKENS` (1500) und erst ab `DELTA_MIN_CHAPTERS` (3) solchen Kapiteln —
+darunter ist eine relative Häufigkeit Rauschen bzw. jedes Kapitel gleich weit von der
+Mitte. `delta_top` hält die stärksten Merkmale mit Vorzeichen; die Karte zeigt sie als
+„öfter: … · seltener: …". Ohne Begründung wäre die Zahl eine Behauptung.
+
+Hervorgehoben wird **relativ** (Delta > Mittel + 1 Standardabweichung der Kapitel),
+weil Delta keinen festen Normalbereich hat.
+
+## Figuren-Idiolekt (Reiter „Figuren")
+
+[lib/lexicon/idiolect.js](../lib/lexicon/idiolect.js). Wortschatz der wörtlichen Rede
+je Figur. Dialog-Erkennung und Namensmuster kommen **injiziert** aus
+[lib/page-index.js](../lib/page-index.js) (`findDialogRanges`,
+`buildFigureNamePatterns`) — dieselbe Regel wie Stil-Metriken und
+Figuren-Erwähnungen, ohne dass das pure Modul die DB lädt.
+
+**Sprecherzuordnung vorsichtig:** ein Absatz wird einer Figur nur zugeordnet, wenn
+in seinem **Erzähltext** (alles ausserhalb der Rede) genau **eine** Figur genannt ist.
+Ein Name in der Rede („»Anna, komm!«") ist kein Sprecher. Lieber weniger Rede als
+falsch zugeordnete — ein falscher Satz macht aus zwei Stimmen eine. Folge: Ich-Erzähler
+und Wechselrede ohne Inquit-Formel bleiben unzugeordnet. Der zugeordnete Anteil steht
+als `book_lexicon.idiolect_coverage` über der Tabelle.
+
+Gleichnamige Figuren (Kopien desselben Stammeintrags unter verschiedenen Konten)
+bilden eine Gruppe und bekommen dieselbe Zeile; der Lesepfad zeigt die Figuren des
+Betrachters, ersatzweise die des Besitzers. Eine Figur braucht mindestens
+`IDIOLECT_MIN_TOKENS` (150) zugeordnete Wörter. **Typische Wörter** = Keyness der Rede
+einer Figur gegen die Rede **aller anderen** Figuren (nicht gegen das Buch).
+
 ## Pflicht-Invarianten
 
 1. **`LEXICON_VERSION` erhöhen**, wenn sich Tokenisierung, Masse oder Auswahlregeln
@@ -278,21 +384,24 @@ darum nicht gegen sie driften.
 6. **Eigennamen aus der Wortliste, aber in die Dichte.** Zwei verschiedene Fragen.
 7. **n-Gramme überspannen keine Segment-/Blockgrenze.**
 8. **Der Job schreibt nie in `pages`.** Rein ableitend.
-9. **Auswahl nach Keyness nur mit `refFloor`.** Ohne die Schranke wählt die Liste
-   bevorzugt Terme, deren Auffälligkeit nur aus der Kappung der Referenz stammt.
+9. **Auswahl nach Keyness nur mit `refUpper`.** Die Schranke summiert pro Buch, in
+   dem der Term fehlt; ohne sie wählt die Liste bevorzugt Terme, deren Auffälligkeit
+   nur aus der Kappung der Referenz stammt.
 10. **Gedeckelte Liste zeigt ihren Deckel.** Einmalwörter kommen mit
-    `hapax_listed`; ein Ausschnitt ohne diese Zahl liest sich als Vollständigkeit.
+    `hapax_listed`, der Idiolekt mit `idiolect_coverage`; ein Ausschnitt ohne diese
+    Zahl liest sich als Vollständigkeit.
 11. **`kind` ist der Diskriminator, kein Sentinel.** Ein Einmalwort ist nicht „ein
     Lieblingswort mit `count = 1`" — die drei Sorten haben verschiedene
     Auswahlregeln und verschiedene Reiter.
+12. **Skip nur über `input_sig`.** Alles, wovon das Ergebnis abhängt (Text, Namen,
+    Referenz-Textstände), gehört hinein; der Referenz-Fingerabdruck nimmt die
+    `content_sig` der anderen Bücher, nie deren `input_sig`.
+13. **Was aus anderen Büchern stammt, sieht nur der Besitzer** (Keyness, `key`,
+    `novel`, Mediane).
 
-## Phase 2 und später (nicht gebaut)
+## Später (nicht gebaut)
 
-- Kapitel-Band: dieselben Masse pro Kapitel (`chapter_lexicon`) + Burrows's Delta
-  gegen den Buchmittelwert → „welches Kapitel liest sich nicht wie der Rest".
-- Figuren-Idiolekt: Diversität + distinktive Wörter **nur im Dialog** je Figur.
-  Braucht die Dialog-Extraktion aus [lib/page-index.js](../lib/page-index.js) in
-  einem geteilten Modul.
 - Frequenzband-Abdeckung (Lexical Frequency Profile) + Keyness gegen ein externes
   Referenzkorpus — braucht eine Frequenzliste als Asset (Lizenz klären).
-- Lemmatisierung; erst damit wird „Wortschatz" statt „Wortformen" korrekt.
+- Lemmatisierung; erst damit wird „Wortschatz" statt „Wortformen" korrekt. Braucht
+  ein Lemma-Lexikon als Asset (Lizenz klären).

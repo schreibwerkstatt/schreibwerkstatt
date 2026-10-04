@@ -21,7 +21,7 @@ export function registerFehlerHeatmapCard() {
     fehlerHeatmapMode: 'open',
     activeFehlerDetailKey: null,
     fehlerTrendData: [],
-    // Memo-Speicher fuer fehlerHeatmapRange (siehe book/fehler-heatmap.js#_memo).
+    // Memo-Speicher fuer fehlerHeatmapRows/-Totals (siehe book/fehler-heatmap.js#_memo).
     // Explizit deklariert statt lazy — CLAUDE.md "State explizit deklariert".
     // Reset ueber this._memos = {} im Lade-Pfad und bei jedem State-Reset.
     _memos: {},

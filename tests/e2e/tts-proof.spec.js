@@ -66,7 +66,7 @@ test.describe('TTS Proof-Listening', () => {
     await ready(page);
     await page.locator('#tts-main').click();
 
-    // Ende der Wiedergabe: _ttsRun ruft am Schluss selbst _ttsStop.
+    // Ende der Wiedergabe: der Kern beendet die Session am Schluss selbst.
     await page.waitForFunction(() => window.__store.playing === false && window.__store.index === 0, null, { timeout: 8000 });
     // Highlight aufgeraeumt, jedes erzeugte Object-URL wieder revoked (kein Leak).
     expect(await page.evaluate(() => CSS.highlights.has('tts-sentence'))).toBe(false);
@@ -86,8 +86,8 @@ test.describe('TTS Proof-Listening', () => {
     await page.locator('#tts-main').click();
     await page.waitForFunction(() => window.__store.paused === true);
     await expect(page.locator('#tts-main')).toHaveAttribute('aria-pressed', 'false');
-    // Skip ist im pausierten Zustand ausgeblendet.
-    await expect(page.locator('#tts-skip')).toBeHidden();
+    // Vor/Zurueck bleiben auch pausiert bedienbar.
+    await expect(page.locator('#tts-skip')).toBeVisible();
 
     // Fortsetzen.
     await page.locator('#tts-main').click();
@@ -164,5 +164,114 @@ test.describe('TTS Proof-Listening', () => {
     await page.waitForFunction(() => window.__store.playing === false, null, { timeout: 10000 });
     const failToasts = await page.evaluate(() => window.__toasts.filter((t) => t.message === 'tts.error.failed').length);
     expect(failToasts).toBe(1);
+  });
+
+  test('Zurueck-Taste springt zum vorigen Satz', async ({ page }) => {
+    await routeOk(page);
+    await ready(page);
+    await page.evaluate(() => { window.__ttsBlockEnd = true; });
+    await page.locator('#tts-main').click();
+    await page.locator('#tts-skip').click();
+    await page.waitForFunction(() => window.__store.index === 2);
+    await page.locator('#tts-prev').click();
+    await page.waitForFunction(() => window.__store.index === 1);
+    await page.evaluate(() => window.__ttsApp.stopTtsProof());
+  });
+
+  test('Weiter wirkt auch, waehrend ein Satz noch synthetisiert wird', async ({ page }) => {
+    await page.route('**/telemetry/tts-log', (r) => r.fulfill({ status: 204, body: '' }));
+    let n = 0;
+    await page.route('**/tts/speak*', async (r) => {
+      n++;
+      if (n === 1) return; // erster Satz haengt (kein fulfill)
+      await r.fulfill({ status: 200, contentType: 'audio/mpeg', body: Buffer.from([0x49, 0x44, 0x33]) });
+    });
+    await ready(page);
+    await page.evaluate(() => { window.__ttsBlockEnd = true; });
+    await page.locator('#tts-main').click();
+    await page.waitForFunction(() => window.__store.loading === true);
+    await page.locator('#tts-skip').click();
+    await page.waitForFunction(() => window.__store.index === 2 && window.__store.loading === false);
+    await page.evaluate(() => window.__ttsApp.stopTtsProof());
+  });
+
+  test('Klick in den Text springt waehrend des Vorlesens dorthin', async ({ page }) => {
+    await routeOk(page);
+    await ready(page);
+    await page.evaluate(() => { window.__ttsBlockEnd = true; });
+    await page.locator('#tts-main').click();
+    await page.waitForFunction(() => window.__store.index === 1);
+    await page.locator('#readview p').nth(1).click();
+    await page.waitForFunction(() => window.__store.index === 2);
+    await page.evaluate(() => window.__ttsApp.stopTtsProof());
+  });
+
+  test('Start ab markiertem Text', async ({ page }) => {
+    await routeOk(page);
+    await ready(page);
+    await page.evaluate(() => { window.__ttsBlockEnd = true; });
+    await page.evaluate(() => {
+      const r = document.createRange();
+      r.selectNodeContents(document.querySelectorAll('#readview p')[1]);
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    });
+    await page.evaluate(() => window.__ttsApp.toggleTtsProof());
+    await page.waitForFunction(() => window.__store.playing === true);
+    expect(await store(page, 's => s.index')).toBe(2);
+    await page.evaluate(() => window.__ttsApp.stopTtsProof());
+  });
+
+  test('Leseposition wird gemerkt: Neustart setzt beim abgebrochenen Satz fort', async ({ page }) => {
+    await routeOk(page);
+    await ready(page);
+    await page.evaluate(() => { window.__ttsBlockEnd = true; });
+    await page.locator('#tts-main').click();
+    await page.locator('#tts-skip').click();
+    await page.waitForFunction(() => window.__store.index === 2);
+    await page.locator('#tts-stop').click();
+    await page.waitForFunction(() => window.__store.playing === false);
+    await page.locator('#tts-main').click();
+    await page.waitForFunction(() => window.__store.playing === true);
+    expect(await store(page, 's => s.index')).toBe(2);
+    await page.evaluate(() => window.__ttsApp.stopTtsProof());
+  });
+
+  test('Pfeiltasten steuern, auch wenn der Fokus auf der Dock-Taste liegt', async ({ page }) => {
+    await routeOk(page);
+    await ready(page);
+    await page.evaluate(() => {
+      window.__ttsBlockEnd = true;
+      document.getElementById('dock').classList.add('tts-dock');
+    });
+    await page.locator('#tts-main').click();
+    await page.waitForFunction(() => window.__store.index === 1);
+    await page.keyboard.press('ArrowRight');
+    await page.waitForFunction(() => window.__store.index === 2);
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForFunction(() => window.__store.index === 1);
+    await page.evaluate(() => window.__ttsApp.stopTtsProof());
+  });
+
+  test('Zeilenumbruch (<br>) wird als Pause gesprochen, nicht zusammengeklebt', async ({ page }) => {
+    await page.route('**/telemetry/tts-log', (r) => r.fulfill({ status: 204, body: '' }));
+    const sent = [];
+    await page.route('**/tts/speak*', async (r) => {
+      sent.push(JSON.parse(r.request().postData()).text);
+      await r.fulfill({ status: 200, contentType: 'audio/mpeg', body: Buffer.from([0x49, 0x44, 0x33]) });
+    });
+    await ready(page);
+    await page.evaluate(() => {
+      document.getElementById('readview').innerHTML = '<p>Rosen bluehen rot im Garten<br>Veilchen bluehen blau am Wegesrand dort</p>';
+      window.__ttsBlockEnd = true;
+    });
+    await page.locator('#tts-main').click();
+    await page.waitForFunction(() => window.__store.playing === true);
+    await expect.poll(() => sent.length).toBeGreaterThan(0);
+    expect(sent.join(' ')).toContain('Garten, Veilchen');
+    expect(sent.join(' ')).not.toContain('GartenVeilchen');
+    // Das Highlight deckt die Zeile, nicht mehr.
+    const hl = await page.evaluate(() => [...CSS.highlights.get('tts-sentence')][0].toString());
+    expect(hl).toContain('Rosen');
+    await page.evaluate(() => window.__ttsApp.stopTtsProof());
   });
 });

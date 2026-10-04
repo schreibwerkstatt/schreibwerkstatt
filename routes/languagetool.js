@@ -6,29 +6,60 @@
 // Disabled / no-URL -> 404 { error: 'languagetool_disabled' } (Frontend
 // behandelt als "Feature aus", kein Retry).
 //
-// Chunking: Texte > CHUNK_MAX (50KB) werden in lib/languagetool-chunk.js an
-// Paragraph-/Satz-Boundaries gesplittet, parallel mit Pool 4 an LT geschickt
-// und mit zurueckgeschobenen Offsets gemerged.
+// Absatz-Cache: der Text wird in Absatz-Segmente zerlegt
+// (lib/languagetool-chunk.js); nur Segmente ohne Cache-Eintrag gehen an LT,
+// gepackt zu Anfragen <= CHUNK_MAX, parallel mit Pool 4. Der Cache haelt
+// UNGEFILTERTE Treffer — Woerterbuch, Buchnamen und abgeschaltete Regeln des
+// Users filtert lib/languagetool-filter.js beim Ausliefern.
 //
-// Body-Cap 600 KB (text bis TEXT_MAX 500 KB, JSON-Overhead). LT-Timeout 10s
-// pro Chunk; bei Abbruch eines Chunks bricht der gesamte Request mit 408 ab.
-// Upstream-Fehler -> 502 mit erstem-fehlerhaften upstream-Status.
+// Body-Cap 600 KB (text bis TEXT_MAX 500 KB, JSON-Overhead). Timeout
+// UPSTREAM_TIMEOUT_MS pro Upstream-Anfrage; laeuft eine ab, faellt ein Fehler
+// oder trennt der Client die Verbindung, bricht der ganze Request ab — keine
+// Worker rufen danach noch LT auf.
+//
+// Daneben: GET/POST/DELETE /languagetool/rules — abgeschaltete Regeln des Users.
 
 const express = require('express');
 const logger = require('../logger');
 const appSettings = require('../lib/app-settings');
 const { toIntId } = require('../lib/validate');
-const { setContext } = require('../lib/log-context');
 const { getBookLocale } = require('../db/schema');
-const { chunkText, adjustMatches, CHUNK_MAX } = require('../lib/languagetool-chunk');
+const { splitSegments, packSegments, assignMatches, CHUNK_MAX } = require('../lib/languagetool-chunk');
+const { filterMatches, buildNameSet } = require('../lib/languagetool-filter');
 const ltCache = require('../db/languagetool-cache');
 const dict = require('../db/user-dictionary');
-const { sessionEmail } = require('../lib/acl');
+const ltRules = require('../db/languagetool-rules');
+const ltNames = require('../db/languagetool-names');
+const { getUser } = require('../db/app-users');
+const { guardBook, sessionEmail } = require('../lib/acl');
 
 const router = express.Router();
 const TEXT_MAX = 500_000;
 const PARALLEL = 4;
-const UPSTREAM_TIMEOUT_MS = 10_000;
+const UPSTREAM_TIMEOUT_MS = 15_000;
+// Bevorzugte Varianten fuer `language=auto`: ohne sie erkennt LT nur „Deutsch"
+// bzw. „Englisch" und prueft nach de-DE/en-US — „Strasse" waere ein Fehler.
+// Gleiche Defaults wie db/book-settings.js#getBookSettings.
+const DEFAULT_VARIANTS = { de: 'de-CH', en: 'en-US' };
+const RULE_ID_MAX = 120;
+const RULE_LABEL_MAX = 200;
+
+function _userLocale(userEmail) {
+  if (!userEmail) return null;
+  try {
+    const u = getUser(userEmail);
+    const l = u?.default_language;
+    if (!l) return null;
+    const r = u.default_region || (l === 'en' ? 'US' : 'CH');
+    return `${l}-${r}`;
+  } catch { return null; }
+}
+
+function _preferredVariants(userLocale) {
+  const v = { ...DEFAULT_VARIANTS };
+  if (userLocale) v[userLocale.split('-')[0]] = userLocale;
+  return Object.values(v).join(',');
+}
 
 router.post('/check', express.json({ limit: '600kb' }), async (req, res) => {
   const enabled = appSettings.get('languagetool.enabled') === true;
@@ -44,118 +75,127 @@ router.post('/check', express.json({ limit: '600kb' }), async (req, res) => {
     return res.status(413).json({ error_code: 'TEXT_TOO_LARGE', error: 'text_too_large', max: TEXT_MAX });
   }
 
+  // bookId steuert Sprache, Buch-Woerterbuch und Buchnamen — darum Buch-ACL.
   const bookId = toIntId(body.bookId);
-  if (bookId) setContext({ book: bookId });
+  if (bookId && !guardBook(req, res, bookId, 'viewer')) return;
   const userEmail = sessionEmail(req);
 
-  // Book ist SSoT fuer Locale: bookId vorhanden -> getBookLocale gewinnt.
-  // Body.language nur als Fallback (Aufrufe ohne Buchscope).
+  // Sprache: Buch > explizite Client-Sprache > Profil-Default > auto.
+  const userLocale = _userLocale(userEmail);
   let language = null;
   if (bookId) {
     try { language = getBookLocale(bookId, userEmail); } catch { /* noop */ }
   }
   if (!language) {
     const raw = typeof body.language === 'string' ? body.language.trim() : '';
-    language = raw && raw !== 'auto' ? raw : 'auto';
+    language = raw && raw !== 'auto' ? raw : (userLocale || 'auto');
   }
+  const preferredVariants = language === 'auto' ? _preferredVariants(userLocale) : null;
 
   // Per-Request-Override: Client kann picky:true/false schicken und damit den
-  // serverseitigen Default fuer genau diesen Request uebersteuern. Ohne Feld im
-  // Body bleibt der globale app_settings-Wert massgeblich (Default = heute).
+  // serverseitigen Default fuer genau diesen Request uebersteuern.
   const bodyPicky = typeof body.picky === 'boolean' ? body.picky : null;
   const picky = bodyPicky !== null ? bodyPicky : (appSettings.get('languagetool.picky') === true);
-  const pageId = toIntId(body.pageId);
   const log = logger.child({ job: 'lt', user: userEmail || '-', book: bookId || '-' });
 
-  // Cache-Lookup: nur wenn pageId gesetzt. Bucheditor (Block-Scope) sendet
-  // pageId weiterhin, aber Hash basiert auf dem Block-Text -- d.h. Notebook-
-  // und Bucheditor-Caches kollidieren nicht (unterschiedliche Hashes).
-  //
-  // Dict-Re-Filter auf Cache-Hits: der body_html-basierte Purge in
-  // user-dictionary.js#_purgeCacheForWord erwischt Faelle nicht, in denen
-  // das Wort beim Add noch nicht in der gespeicherten body_html stand
-  // (ungespeicherte Edits im Notebook-Editor: User tippt "Kantifest", LT
-  // cached den Match unfilterted, User fuegt Wort zum Dict hinzu BEVOR
-  // Autosave gelaufen ist -> Purge findet die Seite nicht -> Cache-Eintrag
-  // mit unfiltered Match bleibt fuer immer auf diesem content_hash). Re-Filter
-  // ist idempotent: gecached sind bereits gefilterte Matches, ein zweiter Lauf
-  // entfernt nur, was seit dem Cache-Write ins Dict gewandert ist.
-  const contentHash = pageId ? ltCache.hashText(text) : null;
-  if (pageId && contentHash) {
-    const cached = ltCache.getCached({ pageId, contentHash, lang: language, picky });
-    if (cached) {
-      let result = cached;
-      if (userEmail) {
-        try {
-          const dictSet = dict.getCheckSet(userEmail, bookId, language);
-          if (dictSet.size) result = dict.filterMatches(cached, dictSet);
-        } catch (e) { log.warn(`dict filter on cache hit failed: ${e.message}`); }
-      }
-      return res.json({ matches: result, language: null, chunks: 0, cached: true });
-    }
-  }
+  const segments = splitSegments(text, CHUNK_MAX);
+  const hashes = segments.map(s => ltCache.hashText(s.text));
+  let cached;
+  try { cached = ltCache.getMany({ hashes, lang: language, picky }); }
+  catch (e) { log.warn(`cache get failed: ${e.message}`); cached = new Map(); }
 
-  const chunks = chunkText(text, CHUNK_MAX);
+  const missing = [];
+  segments.forEach((s, i) => { if (!cached.has(hashes[i])) missing.push(i); });
+  const perSegment = new Map(); // segIndex -> Treffer relativ zum Segment
+  segments.forEach((s, i) => { if (cached.has(hashes[i])) perSegment.set(i, cached.get(hashes[i])); });
+
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), UPSTREAM_TIMEOUT_MS);
+  // Client weg (neuer Check nach Weitertippen, Seitenwechsel) -> LT-Anfragen
+  // abbrechen, statt Antworten zu berechnen, die niemand mehr liest.
+  let clientGone = false;
+  res.on('close', () => { if (!res.writableEnded) { clientGone = true; ctrl.abort(); } });
   const t0 = Date.now();
+  let languageMeta = null;
+  let chunkCount = 0;
 
   try {
-    const allMatches = [];
-    let languageMeta = null;
-    let cursor = 0;
-    async function worker() {
-      while (cursor < chunks.length) {
-        const idx = cursor++;
-        const c = chunks[idx];
-        const matches = await _callLT(url, c.text, language, picky, ctrl.signal);
-        if (idx === 0 && matches.language) languageMeta = matches.language;
-        for (const m of adjustMatches(c.offset, matches.matches)) allMatches.push(m);
+    if (missing.length) {
+      const batches = packSegments(missing.map(i => segments[i]), CHUNK_MAX);
+      chunkCount = batches.length;
+      const fresh = [];
+      let cursor = 0;
+      async function worker() {
+        while (cursor < batches.length && !ctrl.signal.aborted) {
+          const b = batches[cursor++];
+          const r = await _callLT(url, b.text, language, picky, preferredVariants, ctrl.signal);
+          if (!languageMeta && r.language) languageMeta = r.language;
+          for (const [localIdx, ms] of assignMatches(b, r.matches)) {
+            const segIdx = missing[localIdx];
+            perSegment.set(segIdx, ms);
+            fresh.push({ hash: hashes[segIdx], matches: ms });
+          }
+        }
       }
-    }
-    const workers = Array.from({ length: Math.min(PARALLEL, chunks.length) }, () => worker());
-    await Promise.all(workers);
-    allMatches.sort((a, b) => (a.offset || 0) - (b.offset || 0));
-
-    // Custom-Dictionary-Filter: User-Woerter aus den Matches entfernen.
-    let filtered = allMatches;
-    if (userEmail) {
+      const workers = Array.from({ length: Math.min(PARALLEL, batches.length) }, () => worker());
       try {
-        const dictSet = dict.getCheckSet(userEmail, bookId, language);
-        if (dictSet.size) filtered = dict.filterMatches(allMatches, dictSet);
-      } catch (e) { log.warn(`dict filter failed: ${e.message}`); }
-    }
-
-    if (pageId && contentHash) {
-      try { ltCache.setCached({ pageId, contentHash, lang: language, picky, matches: filtered }); }
+        await Promise.all(workers);
+      } catch (err) {
+        ctrl.abort(); // die uebrigen Worker stoppen
+        throw err;
+      }
+      try { ltCache.setMany({ entries: fresh, lang: language, picky }); }
       catch (e) { log.warn(`cache set failed: ${e.message}`); }
     }
-    res.json({ matches: filtered, language: languageMeta, chunks: chunks.length });
+
+    const all = [];
+    segments.forEach((s, i) => {
+      for (const m of perSegment.get(i) || []) all.push({ ...m, offset: m.offset + s.offset });
+    });
+    all.sort((a, b) => a.offset - b.offset);
+
+    let filtered = all;
+    try {
+      filtered = filterMatches(all, {
+        words: userEmail ? dict.getCheckSet(userEmail, bookId, language) : null,
+        names: bookId ? buildNameSet(ltNames.listBookNames(bookId)) : null,
+        rules: userEmail ? ltRules.getCheckSet(userEmail, bookId) : null,
+      });
+    } catch (e) { log.warn(`filter failed: ${e.message}`); }
+
+    if (clientGone) return;
+    res.json({
+      matches: filtered,
+      language: languageMeta,
+      chunks: chunkCount,
+      cached: segments.length - missing.length,
+      segments: segments.length,
+    });
   } catch (err) {
-    const isAbort = err && (err.name === 'AbortError' || err.code === 'ABORT_ERR');
+    if (clientGone || res.headersSent) return;
     if (err && err.upstreamStatus) {
       log.warn(`upstream ${err.upstreamStatus} latency=${Date.now() - t0}ms`);
       return res.status(502).json({ error_code: 'LANGUAGETOOL_UPSTREAM', error: 'languagetool_upstream', upstream_status: err.upstreamStatus });
     }
-    log.warn(`fetch ${isAbort ? 'TIMEOUT' : err.message} latency=${Date.now() - t0}ms`);
-    return res.status(isAbort ? 408 : 502).json(isAbort
+    const isTimeout = err && (err.name === 'TimeoutError' || err.name === 'AbortError' || err.code === 'ABORT_ERR');
+    log.warn(`fetch ${isTimeout ? 'TIMEOUT' : err.message} latency=${Date.now() - t0}ms`);
+    return res.status(isTimeout ? 408 : 502).json(isTimeout
       ? { error_code: 'LANGUAGETOOL_TIMEOUT', error: 'languagetool_timeout' }
       : { error_code: 'LANGUAGETOOL_FETCH_FAILED', error: 'languagetool_fetch_failed' });
-  } finally {
-    clearTimeout(timer);
   }
 });
 
-async function _callLT(url, text, language, picky, signal) {
+async function _callLT(url, text, language, picky, preferredVariants, signal) {
   const params = new URLSearchParams();
   params.set('text', text);
   params.set('language', language);
+  if (preferredVariants) params.set('preferredVariants', preferredVariants);
   if (picky) params.set('level', 'picky');
   const upstream = await fetch(`${url}/v2/check`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
     body: params.toString(),
-    signal,
+    // Timeout gilt pro Anfrage; der Request-Signal bricht alle gemeinsam ab.
+    signal: AbortSignal.any([signal, AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)]),
   });
   if (!upstream.ok) {
     const err = new Error('upstream_error');
@@ -168,5 +208,44 @@ async function _callLT(url, text, language, picky, signal) {
     language: json?.language || null,
   };
 }
+
+// ─── Abgeschaltete Regeln ──────────────────────────────────────────────────
+
+function _ruleBody(req) {
+  const body = req.body || {};
+  return {
+    ruleId: typeof body.ruleId === 'string' ? body.ruleId.trim() : '',
+    label: typeof body.label === 'string' ? body.label.trim().slice(0, RULE_LABEL_MAX) : null,
+    bookId: toIntId(body.bookId) || 0,
+  };
+}
+
+router.get('/rules', (req, res) => {
+  const userEmail = sessionEmail(req);
+  if (!userEmail) return res.status(401).json({ error_code: 'NOT_LOGGED_IN' });
+  res.json({ entries: ltRules.listForUser(userEmail) });
+});
+
+router.post('/rules', express.json({ limit: '4kb' }), (req, res) => {
+  const userEmail = sessionEmail(req);
+  if (!userEmail) return res.status(401).json({ error_code: 'NOT_LOGGED_IN' });
+  const { ruleId, label, bookId } = _ruleBody(req);
+  if (!ruleId || ruleId.length > RULE_ID_MAX) {
+    return res.status(400).json({ error_code: 'INVALID_RULE', params: { max: RULE_ID_MAX } });
+  }
+  if (bookId && !guardBook(req, res, bookId, 'viewer')) return;
+  ltRules.add(userEmail, { ruleId, bookId, label });
+  logger.child({ job: 'lt-rules', user: userEmail, book: bookId || '-' }).info(`disable rule ${ruleId}`);
+  res.json({ ok: true });
+});
+
+router.delete('/rules', express.json({ limit: '4kb' }), (req, res) => {
+  const userEmail = sessionEmail(req);
+  if (!userEmail) return res.status(401).json({ error_code: 'NOT_LOGGED_IN' });
+  const { ruleId, bookId } = _ruleBody(req);
+  if (!ruleId) return res.status(400).json({ error_code: 'INVALID_RULE', params: { max: RULE_ID_MAX } });
+  if (bookId && !guardBook(req, res, bookId, 'viewer')) return;
+  res.json({ ok: true, removed: ltRules.remove(userEmail, { ruleId, bookId }) });
+});
 
 module.exports = router;

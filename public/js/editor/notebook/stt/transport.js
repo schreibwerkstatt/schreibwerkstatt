@@ -20,12 +20,12 @@ export const sttTransportMethods = {
   // Segmente transkribieren parallel), die EINFUEGUNG wird aber ueber
   // `rt.insertChain` in Sende-Reihenfolge serialisiert — so landet ein frueher
   // gesprochenes Segment auch dann vor einem spaeteren im Text, wenn dessen
-  // Transkript (z. B. nach einem Retry) erst spaeter zurueckkommt. Der Guard
-  // `this._sttRt === rt` verwirft Inserts, deren Session inzwischen beendet oder
-  // gewechselt wurde (Stop, Seitenwechsel).
-  _sttSendSegment(blob, mime, boundaryKind) {
-    const rt = this._sttRt;
-    if (!rt) return;
+  // Transkript (z. B. nach einem Retry) erst spaeter zurueckkommt. `rt` kommt
+  // vom Aufrufer (onstop), weil das letzte Segment eines beendenden Stopps
+  // gesendet wird, wenn `_sttRt` schon geraeumt ist. `rt.dead` (harter Stopp:
+  // Seitenwechsel, Edit-Modus verlassen) verwirft spaete Inserts.
+  _sttSendSegment(rt, blob, mime, boundaryKind) {
+    if (!rt || rt.dead) return;
     this._sttBusyOn(); // Indikator „transkribiert" (mit Mindest-Standzeit)
     const fetchP = this._sttFetchTranscript(blob, mime, 0, rt.abort.signal)
       .finally(() => this._sttBusyOff());
@@ -33,7 +33,7 @@ export const sttTransportMethods = {
       .then(async () => {
         const text = await fetchP;
         if (text == null) return; // Fehler/Abbruch bereits behandelt (Toast/Stop)
-        if (this._sttRt !== rt) return; // Session beendet -> nicht mehr einfuegen
+        if (rt.dead) return; // Session hart beendet -> nicht mehr einfuegen
         this._sttInsertText(text, boundaryKind);
       })
       .catch(() => { /* ein fehlgeschlagener Insert darf die Kette nicht brechen */ });

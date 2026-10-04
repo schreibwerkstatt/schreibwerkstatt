@@ -14,6 +14,7 @@
 const express = require('express');
 const logger = require('../../logger');
 const appUsers = require('../../db/app-users');
+const appSettings = require('../../lib/app-settings');
 const altcha = require('../../lib/altcha');
 const avatarCache = require('../../lib/avatar-cache');
 const demoUser = require('../../lib/demo-user');
@@ -82,17 +83,6 @@ router.get('/login', (req, res) => {
 
   const blocks = [];
   if (provider.isConfigured()) blocks.push(provider.renderLoginBlock({ t, returnTo, escAttr }));
-  if (hasAdminPw) {
-    blocks.push(pwForm({
-      t,
-      id: 'admin-form',
-      endpoint: '/auth/admin-login',
-      returnTo,
-      heading: t('auth.login.adminTitle'),
-      emailLabel: t('auth.login.email'),
-      submitLabel: t('auth.login.submit'),
-    }));
-  }
   if (hasDemo) {
     // Demo-Adresse vorbefuellen: sie ist kein Geheimnis (steht in den
     // Store-Reviewer-Notes) und ein Tippfehler des Reviewers kostet einen
@@ -110,14 +100,41 @@ router.get('/login', (req, res) => {
     }));
   }
 
+  // Admin-Form zuletzt: sie ist der Notfall-Pfad, nicht der Alltagsweg. Steht
+  // ein regulaeres Verfahren daneben, klappt sie hinter einen leisen Link ein,
+  // damit der Verfahrens-Knopf der eine prominente Einstieg bleibt; ist sie
+  // der einzige Weg, steht sie offen.
+  const adminHtml = hasAdminPw
+    ? pwForm({
+      t,
+      id: 'admin-form',
+      endpoint: '/auth/admin-login',
+      returnTo,
+      heading: t('auth.login.adminTitle'),
+      emailLabel: t('auth.login.email'),
+      submitLabel: t('auth.login.submit'),
+    })
+    : '';
+
   const title = t('auth.login.title');
+  const appName = appSettings.get('app.name') || 'Schreibwerkstatt';
   const sep = `  <div class="public-sep">${t('auth.login.or')}</div>\n`;
+  // Kein <details>: Klapp-Sektionen laufen ueber einen Knopf mit
+  // aria-expanded, den credential-login.js schaltet (Pre-Auth, ohne Alpine).
+  const fallbackHtml = adminHtml && blocks.length
+    ? `  <div class="public-fallback">
+    <button type="button" class="public-btn-link" aria-expanded="false" aria-controls="admin-fallback" data-fallback-toggle>${t('auth.login.adminToggle')}</button>
+    <div id="admin-fallback" hidden>
+${adminHtml}    </div>
+  </div>\n`
+    : '';
+  if (adminHtml && !fallbackHtml) blocks.push(adminHtml);
   const bodyHtml = blocks.length
-    ? blocks.join(sep)
+    ? blocks.join(sep) + fallbackHtml
     : `  <p class="public-sub">${t('auth.login.noAdmin')}</p>\n`;
   // Jede Passwort-Form braucht den geteilten Handler; ALTCHA nur, wenn
   // ueberhaupt eine Form auf der Seite steht.
-  const hasPwForm = blocks.some(b => b.includes('data-login-endpoint'));
+  const hasPwForm = !!adminHtml || blocks.some(b => b.includes('data-login-endpoint'));
   const scripts = hasPwForm
     ? `${altcha.isEnabled() ? '<script type="module" src="/vendor/altcha-3.0.11.min.js"></script>\n' : ''}<script src="/js/credential-login.js"></script>\n`
     : '';
@@ -125,9 +142,19 @@ router.get('/login', (req, res) => {
   res.send(renderPublicShell({
     lang,
     title,
-    mainHtml: `<main class="public-shell">
-  <header class="public-header"><h1>${title}</h1></header>
-${bodyHtml}</main>`,
+    mainHtml: `<main class="public-shell public-shell--narrow">
+  <header class="public-header">
+    <img class="public-brand" src="/schreibwerkstatt_icon.svg" alt="" width="72" height="72">
+    <h1>${escAttr(appName)}</h1>
+    <p class="public-sub">${t('auth.login.lead')}</p>
+  </header>
+${bodyHtml}  <footer class="public-footer">
+    <nav class="public-footer-links">
+      <a class="public-footer-link" href="/landing">${t('auth.login.toLanding')}</a>
+      <a class="public-footer-link" href="/datenschutz">${t('privacy.footerLink')}</a>
+    </nav>
+  </footer>
+</main>`,
     scripts: scripts + provider.loginScripts(),
   }));
 });

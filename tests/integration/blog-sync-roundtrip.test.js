@@ -210,7 +210,7 @@ test('Import: Titel nur als `rendered` → Entities dekodiert im Seitennamen', a
   try {
     await run('blog-import', id => blogSync.runBlogImportJob(id, bookId, null), bookId);
     const row = ctx.dbSchema.db.prepare('SELECT page_name FROM pages WHERE book_id = ?').get(bookId);
-    assert.equal(row.page_name, '2025-03-04: Kafka’s Briefe & Tageb&uuml;cher – neu');
+    assert.equal(row.page_name, '2025-03-04: Kafka’s Briefe & Tagebücher – neu');
   } finally { restore(); }
 });
 

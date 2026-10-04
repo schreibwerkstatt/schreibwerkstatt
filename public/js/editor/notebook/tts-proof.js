@@ -1,61 +1,51 @@
 import { EVT } from '../../events.js';
 import {
   computeTtsSentences, coalesceTtsRanges, splitLongRange, chunkTtsRanges,
-  normalizeForSpeech, ttsTextNodes, ttsBlockText, isTtsSkippedBlock,
+  collectTtsSegments, hasTtsText, ttsSegmentAt,
   TTS_MIN_CHUNK_CHARS, TTS_MAX_CHUNK_CHARS,
 } from '../../tts-segment.js';
-'use strict';
+import { createTtsPlayer, ttsPointAt, ttsKeyTargetIsInteractive, TTS_RATES } from '../../tts-player.js';
+import { lsGet, lsSet, lsGetJSON, lsSetJSON, lsRemove } from '../../safe-storage.js';
+
 // Proof-Listening / Text-to-Speech (Notebook-Seitenansicht, Read-Modus). Liest
-// den gerenderten Seitentext satzweise vor: pro Satz ein POST /tts/speak, das
-// Audio wird sequenziell abgespielt, der gerade gehoerte Satz per
-// CSS-Custom-Highlight markiert und ins Sichtfeld gescrollt. Den eigenen Text
+// den gerenderten Seitentext satzweise vor, markiert den gerade gehoerten Satz
+// per CSS Custom Highlight und scrollt ihn ins Sichtfeld. Den eigenen Text
 // gehoert aufzudecken Stolperstellen, die das Auge ueberliest.
 //
 // Laeuft in der Leseansicht (`.page-content-view`), NICHT im Edit-Modus —
-// Korrekturhoeren am fertigen Text, nicht waehrend des Tippens.
+// Korrekturhoeren am fertigen Text, nicht waehrend des Tippens. Reines Lesen:
+// keine DOM-Mutation, kein Save-Pfad.
 //
-// Reines Lesen: KEINE DOM-Mutation, kein Save-Pfad, kein data-bid, kein
-// Stale-Write. Der Highlight laeuft ueber die CSS Custom Highlight API (wie
-// Bucheditor-Find/Replace + LanguageTool-Squiggles) — er faerbt nur, er
-// veraendert den Seiteninhalt nicht.
+// Abspiel-Schleife, Vorausladen, Wiederholen, Springen, Audio-Cache und Media
+// Session liegen im geteilten Kern ../../tts-player.js (SSoT mit dem
+// Share-Reader), Segmentierung in ../../tts-segment.js. Hier nur, was das
+// Notebook ausmacht: Lese-Container, Store-Spiegel, Toasts/Telemetrie,
+// Leseposition pro Seite, „ab hier", Tastatur und Weiterlesen auf der
+// naechsten Seite.
 //
 // Diese Methoden werden in den Root (`Alpine.data('lektorat')`) gespreaded —
 // der Vorlese-Dock laeuft im Root-Scope.
-//
-// Durchsatz: das Audio des aktuellen Satzes wird abgespielt, waehrend das des
-// naechsten schon vorgeladen wird (Prefetch-Kette) — das Gegenstueck zur
-// STT-insertChain (dort seriell EINFUEGEN, hier seriell ABSPIELEN).
 
-const TTS_HIGHLIGHT = 'tts-sentence';
-const TTS_PREFETCH_AHEAD = 1;   // wie viele Saetze im Voraus synthetisiert werden
-// Chunk-Groessen + die pure Segmentierung leben in ../../tts-segment.js (SSoT,
-// geteilt mit dem Share-Reader-Vorlese-Dock). Siehe dort, warum die zwei
-// Chunk-Korrektive noetig sind (Kurz-Input-Halluzination / Lang-Satz-Latenz).
-// Default-Atempause (ms) zwischen den vorgelesenen Fragmenten: statt nahtlos ins
-// naechste Fragment ueberzugehen, gibt eine kurze Stille dem Ohr Luft — naeher
-// am natuerlichen Vorlesen. An Absatzgrenzen (Block-Wechsel) etwas laenger.
-// Fallback, falls /config keine Werte liefert — der Admin ueberschreibt sie via
-// `tts.pause.fragment_ms` / `tts.pause.paragraph_ms` (this.$store.tts.pause).
-const TTS_FRAGMENT_PAUSE_MS = 250;
-const TTS_PARAGRAPH_PAUSE_MS = 550;
-const TTS_MAX_RETRY = 1;
-const TTS_RETRY_DELAY_MS = 600;
-const TTS_RETRYABLE_STATUS = new Set([408, 500, 502, 503]);
+// Gemerkte Leseposition pro Seite: wie lange sie gilt.
+const TTS_POS_MAX_AGE_MS = 14 * 24 * 3600 * 1000;
+// Weiterlesen: so lange wird auf den Inhalt der naechsten Seite gewartet.
+const TTS_CONTINUE_WAIT_MS = 15_000;
+// Klicks auf diese Elemente gehoeren ihnen (Lektorat-Popover, Links, Chips) —
+// kein Sprung dorthin.
+const TTS_CLICK_IGNORE_SEL = 'a, button, input, textarea, mark.lektorat-mark, mark.chat-mark, .mention, .entity-ref, span.cite';
 
-// Aktive Vorlese-Session (Segmente, Audio, Prefetch-Cache, AbortController).
-// Bewusst MODUL-scoped, NICHT auf der Alpine-Card: ein an `this` (= reaktiver
-// Alpine-Root-Proxy) zugewiesenes Objekt wird von Alpine/Vue in einen reaktiven
-// Proxy gewrappt, sodass `activeRt === rt` (Referenz-Identitaet) NIE haelt —
-// die Abspiel-Schleife laeuft dann nie an. Als Modul-Variable bleibt die
-// Referenz roh und die Guards greifen. Es gibt genau einen Root → ein Singleton
-// reicht. Pro Session neu befuellt, bei Stop genullt.
-let activeRt = null;
+// Spieler-Instanz: modul-scoped (es gibt genau einen Root). Bewusst nicht auf
+// `this` — siehe tts-player.js, der reaktive Proxy braeche die Guards.
+let player = null;
+// Memo fuer die Dock-Sichtbarkeit (wird im x-show pro Render gefragt).
+let readableMemo = { html: null, ok: false };
+
+const posKey = (pageId) => `tts.pos.${pageId}`;
 
 export const ttsProofMethods = {
   // Diagnostik-Logger: meldet reine Vorlese-Frontend-Events fire-and-forget an
   // POST /telemetry/tts-log, sodass sie zentral in schreibwerkstatt.log landen
-  // (der /tts/speak-Proxy loggt nur die einzelnen Synthese-Calls). Lifecycle als
-  // level=info, Fehler/Retry als level=warn. Best-effort: Netzfehler verschluckt.
+  // (der /tts/speak-Proxy loggt nur die einzelnen Synthese-Calls). Best-effort.
   _ttsLog(msg, level = 'info') {
     const body = { level, msg, bookId: this.$store.nav.selectedBookId || null };
     try {
@@ -67,13 +57,9 @@ export const ttsProofMethods = {
       }).catch(() => {});
     } catch { /* noop */ }
   },
-  _ttsWarn(msg, data) {
-    this._ttsLog(data !== undefined ? `${msg} (${data})` : msg, 'warn');
-  },
 
-  // ── Pure Compute (SSoT tts-segment.js, testbar ohne Browser) ─────────────
-  // Duenne Delegationen an den geteilten Kern (auch der Share-Reader-Dock nutzt
-  // ihn). Als Methoden erhalten, damit die bestehenden Aufrufer + Unit-Tests
+  // ── Pure Compute (SSoT tts-segment.js) ───────────────────────────────────
+  // Duenne Delegationen, damit bestehende Aufrufer + Unit-Tests
   // (`ttsProofMethods._computeTtsSentences`) unveraendert bleiben.
   _computeTtsSentences(text, locale = 'de') { return computeTtsSentences(text, locale); },
   _coalesceTtsRanges(ranges, text, minLen = TTS_MIN_CHUNK_CHARS, maxLen = Infinity) {
@@ -84,109 +70,127 @@ export const ttsProofMethods = {
     return chunkTtsRanges(ranges, text, minLen, maxLen);
   },
 
+  // ── Spieler ──────────────────────────────────────────────────────────────
+
+  _ttsPlayer() {
+    if (player) return player;
+    const store = () => this.$store.tts;
+    player = createTtsPlayer({
+      request: (text, signal) => {
+        const params = new URLSearchParams();
+        if (this.$store.nav.selectedBookId) params.set('bookId', this.$store.nav.selectedBookId);
+        if (this.currentPage?.id) params.set('pageId', this.currentPage.id);
+        const qs = params.toString() ? `?${params}` : '';
+        return fetch(`/tts/speak${qs}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+          signal,
+        });
+      },
+      // Stimme haengt an der Buch-Locale → Cache pro Buch.
+      cacheScope: () => `book:${this.$store.nav.selectedBookId || '-'}`,
+      getPause: () => store().pause || {},
+      onState: (s) => {
+        const st = store();
+        st.playing = s.playing;
+        st.paused = s.paused;
+        st.loading = s.loading;
+        st.index = s.index;
+        st.total = s.total;
+      },
+      onScroll: (range) => {
+        let rect = null;
+        try { rect = range.getBoundingClientRect(); } catch { /* noop */ }
+        this._ttsScrollViewIntoView(rect);
+      },
+      onFailed: () => {
+        this._showJobToast?.({ message: this.t('tts.error.failed'), severity: 'err', jobType: 'tts', bookId: null });
+      },
+      onStop: (info) => this._ttsOnStop(info),
+      log: (msg, level) => this._ttsLog(msg, level),
+      mediaTitle: () => {
+        const book = this._ttsCurrentBook();
+        return [this.currentPage?.name, book?.name].filter(Boolean).join(' · ');
+      },
+    });
+    const rate = Number(lsGet('tts.rate'));
+    if (TTS_RATES.includes(rate)) { player.setRate(rate); store().rate = rate; }
+    store().continueReading = lsGet('tts.continue') === '1';
+    return player;
+  },
+
   // ── Lifecycle ────────────────────────────────────────────────────────────
 
   _initTtsProof(signal) {
-    // Session-Handle zuruecksetzen (siehe `activeRt`-Deklaration oben: bewusst
-    // modul-scoped, damit die Referenz-Identitaets-Guards nicht am Alpine-Proxy
-    // scheitern).
-    activeRt = null;
-    this._ttsFailToasted = false; // Fehler-Toast nur einmal pro Session (kein Flood)
-    const stop = () => { if (this.$store.tts.playing) this._ttsStop(); };
+    const stop = () => { if (player?.isActive()) player.stop(); };
     window.addEventListener(EVT.BOOK_CHANGED, stop, { signal });
     window.addEventListener(EVT.VIEW_RESET, stop, { signal });
     // In den Edit-Modus wechseln (Dock ist read-only) / Seite gewechselt ->
     // Vorlesen beenden, Audio freigeben.
     this.$watch('editMode', (on) => { if (on) stop(); });
     this.$watch(() => this.currentPage?.id, () => stop());
+    // Leseansicht neu gerendert (Fremd-Aenderung nachgeladen, Lektorat-
+    // Markierungen ein/aus): Segmente auf die neuen Knoten umhaengen, sonst
+    // liest der Ton weiter, waehrend die Markierung verschwunden ist.
+    this.$watch('renderedPageHtml', () => {
+      if (!player?.isActive()) return;
+      this.$nextTick(() => { if (player?.isActive()) player.updateSegments(this._ttsCollectSegments()); });
+    });
+    // Waehrend des Vorlesens: Klick in den Text springt dorthin.
+    document.addEventListener('click', (e) => this._ttsOnClick(e), { signal });
+    // Waehrend des Vorlesens: Leertaste = Pause/Weiter, ←/→ = Satz zurueck/vor.
+    document.addEventListener('keydown', (e) => this._ttsOnKey(e), { signal });
   },
 
+  _ttsCurrentBook() {
+    const id = this.$store.nav.selectedBookId;
+    if (!id) return null;
+    return (this.$store.nav.books || []).find(b => String(b.id) === String(id)) || null;
+  },
+
+  // Sprache der Satztrennung = Buchsprache (dieselbe, nach der der Server die
+  // Stimme waehlt). Die UI-Sprache waere falsch: ein deutsches Buch bei
+  // englischer Oberflaeche zerfiele an „z. B." in Pseudo-Saetze.
   _ttsLocaleCode() {
-    return String(this.$store.shell.uiLocale || 'de').split('-')[0].trim().toLowerCase() || 'de';
+    const lang = this._ttsCurrentBook()?.language || this.$store.shell.uiLocale || 'de';
+    return String(lang).split('-')[0].trim().toLowerCase() || 'de';
   },
 
   // Hat die aktuelle Seite vorlesbaren Text? Steuert die Sichtbarkeit des
-  // Vorlese-Docks: `renderedPageHtml` ist auch bei leerem Markup (`<p></p>`,
-  // `<p><br></p>`) truthy — der Dock soll aber nur erscheinen, wenn nach dem
-  // Strippen der Tags echter Text uebrig bleibt. Liest reaktiv aus
-  // `renderedPageHtml` (Alpine trackt den Zugriff im x-show-Aufruf).
+  // Docks. Gleiche Regel wie die Segmentierung (hasTtsText): eine Seite aus nur
+  // einer Tabelle oder einem Diagramm hat keinen. Parst in ein inertes
+  // <template> (laedt keine Bilder), gemerkt pro HTML-Stand.
   _ttsHasReadableText() {
     const html = this.renderedPageHtml;
     if (!html) return false;
-    return html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').trim().length > 0;
+    if (readableMemo.html === html) return readableMemo.ok;
+    let ok = false;
+    try {
+      const tpl = document.createElement('template');
+      tpl.innerHTML = html;
+      ok = hasTtsText(tpl.content);
+    } catch {
+      ok = html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').trim().length > 0;
+    }
+    readableMemo = { html, ok };
+    return ok;
   },
 
   // Container der Leseansicht (Read-Modus). Bewusst nicht der Edit-Container
-  // (`_getEditEl`): TTS liest den gerenderten Seitentext, nicht das
-  // contenteditable. `:not(--editing)` grenzt gegen das Edit-Feld ab.
+  // (`_getEditEl`): TTS liest den gerenderten Seitentext.
   _ttsGetReadEl() {
     return document.querySelector('#editor-card .page-content-view:not(.page-content-view--editing)');
   },
 
-  // ── DOM-Segmentierung ──────────────────────────────────────────────────────
-
-  // Edit-Feld in Vorlese-Segmente zerlegen: pro Block-Kind die Saetze, jeweils
-  // mit Block-Referenz + Zeichen-Offsets. Die Range wird erst beim Highlight
-  // gebaut (ueberlebt so minimale Reflows). Leere Bloecke werden uebersprungen.
   _ttsCollectSegments() {
-    const editEl = this._ttsGetReadEl();
-    if (!editEl) return [];
-    const locale = this._ttsLocaleCode();
-    const blocks = editEl.children.length ? Array.from(editEl.children) : [editEl];
-    const segs = [];
-    for (const block of blocks) {
-      // Diagramme und Tabellen haben keinen Sprech-Text (SSoT tts-segment.js).
-      if (isTtsSkippedBlock(block)) continue;
-      // Sprech-Text OHNE Beleg-Chips (SSoT tts-segment.js#ttsBlockText) — ein
-      // vorgelesenes „(Kafka, 1915, S. 44)" zerreisst den Hoerfluss. Der
-      // Range-Bau unten laeuft ueber dieselbe Knotenliste, sonst driftet das
-      // Highlight um die Chip-Laenge.
-      const text = ttsBlockText(block);
-      if (!text.trim()) continue;
-      const ranges = this._computeTtsSentences(text, locale);
-      const base = ranges.length ? ranges : [[0, text.length]];
-      const list = this._chunkTtsRanges(base, text);
-      for (const [s, e] of list) {
-        const t = text.slice(s, e).trim();
-        if (t) segs.push({ text: t, block, startOff: s, endOff: e });
-      }
-    }
-    return segs;
+    const el = this._ttsGetReadEl();
+    return el ? collectTtsSegments(el, this._ttsLocaleCode()) : [];
   },
 
-  // Range aus Block + Zeichen-Offsets. Knotenliste kommt aus ttsTextNodes —
-  // derselbe Offsetraum, aus dem _ttsCollectSegments seinen Text zieht.
-  _ttsBuildRange(block, startOffset, endOffset) {
-    if (!block) return null;
-    let pos = 0;
-    let startNode = null, startOff = 0, endNode = null, endOff = 0;
-    for (const node of ttsTextNodes(block)) {
-      const len = node.nodeValue.length;
-      if (!startNode && pos + len >= startOffset) {
-        startNode = node;
-        startOff = startOffset - pos;
-      }
-      if (pos + len >= endOffset) {
-        endNode = node;
-        endOff = endOffset - pos;
-        break;
-      }
-      pos += len;
-    }
-    if (!startNode || !endNode) return null;
-    const r = document.createRange();
-    try {
-      r.setStart(startNode, Math.max(0, Math.min(startOff, startNode.nodeValue.length)));
-      r.setEnd(endNode, Math.max(0, Math.min(endOff, endNode.nodeValue.length)));
-    } catch { return null; }
-    return r;
-  },
-
-  // Rect des aktuellen Satzes in der Leseansicht ins Sichtfeld nudgen. Die
-  // `.page-content-view` ist (wie das Edit-Feld) ihr eigener Scroll-Container
-  // (max-height + overflow-y:auto) -> scrollTop direkt nachziehen, nur wenn der
-  // Satz ueber/unter den sichtbaren Rand rutscht. Eigene Methode statt
-  // `_scrollEditCaretIntoView`, weil jene gegen den Edit-Container misst.
+  // Rect des aktuellen Satzes ins Sichtfeld nudgen. Die `.page-content-view`
+  // ist ihr eigener Scroll-Container (max-height + overflow-y:auto) ->
+  // scrollTop direkt nachziehen, nur wenn der Satz ueber/unter den Rand rutscht.
   _ttsScrollViewIntoView(rect) {
     const el = this._ttsGetReadEl();
     if (!el || !rect || (!rect.height && !rect.top && !rect.bottom)) return;
@@ -199,292 +203,131 @@ export const ttsProofMethods = {
     }
   },
 
-  // Den gerade vorgelesenen Satz markieren + ins Sichtfeld holen. Reiner
-  // CSS-Custom-Highlight (keine DOM-Mutation). Leseansicht ist ihr eigener
-  // Scroll-Container -> Rect des Satzes an den scrollTop-Nudge geben.
-  _ttsHighlight(idx) {
-    if (typeof CSS === 'undefined' || !CSS.highlights || typeof Highlight === 'undefined') return;
-    CSS.highlights.delete(TTS_HIGHLIGHT);
-    const rt = activeRt;
-    const seg = rt?.segs?.[idx];
-    if (!seg || !seg.block?.isConnected) return;
-    const range = this._ttsBuildRange(seg.block, seg.startOff, seg.endOff);
-    if (!range) return;
-    try { CSS.highlights.set(TTS_HIGHLIGHT, new Highlight(range)); } catch { return; }
-    let rect = null;
-    try { rect = range.getBoundingClientRect(); } catch { /* noop */ }
-    this._ttsScrollViewIntoView(rect);
-  },
-
-  _ttsClearHighlight() {
-    if (typeof CSS !== 'undefined' && CSS.highlights) CSS.highlights.delete(TTS_HIGHLIGHT);
-  },
-
-  // ── Toggle / Start / Stop ────────────────────────────────────────────────
+  // ── Steuerung ────────────────────────────────────────────────────────────
 
   // Hauptbutton: idle -> starten; aktiv -> pausieren <-> fortsetzen.
   toggleTtsProof() {
     if (!this.$store.tts.enabled) return;
-    const rt = activeRt;
-    if (!this.$store.tts.playing || !rt) { this._ttsStart(); return; }
-    if (this.$store.tts.paused) {
-      rt.paused = false;
-      this.$store.tts.paused = false;
-      // War mitten in der Wiedergabe pausiert (Audio pending) -> dasselbe Element
-      // weiterspielen; war beim Laden pausiert (kein aktives Audio) -> Schleife
-      // neu antreiben.
-      if (rt.resolveCurrent && rt.audio && !rt.audio.ended) {
-        try { rt.audio.play(); } catch { /* noop */ }
-      } else if (!rt.running) {
-        // Beim Laden / in einer Inter-Fragment-Pause pausiert: die alte Schleife
-        // laeuft ggf. noch (running) und nimmt den Resume selbst auf — dann hier
-        // keine zweite anwerfen.
-        this._ttsRun(rt);
-      }
-    } else {
-      rt.paused = true;
-      this.$store.tts.paused = true;
-      try { rt.audio?.pause(); } catch { /* noop */ }
-    }
+    const p = this._ttsPlayer();
+    if (!p.isActive()) { this._ttsStart(); return; }
+    p.toggle();
+  },
+  skipTtsProof() { player?.skip(); },
+  prevTtsProof() { player?.prev(); },
+  stopTtsProof() { player?.stop(); },
+
+  cycleTtsRate() {
+    const p = this._ttsPlayer();
+    const cur = Number(this.$store.tts.rate) || 1;
+    const next = TTS_RATES[(TTS_RATES.indexOf(cur) + 1) % TTS_RATES.length] ?? 1;
+    p.setRate(next);
+    this.$store.tts.rate = next;
+    lsSet('tts.rate', String(next));
   },
 
-  // Naechsten Satz: aktuelles Audio beenden, Schleife rueckt auf i+1. Nur im
-  // laufenden (nicht pausierten) Zustand sinnvoll — der Skip-Button ist im
-  // pausierten Zustand ausgeblendet.
-  skipTtsProof() {
-    const rt = activeRt;
-    if (!rt || this.$store.tts.paused) return;
-    try { rt.audio?.pause(); } catch { /* noop */ }
-    if (rt.resolveCurrent) {
-      const r = rt.resolveCurrent;
-      rt.resolveCurrent = null;
-      r(true); // als "beendet" aufloesen -> Schleife geht zu i+1
-    }
+  toggleTtsContinue() {
+    this._ttsPlayer();
+    const on = !this.$store.tts.continueReading;
+    this.$store.tts.continueReading = on;
+    lsSet('tts.continue', on ? '1' : '0');
   },
 
-  stopTtsProof() { this._ttsStop(); },
-
-  _ttsStart() {
-    if (!this.$store.tts.enabled || this.$store.tts.playing) return;
+  // Start-Position: markierter Text > gemerkte Position dieser Seite > Anfang.
+  _ttsStart({ fromIdx = null } = {}) {
+    if (!this.$store.tts.enabled) return;
+    const p = this._ttsPlayer();
     const segs = this._ttsCollectSegments();
     if (!segs.length) {
       this._ttsLog('start aborted: no segments (empty text)');
       this._showJobToast?.({ message: this.t('tts.error.empty'), severity: 'info', jobType: 'tts', bookId: null });
       return;
     }
-    this._ttsLog(`start segments=${segs.length} locale=${this._ttsLocaleCode()} book=${this.$store.nav.selectedBookId || '-'} page=${this.currentPage?.id || '-'}`);
-    const rt = {
-      segs,
-      i: 0,
-      cache: new Map(),     // idx -> Promise<objectURL|null>
-      urls: new Set(),      // alle erzeugten Object-URLs (Revoke beim Stop)
-      audio: null,
-      paused: false,
-      running: false,       // Re-Entry-Guard fuer _ttsRun (siehe dort)
-      abort: new AbortController(),
-      resolveCurrent: null, // beendet das aktuelle _ttsPlayUrl-Promise (Skip/Stop)
-    };
-    activeRt = rt;
-    this._ttsFailToasted = false;
-    this.$store.tts.playing = true;
-    this.$store.tts.paused = false;
-    this.$store.tts.loading = false;
-    this.$store.tts.total = segs.length;
-    this.$store.tts.index = 0;
-    this._ttsRun(rt);
+    let idx = fromIdx;
+    if (idx == null) idx = this._ttsSelectionIndex(segs);
+    if (idx < 0) idx = this._ttsSavedIndex(segs);
+    this._ttsLog(`start locale=${this._ttsLocaleCode()} book=${this.$store.nav.selectedBookId || '-'} page=${this.currentPage?.id || '-'}`);
+    p.start(segs, Math.max(0, idx));
   },
 
-  // Abspiel-Schleife: highlightet Satz i, laedt i (+Lookahead) vor, spielt ab,
-  // rueckt vor. Alle Guards pruefen `activeRt === rt` — eine beendete oder
-  // gewechselte Session bricht still ab.
-  async _ttsRun(rt) {
-    // Re-Entry-Guard: solange die Schleife laeuft (auch waehrend einer
-    // Inter-Fragment-Pause oder eines Lade-Awaits), darf der Resume-Pfad in
-    // `toggleTtsProof` keine zweite Schleife anwerfen — sonst spielen zwei
-    // Schleifen parallel. `running` wird in `finally` garantiert zurueckgesetzt.
-    if (rt.running) return;
-    rt.running = true;
-    try {
-      while (activeRt === rt && rt.i < rt.segs.length) {
-        if (rt.paused) return; // Fortsetzen treibt die Schleife neu an
-        const idx = rt.i;
-        this.$store.tts.index = idx + 1;
-        this._ttsHighlight(idx);
-        for (let k = 0; k <= TTS_PREFETCH_AHEAD; k++) this._ttsPrefetch(rt, idx + k);
-        this.$store.tts.loading = true;
-        const url = await rt.cache.get(idx);
-        this.$store.tts.loading = false;
-        if (activeRt !== rt || rt.paused) return;
-        if (url == null) { this._ttsWarn(`segment ${idx} skipped (synth failed)`); rt.i++; continue; } // Fehler-Satz uebersprungen (schon getoastet)
-        const ended = await this._ttsPlayUrl(rt, url);
-        if (activeRt !== rt) return;
-        if (!ended) return; // pausiert/gestoppt -> Steuerung liegt bei Toggle/Stop
-        // Gespieltes Segment freigeben: die Schleife laeuft nur vorwaerts, sonst
-        // hielte eine lange Seite bis zum Stop jedes Audio-Blob im Speicher.
-        rt.cache.delete(idx);
-        rt.urls.delete(url);
-        try { URL.revokeObjectURL(url); } catch { /* noop */ }
-        rt.i++;
-        // Atempause vor dem naechsten Fragment (an Absatzgrenzen laenger). Dauer
-        // vom Admin konfigurierbar (this.$store.tts.pause aus /config), Default via
-        // Konstanten. 0 = keine Pause (kein unnoetiger Await). Kein Audio aktiv
-        // -> nur via Stop abbrechbar (abort.signal); Pause waehrend der Pause
-        // faengt der `rt.paused`-Return oben in der naechsten Runde.
-        const next = rt.segs[rt.i];
-        if (next) {
-          const blockChange = next.block !== rt.segs[idx].block;
-          const ms = blockChange
-            ? (this.$store.tts.pause?.paragraphMs ?? TTS_PARAGRAPH_PAUSE_MS)
-            : (this.$store.tts.pause?.fragmentMs ?? TTS_FRAGMENT_PAUSE_MS);
-          if (ms > 0) {
-            await this._ttsDelay(ms, rt.abort.signal);
-            if (activeRt !== rt || rt.paused) return;
-          }
-        }
-      }
-      if (activeRt === rt) this._ttsStop(); // ans Ende gelesen
-    } finally {
-      rt.running = false;
+  // Nicht-leere Markierung in der Leseansicht → Start ab dem Satz, in dem sie
+  // beginnt. Eine blosse Einfuegemarke zaehlt nicht (zufaelliger Klick).
+  _ttsSelectionIndex(segs) {
+    const sel = window.getSelection?.();
+    if (!sel || !sel.rangeCount || sel.isCollapsed) return -1;
+    const el = this._ttsGetReadEl();
+    const r = sel.getRangeAt(0);
+    if (!el || !el.contains(r.startContainer)) return -1;
+    return ttsSegmentAt(segs, r.startContainer, r.startOffset);
+  },
+
+  _ttsSavedIndex(segs) {
+    const id = this.currentPage?.id;
+    if (!id) return 0;
+    const saved = lsGetJSON(posKey(id));
+    if (!saved || !(Date.now() - (saved.at || 0) < TTS_POS_MAX_AGE_MS)) return 0;
+    if (segs[saved.i]?.text === saved.text) return saved.i;
+    const j = segs.findIndex(s => s.text === saved.text);
+    return j >= 0 ? j : 0;
+  },
+
+  // Session vorbei: Position merken (abgebrochen) bzw. vergessen (zu Ende
+  // gehoert), am Ende ggf. auf der naechsten Seite weiterlesen.
+  _ttsOnStop({ index, seg, ended }) {
+    const id = this.currentPage?.id;
+    if (id) {
+      if (ended || !seg || index <= 0) lsRemove(posKey(id));
+      else lsSetJSON(posKey(id), { i: index, text: seg.text, at: Date.now() });
     }
+    if (ended && this.$store.tts.continueReading) this._ttsContinue();
   },
 
-  // Spielt eine Audio-URL; resolved true bei natuerlichem Ende (oder Defekt ->
-  // weiter), false wenn von aussen (Stop) beendet. Pause/Resume operiert direkt
-  // am Media-Element, ohne dieses Promise aufzuloesen — der Await bleibt offen.
-  _ttsPlayUrl(rt, url) {
-    return new Promise((resolve) => {
-      const audio = new Audio(url);
-      rt.audio = audio;
-      rt.resolveCurrent = resolve;
-      const done = (val) => {
-        if (rt.resolveCurrent !== resolve) return;
-        rt.resolveCurrent = null;
-        resolve(val);
-      };
-      audio.addEventListener('ended', () => done(true));
-      audio.addEventListener('error', () => {
-        // Beim Stop setzt `_ttsStop` `audio.src = ''`, was ein spaeteres
-        // MEDIA_ELEMENT_ERROR ("Empty src attribute") feuert. Da `activeRt`
-        // dort vorher genullt wird, ist das nur Teardown-Rauschen -> still
-        // verwerfen. Nur bei lebender Session ist es ein echter Defekt.
-        if (activeRt !== rt) return;
-        this._ttsWarn('audio playback error, skipping segment', audio.error?.message);
-        done(true); // defektes Segment -> weiter
-      });
-      audio.play().catch((e) => { if (!rt.paused) { this._ttsWarn('audio.play() rejected, skipping segment', e?.message); done(true); } });
-    });
-  },
-
-  // ── Synthese (Prefetch + Fetch) ───────────────────────────────────────────
-
-  // Synthetisiert das Segment idx vorab und legt das Object-URL-Promise in den
-  // Cache. Mehrfachaufruf ist no-op (Cache-Hit).
-  _ttsPrefetch(rt, idx) {
-    if (idx < 0 || idx >= rt.segs.length || rt.cache.has(idx)) return;
-    const seg = rt.segs[idx];
-    const p = this._ttsFetchAudio(seg.text, 0, rt.abort.signal)
-      .then((blob) => {
-        if (activeRt !== rt || !blob) return null;
-        const objUrl = URL.createObjectURL(blob);
-        rt.urls.add(objUrl);
-        return objUrl;
-      })
-      .catch(() => null);
-    rt.cache.set(idx, p);
-  },
-
-  // Synthetisiert einen Satz; gibt das Audio-Blob zurueck oder null (Fehler
-  // bereits behandelt). Transiente Fehler (Netzwerk-Throw, 408/5xx) werden bis
-  // TTS_MAX_RETRY-mal wiederholt. 404 (Feature aus) / 401 (Session abgelaufen)
-  // stoppen die Session. `signal` (Session-AbortController) beendet Request UND
-  // Retry-Wait sofort und still beim Stop.
-  // Guillemet-Normalisierung fuer die Sprachausgabe (SSoT tts-segment.js).
-  _ttsNormalizeForSpeech(text) { return normalizeForSpeech(text); },
-
-  async _ttsFetchAudio(text, attempt, signal) {
-    if (signal?.aborted) return null;
-    text = this._ttsNormalizeForSpeech(text);
-    const params = new URLSearchParams();
-    if (this.$store.nav.selectedBookId) params.set('bookId', this.$store.nav.selectedBookId);
-    if (this.currentPage?.id) params.set('pageId', this.currentPage.id);
-    const qs = params.toString() ? `?${params}` : '';
-    let res;
-    try {
-      res = await fetch(`/tts/speak${qs}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-        signal,
-      });
-    } catch (e) {
-      if (signal?.aborted || e?.name === 'AbortError') return null;
-      if (attempt < TTS_MAX_RETRY) {
-        this._ttsWarn(`fetch network error (attempt ${attempt + 1}/${TTS_MAX_RETRY + 1}), retrying`, e?.message);
-        await this._ttsDelay(TTS_RETRY_DELAY_MS, signal);
-        return this._ttsFetchAudio(text, attempt + 1, signal);
-      }
-      this._ttsWarn('fetch network error, giving up', e?.message);
-      this._ttsToastFailed();
-      return null;
+  // Naechste Seite desselben Kapitels oeffnen und von vorn vorlesen. Kapitel-
+  // grenze = Ende (ein neues Kapitel ist ein bewusster Schritt).
+  async _ttsContinue() {
+    const pages = this.$store.nav.pages || [];
+    const cur = this.currentPage;
+    const i = cur ? pages.findIndex(p => p.id === cur.id) : -1;
+    const next = i >= 0 ? pages[i + 1] : null;
+    if (!next || (next.chapter_id ?? null) !== (pages[i].chapter_id ?? null)) return;
+    this._ttsLog(`continue to page ${next.id}`);
+    await this.selectPage(next);
+    const t0 = Date.now();
+    while (Date.now() - t0 < TTS_CONTINUE_WAIT_MS) {
+      if (this.currentPage?.id !== next.id || this.editMode) return; // User hat woanders hin navigiert
+      if (this.renderedPageHtml && !this.pageContentLoading && this._ttsGetReadEl()) break;
+      await new Promise(r => setTimeout(r, 100));
     }
-    if (res.status === 404 || res.status === 401) {
-      this._ttsWarn(`fetch ${res.status} (${res.status === 404 ? 'feature disabled' : 'session expired'}) -> stop session`);
-      this._ttsStop();
-      return null;
-    }
-    if (!res.ok) {
-      if (TTS_RETRYABLE_STATUS.has(res.status) && attempt < TTS_MAX_RETRY) {
-        this._ttsWarn(`fetch ${res.status} (attempt ${attempt + 1}/${TTS_MAX_RETRY + 1}), retrying`);
-        await this._ttsDelay(TTS_RETRY_DELAY_MS, signal);
-        return this._ttsFetchAudio(text, attempt + 1, signal);
-      }
-      this._ttsWarn(`fetch ${res.status}, giving up`);
-      this._ttsToastFailed();
-      return null;
-    }
-    try {
-      const blob = await res.blob();
-      return blob && blob.size ? blob : null;
-    } catch (e) {
-      if (signal?.aborted || e?.name === 'AbortError') return null;
-      this._ttsToastFailed();
-      return null;
-    }
+    await this.$nextTick();
+    if (this.currentPage?.id !== next.id || this.editMode || player?.isActive()) return;
+    this._ttsStart({ fromIdx: 0 });
   },
 
-  _ttsDelay(ms, signal) {
-    return new Promise((resolve) => {
-      if (signal?.aborted) return resolve();
-      const t = setTimeout(resolve, ms);
-      signal?.addEventListener?.('abort', () => { clearTimeout(t); resolve(); }, { once: true });
-    });
+  _ttsOnClick(e) {
+    if (!player?.isActive() || e.defaultPrevented || e.button !== 0) return;
+    const el = this._ttsGetReadEl();
+    if (!el || !el.contains(e.target)) return;
+    if (e.target.closest?.(TTS_CLICK_IGNORE_SEL)) return;
+    if (window.getSelection?.()?.isCollapsed === false) return; // markiert gerade Text
+    const pt = ttsPointAt(e.clientX, e.clientY);
+    if (!pt) return;
+    const idx = ttsSegmentAt(player.segments(), pt.node, pt.offset);
+    if (idx >= 0) player.jumpTo(idx);
   },
 
-  _ttsToastFailed() {
-    if (this._ttsFailToasted) return; // nur einmal pro Session
-    this._ttsFailToasted = true;
-    this._showJobToast?.({ message: this.t('tts.error.failed'), severity: 'err', jobType: 'tts', bookId: null });
-  },
-
-  _ttsStop() {
-    const rt = activeRt;
-    activeRt = null; // Guard: laufende Schleife/Prefetches verwerfen ab hier
-    this.$store.tts.playing = false;
-    this.$store.tts.paused = false;
-    this.$store.tts.loading = false;
-    this.$store.tts.index = 0;
-    this.$store.tts.total = 0;
-    this._ttsClearHighlight();
-    if (!rt) return;
-    this._ttsLog(`stop at segment ${rt.i}/${rt.segs.length}`);
-    try { rt.abort.abort(); } catch { /* noop */ }
-    try { if (rt.audio) { rt.audio.pause(); rt.audio.src = ''; } } catch { /* noop */ }
-    if (rt.resolveCurrent) {
-      const r = rt.resolveCurrent;
-      rt.resolveCurrent = null;
-      r(false); // wartende Schleife beenden
+  _ttsOnKey(e) {
+    if (!player?.isActive() || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    // Leertaste gehoert einem fokussierten Bedienelement (auch der Dock-Taste,
+    // die damit selbst umschaltet); ←/→ wirken zusaetzlich im Dock, wo nach
+    // einem Klick auf eine Taste der Fokus liegt.
+    const interactive = ttsKeyTargetIsInteractive(e.target);
+    const inDock = !!e.target?.closest?.('.tts-dock');
+    if (e.key === ' ') {
+      if (interactive) return;
+      e.preventDefault(); player.toggle();
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      if (interactive && !inDock) return;
+      e.preventDefault();
+      if (e.key === 'ArrowRight') player.skip(); else player.prev();
     }
-    for (const url of rt.urls) { try { URL.revokeObjectURL(url); } catch { /* noop */ } }
-    rt.urls.clear();
   },
 };

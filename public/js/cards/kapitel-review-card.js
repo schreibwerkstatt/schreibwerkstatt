@@ -146,6 +146,9 @@ export function registerKapitelReviewCard() {
       const safe = escHtml(msg);
       return spinner ? `<span class="spinner"></span>${safe}` : safe;
     },
+    _errorStatus(msg) {
+      return `<span class="error-msg">${escHtml(window.__app.t('common.errorColon'))}${escHtml(msg)}</span>`;
+    },
 
     get kapitelReviewLoading()  { return this._currentSlot().loading; },
     get kapitelReviewProgress() { return this._currentSlot().progress; },
@@ -184,11 +187,16 @@ export function registerKapitelReviewCard() {
           slot.loading = false;
           slot.status = this._formatStatus(root.t('job.interrupted'));
         },
+        // Fehler in die Statuszeile, nicht in den Ergebnis-Slot: die letzte
+        // gespeicherte Bewertung bleibt darunter sichtbar.
         onError: (job) => {
           slot.loading = false;
-          slot.out = `<span class="error-msg">${root.t('common.errorColon')}${escHtml(root.t(job.error, job.errorParams))}</span>`;
-          slot.status = '';
+          slot.status = this._errorStatus(root.t(job.error, job.errorParams));
         },
+        // Das Ergebnis steht nach dem Reload im Verlauf und wird von dort als
+        // aktuelle Bewertung gezeigt (kapitelReviewLatest). `slot.out` nur als
+        // Rückfall, wenn der Verlauf nicht lädt — sonst stünde dieselbe
+        // Bewertung zweimal in der Karte.
         onDone: async (job) => {
           slot.loading = false;
           if (job.result?.empty) {
@@ -197,10 +205,14 @@ export function registerKapitelReviewCard() {
           }
           const r = job.result?.review;
           if (r) {
-            slot.out = this._renderKapitelReviewHtml(r);
+            slot.out = '';
             setTimeout(() => { slot.progress = 0; }, 400);
             slot.status = this._formatStatus(root.t('kapitelReview.pagesAnalyzed', { n: job.result.pageCount || '?' }));
-            if (Alpine.store('nav').selectedBookId) await this.loadKapitelReviewHistory(Alpine.store('nav').selectedBookId);
+            const bookId = Alpine.store('nav').selectedBookId;
+            if (bookId) await this.loadKapitelReviewHistory(bookId);
+            if (!this.kapitelReviewHistory?.[String(chapterId)]?.length) {
+              slot.out = this._renderKapitelReviewHtml(r);
+            }
           }
         },
       });
@@ -227,7 +239,7 @@ export function registerKapitelReviewCard() {
         i.type === 'chapter' && !i.solo && String(i.id) === String(current)
       );
       if (!stillValid) {
-        const eligible = this.kapitelReviewChapterOptions();
+        const eligible = root.kapitelReviewChapterOptions();
         root.kapitelReviewChapterId = eligible.length ? String(eligible[0].id) : '';
       }
       const bookId = Alpine.store('nav').selectedBookId;
@@ -242,11 +254,8 @@ export function registerKapitelReviewCard() {
     async runKapitelReview() {
       const root = window.__app;
       const bookId = Alpine.store('nav').selectedBookId;
-      const bookName = root.selectedBookName;
       const chapterId = root.kapitelReviewChapterId;
       if (!chapterId) return;
-      const chapter = (Alpine.store('nav').tree || []).find(i => i.type === 'chapter' && String(i.id) === String(chapterId));
-      const chapterName = chapter?.name || '';
       const includeSubchapters = this.kapitelReviewIncludeSubchapters(chapterId);
       const slot = this._ensureSlot(chapterId);
       slot.loading = true;
@@ -261,8 +270,6 @@ export function registerKapitelReviewCard() {
           body: JSON.stringify({
             book_id: parseInt(bookId),
             chapter_id: parseInt(chapterId),
-            chapter_name: chapterName,
-            book_name: bookName,
             include_subchapters: includeSubchapters,
           }),
         });
@@ -270,8 +277,7 @@ export function registerKapitelReviewCard() {
         this.startKapitelReviewPoll(jobId, chapterId);
       } catch (e) {
         console.error('[runKapitelReview]', e);
-        slot.out = `<span class="error-msg">${root.t('common.errorColon')}${escHtml(e.message)}</span>`;
-        slot.status = '';
+        slot.status = this._errorStatus(e.body ? root.tError(e.body) : e.message);
         slot.loading = false;
       }
     },
@@ -342,32 +348,18 @@ export function registerKapitelReviewCard() {
     },
 
     async deleteKapitelReview(id) {
+      const root = window.__app;
+      if (!await root.appConfirm({
+        message: root.t('kapitelReview.deleteConfirm'),
+        confirmLabel: root.t('common.delete'),
+        danger: true,
+      })) return;
       try {
         await fetchJson('/history/chapter-review/' + id, { method: 'DELETE' });
         if (Alpine.store('nav').selectedBookId) await this.loadKapitelReviewHistory(Alpine.store('nav').selectedBookId);
       } catch (e) {
         console.error('[deleteKapitelReview]', e);
       }
-    },
-
-    // Sobald mindestens ein Kapitel mehrere Seiten hat, lohnt sich das Kapitel-
-    // Review für alle Kapitel des Buchs – auch für solche mit nur einer Seite.
-    // Bücher aus lauter Ein-Seiten-Kapiteln bzw. reinen Solo-Seiten deckt das
-    // Seiten-Lektorat ab.
-    _bookQualifiesForChapterReview() {
-      const chapters = (Alpine.store('nav').tree || []).filter(i => i.type === 'chapter' && !i.solo);
-      return chapters.some(c => c.pages.length > 1);
-    },
-
-    // Liste der Kapitel, die fürs Kapitel-Review anklickbar sind. Parent-Kapitel
-    // ohne direkte Pages, aber mit Sub-Kapiteln, sind ebenfalls eligible — der
-    // Job lädt bei include_subchapters=true alle Descendant-Pages.
-    kapitelReviewChapterOptions() {
-      if (!this._bookQualifiesForChapterReview()) return [];
-      return (Alpine.store('nav').tree || [])
-        .filter(i => i.type === 'chapter' && !i.solo
-          && (i.pages.length > 0 || this.kapitelReviewHasSubchapters(i.id)))
-        .map(c => ({ id: c.id, name: c.name, pageCount: this.kapitelReviewEffectivePageCount(c.id) }));
     },
 
     // Direkte + transitiv geerbte Sub-Kapitel des aktiven Kapitels, in Tree-
@@ -422,13 +414,21 @@ export function registerKapitelReviewCard() {
       ) || null;
     },
 
+    // Jüngste Seitenänderung im Bewertungs-Umfang — wie die Kennzahlen daneben
+    // inkl. Sub-Kapitel, wenn der Schalter an ist.
     kapitelReviewLastEditAt() {
       const ch = this.kapitelReviewSelectedChapter();
-      if (!ch?.pages?.length) return null;
+      if (!ch) return null;
+      const ids = this.kapitelReviewIncludeSubchapters(ch.id)
+        ? this._kapitelReviewDescendantIds(ch.id)
+        : new Set([String(ch.id)]);
       let max = 0;
-      for (const p of ch.pages) {
-        const t = p.updated_at ? new Date(p.updated_at).getTime() : 0;
-        if (t > max) max = t;
+      for (const it of Alpine.store('nav').tree || []) {
+        if (it.type !== 'chapter' || it.solo || !ids.has(String(it.id))) continue;
+        for (const p of it.pages || []) {
+          const t = p.updated_at ? new Date(p.updated_at).getTime() : 0;
+          if (t > max) max = t;
+        }
       }
       return max ? new Date(max).toISOString() : null;
     },
@@ -467,14 +467,37 @@ export function registerKapitelReviewCard() {
     // Notendifferenz eines History-Eintrags gegenüber dem chronologisch
     // vorherigen Run desselben Kapitels. Die Liste ist newest-first, der
     // Vorgänger liegt also bei index+1. null, wenn kein Vorgänger existiert,
-    // eine Note fehlt oder die Note unverändert ist.
+    // eine Note fehlt, die Note unverändert ist oder die beiden Läufe nicht
+    // vergleichbar sind (anderer Umfang „Inkl. Sub-Kapitel" oder anderes Modell).
     kapitelReviewNoteDelta(index) {
       const list = this.kapitelReviewCurrentHistory();
-      const cur = list[index]?.review_json?.gesamtnote;
-      const prev = list[index + 1]?.review_json?.gesamtnote;
-      if (typeof cur !== 'number' || typeof prev !== 'number') return null;
-      const d = Math.round((cur - prev) * 100) / 100;
+      const cur = list[index];
+      const prev = list[index + 1];
+      const a = cur?.review_json?.gesamtnote;
+      const b = prev?.review_json?.gesamtnote;
+      if (typeof a !== 'number' || typeof b !== 'number') return null;
+      if (cur.model !== prev.model) return null;
+      if (cur.review_json.includeSubchapters !== prev.review_json.includeSubchapters) return null;
+      const d = Math.round((a - b) * 100) / 100;
       return d === 0 ? null : d;
+    },
+
+    // Jüngste gespeicherte Bewertung: steht als aktuelles Urteil oben in der
+    // Karte, auch nach Reload. Der Verlauf darunter zeigt nur die älteren.
+    kapitelReviewLatest() {
+      const entry = this.kapitelReviewCurrentHistory()[0];
+      return entry?.review_json ? entry : null;
+    },
+
+    // Kennzeichen des Umfangs eines Laufs, '' wenn ohne Belang (Kapitel ohne
+    // Sub-Kapitel) oder unbekannt (Läufe, die den Umfang noch nicht speicherten).
+    kapitelReviewScopeLabel(entry) {
+      const inc = entry?.review_json?.includeSubchapters;
+      if (inc === true) return window.__app.t('kapitelReview.scopeWithSubs');
+      if (inc === false && this.kapitelReviewHasSubchapters(entry.chapter_id)) {
+        return window.__app.t('kapitelReview.scopeOwnOnly');
+      }
+      return '';
     },
 
     // Schnell eine Seite im aktuellen Kapitel anlegen — Baum + Flat-Liste lokal

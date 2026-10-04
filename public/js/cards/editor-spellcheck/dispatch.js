@@ -6,7 +6,8 @@
 // Wechselt der aktive Editor (z.B. Notebook -> Focus, oder Block-Switch im
 // Bucheditor), detached der Dispatcher den alten und attached einen neuen.
 //
-// Sprache: aus aktuellem Buch (books[i] mit language+region) → `${l}-${r}`.
+// Sprache: bestimmt der Server (Buch-Locale ueber `bookId`, sonst Profil-
+// Default). Das Frontend schickt 'auto' — die Buchliste traegt keine Locale.
 
 import { createSpellcheckController } from './controller.js';
 import { createFormFieldSpellcheck } from './form-controller.js';
@@ -30,20 +31,7 @@ export function setupSpellcheckDispatch(app) {
   let current = null;        // { kind, root, ctl }
   let bookBlockObserver = null;  // MutationObserver fuer Bucheditor (Block-Wechsel) — lebt unabhaengig vom Controller
 
-  function _currentBook() {
-    const id = Alpine.store('nav').selectedBookId;
-    if (!id) return null;
-    return (Alpine.store('nav').books || []).find(b => String(b.id) === String(id)) || null;
-  }
-  function _locale() {
-    const b = _currentBook();
-    if (!b) return 'auto';
-    const l = b.language || '';
-    const r = b.region || '';
-    if (l && r) return `${l}-${r}`;
-    if (l) return l;
-    return 'auto';
-  }
+  function _locale() { return 'auto'; }
   function _bookId() {
     const id = Alpine.store('nav').selectedBookId;
     return id ? Number(id) : null;
@@ -115,7 +103,11 @@ export function setupSpellcheckDispatch(app) {
       editorKind: kind,
       getBookLocale: _locale,
       getBookId: _bookId,
-      getPageId: _pageId,
+      // Bucheditor: die Seite des aktiven Blocks, nicht `currentPage` (die
+      // Baum-Auswahl, die der Bucheditor nicht nachfuehrt).
+      getPageId: kind === 'book'
+        ? () => (Number(root.dataset.bookEditorPage) > 0 ? Number(root.dataset.bookEditorPage) : null)
+        : _pageId,
       isEnabled: _isEnabled,
       getDebounceMs: _debounceMs,
       i18n: (k) => (typeof app.t === 'function' ? app.t(k) : k),
@@ -208,10 +200,14 @@ export function setupSpellcheckDispatch(app) {
     formCtlSet.delete(ctl);
   }
 
+  // Auch die WeakMap-Eintraege fallen weg: sonst faende `_ensureFormCtl` nach
+  // dem Wiedereinschalten den abgehaengten Controller und haengte ihn nie neu an.
   function _detachAllForms() {
     for (const ctl of Array.from(formCtlSet)) {
       try { ctl.detach(); } catch {}
       formCtlSet.delete(ctl);
+      const el = ctl.getElement?.();
+      if (el) formCtls.delete(el);
     }
   }
 

@@ -31,6 +31,7 @@ router.use((req, res, next) => {
   next();
 });
 
+require('./share/tts').register(router);
 require('./share/reader').register(router);
 require('./share/api').register(router);
 

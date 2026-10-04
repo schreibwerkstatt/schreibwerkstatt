@@ -82,7 +82,8 @@
   <div class="search-status" x-show="loading" x-text="$app.t('search.loading')"></div>
   <div class="search-status search-status--error" x-show="errorMessage && !loading" x-text="errorMessage"></div>
   <div class="search-status" x-show="fallback && !loading && hits.length" x-text="$app.t('search.fallback')"></div>
-  <div class="search-status" x-show="!loading && !errorMessage && q.length >= 2 && hits.length === 0" x-text="$app.t('search.empty')"></div>
+  <div class="search-status" x-show="mode === 'semantic' && notIndexed && !loading && !errorMessage" x-text="$app.t('search.semantic.indexMissing')"></div>
+  <div class="search-status" x-show="!loading && !errorMessage && !(mode === 'semantic' && notIndexed) && (q.length >= 2 || likeEntity) && hits.length === 0" x-text="$app.t('search.empty')"></div>
   <div class="search-status search-status--meta" x-show="!loading && hits.length"
        x-text="$app.t('search.results.count', { n: hits.length })"></div>
 

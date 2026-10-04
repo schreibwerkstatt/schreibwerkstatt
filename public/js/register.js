@@ -43,6 +43,10 @@
       email: (data.get('email') || '').trim(),
       displayName: (data.get('displayName') || '').trim() || null,
       message: (data.get('message') || '').trim() || null,
+      sourceNote: (data.get('sourceNote') || '').trim() || null,
+      // Vom Server beim Ausliefern ermittelt (lib/register-source.js) und hier
+      // nur durchgereicht; der POST selbst kommt immer vom eigenen Host.
+      source: cfg.source || null,
       altcha: altchaOn ? (data.get('altcha') || null) : null,
     };
 

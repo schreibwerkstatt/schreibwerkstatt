@@ -220,13 +220,15 @@ export function buildPlotProposalMemoryBlock(list = []) {
  * System-Prompt als zwei Cache-Blöcke (wie der agentische Buch-Chat):
  *   Block 1 (ttl '1h'): Rolle, Regeln, Werkzeug-Strategie, Buch-Kontext — über die
  *     Session stabil.
- *   Block 2 (cache:false): Board-Outline, Figurenliste, frühere Vorschläge — ändert
- *     sich mit jeder Übernahme, darum ohne Breakpoint und am Ende.
+ *   Block 2 (cache:false): Board-Outline, Figurenliste, frühere Vorschläge und die
+ *     Textpassagen zur Frage — ändert sich mit jeder Übernahme bzw. Frage, darum
+ *     ohne Breakpoint und am Ende.
  *
  * @param {string} bookName
  * @param {object} ctx { mode ('agent'|'classic'), maxToolIter, toolNames,
  *                       bookContext, boardOutline, figurenOutline,
- *                       proposalMemory, passages (nur classic) }
+ *                       proposalMemory, passages (classic immer; agent als
+ *                       Erst-Kontext, null = ohne Embedding-Endpunkt) }
  */
 export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
   const classic = ctx.mode === 'classic';
@@ -278,6 +280,7 @@ export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
   stable.push(
     'Lese-Werkzeuge:',
     '- Das aktuelle Board steht unten vollständig im Prompt (`get_plot_board` brauchst du nur nach eigenen Rückfragen, z.B. für Strang-Erbschaften).',
+    ...ifAny(['search_similar'], '- Die TEXTPASSAGEN unten sind schon die semantisch nächsten Stellen zur aktuellen Frage — prüfe sie zuerst, bevor du liest.'),
     ...ifAny(['list_figures', 'get_figure_profile', 'get_figure_relations'], '- Figuren, Beziehungen → list_figures, get_figure_profile, get_figure_relations'),
     ...ifAny(['list_werkstatt_drafts', 'get_werkstatt_draft'], '- Geplante Figuren mit psychologischem Kern (Want/Need/Wound/Lie, Bogen) → list_werkstatt_drafts, get_werkstatt_draft'),
     ...ifAny(['list_scenes', 'get_timeline'], '- Was schon geschrieben ist (Szenen, Ereignisse in Reihenfolge) → list_scenes, get_timeline'),
@@ -305,7 +308,7 @@ export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
   return _finish(stable, ctx, { classic: false });
 }
 
-// Volatiler Block (Board, Figuren, Gedächtnis, im klassischen Pfad Passagen)
+// Volatiler Block (Board, Figuren, Gedächtnis, Textpassagen zur Frage)
 // und JSON-Pflicht des klassischen Pfads — gemeinsam für beide Modi.
 function _finish(stable, ctx, { classic }) {
   const volatile = [
@@ -316,13 +319,21 @@ function _finish(stable, ctx, { classic }) {
   if (fig) volatile.push('', '=== FIGUREN (Name · fig_id bzw. Werkstatt) ===', fig);
   const mem = String(ctx.proposalMemory || '').trim();
   if (mem) volatile.push('', mem);
-  if (classic) {
+  // Textpassagen: klassisch immer (einzige Text-Grundierung), agentisch als
+  // Erst-Kontext nur mit Embedding-Endpunkt (ctx.passages = Array). Pro Frage andere
+  // Bytes — darum hier im ungecachten Block am Ende, nie im gecachten Block 1.
+  if (classic || Array.isArray(ctx.passages)) {
     const passages = Array.isArray(ctx.passages) ? ctx.passages : [];
     volatile.push('', '=== TEXTPASSAGEN (semantisch nächste Stellen zur Frage) ===');
     if (passages.length) {
+      if (!classic) {
+        volatile.push('(Automatisch vorab geholt; Ausschnitte können unvollständig sein. Reichen sie, brauchst du kein Lese-Werkzeug — sonst weiter mit search_similar/get_chapter_text.)');
+      }
       for (const p of passages) volatile.push(`--- ${p.title || p.kind || ''} ---`, String(p.text || '').trim());
     } else {
-      volatile.push('(keine — Embedding-Index fehlt oder kein Treffer; urteile über Board und Figuren)');
+      volatile.push(classic
+        ? '(keine — Embedding-Index fehlt oder kein Treffer; urteile über Board und Figuren)'
+        : '(keine Treffer zur Frage — nutze bei Bedarf die Lese-Werkzeuge)');
     }
   }
   return [

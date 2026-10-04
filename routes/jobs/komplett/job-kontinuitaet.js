@@ -1,8 +1,10 @@
 'use strict';
 // Standalone-Kontinuitätscheck (eigenständiger Job, ohne die volle Extraktions-
-// Pipeline): Single-Pass bei kleinem Buch, sonst Fakten-Multi-Pass mit Checkpoint,
-// danach Verify-Stufe (False-Positive-Filter, Claude). Verify/Anachronismus/
-// Overrides in ./job-shared.
+// Pipeline; Knopf „Nur Kontinuität prüfen" in der Kontinuitäts-Karte): Single-Pass bei
+// kleinem Buch (Buchtext als gecachter System-Block wie P8), sonst Fakten-Multi-Pass mit
+// Checkpoint, danach Verify-Stufe (False-Positive-Filter) und Attribut-Detektor (F4) —
+// dieselben Stufen wie P8 der Komplettanalyse. Verify/F4/Anachronismus/Overrides in
+// ./job-shared.
 const {
   db,
   saveCheckpoint, loadCheckpoint, deleteCheckpoint,
@@ -11,18 +13,20 @@ const {
 const { narrativeLabels } = require('../narrative-labels');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, contentHttpError,
-  aiCall, getPrompts, getBookPrompts,
+  aiCall, getPrompts, getBookPrompts, toSystemBlocks,
   loadOrderedBookContents, loadPageContents, groupByChapter, buildSinglePassBookText, cleanPageTextForAi,
   chunkLimitsFor, BATCH_SIZE, jobAbortControllers,
   tps, retryOnTransientAi,
 } = require('../shared');
 const appSettings = require('../../../lib/app-settings');
-const { providerClass } = require('../../../lib/ai');
+const { providerClass, resolveProvider } = require('../../../lib/ai');
 const { setContext } = require('../../../lib/log-context');
-const { makePhaseTimer } = require('./utils');
+const { makePhaseTimer, buildBookSystemBlockText } = require('./utils');
 const { saveKontinuitaetResult } = require('./remap');
 const { komplettMaxTokens } = require('./phases');
-const { buildAnachronismusData, verifyKontinuitaetProbleme, _komplettAiOverrides } = require('./job-shared');
+const {
+  buildAnachronismusData, verifyKontinuitaetProbleme, runAttributeContradictionCheck, _komplettAiOverrides,
+} = require('./job-shared');
 const { COST_LABEL, costTier } = require('./cost-labels');
 
 async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider = undefined) {
@@ -32,21 +36,21 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
   const pt = makePhaseTimer(log);
   // Effektiven Provider binden (siehe runKomplettAnalyseJob) – sonst kappt aiCall das
   // Output-Ceiling fälschlich auf den Claude-Default, wenn der Job ohne expliziten Provider läuft.
-  const effectiveProvider = provider || appSettings.get('ai.provider') || 'claude';
+  const effectiveProvider = provider || resolveProvider({ userEmail });
   const overrides = _komplettAiOverrides(effectiveProvider);
   if (overrides) {
     setContext(overrides);
     log.info(`Kontinuität-Override (${effectiveProvider}): ${JSON.stringify(overrides.aiJob)} (global model=${appSettings.get(`ai.${effectiveProvider}.model`)}).`);
   }
-  const call = (jobId_, tok_, prompt_, system_, fromPct, toPct, expectedChars, outputRatio, maxTokens, schema) =>
-    aiCall(jobId_, tok_, prompt_, system_, fromPct, toPct, expectedChars, outputRatio, maxTokens, effectiveProvider, schema);
+  // `tier` (Kostenklasse für job.result.costByPhase) wie in runKomplettAnalyseJob durchreichen.
+  const call = (jobId_, tok_, prompt_, system_, fromPct, toPct, expectedChars, outputRatio, maxTokens, schema, tier) =>
+    aiCall(jobId_, tok_, prompt_, system_, fromPct, toPct, expectedChars, outputRatio, maxTokens, effectiveProvider, schema, tier);
   const { singlePass: singlePassLimit } = chunkLimitsFor(effectiveProvider);
   const prompts = await getPrompts(userEmail);
   const sys = await getBookPrompts(bookId, email);
 
   try {
-    const cp = loadCheckpoint('kontinuitaet', bookIdInt, email);
-    if (cp) log.info(`Checkpoint gefunden (${cp.nextGi} Kapitel fertig).`);
+    let cp = loadCheckpoint('kontinuitaet', bookIdInt, email);
 
     updateJob(jobId, { statusText: 'job.phase.loadingPages', progress: 0 });
     const { chMap, chNameToId, pages } = await loadOrderedBookContents(bookId)
@@ -64,13 +68,13 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
     // Bekannte Figuren + Orte aus DB laden
     const figRows = db.prepare(`
       SELECT f.fig_id, f.name, f.typ, f.beschreibung FROM figures f
-      WHERE f.book_id = ? AND f.user_email = ? ORDER BY f.sort_order
+      WHERE f.book_id = ? AND f.user_email IS ? ORDER BY f.sort_order
     `).all(bookIdInt, email);
     const figurenKompakt = figRows.map(f => ({ name: f.name, typ: f.typ || 'andere', beschreibung: f.beschreibung || '' }));
     const figNameToId = Object.fromEntries(figRows.map(r => [r.name, r.fig_id]));
 
     const ortRows = db.prepare(
-      'SELECT name, typ, beschreibung FROM locations WHERE book_id = ? AND user_email = ? AND stale = 0 ORDER BY sort_order'
+      'SELECT name, typ, beschreibung FROM locations WHERE book_id = ? AND user_email IS ? AND stale = 0 ORDER BY sort_order'
     ).all(bookIdInt, email);
     const orteKompakt = ortRows.map(o => ({ name: o.name, typ: o.typ, beschreibung: o.beschreibung || '' }));
     // Anachronismus-Kontext (nur bei echter Zeitlinie) aus dem zuletzt gespeicherten Katalog.
@@ -97,24 +101,39 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
 
     const totalChars = pageContents.reduce((s, p) => s + p.text.length, 0);
     const { groupOrder, groups } = groupByChapter(pageContents);
+    // Checkpoint nur gegen DENSELBEN Buchstand fortsetzen: `nextGi`/`failedGis` sind
+    // Indizes in groupOrder — nach umgestellten, neuen oder bearbeiteten Kapiteln zeigten
+    // sie auf andere Kapitel, und die gesammelten Fakten wären veraltet.
+    const bookSig = groupOrder.map(k => `${k}:` + groups.get(k).pages.map(p => `${p.id}@${p.updated_at || ''}`).join(',')).join('|');
+    if (cp && cp.bookSig !== bookSig) {
+      log.info('Checkpoint verworfen – Buch seit dem abgebrochenen Lauf verändert.');
+      deleteCheckpoint('kontinuitaet', bookIdInt, email);
+      cp = null;
+    }
+    if (cp) log.info(`Checkpoint gefunden (${cp.nextGi} Kapitel fertig).`);
     let result;
-    // Single-Pass-Buchtext für die Beleg-Prüfung in saveKontinuitaetResult (gilt für
-    // ALLE Provider hier – auch lokale, die im Single-Pass den Volltext sehen).
-    let kontFullText = null;
+    // Multi-Pass-Fakten (Seiten-Anker + Verify-Belege); im Single-Pass null.
+    let chapterFactsForSave = null;
+    const isCloud = providerClass(effectiveProvider) === 'cloud';
+    const verifyCtx = { call, prompts, sys, jobId, tok, bookName, groups, groupOrder, log, bookIdInt, email, pageContents };
     pt.mark('Laden');
 
     if (totalChars <= singlePassLimit) {
       updateJob(jobId, { progress: 60, statusText: 'job.phase.checkContinuity' });
+      // Buchtext als gecachter System-Block (1h), Auftrag im User-Prompt — wie P8.
       const bookText = buildSinglePassBookText(groups, groupOrder);
-      kontFullText = bookText;
+      const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, bookText), ttl: '1h' };
       result = await retryOnTransientAi(() => call(jobId, tok,
-        prompts.buildKontinuitaetSinglePassPrompt(bookName, bookText, figurenKompakt, orteKompakt, narrativeLabels(getBookSettings(bookIdInt, email)), anachronismus),
-        sys.SYSTEM_KONTINUITAET_BLOCKS, 60, 97, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_PROBLEME,
+        prompts.buildKontinuitaetSinglePassPrompt(bookName, null, figurenKompakt, orteKompakt, narrativeLabels(getBookSettings(bookIdInt, email)), anachronismus),
+        [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KONTINUITAET_BLOCKS, '1h')], 60, 95, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_PROBLEME,
         costTier(COST_LABEL.kontinuitaet),
       ), { log, label: 'Kontinuität Single-Pass' });
       pt.mark('Single-Pass Check');
     } else {
-      // Multi-Pass: Fakten pro Kapitel extrahieren – ggf. aus Checkpoint fortsetzen
+      // Multi-Pass: Fakten pro Kapitel extrahieren – ggf. aus Checkpoint fortsetzen.
+      // Jeder Eintrag trägt seinen Kapitel-Index `gi`: der Retry-Pass unten holt
+      // Kapitel nach, und der Check braucht die Buchreihenfolge («stirbt in Kapitel 3,
+      // taucht in Kapitel 7 auf»).
       let chapterFacts = cp?.chapterFacts ?? [];
       // Übersprungene Kapitel persistent merken: der Checkpoint rückt nextGi vor (sonst
       // Endlosschleife bei deterministischem Fehler), aber failedGis hält die Lücke fest,
@@ -143,13 +162,13 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
             sys.SYSTEM_KONTINUITAET_BLOCKS, fromPct, toPct, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_FAKTEN,
             costTier(COST_LABEL.kontinuitaet),
           ), { log, label: `Fakten «${group.name}»` });
-          chapterFacts.push({ kapitel: group.name, fakten: chResult.fakten || [] });
+          chapterFacts.push({ gi, kapitel: group.name, fakten: chResult.fakten || [] });
         } catch (e) {
           if (e.name === 'AbortError') throw e;
           log.warn(`Fakten «${group.name}» übersprungen (Retry folgt): ${e.message}`);
           if (!failedGis.includes(gi)) failedGis.push(gi);
         }
-        saveCheckpoint('kontinuitaet', bookIdInt, email, { chapterFacts, nextGi: gi + 1, failedGis });
+        saveCheckpoint('kontinuitaet', bookIdInt, email, { bookSig, chapterFacts, nextGi: gi + 1, failedGis });
       }
       // Übersprungene Kapitel gezielt nachholen — ein (transienter) Ausfall darf nicht
       // dauerhaft Fakten verlieren, auch nicht über einen Resume hinweg. Bleibt es bei einem
@@ -166,7 +185,7 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
               sys.SYSTEM_KONTINUITAET_BLOCKS, 86, 88, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_FAKTEN,
               costTier(COST_LABEL.kontinuitaet),
             ), { log, label: `Fakten-Retry «${group.name}»` });
-            chapterFacts.push({ kapitel: group.name, fakten: chResult.fakten || [] });
+            chapterFacts.push({ gi, kapitel: group.name, fakten: chResult.fakten || [] });
           } catch (e) {
             if (e.name === 'AbortError') throw e;
             stillFailed.push(group.name);
@@ -174,11 +193,13 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
           }
         }
         failedGis = [];
-        saveCheckpoint('kontinuitaet', bookIdInt, email, { chapterFacts, nextGi: groupOrder.length, failedGis });
+        saveCheckpoint('kontinuitaet', bookIdInt, email, { bookSig, chapterFacts, nextGi: groupOrder.length, failedGis });
         if (stillFailed.length) {
           warnings.push({ key: 'job.warn.factsChapterSkipped', params: { chapters: stillFailed.join(', ') } });
         }
       }
+      chapterFacts = chapterFacts.slice().sort((a, b) => (a.gi ?? 0) - (b.gi ?? 0));
+      chapterFactsForSave = chapterFacts;
       pt.mark('Fakten-Extraktion');
 
       updateJob(jobId, { progress: 88, statusText: 'job.phase.checkContradictions' });
@@ -190,16 +211,29 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
       // Fakten-basierte Befunde gegen den Originaltext verifizieren (False-Positive-Filter).
       // Klassen-, nicht Namensfrage: der Verify-Pass braucht ein faehiges Modell, keine
       // Anthropic-API-Faehigkeit (SSoT lib/ai/config.js#providerClass).
-      if (providerClass(effectiveProvider) === 'cloud') {
-        result = await verifyKontinuitaetProbleme(
-          { call, prompts, sys, jobId, tok, bookName, groups, groupOrder, log, bookIdInt }, result, 95, 97);
+      if (isCloud) {
+        result = await verifyKontinuitaetProbleme(verifyCtx, result, 95, 96, { chapterFacts });
       }
       pt.mark('Check+Verify');
     }
 
     if (typeof result?.zusammenfassung === 'undefined') throw i18nError('job.error.zusammenfassungMissing');
+
+    // F4: Attribut-Widerspruchs-Detektor inkl. „Auftritt nach dem Tod" — wie in P8
+    // ergänzend und non-critical. Seine Befunde sind bereits geurteilt (keine Verify).
+    if (isCloud && appSettings.get('ai.komplett.attribute_check') === true) {
+      try {
+        const attrFindings = await runAttributeContradictionCheck(verifyCtx, 96, 97);
+        if (attrFindings.length) result = { ...result, probleme: [...(result.probleme || []), ...attrFindings] };
+      } catch (e) {
+        if (e.name === 'AbortError') throw e;
+        log.warn(`Attribut-Widerspruchs-Detektor fehlgeschlagen (ignoriert): ${e.message}`);
+        warnings.push({ key: 'job.warn.attributeCheckFailed' });
+      }
+    }
+
     const normalizedProbleme = saveKontinuitaetResult(bookIdInt, email, result, figNameToId, chNameToId, effectiveProvider, log,
-      { fullBookText: kontFullText, requireQuoteEvidence: kontFullText != null });
+      { pageContents, requireQuoteEvidence: !chapterFactsForSave, chapterFacts: chapterFactsForSave });
     deleteCheckpoint('kontinuitaet', bookIdInt, email);
     log.info(`Phasen-Timing: ${pt.summary()}`);
     completeJob(jobId, {

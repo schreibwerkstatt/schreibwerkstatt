@@ -1,6 +1,6 @@
 // Alpine.data('redundanzCard') — Redundanz-Radar (buchweite Doppelungs-Suche).
-// Job-Polling implementiert die Karte selbst (manueller Flow). Fachlicher State
-// lebt hier; der showRedundanzCard-Flag bleibt im Root (Hash-Router, Exklusivität).
+// Job-Polling implementiert die Karte selbst (manueller Flow, inkl. Wieder-
+// anhängen an einen laufenden Job beim Öffnen). Fachlicher State lebt hier; der showRedundanzCard-Flag bleibt im Root (Hash-Router, Exklusivität).
 
 import { redundanzMethods } from '../book/redundanz.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
@@ -14,7 +14,14 @@ export function registerRedundanzCard() {
     redundanzProgress: 0,
     redundanzStatus: '',
     redundanzIndexInfo: null,
+    redundanzSkipAdjacent: true, // direkt aufeinanderfolgende Seiten im selben Kapitel nicht als Befund
+    redundanzOpen: {},           // aufgeklappte Passagen, key = Paar + Seite
+    redundanzDismissedCount: 0,
+    redundanzBusyKey: null,
+    redundanzIndexing: false,
+    redundanzIndexProgress: 0,
     _redundanzPollTimer: null,
+    _redundanzIndexPollTimer: null,
     _lifecycle: null,
 
     // Getter inline (nicht in redundanzMethods gespreadet — Spread-Getter-Falle):
@@ -30,25 +37,29 @@ export function registerRedundanzCard() {
 
     init() {
       const doReset = (ctx) => {
-        if (ctx._redundanzPollTimer) { clearTimeout(ctx._redundanzPollTimer); ctx._redundanzPollTimer = null; }
         ctx.redundanzResult = null;
         ctx.redundanzLoading = false;
         ctx.redundanzProgress = 0;
         ctx.redundanzStatus = '';
         ctx.redundanzIndexInfo = null;
+        ctx.redundanzOpen = {};
+        ctx.redundanzDismissedCount = 0;
+        ctx.redundanzBusyKey = null;
+        ctx.redundanzIndexing = false;
+        ctx.redundanzIndexProgress = 0;
       };
 
       this._lifecycle = setupCardLifecycle(this, {
         name: 'redundanz',
         showFlag: 'showRedundanzCard',
-        timerKeys: ['_redundanzPollTimer'],
+        timerKeys: ['_redundanzPollTimer', '_redundanzIndexPollTimer'],
         onShow: async () => {
-          if (this.redundanzAvailable) await this.loadRedundanzIndexStatus();
+          if (this.redundanzAvailable) await this.loadRedundanz();
         },
         onBookChanged: async (e, ctx, root) => {
           doReset(ctx);
           if (!root.showRedundanzCard) return;
-          if (ctx.redundanzAvailable) await ctx.loadRedundanzIndexStatus();
+          if (ctx.redundanzAvailable) await ctx.loadRedundanz();
         },
         onViewReset: (e, ctx) => doReset(ctx),
       });

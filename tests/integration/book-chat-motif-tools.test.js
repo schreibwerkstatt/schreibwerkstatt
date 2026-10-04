@@ -99,7 +99,8 @@ test('get_motif_occurrences: per motif_name → Fundstellen mit page/chapter + s
   const motif = motifDb.createMotif(BOOK_ID, userEmail, { name: 'Wasser des Lebens' });
   motifDb.replaceOccurrences(motif.id, BOOK_ID, [
     { kind: 'page', pageId: 73041, score: 0.9, snippet: 'Das Wasser strömte.', source: 'semantic' },
-    { kind: 'page', pageId: 73041, score: 0.4, snippet: 'Regen.', source: 'trigger' },
+    // Trigger-Fundstellen tragen keinen Score (motif-scan.js) — der Score-Floor lässt sie durch.
+    { kind: 'page', pageId: 73041, score: null, snippet: 'Regen.', source: 'trigger' },
   ]);
 
   const result = bookChatTools.TOOLS.get_motif_occurrences(

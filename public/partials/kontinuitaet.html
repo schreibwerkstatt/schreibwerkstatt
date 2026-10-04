@@ -10,8 +10,9 @@
     <div class="card-header-titlebar">
       <span class="card-eyebrow" x-text="$app.selectedBookName"></span>
       <span class="card-title" x-text="$app.t('kontinuitaet.title')"></span>
-      <div class="card-subline" x-show="$store.jobs.alleAktualisierenLastRun && !kontinuitaetLoading">
-        <span class="card-timestamp" x-text="$app.t('common.asOf', { date: $store.jobs.alleAktualisierenLastRun })"></span>
+      <div class="card-subline" x-show="kontinuitaetResult?.checked_at && !kontinuitaetLoading">
+        <span class="card-timestamp"
+              x-text="$app.t('common.asOf', { date: $app.formatDate(kontinuitaetResult?.checked_at) }) + (kontinuitaetResult?.model ? ' · ' + kontinuitaetResult.model : '')"></span>
       </div>
     </div>
   </div>
@@ -29,6 +30,15 @@
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
       <span x-text="$app.t('header.updateAll')"></span>
     </button>
+  </div>
+
+  <!-- Nur die Kontinuität neu prüfen (P8 auf dem vorhandenen Katalog, ohne volle Analyse) -->
+  <div class="card-toolbar" x-show="kontinuitaetResult && !kontinuitaetLoading" x-cloak>
+    <button type="button" class="btn-compact" @click="kontinuitaetRun()" :disabled="!$store.nav.selectedBookId">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
+      <span x-text="$app.t('kontinuitaet.run.start')"></span>
+    </button>
+    <span class="card-hint" x-text="$app.t('kontinuitaet.openCount', { n: kontinuitaetOpenCount() })"></span>
   </div>
 
   <!-- Skeleton während Loading vor erstem Ergebnis -->
@@ -60,16 +70,24 @@
               :class="{ 'tabs-btn--active': $store.catalogUi.kontinuitaetFilters.schwere === '' }"
               @click="$store.catalogUi.kontinuitaetFilters.schwere = ''">
         <span x-text="$app.t('common.all')"></span>
-        <span class="tabs-btn-count" x-text="(kontinuitaetResult?.issues || []).length"></span>
+        <span class="tabs-btn-count" x-text="kontinuitaetIssuesInStatus().length"></span>
       </button>
       <template x-for="sev in ['kritisch','mittel','niedrig']" :key="sev">
         <button type="button" class="tabs-btn"
                 :class="{ 'tabs-btn--active': $store.catalogUi.kontinuitaetFilters.schwere === sev }"
-                :disabled="(kontinuitaetResult?.issues || []).filter(i => i.schwere === sev).length === 0"
+                :disabled="kontinuitaetIssuesInStatus().filter(i => i.schwere === sev).length === 0"
                 @click="$store.catalogUi.kontinuitaetFilters.schwere = $store.catalogUi.kontinuitaetFilters.schwere === sev ? '' : sev">
           <span x-text="$app.t('kontinuitaet.severity.' + sev)"></span>
-          <span class="tabs-btn-count" x-text="(kontinuitaetResult?.issues || []).filter(i => i.schwere === sev).length"></span>
+          <span class="tabs-btn-count" x-text="kontinuitaetIssuesInStatus().filter(i => i.schwere === sev).length"></span>
         </button>
+      </template>
+    </div>
+    <div class="tabs">
+      <template x-for="st in ['', 'open', 'dismissed']" :key="'st-' + st">
+        <button type="button" class="tabs-btn"
+                :class="{ 'tabs-btn--active': ($store.catalogUi.kontinuitaetFilters.status || '') === st }"
+                @click="$store.catalogUi.kontinuitaetFilters.status = st"
+                x-text="$app.t('kontinuitaet.status.' + (st || 'active'))"></button>
       </template>
     </div>
     <div x-data="catalogFilter('figur')"
@@ -82,7 +100,7 @@
          x-effect="options = kontinuitaetKapitelListe().map(k => ({value: k, label: k}))"
          >
     </div>
-    <span class="filter-count" x-text="kontinuitaetResult ? kontinuitaetIssuesSorted().length + ' / ' + kontinuitaetResult.issues.length : ''"></span>
+    <span class="filter-count" x-text="kontinuitaetResult ? kontinuitaetIssuesSorted().length + ' / ' + kontinuitaetIssuesInStatus().length : ''"></span>
   </div>
 
   <template x-if="kontinuitaetResult">
@@ -98,7 +116,7 @@
         <template x-for="(issue, i) in kontinuitaetIssuesSorted()" :key="kontinuitaetIssueKey(issue, i)">
           <div>
             <div class="entity-row"
-                 :class="{ 'entity-row--selected': selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i), 'entity-row--resolved': issue.resolved }"
+                 :class="{ 'entity-row--selected': selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i), 'entity-row--resolved': issue.resolved || issue.dismissed }"
                  @click="selectedKontinuitaetIssueKey = selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i) ? null : kontinuitaetIssueKey(issue, i)">
               <span class="severity-tag"
                     :class="'severity-tag--' + (issue.schwere || 'niedrig')"
@@ -113,7 +131,8 @@
                           x-entity-ref="kontinuitaetStelleRef(issue.stelle_b, issue, 'b')"></button>
                 </template>
               </span>
-              <span x-show="issue.resolved" class="kontinuitaet-resolved-badge" x-text="$app.t('kontinuitaet.resolved')"></span>
+              <span x-show="issue.resolved || issue.dismissed" class="kontinuitaet-resolved-badge"
+                    x-text="$app.t(issue.dismissed ? 'kontinuitaet.dismissed' : 'kontinuitaet.resolved')"></span>
               <span class="history-chevron" :class="{ open: selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i) }" aria-hidden="true"></span>
             </div>
             <div x-show="selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i)" class="entity-detail" x-cloak>
@@ -131,6 +150,11 @@
                         :class="{ 'kontinuitaet-resolve-btn--done': issue.resolved }"
                         @click.stop="kontinuitaetToggleResolved(issue)"
                         x-text="issue.resolved ? $app.t('kontinuitaet.markOpen') : $app.t('kontinuitaet.markResolved')"></button>
+                <button type="button" class="kontinuitaet-resolve-btn"
+                        :class="{ 'kontinuitaet-resolve-btn--done': issue.dismissed }"
+                        :data-tip="$app.t('kontinuitaet.dismissTip')"
+                        @click.stop="kontinuitaetToggleDismissed(issue)"
+                        x-text="issue.dismissed ? $app.t('kontinuitaet.undismiss') : $app.t('kontinuitaet.dismiss')"></button>
               </div>
             </div>
           </div>

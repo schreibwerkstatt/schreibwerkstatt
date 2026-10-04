@@ -302,7 +302,7 @@ const PUBLIC_ASSETS = new Set([
 // /js/ steht aus demselben Grund vollstaendig offen, und zwar fuer BEIDE Seiten:
 //  - Der anonyme Leser braucht den kompletten Share-Reader-Modulgraph
 //    (/js/share-reader/* plus die geteilten Module share-anchor, avatar,
-//    scroll-fade, comment-card-layout, tts-segment, editor/comment-threads) sowie
+//    scroll-fade, comment-card-layout, tts-segment, tts-player, editor/comment-threads) sowie
 //    die Skripte der Pre-Auth-Seiten (credential-login, register, share-theme-init).
 //  - Der EINGELOGGTE User braucht ihn, weil der Service Worker die Shell
 //    cache-only bedient: ein einzelner evictierter Eintrag (v.a. iOS) geht als
@@ -424,6 +424,7 @@ app.use('/world-facts', require('./routes/world-facts'));
 app.use('/geocode', require('./routes/geocode'));
 app.use('/tiles', require('./routes/tiles'));
 app.use('/songs', songsRouter);
+app.use('/redundancy', require('./routes/redundancy'));
 app.use('/jobs', jobsRouter);
 app.use('/events', require('./routes/events'));
 app.use('/chat', chatRouter);

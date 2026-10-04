@@ -133,3 +133,63 @@ test('Kontinuität: AI ohne zusammenfassung → failJob', async () => {
   assert.equal(job.status, 'error');
   assert.equal(job.error, 'job.error.zusammenfassungMissing');
 });
+
+test('Kontinuität multi-pass: nachgeholtes Kapitel bleibt in Buchreihenfolge, Seiten-Anker über den Fakt', async () => {
+  const BOOK_ID = 46;
+  const big = (w) => '<p>' + `${w} `.repeat(14000) + '</p>';
+  ctx.dbSeed.setBook({
+    chapters: [
+      { id: 130, book_id: BOOK_ID, name: 'Kapitel Eins' },
+      { id: 131, book_id: BOOK_ID, name: 'Kapitel Zwei' },
+      { id: 132, book_id: BOOK_ID, name: 'Kapitel Drei' },
+    ],
+    pages: [
+      { id: 230, book_id: BOOK_ID, chapter_id: 130, name: 'Anfang', updated_at: '2026-01-01' },
+      { id: 231, book_id: BOOK_ID, chapter_id: 131, name: 'Mitte', updated_at: '2026-01-01' },
+      { id: 232, book_id: BOOK_ID, chapter_id: 132, name: 'Ende', updated_at: '2026-01-01' },
+    ],
+    pageBodies: { 230: big('Nebel'), 231: big('Regen'), 232: big('Schnee') },
+  });
+
+  let einsFailed = false;
+  ctx.mockAi.on(
+    (entry) => entry.schemaKeys.includes('fakten'),
+    ({ prompt }) => {
+      const m = prompt.match(/Kapitel «([^»]+)»/);
+      const kap = m ? m[1] : '?';
+      if (kap === 'Kapitel Eins' && !einsFailed) { einsFailed = true; throw new Error('kaputt'); }
+      const seite = { 'Kapitel Eins': 'Anfang', 'Kapitel Zwei': 'Mitte', 'Kapitel Drei': 'Ende' }[kap];
+      return { fakten: [{ kategorie: 'figur', subjekt: 'Anna', fakt: `ist in ${kap} anwesend`, seite }] };
+    },
+  );
+  ctx.mockAi.on(
+    (entry) => entry.schemaKeys.includes('zusammenfassung') && entry.schemaKeys.includes('probleme'),
+    {
+      zusammenfassung: 'Ein Widerspruch.',
+      probleme: [{
+        schwere: 'mittel', typ: 'figur', beschreibung: 'Anna ist an zwei Orten zugleich.',
+        stelle_a: 'Kapitel Zwei: «Anna: ist in Kapitel Zwei anwesend»',
+        stelle_b: 'Kapitel Drei: «Anna: ist in Kapitel Drei anwesend»',
+        empfehlung: 'Ort klären.', figuren: [], kapitel: ['Kapitel Zwei', 'Kapitel Drei'],
+      }],
+    },
+  );
+  ctx.mockAi.on((entry) => entry.schemaKeys.includes('bestaetigt'), { bestaetigt: true, grund: 'echt' });
+
+  const jobId = ctx.shared.createJob('kontinuitaet', BOOK_ID, 'tester@test.dev', 'job.label.kontinuitaet');
+  ctx.shared.enqueueJob(jobId, () =>
+    ctx.komplett.runKontinuitaetJob(jobId, BOOK_ID, 'Testbuch', 'tester@test.dev', 'claude'),
+  );
+  const job = await waitForJob(ctx.shared, jobId);
+  assert.equal(job.status, 'done', `expected done, got ${job.status}: ${job.error || ''}`);
+  assert.ok(einsFailed, 'Kapitel Eins ist im ersten Durchgang gescheitert (Multi-Pass aktiv)');
+
+  const checkCall = ctx.mockAi.log.find(e => e.schemaKeys.includes('probleme'));
+  const order = [...checkCall.prompt.matchAll(/^## (Kapitel \w+)$/gm)].map(m => m[1]);
+  assert.deepEqual(order, ['Kapitel Eins', 'Kapitel Zwei', 'Kapitel Drei'], 'Buchreihenfolge trotz Retry');
+
+  const stored = ctx.dbSchema.getLatestContinuityCheck(BOOK_ID, 'tester@test.dev');
+  assert.equal(stored.issues.length, 1);
+  assert.equal(stored.issues[0].page_a_id, 231, 'Anker über den Seitennamen des zitierten Fakts');
+  assert.equal(stored.issues[0].page_b_id, 232);
+});

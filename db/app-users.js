@@ -252,7 +252,10 @@ function _inheritedAiProfileId(inviterEmail) {
   return inviter?.ai_profile_id ?? null;
 }
 
-function createUser({ email, displayName = null, globalRole = 'user', status = 'active', language = 'de', canInviteUsers = 1, invitedBy = null, aiProfileId = undefined }) {
+// Einladen ist Opt-in: neue Konten duerfen nicht von sich aus weitere Leute
+// einladen, der Admin schaltet es pro User frei. Admins laden unabhaengig
+// davon immer ein (Gate in routes/usersettings.js#POST /invite).
+function createUser({ email, displayName = null, globalRole = 'user', status = 'active', language = 'de', canInviteUsers = 0, invitedBy = null, aiProfileId = undefined }) {
   const e = _normEmail(email);
   if (!e) throw new Error('createUser: email required');
   const inviter = invitedBy ? _normEmail(invitedBy) : null;

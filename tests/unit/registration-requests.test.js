@@ -25,6 +25,17 @@ test('createRequest legt pending-Row an', () => {
   assert.equal(r.invite_id, null);
 });
 
+test('createRequest speichert Herkunft (automatisch + Selbstauskunft)', () => {
+  const r = regRequests.createRequest({
+    email: 'origin@example.com', source: 'utm_source=newsletter', sourceNote: 'Podcast',
+  });
+  assert.equal(r.source, 'utm_source=newsletter');
+  assert.equal(r.source_note, 'Podcast');
+  const listed = regRequests.listPending().find(x => x.id === r.id);
+  assert.equal(listed.source, 'utm_source=newsletter');
+  assert.equal(listed.source_note, 'Podcast');
+});
+
 test('Partial-UNIQUE blockt zweite pending-Anfrage derselben Email', () => {
   // alice@example.com hat bereits pending aus vorigem Test.
   assert.throws(

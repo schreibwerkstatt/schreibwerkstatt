@@ -26,7 +26,7 @@ const {
   createJob, enqueueJob, findActiveJobId,
   summarizeCostByPhase, formatCostByPhase,
 } = require('../shared');
-const { providerClass, maxParallelCalls } = require('../../../lib/ai');
+const { providerClass, maxParallelCalls, resolveProvider } = require('../../../lib/ai');
 const contentStore = require('../../../lib/content-store');
 const appSettings = require('../../../lib/app-settings');
 const { setContext } = require('../../../lib/log-context');
@@ -76,7 +76,7 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
   // getContextConfigFor(undefined) fiele in aiCall auf 'claude' zurück und würde das Output-
   // Ceiling fälschlich auf ai.claude.max_tokens_out kappen, während callAI intern den echten
   // Provider auflöst und z.B. openai-compat/ollama anspricht → vorzeitige Truncation.
-  const effectiveProvider = provider || appSettings.get('ai.provider') || 'claude';
+  const effectiveProvider = provider || resolveProvider({ userEmail });
   // Strategie-Entscheidungen dieser Pipeline haengen an der KLASSE, nicht am Namen
   // (SSoT: lib/ai/config.js#providerClass) — ein gehostetes Frontier-Modell ueber
   // openai-compat kann dasselbe wie Claude. Am Namen bleibt nur, was eine
@@ -530,6 +530,10 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
       ...(costByPhase ? { costByPhase } : {}),
       tokensIn: tok.in, tokensOut: tok.out,
     }, tps(tok), `fig=${figuren.length} orte=${orte.length} songs=${songsCount} szenen=${szenenResult.szenenCount}${coverage?.score != null ? ` cov=${coverage.score}` : ''}${warnings.length ? ` warn=${warnings.length}` : ''}`);
+    // Neue Szenen/Figuren/Orte/Fakten in den Embedding-Index holen (läuft schon
+    // einer, hängt sich ein Folgelauf an). Non-fatal: die Analyse ist fertig.
+    try { require('../embed-index').enqueueEmbedIndexJob(bookIdInt, null); }
+    catch (e) { log.warn(`Embed-Index nach Komplettanalyse nicht eingereiht: ${e.message}`); }
   } catch (e) {
     if (e.name !== 'AbortError') {
       const cause = e.cause?.message || e.cause?.code || '';

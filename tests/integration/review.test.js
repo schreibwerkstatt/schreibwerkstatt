@@ -382,11 +382,58 @@ test('Kapitel-Review Cache: Rerun trifft chapter_macro_review_cache → 0 AI-Cal
   assert.equal(job2.result.cached, true);
   assert.equal(ctx.mockAi.log.length, 1, '2. Run = Cache-HIT');
 
-  // chapter_reviews-Zeile wird trotz HIT geschrieben (History-Eintrag).
-  const reviewRows = ctx.dbSchema.db.prepare(
+  // Inhaltsgleicher HIT schreibt keinen zweiten Verlaufseintrag — der auf zehn
+  // Läufe gedeckelte Verlauf liefe sonst mit Kopien voll.
+  const countRows = () => ctx.dbSchema.db.prepare(
     'SELECT COUNT(*) AS n FROM chapter_reviews WHERE book_id = ? AND chapter_id = ? AND user_email = ?'
   ).get(BOOK_ID, CHAPTER_ID, 'tester@test.dev').n;
-  assert.equal(reviewRows, 2, 'beide Runs in chapter_reviews persistiert');
+  assert.equal(countRows(), 1, 'Cache-HIT ohne Doppel-Eintrag');
+  assert.equal(job2.result.pageCount, job1.result.pageCount, 'gleiche Seitenzahl bei HIT und frischem Lauf');
+
+  // Wurde der jüngste Eintrag gelöscht, legt der nächste HIT ihn wieder an.
+  ctx.dbSchema.db.prepare('DELETE FROM chapter_reviews WHERE book_id = ? AND chapter_id = ?').run(BOOK_ID, CHAPTER_ID);
+  const jobId3 = ctx.shared.createJob('chapter-review', BOOK_ID, 'tester@test.dev', 'job.label.chapterReview', null, CHAPTER_ID);
+  ctx.shared.enqueueJob(jobId3, () =>
+    ctx.kapitel.runChapterReviewJob(jobId3, BOOK_ID, CHAPTER_ID, 'Kap A', 'Buch', 'tester@test.dev'),
+  );
+  assert.equal((await waitForJob(ctx.shared, jobId3)).result.cached, true);
+  assert.equal(countRows(), 1, 'HIT nach Löschen schreibt wieder einen Eintrag');
+});
+
+test('Kapitel-Review: Seite lädt nicht → Lauf bricht ab, kein Cache, kein Verlauf', async () => {
+  const BOOK_ID = 93;
+  const CHAPTER_ID = 9650;
+  ctx.dbSeed.setBook({
+    chapters: [{ id: CHAPTER_ID, book_id: BOOK_ID, name: 'K' }],
+    pages: [
+      { id: 9660, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 1', position: 0 },
+      { id: 9661, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 2', position: 1 },
+    ],
+    pageBodies: { 9660: '<p>Anna ging in den Wald.</p>', 9661: '<p>Es war kalt.</p>' },
+  });
+  ctx.mockAi.on(() => true, chapterReviewResponse(4.1));
+
+  const contentStore = require('../../lib/content-store');
+  const orig = contentStore.loadPage;
+  contentStore.loadPage = async (id, ...rest) => {
+    if (id === 9661) throw Object.assign(new Error('boom'), { status: 503 });
+    return orig.call(contentStore, id, ...rest);
+  };
+  try {
+    const jobId = ctx.shared.createJob('chapter-review', BOOK_ID, 'tester@test.dev', 'job.label.chapterReview', null, CHAPTER_ID);
+    ctx.shared.enqueueJob(jobId, () =>
+      ctx.kapitel.runChapterReviewJob(jobId, BOOK_ID, CHAPTER_ID, 'K', 'Buch', 'tester@test.dev'),
+    );
+    const job = await waitForJob(ctx.shared, jobId);
+    assert.equal(job.status, 'error');
+  } finally {
+    contentStore.loadPage = orig;
+  }
+  assert.equal(ctx.mockAi.log.length, 0, 'kein KI-Call über ein lückenhaftes Kapitel');
+  const n = (t) => ctx.dbSchema.db.prepare(`SELECT COUNT(*) AS n FROM ${t} WHERE book_id = ? AND chapter_id = ?`)
+    .get(BOOK_ID, CHAPTER_ID).n;
+  assert.equal(n('chapter_macro_review_cache'), 0);
+  assert.equal(n('chapter_reviews'), 0);
 });
 
 test('Kapitel-Review: leeres Kapitel → result.empty, kein AI-Call', async () => {

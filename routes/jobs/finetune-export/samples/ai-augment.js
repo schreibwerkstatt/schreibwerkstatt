@@ -22,6 +22,7 @@ const {
 } = require('../../../../db/schema');
 const { aiCall, _modelName, getPrompts } = require('../../shared');
 const { extractName } = require('../lib/names');
+const { collectAppliedCorrections } = require('./correction');
 const appSettings = require('../../../../lib/app-settings');
 
 const REVERSE_PROMPTS_PER_PAGE_DEFAULT = 4;
@@ -259,39 +260,17 @@ async function buildReasoningBackfillSamples(ctx) {
     bookIdInt, userEmail, prompts, augmentSystem, versionTag, jobId, logger, tok,
   } = ctx;
   const { maxChars } = opts;
-  const { db } = require('../../../../db/schema');
 
   const userPrefix   = langIsEn
-    ? 'Rewrite this sentence in the author\'s style and explain the change in one sentence:\n\n'
-    : 'Formuliere diesen Satz im Stil des Autors um und erkläre die Änderung in einem Satz:\n\n';
+    ? 'Revise this sentence and explain the change in one sentence:\n\n'
+    : 'Überarbeite diesen Satz und erkläre die Änderung in einem Satz:\n\n';
   const reasonLabel  = langIsEn ? 'Reason: ' : 'Grund: ';
 
-  const checkRows = db.prepare(`
-    SELECT errors_json FROM page_checks
-    WHERE book_id = ? AND user_email = ? AND errors_json IS NOT NULL AND error_count > 0
-    ORDER BY checked_at DESC
-  `).all(bookIdInt, userEmail);
-
-  const targets = [];
-  const seenPair = new Set();
-  for (const row of checkRows) {
-    let errs = null;
-    try { errs = JSON.parse(row.errors_json); } catch { continue; }
-    if (!Array.isArray(errs)) continue;
-    for (const e of errs) {
-      const orig = (e.original || '').trim();
-      const korr = (e.korrektur || '').trim();
-      const erkl = (e.erklaerung || '').trim();
-      if (orig.length < 8 || korr.length < 5) continue;
-      if (orig.toLowerCase() === korr.toLowerCase()) continue;
-      if (orig.length > maxChars || korr.length > maxChars) continue;
-      if (erkl.length >= 15) continue; // bereits vorhanden — kein Backfill nötig
-      const key = orig + '→' + korr;
-      if (seenPair.has(key)) continue;
-      seenPair.add(key);
-      targets.push({ orig, korr, kontext: (e.kontext || '').trim() });
-    }
-  }
+  // Nur übernommene Korrekturen ohne eigene Begründung (gleiche Quelle wie der
+  // correction-Sampler, siehe collectAppliedCorrections).
+  const targets = collectAppliedCorrections(bookIdInt, userEmail, maxChars)
+    .filter(c => c.erkl.length < 15)
+    .map(({ orig, korr, kontext }) => ({ orig, korr, kontext }));
   if (!targets.length) return;
 
   let processed = 0;

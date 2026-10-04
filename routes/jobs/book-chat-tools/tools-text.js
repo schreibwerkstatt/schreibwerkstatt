@@ -1,13 +1,13 @@
 'use strict';
 // Text-fokussierte Tools: Seiten + Kapiteltexte laden, Volltext-/Regex-Suche,
-// Zitate via Offset oder Pattern, Dialogerkennung, Erst-/Letztauftritt.
+// Zitate via Offset oder Pattern, Dialogerkennung, Erst-/Letztauftritt. Die
+// semantische Suche (search_similar) liegt in tools-similar.js.
 
 const { htmlToText } = require('../shared');
 const contentStore = require('../../../lib/content-store');
 const { htmlToPlainText } = require('../../../lib/html-text');
 const { findDialogRanges } = require('../../../lib/page-index');
 const searchIndex = require('../../../lib/search');
-const embed = require('../../../lib/embed');
 const semanticRetrieval = require('../../../lib/semantic-retrieval');
 const {
   MAX_CHARS_PER_PAGE,
@@ -17,7 +17,6 @@ const {
   SEARCH_SNIPPET_CONTEXT,
   _truncateResult,
   _findFigure,
-  resolveEntityTitle,
 } = require('./shared');
 const {
   listPagesForPassageSearch,
@@ -535,56 +534,8 @@ function tool_find_first_last_mention(input, ctx) {
   };
 }
 
-// ── search_similar ────────────────────────────────────────────────────────────
-// Semantische Ähnlichkeitssuche über die Embedding-Vektoren (semantic_chunks).
-// Gegenstück zu search_passages: findet nach BEDEUTUNG, nicht nach Wortlaut.
-
-// Snippet-Länge pro Treffer. Ein Chunk ist ~1500 Zeichen (lib/embed-chunk.js#CHUNK_CHARS),
-// der Default deckt also den grössten Teil des Treffers ab. Bewusst gross: ein zu kurzes
-// Snippet ist nur ein Zeiger, nach dem das Modell die Seite per get_pages nachladen MUSS —
-// und dieser Volltext kostet ein Vielfaches der Passage, die die Frage schon beantwortet
-// hätte. _truncateResult deckelt die Gesamtantwort weiterhin.
-const SIMILAR_SNIPPET_CHARS     = 700;
-const SIMILAR_SNIPPET_MAX_CHARS = 1500;
-
-async function tool_search_similar(input, ctx) {
-  if (!embed.isEnabled()) return { error: 'Embedding-Backend nicht konfiguriert.' };
-  const query = (input.query || '').trim();
-  if (!query) return { error: 'query fehlt' };
-  const allowed = ['page', 'scene', 'figure'];
-  const kinds = Array.isArray(input.kinds) && input.kinds.length
-    ? input.kinds.filter(k => allowed.includes(k)) : allowed;
-  const topK = Math.min(Math.max(1, input.limit || 20), 50);
-
-  // Volle Qualitäts-Pipeline (Retrieval → Hybrid-Fusion → Reranking), damit der
-  // agentische Chat dieselben scharfen Treffer bekommt wie die Such-Karte.
-  let raw;
-  try { raw = await semanticRetrieval.semanticQuery(ctx.bookId, query, { kinds, topK, signal: ctx.jobSignal }); }
-  catch (e) { return { error: `Embedding-Endpunkt nicht erreichbar: ${e.message}` }; }
-
-  const snippetChars = Math.min(
-    Math.max(120, Number.isInteger(input.snippet_chars) ? input.snippet_chars : SIMILAR_SNIPPET_CHARS),
-    SIMILAR_SNIPPET_MAX_CHARS,
-  );
-
-  const results = [];
-  for (const h of raw) {
-    // User-Scope: Szenen/Figuren anderer Mitautoren im selben Buch fallen weg.
-    const title = resolveEntityTitle(h.kind, h.entity_id, { userEmail: ctx.userEmail ?? null });
-    if (title == null) continue; // gelöschte Entität → überspringen
-    const text = String(h.text || '');
-    results.push({
-      kind: h.kind, entity_id: h.entity_id, title,
-      snippet: text.length > snippetChars ? text.slice(0, snippetChars) + '…' : text,
-      score: Math.round(h.score * 1000) / 1000,
-    });
-  }
-  return _truncateResult({ query, count: results.length, results });
-}
-
 module.exports = {
   tool_search_passages,
-  tool_search_similar,
   tool_get_pages,
   tool_get_chapter_text,
   tool_quote_passage,

@@ -30,6 +30,8 @@
   </div>
 
   <p class="wortschatz-intro" x-text="$app.t('wortschatz.intro')"></p>
+  <p class="wortschatz-list-hint" x-show="wortschatzHasResult && !wortschatzIsOwner"
+     x-text="$app.t('wortschatz.viewerHint')"></p>
 
   <div x-show="wortschatzLoading && wortschatzProgress > 0" class="progress-bar-wrap">
     <div class="progress-bar" :style="{ '--progress': wortschatzProgress + '%' }"></div>
@@ -80,8 +82,7 @@
             <span class="overview-hero-value" x-text="wsNum(wortschatzData.stats.mtld, 1)"></span>
           </div>
           <p class="wortschatz-kpi-peer" x-show="wsPeer('mtld', 1)" x-text="wsPeer('mtld', 1)"></p>
-          <p class="wortschatz-kpi-warn" x-show="wortschatzData.stats.mtld == null"
-             x-text="$app.t('wortschatz.kpi.mtldShort', { min: wortschatzData.thresholds.mtldMinTokens })"></p>
+          <p class="wortschatz-kpi-warn" x-show="wsMtldNote()" x-text="wsMtldNote()"></p>
         </div>
 
         <div class="overview-tile">
@@ -132,12 +133,22 @@
                 :class="{ 'tabs-btn--active': wortschatzTab === 'cloud' }"
                 @click="wortschatzTab = 'cloud'"
                 x-text="$app.t('wortschatz.tab.cloud')"></button>
+        <button type="button" class="tabs-btn"
+                :class="{ 'tabs-btn--active': wortschatzTab === 'chapters' }"
+                @click="wortschatzTab = 'chapters'"
+                x-text="$app.t('wortschatz.tab.chapters', { n: wortschatzChapters.length })"></button>
+        <button type="button" class="tabs-btn"
+                :class="{ 'tabs-btn--active': wortschatzTab === 'figures' }"
+                @click="wortschatzTab = 'figures'"
+                x-text="$app.t('wortschatz.tab.figures', { n: wortschatzIdiolect.length })"></button>
       </div>
 
       <!-- @include wortschatz-terms -->
       <!-- @include wortschatz-phrases -->
       <!-- @include wortschatz-hapax -->
       <!-- @include wortschatz-cloud -->
+      <!-- @include wortschatz-chapters -->
+      <!-- @include wortschatz-figures -->
     </div>
   </template>
 </div>

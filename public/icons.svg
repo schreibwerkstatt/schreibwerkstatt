@@ -11,6 +11,8 @@
   <symbol id="chevron-down"  viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
   <symbol id="chevron-up"    viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
   <symbol id="chevron-last"  viewBox="0 0 24 24"><path d="m7 18 6-6-6-6"/><path d="M17 6v12"/></symbol>
+  <symbol id="chevron-first" viewBox="0 0 24 24"><path d="m17 18-6-6 6-6"/><path d="M7 6v12"/></symbol>
+  <symbol id="list-end"      viewBox="0 0 24 24"><path d="M16 12H3"/><path d="M16 6H3"/><path d="M10 18H3"/><path d="M21 6v10a2 2 0 0 1-2 2h-5"/><path d="m16 16-2 2 2 2"/></symbol>
 
   <symbol id="arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
   <symbol id="arrow-left"  viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>

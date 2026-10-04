@@ -3,25 +3,19 @@
 // matchen"). Konsumenten: book/tree.js (_syncPageStatsAfterSave),
 // page-revision-diff.js (Plain-Text-Fallback).
 
-const _NAMED = Object.freeze({
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: ' ',
-});
+import { NAMED_ENTITIES } from './html-entities.js';
 
 function _decodeEntities(s) {
-  return s.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (m, code) => {
+  return s.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/g, (m, code) => {
     if (code[0] === '#') {
       const isHex = code[1] === 'x' || code[1] === 'X';
       const n = isHex ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
       if (!Number.isFinite(n) || n < 0 || n > 0x10FFFF) return m;
       try { return String.fromCodePoint(n); } catch { return m; }
     }
-    const named = _NAMED[code];
-    return named !== undefined ? named : m;
+    // Entity-Namen sind case-sensitiv (`&Uuml;` ≠ `&uuml;`) — kein Lowercasing.
+    const cp = Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, code) ? NAMED_ENTITIES[code] : undefined;
+    return cp !== undefined ? String.fromCodePoint(cp) : m;
   });
 }
 

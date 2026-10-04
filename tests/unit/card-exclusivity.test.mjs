@@ -83,7 +83,7 @@ function makeCtx() {
         orteUpdatedAt: null, selectedOrtId: null,
         orteFilters: { figurId: '', kapitel: '', szeneId: '', suche: '' },
         songsUpdatedAt: null, selectedSongId: null,
-        songsFilters: { figurId: '', kapitel: '', szeneId: '', genre: '', kontextTyp: '', suche: '' },
+        songsFilters: { figurId: '', kapitel: '', genre: '', kontextTyp: '', suche: '' },
         kontinuitaetFilters: { figurId: '', kapitel: '', schwere: '' },
       },
       jobs: {

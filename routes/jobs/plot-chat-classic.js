@@ -24,7 +24,7 @@ const { recordChatLedgerForMessage } = require('../../db/cost-ledger');
 const { generateSessionTitle } = require('./chat-title');
 const { getSessionWithBookName } = require('../../db/chat-sessions');
 const embed = require('../../lib/embed');
-const { preContextPassages } = require('./chat/book-chat-retrieval');
+const { preContextPassages, retrievalQuery } = require('./chat/book-chat-retrieval');
 
 // Leere Werte, die ein Modell mit Constrained Decoding gern mitschickt, weglassen:
 // "" als titel wäre für den Handler „Titel leeren", 0 als id eine ungültige id.
@@ -74,11 +74,13 @@ async function runPlotChatJobClassic(jobId, sessionId, userMsgId, message, userE
     const jobSignal = jobAbortControllers.get(jobId)?.signal;
     const base = await plotChatContext(session, userEmail);
 
+    const history = buildAgenticHistory(session.id).slice(0, -1);
     let passages = [];
     if (embed.isEnabled()) {
       updateJob(jobId, { statusText: 'job.phase.selectingPages', progress: 20 });
       try {
-        const pre = await preContextPassages(session.book_id, message, { signal: jobSignal, userEmail });
+        // Suchtext = Frage + letzte Runde: Folgefragen tragen ihr Subjekt nicht selbst.
+        const pre = await preContextPassages(session.book_id, retrievalQuery(message, history), { signal: jobSignal, userEmail });
         passages = pre?.hits || [];
       } catch (e) {
         if (e.name === 'AbortError') throw e;
@@ -90,7 +92,6 @@ async function runPlotChatJobClassic(jobId, sessionId, userMsgId, message, userE
       mode: 'classic', bookContext: base.bookContext, boardOutline: base.boardOutline,
       figurenOutline: base.figurenOutline, proposalMemory: base.proposalMemory, passages,
     });
-    const history = buildAgenticHistory(session.id).slice(0, -1);
     const aiMessages = [...history, { role: 'user', content: message }];
 
     updateJob(jobId, { statusText: 'job.phase.aiReply', progress: 50 });

@@ -115,7 +115,7 @@ export function registerSzenenCard() {
     },
 
     // Einzelne Stale-Szene löschen. Nur für stale-Einträge (Server prüft ebenfalls).
-    // CASCADE räumt scene_figures/scene_locations/song_scenes + research_item_links mit.
+    // CASCADE räumt scene_figures/scene_locations + research_item_links mit.
     async deleteStale(s) {
       if (!s?.stale) return;
       const app = window.__app;

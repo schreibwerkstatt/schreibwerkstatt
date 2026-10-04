@@ -13,19 +13,6 @@ export const songsMethods = {
     }
   },
 
-  async saveSongs() {
-    try {
-      const r = await fetch('/songs/' + this.$store.nav.selectedBookId, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ songs: this.$store.catalog.songs }),
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    } catch (e) {
-      console.error('[saveSongs]', e);
-    }
-  },
-
   songsKapitelListe() {
     const seen = new Set();
     for (const s of this.$store.catalog.songs) {
@@ -55,7 +42,11 @@ export const songsMethods = {
   openSongById(id) {
     if (!this.$store.catalog.songs.some(s => s.id === id)) return;
     if (typeof this.toggleSongsCard === 'function' && !this.showSongsCard) this.toggleSongsCard();
-    this.$store.catalogUi.songsFilters = { suche: '', figurId: '', kapitel: '', szeneId: '', genre: '', kontextTyp: '' };
+    // Alle Filter leeren, ohne die Schlüssel hier ein zweites Mal aufzuzählen
+    // (SSoT: FILTER_SCOPES in app-view/_shared.js, alle Defaults '').
+    // In-Place wie applyFilterScope: Bindings auf das Objekt bleiben gültig.
+    const f = this.$store.catalogUi.songsFilters;
+    for (const k of Object.keys(f)) f[k] = '';
     this.$store.catalogUi.selectedSongId = id;
     setTimeout(() => {
       const el = document.querySelector(`[data-song-id="${id}"]`);

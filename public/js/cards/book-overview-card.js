@@ -5,6 +5,10 @@
 import { bookOverviewMethods } from '../book-overview.js';
 import { initialOverviewState } from '../book-overview/load.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { localIsoDate } from '../utils.js';
+
+// Wie oft die Karte prüft, ob der Kalendertag gewechselt hat.
+const DAY_TICK_MS = 60_000;
 
 export function registerBookOverviewCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -16,6 +20,18 @@ export function registerBookOverviewCard() {
     _lifecycle: null,
     // Re-Entry-Guard für die Microtask-Koaleszierung unten (kein fachlicher State).
     _pendingBookId: null,
+    // Re-Entry-Guards der Lade-Pipeline (book-overview/load.js). Deklariert,
+    // weil Alpine nicht deklarierte Felder beim Schreiben an die äusserste
+    // Scope hängt — sie lägen sonst als globaler Zustand auf `$app`.
+    _loadingBookId: null,
+    _staleCheckBookId: null,
+    _statsSyncBookId: null,
+    // Heutiger Kalendertag (appTimezone). Reaktive Abhängigkeit aller Kacheln,
+    // die „heute" kennen (Heute-Ring, 7 Tage, Streak, Prognose, Tagebuch):
+    // bleibt die Karte über Mitternacht offen, rechnen sie damit neu, statt den
+    // Vortag als heute zu zeigen. Der Tick unten zieht den Wert nach.
+    overviewToday: localIsoDate(),
+    _dayTimer: null,
     // Memo-Speicher von cards/card-memo.js#_memo. Siehe Begruendung in
     // tagebuch-rueckblick-card.js: ohne Deklaration landet der Topf beim
     // Scope-Merge an der Root und wird zwischen Karten geteilt.
@@ -62,10 +78,17 @@ export function registerBookOverviewCard() {
         // progress-Store — sonst waere „nochmal laden" ein Cache-Treffer.
         onCardRefresh: () => this.loadBookOverview(Alpine.store('nav').selectedBookId, { fresh: true }),
       });
+
+      this._dayTimer = setInterval(() => {
+        const today = localIsoDate();
+        if (today !== this.overviewToday) this.overviewToday = today;
+      }, DAY_TICK_MS);
     },
 
     destroy() {
       this._lifecycle?.destroy();
+      clearInterval(this._dayTimer);
+      this._dayTimer = null;
     },
 
     ...bookOverviewMethods,

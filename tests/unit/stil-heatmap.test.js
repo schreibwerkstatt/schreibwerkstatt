@@ -7,7 +7,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { buildStilHeatmap, buildStilDetail, isSampleBucket, parseStyleRow } = require('../../lib/stil-heatmap');
+const { buildStilHeatmap, buildStilDetail, isSampleBucket, parseStyleRow, PERSPECTIVE_MIN_PRONOUNS } = require('../../lib/stil-heatmap');
+const { percentileSorted } = require('../../lib/percentile');
 
 function row(over = {}) {
   return {
@@ -71,10 +72,17 @@ test('buildStilHeatmap: needsSync bei alter Metrik-Version', () => {
   assert.equal(buildStilHeatmap({ rows: [row({ metrics_version: 6 })], metricsVersion: 7 }).needsSync, true);
 });
 
-test('buildStilHeatmap: needsSync bei fehlendem Wert trotz Text', () => {
-  assert.equal(buildStilHeatmap({ rows: [row({ lix: null })], metricsVersion: 7 }).needsSync, true);
+test('buildStilHeatmap: needsSync bei nie gerechneter Seite mit Text', () => {
+  // Nur der Umfangs-Pfad hat geschrieben: Woerter da, keine Metrik-Version.
+  assert.equal(buildStilHeatmap({ rows: [row({ lix: null, metrics_version: null })], metricsVersion: 7 }).needsSync, true);
   // Eine leere Seite ist kein Grund nachzurechnen.
-  assert.equal(buildStilHeatmap({ rows: [row({ lix: null, words: 0 })], metricsVersion: 7 }).needsSync, false);
+  assert.equal(buildStilHeatmap({ rows: [row({ lix: null, words: 0, metrics_version: null })], metricsVersion: 7 }).needsSync, false);
+});
+
+test('buildStilHeatmap: fehlender LIX auf aktuell gerechneter Seite loest KEIN Nachrechnen aus', () => {
+  // Seite ohne zaehlbaren Satz (nur Zahlen): auch nach dem Sync bleibt lix null.
+  // Als Ausloeser rechnete die Karte sonst bei jedem Oeffnen das ganze Buch neu.
+  assert.equal(buildStilHeatmap({ rows: [row({ lix: null, flesch_de: null })], metricsVersion: 7 }).needsSync, false);
 });
 
 test('buildStilHeatmap: ohne Zeilen ist nichts berechnet, also needsSync', () => {
@@ -141,4 +149,114 @@ test('buildStilDetail: Wiederholungen liefern Woerter statt Saetze', () => {
 
 test('buildStilDetail: unbekannter Eimer liefert nichts statt zu raten', () => {
   assert.deepEqual(buildStilDetail({ rows: [row()], bucket: 'lix' }).entries, []);
+});
+
+// --- Kapitel-P90 exakt aus den gepoolten Satzlaengen ------------------------
+
+test('Kapitel-P90: gepoolte Sequenz, nicht das Mittel der Seiten-P90', () => {
+  // Seite 1: 9 kurze Saetze, Seite 2: 1 langer. Pro Seite waere P90 = 5 bzw. 40,
+  // das wortgewichtete Mittel ~22. Ueber alle 10 Saetze ist P90 = Index 8 = 5.
+  const rows = [
+    row({ page_id: 1, words: 45, sentence_len_p90: 5,  sentence_lens: JSON.stringify(Array(9).fill(5)) }),
+    row({ page_id: 2, words: 40, sentence_len_p90: 40, sentence_lens: JSON.stringify([40]) }),
+  ];
+  const { chapters, book } = buildStilHeatmap({ rows, metricsVersion: 7 });
+  assert.equal(chapters[0].sentence_len_p90, 5);
+  assert.equal(chapters[0].sentence_len_p90_exact, true);
+  assert.equal(book.sentence_len_p90, 5);
+  assert.equal(book.sentence_len_p90_exact, true);
+});
+
+test('Kapitel-P90: eine einzige Seite ergibt genau den Seiten-P90 (gleiche Definition)', () => {
+  const lens = [3, 8, 12, 15, 17, 20, 22, 25, 31, 44, 60];
+  const sorted = [...lens].sort((a, b) => a - b);
+  const { chapters } = buildStilHeatmap({
+    rows: [row({ sentence_lens: JSON.stringify(lens), sentence_len_p90: percentileSorted(sorted, 0.9) })],
+    metricsVersion: 7,
+  });
+  assert.equal(chapters[0].sentence_len_p90, percentileSorted(sorted, 0.9));
+  assert.equal(chapters[0].sentence_len_p90, 44);
+});
+
+test('Kapitel-P90: Fallback auf das Seiten-P90-Mittel nur fuer Seiten ohne Sequenz', () => {
+  // Nur Altseiten (metrics_version < 7): wortgewichtetes Mittel, als geschaetzt markiert.
+  const legacyOnly = buildStilHeatmap({
+    rows: [
+      row({ page_id: 1, words: 300, sentence_len_p90: 20, sentence_lens: null, metrics_version: 6 }),
+      row({ page_id: 2, words: 100, sentence_len_p90: 40, sentence_lens: null, metrics_version: 6 }),
+    ],
+    metricsVersion: 7,
+  });
+  assert.equal(legacyOnly.chapters[0].sentence_len_p90, 25); // (20*300 + 40*100) / 400
+  assert.equal(legacyOnly.chapters[0].sentence_len_p90_exact, false);
+
+  // Gemischt: exakter Teil (P90 = 10, 100 Woerter) + Altseite (P90 30, 100 Woerter).
+  const mixed = buildStilHeatmap({
+    rows: [
+      row({ page_id: 1, words: 100, sentence_lens: JSON.stringify(Array(10).fill(10)) }),
+      row({ page_id: 2, words: 100, sentence_len_p90: 30, sentence_lens: null, metrics_version: 6 }),
+    ],
+    metricsVersion: 7,
+  });
+  assert.equal(mixed.chapters[0].sentence_len_p90, 20);
+  assert.equal(mixed.chapters[0].sentence_len_p90_exact, false);
+  assert.equal(mixed.book.sentence_len_p90_exact, false);
+});
+
+test('Kapitel-P90: ohne Saetze und ohne Altwert bleibt er null', () => {
+  const { chapters } = buildStilHeatmap({
+    rows: [row({ sentence_lens: JSON.stringify([]), sentence_len_p90: null })],
+    metricsVersion: 7,
+  });
+  assert.equal(chapters[0].sentence_len_p90, null);
+});
+
+// --- Satzanfaenge pro Kapitel ----------------------------------------------
+
+test('buildStilHeatmap: Satzanfaenge pro Kapitel reisen mit', () => {
+  const r = buildStilHeatmap({
+    rows: [
+      row({ page_id: 1, chapter_id: 1, opener_counts: JSON.stringify({ counts: { Er: 4 }, repeats: 2 }) }),
+      row({ page_id: 2, chapter_id: 2, chapter_name: 'K2', opener_counts: JSON.stringify({ counts: { Ich: 3, Dann: 1 }, repeats: 1 }) }),
+    ],
+    metricsVersion: 7,
+  });
+  assert.deepEqual(r.chapterOpeners.map(c => c.key), ['1', '2']);
+  assert.equal(r.chapterOpeners[1].top[0].word, 'Ich');
+  assert.equal(r.chapterOpeners[1].repeats, 1);
+  assert.equal(r.openers.total, 8, 'die buchweite Rangliste bleibt daneben bestehen');
+});
+
+// --- Ich-Anteil im Erzaehltext -------------------------------------------------
+
+function pron({ ich = 0, wir = 0, er = 0, sie = 0, ichDlg = 0, du = 0 } = {}) {
+  return JSON.stringify({
+    ich: { narr: ich, dlg: ichDlg }, du: { narr: du, dlg: 0 }, er: { narr: er, dlg: 0 },
+    sie_sg: { narr: sie, dlg: 0 }, wir: { narr: wir, dlg: 0 }, ihr_pl: { narr: 0, dlg: 0 }, man: { narr: 0, dlg: 0 },
+  });
+}
+
+test('Ich-Anteil: 1. Person (ich + wir) unter 1. + 3. Person, nur Erzaehltext', () => {
+  const { chapters } = buildStilHeatmap({
+    rows: [
+      row({ page_id: 1, chapter_id: 1, pronoun_counts: pron({ ich: 25, wir: 5, er: 8, sie: 2, ichDlg: 500, du: 50 }) }),
+      row({ page_id: 2, chapter_id: 2, chapter_name: 'K2', pronoun_counts: pron({ ich: 1, er: 30, sie: 9, ichDlg: 80 }) }),
+    ],
+    metricsVersion: 7,
+  });
+  // (25 + 5) / (25 + 5 + 8 + 2) = 75 % — Dialog-„ich" und „du" zaehlen nicht.
+  assert.equal(chapters[0].first_person_share, 75);
+  assert.equal(chapters[1].first_person_share, 2.5);
+});
+
+test('Ich-Anteil: null unter der Mindestzahl erzaehlender Pronomen', () => {
+  const below = PERSPECTIVE_MIN_PRONOUNS - 1;
+  const r1 = buildStilHeatmap({ rows: [row({ pronoun_counts: pron({ ich: below }) })], metricsVersion: 7 });
+  assert.equal(r1.chapters[0].first_person_share, null);
+  const r2 = buildStilHeatmap({ rows: [row({ pronoun_counts: pron({ ich: below, er: 1 }) })], metricsVersion: 7 });
+  assert.equal(r2.chapters[0].first_person_share, Math.round((below / PERSPECTIVE_MIN_PRONOUNS) * 1000) / 10);
+  // Ohne Pronomen-Spalte (oder korrupt) ebenfalls null, nicht 0.
+  const r3 = buildStilHeatmap({ rows: [row({ pronoun_counts: '{kaputt' })], metricsVersion: 7 });
+  assert.equal(r3.chapters[0].first_person_share, null);
+  assert.equal(r3.perspectiveMinPronouns, PERSPECTIVE_MIN_PRONOUNS);
 });

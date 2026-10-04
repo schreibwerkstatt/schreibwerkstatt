@@ -67,6 +67,13 @@ test.before(async () => {
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
 
+// Audio-Cache, Wortmengen-Cache und Ratenlimit sind Prozess-Zustand — pro Test frisch.
+test.beforeEach(() => {
+  require('../../lib/tts-synth').clearAudioCache();
+  require('../../lib/share-tts-guard')._resetForTests();
+  require('../../lib/share-ratelimit')._resetAll();
+});
+
 test.after(async () => {
   global.fetch = originalFetch;
   if (server) await new Promise(r => server.close(r));
@@ -140,4 +147,38 @@ test('upstream 500 -> 502 tts_upstream', async () => {
   const r = await postTts(link.token, { text: 'Hallo.' });
   assert.equal(r.status, 502);
   assert.equal((await r.json()).error, 'tts_upstream');
+});
+
+test('Text, der nicht aus dem geteilten Inhalt stammt -> 422, kein Upstream-Call', async () => {
+  setTts({ enabled: true });
+  const link = sl.createShareLink({ kind: 'page', pageId: PAGE_ID, bookId: BOOK_ID, ownerEmail: OWNER });
+  let called = false;
+  fetchHandler = async () => { called = true; return new Response(Buffer.from([1]), { status: 200 }); };
+  const r = await postTts(link.token, { text: 'Kaufen Sie jetzt guenstige Uhren im Angebot.' });
+  assert.equal(r.status, 422);
+  assert.equal((await r.json()).error, 'tts_text_not_shared');
+  assert.equal(called, false);
+});
+
+test('aufbereiteter Sprechtext aus dem Inhalt wird akzeptiert (Wort-Ebene, nicht Teilstring)', async () => {
+  setTts({ enabled: true });
+  const link = sl.createShareLink({ kind: 'page', pageId: PAGE_ID, bookId: BOOK_ID, ownerEmail: OWNER });
+  fetchHandler = async () => new Response(Buffer.from([1]), { status: 200 });
+  // Client normalisiert Satzzeichen (normalizeForSpeech) — die Woerter bleiben.
+  const r = await postTts(link.token, { text: 'Hallo, Welt' });
+  assert.equal(r.status, 200);
+});
+
+test('Ratenlimit pro Token + IP -> 429 mit Retry-After', async () => {
+  setTts({ enabled: true });
+  const link = sl.createShareLink({ kind: 'page', pageId: PAGE_ID, bookId: BOOK_ID, ownerEmail: OWNER });
+  const rl = require('../../lib/share-ratelimit');
+  // Kontingent bis auf den letzten Platz verbrauchen (gleiche IP wie der Test-Client).
+  const ipHash = rl.hashIp('::ffff:127.0.0.1');
+  for (let i = 0; i < rl.TTS_MAX_PER_WINDOW; i++) rl.checkTts(link.token, ipHash);
+  fetchHandler = async () => new Response(Buffer.from([1]), { status: 200 });
+  const r = await postTts(link.token, { text: 'Hallo.' });
+  assert.equal(r.status, 429);
+  assert.ok(Number(r.headers.get('retry-after')) > 0);
+  assert.equal((await r.json()).error, 'tts_rate_limited');
 });

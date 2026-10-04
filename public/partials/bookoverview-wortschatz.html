@@ -1,0 +1,50 @@
+<!-- Wortschatz: MTLD (ersatzweise MATTR) + Median der übrigen Bücher des Besitzers.
+     Ohne Scan ein Hinweis-Tile. Klick öffnet die Wortschatz-Karte (editor+; für
+     Betrachter reine Anzeige). Logik in book-overview/wortschatz.js. -->
+<template x-if="overviewLexicon()">
+  <div class="overview-tile"
+       :class="{ 'internal-link': overviewCanOpenWortschatz(), 'overview-tile--cta': !overviewLexicon().scanned }"
+       @click="overviewOpenWortschatz()"
+       :data-tip="overviewCanOpenWortschatz() ? $app.t('overview.lexicon.open') : null"
+       :aria-label="$app.t('tile.wortschatz')">
+    <div class="overview-tile-head">
+      <span class="overview-tile-label" x-text="$app.t('tile.wortschatz')"></span>
+      <span class="overview-tile-median" x-show="overviewLexicon().stale" x-cloak
+            x-text="$app.t('wortschatz.stale')"></span>
+    </div>
+
+    <template x-if="!overviewLexicon().scanned">
+      <div class="overview-cta-body">
+        <span class="overview-cta-text" x-text="$app.t('overview.lexicon.noScan')"></span>
+        <span class="overview-cta-action" x-show="overviewCanOpenWortschatz()"
+              x-text="$app.t('overview.lexicon.open')"></span>
+      </div>
+    </template>
+
+    <template x-if="overviewLexicon().scanned">
+      <div>
+        <div class="overview-fig-row"
+             :data-tip="overviewLexicon().metric ? $app.t('autorenprofil.metricTip.' + overviewLexicon().metric) : null">
+          <span class="overview-fig-count"
+                x-text="overviewLexNum(overviewLexicon().value, overviewLexicon().decimals)"></span>
+          <span class="overview-fig-count-unit"
+                x-text="$app.t(overviewLexicon().metric === 'mattr' ? 'wortschatz.kpi.mattr' : 'wortschatz.kpi.mtld')"></span>
+        </div>
+        <div class="card-hint" x-show="overviewLexicon().peerLine"
+             x-text="overviewLexicon().peer !== null
+               ? $app.t('wortschatz.peerMedian', { value: overviewLexNum(overviewLexicon().peer, overviewLexicon().decimals), books: overviewLexicon().peerBooks })
+               : $app.t('overview.lexicon.noPeer')"></div>
+        <div class="overview-substats">
+          <div class="overview-substat" :data-tip="$app.t('wortschatz.kpi.density')">
+            <span class="overview-substat-value" x-text="overviewLexPercent(overviewLexicon().lexDensity)"></span>
+            <span class="overview-substat-unit" x-text="$app.t('overview.lexicon.density')"></span>
+          </div>
+          <div class="overview-substat" :data-tip="$app.t('wortschatz.kpi.hapax')">
+            <span class="overview-substat-value" x-text="overviewLexPercent(overviewLexicon().hapaxRatio)"></span>
+            <span class="overview-substat-unit" x-text="$app.t('overview.lexicon.hapax')"></span>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+</template>

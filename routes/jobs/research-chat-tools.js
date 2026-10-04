@@ -34,11 +34,13 @@ const _snip = (s, n) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
 // Verknuepfungen eines Fundstuecks, kompakt fuers Modell: `stellen` = Kapitel/
 // Seiten (wo es im Buch steht bzw. eingearbeitet ist), `bezug` = Figuren, Orte,
 // Szenen, Beats, Straenge. Labels kommen aus db/research-items#attachRelations.
+// Figuren/Orte mit ihrer oeffentlichen Kennung (`ref_id` = fig_id/loc_id), wie in
+// list_book_entities und den anderen Chats.
 function _linkView(links) {
   const stellen = [];
   const bezug = [];
   for (const l of (links || [])) {
-    const e = { art: l.target_kind, id: l.target_id, name: l.label || '' };
+    const e = { art: l.target_kind, id: l.ref_id ?? l.target_id, name: l.label || '' };
     (l.target_kind === 'chapter' || l.target_kind === 'page' ? stellen : bezug).push(e);
   }
   return { stellen, bezug };
@@ -226,15 +228,20 @@ async function tool_search_research_passages(input, ctx) {
       });
     return { q, results, count: results.length };
   } catch (e) {
+    // Abbruch des Jobs ist kein Werkzeug-Fehler: weiterwerfen, sonst rechnet der
+    // Loop mit einem {error} weiter, obwohl der User gestoppt hat.
+    if (e?.name === 'AbortError') throw e;
     ctx.logger?.warn?.(`[research-chat] Passagen-Suche fehlgeschlagen: ${e.message}`);
     return { error: `Semantische Suche nicht verfügbar (${e.message}). Nutze list_research_items (Wortsuche).` };
   }
 }
 
 // ── list_book_entities ───────────────────────────────────────────────────────
+// Figuren/Orte mit ihrer oeffentlichen Kennung (fig_id/loc_id) als `id`, wie Buch-
+// und Plot-Chat — die INTEGER-PK bleibt im Server.
 const ENTITY_QUERIES = {
-  figur:  'SELECT id, name AS label, typ, rolle, beschreibung FROM figures WHERE book_id = ? AND user_email = ? AND COALESCE(stale,0) = 0 ORDER BY sort_order, name',
-  ort:    'SELECT id, name AS label, typ, land, beschreibung FROM locations WHERE book_id = ? AND user_email = ? ORDER BY sort_order, name',
+  figur:  'SELECT fig_id AS id, name AS label, typ, rolle, beschreibung FROM figures WHERE book_id = ? AND user_email = ? AND COALESCE(stale,0) = 0 ORDER BY sort_order, name',
+  ort:    'SELECT loc_id AS id, name AS label, typ, land, beschreibung FROM locations WHERE book_id = ? AND user_email = ? ORDER BY sort_order, name',
   szene:  'SELECT id, titel AS label, kommentar FROM figure_scenes WHERE book_id = ? AND user_email = ? ORDER BY sort_order, titel',
   beat:   'SELECT id, titel AS label, beschreibung FROM plot_beats WHERE book_id = ? AND user_email = ? ORDER BY sort_order, titel',
   strang: 'SELECT id, name AS label FROM plot_threads WHERE book_id = ? AND user_email = ? ORDER BY position, name',

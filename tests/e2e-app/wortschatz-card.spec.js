@@ -17,7 +17,7 @@ const { bootApp, selectSeededBook } = require('./_helpers/app');
 
 test.describe.configure({ mode: 'serial' });
 
-test('Wortschatz: Scan laeuft, alle vier Reiter rendern mit Daten', async ({ page }) => {
+test('Wortschatz: Scan laeuft, alle Reiter rendern mit Daten', async ({ page }) => {
   const guard = attachConsoleGuard(page);
   await bootApp(page);
   await selectSeededBook(page);
@@ -48,14 +48,31 @@ test('Wortschatz: Scan laeuft, alle vier Reiter rendern mit Daten', async ({ pag
   const phraseRows = card.locator('div[x-show="wortschatzTab === \'phrases\'"] tbody tr');
   await expect.poll(() => phraseRows.count()).toBeGreaterThan(0);
 
-  // Reiter 3: Einmalwoerter — Wortlaenge als Sortierschluessel, laengstes zuerst.
+  // Reiter 3: Einmalwoerter — in der Reihenfolge der Auswahl (Rang-Spalte). Ohne
+  // Referenzkorpus gibt es kein „sonst nie", die Auswahl ist dann: laengstes zuerst.
   await card.getByRole('button', { name: /Einmalwörter/ }).click();
   const hapaxRows = card.locator('div[x-show="wortschatzTab === \'hapax\'"] tbody tr');
   await expect.poll(() => hapaxRows.count()).toBeGreaterThan(0);
-  const lengths = await hapaxRows.evaluateAll(
-    (rows) => rows.map((r) => r.querySelector('td').textContent.trim().length),
+  const hapax = await hapaxRows.evaluateAll(
+    (rows) => rows.map((r) => ({
+      rank: Number(r.querySelector('td').textContent.trim()),
+      len: r.querySelector('td.wortschatz-term span').textContent.trim().length,
+    })),
   );
-  expect(lengths[0]).toBeGreaterThanOrEqual(lengths[lengths.length - 1]);
+  expect(hapax[0].rank).toBe(1);
+  expect(hapax[0].len).toBeGreaterThanOrEqual(hapax[hapax.length - 1].len);
+  await expect(card.locator('div[x-show="wortschatzTab === \'hapax\'"] .wortschatz-kind:visible')).toHaveCount(0);
+
+  // Reiter 5 + 6: Kapitel-Band und Figuren-Idiolekt rendern (Figuren darf leer sein —
+  // dann steht der Hinweis mit der Mindestmenge da, keine leere Tabelle).
+  await card.getByRole('button', { name: /^Kapitel \(/ }).click();
+  const chapterRows = card.locator('div[x-show="wortschatzTab === \'chapters\'"] tbody tr');
+  await expect.poll(() => chapterRows.count()).toBeGreaterThan(0);
+  await card.getByRole('button', { name: /^Figuren \(/ }).click();
+  const figPane = card.locator('div[x-show="wortschatzTab === \'figures\'"]');
+  await expect(figPane).toBeVisible();
+  await expect.poll(async () => (await figPane.locator('tbody tr').count())
+    + (await figPane.locator('.muted-msg:visible').count())).toBeGreaterThan(0);
 
   // Reiter 4: Wortwolke. Braucht die echte App, weil d3-cloud jedes Wort auf
   // einem Canvas misst — im Fixture-Harness gaebe es nichts zu messen. Der

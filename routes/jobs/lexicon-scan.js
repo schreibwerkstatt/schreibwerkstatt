@@ -22,9 +22,11 @@ const {
 } = require('./shared');
 const contentStore = require('../../lib/content-store');
 const lexiconDb = require('../../db/lexicon');
-const { analyzeBook, LEXICON_VERSION } = require('../../lib/lexicon');
-const { tokenizeNamesForStopwords } = require('../../lib/page-index');
-const { foldSharpS } = require('../../lib/lexicon/tokenize');
+const { analyzeBook, buildNameStopwords, LEXICON_VERSION, MATTR_WINDOW } = require('../../lib/lexicon');
+const {
+  tokenizeNamesForStopwords, findDialogRanges, buildFigureNamePatterns,
+} = require('../../lib/page-index');
+const { localIsoDate } = require('../../lib/local-date');
 const { db } = require('../../db/schema');
 const logger = require('../../logger');
 
@@ -42,8 +44,8 @@ const lexiconScanRouter = express.Router();
 // Terme greifen, deren Wert allein aus der Kappung stammt.
 // Bei 3 ist der verbleibende Fehler auf zwei Vorkommen begrenzt. Der Rangdeckel
 // bleibt als Notbremse gegen ein absurd langes Buch stehen; greift er, steigt die
-// Kappungsgrenze wieder — `loadReferenceCorpus` liest sie aus der Tabelle selbst
-// (`floor`) und die Auswahl wird von allein vorsichtiger.
+// Kappungsgrenze wieder — `loadReferenceCorpus` liest sie pro Buch aus der Tabelle
+// selbst (`upper`) und die Auswahl wird von allein vorsichtiger.
 const REF_MIN_COUNT = 3;
 const REF_TERM_LIMIT = 40000;
 
@@ -56,10 +58,10 @@ function _checkAbort(signal) {
   }
 }
 
-// Signatur des Buchstands: Seiten-IDs + ihre `updated_at` in Leserichtung, plus
-// die Analyse-Version. Ändert sich nichts davon, ist das Ergebnis bitgleich und der
-// Scan kann komplett entfallen. Die Reihenfolge gehört mit hinein — eine
-// Umsortierung der Kapitel verschiebt die MATTR-Fenster.
+// Text-Signatur des Buchstands: Seiten-IDs + ihre `updated_at` in Leserichtung,
+// plus die Analyse-Version. Die Reihenfolge gehört mit hinein — eine Umsortierung
+// der Kapitel verschiebt die MATTR-Fenster. Sie geht in die Referenz-Fingerabdrücke
+// der ANDEREN Bücher ein (siehe computeInputSig).
 function computeContentSig(orderedPages) {
   const h = crypto.createHash('sha1');
   h.update(`v${LEXICON_VERSION}`);
@@ -67,18 +69,33 @@ function computeContentSig(orderedPages) {
   return h.digest('hex');
 }
 
+// Eingangs-Signatur: ALLES, wovon das Ergebnis abhängt. Neben dem Text sind das
+// die Namensliste (eine neue Figur muss aus den Lieblingswörtern verschwinden, auch
+// wenn keine Seite geändert wurde) und der Stand der Referenzbücher (Keyness,
+// auffällige Wörter, Einmalwort-Reihenfolge). Ohne die Referenz bliebe ein Buch,
+// das in einer frischen Installation vor allen anderen gescannt wurde, für immer
+// ohne Keyness — jede folgende Nacht hätte es als „unverändert" übersprungen.
+function computeInputSig(contentSig, nameWords, figureNames, refFingerprint) {
+  const h = crypto.createHash('sha1');
+  h.update(contentSig);
+  h.update('|names:' + [...nameWords].sort().join(','));
+  h.update('|figs:' + [...figureNames].sort().join(','));
+  h.update('|ref:' + refFingerprint);
+  return h.digest('hex');
+}
+
 // Figuren-, Orts- und Szenennamen als Zusatz-Stoppwörter. Ohne sie führt die Figur,
 // die auf jeder Seite vorkommt, die Lieblingswort-Liste an — kein Stilbefund.
-// Gleiche Quelle wie routes/sync.js; `foldSharpS`, weil der Tokenizer ß faltet und
-// ein Name wie „Straßer" sonst nicht greift.
-function _nameStopwords(bookId) {
+// Gleiche Zerlegung wie routes/sync.js, danach dieselbe Normalisierung wie der
+// Buchtext plus Genitivformen (lib/lexicon/names.js).
+function _loadNames(bookId) {
+  const figures = db.prepare('SELECT id, name, kurzname FROM figures WHERE book_id = ? AND COALESCE(stale, 0) = 0').all(bookId);
   const names = [
-    ...db.prepare('SELECT name, kurzname FROM figures WHERE book_id = ?').all(bookId).flatMap(r => [r.name, r.kurzname]),
+    ...figures.flatMap(r => [r.name, r.kurzname]),
     ...db.prepare('SELECT name FROM locations WHERE book_id = ?').all(bookId).map(r => r.name),
     ...db.prepare('SELECT titel FROM figure_scenes WHERE book_id = ?').all(bookId).map(r => r.titel),
   ];
-  const raw = tokenizeNamesForStopwords(names);
-  return new Set([...raw].map(w => foldSharpS(w)));
+  return { figures, stopwords: buildNameStopwords(names, tokenizeNamesForStopwords(names)) };
 }
 
 // Referenztabelle dieses Buchs: alle Terme ab der Mindesthäufigkeit, absteigend
@@ -114,9 +131,14 @@ async function runLexiconScanJob(jobId, bookId, userEmail, opts = {}) {
 
     const metas = flat.map(f => ({ id: f.page.id, chapterId: f.chapterId, updated_at: f.page.updated_at }));
     const sig = computeContentSig(metas.map(m => ({ page_id: m.id, updated_at: m.updated_at })));
+    const names = _loadNames(bookId);
+    const inputSig = computeInputSig(
+      sig, names.stopwords, names.figures.map(f => `${f.id}:${f.name}:${f.kurzname || ''}`),
+      lexiconDb.referenceFingerprint(bookId, LEXICON_VERSION),
+    );
     const prev = lexiconDb.getLexiconSignature(bookId);
-    if (!opts.force && prev && prev.content_sig === sig && prev.lexicon_version === LEXICON_VERSION) {
-      log.info(`Wortschatz-Scan übersprungen (unverändert, sig ${sig.slice(0, 8)}).`);
+    if (!opts.force && prev && prev.input_sig === inputSig && prev.lexicon_version === LEXICON_VERSION) {
+      log.info(`Wortschatz-Scan übersprungen (unverändert, sig ${inputSig.slice(0, 8)}).`);
       completeJob(jobId, { skipped: true }, null, 'unverändert');
       return;
     }
@@ -135,10 +157,14 @@ async function runLexiconScanJob(jobId, bookId, userEmail, opts = {}) {
     }
 
     updateJob(jobId, { statusText: 'job.phase.lexiconMeasure' });
-    const reference = lexiconDb.loadReferenceCorpus(bookId);
+    const reference = lexiconDb.loadReferenceCorpus(bookId, LEXICON_VERSION);
     const result = await analyzeBook(pages, {
-      nameStopwords: _nameStopwords(bookId),
+      nameStopwords: names.stopwords,
       reference,
+      idiolect: {
+        figures: names.figures,
+        deps: { findDialogRanges, buildFigureNamePatterns },
+      },
       onYield: async () => {
         _checkAbort(signal);
         await new Promise(r => setImmediate(r));
@@ -147,8 +173,12 @@ async function runLexiconScanJob(jobId, bookId, userEmail, opts = {}) {
     _checkAbort(signal);
 
     result.stats.content_sig = sig;
+    result.stats.input_sig = inputSig;
     result.stats.freq_json = _buildFreqJson(result.freq);
     lexiconDb.replaceBookLexicon(bookId, result);
+    // Tageszeile des Verlaufs auf den frischen Stand ziehen (nur wenn der Sync sie
+    // heute schon geschrieben hat — siehe db/lexicon.js#stampLexiconHistory).
+    lexiconDb.stampLexiconHistory(bookId, localIsoDate(), MATTR_WINDOW);
 
     const s = result.stats;
     const byKind = { freq: 0, key: 0, hapax: 0 };
@@ -156,9 +186,10 @@ async function runLexiconScanJob(jobId, bookId, userEmail, opts = {}) {
     log.info(`Wortschatz: ${s.tokens} Token, ${s.types} Types, MATTR ${s.mattr} (Fenster ${s.mattr_window}), `
       + `MTLD ${s.mtld}, Yule K ${s.yule_k}, β ${s.heaps_beta}, Dichte ${s.lex_density}, `
       + `${byKind.freq} Terme + ${byKind.key} auffällige + ${byKind.hapax}/${s.hapax_listed} Einmalwörter, `
-      + `${result.phrases.length} Wendungen`
+      + `${result.phrases.length} Wendungen, ${result.chapters.length} Kapitel, `
+      + `Idiolekt ${result.idiolect.length} Figur(en) (Abdeckung ${s.idiolect_coverage})`
       + (reference
-        ? `, Referenz aus ${reference.books} Buch/Büchern (Kappung bei ${reference.floor})`
+        ? `, Referenz aus ${reference.books} Buch/Büchern (Fehl-Schranke ${reference.absentBound})`
         : ', ohne Referenzkorpus'));
 
     completeJob(jobId, {
@@ -199,5 +230,5 @@ lexiconScanRouter.post('/lexicon-scan', jsonBody, (req, res) => startBookJob(req
 
 module.exports = {
   lexiconScanRouter, runLexiconScanJob, scanAllBooks,
-  computeContentSig,
+  computeContentSig, computeInputSig,
 };

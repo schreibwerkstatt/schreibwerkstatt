@@ -163,6 +163,7 @@
 
 .lt-popover__footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-6);
@@ -173,7 +174,9 @@
 /* Footer-Links: gleiche Trefferhöhe wie die Vorschlags-Chips (28 px), sonst
    sind sie die kleinsten Ziele im Popover. */
 .lt-popover__ignore,
+.lt-popover__ignore-all,
 .lt-popover__dict,
+.lt-popover__rule,
 .lt-popover__info {
   appearance: none;
   display: inline-flex;
@@ -189,13 +192,16 @@
 }
 
 .lt-popover__ignore:hover,
+.lt-popover__ignore-all:hover,
 .lt-popover__dict:hover,
+.lt-popover__rule:hover,
 .lt-popover__info:hover {
   color: var(--color-text);
   text-decoration: underline;
 }
 
-.lt-popover__dict[disabled] {
+.lt-popover__dict[disabled],
+.lt-popover__rule[disabled] {
   opacity: 0.5;
   cursor: default;
 }
@@ -500,6 +506,7 @@ textarea[data-spellcheck="spelling"]:not(.card-title--input, .page-head__input) 
 
 .lt-popover__row-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-6);
 }
 }

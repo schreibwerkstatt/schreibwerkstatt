@@ -94,18 +94,21 @@
         // liest this.$store.shell.uiLocale (Speak-Sprache).
         shell: { uiLocale: 'de' },
         tts: {
-          enabled,
+          enabled, rate: 1, continueReading: false,
           // Pausen auf 0 -> Tests laufen schnell; Pause-Test setzt sie selbst.
           pause: { fragmentMs: 0, paragraphMs: 0 },
           playing: false, paused: false, loading: false, index: 0, total: 0,
         },
       },
       $watch: () => {},
+      $nextTick: (fn) => Promise.resolve().then(fn),
       t: (k) => k,
       _showJobToast: (o) => { window.__toasts.push(o); },
     };
     window.__ttsApp = app;
     window.__store = app.$store.tts;
+    // Klick-Sprung + Tastatur haengen am Lifecycle-Hook (wie in Prod via app-init).
+    if (enabled) app._initTtsProof(new AbortController().signal);
 
     // ── Dock (nur bei enabled) + State->DOM-Spiegelung (Alpine-Ersatz) ────
     if (enabled) {
@@ -116,6 +119,7 @@
         dock.appendChild(b);
         return b;
       };
+      const prev = mk('tts-prev', 'prev');
       const main = mk('tts-main', 'play');
       const skip = mk('tts-skip', 'skip');
       const stop = mk('tts-stop', 'stop');
@@ -124,14 +128,16 @@
 
       main.addEventListener('click', () => app.toggleTtsProof());
       skip.addEventListener('click', () => app.skipTtsProof());
+      prev.addEventListener('click', () => app.prevTtsProof());
       stop.addEventListener('click', () => app.stopTtsProof());
 
       const s = app.$store.tts;
       setInterval(() => {
         main.setAttribute('aria-pressed', String(s.playing && !s.paused));
         main.textContent = !s.playing ? 'play' : (s.paused ? 'paused' : 'pause');
-        // Skip nur im laufenden, nicht-pausierten Zustand sichtbar (wie Prod).
-        skip.hidden = !(s.playing && !s.paused);
+        // Vor/Zurueck sichtbar, solange eine Session laeuft (auch pausiert, wie Prod).
+        skip.hidden = !s.playing;
+        prev.hidden = !s.playing;
         stop.hidden = !s.playing;
         pill.textContent = s.loading ? 'loading'
           : s.paused ? 'paused'

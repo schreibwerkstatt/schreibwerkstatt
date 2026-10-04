@@ -16,7 +16,7 @@ const { setContext } = require('../../../lib/log-context');
 const { makePhaseTimer } = require('./utils');
 const { runErzaehlprofil } = require('./phases');
 const { _komplettAiOverrides } = require('./job-shared');
-const { providerClass } = require('../../../lib/ai');
+const { providerClass, resolveProvider } = require('../../../lib/ai');
 
 async function runErzaehlprofilJob(jobId, bookId, bookName, userEmail, provider = undefined) {
   const bookIdInt = parseInt(bookId);
@@ -25,14 +25,15 @@ async function runErzaehlprofilJob(jobId, bookId, bookName, userEmail, provider 
   const pt = makePhaseTimer(log);
   // Effektiven Provider binden (siehe runKomplettAnalyseJob) — sonst kappt aiCall das
   // Output-Ceiling fälschlich auf den Claude-Default.
-  const effectiveProvider = provider || appSettings.get('ai.provider') || 'claude';
+  const effectiveProvider = provider || resolveProvider({ userEmail });
   const overrides = _komplettAiOverrides(effectiveProvider);
   if (overrides) {
     setContext(overrides);
     log.info(`Erzählprofil-Override (${effectiveProvider}): ${JSON.stringify(overrides.aiJob)} (global model=${appSettings.get(`ai.${effectiveProvider}.model`)}).`);
   }
-  const call = (jobId_, tok_, prompt_, system_, fromPct, toPct, expectedChars, outputRatio, maxTokens, schema) =>
-    aiCall(jobId_, tok_, prompt_, system_, fromPct, toPct, expectedChars, outputRatio, maxTokens, effectiveProvider, schema);
+  // `tier` (Kostenklasse für job.result.costByPhase) wie in runKomplettAnalyseJob durchreichen.
+  const call = (jobId_, tok_, prompt_, system_, fromPct, toPct, expectedChars, outputRatio, maxTokens, schema, tier) =>
+    aiCall(jobId_, tok_, prompt_, system_, fromPct, toPct, expectedChars, outputRatio, maxTokens, effectiveProvider, schema, tier);
   const { singlePass: singlePassLimit } = chunkLimitsFor(effectiveProvider);
   const prompts = await getPrompts(userEmail);
   const sys = await getBookPrompts(bookId, email);

@@ -145,7 +145,7 @@ ersten Tastendruck im Manuskript. Darum räumt `activateBlock` den aktiven Block
 Die **Share-Reader-Kopie** ist Absicht: der Reader ist ein eigenständiger,
 schlanker Modulgraph und darf nur aus `/js/share-reader/` importieren — ein
 Import aus `/js/diagram/` zöge dem anonymen Leser das App-Bundle in die
-Leseansicht. Dieselbe Lage wie `READER_BLOCK_SEL`. Die Vendor-Datei selbst steht
+Leseansicht. Dieselbe Lage wie `TTS_BLOCK_SEL`. Die Vendor-Datei selbst steht
 einzeln in `PUBLIC_ASSETS` (`/vendor/` ist nicht pauschal pre-auth freigegeben).
 
 ## Export

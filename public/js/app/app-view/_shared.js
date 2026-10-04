@@ -22,8 +22,8 @@ export const FILTER_SCOPES = [
   { scope: 'ereignisseFilters',   key: 'ereignisseFilters',   defaults: { figurId: '', kapitel: '', seite: '', subtyp: '', suche: '' } },
   { scope: 'szenenFilters',       key: 'szenenFilters',       defaults: { wertung: '', figurId: '', kapitelId: '', seiteId: '', ortId: '', suche: '' } },
   { scope: 'orteFilters',         key: 'orteFilters',         defaults: { figurId: '', kapitel: '', szeneId: '', suche: '' } },
-  { scope: 'songsFilters',        key: 'songsFilters',        defaults: { figurId: '', kapitel: '', szeneId: '', genre: '', kontextTyp: '', suche: '' } },
-  { scope: 'kontinuitaetFilters', key: 'kontinuitaetFilters', defaults: { figurId: '', kapitel: '', schwere: '' } },
+  { scope: 'songsFilters',        key: 'songsFilters',        defaults: { figurId: '', kapitel: '', genre: '', kontextTyp: '', suche: '' } },
+  { scope: 'kontinuitaetFilters', key: 'kontinuitaetFilters', defaults: { figurId: '', kapitel: '', schwere: '', status: '' } },
 ];
 
 // Kartenwechsel als sanfter Cross-Fade (View Transitions API). Progressive

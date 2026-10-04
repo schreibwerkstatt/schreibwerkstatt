@@ -39,6 +39,9 @@ function buildVerbatimSamples(ctx) {
       id,
       type: 'verbatim',
       sourceKey,
+      // Gekürzt wäre es keine wörtliche Wiedergabe von „Teil N von M" mehr,
+      // sondern ein Abbruch mitten im Text — finalize verwirft statt zu kappen.
+      noTruncate: true,
       messages: [
         { role: 'system', content: unifiedSys },
         { role: 'user', content: instr },

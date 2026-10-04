@@ -16,19 +16,19 @@ function _normEmail(email) {
 }
 
 const _stmtInsert = db.prepare(`
-  INSERT INTO registration_requests (email, display_name, message, ip, user_agent, created_at)
-  VALUES (?, ?, ?, ?, ?, ${NOW_ISO_SQL})
+  INSERT INTO registration_requests (email, display_name, message, ip, user_agent, source, source_note, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})
 `);
 
 const _stmtFindById = db.prepare(`
-  SELECT id, email, display_name, message, ip, user_agent, status,
+  SELECT id, email, display_name, message, ip, user_agent, source, source_note, status,
          created_at, reviewed_at, reviewed_by, review_reason, invite_id
     FROM registration_requests
    WHERE id = ?
 `);
 
 const _stmtListByStatus = db.prepare(`
-  SELECT id, email, display_name, message, ip, user_agent, status,
+  SELECT id, email, display_name, message, ip, user_agent, source, source_note, status,
          created_at, reviewed_at, reviewed_by, review_reason, invite_id
     FROM registration_requests
    WHERE status = ?
@@ -36,7 +36,7 @@ const _stmtListByStatus = db.prepare(`
 `);
 
 const _stmtListRecent = db.prepare(`
-  SELECT id, email, display_name, message, ip, user_agent, status,
+  SELECT id, email, display_name, message, ip, user_agent, source, source_note, status,
          created_at, reviewed_at, reviewed_by, review_reason, invite_id
     FROM registration_requests
    ORDER BY created_at DESC, id DESC
@@ -70,10 +70,11 @@ const _stmtExpireOlderThan = db.prepare(`
 
 // Insert. Wirft bei pending-Duplikat (Partial-UNIQUE). Caller darf das
 // schlucken — Antwort an den Public-Caller bleibt gleich (kein Leak).
-function createRequest({ email, displayName = null, message = null, ip = null, userAgent = null }) {
+function createRequest({ email, displayName = null, message = null, ip = null, userAgent = null, source = null, sourceNote = null }) {
   const e = _normEmail(email);
   if (!e) throw new Error('createRequest: email required');
-  const info = _stmtInsert.run(e, displayName || null, message || null, ip || null, userAgent || null);
+  const info = _stmtInsert.run(e, displayName || null, message || null, ip || null, userAgent || null,
+    source || null, sourceNote || null);
   return _stmtFindById.get(info.lastInsertRowid);
 }
 

@@ -18,18 +18,25 @@ const { db } = require('./connection');
 
 // Reihenfolge = Leserichtung. Sie traegt zusammen mit der Reihenfolge innerhalb
 // von `sentence_lens` den Satzrhythmus und darf nicht umsortiert werden.
+// Leserichtung heisst `chapters.position` + `pages.position` (materialisiert von
+// db/book-order.js), NICHT die IDs: die sind Anlage-Reihenfolge und weichen ab,
+// sobald im Buchorganizer umsortiert wurde — der Rhythmus beschriebe dann eine
+// Satzfolge, die so nicht im Buch steht. Wie die Fehler-Heatmap
+// (lib/fehler-heatmap.js): Kapitel ohne position hinten nach ID, Seiten ohne
+// Kapitel ganz am Ende.
 const _stmtRows = db.prepare(`
   SELECT ps.page_id, p.chapter_id, c.chapter_name,
          ps.words, ps.chars, ps.dialog_chars,
          ps.filler_count, ps.passive_count, ps.adverb_count,
          ps.avg_sentence_len, ps.sentence_len_p90, ps.repetition_data,
          ps.lix, ps.flesch_de, ps.metrics_version, ps.cached_at,
-         ps.sentence_lens, ps.opener_counts
+         ps.sentence_lens, ps.opener_counts, ps.pronoun_counts
   FROM page_stats ps
   JOIN pages p ON p.page_id = ps.page_id
   LEFT JOIN chapters c ON c.chapter_id = p.chapter_id AND c.book_id = p.book_id
   WHERE ps.book_id = ?
-  ORDER BY p.chapter_id, p.page_id
+  ORDER BY (p.chapter_id IS NULL), (c.position IS NULL), c.position, p.chapter_id,
+           p.position, p.page_id
 `);
 
 // Drilldown eines Kapitels: nur die Spalten, die das Detail-Panel braucht.
@@ -40,7 +47,7 @@ const _stmtSamplesChapter = db.prepare(`
   FROM page_stats ps
   JOIN pages p ON p.page_id = ps.page_id
   WHERE ps.book_id = ? AND p.chapter_id = ?
-  ORDER BY p.page_id
+  ORDER BY p.position, p.page_id
 `);
 
 // Gegenstueck fuer Seiten ohne Kapitel. Eigenes Statement statt eines
@@ -52,7 +59,7 @@ const _stmtSamplesUncat = db.prepare(`
   FROM page_stats ps
   JOIN pages p ON p.page_id = ps.page_id
   WHERE ps.book_id = ? AND p.chapter_id IS NULL
-  ORDER BY p.page_id
+  ORDER BY p.position, p.page_id
 `);
 
 /** Alle Stil-Zeilen eines Buchs — ohne Beispielsaetze. */

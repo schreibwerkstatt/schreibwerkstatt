@@ -7,6 +7,14 @@
 
 const { listMotifs, listOccurrences, getGraph } = require('../../../db/motifs');
 const { _truncateResult } = require('./shared');
+const appSettings = require('../../../lib/app-settings');
+
+// Dieselbe Cosinus-Untergrenze wie die Motiv-Karte (routes/motifs.js#_motifFloor)
+// und der Konsistenz-Job: sonst nennt der Buch-Chat Zahlen und Stellen, die die
+// Karte als zu schwach ausblendet — zwei Bestände für dieselbe Frage.
+function _motifFloor() {
+  return Number(appSettings.get('motif.scan.min_score')) || 0;
+}
 
 const MOTIF_DESC_PREVIEW = 400;
 const OCC_SNIPPET_PREVIEW = 300;
@@ -29,7 +37,7 @@ function _sollSummary(m) {
 
 function tool_get_motifs(_input, ctx) {
   const userEmail = ctx.userEmail || '';
-  const graph = getGraph(ctx.bookId, userEmail);
+  const graph = getGraph(ctx.bookId, userEmail, _motifFloor());
 
   if (!graph.motifs.length && !graph.themes.length) {
     return {
@@ -115,7 +123,7 @@ function tool_get_motif_occurrences(input, ctx) {
   }
 
   const limit = Math.min(OCC_LIMIT_MAX, Math.max(1, Number.isInteger(input?.limit) ? input.limit : OCC_LIMIT_DEFAULT));
-  const rows = listOccurrences(motif.id);
+  const rows = listOccurrences(motif.id, _motifFloor());
 
   if (!rows.length) {
     return {

@@ -91,7 +91,7 @@ function register(router) {
   });
 
   // Einzelne STALE-Szene endgültig löschen (GUI-Button auf "nicht mehr im Text"-Zeilen).
-  // Nur stale erlaubt. CASCADE räumt scene_figures/scene_locations/song_scenes +
+  // Nur stale erlaubt. CASCADE räumt scene_figures/scene_locations +
   // research_item_links mit.
   router.delete('/scenes/:book_id/:id', (req, res) => {
     const id = toIntId(req.params.id);

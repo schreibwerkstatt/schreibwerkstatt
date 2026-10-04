@@ -10,11 +10,10 @@
 // erweitert, muss die Erwartung hier mitziehen und trifft dabei auf die Frage,
 // ob die anderen Familien denselben Zusatz brauchen.
 //
-// `share-reader/tts.js` ist der Sonderfall: der Reader ist ein eigenstaendiger,
-// schlanker Modulgraph und darf nur aus `/js/share-reader/` importieren (sonst
-// zieht die Leseansicht das App-Bundle), kann den Kern also nicht importieren.
-// Seine Kopie wird hier gegen
-// den Kern geprüft — als Quelltext, weil das Modul Browser-Globals braucht.
+// `TTS_BLOCK_SEL` (public/js/tts-segment.js, Vorlesen auf beiden Oberflaechen)
+// ist der Sonderfall: das Modul gehoert zum schlanken, pre-auth ladbaren
+// Share-Reader-Modulgraph und kann den Kern nicht importieren (sonst zieht die
+// Leseansicht das App-Bundle). Seine Kopie wird hier gegen den Kern geprüft.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -86,26 +85,31 @@ for (const fam of FAMILIES) {
   });
 }
 
-test('READER_BLOCK_SEL (Share-Reader-TTS) enthält den Kern, obwohl er ihn nicht importieren kann', () => {
-  const src = readFileSync('public/js/share-reader/tts.js', 'utf8');
-  const m = src.match(/const READER_BLOCK_SEL = '([^']+)'/);
-  assert.ok(m, 'READER_BLOCK_SEL nicht gefunden — Name geändert? Dann hier mitziehen.');
-  const p = parts(m[1]);
+test('TTS_BLOCK_SEL (Vorlesen, beide Oberflaechen) enthaelt den Kern, obwohl er ihn nicht importieren kann', async () => {
+  const { TTS_BLOCK_SEL } = await import('../../public/js/tts-segment.js');
+  const p = parts(TTS_BLOCK_SEL);
   for (const tag of TEXT_BLOCK_TAGS) {
-    assert.ok(p.has(tag), `Kern-Tag ${tag} fehlt im Reader-Selektor (Drift zur SSoT)`);
+    assert.ok(p.has(tag), `Kern-Tag ${tag} fehlt im TTS-Selektor (Drift zur SSoT)`);
   }
   const extras = [...p].filter((x) => !TEXT_BLOCK_TAGS.includes(x)).sort();
-  // `pre` + `figcaption` werden vorgelesen; `td`/`th`/`div.poem` bewusst nicht.
-  assert.deepEqual(extras, ['figcaption', 'pre']);
+  // `pre` + `figcaption` werden vorgelesen; die Container (ul, div, figure …)
+  // sind Bloecke ohne eigenen Satz, damit verschachtelter Text weder doppelt
+  // noch gar nicht gelesen wird (tts-segment.js#ttsUnits). Kein td/th/caption.
+  assert.deepEqual(extras, ['article', 'aside', 'dd', 'details', 'div', 'dl', 'dt', 'figcaption',
+    'figure', 'footer', 'header', 'ol', 'pre', 'section', 'summary', 'ul']);
 });
 
-test('der Share-Reader importiert nichts aus editor/shared/ (Pre-Auth-Grenze)', () => {
-  // Gegenprobe zur Begründung der Kopie: ein solcher Import käme beim anonymen
-  // Leser als HTML vom Auth-Guard zurück und der Browser würde das Modul wegen
-  // MIME-Type verweigern. Nur `/js/share-reader/` ist pre-auth freigegeben.
-  const src = readFileSync('public/js/share-reader/tts.js', 'utf8');
-  const bad = [...src.matchAll(/^\s*import\s[^;]*?from\s+'([^']+)'/gm)]
-    .map((m) => m[1])
-    .filter((spec) => spec.includes('editor/') || spec.includes('/shared/'));
-  assert.deepEqual(bad, [], 'Share-Reader darf nicht aus dem Editor-Modulgraph importieren');
+test('Share-Reader-TTS und die TTS-Kerne importieren nichts aus dem App-Bundle (Pre-Auth-Grenze)', () => {
+  // Gegenprobe zur Begründung der Kopie: der Reader-Modulgraph schlank und
+  // pre-auth ladbar — ein Import aus editor/ zöge das App-Bundle nach.
+  for (const [file, allowed] of [
+    ['public/js/share-reader/tts.js', ['../tts-segment.js', '../tts-player.js', './dom.js']],
+    ['public/js/tts-player.js', ['./tts-segment.js']],
+    ['public/js/tts-segment.js', []],
+  ]) {
+    const src = readFileSync(file, 'utf8');
+    const specs = [...src.matchAll(/^\s*import\s[^;]*?from\s+'([^']+)'/gm)].map((m) => m[1]);
+    assert.deepEqual(specs.filter((s) => !allowed.includes(s)), [],
+      `${file} darf nur ${allowed.join(', ') || 'nichts'} importieren`);
+  }
 });

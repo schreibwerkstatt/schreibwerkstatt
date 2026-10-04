@@ -6,6 +6,7 @@
       <div x-data="settingField({ k: 'embed.model', base: 'embed.model', help: true, models: { target: 'embed', hostKey: 'embed.host' } })"></div>
       <div x-data="settingField({ k: 'embed.dim', type: 'num', base: 'embed.dim', num: { integer: true, min: 64, max: 8192 }, help: true })"></div>
       <div x-data="settingField({ k: 'embed.timeout_ms', type: 'num', base: 'embed.timeoutMs', num: { integer: true, min: 5000, max: 600000 }, help: true })"></div>
+      <div x-data="settingField({ k: 'embed.autoindex_delay_s', type: 'num', base: 'embed.autoindexDelay', num: { integer: true, min: 0, max: 86400 }, help: true })"></div>
       <div x-data="settingField({ k: 'embed.api_key', type: 'password', base: 'embed.apiKey', help: true })"></div>
       <div class="admin-settings-actions">
         <button type="button" @click="adminSettingsTest('embed')" x-text="$app.t('admin.settings.test.embed')"></button>
@@ -34,9 +35,9 @@
 
       <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.redundancy.title')"></span></h4>
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.redundancy.hint')"></p>
-      <div x-data="settingField({ k: 'redundancy.threshold_strict', type: 'num', base: 'redundancy.thresholdStrict', num: { min: 0, max: 1, step: 0.01 }, help: true })"></div>
-      <div x-data="settingField({ k: 'redundancy.threshold_medium', type: 'num', base: 'redundancy.thresholdMedium', num: { min: 0, max: 1, step: 0.01 }, help: true })"></div>
-      <div x-data="settingField({ k: 'redundancy.threshold_loose', type: 'num', base: 'redundancy.thresholdLoose', num: { min: 0, max: 1, step: 0.01 }, help: true })"></div>
+      <div x-data="settingField({ k: 'redundancy.threshold_strict', type: 'num', base: 'redundancy.thresholdStrict', num: { min: 0.7, max: 0.97, step: 0.01 }, help: true })"></div>
+      <div x-data="settingField({ k: 'redundancy.threshold_medium', type: 'num', base: 'redundancy.thresholdMedium', num: { min: 0.7, max: 0.97, step: 0.01 }, help: true })"></div>
+      <div x-data="settingField({ k: 'redundancy.threshold_loose', type: 'num', base: 'redundancy.thresholdLoose', num: { min: 0.7, max: 0.97, step: 0.01 }, help: true })"></div>
 
       <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.rerank.title')"></span></h4>
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.rerank.hint')"></p>

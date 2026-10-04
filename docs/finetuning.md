@@ -24,13 +24,19 @@ UI → Buch → Kachel **Fine-Tuning-Export**:
 - `Validation-Split = 0.05` (> 20 000 Samples), sonst `0.1`.
 - `Max. Token pro Sample = 4096`.
 - `Vorgerendertes text-Feld` optional.
-- `Typ-Balance` (Max. Anteil pro Typ) optional — `0` lässt die Rohmischung, `0.4`–`0.5` deckelt die volumenstarken Text-Sampler, damit Autor-Chat/KI-Q&A (Welt- und Figurenwissen) nicht untergehen.
+- `Typ-Balance` (Max. Anteil pro Typ) optional — `0` lässt die Rohmischung, `0.4`–`0.5` deckelt die volumenstarken Text-Sampler, damit Autor-Chat/KI-Q&A (Welt- und Figurenwissen) nicht untergehen. Der Anteil gilt gegen den **exportierten** Datensatz, also nach dem Kappen ([finalize.js](../routes/jobs/finetune-export/finalize.js)#`balanceCap`). Mit weniger als `1/Anteil` aktiven Typen ist er nicht erfüllbar und wird übersprungen.
+
+**Lange Samples passen sich `Max. Token pro Sample` an.** Voll-Kapitel-, Wörtlich- und Mehrseiten-Samples werden in Slices von höchstens 60 % des Sequenz-Budgets geschnitten (4096 Tokens → rund 8000 Zeichen DE); der Rest bleibt dem Prompt. Ein fester, grösserer Slice würde genau die Samples aus dem Export filtern, die den Buchtext am vollständigsten tragen. `Lange Samples kappen` kürzt diese Slices nie — ein gekapptes „Teil 2 von 5" brächte dem Modell bei, mitten im Text aufzuhören —, sie fallen dann weg.
+
+**Korrekturen sind nur übernommene Lektorats-Befunde** (`page_checks.applied_errors_json`), nicht jeder KI-Vorschlag. Abgelehnte Vorschläge als Autor-Prosa zu trainieren, hiesse dem Modell genau die Formulierungen beizubringen, gegen die sich der Autor entschieden hat.
+
+**Dialog-Zitate** erkennt [lib/text.js](../routes/jobs/finetune-export/lib/text.js)#`extractDialogs` in allen fünf Schreibweisen: „…“, “…”, »…«, «…» und ASCII-`"…"`. Sie füttern den Dialog-Typ, „Wer sagt das?" und das Sprach-Portrait pro Figur im Autor-Chat; ohne erkannte Zitate fallen alle drei still weg.
 
 **Welt-Fakten (Autor-Chat Block 29) sind KI-extrahiert, nicht kuratiert.** `world_facts` ist ein abgeleiteter Index der Komplettanalyse mit Full-Replace — es gibt keinen Edit-Pfad. Der Sampler ([samples/author-chat/world-facts.js](../routes/jobs/finetune-export/samples/author-chat/world-facts.js)) giesst EINEN Fakt in rund ein halbes Dutzend Samples (mehrere Frage-Paraphrasen + Sammelantwort pro Subjekt + pro Kategorie + globale Welt-Übersicht). Deshalb filtert er die Fakten heraus, die der **Weltfakten-Faktencheck** (`typ='faktenfehler'` in `continuity_issues`, siehe [docs/komplett.md](komplett.md)) als real falsch belegt hat: bei Trainingsdaten ist die Vervielfachung eines Fehlers teurer als das fehlende Sample. Lief der Faktencheck nie, wird nichts gefiltert. Der Abgleich läuft über den normalisierten Text (`subjekt: fakt`) — der Befund trägt keine `fact_id`, und eine einzuführen hiesse, sie an einen Index zu hängen, den der nächste Lauf komplett ersetzt.
 
-**Train/Val wird pro Kapitel gesplittet:** alle Samples eines Kapitels (Stil, Szene, Wörtlich, Dialog, Figur-Passagen) landen gemeinsam in `train` **oder** `val`. So ist `val` ein echtes Holdout — der Eval-Loss misst Generalisierung statt auswendig gelernten Trainingstext, und `load_best_model_at_end`/EarlyStopping (siehe [train_book.py](unsloth-config/train_book.py)) wählen sinnvoll aus. Fakten-Q&A und Korrekturen splitten per Sample (sie geben keinen zusammenhängenden Buchtext wieder). Konsequenz: bei sehr wenigen Kapiteln kann der Val-Anteil schwanken (ggf. `Validation-Split` erhöhen).
+**Train/Val wird pro Kapitel gesplittet:** alle Samples eines Kapitels, deren Antwort Buchtext wiedergibt (Stil, Szene, Wörtlich, Dialog inkl. „Wer sagt das?", Figur-Passagen, Sprach-Portrait pro Figur und Kapitel), landen gemeinsam in `train` **oder** `val`. So ist `val` ein echtes Holdout — der Eval-Loss misst Generalisierung statt auswendig gelernten Trainingstext, und `load_best_model_at_end`/EarlyStopping (siehe [train_book.py](unsloth-config/train_book.py)) wählen sinnvoll aus. Fakten-Q&A und Korrekturen splitten per Sample (sie geben keinen zusammenhängenden Buchtext wieder). Konsequenz: bei sehr wenigen Kapiteln kann der Val-Anteil schwanken (ggf. `Validation-Split` erhöhen).
 
-**Loss-Masking:** Trainiere über das `messages`-Feld + `train_on_responses_only` (so im CLI-Script verdrahtet) — dann fliesst der Loss nur auf die Assistant-Tokens, User-Instruktionen/System-Prompts werden maskiert. Das `text`-Feld (`emit_text=true`) ist nur ein Fallback für Loader, die `dataset_text_field` erwarten; es kann den Prompt nicht maskieren, das Modell lernt dann auch die Instruktions-Phrasen mit.
+**Loss-Masking:** Trainiere über das `messages`-Feld + `train_on_responses_only` (so im CLI-Script verdrahtet; das Script rendert `messages` selbst über das Chat-Template und entfernt dabei das führende `<s>`, weil der Tokenizer es beim Tokenisieren ein zweites Mal setzt) — dann fliesst der Loss nur auf die Assistant-Tokens, User-Instruktionen/System-Prompts werden maskiert. Das `text`-Feld (`emit_text=true`) ist nur ein Fallback für Loader, die `dataset_text_field` erwarten; es kann den Prompt nicht maskieren, das Modell lernt dann auch die Instruktions-Phrasen mit.
 
 Stats nach Generierung: p95/max Token, empfohlene `seq_len`, verworfene Samples, entfernte Dubletten, per Typ-Cap entfernte Samples. Exakte Dubletten-Entfernung und ein deterministisches Shuffle pro Split laufen immer.
 
@@ -38,7 +44,7 @@ Format pro Zeile:
 
 ```json
 {"messages":[
-  {"role":"system","content":"Du bist die Stimme des Autors von «…» …"},
+  {"role":"system","content":"Du bist die Stimme von «…». Schreibe, setze fort und antworte …"},
   {"role":"user","content":"Wer ist Hans Meier?"},
   {"role":"assistant","content":"Hans Meier ist der Protagonist …"}
 ]}
@@ -98,8 +104,8 @@ VRAM-Matrix (Mistral-Small-3.2-24B QLoRA):
 System-Prompt **identisch zum Training** setzen:
 
 ```
-Du bist die Stimme des Autors von «‹Buchtitel›» und antwortest einer Leserin
-im Gespräch. Antworte knapp, präzise und im Geist des Buchs.
+Du bist die Stimme von «‹Buchtitel›». Schreibe, setze fort und antworte im Stil
+des Autors und aus der Welt dieses Buchs heraus.
 ```
 
 Tests:

@@ -9,7 +9,11 @@
      Autors. Die zweite Sorte ist per Definition NICHT häufig — ohne die Markierung
      sähe sie wie ein Ausreisser am Tabellenende aus. -->
 <div x-show="wortschatzTab === 'terms'">
-  <p class="wortschatz-list-hint" x-text="$app.t('wortschatz.terms.hint')"></p>
+  <p class="wortschatz-list-hint">
+    <span x-text="$app.t('wortschatz.terms.hint')"></span>
+    <button type="button" class="internal-link wortschatz-stil-link" @click="wsOpenStil()"
+            :title="$app.t('wortschatz.stilLinkTip')" x-text="$app.t('wortschatz.stilLink')"></button>
+  </p>
   <p class="wortschatz-list-hint" x-show="wortschatzHasKeyness"
      x-text="$app.t('wortschatz.terms.keyHint')"></p>
   <div x-show="!wortschatzTerms.length" class="muted-msg muted-msg--spaced" x-text="$app.t('wortschatz.terms.empty')"></div>

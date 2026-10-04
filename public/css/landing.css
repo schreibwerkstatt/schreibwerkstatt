@@ -24,7 +24,14 @@ html, body {
 }
 
 .public-shell--wide {
-  max-width: 880px;
+  max-width: 960px;
+}
+
+/* Login: eine Spalte, senkrecht mittig wie ein App-Startbildschirm. */
+.public-shell--narrow {
+  max-width: 420px;
+  min-height: 100dvh;
+  justify-content: center;
 }
 
 .public-header {
@@ -32,8 +39,18 @@ html, body {
   padding: var(--space-lg) 0 0;
 }
 
+/* Wortmarke: App-Icon ueber einer Serifen-Ueberschrift — dieselbe Schrift wie
+   der Lesetext im Editor, damit die Eingangsseiten nach Manuskript aussehen
+   und nicht nach Software. */
+.public-brand {
+  display: block;
+  margin: 0 auto var(--space-md);
+}
+
 .public-header h1 {
-  font-size: var(--font-size-2xl);
+  font-family: var(--font-serif);
+  font-size: var(--font-size-3xl);
+  font-weight: var(--fw-semibold);
   margin: 0 0 var(--space-xs);
   letter-spacing: -0.01em;
 }
@@ -87,12 +104,8 @@ html, body {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--space-md);
-}
-
-.public-feature:last-child:nth-child(odd) {
-  grid-column: 1 / -1;
 }
 
 .public-feature {
@@ -129,46 +142,48 @@ html, body {
 .public-feature--recherche    { --card-accent: var(--card-accent-recherche); }
 .public-feature--blog         { --card-accent: var(--card-accent-blog); }
 
-.public-macclient {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-lg);
+/* Apps + Erweiterung: dasselbe Raster wie die Funktionen, aber ohne Akzent —
+   sie sind Zugaenge, keine Funktionen. Der Knopf sitzt am Kachelfuss. */
+.public-client-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-md);
+}
+
+.public-client {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: var(--space-lg) var(--space-xl);
-}
-
-.public-macclient-text {
+  padding: var(--space-lg);
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
 }
 
-.public-macclient-title {
-  margin: 0;
-  font-size: var(--font-size-md);
-  color: var(--color-text);
+.public-client-icon {
+  font-size: var(--font-size-xl);
+  color: var(--color-muted);
+  margin-bottom: var(--space-xs);
 }
 
-.public-macclient-desc {
+.public-client h3 {
   margin: 0;
+  font-size: var(--font-size-md);
+}
+
+.public-client p {
+  margin: 0;
+  flex: 1;
   font-size: var(--font-size-sm);
   color: var(--color-muted);
   line-height: 1.55;
 }
 
-/* Client-CTA: Sprite-Icon vor dem Label (laptop-minimal / smartphone / puzzle),
-   darum inline-flex statt des inline-block der Basis-Klasse. `justify-content`
-   greift erst in der Mobile-Regel unten, wo der Button auf 100% aufgeht. */
-.public-macclient .public-btn {
-  flex-shrink: 0;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-xs);
+.public-client .public-btn {
+  margin-top: var(--space-sm);
 }
 
 .public-btn {
@@ -201,6 +216,10 @@ html, body {
 
 .public-btn-link {
   font: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
   color: var(--color-muted);
   text-decoration: none;
   align-self: center;
@@ -278,6 +297,18 @@ html, body {
   flex: 1;
   height: 1px;
   background: var(--color-border);
+}
+
+/* Notfall-Zugang (ENV-Admin) unter dem regulaeren Verfahren: eingeklappt
+   hinter einem leisen Link, damit der Verfahrens-Knopf der Einstieg bleibt. */
+.public-fallback {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.public-fallback > .public-btn-link {
+  font-size: var(--font-size-sm);
 }
 
 .public-btn[disabled] {
@@ -371,6 +402,19 @@ html, body {
 
 .public-footer-link:hover { color: var(--color-text); }
 
+.public-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-xs) var(--space-lg);
+}
+
+@media (max-width: 900px) {
+  .public-feature-grid { grid-template-columns: repeat(2, 1fr); }
+  .public-feature:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .public-client-grid { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 720px) {
   .public-feature-grid { grid-template-columns: 1fr; }
 }
@@ -384,6 +428,5 @@ html, body {
   .public-actions--inline .public-btn { width: 100%; }
   .public-form-actions { flex-direction: column-reverse; align-items: stretch; gap: var(--space-sm); }
   .public-feature { padding: var(--space-md); }
-  .public-macclient { flex-direction: column; align-items: stretch; text-align: center; padding: var(--space-lg); }
-  .public-macclient .public-btn { width: 100%; }
+  .public-header h1 { font-size: var(--font-size-2xl); }
 }

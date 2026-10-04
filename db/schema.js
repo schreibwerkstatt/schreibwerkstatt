@@ -21,6 +21,8 @@ const locationsWrite = require('./locations-write');
 const worldFacts = require('./world-facts');
 const aiCaches = require('./ai-caches');
 const rueckblick = require('./rueckblick');
+const chapterReviews = require('./chapter-reviews');
+const bookReviews = require('./book-reviews');
 const komplettScope = require('./komplett-scope');
 const bookSettings = require('./book-settings');
 const continuity = require('./continuity');
@@ -62,12 +64,14 @@ module.exports = {
   worldFactsScanState: worldFacts.worldFactsScanState,
   // songs
   saveSongsToDb: songs.saveSongsToDb,
+  listSongsForBook: songs.listSongsForBook,
   // kontinuitaet / faktencheck
   saveContinuityCheck:       continuity.saveContinuityCheck,
   saveFaktencheckIssues:     continuity.saveFaktencheckIssues,
   getLatestContinuityCheck:  continuity.getLatestContinuityCheck,
   getContinuityIssueBookId:  continuity.getContinuityIssueBookId,
   setContinuityIssueResolved: continuity.setContinuityIssueResolved,
+  setContinuityIssueDismissed: continuity.setContinuityIssueDismissed,
   // erzaehlprofil
   saveChapterNarrativeProfiles: narrativeProfiles.saveChapterNarrativeProfiles,
   getChapterNarrativeProfile:   narrativeProfiles.getChapterNarrativeProfile,
@@ -119,6 +123,14 @@ module.exports = {
   latestRueckblickJson:      rueckblick.latestRueckblickJson,
   listRueckblicke:           rueckblick.listRueckblicke,
   deleteRueckblick:          rueckblick.deleteRueckblick,
+  // chapter-reviews (Verlauf der Kapitelbewertung)
+  insertChapterReview:       chapterReviews.insertChapterReview,
+  listChapterReviewHistory:  chapterReviews.listChapterReviewHistory,
+  deleteChapterReview:       chapterReviews.deleteChapterReview,
+  // book-reviews (Verlauf der Buchbewertung)
+  insertBookReview:          bookReviews.insertBookReview,
+  listBookReviewHistory:     bookReviews.listBookReviewHistory,
+  deleteBookReview:          bookReviews.deleteBookReview,
   // figures
   saveFigurenToDb:          figures.saveFigurenToDb,
   addFigurenBeziehungen:    figures.addFigurenBeziehungen,

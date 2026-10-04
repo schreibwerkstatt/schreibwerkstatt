@@ -22,16 +22,18 @@
 // BEWUSST NICHT umgehaengt, sondern fallen gelassen — abgeleitete Indexe, die ihr
 // eigener Job per Full-Replace neu aufbaut; ein Remap erzeugte dort nur einen
 // falschen Zwischenstand:
-//   semantic_chunks        → Caller ruft semanticChunks.remove(kind, sourceId)
+//   semantic_chunks        → CASCADE beim Loeschen der Quelle (FK figure_id/location_id/…;
+//                            embed-index baut neu)
 //   motif_occurrences      → CASCADE beim Loeschen der Quelle (motif-scan baut neu)
 //   plot_beat_occurrences  → CASCADE beim Loeschen der Quelle (beat-anchor baut neu)
 // `page_figure_mentions` wird trotzdem summiert umgehaengt (statt nur geloescht),
 // damit der Stand auch ohne anschliessendes recomputeBookFigureMentions nie
 // schlechter ist als vorher.
 //
-// FTS- und Embedding-Index bleiben Sache des Callers (searchIndex.remove/upsert,
-// semanticChunks.remove) — genau wie bei den bestehenden Einzel-Delete-Handlern in
-// routes/figures.js. Dieses Modul haelt sich frei von lib/-Abhaengigkeiten.
+// Der FTS-Index bleibt Sache des Callers (searchIndex.remove/upsert) — genau wie
+// bei den bestehenden Einzel-Delete-Handlern in routes/figures.js. Der Embedding-
+// Index braucht keinen Caller-Schritt: seine Zeilen fallen per FK-CASCADE mit der
+// Quelle. Dieses Modul haelt sich frei von lib/-Abhaengigkeiten.
 //
 // GRENZE, die keine Schicht verschweigen darf: es gibt keinen persistenten Alias.
 // Steht der Name der Quelle noch im Buchtext, legt die naechste Komplettanalyse
@@ -342,11 +344,6 @@ function mergeScenes(bookId, userEmail, sourceId, targetId) {
       'INSERT OR IGNORE INTO scene_locations (scene_id, location_id) SELECT ?, location_id FROM scene_locations WHERE scene_id = ?'
     ).run(targetId, sourceId).changes;
     db.prepare('DELETE FROM scene_locations WHERE scene_id = ?').run(sourceId);
-
-    moved.songs = db.prepare(
-      'INSERT OR IGNORE INTO song_scenes (scene_id, song_id) SELECT ?, song_id FROM song_scenes WHERE scene_id = ?'
-    ).run(targetId, sourceId).changes;
-    db.prepare('DELETE FROM song_scenes WHERE scene_id = ?').run(sourceId);
 
     moved.research = db.prepare(
       'UPDATE OR IGNORE research_item_links SET scene_id = ? WHERE scene_id = ?'

@@ -2,6 +2,8 @@
 // Phase 3: Orte + Songs konsolidieren (inkl. regelbasierter Fallback-Merges) +
 // Prelim-figurenKompakt + paralleler Orte-Call (Multi-Pass).
 const { saveOrteToDb, saveSongsToDb, planOrteMatch } = require('../../../../db/schema');
+const { songKey, listSongIdsForBook } = require('../../../../db/songs');
+const searchIndex = require('../../../../lib/search');
 const { updateJob } = require('../../shared');
 const { _remapFigNames, consolidationFitsCap } = require('../utils');
 const { komplettMaxTokens } = require('./tokens');
@@ -38,29 +40,48 @@ function buildFallbackOrte(chapterOrte, figNameToId, figNameToIdLower) {
   return [...byName.values()].map((o, i) => ({ ...o, id: 'ort_' + (i + 1) }));
 }
 
-/** Regelbasierter Songs-Merge als Fallback, wenn die KI-Konsolidierung scheitert (analog
- *  buildFallbackOrte). Flattet chapterSongs über alle Kapitel, dedupliziert nach Titel+Interpret
- *  (case-insensitive, erstes Vorkommen gewinnt, figuren-Refs vereinigt), löst figuren_namen gegen
- *  die kanonische Figurenliste zu fig_ids auf und vergibt song_uid kollisionsfrei sequenziell neu
- *  (UNIQUE(book_id, song_uid, user_email)). */
-function buildFallbackSongs(chapterSongs, figNameToId, figNameToIdLower) {
+/** Songs eines Laufs nach Titel+Interpret (songKey, dieselbe Identitaet wie im
+ *  Schreibpfad) zusammenfuehren: Figuren vereinigt, Kapitel vereinigt (je Kapitel die
+ *  hoehere Haeufigkeit), leere Textfelder aus spaeteren Vorkommen gefuellt. Vergibt die
+ *  lauf-interne id `song_1…N` neu — sie ist KEINE Identitaet (die stellt saveSongsToDb
+ *  ueber songKey her), nur muss sie innerhalb des Laufs eindeutig sein. */
+function dedupeSongsWithinRun(songs) {
   const byKey = new Map();
-  for (const ch of (chapterSongs || [])) {
-    for (const s of (ch.songs || [])) {
-      const titel = (s.titel || s.title || '').trim();
-      const key = (titel + '|' + (s.interpret || '').trim()).toLowerCase();
-      if (!titel) continue;
-      const figIds = _remapFigNames(s.figuren_namen, figNameToId, figNameToIdLower);
-      if (!byKey.has(key)) {
-        byKey.set(key, { ...s, figuren: [...new Set(figIds)] });
-      } else {
-        const ex = byKey.get(key);
-        ex.figuren = [...new Set([...ex.figuren, ...figIds])];
-        if (!ex.beschreibung && s.beschreibung) ex.beschreibung = s.beschreibung;
+  for (const s of (songs || [])) {
+    const k = songKey(s);
+    if (!k) continue;
+    const ex = byKey.get(k);
+    if (!ex) {
+      byKey.set(k, { ...s, figuren: [...new Set(s.figuren || [])], kapitel: [...(s.kapitel || [])] });
+      continue;
+    }
+    ex.figuren = [...new Set([...ex.figuren, ...(s.figuren || [])])];
+    for (const kap of (s.kapitel || [])) {
+      const name = typeof kap === 'object' && kap ? kap.name : kap;
+      const hit = ex.kapitel.find(x => (typeof x === 'object' && x ? x.name : x) === name);
+      if (!hit) ex.kapitel.push(kap);
+      else if (typeof hit === 'object' && typeof kap === 'object' && (kap.haeufigkeit || 0) > (hit.haeufigkeit || 0)) {
+        hit.haeufigkeit = kap.haeufigkeit;
       }
+    }
+    for (const f of ['interpret', 'genre', 'kontext_typ', 'beschreibung', 'stimmung', 'erste_erwaehnung']) {
+      if (!ex[f] && s[f]) ex[f] = s[f];
     }
   }
   return [...byKey.values()].map((s, i) => ({ ...s, id: 'song_' + (i + 1) }));
+}
+
+/** Regelbasierter Songs-Merge als Fallback, wenn die KI-Konsolidierung scheitert (analog
+ *  buildFallbackOrte): flattet chapterSongs über alle Kapitel, löst figuren_namen gegen die
+ *  kanonische Figurenliste zu fig_ids auf und führt nach Titel+Interpret zusammen. */
+function buildFallbackSongs(chapterSongs, figNameToId, figNameToIdLower) {
+  const flat = [];
+  for (const ch of (chapterSongs || [])) {
+    for (const s of (ch.songs || [])) {
+      flat.push({ ...s, figuren: _remapFigNames(s.figuren_namen, figNameToId, figNameToIdLower) });
+    }
+  }
+  return dedupeSongsWithinRun(flat);
 }
 
 /** Phase 3: Orte konsolidieren + Name→ID Lookup.
@@ -205,13 +226,10 @@ async function runPhase3Songs(ctx, chapterSongs, figurenKompakt, isSinglePass, f
   if (isSinglePass) {
     updateJob(jobId, { progress: 56, statusText: 'job.phase.consolidatingSongs' });
     const raw = chapterSongs[0]?.songs || [];
-    songs = raw.map((s, i) => ({
+    songs = dedupeSongsWithinRun(raw.map(s => ({
       ...s,
-      // song_uid run-intern IMMER neu vergeben (analog Orte, Rang 15) — kollisionsfrei
-      // gegen UNIQUE(book_id, song_uid, user_email) in saveSongsToDb.
-      id: 'song_' + (i + 1),
       figuren: _remapFigNames(s.figuren_namen, figNameToId, figNameToIdLower),
-    }));
+    })));
     log.info(`Phase 3 Songs übersprungen (Single-Pass, ${songs.length} Songs aus P1 übernommen).`);
   } else {
     updateJob(jobId, { statusText: 'job.phase.consolidatingSongs' });
@@ -238,11 +256,12 @@ async function runPhase3Songs(ctx, chapterSongs, figurenKompakt, isSinglePass, f
         ctx.warnings?.push({ key: 'job.warn.songsKonsolidierungDegraded' });
       }
       if (Array.isArray(songsResultRaw?.songs)) {
-        songs = songsResultRaw.songs.map((s, i) => ({
+        // Die id der KI wird verworfen: doppelt oder fehlend liefe sie in
+        // UNIQUE(book_id, song_uid, user_email) und braeche die Transaktion.
+        songs = dedupeSongsWithinRun(songsResultRaw.songs.map(s => ({
           ...s,
-          id: s.id || ('song_' + (i + 1)),
           figuren: _remapFigNames(s.figuren_namen, figNameToId, figNameToIdLower),
-        }));
+        })));
       } else {
         if (songsResultRaw !== null) {
           log.warn('Songs-Konsolidierung lieferte kein songs-Array – Fallback auf kapitel-extrahierte Songs.');
@@ -254,6 +273,9 @@ async function runPhase3Songs(ctx, chapterSongs, figurenKompakt, isSinglePass, f
     }
   }
   saveSongsToDb(bookIdInt, songs, email, idMaps.chNameToId, idMaps.pageNameToIdByChapter);
+  // Suchindex wie Figuren/Orte/Szenen (remap.js): Full-Replace der Songs des Buchs.
+  searchIndex.removeKindForBook('song', bookIdInt);
+  for (const r of listSongIdsForBook(bookIdInt)) searchIndex.upsertSong(r.id);
   log.info(`${songs.length} Songs gespeichert.`);
   return { songs };
 }
@@ -317,4 +339,4 @@ async function runPhase3OrteCall(ctx, chapterOrte, figurenKompaktForPrompt) {
   }
 }
 
-module.exports = { runPhase3, runPhase3Songs, buildPrelimFigurenKompakt, runPhase3OrteCall };
+module.exports = { runPhase3, runPhase3Songs, buildPrelimFigurenKompakt, runPhase3OrteCall, dedupeSongsWithinRun, buildFallbackSongs };

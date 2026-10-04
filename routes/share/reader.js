@@ -65,48 +65,6 @@ function register(router) {
     res.end(row.image);
   });
 
-  // ── Public: Vorlesen (TTS / Proof-Listening) ───────────────────────────────
-  // Token-gebundene Synthese fuer den Share-Reader (laeuft ohne Session; der
-  // auth-pflichtige /tts/speak-Proxy ist fuer den anonymen Leser nicht
-  // erreichbar). Voice locale-aware aus der Buch-Locale des geteilten Buchs.
-  // Kein Persistieren; Credentials/Host verlassen den Server nie (Kern:
-  // lib/tts-synth.js, geteilt mit routes/tts.js).
-  router.post('/:token/tts', express.json({ limit: tts.TEXT_MAX + 2048 }), async (req, res) => {
-    const token = String(req.params.token || '');
-    if (!TOKEN_RE.test(token)) return res.status(404).json({ error_code: 'NOT_FOUND', error: 'not_found' });
-    const link = shareLinks.getShareLinkByToken(token);
-    if (!link || isExpired(link)) return res.status(404).json({ error_code: 'NOT_FOUND', error: 'not_found' });
-    setContext({ book: link.book_id });
-
-    // Feature aus -> 404 (Frontend behandelt als „Vorlesen nicht verfuegbar",
-    // der Dock ist ohnehin nur bei enabled im DOM).
-    if (!tts.isEnabled()) return res.status(404).json({ error_code: 'TTS_DISABLED', error: 'tts_disabled' });
-
-    // Stimme aus der Buch-Locale (SSoT wie im authed Pfad). owner_email ist der
-    // Buch-Besitzer — dessen Locale-Override bestimmt die Sprache des Buchs.
-    let lang = '';
-    try { lang = getBookLocale(link.book_id, link.owner_email) || ''; } catch { /* noop */ }
-
-    const text = typeof req.body?.text === 'string' ? req.body.text : '';
-    try {
-      const { buf, mime } = await tts.synthesizeSpeech({ text, lang });
-      res.setHeader('Content-Type', mime);
-      res.setHeader('Cache-Control', 'no-store');
-      return res.end(buf);
-    } catch (err) {
-      if (err instanceof tts.TtsError) {
-        if (err.status >= 500 || err.status === 408) {
-          logger.warn(`[share/tts] ${err.code} token=${token.slice(0, 8)} book=${link.book_id} status=${err.status}`);
-        }
-        const body = { error: err.code };
-        if (err.max) body.max = err.max;
-        return res.status(err.status).json(body);
-      }
-      logger.warn(`[share/tts] unexpected ${err?.message} token=${token.slice(0, 8)}`);
-      return res.status(502).json({ error_code: 'TTS_UPSTREAM', error: 'tts_upstream' });
-    }
-  });
-
   // ── Public: Reader-View ───────────────────────────────────────────────────
   router.get('/:token', async (req, res) => {
     const token = String(req.params.token || '');
@@ -206,8 +164,8 @@ function register(router) {
       'delete', 'delete_confirm', 'mark_done', 'reopen', 'delete_has_replies',
       'email_optional_hint', 'email_notice_on', 'name_modal_email',
       'edit', 'edit_save', 'edited_badge', 'new_reply_badge',
-      'tts_listen', 'tts_pause', 'tts_resume', 'tts_skip', 'tts_stop',
-      'tts_reading', 'tts_paused', 'tts_loading', 'tts_error',
+      'tts_listen', 'tts_listen_hint', 'tts_pause', 'tts_resume', 'tts_skip', 'tts_prev', 'tts_stop',
+      'tts_rate', 'tts_reading', 'tts_paused', 'tts_loading', 'tts_error',
       'resume_reading', 'back_to_top',
       'prefs_label', 'prefs_font_size', 'prefs_smaller', 'prefs_larger',
       'prefs_line_width', 'prefs_width_narrow', 'prefs_width_normal', 'prefs_width_wide',
@@ -217,10 +175,12 @@ function register(router) {
       'feedback_thanks', 'feedback_error', 'feedback_change'];
     const readerI18n = {};
     for (const k of readerKeys) readerI18n[k] = tServer(`share.reader.${k}`, lang);
-    // Vorlesen (TTS): nur `enabled` + Atempausen ans Frontend — Host/Voice/Key
-    // bleiben server-seitig (Kern lib/tts-synth.js). Bei ausgeschaltetem Feature
-    // baut share-reader.js den Dock gar nicht.
-    const ttsCfg = { enabled: tts.isEnabled(), pause: tts.pauseConfig() };
+    // Vorlesen (TTS): nur `enabled`, Atempausen und die Buchsprache (Satz-
+    // trennung, POST /share/:token/tts in routes/share/tts.js) ans Frontend —
+    // Host/Voice/Key bleiben server-seitig (Kern lib/tts-synth.js).
+    let ttsLang = '';
+    try { ttsLang = getBookLocale(link.book_id, link.owner_email) || ''; } catch { /* noop */ }
+    const ttsCfg = { enabled: tts.isEnabled(), pause: tts.pauseConfig(), lang: ttsLang };
 
     // Aufruf protokollieren (Gesamtzaehler + share_views-Zeile fuer eindeutige
     // Besucher/Lesedauer). ip_hash gehasht wie bei Kommentaren. viewId geht an den

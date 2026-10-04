@@ -1,56 +1,62 @@
 'use strict';
-// Per-Page-Cache fuer LanguageTool-Resultate.
+// Absatz-Cache fuer LanguageTool-Resultate.
 //
-// Key: (page_id, content_hash, lang, picky). content_hash = sha1 ueber den
-// Text-Stream, der ans LT-API geht (gleiche Normalisierung wie der Proxy).
-// Cache-Eintrag haelt JSON-Array der LT-Matches; FK CASCADE auf pages, d.h.
-// Page-Loeschung raeumt Cache automatisch.
+// Key: (content_hash, lang, picky). content_hash = sha1 ueber den Text EINES
+// Absatz-Segments (lib/languagetool-chunk.js#splitSegments). Gespeichert werden
+// die UNGEFILTERTEN LT-Treffer mit Offsets relativ zum Segment — Woerterbuch,
+// Buchnamen und abgeschaltete Regeln filtert der Proxy erst beim Ausliefern.
+// Darum ist der Cache benutzer- und seitenunabhaengig: ein Absatz, der in zwei
+// Seiten oder bei zwei Mitarbeitern gleich lautet, wird einmal geprueft.
 //
-// TTL: keine harte Frist. Wenn LT-Server-Regeln aktualisiert werden, ist
-// Stale-Risiko akzeptabel (User wuerde manuell auf "Re-Check" klicken;
-// derzeit kein UI dafuer -- Phase 3).
+// TTL: lib/cache-cleanup.js (created_at). Neue LT-Regeln greifen spaetestens
+// nach Ablauf bzw. sobald der Absatz geaendert wird.
 
 const crypto = require('crypto');
 const { db } = require('./connection');
 const { NOW_ISO_SQL } = require('./now');
 
 const _stmtGet = db.prepare(
-  `SELECT matches_json FROM page_languagetool_cache
-   WHERE page_id = ? AND content_hash = ? AND lang = ? AND picky = ?`
+  `SELECT matches_json FROM languagetool_para_cache
+   WHERE content_hash = ? AND lang = ? AND picky = ?`
 );
 const _stmtUpsert = db.prepare(
-  `INSERT INTO page_languagetool_cache (page_id, content_hash, lang, picky, matches_json, created_at)
-   VALUES (?, ?, ?, ?, ?, ${NOW_ISO_SQL})
-   ON CONFLICT(page_id, content_hash, lang, picky) DO UPDATE SET
+  `INSERT INTO languagetool_para_cache (content_hash, lang, picky, matches_json, created_at)
+   VALUES (?, ?, ?, ?, ${NOW_ISO_SQL})
+   ON CONFLICT(content_hash, lang, picky) DO UPDATE SET
      matches_json = excluded.matches_json,
      created_at = excluded.created_at`
-);
-const _stmtPageExists = db.prepare(
-  `SELECT 1 FROM pages WHERE page_id = ? LIMIT 1`
 );
 
 function hashText(text) {
   return crypto.createHash('sha1').update(typeof text === 'string' ? text : '').digest('hex');
 }
 
-function getCached({ pageId, contentHash, lang, picky }) {
-  if (!pageId || !contentHash || !lang) return null;
-  const row = _stmtGet.get(pageId, contentHash, lang, picky ? 1 : 0);
-  if (!row) return null;
-  try { return JSON.parse(row.matches_json); }
-  catch { return null; }
+/** @returns {Map<string, object[]>} hash -> Treffer; fehlende Hashes fehlen in der Map. */
+function getMany({ hashes, lang, picky }) {
+  const out = new Map();
+  if (!lang || !Array.isArray(hashes)) return out;
+  const p = picky ? 1 : 0;
+  for (const h of new Set(hashes)) {
+    const row = _stmtGet.get(h, lang, p);
+    if (!row) continue;
+    try {
+      const arr = JSON.parse(row.matches_json);
+      if (Array.isArray(arr)) out.set(h, arr);
+    } catch { /* kaputte Zeile = Miss */ }
+  }
+  return out;
 }
 
-function setCached({ pageId, contentHash, lang, picky, matches }) {
-  if (!pageId || !contentHash || !lang) return;
-  // Offline-Clients (Mac-Focus-Writer) pruefen LT gegen eine pageId, die
-  // serverseitig noch nicht (oder nicht mehr) existiert -- der LT-Proxy bekommt
-  // den Text ja im Body, braucht die Page nicht. Caching ist dann sinnlos
-  // (FK CASCADE wuerde den Eintrag ohnehin nie aufraeumen koennen): still skip
-  // statt FK-Verletzung zu werfen.
-  if (!_stmtPageExists.get(pageId)) return;
-  const json = JSON.stringify(Array.isArray(matches) ? matches : []);
-  _stmtUpsert.run(pageId, contentHash, lang, picky ? 1 : 0, json);
+const _setManyTx = db.transaction((entries, lang, p) => {
+  for (const e of entries) {
+    _stmtUpsert.run(e.hash, lang, p, JSON.stringify(Array.isArray(e.matches) ? e.matches : []));
+  }
+});
+
+/** @param {{entries: {hash: string, matches: object[]}[], lang: string, picky: boolean}} args */
+function setMany({ entries, lang, picky }) {
+  if (!lang || !Array.isArray(entries) || !entries.length) return;
+  _setManyTx(entries, lang, picky ? 1 : 0);
 }
 
-module.exports = { hashText, getCached, setCached };
+module.exports = { hashText, getMany, setMany };

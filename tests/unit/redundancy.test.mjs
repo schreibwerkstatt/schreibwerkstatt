@@ -143,3 +143,74 @@ test('scanBlock: blockweiser Scan == Voll-Scan (Zerlegung ändert Ergebnis nicht
     finalizePairs(blocked, metas, { topK: 100 }).pairs,
   );
 });
+
+// ── Filter, Fortschritt, Blockgrösse ────────────────────────────────────────
+import { pairsBefore, nextBlockEnd, unitVector, FIGURE_DUPE_THRESHOLD } from '../../lib/redundancy.js';
+
+test('scanBlock skipPair: gefilterte Paare fallen heraus, a < b wird übergeben', () => {
+  const chunks = [
+    chunk(3, 0, [1, 0, 0]),
+    chunk(1, 0, [1, 0, 0]),
+    chunk(2, 0, [1, 0, 0]),
+  ];
+  const seen = [];
+  const { pairs } = findRedundantPairs(chunks, {
+    threshold: 0.9,
+    skipPair: (a, b) => { seen.push([a, b]); return a === 1 && b === 3; },
+  });
+  assert.ok(seen.every(([a, b]) => a < b), 'Entitäts-IDs normiert');
+  assert.deepEqual(pairs.map(p => `${p.a_id}:${p.b_id}`).sort(), ['1:2', '2:3']);
+});
+
+test('finalizePairs: liefert den Passagentext (gekappt) statt nur ein Snippet', () => {
+  const long = 'x'.repeat(2000);
+  const chunks = [
+    { entity_id: 1, chunk_ix: 0, text: long, vector: [1, 0] },
+    { entity_id: 2, chunk_ix: 0, text: long, vector: [1, 0] },
+  ];
+  const { pairs } = findRedundantPairs(chunks, { threshold: 0.9, textChars: 1500 });
+  assert.equal(pairs[0].a_text.length, 1500);
+  assert.equal(pairs[0].b_text.length, 1500);
+});
+
+test('pairsBefore: Dreieckszahl, Randfälle', () => {
+  assert.equal(pairsBefore(5, 0), 0);
+  assert.equal(pairsBefore(5, 1), 4);
+  assert.equal(pairsBefore(5, 5), 10);
+  assert.equal(pairsBefore(5, 99), 10, 'über n hinaus gekappt');
+});
+
+test('nextBlockEnd: deckt alle Zeilen ab, hält das Paar-Budget, mindestens eine Zeile', () => {
+  const n = 1000;
+  const budget = 5000;
+  let i = 0;
+  let blocks = 0;
+  while (i < n) {
+    const end = nextBlockEnd(n, i, budget);
+    assert.ok(end > i, 'Fortschritt');
+    const pairs = pairsBefore(n, end) - pairsBefore(n, i);
+    assert.ok(end - i === 1 || pairs <= budget, `Block ${i}-${end} hält Budget`);
+    i = end;
+    blocks++;
+  }
+  assert.equal(i, n);
+  assert.ok(blocks < n, 'späte Zeilen werden zusammengefasst');
+  assert.equal(nextBlockEnd(n, 0, 1), 1, 'Budget kleiner als eine Zeile → genau eine Zeile');
+});
+
+test('unitVector: Einheitslänge, null bei leer/Null', () => {
+  const u = unitVector([3, 4]);
+  assert.ok(Math.abs(u[0] - 0.6) < 1e-6 && Math.abs(u[1] - 0.8) < 1e-6);
+  assert.equal(unitVector([0, 0]), null);
+  assert.equal(unitVector([]), null);
+  assert.equal(unitVector(null), null);
+});
+
+test('findFigureDuplicates: Default-Schwelle = FIGURE_DUPE_THRESHOLD, skipPair filtert', () => {
+  const figs = [fig(1, 'A', [1, 0]), fig(2, 'B', [0.995, 0.1])]; // Cosinus ≈ 0.995
+  assert.equal(findFigureDuplicates(figs).totalFound, 1);
+  assert.equal(findFigureDuplicates(figs, { skipPair: (a, b) => a === 1 && b === 2 }).totalFound, 0);
+  const below = [fig(1, 'A', [1, 0]), fig(2, 'B', [Math.cos(0.6), Math.sin(0.6)])]; // ≈ 0.825
+  assert.ok(0.825 < FIGURE_DUPE_THRESHOLD);
+  assert.equal(findFigureDuplicates(below).totalFound, 0);
+});

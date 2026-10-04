@@ -131,11 +131,16 @@ async function buildSnapshotPayload(bookId, req, { light = false } = {}) {
   const content = buildBookJson({ book, settings, nodes });
 
   // Stats aus dem inline-HTML (gleiche Normalisierung wie page_stats).
+  // `wordsByPage` traegt zusaetzlich den Nenner der Fehlerdichte im Trend
+  // (lib/lektorat-metrics.js#words_checked: nur gepruefte Seiten zaehlen).
   let chars = 0; let words = 0;
-  for (const html of htmlById.values()) {
+  const wordsByPage = new Map();
+  for (const [id, html] of htmlById) {
     const text = htmlToPlainText(html);
     chars += text.length;
-    if (text) words += text.split(/\s+/).filter(Boolean).length;
+    const w = text ? text.split(/\s+/).filter(Boolean).length : 0;
+    words += w;
+    wordsByPage.set(Number(id), w);
   }
   const stats = { chars, words, pages: htmlById.size, chapters: _countChapters(nodes) };
 
@@ -160,7 +165,7 @@ async function buildSnapshotPayload(bookId, req, { light = false } = {}) {
     const checks = extras?.lektorat?.pageChecks;
     if (Array.isArray(checks) && checks.length) {
       const { computeLektoratMetrics } = require('../../lib/lektorat-metrics');
-      lektoratMetrics = JSON.stringify(computeLektoratMetrics(checks));
+      lektoratMetrics = JSON.stringify(computeLektoratMetrics(checks, { wordsByPage }));
     }
   } catch (e) {
     logger.warn(`Snapshot-Extras fehlgeschlagen (book=${bookId}): ${e.message}`);

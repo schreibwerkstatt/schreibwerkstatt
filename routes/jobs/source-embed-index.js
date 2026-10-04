@@ -24,12 +24,12 @@ const express = require('express');
 const { db } = require('../../db/schema');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
-  createJob, enqueueJob, findActiveJobId, jsonBody, jobAbortControllers,
+  createJob, enqueueJob, findActiveJobId, jsonBody, jobAbortControllers, jobs,
 } = require('./shared');
 const embed = require('../../lib/embed');
 const { chunkText, contentHash } = require('../../lib/embed-chunk');
 const sourceSemanticChunks = require('../../db/source-semantic-chunks');
-const { markSourceIndexed, getSourceDocText } = require('../../db/schema');
+const { markSourceIndexed, getSourceDocText, getSourceDocMeta } = require('../../db/schema');
 const { setContext } = require('../../lib/log-context');
 const logger = require('../../logger');
 const { sessionEmail } = require('../../lib/acl');
@@ -38,10 +38,10 @@ const sourceEmbedIndexRouter = express.Router();
 
 const JOB_TYPE = 'source-embed-index';
 const JOB_LABEL = 'job.label.sourceEmbedIndex';
-// Dedup-Id ist die userEmail — die Indexierung ist pro User, und ein laufender
-// Lauf nimmt via Delta-Cache jede frisch hochgeladene PDF im nächsten Schritt
-// mit. Statt pro Upload einen separaten Job zu erzeugen, wird ein laufender
-// User-Job reused (sonst würde ein Mehrfach-Hochladen den Worker überfluten).
+// Dedup-Id ist die userEmail — die Indexierung ist pro User. Statt pro Upload
+// einen separaten Job zu erzeugen, wird ein laufender User-Job reused und ein
+// einziger Folgelauf vorgemerkt (sonst würde Mehrfach-Hochladen den Worker
+// überfluten).
 function _dedupKey(userEmail) { return `user:${userEmail}`; }
 
 // IDs der Quellen des Users mit PDF-Volltext. Bewusst nur die IDs: der
@@ -65,6 +65,11 @@ async function runSourceEmbedIndexJob(jobId, userEmail) {
     updateJob(jobId, { statusText: 'job.phase.sourceEmbedCollect', progress: 5 });
 
     const rowsBySource = new Map();
+    // Dokument-Stand je Quelle beim Sammeln. Wird das PDF während des Laufs
+    // ersetzt oder entfernt, gehören die gerechneten Vektoren zum alten Stand:
+    // dann nicht schreiben (und nicht „indiziert" stempeln), sondern einen
+    // Folgelauf anfordern.
+    const docHashAtCollect = new Map();
     const pending = [];
     const presentIds = [];
     let totalChunks = 0;
@@ -72,6 +77,7 @@ async function runSourceEmbedIndexJob(jobId, userEmail) {
     for (const sourceId of _candidateIds(userEmail)) {
       throwIfAborted();
       presentIds.push(sourceId);
+      docHashAtCollect.set(sourceId, getSourceDocMeta(sourceId)?.doc_content_hash ?? null);
       // Volltext nur fuer die Dauer des Chunkens im Speicher.
       const chunks = chunkText(getSourceDocText(sourceId));
       if (!chunks.length) continue;
@@ -97,8 +103,16 @@ async function runSourceEmbedIndexJob(jobId, userEmail) {
     for (const p of pending) {
       pendingBySource.set(p.sourceId, (pendingBySource.get(p.sourceId) || 0) + 1);
     }
+    let changedDuringRun = 0;
     const persistSource = (sourceId) => {
       const rows = rowsBySource.get(sourceId);
+      const meta = getSourceDocMeta(sourceId);
+      if (!meta || (meta.doc_content_hash ?? null) !== docHashAtCollect.get(sourceId)) {
+        rowsBySource.delete(sourceId);
+        changedDuringRun++;
+        _rerunRequested.add(userEmail);
+        return;
+      }
       rows.sort((a, b) => a.chunk_ix - b.chunk_ix);
       sourceSemanticChunks.replaceSource(sourceId, userEmail, model, dim, rows);
       // Index-Stand verzeichnen (fürs Stale-Heuristic in der Karte). updated_at
@@ -129,7 +143,11 @@ async function runSourceEmbedIndexJob(jobId, userEmail) {
     }
 
     for (const sid of [...rowsBySource.keys()]) persistSource(sid);
-    const pruned = sourceSemanticChunks.pruneMissing(userEmail, model, presentIds);
+    if (changedDuringRun) l.info(`${changedDuringRun} Quelle(n) während des Laufs geändert — Folgelauf angefordert.`);
+    // Eine während des Laufs hochgeladene PDF steht nicht in presentIds — ihr
+    // Folgelauf indiziert sie. pruneMissing prüft darum gegen den aktuellen
+    // Kandidatenstand, damit es nichts löscht, was inzwischen dazukam.
+    const pruned = sourceSemanticChunks.pruneMissing(userEmail, model, _candidateIds(userEmail));
     // Chunks unter einem frueher aktiven Modell raeumen. `pruneMissing` ist
     // modell-skopiert und sieht sie per Definition nie — ohne diesen Schritt
     // waechst die Tabelle bei jedem Modellwechsel monoton weiter.
@@ -146,7 +164,20 @@ async function runSourceEmbedIndexJob(jobId, userEmail) {
   } catch (e) {
     if (e.name !== 'AbortError') l.error(`Quellen-Embedding-Index Fehler: ${e.message}`, { stack: e.stack });
     failJob(jobId, e);
+  } finally {
+    if (_rerunRequested.delete(userEmail)) _enqueue(userEmail);
   }
+}
+
+// User, für die während eines laufenden Laufs ein weiterer angefordert wurde
+// (Upload/Löschen eines PDFs mitten im Lauf). Der laufende hat seine Quellen am
+// Anfang gesammelt — nach seinem Ende startet genau ein Folgelauf.
+const _rerunRequested = new Set();
+
+function _enqueue(userEmail) {
+  const jobId = createJob(JOB_TYPE, null, userEmail, JOB_LABEL, null, _dedupKey(userEmail));
+  enqueueJob(jobId, () => runSourceEmbedIndexJob(jobId, userEmail));
+  return jobId;
 }
 
 // Nacht-Cron-Pendant: reindex pro User, der PDFs hat (Dedup gegen laufende Jobs).
@@ -169,15 +200,16 @@ async function reindexAllUserSources() {
 }
 
 // Trigger nach Upload: erzeugt den Job (dedup gegen laufende User-Jobs).
-// Läuft schon einer → kein zweiter (Delta-Cache nimmt die neue PDF mit); der
-// Aufrufer bekommt dessen Id und kann sie genauso pollen.
+// Läuft schon einer, sieht er die neue PDF nicht mehr — dann wird ein Folgelauf
+// vorgemerkt. Der Aufrufer bekommt die Id des laufenden und kann sie pollen.
 function enqueueSourceEmbedIndexJob(userEmail) {
   if (!embed.isEnabled()) return null;
   const existing = findActiveJobId(JOB_TYPE, _dedupKey(userEmail), userEmail);
-  if (existing) return existing;
-  const jobId = createJob(JOB_TYPE, null, userEmail, JOB_LABEL, null, _dedupKey(userEmail));
-  enqueueJob(jobId, () => runSourceEmbedIndexJob(jobId, userEmail));
-  return jobId;
+  if (existing) {
+    if (jobs.get(existing)?.status === 'running') _rerunRequested.add(userEmail);
+    return existing;
+  }
+  return _enqueue(userEmail);
 }
 
 sourceEmbedIndexRouter.post('/source-embed-index', jsonBody, (req, res) => {
@@ -186,8 +218,8 @@ sourceEmbedIndexRouter.post('/source-embed-index', jsonBody, (req, res) => {
   setContext({ user: userEmail });
   if (!embed.isEnabled()) return res.status(400).json({ error_code: 'EMBED_DISABLED' });
   const existing = findActiveJobId(JOB_TYPE, _dedupKey(userEmail), userEmail);
-  if (existing) return res.json({ jobId: existing, existing: true });
-  res.json({ jobId: enqueueSourceEmbedIndexJob(userEmail) });
+  const jobId = enqueueSourceEmbedIndexJob(userEmail);
+  res.json(existing ? { jobId, existing: true } : { jobId });
 });
 
 module.exports = {

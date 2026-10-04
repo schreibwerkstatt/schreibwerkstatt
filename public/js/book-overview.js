@@ -14,6 +14,7 @@
 //   /songs/:book_id                    → Soundtrack-Tile
 //   /booksettings/:book_id             → Buchtyp, is_finished, Schreibziel/Deadline
 //   /plot?book_id, /motifs?book_id     → optionale Planungswerkzeuge (Tile aus, wenn leer)
+//   /lexicon/:book_id                  → Wortschatz-Tile (MTLD/MATTR + Peer-Median)
 //
 // Reaktivität / Memoization:
 // Aggregat-Methoden cachen ihr Ergebnis in `_memos` via `_memo(key, deps, fn)`:
@@ -46,6 +47,7 @@ import { diaryMethods } from './book-overview/diary.js';
 import { projectionMethods } from './book-overview/projection.js';
 import { plotMethods } from './book-overview/plot.js';
 import { motivMethods } from './book-overview/motiv.js';
+import { wortschatzMethods } from './book-overview/wortschatz.js';
 
 export const bookOverviewMethods = {
   ...loadMethods,
@@ -64,4 +66,5 @@ export const bookOverviewMethods = {
   ...formatMethods,
   ...plotMethods,
   ...motivMethods,
+  ...wortschatzMethods,
 };

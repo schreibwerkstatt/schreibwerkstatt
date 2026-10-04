@@ -145,6 +145,13 @@ export function minMaxBy(items, getValue) {
   return { min, max };
 }
 
+// Mindest-Textmenge (Wörter), ab der ein Kapitel in die Farbskala einer
+// Dichte-Heatmap eingeht (Fehler-Heatmap: geprüfte Wörter, Stil-Heatmap: Wörter).
+// Darunter ist eine Rate pro 1000 Wörter Zufall — zwei Füllwörter in einem
+// 80-Wort-Prolog sind 25/1k und färbten jedes andere Kapitel grün. Solche
+// Kapitel zeigen ihre Zahl, aber keine Farbe.
+export const HEATMAP_MIN_WORDS = 300;
+
 // Heatmap-Zellfarbe: t∈[0,1], 0 → grün, 1 → rot.
 // Liefert ein Style-Objekt mit CSS-Custom-Properties, das Alpine via
 // `:style` anbindet. Die Farbberechnung selbst steht in style.css

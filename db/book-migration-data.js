@@ -98,7 +98,6 @@ function collectAnalysis(bookId, scopeEmail = null) {
     songs:                 q('SELECT * FROM songs WHERE book_id = ? AND user_email IS ?'),
     songFigures:           q('SELECT sf.* FROM song_figures sf JOIN songs s ON s.id = sf.song_id WHERE s.book_id = ? AND s.user_email IS ?'),
     songChapters:          q('SELECT sc.* FROM song_chapters sc JOIN songs s ON s.id = sc.song_id WHERE s.book_id = ? AND s.user_email IS ?'),
-    songScenes:            q('SELECT ss.* FROM song_scenes ss JOIN songs s ON s.id = ss.song_id WHERE s.book_id = ? AND s.user_email IS ?'),
     worldFacts:            q('SELECT * FROM world_facts WHERE book_id = ? AND user_email IS ?'),
     worldFactChapters:     q('SELECT wfc.* FROM world_fact_chapters wfc JOIN world_facts wf ON wf.id = wfc.fact_id WHERE wf.book_id = ? AND wf.user_email IS ?'),
     storylines:            _all('SELECT * FROM storylines WHERE book_id = ?', bookId),
@@ -364,11 +363,7 @@ function restoreAnalysis(bookId, data, ctx) {
     const sid = songMap.get(r.song_id); const cid = chapterOf(r.chapter_id);
     if (sid && cid) insSongCh.run(sid, cid, r.haeufigkeit ?? 1);
   }
-  const insSongScene = db.prepare('INSERT OR IGNORE INTO song_scenes (scene_id,song_id) VALUES (?,?)');
-  for (const r of arr('songScenes')) {
-    const scid = sceneMap.get(r.scene_id); const sid = songMap.get(r.song_id);
-    if (scid && sid) insSongScene.run(scid, sid);
-  }
+  // `songScenes` aelterer Bundles wird bewusst ignoriert (Tabelle entfallen).
 
   // 6) world_facts
   const insWf = db.prepare(`INSERT INTO world_facts
@@ -421,14 +416,16 @@ function restoreAnalysis(bookId, data, ctx) {
     checkMap.set(r.id, res.lastInsertRowid);
   }
   const insCi = db.prepare(`INSERT INTO continuity_issues
-    (check_id,book_id,user_email,schwere,typ,beschreibung,stelle_a,stelle_b,empfehlung,sort_order,updated_at,resolved,resolved_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    (check_id,book_id,user_email,schwere,typ,beschreibung,stelle_a,stelle_b,empfehlung,quelle,sort_order,updated_at,
+     resolved,resolved_at,dismissed,dismissed_at,page_a_id,page_b_id)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   for (const r of arr('continuityIssues')) {
     const cid = checkMap.get(r.check_id);
     if (!cid) continue;
     const res = insCi.run(cid, bookId, email, r.schwere ?? null, r.typ ?? null, r.beschreibung ?? null,
-      r.stelle_a ?? null, r.stelle_b ?? null, r.empfehlung ?? null, r.sort_order ?? 0, r.updated_at ?? null,
-      r.resolved ?? 0, r.resolved_at ?? null);
+      r.stelle_a ?? null, r.stelle_b ?? null, r.empfehlung ?? null, r.quelle ?? null, r.sort_order ?? 0, r.updated_at ?? null,
+      r.resolved ?? 0, r.resolved_at ?? null, r.dismissed ?? 0, r.dismissed_at ?? null,
+      pageOf(r.page_a_id), pageOf(r.page_b_id));
     issueMap.set(r.id, res.lastInsertRowid);
   }
   const insCif = db.prepare('INSERT INTO continuity_issue_figures (issue_id,figure_id,figur_name,sort_order) VALUES (?,?,?,?)');

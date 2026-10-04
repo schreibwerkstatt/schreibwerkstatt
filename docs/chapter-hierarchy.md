@@ -95,12 +95,19 @@ In [lib/content-store/backends/localdb.js](../lib/content-store/backends/localdb
   - Sub-Kapitel-Drift (neues Sub-Kapitel, verschoben, gelöscht)
   - Mode-Switch (User toggelt Checkbox)
   - Direkter Page-Change
+- `CACHE_REV` im `optionsSig` zählt hoch, wenn sich Prompt-Aufbau oder Ergebnis-Form des Jobs ändern — der Wortlaut der Prompt-Builder fliesst nicht in `PROMPTS_VERSION`.
+- Lädt eine Seite nicht, bricht der Lauf ab: eine Bewertung über ein lückenhaftes Kapitel landete sonst unter der Signatur des vollständigen im Cache.
+- Das Ergebnis trägt `includeSubchapters` und `pageCount` (Seiten mit Text). Ein Cache-Treffer schreibt nur dann einen Verlaufseintrag, wenn er sich vom jüngsten unterscheidet ([db/chapter-reviews.js](../db/chapter-reviews.js)).
+- Dedup pro Kapitel: läuft schon ein Lauf mit anderem Umfang, antwortet der POST `409 CHAPTER_REVIEW_OTHER_SCOPE_RUNNING` statt den fremden Lauf zurückzugeben.
+- Position im Prompt („Kapitel X von Y", Vorgänger/Nachfolger) zählt alle Kapitel des Baums depth-first, Sub-Kapitel und leere eingeschlossen — dieselbe Zählung wie die Positions-Kachel der Karte (`kdPosition`). Bei `true` ist der Nachfolger das erste Kapitel hinter dem Teilbaum.
+- Multi-Pass: die Teil-Analysen bekommen `teil: { nr, von }`, damit das Modell den Schnitt nicht als fehlenden Anfang/Schluss wertet.
 
 Frontend [public/js/cards/kapitel-review-card.js](../public/js/cards/kapitel-review-card.js):
 
 - `_includeSubchaptersByChapter`-Map mit Auto-Default: `true` wenn `kapitelReviewHasSubchapters(chapterId)`.
-- UI-Toggle ([public/partials/kapitelreview.html](../public/partials/kapitelreview.html)) erscheint nur wenn Kapitel Sub-Kapitel hat.
-- Helper `_kapitelReviewDescendantIds` traversiert root.tree-parent_id-Kette (Frontend-Mirror der CTE).
+- UI-Toggle ([public/partials/kapitelreview.html](../public/partials/kapitelreview.html)) erscheint nur wenn Kapitel Sub-Kapitel hat. Liegt im gewählten Umfang keine Seite, ist der Bewerten-Knopf gesperrt.
+- Helper `_kapitelReviewDescendantIds` traversiert root.tree-parent_id-Kette (Frontend-Mirror der CTE); Kennzahlen und „Zuletzt bearbeitet" folgen demselben Umfang.
+- Die aktuelle Bewertung ist der jüngste Verlaufseintrag (`kapitelReviewLatest`) und steht auch nach Reload oben; der Verlauf darunter listet nur die älteren. Läufe tragen ein Umfangs-Kennzeichen, die Notenänderung vergleicht nur Läufe mit gleichem Umfang und Modell.
 
 ## PDF-Export
 

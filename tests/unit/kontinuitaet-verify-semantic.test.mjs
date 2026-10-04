@@ -8,9 +8,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { useTmpDb } from './_helpers/tmp-db.js';
 
 const require_ = createRequire(import.meta.url);
@@ -21,14 +18,16 @@ require_('../../db/connection');
 require_('../../db/migrations').runMigrations();
 
 const jobShared = require_('../../routes/jobs/komplett/job-shared');
-const embed = require_('../../lib/embed');
-const semanticChunks = require_('../../db/semantic-chunks');
-const { _verifyExcerpt, verifyKontinuitaetProbleme } = jobShared;
+const retrieval = require_('../../lib/semantic-retrieval');
+const appSettings = require_('../../lib/app-settings');
+const { _verifyExcerpt, verifyKontinuitaetProbleme, _semanticExcerpt } = jobShared;
 
-test.after(() => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
 
-const GROUPS = new Map([['k1', { name: 'Kapitel Eins', pages: [{ text: 'Der Wald lag still. Anna ging heim.' }] }]]);
-const ORDER = ['k1'];
+const GROUPS = new Map([
+  ['k1', { name: 'Kapitel Eins', pages: [{ id: 5, text: 'Der Wald lag still. Anna ging heim. Am Abend sprach sie mit dem Bruder ueber das Erbe.' }] }],
+  ['k2', { name: 'Kapitel Zwei', pages: [{ id: 6, text: 'Ganz anderes Kapitel ueber das Meer.' }] }],
+]);
+const ORDER = ['k1', 'k2'];
 
 test('_verifyExcerpt: wörtliches Zitat → located:true, Fenster um das Zitat', () => {
   const r = _verifyExcerpt(GROUPS, ORDER, ['Kapitel Eins'], 'Anna ging heim');
@@ -43,78 +42,89 @@ test('_verifyExcerpt: Zitat nicht im Text → located:false, Kapitel-Anfang', ()
 });
 
 test('_verifyExcerpt: kein passendes Kapitel → leer, located:false', () => {
-  const r = _verifyExcerpt(GROUPS, ORDER, ['Kapitel Zwei'], 'egal');
+  const r = _verifyExcerpt(GROUPS, ORDER, ['Kapitel Drei'], 'egal');
   assert.deepEqual(r, { text: '', located: false });
 });
 
-test('verifyKontinuitaetProbleme: paraphrasiertes Zitat → semantische Passage im Verify-Prompt', async () => {
-  const orig = {
-    isEnabled: embed.isEnabled, getConfig: embed.getConfig, embedQuery: embed.embedQuery,
-    bookStats: semanticChunks.bookStats, searchSimilar: semanticChunks.searchSimilar,
-  };
-  embed.isEnabled = () => true;
-  embed.getConfig = () => ({ model: 'test-model' });
-  embed.embedQuery = async () => Float32Array.from([1, 0, 0]);
-  semanticChunks.bookStats = () => ({ total: 1 });
-  const searchCalls = [];
-  semanticChunks.searchSimilar = (bookId, model, vec, opts) => {
-    searchCalls.push({ bookId, model, opts });
-    return [{ text: 'SEMANTISCHE_TREFFER_PASSAGE mit demselben Fakt anders formuliert.' }];
-  };
+function withRetrieval(mock, fn) {
+  const orig = { indexReady: retrieval.indexReady, semanticQuery: retrieval.semanticQuery };
+  Object.assign(retrieval, mock);
+  return Promise.resolve().then(fn).finally(() => Object.assign(retrieval, orig));
+}
 
-  try {
+function ctxFor(seen) {
+  return {
+    call: async (_j, _t, prompt) => { seen.push(prompt); return { bestaetigt: true }; },
+    prompts: { buildKontinuitaetVerifyPrompt: (b, p, exA, exB) => ({ exA, exB }), SCHEMA_KONTINUITAET_VERIFY: {} },
+    sys: { SYSTEM_KONTINUITAET_BLOCKS: '' },
+    jobId: 'no-such-job', tok: { in: 0, out: 0 }, bookName: 'B',
+    groups: GROUPS, groupOrder: ORDER, log: { info() {}, warn() {} }, bookIdInt: 77,
+  };
+}
+
+test('verifyKontinuitaetProbleme: paraphrasiertes Zitat → Live-Passage aus dem Befund-Kapitel', async () => {
+  const calls = [];
+  await withRetrieval({
+    indexReady: () => true,
+    semanticQuery: async (bookId, q, opts) => {
+      calls.push({ bookId, opts });
+      return [
+        // fremdes Kapitel, hoher Score → muss ignoriert werden
+        { kind: 'page', entity_id: 6, text: 'Ganz anderes Kapitel ueber das Meer.', score: 0.9, semScore: 0.9 },
+        // veralteter Chunk-Text derselben Stelle: Wegweiser, Ausschnitt kommt live
+        { kind: 'page', entity_id: 5, text: 'Am Abend sprach sie mit dem Bruder über das Erbe', score: 0.5, semScore: 0.8 },
+      ];
+    },
+  }, async () => {
     const seen = [];
-    const call = async (_jobId, _tok, prompt) => { seen.push(prompt); return { bestaetigt: true }; };
-    const prompts = {
-      buildKontinuitaetVerifyPrompt: (bookName, p, exA, exB) => ({ exA, exB }),
-      SCHEMA_KONTINUITAET_VERIFY: {},
-    };
-    const ctx = {
-      call, prompts, sys: { SYSTEM_KONTINUITAET_BLOCKS: '' },
-      jobId: 'no-such-job', tok: { in: 0, out: 0 }, bookName: 'Testbuch',
-      groups: GROUPS, groupOrder: ORDER, log: { info() {}, warn() {} }, bookIdInt: 77,
-    };
-    const problem = {
-      kapitel: ['Kapitel Eins'],
-      stelle_a: '«dieses Zitat steht so nicht im Buch»', // keyword scheitert → semantisch
-      stelle_b: '',
-    };
-    const out = await verifyKontinuitaetProbleme(ctx, { zusammenfassung: 'z', probleme: [problem] }, 95, 97);
-
-    assert.equal(out.probleme.length, 1, 'bestaetigt=true → Befund bleibt erhalten');
-    assert.equal(seen.length, 1, 'genau ein Verify-Call');
-    assert.match(seen[0].exA, /SEMANTISCHE_TREFFER_PASSAGE/, 'stelle_a bekommt die semantische Passage statt Kapitel-Anfang');
-    assert.equal(searchCalls.length, 1, 'nur für das nicht auflösbare Zitat gesucht (leeres stelle_b löst keine Suche aus)');
-    assert.deepEqual(searchCalls[0].opts.kinds, ['page']);
-    assert.equal(searchCalls[0].bookId, 77);
-  } finally {
-    Object.assign(embed, { isEnabled: orig.isEnabled, getConfig: orig.getConfig, embedQuery: orig.embedQuery });
-    Object.assign(semanticChunks, { bookStats: orig.bookStats, searchSimilar: orig.searchSimilar });
-  }
+    const out = await verifyKontinuitaetProbleme(ctxFor(seen),
+      { zusammenfassung: 'z', probleme: [{ kapitel: ['Kapitel Eins'], stelle_a: '«steht so nicht im Buch»', stelle_b: '' }] }, 95, 97);
+    assert.equal(out.probleme.length, 1);
+    assert.equal(seen.length, 1);
+    assert.match(seen[0].exA, /sprach sie mit dem Bruder ueber das Erbe/, 'Live-Text, nicht Chunk-Text');
+    assert.doesNotMatch(seen[0].exA, /Meer/, 'kein Treffer aus fremdem Kapitel');
+    assert.equal(seen[0].exB, '', 'leeres stelle_b → kein Ausschnitt');
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].opts.kinds, ['page']);
+    assert.equal(calls[0].bookId, 77);
+  });
 });
 
-test('verifyKontinuitaetProbleme: ohne Embed-Index → keyword-Pfad, keine semantische Suche', async () => {
-  const origEnabled = embed.isEnabled;
-  const origSearch = semanticChunks.searchSimilar;
-  embed.isEnabled = () => false; // Backend aus
-  let searched = false;
-  semanticChunks.searchSimilar = () => { searched = true; return []; };
+test('_semanticExcerpt: Cosinus unter embed.min_score bzw. ohne semScore → kein Beleg', async () => {
+  const origGet = appSettings.get;
+  appSettings.get = (k) => (k === 'embed.min_score' ? 0.5 : origGet(k));
   try {
+    await withRetrieval({
+      semanticQuery: async () => ([
+        { kind: 'page', entity_id: 5, text: 'Anna ging heim', score: 0.03, semScore: 0.3 },
+        { kind: 'page', entity_id: 5, text: 'Anna ging heim', score: 0.03, semScore: null },
+      ]),
+    }, async () => {
+      const r = await _semanticExcerpt(77, 'Anna heim', new Map([[5, 'Der Wald lag still. Anna ging heim.']]), undefined);
+      assert.equal(r, null);
+    });
+  } finally { appSettings.get = origGet; }
+});
+
+test('verifyKontinuitaetProbleme: semantisch nichts Belastbares → leerer Ausschnitt statt Kapitel-Anfang', async () => {
+  await withRetrieval({ indexReady: () => true, semanticQuery: async () => [] }, async () => {
     const seen = [];
-    const ctx = {
-      call: async (_j, _t, prompt) => { seen.push(prompt); return { bestaetigt: true }; },
-      prompts: { buildKontinuitaetVerifyPrompt: (b, p, exA, exB) => ({ exA, exB }), SCHEMA_KONTINUITAET_VERIFY: {} },
-      sys: { SYSTEM_KONTINUITAET_BLOCKS: '' },
-      jobId: 'no-such-job', tok: { in: 0, out: 0 }, bookName: 'B',
-      groups: GROUPS, groupOrder: ORDER, log: { info() {}, warn() {} }, bookIdInt: 77,
-    };
-    const out = await verifyKontinuitaetProbleme(ctx,
+    const out = await verifyKontinuitaetProbleme(ctxFor(seen),
+      { zusammenfassung: 'z', probleme: [{ kapitel: ['Kapitel Eins'], stelle_a: '«fehlt»', stelle_b: '«Anna ging heim»' }] }, 95, 97);
+    assert.equal(out.probleme.length, 1);
+    assert.equal(seen[0].exA, '', 'kein Pseudo-Beleg');
+    assert.match(seen[0].exB, /Anna ging heim/, 'wörtlich gefundene Seite bleibt');
+  });
+});
+
+test('verifyKontinuitaetProbleme: ohne Index → keyword-Pfad, keine semantische Suche', async () => {
+  let searched = false;
+  await withRetrieval({ indexReady: () => false, semanticQuery: async () => { searched = true; return []; } }, async () => {
+    const seen = [];
+    const out = await verifyKontinuitaetProbleme(ctxFor(seen),
       { zusammenfassung: 'z', probleme: [{ kapitel: ['Kapitel Eins'], stelle_a: '«fehlt im Text»', stelle_b: '' }] }, 95, 97);
     assert.equal(out.probleme.length, 1);
-    assert.equal(searched, false, 'kein semantischer Call ohne aktivierten Index');
+    assert.equal(searched, false);
     assert.match(seen[0].exA, /Der Wald lag still/, 'keyword-Fallback (Kapitel-Anfang) bleibt');
-  } finally {
-    embed.isEnabled = origEnabled;
-    semanticChunks.searchSimilar = origSearch;
-  }
+  });
 });

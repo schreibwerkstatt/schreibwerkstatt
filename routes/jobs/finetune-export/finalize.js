@@ -8,6 +8,24 @@ const { storeFinetuneResult } = require('./lib/store');
 
 const sha1 = (s) => crypto.createHash('sha1').update(s).digest('hex');
 
+// Grösster Pro-Typ-Cap c, bei dem kein Typ nach dem Kappen mehr als `share`
+// des verbleibenden Gesamts stellt: c ≤ share × Σ min(nₜ, c). Ein Cap gegen das
+// Gesamt VOR dem Kappen hält den Anteil nicht — 900 Stil + 100 Chat bei 0.4
+// ergäbe Cap 400 und damit 400/500 = 80 % Stil. Fixpunkt-Iteration von oben:
+// die Abbildung ist monoton, also landet sie auf dem grössten Fixpunkt. 0 =
+// unerfüllbar (weniger als 1/share Typen vorhanden) → kein Balancing.
+function balanceCap(typeCounts, share) {
+  const total = typeCounts.reduce((a, n) => a + n, 0);
+  let cap = Math.floor(total * share);
+  for (;;) {
+    if (cap <= 0) return 0;
+    const kept = typeCounts.reduce((a, n) => a + Math.min(n, cap), 0);
+    const next = Math.floor(kept * share);
+    if (next >= cap) return cap;
+    cap = next;
+  }
+}
+
 // Token-Stats berechnen, optional nach `maxSeqTokens` filtern, exakte Dubletten
 // entfernen, optional pro Sample-Typ deckeln, train/val auf Quell-Ebene
 // (`sourceKey`) aufteilen, deterministisch shuffeln, JSONL serialisieren und im
@@ -34,7 +52,8 @@ function finalizeFinetuneSamples(jobId, ctx) {
   // ── Seq-Filter / Cap (optional) ──────────────────────────────────────
   // Samples, die bei `maxSeqTokens` zu stiller Truncation führen würden,
   // werden behandelt: entweder gedroppt (default) oder per `truncateLong`
-  // an einer Satzgrenze gekappt (Assistant-Content wird gekürzt).
+  // an einer Satzgrenze gekappt (Assistant-Content wird gekürzt). Samples mit
+  // `noTruncate` (Voll-Kapitel-/Wörtlich-Slices) werden nie gekappt, nur gedroppt.
   let kept;
   let droppedCount = 0;
   let cappedCount = 0;
@@ -45,7 +64,7 @@ function finalizeFinetuneSamples(jobId, ctx) {
       for (const e of withTokens) {
         if (e.tokens <= maxSeqTokens) { kept.push(e); continue; }
         const assistantMsg = e.s.messages[e.s.messages.length - 1];
-        if (!assistantMsg || assistantMsg.role !== 'assistant') {
+        if (e.s.noTruncate || !assistantMsg || assistantMsg.role !== 'assistant') {
           droppedCount++;
           continue;
         }
@@ -93,26 +112,31 @@ function finalizeFinetuneSamples(jobId, ctx) {
 
   // ── Typ-Balance-Cap (optional, `maxTypeShare`) ────────────────────────
   // Verhindert, dass die volumenstarken Text-Sampler (style/scene/verbatim)
-  // das Welt-/Figurenwissen (authorChat/aiAugment) erschlagen. Pro Typ wird
-  // auf `maxTypeShare × Gesamt` gedeckelt; die Auswahl ist deterministisch
-  // (Hash über die Sample-id), also bei gleichem Seed reproduzierbar.
+  // das Welt-/Figurenwissen (authorChat/aiAugment) erschlagen. Der Cap gilt
+  // gegen das Gesamt NACH dem Kappen (siehe `balanceCap`); die Auswahl ist
+  // deterministisch (Hash über die Sample-id), also bei gleichem Seed
+  // reproduzierbar.
   let balancedCount = 0;
   if (maxTypeShare > 0 && maxTypeShare < 1 && kept.length) {
-    const cap = Math.max(1, Math.floor(kept.length * maxTypeShare));
     const byType = new Map();
     for (const e of kept) {
       if (!byType.has(e.s.type)) byType.set(e.s.type, []);
       byType.get(e.s.type).push(e);
     }
-    const keepSet = new Set();
-    for (const [, arr] of byType) {
-      if (arr.length <= cap) { for (const e of arr) keepSet.add(e); continue; }
-      const ranked = [...arr].sort(
-        (a, b) => hashSplit('bal|' + a.s.id, valSeed) - hashSplit('bal|' + b.s.id, valSeed));
-      for (let i = 0; i < cap; i++) keepSet.add(ranked[i]);
-      balancedCount += arr.length - cap;
+    const cap = balanceCap([...byType.values()].map(a => a.length), maxTypeShare);
+    if (cap > 0) {
+      const keepSet = new Set();
+      for (const [, arr] of byType) {
+        if (arr.length <= cap) { for (const e of arr) keepSet.add(e); continue; }
+        const ranked = [...arr].sort(
+          (a, b) => hashSplit('bal|' + a.s.id, valSeed) - hashSplit('bal|' + b.s.id, valSeed));
+        for (let i = 0; i < cap; i++) keepSet.add(ranked[i]);
+        balancedCount += arr.length - cap;
+      }
+      kept = kept.filter(e => keepSet.has(e));
+    } else {
+      ctx.logger?.warn(`Typ-Balance ${maxTypeShare} unerfüllbar bei ${byType.size} Typen — übersprungen.`);
     }
-    kept = kept.filter(e => keepSet.has(e));
   }
 
   // ── Token-Histogramm (p50/p95/max) ────────────────────────────────────
@@ -195,4 +219,4 @@ function finalizeFinetuneSamples(jobId, ctx) {
   return stats;
 }
 
-module.exports = { finalizeFinetuneSamples };
+module.exports = { finalizeFinetuneSamples, balanceCap };

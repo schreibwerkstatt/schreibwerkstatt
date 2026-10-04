@@ -1,7 +1,7 @@
 @layer components {
 /* === Redundanz-Radar ===
    Buchweite Doppelungs-Suche: Liste von Seiten-Paaren mit Score-Badge + zwei
-   nebeneinanderliegenden Snippet-Spalten. Akzentfarbe = --card-accent-redundanz
+   nebeneinanderliegenden Passagen-Spalten (eingeklappt auf fünf Zeilen). Akzentfarbe = --card-accent-redundanz
    (Mapping in card-accents.css). Score-Badges sind eckig (var(--radius-sm)=0).
 */
 
@@ -30,14 +30,22 @@
 .redundanz-pair {
   display: grid;
   grid-template-columns: auto 1fr;
+  align-items: start;
   gap: var(--space-md);
   padding: var(--space-md);
   border: 1px solid var(--color-border);
   background: var(--color-bg);
 }
 
+/* Linke Spalte: Score-Badge + „Ignorieren" untereinander. */
+.redundanz-pair-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+}
+
 .redundanz-score {
-  align-self: start;
   min-width: 3rem;
   text-align: center;
   padding: var(--space-xs) var(--space-6);
@@ -82,6 +90,64 @@
   font-size: var(--font-size-sm);
   color: var(--color-text);
   line-height: 1.5;
+  white-space: pre-line;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+}
+
+.redundanz-snippet--open {
+  display: block;
+  -webkit-line-clamp: none;
+  overflow: visible;
+}
+
+/* Text-Knopf (aufklappen, ignorieren, Index aktualisieren, zurücksetzen). */
+.redundanz-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.redundanz-link:disabled {
+  color: var(--color-muted);
+  cursor: default;
+}
+
+.redundanz-intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.redundanz-index-gate,
+.redundanz-stale {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  margin: var(--space-md) 0;
+}
+
+.redundanz-index-gate .muted-msg {
+  margin: 0;
+}
+
+.redundanz-stale {
+  font-size: var(--font-size-sm);
+}
+
+.redundanz-dismissed {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-xs);
 }
 
 @media (max-width: 700px) {
@@ -107,7 +173,6 @@
 }
 
 .redundanz-fig-pair {
-  align-self: center;
   display: flex;
   flex-wrap: wrap;
   align-items: center;

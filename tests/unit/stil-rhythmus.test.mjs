@@ -9,6 +9,7 @@ import {
   computeSequenceStats,
   computeRhythmBands,
   computeOpeners,
+  computeChapterOpeners,
 } from '../../lib/stil-rhythmus.js';
 
 test('computeSequenceStats: leere Sequenz liefert null statt 0', () => {
@@ -142,4 +143,42 @@ test('computeOpeners: Rangliste ist gedeckelt', () => {
   const o = computeOpeners([{ opener_counts: { counts, repeats: 0 } }]);
   assert.equal(o.top.length, 15);
   assert.equal(o.distinct, 50, 'der Deckel gilt für die Anzeige, nicht für die Zählung');
+});
+
+test('computeChapterOpeners: getrennt pro Kapitel, in Leserichtung, mit Wiederholungen', () => {
+  const pages = [
+    { chapter_id: 1, chapter_name: 'Eins', opener_counts: { counts: { er: 5, sie: 2 }, repeats: 3 } },
+    { chapter_id: 1, chapter_name: 'Eins', opener_counts: { counts: { er: 1 }, repeats: 1 } },
+    { chapter_id: 2, chapter_name: 'Zwei', opener_counts: { counts: { ich: 4, dann: 1 }, repeats: 2 } },
+    { chapter_id: null, chapter_name: null, opener_counts: { counts: { und: 2 }, repeats: 0 } },
+  ];
+  const rows = computeChapterOpeners(pages);
+  assert.deepEqual(rows.map(r => r.key), ['1', '2', '__uncat__']);
+  const [k1, k2, uncat] = rows;
+  assert.equal(k1.name, 'Eins');
+  assert.equal(k1.total, 8);
+  assert.equal(k1.repeats, 4);
+  assert.deepEqual(k1.top.map(t => [t.word, t.count]), [['er', 6], ['sie', 2]]);
+  assert.equal(k2.repeats, 2);
+  assert.equal(k2.repeatRatio, 2 / 4);
+  assert.deepEqual(k2.top.map(t => t.word), ['ich', 'dann']);
+  assert.equal(uncat.name, null, 'das Label ist UI-Text');
+});
+
+test('computeChapterOpeners: Top 10 je Kapitel, Kapitel ohne Saetze fallen weg', () => {
+  const counts = {};
+  for (let i = 0; i < 30; i++) counts['w' + i] = 30 - i;
+  const rows = computeChapterOpeners([
+    { chapter_id: 1, opener_counts: { counts, repeats: 0 } },
+    { chapter_id: 2, opener_counts: null },
+    { chapter_id: 3, opener_counts: { counts: {}, repeats: 0 } },
+  ]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].top.length, 10);
+  assert.equal(rows[0].distinct, 30);
+});
+
+test('computeSequenceStats: P90 nach derselben Definition wie der Seiten-P90 (floor((n-1)·p))', () => {
+  // n = 5: Index floor(4 · 0.9) = 3 → der vierte Wert, nicht der fuenfte.
+  assert.equal(computeSequenceStats([1, 2, 3, 4, 100]).p90, 4);
 });

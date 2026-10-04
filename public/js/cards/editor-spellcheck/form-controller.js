@@ -18,20 +18,12 @@
 // wieder ausgewickelt (DOM bleibt sauber). Alpine-Bindings bleiben intakt,
 // weil das Element-Objekt unveraendert bleibt.
 
+import { ignoreKey, isIgnored, isSpellingMatch } from './categories.js';
+
 const DEFAULT_DEBOUNCE_INPUT = 500;
 const DEFAULT_DEBOUNCE_TEXTAREA = 1000;
 const POPOVER_MAX_REPLACEMENTS = 5;
 const POPOVER_MAX_MATCHES = 12;
-
-function _isSpelling(m) {
-  const id = m?.rule?.id || '';
-  const cat = m?.rule?.category?.id || '';
-  return id.includes('SPELL') || cat === 'TYPOS';
-}
-
-function _matchId(m) {
-  return `${m.offset}:${m.length}:${m.rule?.id || ''}`;
-}
 
 function _extractWord(text, m) {
   const w = (text || '').substr(m.offset || 0, m.length || 0);
@@ -66,8 +58,9 @@ export function createFormFieldSpellcheck({
   let fieldWrap = null;
   let popover = null;
   let docClick = null;
+  let keyCtrl = null;         // Escape-Listener des offenen Popovers
   let matches = [];           // filtered: spelling only
-  const ignored = new Set();
+  const ignored = new Set();  // ignoreKey, session-only
   let abortCtrl = null;
   let debounceTimer = null;
   let seq = 0;
@@ -184,6 +177,25 @@ export function createFormFieldSpellcheck({
       document.removeEventListener('mousedown', docClick, true);
       docClick = null;
     }
+    if (keyCtrl) { keyCtrl.abort(); keyCtrl = null; }
+  }
+
+  // Kopf mit Schliessen-Knopf: Schliessweg ohne Tastatur, der nicht „daneben
+  // tippen" heisst (auf Touch trifft das das naechste Feld).
+  function _renderHeader() {
+    const header = document.createElement('div');
+    header.className = 'lt-popover__header';
+    const closeLabel = i18n('spellcheck.popover.close');
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'lt-popover__close';
+    closeBtn.textContent = '×';
+    closeBtn.setAttribute('aria-label', closeLabel);
+    closeBtn.setAttribute('data-tip', closeLabel);
+    closeBtn.addEventListener('mousedown', (ev) => ev.preventDefault());
+    closeBtn.addEventListener('click', () => _closePopover());
+    header.appendChild(closeBtn);
+    return header;
   }
 
   function _openPopover() {
@@ -193,7 +205,8 @@ export function createFormFieldSpellcheck({
     popover.setAttribute('role', 'dialog');
     popover.setAttribute('data-editor', 'form');
 
-    const visible = matches.filter((m) => !ignored.has(_matchId(m))).slice(0, POPOVER_MAX_MATCHES);
+    popover.appendChild(_renderHeader());
+    const visible = matches.filter((m) => !isIgnored(ignored, m)).slice(0, POPOVER_MAX_MATCHES);
     if (!visible.length) {
       const empty = document.createElement('p');
       empty.className = 'lt-popover__empty';
@@ -205,6 +218,15 @@ export function createFormFieldSpellcheck({
     }
     document.body.appendChild(popover);
     _positionPopover();
+    // Escape schliesst — Capture + stopPropagation, damit ein umgebender
+    // Dialog/Karten-Handler nicht zugleich schliesst.
+    keyCtrl = new AbortController();
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Escape') return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      _closePopover();
+    }, { capture: true, signal: keyCtrl.signal });
     // Outside-Click schliesst. setTimeout: aktueller Click landet sonst gleich
     // im outside-Handler.
     setTimeout(() => {
@@ -265,41 +287,57 @@ export function createFormFieldSpellcheck({
     ignoreBtn.textContent = i18n('spellcheck.popover.ignore');
     ignoreBtn.addEventListener('mousedown', (ev) => ev.preventDefault());
     ignoreBtn.addEventListener('click', () => {
-      ignored.add(_matchId(m));
-      _rerenderPopover();
+      ignored.add(ignoreKey(m));
+      _afterLocalChange();
     });
     actions.appendChild(ignoreBtn);
 
     if (word) {
-      const dictBtn = document.createElement('button');
-      dictBtn.type = 'button';
-      dictBtn.className = 'lt-popover__dict';
-      dictBtn.textContent = i18n('spellcheck.popover.add_to_dict');
-      dictBtn.addEventListener('mousedown', (ev) => ev.preventDefault());
-      dictBtn.addEventListener('click', async () => {
-        dictBtn.disabled = true;
-        try {
-          const rawLang = getBookLocale ? getBookLocale() : '*';
-          const lang = (!rawLang || rawLang === 'auto') ? '*' : rawLang;
-          const resp = await fetch('/dictionary', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ word, bookId: 0, lang }),
-            credentials: 'same-origin',
-          });
-          if (resp.ok) {
-            ignored.add(_matchId(m));
-            _rerenderPopover();
-            _scheduleCheck();
-          } else {
-            dictBtn.disabled = false;
-          }
-        } catch { dictBtn.disabled = false; }
-      });
-      actions.appendChild(dictBtn);
+      // Mit Buch zwei Varianten: nur dieses Buch oder alle Buecher.
+      const bookId = getBookId ? getBookId() : null;
+      if (bookId) actions.appendChild(_dictButton(m, word, bookId, i18n('spellcheck.popover.add_to_dict_book')));
+      actions.appendChild(_dictButton(m, word, 0, i18n(bookId
+        ? 'spellcheck.popover.add_to_dict_global' : 'spellcheck.popover.add_to_dict')));
     }
     row.appendChild(actions);
     return row;
+  }
+
+  function _dictButton(m, word, bookId, label) {
+    const dictBtn = document.createElement('button');
+    dictBtn.type = 'button';
+    dictBtn.className = 'lt-popover__dict';
+    dictBtn.textContent = label;
+    dictBtn.addEventListener('mousedown', (ev) => ev.preventDefault());
+    dictBtn.addEventListener('click', async () => {
+      dictBtn.disabled = true;
+      try {
+        const rawLang = getBookLocale ? getBookLocale() : '*';
+        const lang = (!rawLang || rawLang === 'auto') ? '*' : rawLang;
+        const resp = await fetch('/dictionary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ word, bookId, lang }),
+          credentials: 'same-origin',
+        });
+        if (resp.ok) {
+          ignored.add(ignoreKey(m));
+          _afterLocalChange();
+          _scheduleCheck();
+        } else {
+          dictBtn.disabled = false;
+        }
+      } catch { dictBtn.disabled = false; }
+    });
+    return dictBtn;
+  }
+
+  // Nach Ignorieren/Woerterbuch: Plakette und Liste sofort nachziehen.
+  function _afterLocalChange() {
+    const n = matches.filter((x) => !isIgnored(ignored, x)).length;
+    if (n === 0) { _updateBadge('clean'); _closePopover(); return; }
+    _updateBadge('matches', { count: n });
+    _rerenderPopover();
   }
 
   function _rerenderPopover() {
@@ -394,8 +432,8 @@ export function createFormFieldSpellcheck({
       // Snapshot-Check: User hat waehrend Flight getippt → Match-Offsets stale.
       if ((el.value || '') !== lastValueSnapshot) return;
       const all = Array.isArray(json.matches) ? json.matches : [];
-      matches = all.filter(_isSpelling);
-      const visibleCount = matches.filter((m) => !ignored.has(_matchId(m))).length;
+      matches = all.filter(isSpellingMatch);
+      const visibleCount = matches.filter((m) => !isIgnored(ignored, m)).length;
       if (visibleCount === 0) {
         _updateBadge('clean');
         _closePopover();

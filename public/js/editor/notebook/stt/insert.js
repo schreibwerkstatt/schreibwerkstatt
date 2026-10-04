@@ -9,7 +9,24 @@
 import { caretRangeIn, rangeAtEnd } from '../../utils.js';
 
 export const sttInsertMethods = {
-  // Range fuer die naechste Einfuegung. Bevorzugt den Vorwaerts-Anker
+  // Klick oder Eingabe des Users im Edit-Feld, waehrend das Diktat laeuft oder
+  // auslaeuft: dessen Caret wird die neue Einfuegestelle. Ohne das schriebe das
+  // Diktat hinter seinem eigenen letzten Knoten weiter — von Hand getippter
+  // Text landete HINTER dem naechsten Segment, ein Klick an eine andere Stelle
+  // wuerde ignoriert. Die geklonte Range ist live (der Browser verschiebt sie
+  // bei DOM-Aenderungen mit) und gilt bis zum naechsten STT-Insert, ab dann
+  // fuehrt wieder `_sttLastNode`. Aufrufer: `@input` am Edit-Feld und
+  // figur-lookup.js#`_onEditClick`.
+  _sttReanchorFromUser() {
+    if (!this._sttRt && !this._sttDraining) return;
+    const range = caretRangeIn(this._getEditEl?.());
+    if (!range) return;
+    this._sttUserRange = range.cloneRange();
+    this._sttLastNode = null;
+  },
+
+  // Range fuer die naechste Einfuegung. Vorrang hat die vom User waehrend der
+  // Aufnahme gesetzte Stelle (`_sttUserRange`). Danach der Vorwaerts-Anker
   // (`_sttLastNode`): Caret direkt HINTER dem zuletzt diktierten Knoten. So
   // bewegt sich die Einfuegestelle nur vorwaerts. Die Live-Selection ist
   // unzuverlaessig — der Browser kollabiert/resettet sie nach laengeren Pausen
@@ -19,6 +36,12 @@ export const sttInsertMethods = {
   _sttResolveRange() {
     const editEl = this._getEditEl?.();
     if (!editEl) return null;
+    const ur = this._sttUserRange;
+    if (ur && editEl.contains(ur.startContainer)) {
+      const range = ur.cloneRange();
+      range.collapse(true);
+      return range;
+    }
     if (this._sttLastNode && editEl.contains(this._sttLastNode)) {
       const range = document.createRange();
       range.setStartAfter(this._sttLastNode);
@@ -48,6 +71,7 @@ export const sttInsertMethods = {
     range.deleteContents();
     range.insertNode(node);
     this._sttLastNode = node; // Vorwaerts-Anker auf den frisch eingefuegten Knoten
+    this._sttUserRange = null;
     range.setStartAfter(node);
     range.collapse(true);
     sel?.removeAllRanges();
@@ -90,6 +114,7 @@ export const sttInsertMethods = {
     // Vorwaerts-Anker auf den Textknoten IM neuen Absatz, damit das naechste
     // Segment innerhalb dieses `<p>` weiterschreibt (nicht dahinter am Root).
     this._sttLastNode = p.firstChild || p;
+    this._sttUserRange = null;
     const r2 = document.createRange();
     r2.selectNodeContents(p);
     r2.collapse(false);

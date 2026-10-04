@@ -109,6 +109,8 @@ export const figurLookupMethods = {
     // Klick ins Edit-Feld = bewusst gesetzter Caret → STT-Diktat fuegt dort ein
     // statt ans Editorende (siehe _sttStart / sttCaretUserSet).
     this.$store.stt.caretUserSet = true;
+    // Laeuft das Diktat schon, schreibt es ab jetzt an dieser Stelle weiter.
+    this._sttReanchorFromUser?.();
     if (!(e.ctrlKey || e.metaKey)) return;
     this._tryOpenFigurLookupAt(e);
   },

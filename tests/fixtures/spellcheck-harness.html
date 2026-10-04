@@ -55,7 +55,9 @@
       getBookId: () => 1,
       getPageId: () => 1,
       isEnabled: () => true,
-      i18n: (key) => key,
+      // Ohne ?i18n=1 liefert i18n den rohen Key — wie die i18n-Bridge des
+      // macOS-Clients; optionale Popover-Knoepfe bleiben dann aus.
+      i18n: params.get('i18n') ? (key) => `T:${key}` : (key) => key,
     });
 
     ctl.attach();

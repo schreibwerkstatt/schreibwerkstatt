@@ -20,7 +20,7 @@
 // übersprungen — deren CASCADE-Löschung würde Nutzerdaten reissen.
 //
 // FK-CASCADE (foreign_keys=ON in db/connection.js) räumt beim Löschen die Analyse-Bridges
-// (location_figures/-chapters, scene_locations, song_scenes) automatisch mit.
+// (location_figures/-chapters, scene_locations) automatisch mit.
 
 const { db } = require('../db/schema');
 const { locationSimilarity, sceneTitleTokens } = require('../lib/entity-match');

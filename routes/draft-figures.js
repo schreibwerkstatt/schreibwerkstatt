@@ -13,7 +13,7 @@ const {
 const { importedSourceNames } = require('../db/draft-figures');
 const { scopedDraft, scopedRun } = require('./draft-figures-acl');
 const occDb = require('../db/draft-figure-occurrences');
-const embed = require('../lib/embed');
+const retrieval = require('../lib/semantic-retrieval');
 const contentStore = require('../lib/content-store');
 const { extractPsychologie, PSYCHE_KERNE } = require('../lib/draft-mindmap-extract');
 const { computeArcFindings } = require('../lib/figure-arc');
@@ -232,11 +232,12 @@ router.get('/:book_id/arc', async (req, res) => {
     const drafts = listDraftFigures(bookId, userEmail);
     // Verankert ist das Buch, sobald es Fundstellen gibt ODER ein Anchor-Lauf
     // erfolgreich durchlief — sonst bliebe ein Lauf ohne jeden Treffer fuer
-    // immer „noch nicht verankert". Ein Lauf ohne Embedding-Backend sucht nichts
-    // (figur-anchor endet dann mit semantic:false); darum zaehlt der Job-Lauf
-    // nur, solange die Semantik aktiv ist.
+    // immer „noch nicht verankert". Ohne vollstaendigen Index unter dem aktiven
+    // Modell sucht ein Lauf nichts (figur-anchor scheitert dann mit
+    // anchorNoIndex); ein frueherer Treffer-loser Lauf zaehlt darum nur, solange
+    // der Index steht — nach einem Modellwechsel ist seine Null ungeprueft.
     const anchor = occDb.figurAnchorState(bookId, userEmail);
-    const scanned = anchor.hasOccurrences || (anchor.lastJobRunMs != null && embed.isEnabled());
+    const scanned = anchor.hasOccurrences || (anchor.lastJobRunMs != null && retrieval.indexReady(bookId));
     const floor = Number(appSettings.get('werkstatt.anchor.min_score')) || 0;
 
     // Counts + Kapitel-Aufschluesselung einmal buchweit holen und auf die Drafts

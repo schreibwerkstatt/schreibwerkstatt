@@ -7,7 +7,7 @@
       <div x-data="settingField({ k: 'tts.voice', base: 'tts.voice', help: true })"></div>
       <div x-data="settingField({ k: 'tts.voice.de', label: 'admin.settings.tts.voiceDe.label', phKey: 'admin.settings.tts.voice.placeholder', help: 'admin.settings.tts.voiceLocale.help' })"></div>
       <div x-data="settingField({ k: 'tts.voice.en', label: 'admin.settings.tts.voiceEn.label', phKey: 'admin.settings.tts.voice.placeholder', help: 'admin.settings.tts.voiceLocale.help' })"></div>
-      <div x-data="settingField({ k: 'tts.format', type: 'select', base: 'tts.format', help: true, opts: [{ value: 'mp3', label: 'MP3' }, { value: 'opus', label: 'Opus' }, { value: 'aac', label: 'AAC' }, { value: 'flac', label: 'FLAC' }, { value: 'wav', label: 'WAV' }, { value: 'pcm', label: 'PCM' }] })"></div>
+      <div x-data="settingField({ k: 'tts.format', type: 'select', base: 'tts.format', help: true, opts: [{ value: 'mp3', label: 'MP3' }, { value: 'opus', label: 'Opus' }, { value: 'aac', label: 'AAC' }, { value: 'flac', label: 'FLAC' }, { value: 'wav', label: 'WAV' }] })"></div>
       <div x-data="settingField({ k: 'tts.speed', type: 'num', base: 'tts.speed', num: { step: 0.05, min: 0.25, max: 4, decimals: 2 }, help: true })"></div>
       <div x-data="settingField({ k: 'tts.pause.fragment_ms', type: 'num', base: 'tts.pauseFragmentMs', num: { integer: true, min: 0, max: 5000 }, help: true })"></div>
       <div x-data="settingField({ k: 'tts.pause.paragraph_ms', type: 'num', base: 'tts.pauseParagraphMs', num: { integer: true, min: 0, max: 5000 }, help: true })"></div>

@@ -13,6 +13,7 @@
 <body>
   <main class="public-shell">
     <header class="public-header">
+      <img class="public-brand" src="/schreibwerkstatt_icon.svg" alt="" width="56" height="56">
       <h1>{{title}}</h1>
       <p class="public-sub">{{subtitle}}</p>
     </header>
@@ -29,6 +30,10 @@
       <label>
         <span>{{messageLabel}}</span>
         <textarea name="message" maxlength="500" rows="4"></textarea>
+      </label>
+      <label>
+        <span>{{sourceNoteLabel}}</span>
+        <input type="text" name="sourceNote" maxlength="200">
       </label>
 
       <div id="altcha-slot"></div>

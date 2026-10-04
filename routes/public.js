@@ -30,6 +30,7 @@ const appUsers = require('../db/app-users');
 const regRequests = require('../db/registration-requests');
 const mailer = require('../lib/mailer');
 const rateLimit = require('../lib/register-ratelimit');
+const { deriveSource, cleanSource } = require('../lib/register-source');
 const altcha = require('../lib/altcha');
 const extensionRelease = require('../lib/extension-release');
 const macclientRelease = require('../lib/macclient-release');
@@ -86,8 +87,14 @@ function _clientIp(req) {
   return req.ip || null;
 }
 
+// Herkunft des aktuellen Seitenaufrufs (Kampagnen-Parameter oder fremder Referer).
+function _requestSource(req) {
+  return deriveSource({ query: req.query, referer: req.headers.referer || null, ownHost: req.get('host') });
+}
+
 function _renderLanding(req, res) {
   const lang = _bodyLang(req);
+  const source = _requestSource(req);
   const t = (key) => tServer(key, lang);
   const appName = appSettings.get('app.name') || 'Schreibwerkstatt';
   res.set('Cache-Control', 'no-store');
@@ -100,6 +107,7 @@ function _renderLanding(req, res) {
     subtitle:      t('landing.subtitle'),
     loginLabel:    t('landing.loginLabel'),
     registerLabel: t('landing.registerLabel'),
+    registerQuery: source ? `?src=${encodeURIComponent(source)}` : '',
     footer:        t('landing.footer'),
     githubUrl:     'https://github.com/schreibwerkstatt/schreibwerkstatt',
     githubLabel:   t('landing.githubLabel'),
@@ -125,6 +133,7 @@ function _renderLanding(req, res) {
     extensionTitle:     t('landing.extensionTitle'),
     extensionDesc:      t('landing.extensionDesc'),
     extensionLinkLabel: t('landing.extensionLinkLabel'),
+    clientsTitle:       t('landing.clientsTitle'),
     extensionUrl:       extensionRelease.CHROME_STORE_URL,
   }));
 }
@@ -135,6 +144,7 @@ function _renderRegister(req, res) {
   res.set('Cache-Control', 'no-store');
   const config = {
     altchaEnabled: altcha.isEnabled(),
+    source: _requestSource(req),
     i18n: {
       success:   t('register.success'),
       rateLimit: t('register.rateLimit'),
@@ -149,6 +159,7 @@ function _renderRegister(req, res) {
     emailLabel:     t('register.emailLabel'),
     nameLabel:      t('register.nameLabel'),
     messageLabel:   t('register.messageLabel'),
+    sourceNoteLabel: t('register.sourceNoteLabel'),
     submitLabel:    t('register.submitLabel'),
     backToLanding:  t('register.backToLanding'),
     footerHint:     t('register.footer'),
@@ -263,7 +274,7 @@ router.post('/register', express.json({ limit: '8kb' }), async (req, res) => {
     return res.status(429).json({ error_code: 'RATE_LIMITED', retryAfter: limit.retryAfterSec });
   }
 
-  const { email, displayName, message, altcha: altchaSolution } = req.body || {};
+  const { email, displayName, message, source, sourceNote, altcha: altchaSolution } = req.body || {};
   const e = String(email || '').trim().toLowerCase();
   if (!e || !_emailRegex.test(e) || e.length > 320) {
     rateLimit.record(ip); // Fehlversuch zaehlt — sonst freier Spam-Probe
@@ -278,10 +289,15 @@ router.post('/register', express.json({ limit: '8kb' }), async (req, res) => {
 
   const nameTrim = String(displayName || '').trim().slice(0, 120) || null;
   const msgTrim  = String(message || '').trim().slice(0, 500) || null;
+  const srcTrim  = cleanSource(source);
+  const noteTrim = cleanSource(sourceNote, 200);
 
   let created = null;
   try {
-    created = regRequests.createRequest({ email: e, displayName: nameTrim, message: msgTrim, ip, userAgent });
+    created = regRequests.createRequest({
+      email: e, displayName: nameTrim, message: msgTrim, ip, userAgent,
+      source: srcTrim, sourceNote: noteTrim,
+    });
   } catch (err) {
     // SQLITE_CONSTRAINT (Partial-UNIQUE pending): bestehende pending-Anfrage —
     // antworten als waere alles ok, kein Leak.
@@ -311,6 +327,8 @@ router.post('/register', express.json({ limit: '8kb' }), async (req, res) => {
             createdAt: created.created_at,
             adminUrl,
             message: msgTrim || '',
+            source: srcTrim || '',
+            sourceNote: noteTrim || '',
           },
         }).catch(err => logger.warn(`admin-notify failed: ${err.message}`));
       }

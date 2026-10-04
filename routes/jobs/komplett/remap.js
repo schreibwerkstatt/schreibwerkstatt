@@ -7,6 +7,7 @@ const { _refToString, _stelleQuote } = require('./utils');
 const { NOW_ISO_SQL } = require('../../../db/now');
 const { matchScenes, dedupeScenesWithinRun } = require('../../../lib/entity-match');
 const searchIndex = require('../../../lib/search');
+const { buildPageIndex, buildFactIndex, locateStelle, quotesFabricated } = require('../../../lib/continuity-evidence');
 
 /** Mappt Szenen-Klarnamen (aus Phase 1) auf konsolidierte Figuren-/Ort-IDs.
  *  Nicht auflösbare Namen (KI-Halluzination, Tippfehler, in Phase 2/3 wegkonsolidiert)
@@ -279,75 +280,88 @@ function saveSzenenAndEvents(bookIdInt, email, szenen, assignments, locIdToDbId,
   return { szenenCount: writeSzenen ? szenen.length : 0, eventsCount };
 }
 
-// Patterns, mit denen die KI eine eigene Entwarnung in beschreibung/empfehlung
-// signalisiert. Synchron mit Prompt-Selbstcheck in
-// public/js/prompts/komplett/schema-strings.js (PROBLEME_RULES, Z. «Selbstcheck …»).
-// KI hält die Selbstcheck-Regel nicht zuverlässig ein → Server filtert defensiv nach.
-// `echte[rns]?` deckt alle Genus-/Kasus-Formen ab («kein echter/echte/echten Widerspruch»).
-const SELF_CANCEL_PATTERN = /\b(kein(en)?\s+(echte[rns]?\s+)?widerspruch|kein\s+problem|das\s+ist\s+korrekt|konsistent|pass(t|en)\s+zusammen|stimmig|unproblematisch|entwarnung|wird\s+nicht\s+gemeldet|eintrag\s+entfernen)\b/i;
+// Patterns, mit denen die KI eine eigene Entwarnung signalisiert. Synchron mit dem
+// Prompt-Selbstcheck in public/js/prompts/komplett/schema-strings.js (PROBLEME_RULES,
+// Z. «Selbstcheck …»). KI hält die Selbstcheck-Regel nicht zuverlässig ein → Server
+// filtert defensiv nach. `echte[rns]?` deckt alle Genus-/Kasus-Formen ab.
+//
+// Zwei Felder, zwei Massstäbe: die `beschreibung` benennt den Befund — sagt sie
+// «konsistent»/«stimmig», ist das eine Entwarnung, AUSSER es ist verneint («nicht
+// konsistent», «kaum stimmig»; «inkonsistent»/«unstimmig» trifft \b ohnehin nicht).
+// Die `empfehlung` schlägt laut Prompt eine Lösung vor und formuliert deren Ziel
+// legitim positiv («… damit die Zeitlinie konsistent bleibt») — dort zählen nur die
+// eindeutigen Selbst-Annullierungen.
+const SELF_CANCEL_HARD = /\b(kein(en)?\s+(echte[rns]?\s+)?widerspruch|entwarnung|wird\s+nicht\s+gemeldet|eintrag\s+entfernen)\b/i;
+const SELF_CANCEL_DESCRIPTION = /\b(kein\s+problem|das\s+ist\s+korrekt|pass(t|en)\s+zusammen|unproblematisch)\b|(?<!\b(?:nicht|kaum|wenig)\s+)\b(konsistent|stimmig)\b/i;
 
 // «lässt sich erklären» ist NUR eine Selbst-Annullierung, wenn es einen Erklär-GRUND
 // nennt («… lässt sich erklären durch …») — exakt der Prompt-Wortlaut «lässt sich
 // erklären durch … (als Entwarnung)». Eine Lösungs-EMPFEHLUNG dagegen («Der Widerspruch
 // lässt sich erklären, indem in Kapitel 3 ein Hinweis ergänzt wird») ist ein ECHTER Befund
 // mit Fix-Vorschlag und darf NICHT verworfen werden. Darum (a) nur «… erklären durch …»
-// (nicht das blosse «erklären») und (b) nur in der `beschreibung` werten — die `empfehlung`
-// soll laut Prompt eine Lösung vorschlagen und enthält «erklären» legitim.
+// (nicht das blosse «erklären») und (b) nur in der `beschreibung` werten.
 const SELF_CANCEL_EXPLAIN = /l(ä|ae)sst\s+sich\s+erkl(ä|ae)ren\s+durch/i;
 
 function _isSelfCancelled(p) {
   const beschr = p.beschreibung || '';
   const empf = p.empfehlung || '';
-  return SELF_CANCEL_PATTERN.test(beschr) || SELF_CANCEL_PATTERN.test(empf)
+  return SELF_CANCEL_HARD.test(beschr) || SELF_CANCEL_HARD.test(empf)
+    || SELF_CANCEL_DESCRIPTION.test(beschr)
     || SELF_CANCEL_EXPLAIN.test(beschr);
 }
 
 /** Speichert Kontinuitätsprüfung in die DB (eine Zeile pro Issue + Bridge-Tabellen
  *  für Figuren-/Kapitel-Referenzen). Gibt normalizedIssues zurück, oder null bei
- *  ungültiger Antwort. */
+ *  ungültiger Antwort.
+ *  opts.pageContents: geladene Seiten ({id,title,chapter,chapter_id,text}) — Basis der
+ *    Beleg-Prüfung und der Seiten-Anker (page_a_id/page_b_id).
+ *  opts.requireQuoteEvidence: Zitate sind wörtliche Buchsätze (Single-Pass) → ein
+ *    Befund mit einem im Buch nicht auffindbaren Zitat gilt als erfunden.
+ *  opts.chapterFacts: Multi-Pass-Fakten ({kapitel,fakten[{fakt,seite}]}) — dort zitiert
+ *    das Modell Fakten statt Buchsätzen; der Seitenname des Fakts liefert den Anker. */
 function saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, chNameToId, effectiveProvider, log, opts = {}) {
-  const { fullBookText = null, requireQuoteEvidence = false } = opts;
+  const { pageContents = null, requireQuoteEvidence = false, chapterFacts = null } = opts;
   if (typeof kontResult?.zusammenfassung === 'undefined') return null;
   const rawProbleme = kontResult.probleme || [];
   let filtered = rawProbleme.filter(p => !_isSelfCancelled(p));
   const dropped = rawProbleme.length - filtered.length;
   if (dropped > 0) log.warn(`Kontinuität: ${dropped} Selbst-Entwarnungen verworfen.`);
 
+  const pages = buildPageIndex(pageContents);
   // Beleg-Prüfung NUR für Single-Pass-Pfade (voller Buchtext im Prompt, Zitat-Pflicht
-  // ist wörtlich). Der Multi-Pass-Fakten-Pfad zitiert paraphrasierte Fakt-Aussagen,
-  // nicht den Buchtext → dort würde ein indexOf gegen den Volltext echte Befunde als
-  // False-Negative verwerfen. Der Multi-Pass-Claude-Pfad hat ohnehin die separate
-  // verifyKontinuitaetProbleme-Stufe; Single-Pass + lokale Provider hatten bisher
-  // keine Beleg-Kontrolle → halluzinierte Zitate erreichten die UI.
-  if (requireQuoteEvidence && fullBookText) {
-    const haystack = fullBookText.replace(/\s+/g, ' ');
-    const inText = (q) => haystack.includes(q.replace(/\s+/g, ' ').slice(0, 40));
-    // Konservativ wie die verify-Stufe: nur als Halluzination verwerfen, wenn ein
-    // Problem ein wörtliches Zitat LIEFERT, das aber im Buchtext NICHT auffindbar ist.
-    // Hat es keine «»-Zitate (nur Kapitel-/Seiten-Hinweis), bleibt es erhalten – das
-    // ist eine Zitat-Format-Verletzung, keine erfundene Stelle (kein False-Negative).
-    const isFabricated = (p) => {
-      const quotes = [p.stelle_a, p.stelle_b].map(_stelleQuote).filter(Boolean);
-      return quotes.length > 0 && !quotes.some(inText);
-    };
+  // ist wörtlich). Der Multi-Pass-Fakten-Pfad zitiert Fakt-Aussagen, nicht den Buchtext
+  // → dort hat die separate Verify-Stufe den Originaltext geprüft.
+  if (requireQuoteEvidence && pages.length) {
+    const hayNorm = pages.map(p => p.norm).join(' ');
     const before = filtered.length;
-    filtered = filtered.filter(p => !isFabricated(p));
+    filtered = filtered.filter(p => !quotesFabricated([_stelleQuote(p.stelle_a), _stelleQuote(p.stelle_b)], hayNorm));
     const evDropped = before - filtered.length;
     if (evDropped > 0) log.warn(`Kontinuität: ${evDropped} Problem(e) mit erfundenem Beleg-Zitat (nicht im Buchtext) verworfen.`);
   }
 
-  const issues = filtered.map(p => ({
-    schwere: p.schwere, typ: p.typ, beschreibung: p.beschreibung,
-    stelle_a: p.stelle_a, stelle_b: p.stelle_b, empfehlung: p.empfehlung,
-    quelle: p.quelle || null,
-    figuren: (p.figuren || []).map(_refToString).filter(Boolean),
-    kapitel: (p.kapitel || []).map(_refToString).filter(Boolean),
-  }));
+  const facts = chapterFacts ? buildFactIndex(chapterFacts) : null;
+  const anchor = (stelle, kapitel) => {
+    const page = locateStelle(_refToString(stelle) || '', _stelleQuote(stelle), pages, { kapitel, facts });
+    return page ? page.id : null;
+  };
+  const issues = filtered.map(p => {
+    const kapitel = (p.kapitel || []).map(_refToString).filter(Boolean);
+    return {
+      schwere: p.schwere, typ: p.typ, beschreibung: p.beschreibung,
+      stelle_a: p.stelle_a, stelle_b: p.stelle_b, empfehlung: p.empfehlung,
+      quelle: p.quelle || null,
+      page_a_id: anchor(p.stelle_a, kapitel),
+      page_b_id: anchor(p.stelle_b, kapitel),
+      figuren: (p.figuren || []).map(_refToString).filter(Boolean),
+      kapitel,
+    };
+  });
   const { normalizedIssues } = saveContinuityCheck(
     bookIdInt, email, kontResult.zusammenfassung || '',
     _modelName(effectiveProvider), issues, figNameToId, chNameToId,
   );
-  log.info(`Kontinuitätsprüfung gespeichert (${normalizedIssues.length} Probleme).`);
+  const carried = normalizedIssues.filter(i => i.resolved || i.dismissed).length;
+  log.info(`Kontinuitätsprüfung gespeichert (${normalizedIssues.length} Probleme${carried ? `, Triage von ${carried} übernommen` : ''}).`);
   return normalizedIssues;
 }
 

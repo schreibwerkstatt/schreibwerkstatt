@@ -346,7 +346,11 @@ export const lektoratMethods = {
       if (this.lastCheckId) {
         try {
           this.saveApplying = 95;
-          let applied = selected;
+          // Angenommen ist nur, was tatsächlich im Text gelandet ist. Ein
+          // übersprungener Befund (Text nicht gefunden, Schutzmechanismus) bleibt
+          // offen — sonst zählte ihn die Fehler-Heatmap als erledigt.
+          const skippedSet = new Set(skipped.map(s => s.f));
+          let applied = selected.filter(f => !skippedSet.has(f));
           let selectedAll = selected;
           // Bei History-Einträgen: mit bereits angewendeten Korrekturen mergen
           if (this.activeHistoryEntryId) {

@@ -57,7 +57,7 @@
             <div class="research-status-places" x-show="placeLinks(item).length">
               <template x-for="link in placeLinks(item)" :key="link.link_id">
                 <button type="button" class="entity-ref"
-                        x-entity-ref="{ type: link.target_kind, id: link.target_id, label: link.label }"></button>
+                        x-entity-ref="{ type: link.target_kind, id: link.ref_id ?? link.target_id, label: link.label }"></button>
               </template>
             </div>
 

@@ -19,6 +19,9 @@
 //   paused  — pausiert.
 //   loading — wartet auf Audio des aktuellen Satzes.
 //   index/total — Satz-Fortschritt für die Status-Pille.
+//   rate    — Lesetempo (playbackRate, pro Browser gemerkt: localStorage tts.rate).
+//   continueReading — am Seitenende mit der nächsten Seite des Kapitels
+//             weiterlesen (pro Browser gemerkt: localStorage tts.continue).
 
 export function registerTtsStore() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -30,5 +33,7 @@ export function registerTtsStore() {
     loading: false,
     index: 0,
     total: 0,
+    rate: 1,
+    continueReading: false,
   });
 }

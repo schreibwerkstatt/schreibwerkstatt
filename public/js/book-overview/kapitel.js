@@ -98,7 +98,9 @@ export const kapitelMethods = {
       },
     ).map(b => ({ ...b, normseiten: charsToNormseiten(b.chars) }));
 
-    return divergingRows(out, { valueOf: c => c.chars });
+    // Extrem-Marker erst ab zwei unterschiedlich langen Kapiteln: bei einem
+    // Kapitel oder gleich langen Kapiteln ist keines „das längste".
+    return divergingRows(out, { valueOf: c => c.chars, extremesNeedTwo: true });
   },
 
   // Lektorat-Findings pro Top-Level-Kapitel: aus overviewHeat.matrix (mode=open).

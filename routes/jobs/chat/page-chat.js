@@ -16,11 +16,42 @@ const { generateSessionTitle } = require('../chat-title');
 const { recordChatLedgerForMessage } = require('../../../db/cost-ledger');
 const { _parseChatResponse, figurenBlockChars } = require('./shared');
 const { pageChatBudget, computePageChangeHunks, fitHistory } = require('./page-chat-context');
+const { preContextPassages, retrievalQuery } = require('./book-chat-retrieval');
+const embed = require('../../../lib/embed');
+const appSettings = require('../../../lib/app-settings');
+
+// Zeichendeckel des Buch-Kontext-Blocks: der kleinere Wert aus dem Erst-Kontext-
+// Deckel des Buch-Chats und 10 % des Seiten-Chat-Budgets — der Block ist Beiwerk,
+// die Seite und der Verlauf haben Vorrang.
+function _pageChatRagChars(budget) {
+  const base = parseInt(appSettings.get('jobs.book_chat.pre_rag_chars'), 10) || 0;
+  return Math.max(0, Math.min(base, Math.floor(budget.total * 0.1)));
+}
+
+// Buchweiter Kontext (non-fatal): die semantisch nächsten Stellen zur Frage aus
+// ANDEREN Seiten (+ Szenen/Figuren/Orte/Fakten), aktuelle Seite ausgeschlossen —
+// sie steht vollständig im Prompt. Ohne Embedding-Endpunkt, mit top_k = 0 oder bei
+// Backend-Fehler kein Block. Nur ein Abbruch wird weitergeworfen.
+async function _pageChatBookContext(session, query, budget, signal, userEmail, logger) {
+  const topK = parseInt(appSettings.get('jobs.page_chat.pre_rag_top_k'), 10);
+  const chars = _pageChatRagChars(budget);
+  if (!embed.isEnabled() || !(topK > 0) || chars < 500) return null;
+  try {
+    return await preContextPassages(session.book_id, query, {
+      signal, userEmail, topK, chars, excludePageIds: [session.page_id],
+    });
+  } catch (e) {
+    if (e.name === 'AbortError') throw e;
+    logger.warn(`Buch-Kontext-Retrieval fehlgeschlagen (${e.message}) – Seiten-Chat ohne Buch-Kontext.`);
+    return null;
+  }
+}
 
 async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
   const logger = makeJobLogger(jobId);
   const {
     buildChatSystemPrompt, SCHEMA_CHAT, formatHistoryVorschlaege, historyTrimNote, formatPageChange,
+    buildPageChatBookContext,
   } = await getPrompts(userEmail);
   const aiCfg = getContextConfigFor(resolveProvider({ userEmail }));
   try {
@@ -71,6 +102,23 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const systemPrompt = buildChatSystemPrompt(session.page_name || '–', pageText, figuren, review,
       chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg) });
 
+    const annotate = (r) => {
+      if (r.role !== 'assistant' || !r.vorschlaege) return '';
+      try { return formatHistoryVorschlaege(JSON.parse(r.vorschlaege)); } catch { return ''; }
+    };
+    const fullHistory = buildChatMessageHistory(session.id, { annotate }).slice(0, -1);
+
+    // Buch-Kontext: pro Frage andere Bytes → eigener dritter System-Block OHNE
+    // Breakpoint am Ende; Block 1 (buch-stabil) und Block 2 (seiten-stabil) bleiben
+    // gecachte Präfixe. Suchtext = Frage + letzte Runde (Folgefragen).
+    const signal = jobAbortControllers.get(jobId)?.signal;
+    const bookCtx = await _pageChatBookContext(session, retrievalQuery(message, fullHistory), budget, signal, userEmail, logger);
+    const bookCtxText = bookCtx ? buildPageChatBookContext(bookCtx.hits) : '';
+    if (bookCtxText) {
+      systemPrompt.push({ text: bookCtxText, cache: false });
+      logger.info(`Buch-Kontext: ${bookCtx.hits.length} Stellen, ${bookCtx.chars} Zeichen.`);
+    }
+
     // Konversationshistorie: frühere Vorschläge samt Status als Anhang der
     // jeweiligen Antwort, dann auf das Restbudget gekürzt (älteste zuerst).
     const sysChars = systemPrompt.reduce((n, b) => n + (b.text || '').length, 0);
@@ -78,11 +126,6 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     if (historyBudget < 0) {
       throw i18nError('job.error.pageChatContextFull', { chars: sysChars + message.length, max: budget.total });
     }
-    const annotate = (r) => {
-      if (r.role !== 'assistant' || !r.vorschlaege) return '';
-      try { return formatHistoryVorschlaege(JSON.parse(r.vorschlaege)); } catch { return ''; }
-    };
-    const fullHistory = buildChatMessageHistory(session.id, { annotate }).slice(0, -1);
     const { messages: history, dropped } = fitHistory(fullHistory, historyBudget);
     const aiMessages = [...history, { role: 'user', content: message }];
     if (dropped > 0) {
@@ -99,11 +142,12 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       updateJob(jobId, updates);
     };
 
-    const signal = jobAbortControllers.get(jobId)?.signal;
-    // cacheLastMessage=true: Seiten-Chat hat über die Turns einer Session einen
-    // stabilen System-Prompt (Block 1 buch-stabil, Block 2 seiten-stabil), daher
-    // greift das Multi-Turn-Caching der Konversationshistorie.
-    const { text, truncated, tokensIn, tokensOut, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0, provider, model, genDurationMs } = await callAIChat(aiMessages, systemPrompt, onProgress, null, signal, undefined, SCHEMA_CHAT, chatTemperature(), true);
+    // cacheLastMessage: ohne Buch-Kontext ist der System-Prompt über die Turns einer
+    // Session stabil (Block 1 buch-stabil, Block 2 seiten-stabil) und das Multi-Turn-
+    // Caching der Konversationshistorie greift. Mit Buch-Kontext steht vor dem
+    // Verlauf ein Block, der jede Frage wechselt — ein Breakpoint auf der letzten
+    // Nachricht wäre dann ein cache_write, das nie gelesen wird.
+    const { text, truncated, tokensIn, tokensOut, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0, provider, model, genDurationMs } = await callAIChat(aiMessages, systemPrompt, onProgress, null, signal, undefined, SCHEMA_CHAT, chatTemperature(), !bookCtxText);
     // Job-State auf echte Provider-Werte setzen, damit Status-Anzeige und
     // gespeicherte Chat-Nachricht dieselben Tokens zeigen (statt eines
     // Streaming-Zwischenstands).
@@ -122,6 +166,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       ...(lostVorschlaege ? { lost_vorschlaege: true } : {}),
       ...(titelVarianten.length ? { titel_varianten: titelVarianten } : {}),
       ...(dropped > 0 ? { history_trimmed: dropped } : {}),
+      ...(bookCtxText ? { book_context: { count: bookCtx.hits.length, chars: bookCtx.chars } } : {}),
     };
 
     // Assistant-Nachricht in DB speichern

@@ -2,8 +2,9 @@
 const crypto = require('crypto');
 const express = require('express');
 const {
-  db, getBookSettings,
+  getBookSettings,
   loadChapterMacroReviewCache, saveChapterMacroReviewCache,
+  insertChapterReview,
 } = require('../../db/schema');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, contentHttpError,
@@ -23,10 +24,16 @@ const appSettings = require('../../lib/app-settings');
 const { resolveProvider } = require('../../lib/ai');
 const { getDescendantChapterIds } = require('../../db/book-order');
 const { guardBook, sessionEmail } = require('../../lib/acl');
+const { setContext } = require('../../lib/log-context');
 
 function _sigHash(obj) {
   return crypto.createHash('sha1').update(JSON.stringify(obj ?? null)).digest('hex').slice(0, 12);
 }
+
+// Revision des Job-Aufbaus in der Cache-Signatur. Der Wortlaut der Prompt-
+// Builder fliesst nicht in PROMPTS_VERSION (nur Schemas + Locale-Snapshot) —
+// ändert sich Prompt-Aufbau oder Ergebnis-Form, hier hochzählen.
+const CACHE_REV = 2;
 
 const kapitelRouter = express.Router();
 
@@ -71,7 +78,7 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
     // includeExcluded: ausgeschlossene Kapitel sind direkt in der Kapitel-
     // bewertung bewertbar (anders als Buch-/Komplettanalyse) — der Filter unten
     // beschränkt ohnehin auf die angeforderten chapterIds.
-    const { chMap, pages: allPages } = await loadOrderedBookContents(bookId, { includeExcluded: true })
+    const { chMap, chaptersFlat, pages: allPages } = await loadOrderedBookContents(bookId, { includeExcluded: true })
       .catch(e => { throw contentHttpError(e); });
     const pages = allPages.filter(p => chapterIds.has(String(p.chapter_id || '')));
 
@@ -104,27 +111,29 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
 
     // Position in der Lesereihenfolge: erlaubt dem Modell, Dramaturgie/Pacing
     // relativ zur Funktion des Kapitels im Buch zu bewerten statt absolut.
-    const chapterOrder = [];
-    const seenCh = new Set();
-    for (const p of allPages) {
-      const cid = String(p.chapter_id || '');
-      if (!cid || seenCh.has(cid)) continue;
-      seenCh.add(cid);
-      chapterOrder.push(cid);
+    // Gezählt wird wie die Positions-Kachel der Karte (kdPosition): alle
+    // Kapitel des Baums depth-first, Sub-Kapitel und leere eingeschlossen —
+    // sonst lesen Modell und User zwei verschiedene „Kapitel X von Y".
+    // Die Sub-Kapitel eines Kapitels stehen depth-first direkt dahinter; der
+    // Nachfolger ist bei includeSubchapters das erste Kapitel hinter dem Teilbaum.
+    const flatIdx = chaptersFlat.findIndex(c => String(c.id) === String(chapterIdInt));
+    let position = null;
+    if (flatIdx >= 0) {
+      let nextIdx = flatIdx + 1;
+      while (nextIdx < chaptersFlat.length && chapterIds.has(String(chaptersFlat[nextIdx].id))) nextIdx++;
+      position = {
+        index: flatIdx + 1,
+        total: chaptersFlat.length,
+        prevName: flatIdx > 0 ? chaptersFlat[flatIdx - 1].name : '',
+        nextName: nextIdx < chaptersFlat.length ? chaptersFlat[nextIdx].name : '',
+      };
     }
-    const posIdxs = chapterOrder.map((c, i) => (chapterIds.has(c) ? i : -1)).filter(i => i >= 0);
-    const position = posIdxs.length ? {
-      index: Math.min(...posIdxs) + 1,
-      total: chapterOrder.length,
-      prevName: Math.min(...posIdxs) > 0 ? _nameOf(chapterOrder[Math.min(...posIdxs) - 1]) : '',
-      nextName: Math.max(...posIdxs) < chapterOrder.length - 1 ? _nameOf(chapterOrder[Math.max(...posIdxs) + 1]) : '',
-    } : null;
 
     // Stilprofil fliesst in SYSTEM_KAPITELREVIEW (Referenz-Framing) → Cache-Bust bei Profil-Änderung.
     // Komplettanalyse-Kontext + Position ebenfalls in die Sig, damit ein neuer
     // Kartei-/Kontinuitätsstand bzw. eine Umgruppierung den Cache invalidiert.
     const optionsSig = _sigHash({
-      narrative, schwerpunkt: reviewSchwerpunkt, includeSubchapters,
+      rev: CACHE_REV, narrative, schwerpunkt: reviewSchwerpunkt, includeSubchapters,
       stilprofil: bookSettings?.stilprofil || '', komplettContext, position, strukturContext,
     });
 
@@ -139,17 +148,19 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
     if (cached) {
       logger.info(`«${chapterName}» – Cache-HIT (pages_sig match) – spart Kapitel-Review-Call.`);
       updateJob(jobId, { progress: 97, statusText: 'job.phase.checkpointLoaded' });
-      const model = _modelName(effectiveProvider);
-      db.prepare(`INSERT INTO chapter_reviews
-        (book_id, chapter_id, reviewed_at, review_json, model, user_email)
-        VALUES (?, ?, ?, ?, ?, ?)`)
-        .run(bookIdInt, chapterIdInt,
-          new Date().toISOString(), JSON.stringify(cached), model, userEmail || null);
+      // Unverändertes Kapitel → identisches Ergebnis: keinen Doppel-Eintrag in
+      // den auf zehn Läufe gedeckelten Verlauf schreiben.
+      insertChapterReview({
+        bookId: bookIdInt, chapterId: chapterIdInt, review: cached,
+        model: _modelName(effectiveProvider), userEmail,
+      }, { skipIfSameAsLatest: true });
       completeJob(jobId, {
         review: cached,
         chapterId: chapterIdInt,
         chapterName,
-        pageCount: pages.length,
+        // Seitenzahl aus dem Ergebnis (nur Seiten mit Text) — dieselbe Zahl wie
+        // im frischen Lauf, nicht die Rohzahl inkl. leerer Seiten.
+        pageCount: cached.pageCount ?? pages.length,
         tokensIn: 0,
         tokensOut: 0,
         cached: true,
@@ -167,15 +178,18 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
         statusText: 'job.phase.readingPages',
         statusParams: { from: i + 1, to: Math.min(i + BATCH_SIZE, pages.length), total: pages.length },
       });
-      // Index-Map gegen Reorder durch Promise.allSettled.
+      // Eine Seite, die nicht lädt, bricht den Lauf ab: die Bewertung eines
+      // lückenhaften Kapitels landete sonst unter der Signatur des vollständigen
+      // im Cache und käme bei jedem Folgelauf wieder. Promise.all erhält die
+      // Reihenfolge des Batches.
       const batch = pages.slice(i, i + BATCH_SIZE);
-      const results = await Promise.allSettled(batch.map(async p => {
+      const results = await Promise.all(batch.map(async p => {
         const pd = await contentStore.loadPage(p.id).catch(e => { throw contentHttpError(e); });
         const text = htmlToText(pd.html).trim();
         if (!text) return null;
         return { title: p.name, text, chapterId: p.chapter_id || null };
       }));
-      for (const r of results) if (r.status === 'fulfilled' && r.value) contents.push(r.value);
+      for (const v of results) if (v) contents.push(v);
     }
 
     if (!contents.length) { completeJob(jobId, { empty: true, chapterName }); return; }
@@ -239,7 +253,9 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
         });
         const chunkText = _buildText(chunk.pages);
         const ca = await aiCall(jobId, tok,
-          buildChapterAnalysisPrompt(chapterName, bookName, chunk.pages.length, chunkText, narrative),
+          buildChapterAnalysisPrompt(chapterName, bookName, chunk.pages.length, chunkText, {
+            ...narrative, teil: chunkOrder.length > 1 ? { nr: i + 1, von: chunkOrder.length } : null,
+          }),
           SYSTEM_KAPITELANALYSE,
           fromPct, toPct, 1500, 0.2, null, undefined, SCHEMA_CHAPTER_ANALYSIS,
         );
@@ -265,19 +281,21 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
     // Grundlage + Achsen-Profil ins Ergebnis (siehe routes/jobs/review.js).
     r.basis = basis;
     r.profil = profil;
+    // Umfang des Laufs: der Verlauf kennzeichnet ihn, und die Notenänderung
+    // vergleicht nur Läufe mit gleichem Umfang.
+    r.includeSubchapters = !!includeSubchapters;
+    r.pageCount = contents.length;
 
     saveChapterMacroReviewCache(bookIdInt, email, chapterIdInt, pagesSig, r, effectiveProvider);
 
-    const model = _modelName(effectiveProvider);
-    db.prepare(`INSERT INTO chapter_reviews
-      (book_id, chapter_id, reviewed_at, review_json, model, user_email)
-      VALUES (?, ?, ?, ?, ?, ?)`)
-      .run(parseInt(bookId), parseInt(chapterId),
-        new Date().toISOString(), JSON.stringify(r), model, userEmail || null);
+    insertChapterReview({
+      bookId: bookIdInt, chapterId: chapterIdInt, review: r,
+      model: _modelName(effectiveProvider), userEmail,
+    });
 
     completeJob(jobId, {
       review: r,
-      chapterId: parseInt(chapterId),
+      chapterId: chapterIdInt,
       chapterName,
       pageCount: contents.length,
       tokensIn: tok.in,
@@ -296,6 +314,7 @@ kapitelRouter.post('/chapter-review', jsonBody, async (req, res) => {
   const includeSubchapters = req.body?.include_subchapters === true;
   if (!book_id) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
   if (!chapter_id) return res.status(400).json({ error_code: 'CHAPTER_ID_REQUIRED' });
+  setContext({ book: book_id });
   if (!guardBook(req, res, book_id, 'editor')) return;
   // Kapitel- und Buchname kommen aus dem Content-Store, nicht vom Client: beide
   // gehen in Prompt und Cache-Signatur. Das Kapitel muss im geprüften Buch liegen.
@@ -312,11 +331,20 @@ kapitelRouter.post('/chapter-review', jsonBody, async (req, res) => {
   }
   const userEmail = sessionEmail(req);
   // Dedup auf Kapitel-Ebene – parallele Reviews unterschiedlicher Kapitel sind ok.
+  // Läuft schon ein Lauf mit ANDEREM Umfang (Sub-Kapitel an/aus), wäre ihn
+  // still zurückzugeben falsch: der User bekäme ein Ergebnis, das er nicht
+  // angefordert hat.
   const existing = findActiveJobId('chapter-review', chapter_id, userEmail);
-  if (existing) return res.json({ jobId: existing, existing: true });
+  if (existing) {
+    if (!!jobs.get(existing)?.includeSubchapters !== includeSubchapters) {
+      return res.status(409).json({ error_code: 'CHAPTER_REVIEW_OTHER_SCOPE_RUNNING' });
+    }
+    return res.json({ jobId: existing, existing: true });
+  }
   const label = chapterName ? 'job.label.chapterReviewChapter' : 'job.label.chapterReview';
   const labelParams = chapterName ? { name: chapterName } : null;
   const jobId = createJob('chapter-review', book_id, userEmail, label, labelParams, chapter_id);
+  jobs.get(jobId).includeSubchapters = includeSubchapters;
   enqueueJob(jobId, () => runChapterReviewJob(
     jobId, book_id, chapter_id, chapterName, bookName, userEmail,
     { includeSubchapters },

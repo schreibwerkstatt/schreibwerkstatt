@@ -1,35 +1,90 @@
 'use strict';
-// Semantisches Retrieval für die zwei Buch-Chat-Pfade. Beide gehen über dieselbe
-// geteilte Pipeline lib/semantic-retrieval.js#semanticQuery (Cosinus + Hybrid-RRF +
+// Semantisches Retrieval der Chats. Alle Pfade gehen über dieselbe geteilte
+// Pipeline lib/semantic-retrieval.js#semanticQuery (Cosinus + Hybrid-RRF +
 // optional Rerank) — exakt die, die auch das agentische Tool `search_similar` und
-// die Such-Karte benutzen. Sie unterscheiden sich nur darin, WAS sie damit füllen:
+// die Such-Karte benutzen — und erweitern jeden Treffer per `withNeighbors` um die
+// Nachbar-Chunks derselben Entität (ein Chunk allein schneidet die Antwort oft mitten
+// im Gedanken ab). Sie unterscheiden sich nur darin, WAS sie damit füllen:
 //
-//   selectPassagesSemantic — klassischer Pfad: füllt das ganze Text-Budget des
-//     System-Prompts (ein bester Chunk pro Seite, breite Streuung über das Buch).
-//   preContextPassages     — agentischer Pfad: ein KLEINER Erst-Kontext (wenige
-//     Chunks, harter Zeichendeckel), der die häufigste Frageform („wie alt war X",
-//     „wann hat X …") schon in Iteration 1 beantwortbar macht. Ohne ihn beginnt der
-//     Agent bei JEDER Frage bei null und lädt im Zweifel ganze Kapitel nach — die
-//     paar Tausend Tokens hier sind billiger als eine einzige get_chapter_text-Runde.
+//   selectPassagesSemantic — klassischer Buch-Chat: füllt das ganze Text-Budget des
+//     System-Prompts (ein bester Chunk pro Seite + Nachbarn, breite Streuung).
+//   preContextPassages     — kleiner Erst-Kontext (wenige Treffer, harter
+//     Zeichendeckel): agentischer Buch- und Plot-Chat, klassischer Plot-Chat und
+//     der Buch-Block des Seiten-Chats. Macht die häufigste Frageform („wie alt war
+//     X", „wann hat X …") ohne Werkzeug-Runde beantwortbar — die paar Tausend Tokens
+//     hier sind billiger als eine einzige get_chapter_text-Runde.
+//   retrievalQuery         — Suchtext aus Frage + letzter Runde (Folgefragen).
 //
 // Rein rückwärtsgewandt: findet Bestehendes, schreibt nie in den Buchtext.
 
 const contentStore = require('../../../lib/content-store');
 const appSettings = require('../../../lib/app-settings');
-const { semanticQuery } = require('../../../lib/semantic-retrieval');
+const embed = require('../../../lib/embed');
+const semanticRetrieval = require('../../../lib/semantic-retrieval');
 const { resolveEntityTitle } = require('../book-chat-tools/shared');
 const { i18nError } = require('../shared');
 
-// Mini-RAG-Retrieval für den klassischen Buch-Chat: zieht die semantisch relevantesten
-// Chunk-Auszüge (ein bester Chunk pro Seite) und füllt damit das Text-Budget. Seiten-
-// Metadaten (Name/Slug) werden einmal via listPages aufgelöst; der Chunk-Text kommt aus
-// dem Index, es werden KEINE Seiten-Volltexte geladen. Gibt null zurück, wenn kein Index
-// existiert bzw. die Anfrage keine Treffer liefert (Caller fällt dann auf Keyword-Scoring
-// über alle Seiten zurück). Wirft nur bei Abort/Backend-Fehler.
+// Index-Kinds des Erst-Kontexts. Recherche-Material bleibt draussen: es ist Fremd-
+// text (Quellen, Notizen), keine Buchaussage — der Buch-Chat liest es gezielt über
+// list_research_items/read_research_item.
+const PRE_CONTEXT_KINDS = ['page', 'scene', 'figure', 'location', 'fact'];
+
+// Mindestlänge eines Ausschnitts — darunter trägt er keine Aussage.
+const MIN_PASSAGE_CHARS = 50;
+
+/**
+ * Suchtext für das Retrieval: aktuelle Frage plus die letzte Runde. Folgefragen
+ * («und wie alt war sie da?») tragen ihr Subjekt nicht selbst — ohne die Vorfrage
+ * findet die semantische Suche die falschen Stellen. Gekappt, damit der Text die
+ * aktuelle Frage nicht überstimmt. `history` = [{ role, content }] ohne die aktuelle
+ * Frage; i18n-Marker (Fehler-/Fallback-Antworten) zählen nicht als Antwort.
+ */
+function retrievalQuery(message, history) {
+  const prev = Array.isArray(history) ? [...history].reverse() : [];
+  const lastUser = prev.find(m => m.role === 'user' && typeof m.content === 'string');
+  const lastAsst = prev.find(m => m.role === 'assistant' && typeof m.content === 'string' && !m.content.startsWith('__i18n:'));
+  return [
+    lastUser ? lastUser.content.slice(0, 400) : null,
+    lastAsst ? lastAsst.content.slice(0, 300) : null,
+    message,
+  ].filter(Boolean).join('\n');
+}
+
+// Treffer um ihre Nachbar-Chunks erweitern. Zurück kommt pro Treffer der erweiterte
+// Text UND der Original-Chunk: passt der erweiterte Ausschnitt nicht mehr ins Rest-
+// Budget, fällt der Aufrufer auf den Treffer-Chunk selbst zurück (statt vom Anfang
+// der Nachbarschaft abzuschneiden und den Treffer zu verlieren).
+function _expand(hits) {
+  const key = (h) => `${h.kind}:${h.entity_id}`;
+  const wide = new Map(semanticRetrieval.withNeighbors(hits, { radius: 1 }).map(w => [key(w), w.text]));
+  return hits.map(h => ({ hit: h, wide: String(wide.get(key(h)) || h.text || ''), core: String(h.text || '') }));
+}
+
+// Text für das Rest-Budget: Nachbarschaft, wenn sie passt, sonst der Treffer-Chunk.
+function _fit({ wide, core }, remaining) {
+  if (wide.length <= remaining) return wide;
+  return core.slice(0, remaining);
+}
+
+/**
+ * Mini-RAG des klassischen Buch-Chats: die semantisch relevantesten Seiten (ein
+ * bester Chunk pro Seite, um seine Nachbar-Chunks erweitert) füllen das Text-Budget.
+ * Seiten-Metadaten via listPages; der Text kommt aus dem Index, es werden KEINE
+ * Seiten-Volltexte geladen.
+ *
+ * Rückgabe:
+ *   { status: 'ok', selectedPages, usedChars, totalPages }
+ *   { status: 'no_index' } — kein oder unvollständiger Index (indexReady false):
+ *     Treffer wären nur ein Teil des Buchs, der Aufrufer nimmt Keyword-Scoring.
+ *   { status: 'no_hits' }  — Index vollständig, aber nichts Passendes.
+ * Wirft nur bei Abort/Backend-Fehler.
+ */
 async function selectPassagesSemantic(bookId, query, budgetChars, signal) {
+  if (!semanticRetrieval.indexReady(bookId)) return { status: 'no_index' };
   const topK = parseInt(appSettings.get('jobs.book_chat.rag_top_k'), 10) || 40;
-  const hits = await semanticQuery(bookId, query, { kinds: ['page'], topK, signal });
-  if (!hits.length) return null;
+  const hits = (await semanticRetrieval.semanticQuery(bookId, query, { kinds: ['page'], topK, signal }))
+    .filter(h => h.kind === 'page');
+  if (!hits.length) return { status: 'no_hits' };
 
   let pages;
   try { pages = await contentStore.listPages(bookId); }
@@ -40,58 +95,94 @@ async function selectPassagesSemantic(bookId, query, budgetChars, signal) {
   const metaById = new Map(pages.map(p => [p.id, p]));
 
   const selectedPages = [];
-  const seen = new Set();
   let usedChars = 0;
-  for (const h of hits) {
+  // semanticQuery liefert je Seite schon nur den besten Chunk; gelöschte Seiten
+  // (Chunk noch im Index) fallen vor der Nachbar-Erweiterung heraus.
+  for (const item of _expand(hits.filter(h => metaById.has(h.entity_id)))) {
     if (usedChars >= budgetChars) break;
-    if (h.kind !== 'page' || seen.has(h.entity_id)) continue;
-    const meta = metaById.get(h.entity_id);
-    if (!meta) continue; // Seite gelöscht, Chunk noch im Index
-    const text = String(h.text || '').slice(0, budgetChars - usedChars);
-    if (text.length < 50) continue;
-    seen.add(h.entity_id);
+    const text = _fit(item, budgetChars - usedChars);
+    if (text.length < MIN_PASSAGE_CHARS) continue;
+    const meta = metaById.get(item.hit.entity_id);
     selectedPages.push({ name: meta.name, id: meta.id, slug: meta.slug, book_slug: meta.book_slug, text });
     usedChars += text.length;
   }
-  if (!selectedPages.length) return null;
-  return { selectedPages, usedChars, totalPages: pages.length };
+  if (!selectedPages.length) return { status: 'no_hits' };
+  return { status: 'ok', selectedPages, usedChars, totalPages: pages.length };
 }
 
-// Erst-Kontext des agentischen Buch-Chats. Anders als beim klassischen Pfad ist das
-// KEIN Budget-Füllen: `pre_rag_top_k` Treffer, hart auf `pre_rag_chars` gedeckelt.
-// top_k = 0 schaltet den Erst-Kontext ab (dann verhält sich der Agent wie vorher).
-// Mehrere Chunks derselben Seite sind hier erlaubt — bei einer Faktenfrage stehen
-// Frage und Antwort oft in benachbarten Passagen einer Seite.
-// `userEmail`: Szenen/Figuren sind Analyse-Daten pro User, der Index hängt nur am Buch
-// — Treffer aus der Analyse eines Mitautors fallen weg (resolveEntityTitle-Scope).
-// Rückgabe: { hits, chars } oder null (kein Index / keine Treffer / abgeschaltet).
-async function preContextPassages(bookId, query, { signal, userEmail = null } = {}) {
-  const topK = parseInt(appSettings.get('jobs.book_chat.pre_rag_top_k'), 10);
-  const budget = parseInt(appSettings.get('jobs.book_chat.pre_rag_chars'), 10);
-  if (!(topK > 0) || !(budget > 0)) return null;
+/**
+ * Erst-Kontext: `topK` Treffer, um ihre Nachbar-Chunks erweitert und hart auf
+ * `chars` gedeckelt — KEIN Budget-Füllen. semanticQuery liefert pro Entität nur
+ * ihren besten Chunk; jede Seite/Szene/Figur/jeder Ort/Fakt erscheint darum
+ * höchstens einmal, mit der Nachbarschaft dieses Chunks als Ausschnitt.
+ *
+ * Optionen:
+ *   signal, userEmail — Szenen/Figuren/Orte/Fakten sind Analyse-Daten pro User, der
+ *     Index hängt nur am Buch: Treffer aus der Analyse eines Mitautors fallen weg
+ *     (resolveEntityTitle-Scope).
+ *   topK, chars — Default `jobs.book_chat.pre_rag_top_k` / `…pre_rag_chars`; 0 = aus.
+ *   excludePageIds — Seiten, die schon vollständig im Prompt stehen (Seiten-Chat).
+ * Rückgabe: { hits:[{ kind, entity_id, title, score, text }], chars } oder null
+ * (abgeschaltet / keine Treffer). Ein fehlender Index liefert schlicht keine Treffer.
+ */
+async function preContextPassages(bookId, query, {
+  signal, userEmail = null, topK = null, chars = null, excludePageIds = null,
+} = {}) {
+  const k = topK != null ? topK : parseInt(appSettings.get('jobs.book_chat.pre_rag_top_k'), 10);
+  const budget = chars != null ? chars : parseInt(appSettings.get('jobs.book_chat.pre_rag_chars'), 10);
+  if (!(k > 0) || !(budget > 0)) return null;
+  const exclude = new Set(excludePageIds || []);
 
-  const raw = await semanticQuery(bookId, query, { kinds: ['page', 'scene', 'figure'], topK, signal });
-  if (!raw.length) return null;
+  // Ausgeschlossene Seiten belegen sonst Plätze im topK — darum um ihre Zahl grösser ziehen.
+  const raw = await semanticRetrieval.semanticQuery(bookId, query, {
+    kinds: PRE_CONTEXT_KINDS, topK: k + exclude.size, signal,
+  });
+  const kept = [];
+  for (const h of raw) {
+    if (kept.length >= k) break;
+    if (h.kind === 'page' && exclude.has(h.entity_id)) continue;
+    const title = resolveEntityTitle(h.kind, h.entity_id, { userEmail });
+    if (title == null) continue; // Entität gelöscht / fremder User, Chunk noch im Index
+    kept.push({ ...h, title });
+  }
+  if (!kept.length) return null;
 
   const hits = [];
-  let chars = 0;
-  for (const h of raw) {
-    if (chars >= budget) break;
-    const title = resolveEntityTitle(h.kind, h.entity_id, { userEmail });
-    if (title == null) continue; // Entität gelöscht, Chunk noch im Index
-    const text = String(h.text || '').slice(0, budget - chars);
-    if (text.length < 50) continue;
+  let used = 0;
+  for (const item of _expand(kept)) {
+    if (used >= budget) break;
+    const text = _fit(item, budget - used);
+    if (text.length < MIN_PASSAGE_CHARS) continue;
+    const h = item.hit;
     hits.push({
       kind: h.kind,
       entity_id: h.entity_id,
-      title,
+      title: h.title,
       score: Math.round(h.score * 1000) / 1000,
       text,
     });
-    chars += text.length;
+    used += text.length;
   }
   if (!hits.length) return null;
-  return { hits, chars };
+  return { hits, chars: used };
 }
 
-module.exports = { selectPassagesSemantic, preContextPassages };
+/**
+ * Erst-Kontext der agentischen Chats (Buch- und Plot-Chat), non-fatal: ohne
+ * Embedding-Endpunkt oder bei Backend-Fehler null — der Agent arbeitet dann rein
+ * über seine Werkzeuge. Nur ein Abbruch wird weitergeworfen.
+ */
+async function agentPreContext(bookId, query, { signal, logger, userEmail = null } = {}) {
+  if (!embed.isEnabled() || !query) return null;
+  try {
+    const pre = await preContextPassages(bookId, query, { signal, userEmail });
+    if (pre) logger?.info?.(`Erst-Kontext: ${pre.hits.length} Passagen, ${pre.chars} Zeichen.`);
+    return pre;
+  } catch (e) {
+    if (e.name === 'AbortError') throw e;
+    logger?.warn?.(`Erst-Kontext-Retrieval fehlgeschlagen (${e.message}) – Agent arbeitet nur über Werkzeuge.`);
+    return null;
+  }
+}
+
+module.exports = { selectPassagesSemantic, preContextPassages, agentPreContext, retrievalQuery, PRE_CONTEXT_KINDS };

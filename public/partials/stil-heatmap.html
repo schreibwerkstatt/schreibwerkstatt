@@ -31,7 +31,7 @@
 
   <template x-if="stilHasData()">
     <div class="heatmap-wrap">
-      <div class="heatmap-legend" x-text="$app.t('stil.legend')"></div>
+      <div class="heatmap-legend" x-text="$app.t('stil.legend', { n: stilMinWords })"></div>
 
       <div class="heatmap-scroll">
         <table class="heatmap-table">
@@ -40,7 +40,7 @@
               <th class="heatmap-rowhead" x-text="$app.t('stil.chapter')"></th>
               <th class="heatmap-numcol" x-text="$app.t('stil.words')"></th>
               <template x-for="m in stilMetricDefs" :key="m.key">
-                <th :data-tip="$app.t('stil.tip.' + m.key)">
+                <th :data-tip="stilMetricTip(m.key)">
                   <span x-text="$app.t(m.label)"></span>
                 </th>
               </template>
@@ -61,6 +61,7 @@
                   <td class="heatmap-cell"
                       :class="[c.cells[m.key].cls, { 'heatmap-cell--active': activeStilDetailKey === c.cells[m.key].detailKey }]"
                       :style="c.cells[m.key].vars"
+                      :data-tip="c.cells[m.key].lowData ? $app.t('heatmap.lowData', { n: stilMinWords }) : ''"
                       @click="c.cells[m.key].clickable && toggleStilDetail(c.key, m.key)"
                       x-text="c.cells[m.key].text">
                   </td>
@@ -69,6 +70,12 @@
             </template>
           </tbody>
         </table>
+      </div>
+      <div class="stil-heatmap-foot">
+        <span class="heatmap-legend" x-show="stilHasApproxP90()" x-text="$app.t('stil.legendApprox')"></span>
+        <!-- Querverweis: Wiederholungen hier zählen pro Seite, buchweit zählt der Wortschatz. -->
+        <button type="button" class="internal-link stil-wortschatz-link" @click="stilOpenWortschatz()"
+                :data-tip="$app.t('stil.wortschatzLinkTip')" x-text="$app.t('stil.wortschatzLink')"></button>
       </div>
 
       <!-- Detail-Panel: Treffer-Beispiele für die angeklickte Zelle.
@@ -126,6 +133,8 @@
               </div>
             </template>
           </div>
+          <button type="button" class="internal-link stil-wortschatz-link" x-show="stilDetail.metricKey === 'repetition_score'"
+                  @click="stilOpenWortschatz()" :data-tip="$app.t('stil.wortschatzLinkTip')" x-text="$app.t('stil.wortschatzLink')"></button>
         </div>
       </template>
     </div>
@@ -145,6 +154,8 @@
         <h3 class="stil-rhythm-title" x-text="$app.t('stil.rhythm.title')"></h3>
         <p class="stil-rhythm-sub"
            x-text="$app.t('stil.rhythm.sub', { max: stilNum(stilRhythmData().scaleMax, 0) })"></p>
+        <p class="stil-rhythm-sub" x-show="stilData?.book?.sentence_len_p90 != null"
+           x-text="$app.t('stil.rhythm.bookP90', { p90: (stilData?.book?.sentence_len_p90_exact === false ? '≈ ' : '') + stilNum(stilData?.book?.sentence_len_p90, 0) })"></p>
       </div>
 
       <div class="stil-rhythm-rows">
@@ -181,21 +192,26 @@
     </div>
   </template>
 
-  <!-- Satzanfänge: buchweite Rangliste des jeweils ersten Wortes. -->
+  <!-- Satzanfänge: Rangliste des jeweils ersten Wortes, buchweit oder für ein Kapitel. -->
   <template x-if="stilOpenerData().total > 0">
     <div class="stil-openers">
       <div class="stil-rhythm-head">
-        <h3 class="stil-rhythm-title" x-text="$app.t('stil.openers.title')"></h3>
+        <div class="stil-openers-titlebar">
+          <h3 class="stil-rhythm-title" x-text="$app.t('stil.openers.title')"></h3>
+          <div x-data="combobox($app.t('stil.openers.scope'), $app.t('stil.openers.wholeBook'))"
+               x-modelable="value" x-model="stilOpenerChapter"
+               x-effect="options = (stilData?.chapterOpeners || []).map(c => ({ value: c.key, label: stilChapterName(c.name) }))"></div>
+        </div>
         <p class="stil-rhythm-sub"
            x-text="$app.t('stil.openers.sub', {
-             distinct: stilNum(stilOpenerData().distinct, 0),
-             total: stilNum(stilOpenerData().total, 0),
-             repeats: stilNum(stilOpenerData().repeats, 0),
-             pct: stilPercent(stilOpenerData().repeatRatio),
+             distinct: stilNum(stilOpenerView().distinct, 0),
+             total: stilNum(stilOpenerView().total, 0),
+             repeats: stilNum(stilOpenerView().repeats, 0),
+             pct: stilPercent(stilOpenerView().repeatRatio),
            })"></p>
       </div>
       <ul class="stil-opener-list">
-        <template x-for="o in stilOpenerData().top" :key="o.word">
+        <template x-for="o in stilOpenerView().top" :key="o.word">
           <li class="stil-opener-row">
             <span class="stil-opener-word" x-text="o.word"></span>
             <span class="stil-opener-bar">

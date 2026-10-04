@@ -21,7 +21,7 @@ export function registerWortschatzCard() {
     wortschatzProgress: 0,
     wortschatzStatus: '',
     wortschatzLoadError: false,
-    // Aktiver Reiter: 'terms' | 'phrases' | 'hapax' | 'cloud'
+    // Aktiver Reiter: 'terms' | 'phrases' | 'hapax' | 'cloud' | 'chapters' | 'figures'
     wortschatzTab: 'terms',
     // Wortwolke (vierter Reiter, siehe book/wortschatz-cloud.js).
     // 'freq' = Häufigkeit, 'key' = Keyness.
@@ -53,6 +53,16 @@ export function registerWortschatzCard() {
     get wortschatzNgrams() {
       return this.wortschatzData?.ngrams || [];
     },
+    get wortschatzChapters() {
+      return this.wortschatzData?.chapters || EMPTY_ROWS;
+    },
+    get wortschatzIdiolect() {
+      return this.wortschatzData?.idiolect || EMPTY_ROWS;
+    },
+    // Vergleiche mit den übrigen Büchern sieht nur der Besitzer (routes/lexicon.js).
+    get wortschatzIsOwner() {
+      return this.wortschatzData?.isOwner !== false;
+    },
     // Einmalwörter mit Wortlänge als eigenem Feld: sie ist die einzige Zahl, nach
     // der sich diese Liste sortieren lässt — die Häufigkeit ist per Definition
     // überall 1.
@@ -61,7 +71,8 @@ export function registerWortschatzCard() {
       if (!src) return EMPTY_ROWS;
       if (this._hapaxSrc !== src) {
         this._hapaxSrc = src;
-        this._hapaxRows = src.map(h => ({ ...h, len: h.term.length }));
+        // Codepoints, nicht UTF-16-Einheiten — wie SQLites length() im Lesepfad.
+        this._hapaxRows = src.map(h => ({ ...h, len: [...h.term].length }));
       }
       return this._hapaxRows;
     },

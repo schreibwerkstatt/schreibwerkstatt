@@ -16,8 +16,8 @@ const page = (page_id, chapter_id, words, extra = {}) => ({
   page_name: `Seite ${page_id}`, words, position: null, ...extra,
 });
 const finding = (typ, original, extra = {}) => ({ typ, original, korrektur: original + '!', erklaerung: 'weil', ...extra });
-const check = (page_id, findings) => ({ page_id, errors_json: JSON.stringify(findings) });
-const applied = (page_id, findings) => ({ page_id, applied_errors_json: JSON.stringify(findings) });
+const check = (page_id, findings, extra = {}) => ({ page_id, errors_json: JSON.stringify(findings), ...extra });
+const applied = (page_id, findings, extra = {}) => ({ page_id, applied_errors_json: JSON.stringify(findings), ...extra });
 
 test('normalizeMode: nur die drei Modi, sonst open', () => {
   for (const m of MODES) assert.equal(normalizeMode(m), m);
@@ -29,8 +29,8 @@ test('normalizeMode: nur die drei Modi, sonst open', () => {
 test('open (Default) zaehlt nur Findings, die NICHT angenommen wurden', () => {
   const r = buildFehlerHeatmap({
     pages: [page(1, 10, 1000)],
-    checks: [check(1, [finding('stil', 'A'), finding('stil', 'B'), finding('grammatik', 'C')])],
-    appliedRows: [applied(1, [finding('stil', 'A')])],
+    checks: [check(1, [finding('stil', 'A'), finding('stil', 'B'), finding('grammatik', 'C')], { id: 5 })],
+    appliedRows: [applied(1, [finding('stil', 'A')], { id: 5 })],
   });
   assert.equal(r.mode, 'open');
   assert.equal(r.matrix[10].stil.count, 1);        // B bleibt offen, A ist angenommen
@@ -179,14 +179,46 @@ test('leere Eingabe liefert eine wohlgeformte, leere Antwort', () => {
   assert.deepEqual(r, { mode: 'open', chapters: [], matrix: {}, totals: {}, details: {} });
 });
 
-test('open ignoriert Findings ohne original (kein Abgleich moeglich)', () => {
-  // Ein Finding ohne `original` kann nicht als angenommen erkannt werden; es
-  // faellt im open-Modus heraus statt faelschlich als offen zu zaehlen.
+test('open zaehlt Findings ohne original als offen (wie die Fassungs-Kennzahl)', () => {
+  // Ohne `original` laesst sich nichts als angenommen erkennen — der Befund ist
+  // also offen. Heatmap und Trend (lib/lektorat-metrics.js) zaehlen gleich.
   const r = buildFehlerHeatmap({
     pages: [page(1, 10, 100)],
     checks: [{ page_id: 1, errors_json: JSON.stringify([{ typ: 'stil' }]) }],
     appliedRows: [],
   });
-  assert.equal(r.matrix[10].stil, undefined);
-  assert.deepEqual(r.totals, {});
+  assert.equal(r.matrix[10].stil.count, 1);
+});
+
+test('open: Annahme aus aelterem Lauf, VOR dem juengsten gespeichert, verdeckt nichts', () => {
+  // Der juengste Lauf hat den bereits korrigierten Text gesehen. Meldet er
+  // dasselbe `original` erneut, ist das ein weiteres, echtes Vorkommen.
+  const r = buildFehlerHeatmap({
+    pages: [page(1, 10, 1000)],
+    checks: [check(1, [finding('fuellwort', 'halt')], { id: 2, checked_at: '2026-05-02T10:00:00.000Z' })],
+    appliedRows: [applied(1, [finding('fuellwort', 'halt')],
+      { id: 1, checked_at: '2026-05-01T10:00:00.000Z', saved_at: '2026-05-01T11:00:00.000Z' })],
+  });
+  assert.equal(r.matrix[10].fuellwort.count, 1);
+});
+
+test('open: Annahme aus aelterem Lauf, NACH dem juengsten gespeichert, verdeckt', () => {
+  // Aus der Historie heraus uebernommen, nachdem schon neu lektoriert war:
+  // die Korrektur betrifft den Text, den der juengste Lauf gesehen hat.
+  const r = buildFehlerHeatmap({
+    pages: [page(1, 10, 1000)],
+    checks: [check(1, [finding('fuellwort', 'halt')], { id: 2, checked_at: '2026-05-02T10:00:00.000Z' })],
+    appliedRows: [applied(1, [finding('fuellwort', 'halt')],
+      { id: 1, checked_at: '2026-05-01T10:00:00.000Z', saved_at: '2026-05-03T09:00:00.000Z' })],
+  });
+  assert.equal(r.matrix[10].fuellwort, undefined);
+});
+
+test('open: eine Annahme deckt genau einen gleichlautenden Befund', () => {
+  const r = buildFehlerHeatmap({
+    pages: [page(1, 10, 1000)],
+    checks: [check(1, [finding('fuellwort', 'halt'), finding('fuellwort', 'halt')], { id: 3 })],
+    appliedRows: [applied(1, [finding('fuellwort', 'halt')], { id: 3 })],
+  });
+  assert.equal(r.matrix[10].fuellwort.count, 1);
 });

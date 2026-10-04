@@ -96,9 +96,10 @@ test('gültige Kandidaten → Vorschläge mit korrektem kind/id/label/grund', as
   assert.equal(s.length, 4);
 
   const byKind = Object.fromEntries(s.map(x => [x.target_kind, x]));
-  assert.deepEqual(byKind.figure, { target_kind: 'figure', target_id: ids.figureId, label: 'Anna', grund: 'Anna kommt in der Notiz vor' });
+  assert.deepEqual(byKind.figure, { target_kind: 'figure', target_id: ids.figureId, ref_id: 'f1', label: 'Anna', grund: 'Anna kommt in der Notiz vor' });
   assert.equal(byKind.location.target_id, ids.locationId);
   assert.equal(byKind.location.label, 'Olten');
+  assert.equal(byKind.location.ref_id, 'l1');   // öffentliche Kennung für die Entitäts-Referenz
   assert.equal(byKind.thread.target_id, ids.threadId);   // strang → thread
   assert.equal(byKind.beat.target_id, ids.beatId);
   // Nichts wurde persistiert.

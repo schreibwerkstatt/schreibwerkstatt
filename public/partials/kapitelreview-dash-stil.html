@@ -1,0 +1,35 @@
+<!--
+  Kapitel-Stil — Stil- und Lesbarkeitswerte des Scopes neben dem Buchschnitt,
+  aus derselben Antwort wie die Stil-Heatmap (/history/style-stats). Kein
+  KI-Call. Compute + Abweichungs-Regel: public/js/cards/kapitel-stil.js,
+  Methode `kdStil()`. Als Fragment eingebunden (`@include`), weil das
+  Dashboard-Raster in einem <template> liegt.
+-->
+<template x-if="kdStil()">
+  <div class="overview-tile overview-tile--medium internal-link kapitel-dash-stil"
+       @click="$app.toggleStilCard()"
+       :data-tip="$app.t('kapitelReview.dash.stilOpen')"
+       :aria-label="$app.t('kapitelReview.dash.stil')">
+    <div class="overview-tile-head">
+      <span class="overview-tile-label" x-text="$app.t('kapitelReview.dash.stil')"></span>
+      <span class="overview-tile-median" x-text="$app.t('kapitelReview.dash.stilLink')"></span>
+    </div>
+    <ul class="kapitel-dash-stil-list">
+      <template x-for="r in kdStil().rows" :key="r.key">
+        <li class="kapitel-dash-stil-row" :data-tip="$app.t(r.tipKey)">
+          <span class="kapitel-dash-stil-label" x-text="$app.t(r.labelKey)"></span>
+          <span class="kapitel-dash-stil-value"
+                :class="r.dev ? 'kapitel-dash-stil-value--dev' : ''"
+                :data-tip="r.dev ? $app.t(r.dev === 'up' ? 'kapitelReview.dash.stilDevUp' : 'kapitelReview.dash.stilDevDown') : null"
+                x-text="(r.dev === 'up' ? '▲ ' : r.dev === 'down' ? '▼ ' : '') + _fmtNum(r.value)"></span>
+          <span class="kapitel-dash-stil-book"
+                x-text="r.book === null ? '–' : $app.t('kapitelReview.dash.densityBook', { v: _fmtNum(r.book) })"></span>
+        </li>
+      </template>
+    </ul>
+    <div class="card-hint" x-show="kdStil().needsSync" x-cloak
+         x-text="$app.t('kapitelReview.dash.stilStale')"></div>
+    <div class="card-hint" x-show="!kdStil().needsSync"
+         x-text="$app.t('kapitelReview.dash.stilHint')"></div>
+  </div>
+</template>

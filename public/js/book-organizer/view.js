@@ -315,7 +315,7 @@ export function _computeChapterLengthDist(roots) {
   const withDelta = out.map(c => ({
     ...c,
     deltaPct: median > 0 ? Math.round(((c.chars - median) / median) * 100) : 0,
-    isMax: c.chars === maxChars && maxChars > 0,
+    isMax: c.chars === maxChars && maxChars > 0 && maxChars !== minChars,
     isMin: c.chars === minChars && maxChars !== minChars,
   }));
   const maxAbsDelta = Math.max(1, ...withDelta.map(c => Math.abs(c.deltaPct)));

@@ -2,8 +2,8 @@
 //
 // Reine Anzeige: gerechnet wird in lib/stil-rhythmus.js (Server), zusammengesetzt
 // in lib/stil-heatmap.js. Die Antwort von /history/style-stats bringt `rhythm`
-// (Polygon-Punkte + Kennzahlen pro Kapitel) und `openers` (buchweite Rangliste)
-// fertig mit.
+// (Polygon-Punkte + Kennzahlen pro Kapitel), `openers` (buchweite Rangliste) und
+// `chapterOpeners` (Top 10 je Kapitel, gewählt über `stilOpenerChapter`) fertig mit.
 //
 // Warum serverseitig: die Grundlage ist `page_stats.sentence_lens` — die
 // Satzlängen-Sequenz in Leserichtung, bis zu 2000 Zahlen PRO SEITE. Bei einem
@@ -31,6 +31,18 @@ export const stilRhythmusMethods = {
 
   stilOpenerData() {
     return this.stilData?.openers || EMPTY_OPENERS;
+  },
+
+  // Angezeigte Rangliste: das gewählte Kapitel, sonst das ganze Buch. Fehlt das
+  // Kapitel nach einem Neuladen (gelöscht, keine Sätze mehr), fällt die Anzeige
+  // still auf das Buch zurück, statt leer zu bleiben.
+  stilOpenerView() {
+    const key = this.stilOpenerChapter;
+    if (key) {
+      const ch = (this.stilData?.chapterOpeners || []).find(c => c.key === key);
+      if (ch) return ch;
+    }
+    return this.stilOpenerData();
   },
 
   // Das Band braucht die Sequenz-Felder aus page_stats. Bis der Sync durch ist

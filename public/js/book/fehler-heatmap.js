@@ -1,8 +1,17 @@
 // Fehler-Heatmap: aggregiert Fehlertypen × Kapitel aus jüngstem page_check pro Seite.
 // Daten kommen live aus /history/fehler-heatmap/:book_id — kein KI-Call, keine Sync-Phase.
 // Methoden werden in Alpine.data('fehlerHeatmapCard') gespreadet; Root-Zugriffe via window.__app.
+//
+// Die Zell-Darstellung entsteht EINMAL pro Datenstand (`buildFehlerRows`), nicht
+// pro Zelle im Template — Muster public/js/book/stil-heatmap.js#buildStilRows.
+// Alpine memoisiert Methodenaufrufe in Bindings nicht; 26 Typen x Kapitel x
+// mehrere Bindings mit einer Min/Max-Skala darin waren O(Kapitel²) pro Render.
+//
+// Farbe = DICHTE (Befunde pro 1000 geprüfte Wörter), Zahl = Anzahl. Nach der
+// Anzahl gefärbt wäre jedes lange Kapitel in jeder Spalte rot — die Farbe zeigte
+// dann den Kapitelumfang, nicht die Fehlerlage.
 
-import { escHtml, fetchJson, formatNumber, heatmapCellVars, localeTag, minMaxBy, tzOpts } from '../utils.js';
+import { escHtml, fetchJson, formatNumber, heatmapCellVars, HEATMAP_MIN_WORDS, localeTag, minMaxBy, tzOpts } from '../utils.js';
 import { loadChart } from '../lazy-libs.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { createChartHolder, cssVar } from '../cards/chart-holder.js';
@@ -51,10 +60,124 @@ const FEHLER_CLUSTER_STARTS = new Set(FEHLER_CLUSTERS.reduce((acc, c) => {
 }, [0]).slice(0, -1).slice(1));
 
 const MODES = ['open', 'applied', 'all'];
+const UNCAT = '__uncat__';
+
+/** Zeilen-Schlüssel eines Kapitels — derselbe wie in `matrix`/`details` der Antwort. */
+export function fehlerChapterKey(ch) {
+  return ch.chapter_id == null ? UNCAT : String(ch.chapter_id);
+}
+
+function _coveragePct(ch) {
+  return ch.pages_total ? Math.round((ch.pages_checked / ch.pages_total) * 100) : 0;
+}
+
+/** Baut die render-fertigen Zeilen aus der Server-Antwort. Pure (kein `this`),
+ *  damit ohne Alpine testbar.
+ *
+ *  Zellregeln:
+ *   - Kapitel ohne geprüfte Seite → 'empty' (schraffiert), keine Zahl.
+ *   - Geprüft ohne Befund → Dichte 0: geht in die Skala ein und färbt grün. Sonst
+ *     stünde das beste Kapitel neutral da und das mit einem Befund grün.
+ *   - Unter HEATMAP_MIN_WORDS geprüften Wörtern → 'lowdata': Zahl ja, Farbe nein,
+ *     und kein Einfluss auf die Skala. Erreichen weniger als zwei Kapitel die
+ *     Schwelle (kurzes Buch), gilt sie nicht — sonst hätte es gar keine Farbe.
+ *   - Teilweise geprüft → Farbe blasser (`--heatmap-opacity`, wirkt nur auf den
+ *     Hintergrund, nicht auf die Zahl). */
+export function buildFehlerRows(data, typen, uiLocale) {
+  const chapters = data?.chapters || [];
+  if (!chapters.length) return [];
+  const matrix = data.matrix || {};
+
+  const checked = chapters.filter(ch => ch.pages_checked > 0);
+  const enough = checked.filter(ch => (ch.words_checked || 0) >= HEATMAP_MIN_WORDS);
+  const scaleSet = enough.length >= 2 ? enough : checked;
+  const inScale = new Set(scaleSet);
+
+  const ranges = new Map();
+  for (const typ of typen) {
+    ranges.set(typ, minMaxBy(scaleSet, ch => matrix[fehlerChapterKey(ch)]?.[typ]?.per1k ?? 0));
+  }
+
+  return chapters.map((ch) => {
+    const key = fehlerChapterKey(ch);
+    const coveragePct = _coveragePct(ch);
+    const isChecked = ch.pages_checked > 0;
+    const lowData = isChecked && !inScale.has(ch);
+    const opacity = coveragePct < 100 ? 0.5 + (coveragePct / 200) : 1;
+    const cells = {};
+    for (const typ of typen) {
+      const cell = matrix[key]?.[typ];
+      const count = cell?.count || 0;
+      const per1k = cell?.per1k ?? 0;
+      let kind = 'empty';
+      let vars = {};
+      if (isChecked) {
+        const range = ranges.get(typ);
+        if (lowData) kind = 'lowdata';
+        else if (range.max === range.min) kind = 'neutral';
+        else {
+          kind = 'tinted';
+          vars = heatmapCellVars((per1k - range.min) / (range.max - range.min), opacity);
+        }
+      }
+      const clickable = count > 0;
+      cells[typ] = {
+        text: count > 0 ? formatNumber(count, uiLocale, 0) : '–',
+        cls: `heatmap-cell--${kind}${clickable ? ' heatmap-cell--clickable internal-link' : ''}`,
+        vars,
+        clickable,
+        detailKey: `${key}:${typ}`,
+        // Tooltip-Parameter; der Text selbst ist UI-String und entsteht im Template.
+        tip: !isChecked ? null : {
+          count,
+          pages: cell?.pages || 0,
+          checkedPages: ch.pages_checked,
+          per1k: formatNumber(per1k, uiLocale, 1),
+          lowData,
+        },
+      };
+    }
+    return {
+      key,
+      chapter: ch,
+      coveragePct,
+      wordsLabel: formatNumber(ch.words || 0, uiLocale, 0),
+      cells,
+    };
+  });
+}
+
+/** Summenzeile „ganzes Buch" je Typ: Anzahl + Dichte gegen alle geprüften Wörter. */
+export function buildFehlerTotals(data, typen, uiLocale) {
+  const wordsChecked = (data?.chapters || []).reduce((s, ch) => s + (ch.words_checked || 0), 0);
+  const out = {};
+  for (const typ of typen) {
+    const count = data?.totals?.[typ] || 0;
+    const per1k = wordsChecked > 0 ? Math.round((count / wordsChecked) * 1000 * 10) / 10 : 0;
+    out[typ] = {
+      text: count > 0 ? formatNumber(count, uiLocale, 0) : '–',
+      count,
+      per1k: formatNumber(per1k, uiLocale, 1),
+    };
+  }
+  return { cells: out, wordsChecked, wordsCheckedLabel: formatNumber(wordsChecked, uiLocale, 0) };
+}
+
+/** Nenner der Fehlerdichte einer Fassung: geprüfte Wörter, sofern die Fassung
+ *  sie trägt (lib/lektorat-metrics.js#words_checked). Ältere Fassungen kennen nur
+ *  den Buchumfang — ihr Punkt ist dann eine Näherung (`approx`) und wird im Chart
+ *  so gezeichnet. Gegen den Buchumfang sänke die Dichte mit jeder ungeprüft
+ *  dazugeschriebenen Seite, ohne dass der Text besser geworden wäre. */
+export function fehlerTrendDenominator(v) {
+  const wc = v?.metrics?.words_checked;
+  if (typeof wc === 'number') return { words: wc, approx: false };
+  return { words: v?.words || 0, approx: true };
+}
 
 export const fehlerHeatmapMethods = {
   get fehlerHeatmapTypen() { return FEHLER_TYPEN; },
   get fehlerHeatmapClusters() { return FEHLER_CLUSTERS; },
+  get fehlerHeatmapMinWords() { return HEATMAP_MIN_WORDS; },
   // Beginnt an dieser Spalte ein neues Cluster? (→ Trennlinie)
   fehlerHeatmapIsClusterStart(idx) { return FEHLER_CLUSTER_STARTS.has(idx); },
 
@@ -111,10 +234,15 @@ export const fehlerHeatmapMethods = {
     this.$nextTick(() => requestAnimationFrame(() => this.renderFehlerTrendChart()));
   },
 
-  // Fassungen mit Lektorat-Kennzahl + gültigem Wörter-Nenner — nur diese tragen
-  // einen Dichte-Punkt. Reihenfolge aus dem Backend (seq aufsteigend).
+  // Fassungen mit Lektorat-Kennzahl + gültigem Nenner — nur diese tragen einen
+  // Dichte-Punkt. Reihenfolge aus dem Backend (seq aufsteigend).
   _fehlerTrendPoints() {
-    return (this.fehlerTrendData || []).filter(v => v.metrics && v.words > 0);
+    return (this.fehlerTrendData || []).filter(v => v.metrics && fehlerTrendDenominator(v).words > 0);
+  },
+
+  // Trägt mindestens ein Punkt nur den Buchumfang als Nenner? → Hinweis unter dem Chart.
+  fehlerTrendHasApprox() {
+    return this._fehlerTrendPoints().some(v => fehlerTrendDenominator(v).approx);
   },
 
   // Genug Datenpunkte für einen sichtbaren Verlauf? Sonst Hinweis statt Chart.
@@ -122,11 +250,12 @@ export const fehlerHeatmapMethods = {
     return this._fehlerTrendPoints().length >= 2;
   },
 
-  // Fehler pro 1000 Wörter für eine Fassung im aktuellen Modus.
+  // Fehler pro 1000 geprüfte Wörter für eine Fassung im aktuellen Modus.
   _fehlerTrendPer1k(v) {
     const total = v.metrics?.[this.fehlerHeatmapMode]?.total;
-    if (total == null || !(v.words > 0)) return null;
-    return Math.round((total / v.words) * 1000 * 10) / 10;
+    const { words } = fehlerTrendDenominator(v);
+    if (total == null || !(words > 0)) return null;
+    return Math.round((total / words) * 1000 * 10) / 10;
   },
 
   async renderFehlerTrendChart() {
@@ -153,6 +282,7 @@ export const fehlerHeatmapMethods = {
     const tag = localeTag(Alpine.store('shell').uiLocale);
     const labels = points.map(v => v.label || window.__app.t('fehlerHeatmap.trend.versionLabel', { n: v.seq }));
     const data = points.map(v => this._fehlerTrendPer1k(v));
+    const approx = points.map(v => fehlerTrendDenominator(v).approx);
 
     const accent = cssVar('--color-primary');
     const muted = cssVar('--color-muted');
@@ -173,7 +303,12 @@ export const fehlerHeatmapMethods = {
           tension: 0.35,
           pointRadius: 4,
           pointHoverRadius: 6,
-          pointBackgroundColor: accent,
+          // Näherungs-Punkte (Nenner = Buchumfang) hohl, ihre Strecken gestrichelt.
+          pointBackgroundColor: approx.map(a => (a ? 'transparent' : accent)),
+          pointBorderColor: accent,
+          segment: {
+            borderDash: (ctx) => (approx[ctx.p0DataIndex] || approx[ctx.p1DataIndex] ? [4, 4] : undefined),
+          },
           fill: true,
           spanGaps: true,
         }],
@@ -196,6 +331,7 @@ export const fehlerHeatmapMethods = {
                 if (y == null) return '';
                 return ` ${formatNumber(y, Alpine.store('shell').uiLocale, 1)} ${window.__app.t('fehlerHeatmap.trend.per1kUnit')}`;
               },
+              afterLabel: (ctx) => (approx[ctx.dataIndex] ? ` ${window.__app.t('fehlerHeatmap.trend.approxPoint')}` : ''),
             },
           },
         },
@@ -215,101 +351,52 @@ export const fehlerHeatmapMethods = {
     }));
   },
 
-  fehlerHeatmapChapterKey(ch) {
-    return ch.chapter_id == null ? '__uncat__' : String(ch.chapter_id);
-  },
-
   fehlerHeatmapChapterName(ch) {
     return ch.chapter_name || window.__app.t('fehlerHeatmap.unassigned');
   },
 
-  fehlerHeatmapCoveragePct(ch) {
-    if (!ch.pages_total) return 0;
-    return Math.round((ch.pages_checked / ch.pages_total) * 100);
-  },
-
-  fehlerHeatmapCellValue(chapterKey, typ) {
-    const cell = this.fehlerHeatmapData?.matrix?.[chapterKey]?.[typ];
-    return cell ? cell.count : null;
-  },
-
-  fehlerHeatmapCellCount(chapterKey, typ) {
-    const cell = this.fehlerHeatmapData?.matrix?.[chapterKey]?.[typ];
-    return cell ? cell.count : 0;
-  },
-
-  // Skala pro Typ über alle Kapitel. Rot = hoch, Grün = niedrig.
-  // Memoisiert pro Typ: das Template ruft die Skala ZWEIMAL pro Zelle ab
-  // (Zell-Variante + CSS-Variablen), und jeder Aufruf laeuft ueber alle
-  // Kapitel — ungecacht ist ein Render O(Typen x Kapitel²), und schon das
-  // Auf-/Zuklappen des Detail-Panels loest ihn komplett neu aus (das :class
-  // jeder Zelle liest activeFehlerDetailKey). Deps = die Datenreferenz; ein
-  // neuer Ladevorgang tauscht sie und verwirft damit alle Typ-Slots.
-  fehlerHeatmapRange(typ) {
+  // Render-fertige Zeilen (buildFehlerRows). Memoized über den Datenstand und die
+  // Anzeigesprache — ein neuer Ladevorgang tauscht die Datenreferenz.
+  fehlerHeatmapRows() {
     const data = this.fehlerHeatmapData;
-    return this._memo(`range:${typ}`, [data], () => minMaxBy(data?.chapters || [], (ch) => {
-      const key = this.fehlerHeatmapChapterKey(ch);
-      return data?.matrix?.[key]?.[typ]?.count;
-    }));
+    const locale = Alpine.store('shell').uiLocale;
+    return this._memo('rows', [data, locale], () => buildFehlerRows(data, FEHLER_TYPEN, locale));
   },
 
-  // Welche Zell-Variante (→ CSS-Klasse) und welche CSS-Variablen. Split,
-  // damit Alpine das :class separat vom :style binden kann und keine
-  // Inline-Style-Strings ins DOM landen.
-  fehlerHeatmapCellKind(chapterKey, typ, coveragePct) {
-    const value = this.fehlerHeatmapCellValue(chapterKey, typ);
-    if (value == null) return coveragePct === 0 ? 'empty' : 'neutral';
-    const { min, max } = this.fehlerHeatmapRange(typ);
-    if (max === min) return coveragePct < 100 ? 'faded' : 'neutral';
-    return 'tinted';
+  fehlerHeatmapTotals() {
+    const data = this.fehlerHeatmapData;
+    const locale = Alpine.store('shell').uiLocale;
+    return this._memo('totals', [data, locale], () => buildFehlerTotals(data, FEHLER_TYPEN, locale));
   },
 
-  fehlerHeatmapCellVars(chapterKey, typ, coveragePct) {
-    const value = this.fehlerHeatmapCellValue(chapterKey, typ);
-    if (value == null) return {};
-    const opacity = coveragePct < 100 ? (0.5 + (coveragePct / 200)) : 1;
-    const { min, max } = this.fehlerHeatmapRange(typ);
-    if (max === min) return coveragePct < 100 ? { '--heatmap-opacity': String(opacity) } : {};
-    const t = (value - min) / (max - min);
-    return heatmapCellVars(t, opacity);
+  // Tooltip einer Zelle aus den vorbereiteten Parametern (Text = UI-String).
+  fehlerHeatmapCellTooltip(cell) {
+    const tip = cell?.tip;
+    if (!tip) return window.__app.t('fehlerHeatmap.cellTooltipUnchecked');
+    const t = window.__app.t;
+    const base = tip.count > 0
+      ? t('fehlerHeatmap.cellTooltip', { count: tip.count, pages: tip.pages, per1k: tip.per1k })
+      : t('fehlerHeatmap.cellTooltipZero', { pages: tip.checkedPages });
+    return tip.lowData ? `${base} · ${t('heatmap.lowData', { n: HEATMAP_MIN_WORDS })}` : base;
   },
 
-  fehlerHeatmapCellTooltip(chapterKey, typ) {
-    const cell = this.fehlerHeatmapData?.matrix?.[chapterKey]?.[typ];
-    if (!cell || !cell.count) return '';
-    return window.__app.t('fehlerHeatmap.cellTooltip', {
-      count: cell.count,
-      pages: cell.pages,
-      per1k: formatNumber(cell.per1k, Alpine.store('shell').uiLocale, 1),
-    });
+  fehlerHeatmapTotalTooltip(total) {
+    return window.__app.t('fehlerHeatmap.totalTooltip', { count: total.count, per1k: total.per1k });
   },
 
-  fehlerHeatmapCellLabel(chapterKey, typ) {
-    const cell = this.fehlerHeatmapData?.matrix?.[chapterKey]?.[typ];
-    if (!cell || !cell.count) return '–';
-    return formatNumber(cell.count, Alpine.store('shell').uiLocale, 0);
-  },
-
-  // Eine Zelle ohne Befunde hat kein Detail-Panel — sie darf weder
-  // Klick-Cursor noch Tastatur-Fokus anbieten. SSoT fuer die :class-Bindung
-  // und den Handler darunter, damit die Optik nicht mehr verspricht als der
-  // Klick einloest.
-  fehlerHeatmapCellClickable(chapterKey, typ) {
-    return this.fehlerHeatmapCellCount(chapterKey, typ) > 0;
-  },
-
-  toggleFehlerHeatmapDetail(chapterKey, typ) {
-    const key = `${chapterKey}:${typ}`;
-    if (!this.fehlerHeatmapCellClickable(chapterKey, typ)) return;
-    this.activeFehlerDetailKey = (this.activeFehlerDetailKey === key) ? null : key;
+  toggleFehlerHeatmapDetail(cell) {
+    if (!cell?.clickable) return;
+    this.activeFehlerDetailKey = (this.activeFehlerDetailKey === cell.detailKey) ? null : cell.detailKey;
   },
 
   fehlerHeatmapActiveDetail() {
     const key = this.activeFehlerDetailKey;
     if (!key) return null;
-    const [chapterKey, typ] = key.split(':');
+    const sep = key.lastIndexOf(':');
+    const chapterKey = key.slice(0, sep);
+    const typ = key.slice(sep + 1);
     const pages = this.fehlerHeatmapData?.details?.[key] || [];
-    const chapter = (this.fehlerHeatmapData?.chapters || []).find(c => this.fehlerHeatmapChapterKey(c) === chapterKey);
+    const chapter = (this.fehlerHeatmapData?.chapters || []).find(c => fehlerChapterKey(c) === chapterKey);
     return {
       key,
       chapterKey,
@@ -317,10 +404,6 @@ export const fehlerHeatmapMethods = {
       chapterName: chapter ? this.fehlerHeatmapChapterName(chapter) : '',
       pages,
     };
-  },
-
-  fehlerHeatmapTotal(typ) {
-    return this.fehlerHeatmapData?.totals?.[typ] || 0;
   },
 
   async fehlerHeatmapJumpToPage(pageId) {

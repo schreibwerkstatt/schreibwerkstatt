@@ -24,6 +24,7 @@
 import { buildOffsetTable, rangeFromOffset, filterProtectedMatches } from './mapping.js';
 import {
   categoryKey, createHighlightBuckets, matchId, supportsHighlightApi,
+  ignoreKey, ignoreAllKey, isIgnored,
 } from './categories.js';
 import { createBadge } from './badge.js';
 import { createPopover } from './popover.js';
@@ -66,12 +67,21 @@ export function createSpellcheckController({
     });
     return resp.ok;
   },
+  disableRule = async ({ ruleId, bookId, label }) => {
+    const resp = await fetch('/languagetool/rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ruleId, bookId, label }),
+      credentials: 'same-origin',
+    });
+    return resp.ok;
+  },
 }) {
   if (!root) throw new Error('spellcheck: root required');
 
   const highlights = createHighlightBuckets();
-  const squiggles = new Map(); // matchId -> { match, range, category }
-  const ignored = new Set();   // matchId session-only
+  const squiggles = new Map(); // matchId -> { match, range, category, text }
+  const ignored = new Set();   // ignoreKey/ignoreAllKey, session-only
 
   const badge = createBadge({ root, editorKind, i18n });
 
@@ -87,6 +97,8 @@ export function createSpellcheckController({
       const raw = getBookLocale ? getBookLocale() : '*';
       return (!raw || raw === 'auto') ? '*' : raw;
     },
+    getBookId,
+    disableRule,
   });
 
   const extensionGuard = createExtensionGuard({
@@ -189,8 +201,14 @@ export function createSpellcheckController({
     const matches = filterProtectedMatches((result && Array.isArray(result.matches)) ? result.matches : [], table.protectedRanges);
     _renderMatches(matches, table);
     lastCheckedText = table.text;
-    const visibleCount = matches.filter((m) => !ignored.has(matchId(m))).length;
-    badge.update(visibleCount ? 'matches' : 'clean', { count: visibleCount });
+    _updateCount();
+  }
+
+  // Plakette zaehlt, was markiert ist — nach Ignorieren/Woerterbuch/Regel
+  // sofort, nicht erst beim naechsten Check.
+  function _updateCount() {
+    const n = squiggles.size;
+    badge.update(n ? 'matches' : 'clean', { count: n });
   }
 
   function _renderMatches(matches, table) {
@@ -199,13 +217,16 @@ export function createSpellcheckController({
     squiggles.clear();
     if (!table) return;
     for (const m of matches) {
+      if (isIgnored(ignored, m)) continue;
       const id = matchId(m);
-      if (ignored.has(id)) continue;
       const range = rangeFromOffset(table, m.offset, m.length);
       if (!range) continue;
       const cat = categoryKey(m);
       highlights.add(cat, range);
-      squiggles.set(id, { match: m, range, category: cat });
+      // `text`: der beanstandete Text zum Zeitpunkt des Checks. Die Range lebt
+      // mit dem DOM mit; tippt der User hinein, darf ein Vorschlag nicht mehr
+      // blind ueber den veraenderten Text geschrieben werden.
+      squiggles.set(id, { match: m, range, category: cat, text: range.toString() });
     }
   }
 
@@ -280,21 +301,44 @@ export function createSpellcheckController({
     if (!entry) return;
     popover.open(entry, {
       onApply: (text) => _applyReplacement(id, text),
-      onIgnore: () => { ignored.add(id); _dropSquiggle(id); },
-      // Text unveraendert, Dictionary aber geaendert -> force.
-      onDictAdded: () => { _dropSquiggle(id); _scheduleCheck({ force: true }); },
+      onIgnore: () => { ignored.add(ignoreKey(entry.match)); _dropSquiggle(id); _updateCount(); },
+      onIgnoreAll: () => {
+        ignored.add(ignoreAllKey(entry.match));
+        _dropWhere((m) => isIgnored(ignored, m));
+      },
+      // Text unveraendert, Woerterbuch/Regeln aber geaendert -> force: der
+      // Server filtert neu, Treffer an anderen Stellen fallen mit weg.
+      onDictAdded: () => { _dropSquiggle(id); _updateCount(); _scheduleCheck({ force: true }); },
+      onRuleDisabled: (ruleId) => {
+        _dropWhere((m) => m.rule?.id === ruleId);
+        _scheduleCheck({ force: true });
+      },
     });
+  }
+
+  function _dropWhere(pred) {
+    for (const [sid, e] of Array.from(squiggles)) if (pred(e.match)) _dropSquiggle(sid);
+    _updateCount();
   }
 
   function _applyReplacement(id, text) {
     const entry = squiggles.get(id);
     if (!entry) return;
     popover.close();
+    // Text unter dem Squiggle hat sich seit dem Check geaendert (oder die Range
+    // ist kollabiert) -> nicht ersetzen, neu pruefen.
+    if (entry.range.collapsed || entry.range.toString() !== entry.text) {
+      _dropSquiggle(id);
+      _updateCount();
+      _scheduleCheck({ force: true });
+      return;
+    }
     if (typeof onApplyReplacement === 'function') {
       try { onApplyReplacement(entry.range, text); }
       catch { /* host-side errors swallowed; next check rebuilds */ }
     }
     _dropSquiggle(id);
+    _updateCount();
     _scheduleCheck();
   }
 

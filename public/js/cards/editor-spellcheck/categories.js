@@ -16,8 +16,23 @@ export const supportsHighlightApi = typeof CSS !== 'undefined'
   && typeof Highlight !== 'undefined';
 
 // LT liefert keine stabile ID -> aus offset+length+ruleId zusammenbauen.
+// Identitaet EINES Checks (Squiggle-Register); nach jeder Textaenderung davor
+// verschiebt sie sich.
 export function matchId(m) {
   return `${m.offset}:${m.length}:${m.rule?.id || ''}`;
+}
+
+// Ignorieren ueberlebt Textaenderungen: Schluessel aus Regel + beanstandetem
+// Wort + Satz statt Offset. `ignoreAllKey` laesst den Satz weg und trifft damit
+// jede Stelle mit demselben Wort und derselben Regel.
+export function ignoreKey(m) {
+  return `${m.rule?.id || ''}|${extractMatchedWord(m) || matchId(m)}|${m.sentence || ''}`;
+}
+export function ignoreAllKey(m) {
+  return `${m.rule?.id || ''}|${extractMatchedWord(m) || matchId(m)}`;
+}
+export function isIgnored(ignored, m) {
+  return ignored.has(ignoreKey(m)) || ignored.has(ignoreAllKey(m));
 }
 
 // Das beanstandete Wort aus dem Kontext-Ausschnitt. Leer, wenn es fehlt oder

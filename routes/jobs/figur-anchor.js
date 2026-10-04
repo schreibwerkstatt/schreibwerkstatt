@@ -23,7 +23,8 @@ const occDb = require('../../db/draft-figure-occurrences');
 const { extractPsychologie, PSYCHE_KERNE } = require('../../lib/draft-mindmap-extract');
 const appSettings = require('../../lib/app-settings');
 const embed = require('../../lib/embed');
-const { semanticQuery } = require('../../lib/semantic-retrieval');
+const retrieval = require('../../lib/semantic-retrieval');
+const { getSceneTitleForUser } = require('../../db/book-chat/figures');
 const logger = require('../../logger');
 
 const figurAnchorRouter = express.Router();
@@ -71,10 +72,15 @@ function _kernQuery(draftName, zeilen) {
 // darunter. Reine FTS-Fusions-Kandidaten (semScore null) sind semantisch nicht
 // belegt und werden übersprungen. Gespeichert wird semScore (Muster motif-scan,
 // beat-anchor).
-function _occsFromHits(hits, minScore) {
+//
+// `keep` (optional): Besitz-Filter. Szenen sind Analyse-Daten pro User, der
+// Embedding-Index hängt aber nur am Buch — ohne Filter würden die Szenen eines
+// Mitautors zu Fundstellen der eigenen Figur.
+function _occsFromHits(hits, minScore, keep = null) {
   const found = new Map();
   for (const h of (hits || [])) {
     if (h.semScore == null) continue;
+    if (keep && !keep(h)) continue;
     if (minScore > 0 && h.semScore < minScore) continue;
     const key = _occKey(h.kind, h.entity_id);
     if (found.has(key)) continue;
@@ -83,10 +89,16 @@ function _occsFromHits(hits, minScore) {
   return [...found.values()];
 }
 
-async function _anchorKern(bookId, query, signalFn, minScore) {
+// Besitz-Prädikat für Treffer: Seiten gehören dem Buch, Szenen dem User, der sie
+// analysiert hat (figure_scenes.user_email).
+function _ownHit(userEmail) {
+  return h => h.kind !== 'scene' || getSceneTitleForUser(h.entity_id, userEmail) != null;
+}
+
+async function _anchorKern(bookId, query, signalFn, minScore, userEmail) {
   if (!query) return [];
-  const hits = await semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn() });
-  return _occsFromHits(hits, minScore);
+  const hits = await retrieval.semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn() });
+  return _occsFromHits(hits, minScore, _ownHit(userEmail));
 }
 
 async function runFigurAnchorJob(jobId, bookId, userEmail) {
@@ -103,6 +115,15 @@ async function runFigurAnchorJob(jobId, bookId, userEmail) {
       // endet als Fehler, nicht als `done` — ein `done`-Lauf in job_runs zählt
       // für den Bogen als „verankert" (db/draft-figure-occurrences.js#figurAnchorState).
       throw i18nError('job.error.figurAnchorNoSemantic');
+    }
+    if (!retrieval.indexReady(bookId)) {
+      // Backend da, aber noch kein vollständiger Index-Lauf unter dem aktiven
+      // Modell (Erstindex läuft, Modellwechsel): die Suche fände nichts, und ein
+      // Full-Replace mit [] behauptete „nichts im Buch". Bestehende Fundstellen
+      // bleiben unangetastet. Bewusst Fehler statt `done` mit Skip-Flag: ein
+      // `done`-Lauf in job_runs zählt als „verankert" (figurAnchorState), auch
+      // wenn er nichts gesucht hat.
+      throw i18nError('job.error.anchorNoIndex');
     }
 
     const floor = Number(appSettings.get('werkstatt.anchor.min_score')) || 0;
@@ -126,7 +147,7 @@ async function runFigurAnchorJob(jobId, bookId, userEmail) {
         scanned++;
         for (const kern of PSYCHE_KERNE) {
           throwIfAborted();
-          const rows = await _anchorKern(bookId, _kernQuery(draft.name, psy[kern]), signal, floor);
+          const rows = await _anchorKern(bookId, _kernQuery(draft.name, psy[kern]), signal, floor, userEmail);
           occDb.replaceKernOccurrences(draft.id, bookId, kern, rows);
           totalOcc += rows.length;
         }
@@ -159,6 +180,8 @@ async function anchorAllDraftFigures() {
   const scopes = db.prepare('SELECT DISTINCT book_id, user_email FROM draft_figures').all();
   let enqueued = 0, skipped = 0;
   for (const { book_id, user_email } of scopes) {
+    // Ohne fertigen Index würde der Lauf nur mit anchorNoIndex scheitern.
+    if (!retrieval.indexReady(book_id)) { skipped++; continue; }
     if (findActiveJobId('figur-anchor', book_id, user_email)) { skipped++; continue; }
     const jobId = createJob('figur-anchor', book_id, user_email, 'job.label.figurAnchor', null, book_id);
     enqueueJob(jobId, () => runFigurAnchorJob(jobId, book_id, user_email));
@@ -175,4 +198,4 @@ figurAnchorRouter.post('/figur-anchor', jsonBody, (req, res) => startBookJob(req
   run: (jobId, { bookId, userEmail }) => runFigurAnchorJob(jobId, bookId, userEmail),
 }));
 
-module.exports = { figurAnchorRouter, runFigurAnchorJob, anchorAllDraftFigures, _occsFromHits };
+module.exports = { figurAnchorRouter, runFigurAnchorJob, anchorAllDraftFigures, _occsFromHits, _ownHit };

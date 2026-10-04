@@ -6,11 +6,11 @@
 // Warum die Zell-Darstellung EINMAL pro Datenstand vorberechnet wird (`stilRows`)
 // und nicht pro Zelle im Template: Alpine memoisiert Methodenaufrufe in Bindings
 // nicht. Ein Aufruf in `:class`/`:style` laeuft bei jedem Render erneut — bei
-// Kapiteln x 9 Metriken x 2 Bindings sind das tausende Durchlaeufe, und wenn
+// Kapiteln x 10 Metriken x 2 Bindings sind das tausende Durchlaeufe, und wenn
 // darin die Min/Max-Skala ueber alle Kapitel steckt, wird daraus O(Kapitel^2).
 // Das Template liest darum ausschliesslich fertige Eigenschaften.
 
-import { escHtml, fetchJson, formatNumber, heatmapCellVars, localeTag, minMaxBy, tzOpts } from '../utils.js';
+import { escHtml, fetchJson, formatNumber, heatmapCellVars, HEATMAP_MIN_WORDS, localeTag, minMaxBy, tzOpts } from '../utils.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { memoMethods } from '../cards/card-memo.js';
 
@@ -27,6 +27,10 @@ const STIL_METRICS = [
   { key: 'repetition_score', label: 'stil.metric.repetition', decimals: 1, higherIsWorse: true,  sampleBucket: 'repetition' },
   { key: 'lix',              label: 'stil.metric.lix',        decimals: 1, higherIsWorse: true,  sampleBucket: null         },
   { key: 'flesch_de',        label: 'stil.metric.flesch',     decimals: 1, higherIsWorse: false, sampleBucket: null         },
+  // Ich-Anteil im Erzähltext (lib/stil-heatmap.js#_firstPersonShare). Ohne
+  // Wertung: weder Ich- noch Er-Erzählung ist „schlechter" — auffällig ist der
+  // Sprung zwischen Kapiteln. `null` (zu wenig Pronomen) wird zu „–".
+  { key: 'first_person_share', label: 'stil.metric.firstPerson', decimals: 0, higherIsWorse: null, sampleBucket: null      },
 ];
 
 // Lookup statt linearem Scan — die Metrik-Definition wird pro Zelle gebraucht.
@@ -64,20 +68,33 @@ export function buildStilRows(chapters, uiLocale) {
   const rows = [];
   if (!Array.isArray(chapters) || !chapters.length) return rows;
 
+  // Kapitel unter HEATMAP_MIN_WORDS gehen nicht in die Skala ein und bleiben
+  // ungefärbt ('lowdata') — eine Rate auf 80 Wörtern ist Zufall und drückte sonst
+  // jedes andere Kapitel ans grüne Ende. Erreichen weniger als zwei Kapitel die
+  // Schwelle (kurzes Buch), gilt sie nicht, sonst hätte die Karte keine Farbe.
+  const enough = chapters.filter(c => (c.words || 0) >= HEATMAP_MIN_WORDS);
+  const scaleSet = enough.length >= 2 ? enough : chapters;
+  const inScale = new Set(scaleSet);
+
   const ranges = new Map();
-  for (const m of STIL_METRICS) ranges.set(m.key, minMaxBy(chapters, (c) => c[m.key]));
+  for (const m of STIL_METRICS) ranges.set(m.key, minMaxBy(scaleSet, (c) => c[m.key]));
 
   for (const c of chapters) {
+    const lowData = !inScale.has(c);
     const cells = {};
     for (const m of STIL_METRICS) {
       const value = c[m.key];
       const range = ranges.get(m.key);
       const clickable = !!m.sampleBucket && (value || 0) > 0;
+      // „≈": der Kapitel-P90 ist teilweise aus Seiten ohne Satzlängen-Sequenz
+      // geschätzt (ältere Metrik-Version, siehe lib/stil-heatmap.js#_sentenceP90).
+      const approx = m.key === 'sentence_len_p90' && c.sentence_len_p90_exact === false && value != null;
       cells[m.key] = {
-        text: formatNumber(value, uiLocale, m.decimals ?? 1),
-        cls: `heatmap-cell--${_cellKind(value, m, range)}${clickable ? ' heatmap-cell--clickable' : ''}`,
-        vars: _cellVars(value, m, range),
+        text: (approx ? '≈ ' : '') + formatNumber(value, uiLocale, m.decimals ?? 1),
+        cls: `heatmap-cell--${lowData ? 'lowdata' : _cellKind(value, m, range)}${clickable ? ' heatmap-cell--clickable' : ''}`,
+        vars: lowData ? {} : _cellVars(value, m, range),
         clickable,
+        lowData,
         detailKey: `${c.key}:${m.key}`,
       };
     }
@@ -88,6 +105,7 @@ export function buildStilRows(chapters, uiLocale) {
 
 export const stilMethods = {
   get stilMetricDefs() { return STIL_METRICS; },
+  get stilMinWords() { return HEATMAP_MIN_WORDS; },
 
   // Memo-Helper (cards/card-memo.js); `_memos` wird beim Reset der Karte geleert.
   ...memoMethods,
@@ -101,6 +119,24 @@ export const stilMethods = {
 
   stilHasData() {
     return (this.stilData?.chapters?.length || 0) > 0;
+  },
+
+  // Mindestens ein Kapitel-P90 ist geschätzt → Legenden-Hinweis zum „≈".
+  stilHasApproxP90() {
+    return (this.stilData?.chapters || []).some(c => c.sentence_len_p90_exact === false);
+  },
+
+  // Spalten-Tooltip; der Ich-Anteil nennt seine Mindestzahl, die der Server liefert.
+  stilMetricTip(metricKey) {
+    return window.__app.t('stil.tip.' + metricKey, { min: this.stilData?.perspectiveMinPronouns ?? '' });
+  },
+
+  // Querverweis auf die Wortschatz-Karte: die Wiederholungs-Spalte zählt nur
+  // innerhalb einzelner Seiten, die buchweiten Lieblingswörter stehen dort.
+  // Der generierte Toggle schliesst diese Karte (Exklusivität).
+  stilOpenWortschatz() {
+    this.closeStilDetail();
+    window.__app.toggleWortschatzCard();
   },
 
   // Kapitelname der Zeile; `null` heisst „keinem Kapitel zugeordnet" — das Label
@@ -123,6 +159,14 @@ export const stilMethods = {
       const data = await fetchJson('/history/style-stats/' + bookId);
       if (!isSelectedBook(bookId)) return;
       this.stilData = data;
+      // Ein früherer Ladefehler darf nach erfolgreichem Laden nicht stehen
+      // bleiben; den Sync-Spinner räumt runStilSync selbst ab.
+      if (!this.stilSyncing) this.stilStatus = '';
+      // Gewähltes Kapitel der Satzanfänge nur behalten, wenn es noch Sätze hat —
+      // sonst zeigte die Combobox ein Kapitel, dessen Liste es nicht mehr gibt.
+      if (this.stilOpenerChapter && !(data.chapterOpeners || []).some(c => c.key === this.stilOpenerChapter)) {
+        this.stilOpenerChapter = '';
+      }
       this.activeStilDetailKey = null;
       this.stilDetail = null;
     } catch (e) {
@@ -195,6 +239,7 @@ export const stilMethods = {
       if (seq !== this._stilDetailSeq) return;
       this.stilDetail = {
         key,
+        metricKey,
         metricLabel: this.stilMetricLabel(metricKey),
         chapterName: this.stilChapterName(data.chapterName),
         entries: data.entries || [],
@@ -202,7 +247,7 @@ export const stilMethods = {
     } catch (e) {
       if (seq !== this._stilDetailSeq) return;
       console.error('[toggleStilDetail]', e);
-      this.stilDetail = { key, metricLabel: this.stilMetricLabel(metricKey), chapterName: '', entries: [] };
+      this.stilDetail = { key, metricKey, metricLabel: this.stilMetricLabel(metricKey), chapterName: '', entries: [] };
     } finally {
       if (seq === this._stilDetailSeq) this.stilDetailLoading = false;
     }

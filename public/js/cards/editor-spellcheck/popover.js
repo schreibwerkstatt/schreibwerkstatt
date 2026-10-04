@@ -1,5 +1,6 @@
-// Der Befund-Popover: Kategorie, Meldung, Ersetzungsvorschlaege, Ignorieren,
-// „ins Woerterbuch", Regel-Info.
+// Der Befund-Popover: Kategorie, Meldung, Ersetzungsvorschlaege, Ignorieren
+// (diese Stelle / alle gleichen), „ins Woerterbuch" (Buch / alle Buecher),
+// Regel abschalten, Regel-Info.
 //
 // Kapselt die vier Zustaende, die zusammengehoeren (Element, Host, Anker-Range,
 // Tastatur-Controller) — der Controller sieht davon nur `open/close/remount/
@@ -41,8 +42,10 @@ function button(className, text) {
  * @param {() => Element|Window|null} deps.getScrollEl  Scroll-Box zur Host-Wahl
  * @param {({word, lang}) => Promise<boolean>} deps.addWord
  * @param {() => string} deps.getLang  Buch-Locale ('auto' → '*')
+ * @param {() => number|null} [deps.getBookId]  aktives Buch (Buch-Woerterbuch, Regel pro Buch)
+ * @param {({ruleId, bookId, label}) => Promise<boolean>} [deps.disableRule]
  */
-export function createPopover({ editorKind, i18n, getScrollEl, addWord, getLang }) {
+export function createPopover({ editorKind, i18n, getScrollEl, addWord, getLang, getBookId, disableRule }) {
   let el = null;
   let host = null;
   let anchorRange = null;
@@ -96,27 +99,70 @@ export function createPopover({ editorKind, i18n, getScrollEl, addWord, getLang 
     return wrap;
   }
 
-  function buildFooter(m, { onIgnore, onDictAdded }) {
+  // Optionaler Text: liefert die Uebersetzung oder null, wenn der Host den Key
+  // nicht kennt (macOS-Client mit eigener i18n-Map faellt auf den rohen Key
+  // zurueck). Knoepfe mit optionalem Text erscheinen dort erst nach einem
+  // Client-Release, statt mit „spellcheck.popover.…" beschriftet zu sein.
+  function optText(key) {
+    const v = i18n(key);
+    return v && v !== key ? v : null;
+  }
+
+  // Knopf, der eine async Aktion ausloest: waehrend des Requests gesperrt,
+  // bei Erfolg `onDone` + schliessen, sonst wieder freigeben.
+  function actionButton(className, text, run, onDone) {
+    const btn = button(className, text);
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        if (await run()) { onDone(); close(); }
+        else btn.disabled = false;
+      } catch { btn.disabled = false; }
+    });
+    return btn;
+  }
+
+  function buildFooter(m, { onIgnore, onIgnoreAll, onDictAdded, onRuleDisabled }) {
     const footer = document.createElement('div');
     footer.className = 'lt-popover__footer';
+    const bookId = getBookId ? getBookId() : null;
+    const word = extractMatchedWord(m);
 
     const ignoreBtn = button('lt-popover__ignore', i18n('spellcheck.popover.ignore'));
     ignoreBtn.addEventListener('click', () => { onIgnore(); close(); });
     footer.appendChild(ignoreBtn);
 
+    const ignoreAllText = word && onIgnoreAll ? optText('spellcheck.popover.ignore_all') : null;
+    if (ignoreAllText) {
+      const btn = button('lt-popover__ignore-all', ignoreAllText);
+      btn.addEventListener('click', () => { onIgnoreAll(); close(); });
+      footer.appendChild(btn);
+    }
+
     // „Ins Woerterbuch" nur bei Rechtschreibung und nur mit erkanntem Einzelwort.
-    const word = isSpellingMatch(m) ? extractMatchedWord(m) : '';
-    if (word) {
-      const dictBtn = button('lt-popover__dict', i18n('spellcheck.popover.add_to_dict'));
-      dictBtn.addEventListener('click', async () => {
-        dictBtn.disabled = true;
-        try {
-          const ok = await addWord({ word, bookId: 0, lang: getLang() });
-          if (ok) { onDictAdded(); close(); }
-          else dictBtn.disabled = false;
-        } catch { dictBtn.disabled = false; }
-      });
-      footer.appendChild(dictBtn);
+    // Mit Buch zwei Varianten: nur dieses Buch (Fantasie-Begriffe) oder alle.
+    if (word && isSpellingMatch(m)) {
+      const bookText = bookId ? optText('spellcheck.popover.add_to_dict_book') : null;
+      const globalText = bookText
+        ? (optText('spellcheck.popover.add_to_dict_global') || i18n('spellcheck.popover.add_to_dict'))
+        : i18n('spellcheck.popover.add_to_dict');
+      if (bookText) {
+        footer.appendChild(actionButton('lt-popover__dict', bookText,
+          () => addWord({ word, bookId, lang: getLang() }), onDictAdded));
+      }
+      footer.appendChild(actionButton('lt-popover__dict', globalText,
+        () => addWord({ word, bookId: 0, lang: getLang() }), onDictAdded));
+    }
+
+    // Regel abschalten: mit Buch nur fuer dieses Buch, sonst ueberall.
+    const ruleId = m.rule?.id;
+    const ruleText = ruleId && disableRule && onRuleDisabled
+      ? optText(bookId ? 'spellcheck.popover.disable_rule_book' : 'spellcheck.popover.disable_rule')
+      : null;
+    if (ruleText) {
+      footer.appendChild(actionButton('lt-popover__rule', ruleText,
+        () => disableRule({ ruleId, bookId: bookId || 0, label: m.rule?.description || m.shortMessage || '' }),
+        () => onRuleDisabled(ruleId)));
     }
 
     const urlInfo = Array.isArray(m.rule?.urls) && m.rule.urls[0]?.value;
@@ -188,7 +234,8 @@ export function createPopover({ editorKind, i18n, getScrollEl, addWord, getLang 
 
     /**
      * @param {{match: object, range: Range}} entry
-     * @param {{onApply:(text:string)=>void, onIgnore:()=>void, onDictAdded:()=>void}} handlers
+     * @param {{onApply:(text:string)=>void, onIgnore:()=>void, onIgnoreAll?:()=>void,
+     *          onDictAdded:()=>void, onRuleDisabled?:(ruleId:string)=>void}} handlers
      */
     open(entry, handlers) {
       close();

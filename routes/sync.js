@@ -11,6 +11,8 @@ const { invalidateBookPageCache } = require('./jobs/chat');
 const { localIsoDate } = require('../lib/local-date');
 const searchIndex = require('../lib/search');
 const { htmlToPlainText, stripTableBlocks } = require('../lib/html-text');
+const { stampLexiconHistory } = require('../db/lexicon');
+const { MATTR_WINDOW } = require('../lib/lexicon/measures');
 
 const router = express.Router();
 // Sync ist Write-Pfad (Pages-Upsert, Stats-Recompute) → editor+.
@@ -304,6 +306,11 @@ async function syncBook(bookId, ctx) {
       avg_sentence_len=excluded.avg_sentence_len,
       avg_lix=excluded.avg_lix, avg_flesch_de=excluded.avg_flesch_de
   `).run(bookId, today, pages.length, bookWords, bookChars, bookTok, uniqueWords, chapterCount, avgSentenceLen, avgLix, avgFleschDe);
+  // Wortschatz-Kennzahlen des letzten Scans in die Tageszeile übernehmen. Der
+  // Nacht-Scan läuft NACH dem Sync und überschreibt sie mit dem frischen Stand; an
+  // Tagen, an denen er das Buch als unverändert überspringt, bleibt so trotzdem
+  // ein Wert im Verlauf statt einer Lücke.
+  stampLexiconHistory(bookId, today, MATTR_WINDOW);
 
   logger.info(`Sync Buch ${bookId} (${bookName}): ${pages.length} Seiten, ${chapterCount} Kapitel, ${bookWords} Wörter, ${uniqueWords} einzigartige, Ø ${avgSentenceLen} W/Satz, LIX ${avgLix}, Flesch ${avgFleschDe}`);
   return { page_count: pages.length, words: bookWords, chars: bookChars, tok: bookTok, unique_words: uniqueWords, chapter_count: chapterCount, avg_sentence_len: avgSentenceLen, avg_lix: avgLix, avg_flesch_de: avgFleschDe };

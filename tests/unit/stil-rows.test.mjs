@@ -28,7 +28,7 @@ test('buildStilRows: leere Eingabe liefert keine Zeilen', () => {
 test('buildStilRows: jede Zeile traegt eine fertige Zelle je Metrik', () => {
   const [r] = buildStilRows([chapter()], 'de');
   const keys = Object.keys(r.cells);
-  assert.equal(keys.length, 9);
+  assert.equal(keys.length, 10);
   for (const k of keys) {
     const c = r.cells[k];
     assert.equal(typeof c.text, 'string');
@@ -100,4 +100,49 @@ test('buildStilRows: Kapitel-Felder bleiben erhalten, Woerter sind vorformatiert
   assert.equal(r.pageCount, 2);
   assert.equal(typeof r.wordsLabel, 'string');
   assert.ok(/12.?345/.test(r.wordsLabel), `unerwartete Formatierung: ${r.wordsLabel}`);
+});
+
+test('buildStilRows: geschaetzter Kapitel-P90 bekommt ein „≈", exakter nicht', () => {
+  const [exact, approx] = buildStilRows([
+    chapter({ key: '1', sentence_len_p90: 30, sentence_len_p90_exact: true }),
+    chapter({ key: '2', sentence_len_p90: 31, sentence_len_p90_exact: false }),
+  ], 'de');
+  assert.equal(exact.cells.sentence_len_p90.text, '30');
+  assert.equal(approx.cells.sentence_len_p90.text, '≈ 31');
+});
+
+test('buildStilRows: Ich-Anteil null wird „–" und bleibt ungefaerbt', () => {
+  const rows = buildStilRows([
+    chapter({ key: '1', first_person_share: null }),
+    chapter({ key: '2', first_person_share: 10 }),
+    chapter({ key: '3', first_person_share: 90 }),
+  ], 'de');
+  assert.equal(rows[0].cells.first_person_share.text, '–');
+  assert.ok(rows[0].cells.first_person_share.cls.startsWith('heatmap-cell--neutral'));
+  assert.equal(rows[0].cells.first_person_share.clickable, false);
+  assert.ok(rows[2].cells.first_person_share.cls.startsWith('heatmap-cell--primary'));
+});
+
+test('buildStilRows: Kapitel unter der Mindestmenge bleiben ungefaerbt und ausserhalb der Skala', async () => {
+  const { HEATMAP_MIN_WORDS } = await import('../../public/js/utils.js');
+  const rows = buildStilRows([
+    chapter({ key: '1', words: 2000, filler_per1k: 2 }),
+    chapter({ key: '2', words: 2000, filler_per1k: 6 }),
+    chapter({ key: '3', words: HEATMAP_MIN_WORDS - 1, filler_per1k: 40 }), // Prolog-Ausreisser
+  ], 'de');
+  assert.ok(rows[2].cells.filler_per1k.cls.startsWith('heatmap-cell--lowdata'));
+  assert.deepEqual(rows[2].cells.filler_per1k.vars, {});
+  assert.equal(rows[2].cells.filler_per1k.lowData, true);
+  // Ohne den Ausreisser spannt die Skala 2..6 — K2 ist rot statt blassgruen.
+  assert.equal(rows[1].cells.filler_per1k.vars['--heatmap-t'], '100%');
+  // Beispiele bleiben trotzdem aufklappbar.
+  assert.equal(rows[2].cells.filler_per1k.clickable, true);
+});
+
+test('buildStilRows: kurzes Buch — unter zwei Kapiteln ueber der Schwelle gilt sie nicht', () => {
+  const rows = buildStilRows([
+    chapter({ key: '1', words: 80, filler_per1k: 2 }),
+    chapter({ key: '2', words: 90, filler_per1k: 6 }),
+  ], 'de');
+  assert.ok(rows[0].cells.filler_per1k.cls.startsWith('heatmap-cell--tinted'));
 });

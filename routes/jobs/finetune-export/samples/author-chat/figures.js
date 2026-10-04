@@ -204,29 +204,43 @@ function buildFigureMetaSamples(ctx) {
   // Wenn wir Zitate einer Figur gesammelt haben, aggregieren wir die
   // prägnantesten als Sprach-Portrait. Nimmt die mittleren Längen (nicht
   // zu kurz, nicht zu lang) — die eigentlichen Stimm-Träger.
+  //
+  // Gruppiert pro Kapitel: die Antwort ist wörtlicher Buchtext und braucht den
+  // `sourceKey` ihres Kapitels (Train/Val-Split auf Quell-Ebene), und die Frage
+  // nennt das Kapitel — sonst stünden mehrere Samples mit identischer Frage und
+  // verschiedenen Antworten im Datensatz.
   for (const f of figRows) {
     const entries = dialogsByFigure.get(f.name.toLowerCase()) || [];
     const altEntries = (f.kurzname && f.kurzname !== f.name)
       ? (dialogsByFigure.get(f.kurzname.toLowerCase()) || [])
       : [];
     const seenQ = new Set();
-    const combined = [];
+    const byChapter = new Map();
     for (const e of [...entries, ...altEntries]) {
       if (seenQ.has(e.quote)) continue;
       if (e.quote.length < 20 || e.quote.length > 220) continue;
       seenQ.add(e.quote);
-      combined.push(e);
+      const chKey = e.chapterId ?? '';
+      if (!byChapter.has(chKey)) byChapter.set(chKey, []);
+      byChapter.get(chKey).push(e);
     }
-    if (combined.length < 2) continue;
-    // Alle Zitate verwenden, in Sechsergruppen (eine Antwort bleibt lesbar, die
-    // Zahl der Samples wächst linear mit den Zitaten).
-    for (let k = 0; k * 6 < combined.length; k++) {
-      const group = combined.slice(k * 6, k * 6 + 6);
-      if (group.length < 2) break;
-      const sample = group.map(e => `„${e.quote}"`).join(' · ');
-      pushQA('authorChat|figVoice|' + f.fig_id + (k ? '|' + k : ''),
-        langIsEn ? `How does ${f.name} speak? Show me a few lines.` : `Wie spricht ${f.name}? Zeig mir ein paar Sätze.`,
-        sample);
+    for (const [chKey, combined] of byChapter) {
+      const chapter = combined[0].chapter || '';
+      const where = chapter ? (langIsEn ? ` in «${chapter}»` : ` in «${chapter}»`) : '';
+      // Alle Zitate verwenden, in Sechsergruppen (eine Antwort bleibt lesbar,
+      // die Zahl der Samples wächst linear mit den Zitaten).
+      for (let k = 0; k * 6 < combined.length; k++) {
+        const group = combined.slice(k * 6, k * 6 + 6);
+        if (group.length < 2) break;
+        const sample = group.map(e => `\u201E${e.quote}\u201C`).join(' · ');
+        const part = k ? (langIsEn ? ` (more, ${k + 1})` : ` (weitere, ${k + 1})`) : '';
+        pushQA('authorChat|figVoice|' + f.fig_id + (chKey !== '' ? '|ch' + chKey : '') + (k ? '|' + k : ''),
+          (langIsEn
+            ? `How does ${f.name} speak${where}? Show me a few lines.`
+            : `Wie spricht ${f.name}${where}? Zeig mir ein paar Sätze.`) + part,
+          sample,
+          chKey !== '' ? 'ch:' + chKey : undefined);
+      }
     }
   }
 }

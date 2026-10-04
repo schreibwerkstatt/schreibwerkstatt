@@ -70,9 +70,9 @@ export const FEATURES = [
   // Bewertung / Analyse-Cards: editor+ (Stats- und Lektorat-Auswertung).
   { key: 'review',         kind: 'toggle', group: 'review', labelKey: 'tile.review',         descKey: 'tile.review.desc',         flag: 'showBookReviewCard',     toggle: 'toggleBookReviewCard',     requiresBook: true, minRole: 'editor',
     aliases: ['bewertung','rating','note','stars','sterne','feedback'] },
-  { key: 'stil',           kind: 'toggle', group: 'review', labelKey: 'tile.stil',           descKey: 'tile.stil.desc',           flag: 'showStilCard',           toggle: 'toggleStilCard',           requiresBook: true, minRole: 'editor',
+  { key: 'stil',           kind: 'toggle', group: 'analysis', labelKey: 'tile.stil',           descKey: 'tile.stil.desc',           flag: 'showStilCard',           toggle: 'toggleStilCard',           requiresBook: true, minRole: 'editor',
     aliases: ['style','heatmap','passiv','fuellwoerter','filler','readability','lesbarkeit','metrik'] },
-  { key: 'fehlerHeatmap',  kind: 'toggle', group: 'review', labelKey: 'tile.fehlerHeatmap',  descKey: 'tile.fehlerHeatmap.desc',  flag: 'showFehlerHeatmapCard',  toggle: 'toggleFehlerHeatmapCard',  requiresBook: true, minRole: 'editor',
+  { key: 'fehlerHeatmap',  kind: 'toggle', group: 'analysis', labelKey: 'tile.fehlerHeatmap',  descKey: 'tile.fehlerHeatmap.desc',  flag: 'showFehlerHeatmapCard',  toggle: 'toggleFehlerHeatmapCard',  requiresBook: true, minRole: 'editor',
     aliases: ['errors','heatmap','findings','lektorat','typo','tippfehler'] },
   { key: 'kontinuitaet',   kind: 'toggle', group: 'review', labelKey: 'tile.kontinuitaet',   descKey: 'tile.kontinuitaet.desc',   flag: 'showKontinuitaetCard',   toggle: 'toggleKontinuitaetCard',   requiresBook: true, minRole: 'editor', dependsOnKomplett: true, requiresCloudModel: true, hiddenForBuchtyp: ['journalismus'],
     aliases: ['continuity','widerspruch','plot-hole','contradiction','consistency'] },
@@ -80,7 +80,7 @@ export const FEATURES = [
     aliases: ['redundanz','redundancy','doppelung','doppelungen','duplicate','duplikate','wiederholung','wiederholungen','repetition','dupe','semantik','similar'] },
   { key: 'buchlandkarte',  kind: 'toggle', group: 'review', labelKey: 'tile.buchlandkarte',  descKey: 'tile.buchlandkarte.desc',  flag: 'showBuchlandkarteCard',  toggle: 'toggleBuchlandkarteCard',  requiresBook: true, minRole: 'editor',
     aliases: ['buchlandkarte','landkarte','karte','map','bookmap','projektion','projection','pca','cluster','wolke','scatter','streuung','kohäsion','kohaesion','cohesion','ausreisser','outlier','themenkarte','semantik'] },
-  { key: 'wortschatz',     kind: 'toggle', group: 'review', labelKey: 'tile.wortschatz',     descKey: 'tile.wortschatz.desc',     flag: 'showWortschatzCard',     toggle: 'toggleWortschatzCard',     requiresBook: true, minRole: 'editor',
+  { key: 'wortschatz',     kind: 'toggle', group: 'analysis', labelKey: 'tile.wortschatz',     descKey: 'tile.wortschatz.desc',     flag: 'showWortschatzCard',     toggle: 'toggleWortschatzCard',     requiresBook: true, minRole: 'editor',
     aliases: ['wortschatz','vocabulary','lexik','lexical','diversitaet','diversity','mattr','mtld','ttr','hapax','heaps','yule','lieblingswort','lieblingswoerter','phrasen','wendung','wendungen','tic','tics','ngram','kollokation','keyness','stilometrie','stylometry'] },
   { key: 'erzaehlprofil',  kind: 'toggle', group: 'review', labelKey: 'tile.erzaehlprofil',  descKey: 'tile.erzaehlprofil.desc',  flag: 'showErzaehlprofilCard',  toggle: 'toggleErzaehlprofilCard',  requiresBook: true, minRole: 'editor', dependsOnKomplett: true, requiresCloudModel: true, hiddenForBuchtyp: ['journalismus'],
     aliases: ['pov','perspektive','erzählperspektive','erzaehlperspektive','narration','pacing','spannungskurve','themen','motive','narrative','point of view','erzählprofil'] },
@@ -132,7 +132,7 @@ export const FEATURES = [
   // Werkzeug
   { key: 'bookchat',       kind: 'toggle', group: 'tools',  labelKey: 'tile.bookchat',       descKey: 'tile.bookchat.desc',       flag: 'showBookChatCard',       toggle: 'toggleBookChatCard',       requiresPages: true, minRole: 'editor',
     aliases: ['ai','frage','question','rag','assistant'] },
-  { key: 'stats',          kind: 'toggle', group: 'tools',  labelKey: 'tile.stats',          descKey: 'tile.stats.desc',          flag: 'showBookStatsCard',      toggle: 'toggleBookStatsCard',      requiresBook: true, minRole: 'editor',
+  { key: 'stats',          kind: 'toggle', group: 'analysis', labelKey: 'tile.stats',          descKey: 'tile.stats.desc',          flag: 'showBookStatsCard',      toggle: 'toggleBookStatsCard',      requiresBook: true, minRole: 'editor',
     aliases: ['statistik','progress','wordcount','entwicklung','timeline'] },
   { key: 'bookSettings',   kind: 'toggle', group: 'tools',  labelKey: 'tile.bookSettings',   descKey: 'tile.bookSettings.desc',   flag: 'showBookSettingsCard',   toggle: 'toggleBookSettingsCard',   requiresBook: true, minRole: 'editor',
     aliases: ['settings','config','buchtyp','booktype','einstellungen','genre'] },
@@ -322,10 +322,17 @@ export const EXCLUSIVE_CARDS = [
   { key: 'onboarding',     flag: 'showOnboardingCard',     toggle: 'toggleOnboardingCard',     onReclick: 'refresh', partial: 'onboarding' },
 ];
 
-export const FEATURE_GROUPS = ['review', 'world', 'manuscript', 'export', 'tools', 'app'];
+// Gruppen in Anzeige-Reihenfolge (Palette-Sektionen, Hilfe-Katalog).
+// `analysis` = Statistik & Analyse: messende Buch-Auswertungen ohne KI-Urteil
+// (Buchstatistik, Stil-Heatmap, Fehler-Heatmap, Wortschatz). `review` behält die
+// urteilenden Karten (Bewertung, Kontinuität, Redundanz, Erzählprofil …). Die
+// Buchübersicht bleibt in `tools` — sie ist die Startseite, keine Auswertung.
+// Meine Statistik/Autorenprofil sind user-weite Aktionen und bleiben in `app`.
+export const FEATURE_GROUPS = ['review', 'analysis', 'world', 'manuscript', 'export', 'tools', 'app'];
 
 export const GROUP_LABEL_KEY = {
   review:     'tile.group.review',
+  analysis:   'tile.group.analysis',
   world:      'tile.group.world',
   manuscript: 'tile.group.manuscript',
   export:     'tile.group.export',

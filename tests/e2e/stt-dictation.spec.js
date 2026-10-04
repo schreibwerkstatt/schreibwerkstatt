@@ -181,10 +181,10 @@ test('Segmente werden in Sprechreihenfolge eingefuegt, auch wenn Transkripte out
   expect(text.indexOf('AAA')).toBeLessThan(text.indexOf('BBB'));
 });
 
-test('Nach Stop wird kein noch laufendes Transkript mehr eingefuegt', async ({ page }) => {
-  // Antwort verzoegern, dann waehrend der Transkription stoppen -> der Abort
-  // bricht den Request ab, das spaet eintreffende "Hallo Welt" darf NICHT mehr
-  // im Editor landen.
+test('Harter Stopp (Kontextwechsel) verwirft noch laufende Transkripte', async ({ page }) => {
+  // Antwort verzoegern, dann waehrend der Transkription hart stoppen (wie bei
+  // Seiten-/Buchwechsel oder Verlassen des Edit-Modus) -> der Abort bricht den
+  // Request ab, das spaet eintreffende "Hallo Welt" darf NICHT mehr im Editor landen.
   await page.route('**/stt/transcribe*', async (route) => {
     await new Promise((r) => setTimeout(r, 600));
     try {
@@ -198,20 +198,118 @@ test('Nach Stop wird kein noch laufendes Transkript mehr eingefuegt', async ({ p
   const reqSent = page.waitForRequest('**/stt/transcribe*');
   await page.locator('#stt-mic').click();
   await page.waitForFunction(() => window.__sttApp.$store.stt.recording === true);
-  // Ein Segment senden (Silence-Cut), dann sofort stoppen — vor der Antwort.
   await page.evaluate(() => { window.__voice = true; });
   await page.waitForTimeout(250);
   await page.evaluate(() => { window.__voice = false; });
   await page.waitForTimeout(250);
   await reqSent; // Request ist raus, Antwort noch unterwegs
-  await page.locator('#stt-mic').click(); // STOP
-  await page.waitForFunction(() => window.__sttApp.$store.stt.recording === false);
+  await page.evaluate(() => window.__sttApp._sttStop()); // harter Stopp
+  expect(await page.evaluate(() => window.__sttApp.$store.stt.recording)).toBe(false);
 
-  // Antwort kaeme jetzt — abwarten und sicherstellen, dass NICHTS eingefuegt wurde.
   await page.waitForTimeout(900);
   const after = await page.evaluate(() => document.getElementById('editor').textContent);
   expect(after).toBe(before);
-  expect(after.includes('Hallo Welt')).toBe(false);
+});
+
+test('Mic-Klick waehrend laufender Transkription: Transkript kommt noch in den Text', async ({ page }) => {
+  await page.route('**/stt/transcribe*', async (route) => {
+    await new Promise((r) => setTimeout(r, 600));
+    try {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ text: 'Hallo Welt' }) });
+    } catch { /* Request abgebrochen */ }
+  });
+  await ready(page, HARNESS + '?enabled=true');
+  await placeCaret(page);
+
+  const reqSent = page.waitForRequest('**/stt/transcribe*');
+  await page.locator('#stt-mic').click();
+  await page.waitForFunction(() => window.__sttApp.$store.stt.recording === true);
+  await page.evaluate(() => { window.__voice = true; });
+  await page.waitForTimeout(250);
+  await page.evaluate(() => { window.__voice = false; });
+  await page.waitForTimeout(250);
+  await reqSent;
+  await page.locator('#stt-mic').click(); // Diktat beenden
+  await page.waitForFunction(() => window.__sttApp.$store.stt.recording === false);
+  // Mikrofon ist sofort frei, der „Transkribiert"-Status steht noch.
+  expect(await page.evaluate(() => window.__micStopped)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.__sttApp.$store.stt.busy)).toBe(true);
+
+  await page.waitForFunction(() => document.getElementById('editor').textContent.includes('Hallo Welt'));
+});
+
+test('Mic-Klick mitten im Sprechen: der letzte Abschnitt wird noch gesendet und eingefuegt', async ({ page }) => {
+  await ready(page, HARNESS + '?enabled=true');
+  await placeCaret(page);
+  await page.locator('#stt-mic').click();
+  await page.waitForFunction(() => window.__sttApp.$store.stt.recording === true);
+  // Sprechen und SOFORT stoppen — keine Sprechpause, also kein VAD-Schnitt.
+  await page.evaluate(() => { window.__voice = true; });
+  await page.waitForTimeout(300);
+  const reqSent = page.waitForRequest('**/stt/transcribe*');
+  await page.locator('#stt-mic').click();
+  await reqSent;
+  await page.waitForFunction(() => document.getElementById('editor').textContent.includes('Hallo Welt'));
+  expect(await page.evaluate(() => window.__sttApp.$store.stt.recording)).toBe(false);
+});
+
+test('Kurzes Geraeusch (unter Mindest-Sprechdauer) wird nicht gesendet', async ({ page }) => {
+  let requests = 0;
+  page.on('request', (r) => { if (r.url().includes('/stt/transcribe')) requests++; });
+  await ready(page, HARNESS + '?enabled=true');
+  await placeCaret(page);
+  await page.locator('#stt-mic').click();
+  await page.waitForFunction(() => window.__sttApp.$store.stt.recording === true);
+  // Genau ein lauter VAD-Tick (Husten/Klick), danach Stille -> Silence-Cut.
+  await page.evaluate(() => new Promise((resolve) => {
+    const app = window.__sttApp;
+    window.__voice = true;
+    app._sttVadTick();
+    window.__voice = false;
+    resolve();
+  }));
+  await page.waitForTimeout(500); // Silence-Cut ist durch (silenceMs=150)
+  expect(requests).toBe(0);
+  await page.evaluate(() => window.__sttApp._sttStop());
+});
+
+test('Klick an eine andere Stelle waehrend des Diktats: naechster Abschnitt landet dort', async ({ page }) => {
+  let n = 0;
+  await page.route('**/stt/transcribe*', async (route) => {
+    const i = ++n;
+    try {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ text: i === 1 ? 'Eins' : 'Zwei' }) });
+    } catch { /* abgebrochen */ }
+  });
+  await ready(page, HARNESS + '?enabled=true');
+  await placeCaret(page);
+  await page.locator('#stt-mic').click();
+  await page.waitForFunction(() => window.__sttApp.$store.stt.recording === true);
+  await page.evaluate(() => { window.__voice = true; });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { window.__voice = false; });
+  await page.waitForFunction(() => document.getElementById('editor').textContent.includes('Eins'));
+
+  // User setzt den Caret an den Anfang (wie _onEditClick im echten Editor).
+  await page.evaluate(() => {
+    const el = document.getElementById('editor');
+    const r = document.createRange();
+    r.setStart(el.querySelector('p').firstChild, 0);
+    r.collapse(true);
+    const sel = document.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+    window.__sttApp._sttReanchorFromUser();
+  });
+  await page.evaluate(() => { window.__voice = true; });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { window.__voice = false; });
+  await page.waitForFunction(() => document.getElementById('editor').textContent.includes('Zwei'));
+
+  const text = await page.evaluate(() => document.getElementById('editor').textContent);
+  expect(text.indexOf('Zwei')).toBeLessThan(text.indexOf('Start'));
+  expect(text.indexOf('Start')).toBeLessThan(text.indexOf('Eins'));
+  await page.evaluate(() => window.__sttApp._sttStop());
 });
 
 test('getUserMedia bekommt Mono + DSP-Constraints', async ({ page }) => {

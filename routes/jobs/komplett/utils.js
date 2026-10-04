@@ -103,11 +103,12 @@ function buildBookPagesSig(pageContents, bookSettings, cacheVersion) {
   return `${pagesPart}||${bookSettingsSigPart(bookSettings)}||${cacheVersion || ''}`;
 }
 
-/** Extrahiert das wörtliche Zitat aus einem stelle_a/stelle_b-String (in «»/""/„").
- *  Leer, wenn kein Zitat vorhanden. Geteilt von der Verify-Stufe (job.js) und der
- *  Beleg-Prüfung im Single-Pass-Save (remap.js). */
+/** Extrahiert das wörtliche Zitat aus einem stelle_a/stelle_b-String (in «»/""/„“/“”).
+ *  Leer, wenn kein Zitat vorhanden. Geteilt von der Verify-Stufe (job-shared.js) und
+ *  der Beleg-Prüfung beim Speichern (remap.js). `“` steht in beiden Klassen: es
+ *  schliesst das deutsche „…“ und öffnet das englische “…”. */
 function _stelleQuote(stelle) {
-  const m = String(stelle || '').match(/[«„"“]([^»"”]{3,})[»"”]/);
+  const m = String(stelle || '').match(/[«„"“]([^»"”“]{3,})[»"”“]/);
   return m ? m[1].trim() : '';
 }
 

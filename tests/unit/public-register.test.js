@@ -36,9 +36,9 @@ test.after(() => {
   server.close();
 });
 
-function _req(method, urlPath, { body = null } = {}) {
+function _req(method, urlPath, { body = null, headers: extra = {} } = {}) {
   return new Promise((resolve, reject) => {
-    const headers = { 'content-type': 'application/json' };
+    const headers = { 'content-type': 'application/json', ...extra };
     const req = http.request({ host: '127.0.0.1', port, path: urlPath, method, headers }, res => {
       let buf = '';
       res.on('data', c => buf += c);
@@ -84,6 +84,32 @@ test('POST /register mit gueltiger Email -> 202 + DB-Row', async () => {
   const row = regRequests.listPending().find(x => x.email === 'newuser@example.com');
   assert.ok(row, 'pending registration_request angelegt');
   assert.equal(row.message, 'pls');
+});
+
+test('GET /landing mit fremdem Referer reicht Herkunft an den Register-Link weiter', async () => {
+  const r = await _req('GET', '/landing', { headers: { referer: 'https://www.google.com/search?q=x' } });
+  assert.equal(r.status, 200);
+  assert.match(r.raw, /href="\/register\?src=https%3A%2F%2Fwww\.google\.com%2Fsearch"/);
+  const own = await _req('GET', '/landing', { headers: { referer: `http://127.0.0.1:${port}/` } });
+  assert.match(own.raw, /href="\/register"/, 'eigener Host ist keine Herkunft');
+});
+
+test('GET /register übernimmt Kampagnen-Parameter in die Formular-Config', async () => {
+  const r = await _req('GET', '/register?utm_source=newsletter');
+  const cfg = JSON.parse(r.raw.match(/id="register-config">([^<]*)</)[1]);
+  assert.equal(cfg.source, 'utm_source=newsletter');
+  assert.match(r.raw, /name="sourceNote"/);
+});
+
+test('POST /register speichert Herkunft und Selbstauskunft', async () => {
+  rateLimit._resetAll();
+  const r = await _req('POST', '/register', {
+    body: { email: 'origin@example.com', source: 'ref=mastodon', sourceNote: '  Podcast\n' },
+  });
+  assert.equal(r.status, 202);
+  const row = regRequests.listPending().find(x => x.email === 'origin@example.com');
+  assert.equal(row.source, 'ref=mastodon');
+  assert.equal(row.source_note, 'Podcast');
 });
 
 test('POST /register Duplikat-Email -> 202 (kein User-Enumeration-Leak)', async () => {

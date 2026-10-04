@@ -12,6 +12,7 @@
 //   Alpine.store('catalog').figuren/orte/szenen -> Auftritte im Kapitel
 //   kapitelReviewHistory                        -> letzte Note + Trend
 //   /history/chapter-growth/:book_id           -> Entstehung (Seitenfassungen)
+//   /history/style-stats/:book_id              -> Stil + Lesbarkeit (kapitel-stil.js)
 //
 // Zwei Regeln, die das Dashboard mit den uebrigen Messkarten teilt:
 //   * **Ungeprueft ist nicht fehlerfrei.** Die Befund-Dichte rechnet gegen die
@@ -27,6 +28,7 @@
 import { fetchJson, charsToNormseiten, fmtExactDuration } from '../utils.js';
 import { komplettHiddenFor } from './feature-registry.js';
 import { computeGrowth } from './kapitel-growth.js';
+import { computeKapitelStil } from './kapitel-stil.js';
 
 // Lesegeschwindigkeit fuer die Lesezeit-Angabe des Umfang-Tiles. Bewusst eine
 // runde, konservative Zahl fuer stilles Lesen belletristischer Prosa — die
@@ -184,6 +186,7 @@ export function initialKapitelDashboardState() {
     kdHeat: null,
     kdLektoratTime: null,
     kdGrowthData: null,
+    kdStilData: null,
     kdBookId: null,
     kdLoading: false,
   };
@@ -209,7 +212,7 @@ export const kapitelDashboardMethods = {
       // erst angeboten wird. Die drei Endpunkte antworteten dort mit 403 bzw.
       // leer, und die Kacheln faellen ohnehin weg.
       const narrativ = !komplettHiddenFor(root?.currentBuchtyp?.());
-      const [heat, lektoratTime, growth] = await Promise.all([
+      const [heat, lektoratTime, growth, stil] = await Promise.all([
         fetchJson(`/history/fehler-heatmap/${bookId}?mode=open`).catch((e) => {
           console.warn('[kapitelDashboard] Heatmap nicht ladbar', e);
           return null;
@@ -222,6 +225,10 @@ export const kapitelDashboardMethods = {
           console.warn('[kapitelDashboard] Entstehung nicht ladbar', e);
           return null;
         }),
+        fetchJson(`/history/style-stats/${bookId}`).catch((e) => {
+          console.warn('[kapitelDashboard] Stil-Werte nicht ladbar', e);
+          return null;
+        }),
         narrativ && !catalog.figuren.length ? root?.loadFiguren?.(bookId) : null,
         narrativ && !catalog.orte.length    ? root?.loadOrte?.(bookId)    : null,
         narrativ && !catalog.szenen.length  ? root?.loadSzenen?.(bookId)  : null,
@@ -231,6 +238,7 @@ export const kapitelDashboardMethods = {
       this.kdHeat = heat;
       this.kdLektoratTime = lektoratTime;
       this.kdGrowthData = growth;
+      this.kdStilData = stil;
       this._memos = {};
     } finally {
       if (this.kdBookId === bookId) this.kdLoading = false;
@@ -348,6 +356,15 @@ export const kapitelDashboardMethods = {
     if (!iso) return '';
     return this._dateFmt({ day: '2-digit', month: '2-digit', year: 'numeric' })
       .format(new Date(iso + 'T12:00:00'));
+  },
+
+  // Stil + Lesbarkeit des Scopes neben dem Buchschnitt (Kachel „Stil",
+  // partials/kapitelreview-dash-stil.html). Rechenkern + Abweichungs-Regel:
+  // kapitel-stil.js.
+  kdStil() {
+    const data = this.kdStilData;
+    const ids = this.kdScopeIds();
+    return this._memo('kdStil', [data, ids], () => computeKapitelStil(data, ids));
   },
 
   kdLektorat() {

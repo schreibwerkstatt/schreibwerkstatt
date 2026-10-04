@@ -94,14 +94,35 @@ train_ds = load_dataset("json", data_files=TRAIN_FILE, split="train")
 eval_ds  = load_dataset("json", data_files=EVAL_FILE,  split="train")
 
 # Wenn der Export mit emit_text=true erzeugt wurde, existiert bereits ein
-# text-Feld. Wir ignorieren es und rendern konsistent über die Chat-Template-
+# text-Feld. Wir überschreiben es und rendern konsistent über die Chat-Template-
 # Funktion des Tokenizers — das ist robuster gegen Template-Änderungen.
-def fmt(example):
-    return tokenizer.apply_chat_template(
-        example["messages"],
+#
+# BOS: das Chat-Template beginnt bereits mit <s>, und der Tokenizer setzt beim
+# Tokenisieren selbst noch eines davor → jede Sequenz begänne mit <s><s>, was
+# Mistral in der Inferenz nie sieht. Deshalb das führende <s> aus dem Template
+# entfernen — aber nur, wenn der Tokenizer es wirklich selbst ergänzt (sonst
+# fehlte es ganz).
+_tok = getattr(tokenizer, "tokenizer", tokenizer)   # Processor → Text-Tokenizer
+_bos = _tok.bos_token or ""
+_tok_adds_bos = bool(_bos) and _tok("x").input_ids[:1] == [_tok.bos_token_id]
+
+def render(messages):
+    text = tokenizer.apply_chat_template(
+        messages,
         tokenize               = False,
         add_generation_prompt  = False,
     )
+    if _tok_adds_bos and text.startswith(_bos):
+        text = text[len(_bos):]
+    return text
+
+train_ds = train_ds.map(lambda ex: {"text": render(ex["messages"])})
+eval_ds  = eval_ds.map(lambda ex: {"text": render(ex["messages"])})
+
+_ids = _tok(train_ds[0]["text"]).input_ids
+assert _ids[0] == _tok.bos_token_id and _ids[1] != _tok.bos_token_id, (
+    f"BOS-Handling stimmt nicht — Sequenz beginnt mit {_ids[:3]}"
+)
 
 # ─────────────────────────────────────────────────────────────────────────
 # Trainer
@@ -115,7 +136,7 @@ trainer = SFTTrainer(
     tokenizer        = tokenizer,
     train_dataset    = train_ds,
     eval_dataset     = eval_ds,
-    formatting_func  = fmt,
+    dataset_text_field = "text",
     max_seq_length   = MAX_SEQ,
     packing          = False,
     args = TrainingArguments(

@@ -12,6 +12,14 @@
   z-index: var(--z-spellcheck);
 }
 
+/* Schmale Viewports: sieben Tasten + Pille passen nur kompakt in eine Zeile. */
+@media (max-width: 480px) {
+  .tts-dock {
+    --dock-gap: var(--space-xs);
+    --dock-btn-sub-size: 28px;
+  }
+}
+
 /* Aktive Wiedergabe: akzentfarbene Haupttaste mit ruhigem Puls. */
 .tts-dock-btn.is-reading[aria-pressed="true"] {
   border-color: var(--color-accent);

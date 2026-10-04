@@ -24,7 +24,7 @@ const { toIntId } = require('../lib/validate');
 const { setContext } = require('../lib/log-context');
 const { getBookLocale } = require('../db/schema');
 const tts = require('../lib/tts-synth');
-const { sessionEmail } = require('../lib/acl');
+const { sessionEmail, guardBook } = require('../lib/acl');
 
 const router = express.Router();
 
@@ -32,6 +32,9 @@ router.post('/speak', express.json({ limit: tts.TEXT_MAX + 2048 }), async (req, 
   const bookId = toIntId(req.query.bookId);
   const pageId = toIntId(req.query.pageId);
   if (bookId) setContext({ book: bookId });
+  // Die Buch-ID waehlt die Stimme (Buch-Locale) — nur fuer Buecher, die der
+  // User lesen darf.
+  if (bookId && !guardBook(req, res, bookId, 'viewer')) return;
   const userEmail = sessionEmail(req);
   const log = logger.child({ job: 'tts', user: userEmail || '-', book: bookId || '-' });
 
@@ -45,8 +48,8 @@ router.post('/speak', express.json({ limit: tts.TEXT_MAX + 2048 }), async (req, 
   const text = typeof req.body?.text === 'string' ? req.body.text : '';
   const ctx = `page=${pageId || '-'} chars=${text.trim().length}`;
   try {
-    const { buf, mime, bytes, latency } = await tts.synthesizeSpeech({ text, lang });
-    log.info(`ok ${ctx} bytes=${bytes} ${latency}ms`);
+    const { buf, mime, bytes, latency, cached } = await tts.synthesizeSpeech({ text, lang });
+    log.info(`ok ${ctx} bytes=${bytes} ${cached ? 'cache' : `${latency}ms`}`);
     res.setHeader('Content-Type', mime);
     res.setHeader('Cache-Control', 'no-store');
     return res.end(buf);

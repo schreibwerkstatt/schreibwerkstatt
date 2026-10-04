@@ -250,7 +250,7 @@ test('analyzeBook: Stoppwörter, Eigennamen und kurze Wörter sind keine Einmalw
 
 test('_selectHapax: was der Autor anderswo benutzt, steht hinten — dann die längsten', () => {
   const reference = { freq: new Map([['sonnenaufgangsfarbe', 12]]) };
-  const picked = _selectHapax(['kurzwort', 'sonnenaufgangsfarbe', 'nebelkrone'], reference, 2);
+  const picked = _selectHapax(['kurzwort', 'sonnenaufgangsfarbe', 'nebelkrone'], reference, 2).map(h => h.term);
   // Das Wort aus der Referenz fliegt trotz Länge raus: einmal HIER und sonst nie
   // ist die Frage, nicht einfach „einmal hier".
   assert.deepEqual(picked, ['nebelkrone', 'kurzwort']);
@@ -258,6 +258,9 @@ test('_selectHapax: was der Autor anderswo benutzt, steht hinten — dann die l�
 
 test('_selectHapax: Deckel greift, Reihenfolge ist deterministisch', () => {
   const words = ['aaaaaa', 'bbbbbb', 'cccccc', 'ddddddd'];
-  assert.deepEqual(_selectHapax(words, null, 2), ['ddddddd', 'aaaaaa']);
-  assert.deepEqual(_selectHapax([...words].reverse(), null, 2), ['ddddddd', 'aaaaaa']);
+  const terms = (rows) => rows.map(h => h.term);
+  assert.deepEqual(terms(_selectHapax(words, null, 2)), ['ddddddd', 'aaaaaa']);
+  assert.deepEqual(terms(_selectHapax([...words].reverse(), null, 2)), ['ddddddd', 'aaaaaa']);
+  // Ohne Referenz gibt es kein „sonst nie" — das Feld bleibt leer, nicht 1.
+  assert.equal(_selectHapax(words, null, 1)[0].novel, null);
 });

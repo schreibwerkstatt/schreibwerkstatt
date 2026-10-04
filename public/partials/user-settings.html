@@ -119,7 +119,7 @@
               <div class="lt-dict-row">
                 <span class="lt-dict-word" x-text="e.word"></span>
                 <span class="lt-dict-scope muted-msg muted-msg--sm">
-                  <span x-text="e.book_id ? $app.t('spellcheck.dict.scope_book') : $app.t('spellcheck.dict.scope_global')"></span>
+                  <span x-text="ltScopeLabel(e.book_id)"></span>
                   <span>: </span>
                   <span x-text="e.lang === '*' ? $app.t('spellcheck.dict.scope_lang_any') : e.lang"></span>
                 </span>
@@ -128,6 +128,28 @@
             </template>
             <template x-if="dictEntries.length && !dictEntriesFiltered.length">
               <p class="muted-msg muted-msg--sm" x-text="$app.t('spellcheck.dict.noMatch')"></p>
+            </template>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template x-if="$store.config.languagetoolEnabled">
+      <div class="card-form-row card-form-row--dict" x-data="collapsible()">
+        <button type="button" class="collapsible-toggle" x-bind="trigger">
+          <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+          <span x-text="$app.t('spellcheck.rules.title')"></span>
+          <span class="lt-dict-count" x-text="ltRuleEntries.length"></span>
+        </button>
+        <div class="lt-dict-body" x-bind="panel" x-cloak>
+          <p class="muted-msg muted-msg--sm" x-show="!ltRuleEntries.length" x-text="$app.t('spellcheck.rules.empty')"></p>
+          <div class="lt-dict-list" x-show="ltRuleEntries.length">
+            <template x-for="e in ltRuleEntries" :key="e.rule_id + '|' + e.book_id">
+              <div class="lt-dict-row">
+                <span class="lt-dict-word" x-text="e.rule_label || e.rule_id" :data-tip="e.rule_id"></span>
+                <span class="lt-dict-scope muted-msg muted-msg--sm" x-text="ltScopeLabel(e.book_id)"></span>
+                <button type="button" class="lt-dict-remove" @click="removeLtRule(e)" x-text="$app.t('spellcheck.rules.enable')"></button>
+              </div>
             </template>
           </div>
         </div>

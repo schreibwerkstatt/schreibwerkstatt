@@ -1,0 +1,81 @@
+{
+  "version": "4.17.0",
+  "date": "2026-10-04",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Wortschatz-Karte: Zwei neue Reiter. «Kapitel» zeigt, welche Kapitel sich im Stil vom Rest des Buchs abheben, «Figuren» die typischen Wörter in der wörtlichen Rede jeder Figur.",
+      "en": "Vocabulary card: two new tabs. “Chapters” shows which chapters read differently from the rest of the book, “Characters” the typical words in each character's dialogue."
+    },
+    {
+      "kind": "neu",
+      "de": "Kapitel-Bewertung: Die neue Kachel «Stil & Lesbarkeit» vergleicht das Kapitel mit dem Buchschnitt und markiert deutliche Abweichungen. Bewertungen lassen sich jetzt auch löschen.",
+      "en": "Chapter review: the new “Style & readability” tile compares the chapter with the book average and flags clear deviations. Reviews can now be deleted, too."
+    },
+    {
+      "kind": "neu",
+      "de": "Kontinuität: Mit «Kein Fehler» blendest du einen Fehlalarm dauerhaft aus – auch nach späteren Prüfungen. Die Prüfung startest du jetzt direkt in der Karte mit «Kontinuität neu prüfen».",
+      "en": "Continuity: “Not an error” hides a false alarm for good, even after later checks. You can now start the check right in the card with “Re-check continuity”."
+    },
+    {
+      "kind": "neu",
+      "de": "Rechtschreibprüfung: Im Popup gibt es neu «Alle ignorieren», «Ins Buch-Wörterbuch» und «Regel ausschalten». Ausgeschaltete Regeln findest und reaktivierst du im Profil.",
+      "en": "Spell check: the popup now offers “Ignore all”, “Add to book dictionary” and “Turn off rule”. You can find and re-enable turned-off rules in your profile."
+    },
+    {
+      "kind": "neu",
+      "de": "Redundanz-Radar: Findet jetzt auch Figuren, die vermutlich doppelt angelegt sind. Gewollte Wiederholungen ignorierst du per Knopf, und den Index baust du direkt in der Karte auf.",
+      "en": "Redundancy radar: now also finds characters that were probably created twice. Ignore intended repetitions with one click, and build the index right in the card."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Vorlesen: Neue Knöpfe für den vorherigen Satz und das Lesetempo. Ein Klick in den Text springt dorthin, Leertaste pausiert, und am Seitenende geht es auf Wunsch mit der nächsten Seite weiter.",
+      "en": "Read aloud: new buttons for the previous sentence and reading speed. Clicking the text jumps there, Space pauses, and at the end of a page it can continue with the next one."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Diktat: Starten und Beenden geht jetzt mit ⌘/Strg+Shift+Leertaste. Beim Beenden wird das zuletzt Gesagte noch eingefügt, und ein stummes Mikrofon meldet sich mit einem Hinweis.",
+      "en": "Dictation: start and stop with ⌘/Ctrl+Shift+Space. Stopping still inserts what you said last, and a muted microphone now triggers a hint."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fehler-Heatmap: Die Farbe zeigt jetzt die Fehlerdichte pro 1000 geprüfte Wörter statt der reinen Anzahl, mit einer Zeile «Ganzes Buch». Sehr kurze Kapitel bleiben ohne Farbe.",
+      "en": "Error heatmap: the colour now shows findings per 1,000 checked words instead of the raw count, with a “Whole book” row. Very short chapters stay uncoloured."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Stil-Heatmap: Neue Spalte «Ich-Anteil» im Erzähltext, und die Satzanfänge lassen sich fürs ganze Buch auswerten. Zu kurze Kapitel erscheinen grau.",
+      "en": "Style heatmap: new “first-person share” column for narration, and sentence openers can be analysed for the whole book. Chapters that are too short appear grey."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Kapitel-Bewertung: Du wählst, ob Sub-Kapitel mitbewertet werden. Die Notenänderung vergleicht nur Bewertungen mit gleichem Umfang, und bei unverändertem Text erscheint die letzte Bewertung.",
+      "en": "Chapter review: choose whether sub-chapters are included. The grade change only compares reviews of the same scope, and unchanged text shows the last review."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Suche «Sinngemäss»: Findet jetzt auch Schauplätze und Welt-Fakten, und nach Änderungen am Buch hält sich der Index von selbst aktuell.",
+      "en": "“By meaning” search: now also finds locations and world facts, and the index keeps itself up to date after you change the book."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Seiten-Chat und Buch-Chat: Die Antworten beziehen passende Stellen aus dem übrigen Buch mit ein, etwa Szenen, Figuren und Welt-Fakten.",
+      "en": "Page chat and book chat: answers now draw on matching passages from the rest of the book, such as scenes, characters and world facts."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buchübersicht: Neue Wortschatz-Kachel mit lexikalischer Dichte und Einmalwörtern. Das Schreibziel lässt grosse Sprünge wie Importe aus der Prognose weg.",
+      "en": "Book overview: new vocabulary tile with lexical density and once-only words. The writing goal leaves big jumps such as imports out of its forecast."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Anmeldung: Die Login-Seite wurde aufgeräumt und führt zurück zur Startseite. Bei der Registrierung kannst du angeben, wie du von uns erfahren hast.",
+      "en": "Sign-in: the login page has been tidied up and links back to the start page. When registering, you can tell us how you heard about us."
+    },
+    {
+      "kind": "behoben",
+      "de": "Recherche-Board: Verknüpfte Figuren und Orte auf einer Karte öffnen wieder den richtigen Eintrag.",
+      "en": "Research board: linked characters and places on a card open the right entry again."
+    }
+  ]
+}

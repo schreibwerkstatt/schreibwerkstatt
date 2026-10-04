@@ -45,7 +45,9 @@ export const accessMethods = {
 
 
   shareCanInvite() {
-    return !!Alpine.store('session').currentUser?.can_invite_users;
+    const u = Alpine.store('session').currentUser;
+    // Spiegelt das Server-Gate: Admins laden immer ein, sonst nur mit Freigabe.
+    return !!(u?.can_invite_users || u?.isAdmin);
   },
 
 

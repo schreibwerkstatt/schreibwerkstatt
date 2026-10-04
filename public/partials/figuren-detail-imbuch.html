@@ -6,7 +6,7 @@
      Schleifenvariable `f`; Root-Zugriffe laufen über `$app`.
 -->
 <!-- ===== Gruppe: Im Buch (Auftritte, Beziehungen, Zeitstrahl) ===== -->
-<section class="figur-group" x-show="f.kapitel?.length > 1 || $app.songsByFigurId.get(f.id)?.length || f.eltern_ids?.length || f.geschwister_ids?.length || f.beziehungen?.length || f.lebensereignisse?.length">
+<section class="figur-group" x-show="f.kapitel?.length > 1 || $app.songsByFigurId.get(f.id)?.length || f.beziehungen?.length || f.lebensereignisse?.length">
   <h4 class="figur-group-title" x-text="$app.t('figuren.group.imBuch')"></h4>
   <!-- Kapitelauftritte -->
   <div class="figur-kapitelauftritte" x-show="f.kapitel?.length > 1">
@@ -27,25 +27,6 @@
     <div class="figur-tags-row">
       <template x-for="s in ($app.songsByFigurId.get(f.id) || [])" :key="s.id">
         <button type="button" class="entity-ref" x-entity-ref="{ type: 'song', id: s.id, label: (s.titel || '') + (s.interpret ? ' — ' + s.interpret : '') }"></button>
-      </template>
-    </div>
-  </div>
-  <!-- Familie -->
-  <div x-show="f.eltern_ids?.length || f.geschwister_ids?.length">
-    <div class="bewertung-section-title" x-text="$app.t('figuren.field.familie')"></div>
-    <!-- Verwandtschafts-Pfeil vor der Referenz: ↑ Elternteil, ⇔ Geschwister. -->
-    <div class="entity-refs figur-tags-row">
-      <template x-for="pid in (f.eltern_ids || [])" :key="'e'+pid">
-        <span class="figur-rel">
-          <span class="figur-rel-mark" role="img" :aria-label="$app.t('figuren.rel.parent')" :data-tip="$app.t('figuren.rel.parent')">↑</span>
-          <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: pid }"></button>
-        </span>
-      </template>
-      <template x-for="sid in (f.geschwister_ids || [])" :key="'s'+sid">
-        <span class="figur-rel">
-          <span class="figur-rel-mark" role="img" :aria-label="$app.t('figuren.rel.sibling')" :data-tip="$app.t('figuren.rel.sibling')">⇔</span>
-          <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: sid }"></button>
-        </span>
       </template>
     </div>
   </div>

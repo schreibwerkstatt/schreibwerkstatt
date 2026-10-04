@@ -1,7 +1,7 @@
 <!-- Schreibziel + Deadline-Projektion: Fortschritt zur Zielzeichenzahl plus
      "bei deinem Schnitt fertig am ..." (Schnitt = Zuwachs der letzten 30 Tage).
      Sichtbar sobald ein Ziel in den Buch-Einstellungen gesetzt ist. -->
-<template x-if="overviewHasGoal()">
+<template x-if="!overviewIsFinished && overviewHasGoal()">
   <div class="overview-tile overview-tile--wide">
     <div class="overview-tile-head">
       <div class="overview-tile-label" x-text="$app.t('overview.goal.title')"></div>
@@ -28,15 +28,21 @@
       </span>
       <span class="overview-goal-status overview-goal-status--stalled"
             x-show="!overviewGoalProjection().reached && overviewGoalProjection().stalled" x-cloak
-            x-text="$app.t('overview.goal.stalled')"></span>
+            x-text="$app.t('overview.goal.stalled', { n: overviewGoalProjection().stalledDays })"></span>
       <span class="overview-goal-status"
-            x-show="!overviewGoalProjection().reached && !overviewGoalProjection().stalled" x-cloak
+            x-show="overviewGoalProjection().insufficientHistory" x-cloak
+            x-text="$app.t('overview.goal.tooLittleHistory')"></span>
+      <span class="overview-goal-status"
+            x-show="!overviewGoalProjection().reached && overviewGoalProjection().projectedFinishIso" x-cloak
             x-text="$app.t('overview.goal.finishOn', { date: overviewGoalDateLabel(overviewGoalProjection().projectedFinishIso) })"></span>
     </div>
 
     <div class="overview-goal-stats">
       <span class="overview-goal-stat" x-show="overviewGoalProjection().pace > 0" x-cloak
             x-text="$app.t('overview.goal.pace', { n: _fmtNum(overviewGoalProjection().pace) })"></span>
+      <span class="overview-goal-stat" x-show="overviewGoalProjection().jumpsExcluded > 0" x-cloak
+            :data-tip="$app.t('overview.goal.jumpsExcludedTip')"
+            x-text="$app.t('overview.goal.jumpsExcluded', { n: overviewGoalProjection().jumpsExcluded })"></span>
       <span class="overview-goal-stat"
             x-show="overviewGoalProjection().requiredPace && !overviewGoalProjection().reached" x-cloak
             x-text="$app.t('overview.goal.required', { n: _fmtNum(overviewGoalProjection().requiredPace) })"></span>
@@ -66,7 +72,7 @@
   <div class="overview-tile internal-link"
        x-id="['sl-grad']"
        @click="_openLengthStats(30, 'chars')"
-       :aria-label="$app.t('overview.trend') + ', ' + $app.t('overview.trendDelta', { pct: (overviewSparkline().deltaPct >= 0 ? '+' : '') + overviewSparkline().deltaPct })">
+       :aria-label="$app.t('overview.trend') + ', ' + overviewSparklineDeltaLabel()">
     <div class="overview-tile-label" x-text="$app.t('overview.trend')"></div>
     <div class="overview-sparkline-wrap">
       <svg class="overview-sparkline"
@@ -93,9 +99,9 @@
     </div>
     <div class="overview-trend-meta">
       <span class="overview-trend-pct"
-            :class="overviewSparkline().deltaPct > 0 ? 'overview-trend-pct--up'
-                  : overviewSparkline().deltaPct < 0 ? 'overview-trend-pct--down' : ''"
-            x-text="$app.t('overview.trendDelta', { pct: (overviewSparkline().deltaPct >= 0 ? '+' : '') + overviewSparkline().deltaPct })"></span>
+            :class="overviewSparkline().deltaAbs > 0 ? 'overview-trend-pct--up'
+                  : overviewSparkline().deltaAbs < 0 ? 'overview-trend-pct--down' : ''"
+            x-text="overviewSparklineDeltaLabel()"></span>
     </div>
   </div>
 </template>

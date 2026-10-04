@@ -174,7 +174,25 @@ function worldFactsScanState(bookId, userEmail) {
   return { scanned: !!run, count: 0 };
 }
 
+// Anzeigetitel eines Welt-Fakts per world_facts.id fuer Treffer des Embedding-Index
+// (Kind `fact`): «Subjekt (Kategorie)», ohne Subjekt der Fakt-Anfang. Scope wie
+// getLocationName: mit `opts.userEmail`-Schluessel nur Fakten dieses Users.
+// undefined = Fakt fehlt bzw. gehoert einem anderen User.
+const _stmtFact = db.prepare('SELECT kategorie, subjekt, fakt FROM world_facts WHERE id = ?');
+const _stmtFactForUser = db.prepare('SELECT kategorie, subjekt, fakt FROM world_facts WHERE id = ? AND user_email IS ?');
+function getWorldFactTitle(factId, opts = {}) {
+  const row = Object.prototype.hasOwnProperty.call(opts, 'userEmail')
+    ? _stmtFactForUser.get(factId, opts.userEmail ?? null)
+    : _stmtFact.get(factId);
+  if (!row) return undefined;
+  const subjekt = String(row.subjekt || '').trim();
+  if (subjekt) return row.kategorie ? `${subjekt} (${row.kategorie})` : subjekt;
+  const fakt = String(row.fakt || '').trim();
+  return fakt.length > 80 ? `${fakt.slice(0, 79)}…` : fakt;
+}
+
 module.exports = {
+  getWorldFactTitle,
   saveFaktenToDb,
   listWorldFacts,
   worldFactsScanState,

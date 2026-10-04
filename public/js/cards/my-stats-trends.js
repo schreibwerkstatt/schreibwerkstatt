@@ -118,9 +118,11 @@ export function computeOverallForecast(bookGoals, todayLocal = new Date()) {
   };
 }
 
-// Wortschatz-Trend: Summe der unique_words ueber das letzte Snapshot je Buch,
+// Wortformen-Trend: Summe der unique_words ueber das letzte Snapshot je Buch,
 // verglichen mit dem Stand ~30 Tage zuvor. Trend ∈ {-1,0,1} (richtungsneutral,
-// analog computeReadability). total = aktueller Gesamt-Wortschatz.
+// analog computeReadability). total = aktuelle Summe der Wortformen. Misst
+// ueberwiegend Buchlaenge, darum im UI nicht „Wortschatz" (docs/wortschatz.md);
+// die laengenrobusten Masse stehen im Autorenprofil und in der Buchstatistik.
 export function computeVocabTrend(historyRows, todayLocal = new Date()) {
   const today = new Date(todayLocal); today.setHours(12, 0, 0, 0);
   const latest = latestSnapshotPerBook(historyRows);

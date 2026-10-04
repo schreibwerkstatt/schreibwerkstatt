@@ -16,7 +16,7 @@ const {
 const contentStore = require('../../../lib/content-store');
 const { generateSessionTitle } = require('../chat-title');
 const embed = require('../../../lib/embed');
-const { selectPassagesSemantic } = require('./book-chat-retrieval');
+const { selectPassagesSemantic, retrievalQuery } = require('./book-chat-retrieval');
 const { setContext } = require('../../../lib/log-context');
 const appSettings = require('../../../lib/app-settings');
 const { recordChatLedgerForMessage } = require('../../../db/cost-ledger');
@@ -135,26 +135,35 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     );
 
     // ── Retrieval: Mini-RAG mit Keyword-Fallback ────────────────────────────────
-    // Bei aktivem Embedding-Index zieht die semantische Pipeline die bedeutungs-
-    // relevantesten Chunk-Auszüge — dichterer, präziserer Kontext als reines Keyword-
-    // Scoring, und ohne alle Seiten zu laden. Fällt auf das Keyword-Scoring über alle
-    // Seiten zurück, wenn kein Index existiert, das Backend ausfällt oder die Anfrage
-    // keine semantischen Treffer liefert.
+    // Bei vollständigem Embedding-Index zieht die semantische Pipeline die bedeutungs-
+    // relevantesten Auszüge (bester Chunk je Seite + Nachbar-Chunks) — dichterer,
+    // präziserer Kontext als reines Keyword-Scoring, und ohne alle Seiten zu laden.
+    // Fällt auf das Keyword-Scoring über alle Seiten zurück, wenn der Index fehlt oder
+    // unvollständig ist (Treffer deckten nur einen Teil des Buchs ab), das Backend
+    // ausfällt oder die Anfrage keine semantischen Treffer liefert. Der Grund steht in
+    // context_info.retrievalFallback. Suchtext = Frage + letzte Runde (Folgefragen).
     let selectedPages = [];
     let usedChars = 0;
     let totalPages = 0;
     let retrievalMode = 'keyword';
+    let retrievalFallback = embed.isEnabled() ? null : 'disabled';
 
     if (embed.isEnabled()) {
       updateJob(jobId, { statusText: 'job.phase.selectingPages', progress: 20 });
       try {
-        const sem = await selectPassagesSemantic(session.book_id, message, TEXT_CHAR_BUDGET, jobSignal);
-        if (sem) {
+        const sem = await selectPassagesSemantic(
+          session.book_id, retrievalQuery(message, historyWithoutLast), TEXT_CHAR_BUDGET, jobSignal,
+        );
+        if (sem.status === 'ok') {
           ({ selectedPages, usedChars, totalPages } = sem);
           retrievalMode = 'semantic';
+        } else {
+          retrievalFallback = sem.status;
+          logger.info(`Semantisches Retrieval: ${sem.status === 'no_index' ? 'Index fehlt/unvollständig' : 'keine Treffer'} – Keyword-Scoring.`);
         }
       } catch (e) {
         if (e.name === 'AbortError') throw e;
+        retrievalFallback = 'error';
         logger.warn(`Semantisches Retrieval fehlgeschlagen (${e.message}) – Fallback auf Keyword-Scoring.`);
       }
     }
@@ -248,6 +257,7 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       pages:      selectedPages.map(p => ({ name: p.name, id: p.id, slug: p.slug, book_slug: p.book_slug })),
       totalPages,
       retrievalMode,
+      ...(retrievalFallback ? { retrievalFallback } : {}),
       figuren:    figuren.length > 0,
       review:     !!review,
     };

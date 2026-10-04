@@ -8,6 +8,7 @@ const { _truncateResult, resultCapFor } = require('./shared');
 const catalog = require('./tools-catalog');
 const timeline = require('./tools-timeline');
 const text = require('./tools-text');
+const similar = require('./tools-similar');
 const figures = require('./tools-figures');
 const analysis = require('./tools-analysis');
 const revisions = require('./tools-revisions');
@@ -40,7 +41,7 @@ const TOOLS = {
   get_figure_profile:     figures.tool_get_figure_profile,
 
   search_passages:        text.tool_search_passages,
-  search_similar:         text.tool_search_similar,
+  search_similar:         similar.tool_search_similar,
   get_pages:              text.tool_get_pages,
   get_chapter_text:       text.tool_get_chapter_text,
   quote_passage:          text.tool_quote_passage,

@@ -26,6 +26,7 @@ const FLOW_METRICS = new Set([
 
 const RATE_METRICS = new Set([
   'avg_sentence_len', 'pages_per_chapter', 'avg_lix', 'avg_flesch_de',
+  'mattr', 'mtld', 'lex_density', 'hapax_ratio',
 ]);
 
 // Drift-Guard für den Test: jede Metrik des Charts muss hier eingeordnet sein.

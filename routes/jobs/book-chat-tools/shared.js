@@ -9,6 +9,9 @@ const {
   getFigureByFigId, findFigureByName, getSceneTitle, getFigureName,
   getSceneTitleForUser, getFigureNameForUser,
 } = require('../../../db/book-chat/figures');
+const { getLocationName } = require('../../../db/locations-read');
+const { getWorldFactTitle } = require('../../../db/world-facts');
+const { itemTitle: getResearchItemTitle } = require('../../../db/research-items');
 
 // Obergrenzen schützen das Token-Budget gegen ausufernde Tool-Calls. Skaliert mit
 // MODEL_CONTEXT, damit User mit grösserem Kontextfenster reichere Tool-Antworten
@@ -41,15 +44,17 @@ function resultCapFor(ctx) {
 }
 
 /**
- * Titel einer semantisch getroffenen Entität (page/scene/figure). Geteilt von
- * `search_similar` (tools-text.js) und dem Erst-Kontext des agentischen Buch-Chats
- * (routes/jobs/chat/book-chat-retrieval.js) — beide lösen dieselben drei Kinds des
- * Embedding-Index auf. Rückgabe null = Entität gelöscht, Chunk noch im Index.
+ * Titel einer semantisch getroffenen Entität (page/scene/figure/location/fact/
+ * research). Geteilt von `search_similar` (tools-similar.js) und den Erst-Kontext-/
+ * RAG-Blöcken der Chats (routes/jobs/chat/book-chat-retrieval.js) — alle lösen
+ * dieselben Kinds des Embedding-Index auf. Rückgabe null = Entität gelöscht (Chunk
+ * noch im Index) oder unbekanntes Kind.
  *
- * `opts.userEmail` (gesetzt = User-Scope): Szenen und Figuren sind Analyse-Daten pro
- * User, der Embedding-Index hängt aber nur am Buch. Mit userEmail fallen Szenen/
- * Figuren eines anderen Users im selben Buch weg (null wie gelöscht) — sonst sähe ein
- * Mitautor über search_similar/Erst-Kontext die Analyse-Texte des anderen.
+ * `opts.userEmail` (gesetzt = User-Scope): Szenen, Figuren, Orte und Welt-Fakten sind
+ * Analyse-Daten pro User, der Embedding-Index hängt aber nur am Buch. Mit userEmail
+ * fallen die eines anderen Users im selben Buch weg (null wie gelöscht) — sonst sähe
+ * ein Mitautor über search_similar/Erst-Kontext die Analyse-Texte des anderen.
+ * Recherche-Einträge sind buchweit geteilt und darum nie user-gefiltert.
  */
 function resolveEntityTitle(kind, entityId, opts = {}) {
   const scoped = Object.prototype.hasOwnProperty.call(opts, 'userEmail');
@@ -57,6 +62,10 @@ function resolveEntityTitle(kind, entityId, opts = {}) {
   if (kind === 'page')   return pageTitle(entityId)?.title ?? null;
   if (kind === 'scene')  return (scoped ? getSceneTitleForUser(entityId, user) : getSceneTitle(entityId)) ?? null;
   if (kind === 'figure') return (scoped ? getFigureNameForUser(entityId, user) : getFigureName(entityId)) ?? null;
+  const scope = scoped ? { userEmail: user } : {};
+  if (kind === 'location') return getLocationName(entityId, scope) ?? null;
+  if (kind === 'fact')     return getWorldFactTitle(entityId, scope) ?? null;
+  if (kind === 'research') return getResearchItemTitle(entityId) ?? null;
   return null;
 }
 

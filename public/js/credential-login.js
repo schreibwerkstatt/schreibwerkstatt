@@ -8,6 +8,19 @@
 // Selektoren sind darum form-relativ (name=/data-) statt per id — auf einer
 // Seite koennen beide Formen gleichzeitig stehen.
 (function () {
+  // Notfall-Zugang unter dem regulaeren Verfahren: Knopf klappt das Formular
+  // auf und setzt den Fokus ins erste Feld.
+  document.querySelectorAll('[data-fallback-toggle]').forEach((btn) => {
+    const panel = document.getElementById(btn.getAttribute('aria-controls'));
+    if (!panel) return;
+    btn.addEventListener('click', () => {
+      const open = btn.getAttribute('aria-expanded') !== 'true';
+      btn.setAttribute('aria-expanded', String(open));
+      panel.hidden = !open;
+      if (open) panel.querySelector('input')?.focus();
+    });
+  });
+
   const forms = document.querySelectorAll('form[data-login-endpoint]');
   if (!forms.length) return;
 

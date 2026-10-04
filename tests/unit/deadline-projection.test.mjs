@@ -110,3 +110,47 @@ test('computeDeadlineProjection: Buch juenger als 30 Tage → aeltester Snapshot
   // Spanne 10 Tage: (20000-5000)/10 = 1500
   assert.equal(r.pace, 1500);
 });
+
+test('computeDeadlineProjection: Import-Sprung zaehlt nicht als Schreibtempo', () => {
+  const stats = [
+    { recorded_at: '2026-06-14', chars: 0 },
+    { recorded_at: '2026-06-15', chars: 250000 }, // Import an einem Tag
+  ];
+  const r = computeDeadlineProjection(stats, 255000, { targetChars: 300000, todayLocal: TODAY });
+  assert.equal(r.jumpsExcluded, 1);
+  // Nur die 5000 Zeichen nach dem Import zaehlen, verteilt auf 6 Tage Verlauf.
+  assert.equal(r.pace, Math.round(5000 / 6));
+  assert.equal(r.daysNeeded, Math.ceil(45000 / Math.round(5000 / 6)));
+});
+
+test('computeDeadlineProjection: grosse Loeschung (Kapitel verschoben) kippt den Schnitt nicht ins Minus', () => {
+  const stats = [
+    { recorded_at: '2026-05-21', chars: 200000 },
+    { recorded_at: '2026-06-01', chars: 211000 },
+    { recorded_at: '2026-06-02', chars: 120000 }, // Kapitel in anderes Buch
+  ];
+  const r = computeDeadlineProjection(stats, 129000, { targetChars: 300000, todayLocal: TODAY });
+  assert.equal(r.jumpsExcluded, 1);
+  assert.equal(r.pace, Math.round(20000 / 30));
+  assert.equal(r.stalled, false);
+});
+
+test('computeDeadlineProjection: zu wenig Verlauf → kein „kein Fortschritt"-Urteil', () => {
+  const stats = [{ recorded_at: ISO_TODAY, chars: 10000 }];
+  const r = computeDeadlineProjection(stats, 10000, { targetChars: 300000, deadlineIso: '2026-12-31', todayLocal: TODAY });
+  assert.equal(r.pace, 0);
+  assert.equal(r.stalled, false);
+  assert.equal(r.insufficientHistory, true);
+  assert.equal(r.onTrack, null, 'Deadline-Urteil bleibt offen');
+  assert.equal(r.projectedFinishIso, null);
+});
+
+test('computeDeadlineProjection: stalledDays folgt der tatsaechlichen Spanne', () => {
+  const stats = [
+    { recorded_at: '2026-06-10', chars: 40000 },
+    { recorded_at: ISO_TODAY,    chars: 40000 },
+  ];
+  const r = computeDeadlineProjection(stats, 0, { targetChars: 100000, todayLocal: TODAY });
+  assert.equal(r.stalled, true);
+  assert.equal(r.stalledDays, 10);
+});

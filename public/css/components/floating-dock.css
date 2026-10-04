@@ -71,6 +71,23 @@
     height: 15px;
   }
 
+  /* Sekundärtaste mit Text statt Icon (Lesetempo „1.25×"). */
+  .dock-btn--text {
+    width: auto;
+    min-width: var(--dock-btn-sub-size, 30px);
+    padding: 0 var(--dock-text-pad, var(--space-6));
+    border-radius: var(--dock-btn-sub-size, 30px);
+    font-size: var(--dock-status-font, var(--font-size-xs));
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  /* Umschalter im eingeschalteten Zustand (z. B. „weiterlesen"). */
+  .dock-btn.is-on {
+    color: var(--dock-hover, var(--color-primary));
+    border-color: var(--dock-hover, var(--color-primary));
+  }
+
   /* Status-Pille neben den Tasten (Fortschritt, „hört zu", „pausiert"). */
   .dock-status {
     display: inline-flex;

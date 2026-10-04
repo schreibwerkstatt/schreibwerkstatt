@@ -2,25 +2,20 @@
 <!--
   Alpine.data-Sub-Komponente — siehe public/js/cards/songs-card.js.
   Fachdaten (songs, figuren) leben in Alpine.store('catalog');
-  songsFilters + selectedSongId bleiben im Root.
+  songsFilters, selectedSongId und songsUpdatedAt in Alpine.store('catalogUi').
 -->
 <div class="card card--songs" x-data="songsCard" x-show="$app.showSongsCard" x-cloak>
   <div class="card-header card-header--subline">
     <div class="card-header-titlebar">
       <span class="card-eyebrow" x-text="$app.selectedBookName"></span>
       <span class="card-title" x-text="$app.t('songs.title')"></span>
-      <div class="card-subline" x-show="$store.jobs.alleAktualisierenLastRun && !songsLoading">
-        <span class="card-timestamp" x-text="$app.t('common.asOf', { date: $store.jobs.alleAktualisierenLastRun })"></span>
+      <div class="card-subline" x-show="$store.catalogUi.songsUpdatedAt && !songsLoading">
+        <span class="card-timestamp" x-text="$app.t('common.asOf', { date: songsUpdatedLabel() })"></span>
       </div>
     </div>
   </div>
 
-  <div x-show="songsProgress > 0" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': songsProgress + '%' }"></div>
-  </div>
-  <div x-show="songsStatus" class="card-status" x-html="songsStatus"></div>
-
-  <div x-show="$store.catalog.songs.length === 0 && !songsLoading && !songsStatus" class="card-empty">
+  <div x-show="$store.catalog.songs.length === 0 && !songsLoading" class="card-empty">
     <p class="card-empty-text" x-text="$app.t('common.noAnalysisYet')"></p>
     <button type="button" class="primary card-empty-cta"
             @click="$app.alleAktualisieren()"

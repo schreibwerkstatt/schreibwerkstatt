@@ -45,13 +45,22 @@ ${bookText}
 </buchinhalt>`;
 }
 
-export function buildChapterAnalysisPrompt(chapterName, bookName, pageCount, chText, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null } = {}) {
+// `teil` ({ nr, von }) markiert einen Teil-Abschnitt eines Kapitels, das fürs
+// Input-Budget zerlegt wurde. Ohne die Angabe hielte das Modell den Ausschnitt
+// für das ganze Kapitel und beurteilte dessen Funktion und Bogen falsch.
+export function buildChapterAnalysisPrompt(chapterName, bookName, pageCount, chText, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null, teil = null } = {}) {
   const felder = chapterAnalysisFelder(buchtyp);
   const povBlock = _buildErzaehlformBlock(erzaehlperspektive, erzaehlzeit, buchtyp, 'review');
   const feldKeys = ['funktion_kurz', ...felder.map(f => f.key)].join(', ');
+  const gegenstand = teil
+    ? `Teil ${teil.nr} von ${teil.von} des Kapitels «${chapterName}» aus dem Werk «${bookName}».
+Der Text unten ist NICHT das ganze Kapitel, sondern ein zusammenhängender Ausschnitt davon:
+beschreibe in funktion_kurz, was DIESER Teil leistet, und urteile nicht über Anfang oder
+Ende des Kapitels, die du nicht siehst.`
+    : `«${chapterName}» aus dem Werk «${bookName}».`;
   return `<aufgabe>
-Analysiere «${chapterName}» aus dem Werk «${bookName}».
-Lies den vollständigen Text und gib eine kompakte Analyse als JSON zurück.
+Analysiere ${gegenstand}
+Lies den vorliegenden Text vollständig und gib eine kompakte Analyse als JSON zurück.
 Die Ausgabe dient als Eingabe für eine Synthese auf der Ebene des ganzen Werks –
 sie MUSS deshalb auch ${feldKeys} knapp benennen (nicht nur Themen/Stil).
 Was du hier weglässt, fehlt der Gesamtbewertung ersatzlos: sie sieht diesen Text nicht mehr.
@@ -116,10 +125,24 @@ export function buildBookReviewMultiPassPrompt(bookName, chapterAnalyses, totalP
   const motivBlock = _buildMotivContextBlock(motivContext);
   const strukturBlock = _buildStrukturContextBlock(strukturContext, { achse: _strukturAchse(axes) });
   const weltBlock = _buildWeltContextBlock(weltContext, { achse: _weltAchse(axes) });
-  const synthIn = chapterAnalyses.map((ca, i) => _analyseBlock(ca, felder, `## Kapitel ${i + 1}: ${ca.name} (${ca.pageCount} Seiten)`)).join('\n\n');
+  // Ein zu langes Kapitel kommt als mehrere Teil-Analysen an (`kapitelNr` gleich,
+  // `teil` gesetzt). Gezählt und nummeriert wird nach Kapiteln, nicht nach Analysen —
+  // sonst hielte das Modell die Teile für eigenständige Kapitel gleichen Namens.
+  const kapitelNr = (ca, i) => ca.kapitelNr ?? i + 1;
+  const kapitelCount = new Set(chapterAnalyses.map(kapitelNr)).size;
+  const geteilt = chapterAnalyses.length > kapitelCount;
+  const synthIn = chapterAnalyses.map((ca, i) => {
+    const teil = ca.teil ? `, Teil ${ca.teil.nr}/${ca.teil.von}` : '';
+    return _analyseBlock(ca, felder, `## Kapitel ${kapitelNr(ca, i)}: ${ca.name}${teil} (${ca.pageCount} Seiten)`);
+  }).join('\n\n');
+  const grundlage = geteilt
+    ? `Grundlage sind ${chapterAnalyses.length} Analysen zu ${kapitelCount} Kapiteln (insgesamt ${totalPageCount} Seiten).
+Lange Kapitel wurden in Teile zerlegt und je Teil analysiert ("Teil n/m" im Kopf): lies
+diese Teile als EIN Kapitel, nicht als eigenständige Kapitel.`
+    : `Grundlage sind die Analysen aller ${kapitelCount} Kapitel (insgesamt ${totalPageCount} Seiten).`;
   return `<aufgabe>
 Bewerte ${werkAkk} «${bookName}» kritisch und umfassend.
-Grundlage sind die Analysen aller ${chapterAnalyses.length} Kapitel (insgesamt ${totalPageCount} Seiten).
+${grundlage}
 Leite alle ${axes.length} Achsen aus der Abfolge der Kapitelanalysen ab – auch wenn die
 einzelnen Kapitelausgaben kompakt sind, MUSS die Ebene des Ganzen jede Achse benennen.
 Wo eine Achse aus den Kapitelanalysen nicht ableitbar ist, dies offen benennen
@@ -132,7 +155,7 @@ HINWEIS: Für "beispielzitate" stehen im Multi-Pass keine Volltexte zur Verfügu
 Nutze ausschliesslich die je Kapitel gelieferten "Belegzitate" und übernimm sie
 wörtlich. Liefern die Analysen keine, setze "beispielzitate" auf [] statt zu raten.
 ${schwerpunktBlock}${povBlock}${kontextBlock}${motivBlock}${strukturBlock}${weltBlock}
-<kapitelanalysen kapitel="${chapterAnalyses.length}" seiten="${totalPageCount}">
+<kapitelanalysen kapitel="${kapitelCount}" analysen="${chapterAnalyses.length}" seiten="${totalPageCount}">
 ${synthIn}
 </kapitelanalysen>
 ${_buildOutputFormat(axes, { scope: 'book', kategorien, zitatQuelle: 'einem Belegzitat oben' })}`;

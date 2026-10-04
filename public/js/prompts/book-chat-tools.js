@@ -58,11 +58,11 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'search_passages',
-    description: 'Durchsucht den Buch-Volltext via FTS5 (Literal-Pfad, bm25-sortiert) und liefert exakte Treffer-Offsets + Snippets. Standard: case-insensitive Literal-Suche; mit regex=true als JavaScript-Regex (umgeht FTS5 und scannt alle Seiten direkt). Mit chapter_id/page_id auf ein Kapitel oder eine Seite einschränken. Offsets sind kompatibel mit `quote_passage`. Nutze dies für "wo kommt X vor?"-Fragen über das ganze Buch, wenn X ein KONKRETES Wort/Name/eine Phrase ist. NICHT nutzen, um Stellen nach einer Eigenschaft zu finden, die nicht im Wortlaut steht (lustig/schön/spannend/traurig, Humor, Ton, Stimmung) — solche Aufgaben durch eigene Lektüre lösen (→ `get_chapter_text`, ganze Kapitel gebündelt laden), nicht durch Raten von Stichwörtern. Auch nicht nutzen, wenn du bereits page_ids kennst und den vollen Seitentext brauchst (→ `get_pages` / `get_chapter_text`) oder für Figuren-Auftritte (→ `get_figure_mentions`).',
+    description: 'Durchsucht den Buch-Volltext via FTS5 (Literal-Pfad, bm25-sortiert) und liefert exakte Treffer-Offsets + Snippets. Standard: case-insensitive Literal-Suche; mit regex=true als JavaScript-Regex (umgeht FTS5 und scannt alle Seiten direkt). Mit chapter_id/page_id auf ein Kapitel oder eine Seite einschränken. Offsets sind kompatibel mit `quote_passage`. Nutze dies für "wo kommt X vor?"-Fragen über das ganze Buch, wenn X ein KONKRETES Wort/Name/eine Phrase ist. NICHT nutzen, um Stellen nach einer Eigenschaft zu finden, die nicht im Wortlaut steht — rate dann keine Stichwörter: Beispiele für ein Stilmittel, eine Stimmung, ein Motiv, „Stellen über X“ in eigenen Worten → zuerst `search_similar`; Auswahl oder Vollständigkeit über den ganzen Text (lustigste Stelle, ALLE Stellen zu X, Zusammenfassung) → Kapitel lesen via `get_chapter_text` (gebündelt). Auch nicht nutzen, wenn du bereits page_ids kennst und den vollen Seitentext brauchst (→ `get_pages` / `get_chapter_text`) oder für Figuren-Auftritte (→ `get_figure_mentions`).',
     input_schema: {
       type: 'object',
       properties: {
-        pattern:     { type: 'string',  description: 'Suchmuster (literal oder Regex). Im Literal-Modus ist dies eine PHRASEN-Suche, KEINE Stichwort-ODER-Suche: mehrere Wörter werden als exakte Wortfolge gesucht (FTS5 filtert die Seiten nur vor). „lustig komisch witzig" matcht also nur diese Wortfolge, nicht Seiten, die irgendeines der Wörter enthalten. Suche nach EINEM konkreten Wort/Namen/einer festen Phrase; für „irgendwo etwas Lustiges/Schönes" ist das Tool ungeeignet (→ Kapitel lesen). Mehrere Alternativen brauchst du regex=true (z.B. `lustig|komisch|witzig`).' },
+        pattern:     { type: 'string',  description: 'Suchmuster (literal oder Regex). Im Literal-Modus ist dies eine PHRASEN-Suche, KEINE Stichwort-ODER-Suche: mehrere Wörter werden als exakte Wortfolge gesucht (FTS5 filtert die Seiten nur vor). „lustig komisch witzig" matcht also nur diese Wortfolge, nicht Seiten, die irgendeines der Wörter enthalten. Suche nach EINEM konkreten Wort/Namen/einer festen Phrase; für Stellen nach Sinn ist das Tool ungeeignet (→ `search_similar`). Mehrere Alternativen brauchst du regex=true (z.B. `lustig|komisch|witzig`).' },
         regex:       { type: 'boolean', description: 'true = pattern als JavaScript-Regex interpretieren, scannt alle Buchseiten ohne FTS5-Vorfilter. Default: false.' },
         chapter_id:  { type: 'integer', description: 'Optional: Suche auf ein Kapitel einschränken.' },
         page_id:     { type: 'integer', description: 'Optional: Suche auf eine einzelne Seite einschränken (überschreibt chapter_id-Wirkung).' },
@@ -73,14 +73,14 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'search_similar',
-    description: 'Semantische Ähnlichkeitssuche (Embeddings) über das ganze Buch: findet Passagen/Szenen/Figuren, die einem Suchtext BEDEUTUNGSMÄSSIG nahestehen — auch wenn andere Wörter benutzt werden. Genau das Gegenstück zu `search_passages`: nutze `search_passages` für konkrete Wörter/Namen, `search_similar` für Fragen nach Sinn/Stimmung/Motiv ("wo herrscht dieselbe resignierte Stimmung wie hier", "ähnliche Szenen wie ein Abschied am Bahnhof", "Stellen, die diese Figur ähnlich beschreiben"). Liefert nach Ähnlichkeit sortierte Treffer {kind,entity_id,title,snippet,score}. Der Ausschnitt (`snippet_chars`) ist oft schon die Antwort — dann NICHT noch `get_pages`/`get_chapter_text` nachschieben; die brauchst du nur, wenn der Zusammenhang um die Stelle fehlt. Rein rückwärtsgewandt — findet Bestehendes, erfindet nichts.',
+    description: 'Semantische Ähnlichkeitssuche (Embeddings) über das ganze Buch: findet Passagen, Szenen, Figuren, Orte und Welt-Fakten, die einem Suchtext BEDEUTUNGSMÄSSIG nahestehen — auch mit anderen Wörtern. ERSTE WAHL für Suchen nach Eigenschaft oder Sinn: Beispiele für ein Stilmittel, eine Stimmung, ein Motiv, „Stellen über X“ als Umschreibung („wo herrscht dieselbe resignierte Stimmung“, „Szenen wie ein Abschied am Bahnhof“). Für konkrete Wörter/Namen → `search_passages`; für Superlative oder Vollständigkeit über den ganzen Text (lustigste Stelle, ALLE Stellen, Zusammenfassung) → Kapitel lesen via `get_chapter_text`. Liefert nach Relevanz sortierte Treffer {kind,entity_id,title,snippet,score}; der Ausschnitt ist um den passendsten Satz zentriert. Seiten-Treffer tragen zusätzlich chapter_name und, wenn die Stelle im aktuellen Seitentext gefunden wird, offset/length (kompatibel mit `quote_passage`, dort max. 800 Zeichen). Der Ausschnitt ist oft schon die Antwort — dann NICHT noch `get_pages`/`get_chapter_text` nachschieben. Rein rückwärtsgewandt — findet Bestehendes, erfindet nichts.',
     input_schema: {
       type: 'object',
       properties: {
         query:   { type: 'string',  description: 'Freitext, dessen Bedeutung gesucht wird (eine Beschreibung, ein Beispielsatz, ein Motiv). Für Stichwortsuche stattdessen `search_passages`.' },
-        kinds:   { type: 'array', items: { type: 'string', enum: ['page', 'scene', 'figure'] }, description: 'Optional: auf Treffertypen einschränken (Seiten/Szenen/Figuren). Default: alle drei.' },
+        kinds:   { type: 'array', items: { type: 'string', enum: ['page', 'scene', 'figure', 'location', 'fact', 'research'] }, description: 'Optional: auf Treffertypen einschränken (Seiten/Szenen/Figuren/Orte/Welt-Fakten; `research` = Recherche-Material des Autors, nur auf ausdrücklichen Wunsch). Default: alle ausser research.' },
         limit:   { type: 'integer', description: 'Maximale Trefferzahl (default 20, max 50). Bei grossem snippet_chars kleiner wählen (z.B. 6–10) — sonst kürzt der Server die Liste.' },
-        snippet_chars: { type: 'integer', description: 'Länge des Textausschnitts pro Treffer (default 700, max 1500 ≈ eine ganze indizierte Passage). Gross wählen, wenn der Ausschnitt die Frage schon beantworten soll — das ersetzt ein teures get_pages danach.' },
+        snippet_chars: { type: 'integer', description: 'Länge des Textausschnitts pro Treffer (default 700, max 1500 ≈ eine ganze indizierte Passage). Bei Suchen nach Eigenschaft/Stimmung/Stilmittel gross wählen (1200–1500) und limit klein (6–10) — der Ausschnitt soll die Stelle selbst zeigen und ersetzt ein teures get_pages danach.' },
       },
       required: ['query'],
     },
@@ -313,14 +313,13 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'list_songs',
-    description: 'Listet die Songs/den Soundtrack des Buchs (Musikbibliothek): Titel, Interpret, Genre, Kontext-Typ, Beschreibung, Stimmung, erste Erwähnung + verknüpfte Kapitel (mit Häufigkeit), Figuren und Szenen. Beantwortet "welche Musik/Songs gehören zum Buch?", "welcher Song zu Figur X?", "Soundtrack von Kapitel 3?". Filterbar nach chapter_id, figur_id/figur_name, scene_id.',
+    description: 'Listet die Songs/den Soundtrack des Buchs (Musikbibliothek): Titel, Interpret, Genre, Kontext-Typ, Beschreibung, Stimmung, erste Erwähnung + verknüpfte Kapitel (mit Häufigkeit) und Figuren. Beantwortet "welche Musik/Songs gehören zum Buch?", "welcher Song zu Figur X?", "Soundtrack von Kapitel 3?". Filterbar nach chapter_id, figur_id/figur_name.',
     input_schema: {
       type: 'object',
       properties: {
         chapter_id: { type: 'integer', description: 'Nur Songs, die in diesem Kapitel verknüpft sind.' },
         figur_id:   { type: 'string',  description: 'Nur Songs zu dieser Figur (fig_id).' },
         figur_name: { type: 'string',  description: 'Alternative: Name/Kurzname der Figur.' },
-        scene_id:   { type: 'integer', description: 'Nur Songs zu dieser Szene (scene_id aus list_scenes).' },
         limit:      { type: 'integer', description: 'Maximale Anzahl (default 50, max 200).' },
       },
       required: [],

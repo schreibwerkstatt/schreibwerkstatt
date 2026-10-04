@@ -41,6 +41,7 @@ const {
 } = require('../../lib/figure-age');
 const embed = require('../../lib/embed');
 const { semanticQuery } = require('../../lib/semantic-retrieval');
+const { bestLivePassage } = require('../../lib/live-passage');
 
 // Deckel pro Figur. Mehr Stellen heisst nicht mehr Erkenntnis: das Alter einer
 // Figur haengt an einer Handvoll Saetzen, und die Auswahl verteilt sich bewusst
@@ -78,13 +79,22 @@ function computeContentSig(pages, figuren, model) {
   return h.digest('hex');
 }
 
+// Ausschnitt aus dem Live-Text um einen Index-Treffer (Chunk ~1500 Zeichen).
+const LIVE_PASSAGE_MAX = 2000;
+
 /** Kandidatenstellen aus dem Embedding-Index. Eine Passage (Chunk, bis ~1500
  *  Zeichen) wird auf den Satz MIT der Angabe zugeschnitten (`passageStellen`) —
  *  der Passagen-Anfang enthielte die Zahl meist nicht, und die Zitat-Pruefung
  *  verwuerfe dann ein korrektes Zitat. Treffer ohne Alters-/Jahressignal oder ohne
  *  Nennung der Figur fallen weg. Non-fatal: ohne Index laeuft der Job weiter
- *  (dann eben nur mit den Musterfunden); ein Abbruch wird durchgereicht. */
-async function _semanticStellen(bookId, fig, pageMeta, nameIndex, signal) {
+ *  (dann eben nur mit den Musterfunden); ein Abbruch wird durchgereicht.
+ *
+ *  Der Chunk ist nur Wegweiser: geschnitten wird aus dem AKTUELLEN Seitentext
+ *  (`pageText`, derselbe Stand wie die Musterfunde), denn die Zitat-Pruefung
+ *  laeuft gegen `satz` — ein Satz aus einem veralteten Chunk belegte ein Alter,
+ *  das so nicht mehr im Buch steht. Ist die Stelle umgeschrieben, faellt der
+ *  Treffer weg. */
+async function _semanticStellen(bookId, fig, pageMeta, nameIndex, signal, pageText = new Map()) {
   const query = [fig.name, fig.kurzname].filter(Boolean).join(' ')
     + ' Alter Jahre alt geboren Geburtsjahr Geburtstag wie alt';
   const hits = await semanticQuery(bookId, query, { kinds: ['page'], topK: EMBED_TOP_K, signal });
@@ -93,7 +103,9 @@ async function _semanticStellen(bookId, fig, pageMeta, nameIndex, signal) {
     if (h.kind !== 'page') continue;
     const pageId = parseInt(h.entity_id, 10);
     const meta = pageMeta.get(pageId) || {};
-    for (const st of passageStellen(h.text || '', nameIndex, fig.id)) {
+    const live = bestLivePassage(pageText.get(pageId) || '', h.text || '', { maxChars: LIVE_PASSAGE_MAX });
+    if (!live) continue;
+    for (const st of passageStellen(live.text, nameIndex, fig.id)) {
       out.push({
         figure_id: fig.id,
         satz: st.satz,
@@ -159,10 +171,12 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
     if (!nameIndex) throw i18nError('job.error.figurAlterNoFiguren');
 
     const pageMeta = new Map();
+    const pageText = new Map();
     const byFigur = new Map(figuren.map(f => [f.id, []]));
     for (let i = 0; i < pageContents.length; i++) {
       throwIfAborted();
       const p = pageContents[i];
+      pageText.set(p.id, p.text || '');
       pageMeta.set(p.id, { page_name: p.title || null, chapter: p.chapter || null, chapter_id: p.chapter_id ?? null, ordinal: i });
       for (const c of scanPage(p.text, nameIndex, {
         page_id: p.id, page_name: p.title || null, chapter: p.chapter || null,
@@ -184,7 +198,7 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
         if (embedQueries >= MAX_EMBED_QUERIES) { embedSkipped++; continue; }
         embedQueries++;
         try {
-          const found = await _semanticStellen(bookId, f, pageMeta, nameIndex, signal());
+          const found = await _semanticStellen(bookId, f, pageMeta, nameIndex, signal(), pageText);
           if (found.length) embedUsed = true;
           // Dieselbe Seite nicht zweimal — der Musterfund ist praeziser (Satz
           // statt Passage), also gewinnt er.

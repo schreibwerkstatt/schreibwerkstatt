@@ -313,7 +313,6 @@ function seedOther() {
   const insSong = db.prepare('INSERT INTO songs (book_id, song_uid, titel, sort_order, user_email, updated_at) VALUES (?, ?, ?, ?, ?, ?)');
   o.song = insSong.run(OTHER, 'song_x', 'Seemannslied', 0, U, T).lastInsertRowid;
   db.prepare('INSERT INTO song_figures (song_id, figure_id, kontext_typ) VALUES (?, ?, ?)').run(o.song, o.nord, 'singt');
-  db.prepare('INSERT INTO song_scenes (scene_id, song_id) VALUES (?, ?)').run(o.scene, o.song);
 
   const insCc = db.prepare('INSERT INTO continuity_checks (book_id, checked_at, summary, user_email) VALUES (?, ?, ?, ?)');
   const oldCheck = insCc.run(OTHER, T, 'alt', U).lastInsertRowid;
@@ -375,7 +374,7 @@ test('list_locations / get_location_profile: Figuren nur aus Buch + User', () =>
   assert.match(callO('get_location_profile', { loc_id: 'loc_hafen' }, V).error, /^Ort nicht gefunden/);
 });
 
-test('list_scenes / list_songs: Figuren-, Orts- und Szenen-Bridges, loc_id-Filter im Buch', () => {
+test('list_scenes / list_songs: Figuren- und Orts-Bridges, loc_id-Filter im Buch', () => {
   const s = callO('list_scenes', { loc_id: 'loc_hafen' });
   assert.deepEqual(s.scenes.map(x => x.titel), ['Hafen-Szene']);
   assert.deepEqual(s.scenes[0].figuren, [{ fig_id: 'fig_nord', name: 'Anna Nord' }]);
@@ -383,7 +382,6 @@ test('list_scenes / list_songs: Figuren-, Orts- und Szenen-Bridges, loc_id-Filte
   assert.equal(callO('list_scenes', { loc_id: 'loc_nope' }).error, 'Ort nicht gefunden');
   const g = callO('list_songs');
   assert.deepEqual(g.songs[0].figuren, [{ fig_id: 'fig_nord', name: 'Anna Nord', kontext_typ: 'singt' }]);
-  assert.deepEqual(g.songs[0].szenen, [{ scene_id: o.scene, titel: 'Hafen-Szene' }]);
 });
 
 test('find_first_last_mention (Ort): loc_id getrimmt, Buch- und User-Scope', () => {

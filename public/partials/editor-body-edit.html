@@ -21,7 +21,7 @@
        :spellcheck="!$store.config.languagetoolEnabled"
        autocorrect="off"
        autocapitalize="off"
-       @input="_markEditDirty()"
+       @input="_markEditDirty(); _sttReanchorFromUser()"
        @beforeinput="if ($event.inputType === 'historyUndo' || $event.inputType === 'historyRedo') { $event.preventDefault(); $event.inputType === 'historyUndo' ? notebookUndo() : notebookRedo(); }"
        @paste="_onEditPaste($event)"
        @copy="_onEditCopy($event)"

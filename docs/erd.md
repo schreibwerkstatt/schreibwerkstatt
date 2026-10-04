@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 304, 169 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram` + `search_meta`).
+Stand: Schema-Version 312, 175 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -72,6 +72,7 @@ erDiagram
   books ||--o{ book_extract_cache    : has
   books ||--o{ chapter_review_cache  : has
   books ||--o{ book_review_cache     : has
+  books ||--o{ ungrouped_review_cache : has
   books ||--o{ chapter_macro_review_cache : has
   books ||--o{ tagebuch_rueckblick_cache : has
   books ||--o{ tagebuch_rueckblicke  : has
@@ -114,6 +115,10 @@ erDiagram
   books ||--o{ lexicon_ngrams        : "top phrases"
   pages ||--o{ lexicon_terms         : "first occurrence"
   pages ||--o{ lexicon_ngrams        : "first occurrence"
+  books ||--o{ chapter_lexicon       : "kapitel-band"
+  chapters ||--o| chapter_lexicon    : "wortschatz je kapitel"
+  books ||--o{ figure_idiolect       : "idiolekt"
+  figures ||--o| figure_idiolect     : "rede der figur"
   plot_beats ||--o{ plot_beat_figures : has
   plot_beats ||--o{ plot_beat_locations : "spielt-an"
   locations  ||--o{ plot_beat_locations : "schauplatz-von"
@@ -160,7 +165,6 @@ erDiagram
   pages ||--o{ ideen                 : at
   pages ||--o{ lektorat_time         : on
   pages ||--o{ lektorat_cache        : cached
-  pages ||--o{ page_languagetool_cache : cached
   pages ||--o{ locations             : firstMention
   pages ||--o{ songs                 : firstMention
   pages ||--o{ figures               : firstMention
@@ -175,6 +179,15 @@ erDiagram
   figure_scenes ||--o{ semantic_chunks : "ist (kind=scene)"
   figures       ||--o{ semantic_chunks : "ist (kind=figure)"
   research_items ||--o{ semantic_chunks : "ist (kind=research)"
+  locations     ||--o{ semantic_chunks : "ist (kind=location)"
+  world_facts   ||--o{ semantic_chunks : "ist (kind=fact)"
+  books         ||--o{ semantic_index_state : "letzter vollständiger Index-Lauf"
+  books         ||--o{ redundancy_runs : "letzter Redundanz-Radar-Lauf"
+  app_users     ||--o{ redundancy_runs : "pro User"
+  books         ||--o{ redundancy_dismissals : "ignorierte Paare"
+  app_users     ||--o{ redundancy_dismissals : "pro User"
+  pages         ||--o{ redundancy_dismissals : "Seitenpaar (kind=page)"
+  figures       ||--o{ redundancy_dismissals : "Figurenpaar (kind=figure)"
   research_items ||--|| interview_transcripts : "ist (kind=transcript)"
   interview_transcripts ||--o{ interview_segments : has
   interview_transcripts ||--o{ interview_speakers : has
@@ -197,6 +210,8 @@ erDiagram
   ai_profiles ||--o{ app_users       : "assigned to"
   app_users ||--o| ai_profiles       : "own API access"
   books     ||--o{ user_dictionary   : "scoped (NULL=global)"
+  app_users ||--o{ languagetool_disabled_rules : "switched off"
+  books     ||--o{ languagetool_disabled_rules : "scoped (NULL=global)"
 
   user_invites ||--o{ registration_requests : "linked invite"
   pages ||--o{ page_presence         : "online viewers"
@@ -241,13 +256,11 @@ erDiagram
   locations ||--o{ location_chapters     : at
   locations ||--o{ locations             : parent
 
-  songs ||--o{ song_scenes               : in
   songs ||--o{ song_figures              : has
   songs ||--o{ song_chapters             : at
 
   figure_scenes ||--o{ scene_figures     : has
   figure_scenes ||--o{ scene_locations   : has
-  figure_scenes ||--o{ song_scenes       : has
   chapters ||--o{ song_chapters          : has
 
   zeitstrahl_events ||--o{ zeitstrahl_event_chapters : refs
@@ -257,6 +270,7 @@ erDiagram
   continuity_checks ||--o{ continuity_issues          : has
   continuity_issues ||--o{ continuity_issue_figures   : refs
   continuity_issues ||--o{ continuity_issue_chapters  : refs
+  pages ||--o{ continuity_issues                      : "anchors stelle_a/b"
 
   chat_sessions ||--o{ chat_messages     : has
   chat_sessions ||--o{ chat_images       : "generated in chat"
@@ -997,10 +1011,6 @@ erDiagram
     INTEGER chapter_id  PK,FK
     INTEGER haeufigkeit
   }
-  song_scenes {
-    INTEGER scene_id PK,FK
-    INTEGER song_id  PK,FK
-  }
   world_facts {
     INTEGER id          PK
     INTEGER book_id     FK "ON DELETE CASCADE"
@@ -1028,14 +1038,12 @@ erDiagram
   figures   ||--o{ song_figures       : likes
   figure_scenes ||--o{ scene_figures  : has
   figure_scenes ||--o{ scene_locations: has
-  figure_scenes ||--o{ song_scenes    : has
   locations ||--o{ scene_locations    : in
   locations ||--o{ location_figures   : has
   locations ||--o{ location_chapters  : at
   locations ||--o{ locations          : parent
   songs     ||--o{ song_figures       : has
   songs     ||--o{ song_chapters      : at
-  songs     ||--o{ song_scenes        : in
   chapters  ||--o{ song_chapters      : has
   books     ||--o{ world_facts        : has
   world_facts ||--o{ world_fact_chapters : in
@@ -1123,8 +1131,12 @@ erDiagram
     TEXT    quelle "Beleg-URL des Faktencheck-Befunds (typ=faktenfehler); NULL bei allen anderen Typen"
     INTEGER sort_order
     TEXT    updated_at
-    INTEGER resolved "erledigt-Flag, gueltig bis naechste Komplettanalyse"
+    INTEGER resolved "erledigt-Flag; spaetere Laeufe uebernehmen es fuer denselben Befund (lib/continuity-carryover.js)"
     TEXT    resolved_at
+    INTEGER dismissed "kein Fehler (Fehlalarm); wird wie resolved uebernommen"
+    TEXT    dismissed_at
+    INTEGER page_a_id FK "SET NULL — Seite von stelle_a (Zitat bzw. zitierter Fakt im Text gefunden)"
+    INTEGER page_b_id FK "SET NULL — Seite von stelle_b"
   }
   continuity_issue_figures {
     INTEGER id         PK
@@ -1562,6 +1574,10 @@ erDiagram
     REAL    avg_sentence_len
     REAL    avg_lix
     REAL    avg_flesch_de
+    REAL    mattr            "nullable — Wortschatz-Scan, nur mit vollem Fenster"
+    REAL    mtld             "nullable — Wortschatz-Scan"
+    REAL    lex_density      "nullable — Wortschatz-Scan"
+    REAL    hapax_ratio      "nullable — Wortschatz-Scan"
   }
 
   job_runs {
@@ -1661,6 +1677,15 @@ erDiagram
     TEXT    review_json
     TEXT    cached_at
   }
+  ungrouped_review_cache {
+    INTEGER book_id      PK,FK
+    TEXT    user_email   PK
+    TEXT    phase        PK
+    TEXT    provider     PK
+    TEXT    pages_sig
+    TEXT    review_json
+    TEXT    cached_at
+  }
   chapter_macro_review_cache {
     INTEGER book_id      PK,FK
     TEXT    user_email   PK
@@ -1715,12 +1740,11 @@ erDiagram
     TEXT    result_json
     TEXT    cached_at
   }
-  page_languagetool_cache {
-    INTEGER page_id      PK,FK "CASCADE"
-    TEXT    content_hash PK    "sha1 ueber LT-Eingabetext"
+  languagetool_para_cache {
+    TEXT    content_hash PK    "sha1 ueber den Absatz-Text"
     TEXT    lang         PK    "LT-Locale-Tag (de-CH, en-US, auto)"
     INTEGER picky        PK    "0/1, picky-Mode an/aus"
-    TEXT    matches_json       "JSON-Array von LT-Matches"
+    TEXT    matches_json       "UNGEFILTERTE LT-Matches, Offsets relativ zum Absatz"
     TEXT    created_at
   }
   user_dictionary {
@@ -1728,6 +1752,13 @@ erDiagram
     INTEGER book_id    FK "NULL = global, sonst pro Buch; CASCADE auf books"
     TEXT    word          "User-spezifisches Wort"
     TEXT    lang          "* = alle Sprachen, sonst Locale-Tag"
+    TEXT    created_at
+  }
+  languagetool_disabled_rules {
+    TEXT    user_email FK "CASCADE auf app_users"
+    INTEGER book_id    FK "NULL = alle Buecher, sonst pro Buch; CASCADE auf books"
+    TEXT    rule_id       "LT-Regel-ID"
+    TEXT    rule_label    "LT-Regelbeschreibung fuer die Einstellungs-Liste"
     TEXT    created_at
   }
 
@@ -1907,6 +1938,8 @@ erDiagram
     TEXT    message
     TEXT    ip
     TEXT    user_agent
+    TEXT    source        "automatisch: utm_*/ref oder externer Referer"
+    TEXT    source_note   "Selbstauskunft im Formular"
     TEXT    status        "pending | approved | denied | expired"
     TEXT    created_at
     TEXT    reviewed_at
@@ -2137,19 +2170,47 @@ erDiagram
 
   semantic_chunks {
     INTEGER id           PK "AUTOINCREMENT"
-    TEXT    kind         "page | scene | figure | research (CHECK)"
+    TEXT    kind         "page | scene | figure | research | location | fact (CHECK)"
     INTEGER book_id      FK "→ books ON DELETE CASCADE"
     INTEGER page_id      FK "→ pages CASCADE — nur bei kind=page"
     INTEGER scene_id     FK "→ figure_scenes CASCADE — nur bei kind=scene"
     INTEGER figure_id    FK "→ figures CASCADE — nur bei kind=figure"
     INTEGER research_item_id FK "→ research_items CASCADE — nur bei kind=research (Titel+Inhalt+PDF-Volltext)"
-    INTEGER entity_id    "GENERATED VIRTUAL = COALESCE(page_id, scene_id, figure_id, research_item_id) — polymorpher Lesezugriff"
+    INTEGER location_id  FK "→ locations CASCADE — nur bei kind=location (Name+Typ+Beschreibung+Stimmung)"
+    INTEGER world_fact_id FK "→ world_facts CASCADE — nur bei kind=fact (Kategorie+Subjekt+Fakt)"
+    INTEGER entity_id    "GENERATED VIRTUAL = COALESCE(page_id, scene_id, figure_id, research_item_id, location_id, world_fact_id) — polymorpher Lesezugriff"
     INTEGER chunk_ix
     TEXT    content_hash "Delta-Cache"
     TEXT    model        "Mehr-Modell-Koexistenz"
     INTEGER dim
     BLOB    vector       "Float32-Embedding"
     TEXT    text
+    TEXT    created_at
+  }
+
+  semantic_index_state {
+    INTEGER book_id    PK,FK "→ books ON DELETE CASCADE"
+    TEXT    model      PK "Embedding-Modell des Laufs"
+    TEXT    indexed_at "Ende des letzten VOLLSTÄNDIGEN Index-Laufs — abgebrochene Läufe schreiben nichts"
+  }
+
+  redundancy_runs {
+    INTEGER book_id     PK,FK "→ books ON DELETE CASCADE"
+    TEXT    user_email  PK,FK "→ app_users ON DELETE CASCADE"
+    REAL    threshold   "Cosinus-Schwelle des Laufs"
+    TEXT    result_json "Paare (IDs + Passagentext), Figuren-Dubletten, Index-Stand — keine Namen"
+    TEXT    created_at
+  }
+
+  redundancy_dismissals {
+    INTEGER id          PK
+    INTEGER book_id     FK "→ books ON DELETE CASCADE"
+    TEXT    user_email  FK "→ app_users ON DELETE CASCADE"
+    TEXT    kind        "page|figure"
+    INTEGER page_a_id   FK "→ pages ON DELETE CASCADE; kind=page, a < b"
+    INTEGER page_b_id   FK "→ pages ON DELETE CASCADE"
+    INTEGER figure_a_id FK "→ figures ON DELETE CASCADE; kind=figure, a < b"
+    INTEGER figure_b_id FK "→ figures ON DELETE CASCADE"
     TEXT    created_at
   }
 
@@ -2320,7 +2381,8 @@ erDiagram
     INTEGER book_id         PK "FK books, CASCADE — 1:1 zum Buch"
     TEXT    scanned_at
     INTEGER lexicon_version     "Rechenregel-Version (LEXICON_VERSION)"
-    TEXT    content_sig         "Hash Seiten+Reihenfolge → Delta-Skip"
+    TEXT    content_sig         "Hash Seiten+Reihenfolge — Textstand, geht in input_sig der ANDEREN Buecher"
+    TEXT    input_sig           "Hash Text+Namen+Referenz-Textstaende → Delta-Skip"
     INTEGER pages
     INTEGER segments
     INTEGER tokens
@@ -2338,6 +2400,7 @@ erDiagram
     REAL    heaps_beta          "nullable — erst ab 200 Token"
     REAL    heaps_k
     REAL    lex_density
+    REAL    idiolect_coverage   "nullable — Anteil der Rede, der einer Figur zugeordnet ist"
     TEXT    freq_json           "Terme ab Mindesthaeufigkeit als Referenzkorpus fuer ANDERE Buecher"
   }
   lexicon_terms {
@@ -2349,6 +2412,8 @@ erDiagram
     INTEGER chapter_spread     "in wie vielen Kapiteln"
     REAL    keyness            "nullable — Log-Likelihood vs. andere Buecher"
     INTEGER first_page_id  FK "SET NULL — Sprungziel"
+    INTEGER novel              "nullable 0|1 — Einmalwort, in anderen Buechern nie"
+    INTEGER sort_rank          "nullable — Rang der Einmalwort-Auswahl"
   }
   lexicon_ngrams {
     INTEGER id             PK
@@ -2360,11 +2425,42 @@ erDiagram
     REAL    log_dice           "Kohaesion der Bestandteile"
     INTEGER first_page_id  FK "SET NULL — Sprungziel"
   }
+  chapter_lexicon {
+    INTEGER chapter_id     PK "FK chapters, CASCADE"
+    INTEGER book_id        FK "CASCADE"
+    INTEGER position           "Buchreihenfolge zum Scanzeitpunkt"
+    INTEGER tokens
+    INTEGER types
+    REAL    hapax_ratio
+    REAL    mattr
+    INTEGER mattr_window
+    REAL    mtld
+    REAL    yule_k
+    REAL    lex_density
+    REAL    delta              "nullable — Burrows's Delta gegen das Durchschnittskapitel"
+    TEXT    delta_top_json     "nullable — staerkste Merkmale [{term, z}]"
+  }
+  figure_idiolect {
+    INTEGER figure_id      PK "FK figures, CASCADE"
+    INTEGER book_id        FK "CASCADE"
+    INTEGER utterances
+    INTEGER tokens
+    INTEGER types
+    REAL    mattr
+    INTEGER mattr_window
+    REAL    mtld
+    REAL    avg_utterance_len
+    TEXT    terms_json         "typische Woerter [{term, count, keyness}]"
+  }
   books ||--o| book_lexicon   : "wortschatz"
   books ||--o{ lexicon_terms  : "top terms"
   books ||--o{ lexicon_ngrams : "top phrases"
   pages ||--o{ lexicon_terms  : "first occurrence"
   pages ||--o{ lexicon_ngrams : "first occurrence"
+  books ||--o{ chapter_lexicon : "kapitel-band"
+  chapters ||--o| chapter_lexicon : "wortschatz je kapitel"
+  books ||--o{ figure_idiolect : "idiolekt"
+  figures ||--o| figure_idiolect : "rede der figur"
 ```
 
 ## 6 · Pflege

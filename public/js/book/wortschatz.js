@@ -4,8 +4,7 @@
 // Buchtext. Gespreadet in cards/wortschatz-card.js.
 //
 // Die Analyse-Version kommt vom Server (`thresholds.version`) — hier steht KEINE
-// Kopie davon. Genau an so einer Frontend-Kopie driftet die Stil-Heatmap gegen
-// lib/page-index.js.
+// Kopie davon: eine Frontend-Kopie driftet unbemerkt gegen den Server.
 
 import { formatNumber, localeTag, tzOpts } from '../utils.js';
 import { startPoll } from '../cards/job-helpers.js';
@@ -100,11 +99,27 @@ export const wortschatzMethods = {
   // MATTR ist nur längenrobust, wenn das Fenster voll war. War der Text kürzer,
   // liefert der Server die einfache TTR — das muss sichtbar sein, sonst hält der
   // Autor eine nicht vergleichbare Zahl für vergleichbar.
+  // Leeres Buch: MATTR ist „–", eine Fenster-Warnung („nur 0 Wörter") wäre dann
+  // Unsinn — ohne Wert gibt es nichts, was nicht vergleichbar sein könnte.
   wsMattrIsRobust() {
     const s = this.wortschatzData?.stats;
     const win = this.wortschatzData?.thresholds?.mattrWindow;
-    if (!s || !win) return true;
+    if (!s || !win || s.mattr == null) return true;
     return (s.mattr_window || 0) >= win;
+  },
+
+  // Warum MTLD „–" ist. Zwei verschiedene Gründe, zwei verschiedene Sätze: zu kurz
+  // ist etwas anderes als „die Type-Token-Rate fällt nie unter die Schwelle"
+  // (jedes Wort neu — kommt bei Listen und sehr kurzen, dichten Texten vor).
+  wsMtldNote() {
+    const d = this.wortschatzData;
+    if (!d?.stats || d.stats.mtld != null) return '';
+    const min = d.thresholds?.mtldMinTokens;
+    const t = window.__app?.t;
+    if (!t) return '';
+    return (d.stats.tokens || 0) < (min || 0)
+      ? t('wortschatz.kpi.mtldShort', { min })
+      : t('wortschatz.kpi.mtldNone');
   },
 
   // Datums-Display Pflicht über tzOpts() (App-Zeitzone, nicht Browser-TZ).
@@ -134,10 +149,64 @@ export const wortschatzMethods = {
   // Keyness-Band für die Badge-Färbung. Positiv = in diesem Buch auffällig
   // häufig, negativ = auffällig gemieden.
   wsKeynessClass(v) {
-    if (v == null) return '';
+    // 0 heisst „exakt erwartete Rate" — weder auffällig häufig noch gemieden.
+    if (v == null || Number(v) === 0) return '';
     if (v >= 15) return 'wortschatz-keyness--high';
     if (v > 0) return 'wortschatz-keyness--mid';
     return 'wortschatz-keyness--neg';
+  },
+
+  // ── Kapitel-Band ──────────────────────────────────────────────────────────
+  // Auffällig ist ein Kapitel, dessen Delta mehr als eine Standardabweichung über
+  // dem Mittel der Kapitel liegt. Relativ, nicht absolut: Delta hat keinen festen
+  // Normalbereich, es misst den Abstand zum Durchschnittskapitel DIESES Buchs.
+  wsDeltaOutlier(row) {
+    if (row?.delta == null) return false;
+    const vals = (this.wortschatzData?.chapters || []).map(c => c.delta).filter(v => v != null);
+    if (vals.length < 3) return false;
+    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const sd = Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length);
+    return sd > 0 && row.delta > mean + sd;
+  },
+
+  // Begründung des Deltas in Worten: welche häufigen Wörter das Kapitel öfter bzw.
+  // seltener benutzt als der Rest. Ohne sie ist die Zahl eine Behauptung.
+  wsDeltaReason(row) {
+    const top = row?.delta_top || [];
+    const more = top.filter(d => d.z > 0).map(d => d.term);
+    const less = top.filter(d => d.z < 0).map(d => d.term);
+    const t = window.__app?.t;
+    if (!t || (!more.length && !less.length)) return '';
+    const parts = [];
+    if (more.length) parts.push(t('wortschatz.chapters.more', { words: more.join(', ') }));
+    if (less.length) parts.push(t('wortschatz.chapters.less', { words: less.join(', ') }));
+    return parts.join(' · ');
+  },
+
+  // Hinweis, warum das Kapitel-Band (noch) kein Delta hat.
+  wsDeltaNote() {
+    const d = this.wortschatzData;
+    const rows = d?.chapters || [];
+    if (!rows.length || rows.some(c => c.delta != null)) return '';
+    return window.__app?.t?.('wortschatz.chapters.noDelta', {
+      min: this.wsNum(d.thresholds?.deltaMinTokens), chapters: d.thresholds?.deltaMinChapters,
+    }) || '';
+  },
+
+  // ── Figuren-Idiolekt ──────────────────────────────────────────────────────
+  wsIdiolectTerms(row) {
+    return (row?.terms || []).map(t => t.term).join(', ');
+  },
+
+  // Abdeckung offenlegen: nur Rede mit eindeutiger Inquit-Formel ist zugeordnet.
+  wsIdiolectCoverage() {
+    const c = this.wortschatzData?.stats?.idiolect_coverage;
+    if (c == null) return '';
+    return window.__app?.t?.('wortschatz.figures.coverage', { pct: this.wsPercent(c, 0) }) || '';
+  },
+
+  wsOpenStil() {
+    window.__app?.toggleStilCard?.();
   },
 
   wsGotoPage(pageId) {

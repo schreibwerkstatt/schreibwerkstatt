@@ -297,7 +297,7 @@ export {
   SCHEMA_CHAT_TITLE,
 } from './prompts/chat.js';
 
-export { formatHistoryVorschlaege, historyTrimNote, formatPageChange } from './prompts/page-chat.js';
+export { formatHistoryVorschlaege, historyTrimNote, formatPageChange, buildPageChatBookContext } from './prompts/page-chat.js';
 
 // Buch-Chat-only: Aussenwelt-Regel + Synthese-Aufforderung beim Kosten-Deckel.
 export {

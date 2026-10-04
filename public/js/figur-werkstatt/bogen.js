@@ -263,6 +263,6 @@ export const bogenMethods = {
   // Ohne semantische Suche kann der Lauf nichts finden: ein Kern ist eine
   // Bedeutung, keine Zeichenfolge. Der Knopf bleibt sichtbar, sagt aber warum.
   arcSemanticActive() {
-    return !!window.Alpine?.store('config')?.semanticSearch?.enabled;
+    return !!window.Alpine?.store('config')?.semanticSearchEnabled;
   },
 };

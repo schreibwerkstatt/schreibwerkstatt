@@ -119,7 +119,32 @@ const _saveBookReviewCache = db.prepare(
    VALUES (?, ?, ?, ?, ?, ?)`
 );
 
+// Seiten ohne Kapitel (Gruppen-Key '__ungrouped__', ggf. '__subN') haben in
+// chapter_review_cache keinen Platz — chapter_id ist FK auf chapters. Sie liegen
+// in ungrouped_review_cache; die beiden Funktionen unten leiten transparent um.
+const _loadUngroupedReviewCache = db.prepare(
+  `SELECT review_json FROM ungrouped_review_cache
+   WHERE book_id = ? AND user_email = ? AND phase = ? AND provider = ? AND pages_sig = ?`
+);
+const _saveUngroupedReviewCache = db.prepare(
+  `INSERT OR REPLACE INTO ungrouped_review_cache
+   (book_id, user_email, phase, provider, pages_sig, review_json, cached_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?)`
+);
+
+/** Phase eines '__ungrouped__'-Keys ('' oder 'subN'), sonst null. */
+function _ungroupedPhase(key) {
+  const m = String(key).match(/^__ungrouped__(?:__(sub\d+))?$/);
+  return m ? (m[1] || '') : null;
+}
+
 function loadChapterReviewCache(bookId, userEmail, chapterKey, pagesSig, provider = '') {
+  const ungrouped = _ungroupedPhase(chapterKey);
+  if (ungrouped != null) {
+    const row = _loadUngroupedReviewCache.get(parseInt(bookId), userEmail || '', ungrouped, provider || '', pagesSig);
+    if (!row) return null;
+    try { return JSON.parse(row.review_json); } catch { return null; }
+  }
   const parsed = _parseChapterKey(chapterKey);
   if (!parsed || parsed.book) return null;
   const row = _loadChapterReviewCache.get(
@@ -130,6 +155,15 @@ function loadChapterReviewCache(bookId, userEmail, chapterKey, pagesSig, provide
 }
 
 function saveChapterReviewCache(bookId, userEmail, chapterKey, pagesSig, review, provider = '') {
+  const ungrouped = _ungroupedPhase(chapterKey);
+  if (ungrouped != null) {
+    const email = _requireUserEmail(userEmail, 'saveChapterReviewCache');
+    _saveUngroupedReviewCache.run(
+      parseInt(bookId), email, ungrouped, provider || '',
+      pagesSig, JSON.stringify(review), new Date().toISOString(),
+    );
+    return;
+  }
   const parsed = _parseChapterKey(chapterKey);
   if (!parsed || parsed.book) return;
   const email = _requireUserEmail(userEmail, 'saveChapterReviewCache');
@@ -159,11 +193,15 @@ const _deleteChapterReviewCache = db.prepare(
 const _deleteBookReviewCache = db.prepare(
   `DELETE FROM book_review_cache WHERE book_id = ? AND user_email = ?`
 );
+const _deleteUngroupedReviewCache = db.prepare(
+  `DELETE FROM ungrouped_review_cache WHERE book_id = ? AND user_email = ?`
+);
 
 function deleteReviewCache(bookId, userEmail) {
   const c = _deleteChapterReviewCache.run(parseInt(bookId), userEmail || '').changes;
   const b = _deleteBookReviewCache.run(parseInt(bookId), userEmail || '').changes;
-  return c + b;
+  const u = _deleteUngroupedReviewCache.run(parseInt(bookId), userEmail || '').changes;
+  return c + b + u;
 }
 
 // ── Delta-Cache: Kapitel-Makro-Review (kapitel.js) ────────────────────────────

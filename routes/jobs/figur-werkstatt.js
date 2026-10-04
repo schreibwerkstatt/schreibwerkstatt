@@ -8,7 +8,7 @@ const {
   aiCall, getPrompts, getBookPrompts,
   tps,
   createJob, enqueueJob, findActiveJobId,
-  jsonBody,
+  jsonBody, jobAbortControllers,
   _modelName,
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
@@ -20,6 +20,7 @@ const plotDb = require('../../db/plot');
 const motifsDb = require('../../db/motifs');
 const embed = require('../../lib/embed');
 const { semanticQuery } = require('../../lib/semantic-retrieval');
+const { getSceneTitleForUser } = require('../../db/book-chat/figures');
 const { getUser } = require('../../db/app-users');
 const { resolveI18n, resolveI18nTree } = require('../../lib/i18n-server');
 
@@ -183,31 +184,59 @@ function _loadFigurMotive(draft, userEmail, logger) {
 // Nur bei aktivem Embedding-Backend; ohne Treffer (Figur evtl. noch nicht geschrieben)
 // leer. Best-effort: ein Fehler hier failt den Job (Kern = Mindmap) nicht.
 const _TB_TAG = /<\/?[^>]+>/g;
-function _tbSnippet(s) {
-  return String(s || '').replace(_TB_TAG, ' ').replace(/\s+/g, ' ').trim().slice(0, 240);
+// Beleg-Umfang: topK Treffer, je ein Ausschnitt um den aussagekräftigsten Satz
+// (der mit dem Figurennamen), dazu ein Gesamtdeckel. 240 Zeichen waren meist nur
+// ein Halbsatz — zu wenig, um eine Mindmap-Behauptung zu stützen oder zu kippen.
+const TB_TOP_K = 8;
+const TB_SNIPPET_MAX = 600;
+const TB_TOTAL_MAX = 4000;
+function _tbSnippet(s, name = '') {
+  const text = String(s || '').replace(_TB_TAG, ' ').replace(/\s+/g, ' ').trim();
+  if (text.length <= TB_SNIPPET_MAX) return text;
+  // Ankersatz: erster Satz mit dem Namen (Vorname reicht), sonst der Anfang.
+  const first = String(name || '').trim().split(/\s+/)[0] || '';
+  const idx = first.length >= 2 ? text.toLowerCase().indexOf(first.toLowerCase()) : -1;
+  if (idx < 0) return text.slice(0, TB_SNIPPET_MAX).replace(/\s+\S*$/, '') + ' …';
+  const sStart = Math.max(text.lastIndexOf('. ', idx), text.lastIndexOf('! ', idx), text.lastIndexOf('? ', idx)) + 1;
+  let from = Math.max(0, Math.min(sStart, idx - Math.floor(TB_SNIPPET_MAX / 3)));
+  let to = Math.min(text.length, from + TB_SNIPPET_MAX);
+  from = Math.max(0, to - TB_SNIPPET_MAX);
+  let out = text.slice(from, to).trim();
+  if (from > 0) out = '… ' + out.replace(/^\S*\s+/, '');
+  if (to < text.length) out = out.replace(/\s+\S*$/, '') + ' …';
+  return out;
 }
 // Szene → Seite (figure_scenes ist keine pages/chapters/books-Tabelle → Direkt-SQL
 // erlaubt); die page_id macht den Beleg im Frontend anspringbar.
 const _stmtScenePageId = db.prepare('SELECT page_id FROM figure_scenes WHERE id = ? AND book_id = ?');
-async function _loadFigurTextbelege(draft, userEmail, logger) {
+async function _loadFigurTextbelege(draft, userEmail, logger, signal) {
   try {
     if (!embed.isEnabled()) return [];
     const query = [draft.name, draft.archetype].map(s => String(s || '').trim()).filter(Boolean).join('. ');
     if (!query) return [];
-    const hits = await semanticQuery(draft.book_id, query, { kinds: ['page', 'scene'], topK: 6 });
+    const hits = await semanticQuery(draft.book_id, query, { kinds: ['page', 'scene'], topK: TB_TOP_K, signal });
     const out = [];
     const seenPages = new Set();
+    let total = 0;
     for (const h of hits) {
       let pageId = null;
       if (h.kind === 'page') pageId = h.entity_id;
-      else if (h.kind === 'scene') pageId = _stmtScenePageId.get(parseInt(h.entity_id), parseInt(draft.book_id))?.page_id ?? null;
+      else if (h.kind === 'scene') {
+        // Szenen sind Analyse-Daten pro User; der Index hängt nur am Buch.
+        if (getSceneTitleForUser(parseInt(h.entity_id), userEmail) == null) continue;
+        pageId = _stmtScenePageId.get(parseInt(h.entity_id), parseInt(draft.book_id))?.page_id ?? null;
+      }
       if (pageId == null || seenPages.has(pageId)) continue; // ein Ort einmal (Dichte, nicht Wiederholung)
       seenPages.add(pageId);
-      const snippet = _tbSnippet(h.text);
-      if (snippet) out.push({ page_id: pageId, snippet });
+      const snippet = _tbSnippet(h.text, draft.name);
+      if (!snippet) continue;
+      if (total + snippet.length > TB_TOTAL_MAX) break;
+      total += snippet.length;
+      out.push({ page_id: pageId, snippet });
     }
     return out;
   } catch (e) {
+    if (e?.name === 'AbortError') throw e;
     logger?.warn?.(`Textbeleg-Kontext fehlgeschlagen draft=${draft.id}: ${e.message}`);
     return [];
   }
@@ -322,7 +351,7 @@ async function runConsistencyJob(jobId, draftId, userEmail) {
     // Textbeleg-Erdung: wie die Figur im Manuskript tatsächlich geschrieben ist
     // (semantische Suche über den echten Buchtext). Grundiert den Abgleich
     // „Mindmap-Plan vs. geschriebene Figur".
-    const textbelege = await _loadFigurTextbelege(draft, userEmail, logger);
+    const textbelege = await _loadFigurTextbelege(draft, userEmail, logger, jobAbortControllers.get(jobId)?.signal);
     // Weltgesetze: was in dieser Welt GILT — der Pruefstein gegen unmoegliche
     // Figureneigenschaften, den Prosa-Belege nicht liefern koennen.
     const weltgesetze = _loadWeltgesetze(draft.book_id, userEmail, logger);
@@ -408,4 +437,5 @@ figurWerkstattRouter.post('/werkstatt-consistency', jsonBody, (req, res) => {
   res.json({ jobId });
 });
 
-module.exports = { figurWerkstattRouter, runBrainstormJob, runConsistencyJob, _findKnotenPfad };
+module.exports = {
+  _tbSnippet, figurWerkstattRouter, runBrainstormJob, runConsistencyJob, _findKnotenPfad };

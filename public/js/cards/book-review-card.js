@@ -101,10 +101,8 @@ export function registerBookReviewCard() {
       },
       progressResetDelay: 400,
       buildPayload() {
-        return {
-          book_id: parseInt(Alpine.store('nav').selectedBookId),
-          book_name: window.__app.selectedBookName,
-        };
+        // Buchname liest der Server selbst aus dem Content-Store.
+        return { book_id: parseInt(Alpine.store('nav').selectedBookId) };
       },
       render(job) {
         const r = job.result?.review;
@@ -112,7 +110,11 @@ export function registerBookReviewCard() {
       },
       async onDone(job) {
         if (!job.result?.review) return;
-        this.bookReviewStatus = window.__app.t('review.pagesAnalyzed', { n: job.result.pageCount || '?' });
+        // Cache-Treffer bei unverändertem Text: keine neue Bewertung, keine neue
+        // Historien-Zeile — das soll der User sehen, statt einen Neulauf zu vermuten.
+        this.bookReviewStatus = job.result.unchanged
+          ? escHtml(window.__app.t('review.unchanged'))
+          : window.__app.t('review.pagesAnalyzed', { n: job.result.pageCount || '?' });
         if (Alpine.store('nav').selectedBookId) await window.__app.loadBookReviewHistory(Alpine.store('nav').selectedBookId);
       },
       async onOpen() {

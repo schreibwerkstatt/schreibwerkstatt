@@ -83,6 +83,7 @@
     <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
     <span x-text="$app.t('orte.edit.action')"></span>
   </button>
+  <button type="button" class="btn-compact" x-show="$store.config.semanticSearchEnabled" @click.stop="$app.findSimilar('location', o.id, o.name)" x-text="$app.t('search.semantic.similarEntity')"></button>
   <span class="ort-merge">
     <div x-data="combobox({ placeholder: $app.t('orte.merge.placeholder') })"
          x-modelable="value" x-model="ortMergeTarget"

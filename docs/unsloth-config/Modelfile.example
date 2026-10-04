@@ -10,11 +10,12 @@
 
 FROM ./unsloth.Q4_K_M.gguf
 
-# Mistral-Tekken-V7-Template (Mistral-Small-3.2-Instruct-2506).
+# Mistral-Tekken-V7-Template (Mistral-Small-3.2-Instruct-2506). Exakt wie im
+# Training: kein Leerzeichen zwischen [/INST] und der Antwort.
 # System-Prompts kapseln in [SYSTEM_PROMPT]/[/SYSTEM_PROMPT], User-Turns in
 # [INST]/[/INST]. Assistant-Antwort folgt direkt nach [/INST] und endet mit
 # </s>. Unterschied zur alten 8B-Mistral-Vorlage: separate System-Tags.
-TEMPLATE """{{ if .System }}<s>[SYSTEM_PROMPT]{{ .System }}[/SYSTEM_PROMPT][INST]{{ .Prompt }}[/INST]{{ else }}<s>[INST]{{ .Prompt }}[/INST]{{ end }} {{ .Response }}</s>"""
+TEMPLATE """{{ if .System }}<s>[SYSTEM_PROMPT]{{ .System }}[/SYSTEM_PROMPT][INST]{{ .Prompt }}[/INST]{{ else }}<s>[INST]{{ .Prompt }}[/INST]{{ end }}{{ .Response }}</s>"""
 
 PARAMETER temperature       0.8
 PARAMETER top_p             0.95
@@ -23,6 +24,9 @@ PARAMETER repeat_penalty    1.05
 # Calls und spart KV-Cache-RAM. Bei sehr langen Dokumenten hochsetzen.
 PARAMETER num_ctx           32768
 
-# System-Prompt muss der System-Line aus dem Training entsprechen —
-# sonst "verliert" das Modell die internalisierte Persona.
-SYSTEM """Du bist die Stimme des Autors von «Mein Buchtitel» und antwortest einer Leserin im Gespräch. Antworte knapp, präzise und im Geist des Buchs."""
+# System-Prompt muss der System-Line aus dem Training wörtlich entsprechen
+# (routes/jobs/finetune-export/index.js, `unifiedSys`) — sonst "verliert" das
+# Modell die internalisierte Persona. Englische Bücher: „You are the voice of
+# «…». Write, continue, and answer in the author's style and from within this
+# book's world."
+SYSTEM """Du bist die Stimme von «Mein Buchtitel». Schreibe, setze fort und antworte im Stil des Autors und aus der Welt dieses Buchs heraus."""

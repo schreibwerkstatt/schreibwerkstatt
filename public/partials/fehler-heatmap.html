@@ -48,6 +48,8 @@
     <template x-if="!fehlerTrendHasData()">
       <div class="muted-msg" x-text="$app.t('fehlerHeatmap.trend.hint')"></div>
     </template>
+    <div class="fehler-trend-note" x-show="fehlerTrendHasData() && fehlerTrendHasApprox()"
+         x-text="$app.t('fehlerHeatmap.trend.approxNote')"></div>
   </section>
 
   <div x-show="!fehlerHeatmapLoading && (!fehlerHeatmapData?.chapters || fehlerHeatmapData.chapters.length === 0)"
@@ -55,7 +57,7 @@
 
   <template x-if="fehlerHeatmapData?.chapters?.length > 0">
     <div class="heatmap-wrap">
-      <div class="heatmap-legend" x-text="$app.t('fehlerHeatmap.legend')"></div>
+      <div class="heatmap-legend" x-text="$app.t('fehlerHeatmap.legend', { n: fehlerHeatmapMinWords })"></div>
 
       <div class="heatmap-scroll">
         <table class="heatmap-table">
@@ -80,44 +82,57 @@
             </tr>
           </thead>
           <tbody>
-            <template x-for="ch in fehlerHeatmapData.chapters" :key="fehlerHeatmapChapterKey(ch)">
+            <template x-for="row in fehlerHeatmapRows()" :key="row.key">
               <tr>
                 <th class="heatmap-rowhead" scope="row">
                   <span class="heatmap-rowhead-main"
-                        :class="{ 'internal-link': ch.chapter_id != null }"
-                        @click="ch.chapter_id != null && fehlerHeatmapJumpToChapter(ch)"
-                        x-text="fehlerHeatmapChapterName(ch)"></span>
-                  <span class="heatmap-rowhead-sub" x-text="$app.t('fehlerHeatmap.words', { n: (ch.words || 0).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH') })"></span>
+                        :class="{ 'internal-link': row.chapter.chapter_id != null }"
+                        @click="row.chapter.chapter_id != null && fehlerHeatmapJumpToChapter(row.chapter)"
+                        x-text="fehlerHeatmapChapterName(row.chapter)"></span>
+                  <span class="heatmap-rowhead-sub" x-text="$app.t('fehlerHeatmap.words', { n: row.wordsLabel })"></span>
                 </th>
                 <td class="heatmap-numcol">
-                  <span x-text="$app.t('fehlerHeatmap.coverageLabel', { checked: ch.pages_checked, total: ch.pages_total })"></span>
+                  <span x-text="$app.t('fehlerHeatmap.coverageLabel', { checked: row.chapter.pages_checked, total: row.chapter.pages_total })"></span>
                   <span class="heatmap-coverage">
-                    <span class="heatmap-coverage-bar" :style="{ '--coverage': fehlerHeatmapCoveragePct(ch) + '%' }"></span>
+                    <span class="heatmap-coverage-bar" :style="{ '--coverage': row.coveragePct + '%' }"></span>
                   </span>
                 </td>
                 <template x-for="(typ, idx) in fehlerHeatmapTypen" :key="typ">
-                  <!-- `heatmap-cell--clickable` + `internal-link` haengen am
-                       Praedikat: eine Zelle ohne Befunde hat kein Detail-Panel und
-                       darf weder Klick-Cursor noch Tab-Stopp anbieten.
-                       `internal-link` macht die klickbaren Zellen ueber die globale
-                       Delegation (app/boot/internal-links.js) tastatur-erreichbar. -->
+                  <!-- Klasse, Farbe und Klickbarkeit kommen fertig aus buildFehlerRows
+                       (public/js/book/fehler-heatmap.js). Klickbare Zellen tragen dort
+                       `internal-link` und sind damit ueber die globale Delegation
+                       (app/boot/internal-links.js) tastatur-erreichbar; eine Zelle ohne
+                       Befunde hat kein Detail-Panel und bietet weder Cursor noch Tab-Stopp. -->
                   <td class="heatmap-cell"
-                      :class="[
-                        ('heatmap-cell--' + fehlerHeatmapCellKind(fehlerHeatmapChapterKey(ch), typ, fehlerHeatmapCoveragePct(ch))),
-                        { 'heatmap-cell--clickable': fehlerHeatmapCellClickable(fehlerHeatmapChapterKey(ch), typ),
-                          'internal-link': fehlerHeatmapCellClickable(fehlerHeatmapChapterKey(ch), typ),
-                          'heatmap-cell--active': activeFehlerDetailKey === fehlerHeatmapChapterKey(ch) + ':' + typ,
-                          'heatmap-cluster-start': fehlerHeatmapIsClusterStart(idx) }
-                      ]"
-                      :style="fehlerHeatmapCellVars(fehlerHeatmapChapterKey(ch), typ, fehlerHeatmapCoveragePct(ch))"
-                      :data-tip="fehlerHeatmapCellTooltip(fehlerHeatmapChapterKey(ch), typ)"
-                      @click="toggleFehlerHeatmapDetail(fehlerHeatmapChapterKey(ch), typ)"
-                      x-text="fehlerHeatmapCellLabel(fehlerHeatmapChapterKey(ch), typ)">
+                      :class="[row.cells[typ].cls, {
+                        'heatmap-cell--active': activeFehlerDetailKey === row.cells[typ].detailKey,
+                        'heatmap-cluster-start': fehlerHeatmapIsClusterStart(idx) }]"
+                      :style="row.cells[typ].vars"
+                      :data-tip="fehlerHeatmapCellTooltip(row.cells[typ])"
+                      @click="toggleFehlerHeatmapDetail(row.cells[typ])"
+                      x-text="row.cells[typ].text">
                   </td>
                 </template>
               </tr>
             </template>
           </tbody>
+          <!-- Summenzeile: ganzes Buch je Typ (Anzahl, Dichte im Tooltip). -->
+          <tfoot>
+            <tr class="heatmap-total-row">
+              <th class="heatmap-rowhead" scope="row">
+                <span class="heatmap-rowhead-main" x-text="$app.t('fehlerHeatmap.totalRow')"></span>
+                <span class="heatmap-rowhead-sub"
+                      x-text="$app.t('fehlerHeatmap.wordsChecked', { n: fehlerHeatmapTotals().wordsCheckedLabel })"></span>
+              </th>
+              <td class="heatmap-numcol"></td>
+              <template x-for="(typ, idx) in fehlerHeatmapTypen" :key="typ">
+                <td class="heatmap-cell heatmap-total-cell"
+                    :class="{ 'heatmap-cluster-start': fehlerHeatmapIsClusterStart(idx) }"
+                    :data-tip="fehlerHeatmapTotalTooltip(fehlerHeatmapTotals().cells[typ])"
+                    x-text="fehlerHeatmapTotals().cells[typ].text"></td>
+              </template>
+            </tr>
+          </tfoot>
         </table>
       </div>
 

@@ -79,4 +79,17 @@ function listLocationsForBook(bookId, userEmail) {
   return { orte, updated_at };
 }
 
-module.exports = { listLocationsForBook };
+// Ortsname per locations.id fuer Treffer des Embedding-Index (Kind `location`).
+// Ohne `opts.userEmail`-Schluessel ungescoped; mit Schluessel nur, wenn der Ort dem
+// User gehoert (Analyse-Daten sind user-scoped, der Index haengt nur am Buch).
+// undefined = Ort fehlt bzw. gehoert einem anderen User.
+const _stmtLocName = db.prepare('SELECT name AS t FROM locations WHERE id = ?');
+const _stmtLocNameForUser = db.prepare('SELECT name AS t FROM locations WHERE id = ? AND user_email IS ?');
+function getLocationName(locationId, opts = {}) {
+  if (Object.prototype.hasOwnProperty.call(opts, 'userEmail')) {
+    return _stmtLocNameForUser.get(locationId, opts.userEmail ?? null)?.t;
+  }
+  return _stmtLocName.get(locationId)?.t;
+}
+
+module.exports = { listLocationsForBook, getLocationName };

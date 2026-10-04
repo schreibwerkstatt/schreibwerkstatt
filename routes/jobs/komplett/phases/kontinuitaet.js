@@ -76,7 +76,7 @@ async function runKontinuitaetPhase(ctx, {
   skipContinuity, skipZeitstrahl, isCloudModel, kontMultiPass,
   figKompakt, orteKompakt, chapterFakten, anachronismus, figNameToId,
 }) {
-  const { jobId, bookIdInt, email, log, effectiveProvider, idMaps, fullBookText, warnings } = ctx;
+  const { jobId, bookIdInt, email, log, effectiveProvider, idMaps, pageContents, warnings } = ctx;
   // Zeitstrahl abgewählt: bestehende `zeitstrahl_events` bleiben stehen. Der Aufruf
   // faellt weg statt mit leerer Eingabe zu laufen — P6 konsolidiert aus `figure_events`
   // und schriebe sonst denselben Stand neu, ohne dass ein Ereignis dazugekommen waere.
@@ -120,7 +120,7 @@ async function runKontinuitaetPhase(ctx, {
   if (kontResult) {
     // Multi-Pass-Befunde gegen den Originaltext verifizieren (False-Positive-Filter).
     if (kontMultiPass && isCloudModel) {
-      kontResult = await verifyKontinuitaetProbleme(ctx, kontResult, 96, 97);
+      kontResult = await verifyKontinuitaetProbleme(ctx, kontResult, 96, 97, { chapterFacts: chapterFakten });
     }
   }
 
@@ -148,15 +148,15 @@ async function runKontinuitaetPhase(ctx, {
     }
     // Single-Pass (Cloud, voller Buchtext im Prompt): Beleg-Zitate gegen den Text
     // prüfen. Multi-Pass hat die separate verify-Stufe; der Fakten-Pfad zitiert
-    // paraphrasiert → requireQuoteEvidence dort aus (false negatives sonst). Die
-    // F4-Befunde tragen keine «»-Zitate → von der Beleg-Prüfung unberührt.
+    // Fakt-Aussagen → requireQuoteEvidence dort aus, die Seiten-Anker kommen über
+    // die Fakten. Die F4-Befunde tragen keine «»-Zitate → von der Beleg-Prüfung unberührt.
     saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, idMaps.chNameToId, effectiveProvider, log,
-      { fullBookText, requireQuoteEvidence: !kontMultiPass });
+      { pageContents, requireQuoteEvidence: !kontMultiPass, chapterFacts: kontMultiPass ? chapterFakten : null });
   } else if (attrFindings.length) {
     // P8 selbst fehlgeschlagen/leer, aber der Attribut-Detektor fand Cross-Chapter-Widersprüche:
     // eigenständig als Kontinuitäts-Check persistieren (nicht verlieren).
     saveKontinuitaetResult(bookIdInt, email, { zusammenfassung: '', probleme: attrFindings },
-      figNameToId, idMaps.chNameToId, effectiveProvider, log, { requireQuoteEvidence: false });
+      figNameToId, idMaps.chNameToId, effectiveProvider, log, { pageContents, requireQuoteEvidence: false });
   }
 }
 

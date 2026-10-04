@@ -90,7 +90,7 @@ export const diaryMethods = {
 
   diaryGapsConsistency() {
     const pages = Alpine.store('nav').pages || [];
-    return this._memo('diaryGaps', [pages], () =>
+    return this._memo('diaryGaps', [pages, this.overviewToday], () =>
       this._computeDiaryGapsConsistency(this._diaryEntryDates(pages), localIsoDate()));
   },
 
@@ -189,7 +189,7 @@ export const diaryMethods = {
 
   overviewRueckblickHeatmap() {
     const cov = this.overviewRueckblickCoverage;
-    return this._memo('rueckblickHeatmap', [cov], () => this._computeRueckblickHeatmap(cov));
+    return this._memo('rueckblickHeatmap', [cov, this.overviewToday], () => this._computeRueckblickHeatmap(cov));
   },
 
   // 12 lokalisierte Kurz-Monatsnamen (Spaltenköpfe + Tooltip-Zeitraum).

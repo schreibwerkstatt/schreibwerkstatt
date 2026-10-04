@@ -13,12 +13,15 @@
     <table class="wortschatz-table"
            x-data="sortableTable({
              rows: () => wortschatzHapax,
-             defaultKey: 'len',
-             defaultDir: 'desc',
+             defaultKey: 'sort_rank',
+             defaultDir: 'asc',
              persistKey: 'wortschatz.hapax',
-             types: { len: 'number', term: 'string' },
+             types: { sort_rank: 'number', len: 'number', term: 'string' },
            })">
       <thead><tr>
+        <th class="sortable-th" :class="sortClass('sort_rank')" :aria-sort="ariaSort('sort_rank')"
+            @click="sortBy('sort_rank')" :title="$app.t('wortschatz.col.rankTip')"
+            x-text="$app.t('wortschatz.col.rank')"></th>
         <th class="sortable-th" :class="sortClass('term')" :aria-sort="ariaSort('term')"
             @click="sortBy('term')" x-text="$app.t('wortschatz.col.term')"></th>
         <th class="sortable-th" :class="sortClass('len')" :aria-sort="ariaSort('len')"
@@ -28,7 +31,13 @@
       <tbody>
         <template x-for="h in sorted" :key="h.term">
           <tr>
-            <td class="wortschatz-term" x-text="h.term"></td>
+            <td class="wortschatz-num" x-text="wsNum(h.sort_rank)"></td>
+            <td class="wortschatz-term">
+              <span x-text="h.term"></span>
+              <span class="tag wortschatz-kind" x-show="h.novel === 1"
+                    :title="$app.t('wortschatz.hapax.novelTitle')"
+                    x-text="$app.t('wortschatz.hapax.novel')"></span>
+            </td>
             <td class="wortschatz-num" x-text="wsNum(h.len)"></td>
             <td>
               <button type="button" class="entity-ref" x-show="h.first_page_id"

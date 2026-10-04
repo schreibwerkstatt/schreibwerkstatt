@@ -156,19 +156,22 @@ test('die Block-Aufzaehlung der Konsumenten laesst die Tabelle liegen', () => {
   assert.deepEqual(spoken, ['vor', 'nach']);
 });
 
-test('beide TTS-Oberflaechen filtern die Skip-Bloecke', () => {
+test('beide TTS-Oberflaechen segmentieren ueber den Kern, der die Skip-Bloecke filtert', () => {
+  // Die Block-Aufzaehlung liegt EINMAL in tts-segment.js#ttsBlocks — beide
+  // Oberflaechen muessen sie benutzen, statt eigene Bloecke aufzuzaehlen.
+  assert.match(read('public/js/tts-segment.js'), /TTS_SKIP_BLOCK_SEL\)/,
+    'ttsBlocks/ttsUnits muessen die Skip-Bloecke filtern — sonst werden Zellen vorgelesen');
   for (const p of ['public/js/editor/notebook/tts-proof.js', 'public/js/share-reader/tts.js']) {
-    assert.match(read(p), /isTtsSkippedBlock\(/,
-      `${p} muss die Skip-Bloecke filtern — sonst liest es Zellen vor`);
+    assert.match(read(p), /collectTtsSegments\(/,
+      `${p} muss ueber collectTtsSegments segmentieren — sonst liest es Zellen vor`);
   }
 });
 
-test('der Share-Reader sammelt aus Tabellen keine Sprech-Bloecke', () => {
-  const src = read('public/js/share-reader/tts.js');
-  const sel = src.match(/READER_BLOCK_SEL\s*=\s*'([^']+)'/)?.[1] || '';
-  const parts = sel.split(',').map(s => s.trim());
+test('der TTS-Blockselektor fuehrt keine Tabellenteile', () => {
+  const sel = read('public/js/tts-segment.js').match(/TTS_BLOCK_SEL = ([^;]+);/)?.[1] || '';
+  const parts = sel.replace(/['\s+]+/g, ' ').split(',').map(s => s.trim());
   for (const forbidden of ['table', 'td', 'th', 'caption']) {
     assert.ok(!parts.includes(forbidden),
-      `READER_BLOCK_SEL darf ${forbidden} nicht fuehren — sonst liest der Reader Zellen vor`);
+      `TTS_BLOCK_SEL darf ${forbidden} nicht fuehren — sonst werden Zellen vorgelesen`);
   }
 });

@@ -1,7 +1,8 @@
 <!--
   Kapitel-Dashboard — Kennzahlen-Kopf der Kapitel-Bewertung.
   Rechnet ausschliesslich aus vorhandenen Quellen (Baum + tokEsts, Fehler-
-  Heatmap, Lektoratszeit, Catalog-Store, Bewertungs-Historie); kein KI-Call.
+  Heatmap, Lektoratszeit, Stil-Werte, Catalog-Store, Bewertungs-Historie);
+  kein KI-Call.
   Compute + Ladepfad: public/js/cards/kapitel-dashboard.js.
   Laeuft im Alpine-Scope der Karte (`kapitelReviewCard`).
 -->
@@ -154,6 +155,9 @@
         </ul>
       </div>
     </template>
+
+    <!-- Stil + Lesbarkeit gegen den Buchschnitt (partials/kapitelreview-dash-stil.html) -->
+    <!-- @include kapitelreview-dash-stil -->
 
     <!-- Figuren im Kapitel: Rangliste nach Auftritten (figure_appearances) -->
     <template x-if="kdFiguren().rows.length > 0">

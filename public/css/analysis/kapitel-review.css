@@ -1,4 +1,14 @@
 @layer components {
+/* === Kapitel-Review: Kopfzeile der aktuellen Bewertung (Datum, Umfang,
+   Modell, Löschen) über dem Bewertungstext === */
+.kapitel-review-latest-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  margin: var(--space-sm) 0 var(--space-6);
+}
+
 /* === Kapitel-Review: verdichtete Seitenliste + Quick-Add === */
 
 /* Toggle „Inkl. Sub-Kapitel" als regulärer Action-Button. Icon-Wechsel

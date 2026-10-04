@@ -155,6 +155,38 @@
   margin-top: var(--space-6);
 }
 
+/* ── Stil + Lesbarkeit gegen den Buchschnitt ──────────────────────────────
+   Drei Spalten: Metrik | Kapitelwert | Buchwert. Eine Abweichung ist eine
+   RICHTUNG, kein Urteil (mehr Dialog ist kein Fehler) — darum Kartenakzent
+   statt Gruen/Rot wie bei der Befunddichte. Regel: kapitel-stil.js. */
+.kapitel-dash-stil-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--space-2xs) var(--space-10);
+  font-size: var(--font-size-xs);
+}
+.kapitel-dash-stil-row { display: contents; }
+.kapitel-dash-stil-label {
+  color: var(--color-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kapitel-dash-stil-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-semibold);
+}
+.kapitel-dash-stil-value--dev { color: var(--card-accent, var(--color-accent)); }
+.kapitel-dash-stil-book {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-muted);
+}
+
 /* Schmales Tile (Mobile / Single-Span): die Rangliste verliert die feste
    Namensspalte, sonst wird der Balken zum Strich. */
 @container (max-width: 380px) {

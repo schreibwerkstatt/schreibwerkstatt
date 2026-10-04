@@ -8,7 +8,7 @@
   <template x-for="link in item.links" :key="link.link_id">
     <span class="entity-ref-group">
       <button type="button" class="entity-ref"
-              x-entity-ref="{ type: link.target_kind, id: link.target_id, label: link.label }"></button>
+              x-entity-ref="{ type: link.target_kind, id: link.ref_id ?? link.target_id, label: link.label }"></button>
       <button type="button" class="entity-ref-remove" @click="removeLink(item, link)" :aria-label="$app.t('recherche.link.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
     </span>
   </template>
@@ -49,7 +49,7 @@
   <template x-for="(sg, i) in (itemSuggestions(item) || [])" :key="sg.target_kind + ':' + sg.target_id">
     <div class="research-suggestion">
       <button type="button" class="entity-ref"
-              x-entity-ref="{ type: sg.target_kind, id: sg.target_id, label: sg.label }"></button>
+              x-entity-ref="{ type: sg.target_kind, id: sg.ref_id ?? sg.target_id, label: sg.label }"></button>
       <span class="research-suggestion-reason" x-show="sg.grund" x-text="sg.grund"></span>
       <button type="button" class="btn-compact" @click="acceptSuggestion(item, sg)" x-text="$app.t('recherche.suggest.accept')"></button>
     </div>

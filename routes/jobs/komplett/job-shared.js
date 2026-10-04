@@ -9,8 +9,10 @@ const { providerClass } = require('../../../lib/ai');
 const { updateJob, settledAll, jobAbortControllers } = require('../shared');
 const { _stelleQuote, _refToString } = require('./utils');
 const { COST_LABEL, costTier } = require('./cost-labels');
-const embed = require('../../../lib/embed');
-const semanticChunks = require('../../../db/semantic-chunks');
+const rerank = require('../../../lib/rerank');
+const retrieval = require('../../../lib/semantic-retrieval');
+const { bestLivePassage } = require('../../../lib/live-passage');
+const { buildPageIndex, buildFactIndex, locateStelle, excerptOnPage } = require('../../../lib/continuity-evidence');
 
 // ── Verify-Stufe für den Multi-Pass-Kontinuitätscheck ────────────────────────
 // Der Fakten-basierte Check sieht nur extrahierte Fakten, nicht den Volltext –
@@ -44,40 +46,84 @@ function _verifyExcerpt(groups, groupOrder, kapitelNames, quote) {
 
 // Semantischer Beleg-Fallback: findet die wörtliche Suche das Zitat nicht
 // (Paraphrase, vom Modell rekonstruiertes Zitat, Umformulierung desselben Fakts),
-// liefert eine buchweite Ähnlichkeitssuche über den bestehenden Embedding-Index
-// die thematisch nächste Passage — statt auf den Kapitel-Anfang zurückzufallen.
-// Rein rückwärtsgewandt (nur Kontextbeschaffung). Best-effort/opt-in: fehlt der
-// Index oder das Backend, gibt der Aufrufer den keyword-Notnagel weiter.
-async function _semanticExcerpt(bookId, model, query, signal) {
+// sucht die Freitext-Pipeline (`semanticQuery`: Cosinus + FTS-Hybrid, der auch
+// fast-wörtliche Zitate trägt, + optional Rerank) die nächste Passage — aber nur
+// auf den Seiten der Kapitel, die der Befund nennt, und nur oberhalb einer
+// Konfidenz-Schwelle. Ein unverwandter Absatz aus einem fremden Kapitel wäre für
+// die Verify-Stufe ein falscher Beleg, der einen echten Widerspruch „auflöst".
+//
+// Der Chunk ist nur Wegweiser: der Ausschnitt kommt aus dem LIVE-Text der Seite
+// (`pageTexts`, derselbe Stand wie der Keyword-Pfad), nicht aus dem Index.
+// Rückgabe { text, located: true } oder null (nichts Belastbares gefunden).
+// Rein rückwärtsgewandt; Backend-Fehler sind non-fatal (null), Abbruch nicht.
+const _SEMANTIC_VERIFY_TOPK = 20;
+function _verifyFloors() {
+  const minCos = Number(appSettings.get('embed.min_score'));
+  const rr = rerank.isEnabled() ? rerank.getConfig() : null;
+  return {
+    minCos: Number.isFinite(minCos) && minCos > 0 ? minCos : 0,
+    minRerank: rr && rr.minScore > 0 ? rr.minScore : null,
+  };
+}
+async function _semanticExcerpt(bookId, query, pageTexts, signal) {
   const q = String(query || '').trim();
-  if (!q) return null;
-  let queryVec;
+  if (!q || !pageTexts || !pageTexts.size) return null;
+  let hits;
   try {
-    queryVec = await embed.embedQuery(q, { signal });
+    hits = await retrieval.semanticQuery(bookId, q, { kinds: ['page'], topK: _SEMANTIC_VERIFY_TOPK, signal });
   } catch (e) {
     if (e?.name === 'AbortError') throw e;
-    return null; // Backend down/nicht erreichbar → keyword-Fallback behalten
+    return null; // Backend down/nicht erreichbar → keyword-Pfad behalten
   }
-  if (!queryVec) return null;
-  const hits = semanticChunks.searchSimilar(bookId, model, queryVec, { kinds: ['page'], topK: 1 });
-  return hits.length ? hits[0].text : null;
+  const { minCos, minRerank } = _verifyFloors();
+  for (const h of (hits || [])) {
+    if (h.kind !== 'page') continue;
+    const live = pageTexts.get(Number(h.entity_id));
+    if (live == null) continue;                      // Seite ausserhalb der Befund-Kapitel
+    if (h.semScore == null || h.semScore < minCos) continue;
+    if (minRerank != null && !(h.score >= minRerank)) continue;
+    const ex = bestLivePassage(live, h.text, { maxChars: _VERIFY_RADIUS * 2 });
+    if (ex && ex.text) return { text: ex.text, located: true };
+  }
+  return null;
+}
+
+// Live-Seitentexte (id → Text) der Kapitel, die ein Befund nennt — Suchraum und
+// Textquelle des semantischen Fallbacks.
+function _chapterPageTexts(groups, groupOrder, kapitelNames) {
+  const out = new Map();
+  for (const key of groupOrder) {
+    const g = groups.get(key);
+    if (!g || !kapitelNames.includes(g.name)) continue;
+    for (const pg of g.pages || []) if (pg.id != null && pg.text) out.set(Number(pg.id), pg.text);
+  }
+  return out;
 }
 
 // Filtert die Probleme des Fakten-Checks: verwirft nur explizit als unecht
 // eingestufte (bestaetigt=false); nicht lokalisierbare/fehlgeschlagene bleiben
 // konservativ erhalten. Nur Cloud-Klasse (lokale Provider: zu kleines Kontextfenster
 // für zuverlässige Verify-Urteile, Mutex serialisiert zudem jeden Call).
-async function verifyKontinuitaetProbleme(ctx, result, fromPct, toPct) {
+// `chapterFacts` (Multi-Pass-Fakten mit Seitennamen) + `ctx.pageContents`: das Modell
+// zitiert im Multi-Pass Fakt-Aussagen, keine Buchsätze — der wörtliche Treffer bleibt
+// darum meist aus. Der zitierte Fakt trägt aber seine Seite; deren Text ist der
+// richtige Beleg (lib/continuity-evidence.js), noch vor dem semantischen Fallback.
+async function verifyKontinuitaetProbleme(ctx, result, fromPct, toPct, { chapterFacts = null } = {}) {
   const { call, prompts, sys, jobId, tok, bookName, groups, groupOrder, log, bookIdInt } = ctx;
   const probleme = Array.isArray(result?.probleme) ? result.probleme : [];
   if (!probleme.length) return result;
+  const pageIdx = buildPageIndex(ctx.pageContents);
+  const factIdx = chapterFacts ? buildFactIndex(chapterFacts) : null;
+  const viaFact = (ex, stelle, quote, kap) => {
+    if (ex.located || !factIdx?.length || !pageIdx.length) return ex;
+    const page = locateStelle(_refToString(stelle) || '', quote, pageIdx, { kapitel: kap, facts: factIdx });
+    return page ? { text: excerptOnPage(page, quote, _VERIFY_RADIUS), located: true } : ex;
+  };
   updateJob(jobId, { progress: fromPct, statusText: 'job.phase.verifyContradictions' });
   // Semantischer Beleg-Fallback nur, wenn das Embed-Backend konfiguriert ist UND
-  // dieses Buch bereits einen Index unter dem aktiven Modell hat (opt-in — der Index
-  // ist eine bewusste User-Aktion). Sonst reiner keyword-Pfad wie bisher.
-  const embedModel = embed.isEnabled() ? embed.getConfig().model : null;
-  const semanticOn = !!embedModel && bookIdInt != null &&
-    semanticChunks.bookStats(bookIdInt, embedModel).total > 0;
+  // dieses Buch einen vollständigen Index unter dem aktiven Modell hat. Sonst
+  // reiner keyword-Pfad.
+  const semanticOn = bookIdInt != null && retrieval.indexReady(bookIdInt);
   const signal = jobAbortControllers.get(jobId)?.signal;
   // Concurrency-Cap wie Phase 1 (settledAll + ai.claude.phase1_concurrency, Warmup gegen den
   // gecachten Buchtext-Block): bei 40-60 Befunden würde Promise.all sonst Dutzende Claude-Calls
@@ -88,17 +134,23 @@ async function verifyKontinuitaetProbleme(ctx, result, fromPct, toPct) {
     if (!kap.length) return { p, keep: true };
     const qA = _stelleQuote(p.stelle_a);
     const qB = _stelleQuote(p.stelle_b);
-    let exA = _verifyExcerpt(groups, groupOrder, kap, qA);
-    let exB = _verifyExcerpt(groups, groupOrder, kap, qB);
-    // Zitat wörtlich nicht gefunden → semantisch die thematisch nächste Passage holen
-    // (Paraphrase). Query = Zitat, sonst der Stellen-Text selbst. Best-effort.
-    if (semanticOn && !exA.located) {
-      const s = await _semanticExcerpt(bookIdInt, embedModel, qA || _refToString(p.stelle_a), signal);
-      if (s) exA = { text: s, located: true };
-    }
-    if (semanticOn && !exB.located) {
-      const s = await _semanticExcerpt(bookIdInt, embedModel, qB || _refToString(p.stelle_b), signal);
-      if (s) exB = { text: s, located: true };
+    let exA = viaFact(_verifyExcerpt(groups, groupOrder, kap, qA), p.stelle_a, qA, kap);
+    let exB = viaFact(_verifyExcerpt(groups, groupOrder, kap, qB), p.stelle_b, qB, kap);
+    // Zitat wörtlich nicht gefunden → semantisch die nächste Passage in den
+    // Befund-Kapiteln holen (Paraphrase). Query = Zitat, sonst der Stellen-Text.
+    // Findet auch die Semantik nichts Belastbares, bekommt die Verify-Stufe für
+    // diese Seite KEINEN Ausschnitt („im Text nicht gefunden") statt des
+    // Kapitel-Anfangs — der wäre ein unverwandter Pseudo-Beleg.
+    if (semanticOn && (!exA.located || !exB.located)) {
+      const pageTexts = _chapterPageTexts(groups, groupOrder, kap);
+      if (!exA.located) {
+        const qa = qA || _refToString(p.stelle_a);
+        exA = (qa && await _semanticExcerpt(bookIdInt, qa, pageTexts, signal)) || { text: '', located: false };
+      }
+      if (!exB.located) {
+        const qb = qB || _refToString(p.stelle_b);
+        exB = (qb && await _semanticExcerpt(bookIdInt, qb, pageTexts, signal)) || { text: '', located: false };
+      }
     }
     if (!exA.text && !exB.text) return { p, keep: true };
     try {
@@ -237,129 +289,8 @@ function buildAnachronismusData(bookIdInt, email) {
   return { minYear, maxYear, songs, technik, ereignisse };
 }
 
-// ── Attribut-Widerspruchs-Detektor (F4) ─────────────────────────────────────
-// Der fakten-basierte Multi-Pass-Kontinuitätscheck sieht Fakten nur pro Kapitel → Cross-Chapter-
-// Widersprüche (Kapitel 2 vs. 40) fallen strukturell durch. Dieser Detektor baut aus bereits
-// persistierten, per-Kapitel-strukturierten Daten (figure_events, world_facts) deterministisch
-// Kandidatenpaare mit divergenten Werten desselben Attributs und lässt das Modell nur diese
-// beurteilen. Ergänzt P8 (ersetzt nichts). Rein lesend.
-const _ATTR_CANDIDATE_CAP = 15;
-const _SINGULAR_EVENT_LABEL = { geburt: 'Geburtsjahr', tod: 'Todesjahr', hochzeit: 'Hochzeitsjahr' };
-
-function _factNorm(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
-
-/** Deterministische Kandidatenpaare (KEIN KI-Call). Zwei Detektoren:
- *  A) Singuläre Lebensereignisse (geburt/tod/hochzeit) einer Figur mit ≥2 verschiedenen sicheren
- *     Jahren → jemand kann nicht in zwei Jahren geboren sein/sterben/heiraten.
- *  B) Welt-Fakten mit gleichem subjekt, aber divergentem fakt-Text in verschiedenen Kapiteln.
- *  Gibt `[{ typ, entity, entityFigName, attribut, wertA:{wert,kapitel,beleg}, wertB:{…} }]`,
- *  gedeckelt auf _ATTR_CANDIDATE_CAP (Datums-Konflikte priorisiert). */
-function buildAttributeContradictions(bookIdInt, email) {
-  const candidates = [];
-  // A) Singuläre Lebensereignisse mit Jahres-Konflikt.
-  const evRows = db.prepare(`
-    SELECT fe.figure_id, f.name AS fig_name, fe.subtyp, fe.datum_year AS year, fe.ereignis, c.chapter_name
-      FROM figure_events fe
-      JOIN figures f ON f.id = fe.figure_id
-      LEFT JOIN chapters c ON c.chapter_id = fe.chapter_id
-     WHERE f.book_id = ? AND f.user_email IS ? AND fe.datum_unsicher = 0
-       AND fe.datum_year IS NOT NULL AND fe.subtyp IN ('geburt','tod','hochzeit')
-  `).all(bookIdInt, email);
-  const byFigSubtyp = new Map();
-  for (const r of evRows) {
-    const key = `${r.figure_id}|${r.subtyp}`;
-    if (!byFigSubtyp.has(key)) byFigSubtyp.set(key, []);
-    byFigSubtyp.get(key).push(r);
-  }
-  for (const rows of byFigSubtyp.values()) {
-    const years = [...new Set(rows.map(r => r.year))];
-    if (years.length < 2) continue;
-    const lo = rows.reduce((a, b) => a.year <= b.year ? a : b);
-    const hi = rows.reduce((a, b) => a.year >= b.year ? a : b);
-    candidates.push({
-      typ: 'zeitlinie',
-      entity: lo.fig_name,
-      entityFigName: lo.fig_name,
-      attribut: _SINGULAR_EVENT_LABEL[lo.subtyp] || lo.subtyp,
-      wertA: { wert: String(lo.year), kapitel: lo.chapter_name || '', beleg: lo.ereignis || '' },
-      wertB: { wert: String(hi.year), kapitel: hi.chapter_name || '', beleg: hi.ereignis || '' },
-      _priority: 0,
-    });
-  }
-  // B) Welt-Fakten: gleiches subjekt, divergenter fakt in verschiedenen Kapiteln.
-  const wfRows = db.prepare(`
-    SELECT wf.id, wf.subjekt, wf.kategorie, wf.fakt, c.chapter_name
-      FROM world_facts wf
-      LEFT JOIN world_fact_chapters wfc ON wfc.fact_id = wf.id
-      LEFT JOIN chapters c ON c.chapter_id = wfc.chapter_id
-     WHERE wf.book_id = ? AND wf.user_email IS ? AND wf.subjekt IS NOT NULL AND TRIM(wf.subjekt) != ''
-  `).all(bookIdInt, email);
-  const bySubjekt = new Map();
-  for (const r of wfRows) {
-    const key = _factNorm(r.subjekt);
-    if (!key) continue;
-    if (!bySubjekt.has(key)) bySubjekt.set(key, []);
-    bySubjekt.get(key).push(r);
-  }
-  for (const rows of bySubjekt.values()) {
-    // Erste zwei Fakten mit unterschiedlichem normalisiertem Text UND verschiedenem Kapitel.
-    let a = null, b = null;
-    for (const r of rows) {
-      if (!a) { a = r; continue; }
-      if (_factNorm(r.fakt) !== _factNorm(a.fakt) && (r.chapter_name || '') !== (a.chapter_name || '')) { b = r; break; }
-    }
-    if (a && b) {
-      candidates.push({
-        typ: 'objekt',
-        entity: a.subjekt,
-        entityFigName: null,
-        attribut: a.subjekt,
-        wertA: { wert: a.fakt, kapitel: a.chapter_name || '', beleg: '' },
-        wertB: { wert: b.fakt, kapitel: b.chapter_name || '', beleg: '' },
-        _priority: 1,
-      });
-    }
-  }
-  candidates.sort((x, y) => x._priority - y._priority);
-  return candidates.slice(0, _ATTR_CANDIDATE_CAP);
-}
-
-/** Beurteilt die Kandidaten aus buildAttributeContradictions per KI (Konsolidierungs-Tier,
- *  kein extractTier-Override) und gibt bestätigte Widersprüche in Problem-Form zurück
- *  (kompatibel zu kontResult.probleme → wird dort eingemischt und mit gespeichert). stelle_a/
- *  stelle_b bewusst OHNE «»-Zitate, damit die Beleg-Prüfung (requireQuoteEvidence) sie nicht als
- *  erfundenes Zitat verwirft. Concurrency-Cap + Warmup wie die Verify-Stufe. Non-fatal. */
-async function runAttributeContradictionCheck(ctx, fromPct, toPct) {
-  const { call, prompts, sys, jobId, tok, bookName, bookIdInt, email, log } = ctx;
-  const candidates = buildAttributeContradictions(bookIdInt, email);
-  if (!candidates.length) return [];
-  updateJob(jobId, { progress: fromPct, statusText: 'job.phase.checkAttributes' });
-  const claudeConcurrency = Math.max(1, parseInt(appSettings.get('ai.claude.phase1_concurrency'), 10) || 4);
-  const settled = await settledAll(candidates.map((cand) => async () => {
-    const v = await call(jobId, tok,
-      prompts.buildAttributeContradictionJudgePrompt(bookName, cand),
-      sys.SYSTEM_KONTINUITAET_BLOCKS, null, null, 600, 0.3, 900, prompts.SCHEMA_ATTR_CONTRADICTION,
-      costTier(COST_LABEL.kontinuitaet));
-    if (v?.widerspruch !== true) return null;
-    const stelle = (w) => `${cand.attribut}: ${w.wert}${w.kapitel ? ` (Kapitel ${w.kapitel})` : ''}`;
-    return {
-      schwere: v.schwere || 'mittel',
-      typ: cand.typ,
-      beschreibung: v.beschreibung || '',
-      stelle_a: stelle(cand.wertA),
-      stelle_b: stelle(cand.wertB),
-      empfehlung: v.empfehlung || '',
-      figuren: cand.entityFigName ? [cand.entityFigName] : [],
-      kapitel: [cand.wertA.kapitel, cand.wertB.kapitel].filter(Boolean),
-    };
-  }), { concurrency: claudeConcurrency, warmup: true });
-  const aborted = settled.find(r => r.status === 'rejected' && r.reason?.name === 'AbortError');
-  if (aborted) throw aborted.reason;
-  const findings = settled.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
-  if (toPct != null) updateJob(jobId, { progress: toPct });
-  log.info(`Attribut-Widerspruchs-Detektor: ${findings.length}/${candidates.length} Kandidaten als echter Widerspruch bestätigt.`);
-  return findings;
-}
+// Attribut-Widerspruchs-Detektor (F4): ./attribute-check.js (hier re-exportiert).
+const { buildAttributeContradictions, runAttributeContradictionCheck } = require('./attribute-check');
 
 // ── Remap-Rescue: unauflösbare Figuren-Klarnamen dem Katalog zuordnen ─────────
 // remapSzenen/remapAssignments verwerfen Figuren-Klarnamen aus Szenen/Events, die sich weder
@@ -481,6 +412,7 @@ function _komplettAiOverrides(effectiveProvider) {
 }
 
 module.exports = {
+  _semanticExcerpt,
   _verifyExcerpt, verifyKontinuitaetProbleme,
   buildAnachronismusData, _komplettAiOverrides,
   buildAttributeContradictions, runAttributeContradictionCheck,

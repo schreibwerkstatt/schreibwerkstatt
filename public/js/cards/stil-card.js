@@ -18,6 +18,8 @@ export function registerStilCard() {
     activeStilDetailKey: null,
     stilDetail: null,
     stilDetailLoading: false,
+    // Kapitel-Key der Satzanfänge-Rangliste; '' = ganzes Buch.
+    stilOpenerChapter: '',
     // Re-Entry-Guard für den Drilldown-Fetch: bei schnellen Klicks darf nur die
     // zuletzt geöffnete Zelle ihr Ergebnis setzen.
     _stilDetailSeq: 0,
@@ -46,6 +48,7 @@ export function registerStilCard() {
           activeStilDetailKey: null,
           stilDetail: null,
           stilDetailLoading: false,
+          stilOpenerChapter: '',
           _memos: {},
         },
       });

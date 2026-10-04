@@ -262,8 +262,8 @@ function buildSceneSamples(ctx) {
   // ── Voll-Kapitel-Samples (chunked nach maxFullChars) ─────────────────
   // Lange Kapitel werden in Slices ≤maxFullChars gesplittet (an Satzgrenzen),
   // jeder Slice = eigenes Sample mit Part-Label + Vorgänger-Tail als
-  // Continuity-Kontext. So passt voller Buchtext auch in 4096-seqlen
-  // (maxFullChars=10000 chars ≈ 3000 Tekken-V7-Tokens).
+  // Continuity-Kontext. `maxFullChars` leitet index.js aus `maxSeqTokens` ab,
+  // damit die Slices ins Sequenz-Budget passen (4096 → ~8000 chars DE).
   // Generiert: (a) chunked-fulltext, (b) Sliding-Window-Cuts auf 1. Slice,
   // (c) Kapitel→Kapitel-Continuation mit gestutztem Vorgänger-Tail.
   const sliceAtSentence = (text, maxLen) => {
@@ -331,6 +331,7 @@ function buildSceneSamples(ctx) {
           id: total > 1 ? 'chapFullChunk|' + k + '|' + si : 'chapFull|' + k,
           type: 'scene',
           sourceKey: 'ch:' + k,
+          noTruncate: true, // „Teil N von M" gekappt wäre ein falsches Teilstück
           messages: [
             { role: 'system', content: unifiedSys },
             { role: 'user', content: instr },

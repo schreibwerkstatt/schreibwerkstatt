@@ -152,7 +152,6 @@
           </div>
           <span class="overview-chapter-meta">
             <span class="overview-chapter-delta"
-                  :class="ch.deltaPct > 0 ? 'overview-trend-pct--up' : ch.deltaPct < 0 ? 'overview-trend-pct--down' : ''"
                   x-text="(ch.deltaPct >= 0 ? '+' : '') + ch.deltaPct + '%'"></span>
             <span class="overview-chapter-chars" x-text="_fmtNum(ch.chars) + ' ' + $app.t('bookstats.unit.z')"></span>
             <span class="overview-chapter-ns"

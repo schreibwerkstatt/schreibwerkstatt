@@ -1,7 +1,6 @@
 'use strict';
-// Musik (Songs, Buch-Soundtrack). Parallel zu saveOrteToDb: UPSERT by
-// song_uid; FK-CASCADE raeumt song_figures / song_chapters / song_scenes bei
-// Song-DELETE.
+// Musik (Songs, Buch-Soundtrack): Schreibpfad der Komplettanalyse und Lesepfad
+// der Musik-Karte. FK-CASCADE raeumt song_figures / song_chapters bei Song-DELETE.
 
 const { db } = require('./connection');
 // Prepared Statements dieses Moduls sitzen auf migrierten Spalten — die
@@ -9,9 +8,29 @@ const { db } = require('./connection');
 require('./migrations');
 const { NOW_ISO_SQL } = require('./now');
 const { toRefString: _toRefString } = require('./write-helpers');
+const { inClause: _inClause } = require('../lib/validate');
+const { listSongChaptersWithNames } = require('./content-names');
 
-// Parallel zu saveOrteToDb. UPSERT by song_uid; FK-CASCADE räumt
-// song_figures / song_chapters / song_scenes bei Song-DELETE.
+// Identitaet eines Songs ueber Laeufe: normalisierter Titel + Interpret. Exakt,
+// nicht fuzzy — kurze Titel sind schlechte Fuzzy-Kandidaten, und Songs fehlen
+// die Indizien (Typ, Land, Koordinaten), mit denen Orte den Graubereich klaeren.
+function songKey(s) {
+  const norm = v => String(v ?? '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[„“”"'‚‘’«»‹›]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const titel = norm(s?.titel ?? s?.title);
+  return titel ? `${titel}\u0000${norm(s?.interpret)}` : null;
+}
+
+// Schreibt die Musikbibliothek eines Laufs. Die `id` der Eingabe-Songs ist nur
+// lauf-intern (die Komplettanalyse nummeriert jeden Lauf neu `song_1…N`) und
+// wird hier NICHT als Identitaet benutzt: ein wiedererkannter Song (gleicher
+// songKey) behaelt seine songs.id und seine song_uid, damit Suchindex und
+// Deep-Links (#…/song/<uid>) ueber Laeufe auf denselben Titel zeigen. Neue Songs
+// bekommen eine freie song_uid, nicht mehr gefundene werden geloescht.
 function saveSongsToDb(bookId, songs, userEmail, chNameToId = null, pageNameToIdByChapter = null) {
   if (chNameToId == null) {
     const rows = db.prepare('SELECT chapter_id, chapter_name FROM chapters WHERE book_id = ?').all(bookId);
@@ -44,18 +63,26 @@ function saveSongsToDb(bookId, songs, userEmail, chNameToId = null, pageNameToId
   const emailCond = userEmail ? 'user_email = ?' : 'user_email IS NULL';
   const emailVal  = userEmail ? [userEmail] : [];
 
+  const written = [];
   db.transaction(() => {
     const existing = db.prepare(
-      `SELECT id, song_uid FROM songs WHERE book_id = ? AND ${emailCond}`
+      `SELECT id, song_uid, titel, interpret FROM songs WHERE book_id = ? AND ${emailCond} ORDER BY id`
     ).all(bookId, ...emailVal);
-    const existingMap = Object.fromEntries(existing.map(r => [r.song_uid, r.id]));
-
-    const newUids = new Set(songs.map(s => s.id));
-    for (const { id, song_uid } of existing) {
-      if (!newUids.has(song_uid)) {
-        db.prepare('DELETE FROM songs WHERE id = ?').run(id);
-      }
+    // Pro Schluessel eine Warteschlange: hat der Bestand (Altdaten) Dubletten,
+    // bekommt jeder Eingabe-Song hoechstens eine Zeile, der Rest faellt weg.
+    const byKey = new Map();
+    for (const r of existing) {
+      const k = songKey(r);
+      if (k) (byKey.get(k) ?? byKey.set(k, []).get(k)).push(r);
     }
+    const usedUids = new Set(existing.map(r => r.song_uid));
+    let uidSeq = 0;
+    const freshUid = () => {
+      let uid;
+      do { uid = 'song_' + (++uidSeq); } while (usedUids.has(uid));
+      usedUids.add(uid);
+      return uid;
+    };
 
     const upd = db.prepare(`
       UPDATE songs SET titel=?, interpret=?, genre=?, beschreibung=?, stimmung=?,
@@ -73,26 +100,37 @@ function saveSongsToDb(bookId, songs, userEmail, chNameToId = null, pageNameToId
     ).all(bookId, userEmail || null);
     const figIdToRowId = Object.fromEntries(figRows.map(r => [r.fig_id, r.id]));
     const insSf = db.prepare('INSERT OR IGNORE INTO song_figures (song_id, figure_id, kontext_typ) VALUES (?, ?, ?)');
-    const insSc = db.prepare('INSERT INTO song_chapters (song_id, chapter_id, haeufigkeit) VALUES (?, ?, ?)');
+    const insSc = db.prepare('INSERT OR IGNORE INTO song_chapters (song_id, chapter_id, haeufigkeit) VALUES (?, ?, ?)');
 
-    for (let i = 0; i < songs.length; i++) {
-      const s = songs[i];
+    // Erst alle Zuordnungen, dann loeschen: eine freigegebene song_uid darf
+    // nicht an einen neuen Song gehen, solange die alte Zeile noch steht.
+    const plan = [];
+    for (const s of songs) {
+      const titel = _toRefString(s.titel ?? s.title);
+      if (!titel) continue;
+      const k = songKey(s);
+      const match = k ? byKey.get(k)?.shift() : null;
+      plan.push({ s, titel, match });
+    }
+    const kept = new Set(plan.filter(p => p.match).map(p => p.match.id));
+    const del = db.prepare('DELETE FROM songs WHERE id = ?');
+    for (const r of existing) if (!kept.has(r.id)) del.run(r.id);
+
+    plan.forEach(({ s, titel, match }, i) => {
       const erstPageId = resolveErstePageIdForSong(s.erste_erwaehnung, s.kapitel);
-      let songDbId = existingMap[s.id];
-      if (songDbId !== undefined) {
-        upd.run(s.titel || s.title || '', s.interpret || null, s.genre || null,
-          s.beschreibung || null, s.stimmung || null, s.kontext_typ || null,
-          s.erste_erwaehnung || null, erstPageId, i, songDbId);
+      const vals = [titel, s.interpret || null, s.genre || null, s.beschreibung || null,
+        s.stimmung || null, s.kontext_typ || null, s.erste_erwaehnung || null, erstPageId, i];
+      let songDbId;
+      if (match) {
+        songDbId = match.id;
+        upd.run(...vals, songDbId);
         delSf.run(songDbId);
         delSc.run(songDbId);
       } else {
-        const { lastInsertRowid } = ins.run(
-          bookId, s.id, s.titel || s.title || '', s.interpret || null, s.genre || null,
-          s.beschreibung || null, s.stimmung || null, s.kontext_typ || null,
-          s.erste_erwaehnung || null, erstPageId, i, userEmail || null
-        );
-        songDbId = lastInsertRowid;
+        const [t, ...rest] = vals;
+        songDbId = ins.run(bookId, freshUid(), t, ...rest, userEmail || null).lastInsertRowid;
       }
+      written.push(songDbId);
       for (const f of (s.figuren || [])) {
         // figuren: entweder String (fig_id) oder Objekt { fig_id, kontext_typ }
         const ref = _toRefString(typeof f === 'object' && f ? (f.fig_id ?? f.id) : f);
@@ -107,10 +145,64 @@ function saveSongsToDb(bookId, songs, userEmail, chNameToId = null, pageNameToId
         const haeufigkeit = (k && typeof k === 'object' && k.haeufigkeit) || 1;
         if (chapId != null) insSc.run(songDbId, chapId, haeufigkeit);
       }
-    }
+    });
   })();
+  return { songIds: written.map(Number) };
+}
+
+// Musikbibliothek eines Buchs fuer die Musik-Karte. `null`, wenn es keine gibt.
+function listSongsForBook(bookId, userEmail) {
+  const rows = db.prepare(`
+    SELECT id, song_uid, titel, interpret, genre, kontext_typ, beschreibung,
+           stimmung, erste_erwaehnung, erste_erwaehnung_page_id, updated_at
+    FROM songs
+    WHERE book_id = ? AND user_email IS ?
+    ORDER BY sort_order, id
+  `).all(bookId, userEmail || null);
+  if (!rows.length) return null;
+
+  const songIds = rows.map(r => r.id);
+  const { sql: idSql, values: idVals } = _inClause(songIds);
+  const figMap = {};
+  for (const sf of db.prepare(`
+    SELECT sf.song_id, f.fig_id, sf.kontext_typ
+    FROM song_figures sf
+    JOIN figures f ON f.id = sf.figure_id
+    WHERE sf.song_id IN ${idSql}
+  `).all(...idVals)) {
+    (figMap[sf.song_id] ??= []).push({ fig_id: sf.fig_id, kontext_typ: sf.kontext_typ });
+  }
+  const kapMap = {};
+  for (const sc of listSongChaptersWithNames(songIds)) {
+    (kapMap[sc.song_id] ??= []).push({ chapter_id: sc.chapter_id, name: sc.chapter_name, haeufigkeit: sc.haeufigkeit });
+  }
+
+  const songs = rows.map(r => ({
+    id:                       r.song_uid,
+    titel:                    r.titel,
+    interpret:                r.interpret,
+    genre:                    r.genre,
+    kontext_typ:              r.kontext_typ,
+    beschreibung:             r.beschreibung,
+    stimmung:                 r.stimmung,
+    erste_erwaehnung:         r.erste_erwaehnung,
+    erste_erwaehnung_page_id: r.erste_erwaehnung_page_id || null,
+    figuren:                  figMap[r.id] || [],
+    kapitel:                  kapMap[r.id] || [],
+  }));
+  // Stand = juengster Schreibvorgang, nicht die erste Zeile der Sortierung.
+  const updatedAt = rows.reduce((m, r) => (r.updated_at && (!m || r.updated_at > m) ? r.updated_at : m), null);
+  return { songs, updated_at: updatedAt };
+}
+
+// Alle Song-Zeilen eines Buchs (alle Konten) — fuer den Full-Replace des Suchindex.
+function listSongIdsForBook(bookId) {
+  return db.prepare('SELECT id FROM songs WHERE book_id = ?').all(bookId);
 }
 
 module.exports = {
   saveSongsToDb,
+  listSongIdsForBook,
+  listSongsForBook,
+  songKey,
 };

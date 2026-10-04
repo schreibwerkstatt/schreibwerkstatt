@@ -2,7 +2,11 @@
 // Bewertungen + Tagebuch-Rueckblicke: Buch-/Kapitel-Reviews und Rueckblicke
 // lesen und loeschen, dazu der komplette History-Reset eines Buchs.
 
-const { db } = require('../../db/schema');
+const {
+  db, listChapterReviewHistory, deleteChapterReview,
+  listBookReviewHistory, deleteBookReview,
+  deleteReviewCache, deleteChapterMacroReviewCache,
+} = require('../../db/schema');
 const { toIntId } = require('../../lib/validate');
 const { sessionEmail } = require('../../lib/acl');
 const { buildRueckblickCoverage } = require('../jobs/rueckblick-dates');
@@ -14,8 +18,7 @@ function register(router) {
     const user_email = sessionEmail(req);
     const id = toIntId(req.params.id);
     if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
-    db.prepare('DELETE FROM book_reviews WHERE id = ? AND user_email = ?')
-      .run(id, user_email);
+    deleteBookReview(id, user_email);
     res.json({ ok: true });
   });
 
@@ -30,7 +33,9 @@ function register(router) {
   });
 
   // Kompletter History-Reset für ein Buch: löscht page_checks, book_reviews und
-  // chat_sessions (inkl. Nachrichten via ON DELETE CASCADE) des eingeloggten Users.
+  // chat_sessions (inkl. Nachrichten via ON DELETE CASCADE) des eingeloggten Users,
+  // dazu die Bewertungs-Caches — sonst lieferte die nächste Bewertung nach dem
+  // Reset wortgleich das alte Ergebnis.
   router.delete('/book/:book_id', (req, res) => {
     const user_email = sessionEmail(req);
     const book_id = req.bookId;
@@ -49,27 +54,21 @@ function register(router) {
       chat_sessions:    delSessions.run(book_id, user_email).changes,
       werkstatt_runs:   delWerkRuns.run(book_id, user_email).changes,
       rueckblicke:      delRueckblicke.run(book_id, user_email).changes,
+      review_cache:     deleteReviewCache(book_id, user_email) + deleteChapterMacroReviewCache(book_id, user_email),
     }))();
 
     logger.info(
       `History-Reset: book=${book_id} user=${user_email} ` +
       `page_checks=${result.page_checks} book_reviews=${result.book_reviews} ` +
       `chapter_reviews=${result.chapter_reviews} chat_sessions=${result.chat_sessions} ` +
-      `werkstatt_runs=${result.werkstatt_runs} rueckblicke=${result.rueckblicke}`
+      `werkstatt_runs=${result.werkstatt_runs} rueckblicke=${result.rueckblicke} review_cache=${result.review_cache}`
     );
     res.json({ ok: true, deleted: result });
   });
 
-  // Letzte 10 Bewertungen für ein Buch
+  // Buchbewertungs-Verlauf: die jüngsten zehn (db/book-reviews.js).
   router.get('/review/:book_id', (req, res) => {
-    const user_email = sessionEmail(req);
-    const bookId = req.bookId;
-    const rows = db.prepare(`
-      SELECT br.*, b.name AS book_name FROM book_reviews br
-      LEFT JOIN books b ON b.book_id = br.book_id
-      WHERE br.book_id = ? AND br.user_email = ?
-      ORDER BY br.reviewed_at DESC LIMIT 10`).all(bookId, user_email);
-    res.json(rows.map(r => ({ ...r, review_json: JSON.parse(r.review_json || 'null') })));
+    res.json(listBookReviewHistory(req.bookId, sessionEmail(req)));
   });
 
   // Tagebuch-Rückblicke: letzte 20 generierte Rückblicke eines Buchs (re-öffenbar).
@@ -113,34 +112,17 @@ function register(router) {
     res.json(buildRueckblickCoverage(pages, rbRows));
   });
 
-  // Kapitel-Reviews: alle Einträge eines Buchs, gruppiert als { [chapter_id]: [entries] }.
-  // Max. 10 Einträge pro Kapitel (absteigend nach Datum).
+  // Kapitel-Reviews: gruppiert als { [chapter_id]: [entries] }, je Kapitel die
+  // jüngsten zehn (db/chapter-reviews.js).
   router.get('/chapter-reviews/:book_id', (req, res) => {
-    const user_email = sessionEmail(req);
-    const book_id = req.bookId;
-    const rows = db.prepare(`
-      SELECT cr.*, b.name AS book_name FROM chapter_reviews cr
-      LEFT JOIN books b ON b.book_id = cr.book_id
-      WHERE cr.book_id = ? AND cr.user_email = ?
-      ORDER BY cr.chapter_id, cr.reviewed_at DESC`).all(book_id, user_email);
-    const byChapter = {};
-    for (const r of rows) {
-      const key = String(r.chapter_id);
-      if (!byChapter[key]) byChapter[key] = [];
-      if (byChapter[key].length < 10) {
-        byChapter[key].push({ ...r, review_json: JSON.parse(r.review_json || 'null') });
-      }
-    }
-    res.json(byChapter);
+    res.json(listChapterReviewHistory(req.bookId, sessionEmail(req)));
   });
 
   // Einzelnes Kapitel-Review löschen
   router.delete('/chapter-review/:id', (req, res) => {
-    const user_email = sessionEmail(req);
     const id = toIntId(req.params.id);
     if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
-    db.prepare('DELETE FROM chapter_reviews WHERE id = ? AND user_email = ?')
-      .run(id, user_email);
+    deleteChapterReview(id, sessionEmail(req));
     res.json({ ok: true });
   });
 }

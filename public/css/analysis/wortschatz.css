@@ -155,6 +155,29 @@
     font-style: italic;
   }
 
+  /* Kapitel-Band: Kapitel, die sich deutlich anders lesen als der Rest (Delta mehr
+     als eine Standardabweichung über dem Mittel). Akzent-Tönung statt Warnfarbe —
+     ein abweichendes Kapitel ist ein Befund, kein Fehler. */
+  .wortschatz-row--outlier td {
+    background: color-mix(in oklab, var(--card-accent) 8%, transparent);
+  }
+  /* Begründung (Delta-Merkmale, typische Wörter einer Figur): Fliesstext in einer
+     Tabellenzelle, darf umbrechen. */
+  .wortschatz-reason {
+    color: var(--color-muted);
+    font-size: var(--font-size-xs);
+    line-height: 1.4;
+    min-width: 12rem;
+  }
+  /* Sternchen an einem Wert ohne volles MATTR-Fenster (einfache TTR). */
+  .wortschatz-approx {
+    color: var(--color-muted);
+    cursor: help;
+  }
+  .wortschatz-stil-link {
+    margin-left: var(--space-xs);
+  }
+
   @media (max-width: 640px) {
     .wortschatz-table th,
     .wortschatz-table td { padding: var(--space-xs); }

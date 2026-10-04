@@ -55,3 +55,16 @@ test('behält Eintrag mit leeren Feldern', () => {
 test('matcht case-insensitive', () => {
   assert.equal(_isSelfCancelled({ beschreibung: 'KEIN WIDERSPRUCH erkennbar.', empfehlung: '' }), true);
 });
+
+test('behält verneintes «nicht konsistent»/«nicht stimmig» in beschreibung', () => {
+  assert.equal(_isSelfCancelled({ beschreibung: 'Das Geburtsjahr ist nicht konsistent mit Kapitel 2.', empfehlung: '' }), false);
+  assert.equal(_isSelfCancelled({ beschreibung: 'Die Chronologie ist nicht stimmig.', empfehlung: '' }), false);
+  assert.equal(_isSelfCancelled({ beschreibung: 'Die Angaben sind inkonsistent.', empfehlung: '' }), false);
+});
+
+test('behält Empfehlung, die ihr Ziel positiv formuliert («… konsistent bleibt»)', () => {
+  assert.equal(_isSelfCancelled({
+    beschreibung: 'Mareks Alter widerspricht sich zwischen Kapitel 2 und 5.',
+    empfehlung: 'Alter in Kapitel 5 anpassen, damit die Zeitlinie konsistent bleibt und alles stimmig ist.',
+  }), false);
+});

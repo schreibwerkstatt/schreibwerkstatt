@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "3f824511a3ae59a5";
+self.__SHELL_BUILD = "0b7f6aba11a76365";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -242,6 +242,7 @@ self.__SHELL_MANIFEST = [
   "/js/book-overview/songs.js",
   "/js/book-overview/stats.js",
   "/js/book-overview/szenen.js",
+  "/js/book-overview/wortschatz.js",
   "/js/book-snapshot-diff.js",
   "/js/book/book-create.js",
   "/js/book/book-settings.js",
@@ -436,6 +437,7 @@ self.__SHELL_MANIFEST = [
   "/js/cards/kapitel-dashboard.js",
   "/js/cards/kapitel-growth.js",
   "/js/cards/kapitel-review-card.js",
+  "/js/cards/kapitel-stil.js",
   "/js/cards/kontinuitaet-card.js",
   "/js/cards/lektorat-findings-card.js",
   "/js/cards/motiv-card.js",
@@ -639,6 +641,7 @@ self.__SHELL_MANIFEST = [
   "/js/graph/soziogramm.js",
   "/js/headline/channels.js",
   "/js/hotkeys.js",
+  "/js/html-entities.js",
   "/js/html-text.js",
   "/js/i18n.js",
   "/js/i18n/de.json",
@@ -765,6 +768,7 @@ self.__SHELL_MANIFEST = [
   "/js/today-ring.js",
   "/js/toggle-switch.js",
   "/js/tooltip.js",
+  "/js/tts-player.js",
   "/js/tts-segment.js",
   "/js/upload-pdf.js",
   "/js/user-settings-ai-access.js",
@@ -849,6 +853,7 @@ self.__SHELL_MANIFEST = [
   "/partials/bookoverview-rueckblick-heatmap.html",
   "/partials/bookoverview-snapshot.html",
   "/partials/bookoverview-songs.html",
+  "/partials/bookoverview-wortschatz.html",
   "/partials/bookoverview.html",
   "/partials/bookstats.html",
   "/partials/buchlandkarte.html",
@@ -910,6 +915,7 @@ self.__SHELL_MANIFEST = [
   "/partials/ideen.html",
   "/partials/job-toast.html",
   "/partials/kapitel-page-row.html",
+  "/partials/kapitelreview-dash-stil.html",
   "/partials/kapitelreview-dash-verlauf.html",
   "/partials/kapitelreview-dashboard.html",
   "/partials/kapitelreview-pages.html",
@@ -1017,7 +1023,9 @@ self.__SHELL_MANIFEST = [
   "/partials/werkstatt-link-fields.html",
   "/partials/werkstatt-run-row.html",
   "/partials/world-facts.html",
+  "/partials/wortschatz-chapters.html",
   "/partials/wortschatz-cloud.html",
+  "/partials/wortschatz-figures.html",
   "/partials/wortschatz-hapax.html",
   "/partials/wortschatz-phrases.html",
   "/partials/wortschatz-terms.html",

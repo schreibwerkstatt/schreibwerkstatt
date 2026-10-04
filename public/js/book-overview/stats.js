@@ -4,7 +4,10 @@
 //
 // Memos, die lokalisierte Strings (Wochentage, Datums-Labels, Tooltips) mit
 // backen, führen `this._uiLocale()` in ihren Deps — sonst bleiben die Labels
-// nach einem Sprachwechsel auf der alten Sprache stehen.
+// nach einem Sprachwechsel auf der alten Sprache stehen. Memos, deren Ergebnis
+// vom heutigen Datum abhängt, führen `this.overviewToday` (reaktiv, siehe
+// book-overview-card.js) — sonst zeigt eine über Mitternacht offene Karte den
+// Vortag als „heute".
 import { localIsoDate, localIsoDaysAgo, aggregateLiveBookStats, CHARS_PER_NORMSEITE } from '../utils.js';
 import { computeTodayRing, computeCharsTodayDelta, makeDayDelta } from '../today-ring.js';
 import { buildStreakGrid } from '../streak-grid.js';
@@ -52,7 +55,7 @@ export const statsMethods = {
   _dayDelta() {
     const a = this.overviewStats || [];
     const tokEsts = window.__app?.tokEsts || {};
-    return this._memo('dayDelta', [a, tokEsts], () => makeDayDelta({ stats: a, tokEsts }));
+    return this._memo('dayDelta', [a, tokEsts, this.overviewToday], () => makeDayDelta({ stats: a, tokEsts }));
   },
 
   // Letzte 7 Kalendertage. Pro Tag die Netto-Zeichenbilanz aus _dayDelta().
@@ -62,7 +65,7 @@ export const statsMethods = {
   overviewLast7Days() {
     const a = this.overviewStats || [];
     const tokEsts = window.__app?.tokEsts || {};
-    return this._memo('last7Days', [a, tokEsts, this._uiLocale()], () => {
+    return this._memo('last7Days', [a, tokEsts, this._uiLocale(), this.overviewToday], () => {
       const dayDelta = this._dayDelta();
       const fmt = this._dateFmt({ weekday: 'short' });
       const days = [];
@@ -88,7 +91,7 @@ export const statsMethods = {
     const a = this.overviewStats;
     if (!a || a.length < 2) return null;
     const tokEsts = window.__app?.tokEsts || {};
-    return this._memo('sevenDayDelta', [a, tokEsts], () => {
+    return this._memo('sevenDayDelta', [a, tokEsts, this.overviewToday], () => {
       // Latest = Live-Summe wenn vorhanden (raw, kein Math.max — sonst
       // gewinnt Cron-Snapshot bei Lösch-Edits und überzeichnet net-Delta).
       // Konsistent zum Heute-Ring (computeCharsTodayDelta).
@@ -106,11 +109,13 @@ export const statsMethods = {
   },
 
   // Sparkline-Daten + Polygon-Fläche darunter (Gradient-Fill).
-  // Liefert { d, area, color, deltaPct, endX, endY, w, h, points } oder { d:null, ... } bei <2 Punkten.
+  // Liefert { d, area, color, deltaPct, deltaAbs, endX, endY, w, h, points } oder { d:null, ... } bei <2 Punkten.
+  // `deltaPct` ist null, wenn der Verlauf bei 0 Zeichen beginnt — Prozent von
+  // nichts ist keine Zahl; die Kachel zeigt dann den absoluten Zuwachs.
   // `points`: pro Datenpunkt { chars, iso, label } für Hover-Overlay mit Datum + exaktem Wert.
   overviewSparkline() {
     const stats = this.overviewStats || [];
-    return this._memo('sparkline', [stats, this._uiLocale()], () => {
+    return this._memo('sparkline', [stats, this._uiLocale(), this.overviewToday], () => {
       const W = 240, H = 48, PAD = 3;
       // Fenster nach KALENDERTAGEN, nicht nach Snapshot-Anzahl: das Label
       // verspricht „30 Tage", und Snapshot-Lücken (Cron ausgefallen, Import)
@@ -121,7 +126,7 @@ export const statsMethods = {
       if (start < 0) start = stats.length;
       const slice = stats.slice(Math.max(0, start - 1));
       const data = slice.map(s => Number(s.chars) || 0);
-      if (data.length < 2) return { d: null, area: null, color: 'currentColor', deltaPct: 0, endX: 0, endY: 0, w: W, h: H, points: [] };
+      if (data.length < 2) return { d: null, area: null, color: 'currentColor', deltaPct: 0, deltaAbs: 0, endX: 0, endY: 0, w: W, h: H, points: [] };
       const min = Math.min(...data);
       const max = Math.max(...data);
       const span = Math.max(1, max - min);
@@ -137,9 +142,12 @@ export const statsMethods = {
         + ` L ${pts[0][0].toFixed(1)},${(H - PAD).toFixed(1)} Z`;
       const first = data[0];
       const last = data[data.length - 1];
-      const deltaPct = first > 0 ? Math.round(((last - first) / first) * 100) : 0;
-      const color = deltaPct > 0 ? 'var(--color-success)'
-                  : deltaPct < 0 ? 'var(--color-err-border)'
+      const deltaAbs = last - first;
+      const deltaPct = first > 0 ? Math.round((deltaAbs / first) * 100) : null;
+      // Farbe nach dem Vorzeichen des Zuwachses, nicht der gerundeten Prozente:
+      // ein Plus von 0,4 % ist trotzdem ein Plus.
+      const color = deltaAbs > 0 ? 'var(--color-success)'
+                  : deltaAbs < 0 ? 'var(--color-err-border)'
                   :                'var(--color-accent)';
       const endX = pts[pts.length - 1][0];
       const endY = pts[pts.length - 1][1];
@@ -159,8 +167,19 @@ export const statsMethods = {
         }
         return { chars: data[i], iso, label };
       });
-      return { d, area, color, deltaPct, endX, endY, w: W, h: H, points };
+      return { d, area, color, deltaPct, deltaAbs, endX, endY, w: W, h: H, points };
     });
+  },
+
+  // Beschriftung des Zuwachses unter der Kurve (auch aria-label der Kachel):
+  // Prozent, solange es eine Basis gibt, sonst absolute Zeichen.
+  overviewSparklineDeltaLabel() {
+    const { deltaPct, deltaAbs } = this.overviewSparkline();
+    const t = window.__app?.t || ((k) => k);
+    if (deltaPct != null) {
+      return t('overview.trendDelta', { pct: (deltaPct >= 0 ? '+' : '') + deltaPct });
+    }
+    return t('overview.trendDeltaAbs', { n: (deltaAbs >= 0 ? '+' : '') + this._fmtNum(deltaAbs) });
   },
 
   // Streak-Heatmap: 52 Wochen × 7 Tage GitHub-Stil, ausgehend von HEUTE
@@ -176,7 +195,7 @@ export const statsMethods = {
   overviewStreakHeatmap() {
     const a = this.overviewStats || [];
     const tokEsts = window.__app?.tokEsts || {};
-    return this._memo('streakHeatmap', [a, tokEsts, this._uiLocale()], () => {
+    return this._memo('streakHeatmap', [a, tokEsts, this._uiLocale(), this.overviewToday], () => {
       const dayDelta = this._dayDelta();
       const t = window.__app?.t || ((k) => k);
       const numFmt = this._numFmt();
@@ -208,7 +227,7 @@ export const statsMethods = {
     // Default = eine Normseite/Tag. Auflösung hier statt im Template, damit
     // das Charts-Partial die Methode argumentlos aufrufen kann.
     const goal = Math.max(1, Number(goalChars) || this.overviewDailyGoalChars || CHARS_PER_NORMSEITE);
-    return this._memo('todayRing:' + goal, [a, tokEsts], () =>
+    return this._memo('todayRing:' + goal, [a, tokEsts, this.overviewToday], () =>
       computeTodayRing({ stats: a, tokEsts, goalChars: goal, r: 28 })
     );
   },

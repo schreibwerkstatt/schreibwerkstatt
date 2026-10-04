@@ -56,8 +56,8 @@ const ART_TO_KIND = { figur: 'figure', ort: 'location', szene: 'scene', beat: 'b
 function _loadCandidates(bookId, userEmail) {
   const q = (sql) => db.prepare(sql).all(bookId, userEmail).slice(0, MAX_CANDIDATES);
   return {
-    figur:  q('SELECT id, name AS label, typ, beruf, rolle, beschreibung FROM figures WHERE book_id = ? AND user_email = ? ORDER BY sort_order, name'),
-    ort:    q('SELECT id, name AS label, typ, land, beschreibung FROM locations WHERE book_id = ? AND user_email = ? ORDER BY sort_order, name'),
+    figur:  q('SELECT id, fig_id AS ref_id, name AS label, typ, beruf, rolle, beschreibung FROM figures WHERE book_id = ? AND user_email = ? ORDER BY sort_order, name'),
+    ort:    q('SELECT id, loc_id AS ref_id, name AS label, typ, land, beschreibung FROM locations WHERE book_id = ? AND user_email = ? ORDER BY sort_order, name'),
     szene:  q('SELECT id, titel AS label, kommentar FROM figure_scenes WHERE book_id = ? AND user_email = ? ORDER BY sort_order, titel'),
     beat:   q('SELECT id, titel AS label, status, beschreibung FROM plot_beats WHERE book_id = ? AND user_email = ? ORDER BY sort_order, titel'),
     strang: q('SELECT id, name AS label FROM plot_threads WHERE book_id = ? AND user_email = ? ORDER BY position, name'),
@@ -100,10 +100,11 @@ async function runResearchLinkJob(jobId, itemId, bookId, userEmail, { signal } =
       return;
     }
 
-    // id → { kind, label } für Validierung (KI darf nur diese ids zurückgeben).
+    // id → { kind, label, ref_id } für Validierung (KI darf nur diese ids zurückgeben).
+    // ref_id = öffentliche Kennung (Figur/Ort) für die Entitäts-Referenz im Frontend.
     const byArtId = new Map();
     for (const [art, kind] of Object.entries(ART_TO_KIND)) {
-      for (const c of cands[art]) byArtId.set(`${art}:${c.id}`, { kind, id: c.id, label: c.label || '' });
+      for (const c of cands[art]) byArtId.set(`${art}:${c.id}`, { kind, id: c.id, label: c.label || '', ref_id: c.ref_id });
     }
 
     const { buildSystemResearchLink, buildResearchLinkPrompt, SCHEMA_RESEARCH_LINK } = await getPrompts(userEmail);
@@ -128,6 +129,7 @@ async function runResearchLinkJob(jobId, itemId, bookId, userEmail, { signal } =
       suggestions.push({
         target_kind: cand.kind,
         target_id: cand.id,
+        ...(cand.ref_id ? { ref_id: cand.ref_id } : {}),
         label: cand.label,
         grund: String(l?.grund || '').trim().slice(0, 200),
       });

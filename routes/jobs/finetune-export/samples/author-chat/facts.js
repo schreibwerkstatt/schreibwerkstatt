@@ -71,13 +71,13 @@ function buildReverseLookupSamples(ctx) {
       const s = sents[i];
       if (!looksDistinctive(s)) continue;
       pushQA('authorChat|revPage|' + p.id + '|' + i,
-        langIsEn ? `On which page does this sentence appear: "${s}"` : `Auf welcher Seite steht dieser Satz: „${s}"`,
+        langIsEn ? `On which page does this sentence appear: “${s}”` : `Auf welcher Seite steht dieser Satz: „${s}“`,
         langIsEn
           ? `This sentence is on the page «${p.title}»${p.chapter ? ` in chapter «${p.chapter}»` : ''}.`
           : `Dieser Satz steht auf der Seite «${p.title}»${p.chapter ? ` im Kapitel «${p.chapter}»` : ''}.`);
       if (p.chapter) {
         pushQA('authorChat|revChap|' + p.id + '|' + i,
-          langIsEn ? `Which chapter contains: "${s}"` : `Welches Kapitel enthält: „${s}"`,
+          langIsEn ? `Which chapter contains: “${s}”` : `Welches Kapitel enthält: „${s}“`,
           langIsEn ? `Chapter «${p.chapter}».` : `Kapitel «${p.chapter}».`);
       }
       emitted++;

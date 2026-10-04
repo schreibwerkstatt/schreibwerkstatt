@@ -35,3 +35,13 @@ test('Dedup pro (kind, entity): der erste (bestplatzierte) Treffer gewinnt', () 
   assert.equal(occ.length, 1);
   assert.equal(occ[0].snippet, 'x');
 });
+
+test('Besitz-Filter: abgelehnte Szenen (Mitautor) fallen weg, Seiten bleiben', () => {
+  const keep = h => h.kind !== 'scene' || h.entity_id === 7;
+  const occ = _occsFromHits([
+    { kind: 'scene', entity_id: 6, text: 'fremd', semScore: 0.9 },
+    { kind: 'scene', entity_id: 7, text: 'eigen', semScore: 0.8 },
+    { kind: 'page', entity_id: 1, text: 'seite', semScore: 0.7 },
+  ], 0, keep);
+  assert.deepEqual(occ.map(o => [o.kind, o.sceneId ?? o.pageId]), [['scene', 7], ['page', 1]]);
+});

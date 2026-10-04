@@ -24,6 +24,7 @@ const { setContext } = require('../../lib/log-context');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const contentStore = require('../../lib/content-store');
 const { researchPageHits } = require('../../lib/research-retrieval');
+const { bestLivePassage } = require('../../lib/live-passage');
 const { replaceFindings, placePageIds, FINDING_TYPES } = require('../../db/research-findings');
 
 const router = express.Router();
@@ -35,6 +36,8 @@ const PAGES_PER_ITEM = 3;
 // ohne ein ganzes Kapitel pro Fundstueck in den Prompt zu kippen.
 const PAGE_TEXT_MAX = 6000;
 const STELLE_MAX = 400;
+// Ausschnitt um eine semantisch gefundene Stelle (live nachgeschlagen, s.u.).
+const HIT_PASSAGE_MAX = 2000;
 
 const _norm = (s) => String(s || '').replace(/[“”„«»"]/g, '"').replace(/[‘’‚]/g, "'").replace(/\s+/g, ' ').trim();
 
@@ -51,6 +54,10 @@ function _candidates(bookId, itemId) {
 
 // Manuskriptstellen eines Kandidaten: verknuepfte Seiten zuerst (der Autor hat
 // gesagt, wo es hingehoert), sonst die semantisch naechsten Seiten-Chunks.
+// Der Chunk ist nur Wegweiser: Prompt und `stelle`-Pruefung laufen gegen den
+// AKTUELLEN Seitentext (der Index kann hinter dem Seitenstand liegen). Findet
+// sich die Chunk-Stelle nicht mehr (umgeschrieben/geloescht), faellt die Seite
+// weg — ein unverwandter Absatz waere kein Beleg.
 async function _passages(bookId, item, signal) {
   const linked = placePageIds(item.id).slice(0, PAGES_PER_ITEM);
   const out = [];
@@ -68,7 +75,9 @@ async function _passages(bookId, item, signal) {
     seen.add(h.entity_id);
     const page = await contentStore.loadPage(h.entity_id).catch(() => null);
     if (!page || page.book_id !== bookId) continue;
-    out.push({ page_id: h.entity_id, page_name: page.name || '', text: String(h.text).trim() });
+    const live = bestLivePassage(htmlToTextForPrompt(page.html || ''), h.text, { maxChars: HIT_PASSAGE_MAX });
+    if (!live || !live.text) continue;
+    out.push({ page_id: h.entity_id, page_name: page.name || '', text: live.text });
     if (out.length >= PAGES_PER_ITEM) break;
   }
   return out;

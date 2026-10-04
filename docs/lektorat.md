@@ -55,4 +55,18 @@ Code: [public/js/editor/lektorat.js](../public/js/editor/lektorat.js) (Workflow)
 - **Kein Lektorat auf ungespeicherten Edits** (`editDirty`/`saveOffline` → blockiert).
 - **Staleness im `onDone`:** frischen Seitenstempel selbst holen und bei Fremd-Write über `sortByPosition(base, fehler)` refiltern statt pauschal verwerfen — Regel in [routes/jobs/CLAUDE.md](../routes/jobs/CLAUDE.md), gegated durch [tests/unit/job-result-staleness.test.mjs](../tests/unit/job-result-staleness.test.mjs).
 - **Übernehmen:** Seite frisch laden → `_applyCorrections` (sequenziell, No-Ops mit Grund `notFound`/`spansLink`/`spansMarker`/`boundary`) → Quote-Normalisierung → Grössen-Check → `savePage(..., expectedUpdatedAt)` (409 bei Fremd-Write). Seite ist ab Start gepinnt; ein Seitenwechsel verschiebt Ziel und Namen des PUT nicht.
+- **Als angenommen gespeichert wird nur, was im Text gelandet ist.** Befunde, die `_applyCorrections` überspringt, fehlen in `applied_errors_json` und bleiben offen — sonst zählte die Fehler-Heatmap sie als erledigt.
 - **`x-html`-Sinks** (`analysisOut`, `batchStatus`, `checkStatus`) nur mit `escHtml`-geschleusten KI-/Seiten-Feldern.
+
+## Auswertung: Fehler-Heatmap + Fehlerdichte-Trend
+
+Code: [lib/lektorat-findings.js](../lib/lektorat-findings.js) (Zählregel), [lib/fehler-heatmap.js](../lib/fehler-heatmap.js) + [db/lektorat-heatmap.js](../db/lektorat-heatmap.js) (Live-Matrix, pro User), [lib/lektorat-metrics.js](../lib/lektorat-metrics.js) (Fassungs-Kennzahl, buchweit), [public/js/book/fehler-heatmap.js](../public/js/book/fehler-heatmap.js) (Anzeige).
+
+### Pflicht-Invarianten
+
+- **Eine Zählregel für Heatmap und Trend.** Was pro Seite offen, angenommen oder gemeldet ist, entscheidet ausschliesslich `pageFindings` in `lib/lektorat-findings.js`; beide Aggregationen rufen sie auf. Gegated: Paritäts-Test in [tests/unit/lektorat-metrics.test.mjs](../tests/unit/lektorat-metrics.test.mjs).
+  - `all` = Befunde des jüngsten Checks; `applied` = Annahmen über alle Checks der Seite (Union per `original`); `open` = jüngster Check minus die Annahmen, die **diesen** Stand betreffen — die aus dem jüngsten Check selbst und die aus älteren Checks mit `saved_at >= checked_at` des jüngsten. Eine vorher gespeicherte Annahme steckt schon im Text, den der jüngste Lauf gesehen hat; meldet er dasselbe `original` erneut, ist das ein weiteres Vorkommen.
+  - Abgleich als Multimenge: eine Annahme deckt genau einen gleichlautenden Befund. Befunde ohne `original` sind offen.
+- **Farbe = Dichte, Zahl = Anzahl.** Die Zelle färbt nach Befunden pro 1000 **geprüfte** Wörter (`per1k` gegen `words_checked`), nicht nach der Anzahl — sonst zeigte die Farbe den Kapitelumfang. Geprüft ohne Befund ist Dichte 0 (grün), ungeprüft ist schraffiert.
+- **Mindestmenge für den Vergleich:** Kapitel unter `HEATMAP_MIN_WORDS` ([public/js/utils/format.js](../public/js/utils/format.js)) geprüften Wörtern zeigen ihre Zahl ohne Farbe und gehen nicht in die Skala ein; erreichen weniger als zwei Kapitel die Schwelle, gilt sie nicht. Dieselbe Konstante nutzt die Stil-Heatmap.
+- **Trend-Nenner sind geprüfte Wörter.** Die Fassung speichert `lektorat_metrics.words_checked` (Wörter der Seiten mit Check, die in der Fassung existieren). Ältere Fassungen ohne das Feld fallen auf den Buchumfang zurück und erscheinen als Näherung (hohler Punkt, gestrichelte Strecke, Hinweis unter dem Chart) — gegen den Buchumfang sänke die Dichte mit jeder ungeprüft dazugeschriebenen Seite.

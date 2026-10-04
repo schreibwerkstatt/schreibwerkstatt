@@ -65,14 +65,20 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     // (Voll-Kapitel-Completion, Sliding-Window-Cuts, Kapitel→Kapitel-Continuation).
     // Default an — grösste Hebelwirkung für Memorisierung des Buchtexts und
     // gerechtfertigt durch Mistral-Small-3.2-Kontextfenster (131072 Tokens).
-    // Bei kleinen seqlen-Trainings via maxSeqTokens-Filter aussortiert.
+    // Die Slice-Grösse folgt `maxFullChars` (unten), damit sie ins Seq-Budget passt.
     const fulltext = opts.fulltext !== false;
-    // `maxFullChars`: Cap für Voll-Kapitel-Samples + Multi-Page-Kontextfenster.
-    // 60000 chars ≈ 18000 Tekken-V7-Tokens DE / 15000 EN — passt in 24-32k
-    // seqlen mitsamt Prompt-Anteil. Bei vollem 128k-Training auf >100000
-    // hochsetzen (dann bleiben ganze Kapitel auch in 200k-Charakter-Romanen
-    // ungekürzt).
-    const maxFullChars = Math.max(maxChars, Number(opts.maxFullChars) || 60000);
+    // `maxFullChars`: Cap für Voll-Kapitel-Slices, Wörtlich-Slices und das
+    // Multi-Page-Kontextfenster. Ohne expliziten Wert aus `maxSeqTokens`
+    // abgeleitet: 60 % des Sequenz-Budgets (in Zeichen) für den Text-Slice, der
+    // Rest bleibt dem Prompt (Metadaten, Vorgänger-Tail, Kontextseiten). Ein
+    // fester Wert über dem Budget hiesse, dass der Seq-Filter genau die Samples
+    // verwirft, die den Buchtext am vollständigsten tragen. Ohne `maxSeqTokens`
+    // 60000 chars ≈ 18000 Tekken-V7-Tokens DE.
+    const charsPerToken = langIsEn ? 4.0 : 3.3;
+    const derivedFullChars = maxSeqTokens > 0
+      ? Math.floor((maxSeqTokens - 20) * charsPerToken * 0.6)
+      : 60000;
+    const maxFullChars = Math.max(maxChars, Number(opts.maxFullChars) || derivedFullChars);
     // `truncateLong`: maxSeqTokens als Cap (Assistant-Content trunkieren) statt
     // Drop. Bewahrt grosse Samples für kleinere seqlen-Trainings, riskiert dafür
     // Mid-Sentence-Cuts. Default false → bestehendes Verhalten (Drop).
@@ -205,7 +211,7 @@ finetuneExportRouter.post('/finetune-export', jsonBody, (req, res) => {
     maxSeqTokens: Number(max_seq_tokens) || 0,
     emitText: !!emit_text,
     fulltext: fulltext !== false,
-    maxFullChars: Number(max_full_chars) || 60000,
+    maxFullChars: Number(max_full_chars) || 0,
     truncateLong: !!truncate_long,
     biasBoost: Number(bias_boost) || 1,
     maxTypeShare: Number(max_type_share) || 0,

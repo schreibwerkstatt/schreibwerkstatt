@@ -78,6 +78,9 @@ test('GET /login: rendert Google-Button + Admin-Form bei beiden ENV-Pfaden', asy
   assert.match(r.raw, /Mit Google anmelden/);
   assert.match(r.raw, /Admin-Login/);
   assert.match(r.raw, /admin-form/);
+  // Notfall-Pfad eingeklappt hinter dem Verfahrens-Knopf, nicht gleichrangig daneben.
+  assert.ok(r.raw.indexOf('Mit Google anmelden') < r.raw.indexOf('data-fallback-toggle'));
+  assert.match(r.raw, /<div id="admin-fallback" hidden>\s*<form id="admin-form"/);
 });
 
 test('GET /login ohne ADMIN_PASSWORD: keine Admin-Form', async () => {

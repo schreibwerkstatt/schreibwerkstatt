@@ -432,17 +432,6 @@
   flex: 1;
 }
 
-/* Verwandtschaft: Pfeil-Glyphe vor der Figuren-Referenz. */
-.figur-rel {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2xs);
-}
-.figur-rel-mark {
-  color: var(--color-muted);
-  font-size: var(--font-size-xs);
-}
-
 .figur-beziehung-item {
   display: flex;
   align-items: baseline;

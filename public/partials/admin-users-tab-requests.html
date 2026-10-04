@@ -48,6 +48,7 @@
           <th class="sortable-th" :class="sortClass('display_name')" :aria-sort="ariaSort('display_name')"
               @click="sortBy('display_name')" x-text="$app.t('admin.users.requests.name')"></th>
           <th x-text="$app.t('admin.users.requests.message')"></th>
+          <th x-text="$app.t('admin.users.requests.source')"></th>
           <th class="sortable-th" :class="sortClass('created_at')" :aria-sort="ariaSort('created_at')"
               @click="sortBy('created_at')" x-text="$app.t('admin.users.requests.createdAt')"></th>
           <th class="sortable-th" :class="sortClass('status')" :aria-sort="ariaSort('status')"
@@ -63,6 +64,13 @@
             <td>
               <span x-show="!req.message" class="muted-msg muted-msg--sm">—</span>
               <pre class="admin-users-meta" x-show="req.message" x-text="req.message"></pre>
+            </td>
+            <td>
+              <span x-show="!req.source && !req.source_note" class="muted-msg muted-msg--sm">—</span>
+              <div class="muted-msg muted-msg--sm" x-show="req.source"
+                   x-text="$app.t('admin.users.requests.sourceAuto') + ': ' + req.source"></div>
+              <div class="muted-msg muted-msg--sm" x-show="req.source_note"
+                   x-text="$app.t('admin.users.requests.sourceNote') + ': ' + req.source_note"></div>
             </td>
             <td>
               <span class="muted-msg muted-msg--sm" x-text="new Date(req.created_at + 'Z').toLocaleString(($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH'), { timeZone: $store.shell.appTimezone })"></span>

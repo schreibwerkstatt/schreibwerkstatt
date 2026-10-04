@@ -1,22 +1,20 @@
 // Alpine.data('songsCard') — Sub-Komponente der Musik-Karte.
 //
-// Eigener State: Meta-Flags (Loading/Progress/Status/PollTimer).
+// Eigener State: `songsLoading` (Skeleton beim ersten Laden).
 // Geteilt:
 //   - `songs` (Alpine.store('catalog'))
-//   - `songsFilters`/`selectedSongId` (Alpine.store('catalogUi') —
+//   - `songsFilters`/`selectedSongId`/`songsUpdatedAt` (Alpine.store('catalogUi') —
 //     app-navigation/Hash-Router schreiben darauf)
 // Root behält:
-//   - `loadSongs`, `saveSongs` (Root-Spread)
+//   - `loadSongs` (Root-Spread)
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { applySongsFilters } from '../app/app-ui.js';
+import { formatLastRun } from '../utils/date.js';
 
 export function registerSongsCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('songsCard', () => ({
     songsLoading: false,
-    songsProgress: 0,
-    songsStatus: '',
-    _songsPollTimer: null,
     _lifecycle: null,
 
     // Gefilterte + sortierte Songs für Liste/Grid. Filter-State + Kapitel-Order
@@ -32,17 +30,27 @@ export function registerSongsCard() {
       });
     },
 
+    // Stand der Musikbibliothek (letzter Schreibvorgang der Komplettanalyse).
+    songsUpdatedLabel() {
+      const app = window.__app;
+      return formatLastRun(Alpine.store('catalogUi').songsUpdatedAt, (k, p) => app.t(k, p), app.$store.shell.uiLocale);
+    },
+
+    async _loadWithFlag(tasks) {
+      this.songsLoading = true;
+      try { await Promise.all(tasks); } finally { this.songsLoading = false; }
+    },
+
     init() {
       this._lifecycle = setupCardLifecycle(this, {
         name: 'songs',
         showFlag: 'showSongsCard',
-        timerKeys: ['_songsPollTimer'],
-        resetState: { songsLoading: false, songsProgress: 0, songsStatus: '' },
-        load: (root) => root.loadSongs(Alpine.store('nav').selectedBookId),
-        onShow: async (root) => {
+        resetState: { songsLoading: false },
+        load: (root) => this._loadWithFlag([root.loadSongs(Alpine.store('nav').selectedBookId)]),
+        onShow: (root) => {
           const tasks = [root.loadSongs(Alpine.store('nav').selectedBookId)];
           if (!root.$store.catalog.figuren.length) tasks.push(root.loadFiguren(Alpine.store('nav').selectedBookId));
-          await Promise.all(tasks);
+          return this._loadWithFlag(tasks);
         },
       });
     },

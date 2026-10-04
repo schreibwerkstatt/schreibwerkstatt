@@ -13,7 +13,7 @@ const { executeTool, validateFinalAnswerCitations } = require('../book-chat-tool
 const { makeAgenticChatJob } = require('../agentic-chat');
 const { imageGenEnabled } = require('../../../lib/image-gen');
 const embed = require('../../../lib/embed');
-const { preContextPassages } = require('./book-chat-retrieval');
+const { agentPreContext, retrievalQuery } = require('./book-chat-retrieval');
 const appSettings = require('../../../lib/app-settings');
 const { getSessionWithBookName } = require('../../../db/chat-sessions');
 const { getPageWithChapter } = require('../../../db/book-chat/text');
@@ -145,36 +145,6 @@ function _rechercheHint(input) {
   return { frage };
 }
 
-// Suchtext für den Erst-Kontext: aktuelle Frage plus die letzte Runde. Folgefragen
-// («und wie alt war sie da?») tragen ihr Subjekt nicht selbst — ohne die Vorfrage
-// findet die semantische Suche die falschen Stellen. Gekappt, damit der Text die
-// aktuelle Frage nicht überstimmt.
-function _retrievalQuery(message, history) {
-  const prev = Array.isArray(history) ? [...history].reverse() : [];
-  const lastUser = prev.find(m => m.role === 'user' && typeof m.content === 'string');
-  const lastAsst = prev.find(m => m.role === 'assistant' && typeof m.content === 'string' && !m.content.startsWith('__i18n:'));
-  return [
-    lastUser ? lastUser.content.slice(0, 400) : null,
-    lastAsst ? lastAsst.content.slice(0, 300) : null,
-    message,
-  ].filter(Boolean).join('\n');
-}
-
-// Erst-Kontext holen (non-fatal). Ohne Embedding-Index gibt es ihn nicht — dann
-// arbeitet der Agent wie vorher ausschliesslich über seine Werkzeuge.
-async function _agentPreContext(bookId, query, jobSignal, logger, userEmail) {
-  if (!embed.isEnabled() || !query) return null;
-  try {
-    const pre = await preContextPassages(bookId, query, { signal: jobSignal, userEmail: userEmail ?? null });
-    if (pre) logger.info(`Erst-Kontext: ${pre.hits.length} Passagen, ${pre.chars} Zeichen.`);
-    return pre;
-  } catch (e) {
-    if (e.name === 'AbortError') throw e;
-    logger.warn(`Erst-Kontext-Retrieval fehlgeschlagen (${e.message}) – Agent arbeitet nur über Werkzeuge.`);
-    return null;
-  }
-}
-
 // Welt-Fakten fuer den stabilen (gecachten) Prompt-Block. `scanned` reist mit, damit
 // buildWeltfaktenBlock einen NICHT erhobenen Index von einem leeren unterscheiden kann
 // — ein leerer Block wuerde als «diese Welt hat keine Regeln» gelesen. Nicht-fatal:
@@ -228,7 +198,7 @@ const runBookChatJobAgent = makeAgenticChatJob({
     // Agent bei null und lädt im Zweifel ganze Kapitel — der Block kostet ein paar Tausend
     // Tokens, eine get_chapter_text-Runde ein Vielfaches. Nicht-fatal: fällt der Embedding-
     // Endpunkt aus, läuft der Agent wie vorher rein über seine Werkzeuge.
-    const preContext = await _agentPreContext(session.book_id, _retrievalQuery(message, history), jobSignal, logger, userEmail);
+    const preContext = await agentPreContext(session.book_id, retrievalQuery(message, history), { signal: jobSignal, logger, userEmail });
     const embOn = embed.isEnabled();
     // generate_image / search_similar nur anbieten, wenn der jeweilige Endpunkt
     // (Bild bzw. Embeddings) konfiguriert ist — sonst spart das Input-Tokens und
@@ -342,4 +312,4 @@ const runBookChatJobAgent = makeAgenticChatJob({
   fallbackJob: runBookChatJob,
 });
 
-module.exports = { runBookChatJobAgent, _retrievalQuery, _buildCitations };
+module.exports = { runBookChatJobAgent, _retrievalQuery: retrievalQuery, _buildCitations };

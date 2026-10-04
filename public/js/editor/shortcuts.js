@@ -165,6 +165,7 @@ export const shortcutsMethods = {
   },
 
   // Cmd/Ctrl+E → Notebook-Edit-Modus ein-/ausschalten (nur im Notebook, nicht im Focus)
+  // Cmd/Ctrl+Shift+Leertaste → Diktat starten/abschliessen (nur Notebook-Edit)
   // Cmd/Ctrl+P → Seitenbaum-Filter
   // Cmd/Ctrl+K → Command-Palette
   // Greift auch in Inputs/Editor – preventDefault ist Pflicht (sonst Browser-Print/Find).
@@ -182,6 +183,14 @@ export const shortcutsMethods = {
         this.startEdit?.();
       }
       event.preventDefault();
+      return;
+    }
+    if (event.shiftKey && (event.code === 'Space' || key === ' ')) {
+      // Wie der Mic-Knopf: Stopp schliesst ab (letzter Satz kommt noch rein).
+      // Der Fokus-Modus hat kein Diktat.
+      if (!this.editMode || this.focusActive || !this.$store.stt.enabled) return;
+      event.preventDefault();
+      this.toggleSttDictation?.();
       return;
     }
     if (event.shiftKey) return;

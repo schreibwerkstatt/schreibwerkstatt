@@ -203,7 +203,7 @@ test('find_first_last_mention: figur ohne Index → freundlicher Fehler', () => 
 
 // ── list_songs ──────────────────────────────────────────────────────────────
 
-test('list_songs: liefert Soundtrack mit Kapitel-/Figur-/Szenen-Verknüpfung + filtert', () => {
+test('list_songs: liefert Soundtrack mit Kapitel-/Figur-Verknüpfung + filtert', () => {
   const BOOK_ID = 8050;
   const CH1 = 80500, CH2 = 80501;
   ctx.dbSeed.setBook({
@@ -220,12 +220,6 @@ test('list_songs: liefert Soundtrack mit Kapitel-/Figur-/Szenen-Verknüpfung + f
   `).run(BOOK_ID, 'alice@example.com', now);
   const figId = fig.lastInsertRowid;
 
-  const scene = db.prepare(`
-    INSERT INTO figure_scenes (book_id, user_email, titel, chapter_id, updated_at)
-    VALUES (?, ?, 'Showdown', ?, ?)
-  `).run(BOOK_ID, 'alice@example.com', CH1, now);
-  const sceneId = scene.lastInsertRowid;
-
   const s1 = db.prepare(`
     INSERT INTO songs (book_id, song_uid, titel, interpret, genre, stimmung, user_email, sort_order, updated_at)
     VALUES (?, 'song_a', 'Heldenlied', 'Band X', 'Rock', 'episch', ?, 0, ?)
@@ -238,7 +232,6 @@ test('list_songs: liefert Soundtrack mit Kapitel-/Figur-/Szenen-Verknüpfung + f
 
   db.prepare('INSERT INTO song_chapters (song_id, chapter_id, haeufigkeit) VALUES (?, ?, 3)').run(s1Id, CH1);
   db.prepare('INSERT INTO song_figures (song_id, figure_id, kontext_typ) VALUES (?, ?, ?)').run(s1Id, figId, 'leitmotiv');
-  db.prepare('INSERT INTO song_scenes (song_id, scene_id) VALUES (?, ?)').run(s1Id, sceneId);
 
   const all = bookChatTools.TOOLS.list_songs({}, { bookId: BOOK_ID, userEmail: 'alice@example.com' });
   assert.equal(all.total, 2);
@@ -248,7 +241,7 @@ test('list_songs: liefert Soundtrack mit Kapitel-/Figur-/Szenen-Verknüpfung + f
   assert.equal(lied.kapitel[0].chapter_id, CH1);
   assert.equal(lied.kapitel[0].haeufigkeit, 3);
   assert.equal(lied.figuren[0].fig_id, 'fig_h');
-  assert.equal(lied.szenen[0].scene_id, sceneId);
+  assert.equal(lied.szenen, undefined);
 
   const byChapter = bookChatTools.TOOLS.list_songs({ chapter_id: CH1 }, { bookId: BOOK_ID, userEmail: 'alice@example.com' });
   assert.equal(byChapter.total, 1);
@@ -257,9 +250,6 @@ test('list_songs: liefert Soundtrack mit Kapitel-/Figur-/Szenen-Verknüpfung + f
   const byFig = bookChatTools.TOOLS.list_songs({ figur_name: 'Held' }, { bookId: BOOK_ID, userEmail: 'alice@example.com' });
   assert.equal(byFig.total, 1);
   assert.equal(byFig.songs[0].song_id, 'song_a');
-
-  const byScene = bookChatTools.TOOLS.list_songs({ scene_id: sceneId }, { bookId: BOOK_ID, userEmail: 'alice@example.com' });
-  assert.equal(byScene.total, 1);
 });
 
 test('list_songs: leeres Resultat liefert hint', () => {

@@ -18,7 +18,8 @@ const {
 } = require('./shared');
 const motifsDb = require('../../db/motifs');
 const embed = require('../../lib/embed');
-const { semanticQuery } = require('../../lib/semantic-retrieval');
+const retrieval = require('../../lib/semantic-retrieval');
+const { getSceneTitleForUser } = require('../../db/book-chat/figures');
 const searchIndex = require('../../lib/search');
 const contentStore = require('../../lib/content-store');
 const logger = require('../../logger');
@@ -68,19 +69,23 @@ function _toOcc(kind, entityId, score, snippet, source) {
 
 // Fundstellen eines Motivs sammeln. Dedup pro (kind, entity) — semantischer Treffer
 // gewinnt gegen wörtlichen (höhere Vertrauensstufe); ein Ort zählt einmal (Ist-Dichte).
-async function _scanMotif(bookId, motif, useSemantic, signalFn, topK) {
+// Szenen sind Analyse-Daten pro User, beide Indizes hängen nur am Buch: Szenen
+// eines Mitautors (figure_scenes.user_email) werden nie zu eigenen Fundstellen.
+async function _scanMotif(bookId, motif, useSemantic, signalFn, topK, userEmail = null) {
   const found = new Map();
+  const own = h => h.kind !== 'scene' || getSceneTitleForUser(h.entity_id, userEmail) != null;
 
   if (useSemantic) {
     const query = [motif.name, motif.beschreibung].map(s => String(s || '').trim()).filter(Boolean).join('. ');
     if (query) {
-      const hits = await semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK, signal: signalFn() });
+      const hits = await retrieval.semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK, signal: signalFn() });
       for (const h of hits) {
         // Als Konfidenz zählt der rohe Cosinus (0–1, absolut interpretierbar für
         // %-Anzeige + Score-Floor). Reine FTS-Fusions-Kandidaten (kein Cosinus)
         // sind semantisch nicht belegt → hier überspringen; die wörtliche Erkennung
         // deckt Trigger-Begriffe separat und bewusst ab.
         if (h.semScore == null) continue;
+        if (!own(h)) continue;
         found.set(_occKey(h.kind, h.entity_id), _toOcc(h.kind, h.entity_id, h.semScore, _plainSnippet(h.text), 'semantic'));
       }
     }
@@ -93,6 +98,7 @@ async function _scanMotif(bookId, motif, useSemantic, signalFn, topK) {
     try { r = searchIndex.query(q, { bookId, kinds: SCAN_KINDS, limit: topK }); }
     catch (e) { logger.warn(`[motiv-scan] FTS "${term}" fehlgeschlagen: ${e.message}`); continue; }
     for (const h of (r.hits || [])) {
+      if (!own(h)) continue;
       const key = _occKey(h.kind, h.entity_id);
       if (found.has(key)) continue; // semantischer Treffer behält Vorrang
       found.set(key, _toOcc(h.kind, h.entity_id, null, _plainSnippet(h.snippet || h.title), 'trigger'));
@@ -111,6 +117,16 @@ async function runMotifScanJob(jobId, bookId, userEmail) {
     };
 
     const useSemantic = embed.isEnabled();
+    if (useSemantic && !retrieval.indexReady(bookId)) {
+      // Backend da, Index aber unvollständig (Erstindex läuft, Modellwechsel):
+      // ein Full-Replace nur mit Trigger-Treffern räumte alle semantischen
+      // Fundstellen ab, und Motive ohne Trigger stünden als „nicht im Buch" da.
+      // Nichts anfassen; der nächste Lauf nach dem Index holt es nach.
+      log.info(`Motiv-Scan ${bookId}: übersprungen (Embedding-Index nicht fertig).`);
+      updateJob(jobId, { statusText: 'job.phase.skippedNoIndex' });
+      completeJob(jobId, { motifs: 0, occurrences: 0, semantic: true, skipped: 'noIndex' }, null, 'übersprungen (kein Index)');
+      return;
+    }
     const motifs = motifsDb.listMotifs(bookId, userEmail);
     // Fundstellen-Cap einmal pro Lauf aus der Buchgrösse ableiten (Seiten + Szenen
     // im FTS-Index), damit dichte Motive in grossen Büchern nicht bei 40 plateauen.
@@ -121,7 +137,7 @@ async function runMotifScanJob(jobId, bookId, userEmail) {
     for (let i = 0; i < motifs.length; i++) {
       throwIfAborted();
       const motif = motifs[i];
-      const rows = await _scanMotif(bookId, motif, useSemantic, signal, topK);
+      const rows = await _scanMotif(bookId, motif, useSemantic, signal, topK, userEmail);
       motifsDb.replaceOccurrences(motif.id, bookId, rows);
       totalOcc += rows.length;
       updateJob(jobId, {
@@ -145,7 +161,10 @@ const { db } = require('../../db/schema');
 async function scanAllBooks() {
   const scopes = db.prepare('SELECT DISTINCT book_id, user_email FROM motifs').all();
   let enqueued = 0, skipped = 0;
+  const semantic = embed.isEnabled();
   for (const { book_id, user_email } of scopes) {
+    // Ohne fertigen Index endete der Lauf ohnehin als Skip.
+    if (semantic && !retrieval.indexReady(book_id)) { skipped++; continue; }
     if (findActiveJobId('motif-scan', book_id, user_email)) { skipped++; continue; }
     const jobId = createJob('motif-scan', book_id, user_email, 'job.label.motivScan', null, book_id);
     enqueueJob(jobId, () => runMotifScanJob(jobId, book_id, user_email));
@@ -162,4 +181,4 @@ motifScanRouter.post('/motif-scan', jsonBody, (req, res) => startBookJob(req, re
   run: (jobId, { bookId, userEmail }) => runMotifScanJob(jobId, bookId, userEmail),
 }));
 
-module.exports = { motifScanRouter, runMotifScanJob, scanAllBooks, _triggerQuery, _computeTopK };
+module.exports = { motifScanRouter, runMotifScanJob, scanAllBooks, _triggerQuery, _computeTopK, _scanMotif };

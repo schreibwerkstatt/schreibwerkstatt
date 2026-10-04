@@ -36,8 +36,8 @@ export function registerCatalogUiStore() {
 
     songsUpdatedAt: null,
     selectedSongId: null,
-    songsFilters: { figurId: '', kapitel: '', szeneId: '', genre: '', kontextTyp: '', suche: '' },
+    songsFilters: { figurId: '', kapitel: '', genre: '', kontextTyp: '', suche: '' },
 
-    kontinuitaetFilters: { figurId: '', kapitel: '', schwere: '' },
+    kontinuitaetFilters: { figurId: '', kapitel: '', schwere: '', status: '' },
   });
 }

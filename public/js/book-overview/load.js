@@ -36,6 +36,7 @@ export function initialOverviewState() {
     overviewRueckblickCoverage: null,
     overviewPlot: null,
     overviewMotifs: null,
+    overviewLexiconData: null,
     overviewLoadErrors: [],
   };
 }
@@ -76,7 +77,10 @@ export const loadMethods = {
       // bzw. erwartbar (Reader ohne Editor-Recht → 403 auf /plot) — darum stiller
       // Catch statt `guard`, damit ein 403/leerer Payload NICHT den Fehler-Banner
       // auslöst. Das Tile bleibt bei fehlenden Daten via x-if einfach aus.
-      const [shared, coverage, heat, reviews, recent, figuren, szenen, orte, songs, lektoratTime, plot, motifs] = await Promise.all([
+      // Wortschatz (/lexicon) ebenfalls still: ein fehlender Scan ist dort kein
+      // Fehler (Antwort mit `stats: null`), und ein Ausfall soll das Tile nur
+      // ausblenden statt den Banner fuer die ganze Uebersicht zu ziehen.
+      const [shared, coverage, heat, reviews, recent, figuren, szenen, orte, songs, lektoratTime, plot, motifs, lexicon] = await Promise.all([
         this._loadSharedBookStats(bookId, opts),
         fetchJsonRetry(`/history/coverage/${bookId}`).catch(guard('coverage', null)),
         fetchJsonRetry(`/history/fehler-heatmap/${bookId}?mode=open`).catch(guard('heat', null)),
@@ -89,6 +93,7 @@ export const loadMethods = {
         fetchJsonRetry(`/history/lektorat-time/${bookId}`).catch(guard('lektorat', null)),
         fetchJsonRetry(`/plot?book_id=${bookId}`).catch(() => null),
         fetchJsonRetry(`/motifs?book_id=${bookId}`).catch(() => null),
+        fetchJsonRetry(`/lexicon/${bookId}?summary=1`).catch(() => null),
       ]);
       if (this.overviewBookId !== bookId) return;
       const settings = shared?.settings || null;
@@ -122,6 +127,7 @@ export const loadMethods = {
       this.overviewBuchtyp = settings?.buchtyp || null;
       this.overviewPlot = plot && Array.isArray(plot.beats) ? plot : null;
       this.overviewMotifs = motifs && Array.isArray(motifs.motifs) ? motifs : null;
+      this.overviewLexiconData = lexicon && typeof lexicon === 'object' && !Array.isArray(lexicon) ? lexicon : null;
       this._memos = {};
       // Rückblick-Heatmap-Coverage nur für Tagebücher laden — der Buchtyp steht
       // erst nach `settings` fest, daher sequenziell (non-Tagebuch fetcht nie).
@@ -134,6 +140,9 @@ export const loadMethods = {
       this.overviewLoadErrors = failed;
     } catch (e) {
       console.error('[loadBookOverview]', e);
+      // Unerwarteter Fehler beim Zuweisen: Hinweis + Retry zeigen, statt den
+      // Fehlerstand des vorigen Loads (oder gar keinen) stehen zu lassen.
+      if (this.overviewBookId === bookId) this.overviewLoadErrors = [...failed, 'unexpected'];
     } finally {
       if (this._loadingBookId === bookId) this._loadingBookId = null;
       if (this.overviewBookId === bookId) this.overviewLoading = false;

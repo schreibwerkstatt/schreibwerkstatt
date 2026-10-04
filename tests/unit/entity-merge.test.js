@@ -424,20 +424,17 @@ test('Schauplatz-Merge: Elternort der Quelle wird nicht übernommen, wenn er ein
   assert.ok(fkClean());
 });
 
-test('Szenen-Merge: Figuren/Orte/Songs/Recherche wandern, Quelle weg', () => {
+test('Szenen-Merge: Figuren/Orte/Recherche wandern, Quelle weg', () => {
   const book = newBook();
   const ch = addChapter(book, 'Kapitel 1');
   const src = addSzene(book, 'Ankunft am Bahnhof', { kommentar: 'aus der Quelle', chapter_id: ch });
   const tgt = addSzene(book, 'Ankunft');
   const fig = addFigur(book, 'fig_1', 'A');
   const ort = addOrt(book, 'ort_1', 'Bahnhof');
-  const song = db.prepare('INSERT INTO songs (book_id, user_email, song_uid, titel, updated_at) VALUES (?, ?, ?, ?, ?)')
-    .run(book, USER, 'song_1', 'Lied', NOW).lastInsertRowid;
   const item = addResearchItem(book);
 
   db.prepare('INSERT INTO scene_figures (scene_id, figure_id) VALUES (?, ?)').run(src, fig);
   db.prepare('INSERT INTO scene_locations (scene_id, location_id) VALUES (?, ?)').run(src, ort);
-  db.prepare('INSERT INTO song_scenes (scene_id, song_id) VALUES (?, ?)').run(src, song);
   linkResearch(item, 'scene', 'scene_id', src);
 
   const r = mergeScenes(book, USER, src, tgt);
@@ -445,7 +442,6 @@ test('Szenen-Merge: Figuren/Orte/Songs/Recherche wandern, Quelle weg', () => {
   assert.equal(db.prepare('SELECT COUNT(*) n FROM figure_scenes WHERE id = ?').get(src).n, 0);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM scene_figures WHERE scene_id = ? AND figure_id = ?').get(tgt, fig).n, 1);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM scene_locations WHERE scene_id = ? AND location_id = ?').get(tgt, ort).n, 1);
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM song_scenes WHERE scene_id = ? AND song_id = ?').get(tgt, song).n, 1);
   assert.equal(db.prepare('SELECT scene_id x FROM research_item_links WHERE item_id = ?').get(item).x, tgt);
   const row = db.prepare('SELECT kommentar, chapter_id FROM figure_scenes WHERE id = ?').get(tgt);
   assert.equal(row.kommentar, 'aus der Quelle');

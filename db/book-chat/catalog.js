@@ -209,8 +209,8 @@ function listLocationScenesWithPlaces(locationId, bookId, userEmail) {
 // ── Songs ────────────────────────────────────────────────────────────────────
 
 /** Songs eines Buchs mit Name der Erst-Erwähnungs-Seite. Filter optional:
- *  `chapterId`, `figureId` (figures.id), `sceneId`. */
-function listSongsWithFirstPage(bookId, userEmail, { chapterId = null, figureId = null, sceneId = null } = {}) {
+ *  `chapterId`, `figureId` (figures.id). */
+function listSongsWithFirstPage(bookId, userEmail, { chapterId = null, figureId = null } = {}) {
   let sql = `
     SELECT s.id, s.song_uid, s.titel, s.interpret, s.genre, s.kontext_typ,
            s.beschreibung, s.stimmung, s.erste_erwaehnung,
@@ -227,10 +227,6 @@ function listSongsWithFirstPage(bookId, userEmail, { chapterId = null, figureId 
   if (figureId !== null) {
     sql += ' AND s.id IN (SELECT song_id FROM song_figures WHERE figure_id = ?)';
     params.push(figureId);
-  }
-  if (sceneId !== null) {
-    sql += ' AND s.id IN (SELECT song_id FROM song_scenes WHERE scene_id = ?)';
-    params.push(sceneId);
   }
   sql += ' ORDER BY s.sort_order, s.id';
   return db.prepare(sql).all(...params);
@@ -257,17 +253,6 @@ function listSongFiguresForSongs(songIds) {
     FROM song_figures sf
     JOIN figures f ON f.id = sf.figure_id
     WHERE sf.song_id IN ${idSql}
-  `).all(...idVals);
-}
-
-/** Szenen mehrerer Songs (id + Titel). Ohne ORDER BY. */
-function listSongScenesForSongs(songIds) {
-  const { sql: idSql, values: idVals } = inClause(songIds);
-  return db.prepare(`
-    SELECT ss.song_id, fs.id AS scene_id, fs.titel
-    FROM song_scenes ss
-    JOIN figure_scenes fs ON fs.id = ss.scene_id
-    WHERE ss.song_id IN ${idSql}
   `).all(...idVals);
 }
 
@@ -385,7 +370,6 @@ module.exports = {
   listSongsWithFirstPage,
   listSongChaptersForSongs,
   listSongFiguresForSongs,
-  listSongScenesForSongs,
   listScenesWithPlaces,
   listSceneFiguresForScenes,
   listSceneLocationsForScenes,

@@ -74,7 +74,7 @@ test('createUser + getUser', () => {
   assert.equal(u.display_name, 'Alice');
   assert.equal(u.global_role, 'user');
   assert.equal(u.status, 'active');
-  assert.equal(u.can_invite_users, 1);
+  assert.equal(u.can_invite_users, 0, 'Einladen ist Opt-in');
 });
 
 test('getUser: email wird lowercase-normalisiert', () => {

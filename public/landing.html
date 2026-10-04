@@ -8,7 +8,7 @@
   {{#if canonical}}<link rel="canonical" href="{{canonical}}">{{/if}}
   <link rel="icon" href="/schreibwerkstatt_icon.svg">
   <link rel="stylesheet" href="/css/tokens.css">
-  <!-- .icon-Klasse fuer die Sprite-Icons der Client-Zeilen (Lucide, /icons.svg).
+  <!-- .icon-Klasse fuer die Sprite-Icons der Client-Kacheln (Lucide, /icons.svg).
        Beides pre-auth erreichbar: /css/-Prefix + /icons.svg in server.js. -->
   <link rel="stylesheet" href="/css/components/icons.css">
   <link rel="stylesheet" href="/css/landing.css">
@@ -17,13 +17,14 @@
 <body>
   <main class="public-shell public-shell--wide">
     <header class="public-header">
+      <img class="public-brand" src="/schreibwerkstatt_icon.svg" alt="" width="72" height="72">
       <h1>{{appName}}</h1>
       <p class="public-sub">{{subtitle}}</p>
     </header>
 
     <section class="public-actions public-actions--inline">
       <a class="public-btn public-btn--primary" href="/login">{{loginLabel}}</a>
-      <a class="public-btn" href="/register">{{registerLabel}}</a>
+      <a class="public-btn" href="/register{{registerQuery}}">{{registerLabel}}</a>
     </section>
 
     <section class="public-features" aria-label="{{featuresTitle}}">
@@ -68,34 +69,36 @@
       </ul>
     </section>
 
-    <section class="public-macclient" aria-label="{{macTitle}}">
-      <div class="public-macclient-text">
-        <h2 class="public-macclient-title">{{macTitle}}</h2>
-        <p class="public-macclient-desc">{{macDesc}}</p>
-      </div>
-      <a class="public-btn" href="{{macUrl}}" target="_blank" rel="noopener noreferrer"><svg class="icon" aria-hidden="true"><use href="/icons.svg#laptop-minimal"/></svg>{{macLinkLabel}}</a>
-    </section>
-
-    <section class="public-macclient" aria-label="{{androidTitle}}">
-      <div class="public-macclient-text">
-        <h2 class="public-macclient-title">{{androidTitle}}</h2>
-        <p class="public-macclient-desc">{{androidDesc}}</p>
-      </div>
-      <a class="public-btn" href="{{androidUrl}}" target="_blank" rel="noopener noreferrer"><svg class="icon" aria-hidden="true"><use href="/icons.svg#smartphone"/></svg>{{androidLinkLabel}}</a>
-    </section>
-
-    <section class="public-macclient" aria-label="{{extensionTitle}}">
-      <div class="public-macclient-text">
-        <h2 class="public-macclient-title">{{extensionTitle}}</h2>
-        <p class="public-macclient-desc">{{extensionDesc}}</p>
-      </div>
-      <a class="public-btn" href="{{extensionUrl}}" target="_blank" rel="noopener noreferrer"><svg class="icon" aria-hidden="true"><use href="/icons.svg#puzzle"/></svg>{{extensionLinkLabel}}</a>
+    <section class="public-features" aria-label="{{clientsTitle}}">
+      <h2 class="public-features-title">{{clientsTitle}}</h2>
+      <ul class="public-client-grid">
+        <li class="public-client">
+          <svg class="icon public-client-icon" aria-hidden="true"><use href="/icons.svg#laptop-minimal"/></svg>
+          <h3>{{macTitle}}</h3>
+          <p>{{macDesc}}</p>
+          <a class="public-btn" href="{{macUrl}}" target="_blank" rel="noopener noreferrer">{{macLinkLabel}}</a>
+        </li>
+        <li class="public-client">
+          <svg class="icon public-client-icon" aria-hidden="true"><use href="/icons.svg#smartphone"/></svg>
+          <h3>{{androidTitle}}</h3>
+          <p>{{androidDesc}}</p>
+          <a class="public-btn" href="{{androidUrl}}" target="_blank" rel="noopener noreferrer">{{androidLinkLabel}}</a>
+        </li>
+        <li class="public-client">
+          <svg class="icon public-client-icon" aria-hidden="true"><use href="/icons.svg#puzzle"/></svg>
+          <h3>{{extensionTitle}}</h3>
+          <p>{{extensionDesc}}</p>
+          <a class="public-btn" href="{{extensionUrl}}" target="_blank" rel="noopener noreferrer">{{extensionLinkLabel}}</a>
+        </li>
+      </ul>
     </section>
 
     <footer class="public-footer">
       <span>{{footer}}</span>
-      <a class="public-footer-link" href="{{githubUrl}}" target="_blank" rel="noopener noreferrer">{{githubLabel}}</a>
-      <a class="public-footer-link" href="/datenschutz">{{privacyLabel}}</a>
+      <nav class="public-footer-links">
+        <a class="public-footer-link" href="{{githubUrl}}" target="_blank" rel="noopener noreferrer">{{githubLabel}}</a>
+        <a class="public-footer-link" href="/datenschutz">{{privacyLabel}}</a>
+      </nav>
     </footer>
   </main>
 </body>

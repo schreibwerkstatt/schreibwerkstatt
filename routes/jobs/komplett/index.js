@@ -6,6 +6,7 @@ const {
   getLatestContinuityCheck,
   getContinuityIssueBookId,
   setContinuityIssueResolved,
+  setContinuityIssueDismissed,
   getChapterNarrativeProfile,
   getKomplettScope, saveKomplettScope,
   } = require('../../../db/schema');
@@ -80,11 +81,7 @@ komplettRouter.post('/kontinuitaet', jsonBody, (req, res) => {
 });
 
 komplettRouter.get('/kontinuitaet/:book_id', (req, res) => {
-  const bookId = toIntId(req.params.book_id);
-  if (!bookId) return res.status(400).json({ error_code: 'INVALID_BOOK_ID' });
-  const userEmail = sessionEmail(req);
-  const result = getLatestContinuityCheck(bookId, userEmail);
-  res.json(result);
+  res.json(getLatestContinuityCheck(req.bookId, sessionEmail(req)));
 });
 
 // Issue als erledigt/offen markieren (editor+). book_id wird aus dem Issue
@@ -98,6 +95,20 @@ komplettRouter.post('/kontinuitaet/issue/:issue_id/resolved', jsonBody, (req, re
   const resolved = !!req.body?.resolved;
   setContinuityIssueResolved(issueId, resolved);
   res.json({ ok: true, resolved });
+});
+
+// Issue als „kein Fehler" (Fehlalarm) markieren bzw. das aufheben (editor+). Anders als
+// „erledigt" übernehmen spätere Läufe diesen Status für denselben Befund
+// (db/continuity.js#_priorTriaged + lib/continuity-carryover.js).
+komplettRouter.post('/kontinuitaet/issue/:issue_id/dismissed', jsonBody, (req, res) => {
+  const issueId = toIntId(req.params.issue_id);
+  if (!issueId) return res.status(400).json({ error_code: 'INVALID_ISSUE_ID' });
+  const bookId = getContinuityIssueBookId(issueId);
+  if (!bookId) return res.status(404).json({ error_code: 'ISSUE_NOT_FOUND' });
+  if (!guardBook(req, res, bookId, 'editor')) return;
+  const dismissed = !!req.body?.dismissed;
+  setContinuityIssueDismissed(issueId, dismissed);
+  res.json({ ok: true, dismissed });
 });
 
 // Weltfakten-Realitätscheck eigenständig starten — editor+. Prüft die extrahierten

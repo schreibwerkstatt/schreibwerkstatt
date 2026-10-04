@@ -10,7 +10,7 @@
 // Zwei der drei Schichten tragen eine bewusste KOPIE des Chip-Selektors, weil sie
 // nichts aus dem App-Bundle importieren dürfen (tts-segment.js muss pre-auth
 // ladbar bleiben, mapping.js hält sich frei von Bundle-Kanten). Diese Kopien
-// werden hier gegen die SSoT gegated — dasselbe Muster wie READER_BLOCK_SEL.
+// werden hier gegen die SSoT gegated — dasselbe Muster wie TTS_BLOCK_SEL.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

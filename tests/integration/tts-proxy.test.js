@@ -44,6 +44,10 @@ test.before(async () => {
   await startServer();
 });
 
+// Der Synthese-Kern cacht erfolgreiches Audio; jeder Test startet ohne Cache,
+// sonst beantwortete ein frueherer Erfolg einen spaeteren Fehlerfall.
+test.beforeEach(() => { require('../../lib/tts-synth').clearAudioCache(); });
+
 test.after(async () => {
   global.fetch = originalFetch;
   if (server) await new Promise(r => server.close(r));
@@ -127,6 +131,7 @@ test('Buch-Locale waehlt die Stimme (de-CH -> tts.voice.de schlaegt Default)', a
     .run(920001, 'tts-voice-book');
   db.prepare(`INSERT INTO book_settings (book_id, language, region, updated_at) VALUES (?, ?, ?, ${now})`)
     .run(920001, 'de', 'CH');
+  db.prepare('INSERT INTO book_access (book_id, user_email, role) VALUES (?, ?, ?)').run(920001, 'tester@test.dev', 'viewer');
   let sawVoice = null;
   fetchHandler = async (_url, opts) => {
     sawVoice = JSON.parse(opts.body).voice;
@@ -135,6 +140,7 @@ test('Buch-Locale waehlt die Stimme (de-CH -> tts.voice.de schlaegt Default)', a
   const r = await postSpeak({ text: 'Hallo.' }, { query: '?bookId=920001' });
   assert.equal(r.status, 200);
   assert.equal(sawVoice, 'de_voice');
+  db.prepare('DELETE FROM book_access WHERE book_id = ?').run(920001);
   db.prepare('DELETE FROM book_settings WHERE book_id = ?').run(920001);
   db.prepare('DELETE FROM books WHERE book_id = ?').run(920001);
 });
@@ -147,6 +153,7 @@ test('ohne Locale-Stimme faellt es auf die Standard-Stimme zurueck', async () =>
     .run(920002, 'tts-voice-book2');
   db.prepare(`INSERT INTO book_settings (book_id, language, region, updated_at) VALUES (?, ?, ?, ${now})`)
     .run(920002, 'de', 'CH');
+  db.prepare('INSERT INTO book_access (book_id, user_email, role) VALUES (?, ?, ?)').run(920002, 'tester@test.dev', 'viewer');
   let sawVoice = null;
   fetchHandler = async (_url, opts) => {
     sawVoice = JSON.parse(opts.body).voice;
@@ -155,6 +162,7 @@ test('ohne Locale-Stimme faellt es auf die Standard-Stimme zurueck', async () =>
   const r = await postSpeak({ text: 'Hallo.' }, { query: '?bookId=920002' });
   assert.equal(r.status, 200);
   assert.equal(sawVoice, 'default_voice');
+  db.prepare('DELETE FROM book_access WHERE book_id = ?').run(920002);
   db.prepare('DELETE FROM book_settings WHERE book_id = ?').run(920002);
   db.prepare('DELETE FROM books WHERE book_id = ?').run(920002);
 });
@@ -193,4 +201,46 @@ test('upstream abort -> 408 tts_timeout', async () => {
   const r = await postSpeak({ text: 'x' });
   assert.equal(r.status, 408);
   assert.equal((await r.json()).error, 'tts_timeout');
+});
+
+test('fremdes Buch -> 403, kein Upstream-Call (Buch-ID waehlt die Stimme)', async () => {
+  setTts({ enabled: true, host: 'http://tts.lan:8880' });
+  const { db } = require('../../db/connection');
+  const now = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
+  db.prepare(`INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, ?, ${now}, ${now})`)
+    .run(920003, 'tts-foreign-book');
+  let called = false;
+  fetchHandler = async () => { called = true; return new Response(Buffer.from([1]), { status: 200 }); };
+  const r = await postSpeak({ text: 'Hallo.' }, { query: '?bookId=920003' });
+  assert.equal(r.status, 403);
+  assert.equal(called, false);
+  db.prepare('DELETE FROM books WHERE book_id = ?').run(920003);
+});
+
+test('gleicher Text + gleiche Einstellungen -> zweiter Aufruf aus dem Audio-Cache', async () => {
+  setTts({ enabled: true, host: 'http://tts.lan:8880', voice: 'v1' });
+  let calls = 0;
+  fetchHandler = async () => { calls++; return new Response(Buffer.from([7, 7]), { status: 200 }); };
+  assert.equal((await postSpeak({ text: 'Noch einmal.' })).status, 200);
+  const r = await postSpeak({ text: 'Noch einmal.' });
+  assert.equal(r.status, 200);
+  assert.equal(Buffer.from(await r.arrayBuffer()).length, 2);
+  assert.equal(calls, 1);
+  // Andere Stimme → anderes Audio, kein Cache-Treffer.
+  setTts({ enabled: true, host: 'http://tts.lan:8880', voice: 'v2' });
+  assert.equal((await postSpeak({ text: 'Noch einmal.' })).status, 200);
+  assert.equal(calls, 2);
+});
+
+test('Alt-Einstellung pcm faellt auf mp3 zurueck (kein Browser spielt rohes PCM)', async () => {
+  setTts({ enabled: true, host: 'http://tts.lan:8880' });
+  const { db } = require('../../db/connection');
+  db.prepare("UPDATE app_settings SET value_json = ? WHERE key = 'tts.format'").run(JSON.stringify('pcm'));
+  require('../../lib/app-settings').clearCache();
+  let sawFormat = null;
+  fetchHandler = async (_url, opts) => { sawFormat = JSON.parse(opts.body).response_format; return new Response(Buffer.from([1]), { status: 200 }); };
+  const r = await postSpeak({ text: 'Format.' });
+  assert.equal(r.status, 200);
+  assert.equal(sawFormat, 'mp3');
+  assert.equal(r.headers.get('content-type'), 'audio/mpeg');
 });

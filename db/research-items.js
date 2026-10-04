@@ -20,14 +20,16 @@ const { MAX_TEXT_CHARS } = require('../lib/pdf-extract');
 const searchIndex = require('../lib/search');
 const { findingsByItem } = require('./research-findings');
 
-// target_kind → { col, table, pk, nameCol, orderCol } für Validierung,
+// target_kind → { col, table, pk, nameCol, orderCol, refCol } für Validierung,
 // Display-JOIN und Sortierung „nach verknüpfter Entität". orderCol ist die Spalte,
 // nach der die Entität in ihrer eigenen Ansicht geordnet ist (Buch-Reihenfolge).
+// refCol: öffentliche Kennung, unter der das Frontend die Entität kennt
+// (Katalog figurenById/orteById, Deep-Link) — die Link-Spalte hält die INTEGER-PK.
 const LINK_TARGETS = {
   chapter:  { col: 'chapter_id',  table: 'chapters',      pk: 'chapter_id', nameCol: 'chapter_name', orderCol: 'position' },
   page:     { col: 'page_id',     table: 'pages',         pk: 'page_id',    nameCol: 'page_name',    orderCol: 'position' },
-  figure:   { col: 'figure_id',   table: 'figures',       pk: 'id',         nameCol: 'name',         orderCol: 'sort_order' },
-  location: { col: 'location_id', table: 'locations',     pk: 'id',         nameCol: 'name',         orderCol: 'sort_order' },
+  figure:   { col: 'figure_id',   table: 'figures',       pk: 'id',         nameCol: 'name',         orderCol: 'sort_order', refCol: 'fig_id' },
+  location: { col: 'location_id', table: 'locations',     pk: 'id',         nameCol: 'name',         orderCol: 'sort_order', refCol: 'loc_id' },
   scene:    { col: 'scene_id',    table: 'figure_scenes', pk: 'id',         nameCol: 'titel',        orderCol: 'sort_order' },
   beat:     { col: 'beat_id',     table: 'plot_beats',    pk: 'id',         nameCol: 'titel',        orderCol: 'sort_order' },
   thread:   { col: 'thread_id',   table: 'plot_threads',  pk: 'id',         nameCol: 'name',         orderCol: 'position' },
@@ -66,7 +68,7 @@ function attachRelations(items) {
   const linksByItem = new Map();
   for (const [kind, t] of Object.entries(LINK_TARGETS)) {
     const rows = db.prepare(
-      `SELECT l.id AS link_id, l.item_id, l.${t.col} AS target_id, e.${t.nameCol} AS label
+      `SELECT l.id AS link_id, l.item_id, l.${t.col} AS target_id, e.${t.nameCol} AS label${t.refCol ? `, e.${t.refCol} AS ref_id` : ''}
          FROM research_item_links l
          JOIN ${t.table} e ON e.${t.pk} = l.${t.col}
         WHERE l.item_id IN (${ph}) AND l.target_kind = ?`
@@ -75,6 +77,7 @@ function attachRelations(items) {
       if (!linksByItem.has(r.item_id)) linksByItem.set(r.item_id, []);
       linksByItem.get(r.item_id).push({
         link_id: r.link_id, target_kind: kind, target_id: r.target_id, label: r.label || '',
+        ...(r.ref_id ? { ref_id: r.ref_id } : {}),
       });
     }
   }
@@ -257,6 +260,14 @@ function itemBookId(id) {
   return r?.book_id || null;
 }
 
+/** Anzeigetitel eines Items (Titel, sonst Dokumentname) fuer Treffer des
+ *  Embedding-Index (Kind `research`). undefined = Item fehlt. Buchweit geteilt,
+ *  darum ohne User-Scope (siehe Kopf des Moduls). */
+function itemTitle(id) {
+  const r = db.prepare("SELECT COALESCE(NULLIF(title,''), doc_name, '') AS t FROM research_items WHERE id = ?").get(id);
+  return r ? r.t : undefined;
+}
+
 // Verknuepfbare Welt-Entitaeten des Buchs fuer den Link-Picker. NUR die
 // user-skopierten Dimensionen: Kapitel und Seiten holt der Aufrufer ueber die
 // Content-Store-Facade, weil `chapters`/`pages` niemand ausser ihr liest.
@@ -381,6 +392,7 @@ module.exports = {
   findDuplicateItem,
   addItemLink,
   itemBookId,
+  itemTitle,
   listEntityLinkTargets,
   setItemKind,
   setItemDocText,

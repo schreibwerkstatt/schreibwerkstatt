@@ -91,21 +91,44 @@ const splitHalfAtSentence = (text) => splitAtSentence(text, 0.5);
 // Dialog-Zitate (DE + EN-Typografie + ASCII). Bewusst konservativ — matched nur
 // Zitate innerhalb eines Absatzes (keine Zeilenumbrüche), damit keine
 // mehrseitigen False-Positives entstehen.
+//
+// Anführungszeichen als \u-Escapes, nicht als Literal: typografische Zeichen
+// gehen beim Kopieren/Formatieren leicht als ASCII-`"` verloren, und dann
+// matcht die Erkennung still kein einziges deutsches Zitat mehr.
+//   „…“ / „…”  U+201E … U+201C/U+201D   (deutsch)
+//   “…”        U+201C … U+201D          (englisch)
+//   »…«        U+00BB … U+00AB          (deutsche Guillemets)
+//   «…»        U+00AB … U+00BB          (Schweizer Guillemets)
+//   "…"        ASCII
+const DIALOG_PATTERNS = [
+  /\u201E([^\u201C\u201D\u201E\n]{10,400})[\u201C\u201D]/g,
+  /\u201C([^\u201C\u201D\u201E\n]{10,400})\u201D/g,
+  /\u00BB\s?([^\u00AB\u00BB\n]{10,400}?)\s?\u00AB/g,
+  /\u00AB\s?([^\u00AB\u00BB\n]{10,400}?)\s?\u00BB/g,
+  /"([^"\n]{10,400})"/g,
+];
+
+// Zwei Schreibweisen können dieselbe Stelle unterschiedlich lesen: das
+// Schlusszeichen von »A« ist zugleich das Öffnungszeichen eines falschen «…»
+// bis zum nächsten Zitat. Deshalb gewinnt pro Textstelle der früheste Treffer,
+// überlappende spätere fallen weg.
 function extractDialogs(text) {
-  const results = [];
-  const patterns = [
-    /„([^"\n]{10,400})"/g,
-    /"([^"\n]{10,400})"/g,     // U+201C/U+201D
-    /«\s?([^»\n]{10,400})\s?»/g,
-    /"([^"\n]{10,400})"/g,
-  ];
-  for (const re of patterns) {
+  const found = [];
+  for (const re of DIALOG_PATTERNS) {
+    re.lastIndex = 0;
     let m;
     while ((m = re.exec(text)) !== null) {
-      results.push({ quote: m[1].trim(), start: m.index, end: m.index + m[0].length });
+      found.push({ quote: m[1].trim(), start: m.index, end: m.index + m[0].length });
     }
   }
-  results.sort((a, b) => a.start - b.start);
+  found.sort((a, b) => a.start - b.start || b.end - a.end);
+  const results = [];
+  let lastEnd = -1;
+  for (const d of found) {
+    if (d.start < lastEnd) continue;
+    results.push(d);
+    lastEnd = d.end;
+  }
   return results;
 }
 

@@ -23,6 +23,8 @@ export function registerUserSettingsCard() {
     userSettingsError: '',
     dictEntries: [],
     dictFilter: '',
+    // Abgeschaltete LanguageTool-Regeln (routes/languagetool.js#/rules)
+    ltRuleEntries: [],
     // Device-Tokens (native Clients, z.B. Mac-Focus-Writer)
     deviceTokensList: [],
     deviceTokensLoading: false,
@@ -54,6 +56,13 @@ export function registerUserSettingsCard() {
       return this.dictEntries.filter(e => (e.word || '').toLowerCase().includes(q));
     },
 
+    // Buchname zum Woerterbuch-/Regel-Eintrag mit Buch-Scope.
+    ltScopeLabel(bookId) {
+      if (!bookId) return this.$app.t('spellcheck.dict.scope_global');
+      const b = (this.$store.nav.books || []).find(x => String(x.id) === String(bookId));
+      return b ? b.name : this.$app.t('spellcheck.dict.scope_book');
+    },
+
     _onViewReset: null,
 
     init() {
@@ -61,6 +70,7 @@ export function registerUserSettingsCard() {
         if (!visible) return;
         await this.loadUserSettings();
         await this.loadDictEntries();
+        await this.loadLtRules();
         await this.loadAiAccess();
         await this.loadDeviceTokens();
         await this.loadMacRelease();
@@ -96,6 +106,29 @@ export function registerUserSettingsCard() {
         });
       } catch {}
       await this.loadDictEntries();
+    },
+
+    async loadLtRules() {
+      if (!this.$store.config.languagetoolEnabled) { this.ltRuleEntries = []; return; }
+      try {
+        const r = await fetch('/languagetool/rules', { credentials: 'same-origin' });
+        if (!r.ok) { this.ltRuleEntries = []; return; }
+        const j = await r.json();
+        this.ltRuleEntries = Array.isArray(j.entries) ? j.entries : [];
+      } catch { this.ltRuleEntries = []; }
+    },
+
+    async removeLtRule(entry) {
+      if (!entry || !entry.rule_id) return;
+      try {
+        await fetch('/languagetool/rules', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ ruleId: entry.rule_id, bookId: entry.book_id }),
+        });
+      } catch {}
+      await this.loadLtRules();
     },
 
     destroy() {

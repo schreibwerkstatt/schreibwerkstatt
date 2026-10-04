@@ -39,7 +39,11 @@ function chunkLimitsFor(provider, { maxTokensOut } = {}) {
   // Floor identisch zu getContextConfigFor: ein inkonsistentes Cap darf das Budget nicht
   // negativ werden lassen.
   const budget = Math.max(2000, cfg.contextWindow - out - cfg.safetyMargin) * cfg.charsPerToken;
+  // inputBudget: das volle Prompt-Budget in Zeichen (System + User). singlePass
+  // misst nur den Buchtext — wer zusätzlich grosse Kontext-Blöcke einbettet, prüft
+  // den fertigen Prompt gegen inputBudget, statt erst im Preflight zu scheitern.
   return {
+    inputBudget: Math.floor(budget),
     singlePass: Math.max(20000, Math.min(SINGLE_PASS_CHAR_CEILING, Math.floor(budget * 0.70))),
     perChunk:   Math.max(10000, Math.min(200000, Math.floor(budget * 0.35))),
   };

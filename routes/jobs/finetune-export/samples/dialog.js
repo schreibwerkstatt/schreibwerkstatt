@@ -1,7 +1,7 @@
 'use strict';
 
 const { extractDialogs } = require('../lib/text');
-const { findSpeaker } = require('../lib/names');
+const { findSpeaker, hashSplit } = require('../lib/names');
 
 // Dialog-Sammlung läuft immer, wenn Figuren bekannt sind — `dialogsByFigure`
 // füttert auch den authorChat-Block (Zitatsammlung pro Figur). Der eigentliche
@@ -22,7 +22,9 @@ function buildDialogSamples(ctx) {
       if (!speaker) continue;
       const spkKey = speaker.toLowerCase();
       if (!dialogsByFigure.has(spkKey)) dialogsByFigure.set(spkKey, []);
-      dialogsByFigure.get(spkKey).push({ quote: d.quote, chapter: p.chapter, page: p.title });
+      dialogsByFigure.get(spkKey).push({
+        quote: d.quote, chapter: p.chapter, chapterId: p.chapter_id ?? 0, page: p.title,
+      });
       if (!opts.types.dialog) continue;
       const ctxBefore = p.text.slice(Math.max(0, d.start - 160), d.start).replace(/\s+/g, ' ').trim();
       const ctxStr = (ctxBefore.slice(-140) || p.chapter || bookName).trim();
@@ -47,8 +49,11 @@ function buildDialogSamples(ctx) {
   // Sobald Dialog-Extraktion gelaufen ist, existieren eindeutig
   // speaker-zugeordnete Zitate in dialogsByFigure. Reverse-Sample erzeugt
   // Speaker-Lookup-Fähigkeit: gegeben ein Zitat → Figur zurückgeben. Pro
-  // Figur cap bei 12 Zitaten, damit stark sprechende Figuren nicht das
-  // Training dominieren.
+  // Figur gedeckelt, damit stark sprechende Figuren nicht das Training
+  // dominieren. Die Auswahl streut per Hash über das ganze Buch — die ersten N
+  // in Buchreihenfolge zu nehmen, hiesse, nur die frühen Kapitel abzufragen.
+  // `sourceKey` = Kapitel des Zitats: das Zitat ist Buchtext und gehört in
+  // denselben Split wie die übrigen Ableitungen seines Kapitels.
   if (opts.types.dialog) {
     const REV_CAP_PER_FIG = 30 * (opts.biasBoost || 1);
     for (const f of figRows) {
@@ -57,29 +62,34 @@ function buildDialogSamples(ctx) {
         ? (dialogsByFigure.get(f.kurzname.toLowerCase()) || [])
         : [];
       const seenQ = new Set();
-      let emitted = 0;
+      const pool = [];
       for (const e of [...entries, ...altEntries]) {
-        if (emitted >= REV_CAP_PER_FIG) break;
         if (seenQ.has(e.quote)) continue;
         seenQ.add(e.quote);
         if (e.quote.length < 12 || e.quote.length > 600) continue;
-        const ctxTag = e.chapter
-          ? (langIsEn ? ` (in «${e.chapter}»)` : ` (in «${e.chapter}»)`)
-          : '';
+        pool.push(e);
+      }
+      const picked = pool
+        .map(e => [hashSplit('dlgRev|' + f.fig_id + '|' + e.quote, opts.valSeed), e])
+        .sort((a, b) => a[0] - b[0])
+        .slice(0, REV_CAP_PER_FIG)
+        .map(([, e]) => e);
+      picked.forEach((e, i) => {
+        const ctxTag = e.chapter ? ` (in «${e.chapter}»)` : '';
         samples.push({
-          id: 'dialogRev|' + f.fig_id + '|' + emitted,
+          id: 'dialogRev|' + f.fig_id + '|' + i,
           type: 'dialog',
+          sourceKey: 'ch:' + e.chapterId,
           messages: [
             { role: 'system', content: unifiedSys },
             { role: 'user',   content: (langIsEn
-              ? `Who says this: "${e.quote}"?`
+              ? `Who says this: \u201C${e.quote}\u201D?`
               : `Wer sagt das: «${e.quote}»?`) },
             { role: 'assistant', content: f.name + ctxTag + '.' },
           ],
         });
         counts.dialog++;
-        emitted++;
-      }
+      });
     }
   }
 }

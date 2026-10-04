@@ -24,6 +24,10 @@ const METRIC_KEYS = {
   pages_per_chapter:  'bookstats.metric.pagesPerChapter',
   avg_lix:            'bookstats.metric.lix',
   avg_flesch_de:      'bookstats.metric.flesch',
+  mattr:              'bookstats.metric.mattr',
+  mtld:               'bookstats.metric.mtld',
+  lex_density:        'bookstats.metric.lexDensity',
+  hapax_ratio:        'bookstats.metric.hapaxRatio',
   writing_minutes:    'bookstats.metric.writingMinutes',
   writing_cumulative: 'bookstats.metric.writingCumulative',
   lektorat_minutes:    'bookstats.metric.lektoratMinutes',
@@ -33,6 +37,10 @@ const METRIC_KEYS = {
   stt_chars:           'bookstats.metric.sttChars',
 };
 
+// Wortschatz-Kennzahlen aus dem nächtlichen Scan (book_stats_history, Migration
+// 308). Längenrobust — anders als `unique_words`, das vor allem die Buchlänge misst.
+const LEXICON_METRICS  = new Set(['mattr', 'mtld', 'lex_density', 'hapax_ratio']);
+const PERCENT_METRICS  = new Set(['lex_density', 'hapax_ratio']);
 const WRITING_METRICS  = new Set(['writing_minutes',  'writing_cumulative']);
 const LEKTORAT_METRICS = new Set(['lektorat_minutes', 'lektorat_cumulative']);
 const STT_METRICS      = new Set(['stt_minutes', 'stt_cumulative', 'stt_chars']);
@@ -209,6 +217,8 @@ export const bookstatsMethods = {
     else if (isMin) data = rows.map(r => Math.round(r.seconds / 60));
     else if (isCum) { let sum = 0; data = rows.map(r => { sum += r.seconds; return Math.round(sum / 360) / 10; }); }
     else if (metric === 'stt_chars') data = rows.map(r => Number(r.chars) || 0);
+    // Anteile (0..1) als Prozent zeigen — dieselbe Darstellung wie in der Wortschatz-Karte.
+    else if (PERCENT_METRICS.has(metric)) data = rows.map(r => r[metric] == null ? null : Math.round(r[metric] * 1000) / 10);
     else data = rows.map(r => r[metric] ?? null);
 
     // Leading-Null-Tage abschneiden: X-Achse startet am ersten echten Messpunkt
@@ -225,8 +235,12 @@ export const bookstatsMethods = {
     const metricLabel = METRIC_KEYS[metric] ? window.__app.t(METRIC_KEYS[metric]) : metric;
 
     const tag = localeTag(Alpine.store('shell').uiLocale);
-    const isDecimal = isPpc || isCum || metric === 'avg_sentence_len' || metric === 'avg_lix' || metric === 'avg_flesch_de' || metric === 'normseiten';
-    const fmt = v => isDecimal ? v.toLocaleString(tag, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+    const isDecimal = isPpc || isCum || metric === 'avg_sentence_len' || metric === 'avg_lix' || metric === 'avg_flesch_de' || metric === 'normseiten'
+      || LEXICON_METRICS.has(metric);
+    // MATTR bewegt sich in der dritten Nachkommastelle — mit einer Stelle wäre die
+    // Kurve eine Treppe aus zwei Werten.
+    const digits = metric === 'mattr' ? 3 : 1;
+    const fmt = v => isDecimal ? v.toLocaleString(tag, { minimumFractionDigits: digits, maximumFractionDigits: digits })
       : Math.round(v).toLocaleString(tag);
     const makeTick = () => v => {
       if (v === null) return '';

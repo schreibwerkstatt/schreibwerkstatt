@@ -26,24 +26,28 @@ const _stmtPages = db.prepare(`
 `);
 
 // errors_json aus dem juengsten Check pro Seite = aktueller Findings-Stand.
+// `id`/`checked_at` braucht lib/lektorat-findings.js, um zu entscheiden, welche
+// Annahmen diesen Stand betreffen.
 const _stmtLatestChecks = db.prepare(`
   WITH latest AS (
-    SELECT page_id, errors_json,
-           ROW_NUMBER() OVER (PARTITION BY page_id ORDER BY checked_at DESC) AS rn
+    SELECT id, page_id, checked_at, errors_json, applied_errors_json,
+           ROW_NUMBER() OVER (PARTITION BY page_id ORDER BY checked_at DESC, id DESC) AS rn
     FROM page_checks
     WHERE book_id = ? AND user_email = ?
   )
-  SELECT page_id, errors_json FROM latest WHERE rn = 1
+  SELECT id, page_id, checked_at, errors_json, applied_errors_json FROM latest WHERE rn = 1
 `);
 
-// Alle Checks mit applied_errors_json — die Union daraus ist kumulativ.
+// Alle Checks mit applied_errors_json — die Union daraus ist kumulativ;
+// `saved_at` entscheidet, ob eine Annahme aus einem aelteren Check den
+// juengsten Stand noch betrifft (lib/lektorat-findings.js).
 // ORDER BY ist Teil des Vertrags, nicht Kosmetik: die Union dedupliziert per
 // `original` und behaelt den ERSTEN Treffer. Traegt derselbe Satz in zwei
 // Laeufen unterschiedliche `typ`-Werte (Re-Lektorat klassifiziert um), waere
 // ohne Sortierung SQL-seitig unbestimmt, welcher gewinnt — mit ihr immer der
 // aeltere Lauf.
 const _stmtApplied = db.prepare(`
-  SELECT page_id, applied_errors_json
+  SELECT id, page_id, checked_at, saved_at, applied_errors_json
   FROM page_checks
   WHERE book_id = ? AND user_email = ? AND applied_errors_json IS NOT NULL
   ORDER BY checked_at ASC, rowid ASC

@@ -41,3 +41,22 @@ test('SCHEMA_FAKT_REALITY: Reasoning-First + urteil-Enum + Pflichtfelder', async
   // _obj() macht additionalProperties:false — Grammar-safe für lokale Provider.
   assert.equal(SCHEMA_FAKT_REALITY.additionalProperties, false);
 });
+
+test('buildWeltfaktRealityJudgePrompt: Recherche-Passagen als Erstbeleg, Web-Suche optional', async () => {
+  const { buildWeltfaktRealityJudgePrompt } = await import(url);
+  const p = buildWeltfaktRealityJudgePrompt('X', { kategorie: 'historie', fakt: 'Die Mauer fiel 1989' }, {
+    recherche: [{ titel: 'Mauerfall', quelle: 'Lexikon', url: 'https://example.org/mauer', text: 'Am 9. November 1989 fiel die Berliner Mauer.' }],
+  });
+  assert.match(p, /Recherche des Autors \(Erstbeleg\)/);
+  assert.match(p, /Am 9\. November 1989 fiel die Berliner Mauer/);
+  assert.match(p, /URL: https:\/\/example\.org\/mauer/);
+  assert.match(p, /OHNE Web-Suche urteilen/);
+  assert.match(p, /"urteil": "korrekt\|falsch\|unklar"/, 'JSON-Vertrag unverändert');
+});
+
+test('buildWeltfaktRealityJudgePrompt: leere Recherche → kein Block', async () => {
+  const { buildWeltfaktRealityJudgePrompt } = await import(url);
+  const p = buildWeltfaktRealityJudgePrompt('X', { kategorie: 'ort', fakt: 'Bern' }, { recherche: [] });
+  assert.doesNotMatch(p, /Recherche des Autors/);
+  assert.match(p, /Recherchiere aktiv/);
+});

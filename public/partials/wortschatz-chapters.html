@@ -1,0 +1,61 @@
+<!-- Kapitel-Band der Wortschatz-Analyse: dieselben Masse pro Kapitel und Burrows's
+     Delta gegen den Buchschnitt. Fragment von wortschatz.html (String-Include
+     `<!-- @include wortschatz-chapters -->`) — Begründung siehe wortschatz-terms.html.
+
+     Delta ohne Begründung wäre eine Behauptung: neben der Zahl stehen die häufigen
+     Wörter, die das Kapitel öfter bzw. seltener benutzt als der Rest. Auffällige
+     Kapitel (Delta mehr als eine Standardabweichung über dem Mittel) sind markiert. -->
+<div x-show="wortschatzTab === 'chapters'">
+  <p class="wortschatz-list-hint" x-text="$app.t('wortschatz.chapters.hint')"></p>
+  <p class="wortschatz-list-hint" x-show="wsDeltaNote()" x-text="wsDeltaNote()"></p>
+  <div x-show="!wortschatzChapters.length" class="muted-msg muted-msg--spaced" x-text="$app.t('wortschatz.chapters.empty')"></div>
+  <div class="table-scroll" x-show="wortschatzChapters.length">
+    <table class="wortschatz-table"
+           x-data="sortableTable({
+             rows: () => wortschatzChapters,
+             defaultKey: 'position',
+             defaultDir: 'asc',
+             persistKey: 'wortschatz.chapters',
+             types: { position: 'number', tokens: 'number', mattr: 'number', mtld: 'number', lex_density: 'number', delta: 'number', chapter_name: 'string' },
+           })">
+      <thead><tr>
+        <th class="sortable-th" :class="sortClass('position')" :aria-sort="ariaSort('position')"
+            @click="sortBy('position')" x-text="$app.t('wortschatz.col.chapter')"></th>
+        <th class="sortable-th" :class="sortClass('tokens')" :aria-sort="ariaSort('tokens')"
+            @click="sortBy('tokens')" x-text="$app.t('wortschatz.kpi.tokens')"></th>
+        <th class="sortable-th" :class="sortClass('mattr')" :aria-sort="ariaSort('mattr')"
+            @click="sortBy('mattr')" x-text="$app.t('wortschatz.kpi.mattr')"></th>
+        <th class="sortable-th" :class="sortClass('mtld')" :aria-sort="ariaSort('mtld')"
+            @click="sortBy('mtld')" x-text="$app.t('wortschatz.kpi.mtld')"></th>
+        <th class="sortable-th" :class="sortClass('lex_density')" :aria-sort="ariaSort('lex_density')"
+            @click="sortBy('lex_density')" x-text="$app.t('wortschatz.kpi.density')"></th>
+        <th class="sortable-th" :class="sortClass('delta')" :aria-sort="ariaSort('delta')"
+            @click="sortBy('delta')" :title="$app.t('wortschatz.col.deltaTip')"
+            x-text="$app.t('wortschatz.col.delta')"></th>
+        <th x-text="$app.t('wortschatz.col.deltaReason')"></th>
+      </tr></thead>
+      <tbody>
+        <template x-for="c in sorted" :key="c.chapter_id">
+          <tr :class="{ 'wortschatz-row--outlier': wsDeltaOutlier(c) }">
+            <td>
+              <button type="button" class="entity-ref"
+                      x-entity-ref="{ type: 'kapitel', id: c.chapter_id, label: c.chapter_name || undefined }"></button>
+            </td>
+            <td class="wortschatz-num" x-text="wsNum(c.tokens)"></td>
+            <td class="wortschatz-num">
+              <span x-text="wsNum(c.mattr, 3)"></span>
+              <span class="wortschatz-approx" x-show="c.mattr != null && c.mattr_window < wortschatzData.thresholds.mattrWindow"
+                    :title="$app.t('wortschatz.chapters.mattrShortTip', { window: c.mattr_window })">*</span>
+            </td>
+            <td class="wortschatz-num" x-text="wsNum(c.mtld, 1)"></td>
+            <td class="wortschatz-num" x-text="wsPercent(c.lex_density)"></td>
+            <td class="wortschatz-num">
+              <span class="tag" :class="{ 'wortschatz-keyness--high': wsDeltaOutlier(c) }" x-text="wsNum(c.delta, 2)"></span>
+            </td>
+            <td class="wortschatz-reason" x-text="wsDeltaReason(c)"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</div>

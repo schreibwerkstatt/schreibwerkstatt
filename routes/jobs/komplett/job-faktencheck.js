@@ -21,12 +21,13 @@ const {
   getPrompts,
   jobAbortControllers, settledAll, tps,
 } = require('../shared');
-const { callAIWithTools, parseJSON, getContextConfigFor } = require('../../../lib/ai');
+const { callAIWithTools, parseJSON, getContextConfigFor, resolveProvider } = require('../../../lib/ai');
 const appSettings = require('../../../lib/app-settings');
 const { setContext } = require('../../../lib/log-context');
 const { makePhaseTimer } = require('./utils');
 const { _komplettAiOverrides } = require('./job-shared');
 const { chapterIdsByName, listWorldFactsWithChapterNames } = require('../../../db/content-names');
+const retrieval = require('../../../lib/semantic-retrieval');
 
 // Modellname für den Cost-Ledger / Check-Zeile (parallel zu _modelName in remap.js).
 function _factcheckModelName(provider) {
@@ -111,12 +112,55 @@ async function _judgeOneFact(tok, userPrompt, systemPrompt, signal, callTools = 
   return text;
 }
 
+// ── Recherche-Board als Erstbeleg ────────────────────────────────────────────
+// Was der Autor selbst recherchiert hat, ist für „stimmt das?" der nächste Beleg:
+// je Fakt die semantisch nächsten Recherche-Passagen (Notizen, Fakten, Zitate,
+// PDF-Volltext) — nur oberhalb der Cosinus-Schwelle `embed.min_score`, sonst
+// sähe der Judge einen unverwandten Schnipsel als „Beleg". Der Judge darf die
+// Web-Suche überspringen, wenn die Recherche die Frage schon beantwortet.
+// Best-effort: ohne fertigen Index oder bei Backend-Fehler bleibt es bei der
+// Web-Suche allein.
+const _RESEARCH_TOP_K = 3;
+const _RESEARCH_PASSAGE_MAX = 1200;
+const _stmtResearchMeta = db.prepare(`
+  SELECT ri.id, ri.title, ri.source,
+         (SELECT u.url FROM research_item_urls u WHERE u.item_id = ri.id ORDER BY u.position, u.id LIMIT 1) AS first_url
+    FROM research_items ri
+   WHERE ri.id = ? AND ri.book_id = ? AND ri.archived = 0 AND ri.status <> 'verworfen'
+`);
+function _researchMinScore() {
+  const v = Number(appSettings.get('embed.min_score'));
+  return Number.isFinite(v) && v > 0 ? v : 0;
+}
+async function _researchEvidence(bookIdInt, cand, signal) {
+  const q = `${cand.subjekt ? `${cand.subjekt}: ` : ''}${cand.fakt}`.trim();
+  if (!q) return [];
+  let hits;
+  try {
+    hits = await retrieval.semanticQuery(bookIdInt, q, { kinds: ['research'], topK: _RESEARCH_TOP_K, signal });
+  } catch (e) {
+    if (e?.name === 'AbortError') throw e;
+    return [];
+  }
+  const floor = _researchMinScore();
+  const out = [];
+  for (const h of hits || []) {
+    if (h.kind !== 'research' || h.semScore == null || h.semScore < floor) continue;
+    const meta = _stmtResearchMeta.get(parseInt(h.entity_id), bookIdInt);
+    const text = String(h.text || '').replace(/\s+/g, ' ').trim().slice(0, _RESEARCH_PASSAGE_MAX);
+    if (!meta || !text) continue;
+    const url = [meta.first_url, meta.source].map(x => String(x || '').trim()).find(x => /^https?:\/\//i.test(x)) || null;
+    out.push({ titel: meta.title || '', quelle: meta.source || '', url, text });
+  }
+  return out;
+}
+
 async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = undefined) {
   const bookIdInt = parseInt(bookId);
   const email = userEmail || null;
   const log = makeJobLogger(jobId);
   const pt = makePhaseTimer(log);
-  const effectiveProvider = provider || appSettings.get('ai.provider') || 'claude';
+  const effectiveProvider = provider || resolveProvider({ userEmail });
   const overrides = _komplettAiOverrides(effectiveProvider);
   if (overrides) setContext(overrides);
 
@@ -148,6 +192,8 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
     );
 
     const signal = jobAbortControllers.get(jobId)?.signal;
+    const researchOn = retrieval.indexReady(bookIdInt);
+    let researchUsed = 0;
     const tok = { in: 0, out: 0, ms: 0, inflight: new Map() };
     // Concurrency-Cap + Warmup wie die Verify-Stufe: Web-Such-Calls sind teuer und einzeln
     // langsam; ein paar parallel, aber kein TPM-Burst über Dutzende Fakten.
@@ -155,8 +201,10 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
     updateJob(jobId, { statusText: 'job.phase.factcheckJudge', progress: 10 });
     let done = 0;
     const settled = await settledAll(candidates.map((cand) => async () => {
+      const recherche = researchOn ? await _researchEvidence(bookIdInt, cand, signal) : [];
+      if (recherche.length) researchUsed++;
       const text = await _judgeOneFact(tok,
-        prompts.buildWeltfaktRealityJudgePrompt(bookName, cand, { spanne }),
+        prompts.buildWeltfaktRealityJudgePrompt(bookName, cand, { spanne, recherche }),
         systemPrompt, signal);
       done++;
       updateJob(jobId, { progress: Math.min(92, 10 + Math.round((done / candidates.length) * 80)) });
@@ -201,11 +249,12 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
     const summaryFallback = probleme.length ? '__i18n:kontinuitaet.faktencheck.summaryFound__' : '__i18n:kontinuitaet.faktencheck.summaryClean__';
     const { normalizedIssues } = saveFaktencheckIssues(
       bookIdInt, email, _factcheckModelName(effectiveProvider), probleme, figNameToId, chNameToId, summaryFallback);
-    log.info(`Faktencheck gespeichert (${normalizedIssues.length} Faktenfehler von ${candidates.length} geprüften Fakten).`);
+    log.info(`Faktencheck gespeichert (${normalizedIssues.length} Faktenfehler von ${candidates.length} geprüften Fakten, ${researchUsed} mit Recherche-Beleg).`);
     log.info(`Phasen-Timing: ${pt.summary()}`);
     completeJob(jobId, {
       count: normalizedIssues.length,
       checked: candidates.length,
+      researchEvidence: researchUsed,
       issues: normalizedIssues,
       warnings,
       tokensIn: tok.in, tokensOut: tok.out,
@@ -216,4 +265,4 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
   }
 }
 
-module.exports = { runFaktencheckJob, buildFactCheckCandidates, _judgeOneFact, _FACTCHECK_CANDIDATE_CAP };
+module.exports = { runFaktencheckJob, buildFactCheckCandidates, _judgeOneFact, _researchEvidence, _FACTCHECK_CANDIDATE_CAP };

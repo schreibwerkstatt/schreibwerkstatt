@@ -2,6 +2,12 @@
 // Kontinuitaetspruefung + Faktencheck: eine Zeile pro Issue
 // (`continuity_issues`) plus Bruecken-Tabellen fuer Figuren-/Kapitel-Referenzen.
 // Vorbild: figure_scenes mit scene_figures/scene_locations.
+//
+// Triage-Status (`resolved` = behoben, `dismissed` = kein Fehler) lebt an der Issue-
+// Zeile, jeder Lauf legt aber frische Zeilen an. Damit die Triage einen neuen Lauf
+// (auch den Nacht-Cron) übersteht, übernimmt das Speichern den Status früherer,
+// wiedererkannter Befunde (lib/continuity-carryover.js). Alte Checks bleiben dafür
+// stehen; angezeigt wird nur der neueste.
 
 const { db } = require('./connection');
 // Prepared Statements dieses Moduls sitzen auf migrierten Spalten — die
@@ -9,9 +15,7 @@ const { db } = require('./connection');
 require('./migrations');
 const { NOW_ISO_SQL } = require('./now');
 const { toRefString: _toRefString } = require('./write-helpers');
-
-// Eine Zeile pro Issue (continuity_issues) plus Bridge-Tabellen für Figuren-/
-// Kapitel-Referenzen. Vorbild: figure_scenes mit scene_figures/scene_locations.
+const { carryOverStatus } = require('../lib/continuity-carryover');
 
 const _insContinuityCheck = db.prepare(
   `INSERT INTO continuity_checks (book_id, user_email, checked_at, summary, model)
@@ -19,8 +23,9 @@ const _insContinuityCheck = db.prepare(
 );
 const _insContinuityIssue = db.prepare(
   `INSERT INTO continuity_issues
-   (check_id, book_id, user_email, schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung, quelle, sort_order, updated_at)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})`
+   (check_id, book_id, user_email, schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung, quelle,
+    page_a_id, page_b_id, resolved, resolved_at, dismissed, dismissed_at, sort_order, updated_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})`
 );
 const _insContinuityIssueFig = db.prepare(
   `INSERT INTO continuity_issue_figures (issue_id, figure_id, figur_name, sort_order) VALUES (?, ?, ?, ?)`
@@ -29,55 +34,65 @@ const _insContinuityIssueCh = db.prepare(
   `INSERT INTO continuity_issue_chapters (issue_id, chapter_id, sort_order) VALUES (?, ?, ?)`
 );
 
-/** Speichert einen Kontinuitäts-Check mit allen Issues als eigene Zeilen.
- *  issues: [{schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung,
- *            figuren:[Namen], kapitel:[Namen]}]
- *  figNameToId / chNameToId: Auflösungs-Maps (Name → fig_id / chapter_id).
- *  Gibt { checkId, normalizedIssues } zurück, wobei normalizedIssues die
- *  Frontend-Form mit fig_ids/chapter_ids enthält (kompatibel zur alten Antwort). */
+// Figuren-/Kapitelnamen eines KI-Befunds auflösen (dedupliziert, Reihenfolge bleibt).
+// figIdToRowId: TEXT-fig_id → INTEGER figures.id.
+function _resolveRefs(it, figNameToId, figIdToRowId, chNameToId) {
+  const figs = [];
+  const seenFig = new Set();
+  for (const name of (Array.isArray(it.figuren) ? it.figuren.map(_toRefString).filter(Boolean) : [])) {
+    const fid = figNameToId?.[name] || null;
+    const key = (fid || '') + '|' + name;
+    if (seenFig.has(key)) continue;
+    seenFig.add(key);
+    figs.push({ name, fid, rowId: fid ? (figIdToRowId[fid] ?? null) : null });
+  }
+  const chs = [];
+  const seenCh = new Set();
+  for (const name of (Array.isArray(it.kapitel) ? it.kapitel.map(_toRefString).filter(Boolean) : [])) {
+    const cid = chNameToId?.[name] ?? null;
+    const key = (cid ?? '') + '|' + name;
+    if (seenCh.has(key)) continue;
+    seenCh.add(key);
+    chs.push({ name, cid });
+  }
+  return {
+    figs, chs,
+    figuren: figs.map(f => f.name),
+    fig_ids: figs.filter(f => f.fid).map(f => f.fid),
+    kapitel: chs.map(c => c.name),
+    chapter_ids: chs.filter(c => c.cid != null).map(c => c.cid),
+  };
+}
+
 // Eine Issue-Zeile + Figuren-/Kapitel-Bridges anlegen und die Frontend-Normalform
 // zurückgeben. Geteilt von saveContinuityCheck (Voll-Check) und saveFaktencheckIssues
-// (Anhang an bestehenden Check). figIdToRowId: TEXT-fig_id → INTEGER figures.id.
-function _persistOneContinuityIssue(cid, bookIdInt, email, it, sortIndex, figNameToId, figIdToRowId, chNameToId) {
+// (Anhang an bestehenden Check). `status` = übernommener Triage-Status oder null.
+function _persistOneContinuityIssue(cid, bookIdInt, email, it, refs, status, sortIndex) {
+  const resolved = !!status?.resolved;
+  const dismissed = !!status?.dismissed;
   const { lastInsertRowid: issueId } = _insContinuityIssue.run(
     cid, bookIdInt, email,
     it.schwere || null, it.typ || null, it.beschreibung || null,
     it.stelle_a || null, it.stelle_b || null, it.empfehlung || null,
     it.quelle || null,
+    it.page_a_id ?? null, it.page_b_id ?? null,
+    resolved ? 1 : 0, resolved ? (status.resolved_at || null) : null,
+    dismissed ? 1 : 0, dismissed ? (status.dismissed_at || null) : null,
     sortIndex,
   );
-  const figNames = Array.isArray(it.figuren) ? it.figuren.map(_toRefString).filter(Boolean) : [];
-  const fig_ids = [];
-  const seenFig = new Set();
-  figNames.forEach((name, j) => {
-    const fid = figNameToId?.[name] || null;
-    const key = (fid || '') + '|' + name;
-    if (seenFig.has(key)) return;
-    seenFig.add(key);
-    if (fid) fig_ids.push(fid);
-    const figureRowId = fid ? (figIdToRowId[fid] ?? null) : null;
-    _insContinuityIssueFig.run(issueId, figureRowId, name, j);
-  });
-  const chNames = Array.isArray(it.kapitel) ? it.kapitel.map(_toRefString).filter(Boolean) : [];
-  const chapter_ids = [];
-  const seenCh = new Set();
-  chNames.forEach((name, j) => {
-    const cidCh = chNameToId?.[name] ?? null;
-    const key = (cidCh ?? '') + '|' + name;
-    if (seenCh.has(key)) return;
-    seenCh.add(key);
-    if (cidCh != null) chapter_ids.push(cidCh);
-    if (cidCh != null) _insContinuityIssueCh.run(issueId, cidCh, j);
-  });
+  refs.figs.forEach((f, j) => _insContinuityIssueFig.run(issueId, f.rowId, f.name, j));
+  refs.chs.forEach((c, j) => { if (c.cid != null) _insContinuityIssueCh.run(issueId, c.cid, j); });
   return {
     id: issueId,
+    resolved, dismissed,
     schwere: it.schwere || null, typ: it.typ || null,
     beschreibung: it.beschreibung || null,
     stelle_a: it.stelle_a || null, stelle_b: it.stelle_b || null,
     empfehlung: it.empfehlung || null,
     quelle: it.quelle || null,
-    figuren: figNames, fig_ids,
-    kapitel: chNames, chapter_ids,
+    page_a_id: it.page_a_id ?? null, page_b_id: it.page_b_id ?? null,
+    figuren: refs.figuren, fig_ids: refs.fig_ids,
+    kapitel: refs.kapitel, chapter_ids: refs.chapter_ids,
   };
 }
 
@@ -90,22 +105,64 @@ function _figIdToRowIdMap(bookIdInt, email) {
   return Object.fromEntries(figRows.map(r => [r.fig_id, r.id]));
 }
 
+/** Frühere Befunde mit Triage-Status (behoben oder kein Fehler) dieses Buchs, neueste
+ *  zuerst — Kandidaten für carryOverStatus. Kapitel als IDs + Namen, Figuren als Namen. */
+function _priorTriaged(bookIdInt, email) {
+  const rows = db.prepare(`
+    SELECT ci.id, ci.typ, ci.stelle_a, ci.stelle_b, ci.resolved, ci.resolved_at, ci.dismissed, ci.dismissed_at
+      FROM continuity_issues ci JOIN continuity_checks cc ON cc.id = ci.check_id
+     WHERE ci.book_id = ? AND ci.user_email IS ? AND (ci.resolved = 1 OR ci.dismissed = 1)
+     ORDER BY cc.checked_at DESC, ci.id DESC
+  `).all(bookIdInt, email);
+  if (!rows.length) return [];
+  const ids = rows.map(r => r.id);
+  const ph = ids.map(() => '?').join(',');
+  const figs = db.prepare(`SELECT issue_id, figur_name FROM continuity_issue_figures WHERE issue_id IN (${ph})`).all(...ids);
+  const chs = db.prepare(`
+    SELECT cic.issue_id, cic.chapter_id, c.chapter_name
+      FROM continuity_issue_chapters cic LEFT JOIN chapters c ON c.chapter_id = cic.chapter_id
+     WHERE cic.issue_id IN (${ph})`).all(...ids);
+  const byId = new Map(rows.map(r => [r.id, { ...r, figuren: [], kapitel: [], chapter_ids: [] }]));
+  for (const f of figs) if (f.figur_name) byId.get(f.issue_id).figuren.push(f.figur_name);
+  for (const c of chs) {
+    const it = byId.get(c.issue_id);
+    if (c.chapter_id != null) it.chapter_ids.push(c.chapter_id);
+    if (c.chapter_name) it.kapitel.push(c.chapter_name);
+  }
+  return rows.map(r => byId.get(r.id));
+}
+
+// Issues auflösen, Triage übernehmen, speichern. Läuft innerhalb der Aufrufer-Transaktion.
+function _persistIssues(cid, bookIdInt, email, issuesArr, sortStart, figNameToId, chNameToId) {
+  const figIdToRowId = _figIdToRowIdMap(bookIdInt, email);
+  const refsList = issuesArr.map(it => _resolveRefs(it || {}, figNameToId, figIdToRowId, chNameToId));
+  const statuses = carryOverStatus(
+    issuesArr.map((it, i) => ({ ...(it || {}), ...refsList[i] })),
+    _priorTriaged(bookIdInt, email),
+  );
+  return issuesArr.map((it, i) =>
+    _persistOneContinuityIssue(cid, bookIdInt, email, it || {}, refsList[i], statuses[i], sortStart + i));
+}
+
+/** Speichert einen Kontinuitäts-Check mit allen Issues als eigene Zeilen.
+ *  issues: [{schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung, quelle?,
+ *            page_a_id?, page_b_id?, figuren:[Namen], kapitel:[Namen]}]
+ *  figNameToId / chNameToId: Auflösungs-Maps (Name → fig_id / chapter_id).
+ *  Gibt { checkId, normalizedIssues } zurück (Frontend-Form mit fig_ids/chapter_ids
+ *  und übernommenem Triage-Status). */
 function saveContinuityCheck(bookId, userEmail, summary, model, issues, figNameToId, chNameToId) {
   const bookIdInt = parseInt(bookId);
   const email = userEmail || null;
-  const normalizedIssues = [];
+  let normalizedIssues = [];
   let checkId = null;
-  const figIdToRowId = _figIdToRowIdMap(bookIdInt, email);
   db.transaction(() => {
     const { lastInsertRowid: cid } = _insContinuityCheck.run(
       bookIdInt, email, summary || '', model || null,
     );
     checkId = cid;
     const issuesArr = Array.isArray(issues) ? issues : [];
-    for (let i = 0; i < issuesArr.length; i++) {
-      const { id, ...rest } = _persistOneContinuityIssue(cid, bookIdInt, email, issuesArr[i] || {}, i, figNameToId, figIdToRowId, chNameToId);
-      normalizedIssues.push(rest);
-    }
+    normalizedIssues = _persistIssues(cid, bookIdInt, email, issuesArr, 0, figNameToId, chNameToId)
+      .map(({ id, ...rest }) => rest);
   })();
   return { checkId, normalizedIssues };
 }
@@ -120,9 +177,8 @@ function saveContinuityCheck(bookId, userEmail, summary, model, issues, figNameT
 function saveFaktencheckIssues(bookId, userEmail, model, issues, figNameToId, chNameToId, summaryFallback = '') {
   const bookIdInt = parseInt(bookId);
   const email = userEmail || null;
-  const figIdToRowId = _figIdToRowIdMap(bookIdInt, email);
   const issuesArr = Array.isArray(issues) ? issues : [];
-  const normalizedIssues = [];
+  let normalizedIssues = [];
   db.transaction(() => {
     let row = db.prepare(
       'SELECT id FROM continuity_checks WHERE book_id = ? AND user_email IS ? ORDER BY checked_at DESC LIMIT 1'
@@ -130,14 +186,18 @@ function saveFaktencheckIssues(bookId, userEmail, model, issues, figNameToId, ch
     let cid = row?.id;
     if (!cid) {
       ({ lastInsertRowid: cid } = _insContinuityCheck.run(bookIdInt, email, summaryFallback || '', model || null));
-    } else {
-      db.prepare("DELETE FROM continuity_issues WHERE check_id = ? AND typ = 'faktenfehler'").run(cid);
     }
+    // Die zu ersetzenden faktenfehler-Zeilen bleiben bis nach der Triage-Übernahme
+    // stehen (sie sind deren Quelle) und fallen erst danach.
+    const stale = row?.id
+      ? db.prepare("SELECT id FROM continuity_issues WHERE check_id = ? AND typ = 'faktenfehler'").all(cid).map(r => r.id)
+      : [];
     // Neue faktenfehler ans Ende einsortieren (sort_order nach den bestehenden Issues).
     const maxSort = db.prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM continuity_issues WHERE check_id = ?').get(cid).m;
-    for (let i = 0; i < issuesArr.length; i++) {
-      const { id, ...rest } = _persistOneContinuityIssue(cid, bookIdInt, email, issuesArr[i] || {}, maxSort + 1 + i, figNameToId, figIdToRowId, chNameToId);
-      normalizedIssues.push(rest);
+    normalizedIssues = _persistIssues(cid, bookIdInt, email, issuesArr, maxSort + 1, figNameToId, chNameToId)
+      .map(({ id, ...rest }) => rest);
+    if (stale.length) {
+      db.prepare(`DELETE FROM continuity_issues WHERE id IN (${stale.map(() => '?').join(',')})`).run(...stale);
     }
   })();
   return { normalizedIssues };
@@ -156,7 +216,8 @@ function getLatestContinuityCheck(bookId, userEmail) {
   `).get(bookIdInt, email);
   if (!row) return null;
   const issueRows = db.prepare(`
-    SELECT id, schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung, quelle, resolved
+    SELECT id, schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung, quelle,
+           resolved, dismissed, page_a_id, page_b_id
     FROM continuity_issues
     WHERE check_id = ?
     ORDER BY sort_order, id
@@ -192,9 +253,11 @@ function getLatestContinuityCheck(bookId, userEmail) {
   const issues = issueRows.map(r => ({
     id: r.id,
     resolved: !!r.resolved,
+    dismissed: !!r.dismissed,
     schwere: r.schwere, typ: r.typ, beschreibung: r.beschreibung,
     stelle_a: r.stelle_a, stelle_b: r.stelle_b, empfehlung: r.empfehlung,
     quelle: r.quelle || null,
+    page_a_id: r.page_a_id ?? null, page_b_id: r.page_b_id ?? null,
     figuren: figByIssue.get(r.id)?.figuren || [],
     fig_ids: figByIssue.get(r.id)?.fig_ids || [],
     kapitel: chByIssue.get(r.id)?.kapitel || [],
@@ -223,10 +286,23 @@ function setContinuityIssueResolved(issueId, resolved) {
   return info.changes > 0;
 }
 
+/** Markiert ein Issue als „kein Fehler" (Fehlalarm) bzw. hebt das auf. Der Status wird
+ *  von späteren Läufen übernommen (carryOverStatus). */
+function setContinuityIssueDismissed(issueId, dismissed) {
+  const id = parseInt(issueId);
+  if (!id) return false;
+  const now = dismissed ? new Date().toISOString() : null;
+  const info = db.prepare(
+    'UPDATE continuity_issues SET dismissed = ?, dismissed_at = ? WHERE id = ?'
+  ).run(dismissed ? 1 : 0, now, id);
+  return info.changes > 0;
+}
+
 module.exports = {
   saveContinuityCheck,
   saveFaktencheckIssues,
   getLatestContinuityCheck,
   getContinuityIssueBookId,
   setContinuityIssueResolved,
+  setContinuityIssueDismissed,
 };

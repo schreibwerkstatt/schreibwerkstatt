@@ -29,7 +29,7 @@ ZIP mit Endung `.swbook`:
 
 Tabellen-Inventar pro Block — alle book-scoped, IDs werden beim Restore remapped:
 
-- **analysis** (Komplettanalyse): `figures` (+`figure_tags`/`figure_relations`/`figure_appearances`/`figure_events`/`page_figure_mentions`), `locations` (+`location_figures`/`location_chapters`), `figure_scenes` (+`scene_figures`/`scene_locations`), `songs` (+`song_figures`/`song_chapters`/`song_scenes`), `world_facts` (+`world_fact_chapters`), `storylines`, `zeitstrahl_events` (+`zeitstrahl_event_chapters`/`_pages`/`_figures`), `continuity_checks`/`continuity_issues` (+`_figures`/`_chapters`), `ideen`.
+- **analysis** (Komplettanalyse): `figures` (+`figure_tags`/`figure_relations`/`figure_appearances`/`figure_events`/`page_figure_mentions`), `locations` (+`location_figures`/`location_chapters`), `figure_scenes` (+`scene_figures`/`scene_locations`), `songs` (+`song_figures`/`song_chapters`), `world_facts` (+`world_fact_chapters`), `storylines`, `zeitstrahl_events` (+`zeitstrahl_event_chapters`/`_pages`/`_figures`), `continuity_checks`/`continuity_issues` (+`_figures`/`_chapters`), `ideen`.
 - **lektorat**: `page_checks` (gespeicherte Befunde/Stilanalyse/Fazit pro Seite).
 - **chats**: `chat_sessions` + `chat_messages` (Seiten- und Buch-Chat).
 

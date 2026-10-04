@@ -28,11 +28,12 @@ function getLatestContinuityCheck(bookId, userEmail) {
 const _stmtContinuityIssues = db.prepare(`
     SELECT id, schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung, sort_order
     FROM continuity_issues
-    WHERE check_id = ?
+    WHERE check_id = ? AND dismissed = 0
     ORDER BY sort_order, id
   `);
 
-/** Issues eines Checks in Anzeige-Reihenfolge. */
+/** Issues eines Checks in Anzeige-Reihenfolge — ohne die vom Autor als „kein Fehler"
+ *  verworfenen: der Buch-Chat soll einen bekannten Fehlalarm nicht als Problem nennen. */
 function listContinuityIssuesForCheck(checkId) {
   return _stmtContinuityIssues.all(checkId);
 }
