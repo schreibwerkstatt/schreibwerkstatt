@@ -1,7 +1,6 @@
 'use strict';
 // Regression-Sentinel: PRAGMA-Tuning in db/connection.js. Schützt vor
 // versehentlichem Entfernen der Performance-PRAGMAs bei künftigen Refactors.
-// Plan-Referenz: docs/bookstack-exit.md#phase-0c.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');

@@ -237,6 +237,21 @@ export const cardsMethods = {
     }
   },
 
+  // Gegenstueck am Kapitel-Indikator im Pagetree: Kapitel-Ideen sitzen neben
+  // der Kapitelbewertung, also erst die Karte auf das Kapitel stellen, dann den
+  // Ideen-Slot im Kapitel-Modus öffnen. Kein Toggle — ein zweiter Klick auf die
+  // Plakette schliesst nichts.
+  async openIdeenForChapter(chapterId) {
+    const cid = parseInt(chapterId, 10);
+    if (!cid) return;
+    this.kapitelReviewChapterId = String(cid);
+    if (!this.showKapitelReviewCard) await this.toggleKapitelReviewCard();
+    else this._closeOtherMainCards('kapitelReview');
+    if (!(this.showIdeenCard && this.ideenScope === 'chapter' && this.ideenChapterId === cid)) {
+      await this.toggleChapterIdeenCard(cid);
+    }
+  },
+
   // Seiten-Chat: lebt neben dem Editor, schließt NICHT den Editor. Toggle
   // merkt sich checkDone-Snapshot (Chat soll Findings temporär verbergen).
   // checkDoneBeforeChat wird in chat-card.js beim onShow gesetzt.

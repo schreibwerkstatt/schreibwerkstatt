@@ -35,18 +35,18 @@ function _seedBook({ name = 'Test-Buch', description = 'Beschreibung' } = {}) {
 function _seedChapter(bookId, { name = 'Kapitel 1', position = 0 } = {}) {
   const now = new Date().toISOString();
   const r = ctx.connection.db.prepare(`
-    INSERT INTO chapters (book_id, chapter_name, position, priority, updated_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(bookId, name, position, position, now);
+    INSERT INTO chapters (book_id, chapter_name, position, updated_at)
+    VALUES (?, ?, ?, ?)
+  `).run(bookId, name, position, now);
   return r.lastInsertRowid;
 }
 
 function _seedPage(bookId, chapterId, { name = 'Seite 1', html = '<p>Inhalt</p>', position = 0 } = {}) {
   const now = new Date().toISOString();
   const r = ctx.connection.db.prepare(`
-    INSERT INTO pages (book_id, chapter_id, page_name, body_html, position, priority, updated_at, local_updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(bookId, chapterId, name, html, position, position, now, now);
+    INSERT INTO pages (book_id, chapter_id, page_name, body_html, position, updated_at, local_updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(bookId, chapterId, name, html, position, now, now);
   return r.lastInsertRowid;
 }
 
@@ -315,4 +315,34 @@ test('localdb: findPagesByBlockIds findet die Seite per data-bid, unbekannt → 
   const p2 = _seedPage(bookId, chapterId, { name: 'Y', html: '<p data-bid="b-222">zwei</p>', position: 1 });
   const map = ctx.contentStore.findPagesByBlockIds(bookId, ['b-222', 'b-111', 'b-nope']);
   assert.deepEqual(map, { 'b-222': p2, 'b-111': p1, 'b-nope': null });
+});
+
+test('createChapter after_chapter_id: Geschwister direkt hinter dem Anker, auch nach Reload', async () => {
+  const bookId = _seedBook({ name: 'Einfuege-Buch' });
+  const a = _seedChapter(bookId, { name: 'Zeta A', position: 1 });
+  const b = _seedChapter(bookId, { name: 'Alpha B', position: 2 });
+  const sub1 = await ctx.contentStore.createChapter({ book_id: bookId, name: 'Sub 1', parent_chapter_id: a });
+  const sub2 = await ctx.contentStore.createChapter({ book_id: bookId, name: 'Sub 2', parent_chapter_id: a });
+  // book_order existiert ab hier (bookTree legt sie an) — genau der Fall, in dem
+  // reconcile ein neues Kapitel sonst ans Ende seines Parents haengt.
+  await ctx.contentStore.bookTree(bookId);
+
+  const top = await ctx.contentStore.createChapter({ book_id: bookId, name: 'Neu Top', after_chapter_id: a });
+  assert.equal(top.parent_chapter_id, null);
+  const mid = await ctx.contentStore.createChapter({ book_id: bookId, name: 'Sub Mitte', after_chapter_id: sub1.id });
+  assert.equal(mid.parent_chapter_id, a);
+
+  const tree = await ctx.contentStore.bookTree(bookId);
+  assert.deepEqual(tree.chapters.map(c => c.id), [a, top.id, b]);
+  assert.deepEqual(tree.chapters[0].subchapters.map(c => c.id), [sub1.id, mid.id, sub2.id]);
+  // Positionen materialisiert: depth-first lueckenlos (Invariante docs/chapter-hierarchy.md).
+  const positions = [a, sub1.id, mid.id, sub2.id, top.id, b];
+  for (let i = 0; i < positions.length; i++) {
+    assert.equal((await ctx.contentStore.loadChapter(positions[i])).position, i);
+  }
+
+  // Fremder Anker → nicht gefunden, nichts angelegt.
+  const other = _seedBook({ name: 'Fremd' });
+  await assert.rejects(() => ctx.contentStore.createChapter({ book_id: other, name: 'X', after_chapter_id: a }));
+  assert.equal((await ctx.contentStore.listChapters(other)).length, 0);
 });

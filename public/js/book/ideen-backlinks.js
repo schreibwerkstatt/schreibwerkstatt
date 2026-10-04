@@ -1,4 +1,4 @@
-// Gegenrichtung der Ideen-Verknuepfung: die Ideen-Chips AN einem Recherche-
+// Gegenrichtung der Ideen-Verknuepfung: die Ideen-Referenzen AN einem Recherche-
 // Fundstueck, einem Plot-Beat oder einem Motiv.
 //
 // EIN Modul fuer alle drei Karten — sie stellen dieselbe Frage („welche meiner
@@ -9,8 +9,8 @@
 // Schreibpfade die Skopierung mitfuehren.
 //
 // Kuratiert wird die Kante ausschliesslich auf der Ideen-Seite (Ideen-Karte,
-// Ideen-Board); hier ist sie read-only mit Sprung zurueck. Gleiche Bauart wie
-// die Motiv-Badges auf der Beat-Karte.
+// Ideen-Board); hier ist sie read-only mit Sprung zurueck (x-entity-ref, Typ
+// `idee`: page_id/chapter_id der Idee bestimmen das Sprungziel).
 //
 // Verwendung in einer Karte:
 //   State:   ideaBacklinks: {}, _ideaBacklinkBookId: null
@@ -25,8 +25,8 @@ export const ideenBacklinkMethods = {
   /**
    * Map Ziel-ID → Ideen-Anrisse fuer EINE Ziel-Art holen.
    *
-   * NON-FATAL: schlaegt der Aufruf fehl, bleibt die Karte ohne Ideen-Chips
-   * stehen statt mit einer Fehlermeldung. Die Chips sind eine Beigabe — ein
+   * NON-FATAL: schlaegt der Aufruf fehl, bleibt die Karte ohne Ideen-Referenzen
+   * stehen statt mit einer Fehlermeldung. Die Referenzen sind eine Beigabe — ein
    * Motiv-Katalog, der wegen einer fehlenden Nebenlesung gar nicht erscheint,
    * waere der schlechtere Tausch.
    */
@@ -48,10 +48,9 @@ export const ideenBacklinkMethods = {
   },
 
   ideaStatusLabel(idee) { return window.__app.t(`ideen.status.${ideeStatus(idee)}`); },
-  ideaStatusKey(idee) { return ideeStatus(idee); },
 
-  // Der Chip nennt die Stelle im Buch, an der die Pendenz haengt — ohne sie
-  // waere „noch ein Beleg noetig" eine Notiz ohne Ort.
+  // Der Tooltip nennt Status und die Stelle im Buch, an der die Pendenz haengt —
+  // ohne sie waere „noch ein Beleg noetig" eine Notiz ohne Ort.
   ideaAnchorLabel(idee) {
     return idee?.page_name || idee?.chapter_name || window.__app.t('ideenBoard.laneUnknown');
   },
@@ -59,17 +58,5 @@ export const ideenBacklinkMethods = {
   ideaChipTip(idee) {
     const app = window.__app;
     return `${this.ideaStatusLabel(idee)} · ${this.ideaAnchorLabel(idee)} — ${app.t('ideen.link.gotoIdee')}`;
-  },
-
-  // Sprung zur Idee: an ihren Anker im Buch. Dort steht sie in der Ideen-Karte
-  // neben dem Editor bzw. neben der Kapitelbewertung — also da, wo man sie
-  // bearbeitet. Ein Sprung ins Board zeigte sie zwar auch, aber ohne den Text,
-  // um den es geht.
-  gotoIdee(idee) {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId || !idee) return;
-    location.hash = idee.page_id != null
-      ? `#book/${bookId}/page/${idee.page_id}`
-      : `#book/${bookId}/kapitel/${idee.chapter_id}`;
   },
 };

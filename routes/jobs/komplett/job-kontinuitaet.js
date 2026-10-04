@@ -109,7 +109,7 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
       kontFullText = bookText;
       result = await retryOnTransientAi(() => call(jobId, tok,
         prompts.buildKontinuitaetSinglePassPrompt(bookName, bookText, figurenKompakt, orteKompakt, narrativeLabels(getBookSettings(bookIdInt, email)), anachronismus),
-        sys.SYSTEM_KONTINUITAET_BLOCKS, 60, 97, komplettMaxTokens(effectiveProvider), 0.2, null, prompts.SCHEMA_KONTINUITAET_PROBLEME,
+        sys.SYSTEM_KONTINUITAET_BLOCKS, 60, 97, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_PROBLEME,
         costTier(COST_LABEL.kontinuitaet),
       ), { log, label: 'Kontinuität Single-Pass' });
       pt.mark('Single-Pass Check');
@@ -140,7 +140,7 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
           // transienter Blip würde sonst dauerhaft Fakten verlieren.
           const chResult = await retryOnTransientAi(() => call(jobId, tok,
             prompts.buildKontinuitaetChapterFactsPrompt(group.name, chText),
-            sys.SYSTEM_KONTINUITAET_BLOCKS, fromPct, toPct, komplettMaxTokens(effectiveProvider), 0.2, null, prompts.SCHEMA_KONTINUITAET_FAKTEN,
+            sys.SYSTEM_KONTINUITAET_BLOCKS, fromPct, toPct, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_FAKTEN,
             costTier(COST_LABEL.kontinuitaet),
           ), { log, label: `Fakten «${group.name}»` });
           chapterFacts.push({ kapitel: group.name, fakten: chResult.fakten || [] });
@@ -163,7 +163,7 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
           try {
             const chResult = await retryOnTransientAi(() => call(jobId, tok,
               prompts.buildKontinuitaetChapterFactsPrompt(group.name, chText),
-              sys.SYSTEM_KONTINUITAET_BLOCKS, 86, 88, komplettMaxTokens(effectiveProvider), 0.2, null, prompts.SCHEMA_KONTINUITAET_FAKTEN,
+              sys.SYSTEM_KONTINUITAET_BLOCKS, 86, 88, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_FAKTEN,
               costTier(COST_LABEL.kontinuitaet),
             ), { log, label: `Fakten-Retry «${group.name}»` });
             chapterFacts.push({ kapitel: group.name, fakten: chResult.fakten || [] });
@@ -184,7 +184,7 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
       updateJob(jobId, { progress: 88, statusText: 'job.phase.checkContradictions' });
       result = await retryOnTransientAi(() => call(jobId, tok,
         prompts.buildKontinuitaetCheckPrompt(bookName, chapterFacts, figurenKompakt, orteKompakt, anachronismus),
-        sys.SYSTEM_KONTINUITAET_BLOCKS, 88, 95, komplettMaxTokens(effectiveProvider), 0.2, null, prompts.SCHEMA_KONTINUITAET_PROBLEME,
+        sys.SYSTEM_KONTINUITAET_BLOCKS, 88, 95, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_PROBLEME,
         costTier(COST_LABEL.kontinuitaet),
       ), { log, label: 'Kontinuität Check (Multi-Pass)' });
       // Fakten-basierte Befunde gegen den Originaltext verifizieren (False-Positive-Filter).

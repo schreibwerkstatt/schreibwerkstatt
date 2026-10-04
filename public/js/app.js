@@ -106,60 +106,6 @@ document.addEventListener('alpine:init', () => {
       }
       return this._szeneMap;
     },
-
-    get szenenNachKapitel() {
-      const map = new Map();
-      for (const s of this.$store.catalog.szenen) {
-        if (!s.kapitel) continue;
-        if (!map.has(s.kapitel)) map.set(s.kapitel, { total: 0, stark: 0, mittel: 0, schwach: 0 });
-        const e = map.get(s.kapitel);
-        e.total++;
-        if (s.wertung === 'stark')        e.stark++;
-        else if (s.wertung === 'mittel')  e.mittel++;
-        else if (s.wertung === 'schwach') e.schwach++;
-      }
-      return [...map.entries()].map(([name, c]) => ({ name, ...c }))
-        .sort((a, b) => this._chapterIdx(a.name) - this._chapterIdx(b.name));
-    },
-    get szenenNachSeite() {
-      const map = new Map();
-      for (const s of this.$store.catalog.szenen) {
-        if (!s.seite) continue;
-        if (!map.has(s.seite)) map.set(s.seite, { total: 0, kapitel: s.kapitel });
-        map.get(s.seite).total++;
-      }
-      return [...map.entries()].map(([name, d]) => ({ name, total: d.total, kapitel: d.kapitel }))
-        .sort((a, b) => {
-          const c = this._chapterIdx(a.kapitel) - this._chapterIdx(b.kapitel);
-          return c !== 0 ? c : this._pageIdx(a.name) - this._pageIdx(b.name);
-        });
-    },
-    // Szenen-Anzahl pro Figur (nur Figuren mit ≥1 Szene), in Figuren-Reihenfolge.
-    // `wenig` markiert unterrepräsentierte Figuren (< 3 Szenen) für die
-    // Übersichts-Badges. Ersetzt die doppelte Inline-Filterung im Template.
-    get szenenNachFigur() {
-      const counts = new Map();
-      for (const s of this.$store.catalog.szenen) {
-        for (const id of (s.fig_ids || [])) counts.set(id, (counts.get(id) || 0) + 1);
-      }
-      const out = [];
-      for (const f of this.$store.catalog.figuren) {
-        const total = counts.get(f.id) || 0;
-        if (total === 0) continue;
-        out.push({ id: f.id, name: f.kurzname || f.name, total, wenig: total < 3 });
-      }
-      return out;
-    },
-    // Szenen-Anzahl pro Wertung (Default 'mittel' bei fehlender Wertung) für die
-    // Filter-Tabs. Ein Scan statt 6 Inline-Filter-Durchläufen pro Render.
-    get szenenWertungCounts() {
-      const c = { stark: 0, mittel: 0, schwach: 0 };
-      for (const s of this.$store.catalog.szenen) {
-        const w = s.wertung || 'mittel';
-        if (w in c) c[w]++;
-      }
-      return c;
-    },
     get songsByFigurId() {
       const map = new Map();
       for (const s of (this.$store.catalog.songs || [])) {
@@ -256,6 +202,13 @@ document.addEventListener('alpine:init', () => {
           if (item.name.toLowerCase().includes(q) || item.pages[0]?.name?.toLowerCase().includes(q)) {
             matched.set(item.id, item.pages);
           }
+          continue;
+        }
+        // Trifft der Kapitelname, gehoert das ganze Kapitel zum Ergebnis (alle
+        // Seiten, auch ein leeres Kapitel mit seinem Kopf) — „Teil 2" soll den
+        // Teil finden, nicht nur Seiten, die zufaellig so heissen.
+        if (item.name?.toLowerCase().includes(q)) {
+          matched.set(item.id, item.pages);
           continue;
         }
         const pages = item.pages.filter(p => p.name.toLowerCase().includes(q));

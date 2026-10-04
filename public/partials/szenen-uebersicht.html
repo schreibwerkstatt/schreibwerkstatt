@@ -1,0 +1,65 @@
+<!-- Szenen-Karte: klappbare Verteilung (pro Figur / Kapitel / Seite).
+     Fragment im Scope von szenenCard (public/js/cards/szenen-card.js).
+     Zählt nur Szenen, die im Text stehen (keine stale-Einträge). Jeder Eintrag
+     ist ein Filter-Umschalter: Klick setzt den Filter, erneuter Klick hebt ihn auf. -->
+<div x-show="activeCount > 0" class="szenen-uebersicht" x-data="collapsible()">
+  <button type="button" class="collapsible-toggle" x-bind="trigger">
+    <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+    <span x-text="$app.t('szenen.distribution')"></span>
+  </button>
+  <div x-bind="panel" class="szenen-uebersicht-grid" x-cloak>
+    <!-- Pro Kapitel: gestapelter Balken stark/mittel/schwach, Länge relativ zum grössten Kapitel -->
+    <div class="szenen-uebersicht-block szenen-uebersicht-block--kapitel">
+      <div class="bewertung-section-title" x-text="$app.t('szenen.byKapitel')"></div>
+      <div class="szenen-kapitel-bars" role="group" :aria-label="$app.t('szenen.byKapitel')">
+        <template x-for="k in nachKapitel" :key="k.key">
+          <button type="button" class="szenen-kapitel-bar-row"
+                  :class="{ 'is-active': isKapitelFilter(k) }"
+                  :aria-pressed="isKapitelFilter(k)"
+                  :disabled="k.chapterId == null"
+                  @click="toggleKapitelFilter(k)"
+                  :data-tip="$app.t('szenen.tooltip', { stark: k.stark, mittel: k.mittel, schwach: k.schwach })">
+            <span class="szenen-kapitel-name" x-text="k.name"></span>
+            <span class="szenen-kapitel-track">
+              <span class="szenen-kapitel-bar" :style="{ '--bar-share': k.share + '%' }">
+                <span class="szenen-kapitel-seg szenen-kapitel-seg--stark" x-show="k.stark" :style="{ '--seg-grow': k.stark }"></span>
+                <span class="szenen-kapitel-seg szenen-kapitel-seg--mittel" x-show="k.mittel" :style="{ '--seg-grow': k.mittel }"></span>
+                <span class="szenen-kapitel-seg szenen-kapitel-seg--schwach" x-show="k.schwach" :style="{ '--seg-grow': k.schwach }"></span>
+              </span>
+            </span>
+            <span class="szenen-kapitel-total" x-text="k.total"></span>
+          </button>
+        </template>
+      </div>
+    </div>
+    <!-- Pro Figur -->
+    <div class="szenen-uebersicht-block">
+      <div class="bewertung-section-title" x-text="$app.t('szenen.byFigur')"></div>
+      <div class="szenen-count-badges" role="group" :aria-label="$app.t('szenen.byFigur')">
+        <template x-for="f in nachFigur" :key="f.id">
+          <button type="button" class="szenen-count-badge"
+                  :class="{ 'szenen-count-badge--wenig': f.wenig, 'is-active': isFigurFilter(f.id) }"
+                  :aria-pressed="isFigurFilter(f.id)"
+                  @click="toggleFigurFilter(f.id)"
+                  :data-tip="f.wenig ? $app.t('szenen.wenigHint') : null"
+                  x-text="f.name + ' · ' + f.total"></button>
+        </template>
+      </div>
+    </div>
+    <!-- Pro Seite -->
+    <div class="szenen-uebersicht-block" x-show="nachSeite.length > 0">
+      <div class="bewertung-section-title" x-text="$app.t('szenen.bySeite')"></div>
+      <div class="szenen-count-badges" role="group" :aria-label="$app.t('szenen.bySeite')">
+        <template x-for="p in nachSeite" :key="p.key">
+          <button type="button" class="szenen-count-badge"
+                  :class="{ 'is-active': isSeiteFilter(p) }"
+                  :aria-pressed="isSeiteFilter(p)"
+                  :disabled="p.pageId == null || p.chapterId == null"
+                  @click="toggleSeiteFilter(p)"
+                  :data-tip="p.kapitel"
+                  x-text="p.name + ' · ' + p.total"></button>
+        </template>
+      </div>
+    </div>
+  </div>
+</div>

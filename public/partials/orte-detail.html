@@ -1,0 +1,94 @@
+<!-- Detail eines Schauplatzes (aufgeklappte Listenzeile). Fragment-Include von
+     orte-list.html, Scope `orteCard`, Laufvariable `o`. Auswertung aus
+     book/orte-insights.js, Pflege aus book/orte-edit.js. -->
+<p x-show="o.beschreibung" x-text="o.beschreibung" class="entity-detail-text"></p>
+<div x-show="o.parent" class="entity-meta-row">
+  <span class="entity-meta-label" x-text="$app.t('orte.edit.parentLabel')"></span>
+  <button type="button" class="entity-ref" x-entity-ref="{ type: 'ort', id: o.parent }"></button>
+</div>
+<div x-show="ortChildren(o).length > 0" class="entity-meta-row">
+  <span class="entity-meta-label" x-text="$app.t('orte.children')"></span>
+  <span class="entity-refs">
+    <template x-for="c in ortChildren(o)" :key="c.id">
+      <button type="button" class="entity-ref" x-entity-ref="{ type: 'ort', id: c.id }"></button>
+    </template>
+  </span>
+</div>
+<div x-show="o.erste_erwaehnung" class="entity-meta-row">
+  <span class="entity-meta-label" x-text="$app.t('orte.firstMention')"></span>
+  <template x-if="o.erste_erwaehnung_page_id">
+    <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: o.erste_erwaehnung_page_id }"></button>
+  </template>
+  <template x-if="!o.erste_erwaehnung_page_id">
+    <span x-text="o.erste_erwaehnung"></span>
+  </template>
+</div>
+<div x-show="o.figuren?.length > 0" class="entity-meta-row">
+  <span class="entity-meta-label" x-text="$app.t('orte.figuren')"></span>
+  <span class="entity-refs">
+    <template x-for="figId in o.figuren" :key="figId">
+      <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: figId }"></button>
+    </template>
+  </span>
+</div>
+<div x-show="$store.catalog.szenen.some(s => (s.ort_ids||[]).includes(o.id))" class="entity-meta-row">
+  <span class="entity-meta-label" x-text="$app.t('orte.szenen')"></span>
+  <span class="entity-refs">
+    <template x-for="s in $store.catalog.szenen.filter(s => (s.ort_ids||[]).includes(o.id))" :key="s.id">
+      <button type="button" class="entity-ref" x-entity-ref="{ type: 'szene', id: s.id }"></button>
+    </template>
+  </span>
+</div>
+
+<!-- Präsenz über die Kapitel (Zelle = Kapitel, Intensität = Szenen dort) -->
+<template x-if="ortPresence(o)">
+  <div class="ort-presence">
+    <div class="card-section-title" x-text="$app.t('orte.presence.title')"></div>
+    <div class="ort-presence-cells">
+      <template x-for="(c, ci) in ortPresence(o).chapters" :key="ci">
+        <span class="ort-presence-cell heatmap-cell"
+              :class="{ 'heatmap-cell--primary': ortPresence(o).haeByCol[ci] > 0 }"
+              :style="ortPresenceCellVars(ortPresence(o).haeByCol[ci], ortPresence(o).maxCell)"
+              :data-tip="ortPresence(o).haeByCol[ci] > 0 ? $app.t('orte.presence.cellTip', { chapter: c, n: ortPresence(o).haeByCol[ci] }) : c"
+              role="button" tabindex="0" :aria-label="c"
+              @click="$app.openKapitelByName(c)"
+              @keydown.enter.prevent="$app.openKapitelByName(c)"
+              @keydown.space.prevent="$app.openKapitelByName(c)"></span>
+      </template>
+    </div>
+    <p class="card-hint card-hint--sm" x-show="ortPresence(o).abandoned"
+       x-text="$app.t('orte.presence.abandoned', { chapter: ortPresence(o).lastChapter })"></p>
+  </div>
+</template>
+
+<!-- Begegnungen: Figuren, die sich hier in derselben Szene treffen -->
+<template x-if="ortEncounters(o).pairs.length > 0">
+  <div class="entity-meta-row">
+    <span class="entity-meta-label" x-text="$app.t('orte.encounters')"></span>
+    <span class="ort-encounters">
+      <template x-for="p in ortEncounters(o).pairs" :key="p.a + '|' + p.b">
+        <span class="ort-encounter">
+          <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: p.a }"></button>
+          <span aria-hidden="true">&amp;</span>
+          <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: p.b }"></button>
+          <span class="ort-encounter-count" x-text="$app.t('orte.encounterScenes', { n: p.scenes })"></span>
+        </span>
+      </template>
+    </span>
+  </div>
+</template>
+
+<div class="ort-detail-actions">
+  <button type="button" class="btn-compact" @click.stop="startOrtEdit(o)" :disabled="ortEdit.mode !== null">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+    <span x-text="$app.t('orte.edit.action')"></span>
+  </button>
+  <span class="ort-merge">
+    <div x-data="combobox({ placeholder: $app.t('orte.merge.placeholder') })"
+         x-modelable="value" x-model="ortMergeTarget"
+         x-effect="options = ortMergeOptions(o)"></div>
+    <button type="button" class="btn-compact" :disabled="!ortMergeTarget"
+            @click.stop="mergeOrtInto(o)" :data-tip="$app.t('orte.merge.tip')"
+            x-text="$app.t('orte.merge.action')"></button>
+  </span>
+</div>

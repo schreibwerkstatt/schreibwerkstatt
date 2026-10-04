@@ -32,7 +32,12 @@ export function buildGeocodeResolvePrompt(items, ctx = {}) {
     const hints = Array.isArray(it.hints) && it.hints.length
       ? ` (Wohnadressen verknuepfter Figuren: ${it.hints.map(h => `«${h}»`).join(', ')})`
       : '';
-    return `- id=${it.id}: ${it.name}${hints}`;
+    // Vom Autor gepflegte Hierarchie (Raum › Gebäude › Stadt): der umgebende Ort
+    // ist oft genau der reale Anker, den das Label allein nicht nennt.
+    const within = Array.isArray(it.within) && it.within.length
+      ? ` (liegt in: ${it.within.map(w => `«${w}»`).join(' › ')})`
+      : '';
+    return `- id=${it.id}: ${it.name}${within}${hints}`;
   }).join('\n');
   return `Bestimme zu jedem folgenden Schauplatz-Label den realen Karten-Anker.${ctxBlock}
 

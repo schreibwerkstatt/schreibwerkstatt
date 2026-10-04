@@ -1,0 +1,43 @@
+<!-- Schauplatz-Liste (View-Mode 'list'). Fragment-Include von orte.html, lebt
+     im Scope von `orteCard`. Unterorte stehen eingerückt unter ihrem Elternort
+     (orte-card.js#_nestByParent); das Detail trägt Auswertung + Pflege. -->
+<div x-show="$store.catalog.orte.length > 0 && viewMode === 'list'" class="entity-list entity-list--accented ort-list">
+  <template x-for="o in orteFiltered" :key="o.id">
+    <div :class="{ 'ort-list-item--child': ortDepth(o.id) > 0 }" :style="{ '--ort-depth': ortDepth(o.id) }">
+      <div class="entity-row" :class="{ 'entity-row--stale': o.stale }" :data-ortid="o.id" @click="$store.catalogUi.selectedOrtId = $store.catalogUi.selectedOrtId === o.id ? null : o.id">
+        <span class="tag entity-typ-tag" x-text="ortTypLabel(o.typ)"></span>
+        <span class="entity-row-title" x-text="o.name"></span>
+        <span x-show="o.manually_created" class="tag ort-manual-tag" :data-tip="$app.t('orte.manualCreatedHint')" x-text="$app.t('orte.manualCreated')"></span>
+        <span x-show="o.stale" class="tag tag--stale" :data-tip="$app.t('orte.staleHint')" x-text="$app.t('orte.staleBadge')"></span>
+        <button type="button" x-show="o.stale || o.manually_created" class="icon-btn danger entity-row-delete"
+                @click.stop="$app.deleteOrt(o)"
+                :aria-label="$app.t('common.delete')" :data-tip="$app.t(o.stale ? 'entity.deleteStale' : 'orte.deleteManual')">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+        </button>
+        <span x-show="o.land" class="tag ort-land-tag" x-text="landLabel(o.land)"></span>
+        <span x-show="o.stimmung" class="ort-stimmung" x-text="o.stimmung"></span>
+        <template x-if="o.kapitel?.length">
+          <span class="entity-refs entity-refs--collapse-mobile">
+            <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: o.kapitel[0].chapter_id, name: o.kapitel[0].name }"></button>
+            <template x-if="o.kapitel.length > 1">
+              <span class="entity-ref-more" x-text="'+' + (o.kapitel.length - 1)"></span>
+            </template>
+          </span>
+        </template>
+        <span class="history-chevron" :class="{ open: $store.catalogUi.selectedOrtId === o.id }" aria-hidden="true"></span>
+      </div>
+      <div x-show="$store.catalogUi.selectedOrtId === o.id" class="entity-detail">
+        <template x-if="isEditingOrt(o.id)">
+          <div class="ort-edit-inline">
+            <!-- @include orte-edit -->
+          </div>
+        </template>
+        <template x-if="!isEditingOrt(o.id) && $store.catalogUi.selectedOrtId === o.id">
+          <div>
+            <!-- @include orte-detail -->
+          </div>
+        </template>
+      </div>
+    </div>
+  </template>
+</div>

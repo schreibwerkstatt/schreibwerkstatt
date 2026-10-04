@@ -25,8 +25,8 @@ function seedBook(id, name) {
     .run(id, name, now, now);
 }
 function seedChapter(id, bookId, name, pos) {
-  db.prepare('INSERT INTO chapters (chapter_id, book_id, chapter_name, position, priority, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(id, bookId, name, pos, pos, now);
+  db.prepare('INSERT INTO chapters (chapter_id, book_id, chapter_name, position, updated_at) VALUES (?, ?, ?, ?, ?)')
+    .run(id, bookId, name, pos, now);
 }
 
 test('movePage: Seite wandert ins Zielbuch, intrinsisch zieht mit, Buchwelt gekappt', async () => {

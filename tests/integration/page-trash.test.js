@@ -36,15 +36,15 @@ function _seedBook(name = 'Papierkorb-Buch') {
 function _seedChapter(bookId, name = 'Kapitel 1') {
   const now = new Date().toISOString();
   return db().prepare(`
-    INSERT INTO chapters (book_id, chapter_name, position, priority, updated_at) VALUES (?, ?, 0, 0, ?)
+    INSERT INTO chapters (book_id, chapter_name, position, updated_at) VALUES (?, ?, 0, ?)
   `).run(bookId, name, now).lastInsertRowid;
 }
 
 function _seedPage(bookId, chapterId, name, html) {
   const now = new Date().toISOString();
   return db().prepare(`
-    INSERT INTO pages (book_id, chapter_id, page_name, body_html, position, priority, updated_at, local_updated_at)
-    VALUES (?, ?, ?, ?, 0, 0, ?, ?)
+    INSERT INTO pages (book_id, chapter_id, page_name, body_html, position, updated_at, local_updated_at)
+    VALUES (?, ?, ?, ?, 0, ?, ?)
   `).run(bookId, chapterId, name, html, now, now).lastInsertRowid;
 }
 

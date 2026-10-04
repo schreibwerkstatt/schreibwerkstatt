@@ -539,13 +539,6 @@ export const sourcesMethods = {
     this.srcCitationsLoading = false;
   },
 
-  /** Sprung zur Fundstelle. Die Karte ist exklusiv — `gotoPageById` schliesst
-   *  sie und oeffnet den Notebook-Editor auf der Seite. */
-  gotoSourceCitation(c) {
-    if (c?.page_id == null) return;
-    window.__app.gotoPageById(c.page_id);
-  },
-
   // ── Intern ─────────────────────────────────────────────────────────────────
   _sourcesChanged() {
     const bookId = _bookId();

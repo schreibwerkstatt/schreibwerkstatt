@@ -85,6 +85,34 @@ function _motiveLines(motive) {
     .join('\n');
 }
 
+// Mindmap als eingerueckte Stichpunktliste statt Roh-JSON: die KI braucht nur
+// die Topics und ihre Hierarchie — `id`/`expanded`/`meta` kosteten Tokens ohne
+// Inhalt. Gedeckelt, damit eine maximal grosse Mindmap (256 KB) den Prompt nicht
+// sprengt; ein abgeschnittener Baum wird als solcher markiert.
+const MINDMAP_PROMPT_MAX_CHARS = 40000;
+function _mindmapText(mindmap) {
+  const root = mindmap?.data || mindmap;
+  const lines = [];
+  let len = 0;
+  let truncated = false;
+  const stack = root ? [{ node: root, depth: 0 }] : [];
+  while (stack.length) {
+    const { node, depth } = stack.pop();
+    if (!node || typeof node !== 'object') continue;
+    const topic = typeof node.topic === 'string' ? node.topic.trim() : '';
+    if (topic) {
+      const line = `${'  '.repeat(depth)}- ${topic}`;
+      if (len + line.length + 1 > MINDMAP_PROMPT_MAX_CHARS) { truncated = true; break; }
+      lines.push(line);
+      len += line.length + 1;
+    }
+    const kids = Array.isArray(node.children) ? node.children : [];
+    for (let i = kids.length - 1; i >= 0; i--) stack.push({ node: kids[i], depth: depth + 1 });
+  }
+  if (truncated) lines.push('- […]');
+  return lines.join('\n');
+}
+
 export function buildBrainstormPrompt(figurName, archetype, knotenPfad, mindmapJson, buchKontext, bestehendeFiguren = [], bestehendeOrte = [], existingChildren = [], beziehungen = [], plotBeats = [], motive = []) {
   const ctxSeg = (buchKontext || '').trim() ? `\nBUCH-KONTEXT:\n${buchKontext}\n` : '';
   const archSeg = archetype ? ` (Archetyp: ${archetype})` : '';
@@ -121,8 +149,8 @@ export function buildBrainstormPrompt(figurName, archetype, knotenPfad, mindmapJ
 
 FIGUR: ${figurName}${archSeg}
 ${ctxSeg}${figSeg}${bezSeg}${ortSeg}${plotSeg}${motivSeg}
-AKTUELLE MINDMAP (JSON):
-${JSON.stringify(mindmapJson)}
+AKTUELLE MINDMAP (Hierarchie als eingerückte Liste):
+${_mindmapText(mindmapJson)}
 
 ZIEL-KNOTEN: "${knotenPfad}"
 ${childSeg}
@@ -227,8 +255,8 @@ export function buildConsistencyPrompt(figurName, archetype, mindmapJson, buchKo
 
 FIGUR: ${figurName}${archSeg}
 ${ctxSeg}${figSeg}${bezSeg}${ortSeg}${weltSeg}${auftritteSeg}${tbSeg}${plotSeg}${motivSeg}
-FIGUR-MINDMAP (JSON):
-${JSON.stringify(mindmapJson)}
+FIGUR-MINDMAP (Hierarchie als eingerückte Liste):
+${_mindmapText(mindmapJson)}
 
 Prüfe auf:
 - Widersprüche innerhalb der Mindmap (z.B. Hintergrund passt nicht zur Stimme)

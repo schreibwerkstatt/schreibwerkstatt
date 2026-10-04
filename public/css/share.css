@@ -4,16 +4,22 @@
    (public/share.html / share.gone.html) und der E2E-Harness linken weiterhin
    nur diese eine Datei.
      components/icons.css — Lucide-Sprite-Basis (.icon fill/stroke), vom Vorlese-Dock konsumiert.
+     tokens/spacing.css — Abstands-Skala (--space-*). Die geteilte Kommentar-Karte
+                          (components/comment-rail.css) rechnet damit; ohne sie
+                          fielen Padding/Gap der Karten auf 0.
      share/theme.css    — Custom-Properties (Light/Dark), Theme-Wahl, prefers-color-scheme.
      share/layout.css   — Reset, Body, Skip-Link, Progress, Header, Optionen-Menü, Main, Intro.
      share/content.css  — Lese-Inhalt (Typografie, Prosa, Szenentrenner, TOC, Mark-Reset).
-     share/comments.css — Leser-Kommentare (Rail, Threads, Anker-Highlights, Composer).
+     share/comments.css — Leser-Kommentare (Rail, Threads, Anker-Highlights, Aktions-Knöpfe).
+     share/dialogs.css  — Kommentieren-Button, Composer, Mobile-Sheet, Identitäts-Chip + -Modal.
      share/tts.css      — Vorlesen (Proof-Listening): schwebender Dock + Satz-Highlight.
      share/reading.css  — Lesekomfort (Schrift/Breite/Serif), Umfang/Lesezeit, Weiterlesen, Nach-oben, Gesamt-Fazit. */
 @import url('./components/icons.css');
+@import url('./tokens/spacing.css');
 @import url('./share/theme.css');
 @import url('./share/layout.css');
 @import url('./share/content.css');
 @import url('./share/comments.css');
+@import url('./share/dialogs.css');
 @import url('./share/tts.css');
 @import url('./share/reading.css');

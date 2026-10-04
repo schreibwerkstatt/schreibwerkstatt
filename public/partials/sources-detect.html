@@ -71,7 +71,9 @@
                das Werk gefunden hat. Klickbar, wenn die Seite bestimmbar war. -->
           <button type="button" class="sources-detect-quote internal-link" x-show="v.erwaehnung"
                   :disabled="v.page_id == null" @click="gotoDetected(v)">
-            <span class="kapitel-badge kapitel-badge--primary" x-show="v.chapter_name" x-text="v.chapter_name"></span>
+            <template x-if="v.chapter_name">
+              <span class="entity-ref" x-entity-ref="{ type: 'kapitel', name: v.chapter_name, static: true }"></span>
+            </template>
             <span class="sources-detect-quote-text" x-text="'„' + v.erwaehnung + '“'"></span>
           </button>
         </div>

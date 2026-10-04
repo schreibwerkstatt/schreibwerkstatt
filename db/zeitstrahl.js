@@ -10,6 +10,7 @@ require('./migrations');
 // TEXT-fig_id → INTEGER figures.id: der Lookup liegt bei den Figuren
 // (db/figures/refs.js), nicht als eigene Kopie hier.
 const { figIdMaps } = require('./figures/refs');
+const { inClause } = require('../lib/validate');
 const { NOW_ISO_SQL } = require('./now');
 const { requireUserEmail: _requireUserEmail } = require('./write-helpers');
 const { toRefString: _toRefString } = require('./write-helpers');
@@ -127,6 +128,91 @@ function saveZeitstrahlEvents(bookId, userEmail, ereignisse, chNameToId = {}, pa
   })();
 }
 
+/** Lebensereignisse aller Figuren eines Buchs als Eingabe der Zeitstrahl-
+ *  Konsolidierung (Komplettanalyse P6), chronologisch sortiert (Ereignisse ohne
+ *  Jahr ans Ende) — mit Kapitel- und Seitennamen. Der Namens-JOIN auf
+ *  `chapters`/`pages` liegt hier und nicht im Job-Handler (Content-Store-Regel,
+ *  Muster db/sources/citations.js#listSourceCitations).
+ *  Nur aktive Figuren (`stale = 0`): eine ausgemusterte Figur behält ihre
+ *  Lebensereignisse (updateFigurenEvents löscht sie nicht), steht aber nicht mehr
+ *  im Text — in den Buch-Zeitstrahl gehören ihre Ereignisse nicht. */
+function listFigureEventsForTimeline(bookId, userEmail) {
+  return db.prepare(`
+    SELECT f.fig_id, f.name AS fig_name, f.typ AS fig_typ,
+           fe.datum, fe.datum_label,
+           fe.datum_year, fe.datum_month, fe.datum_day,
+           fe.datum_ende_year, fe.datum_ende_month, fe.datum_ende_day,
+           fe.story_tag, fe.datum_unsicher, fe.subtyp,
+           fe.ereignis, fe.typ AS evt_typ, fe.bedeutung,
+           c.chapter_name AS kapitel, p.page_name AS seite
+    FROM figure_events fe
+    JOIN figures f ON f.id = fe.figure_id
+    LEFT JOIN chapters c ON c.chapter_id = fe.chapter_id
+    LEFT JOIN pages    p ON p.page_id    = fe.page_id
+    WHERE f.book_id = ? AND f.user_email IS ? AND f.stale = 0
+    ORDER BY
+      COALESCE(fe.datum_year,  9999),
+      COALESCE(fe.datum_month, 99),
+      COALESCE(fe.datum_day,   99),
+      COALESCE(fe.story_tag,   99999),
+      f.sort_order
+  `).all(bookId, userEmail);
+}
+
+/** Zeitstrahl-Events eines Buchs/Users für GET /figures/zeitstrahl. ORDER BY:
+ *  strukturierte Datums-Felder zuerst (Year/Month/Day), Events ohne Jahr ans
+ *  Ende („unbekannt"-Bucket via COALESCE-Sentinel 9999/99); sort_order nur als
+ *  Tiebreaker bei Datums-Gleichstand. */
+function listZeitstrahlEvents(bookId, userEmail) {
+  return db.prepare(`
+    SELECT id, datum, datum_label, datum_year, datum_month, datum_day,
+           datum_ende_year, datum_ende_month, datum_ende_day,
+           story_tag, datum_unsicher, ereignis, typ, subtyp, bedeutung,
+           storyline_id, manually_edited, sort_order
+    FROM zeitstrahl_events
+    WHERE book_id = ? AND user_email = ?
+    ORDER BY
+      COALESCE(datum_year,  9999),
+      COALESCE(datum_month, 99),
+      COALESCE(datum_day,   99),
+      COALESCE(story_tag,   99999),
+      sort_order, id
+  `).all(bookId, userEmail || '');
+}
+
+/** Brücken der gegebenen Events mit Kapitel-/Seiten-/Figurennamen. Die
+ *  Namens-JOINs auf chapters/pages liegen hier, nicht im Route-Handler
+ *  (Content-Store-Regel). */
+function listZeitstrahlEventRefs(eventIds) {
+  if (!eventIds.length) return { chRows: [], pgRows: [], fgRows: [] };
+  const { sql: idSql, values: idVals } = inClause(eventIds);
+  const chRows = db.prepare(`
+    SELECT zec.event_id, zec.chapter_id, c.chapter_name
+    FROM zeitstrahl_event_chapters zec
+    LEFT JOIN chapters c ON c.chapter_id = zec.chapter_id
+    WHERE zec.event_id IN ${idSql}
+    ORDER BY zec.event_id, zec.sort_order
+  `).all(...idVals);
+  const pgRows = db.prepare(`
+    SELECT zep.event_id, zep.page_id, p.page_name
+    FROM zeitstrahl_event_pages zep
+    LEFT JOIN pages p ON p.page_id = zep.page_id
+    WHERE zep.event_id IN ${idSql}
+    ORDER BY zep.event_id, zep.sort_order
+  `).all(...idVals);
+  const fgRows = db.prepare(`
+    SELECT zef.event_id, f.fig_id, COALESCE(f.name, zef.figur_name) AS name, f.typ
+    FROM zeitstrahl_event_figures zef
+    LEFT JOIN figures f ON f.id = zef.figure_id
+    WHERE zef.event_id IN ${idSql}
+    ORDER BY zef.event_id, zef.sort_order
+  `).all(...idVals);
+  return { chRows, pgRows, fgRows };
+}
+
 module.exports = {
   saveZeitstrahlEvents,
+  listFigureEventsForTimeline,
+  listZeitstrahlEvents,
+  listZeitstrahlEventRefs,
 };

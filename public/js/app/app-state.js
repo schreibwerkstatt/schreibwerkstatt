@@ -74,15 +74,28 @@ const navigationState = () => ({
   // Per-Buch: true wenn mind. 2 ACL-Eintraege (Owner + N) → Collab-Poller + Presence-Pings
   // erst dann starten. Single-User-Bücher pollen nicht. Befüllt in `_loadBookRole`.
   bookSharedFlags: {},
-  // Tree wird während Buchwechsel-Fetch sichtbar gelassen + via CSS gedimmt +
-  // Klicks blockiert, statt vorab geleert (sonst leerer Tree bei Fetch-Fail).
+  // `treeLoading`: irgendein Voll-Load des Baums laeuft (auch Wake/Job/manuell).
+  // `treeSwitching`: davon der Buchwechsel — nur dann wird der alte Baum via CSS
+  // gedimmt + Klicks blockiert (er gehoert zu einem anderen Buch). Ein Reload
+  // desselben Buchs laesst den Baum bedienbar.
   treeLoading: false,
+  treeSwitching: false,
+  // Buch, dessen Baum gerade in nav.tree steht (tree/load.js#loadPages). Der
+  // Vergleich mit selectedBookId unterscheidet Buchwechsel von Reload.
+  _treeBookId: null,
+  // Roving-Tabstop des Seitenbaums ('c<id>' Kapitel, 'p<id>' Seite), siehe
+  // book/tree/keyboard.js.
+  _treeTabStop: null,
+  // Gedeckelte Wiederholungen eines gescheiterten Baum-Reloads nach dem
+  // Aufwachen (app-view/bookscope.js#_refreshAfterWake).
+  _wakeTreeRetries: 0,
   _applyingHash: false,
   _hashInitialized: false,
   _hashUpdatePending: false,
   _navDepth: 0,
   _inHashApply: false,
   _chapterOrderMap: null,
+  _chapterIdOrderMap: null,
   _pageOrderMap: null,
   _pageIdOrderMap: null,
   pageSearch: '',

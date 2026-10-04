@@ -1,6 +1,6 @@
 'use strict';
 // Integration test: runKontinuitaetJob single-pass.
-// Mocks lib/ai + lib/bookstack, runs the full pipeline against a fresh
+// Mocks lib/ai + content-store, runs the full pipeline against a fresh
 // in-memory-ish DB, verifies job completes and DB has the continuity check.
 
 const test = require('node:test');

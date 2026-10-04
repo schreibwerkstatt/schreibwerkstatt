@@ -259,6 +259,9 @@ async function runBrainstormJob(jobId, draftId, knotenId, userEmail) {
         begruendung: typeof v.begruendung === 'string' ? v.begruendung.trim() : '',
       }));
 
+    // Wurde die Figur waehrend des Laufs geloescht, scheiterte der Insert am
+    // FK mit einer rohen SQLite-Meldung — stattdessen dieselbe Meldung wie beim Start.
+    if (!getDraftFigure(draftId)) throw i18nError('job.error.werkstatt.draftMissing');
     // Run-Historisierung: Frontend listet alle Läufe pro Draft (klappbare
     // Sektion); Re-Open lädt result_json, applyBrainstormVorschlag arbeitet
     // weiter — Apply prüft client-seitig, ob knoten_id noch existiert.
@@ -347,6 +350,7 @@ async function runConsistencyJob(jobId, draftId, userEmail) {
       }));
 
     const fazit = result.fazit.trim();
+    if (!getDraftFigure(draftId)) throw i18nError('job.error.werkstatt.draftMissing');
     const runId = insertWerkstattRun({
       draftId, bookId: draft.book_id, userEmail,
       kind: 'consistency',

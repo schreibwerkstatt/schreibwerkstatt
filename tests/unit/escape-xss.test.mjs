@@ -1,11 +1,11 @@
-// Tests für escHtml + escPreserveStrong + renderChatMarkdown:
+// Tests für escHtml + renderChatMarkdown:
 // XSS-Regression. KI- und User-Inhalte fliessen über `x-html`-Sinks ins DOM
 // (Review-Renderer, Chat-Markdown, Status-Strings). CLAUDE.md fordert ein
 // Escape-First-Modell ohne Runtime-Sanitizer; jede neue Sink muss durch
 // escHtml. Dieser Test prüft die Escape-Invariante.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { escHtml, escPreserveStrong, renderChatMarkdown } from '../../public/js/utils.js';
+import { escHtml, renderChatMarkdown } from '../../public/js/utils.js';
 
 const PAYLOADS = [
   '<script>alert(1)</script>',
@@ -47,25 +47,6 @@ test('escHtml: null/undefined → leerer String, kein Crash; 0 bleibt sichtbar',
   assert.equal(escHtml(undefined), '');
   assert.equal(escHtml(''), '');
   assert.equal(escHtml(0), '0'); // 0 ist ein Wert (Zähler, Seitenzahl) — nur null/undefined werden leer
-});
-
-test('escPreserveStrong: erlaubt <strong> aber escapt alles andere', () => {
-  const input = '<strong>Treffer</strong> <script>x</script>';
-  const out = escPreserveStrong(input);
-  assert.ok(out.includes('<strong>'), 'BookStack-Search-Highlight muss erhalten bleiben');
-  assert.ok(out.includes('</strong>'));
-  assert.ok(!out.includes('<script'), '<script> muss escaped sein');
-  assert.match(out, /&lt;script&gt;/);
-});
-
-test('escPreserveStrong: kein <strong>-Smuggling via escaped Tags', () => {
-  // Wenn ein Angreifer "&lt;strong&gt;" liefert, darf escPreserveStrong das
-  // NICHT in echtes <strong> zurückwandeln (sonst wäre die Whitelist umgehbar).
-  const input = '&lt;strong&gt;evil&lt;/strong&gt;';
-  const out = escPreserveStrong(input);
-  // & wird zu &amp; → "&amp;lt;strong&amp;gt;..."
-  assert.ok(!out.includes('<strong>evil</strong>'),
-    'escaped Strong-Sequenz darf nicht zu echtem Tag werden');
 });
 
 test('renderChatMarkdown: escapt Input zuerst – <script> wird unausführbar', () => {
@@ -140,7 +121,3 @@ test('renderChatMarkdown: Fenced Code-Block bleibt unzerstückelt + escaped', ()
   assert.ok(!out.includes('<br>{'), 'Code-Block darf nicht in <br>-Fragmente zerfallen');
 });
 
-test('escPreserveStrong: 0 bleibt sichtbar', () => {
-  assert.equal(escPreserveStrong(0), '0');
-  assert.equal(escPreserveStrong(null), '');
-});

@@ -40,6 +40,11 @@ export const EVT = {
   // tree/load.js#createChapter). Der Organizer zieht darauf seinen Workstate
   // nach — sonst fehlte das Kapitel im nächsten Order-PUT (Server: MISSING_CHAPTER).
   CHAPTER_ADDED: 'chapter:added',               // detail: { chapterId }
+  // Seite oder Kapitel wurde ausserhalb des Buchorganizers umbenannt und in
+  // nav.tree/nav.pages gespiegelt (Editor-Kopf, Sidebar-Kontextmenü,
+  // app-view/page.js#renamePageById, tree-context-menu.js#renameChapterById).
+  // Der Organizer zieht seinen Workstate nach — sonst zeigte er den alten Namen.
+  TREE_RENAMED: 'tree:renamed',                 // detail: { kind: 'page'|'chapter', id }
 
   // ── Command-Palette ──────────────────────────────────────────────────────
   PALETTE_OPEN: 'palette:open',                 // detail: { mode? }

@@ -49,8 +49,8 @@ function seed() {
     .run(BOOK_ID, 'TTS-Buch', now, now);
   db.prepare(`INSERT INTO book_settings (book_id, language, region, updated_at) VALUES (?, ?, ?, ?)`)
     .run(BOOK_ID, 'de', 'CH', now);
-  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, position, priority, updated_at, body_html)
-              VALUES (?, ?, ?, 0, 0, ?, ?)`)
+  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, position, updated_at, body_html)
+              VALUES (?, ?, ?, 0, ?, ?)`)
     .run(PAGE_ID, BOOK_ID, 'Seite', now, '<p>Hallo Welt.</p>');
 }
 

@@ -8,7 +8,7 @@ import { attachDismiss, detachDismiss } from '../cards/dismiss.js';
 //   chapter → Öffnen (Header-Activate = Toggle + ggf. Kapitel-Review), Teilen,
 //             Exportieren, Neues Kapitel, Neue Seite, Aus-/Einschliessen
 //   Neues Kapitel wird hinter dem Ziel-Kapitel (bzw. dem Kapitel der Ziel-Seite)
-//   eingefügt, sonst ans Ende — createChapter positioniert nur Top-Level.
+//   als dessen Geschwister eingefügt, sonst ans Ende.
 //
 // SCHREIBENDE EINTRAEGE SIND `canEdit()`-GEGATET — Neue Seite, Neues Kapitel,
 // Aus-/Einschliessen und Loeschen. Die Sichtbarkeit im Partial und der Guard in
@@ -41,9 +41,17 @@ export const treeContextMenuMethods = {
     // Roh-Koordinaten merken: das Nachmessen klemmt gegen dieselbe Cursor-
     // Position, nicht gegen die bereits geklemmte Schaetzung (sonst wandert das
     // Menue bei jeder Messung ein Stueck weiter nach oben/links).
-    this._pageTreeMenuAnchor = { x: ev.clientX, y: ev.clientY };
+    // Per Tastatur (Kontextmenue-Taste, Shift+F10) liegt die gemeldete Position
+    // nicht im Eintrag (je nach Browser 0/0) — dann am Eintrag selbst verankern.
+    let x = ev.clientX, y = ev.clientY;
+    const r = ev.currentTarget?.getBoundingClientRect?.();
+    if (r && (x < r.left || x > r.right || y < r.top || y > r.bottom)) {
+      x = r.left + MENU_GAP * 2;
+      y = r.bottom;
+    }
+    this._pageTreeMenuAnchor = { x, y };
     this._pageTreeMenuReturnFocus = document.activeElement;
-    this.pageTreeMenuPos = this._clampPagetreeMenuPos(ev.clientX, ev.clientY, MENU_W_EST, MENU_H_EST);
+    this.pageTreeMenuPos = this._clampPagetreeMenuPos(x, y, MENU_W_EST, MENU_H_EST);
     this.pageTreeMenuOpen = true;
     // Erst nach dem Render steht die echte Groesse fest (Seiten-Menue hat andere
     // Eintraege als das Kapitel-Menue, `canEdit` blendet weitere aus). Ohne das
@@ -183,6 +191,9 @@ export const treeContextMenuMethods = {
     const page = this._findTreePage(target.id);
     if (!page) return;
     await this.selectPage(page);
+    // selectPage kann ohne Wechsel zurueckkehren (Dirty-Rueckfrage abgelehnt)
+    // — dann gehoert die Folgeaktion nicht der weiterhin offenen Seite.
+    if (this.currentPage?.id !== page.id) return;
     // selectPage öffnet die Editor-Karte im View-Mode; Notebook-Edit-Trampoline
     // setzt editMode=true und installiert Autosave.
     this.startEdit?.();
@@ -195,7 +206,50 @@ export const treeContextMenuMethods = {
     const page = this._findTreePage(target.id);
     if (!page) return;
     await this.selectPage(page);
+    if (this.currentPage?.id !== page.id) return; // siehe pagetreeCtxEdit
     this.runCheck?.();
+  },
+
+  // Seite oder Kapitel umbenennen (Titel per appPrompt, vorbelegt).
+  async pagetreeCtxRename() {
+    const target = this.pageTreeMenuTarget;
+    this._hidePagetreeContextMenu();
+    if (!target || !this.canEdit()) return;
+    const current = target.kind === 'page'
+      ? this._findTreePage(target.id)?.name
+      : this._findTreeChapter(target.id)?.name;
+    if (current == null) return;
+    const name = (await this.appPrompt({
+      message: this.t(target.kind === 'page' ? 'pagetreeCtx.renamePagePrompt' : 'pagetreeCtx.renameChapterPrompt'),
+      defaultValue: current,
+      confirmLabel: this.t('pagetreeCtx.renameConfirm'),
+    }))?.trim();
+    if (!name || name === current) return;
+    if (target.kind === 'page') await this.renamePageById(Number(target.id), name);
+    else await this.renameChapterById(target.id, name);
+  },
+
+  // Kapitel umbenennen: Server, dann In-Place-Mirror auf nav.tree, die
+  // `chapterName`-Aliase der Seiten und die namens-keyenden Sortier-Indexe.
+  // Gegenstueck zu app-view/page.js#renamePageById.
+  async renameChapterById(chapterId, newName) {
+    const name = (newName || '').trim();
+    if (chapterId == null || !name) return false;
+    try {
+      await contentRepo.updateChapter(chapterId, { name });
+    } catch (e) {
+      this.setStatus?.(this.t('bookOrganizer.saveFailed', { detail: e.message }));
+      return false;
+    }
+    const item = this._findTreeChapter(chapterId);
+    if (item) item.name = name;
+    for (const p of this.$store.nav.pages) {
+      if (String(p.chapter_id) === String(chapterId)) p.chapterName = name;
+    }
+    this._filteredTreeMemo = null;
+    this._rebuildTreeOrderMaps();
+    window.dispatchEvent(new CustomEvent(EVT.TREE_RENAMED, { detail: { kind: 'chapter', id: chapterId } }));
+    return true;
   },
 
   pagetreeCtxShare() {
@@ -217,6 +271,9 @@ export const treeContextMenuMethods = {
       for (const it of (this.$store.nav.tree || [])) {
         if (it.type === 'chapter' && !it.solo && String(it.id) === String(chapterId)) it.excluded = !!next;
       }
+      // Suchtreffer sind Kopien der Items (app.js#filteredTree) — ohne Reset
+      // zeigte eine laufende Suche den alten Ausschluss weiter.
+      this._filteredTreeMemo = null;
     } catch (e) {
       this.setStatus?.(this.t('bookOrganizer.saveFailed', { detail: e.message }));
     }
@@ -275,11 +332,33 @@ export const treeContextMenuMethods = {
         priority: created.position, // Sort-Alias wie decoratePage
         chapterName: item.name,
       };
-      this.$store.nav.pages = [...this.$store.nav.pages, newPage];
+      // nav.pages folgt der Lese-Reihenfolge (Sortier-Indexe in
+      // tree/build.js#_rebuildTreeOrderMaps): die neue Seite gehoert hinter die
+      // letzte Seite ihres Kapitels, nicht ans Buchende.
+      // Ist das Kapitel leer, zaehlt die letzte Seite des naechsten Vorgaengers
+      // mit Seiten (nav.tree ist depth-first, Invariante in tree/load.js).
+      const tree = this.$store.nav.tree;
+      let anchorId = null;
+      for (let i = tree.indexOf(item); i >= 0 && anchorId == null; i--) {
+        const prev = tree[i].pages;
+        if (prev?.length) anchorId = prev[prev.length - 1].id;
+      }
+      const pages = [...this.$store.nav.pages];
+      const at = anchorId != null ? pages.findIndex(p => p.id === anchorId) : -1;
+      pages.splice(at + 1, 0, newPage);
+      this.$store.nav.pages = pages;
       // Reassignment statt push: Property-Set auf `.pages` triggert die
       // Alpine-Watcher zuverlässig — nested-Array-push tut das nicht immer.
       item.pages = [...(item.pages || []), newPage];
-      item.open = true;
+      this._filteredTreeMemo = null;
+      this._rebuildTreeOrderMaps();
+      // Kapitel (und alle Vorfahren) aufklappen, sonst springt der Editor auf
+      // eine Seite, die in der Sidebar unsichtbar unter einem zugeklappten
+      // Parent haengt.
+      for (let cur = item; cur; cur = cur.parent_id ? this._findTreeChapter(cur.parent_id) : null) {
+        cur.open = true;
+      }
+      this._persistTreeOpenState();
       // Ebenfalls Reassignment: der `tokTotals`-Memo haengt an der Identitaet
       // von `tokEsts` (app/app-root-getters.js).
       this.tokEsts = { ...this.tokEsts, [newPage.id]: { tok: 0, words: 0, chars: 0 } };
@@ -290,9 +369,8 @@ export const treeContextMenuMethods = {
   },
 
   // Neues Kapitel direkt aus dem Kontextmenü. Position: hinter dem
-  // angeklickten Kapitel bzw. hinter dem Kapitel der angeklickten Seite
-  // (nur Top-Level-Kapitel positionierbar — Sub-Kapitel/kein Match → ans Ende,
-  // wie createChapter fallback). createChapter liest `newChapterTitle`.
+  // angeklickten Kapitel bzw. hinter dem Kapitel der angeklickten Seite, auf
+  // derselben Ebene (kein Match → ans Ende). createChapter liest `newChapterTitle`.
   async pagetreeCtxNewChapter() {
     const target = this.pageTreeMenuTarget;
     this._hidePagetreeContextMenu();

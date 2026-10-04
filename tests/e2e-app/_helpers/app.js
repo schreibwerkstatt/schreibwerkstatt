@@ -32,6 +32,16 @@ async function waitBooted(page) {
     null,
     { timeout: 30000 },
   );
+  // Und auf das Ende von init(): `selectedBookId` steht schon mitten im Boot,
+  // der `hashchange`-Listener haengt aber erst danach (app-init.js →
+  // `_setupHashRouting`), und davor schreibt `_syncUrlNow` den Hash aus dem
+  // State neu. Ein Spec, das in diesem Fenster `location.hash` setzt, verliert
+  // den Sprung still — und landet auf der Buchuebersicht statt auf seiner Karte.
+  await page.waitForFunction(
+    () => window.Alpine.store('shell').appReady === true,
+    null,
+    { timeout: 30000 },
+  );
 }
 
 // Frischer Boot vom Server ohne zweite Navigation: Hash weg (sonst wendet der

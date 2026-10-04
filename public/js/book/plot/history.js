@@ -138,6 +138,9 @@ export const historyMethods = {
   // er gehörte zu einem Stack, den es nicht mehr gibt (`_historyEpoch`).
   async plotHistoryUndo() {
     if (this.busy || this._inHistoryFlight) return;
+    // Erst prüfen, dann schliessen: bei leerem Stack ginge sonst ein offener
+    // Beat-Entwurf verloren, ohne dass irgendetwas zurückgedreht wird.
+    if (!this._undoStack.length) return;
     this._closeOpenBeatEdit();
     const rec = this._undoStack.pop();
     if (!rec) return;
@@ -152,7 +155,8 @@ export const historyMethods = {
       this.busy = false;
     }
     if ((this._historyEpoch || 0) !== epoch) return;
-    if (!ok) { this._undoStack.push(rec); return; }
+    if (!ok) { this._requeueFailed(rec, this._undoStack); return; }
+    rec._failed = false;
     // Nach dem Undo eines Create wäre jedes Redo eine Neuanlage mit neuer ID →
     // Records, die die alte referenzieren, wären Nieten. Stack komplett fallen lassen.
     if (rec.kind.startsWith('create-')) this._redoStack = [];
@@ -161,6 +165,7 @@ export const historyMethods = {
 
   async plotHistoryRedo() {
     if (this.busy || this._inHistoryFlight) return;
+    if (!this._redoStack.length) return;
     this._closeOpenBeatEdit();
     const rec = this._redoStack.pop();
     if (!rec) return;
@@ -175,8 +180,19 @@ export const historyMethods = {
       this.busy = false;
     }
     if ((this._historyEpoch || 0) !== epoch) return;
-    if (!ok) { this._redoStack.push(rec); return; }
+    if (!ok) { this._requeueFailed(rec, this._redoStack); return; }
+    rec._failed = false;
     this._pushUndo(rec, { clearRedo: false });
+  },
+
+  // Gescheiterter Record: einmal zurücklegen (Netz-Wackler → nochmal
+  // versuchen), beim zweiten Fehlschlag die Historie verwerfen. Ein Record,
+  // dessen Ziel verschwunden ist (Beat in anderem Tab gelöscht → 404), scheitert
+  // sonst bei jedem Strg+Z erneut und versperrt alle älteren Schritte.
+  _requeueFailed(rec, stack) {
+    if (rec._failed) { this._clearHistory(); return; }
+    rec._failed = true;
+    stack.push(rec);
   },
 
   async _applyInverse(rec) {

@@ -114,7 +114,8 @@ export const historyMethods = {
     } finally {
       this._inHistoryFlight = false;
     }
-    if (!ok) { this._undoStack.push(rec); return; }
+    if (!ok) { this._requeueFailed(rec, this._undoStack); return; }
+    rec._failed = false;
     if (rec.kind === 'create-chapter' || rec.kind === 'create-page') {
       // Redo-Pfad wäre ein Recreate mit neuer ID → bestehende Records mit
       // alter ID werden inkonsistent. Komplett invalidieren.
@@ -138,8 +139,21 @@ export const historyMethods = {
     } finally {
       this._inHistoryFlight = false;
     }
-    if (!ok) { this._redoStack.push(rec); return; }
+    if (!ok) { this._requeueFailed(rec, this._redoStack); return; }
+    rec._failed = false;
     this._pushUndo(rec, { clearRedo: false });
+  },
+
+  // Gescheiterter Record: einmal zurücklegen (Netz-Wackler → nochmal
+  // versuchen), beim zweiten Fehlschlag die Historie verwerfen. Ein Record,
+  // dessen Ziel serverseitig verschwunden ist (Papierkorb-Eintrag anderswo
+  // wiederhergestellt → `trashEntryMissing`), scheitert sonst bei jedem Strg+Z
+  // erneut und versperrt alle älteren Schritte. Die Fehlermeldung hat
+  // `_runMutation` bereits gezeigt.
+  _requeueFailed(rec, stack) {
+    if (rec._failed) { this._clearHistory(); return; }
+    rec._failed = true;
+    stack.push(rec);
   },
 
   // Passt der Record noch zum aktuellen Workstate? Liefert null oder die

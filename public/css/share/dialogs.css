@@ -1,0 +1,189 @@
+/* Reader-Dialoge + schwebende Bedienelemente (share-reader/composer.js,
+   sheet.js, identity.js): Kommentieren-Button an der Selektion, Composer-
+   Overlay, Mobile-Bottom-Sheet, Identitäts-Chip + Namens-Modal. Die gefüllten
+   Primär-Knöpfe (.share-composer__submit) teilen ihre Regel mit Inline-Reply und
+   SSR-Form und stehen darum in comments.css. */
+
+/* Schwebender „Kommentieren"-Button an der Selektion. */
+.share-sel-btn {
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 50;
+  padding: 6px 14px;
+  background: var(--share-accent);
+  color: var(--share-on-accent);
+  border: 0;
+  border-radius: var(--share-radius-sm);
+  box-shadow: var(--share-shadow);
+  font-family: var(--share-font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.share-sel-btn:hover { filter: brightness(1.08); }
+.share-sel-btn[hidden] { display: none; }
+
+/* Composer-Overlay (verankerte + allgemeine Anmerkung). */
+.share-composer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+}
+@media (min-width: 601px) {
+  .share-composer { align-items: center; }
+}
+.share-composer__card {
+  width: 100%;
+  max-width: 60ch;
+  background: var(--share-surface);
+  border: 1px solid var(--share-border);
+  border-radius: var(--share-radius);
+  box-shadow: var(--share-shadow);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: var(--share-font-ui);
+}
+.share-composer__title { margin: 0; font-size: 16px; font-weight: 600; }
+.share-composer__quote {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--share-accent);
+  background: var(--share-hover);
+  font-style: italic;
+  color: var(--share-muted);
+  font-size: 14px;
+}
+.share-composer__name,
+.share-composer__body {
+  border: 1px solid var(--share-border);
+  background: var(--share-bg);
+  color: var(--share-text);
+  border-radius: var(--share-radius-sm);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 15px;
+  resize: vertical;
+}
+.share-composer__name:focus,
+.share-composer__body:focus {
+  outline: 2px solid var(--share-accent);
+  outline-offset: -1px;
+}
+.share-composer__actions { display: flex; align-items: center; gap: 10px; }
+.share-composer__cancel {
+  padding: 8px 18px;
+  background: transparent;
+  color: var(--share-muted);
+  border: 1px solid var(--share-border);
+  border-radius: var(--share-radius-sm);
+  font-family: var(--share-font-ui);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.share-composer__cancel:hover { background: var(--share-hover); }
+/* Hinweis im Composer (z. B. Markierung über mehrere Absätze gekürzt). */
+.share-composer__hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--share-muted);
+}
+
+/* Mobile-Bottom-Sheet für einen verankerten Thread (share-reader/sheet.js) —
+   nutzt die Overlay-Optik des Composers (≤600px unten angedockt). */
+.share-sheet__card {
+  max-height: 80vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.share-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.share-sheet__close {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  padding: 0;
+  background: transparent;
+  color: var(--share-muted);
+  border: 1px solid var(--share-border);
+  border-radius: var(--share-radius-sm);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.share-sheet__close:hover { background: var(--share-hover); }
+.share-sheet__list { list-style: none; margin: 0; padding: 0; }
+.share-sheet__list > .comment-rail__thread { box-shadow: none; border-color: var(--share-border); }
+
+/* Globaler Identitäts-Chip oben rechts (bei den Optionen, im #share-theme-
+   Cluster injiziert): zeigt "Als <Name>" + Ändern bzw. "Name setzen". */
+.share-identity-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.share-identity-bar__as {
+  font-family: var(--share-font-ui);
+  font-size: 12px;
+  color: var(--share-muted);
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-identity-bar__btn {
+  padding: 5px 12px;
+  background: var(--share-surface);
+  color: var(--share-muted);
+  border: 1px solid var(--share-border);
+  border-radius: var(--share-radius-sm);
+  font-family: var(--share-font-ui);
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.share-identity-bar__btn:hover { background: var(--share-hover); }
+
+/* Intro-Text im Namens-Modal (nutzt sonst die .share-composer-Overlay-Optik). */
+.share-name-modal__intro {
+  margin: 0;
+  font-family: var(--share-font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--share-muted);
+}
+/* Hinweis unter dem optionalen Mail-Feld im Identitäts-Modal (#1). */
+.share-name-modal__hint {
+  margin: 0;
+  font-family: var(--share-font-ui);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--share-muted);
+}
+/* „Benachrichtigung aktiv"-Pille am Identitäts-Chip, wenn eine Mail hinterlegt ist (#1). */
+.share-identity-bar__bell {
+  font-size: 11px;
+  color: var(--share-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .share-sheet { padding: 0; }
+  .share-sheet__card {
+    max-width: none;
+    border-radius: var(--share-radius) var(--share-radius) 0 0;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  }
+}

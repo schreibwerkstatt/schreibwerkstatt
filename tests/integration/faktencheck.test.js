@@ -20,8 +20,8 @@ function seedFacts() {
   db.prepare('DELETE FROM chapters WHERE book_id = ?').run(BOOK);
   db.prepare('INSERT OR IGNORE INTO books (book_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)')
     .run(BOOK, 'Faktencheck-Buch', new Date().toISOString(), new Date().toISOString());
-  db.prepare('INSERT INTO chapters (chapter_id, book_id, chapter_name, position, priority, updated_at) VALUES (?,?,?,?,?,?)')
-    .run(91001, BOOK, 'Kapitel 1', 0, 0, new Date().toISOString());
+  db.prepare('INSERT INTO chapters (chapter_id, book_id, chapter_name, position, updated_at) VALUES (?,?,?,?,?)')
+    .run(91001, BOOK, 'Kapitel 1', 0, new Date().toISOString());
   const insWf = db.prepare(
     'INSERT INTO world_facts (book_id, user_email, kategorie, subjekt, fakt, sort_order) VALUES (?,?,?,?,?,?)'
   );

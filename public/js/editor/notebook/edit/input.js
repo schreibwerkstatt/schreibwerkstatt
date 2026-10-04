@@ -38,8 +38,12 @@ export const inputMethods = {
     return { ok: true };
   },
 
+  // Einfügen/Ausschneiden sind eigene Undo-Schritte: Vorher-Stand einfrieren
+  // (offene Tipp-Serie inklusive), Nachher-Stand sofort — sonst fasst der
+  // Debounce Tippen + Einfügen zu einem Schritt zusammen.
   _onEditPaste(e) {
-    if (handleEditorPaste(e)) this._markEditDirty();
+    this._historyPushNow?.();
+    if (handleEditorPaste(e)) { this._markEditDirty(); this._historyPushNow?.(); }
   },
 
 
@@ -47,7 +51,8 @@ export const inputMethods = {
 
 
   _onEditCut(e) {
-    if (handleEditorCut(e)) this._markEditDirty();
+    this._historyPushNow?.();
+    if (handleEditorCut(e)) { this._markEditDirty(); this._historyPushNow?.(); }
   },
 
 

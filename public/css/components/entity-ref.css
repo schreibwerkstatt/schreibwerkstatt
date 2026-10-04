@@ -1,0 +1,207 @@
+@layer components {
+/* Entitäts-Referenz — EINE Darstellung für jeden Verweis auf ein Buch-Objekt
+   (Kapitel, Seite, Figur, Ort, Szene, Motiv, Beat, …). Inhalt, Typ-Modifier und
+   Klick setzt die Direktive `x-entity-ref` (public/js/entity-ref.js); Muster und
+   Varianten: DESIGN.md „Entitäts-Referenz". Typ erkennbar an Präfix-Text UND
+   Farbe (linker Rand + Präfix) — Farbe allein wäre nicht barrierefrei. */
+
+.entity-refs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.entity-ref {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2xs);
+  max-width: 100%;
+  margin: 0;
+  padding: 0.15em 0.5em;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--ref-accent, var(--color-border));
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+button.entity-ref:active { transform: none; }
+.entity-ref:hover .entity-ref__label,
+.entity-ref:focus-visible .entity-ref__label { text-decoration: underline; }
+.entity-ref:hover { background: color-mix(in srgb, var(--ref-accent, var(--color-border)) 8%, var(--color-bg)); }
+
+.entity-ref__kind {
+  flex: none;
+  font-weight: var(--fw-medium);
+  text-transform: uppercase;
+  font-size: 0.72em;
+  letter-spacing: 0.06em;
+  color: var(--ref-accent, var(--color-muted));
+}
+.entity-ref__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.entity-ref__count {
+  flex: none;
+  color: var(--color-muted);
+}
+
+/* Nicht klickbar (static / nicht auflösbar): kein Hover, kein Zeiger.
+   `button:disabled`-Opacity aus buttons-badges.css gilt hier nicht — die
+   Referenz ist eine Anzeige, kein abgeschalteter Knopf. */
+.entity-ref--static,
+.entity-ref--static:disabled { cursor: default; opacity: 1; }
+.entity-ref--static:hover { background: var(--color-bg); }
+.entity-ref--static:hover .entity-ref__label { text-decoration: none; }
+.entity-ref--unresolved { border-left-style: dotted; color: var(--color-muted); }
+
+/* Abgeleitet statt direkt gesetzt (Plot: Kapitel/Figur vom Strang geerbt). */
+.entity-ref--inherited { border-style: dashed; border-left-style: solid; background: transparent; }
+.entity-ref--inherited .entity-ref__label { color: var(--color-muted); font-style: italic; }
+
+/* „+N" — weitere, nicht einzeln gezeigte Referenzen derselben Reihe. */
+.entity-ref-more {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15em 0.45em;
+  border-radius: var(--radius-sm);
+  background: var(--color-tag-bg);
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--fw-bold);
+}
+
+/* Referenz mit Entfernen-Knopf (Editierfelder: Verknüpfung lösen). Die Gruppe
+   ist die Chip-Hülle; Referenz und X teilen Rand und Hintergrund. */
+.entity-ref-group {
+  display: inline-flex;
+  align-items: stretch;
+  max-width: 100%;
+}
+.entity-ref-group > .entity-ref {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+  min-width: 0;
+}
+.entity-ref-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 var(--space-2xs);
+  border: 1px solid var(--color-border);
+  border-left: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--color-bg);
+  color: var(--color-muted);
+  cursor: pointer;
+}
+.entity-ref-remove .icon { width: 0.85em; height: 0.85em; }
+.entity-ref-remove:hover { color: var(--color-err-text); background: var(--color-tag-bg); }
+.entity-ref-remove:active { transform: none; }
+
+/* Typ → Farbakzent. Ausschliesslich vorhandene Card-Accent-Hues (hell + dunkel
+   abgeleitet in tokens/colors.css), kein neues Token. */
+.entity-ref--kapitel   { --ref-accent: var(--card-accent-kapitel); }
+.entity-ref--seite     { --ref-accent: var(--card-accent-page); }
+.entity-ref--figur     { --ref-accent: var(--card-accent-figuren); }
+.entity-ref--werkstatt { --ref-accent: var(--card-accent-werkstatt); }
+.entity-ref--ort       { --ref-accent: var(--card-accent-orte); }
+.entity-ref--szene     { --ref-accent: var(--card-accent-szenen); }
+.entity-ref--ereignis  { --ref-accent: var(--card-accent-ereignisse); }
+.entity-ref--song      { --ref-accent: var(--card-accent-songs); }
+.entity-ref--motiv     { --ref-accent: var(--card-accent-motiv); }
+.entity-ref--beat      { --ref-accent: var(--card-accent-plot); }
+.entity-ref--strang    { --ref-accent: var(--card-accent-kontinuitaet); }
+.entity-ref--recherche { --ref-accent: var(--card-accent-recherche); }
+.entity-ref--idee      { --ref-accent: var(--card-accent-ideen); }
+.entity-ref--quelle    { --ref-accent: var(--card-accent-sources); }
+
+/* Hover-Vorschau (entity-ref-popover.js): EIN geteilter Layer, reine Anzeige.
+   Trägt `entity-ref--<typ>` mit, damit der Akzent derselbe ist wie am Chip. */
+.entity-ref-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-popover);
+  pointer-events: none;
+  width: max-content;
+  max-width: min(340px, calc(100vw - 2 * var(--space-md)));
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-top: 3px solid var(--ref-accent, var(--color-border));
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-md);
+  font-size: var(--font-size-mini);
+  line-height: 1.4;
+}
+.entity-ref-preview[hidden] { display: none; }
+
+.entity-ref-preview__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+.entity-ref-preview__kind {
+  flex: none;
+  font-size: var(--font-size-xs);
+  font-weight: var(--fw-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ref-accent, var(--color-muted));
+}
+.entity-ref-preview__title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--fw-semibold);
+  overflow-wrap: anywhere;
+}
+.entity-ref-preview__meta {
+  margin-top: var(--space-2xs);
+  color: var(--color-muted);
+}
+.entity-ref-preview__stale {
+  margin-top: var(--space-2xs);
+  color: var(--color-warn-text);
+  font-style: italic;
+}
+.entity-ref-preview__text {
+  margin: var(--space-xs) 0 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.entity-ref-preview__rows {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-2xs) var(--space-sm);
+  margin: var(--space-sm) 0 0;
+  padding-top: var(--space-xs);
+  border-top: 1px solid var(--color-border);
+}
+.entity-ref-preview__rows dt { color: var(--color-muted); }
+.entity-ref-preview__rows dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Dichte Listenzeilen: Referenz-Reihen weichen auf dem Handy dem Titel. */
+@media (max-width: 480px) {
+  .entity-refs--collapse-mobile { display: none; }
+}
+
+}

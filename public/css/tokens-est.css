@@ -2,7 +2,7 @@
 /* Token-Schaetzung: das Zeichen-/Token-Badge an Seiten und Kapiteln plus sein
    Hover-Tooltip. Die Datei hiess lange so und enthielt trotzdem den halben
    CSS-Bestand der Figurenkarte — der liegt jetzt in entities/figuren.css,
-   entities/figuren-graph.css und components/kapitel-badges.css. */
+   und entities/figuren-graph.css. */
 
 /* === Token-Schätzung === */
 .tok-badge {

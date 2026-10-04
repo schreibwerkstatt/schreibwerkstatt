@@ -49,9 +49,8 @@
               <span class="tag" :class="wsKeynessClass(t.keyness)" x-text="wsNum(t.keyness, 1)"></span>
             </td>
             <td>
-              <span class="tag internal-link" x-show="t.first_page_id"
-                    @click="wsGotoPage(t.first_page_id)"
-                    x-text="t.first_page_name || ('#' + t.first_page_id)"></span>
+              <button type="button" class="entity-ref" x-show="t.first_page_id"
+                      x-entity-ref="{ type: 'seite', id: t.first_page_id, label: t.first_page_name || undefined }"></button>
             </td>
           </tr>
         </template>

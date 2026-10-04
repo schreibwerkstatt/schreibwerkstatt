@@ -1,28 +1,25 @@
 <!-- Szenenanalyse -->
 <!--
   Alpine.data-Sub-Komponente — siehe public/js/cards/szenen-card.js.
-  Fachdaten (szenen, figuren, orte) leben in Alpine.store('catalog');
-  szenenFilters bleibt im Root.
+  Fachdaten (szenen, figuren, orte) leben in Alpine.store('catalog'),
+  Filter/Auswahl/Stand in Alpine.store('catalogUi'). Verteilung und Grid sind
+  eigene Fragmente (szenen-uebersicht.html, szenen-grid.html) im selben Scope.
 -->
 <div class="card card--szenen" x-data="szenenCard" x-show="$app.showSzenenCard" x-cloak>
   <div class="card-header card-header--subline">
     <div class="card-header-titlebar">
       <span class="card-eyebrow" x-text="$app.selectedBookName"></span>
       <span class="card-title" x-text="$app.t('szenen.title')"></span>
-      <div class="card-subline" x-show="$store.jobs.alleAktualisierenLastRun && !szenenLoading">
-        <span class="card-timestamp" x-text="$app.t('common.asOf', { date: $store.jobs.alleAktualisierenLastRun })"></span>
+      <div class="card-subline" x-show="updatedLabel && !szenenLoading">
+        <span class="card-timestamp" x-text="$app.t('common.asOf', { date: updatedLabel })"></span>
       </div>
     </div>
   </div>
 
-  <!-- Fortschritt -->
-  <div x-show="szenenProgress > 0" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': szenenProgress + '%' }"></div>
-  </div>
-  <div x-show="szenenStatus" class="card-status" x-html="szenenStatus"></div>
+  <div x-show="szenenError" class="card-status card-status--error" role="alert" x-text="szenenError"></div>
 
   <!-- Leer-Hinweis mit CTA -->
-  <div x-show="!$store.catalog.szenen.length && !szenenLoading && !szenenStatus" class="card-empty">
+  <div x-show="!$store.catalog.szenen.length && !szenenLoading" class="card-empty">
     <p class="card-empty-text" x-text="$app.t('common.noAnalysisYet')"></p>
     <p class="card-empty-hint" x-text="$app.t('empty.szenen.hint')"></p>
     <button type="button" class="primary card-empty-cta"
@@ -33,7 +30,7 @@
     </button>
   </div>
 
-  <!-- Skeleton während Loading vor erstem Datensatz -->
+  <!-- Skeleton während des ersten Ladens -->
   <div x-show="szenenLoading && !$store.catalog.szenen.length" class="entity-skeleton entity-list--accented" x-cloak>
     <template x-for="i in 6" :key="i">
       <div class="entity-skeleton-row">
@@ -44,53 +41,7 @@
     </template>
   </div>
 
-  <!-- Szenen-Übersicht: klappbar -->
-  <div x-show="$store.catalog.szenen.length > 0" class="szenen-uebersicht" x-data="collapsible()">
-    <button type="button" class="collapsible-toggle" x-bind="trigger">
-      <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
-      <span x-text="$app.t('szenen.distribution')"></span>
-    </button>
-    <div x-bind="panel" class="szenen-uebersicht-grid" x-cloak>
-      <!-- Pro Figur -->
-      <div class="szenen-uebersicht-block">
-        <div class="bewertung-section-title" x-text="$app.t('szenen.byFigur')"></div>
-        <div class="szenen-count-badges">
-          <template x-for="f in $app.szenenNachFigur" :key="f.id">
-            <span class="szenen-figur-count-badge"
-              :class="{ 'szenen-figur-count-badge--wenig': f.wenig }"
-              x-text="f.name + ' · ' + f.total">
-            </span>
-          </template>
-        </div>
-      </div>
-      <!-- Pro Kapitel -->
-      <div class="szenen-uebersicht-block">
-        <div class="bewertung-section-title" x-text="$app.t('szenen.byKapitel')"></div>
-        <div class="szenen-count-badges">
-          <template x-for="k in $app.szenenNachKapitel" :key="k.name">
-            <span class="szenen-kapitel-count-badge" :data-tip="$app.t('szenen.tooltip', { stark: k.stark, mittel: k.mittel, schwach: k.schwach })">
-              <span class="szenen-kapitel-name" x-text="k.name"></span>
-              <span class="szenen-kapitel-dots">
-                <template x-for="n in k.stark"   :key="'s'+n"><span class="severity-dot severity-dot--stark"></span></template>
-                <template x-for="n in k.mittel"  :key="'m'+n"><span class="severity-dot severity-dot--mittel"></span></template>
-                <template x-for="n in k.schwach" :key="'w'+n"><span class="severity-dot severity-dot--schwach"></span></template>
-              </span>
-              <span class="szenen-kapitel-total" x-text="k.total"></span>
-            </span>
-          </template>
-        </div>
-      </div>
-      <!-- Pro Seite -->
-      <div class="szenen-uebersicht-block" x-show="$app.szenenNachSeite.length > 0">
-        <div class="bewertung-section-title" x-text="$app.t('szenen.bySeite')"></div>
-        <div class="szenen-count-badges">
-          <template x-for="p in $app.szenenNachSeite" :key="p.name">
-            <span class="szenen-seite-count-badge" :data-tip="p.kapitel" x-text="p.name + ' · ' + p.total"></span>
-          </template>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- @include szenen-uebersicht -->
 
   <!-- Alle Szenen -->
   <div x-show="$store.catalog.szenen.length > 0" class="szenen-liste-section">
@@ -108,23 +59,24 @@
     <!-- Filter-Leiste -->
     <div class="filter-bar">
       <span class="filter-search-wrap">
-        <input type="text" x-model="$store.catalogUi.szenenFilters.suche" :placeholder="$app.t('common.search')" :aria-label="$app.t('common.search')" class="filter-search-input">
+        <input type="text" x-model="$store.catalogUi.szenenFilters.suche" :placeholder="$app.t('szenen.searchPlaceholder')" :aria-label="$app.t('szenen.searchPlaceholder')" class="filter-search-input">
         <button type="button" class="search-clear--icon" x-show="$store.catalogUi.szenenFilters.suche" @click="$store.catalogUi.szenenFilters.suche=''" :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
       </span>
+      <!-- Zähler ohne stale-Szenen; die stehen unten mit eigenem Hinweis. -->
       <div class="tabs">
         <button type="button" class="tabs-btn"
                 :class="{ 'tabs-btn--active': $store.catalogUi.szenenFilters.wertung === '' }"
                 @click="$store.catalogUi.szenenFilters.wertung = ''">
           <span x-text="$app.t('common.all')"></span>
-          <span class="tabs-btn-count" x-text="$store.catalog.szenen.length"></span>
+          <span class="tabs-btn-count" x-text="activeCount"></span>
         </button>
         <template x-for="w in ['stark','mittel','schwach']" :key="w">
           <button type="button" class="tabs-btn"
                   :class="{ 'tabs-btn--active': $store.catalogUi.szenenFilters.wertung === w }"
-                  :disabled="$app.szenenWertungCounts[w] === 0"
+                  :disabled="wertungCounts[w] === 0 && $store.catalogUi.szenenFilters.wertung !== w"
                   @click="$store.catalogUi.szenenFilters.wertung = $store.catalogUi.szenenFilters.wertung === w ? '' : w">
             <span x-text="$app.t('szenen.rating.' + w)"></span>
-            <span class="tabs-btn-count" x-text="$app.szenenWertungCounts[w]"></span>
+            <span class="tabs-btn-count" x-text="wertungCounts[w]"></span>
           </button>
         </template>
       </div>
@@ -134,8 +86,15 @@
            >
       </div>
       <div x-data="catalogFilter('chapter')"
-           x-modelable="value" x-model="$store.catalogUi.szenenFilters.kapitel"
-           x-effect="options = $app.szenenKapitelListe().map(k => ({value: k, label: k}))"
+           x-modelable="value" x-model="$store.catalogUi.szenenFilters.kapitelId"
+           x-effect="options = kapitelOptionen"
+           @combobox-change="$store.catalogUi.szenenFilters.seiteId = ''"
+           >
+      </div>
+      <div x-data="catalogFilter('page')"
+           x-modelable="value" x-model="$store.catalogUi.szenenFilters.seiteId"
+           x-effect="_disabled = !$store.catalogUi.szenenFilters.kapitelId || seitenOptionen.length === 0; options = seitenOptionen"
+           :class="{'combobox-wrap--disabled': _disabled}"
            >
       </div>
       <div x-show="$store.catalog.orte.length > 0"
@@ -146,32 +105,41 @@
       </div>
       <span class="filter-count" x-text="szenenFiltered.length + ' / ' + $store.catalog.szenen.length"></span>
     </div>
+    <!-- Stale-Szenen: Hinweis + Sammel-Löschen (Einzel-Löschen an der Zeile) -->
+    <div x-show="staleCount > 0" class="szenen-stale-row">
+      <span class="card-hint" :data-tip="$app.t('szenen.staleHint')" x-text="$app.t('szenen.staleSummary', { n: staleCount })"></span>
+      <button type="button" class="btn-compact danger" :disabled="staleDeleting" @click="deleteAllStale()"
+              x-text="$app.t('szenen.deleteAllStale')"></button>
+    </div>
     <!-- Kompakte Szenen-Liste -->
     <div x-show="viewMode === 'list'" class="entity-list entity-list--accented">
-      <template x-for="(s, i) in szenenFiltered" :key="s.id || i">
+      <template x-for="s in szenenFiltered" :key="s.id">
         <div>
           <div class="entity-row"
                :data-szeneid="s.id"
                :class="{ 'entity-row--selected': $store.catalogUi.selectedSzeneId === s.id, 'entity-row--stale': s.stale }"
                @click="$store.catalogUi.selectedSzeneId = $store.catalogUi.selectedSzeneId === s.id ? null : s.id">
             <span class="severity-tag"
-                  :class="'severity-tag--' + (s.wertung || 'mittel')"
-                  x-text="$app.t('szenen.rating.' + (s.wertung || 'mittel'))"></span>
-            <span class="entity-row-title" x-text="s.titel"></span>
+                  :class="'severity-tag--' + wertungOf(s)"
+                  x-text="$app.t('szenen.rating.' + wertungOf(s))"></span>
+            <!-- Titel + Anriss des Kommentars (Begründung/Verbesserungshinweis); voll im Detail. -->
+            <span class="szenen-row-main">
+              <span class="entity-row-title" x-text="s.titel"></span>
+              <span class="szenen-row-snippet" x-show="s.kommentar && $store.catalogUi.selectedSzeneId !== s.id" x-text="s.kommentar"></span>
+            </span>
             <span x-show="s.stale" class="tag tag--stale" :data-tip="$app.t('szenen.staleHint')" x-text="$app.t('szenen.staleBadge')"></span>
             <button type="button" x-show="s.stale" class="icon-btn danger entity-row-delete"
-                    @click.stop="$app.deleteStaleSzene(s)"
+                    @click.stop="deleteStale(s)"
                     :aria-label="$app.t('common.delete')" :data-tip="$app.t('entity.deleteStale')">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
             </button>
-            <span class="kapitel-badges">
-              <span class="kapitel-badge kapitel-badge--primary internal-link"
-                    @click.stop="$app.openKapitelByName(s.kapitel)"
-                    x-text="s.kapitel"></span>
+            <!-- Stelle ist primäre Info der Szene: bleibt auch mobil sichtbar. -->
+            <span class="entity-refs">
+              <template x-if="s.kapitel">
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: s.chapter_id, name: s.kapitel, label: kapitelLabel(s.chapter_id, s.kapitel) }"></button>
+              </template>
               <template x-if="s.seite">
-                <span class="kapitel-badge kapitel-badge--secondary internal-link"
-                      @click.stop="s.page_id ? $app.gotoPageById(s.page_id) : $app.gotoStelle(s.kapitel, s.seite)"
-                      x-text="s.seite"></span>
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: s.page_id, name: s.seite, kapitel: s.kapitel }"></button>
               </template>
             </span>
             <span class="history-chevron" :class="{ open: $store.catalogUi.selectedSzeneId === s.id }" aria-hidden="true"></span>
@@ -180,94 +148,26 @@
             <p x-show="s.kommentar" x-text="s.kommentar" class="entity-detail-text"></p>
             <button type="button" class="btn-compact entity-detail-actions" x-show="$store.config.semanticSearchEnabled" @click.stop="$app.findSimilar('scene', s.id, s.titel)" x-text="$app.t('search.semantic.similarEntity')"></button>
             <div x-show="(s.fig_ids || []).length > 0" class="entity-meta-row">
-              <span class="entity-meta-label" x-text="$app.t('orte.figuren')"></span>
-              <template x-for="figId in (s.fig_ids || [])" :key="figId">
-                <span class="tag internal-link"
-                      @click.stop="$app.openFigurById(figId)"
-                      x-text="$app.figurenById.get(figId)?.kurzname || $app.figurenById.get(figId)?.name || figId"></span>
-              </template>
+              <span class="entity-meta-label" x-text="$app.t('szenen.figuren')"></span>
+              <span class="entity-refs">
+                <template x-for="figId in (s.fig_ids || [])" :key="figId">
+                  <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: figId }"></button>
+                </template>
+              </span>
             </div>
             <div x-show="(s.ort_ids || []).length > 0" class="entity-meta-row">
               <span class="entity-meta-label" x-text="$app.t('szenen.orte')"></span>
-              <template x-for="ortId in (s.ort_ids || [])" :key="'o'+ortId">
-                <span class="tag internal-link"
-                      @click.stop="$app.openOrtById(ortId)"
-                      x-text="$app.orteById.get(ortId)?.name || ortId"></span>
-              </template>
+              <span class="entity-refs">
+                <template x-for="ortId in (s.ort_ids || [])" :key="'o'+ortId">
+                  <button type="button" class="entity-ref" x-entity-ref="{ type: 'ort', id: ortId }"></button>
+                </template>
+              </span>
             </div>
           </div>
         </div>
       </template>
     </div>
 
-    <!-- Grid (Matrix): sortierbare Tabelle aller gefilterten Szenen -->
-    <div x-show="viewMode === 'grid'" class="table-scroll" x-cloak>
-      <table class="entity-grid-table"
-             x-data="sortableTable({
-               rows: () => szenenFiltered,
-               defaultKey: 'kapitel',
-               types: { wertung: 'string', titel: 'string', kapitel: 'string', seite: 'string' },
-               persistKey: 'szenen.grid',
-             })">
-        <thead>
-          <tr>
-            <th class="sortable-th" :class="sortClass('wertung')" :aria-sort="ariaSort('wertung')"
-                @click="sortBy('wertung')" x-text="$app.t('szenen.col.wertung')"></th>
-            <th class="sortable-th" :class="sortClass('titel')" :aria-sort="ariaSort('titel')"
-                @click="sortBy('titel')" x-text="$app.t('szenen.col.titel')"></th>
-            <th class="sortable-th" :class="sortClass('kapitel')" :aria-sort="ariaSort('kapitel')"
-                @click="sortBy('kapitel')" x-text="$app.t('szenen.col.kapitel')"></th>
-            <th class="sortable-th" :class="sortClass('seite')" :aria-sort="ariaSort('seite')"
-                @click="sortBy('seite')" x-text="$app.t('szenen.col.seite')"></th>
-            <th x-text="$app.t('szenen.col.pov')"></th>
-            <th x-text="$app.t('szenen.col.orte')"></th>
-            <th x-text="$app.t('szenen.col.kommentar')"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <template x-for="s in sorted" :key="s.id">
-            <tr>
-              <td>
-                <span class="severity-tag"
-                      :class="'severity-tag--' + (s.wertung || 'mittel')"
-                      x-text="$app.t('szenen.rating.' + (s.wertung || 'mittel'))"></span>
-              </td>
-              <td class="entity-grid-cell-title" x-text="s.titel"></td>
-              <td>
-                <span class="kapitel-badge kapitel-badge--primary internal-link"
-                      @click="$app.openKapitelByName(s.kapitel)"
-                      x-text="s.kapitel"></span>
-              </td>
-              <td>
-                <template x-if="s.seite">
-                  <span class="kapitel-badge kapitel-badge--secondary internal-link"
-                        @click="s.page_id ? $app.gotoPageById(s.page_id) : $app.gotoStelle(s.kapitel, s.seite)"
-                        x-text="s.seite"></span>
-                </template>
-              </td>
-              <td>
-                <span class="entity-grid-tags">
-                  <template x-for="figId in (s.fig_ids || [])" :key="figId">
-                    <span class="tag internal-link"
-                          @click="$app.openFigurById(figId)"
-                          x-text="$app.figurenById.get(figId)?.kurzname || $app.figurenById.get(figId)?.name || figId"></span>
-                  </template>
-                </span>
-              </td>
-              <td>
-                <span class="entity-grid-tags">
-                  <template x-for="ortId in (s.ort_ids || [])" :key="'o'+ortId">
-                    <span class="tag internal-link"
-                          @click="$app.openOrtById(ortId)"
-                          x-text="$app.orteById.get(ortId)?.name || ortId"></span>
-                  </template>
-                </span>
-              </td>
-              <td class="entity-grid-cell-text" x-text="s.kommentar"></td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-    </div>
+    <!-- @include szenen-grid -->
   </div>
 </div>

@@ -155,7 +155,7 @@
   height: 0;
 }
 
-/* Inline-Formatierungen aus BookStack (text-align, Farbe, Hintergrund via
+/* Inline-Formatierungen aus importiertem HTML (text-align, Farbe, Hintergrund via
    style-Attribut). Attribut-Selektor greift auch bei beliebigen span-
    Wrappern ohne dass wir den Stil parsen müssen. */
 .focus-editor__content

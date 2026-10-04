@@ -2,7 +2,7 @@
 // Persistenz der Alters-Analyse (Job `figur-alter`).
 //
 // ALLE DREI TABELLEN SIND ABGELEITETE INDEXE: `replaceFigureAges` ersetzt den
-// Stand eines Buchs als Ganzes (eine Transaktion). Kein Delta — eine Figur, die
+// Stand eines Buchs fuer einen User als Ganzes (eine Transaktion). Kein Delta — eine Figur, die
 // im neuen Lauf keine Altersangabe mehr hat (Satz umgeschrieben, Angabe
 // gestrichen), muesste sonst aktiv geloescht werden, und genau das vergisst man.
 //
@@ -13,8 +13,13 @@
 const { db } = require('./connection');
 const { NOW_ISO_SQL } = require('./now');
 
-const _stmtDelAges = db.prepare('DELETE FROM figure_ages WHERE book_id = ?');
-const _stmtDelBelege = db.prepare('DELETE FROM figure_age_belege WHERE book_id = ?');
+// Figuren gehoeren einem User (`figures.user_email`), der Lauf-Kopf ist pro
+// (Buch, User) gespeichert — also ersetzt ein Lauf nur die Zeilen der eigenen
+// Figuren. Ein buchweites Loeschen raeumte bei einem geteilten Buch die Alters-
+// tabelle der anderen Mitarbeitenden ab, deren Kopf aber weiter „aktuell" meldet.
+const _OWN_FIGS = 'figure_id IN (SELECT id FROM figures WHERE book_id = ? AND user_email IS ?)';
+const _stmtDelAges = db.prepare(`DELETE FROM figure_ages WHERE book_id = ? AND ${_OWN_FIGS}`);
+const _stmtDelBelege = db.prepare(`DELETE FROM figure_age_belege WHERE book_id = ? AND ${_OWN_FIGS}`);
 
 const _stmtInsAge = db.prepare(`
   INSERT INTO figure_ages (
@@ -68,24 +73,25 @@ function _safeChapterId(id) { return id != null && _stmtChapterExists.get(id) ? 
 // Dieselbe Ursache eine Ebene hoeher: eine Figur, die waehrend des Laufs
 // verschwindet (Komplettanalyse-Reconcile, manuelles Loeschen), darf den Lauf
 // nicht verwerfen — ihre Zeile faellt einfach weg.
-const _stmtFigureExists = db.prepare('SELECT 1 FROM figures WHERE id = ? AND book_id = ?');
+const _stmtFigureExists = db.prepare('SELECT 1 FROM figures WHERE id = ? AND book_id = ? AND user_email IS ?');
 
 const _num = v => (v == null || v === '' ? null : (Number.isFinite(Number(v)) ? Math.round(Number(v)) : null));
 
 /**
- * Full-Replace des Alters-Index eines Buchs.
+ * Full-Replace des Alters-Index eines Buchs fuer die Figuren eines Users.
  * @param {number} bookId
  * @param {string} userEmail
  * @param {object} payload  { rows: [{ figure_id, …, belege: [] }], scan: {…} }
  */
 const replaceFigureAges = db.transaction((bookId, userEmail, { rows = [], scan = {} } = {}) => {
-  _stmtDelBelege.run(bookId);
-  _stmtDelAges.run(bookId);
+  const em = userEmail || null;
+  _stmtDelBelege.run(bookId, bookId, em);
+  _stmtDelAges.run(bookId, bookId, em);
 
   let belegeTotal = 0, mitAlter = 0;
   for (const r of rows) {
     const figureId = _num(r.figure_id);
-    if (figureId == null || !_stmtFigureExists.get(figureId, bookId)) continue;
+    if (figureId == null || !_stmtFigureExists.get(figureId, bookId, em)) continue;
     _stmtInsAge.run({
       figure_id: figureId,
       book_id: bookId,
@@ -154,8 +160,8 @@ function listFigureAges(bookId, userEmail) {
     SELECT fa.*, f.fig_id, f.name
     FROM figure_ages fa
     JOIN figures f ON f.id = fa.figure_id
-    WHERE fa.book_id = ? AND f.user_email = ?
-  `).all(bookId, userEmail || '');
+    WHERE fa.book_id = ? AND f.user_email IS ?
+  `).all(bookId, userEmail || null);
   const belege = db.prepare(`
     SELECT b.figure_id, b.art, b.wert, b.bezugsjahr, b.zitat, b.page_id, b.chapter_id,
            b.unsicher, b.begruendung, p.page_name, c.chapter_name
@@ -163,9 +169,9 @@ function listFigureAges(bookId, userEmail) {
     JOIN figures f ON f.id = b.figure_id
     LEFT JOIN pages p    ON p.page_id = b.page_id
     LEFT JOIN chapters c ON c.chapter_id = b.chapter_id
-    WHERE b.book_id = ? AND f.user_email = ?
+    WHERE b.book_id = ? AND f.user_email IS ?
     ORDER BY b.figure_id, b.sort_order
-  `).all(bookId, userEmail || '');
+  `).all(bookId, userEmail || null);
   const byFig = new Map();
   for (const b of belege) {
     if (!byFig.has(b.figure_id)) byFig.set(b.figure_id, []);

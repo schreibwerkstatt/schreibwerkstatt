@@ -226,7 +226,7 @@ async function runPhase3Songs(ctx, chapterSongs, figurenKompakt, isSinglePass, f
       try {
         songsResultRaw = await call(jobId, tok,
           prompts.buildSongsConsolidationPrompt(bookName, chapterSongs, figurenKompakt),
-          sys.SYSTEM_ORTE_BLOCKS, 55, 56, komplettMaxTokens(effectiveProvider), 0.2, null, prompts.SCHEMA_SONGS_KONSOL,
+          sys.SYSTEM_ORTE_BLOCKS, 55, 56, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_SONGS_KONSOL,
           costTier(COST_LABEL.orte),
         );
       } catch (e) {

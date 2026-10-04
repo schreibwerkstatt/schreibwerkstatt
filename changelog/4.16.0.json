@@ -1,0 +1,106 @@
+{
+  "version": "4.16.0",
+  "date": "2026-10-04",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Schauplätze-Karte: Du kannst Orte jetzt selbst anlegen, umbenennen, löschen und ineinander ordnen – Zimmer im Haus, Haus in der Stadt. Deine Korrekturen bleiben auch nach einer neuen Komplettanalyse stehen.",
+      "en": "Locations card: you can now create, rename, delete and nest places yourself – room in a house, house in a town. Your corrections survive the next full analysis."
+    },
+    {
+      "kind": "neu",
+      "de": "Schauplätze-Karte, Detail eines Orts: Ein Streifen zeigt, in welchen Kapiteln der Ort vorkommt und welche Figuren sich dort begegnen. Dubletten führst du direkt dort zusammen.",
+      "en": "Locations card, place details: a strip shows which chapters the place appears in and which characters meet there. Merge duplicates right there."
+    },
+    {
+      "kind": "neu",
+      "de": "Bucheditor: Rückgängig und Wiederholen gibt es jetzt auch hier, mit Knöpfen im Kopf und Strg+Z / Strg+Shift+Z. Jede Seite hat ihren eigenen Verlauf.",
+      "en": "Book editor: undo and redo now work here too, with buttons in the header and Ctrl+Z / Ctrl+Shift+Z. Every page keeps its own history."
+    },
+    {
+      "kind": "neu",
+      "de": "Verweise auf Figuren, Orte, Kapitel, Szenen, Motive und mehr sehen überall gleich aus und führen per Klick zum Objekt. Fährst du mit der Maus darüber, erscheint eine kurze Vorschau.",
+      "en": "References to characters, places, chapters, scenes, motifs and more now look the same everywhere and jump to the item on click. Hover over one for a short preview."
+    },
+    {
+      "kind": "neu",
+      "de": "Szenen-Karte: Neben der Liste gibt es eine Rasteransicht und eine klappbare Verteilung pro Figur, Kapitel und Seite. Szenen, die nicht mehr im Text stehen, löschst du gesammelt.",
+      "en": "Scenes card: next to the list there is now a grid view and a collapsible breakdown per character, chapter and page. Scenes no longer in the text can be deleted in one go."
+    },
+    {
+      "kind": "neu",
+      "de": "Seitenleiste: Seiten und Kapitel benennst du jetzt direkt per Rechtsklick um („Umbenennen …“), ohne sie erst zu öffnen.",
+      "en": "Sidebar: rename pages and chapters right from the context menu (“Rename …”) without opening them first."
+    },
+    {
+      "kind": "neu",
+      "de": "Admin-Einstellungen, Reiter „API / Metrics“: Deutlich mehr Kennzahlen wie Kosten heute und im Monat, Serverzustand und Jobs. Auf Wunsch kommen Werte pro Benutzer dazu, passend für Home Assistant aufbereitet.",
+      "en": "Admin settings, “API / Metrics” tab: many more figures such as cost today and this month, server health and jobs. Optionally per-user values too, ready for Home Assistant."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Seitenbaum in der Seitenleiste: Mit Tab springst du in einem Schritt hinein, die Pfeiltasten wandern durch Kapitel und Seiten und klappen sie auf und zu. Die Suche findet jetzt auch Kapitelnamen.",
+      "en": "Page tree in the sidebar: Tab jumps in with a single step, the arrow keys move through chapters and pages and expand or collapse them. Search now also finds chapter names."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lese-Link auf dem Handy: Ein Tipp auf eine markierte Stelle öffnet den Kommentar direkt darüber, statt ans Ende des Buchs zu springen.",
+      "en": "Reading link on mobile: tapping a highlighted passage opens its comment right above it instead of jumping to the end of the book."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figuren-Karte, Reiter „Alter“: Altersangaben werden zuverlässiger gefunden, etwa bei „am 3. Mai 1850“ oder „geb. 1850“. Unsinnige Werte fallen weg.",
+      "en": "Characters card, “Age” tab: age statements are found more reliably, for example in “born 3 May 1850”. Implausible values are dropped."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figur-Werkstatt: Arbeitest du in zwei Tabs oder auf zwei Geräten an derselben Figur, warnt die Werkstatt, statt den neueren Stand still zu überschreiben.",
+      "en": "Character workshop: if you work on the same character in two tabs or on two devices, the workshop warns you instead of silently overwriting the newer version."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Komplettanalyse: Figuren aus verschiedenen Kapiteln werden zuverlässiger zusammengeführt. Es gibt weniger falsche Zusammenlegungen, und Beziehungen aus späteren Kapiteln bleiben erhalten.",
+      "en": "Full analysis: characters from different chapters are merged more reliably. There are fewer wrong merges, and relationships from later chapters are kept."
+    },
+    {
+      "kind": "behoben",
+      "de": "Fokus-Modus: Ein fehlgeschlagenes Speichern wird automatisch wiederholt, und beim Seitenwechsel geht kein ungespeicherter Text mehr verloren. Escape bei einer Akzent-Eingabe beendet den Modus nicht mehr, und Shift+Enter bricht auch in Safari nur die Zeile um.",
+      "en": "Focus mode: a failed save is retried automatically and switching pages no longer loses unsaved text. Escape during an accent input no longer exits the mode, and Shift+Enter now only breaks the line in Safari too."
+    },
+    {
+      "kind": "behoben",
+      "de": "Bearbeiten einer Seite: Nach Strg+Z steht der Cursor wieder an der Stelle der Änderung statt am Seitenanfang.",
+      "en": "Page editing: after Ctrl+Z the cursor is back at the place of the change instead of the top of the page."
+    },
+    {
+      "kind": "behoben",
+      "de": "Buchorganizer: Rückgängig hängt nicht mehr fest, wenn ein Schritt nicht mehr ausführbar ist, und funktioniert jetzt auch für den Papierkorb.",
+      "en": "Book organizer: undo no longer gets stuck when a step can no longer be applied, and now also works for the trash."
+    },
+    {
+      "kind": "behoben",
+      "de": "Bearbeiten einer Seite: Text, den du direkt vor einem hervorgehobenen Namen tippst, wird nicht mehr mit hervorgehoben.",
+      "en": "Page editing: text typed right before a highlighted name is no longer highlighted along with it."
+    },
+    {
+      "kind": "behoben",
+      "de": "Figuren-Karte: Lässt sich die Liste nicht laden, steht jetzt eine Meldung mit „Erneut laden“. Bisher sah es aus, als gäbe es noch keine Analyse.",
+      "en": "Characters card: if the list fails to load, a message with “Reload” now appears. Previously it looked as if there was no analysis yet."
+    },
+    {
+      "kind": "behoben",
+      "de": "PDF-Export: Auf dem Umschlag steht jetzt der Autorenname aus den Publikationsangaben, wie im Innenteil, statt des Kontonamens.",
+      "en": "PDF export: the cover now shows the author name from the publication settings, as inside the book, instead of the account name."
+    },
+    {
+      "kind": "behoben",
+      "de": "Figuren-Karte, Reiter „Alter“: In geteilten Büchern leert die Altersanalyse einer anderen Person nicht mehr deine Tabelle.",
+      "en": "Characters card, “Age” tab: in shared books, another person's age analysis no longer empties your table."
+    },
+    {
+      "kind": "behoben",
+      "de": "Buch-Chat: Figuren mit Umlaut im Namen werden jetzt auch bei abweichender Gross- und Kleinschreibung gefunden.",
+      "en": "Book chat: characters with umlauts in their name are now found regardless of upper or lower case."
+    }
+  ]
+}

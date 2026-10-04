@@ -158,11 +158,6 @@
   flex: 1 1 20rem;
   min-width: 0;
 }
-.figur-alter-beleg-ort {
-  font-size: var(--font-size-mini);
-  color: var(--color-muted);
-  white-space: nowrap;
-}
 
 /* Mobile: die Tabelle behält ihre natürliche Breite und scrollt im .table-scroll
    (Utility-Regel `.table-scroll > table { min-width: 100% }` überschreiben). */

@@ -11,9 +11,11 @@
   <!-- Kapitelauftritte -->
   <div class="figur-kapitelauftritte" x-show="f.kapitel?.length > 1">
     <div class="bewertung-section-title" x-text="$app.t('figuren.field.kapitelauftritte')"></div>
-    <div class="figur-tags-row">
+    <!-- Klick setzt den Kapitel-Filter der Figurenliste (bewusst keine Navigation). -->
+    <div class="entity-refs figur-tags-row">
       <template x-for="(k, ki) in (f.kapitel || [])" :key="ki">
-        <span class="tag internal-link" @click="$store.catalogUi.figurenFilters.kapitel = k.name; $store.catalogUi.figurenFilters.seite = ''" x-text="ki === 0 ? k.name : k.name + (k.haeufigkeit > 1 ? ' ×' + k.haeufigkeit : '')"></span>
+        <button type="button" class="entity-ref"
+                x-entity-ref="{ type: 'kapitel', id: k.chapter_id, name: k.name, count: k.haeufigkeit, onOpen: () => { $store.catalogUi.figurenFilters.kapitel = k.name; $store.catalogUi.figurenFilters.seite = '' } }"></button>
       </template>
     </div>
   </div>
@@ -24,19 +26,26 @@
     <div class="bewertung-section-title" x-text="$app.t('figuren.field.musikgeschmack')"></div>
     <div class="figur-tags-row">
       <template x-for="s in ($app.songsByFigurId.get(f.id) || [])" :key="s.id">
-        <span class="tag internal-link" @click.stop="$app.openSongById(s.id)" x-text="(s.titel || '') + (s.interpret ? ' — ' + s.interpret : '')"></span>
+        <button type="button" class="entity-ref" x-entity-ref="{ type: 'song', id: s.id, label: (s.titel || '') + (s.interpret ? ' — ' + s.interpret : '') }"></button>
       </template>
     </div>
   </div>
   <!-- Familie -->
   <div x-show="f.eltern_ids?.length || f.geschwister_ids?.length">
     <div class="bewertung-section-title" x-text="$app.t('figuren.field.familie')"></div>
-    <div class="figur-tags-row">
+    <!-- Verwandtschafts-Pfeil vor der Referenz: ↑ Elternteil, ⇔ Geschwister. -->
+    <div class="entity-refs figur-tags-row">
       <template x-for="pid in (f.eltern_ids || [])" :key="'e'+pid">
-        <span class="tag figur-rel-tag internal-link" :data-tip="$app.t('figuren.rel.parent')" @click.stop="$app.openFigurById(pid)" x-text="'↑ ' + ($app.figurenById.get(pid)?.name || pid)"></span>
+        <span class="figur-rel">
+          <span class="figur-rel-mark" role="img" :aria-label="$app.t('figuren.rel.parent')" :data-tip="$app.t('figuren.rel.parent')">↑</span>
+          <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: pid }"></button>
+        </span>
       </template>
       <template x-for="sid in (f.geschwister_ids || [])" :key="'s'+sid">
-        <span class="tag figur-rel-tag internal-link" :data-tip="$app.t('figuren.rel.sibling')" @click.stop="$app.openFigurById(sid)" x-text="'⇔ ' + ($app.figurenById.get(sid)?.name || sid)"></span>
+        <span class="figur-rel">
+          <span class="figur-rel-mark" role="img" :aria-label="$app.t('figuren.rel.sibling')" :data-tip="$app.t('figuren.rel.sibling')">⇔</span>
+          <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: sid }"></button>
+        </span>
       </template>
     </div>
   </div>
@@ -46,14 +55,18 @@
     <div class="figur-bz-list">
       <template x-for="(bz, i) in (f.beziehungen || [])" :key="i">
         <div class="figur-beziehung-item">
-          <span class="figur-bz-typ" :class="'figur-bz-' + bz.typ" x-text="bz.typ"></span>
-          <span class="figur-bz-name internal-link" @click.stop="$app.openFigurById(bz.figur_id)" x-text="$app.figurenById.get(bz.figur_id)?.name || bz.figur_id"></span>
+          <span class="figur-bz-typ" :class="'figur-bz-' + bz.typ" x-text="$app.t('figuren.bz.' + bz.typ)"></span>
+          <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: bz.figur_id }"></button>
           <span x-show="bz.machtverhaltnis && bz.machtverhaltnis !== 0" class="figur-bz-macht" :class="bz.machtverhaltnis > 0 ? 'figur-bz-macht--positiv' : 'figur-bz-macht--negativ'" x-text="bz.machtverhaltnis > 0 ? '↑'.repeat(Math.abs(bz.machtverhaltnis)) : '↓'.repeat(Math.abs(bz.machtverhaltnis))"></span>
           <span x-show="bz.beschreibung" class="card-hint card-hint--sm" x-text="'– ' + bz.beschreibung"></span>
           <template x-if="bz.belege?.length">
-            <span class="figur-bz-belege">
+            <!-- Beleg: Seite (per ID oder Kapitel+Seitenname), sonst Kapitel. -->
+            <span class="entity-refs figur-bz-belege">
               <template x-for="(bg, bi) in (bz.belege || [])" :key="bi">
-                <span class="figur-bz-beleg internal-link" @click.stop="bg.page_id ? $app.gotoPageById(bg.page_id) : (bg.chapter_id ? $app.gotoChapterById(bg.chapter_id) : $app.gotoStelle(bg.kapitel, bg.seite))" x-text="bg.seite || bg.kapitel" :data-tip="(bg.kapitel || '') + (bg.seite ? ' · ' + bg.seite : '')"></span>
+                <button type="button" class="entity-ref"
+                        x-entity-ref="(bg.page_id || (!bg.chapter_id && bg.seite))
+                          ? { type: 'seite', id: bg.page_id, name: bg.seite, kapitel: bg.kapitel }
+                          : { type: 'kapitel', id: bg.chapter_id, name: bg.kapitel }"></button>
               </template>
             </span>
           </template>
@@ -89,11 +102,13 @@
               </template>
             </div>
             <div class="gz-ereignis internal-link" @click="$app.openEreignisseMitFigur(f.id)" x-text="ev.ereignis"></div>
-            <div x-show="ev.kapitel" class="gz-kapitel">
-              <span class="gz-kapitel-link internal-link" @click="$app.gotoStelle(ev.kapitel, null)" x-text="ev.kapitel"></span>
-            </div>
-            <div x-show="ev.seite" class="gz-seite">
-              <span class="internal-link" @click="$app.gotoStelle(ev.kapitel, ev.seite)" x-text="ev.seite"></span>
+            <div x-show="ev.kapitel || ev.seite" class="entity-refs gz-meta">
+              <template x-if="ev.kapitel">
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: ev.chapter_id, name: ev.kapitel }"></button>
+              </template>
+              <template x-if="ev.seite">
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: ev.page_id, name: ev.seite, kapitel: ev.kapitel }"></button>
+              </template>
             </div>
             <div x-show="ev.bedeutung" class="gz-bedeutung" x-text="ev.bedeutung"></div>
           </div>

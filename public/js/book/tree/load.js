@@ -245,7 +245,18 @@ export const treeLoadMethods = {
     const loadCtrl = new AbortController();
     this._bookLoadAbort = loadCtrl;
     const signal = loadCtrl.signal;
+    // Generation fuer den leisen Nachzug (tree/catchup.js): ein Voll-Load, der
+    // waehrend dessen Fetch startet UND endet, ist juenger als dessen Antwort.
+    this._treeLoadGen = (this._treeLoadGen || 0) + 1;
+    // Buchwechsel vs. Reload desselben Buchs (Wake, Job, manuell, Nachzug):
+    // nur der Wechsel raeumt buchgebundenen Sidebar-Zustand (Suche, Plaketten,
+    // Stats), dimmt den alten Baum und verwirft ihn bei einem Fehler. Ein Reload
+    // laesst Suche und Baum stehen — ein fertiger Sync-Job darf dem User nicht
+    // den Suchbegriff unter den Fingern loeschen. `login` zaehlt als Wechsel:
+    // der Baum davor kann einer fremden Sitzung gehoeren.
+    const bookSwitch = String(this._treeBookId ?? '') !== String(bookId) || opts.source === 'login';
     this.treeLoading = true;
+    this.treeSwitching = bookSwitch;
     // Sidebar-Mode SYNCHRON vor dem Page-Fetch setzen: Tagebuch öffnet Kalender,
     // sonst Tree. Buchtyp ist aus der bereits geladenen `books`-Liste sofort
     // bekannt (currentBuchtyp), daher kein Warten auf den Fetch nötig — sonst
@@ -258,11 +269,11 @@ export const treeLoadMethods = {
     try {
       this.setStatus(this.t('tree.loadingPages'), true);
       // Tree/Pages werden NICHT vorab geleert — alter Tree bleibt sichtbar
-      // (CSS dimmt + blockiert Klicks via .tree-card--loading), bis der neue
-      // Tree da ist. Bei Fetch-Fail (Session, Timeout) räumt der catch-Block
-      // explizit auf, statt einen Sackgassen-Tree mit Seiten aus dem alten
-      // Buch stehen zu lassen. Wake-Refresh clear't ohnehin nichts.
-      if (opts.source !== 'wake') {
+      // (beim Buchwechsel gedimmt + klick-blockiert via .tree-card--loading),
+      // bis der neue Tree da ist. Scheitert der Fetch beim Buchwechsel, raeumt
+      // der catch-Block auf, statt einen Sackgassen-Tree mit Seiten aus dem
+      // alten Buch stehen zu lassen.
+      if (bookSwitch) {
         this.pageSearch = '';
         this.pageSearchActiveIndex = 0;
         this._pageSearchActiveId = null;
@@ -292,6 +303,10 @@ export const treeLoadMethods = {
 
       // Tree-Bau (nav.pages + nav.tree + Sortier-Indexe) liegt in tree/build.js.
       this._buildTreeFromResponse(tree, bookId);
+      this._treeBookId = bookId;
+      // Neue Baum-Identitaet → Such-Memo ist ohnehin kalt; bei Reload mit
+      // aktiver Suche den kbd-Treffer auf den neuen Baum ziehen.
+      if (this.pageSearch) this._recomputePageSearchActiveId?.();
 
       // Gecachte Stats + Lektorats-Alter + die sechs Plaketten-Zaehler.
       try {
@@ -332,17 +347,28 @@ export const treeLoadMethods = {
       // so können dieselben Karten auch In-Place-Mutationen am Tree machen,
       // ohne sich selbst rekursiv neu zu rendern.
       window.dispatchEvent(new CustomEvent(EVT.PAGES_LOADED, { detail: { bookId } }));
+      return true;
     } catch (e) {
       // AbortError = Buchwechsel hat laufenden Load gekillt — kein User-Fehler.
       // Nachfolge-Call managed treeLoading + Tree selbst, hier nichts touchen.
       if (e?.name === 'AbortError' || signal.aborted) return;
       console.error('[loadPages]', e);
-      // Endgültiger Fail (Session expired, Timeout, Netz weg): alten Tree
-      // verwerfen. Sonst sieht User Sackgassen-Tree mit Seiten aus dem alten
-      // Buch und kann nicht navigieren (Klick → Page aus fremdem Buch).
-      this.$store.nav.tree = [];
-      this.$store.nav.pages = [];
+      // Buchwechsel gescheitert (Session expired, Timeout, Netz weg): alten
+      // Tree verwerfen. Sonst sieht User Sackgassen-Tree mit Seiten aus dem
+      // alten Buch und kann nicht navigieren (Klick → Page aus fremdem Buch).
+      // Ein gescheiterter Reload DESSELBEN Buchs (Wake ohne Netz: der frische
+      // Read umgeht den SW-Cache und endet im 503) behaelt den Baum — er ist
+      // weiterhin der richtige, nur vielleicht nicht der neueste.
+      if (bookSwitch) {
+        this.$store.nav.tree = [];
+        this.$store.nav.pages = [];
+        this._treeBookId = null;
+      }
       this.setStatus(this.t('common.errorColon') + e.message);
+      // `false` statt Wurf: Aufrufer ohne await (Sync-/Blog-Job) erzeugten
+      // sonst unbehandelte Rejections. Wer neu versuchen will (Wake-Refresh,
+      // app-view/bookscope.js#_refreshAfterWake), wertet den Rueckgabewert aus.
+      return false;
     } finally {
       // treeLoading freigeben, wenn dieser Call der aktuelle Owner ist ODER
       // niemand mehr Owner ist (Handle === null: _resetBookScopedState hat ihn
@@ -355,8 +381,10 @@ export const treeLoadMethods = {
       if (this._bookLoadAbort === loadCtrl) {
         this._bookLoadAbort = null;
         this.treeLoading = false;
+        this.treeSwitching = false;
       } else if (this._bookLoadAbort === null) {
         this.treeLoading = false;
+        this.treeSwitching = false;
       }
     }
   },
@@ -388,20 +416,21 @@ export const treeLoadMethods = {
         ? this.$store.nav.tree.find(i => i.type === 'chapter' && !i.solo && String(i.id) === String(afterChapterId))
         : null;
       const body = { book_id: parseInt(bookId), name: title };
-      if (afterItem && Number.isFinite(afterItem.priority)) body.position = afterItem.priority + 1;
+      // Mit Anker legt der Server das Kapitel als Geschwister direkt dahinter
+      // ab — Parent vom Anker, Reihenfolge in book_order (content-store#createChapter).
+      if (afterItem) body.after_chapter_id = Number(afterItem.id);
+      const parentId = afterItem?.parent_id ?? null;
       const created = await contentRepo.createChapter(body);
       this.newChapterTitle = '';
       if (!created?.id) return null;
-      const localPriority = afterItem && Number.isFinite(afterItem.priority)
-        ? afterItem.priority + 0.5
-        : (created.position ?? Number.MAX_SAFE_INTEGER);
+      const localPriority = created.position ?? Number.MAX_SAFE_INTEGER;
       const chapterItem = {
         type: 'chapter',
         id: created.id,
         name: created.name,
         priority: localPriority,
-        depth: 1,
-        parent_id: null,
+        depth: afterItem?.depth || 1,
+        parent_id: parentId,
         hasChildren: false,
         open: true,
         solo: false,
@@ -425,7 +454,7 @@ export const treeLoadMethods = {
 
   // Token-Estimates befüllen die Sidebar-Badges + Σ-Totals. Strategie:
   //   1) Server-Backfill (`POST /sync/page-stats/:bookId`) — ein einzelner
-  //      Request, Server holt fehlende Stats parallel von BookStack und
+  //      Request, Server berechnet fehlende Stats aus den Seiten und
   //      persistiert sie in `page_stats`. Erspart 429 Browser-Roundtrips bei
   //      einem grossen Buch.
   //   2) IntersectionObserver auf den Sidebar-Items — fehlende Stats für
@@ -547,6 +576,10 @@ export const treeLoadMethods = {
       }
     }
     if (!removed) return;
+    // Der Such-Memo (app.js#filteredTree) keyt auf die Identitaet von nav.tree;
+    // die splices oben lassen sie stehen → ohne Reset zeigte eine aktive Suche
+    // die geloeschte Seite weiter.
+    this._filteredTreeMemo = null;
     // Alle drei Sortier-Indexe neu bauen, nicht nur den ID-Index: `_pageOrderMap`
     // keyt auf den SEITENNAMEN und zeigte sonst weiter auf die tote Position
     // (app/app-ui.js#_pageIdx). Ausserdem verschieben sich durch das Entfernen

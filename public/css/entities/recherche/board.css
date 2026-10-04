@@ -324,65 +324,6 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   gap: var(--space-xs);
 }
 
-.research-link-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  padding: 0.2em 0.5em;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--link-accent, var(--color-border));
-  color: var(--color-text);
-}
-/* Typ-Farbcodierung der Verknüpfung: linker Rand + Label-Farbe je Art
-   (vorhandene Card-Accent-Hues, kein neues Token). */
-.research-link-chip--figure   { --link-accent: var(--card-accent-figuren); }
-.research-link-chip--location { --link-accent: var(--card-accent-orte); }
-.research-link-chip--scene    { --link-accent: var(--card-accent-szenen); }
-.research-link-chip--beat     { --link-accent: var(--card-accent-plot); }
-.research-link-chip--thread   { --link-accent: var(--card-accent-kontinuitaet); }
-.research-link-chip--chapter  { --link-accent: var(--card-accent-kapitel); }
-.research-link-chip--page     { --link-accent: var(--card-accent-bookstats); }
-
-/* Klickbarer Kern des Chips: springt zum verknüpften Element (Hash-Router). */
-.research-link-goto {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  background: none;
-  border: none;
-  padding: 0;
-  margin: 0;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-.research-link-goto:hover .research-link-goto-label,
-.research-link-goto:focus-visible .research-link-goto-label { text-decoration: underline; }
-
-.research-link-kind {
-  font-weight: var(--fw-medium);
-  text-transform: uppercase;
-  font-size: 0.72em;
-  letter-spacing: 0.06em;
-  color: var(--link-accent, var(--color-muted));
-}
-.research-chip-x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  padding: var(--space-2xs);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  color: var(--color-muted);
-}
-.research-chip-x .icon { width: 0.85em; height: 0.85em; }
-.research-chip-x:hover { color: var(--color-err-text); background: var(--color-tag-bg); }
-
 .research-tag {
   display: inline-block;
   padding: 0.1em 0.5em;
@@ -416,7 +357,6 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   gap: var(--space-xs);
   flex-wrap: wrap;
 }
-.research-suggestion-label { font-weight: var(--fw-semibold); }
 .research-suggestion-reason { font-size: var(--font-size-sm); color: var(--color-muted); }
 .research-suggestion .btn-compact { margin-left: auto; }
 .research-suggestions-dismiss {

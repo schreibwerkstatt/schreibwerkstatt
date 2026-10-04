@@ -2,8 +2,6 @@
 // Unit-Tests fuer lib/cache-cleanup.js. Seedet eine in-Tmp-Datei liegende DB
 // mit alten und frischen Rows in einer Auswahl der Policy-Tabellen und
 // verifiziert, dass nur die alten Rows entfernt werden.
-//
-// Plan-Referenz: docs/bookstack-exit.md#phase-0d.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');

@@ -169,7 +169,7 @@ export const mirrorMethods = {
     });
   },
 
-  // Sortier-Indexe (`_chapterOrderMap`/`_pageOrderMap`/`_pageIdOrderMap`) —
+  // Sortier-Indexe (`_chapterOrderMap`/`_chapterIdOrderMap`/`_pageOrderMap`/`_pageIdOrderMap`) —
   // SSoT ist der Root-Builder aus tree/build.js, kein Nachbau hier.
   _rebuildOrderMaps() {
     window.__app._rebuildTreeOrderMaps?.();

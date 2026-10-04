@@ -117,8 +117,11 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
   // Per-Provider-Skalierung aus dessen `ai.<p>.context_window` (lib/ai.js#getContextConfigFor).
   // Bei Claude 200K-Kontext ≈ 420K Zeichen Single-Pass – reicht für fast alle Bücher.
   // Gegen das EIGENE Output-Cap dieser Pipeline gerechnet, nicht gegen das provider-weite:
-  // jeder Komplett-Call reserviert `komplettMaxTokens` (Cloud: das Provider-Ceiling, lokal
-  // `ai.komplett.extract_max_tokens`), und derselbe Wert bestimmt den Preflight in aiCall.
+  // `komplettMaxTokens` (Cloud: das Provider-Ceiling, lokal `ai.komplett.extract_max_tokens`)
+  // ist das Output-Cap der Pipeline. Es wirkt nur, wenn ein Call es im `maxTokens`-Slot
+  // übergibt (9. Argument von `call`, Muster phases/extraktion.js) — im `expectedChars`-Slot
+  // ist es bloss eine Fortschritts-Schätzung, und aiCall reserviert dann das Provider-Ceiling.
+  // Der Wert im `maxTokens`-Slot bestimmt auch den Kontext-Preflight in aiCall.
   // Mit dem provider-weiten `max_tokens_out` läge die Chunk-Grenze unter dem, was die Calls
   // tatsächlich tragen — bei einem lokalen Modell zerlegt das das Buch in deutlich mehr
   // Chunks als nötig (mehr Calls, mehr chunk-übergreifende Dubletten in der Konsolidierung).
@@ -424,6 +427,9 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
       backfillLocationChaptersFromScenes(bookIdInt, email);
     } else {
       log.info('Szenen und Lebensereignisse auf Wunsch übersprungen – bestehender Bestand bleibt.');
+      // Die Orte hat P3 trotzdem neu geschrieben (haeufigkeit=1) — Haeufigkeit aus dem
+      // bestehenden Szenen-Bestand wieder ableiten.
+      backfillLocationChaptersFromScenes(bookIdInt, email);
       updateJob(jobId, { progress: 76 });
     }
     // Kapitel-Auftritte neu aufbauen — Full-Replace, JETZT liegen alle drei Quellen vor:

@@ -28,8 +28,8 @@ const BOOK = 7301;
 function seed() {
   for (const t of ['research_item_findings', 'research_item_links', 'research_items', 'pages', 'books']) db.prepare(`DELETE FROM ${t}`).run();
   db.prepare("INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, 'Abgleich', ?, ?)").run(BOOK, NOW, NOW);
-  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, position, priority, updated_at, body_html)
-              VALUES (730101, ?, 'Landung', 1, 1, ?, '<p>Am 21. Juli 1968 betrat Armstrong den Mond. „Ein kleiner Schritt für einen Menschen", sagte er.</p>')`).run(BOOK, NOW);
+  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, position, updated_at, body_html)
+              VALUES (730101, ?, 'Landung', 1, ?, '<p>Am 21. Juli 1968 betrat Armstrong den Mond. „Ein kleiner Schritt für einen Menschen", sagte er.</p>')`).run(BOOK, NOW);
   const ins = db.prepare("INSERT INTO research_items (book_id, user_email, kind, title, body, status) VALUES (?, ?, ?, ?, ?, ?)");
   const fact = ins.run(BOOK, USER, 'fact', 'Mondlandung', 'Armstrong betrat den Mond am 21. Juli 1969.', 'offen').lastInsertRowid;
   const quote = ins.run(BOOK, USER, 'quote', 'Armstrong', 'Das ist ein kleiner Schritt für einen Menschen, ein riesiger Sprung für die Menschheit.', 'offen').lastInsertRowid;

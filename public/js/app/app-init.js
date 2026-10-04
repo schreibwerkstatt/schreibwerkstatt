@@ -124,6 +124,9 @@ export const appInitMethods = {
     // Seitenwechsel → page-scoped Presence neu melden (welche Seite dieses
     // Geraet jetzt offen hat). Steuert, ob der teure Collab-Poll laeuft.
     this.$watch(() => this.currentPage?.id, () => this._pingDevicePresenceNow?.());
+    // Seitenwechsel → Seite im Seitenbaum aufdecken (Kapitel aufklappen, in den
+    // Scrollbereich holen), egal woher der Wechsel kam (book/tree/keyboard.js).
+    this.$watch(() => this.currentPage?.id, (id) => { if (id != null) this._revealPageInTree(id); });
     // Sidebar-Suche: bei jedem (debounced) pageSearch-Write Index auf
     // ersten Treffer und kbd-aktive Page-ID neu setzen.
     this.$watch('pageSearch', () => {

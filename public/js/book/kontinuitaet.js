@@ -295,9 +295,21 @@ export const kontinuitaetMethods = {
     return pageByName(chapter.pages, part2) || chapter.pages?.[0] || null;
   },
 
-  kontinuitaetGotoStelle(stelle, issue, side) {
+  // Spec für die Entitäts-Referenz einer Stelle (x-entity-ref). Label bleibt
+  // der KI-Text. Eine reine Kapitelreferenz verweist aufs Kapitel (→ Kapitel-
+  // bewertung), sonst auf die über kontinuitaetResolveStelle aufgelöste Seite;
+  // ohne Treffer bleibt die Referenz unaufgelöst (kein globaler Seiten-Fallback).
+  kontinuitaetStelleRef(stelle, issue, side) {
+    const label = stelle || '';
     const page = this.kontinuitaetResolveStelle(stelle, issue, side);
-    if (page) window.__app.selectPage(page);
+    if (!page) return { type: 'seite', label };
+    const ch = this._kontinuitaetChapters().list.find(c => (c.pages || []).includes(page)) || null;
+    const ci = label.indexOf(':');
+    const part1 = (ci > 0 ? label.slice(0, ci) : label).trim().toLowerCase();
+    if (ch && ci <= 0 && part1 === String(ch.name || '').toLowerCase()) {
+      return { type: 'kapitel', id: ch.id, label };
+    }
+    return { type: 'seite', id: page.id, label };
   },
 
   // ── Namens-/Konsistenz-Waechter ────────────────────────────────────────────

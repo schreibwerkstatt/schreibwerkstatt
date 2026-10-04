@@ -1,7 +1,6 @@
 'use strict';
 // Admin-Verwaltung fuer Buecher: Owner-Zuweisung fuer Buecher ohne Owner
-// (entstanden z.B. nach Backend-Switch, wenn das BookStack-Token-User nicht
-// im app_users-Verzeichnis lebt). Fuer Buecher mit existierendem Owner geht
+// (entstanden z.B. nach einem Import). Fuer Buecher mit existierendem Owner geht
 // die Reassignment ueber den normalen Transfer-Flow (Owner → Admin macht sich
 // selbst zum Editor → neuer Owner → transferOwnership).
 

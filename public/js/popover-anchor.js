@@ -3,7 +3,9 @@
 // Konsumenten: das Ideen-Meatball-Menue (book/ideen.js#openMenu), das Plot-Lane-
 // Menue (book/plot/threads.js#openThreadMenu), das Plot-Fundstellen-Popover
 // (book/plot/ai.js#openBeatOccPopover) und der Verknuepfungs-Picker der Ideen
-// (book/ideen-links.js#openLinkPicker). Alle teleportieren aus ihrem Container
+// (book/ideen-links.js#openLinkPicker), dazu die Hover-Vorschau der Entitaets-
+// Referenz (entity-ref-popover.js, `align: 'start'`, ohne Schaetz-Pass: sie misst
+// synchron nach dem Befuellen). Die Menues teleportieren aus ihrem Container
 // heraus (nach <body>, die beiden Plot-Popover in die Karten-Wurzel `.card--plot`
 // wegen des Native-Vollbilds), weil der Container scrollt oder `overflow` klippt,
 // und brauchen dieselbe Rechnung — sie liegt darum hier und nicht mehrfach daneben.
@@ -24,15 +26,19 @@ const EDGE = 8;
 
 /**
  * Position eines am Trigger verankerten Popovers.
- * Rechtsbuendig zum Trigger, darunter — und darueber, wenn unten kein Platz ist.
+ * Rechtsbuendig zum Trigger (Menue-Knoepfe sitzen am rechten Rand), mit
+ * `align: 'start'` linksbuendig (Hover-Vorschau eines Chips im Fliesstext);
+ * darunter — und darueber, wenn unten kein Platz ist.
  *
- * @param {DOMRect|{top:number,bottom:number,right:number}} r Trigger-Rect (Viewport).
+ * @param {DOMRect|{top:number,bottom:number,left?:number,right:number}} r Trigger-Rect (Viewport).
  * @param {number} pw Popover-Breite  (Schaetzung im ersten Pass, gemessen im zweiten).
  * @param {number} ph Popover-Hoehe   (dito).
+ * @param {{align?: 'end'|'start'}} [opts]
  * @returns {{top:number,left:number}}
  */
-export function computePopoverPos(r, pw, ph) {
-  const left = Math.max(EDGE, Math.min(window.innerWidth - pw - EDGE, r.right - pw));
+export function computePopoverPos(r, pw, ph, { align = 'end' } = {}) {
+  const ideal = align === 'start' ? r.left : r.right - pw;
+  const left = Math.max(EDGE, Math.min(window.innerWidth - pw - EDGE, ideal));
   const top = (r.bottom + ph + EDGE > window.innerHeight)
     ? Math.max(EDGE, r.top - ph - GAP)
     : r.bottom + GAP;

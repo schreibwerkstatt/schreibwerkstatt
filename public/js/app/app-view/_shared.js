@@ -20,7 +20,7 @@ import { EVT } from '../../events.js';
 export const FILTER_SCOPES = [
   { scope: 'figurenFilters',      key: 'figurenFilters',      defaults: { kapitel: '', seite: '', suche: '' } },
   { scope: 'ereignisseFilters',   key: 'ereignisseFilters',   defaults: { figurId: '', kapitel: '', seite: '', subtyp: '', suche: '' } },
-  { scope: 'szenenFilters',       key: 'szenenFilters',       defaults: { wertung: '', figurId: '', kapitel: '', ortId: '', suche: '' } },
+  { scope: 'szenenFilters',       key: 'szenenFilters',       defaults: { wertung: '', figurId: '', kapitelId: '', seiteId: '', ortId: '', suche: '' } },
   { scope: 'orteFilters',         key: 'orteFilters',         defaults: { figurId: '', kapitel: '', szeneId: '', suche: '' } },
   { scope: 'songsFilters',        key: 'songsFilters',        defaults: { figurId: '', kapitel: '', szeneId: '', genre: '', kontextTyp: '', suche: '' } },
   { scope: 'kontinuitaetFilters', key: 'kontinuitaetFilters', defaults: { figurId: '', kapitel: '', schwere: '' } },

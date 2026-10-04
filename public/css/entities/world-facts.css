@@ -93,11 +93,6 @@
   gap: var(--space-2xs);
 }
 
-.weltfakten-seite {
-  font-size: var(--font-size-xs);
-  color: var(--color-muted);
-}
-
 /* Mobil: Spalten stapeln, Subjekt wird zur Label-Zeile über der Aussage. */
 @media (max-width: 640px) {
   .weltfakten-row { grid-template-columns: 1fr; gap: var(--space-2xs); }

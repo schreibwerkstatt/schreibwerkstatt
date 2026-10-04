@@ -379,3 +379,37 @@ test('_findKnotenPfad: liefert "Wurzel > … > Knoten"-Pfad', () => {
   assert.equal(werkstatt._findKnotenPfad(tree, 'stimme'),     'Anna > Stimme');
   assert.equal(werkstatt._findKnotenPfad(tree, 'unbekannt'),  null);
 });
+
+test('Brainstorm: Figur waehrend des Laufs geloescht → draftMissing statt FK-Rohfehler', async () => {
+  const BOOK_ID = 6120;
+  const userEmail = 'autor@test.dev';
+  ctx.dbSeed.setBook({ chapters: [], pages: [], pageBodies: {} });
+  ctx.dbSchema.upsertBookByName(BOOK_ID, 'B');
+  const draft = draftFigDb.createDraftFigure(BOOK_ID, userEmail, { name: 'Anna', mindmap: sampleMindmap() });
+
+  // Der Matcher laeuft mitten im KI-Call: genau dort loescht der User die Figur.
+  ctx.mockAi.on(() => { draftFigDb.deleteDraftFigure(draft.id); return true; }, brainstormResponse());
+
+  const jobId = ctx.shared.createJob('werkstatt-brainstorm', BOOK_ID, userEmail, 'l');
+  ctx.shared.enqueueJob(jobId, () => werkstatt.runBrainstormJob(jobId, draft.id, 'aussehen', userEmail));
+  const job = await waitForJob(ctx.shared, jobId);
+  assert.equal(job.status, 'error');
+  assert.equal(job.error, 'job.error.werkstatt.draftMissing');
+});
+
+test('Prompt: Mindmap als eingerueckte Liste statt Roh-JSON', async () => {
+  const BOOK_ID = 6121;
+  const userEmail = 'autor@test.dev';
+  ctx.dbSeed.setBook({ chapters: [], pages: [], pageBodies: {} });
+  ctx.dbSchema.upsertBookByName(BOOK_ID, 'B');
+  const draft = draftFigDb.createDraftFigure(BOOK_ID, userEmail, { name: 'Anna', mindmap: sampleMindmap() });
+  let prompt = '';
+  ctx.mockAi.on((e) => { prompt = e.prompt; return true; }, consistencyResponse());
+
+  const jobId = ctx.shared.createJob('werkstatt-consistency', BOOK_ID, userEmail, 'l');
+  ctx.shared.enqueueJob(jobId, () => werkstatt.runConsistencyJob(jobId, draft.id, userEmail));
+  const job = await waitForJob(ctx.shared, jobId);
+  assert.equal(job.status, 'done');
+  assert.match(prompt, /\n- Anna\n {2}- Steckbrief\n {4}- Aussehen/);
+  assert.ok(!prompt.includes('"expanded"') && !prompt.includes('"id":"root"'));
+});

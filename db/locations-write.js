@@ -41,8 +41,12 @@ function planOrteMatch(bookId, orte, userEmail, chNameToId = null, hint = null) 
     const rows = db.prepare('SELECT chapter_id, chapter_name FROM chapters WHERE book_id = ?').all(bookId);
     chNameToId = Object.fromEntries(rows.map(r => [r.chapter_name, r.chapter_id]));
   }
+  // Gematcht wird gegen den Namen, den die Analyse zuletzt geliefert hat (`ki_name`):
+  // hat der Autor einen Ort umbenannt, liefert der naechste Lauf weiter den Textnamen,
+  // und der Ort soll gefunden statt als verschwunden markiert werden. Manuell
+  // angelegte Orte haben keinen ki_name und matchen ueber ihren eigenen Namen.
   const existing = db.prepare(
-    `SELECT id, loc_id, name, typ, lat, lng, land FROM locations WHERE book_id = ? AND ${emailCond}`
+    `SELECT id, loc_id, COALESCE(ki_name, name) AS name, typ, lat, lng, land FROM locations WHERE book_id = ? AND ${emailCond}`
   ).all(bookId, ...emailVal);
   // Indizien (lib/entity-match.js#locationEvidence): gemeinsames Kapitel und gemeinsame
   // Figur unterscheiden zwei aehnlich benannte Orte deutlich besser als der Name allein.
@@ -138,7 +142,9 @@ function saveOrteToDb(bookId, orte, userEmail, chNameToId = null, pageNameToIdBy
 
   db.transaction(() => {
     const existing = db.prepare(
-      `SELECT id, loc_id, name, typ, lat, lng, land FROM locations WHERE book_id = ? AND ${emailCond}`
+      `SELECT id, loc_id, name, typ, beschreibung, stimmung, lat, lng, land,
+              manually_edited, manually_created
+       FROM locations WHERE book_id = ? AND ${emailCond}`
     ).all(bookId, ...emailVal);
     const prevById = Object.fromEntries(existing.map(r => [r.id, r]));
 
@@ -198,8 +204,11 @@ function saveOrteToDb(bookId, orte, userEmail, chNameToId = null, pageNameToIdBy
       // stale=1 statt Loeschen → FK-Refs (research_item_links.location_id, scene_locations)
       // ueberleben. loc_id auf 'orphan_<id>' ziehen, damit der 'ort_N'-Namespace fuer den
       // naechsten Lauf kollisionsfrei (UNIQUE(book_id, loc_id, user_email)) bleibt.
+      // Vom Autor angelegte Orte hat die Analyse nie gefunden — «nicht mehr im Text»
+      // waere fuer sie falsch. Sie bleiben aktiv und raeumen nur den Namespace.
       const markStale = db.prepare("UPDATE locations SET stale = 1, loc_id = 'orphan_' || id WHERE id = ?");
-      for (const ex of missing) markStale.run(ex.id);
+      const parkManual = db.prepare("UPDATE locations SET loc_id = 'man_' || id WHERE id = ?");
+      for (const ex of missing) (ex.manually_created ? parkManual : markStale).run(ex.id);
     } else {
       // CASCADE entfernt location_figures, location_chapters, scene_locations.
       const delLoc = db.prepare('DELETE FROM locations WHERE id = ?');
@@ -216,12 +225,12 @@ function saveOrteToDb(bookId, orte, userEmail, chNameToId = null, pageNameToIdBy
 
     const upd = db.prepare(`
       UPDATE locations SET loc_id=?, name=?, typ=?, beschreibung=?, erste_erwaehnung=?, erste_erwaehnung_page_id=?, stimmung=?,
-        land=?, lat=?, lng=?, sort_order=?, ${matchByName ? 'stale=0, ' : ''}updated_at=${NOW_ISO_SQL}
+        land=?, lat=?, lng=?, sort_order=?, ki_name=COALESCE(?, ki_name), ${matchByName ? 'stale=0, ' : ''}updated_at=${NOW_ISO_SQL}
       WHERE id=?`);
     const ins = db.prepare(`
       INSERT INTO locations (book_id, loc_id, name, typ, beschreibung, erste_erwaehnung, erste_erwaehnung_page_id, stimmung,
-        land, lat, lng, sort_order, user_email, stale, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ${NOW_ISO_SQL})`);
+        land, lat, lng, sort_order, user_email, ki_name, stale, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ${NOW_ISO_SQL})`);
     const delLf = db.prepare('DELETE FROM location_figures WHERE location_id = ?');
     const delLc = db.prepare('DELETE FROM location_chapters WHERE location_id = ?');
     // Geocode-Resolve-Cache: bei Umbenennung nullen (Toponym-Aufloesung ist dann
@@ -236,39 +245,59 @@ function saveOrteToDb(bookId, orte, userEmail, chNameToId = null, pageNameToIdBy
     for (let i = 0; i < orte.length; i++) {
       const o = orte[i];
       const erstPageId = resolveErstePageIdForOrt(o.erste_erwaehnung, o.kapitel);
-      if (coordByName && (o.lat == null || o.lng == null)) {
-        const m = coordByName.get(String(o.name || '').trim().toLowerCase());
-        if (m) { o.lat = m.lat; o.lng = m.lng; if (o.land == null && m.land) o.land = m.land; }
+      const existingId = matchOf.get(i);
+      const prev = existingId != null ? prevById[existingId] : null;
+      // Koordinaten/Land bei der Komplett-Reextraktion erhalten (die KI liefert kein
+      // lat/lng). Zuerst vom ZUGEORDNETEN Bestands-Eintrag: der Abgleich verbindet auch
+      // Namensvarianten («Schulhaus Frohheim» ↔ «Frohheim-Schule Olten»), und eine Suche
+      // ueber den neuen Namen faende dort nichts — die Pins gingen still verloren.
+      // Der Namens-Lookup bleibt fuer neu angelegte Zeilen (Pfad ohne Zuordnung).
+      if (opts.preserveExistingCoords && (o.lat == null || o.lng == null)) {
+        const m = (prev && prev.lat != null && prev.lng != null)
+          ? prev
+          : coordByName.get(String(o.name || '').trim().toLowerCase());
+        if (m) { o.lat = m.lat; o.lng = m.lng; }
+        if (!o.land && (prev?.land || m?.land)) o.land = prev?.land || m.land;
       }
       const lat = _clampCoord(o.lat, 90);
       const lng = _clampCoord(o.lng, 180);
       // land normalisiert auf ISO-3166-1-alpha-2 lowercase; alles andere → NULL.
-      const land = /^[A-Za-z]{2}$/.test(String(o.land || '').trim()) ? String(o.land).trim().toLowerCase() : null;
-      const existingId = matchOf.get(i);
+      let land = /^[A-Za-z]{2}$/.test(String(o.land || '').trim()) ? String(o.land).trim().toLowerCase() : null;
+      // Der Name, den die Analyse liefert — nur im Analyse-Modus, damit ein spaeter
+      // umbenannter Ort weiter ueber seinen Textnamen gefunden wird (planOrteMatch).
+      const kiName = matchByName ? (o.name || null) : null;
       let locDbId = existingId;
       if (existingId != null) {
+        // Vom Autor korrigierte Stammdaten gewinnen gegen die Analyse; sie liefert dann
+        // nur noch die abgeleiteten Felder (Kapitel, Figuren, erste Erwaehnung).
+        let { name, typ, beschreibung, stimmung } = o;
+        if (matchByName && prev.manually_edited) {
+          ({ name, typ, beschreibung, stimmung } = prev);
+          land = prev.land;
+        }
         // integer id (und scene_locations) bleibt erhalten; loc_id wird auf den
         // frischen Lauf-Wert gesetzt (matched-Rows wurden vorab auf 'tmp_<id>' geparkt).
-        upd.run(o.id, o.name, o.typ || null, o.beschreibung || null,
-          o.erste_erwaehnung || null, erstPageId, o.stimmung || null,
-          land, lat, lng, i, locDbId);
+        upd.run(o.id, name, typ || null, beschreibung || null,
+          o.erste_erwaehnung || null, erstPageId, stimmung || null,
+          land, lat, lng, i, kiName, locDbId);
         delLf.run(locDbId);
         delLc.run(locDbId);
         // Resolve-Cache fallen lassen, wenn das Label sich aendert ODER der User
         // die Georeferenz manuell entfernt (hatte Koordinaten, jetzt keine) — Letzteres
         // ist sein «nochmal von vorn»-Signal, dann soll auch die KI neu aufloesen.
-        // Komplett-Reextraktion (preserveExistingCoords) reattacht Coords und faellt
-        // hier nicht durch.
-        const prev = prevById[existingId];
-        const renamed = String(prev?.name ?? '') !== String(o.name ?? '');
-        const clearedCoords = !opts.preserveExistingCoords
-          && prev && prev.lat != null && prev.lng != null && (lat == null || lng == null);
-        if (renamed || clearedCoords) resetGeo.run(locDbId);
+        // Die Komplett-Reextraktion (preserveExistingCoords) behaelt ihn: der Abgleich
+        // hat entschieden, dass es derselbe Ort ist, eine Schreibvariante ist kein
+        // neues Toponym.
+        if (!opts.preserveExistingCoords) {
+          const renamed = String(prev?.name ?? '') !== String(name ?? '');
+          const clearedCoords = prev && prev.lat != null && prev.lng != null && (lat == null || lng == null);
+          if (renamed || clearedCoords) resetGeo.run(locDbId);
+        }
       } else {
         const { lastInsertRowid } = ins.run(
           bookId, o.id, o.name, o.typ || null, o.beschreibung || null,
           o.erste_erwaehnung || null, erstPageId, o.stimmung || null,
-          land, lat, lng, i, userEmail || null
+          land, lat, lng, i, userEmail || null, kiName
         );
         locDbId = lastInsertRowid;
         // Komplett-Reextraktion: Cache der namensgleichen Vorgaenger-Row uebernehmen.
@@ -331,21 +360,23 @@ function patchOrtCoords(bookId, patches, userEmail) {
   return changed;
 }
 
-// Backfill für location_chapters: ergänzt fehlende Kapitel-Zuordnungen aus
-// scene_locations → figure_scenes.chapter_id. Nutzt INSERT OR IGNORE — bestehende
-// Einträge (Primary-Key location_id+chapter_id) bleiben unverändert (haeufigkeit
-// wird nicht überschrieben). Deckt Fall ab: AI liefert für Ort kein kapitel-Array,
-// aber Ort hängt an Szene mit aufgelöstem chapter_id.
+// Kapitel-Vorkommen + Haeufigkeit aus den Szenen ableiten (scene_locations →
+// figure_scenes.chapter_id). Die KI liefert pro Ort nur eine flache Kapitelliste,
+// jede Zeile kommt also mit haeufigkeit=1 an. Die Zahl der Szenen, die ein Kapitel
+// an diesem Ort spielen laesst, ist das belastbarere Mass: sie ergaenzt fehlende
+// Kapitel und hebt die Haeufigkeit bestehender an (MAX, nie absenken — ein Ort kann
+// im Text vorkommen, ohne Schauplatz einer erkannten Szene zu sein).
 function backfillLocationChaptersFromScenes(bookId, userEmail) {
   const emailCond = userEmail ? 'fs.user_email = ?' : 'fs.user_email IS NULL';
   const emailVal  = userEmail ? [userEmail] : [];
   db.prepare(`
-    INSERT OR IGNORE INTO location_chapters (location_id, chapter_id, haeufigkeit)
+    INSERT INTO location_chapters (location_id, chapter_id, haeufigkeit)
     SELECT sl.location_id, fs.chapter_id, COUNT(*)
     FROM scene_locations sl
     JOIN figure_scenes fs ON fs.id = sl.scene_id
     WHERE fs.book_id = ? AND ${emailCond} AND fs.chapter_id IS NOT NULL AND fs.stale = 0
     GROUP BY sl.location_id, fs.chapter_id
+    ON CONFLICT(location_id, chapter_id) DO UPDATE SET haeufigkeit = MAX(haeufigkeit, excluded.haeufigkeit)
   `).run(bookId, ...emailVal);
 }
 

@@ -21,6 +21,7 @@ Trigger: Karten-Toggle aus Palette/Quick-Pills (`showBookEditorCard`, Feature-Ke
 | Save-Trigger | Block-Wechsel / Autosave / Cmd+S (Save-All) | Save-Button / Ctrl+S / Autosave | (vererbt Notebook-Save aus `focusMode ⇒ editMode`) |
 | Concurrency | Save-Queue, eine Page parallel | eine Page | eine Page |
 | Find/Replace | eigene Find-Bar (CSS Custom Highlight, Range-Replace) | — | — |
+| Undo/Redo | eigener Verlauf **pro Seite** (`book-editor/history.js`) + Buttons im Kopf | eigener Verlauf pro Edit-Session | derselbe Verlauf wie Notebook |
 | Toolbar / Bubble | nein | ja ([editorToolbarCard](../public/js/cards/editor-toolbar-card.js)) | nein (im Fokus deaktiviert) |
 | Lektorat-Marks | nein (`stripLektoratMarks` entfernt sie defensiv) | ja (Findings im View, Apply via `saveCorrections`) | nein (im Fokus deaktiviert) |
 
@@ -35,6 +36,7 @@ Trigger: Karten-Toggle aus Palette/Quick-Pills (`showBookEditorCard`, Feature-Ke
 | [book-editor/save.js](../public/js/cards/book-editor/save.js) | Save-Queue, `_saveBlock`, Save-All, Konflikt-Auflösung, `blockStatus`/`blockStatusLine` (+ pure `applySaveOutcome`) |
 | [book-editor/find.js](../public/js/cards/book-editor/find.js) | Find/Replace über den Stream (Kern in [editor/shared/text-find.js](../public/js/editor/shared/text-find.js)) |
 | [book-editor/outline.js](../public/js/cards/book-editor/outline.js) | Inhaltsverzeichnis + `IntersectionObserver` |
+| [book-editor/history.js](../public/js/cards/book-editor/history.js) | Undo/Redo pro Seite über den geteilten Kern [editor/shared/edit-history.js](../public/js/editor/shared/edit-history.js); Buttons in [book-editor-history.html](../public/partials/book-editor-history.html) |
 | [editor/book-editor-comments.js](../public/js/editor/book-editor-comments.js) | Kommentar-Leiste (Kern in `comment-rail-core/-layout`) |
 
 Geteilt mit dem Notebook-Editor: [shared/text-find.js](../public/js/editor/shared/text-find.js) (Match-Suche + Highlight-Paar), [shared/autosave.js](../public/js/editor/shared/autosave.js) (`AUTOSAVE_IDLE_MS`/`AUTOSAVE_MAX_MS` + `createAutosaveTimers`), [shared/html-clean.js](../public/js/editor/shared/html-clean.js) (`stripLektoratMarks`), [shared/save-pipeline.js](../public/js/editor/shared/save-pipeline.js) (`isNoChange`), [shared/page-api.js](../public/js/editor/shared/page-api.js) (`savePage`).
@@ -55,6 +57,7 @@ Geteilt mit dem Notebook-Editor: [shared/text-find.js](../public/js/editor/share
 | `findOpen/Term/Replace/CaseSensitive/WholeWord/Matches/Index` | Find/Replace-State |
 | `visiblePageId` / `collapsedChapters` / `outlineOpen` | Outline / TOC (Sticky-Sidebar) |
 | `_outlineObserver` | `IntersectionObserver` für Active-Outline-Item |
+| `_histories` / `_histTick` | Undo-Verläufe `Map<pageId, createEditHistory>` bzw. Reaktivitäts-Zähler für `bookEditorCanUndo/-Redo` (der Kern ist framework-frei). Verworfen bei `_load`, `_resetSession`, `destroy`; pro Seite bei „Server-Fassung übernehmen" |
 
 Reset-Quelle: `sessionState()` ist **eine** Deklaration für Initial-State **und** `resetState` des Lifecycles ([card-lifecycle.js](../public/js/cards/card-lifecycle.js) akzeptiert dafür eine Factory) — `book:changed`/`view:reset` resetten den State und laden neu. Nicht im Reset: Präferenzen, die über den Buchwechsel gelten (`outlineOpen`, `findCaseSensitive`/`-WholeWord`, `bookEditorFullscreen`).
 
@@ -122,9 +125,19 @@ Code: [book-editor/save.js](../public/js/cards/book-editor/save.js).
   2. Pro Block: `collectMatches(el, term, { caseSensitive, wholeWord })` aus [shared/text-find.js](../public/js/editor/shared/text-find.js) — `TreeWalker(SHOW_TEXT)` baut Node-Liste + concat-String, `indexOf`-Schleife sammelt Offsets, das Rückmapping liefert `{ startNode, startOffset, endNode, endOffset }`. Wortgrenze = `isWordChar` (Buchstaben/Ziffern inkl. `-`/`'`) plus `_`, **eine** Regel für Notebook- und Bucheditor.
   3. `findMatches` aggregiert über alle Blöcke und merkt sich pro Treffer `pageId` + `container`.
 - Highlight: **CSS Custom Highlight API** über `createHighlightPair('book-editor-find-match', 'book-editor-find-current')`, kein DOM-Wrap. Browser ohne API → keine Highlights, Navigation bleibt funktional.
-- Replace: `Range.deleteContents` + `createTextNode(replace)` + `range.insertNode`. Danach `block.html = container.innerHTML`, dirty + autosave-schedule.
+- Replace: `Range.deleteContents` + `createTextNode(replace)` + `range.insertNode`. Danach `block.html = cleanBlockHtml(container)`, dirty + autosave-schedule. Jeder Replace ist ein Undo-Schritt der betroffenen Seite (aktiv: Snapshot davor + danach; inaktiv: `_historyRecordInactive` aus `block.html`).
 - Replace-All läuft rückwärts über die Match-Liste (sonst verschieben sich nachfolgende Offsets).
 - Einzel-Replace prüft vorher `_matchStillValid` (Nodes noch im DOM, Range-Text = Suchbegriff). Hat der User seit der Suche im aktiven Block getippt, zeigen die gespeicherten Offsets auf anderen Text — dann wird neu gesucht und nicht ersetzt.
+
+## Undo/Redo
+
+Eigener Verlauf pro Seite, das native Browser-Undo wird **nie** bedient: `onBlockKeydown` fängt Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z und Ctrl+Y über `matchHistoryCommand` ab (`preventDefault`), `@beforeinput` leitet `historyUndo`/`historyRedo` aus Bearbeiten-Menü, Kontextmenü und iOS-Schütteln um. **Why:** Range-Replace landet nicht im Browser-Stack und entwertet ihn; Chromium/WebKit wenden ein überzähliges Strg+Z auf eine bereits verlassene Seite an, deren DOM Anzeige-Artefakte trägt; WebKit fasst lange Tipp-Strecken zu einem Schritt zusammen.
+
+- Baseline bei der ersten Aktivierung einer Seite (`_historyOnActivate`, nach `clearRenderedDiagrams`/`clearCaptionNumbers`), bei späteren Aktivierungen ein Anschluss-Snapshot (Dedupe gegen die Spitze).
+- Verlassen: `_historyOnDeactivate` löst den offenen 500-ms-Debounce ein, **bevor** `activePageId` wechselt.
+- Tippen → `pushSoon` (in `_onBlockInput`); Paste/Cut → `pushNow` davor und danach.
+- Restore mountet roh per `innerHTML` und dispatcht `input` → `_onBlockInput` setzt `block.html`, dirty, Autosave. Ein Undo ist eine normale Änderung und wird gespeichert. Danach Kommentar-Rail neu berechnen.
+- Undo/Redo-Buttons und Tasten wirken nur auf die aktive Seite.
 
 ## Outline (Sticky-TOC)
 
@@ -152,6 +165,7 @@ Code: [book-editor/save.js](../public/js/cards/book-editor/save.js).
 13. **Body-Styling ist eigenständig** — kein `--notebook-line`-Liniengitter, kein `repeating-linear-gradient` mit `--color-notebook-rule`. Bucheditor ist Manuskript-Stream, nicht Notebook-Sheet.
 14. **Cross-Karten-Aufrufer respektieren** `window.__app` — der Bucheditor liest `app._syncPageStatsAfterSave`/`app.t`/`app.setStatus`. Diese Methoden gehören dem Root. Keine eigenen Duplikate. Was editor-agnostisch ist (Konflikt-Pruefung, Konflikt-Wortlaut, Autosave-Timing), wird dagegen aus `editor/shared/` **importiert** statt am Root abgegriffen.
 15. **DOM-Lookups über `$root`, nie `$el`.** In einer aus einem Template-Handler gerufenen Methode ist `$el` das auslösende Element — ein Lookup findet dann nichts, ohne einen Fehler zu werfen (Block bekommt keinen Fokus, Find findet keine Blöcke).
+16. **Undo-Snapshots nur vom aktiven Block oder aus `block.html`.** `getRoot` des Verlaufs liefert für inaktive Seiten `null`; nur `_historyRecordInactive` legt kurz einen losgelösten Container aus `block.html` vor. Inaktive Blöcke tragen Anzeige-Artefakte (Mermaid-SVG, Nummern-Badges), die ein Restore sonst ins Manuskript trüge. Aus demselben Grund übernimmt `_onBlockInput` nur Events des aktiven Blocks.
 
 ## Erweitern (Checkliste)
 
@@ -172,6 +186,7 @@ Neue Aktion / neuer Block-Typ / neuer Find-Modus:
 | [tests/unit/book-editor-blocks.test.mjs](../tests/unit/book-editor-blocks.test.mjs) | `buildBlocksFromPages`: Chapter-Boundary-Marker, Solo-Pages vor erstem Kapitel, `originalHtml`/`originalUpdatedAt`-Initialisierung. Dazu `applySaveOutcome`: Dirty-Ausgang inkl. „während des Saves weitergetippt". `resolveConflictTakeRemote`: Frisch-Read im 409-Pfad, Deaktivierung des aktiven Blocks |
 | [tests/unit/text-find.test.mjs](../tests/unit/text-find.test.mjs) | Geteilter Find-Kern: Offset-Rückmapping über Node-Grenzen, Ganzwort-Regel, Case-Sensitivität, Grenz-Semantik am Node-Übergang |
 | [tests/e2e-app/book-editor.spec.js](../tests/e2e-app/book-editor.spec.js) | **Verhalten gegen die echte App**: Klick aktiviert + fokussiert Block, Tippen → dirty, Save-All → persistiert (Reload-Probe), Caret-Fallback ohne `caretRangeFromPoint`, Find/Replace über den Stream, Outline-Collapse |
+| [tests/e2e-app/book-editor-undo.spec.js](../tests/e2e-app/book-editor-undo.spec.js) | Undo/Redo pro Seite: Tippen + Strg+Z/Strg+Shift+Z, überzähliges Strg+Z nach Seitenwechsel lässt die verlassene Seite unberührt (kein Render-Artefakt in `block.html`), Replace als eigener Schritt |
 | [tests/e2e-app/smoke.spec.js](../tests/e2e-app/smoke.spec.js) | Karte + alle drei Editoren öffnen ohne Konsolenfehler |
 | [tests/unit/stale-write.test.mjs](../tests/unit/stale-write.test.mjs) | Pre-Save-Conflict-Check (geteilt mit Notebook-Card) — Bucheditor ruft denselben Helper |
 | [tests/unit/page-stats-normalization.test.mjs](../tests/unit/page-stats-normalization.test.mjs) | `_syncPageStatsAfterSave`-Parität — Bucheditor ruft denselben Helper |

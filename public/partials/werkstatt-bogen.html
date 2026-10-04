@@ -43,6 +43,11 @@
          dass noch nichts gemessen wurde. -->
     <p class="muted-msg muted-msg--spaced" x-show="arc && !arc.scanned"
        x-text="$app.t('werkstatt.arc.neverRun')"></p>
+    <!-- Mindmap seit der letzten Verankerung geändert: ein neu geplanter Kern
+         wurde nie gesucht. Seine Null ist ungeprüft; der Server lässt die
+         Null-Befunde darum weg, bis neu verankert ist. -->
+    <p class="card-hint" x-show="arc && arc.scanned && arcDraft()?.anchorStale" x-cloak
+       x-text="$app.t('werkstatt.arc.draftStale')"></p>
 
     <template x-if="arc && arc.scanned && arcKerne().length > 0 && arcChapters().length > 0">
       <div class="heatmap-wrap">

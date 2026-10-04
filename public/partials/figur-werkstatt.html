@@ -61,7 +61,7 @@
                   @click="selectDraft(d.id)"
                   role="listitem">
             <span class="werkstatt-list-name" x-text="d.name"></span>
-            <span class="werkstatt-list-archetype" x-show="d.archetype" x-text="d.archetype ? ($app.t('werkstatt.archetype.' + d.archetype) || d.archetype) : ''"></span>
+            <span class="werkstatt-list-archetype" x-show="d.archetype" x-text="archetypeLabel(d.archetype)"></span>
           </button>
         </template>
       </div>
@@ -213,10 +213,10 @@
                 x-text="selectedDraft()?.updated_at ? $app.t('werkstatt.savedAt', { when: $app._formatSaveTs(new Date(selectedDraft().updated_at).getTime()) }) : ''"></span>
         </div>
         <div class="werkstatt-mindmap-canvas">
-          <!-- :key="selectedDraftId" zwingt komplettes Remount des Mindmap-Divs bei
-               Figur-Wechsel. jsMind hängt sich an frische DOM, kein State-Lecken
+          <!-- Key aus selectedDraftId + _mindmapMountKey zwingt komplettes Remount des
+               Mindmap-Divs bei Figur-Wechsel und beim Refresh mit Verwerfen. jsMind hängt sich an frische DOM, kein State-Lecken
                zwischen Drafts. _mountMindmap kriegt $el direkt — keine $el-Magic-Race. -->
-          <template x-for="dId in selectedDraftId ? [selectedDraftId] : []" :key="dId">
+          <template x-for="dId in selectedDraftId ? [selectedDraftId + ':' + _mindmapMountKey] : []" :key="dId">
             <div class="werkstatt-mindmap" x-init="_mountMindmap($el)"></div>
           </template>
           <div class="werkstatt-mindmap-controls werkstatt-mindmap-controls--overlay">
@@ -251,7 +251,7 @@
              x-cloak
              :style="{ left: contextMenuPos.left + 'px', top: contextMenuPos.top + 'px' }"
              @click.stop>
-          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon" @click="ctxBrainstorm()">
+          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon" @click="ctxBrainstorm()" :disabled="busy || brainstormLoading">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#lightbulb"/></svg>
             <span x-text="$app.t('werkstatt.action.brainstorm')"></span>
           </button>
@@ -375,10 +375,7 @@
                   <p class="entity-meta-label" x-text="$app.t('werkstatt.consistency.belegHint')"></p>
                   <template x-for="(b, bi) in (consistencyResult ? consistencyResult.textbelege : [])" :key="bi">
                     <div class="werkstatt-beleg">
-                      <button type="button" class="tag internal-link werkstatt-beleg-link"
-                              @click.stop="gotoBeleg(b.page_id)"
-                              :data-tip="$app.t('werkstatt.consistency.gotoBeleg')"
-                              x-text="belegPageLabel(b.page_id)"></button>
+                      <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: b.page_id }"></button>
                       <span class="werkstatt-beleg-snippet" x-text="b.snippet"></span>
                     </div>
                   </template>

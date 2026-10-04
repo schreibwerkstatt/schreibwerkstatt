@@ -63,14 +63,14 @@
              defaultKey: 'name',
              defaultDir: 'asc',
              persistKey: 'figuren.alter',
-             types: { name: 'string', typ: 'string', geburtsjahr: 'number', alter_von: 'number', alter_abgeleitet: 'number' },
+             types: { name: 'string', typ_rank: 'number', geburtsjahr: 'number', alter_von: 'number', alter_abgeleitet: 'number' },
            })">
       <thead>
         <tr>
           <th class="sortable-th" :class="sortClass('name')" :aria-sort="ariaSort('name')"
               @click="sortBy('name')" x-text="$app.t('figuren.alter.col.figur')"></th>
-          <th class="sortable-th" :class="sortClass('typ')" :aria-sort="ariaSort('typ')"
-              @click="sortBy('typ')" x-text="$app.t('figuren.alter.col.typ')"></th>
+          <th class="sortable-th" :class="sortClass('typ_rank')" :aria-sort="ariaSort('typ_rank')"
+              @click="sortBy('typ_rank')" x-text="$app.t('figuren.alter.col.typ')"></th>
           <th class="sortable-th" :class="sortClass('alter_von')" :aria-sort="ariaSort('alter_von')"
               @click="sortBy('alter_von')" x-text="$app.t('figuren.alter.col.alter')"></th>
           <th class="sortable-th" :class="sortClass('geburtsjahr')" :aria-sort="ariaSort('geburtsjahr')"
@@ -157,9 +157,9 @@
                           :data-tip="$app.t('figuren.alter.uncertainTip')"
                           x-text="$app.t('figuren.alter.uncertain')"></span>
                     <span class="figur-alter-zitat" x-text="'«' + b.zitat + '»'"></span>
-                    <span class="internal-link figur-alter-beleg-ort" x-show="b.page_id"
-                          @click.stop="figurenAlterGotoBeleg(b)"
-                          x-text="[b.chapter_name, b.page_name].filter(Boolean).join(' › ') || ('#' + b.page_id)"></span>
+                    <template x-if="b.page_id">
+                      <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: b.page_id, name: b.page_name }"></button>
+                    </template>
                   </li>
                 </template>
               </ul>

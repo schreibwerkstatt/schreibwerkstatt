@@ -2,7 +2,7 @@
    Pendant zu manuscript-stream.css: das dort stylt die *Rahmung* (Kapitel- und
    Seiten-Blöcke des Streams), hier steht der *Inhalt* — jedes Element, das der
    Notebook-Editor in `pages.html` schreiben kann (Slash-Blöcke, Bubble-Toolbar,
-   Bild-Upload) plus die Import-Artefakte (BookStack-Callouts, Tabellen).
+   Bild-Upload) plus die Import-Artefakte (Callouts, Tabellen).
 
    Drei Konsumenten rendern dasselbe gespeicherte HTML und müssen es gleich
    zeigen:
@@ -115,7 +115,7 @@
          kontext-spezifisch (Lesekasten vs. Stream vs. Reader). --- */
   :is(.page-content-view, .book-editor-page-body, .share-content) blockquote > :first-child { margin-top: 0; }
   :is(.page-content-view, .book-editor-page-body, .share-content) blockquote > :last-child { margin-bottom: 0; }
-  /* BookStack-Import-Artefakt: orphan <br> direkt nach </blockquote> erzeugt
+  /* Import-Artefakt: orphan <br> direkt nach </blockquote> erzeugt
      eine ganze Zeilenhöhe Lücke. Visuell schlucken — HTML bleibt unverändert. */
   :is(.page-content-view, .book-editor-page-body, .share-content) blockquote + br { display: none; }
 
@@ -414,7 +414,7 @@
     user-select: none;
   }
 
-  /* --- BookStack-Callouts (div.callout.info/.warning/.danger/.success) --- */
+  /* --- Callouts aus Importen (div.callout.info/.warning/.danger/.success) --- */
   :is(.page-content-view, .book-editor-page-body, .share-content) .callout {
     border-inline-start: 4px solid var(--mc-border);
     background: var(--mc-surface-alt);

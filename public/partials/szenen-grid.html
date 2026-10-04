@@ -1,0 +1,69 @@
+<!-- Szenen-Karte: Grid (Matrix) aller gefilterten Szenen.
+     Fragment im Scope von szenenCard (public/js/cards/szenen-card.js).
+     `gridRows` liefert je Szene Sortierwerte (Kapitel/Seite = Buchposition,
+     Wertung = Rang stark→schwach) und die Szene selbst als `row.s`. -->
+<div x-show="viewMode === 'grid'" class="table-scroll" x-cloak>
+  <table class="entity-grid-table"
+         x-data="sortableTable({
+           rows: () => gridRows,
+           defaultKey: 'kapitel',
+           types: { wertung: 'number', titel: 'string', kapitel: 'number', seite: 'number' },
+           persistKey: 'szenen.grid',
+         })">
+    <thead>
+      <tr>
+        <th class="sortable-th" :class="sortClass('wertung')" :aria-sort="ariaSort('wertung')"
+            @click="sortBy('wertung')" x-text="$app.t('szenen.col.wertung')"></th>
+        <th class="sortable-th" :class="sortClass('titel')" :aria-sort="ariaSort('titel')"
+            @click="sortBy('titel')" x-text="$app.t('szenen.col.titel')"></th>
+        <th class="sortable-th" :class="sortClass('kapitel')" :aria-sort="ariaSort('kapitel')"
+            @click="sortBy('kapitel')" x-text="$app.t('szenen.col.kapitel')"></th>
+        <th class="sortable-th" :class="sortClass('seite')" :aria-sort="ariaSort('seite')"
+            @click="sortBy('seite')" x-text="$app.t('szenen.col.seite')"></th>
+        <th x-text="$app.t('szenen.col.figuren')"></th>
+        <th x-text="$app.t('szenen.col.orte')"></th>
+        <th x-text="$app.t('szenen.col.kommentar')"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="row in sorted" :key="row.id">
+        <tr :class="{ 'entity-grid-row--stale': row.s.stale }">
+          <td>
+            <span class="severity-tag"
+                  :class="'severity-tag--' + wertungOf(row.s)"
+                  x-text="$app.t('szenen.rating.' + wertungOf(row.s))"></span>
+          </td>
+          <td class="entity-grid-cell-title">
+            <span x-text="row.s.titel"></span>
+            <span x-show="row.s.stale" class="tag tag--stale" :data-tip="$app.t('szenen.staleHint')" x-text="$app.t('szenen.staleBadge')"></span>
+          </td>
+          <td>
+            <template x-if="row.s.kapitel">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: row.s.chapter_id, name: row.s.kapitel, label: kapitelLabel(row.s.chapter_id, row.s.kapitel) }"></button>
+            </template>
+          </td>
+          <td>
+            <template x-if="row.s.seite">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: row.s.page_id, name: row.s.seite, kapitel: row.s.kapitel }"></button>
+            </template>
+          </td>
+          <td>
+            <span class="entity-refs">
+              <template x-for="figId in (row.s.fig_ids || [])" :key="figId">
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: figId }"></button>
+              </template>
+            </span>
+          </td>
+          <td>
+            <span class="entity-refs">
+              <template x-for="ortId in (row.s.ort_ids || [])" :key="'o'+ortId">
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'ort', id: ortId }"></button>
+              </template>
+            </span>
+          </td>
+          <td class="entity-grid-cell-text" x-text="row.s.kommentar"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+</div>

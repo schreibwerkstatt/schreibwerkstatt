@@ -124,7 +124,6 @@ module.exports = {
   addFigurenBeziehungen:    figures.addFigurenBeziehungen,
   updateFigurenEvents:      figures.updateFigurenEvents,
   updateFigurenSoziogramm:  figures.updateFigurenSoziogramm,
-  cleanupDuplicateFiguren:  figures.cleanupDuplicateFiguren,
   listFigurenWithDetails:   figures.listFigurenWithDetails,
   getChapterFigures:        figures.getChapterFigures,
   getChapterFigureRelations: figures.getChapterFigureRelations,

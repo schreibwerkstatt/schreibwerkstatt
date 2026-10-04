@@ -10,21 +10,21 @@ function _seedDb({ chapters, pages, pageBodies = {}, books = [] }) {
     ON CONFLICT(book_id) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at
   `);
   const insChap = db.prepare(`
-    INSERT INTO chapters (chapter_id, book_id, chapter_name, position, priority, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO chapters (chapter_id, book_id, chapter_name, position, updated_at) VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(chapter_id) DO UPDATE SET
       book_id=excluded.book_id, chapter_name=excluded.chapter_name,
-      position=excluded.position, priority=excluded.priority, updated_at=excluded.updated_at
+      position=excluded.position, updated_at=excluded.updated_at
   `);
   // local_updated_at bewusst NULL — content-store-Reader nutzt dann
   // pages.updated_at (Test-Fixture-Wert) als Single-Source-of-Truth fuer
   // updated_at; Caches in der Pipeline koennen so per page.updated_at
   // invalidiert werden.
   const insPage = db.prepare(`
-    INSERT INTO pages (page_id, book_id, page_name, chapter_id, position, priority, updated_at, local_updated_at, body_html)
-    VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)
+    INSERT INTO pages (page_id, book_id, page_name, chapter_id, position, updated_at, local_updated_at, body_html)
+    VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
     ON CONFLICT(page_id) DO UPDATE SET
       book_id=excluded.book_id, page_name=excluded.page_name, chapter_id=excluded.chapter_id,
-      position=excluded.position, priority=excluded.priority,
+      position=excluded.position,
       updated_at=excluded.updated_at, local_updated_at=NULL,
       body_html=excluded.body_html
   `);
@@ -40,15 +40,15 @@ function _seedDb({ chapters, pages, pageBodies = {}, books = [] }) {
       insBook.run(bid, b?.name || `Test-Book-${bid}`, nowIso, nowIso);
     }
     for (const c of chapters) {
-      const pos = c.priority ?? c.position ?? 0;
-      insChap.run(c.id, c.book_id, c.name || '', pos, pos, c.updated_at || nowIso);
+      const pos = c.position ?? 0;
+      insChap.run(c.id, c.book_id, c.name || '', pos, c.updated_at || nowIso);
       chIds.add(c.id);
     }
     for (const p of pages) {
       const knownCh = p.chapter_id && chIds.has(p.chapter_id) ? p.chapter_id : null;
-      const pos = p.priority ?? p.position ?? 0;
+      const pos = p.position ?? 0;
       const body = pageBodies[p.id] || '';
-      insPage.run(p.id, p.book_id, p.name || '', knownCh, pos, pos, p.updated_at || nowIso, body);
+      insPage.run(p.id, p.book_id, p.name || '', knownCh, pos, p.updated_at || nowIso, body);
     }
   })();
 }

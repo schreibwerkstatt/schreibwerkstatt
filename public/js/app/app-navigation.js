@@ -183,7 +183,8 @@ export const appNavigationMethods = {
       this.$store.catalogUi.szenenFilters.suche = '';
       this.$store.catalogUi.szenenFilters.wertung = '';
       this.$store.catalogUi.szenenFilters.figurId = '';
-      this.$store.catalogUi.szenenFilters.kapitel = '';
+      this.$store.catalogUi.szenenFilters.kapitelId = '';
+      this.$store.catalogUi.szenenFilters.seiteId = '';
       this.$store.catalogUi.szenenFilters.ortId = '';
       if (!this.showSzenenCard) {
         await this.toggleSzenenCard({ skipCardScroll: true });

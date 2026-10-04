@@ -14,11 +14,8 @@
             <li class="book-chat-citation" :class="{ 'book-chat-citation--invalid': !c.valid }">
               <span class="book-chat-citation-quote" x-text="'«' + c.quote + '»'"></span>
               <template x-if="c.page_id">
-                <a class="chat-context-link"
-                   :href="'#book/' + $store.nav.selectedBookId + '/page/' + c.page_id"
-                   @click.prevent="$app.gotoPageById(c.page_id)"
-                   :data-tip="$app.t('chat.citationGoto', { name: c.page_name || '' })"
-                   x-text="c.page_name || ('#' + c.page_id)"></a>
+                <button type="button" class="entity-ref"
+                        x-entity-ref="{ type: 'seite', id: c.page_id, label: c.page_name || undefined }"></button>
               </template>
               <template x-if="!c.valid">
                 <span class="chat-context-badge chat-context-badge--error"

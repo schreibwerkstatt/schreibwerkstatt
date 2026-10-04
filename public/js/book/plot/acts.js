@@ -86,6 +86,10 @@ export const actsMethods = {
     const name = (this.actDraft || '').trim();
     if (!name) { this.errorMessage = app.t('plot.error.nameRequired'); return; }
     if (name === act.name) { this.cancelEditAct(); return; }
+    // Undo/Redo im Flight (Blur-Save kommt per rAF erst nach dem Klick an):
+    // Entwurf offen lassen statt zwischen Pop und Gegen-Push zu schreiben —
+    // der Record ginge sonst verloren und `busy` fiele mitten im Flight.
+    if (this.busy || this._inHistoryFlight) return;
     this.busy = true;
     try {
       const updated = await fetchJson(`/plot/acts/${act.id}`, {

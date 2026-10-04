@@ -1,5 +1,5 @@
 <!-- Seitenbaum -->
-<div class="card" :class="{ 'tree-card--loading': treeLoading }">
+<div class="card" :class="{ 'tree-card--loading': treeSwitching }">
   <div class="card-header">
     <div class="card-actions">
       <button type="button" class="icon-btn icon-btn--ghost" @click="loadPages({ source: 'manual' })"
@@ -72,14 +72,25 @@
     </div>
     <div class="batch-status" x-html="batchStatus"></div>
   </div>
+  <!-- ARIA-Tree mit EINEM Tab-Stopp (_treeTabStop); Pfeiltasten + Fokus in
+       book/tree/keyboard.js. Flach gerendert → Ebene via aria-level, die
+       Wrapper sind role="none". -->
+  <div class="page-tree" role="tree" :aria-label="t('sidebar.treeLabel')"
+       x-effect="_syncTreeTabStop()"
+       @keydown="_onTreeKeydown($event)"
+       @focusin="_onTreeFocusIn($event)">
   <template x-for="item in filteredTree" :key="item.id">
-    <div class="tree-chapter"
-         :class="{ ['tree-chapter--depth-' + (item.depth || 1)]: true, 'tree-chapter--solo': item.solo, 'tree-chapter--excluded': item.excluded }"
+    <div class="tree-chapter" role="none"
+         :class="{ ['tree-chapter--depth-' + (item.depth || 1)]: true, 'tree-chapter--solo': item.solo, 'tree-chapter--excluded': item.excluded || _chapterExcludedByAncestor(item) }"
          :style="{ '--depth': item.depth || 1 }">
       <div x-show="!item.solo"
            class="tree-chapter-header"
-           role="button"
-           tabindex="0"
+           role="treeitem"
+           data-tree-kind="chapter"
+           :data-tree-key="'c' + item.id"
+           :data-tree-parent="item.parent_id ? 'c' + item.parent_id : null"
+           :aria-level="item.depth || 1"
+           :tabindex="_treeTabStop === 'c' + item.id ? 0 : -1"
            :aria-expanded="(item.pages.length > 0 || item.hasChildren) ? (item.open ? 'true' : 'false') : null"
            :class="{
              'tree-chapter-header--empty': item.pages.length === 0 && !item.hasChildren,
@@ -93,8 +104,6 @@
              : ''"
            @keydown.enter.prevent="_onChapterHeaderActivate(item)"
            @keydown.space.prevent="_onChapterHeaderActivate(item)"
-           @keydown.arrow-right.prevent="if ((item.pages.length > 0 || item.hasChildren) && !item.open) setChapterOpen(item, true)"
-           @keydown.arrow-left.prevent="if ((item.pages.length > 0 || item.hasChildren) && item.open) setChapterOpen(item, false)"
            @click="_onChapterHeaderActivate(item)"
            @contextmenu="_openPagetreeContextMenu($event, { kind: 'chapter', id: item.id, name: item.name, excluded: item.excluded })">
         <span class="history-chevron" :class="{ open: item.open }" x-show="item.pages.length > 0 || item.hasChildren"
@@ -103,7 +112,7 @@
         <span class="tree-chapter-meta">
           <span class="tag tree-chapter-excluded-tag" x-show="item.excluded" x-text="t('sidebar.excludedBadge')"
                 :data-tip="t('sidebar.excludedTitle', { name: item.name })"></span>
-          <span class="tag" x-show="item.pages.length >= 1" x-text="item.pages.length === 1 ? t('sidebar.pagesCountOne') : t('sidebar.pagesCount', { n: item.pages.length })"></span>
+          <span class="tag" x-show="_chapterPageCount(item) >= 1" x-text="_chapterPageCount(item) === 1 ? t('sidebar.pagesCountOne') : t('sidebar.pagesCount', { n: _chapterPageCount(item) })"></span>
           <template x-if="item.stats">
             <span class="tok-badge tok-neutral"
               x-text="item.stats.badge"
@@ -111,9 +120,11 @@
               @mouseleave.stop="_hideTokTip()"></span>
           </template>
           <span x-show="!item.solo && $store.badges.chapterIdeenCounts[item.id] > 0"
-                class="ideen-count-badge"
+                class="ideen-count-badge internal-link"
+                @click.stop="openIdeenForChapter(item.id)"
                 x-text="$store.badges.chapterIdeenCounts[item.id]"
-                :data-tip="t('ideen.openCountTitle', { n: $store.badges.chapterIdeenCounts[item.id] })"></span>
+                :data-tip="t('ideen.openCountTitle', { n: $store.badges.chapterIdeenCounts[item.id] })"
+                :aria-label="t('ideen.openCountTitle', { n: $store.badges.chapterIdeenCounts[item.id] })"></span>
           <span x-show="!item.solo && $store.badges.chapterRechercheCounts[item.id] > 0"
                 class="recherche-count-badge internal-link"
                 @click.stop="openRechercheForChapter(item.id)"
@@ -122,14 +133,27 @@
                 :aria-label="t('recherche.openCountTitle', { n: $store.badges.chapterRechercheCounts[item.id] })"></span>
         </span>
       </div>
-      <div x-show="item.solo || item.open" class="tree-chapter-pages">
+      <div x-show="item.solo || item.open" class="tree-chapter-pages" role="none">
         <template x-for="page in item.pages" :key="page.id">
-          <div class="page-item"
+          <!-- Echter Link: Mittelklick/Ctrl-/Cmd-Klick/"In neuem Tab öffnen"/
+               "Link kopieren" nutzen die Hash-Route der Seite. Der normale Klick
+               bleibt in der App (selectPage, mit Dirty-Rückfrage) — dafür
+               preventDefault nur ohne Modifier. Plaketten darin brauchen
+               @click.stop.prevent, sonst navigierte der Link mit. -->
+          <a class="page-item"
                :class="{ selected: currentPage?.id === page.id, 'page-item--empty': tokEsts[page.id] && tokEsts[page.id].words === 0, 'page-item--kb-active': _pageSearchActiveId === page.id, 'page-item--remote-edit': $store.collab.recentRemoteEdits.has(page.id) }"
-               :data-page-id="page.id" role="button" tabindex="0"
+               :href="'#book/' + $store.nav.selectedBookId + '/page/' + page.id"
+               :data-page-id="page.id"
+               role="treeitem"
+               data-tree-kind="page"
+               :data-tree-key="'p' + page.id"
+               :data-tree-parent="item.solo ? null : 'c' + item.id"
+               :aria-level="item.solo ? 1 : (item.depth || 1) + 1"
+               :tabindex="_treeTabStop === 'p' + page.id ? 0 : -1"
                :aria-current="currentPage?.id === page.id ? 'page' : null"
                :data-tip="remoteEditTip(page.id)"
-               @click="selectPage(page); _clearRemoteEditMark(page.id)"
+               @click="if ($event.button === 0 && !$event.ctrlKey && !$event.metaKey && !$event.shiftKey && !$event.altKey) { $event.preventDefault(); selectPage(page); _clearRemoteEditMark(page.id); }"
+               @keydown.space.self.prevent="$el.click()"
                @contextmenu="_openPagetreeContextMenu($event, { kind: 'page', id: page.id, name: page.name })">
             <span class="page-name">
               <span class="page-status-dot" :class="'page-status-' + pageStatus(page)"
@@ -160,22 +184,23 @@
               </template>
               <span x-show="$store.badges.ideenCounts[page.id] > 0"
                     class="ideen-count-badge internal-link"
-                    @click.stop="openIdeenForPage(page.id)"
+                    @click.stop.prevent="openIdeenForPage(page.id)"
                     x-text="$store.badges.ideenCounts[page.id]"
                     :data-tip="t('ideen.openCountTitle', { n: $store.badges.ideenCounts[page.id] })"
                     :aria-label="t('ideen.openCountTitle', { n: $store.badges.ideenCounts[page.id] })"></span>
               <span x-show="$store.badges.rechercheCounts[page.id] > 0"
                     class="recherche-count-badge internal-link"
-                    @click.stop="openRechercheForPage(page.id)"
+                    @click.stop.prevent="openRechercheForPage(page.id)"
                     x-text="$store.badges.rechercheCounts[page.id]"
                     :data-tip="t('recherche.openCountTitle', { n: $store.badges.rechercheCounts[page.id] })"
                     :aria-label="t('recherche.openCountTitle', { n: $store.badges.rechercheCounts[page.id] })"></span>
             </span>
-          </div>
+          </a>
         </template>
       </div>
     </div>
   </template>
+  </div><!-- /page-tree -->
   <template x-if="filteredTree.length === 0 && pageSearch">
     <div class="muted-msg muted-msg--sm" x-text="t('sidebar.noPagesFound')"></div>
   </template>

@@ -153,14 +153,24 @@ async function runNonCritical(label, fn, log, { warnings = null, warnKey = null 
  * passende Phase-2-Figur gesucht. Nur bei eindeutigem Match.
  */
 function buildFigNameLookup(figuren, chapterFiguren, chapterAssignments, chapterSzenen, log, jobId, aliasMap = null) {
+  // Vollnamen zuerst und erste-gewinnt; Kurznamen und im Merge aufgegangene Namen
+  // (`__aliasNamen`, figuren-merge/dedup.js) erst danach und nur, wo kein Vollname
+  // steht — sonst überschriebe der Kurzname «Anna» von «Anna Weber» die eigenständige
+  // Figur «Anna».
   const nameToId = {};
   for (const f of figuren) {
-    nameToId[f.name] = f.id;
-    if (f.kurzname && f.kurzname !== f.name) nameToId[f.kurzname] = f.id;
+    if (f.name && !(f.name in nameToId)) nameToId[f.name] = f.id;
   }
-  const nameToIdLower = Object.fromEntries(
-    Object.entries(nameToId).map(([k, v]) => [k.toLowerCase(), v])
-  );
+  for (const f of figuren) {
+    for (const alt of [f.kurzname, ...(f.__aliasNamen || [])]) {
+      if (alt && alt !== f.name && !(alt in nameToId)) nameToId[alt] = f.id;
+    }
+  }
+  const nameToIdLower = {};
+  for (const [k, v] of Object.entries(nameToId)) {
+    const lk = k.toLowerCase();
+    if (!(lk in nameToIdLower)) nameToIdLower[lk] = v;
+  }
   // Alias-Cluster (F3): Namen, die auf einen kanonischen Namen vereinheitlicht wurden, weiter
   // auflösbar halten — sonst droppt eine Szene/Event, die noch den Alias-Namen trägt, im Remap.
   if (aliasMap) {

@@ -56,14 +56,8 @@
                  wo auch der Picker sitzt. -->
             <div class="research-status-places" x-show="placeLinks(item).length">
               <template x-for="link in placeLinks(item)" :key="link.link_id">
-                <button type="button" class="research-link-chip research-status-place"
-                        :class="'research-link-chip--' + link.target_kind"
-                        @click="gotoLink(link)"
-                        :data-tip="$app.t('recherche.link.goto')"
-                        :aria-label="$app.t('recherche.link.goto') + ': ' + link.label">
-                  <span class="research-link-kind" x-text="linkKindLabel(link.target_kind)"></span>
-                  <span class="research-link-goto-label" x-text="link.label"></span>
-                </button>
+                <button type="button" class="entity-ref"
+                        x-entity-ref="{ type: link.target_kind, id: link.target_id, label: link.label }"></button>
               </template>
             </div>
 

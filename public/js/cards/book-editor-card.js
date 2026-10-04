@@ -6,6 +6,7 @@
 //   save.js    — Save-Queue, Konflikte, Status-Ableitung
 //   find.js    — Find/Replace über den ganzen Stream
 //   outline.js — Inhaltsverzeichnis + IntersectionObserver
+//   history.js — Undo/Redo pro Seite (eigener Verlauf statt Browser-Stack)
 // Kommentar-Leiste: editor/book-editor-comments.js.
 //
 // Click-aktiviert-Block: Default contenteditable=false; Klick setzt aktive
@@ -18,6 +19,7 @@ import { bookEditorCommentsMethods } from '../editor/book-editor-comments.js';
 import { bookEditorFindMethods, clearHighlights } from './book-editor/find.js';
 import { bookEditorOutlineMethods } from './book-editor/outline.js';
 import { bookEditorSaveMethods } from './book-editor/save.js';
+import { bookEditorHistoryMethods } from './book-editor/history.js';
 import { stripFocusArtefacts, fetchJson } from '../utils.js';
 import { handleEditorPaste, handleEditorCopy, handleEditorCut } from '../editor/shared/paste.js';
 import { createAutosaveTimers } from '../editor/shared/autosave.js';
@@ -137,6 +139,11 @@ export function registerBookEditorCard() {
     _commentObserved: null,
     _commentResizeHandler: null,
     _lifecycle: null,
+    // Undo/Redo-Verläufe pro Seite + Hilfsfelder: cards/book-editor/history.js.
+    _histories: null,
+    _histTick: 0,
+    _histCaptureEl: null,
+    _histCapturePageId: null,
 
     init() {
       this._autosave = createAutosaveTimers((pageId) => this._enqueueSave(pageId));
@@ -166,7 +173,7 @@ export function registerBookEditorCard() {
       }, { signal: this._lifecycle.signal });
 
       // Cmd/Ctrl+F-Routing via editor-find-card: dispatcht hierher, wenn die
-      // Karte sichtbar ist (statt BookStack-Search zu fokussieren).
+      // Karte sichtbar ist.
       window.addEventListener(EVT.BOOK_EDITOR_OPEN_FIND, () => {
         if (window.__app?.showBookEditorCard) this.openFind();
       }, { signal: this._lifecycle.signal });
@@ -201,6 +208,7 @@ export function registerBookEditorCard() {
       this._teardownCommentLayout();
       this._clearCommentHL();
       clearHighlights();
+      this._historyDropAll();
       this._lifecycle?.destroy();
     },
 
@@ -237,6 +245,7 @@ export function registerBookEditorCard() {
       this._clearCommentHL();
       this._railCancelSchedule();
       this._railInvalidateLoad();
+      this._historyDropAll();
       Object.assign(this, sessionState());
       if (!reload) return;
       if (!window.__app?.showBookEditorCard) return;
@@ -256,6 +265,7 @@ export function registerBookEditorCard() {
       this.loadError = '';
       this.blocks = [];
       this.activePageId = null;
+      this._historyDropAll();
       this._memos = {};
       try {
         const data = await fetchJson('/book-editor/' + bookId + '/contents');
@@ -285,6 +295,7 @@ export function registerBookEditorCard() {
     ...bookEditorSaveMethods,
     ...bookEditorFindMethods,
     ...bookEditorOutlineMethods,
+    ...bookEditorHistoryMethods,
 
     // Cache hit nur, wenn ALLE Source-Refs (deps) identisch zur letzten Compute
     // sind. Reset über this._memos = {} im Lade-Pfad.
@@ -421,6 +432,7 @@ export function registerBookEditorCard() {
       if (!this._canEdit()) return;
       const prevId = this.activePageId;
       if (prevId != null) {
+        this._historyOnDeactivate(prevId);
         const prev = this._blockById(prevId);
         if (prev?.dirty) this._enqueueSave(prevId);
       }
@@ -443,6 +455,7 @@ export function registerBookEditorCard() {
         if (!el) return;
         clearRenderedDiagrams(el);
         clearCaptionNumbers(el);
+        this._historyOnActivate(block.pageId, el);
         el.focus({ preventScroll: true });
         const md = this._pendingMousedown?.pageId === block.pageId ? this._pendingMousedown : null;
         this._pendingMousedown = null;
@@ -481,9 +494,16 @@ export function registerBookEditorCard() {
       } catch { /* noop */ }
     },
 
+    // Nur der aktive Block: sein DOM gehört dem User. Ein inaktiver trägt
+    // Anzeige-Artefakte (Mermaid-SVG, Nummern-Badges) — ein `input` dort (z.B.
+    // natives Undo, das Chromium/WebKit auf eine verlassene Seite anwenden)
+    // trüge sie sonst ins Manuskript.
     _onBlockInput(block, event) {
+      if (this.activePageId !== block.pageId) return;
       block.html = event.currentTarget.innerHTML;
       this._markBlockDirty(block);
+      // Restore-`input` des Verlaufs pusht nicht (Kern-Flag `applying`).
+      this._historyPushSoon(block.pageId);
     },
 
     // Copy/Cut/Paste über einen Pfad — die drei unterscheiden sich nur im
@@ -491,16 +511,20 @@ export function registerBookEditorCard() {
     onBlockClipboard(block, e, kind) {
       if (kind === 'copy') { handleEditorCopy(e); return; }
       if (this.activePageId !== block.pageId) return;
+      // Eigener Undo-Schritt: Stand vor dem Einfügen/Ausschneiden sichern.
+      this._historyPushNow(block.pageId);
       // execCommand triggert kein input-Event in allen Browsern → manuell.
       if (!CLIPBOARD_HANDLERS[kind](e)) return;
       block.html = e.currentTarget.innerHTML;
       this._markBlockDirty(block);
+      this._historyPushNow(block.pageId);
     },
 
     // Shift+Enter = weicher Zeilenumbruch (<br>). Safari/WebKit splittet sonst
     // den Absatz in zwei <p>. execCommand('insertLineBreak') setzt cross-browser
     // konsistent ein <br> — gleicher Pfad wie Notebook-Editor.
     onBlockKeydown(block, event) {
+      if (this._historyKeydown(event)) return;
       if (event.key === 'Enter' && event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) {
         event.preventDefault();
         document.execCommand('insertLineBreak');

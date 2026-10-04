@@ -20,6 +20,9 @@ export function registerEditorNotebookCard() {
     // Kern in editor/shared/edit-history.js). Instanz entsteht beim ersten
     // Zugriff — `startEdit` ruft `_historyReset(initialHtml)`.
     _editHistory: null,
+    // Reaktivitäts-Zähler für notebookCanUndo/-Redo (onChange des Kerns) —
+    // der Stack selbst lebt in einer Closure, die Alpine nicht sieht.
+    _historyRev: 0,
     // Steuerzeichen-Overlay (Soft-Break-Marken ↵): Listener-/Observer-Handles
     // (siehe editor/notebook/format-marks.js).
     _formatMarksRaf: null,

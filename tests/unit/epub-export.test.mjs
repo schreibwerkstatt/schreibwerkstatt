@@ -95,33 +95,28 @@ test('_buildCss: scene-gap-Regel nur im Belletristik-Satz', () => {
   assert.ok(!epub._buildCss({ epub_paragraph_style: 'spaced' }).includes('.scene-gap'));
 });
 
-test('_resolveEpubMeta: opts.author/lang gewinnen vor Domain-Shape', () => {
-  const m = _resolveEpubMeta({ created_by: { name: 'Alt' } }, { author: 'Owner Name', lang: 'en' });
+test('_resolveEpubMeta: opts.author/lang setzen Autor + Sprache', () => {
+  const m = _resolveEpubMeta({ author: 'Owner Name', lang: 'en' });
   assert.equal(m.author, 'Owner Name');
   assert.equal(m.lang, 'en');
   assert.equal(m.tocTitle, 'Contents');
 });
 
-test('_resolveEpubMeta: Fallback auf created_by/owned_by wenn keine opts', () => {
-  assert.equal(_resolveEpubMeta({ created_by: { name: 'A' } }, {}).author, 'A');
-  assert.equal(_resolveEpubMeta({ owned_by: { name: 'B' } }, {}).author, 'B');
-});
-
 test('_resolveEpubMeta: Default de + Inhalt, kein Autor', () => {
-  const m = _resolveEpubMeta(null, {});
+  const m = _resolveEpubMeta({});
   assert.equal(m.lang, 'de');
   assert.equal(m.tocTitle, 'Inhalt');
   assert.equal(m.author, '');
 });
 
 test('_resolveEpubMeta: tocTitle-Override schlaegt Sprach-Default', () => {
-  assert.equal(_resolveEpubMeta(null, { lang: 'en', tocTitle: 'Index' }).tocTitle, 'Index');
+  assert.equal(_resolveEpubMeta({ lang: 'en', tocTitle: 'Index' }).tocTitle, 'Index');
 });
 
 test('_resolveEpubMeta: nur en-Praefix triggert Contents, sonst Inhalt', () => {
-  assert.equal(_resolveEpubMeta(null, { lang: 'en-US' }).tocTitle, 'Contents');
-  assert.equal(_resolveEpubMeta(null, { lang: 'de-CH' }).tocTitle, 'Inhalt');
-  assert.equal(_resolveEpubMeta(null, { lang: 'fr' }).tocTitle, 'Inhalt');
+  assert.equal(_resolveEpubMeta({ lang: 'en-US' }).tocTitle, 'Contents');
+  assert.equal(_resolveEpubMeta({ lang: 'de-CH' }).tocTitle, 'Inhalt');
+  assert.equal(_resolveEpubMeta({ lang: 'fr' }).tocTitle, 'Inhalt');
 });
 
 test('_countUnfetchableImages: zaehlt nur non-http/non-data src', () => {

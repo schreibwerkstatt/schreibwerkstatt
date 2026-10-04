@@ -17,7 +17,7 @@ const appUsers = require('../../db/app-users');
 const shareLinks = require('../../db/share-links');
 
 function makeChapter(id, bookId, name, position) {
-  db.prepare('INSERT INTO chapters (chapter_id, book_id, chapter_name, position, priority, updated_at) VALUES (?, ?, ?, ?, 0, ?)')
+  db.prepare('INSERT INTO chapters (chapter_id, book_id, chapter_name, position, updated_at) VALUES (?, ?, ?, ?, ?)')
     .run(id, bookId, name, position, '2026-01-01T00:00:00.000Z');
 }
 

@@ -64,23 +64,22 @@
            ...(draftFiguren||[]).map(d=>({value:'draft:'+d.id, label:d.name, group:$app.t('plot.beat.figureGroup.werkstatt')}))
          ]"
          @combobox-change="addBeatFigureLink($event.detail)"></div>
-    <div class="plot-fig-chips" x-show="beatFigureChips().length || beatWerkstattChips().length">
-      <template x-for="chip in beatFigureChips()" :key="chip.id">
-        <span class="tag plot-fig-chip">
-          <span x-text="chip.label"></span>
-          <button type="button" class="plot-fig-chip-remove" :aria-label="$app.t('common.remove')"
-                  @click="toggleBeatDraftFigure(chip.id)">
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
-          </button>
+    <!-- Auswahl als Referenzen mit Entfernen-Knopf. Im Bearbeiten-Formular nicht
+         klickbar (static): ein Sprung in die Figuren-/Werkstatt-Karte verwürfe den
+         ungespeicherten Beat-Entwurf. -->
+    <div class="entity-refs plot-edit-refs" x-show="(beatDraft.figure_ids || []).length || beatWerkstattChips().length">
+      <template x-for="figId in (beatDraft.figure_ids || [])" :key="figId">
+        <span class="entity-ref-group">
+          <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: figId, static: true }"></button>
+          <button type="button" class="entity-ref-remove" :aria-label="$app.t('common.remove')"
+                  @click="toggleBeatDraftFigure(figId)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
         </span>
       </template>
       <template x-for="chip in beatWerkstattChips()" :key="'d' + chip.id">
-        <span class="tag tag--werkstatt plot-fig-chip">
-          <span x-text="chip.label"></span>
-          <button type="button" class="plot-fig-chip-remove" :aria-label="$app.t('common.remove')"
-                  @click="toggleBeatDraftWerkstattFigure(chip.id)">
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
-          </button>
+        <span class="entity-ref-group">
+          <button type="button" class="entity-ref" x-entity-ref="{ type: 'werkstatt', id: chip.id, label: chip.label, static: true }"></button>
+          <button type="button" class="entity-ref-remove" :aria-label="$app.t('common.remove')"
+                  @click="toggleBeatDraftWerkstattFigure(chip.id)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
         </span>
       </template>
     </div>
@@ -90,14 +89,12 @@
     <div x-show="motifsCatalog.length" role="group" :aria-labelledby="$id('pbe-motif')"
          x-data="entityPicker({ entity: 'custom', multiple: true, placeholder: $app.t('plot.beat.motifPick'), items: () => beatMotifOptions() })"
          x-modelable="value" x-model="beatDraft.motif_ids"></div>
-    <div class="plot-fig-chips" x-show="beatMotifChips().length">
+    <div class="entity-refs plot-edit-refs" x-show="beatMotifChips().length">
       <template x-for="chip in beatMotifChips()" :key="'m' + chip.id">
-        <span class="tag tag--motif plot-fig-chip">
-          <span x-text="chip.label"></span>
-          <button type="button" class="plot-fig-chip-remove" :aria-label="$app.t('common.remove')"
-                  @click="toggleBeatDraftMotif(chip.id)">
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
-          </button>
+        <span class="entity-ref-group">
+          <button type="button" class="entity-ref" x-entity-ref="{ type: 'motiv', id: chip.id, label: chip.label, static: true }"></button>
+          <button type="button" class="entity-ref-remove" :aria-label="$app.t('common.remove')"
+                  @click="toggleBeatDraftMotif(chip.id)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
         </span>
       </template>
     </div>
@@ -108,14 +105,12 @@
     <div x-show="$store.catalog.orte.length" role="group" :aria-labelledby="$id('pbe-ort')"
          x-data="entityPicker({ entity: 'ort', multiple: true, placeholder: $app.t('plot.beat.ortPick') })"
          x-modelable="value" x-model="beatDraft.location_ids"></div>
-    <div class="plot-fig-chips" x-show="beatOrtChips().length">
-      <template x-for="chip in beatOrtChips()" :key="'l' + chip.id">
-        <span class="tag tag--ort plot-fig-chip">
-          <span x-text="chip.label"></span>
-          <button type="button" class="plot-fig-chip-remove" :aria-label="$app.t('common.remove')"
-                  @click="toggleBeatDraftOrt(chip.id)">
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
-          </button>
+    <div class="entity-refs plot-edit-refs" x-show="(beatDraft.location_ids || []).length">
+      <template x-for="ortId in (beatDraft.location_ids || [])" :key="'l' + ortId">
+        <span class="entity-ref-group">
+          <button type="button" class="entity-ref" x-entity-ref="{ type: 'ort', id: ortId, static: true }"></button>
+          <button type="button" class="entity-ref-remove" :aria-label="$app.t('common.remove')"
+                  @click="toggleBeatDraftOrt(ortId)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
         </span>
       </template>
     </div>
@@ -135,14 +130,18 @@
         <button type="button" class="btn-compact" :disabled="busy || !relDraftTyp || !relDraftTarget"
                 @click="addBeatRelation(beat)" x-text="$app.t('plot.relation.add')"></button>
       </div>
-      <div class="plot-fig-chips" x-show="beatRelationsOut(beat).length">
+      <!-- Bestehende Kanten: Typ als Klartext, Ziel-Beat als Referenz. Der Klick
+           scrollt nur im Board (kein Kartenwechsel) — darum hier klickbar. -->
+      <div class="entity-refs plot-edit-refs" x-show="beatRelationsOut(beat).length">
         <template x-for="rel in beatRelationsOut(beat)" :key="rel.id">
-          <span class="tag plot-fig-chip plot-rel-chip">
-            <span x-text="relTypeLabel(rel.typ) + ' → ' + relTargetTitle(rel)"></span>
-            <button type="button" class="plot-fig-chip-remove" :aria-label="$app.t('common.remove')"
-                    @click="deleteBeatRelationById(rel.id)">
-              <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
-            </button>
+          <span class="plot-beat-rel">
+            <span class="plot-beat-rel-typ" x-text="relTypeLabel(rel.typ)"></span>
+            <span class="entity-ref-group">
+              <button type="button" class="entity-ref"
+                      x-entity-ref="{ type: 'beat', id: rel.to_beat_id, label: relTargetTitle(rel), onOpen: () => scrollToBeat(rel.to_beat_id) }"></button>
+              <button type="button" class="entity-ref-remove" :aria-label="$app.t('common.remove')"
+                      @click="deleteBeatRelationById(rel.id)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+            </span>
           </span>
         </template>
       </div>

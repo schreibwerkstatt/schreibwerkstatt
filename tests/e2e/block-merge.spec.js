@@ -4,7 +4,7 @@ const { test, expect } = require('./_helpers/fixtures');
 // nicht-kollidierende Block-Edits mergen still, echter Block-Overlap öffnet das
 // Auflösungs-Banner. Harness importiert die echte Merge-Engine (block-merge.js)
 // + das echte Konflikt-Modal-Markup (Kopie aus partials/conflict-resolution.html)
-// unter echtem Alpine. Voller Dual-Tab-Save-Roundtrip braucht Express/BookStack
+// unter echtem Alpine. Voller Dual-Tab-Save-Roundtrip braucht Express
 // und ist hier out-of-scope — Engine + Auflösungs-UX sind abgedeckt.
 const HARNESS = '/tests/fixtures/block-merge-harness.html';
 

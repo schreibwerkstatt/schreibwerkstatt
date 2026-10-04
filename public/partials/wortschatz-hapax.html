@@ -31,9 +31,8 @@
             <td class="wortschatz-term" x-text="h.term"></td>
             <td class="wortschatz-num" x-text="wsNum(h.len)"></td>
             <td>
-              <span class="tag internal-link" x-show="h.first_page_id"
-                    @click="wsGotoPage(h.first_page_id)"
-                    x-text="h.first_page_name || ('#' + h.first_page_id)"></span>
+              <button type="button" class="entity-ref" x-show="h.first_page_id"
+                      x-entity-ref="{ type: 'seite', id: h.first_page_id, label: h.first_page_name || undefined }"></button>
             </td>
           </tr>
         </template>

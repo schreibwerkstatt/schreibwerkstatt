@@ -2,8 +2,6 @@
 'use strict';
 // Ad-hoc TTL-Cleanup nach Prompt-Schema-Bumps oder zur DB-Hygiene.
 // Aufruf: `npm run cache:cleanup` oder `npm run cache:cleanup -- --vacuum`.
-//
-// Plan-Referenz: docs/bookstack-exit.md#phase-0d.
 
 require('dotenv').config();
 const logger = require('../logger');

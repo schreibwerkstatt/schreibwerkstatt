@@ -137,6 +137,14 @@ test('Long-Press auf einen Knoten oeffnet das Knoten-Menue', async ({ browser })
       await page.waitForTimeout(700);
       const menu = page.locator(`${CARD} .werkstatt-context-menu`);
       await expect(menu).toBeVisible();
+      // Lage: das Menü sitzt am Finger (viewport-verankert, auf den Viewport
+      // geklemmt) — nicht um den Karten-Offset verschoben.
+      const vp = page.viewportSize();
+      const mbox = await menu.boundingBox();
+      const expLeft = Math.max(8, Math.min(vp.width - 240 - 8, x));
+      const expTop = Math.max(8, Math.min(vp.height - 240 - 8, y));
+      expect(Math.abs(mbox.x - expLeft)).toBeLessThan(2);
+      expect(Math.abs(mbox.y - expTop)).toBeLessThan(2);
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
       // Das nachgereichte Maus-Event darf das Menue nicht wieder schliessen.
       await page.waitForTimeout(200);

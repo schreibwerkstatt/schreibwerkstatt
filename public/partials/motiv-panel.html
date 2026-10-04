@@ -131,8 +131,10 @@
       </div>
 
       <!-- Soll: Verknüpfungen (klappbar, Zustand pro Motiv in localStorage).
-           Explizites Speichern via Save/Cancel-Icon (kein Auto-Save) — Chips
-           bearbeiten die editXxx-Puffer, sichtbar nur bei ungespeicherten Änderungen. -->
+           Explizites Speichern via Save/Cancel-Icon (kein Auto-Save, Knöpfe sichtbar
+           nur bei ungespeicherten Änderungen) — die Entfernen-Knöpfe der Referenzen
+           bearbeiten die editXxx-Puffer. Solange etwas ungespeichert ist, sind die
+           Referenzen nicht klickbar: der Sprung in eine andere Karte verwürfe den Puffer. -->
       <div x-data="collapsible(true)" x-modelable="open" x-model="linksExpanded">
       <button type="button" class="collapsible-toggle motiv-panel-heading" x-bind="trigger">
         <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
@@ -142,14 +144,14 @@
       <div x-bind="panel" x-cloak>
       <div class="motiv-link-group">
         <span class="motiv-field-label" x-text="$app.t('motiv.link.figures')"></span>
-        <div class="motiv-chip-row">
+        <div class="entity-refs">
           <template x-for="f in editFigures" :key="'k'+f.figId">
-            <span class="motiv-chip"><span x-text="f.name"></span><button type="button" @click="toggleLink('figures', f)"
-                    :data-tip="$app.t('common.remove')" :aria-label="$app.t('common.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
+            <span class="entity-ref-group"><button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: f.figId, name: f.name, static: motifDirty() }"></button>
+              <button type="button" class="entity-ref-remove" @click="toggleLink('figures', f)" :data-tip="$app.t('common.remove')" :aria-label="$app.t('common.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
           </template>
           <template x-for="f in editDraftFigures" :key="'d'+f.id">
-            <span class="motiv-chip motiv-chip--werkstatt"><span x-text="f.name"></span><button type="button" @click="toggleLink('draftFigures', f)"
-                    :data-tip="$app.t('common.remove')" :aria-label="$app.t('common.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
+            <span class="entity-ref-group"><button type="button" class="entity-ref" x-entity-ref="{ type: 'werkstatt', id: f.id, label: f.name, static: motifDirty() }"></button>
+              <button type="button" class="entity-ref-remove" @click="toggleLink('draftFigures', f)" :data-tip="$app.t('common.remove')" :aria-label="$app.t('common.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
           </template>
         </div>
         <!-- Eine Combobox, zwei Quellen gruppiert (Komplettanalyse figures + Plotwerkstatt draft_figures);
@@ -164,10 +166,10 @@
       </div>
       <div class="motiv-link-group">
         <span class="motiv-field-label" x-text="$app.t('motiv.link.beats')"></span>
-        <div class="motiv-chip-row">
+        <div class="entity-refs">
           <template x-for="b in editBeats" :key="b.id">
-            <span class="motiv-chip"><span x-text="b.titel"></span><button type="button" @click="toggleLink('beats', b)"
-                    :data-tip="$app.t('common.remove')" :aria-label="$app.t('common.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
+            <span class="entity-ref-group"><button type="button" class="entity-ref" x-entity-ref="{ type: 'beat', id: b.id, label: b.titel, static: motifDirty() }"></button>
+              <button type="button" class="entity-ref-remove" @click="toggleLink('beats', b)" :data-tip="$app.t('common.remove')" :aria-label="$app.t('common.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
           </template>
         </div>
         <div x-data="combobox({ placeholder: $app.t('motiv.link.addBeat'), transient: true })"
@@ -176,10 +178,10 @@
       </div>
       <div class="motiv-link-group">
         <span class="motiv-field-label" x-text="$app.t('motiv.link.chapters')"></span>
-        <div class="motiv-chip-row">
+        <div class="entity-refs">
           <template x-for="c in editChapters" :key="c.id">
-            <span class="motiv-chip"><span x-text="c.name"></span><button type="button" @click="toggleLink('chapters', c)"
-                    :data-tip="$app.t('common.remove')" :aria-label="$app.t('common.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
+            <span class="entity-ref-group"><button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: c.id, name: c.name, static: motifDirty() }"></button>
+              <button type="button" class="entity-ref-remove" @click="toggleLink('chapters', c)" :data-tip="$app.t('common.remove')" :aria-label="$app.t('common.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
           </template>
         </div>
         <div x-data="combobox({ placeholder: $app.t('motiv.link.addChapter'), transient: true })"
@@ -188,10 +190,10 @@
       </div>
       <div class="motiv-link-group">
         <span class="motiv-field-label" x-text="$app.t('motiv.link.pages')"></span>
-        <div class="motiv-chip-row">
+        <div class="entity-refs">
           <template x-for="p in editPages" :key="p.id">
-            <span class="motiv-chip"><span x-text="p.name"></span><button type="button" @click="toggleLink('pages', p)"
-                    :data-tip="$app.t('common.remove')" :aria-label="$app.t('common.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
+            <span class="entity-ref-group"><button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: p.id, name: p.name, static: motifDirty() }"></button>
+              <button type="button" class="entity-ref-remove" @click="toggleLink('pages', p)" :data-tip="$app.t('common.remove')" :aria-label="$app.t('common.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
           </template>
         </div>
         <div x-data="combobox({ placeholder: $app.t('motiv.link.addPage'), transient: true })"
@@ -209,12 +211,15 @@
         <span class="badge" x-text="relationsForSelected().length"></span>
       </button>
       <div x-bind="panel" x-cloak>
-      <div class="motiv-chip-row">
+      <!-- Richtung + Beziehungstyp als Klartext, Partner-Motiv als Referenz. Klick
+           wählt das Partner-Motiv (selectMotif übernimmt offene Änderungen zuerst). -->
+      <div class="entity-refs">
         <template x-for="r in relationsForSelected()" :key="r.id">
-          <span class="motiv-chip">
-            <span x-text="(r.outgoing ? '→ ' : '← ') + r.otherName + ' (' + motifRelLabel(r.typ) + ')'"></span>
-            <button type="button" @click="deleteRelation(r)"
-                    :data-tip="$app.t('motiv.relations.delete')" :aria-label="$app.t('motiv.relations.delete')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
+          <span class="motiv-rel">
+            <span class="motiv-rel-typ" x-text="(r.outgoing ? '→ ' : '← ') + motifRelLabel(r.typ)"></span>
+            <span class="entity-ref-group"><button type="button" class="entity-ref" x-entity-ref="{ type: 'motiv', id: r.otherId, label: r.otherName }"></button>
+              <button type="button" class="entity-ref-remove" @click="deleteRelation(r)" :data-tip="$app.t('motiv.relations.delete')" :aria-label="$app.t('motiv.relations.delete')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
+          </span>
         </template>
       </div>
       <div class="motiv-relation-add">

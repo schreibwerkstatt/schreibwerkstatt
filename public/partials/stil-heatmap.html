@@ -98,9 +98,8 @@
             <template x-for="page in stilDetail.entries" :key="page.page_id">
               <div class="heatmap-detail-page">
                 <div class="heatmap-detail-page-header">
-                  <span class="tag internal-link"
-                        @click="stilJumpToPage(page.page_id)"
-                        x-text="page.page_name"></span>
+                  <button type="button" class="entity-ref"
+                          x-entity-ref="{ type: 'seite', id: page.page_id, label: page.page_name, onOpen: () => stilJumpToPage(page.page_id) }"></button>
                   <span class="heatmap-detail-page-count" x-text="$app.t('fehlerHeatmap.detail.countLabel', { n: page.count })"></span>
                 </div>
                 <template x-if="page.tokens">

@@ -329,7 +329,9 @@ export const pageViewMethods = {
 
   /** Lädt Figurenkontext für das aktuelle Kapitel (nur bei >1 Seite im Kapitel) */
   async loadChapterFigures() {
-    if (!this.currentPage?.chapter_id || !this.$store.nav.selectedBookId) {
+    // Der Endpoint verlangt editor (Figuren sind Buchwelt-CRUD, routes/figures.js);
+    // Lektor/Viewer bekämen bei jedem Seitenwechsel einen 403.
+    if (!this.currentPage?.chapter_id || !this.$store.nav.selectedBookId || !this.canEdit()) {
       this.chapterFigures = [];
       return;
     }

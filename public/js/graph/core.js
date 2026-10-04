@@ -22,10 +22,15 @@ export const coreMethods = {
   // des Familien-Reiters), und der Lauf geht ueber alle Figuren x Beziehungen.
   figurenHasFamilyEdges() {
     const figuren = Alpine.store('catalog').figuren;
+    // Nur Kanten, deren Ziel im Graphen steht: der Familiengraph baut seine
+    // Kanten ueber _buildEdges, das Ziele ausserhalb (stale/geloescht)
+    // ueberspringt. Sonst waere der Reiter aktiv und zeigte nur „keine Familie".
     return this._memo('hasFamilyEdges', [figuren], () => {
-      for (const f of this._graphFiguren()) {
+      const graphFiguren = this._graphFiguren();
+      const ids = new Set(graphFiguren.map(f => String(f.id)));
+      for (const f of graphFiguren) {
         for (const bz of (f.beziehungen || [])) {
-          if (['elternteil', 'kind', 'geschwister'].includes(bz.typ)) return true;
+          if (['elternteil', 'kind', 'geschwister'].includes(bz.typ) && ids.has(String(bz.figur_id))) return true;
         }
       }
       return false;
@@ -70,10 +75,16 @@ export const coreMethods = {
     // inkl. Machtverhältnis (Edges + Macht-Sortierung). Nur Kapitel zu prüfen würde
     // nach einem Beziehungs-/Typ-/Schicht-Edit den alten Stand zeigen (Hash matcht
     // trotz Datenänderung → No-op).
+    // Dazu Label-Felder (Name/Kurzname/Geburtstag → nodeLabel) und die
+    // Tooltip-Texte (Figuren- und Beziehungsbeschreibung): der Tooltip liest aus
+    // einem pro Render gebauten Index — ohne sie bliebe nach einer Re-Analyse,
+    // die nur Texte aendert, das alte Label/der alte Tooltip stehen.
     const sig = figuren.map(f => {
       const kap = (f.kapitel || []).map(k => k.name + k.haeufigkeit).join(',');
-      const bz  = (f.beziehungen || []).map(b => b.figur_id + b.typ + (b.machtverhaltnis ?? '')).join(',');
-      return [f.id, f.typ || '', f.sozialschicht || '', kap, bz].join('::');
+      const bz  = (f.beziehungen || []).map(b =>
+        b.figur_id + b.typ + (b.machtverhaltnis ?? '') + '~' + (b.beschreibung || '')).join(',');
+      return [f.id, f.typ || '', f.sozialschicht || '', f.name || '', f.kurzname || '',
+        f.geburtstag || '', f.beschreibung || '', kap, bz].join('::');
     }).join('|');
     // Theme im Key: die Canvas-Farben hängen am aufgelösten Hell/Dunkel-Stand,
     // ohne diesen Anteil bliebe nach einem Theme-Wechsel das alte Bild stehen.

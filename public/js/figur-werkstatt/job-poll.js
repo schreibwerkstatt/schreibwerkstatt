@@ -115,7 +115,8 @@ export function stopWerkstattJob(self, kind) {
   if (!k.bookScoped) self[k.draftIdProp] = null;
 }
 
-// Reattach beim Öffnen einer Figur: seedet Loading-/Progress-/Status-State aus
+// Reattach beim Öffnen einer Figur (bzw. der Karte, für die buchweite
+// Verankerung): seedet Loading-/Progress-/Status-State aus
 // dem Queue-Item und hängt sich dann via startWerkstattJobPoll dran.
 export function reattachWerkstattJob(self, kind, qItem, draftId) {
   const app = window.__app;
@@ -125,8 +126,11 @@ export function reattachWerkstattJob(self, kind, qItem, draftId) {
   self[k.statusProp] = runningJobStatus(app.t.bind(app),
     qItem.statusText, qItem.tokensIn, qItem.tokensOut, qItem.maxTokensOut,
     qItem.progress, qItem.tokensPerSec, qItem.statusParams);
-  self[k.resultProp] = null;
   self[k.jobIdProp] = qItem.id;
-  self[k.draftIdProp] = draftId;
+  // Buchweite Läufe (Verankerung) haben weder Result-Panel noch Draft-Bindung.
+  if (!k.bookScoped) {
+    self[k.resultProp] = null;
+    self[k.draftIdProp] = draftId;
+  }
   startWerkstattJobPoll(self, kind, qItem.id);
 }

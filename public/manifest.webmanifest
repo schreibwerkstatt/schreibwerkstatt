@@ -1,7 +1,7 @@
 {
   "name": "Schreibwerkstatt",
   "short_name": "Schreibwerkstatt",
-  "description": "Schreiben, Lektorat und Buchanalyse mit KI auf BookStack-Basis.",
+  "description": "Schreiben, Lektorat und Buchanalyse mit KI.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

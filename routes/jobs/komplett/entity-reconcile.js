@@ -118,7 +118,7 @@ async function judgeEntityPairs(ctx, kind, { incoming, existing, unsure }) {
   try {
     res = await call(jobId, tok,
       prompts.buildEntityMatchJudgePrompt(bookName, kind, pairs.map(p => ({ nr: p.nr, a: p.a, b: p.b }))),
-      sys.SYSTEM_ORTE_BLOCKS, null, null, komplettMaxTokens(effectiveProvider), 0.2, null,
+      sys.SYSTEM_ORTE_BLOCKS, null, null, undefined, 0.2, komplettMaxTokens(effectiveProvider),
       prompts.SCHEMA_ENTITY_MATCH, costTier(COST_LABEL.match),
     );
   } catch (e) {

@@ -8,13 +8,12 @@
 
 ---
 
-## So legst du es in BookStack an
+## So legst du es in der Schreibwerkstatt an
 
-1. **Regal** (optional): *Lektorat-Testbuch*
-2. **Buch** anlegen: *Der Nebel über Luzern* — Beschreibung kurz, Tag: `dummy`, `lektorat-test`
-3. Für jedes Kapitel unten: **Kapitel** anlegen, dann die 2 Seiten als **Seiten** hineinkopieren (Titel = Überschrift der Seite, Inhalt = alles darunter bis zur nächsten `## Seite`-Überschrift).
-4. In der Lektorat-App: Bucheinstellungen → **Buchtyp** = *Krimi / Thriller*, **Sprache** = *de-CH*, **Weiterer Kontext** = Text oben.
-5. Danach: Sync anstossen (oder bis 02:00 warten), damit der Buch-Chat-Index aufgebaut wird.
+1. **Buch** anlegen: *Der Nebel über Luzern*
+2. Für jedes Kapitel unten: **Kapitel** anlegen, dann die 2 Seiten als **Seiten** hineinkopieren (Titel = Überschrift der Seite, Inhalt = alles darunter bis zur nächsten `## Seite`-Überschrift).
+3. Bucheinstellungen → **Buchtyp** = *Krimi / Thriller*, **Sprache** = *de-CH*, **Weiterer Kontext** = Text oben.
+4. Danach: Sync anstossen (oder bis 02:00 warten), damit der Buch-Chat-Index aufgebaut wird.
 
 ---
 
@@ -358,7 +357,7 @@ Hoffentlich.
 
 # Fehler-Checkliste (fürs Testen)
 
-Diese Checkliste **nicht** in BookStack einpflegen — nur als Referenz.
+Diese Checkliste **nicht** ins Buch einpflegen — nur als Referenz.
 
 ## Rechtschreibung (absichtlich falsch eingebaut)
 - Seite 1.1: „warscheinlich" → wahrscheinlich

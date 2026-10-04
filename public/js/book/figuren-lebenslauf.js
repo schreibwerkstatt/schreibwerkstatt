@@ -18,7 +18,7 @@
 //
 // Gespreadet in cards/figuren-card.js; Root-Zugriffe via window.__app.
 
-import { typRank } from './figur-typen.js';
+import { typRank, compareNames } from './figur-typen.js';
 
 // Wie viele Spalten die Tabelle von sich aus oeffnet. Mehr als eine Handvoll
 // nebeneinander liest niemand mehr; der Rest wird zugeschaltet.
@@ -122,7 +122,7 @@ export function computeLebenslaufKandidaten(figuren, ages, { suche = '', typ = '
     const t = typRank(a.typ) - typRank(b.typ);
     if (t) return t;
     if (a.anzahl !== b.anzahl) return b.anzahl - a.anzahl;
-    return (a.name || '').localeCompare(b.name || '', 'de');
+    return compareNames(a.name, b.name);
   });
   return { liste, ohneJahr };
 }

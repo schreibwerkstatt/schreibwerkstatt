@@ -97,14 +97,14 @@ test('Ort: stale-Eintrag mit orphan_-loc_id wird geloescht', async () => {
   assert.equal(locExists(rowId), false, 'Ort muss aus der DB verschwinden');
 });
 
-test('Ort: aktiver Eintrag bleibt (409 NOT_STALE)', async () => {
+test('Ort: aktiver Analyse-Eintrag bleibt (409 NOT_DELETABLE)', async () => {
   const BOOK = 9402;
   seedBook(BOOK);
   const rowId = seedLocation(BOOK, { locId: 'ort_1', stale: false });
 
   const { status, json } = await api('DELETE', `/locations/${BOOK}/ort_1`);
   assert.equal(status, 409);
-  assert.equal(json.error_code, 'NOT_STALE');
+  assert.equal(json.error_code, 'NOT_DELETABLE');
   assert.equal(locExists(rowId), true);
 });
 
@@ -152,4 +152,24 @@ test('Figur: aktiver Eintrag bleibt (409 NOT_STALE)', async () => {
   assert.equal(status, 409);
   assert.equal(json.error_code, 'NOT_STALE');
   assert.equal(figExists(rowId), true);
+});
+
+// PUT /figures/:book_id prüft den Body, bevor saveFigurenToDb an NOT NULL/UNIQUE
+// scheitert (sonst 500 INTERNAL statt einer verwertbaren 400).
+test('PUT /figures/:book_id: ungültiger Body → 400 mit error_code', async () => {
+  seedBook(77);
+  const put = async (body) => {
+    const res = await fetch(`${baseUrl}/figures/77`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  };
+  assert.deepEqual((await put({ figuren: 'x' })).json?.error_code, 'INVALID_VALUE');
+  assert.equal((await put({ figuren: [{ name: 'Anna' }] })).json?.error_code, 'ID_REQUIRED');
+  assert.equal((await put({ figuren: [{ id: 'fig_1', name: ' ' }] })).json?.error_code, 'NAME_REQUIRED');
+  const dup = await put({ figuren: [{ id: 'fig_1', name: 'A' }, { id: 'fig_1', name: 'B' }] });
+  assert.equal(dup.status, 400);
+  assert.equal(dup.json?.reason, 'duplicate');
+  const ok = await put({ figuren: [{ id: 'fig_1', name: 'Anna' }] });
+  assert.equal(ok.status, 200);
 });

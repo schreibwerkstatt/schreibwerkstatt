@@ -5,8 +5,8 @@
   <template x-teleport="body">
     <div x-show="showFigurLookup" x-cloak class="figur-lookup"
          :style="{ left: figurLookupX + 'px', top: figurLookupY + 'px' }"
-         @click.outside="closeFigurLookup()"
-         @keydown.escape.window="closeFigurLookup()">
+         role="dialog" :aria-label="figurLookupData ? figurLookupData.name : null"
+         @click.outside="closeFigurLookup()">
       <template x-if="figurLookupData">
         <div>
           <div class="figur-lookup-header">

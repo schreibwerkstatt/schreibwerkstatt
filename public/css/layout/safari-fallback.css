@@ -19,24 +19,17 @@
      Identität bleibt erkennbar, nur ohne Pastell-Fläche. */
   .figur-bz-typ,
   .figur-sozialschicht-badge,
-  .figur-praesenz-badge,
-  .gz-figur-badge {
+  .figur-praesenz-badge {
     background: var(--color-tag-bg);
     color: var(--color-text);
   }
   .figur-bz-typ          { color: var(--rel-hue); }
   .figur-sozialschicht-badge { color: var(--badge-hue); }
   .figur-praesenz-badge  { color: var(--badge-hue); }
-  .gz-figur-badge        { color: var(--fig-hue); }
 
   /* Legenden-Punkt (10x10) – Hue direkt als Fläche */
   .figur-legend-dot {
     background: var(--fig-hue);
-  }
-
-  /* Beziehungs-Belege */
-  .figur-bz-beleg {
-    background: var(--color-surface);
   }
 
   /* Fehler-Heatmap – Gradient nicht abbildbar; flache Ersatzfarben.

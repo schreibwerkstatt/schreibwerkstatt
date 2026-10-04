@@ -23,7 +23,7 @@ import { EVT } from '../events.js';
 
 import {
   applyHighlights, clearHighlights, findHighlightAtPoint,
-  toEntitiesList,
+  pruneStaleHighlights, toEntitiesList,
 } from '../editor/notebook/entities.js';
 import { closestCiteEl, CITE_ATTR_SRC, CITE_ATTR_LOC, citeModeOf } from '../sources/cite-html.js';
 import { loadBookSources, invalidateSourceCache } from '../sources/source-cache.js';
@@ -162,6 +162,10 @@ export function registerEditorEntitiesCard() {
       document.addEventListener('input', (e) => {
         if (!window.__app?.entitiesEnabledForCurrentBook) return;
         if (!e.target?.closest?.(EDIT_SELECTOR)) return;
+        // Sofort, nicht entprellt: lebende Ranges wachsen beim Tippen am
+        // Namensanfang mit — ohne Pruning stuende der neue Text bis zum
+        // Recompute (erst nach der Tipp-Pause) im Highlight.
+        this._highlights = pruneStaleHighlights(this._highlights);
         this._scheduleRecompute();
       }, { signal });
 

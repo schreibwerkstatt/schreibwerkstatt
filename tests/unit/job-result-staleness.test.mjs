@@ -1,7 +1,7 @@
 // Job-Result `updatedAt`-Staleness — Contract zwischen Server-Job und Frontend.
 //
 // CLAUDE.md "Harte Regel": Server-Jobs, deren Resultate auf einem Snapshot
-// des BookStack-Seitenstands operieren (Lektorat-Findings mit Positionen,
+// des gespeicherten Seitenstands operieren (Lektorat-Findings mit Positionen,
 // Chat-Antworten mit `vorschlaege.original`), liefern `updatedAt: pd.updated_at`.
 // Der Client vergleicht im `onDone` mit `currentPage.updated_at`; weicht es ab,
 // wird das Ergebnis verworfen statt angewandt.

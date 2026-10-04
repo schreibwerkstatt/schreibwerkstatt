@@ -165,7 +165,7 @@ test('Schauplatz: Einmal-Ort landet in oneOff', () => {
       { location_id: 2, chapter_id: 1 }, { location_id: 2, chapter_id: 7 }, // mehrfach
     ],
   });
-  assert.deepEqual(r.locations.oneOff, ['Bahnhof']);
+  assert.deepEqual(r.locations.oneOff.map(l => l.name), ['Bahnhof']);
 });
 
 test('POV: Konfidenz-Lauf unter Schwelle', () => {

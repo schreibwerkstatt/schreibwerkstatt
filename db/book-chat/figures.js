@@ -10,7 +10,7 @@ const { db } = require('../connection');
 require('../migrations');
 
 const _stmtPronounsPerChapter = db.prepare(`
-    SELECT p.chapter_id, c.chapter_name, ps.pronoun_counts
+    SELECT p.chapter_id, c.chapter_name, c.position AS chapter_position, ps.pronoun_counts
     FROM page_stats ps
     JOIN pages p      ON p.page_id = ps.page_id
     LEFT JOIN chapters c ON c.chapter_id = p.chapter_id AND c.book_id = p.book_id
@@ -93,18 +93,37 @@ function getFigureByFigId(bookId, figId, userEmail) {
   return _stmtFigureByFigId.get(bookId, figId, userEmail);
 }
 
-const _stmtFigureByName = db.prepare(
-      `SELECT id, fig_id, name, kurzname FROM figures
-         WHERE book_id = ? AND user_email IS ?
-           AND (name LIKE ? OR kurzname LIKE ?)
-         ORDER BY CASE WHEN name = ? OR kurzname = ? THEN 0 ELSE 1 END, id
-         LIMIT 1`
+const _stmtFiguresForLookup = db.prepare(
+      'SELECT id, fig_id, name, kurzname, stale FROM figures WHERE book_id = ? AND user_email IS ? ORDER BY id'
     );
 
-/** Figur per Namens-Teilstring auf name/kurzname; exakter Treffer zuerst, dann id. */
+/** Figur per Name auf name/kurzname. Rangfolge: exakter Treffer, dann Wortanfang,
+ *  dann Teilstring; bei Gleichstand aktive vor ausgemusterten (stale), dann id.
+ *  Der Vergleich läuft in JS mit toLocaleLowerCase — SQLite-LIKE ignoriert die
+ *  Gross-/Kleinschreibung nur für ASCII („ä" träfe „Ä" nicht) und behandelt
+ *  `%`/`_` im Namen als Platzhalter. Die Figurenliste eines Buchs ist klein. */
 function findFigureByName(bookId, userEmail, name) {
-  const q = `%${name}%`;
-  return _stmtFigureByName.get(bookId, userEmail, q, q, name, name);
+  const needle = String(name ?? '').trim().toLocaleLowerCase('de');
+  if (!needle) return undefined;
+  const rank = (v) => {
+    const h = String(v ?? '').toLocaleLowerCase('de');
+    if (!h) return 9;
+    if (h === needle) return 0;
+    if (h.split(/[\s\-]+/).some(w => w.startsWith(needle))) return 1;
+    return h.includes(needle) ? 2 : 9;
+  };
+  let best = null;
+  for (const f of _stmtFiguresForLookup.all(bookId, userEmail ?? null)) {
+    const r = Math.min(rank(f.name), rank(f.kurzname));
+    if (r === 9) continue;
+    const key = [r, f.stale ? 1 : 0, f.id];
+    if (!best || key[0] < best.key[0] || (key[0] === best.key[0] && (key[1] < best.key[1] || (key[1] === best.key[1] && key[2] < best.key[2])))) {
+      best = { key, f };
+    }
+  }
+  if (!best) return undefined;
+  const { id, fig_id, name: n, kurzname } = best.f;
+  return { id, fig_id, name: n, kurzname };
 }
 
 const _stmtSceneTitle = db.prepare('SELECT titel AS t FROM figure_scenes WHERE id = ?');

@@ -181,8 +181,8 @@ test('researchMessageContext / loadResearchContext: nur Stellen des eigenen Buch
   const { researchMessageContext, loadResearchContext } = require('../../routes/jobs/research-chat-helpers');
   db.prepare("INSERT OR IGNORE INTO books (book_id, name, created_at, updated_at) VALUES (81001, 'Kontext', ?, ?), (81002, 'Fremd', ?, ?)").run(NOW, NOW, NOW, NOW);
   db.prepare("INSERT INTO chapters (chapter_id, book_id, chapter_name, position, updated_at) VALUES (8101, 81001, 'Kap Eins', 1, ?)").run(NOW);
-  db.prepare("INSERT INTO pages (page_id, book_id, chapter_id, page_name, position, priority, updated_at, body_html) VALUES (810101, 81001, 8101, 'Hafen', 1, 1, ?, '<p>Im Hafen von Genua, 1492.</p>')").run(NOW);
-  db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, priority, updated_at, body_html) VALUES (810201, 81002, 'Fremdseite', 1, 1, ?, '<p>x</p>')").run(NOW);
+  db.prepare("INSERT INTO pages (page_id, book_id, chapter_id, page_name, position, updated_at, body_html) VALUES (810101, 81001, 8101, 'Hafen', 1, ?, '<p>Im Hafen von Genua, 1492.</p>')").run(NOW);
+  db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, updated_at, body_html) VALUES (810201, 81002, 'Fremdseite', 1, ?, '<p>x</p>')").run(NOW);
   const item = db.prepare("INSERT INTO research_items (book_id, user_email, kind, title) VALUES (81001, ?, 'fact', 'Genua 1492')").run(USER).lastInsertRowid;
   db.prepare("INSERT INTO research_item_links (item_id, target_kind, page_id) VALUES (?, 'page', 810101)").run(item);
 

@@ -184,11 +184,30 @@ function _figureRicher(a, b) {
   return a.id > b.id;
 }
 
+// Namen der Katalog-Figuren, die dieser User schon als Quelle an einem Draft
+// haengen hat (normalisiert). Der LEFT JOIN oben schliesst nur die exakte
+// Quell-Zeile aus — bei einer Merge-Kollision (`__2`) rueckte sonst ihre
+// gleichnamige Schwester nach und liesse sich als Duplikat ein zweites Mal
+// importieren.
+const _stmtImportedSourceNames = db.prepare(`
+  SELECT f.name
+    FROM draft_figures d
+    JOIN figures f ON f.id = d.source_figure_id
+   WHERE d.book_id = ? AND d.user_email = ?
+`);
+function _normName(s) { return String(s || '').trim().toLowerCase(); }
+
+function importedSourceNames(bookId, userEmail) {
+  return new Set(_stmtImportedSourceNames.all(parseInt(bookId), userEmail).map(r => _normName(r.name)));
+}
+
 function listImportableFigures(bookId, userEmail) {
   const rows = _stmtImportable.all(userEmail, parseInt(bookId), userEmail);
+  const imported = importedSourceNames(bookId, userEmail);
   const byName = new Map();
   for (const r of rows) {
-    const key = (r.name || '').trim().toLowerCase();
+    const key = _normName(r.name);
+    if (imported.has(key)) continue;
     const prev = byName.get(key);
     if (!prev || _figureRicher(r, prev)) byName.set(key, r);
   }
@@ -253,6 +272,6 @@ function deleteWerkstattRun(id, userEmail) {
 module.exports = {
   listDraftFigures, getDraftFigure, getDraftFigureBySource,
   createDraftFigure, updateDraftFigure, deleteDraftFigure,
-  listImportableFigures, setDraftSourceFigure, listLinkCandidates,
+  listImportableFigures, importedSourceNames, setDraftSourceFigure, listLinkCandidates,
   insertWerkstattRun, listWerkstattRuns, getWerkstattRun, deleteWerkstattRun,
 };

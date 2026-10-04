@@ -193,3 +193,37 @@ test('Ein mehrdeutiger Kurzname wird nicht geraten', async () => {
   assert.equal(rows[0].fig_id, 'f_am');
   assert.equal(rows[0].alter_von, 40);
 });
+
+test('Abbruch waehrend des Laufs: Status cancelled, der vorige Index bleibt stehen', async () => {
+  const BOOK_ID = 905;
+  ctx.dbSeed.setBook({
+    chapters: [{ id: 9510, book_id: BOOK_ID, name: 'Kap 1' }],
+    pages: [{ id: 9520, book_id: BOOK_ID, chapter_id: 9510, name: 'S 1', updated_at: '' }],
+    pageBodies: { 9520: '<p>Mara war vierzig Jahre alt, als sie ging.</p>' },
+  });
+  seedFiguren(BOOK_ID, [{ id: 'f_mara', name: 'Mara', typ: 'hauptfigur' }]);
+  ctx.mockAi.on(
+    (e) => e.schemaKeys.includes('funde'),
+    () => ({ funde: [{ figur: 'Mara', art: 'alter', wert: 40, bezugsjahr: null, unsicher: false, zitat: 'Mara war vierzig Jahre alt', begruendung: '' }] }),
+  );
+  const first = await runJob(BOOK_ID, { force: true });
+  assert.equal(first.status, 'done', first.error || '');
+  const ages = require('../../db/figure-ages');
+  assert.equal(ages.listFigureAges(BOOK_ID, USER).length, 1);
+
+  // Zweiter Lauf: der Job wird abgebrochen, waehrend das Modell antwortet. Der Mock
+  // ignoriert das Signal (wie ein Provider, dessen Antwort schon unterwegs war) und
+  // liefert eine LEERE Fundliste — schriebe der Job danach weiter, waere Maras Zeile weg.
+  ctx.mockAi.reset();
+  const jobId = ctx.shared.createJob('figur-alter', BOOK_ID, USER, 'job.label.figurAlter');
+  ctx.mockAi.on(
+    (e) => e.schemaKeys.includes('funde'),
+    () => { ctx.shared.cancelJob(jobId, USER); return { funde: [] }; },
+  );
+  ctx.shared.enqueueJob(jobId, () => ctx.figurAlter.runFigurAlterJob(jobId, BOOK_ID, USER, { force: true }));
+  const second = await waitForJob(ctx.shared, jobId, { timeoutMs: 15000 });
+  assert.equal(second.status, 'cancelled');
+  const rows = ages.listFigureAges(BOOK_ID, USER);
+  assert.equal(rows.length, 1, 'vorheriger Index unveraendert');
+  assert.equal(rows[0].alter_von, 40);
+});

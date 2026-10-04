@@ -13,7 +13,7 @@
   </div>
 </template>
 
-<!-- Figuren: Anzahl + Top-3 als Avatar-Chips -->
+<!-- Figuren: Anzahl + Top-3 als Entitäts-Referenzen -->
 <template x-if="overviewFigurenCount() > 0">
   <div class="overview-tile internal-link"
        @click="$app.toggleFiguresCard()"
@@ -23,16 +23,10 @@
       <span class="overview-fig-count" x-text="_fmtNum(overviewFigurenCount())"></span>
       <span class="overview-fig-count-unit" x-text="$app.t('overview.unit.figuren')"></span>
     </div>
-    <div class="overview-fig-chips" x-show="overviewTopFiguren().length > 0">
-      <template x-for="(f, i) in overviewTopFiguren()" :key="f.id">
-        <span class="overview-fig-chip"
-              :data-rolle="f.rolle || ''"
-              :data-tip="f.name + (f.mentions > 0 ? ' · ' + f.mentions : '')">
-          <span class="overview-fig-avatar"
-                :data-idx="i"
-                x-text="tileInitials(f.kurzname || f.name)"></span>
-          <span class="overview-fig-name" x-text="f.kurzname || f.name"></span>
-        </span>
+    <div class="entity-refs" x-show="overviewTopFiguren().length > 0">
+      <template x-for="f in overviewTopFiguren()" :key="f.id">
+        <button type="button" class="entity-ref"
+                x-entity-ref="{ type: 'figur', id: f.id, count: f.mentions }"></button>
       </template>
     </div>
   </div>
@@ -52,7 +46,8 @@
          :data-tip="$app.t('overview.szenenBreakdown', {
            stark: overviewSzenenWertung().stark,
            mittel: overviewSzenenWertung().mittel,
-           schwach: overviewSzenenWertung().schwach
+           schwach: overviewSzenenWertung().schwach,
+           ohne: overviewSzenenWertung().ohne
          })">
       <div class="overview-stacked-seg overview-stacked-seg--stark"
            :style="{ flex: overviewSzenenWertung().stark }"
@@ -77,11 +72,14 @@
       <span class="overview-stacked-key overview-stacked-key--schwach"
             x-show="overviewSzenenWertung().schwach > 0"
             x-text="overviewSzenenWertung().schwach + ' ' + $app.t('overview.unit.schwach')"></span>
+      <span class="overview-stacked-key overview-stacked-key--ohne"
+            x-show="overviewSzenenWertung().ohne > 0"
+            x-text="overviewSzenenWertung().ohne + ' ' + $app.t('overview.unit.ohne')"></span>
     </div>
   </div>
 </template>
 
-<!-- Schauplätze: Anzahl + Top-6 als Chips, typ als data-attr für Akzentfarbe -->
+<!-- Schauplätze: Anzahl + Top-6 als Entitäts-Referenzen -->
 <template x-if="overviewOrteCount() > 0">
   <div class="overview-tile internal-link"
        @click="$app.toggleOrteCard()"
@@ -91,15 +89,10 @@
       <span class="overview-fig-count" x-text="_fmtNum(overviewOrteCount())"></span>
       <span class="overview-fig-count-unit" x-text="$app.t('overview.unit.orte')"></span>
     </div>
-    <div class="overview-fig-chips" x-show="overviewTopOrte().length > 0">
+    <div class="entity-refs" x-show="overviewTopOrte().length > 0">
       <template x-for="o in overviewTopOrte()" :key="o.id">
-        <span class="overview-ort-chip"
-              :data-typ="o.typ"
-              :data-tip="o.name + (o.total > 0 ? ' · ' + o.total : '')"
-              @click.stop="$app.openOrtById(o.id)">
-          <span class="overview-ort-dot" :data-typ="o.typ" aria-hidden="true"></span>
-          <span class="overview-fig-name" x-text="o.name"></span>
-        </span>
+        <button type="button" class="entity-ref"
+                x-entity-ref="{ type: 'ort', id: o.id, count: o.total }"></button>
       </template>
     </div>
   </div>

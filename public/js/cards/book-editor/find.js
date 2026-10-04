@@ -199,14 +199,21 @@ export const bookEditorFindMethods = {
       const container = m.container || m.startNode.parentElement?.closest('[data-book-editor-page]');
       if (!container) return false;
       try {
+        const block = this._blockById(parseInt(container.dataset.bookEditorPage, 10));
+        const active = block && this.activePageId === block.pageId;
+        // Replace ist ein eigener Undo-Schritt (cards/book-editor/history.js):
+        // im aktiven Block Stand davor + danach, im inaktiven nur danach — sein
+        // Stand davor ist die Spitze seines Verlaufs.
+        if (active) this._historyPushNow(block.pageId);
         const range = rangeOf(m);
         range.deleteContents();
         range.insertNode(document.createTextNode(this.findReplace));
-        const block = this._blockById(parseInt(container.dataset.bookEditorPage, 10));
         if (block) {
           block.html = cleanBlockHtml(container);
           this._markBlockDirty(block);
           touched?.add(container);
+          if (active) this._historyPushNow(block.pageId);
+          else this._historyRecordInactive(block);
         }
         return true;
       } catch {

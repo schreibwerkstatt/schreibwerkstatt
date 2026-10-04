@@ -97,7 +97,6 @@ function makeCtx() {
     batchStatus: '',
     _batchPollTimer: null,
     _komplettPollTimer: null,
-    clearBookstackSearch() {},
     currentPage: { id: 7 },
     resetPage() { /* noop */ },
     loadFiguren: async () => {},

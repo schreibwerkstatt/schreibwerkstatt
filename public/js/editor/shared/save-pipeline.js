@@ -22,7 +22,7 @@ export function isNoChange(currentHtml, originalHtml) {
 // werden — die Lib wählt das nicht selbst, weil sie modus-agnostisch ist.
 //
 // Erlaubte Quellen (Spiegel von db/page-revisions.js#VALID_SOURCES, ohne
-// die nur-Server-Quellen bookstack-sync/import/conflict):
+// die nur-Server-Quellen import/conflict):
 //   'main'          — Notebook-Editor
 //   'focus'         — Focus-Editor
 //   'book'          — Buch-Editor (mehrere Pages am Stück)

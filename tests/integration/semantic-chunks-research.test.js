@@ -151,3 +151,30 @@ test('pruneMissing entfernt Chunks geloeschter Recherche-Eintraege', () => {
   assert.equal(semanticChunks.pruneMissing(BOOK, MODEL, 'research', []), 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM semantic_chunks').get().n, 0);
 });
+
+// Vektor-Cache in searchSimilar: Treffer müssen nach jedem Schreibweg frisch
+// sein — nach replaceEntity mit gleicher Chunk-Zahl (nur _writeGen merkt das)
+// und nach einer FK-CASCADE-Löschung am Modul vorbei (nur die Chunk-Zahl merkt das).
+test('searchSimilar-Cache: replaceEntity mit gleicher Chunk-Zahl liefert neuen Vektor + Text', () => {
+  const BOOK = 9404;
+  const { itemId } = seed(BOOK);
+  semanticChunks.replaceEntity('research', itemId, BOOK, MODEL, DIM, [row(0, V.e2, 'alt')]);
+  const before = semanticChunks.searchSimilar(BOOK, MODEL, V.e0, { topK: 5 });
+  assert.equal(before[0].text, 'alt');
+  assert.ok(before[0].score < 0.1);
+
+  semanticChunks.replaceEntity('research', itemId, BOOK, MODEL, DIM, [row(0, V.e0, 'neu')]);
+  const after = semanticChunks.searchSimilar(BOOK, MODEL, V.e0, { topK: 5 });
+  assert.equal(after[0].text, 'neu');
+  assert.ok(after[0].score > 0.99, 'gecachter alter Vektor darf nicht überleben');
+});
+
+test('searchSimilar-Cache: CASCADE-Delete am Modul vorbei räumt den Treffer', () => {
+  const BOOK = 9405;
+  const { itemId } = seed(BOOK);
+  semanticChunks.replaceEntity('research', itemId, BOOK, MODEL, DIM, [row(0, V.e0, 'Passage')]);
+  assert.equal(semanticChunks.searchSimilar(BOOK, MODEL, V.e0, { topK: 5 }).length, 1);
+
+  db.prepare('DELETE FROM research_items WHERE id = ?').run(itemId);
+  assert.deepEqual(semanticChunks.searchSimilar(BOOK, MODEL, V.e0, { topK: 5 }), []);
+});

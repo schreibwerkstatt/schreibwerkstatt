@@ -51,7 +51,8 @@ export const threadsMethods = {
     const app = window.__app;
     const name = (this.threadDraft.name || '').trim();
     if (!name) { this.errorMessage = app.t('plot.error.nameRequired'); return; }
-    this.busy = true;
+    // Wie saveEditAct: im Undo/Redo-Flight nicht dazwischen schreiben.
+    if (this.busy || this._inHistoryFlight) return;
     // Undo-Ausgangsstand in PATCH-Form: die Katalog-Bindung wird nach aussen als
     // TEXT-fig_id geführt (thread.fig_id), der Server erwartet sie als figure_id.
     const before = {
@@ -68,6 +69,10 @@ export const threadsMethods = {
       draft_figure_id: this.threadDraft.draft_figure_id || null,
       chapter_id: this.threadDraft.chapter_id ? parseInt(this.threadDraft.chapter_id) : null,
     };
+    // Unverändert → kein PATCH, kein Record (der leerte sonst den Redo-Stack
+    // und das nächste Strg+Z täte sichtbar nichts) — wie saveEditAct/beatFieldsEqual.
+    if (Object.keys(after).every(k => after[k] === before[k])) { this.cancelEditThread(); return; }
+    this.busy = true;
     try {
       const updated = await fetchJson(`/plot/threads/${thread.id}`, {
         method: 'PATCH',

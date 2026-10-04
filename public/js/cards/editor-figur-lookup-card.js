@@ -20,6 +20,8 @@ export function registerEditorFigurLookupCard() {
     _figurLookupReflowDetach: null,
     _figurLookupAnchor: null,
     _figurLookupAbort: null,
+    // Escape-Listener, nur solange das Popover offen ist (figur-lookup.js).
+    _figurLookupEscAbort: null,
 
     init() {
       const abort = new AbortController();
@@ -42,6 +44,7 @@ export function registerEditorFigurLookupCard() {
     destroy() {
       this._figurLookupAbort?.abort();
       this._detachFigurLookupScroll();
+      this._detachFigurLookupEscape();
     },
 
     ...figurLookupCardMethods,

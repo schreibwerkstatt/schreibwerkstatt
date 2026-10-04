@@ -57,7 +57,6 @@ const CATEGORIES = [
     ext: '.js',
     cap: 600,
     allow: {
-      'public/js/share-reader.js': 658,
     },
   },
   {
@@ -71,8 +70,6 @@ const CATEGORIES = [
       'public/partials/book-editor.html': 358,
       'public/partials/epub-export.html': 321,
       'public/partials/plot-board-grid.html': 289,
-      'public/partials/szenen.html': 273,
-      'public/partials/orte.html': 277,
       'public/partials/finetune-export.html': 254,
     },
   },
@@ -105,7 +102,7 @@ const CATEGORIES = [
       'lib/content-store/backends/localdb.js': 635,
       'routes/jobs/komplett/phases/extraktion.js': 932,
       'routes/usersettings.js': 641,
-      'routes/share/reader.js': 629,
+      'routes/share/reader.js': 621,
     },
   },
   // Einzeldateien ausserhalb der Verzeichnis-Walks: der Server-Einstieg und der

@@ -334,7 +334,13 @@ export const plotProposalMethods = {
       this.acts = [...this.acts, act];
       this._memos = {};
       this._recordCreate('act', act.id);
-      if (p.after_act_id || p.at_start) await this._placePlotAct(act, p);
+      // Der Akt existiert ab hier — scheitert nur die Platzierung, gilt der
+      // Vorschlag trotzdem als übernommen (sonst legte ein zweiter Klick einen
+      // zweiten Akt an). Die lokal umnummerierten Positionen wären dann nicht
+      // persistiert: Board neu laden (leert auch die Historie).
+      if (p.after_act_id || p.at_start) {
+        try { await this._placePlotAct(act, p); } catch { await this.loadBoard(); }
+      }
       return act.id;
     }
 

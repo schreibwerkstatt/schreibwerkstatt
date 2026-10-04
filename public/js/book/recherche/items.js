@@ -194,7 +194,7 @@ export const rechercheItemMethods = {
   // und sonst durchblubbern würden), die ihre eigene Aktion behalten.
   onItemBodyClick(item, ev) {
     if (this.busy) return;
-    if (ev.target.closest('a, button, input, label, .research-tag, .research-link-chip, .recherche-linkpicker, .combobox-wrap')) return;
+    if (ev.target.closest('a, button, input, label, .research-tag, .entity-ref, .recherche-linkpicker, .combobox-wrap')) return;
     // Im Auswahl-Modus markiert ein Klick, statt den Dialog zu oeffnen.
     if (this.bulkMode) { this.toggleBulkSelect(item); return; }
     // Textselektion nicht abwürgen: hat der User Text markiert (Drag löst am

@@ -55,12 +55,13 @@ function tool_count_pronouns(input, ctx) {
   for (const r of rows) {
     const key = r.chapter_id ?? 0;
     if (!byChapter.has(key)) {
-      byChapter.set(key, { chapter_id: r.chapter_id, chapter_name: r.chapter_name || '(ohne Kapitel)', rows: [] });
+      byChapter.set(key, { chapter_id: r.chapter_id, chapter_name: r.chapter_name || '(ohne Kapitel)', position: r.chapter_position, rows: [] });
     }
     byChapter.get(key).rows.push(r);
   }
   const chapters = [...byChapter.values()]
-    .sort((a, b) => (a.chapter_id ?? 0) - (b.chapter_id ?? 0))
+    // Lesereihenfolge (Kapitel-Position), nicht Anlage-Reihenfolge (chapter_id).
+    .sort((a, b) => (a.position ?? Infinity) - (b.position ?? Infinity) || (a.chapter_id ?? 0) - (b.chapter_id ?? 0))
     .map(ch => ({
       chapter_id: ch.chapter_id,
       chapter_name: ch.chapter_name,

@@ -1,7 +1,7 @@
 'use strict';
 // Listing-/Lookup-Tools: Buch-Inventar (Kapitel, Figuren, Orte, Szenen,
-// Ideen, Buch-Settings, Revisionen). Reines DB-Aggregat, kein BookStack-
-// Roundtrip. Temporal-Tools (Kontinuitaet/Zeitstrahl) liegen in tools-timeline.js.
+// Ideen, Buch-Settings, Revisionen). Reines DB-Aggregat, kein
+// Volltext-Laden. Temporal-Tools (Kontinuitaet/Zeitstrahl) liegen in tools-timeline.js.
 
 const { getBookSettings, getBookName, worldFactsScanState } = require('../../../db/schema');
 const { narrativeLabels } = require('../narrative-labels');

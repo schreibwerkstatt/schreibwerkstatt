@@ -152,7 +152,7 @@ test('quellen: anlegen, filtern, bearbeiten, archivieren, loeschen, Fundstellen 
   await expect(page.locator('.sources-citations')).toBeVisible();
   await expect(page.locator('.sources-citation')).toHaveCount(1);
   // Sprung zur Fundstelle öffnet den Notebook-Editor auf der Seite.
-  await page.locator('.sources-citation-link').click();
+  await page.locator('.sources-citation .entity-ref--seite').click();
   await page.waitForFunction(() => window.__app.showEditorCard === true && window.__app.showSourcesCard === false);
 
   // Bucheinstellungen → Quellen-Tab: Stil wechseln, Vorschau folgt, speichern.

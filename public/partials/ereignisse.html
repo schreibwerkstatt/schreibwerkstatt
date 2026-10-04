@@ -173,27 +173,22 @@
                :data-tip="eventHasTarget(ev) ? $app.t('events.openText') : null"
                @click="eventHasTarget(ev) && openEventText(ev)"
                x-text="ev.ereignis"></div>
-          <!-- Meta-Zeile: Kapitel + Seite („wo") in einer fliessenden Zeile.
-               Jeder Kapitel-Eintrag ist einzeln klickbar (nicht immer kapitel[0]). -->
-          <div x-show="ev.kapitel.length || ev.seiten.length" class="gz-meta">
-            <div x-show="ev.kapitel.length" class="gz-kapitel">
-              <template x-for="(kap, ki) in ev.kapitel" :key="ki">
-                <span class="gz-kapitel-link internal-link" x-text="kap" @click="gotoEventKapitel(kap, null)"></span>
-              </template>
-            </div>
-            <div x-show="ev.seiten.length" class="gz-seite">
-              <template x-for="(s, si) in ev.seiten" :key="si">
-                <span>
-                  <template x-if="si > 0"><span> · </span></template>
-                  <span class="internal-link" @click="gotoEventKapitel(ev.kapitel[0], s)" x-text="s"></span>
-                </span>
-              </template>
-            </div>
+          <!-- Meta-Zeile: Kapitel + Seiten („wo") in einer fliessenden Zeile.
+               kapitel[i] gehört zu chapter_ids[i], seiten[i] zu page_ids[i]
+               (gleiche Push-Reihenfolge in der /zeitstrahl-Route); im
+               Figuren-Fallback fehlen die IDs, dann löst der Name auf. -->
+          <div x-show="ev.kapitel.length || ev.seiten.length" class="entity-refs gz-meta">
+            <template x-for="(kap, ki) in ev.kapitel" :key="'k' + ki">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: (ev.chapter_ids || [])[ki], name: kap }"></button>
+            </template>
+            <template x-for="(s, si) in ev.seiten" :key="'s' + si">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: (ev.page_ids || [])[si], name: s, kapitel: ev.kapitel[0] }"></button>
+            </template>
           </div>
           <div x-show="ev.bedeutung" class="gz-bedeutung" x-text="ev.bedeutung"></div>
-          <div class="gz-figuren-row">
+          <div class="entity-refs gz-figuren-row">
             <template x-for="(fref, fi) in ev.figuren" :key="fi">
-              <span class="gz-figur-badge internal-link" :class="'gz-figur-badge--' + (fref.typ || 'andere')" x-text="fref.name" @click="$app.openFigurById(fref.id)"></span>
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: fref.id, name: fref.name }"></button>
             </template>
           </div>
         </div>

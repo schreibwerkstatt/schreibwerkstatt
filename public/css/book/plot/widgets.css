@@ -83,15 +83,6 @@
   .plot-konflikt-head { display: flex; align-items: center; gap: var(--space-xs); }
   .plot-konflikt-beat { font-weight: var(--fw-semibold); font-size: var(--font-size-xs); color: var(--color-text); flex: 0 0 auto; }
   .plot-konflikt-problem { font-size: var(--font-size-xs); color: var(--color-muted); flex: 1 1 auto; overflow-wrap: anywhere; }
-  /* Klickbare Textbeleg-Fundstelle im Befund — dezenter Akzent-Chip, springt an
-     die belegende Manuskript-Stelle (semantische Verankerung). */
-  .plot-konflikt-beleg {
-    flex: 0 0 auto;
-    cursor: pointer;
-    color: var(--color-stark);
-    border-color: color-mix(in oklch, var(--color-stark) 40%, transparent);
-    background: color-mix(in oklch, var(--color-stark) 12%, transparent);
-  }
   .plot-konflikt-vorschlag {
     display: flex;
     flex-direction: column;
@@ -112,7 +103,6 @@
     padding: var(--space-xs) 0 0;
   }
   .plot-coverage-group { display: flex; flex-direction: column; gap: var(--space-2xs); }
-  .plot-coverage-chips { display: flex; flex-wrap: wrap; gap: var(--space-2xs); }
 
   /* ── Status-Verteilungsbalken (board-weit + Mini pro Akt) ──────────────── */
   .plot-progress {

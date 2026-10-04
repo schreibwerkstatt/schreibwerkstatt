@@ -99,3 +99,17 @@ test('vertraegt leere Eingaben', () => {
   assert.deepEqual(computeAlterRows(null, null), []);
   assert.deepEqual(computeAlterRows([], new Map()), []);
 });
+
+// Die Typ-Spalte der sortierbaren Tabelle sortiert ueber `typ_rank`, die
+// Taxonomie-Reihenfolge — nicht ueber das Alphabet der Typ-Keys, sonst stuende
+// „andere" vor „hauptfigur".
+test('typ_rank folgt der Taxonomie, nicht dem Alphabet', () => {
+  const rows = computeAlterRows([
+    figur({ id: 'fig_1', name: 'A', typ: 'andere' }),
+    figur({ id: 'fig_2', name: 'B', typ: 'hauptfigur' }),
+    figur({ id: 'fig_3', name: 'C', typ: 'antagonist' }),
+  ], new Map());
+  const rank = Object.fromEntries(rows.map(r => [r.typ, r.typ_rank]));
+  assert.ok(rank.hauptfigur < rank.antagonist);
+  assert.ok(rank.antagonist < rank.andere);
+});

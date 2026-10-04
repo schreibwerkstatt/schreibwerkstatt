@@ -136,8 +136,12 @@
               <tbody>
                 <template x-for="row in sorted" :key="row.id">
                   <tr>
-                    <td><span class="tag internal-link" @click="bookMapGotoPage(row.id)" x-text="row.name"></span></td>
-                    <td x-text="row.chapterName"></td>
+                    <td><button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: row.id, label: row.name }"></button></td>
+                    <td>
+                      <button type="button" class="entity-ref" x-show="row.chapterId != null"
+                              x-entity-ref="{ type: 'kapitel', id: row.chapterId, label: row.chapterName }"></button>
+                      <span x-show="row.chapterId == null" x-text="row.chapterName"></span>
+                    </td>
                     <td class="buchlandkarte-num" x-text="row.distancePct + '%'"></td>
                   </tr>
                 </template>

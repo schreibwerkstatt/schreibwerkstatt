@@ -21,11 +21,27 @@ const RUN = String(Date.now()).slice(-6);
 const A_NAME = `Alter-Anna ${RUN}`;
 const B_NAME = `Alter-Bert ${RUN}`;
 
+// Bestand des geteilten Wegwerf-Buchs nach JEDEM Lauf zurueckschreiben — auch
+// nach einem Fehlschlag. Sonst sehen spaetere Specs (Kapitel-Dashboard) die
+// gesaeten Figuren statt ihrer gemockten.
+let restore = null;
+test.afterEach(async ({ page }) => {
+  if (!restore) return;
+  const { bookId, before } = restore;
+  restore = null;
+  await page.evaluate(async ({ id, before }) => {
+    await fetch(`/figures/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ figuren: before }),
+    });
+  }, { id: bookId, before });
+});
+
 async function seedFiguren(page, bookId) {
   return page.evaluate(async ({ bookId, aName, bName }) => {
     const cur = await (await fetch(`/figures/${bookId}`)).json();
     const existing = cur?.figuren || [];
-    window.__alterSpecBefore = existing;
     const a = { id: `fig_alter_a_${Date.now()}`, name: aName, typ: 'hauptfigur', geburtstag: '1900', beziehungen: [], kapitel: [], eigenschaften: [] };
     const b = { id: `fig_alter_b_${Date.now()}`, name: bName, typ: 'randfigur', beziehungen: [], kapitel: [], eigenschaften: [] };
     const r = await fetch(`/figures/${bookId}`, {
@@ -34,7 +50,7 @@ async function seedFiguren(page, bookId) {
       body: JSON.stringify({ figuren: [...existing, a, b] }),
     });
     if (!r.ok) throw new Error(`PUT /figures fehlgeschlagen: ${r.status}`);
-    return { aId: a.id, bId: b.id };
+    return { aId: a.id, bId: b.id, before: existing };
   }, { bookId, aName: A_NAME, bName: B_NAME });
 }
 
@@ -42,6 +58,15 @@ test('alterstabelle: Reiter rendert, Filter greifen, Belege klappen auf', async 
   await bootApp(page);
   const bookId = await selectSeededBook(page);
   const seeded = await seedFiguren(page, bookId);
+  restore = { bookId, before: seeded.before };
+  // Beleg-Seite: eine echte Seite des Buchs — die Seiten-Referenz löst gegen
+  // den Buchbaum auf, eine erfundene ID bliebe unaufgelöst.
+  const realPage = await page.evaluate(() => {
+    const nav = window.Alpine.store('nav');
+    const p = (nav.pages || [])[0];
+    const c = (nav.tree || []).find(x => x.type === 'chapter' && String(x.id) === String(p.chapter_id));
+    return { id: p.id, name: p.name, chapter: c && !c.solo ? c.name : null };
+  });
 
   // Leseroute des Alters-Index bedienen: Anna hat eine belegte Spanne MIT
   // Widerspruch, Bert gar keine Zeile (der haeufige Fall „nichts bekannt").
@@ -61,7 +86,7 @@ test('alterstabelle: Reiter rendert, Filter greifen, Belege klappen auf', async 
           begruendung: null,
           scanned_at: '2026-01-02T03:04:05.000Z',
           belege: [
-            { art: 'alter', wert: 12, bezugsjahr: 1912, zitat: 'sie war zwölf Jahre alt', page_id: 1, page_name: 'Seite Eins', chapter_id: null, chapter_name: 'Kapitel Eins', unsicher: false, begruendung: null },
+            { art: 'alter', wert: 12, bezugsjahr: 1912, zitat: 'sie war zwölf Jahre alt', page_id: realPage.id, page_name: realPage.name, chapter_id: null, chapter_name: realPage.chapter, unsicher: false, begruendung: null },
             { art: 'alter', wert: 19, bezugsjahr: 1919, zitat: 'die neunzehnjährige Anna', page_id: null, page_name: 'Seite Zwei', chapter_id: null, chapter_name: 'Kapitel Zwei', unsicher: true, begruendung: null },
           ],
         }],
@@ -107,13 +132,24 @@ test('alterstabelle: Reiter rendert, Filter greifen, Belege klappen auf', async 
   await rowA.locator('tr.figur-alter-row').click();
   await expect(rowA.locator('.figur-alter-beleg')).toHaveCount(2);
   await expect(rowA.locator('.figur-alter-zitat').first()).toContainText('zwölf Jahre alt');
-  // Beleg MIT Seite bekommt ein Sprungziel, der ohne bleibt ohne — beide Zweige.
-  // Auf Sichtbarkeit pruefen, nicht auf Anzahl: `x-show` laesst den versteckten
-  // Knoten im DOM stehen, `toHaveCount` zaehlt ihn mit.
-  const orte = rowA.locator('.figur-alter-beleg-ort');
-  await expect(orte.first()).toBeVisible();
-  await expect(orte.first()).toHaveText('Kapitel Eins › Seite Eins');
-  await expect(orte.nth(1)).toBeHidden();
+  // Beleg MIT Seite bekommt eine Seiten-Referenz, der ohne bleibt ohne — beide
+  // Zweige (`x-if`: der Beleg ohne Seite rendert keinen Knoten).
+  const orte = rowA.locator('.figur-alter-beleg .entity-ref--seite');
+  await expect(orte).toHaveCount(1);
+  await expect(orte.first()).toBeEnabled();
+  await expect(orte.first().locator('.entity-ref__label')).toHaveText(realPage.name);
+  // Kapitel-Kontext steht in der Hover-Vorschau, nicht im Tooltip (Referenzen
+  // mit Vorschau tragen bewusst kein data-tip).
+  await expect(orte.first()).not.toHaveAttribute('data-tip', /.*/);
+  if (realPage.chapter) {
+    await orte.first().hover();
+    const pop = page.locator('.entity-ref-preview');
+    await expect(pop.locator('.entity-ref-preview__title')).toHaveText(realPage.name);
+    await expect(pop.locator('.entity-ref-preview__meta')).toContainText(realPage.chapter);
+    await page.mouse.move(0, 0);
+    await expect(pop).toBeHidden();
+  }
+  await expect(rowA.locator('.figur-alter-beleg').nth(1).locator('.entity-ref')).toHaveCount(0);
 
   // Filter „nur mit Alter" (zweite Combobox) blendet Bert aus.
   const boxes = card.locator('.figur-alter .filter-bar .combobox-wrap');
@@ -127,12 +163,4 @@ test('alterstabelle: Reiter rendert, Filter greifen, Belege klappen auf', async 
   await card.locator('.figur-alter .filter-search-input').fill(B_NAME);
   await expect(table.locator('tbody', { hasText: A_NAME })).toHaveCount(0);
 
-  // Bestand wiederherstellen (geteiltes Wegwerf-Buch).
-  await page.evaluate(async ({ id, before }) => {
-    await fetch(`/figures/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ figuren: before }),
-    });
-  }, { id: bookId, before: await page.evaluate(() => window.__alterSpecBefore) });
 });

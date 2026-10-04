@@ -12,16 +12,17 @@
 // dieselbe /history/book-stats-Antwort und dasselbe tokEsts lesen.
 //
 // Live-Delta fuer heute = Σ-chars aus tokEsts − letzter Snapshot strikt vor
-// heute. Negativ wird auf 0 geklemmt (Lösch-Edits zählen nicht zurück). Fehlt
-// einer der beiden Werte (z.B. neues Buch ohne Vortagssnapshot), wird 0
-// geliefert — Donut bleibt leer statt falsch optimistisch zu fuellen.
+// heute. Der Donut (Ziel-Semantik) klemmt negativ auf 0 (Lösch-Edits zählen
+// nicht zurück); die Netto-Bilanz in makeDayDelta behält das Minus. Fehlt
+// einer der beiden Werte (z.B. neues Buch ohne Vortagssnapshot), liefert der
+// Donut 0 — er bleibt leer statt falsch optimistisch zu fuellen.
 import { aggregateLiveBookStats, localIsoDate, CHARS_PER_NORMSEITE } from './utils.js';
 
-// Reine Zahl: heute geschriebene Zeichen (Live-Σ minus Vortagssnapshot).
-// Wird sowohl vom Donut als auch von 7-Tage-Bar/Total konsumiert, damit alle
-// drei nie auseinander driften.
-export function computeCharsTodayDelta(stats = [], tokEsts = {}) {
-  const todayIso = localIsoDate();
+// Netto-Bilanz von heute, VORZEICHENBEHAFTET: Live-Σ (bzw. heutiger Snapshot,
+// solange tokEsts leer ist) minus letzter Snapshot strikt vor heute. `null`,
+// wenn einer der beiden Werte fehlt. Grundlage von `computeCharsTodayDelta`
+// (Ziel-Semantik, geklemmt) und `makeDayDelta` (Netto-Bilanz, mit Minus).
+function signedTodayDelta(stats, tokEsts, todayIso) {
   const liveChars = aggregateLiveBookStats(tokEsts).chars;
   let cronTodayChars = null;
   let prevChars = null;
@@ -39,8 +40,15 @@ export function computeCharsTodayDelta(stats = [], tokEsts = {}) {
     }
   }
   const curChars = liveChars > 0 ? liveChars : cronTodayChars;
-  if (curChars == null || prevChars == null) return 0;
-  return Math.max(0, curChars - prevChars);
+  if (curChars == null || prevChars == null) return null;
+  return curChars - prevChars;
+}
+
+// Reine Zahl: heute geschriebene Zeichen (Live-Σ minus Vortagssnapshot),
+// auf 0 geklemmt. Wird vom Donut konsumiert; 7-Tage-Bar und Streak lesen
+// dieselbe Bilanz ungeklemmt über makeDayDelta, damit nichts auseinander driftet.
+export function computeCharsTodayDelta(stats = [], tokEsts = {}) {
+  return Math.max(0, signedTodayDelta(stats, tokEsts, localIsoDate()) ?? 0);
 }
 
 // Kalendertag `n` Tage vor `iso` — reine Kalenderarithmetik ueber einen
@@ -92,12 +100,13 @@ function buildCumMap(stats) {
  */
 export function makeDayDelta({ stats = [], tokEsts = {}, todayIso = localIsoDate() } = {}) {
   const { cumByIso, sortedIsos } = buildCumMap(stats);
-  const todayDelta = computeCharsTodayDelta(stats, tokEsts);
+  const todayDelta = signedTodayDelta(stats, tokEsts, todayIso);
   return (iso) => {
-    // Heute zaehlt der Live-Stand, sobald er etwas hergibt — er ist frischer
-    // als jeder Cron-Snapshot. Sonst faellt der Tag auf den Snapshot-Vergleich
-    // zurueck (Buch heute noch nicht geoeffnet, tokEsts leer).
-    if (iso === todayIso && todayDelta > 0) return todayDelta;
+    // Heute zaehlt der Live-Stand — er ist frischer als jeder Cron-Snapshot.
+    // Mit Vorzeichen: ein Loesch-Tag ist auch HEUTE schon ein negativer Tag,
+    // sonst zeigte der Heute-Balken 0, waehrend die 7-Tage-Summe das Minus
+    // (Live-Σ gegen Snapshot) schon enthaelt.
+    if (iso === todayIso && todayDelta != null) return todayDelta;
     const cur = cumOnOrBefore(sortedIsos, cumByIso, iso);
     if (cur == null) return null;
     const prev = cumOnOrBefore(sortedIsos, cumByIso, isoMinusDays(iso, 1));

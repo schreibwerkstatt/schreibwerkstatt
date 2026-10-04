@@ -655,9 +655,9 @@ test('Dim-Logik: nicht-aktive Absätze opacity 0.5, aktiver opacity 1 (2-Absatz-
   expect(state[3].opacity).toBeLessThan(1);
 });
 
-test('Dim-Logik: greift auch bei Wrapper-Elementen um die <p> (BookStack-Struktur)', async ({ page }) => {
+test('Dim-Logik: greift auch bei Wrapper-Elementen um die <p> (importiertes HTML)', async ({ page }) => {
   // Realer Bug-Report: „alle Absätze hervorgehoben, keiner ausgegraut".
-  // Hypothese: BookStack-HTML liefert Absätze gelegentlich in Wrappern
+  // Hypothese: importiertes HTML liefert Absätze gelegentlich in Wrappern
   // (z.B. <div>…<p>…</p>…</div>), dann trifft ein `> *`-Child-Selector nur
   // den Wrapper. Der Test forciert genau diese Struktur, damit Regressionen
   // in der Dim-Regel sofort auffallen.

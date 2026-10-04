@@ -31,7 +31,7 @@ test('Dummy-Buch: Fixture-Loader liefert deterministische IDs', () => {
   assert.equal(fix.idMap.chapters[1], 102001);
   assert.equal(fix.idMap.pages['1.1'], 102011);
   assert.equal(fix.idMap.pages['4.2'], 102042);
-  // Body kommt als HTML in Mock-BookStack an.
+  // Body kommt als HTML im Mock-Content-Store an.
   const firstBody = fix.pageBodies[fix.idMap.pages['1.1']];
   assert.match(firstBody, /^<p>/);
   assert.ok(firstBody.includes('Brunner'), 'Page 1.1 sollte „Brunner" enthalten');

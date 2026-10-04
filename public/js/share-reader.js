@@ -10,16 +10,18 @@
 // driften. Findet sich der Quote nicht mehr, bleibt der Thread gelistet, aber
 // ohne Inline-Highlight ("Stelle geändert").
 //
-// Facade + gekoppelter Kern (State, API, Highlights, Thread-Render, Live-Poll).
-// Widgets unter share-reader/: dom/identity/menu/theme/toc/layout/composer (hier
-// importiert) sowie dwell/read-depth/resume/reading-prefs/back-to-top/feedback/tts
+// Facade + gekoppelter Kern (State, Highlights, Auswahl, Live-Poll).
+// Widgets unter share-reader/: dom/api/identity/menu/theme/toc/layout/composer/
+// thread-render/sheet (hier importiert) sowie dwell/read-depth/resume/reading-prefs/back-to-top/feedback/tts
 // (direkt aus share.html geladen, lesen #share-config selbst).
 
-import { locateRange, locateApprox, resolveCurrentQuote, caretPosFromPoint } from './share-anchor.js';
+import { locateRange, locateApprox, caretPosFromPoint } from './share-anchor.js';
 import { groupThreads } from './editor/comment-threads.js';
-import { avatarHue, avatarInitials } from './avatar.js';
 import { bindScrollFade } from './scroll-fade.js';
-import { el, fmtDate } from './share-reader/dom.js';
+import { el, parseTs, submitOnModEnter } from './share-reader/dom.js';
+import { createApi } from './share-reader/api.js';
+import { createThreadRenderer } from './share-reader/thread-render.js';
+import { createThreadSheet } from './share-reader/sheet.js';
 import {
   readerToken, savedName, savedEmail, markNameDismissed, closeNameModal, setupIdentity,
 } from './share-reader/identity.js';
@@ -27,7 +29,7 @@ import { createOptionsMenu } from './share-reader/menu.js';
 import { setupThemeSwitcher } from './share-reader/theme.js';
 import { setupToc } from './share-reader/toc.js';
 import { setupProgressBar } from './share-reader/progress.js';
-import { createCardLayout } from './share-reader/layout.js';
+import { createCardLayout, FLAT_BELOW } from './share-reader/layout.js';
 import { setupComposer } from './share-reader/composer.js';
 import { setupWakeLock } from './share-reader/wakelock.js';
 
@@ -115,7 +117,9 @@ import { setupWakeLock } from './share-reader/wakelock.js';
   });
   cardLayout.init();
 
-  // ── API ──────────────────────────────────────────────────────────────────────
+  // ── API (share-reader/api.js) ────────────────────────────────────────────────
+  const api = createApi({ token: TOKEN, rt: RT, savedEmail });
+
   // Leichtgewichtige Signatur über die Threads — erkennt neue/aufgelöste
   // Kommentare und Antworten, ohne bei jedem Poll-Tick neu zu rendern (sonst
   // Scroll-Reset + verlorene halb getippte Antwort).
@@ -125,12 +129,8 @@ import { setupWakeLock } from './share-reader/wakelock.js';
   let lastSig = null;
   async function fetchThreads() {
     try {
-      const res = await fetch(`/share/${encodeURIComponent(TOKEN)}/threads?rt=${encodeURIComponent(RT)}`, {
-        headers: { 'Accept': 'application/json' },
-      });
-      if (!res.ok) return;
-      const j = await res.json();
-      const next = Array.isArray(j.comments) ? j.comments : [];
+      const next = await api.fetchThreads();
+      if (!next) return;
       const sig = commentsSig(next);
       comments = next;
       if (sig === lastSig) return; // keine Änderung → kein Reflow
@@ -138,79 +138,12 @@ import { setupWakeLock } from './share-reader/wakelock.js';
       render();
     } catch {}
   }
-  async function postComment(payload) {
-    const res = await fetch(`/share/${encodeURIComponent(TOKEN)}/comment`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // reader_email aus dem Identitäts-Chip mitschicken → Reply-Benachrichtigung.
-      body: JSON.stringify({ reader_email: savedEmail(), ...payload, reader_token: RT }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const err = new Error(j.error_code || 'ERR');
-      err.status = res.status;
-      throw err;
-    }
-    return j.comment;
-  }
-
-  // Eigenen Kommentar bearbeiten (Self-Identität via reader_token).
-  async function editOwnComment(id, body) {
-    const res = await fetch(`/share/${encodeURIComponent(TOKEN)}/comment/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reader_token: RT, body }),
-    });
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      const err = new Error(j.error_code || 'ERR');
-      err.status = res.status;
-      throw err;
-    }
-  }
-
-  // Eigenen Kommentar löschen (Self-Identität via reader_token). 409 HAS_REPLIES
-  // = der Autor hat geantwortet → die UI zeigt für solche Threads keinen
-  // Lösch-Button (Schutz vor Cascade), der Status fängt Race-Fälle ab.
-  async function deleteOwnComment(id) {
-    const res = await fetch(`/share/${encodeURIComponent(TOKEN)}/comment/${id}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reader_token: RT }),
-    });
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      const err = new Error(j.error_code || 'ERR');
-      err.status = res.status;
-      throw err;
-    }
-  }
-  // Eigenen Root-Thread als erledigt markieren / wieder öffnen.
-  async function resolveOwnComment(id, resolved) {
-    const res = await fetch(`/share/${encodeURIComponent(TOKEN)}/comment/${id}/resolve`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reader_token: RT, resolved }),
-    });
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      const err = new Error(j.error_code || 'ERR');
-      err.status = res.status;
-      throw err;
-    }
-  }
 
   // Identitäts-Änderung (Name + optionale Mail) am Chip auf die bisherigen eigenen
   // Kommentare dieses Browsers (reader_token) übertragen und die Threads neu laden,
   // damit Name/Benachrichtigungs-Status sofort konsistent sind.
   async function syncReaderIdentity(name, email) {
-    try {
-      await fetch(`/share/${encodeURIComponent(TOKEN)}/reader-name`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reader_token: RT, reader_name: name, reader_email: email }),
-      });
-    } catch {}
+    await api.syncIdentity(name, email);
     lastSig = null; // Re-Render erzwingen (Body-Signatur ändert sich nicht)
     fetchThreads();
   }
@@ -256,251 +189,58 @@ import { setupWakeLock } from './share-reader/wakelock.js';
     CSS.highlights.set('share-anchor-changed', changed);
   }
 
-  // ── Thread-Aufbau + Rendering ────────────────────────────────────────────────
+  // ── Thread-Karten (share-reader/thread-render.js) ────────────────────────────
   // Gruppierung kommt aus dem geteilten pure Kern (editor/comment-threads.js,
   // SSoT mit der Owner-Leiste) — Roots + chronologisch sortierte Antworten.
+  const { renderThread: renderThreadCard } = createThreadRenderer({
+    t, article, api, savedName,
+    reload: fetchThreads,
+    setActive: (id) => setActive(id),
+    scrollToAnchor: (id) => scrollToAnchor(id),
+    isAnchorLocated: (c) => !c._stale,
+    unseenReplies,
+    markThreadSeen,
+    onResize: () => cardLayout.schedule(),
+  });
+  const renderThread = (node) => renderThreadCard(node, { activeId });
 
-  function authorName(c) {
-    if (c.is_author) return t('author_badge');
-    if (c.mine) return c.name ? `${c.name} (${t('you_badge')})` : t('you_badge');
-    return c.name || t('anon');
-  }
+  // Mobile: Tipp auf eine Markierung öffnet den Thread als Bottom-Sheet über der
+  // Lesestelle (statt ans Ende der Liste zu scrollen).
+  const sheet = createThreadSheet({
+    t, renderThread,
+    onClose: () => { if (activeId != null) { activeId = null; renderHighlights(); clearSelected(); } },
+  });
+  const isFlat = () => !!(window.matchMedia && window.matchMedia(FLAT_BELOW).matches);
 
-  // Avatar-Daten (Label + Initialen-Pip + deterministische Hue) aus den geteilten
-  // pure Primitiven (public/js/avatar.js, SSoT mit app.userAvatarHue + der
-  // SPA-Leiste). Leser haben keine Email → Seed/Initialen aus dem Anzeigenamen;
-  // der Autor bekommt einen festen Seed.
-  function commentAvatar(c) {
-    const label = authorName(c);
-    const seed = c.is_author ? 'author' : (c.name || 'anon');
-    return { label, initials: avatarInitials(label), hue: avatarHue(seed) };
-  }
+  const byTime = (a, b) => parseTs(a.root.created_at) - parseTs(b.root.created_at);
 
-  function renderMeta(c) {
-    const meta = el('div', 'comment-rail__meta');
-    const av = commentAvatar(c);
-    const avatar = el('span', 'comment-rail__avatar', av.initials);
-    avatar.setAttribute('aria-hidden', 'true');
-    avatar.style.setProperty('--avatar-hue', av.hue);
-    meta.appendChild(avatar);
-    meta.appendChild(el('span', 'comment-rail__author', av.label));
-    meta.appendChild(el('span', 'comment-rail__time', fmtDate(c.created_at)));
-    if (c.edited_at) meta.appendChild(el('span', 'comment-rail__edited', t('edited_badge')));
-    if (c.resolved) meta.appendChild(el('span', 'comment-rail__resolved', t('resolved_badge')));
-    return meta;
-  }
-
-  function renderReplyForm(rootId) {
-    const form = el('form', 'comment-rail__reply');
-    const ta = el('textarea', 'comment-rail__textarea');
-    ta.rows = 2;
-    ta.required = true;
-    ta.maxLength = 4000;
-    ta.placeholder = t('reply_placeholder');
-    const actions = el('div', 'share-thread__reply-actions');
-    const btn = el('button', null, t('send'));
-    btn.type = 'submit';
-    const status = el('span', 'share-comments__status');
-    actions.appendChild(btn);
-    actions.appendChild(status);
-    form.appendChild(ta);
-    form.appendChild(actions);
-    form.addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const body = (ta.value || '').trim();
-      if (!body) { status.textContent = t('form_empty'); return; }
-      btn.disabled = true;
-      try {
-        await postComment({ parent_id: rootId, body, reader_name: savedName() });
-        await fetchThreads();
-      } catch (e) {
-        status.textContent = e.status === 429 ? t('comment_rate_limited') : t('form_error');
-        btn.disabled = false;
-      }
-    });
-    return form;
-  }
-
-  // Body-Element durch einen Inline-Editor ersetzen (#4). Bei Speichern lädt
-  // fetchThreads die Liste neu (rebaut die Karte); bei Abbruch wird der Body
-  // unverändert wiederhergestellt.
-  function startEditInline(c, bodyEl, status) {
-    const editor = el('div', 'share-thread__edit');
-    const ta = el('textarea', 'comment-rail__textarea');
-    ta.rows = 3;
-    ta.maxLength = 4000;
-    ta.value = c.body || '';
-    const acts = el('div', 'share-thread__reply-actions');
-    const save = el('button', null, t('edit_save'));
-    save.type = 'button';
-    const cancel = el('button', 'share-thread__action', t('cancel'));
-    cancel.type = 'button';
-    acts.appendChild(save);
-    acts.appendChild(cancel);
-    editor.appendChild(ta);
-    editor.appendChild(acts);
-    bodyEl.replaceWith(editor);
-    setTimeout(() => ta.focus(), 20);
-    cancel.addEventListener('click', () => editor.replaceWith(bodyEl));
-    save.addEventListener('click', async () => {
-      const val = (ta.value || '').trim();
-      if (!val) { status.textContent = t('form_empty'); return; }
-      save.disabled = true;
-      try { await editOwnComment(c.id, val); await fetchThreads(); }
-      catch (e) { status.textContent = t('form_error'); save.disabled = false; }
-    });
-  }
-
-  // Self-Service-Aktionen für eigene Kommentare (mine). Root: Erledigt-Toggle +
-  // Bearbeiten + Löschen (nur ohne Antworten); Antwort-Beiträge: Bearbeiten +
-  // Löschen. Buttons als dezente Text-Aktionen unter dem Body. Bei Fehlern
-  // erscheint ein Status-Text; bei Erfolg lädt fetchThreads die Liste neu.
-  function renderOwnActions(c, { isRoot, hasReplies, bodyEl }) {
-    const actions = el('div', 'share-thread__actions');
-    const status = el('span', 'share-comments__status');
-
-    if (isRoot) {
-      const toggle = el('button', 'share-thread__action', c.resolved ? t('reopen') : t('mark_done'));
-      toggle.type = 'button';
-      toggle.addEventListener('click', async () => {
-        toggle.disabled = true;
-        try { await resolveOwnComment(c.id, !c.resolved); await fetchThreads(); }
-        catch (e) { status.textContent = t('form_error'); toggle.disabled = false; }
-      });
-      actions.appendChild(toggle);
+  // Hinweis „Markiere eine Textstelle …" unter der Überschrift der allgemeinen
+  // Sektion, solange es keine verankerten Anmerkungen gibt — die Leiste selbst
+  // bleibt dann ausgeblendet (kein zweiter Leer-Zustand).
+  let anchorHint = null;
+  function syncAnchorHint(show) {
+    if (!generalList) return;
+    if (show && !anchorHint) {
+      anchorHint = el('p', 'share-general__hint', t('threads_empty'));
+      generalList.before(anchorHint);
+    } else if (!show && anchorHint) {
+      anchorHint.remove();
+      anchorHint = null;
     }
-
-    // Bearbeiten (#4): eigenen Beitrag inline editieren.
-    if (bodyEl) {
-      const edit = el('button', 'share-thread__action', t('edit'));
-      edit.type = 'button';
-      edit.addEventListener('click', () => startEditInline(c, bodyEl, status));
-      actions.appendChild(edit);
-    }
-
-    // Antworten (Replies) sind Blätter → immer löschbar. Root nur ohne Antworten
-    // (sonst würde die Owner-Antwort per CASCADE verschwinden — serverseitig geblockt).
-    if (!isRoot || !hasReplies) {
-      const del = el('button', 'share-thread__action share-thread__action--danger', t('delete'));
-      del.type = 'button';
-      del.addEventListener('click', async () => {
-        if (!window.confirm(t('delete_confirm'))) return;
-        del.disabled = true;
-        try { await deleteOwnComment(c.id); await fetchThreads(); }
-        catch (e) {
-          status.textContent = e.message === 'HAS_REPLIES' ? t('delete_has_replies') : t('form_error');
-          del.disabled = false;
-        }
-      });
-      actions.appendChild(del);
-    }
-
-    actions.appendChild(status);
-    return actions;
   }
-
-  function renderThread(node) {
-    const { root, replies } = node;
-    // Optik aus der geteilten Karte (.comment-rail__*, components/comment-rail.css);
-    // `share-thread` bleibt als Hook für die Margin-Note-Positionierung
-    // (share-reader/layout.js) + setActive.
-    const li = el('li', 'comment-rail__thread share-thread');
-    li.dataset.commentId = root.id;
-    if (root.resolved) li.classList.add('comment-rail__thread--resolved');
-    if (root.id === activeId) li.classList.add('comment-rail__thread--selected');
-
-    // Ungelesen-Badge (#2): es gibt fremde Antworten, die dieser Browser noch
-    // nicht gesehen hat (typisch: der Autor hat geantwortet). Verschwindet beim
-    // Öffnen des Threads (setActive markiert ihn als gesehen).
-    const unseen = unseenReplies(node);
-    if (unseen.length) {
-      const label = unseen.length > 1 ? `${t('new_reply_badge')} (${unseen.length})` : t('new_reply_badge');
-      const badge = el('span', 'share-thread__unread', label);
-      li.appendChild(badge);
-      // Erste Interaktion mit der Karte (Klick irgendwo) markiert die neuen
-      // Antworten als gesehen → Badge weg. Deckt auch allgemeine Threads ab, die
-      // nicht über setActive laufen.
-      li.addEventListener('click', () => {
-        if (markThreadSeen(node)) badge.remove();
-      }, { once: true });
-    }
-
-    // Anker-Zeile: getönter Quote-Snippet + Jump bzw. Stale-Hinweis.
-    if (root.anchor) {
-      const anchorRow = el('div', 'comment-rail__anchor');
-      // resolveCurrentQuote trennt „Block weg" (gone) von „Text geändert" (changed).
-      const res = resolveCurrentQuote(article, root.anchor);
-      if (res.status === 'changed') {
-        // Stelle seit dem Kommentar geändert: getönter Quote (damaliger Wortlaut) +
-        // neutraler Hinweis, weiterhin anspringbar (Fuzzy-Span markiert die
-        // ungefähre Stelle, gestrichelt). Bewusst KEIN Wort-Diff im öffentlichen
-        // Reader: Anker-Diffing auf Live-Content ist unzuverlässig (grössere
-        // Umschreibungen landen als 'gone' ganz ohne Diff) und der Review-Loop läuft
-        // ohnehin über Autor-Antworten im Thread. Der Drift-Diff bleibt owner-only
-        // (Notebook-/Bucheditor-Leiste).
-        const quote = el('span', 'comment-rail__quote comment-rail__quote--stale', root.anchor.quote || '');
-        anchorRow.appendChild(quote);
-        anchorRow.appendChild(el('span', 'share-thread__stale', t('anchor_changed')));
-        anchorRow.setAttribute('role', 'button');
-        anchorRow.tabIndex = 0;
-        const jump = () => scrollToAnchor(root.id);
-        anchorRow.addEventListener('click', jump);
-        anchorRow.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jump(); } });
-        li.appendChild(anchorRow);
-      } else if (root._stale || res.status === 'gone') {
-        const quote = el('span', 'comment-rail__quote comment-rail__quote--stale', root.anchor.quote || '');
-        anchorRow.appendChild(quote);
-        anchorRow.appendChild(el('span', 'share-thread__stale', t('anchor_stale')));
-        li.appendChild(anchorRow);
-      } else {
-        anchorRow.appendChild(el('span', 'comment-rail__quote', root.anchor.quote || ''));
-        anchorRow.setAttribute('role', 'button');
-        anchorRow.tabIndex = 0;
-        const jump = () => scrollToAnchor(root.id);
-        anchorRow.addEventListener('click', jump);
-        anchorRow.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jump(); } });
-        li.appendChild(anchorRow);
-      }
-    }
-
-    // Root-Kommentar (Meta + Body + Self-Service-Aktionen).
-    const rootComment = el('div', 'comment-rail__comment');
-    rootComment.appendChild(renderMeta(root));
-    const rootBody = el('div', 'comment-rail__body', root.body);
-    rootComment.appendChild(rootBody);
-    if (root.mine) rootComment.appendChild(renderOwnActions(root, { isRoot: true, hasReplies: replies.length > 0, bodyEl: rootBody }));
-    li.appendChild(rootComment);
-
-    // Antworten (abgesetzt; Autor-Antworten mit Akzentbalken).
-    for (const r of replies) {
-      const rEl = el('div', 'comment-rail__comment comment-rail__comment--reply');
-      if (r.is_author) rEl.classList.add('comment-rail__comment--author');
-      rEl.appendChild(renderMeta(r));
-      const rBody = el('div', 'comment-rail__body', r.body);
-      rEl.appendChild(rBody);
-      if (r.mine) rEl.appendChild(renderOwnActions(r, { isRoot: false, hasReplies: false, bodyEl: rBody }));
-      li.appendChild(rEl);
-    }
-
-    // Reader-Antwort (nur offene Threads) in der Fuss-Sektion.
-    if (!root.resolved) {
-      const foot = el('div', 'comment-rail__foot');
-      foot.appendChild(renderReplyForm(root.id));
-      li.appendChild(foot);
-    }
-    return li;
-  }
-
-  const byTime = (a, b) => new Date(a.root.created_at) - new Date(b.root.created_at);
 
   function render() {
+    // Erst re-verankern: setzt _stale/_approx, das die Karten (Anker-Zeile,
+    // Auswahl-Klick) beim Aufbau lesen.
+    renderHighlights();
     const tree = groupThreads(comments);
     const anchored = tree.filter(n => n.root.anchor).sort(byTime);
     const general = tree.filter(n => !n.root.anchor).sort(byTime);
 
     // Kommentar-Leiste (und ihre Grid-Spalte) nur einblenden, wenn es verankerte
-    // Anmerkungen gibt — sonst zentriert die Lesespalte.
+    // Anmerkungen gibt — sonst zentriert die Lesespalte, mobil entfällt der Block.
     if (layoutEl) layoutEl.classList.toggle('share-has-comments', anchored.length > 0);
+    syncAnchorHint(!anchored.length);
 
     // Verankerte Anmerkungen → schwebende Leiste rechts. Pro Karte ein Marker-Tick
     // (echte Anker-Höhe, vom Layout positioniert), damit verschobene Karten ihren
@@ -510,16 +250,12 @@ import { setupWakeLock } from './share-reader/wakelock.js';
       // Frische, noch unpositionierte Karten → wieder ausblenden, bis das Layout
       // sie platziert hat (kein „Auffliegen" der neuen Karten beim Re-Render).
       list.classList.remove('is-positioned');
-      if (!anchored.length) {
-        list.appendChild(el('li', 'share-comments__empty', t('threads_empty')));
-      } else {
-        for (const node of anchored) {
-          const marker = el('div', 'share-thread-marker');
-          marker.setAttribute('data-marker-for', node.root.id);
-          marker.setAttribute('aria-hidden', 'true');
-          list.appendChild(marker);
-          list.appendChild(renderThread(node));
-        }
+      for (const node of anchored) {
+        const marker = el('div', 'share-thread-marker');
+        marker.setAttribute('data-marker-for', node.root.id);
+        marker.setAttribute('aria-hidden', 'true');
+        list.appendChild(marker);
+        list.appendChild(renderThread(node));
       }
     }
 
@@ -533,12 +269,13 @@ import { setupWakeLock } from './share-reader/wakelock.js';
       }
     }
 
-    renderHighlights();
+    sheet.refresh(threadById);
     cardLayout.schedule();
   }
 
   function scrollToAnchor(id) {
-    setActive(id);
+    sheet.close();
+    setActive(id, { reveal: false });
     const found = anchorRanges.find(a => a.id === id);
     if (found) {
       const rect = found.range.getBoundingClientRect();
@@ -547,25 +284,26 @@ import { setupWakeLock } from './share-reader/wakelock.js';
       }
     }
   }
-  function setActive(id) {
+  function clearSelected() {
+    document.querySelectorAll('.comment-rail__thread--selected').forEach(e => e.classList.remove('comment-rail__thread--selected'));
+  }
+  // reveal: im Flach-Modus (Mobile) die Karte in der Liste ins Bild scrollen —
+  // nicht, wenn die Auswahl aus dem Sheet oder einem Sprung zur Textstelle kommt.
+  function setActive(id, { reveal = true } = {}) {
     activeId = id;
     renderHighlights();
-    // Öffnen markiert neue Antworten dieses Threads als gesehen (#2).
+    // Öffnen markiert neue Antworten dieses Threads als gesehen.
     if (markThreadSeen(threadById(id))) {
-      const badge = list && list.querySelector(`.share-thread[data-comment-id="${id}"] .share-thread__unread`);
-      if (badge) badge.remove();
+      document.querySelectorAll(`.share-thread[data-comment-id="${id}"] .share-thread__unread`).forEach(b => b.remove());
     }
-    document.querySelectorAll('.comment-rail__thread--selected').forEach(e => e.classList.remove('comment-rail__thread--selected'));
+    clearSelected();
+    document.querySelectorAll(`.share-thread[data-comment-id="${id}"]`).forEach(c => c.classList.add('comment-rail__thread--selected'));
     const card = list && list.querySelector(`.share-thread[data-comment-id="${id}"]`);
     if (card) {
-      card.classList.add('comment-rail__thread--selected');
       // Auswahl pinnt die aktive Karte auf ihre exakte Anker-Höhe und verteilt die
       // übrigen darum herum → Layout neu rechnen.
       cardLayout.schedule();
-      // Flach gestapelt (Mobile, kein Verankerungs-Layout) sichtbar scrollen.
-      if (window.matchMedia && window.matchMedia('(max-width: 1099px)').matches) {
-        card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }
+      if (reveal && isFlat() && !sheet.isOpen()) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   }
 
@@ -577,7 +315,12 @@ import { setupWakeLock } from './share-reader/wakelock.js';
       if (!pos || !pos.node) return;
       for (const a of anchorRanges) {
         try {
-          if (a.range.isPointInRange(pos.node, pos.offset)) { setActive(a.id); return; }
+          if (!a.range.isPointInRange(pos.node, pos.offset)) continue;
+          // Mobile: Thread als Sheet über der Lesestelle, statt zur Liste
+          // unter dem Artikel zu springen.
+          if (isFlat()) { setActive(a.id, { reveal: false }); sheet.open(threadById(a.id)); }
+          else setActive(a.id);
+          return;
         } catch {}
       }
     });
@@ -585,13 +328,14 @@ import { setupWakeLock } from './share-reader/wakelock.js';
 
   // ── Selektions-Button + Composer-Overlay (Widget) ────────────────────────────
   const composer = setupComposer({
-    t, article, postComment, savedName,
+    t, article, postComment: api.postComment, savedName,
     onPosted: fetchThreads,
   });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (document.getElementById('share-name-modal')) { markNameDismissed(); closeNameModal(); }
     composer.closeComposer();
+    sheet.close();
   });
 
   // ── Allgemeine Kommentar-Form (SSR) an JSON-Pfad koppeln ─────────────────────
@@ -603,6 +347,7 @@ import { setupWakeLock } from './share-reader/wakelock.js';
     const nameField = form.elements['reader_name'];
     const nameLabel = nameField ? nameField.closest('.share-comments__label') : null;
     if (nameLabel) nameLabel.remove();
+    submitOnModEnter(form.elements['body'], () => form.requestSubmit());
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       status.textContent = '';
@@ -612,7 +357,7 @@ import { setupWakeLock } from './share-reader/wakelock.js';
       const hp = (form.elements['_hp'].value || '').trim();
       if (!body) { status.textContent = form.dataset.emptyMsg; submit.disabled = false; return; }
       try {
-        await postComment({ body, reader_name: savedName(), _hp: hp });
+        await api.postComment({ body, reader_name: savedName(), _hp: hp });
         form.elements['body'].value = '';
         status.textContent = form.dataset.successMsg;
         await fetchThreads();
@@ -640,6 +385,7 @@ import { setupWakeLock } from './share-reader/wakelock.js';
   const POLL_MS = 10000;
   function readerBusy() {
     if (composer.isBusy()) return true; // Composer offen oder Text gerade markiert
+    if (document.getElementById('share-name-modal')) return true;
     const ae = document.activeElement;
     if (ae && (ae.tagName === 'TEXTAREA' || ae.tagName === 'INPUT')) return true;
     // Halb getippten, gerade unfokussierten Beitrag nicht verwerfen.

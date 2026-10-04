@@ -9,7 +9,7 @@
 // Dateien.
 //   • db/migrations.js          → squash:regen + docs/erd.md
 //   • db/squashed-schema.js     → docs/erd.md
-//   • lib/metrics-collector.js  → docs/homeassistant/*
+//   • lib/metrics/defs.js       → docs/homeassistant/* + metrics.name.* (i18n)
 //   • public/css/**.css (neu)   → DESIGN.md „CSS-File-Inventar" + index.html
 //                                 (gegated durch design-css-inventory-drift.test)
 //   • public/partials/*.html (neu, unverdrahtet) → Wiring + ggf. DESIGN.md-Pattern
@@ -99,9 +99,10 @@ process.stdin.on('end', () => {
     }
   }
 
-  if (/\/lib\/metrics-collector\.js$/.test(p)) {
+  if (/\/lib\/metrics\/defs\.js$/.test(p)) {
     reminders.push(
-      'lib/metrics-collector.js bearbeitet → bei neuer /metrics-Kennzahl im selben Commit ergaenzen:',
+      'lib/metrics/defs.js bearbeitet → bei neuer /metrics-Kennzahl im selben Commit ergaenzen:',
+      '  • metrics.name.<name> in public/js/i18n/{de,en}.json (Anzeigename in /metrics.json)',
       '  • docs/homeassistant/configuration.yaml (REST-Sensor + ggf. abgeleiteter template:-Sensor)',
       '  • docs/homeassistant/dashboard.yaml (Dashboard-Kachel)',
       '  • docs/homeassistant/README.md (Sensor-Uebersicht)',

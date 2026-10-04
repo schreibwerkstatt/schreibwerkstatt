@@ -42,6 +42,9 @@ export function computeAlterRows(figuren, ages, { suche = '', typ = '', nur = ''
       name: f.name,
       kurzname: f.kurzname || null,
       typ: f.typ || 'andere',
+      // Sortierschluessel der Typ-Spalte: die Taxonomie-Reihenfolge, nicht das
+      // Alphabet der Typ-Keys (sonst stuende „andere" vor „hauptfigur").
+      typ_rank: typRank(f.typ || 'andere'),
       geburtsjahr: a?.geburtsjahr ?? (f.geburtsjahr ?? null),
       geburtsjahr_quelle: a?.geburtsjahr_quelle ?? (f.geburtsjahr != null ? 'zeitstrahl' : null),
       geburtstag: f.geburtstag || null,
@@ -72,12 +75,17 @@ export const figurenAlterMethods = {
   async loadFigurenAlter() {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) { this.figurenAlterData = null; return; }
+    // Buchwechsel waehrend des Requests: die Antwort gehoert zum alten Buch und
+    // darf weder Daten noch Scan-Datum noch den Lade-Marker des neuen setzen.
+    const isCurrent = () => String(Alpine.store('nav').selectedBookId) === String(bookId);
     try {
-      this.figurenAlterData = await fetchJson(`/figures/${encodeURIComponent(bookId)}/alter`);
+      const data = await fetchJson(`/figures/${encodeURIComponent(bookId)}/alter`);
+      if (!isCurrent()) return;
+      this.figurenAlterData = data;
       this._figurenAlterLoadedBookId = String(bookId);
       this._memos = {};
     } catch (e) {
-      if (e?.name === 'AbortError') return;
+      if (e?.name === 'AbortError' || !isCurrent()) return;
       this.figurenAlterData = null;
       this.figurenAlterStatus = this._t('figuren.alter.loadError');
     }
@@ -107,6 +115,9 @@ export const figurenAlterMethods = {
         body: JSON.stringify({ book_id: bookId, force: true }),
       });
       if (!j?.jobId) throw new Error('no jobId');
+      // Buchwechsel waehrend des POST: _resetFigurenAlter hat den Zustand schon
+      // geraeumt; ein Poll des alten Jobs zeigte seinen Fortschritt im neuen Buch.
+      if (String(Alpine.store('nav').selectedBookId) !== String(bookId)) return;
       this._pollFigurenAlter(j.jobId);
     } catch (e) {
       this.figurenAlterLoading = false;
@@ -240,10 +251,6 @@ export const figurenAlterMethods = {
 
   figurenAlterWiderspruchTip(row) {
     return (row.widerspruch || []).map(w => this.figurenAlterWiderspruchText(w)).filter(Boolean).join(' · ');
-  },
-
-  figurenAlterGotoBeleg(b) {
-    if (b?.page_id != null) window.__app?.gotoPageById?.(Number(b.page_id));
   },
 
   figurenAlterScanLabel() {

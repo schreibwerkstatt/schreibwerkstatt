@@ -10,8 +10,10 @@ const {
   listImportableFigures, listWerkstattRuns, deleteWerkstattRun,
   getFigureWithDetails, setDraftSourceFigure, listLinkCandidates,
 } = require('../db/schema');
+const { importedSourceNames } = require('../db/draft-figures');
 const { scopedDraft, scopedRun } = require('./draft-figures-acl');
 const occDb = require('../db/draft-figure-occurrences');
+const embed = require('../lib/embed');
 const contentStore = require('../lib/content-store');
 const { extractPsychologie, PSYCHE_KERNE } = require('../lib/draft-mindmap-extract');
 const { computeArcFindings } = require('../lib/figure-arc');
@@ -41,12 +43,38 @@ const MAX_NAME_LEN = 200;
 const MAX_NOTES_LEN = 8000;
 const MAX_MINDMAP_BYTES = 256 * 1024;
 
+// Struktur-Grenzen des Baums. Jeder Lesepfad (Brainstorm-Pfadsuche, Bogen-
+// Extraktion, i18n-Resolve, Buch-Chat-Tools) laeuft rekursiv ueber den Baum und
+// erwartet String-Topics: ein Knoten mit Zahl-Topic oder ein tausendfach
+// verschachtelter Ast liesse dort `trim()` bzw. den Stack werfen — und die
+// Bogen-Ansicht antwortete dann fuer ALLE Figuren des Users mit 500.
+const MAX_MINDMAP_DEPTH = 64;
+const MAX_MINDMAP_NODES = 5000;
+const MAX_NODE_ID_LEN = 200;
+const MAX_TOPIC_LEN = 2000;
+
 function _validateMindmap(obj) {
   if (!obj || typeof obj !== 'object') return false;
   if (!obj.data || typeof obj.data !== 'object') return false;
-  if (typeof obj.data.id !== 'string' || typeof obj.data.topic !== 'string') return false;
   const json = JSON.stringify(obj);
   if (json.length > MAX_MINDMAP_BYTES) return false;
+  // Iterativ statt rekursiv: die Pruefung selbst darf an der Tiefe nicht werfen.
+  const seen = new Set();
+  const stack = [{ node: obj.data, depth: 1 }];
+  while (stack.length) {
+    const { node, depth } = stack.pop();
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return false;
+    if (depth > MAX_MINDMAP_DEPTH) return false;
+    if (typeof node.id !== 'string' || !node.id || node.id.length > MAX_NODE_ID_LEN) return false;
+    if (typeof node.topic !== 'string' || node.topic.length > MAX_TOPIC_LEN) return false;
+    if (seen.has(node.id)) return false;   // jsMind adressiert Knoten ueber die id
+    seen.add(node.id);
+    if (seen.size > MAX_MINDMAP_NODES) return false;
+    if (node.children != null) {
+      if (!Array.isArray(node.children)) return false;
+      for (const c of node.children) stack.push({ node: c, depth: depth + 1 });
+    }
+  }
   return true;
 }
 
@@ -130,10 +158,20 @@ router.post('/:book_id', jsonBody, (req, res) => {
   res.json(created);
 });
 
-// Update. Body: { name?, archetype?, mindmap?, notes? }.
+// Update. Body: { name?, archetype?, mindmap?, notes?, expectedUpdatedAt? }.
+//
+// `expectedUpdatedAt` ist der Stand, auf dem der Client editiert hat. Weicht er
+// vom Server-Stand ab (zweiter Tab, Zweitgeraet), antwortet die Route 409
+// DRAFT_CONFLICT samt aktuellem Draft, statt den neueren Stand still zu
+// ueberschreiben. Ohne das Feld (Fremd-Clients) bleibt es beim Last-Write-Wins.
 router.put('/:id', jsonBody, (req, res) => {
   const draft = scopedDraft(req, res, req.params.id);
   if (!draft) return;
+
+  const expected = req.body?.expectedUpdatedAt;
+  if (expected != null && String(expected) !== String(draft.updated_at)) {
+    return res.status(409).json({ error_code: 'DRAFT_CONFLICT', current: draft });
+  }
 
   const name = req.body?.name != null
     ? String(req.body.name).trim()
@@ -184,12 +222,21 @@ function _chapterOrder(tree) {
   return out;
 }
 
+// Befund-Codes, die eine NULL an Fundstellen behaupten (lib/figure-arc.js).
+const ARC_ZERO_CODES = new Set(['kernOhneText', 'bogenOhneBeleg']);
+
 router.get('/:book_id/arc', async (req, res) => {
   const bookId = req.bookId;
   const userEmail = sessionEmail(req);
   try {
     const drafts = listDraftFigures(bookId, userEmail);
-    const scanned = occDb.hasDraftOccurrences(bookId, userEmail);
+    // Verankert ist das Buch, sobald es Fundstellen gibt ODER ein Anchor-Lauf
+    // erfolgreich durchlief — sonst bliebe ein Lauf ohne jeden Treffer fuer
+    // immer „noch nicht verankert". Ein Lauf ohne Embedding-Backend sucht nichts
+    // (figur-anchor endet dann mit semantic:false); darum zaehlt der Job-Lauf
+    // nur, solange die Semantik aktiv ist.
+    const anchor = occDb.figurAnchorState(bookId, userEmail);
+    const scanned = anchor.hasOccurrences || (anchor.lastJobRunMs != null && embed.isEnabled());
     const floor = Number(appSettings.get('werkstatt.anchor.min_score')) || 0;
 
     // Counts + Kapitel-Aufschluesselung einmal buchweit holen und auf die Drafts
@@ -216,11 +263,19 @@ router.get('/:book_id/arc', async (req, res) => {
         geplant,
         counts: counts.get(d.id) || {},
         occ: chapters.get(d.id) || {},
+        // Mindmap seit der letzten Verankerung geaendert: ein dabei neu geplanter
+        // Kern wurde nie gesucht. Seine Null ist UNGEPRUEFT, nicht abwesend.
+        anchorStale: scanned && occDb.draftChangedSinceAnchor(d, anchor.lastRunMs),
       };
     });
 
     const chapterOrder = _chapterOrder(await contentStore.bookTree(bookId, req));
-    const befunde = computeArcFindings({ drafts: payload, chapterOrder, scanned });
+    const staleIds = new Set(payload.filter(d => d.anchorStale).map(d => d.id));
+    // Die Messung kennt nur Zahlen; „Kern ohne Fundstelle" darf sie nur ueber
+    // Kerne behaupten, die der letzte Lauf auch gesucht hat. Fuer geaenderte
+    // Drafts fallen die beiden Null-Befunde darum weg, bis neu verankert ist.
+    const befunde = computeArcFindings({ drafts: payload, chapterOrder, scanned })
+      .filter(b => !(staleIds.has(b.draft_id) && ARC_ZERO_CODES.has(b.code)));
     res.json({
       drafts: payload, befunde, scanned,
       stale: occDb.draftAnchorStale(bookId, userEmail),
@@ -254,6 +309,14 @@ router.post('/:book_id/import', jsonBody, (req, res) => {
   const existing = getDraftFigureBySource(bookId, userEmail, figureId);
   if (existing) {
     return res.status(409).json({ error_code: 'ALREADY_IMPORTED', existingDraftId: existing.id });
+  }
+  // Gleichnamige Katalog-Zeile (Merge-Kollision `__2`) einer schon importierten
+  // Figur: dieselbe Figur, kein zweiter Draft. Gleiche Regel wie der Picker
+  // (db/draft-figures.js#listImportableFigures).
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  if (importedSourceNames(bookId, userEmail).has(norm(fig.name))) {
+    const twin = listDraftFigures(bookId, userEmail).find(d => d.source_figure_id && norm(d.source_figure_name) === norm(fig.name));
+    return res.status(409).json({ error_code: 'ALREADY_IMPORTED', existingDraftId: twin?.id ?? null });
   }
 
   const mindmap = buildMindmapFromFigure(fig);

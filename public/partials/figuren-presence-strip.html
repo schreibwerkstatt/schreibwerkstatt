@@ -7,7 +7,10 @@
               :class="{ 'heatmap-cell--primary': figurenPresenceRow(f.id).haeByCol[ci] > 0, 'heatmap-cell--empty': figurenPresenceRow(f.id).haeByCol[ci] === 0 && ci >= figurenPresenceRow(f.id).firstIdx && ci <= figurenPresenceRow(f.id).lastIdx, 'figur-presence-cell--wp': figurenPresenceRow(f.id).wpCols.has(ci) }"
               :style="figurenPresenceCellVars(figurenPresenceRow(f.id).haeByCol[ci], figurenPresenceData().maxCell)"
               :data-tip="c"
-              @click="figurenPresenceJumpToChapter(c)"></span>
+              role="button" tabindex="0" :aria-label="c"
+              @click="figurenPresenceJumpToChapter(c)"
+              @keydown.enter.prevent="figurenPresenceJumpToChapter(c)"
+              @keydown.space.prevent="figurenPresenceJumpToChapter(c)"></span>
       </template>
     </div>
   </div>

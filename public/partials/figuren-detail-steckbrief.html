@@ -47,7 +47,7 @@
         <dt x-text="$app.t('figuren.field.ersteErwaehnung')"></dt>
         <dd>
           <template x-if="f.erste_erwaehnung_page_id">
-            <span class="internal-link" @click.stop="$app.gotoPageById(f.erste_erwaehnung_page_id)" x-text="f.erste_erwaehnung"></span>
+            <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: f.erste_erwaehnung_page_id }"></button>
           </template>
           <template x-if="!f.erste_erwaehnung_page_id">
             <span x-text="f.erste_erwaehnung"></span>

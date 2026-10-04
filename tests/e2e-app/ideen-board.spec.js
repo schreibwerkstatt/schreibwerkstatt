@@ -143,20 +143,20 @@ test('ideen-board: Verknuepfung ist beidseitig — Chip an der Idee, Plakette am
   // Das Label kommt per JOIN zur Lesezeit, nicht als Snapshot.
   expect(made.label).toBe('Der Prozess beginnt');
 
-  // ── Seite 1: der Chip an der Idee, mit Sprung zum Beat ──────────────────
+  // ── Seite 1: die Beat-Referenz an der Idee, mit Sprung zum Beat ─────────
   await page.evaluate((id) => { location.hash = `#book/${id}/ideen`; }, bookId);
   const boardCard = page.locator('#ideen-board-card');
   await expect(boardCard).toBeVisible();
-  const chip = boardCard.locator(`[data-idee-card-id="${made.ideeId}"] .idee-link-chip--beat`);
+  const chip = boardCard.locator(`[data-idee-card-id="${made.ideeId}"] .idee-links .entity-ref--beat`);
   await expect(chip).toBeVisible();
   await expect(chip).toContainText('Der Prozess beginnt');
 
-  // ── Seite 2: die Plakette am Beat, read-only, mit Sprung zurueck ────────
+  // ── Seite 2: die Ideen-Referenz am Beat, read-only, mit Sprung zurueck ──
   await page.evaluate((id) => { location.hash = `#book/${id}/plot`; }, bookId);
   await expect(page.locator('.card--plot')).toBeVisible();
   // `.first()`: die Beat-Karte steht im DOM zweimal (flaches Board + Raster-Board
   // teilen sich das Fragment plot-beat-cell.html), sichtbar ist immer nur eine.
-  const plaque = page.locator(`[data-beat-id="${made.beatId}"] .idee-backlink-chip`).first();
+  const plaque = page.locator(`[data-beat-id="${made.beatId}"] .idee-backlinks .entity-ref--idee`).first();
   await expect(plaque).toBeVisible();
   await expect(plaque).toContainText('Beat hier tatsächlich einlösen');
 });
@@ -228,7 +228,7 @@ test('ideen-board: Verknuepfungs-Picker oeffnet AM Knopf und schreibt die Kante'
   await popover.getByRole('button', { name: 'Verknüpfen' }).click();
 
   await expect(popover).toBeHidden();
-  const chip = card.locator('.idee-link-chip--beat');
+  const chip = card.locator('.idee-links .entity-ref--beat');
   await expect(chip).toContainText('Wendepunkt am Fluss');
 });
 

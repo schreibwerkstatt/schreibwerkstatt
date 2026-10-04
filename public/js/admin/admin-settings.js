@@ -162,10 +162,12 @@ export const adminSettingsMethods = {
     try {
       const body = { display_name: name };
       if (this.adminApiTokensNewExpiresAt) body.expires_at = this.adminApiTokensNewExpiresAt;
+      if (this.adminApiTokensNewIncludeUsers) body.include_users = true;
       const j = await sendJson('/admin/api-tokens', 'POST', body);
       this.adminApiTokensJustCreated = j;
       this.adminApiTokensNewName = '';
       this.adminApiTokensNewExpiresAt = '';
+      this.adminApiTokensNewIncludeUsers = false;
       await this.adminApiTokensLoad();
     } catch (e) {
       this.adminApiTokensError = tFetchErrorRaw(e);

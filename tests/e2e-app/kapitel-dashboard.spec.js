@@ -79,6 +79,13 @@ test('Kapitel-Dashboard rendert alle Kacheln und rechnet im Kapitel-Scope', asyn
   await page.route(`**/figures/${bookId}`, json(mock.figuren));
   await page.route(`**/figures/scenes/${bookId}`, json(mock.szenen));
   await page.route(`**/locations/${bookId}`, json(mock.orte));
+  // Katalog leeren: der Boot hat ihn schon aus dem geteilten Wegwerf-Buch
+  // geladen, und ein nicht-leerer Katalog wird vom Dashboard nicht neu geholt —
+  // die Mocks oben griffen sonst nie, sobald eine andere Spec dort Figuren laesst.
+  await page.evaluate(() => {
+    const c = window.Alpine.store('catalog');
+    c.figuren = []; c.orte = []; c.szenen = [];
+  });
 
   // Nur die ERSTE Seite des Kapitels gilt als geprueft — die zweite darf keine
   // Plakette bekommen (ungeprueft ist nicht fehlerfrei).
@@ -100,7 +107,7 @@ test('Kapitel-Dashboard rendert alle Kacheln und rechnet im Kapitel-Scope', asyn
   await expect(umfang.locator('.overview-hero-value')).not.toBeEmpty();
   await expect(umfang.locator('.overview-tile-median'))
     .toHaveText(new RegExp(`1\\D+${chapters.length}`));
-  await expect(umfang.locator('.kapitel-dash-foot-link')).toBeVisible();
+  await expect(umfang.locator('.kapitel-dash-foot .entity-ref--seite')).toBeVisible();
 
   // ── Lektorat: Abdeckung + Befunde NUR aus diesem Kapitel ─────────────────
   const lektoratLabel = await page.evaluate(() => window.__app.t('kapitelReview.dash.lektorat'));
@@ -130,7 +137,7 @@ test('Kapitel-Dashboard rendert alle Kacheln und rechnet im Kapitel-Scope', asyn
   // ── Schauplaetze + Szenen: ebenfalls kapitel-skopiert ────────────────────
   const orteLabel = await page.evaluate(() => window.__app.t('kapitelReview.dash.orte'));
   const orte = dash.locator('.overview-tile', { hasText: orteLabel });
-  await expect(orte.locator('.overview-ort-chip')).toHaveCount(1);
+  await expect(orte.locator('.entity-ref--ort')).toHaveCount(1);
   await expect(orte).toContainText('Gregors Zimmer');
 
   const szenenLabel = await page.evaluate(() => window.__app.t('kapitelReview.dash.szenen'));
@@ -167,6 +174,13 @@ test('Kapitel wechseln rechnet das Dashboard neu', async ({ page }) => {
   await page.route(`**/figures/${bookId}`, json(mock.figuren));
   await page.route(`**/figures/scenes/${bookId}`, json(mock.szenen));
   await page.route(`**/locations/${bookId}`, json(mock.orte));
+  // Katalog leeren: der Boot hat ihn schon aus dem geteilten Wegwerf-Buch
+  // geladen, und ein nicht-leerer Katalog wird vom Dashboard nicht neu geholt —
+  // die Mocks oben griffen sonst nie, sobald eine andere Spec dort Figuren laesst.
+  await page.evaluate(() => {
+    const c = window.Alpine.store('catalog');
+    c.figuren = []; c.orte = []; c.szenen = [];
+  });
 
   await page.evaluate((id) => {
     window.__app.kapitelReviewChapterId = String(id);

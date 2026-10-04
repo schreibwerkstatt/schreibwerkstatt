@@ -138,13 +138,6 @@
   font-weight: var(--fw-semibold);
 }
 
-.erzaehlprofil-narrator { font-style: italic; }
-.erzaehlprofil-narrator.internal-link { cursor: pointer; }
-.erzaehlprofil-narrator.internal-link:hover {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
 /* POV-Konfidenz: dezent muted; niedrige Konfidenz = Akzent (Prüf-Signal). */
 .erzaehlprofil-konfidenz {
   font-size: var(--font-size-mini);
@@ -369,7 +362,7 @@
   color: var(--card-accent);
 }
 
-.erzaehlprofil-pair { font-size: var(--font-size-sm); color: var(--color-text); }
+.erzaehlprofil-pair { color: var(--color-muted); }
 
 .erzaehlprofil-flag-row {
   display: flex;
@@ -413,9 +406,6 @@
   flex: 0 0 auto;
   min-width: var(--space-20);
   max-width: var(--space-20);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .erzaehlprofil-band-cells {

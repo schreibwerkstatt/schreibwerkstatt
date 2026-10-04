@@ -3,7 +3,7 @@
    (Spalten = STATUSES aus public/js/book/recherche/shared.js, Karten = dieselben
    Fundstuecke wie die Liste). Laedt NACH board.css: die Karte benutzt dessen
    Vokabular weiter (.research-kind-badge, .research-item-title,
-   .research-link-chip, .research-item-actions) und traegt hier nur die Deltas
+   .research-item-actions) und traegt hier nur die Deltas
    der Board-Form.
 
    Bewusst KEINE Kopie des Plot-Board-CSS: die Geometrie ist eine andere (vier
@@ -161,18 +161,12 @@ body.research-dnd-active .research-status-cell {
   overflow: hidden;
 }
 
-/* Stelle im Buch: dieselben Chips wie in der Liste, aber ohne Entfernen-Knopf
-   (der sitzt in der Detailansicht neben dem Picker) — darum ist der Chip hier
-   selbst der Knopf. */
+/* Stelle im Buch: dieselben Entitäts-Referenzen wie in der Liste, aber ohne
+   Entfernen-Knopf (der sitzt in der Detailansicht neben dem Picker). */
 .research-status-places {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
-}
-.research-status-place {
-  cursor: pointer;
-  font-family: inherit;
-  text-align: left;
 }
 
 /* „Eingearbeitet" ohne Stelle im Buch — Befund, kein Fehler: warnend getoent,

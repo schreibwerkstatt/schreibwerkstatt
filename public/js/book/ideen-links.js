@@ -1,11 +1,12 @@
-// Verknuepfungen einer Idee: Picker, Chips, Sprung zur Gegenseite.
+// Verknuepfungen einer Idee: Picker und Entfernen (Anzeige + Sprung zur
+// Gegenseite: x-entity-ref in partials/ideen-link-chips.html).
 //
 // Geteilt von der Ideen-Karte (Seite/Kapitel, neben dem Editor) und dem
-// Ideen-Board — beide Oberflaechen zeigen dieselben Chips an derselben Idee, und
-// eine zweite Implementierung waere die klassische Drift-Stelle (eine Seite
+// Ideen-Board — beide Oberflaechen zeigen dieselben Verknuepfungen an derselben
+// Idee, und eine zweite Implementierung waere die klassische Drift-Stelle (eine Seite
 // kennt die neue Ziel-Art, die andere nicht).
 //
-// Die Gegenrichtung (Ideen-Chips AN einem Fundstueck / Beat / Motiv) liegt
+// Die Gegenrichtung (Ideen-Referenzen AN einem Fundstueck / Beat / Motiv) liegt
 // bewusst NICHT hier, sondern in ideen-backlinks.js: dort ist die Idee das Ziel,
 // nicht der Besitzer, und die drei Karten holen nur eine Map.
 
@@ -14,12 +15,6 @@ import { EVT } from '../events.js';
 import { IDEA_LINK_KINDS } from './ideen-shared.js';
 import { computePopoverPos, refinePopoverPos } from '../popover-anchor.js';
 import { attachDismiss, detachDismiss } from '../cards/dismiss.js';
-
-// Ziel-Art → Hash-View der Gegenseite. Recherche-Fundstueck und Plot-Beat
-// tragen einen Deep-Link-Permalink (`#…/recherche/<id>`, `#…/plot/<id>`); die
-// Motiv-Werkstatt hat keinen, dort waehlt `openMotifById` das Motiv ueber ein
-// Event aus. Darum zwei Wege statt einer erfundenen dritten Hash-Form.
-const LINK_VIEW = { research: 'recherche', beat: 'plot' };
 
 // Schaetzung fuer den ersten Positions-Pass (gemessen wird danach, siehe
 // popover-anchor.js). Nah an der CSS-Breite von `.idee-link-popover`.
@@ -137,17 +132,5 @@ export const ideenLinkMethods = {
     } finally {
       this.busy = false;
     }
-  },
-
-  // Sprung zur Gegenseite. Wo es einen Permalink gibt, wird der Hash gebaut und
-  // die Navigation dem Hash-Router ueberlassen (SSoT); das Motiv geht ueber den
-  // vorhandenen Cross-Feature-Sprung des Roots.
-  gotoIdeeLink(link) {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId || !link) return;
-    if (link.target_kind === 'motif') { window.__app.openMotifById(link.target_id); return; }
-    const view = LINK_VIEW[link.target_kind];
-    if (!view) return;
-    location.hash = `#book/${bookId}/${view}/${link.target_id}`;
   },
 };

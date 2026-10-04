@@ -12,6 +12,8 @@
 //   tree/open-state.js  — Persistenter Collapse-State + Chapter-Header-Aktivierung.
 //   tree/stats.js       — Seiten-Status/Tooltips, Page-Stats-Sync, Kapitel-Aggregation.
 //   tree/ui.js          — Sidebar-Tooltip-Helper (Token-Badge + Page-Status).
+//   tree/keyboard.js    — Tastatur-/Fokus-Fuehrung (ARIA-Tree, ein Tab-Stopp) +
+//                         Aufdecken der geoeffneten Seite.
 
 import { treeLoadMethods } from './tree/load.js';
 import { treeBuildMethods } from './tree/build.js';
@@ -20,6 +22,7 @@ import { treePermissionsMethods } from './tree/permissions.js';
 import { treeOpenStateMethods } from './tree/open-state.js';
 import { treeStatsMethods } from './tree/stats.js';
 import { treeUiMethods } from './tree/ui.js';
+import { treeKeyboardMethods } from './tree/keyboard.js';
 
 
 export const treeMethods = {
@@ -30,4 +33,5 @@ export const treeMethods = {
   ...treeOpenStateMethods,
   ...treeStatsMethods,
   ...treeUiMethods,
+  ...treeKeyboardMethods,
 };

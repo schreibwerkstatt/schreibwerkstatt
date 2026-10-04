@@ -191,6 +191,9 @@ export const keydownMethods = {
   _kbSlashNav(e) {
     if (!this.slashShow) return false;
     if (e.key === 'Escape') { e.preventDefault(); this._closeSlash(); return true; }
+    // Konsumiert, aber nie zum Browser durchlassen: dessen Undo-Stack liefe an
+    // der eigenen Historie vorbei (siehe _kbUndoRedo).
+    if (matchHistoryCommand(e)) { e.preventDefault(); return true; }
     const filtered = this.slashItems();
     if (e.key === 'ArrowDown') {
       e.preventDefault();

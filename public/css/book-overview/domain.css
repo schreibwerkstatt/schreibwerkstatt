@@ -1,7 +1,7 @@
 @layer components {
-/* Domain-Tiles: Figuren-/Szenen-/Orte-Counts mit Chips bzw. Stacked-Bar.
-   Geteilte Atome: `.overview-fig-row`, `.overview-fig-count`,
-   `.overview-fig-chips` (auch von Orte verwendet, Naming bewahrt). */
+/* Domain-Tiles: Figuren-/Szenen-/Orte-Counts mit Entitäts-Referenzen bzw.
+   Stacked-Bar. Geteilte Atome: `.overview-fig-row`, `.overview-fig-count`
+   (auch von Szenen/Orte verwendet, Naming bewahrt). */
 
 .overview-fig-row {
   display: flex;
@@ -19,74 +19,6 @@
   font-size: var(--font-size-xs);
   color: var(--color-muted);
 }
-.overview-fig-chips {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-6);
-}
-.overview-fig-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-3) var(--space-sm) var(--space-3) var(--space-3);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  border: 0.5px solid var(--color-border);
-  font-size: var(--font-size-xs);
-  min-width: 0;
-}
-.overview-fig-name {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.overview-fig-avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-micro);
-  font-weight: var(--fw-semibold);
-  letter-spacing: 0.02em;
-  color: var(--color-bg);
-  background: var(--color-accent);
-  flex: 0 0 auto;
-}
-/* Drei verschiedene Avatar-Hintergründe für Top-3 (visuelle Unterscheidung) */
-.overview-fig-avatar[data-idx="0"] { background: var(--color-accent); }
-.overview-fig-avatar[data-idx="1"] { background: var(--color-success); }
-.overview-fig-avatar[data-idx="2"] { background: var(--color-warn-text); }
-
-/* ── Schauplatz-Chips ────────────────────────────────────────────────────── */
-.overview-ort-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-3) var(--space-sm);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  border: 0.5px solid var(--color-border);
-  font-size: var(--font-size-xs);
-  max-width: 100%;
-  min-width: 0;
-  cursor: pointer;
-}
-.overview-ort-chip:hover { border-color: var(--color-accent); }
-.overview-ort-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-sm);
-  flex: 0 0 auto;
-  background: var(--color-muted);
-}
-/* Schauplatz-Typ-Farben (Enum aus prompts/komplett.js: stadt|gebaeude|raum|landschaft|region|andere) */
-.overview-ort-dot[data-typ="stadt"]      { background: var(--color-accent); }
-.overview-ort-dot[data-typ="gebaeude"]   { background: var(--color-warn-text); }
-.overview-ort-dot[data-typ="raum"]       { background: var(--color-success); }
-.overview-ort-dot[data-typ="landschaft"] { background: var(--ort-typ-landschaft); }
-.overview-ort-dot[data-typ="region"]     { background: var(--ort-typ-region); }
 
 /* ── Soundtrack: Top-Songs-Liste ─────────────────────────────────────────── */
 .overview-song-list {
@@ -164,6 +96,7 @@
 .overview-stacked-key--stark::before   { background: var(--color-success); }
 .overview-stacked-key--mittel::before  { background: var(--color-warn-text); }
 .overview-stacked-key--schwach::before { background: var(--color-err-text); }
+.overview-stacked-key--ohne::before    { background: var(--color-border); }
 
 /* ── Plot-Board-Snapshot: Status-Verteilung + Meta + Drift-Warnung ─────────── */
 /* Status-Segmente der geteilten `.overview-stacked-bar`: geplant (Akzent),

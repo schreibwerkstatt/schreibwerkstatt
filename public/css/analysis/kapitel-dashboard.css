@@ -1,7 +1,7 @@
 @layer components {
 /* === Kapitel-Dashboard: Kennzahlen-Kopf der Kapitel-Bewertung ===============
    Das Tile-Raster selbst (`.overview-grid` / `.overview-tile` + Hero-, Substat-,
-   Donut-, Error-Bar- und Chip-Atome) kommt aus book-overview/ und wird hier
+   Donut- und Error-Bar-Atome) kommt aus book-overview/ und wird hier
    NICHT nachgebaut — siehe DESIGN.md „Book-Overview-Tiles". Diese Datei traegt
    nur, was es dort nicht gibt: den Tile-Fuss des Umfangs, die Kennzahl-Zeilen
    der Lektorats-Kachel, die Figuren-Rangliste und die Szenen-Kurzliste.
@@ -29,13 +29,6 @@
 .kapitel-dash-foot-value {
   font-variant-numeric: tabular-nums;
   font-weight: var(--fw-medium);
-}
-.kapitel-dash-foot-link {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 16ch;
 }
 
 /* ── Kennzahl-Zeilen neben dem Abdeckungs-Ring ────────────────────────────── */

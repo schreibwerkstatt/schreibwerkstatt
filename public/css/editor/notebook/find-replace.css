@@ -1,7 +1,7 @@
 @layer components {
 /* === Find & Replace (Cmd/Ctrl+F im Edit-Mode) === */
 /* Highlights via CSS Custom Highlight API – rein visuell, kein DOM-Eingriff,
-   landet nicht in BookStack beim Speichern. */
+   landet nicht im gespeicherten HTML. */
 ::highlight(edit-find-match) {
   background: var(--color-warn-bg);
   color: inherit;

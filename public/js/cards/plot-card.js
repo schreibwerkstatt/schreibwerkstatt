@@ -8,6 +8,7 @@ import { setupCardLifecycle } from './card-lifecycle.js';
 import { attachFullscreenSync } from '../fullscreen.js';
 import { loadSortable } from '../lazy-libs.js';
 import { EVT } from '../events.js';
+import { bindBoardHistoryKeys } from './board-history-keys.js';
 import { getUserPref, setUserPref } from '../local-prefs.js';
 import { ideenBacklinkMethods } from '../book/ideen-backlinks.js';
 import { plotChatMethods, plotChatState } from '../chat/plot-chat.js';
@@ -298,24 +299,17 @@ export function registerPlotCard() {
         if (!visible && this.editingBeatId != null) this.cancelEditBeat();
       });
 
-      // Cmd/Ctrl+Z / Cmd/Ctrl+Shift+Z + Cmd/Ctrl+Y (Muster wie im Buchorganizer).
-      // Nur bei sichtbarer Karte und Fokus ausserhalb von Eingabefeldern —
-      // sonst überschriebe man die native Edit-Undo-Funktion in Titel-/
-      // Beschreibungsfeldern (Beat-Edit, Akt-/Strang-Umbenennen).
-      window.addEventListener('keydown', (e) => {
-        if (!window.__app?.showPlotCard) return;
-        const tag = e.target?.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return;
-        if (!(e.metaKey || e.ctrlKey)) return;
-        const key = (e.key || '').toLowerCase();
-        if (key === 'z' && !e.shiftKey) {
-          e.preventDefault();
-          this.plotHistoryUndo();
-        } else if ((key === 'z' && e.shiftKey) || key === 'y') {
-          e.preventDefault();
-          this.plotHistoryRedo();
-        }
-      }, { signal: this._lifecycle.signal });
+      // Cmd/Ctrl+Z / Cmd/Ctrl+Shift+Z + Cmd/Ctrl+Y — Guards (Karte sichtbar,
+      // kein Eingabefeld, kein offener Dialog) in board-history-keys.js.
+      // Zusätzlich gesperrt, solange der Fokus im offenen Beat-Edit-Panel
+      // steht (Combobox-Trigger, Knöpfe): Undo verwürfe dort den Entwurf.
+      bindBoardHistoryKeys({
+        isVisible: () => !!window.__app?.showPlotCard,
+        isBlocked: (e) => this.editingBeatId != null && !!e.target?.closest?.('.plot-beat-edit'),
+        onUndo: () => this.plotHistoryUndo(),
+        onRedo: () => this.plotHistoryRedo(),
+        signal: this._lifecycle.signal,
+      });
 
       // Native Fullscreen-API: Status spiegeln (Toggle-Button + Esc-Exit).
       // $root = die Karten-Wurzel (.card--plot), unabhängig vom Klick-Kontext.

@@ -7,7 +7,7 @@ Karte `rechercheCard`, Routen `/research`, Status-SSoT [lib/research-validate.js
 ## Rückrichtung: Pendenzen am Fundstück
 
 Jedes Fundstück zeigt die eigenen Ideen, die darauf zeigen, als
-`.idee-backlink-chip` — geladen über `GET /ideen/links?target_kind=research`
+Entitäts-Referenzen vom Typ `idee` (`x-entity-ref`) — geladen über `GET /ideen/links?target_kind=research`
 (non-fatal, [ideen-backlinks.js](../public/js/book/ideen-backlinks.js)). Read-only:
 kuratiert wird die Kante auf der Ideen-Seite, Klick springt an die Stelle im Buch,
 an der die Pendenz hängt.

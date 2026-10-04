@@ -295,7 +295,7 @@
 }
 
 /* Belegstellen (Consistency): Textstellen aus der semantischen Suche, gegen die
-   geprüft wurde. Klickbarer Seiten-Link + Prosa-Ausschnitt. */
+   geprüft wurde. Seiten-Referenz + Prosa-Ausschnitt. */
 .werkstatt-belege { margin-top: var(--space-sm); }
 .werkstatt-belege-body {
   display: flex;
@@ -308,7 +308,7 @@
   align-items: baseline;
   gap: var(--space-xs);
 }
-.werkstatt-beleg-link { flex: 0 0 auto; cursor: pointer; }
+.werkstatt-beleg > .entity-ref { flex: 0 0 auto; }
 .werkstatt-beleg-snippet {
   font-size: var(--font-size-xs);
   color: var(--color-muted);

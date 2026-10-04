@@ -65,10 +65,13 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
           updateJob(jobId, { statusText: 'job.phase.aliasCluster' });
           const aliasRes = await call(jobId, tok,
             prompts.buildAliasClusterPrompt(bookName, candidates),
-            sys.SYSTEM_FIGUREN_BLOCKS, 30, 30, komplettMaxTokens(effectiveProvider), 0.2, null, prompts.SCHEMA_FIGUREN_ALIAS_CLUSTER,
+            sys.SYSTEM_FIGUREN_BLOCKS, 30, 30, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_FIGUREN_ALIAS_CLUSTER,
             costTier(COST_LABEL.figuren),
           );
-          const { renamed, aliasMap: am } = applyAliasClusters(preMerged, aliasRes?.cluster || [], log);
+          // Pflichtfeld: ohne `cluster`-Array hat das Modell nicht wie verlangt geantwortet
+          // → Degradierung melden statt still «keine Aliasse» anzunehmen.
+          if (!Array.isArray(aliasRes?.cluster)) throw i18nError('job.error.aliasClusterMissing');
+          const { renamed, aliasMap: am } = applyAliasClusters(preMerged, aliasRes.cluster, log);
           if (renamed > 0) aliasMap = am;
         } catch (e) {
           if (e.name === 'AbortError') throw e;
@@ -111,7 +114,7 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
       try {
         figResult = await call(jobId, tok,
           konsolPrompt,
-          sys.SYSTEM_FIGUREN_BLOCKS, 30, figProgressEnd, cap, 0.2, null, prompts.SCHEMA_FIGUREN_KONSOL,
+          sys.SYSTEM_FIGUREN_BLOCKS, 30, figProgressEnd, undefined, 0.2, cap, prompts.SCHEMA_FIGUREN_KONSOL,
           costTier(COST_LABEL.figuren),
         );
         if (!Array.isArray(figResult?.figuren)) throw i18nError('job.error.figurenMissing');
@@ -144,8 +147,8 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
   figuren = mergedFiguren;
   // Beziehungs-Beschreibungs-Rescue ist pure + billig und hilft jedem Provider:
   // auch Claude attribuiert gelegentlich eine Beschreibung der falschen Figur zu.
-  const { cleared, moved } = validateBeziehungenDescriptions(figuren);
-  if (cleared > 0 || moved > 0) log.info(`Beziehungs-Beschreibungen bereinigt – ${moved} verschoben, ${cleared} geleert.`);
+  const { moved, suspicious } = validateBeziehungenDescriptions(figuren);
+  if (moved > 0 || suspicious > 0) log.info(`Beziehungs-Beschreibungen geprüft – ${moved} an die genannte Figur verschoben, ${suspicious} fraglich (unverändert gelassen).`);
   // Sozialschicht-Mehrheitsvotum nur für lokale Modelle: die Cloud-Klasse läuft durch
   // den holistischen Soziogramm-Refine-Call und braucht das nicht.
   if (effectiveProvider && providerClass(effectiveProvider) !== 'cloud') {
@@ -202,14 +205,15 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
       try {
         const sozResult = await call(jobId, tok,
           prompts.buildSoziogrammConsolidationPrompt(bookName, figuren, sys.BUCH_KONTEXT || ''),
-          sys.SYSTEM_FIGUREN_BLOCKS, 40, 43, komplettMaxTokens(effectiveProvider), 0.2, null, prompts.SCHEMA_SOZIOGRAMM_KONSOL,
+          sys.SYSTEM_FIGUREN_BLOCKS, 40, 43, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_SOZIOGRAMM_KONSOL,
           costTier(COST_LABEL.figuren),
         );
+        if (!Array.isArray(sozResult?.figuren)) throw i18nError('job.error.soziogrammMissing');
         const validIds = new Set(figuren.map(f => f.id));
         const prelimSchichtById = Object.fromEntries(sozFiguren.map(s => [s.fig_id, s.sozialschicht]));
         const prelimPairs = new Set(sozBeziehungen.map(bz => `${bz.from_fig_id}|${bz.to_fig_id}`));
         const schichtOverride = {};
-        for (const f of (sozResult?.figuren || [])) {
+        for (const f of sozResult.figuren) {
           if (f && validIds.has(f.id) && f.sozialschicht) schichtOverride[f.id] = f.sozialschicht;
         }
         sozFiguren = figuren.map(f => ({
@@ -225,6 +229,7 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
         const changedSchichten = Object.keys(schichtOverride).filter(id => schichtOverride[id] !== prelimSchichtById[id]).length;
         log.info(`Soziogramm-Konsolidierung: ${changedSchichten} Schicht-Korrekturen, ${refinedBz.length}/${prelimPairs.size} Machtbeziehungen verfeinert.`);
       } catch (e) {
+        if (e.name === 'AbortError') throw e;
         log.warn(`Soziogramm-Konsolidierung fehlgeschlagen, nutze preliminary-Werte: ${e.message}`);
         ctx.warnings?.push({ key: 'job.warn.soziogrammDegraded' });
         updateJob(jobId, { progress: 43 });

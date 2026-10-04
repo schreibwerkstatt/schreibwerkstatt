@@ -28,7 +28,7 @@ export function registerCatalogUiStore() {
 
     szenenUpdatedAt: null,
     selectedSzeneId: null,
-    szenenFilters: { wertung: '', figurId: '', kapitel: '', ortId: '', suche: '' },
+    szenenFilters: { wertung: '', figurId: '', kapitelId: '', seiteId: '', ortId: '', suche: '' },
 
     orteUpdatedAt: null,
     selectedOrtId: null,

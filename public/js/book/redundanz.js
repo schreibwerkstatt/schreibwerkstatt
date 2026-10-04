@@ -104,20 +104,13 @@ export const redundanzMethods = {
     return 'redundanz-score--low';
   },
 
-  redundanzGotoPage(pageId) {
-    window.__app?.gotoPageById?.(Number(pageId));
-  },
-
   // Figuren-Dubletten (zweiter Ergebnis-Abschnitt) ──────────────────────────
   // Figurennamen drift-frei aus dem Katalog-Store auflösen (kein Snapshot-Name
   // aus dem Job-Ergebnis); Fallback: der zum Analysezeitpunkt gespeicherte Name.
+  // Voller Name statt Kurzname: bei Dubletten ist genau der Unterschied gefragt.
   redundanzFigurName(figId, fallback) {
     const f = (Alpine.store('catalog')?.figuren || []).find(x => String(x.id) === String(figId));
     return f?.name || fallback || ('#' + figId);
-  },
-
-  redundanzGotoFigur(figId) {
-    window.__app?.openFigurById?.(Number(figId));
   },
 
   // Badge-Text für die Art des Fundes (alias = namensverschieden, das

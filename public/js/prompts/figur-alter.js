@@ -38,14 +38,18 @@ function _figurBlock(f, nr) {
   ].filter(Boolean).join(', ');
   const stellen = (f.stellen || []).map((s, i) => {
     const ort = [s.chapter, s.page_name].filter(Boolean).join(' › ');
-    const hinweis = s.indirekt ? ' [Figur steht im Satz davor]' : '';
+    // Semantische Nachlese: die Figur steht irgendwo in derselben Passage, nicht
+    // zwingend im Satz davor — der Bezug ist dort noch loser.
+    const hinweis = s.indirekt
+      ? (s.semantisch ? ' [Figur in der Umgebung genannt]' : ' [Figur steht im Satz davor]')
+      : '';
     return `  (${nr}.${i + 1})${ort ? ` [${ort}]` : ''}${hinweis} ${s.satz}`;
   });
   return `${nr}. ${f.name}${kopf ? ` (${kopf})` : ''}\n${stellen.length ? stellen.join('\n') : '  (keine Stellen gefunden)'}`;
 }
 
 /**
- * @param {Array}  figuren  [{ id, name, kurzname, typ, geburtstag, stellen: [{ satz, chapter, page_name, indirekt }] }]
+ * @param {Array}  figuren  [{ id, name, kurzname, typ, geburtstag, stellen: [{ satz, chapter, page_name, indirekt, semantisch }] }]
  * @param {string} buchKontext  BUCH_KONTEXT aus getBookPrompts.
  * @param {object} zeit  { minYear, maxYear } — Spanne des konsolidierten Zeitstrahls, falls vorhanden.
  */
@@ -68,6 +72,7 @@ Regeln:
 - "unsicher": true, wenn die Stelle die Angabe nur nahelegt (Pronomen-Bezug unklar, Zahl koennte etwas anderes meinen, Rueckblende ungewiss). Ein unsicherer Fund ist brauchbar, ein als sicher ausgegebener falscher nicht.
 - Eine Stelle, in der die Zahl NICHTS mit einem Alter zu tun hat (Uhrzeit, Hausnummer, Geldbetrag, Anzahl von Dingen, Jahreszahl eines Ereignisses ohne Bezug zur Figur), ergibt keinen Fund.
 - Steht die Figur nur im Satz davor ([Figur steht im Satz davor]), pruefe den Pronomen-Bezug. Traegt er nicht, gib keinen Fund aus.
+- Bei [Figur in der Umgebung genannt] steht die Figur nicht im Satz selbst, sondern weiter vorn im Text. Gib nur dann einen Fund aus, wenn der Satz eindeutig von DIESER Figur spricht; sonst keinen.
 - Mehrere Angaben zur selben Figur sind erwuenscht, wenn der Text sie an verschiedenen Stellen macht — daraus liest die Autorin ab, wie die Figur altert. Dieselbe Angabe nicht doppelt.
 - Findest du nichts, gib ein leeres Array zurueck.
 

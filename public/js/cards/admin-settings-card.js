@@ -35,6 +35,7 @@ export function registerAdminSettingsCard() {
     adminApiTokensCreating: false,
     adminApiTokensNewName: '',
     adminApiTokensNewExpiresAt: '',
+    adminApiTokensNewIncludeUsers: false,
     adminApiTokensJustCreated: null,
 
     _lifecycle: null,

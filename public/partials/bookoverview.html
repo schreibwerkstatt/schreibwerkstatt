@@ -9,7 +9,7 @@
       <span class="card-title" x-text="$app.t('overview.title')"></span>
     </div>
     <div class="card-actions">
-      <button type="button" class="icon-btn icon-btn--ghost" @click="loadBookOverview($store.nav.selectedBookId)" :disabled="overviewLoading"
+      <button type="button" class="icon-btn icon-btn--ghost" @click="loadBookOverview($store.nav.selectedBookId, { fresh: true })" :disabled="overviewLoading"
               :data-tip="$app.t('overview.refresh')" :aria-label="$app.t('overview.refresh')">
         <span x-show="overviewLoading" class="spinner"></span>
         <svg x-show="!overviewLoading" class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
@@ -26,7 +26,7 @@
   <div class="overview-notice" x-show="overviewLoadErrors.length > 0" x-cloak role="status">
     <svg class="icon" aria-hidden="true"><use href="/icons.svg#alert-triangle"/></svg>
     <span class="overview-notice-text" x-text="$app.t('overview.loadError')"></span>
-    <button type="button" class="btn-compact" @click="loadBookOverview($store.nav.selectedBookId)" :disabled="overviewLoading" x-text="$app.t('overview.refresh')"></button>
+    <button type="button" class="btn-compact" @click="loadBookOverview($store.nav.selectedBookId, { fresh: true })" :disabled="overviewLoading" x-text="$app.t('overview.refresh')"></button>
   </div>
 
   <div class="overview-grid" x-show="overviewLatest() || overviewCoverage?.total_pages > 0 || $store.nav.pages.length > 0">

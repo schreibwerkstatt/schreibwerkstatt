@@ -76,25 +76,19 @@ export const erzaehlprofilMethods = {
 
   // Erzähler-/Fokusfiguren übers Buch aggregiert: je Figur Anzahl Kapitel + Liste,
   // sortiert nach Häufigkeit. Bei Multi-POV-Romanen die zentrale Kennzahl («aus wessen
-  // Sicht wird wie oft erzählt»). Figuren mit aufgelöster figure_id sind klickbar.
+  // Sicht wird wie oft erzählt»). `fig_id` = Katalog-Kennung für die Entitäts-Referenz.
   erzaehlprofilFigurenVerteilung() {
     const byKey = new Map();
     for (const ch of this.erzaehlprofilChapters()) {
       const name = (ch.erzaehler_figur || '').trim();
       if (!name) continue;
       const key = ch.erzaehler_figur_id != null ? 'id:' + ch.erzaehler_figur_id : 'n:' + name.toLowerCase();
-      if (!byKey.has(key)) byKey.set(key, { name, figur_id: ch.erzaehler_figur_id ?? null, count: 0, kapitel: [] });
+      if (!byKey.has(key)) byKey.set(key, { name, fig_id: ch.erzaehler_fig_id ?? null, count: 0, kapitel: [] });
       const e = byKey.get(key);
       e.count++;
       if (ch.kapitel && !e.kapitel.includes(ch.kapitel)) e.kapitel.push(ch.kapitel);
     }
     return [...byKey.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  },
-
-  // Navigation zur Figur (öffnet die Figuren-Karte + selektiert). Nur mit id.
-  erzaehlprofilGotoFigur(figurId) {
-    if (figurId == null) return;
-    window.__app.openFigurById(figurId);
   },
 
   // Spannungskurven-Punkte: pro Kapitel { kapitel, chapter_id, intensitaet(1–5),
@@ -124,14 +118,6 @@ export const erzaehlprofilMethods = {
       }
     }
     return [...byKey.values()].sort((a, b) => b.count - a.count || a.thema.localeCompare(b.thema));
-  },
-
-  // Navigation zur ersten Seite eines Kapitels (Klick auf Kurvenbalken/Kapitelzeile).
-  erzaehlprofilGotoKapitel(chapterId) {
-    if (chapterId == null) return;
-    const chapter = (Alpine.store('nav').tree || []).find(t => t.type === 'chapter' && t.id === chapterId);
-    const page = chapter?.pages?.[0];
-    if (page) window.__app.selectPage(page);
   },
 
   erzaehlprofilChapterKey(ch, i) {

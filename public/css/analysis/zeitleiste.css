@@ -128,46 +128,13 @@
   color: var(--color-err-text);
 }
 
-/* Meta-Zeile (nur Ereignisse-Karte): Kapitel + Seite (= „wo im Manuskript") in
-   einer fliessenden Zeile, damit die Liste dichter scanbar bleibt (eine Zeile
-   statt zwei). gap ersetzt die Margins der Spalten-Variante (Figuren-Detail). */
-.gz-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-6);
-}
+/* Meta-Zeile: Kapitel + Seiten (= „wo im Manuskript") als Referenz-Reihe in
+   einer fliessenden Zeile; Figuren darunter als eigene Reihe. Optik der
+   Referenzen: entity-ref.css. */
+.gz-meta,
+.gz-figuren-row { display: flex; }
 
-.gz-meta .gz-kapitel { margin-bottom: 0; }
-
-.gz-meta .gz-seite { margin-bottom: 0; align-self: center; }
-
-.gz-kapitel {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  align-items: center;
-  margin-bottom: var(--space-2xs);
-}
-
-.gz-kapitel-link {
-  font-size: var(--font-size-xs);
-  padding: var(--space-2xs) 7px;
-  font-weight: var(--fw-bold);
-  background: var(--color-text);
-  color: var(--color-surface);
-  white-space: nowrap;
-}
-
-.gz-seite {
-  font-size: var(--font-size-xs);
-  padding: var(--space-2xs) 7px;
-  background: var(--color-tag-bg);
-  color: var(--color-muted);
-  white-space: nowrap;
-  align-self: flex-start;
-  margin-bottom: var(--space-2xs);
-}
+.gz-meta { margin-bottom: var(--space-2xs); }
 
 .gz-bedeutung {
   font-size: var(--font-size-mini);
@@ -176,33 +143,7 @@
   overflow-wrap: anywhere;
 }
 
-.gz-figuren-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  margin-top: var(--space-2xs);
-}
-
-.gz-figur-badge {
-  --fig-hue: var(--palette-gray);
-  font-size: var(--font-size-xs);
-  font-weight: var(--fw-regular);
-  padding: var(--space-2xs) var(--space-6);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--fig-hue) var(--figpal-bg-mix), var(--color-surface));
-  color:      color-mix(in srgb, var(--fig-hue) var(--figpal-text-mix), var(--color-text));
-}
-
-.gz-figuren-row .entity-typ-tag {
-  min-width: 0;
-  text-align: left;
-}
-
-.gz-figur-badge--hauptfigur { --fig-hue: var(--palette-blue); }
-.gz-figur-badge--antagonist { --fig-hue: var(--palette-red); }
-.gz-figur-badge--mentor     { --fig-hue: var(--palette-green); }
-.gz-figur-badge--nebenfigur { /* fällt auf Default-Grau zurück */ }
-.gz-figur-badge--andere     { --fig-hue: var(--color-accent); }
+.gz-figuren-row { margin-top: var(--space-2xs); }
 
 /* === Jahres-Band (selbstgebaut) — Layout-Wrapper === */
 .gz-layout {

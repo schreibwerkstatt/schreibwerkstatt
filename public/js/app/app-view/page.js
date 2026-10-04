@@ -88,8 +88,8 @@ export const pageMethods = {
 
 
   // Lädt die aktuell offene Seite neu vom Server (SW-Cache umgangen). Wird
-  // beim Re-Klick auf die offene Sidebar-Seite verwendet, damit nach externer
-  // Änderung in BookStack kein veralteter Stand stehenbleibt.
+  // beim Re-Klick auf die offene Sidebar-Seite verwendet, damit nach einer
+  // Änderung auf einem anderen Gerät kein veralteter Stand stehenbleibt.
   // Push-getriebenen „Zuletzt bearbeitet"-Hint aufbereiten. Zeigt nur, wenn das
   // letzte Save von einem ANDEREN eigenen Gerät kam: device_name ist serverseitig
   // schon user-scoped (kein Fremd-Leak), hier zusätzlich das AKTUELLE Gerät
@@ -200,9 +200,7 @@ export const pageMethods = {
   },
 
 
-  // Inline-Rename des Seitentitels aus dem Editor-Card-Header. Spiegelt den
-  // neuen Namen in currentPage, Alpine.store('nav').pages und Alpine.store('nav').tree (inkl. Solo-Wrapper +
-  // Sub-Kapitel) — Buchorganizer-Pfade pflegen Order-Maps, hier nicht nötig.
+  // Inline-Rename des Seitentitels aus dem Editor-Card-Header.
   async renameCurrentPage(ev) {
     const newName = (ev?.target?.value || '').trim();
     const page = this.currentPage;
@@ -210,31 +208,41 @@ export const pageMethods = {
       if (page && ev?.target) ev.target.value = page?.name || '';
       return;
     }
-    const oldName = page.name;
+    const ok = await this.renamePageById(page.id, newName);
+    if (!ok && ev?.target) ev.target.value = page.name;
+  },
+
+  // Seite umbenennen — geteilt zwischen Editor-Kopf (renameCurrentPage) und
+  // Sidebar-Kontextmenü. Spiegelt den neuen Namen in currentPage, nav.pages und
+  // nav.tree (Seiten-Objekte und Solo-Wrapper; nav.tree ist flach, Sub-Kapitel
+  // stehen als eigene Items darin), baut die namens-keyenden Sortier-Indexe neu
+  // und invalidiert den Such-Memo. Der Buchorganizer pflegt seine eigene Spur
+  // (book-organizer/crud.js#_doRenamePage) und hoert hier auf TREE_RENAMED.
+  // Liefert true bei Erfolg; der Fehler steht dann schon im Status.
+  async renamePageById(pageId, newName) {
+    const name = (newName || '').trim();
+    if (!pageId || !name) return false;
     try {
-      await contentRepo.updatePage(page.id, { name: newName });
-      page.name = newName;
-      const rp = this.$store.nav.pages.find(p => p.id === page.id);
-      if (rp) rp.name = newName;
-      const renameInTree = (items) => {
-        for (const it of items) {
-          if (it.type !== 'chapter') continue;
-          if (it.solo && it.pages?.[0]?.id === page.id) it.name = newName;
-          if (!it.solo) {
-            const cp = it.pages?.find(p => p.id === page.id);
-            if (cp) cp.name = newName;
-          }
-          if (it.subchapters?.length) renameInTree(it.subchapters);
-        }
-      };
-      renameInTree(this.$store.nav.tree);
-      // nav.pages-Identität neu setzen → invalidiert den identity-gateten
-      // Diary-Kalender-Cache (er keyt auf den YYYY-MM-DD-Page-Namen).
-      this.$store.nav.pages = [...this.$store.nav.pages];
+      await contentRepo.updatePage(pageId, { name });
     } catch (e) {
       this.setStatus(this.t('bookOrganizer.saveFailed', { detail: e.message }));
-      if (ev?.target) ev.target.value = oldName;
+      return false;
     }
+    const nav = this.$store.nav;
+    if (this.currentPage?.id === pageId) this.currentPage.name = name;
+    for (const p of nav.pages) if (p.id === pageId) p.name = name;
+    for (const it of nav.tree) {
+      if (it.type !== 'chapter') continue;
+      if (it.solo && it.pages?.[0]?.id === pageId) it.name = name;
+      for (const p of it.pages || []) if (p.id === pageId) p.name = name;
+    }
+    this._filteredTreeMemo = null;
+    this._rebuildTreeOrderMaps?.();
+    // nav.pages-Identität neu setzen → invalidiert den identity-gateten
+    // Diary-Kalender-Cache (er keyt auf den YYYY-MM-DD-Page-Namen).
+    nav.pages = [...nav.pages];
+    window.dispatchEvent(new CustomEvent(EVT.TREE_RENAMED, { detail: { kind: 'page', id: pageId } }));
+    return true;
   },
 
 

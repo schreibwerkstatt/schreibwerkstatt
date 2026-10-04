@@ -16,7 +16,7 @@ globalThis.window = window;
 globalThis.document = window.document;
 globalThis.NodeFilter = window.NodeFilter || { SHOW_TEXT: 4 };
 
-const { createEditHistory, captureCaretOffset, restoreCaretAtOffset } =
+const { createEditHistory, captureCaretOffset, restoreCaretAtOffset, changedCaretOffset } =
   await import('../../public/js/editor/shared/edit-history.js');
 
 // mountHtml bewusst als schlichtes innerHTML — der Kern darf keine Pipeline
@@ -233,4 +233,67 @@ test('Caret-Helfer sind in einer Umgebung ohne Range-API still (kein Crash)', ()
   assert.doesNotThrow(() => restoreCaretAtOffset(el, 999));
   assert.doesNotThrow(() => restoreCaretAtOffset(null, 1));
   assert.doesNotThrow(() => captureCaretOffset(null));
+});
+
+test('onChange meldet jede Änderung an canUndo/canRedo (reaktive Buttons)', async () => {
+  let n = 0;
+  const { history, el } = makeHistory({ onChange: () => { n++; } });
+  const afterReset = n;
+  assert.ok(afterReset >= 1, 'reset meldet');
+  setHtml(el, '<p>start x</p>');
+  history.pushSoon();
+  assert.ok(n > afterReset, 'Debounce-Start meldet (Undo wird schon jetzt möglich)');
+  const beforeFire = n;
+  await new Promise((r) => setTimeout(r, 20));
+  assert.ok(n > beforeFire, 'Push nach Ablauf des Debounce meldet');
+  const beforeUndo = n;
+  history.undo();
+  assert.ok(n > beforeUndo, 'undo meldet');
+  const beforeRedo = n;
+  history.redo();
+  assert.ok(n > beforeRedo, 'redo meldet');
+  const beforeClear = n;
+  history.clear();
+  assert.ok(n > beforeClear, 'clear meldet');
+});
+
+test('canUndo ist schon während des offenen Debounce true, canRedo dann false', () => {
+  const { history, el } = makeHistory({ debounceMs: 10000 });
+  setHtml(el, '<p>start a</p>');
+  history.pushNow();
+  history.undo();
+  assert.equal(history.canRedo(), true);
+  setHtml(el, '<p>start b</p>');
+  history.pushSoon();
+  assert.equal(history.canUndo(), true, 'offene Tipp-Strecke ist rückgängig machbar');
+  assert.equal(history.canRedo(), false, 'Einlösen schneidet den Redo-Ast ab');
+  history.clear();
+});
+
+test('redo im offenen Debounce verwirft die frische Eingabe nicht', () => {
+  const { history, el } = makeHistory({ debounceMs: 10000 });
+  setHtml(el, '<p>start a</p>');
+  history.pushNow();
+  history.undo();
+  setHtml(el, '<p>start X</p>');
+  history.pushSoon();
+  assert.equal(history.redo(), false, 'Redo-Ast ist durch die Eingabe abgeschnitten');
+  assert.equal(el.innerHTML, '<p>start X</p>', 'die gerade getippte Strecke bleibt stehen');
+  history.undo();
+  assert.equal(el.innerHTML, '<p>start</p>');
+  history.redo();
+  assert.equal(el.innerHTML, '<p>start X</p>', 'und ist per Redo wieder herstellbar');
+});
+
+test('changedCaretOffset: Caret ans Ende des geänderten Bereichs im neuen Text', () => {
+  // Undo einer Eingabe am Ende: Caret an die Einfügestelle, nicht an den Anfang.
+  assert.equal(changedCaretOffset('Absatz eins zwei', 'Absatz eins', 0), 11);
+  // Redo derselben Eingabe: hinter das wiederhergestellte Stück.
+  assert.equal(changedCaretOffset('Absatz eins', 'Absatz eins zwei', 0), 16);
+  // Mitte: Einfügung zwischen gleichem Präfix und Suffix.
+  assert.equal(changedCaretOffset('ab XY cd', 'ab cd', 0), 3);
+  // Wiederholte Zeichen an der Grenze: Suffix darf das Präfix nicht überlappen.
+  assert.equal(changedCaretOffset('aaa', 'aa', 0), 2);
+  // Unveränderter Text (reine Formatierung): gemerkter Offset.
+  assert.equal(changedCaretOffset('gleich', 'gleich', 4), 4);
 });

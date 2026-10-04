@@ -103,6 +103,7 @@ import { registerToggleSwitch } from '../toggle-switch.js';
 import { registerSettingField } from '../setting-field.js';
 import { registerMenu } from '../menu.js';
 import { registerModal } from '../modal.js';
+import { registerEntityRef } from '../entity-ref.js';
 
 // Magics, die Sub-Komponenten/Partials den Zugriff auf Root + Sync-Provider geben.
 export function registerAppMagics() {
@@ -237,4 +238,5 @@ export function registerAllCards() {
   registerSettingField();
   registerMenu();
   registerModal();
+  registerEntityRef();
 }

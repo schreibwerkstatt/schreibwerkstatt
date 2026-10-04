@@ -137,16 +137,10 @@
 
               <!-- Klassischer Modus: vorausgewählte Seiten -->
               <template x-if="msg.context_info.mode !== 'agent' && Array.isArray(msg.context_info.pages)">
-                <span>
+                <span class="entity-refs">
                   <template x-for="(p, pi) in (expanded ? msg.context_info.pages : (msg.context_info.pages || []).slice(0, 3))" :key="pi">
-                    <span>
-                      <template x-if="pi > 0"><span class="chat-context-sep">, </span></template>
-                      <a x-show="p.id"
-                         :href="'#book/' + $store.nav.selectedBookId + '/page/' + p.id"
-                         @click.prevent="$app.gotoPageById(p.id)"
-                         class="chat-context-link" x-text="p.name"></a>
-                      <span x-show="!p.id" x-text="p.name"></span>
-                    </span>
+                    <button type="button" class="entity-ref"
+                            x-entity-ref="{ type: 'seite', id: p.id || null, label: p.name }"></button>
                   </template>
                   <button type="button" x-show="(msg.context_info.pages || []).length > 3"
                           class="chat-context-toggle"

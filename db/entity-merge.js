@@ -55,7 +55,18 @@ const FIG_FILL = ['kurzname', 'typ', 'geburtstag', 'geschlecht', 'beruf', 'besch
 // `figures.meta` fehlt hier bewusst: die Spalte wird nirgends gelesen oder
 // geschrieben (Altlast) — ein unbekannter Blob soll nicht mitwandern.
 const LOC_FILL = ['typ', 'beschreibung', 'erste_erwaehnung', 'erste_erwaehnung_page_id',
-  'stimmung', 'lat', 'lng', 'land', 'geo_query', 'geo_land'];
+  'stimmung', 'lat', 'lng', 'land', 'geo_query', 'geo_land', 'parent_id'];
+
+// true, wenn `ancestorId` der Ort `id` selbst oder einer seiner Vorfahren ist —
+// entlang locations.parent_id, mit Deckel gegen Altlast-Zyklen.
+function _isAncestorOrSelf(ancestorId, id) {
+  const up = db.prepare('SELECT parent_id FROM locations WHERE id = ?');
+  for (let cur = id, i = 0; cur != null && i < 64; i++) {
+    if (cur === ancestorId) return true;
+    cur = up.get(cur)?.parent_id ?? null;
+  }
+  return false;
+}
 const SCENE_FILL = ['wertung', 'kommentar', 'chapter_id', 'page_id'];
 
 // Laedt Quelle + Ziel und stellt sicher, dass beide zu (bookId, userEmail) gehoeren.
@@ -285,7 +296,26 @@ function mergeLocations(bookId, userEmail, sourceId, targetId) {
     ).run(targetId, sourceId).changes;
     db.prepare('DELETE FROM research_item_links WHERE location_id = ?').run(sourceId);
 
-    const filled = _fillEmpty('locations', LOC_FILL, source, target);
+    moved.beats = db.prepare(
+      'INSERT OR IGNORE INTO plot_beat_locations (beat_id, location_id) SELECT beat_id, ? FROM plot_beat_locations WHERE location_id = ?'
+    ).run(targetId, sourceId).changes;
+    db.prepare('DELETE FROM plot_beat_locations WHERE location_id = ?').run(sourceId);
+
+    // Hierarchie (locations.parent_id): Kinder der Quelle wandern ans Ziel; hing das
+    // Ziel selbst unter der Quelle, rückt es an deren Platz. Ohne das fielen die
+    // Kinder per SET NULL auf die Wurzel zurück.
+    moved.children = db.prepare('UPDATE locations SET parent_id = ? WHERE parent_id = ? AND id <> ?')
+      .run(targetId, sourceId, targetId).changes;
+    const parentExtra = {};
+    if (target.parent_id === sourceId) {
+      target.parent_id = null;
+      db.prepare('UPDATE locations SET parent_id = NULL WHERE id = ?').run(targetId);
+    }
+    // Elternort der Quelle nur übernehmen, wenn er keinen Zyklus schliesst (er darf
+    // weder das Ziel noch einer seiner Nachfahren sein).
+    if (source.parent_id != null && _isAncestorOrSelf(targetId, source.parent_id)) parentExtra.parent_id = null;
+
+    const filled = _fillEmpty('locations', LOC_FILL, source, target, parentExtra);
     db.prepare('DELETE FROM locations WHERE id = ?').run(sourceId);
 
     return {

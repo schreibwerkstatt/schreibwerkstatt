@@ -363,12 +363,13 @@ app.use((req, res, next) => {
 });
 
 // ── Prometheus-Endpoint (vor Auth-Guard) ─────────────────────────────────────
-// /metrics nutzt Bearer-Token-Auth (lib/bearer-auth, Scope `metrics:read`).
-// Mount muss VOR dem Session-Guard liegen, sonst redirected der Guard externe
-// Scraper (HA/Prometheus/Grafana) auf /login. Die Route validiert den Token
-// selbst und setzt req.session.user falls gueltig; ungueltige Tokens enden in
-// 401 JSON ohne Redirect.
-app.use('/metrics', require('./routes/metrics'));
+// /metrics + /metrics.json nutzen Bearer-Token-Auth (lib/bearer-auth, Scope
+// `metrics:read`). Mount muss VOR dem Session-Guard liegen, sonst redirected
+// der Guard externe Scraper (HA/Prometheus/Grafana) auf /login. Die Routen
+// validieren den Token selbst und setzen req.session.user falls gueltig;
+// ungueltige Tokens enden in 401 JSON ohne Redirect. Volle Pfade im Router,
+// darum Mount an der Wurzel.
+app.use(require('./routes/metrics'));
 
 // ── Auth-Guard ────────────────────────────────────────────────────────────────
 // Session oder Device-Token; ohne Anmeldung bekommt nur eine Browser-Navigation

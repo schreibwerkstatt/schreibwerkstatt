@@ -1,0 +1,76 @@
+<!-- Grid (Matrix): sortierbare Tabelle aller gefilterten Schauplätze. Fragment-
+     Include von orte.html, Scope `orteCard`. Typ und Land sortieren nach dem
+     sichtbaren Label (orte-map.js#orteGridRows). -->
+<div x-show="$store.catalog.orte.length > 0 && viewMode === 'grid'" class="table-scroll" x-cloak>
+  <table class="entity-grid-table"
+         x-data="sortableTable({
+           rows: () => orteGridRows(),
+           defaultKey: 'name',
+           types: { typLabelText: 'string', name: 'string', parentName: 'string', landLabelText: 'string', stimmung: 'string' },
+           persistKey: 'orte.grid',
+         })">
+    <thead>
+      <tr>
+        <th class="sortable-th" :class="sortClass('typLabelText')" :aria-sort="ariaSort('typLabelText')"
+            @click="sortBy('typLabelText')" x-text="$app.t('orte.col.typ')"></th>
+        <th class="sortable-th" :class="sortClass('name')" :aria-sort="ariaSort('name')"
+            @click="sortBy('name')" x-text="$app.t('orte.col.name')"></th>
+        <th class="sortable-th" :class="sortClass('parentName')" :aria-sort="ariaSort('parentName')"
+            @click="sortBy('parentName')" x-text="$app.t('orte.col.parent')"></th>
+        <th class="sortable-th" :class="sortClass('landLabelText')" :aria-sort="ariaSort('landLabelText')"
+            @click="sortBy('landLabelText')" x-text="$app.t('orte.col.land')"></th>
+        <th class="sortable-th" :class="sortClass('stimmung')" :aria-sort="ariaSort('stimmung')"
+            @click="sortBy('stimmung')" x-text="$app.t('orte.col.stimmung')"></th>
+        <th x-text="$app.t('orte.col.kapitel')"></th>
+        <th x-text="$app.t('orte.col.erste')"></th>
+        <th x-text="$app.t('orte.col.figuren')"></th>
+        <th x-text="$app.t('orte.col.beschreibung')"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="o in sorted" :key="o.id">
+        <tr>
+          <td><span class="tag entity-typ-tag" x-text="o.typLabelText"></span></td>
+          <td class="entity-grid-cell-title">
+            <span x-text="o.name"></span>
+            <button type="button" x-show="o.stale || o.manually_created" class="icon-btn danger entity-row-delete"
+                    @click.stop="$app.deleteOrt(o)"
+                    :aria-label="$app.t('common.delete')" :data-tip="$app.t(o.stale ? 'entity.deleteStale' : 'orte.deleteManual')">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+            </button>
+          </td>
+          <td>
+            <template x-if="o.parent">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'ort', id: o.parent }"></button>
+            </template>
+          </td>
+          <td><span x-show="o.land" class="tag ort-land-tag" x-text="landLabel(o.land)"></span></td>
+          <td x-text="o.stimmung"></td>
+          <td>
+            <span class="entity-refs">
+              <template x-for="k in (o.kapitel || [])" :key="k.name">
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: k.chapter_id, name: k.name }"></button>
+              </template>
+            </span>
+          </td>
+          <td>
+            <template x-if="o.erste_erwaehnung && o.erste_erwaehnung_page_id">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: o.erste_erwaehnung_page_id }"></button>
+            </template>
+            <template x-if="o.erste_erwaehnung && !o.erste_erwaehnung_page_id">
+              <span x-text="o.erste_erwaehnung"></span>
+            </template>
+          </td>
+          <td>
+            <span class="entity-refs">
+              <template x-for="figId in (o.figuren || [])" :key="figId">
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: figId }"></button>
+              </template>
+            </span>
+          </td>
+          <td class="entity-grid-cell-text" x-text="o.beschreibung"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+</div>

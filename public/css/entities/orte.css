@@ -1,0 +1,83 @@
+@layer components {
+/* === Schauplatz-Karte: Hierarchie, Pflegeformular, Auswertung im Detail ===
+   Basis-Zeile/-Detail kommen aus entity-list.css, die Geo-Karte aus orte-map.css
+   (unlayered, siehe dort). `--ort-depth` setzt orte-list.html je Zeile
+   (0 = Wurzel, Unterorte unter ihrem Elternort, gedeckelt auf 3). */
+
+.ort-list-item--child > .entity-row {
+  padding-left: calc(var(--space-sm) - var(--space-3) + var(--ort-depth, 0) * var(--space-lg));
+}
+.ort-list-item--child > .entity-row .entity-row-title::before {
+  content: "↳ ";
+  color: var(--color-muted);
+  font-weight: var(--fw-regular);
+}
+
+.ort-manual-tag {
+  background: color-mix(in srgb, var(--card-accent) 14%, var(--color-surface));
+  color: var(--color-text);
+}
+
+/* Pflegeformular: Neuanlage über der Liste, Bearbeiten im Detail einer Zeile */
+.ort-edit-panel {
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--card-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-card-bg);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.ort-edit-actions,
+.ort-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+.ort-merge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-left: auto;
+}
+
+/* Präsenz-Streifen: eine Zelle pro Kapitel, Intensität = Szenen dort */
+.ort-presence { margin-top: var(--space-sm); }
+.ort-presence-cells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  margin-top: var(--space-2xs);
+}
+.ort-presence-cell {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-sm);
+  border: 0.5px solid var(--color-border);
+  cursor: pointer;
+}
+
+.ort-encounters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+}
+.ort-encounter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+.ort-encounter-count {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+}
+
+@media (max-width: 700px) {
+  .ort-merge { margin-left: 0; width: 100%; }
+  .ort-presence-cell { width: 13px; height: 13px; }
+  .ort-list-item--child > .entity-row {
+    padding-left: calc(var(--space-sm) - var(--space-3) + var(--ort-depth, 0) * var(--space-sm));
+  }
+}
+}

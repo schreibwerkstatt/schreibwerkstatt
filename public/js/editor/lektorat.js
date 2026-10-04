@@ -139,7 +139,7 @@ export const lektoratMethods = {
   async runCheck() {
     if (!this.currentPage) return;
     // Guard: Lektorat darf nicht auf nicht-persistierten Edits laufen.
-    // Server-Job liest BookStack server-seitig; sind Edits nur lokal (offline-
+    // Server-Job liest die gespeicherte Seite; sind Edits nur lokal (offline-
     // Draft oder editDirty), sieht der Job die alte Fassung. Findings haben
     // dann Positionen aus altem Text, und der spätere Save-Pfad würde nach
     // einem zwischenzeitlichen Online-Retry ein Race auslösen, das Edits

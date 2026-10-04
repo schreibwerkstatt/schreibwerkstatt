@@ -15,7 +15,8 @@
 // die Befund-Sammelstelle liest (ein zweiter Lesepfad zeigte zwei Bestände).
 
 import { fetchJson } from '../utils.js';
-import { startWerkstattJobPoll } from './job-poll.js';
+import { startWerkstattJobPoll, reattachWerkstattJob } from './job-poll.js';
+import { werkstattErrorText } from './crud.js';
 
 export const bogenMethods = {
   // Kapitel in Lesereihenfolge (depth-first) aus dem Sidebar-Tree — nur echte
@@ -197,13 +198,19 @@ export const bogenMethods = {
   async loadArc() {
     const bookId = window.Alpine?.store('nav').selectedBookId;
     if (!bookId) { this.arc = null; return; }
+    // Stale-Schutz wie loadDrafts: die Antwort eines inzwischen verlassenen
+    // Buchs darf den Bogen des neuen nicht überschreiben.
+    const isStale = () => window.Alpine?.store('nav').selectedBookId !== bookId;
+    let arc = null;
     try {
-      this.arc = await fetchJson(`/draft-figures/${bookId}/arc`);
+      arc = await fetchJson(`/draft-figures/${bookId}/arc`);
     } catch {
       // Best-effort wie die Plot-Beteiligung: der Bogen ist eine Nebenansicht,
       // sein Ausfall darf die Werkstatt nicht blockieren.
-      this.arc = null;
+      arc = null;
     }
+    if (isStale()) return;
+    this.arc = arc;
     this.arcOccCache = {};
     this.activeArcDetailKey = null;
     this._memos = {};
@@ -229,10 +236,28 @@ export const bogenMethods = {
       });
       this._anchorJobId = resp.jobId;
       startWerkstattJobPoll(this, 'anchor', resp.jobId);
-    } catch {
+    } catch (e) {
       this.anchorLoading = false;
-      this.errorMessage = app.t('werkstatt.error.anchor') || app.t('common.unknownError');
+      this.errorMessage = werkstattErrorText(e, 'werkstatt.error.anchor');
     }
+  },
+
+  // Läuft die buchweite Verankerung noch (Karte neu geöffnet, Reload), den
+  // Fortschritt wieder anhängen — sonst stünde der Knopf bereit, während der
+  // Lauf im Hintergrund weiterarbeitet.
+  async _reattachAnchorJob() {
+    const bookId = window.Alpine?.store('nav').selectedBookId;
+    if (!bookId || this._anchorJobId || this.anchorLoading) return;
+    let queue;
+    try {
+      const queued = window.Alpine?.store('jobs')?.jobQueueItems;
+      queue = Array.isArray(queued) && queued.length > 0 ? queued : await fetchJson('/jobs/queue');
+    } catch { return; }
+    if (!Array.isArray(queue)) return;
+    if (window.Alpine?.store('nav').selectedBookId !== bookId || this._anchorJobId || this.anchorLoading) return;
+    // /jobs/queue liefert nur aktive (queued/running) Jobs des Users.
+    const job = queue.find(j => j.type === 'figur-anchor' && String(j.bookId) === String(bookId));
+    if (job) reattachWerkstattJob(this, 'anchor', job, null);
   },
 
   // Ohne semantische Suche kann der Lauf nichts finden: ein Kern ist eine

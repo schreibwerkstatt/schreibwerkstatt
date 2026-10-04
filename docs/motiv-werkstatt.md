@@ -111,7 +111,7 @@ Gegated: [tests/integration/motif-consistency.test.js](../tests/integration/moti
 ## Rückrichtung: Pendenzen am Motiv
 
 Das Seitenpanel zeigt die eigenen Ideen, die auf das gewählte Motiv zeigen, als
-`.idee-backlink-chip` — geladen über `GET /ideen/links?target_kind=motif`
+Entitäts-Referenzen vom Typ `idee` (`x-entity-ref`) — geladen über `GET /ideen/links?target_kind=motif`
 (non-fatal, [ideen-backlinks.js](../public/js/book/ideen-backlinks.js)). Read-only:
 kuratiert wird die Kante auf der Ideen-Seite, Klick springt an die Stelle im Buch,
 an der die Pendenz hängt. Ideen sind **user-privat** (Sichtbarkeits-Scope, nicht

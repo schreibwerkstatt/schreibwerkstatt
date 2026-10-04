@@ -140,8 +140,8 @@ test('beziehungsBeschreibung: passende Beschreibung bleibt unangetastet', () => 
     { id: 'fig_1', name: 'Anna', beziehungen: [{ figur_id: 'fig_2', typ: 'freund', beschreibung: 'Bert ist Annas Begleiter' }] },
     { id: 'fig_2', name: 'Bert' },
   ];
-  const { cleared, moved } = validateBeziehungenDescriptions(figuren);
-  assert.equal(cleared, 0);
+  const { suspicious, moved } = validateBeziehungenDescriptions(figuren);
+  assert.equal(suspicious, 0);
   assert.equal(moved, 0);
   assert.equal(figuren[0].beziehungen[0].beschreibung, 'Bert ist Annas Begleiter');
 });
@@ -155,22 +155,22 @@ test('beziehungsBeschreibung: an die richtige (leere) Beziehung verschoben', () 
     { id: 'fig_2', name: 'Bert' },
     { id: 'fig_3', name: 'Cara' },
   ];
-  const { cleared, moved } = validateBeziehungenDescriptions(figuren);
+  const { suspicious, moved } = validateBeziehungenDescriptions(figuren);
   assert.equal(moved, 1);
-  assert.equal(cleared, 0);
+  assert.equal(suspicious, 0);
   assert.equal(figuren[0].beziehungen[0].beschreibung, null);
   assert.equal(figuren[0].beziehungen[1].beschreibung, 'Cara ist die Schwester');
 });
 
-test('beziehungsBeschreibung: ohne erkennbare Figur → geleert', () => {
+test('beziehungsBeschreibung: ohne erkennbare Figur → bleibt stehen (kein Urteil ohne Gegenbeleg)', () => {
   const figuren = [
     { id: 'fig_1', name: 'Anna', beziehungen: [{ figur_id: 'fig_2', typ: 'freund', beschreibung: 'irgendeine Notiz ohne Namen' }] },
     { id: 'fig_2', name: 'Bert' },
   ];
-  const { cleared, moved } = validateBeziehungenDescriptions(figuren);
-  assert.equal(cleared, 1);
+  const { suspicious, moved } = validateBeziehungenDescriptions(figuren);
+  assert.equal(suspicious, 0);
   assert.equal(moved, 0);
-  assert.equal(figuren[0].beziehungen[0].beschreibung, null);
+  assert.equal(figuren[0].beziehungen[0].beschreibung, 'irgendeine Notiz ohne Namen');
 });
 
 // ── ensureUniqueFigIds ────────────────────────────────────────────────────────

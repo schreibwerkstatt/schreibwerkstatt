@@ -62,3 +62,51 @@ test('rerankOrder: AbortError propagiert (Job-Cancel)', async () => {
   mockRerank({ fn: async () => { const e = new Error('aborted'); e.name = 'AbortError'; throw e; } });
   await assert.rejects(() => rerankOrder('q', ['a', 'b']), /aborted/);
 });
+
+// semanticQuery mit aktivem Reranker: der Cross-Encoder bewertet nur die Spitze
+// (top_n), der Rest hängt in Retrieval-Reihenfolge an — sonst deckelte der
+// Reranker jede Anfrage auf top_n (Motiv-Scan verlangt bis zu 500 Fundstellen).
+const embed = require('../../lib/embed.js');
+const semanticChunks = require('../../db/semantic-chunks.js');
+const searchIndex = require('../../lib/search.js');
+const { semanticQuery } = require('../../lib/semantic-retrieval.js');
+
+function mockRetrieval(n) {
+  const seen = {};
+  embed.getConfig = () => ({ model: 'm' });
+  embed.embedQuery = async () => [1, 0];
+  semanticChunks.searchSimilar = (bookId, model, vec, opts) => {
+    seen.topK = opts.topK;
+    return Array.from({ length: Math.min(n, opts.topK) }, (_, i) => ({
+      kind: 'page', entity_id: i + 1, text: `t${i + 1}`, score: 0.9 - i * 0.001,
+    }));
+  };
+  searchIndex.query = () => ({ hits: [] });
+  return seen;
+}
+
+test('semanticQuery: Rerank deckelt nicht auf top_n — Rest hängt ungeprüft an', async () => {
+  const seen = mockRetrieval(200);
+  mockRerank({
+    topN: 3,
+    fn: async (q, docs) => {
+      assert.equal(docs.length, 3);
+      return [{ index: 2, score: 0.9 }, { index: 0, score: 0.5 }, { index: 1, score: 0.1 }];
+    },
+  });
+  const hits = await semanticQuery(1, 'frage', { topK: 150 });
+  assert.equal(seen.topK, 150, 'Retrieval-Pool nie kleiner als topK');
+  assert.equal(hits.length, 150);
+  assert.deepEqual(hits.slice(0, 5).map(h => h.entity_id), [3, 1, 2, 4, 5]);
+  assert.equal(hits[3].score, 0);
+});
+
+test('semanticQuery: rerank.min_score > 0 ist ein Tor — ungeprüfter Rest kommt nicht durch', async () => {
+  mockRetrieval(10);
+  mockRerank({
+    topN: 3, minScore: 0.3,
+    fn: async () => [{ index: 2, score: 0.9 }, { index: 0, score: 0.2 }, { index: 1, score: 0.1 }],
+  });
+  const hits = await semanticQuery(1, 'frage', { topK: 5 });
+  assert.deepEqual(hits.map(h => h.entity_id), [3]);
+});

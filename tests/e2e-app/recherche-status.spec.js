@@ -95,7 +95,7 @@ test('recherche: Status-Board sortiert in Spalten, das Aktionsmenue verschiebt, 
 
   // Verknuepftes Kapitel steht als Sprungziel auf der Karte, kein Befund.
   const moved = cell('eingearbeitet').locator(`[data-research-card-id="${made.withPlace}"]`);
-  await expect(moved.locator('.research-status-place')).toHaveCount(1);
+  await expect(moved.locator('.research-status-places .entity-ref--kapitel')).toHaveCount(1);
   await expect(moved.locator('.research-status-noplace')).toBeHidden();
 
   // ── „eingearbeitet ohne Stelle im Buch" ist ein Befund auf der Karte ──────
@@ -125,4 +125,31 @@ test('recherche: Status-Board sortiert in Spalten, das Aktionsmenue verschiebt, 
   await page.evaluate(async (ids) => {
     for (const id of ids) await fetch(`/research/${id}`, { method: 'DELETE' });
   }, [made.withPlace, made.noPlace]);
+});
+
+// Die Board-Karte traegt das Aktionsmenue, aber weder Link-Picker noch
+// KI-Vorschlaege (beides in recherche-item-relations). „Verknuepfen" muss darum
+// die Detailansicht oeffnen, sonst setzt der Klick nur unsichtbaren State.
+test('recherche: „Verknuepfen" im Menue einer Board-Karte oeffnet den Picker in der Detailansicht', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const itemId = await page.evaluate(async (id) => {
+    const r = await fetch('/research', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ book_id: id, kind: 'note', title: 'Board-Verknuepfung' }),
+    }).then(res => res.json());
+    return r.id;
+  }, bookId);
+
+  await page.evaluate((id) => { location.hash = `#book/${id}/recherche`; }, bookId);
+  await expect(page.locator('#recherche-card')).toBeVisible();
+  await page.locator('.entity-view-toggle .tabs-btn', { hasText: 'Status' }).click();
+
+  const card = page.locator(`.research-status-board [data-research-card-id="${itemId}"]`);
+  await card.locator('.research-status-card-actions .icon-btn').first().click();
+  await page.locator('.research-status-card-actions .context-menu:visible [role="menuitem"]', { hasText: 'Verknüpfen' }).click();
+
+  await expect(page.locator('dialog[open] .recherche-linkpicker')).toBeVisible();
+
+  await page.evaluate(async (id) => { await fetch(`/research/${id}`, { method: 'DELETE' }); }, itemId);
 });

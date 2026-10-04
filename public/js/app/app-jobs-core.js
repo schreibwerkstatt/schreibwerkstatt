@@ -426,14 +426,6 @@ export const appJobsCoreMethods = {
       }
     }
 
-    await this._reconnectJob('lektorat_figures_job_' + bookId, (job, jobId) => {
-      this.$store.catalogUi.figurenLoading = true;
-      this.$store.catalogUi.figurenProgress = job.progress || 0;
-      if (canAutoOpenCard(this)) this.showFiguresCard = true;
-      this.$store.catalogUi.figurenStatus = job.statusText ? this.t(job.statusText, job.statusParams) : this.t('common.analysisRunning');
-      this.startFiguresPoll(jobId);
-    });
-
     await this._reconnectJob('lektorat_batchcheck_job_' + bookId, (job, jobId) => {
       this.batchLoading = true;
       this.batchProgress = job.progress || 0;

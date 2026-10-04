@@ -1,5 +1,4 @@
-// Smoke-Tests für Fokus-Editor. Lädt eine Mini-Fixture-Page (kein Express,
-// kein BookStack), die `focusMethods` direkt importiert und an ein Test-
+// Smoke-Tests für Fokus-Editor. Lädt eine Mini-Fixture-Page (kein Express), die `focusMethods` direkt importiert und an ein Test-
 // Harness-Objekt bindet. Reicht aus, um die DOM-Logik (Toggle, Recenter,
 // Pointer-Schonfrist, Cleanup) abzudecken.
 

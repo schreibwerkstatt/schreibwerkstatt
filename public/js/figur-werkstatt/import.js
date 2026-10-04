@@ -25,7 +25,7 @@ export const importMethods = {
       this.importables = Array.isArray(rows) ? rows : [];
     } catch (e) {
       this.importables = [];
-      this.errorMessage = app.t('werkstatt.error.importLoad') || app.t('common.unknownError');
+      this.errorMessage = app.t('werkstatt.error.importLoad');
     } finally {
       this.importablesLoading = false;
     }
@@ -53,7 +53,7 @@ export const importMethods = {
       if (hit) this.selectedLinkFigureId = String(hit.id);
     } catch {
       this.linkCandidates = [];
-      this.errorMessage = app.t('werkstatt.error.linkLoad') || app.t('common.unknownError');
+      this.errorMessage = app.t('werkstatt.error.linkLoad');
     } finally {
       this.linkCandidatesLoading = false;
     }
@@ -100,7 +100,7 @@ export const importMethods = {
       this.loadPlotUsage?.();
       this.loadMotifUsage?.();
     } catch {
-      this.errorMessage = app.t('werkstatt.error.link') || app.t('common.unknownError');
+      this.errorMessage = app.t('werkstatt.error.link');
     } finally { this.busy = false; }
   },
 
@@ -143,7 +143,7 @@ export const importMethods = {
       this.selectDraft(body.id);
       this.errorMessage = '';
     } catch (e) {
-      this.errorMessage = app.t('werkstatt.error.import') || app.t('common.unknownError');
+      this.errorMessage = app.t('werkstatt.error.import');
     } finally {
       this.busy = false;
     }

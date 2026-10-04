@@ -99,11 +99,11 @@ test.beforeEach(() => {
   const insBook = db.prepare('INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)');
   insBook.run(MY_BOOK, 'Mein Buch', NOW, NOW);
   insBook.run(FOREIGN_BOOK, 'Fremdes Buch', NOW, NOW);
-  const insChap = db.prepare('INSERT INTO chapters (chapter_id, book_id, chapter_name, position, priority, updated_at) VALUES (?, ?, ?, 0, 0, ?)');
+  const insChap = db.prepare('INSERT INTO chapters (chapter_id, book_id, chapter_name, position, updated_at) VALUES (?, ?, ?, 0, ?)');
   insChap.run(MY_CHAPTER, MY_BOOK, 'Mein Kapitel', NOW);
   insChap.run(FOREIGN_CHAPTER, FOREIGN_BOOK, 'Fremdes Kapitel', NOW);
-  const insPage = db.prepare(`INSERT INTO pages (page_id, book_id, page_name, chapter_id, position, priority, updated_at, body_html)
-                              VALUES (?, ?, ?, ?, 0, 0, ?, ?)`);
+  const insPage = db.prepare(`INSERT INTO pages (page_id, book_id, page_name, chapter_id, position, updated_at, body_html)
+                              VALUES (?, ?, ?, ?, 0, ?, ?)`);
   insPage.run(MY_PAGE, MY_BOOK, 'Meine Seite', MY_CHAPTER, NOW, '<p>Eigener Text.</p>');
   insPage.run(FOREIGN_PAGE, FOREIGN_BOOK, 'Geheime Seite', FOREIGN_CHAPTER, NOW, '<p>Geheimer Fremdtext.</p>');
   grantAccess(MY_BOOK, ME, 'editor', ME);

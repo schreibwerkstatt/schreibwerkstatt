@@ -67,7 +67,7 @@ export function bindInlineFormattingShortcuts(container, { allowedCommands, sign
   return () => container.removeEventListener('keydown', handler);
 }
 
-// Undo/Redo-Griffe, geteilt von beiden Editoren: Cmd/Ctrl+Z = Undo,
+// Undo/Redo-Griffe, geteilt von Notebook-, Fokus- und Bucheditor: Cmd/Ctrl+Z = Undo,
 // Cmd/Ctrl+Shift+Z und Ctrl+Y = Redo. Reine Funktion, damit die Griffe nicht in
 // zwei Handlern auseinanderdriften (der Notebook-Dispatcher hängt am document,
 // der Fokusmodus am contenteditable). Liefert 'undo' | 'redo' | null.

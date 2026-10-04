@@ -206,8 +206,18 @@ test('_beatFieldSnapshot laesst kein PATCH-Feld aus (auch bei leerem Beat)', () 
 // dessen Aufrufer aufzeichnen) und die KI-Lauf-Historie (keine Board-Daten).
 import { readFileSync } from 'node:fs';
 test('jede schreibende Plot-Methode zeichnet auf oder leert die Historie', () => {
-  const files = ['acts', 'beats', 'threads', 'ai', 'history'].map(f => `public/js/book/plot/${f}.js`);
-  const exempt = new Set(['_persistCells', 'deleteConsistencyRun', 'deleteBrainstormRun']);
+  // Dazu die Module, die über andere Wege aufs Board schreiben: Befund-Aktionen,
+  // Verschieben ohne Drag, Drag & Drop, Plot-Chat-Übernahme.
+  const files = [
+    ...['acts', 'beats', 'threads', 'ai', 'history', 'konflikt-actions', 'beat-move', 'dnd']
+      .map(f => `public/js/book/plot/${f}.js`),
+    'public/js/chat/plot-chat-proposals.js',
+  ];
+  // _placePlotAct: Platzierung eines gerade angelegten Akts, dessen create-act-
+  // Record das Undo samt Platz trägt. _patchPlotProposal: Vorschlags-Status,
+  // keine Board-Daten.
+  const exempt = new Set(['_persistCells', 'deleteConsistencyRun', 'deleteBrainstormRun',
+    '_placePlotAct', '_patchPlotProposal']);
   const offenders = [];
   for (const f of files) {
     const src = readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8');

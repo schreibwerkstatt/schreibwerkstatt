@@ -89,11 +89,13 @@
               <span x-show="f.subjekt" class="weltfakten-subjekt" x-text="f.subjekt"></span>
               <div class="weltfakten-row-body">
                 <span class="weltfakten-fakt" x-text="f.fakt"></span>
-                <div class="weltfakten-row-meta" x-show="f.kapitel?.length || f.seite">
+                <div class="entity-refs weltfakten-row-meta" x-show="f.kapitel?.length || f.seite">
                   <template x-for="k in (f.kapitel || [])" :key="k">
-                    <span class="kapitel-badge kapitel-badge--primary internal-link" @click="$app.openKapitelByName(k)" x-text="k"></span>
+                    <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', name: k }"></button>
                   </template>
-                  <span x-show="f.seite" class="weltfakten-seite" x-text="f.seite"></span>
+                  <template x-if="f.seite">
+                    <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', name: f.seite, kapitel: (f.kapitel || [])[0] }"></button>
+                  </template>
                 </div>
               </div>
             </div>

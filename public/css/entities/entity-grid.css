@@ -42,12 +42,6 @@
   min-width: 12rem;
 }
 
-.entity-grid-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2xs);
-}
-
 .entity-grid-cell-text {
   max-width: 24rem;
   color: var(--color-muted);

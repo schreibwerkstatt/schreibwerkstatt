@@ -25,12 +25,12 @@ export function htmlToText(html) {
 }
 
 /**
- * Entfernt Fokus-Modus-Artefakte aus BookStack-HTML. Browser friert bei
+ * Entfernt Fokus-Modus-Artefakte aus Seiten-HTML. Browser friert bei
  * contenteditable-Edits die computed `font-size` des Fokus-Containers als
  * inline `<span style="font-size:…">` ein; die `focus-paragraph-*`-Klassen sind
  * rein interne UI-Markierungen, die nie ins persistierte HTML gehören.
  * Idempotent – auch auf bereits sauberem HTML sicher aufrufbar. Aufruf an allen
- * Seams: nach dem Laden von BookStack und vor dem Speichern an BookStack.
+ * Seams: nach dem Laden vom Server und vor dem Speichern.
  */
 export function stripFocusArtefacts(html) {
   if (!html) return html;
@@ -326,7 +326,7 @@ export function collapseEmptyBlocks(html) {
 /**
  * Entfernt leere Absätze am Ende des HTML. contenteditable hängt beim Tippen
  * oft `<p><br></p>`/`<p>&nbsp;</p>` an; ohne Strip wachsen beim jedem Save
- * weitere Leerabsätze hinten ans BookStack-HTML. Idempotent, Top-Level only.
+ * weitere Leerabsätze hinten ans Seiten-HTML. Idempotent, Top-Level only.
  * Nutzt DOMParser statt innerHTML-Assign, um keine Script-Side-Effects auszulösen.
  */
 export function stripTrailingEmptyBlocks(html) {

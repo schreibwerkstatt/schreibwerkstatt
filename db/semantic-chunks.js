@@ -70,20 +70,72 @@ const _replaceTx = db.transaction((kind, entityId, bookId, model, dim, rows) => 
 });
 function replaceEntity(kind, entityId, bookId, model, dim, rows) {
   _replaceTx(kind, entityId, bookId, model, dim, rows || []);
+  _bumpWriteGen();
 }
 
 // Vollständige Entfernung einer Entität (alle Modelle) — beim Entity-Delete
 // aus den Quelltabellen aufzurufen (Pages/Scenes/Figures).
 function remove(kind, entityId) {
   _delEntityAll.run(kind, entityId);
+  _bumpWriteGen();
 }
 
-// ORDER BY macht die MAX_CHUNKS-Kappung im Redundanz-Radar deterministisch: ohne
-// stabile Reihenfolge schnitte .slice() in SQLite-rowid-Ordnung, und welche Passagen
-// bei einem Buch über dem Cap fehlen, wäre zwischen Läufen nicht reproduzierbar.
+// Vektor-Cache für searchSimilar, pro (Buch, Modell). Jede Anfrage las sonst alle
+// Chunks des Buchs samt BLOB aus SQLite — bei 11k Chunks ~100 ms (kalt ~1 s) je
+// Anfrage, während der Cosinus-Scan selbst ~13 ms braucht; Beat-/Figur-Anker und
+// Motiv-Scan stellen pro Lauf Dutzende Anfragen. Der Text liegt NICHT im Cache
+// (nur die Gewinner brauchen ihn, per rowid nachgeladen).
+//
+// Invalidierung über zwei Signale, geprüft vor jeder Anfrage:
+//   - _writeGen: zählt jeden Schreibweg dieses Moduls hoch (replaceEntity,
+//     remove, pruneMissing, clearBook) — andere Schreiber auf semantic_chunks
+//     gibt es nicht.
+//   - Chunk-Anzahl des Buchs: fängt die FK-CASCADE-Löschungen (Seite/Figur/Szene/
+//     Buch gelöscht), die am Modul vorbeigehen. Kaskaden löschen nur, also sinkt
+//     die Anzahl immer; Einfügen geht ausschliesslich über replaceEntity.
+// Deckel über die Summe der gecachten Chunks (LRU nach Buch): 1024-dim bge-m3
+// ≈ 4 KB je Chunk → 30k Chunks ≈ 120 MB.
+const VEC_CACHE_MAX_CHUNKS = 30000;
+const _vecCache = new Map(); // `${bookId}|${model}` → { gen, count, rows }
+let _writeGen = 0;
+function _bumpWriteGen() { _writeGen++; }
+
+const _selBookCount = db.prepare('SELECT COUNT(*) AS n FROM semantic_chunks WHERE book_id = ?');
+// ORDER BY hält die Scan-Reihenfolge (und damit Gleichstands-Auflösung) stabil.
+const _selBookVectors = db.prepare(
+  'SELECT rowid AS rid, kind, entity_id, chunk_ix, vector FROM semantic_chunks WHERE book_id = ? AND model = ? ORDER BY entity_id, chunk_ix'
+);
+const _selChunkText = db.prepare('SELECT text FROM semantic_chunks WHERE rowid = ?');
+
+// Volle Zeilen (mit Text) für den Redundanz-Radar. ORDER BY macht dessen
+// MAX_CHUNKS-Kappung deterministisch: ohne stabile Reihenfolge schnitte .slice()
+// in SQLite-rowid-Ordnung, und welche Passagen bei einem Buch über dem Cap
+// fehlen, wäre zwischen Läufen nicht reproduzierbar.
 const _selBookKinds = db.prepare(
   'SELECT kind, entity_id, chunk_ix, text, vector FROM semantic_chunks WHERE book_id = ? AND model = ? ORDER BY entity_id, chunk_ix'
 );
+
+function _bookVectors(bookId, model) {
+  const key = `${bookId}|${model}`;
+  const count = _selBookCount.get(bookId).n;
+  const hit = _vecCache.get(key);
+  if (hit && hit.gen === _writeGen && hit.count === count) {
+    _vecCache.delete(key); _vecCache.set(key, hit); // LRU: ans Ende
+    return hit.rows;
+  }
+  const rows = _selBookVectors.all(bookId, model).map(r => ({
+    rid: r.rid, kind: r.kind, entity_id: r.entity_id, chunk_ix: r.chunk_ix, vec: blobToVector(r.vector),
+  }));
+  _vecCache.delete(key);
+  _vecCache.set(key, { gen: _writeGen, count, rows });
+  let total = 0;
+  for (const e of _vecCache.values()) total += e.rows.length;
+  for (const [k, e] of _vecCache) {
+    if (total <= VEC_CACHE_MAX_CHUNKS || k === key) break;
+    _vecCache.delete(k); total -= e.rows.length;
+  }
+  return rows;
+}
 
 // Brute-Force-Ähnlichkeitssuche innerhalb eines Buches gegen queryVec. Bei
 // Buchgrösse (Hunderte–wenige Tausend Chunks) ist der lineare Scan Millisekunden
@@ -96,19 +148,20 @@ const _selBookKinds = db.prepare(
 function searchSimilar(bookId, model, queryVec, { kinds = null, topK = 20, excludeKind = null, excludeEntityId = null, minScore = 0 } = {}) {
   const kindSet = kinds && kinds.length ? new Set(kinds) : null;
   const best = new Map(); // key `${kind}:${entity_id}` → { kind, entity_id, chunk_ix, text, score }
-  for (const r of _selBookKinds.all(bookId, model)) {
+  for (const r of _bookVectors(bookId, model)) {
     if (kindSet && !kindSet.has(r.kind)) continue;
     if (excludeKind && r.kind === excludeKind && r.entity_id === excludeEntityId) continue;
-    const score = cosineSim(queryVec, blobToVector(r.vector));
+    const score = cosineSim(queryVec, r.vec);
     if (!Number.isFinite(score)) continue;
     if (score < minScore) continue;
     const key = `${r.kind}:${r.entity_id}`;
     const cur = best.get(key);
     if (!cur || score > cur.score) {
-      best.set(key, { kind: r.kind, entity_id: r.entity_id, chunk_ix: r.chunk_ix, text: r.text, score });
+      best.set(key, { kind: r.kind, entity_id: r.entity_id, chunk_ix: r.chunk_ix, rid: r.rid, score });
     }
   }
-  return Array.from(best.values()).sort((a, b) => b.score - a.score).slice(0, topK);
+  return Array.from(best.values()).sort((a, b) => b.score - a.score).slice(0, topK)
+    .map(({ rid, ...h }) => ({ ...h, text: _selChunkText.get(rid)?.text ?? '' }));
 }
 
 // Beste Chunks INNERHALB einer Entität gegen queryVec. Gegenstück zu
@@ -148,21 +201,22 @@ function loadChunksForPairing(bookId, model, kinds = ['page']) {
 // ihre Chunks unter model). Der JOIN auf figures scoped auf den anfragenden User
 // und filtert stale-Figuren — der embed-index indexiert Figuren buchweit über alle
 // User und OHNE stale-Filter, ein ungefilterter Vergleich brächte Fremd-User- und
-// verwaiste Figuren als Falsch-Treffer. Rückgabe: [{ id, name, vector:Float32Array }].
+// verwaiste Figuren als Falsch-Treffer. Rückgabe: [{ id, fig_id, name, vector:Float32Array }]
+// (`fig_id` = öffentliche Kennung, Katalog-`id` im Frontend).
 function loadFigureVectorsForPairing(bookId, userEmail, model) {
   const rows = db.prepare(`
-    SELECT sc.entity_id, sc.vector, f.name
+    SELECT sc.entity_id, sc.vector, f.name, f.fig_id
       FROM semantic_chunks sc
       JOIN figures f ON f.id = sc.entity_id
      WHERE sc.book_id = ? AND sc.model = ? AND sc.kind = 'figure'
        AND f.book_id = ? AND f.user_email IS ? AND f.stale = 0
      ORDER BY sc.entity_id, sc.chunk_ix
   `).all(bookId, model, bookId, userEmail || null);
-  const acc = new Map(); // entity_id → { name, sum:Float32Array, count }
+  const acc = new Map(); // entity_id → { name, fig_id, sum:Float32Array, count }
   for (const r of rows) {
     const v = blobToVector(r.vector);
     let e = acc.get(r.entity_id);
-    if (!e) { e = { name: r.name, sum: new Float32Array(v.length), count: 0 }; acc.set(r.entity_id, e); }
+    if (!e) { e = { name: r.name, fig_id: r.fig_id, sum: new Float32Array(v.length), count: 0 }; acc.set(r.entity_id, e); }
     if (v.length !== e.sum.length) continue; // Fremdmodell-Rest überspringen
     for (let i = 0; i < v.length; i++) e.sum[i] += v[i];
     e.count++;
@@ -172,7 +226,7 @@ function loadFigureVectorsForPairing(bookId, userEmail, model) {
     if (!e.count) continue;
     const vec = new Float32Array(e.sum.length);
     for (let i = 0; i < vec.length; i++) vec[i] = e.sum[i] / e.count;
-    out.push({ id, name: e.name, vector: vec });
+    out.push({ id, fig_id: e.fig_id, name: e.name, vector: vec });
   }
   return out;
 }
@@ -245,6 +299,7 @@ function pruneMissing(bookId, model, kind, keepIds) {
       if (!keep.has(Number(r.entity_id))) { del.run(bookId, model, kind, r.entity_id); removed++; }
     }
   })();
+  if (removed) _bumpWriteGen();
   return removed;
 }
 
@@ -272,6 +327,7 @@ function indexStatus(bookId, model) {
 function clearBook(bookId, model = null) {
   if (model) db.prepare('DELETE FROM semantic_chunks WHERE book_id = ? AND model = ?').run(bookId, model);
   else db.prepare('DELETE FROM semantic_chunks WHERE book_id = ?').run(bookId);
+  _bumpWriteGen();
 }
 
 // Seiten-Chunks eines Buchs samt KAPITEL-Zuordnung fuer die Buchlandkarte

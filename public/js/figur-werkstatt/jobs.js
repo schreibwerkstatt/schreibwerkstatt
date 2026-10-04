@@ -5,17 +5,23 @@
 import { fetchJson } from '../utils.js';
 import { startWerkstattJobPoll, stopWerkstattJob } from './job-poll.js';
 import { _newNodeId } from './mindmap.js';
+import { werkstattErrorText } from './crud.js';
 
 export const jobsMethods = {
   async runBrainstorm() {
-    const app = window.__app;
     const sel = this.selectedDraft();
-    if (!sel || !this.selectedKnotenId) return;
+    // Ein Brainstorm-Slot pro Karte: ein zweiter Start (Kontextmenü) übernähme
+    // sonst Poll-Timer und Job-ID, und der erste Lauf liefe unsichtbar und
+    // nicht mehr abbrechbar weiter.
+    if (!sel || !this.selectedKnotenId || this.brainstormLoading) return;
+    // Knoten VOR dem Save-await festhalten: während des Saves kann die Auswahl
+    // wandern, der Lauf gehört aber zum Knoten, auf dem er gestartet wurde.
+    const knotenId = this.selectedKnotenId;
+    this.brainstormLoading = true;
     if (this.isDirty()) {
       const ok = await this.saveDraft();
-      if (!ok) return; // Save-Fail: errorMessage steht; KI-Run abbrechen.
+      if (!ok) { this.brainstormLoading = false; return; } // Save-Fail: errorMessage steht.
     }
-    this.brainstormLoading = true;
     this.brainstormStatus = '';
     this.brainstormResult = null;
     this._brainstormJobDraftId = sel.id;
@@ -23,14 +29,14 @@ export const jobsMethods = {
       const resp = await fetchJson('/jobs/werkstatt-brainstorm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ draftId: sel.id, knotenId: this.selectedKnotenId }),
+        body: JSON.stringify({ draftId: sel.id, knotenId }),
       });
       this._brainstormJobId = resp.jobId;
       startWerkstattJobPoll(this, 'brainstorm', resp.jobId);
     } catch (e) {
       this.brainstormLoading = false;
       this._brainstormJobDraftId = null;
-      this.errorMessage = app.t('werkstatt.error.brainstorm') || app.t('common.unknownError');
+      this.errorMessage = werkstattErrorText(e, 'werkstatt.error.brainstorm');
     }
   },
 
@@ -54,14 +60,13 @@ export const jobsMethods = {
   },
 
   async runConsistency() {
-    const app = window.__app;
     const sel = this.selectedDraft();
-    if (!sel) return;
+    if (!sel || this.consistencyLoading) return;
+    this.consistencyLoading = true;
     if (this.isDirty()) {
       const ok = await this.saveDraft();
-      if (!ok) return;
+      if (!ok) { this.consistencyLoading = false; return; }
     }
-    this.consistencyLoading = true;
     this.consistencyStatus = '';
     this.consistencyResult = null;
     this.selectedKonfliktIdx = null;
@@ -77,7 +82,7 @@ export const jobsMethods = {
     } catch (e) {
       this.consistencyLoading = false;
       this._consistencyJobDraftId = null;
-      this.errorMessage = app.t('werkstatt.error.consistency') || app.t('common.unknownError');
+      this.errorMessage = werkstattErrorText(e, 'werkstatt.error.consistency');
     }
   },
 

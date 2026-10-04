@@ -35,6 +35,51 @@ views:
             icon: mdi:microphone-message
 
       - type: glance
+        title: Heute
+        columns: 4
+        entities:
+          - entity: sensor.schreibwerkstatt_words_today
+            name: Wörter
+          - entity: sensor.schreibwerkstatt_cost_usd_today
+            name: Kosten heute
+          - entity: sensor.schreibwerkstatt_cost_usd_month
+            name: Kosten Monat
+          - entity: sensor.schreibwerkstatt_billed_usd_month
+            name: Abgerechnet
+
+      - type: glance
+        title: Server
+        columns: 5
+        entities:
+          - entity: sensor.schreibwerkstatt_uptime
+            name: Laufzeit
+          - entity: sensor.schreibwerkstatt_memory_rss
+            name: RAM
+          - entity: sensor.schreibwerkstatt_db_size
+            name: DB
+          - entity: sensor.schreibwerkstatt_js_errors_24h
+            name: JS-Fehler 24h
+          - entity: sensor.schreibwerkstatt_registrations_pending
+            name: Anfragen
+
+      - type: glance
+        title: Betrieb
+        columns: 5
+        entities:
+          - entity: sensor.schreibwerkstatt_jobs_done_24h
+            name: Jobs ok 24h
+          - entity: sensor.schreibwerkstatt_jobs_failed_24h
+            name: Jobs Fehler 24h
+          - entity: sensor.schreibwerkstatt_jobs_in_memory
+            name: Jobs im RAM
+          - entity: sensor.schreibwerkstatt_devices
+            name: Geräte
+          - entity: sensor.schreibwerkstatt_heap_used
+            name: Heap
+          - entity: sensor.schreibwerkstatt_db_schema_version
+            name: Schema
+
+      - type: glance
         title: Inhalte
         columns: 5
         entities:
@@ -97,6 +142,10 @@ views:
             name: Output
           - entity: sensor.schreibwerkstatt_cache_hit_ratio
             name: Cache-Hit
+          - entity: sensor.schreibwerkstatt_cost_usd_by_type_total
+            name: Kosten nach Typ (Summe)
+          - entity: sensor.schreibwerkstatt_billed_diff_usd_month
+            name: Abweichung Abrechnung
 
       - type: glance
         title: Block-Merge (Stale-Write-Konflikte)
@@ -131,6 +180,13 @@ views:
           - entity: sensor.schreibwerkstatt_writing_today_minutes
           - entity: sensor.schreibwerkstatt_lektorat_today_minutes
           - entity: sensor.schreibwerkstatt_stt_today_minutes
+
+      - type: history-graph
+        title: Kosten USD heute / Monat (7d)
+        hours_to_show: 168
+        entities:
+          - entity: sensor.schreibwerkstatt_cost_usd_today
+          - entity: sensor.schreibwerkstatt_cost_usd_month
 
       - type: history-graph
         title: Kosten USD (kumuliert, 30d)

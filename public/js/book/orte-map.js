@@ -62,18 +62,37 @@ export const orteMapMethods = {
     }
   },
 
-  // Grid-Zeilen: orteFiltered mit vorab aufgelöstem Land-Label, damit die
-  // sortierbare Tabelle die Spalte „Land" nach dem sichtbaren Text sortiert
-  // (nicht nach dem ISO-Code). Memoized auf die orteFiltered-Referenz (stabil
+  // Grid-Zeilen: orteFiltered mit vorab aufgelösten Labels (Land, Typ, Elternort),
+  // damit die sortierbare Tabelle nach dem sichtbaren Text sortiert (nicht nach
+  // ISO-Code, Typ-Key oder loc_id). Memoized auf die orteFiltered-Referenz (stabil
   // dank Getter-Memo) + Sprache → keine neue Array-/Objekt-Allokation pro Render.
   orteGridRows() {
     const list = this.orteFiltered;
     const lang = this._geoLang || 'de';
+    const uiLocale = Alpine.store('shell')?.uiLocale;
     const c = this._gridRowsCache;
-    if (c && c.list === list && c.lang === lang) return c.val;
-    const val = list.map(o => ({ ...o, landLabelText: o.land ? this.landLabel(o.land) : '' }));
-    this._gridRowsCache = { list, lang, val };
+    if (c && c.list === list && c.lang === lang && c.uiLocale === uiLocale) return c.val;
+    const byId = window.__app.orteById;
+    const val = list.map(o => ({
+      ...o,
+      landLabelText: o.land ? this.landLabel(o.land) : '',
+      typLabelText: this.ortTypLabel(o.typ),
+      parentName: o.parent ? (byId.get(o.parent)?.name || '') : '',
+    }));
+    this._gridRowsCache = { list, lang, uiLocale, val };
     return val;
+  },
+
+  // Position, die ein unverorteter Ort von seinem nächsten verorteten Elternort
+  // erbt (Raum im Hotel → Pin beim Hotel). null, wenn keine Kette verortet ist.
+  inheritedLatLng(o) {
+    const byId = window.__app.orteById;
+    const seen = new Set([o.id]);
+    for (let p = o.parent ? byId.get(o.parent) : null; p && !seen.has(p.id); p = p.parent ? byId.get(p.parent) : null) {
+      if (p.lat != null && p.lng != null) return { lat: p.lat, lng: p.lng };
+      seen.add(p.id);
+    }
+    return null;
   },
 
   // Map lazy aufbauen + Marker rendern. Idempotent — mehrfaches Aufrufen
@@ -134,7 +153,19 @@ export const orteMapMethods = {
     // Einmal vergebene Pin-Positionen je Ort cachen (_unlocatedLatLng), damit ein
     // bereits platzierter Pin beim nächsten Render nicht wegspringt, nur weil ein
     // anderer Ort verortet wurde — nur neue Orte bekommen einen frischen Slot.
-    const unlocated = this.unlocatedOrte();
+    // Unverortete Unterorte mit verortetem Elternort sitzen bei diesem (eigener,
+    // gestrichelter Pin, leicht versetzt, damit er den Eltern-Marker nicht verdeckt).
+    // Ziehen setzt wie bei jedem Pin eigene Koordinaten.
+    const unlocated = [];
+    let inheritedSlot = 0;
+    for (const o of this.unlocatedOrte()) {
+      const ll = this.inheritedLatLng(o);
+      if (!ll) { unlocated.push(o); continue; }
+      const p = this._map.latLngToContainerPoint([ll.lat, ll.lng]);
+      const q = this._map.containerPointToLatLng([p.x + 14 + (inheritedSlot % 4) * 10, p.y + 14 + Math.floor(inheritedSlot / 4) * 10]);
+      inheritedSlot++;
+      this._addOrtMarker(L, o, [q.lat, q.lng], true, true);
+    }
     if (unlocated.length) {
       const size = this._map.getSize();
       const gap = 26;
@@ -209,17 +240,19 @@ export const orteMapMethods = {
   },
 
   // Einen Marker bauen + verdrahten. `unlocated` → roter Pin in der Kartenmitte
-  // (kein lat/lng am Ort); Dragend setzt echte Koordinaten → wird blau.
-  _addOrtMarker(L, o, latlng, unlocated) {
+  // (kein lat/lng am Ort); `inherited` → gestrichelter Pin beim Elternort.
+  // Dragend setzt echte Koordinaten → wird blau.
+  _addOrtMarker(L, o, latlng, unlocated, inherited = false) {
     const opts = { draggable: true };
     if (unlocated) {
-      opts.icon = L.divIcon({ className: 'ort-marker-pin ort-marker-pin--unlocated', iconSize: [18, 18] });
+      const cls = inherited ? 'ort-marker-pin ort-marker-pin--inherited' : 'ort-marker-pin ort-marker-pin--unlocated';
+      opts.icon = L.divIcon({ className: cls, iconSize: [18, 18] });
     }
     const marker = L.marker(latlng, opts);
     marker.bindPopup(this._buildPopupHtml(o), { minWidth: 160, maxWidth: 240, maxHeight: 300 });
-    // Popup-Inhalt lebt als statisches HTML in Leaflet; interne Links erst beim
-    // Öffnen an die App-Navigation binden (Alpine-Bindings greifen hier nicht).
-    marker.on('popupopen', (e) => this._bindPopupLinks(e.popup.getElement(), o));
+    // Popup-Inhalt lebt als HTML-String in Leaflet; die Referenz-Knöpfe darin
+    // (`x-entity-ref`) beim Öffnen von Alpine initialisieren lassen.
+    marker.on('popupopen', (e) => this._initPopupRefs(e.popup.getElement()));
     // Marker-Klick spiegelt die Selektion in die Locate-Liste (Cross-Highlight).
     marker.on('click', () => this._selectFromMap(o.id));
     marker.on('dragend', async () => {
@@ -276,13 +309,16 @@ export const orteMapMethods = {
     }
   },
 
-  // Reicher Marker-Popup: Stammdaten + klickbare Querverweise (Seite/Figuren/
-  // Kapitel). Alle KI-/User-Felder via escHtml — Popup ist ein x-html-Sink.
+  // Reicher Marker-Popup: Stammdaten + Referenzen (Figuren/Kapitel/Seite) als
+  // `x-entity-ref`-Knöpfe — Label, Typ-Präfix und Sprungziel liefert die
+  // Komponente. Alle KI-/User-Felder via escHtml — Popup ist ein HTML-Sink; die
+  // Spec steht als JSON-Literal (escaped) im Attribut, nie als User-Ausdruck.
   _buildPopupHtml(o) {
     const app = window.__app;
     const esc = (v) => escHtml(v == null ? '' : String(v));
+    const ref = (spec) => `<button type="button" class="entity-ref" x-entity-ref="${esc(JSON.stringify(spec))}"></button>`;
     let h = `<div class="ort-popup"><strong class="ort-popup__name">${esc(o.name)}</strong>`;
-    const sub = [o.typ, o.stimmung].filter(Boolean).map(esc).join(' · ');
+    const sub = [o.typ ? this.ortTypLabel(o.typ) : '', o.stimmung].filter(Boolean).map(esc).join(' · ');
     if (sub) h += `<div class="ort-popup__sub">${sub}</div>`;
     // Match-Konfidenz: als was hat der Geocoder den Ort verortet (Toponym + Land)?
     // Nur bei KI-verorteten Orten gesetzt; deckt Fehltreffer auf (z.B. falsches Land).
@@ -297,35 +333,31 @@ export const orteMapMethods = {
     }
     const figIds = [...new Set((o.figuren || []).filter(Boolean))];
     if (figIds.length) {
-      h += `<div class="ort-popup__row">` + figIds.map((id) => {
-        const f = app.figurenById.get(id);
-        const label = f?.kurzname || f?.name || id;
-        return `<button type="button" class="ort-popup__chip" data-fig="${esc(id)}">${esc(label)}</button>`;
-      }).join('') + `</div>`;
+      h += `<div class="entity-refs ort-popup__row">` + figIds.map((id) => ref({ type: 'figur', id })).join('') + `</div>`;
     }
-    const kapNames = [...new Set((o.kapitel || []).map((k) => (k.name || '').trim()).filter(Boolean))];
-    if (kapNames.length) {
-      h += `<div class="ort-popup__row">` + kapNames.map((name) =>
-        `<button type="button" class="ort-popup__chip" data-kap="${esc(name)}">${esc(name)}</button>`
-      ).join('') + `</div>`;
+    const kapSeen = new Set();
+    const kapitel = (o.kapitel || []).filter((k) => {
+      const key = k.chapter_id != null ? `id:${k.chapter_id}` : `name:${(k.name || '').trim()}`;
+      if (key === 'name:' || kapSeen.has(key)) return false;
+      kapSeen.add(key);
+      return true;
+    });
+    if (kapitel.length) {
+      h += `<div class="entity-refs ort-popup__row">`
+        + kapitel.map((k) => ref({ type: 'kapitel', id: k.chapter_id ?? null, name: (k.name || '').trim() })).join('')
+        + `</div>`;
     }
     if (o.erste_erwaehnung && o.erste_erwaehnung_page_id) {
-      h += `<button type="button" class="ort-popup__page" data-page="${esc(o.erste_erwaehnung_page_id)}">${esc(o.erste_erwaehnung)}</button>`;
+      h += `<div class="entity-refs ort-popup__row">${ref({ type: 'seite', id: Number(o.erste_erwaehnung_page_id), name: o.erste_erwaehnung })}</div>`;
     }
     return h + `</div>`;
   },
 
-  // Klick-Handler an die statischen Popup-Buttons hängen → App-Navigation.
-  _bindPopupLinks(root, o) {
-    if (!root) return;
-    const app = window.__app;
-    root.querySelector('.ort-popup__page')?.addEventListener('click', () => {
-      app.gotoPageById(Number(o.erste_erwaehnung_page_id));
-    });
-    root.querySelectorAll('.ort-popup__chip[data-fig]').forEach((b) =>
-      b.addEventListener('click', () => app.openFigurById(b.dataset.fig)));
-    root.querySelectorAll('.ort-popup__chip[data-kap]').forEach((b) =>
-      b.addEventListener('click', () => app.openKapitelByName(b.dataset.kap)));
+  // Referenz-Knöpfe im geöffneten Popup initialisieren. `initTree` überspringt
+  // bereits initialisierte Knoten (Alpine-Marker) — ein zweites Öffnen bzw. der
+  // MutationObserver bindet also nichts doppelt.
+  _initPopupRefs(root) {
+    if (root) window.Alpine?.initTree(root);
   },
 
   // Marker-Klick → Locate-Row markieren (kein Scroll).
@@ -382,9 +414,7 @@ export const orteMapMethods = {
     });
 
     // Der Job hat lat/lng + geo_query/geo_land bereits serverseitig persistiert.
-    // Hier nur die In-Memory-Orte spiegeln (Marker/Popup ohne Reload korrekt) —
-    // KEIN saveOrte: ein Full-Replace mit dem alten, coord-losen Array wuerde die
-    // gerade gespeicherten Koordinaten via clearedCoords-Heuristik wieder nullen.
+    // Hier nur die In-Memory-Orte spiegeln (Marker/Popup ohne Reload korrekt).
     for (const r of results) {
       if (!r || r.lat == null || r.lng == null) continue;
       const t = app.$store.catalog.orte.find(x => x.id === r.id);

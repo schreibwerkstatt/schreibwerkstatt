@@ -8,7 +8,6 @@
 
 @media (max-width: 600px) {
   .kontinuitaet-result { padding: var(--space-xs) 0 var(--space-md); }
-  .kontinuitaet-row-stellen { font-size: var(--font-size-xs); gap: var(--space-3); }
 }
 
 .kontinuitaet-result {
@@ -31,24 +30,14 @@
   font-size: var(--font-size-sm);
 }
 
-/* Stellen-Paar in der Zeile (Stelle A ↔ Stelle B) */
+/* Stellen-Paar in der Zeile (Stelle A ↔ Stelle B) als Entitäts-Referenzen.
+   Stellen-Texte sind KI-Freitext und können lang sein — umbrechen statt
+   abschneiden. */
 .kontinuitaet-row-stellen {
   flex: 1;
   min-width: 0;
-  font-size: var(--font-size-mini);
-  color: var(--color-muted);
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
-  flex-wrap: wrap;
 }
-/* Stellen-Texte können lange Szenen-/Datums-Titel sein — umbrechen statt
-   überlaufen. Globaler kapitel-badge nowrap wird hier überschrieben. */
-.kontinuitaet-row-stellen .kapitel-badge {
-  white-space: normal;
-  word-break: break-word;
-  max-width: 100%;
-}
+.kontinuitaet-row-stellen .entity-ref { white-space: normal; }
 .kontinuitaet-arrow {
   color: var(--color-subtle);
   flex-shrink: 0;

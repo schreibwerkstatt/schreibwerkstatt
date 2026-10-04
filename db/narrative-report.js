@@ -26,7 +26,7 @@ function gatherNarrativeReportData(bookId, userEmail) {
   `).all(bookIdInt, email);
 
   const figures = db.prepare(
-    'SELECT id, name FROM figures WHERE book_id = ? AND user_email IS ? AND stale = 0'
+    'SELECT id, fig_id, name FROM figures WHERE book_id = ? AND user_email IS ? AND stale = 0'
   ).all(bookIdInt, email);
 
   const appearances = db.prepare(`
@@ -59,7 +59,7 @@ function gatherNarrativeReportData(bookId, userEmail) {
   ).all(bookIdInt, email);
 
   const locations = db.prepare(
-    'SELECT id, name FROM locations WHERE book_id = ? AND user_email IS ?'
+    'SELECT id, loc_id, name FROM locations WHERE book_id = ? AND user_email IS ?'
   ).all(bookIdInt, email);
 
   const locationChapters = db.prepare(`

@@ -1,4 +1,4 @@
-<!-- Ideen-Plaketten an einer Gegenseite (Recherche-Fundstück, Plot-Beat, Motiv).
+<!-- Ideen-Referenzen an einer Gegenseite (Recherche-Fundstück, Plot-Beat, Motiv).
      Fragment (string-seitiger @include) — dieselbe Frage, dieselbe Antwortform
      auf allen drei Karten; Methoden aus public/js/book/ideen-backlinks.js.
 
@@ -10,20 +10,15 @@
      expandieren, und sein Delimiter beendete den Kommentar vorzeitig.)
 
      READ-ONLY. Kuratiert wird die Kante ausschliesslich auf der Ideen-Seite
-     (Ideen-Karte neben dem Editor, Ideen-Board) — genau wie die Motiv-Badges auf
-     der Beat-Karte in der Motiv-Werkstatt kuratiert werden. Klick springt an die
-     Stelle im Buch, an der die Pendenz hängt.
+     (Ideen-Karte neben dem Editor, Ideen-Board) — genau wie die Motiv-Referenzen
+     auf der Beat-Karte in der Motiv-Werkstatt kuratiert werden. Klick springt an
+     die Stelle im Buch, an der die Pendenz hängt (Sprungziel: entity-ref TYPES.idee).
 
      Nur die EIGENEN Ideen: `ideen.user_email` ist Sichtbarkeits-Scope, nicht
      Attribution — der Server filtert, hier wird nichts nachgeprüft. -->
-<div class="idee-backlinks" x-show="ideasFor(ideaOwnerId).length">
+<div class="idee-backlinks entity-refs" x-show="ideasFor(ideaOwnerId).length">
   <template x-for="idee in ideasFor(ideaOwnerId)" :key="idee.link_id">
-    <button type="button" class="idee-backlink-chip"
-            :class="'idee-backlink-chip--' + ideaStatusKey(idee)"
-            @click.stop="gotoIdee(idee)"
-            :data-tip="ideaChipTip(idee)"
-            :aria-label="$app.t('ideen.link.gotoIdee') + ': ' + idee.content">
-      <span class="idee-backlink-text" x-text="idee.content"></span>
-    </button>
+    <button type="button" class="entity-ref"
+            x-entity-ref="{ type: 'idee', id: idee.idea_id, label: idee.content, page_id: idee.page_id, chapter_id: idee.chapter_id, title: ideaChipTip(idee) }"></button>
   </template>
 </div>

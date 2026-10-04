@@ -1,7 +1,8 @@
 'use strict';
 // Phase 3b: kapitelübergreifende Beziehungen (Multi-Pass) · Phase 6: Zeitstrahl.
-const { db, addFigurenBeziehungen, saveZeitstrahlEvents } = require('../../../../db/schema');
-const { updateJob } = require('../../shared');
+const { addFigurenBeziehungen, saveZeitstrahlEvents } = require('../../../../db/schema');
+const { listFigureEventsForTimeline } = require('../../../../db/zeitstrahl');
+const { i18nError, updateJob } = require('../../shared');
 const { komplettMaxTokens } = require('./tokens');
 const { providerClass } = require('../../../../lib/ai');
 const appSettings = require('../../../../lib/app-settings');
@@ -89,10 +90,13 @@ async function runPhase3b(ctx, figuren) {
 
   const bzResult = await call(jobId, tok,
     prompts.buildKapiteluebergreifendeBeziehungenPrompt(bookName, figuren, textForPrompt),
-    sys.SYSTEM_FIGUREN_BLOCKS, 56, 58, komplettMaxTokens(effectiveProvider), 0.2, null, prompts.SCHEMA_BEZIEHUNGEN,
+    sys.SYSTEM_FIGUREN_BLOCKS, 56, 58, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_BEZIEHUNGEN,
     costTier(COST_LABEL.figuren),
   );
-  const newBz = Array.isArray(bzResult?.beziehungen) ? bzResult.beziehungen : [];
+  // Pflichtfeld: ein leeres Array ist gültig («keine neuen Beziehungen»), ein fehlendes
+  // nicht — der Aufrufer (runNonCritical) meldet das als Degradierung.
+  if (!Array.isArray(bzResult?.beziehungen)) throw i18nError('job.error.beziehungenMissing');
+  const newBz = bzResult.beziehungen;
   if (newBz.length > 0) addFigurenBeziehungen(bookIdInt, newBz, email, ctx.idMaps);
   log.info(`Phase 3b – ${newBz.length} kapitelübergreifende Beziehungen.`);
 }
@@ -105,26 +109,7 @@ async function runZeitstrahl(ctx, opts = {}) {
   const silent = !!opts.silent;
 
   if (!silent) updateJob(jobId, { progress: 78, statusText: 'job.phase.consolidatingTimeline' });
-  const rawEvtRows = db.prepare(`
-    SELECT f.fig_id, f.name AS fig_name, f.typ AS fig_typ,
-           fe.datum, fe.datum_label,
-           fe.datum_year, fe.datum_month, fe.datum_day,
-           fe.datum_ende_year, fe.datum_ende_month, fe.datum_ende_day,
-           fe.story_tag, fe.datum_unsicher, fe.subtyp,
-           fe.ereignis, fe.typ AS evt_typ, fe.bedeutung,
-           c.chapter_name AS kapitel, p.page_name AS seite
-    FROM figure_events fe
-    JOIN figures f ON f.id = fe.figure_id
-    LEFT JOIN chapters c ON c.chapter_id = fe.chapter_id
-    LEFT JOIN pages    p ON p.page_id    = fe.page_id
-    WHERE f.book_id = ? AND f.user_email IS ?
-    ORDER BY
-      COALESCE(fe.datum_year,  9999),
-      COALESCE(fe.datum_month, 99),
-      COALESCE(fe.datum_day,   99),
-      COALESCE(fe.story_tag,   99999),
-      f.sort_order
-  `).all(bookIdInt, email);
+  const rawEvtRows = listFigureEventsForTimeline(bookIdInt, email);
   if (!rawEvtRows.length) return;
 
   const evtGroupMap = new Map();
@@ -207,8 +192,11 @@ async function runZeitstrahl(ctx, opts = {}) {
       prompts.buildZeitstrahlConsolidationPrompt(zeitstrahlEvents),
       sys.SYSTEM_ZEITSTRAHL_BLOCKS,
       silent ? null : 78, silent ? null : 82,
-      komplettMaxTokens(effectiveProvider), 0.2, null, prompts.SCHEMA_ZEITSTRAHL, costTier(COST_LABEL.zeitstrahl),
+      undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_ZEITSTRAHL, costTier(COST_LABEL.zeitstrahl),
     );
+    // Pflichtfeld: fehlt `ereignisse`, hat das Modell nicht wie verlangt geantwortet —
+    // in den Fallback unten (pre-gruppierte Events), statt still nichts zu speichern.
+    if (!Array.isArray(ztResult?.ereignisse)) throw i18nError('job.error.zeitstrahlMissing');
   } catch (e) {
     if (e.name === 'AbortError') throw e;
     // Die Konsolidierung ist rein kosmetisch (Dedup + kanonische Formulierung) – die
@@ -225,10 +213,8 @@ async function runZeitstrahl(ctx, opts = {}) {
     if (!silent) updateJob(jobId, { progress: 82 });
     return;
   }
-  if (Array.isArray(ztResult?.ereignisse)) {
-    saveZeitstrahlEvents(bookIdInt, email, ztResult.ereignisse, idMaps.chNameToId, idMaps.pageNameToIdByChapter);
-    log.info(`${ztResult.ereignisse.length} Zeitstrahl-Ereignisse gespeichert.`);
-  }
+  saveZeitstrahlEvents(bookIdInt, email, ztResult.ereignisse, idMaps.chNameToId, idMaps.pageNameToIdByChapter);
+  log.info(`${ztResult.ereignisse.length} Zeitstrahl-Ereignisse gespeichert (aus ${zeitstrahlEvents.length} vorgruppierten).`);
   if (!silent) updateJob(jobId, { progress: 82 });
 }
 

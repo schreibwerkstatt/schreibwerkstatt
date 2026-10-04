@@ -6,6 +6,7 @@
 const express = require('express');
 const { requireAdmin } = require('../lib/admin-mw');
 const apiTokens = require('../db/api-tokens');
+const appUsers = require('../db/app-users');
 const logger = require('../logger');
 const { sessionEmail } = require('../lib/acl');
 
@@ -30,14 +31,31 @@ router.post('/', express.json(), (req, res) => {
     if (isNaN(d.getTime())) return res.status(400).json({ error_code: 'INVALID_EXPIRES_AT' });
     expiresAt = d.toISOString();
   }
+  // `metrics:users` schaltet Kennzahlen je User frei (Schreibzeit, Kosten,
+  // zuletzt gesehen). Ein Abruf alle paar Sekunden kann nicht jedes Mal ins
+  // Audit schreiben wie die Usage-Ansicht — darum wird das Ausstellen auditiert,
+  // als dasselbe Event `usage-viewed` (eigenes `kind`).
+  const includeUsers = body.include_users === true;
+  const scopes = includeUsers ? 'metrics:read,metrics:users' : 'metrics:read';
   try {
     const row = apiTokens.createApiToken({
       adminEmail: email,
       displayName: name,
-      scopes: 'metrics:read',
+      scopes,
       expiresAt,
     });
-    logger.info(`api-tokens: created '${name}' (id=${row.id}) by ${email}`);
+    logger.info(`api-tokens: created '${name}' (id=${row.id}, scopes=${scopes}) by ${email}`);
+    if (includeUsers) {
+      try {
+        appUsers.recordAuditEvent(email, 'usage-viewed', {
+          ip: req.ip || null,
+          userAgent: req.headers['user-agent'] || null,
+          meta: { kind: 'metrics-users-token', tokenId: row.id, name },
+        });
+      } catch (e) {
+        logger.warn(`api-tokens: audit failed: ${e.message}`);
+      }
+    }
     res.status(201).json({
       id: row.id,
       display_name: row.display_name,

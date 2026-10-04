@@ -1,100 +1,153 @@
 @layer components {
-/* === Szenen-Karte: Akzentfarbe + Severity-Bar links =================
-   Akzent = --card-accent-szenen, Mapping in card-accents.css. Severity-Punkt
-   wird zur vertikalen Bar (Heatmap-Effekt beim Scannen).
+/* === Szenen-Karte ===================================================
+   Akzent = --card-accent-szenen, Mapping in card-accents.css. Severity in der
+   Liste: Text-Tag via .severity-tag (entity-list.css).
 */
-/* Severity in der Liste: Text-Tag via .severity-tag (entity-list.css).
-   Übersichts-Badges (.severity-dot--*) bleiben unverändert als runde Dots. */
 
-@media (max-width: 600px) {
-  .szenen-uebersicht-grid { gap: var(--space-sm); padding: var(--space-6) 0 var(--space-sm); }
-}
-
-/* Stelle (Kapitel + Seite) ist primäre Info — bleibt auch <480px sichtbar
-   und wrappt bei langen Kapitelnamen, statt aus Karte zu schiessen.
-   Überschreibt globale `.kapitel-badges { display:none }`-Regel auf <480px
-   sowie `kapitel-badge { white-space: nowrap }` aus tokens-est.css. */
-.card--szenen .entity-row .kapitel-badge {
-  white-space: normal;
-  word-break: break-word;
-  max-width: 100%;
-}
-@media (max-width: 480px) {
-  .card--szenen .entity-row .kapitel-badges { display: inline-flex; }
-}
-
-/* === Szenen-Karte: Übersichts-Grid (Figur / Kapitel / Seite, klappbar) === */
+/* === Übersicht (Kapitel / Figur / Seite, klappbar) ===
+   Kapitel-Balken über die volle Breite, Figuren + Seiten darunter nebeneinander. */
 .szenen-uebersicht {
   padding: var(--space-xs) 0 var(--space-md);
   margin-bottom: var(--space-sm);
 }
 .szenen-uebersicht-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-md);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md) var(--space-lg);
   padding: var(--space-md) 0 var(--space-14);
   border-bottom: 1px solid var(--color-border);
   margin-top: var(--space-sm);
 }
+.szenen-uebersicht-block--kapitel { grid-column: 1 / -1; }
 @media (max-width: 700px) {
-  .szenen-uebersicht-grid { grid-template-columns: 1fr; }
+  .szenen-uebersicht-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-sm); }
 }
 
-.szenen-count-badges {
+/* Kapitel-Zeile: Name | gestapelter Balken | Anzahl. Die Balkenlänge ist der
+   Anteil am szenenreichsten Kapitel (--bar-share), die Segmente teilen sich
+   nach Anzahl (--seg-grow) — Muster wie .plot-dist-bar. Die ganze Zeile ist ein
+   Filter-Umschalter (aria-pressed). */
+.szenen-kapitel-bars {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-5);
+  flex-direction: column;
+  gap: var(--space-2xs);
   margin-top: var(--space-5);
 }
-
-/* Kapitel-Badge mit Qualitäts-Dots */
-.szenen-kapitel-count-badge {
-  display: inline-flex;
+.szenen-kapitel-bar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 14em) minmax(0, 1fr) 2.5em;
   align-items: center;
-  gap: var(--space-xs);
-  font-size: var(--font-size-xs);
-  padding: var(--space-3) 7px var(--space-3) 7px;
-  border-radius: 0;
-  background: var(--color-tag-bg);
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-2xs) var(--space-xs);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
   color: var(--color-text);
-  cursor: default;
+  font: inherit;
+  font-size: var(--font-size-xs);
+  text-align: left;
+  cursor: pointer;
 }
+.szenen-kapitel-bar-row:hover:not(:disabled) { background: var(--color-hover); }
+.szenen-kapitel-bar-row.is-active {
+  background: var(--color-history-active-bg);
+  border-color: var(--color-primary);
+}
+.szenen-kapitel-bar-row:disabled { cursor: default; }
 .szenen-kapitel-name {
-  font-weight: var(--fw-regular);
-  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.szenen-kapitel-dots { display: flex; gap: var(--space-2xs); align-items: center; }
-.szenen-kapitel-total { font-size: var(--font-size-micro); color: var(--color-muted); }
-
-/* Seiten-Badge */
-.szenen-seite-count-badge {
-  font-size: var(--font-size-xs);
-  padding: var(--space-2xs) 7px;
-  border-radius: 0;
+.szenen-kapitel-track { display: block; }
+.szenen-kapitel-bar {
+  display: flex;
+  width: var(--bar-share, 100%);
+  min-width: var(--space-xs);
+  height: 0.75em;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
   background: var(--color-tag-bg);
-  color: var(--color-muted);
-  white-space: nowrap;
-  cursor: default;
 }
-
-/* === Szenen-Karte: Listen-Wrapper (entity-list innen) === */
-.szenen-liste-section { padding: var(--space-xs) 0; }
-
-/* === Szenen-Übersicht: Zähler pro Figur === */
-.szenen-figur-count-badge {
+.szenen-kapitel-seg {
+  flex-grow: var(--seg-grow, 1);
+  flex-basis: 0;
+  min-width: var(--space-2xs);
+}
+.szenen-kapitel-seg--stark   { background: var(--color-stark); }
+.szenen-kapitel-seg--mittel  { background: var(--color-mittel); }
+.szenen-kapitel-seg--schwach { background: var(--color-schwach); }
+.szenen-kapitel-total {
   font-size: var(--font-size-micro);
+  color: var(--color-muted);
+  text-align: right;
+}
+@media (max-width: 480px) {
+  .szenen-kapitel-bar-row { grid-template-columns: minmax(0, 9em) minmax(0, 1fr) 2em; }
+}
+
+/* Zähler-Plaketten pro Figur / Seite — Filter-Umschalter. */
+.szenen-count-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-5);
+  margin-top: var(--space-5);
+}
+.szenen-count-badge {
+  font: inherit;
+  font-size: var(--font-size-xs);
   font-weight: var(--fw-regular);
-  padding: var(--space-1) 7px;
-  border-radius: 0;
+  padding: var(--space-2xs) var(--space-6);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   background: var(--color-tag-bg);
   color: var(--color-muted);
   white-space: nowrap;
+  cursor: pointer;
 }
-.szenen-figur-count-badge--wenig {
+.szenen-count-badge:hover:not(:disabled) { color: var(--color-text); }
+.szenen-count-badge:disabled { cursor: default; }
+.szenen-count-badge--wenig {
   background: var(--color-schwach-bg);
   color: var(--color-schwach-text);
 }
+.szenen-count-badge.is-active {
+  background: var(--color-history-active-bg);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* === Liste === */
+.szenen-liste-section { padding: var(--space-xs) 0; }
+
+/* Stale-Hinweis + Sammel-Löschen unter der Filterleiste. */
+.szenen-stale-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+/* Zeilen-Hauptteil: Titel + einzeiliger Anriss des KI-Kommentars. */
+.szenen-row-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.szenen-row-snippet {
+  font-size: var(--font-size-mini);
+  color: var(--color-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 480px) {
+  .szenen-row-snippet { display: none; }
+}
+
+/* Grid: stale-Zeilen gedämpft wie in der Liste (.entity-row--stale). */
+.card--szenen .entity-grid-row--stale { opacity: 0.6; }
 }

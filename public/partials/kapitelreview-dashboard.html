@@ -48,9 +48,8 @@
       </div>
       <div class="kapitel-dash-foot" x-show="kdUmfang().pages > 1 && kdUmfang().longest">
         <span class="kapitel-dash-foot-label" x-text="$app.t('kapitelReview.dash.longest')"></span>
-        <span class="kapitel-dash-foot-link internal-link"
-              @click="$app.selectPage(kdUmfang().longest.page)"
-              x-text="kdUmfang().longest.name"></span>
+        <button type="button" class="entity-ref"
+                x-entity-ref="{ type: 'seite', id: kdUmfang().longest?.page?.id, label: kdUmfang().longest?.name }"></button>
         <span class="kapitel-dash-foot-value" x-text="$app.charBadge(kdUmfang().longest.chars)"></span>
         <span class="kapitel-dash-foot-label" x-text="$app.t('kapitelReview.dash.avgPage')"></span>
         <span class="kapitel-dash-foot-value" x-text="$app.charBadge(kdUmfang().avgChars)"></span>
@@ -190,15 +189,10 @@
           <span class="overview-tile-median" x-show="kdOrte().total > kdOrte().rows.length"
                 x-text="$app.t('kapitelReview.dash.more', { n: kdOrte().total - kdOrte().rows.length })"></span>
         </div>
-        <div class="overview-fig-chips">
+        <div class="entity-refs">
           <template x-for="o in kdOrte().rows" :key="o.id">
-            <span class="overview-ort-chip internal-link"
-                  :data-typ="o.typ"
-                  :data-tip="o.fullName + ' · ' + o.count"
-                  @click="$app.openOrtById(o.id)">
-              <span class="overview-ort-dot" :data-typ="o.typ" aria-hidden="true"></span>
-              <span class="overview-fig-name" x-text="o.name"></span>
-            </span>
+            <button type="button" class="entity-ref"
+                    x-entity-ref="{ type: 'ort', id: o.id, count: o.count }"></button>
           </template>
         </div>
       </div>

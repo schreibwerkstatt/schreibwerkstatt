@@ -18,10 +18,13 @@ function loadFinetuneData({ bookIdInt, userEmail, pageContents, langIsEn }) {
            GROUP_CONCAT(DISTINCT ft.tag) AS tags_csv
     FROM figures f
     LEFT JOIN figure_tags ft ON ft.figure_id = f.id
-    WHERE f.book_id = ? AND f.user_email = ?
+    WHERE f.book_id = ? AND f.user_email = ? AND f.stale = 0
     GROUP BY f.id
     ORDER BY f.sort_order
   `).all(bookIdInt, userEmail);
+  // stale = 0: vom letzten Analyse-Lauf nicht wiedergefundene Figuren (Katalog-Badge
+  // „nicht mehr im Text") sind oft die alte Dublette einer umbenannten Figur — im
+  // Training gäbe das zwei widersprüchliche Antworten auf „Wer ist X?".
   const figById = new Map(figRows.map(f => [f.fig_id, f]));
   const figNamesSorted = [...new Set(
     figRows.flatMap(f => [f.name, f.kurzname].filter(n => n && String(n).trim().length >= 2))

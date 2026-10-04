@@ -1,5 +1,5 @@
 // Lokale `books`-Tabelle: FK-Target fuer alle book_id-tragenden Tabellen.
-// `book_id` ist der externe BookStack-Identifier und gleichzeitig PRIMARY KEY
+// `book_id` ist der Buch-Identifier und gleichzeitig PRIMARY KEY
 // (analog pages.page_id und chapters.chapter_id). Discovery-Hooks (sync.js,
 // db/pages.js) halten die Tabelle aktuell, ohne dass jede Beruehrung einen
 // API-Roundtrip braucht. Handler schreiben hier nie direkt — der Eigentuemer

@@ -59,7 +59,7 @@ In [lib/content-store/index.js](../lib/content-store/index.js):
 - **`flattenTree(tree)`** — depth-first Liste `[{ page, chapterId, chapterName, depth }]`. `chapterName` ist das direkt umschliessende Kapitel. Genutzt von [routes/book-editor.js](../routes/book-editor.js) für flache Page-Liste.
 - **`walkAllChapters(tree, cb)`** — Iterator über alle Kapitel-Ebenen.
 
-In [lib/content-mapper.js](../lib/content-mapper.js): `mapChapter` exposed `parent_chapter_id` — Pflicht, damit `coalesce.js`/Export-Builder die Tiefe berechnen können.
+In [lib/content-store/backends/localdb.js](../lib/content-store/backends/localdb.js): das Kapitel-Shape (`_chapterRow`) führt `parent_chapter_id` — Pflicht, damit `coalesce.js`/Export-Builder die Tiefe berechnen können.
 
 ## Frontend: Buchorganizer
 
@@ -151,7 +151,7 @@ Falls eine Aggregation auf **Top-Level-Kapitel rollupen** soll (z.B. „Häufigk
 
 ## Pflicht-Invarianten
 
-1. **PUT auf `/content/books/:id/order`** ist einzige Stelle, die `chapters.parent_chapter_id` mutiert. CRUD-Routen (`POST /chapters`) akzeptieren `parent_chapter_id` nur beim Anlegen; Re-Parent läuft ausschliesslich über order_json.
+1. **PUT auf `/content/books/:id/order`** ist einzige Stelle, die `chapters.parent_chapter_id` mutiert. CRUD-Routen (`POST /chapters`) akzeptieren `parent_chapter_id` nur beim Anlegen; Re-Parent läuft ausschliesslich über order_json. Ein neues Kapitel landet per reconcile am Ende seines Parents — `position` im POST-Body wirkt auf die Lese-Reihenfolge nicht, sobald eine order_json-Row existiert. Wer an einer bestimmten Stelle einfügen will, schickt `after_chapter_id`: die Facade ([lib/content-store/index.js](../lib/content-store/index.js)#`createChapter`) übernimmt den Parent des Ankers und hängt das Kapitel in order_json direkt dahinter (Konsumenten: Sidebar-Kontextmenü, Kapitelbewertung).
 2. **`MAX_CHAPTER_DEPTH = 3`** ist gespiegelte Konstante. Bei Bumpen: beide Stellen ändern + PDF-Renderer (h1/h2/h3-Mapping) erweitern + Frontend-Indent-CSS-Stufen ergänzen.
 3. **`chapters.position`** ist depth-first global lückenlos. Wer sortiert nach `position` über `listChapters`, bekommt depth-first Tree-Reihenfolge automatisch.
 4. **`pages.position`** ist per-Bucket lückenlos. Mixed chapter+page-children eines Eltern-Kapitels werden in order_json sortiert; aus pages.position allein lässt sich die mixed-Reihenfolge nicht rekonstruieren. SSoT bleibt order_json.

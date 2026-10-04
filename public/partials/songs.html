@@ -78,10 +78,10 @@
           </span>
           <span x-show="s.genre" class="song-genre" x-text="s.genre"></span>
           <template x-if="s.kapitel?.length">
-            <span class="kapitel-badges">
-              <span class="kapitel-badge kapitel-badge--primary internal-link" @click.stop="$app.openKapitelByName(s.kapitel[0].name)" x-text="s.kapitel[0].name"></span>
+            <span class="entity-refs entity-refs--collapse-mobile">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: s.kapitel[0].chapter_id, name: s.kapitel[0].name }"></button>
               <template x-if="s.kapitel.length > 1">
-                <span class="kapitel-badge kapitel-badge--more" x-text="'+' + (s.kapitel.length - 1)"></span>
+                <span class="entity-ref-more" x-text="'+' + (s.kapitel.length - 1)"></span>
               </template>
             </span>
           </template>
@@ -96,7 +96,7 @@
           <div x-show="s.erste_erwaehnung" class="entity-meta-row">
             <span class="entity-meta-label" x-text="$app.t('songs.firstMention')"></span>
             <template x-if="s.erste_erwaehnung_page_id">
-              <span class="internal-link" @click.stop="$app.gotoPageById(s.erste_erwaehnung_page_id)" x-text="s.erste_erwaehnung"></span>
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: s.erste_erwaehnung_page_id }"></button>
             </template>
             <template x-if="!s.erste_erwaehnung_page_id">
               <span x-text="s.erste_erwaehnung"></span>
@@ -104,15 +104,19 @@
           </div>
           <div x-show="s.figuren?.length > 0" class="entity-meta-row">
             <span class="entity-meta-label" x-text="$app.t('songs.figuren')"></span>
-            <template x-for="f in s.figuren" :key="(f.fig_id || f)">
-              <span class="tag internal-link" @click.stop="$app.openFigurById(f.fig_id || f)" x-text="$app.figurenById.get(f.fig_id || f)?.kurzname || $app.figurenById.get(f.fig_id || f)?.name || (f.fig_id || f)"></span>
-            </template>
+            <span class="entity-refs">
+              <template x-for="f in s.figuren" :key="(f.fig_id || f)">
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: f.fig_id || f }"></button>
+              </template>
+            </span>
           </div>
           <div x-show="s.kapitel?.length > 1" class="entity-meta-row">
             <span class="entity-meta-label" x-text="$app.t('songs.kapitel')"></span>
-            <template x-for="k in s.kapitel" :key="k.name">
-              <span class="tag internal-link" @click.stop="$app.openKapitelByName(k.name)" x-text="k.name + (k.haeufigkeit > 1 ? ' ×' + k.haeufigkeit : '')"></span>
-            </template>
+            <span class="entity-refs">
+              <template x-for="k in s.kapitel" :key="k.name">
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: k.chapter_id, name: k.name, count: k.haeufigkeit }"></button>
+              </template>
+            </span>
           </div>
         </div>
       </div>

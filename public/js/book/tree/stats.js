@@ -123,6 +123,14 @@ export const treeStatsMethods = {
     }).catch(() => {});
   },
 
+  // Seitenzahl fuer das Kapitelkopf-Tag. Bei aktiver Suche die Trefferzahl (die
+  // Such-Items tragen gefilterte `pages`), sonst der ganze Subtree.
+  _chapterPageCount(item) {
+    if (!item) return 0;
+    if (this.pageSearch) return item.pages.length;
+    return item.pageTotal ?? item.pages.length;
+  },
+
   // Setzt `item.stats` für jedes Kapitel der aktuellen Tree-Struktur.
   // Aufruf: nach Tree-Build (loadPages) und nach jeder tokEsts-Reassignment
   // (loadTokenEstimates / _syncPageStatsAfterSave). Mutiert direkt die
@@ -140,7 +148,7 @@ export const treeStatsMethods = {
     const cache = new Map();
     const subtree = (item) => {
       if (cache.has(item.id)) return cache.get(item.id);
-      let words = 0, chars = 0, tok = 0, count = 0;
+      let words = 0, chars = 0, tok = 0, count = 0, pageTotal = item.pages.length;
       for (const p of item.pages) {
         const e = ts[p.id];
         if (e) { words += e.words; chars += e.chars; tok += e.tok; count++; }
@@ -148,13 +156,18 @@ export const treeStatsMethods = {
       for (const child of (childMap.get(item.id) || [])) {
         const s = subtree(child);
         words += s.words; chars += s.chars; tok += s.tok; count += s.count;
+        pageTotal += s.pageTotal;
       }
-      const res = { words, chars, tok, count };
+      const res = { words, chars, tok, count, pageTotal };
       cache.set(item.id, res);
       return res;
     };
     for (const item of items) {
-      const { words, chars, tok, count } = subtree(item);
+      const { words, chars, tok, count, pageTotal } = subtree(item);
+      // Seitenzahl-Tag am Kapitelkopf zaehlt wie die Umfang-Plakette den ganzen
+      // Subtree — sonst zeigte ein Teil mit drei Unterkapiteln „0 Seiten" neben
+      // einer Zeichenzahl, die alle drei umfasst.
+      item.pageTotal = pageTotal;
       item.stats = count
         ? {
             words, chars, tok, count,

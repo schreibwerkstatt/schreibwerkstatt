@@ -88,6 +88,7 @@ export const strukturMethods = {
           id: p.id,
           name: p.name || '',
           chapter: p.chapter_id ? (chapterName[String(p.chapter_id)] || '') : '',
+          chapterId: p.chapter_id || null,
           ownTextsorte: own || '',
           textsorte: eff,
           textsorteLabel: eff ? window.__app.t(`textsorte.${eff}`) : '',

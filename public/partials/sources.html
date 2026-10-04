@@ -235,12 +235,13 @@
        x-cloak x-text="$app.t('sources.citations.empty')"></p>
     <ul class="sources-citation-list" x-show="srcCitations.length > 0">
       <template x-for="c in srcCitations" :key="c.page_id">
-        <li class="sources-citation">
-          <button type="button" class="sources-citation-link internal-link" @click="gotoSourceCitation(c)">
-            <span class="kapitel-badge kapitel-badge--primary" x-show="c.chapter_name" x-text="c.chapter_name"></span>
-            <span class="sources-citation-page" x-text="c.page_name || ('#' + c.page_id)"></span>
-          </button>
-          <span class="sources-citation-count" x-show="c.count > 1" x-text="'×' + c.count"></span>
+        <li class="sources-citation entity-refs">
+          <template x-if="c.chapter_id != null">
+            <button type="button" class="entity-ref"
+                    x-entity-ref="{ type: 'kapitel', id: c.chapter_id }"></button>
+          </template>
+          <button type="button" class="entity-ref"
+                  x-entity-ref="{ type: 'seite', id: c.page_id, label: c.page_name || undefined, count: c.count }"></button>
         </li>
       </template>
     </ul>

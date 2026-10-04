@@ -99,15 +99,12 @@ export const shortcutsMethods = {
   },
 
   // Pages aus filteredTree als flache, navigierbare Liste – Reihenfolge wie
-  // sichtbar (Kapitel → Pages, dann Stand-alone Pages).
+  // sichtbar. Jedes Tree-Item ist ein Kapitel; Solo-Seiten stecken als
+  // Pseudo-Kapitel mit einer Seite darin (tree/build.js).
   _pageSearchFlatPages() {
     const out = [];
     for (const item of this.filteredTree || []) {
-      if (item.type === 'chapter') {
-        for (const p of item.pages) out.push(p);
-      } else if (item.page) {
-        out.push(item.page);
-      }
+      for (const p of item.pages || []) out.push(p);
     }
     return out;
   },

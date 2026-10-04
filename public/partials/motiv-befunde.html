@@ -34,9 +34,9 @@
            @click="selectedCheckIdx = selectedCheckIdx === idx ? null : idx">
         <div class="motiv-check-head">
           <span class="severity-tag" :class="checkSeverityClass(f)" x-text="checkSeverityLabel(f)"></span>
-          <span class="motiv-check-name internal-link"
-                :data-tip="$app.t('motiv.checks.gotoMotif')"
-                @click.stop="gotoCheckMotif(f)" x-text="f.motiv"></span>
+          <!-- Motiv-Sprung innerhalb der Werkstatt: Konstellation zeigen + auswählen. -->
+          <button type="button" class="entity-ref"
+                  x-entity-ref="{ type: 'motiv', id: f.motiv_id, name: f.motiv, onOpen: f.motiv_id != null ? () => gotoCheckMotif(f) : null }"></button>
           <span class="motiv-check-text" x-text="checkText(f)"></span>
           <span class="history-chevron" :class="{ open: selectedCheckIdx === idx }" aria-hidden="true"></span>
         </div>
@@ -88,17 +88,15 @@
              @click="selectedKonfliktIdx = selectedKonfliktIdx === idx ? null : idx">
           <div class="motiv-check-head">
             <span class="severity-tag" :class="konfliktSeverityClass(k)" x-text="konfliktSeverityLabel(k)"></span>
-            <span class="motiv-check-name" :class="{ 'internal-link': k.motiv_id != null }"
-                  :data-tip="k.motiv_id != null ? $app.t('motiv.consistency.gotoMotiv') : null"
-                  @click.stop="gotoKonfliktMotiv(k)" x-text="k.motiv"></span>
+            <button type="button" class="entity-ref"
+                    x-entity-ref="{ type: 'motiv', id: k.motiv_id, name: k.motiv, onOpen: k.motiv_id != null ? () => gotoKonfliktMotiv(k) : null }"></button>
             <span class="motiv-check-text" x-text="k.problem"></span>
             <!-- Sprungziel kommt deterministisch aus dem Fund-Index, nicht aus dem
                  Modelltext (ein erfundenes Ziel fiele niemandem auf). -->
-            <button type="button" class="tag motiv-check-beleg"
-                    x-show="k.fundstelle && k.fundstelle.page_id"
-                    @click.stop="$app.gotoPageById(k.fundstelle.page_id)"
-                    :data-tip="$app.t('motiv.consistency.gotoBeleg')"
-                    x-text="k.fundstelle && k.fundstelle.page_name ? $app.t('motiv.consistency.beleg', { seite: k.fundstelle.page_name }) : $app.t('motiv.consistency.belegGeneric')"></button>
+            <template x-if="k.fundstelle && k.fundstelle.page_id">
+              <button type="button" class="entity-ref"
+                      x-entity-ref="{ type: 'seite', id: k.fundstelle.page_id, name: k.fundstelle.page_name }"></button>
+            </template>
             <span class="history-chevron" :class="{ open: selectedKonfliktIdx === idx }" aria-hidden="true"></span>
           </div>
           <div x-show="selectedKonfliktIdx === idx && k.vorschlag" class="motiv-check-hint" x-cloak>

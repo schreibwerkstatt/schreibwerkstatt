@@ -165,19 +165,41 @@ export function clearHighlights() {
 /** Sammelt Text-Nodes im root (Editor-Container) und konkateniert sie.
  *  Pendant zu find.js#collectTextNodes — duplizieren wir bewusst, weil
  *  find.js andere Aufrufer/Lifecycle hat. */
+// Block-Grenzen fuer den Match-Text: zwischen Text-Nodes verschiedener Bloecke
+// (bzw. ueber ein <br>) steht im `full` ein '\n', der keinem Node gehoert.
+// Ohne Trenner verschmoelzen "…Lea</p><p>Sie…" zu "LeaSie" und der Name am
+// Absatzende verliert seine Wortgrenze.
+const BLOCK_SEL = 'p,div,h1,h2,h3,h4,h5,h6,li,ul,ol,blockquote,pre,figure,figcaption,table,caption,tr,td,th';
+const BLOCK_SEP = '\n';
+
 function collectTextNodes(root) {
   const nodes = [];
   if (!root) return { nodes, full: '', starts: [] };
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-  let n;
-  while ((n = walker.nextNode())) nodes.push(n);
-  const starts = new Array(nodes.length);
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, null);
+  const starts = [];
+  const parts = [];
   let acc = 0;
-  for (let i = 0; i < nodes.length; i++) {
-    starts[i] = acc;
-    acc += nodes[i].nodeValue.length;
+  let prevBlock = null;
+  let sawBreak = false;
+  let n;
+  while ((n = walker.nextNode())) {
+    if (n.nodeType === 1) {
+      if (n.tagName === 'BR') sawBreak = true;
+      continue;
+    }
+    const block = n.parentElement?.closest(BLOCK_SEL) || root;
+    if (nodes.length > 0 && (sawBreak || block !== prevBlock)) {
+      parts.push(BLOCK_SEP);
+      acc += BLOCK_SEP.length;
+    }
+    sawBreak = false;
+    prevBlock = block;
+    nodes.push(n);
+    starts.push(acc);
+    parts.push(n.nodeValue);
+    acc += n.nodeValue.length;
   }
-  return { nodes, full: nodes.map(n => n.nodeValue).join(''), starts };
+  return { nodes, full: parts.join(''), starts };
 }
 
 /** Rangiert einen globalen [start, end)-Offset auf konkrete (Node, Offset)
@@ -228,6 +250,34 @@ export function applyHighlights(rootEl, entities) {
     out.push({ kind: r.kind, id: r.id, name: r.name, range });
   }
   return out;
+}
+
+/** Prueft eine (lebende) Highlight-Range: deckt sie noch genau den Namen als
+ *  ganzes Wort ab? Tippt der User am Range-Anfang, bleibt der Start stehen
+ *  und das Ende wandert mit — der neue Text laege bis zum Recompute im
+ *  Highlight. Nachbarzeichen werden nur im selben Text-Node geprueft. */
+function isRangeIntact(h) {
+  const r = h?.range;
+  if (!r || r.collapsed || !r.startContainer?.isConnected) return false;
+  if (r.toString().toLowerCase() !== String(h.name || '').toLowerCase()) return false;
+  const sc = r.startContainer, ec = r.endContainer;
+  if (sc.nodeType === 3 && isWordChar(sc.nodeValue[r.startOffset - 1])) return false;
+  if (ec.nodeType === 3 && isWordChar(ec.nodeValue[r.endOffset])) return false;
+  return true;
+}
+
+/** Wirft sofort (ohne Debounce) jede Highlight-Range aus den Registern, die
+ *  durch eine Eingabe nicht mehr den Namen abdeckt. Der entprellte Recompute
+ *  setzt danach den korrekten Stand. Liefert die noch gueltigen Eintraege. */
+export function pruneStaleHighlights(highlights) {
+  if (!Array.isArray(highlights) || highlights.length === 0) return [];
+  const keep = [];
+  for (const h of highlights) {
+    if (isRangeIntact(h)) { keep.push(h); continue; }
+    if (h.kind === 'figure') _hlFigure?.delete(h.range);
+    else if (h.kind === 'location') _hlLocation?.delete(h.range);
+  }
+  return keep;
 }
 
 /** Findet den ersten Highlight-Match, dessen Bounding-Rect den Punkt

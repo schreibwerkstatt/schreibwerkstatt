@@ -37,7 +37,7 @@ const { computeFigureYears, bookYearSpan } = require('../../lib/figure-years');
 const { buildFigureNamePatterns } = require('../../lib/page-index');
 const {
   AGE_ANALYSIS_VERSION, buildNameIndex, scanPage, selectCandidates, isStrong,
-  extractAgeSignals, numbersIn, trimSatz, consolidateFigure, foldWord,
+  numbersIn, consolidateFigure, foldWord, passageStellen, isPlausibleWert,
 } = require('../../lib/figure-age');
 const embed = require('../../lib/embed');
 const { semanticQuery } = require('../../lib/semantic-retrieval');
@@ -56,6 +56,9 @@ const EMBED_TOP_K = 6;
 // Zeichenbudget eines Figuren-Buendels im Prompt. Unter dem Chunk-Limit des
 // Providers, weil System-Prompt, Buch-Kontext und Antwort dazukommen.
 const BUNDLE_SHARE = 0.5;
+// Ein Zitat unter dieser Laenge ("zwölf") steht in fast jeder vorgelegten Stelle —
+// die Zitat-Pruefung waere dann wirkungslos.
+const MIN_ZITAT_CHARS = 8;
 
 /** Vergleichsform fuer Zitat-Nachschlag und Namens-Zuordnung. */
 function _norm(s) {
@@ -75,11 +78,13 @@ function computeContentSig(pages, figuren, model) {
   return h.digest('hex');
 }
 
-/** Kandidatenstellen aus dem Embedding-Index. Nur Treffer MIT Alters-/Jahres-
- *  signal — eine Passage ohne Zahl kann keine Altersangabe enthalten, und im
- *  Prompt kostet sie nur Platz. Non-fatal: ohne Index laeuft der Job weiter
- *  (dann eben nur mit den Musterfunden). */
-async function _semanticStellen(bookId, fig, pageMeta, signal) {
+/** Kandidatenstellen aus dem Embedding-Index. Eine Passage (Chunk, bis ~1500
+ *  Zeichen) wird auf den Satz MIT der Angabe zugeschnitten (`passageStellen`) —
+ *  der Passagen-Anfang enthielte die Zahl meist nicht, und die Zitat-Pruefung
+ *  verwuerfe dann ein korrektes Zitat. Treffer ohne Alters-/Jahressignal oder ohne
+ *  Nennung der Figur fallen weg. Non-fatal: ohne Index laeuft der Job weiter
+ *  (dann eben nur mit den Musterfunden); ein Abbruch wird durchgereicht. */
+async function _semanticStellen(bookId, fig, pageMeta, nameIndex, signal) {
   const query = [fig.name, fig.kurzname].filter(Boolean).join(' ')
     + ' Alter Jahre alt geboren Geburtsjahr Geburtstag wie alt';
   const hits = await semanticQuery(bookId, query, { kinds: ['page'], topK: EMBED_TOP_K, signal });
@@ -87,22 +92,22 @@ async function _semanticStellen(bookId, fig, pageMeta, signal) {
   for (const h of hits) {
     if (h.kind !== 'page') continue;
     const pageId = parseInt(h.entity_id, 10);
-    const signale = extractAgeSignals(h.text || '');
-    if (!signale.length) continue;
     const meta = pageMeta.get(pageId) || {};
-    out.push({
-      figure_id: fig.id,
-      satz: trimSatz(h.text),
-      signale,
-      page_id: Number.isFinite(pageId) ? pageId : null,
-      page_name: meta.page_name ?? null,
-      chapter: meta.chapter ?? null,
-      chapter_id: meta.chapter_id ?? null,
-      ordinal: meta.ordinal ?? 0,
-      offset: 0,
-      indirekt: false,
-      semantisch: true,
-    });
+    for (const st of passageStellen(h.text || '', nameIndex, fig.id)) {
+      out.push({
+        figure_id: fig.id,
+        satz: st.satz,
+        signale: st.signale,
+        page_id: Number.isFinite(pageId) ? pageId : null,
+        page_name: meta.page_name ?? null,
+        chapter: meta.chapter ?? null,
+        chapter_id: meta.chapter_id ?? null,
+        ordinal: meta.ordinal ?? 0,
+        offset: 0,
+        indirekt: st.indirekt,
+        semantisch: true,
+      });
+    }
   }
   return out;
 }
@@ -116,6 +121,12 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
 
   try {
     const signal = () => jobAbortControllers.get(jobId)?.signal;
+    // Abbruch WIRFT, statt eine Schleife zu verlassen: der Lauf endet sonst regulaer,
+    // ersetzt den Index (Full-Replace) mit den bis dahin gesammelten Teilfunden und
+    // meldet `done` — der vorige Stand waere weg und der Teilstand als aktuell markiert.
+    const throwIfAborted = () => {
+      if (signal()?.aborted) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
+    };
 
     updateJob(jobId, { statusText: 'job.phase.figurAlterCollect', progress: 4 });
 
@@ -150,7 +161,7 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
     const pageMeta = new Map();
     const byFigur = new Map(figuren.map(f => [f.id, []]));
     for (let i = 0; i < pageContents.length; i++) {
-      if (signal()?.aborted) break;
+      throwIfAborted();
       const p = pageContents[i];
       pageMeta.set(p.id, { page_name: p.title || null, chapter: p.chapter || null, chapter_id: p.chapter_id ?? null, ordinal: i });
       for (const c of scanPage(p.text, nameIndex, {
@@ -167,13 +178,13 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
     if (embed.isEnabled()) {
       updateJob(jobId, { statusText: 'job.phase.figurAlterSemantic', progress: 13 });
       for (const f of figuren) {
-        if (signal()?.aborted) break;
+        throwIfAborted();
         const have = (byFigur.get(f.id) || []).filter(isStrong).length;
         if (have >= EMBED_IF_STRONG_BELOW) continue;
         if (embedQueries >= MAX_EMBED_QUERIES) { embedSkipped++; continue; }
         embedQueries++;
         try {
-          const found = await _semanticStellen(bookId, f, pageMeta, signal());
+          const found = await _semanticStellen(bookId, f, pageMeta, nameIndex, signal());
           if (found.length) embedUsed = true;
           // Dieselbe Seite nicht zweimal — der Musterfund ist praeziser (Satz
           // statt Passage), also gewinnt er.
@@ -181,7 +192,9 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
           for (const c of found) if (!seenPages.has(c.page_id)) byFigur.get(f.id)?.push(c);
         } catch (e) {
           // Nicht fatal: ohne Index bleiben die Musterfunde. Gleiche Haltung wie
-          // beim Textbeleg-Kontext der Figuren-Werkstatt.
+          // beim Textbeleg-Kontext der Figuren-Werkstatt. Ein Abbruch ist kein
+          // Index-Fehler und beendet den Lauf.
+          if (e.name === 'AbortError' || signal()?.aborted) { throwIfAborted(); throw e; }
           logger.warn(`Semantische Nachlese fehlgeschlagen figur=${f.id}: ${e.message}`);
         }
       }
@@ -233,7 +246,7 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
     }
 
     const fundeByFigur = new Map();
-    let verworfenZitat = 0, verworfenZahl = 0, verworfenFigur = 0;
+    let verworfenZitat = 0, verworfenZahl = 0, verworfenFigur = 0, verworfenWert = 0;
 
     function consume(funde, stellenOf) {
       for (const v of Array.isArray(funde) ? funde : []) {
@@ -243,7 +256,10 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
         const art = ['alter', 'geburtsjahr', 'todesjahr'].includes(v.art) ? v.art : null;
         const wert = Number.isFinite(Number(v.wert)) ? Math.round(Number(v.wert)) : null;
         const zitat = typeof v.zitat === 'string' ? v.zitat.trim() : '';
-        if (!art || wert == null || !zitat) { verworfenZitat++; continue; }
+        if (!art || wert == null || zitat.length < MIN_ZITAT_CHARS) { verworfenZitat++; continue; }
+        // Plausibilitaet: ein Geburtsjahr 12 oder ein Alter 400 ist eine Verwechslung,
+        // auch wenn die Zahl im Zitat steht.
+        if (!isPlausibleWert(art, wert)) { verworfenWert++; continue; }
 
         // Zitat-Pruefung: das Zitat muss in einer der VORGELEGTEN Stellen dieser
         // Figur stehen. Eine Zahl aus einem Sprachmodell ohne nachschlagbare
@@ -290,32 +306,54 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
       + `buendel=${bundles.length} embedQueries=${embedQueries} stellenVerworfen=${stellenDropped}`,
     );
 
-    for (let i = 0; i < bundles.length; i++) {
-      if (signal()?.aborted) break;
-      const bundle = bundles[i];
-      const from = AI_FROM + Math.floor((i / bundles.length) * (AI_TO - AI_FROM));
-      const to = AI_FROM + Math.floor(((i + 1) / bundles.length) * (AI_TO - AI_FROM));
+    // Arbeitsliste statt fester Schleife: reisst ein Bündel am Output-Cap (viele
+    // Funde in einem Bündel), wird es halbiert und beide Hälften laufen einzeln —
+    // statt den ganzen Lauf mit `aiTruncated` zu verwerfen. Eine einzelne Figur, die
+    // allein nicht passt, bleibt ein Fehler (dann ist das Cap schlicht zu klein).
+    const queue = [...bundles];
+    let done = 0;
+    while (queue.length) {
+      throwIfAborted();
+      const bundle = queue.shift();
+      const total = done + queue.length + 1;
+      const from = AI_FROM + Math.floor((done / total) * (AI_TO - AI_FROM));
+      const to = AI_FROM + Math.floor(((done + 1) / total) * (AI_TO - AI_FROM));
       updateJob(jobId, {
         statusText: 'job.phase.figurAlterAsk',
-        statusParams: { done: i + 1, total: bundles.length },
+        statusParams: { done: done + 1, total },
         progress: from,
       });
       const stellenOf = new Map(bundle.map(b => [b.fig.id, b.stellen]));
-      const result = await aiCall(jobId, tok,
-        buildFigurAlterPrompt(bundle.map(b => ({
-          name: b.fig.name, kurzname: b.fig.kurzname, typ: b.fig.typ,
-          geburtstag: b.fig.geburtstag,
-          stellen: b.stellen.map(s => ({ satz: s.satz, chapter: s.chapter, page_name: s.page_name, indirekt: s.indirekt })),
-        })), BUCH_KONTEXT, buchJahre),
-        systemPrompt, from, to, 4000, 0.25, 8000, undefined, SCHEMA_FIGUR_ALTER,
-      );
+      let result;
+      try {
+        result = await aiCall(jobId, tok,
+          buildFigurAlterPrompt(bundle.map(b => ({
+            name: b.fig.name, kurzname: b.fig.kurzname, typ: b.fig.typ,
+            geburtstag: b.fig.geburtstag,
+            stellen: b.stellen.map(s => ({ satz: s.satz, chapter: s.chapter, page_name: s.page_name, indirekt: s.indirekt, semantisch: !!s.semantisch })),
+          })), BUCH_KONTEXT, buchJahre),
+          systemPrompt, from, to, 4000, 0.25, 8000, undefined, SCHEMA_FIGUR_ALTER,
+        );
+      } catch (e) {
+        if (e?.message === 'job.error.aiTruncated' && bundle.length > 1) {
+          const mid = Math.ceil(bundle.length / 2);
+          queue.unshift(bundle.slice(0, mid), bundle.slice(mid));
+          logger.warn(`Alters-Analyse: Bündel mit ${bundle.length} Figuren am Output-Cap abgeschnitten – wird geteilt.`);
+          continue;
+        }
+        throw e;
+      }
       // Pflichtfeld: fehlt `funde`, hat der Provider nicht geantwortet wie
       // verlangt. Ein leeres ARRAY ist dagegen gueltig (Stellen ohne Aussage).
       if (!Array.isArray(result?.funde)) throw i18nError('job.error.figurAlterMissing');
       consume(result.funde, stellenOf);
+      done++;
     }
 
     // ── Schicht 3: Verdichtung ──────────────────────────────────────────────
+    // Letzter Abbruch-Punkt VOR dem Full-Replace: was bis hier gesammelt ist, ist ein
+    // Teilstand und darf den vorigen Index nicht ersetzen.
+    throwIfAborted();
     updateJob(jobId, { statusText: 'job.phase.figurAlterConsolidate', progress: AI_TO + 2 });
     const rows = [];
     for (const f of figuren) {
@@ -344,7 +382,7 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
     logger.info(
       `Alters-Analyse fertig: book=${bookId} zeilen=${written.rows} mitAlter=${written.mitAlter} `
       + `belege=${written.belegeTotal} widersprueche=${widersprueche} `
-      + `verworfen(zitat=${verworfenZitat} zahl=${verworfenZahl} figur=${verworfenFigur})`,
+      + `verworfen(zitat=${verworfenZitat} zahl=${verworfenZahl} wert=${verworfenWert} figur=${verworfenFigur})`,
     );
 
     completeJob(jobId, {
@@ -354,7 +392,7 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
       widersprueche,
       stellenDropped,
       embedQueries, embedSkipped, embedUsed,
-      verworfen: { zitat: verworfenZitat, zahl: verworfenZahl, figur: verworfenFigur },
+      verworfen: { zitat: verworfenZitat, zahl: verworfenZahl, wert: verworfenWert, figur: verworfenFigur },
       tokensIn: tok.in, tokensOut: tok.out,
     }, tps(tok), `${written.mitAlter}/${figuren.length} Figuren mit Alter`);
   } catch (e) {

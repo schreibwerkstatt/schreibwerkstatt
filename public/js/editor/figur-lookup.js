@@ -27,48 +27,79 @@ function wordAtClientPoint(x, y) {
   return r ? r.word : null;
 }
 
+// Namenspartikel und Artikel, die als Einzel-Token keine Figur bezeichnen
+// („von" aus „Johann von Goethe", „Der" aus „Der Alte"). Der Vollname bleibt
+// als Schluessel erhalten; nur der Token-Einzeltreffer faellt weg.
+const NAME_PARTICLES = new Set([
+  'von', 'vom', 'van', 'der', 'die', 'das', 'den', 'dem', 'des', 'zu', 'zum', 'zur',
+  'und', 'auf', 'am', 'im', 'de', 'del', 'della', 'di', 'da', 'du', 'la', 'le', 'les',
+  'ten', 'ter', 'the', 'of', 'and', 'el', 'al', 'bin', 'ibn',
+]);
+
+/** Pure: Lookup-Index normalisierter Name → Figur (null = mehrdeutig).
+ *  Stale Figuren (nicht mehr im Text) bleiben draussen. */
+export function buildFigurLookupIndex(figuren) {
+  const map = new Map();
+  for (const f of (figuren || [])) {
+    if (!f || f.stale) continue;
+    const keys = new Set();
+    if (f.name) keys.add(normalizeName(f.name));
+    if (f.kurzname) keys.add(normalizeName(f.kurzname));
+    // Einzel-Tokens aus dem Vollnamen (für "Müller" aus "Anna Müller"),
+    // aber nur wenn der Token eindeutig bleibt und kein Namenspartikel ist.
+    if (f.name) {
+      for (const tok of String(f.name).split(/\s+/)) {
+        const n = normalizeName(tok);
+        if (n.length >= 3 && !NAME_PARTICLES.has(n)) keys.add(n);
+      }
+    }
+    for (const k of keys) {
+      if (!k) continue;
+      if (map.has(k)) {
+        if (map.get(k) !== f) map.set(k, null); // mehrdeutig → nicht matchen
+      } else {
+        map.set(k, f);
+      }
+    }
+  }
+  return map;
+}
+
+// Index je Katalog-Array (Loader reassignen `catalog.figuren`, pushen nie):
+// ein Buchwechsel, Reload oder Delete liefert ein neues Array und damit einen
+// neuen Index — auch dann, wenn ein Ladefehler den Katalog leer laesst.
+const _indexByCatalog = new WeakMap();
+function _indexFor(figuren) {
+  const src = figuren || [];
+  let idx = _indexByCatalog.get(src);
+  if (!idx) { idx = buildFigurLookupIndex(src); _indexByCatalog.set(src, idx); }
+  return idx;
+}
+
 // ── Root-Methoden ──────────────────────────────────────────────────────────
 // Lookup-Index + Word-Matching leben am Root, weil `_tryOpenFigurLookupAt`
 // synchron ein Bool zurückgeben muss (Synonym-Menü nutzt das, um nicht zu
 // öffnen, falls bereits ein Figur-Popover gezeigt wird). Der Display-Teil
 // läuft als Sub-Komponente und wird über Events gesteuert.
 export const figurLookupMethods = {
+  // Index des aktuellen Katalogs (an dessen Array-Referenz gecacht). Das Feld
+  // `_figurLookupIndex` spiegelt ihn fuer bestehende Leser; die Loader duerfen
+  // es weiter nullen, die Wahrheit ist die Referenz des Katalogs.
   _buildFigurLookupIndex() {
-    const map = new Map();
-    for (const f of (this.$store.catalog.figuren || [])) {
-      const keys = new Set();
-      if (f.name) keys.add(normalizeName(f.name));
-      if (f.kurzname) keys.add(normalizeName(f.kurzname));
-      // Einzel-Tokens aus dem Vollnamen (für "Müller" aus "Anna Müller"),
-      // aber nur wenn der Token eindeutig bleibt.
-      if (f.name) {
-        for (const tok of String(f.name).split(/\s+/)) {
-          const n = normalizeName(tok);
-          if (n.length >= 3) keys.add(n);
-        }
-      }
-      for (const k of keys) {
-        if (!k) continue;
-        if (map.has(k)) {
-          map.set(k, null); // mehrdeutig → nicht matchen
-        } else {
-          map.set(k, f);
-        }
-      }
-    }
-    this._figurLookupIndex = map;
+    this._figurLookupIndex = _indexFor(this.$store.catalog.figuren);
+    return this._figurLookupIndex;
   },
 
   _findFigurByWord(word) {
     if (!word) return null;
-    if (!this._figurLookupIndex) this._buildFigurLookupIndex();
+    const idx = this._buildFigurLookupIndex();
     const n = normalizeName(word);
     // Exakter Hit: value kann null sein (mehrdeutig → bewusst nicht matchen).
-    if (this._figurLookupIndex.has(n)) return this._figurLookupIndex.get(n);
+    if (idx.has(n)) return idx.get(n);
     // Genitiv-s abschneiden: "Samuels" → "Samuel", "Müllers" → "Müller".
     if (n.length > 2 && n.endsWith('s')) {
       const base = n.slice(0, -1);
-      if (this._figurLookupIndex.has(base)) return this._figurLookupIndex.get(base);
+      if (idx.has(base)) return idx.get(base);
     }
     return null;
   },
@@ -118,6 +149,7 @@ export const figurLookupCardMethods = {
     if (window.__app) window.__app._figurLookupOpen = true;
     this._figurLookupAnchor = { x: clientX, y: clientY };
     this._attachFigurLookupScroll();
+    this._attachFigurLookupEscape();
     this.$nextTick(() => this._positionFigurLookup());
     // Erstpositionierung bereits vor nextTick, damit kein Flash oben links.
     this._positionFigurLookup();
@@ -130,6 +162,31 @@ export const figurLookupCardMethods = {
     this._figurLookupAnchor = null;
     if (window.__app) window.__app._figurLookupOpen = false;
     this._detachFigurLookupScroll();
+    this._detachFigurLookupEscape();
+  },
+
+  // Escape schliesst NUR das Popover. Darum nur solange es offen ist, und in
+  // der Capture-Phase am window (vor jedem anderen keydown-Listener) samt
+  // stopPropagation: ein window-Bubble-Listener (frueher `@keydown.escape.window`)
+  // lief VOR dem spaeter registrierten Fokusmodus-Handler, setzte
+  // `_figurLookupOpen` schon zurueck — und der Fokusmodus wertete dasselbe
+  // Escape dann als „verlassen". Ebenso schliesst Escape im Notebook nicht
+  // zusaetzlich das Editor-Vollbild.
+  _attachFigurLookupEscape() {
+    if (this._figurLookupEscAbort) return;
+    const ctrl = new AbortController();
+    this._figurLookupEscAbort = ctrl;
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !this.showFigurLookup) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.closeFigurLookup();
+    }, { capture: true, signal: ctrl.signal });
+  },
+
+  _detachFigurLookupEscape() {
+    this._figurLookupEscAbort?.abort();
+    this._figurLookupEscAbort = null;
   },
 
   _positionFigurLookup() {

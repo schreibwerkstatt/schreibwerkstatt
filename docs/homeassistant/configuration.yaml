@@ -3,6 +3,9 @@
 #   schreibwerkstatt_token: "Bearer sw_REPLACE_WITH_TOKEN"
 #   schreibwerkstatt_url:   "https://app.example.com/metrics"
 #
+# Kennzahlen je User (Scope metrics:users) deckt dieses Paket nicht ab — ihre
+# Label-Werte (User) sind nicht vorab bekannt. Dafuer ist /metrics.json da.
+#
 # Pattern-Hinweis: jeder Single-Match-Sensor nutzt
 #   (regex_findall(...) + [default]) | first
 # statt regex_findall_index — sonst IndexError beim ersten Render
@@ -16,6 +19,71 @@ rest:
       Authorization: !secret schreibwerkstatt_token
       Accept: text/plain
     sensor:
+      # ---- Server-Betrieb ----
+      - name: Schreibwerkstatt Uptime
+        unique_id: sw_process_uptime_seconds
+        icon: mdi:timer-outline
+        unit_of_measurement: s
+        device_class: duration
+        value_template: >
+          {{ ((value | regex_findall('sw_process_uptime_seconds (\d+)')) + ['0']) | first | int(0) }}
+        state_class: measurement
+
+      - name: Schreibwerkstatt Memory RSS
+        unique_id: sw_process_resident_memory_bytes
+        icon: mdi:memory
+        unit_of_measurement: B
+        device_class: data_size
+        value_template: >
+          {{ ((value | regex_findall('sw_process_resident_memory_bytes (\d+)')) + ['0']) | first | int(0) }}
+        state_class: measurement
+
+      - name: Schreibwerkstatt Heap Used
+        unique_id: sw_process_heap_used_bytes
+        icon: mdi:memory
+        unit_of_measurement: B
+        device_class: data_size
+        value_template: >
+          {{ ((value | regex_findall('sw_process_heap_used_bytes (\d+)')) + ['0']) | first | int(0) }}
+        state_class: measurement
+
+      - name: Schreibwerkstatt DB Size
+        unique_id: sw_db_size_bytes
+        icon: mdi:database
+        unit_of_measurement: B
+        device_class: data_size
+        value_template: >
+          {{ ((value | regex_findall('sw_db_size_bytes (\d+)')) + ['0']) | first | int(0) }}
+        state_class: measurement
+
+      - name: Schreibwerkstatt DB Schema Version
+        unique_id: sw_db_schema_version
+        icon: mdi:database-cog
+        value_template: >
+          {{ ((value | regex_findall('sw_db_schema_version (\d+)')) + ['0']) | first | int(0) }}
+
+      - name: Schreibwerkstatt JS Errors 24h
+        unique_id: sw_js_errors_24h
+        icon: mdi:alert-circle-outline
+        value_template: >
+          {{ ((value | regex_findall('sw_js_errors_24h (\d+)')) + ['0']) | first | int(0) }}
+        state_class: measurement
+
+      - name: Schreibwerkstatt Registrations Pending
+        unique_id: sw_registration_requests_pending
+        icon: mdi:account-question
+        value_template: >
+          {{ ((value | regex_findall('sw_registration_requests_pending (\d+)')) + ['0']) | first | int(0) }}
+        state_class: measurement
+
+      - name: Schreibwerkstatt Devices
+        unique_id: sw_devices
+        icon: mdi:cellphone-link
+        value_template: >
+          {% set vals = value | regex_findall('sw_devices\{[^}]+\}\s+(\d+)') %}
+          {{ vals | map('int', 0) | sum }}
+        state_class: measurement
+
       # ---- Build + User ----
       - name: Schreibwerkstatt Version
         unique_id: sw_version
@@ -148,6 +216,14 @@ rest:
           {{ ((value | regex_findall('sw_stt_chars_today (\d+)')) + ['0']) | first | int(0) }}
         state_class: measurement
 
+      - name: Schreibwerkstatt Words Today
+        unique_id: sw_words_today
+        icon: mdi:text-box-plus
+        unit_of_measurement: "Wörter"
+        value_template: >
+          {{ ((value | regex_findall('sw_words_today (-?\d+)')) + ['0']) | first | int(0) }}
+        state_class: measurement
+
       # ---- Job-Queue (In-Memory, resettet bei Server-Restart) ----
       - name: Schreibwerkstatt Jobs Running
         unique_id: sw_jobs_running
@@ -161,6 +237,28 @@ rest:
         icon: mdi:tray-full
         value_template: >
           {{ ((value | regex_findall('sw_jobs_queued (\d+)')) + ['0']) | first | int(0) }}
+        state_class: measurement
+
+      - name: Schreibwerkstatt Jobs In Memory
+        unique_id: sw_jobs_in_memory
+        icon: mdi:cog
+        value_template: >
+          {% set vals = value | regex_findall('sw_jobs_in_memory\{[^}]+\}\s+(\d+)') %}
+          {{ vals | map('int', 0) | sum }}
+        state_class: measurement
+
+      - name: Schreibwerkstatt Jobs Done 24h
+        unique_id: sw_jobs_ended_24h_done
+        icon: mdi:cog-transfer
+        value_template: >
+          {{ ((value | regex_findall('sw_jobs_ended_24h\{status="done"\} (\d+)')) + ['0']) | first | int(0) }}
+        state_class: measurement
+
+      - name: Schreibwerkstatt Jobs Failed 24h
+        unique_id: sw_jobs_ended_24h_error
+        icon: mdi:cog-off
+        value_template: >
+          {{ ((value | regex_findall('sw_jobs_ended_24h\{status="error"\} (\d+)')) + ['0']) | first | int(0) }}
         state_class: measurement
 
       # ---- Persistente Job-Historie (Sum über alle type/status) ----
@@ -182,7 +280,53 @@ rest:
         value_template: >
           {% set vals = value | regex_findall('sw_cost_usd_total\{[^}]+\}\s+([0-9.eE+-]+)') %}
           {{ (vals | map('float', 0) | sum) | round(4) }}
-        state_class: total_increasing
+        state_class: total
+
+      - name: Schreibwerkstatt Cost USD Today
+        unique_id: sw_cost_usd_today
+        icon: mdi:cash-clock
+        unit_of_measurement: USD
+        device_class: monetary
+        value_template: >
+          {{ ((value | regex_findall('sw_cost_usd_today ([0-9.eE+-]+)')) + ['0']) | first | float(0) | round(4) }}
+        state_class: total
+
+      - name: Schreibwerkstatt Cost USD Month
+        unique_id: sw_cost_usd_month
+        icon: mdi:cash-multiple
+        unit_of_measurement: USD
+        device_class: monetary
+        value_template: >
+          {{ ((value | regex_findall('sw_cost_usd_month ([0-9.eE+-]+)')) + ['0']) | first | float(0) | round(4) }}
+        state_class: total
+
+      - name: Schreibwerkstatt Cost USD By Type Total
+        unique_id: sw_cost_usd_by_type_total
+        icon: mdi:cash
+        unit_of_measurement: USD
+        device_class: monetary
+        value_template: >
+          {% set vals = value | regex_findall('sw_cost_usd_by_type_total\{[^}]+\}\s+([0-9.eE+-]+)') %}
+          {{ (vals | map('float', 0) | sum) | round(4) }}
+        state_class: total
+
+      # Nur mit hinterlegtem Anthropic-Admin-Key; sonst fehlt die Kennzahl → 0.
+      - name: Schreibwerkstatt Billed USD Month
+        unique_id: sw_billed_usd_month
+        icon: mdi:receipt-text
+        unit_of_measurement: USD
+        device_class: monetary
+        value_template: >
+          {{ ((value | regex_findall('sw_billed_usd_month ([0-9.eE+-]+)')) + ['0']) | first | float(0) | round(2) }}
+        state_class: total
+
+      - name: Schreibwerkstatt Billed Diff USD Month
+        unique_id: sw_billed_diff_usd_month
+        icon: mdi:scale-unbalanced
+        unit_of_measurement: USD
+        value_template: >
+          {{ ((value | regex_findall('sw_billed_diff_usd_month ([0-9.eE+-]+)')) + ['0']) | first | float(0) | round(2) }}
+        state_class: measurement
 
       - name: Schreibwerkstatt Tokens In Total
         unique_id: sw_tokens_in_total

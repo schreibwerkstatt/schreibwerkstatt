@@ -141,28 +141,73 @@ function occChapters(bookId, userEmail, floor = 0) {
   return _stmtChapters.all(parseInt(bookId), userEmail, _floorParam(floor));
 }
 
-// Frischestand: der juengste Draft-Stand gegen den juengsten Anchor-Lauf. Wie
-// `beatAnchorStale` eine billige updated_at-Heuristik — sie sagt „die Mindmap
-// hat sich seit der letzten Verankerung bewegt", nicht „der Text hat sich
-// geaendert" (das beantwortet der embed-Index).
-const _stmtStale = db.prepare(`
-  SELECT
-    (SELECT MAX(d.updated_at) FROM draft_figures d
-      WHERE d.book_id = ? AND d.user_email = ?) AS draft_max,
-    (SELECT MAX(o.created_at) FROM draft_figure_occurrences o
-       JOIN draft_figures d2 ON d2.id = o.draft_id
-      WHERE d2.book_id = ? AND d2.user_email = ?) AS occ_max
+// ── Lauf-Zeitpunkt ─────────────────────────────────────────────────────────
+// Wann wurde zuletzt verankert? Eine Scan-Marker-Tabelle gibt es nicht (Full-
+// Replace pro Lauf); die Antwort kommt — wie `beatAnchorLastRun` in
+// db/plot/anchor.js — aus zwei Signalen: dem juengsten erfolgreichen
+// `figur-anchor`-Lauf in `job_runs` (nie geprunt) ODER der juengsten Fundstelle
+// (deckt Indizes ohne Job-Spur ab). Ohne den Lauf-Zeitpunkt waere „verankert,
+// nichts gefunden" von „nie verankert" nicht zu unterscheiden.
+const _stmtLastRun = db.prepare(`
+  SELECT MAX(COALESCE(started_at, queued_at)) AS t FROM job_runs
+   WHERE type = 'figur-anchor' AND status = 'done' AND book_id = ? AND user_email = ?
+`);
+const _stmtOccMax = db.prepare(`
+  SELECT MAX(o.created_at) AS t
+    FROM draft_figure_occurrences o
+    JOIN draft_figures d ON d.id = o.draft_id
+   WHERE d.book_id = ? AND d.user_email = ?
+`);
+
+// ISO+Z und das Alt-Format ('YYYY-MM-DD HH:MM:SS', UTC ohne Z) auf ms.
+function _tsMs(s) {
+  if (!s) return null;
+  const str = String(s);
+  const ms = Date.parse(/[TZ]/.test(str) ? str : `${str.replace(' ', 'T')}Z`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+// Zeitpunkt (ms) des juengsten erfolgreichen Anchor-Laufs; `lastJobRun` trennt
+// den Job-Zeitpunkt vom Fundstellen-Fallback (der Aufrufer braucht ihn, um
+// „Lauf ohne Treffer" zu erkennen).
+function figurAnchorState(bookId, userEmail) {
+  const bid = parseInt(bookId);
+  const runMs = _tsMs(_stmtLastRun.get(bid, userEmail)?.t);
+  const occMs = _tsMs(_stmtOccMax.get(bid, userEmail)?.t);
+  const lastMs = Math.max(runMs ?? -Infinity, occMs ?? -Infinity);
+  return {
+    lastRunMs: Number.isFinite(lastMs) ? lastMs : null,
+    lastJobRunMs: runMs,
+    hasOccurrences: occMs != null,
+  };
+}
+
+// Hat sich ein Draft seit der letzten Verankerung bewegt? Dann sind seine Kerne
+// ohne Fundstelle UNGEPRUEFT — der Lauf hat einen damals ungeplanten Kern gar
+// nicht gesucht. Billige updated_at-Heuristik wie `beatAnchorStale`.
+function draftChangedSinceAnchor(draft, lastRunMs) {
+  if (lastRunMs == null) return true;
+  const upd = _tsMs(draft?.updated_at);
+  return upd != null && upd > lastRunMs;
+}
+
+// Frischestand: der juengste Draft-Stand gegen den juengsten Anchor-Lauf. Sagt
+// „die Mindmap hat sich seit der letzten Verankerung bewegt", nicht „der Text
+// hat sich geaendert" (das beantwortet der embed-Index).
+const _stmtDraftMax = db.prepare(`
+  SELECT MAX(d.updated_at) AS t FROM draft_figures d WHERE d.book_id = ? AND d.user_email = ?
 `);
 function draftAnchorStale(bookId, userEmail) {
-  const bid = parseInt(bookId);
-  const r = _stmtStale.get(bid, userEmail, bid, userEmail);
-  if (!r || !r.draft_max) return false;   // keine Drafts → nichts zu verankern
-  if (!r.occ_max) return true;            // nie verankert → Knopf anbieten
-  return String(r.draft_max) > String(r.occ_max);
+  const draftMs = _tsMs(_stmtDraftMax.get(parseInt(bookId), userEmail)?.t);
+  if (draftMs == null) return false;      // keine Drafts → nichts zu verankern
+  const { lastRunMs } = figurAnchorState(bookId, userEmail);
+  if (lastRunMs == null) return true;     // nie verankert → Knopf anbieten
+  return draftMs > lastRunMs;
 }
 
 module.exports = {
   replaceKernOccurrences, clearDraftOccurrences,
   listDraftOccurrences, hasDraftOccurrences,
   occCounts, occChapters, draftAnchorStale,
+  figurAnchorState, draftChangedSinceAnchor,
 };

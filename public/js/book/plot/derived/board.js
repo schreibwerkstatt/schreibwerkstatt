@@ -56,15 +56,11 @@ export const boardMethods = {
 
   // Die Figuren-Auswahl läuft über EINE `combobox` mit zwei opt-Gruppen
   // (Katalog + Werkstatt, Präfix fig:/draft:) — Markup + addBeatFigureLink in
-  // plot-beat-cell.html / beats.js. Die Chips darunter lesen die Labels hier.
+  // plot-beat-edit.html / beats.js. Katalog-Figuren und Orte löst die
+  // Entitäts-Referenz selbst auf; Werkstatt-Figuren und Motive haben keinen
+  // Frontend-Katalog, ihre Labels liefern die beiden Getter unten.
 
-  // Aktuell gewählte Katalog-Figuren des Edit-Drafts als entfernbare Chips.
-  beatFigureChips() {
-    const byId = window.__app?.figurenById;
-    return (this.beatDraft.figure_ids || []).map(id => ({ id, label: byId?.get(id)?.kurzname || byId?.get(id)?.name || id }));
-  },
-
-  // Aktuell gewählte Werkstatt-Figuren des Edit-Drafts als entfernbare Chips.
+  // Aktuell gewählte Werkstatt-Figuren des Edit-Drafts (id + Label für die Referenz).
   beatWerkstattChips() {
     return (this.beatDraft.draft_figure_ids || []).map(id => ({ id, label: this.draftFigurenById?.get(id)?.name || id }));
   },
@@ -93,19 +89,10 @@ export const boardMethods = {
     return rows;
   },
 
-  // Aktuell gewählte Motive des Edit-Drafts als entfernbare Chips.
+  // Aktuell gewählte Motive des Edit-Drafts (id + Label für die Referenz).
   beatMotifChips() {
     const byId = new Map((this.motifsCatalog || []).map(m => [m.id, m]));
     return (this.beatDraft.motif_ids || []).map(id => ({ id, label: byId.get(id)?.name || id }));
-  },
-
-  // Aktuell gewählte Schauplätze des Edit-Drafts als entfernbare Chips. Quelle
-  // ist der globale Orte-Katalog ($store.catalog.orte) — dieselbe Liste, die der
-  // entityPicker anbietet; ein eigener Bestand hier wäre eine zweite Wahrheit.
-  beatOrtChips() {
-    const orte = window.Alpine?.store('catalog')?.orte || [];
-    const byId = new Map(orte.map(o => [o.id, o]));
-    return (this.beatDraft.location_ids || []).map(id => ({ id, label: byId.get(id)?.name || id }));
   },
 
   // ── Stränge (Swimlanes, Derived) ───────────────────────────────────────────
@@ -202,21 +189,6 @@ export const boardMethods = {
     return (key && ACT_PALETTE.includes(key)) ? `var(--palette-${key})` : 'var(--card-accent)';
   },
 
-  // Anzeigename der an den Strang gebundenen Figur (Katalog via fig_id, sonst
-  // Werkstatt via draft_figure_id). Leer, wenn keine Figur gebunden.
-  threadFigureLabel(thread) {
-    if (!thread) return '';
-    if (thread.fig_id) {
-      const f = window.__app.figurenById?.get(thread.fig_id);
-      return f ? (f.kurzname || f.name) : '';
-    }
-    if (thread.draft_figure_id) {
-      const d = this.draftFigurenById?.get(thread.draft_figure_id);
-      return d ? d.name : '';
-    }
-    return '';
-  },
-
   // ── Live-Vererbung Strang → Beat ────────────────────────────────────────────
   // Ein Beat in einer Strang-Lane erbt implizit die Hauptfigur + das Kapitel des
   // Strangs (nie auf dem Beat gespeichert — rein Anzeige + KI-Kontext). Eigene
@@ -288,14 +260,6 @@ export const boardMethods = {
     return (key && ACT_PALETTE.includes(key)) ? `var(--palette-${key})` : 'var(--card-accent)';
   },
 
-  // CSS-Akzent eines Motiv-Badges auf der Beat-Karte: bekannter Palette-Key
-  // (eigene Motiv- oder geerbte Themen-Farbe) → --palette-<key>, sonst der
-  // Motiv-Werkstatt-Akzent. Whitelist verhindert CSS-Injection.
-  motifAccent(m) {
-    const key = m && m.farbe;
-    return (key && ACT_PALETTE.includes(key)) ? `var(--palette-${key})` : 'var(--card-accent-motiv)';
-  },
-
   // ── Beat-Verankerung (Soll status vs. Ist-Fundstellen aus plot_beat_occurrences) ──
   // Klassifikation via reiner Funktion (constants.js, unit-getestet). Der Server
   // hängt occ_count + occ_top an jeden Beat (routes/plot.js). 'none' → kein Badge.
@@ -324,8 +288,8 @@ export const boardMethods = {
     return label === key ? typ : label;
   },
 
-  // Ausgehende Kanten eines Beats (from_beat_id === beat.id) — read-only Badges +
-  // Edit-Chips. Den Ziel-Titel liefert relTargetTitle (live aus this.beats).
+  // Ausgehende Kanten eines Beats (from_beat_id === beat.id) — read-only Kanten +
+  // Edit-Liste. Den Ziel-Titel liefert relTargetTitle (live aus this.beats).
   beatRelationsOut(beat) {
     if (!beat) return [];
     return this._memo(`relOut:${beat.id}`, [this.relations, beat.id], () =>

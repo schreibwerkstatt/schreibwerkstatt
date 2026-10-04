@@ -38,13 +38,13 @@ function seed() {
   if (!appUsers.getUser(OWNER)) appUsers.createUser({ email: OWNER, displayName: 'Autor Anna' });
   db.prepare(`INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`)
     .run(BOOK_ID, 'Live-Buch', now, now);
-  db.prepare(`INSERT INTO chapters (chapter_id, book_id, chapter_name, position, priority, updated_at)
-              VALUES (?, ?, ?, 0, 0, ?)`).run(CHAPTER_ID, BOOK_ID, 'Kapitel Eins', now);
-  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, chapter_id, position, priority, updated_at, body_html)
-              VALUES (?, ?, ?, ?, 0, 0, ?, ?)`)
+  db.prepare(`INSERT INTO chapters (chapter_id, book_id, chapter_name, position, updated_at)
+              VALUES (?, ?, ?, 0, ?)`).run(CHAPTER_ID, BOOK_ID, 'Kapitel Eins', now);
+  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, chapter_id, position, updated_at, body_html)
+              VALUES (?, ?, ?, ?, 0, ?, ?)`)
     .run(PAGE_A, BOOK_ID, 'Seite A', CHAPTER_ID, now, '<p>URSPRUNG_ALPHA</p>');
-  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, chapter_id, position, priority, updated_at, body_html)
-              VALUES (?, ?, ?, ?, 1, 1, ?, ?)`)
+  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, chapter_id, position, updated_at, body_html)
+              VALUES (?, ?, ?, ?, 1, ?, ?)`)
     .run(PAGE_B, BOOK_ID, 'Seite B', CHAPTER_ID, now, '<p>URSPRUNG_BETA</p>');
 }
 
@@ -111,8 +111,8 @@ const PAGE_LEGACY = 7203;
 test('Share-Reader: Alt-Bestand mit aktivem Markup wird beim Ausliefern entschaerft', async () => {
   const now = new Date().toISOString();
   // Direkt per SQL, also bewusst UM den Sanitizer herum — genau der Alt-Zustand.
-  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, chapter_id, position, priority, updated_at, body_html)
-              VALUES (?, ?, ?, ?, 2, 2, ?, ?)`)
+  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, chapter_id, position, updated_at, body_html)
+              VALUES (?, ?, ?, ?, 2, ?, ?)`)
     .run(PAGE_LEGACY, BOOK_ID, 'Seite Alt', CHAPTER_ID, now,
       '<p>SICHTBARER_TEXT</p><script>window.__pwn=1</script>'
       + '<p onclick="window.__pwn=2">Klick</p>'

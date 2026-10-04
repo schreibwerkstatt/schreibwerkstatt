@@ -52,6 +52,11 @@
         <div>
           <div class="context-menu-sep" role="separator"></div>
           <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                  @click="pagetreeCtxRename()">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#heading"/></svg>
+            <span x-text="t('pagetreeCtx.rename')"></span>
+          </button>
+          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
                   @click="pagetreeCtxNewChapter()">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#folder-plus"/></svg>
             <span x-text="t('pagetreeCtx.newChapter')"></span>

@@ -828,7 +828,7 @@ test('Anmerkungsmodus: Notenziffer im Text, Notenliste hinter dem Kapitel', asyn
 });
 
 // ── Seite als Strukturelement ────────────────────────────────────────────────
-// Die BookStack-Seite traegt im Default eine eigene Ueberschrift (h4, vierte
+// Die Buchseite traegt im Default eine eigene Ueberschrift (h4, vierte
 // Stufe unter den drei Kapitelebenen), einen eigenen Seitenumbruch und einen
 // eigenen Verzeichnis-Eintrag. Pendant im Word-Export:
 // tests/unit/docx-export.test.mjs.

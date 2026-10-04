@@ -169,8 +169,8 @@ Regeln:
 
 // ── Soziogramm-Konsolidierung (Claude-only, holistische Revision) ────────────
 export function buildSoziogrammConsolidationPrompt(bookName, figuren, buchKontext = '') {
+  const nameById = Object.fromEntries(figuren.map(x => [x.id, x.name]));
   const figInfo = figuren.map(f => {
-    const nameById = Object.fromEntries(figuren.map(x => [x.id, x.name]));
     const meta = [f.typ, f.beruf, f.geschlecht].filter(Boolean).join(', ');
     const bzStr = (f.beziehungen || [])
       .map(b => `${nameById[b.figur_id] || b.figur_id} [${b.typ}${Number.isFinite(b.machtverhaltnis) ? ', macht=' + b.machtverhaltnis : ''}]`)

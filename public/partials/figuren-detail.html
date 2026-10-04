@@ -7,8 +7,13 @@
      Die drei Gruppen liegen nochmals je in einem eigenen Fragment: sie sind
      inhaltlich unabhängig (Fakten / Innenleben / Auftritte im Buch) und zusammen
      mehr als das doppelte Partial-Limit aus CLAUDE.md.
+
+     `x-if` statt `x-show`: der Detailbaum (Steckbrief, Charakter, Zeitstrahl,
+     Präsenz-Streifen) entsteht nur für die EINE aufgeklappte Figur — mit x-show
+     baute die Liste ihn für jede Figur des Katalogs vorab auf.
 -->
-<div x-show="$store.catalogUi.selectedFigurId === f.id" class="figur-detail">
+<template x-if="$store.catalogUi.selectedFigurId === f.id">
+<div class="figur-detail">
   <p x-show="f.beschreibung" x-text="f.beschreibung" class="figur-beschreibung"></p>
   <button type="button" class="btn-compact figur-detail-actions" x-show="$store.config.semanticSearchEnabled" @click.stop="$app.findSimilar('figure', f.id, f.name)" x-text="$app.t('search.semantic.similarEntity')"></button>
 
@@ -18,3 +23,4 @@
 
   <!-- @include figuren-detail-imbuch -->
 </div>
+</template>

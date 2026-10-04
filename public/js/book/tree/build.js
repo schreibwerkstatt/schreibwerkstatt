@@ -1,5 +1,8 @@
 import { fetchJson } from '../../utils.js';
 
+// nav.tree → { len, byId } fuer _chapterExcludedByAncestor.
+const chapterIndexCache = new WeakMap();
+
 // Tree-Aufbau aus der `contentRepo.bookTree`-Antwort + Nachladen der
 // Sidebar-Plaketten. Beides aus `loadPages` (tree/load.js) herausgeloest, das
 // sonst Abbruch-Verwaltung, Sidebar-Modus, State-Clearing, Tree-Bau,
@@ -97,10 +100,12 @@ export const treeBuildMethods = {
   // wo der Name im Buch zuerst auftaucht — nicht beim letzten Treffer.
   _rebuildTreeOrderMaps() {
     const chapterMap = new Map();
+    const chapterIdMap = new Map();
     let chIdx = 0;
     for (const item of this.$store.nav.tree) {
       if (item.type !== 'chapter' || item.solo) continue;
       if (!chapterMap.has(item.name)) chapterMap.set(item.name, chIdx);
+      chapterIdMap.set(item.id, chIdx);
       chIdx++;
     }
     const nameMap = new Map();
@@ -112,8 +117,39 @@ export const treeBuildMethods = {
       idMap.set(p.id, i);
     }
     this._chapterOrderMap = chapterMap;
+    this._chapterIdOrderMap = chapterIdMap;
     this._pageOrderMap = nameMap;
     this._pageIdOrderMap = idMap;
+  },
+
+  // Der Ausschluss kaskadiert serverseitig (lib/load-contents.js#_excludedChapterIds):
+  // ein Sub-Kapitel unter einem ausgeschlossenen Parent fehlt in Export und
+  // Analyse, auch wenn sein eigenes Flag aus ist. Die Sidebar graut es deshalb
+  // mit — als eigene Abfrage statt eines Felds am Item, weil Toggle-Pfade
+  // (setChapterExcluded, Buchorganizer) nur das Flag des Kapitels selbst setzen.
+  _chapterExcludedByAncestor(item) {
+    if (!item?.parent_id) return false;
+    // Pro Kapitelzeile und Render gerufen — ID-Index statt linearer Suche,
+    // gecacht auf Identitaet + Laenge von nav.tree (Einfuegen/Entfernen
+    // aendert eins von beiden; `excluded` selbst wird unten frisch gelesen).
+    // Modul-WeakMap statt Komponenten-Feld: ein Schreibzugriff auf reaktiven
+    // State mitten im Render weckte die Effekte aller anderen Zeilen.
+    const tree = this.$store.nav.tree;
+    let idx = chapterIndexCache.get(tree);
+    if (!idx || idx.len !== tree.length) {
+      const byId = new Map();
+      for (const i of tree) if (i.type === 'chapter' && !i.solo) byId.set(i.id, i);
+      idx = { len: tree.length, byId };
+      chapterIndexCache.set(tree, idx);
+    }
+    let parentId = item.parent_id;
+    for (let guard = 0; parentId && guard < 64; guard++) {
+      const parent = idx.byId.get(parentId);
+      if (!parent) return false;
+      if (parent.excluded) return true;
+      parentId = parent.parent_id;
+    }
+    return false;
   },
 
   // Gecachte Seiten-Stats, Lektorats-Alter und die sechs Plaketten-Zaehler.
@@ -126,9 +162,9 @@ export const treeBuildMethods = {
   // nachbauen, und ein Fehler darin gaebe fremde Daten heraus. Die acht laufen
   // parallel, kosten also eine Roundtrip-Latenz, nicht acht.
   //
-  // Jeder Zaehler faellt einzeln auf `{}` zurueck: eine fehlende Plakette darf
-  // den Baum nicht kosten. Stats/Ages tun das nicht — sie liegen im gemeinsamen
-  // try/catch des Aufrufers.
+  // Jeder Endpunkt faellt einzeln auf `{}` zurueck — auch Stats und Ages: ein
+  // einzelner Fehlschlag darf weder den Baum noch die uebrigen Plaketten kosten
+  // (in einem gemeinsamen Promise.all-Reject gingen alle acht verloren).
   async _loadSidebarBadges(bookId, signal) {
     const [
       statsCache, ageMap,
@@ -137,8 +173,8 @@ export const treeBuildMethods = {
       shareCommentMap, shareLinkMap,
       plotBeatMap, chapterPlotBeatMap,
     ] = await Promise.all([
-      fetchJson('/history/page-stats/' + bookId, { signal }),
-      fetchJson('/history/page-ages/' + bookId, { signal }),
+      fetchJson('/history/page-stats/' + bookId, { signal }).catch(() => ({})),
+      fetchJson('/history/page-ages/' + bookId, { signal }).catch(() => ({})),
       fetchJson('/ideen/counts?book_id=' + bookId, { signal }).catch(() => ({})),
       fetchJson('/ideen/counts?book_id=' + bookId + '&kind=chapter', { signal }).catch(() => ({})),
       fetchJson('/research/page-counts?book_id=' + bookId, { signal }).catch(() => ({})),
@@ -148,6 +184,9 @@ export const treeBuildMethods = {
       fetchJson('/plot/page-beat-counts?book_id=' + bookId, { signal }).catch(() => ({})),
       fetchJson('/plot/chapter-beat-counts?book_id=' + bookId, { signal }).catch(() => ({})),
     ]);
+    // Da kein Endpunkt mehr wirft, landet auch ein Abbruch (Buchwechsel) hier —
+    // mit leeren Maps, die nicht ueber das neue Buch geschrieben werden duerfen.
+    if (signal?.aborted || String(this.$store.nav.selectedBookId) !== String(bookId)) return;
 
     this.pageLastChecked = ageMap || {};
     const badges = this.$store.badges;
@@ -175,7 +214,7 @@ export const treeBuildMethods = {
     // die Sidebar-Σ-Zeile auf dem Vorzustand stehen.
     const initialTokEsts = {};
     for (const p of this.$store.nav.pages) {
-      const c = statsCache[p.id];
+      const c = statsCache?.[p.id];
       if (c && c.updated_at === p.updated_at) {
         initialTokEsts[p.id] = { tok: c.tok, words: c.words, chars: c.chars };
       }

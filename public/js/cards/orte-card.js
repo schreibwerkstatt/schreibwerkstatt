@@ -8,11 +8,15 @@
 // Root behält:
 //   - `loadOrte` (Root-Spread; von komplett-Job, Szenen-Trigger
 //     und _reloadVisibleBookCards genutzt)
-//   - `patchOrtCoords` (Koordinaten-Patch für Geo-Edits), `saveOrte` (Full-Save
-//     + FTS-Rebuild via PUT /locations/:id)
+//   - `patchOrtCoords` (Koordinaten-Patch für Geo-Edits) und die Pflege-Calls
+//     `createOrt`/`updateOrt`/`mergeOrt`/`deleteOrt` (book/orte.js)
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { memoMethods } from './card-memo.js';
 import { orteMapMethods } from '../book/orte-map.js';
+import { orteEditMethods, closedOrtEdit } from '../book/orte-edit.js';
+import { orteInsightMethods } from '../book/orte-insights.js';
 import { lsGet, lsSet } from '../safe-storage.js';
+import { formatLastRun } from '../utils/date.js';
 
 export function registerOrteCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -46,6 +50,9 @@ export function registerOrteCard() {
     _geocodeJobTimer: null,   // transienter Poll-Timer fuer den KI-Geocode-Fallback-Job
     _orteMapStatusTimer: null,// Auto-Clear-Timer fuer orteMapStatus
     _lifecycle: null,
+    // Pflege-Formular (book/orte-edit.js): { mode: null|'new'|'edit', id, draft, busy, error }.
+    ortEdit: closedOrtEdit(),
+    ortMergeTarget: '',       // Ziel-loc_id der «Zusammenführen mit …»-Auswahl im Detail
 
     init() {
       this.$watch('viewMode', (v) => {
@@ -66,7 +73,7 @@ export function registerOrteCard() {
         name: 'orte',
         showFlag: 'showOrteCard',
         timerKeys: ['_ortePollTimer', '_geocodeJobTimer', '_orteMapStatusTimer'],
-        resetState: { orteLoading: false, orteProgress: 0, orteStatus: '', orteRealEnabled: false, geocodingId: null, geocodingAll: false, highlightOrtId: null, orteMapStatus: '' },
+        resetState: { orteLoading: false, orteProgress: 0, orteStatus: '', orteRealEnabled: false, geocodingId: null, geocodingAll: false, highlightOrtId: null, orteMapStatus: '', ortMergeTarget: '' },
         load: (root) => root.loadOrte(Alpine.store('nav').selectedBookId),
         onShow: async (root) => {
           const tasks = [root.loadOrte(Alpine.store('nav').selectedBookId), this.loadOrteReal()];
@@ -76,7 +83,7 @@ export function registerOrteCard() {
         extraListeners: [
           // Buchwechsel: Map verwerfen + auf Liste zuruecksetzen — neues Buch ist
           // evtl. nicht orte_real, und Marker-Daten stammen vom alten Buch.
-          { type: 'book:changed', handler: () => { this._teardownMap(); if (this.viewMode === 'map') this.viewMode = 'list'; } },
+          { type: 'book:changed', handler: () => { this._teardownMap(); this.ortEdit = closedOrtEdit(); if (this.viewMode === 'map') this.viewMode = 'list'; } },
           { type: 'view:reset', handler: () => { this._teardownMap(); if (this.viewMode === 'map') this.viewMode = 'list'; } },
         ],
       });
@@ -96,9 +103,50 @@ export function registerOrteCard() {
       const sig = [root.$store.catalog.orte, root.$store.catalog.szenen, f.suche || '', f.figurId || '', f.kapitel || '', f.szeneId || ''];
       const c = this._orteFilteredCache;
       if (c && c.sig.length === sig.length && c.sig.every((v, i) => v === sig[i])) return c.val;
-      const val = this._computeOrteFiltered();
-      this._orteFilteredCache = { sig, val };
+      const { val, depth } = this._nestByParent(this._computeOrteFiltered());
+      this._orteFilteredCache = { sig, val, depth };
       return val;
+    },
+
+    // Stand des Katalogs (jüngster Edit oder Analyse-Lauf) für die Kopfzeile.
+    orteUpdatedLabel() {
+      const app = window.__app;
+      return formatLastRun(Alpine.store('catalogUi').orteUpdatedAt, (k, p) => app.t(k, p), app.$store.shell.uiLocale);
+    },
+
+    // Einrücktiefe eines Orts in der gefilterten Liste (0 = Wurzel). Tiefe zählt nur
+    // über Elternorte, die selbst in der Liste stehen — sonst hinge das Kind
+    // eingerückt unter einem fremden Nachbarn.
+    ortDepth(id) {
+      this.orteFiltered;
+      return this._orteFilteredCache?.depth.get(id) || 0;
+    },
+
+    // Unterorte direkt unter ihren Elternort ziehen (Tiefensuche, Geschwister in
+    // der Reihenfolge der Sortierung). Zyklen aus Altbeständen brechen über `seen`.
+    _nestByParent(list) {
+      const ids = new Set(list.map(o => o.id));
+      const kids = new Map();
+      const roots = [];
+      for (const o of list) {
+        if (o.parent && o.parent !== o.id && ids.has(o.parent)) {
+          if (!kids.has(o.parent)) kids.set(o.parent, []);
+          kids.get(o.parent).push(o);
+        } else roots.push(o);
+      }
+      const val = [];
+      const depth = new Map();
+      const seen = new Set();
+      const walk = (o, d) => {
+        if (seen.has(o.id)) return;
+        seen.add(o.id);
+        val.push(o);
+        depth.set(o.id, d);
+        for (const k of (kids.get(o.id) || [])) walk(k, Math.min(d + 1, 3));
+      };
+      for (const r of roots) walk(r, 0);
+      for (const o of list) if (!seen.has(o.id)) walk(o, 0);
+      return { val, depth };
     },
     _computeOrteFiltered() {
       const root = window.__app;
@@ -122,6 +170,9 @@ export function registerOrteCard() {
       });
     },
 
+    ...memoMethods,
     ...orteMapMethods,
+    ...orteEditMethods,
+    ...orteInsightMethods,
   }));
 }

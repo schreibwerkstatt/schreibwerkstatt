@@ -169,10 +169,6 @@
   .plot-swim-lane-view > .plot-icon-btn { flex: 0 0 auto; align-self: flex-start; }
   .plot-swim-lane-name { font-weight: var(--fw-semibold); font-size: var(--font-size-sm); color: var(--color-text); cursor: text; }
   .plot-swim-lane-name--muted { font-weight: var(--fw-regular); font-style: italic; color: var(--color-muted); cursor: default; }
-  .plot-swim-lane-figure { font-size: var(--font-size-micro); color: var(--color-muted); cursor: pointer; }
-  .plot-swim-lane-figure:hover { color: var(--color-text); }
-  .plot-swim-lane-chapter { font-size: var(--font-size-micro); color: var(--color-muted); cursor: pointer; }
-  .plot-swim-lane-chapter:hover { color: var(--color-text); }
   .plot-swim-lane-edit { display: flex; flex-direction: column; gap: var(--space-xs); width: 100%; }
   .plot-thread-name-input {
     width: 100%;

@@ -85,7 +85,7 @@ function getChapterNarrativeProfile(bookId, userEmail) {
   const email = userEmail || null;
   const rows = db.prepare(`
     SELECT p.id, p.chapter_id, c.chapter_name, p.perspektive, p.erzaehlzeit,
-           p.erzaehler_figur_id, f.name AS erzaehler_figur_name, p.erzaehler_figur,
+           p.erzaehler_figur_id, f.fig_id AS erzaehler_fig_id, f.name AS erzaehler_figur_name, p.erzaehler_figur,
            p.pov_konfidenz, p.pov_beleg, p.pov_abweichung, p.intensitaet,
            p.intensitaet_begruendung, p.zusammenfassung, p.sort_order, p.updated_at
       FROM chapter_narrative_profile p
@@ -125,6 +125,8 @@ function getChapterNarrativeProfile(bookId, userEmail) {
     perspektive: r.perspektive,
     erzaehlzeit: r.erzaehlzeit,
     erzaehler_figur_id: r.erzaehler_figur_id,
+    // Öffentliche Figuren-Kennung (Katalog-`id` im Frontend) für Verweise.
+    erzaehler_fig_id: r.erzaehler_fig_id || null,
     erzaehler_figur: r.erzaehler_figur_name || r.erzaehler_figur || null,
     pov_konfidenz: r.pov_konfidenz,
     pov_beleg: r.pov_beleg,

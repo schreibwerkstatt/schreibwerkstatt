@@ -63,18 +63,20 @@
           <span class="tag plot-konflikt-typ" x-show="konfliktHasTyp(k)" x-text="konfliktHasTyp(k) ? konfliktTypLabel(k.typ) : ''"></span>
           <span class="badge badge-warn" x-show="k.seit_letztem_lauf === 'neu'"
                 :data-tip="$app.t('plot.konflikt.neuTip')" x-text="$app.t('plot.konflikt.neu')"></span>
-          <span class="plot-konflikt-beat" :class="{ 'internal-link': k.beat && k.beat !== '—' }"
-                :data-tip="(k.beat && k.beat !== '—') ? $app.t('plot.consistency.gotoBeat') : null"
-                @click="if (k.beat && k.beat !== '—') { gotoKonfliktBeat(k); $event.stopPropagation(); }"
-                x-text="k.beat"></span>
+          <!-- Betroffener Beat: Klick scrollt ihn im Board ins Bild (beat_id, sonst
+               Titel-Match — gotoKonfliktBeat). Übergreifende Befunde („—") haben kein Ziel. -->
+          <template x-if="k.beat && k.beat !== '—'">
+            <button type="button" class="entity-ref"
+                    x-entity-ref="{ type: 'beat', id: k.beat_id, label: k.beat, onOpen: () => gotoKonfliktBeat(k) }"></button>
+          </template>
+          <span class="plot-konflikt-beat" x-show="!k.beat || k.beat === '—'" x-text="k.beat"></span>
           <span class="plot-konflikt-problem" x-text="k.problem"></span>
-          <!-- Klickbare Textbeleg-Fundstelle (aus dem Verankerungs-Index, server-seitig
-               am Befund gematcht) → springt an die belegende Manuskript-Stelle. -->
-          <button type="button" class="tag plot-konflikt-beleg internal-link"
-                  x-show="k.fundstelle && k.fundstelle.page_id"
-                  @click.stop="$app.gotoPageById(k.fundstelle.page_id)"
-                  :data-tip="$app.t('plot.consistency.gotoBeleg')"
-                  x-text="k.fundstelle && k.fundstelle.page_name ? $app.t('plot.consistency.beleg', { seite: k.fundstelle.page_name }) : $app.t('plot.consistency.belegGeneric')"></button>
+          <!-- Textbeleg-Fundstelle (aus dem Verankerungs-Index, server-seitig am
+               Befund gematcht) → springt an die belegende Manuskript-Seite. -->
+          <template x-if="k.fundstelle && k.fundstelle.page_id">
+            <button type="button" class="entity-ref"
+                    x-entity-ref="{ type: 'seite', id: k.fundstelle.page_id, name: k.fundstelle.page_name }"></button>
+          </template>
           <!-- Ein-Klick-Aktion des Befunds (Status / verwerfen / Beziehung) über die
                bestehenden Mutationspfade inkl. Undo. Verschwindet, sobald sie
                erfüllt ist oder der Beat fehlt; danach „angewendet". -->
@@ -138,7 +140,9 @@
          @click="r.act_id !== null && openBrainstormRunChecked(r)">
       <span class="history-date" x-text="formatRunDate(r.created_at)"></span>
       <span class="tag" x-text="r.act_name || $app.t('plot.brainstorm.actDeleted')"></span>
-      <span x-show="r.thread_name" class="tag tag--werkstatt" x-text="r.thread_name"></span>
+      <template x-if="r.thread_id && r.thread_name">
+        <span class="entity-ref" x-entity-ref="{ type: 'strang', id: r.thread_id, label: r.thread_name, static: true }"></span>
+      </template>
       <span class="tag" x-text="$app.t('plot.brainstorm.vorschlagCount', { n: r.vorschlag_count })"></span>
       <span x-show="r.model" class="tag" x-text="r.model"></span>
       <span class="history-chevron" :class="{ open: selectedBrainstormRunId === r.id }" aria-hidden="true" x-show="r.act_id !== null"></span>

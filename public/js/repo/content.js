@@ -1,13 +1,8 @@
 // Frontend-Domain-Repository fuer Buch-/Kapitel-/Seiten-Inhalte.
 //
-// Caller (Editor, Lektorat, Chat, History, Tree) reden nur noch hierhin —
-// nicht mehr direkt mit BookStack-Pfaden unter /api/*. Antwort-Shape ist das
-// App-Domain-Shape aus lib/content-mapper.js.
-//
-// Diese Datei + lib/content-mapper.js + routes/content.js sind zusammen mit
-// public/js/api-bookstack.js und lib/bookstack.js die EINZIGEN Stellen, an
-// denen die BookStack-API noch erkennbar sein darf (Tripwire-Liste, siehe
-// docs/bookstack-exit.md Schritt 6).
+// Caller (Editor, Lektorat, Chat, History, Tree) reden nur hierhin, nicht
+// direkt mit den /content/*-Routen. Antwort-Shape ist das Domain-Shape der
+// Content-Store-Facade (lib/content-store/backends/localdb.js).
 
 import { stripFocusArtefacts } from '../utils.js';
 import { getDeviceId } from '../device-id.js';
@@ -144,7 +139,7 @@ export const contentRepo = {
   },
 
   // PUT /content/pages/:id mit `{ html?, name?, position?, chapter_id?, source? }`.
-  // Server cleant html, mapped position→priority. Bei Body-Change schreibt die
+  // Server cleant html. Bei Body-Change schreibt die
   // content-store-Facade eine page_revisions-Row mit `source` (Default 'main') —
   // Frontend dispatcht danach `page-revisions:changed`, damit die Revisionsliste
   // sich aktualisiert ohne Page-Reload. SW-Invalidation muss neben der Page

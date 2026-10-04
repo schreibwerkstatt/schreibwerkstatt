@@ -14,13 +14,15 @@
         <div class="erzaehlprofil-band" role="table">
           <template x-for="(f, fi) in erzaehlprofilPresenceBand().figures" :key="'band:' + f.id">
             <div class="erzaehlprofil-band-row" role="row">
-              <span class="erzaehlprofil-band-name tag erzaehlprofil-narrator internal-link"
-                    @click="erzaehlprofilGotoFigur(f.id)" x-text="f.name"></span>
+              <span class="erzaehlprofil-band-name">
+                <button type="button" class="entity-ref"
+                        x-entity-ref="{ type: 'figur', id: f.figId, name: f.name }"></button>
+              </span>
               <div class="erzaehlprofil-band-cells">
                 <template x-for="(cell, ci) in f.present" :key="'bc:' + ci">
                   <span class="erzaehlprofil-band-cell" :class="{ 'erzaehlprofil-band-cell--on': cell }"
                         :data-tip="erzaehlprofilPresenceBand().chapters[ci]?.kap || ''"
-                        @click="erzaehlprofilGotoKapitel(erzaehlprofilPresenceBand().chapters[ci]?.chapter_id)"></span>
+                        @click="erzaehlprofilPresenceBand().chapters[ci]?.chapter_id != null && $app.openChapterById(erzaehlprofilPresenceBand().chapters[ci].chapter_id)"></span>
                 </template>
               </div>
               <span class="erzaehlprofil-band-flags">
@@ -72,7 +74,11 @@
             <div class="entity-list">
               <template x-for="(e, i) in erzaehlprofilBefund().encounters" :key="'enc:' + i">
                 <div class="erzaehlprofil-befund-row" :class="{ 'erzaehlprofil-befund-row--strong': e.hasRelation }">
-                  <span class="erzaehlprofil-pair"><span x-text="e.aName"></span> ✕ <span x-text="e.bName"></span></span>
+                  <span class="erzaehlprofil-pair entity-refs">
+                    <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: e.aFigId, name: e.aName }"></button>
+                    <span aria-hidden="true">✕</span>
+                    <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: e.bFigId, name: e.bName }"></button>
+                  </span>
                   <span class="tag" x-show="e.hasRelation"
                         x-text="$app.t('erzaehlprofil.encounterRelation', { typ: e.relTyp || '' })"></span>
                 </div>
@@ -86,13 +92,13 @@
             <div class="entity-list">
               <template x-for="(a, i) in erzaehlprofilArcsFlagged()" :key="'arc:' + i">
                 <div class="erzaehlprofil-befund-row">
-                  <span class="tag erzaehlprofil-narrator internal-link" x-show="a.id != null"
-                        @click="erzaehlprofilGotoFigur(a.id)" x-text="a.name"></span>
+                  <button type="button" class="entity-ref"
+                          x-entity-ref="{ type: 'figur', id: a.figId, name: a.name }"></button>
                   <template x-for="f in a.flags" :key="'af:' + f">
                     <span class="erzaehlprofil-flag" x-text="erzaehlprofilFlagLabel(f)"></span>
                   </template>
                   <span class="erzaehlprofil-befund-detail internal-link" x-show="a.longestGap"
-                        @click="erzaehlprofilGotoKapitel(a.longestGap.fromChapterId)"
+                        @click="a.longestGap?.fromChapterId != null && $app.openChapterById(a.longestGap.fromChapterId)"
                         x-text="$app.t('erzaehlprofil.arcGap', { from: a.longestGap?.fromKap, to: a.longestGap?.toKap, n: a.longestGap?.len })"></span>
                 </div>
               </template>
@@ -110,7 +116,7 @@
             </div>
             <div class="entity-list">
               <template x-for="(s, i) in erzaehlprofilBefund().pacing.sags" :key="'sag:' + i">
-                <div class="erzaehlprofil-befund-row internal-link" @click="erzaehlprofilGotoKapitel(s.fromChapterId)">
+                <div class="erzaehlprofil-befund-row internal-link" @click="s.fromChapterId != null && $app.openChapterById(s.fromChapterId)">
                   <span class="erzaehlprofil-befund-detail"
                         x-text="$app.t('erzaehlprofil.pacingSag', { from: s.fromKap, to: s.toKap, n: s.len })"></span>
                 </div>
@@ -137,7 +143,7 @@
             <div class="erzaehlprofil-befund-group-head" x-text="$app.t('erzaehlprofil.eventDesertsTitle')"></div>
             <div class="entity-list">
               <template x-for="(d, i) in erzaehlprofilBefund().eventDeserts" :key="'ed:' + i">
-                <div class="erzaehlprofil-befund-row internal-link" @click="erzaehlprofilGotoKapitel(d.fromChapterId)">
+                <div class="erzaehlprofil-befund-row internal-link" @click="d.fromChapterId != null && $app.openChapterById(d.fromChapterId)">
                   <span class="erzaehlprofil-befund-detail"
                         x-text="$app.t('erzaehlprofil.eventDesert', { from: d.fromKap, to: d.toKap, n: d.len })"></span>
                 </div>
@@ -150,7 +156,7 @@
             <div class="erzaehlprofil-befund-group-head" x-text="$app.t('erzaehlprofil.povRunsTitle')"></div>
             <div class="entity-list">
               <template x-for="(p, i) in erzaehlprofilBefund().pov.lowConfidenceRuns" :key="'pr:' + i">
-                <div class="erzaehlprofil-befund-row internal-link" @click="erzaehlprofilGotoKapitel(p.fromChapterId)">
+                <div class="erzaehlprofil-befund-row internal-link" @click="p.fromChapterId != null && $app.openChapterById(p.fromChapterId)">
                   <span class="erzaehlprofil-befund-detail"
                         x-text="$app.t('erzaehlprofil.povRun', { from: p.fromKap, to: p.toKap, n: p.len })"></span>
                 </div>
@@ -168,9 +174,9 @@
                 <span x-text="$app.t('erzaehlprofil.locationsOneOffToggle', { n: (erzaehlprofilBefund().locations.oneOff || []).length })"></span>
               </button>
               <div x-bind="panel" class="collapsible-section erzaehlprofil-oneoff-scroll" x-cloak>
-                <div class="erzaehlprofil-flag-row">
-                  <template x-for="(name, i) in erzaehlprofilBefund().locations.oneOff" :key="'oo:' + i">
-                    <span class="tag" x-text="name"></span>
+                <div class="entity-refs">
+                  <template x-for="(l, i) in erzaehlprofilBefund().locations.oneOff" :key="'oo:' + i">
+                    <button type="button" class="entity-ref" x-entity-ref="{ type: 'ort', id: l.id, name: l.name }"></button>
                   </template>
                 </div>
               </div>
@@ -178,7 +184,7 @@
             <div class="entity-list" x-show="(erzaehlprofilBefund().locations.abandoned || []).length">
               <template x-for="(l, i) in erzaehlprofilBefund().locations.abandoned" :key="'ab:' + i">
                 <div class="erzaehlprofil-befund-row">
-                  <span class="tag" x-text="l.name"></span>
+                  <button type="button" class="entity-ref" x-entity-ref="{ type: 'ort', id: l.id, name: l.name }"></button>
                   <span class="erzaehlprofil-befund-detail"
                         x-text="$app.t('erzaehlprofil.motifSpan', { from: l.firstKap, to: l.lastKap })"></span>
                 </div>

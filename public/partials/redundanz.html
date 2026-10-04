@@ -65,11 +65,11 @@
                   x-text="Math.round(pair.score * 100) + '%'"></span>
             <div class="redundanz-pair-sides">
               <div class="redundanz-side">
-                <span class="tag internal-link" @click="redundanzGotoPage(pair.a_id)" x-text="redundanzPageName(pair.a_id)"></span>
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: pair.a_id, label: redundanzPageName(pair.a_id) }"></button>
                 <p class="redundanz-snippet" x-text="pair.a_snippet"></p>
               </div>
               <div class="redundanz-side">
-                <span class="tag internal-link" @click="redundanzGotoPage(pair.b_id)" x-text="redundanzPageName(pair.b_id)"></span>
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: pair.b_id, label: redundanzPageName(pair.b_id) }"></button>
                 <p class="redundanz-snippet" x-text="pair.b_snippet"></p>
               </div>
             </div>
@@ -89,9 +89,9 @@
                 <span class="redundanz-score" :class="redundanzScoreClass(pair.score)"
                       x-text="Math.round(pair.score * 100) + '%'"></span>
                 <div class="redundanz-fig-pair">
-                  <span class="tag internal-link" @click="redundanzGotoFigur(pair.a_id)" x-text="redundanzFigurName(pair.a_id, pair.a_name)"></span>
+                  <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: pair.a_fig_id, label: redundanzFigurName(pair.a_fig_id, pair.a_name) }"></button>
                   <span class="redundanz-fig-sep" aria-hidden="true">↔</span>
-                  <span class="tag internal-link" @click="redundanzGotoFigur(pair.b_id)" x-text="redundanzFigurName(pair.b_id, pair.b_name)"></span>
+                  <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: pair.b_fig_id, label: redundanzFigurName(pair.b_fig_id, pair.b_name) }"></button>
                   <span class="tag redundanz-dupe-kind" :class="'redundanz-dupe-kind--' + pair.dupeKind"
                         x-text="redundanzDupeKindLabel(pair.dupeKind)"></span>
                 </div>

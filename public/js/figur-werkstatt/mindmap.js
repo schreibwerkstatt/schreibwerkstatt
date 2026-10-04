@@ -70,7 +70,7 @@ export const mindmapMethods = {
     try {
       jsMind = await loadJsMind();
     } catch (e) {
-      this.errorMessage = window.__app.t('werkstatt.error.libLoad') || 'Library load failed';
+      this.errorMessage = window.__app.t('werkstatt.error.libLoad');
       return;
     }
     if (this.selectedDraftId !== sel.id || !container.isConnected) return;
@@ -160,7 +160,7 @@ export const mindmapMethods = {
         this.selectedKnotenId = id;
         if (id && !this._suppressCenter) this._centerNodeInView(id);
       } else if (type === 3) {
-        this._mindmapDirty = true;
+        this._markMindmapDirty();
         // Umbenennung der Wurzel im Canvas → Namensfeld. Die Gegenrichtung
         // macht _syncRootTopic; update_node mit gleichem Topic feuert nicht,
         // die beiden schaukeln sich also nicht auf.
@@ -235,7 +235,7 @@ export const mindmapMethods = {
     if (!this._jm) return false;
     try {
       fn(this._jm);
-      this._mindmapDirty = true;
+      this._markMindmapDirty();
       return true;
     } catch (e) {
       return false;
@@ -249,7 +249,7 @@ export const mindmapMethods = {
     this._suppressCenter = true;
     try {
       fn(this._jm);
-      this._mindmapDirty = true;
+      this._markMindmapDirty();
       return true;
     } catch (e) {
       return false;
@@ -340,7 +340,7 @@ export const mindmapMethods = {
     try {
       await toggleWrapFullscreen(wrap);
     } catch {
-      this.errorMessage = window.__app.t('werkstatt.error.fullscreen') || 'Fullscreen failed';
+      this.errorMessage = window.__app.t('werkstatt.error.fullscreen');
     }
   },
 };

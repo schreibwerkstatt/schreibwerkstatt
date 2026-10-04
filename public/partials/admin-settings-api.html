@@ -4,6 +4,7 @@
       <p class="muted-msg muted-msg--sm">
         <strong x-text="$app.t('admin.settings.api.endpointLabel') + ': '"></strong>
         <code x-text="location.origin + '/metrics'"></code>
+        · <code x-text="location.origin + '/metrics.json'"></code>
       </p>
 
       <!-- Plain-Token-Anzeige direkt nach Create (NUR einmal sichtbar) -->
@@ -30,6 +31,13 @@
           <span x-text="$app.t('admin.settings.api.expiresLabel')"></span>
           <input type="date" x-model="adminApiTokensNewExpiresAt">
           <small class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.api.expiresHint')"></small>
+        </label>
+        <label class="form-check">
+          <input type="checkbox" x-model="adminApiTokensNewIncludeUsers">
+          <span>
+            <span class="form-check-title" x-text="$app.t('admin.settings.api.includeUsers')"></span>
+            <span class="form-check-desc" x-text="$app.t('admin.settings.api.includeUsersDesc')"></span>
+          </span>
         </label>
         <div class="admin-settings-actions">
           <button type="button" @click="adminApiTokensCreate()"

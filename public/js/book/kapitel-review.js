@@ -30,22 +30,29 @@ export const kapitelReviewMethods = {
     }
   },
 
-  // Klick auf Kapitel-Badge in Listen (figuren/orte/szenen): Kapitel-Review
-  // öffnen, falls das Buch dafür qualifiziert. Sonst Fallback auf erste
-  // Kapitelseite. Match per exaktem Namen, dann case-insensitive.
+  // Sprungziel jeder Kapitel-Referenz (x-entity-ref, Hash-Router-Fallback):
+  // die Kapitelbewertung. Nur wo das Buch keine hat (lauter Ein-Seiten-Kapitel,
+  // Solo-Seite), führt der Sprung auf die erste Kapitelseite — sonst endete der
+  // Klick im Nichts.
+  async openChapterById(chapterId) {
+    if (chapterId == null || chapterId === '') return;
+    const opts = this.kapitelReviewChapterOptions();
+    if (opts.some(c => String(c.id) === String(chapterId))) {
+      await this.openKapitelReviewForChapter(chapterId);
+      return;
+    }
+    this.gotoChapterById(chapterId);
+  },
+
+  // Kapitel per Name (Analyse-Listen speichern Namen, keine IDs). Match per
+  // exaktem Namen, dann case-insensitive; ohne Treffer der Seiten-Fallback.
   async openKapitelByName(name) {
     if (!name) return;
     const chapters = (this.$store.nav.tree || []).filter(i => i.type === 'chapter' && !i.solo);
     const lc = String(name).toLowerCase();
     const ch = chapters.find(c => c.name === name)
       || chapters.find(c => c.name.toLowerCase() === lc);
-    if (ch && this._bookQualifiesForChapterReview()) {
-      const opts = this.kapitelReviewChapterOptions();
-      if (opts.some(c => String(c.id) === String(ch.id))) {
-        await this.openKapitelReviewForChapter(ch.id);
-        return;
-      }
-    }
+    if (ch) { await this.openChapterById(ch.id); return; }
     this.gotoStelle(name, null);
   },
 

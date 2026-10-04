@@ -3,7 +3,7 @@
 // - Block-Erkennung um Caret bzw. Viewport-Center.
 // - Trailing-Paragraph-Slot beim Eintritt in den Fokusmodus.
 // - active/near-Markierungen samt Cleanup ohne residuales `class=""`-Attribut
-//   (würde sonst BookStack-Revisionen beim nächsten Save erzeugen).
+//   (würde sonst Revisionen beim nächsten Save erzeugen).
 
 import { BLOCK_TAGS, FOCUS_BLOCK_SEL } from './constants.js';
 import { clearSentenceHighlight } from './sentence.js';
@@ -259,7 +259,7 @@ export function setActiveBlock(container, block) {
     if (prev !== block) {
       prev.classList.remove('focus-paragraph-active');
       // classList.remove leert das Attribut nur, entfernt es aber nicht.
-      // Zurück bleibt `class=""` und produziert sonst eine BookStack-Revision
+      // Zurück bleibt `class=""` und produziert sonst eine Revision
       // beim nächsten Save (Diff zur ursprünglichen, attributlosen Fassung).
       if (prev.classList.length === 0) prev.removeAttribute('class');
     }

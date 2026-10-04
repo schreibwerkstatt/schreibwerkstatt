@@ -1,0 +1,16 @@
+<!-- Bucheditor: Undo/Redo der aktiven Seite (cards/book-editor/history.js).
+     mousedown.prevent: Auswahl und Caret bleiben im Block. -->
+<button type="button" class="icon-btn icon-btn--ghost" x-show="_canEdit()"
+        :disabled="!bookEditorCanUndo()"
+        :data-tip="$app.withHotkey($app.t('editor.toolbar.undoTitle'), 'undo')"
+        :aria-label="$app.t('editor.toolbar.undoTitle')"
+        @mousedown.prevent @click="bookEditorUndo()">
+  <svg class="icon" aria-hidden="true"><use href="/icons.svg#undo"/></svg>
+</button>
+<button type="button" class="icon-btn icon-btn--ghost" x-show="_canEdit()"
+        :disabled="!bookEditorCanRedo()"
+        :data-tip="$app.withHotkey($app.t('editor.toolbar.redoTitle'), 'redo')"
+        :aria-label="$app.t('editor.toolbar.redoTitle')"
+        @mousedown.prevent @click="bookEditorRedo()">
+  <svg class="icon" aria-hidden="true"><use href="/icons.svg#redo"/></svg>
+</button>

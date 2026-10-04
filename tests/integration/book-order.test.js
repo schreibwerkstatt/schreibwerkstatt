@@ -33,16 +33,16 @@ function seedBook(name = 'BO-Test') {
 function seedChapter(bookId, name, position = 0) {
   const now = new Date().toISOString();
   return db.prepare(`
-    INSERT INTO chapters (book_id, chapter_name, position, priority, updated_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(bookId, name, position, position, now).lastInsertRowid;
+    INSERT INTO chapters (book_id, chapter_name, position, updated_at)
+    VALUES (?, ?, ?, ?)
+  `).run(bookId, name, position, now).lastInsertRowid;
 }
 function seedPage(bookId, chapterId, name, position = 0) {
   const now = new Date().toISOString();
   return db.prepare(`
-    INSERT INTO pages (book_id, chapter_id, page_name, body_html, position, priority, updated_at, local_updated_at)
-    VALUES (?, ?, ?, '<p/>', ?, ?, ?, ?)
-  `).run(bookId, chapterId, name, position, position, now, now).lastInsertRowid;
+    INSERT INTO pages (book_id, chapter_id, page_name, body_html, position, updated_at, local_updated_at)
+    VALUES (?, ?, ?, '<p/>', ?, ?, ?)
+  `).run(bookId, chapterId, name, position, now, now).lastInsertRowid;
 }
 
 test('validateTree akzeptiert vollstaendigen, sauberen Baum', () => {
@@ -176,7 +176,7 @@ test('putOrder persistiert order_json + updated_by', () => {
   assert.ok(r.updated_at);
 });
 
-test('ensureTree initialisiert aus position/priority, wenn keine Row existiert', () => {
+test('ensureTree initialisiert aus position, wenn keine Row existiert', () => {
   const bookId = seedBook('init');
   const c1 = seedChapter(bookId, 'C1', 0);
   const c2 = seedChapter(bookId, 'C2', 1);

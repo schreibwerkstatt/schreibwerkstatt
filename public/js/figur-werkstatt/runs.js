@@ -34,21 +34,10 @@ export const runsMethods = {
     } catch (e) {
       if (this._runsLoadDraftId !== draftId) return;
       this.runs = { brainstorm: [], consistency: [] };
-      this.errorMessage = app.t('werkstatt.error.runsLoad') || app.t('common.unknownError');
+      this.errorMessage = app.t('werkstatt.error.runsLoad');
     } finally {
       if (this._runsLoadDraftId === draftId) this.runsLoading = false;
     }
-  },
-
-  // Textbeleg-Fundstelle (Consistency): Seitenname aus dem nav-Store auflösen
-  // (das Frontend hat die Seitenliste des Buchs bereits geladen — der Job schickt
-  // nur die page_id). Fallback auf ein generisches Label.
-  belegPageLabel(pageId) {
-    const p = (Alpine.store('nav').pages || []).find(x => String(x.id) === String(pageId));
-    return (p && (p.name || p.page_name)) || window.__app.t('werkstatt.consistency.belegGeneric');
-  },
-  gotoBeleg(pageId) {
-    if (pageId != null) window.__app.gotoPageById(pageId);
   },
 
   // Toggle: Klick auf aktiv markierten Eintrag schliesst Result; sonst Detail
@@ -86,7 +75,7 @@ export const runsMethods = {
       }
       this.selectedRunId = run.id;
     } catch (e) {
-      this.errorMessage = app.t('werkstatt.error.runLoad') || app.t('common.unknownError');
+      this.errorMessage = app.t('werkstatt.error.runLoad');
     }
   },
 
@@ -108,7 +97,7 @@ export const runsMethods = {
         else this.consistencyResult = null;
       }
     } catch (e) {
-      this.errorMessage = app.t('werkstatt.error.runDelete') || app.t('common.unknownError');
+      this.errorMessage = app.t('werkstatt.error.runDelete');
     }
   },
 

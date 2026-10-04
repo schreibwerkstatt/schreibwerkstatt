@@ -47,7 +47,9 @@
     <!-- Verankerte Anmerkungen: schwebende Karten auf Höhe ihrer Textstelle
          (Google-Docs-Modell, vertikal positioniert via share-reader/layout.js).
          .share-comments__list ist die Positionierungs-Ebene. -->
-    <aside class="share-comments" aria-label="{{t_comments}}">
+    <aside class="share-comments" aria-labelledby="share-comments-heading">
+      <!-- Überschrift nur in der gestapelten Liste (<1100px) sichtbar. -->
+      <h2 class="share-comments__heading" id="share-comments-heading">{{t_threads_heading}}</h2>
       <ol class="share-comments__list">{{anchored_comments_html}}</ol>
     </aside>
   </div>
@@ -56,8 +58,8 @@
   <section class="share-feedback" id="share-feedback" hidden></section>
 
   <!-- Allgemeine Kommentare (nicht verankert) + eigenes Formular, ganz unten. -->
-  <section class="share-general" id="share-general" aria-label="{{t_general_heading}}">
-    <h2 class="share-general__heading">{{t_general_heading}}</h2>
+  <section class="share-general" id="share-general" aria-labelledby="share-general-heading">
+    <h2 class="share-general__heading" id="share-general-heading">{{t_general_heading}}</h2>
     <ol class="share-general__list">{{general_comments_html}}</ol>
     {{form_block}}
   </section>

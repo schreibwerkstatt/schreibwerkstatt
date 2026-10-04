@@ -441,101 +441,11 @@ body.ideen-dnd-active .ideen-board-cell {
   justify-content: flex-end;
 }
 
-/* Geteiltes Markup mit der Ideen-Karte (partials/ideen-link-chips.html), darum
-   liegt das Vokabular hier und nicht in der Board-Sektion: entities/ideen.css
-   laedt davor und benutzt dieselben Klassen. */
-.idee-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-.idee-link-chip {
-  --idee-link-accent: var(--color-muted);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  max-width: 100%;
-  border: 1px solid color-mix(in srgb, var(--idee-link-accent) 45%, transparent);
-  border-radius: var(--radius-sm);
-  padding: 0 var(--space-3);
-  background: var(--color-tag-bg);
-}
-/* Ziel-Art traegt die Farbe der Karte, auf die der Chip zeigt — so erkennt man
-   ohne Lesen, ob eine Pendenz an einem Fundstueck, einem Beat oder einem Motiv
-   haengt. */
-.idee-link-chip--research { --idee-link-accent: var(--card-accent-recherche); }
-.idee-link-chip--beat     { --idee-link-accent: var(--card-accent-plot); }
-.idee-link-chip--motif    { --idee-link-accent: var(--card-accent-motiv); }
-
-.idee-link-goto {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--space-3);
-  min-width: 0;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  font-size: var(--font-size-micro);
-  color: var(--color-text);
-}
-.idee-link-kind {
-  flex: 0 0 auto;
-  color: var(--idee-link-accent);
-  font-weight: var(--fw-semibold);
-}
-.idee-link-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.idee-chip-x {
-  flex: 0 0 auto;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  color: var(--color-muted);
-  display: inline-flex;
-}
-.idee-chip-x:hover { color: var(--color-err-text); }
-.idee-chip-x .icon { width: 0.75em; height: 0.75em; }
-
-/* ── Ideen-Plaketten auf den Gegenseiten ────────────────────────────────── */
-/* Read-only Chips an Recherche-Fundstueck, Plot-Beat und Motiv
-   (public/js/book/ideen-backlinks.js). Gleiche Bauart wie die Motiv-Badges auf
-   der Beat-Karte: sie zeigen und springen, kuratiert wird auf der Ideen-Seite. */
-.idee-backlinks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-.idee-backlink-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  max-width: 14rem;
-  background: var(--color-tag-bg);
-  border: 1px solid color-mix(in srgb, var(--card-accent-ideen) 45%, transparent);
-  border-left: 3px solid var(--idee-status-accent, var(--color-muted));
-  border-radius: var(--radius-sm);
-  padding: 0 var(--space-xs);
-  cursor: pointer;
-  font-size: var(--font-size-micro);
-  color: var(--color-text);
-  text-align: left;
-}
-.idee-backlink-chip--offen     { --idee-status-accent: var(--color-muted); }
-.idee-backlink-chip--in_arbeit { --idee-status-accent: var(--color-warn-text); }
-.idee-backlink-chip--erledigt  { --idee-status-accent: var(--color-ok-border); }
-.idee-backlink-chip--verworfen { --idee-status-accent: var(--color-border); opacity: var(--opacity-muted); }
-.idee-backlink-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* ── Ideen-Referenzen auf den Gegenseiten ───────────────────────────────── */
+/* Read-only Referenzen an Recherche-Fundstueck, Plot-Beat und Motiv
+   (partials/ideen-backlinks.html). Der Ideen-Text ist Freitext beliebiger
+   Laenge — gedeckelt, damit eine lange Notiz die Beat-Karte nicht sprengt. */
+.idee-backlinks > .entity-ref { max-width: 14rem; }
 
 /* ── Schmaler Container ─────────────────────────────────────────────────── */
 /* Reicht der Platz nicht, bleibt das Raster wie es ist und die Flaeche scrollt

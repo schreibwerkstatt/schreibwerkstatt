@@ -7,7 +7,7 @@ test('defaultConfig liefert vollständigen Schema-Baum', () => {
   const c = defaultConfig();
   assert.equal(c.layout.pageSize, 'A4');
   assert.equal(c.font.body.family, 'Lora');
-  // Die BookStack-Seite ist Strukturelement: eigene Ueberschrift, eigener
+  // Die Buchseite ist Strukturelement: eigene Ueberschrift, eigener
   // Umbruch, eigener Verzeichnis-Eintrag (siehe lib/pdf-export-defaults.js).
   assert.equal(c.chapter.pageStructure, 'nested');
   assert.equal(c.chapter.pageBreakBetweenPages, true);

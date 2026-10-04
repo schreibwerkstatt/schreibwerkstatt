@@ -95,17 +95,6 @@
   font-weight: var(--fw-bold);
   opacity: 0.7;
 }
-.chat-context-link {
-  color: var(--color-subtle);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.chat-context-link:hover {
-  color: var(--color-primary);
-}
-.chat-context-sep {
-  color: var(--color-subtle);
-}
 .chat-context-toggle {
   margin-left: var(--space-xs);
   padding: 0 var(--space-xs);

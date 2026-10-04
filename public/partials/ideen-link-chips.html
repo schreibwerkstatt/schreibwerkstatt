@@ -1,4 +1,4 @@
-<!-- Verknuepfungs-Chips einer Idee (Recherche-Fundstueck / Plot-Beat / Motiv).
+<!-- Verknuepfungen einer Idee (Recherche-Fundstueck / Plot-Beat / Motiv).
      Fragment (string-seitiger @include), weil der Block sowohl im x-for der
      Ideen-Karte als auch im x-for des Ideen-Boards steht — beide nennen die
      Idee `idee`, das Markup ist darum wortgleich teilbar. Methoden kommen aus
@@ -7,20 +7,14 @@
      Klick springt zur Gegenseite, das X loest die Kante. Gesetzt wird sie ueber
      den Picker der jeweiligen Karte — es gibt nur EINEN Schreibpfad
      (addIdeeLink), drei Oberflaechen. -->
-<div class="idee-links" x-show="idee.links && idee.links.length">
+<div class="idee-links entity-refs" x-show="idee.links && idee.links.length">
   <template x-for="link in (idee.links || [])" :key="link.link_id">
-    <span class="idee-link-chip" :class="'idee-link-chip--' + link.target_kind">
-      <button type="button" class="idee-link-goto" @click.stop="gotoIdeeLink(link)"
-              :data-tip="linkKindLabel(link.target_kind) + ': ' + link.label"
-              :aria-label="$app.t('ideen.link.goto') + ': ' + link.label">
-        <span class="idee-link-kind" x-text="linkKindLabel(link.target_kind)"></span>
-        <span class="idee-link-label" x-text="link.label"></span>
-      </button>
-      <button type="button" class="idee-chip-x" @click.stop="removeIdeeLink(idee, link)"
+    <span class="entity-ref-group">
+      <button type="button" class="entity-ref"
+              x-entity-ref="{ type: link.target_kind, id: link.target_id, label: link.label }"></button>
+      <button type="button" class="entity-ref-remove" @click.stop="removeIdeeLink(idee, link)"
               :disabled="busy"
-              :aria-label="$app.t('ideen.link.remove')">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
-      </button>
+              :aria-label="$app.t('ideen.link.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
     </span>
   </template>
 </div>

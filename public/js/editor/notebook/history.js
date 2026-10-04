@@ -44,6 +44,7 @@ export const notebookHistoryMethods = {
         this._scheduleDraftSave?.();
         this._scheduleAutosave?.();
       },
+      onChange: () => { this._historyRev++; },
     });
     return this._editHistory;
   },
@@ -53,8 +54,9 @@ export const notebookHistoryMethods = {
   _historyPushSoon() { this._historyEnsure().pushSoon(); },
   _historyPushNow() { this._historyEnsure().pushNow(); },
 
-  notebookCanUndo() { return this._historyEnsure().canUndo(); },
-  notebookCanRedo() { return this._historyEnsure().canRedo(); },
+  // `_historyRev` lesen = Abhängigkeit für Alpine (Buttons `:disabled`).
+  notebookCanUndo() { void this._historyRev; return this._historyEnsure().canUndo(); },
+  notebookCanRedo() { void this._historyRev; return this._historyEnsure().canRedo(); },
 
   // Kein `focusActive`-Gate: der Fokusmodus fährt bewusst auf dieser Historie
   // (siehe Modulkopf). Der Edit-Modus bleibt Vorbedingung — ohne offene Session

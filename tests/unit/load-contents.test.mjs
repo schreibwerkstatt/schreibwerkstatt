@@ -1,5 +1,5 @@
 // Scope-Dispatch fuer Buch/Kapitel/Seite. Mocked content-store via require-cache-
-// Override, damit kein BookStack-Roundtrip noetig wird.
+// Override, damit kein Content-Store-Zugriff noetig wird.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

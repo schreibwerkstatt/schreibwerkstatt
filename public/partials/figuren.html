@@ -20,7 +20,18 @@
   <div x-show="$store.catalogUi.figurenProgress > 0" class="progress-bar-wrap">
     <div class="progress-bar" :style="{ '--progress': $store.catalogUi.figurenProgress + '%' }"></div>
   </div>
-  <div x-show="$store.catalogUi.figurenStatus" class="card-status" x-html="$store.catalogUi.figurenStatus"></div>
+  <!-- Status = Lade-/Löschfehler (book/figuren.js). Bei leerem Katalog ersetzt er
+       den „Noch keine Analyse"-Leerzustand: ein gescheiterter Fetch ist kein
+       fehlendes Analyseergebnis, und dessen CTA wäre eine teure Komplettanalyse. -->
+  <div x-show="$store.catalogUi.figurenStatus" class="card-status" role="status" x-text="$store.catalogUi.figurenStatus"></div>
+  <div x-show="$store.catalogUi.figurenStatus && $store.catalog.figuren.length === 0 && !$store.catalogUi.figurenLoading" class="card-empty">
+    <button type="button" class="card-empty-cta"
+            @click="$app.loadFiguren($store.nav.selectedBookId)"
+            :disabled="!$store.nav.selectedBookId">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
+      <span x-text="$app.t('figuren.loadRetry')"></span>
+    </button>
+  </div>
 
   <!-- Leer-Hinweis mit CTA -->
   <div x-show="$store.catalog.figuren.length === 0 && !$store.catalogUi.figurenLoading && !$store.catalogUi.figurenStatus" class="card-empty">
@@ -113,7 +124,15 @@
 
     <template x-for="f in filteredFiguren()" :key="f.id">
       <div>
-        <div class="figur-item" :class="{ 'figur-item--stale': f.stale }" :data-figid="f.id" @click="$store.catalogUi.selectedFigurId = $store.catalogUi.selectedFigurId === f.id ? null : f.id;">
+        <!-- Zeile = Aufklapp-Schalter. Kein <button>, weil sie selbst Buttons
+             (Löschen, Kapitel-Referenz) enthält; darum role/tabindex/aria-expanded
+             und Enter/Space nur auf der Zeile selbst (.self), nicht aus den Kindern. -->
+        <div class="figur-item" :class="{ 'figur-item--stale': f.stale }" :data-figid="f.id"
+             role="button" tabindex="0"
+             :aria-expanded="$store.catalogUi.selectedFigurId === f.id"
+             @click="$store.catalogUi.selectedFigurId = $store.catalogUi.selectedFigurId === f.id ? null : f.id;"
+             @keydown.enter.self.prevent="$store.catalogUi.selectedFigurId = $store.catalogUi.selectedFigurId === f.id ? null : f.id;"
+             @keydown.space.self.prevent="$store.catalogUi.selectedFigurId = $store.catalogUi.selectedFigurId === f.id ? null : f.id;">
           <span class="figur-typ-dot" :class="'figur-typ-dot--' + (f.typ || 'unknown')"></span>
           <span class="figur-name" x-text="f.name"></span>
           <span x-show="f.stale" class="tag tag--stale" :data-tip="$app.t('figuren.staleHint')" x-text="$app.t('figuren.staleBadge')"></span>
@@ -125,12 +144,12 @@
           <span class="tag" x-text="$app.t('figuren.type.' + f.typ)"></span>
           <span x-show="$app.figurJahrLabel(f)" class="tag" :data-tip="$app.t('figuren.jahrAlterTip')" x-text="$app.figurJahrLabel(f)"></span>
           <span x-show="f.geburtstag" class="tag" :data-tip="$app.t('figuren.birthYearTip')" x-text="$app.t('figuren.birthYear', { jahr: f.geburtstag })"></span>
-          <!-- Kapitel-Badges -->
+          <!-- Häufigstes Kapitel + Anzahl weiterer -->
           <template x-if="f.kapitel?.length">
-            <span class="kapitel-badges">
-              <span class="kapitel-badge kapitel-badge--primary internal-link" x-text="f.kapitel[0].name" @click.stop="$app.openKapitelByName(f.kapitel[0].name)"></span>
+            <span class="entity-refs entity-refs--collapse-mobile">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: f.kapitel[0].chapter_id, name: f.kapitel[0].name }"></button>
               <template x-if="f.kapitel.length > 1">
-                <span class="kapitel-badge kapitel-badge--more" x-text="'+' + (f.kapitel.length - 1)"></span>
+                <span class="entity-ref-more" x-text="'+' + (f.kapitel.length - 1)"></span>
               </template>
             </span>
           </template>

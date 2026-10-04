@@ -101,7 +101,9 @@ export const loadMethods = {
       this.overviewPrevReview = reviewArr[1] || null;
       this.overviewRecent = Array.isArray(recent) ? recent : [];
       this.overviewFiguren = Array.isArray(figuren?.figuren) ? figuren.figuren : [];
-      this.overviewSzenen = Array.isArray(szenen?.szenen) ? szenen.szenen : [];
+      // Nur Szenen, die im Text stehen — stale-Einträge zählen in keiner Kachel
+      // (gleiche Regel wie die Szenen-Karte, book/szenen-stats.js).
+      this.overviewSzenen = Array.isArray(szenen?.szenen) ? szenen.szenen.filter(s => !s.stale) : [];
       this.overviewOrte = Array.isArray(orte?.orte) ? orte.orte : [];
       this.overviewSongs = Array.isArray(songs?.songs) ? songs.songs : [];
       this.overviewLektoratTime = lektoratTime || null;

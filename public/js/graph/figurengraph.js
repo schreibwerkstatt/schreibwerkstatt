@@ -23,24 +23,28 @@ export const figurengraphMethods = {
 
     // Startpositionen deterministisch; Physics bleibt aus, damit Nodes ohne
     // Rückzug dort bleiben, wohin der Nutzer sie zieht.
-    this._figurenNodes = new vis.DataSet(nodePositions.map(({ f, x, y }) => ({
+    // Lokale Rohobjekte erzeugen und erst danach an `this` hängen: über `this._…`
+    // gelesen wären es Alpine-Proxys, und vis-network ruft in den Zeichen-Hooks
+    // pro Frame getBoundingBox/canvasToDOM — gleiches Muster wie Soziogramm und
+    // Familiengraph.
+    const nodes = new vis.DataSet(nodePositions.map(({ f, x, y }) => ({
       ...this._baseNode(f),
       borderWidth: importanceBorderWidth(info[f.id].importance),
       x, y,
     })));
-    const nodes = this._figurenNodes;
 
     const { edgeList } = this._buildEdges(/* soziogrammModus */ false);
-    this._figurenEdges = new vis.DataSet(edgeList);
-    const edges = this._figurenEdges;
+    const edges = new vis.DataSet(edgeList);
 
-    this._figurenNetwork = new vis.Network(container, { nodes, edges }, {
+    const network = new vis.Network(container, { nodes, edges }, {
       physics: false,
       layout: { improvedLayout: false },
       interaction: { hover: true, tooltipDelay: 100, dragNodes: true },
       edges: { smooth: { type: 'curvedCW', roundness: 0.15 } },
     });
-    const network = this._figurenNetwork;
+    this._figurenNodes = nodes;
+    this._figurenEdges = edges;
+    this._figurenNetwork = network;
 
     // Vertikale Ausdehnung für Kapitel-Spalten (genug Luft über/unter den Tier-Bändern)
     const PAD_Y      = 200;

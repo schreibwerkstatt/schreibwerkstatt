@@ -77,7 +77,7 @@ test('setNearBlocks: block=null → alle near-Klassen weg', () => {
 });
 
 test('setNearBlocks: überspringt Nicht-Block-Geschwister', () => {
-  // BookStack-HTML kann Nicht-Block-Knoten zwischen Absätzen einstreuen
+  // Seiten-HTML kann Nicht-Block-Knoten zwischen Absätzen einstreuen
   // (Whitespace-Text, Inline-Tags). matches() liefert dann false → weiter
   // suchen, sonst würde der „aktive Absatz" keine markierten Nachbarn haben.
   const prev = mkBlock();

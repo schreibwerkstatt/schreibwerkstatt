@@ -1,0 +1,68 @@
+<!-- Pflegeformular eines Schauplatzes (anlegen + bearbeiten). Fragment-Include
+     in orte.html (Neuanlage) und orte-list.html (Bearbeiten im Detail einer
+     Zeile) — lebt im Scope von `orteCard`, State `ortEdit` (book/orte-edit.js).
+     Korrigierte Felder überschreibt die nächste Komplettanalyse nicht. -->
+<div class="ort-edit" @keydown.escape.stop="cancelOrtEdit()">
+  <div class="card-section-head">
+    <span class="card-section-title"
+          x-text="ortEdit.mode === 'new' ? $app.t('orte.edit.newTitle') : $app.t('orte.edit.editTitle')"></span>
+  </div>
+  <div class="card-form-grid">
+    <div class="card-form-row">
+      <label class="card-form-label" x-text="$app.t('orte.col.name')"></label>
+      <div class="card-form-field">
+        <input type="text" x-ref="ortEditName" x-model="ortEdit.draft.name" maxlength="200"
+               data-spellcheck="spelling" :aria-label="$app.t('orte.col.name')"
+               @keydown.enter.prevent="saveOrtEdit()">
+      </div>
+    </div>
+    <div class="card-form-row">
+      <label class="card-form-label" x-text="$app.t('orte.col.typ')"></label>
+      <div class="card-form-field">
+        <div x-data="combobox({ placeholder: $app.t('orte.col.typ'), compact: false, emptyLabel: $app.t('orte.edit.noTyp') })"
+             x-modelable="value" x-model="ortEdit.draft.typ"
+             x-effect="options = ortTypOptions()"></div>
+      </div>
+    </div>
+    <div class="card-form-row">
+      <label class="card-form-label" x-text="$app.t('orte.edit.parent')"></label>
+      <div class="card-form-field">
+        <div x-data="combobox({ placeholder: $app.t('orte.edit.parent'), compact: false, emptyLabel: $app.t('orte.edit.noParent') })"
+             x-modelable="value" x-model="ortEdit.draft.parent"
+             x-effect="options = ortParentOptions(ortEdit.id)"></div>
+        <p class="card-form-field-note" x-text="$app.t('orte.edit.parentHint')"></p>
+      </div>
+    </div>
+    <div class="card-form-row">
+      <label class="card-form-label" x-text="$app.t('orte.col.land')"></label>
+      <div class="card-form-field">
+        <div x-data="combobox({ placeholder: $app.t('orte.col.land'), compact: false, emptyLabel: $app.t('orte.edit.noLand') })"
+             x-modelable="value" x-model="ortEdit.draft.land"
+             x-effect="options = ortLandOptions()"></div>
+      </div>
+    </div>
+    <div class="card-form-row">
+      <label class="card-form-label" x-text="$app.t('orte.col.stimmung')"></label>
+      <div class="card-form-field">
+        <input type="text" x-model="ortEdit.draft.stimmung" maxlength="200"
+               data-spellcheck="spelling" :aria-label="$app.t('orte.col.stimmung')">
+      </div>
+    </div>
+    <div class="card-form-row card-form-row--top">
+      <label class="card-form-label" x-text="$app.t('orte.col.beschreibung')"></label>
+      <div class="card-form-field">
+        <textarea class="card-form-textarea" rows="3" x-model="ortEdit.draft.beschreibung" maxlength="4000"
+                  data-spellcheck="spelling" :aria-label="$app.t('orte.col.beschreibung')"></textarea>
+      </div>
+    </div>
+  </div>
+  <p class="card-form-hint" x-show="ortEdit.mode === 'edit'" x-text="$app.t('orte.edit.protectHint')"></p>
+  <p class="card-form-error" x-show="ortEdit.error" x-cloak x-text="ortEdit.error"></p>
+  <div class="ort-edit-actions">
+    <button type="button" class="primary" @click="saveOrtEdit()" :disabled="ortEdit.busy || !ortEdit.draft.name.trim()">
+      <span x-show="ortEdit.busy" class="spinner"></span>
+      <span x-text="ortEdit.busy ? $app.t('common.saving') : $app.t('common.save')"></span>
+    </button>
+    <button type="button" @click="cancelOrtEdit()" x-text="$app.t('common.cancel')"></button>
+  </div>
+</div>

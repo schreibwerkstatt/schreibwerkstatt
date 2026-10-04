@@ -194,7 +194,7 @@ test.describe('Lektorat-Flow', () => {
     expect(mock.lastBsPut.html).not.toContain('scheinet');
   });
 
-  test('saveCorrections: sendet korrigiertes HTML an BookStack und räumt State ab', async ({ page }) => {
+  test('saveCorrections: sendet korrigiertes HTML an den Server und räumt State ab', async ({ page }) => {
     await loadHarness(page, 'ok');
     await page.evaluate(() => window.harness.runCheck());
     await waitUntil(page, 'h => h.checkDone === true');

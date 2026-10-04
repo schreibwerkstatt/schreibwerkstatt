@@ -107,15 +107,24 @@ export const figurenMethods = {
       : fig.anchor_ereignis;
   },
 
+  // Buchwechsel-Guard nach dem await: mehrere Pfade laden parallel (Tree-Load
+  // mit Abort-Signal, Figuren-Karte, Komplett-Lauf-Ende) — eine verspätete
+  // Antwort des vorigen Buchs darf den Katalog des neuen nicht überschreiben.
+  // Ladefehler stehen als Status in der Karte statt als „Noch keine Analyse"-
+  // Leerzustand, dessen CTA eine teure Komplettanalyse anbietet.
   async loadFiguren(bookId, { signal } = {}) {
+    const isCurrent = () => String(this.$store.nav.selectedBookId) === String(bookId);
     try {
       const data = await fetchJson('/figures/' + bookId, { signal });
+      if (!isCurrent()) return;
       this.$store.catalog.figuren = (data?.figuren || []).map(_sanitizeFigur);
+      this.$store.catalogUi.figurenStatus = '';
       this._figurLookupIndex = null;
       this._buildGlobalZeitstrahl();
     } catch (e) {
       if (e?.name === 'AbortError') return;
       console.error('[loadFiguren]', e);
+      if (isCurrent()) this.$store.catalogUi.figurenStatus = this.t('figuren.loadError');
     }
   },
 
@@ -132,10 +141,12 @@ export const figurenMethods = {
       const r = await fetch(`/figures/${this.$store.nav.selectedBookId}/${f.id}`, { method: 'DELETE' });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       this.$store.catalog.figuren = this.$store.catalog.figuren.filter(x => x.id !== f.id);
+      this.$store.catalogUi.figurenStatus = '';
       this._figurLookupIndex = null;
       this._buildGlobalZeitstrahl();
     } catch (e) {
       console.error('[deleteStaleFigur]', e);
+      this.$store.catalogUi.figurenStatus = this.t('figuren.deleteStaleFailed', { name: f.name });
     }
   },
 };

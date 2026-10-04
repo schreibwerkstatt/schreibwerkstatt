@@ -6,14 +6,10 @@
      `suggestions[item.id]` — beides pro Fundstueck, nicht pro Oberflaeche. -->
 <div class="research-links" x-show="item.links && item.links.length">
   <template x-for="link in item.links" :key="link.link_id">
-    <span class="research-link-chip" :class="'research-link-chip--' + link.target_kind">
-      <button type="button" class="research-link-goto" @click="gotoLink(link)"
-              :data-tip="$app.t('recherche.link.goto')"
-              :aria-label="$app.t('recherche.link.goto') + ': ' + link.label">
-        <span class="research-link-kind" x-text="linkKindLabel(link.target_kind)"></span>
-        <span class="research-link-goto-label" x-text="link.label"></span>
-      </button>
-      <button type="button" class="research-chip-x" @click="removeLink(item, link)" :aria-label="$app.t('recherche.link.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+    <span class="entity-ref-group">
+      <button type="button" class="entity-ref"
+              x-entity-ref="{ type: link.target_kind, id: link.target_id, label: link.label }"></button>
+      <button type="button" class="entity-ref-remove" @click="removeLink(item, link)" :aria-label="$app.t('recherche.link.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
     </span>
   </template>
 </div>
@@ -52,8 +48,8 @@
   </template>
   <template x-for="(sg, i) in (itemSuggestions(item) || [])" :key="sg.target_kind + ':' + sg.target_id">
     <div class="research-suggestion">
-      <span class="research-link-kind" x-text="linkKindLabel(sg.target_kind)"></span>
-      <span class="research-suggestion-label" x-text="sg.label"></span>
+      <button type="button" class="entity-ref"
+              x-entity-ref="{ type: sg.target_kind, id: sg.target_id, label: sg.label }"></button>
       <span class="research-suggestion-reason" x-show="sg.grund" x-text="sg.grund"></span>
       <button type="button" class="btn-compact" @click="acceptSuggestion(item, sg)" x-text="$app.t('recherche.suggest.accept')"></button>
     </div>

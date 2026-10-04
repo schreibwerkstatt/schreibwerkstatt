@@ -221,17 +221,3 @@ test('checkPendingJobs: Kapitel-Review nicht running → lsKey geräumt, kein Ev
   assert.equal(ev, undefined);
   assert.equal(localStorage.getItem('lektorat_chapter_review_job_42_33'), null);
 });
-
-test('checkPendingJobs: laufender Figuren-Job → setzt Loading + öffnet Karte', async () => {
-  reset();
-  const c = makeCtx();
-  lsStore.set('lektorat_figures_job_42', 'fig-1');
-  fetchResponses.set('/jobs/fig-1', {
-    ok: true, status: 200,
-    body: { id: 'fig-1', status: 'running', progress: 40, statusText: 'job.phase.aiAnalyzing' },
-  });
-  await c.checkPendingJobs(42);
-  assert.equal(c.figurenLoading, true);
-  assert.equal(c.figurenProgress, 40);
-  assert.equal(c.showFiguresCard, true);
-});

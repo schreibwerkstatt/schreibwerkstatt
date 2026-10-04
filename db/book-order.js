@@ -116,20 +116,20 @@ function validateTree(tree, bookId) {
 // pages.position bleibt 0-basiert + lueckenlos pro Bucket (Eltern-Kapitel oder
 // Top-Level). Caller wrapped in Tx.
 function materializeTree(bookId, tree) {
-  const updateChapter = db.prepare('UPDATE chapters SET position = ?, priority = ?, parent_chapter_id = ? WHERE chapter_id = ? AND book_id = ?');
-  const updatePage = db.prepare('UPDATE pages SET position = ?, priority = ?, chapter_id = ? WHERE page_id = ? AND book_id = ?');
+  const updateChapter = db.prepare('UPDATE chapters SET position = ?, parent_chapter_id = ? WHERE chapter_id = ? AND book_id = ?');
+  const updatePage = db.prepare('UPDATE pages SET position = ?, chapter_id = ? WHERE page_id = ? AND book_id = ?');
 
   const chapterIdxRef = { value: 0 };
 
   function walkChapter(entry, parentChapterId) {
-    updateChapter.run(chapterIdxRef.value, chapterIdxRef.value, parentChapterId, entry.id, bookId);
+    updateChapter.run(chapterIdxRef.value, parentChapterId, entry.id, bookId);
     chapterIdxRef.value++;
     let pageIdx = 0;
     for (const child of (entry.children || [])) {
       if (child.type === 'chapter') {
         walkChapter(child, entry.id);
       } else {
-        updatePage.run(pageIdx, pageIdx, entry.id, child.id, bookId);
+        updatePage.run(pageIdx, entry.id, child.id, bookId);
         pageIdx++;
       }
     }
@@ -140,7 +140,7 @@ function materializeTree(bookId, tree) {
     if (entry.type === 'chapter') {
       walkChapter(entry, null);
     } else {
-      updatePage.run(topPageIdx, topPageIdx, null, entry.id, bookId);
+      updatePage.run(topPageIdx, null, entry.id, bookId);
       topPageIdx++;
     }
   }
@@ -189,19 +189,19 @@ function putOrder(bookId, tree, userEmail = null) {
   return getOrder(bookId);
 }
 
-// Initial-Fill: Tree aus aktuellen pages.position/chapters.position (bzw.
-// priority als Fallback) + chapters.parent_chapter_id ableiten. Verwendet vom
+// Initial-Fill: Tree aus aktuellen pages.position/chapters.position
+// + chapters.parent_chapter_id ableiten. Verwendet vom
 // Backfill + bookTree-Read, wenn noch keine book_order-Row existiert.
 function buildFromCurrentState(bookId) {
   const chapters = db.prepare(`
-    SELECT chapter_id, parent_chapter_id, COALESCE(position, priority, 0) AS pos
+    SELECT chapter_id, parent_chapter_id, COALESCE(position, 0) AS pos
       FROM chapters WHERE book_id = ?
-     ORDER BY COALESCE(position, priority, 0), chapter_id
+     ORDER BY COALESCE(position, 0), chapter_id
   `).all(bookId);
   const pages = db.prepare(`
-    SELECT page_id, chapter_id, COALESCE(position, priority, 0) AS pos
+    SELECT page_id, chapter_id, COALESCE(position, 0) AS pos
       FROM pages WHERE book_id = ?
-     ORDER BY COALESCE(position, priority, 0), page_id
+     ORDER BY COALESCE(position, 0), page_id
   `).all(bookId);
 
   const pagesByChapter = new Map();
@@ -259,7 +259,7 @@ function buildFromCurrentState(bookId) {
 // Reconciliation: stored tree mit aktuellem DB-Stand abgleichen. Items, die
 // in der DB nicht (mehr) existieren, fliegen raus; neue Items werden ans Ende
 // angehaengt (Kapitel als leeres Top-Level-Kapitel, Seiten als Top-Level).
-// Verwendet vom Lese-Pfad nach BookStack-Sync oder nach
+// Verwendet vom Lese-Pfad nach Importen oder nach
 // CRUD-Operationen, die book_order nicht selbst pflegen.
 function reconcile(bookId, storedTree) {
   const { chapterIds, pageIds } = _knownIds(bookId);
@@ -377,11 +377,10 @@ function reconcile(bookId, storedTree) {
 // Liefert die aktuelle Tree-Struktur. Mit Auto-Init: keine Row -> aus
 // Bestand bauen + persistieren. Mit Auto-Reconcile: vorhandene Row gegen
 // aktuellen DB-Stand abgleichen, falls Items hinzugekommen/verschwunden sind
-// (z.B. nach BookStack-Sync, Direct-Insert via API ausserhalb des PUT-Hooks).
+// (z.B. nach Import, Direct-Insert via API ausserhalb des PUT-Hooks).
 //
 // Defensiv: kein books-Row → kein Auto-Init, sonst FK-Violation gegen
-// books(book_id). Tritt bei bookstack-Backend auf, wenn das Buch noch nicht
-// lokal gesynct ist; Caller (bookTree-Facade) faellt auf raw zurueck.
+// books(book_id); Caller (bookTree-Facade) faellt auf raw zurueck.
 function ensureTree(bookId, userEmail = null) {
   const bookExists = db.prepare('SELECT 1 FROM books WHERE book_id = ?').get(bookId);
   if (!bookExists) return { tree: [], updated_at: null, updated_by: null };

@@ -194,6 +194,8 @@ export const bookEditorSaveMethods = {
       if (block.conflict !== conflict) return;
     }
     this._autosave.clear(block.pageId);
+    // Undo darf nicht in die gerade verworfene eigene Fassung zurückführen.
+    this._historyDrop?.(block.pageId);
     block.html = remoteHtml;
     block.originalHtml = remoteHtml;
     block.originalUpdatedAt = remoteUpdatedAt;

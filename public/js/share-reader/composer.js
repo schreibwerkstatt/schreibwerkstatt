@@ -7,7 +7,7 @@
 // Start/Ende des markierten Quotes innerhalb des data-bid-Blocks.
 
 import { charOffset } from '../share-anchor.js';
-import { el } from './dom.js';
+import { el, makeModal, submitOnModEnter } from './dom.js';
 
 // deps:
 //   t            → i18n-Lookup
@@ -27,14 +27,17 @@ export function setupComposer({ t, article, postComment, onPosted, savedName }) 
     if (!block || !article.contains(block)) return null;
     const start = charOffset(block, range.startContainer, range.startOffset);
     const blockLen = block.textContent.length;
-    let end = block.contains(range.endContainer)
+    // Reicht die Markierung über den Block hinaus, wird nur der Teil im ersten
+    // Block verankert — der Composer sagt das dem Leser (truncated).
+    const truncated = !block.contains(range.endContainer);
+    let end = !truncated
       ? charOffset(block, range.endContainer, range.endOffset)
       : blockLen;
     if (end > blockLen) end = blockLen;
     if (end <= start) return null;
     const quote = block.textContent.slice(start, end);
     if (!quote.trim()) return null;
-    return { bid: block.getAttribute('data-bid'), start, end, quote };
+    return { bid: block.getAttribute('data-bid'), start, end, quote, truncated };
   }
 
   const selBtn = el('button', 'share-sel-btn', t('anchor_cta'));
@@ -68,25 +71,32 @@ export function setupComposer({ t, article, postComment, onPosted, savedName }) 
     selBtn.hidden = true;
   });
 
+  let release = null;
   function openComposer(anchor) {
     closeComposer();
     const overlay = el('div', 'share-composer');
     overlay.id = 'share-composer';
     const card = el('div', 'share-composer__card');
-    card.appendChild(el('h3', 'share-composer__title', anchor ? t('composer_title') : t('composer_general_title')));
+    const title = el('h3', 'share-composer__title', anchor ? t('composer_title') : t('composer_general_title'));
+    card.appendChild(title);
     if (anchor) {
-      card.appendChild(el('blockquote', 'share-composer__quote', '„' + anchor.quote + '"'));
+      // Ohne literale Anführungszeichen — der Akzentbalken markiert das Zitat
+      // (gleiche Optik wie das Quote-Snippet der Karte, sprachneutral).
+      card.appendChild(el('blockquote', 'share-composer__quote', anchor.quote));
+      if (anchor.truncated) card.appendChild(el('p', 'share-composer__hint', t('anchor_truncated')));
     }
     const ta = el('textarea', 'share-composer__body');
     ta.rows = 4;
     ta.maxLength = 4000;
     ta.placeholder = t('comment_form_body');
+    ta.setAttribute('aria-label', t('comment_form_body'));
     const actions = el('div', 'share-composer__actions');
     const submit = el('button', 'share-composer__submit', t('send'));
     submit.type = 'button';
     const cancel = el('button', 'share-composer__cancel', t('cancel'));
     cancel.type = 'button';
     const status = el('span', 'share-comments__status');
+    status.setAttribute('role', 'status');
     actions.appendChild(submit);
     actions.appendChild(cancel);
     actions.appendChild(status);
@@ -94,10 +104,12 @@ export function setupComposer({ t, article, postComment, onPosted, savedName }) 
     card.appendChild(actions);
     overlay.appendChild(card);
     document.body.appendChild(overlay);
+    release = makeModal(overlay, card, title);
     setTimeout(() => ta.focus(), 30);
 
     cancel.addEventListener('click', closeComposer);
     overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) closeComposer(); });
+    submitOnModEnter(ta, () => submit.click());
     submit.addEventListener('click', async () => {
       const body = (ta.value || '').trim();
       if (!body) { status.textContent = t('form_empty'); return; }
@@ -120,6 +132,7 @@ export function setupComposer({ t, article, postComment, onPosted, savedName }) 
   function closeComposer() {
     const ex = document.getElementById('share-composer');
     if (ex) ex.remove();
+    if (release) { release(); release = null; }
   }
 
   // Leser interagiert gerade (Composer offen oder Text markiert) → Live-Poll pausieren.

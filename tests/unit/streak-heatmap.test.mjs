@@ -316,3 +316,22 @@ test('Konsistenz: 7-Tage-Kachel == Header-Popover-Balken (gleiche Datenquelle)',
   const del = tile.find(d => d.iso === isoDaysAgo(2));
   assert.equal(del.delta, -800);
 });
+
+test('Heute geloescht: Heute-Balken negativ und 7-Tage-Summe == Summe der Balken', () => {
+  // Regressions-Sentinel: Live-Σ unter dem Vortagssnapshot ergab im
+  // Heute-Balken 0 (geklemmtes Live-Delta), waehrend die 7-Tage-Summe das Minus
+  // ueber den rohen Live-Stand schon enthielt — Balken und Summe widersprachen sich.
+  const stats = [
+    { recorded_at: isoDaysAgo(8), chars: 1000 },
+    { recorded_at: isoDaysAgo(3), chars: 3000 },
+    { recorded_at: isoDaysAgo(1), chars: 5000 },
+  ];
+  const tokEsts = { 1: { chars: 4200 } }; // heute 800 geloescht
+  const ctx = makeCtx(stats, tokEsts);
+  const days = ctx.overviewLast7Days();
+  assert.equal(days[days.length - 1].delta, -800);
+  const sum = days.reduce((s, d) => s + d.delta, 0);
+  assert.equal(ctx.overview7DayCharDelta(), sum);
+  // Donut bleibt bei Ziel-Semantik: nichts geschafft, nicht negativ.
+  assert.equal(ctx.overviewTodayRing(1500).chars, 0);
+});

@@ -216,9 +216,9 @@ test('Seiten-Vorschläge aus den Embeddings: eigene Seiten mit Auszug, fremde un
   const BOOK_ID = 7210;
   const ids = seedWorld(BOOK_ID);
   db.prepare("INSERT INTO books (book_id, name, created_at, updated_at) VALUES (7211, 'Fremd', ?, ?)").run(NOW, NOW);
-  db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, priority, updated_at) VALUES (721001, ?, 'Grabung', 1, 1, ?)").run(BOOK_ID, NOW);
-  db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, priority, updated_at) VALUES (721002, ?, 'Schon da', 2, 2, ?)").run(BOOK_ID, NOW);
-  db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, priority, updated_at) VALUES (721101, 7211, 'Fremdseite', 1, 1, ?)").run(NOW);
+  db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, updated_at) VALUES (721001, ?, 'Grabung', 1, ?)").run(BOOK_ID, NOW);
+  db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, updated_at) VALUES (721002, ?, 'Schon da', 2, ?)").run(BOOK_ID, NOW);
+  db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, updated_at) VALUES (721101, 7211, 'Fremdseite', 1, ?)").run(NOW);
   db.prepare("INSERT INTO research_item_links (item_id, target_kind, page_id) VALUES (?, 'page', 721002)").run(ids.itemId);
   aiReturnsLinks([]);
 
@@ -250,7 +250,7 @@ test('Seiten-Vorschläge aus den Embeddings: eigene Seiten mit Auszug, fremde un
 test('Seiten-Vorschläge: nicht indexiertes Fundstück → Freitext-Anfrage (Array-Rückgabe)', async () => {
   const BOOK_ID = 7212;
   const ids = seedWorld(BOOK_ID);
-  db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, priority, updated_at) VALUES (721201, ?, 'Grabung', 1, 1, ?)").run(BOOK_ID, NOW);
+  db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, updated_at) VALUES (721201, ?, 'Grabung', 1, ?)").run(BOOK_ID, NOW);
   aiReturnsLinks([]);
   const embed = require('../../lib/embed');
   const sr = require('../../lib/semantic-retrieval');

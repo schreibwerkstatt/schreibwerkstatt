@@ -112,7 +112,14 @@ export const statsMethods = {
     const stats = this.overviewStats || [];
     return this._memo('sparkline', [stats, this._uiLocale()], () => {
       const W = 240, H = 48, PAD = 3;
-      const slice = stats.slice(-30);
+      // Fenster nach KALENDERTAGEN, nicht nach Snapshot-Anzahl: das Label
+      // verspricht „30 Tage", und Snapshot-Lücken (Cron ausgefallen, Import)
+      // dehnten `slice(-30)` sonst über Monate. Der letzte Snapshot VOR dem
+      // Fenster bleibt als Anker drin — er ist der Stand am Fensteranfang.
+      const cutoff = localIsoDaysAgo(30);
+      let start = stats.findIndex(s => (s.recorded_at || '') >= cutoff);
+      if (start < 0) start = stats.length;
+      const slice = stats.slice(Math.max(0, start - 1));
       const data = slice.map(s => Number(s.chars) || 0);
       if (data.length < 2) return { d: null, area: null, color: 'currentColor', deltaPct: 0, endX: 0, endY: 0, w: W, h: H, points: [] };
       const min = Math.min(...data);

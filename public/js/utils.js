@@ -3,7 +3,7 @@
 // re-exportiert werden. Interne Aufteilung nach Domäne unter `utils/`:
 //   format.js    — Zahlen/Dauer/Token/Umfang/Locale + Compute-Helper (Min/Max, Heatmap)
 //   date.js      — Zeitzone (appTimezone/tzOpts) + ISO-Datum + relative Zeit-Formatter
-//   escape.js    — HTML-Escape-Atome (escHtml/escMd/escPreserveStrong)
+//   escape.js    — HTML-Escape-Atome (escHtml/escMd)
 //   net.js       — Fetch-Wrapper + Status-Reset
 //   html.js      — HTML-Bereinigung (Paste-Sanitizing, Style-/Leerblock-Cleanup)
 //   html-find.js — tolerantes Suchen/Ersetzen in HTML

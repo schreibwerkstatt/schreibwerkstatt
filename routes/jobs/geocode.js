@@ -138,6 +138,30 @@ function _figureHints(locIds, bookId, userEmail) {
   return byLoc;
 }
 
+// Elternkette je Ort (nächster Elternort zuerst, max. 3 Ebenen) als Kontext fürs
+// Disambiguieren — die Hierarchie pflegt der Autor (locations.parent_id).
+const MAX_PARENT_DEPTH = 3;
+function _parentChains(locIds, bookId, userEmail) {
+  const out = new Map();
+  if (!locIds.length) return out;
+  const get = db.prepare(
+    `SELECT p.id, p.name, p.parent_id FROM locations c JOIN locations p ON p.id = c.parent_id
+      WHERE c.book_id = ? AND c.user_email IS ? AND c.loc_id = ?`
+  );
+  const up = db.prepare('SELECT id, name, parent_id FROM locations WHERE id = ?');
+  for (const locId of locIds) {
+    const chain = [];
+    const seen = new Set();
+    for (let p = get.get(bookId, userEmail || null, String(locId)); p && chain.length < MAX_PARENT_DEPTH && !seen.has(p.id);
+      p = p.parent_id ? up.get(p.parent_id) : null) {
+      seen.add(p.id);
+      chain.push(p.name);
+    }
+    if (chain.length) out.set(locId, chain);
+  }
+  return out;
+}
+
 async function runGeocodeResolveJob(jobId, items, bookId, userEmail) {
   const logger = makeJobLogger(jobId);
   try {
@@ -155,11 +179,13 @@ async function runGeocodeResolveJob(jobId, items, bookId, userEmail) {
     const tok = { in: 0, out: 0, ms: 0 };
     if (toResolve.length) {
       const hintsByLoc = _figureHints(toResolve.map(it => it.id), bookId, userEmail);
+      const parentsByLoc = _parentChains(toResolve.map(it => it.id), bookId, userEmail);
       const { buildSystemGeocodeResolve, buildGeocodeResolvePrompt, SCHEMA_GEOCODE_RESOLVE } = await getPrompts();
       const promptItems = toResolve.map(it => ({
         id: String(it.id),
         name: it.name,
         hints: hintsByLoc.get(it.id) || [],
+        within: parentsByLoc.get(it.id) || [],
       }));
       // Output skaliert mit der Label-Anzahl: pro Label ein { id, ort, land }-Objekt
       // (~30 Output-Tokens). Statischer Cap truncated sonst grosse Batches still.

@@ -157,7 +157,9 @@
   color: var(--cr-muted, var(--color-muted));
   font-style: italic;
 }
-.comment-rail__body { white-space: pre-wrap; }
+/* overflow-wrap: lange URLs/Wörter ohne Leerzeichen brechen um, statt aus der
+   schmalen Leiste zu ragen. */
+.comment-rail__body { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Triage-Filter-Leiste (#5): Status-Segment + Reviewer-Combobox. */
 .comment-rail__filters {

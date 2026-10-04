@@ -45,7 +45,9 @@
   --ms-muted: var(--share-muted);
   --ms-border: var(--share-border);
   --ms-serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Times New Roman', serif;
-  --ms-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* UI-Schrift (Menüs, Kommentar-Karten, Formulare) — Lesetext bleibt Serif. */
+  --share-font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ms-sans: var(--share-font-ui);
   --ms-chapter-size: 30px;
   --ms-caption-size: 13px;
   /* Titel-Kopf eines Beitrags (publizistische Buecher): Schlagzeile eine Stufe

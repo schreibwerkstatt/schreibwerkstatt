@@ -135,12 +135,6 @@
   /* Skeleton-Shimmer */
   --color-shimmer-from: #ccc;
 
-  /* Schauplatz-Typ-Farben (Enum aus prompts/komplett.js).
-     stadt/gebaeude/raum mappen auf semantische Status-Tokens (siehe book-overview/domain.css);
-     landschaft/region brauchen eigene Hues. */
-  --ort-typ-landschaft: #6aa9c2;
-  --ort-typ-region:     #9b6dbf;
-
   /* Aktiver Block im Focus-Modus (Light): reines Schwarz für maximalen Kontrast
      gegen dim-Blöcke (opacity 0.35). Dark-Theme behält --color-text. */
   --color-focus-active-text: #000;
@@ -423,9 +417,6 @@
   --color-session-banner-btn-hover: #c44040;
 
   --color-shimmer-from: #3a3a3a;
-
-  --ort-typ-landschaft: #7fb8ce;
-  --ort-typ-region:     #b58cd0;
 
   --color-focus-active-text: var(--color-text);
   --color-focus-sentence-dim: rgba(255, 255, 255, 0.5);

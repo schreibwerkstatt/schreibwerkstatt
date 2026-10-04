@@ -17,7 +17,7 @@ import { resolveCardPositions } from '../comment-card-layout.js';
 const CARD_GAP = 10;
 // Unter diesem Viewport fällt die Leiste auf eine statische Stapel-Liste zurück
 // (siehe share.css ≥1100px-Branch) — das JS überspringt dann die Verankerung.
-const FLAT_BELOW = '(max-width: 1099px)';
+export const FLAT_BELOW = '(max-width: 1099px)';
 
 // opts:
 //   article()         → das Artikel-Element (#share-article)

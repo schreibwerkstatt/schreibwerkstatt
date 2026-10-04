@@ -20,13 +20,3 @@ export function escHtml(s) {
 export function escMd(s) {
   return escHtml(String(s ?? '').replace(/\*\*/g, ''));
 }
-
-// Escapt alles außer <strong>…</strong> (BookStack-Search-Highlight).
-// Verhindert XSS über preview_html, falls ein BookStack-User böswilligen
-// HTML-Seitentitel/-Inhalt einschleust.
-export function escPreserveStrong(s) {
-  if (s == null) return '';
-  return escHtml(s)
-    .replace(/&lt;strong&gt;/g, '<strong>')
-    .replace(/&lt;\/strong&gt;/g, '</strong>');
-}

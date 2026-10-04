@@ -320,7 +320,7 @@ body.palette-open { overflow: hidden; overscroll-behavior: contain; }
 }
 
 /* Typewriter-Dim: alle Block-Elemente gedimmt, aktiver bleibt hell.
-   Descendant- statt Child-Selector, weil BookStack-HTML Absätze in Wrapper
+   Descendant- statt Child-Selector, weil Seiten-HTML Absätze in Wrapper
    (z.B. <div>, .poem) packen kann – dann würde `> *` nur den Wrapper treffen
    und die <p> darin blieben hell. `:not(.focus-paragraph-active)` macht die
    Brighten-Regel überflüssig und vermeidet opacity-Stacking-Probleme, bei

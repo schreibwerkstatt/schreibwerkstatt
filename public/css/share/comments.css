@@ -21,8 +21,9 @@
     align-items: start;
   }
   .share-layout .share-main { max-width: none; margin: 0; padding-right: 0; }
-  /* Leere Kommentar-Leiste (keine verankerten Anmerkungen) nimmt keinen Platz. */
-  .share-layout:not(.share-has-comments) .share-comments { display: none; }
+  /* Überschrift nur in der gestapelten Liste — neben dem Text ist die Leiste
+     selbsterklärend, und eine Kopfzeile verschöbe die Positionierungs-Ebene. */
+  .share-comments__heading { display: none; }
 
   /* Mit verankerten Anmerkungen: Text links, Kommentare als sticky Seitenleiste. */
   .share-layout.share-has-comments {
@@ -187,6 +188,20 @@
     max-width: calc(82ch + 520px + 72px);
   }
 }
+/* Leiste nur, wenn verankerte Anmerkungen existieren (share-reader.js setzt
+   .share-has-comments) — in jeder Breite: gestapelt gäbe es sonst einen zweiten
+   Leer-Zustand direkt über dem der allgemeinen Kommentare. Ohne JS bleibt die
+   Leiste ohnehin leer (SSR rendert nur allgemeine Kommentare). */
+.share-layout:not(.share-has-comments) .share-comments { display: none; }
+.share-comments__heading {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--share-border);
+  font-family: var(--share-font-ui);
+}
+
 /* Abgesetzte Sektion ganz unten: allgemeine (nicht verankerte) Kommentare +
    eigenes Formular. Volle Lesespalten-Breite, zentriert wie Header/Footer. */
 .share-general {
@@ -200,7 +215,7 @@
   margin: 0 0 16px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--share-border);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--share-font-ui);
 }
 .share-comments__list,
 .share-general__list {
@@ -213,25 +228,12 @@
 }
 /* Marker-Ticks nur im verankerten Desktop-Layout (≥1100px-Branch setzt display). */
 .share-thread-marker { display: none; }
-.share-comments__item {
-  padding: 12px 14px;
-  background: var(--share-surface);
-  border: 1px solid var(--share-border);
-  border-radius: var(--share-radius);
-  box-shadow: var(--share-shadow);
-}
-.share-comments__meta {
+/* Hinweis auf verankerte Anmerkungen (JS, solange es keine gibt). */
+.share-general__hint {
+  margin: 0 0 12px;
+  font-family: var(--share-font-ui);
   font-size: 13px;
   color: var(--share-muted);
-  margin-bottom: 4px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
-.share-comments__body {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 15px;
-  line-height: 1.6;
 }
 .share-comments__empty {
   list-style: none;
@@ -239,7 +241,7 @@
   font-style: italic;
   text-align: center;
   padding: 18px 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--share-font-ui);
 }
 .share-comments__form {
   display: flex;
@@ -249,7 +251,7 @@
   border: 1px solid var(--share-border);
   padding: 16px;
   border-radius: var(--share-radius);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--share-font-ui);
 }
 .share-comments__label {
   display: flex;
@@ -314,165 +316,30 @@
 }
 .share-content [data-bid] { cursor: text; }
 
-/* Schwebender „Kommentieren"-Button an der Selektion. */
-.share-sel-btn {
-  position: absolute;
-  transform: translateX(-50%);
-  z-index: 50;
-  padding: 6px 14px;
-  background: var(--share-accent);
-  color: var(--share-on-accent);
-  border: 0;
-  border-radius: var(--share-radius-sm);
-  box-shadow: var(--share-shadow);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.share-sel-btn:hover { filter: brightness(1.08); }
-.share-sel-btn[hidden] { display: none; }
-
-/* Composer-Overlay (verankerte + allgemeine Anmerkung). */
-.share-composer {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  background: rgba(0, 0, 0, 0.35);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 16px;
-}
-@media (min-width: 601px) {
-  .share-composer { align-items: center; }
-}
-.share-composer__card {
-  width: 100%;
-  max-width: 60ch;
-  background: var(--share-surface);
-  border: 1px solid var(--share-border);
-  border-radius: var(--share-radius);
-  box-shadow: var(--share-shadow);
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
-.share-composer__title { margin: 0; font-size: 16px; font-weight: 600; }
-.share-composer__quote {
-  margin: 0;
-  padding: 8px 12px;
-  border-left: 3px solid var(--share-accent);
-  background: var(--share-hover);
-  font-style: italic;
-  color: var(--share-muted);
-  font-size: 14px;
-}
-.share-composer__name,
-.share-composer__body {
-  border: 1px solid var(--share-border);
-  background: var(--share-bg);
-  color: var(--share-text);
-  border-radius: var(--share-radius-sm);
-  padding: 8px 10px;
-  font: inherit;
-  font-size: 15px;
-  resize: vertical;
-}
-.share-composer__name:focus,
-.share-composer__body:focus {
-  outline: 2px solid var(--share-accent);
-  outline-offset: -1px;
-}
-.share-composer__actions { display: flex; align-items: center; gap: 10px; }
 /* Geteilte Kommentar-Aktions-Buttons (Composer-Modal, Inline-Reply, SSR-Form).
-   Primär = gefüllt, Ghost = Rahmen — gleiche Metrik/Schrift, damit alle Senden/
-   Abbrechen-Paare einheitlich aussehen. */
+   Primär = gefüllt, Ghost = Rahmen (.share-composer__cancel) — gleiche Metrik/
+   Schrift, damit alle Senden/Abbrechen-Paare einheitlich aussehen. Der Ghost
+   ist in den Reply-/Edit-Aktionen ausgenommen, sonst überstimmt die spezifischere
+   Primär-Regel ihn. */
 .share-composer__submit,
-.share-thread__reply-actions button,
+.share-thread__reply-actions button:not(.share-composer__cancel),
 .share-comments__form button[type=submit] {
   padding: 8px 18px;
   background: var(--share-accent);
   color: var(--share-on-accent);
   border: 0;
   border-radius: var(--share-radius-sm);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--share-font-ui);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
 }
 .share-composer__submit:hover,
-.share-thread__reply-actions button:hover,
+.share-thread__reply-actions button:not(.share-composer__cancel):hover,
 .share-comments__form button[type=submit]:hover { filter: brightness(1.08); }
 .share-composer__submit:disabled,
-.share-thread__reply-actions button:disabled,
+.share-thread__reply-actions button:not(.share-composer__cancel):disabled,
 .share-comments__form button[type=submit]:disabled { opacity: 0.6; cursor: not-allowed; }
-.share-composer__cancel {
-  padding: 8px 18px;
-  background: transparent;
-  color: var(--share-muted);
-  border: 1px solid var(--share-border);
-  border-radius: var(--share-radius-sm);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.share-composer__cancel:hover { background: var(--share-hover); }
-
-/* Globaler Identitäts-Chip oben rechts (bei den Optionen, im #share-theme-
-   Cluster injiziert): zeigt "Als <Name>" + Ändern bzw. "Name setzen". */
-.share-identity-bar {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.share-identity-bar__as {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12px;
-  color: var(--share-muted);
-  max-width: 22ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.share-identity-bar__btn {
-  padding: 5px 12px;
-  background: var(--share-surface);
-  color: var(--share-muted);
-  border: 1px solid var(--share-border);
-  border-radius: var(--share-radius-sm);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12px;
-  line-height: 1.2;
-  cursor: pointer;
-}
-.share-identity-bar__btn:hover { background: var(--share-hover); }
-
-/* Intro-Text im Namens-Modal (nutzt sonst die .share-composer-Overlay-Optik). */
-.share-name-modal__intro {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--share-muted);
-}
-/* Hinweis unter dem optionalen Mail-Feld im Identitäts-Modal (#1). */
-.share-name-modal__hint {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--share-muted);
-}
-/* „Benachrichtigung aktiv"-Pille am Identitäts-Chip, wenn eine Mail hinterlegt ist (#1). */
-.share-identity-bar__bell {
-  font-size: 11px;
-  color: var(--share-muted);
-  white-space: nowrap;
-}
 /* Ungelesen-Badge an einem Thread mit neuen fremden Antworten (#2). */
 .share-thread__unread {
   display: inline-block;
@@ -505,8 +372,8 @@
   padding: 1px 6px;
   font-size: 11px;
 }
-/* Self-Service-Aktionen am eigenen Kommentar (Erledigt / Löschen). Dezente
-   Text-Buttons, damit sie die Lese-Anmerkung nicht dominieren. */
+/* Self-Service-Aktionen am eigenen Kommentar (Erledigt / Bearbeiten / Löschen).
+   Dezente Text-Buttons, damit sie die Lese-Anmerkung nicht dominieren. */
 .share-thread__actions {
   display: flex;
   flex-wrap: wrap;
@@ -514,12 +381,27 @@
   gap: 12px;
   margin-top: 8px;
 }
+/* Auf Hover-Geräten erst bei Hover, Auswahl oder Tastatur-Fokus einblenden
+   (Google-Docs-Muster wie die SPA-Leisten). Nur Opacity, nicht visibility —
+   sonst wären die Knöpfe per Tab nicht erreichbar und :focus-within griffe nie.
+   Touch-Geräte zeigen sie immer. */
+@media (hover: hover) {
+  .share-thread__actions { opacity: 0; transition: opacity 0.12s ease; }
+  .comment-rail__thread:hover .share-thread__actions,
+  .comment-rail__thread--selected .share-thread__actions,
+  .comment-rail__thread:focus-within .share-thread__actions { opacity: 1; }
+}
+/* Nur auswählbare Karten (verankert, Stelle auffindbar) zeigen den Hand-Zeiger;
+   allgemeine Threads haben keine Klick-Aktion auf der Karte. */
+.share-thread { cursor: default; }
+.share-thread--selectable { cursor: pointer; }
+.share-thread__reply-toggle { align-self: flex-start; }
 .share-thread__action {
   padding: 0;
   background: none;
   border: 0;
   color: var(--share-muted);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--share-font-ui);
   font-size: 12px;
   cursor: pointer;
 }
@@ -537,7 +419,7 @@
   font-size: 12px;
   color: var(--share-faint);
   text-align: center;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--share-font-ui);
 }
 .share-footer__link {
   color: inherit;

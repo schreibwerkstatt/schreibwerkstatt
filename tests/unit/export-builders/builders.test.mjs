@@ -72,7 +72,7 @@ test('md scope=page leitet immer aus body_html ab (ignoriert Alt-markdown-Feld)'
   const bundle = {
     scope: 'page', book, chapter, page,
     groups: [{ chapterId: 10, chapter, pages: [
-      // Alt-Spalte (BookStack-Ära) darf nicht mehr durchschlagen: html ist SSoT.
+      // Alt-Spalte darf nicht mehr durchschlagen: html ist SSoT.
       { p: page, pd: { ...page, html: '<p>Aus <strong>HTML</strong>.</p>', markdown: '# Stale' } },
     ] }],
   };

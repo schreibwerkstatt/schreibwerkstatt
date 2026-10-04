@@ -6,7 +6,10 @@
      auf dem contenteditable — daher kein @keydown hier.
      Die Page-Editor-Toolbar (Zoom/FitWidth/Fullscreen/HR) lebt im Card-
      Topbar (editor-notebook.html), damit sie an der sticky Topbar haftet
-     und permanent sichtbar bleibt — besonders im Vollbild beim Scrollen. -->
+     und permanent sichtbar bleibt — besonders im Vollbild beim Scrollen.
+     @beforeinput: natives Undo/Redo (Bearbeiten-Menü, Kontextmenü, Strg+Z mit
+     Fokus ausserhalb) auf die eigene Historie umleiten — der Browser-Stack
+     liefe sonst an ihr vorbei und würde dort als neuer Schritt aufgezeichnet. -->
 <div x-show="editMode && !focusActive" class="page-editor-wrap normal-editor">
   <div class="page-content-view page-content-view--editing"
        :class="{ 'page-content-view--fit-width': pageEditorFitWidth, 'page-content-view--show-marks': pageEditorShowMarks }"
@@ -19,6 +22,7 @@
        autocorrect="off"
        autocapitalize="off"
        @input="_markEditDirty()"
+       @beforeinput="if ($event.inputType === 'historyUndo' || $event.inputType === 'historyRedo') { $event.preventDefault(); $event.inputType === 'historyUndo' ? notebookUndo() : notebookRedo(); }"
        @paste="_onEditPaste($event)"
        @copy="_onEditCopy($event)"
        @cut="_onEditCut($event)"

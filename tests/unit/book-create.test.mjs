@@ -210,10 +210,10 @@ test('submitCreateBook Server-Fehler → errorGeneric mit detail', async () => {
   const ctx = makeCtx({ bookCreateName: 'Bad', bookCreateBuchtyp: 'krimi' });
   ctx.$refs.bookCreateDialog.open = true;
   mockFetch({
-    '/content/books': async () => jsonResponse({ error_code: 'CREATE_FAILED', detail: 'BookStack abgelehnt' }, 500),
+    '/content/books': async () => jsonResponse({ error_code: 'CREATE_FAILED', detail: 'Anlegen abgelehnt' }, 500),
   });
   await ctx.submitCreateBook();
-  assert.match(ctx.bookCreateError, /BookStack abgelehnt/);
+  assert.match(ctx.bookCreateError, /Anlegen abgelehnt/);
   assert.equal(ctx.$refs.bookCreateDialog.open, true, 'Modal bleibt offen bei Fehler');
   assert.equal(ctx.bookCreateBusy, false);
 });

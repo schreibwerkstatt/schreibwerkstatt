@@ -99,7 +99,7 @@ async function loadOrderedBookContents(bookId, { includeExcluded = false } = {})
 async function loadPageContents(pages, chMap, minLength, onBatch, signal = null) {
   // Vor-Filter via preview_text aus dem pages-Cache: wenn ein gespeicherter
   // Preview kürzer als minLength ist, ist auch der Volltext zu kurz und wir
-  // sparen den BookStack-Roundtrip (oft 100+ leere Stub-Pages pro Buch).
+  // sparen das Volltext-Laden (oft 100+ leere Stub-Pages pro Buch).
   // Nur sinnvoll wenn minLength <= PREVIEW_CHARS (800) — sonst ist der Preview
   // kein zuverlässiger Indikator.
   let skipped = 0;

@@ -180,29 +180,6 @@
   flex-direction: column;
   gap: var(--space-6);
 }
-.sources-citation {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-}
-.sources-citation-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  background: none;
-  border: none;
-  padding: var(--space-2xs) 0;
-  font-size: var(--font-size-sm);
-  color: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-.sources-citation-link:hover .sources-citation-page { text-decoration: underline; }
-.sources-citation-count {
-  font-size: var(--font-size-mini);
-  color: var(--color-muted);
-  font-variant-numeric: tabular-nums;
-}
 
 /* ── Bibliotheks-Picker ───────────────────────────────────────────────────── */
 /* Gleiche Panel-Form wie das Fundstellen-Panel (gerahmt, Akzentkante links) —
@@ -392,7 +369,7 @@
   color: var(--color-muted);
 }
 
-/* Fundstelle: Kapitel-Badge + woertlicher Satz, als Sprung in den Text. */
+/* Fundstelle: Kapitel-Referenz (statisch) + woertlicher Satz, als Sprung in den Text. */
 .sources-detect-quote {
   display: flex;
   align-items: baseline;

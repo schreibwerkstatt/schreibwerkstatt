@@ -197,10 +197,16 @@ export const conflictMethods = {
   // Läuft über `mountEditorHtml` (dieselbe Pipeline wie startEdit + Undo-Restore):
   // ein gemergtes Block-Set kann auf einer `<hr>` enden oder einen kindlosen
   // `<p>` enthalten — ohne Caret-Slot stünde der User danach ohne Schreib-Anker da.
+  //
+  // Der gemergte Stand ist die neue Undo-Baseline: ein Undo dahinter zurück
+  // nähme die Remote-Blöcke wieder heraus, und der nächste Save liefe gegen das
+  // inzwischen übernommene `updated_at` ohne 409 durch — die Änderung des
+  // anderen Geräts wäre still überschrieben.
   _applyMergedToEditor(html) {
     const el = this._getEditEl();
     if (!el || el.innerHTML === html) return;
     mountEditorHtml(el, html);
+    this._historyReset?.(el.innerHTML);
   },
 
 

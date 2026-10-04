@@ -6,9 +6,9 @@
 // ACL-Guard. Registriert wird er wie die History-Submodule ueber `register(router)`
 // vom Facade-Router (../figures.js) — auf DEMSELBEN Router, damit `router.param`
 // (ACL + Log-Kontext) und die Reihenfolge vor `/:book_id` erhalten bleiben.
-const { db, getBookSettings } = require('../../db/schema');
+const { getBookSettings } = require('../../db/schema');
+const { listZeitstrahlEvents, listZeitstrahlEventRefs } = require('../../db/zeitstrahl');
 const { ensureTree } = require('../../db/book-order');
-const { toIntId, inClause } = require('../../lib/validate');
 const { sessionEmail } = require('../../lib/acl');
 const { parseDatum } = require('../../lib/datum-parse');
 
@@ -76,26 +76,9 @@ function _computeChronology(bookId, events) {
 
 function register(router) {
   router.get('/zeitstrahl/:book_id', (req, res) => {
-    const bookId = toIntId(req.params.book_id);
-    if (!bookId) return res.status(400).json({ error_code: 'INVALID_ID' });
+    const bookId = req.bookId;
     const userEmail = sessionEmail(req);
-    // ORDER BY: strukturierte Datums-Felder zuerst (Year/Month/Day), Events ohne
-    // Jahr ans Ende ("unbekannt"-Bucket via COALESCE-Sentinel 9999/99). sort_order
-    // dient nur noch als Tiebreaker bei Datums-Gleichstand.
-    const rows = db.prepare(`
-      SELECT id, datum, datum_label, datum_year, datum_month, datum_day,
-             datum_ende_year, datum_ende_month, datum_ende_day,
-             story_tag, datum_unsicher, ereignis, typ, subtyp, bedeutung,
-             storyline_id, manually_edited, sort_order
-      FROM zeitstrahl_events
-      WHERE book_id = ? AND user_email = ?
-      ORDER BY
-        COALESCE(datum_year,  9999),
-        COALESCE(datum_month, 99),
-        COALESCE(datum_day,   99),
-        COALESCE(story_tag,   99999),
-        sort_order, id
-    `).all(bookId, userEmail || '');
+    const rows = listZeitstrahlEvents(bookId, userEmail);
     if (!rows.length) return res.json({ ereignisse: null });
 
     // Lazy-Parser-Fallback: Events mit Label aber ohne strukturierte Felder
@@ -112,30 +95,7 @@ function register(router) {
       }
     }
 
-    const eventIds = rows.map(r => r.id);
-    const { sql: idSql, values: idVals } = inClause(eventIds);
-
-    const chRows = db.prepare(`
-      SELECT zec.event_id, zec.chapter_id, c.chapter_name
-      FROM zeitstrahl_event_chapters zec
-      LEFT JOIN chapters c ON c.chapter_id = zec.chapter_id
-      WHERE zec.event_id IN ${idSql}
-      ORDER BY zec.event_id, zec.sort_order
-    `).all(...idVals);
-    const pgRows = db.prepare(`
-      SELECT zep.event_id, zep.page_id, p.page_name
-      FROM zeitstrahl_event_pages zep
-      LEFT JOIN pages p ON p.page_id = zep.page_id
-      WHERE zep.event_id IN ${idSql}
-      ORDER BY zep.event_id, zep.sort_order
-    `).all(...idVals);
-    const fgRows = db.prepare(`
-      SELECT zef.event_id, f.fig_id, COALESCE(f.name, zef.figur_name) AS name, f.typ
-      FROM zeitstrahl_event_figures zef
-      LEFT JOIN figures f ON f.id = zef.figure_id
-      WHERE zef.event_id IN ${idSql}
-      ORDER BY zef.event_id, zef.sort_order
-    `).all(...idVals);
+    const { chRows, pgRows, fgRows } = listZeitstrahlEventRefs(rows.map(r => r.id));
 
     const chByEvt = new Map();
     for (const r of chRows) {

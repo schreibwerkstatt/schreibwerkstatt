@@ -56,6 +56,8 @@
   align-items: center;
   gap: var(--space-xs);
   padding: var(--space-2xs) var(--space-xs);
+  /* Unterorte eingerückt (--ort-depth aus orte-map-view.html) */
+  padding-left: calc(var(--space-xs) + var(--ort-depth, 0) * var(--space-md));
   border-left: 3px solid var(--card-accent);
   cursor: default;
   transition: background-color var(--transition-fast);
@@ -67,6 +69,20 @@
 
 /* Marker für Orte ohne Georeferenz: roter Punkt in der Kartenmitte. Signalisiert
    „noch nicht verortet" — User zieht ihn an die richtige Stelle (dragend speichert). */
+/* Unverorteter Unterort, der die Position seines Elternorts erbt: Hohl-Pin,
+   damit er sich von echten (blauen) und ganz unverorteten (roten) unterscheidet. */
+.ort-marker-pin--inherited {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  border: 2px dashed var(--card-accent);
+  box-shadow: var(--shadow-md);
+  cursor: grab;
+}
+
+.ort-map-located--inherited { font-style: italic; }
+
 .ort-marker-pin--unlocated {
   width: 18px;
   height: 18px;
@@ -130,32 +146,8 @@
   line-height: 1.4;
 }
 
-.ort-popup__row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2xs);
-}
-
-.ort-popup__chip,
-.ort-popup__page {
-  font: inherit;
-  font-size: var(--font-size-xs);
-  padding: var(--space-2xs) var(--space-2xs);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-primary);
-  cursor: pointer;
-}
-
-.ort-popup__chip:hover,
-.ort-popup__page:hover {
-  border-color: var(--card-accent);
-}
-
-.ort-popup__page {
-  align-self: flex-start;
-}
+/* Referenz-Reihe (Figuren / Kapitel / erste Erwähnung); Optik: entity-ref.css. */
+.ort-popup__row { display: flex; }
 
 .ort-map-locate-name {
   flex: 1;

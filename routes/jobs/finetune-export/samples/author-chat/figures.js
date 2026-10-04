@@ -2,6 +2,27 @@
 
 const { hashSplit } = require('../../lib/names');
 
+// Enum-Werte der Analyse (figures.sozialschicht / figures.geschlecht) als Prosa —
+// das Modell soll «gehobenes Bürgertum» lernen, nicht den Schlüssel
+// «gehobenes_buergertum» (und in englischen Büchern nicht das deutsche Wort).
+// Kein UI-String: das ist Trainingstext wie die übrigen Antwort-Vorlagen dieses
+// Samplers. «andere»/«unbekannt» tragen keine Information → kein Sample.
+const SCHICHT_PROSA = {
+  wirtschaftselite:     { de: 'der Wirtschaftselite', en: 'the economic elite' },
+  gehobenes_buergertum: { de: 'dem gehobenen Bürgertum', en: 'the upper middle class' },
+  mittelschicht:        { de: 'der Mittelschicht', en: 'the middle class' },
+  arbeiterschicht:      { de: 'der Arbeiterschicht', en: 'the working class' },
+  migrantenmilieu:      { de: 'dem Migrantenmilieu', en: 'a migrant milieu' },
+  prekariat:            { de: 'dem Prekariat', en: 'the precariat' },
+  unterwelt:            { de: 'der Unterwelt', en: 'the criminal underworld' },
+};
+const GESCHLECHT_PROSA = {
+  'männlich': { de: 'männlich', en: 'male' },
+  maennlich:  { de: 'männlich', en: 'male' },
+  weiblich:   { de: 'weiblich', en: 'female' },
+  divers:     { de: 'divers', en: 'non-binary' },
+};
+
 // Block 1+2: Figuren-Composite + Trait-Q&A
 function buildFigureBaseSamples(ctx) {
   const { langIsEn, opts, figRows, figQuestions, pushQA, pickVariants } = ctx;
@@ -20,7 +41,7 @@ function buildFigureBaseSamples(ctx) {
       if (tags) extras.push(langIsEn ? `Traits: ${tags}.` : `Eigenschaften: ${tags}.`);
     }
     const answer = [desc, ...extras].join(' ');
-    // 3 Paraphrasen pro Figur → gleiche Fakten mehrmals sehen → bessere
+    // Alle Paraphrasen pro Figur → gleiche Fakten mehrmals sehen → bessere
     // Memorisierung der Buchwelt (Ziel: Figur als «Realität» akzeptieren).
     const idxs = pickVariants('fig|' + f.fig_id, figQuestions, figQuestions.length);
     for (const idx of idxs) {
@@ -49,15 +70,17 @@ function buildFigureBaseSamples(ctx) {
         langIsEn ? `What is ${f.name}'s profession?` : `Welchen Beruf hat ${f.name}?`,
         f.beruf);
     }
-    if (f.geschlecht) {
+    const geschl = GESCHLECHT_PROSA[String(f.geschlecht || '').trim().toLowerCase()];
+    if (geschl) {
       pushQA('authorChat|figGeschl|' + f.fig_id,
         langIsEn ? `What is ${f.name}'s gender?` : `Welches Geschlecht hat ${f.name}?`,
-        f.geschlecht);
+        langIsEn ? `${f.name} is ${geschl.en}.` : `${f.name} ist ${geschl.de}.`);
     }
-    if (f.sozialschicht) {
+    const schicht = SCHICHT_PROSA[String(f.sozialschicht || '').trim().toLowerCase()];
+    if (schicht) {
       pushQA('authorChat|figSchicht|' + f.fig_id,
         langIsEn ? `Which social class does ${f.name} come from?` : `Aus welcher gesellschaftlichen Schicht stammt ${f.name}?`,
-        f.sozialschicht);
+        langIsEn ? `${f.name} comes from ${schicht.en}.` : `${f.name} stammt aus ${schicht.de}.`);
     }
   }
 
@@ -82,6 +105,10 @@ function buildFigureBaseSamples(ctx) {
   // ── Figur-vs-Figur-Vergleich (gleicher typ) ──────────────────────────
   // Pro Paar gleiche Kategorie (Hauptfigur/Nebenfigur/…): Vergleich auf
   // Ebene Beschreibung+Tags+Beruf. Lehrt Differenzierung statt Konflation.
+  // Bewusst auf die ersten 6 je Typ gedeckelt: die Paare wachsen quadratisch
+  // (60 Nebenfiguren → 1770 Vergleichs-Samples), und die Vergleiche würden den
+  // Datensatz dominieren, ohne neue Fakten zu tragen — jede Figur hat ihre
+  // eigenen Samples oben.
   const byTyp = new Map();
   for (const f of figRows) {
     const t = (f.typ || '').trim().toLowerCase();
@@ -137,7 +164,9 @@ function buildFigureMetaSamples(ctx) {
 
   // ── Figuren-Lebensereignisse ─────────────────────────────────────────
   // Pro figure_events-Eintrag ein gezielter Fakt + eine aggregierte Antwort
-  // für „Was erlebt X im Buch?"
+  // für „Was erlebt X im Buch?". Die Aggregat-Antwort bleibt bei 8 Momenten: sie
+  // ist eine Zusammenfassung (jedes Ereignis hat sein eigenes Sample), und eine
+  // Antwort mit 50 Einträgen wäre kein „Schlüsselmoment" mehr.
   for (const f of figRows) {
     const evts = eventsByFigPk.get(f.pk) || [];
     if (!evts.length) continue;
@@ -165,7 +194,7 @@ function buildFigureMetaSamples(ctx) {
   for (const f of figRows) {
     const chs = appearancesByFigPk.get(f.pk) || [];
     if (!chs.length) continue;
-    const answer = chs.slice(0, 20).join(', ');
+    const answer = chs.join(', ');
     pushQA('authorChat|figApp|' + f.fig_id,
       langIsEn ? `In which chapters does ${f.name} appear?` : `In welchen Kapiteln taucht ${f.name} auf?`,
       langIsEn ? `${f.name} appears in: ${answer}.` : `${f.name} kommt vor in: ${answer}.`);
@@ -189,10 +218,16 @@ function buildFigureMetaSamples(ctx) {
       combined.push(e);
     }
     if (combined.length < 2) continue;
-    const sample = combined.slice(0, 6).map(e => `„${e.quote}"`).join(' · ');
-    pushQA('authorChat|figVoice|' + f.fig_id,
-      langIsEn ? `How does ${f.name} speak? Show me a few lines.` : `Wie spricht ${f.name}? Zeig mir ein paar Sätze.`,
-      sample);
+    // Alle Zitate verwenden, in Sechsergruppen (eine Antwort bleibt lesbar, die
+    // Zahl der Samples wächst linear mit den Zitaten).
+    for (let k = 0; k * 6 < combined.length; k++) {
+      const group = combined.slice(k * 6, k * 6 + 6);
+      if (group.length < 2) break;
+      const sample = group.map(e => `„${e.quote}"`).join(' · ');
+      pushQA('authorChat|figVoice|' + f.fig_id + (k ? '|' + k : ''),
+        langIsEn ? `How does ${f.name} speak? Show me a few lines.` : `Wie spricht ${f.name}? Zeig mir ein paar Sätze.`,
+        sample);
+    }
   }
 }
 

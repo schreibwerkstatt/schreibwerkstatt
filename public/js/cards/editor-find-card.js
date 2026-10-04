@@ -31,7 +31,7 @@ export function registerEditorFindCard() {
       const { signal } = abort;
 
       // Ctrl/Cmd+F: im Edit-Mode Finder öffnen, im Bucheditor dessen buchweite
-      // Suche triggern (Event an die Sub), sonst BookStack-Suche fokussieren.
+      // Suche triggern (Event an die Sub), sonst Browser-Suche.
       // Bewusst im Sub statt auf dem Body-Keydown: hält die Logik beim Feature.
       window.addEventListener('keydown', (event) => {
         const isFind = (event.metaKey || event.ctrlKey) && !event.altKey && (event.key === 'f' || event.key === 'F');

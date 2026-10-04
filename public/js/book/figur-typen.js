@@ -28,7 +28,17 @@ const RANK = Object.fromEntries(FIGUR_TYPEN.map((t, i) => [t, i]));
 /** Sortierrang eines Typs; Unbekanntes hinten (nicht raus). */
 export const typRank = (typ) => RANK[typ] ?? FIGUR_TYPEN.length;
 
+/** Kollations-Locale der Namenssortierung: die UI-Sprache des Betrachters
+ *  (`$store.shell.uiLocale`), ausserhalb von Alpine (Unit-Tests) `de`. */
+export function nameLocale() {
+  try { return globalThis.Alpine?.store?.('shell')?.uiLocale || 'de'; } catch { return 'de'; }
+}
+
+/** Namensvergleich in der Kollation der UI-Sprache. */
+export const compareNames = (a, b, locale = nameLocale()) =>
+  String(a ?? '').localeCompare(String(b ?? ''), locale);
+
 /** Der Vergleich, den die Listen ohne eigene Zweitachse teilen: Typ-Tier,
- *  danach Name in deutscher Kollation. */
+ *  danach Name in der Kollation der UI-Sprache. */
 export const byTypDannName = (a, b) =>
-  (typRank(a?.typ) - typRank(b?.typ)) || (a?.name ?? '').localeCompare(b?.name ?? '', 'de');
+  (typRank(a?.typ) - typRank(b?.typ)) || compareNames(a?.name, b?.name);

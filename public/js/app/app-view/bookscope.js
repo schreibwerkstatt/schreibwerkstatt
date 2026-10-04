@@ -217,7 +217,17 @@ export const bookscopeMethods = {
           await this.loadBooks();
         } else {
           await this.loadBooks({ source: 'wake' });
-          await this.loadPages({ source: 'wake' });
+          // loadPages wirft nicht, sondern meldet `false` (Baum bleibt dabei
+          // stehen) — ohne Auswertung gaebe es nach einem Netz-Wackler beim
+          // Aufwachen keinen zweiten Versuch. Gedeckelt: ein dauerhafter
+          // Server-Fehler (403, 500) soll nicht alle 8 s erneut anfragen.
+          const treeOk = await this.loadPages({ source: 'wake' });
+          if (treeOk === false) {
+            this._wakeTreeRetries = (this._wakeTreeRetries || 0) + 1;
+            if (this._wakeTreeRetries <= 3) needsRetry = true;
+          } else if (treeOk) {
+            this._wakeTreeRetries = 0;
+          }
         }
       } catch (e) {
         if (isNetErr(e)) needsRetry = true;

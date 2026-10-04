@@ -49,18 +49,16 @@ const EXCLUDED = [
 // Trotzdem gepinnt statt pauschal erlaubt: sonst waere jeder neue rohe Wert in
 // diesen Dateien unsichtbar.
 const ALLOW = {
-  'css/analysis/zeitleiste.css': 3,
+  'css/analysis/zeitleiste.css': 1,
   'css/chat.css': 1,
   'css/components/card-form/card-blocks.css': 1,
   'css/components/card-form/form-elements.css': 1,
   'css/components/comment-rail.css': 1,
-  'css/components/kapitel-badges.css': 1,
   'css/components/icon-btn.css': 1,
   'css/editor/book/book-editor.css': 2,
   'css/editor/notebook/page-head.css': 2,
   'css/entities/figuren.css': 1,
   'css/entities/ideen.css': 1,
-  'css/entities/szenen.css': 4,
   'css/layout/base.css': 3,
   'css/page/page-content-skeleton.css': 1,
   'css/page/stt-dock.css': 1,

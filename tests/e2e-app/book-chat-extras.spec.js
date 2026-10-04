@@ -65,9 +65,9 @@ test('buch-chat: Werkzeug-Verlauf, Belege, Recherche-Hinweis, Kosten', async ({ 
   // Fussnoten: Text per x-text (kein HTML), ungültiges Zitat markiert.
   const cites = extras.locator('.book-chat-citation');
   await expect(cites).toHaveCount(2);
-  await expect(cites.nth(0).locator('a')).toHaveText('Seite <script>');
+  await expect(cites.nth(0).locator('.entity-ref--seite .entity-ref__label')).toHaveText('Seite <script>');
   await expect(cites.nth(1)).toHaveClass(/book-chat-citation--invalid/);
-  await expect(cites.nth(1).locator('a')).toHaveCount(0);
+  await expect(cites.nth(1).locator('.entity-ref')).toHaveCount(0);
 
   // Werkzeug-Verlauf: zu → auf; final_answer erscheint nicht.
   const rows = extras.locator('.book-chat-tool-row');

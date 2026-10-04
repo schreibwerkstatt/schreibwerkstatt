@@ -83,6 +83,7 @@ export const treeCatchUpMethods = {
       return;
     }
     this._treeCatchUpInflight = true;
+    const loadGen = this._treeLoadGen || 0;
     try {
       // Ob `fresh` noetig ist, haengt am Melder (siehe CACHE_IS_FRESH_FOR).
       // Wo es noetig ist, umgeht es den Eintrag, von dem wir WISSEN, dass er
@@ -90,8 +91,10 @@ export const treeCatchUpMethods = {
       // sodass die Offline-Kopie mitwandert statt alt stehen zu bleiben.
       const tree = await contentRepo.bookTree(bookId, { fresh: catchUpReadsFresh(reason) });
       if (this.$store.nav.selectedBookId !== bookId) return;
-      // Waehrend des Fetch hat ein Voll-Load uebernommen: seiner ist juenger.
-      if (this.treeLoading) return;
+      // Waehrend des Fetch hat ein Voll-Load uebernommen — laufend oder schon
+      // fertig: seiner ist juenger. `treeLoading` allein sieht den zweiten Fall
+      // nicht, die Generation schon.
+      if (this.treeLoading || (this._treeLoadGen || 0) !== loadGen) return;
       this._buildTreeFromResponse(tree, bookId);
       // Neue Seiten haben noch keinen Token-Schaetzwert — ohne das bliebe ihre
       // Plakette und die Σ-Zeile der Sidebar leer. Idempotent, holt nur Fehlendes.

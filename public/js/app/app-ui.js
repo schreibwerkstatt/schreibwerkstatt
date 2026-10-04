@@ -1,10 +1,10 @@
-import { escPreserveStrong, fetchText, tzOpts, formatRelativeShort, charBadgeLabel, localeTag } from '../utils.js';
+import { fetchText, tzOpts, formatRelativeShort, charBadgeLabel, localeTag } from '../utils.js';
 import { avatarHue } from '../avatar.js';
 
 // Pure Filter-Logik für die Szenen-Liste. Getrennt von Alpine-Getter, damit
 // Unit-Tests den Kapitel-Filter direkt gegen Fixtures prüfen können.
 // Kapitel-Filter matcht per Name (die Kapitelnamen in den Szenen stammen aus
-// dem Komplett-Job und sind dort bereits auf die echten BookStack-Namen
+// dem Komplett-Job und sind dort bereits auf die echten Kapitelnamen
 // normalisiert).
 // Pure Filter-Logik für die Musik-Liste. Songs[].figuren kann String (fig_id)
 // oder Object ({ fig_id }) enthalten — je nachdem ob der Server das per-Figur-
@@ -22,17 +22,6 @@ export function applySongsFilters(songs, filters) {
     if (filters.kontextTyp && s.kontext_typ !== filters.kontextTyp) return false;
     return true;
   });
-}
-
-export function applySzenenFilters(szenen, filters) {
-  const q = filters.suche ? filters.suche.toLowerCase() : '';
-  return (szenen || []).filter(s =>
-    (!q || (s.titel || '').toLowerCase().includes(q)) &&
-    (!filters.wertung || s.wertung === filters.wertung) &&
-    (!filters.figurId || (s.fig_ids || []).includes(filters.figurId)) &&
-    (!filters.kapitel || s.kapitel === filters.kapitel) &&
-    (!filters.ortId || (s.ort_ids || []).includes(filters.ortId))
-  );
 }
 
 // Allgemeine UI-Helpers: Status, Sortierung, Filter-Listen, Datumformatierung,
@@ -60,6 +49,7 @@ export const appUiMethods = {
 
   // ── Sort helpers (use persistent order maps from loadPages) ─────────────
   _chapterIdx(name) { return this._chapterOrderMap?.get(name) ?? 9999; },
+  _chapterIdIdx(id) { return this._chapterIdOrderMap?.get(id) ?? 9999; },
   _pageIdx(name) { return this._pageOrderMap?.get(name) ?? 9999; },
   _pageIdIdx(id) { return this._pageIdOrderMap?.get(id) ?? 9999; },
   _sortByChapterOrder(names) {
@@ -108,9 +98,6 @@ export const appUiMethods = {
     return this._sortByPageOrder([...names]);
   },
 
-  szenenKapitelListe() {
-    return this._deriveKapitel(this.$store.catalog.szenen, s => s.kapitel);
-  },
   orteKapitelListe() {
     return this._deriveKapitel(this.$store.catalog.orte, o => o.kapitel);
   },
@@ -197,8 +184,6 @@ export const appUiMethods = {
   formatRelativeShort(iso) {
     return formatRelativeShort(iso, this.$store.shell.uiLocale);
   },
-
-  escPreserveStrong,
 
   _saveStatus() {
     // Reihenfolge: lokaler Persist-Fehler zuerst (unsaved — Inhalt liegt nicht

@@ -70,7 +70,12 @@ export function registerFigurWerkstattCard() {
     selectedRunId: null,
     selectedKonfliktIdx: null,
     _runsLoadDraftId: null,
-    _mindmapDirty: false,
+    // Mindmap-Dirty als Generationszähler (crud.js#_markMindmapDirty).
+    _mindmapGen: 0,
+    _mindmapSavedGen: 0,
+    // Schlüssel der x-for-Hülle um das Canvas: hochzählen erzwingt einen
+    // Remount bei gleicher Draft-ID (Refresh mit Verwerfen).
+    _mindmapMountKey: 0,
     _jm: null,
     _jmDraftId: null,
     _mindmapEl: null,
@@ -157,8 +162,9 @@ export function registerFigurWerkstattCard() {
             });
             if (!ok) return;
           }
-          this._mindmapDirty = false;
           await this.loadDrafts();
+          // Wirklich verwerfen: Formular + Canvas aus dem frischen Server-Stand.
+          this._reloadSelectedDraft();
         },
         extraListeners: [{
           type: 'keydown',

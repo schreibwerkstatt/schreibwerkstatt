@@ -1,0 +1,67 @@
+<!-- Geo-Karte (View-Mode 'map'): Marker je verorteter Schauplatz + Geocode-Liste.
+     Fragment-Include von orte.html, Scope `orteCard`, Logik in book/orte-map.js.
+     Unverortete Unterorte erben die Position ihres Elternorts (Marker gestrichelt). -->
+<div x-show="$store.catalog.orte.length > 0 && viewMode === 'map'" class="ort-map-view" x-cloak>
+  <div class="ort-map-actions">
+    <button type="button" class="icon-btn"
+            :disabled="_geoUndoStack.length === 0"
+            @click="undoGeoMove()"
+            :data-tip="$app.t('orte.map.undoTip')" :aria-label="$app.t('orte.map.undo')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#undo"/></svg>
+    </button>
+    <button type="button" class="icon-btn"
+            :disabled="_geoRedoStack.length === 0"
+            @click="redoGeoMove()"
+            :data-tip="$app.t('orte.map.redoTip')" :aria-label="$app.t('orte.map.redo')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#redo"/></svg>
+    </button>
+    <button type="button" class="icon-btn"
+            :aria-pressed="geoLocked"
+            @click="toggleGeoLock()"
+            :data-tip="$app.t(geoLocked ? 'orte.map.unlockTip' : 'orte.map.lockTip')"
+            :aria-label="$app.t(geoLocked ? 'orte.map.unlock' : 'orte.map.lock')">
+      <svg class="icon" aria-hidden="true"><use :href="(geoLocked ? '/icons.svg#lock' : '/icons.svg#lock-open')"/></svg>
+    </button>
+  </div>
+  <div x-ref="orteMapEl" class="ort-map" role="application" :aria-label="$app.t('orte.map.tab')"></div>
+  <p class="card-hint card-hint--sm" x-text="$app.t(geoLocked ? 'orte.map.lockedHint' : 'orte.map.dragHint')"></p>
+  <div class="card-section-head">
+    <span class="ort-map-locate-count"
+          x-text="$app.t('orte.map.unlocatedCount', { n: unlocatedOrte().length, total: orteFiltered.length })"></span>
+    <button type="button" class="btn-compact"
+            x-show="unlocatedOrte().length > 0"
+            :disabled="geocodingAll || geocodingId != null"
+            @click="geocodeAllUnlocated()"
+            x-text="geocodingAll ? $app.t('orte.map.geocoding') : $app.t('orte.map.geocodeAll')"></button>
+  </div>
+  <div x-show="orteMapStatus" class="card-status" x-text="orteMapStatus"></div>
+  <div class="ort-map-locate-list">
+    <template x-for="o in orteFiltered" :key="o.id">
+      <div class="ort-map-locate-row" :data-ortid="o.id"
+           :class="{ 'ort-map-locate-row--active': highlightOrtId === o.id }"
+           :style="{ '--ort-depth': ortDepth(o.id) }"
+           @mouseenter="if (o.lat != null && o.lng != null) focusMapMarker(o.id)">
+        <span class="tag entity-typ-tag" x-text="ortTypLabel(o.typ)"></span>
+        <span class="ort-map-locate-name" x-text="o.name"></span>
+        <span x-show="o.lat != null && o.lng != null" class="ort-map-located" x-text="$app.t('orte.map.located')"></span>
+        <span x-show="(o.lat == null || o.lng == null) && inheritedLatLng(o)" class="ort-map-located ort-map-located--inherited"
+              :data-tip="$app.t('orte.map.inheritedTip')" x-text="$app.t('orte.map.inherited')"></span>
+        <button type="button" class="btn-compact"
+                :disabled="geocodingId === o.id || geocodingAll || (o.lat != null && o.lng != null)"
+                @click="geocodeOrt(o)"
+                x-text="geocodingId === o.id ? $app.t('orte.map.geocoding') : $app.t('orte.map.geocode')"></button>
+        <button type="button" class="btn-compact danger"
+                x-show="o.lat != null && o.lng != null"
+                :disabled="geocodingAll"
+                @click="clearGeoref(o)"
+                x-text="$app.t('orte.map.clearGeoref')"></button>
+      </div>
+    </template>
+  </div>
+  <div class="ort-map-footer" x-show="$store.catalog.orte.some(o => o.lat != null && o.lng != null)">
+    <button type="button" class="btn-compact danger"
+            :disabled="geocodingAll || geocodingId != null"
+            @click="clearAllGeorefs()"
+            x-text="$app.t('orte.map.clearAll')"></button>
+  </div>
+</div>

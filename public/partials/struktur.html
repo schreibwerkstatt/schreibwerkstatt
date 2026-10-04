@@ -80,7 +80,11 @@
           <td class="struktur-cell-title">
             <span class="internal-link" @click="strukturOpenPage(row)" x-text="row.name || $app.t('struktur.untitled')"></span>
           </td>
-          <td class="muted-msg muted-msg--sm" x-text="row.chapter || '—'"></td>
+          <td>
+            <button type="button" class="entity-ref" x-show="row.chapterId"
+                    x-entity-ref="{ type: 'kapitel', id: row.chapterId }"></button>
+            <span class="muted-msg muted-msg--sm" x-show="!row.chapterId" x-text="'—'"></span>
+          </td>
           <td class="struktur-cell-textsorte">
             <!-- Leerwert = „Buch-Default gilt". Das Label zeigt darum die
                  GELTENDE Textsorte, auch wenn die Seite keinen Override hat. -->

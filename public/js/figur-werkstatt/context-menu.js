@@ -33,19 +33,17 @@ export const contextMenuMethods = {
     }
   },
 
+  // Cursor-verankert, viewport-bezogen: das Menü ist `position: fixed`, und
+  // weder `.card` (cardFadeIn läuft mit `backwards`, kein Transform bleibt
+  // stehen — public/CLAUDE.md) noch das Vollbild-Element `.werkstatt-detail`
+  // etabliert einen Containing-Block. clientX/Y gelten darum unverändert.
+  // Geklemmt auf beide Viewport-Ränder: unten/rechts, damit das Menü nicht
+  // hinausragt, oben/links, damit es auf schmalen Viewports nicht negativ wird.
   _clampMenuPos(x, y) {
-    const W = 240, H = 240;
-    // .card-Ancestor hat transform (cardFadeIn) → erzeugt Containing-Block für
-    // position:fixed. clientX/Y sind viewport-relativ; Card-Rect-Offset abziehen.
-    let dx = 0, dy = 0;
-    const cb = this.$el?.closest('.card');
-    if (cb) {
-      const r = cb.getBoundingClientRect();
-      dx = r.left; dy = r.top;
-    }
+    const W = 240, H = 240, M = 8;
     return {
-      left: Math.min(window.innerWidth - W - 8, x) - dx,
-      top: Math.min(window.innerHeight - H - 8, y) - dy,
+      left: Math.max(M, Math.min(window.innerWidth - W - M, x)),
+      top: Math.max(M, Math.min(window.innerHeight - H - M, y)),
     };
   },
 
@@ -74,7 +72,7 @@ export const contextMenuMethods = {
     this._hideContextMenu();
     if (!id) return;
     const newId = _newNodeId();
-    const label = window.__app.t('werkstatt.tree.custom') || 'Neuer Knoten';
+    const label = window.__app.t('werkstatt.tree.newNode');
     this._mutateMindmapQuiet(jm => {
       jm.add_node(id, newId, label);
       jm.select_node(newId);
@@ -87,7 +85,7 @@ export const contextMenuMethods = {
     this._hideContextMenu();
     if (!id) return;
     const newId = _newNodeId();
-    const label = window.__app.t('werkstatt.tree.custom') || 'Neuer Knoten';
+    const label = window.__app.t('werkstatt.tree.newNode');
     this._mutateMindmapQuiet(jm => {
       jm.insert_node_after(id, newId, label);
       jm.select_node(newId);
@@ -104,6 +102,7 @@ export const contextMenuMethods = {
 
   ctxBrainstorm() {
     this._hideContextMenu();
+    if (this.brainstormLoading) return;
     this.runBrainstorm();
   },
 };

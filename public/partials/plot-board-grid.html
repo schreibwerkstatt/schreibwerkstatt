@@ -148,12 +148,11 @@
                   </div>
                   <div class="plot-swim-lane-text">
                     <span class="plot-swim-lane-name" @dblclick="startEditThread(row.lane.thread)" x-text="row.lane.thread.name"></span>
-                    <span class="plot-swim-lane-figure internal-link" x-show="threadFigureLabel(row.lane.thread)"
-                          @click.stop="row.lane.thread.fig_id ? $app.openFigurById(row.lane.thread.fig_id) : (row.lane.thread.draft_figure_id && $app.openWerkstattDraftById(row.lane.thread.draft_figure_id))"
-                          x-text="threadFigureLabel(row.lane.thread)"></span>
-                    <span class="plot-swim-lane-chapter internal-link" x-show="row.lane.thread.chapter_name"
-                          @click.stop="$app.openKapitelByName(row.lane.thread.chapter_name)"
-                          x-text="row.lane.thread.chapter_name"></span>
+                    <span class="entity-refs" x-show="row.lane.thread.fig_id || row.lane.thread.draft_figure_id || row.lane.thread.chapter_id">
+                      <button type="button" class="entity-ref" x-show="row.lane.thread.fig_id || row.lane.thread.draft_figure_id"
+                              x-entity-ref="{ type: row.lane.thread.fig_id ? 'figur' : 'werkstatt', id: row.lane.thread.fig_id || row.lane.thread.draft_figure_id, label: row.lane.thread.fig_id ? undefined : draftFigurenById.get(row.lane.thread.draft_figure_id)?.name }"></button>
+                      <button type="button" class="entity-ref" x-show="row.lane.thread.chapter_id" x-entity-ref="{ type: 'kapitel', id: row.lane.thread.chapter_id, name: row.lane.thread.chapter_name }"></button>
+                    </span>
                     <span class="plot-swim-lane-ownacts" x-show="threadHasOwnActs(row.lane.id)" x-text="$app.t('plot.thread.ownActs')"></span>
                   </div>
                   <button type="button" class="icon-btn icon-btn--ghost plot-icon-btn"

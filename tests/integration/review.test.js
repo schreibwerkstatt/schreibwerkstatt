@@ -267,10 +267,10 @@ test('Kapitel-Review: 1 Kapitel → 1 AI-Call, chapter_reviews-Zeile', async () 
   ctx.dbSeed.setBook({
     chapters: [{ id: CHAPTER_ID, book_id: BOOK_ID, name: 'Kap A' }],
     pages: [
-      { id: 9200, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 1', priority: 0 },
-      { id: 9201, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 2', priority: 1 },
+      { id: 9200, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 1', position: 0 },
+      { id: 9201, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 2', position: 1 },
       // Page in different chapter — should be filtered out.
-      { id: 9300, book_id: BOOK_ID, chapter_id: 9999, name: 'Andere', priority: 0 },
+      { id: 9300, book_id: BOOK_ID, chapter_id: 9999, name: 'Andere', position: 0 },
     ],
     pageBodies: {
       9200: '<p>Anna ging in den Wald.</p>',
@@ -308,8 +308,8 @@ test('Kapitel-Review: ausgeschlossenes Kapitel bleibt direkt bewertbar', async (
   ctx.dbSeed.setBook({
     chapters: [{ id: CHAPTER_ID, book_id: BOOK_ID, name: 'Kap Excl' }],
     pages: [
-      { id: 9060, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 1', priority: 0 },
-      { id: 9061, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 2', priority: 1 },
+      { id: 9060, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 1', position: 0 },
+      { id: 9061, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 2', position: 1 },
     ],
     pageBodies: {
       9060: '<p>Anna ging in den Wald.</p>',
@@ -343,8 +343,8 @@ test('Kapitel-Review Cache: Rerun trifft chapter_macro_review_cache → 0 AI-Cal
   ctx.dbSeed.setBook({
     chapters: [{ id: CHAPTER_ID, book_id: BOOK_ID, name: 'Kap A' }],
     pages: [
-      { id: 9810, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 1', priority: 0, updated_at: '2026-05-01T10:00:00Z' },
-      { id: 9811, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 2', priority: 1, updated_at: '2026-05-01T10:00:00Z' },
+      { id: 9810, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 1', position: 0, updated_at: '2026-05-01T10:00:00Z' },
+      { id: 9811, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 2', position: 1, updated_at: '2026-05-01T10:00:00Z' },
     ],
     pageBodies: {
       9810: '<p>Anna ging in den Wald.</p>',
@@ -394,7 +394,7 @@ test('Kapitel-Review: leeres Kapitel → result.empty, kein AI-Call', async () =
   const CHAPTER_ID = 9400;
   ctx.dbSeed.setBook({
     chapters: [{ id: CHAPTER_ID, book_id: BOOK_ID, name: 'Kap leer' }],
-    pages: [{ id: 9500, book_id: BOOK_ID, chapter_id: 9999, name: 'fremd', priority: 0 }],
+    pages: [{ id: 9500, book_id: BOOK_ID, chapter_id: 9999, name: 'fremd', position: 0 }],
     pageBodies: { 9500: '<p>fremd</p>' },
   });
 
@@ -413,7 +413,7 @@ test('Kapitel-Review: AI ohne gesamtnote → failJob', async () => {
   const CHAPTER_ID = 9600;
   ctx.dbSeed.setBook({
     chapters: [{ id: CHAPTER_ID, book_id: BOOK_ID, name: 'K' }],
-    pages: [{ id: 9700, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S', priority: 0 }],
+    pages: [{ id: 9700, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S', position: 0 }],
     pageBodies: { 9700: '<p>Anna ging in den Wald.</p>' },
   });
 

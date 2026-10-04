@@ -311,33 +311,9 @@
 
 /* ── Soll-Verknüpfungen + Beziehungen ─────────────────────────────────── */
 .motiv-link-group { display: flex; flex-direction: column; gap: var(--space-2xs); margin-bottom: var(--space-2xs); }
-.motiv-chip-row { display: flex; flex-wrap: wrap; gap: var(--space-2xs); }
-.motiv-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  padding: var(--space-2xs) var(--space-xs);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-tag-bg);
-  font-size: var(--font-size-xs);
-  color: var(--color-text);
-}
-/* Werkstatt-Figur (draft_figures) vs. Katalog-Figur optisch unterscheidbar. */
-.motiv-chip--werkstatt {
-  border-color: var(--card-accent);
-  background: color-mix(in srgb, var(--card-accent) 12%, var(--color-tag-bg));
-}
-.motiv-chip button {
-  border: none;
-  background: none;
-  color: var(--color-muted);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  line-height: 1;
-  padding: 0;
-}
-.motiv-chip button:hover { color: var(--color-err-text); }
+/* Motiv-Beziehung: Richtung + Typ als Klartext vor der Partner-Referenz. */
+.motiv-rel { display: inline-flex; align-items: center; gap: var(--space-2xs); max-width: 100%; }
+.motiv-rel-typ { flex: none; font-size: var(--font-size-xs); color: var(--color-muted); }
 /* Schnellweg im Themen-Editor: Motiv-Name + Anlegen-Knopf auf einer Zeile. */
 .motiv-theme-addmotif { display: flex; align-items: center; gap: var(--space-2xs); }
 /* `width` explizit zurueck auf auto: die geteilte Feld-Deklaration oben setzt
@@ -461,13 +437,6 @@
    ganzen Akkordeon-Zeile unerwünscht — Signal ist Border-Color + Chevron. */
 .motiv-check.internal-link:hover { opacity: 1; text-decoration: none; }
 .motiv-check-head { display: flex; align-items: center; gap: var(--space-xs); }
-.motiv-check-name {
-  font-weight: var(--fw-semibold);
-  font-size: var(--font-size-xs);
-  color: var(--color-text);
-  flex: 0 0 auto;
-  cursor: pointer;
-}
 .motiv-check-text { font-size: var(--font-size-xs); color: var(--color-muted); flex: 1 1 auto; overflow-wrap: anywhere; }
 /* Kopfzeile der KI-Schicht: Plakette + Erklärsatz + Auslöser in einer Reihe.
    Der Knopf rechts, damit die Messung darüber nicht wie sein Ergebnis aussieht. */
@@ -475,21 +444,6 @@
 .motiv-checks-head--ai .muted-msg { flex: 1 1 260px; }
 .motiv-consistency { display: flex; flex-direction: column; gap: var(--space-xs); }
 .motiv-consistency-fazit { margin: 0; font-size: var(--font-size-sm); color: var(--color-text); }
-/* Klickbare Fundstelle im Befund — dezenter Chip, springt an die Manuskript-Stelle. */
-.motiv-check-beleg {
-  flex: 0 0 auto;
-  cursor: pointer;
-  color: var(--color-stark);
-  border: 1px solid color-mix(in oklch, var(--color-stark) 40%, transparent);
-  background: color-mix(in oklch, var(--color-stark) 12%, transparent);
-}
-/* Eigenes Hover-Signal: der Chip ist ein <button> und traegt darum nicht mehr
-   die Unterstreichung des globalen `.internal-link` (die dort nur fuer die
-   Tastatur-Delegation an NICHT-Buttons haengt). Ohne sie fehlte jede Rueckmeldung. */
-.motiv-check-beleg:hover {
-  border-color: var(--color-stark);
-  background: color-mix(in oklch, var(--color-stark) 22%, transparent);
-}
 .motiv-check-hint {
   margin-top: var(--space-2xs);
   font-size: var(--font-size-xs);

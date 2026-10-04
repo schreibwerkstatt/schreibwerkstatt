@@ -1,13 +1,12 @@
 /* Plot-Werkstatt — Beat-zu-Beat-Beziehungen (Kausalität + Setup/Payoff).
-   Read-only Badges auf der Beat-Karte (ausgehende Kanten) + der Beziehungs-Editor
-   im Bearbeiten-Modus (Typ- + Ziel-Combobox + „Verknüpfen"-Button, Chips).
-   Lädt NACH board.css (wiederverwendet .plot-fig-chip*, --card-accent). */
+   Read-only Kanten auf der Beat-Karte (ausgehend) + der Beziehungs-Editor
+   im Bearbeiten-Modus (Typ- + Ziel-Combobox + „Verknüpfen"-Button, Kanten-Liste).
+   Ziel-Beats sind Entitäts-Referenzen (components/entity-ref.css). */
 
 @layer components {
 
-  /* Beat-zu-Beat-Beziehungen (ausgehend, read-only): kleine Pille mit Typ + Ziel,
-     Klick springt zum Ziel-Beat. Gedämpfter als die Meta-Tags — es ist eine
-     strukturelle Kante, kein Inhalts-Tag. */
+  /* Beat-zu-Beat-Beziehungen (ausgehend, read-only): Typ als Klartext + Ziel-Beat
+     als Entitäts-Referenz (Klick scrollt zum Ziel-Beat). */
   .plot-beat-rels {
     display: flex;
     flex-wrap: wrap;
@@ -16,21 +15,16 @@
   }
   .plot-beat-rel {
     display: inline-flex;
-    align-items: baseline;
-    gap: var(--space-3);
+    align-items: center;
+    gap: var(--space-2xs);
     max-width: 100%;
-    padding: 0 var(--space-2xs);
-    border-left: 2px solid var(--card-accent);
     font-size: var(--font-size-micro);
-    color: var(--color-muted);
-    cursor: pointer;
   }
-  .plot-beat-rel:hover { color: var(--color-text); }
-  .plot-beat-rel-typ { font-weight: var(--fw-semibold); color: var(--card-accent); }
-  .plot-beat-rel-target { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .plot-beat-rel-typ { flex: none; font-weight: var(--fw-semibold); color: var(--card-accent); }
 
   /* Beziehungs-Editor: Typ-Combobox + Ziel-Combobox + „Verknüpfen"-Button in einer
-     Zeile (umbrechend auf schmalen Spalten). Chips darunter = bestehende Kanten. */
+     Zeile (umbrechend auf schmalen Spalten). Darunter die bestehenden Kanten
+     (.plot-beat-rel mit Entfernen-Gruppe). */
   .plot-rel-add {
     display: flex;
     flex-wrap: wrap;
@@ -40,6 +34,5 @@
   }
   .plot-rel-add .plot-rel-typ { flex: 1 1 40%; min-width: 8rem; }
   .plot-rel-add .plot-rel-target { flex: 2 1 55%; min-width: 10rem; }
-  .plot-rel-chip { border-left: 2px solid var(--card-accent); }
 
 }

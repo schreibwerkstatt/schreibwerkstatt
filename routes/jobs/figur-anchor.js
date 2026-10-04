@@ -16,7 +16,7 @@ const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob,
   createJob, enqueueJob, findActiveJobId, jsonBody, jobAbortControllers,
-  startBookJob,
+  startBookJob, i18nError,
 } = require('./shared');
 const draftDb = require('../../db/draft-figures');
 const occDb = require('../../db/draft-figure-occurrences');
@@ -63,16 +63,30 @@ function _kernQuery(draftName, zeilen) {
 // eine wörtliche Suche darüber liefert Zufallstreffer. Das ist der bewusste
 // Unterschied zum Motiv-Scan, der wörtliche `trigger_terms` hat, und zum
 // Beat-Anchor, dessen Titel wenigstens Eigennamen trägt.
-async function _anchorKern(bookId, query, signalFn, minScore) {
-  if (!query) return [];
+//
+// Konfidenz ist der ROHE COSINUS (`semScore`, 0–1), nicht `score`: bei Hybrid
+// (Default `embed.hybrid`) ist `score` der RRF-Rang-Wert (max. ~0.03), mit Rerank
+// die Rerank-Relevanz — beides nicht gegen die absolute Schwelle
+// `werkstatt.anchor.min_score` (Default 0.35) vergleichbar; jeder Treffer fiele
+// darunter. Reine FTS-Fusions-Kandidaten (semScore null) sind semantisch nicht
+// belegt und werden übersprungen. Gespeichert wird semScore (Muster motif-scan,
+// beat-anchor).
+function _occsFromHits(hits, minScore) {
   const found = new Map();
-  const hits = await semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn() });
-  for (const h of hits) {
-    if (h.score == null) continue;                  // reine FTS-Fusions-Kandidaten: kein Konfidenzwert
-    if (minScore > 0 && h.score < minScore) continue;
-    found.set(_occKey(h.kind, h.entity_id), _toOcc(h.kind, h.entity_id, h.score, _plainSnippet(h.text), 'semantic'));
+  for (const h of (hits || [])) {
+    if (h.semScore == null) continue;
+    if (minScore > 0 && h.semScore < minScore) continue;
+    const key = _occKey(h.kind, h.entity_id);
+    if (found.has(key)) continue;
+    found.set(key, _toOcc(h.kind, h.entity_id, h.semScore, _plainSnippet(h.text), 'semantic'));
   }
   return [...found.values()];
+}
+
+async function _anchorKern(bookId, query, signalFn, minScore) {
+  if (!query) return [];
+  const hits = await semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn() });
+  return _occsFromHits(hits, minScore);
 }
 
 async function runFigurAnchorJob(jobId, bookId, userEmail) {
@@ -85,9 +99,10 @@ async function runFigurAnchorJob(jobId, bookId, userEmail) {
 
     if (!embed.isEnabled()) {
       // Kein stiller Teil-Erfolg: ohne Semantik gibt es zu dieser Frage keine
-      // Antwort, und ein leerer Index wäre als „nichts im Buch" lesbar.
-      completeJob(jobId, { drafts: 0, occurrences: 0, semantic: false }, null, 'kein Embedding-Backend');
-      return;
+      // Antwort, und ein leerer Index wäre als „nichts im Buch" lesbar. Der Lauf
+      // endet als Fehler, nicht als `done` — ein `done`-Lauf in job_runs zählt
+      // für den Bogen als „verankert" (db/draft-figure-occurrences.js#figurAnchorState).
+      throw i18nError('job.error.figurAnchorNoSemantic');
     }
 
     const floor = Number(appSettings.get('werkstatt.anchor.min_score')) || 0;
@@ -160,4 +175,4 @@ figurAnchorRouter.post('/figur-anchor', jsonBody, (req, res) => startBookJob(req
   run: (jobId, { bookId, userEmail }) => runFigurAnchorJob(jobId, bookId, userEmail),
 }));
 
-module.exports = { figurAnchorRouter, runFigurAnchorJob, anchorAllDraftFigures };
+module.exports = { figurAnchorRouter, runFigurAnchorJob, anchorAllDraftFigures, _occsFromHits };

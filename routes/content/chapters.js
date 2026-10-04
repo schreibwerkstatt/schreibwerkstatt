@@ -17,7 +17,9 @@ function register(router) {
     catch (e) { _fail(res, e, 'GET /content/chapters/:id'); }
   });
 
-  // POST /content/chapters — Neues Kapitel. Body: { book_id, name, position?, parent_chapter_id? }.
+  // POST /content/chapters — Neues Kapitel. Body: { book_id, name, position?, parent_chapter_id?, after_chapter_id? }.
+  // `after_chapter_id` fuegt als Geschwister hinter dem Anker ein und laesst die
+  // Nachfolger aufruecken; `position`/`parent_chapter_id` werden dann ignoriert.
   router.post('/chapters', jsonBody, async (req, res) => {
     const bookId = toIntId(req.body?.book_id);
     const name = (req.body?.name || '').toString().trim();
@@ -29,12 +31,17 @@ function register(router) {
     if (parentChapterId != null && resolveChapterBookId(parentChapterId) !== bookId) {
       return res.status(400).json({ error_code: 'CHAPTER_NOT_IN_BOOK' });
     }
+    const afterChapterId = Number.isFinite(req.body?.after_chapter_id) ? req.body.after_chapter_id : null;
+    if (afterChapterId != null && resolveChapterBookId(afterChapterId) !== bookId) {
+      return res.status(400).json({ error_code: 'CHAPTER_NOT_IN_BOOK' });
+    }
     try {
       const created = await contentStore.createChapter({
         book_id: bookId,
         name,
         position: req.body?.position,
         parent_chapter_id: parentChapterId,
+        after_chapter_id: afterChapterId,
       }, req);
       res.json(created);
     } catch (e) { _fail(res, e, 'POST /content/chapters'); }

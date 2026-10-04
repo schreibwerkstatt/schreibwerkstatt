@@ -9,17 +9,26 @@ require('../migrations');
  *  reine Namensnennungen (page_figure_mentions) zählen bewusst nicht mit.
  *  Sortierung: Häufigkeit DESC. Fallback: alle Buchfiguren, wenn keine Kapitel-
  *  zuordnung existiert (z.B. vor der ersten Komplettanalyse).
+ *  **Nur aktive Figuren (`stale = 0`):** `rebuildFigureAppearances` lässt einer
+ *  ausgemusterten Figur ihre Kapitel, damit der Katalog sie nicht kapitellos zeigt —
+ *  als „Figur dieses Kapitels" (Kontext-Leiste, Seiten-Lektorat-Prompt) darf sie
+ *  trotzdem nicht auftreten, sie steht nicht mehr im Text.
  *  Gibt kompakte Objekte zurück: { id, name, kurzname, geschlecht, beruf, wohnadresse, beschreibung, typ }.
  *  **`id` ist die TEXT-`fig_id`, nicht die INTEGER-Zeilen-ID** — dieselbe Achse,
  *  die `listFigurenWithDetails` als `id` ausliefert. Beide Listen treffen im
  *  Frontend aufeinander (Referenz-Slot vereinigt Katalog + Kapitel-Index); mit
  *  zwei Identitätsachsen findet dort kein Vergleich ein Gegenstück, und jede
- *  Kapitel-Figur erscheint ein zweites Mal als angeblich unbekannte Zeile. */
-function getChapterFigures(bookId, chapterId, userEmail) {
+ *  Kapitel-Figur erscheint ein zweites Mal als angeblich unbekannte Zeile.
+ *  `{ withYears: true }` reichert Jahr/Alter aus `computeFigureYears` an — deren
+ *  Map ist nach der INTEGER-`figures.id` geschlüsselt, darum geschieht der Lookup
+ *  hier, wo beide Kennungen vorliegen, und nicht beim Aufrufer. */
+function getChapterFigures(bookId, chapterId, userEmail, { withYears = false } = {}) {
   if (!bookId) return [];
-  const cols = 'f.fig_id AS id, f.name, f.kurzname, f.geschlecht, f.beruf, f.wohnadresse, f.beschreibung, f.typ, f.geburtstag';
+  const em = userEmail || null;
+  const cols = 'f.id AS _row_id, f.fig_id AS id, f.name, f.kurzname, f.geschlecht, f.beruf, f.wohnadresse, f.beschreibung, f.typ, f.geburtstag';
+  let rows = [];
   if (chapterId) {
-    const rows = db.prepare(`
+    rows = db.prepare(`
       SELECT ${cols} FROM figures f
       JOIN (
         SELECT figure_id AS fid, SUM(haeufigkeit) AS h
@@ -27,16 +36,29 @@ function getChapterFigures(bookId, chapterId, userEmail) {
         WHERE chapter_id = ?
         GROUP BY figure_id
       ) a ON a.fid = f.id
-      WHERE f.book_id = ? AND f.user_email IS ?
+      WHERE f.book_id = ? AND f.user_email IS ? AND f.stale = 0
       ORDER BY a.h DESC, f.sort_order, f.id
-    `).all(chapterId, bookId, userEmail || null);
-    if (rows.length > 0) return rows;
+    `).all(chapterId, bookId, em);
   }
-  return db.prepare(`
-    SELECT ${cols} FROM figures f
-    WHERE f.book_id = ? AND f.user_email IS ?
-    ORDER BY f.sort_order, f.id
-  `).all(bookId, userEmail || null);
+  if (!rows.length) {
+    rows = db.prepare(`
+      SELECT ${cols} FROM figures f
+      WHERE f.book_id = ? AND f.user_email IS ? AND f.stale = 0
+      ORDER BY f.sort_order, f.id
+    `).all(bookId, em);
+  }
+  const yearMap = withYears ? computeFigureYears(bookId, em) : null;
+  return rows.map(({ _row_id, ...fig }) => {
+    const fy = yearMap?.get(_row_id);
+    if (fy) {
+      fig.jahr_im_roman   = fy.jahr_im_roman;
+      fig.geburtsjahr     = fy.geburtsjahr;
+      fig.alter_im_roman  = fy.alter_im_roman;
+      fig.anchor_ereignis = fy.anchor_ereignis;
+      fig.anchor_kapitel  = fy.anchor_kapitel;
+    }
+    return fig;
+  });
 }
 
 /** Baut `figure_appearances` für die Figuren EINES Laufs neu auf — Full-Replace an einem
@@ -81,8 +103,12 @@ function rebuildFigureAppearances(bookId, userEmail, figuren, idMaps) {
       const fid = Number(byFigId[f.id]);
       if (!Number.isInteger(fid)) continue;
       for (const app of (f.kapitel || [])) {
-        const chapId = idMaps?.chNameToId?.[_cleanRefName(app.name)] ?? null;
-        if (chapId != null) paare += insApp.run(fid, chapId, app.haeufigkeit || 1).changes;
+        // Die KI liefert das Feld als [{ name, haeufigkeit }] oder als blosse
+        // Namensliste — dieselben zwei Formen, die der Match-Kandidat akzeptiert.
+        const name = typeof app === 'string' ? app : app?.name;
+        const chapId = idMaps?.chNameToId?.[_cleanRefName(name)] ?? null;
+        const h = (app && typeof app === 'object' && app.haeufigkeit) || 1;
+        if (chapId != null) paare += insApp.run(fid, chapId, h).changes;
       }
     }
     // Quelle 2: Szenen.
@@ -109,7 +135,8 @@ function rebuildFigureAppearances(bookId, userEmail, figuren, idMaps) {
 
 /** Beziehungen zwischen Figuren, die im gegebenen Kapitel gemeinsam auftreten.
  *  Liefert: [{ von, zu, typ, beschreibung }] mit Namen (nicht fig_ids).
- *  Ohne chapterId: alle Beziehungen des Buchs. */
+ *  Ohne chapterId: alle Beziehungen des Buchs. Nur zwischen aktiven Figuren
+ *  (`stale = 0`), aus demselben Grund wie bei getChapterFigures. */
 function getChapterFigureRelations(bookId, chapterId, userEmail) {
   if (!bookId) return [];
   const em = userEmail || null;
@@ -120,7 +147,7 @@ function getChapterFigureRelations(bookId, chapterId, userEmail) {
       FROM figure_relations r
       JOIN figures ff ON ff.id = r.from_fig_id
       JOIN figures ft ON ft.id = r.to_fig_id
-      WHERE r.book_id = ? AND r.user_email IS ?
+      WHERE r.book_id = ? AND r.user_email IS ? AND ff.stale = 0 AND ft.stale = 0
         AND EXISTS (SELECT 1 FROM figure_appearances fa WHERE fa.figure_id = ff.id AND fa.chapter_id = ?)
         AND EXISTS (SELECT 1 FROM figure_appearances fa WHERE fa.figure_id = ft.id AND fa.chapter_id = ?)
       ORDER BY ff.sort_order, ft.sort_order
@@ -132,7 +159,7 @@ function getChapterFigureRelations(bookId, chapterId, userEmail) {
     FROM figure_relations r
     JOIN figures ff ON ff.id = r.from_fig_id
     JOIN figures ft ON ft.id = r.to_fig_id
-    WHERE r.book_id = ? AND r.user_email IS ?
+    WHERE r.book_id = ? AND r.user_email IS ? AND ff.stale = 0 AND ft.stale = 0
     ORDER BY ff.sort_order, ft.sort_order
   `).all(bookId, em);
 }

@@ -111,10 +111,9 @@ const _stmtInsertLoc = db.prepare('INSERT OR IGNORE INTO plot_beat_locations (be
 
 // Motiv-Soll-Verknüpfungen pro Beat — read-only Anzeige im Plot. `motif_beats` ist
 // eine der M:M-Soll-Brücken der Motiv-Werkstatt; kuratiert wird sie dort, der Plot
-// zeigt sie nur als Badge (Klick → Motiv-Werkstatt). Effektive Farbe = eigene
-// Motiv-Farbe, sonst die des zugeordneten Themas (wie im Konstellations-Graph);
-// beides ist ein Palette-Schlüssel, die Whitelist gegen CSS-Injection liegt im
-// Frontend (motifAccent). Scoping über den Beat (Buch + User); die verknüpften
+// zeigt sie nur als Entitäts-Referenz (Klick → Motiv-Werkstatt). `farbe` = eigene
+// Motiv-Farbe, sonst die des zugeordneten Themas (wie im Konstellations-Graph).
+// Scoping über den Beat (Buch + User); die verknüpften
 // Motive tragen denselben Scope (Motiv-Werkstatt ist pro Buch + User isoliert).
 const _stmtListMotifsForBook = db.prepare(`
   SELECT mb.beat_id, m.id AS motif_id, m.name, COALESCE(m.farbe, t.farbe) AS farbe

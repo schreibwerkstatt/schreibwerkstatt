@@ -6,7 +6,7 @@
 // mit dem hier gesetzten Namen (sonst anonym). „Überspringen"/Outside-Click
 // merkt sich den Verzicht für die Session (sessionStorage).
 
-import { el } from './dom.js';
+import { el, makeModal } from './dom.js';
 
 const RT_KEY = 'sw_share_reader_token';
 const NAME_KEY = 'sw_share_reader_name';
@@ -32,9 +32,11 @@ export function rememberEmail(e) { try { if (e) localStorage.setItem(EMAIL_KEY, 
 export function forgetEmail() { try { localStorage.removeItem(EMAIL_KEY); } catch {} }
 export function nameDismissed() { try { return sessionStorage.getItem(DISMISS_KEY) === '1'; } catch { return false; } }
 export function markNameDismissed() { try { sessionStorage.setItem(DISMISS_KEY, '1'); } catch {} }
+let releaseModal = null;
 export function closeNameModal() {
   const ex = document.getElementById('share-name-modal');
   if (ex) ex.remove();
+  if (releaseModal) { releaseModal(); releaseModal = null; }
 }
 
 // Identitäts-Chip (in den Optionen-Menü-Cluster via menuSection) + Identitäts-
@@ -67,17 +69,20 @@ export function setupIdentity({ t, menuSection, onIdentityChange }) {
     const overlay = el('div', 'share-composer');
     overlay.id = 'share-name-modal';
     const card = el('div', 'share-composer__card');
-    card.appendChild(el('h3', 'share-composer__title', t('name_modal_title')));
+    const title = el('h3', 'share-composer__title', t('name_modal_title'));
+    card.appendChild(title);
     card.appendChild(el('p', 'share-name-modal__intro', t('name_modal_intro')));
     const input = el('input', 'share-composer__name');
     input.type = 'text';
     input.maxLength = 80;
     input.placeholder = t('your_name');
+    input.setAttribute('aria-label', t('your_name'));
     input.value = savedName();
     const emailInput = el('input', 'share-composer__name');
     emailInput.type = 'email';
     emailInput.maxLength = 200;
     emailInput.placeholder = t('name_modal_email');
+    emailInput.setAttribute('aria-label', t('name_modal_email'));
     emailInput.value = savedEmail();
     const emailHint = el('p', 'share-name-modal__hint', t('email_optional_hint'));
     const actions = el('div', 'share-composer__actions');
@@ -93,6 +98,7 @@ export function setupIdentity({ t, menuSection, onIdentityChange }) {
     card.appendChild(actions);
     overlay.appendChild(card);
     document.body.appendChild(overlay);
+    releaseModal = makeModal(overlay, card, title);
     setTimeout(() => input.focus(), 30);
 
     function commit() {

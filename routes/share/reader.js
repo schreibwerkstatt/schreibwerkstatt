@@ -14,6 +14,7 @@ const logger = require('../../logger');
 const H = require('../../lib/share-helpers');
 const tts = require('../../lib/tts-synth');
 const { getBookLocale } = require('../../db/schema');
+const { renderGeneralCommentsHtml } = require('../../lib/share-comments-ssr');
 
 const {
   commentBody, TEMPLATE_OK, articleStyleClass,
@@ -157,18 +158,9 @@ function register(router) {
       .filter(e => e.level === 1 && e.chapterId)
       .map(e => ({ id: e.chapterId, anchor: e.anchor }));
 
-    // SSR-Fallback zeigt nur allgemeine Anmerkungen (kein Anker, kein Reply) in der
-    // unteren Sektion. Verankerte Threads werden client-seitig via /threads in die
-    // schwebende Leiste hydriert (share-reader.js) — ohne JS nicht positionierbar,
-    // daher SSR-Rail leer.
-    const comments = shareLinks.listCommentsByToken(token, { order: 'desc' })
-      .filter(c => !c.parent_id && !c.anchor_bid);
-    const generalCommentsHtml = comments.length
-      ? comments.map(c => `<li class="share-comments__item">
-          <div class="share-comments__meta">${escHtml(c.reader_name || tServer('share.reader.anon', lang))} · ${escHtml(c.created_at)}</div>
-          <div class="share-comments__body">${escHtml(c.body)}</div>
-        </li>`).join('\n')
-      : `<li class="share-comments__empty">${escHtml(tServer('share.reader.comments_empty', lang))}</li>`;
+    // SSR zeigt die allgemeinen Threads (inkl. Antworten) im selben Karten-Markup
+    // wie der Client; verankerte hydriert share-reader.js in die schwebende Leiste.
+    const generalCommentsHtml = await renderGeneralCommentsHtml(shareLinks.listCommentsByToken(token), lang);
 
     const fallback = req.query?.cmt;
     const fallbackMsg = fallback === 'ok'   ? tServer('share.reader.comment_submitted', lang)
@@ -205,7 +197,7 @@ function register(router) {
     // Reader-Config (Token + i18n) fuer share-reader.js. JSON in <script type=
     // "application/json"> — `<` escapen, damit kein `</script>`-Breakout moeglich.
     const readerKeys = ['anchor_cta', 'composer_title', 'composer_general_title', 'reply',
-      'reply_placeholder', 'send', 'cancel', 'you_badge', 'author_badge', 'resolved_badge',
+      'reply_placeholder', 'send', 'cancel', 'close', 'anchor_truncated', 'you_badge', 'author_badge', 'resolved_badge',
       'jump_to_text', 'anchor_stale', 'anchor_changed', 'threads_heading', 'threads_empty',
       'your_name', 'comment_as', 'change_name', 'set_name', 'name_modal_title', 'name_modal_intro',
       'name_modal_save', 'name_modal_skip', 'anon', 'comment_form_body', 'comment_form_submit',
@@ -267,7 +259,7 @@ function register(router) {
       author_name: escHtml(link.owner_display_name || tServer('share.reader.anon_author', lang)),
       t_by: escHtml(tServer('share.reader.by', lang)),
       t_skip: escHtml(tServer('share.reader.skip_to_content', lang)),
-      t_comments: escHtml(tServer('share.reader.comments_heading', lang)),
+      t_threads_heading: escHtml(tServer('share.reader.threads_heading', lang)),
       t_general_heading: escHtml(tServer('share.reader.general_heading', lang)),
       reading_meta: metaBlock,
       intro_block: introBlock,

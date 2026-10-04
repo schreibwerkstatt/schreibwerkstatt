@@ -3,8 +3,28 @@
 import { fetchJson } from '../utils.js';
 import { stopWerkstattJob } from './job-poll.js';
 
+// Server-error_codes, für die die Werkstatt eine eigene Meldung hat. Alles
+// andere fällt auf die Meldung der jeweiligen Aktion zurück.
+const ERROR_CODE_KEYS = {
+  DRAFT_CONFLICT: 'werkstatt.error.conflict',
+  NO_BOOK_ACCESS: 'werkstatt.error.noBookAccess',
+  INSUFFICIENT_ROLE: 'werkstatt.error.insufficientRole',
+  MINDMAP_INVALID: 'werkstatt.error.mindmapInvalid',
+};
+
+/** Meldung zu einem fetchJson-Fehler: bekannter error_code → eigene Meldung,
+ *  sonst der Aktions-Key (`fallbackKey`). */
+export function werkstattErrorText(err, fallbackKey) {
+  return window.__app.t(ERROR_CODE_KEYS[err?.code] || fallbackKey);
+}
+
+// Archetypen mit eigenem Label (Combobox-Optionen im Partial). Ein freier Wert
+// eines Fremd-Clients wird roh angezeigt — `t()` liefert für unbekannte Keys
+// den Key selbst zurück, nicht leer.
+const KNOWN_ARCHETYPES = new Set(['protagonist', 'antagonist', 'nebenfigur', 'mentor', 'nemesis']);
+
 export const crudMethods = {
-  // Vergleich Form-Felder gegen selectedDraft + _mindmapDirty (gesetzt durch
+  // Vergleich Form-Felder gegen selectedDraft + Mindmap-Generation (gezählt durch
   // jsMind-Mutationsevents). card:refresh prüft isDirty() und ruft appConfirm.
   isDirty() {
     const sel = this.selectedDraft();
@@ -12,7 +32,43 @@ export const crudMethods = {
     if ((this.editName || '').trim() !== (sel.name || '').trim()) return true;
     if ((this.editArchetype || '') !== (sel.archetype || '')) return true;
     if ((this.editNotes || '') !== (sel.notes || '')) return true;
-    return !!this._mindmapDirty;
+    return this._mindmapGen !== this._mindmapSavedGen;
+  },
+
+  // Mindmap-Dirty als Generationszähler statt Boolean: jede Mutation zählt hoch,
+  // ein Save markiert nur die Generation als gespeichert, die er exportiert hat.
+  // Eine Änderung, die während des laufenden PUT entsteht, bleibt so dirty —
+  // ein Boolean würde sie mit dem Save-Ende als gespeichert ausgeben.
+  _markMindmapDirty() { this._mindmapGen++; },
+  _markMindmapClean(gen = this._mindmapGen) { this._mindmapSavedGen = gen; },
+
+  archetypeLabel(a) {
+    if (!a) return '';
+    return KNOWN_ARCHETYPES.has(a) ? window.__app.t('werkstatt.archetype.' + a) : a;
+  },
+
+  // Formularfelder aus einer Draft-Zeile (Auswahl und Neu-Laden nach Refresh).
+  _applyDraftToForm(d) {
+    this.editName = d.name;
+    this.editArchetype = d.archetype || '';
+    this.editNotes = d.notes || '';
+  },
+
+  // Refresh mit Verwerfen: Formular UND Canvas aus der frisch geladenen Zeile
+  // neu aufbauen. Ohne Remount blieben die verworfenen Knoten im Canvas stehen
+  // und gingen beim nächsten Save über den neueren Server-Stand.
+  _reloadSelectedDraft() {
+    const d = this.selectedDraft();
+    if (!d) return;
+    this._destroyMindmap();
+    this._applyDraftToForm(d);
+    this._markMindmapClean();
+    this.brainstormResult = null;
+    this.consistencyResult = null;
+    this.selectedRunId = null;
+    this.selectedKnotenId = null;
+    // Neuer Schlüssel der x-for-Hülle → Alpine mountet ein frisches Canvas.
+    this._mindmapMountKey++;
   },
 
   async loadDrafts() {
@@ -43,7 +99,7 @@ export const crudMethods = {
       }
     } catch (e) {
       if (isStale()) return;
-      this.errorMessage = app.t('werkstatt.error.load') || app.t('common.unknownError');
+      this.errorMessage = app.t('werkstatt.error.load');
       this.drafts = [];
     } finally {
       if (!isStale()) this.loading = false;
@@ -52,7 +108,10 @@ export const crudMethods = {
     // Load und best-effort: der Bogen ist eine Nebenansicht, sein Ausfall darf
     // die Werkstatt nicht blockieren (gleiche Regel wie loadConsistencyRuns in
     // der Plot-Werkstatt).
-    if (!isStale()) await this.loadArc();
+    if (!isStale()) {
+      this._reattachAnchorJob?.();
+      await this.loadArc();
+    }
   },
 
   // Vollstaendiger Karten-Reset (Buchwechsel, view:reset). Verdrahtet in
@@ -99,7 +158,7 @@ export const crudMethods = {
     this.werkstattMenuOpen = false;
     this.contextMenuNodeId = null;
     this.loading = false;
-    this._mindmapDirty = false;
+    this._markMindmapClean();
     this._runsLoadDraftId = null;
     // Geparkte Permalink-Ziele gehoeren zum alten Buch — sonst springt die
     // Karte nach dem Wechsel auf eine Figur, die es hier nicht gibt.
@@ -133,16 +192,14 @@ export const crudMethods = {
     // das alte Mindmap-Element und mountet ein frisches via x-init mit $el.
     if (this.selectedDraftId !== id) this._destroyMindmap();
     this.selectedDraftId = id;
-    this.editName = d.name;
-    this.editArchetype = d.archetype || '';
-    this.editNotes = d.notes || '';
+    this._applyDraftToForm(d);
     this.creating = false;
     this.brainstormResult = null;
     this.consistencyResult = null;
     this.selectedKnotenId = null;
     this.selectedRunId = null;
     this.selectedKonfliktIdx = null;
-    this._mindmapDirty = false;
+    this._markMindmapClean();
     this.loadRuns?.();
     this.loadPlotUsage?.();
     this.loadMotifUsage?.();
@@ -260,7 +317,7 @@ export const crudMethods = {
   async createDraft() {
     const app = window.__app;
     const name = (this.newName || '').trim();
-    if (!name) { this.errorMessage = app.t('werkstatt.error.nameRequired') || app.t('common.unknownError'); return; }
+    if (!name) { this.errorMessage = app.t('werkstatt.error.nameRequired'); return; }
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) return;
     this.busy = true;
@@ -276,7 +333,7 @@ export const crudMethods = {
       this.selectDraft(row.id);
       this.errorMessage = '';
     } catch (e) {
-      this.errorMessage = app.t('werkstatt.error.create') || app.t('common.unknownError');
+      this.errorMessage = werkstattErrorText(e, 'werkstatt.error.create');
     } finally {
       this.busy = false;
     }
@@ -287,7 +344,10 @@ export const crudMethods = {
     const sel = this.selectedDraft();
     if (!sel) return false;
     const name = (this.editName || '').trim();
-    if (!name) { this.errorMessage = app.t('werkstatt.error.nameRequired') || app.t('common.unknownError'); return false; }
+    if (!name) { this.errorMessage = app.t('werkstatt.error.nameRequired'); return false; }
+    // Generation VOR dem Export festhalten: nur sie gilt nach dem Save als
+    // gespeichert (siehe _markMindmapDirty).
+    const gen = this._mindmapGen;
     // Mindmap nur exportieren, wenn Editor zu diesem Draft gehört (_jmDraftId
     // wird in _mountMindmap nach show() gesetzt). Sonst Server-State behalten.
     const exported = this._jmDraftId === sel.id ? this._exportMindmap() : null;
@@ -302,14 +362,18 @@ export const crudMethods = {
           archetype: this.editArchetype || null,
           notes: this.editNotes || null,
           mindmap,
+          // Optimistic Concurrency: der Stand, auf dem editiert wurde. Weicht der
+          // Server-Stand ab (zweiter Tab, Zweitgerät), kommt 409 DRAFT_CONFLICT
+          // statt eines stillen Überschreibens.
+          expectedUpdatedAt: sel.updated_at || null,
         }),
       });
       this.drafts = this.drafts.map(d => d.id === updated.id ? updated : d);
       this.errorMessage = '';
-      this._mindmapDirty = false;
+      this._markMindmapClean(gen);
       return true;
     } catch (e) {
-      this.errorMessage = app.t('werkstatt.error.save') || app.t('common.unknownError');
+      this.errorMessage = werkstattErrorText(e, 'werkstatt.error.save');
       return false;
     } finally {
       this.busy = false;
@@ -351,7 +415,7 @@ export const crudMethods = {
         if (this.drafts.length > 0) this.selectDraft(this.drafts[0].id);
       }
     } catch (e) {
-      this.errorMessage = app.t('werkstatt.error.delete') || app.t('common.unknownError');
+      this.errorMessage = werkstattErrorText(e, 'werkstatt.error.delete');
     } finally {
       this.busy = false;
     }

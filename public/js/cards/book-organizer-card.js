@@ -24,6 +24,7 @@ import { loadSortable } from '../lazy-libs.js';
 import { bookOrganizerMethods } from '../book-organizer.js';
 import { MAX_CHAPTER_DEPTH } from '../book-organizer/constants.js';
 import { EVT } from '../events.js';
+import { bindBoardHistoryKeys } from './board-history-keys.js';
 
 // Buch-skopierter State — SSoT fuer Initial-Wert, `book:changed` und
 // `view:reset`. Factory (keine Konstante): Object.assign wuerde sonst dieselben
@@ -120,28 +121,23 @@ export function registerBookOrganizerCard() {
             if (!window.__app.showBookOrganizerCard) return;
             await this._rerender();
           } },
+          // Umbenannt im Editor-Kopf oder Sidebar-Kontextmenü (in-place
+          // gespiegelt, kein pages:loaded).
+          { type: EVT.TREE_RENAMED, handler: async () => {
+            if (!window.__app.showBookOrganizerCard) return;
+            await this._rerender();
+          } },
         ],
       });
 
-      // Cmd/Ctrl+Z / Cmd/Ctrl+Shift+Z + Cmd/Ctrl+Y. Nur wenn Karte sichtbar
-      // und Fokus nicht in einem Input/Textarea (sonst greift die native
-      // Edit-Undo-Funktion der Rename-Felder).
-      this._onHistoryKeydown = (e) => {
-        if (!window.__app?.showBookOrganizerCard) return;
-        const tag = e.target?.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return;
-        const cmd = e.metaKey || e.ctrlKey;
-        if (!cmd) return;
-        const key = e.key.toLowerCase();
-        if (key === 'z' && !e.shiftKey) {
-          e.preventDefault();
-          this.historyUndo();
-        } else if ((key === 'z' && e.shiftKey) || key === 'y') {
-          e.preventDefault();
-          this.historyRedo();
-        }
-      };
-      window.addEventListener('keydown', this._onHistoryKeydown, { signal: this._lifecycle.signal });
+      // Cmd/Ctrl+Z / Cmd/Ctrl+Shift+Z + Cmd/Ctrl+Y — Guards (Karte sichtbar,
+      // kein Eingabefeld, kein offener Dialog) in board-history-keys.js.
+      this._onHistoryKeydown = bindBoardHistoryKeys({
+        isVisible: () => !!window.__app?.showBookOrganizerCard,
+        onUndo: () => this.historyUndo(),
+        onRedo: () => this.historyRedo(),
+        signal: this._lifecycle.signal,
+      });
 
       // Bei aktiver Suche bricht Reorder über gefiltertem DOM die Reihenfolge —
       // Sortable-Instances werden in dem Fall disabled, statt das Suchfeld

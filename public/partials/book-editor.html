@@ -18,6 +18,7 @@
     </div>
     <div class="card-header-aside">
       <div class="card-actions">
+        <!-- @include book-editor-history -->
         <button type="button" class="icon-btn icon-btn--ghost" @click="outlineOpen = !outlineOpen"
                 :class="{ 'is-active': outlineOpen }"
                 :data-tip="$app.t('bookEditor.btn.outlineTitle')"
@@ -146,7 +147,7 @@
 
             <!-- Body wird imperativ via _mountBlockEl gefüllt; _maybeRehydrate
                  refresht inaktive Blöcke bei externen Mutationen (Find/Replace,
-                 Reload). HTML-Quelle ist BookStack-Proxy (server-cleant). -->
+                 Reload). HTML-Quelle ist der Content-Store (server-cleant). -->
             <div class="book-editor-page-body"
                  :data-book-editor-page="block.pageId"
                  :contenteditable="activePageId === block.pageId"
@@ -156,6 +157,7 @@
                  @mousedown="_onBlockMousedown(block, $event)"
                  @click="onStreamCommentClick($event); activateBlock(block)"
                  @keydown="onBlockKeydown(block, $event)"
+                 @beforeinput="onBlockBeforeInput($event)"
                  @input="_onBlockInput(block, $event)"
                  @paste="onBlockClipboard(block, $event, 'paste')"
                  @copy="onBlockClipboard(block, $event, 'copy')"

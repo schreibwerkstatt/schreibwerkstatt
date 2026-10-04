@@ -13,7 +13,13 @@ function updateFigurenEvents(bookId, assignments, userEmail, idMaps) {
     const { rows: figRows, byFigId: figIdToRowId } = figIdMaps(bookId, userEmail);
     if (!figRows.length) return;
 
-    const delEvt = db.prepare('DELETE FROM figure_events WHERE figure_id = ? AND manually_edited = 0');
+    // Nur aktive Figuren: eine ausgemusterte (stale) bekommt im Lauf keine neuen
+    // Ereignisse — loeschte man ihre alten, verloere sie ihren Lebenslauf, waehrend
+    // sie im Katalog unter „nicht mehr im Text" weiter steht (gleiche Haltung wie
+    // rebuildFigureAppearances, das ihr die Kapitel laesst).
+    const delEvt = db.prepare(
+      'DELETE FROM figure_events WHERE figure_id = ? AND manually_edited = 0 AND figure_id IN (SELECT id FROM figures WHERE stale = 0)'
+    );
     for (const row of figRows) delEvt.run(row.id);
 
     const insEvt = db.prepare(`INSERT INTO figure_events

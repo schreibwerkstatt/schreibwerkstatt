@@ -52,8 +52,8 @@ function seed() {
   });
   // Seite im eigenen Buch, deren Kapitel in einem fremden Buch liegt — der
   // Seeder verwirft unbekannte Kapitel, darum direkt.
-  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, chapter_id, position, priority, updated_at, body_html)
-              VALUES (910105, ?, 'P-fremdkap', 91021, 3, 3, ?, '<p>Bert schwieg.</p>')`).run(BOOK, T);
+  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, chapter_id, position, updated_at, body_html)
+              VALUES (910105, ?, 'P-fremdkap', 91021, 3, ?, '<p>Bert schwieg.</p>')`).run(BOOK, T);
 
   const insPs = db.prepare(`INSERT INTO page_stats (page_id, book_id, words, chars, sentences, dialog_chars, pronoun_counts, passive_count, avg_sentence_len)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);

@@ -17,8 +17,15 @@ test('Palette: x-trap haelt Tab im Panel, blendet Hintergrund aus, Fokus kehrt z
 
   // Grundlinie: einzelne Body-Kinder (Icon-Sprite, Tooltip-Layer) tragen
   // aria-hidden dauerhaft — nur der Zuwachs beweist den `.inert`-Modifier.
+  // Gezaehlt werden nur Kinder, die schon VOR dem Oeffnen dastanden: der
+  // Tooltip-Layer entsteht erst beim ersten Tooltip (auch mitten im Test) und
+  // ist von Haus aus aria-hidden, ohne dass der Trap ihn je angefasst hat.
+  await page.evaluate(() => {
+    for (const el of document.body.children) el.dataset.trapBaseline = '1';
+  });
   const countHidden = () => page.evaluate(() => Array.from(document.body.children)
-    .filter((el) => !el.classList.contains('palette-overlay')
+    .filter((el) => el.dataset.trapBaseline === '1'
+                    && !el.classList.contains('palette-overlay')
                     && el.getAttribute('aria-hidden') === 'true').length);
   const hiddenBefore = await countHidden();
 

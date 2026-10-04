@@ -334,12 +334,12 @@ export const crudMethods = {
       .map(r => {
         const otherId = r.from_motif_id === id ? r.to_motif_id : r.from_motif_id;
         const other = this.motifById(otherId);
-        return { ...r, outgoing: r.from_motif_id === id, otherName: other ? other.name : '?' };
+        return { ...r, outgoing: r.from_motif_id === id, otherId, otherName: other ? other.name : '?' };
       });
   },
 
   // ── Soll-Verknüpfungen (explizit gespeichert via Save/Cancel, kein Auto-Save) ─
-  // Die Chips bearbeiten lokale Puffer (editFigures/…); erst saveMotifEdit() schickt
+  // Die Referenz-Gruppen bearbeiten lokale Puffer (editFigures/…); erst saveMotifEdit() schickt
   // den Full-Replace aller fünf Brücken (ein Motiv-Save deckt Kern-Felder + Links).
   // kind (figures|draftFigures|beats|chapters|pages) → Puffer-Property.
   _linkBufKey(kind) {
@@ -349,7 +349,7 @@ export const crudMethods = {
   // `figId`, alle übrigen Brücken die INTEGER-`id`.
   _linkIdKey(kind) { return kind === 'figures' ? 'figId' : 'id'; },
   // Verknüpfungs-Puffer aus dem Motiv füllen (bei Auswahl/Cancel/nach Save). Kopien,
-  // damit Chip-Mutationen den Board-State nicht anfassen, bevor gespeichert wird.
+  // damit Puffer-Mutationen den Board-State nicht anfassen, bevor gespeichert wird.
   _loadLinkBuffer(m) {
     this.editFigures = m ? (m.figures || []).map(x => ({ ...x })) : [];
     this.editDraftFigures = m ? (m.draftFigures || []).map(x => ({ ...x })) : [];

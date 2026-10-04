@@ -152,12 +152,12 @@ test('dasselbe Werk in zwei Kapiteln erscheint einmal', async () => {
   const filler = 'Ein langer Satz mit vielen Woertern zum Fuellen des Kontingents. '.repeat(900);
   ctx.dbSeed.setBook({
     chapters: [
-      { id: 9014, book_id: BOOK_ID, name: 'Kap 1', priority: 1 },
-      { id: 9015, book_id: BOOK_ID, name: 'Kap 2', priority: 2 },
+      { id: 9014, book_id: BOOK_ID, name: 'Kap 1', position: 1 },
+      { id: 9015, book_id: BOOK_ID, name: 'Kap 2', position: 2 },
     ],
     pages: [
-      { id: 9024, book_id: BOOK_ID, chapter_id: 9014, name: 'S1', priority: 1, updated_at: '' },
-      { id: 9025, book_id: BOOK_ID, chapter_id: 9015, name: 'S2', priority: 2, updated_at: '' },
+      { id: 9024, book_id: BOOK_ID, chapter_id: 9014, name: 'S1', position: 1, updated_at: '' },
+      { id: 9025, book_id: BOOK_ID, chapter_id: 9015, name: 'S2', position: 2, updated_at: '' },
     ],
     pageBodies: { 9024: `<p>${filler}</p>`, 9025: `<p>${filler}</p>` },
   });
@@ -374,12 +374,12 @@ test('Kapitel-Scope durchsucht nur dieses Kapitel', async () => {
   const BOOK_ID = 908;
   ctx.dbSeed.setBook({
     chapters: [
-      { id: 9019, book_id: BOOK_ID, name: 'Kap A', priority: 1 },
-      { id: 9029, book_id: BOOK_ID, name: 'Kap B', priority: 2 },
+      { id: 9019, book_id: BOOK_ID, name: 'Kap A', position: 1 },
+      { id: 9029, book_id: BOOK_ID, name: 'Kap B', position: 2 },
     ],
     pages: [
-      { id: 9030, book_id: BOOK_ID, chapter_id: 9019, name: 'A1', priority: 1, updated_at: '' },
-      { id: 9031, book_id: BOOK_ID, chapter_id: 9029, name: 'B1', priority: 2, updated_at: '' },
+      { id: 9030, book_id: BOOK_ID, chapter_id: 9019, name: 'A1', position: 1, updated_at: '' },
+      { id: 9031, book_id: BOOK_ID, chapter_id: 9029, name: 'B1', position: 2, updated_at: '' },
     ],
     pageBodies: {
       9030: '<p>Nur in Kapitel A steht etwas. ' + 'Fuelltext. '.repeat(40) + '</p>',

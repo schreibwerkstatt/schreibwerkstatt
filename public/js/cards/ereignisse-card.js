@@ -150,12 +150,6 @@ export function registerEreignisseCard() {
       return [...seen].sort();
     },
 
-    // Klick-Helper: bei mehreren Kapiteln wäre `gotoStelle(kap[0], …)` falsch —
-    // der Template-Loop uebergibt darum das Kapitel der geklickten Marke selbst.
-    gotoEventKapitel(kapitelName, seite = null) {
-      window.__app.gotoStelle(kapitelName, seite);
-    },
-
     formatEventDate(ev) {
       return formatEventDateParts(ev, (k, p) => window.__app.t(k, p));
     },

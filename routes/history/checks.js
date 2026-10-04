@@ -110,7 +110,7 @@ function register(router) {
   // geprüft ist. Findings/Reviews bleiben weiterhin user-spezifisch.
   // "Pending" = jüngster Check hat Fehler, wurde weder geöffnet noch übernommen.
   // Wenn Korrekturen aus einem Check übernommen wurden, zählt saved_at — sonst
-  // würde das anschliessende BookStack-updated_at die Seite sofort wieder auf
+  // würde das anschliessende updated_at die Seite sofort wieder auf
   // "bearbeitet seit Lektorat" (warn) flippen.
   // `by` enthält die E-Mail des Editors, der den jüngsten Check gemacht hat
   // (oder null) — Frontend zeigt das als „geprüft von …" im Tooltip.

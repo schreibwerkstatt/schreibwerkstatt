@@ -26,7 +26,6 @@ export const focusMethods = {
 
   // Global Cmd/Ctrl+Shift+E-Hotkey. Läuft auf dem Body-Listener (siehe index.html),
   // damit der Fokusmodus auch aus dem Lesemodus heraus einschaltbar ist.
-  // Cmd+Shift+F ist für die BookStack-Volltextsuche reserviert.
   handleFocusHotkey(event) {
     if (!isFocusToggleChord(event)) return;
     if (!this.showEditorCard) return;

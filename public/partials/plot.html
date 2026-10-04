@@ -174,17 +174,17 @@
     <div class="plot-coverage-body" x-bind="panel" x-cloak>
       <div class="plot-coverage-group" x-show="figureCoverage().developedNoPlot.length">
         <span class="entity-meta-label" x-text="$app.t('plot.figcoverage.developedNoPlot', { n: figureCoverage().developedNoPlot.length })"></span>
-        <div class="plot-coverage-chips">
+        <div class="entity-refs">
           <template x-for="d in figureCoverage().developedNoPlot" :key="d.id">
-            <span class="tag tag--werkstatt internal-link" @click="$app.openWerkstattDraftById(d.id)" x-text="d.name"></span>
+            <button type="button" class="entity-ref" x-entity-ref="{ type: 'werkstatt', id: d.id, label: d.name }"></button>
           </template>
         </div>
       </div>
       <div class="plot-coverage-group" x-show="figureCoverage().inPlotNoArc.length">
         <span class="entity-meta-label" x-text="$app.t('plot.figcoverage.inPlotNoArc', { n: figureCoverage().inPlotNoArc.length })"></span>
-        <div class="plot-coverage-chips">
+        <div class="entity-refs">
           <template x-for="d in figureCoverage().inPlotNoArc" :key="d.id">
-            <span class="tag tag--werkstatt internal-link" @click="$app.openWerkstattDraftById(d.id)" x-text="d.name"></span>
+            <button type="button" class="entity-ref" x-entity-ref="{ type: 'werkstatt', id: d.id, label: d.name }"></button>
           </template>
         </div>
       </div>

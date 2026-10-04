@@ -30,7 +30,7 @@ import { observeThemeChange } from '../graph-kit.js';
 // (und ein Ereignis, dessen Datum NUR strukturiert vorliegt, bliebe ohne Datum).
 import { formatEventDateParts } from './ereignisse/date.js';
 import { subtypIcon } from './ereignisse/subtyp.js';
-import { typRank } from '../book/figur-typen.js';
+import { typRank, compareNames } from '../book/figur-typen.js';
 import { memoMethods } from './card-memo.js';
 
 // Pure Filter+Sort der Figurenliste. Aus dem memoized Wrapper extrahiert, damit
@@ -65,7 +65,7 @@ export function computeFilteredFiguren(figuren, chapterMap, { suche = '', kapite
     const aT = typRank(a.typ);
     const bT = typRank(b.typ);
     if (aT !== bT) return aT - bT;
-    return (a.name ?? '').localeCompare(b.name ?? '', 'de');
+    return compareNames(a.name, b.name);
   });
 }
 
@@ -160,6 +160,12 @@ export function registerFigurenCard() {
           // Schneller Folge-Buchwechsel: Ergebnis verwerfen, der neue
           // book:changed-Handler rendert.
           if (String(Alpine.store('nav').selectedBookId) !== String(bookId)) return;
+          // Buchwechsel ohne resetView (Hash-Navigation, Browser-Zurück): die Karte
+          // bleibt offen, der Reiter auch — dessen Daten fürs neue Buch nachladen.
+          if (ctx.figurenGraphModus === 'alter') ctx.ensureFigurenAlter();
+          else if (ctx.figurenGraphModus === 'lebenslauf') {
+            ctx.ensureFigurenAlter().then(() => ctx.figurenLebenslaufEnsureAuswahl());
+          }
           await ctx.$nextTick();
           ctx.renderFigurGraph();
         },
@@ -253,17 +259,23 @@ export function registerFigurenCard() {
 
     // UI-Helper: aus Comboboxen via x-effect mehrfach pro Render gerufen
     // (für _disabled + options). Memo auf Identität der Quell-Daten.
+    // Dep auch die Reihenfolge-Map: das Ergebnis sortiert nach
+    // root._chapterOrderMap (tree/build.js setzt sie bei jedem Build neu). Ohne
+    // sie bliebe nach Umsortieren — oder wenn die Figuren vor dem Tree ankommen —
+    // die alte Kapitelfolge in Heatmap, Graph-Achse und Filter stehen.
     figurenKapitelListe() {
+      const root = window.__app;
       const figuren = Alpine.store('catalog').figuren;
-      return this._memo('kapitel', [figuren],
-        () => window.__app._deriveKapitel(figuren, f => f.kapitel));
+      return this._memo('kapitel', [figuren, root._chapterOrderMap],
+        () => root._deriveKapitel(figuren, f => f.kapitel));
     },
 
     figurenSeitenListe() {
       // seiten = Array {kapitel, seite} — eigener Iterator (keine 1:1-Relation).
+      const root = window.__app;
       const figuren = Alpine.store('catalog').figuren;
       const kapitel = Alpine.store('catalogUi').figurenFilters.kapitel;
-      return this._memo('seiten', [figuren, kapitel], () => {
+      return this._memo('seiten', [figuren, kapitel, root._pageOrderMap], () => {
         if (!kapitel) return [];
         return window.__app._sortByPageOrder([...computeFigurenSeiten(figuren, kapitel)]);
       });

@@ -3,9 +3,10 @@
 //
 // Framework-frei und ohne Import: keine Alpine-Bindung, kein Host-Zugriff, kein
 // DOM-Modul. Konsumenten sind der Notebook-Editor (editor/notebook/history.js,
-// Alpine-Karte) und der Fokusmodus in einer fremden Schale
-// (editor/focus/standalone.js, WKWebView ohne Alpine). Beide bekommen eine
-// eigene Instanz, teilen aber diese eine Implementierung.
+// Alpine-Karte, inkl. SPA-Fokusmodus), der Fokusmodus in einer fremden Schale
+// (editor/focus/standalone.js, WKWebView ohne Alpine) und der Bucheditor
+// (cards/book-editor/history.js, eine Instanz pro Seite). Jeder bekommt eigene
+// Instanzen, alle teilen diese eine Implementierung.
 //
 // WARUM ÜBERHAUPT EIN EIGENER STACK (zwei unabhängige Gründe):
 //   1. Der browsereigene Stack kollabiert, sobald ein Editor-Modul `innerHTML`
@@ -36,6 +37,11 @@
 //                          nativen Clients.
 //   onRestored(el, snap) → optional, nach Mount + Caret + Fokus. Hier setzt der
 //                          Aufrufer sein Dirty-Flag und plant Draft/Autosave.
+//   onChange()           → optional, nach jeder Änderung an canUndo/canRedo
+//                          (Push, Debounce-Start, Undo, Redo, Reset, Clear).
+//                          Der Stack lebt in einer Closure und ist für ein
+//                          reaktives Framework unsichtbar — ohne diesen Hook
+//                          blieben gebundene Undo-/Redo-Buttons stehen.
 //
 // XSS: Snapshots stammen ausschliesslich aus `getRoot().innerHTML` — Inhalt, der
 // zuvor durch die Paste-Cleaner-Kette gelaufen ist. Kein externer String landet
@@ -58,6 +64,23 @@ export function captureCaretOffset(root) {
   pre.selectNodeContents(root);
   pre.setEnd(range.startContainer, range.startOffset);
   return pre.toString().length;
+}
+
+// Caret nach einem Restore: ans Ende des geänderten Bereichs im NEUEN Text —
+// bei einem Undo einer Eingabe also an die Einfügestelle, bei einem Redo hinter
+// das wiederhergestellte Stück. Der im Snapshot gemerkte Offset ist die
+// Position beim Aufnehmen des Ziel-Stands und taugt dafür nicht (die Baseline
+// hat 0 → jedes erste Undo sprang an den Seitenanfang). Nur bei unverändertem
+// Text (reine Formatierung) zählt der gemerkte Offset.
+export function changedCaretOffset(oldText, newText, fallback) {
+  if (oldText === newText) return fallback;
+  const max = Math.min(oldText.length, newText.length);
+  let pre = 0;
+  while (pre < max && oldText.charCodeAt(pre) === newText.charCodeAt(pre)) pre++;
+  let suf = 0;
+  while (suf < max - pre
+    && oldText.charCodeAt(oldText.length - 1 - suf) === newText.charCodeAt(newText.length - 1 - suf)) suf++;
+  return newText.length - suf;
 }
 
 export function restoreCaretAtOffset(root, offset) {
@@ -126,6 +149,7 @@ export function createEditHistory({
   getRoot,
   mountHtml,
   onRestored = null,
+  onChange = null,
   debounceMs = DEFAULT_DEBOUNCE_MS,
   max = DEFAULT_MAX,
 } = {}) {
@@ -144,6 +168,12 @@ export function createEditHistory({
     if (timer) { clearTimeout(timer); timer = null; }
   };
 
+  const notify = () => {
+    if (typeof onChange === 'function') {
+      try { onChange(); } catch { /* Aufrufer-Glue darf den Stack nicht kippen */ }
+    }
+  };
+
   function pushNow() {
     if (applying) return;
     cancelTimer();
@@ -156,6 +186,7 @@ export function createEditHistory({
     stack.push({ html, caretOffset: captureCaretOffset(el) });
     if (stack.length > max) stack.splice(0, stack.length - max);
     idx = stack.length - 1;
+    notify();
   }
 
   function restore(snap, inputType) {
@@ -163,8 +194,9 @@ export function createEditHistory({
     if (!el || !snap) return;
     applying = true;
     try {
+      const oldText = el.textContent || '';
       mountHtml(el, snap.html || '');
-      restoreCaretAtOffset(el, snap.caretOffset);
+      restoreCaretAtOffset(el, changedCaretOffset(oldText, el.textContent || '', snap.caretOffset));
       el.focus?.();
       if (typeof onRestored === 'function') {
         try { onRestored(el, snap); } catch { /* Aufrufer-Glue darf das Restore nicht kippen */ }
@@ -182,6 +214,7 @@ export function createEditHistory({
       stack = [{ html: html ?? '', caretOffset: 0 }];
       idx = 0;
       applying = false;
+      notify();
     },
 
     // Historie komplett verwerfen (Session-Ende / Unmount). NICHT beim Speichern
@@ -193,19 +226,26 @@ export function createEditHistory({
       stack = [];
       idx = -1;
       applying = false;
+      notify();
     },
 
     // Entprellt: eine Tipp-Serie wird zu EINEM Schritt.
     pushSoon() {
       if (applying) return;
+      const wasIdle = !timer;
       cancelTimer();
       timer = setTimeout(() => { timer = null; pushNow(); }, debounceMs);
+      // Offene Tipp-Strecke macht Undo schon jetzt möglich (siehe canUndo).
+      if (wasIdle) notify();
     },
 
     pushNow,
 
-    canUndo() { return idx > 0; },
-    canRedo() { return idx >= 0 && idx < stack.length - 1; },
+    // Offener Debounce zählt: undo() löst ihn zuerst ein, es gibt also einen
+    // Schritt — sonst wäre der Button die ersten 500 ms nach dem Tippen grau.
+    canUndo() { return idx > 0 || (idx >= 0 && timer !== null); },
+    // Offener Debounce schneidet den Redo-Ast beim Einlösen ab (siehe redo).
+    canRedo() { return timer === null && idx >= 0 && idx < stack.length - 1; },
 
     undo() {
       if (applying) return false;
@@ -215,14 +255,20 @@ export function createEditHistory({
       if (idx <= 0) return false;
       idx--;
       restore(stack[idx], 'historyUndo');
+      notify();
       return true;
     },
 
     redo() {
       if (applying) return false;
+      // Offenen Debounce zuerst einlösen: die frische Eingabe schneidet den
+      // Redo-Ast ab. Ohne das mountete Redo den alten Stand über die gerade
+      // getippte Strecke, und die wäre nicht mehr herstellbar.
+      if (timer) { cancelTimer(); pushNow(); }
       if (idx < 0 || idx >= stack.length - 1) return false;
       idx++;
       restore(stack[idx], 'historyRedo');
+      notify();
       return true;
     },
 

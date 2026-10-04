@@ -56,66 +56,54 @@
     </div>
     <p class="plot-beat-desc" x-show="beat.beschreibung" x-text="beat.beschreibung"></p>
     <div class="plot-beat-meta" x-show="beat.chapter_name || beat.zeit || (beat.fig_ids && beat.fig_ids.length) || (beat.draft_fig_ids && beat.draft_fig_ids.length) || (beat.motifs && beat.motifs.length) || (beat.locations && beat.locations.length) || inheritedChapterForBeat(beat) || inheritedFigureForBeat(beat)">
-      <span class="kapitel-badge kapitel-badge--primary internal-link" x-show="beat.chapter_name"
-            @click.stop="beat.chapter_name && $app.openKapitelByName(beat.chapter_name)"
-            x-text="beat.chapter_name"></span>
+      <button type="button" class="entity-ref" x-show="beat.chapter_name"
+              x-entity-ref="{ type: 'kapitel', id: beat.chapter_id, name: beat.chapter_name }"></button>
       <!-- Live-Vererbung Strang → Beat (nie auf den Beat geschrieben): Kapitel des
            Strangs, solange der Beat kein eigenes hat; Hauptfigur des Strangs, sofern
-           nicht schon explizit verlinkt. Gedämpft + gepunktet = „geerbt". -->
-      <span class="kapitel-badge kapitel-badge--inherited internal-link" x-show="inheritedChapterForBeat(beat)"
-            @click.stop="$app.openKapitelByName(inheritedChapterForBeat(beat))"
-            :data-tip="$app.t('plot.beat.inheritedChapter')"
-            x-text="inheritedChapterForBeat(beat)"></span>
-      <template x-if="inheritedFigureForBeat(beat)">
-        <span class="tag tag--inherited internal-link"
-              @click.stop="inheritedFigureForBeat(beat).kind === 'catalog' ? $app.openFigurById(inheritedFigureForBeat(beat).id) : $app.openWerkstattDraftById(inheritedFigureForBeat(beat).id)"
-              :data-tip="$app.t('plot.beat.inheritedFigure')"
-              x-text="inheritedFigureForBeat(beat).label"></span>
+           nicht schon explizit verlinkt. Gestrichelt = „geerbt". -->
+      <template x-if="inheritedChapterForBeat(beat)">
+        <button type="button" class="entity-ref"
+                x-entity-ref="{ type: 'kapitel', name: inheritedChapterForBeat(beat), inherited: true, title: $app.t('plot.beat.inheritedChapter') }"></button>
       </template>
-      <!-- Erzaehlte Zeit (Freitext). Nicht klickbar: sie zeigt auf kein Objekt,
+      <template x-if="inheritedFigureForBeat(beat)">
+        <button type="button" class="entity-ref"
+                x-entity-ref="{ type: inheritedFigureForBeat(beat).kind === 'catalog' ? 'figur' : 'werkstatt', id: inheritedFigureForBeat(beat).id, label: inheritedFigureForBeat(beat).label, inherited: true, title: $app.t('plot.beat.inheritedFigure') }"></button>
+      </template>
+      <!-- Erzaehlte Zeit (Freitext). Keine Referenz: sie zeigt auf kein Objekt,
            sondern ist eine Angabe ueber die Welt — die Pruefung dagegen laeuft
            in der Zeit-Messung (lib/plot-time-consistency.js). -->
       <span class="tag tag--zeit" x-show="beat.zeit"
             :data-tip="$app.t('plot.beat.zeitTip')"
             x-text="beat.zeit"></span>
-      <!-- Schauplaetze (plot_beat_locations): Klick springt in die Orte-Karte. -->
       <template x-for="lo in (beat.locations || [])" :key="'l' + lo.id">
-        <span class="tag tag--ort internal-link"
-              @click.stop="$app.openOrtById(lo.id)"
-              :data-tip="$app.t('plot.beat.ort')"
-              x-text="lo.name"></span>
+        <button type="button" class="entity-ref" x-entity-ref="{ type: 'ort', id: lo.id, label: lo.name }"></button>
       </template>
       <template x-for="figId in (beat.fig_ids || [])" :key="figId">
-        <span class="tag internal-link" @click.stop="$app.openFigurById(figId)"
-              x-text="$app.figurenById.get(figId)?.kurzname || $app.figurenById.get(figId)?.name || figId"></span>
+        <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: figId }"></button>
       </template>
       <template x-for="dfId in (beat.draft_fig_ids || [])" :key="'d' + dfId">
-        <span class="tag tag--werkstatt internal-link" @click.stop="$app.openWerkstattDraftById(dfId)"
-              :data-tip="$app.t('plot.beat.werkstattFiguren')"
-              x-text="draftFigurenById.get(dfId)?.name || dfId"></span>
+        <button type="button" class="entity-ref"
+                x-entity-ref="{ type: 'werkstatt', id: dfId, label: draftFigurenById.get(dfId)?.name }"></button>
       </template>
-      <!-- Motiv-Badges (read-only): Soll-Verknüpfung aus der Motiv-Werkstatt (motif_beats).
+      <!-- Motive (read-only): Soll-Verknüpfung aus der Motiv-Werkstatt (motif_beats).
            Kuratiert wird sie dort; Klick springt in die Motiv-Werkstatt zum Motiv. -->
       <template x-for="mo in (beat.motifs || [])" :key="'m' + mo.id">
-        <span class="tag tag--motif internal-link" :style="{ '--motif-accent': motifAccent(mo) }"
-              @click.stop="$app.openMotifById(mo.id)"
-              :data-tip="$app.t('plot.beat.motif')"
-              x-text="mo.name"></span>
+        <button type="button" class="entity-ref" x-entity-ref="{ type: 'motiv', id: mo.id, label: mo.name }"></button>
       </template>
     </div>
-    <!-- Ideen-Plaketten: eigene Pendenzen, die an diesem Beat haengen. Read-only
+    <!-- Ideen-Referenzen: eigene Pendenzen, die an diesem Beat haengen. Read-only
          (gesetzt wird die Kante auf der Ideen-Seite) — gleiche Bauart wie die
-         Motiv-Badges darueber. -->
+         Motiv-Referenzen darueber. -->
     <div x-data="{ ideaOwnerId: beat.id }"><!-- @include ideen-backlinks --></div>
 
     <!-- Beat-zu-Beat-Beziehungen (ausgehend): Kausal-/Setup-Payoff-Kanten, read-only.
          Klick springt zum Ziel-Beat (scrollToBeat). Kuratiert wird im Bearbeiten-Modus. -->
     <div class="plot-beat-rels" x-show="beatRelationsOut(beat).length">
       <template x-for="rel in beatRelationsOut(beat)" :key="rel.id">
-        <span class="plot-beat-rel internal-link" @click.stop="scrollToBeat(rel.to_beat_id)"
-              :data-tip="relTypeLabel(rel.typ) + ': ' + relTargetTitle(rel)">
+        <span class="plot-beat-rel">
           <span class="plot-beat-rel-typ" x-text="relTypeLabel(rel.typ)"></span>
-          <span class="plot-beat-rel-target" x-text="relTargetTitle(rel)"></span>
+          <button type="button" class="entity-ref"
+                  x-entity-ref="{ type: 'beat', id: rel.to_beat_id, label: relTargetTitle(rel), onOpen: () => scrollToBeat(rel.to_beat_id) }"></button>
         </span>
       </template>
     </div>

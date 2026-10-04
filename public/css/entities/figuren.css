@@ -162,19 +162,7 @@
 .figur-zitate-list .figur-zitat::before { content: none; }
 
 /* === Figuren: Beziehungs-Belege === */
-.figur-bz-belege {
-  display: inline-flex;
-  gap: var(--space-xs);
-  flex-wrap: wrap;
-  margin-left: var(--space-6);
-}
-.figur-bz-beleg {
-  font-size: var(--font-size-xs);
-  padding: var(--space-1) var(--space-6);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--color-border) 20%, var(--color-surface));
-  color: var(--color-muted);
-}
+.figur-bz-belege { margin-left: var(--space-6); }
 
 /* === Figuren: Listen-Bereich === */
 /* Verhindert Scroll-Anchoring im Listen-Bereich: wenn figur-detail aufklappt,
@@ -236,11 +224,6 @@
 
 .figur-bz-list { margin-bottom: var(--space-sm); }
 
-.figur-bz-name {
-  font-size: var(--font-size-sm);
-  font-weight: var(--fw-regular);
-}
-
 .internal-link {
   cursor: pointer;
 }
@@ -251,13 +234,6 @@
 .internal-link:focus-visible {
   outline: 2px solid var(--color-text);
   outline-offset: 2px;
-  text-decoration: underline;
-}
-/* Dark-badge links: hover via background-shift instead of opacity (contrast: ~5.7:1) */
-.kapitel-badge--primary.internal-link:hover,
-.gz-kapitel-link.internal-link:hover {
-  opacity: 1;
-  background: var(--color-muted);
   text-decoration: underline;
 }
 
@@ -456,7 +432,14 @@
   flex: 1;
 }
 
-.figur-rel-tag {
+/* Verwandtschaft: Pfeil-Glyphe vor der Figuren-Referenz. */
+.figur-rel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+.figur-rel-mark {
+  color: var(--color-muted);
   font-size: var(--font-size-xs);
 }
 
@@ -500,8 +483,8 @@
 .figur-bz-macht--positiv { color: var(--color-primary); }
 .figur-bz-macht--negativ { color: var(--color-err-border); }
 
-/* Die Kapitel-Plaketten selbst sind eine geteilte Komponente
-   (components/kapitel-badges.css); hier steht nur, was am Detail-Block der
+/* Die Kapitel-Referenzen selbst sind die geteilte Komponente
+   (components/entity-ref.css); hier steht nur, was am Detail-Block der
    Figur haengt. */
 @media (max-width: 480px) {
   .figur-kapitelauftritte { display: none; }

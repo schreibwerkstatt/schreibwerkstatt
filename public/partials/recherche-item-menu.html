@@ -4,14 +4,17 @@
      Content nicht. Beide Kontexte nennen das Fundstueck `item`, das Markup ist
      darum wortgleich teilbar; `menuOpenId` ist die geteilte Karten-SSoT.
      Erwartet einen Vorfahren mit `position: relative` (.research-item-actions)
-     — .context-menu--dropdown positioniert absolut. -->
+     — .context-menu--dropdown positioniert absolut.
+     Die Board-Karte (menuCtx 'status') traegt weder Link-Picker noch
+     KI-Vorschlaege (recherche-item-relations) — dort oeffnen beide Eintraege
+     zuerst die Detailansicht, in der beides sitzt. -->
 <button type="button" class="icon-btn" @click.stop="menuOpenId = (menuOpenId === menuCtx + ':' + item.id ? null : menuCtx + ':' + item.id)" :disabled="busy" :aria-label="$app.t('recherche.actions')" aria-haspopup="menu"><svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg></button>
 <div class="context-menu context-menu--dropdown" x-show="menuOpenId === menuCtx + ':' + item.id" x-cloak @click.outside="menuOpenId = null" @keydown.escape.window="menuOpenId = null" role="menu">
-  <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="menuOpenId = null; openLinkPicker(item)">
+  <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="menuOpenId = null; if (menuCtx === 'status') openDetail(item); openLinkPicker(item)">
     <svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"/></svg>
     <span x-text="$app.t('recherche.link.add')"></span>
   </button>
-  <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="suggestLinks(item)" :disabled="busy || suggestItemId === item.id">
+  <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="if (menuCtx === 'status') openDetail(item); suggestLinks(item)" :disabled="busy || suggestItemId === item.id">
     <svg class="icon" aria-hidden="true"><use href="/icons.svg#zap"/></svg>
     <span x-text="$app.t('recherche.suggest.btn')"></span>
   </button>

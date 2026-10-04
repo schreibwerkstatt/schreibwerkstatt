@@ -16,7 +16,7 @@ Knopfdruck und liest den heutigen Text; er läuft bewusst **nicht** im Nacht-Cro
 | # | Wer | Was | Wo |
 |---|-----|-----|----|
 | 1 | deterministisch | **Kandidatensätze**: Muster (Ziffer, Zahlwort, Ordinal-Geburtstag, Geburtsjahr in beiden Leserichtungen, englische Formen) + Figurenname im Satzfenster, inkl. Pronomen-Anschluss aus dem Vorsatz | [lib/figure-age/patterns.js](../lib/figure-age/patterns.js), [scan.js](../lib/figure-age/scan.js) |
-| 1b | deterministisch | **semantische Nachlese** (`semanticQuery`) für Figuren, bei denen die Muster wenig finden — „wie alt ist X" trifft ein Embedding-Index besser als eine Wortsuche. Non-fatal ohne Index | [routes/jobs/figur-alter.js](../routes/jobs/figur-alter.js) |
+| 1b | deterministisch | **semantische Nachlese** (`semanticQuery`) für Figuren, bei denen die Muster wenig finden — „wie alt ist X" trifft ein Embedding-Index besser als eine Wortsuche. Die Passage (bis ~1500 Zeichen) wird per `passageStellen` auf den **Satz mit der Angabe** zugeschnitten, nicht auf ihren Anfang; die Figur muss in der Passage genannt sein. Non-fatal ohne Index | [routes/jobs/figur-alter.js](../routes/jobs/figur-alter.js) |
 | 2 | Modell | **was behaupten diese Sätze** — ein Call pro Figuren-Bündel. Nur das Modell sieht, dass „an ihrem sechzehnten Geburtstag" ein Alter nennt und „1912 kehrte sie zurück" nur ein Bezugsjahr | [prompts/figur-alter.js](../public/js/prompts/figur-alter.js) |
 | 3 | deterministisch | **Zitat nachschlagen, Zahl prüfen, Spanne bilden, Widerspruch melden** | [lib/figure-age/consolidate.js](../lib/figure-age/consolidate.js) |
 
@@ -35,8 +35,29 @@ was im vorgelegten Satz **steht** — samt wörtlichem Zitat.
    als Zahlwort (`numbersIn`). Ohne diese Prüfung wandern gerechnete und geratene
    Werte als „belegt" in die Tabelle.
 
-Beide Verwerfungs-Zähler stehen im Job-Ergebnis (`verworfen.zitat` / `.zahl` / `.figur`)
-und im Log — ein stiller Filter liest sich wie „mehr gab es nicht".
+Davor fallen Zitate unter acht Zeichen (ein blosses „zwölf" steht in jeder Stelle) und
+unplausible Werte (`isPlausibleWert`: Alter 0–130, Geburts-/Todesjahr 1000–2999 — ein
+„Geburtsjahr 12" ergäbe sonst ein gerechnetes Alter von 1900 Jahren). Der unbestimmte
+Artikel („ein", „eine", „einen" …) zählt in `numbersIn` nicht als Eins.
+
+Die Verwerfungs-Zähler stehen im Job-Ergebnis (`verworfen.zitat` / `.zahl` / `.wert` /
+`.figur`) und im Log — ein stiller Filter liest sich wie „mehr gab es nicht".
+
+## Satzfenster
+
+`splitSentences` schneidet **nicht** an einem Punkt hinter einer ein- bis dreistelligen
+Zahl vor einem Wort („am 3. Mai 1850", „zum 40. Geburtstag") und nicht hinter Abkürzungen
+und Initialen („geb. 1850", „Dr. Berg") — genau dort stehen Geburts- und Altersangaben.
+Eine Jahreszahl am Satzende bleibt eine Grenze. Ordinal-Geburtstage werden als ganzes
+Wort zerlegt („dritten", „ersten", „zwanzigsten", „einundzwanzigsten").
+
+## Bündel und Abbruch
+
+Ein Bündel, das am Output-Cap reisst (`aiTruncated`), wird halbiert und erneut gestellt;
+erst eine einzelne Figur, die allein nicht passt, beendet den Lauf mit Fehler. Ein
+**Abbruch wirft** an jeder Schleife und unmittelbar vor dem Schreiben — der Lauf endet
+`cancelled`, und der vorige Index bleibt stehen (ein Teilstand darf den Full-Replace nie
+auslösen).
 
 ## Der gerechnete Wert hängt am Ankerjahr der Figur
 
@@ -53,6 +74,8 @@ Die buchweite Jahresspanne (`bookYearSpan`) ist deshalb **nur Rahmen für den
 Prompt** und geht nicht in die Verdichtung ein.
 
 ## Datenmodell (abgeleiteter Index, Full-Replace pro Lauf)
+
+Ein Lauf ersetzt nur die Zeilen der **eigenen** Figuren (`figures.user_email`) — Figuren und Lauf-Kopf sind pro (Buch, User), ein buchweites Löschen räumte in einem geteilten Buch die Tabelle der anderen Mitarbeitenden ab.
 
 - `figure_ages` — **eine Zeile pro Figur**: Altersspanne, Bezugsjahre, Geburtsjahr +
   dessen Quelle, `gerechnet`, Konfidenz, `widerspruch_json`.
@@ -89,6 +112,8 @@ wurde, müsste sonst aktiv gelöscht werden — und genau das vergisst man.
 - **Ohne Alter kein Bezugsjahr.** `jahr_im_roman` fällt für eine undatierte Figur
   auf das späteste Jahr des Buchs zurück; neben „unbekannt" wäre diese Jahreszahl
   eine Scheinantwort.
+- **Zwei verschiedene Geburtsjahre im Text sind ein Befund** (`widerspruch.typ =
+  'geburtsjahrText'`), genau wie die Abweichung vom Steckbrief. Gezählt wird das erste.
 - **„Alter sinkt im Buchverlauf" ist ein Hinweis, kein Fehler.** Rückblenden sind
   legitim. Das Badge heisst darum `prüfen`, nicht „falsch".
 - **Nur die Zeitlinien-Achse ist gegated.** Der gerechnete Wert setzt
@@ -111,7 +136,8 @@ wurde, müsste sonst aktiv gelöscht werden — und genau das vergisst man.
   `id` nach vorne gibt.
 - Analysieren: `POST /jobs/figur-alter` (ab `editor`, `force: true` überspringt den
   Delta-Skip — manuell ausgelöst heisst „ich will jetzt eine Zahl sehen").
-- Tests: [tests/unit/figure-age.test.js](../tests/unit/figure-age.test.js) (reine
+- Tests: [tests/unit/figure-age.test.js](../tests/unit/figure-age.test.js) +
+  [figure-age-befunde.test.js](../tests/unit/figure-age-befunde.test.js) (reine
   Schichten), [tests/integration/figur-alter.test.js](../tests/integration/figur-alter.test.js)
   (Naht der drei Schichten mit Mock-AI, inkl. der beiden Prüfungen),
   [tests/e2e-app/figuren-alter.spec.js](../tests/e2e-app/figuren-alter.spec.js)

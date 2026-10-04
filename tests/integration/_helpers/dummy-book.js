@@ -41,7 +41,7 @@ function buildDummyBookFixture(bookId) {
       book_id: bookId,
       name: chap.title,
       updated_at: PAGE_UPDATED_AT,
-      priority: chapIndex,
+      position: chapIndex,
     });
     idMap.chapters[chapIndex] = chapterId;
 
@@ -54,7 +54,7 @@ function buildDummyBookFixture(bookId) {
         chapter_id: chapterId,
         name: page.title,
         updated_at: PAGE_UPDATED_AT,
-        priority: pageIndex,
+        position: pageIndex,
       });
       pageBodies[pageId] = _mdToHtml(page.markdown);
       idMap.pages[`${chapIndex}.${pageIndex}`] = pageId;

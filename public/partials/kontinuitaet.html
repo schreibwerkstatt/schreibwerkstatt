@@ -104,23 +104,13 @@
                     :class="'severity-tag--' + (issue.schwere || 'niedrig')"
                     x-text="$app.t('kontinuitaet.severity.' + (issue.schwere || 'niedrig'))"></span>
               <span class="tag entity-typ-tag" x-text="kontinuitaetTypLabel(issue.typ)"></span>
-              <span class="kontinuitaet-row-stellen">
-                <template x-if="kontinuitaetResolveStelle(issue.stelle_a, issue, 'a')">
-                  <span class="kapitel-badge kapitel-badge--primary internal-link"
-                        :data-tip="$app.t('kontinuitaet.gotoTitle', { name: kontinuitaetResolveStelle(issue.stelle_a, issue, 'a').name })"
-                        @click.stop="kontinuitaetGotoStelle(issue.stelle_a, issue, 'a')" x-text="issue.stelle_a"></span>
-                </template>
-                <template x-if="!kontinuitaetResolveStelle(issue.stelle_a, issue, 'a')">
-                  <span class="kapitel-badge kapitel-badge--primary" x-text="issue.stelle_a"></span>
-                </template>
+              <span class="kontinuitaet-row-stellen entity-refs">
+                <button type="button" class="entity-ref"
+                        x-entity-ref="kontinuitaetStelleRef(issue.stelle_a, issue, 'a')"></button>
                 <span class="kontinuitaet-arrow" x-show="issue.stelle_b">↔</span>
-                <template x-if="issue.stelle_b && kontinuitaetResolveStelle(issue.stelle_b, issue, 'b')">
-                  <span class="kapitel-badge kapitel-badge--primary internal-link"
-                        :data-tip="$app.t('kontinuitaet.gotoTitle', { name: kontinuitaetResolveStelle(issue.stelle_b, issue, 'b').name })"
-                        @click.stop="kontinuitaetGotoStelle(issue.stelle_b, issue, 'b')" x-text="issue.stelle_b"></span>
-                </template>
-                <template x-if="issue.stelle_b && !kontinuitaetResolveStelle(issue.stelle_b, issue, 'b')">
-                  <span class="kapitel-badge kapitel-badge--secondary" x-text="issue.stelle_b"></span>
+                <template x-if="issue.stelle_b">
+                  <button type="button" class="entity-ref"
+                          x-entity-ref="kontinuitaetStelleRef(issue.stelle_b, issue, 'b')"></button>
                 </template>
               </span>
               <span x-show="issue.resolved" class="kontinuitaet-resolved-badge" x-text="$app.t('kontinuitaet.resolved')"></span>

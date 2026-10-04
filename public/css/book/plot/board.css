@@ -418,52 +418,10 @@
     color: var(--color-muted);
     margin-top: var(--space-2xs);
   }
-  /* Gewählte Figuren des Beat-Edits als entfernbare Chips unter der Combobox. */
-  .plot-fig-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2xs);
-    margin-top: var(--space-2xs);
-  }
-  .plot-fig-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .plot-fig-chip-remove {
-    display: inline-flex;
-    padding: 0;
-    color: var(--color-muted);
-  }
-  .plot-fig-chip-remove:hover { background: transparent; color: var(--color-text); }
-  .plot-fig-chip-remove .icon { width: 12px; height: 12px; }
-  /* Werkstatt-Chip (draft_figures) vom Katalog absetzen: gestrichelter Rahmen
-     = „in Entwicklung, evtl. noch nicht im Manuskript", eigener Werkstatt-Akzent. */
-  .plot-fig-chip.tag--werkstatt { border: 1px dashed var(--card-accent-werkstatt); }
-  /* Motiv-Chip im Beat-Edit: gleicher Left-Accent wie das read-only Motiv-Badge. */
-  .plot-fig-chip.tag--motif { border-left: 3px solid var(--card-accent-motiv); }
-  /* Werkstatt-Badge im Beat-Meta (Ansichtsmodus). */
-  .plot-beat-meta .tag--werkstatt { border: 1px dashed var(--card-accent-werkstatt); }
-  /* Motiv-Badge im Beat-Meta: read-only Soll-Verknüpfung aus der Motiv-Werkstatt.
-     Farb-Akzent (eigene/Themen-Palette, sonst Motiv-Werkstatt-Akzent) via
-     --motif-accent (im Markup gesetzt); Punkt-Marker setzt es visuell vom
-     Katalog-/Werkstatt-Tag ab, ohne eine neue Badge-Form einzuführen. */
-  .plot-beat-meta .tag--motif {
-    border-left: 3px solid var(--motif-accent, var(--card-accent-motiv));
-  }
-  /* Schauplatz-Badge: Akzent-Streifen wie beim Motiv, in der Farbe der Orte-
-     Karte — die Kante signalisiert das Ziel des Klicks. Die erzaehlte Zeit
-     bekommt keine, weil sie auf kein Objekt zeigt. */
-  .plot-beat-meta .tag--ort,
-  .plot-fig-chip.tag--ort { border-left: 3px solid var(--card-accent-orte, var(--color-accent)); }
+  /* Gewählte Verknüpfungen des Beat-Edits (Referenz-Gruppen mit Entfernen-Knopf)
+     unter dem jeweiligen Picker. */
+  .plot-edit-refs { margin-top: var(--space-2xs); }
   .plot-beat-meta .tag--zeit { font-variant-numeric: tabular-nums; color: var(--color-muted); }
-  /* Live-Vererbung Strang → Beat (nie gespeichert): gedämpft + gepunktet. */
-  .plot-beat-meta .tag--inherited,
-  .plot-beat-meta .kapitel-badge--inherited {
-    background: transparent;
-    color: var(--color-muted);
-    border: 1px dotted var(--color-border-input);
-  }
   .plot-beat-edit-actions {
     display: flex;
     align-items: center;

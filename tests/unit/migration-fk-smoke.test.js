@@ -146,7 +146,7 @@ test('Snapshot-Spalten verboten (CLAUDE.md "Snapshot-Spalten verboten")', () => 
   const TOLERATED = new Set([
     'continuity_issue_figures.figur_name',
     'continuity_issue_chapters.kapitel',
-    // chat_sessions.page_name: Snapshot von BookStack-Seitennamen, da chat
+    // chat_sessions.page_name: Snapshot von Seitennamen, da chat
     // auch nach Page-Löschung lesbar bleiben soll. Bewusst toleriert.
     'chat_sessions.page_name',
     // page_deletions.page_name: Audit-Name der geloeschten Seite fuer den

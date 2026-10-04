@@ -378,6 +378,52 @@ test('Schauplatz-Merge: geteilte Szene kollidiert nicht', () => {
   assert.ok(fkClean());
 });
 
+test('Schauplatz-Merge: Plot-Beat-Verknüpfungen wandern mit (kein CASCADE-Verlust)', () => {
+  const book = newBook();
+  const src = addOrt(book, 'ort_1', 'Mühle');
+  const tgt = addOrt(book, 'ort_2', 'Alte Mühle');
+  const act = db.prepare("INSERT INTO plot_acts (book_id, user_email, name, position) VALUES (?, ?, 'Akt', 0)").run(book, USER).lastInsertRowid;
+  const beat = db.prepare("INSERT INTO plot_beats (book_id, act_id, user_email, titel) VALUES (?, ?, ?, 'Beat')").run(book, act, USER).lastInsertRowid;
+  const both = db.prepare("INSERT INTO plot_beats (book_id, act_id, user_email, titel) VALUES (?, ?, ?, 'Beat 2')").run(book, act, USER).lastInsertRowid;
+  db.prepare('INSERT INTO plot_beat_locations (beat_id, location_id) VALUES (?, ?)').run(beat, src);
+  db.prepare('INSERT INTO plot_beat_locations (beat_id, location_id) VALUES (?, ?)').run(both, src);
+  db.prepare('INSERT INTO plot_beat_locations (beat_id, location_id) VALUES (?, ?)').run(both, tgt);
+
+  mergeLocations(book, USER, src, tgt);
+
+  const rows = db.prepare('SELECT beat_id FROM plot_beat_locations WHERE location_id = ? ORDER BY beat_id').all(tgt).map(r => r.beat_id);
+  assert.deepEqual(rows, [beat, both].sort((a, b) => a - b));
+  assert.ok(fkClean());
+});
+
+test('Schauplatz-Merge: Unterorte der Quelle hängen danach am Ziel, kein Zyklus', () => {
+  const book = newBook();
+  const stadt = addOrt(book, 'ort_0', 'Olten');
+  const src = addOrt(book, 'ort_1', 'Hotel Krone', { parent_id: stadt });
+  const kind = addOrt(book, 'ort_2', 'Gaststube', { parent_id: src });
+  // Ziel liegt UNTER der Quelle — nach dem Merge darf es nicht auf sich selbst zeigen.
+  const tgt = addOrt(book, 'ort_3', 'Krone', { parent_id: src });
+
+  mergeLocations(book, USER, src, tgt);
+
+  const parentOf = (id) => db.prepare('SELECT parent_id p FROM locations WHERE id = ?').get(id).p;
+  assert.equal(parentOf(kind), tgt, 'Kind der Quelle hängt am Ziel');
+  assert.equal(parentOf(tgt), stadt, 'Ziel rückt an den Platz der Quelle');
+  assert.ok(fkClean());
+});
+
+test('Schauplatz-Merge: Elternort der Quelle wird nicht übernommen, wenn er ein Nachfahre des Ziels ist', () => {
+  const book = newBook();
+  const tgt = addOrt(book, 'ort_1', 'Stadt');
+  const unter = addOrt(book, 'ort_2', 'Quartier', { parent_id: tgt });
+  const src = addOrt(book, 'ort_3', 'Stadt (alt)', { parent_id: unter });
+
+  mergeLocations(book, USER, src, tgt);
+
+  assert.equal(db.prepare('SELECT parent_id p FROM locations WHERE id = ?').get(tgt).p, null);
+  assert.ok(fkClean());
+});
+
 test('Szenen-Merge: Figuren/Orte/Songs/Recherche wandern, Quelle weg', () => {
   const book = newBook();
   const ch = addChapter(book, 'Kapitel 1');
