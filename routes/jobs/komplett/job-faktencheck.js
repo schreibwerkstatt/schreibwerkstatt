@@ -15,6 +15,7 @@
 const {
   db,
   getBookSettings, saveFaktencheckIssues,
+  listWorldFacts, getFactVerdicts, saveFactVerdicts, worldFactKey, faktenfehlerIssues,
 } = require('../../../db/schema');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
@@ -28,7 +29,7 @@ const { setContext } = require('../../../lib/log-context');
 const { makePhaseTimer } = require('./utils');
 const { COST_LABEL, costTier } = require('./cost-labels');
 const { _komplettAiOverrides } = require('./job-shared');
-const { chapterIdsByName, listWorldFactsWithChapterNames } = require('../../../db/content-names');
+const { chapterIdsByName } = require('../../../db/content-names');
 const retrieval = require('../../../lib/semantic-retrieval');
 
 // Modellname für den Cost-Ledger / Check-Zeile (parallel zu _modelName in remap.js).
@@ -40,12 +41,18 @@ function _factcheckModelName(provider) {
 
 // Anthropics serverseitiges Web-Such-Tool (dieselbe Version wie im Recherche-Chat).
 // max_uses moderat je Kandidat — meist reicht 1–2 Suchen, um ein Datum/eine Angabe zu belegen.
-const WEB_SEARCH_TOOL = { type: 'web_search_20250305', name: 'web_search', max_uses: 4 };
+const WEB_SEARCH_TOOL = { type: 'web_search_20250305', name: 'web_search', max_uses: 3 };
 
 // Nur welt-externe, überprüfbare Kategorien. figur/objekt/organisation/regel/soziolekt/zeit
 // sind entweder fiktions-intern oder keine prüfbaren Tatsachenbehauptungen über die reale Welt.
-const FACTCHECK_CATEGORIES = ['historie', 'ereignis', 'technik', 'kultur', 'ort'];
+// `ort` nur, wenn das Buch reale Schauplätze deklariert (book_settings.orte_real) — ein
+// erfundener Ort ist nicht falsch, und jede Prüfung kostet Web-Suchen.
+const FACTCHECK_CATEGORIES = ['historie', 'ereignis', 'technik', 'kultur'];
 const _FACTCHECK_CANDIDATE_CAP = 20;
+// Parallele Judge-Calls: eigener, niedriger Deckel statt phase1_concurrency (bis 16) —
+// jeder Call kann mehrere Web-Suchen auslösen.
+const _FACTCHECK_MAX_CONCURRENCY = 4;
+const _URTEILE = new Set(['korrekt', 'falsch', 'unklar']);
 // Server-Tool-Turns, die die API pausiert (langlaufende Suche) → begrenzte Fortsetzung.
 const _MAX_JUDGE_TURNS = 3;
 
@@ -67,22 +74,51 @@ function _narrativeYearSpan(bookIdInt, email) {
 }
 
 /** Deterministische Kandidatenliste (KEIN KI-Call). Leer, wenn das Opt-in-Flag aus ist —
- *  dann entfällt der ganze Job. Jeder Kandidat trägt seine Kapitel-Namen (aus
- *  world_fact_chapters → chapters) für die Kontinuitäts-Verlinkung. Auf _FACTCHECK_CANDIDATE_CAP
- *  gedeckelt (Web-Suche ist teuer); Überhang wird als Warnung gemeldet. */
+ *  dann entfällt der ganze Job.
+ *
+ *  - Eine Aussage = ein Kandidat (normalisierter Aussage-Schlüssel, db/world-facts.js#factKey),
+ *    Kapitel aller Fundstellen vereinigt.
+ *  - Bereits als «korrekt»/«falsch» geurteilte Aussagen (world_fact_verdicts) werden nicht
+ *    erneut geprüft; «unklar» kommt nach den ungeprüften dran, älteste zuerst. So prüft ein
+ *    zweiter Lauf die nächsten Fakten statt dieselben.
+ *  - Auf _FACTCHECK_CANDIDATE_CAP gedeckelt (Web-Suche ist teuer).
+ *
+ *  @returns {{ candidates, total, pending, facts }} total = prüfbare Aussagen, pending = davon
+ *           noch ohne festes Urteil, facts = Map key → { kapitel[] } aller prüfbaren Aussagen. */
 function buildFactCheckCandidates(bookIdInt, email) {
-  const { weltfakten_real_pruefen } = getBookSettings(bookIdInt, email);
-  if (!weltfakten_real_pruefen) return { candidates: [], total: 0 };
-  const rows = listWorldFactsWithChapterNames(bookIdInt, email, FACTCHECK_CATEGORIES);
-  // Bridge-Zeilen (1 je Kapitel) zu einem Kandidaten je Fakt gruppieren.
-  const byId = new Map();
-  for (const r of rows) {
-    let e = byId.get(r.id);
-    if (!e) { e = { id: r.id, kategorie: r.kategorie, subjekt: r.subjekt || '', fakt: r.fakt || '', kapitel: [] }; byId.set(r.id, e); }
-    if (r.chapter_name && !e.kapitel.includes(r.chapter_name)) e.kapitel.push(r.chapter_name);
+  const { weltfakten_real_pruefen, orte_real } = getBookSettings(bookIdInt, email);
+  if (!weltfakten_real_pruefen) return { candidates: [], total: 0, pending: 0, facts: new Map() };
+  const kategorien = orte_real ? [...FACTCHECK_CATEGORIES, 'ort'] : FACTCHECK_CATEGORIES;
+  const byKey = new Map();
+  for (const f of listWorldFacts(bookIdInt, email, { kategorien })) {
+    if (!String(f.fakt || '').trim()) continue;
+    const key = worldFactKey(f.subjekt, f.fakt);
+    let e = byKey.get(key);
+    if (!e) {
+      e = { id: f.id, key, kategorie: f.kategorie, subjekt: f.subjekt || '', fakt: f.fakt || '', kapitel: [] };
+      byKey.set(key, e);
+    }
+    for (const k of f.kapitel || []) if (!e.kapitel.includes(k)) e.kapitel.push(k);
   }
-  const all = [...byId.values()].filter(c => c.fakt.trim());
-  return { candidates: all.slice(0, _FACTCHECK_CANDIDATE_CAP), total: all.length };
+  const verdicts = getFactVerdicts(bookIdInt, email);
+  const all = [...byKey.values()];
+  const fresh = all.filter(c => !verdicts.has(c.key));
+  const unklar = all.filter(c => verdicts.get(c.key)?.urteil === 'unklar')
+    .sort((a, b) => String(verdicts.get(a.key).checked_at).localeCompare(String(verdicts.get(b.key).checked_at)));
+  const pendingList = [...fresh, ...unklar];
+  return {
+    candidates: pendingList.slice(0, _FACTCHECK_CANDIDATE_CAP),
+    total: all.length,
+    pending: pendingList.length,
+    facts: byKey,
+  };
+}
+
+/** Prüft ein geparstes Judge-Urteil. Wirft bei unbrauchbarem Urteil — ein kaputtes
+ *  Urteil ist ein ungeprüfter Fakt (zählt in factcheckJudgeFailed), kein «korrekter». */
+function _validVerdict(v) {
+  if (!v || typeof v !== 'object' || !_URTEILE.has(v.urteil)) throw i18nError('job.error.factcheckVerdictInvalid');
+  return v;
 }
 
 // Ein Judge-Call mit Web-Suche. Server-Tool-Turns können pausieren (`pause_turn`) → begrenzt
@@ -119,6 +155,8 @@ async function _judgeOneFact(tok, userPrompt, systemPrompt, signal, callTools = 
     }
     if (r.text) text = r.text;
     if (r.stopReason === 'pause_turn') {
+      // Letzte erlaubte Runde noch pausiert: es gibt kein Urteil, nur Such-Zwischenstand.
+      if (turn === _MAX_JUDGE_TURNS - 1) throw i18nError('job.error.factcheckVerdictInvalid');
       messages.push({ role: 'assistant', content: r.rawContentBlocks });
       continue;
     }
@@ -187,24 +225,18 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
     const systemPrompt = prompts.SYSTEM_FAKTENCHECK;
 
     updateJob(jobId, { statusText: 'job.phase.factcheckCandidates', progress: 5 });
-    const { candidates, total } = buildFactCheckCandidates(bookIdInt, email);
+    const { candidates, total, pending, facts } = buildFactCheckCandidates(bookIdInt, email);
     const warnings = [];
-    if (total > candidates.length) {
-      warnings.push({ key: 'job.warn.factcheckCapped', params: { checked: candidates.length, total } });
-      log.info(`Faktencheck: ${candidates.length}/${total} Welt-Fakten geprüft (Cap ${_FACTCHECK_CANDIDATE_CAP}).`);
+    if (pending > candidates.length) {
+      warnings.push({ key: 'job.warn.factcheckCapped', params: { checked: candidates.length, total: pending } });
+      log.info(`Faktencheck: ${candidates.length}/${pending} offene Welt-Fakten geprüft (Cap ${_FACTCHECK_CANDIDATE_CAP}, ${total} prüfbar).`);
     }
-    if (!candidates.length) {
-      completeJob(jobId, { count: 0, issues: [], zusammenfassung: '', warnings, tokensIn: 0, tokensOut: 0 }, null, '0 Kandidaten');
+    if (!facts.size) {
+      completeJob(jobId, { count: 0, checked: 0, issues: [], warnings, tokensIn: 0, tokensOut: 0 }, null, '0 Kandidaten');
       return;
     }
-
-    const spanne = _narrativeYearSpan(bookIdInt, email);
-    // Auflösungs-Maps für saveFaktencheckIssues (Kapitel-Namen → chapter_id; figNameToId ungenutzt, da Faktenfehler keine Figuren tragen).
+    // Kapitel-Namen → chapter_id für saveFaktencheckIssues (Faktenfehler tragen keine Figuren).
     const chNameToId = chapterIdsByName(bookIdInt);
-    const figNameToId = Object.fromEntries(
-      db.prepare('SELECT name, fig_id FROM figures WHERE book_id = ? AND user_email IS ?').all(bookIdInt, email)
-        .map(r => [r.name, r.fig_id])
-    );
 
     const signal = jobAbortControllers.get(jobId)?.signal;
     const researchOn = retrieval.indexReady(bookIdInt);
@@ -212,7 +244,9 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
     const tok = { in: 0, out: 0, ms: 0, inflight: new Map() };
     // Concurrency-Cap + Warmup wie die Verify-Stufe: Web-Such-Calls sind teuer und einzeln
     // langsam; ein paar parallel, aber kein TPM-Burst über Dutzende Fakten.
-    const concurrency = Math.max(1, parseInt(appSettings.get('ai.claude.phase1_concurrency'), 10) || 4);
+    const concurrency = Math.min(_FACTCHECK_MAX_CONCURRENCY,
+      Math.max(1, parseInt(appSettings.get('ai.claude.phase1_concurrency'), 10) || 4));
+    const spanne = candidates.length ? _narrativeYearSpan(bookIdInt, email) : null;
     updateJob(jobId, { statusText: 'job.phase.factcheckJudge', progress: 10 });
     let done = 0;
     const settled = await settledAll(candidates.map((cand) => async () => {
@@ -224,26 +258,23 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
       done++;
       updateJob(jobId, { progress: Math.min(92, 10 + Math.round((done / candidates.length) * 80)) });
       let v;
-      try { v = parseJSON(text); }
-      catch (e) { log.warn(`Faktencheck-Urteil nicht parsebar (Fakt #${cand.id}): ${e.message}`); return null; }
-      // Nur echte Fehlurteile MIT belegender Quelle. «unklar»/«korrekt» → kein Befund.
-      if (!v || v.urteil !== 'falsch') return null;
+      try { v = _validVerdict(parseJSON(text)); }
+      catch (e) { log.warn(`Faktencheck-Urteil unbrauchbar (Fakt #${cand.id}): ${e.message}`); throw e; }
+      // «falsch» zählt nur MIT belegender Quelle — sonst als «unklar» gespeichert, damit
+      // ein späterer Lauf es erneut versucht.
       const quelle = String(v.quelle || '').trim();
-      if (!/^https?:\/\//i.test(quelle)) {
-        log.info(`Faktencheck: «falsch» ohne belastbare Quelle verworfen (Fakt #${cand.id}).`);
-        return null;
+      let urteil = v.urteil;
+      if (urteil === 'falsch' && !/^https?:\/\//i.test(quelle)) {
+        log.info(`Faktencheck: «falsch» ohne belastbare Quelle → unklar (Fakt #${cand.id}).`);
+        urteil = 'unklar';
       }
       return {
+        key: cand.key,
+        urteil,
         schwere: ['kritisch', 'mittel', 'niedrig'].includes(v.schwere) ? v.schwere : 'mittel',
-        typ: 'faktenfehler',
-        beschreibung: String(v.beschreibung || '').trim() || `${cand.subjekt ? cand.subjekt + ': ' : ''}${cand.fakt}`,
-        // stelle_a = die geprüfte Aussage (KEIN «»-Zitat → requireQuoteEvidence unberührt); stelle_b leer.
-        stelle_a: `${cand.subjekt ? cand.subjekt + ': ' : ''}${cand.fakt}`,
-        stelle_b: '',
+        beschreibung: String(v.beschreibung || '').trim(),
         empfehlung: String(v.empfehlung || '').trim(),
-        quelle,
-        figuren: [],
-        kapitel: cand.kapitel || [],
+        quelle: urteil === 'falsch' ? quelle : null,
       };
     }), { concurrency, warmup: true });
     // AbortError gezielt re-raisen (settledAll fängt Rejects ab).
@@ -256,21 +287,31 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
       warnings.push({ key: 'job.warn.factcheckJudgeFailed', params: { count: failed.length, checked: candidates.length } });
       log.warn(`Faktencheck: ${failed.length}/${candidates.length} Urteile verworfen (${failed[0].reason?.message || failed[0].reason}).`);
     }
-    const probleme = settled.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
+    const judged = settled.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
+    saveFactVerdicts(bookIdInt, email, judged);
     pt.mark('Judge');
+
+    // Befunde = ALLE als falsch belegten Aussagen, die im aktuellen Index noch stehen —
+    // auch die aus früheren Läufen (Urteils-Cache). Der Faktencheck ersetzt die
+    // faktenfehler-Zeilen des neuesten Checks; ohne das Nachziehen verschwänden die
+    // früher gefundenen, sobald ein Lauf nur die nächsten 20 prüft.
+    const probleme = faktenfehlerIssues(bookIdInt, email);
 
     // An den neuesten Kontinuitäts-Check anhängen (idempotent, ersetzt frühere faktenfehler);
     // die zuvor gefundenen Kontinuitäts-Befunde bleiben unberührt und weiter sichtbar.
     const summaryFallback = probleme.length ? '__i18n:kontinuitaet.faktencheck.summaryFound__' : '__i18n:kontinuitaet.faktencheck.summaryClean__';
     const { normalizedIssues } = saveFaktencheckIssues(
-      bookIdInt, email, _factcheckModelName(effectiveProvider), probleme, figNameToId, chNameToId, summaryFallback);
-    log.info(`Faktencheck gespeichert (${normalizedIssues.length} Faktenfehler von ${candidates.length} geprüften Fakten, ${researchUsed} mit Recherche-Beleg).`);
+      bookIdInt, email, _factcheckModelName(effectiveProvider), probleme, {}, chNameToId, summaryFallback);
+    log.info(`Faktencheck gespeichert (${normalizedIssues.length} Faktenfehler; ${judged.length} von ${candidates.length} Kandidaten geurteilt, ${researchUsed} mit Recherche-Beleg).`);
     log.info(`Phasen-Timing: ${pt.summary()}`);
     const costByPhase = summarizeCostByPhase(tok);
     if (costByPhase) log.info(`Kosten: ${formatCostByPhase(costByPhase)} → $${costByPhase.totalUsd.toFixed(2)}`);
     completeJob(jobId, {
       count: normalizedIssues.length,
-      checked: candidates.length,
+      checked: judged.length,
+      candidates: candidates.length,
+      remaining: Math.max(0, pending - judged.length),
+      total,
       researchEvidence: researchUsed,
       issues: normalizedIssues,
       warnings,

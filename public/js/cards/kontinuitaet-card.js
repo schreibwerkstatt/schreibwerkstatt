@@ -11,6 +11,12 @@ export function registerKontinuitaetCard() {
     kontinuitaetLoading: false,
     kontinuitaetProgress: 0,
     kontinuitaetStatus: '',
+    // Laufender Prüf-Job: 'kontinuitaet' | 'faktencheck' | '' (Knopf-Beschriftung).
+    kontinuitaetRunKind: '',
+    // Teil-Degradierungen des letzten Standalone-Laufs: [{ key, params? }].
+    kontinuitaetWarnings: [],
+    // GET der Befunde fehlgeschlagen (ohne vorhandenes Ergebnis) → Retry-Zustand.
+    kontinuitaetLoadError: false,
     selectedKontinuitaetIssueKey: null,
     // Namens-/Konsistenz-Waechter (regelbasiert, eigene Sektion in dieser Karte).
     nameGuardResult: null,
@@ -32,6 +38,9 @@ export function registerKontinuitaetCard() {
         ctx.kontinuitaetLoading = false;
         ctx.kontinuitaetProgress = 0;
         ctx.kontinuitaetStatus = '';
+        ctx.kontinuitaetRunKind = '';
+        ctx.kontinuitaetWarnings = [];
+        ctx.kontinuitaetLoadError = false;
         ctx.selectedKontinuitaetIssueKey = null;
         ctx.nameGuardResult = null;
         ctx.nameGuardLoading = false;

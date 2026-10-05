@@ -1,6 +1,6 @@
 // Kontinuitätsprüfung: Namens-Disambiguierung, Kapitel-Fakten-Extraktion, Check + Single-Pass.
 import { _buildErzaehlformBlock } from '../blocks.js';
-import { FAKTEN_SCHEMA, FAKTEN_RULES, PROBLEME_SCHEMA, PROBLEME_RULES } from './schema-strings.js';
+import { FAKTEN_SCHEMA, FAKTEN_RULES, PROBLEME_SCHEMA, buildProblemeRules } from './schema-strings.js';
 
 // ── Kontinuitätsprüfung ───────────────────────────────────────────────────────
 
@@ -74,15 +74,15 @@ Dieses Buch hat eine reale, kalendarische Chronologie. Die datierte Handlung spi
 }
 
 // Wird NUR angehängt, wenn ein Anachronismus-Block vorhanden ist – sonst soll das Modell
-// gar nicht erst nach Anachronismen suchen (keine reale Zeitlinie). Überschreibt bewusst die
-// allgemeine «beide Stellen müssen Zitate sein»-Regel für genau diesen typ: bei einem
-// Anachronismus gibt es nur EINE Buchstelle (die Erwähnung); die zweite Stelle ist die
-// etablierte Jahresangabe.
+// gar nicht erst nach Anachronismen suchen (keine reale Zeitlinie). Die Belegstellen-
+// Ausnahme (stelle_b = Klartext-Jahr ohne «») steht in PROBLEME_RULES VOR der harten
+// Zitat-Pflicht; hier wird sie nur wiederholt, damit die Prüfung in sich lesbar bleibt.
 const _ANACHRONISMUS_RULE = `
 
 Anachronismus-Prüfung (typ «anachronismus»): Vergleiche die oben unter «Zeitliche Verortung» gelisteten Songs, Technologien und historischen Ereignisse mit ihrer realen Entstehungs- bzw. Veröffentlichungszeit (aus deinem Allgemeinwissen). Maßgeblich ist je Eintrag das markierte «(Szene ~JAHR)» – fehlt es, gilt die Gesamtspanne. Wird etwas erwähnt, das es zu dieser Erzählzeit real noch nicht gab (ein Song nach seinem Erscheinungsjahr, eine Technologie vor ihrer Erfindung, ein Ereignis vor seinem tatsächlichen Datum), ist das ein Anachronismus. Für typ «anachronismus» gilt abweichend: stelle_a = wörtliches Zitat bzw. exakte Bezeichnung der Erwähnung im Buch; stelle_b = die für diesen Eintrag maßgebliche Erzählzeit (das «(Szene ~JAHR)» bzw. die Gesamtspanne) – als Klartext-Jahresangabe OHNE «» (kein Buchzitat nötig). Beschreibung nennt das reale Datum (z.B. «Der Song … erschien erst 1991, die Handlung spielt 1985»). Nur melden, wenn du dir beim realen Datum sicher bist; im Zweifel weglassen.`;
 
-// Zeitlücken-Prüfung (typ «zeitluecke») – IMMER angehängt (anders als Anachronismus, der
+// Zeitlücken-Prüfung (typ «zeitluecke») – IMMER angehängt (Belegstellen-Ausnahme wie beim
+// Anachronismus in PROBLEME_RULES) (anders als Anachronismus, der
 // eine reale Kalender-Chronologie braucht): unmarkierte Zeitsprünge sind auch bei relativer
 // Erzählzeit ein Orientierungsproblem. Bewusst als eigener typ neben «zeitlinie»
 // (= widersprüchliche Zeitangaben): hier geht es NICHT um einen Widerspruch, sondern um
@@ -101,10 +101,27 @@ const _KONTINUITAET_FAKTEN_RULES = `Vorrang für diese Kontinuitäts-Extraktion 
 - Zustandswechsel einer Figur SIND hier Pflicht, auch wenn sie biografisch sind: Tod, schwere Verletzung/Krankheit, Genesung, Verhaftung/Freilassung, Erwerb oder Verlust eines Objekts, das Erfahren eines Geheimnisses («weiss ab jetzt, dass …»), Wechsel von Aufenthaltsort, Beruf oder Beziehung. Kategorie «figur» für den Zustand danach (z.B. «Marek: ist tot», «Lena: weiss, dass Paul der Täter ist»).
 - Handlungstragende Ereignisse mit bleibender Folge erfassen (Kategorie «ereignis» bzw. «figur»); nur alltägliche Handlungsschritte ohne Folge weglassen.
 - Wer in einer Szene anwesend ist und handelt, ist ein Fakt, sobald die Figur zuvor als tot, abwesend, gefangen oder verreist galt.
+- Namen exakt in der Schreibweise des Texts erfassen, auch für Nebenfiguren und Tiere (Kategorie «figur», z.B. «Hund der Familie: heisst Bello», «Frau Maier: Nachname so geschrieben») — abweichende Schreibungen derselben Figur sind ein Prüfgegenstand.
+- Alter, Geburtstag, Datum und Wochentag immer mit dem genauen Wortlaut erfassen (Kategorie «figur» bzw. «zeit», z.B. «Lena: ist 34 Jahre alt», «Zeit: Montag, der 3. Mai»), ebenso die vergangene Erzählzeit («zwei Wochen später»).
+- Reisen und Wege mit Start, Ziel und Dauer bzw. Entfernung (Kategorie «ort», z.B. «Paul: fährt in drei Stunden von Bern nach Hamburg»).
+- Zeit-Rahmen jeder Szene: Tageszeit, Jahreszeit, Wetter am Szenenbeginn (Kategorie «zeit» bzw. «ort», z.B. «Szene am See: Nachmittag, Schneefall»).
+- Verletzungen und Krankheiten mit Schwere und Heilungsstand («Marek: Bein gebrochen», «Marek: läuft wieder ohne Krücken»); Verwandtschaft und Beziehungsstatus («Lena: ist Pauls Schwester», «Paul: ist geschieden»).
+- Erzählform: pro Kapitel EIN Fakt mit Kategorie «sonstiges», subjekt «Erzählform», fakt = Perspektive und Tempus («Ich-Erzählerin Lena, Präteritum»); wechselt die Erzählform innerhalb des Kapitels, den Wechsel als eigenen Fakt.
 - «seite» IMMER füllen (Abschnittsname aus der «### …»-Überschrift) — die Prüfung findet darüber die Originalstelle.`;
 
+// Fehlerklassen, die Single- und Multi-Pass gleichermassen suchen. Die typ-Zuordnung
+// steht in PROBLEME_RULES; hier steht, WORAUF zu achten ist.
+const _FEHLERKLASSEN = `Prüfe insbesondere auch:
+- Namens- und Schreibvarianten derselben Figur, Nebenfigur oder desselben Haustiers (typ «name») — nicht melden bei etablierten Spitz-/Kosenamen, Titel-Varianten oder wenn es erkennbar verschiedene Figuren sind.
+- Alter gegen vergangene Erzählzeit (typ «zeitlinie»): eine Figur ist in Kapitel 2 zwölf, drei Jahre später fünfzehn — oder schon siebzehn.
+- Wochentag/Datum-Rechnung (typ «zeitlinie»): «Montag, der 3. Mai» und zwei Tage später «Freitag».
+- Reisedauer und Entfernung (typ «zeitlinie» bzw. «ort»): eine Strecke ist in der verfügbaren Zeit nicht zu schaffen; eine Figur ist zur selben Zeit an zwei Orten.
+- Bruch innerhalb einer Szene (typ «zeitlinie»): Tageszeit, Jahreszeit oder Wetter kippen ohne vergangene Zeit (Mittag → Mondlicht, Schnee → Sommerhitze).
+- Zu schnelle Heilung (typ «figur»): eine schwere Verletzung ist ohne plausible Zeit folgenlos verschwunden.
+- Verwandtschaft und Beziehungsstatus (typ «figur»): Schwester wird Cousine, der Verheiratete ist plötzlich ledig, ohne dass der Text es erklärt.`;
+
 export function buildKontinuitaetChapterFactsPrompt(chapterName, chText) {
-  return `Extrahiere alle konkreten Fakten und Behauptungen aus dem Kapitel «${chapterName}» die für die Kontinuitätsprüfung relevant sind: Figuren-Zustände (lebendig/tot, Verletzungen, Wissen, Beziehungen), Ortsbeschreibungen, Zeitangaben, Objekte und deren Besitz/Zustand, sowie wichtige Handlungsereignisse.
+  return `Extrahiere alle konkreten Fakten und Behauptungen aus dem Kapitel «${chapterName}» die für die Kontinuitätsprüfung relevant sind: Figuren-Zustände (lebendig/tot, Verletzungen und Heilung, Wissen, Alter, Verwandtschaft, Beziehungen), Namen und ihre Schreibweise (auch Nebenfiguren, Tiere), Ortsbeschreibungen, Reisen und Entfernungen, Zeitangaben (Datum, Wochentag, Tages-/Jahreszeit, Wetter), Objekte und deren Besitz/Zustand, die Erzählform sowie wichtige Handlungsereignisse.
 
 Antworte mit diesem JSON-Schema:
 {
@@ -120,7 +137,10 @@ Kapiteltext:
 ${chText}`;
 }
 
-export function buildKontinuitaetCheckPrompt(bookName, chapterFacts, figurenKompakt, orteKompakt, anachronismus = null) {
+// `erzaehlform` (optional, wie buildKontinuitaetSinglePassPrompt): Soll-Erzählform aus
+// den Buch-Einstellungen. Fehlt sie, prüft der Multi-Pass die Erzählform nur über die
+// Erzählform-Fakten der Kapitel (Wechsel gegeneinander), nicht gegen eine Vorgabe.
+export function buildKontinuitaetCheckPrompt(bookName, chapterFacts, figurenKompakt, orteKompakt, anachronismus = null, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null } = {}) {
   const factsText = chapterFacts.map(cf =>
     `## ${cf.kapitel}\n` + cf.fakten.map(f => `[${f.kategorie}] ${f.subjekt}: ${f.fakt}${f.seite ? ` (${f.seite})` : ''}`).join('\n')
   ).join('\n\n');
@@ -133,9 +153,13 @@ export function buildKontinuitaetCheckPrompt(bookName, chapterFacts, figurenKomp
     ? '\n\n## Bekannte Schauplätze\n' + orteKompakt.map(o => `${o.name} (${o.typ || 'andere'}): ${o.beschreibung || ''}`).join('\n')
     : '';
   const anachronismusStr = _buildAnachronismusBlock(anachronismus);
+  const povBlock = (erzaehlperspektive || erzaehlzeit) ? _buildErzaehlformBlock(erzaehlperspektive, erzaehlzeit, buchtyp, 'review') : '';
+  const erzaehlformHint = buchtyp === 'kurzgeschichten' ? '' : `
+
+Prüfe zusätzlich die Erzählform: Weichen die Erzählform-Fakten eines Kapitels unbegründet ${povBlock ? 'von der oben angegebenen Erzählperspektive/-zeit bzw. ' : ''}von der in den übrigen Kapiteln etablierten Erzählform ab (Wechsel nur an Szenen-/Kapitelgrenzen oder bei expliziten Rückblenden zulässig)? Typ «erzaehlform». Nur bei klarem Bruch melden.`;
 
   return `Prüfe das Buch «${bookName}» auf Kontinuitätsfehler und Widersprüche. Dir liegen die extrahierten Fakten aller Kapitel vor.${figurenStr}${disambigStr}${orteStr}${anachronismusStr}
-
+${povBlock}
 ## Extrahierte Fakten nach Kapitel:
 
 ${factsText}
@@ -144,39 +168,68 @@ Suche nach Widersprüchen: Fakten, die sich gegenseitig ausschliessen oder nicht
 
 Prüfe zusätzlich Charakterverhalten: Handelt eine Figur ihrer in früheren Kapiteln etablierten Persönlichkeit, ihren Werten oder ihrem Können klar zuwider, ohne dass der Text einen Grund liefert (Entwicklung, Druck, Täuschung)? Typ «verhalten». Nur bei deutlichem Bruch melden.
 
-Prüfe zusätzlich die Soziolekt-Kohärenz: Spricht jede Figur konsistent mit der Herkunft, Bildung und sozialen Schicht, die in früheren Kapiteln durch ihren Soziolekt etabliert wurde? Registerwechsel (z.B. plötzlich formal statt umgangssprachlich, plötzlich Dialekt statt Hochsprache) die sich nicht durch die Situation oder dramaturgischen Kontext erklären lassen, sind Kontinuitätsfehler. Typ «soziolekt» verwenden.
+Prüfe zusätzlich die Soziolekt-Kohärenz: Spricht jede Figur konsistent mit der Herkunft, Bildung und sozialen Schicht, die in früheren Kapiteln durch ihren Soziolekt etabliert wurde? Registerwechsel (z.B. plötzlich formal statt umgangssprachlich, plötzlich Dialekt statt Hochsprache) die sich nicht durch die Situation oder dramaturgischen Kontext erklären lassen, sind Kontinuitätsfehler. Typ «soziolekt» verwenden.${erzaehlformHint}
+
+${_FEHLERKLASSEN}
 
 Antworte mit diesem JSON-Schema:
 ${PROBLEME_SCHEMA}
 
-${PROBLEME_RULES}${anachronismusStr ? _ANACHRONISMUS_RULE : ''}${_ZEITLUECKE_RULE}`;
+${buildProblemeRules({ anachronismus: !!anachronismusStr })}${anachronismusStr ? _ANACHRONISMUS_RULE : ''}${_ZEITLUECKE_RULE}`;
 }
 
 // Verify-Stufe für den Multi-Pass-Check: Der Fakten-basierte Check (buildKontinuitaetCheckPrompt)
 // sieht nur extrahierte Fakten, nicht den Volltext – auflösender Kontext (Rückblende, Ironie,
 // Konjunktiv, indirekte Rede) ist dort bereits weg und erzeugt systematisch False-Positives.
 // Diese Stufe lädt pro gemeldetem Problem die Original-Textstellen nach und lässt das Modell
-// den Widerspruch mit echtem Kontext bestätigen oder verwerfen. Single-Pass braucht das nicht
-// (hat den Volltext bereits beim Check).
-export function buildKontinuitaetVerifyPrompt(bookName, problem, excerptA, excerptB) {
-  return `Im Buch «${bookName}» wurde ein möglicher Kontinuitätsfehler gemeldet – auf Basis extrahierter Fakten, OHNE Originaltext. Prüfe anhand der echten Textstellen, ob der Widerspruch WIRKLICH besteht.
+// den Befund mit echtem Kontext bestätigen oder verwerfen. Single-Pass braucht das nicht
+// (hat den Volltext bereits beim Check). Die Prüffrage hängt am typ: eine Zeitlücke ist kein
+// Widerspruch zweier Aussagen, ein Anachronismus vergleicht eine Erwähnung mit der realen
+// Geschichte — beide mit der Widerspruchs-Frage zu prüfen, hiesse sie systematisch zu verwerfen.
+// «grund» steht vor «bestaetigt» (wie SCHEMA_KONTINUITAET_VERIFY): erst abwägen, dann urteilen.
+function _verifyQuestion(typ) {
+  if (typ === 'zeitluecke') {
+    return {
+      head: 'eine mögliche unmarkierte Zeitlücke',
+      task: 'Prüfe anhand der echten Textstellen, ob der Zeitsprung zwischen Stelle A und Stelle B WIRKLICH unmarkiert ist und den Leser zeitlich desorientiert.',
+      rule: 'Signalisiert der Text den Sprung (Zeitangabe wie «Drei Wochen später», Datum, Jahreszeit-/Altersangabe, Überleitung, Kapitel-/Szenenwechsel mit erkennbarer Zeitmarke, bewusste Ellipse als Stilmittel) oder vergeht in Wahrheit kaum Zeit, ist es KEIN Befund (bestaetigt=false). Bleibt der Sprung erheblich und ohne jedes Signal, bestaetigt=true. Im Zweifel bestaetigt=true.',
+    };
+  }
+  if (typ === 'anachronismus') {
+    return {
+      head: 'ein möglicher Anachronismus',
+      task: 'Prüfe anhand der echten Textstelle und deines Allgemeinwissens, ob das Erwähnte (Song, Technik, Ereignis) real erst NACH der angegebenen Erzählzeit (Stelle B) existierte bzw. stattfand.',
+      rule: 'Liegt das reale Datum vor oder in der Erzählzeit, spielt die Stelle in einer anderen Zeit (Rückblende, Vorausblende, Rahmenerzählung), ist das Erwähnte erkennbar fiktiv oder bist du dir beim realen Datum nicht sicher, ist es KEIN Befund (bestaetigt=false). Nur wenn das reale Datum sicher nach der Erzählzeit dieser Stelle liegt, bestaetigt=true.',
+    };
+  }
+  return {
+    head: 'ein möglicher Kontinuitätsfehler',
+    task: 'Prüfe anhand der echten Textstellen, ob der Widerspruch WIRKLICH besteht.',
+    rule: 'Berücksichtige auflösenden Kontext, der in reinen Fakten verloren geht: Rückblende/Vorausblende, Traum/Vorstellung/Wunsch, Ironie/Sarkasmus, Konjunktiv/Hypothese («hätte», «wäre»), indirekte oder zitierte Rede, unzuverlässiger Erzähler, zwei verschiedene Figuren mit ähnlichem Namen, bewusste erzählerische Wiederholung, plausibel vergangene Erzählzeit (Alter, Heilung, Reise). Löst der Kontext den scheinbaren Widerspruch auf, ist es KEIN echter Fehler (bestaetigt=false). Im Zweifel – wenn der Kontext den Widerspruch nicht klar auflöst – bestaetigt=true.',
+  };
+}
 
-Gemeldeter Widerspruch (${problem.typ || 'sonstiges'}): ${problem.beschreibung || ''}
+export function buildKontinuitaetVerifyPrompt(bookName, problem, excerptA, excerptB) {
+  const typ = String(problem?.typ || '').trim().toLowerCase();
+  const q = _verifyQuestion(typ);
+  const blockB = typ === 'anachronismus'
+    ? ''
+    : `\n\n## Originaltext rund um Stelle B\n${excerptB || '(im Text nicht gefunden)'}`;
+  return `Im Buch «${bookName}» wurde ${q.head} gemeldet – auf Basis extrahierter Fakten, OHNE Originaltext. ${q.task}
+
+Gemeldeter Befund (${problem.typ || 'sonstiges'}): ${problem.beschreibung || ''}
 Stelle A: ${problem.stelle_a || ''}
 Stelle B: ${problem.stelle_b || ''}
 
 ## Originaltext rund um Stelle A
-${excerptA || '(im Text nicht gefunden)'}
+${excerptA || '(im Text nicht gefunden)'}${blockB}
 
-## Originaltext rund um Stelle B
-${excerptB || '(im Text nicht gefunden)'}
-
-Berücksichtige auflösenden Kontext, der in reinen Fakten verloren geht: Rückblende/Vorausblende, Traum/Vorstellung/Wunsch, Ironie/Sarkasmus, Konjunktiv/Hypothese («hätte», «wäre»), indirekte oder zitierte Rede, unzuverlässiger Erzähler, zwei verschiedene Figuren mit ähnlichem Namen, bewusste erzählerische Wiederholung. Löst der Kontext den scheinbaren Widerspruch auf, ist es KEIN echter Fehler (bestaetigt=false). Im Zweifel – wenn der Kontext den Widerspruch nicht klar auflöst – bestaetigt=true.
+${q.rule}
 
 Antworte mit diesem JSON-Schema:
 {
-  "bestaetigt": true,
-  "grund": "1 Satz: warum der Widerspruch echt ist bzw. durch welchen Kontext er sich auflöst"
+  "grund": "1 Satz: warum der Befund echt ist bzw. durch welchen Kontext er sich auflöst",
+  "bestaetigt": true
 }`;
 }
 
@@ -287,8 +340,8 @@ export function buildKontinuitaetSinglePassPrompt(bookName, bookText, figurenKom
   const anachronismusStr = _buildAnachronismusBlock(anachronismus);
   const povBlock = _buildErzaehlformBlock(erzaehlperspektive, erzaehlzeit, buchtyp, 'review');
   const erzaehlformHint = (erzaehlperspektive || erzaehlzeit) && buchtyp !== 'kurzgeschichten'
-    ? ' Erzählform-Brüche: Kapitel oder Passagen, die die oben angegebene Erzählperspektive oder Erzählzeit unbegründet verlassen (Wechsel nur an Szenen-/Kapitelgrenzen oder bei expliziten Rückblenden zulässig) – typ «sonstiges», Beschreibung: «Erzählform-Bruch: …».'
-    : '';
+    ? ' Erzählform-Brüche: Kapitel oder Passagen, die die oben angegebene Erzählperspektive oder Erzählzeit unbegründet verlassen (Wechsel nur an Szenen-/Kapitelgrenzen oder bei expliziten Rückblenden zulässig) – typ «erzaehlform».'
+    : (buchtyp === 'kurzgeschichten' ? '' : ' Erzählform-Brüche: Passagen, die die im Buch etablierte Erzählperspektive oder Erzählzeit unbegründet verlassen – typ «erzaehlform».');
 
   const textBlock = bookText == null
     ? 'Der Buchtext steht im System-Prompt oben.'
@@ -297,10 +350,12 @@ export function buildKontinuitaetSinglePassPrompt(bookName, bookText, figurenKom
 ${povBlock}
 Suche aktiv nach: Figuren die nach ihrem Tod wieder auftauchen; Orte die sich widersprüchlich beschrieben werden; Zeitangaben die nicht vereinbar sind; Objekte die falsch verwendet werden; Figuren die Wissen haben das sie noch nicht haben könnten; Charakterverhalten das ihrer etablierten Persönlichkeit widerspricht; Soziolekt-Brüche: Figuren die plötzlich anders sprechen als durch ihre Herkunft, Bildung und soziale Schicht etabliert (Registerwechsel ohne dramaturgische Begründung).${erzaehlformHint}
 
+${_FEHLERKLASSEN}
+
 ${textBlock}
 
 Antworte mit diesem JSON-Schema:
 ${PROBLEME_SCHEMA}
 
-${PROBLEME_RULES}${anachronismusStr ? _ANACHRONISMUS_RULE : ''}${_ZEITLUECKE_RULE}`;
+${buildProblemeRules({ anachronismus: !!anachronismusStr })}${anachronismusStr ? _ANACHRONISMUS_RULE : ''}${_ZEITLUECKE_RULE}`;
 }

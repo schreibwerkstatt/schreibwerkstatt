@@ -1,10 +1,14 @@
 'use strict';
 // Route-Tests des Komplett-Routers (routes/jobs/komplett/index.js):
 //   - Triage-Routen /kontinuitaet/issue/:id/{resolved,dismissed}: Buch-Rolle editor+ UND
-//     das Issue gehört zum Check des anfragenden Users (fremdes Issue → 404 wie unbekannt).
+//     das Issue gehört zum Check des anfragenden Users (fremdes Issue → 404 wie unbekannt);
+//     ohne Leserecht am Buch ebenfalls 404 (kein Existenz-Leak), Viewer → 403.
 //   - Standalone-Kontinuität/-Erzählprofil starten nicht parallel zu einer laufenden
 //     Komplettanalyse: enthält deren Umfang den Schritt → deren Job-ID (existing+komplett),
-//     sonst 409 KOMPLETT_ANALYSIS_RUNNING.
+//     sonst 409 KOMPLETT_ANALYSIS_RUNNING. Gegenrichtung: die Komplettanalyse startet
+//     nicht, solange ein Standalone-Job eines enthaltenen Schritts läuft (409
+//     KOMPLETT_STEP_JOB_RUNNING).
+//   - DELETE /chapter-cache/:book_id verlangt editor+.
 // Fährt den echten Router unter Express hoch; die Fake-Session liefert den User.
 
 const test = require('node:test');
@@ -112,13 +116,55 @@ test('Triage: Issue aus dem Check eines anderen Editors → 404, nichts geänder
   assert.deepEqual({ ...row }, { resolved: 0, dismissed: 0 });
 });
 
-test('Triage: ohne Buchzugriff → 403; unbekanntes Issue → 404', async () => {
+test('Triage: ohne Buchzugriff → 404 wie unbekanntes Issue; Viewer → 403', async () => {
   const id = issueFor(ME);
   db.prepare('DELETE FROM book_access WHERE user_email = ?').run(ME);
   const r = await api('POST', `/jobs/kontinuitaet/issue/${id}/resolved`, { resolved: true });
-  assert.equal(r.status, 403);
+  assert.equal(r.status, 404);
+  assert.equal(r.json.error_code, 'ISSUE_NOT_FOUND');
   const u = await api('POST', '/jobs/kontinuitaet/issue/999999/resolved', { resolved: true });
   assert.equal(u.status, 404);
+  assert.equal(u.json.error_code, 'ISSUE_NOT_FOUND');
+  require('../../db/book-access').grantAccess(BOOK, ME, 'viewer', COLLEAGUE);
+  const v = await api('POST', `/jobs/kontinuitaet/issue/${id}/resolved`, { resolved: true });
+  assert.equal(v.status, 403);
+  assert.equal(db.prepare('SELECT resolved FROM continuity_issues WHERE id = ?').get(id).resolved, 0);
+});
+
+test('Komplettanalyse: laufender Standalone-Kontinuitäts-/Erzählprofil-Job → 409 KOMPLETT_STEP_JOB_RUNNING', async () => {
+  const shared = require('../../routes/jobs/shared');
+  const { getKomplettScope, saveKomplettScope } = require('../../db/schema');
+  saveKomplettScope(BOOK, ME, { songs: false });
+  for (const [type, step] of [['kontinuitaet', 'kontinuitaet'], ['erzaehlprofil', 'erzaehlprofil']]) {
+    clearJobs();
+    const stepId = shared.createJob(type, BOOK, ME, 'job.label.' + type);
+    const r = await api('POST', '/jobs/komplett-analyse', { book_id: BOOK });
+    assert.equal(r.status, 409, type);
+    assert.equal(r.json.error_code, 'KOMPLETT_STEP_JOB_RUNNING');
+    assert.equal(r.json.jobId, stepId);
+    assert.equal(r.json.step, step);
+    assert.equal(shared.findActiveJobId('komplett-analyse', BOOK, ME), null, 'keine Komplettanalyse eingereiht');
+  }
+  assert.equal(getKomplettScope(BOOK, ME).songs, false, 'abgewiesener Start verschiebt die Vorbelegung nicht');
+});
+
+test('activeStepJob: abgewählter Schritt blockiert nicht, fremder User auch nicht', () => {
+  const shared = require('../../routes/jobs/shared');
+  const { activeStepJob } = require('../../routes/jobs/komplett/scope');
+  const id = shared.createJob('kontinuitaet', BOOK, ME, 'job.label.kontinuitaet');
+  assert.deepEqual(activeStepJob(BOOK, ME, null), { jobId: id, step: 'kontinuitaet' });
+  assert.equal(activeStepJob(BOOK, ME, { kontinuitaet: false }), null);
+  assert.equal(activeStepJob(BOOK, COLLEAGUE, null), null);
+});
+
+test('DELETE /chapter-cache/:book_id: Viewer → 403, Editor → 200', async () => {
+  require('../../db/book-access').grantAccess(BOOK, ME, 'viewer', COLLEAGUE);
+  const v = await api('DELETE', `/jobs/chapter-cache/${BOOK}`);
+  assert.equal(v.status, 403);
+  require('../../db/book-access').grantAccess(BOOK, ME, 'editor', COLLEAGUE);
+  const e = await api('DELETE', `/jobs/chapter-cache/${BOOK}`);
+  assert.equal(e.status, 200);
+  assert.equal(e.json.ok, true);
 });
 
 test('Kontinuität/Erzählprofil: laufende Komplettanalyse mit dem Schritt → deren Job-ID', async () => {

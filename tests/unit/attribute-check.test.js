@@ -147,6 +147,33 @@ function twoChapterDeathBook() {
   return { bookId, k1, k2 };
 }
 
+function addFact(bookId, kategorie, subjekt, fakt, chapterId, order) {
+  const { lastInsertRowid } = db.prepare(
+    'INSERT INTO world_facts (book_id, kategorie, subjekt, fakt, sort_order, user_email) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(bookId, kategorie, subjekt, fakt, order, USER);
+  if (chapterId != null) db.prepare('INSERT INTO world_fact_chapters (fact_id, chapter_id) VALUES (?, ?)').run(lastInsertRowid, chapterId);
+}
+const factCands = (bookId) => buildAttributeContradictions(bookId, USER, {}).filter(c => c._priority === 2);
+
+test('B: ähnliche Welt-Fakten in zwei bekannten Kapiteln → Kandidat', () => {
+  const bookId = newBook();
+  const k1 = addChapter(bookId, 'Eins', 1);
+  const k2 = addChapter(bookId, 'Zwei', 2);
+  addFact(bookId, 'ort', 'Burg', 'Die Burg steht auf dem Nordhügel am Fluss.', k1, 0);
+  addFact(bookId, 'ort', 'Burg', 'Die Burg steht auf dem Südhügel am Fluss.', k2, 1);
+  const c = factCands(bookId);
+  assert.equal(c.length, 1);
+  assert.deepEqual([c[0].wertA.kapitel, c[0].wertB.kapitel].sort(), ['Eins', 'Zwei']);
+});
+
+test('B: ein Fakt ohne Kapitel wird nicht als „verschiedene Kapitel" gepaart', () => {
+  const bookId = newBook();
+  const k1 = addChapter(bookId, 'Eins', 1);
+  addFact(bookId, 'ort', 'Burg', 'Die Burg steht auf dem Nordhügel am Fluss.', k1, 0);
+  addFact(bookId, 'ort', 'Burg', 'Die Burg steht auf dem Südhügel am Fluss.', null, 1);
+  assert.equal(factCands(bookId).length, 0);
+});
+
 test('runAttributeContradictionCheck: Befund trägt _source=attr; Call mit 4000er-Deckel + Effort low', async () => {
   const { bookId, k1, k2 } = twoChapterDeathBook();
   const { ctx, calls, warnings } = judgeCtx(bookId, [k1, k2]);

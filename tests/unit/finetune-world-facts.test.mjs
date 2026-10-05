@@ -16,6 +16,7 @@ useTmpDb('ft-wf');
 const schema = require('../../db/schema');
 const db = schema.db;
 const { buildWorldFactSamples } = require('../../routes/jobs/finetune-export/samples/author-chat/world-facts.js');
+const { factKeyOf } = require('../../lib/world-fact-key');
 
 const BOOK = 720;
 const USER = 'ftwf@test.dev';
@@ -25,6 +26,7 @@ function seedFacts() {
   schema.upsertBookByName(BOOK, 'Finetune-Welt');
   // Befunde aus vorherigen Tests raeumen (gleiche DB je Datei).
   db.prepare('DELETE FROM continuity_checks WHERE book_id = ?').run(BOOK);
+  db.prepare('DELETE FROM world_fact_verdicts WHERE book_id = ?').run(BOOK);
   db.prepare('INSERT OR IGNORE INTO chapters (chapter_id, book_id, chapter_name, position) VALUES (?, ?, ?, ?)')
     .run(7201, BOOK, 'Kapitel 1', 1);
   schema.saveFaktenToDb(BOOK, [{ kapitel: 'Kapitel 1', fakten: [
@@ -42,6 +44,8 @@ function seedFaktenfehler(stelleA) {
      VALUES (?, ?, '', 'test', '2026-01-01T00:00:00.000Z')`).run(BOOK, USER);
   db.prepare(`INSERT INTO continuity_issues (check_id, book_id, user_email, schwere, typ, beschreibung, stelle_a, stelle_b)
               VALUES (?, ?, ?, 'mittel', 'faktenfehler', 'falsch', ?, '')`).run(cid, BOOK, USER, stelleA);
+  // Massgeblich ist das Urteil des Faktenchecks (world_fact_verdicts), nicht die Befund-Zeile.
+  schema.saveFactVerdicts(BOOK, USER, [{ key: factKeyOf(stelleA), urteil: 'falsch', quelle: 'https://example.org/beleg' }]);
 }
 
 function collect() {

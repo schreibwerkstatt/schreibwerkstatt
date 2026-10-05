@@ -165,7 +165,7 @@ export function buildWeltfaktenBlock(welt, opts = {}) {
   const rows = sorted.map(f => {
     const subj = f.subjekt ? `${f.subjekt}: ` : '';
     const kap = (f.kapitel || []).length ? ` (${f.kapitel.slice(0, 3).join(', ')})` : '';
-    return `- [${f.kategorie || 'sonstiges'}] ${subj}${String(f.fakt).trim()}${kap}`;
+    return `- [${f.kategorie || 'sonstiges'}] ${subj}${String(f.fakt).trim()}${kap}${f.widerlegt ? ' [real widerlegt]' : ''}`;
   });
 
   const lead = [
@@ -173,6 +173,9 @@ export function buildWeltfaktenBlock(welt, opts = {}) {
     '(Aus der Komplettanalyse extrahiert, nicht von der Autorin kuratiert — im Zweifel gilt der Buchtext.',
     'Form: [kategorie] Subjekt: Aussage (Kapitel). Beantwortet die Frage schon hier, rufe direkt `final_answer`.)',
   ];
+  if (sorted.some(f => f.widerlegt)) {
+    lead.push('([real widerlegt] = der Faktencheck hat die Aussage per Quelle als real falsch belegt: sie steht so im Buch, ist aber keine reale Tatsache — nie als real bestätigen.)');
+  }
   // Der Kappungs-Hinweis waechst mit den Zahlen darin, ein geschaetzter Overhead
   // reisst den Deckel deshalb gelegentlich. Darum EXAKT: rendern, und solange Zeilen
   // zurueckziehen, bis der fertige Block passt.

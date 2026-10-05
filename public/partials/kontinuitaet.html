@@ -22,7 +22,16 @@
   </div>
   <div x-show="kontinuitaetStatus" class="card-status" x-html="kontinuitaetStatus"></div>
 
-  <div x-show="!kontinuitaetResult && !kontinuitaetLoading && !kontinuitaetStatus" class="card-empty">
+  <!-- Laden der Befunde fehlgeschlagen: eigener Zustand mit Retry, nicht „noch keine Analyse". -->
+  <div x-show="kontinuitaetLoadError && !kontinuitaetResult && !kontinuitaetLoading" class="card-empty" x-cloak>
+    <p class="card-empty-text" x-text="$app.t('kontinuitaet.error.loadFailed')"></p>
+    <button type="button" class="secondary card-empty-cta" @click="_loadKontinuitaetHistory()">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
+      <span x-text="$app.t('kontinuitaet.error.retry')"></span>
+    </button>
+  </div>
+
+  <div x-show="!kontinuitaetResult && !kontinuitaetLoading && !kontinuitaetLoadError" class="card-empty">
     <p class="card-empty-text" x-text="$app.t('common.noAnalysisYet')"></p>
     <button type="button" class="primary card-empty-cta"
             @click="$app.alleAktualisieren()"
@@ -33,13 +42,21 @@
   </div>
 
   <!-- Nur die Kontinuität neu prüfen (P8 auf dem vorhandenen Katalog, ohne volle Analyse) -->
-  <div class="card-toolbar" x-show="kontinuitaetResult && !kontinuitaetLoading" x-cloak>
+  <!-- Auch ohne bisheriges Ergebnis und nach einem Startfehler sichtbar (Retry). -->
+  <div class="card-toolbar" x-show="!kontinuitaetLoading && !kontinuitaetLoadError" x-cloak>
     <button type="button" class="btn-compact" @click="kontinuitaetRun()" :disabled="!$store.nav.selectedBookId">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
-      <span x-text="$app.t('kontinuitaet.run.start')"></span>
+      <span x-text="$app.t(kontinuitaetResult ? 'kontinuitaet.run.start' : 'kontinuitaet.run.startFirst')"></span>
     </button>
-    <span class="card-hint" x-text="$app.t('kontinuitaet.openCount', { n: kontinuitaetOpenCount() })"></span>
+    <span class="card-hint" x-show="kontinuitaetResult" x-text="$app.t('kontinuitaet.openCount', { n: kontinuitaetOpenCount() })"></span>
   </div>
+
+  <!-- Teil-Degradierungen des letzten Laufs (job.warn.*), Darstellung wie im Komplett-Status. -->
+  <ul class="komplett-warnings" x-show="!kontinuitaetLoading && kontinuitaetWarnings.length" x-cloak>
+    <template x-for="(w, wi) in kontinuitaetWarnings" :key="w.key + '-' + wi">
+      <li class="komplett-warning-item" x-text="$app.t(w.key, w.params || {})"></li>
+    </template>
+  </ul>
 
   <!-- Skeleton während Loading vor erstem Ergebnis -->
   <div x-show="kontinuitaetLoading && !kontinuitaetResult" class="entity-skeleton entity-list--accented" x-cloak>
@@ -54,12 +71,12 @@
 
   <!-- Zusammenfassung (klappbar) — ausserhalb x-if, sonst werden Filter und
        Zusammenfassung beim Result-Wechsel komplett neu gemountet. -->
-  <div x-show="kontinuitaetResult?.summary" class="collapsible-wrap" x-cloak x-data="collapsible()">
+  <div x-show="kontinuitaetSummaryText()" class="collapsible-wrap" x-cloak x-data="collapsible()">
     <button type="button" class="collapsible-toggle" x-bind="trigger">
       <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
       <span x-text="$app.t('kontinuitaet.summary')"></span>
     </button>
-    <div x-bind="panel" class="collapsible-section kontinuitaet-summary" x-cloak x-text="kontinuitaetResult?.summary || ''"></div>
+    <div x-bind="panel" class="collapsible-section kontinuitaet-summary" x-cloak x-text="kontinuitaetSummaryText()"></div>
   </div>
 
   <!-- Filter-Leiste — MUSS ausserhalb x-if bleiben, sonst trackt Alpine x-effect
@@ -68,24 +85,28 @@
     <div class="tabs">
       <button type="button" class="tabs-btn"
               :class="{ 'tabs-btn--active': $store.catalogUi.kontinuitaetFilters.schwere === '' }"
+              :aria-pressed="$store.catalogUi.kontinuitaetFilters.schwere === '' ? 'true' : 'false'"
               @click="$store.catalogUi.kontinuitaetFilters.schwere = ''">
         <span x-text="$app.t('common.all')"></span>
-        <span class="tabs-btn-count" x-text="kontinuitaetIssuesInStatus().length"></span>
+        <span class="tabs-btn-count" x-text="kontinuitaetSeverityCounts().all"></span>
       </button>
+      <!-- Aktiver Tab bleibt klickbar (abwählen), auch wenn er gerade 0 zählt. -->
       <template x-for="sev in ['kritisch','mittel','niedrig']" :key="sev">
         <button type="button" class="tabs-btn"
                 :class="{ 'tabs-btn--active': $store.catalogUi.kontinuitaetFilters.schwere === sev }"
-                :disabled="kontinuitaetIssuesInStatus().filter(i => i.schwere === sev).length === 0"
+                :aria-pressed="$store.catalogUi.kontinuitaetFilters.schwere === sev ? 'true' : 'false'"
+                :disabled="kontinuitaetSeverityCounts()[sev] === 0 && $store.catalogUi.kontinuitaetFilters.schwere !== sev"
                 @click="$store.catalogUi.kontinuitaetFilters.schwere = $store.catalogUi.kontinuitaetFilters.schwere === sev ? '' : sev">
           <span x-text="$app.t('kontinuitaet.severity.' + sev)"></span>
-          <span class="tabs-btn-count" x-text="kontinuitaetIssuesInStatus().filter(i => i.schwere === sev).length"></span>
+          <span class="tabs-btn-count" x-text="kontinuitaetSeverityCounts()[sev]"></span>
         </button>
       </template>
     </div>
     <div class="tabs">
-      <template x-for="st in ['', 'open', 'dismissed']" :key="'st-' + st">
+      <template x-for="st in ['', 'open', 'resolved', 'dismissed']" :key="'st-' + st">
         <button type="button" class="tabs-btn"
                 :class="{ 'tabs-btn--active': ($store.catalogUi.kontinuitaetFilters.status || '') === st }"
+                :aria-pressed="($store.catalogUi.kontinuitaetFilters.status || '') === st ? 'true' : 'false'"
                 @click="$store.catalogUi.kontinuitaetFilters.status = st"
                 x-text="$app.t('kontinuitaet.status.' + (st || 'active'))"></button>
       </template>
@@ -100,7 +121,7 @@
          x-effect="options = kontinuitaetKapitelListe().map(k => ({value: k, label: k}))"
          >
     </div>
-    <span class="filter-count" x-text="kontinuitaetResult ? kontinuitaetIssuesSorted().length + ' / ' + kontinuitaetIssuesInStatus().length : ''"></span>
+    <span class="filter-count" x-text="kontinuitaetResult ? kontinuitaetIssuesSorted().length + ' / ' + kontinuitaetSeverityCounts().all : ''"></span>
   </div>
 
   <template x-if="kontinuitaetResult">
@@ -109,55 +130,15 @@
       <!-- Keine Probleme -->
       <div x-show="kontinuitaetResult.issues?.length === 0" class="kontinuitaet-ok" x-text="$app.t('kontinuitaet.noIssues')"></div>
       <!-- Alle weggefiltert -->
-      <div x-show="kontinuitaetResult.issues?.length > 0 && kontinuitaetIssuesSorted().length === 0" class="kontinuitaet-ok" x-text="$app.t('kontinuitaet.noMatch')"></div>
+      <div x-show="kontinuitaetResult.issues?.length > 0 && kontinuitaetIssuesSorted().length === 0" class="kontinuitaet-nomatch">
+        <span x-text="$app.t('kontinuitaet.noMatch')"></span>
+        <button type="button" class="btn-compact" @click="kontinuitaetResetFilters()" x-text="$app.t('kontinuitaet.resetFilters')"></button>
+      </div>
 
       <!-- Flache Liste, sortiert nach Schwere -->
       <div x-show="kontinuitaetIssuesSorted().length > 0" class="entity-list entity-list--accented">
         <template x-for="(issue, i) in kontinuitaetIssuesSorted()" :key="kontinuitaetIssueKey(issue, i)">
-          <div>
-            <div class="entity-row"
-                 :class="{ 'entity-row--selected': selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i), 'entity-row--resolved': issue.resolved || issue.dismissed }"
-                 @click="selectedKontinuitaetIssueKey = selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i) ? null : kontinuitaetIssueKey(issue, i)">
-              <span class="severity-tag"
-                    :class="'severity-tag--' + (issue.schwere || 'niedrig')"
-                    x-text="$app.t('kontinuitaet.severity.' + (issue.schwere || 'niedrig'))"></span>
-              <span class="tag entity-typ-tag" x-text="kontinuitaetTypLabel(issue.typ)"></span>
-              <span class="kontinuitaet-row-stellen entity-refs">
-                <button type="button" class="entity-ref"
-                        x-entity-ref="kontinuitaetStelleRef(issue.stelle_a, issue, 'a')"></button>
-                <span class="kontinuitaet-arrow" x-show="issue.stelle_b">↔</span>
-                <template x-if="issue.stelle_b">
-                  <button type="button" class="entity-ref"
-                          x-entity-ref="kontinuitaetStelleRef(issue.stelle_b, issue, 'b')"></button>
-                </template>
-              </span>
-              <span x-show="issue.resolved || issue.dismissed" class="kontinuitaet-resolved-badge"
-                    x-text="$app.t(issue.dismissed ? 'kontinuitaet.dismissed' : 'kontinuitaet.resolved')"></span>
-              <span class="history-chevron" :class="{ open: selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i) }" aria-hidden="true"></span>
-            </div>
-            <div x-show="selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i)" class="entity-detail" x-cloak>
-              <p x-show="issue.beschreibung" x-text="issue.beschreibung" class="entity-detail-text"></p>
-              <div x-show="issue.empfehlung" class="entity-meta-row kontinuitaet-empfehlung">
-                <span class="entity-meta-label kontinuitaet-empfehlung-label" x-text="$app.t('kontinuitaet.empfehlung')"></span>
-                <span class="entity-meta-value kontinuitaet-empfehlung-value" x-text="issue.empfehlung"></span>
-              </div>
-              <div x-show="issue.quelle" class="entity-meta-row kontinuitaet-quelle">
-                <span class="entity-meta-label" x-text="$app.t('kontinuitaet.faktencheck.source')"></span>
-                <a class="entity-meta-value kontinuitaet-quelle-link" :href="issue.quelle" target="_blank" rel="noopener noreferrer" x-text="issue.quelle"></a>
-              </div>
-              <div class="kontinuitaet-detail-actions">
-                <button type="button" class="kontinuitaet-resolve-btn"
-                        :class="{ 'kontinuitaet-resolve-btn--done': issue.resolved }"
-                        @click.stop="kontinuitaetToggleResolved(issue)"
-                        x-text="issue.resolved ? $app.t('kontinuitaet.markOpen') : $app.t('kontinuitaet.markResolved')"></button>
-                <button type="button" class="kontinuitaet-resolve-btn"
-                        :class="{ 'kontinuitaet-resolve-btn--done': issue.dismissed }"
-                        :data-tip="$app.t('kontinuitaet.dismissTip')"
-                        @click.stop="kontinuitaetToggleDismissed(issue)"
-                        x-text="issue.dismissed ? $app.t('kontinuitaet.undismiss') : $app.t('kontinuitaet.dismiss')"></button>
-              </div>
-            </div>
-          </div>
+          <!-- @include kontinuitaet-issue -->
         </template>
       </div>
 
@@ -178,68 +159,11 @@
         <button type="button" class="secondary"
                 @click="faktencheckRun()"
                 :disabled="kontinuitaetLoading || !$store.nav.selectedBookId">
-          <span x-show="!kontinuitaetLoading" x-text="$app.t('kontinuitaet.faktencheck.start')"></span>
-          <span x-show="kontinuitaetLoading" x-text="$app.t('kontinuitaet.faktencheck.starting')"></span>
+          <span x-text="$app.t(kontinuitaetRunKind === 'faktencheck' ? 'kontinuitaet.faktencheck.starting' : 'kontinuitaet.faktencheck.start')"></span>
         </button>
       </div>
     </div>
   </div>
 
-  <!-- Namens-/Konsistenz-Waechter: regelbasierte Erkennung buchweiter
-       Schreibvarianten von Eigennamen (Figuren + Orte). Eigene klappbare Sektion,
-       unabhaengig vom KI-Kontinuitaetscheck oben. -->
-  <div class="collapsible-wrap nameguard" x-data="collapsible()">
-    <button type="button" class="collapsible-toggle" x-bind="trigger">
-      <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
-      <span x-text="$app.t('nameGuard.title')"></span>
-    </button>
-    <div x-bind="panel" class="collapsible-section" x-cloak>
-      <p class="card-hint card-section" x-text="$app.t('nameGuard.intro')"></p>
-      <div class="nameguard-actions card-section">
-        <button type="button" class="secondary"
-                @click="nameGuardRun()"
-                :disabled="nameGuardLoading || !$store.nav.selectedBookId">
-          <span x-show="!nameGuardLoading" x-text="$app.t('nameGuard.run')"></span>
-          <span x-show="nameGuardLoading" x-text="$app.t('nameGuard.running')"></span>
-        </button>
-      </div>
-
-      <template x-if="nameGuardResult">
-        <div class="nameguard-result">
-          <div x-show="nameGuardResult.error" class="kontinuitaet-ok" x-text="$app.t('nameGuard.error')"></div>
-          <div x-show="!nameGuardResult.error && nameGuardResult.anchorCount === 0" class="kontinuitaet-ok" x-text="$app.t('nameGuard.noNames')"></div>
-          <div x-show="!nameGuardResult.error && nameGuardResult.anchorCount > 0 && (nameGuardResult.clusters || []).length === 0" class="kontinuitaet-ok" x-text="$app.t('nameGuard.noVariants')"></div>
-
-          <div x-show="(nameGuardResult.clusters || []).length > 0" class="entity-list entity-list--accented">
-            <template x-for="cluster in nameGuardResult.clusters" :key="nameGuardKey(cluster)">
-              <div>
-                <div class="entity-row"
-                     :class="{ 'entity-row--selected': selectedNameGuardKey === nameGuardKey(cluster) }"
-                     @click="selectedNameGuardKey = selectedNameGuardKey === nameGuardKey(cluster) ? null : nameGuardKey(cluster)">
-                  <span class="severity-tag" :class="'severity-tag--' + nameGuardConfidenceSeverity(cluster.confidence)"
-                        x-text="$app.t('nameGuard.confidence.' + cluster.confidence)"></span>
-                  <span class="nameguard-canonical" x-text="cluster.canonical"></span>
-                  <span class="nameguard-count" x-text="cluster.canonicalCount + '×'"></span>
-                  <span class="nameguard-variant-summary" x-text="cluster.variants.map(v => v.form).join(', ')"></span>
-                  <span class="history-chevron" :class="{ open: selectedNameGuardKey === nameGuardKey(cluster) }" aria-hidden="true"></span>
-                </div>
-                <div x-show="selectedNameGuardKey === nameGuardKey(cluster)" class="entity-detail" x-cloak>
-                  <template x-for="v in cluster.variants" :key="v.form">
-                    <div class="nameguard-variant-row">
-                      <span class="tag nameguard-variant" x-text="v.form"></span>
-                      <span class="nameguard-count" x-text="v.count + '×'"></span>
-                      <button type="button" class="nameguard-accept-btn"
-                              @click.stop="nameGuardIgnore(cluster, v)"
-                              :data-tip="$app.t('nameGuard.acceptTitle')"
-                              x-text="$app.t('nameGuard.accept')"></button>
-                    </div>
-                  </template>
-                </div>
-              </div>
-            </template>
-          </div>
-        </div>
-      </template>
-    </div>
-  </div>
+  <!-- @include kontinuitaet-nameguard -->
 </div>

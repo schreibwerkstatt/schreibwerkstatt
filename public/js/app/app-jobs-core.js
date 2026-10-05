@@ -17,7 +17,7 @@ const QUEUE_STREAM_SAFETY_TICKS = 6;
 const JOB_NAV_CARD = {
   'review':            'bookReview',
   'komplett-analyse':  'figures',
-  'faktencheck':       'weltfakten',
+  'faktencheck':       'kontinuitaet',
   'erzaehlprofil':     'erzaehlprofil',
   'kontinuitaet':      'kontinuitaet',
   'redundancy':        'buchlandkarte',
@@ -165,6 +165,7 @@ export const appJobsCoreMethods = {
     const labels = {
       'komplett-analyse':      'toast.job.komplettAnalyse',
       'kontinuitaet':          'toast.job.kontinuitaet',
+      'faktencheck':           'toast.job.faktencheck',
       'erzaehlprofil':         'toast.job.erzaehlprofil',
       'review':                'toast.job.review',
       'chapter-review':        'toast.job.kapitelReview',

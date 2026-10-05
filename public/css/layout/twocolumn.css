@@ -68,15 +68,12 @@
    bleibt Positions-Kontext für das absolut gesetzte Handle. Nur Desktop:
    mobil stapelt die Sidebar über den Karten und darf nicht höhenbegrenzt sein. */
 @media (min-width: 960px) {
-  /* `position: sticky` macht die Sidebar zum Stacking-Context — das fixed
-     Pagetree-Kontextmenü (--z-popover) zählt dann nur innerhalb dieser Ebene.
-     Ohne eigenen z-index läge sie auf 0, und positionierte Inhalte der
-     Hauptspalte (Sticky-Köpfe/-Lanes der Plot-Werkstatt, --z-sticky) malten
-     über das in die Hauptspalte ragende Menü. Popover der Hauptspalte stehen
-     im DOM später und bleiben bei gleichem z-index darüber. */
+  /* `position: sticky` macht die Sidebar zum Stacking-Context. Kein hoher
+     z-index hier: sie läge sonst über der fixen Job-Queue-Leiste. Was aus der
+     Sidebar in die Hauptspalte ragt (Pagetree-Kontextmenü), hängt per
+     x-teleport am <body>. */
   .layout-sidebar {
     position: sticky;
-    z-index: var(--z-popover);
     top: 1.5rem;
     max-height: calc(100dvh - 3rem);
     display: flex;

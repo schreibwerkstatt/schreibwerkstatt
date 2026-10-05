@@ -12,7 +12,7 @@ const { COST_LABEL, costTier } = require('./cost-labels');
 const rerank = require('../../../lib/rerank');
 const retrieval = require('../../../lib/semantic-retrieval');
 const { bestLivePassage } = require('../../../lib/live-passage');
-const { buildPageIndex, buildFactIndex, locateStelle, excerptOnPage } = require('../../../lib/continuity-evidence');
+const { buildPageIndex, buildFactIndex, locateStelle, excerptOnPage, excerptAround } = require('../../../lib/continuity-evidence');
 
 // ── Verify-Stufe für den Multi-Pass-Kontinuitätscheck ────────────────────────
 // Der Fakten-basierte Check sieht nur extrahierte Fakten, nicht den Volltext –
@@ -29,25 +29,32 @@ const _VERIFY_RADIUS = 1500;
 const _VERIFY_MAX_TOKENS = 4000;
 const _VERIFY_EFFORT = 'low';
 
+// Kapitelnamen eines Befunds als Set blanker Strings — das Modell liefert gelegentlich
+// Objekte ({ name: … }) statt Strings; ein roher Vergleich mit g.name träfe dann nie.
+function _kapNameSet(kapitelNames) {
+  return new Set((kapitelNames || []).map(_refToString).filter(Boolean));
+}
+
 // Textfenster rund um das Zitat aus den im Problem referenzierten Kapiteln.
-// Whitespace-normalisiert (matcht den Single-Pass-/Fakten-Textfluss); findet das
-// Zitat und schneidet ±_VERIFY_RADIUS Zeichen aus. Rückgabe { text, located }:
-// located=true nur bei wörtlichem Zitat-Treffer, sonst Kapitel-Anfang als
-// Notnagel (located=false) — das Signal steuert den semantischen Fallback unten.
+// Abgleich normalisiert (lib/continuity-evidence.js#excerptAround: Anführungs-/Strich-/
+// Leerraum-Varianten, unsichtbare Zeichen, Auslassungen) und ±_VERIFY_RADIUS Zeichen
+// ausgeschnitten. Rückgabe { text, located }: located=true nur bei Zitat-Treffer, sonst
+// Kapitel-Anfang als Notnagel (located=false) — das Signal steuert den semantischen
+// Fallback unten.
 function _verifyExcerpt(groups, groupOrder, kapitelNames, quote) {
+  const names = _kapNameSet(kapitelNames);
   const texts = [];
   for (const key of groupOrder) {
     const g = groups.get(key);
-    if (kapitelNames.includes(g.name)) texts.push(g.pages.map(p => p.text).join('\n'));
+    if (g && names.has(g.name)) texts.push(g.pages.map(p => p.text).join('\n'));
   }
   if (!texts.length) return { text: '', located: false };
-  const full = texts.join('\n\n').replace(/\s+/g, ' ');
+  const full = texts.join('\n\n');
   if (quote) {
-    const needle = quote.replace(/\s+/g, ' ').slice(0, 40);
-    const idx = full.indexOf(needle);
-    if (idx >= 0) return { text: full.slice(Math.max(0, idx - _VERIFY_RADIUS), Math.min(full.length, idx + needle.length + _VERIFY_RADIUS)), located: true };
+    const ex = excerptAround(full, quote, _VERIFY_RADIUS);
+    if (ex.located) return ex;
   }
-  return { text: full.slice(0, _VERIFY_RADIUS * 2), located: false };
+  return { text: full.replace(/\s+/g, ' ').slice(0, _VERIFY_RADIUS * 2), located: false };
 }
 
 // Semantischer Beleg-Fallback: findet die wörtliche Suche das Zitat nicht
@@ -97,10 +104,11 @@ async function _semanticExcerpt(bookId, query, pageTexts, signal) {
 // Live-Seitentexte (id → Text) der Kapitel, die ein Befund nennt — Suchraum und
 // Textquelle des semantischen Fallbacks.
 function _chapterPageTexts(groups, groupOrder, kapitelNames) {
+  const names = _kapNameSet(kapitelNames);
   const out = new Map();
   for (const key of groupOrder) {
     const g = groups.get(key);
-    if (!g || !kapitelNames.includes(g.name)) continue;
+    if (!g || !names.has(g.name)) continue;
     for (const pg of g.pages || []) if (pg.id != null && pg.text) out.set(Number(pg.id), pg.text);
   }
   return out;
@@ -113,17 +121,29 @@ function _chapterPageTexts(groups, groupOrder, kapitelNames) {
 // `chapterFacts` (Multi-Pass-Fakten mit Seitennamen) + `ctx.pageContents`: das Modell
 // zitiert im Multi-Pass Fakt-Aussagen, keine Buchsätze — der wörtliche Treffer bleibt
 // darum meist aus. Der zitierte Fakt trägt aber seine Seite; deren Text ist der
-// richtige Beleg (lib/continuity-evidence.js), noch vor dem semantischen Fallback.
+// richtige Suchraum (lib/continuity-evidence.js), noch vor dem semantischen Fallback.
+//
+// Typabhängig: eine Zeitlücke ist kein Widerspruch zweier Aussagen, sondern ein
+// unmarkierter Sprung zwischen zwei Stellen — ob er markiert ist, entscheidet nur der
+// Text auf BEIDEN Seiten. Fehlt einer der beiden Ausschnitte, wird sie nicht geprüft
+// und bleibt stehen. Beim Anachronismus ist stelle_b die Erzählzeit (Klartext-Jahr,
+// kein Buchzitat) — dort gibt es keinen Ausschnitt B zu suchen.
 async function verifyKontinuitaetProbleme(ctx, result, fromPct, toPct, { chapterFacts = null } = {}) {
   const { call, prompts, sys, jobId, tok, bookName, groups, groupOrder, log, bookIdInt } = ctx;
   const probleme = Array.isArray(result?.probleme) ? result.probleme : [];
   if (!probleme.length) return result;
   const pageIdx = buildPageIndex(ctx.pageContents);
   const factIdx = chapterFacts ? buildFactIndex(chapterFacts) : null;
+  // Fakt-Seite: liegt das Zitat dort wörtlich, ist das der Beleg (located). Sonst merkt
+  // sich der Ausschnitt die Seite (pageId) als engsten Suchraum für die Semantik; ohne
+  // Semantik bleibt deren Anfang der Notnagel (located=false, wie der Kapitel-Anfang).
   const viaFact = (ex, stelle, quote, kap) => {
     if (ex.located || !factIdx?.length || !pageIdx.length) return ex;
     const page = locateStelle(_refToString(stelle) || '', quote, pageIdx, { kapitel: kap, facts: factIdx });
-    return page ? { text: excerptOnPage(page, quote, _VERIFY_RADIUS), located: true } : ex;
+    if (!page) return ex;
+    const hit = excerptOnPage(page, quote, _VERIFY_RADIUS);
+    if (hit.located) return hit;
+    return { text: String(page.text || '').replace(/\s+/g, ' ').slice(0, _VERIFY_RADIUS * 2), located: false, pageId: page.id };
   };
   updateJob(jobId, { progress: fromPct, statusText: 'job.phase.verifyContradictions' });
   // Semantischer Beleg-Fallback nur, wenn das Embed-Backend konfiguriert ist UND
@@ -136,28 +156,37 @@ async function verifyKontinuitaetProbleme(ctx, result, fromPct, toPct, { chapter
   // gleichzeitig feuern → TPM-Burst (429/overloaded, auch auf andere Pipeline-Calls).
   const claudeConcurrency = Math.max(1, parseInt(appSettings.get('ai.claude.phase1_concurrency'), 10) || 4);
   const settled = await settledAll(probleme.map((p) => async () => {
-    const kap = Array.isArray(p.kapitel) ? p.kapitel : [];
+    const kap = (Array.isArray(p.kapitel) ? p.kapitel : []).map(_refToString).filter(Boolean);
     if (!kap.length) return { p, keep: true };
-    const qA = _stelleQuote(p.stelle_a);
-    const qB = _stelleQuote(p.stelle_b);
+    const typ = String(p.typ || '').trim().toLowerCase();
+    const noExcerptB = typ === 'anachronismus';
+    const qA = _stelleQuote(p.stelle_a, { kapitel: kap });
+    const qB = noExcerptB ? '' : _stelleQuote(p.stelle_b, { kapitel: kap });
     let exA = viaFact(_verifyExcerpt(groups, groupOrder, kap, qA), p.stelle_a, qA, kap);
-    let exB = viaFact(_verifyExcerpt(groups, groupOrder, kap, qB), p.stelle_b, qB, kap);
-    // Zitat wörtlich nicht gefunden → semantisch die nächste Passage in den
-    // Befund-Kapiteln holen (Paraphrase). Query = Zitat, sonst der Stellen-Text.
-    // Findet auch die Semantik nichts Belastbares, bekommt die Verify-Stufe für
-    // diese Seite KEINEN Ausschnitt („im Text nicht gefunden") statt des
-    // Kapitel-Anfangs — der wäre ein unverwandter Pseudo-Beleg.
-    if (semanticOn && (!exA.located || !exB.located)) {
+    let exB = noExcerptB ? { text: '', located: false }
+      : viaFact(_verifyExcerpt(groups, groupOrder, kap, qB), p.stelle_b, qB, kap);
+    // Zitat wörtlich nicht gefunden → semantisch die nächste Passage holen
+    // (Paraphrase): zuerst auf der Fakt-Seite, sonst in den Befund-Kapiteln. Query =
+    // Zitat, sonst der Stellen-Text. Findet auch die Semantik nichts Belastbares,
+    // bekommt die Verify-Stufe für diese Stelle KEINEN Ausschnitt („im Text nicht
+    // gefunden") statt eines Seiten-/Kapitel-Anfangs — der wäre ein unverwandter
+    // Pseudo-Beleg.
+    if (semanticOn && (!exA.located || (!noExcerptB && !exB.located))) {
       const pageTexts = _chapterPageTexts(groups, groupOrder, kap);
-      if (!exA.located) {
-        const qa = qA || _refToString(p.stelle_a);
-        exA = (qa && await _semanticExcerpt(bookIdInt, qa, pageTexts, signal)) || { text: '', located: false };
-      }
-      if (!exB.located) {
-        const qb = qB || _refToString(p.stelle_b);
-        exB = (qb && await _semanticExcerpt(bookIdInt, qb, pageTexts, signal)) || { text: '', located: false };
-      }
+      const semantic = async (ex, q, stelle) => {
+        const query = q || _refToString(stelle);
+        if (!query) return { text: '', located: false };
+        if (ex.pageId != null && pageTexts.has(Number(ex.pageId))) {
+          const onPage = await _semanticExcerpt(bookIdInt, query,
+            new Map([[Number(ex.pageId), pageTexts.get(Number(ex.pageId))]]), signal);
+          if (onPage) return onPage;
+        }
+        return (await _semanticExcerpt(bookIdInt, query, pageTexts, signal)) || { text: '', located: false };
+      };
+      if (!exA.located) exA = await semantic(exA, qA, p.stelle_a);
+      if (!noExcerptB && !exB.located) exB = await semantic(exB, qB, p.stelle_b);
     }
+    if (typ === 'zeitluecke' && !(exA.located && exB.located)) return { p, keep: true };
     if (!exA.text && !exB.text) return { p, keep: true };
     try {
       const v = await call(jobId, tok,

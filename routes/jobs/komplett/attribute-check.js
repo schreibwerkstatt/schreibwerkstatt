@@ -6,8 +6,9 @@
 const appSettings = require('../../../lib/app-settings');
 const {
   listFigureDeathsWithChapterNames, listFigureScenesWithChapterNames,
-  listDatedLifeEventsWithChapterNames, listSubjectWorldFactsWithChapterNames,
+  listDatedLifeEventsWithChapterNames,
 } = require('../../../db/content-names');
+const { listWorldFacts } = require('../../../db/world-facts');
 const { updateJob, settledAll } = require('../shared');
 const { COST_LABEL, costTier } = require('./cost-labels');
 
@@ -134,7 +135,11 @@ function buildAttributeContradictions(bookIdInt, email, { chapterOrder = null, p
   }
 
   // B) Welt-Fakten: gleiche Kategorie + gleiches subjekt, ähnliche Aussage, anderer Wortlaut.
-  const wfRows = listSubjectWorldFactsWithChapterNames(bookIdInt, email);
+  // Eine Zeile je Fakt-Kapitel-Bezug: ein Fakt in mehreren Kapiteln kann so mit
+  // jedem seiner Kapitel gepaart werden (gleicher Wortlaut fällt unten heraus).
+  const wfRows = listWorldFacts(bookIdInt, email)
+    .filter(f => f.subjekt && f.subjekt.trim())
+    .flatMap(f => (f.kapitel.length ? f.kapitel : [null]).map(ch => ({ ...f, chapter_name: ch })));
   const bySubjekt = new Map();
   for (const r of wfRows) {
     const key = `${_factNorm(r.kategorie)}|${_factNorm(r.subjekt)}`;
@@ -148,7 +153,9 @@ function buildAttributeContradictions(bookIdInt, email, { chapterOrder = null, p
       for (let j = i + 1; j < rows.length; j++) {
         const a = rows[i], b = rows[j];
         if (_factNorm(a.fakt) === _factNorm(b.fakt)) continue;
-        if ((a.chapter_name || '') === (b.chapter_name || '')) continue;
+        // „Verschiedene Kapitel" nur, wenn BEIDE ein bekanntes Kapitel haben: ein Fakt
+        // ohne Kapitelbezug sagt nichts darüber, wo er steht.
+        if (!a.chapter_name || !b.chapter_name || a.chapter_name === b.chapter_name) continue;
         const score = _overlap(a.tokens, b.tokens);
         if (score > bestScore) { best = [a, b]; bestScore = score; }
       }

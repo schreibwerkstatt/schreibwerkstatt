@@ -63,6 +63,15 @@
           <span class="tabs-btn-count" x-text="wfKatCount(k)"></span>
         </button>
       </template>
+      <button type="button" class="tabs-btn" x-show="wfRefutedCount > 0" x-cloak
+              :class="{ 'tabs-btn--active': wfFilters.widerlegt }"
+              :aria-pressed="wfFilters.widerlegt"
+              :data-tip="$app.t('weltfakten.widerlegtTip')"
+              @click="wfFilters.widerlegt = !wfFilters.widerlegt">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#alert-triangle"/></svg>
+        <span x-text="$app.t('weltfakten.widerlegt')"></span>
+        <span class="tabs-btn-count" x-text="wfRefutedCount"></span>
+      </button>
     </div>
     <span class="filter-count" x-text="wfFiltered.length + ' / ' + fakten.length"></span>
   </div>
@@ -89,6 +98,8 @@
               <span x-show="f.subjekt" class="weltfakten-subjekt" x-text="f.subjekt"></span>
               <div class="weltfakten-row-body">
                 <span class="weltfakten-fakt" x-text="f.fakt"></span>
+                <span x-show="f.widerlegt" class="badge badge-warn weltfakten-widerlegt"
+                      :data-tip="$app.t('weltfakten.widerlegtTip')" x-text="$app.t('weltfakten.widerlegt')"></span>
                 <div class="entity-refs weltfakten-row-meta" x-show="f.kapitel?.length || f.seite">
                   <template x-for="k in (f.kapitel || [])" :key="k">
                     <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', name: k }"></button>
@@ -103,5 +114,40 @@
         </div>
       </div>
     </template>
+  </div>
+
+  <!-- Weltfakten-Faktencheck: prüft die Fakten per Web-Suche gegen die reale Faktenlage
+       (Job /jobs/faktencheck). Nur bei instanzweiter Freigabe; ohne Buch-Opt-in
+       deaktiviert mit Hinweis auf die Bucheinstellungen. -->
+  <div class="collapsible-wrap weltfakten-factcheck card-section" x-show="$store.config.factcheckEnabled && fakten.length > 0" x-cloak x-data="collapsible()">
+    <button type="button" class="collapsible-toggle" x-bind="trigger">
+      <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+      <span x-text="$app.t('weltfakten.factcheck.title')"></span>
+    </button>
+    <div x-bind="panel" class="collapsible-section" x-cloak>
+      <p class="card-hint card-section" x-text="$app.t(wfFactcheck.bookOptIn ? 'weltfakten.factcheck.hint' : 'weltfakten.factcheck.notEnabled')"></p>
+      <div class="card-section">
+        <button type="button" class="secondary"
+                @click="wfFactcheckRun()"
+                :disabled="wfFcRunning || !wfFactcheck.bookOptIn || !$store.nav.selectedBookId">
+          <span x-text="$app.t(wfFcRunning ? 'weltfakten.factcheck.starting' : 'weltfakten.factcheck.start')"></span>
+        </button>
+      </div>
+      <div x-show="wfFcProgress > 0" class="progress-bar-wrap">
+        <div class="progress-bar" :style="{ '--progress': wfFcProgress + '%' }"></div>
+      </div>
+      <p class="card-status" x-show="wfFcRunning && wfFcStatusKey" x-text="$app.t(wfFcStatusKey, wfFcStatusParams || {})"></p>
+      <p class="card-status error-msg" x-show="wfFcError" x-text="wfFcError"></p>
+      <template x-if="wfFcResult">
+        <div class="card-section">
+          <p class="card-status" x-text="$app.t('weltfakten.factcheck.result', wfFcResult)"></p>
+          <ul class="komplett-warnings" x-show="wfFcResult.warnings.length">
+            <template x-for="(w, wi) in wfFcResult.warnings" :key="w.key + '-' + wi">
+              <li class="komplett-warning-item" x-text="$app.t(w.key, w.params || {})"></li>
+            </template>
+          </ul>
+        </div>
+      </template>
+    </div>
   </div>
 </div>

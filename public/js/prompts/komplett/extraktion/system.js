@@ -12,6 +12,7 @@ import {
   SONGS_RULES,
   FAKTEN_SCHEMA,
   FAKTEN_RULES,
+  FAKTEN_RULES_LOCAL,
   _schemaBody,
   _ASSIGNMENTS_SCHEMA_BLOCK,
   _EREIGNIS_RULES,
@@ -79,7 +80,9 @@ Kernregeln:
 - figuren_namen / orte_namen / figur_name: Klarnamen exakt wie im Text.
 - Songs: nur mit konkretem Titel oder Interpret aufnehmen; kontext_typ Pflicht.
 - Ereignisse: datum_label = Original-String, datum_year/month/day strukturiert (jeweils null wenn unbekannt). Ist das Jahr nicht explizit, aber aus dem Kontext erschliessbar (verankerte Jahreszahl + relative Angaben, Lebensspanne, Epoche), das abgeleitete Jahr trotzdem in datum_year eintragen und datum_unsicher=true setzen; sonst datum_unsicher=false. subtyp aus Whitelist; im Zweifel 'sonstiges'. Gleiches Ereignis bei allen beteiligten Figuren identisch formulieren.
-- Leere Arrays wenn nichts gefunden.`;
+- Leere Arrays wenn nichts gefunden.
+
+${FAKTEN_RULES_LOCAL}`;
   }
 
   return `${schemaPart}
@@ -225,7 +228,9 @@ Kernregeln:
 - kapitel[].name: aus ## Header oder Prompt-Kontext, OHNE «## »-Markierung.
 - Szene.seite: reiner Titel eines ### Headers aus dem aktuellen ## Kapitel, OHNE «### »-Markierung. NIE der Kapitelname. Im Zweifel leer.
 - Songs: nur mit konkretem Titel oder Interpret aufnehmen; kontext_typ Pflicht.
-- Leere Arrays wenn nichts gefunden.`;
+- Leere Arrays wenn nichts gefunden.
+
+${FAKTEN_RULES_LOCAL}`;
   }
   // Claude: Fakten laufen über buildKomplettSchemaFakten – hier keine FAKTEN_RULES.
   return `${schemaPart}

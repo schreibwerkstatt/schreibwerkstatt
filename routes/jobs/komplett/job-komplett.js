@@ -7,7 +7,6 @@ const {
   saveCheckpoint, loadCheckpoint, deleteCheckpoint,
   backfillLocationChaptersFromScenes,
   rebuildFigureAppearances,
-  saveFaktenToDb,
   getBookSettings,
 } = require('../../../db/schema');
 
@@ -43,9 +42,10 @@ const {
   runKontinuitaetPhase, runCoverageAudit, komplettMaxTokens,
 } = require('./phases');
 const { buildAnachronismusData, _komplettAiOverrides, resolveRemapNames } = require('./job-shared');
-const { loadOrteFromDb, countSongsInDb, countSzenenInDb } = require('./scope');
+const { loadOrteFromDb, countSongsInDb, countSzenenInDb, activeStepJob } = require('./scope');
 const { normalizeKomplettScope, isFullKomplettScope, skippedKomplettSteps } = require('../../../lib/komplett-scope');
 const { COST_LABEL, relabel } = require('./cost-labels');
+const { persistWorldFacts } = require('./world-facts-save');
 
 // ── Job: Komplettanalyse ─────────────────────────────────────────────────────
 // Pipeline (token-optimiert):
@@ -315,8 +315,7 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
     }
 
     // Welt-Fakten persistieren (Full-Replace) — abfragbar im Buch-Chat via list_world_facts.
-    saveFaktenToDb(bookIdInt, chapterFakten, email, idMaps.chNameToId);
-    log.info(`${chapterFakten.reduce((s, c) => s + (c.fakten?.length || 0), 0)} Welt-Fakten gespeichert.`);
+    persistWorldFacts(ctx, chapterFakten, idMaps.chNameToId);
 
     // ── Phase 2 + 3: Figuren + Orte konsolidieren ────────────────────────────
     // Multi-Pass: P2 (Figuren-AI) und P3 (Orte-AI) sind unabhängig und werden parallel
@@ -583,8 +582,9 @@ async function runKomplettAnalyseAll() {
   for (const book of books) {
     const emails = accessByBook.get(book.id) || [];
     for (const email of emails) {
-      if (findActiveJobId('komplett-analyse', book.id, email)) {
-        logger.info(`Nacht-Analyse: Buch ${book.id} / ${email} läuft bereits – überspringe.`);
+      // Auch ein Standalone-Teil-Job blockiert: der Cron-Lauf ohne Umfang enthält alle Schritte.
+      if (findActiveJobId('komplett-analyse', book.id, email) || activeStepJob(book.id, email, null)) {
+        logger.info(`Nacht-Analyse: Buch ${book.id} / ${email} – Komplettanalyse oder Teil-Job läuft bereits – überspringe.`);
         continue;
       }
       const label = `Nacht · ${book.name}`;

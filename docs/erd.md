@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 319, 175 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram` + `search_meta`).
+Stand: Schema-Version 320, 177 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -24,6 +24,8 @@ erDiagram
   books ||--o{ figure_scenes         : has
   books ||--o{ songs                 : has
   books ||--o{ world_facts           : has
+  books ||--o{ world_facts_scan      : has
+  books ||--o{ world_fact_verdicts   : has
   books ||--o{ figure_relations      : has
   books ||--o{ zeitstrahl_events     : has
   books ||--o{ continuity_checks     : has
@@ -1035,6 +1037,24 @@ erDiagram
     INTEGER fact_id    PK,FK "ON DELETE CASCADE"
     INTEGER chapter_id PK,FK "ON DELETE CASCADE"
   }
+  world_facts_scan {
+    INTEGER id         PK
+    INTEGER book_id    FK "ON DELETE CASCADE"
+    TEXT    user_email "UNIQUE(book_id, IFNULL(user_email,''))"
+    TEXT    scanned_at "Fakten-Index erhoben (leer ≠ nie analysiert)"
+  }
+  world_fact_verdicts {
+    INTEGER id           PK
+    INTEGER book_id      FK "ON DELETE CASCADE"
+    TEXT    user_email
+    TEXT    fact_key     "normalisiert subjekt: fakt — überdauert den Full-Replace"
+    TEXT    urteil       "korrekt|falsch|unklar (Faktencheck)"
+    TEXT    schwere
+    TEXT    beschreibung
+    TEXT    empfehlung
+    TEXT    quelle       "Beleg-URL"
+    TEXT    checked_at
+  }
 
   figures   ||--o{ figure_tags        : tagged
   figures   ||--o{ figure_relations   : from
@@ -1057,6 +1077,8 @@ erDiagram
   books     ||--o{ world_facts        : has
   world_facts ||--o{ world_fact_chapters : in
   chapters  ||--o{ world_fact_chapters : tagged
+  books     ||--o{ world_facts_scan   : scanned
+  books     ||--o{ world_fact_verdicts : checked
 ```
 
 ### 3a · Figuren-Werkstatt (isoliert, kein Promotion-Pfad zu `figures`)

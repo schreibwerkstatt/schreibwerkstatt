@@ -28,6 +28,7 @@ const { db } = require('./connection');
 // beim Import bereinigen, sonst wandert der Defekt mit dem Buch mit.
 const { normalizeDatumFields } = require('../lib/datum-parse');
 const { normalizeIdeeStatus } = require('../lib/ideen-status');
+const { normFaktKategorie, markWorldFactsScanned } = require('./world-facts');
 const searchIndex = require('../lib/search');
 const { collectResearch, restoreResearch } = require('./book-migration-data/research');
 
@@ -371,7 +372,8 @@ function restoreAnalysis(bookId, data, ctx) {
   const insWf = db.prepare(`INSERT INTO world_facts
     (book_id,kategorie,subjekt,fakt,seite_label,sort_order,user_email,updated_at) VALUES (?,?,?,?,?,?,?,?)`);
   for (const r of arr('worldFacts')) {
-    const res = insWf.run(bookId, r.kategorie ?? null, r.subjekt ?? null, r.fakt, r.seite_label ?? null,
+    // Kategorie über die Whitelist — ein roher Fremd-Wert fiele aus jedem Kategorien-Filter.
+    const res = insWf.run(bookId, normFaktKategorie(r.kategorie), r.subjekt ?? null, r.fakt, r.seite_label ?? null,
       r.sort_order ?? 0, email, r.updated_at || _now());
     factMap.set(r.id, res.lastInsertRowid);
   }
@@ -380,6 +382,7 @@ function restoreAnalysis(bookId, data, ctx) {
     const fid = factMap.get(r.fact_id); const cid = chapterOf(r.chapter_id);
     if (fid && cid) insWfc.run(fid, cid);
   }
+  if (arr('worldFacts').length) markWorldFactsScanned(bookId, email);
 
   // 7) zeitstrahl_events
   const insZe = db.prepare(`INSERT INTO zeitstrahl_events
@@ -411,7 +414,9 @@ function restoreAnalysis(bookId, data, ctx) {
     if (eid) insZef.run(eid, r.figure_id == null ? null : (figMap.get(r.figure_id) ?? null), r.figur_name ?? null, r.sort_order ?? 0);
   }
 
-  // 8) continuity
+  // 8) continuity — `quelle` landet in der Karte als Link: aus einem fremden Bundle
+  // nur http(s)-URLs übernehmen (kein `javascript:` o. ä.), sonst null.
+  const _httpUrlOrNull = (v) => (typeof v === 'string' && /^https?:\/\//i.test(v.trim())) ? v.trim() : null;
   const insCc = db.prepare('INSERT INTO continuity_checks (book_id,user_email,checked_at,summary,model) VALUES (?,?,?,?,?)');
   for (const r of arr('continuityChecks')) {
     const res = insCc.run(bookId, email, r.checked_at || _now(), r.summary ?? null, r.model ?? null);
@@ -425,7 +430,7 @@ function restoreAnalysis(bookId, data, ctx) {
     const cid = checkMap.get(r.check_id);
     if (!cid) continue;
     const res = insCi.run(cid, bookId, email, r.schwere ?? null, r.typ ?? null, r.beschreibung ?? null,
-      r.stelle_a ?? null, r.stelle_b ?? null, r.empfehlung ?? null, r.quelle ?? null, r.sort_order ?? 0, r.updated_at ?? null,
+      r.stelle_a ?? null, r.stelle_b ?? null, r.empfehlung ?? null, _httpUrlOrNull(r.quelle), r.sort_order ?? 0, r.updated_at ?? null,
       r.resolved ?? 0, r.resolved_at ?? null, r.dismissed ?? 0, r.dismissed_at ?? null,
       pageOf(r.page_a_id), pageOf(r.page_b_id));
     issueMap.set(r.id, res.lastInsertRowid);

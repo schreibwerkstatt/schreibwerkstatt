@@ -106,7 +106,7 @@ function seed() {
   db.prepare('INSERT INTO zeitstrahl_event_chapters (event_id, chapter_id, sort_order) VALUES (?, ?, 0)').run(evt, 91011);
   db.prepare('INSERT INTO zeitstrahl_event_pages (event_id, page_id, sort_order) VALUES (?, ?, 0)').run(evt, 910104);
 
-  const fact = db.prepare(`INSERT INTO world_facts (book_id, kategorie, subjekt, fakt, sort_order, user_email) VALUES (?, 'magie', 'Anna', 'fliegt', 0, ?)`).run(BOOK, U).lastInsertRowid;
+  const fact = db.prepare(`INSERT INTO world_facts (book_id, kategorie, subjekt, fakt, sort_order, user_email) VALUES (?, 'regel', 'Anna', 'fliegt', 0, ?)`).run(BOOK, U).lastInsertRowid;
   db.prepare('INSERT INTO world_fact_chapters (fact_id, chapter_id) VALUES (?, ?)').run(fact, 91011);
   db.prepare('INSERT INTO world_fact_chapters (fact_id, chapter_id) VALUES (?, ?)').run(fact, 91012);
 }
@@ -337,10 +337,10 @@ function seedOther() {
   insZef.run(e2, o.ann, null, 0);
 
   const insWf = db.prepare('INSERT INTO world_facts (book_id, kategorie, subjekt, fakt, sort_order, user_email) VALUES (?, ?, ?, ?, ?, ?)');
-  insWf.run(OTHER, 'magie', 'Anna Nord', 'zaubert', 1, U);
-  insWf.run(OTHER, 'geografie', 'Hafen', 'liegt im Norden', 0, U);
-  insWf.run(OTHER, 'magie', 'Zoe', 'kann nichts', 2, U);
-  insWf.run(OTHER, 'magie', 'Anna Nord', 'bob', 0, V);
+  insWf.run(OTHER, 'regel', 'Anna Nord', 'zaubert', 1, U);
+  insWf.run(OTHER, 'ort', 'Hafen', 'liegt im Norden', 0, U);
+  insWf.run(OTHER, 'regel', 'Zoë', 'kann nichts', 2, U);
+  insWf.run(OTHER, 'regel', 'Anna Nord', 'bob', 0, V);
 }
 
 test('_findFigure: fig_id exakt je User, Name mit Exact-Match-Bonus', () => {
@@ -410,7 +410,11 @@ test('get_timeline: sort_order, Figuren-Fallback, Fokusfigur, User-Scope', () =>
 
 test('list_world_facts: sort_order, kategorie exakt, subjekt als Teilstring, User-Scope', () => {
   assert.deepEqual(callO('list_world_facts').fakten.map(f => f.fakt), ['liegt im Norden', 'zaubert', 'kann nichts']);
-  assert.deepEqual(callO('list_world_facts', { kategorie: 'MAGIE' }).fakten.map(f => f.fakt), ['zaubert', 'kann nichts']);
+  assert.deepEqual(callO('list_world_facts', { kategorie: 'REGEL' }).fakten.map(f => f.fakt), ['zaubert', 'kann nichts']);
+  // Unbekannte Kategorie: Fehler mit den gültigen Werten statt stiller Leere.
+  assert.match(callO('list_world_facts', { kategorie: 'magie' }).error, /Gültige Werte: .*regel/);
+  // Subjekt-Teilstring faltet auch Umlaute (SQLite-LIKE täte das nicht).
+  assert.deepEqual(callO('list_world_facts', { subjekt: 'ZOË' }).fakten.map(f => f.fakt), ['kann nichts']);
   assert.deepEqual(callO('list_world_facts', { subjekt: 'Nor' }).fakten.map(f => f.fakt), ['zaubert']);
   assert.deepEqual(callO('list_world_facts', {}, V).fakten.map(f => f.fakt), ['bob']);
 });

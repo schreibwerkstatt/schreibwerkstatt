@@ -110,13 +110,79 @@ function buildBookPagesSig(pageContents, bookSettings, cacheVersion) {
   return `${pagesPart}||${bookSettingsSigPart(bookSettings)}||${cacheVersion || ''}`;
 }
 
-/** Extrahiert das wörtliche Zitat aus einem stelle_a/stelle_b-String (in «»/""/„“/“”).
- *  Leer, wenn kein Zitat vorhanden. Geteilt von der Verify-Stufe (job-shared.js) und
- *  der Beleg-Prüfung beim Speichern (remap.js). `“` steht in beiden Klassen: es
- *  schliesst das deutsche „…“ und öffnet das englische “…”. */
-function _stelleQuote(stelle) {
-  const m = String(stelle || '').match(/[«„"“]([^»"”“]{3,})[»"”“]/);
-  return m ? m[1].trim() : '';
+// Mindestgrösse eines Belegzitats. Kürzere «Zitate» (ein Kapitelname, ein Begriff,
+// «Ja») taugen weder als Beleg noch als Fabrikations-Nachweis — sie gelten als «kein
+// Zitat»: keine Beleg-Prüfung, keine Ortung über den Wortlaut.
+const STELLE_QUOTE_MIN_CHARS = 12;
+const STELLE_QUOTE_MIN_WORDS = 3;
+
+// Zitat-Paare in Suchreihenfolge. Jedes gefundene Paar wird im Arbeitsstring maskiert,
+// bevor die nächste Form sucht — sonst läse «“…”» das schliessende “ eines deutschen
+// „…“ als Öffner, und «"…"» fände das Innere eines schon erkannten Zitats noch einmal.
+// Die Guillemet-Richtung («…» vs. »…«, ‹…› vs. ›…‹) entscheidet das erste Zeichen im
+// String; die Gegenrichtung fände sonst den Zwischenraum zweier Zitate («A» und «B»
+// → «» und «»).
+function _quotePairs(s) {
+  const firstOf = (a, b) => {
+    const ia = s.indexOf(a), ib = s.indexOf(b);
+    if (ia < 0) return ib < 0 ? null : 'rev';
+    return (ib < 0 || ia < ib) ? 'fwd' : 'rev';
+  };
+  const guil = firstOf('«', '»');
+  const single = firstOf('‹', '›');
+  const pairs = [];
+  if (guil === 'fwd') pairs.push(/«([^«»]+)»/g); else if (guil === 'rev') pairs.push(/»([^«»]+)«/g);
+  if (single === 'fwd') pairs.push(/‹([^‹›]+)›/g); else if (single === 'rev') pairs.push(/›([^‹›]+)‹/g);
+  pairs.push(/„([^„“”]+)[“”]/g, /‚([^‚‘’]+)‘/g, /“([^“”„]+)”/g, /"([^"]+)"/g);
+  return pairs;
+}
+
+// Ein Zitat, das direkt hinter «Kapitel»/«Abschnitt»/«Chapter»/«Teil» (ggf. mit Nummer,
+// aber ohne Doppelpunkt) steht, ist vermutlich ein Kapitel-Titel («Kapitel «Die Flucht»:
+// «Marek lag reglos»»). Weich: es zählt nur, wenn sonst kein Zitat bleibt — «Kapitel 3
+// «Marek lag reglos …»» ohne Doppelpunkt ist ebenso denkbar.
+const _TITLE_LEAD = /(?:kapitel|kap\.|abschnitt|unterkapitel|teil|chapter|ch\.|section|part)(?:\s+\d+)?\s*$/i;
+
+function _normTitle(s) {
+  return String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/** Extrahiert das wörtliche Zitat aus einem stelle_a/stelle_b-String.
+ *  Sammelt alle Zitat-Paare («…», »…«, „…“, “…”, "…", ‹…›, ›…‹, ‚…‘), verwirft
+ *  Kapitel-Titel (direkt hinter «Kapitel …» bzw. gleich einem Namen aus `kapitel`) und
+ *  Zitate unter der Mindestgrösse und nimmt das längste. Innere Zitate (ein „…“ in
+ *  einem «…») schneiden das äussere nicht ab. Leer, wenn kein taugliches Zitat da ist.
+ *  Geteilt von der Verify-Stufe (job-shared.js) und der Beleg-Prüfung beim Speichern
+ *  (remap.js).
+ *  @param {string} stelle
+ *  @param {{kapitel?: string[]}} [opts]  Kapitelnamen des Befunds (Titel-Ausschluss) */
+function _stelleQuote(stelle, { kapitel = null } = {}) {
+  let work = String(stelle || '');
+  if (!work) return '';
+  const titles = new Set((kapitel || []).map(k => _normTitle(_refToString(k))).filter(Boolean));
+  const quotes = [];
+  const titleLike = [];
+  for (const re of _quotePairs(work)) {
+    const snapshot = work;
+    work = work.replace(re, (whole, inner, offset) => {
+      const text = inner.trim();
+      // Exakter Kapitelname des Befunds: nie ein Beleg.
+      if (!titles.has(_normTitle(text))) {
+        (_TITLE_LEAD.test(snapshot.slice(0, offset)) ? titleLike : quotes).push(text);
+      }
+      return ' '.repeat(whole.length);
+    });
+  }
+  const longest = (list) => {
+    let best = '';
+    for (const c of list) {
+      if (c.length < STELLE_QUOTE_MIN_CHARS) continue;
+      if (c.split(/\s+/).filter(w => /[\p{L}\p{N}]/u.test(w)).length < STELLE_QUOTE_MIN_WORDS) continue;
+      if (c.length > best.length) best = c;
+    }
+    return best;
+  };
+  return longest(quotes) || longest(titleLike);
 }
 
 /** Misst Wall-Clock pro Pipeline-Segment. `mark(label)` loggt die Dauer seit dem
@@ -289,7 +355,7 @@ function buildConsolidationSig(chapters, cacheVersion, flags = {}) {
 module.exports = {
   _refToString, _remapFigNames, extractField, consolidationFitsCap,
   buildBookSystemBlockText, buildChapterSystemBlockText, buildBookPagesSig, bookSettingsSigPart,
-  _stelleQuote,
+  _stelleQuote, STELLE_QUOTE_MIN_CHARS, STELLE_QUOTE_MIN_WORDS,
   makePhaseTimer,
   runNonCritical, buildFigNameLookup,
   sampleChapters, computeCoverageScore, buildConsolidationSig,

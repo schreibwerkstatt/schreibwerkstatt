@@ -10,6 +10,9 @@
 // Delta-Cache: pro Chunk ein content_hash; ein Chunk, dessen Hash die Entität
 // schon unter irgendeinem chunk_ix hatte, behält seinen Vektor (kein erneuter
 // Embedding-Call — auch wenn eine Einfügung vorne die Nummerierung verschiebt).
+// Verfehlt die Entität, greift der Hash im ganzen (Buch, kind, Modell) samt
+// Recycling-Puffer gelöschter Chunks (semanticChunks.reusableVectors): Welt-
+// Fakten bekommen bei jeder Komplettanalyse neue IDs, ihr Text bleibt meist gleich.
 // Entitäten ohne jede Änderung werden gar nicht geschrieben. model steht im
 // Chunk-Key — ein Modellwechsel führt beim nächsten Lauf zu vollständigem
 // Neu-Embedden; die Chunks des alten Modells räumt das Ende eines vollständigen
@@ -121,6 +124,9 @@ async function runEmbedIndexJob(jobId, bookId, userEmail) {
       if (signal()?.aborted) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
     };
 
+    // Startzeitpunkt für das Räumen des Recycling-Puffers am Ende: was erst
+    // während dieses Laufs gelöscht wird, gehört dem Folgelauf.
+    const runStartedAt = new Date().toISOString();
     updateJob(jobId, { statusText: 'job.phase.embedCollect', progress: 5 });
     const entities = await _collectEntities(bookId, signal());
 
@@ -134,8 +140,16 @@ async function runEmbedIndexJob(jobId, bookId, userEmail) {
     const presentIds = Object.fromEntries(KINDS.map(k => [k, []]));
     let totalChunks = 0;
     let unchanged = 0;
+    let rehomed = 0;
 
     for (const kind of KINDS) {
+      // Hash-Nachschlagewerk über Entitäts-Grenzen, lazy je kind (nur geladen,
+      // wenn eine Entität ihren eigenen Cache verfehlt).
+      let kindCache = null;
+      const crossEntity = (hash) => {
+        if (!kindCache) kindCache = semanticChunks.reusableVectors(bookId, kind, model, dim);
+        return kindCache.get(hash);
+      };
       for (const ent of entities[kind]) {
         presentIds[kind].push(ent.id);
         const chunks = chunkText(ent.text);
@@ -159,8 +173,12 @@ async function runEmbedIndexJob(jobId, bookId, userEmail) {
           // (Snippet-Quelle).
           const embedInput = passagePrefix ? passagePrefix + text : text;
           const hash = contentHash(embedInput);
-          const vec = byHash.get(hash);
+          let vec = byHash.get(hash);
           if (existing.get(ix)?.content_hash !== hash) samePlace = false;
+          if (!vec) {
+            vec = crossEntity(hash);
+            if (vec) rehomed++;
+          }
           if (vec) {
             rows.push({ chunk_ix: ix, content_hash: hash, vector: vec, text });
           } else {
@@ -175,7 +193,7 @@ async function runEmbedIndexJob(jobId, bookId, userEmail) {
       }
     }
 
-    logger.info(`Index ${bookId}: ${totalChunks} Chunks, davon ${pending.length} neu (${totalChunks - pending.length} aus Cache), ${unchanged} Einträge unverändert.`);
+    logger.info(`Index ${bookId}: ${totalChunks} Chunks, davon ${pending.length} neu (${totalChunks - pending.length} aus Cache, ${rehomed} davon von anderer/gelöschter Entität), ${unchanged} Einträge unverändert.`);
     updateJob(jobId, { statusText: 'job.phase.embedding', statusParams: { done: 0, total: pending.length }, progress: 15 });
 
     // Offene Chunk-Zahl pro Entität → eine Entität wird persistiert, sobald ihr
@@ -236,6 +254,7 @@ async function runEmbedIndexJob(jobId, bookId, userEmail) {
     // Erst jetzt gilt der Index als vollständig — Konsumenten, die „kein Treffer"
     // als „kommt nicht vor" werten, verlassen sich darauf (isIndexed).
     semanticChunks.markIndexed(bookId, model);
+    semanticChunks.dropRecycled(bookId, runStartedAt);
     const dropped = semanticChunks.clearForeignModels(bookId, model);
     if (dropped) logger.info(`Fremdmodell-Chunks entfernt: ${dropped} (aktives Modell ${model}).`);
     if (vanished) logger.info(`${vanished} Einträge während des Laufs gelöscht, übersprungen.`);
@@ -244,7 +263,7 @@ async function runEmbedIndexJob(jobId, bookId, userEmail) {
     const stats = semanticChunks.bookStats(bookId, model);
     completeJob(jobId, {
       model, dim, totalChunks: stats.total, embedded: pending.length,
-      reused: totalChunks - pending.length, pruned, droppedForeignModel: dropped, byKind: stats.byKind,
+      reused: totalChunks - pending.length, rehomed, pruned, droppedForeignModel: dropped, byKind: stats.byKind,
     }, null, `${stats.total} Chunks (${pending.length} neu, ${totalChunks - pending.length} aus Cache${pruned ? `, ${pruned} verwaist entfernt` : ''})`);
   } catch (e) {
     if (e.name !== 'AbortError') logger.error(`Embedding-Index Fehler: ${e.message}`, { stack: e.stack });

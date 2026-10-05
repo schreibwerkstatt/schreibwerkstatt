@@ -318,7 +318,8 @@ async function runBrainstormJob(jobId, draftId, knotenId, userEmail) {
 function _loadWeltgesetze(bookId, userEmail, logger) {
   try {
     if (!worldFactsScanState(bookId, userEmail).scanned) return [];
-    return listWorldFacts(bookId, userEmail, { kategorien: ['regel', 'technik'] }).slice(0, 40);
+    // Kein Deckel hier: der Prompt kappt und weist „N von M" aus.
+    return listWorldFacts(bookId, userEmail, { kategorien: ['regel', 'technik'] });
   } catch (e) {
     logger?.warn?.(`Weltgesetz-Kontext fehlgeschlagen book=${bookId}: ${e.message}`);
     return [];

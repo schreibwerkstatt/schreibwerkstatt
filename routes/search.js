@@ -111,7 +111,9 @@ function _escHtml(s) {
 // Treffer-/Quell-Lookups der semantischen Suche. Szenen, Figuren, Schauplätze
 // und Welt-Fakten sind Analyse-Daten PRO USER (`user_email`): ein Co-Autor sieht
 // im selben Buch nur seine eigenen — Treffer wie Quelle werden darum auf
-// (book_id, user_email) skopiert. Recherche ist buch-geteilt, Seiten laufen über
+// (book_id, user_email) skopiert. Der Retrieval-Pfad filtert schon vor dem
+// topK-Schnitt (Option `user`), sonst kämen nach diesem Filter zu wenige Treffer
+// zurück; die Auflösung hier bleibt die zweite Schicht (Titel + Existenz). Recherche ist buch-geteilt, Seiten laufen über
 // db/content-names (keine Roh-SQL auf `pages`). Lazy vorbereitet: das Modul wird
 // vor dem Migrationslauf geladen.
 let _stmts = null;
@@ -220,7 +222,7 @@ router.get('/semantic', async (req, res) => {
       // Vektor, danach optionales Reranking gegen den Entitäts-Text (siehe
       // lib/semantic-retrieval#similarToEntity). Kein Hybrid — hier gibt es keinen
       // Anfragetext für die FTS-Seite.
-      const sim = await semanticRetrieval.similarToEntity(bookId, likeKind, likeId, { kinds, topK });
+      const sim = await semanticRetrieval.similarToEntity(bookId, likeKind, likeId, { kinds, topK, user: email });
       const notIndexed = !!sim.notIndexed || !semanticRetrieval.indexReady(bookId);
       return res.json({ hits: sim.notIndexed ? [] : _resolveSemanticHits(sim.hits, bookId, email), mode: 'semantic', notIndexed });
     }
@@ -228,7 +230,7 @@ router.get('/semantic', async (req, res) => {
     if (q.length < 2) return res.json({ hits: [], mode: 'semantic' });
     if (q.length > 500) return res.status(400).json({ error_code: 'QUERY_TOO_LONG' });
     // Freitext: Retrieval → Hybrid-Fusion → Reranking (siehe lib/semantic-retrieval).
-    const raw = await semanticRetrieval.semanticQuery(bookId, q, { kinds, topK });
+    const raw = await semanticRetrieval.semanticQuery(bookId, q, { kinds, topK, user: email });
     res.json({
       hits: _resolveSemanticHits(raw, bookId, email), mode: 'semantic',
       notIndexed: !semanticRetrieval.indexReady(bookId),
@@ -250,7 +252,9 @@ router.get('/semantic/status', (req, res) => {
 
   const { model } = embed.getConfig();
   try {
-    res.json({ enabled: true, ...semanticChunks.indexStatus(bookId, model) });
+    // staleCount user-skopiert: Analyse-Änderungen eines Co-Autors betreffen
+    // nicht, was dieser User findet (siehe indexStatus).
+    res.json({ enabled: true, ...semanticChunks.indexStatus(bookId, model, email) });
   } catch (e) {
     logger.error(`[search] GET /search/semantic/status failed: ${e.message}`);
     res.status(500).json({ error_code: 'STATUS_FAILED', detail: e.message });

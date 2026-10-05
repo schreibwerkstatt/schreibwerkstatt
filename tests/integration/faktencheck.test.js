@@ -15,6 +15,7 @@ const EMAIL = 'autor@test.dev';
 
 function seedFacts() {
   db.prepare('DELETE FROM world_facts WHERE book_id = ?').run(BOOK);
+  db.prepare('DELETE FROM world_fact_verdicts WHERE book_id = ?').run(BOOK);
   db.prepare('DELETE FROM continuity_issues WHERE book_id = ?').run(BOOK);
   db.prepare('DELETE FROM continuity_checks WHERE book_id = ?').run(BOOK);
   db.prepare('DELETE FROM chapters WHERE book_id = ?').run(BOOK);
@@ -39,11 +40,12 @@ function seedFacts() {
   db.prepare('INSERT INTO world_fact_chapters (fact_id, chapter_id) VALUES (?, ?)').run(idHist, 91001);
 }
 
-function setFlag(on) {
-  db.prepare(`INSERT INTO book_settings (book_id, weltfakten_real_pruefen, updated_at)
-              VALUES (?, ?, ?)
-              ON CONFLICT(book_id) DO UPDATE SET weltfakten_real_pruefen=excluded.weltfakten_real_pruefen`)
-    .run(BOOK, on ? 1 : 0, new Date().toISOString());
+function setFlag(on, orteReal = false) {
+  db.prepare(`INSERT INTO book_settings (book_id, weltfakten_real_pruefen, orte_real, updated_at)
+              VALUES (?, ?, ?, ?)
+              ON CONFLICT(book_id) DO UPDATE SET weltfakten_real_pruefen=excluded.weltfakten_real_pruefen,
+                                                 orte_real=excluded.orte_real`)
+    .run(BOOK, on ? 1 : 0, orteReal ? 1 : 0, new Date().toISOString());
 }
 
 before(() => {
@@ -66,11 +68,56 @@ test('buildFactCheckCandidates: nur welt-externe Kategorien, Kapitel-Gruppierung
   setFlag(true);
   const { candidates } = buildFactCheckCandidates(BOOK, EMAIL);
   const kats = candidates.map(c => c.kategorie).sort();
-  assert.deepEqual(kats, ['ereignis', 'historie', 'kultur', 'ort', 'technik']);
-  // figur/objekt/regel ausgeschlossen
+  assert.deepEqual(kats, ['ereignis', 'historie', 'kultur', 'technik']);
+  // figur/objekt/regel ausgeschlossen; ort nur bei realen Schauplätzen (orte_real)
   assert.ok(!candidates.some(c => ['figur', 'objekt', 'regel'].includes(c.kategorie)));
   const hist = candidates.find(c => c.subjekt === 'Mondlandung');
   assert.deepEqual(hist.kapitel, ['Kapitel 1']);
+});
+
+test('buildFactCheckCandidates: ort nur mit orte_real', () => {
+  setFlag(true, true);
+  const { candidates } = buildFactCheckCandidates(BOOK, EMAIL);
+  assert.ok(candidates.some(c => c.kategorie === 'ort'));
+});
+
+test('buildFactCheckCandidates: gleiche Aussage zweimal → ein Kandidat', () => {
+  setFlag(true);
+  db.prepare('INSERT INTO world_facts (book_id, user_email, kategorie, subjekt, fakt, sort_order) VALUES (?,?,?,?,?,?)')
+    .run(BOOK, EMAIL, 'historie', 'mondlandung', 'Fand 1968 statt.', 50);
+  const { candidates } = buildFactCheckCandidates(BOOK, EMAIL);
+  assert.equal(candidates.filter(c => c.subjekt.toLowerCase() === 'mondlandung').length, 1);
+});
+
+test('buildFactCheckCandidates: geurteilte Aussagen fallen weg, «unklar» kommt hinten wieder', () => {
+  setFlag(true);
+  const { saveFactVerdicts, worldFactKey } = require('../../db/schema');
+  saveFactVerdicts(BOOK, EMAIL, [
+    { key: worldFactKey('Mondlandung', 'fand 1968 statt'), urteil: 'falsch', quelle: 'https://example.org/a' },
+    { key: worldFactKey('Smartphone', 'gab es 1985'), urteil: 'korrekt' },
+    { key: worldFactKey('Mauerfall', 'war 1989'), urteil: 'unklar' },
+  ]);
+  const { candidates, pending, total } = buildFactCheckCandidates(BOOK, EMAIL);
+  assert.equal(total, 4);
+  assert.equal(pending, 2);
+  assert.deepEqual(candidates.map(c => c.subjekt), ['Brauch X', 'Mauerfall']);
+});
+
+test('faktenfehlerIssues: «falsch»-Urteile werden in jeden neuen Kontinuitäts-Check nachgezogen', () => {
+  setFlag(true);
+  const { saveFactVerdicts, worldFactKey, faktenfehlerIssues } = require('../../db/schema');
+  saveFactVerdicts(BOOK, EMAIL, [{ key: worldFactKey('Mondlandung', 'fand 1968 statt'), urteil: 'falsch',
+    quelle: 'https://example.org/apollo', beschreibung: '1969' }]);
+  const issues = faktenfehlerIssues(BOOK, EMAIL);
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0].stelle_a, 'Mondlandung: fand 1968 statt');
+  assert.deepEqual(issues[0].kapitel, ['Kapitel 1']);
+  // Neuer Kontinuitäts-Check (wie nach einer Komplettanalyse) + Nachziehen.
+  const { saveKontinuitaetResult } = require('../../routes/jobs/komplett/remap');
+  const log = { info() {}, warn() {} };
+  saveKontinuitaetResult(BOOK, EMAIL, { zusammenfassung: 'neu', probleme: [] }, {}, { 'Kapitel 1': 91001 }, 'claude', log);
+  const latest = getLatestContinuityCheck(BOOK, EMAIL);
+  assert.equal(latest.issues.filter(i => i.typ === 'faktenfehler').length, 1);
 });
 
 test('buildFactCheckCandidates: Cap greift, total zählt alle', () => {
@@ -159,4 +206,12 @@ test('_judgeOneFact: pause_turn wird fortgesetzt, vollständiges Urteil kommt du
   const text = await _judgeOneFact(tok, 'prompt', 'system', null, stub);
   assert.equal(calls, 2);
   assert.equal(text, '{"urteil":"korrekt"}');
+});
+
+test('_judgeOneFact: auch nach der letzten Runde noch pause_turn → wirft statt leerem Urteil', async () => {
+  const { _judgeOneFact } = require('../../routes/jobs/komplett/job-faktencheck');
+  const tok = { in: 0, out: 0 };
+  const stub = async () => ({ text: 'Ich suche noch …', stopReason: 'pause_turn', rawContentBlocks: [], tokensIn: 1, tokensOut: 1 });
+  await assert.rejects(() => _judgeOneFact(tok, 'prompt', 'system', null, stub),
+    (e) => e.message === 'job.error.factcheckVerdictInvalid');
 });

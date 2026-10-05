@@ -114,6 +114,37 @@ test('kontinuitaetResolveStelle: side b nimmt das zweite Kapitel des Befunds', (
   assert.equal(ctx.kontinuitaetResolveStelle('x', issue, 'b').name, 'B1');
 });
 
+test('kontinuitaetResolveStelle: Abschnittsname ohne Kapitel nur bei eindeutigem Treffer', () => {
+  const stores = installAlpine({ tree: [chapter(1, 'Eins', ['Am Strand', 'Nacht']), chapter(2, 'Zwei', ['Nacht'])] });
+  const ctx = kontinuitaetCtx(stores, []);
+  assert.equal(ctx.kontinuitaetResolveStelle('Am Strand: «Er lief zum Wasser hinunter»', {}, 'a').id, 100);
+  assert.equal(ctx.kontinuitaetResolveStelle('Nacht: «Es war dunkel und still»', {}, 'a'), null, 'mehrdeutig → kein Link');
+  assert.equal(ctx.kontinuitaetResolveStelle('Zwei, Nacht «Es war dunkel»', {}, 'a').id, 200);
+});
+
+test('kontinuitaetResolveStelle: Kapitelname im Freitext, nie aus dem Zitat', () => {
+  const stores = installAlpine({ tree: [chapter(1, 'Der Vater', ['A1']), chapter(2, 'Zwei', ['B1'])] });
+  const ctx = kontinuitaetCtx(stores, []);
+  assert.equal(ctx.kontinuitaetResolveStelle('Kapitel «Der Vater»', {}, 'a'), null);
+  assert.equal(ctx.kontinuitaetResolveStelle('Im Kapitel Der Vater «Er schwieg lange»', {}, 'a').name, 'A1');
+});
+
+test('kontinuitaetResolveStelle: Abschnitt im Unterkapitel ueber das Elternkapitel', () => {
+  const parent = chapter(1, 'Teil I', []);
+  const sub = { ...chapter(2, 'Ankunft', ['Bahnhof']), parent_id: 1 };
+  const stores = installAlpine({ tree: [parent, sub] });
+  const ctx = kontinuitaetCtx(stores, []);
+  assert.equal(ctx.kontinuitaetResolveStelle('Teil I: Bahnhof', { chapter_ids: [1] }, 'a').name, 'Bahnhof');
+});
+
+test('kontinuitaetStelleRef: reine Kapitelreferenz → kapitel, Abschnitt → seite', () => {
+  const stores = installAlpine({ tree: [chapter(1, 'Eins', ['A1', 'A2'])] });
+  const ctx = kontinuitaetCtx(stores, []);
+  assert.deepEqual(ctx.kontinuitaetStelleRef('Eins', {}, 'a'), { type: 'kapitel', id: 1, label: 'Eins' });
+  assert.equal(ctx.kontinuitaetStelleRef('Eins: A2', {}, 'a').id, 101);
+  assert.equal(ctx.kontinuitaetStelleRef('Nirgends', {}, 'a').id, undefined);
+});
+
 // ── Kontinuitaet: Befundliste ──────────────────────────────────────────────
 
 const ISSUES = [

@@ -301,7 +301,7 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'list_world_facts',
-    description: 'Liefert die etablierten Welt-Fakten/Weltregeln des Buchs (deklaratives Buch-Wissen aus der Komplettanalyse): Magiesystem-Regeln, Geografie, Daten, etablierte Aussagen. Pro Fakt: kategorie, subjekt, fakt-Text, betroffene Kapitel. Beantwortet "welche Weltregeln gelten?", "wie funktioniert die Magie?", "welche Fakten über Ort/Figur X sind etabliert?". Filterbar nach kategorie (exakt) und subjekt (Teilstring).',
+    description: 'Liefert die etablierten Welt-Fakten/Weltregeln des Buchs (deklaratives Buch-Wissen aus der Komplettanalyse): Magiesystem-Regeln, Geografie, Daten, etablierte Aussagen. Pro Fakt: kategorie, subjekt, fakt-Text, betroffene Kapitel; real_widerlegt=true heisst, der Faktencheck hat die Aussage per Quelle als real falsch belegt (Buchaussage, keine reale Tatsache). Beantwortet "welche Weltregeln gelten?", "wie funktioniert die Magie?", "welche Fakten über Ort/Figur X sind etabliert?". Filterbar nach kategorie (exakt) und subjekt (Teilstring).',
     input_schema: {
       type: 'object',
       properties: {

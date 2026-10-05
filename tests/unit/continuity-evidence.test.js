@@ -37,9 +37,21 @@ test('locateStelle: weder Zitat noch Fakt → null (kein Pseudo-Anker)', () => {
   assert.equal(locateStelle('Kapitel 5', 'steht so nirgends im ganzen Buch', PAGES, {}), null);
 });
 
-test('excerptOnPage: Fenster ums Zitat; ohne Treffer Seitenanfang', () => {
-  assert.match(excerptOnPage(PAGES[1], 'Marek öffnete die Tür', 10), /Marek öffnete/);
-  assert.equal(excerptOnPage(PAGES[1], 'fehlt hier komplett', 5), 'Am Morgen ');
+test('excerptOnPage: Fenster ums Zitat (located); ohne Treffer leer und located:false', () => {
+  const hit = excerptOnPage(PAGES[1], 'Marek öffnete die Tür', 10);
+  assert.equal(hit.located, true);
+  assert.match(hit.text, /Marek öffnete/);
+  assert.deepEqual(excerptOnPage(PAGES[1], 'fehlt hier komplett', 5), { text: '', located: false });
+});
+
+test('excerptOnPage: abweichende Anführungs-/Strich-/Leerraumformen, Soft-Hyphen, Auslassung', () => {
+  const page = { text: 'Am  Morgen klopfte es.\n«Marek öff\u00adnete die Tür – und lachte», sagte sie leise.' };
+  const a = excerptOnPage(page, '„Marek öffnete die Tür—und lachte“', 0);
+  assert.equal(a.located, true);
+  assert.match(a.text, /^Marek öff\u00adnete die Tür – und lachte$/);
+  const b = excerptOnPage(page, 'Marek öffnete [...] lachte', 0);
+  assert.equal(b.located, true);
+  assert.equal(excerptOnPage(page, 'Marek öffnete (…) weinte bitterlich', 0).located, false, 'Reihenfolge/Wortlaut zählen');
 });
 
 test('quotesFabricated: ein fehlendes von zwei Zitaten genügt; leere Stellen zählen nicht', () => {
@@ -48,4 +60,52 @@ test('quotesFabricated: ein fehlendes von zwei Zitaten genügt; leere Stellen z�
   assert.equal(quotesFabricated(['Marek lag reglos unter den Trümmern', 'erfundener Satz ohne Vorlage'], hay), true);
   assert.equal(quotesFabricated(['', ''], hay), false);
   assert.equal(normalizeForQuoteMatch('«A»'), '"a"');
+});
+
+test('normalizeForQuoteMatch: unsichtbare Zeichen weg, Klammer-Auslassungen = «…», Apostroph-Varianten gleich', () => {
+  assert.equal(normalizeForQuoteMatch('Wei\u00adter\u200bhin\ufeff'), 'weiterhin');
+  for (const e of ['[…]', '[...]', '(…)', '(...)']) assert.equal(normalizeForQuoteMatch(`a ${e} b`), 'a … b');
+  assert.equal(normalizeForQuoteMatch('geht´s'), normalizeForQuoteMatch('geht’s'));
+  const hay = normalizeForQuoteMatch('Marek lag re\u00adglos unter den Trümmern, niemand rührte sich.');
+  assert.equal(quotesFabricated(['Marek lag reglos [...] Trümmern'], hay), false);
+});
+
+// _stelleQuote: alle Zitat-Paare, Kapitel-Titel raus, längstes Zitat, Mindestgrösse.
+const { _stelleQuote } = require('../../routes/jobs/komplett/utils');
+
+test('_stelleQuote: Kapitelname in «» vor dem Zitat wird nicht als Zitat genommen', () => {
+  assert.equal(_stelleQuote('Kapitel «Die Flucht»: «Marek lag reglos unter den Trümmern»'), 'Marek lag reglos unter den Trümmern');
+  assert.equal(_stelleQuote('«Die lange Flucht nach Westen»: «Marek war schon tot»', { kapitel: ['Die lange Flucht nach Westen'] }), 'Marek war schon tot');
+});
+
+test('_stelleQuote: »…«, ‹…›, „…“, “…”, "…", ‚…‘', () => {
+  assert.equal(_stelleQuote('Kapitel 3: »Marek lag reglos unter den Trümmern«'), 'Marek lag reglos unter den Trümmern');
+  assert.equal(_stelleQuote('Kap. ‹Nacht›: ‹Marek öffnete die Tür und lachte›'), 'Marek öffnete die Tür und lachte');
+  assert.equal(_stelleQuote('Kapitel 5: „Marek öffnete die Tür“'), 'Marek öffnete die Tür');
+  assert.equal(_stelleQuote('Chapter 5: “Marek opened the door and laughed”'), 'Marek opened the door and laughed');
+  assert.equal(_stelleQuote('Kapitel 2: "Marek lag reglos unter Trümmern"'), 'Marek lag reglos unter Trümmern');
+  assert.equal(_stelleQuote('Kapitel 2: ‚Marek lag reglos unter Trümmern‘'), 'Marek lag reglos unter Trümmern');
+});
+
+test('_stelleQuote: inneres „…“ schneidet das äussere Zitat nicht ab', () => {
+  assert.equal(_stelleQuote('Kapitel 4: «Er sagte „Hallo Welt“ und ging fort»'), 'Er sagte „Hallo Welt“ und ging fort');
+  assert.equal(_stelleQuote('Kapitel 4: »Er sagte ‹Hallo Welt› und ging fort«'), 'Er sagte ‹Hallo Welt› und ging fort');
+});
+
+test('_stelleQuote: zwei Guillemet-Zitate — nicht der Zwischenraum, das längere gewinnt', () => {
+  assert.equal(_stelleQuote('«Ja» und später «Marek öffnete die Tür»'), 'Marek öffnete die Tür');
+  assert.equal(_stelleQuote('»Ja« und später »Marek öffnete die Tür«'), 'Marek öffnete die Tür');
+});
+
+test('_stelleQuote: zu kurze Zitate und Stellen ohne Anführungszeichen → kein Zitat', () => {
+  assert.equal(_stelleQuote('Kapitel 2: «Ja, klar»'), '');
+  assert.equal(_stelleQuote('Kapitel 2: «Unterwegs»'), '');
+  assert.equal(_stelleQuote('Erzählzeit 1985'), '');
+  assert.equal(_stelleQuote(null), '');
+});
+
+test('Kapitelname in «» lässt den Befund nicht als erfunden fallen', () => {
+  const hay = PAGES.map(p => p.norm).join(' ');
+  const q = _stelleQuote('Kapitel «Der Angriff»: «Marek lag reglos unter den Trümmern»');
+  assert.equal(quotesFabricated([q], hay), false);
 });

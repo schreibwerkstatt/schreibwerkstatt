@@ -15,6 +15,7 @@ const appSettings = require('../../../../lib/app-settings');
 const { getContextConfigFor, providerClass } = require('../../../../lib/ai');
 const { komplettMaxTokens } = require('./tokens');
 const { extractMultiPass } = require('./extraktion/multi-pass');
+const { resolveSinglePassFakten } = require('./extraktion/fakten-pass');
 
 /** Teilt ein Array in Gruppen der Grösse `size` (≥1). */
 function _chunkArray(arr, size) {
@@ -408,18 +409,11 @@ async function extractSinglePassSplit(ctx, { claudeExtractCap }) {
   // legitim ortloses Buch liefert fulfilled mit leerem Array und cached korrekt.
   if (orteRes.status === 'rejected') throw orteRes.reason;
   const passB = orteRes.value || {};
-  // Fakten-Pass (C): nicht fatal – ein gescheiterter Fakten-Call soll die
-  // teure Figuren-/Orte-Extraktion nicht verwerfen. Stattdessen leere Fakten +
-  // Warnung; faktenFailed verhindert das Einfrieren des '__singlepass__'-Caches
-  // (sonst Phantom-leere-Fakten bis zur nächsten Seitenedition).
-  if (faktenRes.status === 'rejected') {
-    failed.fakten = true;
-    log.warn(`Single-Pass Fakten-Pass (C) fehlgeschlagen, Fakten leer: ${faktenRes.reason?.message}`);
-    ctx.warnings?.push({ key: 'job.warn.faktenFailed' });
-    passB.fakten = [];
-  } else {
-    passB.fakten = faktenRes.value?.fakten || [];
-  }
+  // Fakten-Pass (C): nicht fatal, abgeschnitten → kapitelgruppenweise Rettung
+  // (./extraktion/fakten-pass.js). Ein Ausfall hinterlässt leere Fakten + Warnung.
+  const fc = await resolveSinglePassFakten(ctx, faktenRes, { bookSystemBlock, claudeExtractCap });
+  failed.fakten = fc.failed;
+  passB.fakten = fc.fakten;
 
   // ── Completeness-/Gap-Pässe (Long-Tail-Recall) ──
   // Läuft VOR A2, damit der Beziehungs-Pass die ergänzten Figuren mit abdeckt. Der geclampte
@@ -554,6 +548,8 @@ async function extractSinglePass(ctx, { claudeExtractCap, callExtract }) {
   // A2/C/E-Teilfehler: den beziehungs-/fakten-/eventlosen Teilstand NICHT unter
   // '__singlepass__' einfrieren (sonst Phantom-Erfolg bei jedem Folgelauf bis zur
   // Seitenedition). Cache-Skip + Checkpoint-Skip (partialFailure fliesst nach oben).
+  // Ausgefallener Fakten-Pass: der Job darf den bestehenden Index nicht mit [] ersetzen.
+  if (failed.fakten) ctx.faktenFailure = { all: true, kapitel: [] };
   const partialFailure = failed.relations || failed.fakten || failed.events;
   if (partialFailure) {
     const which = [failed.relations && 'A2 (Beziehungen)', failed.fakten && 'C (Fakten)', failed.events && 'E (Events)']

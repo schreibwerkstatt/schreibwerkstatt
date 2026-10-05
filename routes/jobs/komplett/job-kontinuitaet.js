@@ -206,7 +206,8 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
 
       updateJob(jobId, { progress: 88, statusText: 'job.phase.checkContradictions' });
       result = await retryOnTransientAi(() => call(jobId, tok,
-        prompts.buildKontinuitaetCheckPrompt(bookName, chapterFacts, figurenKompakt, orteKompakt, anachronismus),
+        prompts.buildKontinuitaetCheckPrompt(bookName, chapterFacts, figurenKompakt, orteKompakt, anachronismus,
+          narrativeLabels(getBookSettings(bookIdInt, email))),
         sys.SYSTEM_KONTINUITAET_BLOCKS, 88, 95, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_PROBLEME,
         costTier(COST_LABEL.kontinuitaet),
       ), { log, label: 'Kontinuität Check (Multi-Pass)' });

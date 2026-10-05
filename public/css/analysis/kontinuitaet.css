@@ -108,6 +108,36 @@
   background: var(--color-hover);
 }
 
+/* Stelle B (Referenz + Ungefähr-Marker) als eine Einheit im Stellen-Paar. */
+.kontinuitaet-stelle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+.kontinuitaet-stelle .entity-ref { white-space: normal; }
+/* Kein Abschnitt zur Stelle gefunden: die Referenz führt nur an den Kapitelanfang. */
+.kontinuitaet-approx {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+  font-style: italic;
+  white-space: nowrap;
+}
+
+/* Alle Befunde weggefiltert: Hinweis + „Filter zurücksetzen". */
+.kontinuitaet-nomatch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  padding: var(--pad-detail);
+  font-size: var(--font-size-sm);
+  color: var(--color-muted);
+  border: 1px solid var(--color-border);
+}
+
 /* ── Buch-Einstellungen (spezifische Klassen) ───────────────────────────────────
    Generische Form-Klassen .card-form-grid / -row / -label / -field / -hint /
    -section-divider / -saved / -error / -textarea leben in card-form.css. */

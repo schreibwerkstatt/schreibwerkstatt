@@ -78,6 +78,15 @@ export function tRaw(key, params) {
   return msg;
 }
 
+/** Key eines server-persistierten `__i18n:bereich.feld__`-Markers, sonst null.
+ *  Aufrufer übersetzen den Key selbst (in Alpine via `t()`, damit ein
+ *  Sprachwechsel re-evaluiert). */
+const I18N_MARKER_RE = /^__i18n:([a-zA-Z0-9_.-]+)__$/;
+export function i18nMarkerKey(text) {
+  const m = I18N_MARKER_RE.exec(typeof text === 'string' ? text : '');
+  return m ? m[1] : null;
+}
+
 /** Übersetzt eine Backend-Fehlerantwort. Akzeptiert:
  *  - { error_code: 'CODE', params: {...} } → t('error.CODE', params)
  *  - { error: 'freier Text' }              → Text direkt (Legacy-Fallback)

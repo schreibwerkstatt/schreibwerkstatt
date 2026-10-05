@@ -193,15 +193,21 @@ function _textbelegeSeg(textbelege) {
   return `\nSO IST DIE FIGUR IM MANUSKRIPT GESCHRIEBEN (Textstellen aus der semantischen Suche — der tatsächliche Wortlaut, nicht der Plan):\n${lines.join('\n')}\n`;
 }
 
-// Weltgesetze (world_facts, Kategorien regel/technik): was in dieser Welt GILT.
-// Anders als der Buch-Kontext (Freitext der Autorin) und die Textbelege (Prosa der
-// Figur) ist das der harte Rahmen, an dem eine geplante Eigenschaft scheitern kann.
+// Weltgesetze (world_facts, Kategorien regel/technik): der Rahmen dieser Welt, an
+// dem eine geplante Eigenschaft scheitern kann. Anders als der Buch-Kontext (Freitext
+// der Autorin) und die Textbelege (Prosa der Figur) KI-extrahiert, nicht kuratiert —
+// der Block sagt das, im Zweifel gilt der Buchtext. Der Deckel liegt NUR hier (der
+// Job reicht die volle Liste); was er schluckt, weist „(N von M gezeigt)" aus.
+const WELTGESETZE_CAP = 40;
 function _weltgesetzeSeg(weltgesetze) {
-  const lines = (weltgesetze || []).slice(0, 40)
-    .filter(w => w && w.fakt)
+  const all = (weltgesetze || []).filter(w => w && w.fakt);
+  const lines = all.slice(0, WELTGESETZE_CAP)
     .map(w => `- [${w.kategorie || 'regel'}] ${w.subjekt ? `${w.subjekt}: ` : ''}${String(w.fakt).trim()}`);
   if (!lines.length) return '';
-  return `\nETABLIERTE WELTGESETZE (aus der Buchanalyse extrahierte Regeln + Technik-Stand dieser Welt):\n${lines.join('\n')}\n`;
+  const cut = all.length > lines.length
+    ? ` (${lines.length} von ${all.length} gezeigt — ein Auszug; was fehlt, wurde nur nicht gezeigt, nicht als Lücke werten)`
+    : '';
+  return `\nETABLIERTE WELTGESETZE (Regeln + Technik-Stand dieser Welt, von der KI aus dem Buchtext extrahiert, nicht von der Autorin kuratiert — im Zweifel gilt der Buchtext)${cut}:\n${lines.join('\n')}\n`;
 }
 
 export function buildConsistencyPrompt(figurName, archetype, mindmapJson, buchKontext, bestehendeFiguren, bestehendeOrte, beziehungen = [], eigeneAuftritte = null, plotBeats = [], textbelege = [], weltgesetze = [], motive = []) {

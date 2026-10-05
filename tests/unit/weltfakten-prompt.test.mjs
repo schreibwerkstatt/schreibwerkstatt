@@ -109,6 +109,28 @@ test('Werkstatt: ohne Weltgesetze kein Block UND kein Pruefpunkt', () => {
   assert.doesNotMatch(p, /Verstoss gegen ein Weltgesetz/);
 });
 
+test('Plot: der Block sagt KI-extrahiert + im Zweifel gilt der Buchtext', () => {
+  const p = plotPrompt(GESETZE);
+  assert.match(p, /von der KI aus dem Buchtext extrahiert/);
+  assert.match(p, /im Zweifel gilt der Buchtext/);
+  assert.doesNotMatch(p, /unabhaengig davon, was schon geschrieben ist/);
+});
+
+test('Werkstatt: der Block sagt KI-extrahiert + im Zweifel gilt der Buchtext', () => {
+  const p = werkstattPrompt(GESETZE);
+  assert.match(p, /von der KI aus dem Buchtext extrahiert/);
+  assert.match(p, /im Zweifel gilt der Buchtext/);
+});
+
+test('Werkstatt: Deckel weist „N von M gezeigt" aus, ohne Kappung keine Notiz', () => {
+  const viele = Array.from({ length: 55 }, (_, i) => ({ kategorie: 'regel', subjekt: `S${i}`, fakt: `Regel ${i}.` }));
+  const p = werkstattPrompt(viele);
+  assert.match(p, /40 von 55 gezeigt/);
+  assert.match(p, /Regel 39\./);
+  assert.doesNotMatch(p, /Regel 40\./);
+  assert.doesNotMatch(werkstattPrompt(GESETZE), /von \d+ gezeigt/);
+});
+
 // ── Buchbewertung: die Messung, nicht die Schaetzung ────────────────────────
 
 const WELT_CTX = {

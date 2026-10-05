@@ -287,7 +287,7 @@ export const EXCLUSIVE_CARDS = [
     loadDeps: [{ method: 'loadFiguren', skipIfNonEmpty: 'figuren' }] },
   { key: 'songs',          flag: 'showSongsCard',          toggle: 'toggleSongsCard',          onReclick: 'refresh', partial: 'songs', hiddenForBuchtyp: ['journalismus'],
     loadDeps: [{ method: 'loadFiguren', skipIfNonEmpty: 'figuren' }] },
-  { key: 'kontinuitaet',   flag: 'showKontinuitaetCard',   toggle: 'toggleKontinuitaetCard',   onReclick: 'refresh', extraRefreshOnOpen: true, partial: 'kontinuitaet', requiresCloudModel: true, hiddenForBuchtyp: ['journalismus'] },
+  { key: 'kontinuitaet',   flag: 'showKontinuitaetCard',   toggle: 'toggleKontinuitaetCard',   onReclick: 'refresh', partial: 'kontinuitaet', requiresCloudModel: true, hiddenForBuchtyp: ['journalismus'] },
   { key: 'erzaehlprofil',  flag: 'showErzaehlprofilCard',  toggle: 'toggleErzaehlprofilCard',  onReclick: 'refresh', extraRefreshOnOpen: true, partial: 'erzaehlprofil', requiresCloudModel: true, hiddenForBuchtyp: ['journalismus'] },
   { key: 'tagebuchRueckblick', flag: 'showTagebuchRueckblickCard', toggle: 'toggleTagebuchRueckblickCard', onReclick: 'refresh', requiresBook: true, requiresBuchtyp: 'tagebuch', partial: 'tagebuch-rueckblick' },
   { key: 'bookSettings',   flag: 'showBookSettingsCard',   toggle: 'toggleBookSettingsCard',   onReclick: 'close', partial: 'book-settings' },

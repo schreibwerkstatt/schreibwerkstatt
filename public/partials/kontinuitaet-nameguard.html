@@ -1,0 +1,62 @@
+<!-- Namens-/Konsistenz-Wächter der Kontinuitätskarte (Fragment, string-seitiger
+     @include aus kontinuitaet.html, Scope: kontinuitaetCard): regelbasierte
+     Erkennung buchweiter Schreibvarianten von Eigennamen (Figuren + Orte). Eigene
+     klappbare Sektion, unabhängig vom KI-Kontinuitätscheck. -->
+<div class="collapsible-wrap nameguard" x-data="collapsible()">
+  <button type="button" class="collapsible-toggle" x-bind="trigger">
+    <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+    <span x-text="$app.t('nameGuard.title')"></span>
+  </button>
+  <div x-bind="panel" class="collapsible-section" x-cloak>
+    <p class="card-hint card-section" x-text="$app.t('nameGuard.intro')"></p>
+    <div class="nameguard-actions card-section">
+      <button type="button" class="secondary"
+              @click="nameGuardRun()"
+              :disabled="nameGuardLoading || !$store.nav.selectedBookId">
+        <span x-show="!nameGuardLoading" x-text="$app.t('nameGuard.run')"></span>
+        <span x-show="nameGuardLoading" x-text="$app.t('nameGuard.running')"></span>
+      </button>
+    </div>
+
+    <template x-if="nameGuardResult">
+      <div class="nameguard-result">
+        <div x-show="nameGuardResult.error" class="kontinuitaet-ok" x-text="$app.t('nameGuard.error')"></div>
+        <div x-show="!nameGuardResult.error && nameGuardResult.anchorCount === 0" class="kontinuitaet-ok" x-text="$app.t('nameGuard.noNames')"></div>
+        <div x-show="!nameGuardResult.error && nameGuardResult.anchorCount > 0 && (nameGuardResult.clusters || []).length === 0" class="kontinuitaet-ok" x-text="$app.t('nameGuard.noVariants')"></div>
+
+        <div x-show="(nameGuardResult.clusters || []).length > 0" class="entity-list entity-list--accented">
+          <template x-for="cluster in nameGuardResult.clusters" :key="nameGuardKey(cluster)">
+            <div>
+              <div class="entity-row"
+                   role="button" tabindex="0"
+                   :aria-expanded="selectedNameGuardKey === nameGuardKey(cluster) ? 'true' : 'false'"
+                   :class="{ 'entity-row--selected': selectedNameGuardKey === nameGuardKey(cluster) }"
+                   @click="nameGuardToggle(cluster)"
+                   @keydown.enter.self.prevent="nameGuardToggle(cluster)"
+                   @keydown.space.self.prevent="nameGuardToggle(cluster)">
+                <span class="severity-tag" :class="'severity-tag--' + nameGuardConfidenceSeverity(cluster.confidence)"
+                      x-text="$app.t('nameGuard.confidence.' + cluster.confidence)"></span>
+                <span class="nameguard-canonical" x-text="cluster.canonical"></span>
+                <span class="nameguard-count" x-text="cluster.canonicalCount + '×'"></span>
+                <span class="nameguard-variant-summary" x-text="cluster.variants.map(v => v.form).join(', ')"></span>
+                <span class="history-chevron" :class="{ open: selectedNameGuardKey === nameGuardKey(cluster) }" aria-hidden="true"></span>
+              </div>
+              <div x-show="selectedNameGuardKey === nameGuardKey(cluster)" class="entity-detail" x-cloak>
+                <template x-for="v in cluster.variants" :key="v.form">
+                  <div class="nameguard-variant-row">
+                    <span class="tag nameguard-variant" x-text="v.form"></span>
+                    <span class="nameguard-count" x-text="v.count + '×'"></span>
+                    <button type="button" class="nameguard-accept-btn"
+                            @click.stop="nameGuardIgnore(cluster, v)"
+                            :data-tip="$app.t('nameGuard.acceptTitle')"
+                            x-text="$app.t('nameGuard.accept')"></button>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+  </div>
+</div>

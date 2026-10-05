@@ -1,93 +1,97 @@
-<!-- Pagetree-Rechtsklick-Menü. Position:fixed (viewport-koordinaten). MUSS
-     ausserhalb des `.card`-Wrappers stehen: .card hat cardFadeIn-Animation mit
-     transform: translateY(0) als Endzustand — ein transform-Ancestor erzeugt
-     einen Containing-Block fuer position:fixed (Spec), wodurch das Menue an
-     der Karte statt am Viewport ausgerichtet wuerde. Der Placeholder-Wrapper
-     (`#partial-sidebar-pagetree-menu`) ist ein transform-freies div, daher
-     bleibt der Containing-Block der Viewport. State + Handler in
-     tree-context-menu.js + app-state.js#navigationState. -->
-<div class="context-menu pagetree-context-menu"
-     role="menu"
-     x-show="pageTreeMenuOpen"
-     x-cloak
-     :style="{ left: pageTreeMenuPos.left + 'px', top: pageTreeMenuPos.top + 'px' }"
-     @click.stop
-     @contextmenu.prevent>
-  <template x-if="pageTreeMenuTarget">
-    <div>
-      <div class="context-menu-header" x-text="pageTreeMenuTarget.name"></div>
-      <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-              @click="pagetreeCtxOpen()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg>
-        <span x-text="t('pagetreeCtx.open')"></span>
-      </button>
-      <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-              x-show="pageTreeMenuTarget.kind === 'page'"
-              @click="pagetreeCtxEdit()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
-        <span x-text="t('pagetreeCtx.edit')"></span>
-      </button>
-      <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-              x-show="pageTreeMenuTarget.kind === 'page'"
-              @click="pagetreeCtxLektorieren()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#spell-check"/></svg>
-        <span x-text="t('pagetreeCtx.lektorieren')"></span>
-      </button>
-      <div class="context-menu-sep" role="separator"></div>
-      <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-              @click="pagetreeCtxShare()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#share-2"/></svg>
-        <span x-text="t('pagetreeCtx.share')"></span>
-      </button>
-      <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-              @click="pagetreeCtxExport()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
-        <span x-text="t('pagetreeCtx.export')"></span>
-      </button>
-      <!-- Schreibende Eintraege nur mit Schreibrecht. Ein viewer/lektor sah sie
-           bisher und lief in den Server-403; das Loeschen war als einziges
-           gegated. Die Methoden pruefen `canEdit()` zusaetzlich selbst — die
-           Sichtbarkeit hier ist UX, der Guard dort die Absicherung des Pfads. -->
-      <template x-if="canEdit()">
-        <div>
-          <div class="context-menu-sep" role="separator"></div>
-          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-                  @click="pagetreeCtxRename()">
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#heading"/></svg>
-            <span x-text="t('pagetreeCtx.rename')"></span>
-          </button>
-          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-                  @click="pagetreeCtxNewChapter()">
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#folder-plus"/></svg>
-            <span x-text="t('pagetreeCtx.newChapter')"></span>
-          </button>
-        </div>
-      </template>
-      <template x-if="pageTreeMenuTarget.kind === 'chapter' && canEdit()">
-        <div>
-          <div class="context-menu-sep" role="separator"></div>
-          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-                  @click="pagetreeCtxNewPage()">
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
-            <span x-text="t('pagetreeCtx.newPage')"></span>
-          </button>
-          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-                  @click="pagetreeCtxToggleExclude()">
-            <svg class="icon" aria-hidden="true"><use :href="'/icons.svg#' + (pageTreeMenuTarget.excluded ? 'rotate-cw' : 'archive')"/></svg>
-            <span x-text="pageTreeMenuTarget.excluded ? t('pagetreeCtx.includeChapter') : t('pagetreeCtx.excludeChapter')"></span>
-          </button>
-        </div>
-      </template>
-      <template x-if="pageTreeMenuTarget.kind === 'page' && canEdit()">
-        <div>
-          <div class="context-menu-sep" role="separator"></div>
-          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
-                  @click="pagetreeCtxDeletePage()">
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
-            <span x-text="t('pagetreeCtx.delete')"></span>
-          </button>
-        </div>
-      </template>
-    </div>
-  </template>
-</div>
+<!-- Pagetree-Rechtsklick-Menü. Position:fixed (viewport-koordinaten), per
+     x-teleport an den <body> gehängt: die Desktop-Sidebar ist `position: sticky`
+     und damit ein eigener Stacking-Context — im Baum gelassen zählte das
+     --z-popover des Menüs nur innerhalb der Sidebar, und positionierte Inhalte
+     der Hauptspalte (Sticky-Köpfe/-Lanes, --z-sticky) malten über das in die
+     Hauptspalte ragende Menü. Der Sidebar selbst einen hohen z-index zu geben
+     hiesse, sie über die fixe Job-Queue-Leiste zu heben. Am <body> entfällt
+     zugleich jeder transform-Ancestor (.card/cardFadeIn), der sonst den
+     Containing-Block für position:fixed stellen würde.
+     State + Handler in tree-context-menu.js + app-state.js#navigationState. -->
+<template x-teleport="body">
+  <div class="context-menu pagetree-context-menu"
+       role="menu"
+       x-show="pageTreeMenuOpen"
+       x-cloak
+       :style="{ left: pageTreeMenuPos.left + 'px', top: pageTreeMenuPos.top + 'px' }"
+       @click.stop
+       @contextmenu.prevent>
+    <template x-if="pageTreeMenuTarget">
+      <div>
+        <div class="context-menu-header" x-text="pageTreeMenuTarget.name"></div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="pagetreeCtxOpen()">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg>
+          <span x-text="t('pagetreeCtx.open')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="pageTreeMenuTarget.kind === 'page'"
+                @click="pagetreeCtxEdit()">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+          <span x-text="t('pagetreeCtx.edit')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="pageTreeMenuTarget.kind === 'page'"
+                @click="pagetreeCtxLektorieren()">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#spell-check"/></svg>
+          <span x-text="t('pagetreeCtx.lektorieren')"></span>
+        </button>
+        <div class="context-menu-sep" role="separator"></div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="pagetreeCtxShare()">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#share-2"/></svg>
+          <span x-text="t('pagetreeCtx.share')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="pagetreeCtxExport()">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+          <span x-text="t('pagetreeCtx.export')"></span>
+        </button>
+        <!-- Schreibende Eintraege nur mit Schreibrecht. Ein viewer/lektor sah sie
+             bisher und lief in den Server-403; das Loeschen war als einziges
+             gegated. Die Methoden pruefen `canEdit()` zusaetzlich selbst — die
+             Sichtbarkeit hier ist UX, der Guard dort die Absicherung des Pfads. -->
+        <template x-if="canEdit()">
+          <div>
+            <div class="context-menu-sep" role="separator"></div>
+            <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                    @click="pagetreeCtxRename()">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#heading"/></svg>
+              <span x-text="t('pagetreeCtx.rename')"></span>
+            </button>
+            <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                    @click="pagetreeCtxNewChapter()">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#folder-plus"/></svg>
+              <span x-text="t('pagetreeCtx.newChapter')"></span>
+            </button>
+          </div>
+        </template>
+        <template x-if="pageTreeMenuTarget.kind === 'chapter' && canEdit()">
+          <div>
+            <div class="context-menu-sep" role="separator"></div>
+            <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                    @click="pagetreeCtxNewPage()">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
+              <span x-text="t('pagetreeCtx.newPage')"></span>
+            </button>
+            <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                    @click="pagetreeCtxToggleExclude()">
+              <svg class="icon" aria-hidden="true"><use :href="'/icons.svg#' + (pageTreeMenuTarget.excluded ? 'rotate-cw' : 'archive')"/></svg>
+              <span x-text="pageTreeMenuTarget.excluded ? t('pagetreeCtx.includeChapter') : t('pagetreeCtx.excludeChapter')"></span>
+            </button>
+          </div>
+        </template>
+        <template x-if="pageTreeMenuTarget.kind === 'page' && canEdit()">
+          <div>
+            <div class="context-menu-sep" role="separator"></div>
+            <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
+                    @click="pagetreeCtxDeletePage()">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+              <span x-text="t('pagetreeCtx.delete')"></span>
+            </button>
+          </div>
+        </template>
+      </div>
+    </template>
+  </div>
+</template>

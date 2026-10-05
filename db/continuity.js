@@ -4,10 +4,11 @@
 // Vorbild: figure_scenes mit scene_figures/scene_locations.
 //
 // Triage-Status (`resolved` = behoben, `dismissed` = kein Fehler) lebt an der Issue-
-// Zeile, jeder Lauf legt aber frische Zeilen an. Damit die Triage einen neuen Lauf
-// (auch den Nacht-Cron) übersteht, übernimmt das Speichern den Status früherer,
-// wiedererkannter Befunde (lib/continuity-carryover.js). Alte Checks bleiben dafür
-// stehen; angezeigt wird nur der neueste.
+// Zeile, jeder Lauf legt aber frische Zeilen an. Damit „kein Fehler" einen neuen Lauf
+// (auch den Nacht-Cron) übersteht, übernimmt das Speichern ihn von früheren,
+// wiedererkannten Befunden (lib/continuity-carryover.js); „erledigt" nicht — ein
+// wiedergefundener Befund ist nicht behoben. Alte Checks bleiben dafür stehen;
+// angezeigt wird nur der neueste.
 
 const { db } = require('./connection');
 // Prepared Statements dieses Moduls sitzen auf migrierten Spalten — die
@@ -66,7 +67,8 @@ function _resolveRefs(it, figNameToId, figIdToRowId, chNameToId) {
 
 // Eine Issue-Zeile + Figuren-/Kapitel-Bridges anlegen und die Frontend-Normalform
 // zurückgeben. Geteilt von saveContinuityCheck (Voll-Check) und saveFaktencheckIssues
-// (Anhang an bestehenden Check). `status` = übernommener Triage-Status oder null.
+// (Anhang an bestehenden Check). `status` = übernommener Triage-Status oder null
+// (carryOverStatus vererbt nur `dismissed`).
 function _persistOneContinuityIssue(cid, bookIdInt, email, it, refs, status, sortIndex) {
   const resolved = !!status?.resolved;
   const dismissed = !!status?.dismissed;
@@ -105,29 +107,36 @@ function _figIdToRowIdMap(bookIdInt, email) {
   return Object.fromEntries(figRows.map(r => [r.fig_id, r.id]));
 }
 
-/** Frühere Befunde mit Triage-Status (behoben oder kein Fehler) dieses Buchs, neueste
- *  zuerst — Kandidaten für carryOverStatus. Kapitel als IDs + Namen, Figuren als Namen. */
-function _priorTriaged(bookIdInt, email) {
+// Wie viele frühere Checks die Wiedererkennung durchsucht. Ein Fehlalarm, der über so
+// viele Läufe nie wieder auftauchte, ist kein Kandidat mehr; der Deckel hält das
+// Speichern bei einem Buch mit Nacht-Cron über Monate billig.
+const PRIOR_CHECKS_LIMIT = 20;
+
+/** Befunde der letzten PRIOR_CHECKS_LIMIT Checks dieses Buchs, ALLE Status (auch
+ *  offene — eine jüngere offene Zeile schlägt eine ältere verworfene), neueste
+ *  zuerst — Kandidaten für carryOverStatus. Kapitel als aufgelöste IDs, Figuren als Namen. */
+function _priorIssues(bookIdInt, email) {
   const rows = db.prepare(`
-    SELECT ci.id, ci.typ, ci.stelle_a, ci.stelle_b, ci.resolved, ci.resolved_at, ci.dismissed, ci.dismissed_at
-      FROM continuity_issues ci JOIN continuity_checks cc ON cc.id = ci.check_id
-     WHERE ci.book_id = ? AND ci.user_email IS ? AND (ci.resolved = 1 OR ci.dismissed = 1)
-     ORDER BY cc.checked_at DESC, ci.id DESC
+    SELECT ci.id, ci.check_id, ci.typ, ci.stelle_a, ci.stelle_b, ci.dismissed, ci.dismissed_at
+      FROM continuity_issues ci
+      JOIN (SELECT id, checked_at FROM continuity_checks
+             WHERE book_id = ? AND user_email IS ?
+             ORDER BY checked_at DESC, id DESC LIMIT ${PRIOR_CHECKS_LIMIT}) cc ON cc.id = ci.check_id
+     ORDER BY cc.checked_at DESC, cc.id DESC, ci.id DESC
   `).all(bookIdInt, email);
   if (!rows.length) return [];
   const ids = rows.map(r => r.id);
-  const ph = ids.map(() => '?').join(',');
-  const figs = db.prepare(`SELECT issue_id, figur_name FROM continuity_issue_figures WHERE issue_id IN (${ph})`).all(...ids);
-  const chs = db.prepare(`
-    SELECT cic.issue_id, cic.chapter_id, c.chapter_name
-      FROM continuity_issue_chapters cic LEFT JOIN chapters c ON c.chapter_id = cic.chapter_id
-     WHERE cic.issue_id IN (${ph})`).all(...ids);
-  const byId = new Map(rows.map(r => [r.id, { ...r, figuren: [], kapitel: [], chapter_ids: [] }]));
-  for (const f of figs) if (f.figur_name) byId.get(f.issue_id).figuren.push(f.figur_name);
-  for (const c of chs) {
-    const it = byId.get(c.issue_id);
-    if (c.chapter_id != null) it.chapter_ids.push(c.chapter_id);
-    if (c.chapter_name) it.kapitel.push(c.chapter_name);
+  const byId = new Map(rows.map(r => [r.id, { ...r, figuren: [], chapter_ids: [] }]));
+  // In Häppchen, damit die Platzhalter-Zahl unter dem SQLite-Limit bleibt.
+  for (let i = 0; i < ids.length; i += 500) {
+    const chunk = ids.slice(i, i + 500);
+    const ph = chunk.map(() => '?').join(',');
+    for (const f of db.prepare(`SELECT issue_id, figur_name FROM continuity_issue_figures WHERE issue_id IN (${ph})`).all(...chunk)) {
+      if (f.figur_name) byId.get(f.issue_id).figuren.push(f.figur_name);
+    }
+    for (const c of db.prepare(`SELECT issue_id, chapter_id FROM continuity_issue_chapters WHERE issue_id IN (${ph})`).all(...chunk)) {
+      if (c.chapter_id != null) byId.get(c.issue_id).chapter_ids.push(c.chapter_id);
+    }
   }
   return rows.map(r => byId.get(r.id));
 }
@@ -138,7 +147,7 @@ function _persistIssues(cid, bookIdInt, email, issuesArr, sortStart, figNameToId
   const refsList = issuesArr.map(it => _resolveRefs(it || {}, figNameToId, figIdToRowId, chNameToId));
   const statuses = carryOverStatus(
     issuesArr.map((it, i) => ({ ...(it || {}), ...refsList[i] })),
-    _priorTriaged(bookIdInt, email),
+    _priorIssues(bookIdInt, email),
   );
   return issuesArr.map((it, i) =>
     _persistOneContinuityIssue(cid, bookIdInt, email, it || {}, refsList[i], statuses[i], sortStart + i));
@@ -181,7 +190,7 @@ function saveFaktencheckIssues(bookId, userEmail, model, issues, figNameToId, ch
   let normalizedIssues = [];
   db.transaction(() => {
     let row = db.prepare(
-      'SELECT id FROM continuity_checks WHERE book_id = ? AND user_email IS ? ORDER BY checked_at DESC LIMIT 1'
+      'SELECT id FROM continuity_checks WHERE book_id = ? AND user_email IS ? ORDER BY checked_at DESC, id DESC LIMIT 1'
     ).get(bookIdInt, email);
     let cid = row?.id;
     if (!cid) {
@@ -212,7 +221,7 @@ function getLatestContinuityCheck(bookId, userEmail) {
     SELECT id, checked_at, summary, model
     FROM continuity_checks
     WHERE book_id = ? AND user_email IS ?
-    ORDER BY checked_at DESC LIMIT 1
+    ORDER BY checked_at DESC, id DESC LIMIT 1
   `).get(bookIdInt, email);
   if (!row) return null;
   const issueRows = db.prepare(`

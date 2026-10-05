@@ -4,6 +4,7 @@
 // Volltext-Laden. Temporal-Tools (Kontinuitaet/Zeitstrahl) liegen in tools-timeline.js.
 
 const { getBookSettings, getBookName, worldFactsScanState } = require('../../../db/schema');
+const { listWorldFacts, FAKT_KATEGORIE_WL } = require('../../../db/world-facts');
 const { narrativeLabels } = require('../narrative-labels');
 const pageRevisions = require('../../../db/page-revisions');
 const { _truncateResult, _findFigure, resultCapFor } = require('./shared');
@@ -17,8 +18,7 @@ const {
   getLocationByLocId, findLocationByName, listLocationScenesWithPlaces,
   listSongsWithFirstPage, listSongChaptersForSongs, listSongFiguresForSongs,
   listScenesWithPlaces, listSceneFiguresForScenes,
-  listSceneLocationsForScenes, listFiguresWithMentions, listWorldFacts,
-  listWorldFactChapterNames,
+  listSceneLocationsForScenes, listFiguresWithMentions,
 } = require('../../../db/book-chat/catalog');
 
 // ── list_chapters ────────────────────────────────────────────────────────────
@@ -508,9 +508,10 @@ function tool_list_revisions(input, ctx) {
 }
 
 // ── list_world_facts ────────────────────────────────────────────────────────
-// Deklaratives Buch-Wissen (Weltregeln/Fakten) aus der Komplettanalyse.
-// Optionale Filter: kategorie (exakt), subjekt (Teilstring). Kapitelname per JOIN
-// zur Lesezeit (kein Snapshot).
+// Deklaratives Buch-Wissen (Weltregeln/Fakten) aus der Komplettanalyse, über den
+// SSoT-Lesepfad db/world-facts.js#listWorldFacts (Kapitelnamen per JOIN zur
+// Lesezeit). Optionale Filter: kategorie (Whitelist-Key), subjekt (Teilstring,
+// auch bei Umlauten gross-/kleinschreibungsunabhängig).
 //
 // Leerer Index heisst „nie analysiert", nicht „das Buch hat keine Weltregeln":
 // `scanned` trennt beides, damit der Agent aus einer leeren Antwort nicht
@@ -519,8 +520,11 @@ function tool_list_world_facts(input, ctx) {
   const userEmail = ctx.userEmail || null;
   const kategorie = typeof input?.kategorie === 'string' && input.kategorie.trim() ? input.kategorie.trim().toLowerCase() : null;
   const subjekt   = typeof input?.subjekt === 'string' && input.subjekt.trim() ? input.subjekt.trim() : null;
+  if (kategorie !== null && !FAKT_KATEGORIE_WL.has(kategorie)) {
+    return { fakten: [], error: `Unbekannte kategorie «${kategorie}». Gültige Werte: ${[...FAKT_KATEGORIE_WL].join(', ')}.` };
+  }
 
-  const rows = listWorldFacts(ctx.bookId, userEmail, { kategorie, subjekt });
+  const rows = listWorldFacts(ctx.bookId, userEmail, { kategorien: kategorie ? [kategorie] : null, subjekt, withRefuted: true });
   if (!rows.length) {
     const { scanned } = worldFactsScanState(ctx.bookId, userEmail);
     const hint = !scanned
@@ -531,21 +535,15 @@ function tool_list_world_facts(input, ctx) {
     return { fakten: [], scanned, hint };
   }
 
-  const factIds = rows.map(r => r.id);
-  const chRows = listWorldFactChapterNames(factIds);
-  const chByFact = new Map();
-  for (const r of chRows) {
-    if (!chByFact.has(r.fact_id)) chByFact.set(r.fact_id, []);
-    if (r.chapter_name) chByFact.get(r.fact_id).push(r.chapter_name);
-  }
-
   return _truncateResult({
     fakten: rows.map(r => ({
       kategorie:    r.kategorie || null,
       subjekt:      r.subjekt || null,
       fakt:         r.fakt,
-      seite:        r.seite_label || null,
-      kapitel:      chByFact.get(r.id) || [],
+      seite:        r.seite || null,
+      kapitel:      r.kapitel,
+      // Faktencheck: per Quelle als real falsch belegt — Buchaussage, keine reale Tatsache.
+      ...(r.widerlegt ? { real_widerlegt: true } : {}),
     })),
     total: rows.length,
     scanned: true,

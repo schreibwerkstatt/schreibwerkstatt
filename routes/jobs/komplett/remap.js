@@ -1,6 +1,7 @@
 'use strict';
 const {
   db, saveZeitstrahlEvents, updateFigurenEvents, saveContinuityCheck,
+  saveFaktencheckIssues, faktenfehlerIssues,
 } = require('../../../db/schema');
 const { _modelName } = require('../shared');
 const { _refToString, _stelleQuote } = require('./utils');
@@ -282,41 +283,96 @@ function saveSzenenAndEvents(bookIdInt, email, szenen, assignments, locIdToDbId,
   return { szenenCount: writeSzenen ? szenen.length : 0, eventsCount };
 }
 
-// Patterns, mit denen die KI eine eigene Entwarnung signalisiert. Synchron mit dem
-// Prompt-Selbstcheck in public/js/prompts/komplett/schema-strings.js (PROBLEME_RULES,
-// Z. «Selbstcheck …»). KI hält die Selbstcheck-Regel nicht zuverlässig ein → Server
-// filtert defensiv nach. `echte[rns]?` deckt alle Genus-/Kasus-Formen ab.
+// Patterns, mit denen die KI eine eigene Entwarnung signalisiert — Fallback hinter dem
+// Pflichtfeld `entwarnung` (SCHEMA_KONTINUITAET_PROBLEME): nicht jeder Provider-Pfad
+// erzwingt das Schema, und das Modell hält die Selbstcheck-Regel nicht zuverlässig ein.
+// Synchron mit dem Prompt-Selbstcheck in public/js/prompts/komplett/schema-strings.js
+// (PROBLEME_RULES, «Selbstcheck …»). Deutsch und Englisch (EN-Locale).
 //
-// Zwei Felder, zwei Massstäbe: die `beschreibung` benennt den Befund — sagt sie
-// «konsistent»/«stimmig», ist das eine Entwarnung, AUSSER es ist verneint («nicht
-// konsistent», «kaum stimmig»; «inkonsistent»/«unstimmig» trifft \b ohnehin nicht).
-// Die `empfehlung` schlägt laut Prompt eine Lösung vor und formuliert deren Ziel
-// legitim positiv («… damit die Zeitlinie konsistent bleibt») — dort zählen nur die
-// eindeutigen Selbst-Annullierungen.
-// Die Verneinung darf bis zu drei Füllwörter vor dem Adjektiv stehen haben («nicht
-// mehr konsistent», «nicht ganz stimmig», «kaum wirklich in sich stimmig»)
-// — sonst fiele ein echter Befund als vermeintliche Entwarnung weg.
-const SELF_CANCEL_HARD = /\b(kein(en)?\s+(echte[rns]?\s+)?widerspruch|entwarnung|wird\s+nicht\s+gemeldet|eintrag\s+entfernen)\b/i;
-const _NEG_FILLER = '(?:mehr|ganz|so|wirklich|recht|völlig|vollständig|vollkommen|durchweg|durchgehend|immer|in|sich|zeitlich|logisch|inhaltlich)';
-const SELF_CANCEL_DESCRIPTION = new RegExp(
-  '\\b(kein\\s+problem|das\\s+ist\\s+korrekt|pass(t|en)\\s+zusammen|unproblematisch)\\b'
-  + `|(?<!\\b(?:nicht|kaum|wenig)\\s+(?:${_NEG_FILLER}\\s+){0,3})\\b(konsistent|stimmig)\\b`,
-  'i');
+// Zwei Felder, zwei Massstäbe:
+//  - `empfehlung` schlägt laut Prompt eine Lösung vor und formuliert deren Ziel legitim
+//    positiv («… damit kein Widerspruch entsteht», «… damit die Zeitlinie konsistent
+//    bleibt») — dort zählen nur die eindeutigen Selbst-Annullierungen (SELF_CANCEL_HARD).
+//  - `beschreibung` benennt den Befund. Entwarnend sind dort zusätzlich «kein (echter/
+//    wirklicher) Widerspruch», «das ist korrekt», «passt zusammen», «unproblematisch»,
+//    «lässt sich erklären durch …», «Kein Problem» nur als Satzanfang/Gesamturteil (nicht
+//    «der Sprint ist für sie kein Problem») und «konsistent/stimmig» nur PRÄDIKATIV am
+//    Satzende über den Befund selbst («Die Angaben sind (in sich) konsistent.»,
+//    «insgesamt stimmig») — nicht adverbial («spricht konsistent Berlinerisch») und
+//    nicht verneint («sind nie konsistent», «nicht durchgängig konsistent»).
+const SELF_CANCEL_HARD = /\b(entwarnung|wird\s+nicht\s+gemeldet|eintrag\s+entfernen|remove\s+(?:this\s+)?entry|not\s+to\s+be\s+reported)\b/i;
+const SELF_CANCEL_DESC_HARD = new RegExp([
+  '\\bkein(?:en)?\\s+(?:(?:echte[rns]?|wirkliche[rns]?|tatsächliche[rns]?)\\s+)?widerspruch\\b',
+  '\\bdas\\s+ist\\s+korrekt\\b',
+  '\\bpass(?:t|en)\\s+(?:doch\\s+|also\\s+)?zusammen\\b',
+  '\\bunproblematisch\\b',
+  'l(?:ä|ae)sst\\s+sich\\s+erkl(?:ä|ae)ren\\s+durch',
+  '\\bno\\s+(?:(?:real|actual|genuine|true)\\s+)?contradiction\\b',
+  '\\bnot\\s+(?:a|an)\\s+(?:(?:real|actual|genuine|true)\\s+)?(?:contradiction|inconsistency)\\b',
+  '\\bcan\\s+be\\s+explained\\s+by\\b',
+].join('|'), 'i');
+// «Kein Problem» / «No issue» nur am Satzanfang oder als Gesamturteil.
+const SELF_CANCEL_VERDICT = /(?:^|[.!?;:–—]\s*|\b(?:also|insgesamt|daher|somit|overall|so)\s+)(?:(?:das\s+ist|es\s+ist|ist|this\s+is|it\s+is)\s+)?(?:kein(?:e)?\s+(?:(?:echtes|wirkliches)\s+)?problem|no\s+(?:(?:real|actual)\s+)?(?:issue|problem))\b/i;
+// Prädikatives «konsistent/stimmig» am Satzende (oder mit «mit/zu …»-Ergänzung), bis zu
+// fünf Wörter hinter der Kopula. Der Zwischenraum wird gesondert auf Verneinung geprüft.
+const _COPULA = '(?:ist|sind|bleibt|bleiben|wirkt|wirken|erscheint|erscheinen|scheint|scheinen|war|waren|is|are|remains|remain|seems|seem|appears|appear|was|were)';
+const SELF_CANCEL_PREDICATIVE = new RegExp(
+  `\\b${_COPULA}\\s+((?:[^\\s.!?;]+\\s+){0,5}?)(konsistent|stimmig|consistent|coherent)(?=\\s*(?:[.!?;]|$|[–—]\\s)|\\s+(?:mit|zu|zum|zur|with)\\b)`,
+  'gi');
+const SELF_CANCEL_OVERALL = /\binsgesamt\s+(?:konsistent|stimmig)\b|\boverall\s+consistent\b/i;
+const _NEGATION = /\b(?:nicht|kaum|wenig|nie|niemals|keineswegs|keinesfalls|weder|nirgends|not|never|hardly|neither|nor|no\s+longer)\b/i;
 
-// «lässt sich erklären» ist NUR eine Selbst-Annullierung, wenn es einen Erklär-GRUND
-// nennt («… lässt sich erklären durch …») — exakt der Prompt-Wortlaut «lässt sich
-// erklären durch … (als Entwarnung)». Eine Lösungs-EMPFEHLUNG dagegen («Der Widerspruch
-// lässt sich erklären, indem in Kapitel 3 ein Hinweis ergänzt wird») ist ein ECHTER Befund
-// mit Fix-Vorschlag und darf NICHT verworfen werden. Darum (a) nur «… erklären durch …»
-// (nicht das blosse «erklären») und (b) nur in der `beschreibung` werten.
-const SELF_CANCEL_EXPLAIN = /l(ä|ae)sst\s+sich\s+erkl(ä|ae)ren\s+durch/i;
+function _predicativeEntwarnung(text) {
+  SELF_CANCEL_PREDICATIVE.lastIndex = 0;
+  let m;
+  while ((m = SELF_CANCEL_PREDICATIVE.exec(text))) {
+    if (!_NEGATION.test(m[1] || '')) return true;
+  }
+  return false;
+}
 
 function _isSelfCancelled(p) {
-  const beschr = p.beschreibung || '';
-  const empf = p.empfehlung || '';
+  if (!p || typeof p !== 'object') return false;
+  const beschr = typeof p.beschreibung === 'string' ? p.beschreibung : '';
+  const empf = typeof p.empfehlung === 'string' ? p.empfehlung : '';
   return SELF_CANCEL_HARD.test(beschr) || SELF_CANCEL_HARD.test(empf)
-    || SELF_CANCEL_DESCRIPTION.test(beschr)
-    || SELF_CANCEL_EXPLAIN.test(beschr);
+    || SELF_CANCEL_DESC_HARD.test(beschr)
+    || SELF_CANCEL_VERDICT.test(beschr)
+    || SELF_CANCEL_OVERALL.test(beschr)
+    || _predicativeEntwarnung(beschr);
+}
+
+// Server-Spiegel von KONTINUITAET_TYPEN (public/js/prompts/komplett/schema-strings.js,
+// ESM — hier kein Import möglich) plus `faktenfehler` (Faktencheck-Job). Ein unbekannter
+// typ (Freitext-Pfad ohne Schema-Zwang) wird beim Speichern zu `sonstiges` — sonst
+// rendert die Karte einen rohen Key ohne Label. Drift-Test:
+// tests/unit/kontinuitaet-typen-drift.test.mjs.
+const KONTINUITAET_TYPEN = [
+  'figur', 'name', 'zeitlinie', 'zeitluecke', 'ort', 'objekt', 'verhalten',
+  'soziolekt', 'erzaehlform', 'anachronismus', 'sonstiges', 'faktenfehler',
+];
+const _TYP_SET = new Set(KONTINUITAET_TYPEN);
+function _normTyp(typ) {
+  const t = typeof typ === 'string' ? typ.trim().toLowerCase() : '';
+  return _TYP_SET.has(t) ? t : 'sonstiges';
+}
+
+// Form-Härtung: das Modell liefert gelegentlich einen String statt einer Liste, null-
+// Einträge oder eine Nicht-URL als Quelle. Nichts davon darf den Save werfen lassen
+// oder als Müll in der Karte landen.
+function _asList(v) {
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string' && v.trim()) return [v];
+  return [];
+}
+function _str(v) {
+  if (typeof v === 'string') return v;
+  if (v && typeof v === 'object') return _refToString(v) || '';
+  return v == null ? '' : String(v);
+}
+function _httpUrl(v) {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return /^https?:\/\//i.test(s) ? s : null;
 }
 
 /** Speichert Kontinuitätsprüfung in die DB (eine Zeile pro Issue + Bridge-Tabellen
@@ -331,10 +387,13 @@ function _isSelfCancelled(p) {
 function saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, chNameToId, effectiveProvider, log, opts = {}) {
   const { pageContents = null, requireQuoteEvidence = false, chapterFacts = null } = opts;
   if (typeof kontResult?.zusammenfassung === 'undefined') return null;
-  const rawProbleme = kontResult.probleme || [];
-  let filtered = rawProbleme.filter(p => !_isSelfCancelled(p));
+  const rawProbleme = (Array.isArray(kontResult.probleme) ? kontResult.probleme : [])
+    .filter(p => p && typeof p === 'object' && !Array.isArray(p));
+  // Selbst-Entwarnung: das Pflichtfeld zuerst, der Text-Fallback dahinter.
+  let filtered = rawProbleme.filter(p => p.entwarnung !== true && !_isSelfCancelled(p));
   const dropped = rawProbleme.length - filtered.length;
   if (dropped > 0) log.warn(`Kontinuität: ${dropped} Selbst-Entwarnungen verworfen.`);
+  const kapOf = (p) => _asList(p.kapitel).map(_refToString).filter(Boolean);
 
   const pages = buildPageIndex(pageContents);
   // Beleg-Prüfung NUR für Single-Pass-Pfade (voller Buchtext im Prompt, Zitat-Pflicht
@@ -346,26 +405,33 @@ function saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, chNam
     // Befunde des Attribut-Detektors (F4, attribute-check.js, `_source: 'attr'`) tragen
     // synthetische Stellen («Geburtsjahr: 1952 (Kapitel 3)», Szenentitel, Attributwerte
     // mit Anführungszeichen) — kein Buchzitat, also auch nichts, was erfunden sein könnte.
-    filtered = filtered.filter(p => p?._source === ATTR_SOURCE
-      || !quotesFabricated([_stelleQuote(p.stelle_a), _stelleQuote(p.stelle_b)], hayNorm));
+    // Ein Zitat unter der Mindestgrösse (_stelleQuote) gilt als «kein Zitat»: weder
+    // Beleg noch Fabrikations-Nachweis.
+    filtered = filtered.filter(p => {
+      if (p._source === ATTR_SOURCE) return true;
+      const kapitel = kapOf(p);
+      return !quotesFabricated([_stelleQuote(_str(p.stelle_a), { kapitel }), _stelleQuote(_str(p.stelle_b), { kapitel })], hayNorm);
+    });
     const evDropped = before - filtered.length;
     if (evDropped > 0) log.warn(`Kontinuität: ${evDropped} Problem(e) mit erfundenem Beleg-Zitat (nicht im Buchtext) verworfen.`);
   }
 
   const facts = chapterFacts ? buildFactIndex(chapterFacts) : null;
   const anchor = (stelle, kapitel) => {
-    const page = locateStelle(_refToString(stelle) || '', _stelleQuote(stelle), pages, { kapitel, facts });
+    const page = locateStelle(_refToString(stelle) || '', _stelleQuote(stelle, { kapitel }), pages, { kapitel, facts });
     return page ? page.id : null;
   };
   const issues = filtered.map(p => {
-    const kapitel = (p.kapitel || []).map(_refToString).filter(Boolean);
+    const kapitel = kapOf(p);
+    const stelleA = _str(p.stelle_a);
+    const stelleB = _str(p.stelle_b);
     return {
-      schwere: p.schwere, typ: p.typ, beschreibung: p.beschreibung,
-      stelle_a: p.stelle_a, stelle_b: p.stelle_b, empfehlung: p.empfehlung,
-      quelle: p.quelle || null,
-      page_a_id: anchor(p.stelle_a, kapitel),
-      page_b_id: anchor(p.stelle_b, kapitel),
-      figuren: (p.figuren || []).map(_refToString).filter(Boolean),
+      schwere: p.schwere, typ: _normTyp(p.typ), beschreibung: _str(p.beschreibung),
+      stelle_a: stelleA, stelle_b: stelleB, empfehlung: _str(p.empfehlung),
+      quelle: _httpUrl(p.quelle),
+      page_a_id: anchor(stelleA, kapitel),
+      page_b_id: anchor(stelleB, kapitel),
+      figuren: _asList(p.figuren).map(_refToString).filter(Boolean),
       kapitel,
     };
   });
@@ -375,8 +441,19 @@ function saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, chNam
   );
   const carried = normalizedIssues.filter(i => i.resolved || i.dismissed).length;
   log.info(`Kontinuitätsprüfung gespeichert (${normalizedIssues.length} Probleme${carried ? `, Triage von ${carried} übernommen` : ''}).`);
+  // Faktencheck-Befunde aus dem Urteils-Cache in den neuen Check nachziehen — sonst
+  // verdeckte jeder Kontinuitätslauf (Komplettanalyse wie Standalone) die belegten
+  // Abweichungen bis zum nächsten Faktencheck. Kein KI-Call, keine Web-Suche.
+  const faktenfehler = faktenfehlerIssues(bookIdInt, email);
+  if (faktenfehler.length) {
+    const { normalizedIssues: ff } = saveFaktencheckIssues(
+      bookIdInt, email, _modelName(effectiveProvider), faktenfehler, {}, chNameToId);
+    normalizedIssues.push(...ff);
+    log.info(`${ff.length} Faktenfehler aus dem Faktencheck übernommen.`);
+  }
   return normalizedIssues;
 }
 
 module.exports = {
-  planSzenenMatch, resolveSzenenForSave, remapSzenen, remapAssignments, saveSzenenAndEvents, saveKontinuitaetResult, _isSelfCancelled };
+  planSzenenMatch, resolveSzenenForSave, remapSzenen, remapAssignments, saveSzenenAndEvents, saveKontinuitaetResult, _isSelfCancelled,
+  KONTINUITAET_TYPEN };

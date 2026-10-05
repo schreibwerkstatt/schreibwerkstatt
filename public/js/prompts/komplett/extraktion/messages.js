@@ -16,6 +16,7 @@ export function buildExtraktionKomplettChapterPrompt(chapterName, bookName, page
   const kapitelNote = isSinglePass
     ? 'Der Text ist in Kapitel-Sektionen gegliedert (## Kapitelname) mit Abschnitten darunter (### Abschnittstitel). Für alle Kapitel-Felder (kapitel[].name der Figuren, kapitel der Orte, szenen[].kapitel, lebensereignisse[].kapitel): den Kapitelnamen exakt aus dem ## Header entnehmen, unter dem der jeweilige Abschnitt steht.'
     : `Für alle Kapitel-Felder (kapitel[].name der Figuren, kapitel der Orte, szenen[].kapitel, lebensereignisse[].kapitel): immer genau «${chapterName}» verwenden – die ### Überschriften im Text sind Abschnittstitel, keine Kapitelnamen.`;
+  const seiteNote = 'Im «seite»-Feld jedes Faktums den reinen Abschnittstitel aus dem zugehörigen ### Header eintragen (OHNE «### »-Markierung); leer lassen wenn nicht eindeutig zuordenbar.';
   const textBlock = chText == null
     ? `<text>Der ${isSinglePass ? 'Buchtext' : 'Kapiteltext'} steht im System-Prompt oben.</text>`
     : `<${isSinglePass ? 'buchtext' : 'kapiteltext'} seiten="${pageCount}">\n${chText}\n</${isSinglePass ? 'buchtext' : 'kapiteltext'}>`;
@@ -24,6 +25,7 @@ Extrahiere aus ${scope} in einem Durchgang: alle Figuren, alle Schauplätze, all
 </aufgabe>
 
 ${kapitelNote}
+${seiteNote}
 
 ${textBlock}`;
 }
@@ -326,15 +328,20 @@ Regeln:
 }
 
 /** Claude-Single-Pass C: nur Fakten – eigener Call gegen den gecachten Buchtext-Block. */
-export function buildExtraktionFaktenPassPrompt(chapterName, bookName, pageCount, chText) {
+// opts.nurKapitel: Rettungs-Teilauftrag eines abgeschnittenen Single-Pass-Calls — der
+// ganze Buchtext steht weiter im (gecachten) System-Prompt, erfasst wird nur aus diesen Kapiteln.
+export function buildExtraktionFaktenPassPrompt(chapterName, bookName, pageCount, chText, opts = {}) {
   const isSinglePass = chapterName === 'Gesamtbuch';
-  const scope = isSinglePass ? `dem Buch «${bookName}»` : `dem Kapitel «${chapterName}» des Buchs «${bookName}»`;
+  const nur = Array.isArray(opts.nurKapitel) && opts.nurKapitel.length ? opts.nurKapitel : null;
+  const scope = nur
+    ? `den Kapiteln ${nur.map(n => `«${n}»`).join(', ')} des Buchs «${bookName}» (nur diese – Fakten aus anderen Kapiteln werden separat erfasst)`
+    : isSinglePass ? `dem Buch «${bookName}»` : `dem Kapitel «${chapterName}» des Buchs «${bookName}»`;
   const seiteNote = 'Im «seite»-Feld jedes Faktums den reinen Abschnittstitel aus dem zugehörigen ### Header eintragen (OHNE «### »-Markierung); leer lassen wenn nicht eindeutig zuordenbar.';
   const textBlock = chText == null
     ? '<text>Der Buchtext steht im System-Prompt oben.</text>'
     : `<${isSinglePass ? 'buchtext' : 'kapiteltext'} seiten="${pageCount}">\n${chText}\n</${isSinglePass ? 'buchtext' : 'kapiteltext'}>`;
   return `<aufgabe>
-Extrahiere aus ${scope} AUSSCHLIESSLICH alle Welt- und Kontinuitätsfakten – so vollständig wie möglich. Keine Figuren, Orte, Songs oder Szenen – die werden separat erfasst.
+Extrahiere aus ${scope} AUSSCHLIESSLICH alle Welt-Fakten – so vollständig wie möglich. Keine Figuren-, Orte-, Song- oder Szenen-Einträge – die werden separat erfasst; dauerhafte Eigenschaften von Figuren und Orten gehören als Fakt (Kategorie «figur»/«ort») aber hierher.
 </aufgabe>
 
 ${seiteNote}

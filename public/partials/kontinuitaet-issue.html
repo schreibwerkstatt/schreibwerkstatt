@@ -1,0 +1,66 @@
+<!-- Eine Befund-Zeile + Detail der Kontinuitätskarte (Fragment, string-seitiger
+     @include aus kontinuitaet.html, im x-for-Scope `issue`, `i` der kontinuitaetCard). -->
+<div>
+  <!-- Enter/Space nur auf der Zeile selbst (.self): die Stellen-Knöpfe darin
+       behalten ihre eigene Tastaturbedienung. -->
+  <div class="entity-row"
+       role="button" tabindex="0"
+       :aria-expanded="selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i) ? 'true' : 'false'"
+       :class="{ 'entity-row--selected': selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i), 'entity-row--resolved': issue.resolved || issue.dismissed }"
+       @click="kontinuitaetToggleIssue(issue, i)"
+       @keydown.enter.self.prevent="kontinuitaetToggleIssue(issue, i)"
+       @keydown.space.self.prevent="kontinuitaetToggleIssue(issue, i)">
+    <span class="severity-tag"
+          :class="'severity-tag--' + kontinuitaetSeverity(issue)"
+          x-text="$app.t('kontinuitaet.severity.' + kontinuitaetSeverity(issue))"></span>
+    <span class="tag entity-typ-tag" x-text="kontinuitaetTypLabel(issue.typ)"></span>
+    <span class="kontinuitaet-row-stellen entity-refs">
+      <button type="button" class="entity-ref"
+              x-entity-ref="kontinuitaetStelleRef(issue.stelle_a, issue, 'a')"></button>
+      <span class="kontinuitaet-approx" x-show="kontinuitaetStelleApprox(issue.stelle_a, issue, 'a')"
+            :data-tip="$app.t('kontinuitaet.stelle.approxTip')"
+            x-text="$app.t('kontinuitaet.stelle.approx')"></span>
+      <span class="kontinuitaet-arrow" x-show="issue.stelle_b">↔</span>
+      <template x-if="issue.stelle_b">
+        <span class="kontinuitaet-stelle">
+          <button type="button" class="entity-ref"
+                  x-entity-ref="kontinuitaetStelleRef(issue.stelle_b, issue, 'b')"></button>
+          <span class="kontinuitaet-approx" x-show="kontinuitaetStelleApprox(issue.stelle_b, issue, 'b')"
+                :data-tip="$app.t('kontinuitaet.stelle.approxTip')"
+                x-text="$app.t('kontinuitaet.stelle.approx')"></span>
+        </span>
+      </template>
+    </span>
+    <span x-show="issue.resolved || issue.dismissed" class="kontinuitaet-resolved-badge"
+          x-text="$app.t(issue.dismissed ? 'kontinuitaet.dismissed' : 'kontinuitaet.resolved')"></span>
+    <span class="history-chevron" :class="{ open: selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i) }" aria-hidden="true"></span>
+  </div>
+  <div x-show="selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i)" class="entity-detail" x-cloak>
+    <p x-show="issue.beschreibung" x-text="issue.beschreibung" class="entity-detail-text"></p>
+    <div x-show="issue.empfehlung" class="entity-meta-row kontinuitaet-empfehlung">
+      <span class="entity-meta-label kontinuitaet-empfehlung-label" x-text="$app.t('kontinuitaet.empfehlung')"></span>
+      <span class="entity-meta-value kontinuitaet-empfehlung-value" x-text="issue.empfehlung"></span>
+    </div>
+    <div x-show="issue.quelle" class="entity-meta-row kontinuitaet-quelle">
+      <span class="entity-meta-label" x-text="$app.t('kontinuitaet.faktencheck.source')"></span>
+      <template x-if="kontinuitaetSafeUrl(issue.quelle)">
+        <a class="entity-meta-value kontinuitaet-quelle-link" :href="kontinuitaetSafeUrl(issue.quelle)" target="_blank" rel="noopener noreferrer" x-text="issue.quelle"></a>
+      </template>
+      <template x-if="!kontinuitaetSafeUrl(issue.quelle)">
+        <span class="entity-meta-value" x-text="issue.quelle"></span>
+      </template>
+    </div>
+    <div class="kontinuitaet-detail-actions">
+      <button type="button" class="kontinuitaet-resolve-btn"
+              :class="{ 'kontinuitaet-resolve-btn--done': issue.resolved }"
+              :data-tip="$app.t('kontinuitaet.resolveTip')"
+              @click.stop="kontinuitaetToggleResolved(issue)"
+              x-text="issue.resolved ? $app.t('kontinuitaet.markOpen') : $app.t('kontinuitaet.markResolved')"></button>
+      <button type="button" class="kontinuitaet-resolve-btn"
+              :class="{ 'kontinuitaet-resolve-btn--done': issue.dismissed }"
+              :data-tip="$app.t('kontinuitaet.dismissTip')"
+              @click.stop="kontinuitaetToggleDismissed(issue)"
+              x-text="issue.dismissed ? $app.t('kontinuitaet.undismiss') : $app.t('kontinuitaet.dismiss')"></button>
+    </div>
+  </div>
+</div>

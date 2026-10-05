@@ -3,6 +3,7 @@
 // via _loadKontinuitaetHistory (GET) angezeigt; Anzeige + Filter + Resolve-Toggle.
 
 import { fetchJson, escHtml } from '../utils.js';
+import { i18nMarkerKey } from '../i18n.js';
 import { startPoll, runningJobStatus } from '../cards/job-helpers.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { memoMethods } from '../cards/card-memo.js';
@@ -17,12 +18,30 @@ const START_ERROR_KEYS = {
 };
 
 // Triage-Status eines Befunds (Filter `status`): '' = aktiv (offen + erledigt, ohne
-// „kein Fehler"), 'open' = nur offene, 'dismissed' = nur als „kein Fehler" markierte.
+// „kein Fehler"), 'open' = nur offene, 'resolved' = nur erledigte, 'dismissed' = nur
+// als „kein Fehler" markierte.
+export const KONTINUITAET_STATUS_FILTERS = ['', 'open', 'resolved', 'dismissed'];
 function _matchesStatus(issue, status) {
   if (status === 'dismissed') return !!issue.dismissed;
   if (issue.dismissed) return false;
   if (status === 'open') return !issue.resolved;
+  if (status === 'resolved') return !!issue.resolved;
   return true;
+}
+
+// Schwere eines Befunds, normalisiert: fehlend/unbekannt = niedrig. SSoT für
+// Filter, Sortierung, Tab-Zähler und Tag — sonst zählt ein Tab andere Zeilen,
+// als sein Filter zeigt.
+export const KONTINUITAET_SEVERITIES = ['kritisch', 'mittel', 'niedrig'];
+export function kontinuitaetSeverity(issue) {
+  const s = issue?.schwere;
+  return KONTINUITAET_SEVERITIES.includes(s) ? s : 'niedrig';
+}
+
+// Quellen-URL der Faktencheck-Befunde ist KI-Output: nur http(s) wird ein Link.
+export function kontinuitaetSafeUrl(url) {
+  const u = typeof url === 'string' ? url.trim() : '';
+  return /^https?:\/\//i.test(u) ? u : '';
 }
 
 export const kontinuitaetMethods = {
@@ -35,24 +54,29 @@ export const kontinuitaetMethods = {
   //    Web-Suche; Ergebnisse (typ='faktenfehler') hängen am neuesten Check. Nur wenn
   //    instanzweit freigeschaltet (Karte zeigt den Button nur dann) UND das Buch
   //    opt-in hat.
-  kontinuitaetRun() { return this._kontinuitaetStartJob('/jobs/kontinuitaet', 'kontinuitaet.run.starting'); },
-  faktencheckRun() { return this._kontinuitaetStartJob('/jobs/faktencheck', 'kontinuitaet.faktencheck.starting'); },
+  kontinuitaetRun() { return this._kontinuitaetStartJob('kontinuitaet', '/jobs/kontinuitaet', 'kontinuitaet.run.starting'); },
+  faktencheckRun() { return this._kontinuitaetStartJob('faktencheck', '/jobs/faktencheck', 'kontinuitaet.faktencheck.starting'); },
 
-  async _kontinuitaetStartJob(url, startingKey) {
+  // `kind` ('kontinuitaet' | 'faktencheck') steuert nur die Knopf-Beschriftung:
+  // „Welt-Fakten werden geprüft …" darf nicht stehen, während die Kontinuität läuft.
+  async _kontinuitaetStartJob(kind, url, startingKey) {
     const root = window.__app;
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId || this.kontinuitaetLoading) return;
     this.kontinuitaetLoading = true;
+    this.kontinuitaetRunKind = kind;
     this.kontinuitaetProgress = 1;
+    this.kontinuitaetWarnings = [];
     this.kontinuitaetStatus = runningJobStatus(root.t, startingKey);
     const clearRunState = () => {
       this.kontinuitaetLoading = false;
+      this.kontinuitaetRunKind = '';
       this.kontinuitaetProgress = 0;
       this.kontinuitaetStatus = '';
     };
-    const showError = (key) => {
+    const showError = (text) => {
       clearRunState();
-      this.kontinuitaetStatus = `<span>${escHtml(root.t(key))}</span>`;
+      this.kontinuitaetStatus = `<span class="error-msg">${escHtml(text)}</span>`;
     };
     try {
       const resp = await fetch(url, {
@@ -61,10 +85,13 @@ export const kontinuitaetMethods = {
         body: JSON.stringify({ book_id: bookId, book_name: root.selectedBookName || '' }),
       });
       const data = await resp.json().catch(() => ({}));
+      // Buchwechsel während des Starts: der Reset (book:changed) hat die Karte
+      // schon geleert — nichts mehr hineinschreiben, keinen Poller anhängen.
+      if (!isSelectedBook(bookId)) return;
       if (!resp.ok || !data.jobId) {
         // 401 behandelt der globale fetch-Wrapper (Session-Banner).
         if (resp.status === 401) { clearRunState(); return; }
-        showError(START_ERROR_KEYS[data.error_code] || 'kontinuitaet.error.startFailed');
+        showError(this._kontinuitaetStartErrorText(data));
         return;
       }
       startPoll(this, {
@@ -76,26 +103,88 @@ export const kontinuitaetMethods = {
             root.t, job.statusText, job.tokensIn, job.tokensOut,
             Alpine.store('config').claudeMaxTokens, job.progress, job.tps, job.statusParams);
         },
-        onDone: async () => { clearRunState(); await this._loadKontinuitaetHistory(); },
-        onError: async () => { showError('kontinuitaet.error.jobFailed'); },
+        onDone: async (job) => {
+          clearRunState();
+          // Teil-Degradierungen (job.warn.*) des Laufs — gleiche Form wie
+          // komplett-analyse (`result.warnings: [{ key, params? }]`).
+          this.kontinuitaetWarnings = Array.isArray(job?.result?.warnings) ? job.result.warnings : [];
+          await this._loadKontinuitaetHistory();
+        },
+        onError: async (job) => { showError(this._kontinuitaetJobErrorText(job)); },
         onNotFound: () => { clearRunState(); },
       });
     } catch (e) {
-      showError('kontinuitaet.error.startFailed');
+      if (!isSelectedBook(bookId)) return;
+      showError(root.t('kontinuitaet.error.startFailed'));
       console.error('[_kontinuitaetStartJob]', e);
     }
   },
 
+  // Fehlertext einer abgelehnten Start-Antwort: karteneigener Hinweis, sonst die
+  // übersetzte `error.CODE`-Meldung, sonst generisch.
+  _kontinuitaetStartErrorText(data) {
+    const t = (k, p) => window.__app.t(k, p);
+    const code = data?.error_code;
+    if (code && START_ERROR_KEYS[code]) return t(START_ERROR_KEYS[code], data.params || {});
+    if (code) {
+      const key = 'error.' + code;
+      const msg = t(key, data.params || {});
+      if (msg !== key) return msg;
+    }
+    return t('kontinuitaet.error.startFailed');
+  },
+
+  // Terminaler Fehlstatus des Jobs: Abbruch ist kein Fehlschlag; ein konkreter
+  // Fehler-Key (failJob mit i18nError) wird angehängt, Rohtext nicht.
+  _kontinuitaetJobErrorText(job) {
+    const t = (k, p) => window.__app.t(k, p);
+    if (job?.status === 'cancelled') return t('kontinuitaet.run.cancelled');
+    const err = job?.error;
+    if (typeof err === 'string' && err && err !== 'job.cancelled') {
+      const detail = t(err, job.errorParams || {});
+      if (detail !== err) return t('kontinuitaet.error.jobFailedDetail', { detail });
+    }
+    return t('kontinuitaet.error.jobFailed');
+  },
+
   async _loadKontinuitaetHistory() {
     const bookId = Alpine.store('nav').selectedBookId;
+    if (!bookId) return;
     try {
       const data = await fetchJson('/jobs/kontinuitaet/' + bookId);
       if (!isSelectedBook(bookId)) return;
       this._memos = {};
+      this.kontinuitaetLoadError = false;
       this.kontinuitaetResult = data;
     } catch (e) {
+      if (!isSelectedBook(bookId)) return;
+      // Nur ohne angezeigtes Ergebnis zum Fehlerzustand: ein fehlgeschlagener
+      // Refresh soll die vorhandene Liste nicht wegwerfen.
+      if (!this.kontinuitaetResult) this.kontinuitaetLoadError = true;
       console.error('[_loadKontinuitaetHistory]', e);
     }
+  },
+
+  // Zusammenfassung des Checks; der Faktencheck persistiert sie als
+  // `__i18n:key__`-Marker → in der Locale des Betrachters auflösen.
+  kontinuitaetSummaryText() {
+    const s = this.kontinuitaetResult?.summary || '';
+    const key = i18nMarkerKey(s);
+    return key ? window.__app.t(key) : s;
+  },
+
+  kontinuitaetSafeUrl(url) { return kontinuitaetSafeUrl(url); },
+  kontinuitaetSeverity(issue) { return kontinuitaetSeverity(issue); },
+
+  // Alle Filter auf ihre Defaults (Zustand „Alle weggefiltert").
+  kontinuitaetResetFilters() {
+    Object.assign(Alpine.store('catalogUi').kontinuitaetFilters, { figurId: '', kapitel: '', schwere: '', status: '' });
+  },
+
+  // Zeile auf-/zuklappen (Klick + Enter/Space).
+  kontinuitaetToggleIssue(issue, i) {
+    const key = this.kontinuitaetIssueKey(issue, i);
+    this.selectedKontinuitaetIssueKey = this.selectedKontinuitaetIssueKey === key ? null : key;
   },
 
   // Memo-Helper (cards/card-memo.js); Reset über this._memos = {} im Lade-/Reset-Pfad (kontinuitaet-card.js).
@@ -168,10 +257,7 @@ export const kontinuitaetMethods = {
         const stelleMatch = fromStelle(issue.stelle_a) === f || fromStelle(issue.stelle_b) === f;
         if (!idMatch && !nameMatch && !stelleMatch) return false;
       }
-      if (filters.schwere) {
-        const s = issue.schwere || 'niedrig';
-        if (s !== filters.schwere) return false;
-      }
+      if (filters.schwere && kontinuitaetSeverity(issue) !== filters.schwere) return false;
       return true;
     });
   },
@@ -191,9 +277,7 @@ export const kontinuitaetMethods = {
       const ra = a.resolved ? 1 : 0;
       const rb = b.resolved ? 1 : 0;
       if (ra !== rb) return ra - rb;
-      const sa = order[a.schwere || 'niedrig'] ?? 2;
-      const sb = order[b.schwere || 'niedrig'] ?? 2;
-      return sa - sb;
+      return order[kontinuitaetSeverity(a)] - order[kontinuitaetSeverity(b)];
     });
     return list;
   },
@@ -206,7 +290,8 @@ export const kontinuitaetMethods = {
   },
 
   // Erledigt-Status umschalten. Optimistisch + Rollback bei Fehler. Gültig bis
-  // zur nächsten Komplettanalyse (frische Issue-Zeilen, resolved=0).
+  // zum nächsten Prüflauf (frische Issue-Zeilen, resolved=0) — anders als „kein
+  // Fehler" übernimmt ein neuer Lauf „erledigt" nicht.
   async kontinuitaetToggleResolved(issue) {
     if (!issue || issue.id == null) return;
     const next = !issue.resolved;
@@ -223,6 +308,7 @@ export const kontinuitaetMethods = {
     } catch (e) {
       issue.resolved = !next;
       this._invalidateKontinuitaetSort();
+      this._kontinuitaetTriageFailed();
       console.error('[kontinuitaetToggleResolved]', e);
     }
   },
@@ -243,13 +329,26 @@ export const kontinuitaetMethods = {
     } catch (e) {
       issue.dismissed = !next;
       this._invalidateKontinuitaetSort();
+      this._kontinuitaetTriageFailed();
       console.error('[kontinuitaetToggleDismissed]', e);
     }
   },
 
-  // Status-Wechsel in place: gefilterte UND sortierte Liste neu berechnen.
+  // Rollback sichtbar machen: ohne Hinweis springt der Knopf kommentarlos zurück.
+  // 401 meldet der globale Session-Banner; der Toast steht trotzdem (harmlos).
+  _kontinuitaetTriageFailed() {
+    const root = window.__app;
+    root?._showJobToast?.({
+      message: root.t('kontinuitaet.error.triageFailed'),
+      severity: 'err',
+      jobType: 'kontinuitaet',
+      bookId: Alpine.store('nav').selectedBookId ?? null,
+    });
+  },
+
+  // Status-Wechsel in place: gefilterte UND sortierte Liste sowie Tab-Zähler neu berechnen.
   _invalidateKontinuitaetSort() {
-    if (this._memos) { delete this._memos.sorted; delete this._memos.filtered; }
+    if (this._memos) { delete this._memos.sorted; delete this._memos.filtered; delete this._memos.counts; }
   },
 
   // Anzahl offener Befunde (nicht erledigt, nicht „kein Fehler") im aktuellen Check.
@@ -262,6 +361,23 @@ export const kontinuitaetMethods = {
   kontinuitaetIssuesInStatus() {
     const status = Alpine.store('catalogUi').kontinuitaetFilters.status || '';
     return (this.kontinuitaetResult?.issues || []).filter(i => _matchesStatus(i, status));
+  },
+
+  // Tab-Zähler { all, kritisch, mittel, niedrig } im aktuellen Status-Filter,
+  // mit derselben Schwere-Normalisierung wie der Filter. Memoisiert (pro Render
+  // sieben Lesezugriffe).
+  kontinuitaetSeverityCounts() {
+    const status = Alpine.store('catalogUi').kontinuitaetFilters.status || '';
+    const issues = this.kontinuitaetResult?.issues || [];
+    return this._memo('counts', [issues, status], () => {
+      const counts = { all: 0, kritisch: 0, mittel: 0, niedrig: 0 };
+      for (const i of issues) {
+        if (!_matchesStatus(i, status)) continue;
+        counts.all++;
+        counts[kontinuitaetSeverity(i)]++;
+      }
+      return counts;
+    });
   },
 
   // Menschliches Label für den Issue-Typ. Freitext-Feld (Prompt-gesteuert) → i18n-Key
@@ -296,98 +412,142 @@ export const kontinuitaetMethods = {
   },
 
   // Löst "stelle_a/stelle_b" zu einem Page-Objekt auf. `stelle` ist ein
-  // LLM-generierter String – Format nominal "Kapitel: Seite", kann aber
-  // auch nur "Kapitel" sein. Authoritativer Kontext: issue.chapter_ids.
-  //
-  // Wichtig: Reine Kapitelreferenz (kein ":" oder part1 == Kapitelname)
-  // verlinkt IMMER auf die erste Kapitelseite, NIE auf eine gleichnamige
-  // Seite – sonst landet "Der Vater" (Kapitel) versehentlich auf einer
-  // Seite namens "Der Vater" (in irgendeinem Kapitel). Globalen Page-
-  // Fallback gibt es nicht: ohne Kapitelkontext kein Link.
+  // LLM-generierter String – nominal "Kapitel: «Zitat»", in der Praxis auch
+  // "Kapitel, Abschnitt «Zitat»", "Abschnitt: «Zitat»" (das Modell sieht im Prompt
+  // die Abschnittstitel als `### Titel`) oder nur "Kapitel". Reihenfolge:
+  //   1. Seiten-Anker vom Speichern (Zitat im Buchtext gefunden) — autoritativ.
+  //   2. Kapitel aus issue.chapter_ids, sonst ein Verweis-Segment, das exakt ein
+  //      Kapitelname ist; darin ein Segment mit Abschnittsnamen, sonst die erste
+  //      Kapitelseite.
+  //   3. Ohne Kapitel: ein Segment, das buchweit genau EINEN Abschnitt benennt.
+  //   4. Ein Kapitelname, der im Verweis-Teil vorkommt (längster Treffer).
+  // Reine Kapitelreferenz verlinkt IMMER auf die erste Kapitelseite, NIE auf einen
+  // gleichnamigen Abschnitt; ein mehrdeutiger Abschnittsname ohne Kapitelkontext
+  // bleibt unaufgelöst — lieber kein Link als ein falscher.
   kontinuitaetResolveStelle(stelle, issue, side) {
     if (!stelle) return null;
+    return this._kontinuitaetResolveStelleDetail(stelle, issue, side)?.page || null;
+  },
+
+  // { page, chapterRef, approx } — chapterRef = die Stelle nennt nur ein Kapitel,
+  // keinen Abschnitt; approx = kein Abschnitt gefunden, `page` ist nur der
+  // Kapitelanfang (Karte kennzeichnet das, statt still dorthin zu springen).
+  _kontinuitaetResolveStelleDetail(stelle, issue, side) {
     const chapters = this._kontinuitaetChapters();
-    // Seiten-Anker aus dem Speichern (Zitat bzw. zitierter Fakt im Buchtext gefunden)
-    // ist autoritativ — er zeigt auf die Seite der Stelle, nicht auf die erste
-    // Kapitelseite. Fehlt er (Altbefund, Stelle nicht auffindbar), greift die
-    // Namensauflösung unten.
     const anchorId = side === 'b' ? issue?.page_b_id : issue?.page_a_id;
     if (anchorId != null) {
       for (const c of chapters.list) {
         const hit = (c.pages || []).find(p => p.id === anchorId);
-        if (hit) return hit;
+        if (hit) return { page: hit, chapterRef: false };
       }
     }
+    const lc = (s) => String(s || '').trim().toLowerCase();
+    // Verweis-Teil ohne Zitate, in Segmente zerlegt («Kapitel: Abschnitt», «A › B», «A, B»).
+    const ref = String(stelle).replace(/[«„"“][^»"”“]*[»"”“]?/g, ' ');
+    const segs = ref.split(/\s*(?::|›|>|,|\s[–—-]\s)\s*/).map(s => s.trim()).filter(Boolean);
+    const segsLc = segs.map(lc);
+
     const chIds = issue?.chapter_ids || [];
     const idx = side === 'b' && chIds.length > 1 ? 1 : 0;
-    const targetCh = chIds[idx] ? (chapters.byId.get(chIds[idx]) || null) : null;
+    const chapter = (chIds[idx] ? chapters.byId.get(chIds[idx]) : null)
+      || chapters.list.find(c => segs.includes(c.name))
+      || chapters.list.find(c => segsLc.includes(lc(c.name)))
+      || null;
 
-    const ci = stelle.indexOf(':');
-    const part1 = (ci > 0 ? stelle.slice(0, ci) : stelle).trim();
-    const part2 = ci > 0 ? stelle.slice(ci + 1).trim() : '';
-
-    const chapter = targetCh || chapters.list.find(c => c.name === part1) || null;
-    if (!chapter) return null;
-
-    const pageByName = (pages, needle) => {
-      if (!pages?.length || !needle) return null;
-      const nLower = needle.toLowerCase();
-      return pages.find(p => p.name === needle)
-        || pages.find(p => p.name.toLowerCase() === nLower)
-        || null;
-    };
-
-    if (!part2) {
-      // Reine Kapitelreferenz → erste Kapitelseite (auch wenn gleichnamige
-      // Seite existiert). Wenn part1 nicht der Kapitelname ist, kann es
-      // ein Seitenname innerhalb des Kapitels sein.
-      if (part1.toLowerCase() === chapter.name.toLowerCase()) {
-        return chapter.pages?.[0] || null;
+    if (chapter) {
+      const pages = this._kontinuitaetSubtreePages(chapter, chapters.list);
+      const chName = lc(chapter.name);
+      for (const s of segsLc) {
+        if (s === chName) continue;
+        const hit = pages.find(p => lc(p.name) === s);
+        if (hit) return { page: hit, chapterRef: false };
       }
-      return pageByName(chapter.pages, part1) || chapter.pages?.[0] || null;
+      const first = chapter.pages?.[0] || pages[0] || null;
+      if (!first) return null;
+      const chapterRef = segsLc.length > 0 && segsLc.every(s => s === chName);
+      return { page: first, chapterRef, approx: !chapterRef };
     }
-    return pageByName(chapter.pages, part2) || chapter.pages?.[0] || null;
+
+    const allPages = chapters.list.flatMap(c => c.pages || []);
+    for (const s of segsLc) {
+      const hits = allPages.filter(p => lc(p.name) === s);
+      if (hits.length === 1) return { page: hits[0], chapterRef: false };
+    }
+
+    const refLc = lc(ref);
+    const contained = chapters.list
+      .filter(c => !c.solo && lc(c.name).length >= 3 && refLc.includes(lc(c.name)))
+      .sort((a, b) => b.name.length - a.name.length)[0];
+    const first = contained ? (contained.pages?.[0] || this._kontinuitaetSubtreePages(contained, chapters.list)[0]) : null;
+    return first ? { page: first, chapterRef: false, approx: true } : null;
+  },
+
+  // Abschnitte eines Kapitels inkl. aller Unterkapitel (nav.tree ist flach, parent_id).
+  _kontinuitaetSubtreePages(chapter, list) {
+    const out = [...(chapter.pages || [])];
+    const stack = [chapter.id];
+    while (stack.length) {
+      const pid = stack.pop();
+      for (const c of list) {
+        if (c.parent_id === pid && c !== chapter) { out.push(...(c.pages || [])); stack.push(c.id); }
+      }
+    }
+    return out;
   },
 
   // Spec für die Entitäts-Referenz einer Stelle (x-entity-ref). Label bleibt
   // der KI-Text. Eine reine Kapitelreferenz verweist aufs Kapitel (→ Kapitel-
-  // bewertung), sonst auf die über kontinuitaetResolveStelle aufgelöste Seite;
-  // ohne Treffer bleibt die Referenz unaufgelöst (kein globaler Seiten-Fallback).
+  // bewertung), sonst auf den aufgelösten Abschnitt; ohne Treffer bleibt die
+  // Referenz unaufgelöst (siehe kontinuitaetResolveStelle).
   kontinuitaetStelleRef(stelle, issue, side) {
     const label = stelle || '';
-    const page = this.kontinuitaetResolveStelle(stelle, issue, side);
-    if (!page) return { type: 'seite', label };
-    const ch = this._kontinuitaetChapters().list.find(c => (c.pages || []).includes(page)) || null;
-    const ci = label.indexOf(':');
-    const part1 = (ci > 0 ? label.slice(0, ci) : label).trim().toLowerCase();
-    if (ch && ci <= 0 && part1 === String(ch.name || '').toLowerCase()) {
-      return { type: 'kapitel', id: ch.id, label };
+    const hit = stelle ? this._kontinuitaetResolveStelleDetail(stelle, issue, side) : null;
+    if (!hit) return { type: 'seite', label };
+    if (hit.chapterRef) {
+      const ch = this._kontinuitaetChapters().list.find(c => (c.pages || []).includes(hit.page));
+      if (ch) return { type: 'kapitel', id: ch.id, label };
     }
-    return { type: 'seite', id: page.id, label };
+    return { type: 'seite', id: hit.page.id, label };
+  },
+
+  // true = die Stelle verlinkt nur den Kapitelanfang, weil kein Abschnitt passt.
+  kontinuitaetStelleApprox(stelle, issue, side) {
+    if (!stelle) return false;
+    return !!this._kontinuitaetResolveStelleDetail(stelle, issue, side)?.approx;
   },
 
   // ── Namens-/Konsistenz-Waechter ────────────────────────────────────────────
   // Regelbasierte Erkennung buchweiter Schreibvarianten/Tippfehler von Eigennamen
   // (Figuren + Orte). Synchroner Endpunkt, kein KI-Job. Auf Knopfdruck.
+  // Das Ergebnis trägt seine bookId mit: nameGuardIgnore schreibt die Ignore-Liste
+  // des Buchs, zu dem der Cluster gehört, nicht des gerade gewählten.
   async nameGuardRun() {
-    const root = window.__app;
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId || this.nameGuardLoading) return;
     this.nameGuardLoading = true;
     try {
       const data = await fetchJson('/name-guard/' + bookId + '/check', { method: 'POST' });
-      this.nameGuardResult = data;
+      if (!isSelectedBook(bookId)) return;
+      this.nameGuardResult = { ...data, bookId };
       this.selectedNameGuardKey = null;
     } catch (e) {
+      if (!isSelectedBook(bookId)) return;
       console.error('[nameGuardRun]', e);
-      this.nameGuardResult = { clusters: [], error: true };
+      this.nameGuardResult = { clusters: [], error: true, bookId };
     } finally {
-      this.nameGuardLoading = false;
+      // Nach Buchwechsel hat der Reset nameGuardLoading schon zurückgesetzt.
+      if (isSelectedBook(bookId)) this.nameGuardLoading = false;
     }
   },
 
   nameGuardKey(cluster) {
     return 'ng:' + (cluster?.canonical || '');
+  },
+
+  // Cluster-Zeile auf-/zuklappen (Klick + Enter/Space).
+  nameGuardToggle(cluster) {
+    const key = this.nameGuardKey(cluster);
+    this.selectedNameGuardKey = this.selectedNameGuardKey === key ? null : key;
   },
 
   nameGuardConfidenceSeverity(conf) {
@@ -398,15 +558,17 @@ export const kontinuitaetMethods = {
 
   // Eine Variante als gewollt akzeptieren → serverseitige Ignore-Liste + lokal entfernen.
   async nameGuardIgnore(cluster, variant) {
-    const root = window.__app;
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId || !cluster || !variant) return;
+    const result = this.nameGuardResult;
+    const bookId = result?.bookId;
+    if (!bookId || !cluster || !variant || !isSelectedBook(bookId)) return;
     try {
       await fetchJson('/name-guard/' + bookId + '/ignore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ canonical: cluster.canonical, variant: variant.form }),
       });
+      // Gespeichert ist es; die lokale Liste nur anfassen, wenn sie noch dieses Ergebnis zeigt.
+      if (!isSelectedBook(bookId) || this.nameGuardResult !== result) return;
       cluster.variants = (cluster.variants || []).filter(v => v.form !== variant.form);
       if (!cluster.variants.length && this.nameGuardResult?.clusters) {
         this.nameGuardResult.clusters = this.nameGuardResult.clusters.filter(c => c !== cluster);

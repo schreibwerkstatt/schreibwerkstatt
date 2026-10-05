@@ -128,3 +128,43 @@ test('verifyKontinuitaetProbleme: ohne Index → keyword-Pfad, keine semantische
     assert.match(seen[0].exA, /Der Wald lag still/, 'keyword-Fallback (Kapitel-Anfang) bleibt');
   });
 });
+
+test('_verifyExcerpt: Kapitel als Objekt ({ name }) und abweichende Anführungs-/Strichformen', () => {
+  const r = _verifyExcerpt(GROUPS, ORDER, [{ name: 'Kapitel Eins' }], '„Am  Abend sprach sie\nmit dem Bruder“');
+  assert.equal(r.located, true);
+  assert.match(r.text, /Am Abend sprach sie mit dem Bruder/);
+});
+
+test('verifyKontinuitaetProbleme: Zeitlücke ohne beide Belege → ungeprüft stehen lassen (kein Call)', async () => {
+  await withRetrieval({ indexReady: () => false }, async () => {
+    const seen = [];
+    const out = await verifyKontinuitaetProbleme(ctxFor(seen),
+      { zusammenfassung: 'z', probleme: [{ typ: 'zeitluecke', kapitel: ['Kapitel Eins'], stelle_a: '«Anna ging heim»', stelle_b: '«steht so nirgends im Text»' }] }, 95, 97);
+    assert.equal(out.probleme.length, 1);
+    assert.equal(seen.length, 0);
+  });
+});
+
+test('verifyKontinuitaetProbleme: Anachronismus — kein Ausschnitt B (stelle_b ist das Erzähljahr)', async () => {
+  await withRetrieval({ indexReady: () => false }, async () => {
+    const seen = [];
+    await verifyKontinuitaetProbleme(ctxFor(seen),
+      { zusammenfassung: 'z', probleme: [{ typ: 'anachronismus', kapitel: ['Kapitel Eins'], stelle_a: '«Anna ging heim»', stelle_b: '1985' }] }, 95, 97);
+    assert.equal(seen.length, 1);
+    assert.match(seen[0].exA, /Anna ging heim/);
+    assert.equal(seen[0].exB, '');
+  });
+});
+
+test('Verify-Schema und -Prompt: grund vor bestaetigt; Prüffrage typabhängig', async () => {
+  const m = await import('../../public/js/prompts/komplett/schemas.js');
+  assert.deepEqual(Object.keys(m.SCHEMA_KONTINUITAET_VERIFY.properties), ['grund', 'bestaetigt']);
+  const { buildKontinuitaetVerifyPrompt: b } = await import('../../public/js/prompts/komplett/kontinuitaet.js');
+  const zl = b('B', { typ: 'zeitluecke', beschreibung: 'x' }, 'a', 'b');
+  assert.match(zl, /unmarkiert/);
+  assert.ok(zl.indexOf('"grund"') < zl.indexOf('"bestaetigt"'));
+  const an = b('B', { typ: 'anachronismus', beschreibung: 'x', stelle_b: '1985' }, 'a', 'b');
+  assert.match(an, /NACH der angegebenen Erzählzeit/);
+  assert.doesNotMatch(an, /rund um Stelle B/);
+  assert.match(b('B', { typ: 'figur' }, 'a', 'b'), /Widerspruch WIRKLICH besteht/);
+});

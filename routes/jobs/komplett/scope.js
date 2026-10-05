@@ -9,6 +9,8 @@
 //
 // Der Katalog der abwählbaren Schritte liegt in lib/komplett-scope.js.
 const { db } = require('../../../db/schema');
+const { findActiveJobId } = require('../shared');
+const { normalizeKomplettScope } = require('../../../lib/komplett-scope');
 
 /**
  * Orte-Karten aus dem bestehenden Katalog (Schritt «Orte» abgewählt).
@@ -43,4 +45,21 @@ function countSzenenInDb(bookIdInt, email) {
   ).get(bookIdInt, email).c;
 }
 
-module.exports = { loadOrteFromDb, countSongsInDb, countSzenenInDb };
+// Schritte der Komplettanalyse, die es auch als eigenständigen Job gibt (Schritt-Key →
+// Job-Typ). Gegenrichtung zu index.js#_komplettDedup: startete die Komplettanalyse,
+// während einer davon läuft, schrieben zwei Läufe denselben Check bzw. dasselbe Profil.
+const STEP_JOB_TYPES = { kontinuitaet: 'kontinuitaet', erzaehlprofil: 'erzaehlprofil' };
+
+/** Laufender/wartender Standalone-Job eines Schritts, den `scope` enthält (null/fehlend =
+ *  alles), für Buch + User → `{ jobId, step }`, sonst null. */
+function activeStepJob(bookId, userEmail, scope) {
+  const s = normalizeKomplettScope(scope);
+  for (const [step, type] of Object.entries(STEP_JOB_TYPES)) {
+    if (!s[step]) continue;
+    const jobId = findActiveJobId(type, bookId, userEmail);
+    if (jobId) return { jobId, step };
+  }
+  return null;
+}
+
+module.exports = { loadOrteFromDb, countSongsInDb, countSzenenInDb, activeStepJob };

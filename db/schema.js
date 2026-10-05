@@ -62,6 +62,12 @@ module.exports = {
   saveFaktenToDb: worldFacts.saveFaktenToDb,
   listWorldFacts: worldFacts.listWorldFacts,
   worldFactsScanState: worldFacts.worldFactsScanState,
+  getFactVerdicts: worldFacts.getFactVerdicts,
+  saveFactVerdicts: worldFacts.saveFactVerdicts,
+  refutedFactKeys: worldFacts.refutedFactKeys,
+  faktenfehlerIssues: worldFacts.faktenfehlerIssues,
+  worldFactKey: worldFacts.factKey,
+  normFaktKategorie: worldFacts.normFaktKategorie,
   // songs
   saveSongsToDb: songs.saveSongsToDb,
   listSongsForBook: songs.listSongsForBook,

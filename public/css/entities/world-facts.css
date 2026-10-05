@@ -86,6 +86,12 @@
   line-height: var(--lh-base);
 }
 
+/* Faktencheck-Markierung: Badge unter der Aussage, nicht über die Zeilenbreite gezogen. */
+.weltfakten-widerlegt { align-self: flex-start; }
+
+/* Faktencheck-Sektion am Kartenende. */
+.weltfakten-factcheck { margin-top: var(--space-sm); }
+
 .weltfakten-row-meta {
   display: flex;
   flex-wrap: wrap;

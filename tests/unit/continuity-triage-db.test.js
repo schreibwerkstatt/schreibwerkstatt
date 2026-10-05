@@ -1,7 +1,8 @@
 'use strict';
 // Unit (Temp-DB): Kontinuitäts-Persistenz und deterministische Kandidaten.
-//  - saveContinuityCheck übernimmt „erledigt"/„kein Fehler" auf wiedererkannte Befunde
-//    eines neuen Laufs und speichert die Seiten-Anker.
+//  - saveContinuityCheck übernimmt „kein Fehler" (nie „erledigt") auf wiedererkannte
+//    Befunde eines neuen Laufs und speichert die Seiten-Anker; ein aufgehobenes „kein
+//    Fehler" bleibt über Folgeläufe aufgehoben; Befunde ohne auflösbares Kapitel erben.
 //  - saveFaktencheckIssues verliert beim Ersetzen der faktenfehler-Zeilen deren Triage nicht.
 //  - buildAttributeContradictions: „Auftritt nach dem Tod", keine Hochzeit als
 //    Einmal-Ereignis, Welt-Fakten nur bei gleicher Kategorie und ähnlicher Aussage.
@@ -53,7 +54,7 @@ function issue(stelle_a, stelle_b, extra = {}) {
   };
 }
 
-test('neuer Lauf übernimmt „kein Fehler" und „erledigt" auf wiedererkannte Befunde', () => {
+test('neuer Lauf übernimmt „kein Fehler", aber nicht „erledigt"', () => {
   const bookId = newBook();
   const c3 = addChapter(bookId, 'Kap 3', 1);
   const c5 = addChapter(bookId, 'Kap 5', 2);
@@ -79,7 +80,62 @@ test('neuer Lauf übernimmt „kein Fehler" und „erledigt" auf wiedererkannte 
   ], figMap, chMap);
   const latest2 = continuity.getLatestContinuityCheck(bookId, USER);
   assert.notEqual(latest2.id, latest1.id);
-  assert.deepEqual(latest2.issues.map(i => [i.dismissed, i.resolved]), [[true, false], [false, true], [false, false]]);
+  assert.deepEqual(latest2.issues.map(i => [i.dismissed, i.resolved]), [[true, false], [false, false], [false, false]],
+    'wiedergefundener „erledigt"-Befund ist nicht behoben → offen');
+});
+
+const MAREK_A = 'Kap 3: «Marek lag reglos unter den Trümmern»';
+const MAREK_B = 'Kap 5: «Marek öffnete die Tür und lachte»';
+
+test('dismiss → Lauf 2 erbt → aufheben → Lauf 3 bleibt offen', () => {
+  const bookId = newBook();
+  const chMap = { 'Kap 3': addChapter(bookId, 'Kap 3', 1), 'Kap 5': addChapter(bookId, 'Kap 5', 2) };
+  const figMap = { Marek: 'fig_1' };
+  addFigur(bookId, 'fig_1', 'Marek');
+  const run = () => {
+    continuity.saveContinuityCheck(bookId, USER, 's', 'm', [issue(MAREK_A, MAREK_B)], figMap, chMap);
+    return continuity.getLatestContinuityCheck(bookId, USER).issues[0];
+  };
+  continuity.setContinuityIssueDismissed(run().id, true);
+  const second = run();
+  assert.equal(second.dismissed, true, 'Lauf 2 erbt „kein Fehler"');
+  continuity.setContinuityIssueDismissed(second.id, false);
+  assert.equal(run().dismissed, false, 'Lauf 3 bleibt offen — die ältere verworfene Kopie zählt nicht');
+  assert.equal(run().dismissed, false, 'auch Lauf 4');
+});
+
+test('zwei ähnliche neue Befunde erben nicht beide von einem alten', () => {
+  const bookId = newBook();
+  const chMap = { 'Kap 3': addChapter(bookId, 'Kap 3', 1), 'Kap 5': addChapter(bookId, 'Kap 5', 2) };
+  const figMap = { Marek: 'fig_1' };
+  addFigur(bookId, 'fig_1', 'Marek');
+  continuity.saveContinuityCheck(bookId, USER, 's', 'm', [issue(MAREK_A, MAREK_B)], figMap, chMap);
+  continuity.setContinuityIssueDismissed(continuity.getLatestContinuityCheck(bookId, USER).issues[0].id, true);
+  const { normalizedIssues } = continuity.saveContinuityCheck(bookId, USER, 's', 'm', [
+    issue(MAREK_A, 'Kap 5: «Marek öffnete die Tür und lachte laut über den Witz des Wirts»'),
+    issue(MAREK_A, MAREK_B),
+  ], figMap, chMap);
+  assert.deepEqual(normalizedIssues.map(i => i.dismissed), [false, true], 'nur der beste Überlapp erbt');
+});
+
+test('Befund ohne auflösbares Kapitel («Gesamtbuch») erbt „kein Fehler"', () => {
+  const bookId = newBook();
+  const chMap = { 'Kap 3': addChapter(bookId, 'Kap 3', 1) };
+  const figMap = { Marek: 'fig_1' };
+  addFigur(bookId, 'fig_1', 'Marek');
+  const it = issue(MAREK_A, MAREK_B, { kapitel: ['Gesamtbuch'] });
+  continuity.saveContinuityCheck(bookId, USER, 's', 'm', [it], figMap, chMap);
+  const first = continuity.getLatestContinuityCheck(bookId, USER).issues[0];
+  assert.deepEqual(first.chapter_ids, [], 'kein Kapitel aufgelöst');
+  continuity.setContinuityIssueDismissed(first.id, true);
+  continuity.saveContinuityCheck(bookId, USER, 's', 'm', [it], figMap, chMap);
+  assert.equal(continuity.getLatestContinuityCheck(bookId, USER).issues[0].dismissed, true);
+  // gemischt: ein aufgelöstes + ein unaufgelöstes Kapitel
+  const mixed = issue(MAREK_A, MAREK_B, { kapitel: ['Kap 3', 'Gesamtbuch'] });
+  continuity.saveContinuityCheck(bookId, USER, 's', 'm', [mixed], figMap, chMap);
+  continuity.setContinuityIssueDismissed(continuity.getLatestContinuityCheck(bookId, USER).issues[0].id, true);
+  continuity.saveContinuityCheck(bookId, USER, 's', 'm', [mixed], figMap, chMap);
+  assert.equal(continuity.getLatestContinuityCheck(bookId, USER).issues[0].dismissed, true);
 });
 
 test('Faktencheck-Ersetzung behält die Triage ihrer Befunde', () => {

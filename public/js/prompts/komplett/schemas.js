@@ -3,6 +3,7 @@
 // Schemas nach configurePrompts() neu.
 import { _isLocal } from '../state.js';
 import { _obj, _str, _num } from '../schema-utils.js';
+import { KONTINUITAET_TYPEN } from './schema-strings.js';
 
 // ═════════════════════════════════════════════════════════════════════════════
 // JSON-Schemas für Grammar-Constrained Decoding (lokale Provider)
@@ -272,28 +273,34 @@ export const SCHEMA_KONTINUITAET_FAKTEN = _obj({
 });
 
 // Verify-Stufe: pro gemeldetem Multi-Pass-Problem die Bestätigung mit Originaltext.
+// `grund` vor `bestaetigt`: ein Modell generiert in Feldreihenfolge — stünde das Urteil
+// vorn, wäre der Grund nur dessen Rechtfertigung (Reasoning-First wie _reasoning).
 export const SCHEMA_KONTINUITAET_VERIFY = _obj({
-  bestaetigt: { type: 'boolean' },
   grund: _str,
+  bestaetigt: { type: 'boolean' },
 });
 
 // _reasoning MUSS das erste Property bleiben: PROBLEME_RULES (schema-strings.js)
 // erzwingt Reasoning-First als zentrale False-Positive-Abwehr. _obj() macht alle
 // Properties required + additionalProperties:false – ohne dieses Feld verbietet die
 // Grammar lokaler Provider (ollama/llama) genau das vom Prompt geforderte Reasoning.
+// `typ` als Enum (Schema == Prompt-Enum, KONTINUITAET_TYPEN); `entwarnung` zuletzt:
+// die Selbst-Entwarnung des Modells nach dem Ausformulieren — saveKontinuitaetResult
+// verwirft Einträge mit entwarnung===true.
 export const SCHEMA_KONTINUITAET_PROBLEME = _obj({
   _reasoning: _str,
   probleme: {
     type: 'array',
     items: _obj({
       schwere: { type: 'string', enum: ['kritisch', 'mittel', 'niedrig'] },
-      typ: _str,
+      typ: { type: 'string', enum: KONTINUITAET_TYPEN },
       beschreibung: _str,
       stelle_a: _str,
       stelle_b: _str,
       figuren: { type: 'array', items: _str },
       kapitel: { type: 'array', items: _str },
       empfehlung: _str,
+      entwarnung: { type: 'boolean' },
     }),
   },
   zusammenfassung: _str,

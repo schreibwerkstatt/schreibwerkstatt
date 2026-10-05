@@ -1,6 +1,6 @@
 'use strict';
 
-const { db } = require('../../../../../db/schema');
+const { db, refutedFactKeys, worldFactKey } = require('../../../../../db/schema');
 
 // Block 29: Welt-Fakten (world_facts) — deklaratives Buch-Wissen der Komplettanalyse.
 //
@@ -26,28 +26,12 @@ function buildWorldFactSamples(ctx) {
   `).all(bookIdInt, userEmail, userEmail);
   if (!factRows.length) return;
 
-  // Als real FALSCH belegte Fakten aussortieren. Der Faktencheck-Job (web_search,
-  // opt-in pro Buch) persistiert seine Befunde als typ='faktenfehler' in
-  // continuity_issues; `stelle_a` trägt dort die geprüfte Aussage in genau der Form
-  // `subjekt: fakt` (siehe routes/jobs/komplett/job-faktencheck.js). Der Abgleich
-  // läuft deshalb über den normalisierten Text — es gibt keine fact_id am Befund,
-  // und eine einzuführen hiesse, den Befund an einen Index zu hängen, der beim
-  // nächsten Lauf komplett ersetzt wird.
-  // Läuft der Faktencheck nie, ist die Menge leer und nichts wird gefiltert. Vom Autor
-  // als „kein Fehler" verworfene Befunde zählen nicht — der Fakt gilt dann als richtig.
-  const _normFakt = (x) => String(x || '').toLowerCase().replace(/\s+/g, ' ').trim();
-  const falsch = new Set(
-    db.prepare(`
-      SELECT ci.stelle_a
-        FROM continuity_issues ci
-        JOIN continuity_checks cc ON cc.id = ci.check_id
-       WHERE cc.book_id = ? AND cc.user_email IS ? AND ci.typ = 'faktenfehler' AND ci.dismissed = 0
-    `).all(bookIdInt, userEmail || null)
-      .map(r => _normFakt(r.stelle_a))
-      .filter(Boolean)
-  );
-  const istFalsch = (r) => falsch.size > 0
-    && falsch.has(_normFakt(`${r.subjekt ? `${r.subjekt}: ` : ''}${r.fakt}`));
+  // Als real FALSCH belegte Fakten aussortieren — SSoT db/world-facts.js#refutedFactKeys:
+  // Urteile des Faktenchecks (world_fact_verdicts, gekoppelt an den normalisierten
+  // Aussage-Schlüssel statt an die bei jedem Full-Replace neue Zeilen-ID), abzüglich der
+  // vom Autor als „kein Fehler" verworfenen. Läuft der Faktencheck nie, ist die Menge leer.
+  const falsch = refutedFactKeys(bookIdInt, userEmail || null);
+  const istFalsch = (r) => falsch.size > 0 && falsch.has(worldFactKey(r.subjekt, r.fakt));
 
   // Junction: fact_id → [chapter_name]
   const chByFact = new Map();
@@ -56,8 +40,8 @@ function buildWorldFactSamples(ctx) {
     FROM world_fact_chapters wfc
     JOIN world_facts wf ON wf.id = wfc.fact_id
     LEFT JOIN chapters c ON c.chapter_id = wfc.chapter_id
-    WHERE wf.book_id = ?
-  `).all(bookIdInt)) {
+    WHERE wf.book_id = ? AND wf.user_email IS ?
+  `).all(bookIdInt, userEmail || null)) {
     if (!r.name) continue;
     if (!chByFact.has(r.fact_id)) chByFact.set(r.fact_id, []);
     chByFact.get(r.fact_id).push(r.name);

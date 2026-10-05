@@ -64,6 +64,82 @@ function getEntityChunks(kind, entityId, model) {
   return map;
 }
 
+// Wiederverwendung über Entitäts-Grenzen: ein Vektor hängt nur am eingebetteten
+// Text (content_hash deckt auch den passage_prefix) und am Modell, nicht an der
+// Entität. Der Delta-Cache im Index-Job fragt zuerst die eigenen Chunks der
+// Entität (getEntityChunks); verfehlt er, liefert reusableVectors() einen Vektor
+// mit demselben Hash aus demselben (Buch, kind, Modell) — aus einer anderen
+// lebenden Entität oder aus dem Recycling-Puffer gelöschter Chunks.
+//
+// Recycling-Puffer: Welt-Fakten haben keine lauf-stabile ID — die Komplettanalyse
+// ersetzt sie pro (Buch, User) komplett (db/world-facts.js#saveFaktenToDb), jede
+// Fakt-ID ist danach neu, und die FK-CASCADE löscht die alten Chunks schon beim
+// DELETE. Ein TEMP-Trigger fängt diese Löschungen (auch die kaskadierten) ab und
+// parkt Hash + Vektor in einer TEMP-Tabelle; der Folgelauf holt sie dort, statt
+// jeden Fakt neu zu embedden. Figuren, Schauplätze und Szenen reconcilen ihre IDs
+// und brauchen den Puffer nicht. TEMP heisst: pro Verbindung, weg beim Neustart —
+// dann wird einmal neu embeddet, genau wie ohne Puffer; keine Migration nötig.
+// Geräumt wird am Ende jedes vollständigen Laufs (dropRecycled).
+function _ensureRecycle() {
+  db.exec(`
+    CREATE TEMP TABLE IF NOT EXISTS semantic_vec_recycle (
+      book_id      INTEGER NOT NULL,
+      kind         TEXT    NOT NULL,
+      model        TEXT    NOT NULL,
+      content_hash TEXT    NOT NULL,
+      dim          INTEGER NOT NULL,
+      vector       BLOB    NOT NULL,
+      deleted_at   TEXT    NOT NULL,
+      PRIMARY KEY (book_id, kind, model, content_hash)
+    )
+  `);
+  db.exec(`
+    CREATE TEMP TRIGGER IF NOT EXISTS semantic_vec_recycle_fact
+    AFTER DELETE ON main.semantic_chunks WHEN old.kind = 'fact'
+    BEGIN
+      INSERT OR REPLACE INTO semantic_vec_recycle (book_id, kind, model, content_hash, dim, vector, deleted_at)
+      VALUES (old.book_id, old.kind, old.model, old.content_hash, old.dim, old.vector,
+              strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+    END
+  `);
+}
+_ensureRecycle();
+
+const _selHashRids = db.prepare(
+  'SELECT content_hash, MIN(rowid) AS rid FROM semantic_chunks WHERE book_id = ? AND kind = ? AND model = ? GROUP BY content_hash'
+);
+const _selRidVector = db.prepare('SELECT vector FROM semantic_chunks WHERE rowid = ?');
+const _selRecycled = db.prepare(
+  'SELECT vector FROM temp.semantic_vec_recycle WHERE book_id = ? AND kind = ? AND model = ? AND content_hash = ?'
+);
+
+// Hash-Nachschlagewerk für (Buch, kind, Modell) → { get(hash) → Float32Array|null }.
+// Lädt nur Hash → rowid (billig), den Vektor erst beim Treffer. Der Aufrufer liest
+// die Vektoren, bevor er selbst schreibt (Sammelphase des Index-Jobs).
+function reusableVectors(bookId, kind, model, dim) {
+  const rids = new Map();
+  for (const r of _selHashRids.all(bookId, kind, model)) rids.set(r.content_hash, r.rid);
+  return {
+    get(hash) {
+      const rid = rids.get(hash);
+      const live = rid != null ? _selRidVector.get(rid) : null;
+      const blob = live?.vector || _selRecycled.get(bookId, kind, model, hash)?.vector;
+      if (!blob) return null;
+      const vec = blobToVector(blob);
+      return vec.length === dim ? vec : null;
+    },
+  };
+}
+
+// Recycling-Puffer eines Buchs leeren — alles, was vor `before` (ISO) gelöscht
+// wurde. Der Index-Job übergibt seinen Startzeitpunkt: was erst während des Laufs
+// gelöscht wurde (Komplettanalyse ersetzt die Fakten, während der Index läuft),
+// bleibt für den Folgelauf liegen. Bücher, die es nicht mehr gibt, fallen mit.
+function dropRecycled(bookId, before) {
+  db.prepare('DELETE FROM temp.semantic_vec_recycle WHERE book_id = ? AND deleted_at < ?').run(bookId, before);
+  db.prepare('DELETE FROM temp.semantic_vec_recycle WHERE book_id NOT IN (SELECT book_id FROM main.books)').run();
+}
+
 // Existiert die Entität (noch)? Der Index-Job sammelt seine Entitäten am Anfang
 // und schreibt sie erst nach dem Embedden — wird eine dazwischen gelöscht,
 // schlüge das INSERT am FK fehl und risse den ganzen Lauf mit. Der Job prüft
@@ -201,12 +277,21 @@ function _bookVectors(bookId, model) {
 // (bester Chunk), nach Score sortiert, top-K. minScore: Cosinus-Untergrenze —
 // die Ähnlichkeitssuche liefert nie „keine Treffer", darum schneidet der Floor
 // den schwachen Long-Tail ab (0 = aus).
-function searchSimilar(bookId, model, queryVec, { kinds = null, topK = 20, excludeKind = null, excludeEntityId = null, minScore = 0 } = {}) {
+//
+// user: optionaler User-Scope. Szenen, Figuren, Schauplätze und Welt-Fakten sind
+// Analyse-Daten PRO USER, der Index führt sie buchweit für alle. Ohne Filter VOR
+// dem topK-Schnitt füllten fremde (Co-Autor-)Treffer die Liste, und der Aufrufer,
+// der sie danach verwirft, bekäme weniger als topK. `user` gesetzt (auch null =
+// Daten ohne User) → nur eigene Entitäten dieser Kinds; Seiten und Recherche sind
+// buch-geteilt und bleiben ungefiltert. `undefined` (Default) = kein Filter.
+function searchSimilar(bookId, model, queryVec, { kinds = null, topK = 20, excludeKind = null, excludeEntityId = null, minScore = 0, user } = {}) {
   const kindSet = kinds && kinds.length ? new Set(kinds) : null;
+  const owned = user === undefined ? null : ownedEntityFilter(bookId, user);
   const best = new Map(); // key `${kind}:${entity_id}` → { kind, entity_id, chunk_ix, text, score }
   for (const r of _bookVectors(bookId, model)) {
     if (kindSet && !kindSet.has(r.kind)) continue;
     if (excludeKind && r.kind === excludeKind && r.entity_id === excludeEntityId) continue;
+    if (owned && !owned(r.kind, r.entity_id)) continue;
     const score = cosineSim(queryVec, r.vec);
     if (!Number.isFinite(score)) continue;
     if (score < minScore) continue;
@@ -218,6 +303,28 @@ function searchSimilar(bookId, model, queryVec, { kinds = null, topK = 20, exclu
   }
   return Array.from(best.values()).sort((a, b) => b.score - a.score).slice(0, topK)
     .map(({ rid, ...h }) => ({ ...h, text: _selChunkText.get(rid)?.text ?? '' }));
+}
+
+// User-skopierte Kinds und ihre Quelltabellen. Alle vier tragen user_email.
+const USER_SCOPED_TABLES = {
+  scene: 'figure_scenes', figure: 'figures', location: 'locations', fact: 'world_facts',
+};
+const _selOwnedIds = Object.fromEntries(Object.entries(USER_SCOPED_TABLES).map(([kind, table]) => [
+  kind, db.prepare(`SELECT id FROM ${table} WHERE book_id = ? AND user_email IS ?`),
+]));
+
+// Prädikat (kind, entityId) → gehört die Entität zum User? User-skopierte Kinds
+// gegen die Quelltabelle (book_id + user_email), alle anderen Kinds → true.
+function ownedEntityFilter(bookId, userEmail) {
+  const email = userEmail || null;
+  const sets = {};
+  for (const [kind, st] of Object.entries(_selOwnedIds)) {
+    sets[kind] = new Set(st.all(bookId, email).map(r => r.id));
+  }
+  return (kind, entityId) => {
+    const set = sets[kind];
+    return set ? set.has(Number(entityId)) : true;
+  };
 }
 
 // Beste Chunks INNERHALB einer Entität gegen queryVec. Gegenstück zu
@@ -377,16 +484,21 @@ function isIndexed(bookId, model) {
 // Laufs (semantic_index_state). staleCount = Quell-Entitäten, deren updated_at
 // danach liegt (seither geändert oder neu hinzugekommen) — billiger Heuristik-
 // Zähler ohne Re-Hashing. Plus bookStats (total/byKind/staleModel).
-function indexStatus(bookId, model) {
+// userEmail gesetzt (auch null) → die user-skopierten Tabellen zählen nur die
+// Einträge dieses Users: eine Komplettanalyse eines Co-Autors ändert dessen Fakten,
+// nicht das, was dieser User in der Suche findet. Seiten + Recherche buchweit.
+function indexStatus(bookId, model, userEmail) {
   const stats = bookStats(bookId, model);
   const last = lastIndexedAt(bookId, model);
   if (!last) return { indexed: false, lastIndexedAt: null, staleCount: 0, ...stats };
-  const _changedSince = (table) => db.prepare(
-    `SELECT COUNT(*) AS n FROM ${table} WHERE book_id = ? AND updated_at > ?`
-  ).get(bookId, last).n;
-  const staleCount = _changedSince('pages') + _changedSince('figure_scenes')
-                   + _changedSince('figures') + _changedSince('research_items')
-                   + _changedSince('locations') + _changedSince('world_facts');
+  const scoped = userEmail !== undefined;
+  const _changedSince = (table, userScoped) => (scoped && userScoped
+    ? db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE book_id = ? AND updated_at > ? AND user_email IS ?`)
+      .get(bookId, last, userEmail || null)
+    : db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE book_id = ? AND updated_at > ?`).get(bookId, last)
+  ).n;
+  let staleCount = _changedSince('pages', false) + _changedSince('research_items', false);
+  for (const table of Object.values(USER_SCOPED_TABLES)) staleCount += _changedSince(table, true);
   return { indexed: true, lastIndexedAt: last, staleCount, ...stats };
 }
 
@@ -435,7 +547,7 @@ function loadPageChunksWithChapter(bookId, model) {
 }
 
 module.exports = {
-  getEntityChunks, replaceEntity, remove, searchSimilar, searchInEntity, getEntityVector, getEntityText,
+  getEntityChunks, reusableVectors, dropRecycled, ownedEntityFilter, replaceEntity, remove, searchSimilar, searchInEntity, getEntityVector, getEntityText,
   bookStats, clearForeignModels, pruneMissing, indexStatus,
   entityExists, neighborText, mergeOverlap, lastIndexedAt, markIndexed, isIndexed,
   loadChunksForPairing, loadFigureVectorsForPairing, loadPageChunksWithChapter,

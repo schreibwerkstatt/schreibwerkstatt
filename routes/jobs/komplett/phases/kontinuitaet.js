@@ -40,7 +40,8 @@ async function _runP8(ctx, { kontMultiPass, figKompakt, orteKompakt, chapterFakt
     }
     log.info(`Kontinuität facts-basiert: ${chapterFakten.length} Kapitel, ${figKompakt.length} Figuren`);
     return await retryOnTransientAi(() => call(jobId, tok,
-      prompts.buildKontinuitaetCheckPrompt(bookName, chapterFakten, figKompakt, orteKompakt, anachronismus),
+      prompts.buildKontinuitaetCheckPrompt(bookName, chapterFakten, figKompakt, orteKompakt, anachronismus,
+          narrativeLabels(getBookSettings(bookIdInt, email))),
       sys.SYSTEM_KONTINUITAET_BLOCKS, 82, 97, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_PROBLEME,
       costTier(COST_LABEL.kontinuitaet),
     ), { log, label: 'Kontinuität facts-basiert (P8)' });
@@ -117,10 +118,17 @@ async function runKontinuitaetPhase(ctx, {
     warnings.push({ key: 'job.warn.continuityFailed' });
     kontResult = null;
   }
-  if (kontResult) {
+  if (kontResult && kontMultiPass && isCloudModel) {
     // Multi-Pass-Befunde gegen den Originaltext verifizieren (False-Positive-Filter).
-    if (kontMultiPass && isCloudModel) {
+    // Scheitert die Stufe als Ganzes, wird P8 verworfen (ungeprüfte Multi-Pass-Befunde
+    // wären überwiegend Fehlalarme) — der Katalog bleibt, Warnung statt failJob.
+    try {
       kontResult = await verifyKontinuitaetProbleme(ctx, kontResult, 96, 97, { chapterFacts: chapterFakten });
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      log.warn(`Kontinuität Verify fehlgeschlagen – Ergebnis verworfen (Katalog bleibt erhalten): ${e.message}`);
+      warnings.push({ key: 'job.warn.continuityFailed' });
+      kontResult = null;
     }
   }
 
@@ -151,13 +159,25 @@ async function runKontinuitaetPhase(ctx, {
     // Fakt-Aussagen → requireQuoteEvidence dort aus, die Seiten-Anker kommen über
     // die Fakten. F4-Befunde (`_source: 'attr'`) nimmt saveKontinuitaetResult von der
     // Beleg-Prüfung aus: ihre Stellen sind aus Katalogdaten gebaut, nicht zitiert.
-    saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, idMaps.chNameToId, effectiveProvider, log,
-      { pageContents, requireQuoteEvidence: !kontMultiPass, chapterFacts: kontMultiPass ? chapterFakten : null });
+    _saveSafe(ctx, () => saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, idMaps.chNameToId, effectiveProvider, log,
+      { pageContents, requireQuoteEvidence: !kontMultiPass, chapterFacts: kontMultiPass ? chapterFakten : null }));
   } else if (attrFindings.length) {
     // P8 selbst fehlgeschlagen/leer, aber der Attribut-Detektor fand Cross-Chapter-Widersprüche:
     // eigenständig als Kontinuitäts-Check persistieren (nicht verlieren).
-    saveKontinuitaetResult(bookIdInt, email, { zusammenfassung: '', probleme: attrFindings },
-      figNameToId, idMaps.chNameToId, effectiveProvider, log, { pageContents, requireQuoteEvidence: false });
+    _saveSafe(ctx, () => saveKontinuitaetResult(bookIdInt, email, { zusammenfassung: '', probleme: attrFindings },
+      figNameToId, idMaps.chNameToId, effectiveProvider, log, { pageContents, requireQuoteEvidence: false }));
+  }
+}
+
+// Persistenz des P8-Ergebnisses: ein Fehler beim Speichern (kaputter Befund, DB-Fehler
+// in der Check-Transaktion) lässt den vorherigen Check stehen und darf den bereits
+// gespeicherten Katalog nicht über failJob kippen.
+function _saveSafe(ctx, fn) {
+  try { fn(); }
+  catch (e) {
+    if (e.name === 'AbortError') throw e;
+    ctx.log.warn(`Kontinuitäts-Ergebnis nicht gespeichert (Katalog bleibt erhalten): ${e.message}`);
+    ctx.warnings.push({ key: 'job.warn.continuityFailed' });
   }
 }
 

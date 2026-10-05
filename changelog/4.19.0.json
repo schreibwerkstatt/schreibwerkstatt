@@ -1,0 +1,31 @@
+{
+  "version": "4.19.0",
+  "date": "2026-10-05",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Die Welt-Fakten-Karte hat einen eigenen Faktencheck, der historische, technische und kulturelle Fakten per Web-Suche gegen die Realität prüft. Real widerlegte Fakten tragen ein Kennzeichen und lassen sich mit einem eigenen Filter anzeigen.",
+      "en": "The world facts card has its own fact check that compares historical, technical and cultural facts against reality via web search. Facts refuted in reality are flagged and can be shown with their own filter."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Die Kontinuitäts-Karte erkennt jetzt auch abweichende Namen und Wechsel der Erzählform. Ein Klick auf einen Befund springt genauer an die betroffene Stelle im Text.",
+      "en": "The continuity card now also spots inconsistent names and shifts in narrative voice. Clicking a finding takes you more precisely to the affected passage."
+    },
+    {
+      "kind": "verbessert",
+      "de": "In der Kontinuitäts-Karte bleiben als Fehlalarm markierte Befunde auch nach späteren Prüfungen ausgeblendet, erledigte erscheinen wieder, falls der Widerspruch noch besteht. Ein Knopf setzt alle Filter zurück.",
+      "en": "In the continuity card, findings marked as false alarms stay hidden after later checks, while resolved ones reappear if the contradiction remains. A button resets all filters."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Die Komplettanalyse meldet weniger Fehlalarme bei der Kontinuität. Schlägt das Sammeln der Welt-Fakten fehl, bleiben die bisherigen Welt-Fakten stehen.",
+      "en": "The full analysis reports fewer false continuity alarms. If collecting world facts fails, your previous world facts are kept."
+    },
+    {
+      "kind": "behoben",
+      "de": "Das Rechtsklick-Menü im Inhaltsbaum wurde in manchen Karten vom Inhalt daneben verdeckt, und die aufgeklappte Job-Leiste lag unter dem Inhaltsbaum.",
+      "en": "The right-click menu in the contents tree was hidden behind neighbouring content in some cards, and the expanded job bar slid under the contents tree."
+    }
+  ]
+}

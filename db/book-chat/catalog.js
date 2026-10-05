@@ -327,35 +327,6 @@ function listFiguresWithMentions(bookId, userEmail) {
   return _stmtFiguresWithMentions.all(bookId, userEmail);
 }
 
-// ── Welt-Fakten ──────────────────────────────────────────────────────────────
-
-/** Welt-Fakten von (Buch, User). Filter optional: `kategorie` (exakt),
- *  `subjekt` (Teilstring per LIKE); null = kein Filter. */
-function listWorldFacts(bookId, userEmail, { kategorie = null, subjekt = null } = {}) {
-  let sql = `
-    SELECT wf.id, wf.kategorie, wf.subjekt, wf.fakt, wf.seite_label
-    FROM world_facts wf
-    WHERE wf.book_id = ? AND wf.user_email IS ?`;
-  const params = [bookId, userEmail];
-  if (kategorie !== null) { sql += ' AND wf.kategorie = ?'; params.push(kategorie); }
-  if (subjekt !== null)   { sql += ' AND wf.subjekt LIKE ?'; params.push(`%${subjekt}%`); }
-  sql += ' ORDER BY wf.sort_order, wf.id';
-  return db.prepare(sql).all(...params);
-}
-
-/** Kapitelnamen mehrerer Welt-Fakten, je Fakt in Leserichtung (chapter_name
- *  NULL bei gelöschtem Kapitel). */
-function listWorldFactChapterNames(factIds) {
-  const { sql: idSql, values: idVals } = inClause(factIds);
-  return db.prepare(`
-    SELECT wfc.fact_id, c.chapter_name
-    FROM world_fact_chapters wfc
-    LEFT JOIN chapters c ON c.chapter_id = wfc.chapter_id
-    WHERE wfc.fact_id IN ${idSql}
-    ORDER BY wfc.fact_id, c.position
-  `).all(...idVals);
-}
-
 module.exports = {
   listChaptersWithStats,
   listPagesWithStats,
@@ -376,6 +347,4 @@ module.exports = {
   listSceneFiguresForScenes,
   listSceneLocationsForScenes,
   listFiguresWithMentions,
-  listWorldFacts,
-  listWorldFactChapterNames,
 };

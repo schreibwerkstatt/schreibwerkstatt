@@ -85,3 +85,41 @@ for (const beschreibung of [
 test('droppt weiterhin positives «in sich konsistent»', () => {
   assert.equal(_isSelfCancelled({ beschreibung: 'Die Angaben sind in sich konsistent.' }), true);
 });
+
+// Adverbiales, verneintes oder lokal gebundenes «konsistent»/«kein Problem» ist KEINE
+// Entwarnung; eine Empfehlung darf ihr Ziel als «kein Widerspruch» formulieren.
+for (const [beschreibung, empfehlung] of [
+  ['Marek spricht in Kapitel 1–6 konsistent Berlinerisch, in Kapitel 7 plötzlich Hochdeutsch.', 'Dialekt in Kapitel 7 beibehalten.'],
+  ['Die Altersangaben sind nie konsistent.', ''],
+  ['Die Altersangaben sind nicht durchgängig konsistent.', ''],
+  ['Die Angaben sind weder vollständig noch konsistent.', ''],
+  ['Das Geburtsjahr ist nicht konsistent mit Kapitel 2.', ''],
+  ['The ages are not consistent.', ''],
+  ['Marek stirbt in Kapitel 3 und lebt in Kapitel 5.', 'Tod abschwächen, damit kein Widerspruch entsteht.'],
+  ['Lena hat ein gebrochenes Bein, doch der Sprint ist für sie kein Problem.', 'Verletzung früher heilen lassen.'],
+]) {
+  test(`behält echten Befund: «${beschreibung}» / «${empfehlung}»`, () => {
+    assert.equal(_isSelfCancelled({ beschreibung, empfehlung }), false);
+  });
+}
+
+for (const [beschreibung, empfehlung] of [
+  ['No real contradiction – this is consistent with the flashback.', ''],
+  ['Not a contradiction; the narrator lies.', ''],
+  ['The dates are consistent.', ''],
+  ['This can be explained by the time skip.', ''],
+  ['Mareks Alter springt.', 'Remove this entry.'],
+  ['Das ist kein wirklicher Widerspruch.', ''],
+  ['Kein Problem. Die Reisezeit reicht aus.', ''],
+  ['Die Chronologie ist insgesamt stimmig.', ''],
+  ['Das Geburtsjahr ist konsistent mit Kapitel 2.', ''],
+]) {
+  test(`verwirft Selbst-Entwarnung: «${beschreibung}» / «${empfehlung}»`, () => {
+    assert.equal(_isSelfCancelled({ beschreibung, empfehlung }), true);
+  });
+}
+
+test('robust gegen Nicht-Objekte und Nicht-String-Felder', () => {
+  assert.equal(_isSelfCancelled(null), false);
+  assert.equal(_isSelfCancelled({ beschreibung: 42, empfehlung: ['x'] }), false);
+});

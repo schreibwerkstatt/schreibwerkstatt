@@ -151,7 +151,7 @@ function _rechercheHint(input) {
 // ein DB-Fehler kostet den Block, nicht den Chat.
 function _agentWeltContext(bookId, userEmail, logger) {
   try {
-    const fakten = listWorldFacts(bookId, userEmail);
+    const fakten = listWorldFacts(bookId, userEmail, { withRefuted: true });
     const { scanned } = worldFactsScanState(bookId, userEmail);
     return { scanned, fakten };
   } catch (e) {

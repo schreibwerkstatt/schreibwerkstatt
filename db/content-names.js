@@ -9,6 +9,7 @@
 // Rein lesend. Schreibpfade auf Buchinhalte gehören in lib/content-store.
 
 const { db } = require('./connection');
+const { listWorldFacts } = require('./world-facts');
 
 function _inClause(ids) {
   return { sql: `(${ids.map(() => '?').join(',')})`, values: ids };
@@ -105,18 +106,15 @@ function listSongChaptersWithNames(songIds) {
 }
 
 /** Welt-Fakten der Kategorien `kategorien` mit Kapitelname, eine Zeile je
- *  Fakt-Kapitel-Bezug (Fakten ohne Kapitel mit chapter_name NULL). */
+ *  Fakt-Kapitel-Bezug (Fakten ohne Kapitel mit chapter_name NULL). Dünne Hülle um
+ *  den SSoT-Lesepfad db/world-facts.js#listWorldFacts — nur für Konsumenten, die
+ *  die flache Bridge-Form erwarten (Faktencheck-Kandidaten). */
 function listWorldFactsWithChapterNames(bookId, userEmail, kategorien) {
   if (!kategorien.length) return [];
-  return db.prepare(`
-    SELECT wf.id, wf.kategorie, wf.subjekt, wf.fakt, c.chapter_name
-      FROM world_facts wf
-      LEFT JOIN world_fact_chapters wfc ON wfc.fact_id = wf.id
-      LEFT JOIN chapters c ON c.chapter_id = wfc.chapter_id
-     WHERE wf.book_id = ? AND wf.user_email IS ?
-       AND wf.kategorie IN (${kategorien.map(() => '?').join(',')})
-     ORDER BY wf.sort_order, wf.id
-  `).all(bookId, userEmail, ...kategorien);
+  return listWorldFacts(bookId, userEmail, { kategorien }).flatMap(f =>
+    (f.kapitel.length ? f.kapitel : [null]).map(chapter_name => ({
+      id: f.id, kategorie: f.kategorie, subjekt: f.subjekt, fakt: f.fakt, chapter_name,
+    })));
 }
 
 // ── Attribut-Widerspruchs-Detektor (F4, routes/jobs/komplett/attribute-check.js) ──
@@ -162,19 +160,6 @@ function listDatedLifeEventsWithChapterNames(bookId, userEmail) {
   `).all(bookId, userEmail);
 }
 
-/** Welt-Fakten MIT Subjekt (alle Kategorien) mit Kapitelname, eine Zeile je
- *  Fakt-Kapitel-Bezug (Fakten ohne Kapitel mit chapter_name NULL). */
-function listSubjectWorldFactsWithChapterNames(bookId, userEmail) {
-  return db.prepare(`
-    SELECT wf.id, wf.subjekt, wf.kategorie, wf.fakt, c.chapter_name
-      FROM world_facts wf
-      LEFT JOIN world_fact_chapters wfc ON wfc.fact_id = wf.id
-      LEFT JOIN chapters c ON c.chapter_id = wfc.chapter_id
-     WHERE wf.book_id = ? AND wf.user_email IS ? AND wf.subjekt IS NOT NULL AND TRIM(wf.subjekt) != ''
-     ORDER BY wf.sort_order, wf.id
-  `).all(bookId, userEmail);
-}
-
 module.exports = {
   listChaptersForBook,
   chapterIdsByName,
@@ -188,5 +173,4 @@ module.exports = {
   listFigureDeathsWithChapterNames,
   listFigureScenesWithChapterNames,
   listDatedLifeEventsWithChapterNames,
-  listSubjectWorldFactsWithChapterNames,
 };

@@ -190,10 +190,10 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
   // Per-Chunk-Caches invalidieren – sonst liefert der Multi-Pass-Cache stale
   // Extraktion mit den alten Autoren-Vorgaben.
   const settingsSig = bookSettingsSigPart(getBookSettings(bookIdInt, email));
-  const chunkTexts = chunkOrder.map(chunkKey => {
+  const chunkTexts = chunkOrder.map((chunkKey, ord) => {
     const chunk = chunks.get(chunkKey);
     return {
-      chunk, key: chunkKey,
+      chunk, key: chunkKey, ord,
       // Kapitelname im Sig: er fliesst via buildExtraktionKomplettChapterPrompt(chunk.name)
       // in den Prompt, steht aber nicht in page_id:updated_at. Ohne ihn liefert eine reine
       // Kapitel-Umbenennung einen stale Cache-HIT mit altem Kapitelkontext. Rename → MISS.
@@ -296,6 +296,15 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
     settledOpts,
   );
 
+  // Buchreihenfolge wiederherstellen: der Warmup zog den kleinsten Chunk nach vorn, und
+  // die Reihenfolge der Kapiteleinträge wird zur sort_order der Welt-Fakten.
+  if (chunkTexts.some((ct, i) => ct.ord !== i)) {
+    const idx = chunkTexts.map((_, i) => i).sort((a, b) => chunkTexts[a].ord - chunkTexts[b].ord);
+    const ctSorted = idx.map(i => chunkTexts[i]);
+    const stSorted = idx.map(i => settled[i]);
+    chunkTexts.splice(0, chunkTexts.length, ...ctSorted);
+    settled.splice(0, settled.length, ...stSorted);
+  }
   for (let i = 0; i < settled.length; i++) {
     if (settled[i].status === 'rejected')
       log.warn(`Vollextraktion «${chunkTexts[i].chunk.name}» übersprungen: ${settled[i].reason?.message}`);
@@ -334,6 +343,9 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
       // lückenhaften Stand statt die nie gecachten Chunks erneut zu extrahieren.
       partialFailure = true;
       const skippedChapters = [...new Set(failedInfo.map(f => f.name))];
+      // Diese Kapitel behalten beim Speichern ihre bisherigen Welt-Fakten (saveFaktenToDb
+      // keepChapterIds) — ein ausgefallener Chunk ist keine Aussage „hier gibt es keine".
+      ctx.faktenFailure = { all: false, kapitel: skippedChapters };
       log.warn(`Phase 1 – ${failedChunks.length} Chunk(s) durch Truncation übersprungen (nicht-fatal): ${details}`);
       ctx.warnings?.push({
         key: 'job.warn.chunksTruncated',

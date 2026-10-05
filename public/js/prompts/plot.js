@@ -200,7 +200,7 @@ export function buildPlotConsistencyPrompt(acts, beats, kapitel = [], szenen = [
   // Weltgesetz-Segment: fehlt es, wird NICHT behauptet, die Welt habe keine Regeln.
   const weltLines = _weltgesetzeLines(weltgesetze);
   const weltSeg = weltLines
-    ? `\nETABLIERTE WELTGESETZE (aus der Buchanalyse extrahierte Regeln + Technik-Stand dieser Welt — was hier GILT, unabhaengig davon, was schon geschrieben ist)${_cutNote(k, 'weltgesetze')}:\n${weltLines}\n`
+    ? `\nETABLIERTE WELTGESETZE (Regeln + Technik-Stand dieser Welt, von der KI aus dem Buchtext extrahiert, nicht von der Autorin kuratiert — Pruefstein fuer die geplanten Beats; im Zweifel gilt der Buchtext)${_cutNote(k, 'weltgesetze')}:\n${weltLines}\n`
     : '';
   const weltChecks = weltLines
     ? `

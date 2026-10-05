@@ -1,5 +1,6 @@
 import { fetchJson, clearStatusAfter, formatLastRun } from '../utils.js';
 import { EVT } from '../events.js';
+import { tFetchError } from '../i18n.js';
 import { KOMPLETT_STEPS, KOMPLETT_CORE_STEPS, KOMPLETT_STEP_KEYS,
          normalizeKomplettScope, isFullKomplettScope } from '../komplett-scope.js';
 
@@ -107,7 +108,8 @@ export const appKomplettMethods = {
       this._startKomplettPoll(jobId, bookId);
     } catch (e) {
       console.error('[startKomplettRun]', e);
-      this.$store.jobs.alleAktualisierenStatus = `${this.t('common.errorColon')}${e.message}`;
+      // Server-Fehler (z. B. 409 KOMPLETT_STEP_JOB_RUNNING) über ihren error_code übersetzen.
+      this.$store.jobs.alleAktualisierenStatus = `${this.t('common.errorColon')}${tFetchError(e)}`;
       this.$store.jobs.alleAktualisierenLoading = false;
     }
   },

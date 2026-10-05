@@ -43,8 +43,42 @@ test('jeder frühere Befund wird höchstens einmal vergeben', () => {
   assert.equal(out[1], null);
 });
 
-test('ohne Kapitel-IDs vergleichen die Kapitelnamen', () => {
-  const p = { ...PRIOR, chapter_ids: [], kapitel: ['Kapitel 3', 'Kapitel 5'] };
-  const n = { ...PRIOR, chapter_ids: [], kapitel: ['kapitel 5', 'Kapitel 3'] };
+test('nicht auflösbare Kapitelnamen zählen nicht — nur aufgelöste IDs', () => {
+  // Gespeichert werden nur aufgelöste Kapitel-Bridges: der alte Befund trägt den Namen
+  // «Gesamtbuch» nicht mehr, der neue schon. Beide müssen trotzdem gleich aussehen.
+  const p = { ...PRIOR, chapter_ids: [], kapitel: [] };
+  const n = { ...PRIOR, chapter_ids: [], kapitel: ['Gesamtbuch'] };
   assert.equal(sameIssue(issueSignature(n), issueSignature(p)), true);
+  const mixed = { ...PRIOR, kapitel: ['Kapitel 3', 'Kapitel 5', 'Kapitl 9'] };
+  assert.equal(sameIssue(issueSignature(mixed), issueSignature(PRIOR)), true);
+});
+
+test('„erledigt" wird nie übernommen', () => {
+  const p = { ...PRIOR, dismissed: false, dismissed_at: null, resolved: true, resolved_at: '2026-10-01T10:00:00.000Z' };
+  assert.deepEqual(carryOverStatus([{ ...PRIOR }], [p]), [null]);
+});
+
+test('jüngste Zeile zählt: aufgehobenes „kein Fehler" kommt nicht über die ältere Kopie zurück', () => {
+  const lauf1 = { ...PRIOR, check_id: 1 };                                              // verworfen
+  const lauf2 = { ...PRIOR, check_id: 2, dismissed: false, dismissed_at: null };         // geerbt, dann aufgehoben
+  // prior: neueste zuerst
+  assert.deepEqual(carryOverStatus([{ ...PRIOR }], [lauf2, lauf1]), [null]);
+  // auch ein zweiter neuer Befund greift nicht auf die verdeckte ältere Kopie zu
+  assert.deepEqual(carryOverStatus([{ ...PRIOR }, { ...PRIOR }], [lauf2, lauf1]), [null, null]);
+});
+
+test('ein älterer verworfener Befund, den der jüngste Lauf nicht fand, vererbt weiter', () => {
+  const other = { ...PRIOR, check_id: 2, typ: 'zeitlinie', dismissed: false };
+  const old = { ...PRIOR, check_id: 1 };
+  const [st] = carryOverStatus([{ ...PRIOR }], [other, old]);
+  assert.equal(st?.dismissed, true);
+});
+
+test('zwei ähnliche neue Befunde: nur der mit dem besten Überlapp erbt', () => {
+  const nah = { ...PRIOR, stelle_a: PRIOR.stelle_a, stelle_b: PRIOR.stelle_b };
+  const fern = { ...PRIOR, stelle_b: 'Kapitel 5: «Marek öffnete die Tür und lachte laut über den Witz des Wirts»' };
+  // Reihenfolge absichtlich: der schwächere zuerst — «erster passender gewinnt» wäre falsch.
+  const out = carryOverStatus([fern, nah], [{ ...PRIOR, check_id: 1 }]);
+  assert.equal(out[0], null);
+  assert.equal(out[1]?.dismissed, true);
 });
