@@ -5,7 +5,8 @@
 import { fetchJson, configureTokenEstimate, configureAppTimezone, configureLocaleRegion, localeTag } from '../utils.js';
 import { configurePrompts } from '../prompts.js';
 import { watchFilterScopes } from '../filter-persist.js';
-import { configureI18n, getSupportedLocales } from '../i18n.js';
+import { configureI18n, getSupportedLocales, setUnitTerm } from '../i18n.js';
+import { unitTermFor } from '../i18n-unit-term.js';
 import { setupSpellcheckDispatch } from '../cards/editor-spellcheck/dispatch.js';
 import { FILTER_SCOPES } from './app-view.js';
 import { EVT } from '../events.js';
@@ -45,6 +46,14 @@ export const appInitMethods = {
     // während der initialen Hash-Anwendung erfasst werden.
     this.setupFeatureUsageWatchers();
     setupSpellcheckDispatch(this);
+    // Gliederungseinheit folgt dem Buchtyp des offenen Buchs (Blog/Journalismus:
+    // Beitrag, Tagebuch: Eintrag). Erst das Modul (tRaw), dann der Store — der
+    // Store-Wechsel lässt die t()-Bindings neu rendern.
+    window.Alpine.effect(() => {
+      const unit = unitTermFor(this.currentBuchtyp?.());
+      setUnitTerm(unit);
+      if (this.$store.shell.unitTerm !== unit) this.$store.shell.unitTerm = unit;
+    });
     // Plattform-Detect für Tasten-Hints (⌘ vs. Ctrl).
     const ua = navigator.userAgent || '';
     const plat = navigator.platform || '';

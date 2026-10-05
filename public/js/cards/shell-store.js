@@ -22,6 +22,8 @@
 //   bossScreenActive— Chef-Taste (F9 im Seiten-Editor): schwarzer Vollbild-Vorhang.
 //   themePref       — Theme-Wahl ('auto'|'light'|'dark'), in localStorage gespiegelt.
 //   uiLocale        — UI-Sprache ('de'|'en'); Quelle für t()/tRaw() + Date-Locale.
+//   unitTerm        — Gliederungseinheit des offenen Buchs ('section'|'post'|'entry',
+//                   aus dem Buchtyp, i18n-unit-term.js); t() re-rendert darauf.
 //   defaultRegion   — Default-Region (Geocoding/Locale-Defaults).
 //   appTimezone     — App-weite Zeitzone (/config → app_settings.app.timezone);
 //                   Basis für tzOpts() + alle Date-Display-Formatter.
@@ -44,6 +46,7 @@ export function registerShellStore() {
     bossScreenActive: false,
     themePref: 'auto',
     uiLocale: '',
+    unitTerm: 'section',
     defaultRegion: '',
     appTimezone: 'Europe/Zurich',
     appName: 'Schreibwerkstatt',

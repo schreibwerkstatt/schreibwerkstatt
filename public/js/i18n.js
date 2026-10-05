@@ -9,12 +9,20 @@
 // Platzhalter: {name} → Parameter-Map: t('foo', { name: 'Anna' }).
 
 import { formatLastRun as _formatLastRunImpl, localeTag } from './utils.js';
+import { applyUnitTerm, UNIT_SECTION } from './i18n-unit-term.js';
 
 const FALLBACK_LOCALE = 'de';
 const SUPPORTED_LOCALES = ['de', 'en'];
 
 let _messages = {};
 let _fallback = null;
+let _locale = FALLBACK_LOCALE;
+// Gliederungseinheit des offenen Buchs (Abschnitt/Beitrag/Eintrag), gesetzt
+// über setUnitTerm aus dem Root-Effekt (app-init.js). Siehe i18n-unit-term.js.
+let _unit = UNIT_SECTION;
+
+/** Gliederungseinheit für alle folgenden Übersetzungen setzen ('section'|'post'|'entry'). */
+export function setUnitTerm(unit) { _unit = unit || UNIT_SECTION; }
 
 // Ein Reload bricht einen laufenden Locale-Fetch der alten Seite ab. Das ist kein
 // Fehler, sondern das Ende dieser Seite — die neue lädt die Locale selbst.
@@ -42,11 +50,13 @@ export async function configureI18n(locale) {
   if (!_fallback) _fallback = await _load(FALLBACK_LOCALE);
   if (locale === FALLBACK_LOCALE) {
     _messages = _fallback;
+    _locale = FALLBACK_LOCALE;
   } else {
-    try { _messages = await _load(locale); }
+    try { _messages = await _load(locale); _locale = locale; }
     catch (e) {
       if (!_unloading) console.error('[i18n]', e.message, '– Fallback auf de.');
       _messages = _fallback;
+      _locale = FALLBACK_LOCALE;
     }
   }
 }
@@ -57,8 +67,11 @@ export function getSupportedLocales() { return SUPPORTED_LOCALES.slice(); }
 /** Übersetzt einen Key. Fallback: de-Wert; letzter Fallback: der Key selbst (sichtbares Debug-Signal). */
 export function tRaw(key, params) {
   let msg = _messages[key];
-  if (msg === undefined) msg = _fallback?.[key];
+  let locale = _locale;
+  if (msg === undefined) { msg = _fallback?.[key]; locale = FALLBACK_LOCALE; }
   if (msg === undefined) msg = key;
+  // Vor den Platzhaltern: ein Abschnittstitel im Parameter bleibt, wie er heisst.
+  else msg = applyUnitTerm(msg, { key, locale, unit: _unit });
   if (params) {
     msg = msg.replace(/\{(\w+)\}/g, (_, k) => (params[k] !== undefined ? params[k] : `{${k}}`));
   }
@@ -108,12 +121,14 @@ export function tFetchErrorRaw(err) {
 export const i18nMethods = {
   t(key, params) {
     void this?.$store?.shell?.uiLocale;
+    void this?.$store?.shell?.unitTerm;
     return tRaw(key, params);
   },
 
   /** Backend-Fehler übersetzen. Siehe tErrorRaw für Schema. */
   tError(response) {
     void this?.$store?.shell?.uiLocale;
+    void this?.$store?.shell?.unitTerm;
     return tErrorRaw(response);
   },
 
