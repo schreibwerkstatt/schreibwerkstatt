@@ -99,6 +99,48 @@ export function lektoratProfil(buchtyp) {
   return PROFIL_BY_BUCHTYP[buchtyp] || 'narrativ';
 }
 
+// ── Bewertungseinheit des Abschnitts ─────────────────────────────────────────
+// Wovon das Feld «szenen» handelt. Der Feldname ist eine Persistenz-Konstante
+// (`page_checks.szenen_json`), der Inhalt nicht: bewertet wird je Buchtyp eine
+// andere Einheit.
+// Why: «das Profil» sagt nicht, WAS eine Szene ist. Die Fach-Profile liefern ihre
+// Einheit aus dem Profil (Teilschritt statt Szene), aber das narrative Profil
+// teilt sich Roman, Krimi, Lyrik und Tagebuch – und «abgegrenzter Handlungsabschnitt
+// mit eigenem Anfang und Ende», bewertet an Spannung, Tempo und Figurenentwicklung,
+// ist an einem Tagebucheintrag die falsche Frage. Ein Tagebuch-Eintrag hat keine
+// Handlung, die über den Eintrag hinausgetragen werden muss; zu fragen ist, ob
+// seine Stimme trägt. Darum eine eigene Key-Liste statt einer Profil-Ausnahme.
+export const EINHEIT_SZENE = 'szene';
+export const EINHEIT_TEILSCHRITT = 'teilschritt';
+export const EINHEIT_EINTRAG = 'eintrag';
+
+// Alle gültigen Einheiten. SZENEN_FELD in lektorat.js hat genau diese Keys – ein
+// Tippfehler in EINHEIT_BY_BUCHTYP ergäbe dort `undefined` und liesse den Prompt
+// ohne Szenen-Regeln bauen (statt zu crashen). Gegated durch den Drift-Test.
+export const LEKTORAT_EINHEITEN = [EINHEIT_SZENE, EINHEIT_TEILSCHRITT, EINHEIT_EINTRAG];
+
+const EINHEIT_BY_BUCHTYP = {
+  tagebuch: EINHEIT_EINTRAG,
+};
+
+/**
+ * Bewertungseinheit des «szenen»-Feldes für einen Buchtyp.
+ * Key-Liste zuerst, dann Profil-Ableitung: die Fach-Profile sind je Buchtyp
+ * eindeutig, `tagebuch` nicht (es ist narrativ).
+ * @param {string|null} buchtyp
+ * @returns {'szene'|'teilschritt'|'eintrag'}
+ */
+export function lektoratEinheit(buchtyp) {
+  if (EINHEIT_BY_BUCHTYP[buchtyp]) return EINHEIT_BY_BUCHTYP[buchtyp];
+  // Lokal heisst die Variable `profil`, nicht `buchtyp`: Profilnamen sind ein
+  // eigener Key-Namensraum, und ein Vergleich des Buchtyp-Parameters gegen einen
+  // Profilnamen wäre doppelt falsch — der Buchtyp-Drift-Gate
+  // (tests/unit/buchtyp-drift.test.mjs) meldet jedes Literal neben `buchtyp` als
+  // nicht existierenden Buchtyp-Key. Das gilt für Prosa im Kommentar mit.
+  const profil = lektoratProfil(buchtyp);
+  return profil === 'narrativ' ? EINHEIT_SZENE : EINHEIT_TEILSCHRITT;
+}
+
 // Objektive/mechanische Typen: werden im Claude-Split im fokussierten Objektiv-Pass
 // geprüft und sind im Stil-Pass verboten. Reihenfolge = Enum-Reihenfolge dort.
 // `konjunktiv` gehört hierher, weil der Modus der indirekten Rede eine
@@ -264,7 +306,9 @@ export function spanRegeln(typen) {
 // Signatur für den Prompt-Content-Hash (public/js/prompts.js#_promptsContentHash).
 // Die Prompt-BODYS fliessen nicht in den Hash (sie hängen an Call-Argumenten) —
 // eine Profil-Änderung muss darum hier ankommen, sonst behält ein wissenschaftliches
-// Buch seine alten, narrativ geprägten `lektorat_cache`-Zeilen.
+// Buch seine alten, narrativ geprägten `lektorat_cache`-Zeilen. Dasselbe gilt für die
+// Bewertungseinheit: die Szenen-Regeln sind Prompt-Body, ohne diesen Eintrag behielte
+// ein Tagebuch nach dem Wechsel auf «Eintrag» seine alt benoteten «Szenen».
 export const PROFIL_SIGNATUR = JSON.stringify([
-  PROFILE, PROFIL_BY_BUCHTYP, TYP_PRIORITAET, STILISTISCHE_TYPEN, SPAN_KIND,
+  PROFILE, PROFIL_BY_BUCHTYP, EINHEIT_BY_BUCHTYP, TYP_PRIORITAET, STILISTISCHE_TYPEN, SPAN_KIND,
 ]);

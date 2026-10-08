@@ -5,6 +5,7 @@ const deviceTokens = require('../db/device-tokens');
 const { TOKEN_KINDS, DEFAULT_KIND, scopesForKind } = require('../lib/device-scopes');
 const { db } = require('../db/schema');
 const { listBookIdsForUser } = require('../db/book-access');
+const { visibleUserDirectory } = require('../db/user-directory');
 const bookCategories = require('../db/book-categories');
 const { setContext } = require('../lib/log-context');
 const { localIsoDate, localIsoDaysAgo } = require('../lib/local-date');
@@ -315,15 +316,12 @@ router.get('/profile-stats-history', (req, res) => {
 });
 
 /**
- * Email → Display-Name-Map fuer Anzeige in Revision-Listen, Tree-Toasts und
- * generelle „Wer hat editiert"-Hints. Nur active/invited User. Keine PII
- * ausserhalb dessen, was die Buch-Mitglieder ohnehin via book_access sehen.
+ * Email → Display-Name-Map fuer Revision-Listen, Tree-Toasts, Konflikt-Hinweise
+ * und die Share-Mitgliederliste. Der Sichtkreis (eigener Account + Co-Mitglieder
+ * der eigenen Bücher) ist in `db/user-directory.js` festgeschrieben.
  */
-router.get('/users-light', (_req, res) => {
-  const rows = appUsers.listUsers().filter(u => u.status === 'active' || u.status === 'invited');
-  res.json({
-    users: rows.map(u => ({ email: u.email, display_name: u.display_name || null, global_role: u.global_role || null })),
-  });
+router.get('/users-light', (req, res) => {
+  res.json({ users: visibleUserDirectory(sessionEmail(req)) });
 });
 
 // API-Key (extern) → app_users-Spaltenname (intern). `locale` mappt auf `language`.

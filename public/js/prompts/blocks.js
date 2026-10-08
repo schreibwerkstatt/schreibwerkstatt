@@ -224,7 +224,20 @@ Wörterbuch des Autors (diese Schreibweisen sind gewollt und KEINE Rechtschreibf
 ${liste}`;
 }
 
-export function _buildShowVsTellBlock() {
+export function _buildShowVsTellBlock(einheit = 'szene') {
+  // Die Meldeschwelle hängt an der Bewertungseinheit. Der Typ bleibt überall
+  // derselbe (Zustand behauptet statt gezeigt ist in jeder Textsorte ein Befund);
+  // nur die Frage, WANN er einer ist, verschiebt sich. Im Tagebuch darf der
+  // Vorschlag nichts erfinden, was nicht schon im Eintrag steht – eine erfundene
+  // Szene wäre schlimmer als der Zustand, den sie ersetzt.
+  const korrektur = einheit === 'eintrag'
+    ? '- «korrektur»: derselbe Satz umformuliert mit der konkreten Beobachtung, die der Eintrag bereits enthält (Worte, Geräusch, Wetter, Uhrzeit, Gegenstand) – NICHTS ergänzen, was nicht im Material steht (NICHT der ganze Absatz – nur den einen Satz ersetzen)'
+    : '- «korrektur»: derselbe Satz umformuliert mit konkreten Sinneseindrücken, Handlungen, Körpersprache oder Details, die das Gleiche zeigen (NICHT der ganze Absatz – nur den einen Satz ersetzen)';
+  const schwelle = einheit === 'eintrag'
+    ? `- Nur melden, wenn der Text den Zustand BEHAUPTET statt beobachtet – nicht, weil eine szenische Variante lebendiger wäre. Ein Tagebucheintrag darf Zustände benennen und abkürzen, ohne sie auszumalen («müde», «kurz vor dem Termin», «alles wie immer»): Abbreviaturen sind sein Material, kein Mangel. Melden nur, wo die Behauptung dem Eintrag seine Substanz nimmt, obwohl das Material sie hergibt.
+- Selbsttest: Trägt der Eintrag so, wie er dasteht? Wenn ja, weglassen. Ein Finding ist hier erst berechtigt, wenn die Abstraktion den Eintrag ärmer macht – nicht bloss kürzer.`
+    : `- Nur melden, wenn eine szenische Darstellung den Text spürbar lebendiger macht — nicht jede abstrakte Aussage muss umgeschrieben werden (z.B. in Zusammenfassungen, Rückblenden oder schnellen Übergängen ist Telling erlaubt und stilistisch korrekt)
+- Selbsttest: Passt die szenische Variante zum Erzähltempo und zur Szene? Nicht aufblähen. Würde die szenische Variante den Lesefluss bremsen, obwohl die Stelle gerade Tempo braucht? Dann weglassen.`;
   return `
 Show-vs-Tell-Regeln (typ: «show_vs_tell»):
 - Stellen identifizieren, an denen Emotionen, Eigenschaften oder Zustände abstrakt benannt statt szenisch gezeigt werden
@@ -234,11 +247,10 @@ Show-vs-Tell-Regeln (typ: «show_vs_tell»):
   · Abstrakte Substantive als Subjekt oder Prädikatsnomen: «Die Schönheit der Landschaft überwältigte ihn», «Es war pure Trauer in ihren Augen», «Ein Gefühl der Einsamkeit erfasste sie»
   · Erklärende Adverbien statt Handlung: «sagte er wütend», «antwortete sie traurig» (ein EINZELNES solches Redebegleit-Adverb gehört hierher; erst die gehäufte Inquit-Adverb-Inflation über die Passage ist «ki_geruch»)
 - «original»: vollständiger Satz zeichengenau aus dem Text
-- «korrektur»: derselbe Satz umformuliert mit konkreten Sinneseindrücken, Handlungen, Körpersprache oder Details, die das Gleiche zeigen (NICHT der ganze Absatz – nur den einen Satz ersetzen)
+${korrektur}
 - «erklaerung»: EIN Satz, benennt das Telling («Gefühl benannt statt gezeigt», «erklärendes Inquit-Adverb statt Handlung»)
 - In direkter Rede / Dialog NICHT melden: Figuren dürfen abstrakt über ihre Gefühle sprechen («Ich bin müde»). Show-vs-Tell gilt ausschliesslich für Erzähltext.
-- Nur melden, wenn eine szenische Darstellung den Text spürbar lebendiger macht — nicht jede abstrakte Aussage muss umgeschrieben werden (z.B. in Zusammenfassungen, Rückblenden oder schnellen Übergängen ist Telling erlaubt und stilistisch korrekt)
-- Selbsttest: Passt die szenische Variante zum Erzähltempo und zur Szene? Nicht aufblähen. Würde die szenische Variante den Lesefluss bremsen, obwohl die Stelle gerade Tempo braucht? Dann weglassen.`;
+${schwelle}`;
 }
 
 export function _buildFilterwortBlock() {

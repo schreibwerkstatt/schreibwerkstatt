@@ -65,8 +65,13 @@ router.post('/:book_id/share', aclParamGuard('owner'), jsonBody, (req, res) => {
   }
   const user = appUsers.getUser(target);
   if (!user) return res.status(404).json({ error_code: 'USER_NOT_FOUND' });
+  // Gesperrte und geloeschte Konten antworten wie eine unbekannte Adresse. Der
+  // Konto-Status waere sonst ein Orakel: ein Owner koennte ueber die Fehlermeldung
+  // beliebige E-Mails der Instanz durchprobieren und erfahren, welche es gibt und
+  // in welchem Zustand. Fuer den Share-Dialog ist beides dieselbe Lage — dort
+  // schaltet `USER_NOT_FOUND` auf die Einladung um.
   if (user.status !== 'active' && user.status !== 'invited') {
-    return res.status(400).json({ error_code: 'USER_NOT_USABLE', detail: { status: user.status } });
+    return res.status(404).json({ error_code: 'USER_NOT_FOUND' });
   }
   // Owner-Slot ist via Transfer-Route geschuetzt, nicht via Share — Share darf
   // einen Eintrag zu owner nicht hochstufen.

@@ -29,7 +29,17 @@ const {
   ALLE_LEKTORAT_TYPEN, STILISTISCHE_TYPEN, TYP_PRIORITAET,
   NARRATIV_TYPEN, WISSENSCHAFT_TYPEN, SACHLICH_TYPEN,
   lektoratProfil, lektoratTypen, lektoratObjektivTypen,
+  lektoratEinheit, LEKTORAT_EINHEITEN, PROFIL_SIGNATUR,
 } = typen;
+
+// Gültige Buchtyp-Keys (routes/booksettings.js#VALID_BUCHTYPEN) – fuer Achsen, die
+// nicht aus dem Profil kommen. Buchtyp ist eine Persistenz-Konstante; hier geht es
+// nur darum, dass KEIN gueltiger Buchtyp eine undefinierte Einheit erhaelt.
+const ALLE_BUCHTYPEN = [
+  'roman', 'kurzgeschichten', 'gesellschaft', 'krimi', 'historisch', 'fantasy_scifi',
+  'erotik', 'jugend', 'autobiografie', 'tagebuch', 'sachbuch', 'wissenschaft',
+  'lyrik', 'essay', 'blog', 'satire', 'journalismus', 'andere',
+];
 
 // ── 1. Profil-Zuordnung + Inhalt ─────────────────────────────────────────────
 
@@ -113,7 +123,39 @@ test('TYP_PRIORITAET deckt jeden Typ ab (sonst landen Typen gleichrangig im Dedu
   assert.equal(TYP_PRIORITAET.length, ALLE_LEKTORAT_TYPEN.length, 'keine verwaisten Typen');
 });
 
-// ── 2. CJS-Spiegel der Server-Seite ──────────────────────────────────────────
+// ── 2. Bewertungseinheit des «szenen»-Feldes ─────────────────────────────────
+// Zweite Achse neben dem Profil. Sie beantwortet nicht «welche Fehler», sondern
+// «wovon handelt das Feld szenen» – und kann es nicht aus dem Profil ableiten:
+// tagebuch laeuft auf narrativ, die Einheit ist aber der Eintrag.
+
+test('Einheit: Tagebuch = Eintrag, Fach-Profile = Teilschritt, Rest = Szene', () => {
+  assert.equal(lektoratEinheit('tagebuch'), 'eintrag');
+  for (const bt of ['wissenschaft', 'sachbuch', 'essay', 'blog', 'journalismus']) {
+    assert.equal(lektoratEinheit(bt), 'teilschritt', bt);
+  }
+  // Das narrative Profil kann die Einheit nicht liefern – tagebuch ist sein Gegenbeweis.
+  for (const bt of ['roman', 'krimi', 'lyrik', 'autobiografie', 'satire', null, undefined, 'gibtsnicht']) {
+    assert.equal(lektoratEinheit(bt), 'szene', String(bt));
+  }
+});
+
+test('Einheit: jeder gueltige Buchtyp ergibt eine definierte Einheit', () => {
+  // Ein Tippfehler in der Key-Liste ergaebe sonst `SZENEN_FELD[undefined]` und
+  // liesse den Prompt kommentarlos ohne Szenen-Regeln bauen.
+  for (const bt of ALLE_BUCHTYPEN) {
+    assert.ok(LEKTORAT_EINHEITEN.includes(lektoratEinheit(bt)), `«${bt}» hat keine definierte Einheit`);
+  }
+});
+
+test('Einheit: PROFIL_SIGNATUR enthaelt die Einheit-Achse (Cache-Invalidierung)', () => {
+  // Ohne diesen Eintrag behaelt ein Tagebuch nach dem Wechsel auf «Eintrag» seine
+  // alt benoteten «Szenen» aus dem lektorat_cache: die Regeln sind Prompt-Body und
+  // fliessen nicht in den Content-Hash.
+  assert.ok(PROFIL_SIGNATUR.includes('eintrag'),
+    'PROFIL_SIGNATUR muss die Einheit-Achse mitnehmen, sonst invalidiert der Wechsel den Cache nicht');
+});
+
+// ── 3. CJS-Spiegel der Server-Seite ──────────────────────────────────────────
 
 test('routes/jobs/lektorat-filter.js#STYLISTIC_TYPEN spiegelt STILISTISCHE_TYPEN', () => {
   const { STYLISTIC_TYPEN } = require(path.join(ROOT, 'routes/jobs/lektorat-filter.js'));
@@ -133,7 +175,7 @@ test('lib/lektorat-consolidate.js#TYP_PRIORITY spiegelt TYP_PRIORITAET (inkl. Re
   assert.deepEqual(TYP_PRIORITY, TYP_PRIORITAET);
 });
 
-// ── 3. Frontend-Ableitungen ──────────────────────────────────────────────────
+// ── 4. Frontend-Ableitungen ──────────────────────────────────────────────────
 
 test('Fehler-Heatmap-Cluster deckt genau ALLE_LEKTORAT_TYPEN ab', async () => {
   const src = fs.readFileSync(path.join(ROOT, 'public/js/book/fehler-heatmap.js'), 'utf8');

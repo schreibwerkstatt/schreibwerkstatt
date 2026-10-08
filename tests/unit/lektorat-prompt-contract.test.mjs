@@ -189,6 +189,82 @@ test('Schema-Enum und Prompt-Enum tragen dasselbe Typ-Set', () => {
   }
 });
 
+// ── Tagebuch: Bewertungseinheit «Eintrag» ─────────────────────────────────────
+// Das Tagebuch laeuft bewusst auf dem narrativen Profil (die Fehlertypen passen), hat
+// aber eine eigene Einheit fuer das Feld «szenen». Ohne sie benotete das Lektorat
+// jeden Tagebucheintrag als Szene – «abgegrenzter Handlungsabschnitt mit eigenem
+// Anfang und Ende», gemessen an Spannung, Tempo und Figurenentwicklung – und
+// schlug Szenenfutter vor, wo der Autor eine Notiz schrieb. Verankert ist hier nur,
+// dass die Unterscheidung im GEBAUTEN Prompt ankommt; die Qualitaet der Noten ist
+// Sache von `npm run eval:lektorat`.
+
+function buildTagebuch(opts = {}) {
+  prompts.configurePrompts(cfg, 'claude');
+  return prompts.buildLektoratPrompt(SAMPLE, { langCode: 'de', buchtyp: 'tagebuch', ...opts });
+}
+
+test('Tagebuch-Prompt benotet Eintraege, keine Szenen', () => {
+  const p = buildTagebuch();
+  assert.ok(p.includes('Eintrag-Regeln (Feld «szenen»)'), 'Eintrag-Regeln fehlen');
+  assert.ok(!p.includes('Szenen-Regeln:'), 'Tagebuch darf keine Szenen-Regeln bekommen');
+  assert.ok(!p.includes('Teilabschnitts-Regeln'), 'Tagebuch darf keine Teilabschnitts-Regeln bekommen');
+  // Auch die Schema-Felder und die Aufgabenzeile muessen dieselbe Einheit nennen –
+  // sonst verspricht das Schema eine Szenenbezeichnung, die die Regeln nicht kennen.
+  assert.ok(p.includes('Bezeichnung des Eintrags'), 'Schema-Feld titel nennt nicht den Eintrag');
+  assert.ok(p.includes('trägt die Stimme des Eintrags'), 'Schema-Feld kommentar nennt nicht die Stimme');
+  assert.ok(p.includes('Bewerte ausserdem die Einträge des Abschnitts.'), 'Aufgabe benennt nicht die Einträge');
+  // Die genretypische Kuerze muss ausdruecklich freigegeben sein, sonst landet
+  // «bleibt Notizstenografie» wieder als «mittel» in der Notenliste.
+  assert.ok(p.includes('sind genretypisch und KEIN Mangel dieses Feldes'),
+    'Tagebuch: genretypische Kürze nicht freigegeben');
+});
+
+test('Tagebuch-Prompt verengt show_vs_tell,-Roman-Prompt nicht', () => {
+  const tag = buildTagebuch();
+  const roman = prompts.buildLektoratPrompt(SAMPLE, { langCode: 'de', buchtyp: 'roman' });
+  // Tagebuch: behaupteter statt beobachteter Zustand, kein «wäre lebendiger».
+  assert.ok(tag.includes('BEHAUPTET statt beobachtet'), 'Tagebuch: verengte Meldeschwelle fehlt');
+  assert.ok(!tag.includes('spürbar lebendiger macht'), 'Tagebuch: narrative Schwelle darf nicht drin sein');
+  assert.ok(tag.includes('NICHTS ergänzen, was nicht im Material steht'),
+    'Tagebuch: Erfindungsverbot für die Korrektur fehlt');
+  // Regression: die Schwelle der anderen Einheiten bleibt unberuehrt.
+  assert.ok(roman.includes('spürbar lebendiger macht'), 'Roman: narrative Schwelle muss bleiben');
+  assert.ok(!roman.includes('BEHAUPTET statt beobachtet'), 'Roman: darf nicht die Tagebuch-Schwelle tragen');
+  // Und der Typ selbst bleibt in beiden – er wird verengt, nicht abgeschaltet.
+  for (const p of [tag, roman]) {
+    assert.ok(p.includes('Show-vs-Tell-Regeln'), 'Show-vs-Tell-Block muss bleiben');
+    assert.ok(p.includes('show_vs_tell'), 'show_vs_tell muss im Enum bleiben');
+  }
+});
+
+test('Tagebuch-Prompt behaelt die Puritaets-Invarianten des narrativen Profils', () => {
+  // Mit Figuren: der Block haengt an der Figurenkartei, nicht am Buchtyp – ohne sie
+  // pruefte der Test den falschen Grund.
+  const p = buildTagebuch({ figuren: [{ name: 'Anna', geschlecht: 'weiblich' }] });
+  for (const [label, needle] of CLOUD_INVARIANTS) {
+    assert.ok(p.includes(needle), `Tagebuch-Prompt fehlt Block: ${label} («${needle}»)`);
+  }
+  // Der Einheitenwechsel darf das Erzähl-Handwerk nicht mitschleifen: Tagebuch
+  // braucht show_vs_tell/filterwort/figurenbezogene Typen weiterhin.
+  for (const block of ['Show-vs-Tell-Regeln', 'Filterwort-Regeln', 'Figurenkonsistenz-Regeln']) {
+    assert.ok(p.includes(block), `Tagebuch: Block «${block}» muss bleiben`);
+  }
+});
+
+test('Nachbarkontext: im Tagebuch ist der harte Szenenwechsel der Normalfall', () => {
+  prompts.configurePrompts(cfg, 'claude');
+  const p = prompts.buildStilLektoratPrompt(SAMPLE, {
+    langCode: 'de', buchtyp: 'tagebuch', previousExcerpt: 'VORHER', nextExcerpt: 'NACHHER',
+  });
+  assert.ok(p.includes('ohne Überleitung zum nächsten weitergeht, nicht'),
+    'Tagebuch-Nachbarkontext muss den harten Wechsel freigeben');
+  const roman = prompts.buildStilLektoratPrompt(SAMPLE, {
+    langCode: 'de', buchtyp: 'roman', previousExcerpt: 'VORHER', nextExcerpt: 'NACHHER',
+  });
+  assert.ok(roman.includes('scheinbar abrupter Schluss bewusst offen bleibt'),
+    'Roman-Nachbarkontext muss unverändert bleiben');
+});
+
 // Nachbarseiten-Kontext: Cloud bekommt Vor- und Folgeseite als abgegrenzten
 // Lesekontext mit Pruef-Verbot; lokal faellt der Block ganz weg.
 test('Nachbarkontext: Cloud rahmt Vor- und Folgeseite als nicht zu pruefen', () => {

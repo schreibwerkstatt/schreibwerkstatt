@@ -26,6 +26,12 @@ KI-Prüfung einer Seite (Abschnitts-Lektorat, Job `check`) oder aller Seiten ein
 - **Nachbarseiten sind Lesekontext, nie Prüfgegenstand.** Prompt verbietet es, `dropNeighbourFindings` verwirft Befunde, deren `original` nur im Auszug steht. Lokale Provider bekommen keinen Nachbarkontext.
 - **Fehlertyp-Spiegel** (CJS-Kopien, Heatmap-Cluster, `SOFT_TYPEN`/`EDITORIAL_TYPEN`, i18n) sind durch [tests/unit/lektorat-typen-drift.test.mjs](../tests/unit/lektorat-typen-drift.test.mjs) gegated.
 
+### Das Feld `szenen`
+
+Drei Felder ausser den Befunden: `szenen` (benotete Textbausteine), `stilanalyse`, `fazit`. Alle drei sind **cloud-only** — lokale Provider bekommen ein reduziertes Schema ohne sie (kleine Modelle halluzinieren sie generisch, das Generieren kostet spürbar Output-Tokens).
+
+`szenen` ist ein Persistenzformat (`page_checks.szenen_json`, drei Spalten `titel`/`wertung`/`kommentar`), dessen **Inhalt** vom Buchtyp abhängt: `szene` (erzählende Werke), `teilschritt` (Sachbuch, Essay, Blog, Wissenschaft, Journalismus), `eintrag` (Tagebuch). Die Form bleibt, die Frage an `wertung` wechselt — ein Tagebucheintrag wird nicht an Spannung und Figurenentwicklung gemessen, sondern daran, ob seine Stimme trägt. Achse: `lektoratEinheit` in [lektorat-typen.js](../public/js/prompts/lektorat-typen.js), Feldtexte im `SZENEN_FELD`-SSoT in [lektorat.js](../public/js/prompts/lektorat.js). Die Spaltennamen bleiben aus Kompatibilitätsgründen `szene-*`/`wertung`, auch wenn der Buchtyp keine Szene mehr meint; der Panel-Heading ist deshalb bewusst nicht buchtyp-skopiert (eine Migration, nur für ein Überschrift-Wort, wäre unverhältnismässig).
+
 ### Buch-Lektorat
 
 Seiten laufen in einem Worker-Pool; `ai.lektorat_batch_concurrency` deckelt die gleichzeitigen **Calls**, der Seiten-Pool ist der Quotient durch die Calls pro Seite (Split: `objective_runs + 1`). Das Ergebnis trennt `done` (geprüft), `skippedEmpty` (leere Seiten, zählen für den Fortschritt als erledigt) und `failed` (`[{ id, name }]`, Prüfung gescheitert) — das Frontend nennt gescheiterte Seiten beim Namen. Abbruch (`AbortError`) beendet den ganzen Lauf, jeder andere Seitenfehler nur diese Seite.

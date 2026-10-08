@@ -14,7 +14,7 @@
 import { _isLocal } from './state.js';
 import { _obj, _str } from './schema-utils.js';
 import {
-  lektoratProfil, lektoratTypen,
+  lektoratProfil, lektoratTypen, lektoratEinheit,
   typPrioritaetString, spanRegeln, STILISTISCHE_TYPEN,
 } from './lektorat-typen.js';
 import {
@@ -63,6 +63,52 @@ import {
 import { textsorteLabel } from './textsorten.js';
 import { STOPWORDS, ERKLAERUNG_RULE, KORREKTUR_REGELN } from './core.js';
 
+// ── Das «szenen»-Feld, je Bewertungseinheit ───────────────────────────────────
+// EIN SSoT für Schema-Felder UND Regelblock. Vorher standen beides als zwei
+// getrennte `fach ? … : …`-Ternaries nebeneinander – Schema und Regeln konnten
+// also auseinanderlaufen (das Schema hätte «Argumentationsschritt» versprochen,
+// während die Regeln noch von Szenen sprachen).
+// Why das eine SSoT und nicht drei Blöcke: das Feld ist ein Persistenzformat
+// (`page_checks.szenen_json` → drei Spalten titel/wertung/kommentar). Ob der
+// Inhalt eine Szene, ein Argumentationsschritt oder ein Tagebucheintrag ist,
+// ändert die Form nicht – nur die Frage, die `wertung` beantworten soll. Die
+// Fach-Regeltexte bleiben in blocks-fach.js (sie hängen am Profil, nicht an der
+// Einheit); dieses Feld entscheidet nur, WELCHE Einheit in einem Lauf gilt.
+const SZENEN_FELD = {
+  szene: {
+    nomen: 'Szenen',
+    titel: '"Kurze Szenenbezeichnung (1 Satz)"',
+    kommentar: '"1-2 Sätze: was funktioniert, was fehlt (Spannung, Tempo, Figurenentwicklung). KEINE konkreten Fehler aus dem «fehler»-Array wiederholen (keine Wortwahl-, Stil-, Grammatik-, Wiederholungs-, Füllwort-Hinweise zu Einzelstellen). Nur szenen-übergreifende Beobachtungen (Spannungsbogen, Tempo, Konflikt, Figurenentwicklung, Schauplatzwirkung)."',
+    regeln: () => `
+Szenen-Regeln:
+- Eine Szene ist ein abgegrenzter Handlungsabschnitt mit eigenem Anfang und Ende
+- Wenn der Abschnitt keine erkennbaren Szenen enthält (z.B. rein beschreibender Text, Exposition): «szenen» als leeres Array zurückgeben
+- wertung: «stark» = funktioniert gut, «mittel» = verbesserungswürdig, «schwach» = klare Schwächen`,
+  },
+  teilschritt: {
+    nomen: 'Teilabschnitte',
+    titel: '"Kurze Bezeichnung des Argumentations-/Darstellungsschritts (1 Satz)"',
+    kommentar: '"1-2 Sätze: trägt der Schritt, ist er nachvollziehbar belegt, schliesst er an den vorigen an. KEINE konkreten Fehler aus dem «fehler»-Array wiederholen (keine Wortwahl-, Stil-, Grammatik-, Wiederholungs-, Hedging-Hinweise zu Einzelstellen). Nur schritt-übergreifende Beobachtungen (Argumentationsführung, Beleglage, Aufbau, Anschluss)."',
+    regeln: (profil) => _buildFachAbschnittRegelnBlock(profil),
+  },
+  eintrag: {
+    nomen: 'Einträge',
+    titel: '"Kurze Bezeichnung des Eintrags – Datum oder Thema (1 Satz)"',
+    kommentar: '"1-2 Sätze: trägt die Stimme des Eintrags, wie weit der Eintrag über die Notiz hinausgeht, was er bewusst auslässt. KEINE konkreten Fehler aus dem «fehler»-Array wiederholen (keine Wortwahl-, Stil-, Grammatik-, Wiederholungs-, Füllwort-Hinweise zu Einzelstellen). Nur eintrag-übergreifende Beobachtungen (Stimme, Dichte, Verhältnis von Alltagsnotiz und Reflexion)."',
+    // Der Tagebucheintrag hat keine Handlung, die über ihn hinausgetragen werden
+    // muss. Zu fragen ist nicht Spannung, sondern Dichte – und die genretypische
+    // Kürze ist KEIN Mangel: ohne diesen Satz bewertete das Modell «bleibt
+    // Notizstenografie ohne Verdichtung» als «mittel» und schlug Szenenfutter vor.
+    regeln: () => `
+Eintrag-Regeln (Feld «szenen»):
+- Ein Eintrag ist hier ein datierter, überschriebener oder thematisch abgeschlossener Tagebucheintrag – KEINE Szene, kein Handlungsabschnitt mit Spannungsbogen, der über den Eintrag hinausgetragen werden müsste.
+- Enthält der Abschnitt keinen abgrenzbaren Eintrag (z.B. ein lose notiertes Sammeldatum): «szenen» als leeres Array zurückgeben.
+- wertung: «stark» = die Stimme trägt den Eintrag, «mittel» = Eintrag bleibt Notiz, ohne eine eigene Stimme zu entwickeln, «schwach» = der Eintrag sagt nichts Eigenes.
+- kommentar: 1-2 Sätze zu Stimme, Dichte und Verhältnis von Beobachtung und Reflexion. KEINE Einzelstellen-Kritik aus dem «fehler»-Array wiederholen.
+- Fragmentarische Notizen, Stichworte, Auslassungen, abrupte Registerwechsel und Einträge ohne Reflexion sind genretypisch und KEIN Mangel dieses Feldes. Bewerten wird nur, ob der Eintrag als Eintrag trägt – NICHT, wie viel ein Roman aus ihm gemacht hätte.`,
+  },
+};
+
 function _buildLektoratPromptBody(text, textLabel, {
   stopwords = STOPWORDS,
   erklaerungRule = ERKLAERUNG_RULE,
@@ -96,6 +142,10 @@ function _buildLektoratPromptBody(text, textLabel, {
   // Rahmenblöcke. 'narrativ' ist der Default (auch bei buchtyp === null).
   const profil = lektoratProfil(buchtyp);
   const fach = profil !== 'narrativ';
+  // Bewertungseinheit des «szenen»-Feldes: Szene (erzählend), Teilschritt
+  // (Fach-Profile) oder Eintrag (Tagebuch). Eigene Achse neben dem Profil, weil
+  // das Tagebuch das narrative Profil teilt – siehe lektorat-typen.js.
+  const einheit = lektoratEinheit(buchtyp);
   // Journalistisch: die Textsorte schneidet zusaetzlich (kein `wertung` im
   // Kommentar) und benennt sich in den Regelbloecken selbst.
   const journal = profil === 'journalistisch';
@@ -190,6 +240,8 @@ function _buildLektoratPromptBody(text, textLabel, {
     ? 'z.B. ob der Abschnittsanfang sauber an das Vorherige anschliesst.'
     : fach
     ? 'z.B. ob ein Gedankengang im nächsten Abschnitt weitergeht. Einen Gedankengang, der erkennbar fortgesetzt wird, nicht als unvollständig oder abgebrochen bewerten.'
+    : einheit === 'eintrag'
+    ? 'z.B. ob ein Datum oder ein Thema abgerissen ist. Ein Eintrag, der mitten im Satz abbricht, ist ein Befund – ein Eintrag, der ohne Überleitung zum nächsten weitergeht, nicht: das ist im Tagebuch der Normalfall.'
     : 'z.B. ob eine Szene im nächsten Abschnitt weitergeht oder ein scheinbar abrupter Schluss bewusst offen bleibt. Eine Szene, die erkennbar fortgesetzt wird, nicht als unvollständig oder abgebrochen bewerten.';
   const nachbarBlock = (_isLocal || (!previousExcerpt && !nextExcerpt)) ? '' : `
 <nachbarkontext>
@@ -354,7 +406,7 @@ ${journal
       aktiv('filterwort')           && _buildFilterwortBlock(),
       aktiv('klischee')             && _buildKlischeeBlock(),
       aktiv('pleonasmus')           && _buildPleonasmusBlock(),
-      aktiv('show_vs_tell')         && _buildShowVsTellBlock(),
+      aktiv('show_vs_tell')         && _buildShowVsTellBlock(einheit),
       aktiv('dialogformat')         && _buildDialogformatBlock(langCode),
       aktiv('passiv')               && _buildPassivBlock(),
       aktiv('perspektivbruch')      && _buildPerspektivbruchBlock(),
@@ -375,6 +427,7 @@ ${journal
 
   // Lokal: szenen/stilanalyse/fazit werden aus Schema und Prompt gestrichen. Kleine Modelle
   // halluzinieren diese Felder oft generisch und das Generieren kostet spürbar Output-Tokens.
+  const szenen = SZENEN_FELD[einheit];
   const schemaBlock = _isLocal
     ? `Antworte mit diesem JSON-Schema:
 {
@@ -399,11 +452,9 @@ ${journal
   ],
   "szenen": [
     {
-      "titel": ${fach ? '"Kurze Bezeichnung des Argumentations-/Darstellungsschritts (1 Satz)"' : '"Kurze Szenenbezeichnung (1 Satz)"'},
+      "titel": ${szenen.titel},
       "wertung": "stark|mittel|schwach",
-      "kommentar": ${fach
-        ? '"1-2 Sätze: trägt der Schritt, ist er nachvollziehbar belegt, schliesst er an den vorigen an. KEINE konkreten Fehler aus dem «fehler»-Array wiederholen (keine Wortwahl-, Stil-, Grammatik-, Wiederholungs-, Hedging-Hinweise zu Einzelstellen). Nur schritt-übergreifende Beobachtungen (Argumentationsführung, Beleglage, Aufbau, Anschluss)."'
-        : '"1-2 Sätze: was funktioniert, was fehlt (Spannung, Tempo, Figurenentwicklung). KEINE konkreten Fehler aus dem «fehler»-Array wiederholen (keine Wortwahl-, Stil-, Grammatik-, Wiederholungs-, Füllwort-Hinweise zu Einzelstellen). Nur szenen-übergreifende Beobachtungen (Spannungsbogen, Tempo, Konflikt, Figurenentwicklung, Schauplatzwirkung)."'}
+      "kommentar": ${szenen.kommentar}
     }
   ],
   "stilanalyse": ${fach
@@ -414,19 +465,15 @@ ${journal
     : '"ein Satz Gesamtfazit zur literarischen Qualität – KEINE Fehler aus dem «fehler»-Array wiederholen, zusammenfassen oder als Gruppe charakterisieren («viele Stilbrüche», «zahlreiche Wiederholungen» o.Ä.). Nur Gesamtwirkung, nicht das Findings-Resultat paraphrasieren."'}
 }`;
 
-  const szenenRegelnBlock = _isLocal ? '' : (fach ? _buildFachAbschnittRegelnBlock(profil) : `
-Szenen-Regeln:
-- Eine Szene ist ein abgegrenzter Handlungsabschnitt mit eigenem Anfang und Ende
-- Wenn der Abschnitt keine erkennbaren Szenen enthält (z.B. rein beschreibender Text, Exposition): «szenen» als leeres Array zurückgeben
-- wertung: «stark» = funktioniert gut, «mittel» = verbesserungswürdig, «schwach» = klare Schwächen`);
+  const szenenRegelnBlock = _isLocal ? '' : szenen.regeln(profil);
 
   const aufgabeSatz = _isLocal
     ? 'Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze – auf Rechtschreibfehler, Grammatikfehler, Zeichensetzungs-/Interpunktionsfehler (insbesondere Kommasetzung), stilistische Auffälligkeiten und auffällige Wortwiederholungen. Prüfe Grammatik und Zeichensetzung Satz für Satz und gründlich.'
     : (fach
       ? _buildFachAufgabe(profil, stilOnly)
       : (stilOnly
-      ? 'Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze – auf STILISTISCHE Schwächen: holprigen Satzbau, Wortwiederholungen, schwache Verben, Füll- und Filterwörter, Klischees, KI-Geruch, Show-statt-Tell, vermeidbares Passiv, Pleonasmen sowie Tempus- und Perspektivbrüche und Schauplatz-Konsistenz (Zuständigkeit und Details siehe Regelblöcke unten). WICHTIG: Objektive/mechanische Fehler – Rechtschreibung, Grammatik, Zeichensetzung/Interpunktion, Dialogformat-Typografie sowie Namens-/Figuren-Konsistenz und Anreden – werden in einem SEPARATEN Pass geprüft und dürfen hier NICHT gemeldet werden. Bewerte ausserdem die Szenen des Abschnitts.'
-      : 'Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze – auf Rechtschreibfehler, Grammatikfehler, Zeichensetzungs-/Interpunktionsfehler (insbesondere Kommasetzung), Tempus- und Perspektivbrüche, holprigen Satzbau, stilistische Auffälligkeiten und auffällige Wortwiederholungen – ebenso auf schwache Verben, Füll- und Filterwörter, Klischees, KI-Geruch, Show-statt-Tell, vermeidbares Passiv, Dialogformat-Typografie und Konsistenz von Figuren und Schauplätzen (Zuständigkeit und Details der einzelnen Typen siehe Regelblöcke unten). Prüfe Grammatik, Zeichensetzung und Erzähltempus Satz für Satz und gründlich – das sind objektive Fehler, die nicht übersehen werden dürfen. Bewerte ausserdem die Szenen des Abschnitts.'));
+      ? `Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze – auf STILISTISCHE Schwächen: holprigen Satzbau, Wortwiederholungen, schwache Verben, Füll- und Filterwörter, Klischees, KI-Geruch, Show-statt-Tell, vermeidbares Passiv, Pleonasmen sowie Tempus- und Perspektivbrüche und Schauplatz-Konsistenz (Zuständigkeit und Details siehe Regelblöcke unten). WICHTIG: Objektive/mechanische Fehler – Rechtschreibung, Grammatik, Zeichensetzung/Interpunktion, Dialogformat-Typografie sowie Namens-/Figuren-Konsistenz und Anreden – werden in einem SEPARATEN Pass geprüft und dürfen hier NICHT gemeldet werden. Bewerte ausserdem die ${szenen.nomen} des Abschnitts.`
+      : `Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze – auf Rechtschreibfehler, Grammatikfehler, Zeichensetzungs-/Interpunktionsfehler (insbesondere Kommasetzung), Tempus- und Perspektivbrüche, holprigen Satzbau, stilistische Auffälligkeiten und auffällige Wortwiederholungen – ebenso auf schwache Verben, Füll- und Filterwörter, Klischees, KI-Geruch, Show-statt-Tell, vermeidbares Passiv, Dialogformat-Typografie und Konsistenz von Figuren und Schauplätzen (Zuständigkeit und Details der einzelnen Typen siehe Regelblöcke unten). Prüfe Grammatik, Zeichensetzung und Erzähltempus Satz für Satz und gründlich – das sind objektive Fehler, die nicht übersehen werden dürfen. Bewerte ausserdem die ${szenen.nomen} des Abschnitts.`));
 
   // XML-Wrapper für die strukturell trennbaren Sektionen — hilft Claude beim
   // Parsen von Aufgabe, Schema, Beispielen und Originaltext als distinkte

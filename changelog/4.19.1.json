@@ -1,0 +1,21 @@
+{
+  "version": "4.19.1",
+  "date": "2026-10-08",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Das Lektorat bewertet in Tagebüchern jetzt Einträge statt Szenen: gefragt ist, ob die Stimme des Eintrags trägt, nicht ob er Spannung aufbaut.",
+      "en": "In diaries, the editing review now assesses entries instead of scenes: the question is whether an entry's voice holds up, not whether it builds tension."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Das Lektorat meldet in Tagebüchern keine Stellen mehr, an denen ein Zustand nur benannt statt beobachtet ist — der Vorschlag ergänzt nichts, was nicht im Eintrag steht.",
+      "en": "In diaries, the editing review no longer flags places where a state is merely named instead of observed — the suggestion adds nothing that is not already in the entry."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Beim Teilen eines Buchs sehen Sie nur noch Konten, mit denen Sie tatsächlich zusammenarbeiten. Gesperrte oder gelöschte Konten meldet die Fehlermeldung wie eine unbekannte Adresse.",
+      "en": "When sharing a book you now only see accounts you actually work with. Blocked or deleted accounts are reported by the error message like an unknown address."
+    }
+  ]
+}
