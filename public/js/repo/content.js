@@ -236,6 +236,20 @@ export const contentRepo = {
     return _write('POST', 'pages/' + id + '/move', body, inv);
   },
 
+  // POST /content/pages/:id/split — Abschnitt teilen (Notebook-Editor). body:
+  // { head_html, tail_html, new_name, expected_updated_at }. Liefert
+  // { head, tail } (beide Seiten im Domain-Shape). Bustet die Seite, ihre
+  // Revisionen und den Baum (neue Seite + verschobene Positionen).
+  async splitPage(id, body, { bookId } = {}) {
+    const inv = ['pages', 'pages/' + id, 'pages/' + id + '/revisions'];
+    if (bookId != null) inv.push('books/' + bookId + '/tree');
+    const out = await _write('POST', 'pages/' + id + '/split', { ...body, device_id: getDeviceId() }, inv);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(EVT.PAGE_REVISIONS_CHANGED, { detail: { pageId: id } }));
+    }
+    return out;
+  },
+
   // POST /content/chapters mit `{ book_id, name, position?, description? }`.
   async createChapter(body) {
     const inv = ['chapters'];

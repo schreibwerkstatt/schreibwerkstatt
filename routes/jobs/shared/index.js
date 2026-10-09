@@ -71,6 +71,8 @@ module.exports = {
   groupByChapter: loader.groupByChapter,
   buildSinglePassBookText: loader.buildSinglePassBookText,
   splitGroupsIntoChunks: loader.splitGroupsIntoChunks,
+  halveChunkPages: loader.halveChunkPages,
+  pageSigSuffix: loader.pageSigSuffix,
 
   aiCall: ai.aiCall,
   toSystemBlocks: ai.toSystemBlocks,

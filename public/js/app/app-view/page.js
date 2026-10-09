@@ -218,10 +218,16 @@ export const pageMethods = {
   // stehen als eigene Items darin), baut die namens-keyenden Sortier-Indexe neu
   // und invalidiert den Such-Memo. Der Buchorganizer pflegt seine eigene Spur
   // (book-organizer/crud.js#_doRenamePage) und hoert hier auf TREE_RENAMED.
+  // Ist die Seite der einzige Abschnitt ihres Kapitels und hiess sie bisher wie
+  // das Kapitel, wird das Kapitel mitbenannt (Gegenstueck zu
+  // tree-context-menu.js#renameChapterById).
   // Liefert true bei Erfolg; der Fehler steht dann schon im Status.
   async renamePageById(pageId, newName) {
     const name = (newName || '').trim();
     if (!pageId || !name) return false;
+    const before = this.$store.nav.pages.find(p => p.id === pageId);
+    const oldName = before?.name;
+    const chapterId = before?.chapter_id ?? null;
     try {
       await contentRepo.updatePage(pageId, { name });
     } catch (e) {
@@ -242,6 +248,11 @@ export const pageMethods = {
     // Diary-Kalender-Cache (er keyt auf den YYYY-MM-DD-Page-Namen).
     nav.pages = [...nav.pages];
     window.dispatchEvent(new CustomEvent(EVT.TREE_RENAMED, { detail: { kind: 'page', id: pageId } }));
+    const ch = chapterId != null ? this._findTreeChapter?.(chapterId) : null;
+    if (ch && ch.pages?.length === 1 && !ch.hasChildren
+        && this.sameStructureTitle(ch.name, oldName) && !this.sameStructureTitle(ch.name, name)) {
+      await this.renameChapterById(chapterId, name);
+    }
     return true;
   },
 

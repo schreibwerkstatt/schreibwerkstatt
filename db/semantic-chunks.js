@@ -180,7 +180,7 @@ function replaceEntity(kind, entityId, bookId, model, dim, rows) {
 // danach, zu EINEM Text verschmolzen. Die Chunks überlappen (CHUNK_OVERLAP) — die
 // doppelte Naht wird entfernt, damit kein Satz zweimal im Prompt steht. Für
 // Chat-Kontexte: eine Faktenfrage und ihre Antwort stehen oft in benachbarten
-// Passagen, searchSimilar liefert aber nur den besten Chunk je Entität.
+// Passagen, searchSimilar liefert aber nur einzelne Chunks je Entität.
 function neighborText(kind, entityId, model, chunkIx, radius = 1) {
   const rows = db.prepare(
     'SELECT chunk_ix, text FROM semantic_chunks WHERE kind = ? AND entity_id = ? AND model = ? AND chunk_ix BETWEEN ? AND ? ORDER BY chunk_ix'
@@ -273,10 +273,19 @@ function _bookVectors(bookId, model) {
 // Buchgrösse (Hunderte–wenige Tausend Chunks) ist der lineare Scan Millisekunden
 // — kein sqlite-vec nötig. Filtert aufs aktive Modell (model), optional auf
 // kinds und schliesst die Quell-Entität aus (exclude), damit „ähnliche Stellen
-// zu dieser Szene" nicht die Szene selbst zurückgibt. Ein Treffer pro Entität
-// (bester Chunk), nach Score sortiert, top-K. minScore: Cosinus-Untergrenze —
-// die Ähnlichkeitssuche liefert nie „keine Treffer", darum schneidet der Floor
-// den schwachen Long-Tail ab (0 = aus).
+// zu dieser Szene" nicht die Szene selbst zurückgibt. Nach Score sortiert, top-K.
+// minScore: Cosinus-Untergrenze — die Ähnlichkeitssuche liefert nie „keine
+// Treffer", darum schneidet der Floor den schwachen Long-Tail ab (0 = aus).
+//
+// perEntity: wie viele Treffer eine Entität höchstens stellt. Default 1 = nur ihr
+// bester Chunk — das brauchen alle Konsumenten, die pro Entität EINE Aussage
+// werten (Beat-/Figur-Anker, Motiv-Ist-Index, Faktencheck, „ähnliche Stellen zu
+// Entität"). > 1 für Passagen-Suchen (Such-Karte, Buch-Chat-RAG, search_similar):
+// ein Roman mit einem Abschnitt pro Kapitel (20–60k Zeichen) hätte sonst höchstens
+// eine Fundstelle pro Kapitel. Weitere Chunks zählen nur als EIGENE Passage:
+// chunk_ix ≥ minChunkGap von jedem behaltenen Chunk der Entität entfernt (Default
+// 2 = keine direkten Nachbarn, die per CHUNK_OVERLAP fast denselben Text tragen).
+// Wer danach um ±radius erweitert (withNeighbors), setzt 2·radius + 1.
 //
 // user: optionaler User-Scope. Szenen, Figuren, Schauplätze und Welt-Fakten sind
 // Analyse-Daten PRO USER, der Index führt sie buchweit für alle. Ohne Filter VOR
@@ -284,10 +293,16 @@ function _bookVectors(bookId, model) {
 // der sie danach verwirft, bekäme weniger als topK. `user` gesetzt (auch null =
 // Daten ohne User) → nur eigene Entitäten dieser Kinds; Seiten und Recherche sind
 // buch-geteilt und bleiben ungefiltert. `undefined` (Default) = kein Filter.
-function searchSimilar(bookId, model, queryVec, { kinds = null, topK = 20, excludeKind = null, excludeEntityId = null, minScore = 0, user } = {}) {
+function searchSimilar(bookId, model, queryVec, {
+  kinds = null, topK = 20, excludeKind = null, excludeEntityId = null, minScore = 0, user,
+  perEntity = 1, minChunkGap = 2,
+} = {}) {
   const kindSet = kinds && kinds.length ? new Set(kinds) : null;
   const owned = user === undefined ? null : ownedEntityFilter(bookId, user);
-  const best = new Map(); // key `${kind}:${entity_id}` → { kind, entity_id, chunk_ix, text, score }
+  const maxPer = Math.max(1, Math.floor(Number(perEntity) || 1));
+  const gap = Math.max(1, Math.floor(Number(minChunkGap) || 1));
+  const scored = []; // { kind, entity_id, chunk_ix, rid, score } in Scan-Reihenfolge
+  const best = maxPer === 1 ? new Map() : null; // key `${kind}:${entity_id}` → bester Chunk
   for (const r of _bookVectors(bookId, model)) {
     if (kindSet && !kindSet.has(r.kind)) continue;
     if (excludeKind && r.kind === excludeKind && r.entity_id === excludeEntityId) continue;
@@ -295,14 +310,38 @@ function searchSimilar(bookId, model, queryVec, { kinds = null, topK = 20, exclu
     const score = cosineSim(queryVec, r.vec);
     if (!Number.isFinite(score)) continue;
     if (score < minScore) continue;
-    const key = `${r.kind}:${r.entity_id}`;
-    const cur = best.get(key);
-    if (!cur || score > cur.score) {
-      best.set(key, { kind: r.kind, entity_id: r.entity_id, chunk_ix: r.chunk_ix, rid: r.rid, score });
+    const hit = { kind: r.kind, entity_id: r.entity_id, chunk_ix: r.chunk_ix, rid: r.rid, score };
+    if (best) {
+      const key = `${r.kind}:${r.entity_id}`;
+      const cur = best.get(key);
+      if (!cur || score > cur.score) best.set(key, hit);
+    } else {
+      scored.push(hit);
     }
   }
-  return Array.from(best.values()).sort((a, b) => b.score - a.score).slice(0, topK)
-    .map(({ rid, ...h }) => ({ ...h, text: _selChunkText.get(rid)?.text ?? '' }));
+  let picked;
+  if (best) {
+    picked = Array.from(best.values()).sort((a, b) => b.score - a.score).slice(0, topK);
+  } else {
+    // Stabil sortieren, gierig wählen: der beste Chunk einer Entität kommt immer durch.
+    scored.sort((a, b) => b.score - a.score);
+    picked = [];
+    const kept = new Map(); // key → [chunk_ix …]
+    for (const h of scored) {
+      if (picked.length >= topK) break;
+      const key = `${h.kind}:${h.entity_id}`;
+      const ixs = kept.get(key);
+      if (ixs) {
+        if (ixs.length >= maxPer) continue;
+        if (ixs.some(ix => Math.abs(ix - h.chunk_ix) < gap)) continue;
+        ixs.push(h.chunk_ix);
+      } else {
+        kept.set(key, [h.chunk_ix]);
+      }
+      picked.push(h);
+    }
+  }
+  return picked.map(({ rid, ...h }) => ({ ...h, text: _selChunkText.get(rid)?.text ?? '' }));
 }
 
 // User-skopierte Kinds und ihre Quelltabellen. Alle vier tragen user_email.
@@ -328,7 +367,7 @@ function ownedEntityFilter(bookId, userEmail) {
 }
 
 // Beste Chunks INNERHALB einer Entität gegen queryVec. Gegenstück zu
-// searchSimilar, das pro Entität nur den besten Chunk liefert: hier zählt die
+// searchSimilar, das pro Entität nur wenige, verstreute Chunks liefert: hier zählt die
 // Verteilung im Inneren eines langen Dokuments (Recherche-PDF), von dem mehrere
 // Passagen zur Frage passen können. Kein Embedding-Call für die Chunks — die
 // Vektoren liegen schon; der Aufrufer bringt nur den Query-Vektor mit.

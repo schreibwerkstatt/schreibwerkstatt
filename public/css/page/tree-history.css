@@ -97,6 +97,24 @@
   padding-top: var(--space-2xs);
 }
 
+/* Ein-Abschnitt-Kapitel: Kapitel und sein einziger Abschnitt als EINE Zeile
+   (sidebar.html, _isSingleSectionChapter). Header ausgeblendet wie beim Solo,
+   die Zeile traegt aber Kapitel-Gewicht — sie IST das Kapitel. */
+.tree-chapter--single { margin-bottom: var(--space-2xs); }
+.tree-chapter--single > .tree-chapter-pages {
+  margin-left: 0;
+  padding-left: 0;
+  padding-top: 0;
+}
+.tree-chapter--single > .tree-chapter-pages::before { display: none; }
+.tree-chapter--single > .tree-chapter-pages > .page-item {
+  margin-bottom: 0;
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+}
+.tree-chapter--depth-2.tree-chapter--single > .tree-chapter-pages > .page-item,
+.tree-chapter--depth-3.tree-chapter--single > .tree-chapter-pages > .page-item { font-size: var(--font-size-sm); }
+
 /* Ausgeschlossenes Kapitel (chapters.excluded): bleibt editierbar, wird aber
    gedaempft dargestellt — Signal, dass es nicht in Export/Bewertung/Komplett-
    analyse einfliesst. Bleibt durchgehend gedaempft (kein Hover-Aufhellen). */

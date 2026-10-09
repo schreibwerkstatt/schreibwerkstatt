@@ -7,6 +7,7 @@ import { lifecycleMethods } from './edit/lifecycle.js';
 import { inputMethods } from './edit/input.js';
 import { autosaveMethods } from './edit/autosave.js';
 import { viewMethods } from './edit/view.js';
+import { splitMethods } from './edit/split.js';
 
 export const notebookEditMethods = {
   ...conflictMethods,
@@ -14,4 +15,5 @@ export const notebookEditMethods = {
   ...inputMethods,
   ...autosaveMethods,
   ...viewMethods,
+  ...splitMethods,
 };

@@ -61,6 +61,14 @@
             @click="normalizeQuotes()">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#quote"/></svg>
     </button>
+    <!-- Abschnitt am Caret teilen (edit/split.js). `@mousedown.prevent` hält
+         den Caret im contenteditable, sonst gäbe es keinen Schnittpunkt. -->
+    <button type="button" class="icon-btn"
+            :data-tip="t('editor.split.title')" :aria-label="t('editor.split.title')"
+            @mousedown.prevent
+            @click="splitSectionHere()">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#scissors"/></svg>
+    </button>
     <span class="action-sep" aria-hidden="true"></span>
     <button type="button" class="icon-btn"
             :data-tip="t('graph.zoomOut')" :aria-label="t('graph.zoomOut')"
@@ -150,6 +158,12 @@
               ? t('editor.toolbar.quotesDone', { count: quotesNormalizedFlash.count })
               : t('editor.toolbar.quotesNone'))
           : t('editor.toolbar.quotesTitle')"></span>
+      </button>
+      <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+              @mousedown.prevent
+              @click="splitSectionHere()">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#scissors"/></svg>
+        <span x-text="t('editor.split.title')"></span>
       </button>
       <div class="context-menu-sep" role="separator"></div>
       <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"

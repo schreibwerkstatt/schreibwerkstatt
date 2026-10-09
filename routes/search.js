@@ -230,7 +230,12 @@ router.get('/semantic', async (req, res) => {
     if (q.length < 2) return res.json({ hits: [], mode: 'semantic' });
     if (q.length > 500) return res.status(400).json({ error_code: 'QUERY_TOO_LONG' });
     // Freitext: Retrieval → Hybrid-Fusion → Reranking (siehe lib/semantic-retrieval).
-    const raw = await semanticRetrieval.semanticQuery(bookId, q, { kinds, topK, user: email });
+    // Mehrere getrennte Passagen je Entität: ein langer Abschnitt (ein Kapitel am
+    // Stück) soll nicht nur seine eine beste Stelle zeigen. Jeder Treffer trägt
+    // chunk_ix + Snippet der eigenen Passage.
+    const raw = await semanticRetrieval.semanticQuery(bookId, q, {
+      kinds, topK, user: email, perEntity: semanticRetrieval.PASSAGES_PER_ENTITY,
+    });
     res.json({
       hits: _resolveSemanticHits(raw, bookId, email), mode: 'semantic',
       notIndexed: !semanticRetrieval.indexReady(bookId),

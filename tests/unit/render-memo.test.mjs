@@ -195,36 +195,36 @@ function reviewCtx(stores) {
   };
 }
 
-test('_bookQualifiesForChapterReview: erst ab einem Kapitel mit mehreren Seiten', () => {
-  const stores = installAlpine({ tree: [chapter(1, 'Eins', ['A'])], pages: [{ id: 100 }] });
+test('_bookQualifiesForChapterReview: ab dem ersten Kapitel mit Text', () => {
+  const stores = installAlpine({ tree: [chapter(1, 'Eins', [])], pages: [] });
   const ctx = reviewCtx(stores);
   assert.equal(ctx._bookQualifiesForChapterReview(), false);
 
-  stores.nav.tree = [chapter(1, 'Eins', ['A', 'B'])];
-  stores.nav.pages = [{ id: 100 }, { id: 101 }];
-  assert.equal(ctx._bookQualifiesForChapterReview(), true);
+  stores.nav.tree = [chapter(1, 'Eins', ['A'])];
+  stores.nav.pages = [{ id: 100 }];
+  assert.equal(ctx._bookQualifiesForChapterReview(), true, 'ein Abschnitt genuegt');
 });
 
 test('_bookQualifiesForChapterReview: Seite anlegen und verschieben brechen den Cache', () => {
-  const ch1 = chapter(1, 'Eins', ['A']);
-  const ch2 = chapter(2, 'Zwei', ['B']);
-  const stores = installAlpine({ tree: [ch1, ch2], pages: [{ id: 100 }, { id: 200 }] });
+  const ch1 = chapter(1, 'Eins', []);
+  const ch2 = chapter(2, 'Zwei', []);
+  const stores = installAlpine({ tree: [ch1, ch2], pages: [] });
   const ctx = reviewCtx(stores);
   assert.equal(ctx._bookQualifiesForChapterReview(), false);
 
   // Seite anlegen: Baum-Referenz bleibt, die flache Seitenliste waechst.
-  ch1.pages = [...ch1.pages, { id: 101, name: 'A2' }];
+  ch1.pages = [{ id: 101, name: 'A2' }];
   stores.nav.pages.push({ id: 101 });
   assert.equal(ctx._bookQualifiesForChapterReview(), true, 'Laenge der Seitenliste muss greifen');
 
   // Verschieben: Laenge bleibt, der Buchorganizer weist `nav.pages` neu zu.
-  ch1.pages = [{ id: 100, name: 'A' }];
-  ch2.pages = [{ id: 200, name: 'B' }, { id: 101, name: 'A2' }];
+  ch1.pages = [];
+  ch2.pages = [{ id: 101, name: 'A2' }];
   stores.nav.pages = [...stores.nav.pages];
   assert.equal(ctx._bookQualifiesForChapterReview(), true);
 
-  ch2.pages = [{ id: 200, name: 'B' }];
-  stores.nav.pages = [{ id: 100 }, { id: 200 }];
+  ch2.pages = [];
+  stores.nav.pages = [];
   assert.equal(ctx._bookQualifiesForChapterReview(), false);
 });
 

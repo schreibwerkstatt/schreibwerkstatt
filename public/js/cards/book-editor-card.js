@@ -17,7 +17,8 @@ import { attachFullscreenSync, toggleWrapFullscreen } from '../fullscreen.js';
 import { fromPages } from '../manuscript-stream.js';
 import { bookEditorCommentsMethods } from '../editor/book-editor-comments.js';
 import { bookEditorFindMethods, clearHighlights } from './book-editor/find.js';
-import { bookEditorOutlineMethods } from './book-editor/outline.js';
+import { bookEditorOutlineMethods, buildOutlineNodes } from './book-editor/outline.js';
+import { sameStructureTitle } from '../structure-title.js';
 import { bookEditorSaveMethods } from './book-editor/save.js';
 import { bookEditorHistoryMethods } from './book-editor/history.js';
 import { stripFocusArtefacts, fetchJson } from '../utils.js';
@@ -89,14 +90,20 @@ const sessionState = () => ({
 export function buildBlocksFromPages(pages) {
   const byId = new Map();
   for (const p of (pages || [])) byId.set(p.pageId, p);
+  // `dupTitle`: erster Abschnitt, der wie sein Kapitel heisst — der Kopf zeigt
+  // dann keinen zweiten Namen (Regel wie Share-Reader/PDF, structure-title.js).
+  let pendingChapter = null;
   return fromPages(pages).map((e) => {
-    if (e.kind === 'chapter') return { kind: 'chapter', chapterId: e.chapterId, name: e.name };
+    if (e.kind === 'chapter') { pendingChapter = e; return { kind: 'chapter', chapterId: e.chapterId, name: e.name }; }
     const src = byId.get(e.id) || {};
     const html = stripFocusArtefacts(e.html || '');
+    const dupTitle = !!pendingChapter && pendingChapter.chapterId === e.chapterId && sameStructureTitle(e.name, pendingChapter.name);
+    pendingChapter = null;
     return {
       kind: 'page',
       pageId: e.id,
       name: e.name,
+      dupTitle,
       chapterId: e.chapterId,
       html,
       originalHtml: html,
@@ -539,30 +546,11 @@ export function registerBookEditorCard() {
     // saveAllDirty / Konflikt-Auflösung / Status: cards/book-editor/save.js.
 
     // ── Outline / TOC ─────────────────────────────────────────────────────
-    // Liste der Outline-Items, abgeleitet aus blocks: pro Kapitel ein Knoten mit
-    // seinen Pages, Pages vor dem ersten Kapitel in einem `solos`-Bucket. Beide
-    // Knoten-Typen tragen dieselbe `pages`-Liste, damit das Template EINEN
-    // Zweig hat. Memoized auf die Block-Liste — Namen/Struktur ändern sich nur
-    // beim Laden, der Per-Item-Status kommt reaktiv über `outlinePageStatus`.
+    // Gliederung aus blocks (Aufbau: book-editor/outline.js#buildOutlineNodes).
+    // Memoized auf die Block-Liste — Namen/Struktur ändern sich nur beim Laden,
+    // der Per-Item-Status kommt reaktiv über `outlinePageStatus`.
     get outlineNodes() {
-      return this._memo('outlineNodes', [this.blocks], () => {
-        const out = [];
-        let currentChapter = null;
-        let solos = [];
-        for (const b of this.blocks) {
-          if (b.kind === 'chapter') {
-            if (solos.length) { out.push({ kind: 'solos', chapterId: null, pages: solos }); solos = []; }
-            currentChapter = { kind: 'chapter', chapterId: b.chapterId, name: b.name, pages: [] };
-            out.push(currentChapter);
-          } else {
-            const item = { kind: 'page', pageId: b.pageId, name: b.name, block: b };
-            if (currentChapter) currentChapter.pages.push(item);
-            else solos.push(item);
-          }
-        }
-        if (solos.length) out.push({ kind: 'solos', chapterId: null, pages: solos });
-        return out;
-      });
+      return this._memo('outlineNodes', [this.blocks], () => buildOutlineNodes(this.blocks));
     },
 
     onFindKeydown(event) {

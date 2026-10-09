@@ -17,7 +17,10 @@ useTmpDb('lektorat-dedup');
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret';
 require('../../db/migrations');
 
-const { dedupFehler, validateLektoratFehler, capStylisticFehler, STYLISTIC_TYPEN, _runSig } = require('../../routes/jobs/lektorat-filter');
+const {
+  dedupFehler, validateLektoratFehler, capStylisticFehler, STYLISTIC_TYPEN, _runSig,
+  effectiveStylisticCap, finalizeFehler,
+} = require('../../routes/jobs/lektorat-filter');
 
 // validateLektoratFehler filtert gegen das Typ-Set des Buchtyp-Profils (SSoT:
 // public/js/prompts/lektorat-typen.js, ESM — hier nicht importierbar, weil diese
@@ -132,8 +135,35 @@ test('capStylisticFehler kappt stilistische Findings auf cap, unter cap unveraen
   const over = Array.from({ length: 30 }, (_, i) => ({ typ: 'fuellwort', original: `f${i}` }));
   const out = capStylisticFehler(over, 20);
   assert.equal(out.length, 20, 'ueber dem Cap: auf 20 gekappt');
-  assert.equal(out[0].original, 'f0', 'Reihenfolge erhalten (Textposition)');
-  assert.equal(out[19].original, 'f19');
+  assert.equal(out[0].original, 'f0', 'Reihenfolge erhalten, Anfang dabei');
+  const idx = out.map(f => Number(f.original.slice(1)));
+  assert.deepEqual(idx, [...idx].sort((a, b) => a - b), 'Array-Reihenfolge bleibt erhalten');
+  assert.ok(idx[19] >= 27, 'das Ende des Textes ist vertreten, nicht nur die ersten 20');
+});
+
+test('capStylisticFehler verteilt die behaltenen Funde gleichmaessig ueber den Text', () => {
+  // 40 Funde, Cap 10 → gleichmaessig gestreut, erster und letzter dabei; ohne Text
+  // zaehlt die Array-Reihenfolge.
+  const over = Array.from({ length: 40 }, (_, i) => ({ typ: 'stil', original: `s${i}` }));
+  assert.deepEqual(capStylisticFehler(over, 10).map(f => f.original),
+    ['s0', 's4', 's9', 's13', 's17', 's22', 's26', 's30', 's35', 's39']);
+
+  // Mit Text ranken die Fundstellen von `original`, nicht die Array-Reihenfolge:
+  // das Modell hat die zweite Hälfte vorne einsortiert.
+  const words = Array.from({ length: 20 }, (_, i) => `wort${String(i).padStart(2, '0')}`);
+  const text = words.join(' ');
+  const shuffled = [...words.slice(10), ...words.slice(0, 10)].map(w => ({ typ: 'fuellwort', original: w }));
+  const kept = capStylisticFehler(shuffled, 4, text).map(f => f.original).sort();
+  assert.deepEqual(kept, ['wort00', 'wort06', 'wort13', 'wort19'], 'Anfang, Mitte und Ende vertreten');
+
+  // Erste Hälfte des Abschnitts voller Funde, zweite dünn: das Ende bleibt drin.
+  const dense = [
+    ...Array.from({ length: 30 }, (_, i) => ({ typ: 'stil', original: `a${i}` })),
+    { typ: 'stil', original: 'ende1' }, { typ: 'stil', original: 'ende2' },
+  ];
+  const out = capStylisticFehler(dense, 8);
+  assert.equal(out.length, 8);
+  assert.ok(out.some(f => f.original.startsWith('ende')), 'Funde am Abschnittsende ueberleben den Cap');
 });
 
 test('capStylisticFehler kappt mechanische/objektive Fehler NIE', () => {
@@ -195,6 +225,36 @@ test('validateLektoratFehler verwirft profilfremde Typen', () => {
   assert.deepEqual(nar.map(f => f.typ), ['grammatik', 'show_vs_tell']);
 });
 
+// ── effectiveStylisticCap: Regler gilt pro 10'000 Zeichen ───────────────────
+
+test('effectiveStylisticCap: kurz = Regler, lang proportional, gedeckelt', () => {
+  assert.equal(effectiveStylisticCap(0, 10), 10, 'leer → Regler');
+  assert.equal(effectiveStylisticCap(3000, 10), 10, 'kurzer Abschnitt nie unter dem Regler');
+  assert.equal(effectiveStylisticCap(10000, 10), 10, 'eine Einheit = Regler');
+  assert.equal(effectiveStylisticCap(14000, 10), 14, 'darueber proportional');
+  assert.equal(effectiveStylisticCap(20000, 10), 20);
+  assert.equal(effectiveStylisticCap(43000, 10), 43);
+  assert.equal(effectiveStylisticCap(60000, 10), 50, 'Deckel 5x Regler');
+  assert.equal(effectiveStylisticCap(500000, 60), 200, 'Deckel 200 (Validator-Maximum)');
+  assert.equal(effectiveStylisticCap(25000, 3), 8, 'kleiner Regler skaliert mit');
+  assert.equal(effectiveStylisticCap(NaN, 10), 10, 'defensiv');
+});
+
+test('finalizeFehler kappt mit der laengenabhaengigen Obergrenze des Prompt-Texts', () => {
+  const words = Array.from({ length: 60 }, (_, i) => `wort${String(i).padStart(2, '0')}`);
+  const fehler = words.map(w => ({ typ: 'stil', original: w, korrektur: w + 'x', erklaerung: 'e' }));
+  const typen = new Set(['stil']);
+  // Kurzer Text: Regler (10).
+  const shortText = words.join(' ');
+  assert.equal(finalizeFehler(fehler, 'de', typen, { text: shortText, excerpts: [] }).length, 10);
+  // 30'000 Zeichen: dreifacher Regler (30).
+  const longText = shortText + ' ' + 'x'.repeat(30000 - shortText.length - 1);
+  assert.equal(longText.length, 30000);
+  const out = finalizeFehler(fehler, 'de', typen, { text: longText, excerpts: [] });
+  assert.equal(out.length, effectiveStylisticCap(30000));
+  assert.equal(out.length, 30);
+});
+
 // ── _runSig: Lauf-Parameter in der Cache-Signatur ────────────────────────────
 // Stil-Obergrenze und Pass-Aufteilung stecken in keinem Prompt-String, formen aber
 // den Output — ohne sie in der Signatur lieferte der Cache nach einer Umstellung
@@ -208,4 +268,8 @@ test('_runSig: Stil-Obergrenze und Split-Konfiguration aendern die Signatur', ()
   assert.deepEqual(_runSig(false), { sc: 5, sp: '3/2' });
   appSettings.set('ai.lektorat_split', false);
   assert.deepEqual(_runSig(false), { sc: 5, sp: 0 });
+  // `sc` ist die wirksame Obergrenze: kurze Abschnitte behalten ihre Signatur,
+  // lange bekommen eine eigene.
+  assert.deepEqual(_runSig(false, 8000), { sc: 5, sp: 0 });
+  assert.deepEqual(_runSig(false, 40000), { sc: 20, sp: 0 });
 });

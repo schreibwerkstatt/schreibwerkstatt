@@ -16,6 +16,7 @@ const {
   MAX_PAGES_PER_FETCH,
   SEARCH_SNIPPET_CONTEXT,
   _truncateResult,
+  resultCapFor,
   _findFigure,
 } = require('./shared');
 const {
@@ -145,6 +146,49 @@ async function tool_search_passages(input, ctx) {
   });
 }
 
+// ── Seiten-Fenster (get_pages / get_chapter_text) ─────────────────────────────
+
+// Lange Abschnitte (ein Kapitel am Stück, 20–60k Zeichen) passen nicht in ein
+// Werkzeug-Ergebnis. Statt nur den Anfang zu liefern, gibt es ein Fenster ab
+// `offset` (Zeichen im zurückgegebenen Text) und `next_offset` zum Weiterlesen.
+// Der Schnitt fällt auf eine Wortgrenze, wenn eine in den letzten
+// WINDOW_WORD_SNAP Zeichen liegt. Pure, unit-getestet.
+const WINDOW_WORD_SNAP = 200;
+
+function pageWindow(text, offset, maxChars) {
+  const t = String(text || '');
+  const total = t.length;
+  const start = Math.min(Math.max(0, Number.isInteger(offset) ? offset : 0), total);
+  let end = Math.min(total, start + Math.max(1, maxChars));
+  let next = end;
+  if (end < total) {
+    const sp = t.lastIndexOf(' ', end);
+    if (sp > start && end - sp <= WINDOW_WORD_SNAP) { end = sp; next = sp + 1; }
+  }
+  return {
+    text: t.slice(start, end),
+    ...(start > 0 ? { offset: start } : {}),
+    page_chars: total,
+    truncated: end < total,
+    ...(end < total ? { next_offset: next } : {}),
+    ...(Number.isInteger(offset) && offset >= total && total > 0 ? { offset_beyond_end: true } : {}),
+  };
+}
+
+// Text-Deckel pro Abschnitt. Höchstens so viel, dass EIN Abschnitt samt Metadaten
+// unter den Ergebnis-Deckel des Loops passt: sonst kürzte _truncateResult den
+// Text nachträglich (Stufe 2), und next_offset zeigte hinter Text, den das Modell
+// nie gesehen hat. Mehrere Abschnitte kürzt der Deckel über das pages-Array
+// (ganze Abschnitte fallen weg, truncated_fields meldet es) — der Text bleibt exakt.
+const WINDOW_META_RESERVE = 1500;
+function _perPageChars(requested, ctx) {
+  const fitCap = Math.floor((resultCapFor(ctx) - WINDOW_META_RESERVE) * 0.9);
+  const want = Number.isInteger(requested) && requested > 0 ? requested : DEFAULT_CHARS_PER_PAGE;
+  return Math.max(500, Math.min(MAX_CHARS_PER_PAGE, fitCap, Math.max(500, want)));
+}
+
+const WINDOW_HINT = 'Mindestens ein Abschnitt ist gekürzt (truncated) — mit offset=next_offset weiterlesen.';
+
 // ── get_pages ─────────────────────────────────────────────────────────────────
 
 const LATEST_CHECK_STILANALYSE_CHARS = 600;
@@ -168,7 +212,8 @@ async function tool_get_pages(input, ctx) {
   const ids = Array.isArray(input.ids) ? input.ids.filter(n => Number.isInteger(n)) : [];
   if (!ids.length) return { error: 'ids fehlen oder leer' };
   const limit = Math.min(MAX_PAGES_PER_FETCH, ids.length);
-  const maxChars = Math.min(MAX_CHARS_PER_PAGE, Math.max(500, input.max_chars_per_page || DEFAULT_CHARS_PER_PAGE));
+  const maxChars = _perPageChars(input.max_chars_per_page, ctx);
+  const offset = Number.isInteger(input.offset) && input.offset > 0 ? input.offset : 0;
   const toFetch = ids.slice(0, limit);
   const results = [];
   const missing = [];
@@ -190,8 +235,7 @@ async function tool_get_pages(input, ctx) {
         page_id: pageId,
         page_name: pageRow?.page_name || pd.name || `#${pageId}`,
         chapter_name: pageRow?.chapter_name || null,
-        text: text.length > maxChars ? text.slice(0, maxChars) + '…' : text,
-        truncated: text.length > maxChars,
+        ...pageWindow(text, offset, maxChars),
         ...(latestCheck ? { latest_check: latestCheck } : {}),
       });
     } catch (e) {
@@ -200,6 +244,7 @@ async function tool_get_pages(input, ctx) {
   }
   const dropped = ids.length - toFetch.length;
   return _truncateResult({
+    ...(results.some(r => r.truncated) ? { hint: WINDOW_HINT } : {}),
     pages: results,
     ...(missing.length ? { missing } : {}),
     ...(dropped > 0 ? { dropped, note: `${dropped} weitere IDs ignoriert (max ${MAX_PAGES_PER_FETCH} pro Aufruf).` } : {}),
@@ -226,8 +271,8 @@ async function tool_get_chapter_text(input, ctx) {
 
   const maxPages = Math.min(MAX_PAGES_PER_FETCH,
     Math.max(1, Number.isInteger(input?.max_pages) ? input.max_pages : pageRows.length));
-  const maxCharsPerPage = Math.min(MAX_CHARS_PER_PAGE,
-    Math.max(500, Number.isInteger(input?.max_chars_per_page) ? input.max_chars_per_page : DEFAULT_CHARS_PER_PAGE));
+  const maxCharsPerPage = _perPageChars(input?.max_chars_per_page, ctx);
+  const offset = Number.isInteger(input?.offset) && input.offset > 0 ? input.offset : 0;
   const toFetch = pageRows.slice(0, maxPages);
   const dropped = pageRows.length - toFetch.length;
 
@@ -241,8 +286,7 @@ async function tool_get_chapter_text(input, ctx) {
       results.push({
         page_id:   row.page_id,
         page_name: row.page_name,
-        text:      text.length > maxCharsPerPage ? text.slice(0, maxCharsPerPage) + '…' : text,
-        truncated: text.length > maxCharsPerPage,
+        ...pageWindow(text, offset, maxCharsPerPage),
       });
     } catch (e) {
       missing.push({ page_id: row.page_id, error: e.message });
@@ -252,8 +296,9 @@ async function tool_get_chapter_text(input, ctx) {
   return _truncateResult({
     chapter_id:   chapter.chapter_id,
     chapter_name: chapter.chapter_name,
-    pages:        results,
     total_pages:  pageRows.length,
+    ...(results.some(r => r.truncated) ? { hint: WINDOW_HINT } : {}),
+    pages:        results,
     ...(missing.length ? { missing } : {}),
     ...(dropped > 0 ? { dropped, note: `${dropped} weitere Abschnitte nicht geladen (max ${maxPages}).` } : {}),
   });
@@ -542,4 +587,5 @@ module.exports = {
   tool_quote_match,
   tool_get_dialogue,
   tool_find_first_last_mention,
+  pageWindow,
 };

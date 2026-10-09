@@ -14,6 +14,7 @@
 // seine Textwerte dort bereits escaped hat.
 
 import { escHtml } from './utils/escape.js';
+import { sameStructureTitle } from './structure-title.js';
 
 const DEFAULTS = {
   chapterTag: 'h2',
@@ -39,13 +40,30 @@ export function renderStreamHtml(entries, opts = {}) {
   const sections = [];
   const toc = [];
   let n = 0;
+  // Kapitel, dessen erster Abschnitt als naechstes kommt (null, sobald einer
+  // gerendert ist). Traegt dieser erste Abschnitt denselben Namen, entfaellt
+  // seine Ueberschrift samt Verzeichnis-Eintrag — dieselbe Regel wie PDF/Word
+  // (structure-title.js). Bei Kapitel-Shares steht der Kapitelname im h1-Kopf
+  // der Leseansicht und zaehlt genauso.
+  let pendingChapter = null;
   for (const e of (entries || [])) {
     if (e.kind === 'chapter') {
+      pendingChapter = e;
       if (o.omitChapterHeaders) continue;
       const a = o.anchorPrefix + (++n);
       toc.push({ level: 1, label: e.name || '', anchor: a, chapterId: e.chapterId ?? null, pageId: null });
       sections.push(`<${o.chapterTag} id="${a}" class="${o.chapterClass}">${escHtml(e.name || '')}</${o.chapterTag}>`);
     } else if (e.kind === 'page') {
+      const dupOfChapter = !!pendingChapter && !e.article
+        && (pendingChapter.chapterId ?? null) === (e.chapterId ?? null)
+        && sameStructureTitle(e.name, pendingChapter.name);
+      pendingChapter = null;
+      if (dupOfChapter) {
+        sections.push(`<section class="${o.pageSectionClass}">
+            <div class="${o.pageBodyClass}">${e.html || ''}</div>
+          </section>`);
+        continue;
+      }
       const a = o.anchorPrefix + (++n);
       const level = (e.chapterId && !o.omitChapterHeaders) ? 2 : 1;
       toc.push({ level, label: e.name || '', anchor: a, chapterId: e.chapterId ?? null, pageId: e.id ?? null });

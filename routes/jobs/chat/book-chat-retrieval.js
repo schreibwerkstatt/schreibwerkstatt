@@ -7,7 +7,8 @@
 // im Gedanken ab). Sie unterscheiden sich nur darin, WAS sie damit füllen:
 //
 //   selectPassagesSemantic — klassischer Buch-Chat: füllt das ganze Text-Budget des
-//     System-Prompts (ein bester Chunk pro Seite + Nachbarn, breite Streuung).
+//     System-Prompts (bis zu PASSAGES_PER_ENTITY getrennte Passagen pro Seite, je
+//     um ihre Nachbarn erweitert, pro Seite zu einem Auszug gebündelt).
 //   preContextPassages     — kleiner Erst-Kontext (wenige Treffer, harter
 //     Zeichendeckel): agentischer Buch- und Plot-Chat, klassischer Plot-Chat und
 //     der Buch-Block des Seiten-Chats. Macht die häufigste Frageform („wie alt war
@@ -55,7 +56,8 @@ function retrievalQuery(message, history) {
 // Budget, fällt der Aufrufer auf den Treffer-Chunk selbst zurück (statt vom Anfang
 // der Nachbarschaft abzuschneiden und den Treffer zu verlieren).
 function _expand(hits) {
-  const key = (h) => `${h.kind}:${h.entity_id}`;
+  // Eine Entität kann mit mehreren Passagen kommen — der Schlüssel trägt darum chunk_ix.
+  const key = (h) => `${h.kind}:${h.entity_id}:${Number.isInteger(h.chunk_ix) ? h.chunk_ix : ''}`;
   const wide = new Map(semanticRetrieval.withNeighbors(hits, { radius: 1 }).map(w => [key(w), w.text]));
   return hits.map(h => ({ hit: h, wide: String(wide.get(key(h)) || h.text || ''), core: String(h.text || '') }));
 }
@@ -66,11 +68,21 @@ function _fit({ wide, core }, remaining) {
   return core.slice(0, remaining);
 }
 
+// Trenner zwischen zwei Passagen derselben Seite in einem RAG-Auszug.
+const PASSAGE_SEPARATOR = '\n[…]\n';
+
+// Abstand der Passagen einer Seite: jede wird um ±1 Nachbar-Chunk erweitert
+// (_expand) — mit Abstand 3 überlappen die erweiterten Passagen nicht.
+const RAG_MIN_CHUNK_GAP = 3;
+
 /**
- * Mini-RAG des klassischen Buch-Chats: die semantisch relevantesten Seiten (ein
- * bester Chunk pro Seite, um seine Nachbar-Chunks erweitert) füllen das Text-Budget.
- * Seiten-Metadaten via listPages; der Text kommt aus dem Index, es werden KEINE
- * Seiten-Volltexte geladen.
+ * Mini-RAG des klassischen Buch-Chats: die semantisch relevantesten Passagen füllen
+ * das Text-Budget — bis zu PASSAGES_PER_ENTITY getrennte Passagen pro Seite (ein
+ * Roman mit einem Abschnitt pro Kapitel hätte sonst nur eine Stelle je Kapitel),
+ * jede um ihre Nachbar-Chunks erweitert. Die Passagen einer Seite werden in
+ * Text-Reihenfolge zu EINEM Auszug gebündelt (selectedPages bleibt eine Zeile pro
+ * Seite, Reihenfolge = Relevanz des besten Treffers der Seite). Seiten-Metadaten via
+ * listPages; der Text kommt aus dem Index, es werden KEINE Seiten-Volltexte geladen.
  *
  * Rückgabe:
  *   { status: 'ok', selectedPages, usedChars, totalPages }
@@ -82,8 +94,10 @@ function _fit({ wide, core }, remaining) {
 async function selectPassagesSemantic(bookId, query, budgetChars, signal) {
   if (!semanticRetrieval.indexReady(bookId)) return { status: 'no_index' };
   const topK = parseInt(appSettings.get('jobs.book_chat.rag_top_k'), 10) || 40;
-  const hits = (await semanticRetrieval.semanticQuery(bookId, query, { kinds: ['page'], topK, signal }))
-    .filter(h => h.kind === 'page');
+  const hits = (await semanticRetrieval.semanticQuery(bookId, query, {
+    kinds: ['page'], topK, signal,
+    perEntity: semanticRetrieval.PASSAGES_PER_ENTITY, minChunkGap: RAG_MIN_CHUNK_GAP,
+  })).filter(h => h.kind === 'page');
   if (!hits.length) return { status: 'no_hits' };
 
   let pages;
@@ -94,19 +108,27 @@ async function selectPassagesSemantic(bookId, query, budgetChars, signal) {
   }
   const metaById = new Map(pages.map(p => [p.id, p]));
 
-  const selectedPages = [];
+  const byPage = new Map(); // page_id → [{ ix, text }] in Relevanz-Reihenfolge der ersten Passage
   let usedChars = 0;
-  // semanticQuery liefert je Seite schon nur den besten Chunk; gelöschte Seiten
-  // (Chunk noch im Index) fallen vor der Nachbar-Erweiterung heraus.
+  // Gelöschte Seiten (Chunk noch im Index) fallen vor der Nachbar-Erweiterung heraus.
   for (const item of _expand(hits.filter(h => metaById.has(h.entity_id)))) {
     if (usedChars >= budgetChars) break;
-    const text = _fit(item, budgetChars - usedChars);
+    const parts = byPage.get(item.hit.entity_id);
+    const sep = parts ? PASSAGE_SEPARATOR.length : 0;
+    const text = _fit(item, budgetChars - usedChars - sep);
     if (text.length < MIN_PASSAGE_CHARS) continue;
-    const meta = metaById.get(item.hit.entity_id);
-    selectedPages.push({ name: meta.name, id: meta.id, slug: meta.slug, book_slug: meta.book_slug, text });
-    usedChars += text.length;
+    const ix = Number.isInteger(item.hit.chunk_ix) ? item.hit.chunk_ix : 0;
+    if (parts) parts.push({ ix, text });
+    else byPage.set(item.hit.entity_id, [{ ix, text }]);
+    usedChars += text.length + sep;
   }
-  if (!selectedPages.length) return { status: 'no_hits' };
+  if (!byPage.size) return { status: 'no_hits' };
+  const selectedPages = [];
+  for (const [pageId, parts] of byPage) {
+    const meta = metaById.get(pageId);
+    const text = parts.sort((a, b) => a.ix - b.ix).map(p => p.text).join(PASSAGE_SEPARATOR);
+    selectedPages.push({ name: meta.name, id: meta.id, slug: meta.slug, book_slug: meta.book_slug, text });
+  }
   return { status: 'ok', selectedPages, usedChars, totalPages: pages.length };
 }
 

@@ -27,6 +27,8 @@ export { brLeftOfCaret as _brLeftOfCaret };
 // Inhalt in ein <li>. `todoList: true` erzeugt eine Checkbox-Liste.
 // `insertText: 'date'|'time'|'datetime'` ersetzt den Block durch einen
 // formatierten Datums-/Zeit-Stempel.
+// `split: true` teilt den Abschnitt am (leeren) Trigger-Block in zwei
+// Abschnitte (edit/split.js#splitSectionHere).
 // `diagram: true` oeffnet den Diagramm-Dialog (Quelltext + Live-Vorschau) und
 // setzt danach einen `<pre class="mermaid">`. Bewusst kein Tag-Swap wie die
 // uebrigen Bloecke: Diagramm-Code ist mehrzeilig, und Enter in einem `<pre>`
@@ -48,6 +50,7 @@ export const SLASH_ITEMS = [
   { key: 'heute',      insertText: 'date',     group: 'insert' },
   { key: 'jetzt',      insertText: 'datetime', group: 'insert' },
   { key: 'zeit',       insertText: 'time',     group: 'insert' },
+  { key: 'teilen',     split: true,            group: 'section' },
 ];
 
 // Datums-/Zeit-Stempel im uiLocale + appTimezone. Kein Locale-Param —

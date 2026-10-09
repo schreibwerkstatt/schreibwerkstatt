@@ -528,6 +528,95 @@ test('Exit raeumt Overlay + Chrome ab', async ({ page }) => {
   guard.assertClean('Exit');
 });
 
+// docs/focus-editor.md „Schreibstelle pro Abschnitt": Exit mitten im Text →
+// der naechste Eintritt setzt den Caret dorthin, ohne Auto-Slot; Exit am Ende →
+// der gewohnte Sprung ans Ende.
+async function exitFocus(page) {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('editor:focus:exit')));
+  await page.waitForFunction(() => {
+    const d = window.Alpine.$data(document.querySelector('.focus-editor'));
+    return d._focusState === 'idle';
+  }, null, { timeout: 15000 });
+  await page.waitForTimeout(200);
+}
+async function reenterFocus(page) {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('editor:focus:enter-from-pageview')));
+  await page.waitForFunction(() => {
+    const d = window.Alpine.$data(document.querySelector('.focus-editor'));
+    return d._focusState === 'active';
+  }, null, { timeout: 15000 });
+  await page.waitForTimeout(200);
+}
+function caretState(page) {
+  return page.evaluate((sel) => {
+    const c = document.querySelector(sel);
+    const s = getSelection();
+    const blocks = [...c.children];
+    const block = blocks.find(b => b.contains(s.anchorNode)) || null;
+    return {
+      blockIdx: block ? blocks.indexOf(block) : -1,
+      count: blocks.length,
+      offset: s.anchorOffset,
+    };
+  }, FOCUS);
+}
+
+test('Schreibstelle: Exit mitten im Text → Wiedereintritt dort, Exit am Ende → Buchende', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  // Eigener Abschnitt statt der geteilten Seed-Seite: andere Specs derselben
+  // Shard tippen dort hinein, frisch getippte Bloecke tragen bis zum Reload
+  // keine data-bid — die Schreibstelle braucht aber gespeicherte Bloecke.
+  await bootApp(page);
+  await selectSeededBook(page);
+  // Ins LETZTE Kapitel, nicht kapitellos: Solo-Abschnitte stehen in `nav.pages`
+  // vorn, und nachfolgende Specs derselben Shard oeffnen `pages[0]`.
+  const createdId = await page.evaluate(async () => {
+    const nav = window.Alpine.store('nav');
+    const chapters = nav.tree.filter(i => i.type === 'chapter' && !i.solo);
+    const res = await fetch('/content/pages', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        book_id: Number(nav.selectedBookId), chapter_id: Number(chapters[chapters.length - 1].id),
+        name: 'Schreibstelle ' + Date.now(),
+        html: '<p>Erster Absatz mit Text.</p><p>Zweiter Absatz mit Text.</p><p>Dritter Absatz mit Text.</p>',
+      }),
+    });
+    const created = await res.json();
+    await window.__app.loadPages({ fresh: true });
+    const p = window.Alpine.store('nav').pages.find(x => x.id === created.id);
+    await window.__app.selectPage(p);
+    return created.id;
+  });
+  await page.waitForFunction(() => window.__app.showEditorCard === true, null, { timeout: 15000 });
+  await reenterFocus(page);
+  await placeCaret(page, 0);
+  await exitFocus(page);
+  const stored = await page.evaluate(() => {
+    const id = window.__app.currentPage.id;
+    return localStorage.getItem('focus.caret.' + id);
+  });
+  expect(stored, 'Schreibstelle gemerkt').toBeTruthy();
+
+  await reenterFocus(page);
+  const mid = await caretState(page);
+  expect(mid.blockIdx, 'Caret im ersten Block').toBe(0);
+  expect(mid.offset, 'Caret an derselben Stelle').toBe(4);
+  const slot = await page.evaluate(() => window.Alpine.$data(document.querySelector('.focus-editor'))._focusAutoAddedP);
+  expect(slot, 'kein Auto-Slot beim Wiedereintritt').toBeNull();
+
+  // Ans Ende, raus, rein: gewohnter Sprung ans Ende.
+  await placeCaret(page, -1);
+  await exitFocus(page);
+  const cleared = await page.evaluate(() => localStorage.getItem('focus.caret.' + window.__app.currentPage.id));
+  expect(cleared, 'Ende vergisst die Schreibstelle').toBeNull();
+  await reenterFocus(page);
+  const end = await caretState(page);
+  expect(end.blockIdx, 'Caret am Buchende').toBe(end.count - 1);
+  guard.assertClean('Schreibstelle');
+  await exitFocus(page);
+  await page.evaluate((id) => fetch('/content/pages/' + id, { method: 'DELETE' }), createdId);
+});
+
 test('Leerschlag an der Umbruchkante: Wort bleibt stehen, kein &nbsp;', async ({ page }) => {
   // Der Bug: unter `white-space: normal` schreibt Blink fuer einen Leerschlag,
   // der am Zeilenende kollabieren wuerde, ein `&nbsp;` in den Text und wandelt

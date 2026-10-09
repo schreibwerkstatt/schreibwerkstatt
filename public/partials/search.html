@@ -88,7 +88,7 @@
        x-text="$app.t('search.results.count', { n: hits.length })"></div>
 
   <ul class="search-results" x-show="hits.length">
-    <template x-for="hit in hits" :key="hit.kind + ':' + hit.entity_id">
+    <template x-for="hit in hits" :key="hit.kind + ':' + hit.entity_id + ':' + (hit.chunk_ix ?? '')">
       <li class="search-hit internal-link"
           @click="activateHit(hit)">
         <div class="search-hit-row">

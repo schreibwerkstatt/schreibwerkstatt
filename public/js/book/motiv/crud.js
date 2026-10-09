@@ -4,7 +4,6 @@
 
 import { fetchJson, sendJson } from '../../utils.js';
 import { THEME_COLOR_KEYS, defaultThemeColorKey } from './graph.js';
-import { highlightOccurrenceOnPage } from './highlight.js';
 import { MOTIF_REL_TYPES } from './constants.js';
 
 export const crudMethods = {
@@ -513,9 +512,7 @@ export const crudMethods = {
     // Seite zurück, an der die Szene verankert ist (figure_scenes.page_id).
     const pageId = occ.page_id || occ.scene_page_id;
     if (!pageId) return;
-    window.__app.gotoPageById(pageId);
-    // Passage im Seitentext hervorheben (reines Lesen; findet sie nichts, bleibt
-    // der Sprung auf die Seite bestehen).
-    if (occ.snippet) highlightOccurrenceOnPage(occ.snippet);
+    // Passage wird im Abschnittstext hervorgehoben (book/passage-highlight.js).
+    window.__app.gotoPageById(pageId, { snippet: occ.snippet });
   },
 };

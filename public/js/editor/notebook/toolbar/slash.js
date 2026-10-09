@@ -249,6 +249,15 @@ export const slashMethods = {
       return;
     }
 
+    // Abschnitt teilen: Schnitt vor dem (leeren) Trigger-Block, der dabei
+    // wegfaellt. Den Ablauf (Namensdialog, Speichern, Route) traegt die
+    // Notebook-Karte; sie haelt den Block fest, bevor der Dialog aufgeht.
+    if (item.split) {
+      window.__app?.splitSectionHere?.({ block });
+      this._closeSlash();
+      return;
+    }
+
     // Tabelle: oeffnet den Gitter-Dialog, gleiche Uebergabe wie beim Diagramm.
     if (item.table) {
       this.openTableDialog(block);

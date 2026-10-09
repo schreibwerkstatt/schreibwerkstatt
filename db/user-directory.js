@@ -5,7 +5,7 @@
 // Wer sieht wen: der eigene Account und die Co-Mitglieder der Bücher, an denen
 // der User beteiligt ist — in beide Richtungen (mit wem er geteilt hat und wer
 // mit ihm teilt). Das sind genau die Personen, deren E-Mail er ohnehin ueber
-// `GET /books/:book_id/access` sieht; die Anzeigename kommen nur zusaetzlich dazu,
+// `GET /books/:book_id/access` sieht; die Anzeigenamen kommen nur zusaetzlich dazu,
 // damit Revisions- und Toast-Listen statt einer nackten E-Mail einen Namen zeigen.
 //
 // `global_role` wird bewusst nicht geliefert: wer die Instanz-Verwaltung sieht,
@@ -20,7 +20,7 @@ function _normEmail(e) {
   return (e || '').toString().trim().toLowerCase();
 }
 
-// Status-Filter wie beim Teilen: gesperrte und geloeschte Kontona sind keine
+// Status-Filter wie beim Teilen: gesperrte und geloeschte Konten sind keine
 // Adressen, die eine andere Rolle als 'inhaber' sehen sollte. `display_name`
 // darf NULL sein (Konto ohne Anzeigename) — der Client faellt dann auf die E-Mail.
 const _stmtVisibleUsers = db.prepare(`

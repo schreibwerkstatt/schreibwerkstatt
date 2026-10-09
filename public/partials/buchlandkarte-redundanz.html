@@ -95,7 +95,7 @@
             <div class="redundanz-pair-sides">
               <template x-for="side in ['a', 'b']" :key="side">
                 <div class="redundanz-side">
-                  <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: pair[side + '_id'], label: redundanzPageName(pair[side + '_id']) }"></button>
+                  <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: pair[side + '_id'], label: redundanzPageName(pair[side + '_id']), snippet: pair[side + '_text'] || pair[side + '_snippet'] || '' }"></button>
                   <p class="redundanz-snippet"
                      :class="{ 'redundanz-snippet--open': redundanzIsOpen(pair.a_id + ':' + pair.b_id + side) }"
                      x-text="pair[side + '_text'] || pair[side + '_snippet'] || ''"></p>

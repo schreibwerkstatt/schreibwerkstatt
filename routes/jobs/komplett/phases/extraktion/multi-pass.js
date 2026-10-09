@@ -3,7 +3,7 @@
 // (Cloud: Extraktions-Tier, Halbierungs-Retry bei Truncation) und additiver Gap-Pass.
 // Facade: ../extraktion.js (runPhase1 wählt Single- oder Multi-Pass).
 const { loadChapterExtractCache, saveChapterExtractCache, getBookSettings } = require('../../../../../db/schema');
-const { i18nError, settledAll, retryOnTransientAi, updateJob, toSystemBlocks } = require('../../../shared');
+const { i18nError, settledAll, retryOnTransientAi, updateJob, toSystemBlocks, halveChunkPages, pageSigSuffix } = require('../../../shared');
 const { buildChapterSystemBlockText, bookSettingsSigPart, extractField } = require('../../utils');
 const { _normalizeName } = require('../../figuren-merge');
 const appSettings = require('../../../../../lib/app-settings');
@@ -144,7 +144,9 @@ async function runMultiPassCompletenessGaps(ctx, { chunkTexts, chapters, concurr
  * Basis-Extraktion eines Cloud-Chunks auf dem Extraktions-Tier (Modell + Effort aus
  * ai.claude.*.komplett.extract, wie Single-Pass und Gap-Pässe). Truncation am Output-Cap
  * ist bei einem Cloud-Modell kein Wiederholungs-Loop wie lokal, sondern schlicht zu viel
- * Stoff für einen Call: der Chunk wird EINMAL seitenweise halbiert und die Hälften einzeln
+ * Stoff für einen Call: der Chunk wird EINMAL halbiert (seitenweise; ein Chunk aus nur einem
+ * Abschnitt bzw. Abschnitts-Teil an der Absatz-/Satzgrenze nächst der Mitte, gleiche Identität,
+ * shared/chunking.js#halveChunkPages) und die Hälften einzeln
  * extrahiert (Text im User-Turn, ohne Cache — nur dieser eine Rettungsweg liest ihn).
  * Ohne das trüge das Kapitel nichts bei, würde nie gecacht und truncierte in jedem
  * Folgelauf erneut (bezahlt, verworfen). Truncieren auch die Hälften → Fehler wie bisher.
@@ -159,10 +161,10 @@ async function _extractCloudChunk(ctx, { chunk, chText, chunkLabel, claudeExtrac
   try {
     return await extractOnce(chunkLabel, chunk.pages, parts.system, parts.chText);
   } catch (e) {
-    if (e?.message !== 'job.error.aiTruncated' || chunk.pages.length < 2) throw e;
-    const mid = Math.ceil(chunk.pages.length / 2);
-    const halves = [chunk.pages.slice(0, mid), chunk.pages.slice(mid)];
-    log.warn(`${chunkLabel} – Truncation, Retry in zwei Hälften (${halves[0].length}+${halves[1].length} Seiten).`);
+    if (e?.message !== 'job.error.aiTruncated') throw e;
+    const halves = halveChunkPages(chunk.pages);
+    if (!halves) throw e;
+    log.warn(`${chunkLabel} – Truncation, Retry in zwei Hälften (${halves[0].length}+${halves[1].length} Seiten${chunk.pages.length === 1 ? ', Abschnitt geteilt' : ''}).`);
     const results = [];
     for (const [hi, pages] of halves.entries()) {
       const text = pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n');
@@ -197,7 +199,7 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
       // Kapitelname im Sig: er fliesst via buildExtraktionKomplettChapterPrompt(chunk.name)
       // in den Prompt, steht aber nicht in page_id:updated_at. Ohne ihn liefert eine reine
       // Kapitel-Umbenennung einen stale Cache-HIT mit altem Kapitelkontext. Rename → MISS.
-      pagesSig: chunk.pages.map(p => `${p.id}:${p.updated_at}`).sort().join('|') + `||${settingsSig}||ch:${chunk.name || ''}||${chunkCacheVersion || ''}`,
+      pagesSig: chunk.pages.map(p => `${p.id}:${p.updated_at}${pageSigSuffix(p)}`).sort().join('|') + `||${settingsSig}||ch:${chunk.name || ''}||${chunkCacheVersion || ''}`,
       chText: chunk.pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n'),
     };
   });

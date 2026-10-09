@@ -49,40 +49,82 @@ const STYLISTIC_TYPEN = new Set([
 ]);
 
 const DEFAULT_STYLISTIC_CAP = 10;
+// Bezugsgrösse des Admin-Reglers: `ai.lektorat_stylistic_cap` gilt pro so vielen
+// Zeichen Prompt-Text. Ein Abschnitt kann eine Szene oder ein ganzes Kapitel sein
+// (20–60 000 Zeichen); eine feste Zahl pro Abschnitt liesse lange Abschnitte
+// stilistisch fast unkommentiert.
+const STYLISTIC_CAP_UNIT_CHARS = 10000;
+// Deckel nach oben: höchstens das Fünffache des Reglers, nie über dem
+// Validator-Maximum des Settings.
+const STYLISTIC_CAP_MAX_FACTOR = 5;
+const STYLISTIC_CAP_ABS_MAX = 200;
 
 // Deterministischer Backstop zur Prompt-Regel „max ~N stilistische Findings".
 // Modelle zählen und selbst-limitieren unzuverlässig – der Prompt bittet zwar um
 // harte Priorisierung, aber wenn das Modell 40 schwache Stil-Findings zurückgibt,
 // erzwingt dieser Handler-Filter die Grenze verlässlich. Objektive Fehler bleiben
 // vollständig erhalten; nur die im STYLISTIC_TYPEN-Set gelisteten Typen werden
-// nach Erreichen von `cap` verworfen. Reihenfolge bleibt erhalten (der Prompt hat
-// nach Textposition sortiert).
-function capStylisticFehler(fehler, cap = DEFAULT_STYLISTIC_CAP) {
+// gekappt. Die Findings tragen kein Schwere-Feld (das Modell hat nach Schwere schon
+// selbst ausgewählt); der Backstop verteilt die behaltenen Funde darum gleichmässig
+// über den Text: Rang nach Textposition (Fundstelle von `original` in `text`, sonst
+// Array-Reihenfolge), gleichmässig gestreut inkl. erstem und letztem Fund. So
+// verliert das Ende eines langen Abschnitts nicht systematisch alle Stil-Funde.
+// Die Array-Reihenfolge der behaltenen Einträge bleibt erhalten.
+function capStylisticFehler(fehler, cap = DEFAULT_STYLISTIC_CAP, text = null) {
   if (!Array.isArray(fehler)) return fehler;
-  let kept = 0;
-  return fehler.filter(f => {
-    if (!STYLISTIC_TYPEN.has(f?.typ)) return true;   // objektiv/Konsistenz → nie kappen
-    if (kept < cap) { kept++; return true; }
-    return false;
-  });
+  const stilIdx = [];
+  fehler.forEach((f, i) => { if (STYLISTIC_TYPEN.has(f?.typ)) stilIdx.push(i); });
+  const n = stilIdx.length;
+  if (n <= cap) return fehler;
+  const pos = (i) => {
+    if (typeof text === 'string' && fehler[i]?.original) {
+      const p = text.indexOf(fehler[i].original);
+      if (p >= 0) return p;
+    }
+    return -1;
+  };
+  // Stabil nach Position sortieren; nicht auffindbare Funde behalten ihren
+  // Platz relativ zum Vorgänger (Position = die des vorherigen auffindbaren).
+  let last = -1;
+  const ranked = stilIdx
+    .map((i, k) => { const p = pos(i); if (p >= 0) last = p; return { i, p: p >= 0 ? p : last, k }; })
+    .sort((a, b) => a.p - b.p || a.k - b.k);
+  const keep = new Set();
+  // Gleichmässige Stichprobe über die Ränge, beide Enden eingeschlossen: der
+  // erste und der letzte Fund des Abschnitts bleiben immer drin.
+  if (cap === 1) keep.add(ranked[0].i);
+  else for (let j = 0; j < cap; j++) keep.add(ranked[Math.round(j * (n - 1) / (cap - 1))].i);
+  return fehler.filter((f, i) => !STYLISTIC_TYPEN.has(f?.typ) || keep.has(i));
 }
 
-// Cap aus app_settings (Admin-tunebar), Default 10 – analog ai.lektorat_batch_concurrency.
-// Derselbe Wert steht als Mengen-Obergrenze im Prompt (promptOpts.stylisticCap): dort
-// priorisiert das Modell nach Schwere, dieser Backstop schneidet nur nach Textposition.
-// Laufen beide auseinander, kappt der Backstop die guten Funde am Seitenende.
+// Regler aus app_settings (Admin-tunebar), Default 10 – analog ai.lektorat_batch_concurrency.
+// Bedeutung: Stil-Funde pro STYLISTIC_CAP_UNIT_CHARS Zeichen Text.
 function stylisticCap() {
   const n = parseInt(appSettings.get('ai.lektorat_stylistic_cap'), 10);
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_STYLISTIC_CAP;
 }
 
+// Wirksame Obergrenze für EINEN Abschnitt — einzige Quelle für Prompt
+// (promptOpts.stylisticCap) und Backstop (finalizeFehler). `textLen` ist die Länge
+// des Prompt-Texts (htmlToTextForPrompt-Ausgabe), damit Modell und Backstop dieselbe
+// Zahl sehen; laufen beide auseinander, kappt der Backstop gute Funde.
+// Abschnitte bis eine Einheit behalten den Reglerwert, längere skalieren
+// proportional, gedeckelt auf min(5 × Regler, 200).
+function effectiveStylisticCap(textLen, base = stylisticCap()) {
+  const len = Number.isFinite(textLen) && textLen > 0 ? textLen : 0;
+  const scaled = Math.round(base * len / STYLISTIC_CAP_UNIT_CHARS);
+  const max = Math.min(base * STYLISTIC_CAP_MAX_FACTOR, STYLISTIC_CAP_ABS_MAX);
+  return Math.max(base, Math.min(scaled, max));
+}
+
 // Lauf-Parameter, die den Output formen, aber in keinem Prompt-String stecken: die
 // Stil-Obergrenze und die Pass-Aufteilung (Split an/aus, Zahl der Objektiv-Läufe,
 // Konsens-Schwelle). Gehören in die Cache-Signatur, sonst liefert der Cache nach
-// einer Umstellung das Ergebnis der alten Konfiguration.
-function _runSig(local) {
+// einer Umstellung das Ergebnis der alten Konfiguration. `sc` ist die wirksame
+// Obergrenze dieses Abschnitts: kurze Abschnitte behalten so ihre Cache-Zeilen.
+function _runSig(local, textLen = 0) {
   const split = !local && splitEnabled();
-  return { sc: stylisticCap(), sp: split ? `${objektivRuns()}/${consensusThreshold()}` : 0 };
+  return { sc: effectiveStylisticCap(textLen), sp: split ? `${objektivRuns()}/${consensusThreshold()}` : 0 };
 }
 
 function validateLektoratFehler(fehler, locale, validTypen) {
@@ -116,15 +158,19 @@ function validateLektoratFehler(fehler, locale, validTypen) {
 // `validTypen` ist das Typ-Set des Buchtyp-Profils – Findings mit profilfremdem
 // Typ werden verworfen. Greift auch auf dem Cache-Pfad: eine Buchtyp-Umstellung
 // soll narrativ geprägte Alt-Findings nicht durchlassen.
-// `neighbour` = { text, excerpts } der Seite und ihrer Kontext-Auszüge.
+// `neighbour` = { text, excerpts } der Seite und ihrer Kontext-Auszüge; `text` ist
+// der Prompt-Text und bestimmt die wirksame Stil-Obergrenze (effectiveStylisticCap).
 function finalizeFehler(fehler, locale, validTypen, neighbour = null) {
   const valid = validateLektoratFehler(fehler, locale, validTypen);
   const own = neighbour ? dropNeighbourFindings(valid, neighbour.text, neighbour.excerpts) : valid;
-  return capStylisticFehler(dedupFehler(own), stylisticCap());
+  const text = neighbour?.text ?? null;
+  const cap = effectiveStylisticCap(text ? text.length : 0);
+  return capStylisticFehler(dedupFehler(own), cap, text);
 }
 
 module.exports = {
   NON_ERROR_RE, STYLISTIC_TYPEN,
-  dedupFehler, capStylisticFehler, stylisticCap, _runSig,
+  STYLISTIC_CAP_UNIT_CHARS,
+  dedupFehler, capStylisticFehler, stylisticCap, effectiveStylisticCap, _runSig,
   validateLektoratFehler, finalizeFehler,
 };

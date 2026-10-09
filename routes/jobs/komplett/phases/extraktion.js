@@ -627,7 +627,8 @@ async function runPhase1(ctx) {
       // 128K-Ceiling inkl. adaptive-Thinking-Tokens), verwirft das nicht den Job – wir weichen
       // auf Multi-Pass aus (kapitelweise/geteilte Chunks). Nur Claude + echte Truncation; ein
       // eigener, kleinerer perChunkLimit erzwingt auch bei einem einzelnen grossen Kapitel einen
-      // Split. AbortError + andere Fehler bleiben fatal.
+      // Split — besteht es aus einem einzigen Abschnitt, wird der in Teile zerlegt
+      // (shared/chunking.js). AbortError + andere Fehler bleiben fatal.
       if (e?.message === 'job.error.aiTruncated' && providerClass(effectiveProvider) === 'cloud') {
         const fbPerChunk = Math.max(10000, Math.floor(extractLimit / 2));
         const { chunkOrder: fbOrder, chunks: fbChunks } = splitGroupsIntoChunks(groups, groupOrder, fbPerChunk);
@@ -635,7 +636,7 @@ async function runPhase1(ctx) {
           log.warn(`Single-Pass-Extraktion truncated – Fallback auf Multi-Pass (${fbOrder.length} Chunks à ≤${fbPerChunk} Zeichen).`);
           result = await extractMultiPass(ctx, { chunks: fbChunks, chunkOrder: fbOrder, claudeExtractCap, callExtract });
         } else {
-          throw e; // ein einziges, nicht weiter teilbares Kapitel – kein Fallback möglich
+          throw e; // ein einziger, nicht weiter teilbarer Chunk – kein Fallback möglich
         }
       } else {
         throw e;

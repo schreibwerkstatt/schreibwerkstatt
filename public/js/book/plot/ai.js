@@ -453,7 +453,7 @@ export const aiMethods = {
   // → Seite (Szenen erben serverseitig ihre page_id fürs Anspringen).
   gotoOccurrence(occ) {
     this.closeBeatOccPopover();
-    if (occ && occ.page_id) window.__app.gotoPageById(occ.page_id);
+    if (occ && occ.page_id) window.__app.gotoPageById(occ.page_id, { snippet: occ.snippet });
   },
 
   // Promotion aus dem Fundstellen-Popover: einen GEPLANTEN Beat, der offenbar

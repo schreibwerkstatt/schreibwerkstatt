@@ -189,9 +189,13 @@ selectionchange / input / scroll / focus → _focusUpdateActive(…)
 8. Idempotent: `_syncPageStatsAfterSave` + `updatePageView` — garantiert dass Stats-Badges + View-HTML den aktuellen `originalHtml` reflektieren.
 9. `_focusState='idle'`.
 
+## Schreibstelle pro Abschnitt
+
+[caret-memory.js](../public/js/editor/focus/caret-memory.js): beim Exit merkt sich der Fokusmodus die Caret-Stelle (`data-bid` des Top-Level-Blocks + Zeichen-Offset, `localStorage` `focus.caret.<pageId>`) — **nur wenn sie vor dem letzten Block liegt**. Der nächste Enter setzt den Caret dorthin und holt den Block auf den Anker (`scrollEntryTargetToAnchor`), ohne Auto-Slot. Steht der Caret beim Exit am Ende (letzter Block, oder vorletzter mit leerem Slot dahinter), wird der Eintrag gelöscht und der Enter bleibt der Sprung ans Ende unten. **Why:** ein Kapitel aus einem einzigen langen Abschnitt wurde bei jeder Überarbeitung in der Mitte erst wieder von Hand angescrollt; wer am Ende weiterschreibt, merkt von der Regel nichts. Block ohne `data-bid` (noch nie gespeichert) → nichts gemerkt.
+
 ## Auto-`<p>`-Slot
 
-Beim Enter springt der Caret an Buchende. `jumpToTrailingParagraph` ([dom-blocks.js:23-56](../public/js/editor/focus/dom-blocks.js#L23-L56)):
+Beim Enter ohne gemerkte Schreibstelle springt der Caret an Buchende. `jumpToTrailingParagraph` ([dom-blocks.js:23-56](../public/js/editor/focus/dom-blocks.js#L23-L56)):
 - Letzter Block ist leerer `<p>` → recyceln, `added = null`.
 - Sonst neuen `<p><br></p>` anhängen, `added = p`.
 

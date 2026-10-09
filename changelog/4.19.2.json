@@ -1,0 +1,61 @@
+{
+  "version": "4.19.2",
+  "date": "2026-10-09",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Notebook-Editor: Mit der Schere in der Werkzeugleiste oder «/teilen» teilen Sie einen Abschnitt an der Cursorstelle. Der zweite Teil wird ein neuer Abschnitt direkt dahinter.",
+      "en": "Notebook editor: use the scissors in the toolbar or «/teilen» to split a section at the cursor. The second part becomes a new section right after it."
+    },
+    {
+      "kind": "neu",
+      "de": "Fokusmodus: Wer ihn mitten im Text verlässt, landet beim nächsten Öffnen wieder an derselben Stelle. Wer am Ende aufhört, beginnt wie gewohnt am Ende.",
+      "en": "Focus mode: if you leave it in the middle of the text, you return to the same spot next time. If you stop at the end, it opens at the end as before."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Seitenleiste: Ein Kapitel mit nur einem Abschnitt steht jetzt als eine Zeile da, ein Klick öffnet direkt den Text. Umbenennen ändert Kapitel- und gleichnamigen Abschnittsnamen zusammen.",
+      "en": "Sidebar: a chapter with only one section now shows as a single row, and one click opens the text. Renaming changes the chapter and its same-named section together."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Die Kapitel-Bewertung steht jetzt in jedem Buch zur Verfügung, auch wenn jedes Kapitel nur einen Abschnitt hat. Sie finden sie auch im Rechtsklick-Menü unter «Kapitel bewerten».",
+      "en": "Chapter review is now available in every book, even when each chapter has only one section. You also find it in the right-click menu under «Review chapter»."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Neues Kapitel: In Büchern mit einem Abschnitt pro Kapitel entsteht der erste Abschnitt gleich mit und öffnet sich zum Schreiben.",
+      "en": "New chapter: in books with one section per chapter, the first section is created along with it and opens for writing."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lese-Link und Bucheditor zeigen keine zweite Überschrift mehr, wenn der erste Abschnitt so heisst wie sein Kapitel.",
+      "en": "Reading links and the book editor no longer show a second heading when the first section has the same name as its chapter."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fundstellen aus Suche, Motiv-Werkstatt, Figurenbogen, Plot und Redundanz-Radar springen jetzt an die Stelle im Text und heben sie hervor, statt am Anfang des Abschnitts zu landen.",
+      "en": "Matches from search, the motif workshop, the figure arc, the plot board and the redundancy radar now jump to the spot in the text and highlight it, instead of landing at the start of the section."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Suche und Buch-Chat finden in langen Abschnitten jetzt mehrere passende Stellen statt nur einer. Der Buch-Chat liest lange Kapitel auch bis zum Ende.",
+      "en": "Search and the book chat now find several matching passages in long sections instead of just one. The book chat also reads long chapters all the way to the end."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lektorat: Lange Abschnitte bekommen jetzt mehr Stil-Hinweise, verteilt über den ganzen Text statt nur vom Anfang. Die Einstellung zählt pro 10'000 Zeichen.",
+      "en": "Editing review: long sections now get more style notes, spread across the whole text instead of only the beginning. The setting counts per 10,000 characters."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Kapitel-Bewertung, Buch-Bewertung und Komplettanalyse kommen jetzt auch mit sehr langen Abschnitten zurecht, wenn ein KI-Zugang mit kleinem Textfenster eingestellt ist.",
+      "en": "Chapter review, book review and the full analysis now also handle very long sections when an AI access with a small text window is set up."
+    },
+    {
+      "kind": "behoben",
+      "de": "Nach dem Teilen eines Buchs erschien ein neues Mitglied in Verlaufslisten erst nach dem Neuladen mit seinem Namen statt seiner E-Mail-Adresse.",
+      "en": "After sharing a book, a new member only showed up with their name instead of their email address in history lists after reloading."
+    }
+  ]
+}

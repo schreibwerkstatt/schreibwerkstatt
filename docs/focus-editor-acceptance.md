@@ -23,7 +23,7 @@ bzw. Cmd/Ctrl+Shift+E.
 
 | # | Handgriff | Erwartung |
 |---|-----------|-----------|
-| 1 | Fokusmodus betreten | Overlay füllt den Bildschirm, Caret blinkt am Buchende, Schreibzeile auf der Bildschirmmitte |
+| 1 | Fokusmodus betreten (zuletzt am Ende verlassen) | Overlay füllt den Bildschirm, Caret blinkt am Buchende, Schreibzeile auf der Bildschirmmitte |
 | 2 | Drei Absätze tippen (mit Enter dazwischen) | Zeile bleibt auf der Mitte, wandert **nicht** schrittweise nach unten |
 | 3 | Cmd/Ctrl+Home, dann in die **erste** Zeile klicken und tippen | Erste Zeile liegt auf der Schreiblinie, nicht am oberen Rand |
 | 4 | In den **letzten** Absatz klicken und tippen | Letzte Zeile erreicht die Schreiblinie (nicht „man kommt nur bis zum zweitletzten") |
@@ -35,6 +35,13 @@ bzw. Cmd/Ctrl+Shift+E.
 | 10 | Wieder betreten, Fenster schmal ziehen (< 500 px) | Schreiblinie sitzt weiter auf der Mitte, kein horizontaler Overflow |
 | 11a | Einen Satz tippen, **eine Sekunde warten** (nicht in den Text klicken!), einen zweiten Satz tippen, **einmal** Cmd/Ctrl+Z | Nur der zweite Satz ist weg, der erste steht. Danach Cmd/Ctrl+Shift+Z holt ihn zurück. In **Safari** prüfen: dort nahm der Browser-Undo die ganze Strecke (Invariante 19) |
 | 11 | Kurz vor der Umbruchkante weiterschreiben (Wörter mit Leerschlag), danach Shift+Enter mitten im Absatz **und** am Absatzende; Escape, Seite erneut öffnen | Das letzte Wort bleibt beim Leerschlag auf seiner Zeile (fällt nicht ab und springt zurück). Shift+Enter erzeugt an beiden Stellen eine sichtbare neue Zeile, die nach dem erneuten Öffnen noch da ist |
+
+Zusätzlich bei Änderungen an Enter/Exit oder der Schreibstelle ([caret-memory.js](../public/js/editor/focus/caret-memory.js)):
+
+- **13** — In der Seitenmitte klicken, ein Wort tippen, Escape, wieder betreten:
+  Caret steht an derselben Stelle, der Absatz liegt auf der Schreiblinie, **kein**
+  leerer Absatz am Ende angehängt. Dann ans Ende (Cmd/Ctrl+End), Escape, wieder
+  betreten: Caret wieder am Buchende wie in Griff 1.
 
 Zusätzlich bei Änderungen an Save/Draft/Exit:
 

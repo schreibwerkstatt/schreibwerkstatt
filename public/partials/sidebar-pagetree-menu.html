@@ -36,6 +36,12 @@
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#spell-check"/></svg>
           <span x-text="t('pagetreeCtx.lektorieren')"></span>
         </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="_pagetreeCtxChapterId() != null"
+                @click="pagetreeCtxReviewChapter()">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#scale"/></svg>
+          <span x-text="t('pagetreeCtx.reviewChapter')"></span>
+        </button>
         <div class="context-menu-sep" role="separator"></div>
         <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
                 @click="pagetreeCtxShare()">
@@ -66,7 +72,7 @@
             </button>
           </div>
         </template>
-        <template x-if="pageTreeMenuTarget.kind === 'chapter' && canEdit()">
+        <template x-if="_pagetreeCtxChapterId() != null && canEdit()">
           <div>
             <div class="context-menu-sep" role="separator"></div>
             <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"

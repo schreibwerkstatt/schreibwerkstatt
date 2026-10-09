@@ -2,6 +2,32 @@
 // abgeleitete Gliederung + IntersectionObserver für die aktive Markierung.
 // Methoden in den Card-Scope gespreadet (gemeinsames `this`).
 
+// Liste der Outline-Items, abgeleitet aus blocks: pro Kapitel ein Knoten mit
+// seinen Pages, Pages vor dem ersten Kapitel in einem `solos`-Bucket. Beide
+// Knoten-Typen tragen dieselbe `pages`-Liste, damit das Template EINEN Zweig
+// hat. `single`: Kapitel aus genau einem Abschnitt — die Outline zeigt es als
+// EINE Zeile (Kapitelname, Klick springt zum Abschnitt) statt Kapitelzeile +
+// gleichlautender Abschnittszeile darunter.
+export function buildOutlineNodes(blocks) {
+  const out = [];
+  let currentChapter = null;
+  let solos = [];
+  for (const b of blocks) {
+    if (b.kind === 'chapter') {
+      if (solos.length) { out.push({ kind: 'solos', chapterId: null, pages: solos }); solos = []; }
+      currentChapter = { kind: 'chapter', chapterId: b.chapterId, name: b.name, pages: [] };
+      out.push(currentChapter);
+    } else {
+      const item = { kind: 'page', pageId: b.pageId, name: b.name, block: b };
+      if (currentChapter) currentChapter.pages.push(item);
+      else solos.push(item);
+    }
+  }
+  if (solos.length) out.push({ kind: 'solos', chapterId: null, pages: solos });
+  for (const n of out) n.single = n.kind === 'chapter' && n.pages.length === 1;
+  return out;
+}
+
 export const bookEditorOutlineMethods = {
     _initOutlineObserver() {
       this._teardownOutlineObserver();

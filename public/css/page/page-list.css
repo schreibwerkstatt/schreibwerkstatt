@@ -83,6 +83,12 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+/* Abweichender Abschnittsname unter dem Kapitelnamen einer Ein-Abschnitt-Zeile. */
+.page-name > .page-item-section-name {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+  align-self: center;
+}
 
 .page-status-dot {
   flex-shrink: 0;

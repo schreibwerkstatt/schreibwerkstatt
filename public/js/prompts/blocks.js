@@ -16,7 +16,9 @@
 // Typ-Enum des Laufs (`typen`) und filtern ihre Verweise darauf – im Stil-Pass
 // des Claude-Splits existieren die objektiven Typen nicht.
 
-import { verweisTypen, verweisZiel, OBJEKTIV_VERWEIS } from './lektorat-typen.js';
+import {
+  verweisTypen, verweisZiel, OBJEKTIV_VERWEIS, EINHEIT_SZENE, EINHEIT_EINTRAG,
+} from './lektorat-typen.js';
 
 // Grammatik + Zeichensetzung/Interpunktion (beide unter typ «grammatik»). Locale-scharf.
 // Beide Fehlergruppen sind objektiv und mechanisch – sie werden SYSTEMATISCH geprüft und
@@ -224,16 +226,16 @@ Wörterbuch des Autors (diese Schreibweisen sind gewollt und KEINE Rechtschreibf
 ${liste}`;
 }
 
-export function _buildShowVsTellBlock(einheit = 'szene') {
+export function _buildShowVsTellBlock(einheit = EINHEIT_SZENE) {
   // Die Meldeschwelle hängt an der Bewertungseinheit. Der Typ bleibt überall
   // derselbe (Zustand behauptet statt gezeigt ist in jeder Textsorte ein Befund);
   // nur die Frage, WANN er einer ist, verschiebt sich. Im Tagebuch darf der
   // Vorschlag nichts erfinden, was nicht schon im Eintrag steht – eine erfundene
   // Szene wäre schlimmer als der Zustand, den sie ersetzt.
-  const korrektur = einheit === 'eintrag'
+  const korrektur = einheit === EINHEIT_EINTRAG
     ? '- «korrektur»: derselbe Satz umformuliert mit der konkreten Beobachtung, die der Eintrag bereits enthält (Worte, Geräusch, Wetter, Uhrzeit, Gegenstand) – NICHTS ergänzen, was nicht im Material steht (NICHT der ganze Absatz – nur den einen Satz ersetzen)'
     : '- «korrektur»: derselbe Satz umformuliert mit konkreten Sinneseindrücken, Handlungen, Körpersprache oder Details, die das Gleiche zeigen (NICHT der ganze Absatz – nur den einen Satz ersetzen)';
-  const schwelle = einheit === 'eintrag'
+  const schwelle = einheit === EINHEIT_EINTRAG
     ? `- Nur melden, wenn der Text den Zustand BEHAUPTET statt beobachtet – nicht, weil eine szenische Variante lebendiger wäre. Ein Tagebucheintrag darf Zustände benennen und abkürzen, ohne sie auszumalen («müde», «kurz vor dem Termin», «alles wie immer»): Abbreviaturen sind sein Material, kein Mangel. Melden nur, wo die Behauptung dem Eintrag seine Substanz nimmt, obwohl das Material sie hergibt.
 - Selbsttest: Trägt der Eintrag so, wie er dasteht? Wenn ja, weglassen. Ein Finding ist hier erst berechtigt, wenn die Abstraktion den Eintrag ärmer macht – nicht bloss kürzer.`
     : `- Nur melden, wenn eine szenische Darstellung den Text spürbar lebendiger macht — nicht jede abstrakte Aussage muss umgeschrieben werden (z.B. in Zusammenfassungen, Rückblenden oder schnellen Übergängen ist Telling erlaubt und stilistisch korrekt)

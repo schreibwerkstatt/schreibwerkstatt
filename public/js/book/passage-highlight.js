@@ -1,12 +1,15 @@
-// Motiv-Werkstatt — Fundstelle im Seitentext hervorheben (reines Lesen, keine
-// DOM-Mutation): nach dem Sprung auf die Seite wird der Occurrence-Snippet im
-// gerenderten `.page-content-view` gesucht und via CSS Custom Highlight API
-// (::highlight(motiv-hit), Muster wie Find/TTS) markiert + zentriert. Findet die
-// Passage nicht (semantischer Chunk quer über Blockgrenzen), wird auf das längste
-// distinktive Wort zurückgefallen; findet auch das nichts, passiert nichts (der
-// Sprung auf die Seite bleibt bestehen).
+// Fundstelle im Abschnittstext hervorheben (reines Lesen, keine DOM-Mutation):
+// nach dem Sprung auf einen Abschnitt wird der Snippet im gerenderten
+// `.page-content-view` gesucht und via CSS Custom Highlight API
+// (::highlight(passage-hit), Muster wie Find/TTS) markiert + zentriert — damit
+// landet ein Sprung in einen langen Abschnitt (ein ganzes Kapitel) an der
+// Stelle statt an seinem Anfang. Findet die Passage nicht (semantischer Chunk
+// quer über Blockgrenzen), wird auf das längste distinktive Wort
+// zurückgefallen; findet auch das nichts, passiert nichts (der Sprung auf den
+// Abschnitt bleibt bestehen). Einstieg für Konsumenten:
+// app-navigation.js#gotoPageById(pageId, { snippet }).
 
-const HL_NAME = 'motiv-hit';
+const HL_NAME = 'passage-hit';
 const MAX_PHRASE_WORDS = 12;
 
 function _clear() {
@@ -64,17 +67,31 @@ function _findRange(root, snippet) {
   return r;
 }
 
-// Öffentlicher Einstieg: nach der Navigation aufgerufen. Wartet per rAF, bis die
-// Seite gerendert ist (bis ~40 Frames), markiert dann + scrollt zentriert. Räumt
-// die Markierung nach einigen Sekunden wieder ab.
-export function highlightOccurrenceOnPage(snippet) {
+// Snippets kommen teils als Markup (Suchtreffer mit <mark>) oder mit
+// Auslassungszeichen am Rand — beides steht nicht im Abschnittstext.
+function _plainSnippet(snippet) {
+  return String(snippet || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/^[\s…]+|[\s…]+$/g, '')
+    .replace(/\.\.\.$/, '');
+}
+
+// Öffentlicher Einstieg: nach der Navigation aufgerufen. Wartet per rAF, bis
+// der Zielabschnitt gerendert ist (bis ~60 Frames; mit `pageId` erst, wenn
+// genau dieser offen ist — sonst suchte der erste Frame noch im vorigen
+// Abschnitt), markiert dann + scrollt zentriert. Räumt die Markierung nach
+// einigen Sekunden wieder ab.
+export function highlightOccurrenceOnPage(snippet, { pageId = null } = {}) {
   _clear();
-  if (!snippet || !window.CSS?.highlights || typeof window.Highlight === 'undefined') return;
+  const text = _plainSnippet(snippet);
+  if (!text || !window.CSS?.highlights || typeof window.Highlight === 'undefined') return;
   let tries = 0;
   const attempt = () => {
-    const root = document.querySelector('.page-content-view');
+    const onTarget = pageId == null || String(window.__app?.currentPage?.id) === String(pageId);
+    const root = onTarget ? document.querySelector('.page-content-view') : null;
     if (root && root.textContent && root.textContent.trim()) {
-      const r = _findRange(root, snippet);
+      const r = _findRange(root, text);
       if (r) {
         try {
           window.CSS.highlights.set(HL_NAME, new window.Highlight(r));
@@ -84,7 +101,7 @@ export function highlightOccurrenceOnPage(snippet) {
         return;
       }
     }
-    if (tries++ < 40) requestAnimationFrame(attempt);
+    if (tries++ < 60) requestAnimationFrame(attempt);
   };
   requestAnimationFrame(attempt);
 }

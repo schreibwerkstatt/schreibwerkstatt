@@ -12,7 +12,8 @@ const bookAccess = require('../../db/book-access');
 const { toIntId } = require('../../lib/validate');
 const { resolveChapterBookId } = require('../../lib/content-ownership');
 const { guardBook, sessionEmail } = require('../../lib/acl');
-const { jsonBody, _validDeviceId, _deviceTokenLabel, _guardPage, _fail } = require('./shared');
+const { jsonBody, NAME_MAX, _validDeviceId, _deviceTokenLabel, _guardPage, _fail } = require('./shared');
+const { htmlToPlainText } = require('../../lib/html-text');
 const logger = require('../../logger');
 
 function register(router) {
@@ -254,6 +255,61 @@ function register(router) {
       if (e.code === 'TARGET_BOOK_NOT_FOUND') return res.status(404).json({ error_code: 'TARGET_BOOK_NOT_FOUND' });
       if (e.code === 'CHAPTER_NOT_IN_TARGET') return res.status(400).json({ error_code: 'CHAPTER_NOT_IN_TARGET' });
       _fail(res, e, 'POST /content/pages/:id/move');
+    }
+  });
+
+  // POST /content/pages/:page_id/split — Abschnitt teilen (Notebook-Editor).
+  // Body: { head_html, tail_html, new_name, expected_updated_at?, device_id? }.
+  // Kopf ersetzt den Body der Seite, Schwanz wird neue Seite direkt dahinter im
+  // selben Kapitel. Gleiche Schranken wie der Save-Pfad: editor-Rolle, fremder
+  // Page-Lock → 423, Stempel-Abweichung → 409. Beide Haelften gehen durch
+  // denselben Sanitizer wie jeder Save (Facade-Chokepoint).
+  router.post('/pages/:page_id/split', jsonBody, async (req, res) => {
+    const pageId = toIntId(req.params.page_id);
+    if (!pageId) return res.status(400).json({ error_code: 'INVALID_PAGE_ID' });
+    if (_guardPage(req, res, pageId, 'editor') == null) return;
+    const b = req.body || {};
+    const name = typeof b.new_name === 'string' ? b.new_name.trim() : '';
+    if (!name) return res.status(400).json({ error_code: 'NAME_REQUIRED' });
+    if (name.length > NAME_MAX) return res.status(400).json({ error_code: 'NAME_TOO_LONG' });
+    if (typeof b.head_html !== 'string' || typeof b.tail_html !== 'string') {
+      return res.status(400).json({ error_code: 'HTML_REQUIRED' });
+    }
+    if (!htmlToPlainText(b.head_html).trim() || !htmlToPlainText(b.tail_html).trim()) {
+      return res.status(400).json({ error_code: 'SPLIT_EMPTY_PART' });
+    }
+    const email = sessionEmail(req);
+    const blocking = bookAccess.getBlockingLockFor(pageId, email);
+    if (blocking) return res.status(423).json({
+      error_code: 'PAGE_LOCKED',
+      locked_by_email: blocking.locked_by_email,
+      expires_at: blocking.expires_at,
+    });
+    let deviceId = null;
+    if (_validDeviceId(b.device_id)) {
+      try { appUsersDevices.upsertDevice(b.device_id, email, req.get('user-agent') || '', _deviceTokenLabel(req)); deviceId = b.device_id; }
+      catch { /* nicht-fatal: Seite traegt dann kein Geraet */ }
+    }
+    try {
+      const out = await contentStore.splitPage(pageId, {
+        headHtml: b.head_html,
+        tailHtml: b.tail_html,
+        newName: name,
+        expectedUpdatedAt: b.expected_updated_at || null,
+        deviceId,
+      }, req);
+      res.json(out);
+    } catch (e) {
+      if (e.code === 'PAGE_CONFLICT') {
+        return res.status(409).json({
+          error_code: 'PAGE_CONFLICT',
+          server_updated_at: e.serverUpdatedAt || null,
+          server_editor_email: e.serverEditorEmail || null,
+          server_is_self: !!email && e.serverEditorEmail === email,
+        });
+      }
+      if (e.code === 'NOT_FOUND') return res.status(404).json({ error_code: 'PAGE_NOT_FOUND' });
+      _fail(res, e, 'POST /content/pages/:id/split');
     }
   });
 

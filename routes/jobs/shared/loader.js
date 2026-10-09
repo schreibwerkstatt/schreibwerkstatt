@@ -5,6 +5,7 @@ const { i18nError } = require('./jobs');
 const { htmlToText } = require('./ai');
 const { pagePreviewTexts } = require('../../../db/content-names');
 const { UNGROUPED_CHAPTER_NAME } = require('../../../lib/ungrouped-chapter');
+const { splitGroupsIntoChunks, halveChunkPages, pageSigSuffix } = require('./chunking');
 
 // Multi-Pass-Grenzen skalieren mit dem Input-Budget (context_window − max_tokens_out).
 // SINGLE_PASS_LIMIT: Schwelle, ab der in Chunks zerlegt wird. 70% des Budgets für
@@ -160,39 +161,7 @@ function groupByChapter(pageContents) {
   return { groupOrder, groups };
 }
 
-/**
- * Teilt Kapitel-Gruppen in kleinere Chunks auf, wenn sie perChunkLimit überschreiten.
- * Nicht aufzuteilende Kapitel behalten ihren Original-Key (bestehende Cache-Einträge bleiben gültig).
- * Sub-Chunks erhalten den Key "${chapterKey}__sub${idx}".
- * Gibt { chunkOrder, chunks } zurück – gleiche Struktur wie groupByChapter, drop-in verwendbar.
- */
-function splitGroupsIntoChunks(groups, groupOrder, perChunkLimit) {
-  const chunkOrder = [], chunks = new Map();
-  for (const key of groupOrder) {
-    const group = groups.get(key);
-    const totalChars = group.pages.reduce((s, p) => s + p.text.length, 0);
-    if (totalChars <= perChunkLimit) {
-      chunkOrder.push(key);
-      chunks.set(key, group);
-      continue;
-    }
-    let currentPages = [], currentChars = 0, subIdx = 0;
-    for (const page of group.pages) {
-      if (currentChars + page.text.length > perChunkLimit && currentPages.length > 0) {
-        chunkOrder.push(`${key}__sub${subIdx}`);
-        chunks.set(`${key}__sub${subIdx}`, { name: group.name, pages: currentPages });
-        currentPages = []; currentChars = 0; subIdx++;
-      }
-      currentPages.push(page);
-      currentChars += page.text.length;
-    }
-    if (currentPages.length > 0) {
-      chunkOrder.push(`${key}__sub${subIdx}`);
-      chunks.set(`${key}__sub${subIdx}`, { name: group.name, pages: currentPages });
-    }
-  }
-  return { chunkOrder, chunks };
-}
+// splitGroupsIntoChunks + Teil-Split übergrosser Abschnitte: ./chunking.js (pure).
 
 // Formatiert den Buchtext für Single-Pass-KI-Calls mit klarer Kapitelstruktur:
 // ## Kapitelname als Abschnittsmarker, ### Seitentitel innerhalb.
@@ -210,5 +179,5 @@ function buildSinglePassBookText(groups, groupOrder) {
 module.exports = {
   SINGLE_PASS_LIMIT, PER_CHUNK_LIMIT, BATCH_SIZE, chunkLimitsFor, resolveExtractSinglePassLimit,
   loadOrderedBookContents,
-  loadPageContents, groupByChapter, splitGroupsIntoChunks, buildSinglePassBookText,
+  loadPageContents, groupByChapter, splitGroupsIntoChunks, halveChunkPages, pageSigSuffix, buildSinglePassBookText,
 };

@@ -147,6 +147,8 @@ Eigener Verlauf pro Seite, das native Browser-Undo wird **nie** bedient: `onBloc
 - Klapp-Marker ist das App-Pattern `.history-chevron` (Mask-Icon + `.open`-Rotation, siehe DESIGN.md), kein eigener Glyph/Pseudo-Chevron.
 - `scrollToBlock(pageId)` — smooth-scroll aus Outline-Klick; setzt `visiblePageId` sofort optimistisch.
 - `toggleChapterCollapse(chapterId)` — Map `collapsedChapters` togglet Sichtbarkeit der Pages unter einem Kapitel im Outline (Stream bleibt vollständig).
+- `buildOutlineNodes(blocks)` ([book-editor/outline.js](../public/js/cards/book-editor/outline.js)) — Kapitel aus genau einem Abschnitt (`node.single`) erscheinen als **eine** Zeile (Kapitelname, Seiten-Optik mit Status-Punkt, Klick springt zum Abschnitt), ohne Kapitelzeile, Zähler und Collapse.
+- Stream: heisst der erste Abschnitt eines Kapitels wie das Kapitel (`block.dupTitle`, `sameStructureTitle` aus [structure-title.js](../public/js/structure-title.js)), bleibt der Name in der Abschnitts-Caption leer — Status und Plaketten bleiben stehen.
 
 ## Pflicht-Invarianten
 

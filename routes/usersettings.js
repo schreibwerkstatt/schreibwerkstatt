@@ -316,8 +316,8 @@ router.get('/profile-stats-history', (req, res) => {
 });
 
 /**
- * Email → Display-Name-Map fuer Revision-Listen, Tree-Toasts, Konflikt-Hinweise
- * und die Share-Mitgliederliste. Der Sichtkreis (eigener Account + Co-Mitglieder
+ * Email → Display-Name-Map fuer Revision-Listen, Tree-Toasts, Konflikt-Hinweise,
+ * Fassungen und Präsenz-Initialen. Der Sichtkreis (eigener Account + Co-Mitglieder
  * der eigenen Bücher) ist in `db/user-directory.js` festgeschrieben.
  */
 router.get('/users-light', (req, res) => {

@@ -83,3 +83,34 @@ test('leeres Input → leeres html + leere toc', () => {
   assert.deepEqual(renderStreamHtml([]), { html: '', toc: [] });
   assert.deepEqual(renderStreamHtml(null), { html: '', toc: [] });
 });
+
+test('Erster Abschnitt gleichnamig mit Kapitel: keine zweite Ueberschrift, kein TOC-Eintrag', () => {
+  const { html, toc } = renderStreamHtml([
+    { kind: 'chapter', name: 'Kapitel 3', depth: 0, key: 'c0', chapterId: 7 },
+    { kind: 'page', name: '  kapitel   3 ', html: '<p data-bid="b1">Text</p>', depth: 0, key: 'p1', id: 1, chapterId: 7 },
+    { kind: 'page', name: 'Kapitel 3', html: '<p>zwei</p>', depth: 0, key: 'p2', id: 2, chapterId: 7 },
+  ]);
+  assert.equal((html.match(/ms-page__title/g) || []).length, 1, 'nur der zweite Abschnitt traegt einen Titel');
+  assert.ok(html.includes('<p data-bid="b1">Text</p>'), 'Text des ersten Abschnitts bleibt');
+  assert.deepEqual(toc.map(t => t.label), ['Kapitel 3', 'Kapitel 3']);
+  assert.deepEqual(toc.map(t => t.level), [1, 2]);
+});
+
+test('Kapitel-Share: gleichnamiger erster Abschnitt verdoppelt den h1-Kopf nicht', () => {
+  const { html, toc } = renderStreamHtml([
+    { kind: 'chapter', name: 'Kap', depth: 0, key: 'c0', chapterId: 7 },
+    { kind: 'page', name: 'Kap', html: '<p>x</p>', depth: 0, key: 'p1', id: 1, chapterId: 7 },
+  ], { pageTag: 'h2', omitChapterHeaders: true });
+  assert.ok(!html.includes('ms-page__title'));
+  assert.equal(toc.length, 0);
+});
+
+test('Abweichender Name und Beitrag mit Schlagzeile behalten ihre Ueberschrift', () => {
+  const { html } = renderStreamHtml([
+    { kind: 'chapter', name: 'Kap', depth: 0, key: 'c0', chapterId: 7 },
+    { kind: 'page', name: 'Kap', html: '<p>x</p>', depth: 0, key: 'p1', id: 1, chapterId: 7, article: true },
+    { kind: 'chapter', name: 'Kap2', depth: 0, key: 'c1', chapterId: 8 },
+    { kind: 'page', name: 'Szene', html: '<p>y</p>', depth: 0, key: 'p2', id: 2, chapterId: 8 },
+  ]);
+  assert.equal((html.match(/<h3 /g) || []).length, 2);
+});

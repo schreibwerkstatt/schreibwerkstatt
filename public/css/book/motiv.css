@@ -452,11 +452,4 @@
   gap: var(--space-2xs);
   flex-wrap: wrap;
 }
-
-/* Fundstelle im Seitentext (::highlight — global, gesetzt von book/motiv/highlight.js).
-   Semi-transparenter Akzent, funktioniert in Light + Dark ohne DOM-Mutation. */
-::highlight(motiv-hit) {
-  background-color: rgba(124, 58, 237, 0.32);
-  color: inherit;
-}
 }

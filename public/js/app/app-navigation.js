@@ -1,4 +1,5 @@
 import { EVT } from '../events.js';
+import { highlightOccurrenceOnPage } from '../book/passage-highlight.js';
 
 // Figuren/Orte/Szenen-IDs sind INTEGER-PKs; aus Volltext-Treffern (FTS5
 // liefert entity_id als String) und aus Deep-Link-Hashes kommen sie als
@@ -285,10 +286,18 @@ export const appNavigationMethods = {
     if (page) this.selectPage(page);
   },
 
-  gotoPageById(pageId) {
+  // `snippet`: Textstelle, an die gesprungen wird (Fundstellen aus Suche,
+  // Motiven, Figurenbogen, Plot, Buchlandkarte) — sonst landete der Sprung in
+  // einem langen Abschnitt immer an dessen Anfang. Markierung + Scroll in
+  // book/passage-highlight.js; ohne Treffer bleibt es beim Abschnittsanfang.
+  async gotoPageById(pageId, { snippet = '' } = {}) {
     if (!pageId) return;
     const page = this.$store.nav.pages.find(p => String(p.id) === String(pageId));
-    if (page) this.selectPage(page);
+    if (!page) return;
+    await this.selectPage(page);
+    if (snippet && String(this.currentPage?.id) === String(page.id)) {
+      highlightOccurrenceOnPage(snippet, { pageId: page.id });
+    }
   },
 
   gotoChapterById(chapterId) {

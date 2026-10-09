@@ -28,6 +28,9 @@ export const notebookTrampoline = {
   pageEditorZoomOut() { card()?.pageEditorZoomOut(); },
   pageEditorZoomReset() { card()?.pageEditorZoomReset(); },
   normalizeQuotes() { return card()?.normalizeQuotes(); },
+  // «Abschnitt hier teilen» (edit/split.js). `opts.block` = Schnitt vor diesem
+  // Block (Slash-Menü), sonst am Caret (Toolbar).
+  splitSectionHere(opts) { return card()?.splitSectionHere(opts); },
   // Beleg-Picker (Quellenverzeichnis) am Caret öffnen. Einziger Forwarder hier,
   // der NICHT auf `editorNotebookCard` zeigt: der Picker liegt in
   // `editorToolbarCard`, die keinen Selbst-Ref auslegt — darum per Event

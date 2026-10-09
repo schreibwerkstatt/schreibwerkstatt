@@ -1,6 +1,7 @@
 import { CHARS_PER_TOKEN, charBadgeLabel, localDayDiff, localeTag, relativeDay, tzOpts } from '../../utils.js';
 import { htmlToPlainText } from '../../html-text.js';
 import { EVT } from '../../events.js';
+import { sameStructureTitle } from '../../structure-title.js';
 
 // Seiten-Status (Lektorat-Aktualität), Tooltip-Zeilen, Page-Stats-Sync nach Save
 // und Kapitel-Stat-Aggregation. `this` = die Alpine-Komponente (tree-Methoden
@@ -129,6 +130,32 @@ export const treeStatsMethods = {
     if (!item) return 0;
     if (this.pageSearch) return item.pages.length;
     return item.pageTotal ?? item.pages.length;
+  },
+
+  // Kapitel aus genau einem Abschnitt ohne Unterkapitel: die Sidebar zeigt es
+  // als EINE Zeile (Kapitelname, Klick oeffnet den Abschnitt) statt Kapitelkopf
+  // + gleichlautender Abschnittszeile darunter. Bei aktiver Suche tragen die
+  // Such-Kopien gefilterte `pages` — dort zaehlt der ganze Bestand
+  // (`pageTotal`), sonst verschmoelze ein Mehr-Abschnitt-Kapitel mit seinem
+  // einzigen Treffer.
+  // Template-Zugang zur Namensregel (Sidebar: Untertitel nur bei abweichendem
+  // Abschnittsnamen).
+  sameStructureTitle(a, b) { return sameStructureTitle(a, b); },
+
+  // Schreibt das Buch Kapitel aus je genau einem Abschnitt? Massgeblich sind
+  // die Blatt-Kapitel mit Text; ein Buch ohne solche hat noch keine Form und
+  // zaehlt nicht. Konsument: tree/load.js#createChapter (erster Abschnitt
+  // entsteht dann mit dem Kapitel).
+  _bookUsesSingleSectionChapters() {
+    const leaves = (this.$store.nav.tree || []).filter(i =>
+      i.type === 'chapter' && !i.solo && !i.hasChildren && i.pages?.length > 0);
+    return leaves.length > 0 && leaves.every(i => i.pages.length === 1);
+  },
+
+  _isSingleSectionChapter(item) {
+    if (!item || item.type !== 'chapter' || item.solo || item.hasChildren) return false;
+    if (item.pages?.length !== 1) return false;
+    return !this.pageSearch || (item.pageTotal ?? 1) === 1;
   },
 
   // Setzt `item.stats` für jedes Kapitel der aktuellen Tree-Struktur.

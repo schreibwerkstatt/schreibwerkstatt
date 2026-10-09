@@ -9,7 +9,7 @@ const {
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, contentHttpError,
   aiCall, getPrompts, getBookPrompts,
-  loadOrderedBookContents, loadPageContents, groupByChapter, splitGroupsIntoChunks, buildSinglePassBookText,
+  loadOrderedBookContents, loadPageContents, groupByChapter, splitGroupsIntoChunks, pageSigSuffix, buildSinglePassBookText,
   chunkLimitsFor, BATCH_SIZE, jobAbortControllers, settledAll,
   _modelName, applyReviewAiOverrides, tps,
   jobs, runningJobs, createJob, enqueueJob, jobKey, findActiveJobId,
@@ -34,7 +34,7 @@ function _sigHash(obj) {
 // steht drin, weil der Prompt eines Teil-Abschnitts anders lautet als der eines
 // ganzen Kapitels.
 function buildChapterPagesSig(chunk, { bookName, teil, narrativeSig, systemSig, cacheVersion }) {
-  const pages = chunk.pages.map(p => `${p.id}:${p.updated_at || ''}`).sort().join('|');
+  const pages = chunk.pages.map(p => `${p.id}:${p.updated_at || ''}${pageSigSuffix(p)}`).sort().join('|');
   const teilSig = teil ? `${teil.nr}/${teil.von}` : '';
   return `${pages}||${chunk.name}||${bookName}||${teilSig}||${narrativeSig}||${systemSig}||${cacheVersion}`;
 }

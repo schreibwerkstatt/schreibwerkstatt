@@ -14,7 +14,7 @@
 import { _isLocal } from './state.js';
 import { _obj, _str } from './schema-utils.js';
 import {
-  lektoratProfil, lektoratTypen, lektoratEinheit,
+  lektoratProfil, lektoratTypen, lektoratEinheit, EINHEIT_EINTRAG,
   typPrioritaetString, spanRegeln, STILISTISCHE_TYPEN,
 } from './lektorat-typen.js';
 import {
@@ -105,7 +105,7 @@ Eintrag-Regeln (Feld «szenen»):
 - Enthält der Abschnitt keinen abgrenzbaren Eintrag (z.B. ein lose notiertes Sammeldatum): «szenen» als leeres Array zurückgeben.
 - wertung: «stark» = die Stimme trägt den Eintrag, «mittel» = Eintrag bleibt Notiz, ohne eine eigene Stimme zu entwickeln, «schwach» = der Eintrag sagt nichts Eigenes.
 - kommentar: 1-2 Sätze zu Stimme, Dichte und Verhältnis von Beobachtung und Reflexion. KEINE Einzelstellen-Kritik aus dem «fehler»-Array wiederholen.
-- Fragmentarische Notizen, Stichworte, Auslassungen, abrupte Registerwechsel und Einträge ohne Reflexion sind genretypisch und KEIN Mangel dieses Feldes. Bewerten wird nur, ob der Eintrag als Eintrag trägt – NICHT, wie viel ein Roman aus ihm gemacht hätte.`,
+- Fragmentarische Notizen, Stichworte, Auslassungen, abrupte Registerwechsel und Einträge ohne Reflexion sind genretypisch und KEIN Mangel dieses Feldes. Bewertet wird nur, ob der Eintrag als Eintrag trägt – NICHT, wie viel ein Roman aus ihm gemacht hätte.`,
   },
 };
 
@@ -125,8 +125,10 @@ function _buildLektoratPromptBody(text, textLabel, {
   textsorte = null,
   previousExcerpt = null,
   nextExcerpt = null,
-  // Mengen-Obergrenze für stilistische Funde; der Server reicht `ai.lektorat_stylistic_cap`
-  // durch (routes/jobs/lektorat.js#stylisticCap), dessen Backstop denselben Wert kappt.
+  // Mengen-Obergrenze für stilistische Funde DIESES Abschnitts; der Server reicht die
+  // nach Textlänge skalierte Zahl durch (routes/jobs/lektorat-filter.js#effectiveStylisticCap),
+  // dessen Backstop denselben Wert kappt. Steht im User-Prompt neben dem Seitentext,
+  // nicht im gecachten System-Block – eine längenabhängige Zahl bricht keinen Cache.
   stylisticCap = 10,
   hatBelege = false,
   woerterbuch = [],
@@ -240,7 +242,7 @@ function _buildLektoratPromptBody(text, textLabel, {
     ? 'z.B. ob der Abschnittsanfang sauber an das Vorherige anschliesst.'
     : fach
     ? 'z.B. ob ein Gedankengang im nächsten Abschnitt weitergeht. Einen Gedankengang, der erkennbar fortgesetzt wird, nicht als unvollständig oder abgebrochen bewerten.'
-    : einheit === 'eintrag'
+    : einheit === EINHEIT_EINTRAG
     ? 'z.B. ob ein Datum oder ein Thema abgerissen ist. Ein Eintrag, der mitten im Satz abbricht, ist ein Befund – ein Eintrag, der ohne Überleitung zum nächsten weitergeht, nicht: das ist im Tagebuch der Normalfall.'
     : 'z.B. ob eine Szene im nächsten Abschnitt weitergeht oder ein scheinbar abrupter Schluss bewusst offen bleibt. Eine Szene, die erkennbar fortgesetzt wird, nicht als unvollständig oder abgebrochen bewerten.';
   const nachbarBlock = (_isLocal || (!previousExcerpt && !nextExcerpt)) ? '' : `

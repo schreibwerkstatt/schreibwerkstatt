@@ -189,3 +189,23 @@ test('resolveConflictTakeRemote: aktiver Block wird deaktiviert, damit der DOM n
   assert.equal(ctx.activePageId, null,
     'sonst lässt _maybeRehydrate den DOM stehen und der nächste Tastendruck speichert die lokale Fassung');
 });
+
+test('buildBlocksFromPages: erster Abschnitt gleichnamig mit Kapitel → dupTitle', () => {
+  const blocks = buildBlocksFromPages([
+    { pageId: 1, pageName: 'Kapitel 1', chapterId: 10, chapterName: 'Kapitel 1', html: '<p>a</p>' },
+    { pageId: 2, pageName: 'Kapitel 1', chapterId: 10, chapterName: 'Kapitel 1', html: '<p>b</p>' },
+    { pageId: 3, pageName: 'Szene', chapterId: 20, chapterName: 'Kapitel 2', html: '<p>c</p>' },
+  ]);
+  const pages = blocks.filter(b => b.kind === 'page');
+  assert.deepEqual(pages.map(b => b.dupTitle), [true, false, false]);
+});
+
+test('buildOutlineNodes: Ein-Abschnitt-Kapitel ist single, Mehr-Abschnitt-Kapitel nicht', async () => {
+  const { buildOutlineNodes } = await import('../../public/js/cards/book-editor/outline.js');
+  const nodes = buildOutlineNodes(buildBlocksFromPages([
+    { pageId: 1, pageName: 'A', chapterId: 10, chapterName: 'K1', html: '' },
+    { pageId: 2, pageName: 'B', chapterId: 20, chapterName: 'K2', html: '' },
+    { pageId: 3, pageName: 'C', chapterId: 20, chapterName: 'K2', html: '' },
+  ]));
+  assert.deepEqual(nodes.map(n => [n.chapterId, n.single]), [[10, true], [20, false]]);
+});

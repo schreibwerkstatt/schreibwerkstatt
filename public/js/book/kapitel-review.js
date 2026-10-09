@@ -31,9 +31,9 @@ export const kapitelReviewMethods = {
   },
 
   // Sprungziel jeder Kapitel-Referenz (x-entity-ref, Hash-Router-Fallback):
-  // die Kapitelbewertung. Nur wo das Buch keine hat (lauter Ein-Seiten-Kapitel,
-  // Solo-Seite), führt der Sprung auf die erste Kapitelseite — sonst endete der
-  // Klick im Nichts.
+  // die Kapitelbewertung. Nur wo das Kapitel keine hat (leer, Solo-Abschnitt),
+  // führt der Sprung auf den ersten Kapitelabschnitt — sonst endete der Klick im
+  // Nichts.
   async openChapterById(chapterId) {
     if (chapterId == null || chapterId === '') return;
     const opts = this.kapitelReviewChapterOptions();
@@ -56,10 +56,11 @@ export const kapitelReviewMethods = {
     this.gotoStelle(name, null);
   },
 
-  // Sobald mindestens ein Kapitel mehrere Seiten hat, lohnt sich das Kapitel-
-  // Review — dann gibt es eine Kapiteleinheit, die als Ganzes bewertet werden
-  // kann (unabhängig von der Kapitelanzahl). Bücher aus lauter Ein-Seiten-
-  // Kapiteln bzw. reinen Solo-Seiten deckt das Seiten-Lektorat ab.
+  // Jedes Buch mit mindestens einem Kapitel, das Text traegt (eigene Abschnitte
+  // oder Unterkapitel), hat eine Kapitelbewertung — auch wenn jedes Kapitel aus
+  // genau einem Abschnitt besteht: die Bewertung (Achsen, Belege, Dashboard) ist
+  // eine andere Linse als das Abschnitts-Lektorat, nicht dessen Duplikat. Nur
+  // Buecher aus reinen Solo-Abschnitten haben keine Kapiteleinheit.
   // Memoisiert: sidebar.html liest das Praedikat ZWEIMAL pro Kapitelzeile
   // (`:class` + `:data-tip`), obwohl es eine Aussage ueber das ganze Buch ist —
   // ungecacht ist ein Sidebar-Render O(Kapitel x Baumlaenge), und jede Zeile
@@ -75,7 +76,7 @@ export const kapitelReviewMethods = {
     const memo = this._chapterReviewEligibleMemo;
     if (memo && memo.tree === tree && memo.treeLen === tree.length
         && memo.pages === pages && memo.pagesLen === pages.length) return memo.val;
-    const val = tree.some(i => i.type === 'chapter' && !i.solo && i.pages.length > 1);
+    const val = tree.some(i => i.type === 'chapter' && !i.solo && (i.pages.length > 0 || i.hasChildren));
     this._chapterReviewEligibleMemo = {
       tree, treeLen: tree.length, pages, pagesLen: pages.length, val,
     };

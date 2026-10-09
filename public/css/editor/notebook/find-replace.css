@@ -10,6 +10,12 @@
   background: var(--color-accent);
   color: var(--color-on-accent);
 }
+/* Angesprungene Fundstelle im Abschnittstext (Suche, Motive, Figurenbogen,
+   Plot, Buchlandkarte — gesetzt von book/passage-highlight.js). */
+::highlight(passage-hit) {
+  background-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  color: inherit;
+}
 
 /* left/top werden in editor-find.js aus der Editor-Karten-Box berechnet. */
 .edit-find {

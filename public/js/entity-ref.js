@@ -24,6 +24,8 @@
 //   inherited true = abgeleitet statt gesetzt (Plot: vom Strang geerbt) → gestrichelt
 //             + Zusatz „· Strang“ im Badge; `title` erklärt die Herkunft (Tooltip
 //             bzw. erste Meta-Zeile der Vorschau).
+//   snippet   bei `seite`: Textstelle, an die der Sprung im Abschnitt scrollt
+//             (gotoPageById → book/passage-highlight.js) statt an den Anfang.
 //   onOpen    eigene Klick-Aktion statt Navigation (z.B. Filter setzen).
 //   page_id / chapter_id   nur `idee`: Anker der Idee.
 //   preview   false = keine Hover-Vorschau (z.B. wo die Zeile das Objekt schon zeigt).
@@ -37,6 +39,7 @@
 
 import { buildEntityPreview, PREVIEW_BUILDERS } from './entity-ref-preview.js';
 import { installEntityRefPreview } from './entity-ref-popover.js';
+import { sameStructureTitle } from './structure-title.js';
 
 const t = (app, key) => (app?.t ? app.t(key) : key);
 
@@ -98,9 +101,9 @@ export const TYPES = {
     label: (p) => p.name,
     title: (p, app) => {
       const ch = p.chapter_id != null ? chapters(app).find(c => String(c.id) === String(p.chapter_id)) : null;
-      return ch && !ch.solo ? `${ch.name} › ${p.name}` : p.name;
+      return ch && !ch.solo && !sameStructureTitle(ch.name, p.name) ? `${ch.name} › ${p.name}` : p.name;
     },
-    open: (app, p) => app.selectPage(p),
+    open: (app, p, spec) => (spec?.snippet ? app.gotoPageById(p.id, { snippet: spec.snippet }) : app.selectPage(p)),
   },
   figur: {
     resolve: fromMap('figurenById'),

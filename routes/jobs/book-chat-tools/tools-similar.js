@@ -124,10 +124,15 @@ async function tool_search_similar(input, ctx) {
   const topK = Math.min(Math.max(1, input.limit || 20), 50);
 
   // Volle Qualitäts-Pipeline (Retrieval → Hybrid-Fusion → Reranking), damit der
-  // agentische Chat dieselben scharfen Treffer bekommt wie die Such-Karte. Ein
-  // Abbruch ist kein Werkzeug-Fehler: weiterwerfen, damit der Loop endet.
+  // agentische Chat dieselben scharfen Treffer bekommt wie die Such-Karte — inkl.
+  // mehrerer getrennter Passagen je Abschnitt (ein Kapitel am Stück hätte sonst nur
+  // eine Fundstelle). Ein Abbruch ist kein Werkzeug-Fehler: weiterwerfen.
   let raw;
-  try { raw = await semanticRetrieval.semanticQuery(ctx.bookId, query, { kinds, topK, signal: ctx.jobSignal }); }
+  try {
+    raw = await semanticRetrieval.semanticQuery(ctx.bookId, query, {
+      kinds, topK, signal: ctx.jobSignal, perEntity: semanticRetrieval.PASSAGES_PER_ENTITY,
+    });
+  }
   catch (e) {
     if (e?.name === 'AbortError') throw e;
     return { error: `Embedding-Endpunkt nicht erreichbar: ${e.message}` };

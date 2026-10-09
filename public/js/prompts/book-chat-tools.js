@@ -73,7 +73,7 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'search_similar',
-    description: 'Semantische Ähnlichkeitssuche (Embeddings) über das ganze Buch: findet Passagen, Szenen, Figuren, Orte und Welt-Fakten, die einem Suchtext BEDEUTUNGSMÄSSIG nahestehen — auch mit anderen Wörtern. ERSTE WAHL für Suchen nach Eigenschaft oder Sinn: Beispiele für ein Stilmittel, eine Stimmung, ein Motiv, „Stellen über X“ als Umschreibung („wo herrscht dieselbe resignierte Stimmung“, „Szenen wie ein Abschied am Bahnhof“). Für konkrete Wörter/Namen → `search_passages`; für Superlative oder Vollständigkeit über den ganzen Text (lustigste Stelle, ALLE Stellen, Zusammenfassung) → Kapitel lesen via `get_chapter_text`. Liefert nach Relevanz sortierte Treffer {kind,entity_id,title,snippet,score}; der Ausschnitt ist um den passendsten Satz zentriert. Abschnitts-Treffer (kind=page) tragen zusätzlich chapter_name und, wenn die Stelle im aktuellen Abschnittstext gefunden wird, offset/length (kompatibel mit `quote_passage`, dort max. 800 Zeichen). Der Ausschnitt ist oft schon die Antwort — dann NICHT noch `get_pages`/`get_chapter_text` nachschieben. Rein rückwärtsgewandt — findet Bestehendes, erfindet nichts.',
+    description: 'Semantische Ähnlichkeitssuche (Embeddings) über das ganze Buch: findet Passagen, Szenen, Figuren, Orte und Welt-Fakten, die einem Suchtext BEDEUTUNGSMÄSSIG nahestehen — auch mit anderen Wörtern. ERSTE WAHL für Suchen nach Eigenschaft oder Sinn: Beispiele für ein Stilmittel, eine Stimmung, ein Motiv, „Stellen über X“ als Umschreibung („wo herrscht dieselbe resignierte Stimmung“, „Szenen wie ein Abschied am Bahnhof“). Für konkrete Wörter/Namen → `search_passages`; für Superlative oder Vollständigkeit über den ganzen Text (lustigste Stelle, ALLE Stellen, Zusammenfassung) → Kapitel lesen via `get_chapter_text`. Liefert nach Relevanz sortierte Treffer {kind,entity_id,title,snippet,score}; der Ausschnitt ist um den passendsten Satz zentriert. Ein langer Abschnitt kann mit bis zu drei getrennten Passagen vorkommen (gleiche entity_id, verschiedene offset). Abschnitts-Treffer (kind=page) tragen zusätzlich chapter_name und, wenn die Stelle im aktuellen Abschnittstext gefunden wird, offset/length (kompatibel mit `quote_passage`, dort max. 800 Zeichen). Der Ausschnitt ist oft schon die Antwort — dann NICHT noch `get_pages`/`get_chapter_text` nachschieben. Rein rückwärtsgewandt — findet Bestehendes, erfindet nichts.',
     input_schema: {
       type: 'object',
       properties: {
@@ -87,25 +87,27 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'get_pages',
-    description: 'Lädt den vollen Text bestimmter Abschnitte (bei Bedarf für Zitate oder Detail-Analyse). Bis zu 20 Abschnitte pro Aufruf – bei kleinen Büchern kannst du in einem Call das ganze Buch laden (page_ids vorher via list_chapters holen). Falls für den Abschnitt ein gespeichertes Lektorat existiert, kommt es als latest_check {checked_at, error_count, fazit, stilanalyse} mit. Schwergewichtig (Volltext) – nicht nutzen für blosse Trefferlisten oder „wo kommt X vor?", dafür `search_passages` / `get_figure_mentions`. Für ein ganzes Kapitel bequemer: `get_chapter_text`. Nicht zur Massen-Inspektion ganzer Bücher aufrufen, wenn ein Aggregat-Tool (z.B. `get_stil_metrics`, `get_lektorat_hotspots`) die Frage direkt beantwortet.',
+    description: 'Lädt den vollen Text bestimmter Abschnitte (bei Bedarf für Zitate oder Detail-Analyse). Bis zu 20 Abschnitte pro Aufruf – bei kleinen Büchern kannst du in einem Call das ganze Buch laden (page_ids vorher via list_chapters holen). Falls für den Abschnitt ein gespeichertes Lektorat existiert, kommt es als latest_check {checked_at, error_count, fazit, stilanalyse} mit. Schwergewichtig (Volltext) – nicht nutzen für blosse Trefferlisten oder „wo kommt X vor?", dafür `search_passages` / `get_figure_mentions`. Für ein ganzes Kapitel bequemer: `get_chapter_text`. Nicht zur Massen-Inspektion ganzer Bücher aufrufen, wenn ein Aggregat-Tool (z.B. `get_stil_metrics`, `get_lektorat_hotspots`) die Frage direkt beantwortet. Lange Abschnitte kommen in Fenstern: jeder Abschnitt trägt page_chars; ist er gekürzt (truncated=true), steht next_offset dabei — mit offset=next_offset (und denselben ids) weiterlesen, bis kein next_offset mehr kommt. So liest du auch einen 60 000-Zeichen-Abschnitt vollständig, nicht nur seinen Anfang.',
     input_schema: {
       type: 'object',
       properties: {
         ids:                { type: 'array', items: { type: 'integer' }, description: 'Liste der page_ids (aus list_chapters oder anderen Tool-Ergebnissen).' },
-        max_chars_per_page: { type: 'integer', description: 'Harte Kürzung pro Abschnitt. Server clamped automatisch an das Kontextfenster – nur setzen, wenn explizit weniger gewünscht.' },
+        max_chars_per_page: { type: 'integer', description: 'Fenstergrösse pro Abschnitt in Zeichen. Server clamped automatisch an das Kontextfenster – nur setzen, wenn explizit weniger gewünscht.' },
+        offset:             { type: 'integer', description: 'Zeichen-Offset im Abschnittstext, ab dem gelesen wird (Default 0). Zum Weiterblättern den next_offset aus dem vorigen Ergebnis übergeben. Gilt für jeden angefragten Abschnitt — zum Blättern am besten eine einzelne id.' },
       },
       required: ['ids'],
     },
   },
   {
     name: 'get_chapter_text',
-    description: 'Lädt den Volltext aller Abschnitte eines Kapitels in einem Call (max 20 Abschnitte, automatische Sortierung nach page_id). Spart die Sequenz list_chapters → get_pages. Liefert pages[{page_id,page_name,text,truncated}] + total_pages. Ideal für "fasse Kapitel X zusammen", "wie endet Kapitel 3?", "welche Szenen sind in Kapitel 2?". Falls das Kapitel >20 Abschnitte hat, kommt `dropped` zurück — restliche Abschnitte dann gezielt via `get_pages` nachladen.',
+    description: 'Lädt den Volltext aller Abschnitte eines Kapitels in einem Call (max 20 Abschnitte, automatische Sortierung nach page_id). Spart die Sequenz list_chapters → get_pages. Liefert total_pages + pages[{page_id,page_name,text,page_chars,truncated,next_offset?}]. Ideal für "fasse Kapitel X zusammen", "wie endet Kapitel 3?", "welche Szenen sind in Kapitel 2?". Falls das Kapitel >20 Abschnitte hat, kommt `dropped` zurück — restliche Abschnitte dann gezielt via `get_pages` nachladen. Ist ein Abschnitt gekürzt (truncated=true, oft bei Kapiteln aus einem einzigen langen Abschnitt), mit offset=next_offset weiterlesen — für das Ende eines Kapitels nicht beim Anfang stehen bleiben.',
     input_schema: {
       type: 'object',
       properties: {
         chapter_id:         { type: 'integer', description: 'Kapitel-ID aus list_chapters (Pflicht).' },
         max_pages:          { type: 'integer', description: 'Anzahl Abschnitte max. (1-20, Default: alle Abschnitte des Kapitels bis 20).' },
-        max_chars_per_page: { type: 'integer', description: 'Harte Kürzung pro Abschnitt. Server clamped automatisch ans Kontextfenster.' },
+        max_chars_per_page: { type: 'integer', description: 'Fenstergrösse pro Abschnitt in Zeichen. Server clamped automatisch ans Kontextfenster.' },
+        offset:             { type: 'integer', description: 'Zeichen-Offset im Abschnittstext, ab dem gelesen wird (Default 0) — gilt für jeden Abschnitt des Kapitels. Zum Weiterblättern next_offset aus dem vorigen Ergebnis übergeben.' },
       },
       required: ['chapter_id'],
     },
@@ -543,12 +545,10 @@ export const BOOK_CHAT_TOOLS = [
 // (Wortlaut + Sinn), Volltext, Zitat-Verifikation, die Figuren-Achse, Orte/Szenen,
 // Bewertung — plus der Pflicht-Endpunkt.
 //
-// Bewusst NICHT drin (über den Erst-Kontext oder eigene Karten erreichbar, und für
-// die häufigen Fragen entbehrlich): count_pronouns, get_stil_metrics, die Lektorat-,
-// Plot-, Motiv-, Ideen-, Song-, Weltfakten-, Werkstatt-, Revisions- und
-// Wiederholungs-Werkzeuge, get_dialogue, quote_passage (quote_match deckt den Weg
-// ab), find_first_last_mention (steht in get_figure_mentions), get_book_settings.
-//
+// Bewusst NICHT drin (über den Erst-Kontext oder eigene Karten erreichbar, für die
+// häufigen Fragen entbehrlich): count_pronouns, get_stil_metrics, die Lektorat-, Plot-,
+// Motiv-, Ideen-, Song-, Werkstatt-, Revisions- und Wiederholungs-Werkzeuge, get_dialogue,
+// quote_passage (quote_match deckt den Weg ab), find_first_last_mention, get_book_settings.
 // KEINE zweite Definitionsliste: Namen zeigen auf BOOK_CHAT_TOOLS oben — Drift ist
 // durch tests/unit/ai-tool-translate.test.js gegated.
 export const BOOK_CHAT_SLIM_TOOL_NAMES = [

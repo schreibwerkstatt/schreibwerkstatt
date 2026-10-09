@@ -420,6 +420,7 @@ export const treeLoadMethods = {
       // ab — Parent vom Anker, Reihenfolge in book_order (content-store#createChapter).
       if (afterItem) body.after_chapter_id = Number(afterItem.id);
       const parentId = afterItem?.parent_id ?? null;
+      const withFirstPage = this._bookUsesSingleSectionChapters(); // vor dem Einhaengen messen
       const created = await contentRepo.createChapter(body);
       this.newChapterTitle = '';
       if (!created?.id) return null;
@@ -442,6 +443,7 @@ export const treeLoadMethods = {
       this._rebuildTreeOrderMaps();
       this._persistTreeOpenState();
       window.dispatchEvent(new CustomEvent(EVT.CHAPTER_ADDED, { detail: { chapterId: created.id } }));
+      if (withFirstPage) await this._createFirstSection(created); // tree-context-menu.js
       return chapterItem;
     } catch (e) {
       console.error('[createChapter]', e);

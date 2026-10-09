@@ -32,6 +32,7 @@ import { collapseSoftNewlines } from './soft-newlines.js';
 import { FOCUS_SELECTOR } from '../shared/active-editor.js';
 import { editorHost } from '../shared/editor-host.js';
 import { installEditCounter } from '../shared/edit-counter.js';
+import { rememberFocusCaret, restoreFocusCaret } from './caret-memory.js';
 
 export const focusCardMethods = {
   // Page-View-Direkteinstieg: Edit-Mode hochfahren (falls nicht bereits aktiv)
@@ -120,6 +121,15 @@ export const focusCardMethods = {
     // container ist via shared/active-editor.js: bei aktiver Focus-Karte der
     // Focus-Cardroot, sonst der Normal-Editor-Container.
     container?.focus?.({ preventScroll: true });
+    // Gemerkte Schreibstelle vor dem Ende (caret-memory.js): dorthin statt ans
+    // Ende, ohne Auto-Slot. Nichts gemerkt → gewohnter Sprung ans Ende.
+    const resumed = restoreFocusCaret(container, editorHost()?.currentPage?.id);
+    if (resumed) {
+      this._focusAutoAddedP = null;
+      resumed.classList.add('focus-paragraph-active');
+      scrollEntryTargetToAnchor(container, resumed, ctx);
+      return;
+    }
     this._focusAutoAddedP = jumpToTrailingParagraph(container);
     // Schreib-Slot auf den Anker holen — dieselbe Geometrie wie der Typewriter
     // danach (siehe scrollEntryTargetToAnchor). `lastElementChild` ist in beiden
@@ -198,6 +208,8 @@ export const focusCardMethods = {
     // samt body-Klasse bis zum Reload fest, ohne Tastatur-Ausweg (die Listener
     // sind zu dem Zeitpunkt schon abgeräumt).
     try {
+      // Schreibstelle merken, solange Caret + Slot noch stehen (caret-memory.js).
+      rememberFocusCaret(getScrollContainer(), app.currentPage?.id);
       // Auto-Slot vom Focus-Entry abräumen, falls User nichts reingeschrieben
       // hat. Sonst würde der leere `<p>` als „Änderung" gespeichert und bei jedem
       // Focus-Open eine Phantom-Revision erzeugen.

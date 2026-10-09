@@ -140,6 +140,13 @@ export const appUiMethods = {
     return avatarHue(email);
   },
 
+  // Nach einer Aenderung am Sichtkreis (Teilen) neu laden. Nur wenn die Map
+  // schon da ist — sonst laedt der naechste `userDisplayName`-Aufruf ohnehin.
+  // Die alte Map bleibt bis zur Antwort stehen, damit nichts auf E-Mail springt.
+  refreshUsersLight() {
+    if (this._usersByEmail) this._loadUsersLight();
+  },
+
   async _loadUsersLight() {
     if (this._usersByEmailLoading) return;
     this._usersByEmailLoading = true;

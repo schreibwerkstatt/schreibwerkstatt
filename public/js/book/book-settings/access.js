@@ -78,6 +78,8 @@ export const accessMethods = {
       if (shareRes.ok) {
         this.shareEmail = '';
         await this.loadBookAccess();
+        // Das neue Mitglied gehoert jetzt zum Sichtkreis von `/me/users-light`.
+        window.__app.refreshUsersLight?.();
         return;
       }
       if (shareData?.error_code === 'USER_NOT_FOUND' && this.shareCanInvite()) {

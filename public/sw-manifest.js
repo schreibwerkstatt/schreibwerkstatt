@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "bd48e2f0f8c36935";
+self.__SHELL_BUILD = "1e3d96f1984151b2";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -294,7 +294,6 @@ self.__SHELL_MANIFEST = [
   "/js/book/motiv/crud.js",
   "/js/book/motiv/dnd.js",
   "/js/book/motiv/graph.js",
-  "/js/book/motiv/highlight.js",
   "/js/book/motiv/lifecycle.js",
   "/js/book/motiv/scan.js",
   "/js/book/ort-typen.js",
@@ -303,6 +302,7 @@ self.__SHELL_MANIFEST = [
   "/js/book/orte-map.js",
   "/js/book/orte.js",
   "/js/book/page-view.js",
+  "/js/book/passage-highlight.js",
   "/js/book/plot-backlinks.js",
   "/js/book/plot.js",
   "/js/book/plot/acts.js",
@@ -536,6 +536,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/find.js",
   "/js/editor/focus.js",
   "/js/editor/focus/card.js",
+  "/js/editor/focus/caret-memory.js",
   "/js/editor/focus/chrome.js",
   "/js/editor/focus/constants.js",
   "/js/editor/focus/cursor-hide.js",
@@ -559,11 +560,13 @@ self.__SHELL_MANIFEST = [
   "/js/editor/notebook/edit/conflict.js",
   "/js/editor/notebook/edit/input.js",
   "/js/editor/notebook/edit/lifecycle.js",
+  "/js/editor/notebook/edit/split.js",
   "/js/editor/notebook/edit/view.js",
   "/js/editor/notebook/entities.js",
   "/js/editor/notebook/format-marks.js",
   "/js/editor/notebook/history.js",
   "/js/editor/notebook/index.js",
+  "/js/editor/notebook/split-html.js",
   "/js/editor/notebook/storage.js",
   "/js/editor/notebook/stt-dictation.js",
   "/js/editor/notebook/stt/compute.js",
@@ -771,6 +774,7 @@ self.__SHELL_MANIFEST = [
   "/js/sources/tags.js",
   "/js/storage-sweep.js",
   "/js/streak-grid.js",
+  "/js/structure-title.js",
   "/js/table/table-html.js",
   "/js/tabs.js",
   "/js/theme-init.js",

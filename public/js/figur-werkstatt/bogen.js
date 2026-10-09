@@ -175,7 +175,7 @@ export const bogenMethods = {
   gotoArcOccurrence(occ) {
     const pageId = occ?.page_id || occ?.scene_page_id;
     if (!pageId) return;
-    window.__app.gotoPageById(pageId);
+    window.__app.gotoPageById(pageId, { snippet: occ.snippet });
   },
 
   // ── Messbefunde dieser Figur ──────────────────────────────────────────────

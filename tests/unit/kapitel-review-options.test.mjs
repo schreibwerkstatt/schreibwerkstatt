@@ -55,10 +55,19 @@ test('Einzelnes Kapitel mit mehreren Seiten qualifiziert (Kapiteleinheit bewertb
   assert.ok(opts.some(o => String(o.id) === 'a'));
 });
 
-test('Buch aus lauter Ein-Seiten-Kapiteln qualifiziert nicht → leer', () => {
+test('Buch aus lauter Ein-Abschnitt-Kapiteln qualifiziert — jedes Kapitel ist bewertbar', () => {
   const tree = [
     { id: 'a', type: 'chapter', solo: false, parent_id: null, pages: [{ id: 'p1' }] },
     { id: 'b', type: 'chapter', solo: false, parent_id: null, pages: [{ id: 'p2' }] },
+  ];
+  const c = ctx(tree);
+  assert.deepEqual(c.kapitelReviewChapterOptions().map(o => o.id), ['a', 'b']);
+});
+
+test('Buch aus reinen Solo-Abschnitten bzw. leeren Kapiteln qualifiziert nicht → leer', () => {
+  const tree = [
+    { id: 'solo-1', type: 'chapter', solo: true, parent_id: null, pages: [{ id: 'sp' }] },
+    { id: 'b', type: 'chapter', solo: false, parent_id: null, pages: [] },
   ];
   const c = ctx(tree);
   assert.deepEqual(c.kapitelReviewChapterOptions(), []);

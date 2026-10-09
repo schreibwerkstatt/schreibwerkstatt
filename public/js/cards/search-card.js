@@ -355,7 +355,7 @@ export function registerSearchCard() {
       try {
         switch (hit.kind) {
           case 'page':
-            return root.gotoPageById?.(hit.entity_id);
+            return root.gotoPageById?.(hit.entity_id, { snippet: hit.snippet });
           case 'chapter': {
             const tree = Alpine.store('nav').tree || [];
             const ch = tree.find(t => t.type === 'chapter' && String(t.id) === String(hit.entity_id));

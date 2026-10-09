@@ -78,11 +78,12 @@
       <nav class="book-editor-outline-nav" :aria-label="$app.t('bookEditor.outline.title')">
         <!-- Kapitel-Knoten und Solo-Bucket tragen dieselbe `pages`-Liste
              (outlineNodes) — darum EIN Listen-Zweig statt zwei identischer.
-             Solos haben chapterId null und sind damit nie eingeklappt. -->
+             Solos haben chapterId null und sind damit nie eingeklappt; ein
+             Ein-Abschnitt-Kapitel (node.single) erscheint als EINE Zeile. -->
         <template x-for="node in outlineNodes" :key="node.kind === 'chapter' ? ('c-' + node.chapterId) : ('s-' + (node.pages?.[0]?.pageId || 0))">
           <div class="book-editor-outline-group">
 
-            <template x-if="node.kind === 'chapter'">
+            <template x-if="node.kind === 'chapter' && !node.single">
               <button type="button"
                       class="book-editor-outline-chapter"
                       :class="{ 'book-editor-outline-chapter--collapsed': !!collapsedChapters[node.chapterId] }"
@@ -93,9 +94,9 @@
               </button>
             </template>
 
-            <template x-if="!collapsedChapters[node.chapterId]">
+            <template x-if="node.single || !collapsedChapters[node.chapterId]">
               <ul class="book-editor-outline-pages"
-                  :class="{ 'book-editor-outline-pages--solo': node.kind === 'solos' }">
+                  :class="{ 'book-editor-outline-pages--solo': node.kind === 'solos' || node.single }">
                 <template x-for="pg in node.pages" :key="pg.pageId">
                   <li>
                     <button type="button"
@@ -106,7 +107,7 @@
                             }"
                             @click="scrollToBlock(pg.pageId)">
                       <span class="book-editor-outline-dot" aria-hidden="true"></span>
-                      <span class="book-editor-outline-page-name" x-text="pg.name"></span>
+                      <span class="book-editor-outline-page-name" x-text="node.single ? node.name : pg.name"></span>
                     </button>
                   </li>
                 </template>
@@ -142,7 +143,7 @@
                  'book-editor-page-card--error': !!block.saveError,
                }">
             <div class="book-editor-page-header">
-              <span class="book-editor-page-name" x-text="block.name"></span>
+              <span class="book-editor-page-name" x-text="block.dupTitle ? '' : block.name"></span>
               <span x-show="$store.badges.ideenCounts[block.pageId] > 0" class="ideen-count-badge internal-link"
                     @click.stop="$app.openIdeenForPage(block.pageId)" x-text="$store.badges.ideenCounts[block.pageId]"
                     :data-tip="$app.t('ideen.openCountTitle', { n: $store.badges.ideenCounts[block.pageId] })"></span>

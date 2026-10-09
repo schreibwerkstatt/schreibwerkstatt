@@ -18,7 +18,7 @@ const { narrativeLabels } = require('./narrative-labels');
 const { effectiveTextsorte } = require('../../db/textsorte');
 const { lektoratAnalyze, applyLektoratAiOverrides } = require('./lektorat-split');
 const { lastParagraph, firstParagraph, findPreviousPage, findNextPage } = require('./lektorat-context');
-const { finalizeFehler, stylisticCap, _runSig } = require('./lektorat-filter');
+const { finalizeFehler, effectiveStylisticCap, _runSig } = require('./lektorat-filter');
 const userDictionary = require('../../db/user-dictionary');
 const { MAX_PROMPT_WORDS, dictionaryWordsOnPage, dropDictionaryFindings } = require('./lektorat-dictionary');
 
@@ -187,7 +187,7 @@ async function checkOnePage(run, {
     // Nur gesetzt, wenn die Seite Wörterbuch-Wörter trägt: ein leeres `wb` würde
     // jede bestehende Cache-Zeile ohne Grund invalidieren.
     ...(woerterbuch.length ? { wb: woerterbuch } : {}),
-    ..._runSig(local),
+    ..._runSig(local, text.length),
   }) : null;
   // Nachbearbeitung für frische und gecachte Ergebnisse, plus Wörterbuch-Backstop
   // (greift auch für Wörter jenseits von MAX_PROMPT_WORDS, die der Prompt nicht sah).
@@ -212,7 +212,8 @@ async function checkOnePage(run, {
         korrekturRegeln: run.korrekturRegeln,
         figuren, figurenBeziehungen, orte, motive, hatBelege,
         woerterbuch: woerterbuch.slice(0, MAX_PROMPT_WORDS),
-        stylisticCap: stylisticCap(),
+        // Wirksame Obergrenze skaliert mit der Textlänge – derselbe Wert wie im Backstop.
+        stylisticCap: effectiveStylisticCap(text.length),
         pageName: pd.name, chapterName,
         ...narrativeLabels(bookSettings),
         textsorte,

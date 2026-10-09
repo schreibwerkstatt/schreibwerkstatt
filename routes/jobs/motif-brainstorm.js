@@ -9,7 +9,7 @@ const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, jsonBody, jobAbortControllers,
   aiCall, getPrompts, getBookPrompts,
   loadOrderedBookContents, loadPageContents,
-  groupByChapter, splitGroupsIntoChunks, buildSinglePassBookText,
+  groupByChapter, splitGroupsIntoChunks, pageSigSuffix, buildSinglePassBookText,
   chunkLimitsFor, tps, _modelName,
   startBookJob,
 } = require('./shared');
@@ -138,7 +138,7 @@ async function runMotifBrainstormJob(jobId, bookId, userEmail, { force = false }
         });
         // pages_sig identisch aufgebaut wie im chapter_extract_cache der Komplett-
         // analyse (page_id:updated_at | settings | ch:<name> | cacheVersion).
-        const pagesSig = group.pages.map(p => `${p.id}:${p.updated_at}`).sort().join('|')
+        const pagesSig = group.pages.map(p => `${p.id}:${p.updated_at}${pageSigSuffix(p)}`).sort().join('|')
           + `||${settingsSig}||ch:${group.name || ''}||${cacheVersion}`;
         consumeRaw(await chunkRawSuggestions(chunkKey, pagesSig,
           buildSinglePassBookText(new Map([[chunkKey, group]]), [chunkKey]), from, to));
