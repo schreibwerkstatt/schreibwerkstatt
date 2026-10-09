@@ -31,8 +31,16 @@
                  :placeholder="$app.t('editor.table.captionPlaceholder')">
         </div>
 
-        <p class="table-dialog-warn" x-show="tableLossy"
-           x-text="$app.t('editor.table.lossy')"></p>
+        <div class="table-dialog-warn" x-show="tableLossyReasons.length">
+          <p x-text="$app.t('editor.table.lossy')"></p>
+          <ul>
+            <template x-for="label in tableLossyLabels()" :key="label">
+              <li x-text="label"></li>
+            </template>
+          </ul>
+        </div>
+        <p class="card-hint card-hint--sm" x-show="tableHasRichCells()"
+           x-text="$app.t('editor.table.richHint')"></p>
 
         <div class="table-dialog-grid-wrap">
           <table class="table-dialog-grid">
@@ -72,6 +80,8 @@
                 <template x-for="(cell, c) in (tableModelState.header || [])" :key="'h' + c">
                   <td>
                     <input type="text" class="table-grid-input table-grid-input--head"
+                           :class="{ 'is-rich': cell.rich }"
+                           :data-tip="cell.rich ? $app.t('editor.table.richCell') : null"
                            :value="cell.text" @input="tableSetCell(cell, $event.target.value)"
                            data-spellcheck="spelling" autocomplete="off"
                            :aria-label="$app.t('editor.table.headerCellLabel', { col: c + 1 })">
@@ -93,7 +103,8 @@
                   <template x-for="(cell, c) in row" :key="'c' + c">
                     <td>
                       <input type="text" class="table-grid-input"
-                             :class="'is-align-' + tableModelState.align[c]"
+                             :class="['is-align-' + tableModelState.align[c], cell.rich ? 'is-rich' : '']"
+                             :data-tip="cell.rich ? $app.t('editor.table.richCell') : null"
                              :value="cell.text" @input="tableSetCell(cell, $event.target.value)"
                              data-spellcheck="spelling" autocomplete="off"
                              :aria-label="$app.t('editor.table.cellLabel', { row: r + 1, col: c + 1 })">

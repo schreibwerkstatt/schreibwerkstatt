@@ -38,7 +38,8 @@ export const tableMethods = {
     this._tableBlock = block || null;
     this._tableEditEl = null;
     this.tableEditing = false;
-    this.tableLossy = false;
+    this.tableLossyReasons = [];
+    this._tableHeaderStash = null;
     this.tableModelState = emptyTableModel(NEW_COLS, NEW_ROWS);
     this._openTableDlg();
   },
@@ -49,15 +50,24 @@ export const tableMethods = {
     this._tableBlock = null;
     this._tableEditEl = el;
     this.tableEditing = true;
+    this._tableHeaderStash = null;
     const m = tableModel(el);
-    // Eine Tabelle ohne Kopfzeile (Import-Markup) bekommt im Dialog keine
-    // aufgezwungen — sonst wuerde die erste Datenzeile zur Ueberschrift.
-    this.tableModelState = m.rows.length ? m : emptyTableModel(NEW_COLS, NEW_ROWS);
-    // Verlustbehaftete Faelle (verbundene Zellen, Blockinhalt) VOR dem
-    // Speichern ansagen. Der Dialog kann sie nicht darstellen; wer hier
-    // uebernimmt, planiert sie. Das soll eine Entscheidung sein, keine
-    // Ueberraschung.
-    this.tableLossy = !!m.lossy;
+    if (!m.header && !m.rows.length) {
+      // Kein einziges `<tr>`: nichts zu zeigen, also das Startgitter.
+      this.tableModelState = { ...emptyTableModel(NEW_COLS, NEW_ROWS), caption: m.caption };
+    } else {
+      // Eine Tabelle, die nur aus der Kopfzeile besteht, bekommt eine leere
+      // Datenzeile dazu — der Dialog braucht mindestens eine, und ein
+      // Startgitter an ihrer Stelle wuerde den Kopf beim Speichern ueberschreiben.
+      if (!m.rows.length) m.rows.push(Array.from({ length: m.align.length }, () => this._blankCell()));
+      // Eine Tabelle ohne Kopfzeile (Import-Markup) bekommt keine aufgezwungen —
+      // sonst wuerde die erste Datenzeile zur Ueberschrift.
+      this.tableModelState = m;
+    }
+    // Verlustbehaftete Faelle VOR dem Speichern ansagen, mit Grund. Der Dialog
+    // kann sie nicht darstellen; wer hier uebernimmt, planiert sie. Das soll
+    // eine Entscheidung sein, keine Ueberraschung.
+    this.tableLossyReasons = m.lossyReasons || [];
     this._openTableDlg();
   },
 
@@ -77,7 +87,8 @@ export const tableMethods = {
     this._tableBlock = null;
     this._tableEditEl = null;
     this.tableEditing = false;
-    this.tableLossy = false;
+    this.tableLossyReasons = [];
+    this._tableHeaderStash = null;
     this.tableModelState = emptyTableModel(NEW_COLS, NEW_ROWS);
     getEditEl()?.focus();
   },
@@ -102,6 +113,7 @@ export const tableMethods = {
     if (!m || !this.tableCanAddCol()) return;
     m.align.push('left');
     if (m.header) m.header.push(this._blankCell());
+    if (this._tableHeaderStash) this._tableHeaderStash.push(this._blankCell());
     for (const r of m.rows) r.push(this._blankCell());
   },
 
@@ -110,6 +122,7 @@ export const tableMethods = {
     if (!m || !this.tableCanRemoveCol()) return;
     m.align.splice(i, 1);
     if (m.header) m.header.splice(i, 1);
+    if (this._tableHeaderStash) this._tableHeaderStash.splice(i, 1);
     for (const r of m.rows) r.splice(i, 1);
   },
 
@@ -127,11 +140,22 @@ export const tableMethods = {
 
   /** Kopfzeile an-/abschalten. Beim Abschalten wandert sie NICHT in die Daten —
    *  wer den Kopf entfernt, will ihn weg; ihn als Datenzeile weiterzuschleppen
-   *  waere eine Ueberraschung. */
+   *  waere eine Ueberraschung. Bis zum Schliessen des Dialogs liegt sie aber
+   *  im Stash: wer sie wieder einschaltet, bekommt seinen Inhalt zurueck.
+   *  Spalten-Operationen halten den Stash mit dem Gitter in Takt. */
   tableToggleHeader() {
     const m = this.tableModelState;
     if (!m) return;
-    m.header = m.header ? null : Array.from({ length: this.tableCols() }, () => this._blankCell());
+    if (m.header) {
+      this._tableHeaderStash = m.header;
+      m.header = null;
+      return;
+    }
+    const stash = this._tableHeaderStash;
+    this._tableHeaderStash = null;
+    m.header = stash && stash.length === this.tableCols()
+      ? stash
+      : Array.from({ length: this.tableCols() }, () => this._blankCell());
   },
 
   tableHasHeader() {
@@ -156,6 +180,20 @@ export const tableMethods = {
     const m = this.tableModelState;
     if (!m || !TABLE_ALIGNS.includes(align)) return;
     m.align[i] = align;
+  },
+
+  /** Traegt irgendeine Zelle Auszeichnung (Quellen-Chip, Querverweis, fett …),
+   *  die eine Textaenderung ersetzen wuerde? Steuert den Hinweis im Dialog. */
+  tableHasRichCells() {
+    const m = this.tableModelState;
+    if (!m) return false;
+    return [...(m.header || []), ...m.rows.flat()].some(c => c?.rich && c?.html);
+  },
+
+  /** Klartext-Gruende fuer die Verlust-Warnung. */
+  tableLossyLabels() {
+    const app = window.__app;
+    return (this.tableLossyReasons || []).map(r => app?.t?.('editor.table.lossyReason.' + r) || r);
   },
 
   tableAlignOptions() {
@@ -186,6 +224,12 @@ export const tableMethods = {
     const node = htmlToElement(buildTableHtml(this.tableModelState));
     if (!node) { this.closeTableDialog(); return; }
     node.setAttribute('contenteditable', 'false');
+    // Block-ID mitnehmen: an ihr haengen Querverweise (`data-xref="table"`)
+    // und der Block-Merge. `buildTableHtml` vergibt bewusst keine — ohne
+    // Uebernahme vergaebe ensureBlockIds beim Speichern eine neue, und jeder
+    // Verweis auf diese Tabelle liefe ins Leere.
+    const bid = this._tableEditEl?.getAttribute?.('data-bid');
+    if (bid) node.setAttribute('data-bid', bid);
 
     const target = this._tableEditEl || this._tableBlock;
     if (target && target.isConnected && target.parentNode && editEl.contains(target)) {

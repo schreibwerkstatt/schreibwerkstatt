@@ -17,6 +17,8 @@
 //      ist beim Mount atomar markiert — ohne den Strip gaelte jede Seite mit
 //      Tabelle beim Oeffnen als geaendert).
 //   6. Klick auf eine gesetzte Tabelle oeffnet den Dialog zum Bearbeiten.
+//   7. Bearbeiten behaelt das `data-bid` — sonst laufen Querverweise ins Leere.
+//   8. Kopfzeile ab- und wieder einschalten bringt ihren Inhalt zurueck.
 //
 // Konventionen wie notebook-xref.spec.js: Inhalt wird ANGEHAENGT, und jeder Test
 // arbeitet auf einer eigenen Seite — die Smoke-DB lebt ueber den ganzen Lauf.
@@ -162,4 +164,39 @@ test('Klick auf eine gesetzte Tabelle oeffnet den Dialog zum Bearbeiten', async 
 
   await page.locator(`${DLG_SEL} .editor-dialog__actions button:not(.primary):not(.danger)`).last().click();
   await page.waitForSelector(`${DLG_SEL}[open]`, { state: 'detached', timeout: 5000 });
+});
+
+test('Bearbeiten behaelt die Block-ID der Tabelle (Querverweis-Anker)', async ({ page }) => {
+  await boot(page);
+  await openPageInEdit(page, 1);
+  const before = await serverHtml(page);
+  const bid = (before.match(/<table[^>]*data-bid="([0-9a-f]+)"/) || [])[1];
+  expect(bid, 'die gespeicherte Tabelle muss ein data-bid tragen').toBeTruthy();
+
+  await page.locator(`${EDIT_SEL} table`).first().click();
+  await page.waitForSelector(`${DLG_SEL}[open]`, { timeout: 5000 });
+  await page.locator(`${DLG_SEL} .table-grid-input`).nth(4).fill('9.9 Mio');
+  await page.locator(`${DLG_SEL} .editor-dialog__actions button.primary`).click();
+  await page.waitForSelector(`${DLG_SEL}[open]`, { state: 'detached', timeout: 5000 });
+
+  await page.evaluate(async () => { await window.__app.saveEdit(); });
+  await page.waitForFunction(() => window.__app.editMode === false, null, { timeout: 15000 });
+  const after = await serverHtml(page);
+  expect(after).toContain('9.9 Mio');
+  expect(after).toContain(`data-bid="${bid}"`);
+});
+
+test('Kopfzeile ab- und wieder einschalten bringt ihren Inhalt zurueck', async ({ page }) => {
+  await boot(page);
+  await openPageInEdit(page, 0);
+  await openTableDialog(page);
+
+  const cells = page.locator(`${DLG_SEL} .table-grid-input`);
+  await cells.nth(0).fill('Jahr');
+  const toggle = page.locator(`${DLG_SEL} .table-dialog-tools button`).nth(2);
+  await toggle.click();
+  await expect(cells).toHaveCount(6);
+  await toggle.click();
+  await expect(cells).toHaveCount(9);
+  await expect(cells.nth(0)).toHaveValue('Jahr');
 });

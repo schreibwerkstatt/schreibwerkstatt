@@ -99,6 +99,65 @@ test('zu viele Zeilen setzen lossy statt still zu kappen', () => {
   assert.equal(m.lossy, true);
 });
 
+test('zu viele Spalten setzen lossy statt still zu kappen', () => {
+  const cells = Array.from({ length: TABLE_MAX_COLS + 3 }, (_, i) => `<td>${i}</td>`).join('');
+  const m = tableModel(tableEl(`<table><tr>${cells}</tr></table>`));
+  assert.equal(m.align.length, TABLE_MAX_COLS);
+  assert.equal(m.lossy, true);
+  assert.ok(m.lossyReasons.includes('cols'));
+});
+
+test('th ausserhalb der Kopfzeile setzt lossy (Zeilenkopf, zweite Kopfzeile)', () => {
+  const rowHead = tableModel(tableEl(
+    '<table><thead><tr><th>A</th><th>B</th></tr></thead>'
+    + '<tbody><tr><th scope="row">x</th><td>1</td></tr></tbody></table>'));
+  assert.deepEqual(rowHead.lossyReasons, ['rowHeader']);
+  const twoHeads = tableModel(tableEl(
+    '<table><thead><tr><th>A</th></tr><tr><th>B</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table>'));
+  assert.ok(twoHeads.lossyReasons.includes('rowHeader'));
+});
+
+test('abweichende Zellausrichtung setzt lossy, passende nicht', () => {
+  const off = tableModel(tableEl(
+    '<table><thead><tr><th data-align="center">A</th></tr></thead>'
+    + '<tbody><tr><td data-align="right">1</td></tr></tbody></table>'));
+  assert.deepEqual(off.lossyReasons, ['cellAlign']);
+  assert.equal(tableModel(tableEl(SIMPLE)).lossy, false, 'gleiche Ausrichtung in Kopf und Zelle ist kein Verlust');
+});
+
+test('lossyReasons nennt jeden Grund genau einmal', () => {
+  const m = tableModel(tableEl('<table><tr><td colspan="2"><p>a</p></td></tr><tr><td colspan="2">b</td></tr></table>'));
+  assert.deepEqual(m.lossyReasons, ['span', 'block']);
+});
+
+test('saubere Tabelle hat keine lossyReasons', () => {
+  assert.deepEqual(tableModel(tableEl(SIMPLE)).lossyReasons, []);
+});
+
+// ── Beschriftung mit Auszeichnung ───────────────────────────────────────────
+
+test('unangetastete Beschriftung behaelt ihre Auszeichnung', () => {
+  const src = '<table><caption>Umsatz <em>netto</em><span class="cite" data-src="3">(X, 2020)</span></caption>'
+    + '<tr><td>1</td></tr></table>';
+  const m = tableModel(tableEl(src));
+  assert.equal(m.caption, 'Umsatz netto(X, 2020)');
+  const out = buildTableHtml(m);
+  assert.ok(out.includes('<em>netto</em>'), 'Kursiv in der Beschriftung darf nicht verschwinden');
+  assert.ok(out.includes('data-src="3"'), 'Beleg in der Beschriftung darf nicht verschwinden');
+});
+
+test('geaenderte Beschriftung schreibt Klartext', () => {
+  const m = tableModel(tableEl('<table><caption>Alt <em>kursiv</em></caption><tr><td>1</td></tr></table>'));
+  m.caption = 'Neu';
+  const out = buildTableHtml(m);
+  assert.ok(out.includes('<caption>Neu</caption>'));
+  assert.ok(!out.includes('<em>'));
+});
+
+test('Beschriftung ohne Auszeichnung traegt kein captionHtml', () => {
+  assert.equal(tableModel(tableEl(SIMPLE)).captionHtml, '');
+});
+
 // ── Erzeugen ────────────────────────────────────────────────────────────────
 
 test('buildTableHtml escapet Klartext-Zellen', () => {

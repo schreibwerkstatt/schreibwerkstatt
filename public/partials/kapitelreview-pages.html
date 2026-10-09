@@ -45,7 +45,9 @@
                         @click="$app.kapitelReviewChapterId = String(sub.id)"
                         :data-tip="$app.t('kapitelReview.openSubchapterTip', { name: sub.name })"
                         x-text="sub.name"></span>
-                  <span class="tag" x-text="sub.pages.length === 1 ? $app.t('sidebar.pagesCountOne') : $app.t('sidebar.pagesCount', { n: sub.pages.length })"></span>
+                  <span class="tag" x-text="$app.t('sidebar.pagesCountShort', { n: sub.pages.length })"
+                        :data-tip="sub.pages.length === 1 ? $app.t('sidebar.pagesCountOne') : $app.t('sidebar.pagesCount', { n: sub.pages.length })"
+                        :aria-label="sub.pages.length === 1 ? $app.t('sidebar.pagesCountOne') : $app.t('sidebar.pagesCount', { n: sub.pages.length })"></span>
                 </div>
                 <div class="kapitel-pages-list" x-show="isSubchapterOpen(sub.id) && sub.pages.length > 0" x-cloak>
                   <template x-for="page in sub.pages" :key="page.id">

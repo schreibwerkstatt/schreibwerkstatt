@@ -448,6 +448,7 @@ export const pageMethods = {
     this.selectedFindings = [];
     this.appliedOriginals = [];
     this.appliedHistoricCorrections = [];
+    this.lektoratProgress = null;
     this.checkDone = false;
     this.checkLoading = false;
     this.checkProgress = 0;

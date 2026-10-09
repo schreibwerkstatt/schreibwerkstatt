@@ -1,4 +1,15 @@
 @layer components {
+/* === Kapitel-Übersicht: Bewertungs-Abschnitt ===
+   Trennlinie + Luft nach oben, damit das KI-Urteil sich von den
+   Dashboard-Kacheln darueber absetzt statt als weitere Statistik zu lesen.
+   Der Abstand ersetzt den Fluss-Abstand (`.card-section + .card-section`),
+   weil das Dashboard davor kein `.card-section` ist. */
+.kapitel-review-verdict {
+  margin-top: var(--space-lg);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
 /* === Kapitel-Review: Kopfzeile der aktuellen Bewertung (Datum, Umfang,
    Modell, Löschen) über dem Bewertungstext === */
 .kapitel-review-latest-meta {

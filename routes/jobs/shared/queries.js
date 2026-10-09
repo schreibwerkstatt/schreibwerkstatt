@@ -1,6 +1,8 @@
 'use strict';
 const { db } = require('../../../db/schema');
 const { openStatusSql } = require('../../../lib/ideen-status');
+const { listFigureAges } = require('../../../db/figure-ages');
+const { birthCandidates, resolveBirth } = require('../../../lib/figure-birth');
 
 /**
  * Offene Ideen einer Seite + des umliegenden Kapitels (user-spezifisch).
@@ -73,7 +75,7 @@ function getLatestReview(bookId, userEmail) {
 function getFiguren(bookId, userEmail, chapterId = null) {
   const figParams = chapterId != null ? [bookId, userEmail, chapterId] : [bookId, userEmail];
   const rows = db.prepare(`
-    SELECT f.fig_id, f.name, f.kurzname, f.typ, f.beschreibung, f.beruf, f.geschlecht,
+    SELECT f.id AS db_id, f.fig_id, f.name, f.kurzname, f.typ, f.beschreibung, f.beruf, f.geschlecht, f.geburtstag,
            GROUP_CONCAT(DISTINCT ft.tag) AS tags,
            GROUP_CONCAT(DISTINCT c.chapter_name) AS kapitel
     FROM figures f
@@ -184,9 +186,27 @@ function getFiguren(bookId, userEmail, chapterId = null) {
     });
   }
 
+  // Geburtsjahr nach derselben Vorrangregel wie `get_figure_age` (lib/figure-birth.js).
+  // Ohne Jahrgang rechnet kein Chat ein Alter («wann wird X eingeschult?»), und ein
+  // Widerspruch zwischen Steckbrief, Geburts-Ereignis und Alters-Index ist genau der
+  // Befund, den eine solche Frage sucht.
+  const indexYearById = new Map(listFigureAges(bookId, userEmail).map(a => [a.fig_id, a.geburtsjahr]));
+  const birthById = new Map();
+  for (const r of rows) {
+    const { birth, widerspruch } = resolveBirth(birthCandidates(bookId, userEmail,
+      { id: r.db_id, geburtstag: r.geburtstag }, indexYearById.get(r.fig_id) ?? null));
+    if (!birth) continue;
+    birthById.set(r.db_id, {
+      geburtsjahr: birth.y, geburtsjahr_quelle: birth.quelle,
+      ...(widerspruch ? { geburtsjahr_widerspruch: widerspruch } : {}),
+    });
+  }
+
   return rows.map(r => ({
     id: r.fig_id, name: r.name, kurzname: r.kurzname, typ: r.typ,
     beschreibung: r.beschreibung, beruf: r.beruf, geschlecht: r.geschlecht,
+    ...(r.geburtstag ? { geburtstag: r.geburtstag } : {}),
+    ...birthById.get(r.db_id),
     eigenschaften: r.tags ? r.tags.split(',') : [],
     kapitel: r.kapitel ? r.kapitel.split(',') : [],
     ...(eventsByFigId[r.fig_id]?.length  ? { lebensereignisse: eventsByFigId[r.fig_id]  } : {}),

@@ -587,6 +587,7 @@ export const BOOK_CHAT_OUTSIDE_WORLD_RULE = [
   'Betrifft eine Frage reale Ereignisse, Orte, Personen oder Fakten ausserhalb des Buchs (z.B. «stimmt das historisch?», «wann fiel die Mauer wirklich?»), sag klar, dass der Buch-Chat das nicht prüfen kann, und verweise auf den Recherche-Chat.',
   'Setze dann in `final_answer` `recherche_hinweis: true` und `recherche_frage` (eigenständig formuliert, ohne Bezug auf diesen Chat). Was das Manuskript selbst dazu sagt, beantwortest du trotzdem.',
   'Ausnahme: was der Autor selbst recherchiert hat, steht im Recherche-Board (list_research_items/read_research_item). Das darfst du heranziehen — kennzeichne es als gesammeltes Material des Autors, nicht als geprüfte Tatsache und nicht als Buchstelle.',
+  'Ausnahme: allgemeine Lebensnormen (Einschulung mit etwa 6 Jahren, Volljährigkeit mit 18, übliches Pensionsalter, Schwangerschaftsdauer u.ä.) darfst du als PRÜFMASSSTAB an die Daten des Buchs anlegen, z.B. «wann sollte X eingeschult werden?» oder «passt das Alter von X zu diesem Ereignis?». Kennzeichne die Norm als Allgemeinwissen (nicht als Buchstelle) und nenne, dass sie je nach Land und Epoche abweichen kann; Alter rechnest du dabei mit `get_figure_age`. Das ist kein Fall für den Recherche-Chat — setze `recherche_hinweis` nur, wenn die Antwort an einer konkreten historischen oder regionalen Tatsache hängt.',
 ].join('\n');
 
 // Synthese-Aufforderung, wenn der Kosten-Deckel pro Antwort

@@ -1,0 +1,61 @@
+{
+  "version": "4.19.3",
+  "date": "2026-10-09",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Lektorat eines Abschnitts: Über der Befundliste steht jetzt, wie viele Beanstandungen seit dem letzten Lektorat behoben, geblieben oder neu dazugekommen sind.",
+      "en": "Section proofreading: above the list of findings you now see how many issues were fixed, remained or are new since the last proofreading."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Kapitel-Übersicht (über das Kapitel in der Seitenleiste): Die Kapitelbewertung steht jetzt in einem eigenen Abschnitt mit Titel, getrennt von Kennzahlen und Abschnittsliste.",
+      "en": "Chapter overview (via the chapter in the sidebar): the chapter review now sits in its own titled section, separate from the figures and the section list."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Tabellen-Dialog: Er sagt jetzt genau, was beim Übernehmen verloren ginge, und hebt Zellen mit Auszeichnung, Beleg oder Querverweis hervor. Eine ausgeschaltete Kopfzeile kommt beim Wiedereinschalten mit ihrem Inhalt zurück.",
+      "en": "Table dialog: it now says exactly what would be lost on applying and highlights cells with formatting, citations or cross-references. A header row you switch off comes back with its content when you switch it on again."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Auswahllisten reagieren jetzt flüssiger: Karten mit vielen Auswahlfeldern scrollen ohne Ruckeln, und Tippen oder Überfahren langer Listen hakt nicht mehr.",
+      "en": "Dropdown lists respond more smoothly: cards with many dropdowns scroll without stutter, and typing in or hovering over long lists no longer lags."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Auswahllisten mit der Tastatur: Nach Escape oder einer Auswahl bleibt der Fokus auf dem Feld, und Tab schliesst eine offene Liste.",
+      "en": "Dropdown lists by keyboard: after Escape or a selection, focus stays on the field, and Tab closes an open list."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buch-Chat: Alter und Geburtsjahr einer Figur nennt er jetzt durchgehend nach derselben Angabe, statt sich zwischen zwei Antworten zu widersprechen.",
+      "en": "Book chat: it now gives a character's age and birth year from the same source throughout, instead of contradicting itself between answers."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Auf sehr breiten Bildschirmen nutzt die App jetzt mehr von der verfügbaren Breite.",
+      "en": "On very wide screens the app now uses more of the available width."
+    },
+    {
+      "kind": "behoben",
+      "de": "Tabelle bearbeiten: Querverweise auf die Tabelle führten nach dem Speichern ins Leere.",
+      "en": "Editing a table: cross-references to the table led nowhere after saving."
+    },
+    {
+      "kind": "behoben",
+      "de": "Rechtschreibprüfung: Der Vorschlag legte sich manchmal über das markierte Wort, sodass man es nicht mehr anklicken konnte.",
+      "en": "Spell check: the suggestion box sometimes covered the marked word, so you could no longer click it."
+    },
+    {
+      "kind": "behoben",
+      "de": "Auf dem Handy überdeckte der Schliessen-Knopf einer Karte die Symbole daneben im Kartenkopf.",
+      "en": "On phones, a card's close button covered the icons next to it in the card header."
+    },
+    {
+      "kind": "behoben",
+      "de": "Eine Auswahlliste nahe am Bildschirmrand schloss sich manchmal gleich nach dem Öffnen wieder.",
+      "en": "A dropdown list near the edge of the screen sometimes closed again right after opening."
+    }
+  ]
+}

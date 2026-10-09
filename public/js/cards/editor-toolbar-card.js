@@ -94,11 +94,14 @@ export function registerEditorToolbarCard() {
     // `tableModelState` ist das Gitter-Modell im Dialog (Form: tableModel() aus
     // table/table-html.js), `_tableEditEl` die angeklickte Tabelle (null =
     // Einfügen), `_tableBlock` der leere Trigger-Block des Slash-Menüs.
-    // `tableLossy` warnt vor dem Speichern, wenn das Quell-Markup verbundene
-    // Zellen oder Blockinhalt trug — beides kann der Dialog nicht darstellen.
+    // `tableLossyReasons` (Codes aus TABLE_LOSSY_REASONS) warnt vor dem
+    // Speichern, wenn das Quell-Markup etwas trug, das der Dialog nicht
+    // darstellen kann. `_tableHeaderStash` haelt eine abgeschaltete Kopfzeile
+    // bis zum Schliessen, damit Wiedereinschalten ihren Inhalt zurueckbringt.
     tableModelState: null,
     tableEditing: false,
-    tableLossy: false,
+    tableLossyReasons: [],
+    _tableHeaderStash: null,
     _tableBlock: null,
     _tableEditEl: null,
     // Bild-Dialog (siehe editor/notebook/toolbar/image.js). `imageSrc` ist nur

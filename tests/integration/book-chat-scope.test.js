@@ -166,3 +166,29 @@ test('_retrievalQuery: Folgefrage trägt die letzte Runde mit', () => {
   assert.ok(q.endsWith('und wie alt war sie da?'));
   assert.equal(_retrievalQuery('nur Frage', []), 'nur Frage');
 });
+
+test('getFiguren: Geburtsjahr nach derselben Vorrangregel wie get_figure_age, Widerspruch ausgewiesen', () => {
+  const { getFiguren } = require('../../routes/jobs/shared/queries');
+  // Alters-Index: Bert widerspricht seinem Geburts-Ereignis (1970), Dora hat nur den Index.
+  const T2 = '2026-01-02T10:00:00.000Z';
+  ids.dora = db.prepare(`INSERT INTO figures (book_id, user_email, fig_id, name, sort_order, updated_at) VALUES (?, ?, 'fig_dora', 'Dora Dorn', 3, ?)`).run(BOOK, U, T2).lastInsertRowid;
+  const insAge = db.prepare('INSERT INTO figure_ages (figure_id, book_id, geburtsjahr) VALUES (?, ?, ?)');
+  insAge.run(ids.bert, BOOK, 1971);
+  insAge.run(ids.dora, BOOK, 1980);
+
+  const byId = Object.fromEntries(getFiguren(BOOK, U).map(f => [f.id, f]));
+  assert.equal(byId.fig_anna.geburtstag, '12. März 1961');
+  assert.equal(byId.fig_anna.geburtsjahr, 1961);
+  assert.equal(byId.fig_anna.geburtsjahr_quelle, 'steckbrief');
+  assert.equal(byId.fig_anna.geburtsjahr_widerspruch, undefined);
+  assert.equal(byId.fig_bert.geburtsjahr, 1970);
+  assert.equal(byId.fig_bert.geburtsjahr_quelle, 'geburts_ereignis');
+  assert.deepEqual(byId.fig_bert.geburtsjahr_widerspruch,
+    [{ quelle: 'geburts_ereignis', jahr: 1970 }, { quelle: 'alters_index', jahr: 1971 }]);
+  assert.equal(byId.fig_dora.geburtsjahr, 1980);
+  assert.equal(byId.fig_dora.geburtsjahr_quelle, 'alters_index');
+  assert.equal(byId.fig_cleo.geburtsjahr, undefined);
+  assert.equal(byId.fig_fremd, undefined);
+  // Werkzeug und Block sagen dasselbe.
+  assert.deepEqual(call('get_figure_age', { figur_id: 'fig_bert' }).geburtsjahr_widerspruch, byId.fig_bert.geburtsjahr_widerspruch);
+});

@@ -135,6 +135,10 @@ function _isHeaderRow(tr) {
   return cells.length > 0 && cells.every(c => c.tagName === 'TH');
 }
 
+/** Gruende, aus denen `tableModel` eine Tabelle als verlustbehaftet meldet.
+ *  Der Dialog nennt sie einzeln (i18n `editor.table.lossyReason.<code>`). */
+export const TABLE_LOSSY_REASONS = ['span', 'block', 'rows', 'cols', 'rowHeader', 'cellAlign'];
+
 /** Tabelle als Modell lesen. Gegenstueck zu `buildTableHtml` — der Round-Trip
  *  Modell → HTML → Modell ist stabil (gegated in tests/unit/table-html.test.mjs).
  *
@@ -143,35 +147,55 @@ function _isHeaderRow(tr) {
  *  breiteste aufgefuellt).
  *
  *  VERLUSTBEHAFTETE FAELLE werden gemeldet, nicht stillschweigend geschluckt:
- *  `lossy` ist wahr, wenn colspan/rowspan oder Blockinhalt in einer Zelle
- *  wegfallen. Der Dialog warnt damit VOR dem Speichern — eine aus Word
- *  importierte Tabelle mit verbundenen Zellen soll man nicht versehentlich
- *  planieren.
+ *  `lossy` ist wahr, sobald `buildTableHtml(tableModel(el))` etwas vom
+ *  Quell-Markup nicht wiedergibt — verbundene Zellen, Blockinhalt, Zeilen oder
+ *  Spalten ueber dem Deckel, `<th>` ausserhalb der Kopfzeile (Zeilenkoepfe,
+ *  mehrzeiliger Kopf), eine Zellausrichtung, die von ihrer Spalte abweicht.
+ *  `lossyReasons` nennt die Gruende (Codes aus TABLE_LOSSY_REASONS). Der Dialog
+ *  warnt damit VOR dem Speichern — eine aus Word importierte Tabelle soll man
+ *  nicht versehentlich planieren.
  *
- *  @returns {{ caption: string, align: string[], header: object[]|null,
- *              rows: object[][], lossy: boolean }}
+ *  Die Beschriftung behaelt ihre Auszeichnung nach derselben Regel wie eine
+ *  Zelle: `captionHtml` traegt sie, `captionText` den Klartext beim Auslesen.
+ *  Solange `caption` unveraendert ist, schreibt `buildTableHtml` das HTML.
+ *
+ *  @returns {{ caption: string, captionText: string, captionHtml: string,
+ *              align: string[], header: object[]|null, rows: object[][],
+ *              lossy: boolean, lossyReasons: string[] }}
  */
 export function tableModel(el) {
-  const empty = { caption: '', align: [], header: null, rows: [], lossy: false };
+  const empty = {
+    caption: '', captionText: '', captionHtml: '',
+    align: [], header: null, rows: [], lossy: false, lossyReasons: [],
+  };
   if (!isTableEl(el)) return empty;
 
   const capEl = el.querySelector?.('caption');
   const caption = capEl ? _normText(capEl.textContent) : '';
+  const capHtml = capEl ? _inlineHtml(capEl).trim() : '';
+  // Nur wenn die Beschriftung mehr traegt als ihren Klartext — sonst gilt
+  // `caption` allein, wie bei einer Zelle mit `rich: false`.
+  const captionHtml = capHtml && capHtml !== escHtml(caption) && /</.test(capHtml) ? capHtml : '';
+  const capFields = { caption, captionText: caption, captionHtml };
 
   const trs = Array.from(el.querySelectorAll?.('tr') || []);
-  if (!trs.length) return { ...empty, caption };
+  if (!trs.length) return { ...empty, ...capFields };
 
-  let lossy = false;
+  const reasons = new Set();
   const rowsRaw = [];
   for (const tr of trs) {
     const cells = _rowCells(tr);
     for (const c of cells) {
       const cs = parseInt(c.getAttribute?.('colspan') || '1', 10);
       const rs = parseInt(c.getAttribute?.('rowspan') || '1', 10);
-      if (cs > 1 || rs > 1) lossy = true;
-      if (c.querySelector?.('p,div,ul,ol,table,blockquote,pre,figure')) lossy = true;
+      if (cs > 1 || rs > 1) reasons.add('span');
+      if (c.querySelector?.('p,div,ul,ol,table,blockquote,pre,figure')) reasons.add('block');
     }
-    rowsRaw.push({ header: _isHeaderRow(tr), cells: cells.map(_cellModel) });
+    rowsRaw.push({
+      header: _isHeaderRow(tr),
+      hasTh: cells.some(c => c.tagName === 'TH'),
+      cells: cells.map(_cellModel),
+    });
   }
 
   // Kopfzeile: die erste Zeile, wenn sie aus `<th>` besteht — egal ob in
@@ -182,13 +206,15 @@ export function tableModel(el) {
     header = rowsRaw[0].cells;
     body = rowsRaw.slice(1);
   }
+  // Jedes weitere `<th>` (Zeilenkopf, zweite Kopfzeile) wird beim Schreiben
+  // zu `<td>` — die Kopf-Semantik faellt weg.
+  if (body.some(r => r.hasTh)) reasons.add('rowHeader');
 
-  const cols = Math.min(TABLE_MAX_COLS, Math.max(
-    header ? header.length : 0,
-    ...body.map(r => r.cells.length), 1,
-  ));
+  const widest = Math.max(header ? header.length : 0, ...body.map(r => r.cells.length), 1);
+  const cols = Math.min(TABLE_MAX_COLS, widest);
+  if (widest > TABLE_MAX_COLS) reasons.add('cols');
   const rows = body.slice(0, TABLE_MAX_ROWS);
-  if (body.length > TABLE_MAX_ROWS) lossy = true;
+  if (body.length > TABLE_MAX_ROWS) reasons.add('rows');
 
   const pad = (cells) => {
     const out = cells.slice(0, cols);
@@ -207,7 +233,18 @@ export function tableModel(el) {
     align.push(a || 'left');
   }
 
-  return { caption, align, header: headerCells, rows: bodyRows, lossy };
+  // Ausrichtung hat einen Traeger pro Spalte: eine Zelle mit eigener, davon
+  // abweichender Angabe verliert sie beim Schreiben.
+  const colCells = [...(headerCells ? [headerCells] : []), ...bodyRows];
+  if (colCells.some(r => r.some((cell, c) => cell.align && cell.align !== align[c]))) {
+    reasons.add('cellAlign');
+  }
+
+  const lossyReasons = TABLE_LOSSY_REASONS.filter(r => reasons.has(r));
+  return {
+    ...capFields, align, header: headerCells, rows: bodyRows,
+    lossy: lossyReasons.length > 0, lossyReasons,
+  };
 }
 
 /** Alle Tabellen unter `root` in Dokumentreihenfolge, je mit Modell. */
@@ -277,8 +314,12 @@ export function buildTableHtml(model) {
   };
 
   const caption = _normText(m.caption);
+  // Unveraenderte Beschriftung behaelt ihre Auszeichnung (siehe tableModel).
+  const captionInner = m.captionHtml && caption && caption === _normText(m.captionText)
+    ? _stripDanger(m.captionHtml)
+    : escHtml(caption);
   const parts = ['<table>'];
-  if (caption) parts.push(`<caption>${escHtml(caption)}</caption>`);
+  if (caption) parts.push(`<caption>${captionInner}</caption>`);
   if (header) parts.push(`<thead>${row(header, 'th')}</thead>`);
   parts.push(`<tbody>${rows.map(r => row(r, 'td')).join('')}</tbody>`);
   parts.push('</table>');
@@ -292,10 +333,13 @@ export function emptyTableModel(cols = 3, rows = 2) {
   const blank = () => ({ html: '', text: '', align: null, rich: false });
   return {
     caption: '',
+    captionText: '',
+    captionHtml: '',
     align: Array.from({ length: c }, () => 'left'),
     header: Array.from({ length: c }, blank),
     rows: Array.from({ length: r }, () => Array.from({ length: c }, blank)),
     lossy: false,
+    lossyReasons: [],
   };
 }
 

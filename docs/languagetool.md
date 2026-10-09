@@ -156,7 +156,7 @@ Fallback bei fehlendem API-Support: `badge.update('disabled')`, sonst läuft die
 **Popover-Mounting** (Host-Wahl + Geometrie in [position.js](../public/js/cards/editor-spellcheck/position.js), pure DOM-Mathematik ohne Controller-State — `resolvePopoverHost(scrollEl)` + `positionPopover(el, anchorRect, host)`):
 - Interner Scroll-Container (Notebook/Focus): Popover als Kind des Scroll-Containers, `position: absolute` in Scroll-Content-Koordinaten. Popover ist `contenteditable="false"` (nicht-editbare Insel), MutationObserver filtert popover-eigene Mutationen (sonst trigger das Anhängen einen Re-Check, der Squiggles vor dem User-Klick verwirft).
 - Window-Scroll (Bucheditor): Popover an `document.body`, position absolute in Document-Koordinaten.
-- Vertical/Horizontal Clamp + Flip gegen Viewport bzw. Host-Sichtbereich.
+- Vertikal (`placeVertical`): unter dem Wort, sonst darüber; passt der Popover auf keiner Seite, kommt er auf die geräumigere und wird per `max-height` gekappt (scrollt intern). **Nie auf das Wort geklemmt** — ein Popover über dem Wort verhindert Klick und Selektion darin. Horizontal: Clamp gegen Viewport bzw. Host-Sichtbereich. Test: [tests/unit/spellcheck-popover-position.test.mjs](../tests/unit/spellcheck-popover-position.test.mjs).
 
 **MutationObserver-Filter `_isPopoverOnlyMutation`** — Mutationen, deren betroffene Knoten ausschliesslich im Popover-Subtree liegen, triggern keinen Re-Check.
 

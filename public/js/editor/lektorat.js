@@ -128,6 +128,7 @@ export const lektoratMethods = {
     this.selectedFindings = [];
     this.appliedOriginals = [];
     this.appliedHistoricCorrections = [];
+    this.lektoratProgress = null;
     this.correctedHtml = null;
     this.hasErrors = false;
     this.analysisOut = '';
@@ -161,6 +162,7 @@ export const lektoratMethods = {
     this.selectedFindings = [];
     this.appliedOriginals = [];
     this.appliedHistoricCorrections = [];
+    this.lektoratProgress = null;
     this.checkProgress = 0;
     this.checkStatus = `<span class="spinner"></span>${escHtml(this.t('lektorat.starting'))}`;
 
@@ -281,6 +283,9 @@ export const lektoratMethods = {
         // Default selected: nur „harte" Typen (page-view.js#findingKind). Weiche und redaktionelle default unselected.
         this.selectedFindings = findings.map(f => isHardFinding(f.typ));
         this.appliedOriginals = [];
+        // Im Stale-Fall ist der Vergleich gegen einen Text gerechnet, den es nicht
+        // mehr gibt — dann lieber keiner als ein falscher.
+        this.lektoratProgress = staleRefiltered ? null : (r.progress || null);
         const hardErrors = findings.filter(f => isHardFinding(f.typ));
         this.hasErrors = hardErrors.length > 0;
         this.correctedHtml = hardErrors.length > 0
@@ -395,6 +400,7 @@ export const lektoratMethods = {
       this.selectedFindings = [];
       this.appliedOriginals = [];
       this.appliedHistoricCorrections = [];
+      this.lektoratProgress = null;
       this.checkDone = false;
       this.activeHistoryEntryId = null;
       // Seitenansicht aus dem gerade gespeicherten HTML neu aufbauen

@@ -430,6 +430,9 @@ const lektoratState = () => ({
   selectedFindings: [],
   appliedOriginals: [],
   appliedHistoricCorrections: [],
+  // Vergleich mit dem Vorlauf derselben Seite (lib/lektorat-progress.js), nur
+  // direkt nach einem Abschnitts-Lektorat gesetzt, sonst null.
+  lektoratProgress: null,
   checkDone: false,
   checkLoading: false,
   checkProgress: 0,

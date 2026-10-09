@@ -42,6 +42,7 @@ export const historyMethods = {
         this.selectedFindings = [];
         this.appliedOriginals = [];
         this.appliedHistoricCorrections = [];
+        this.lektoratProgress = null;
         this.correctedHtml = null;
         this.hasErrors = false;
         this.checkDone = false;
@@ -72,6 +73,7 @@ export const historyMethods = {
       this.selectedFindings = [];
       this.appliedOriginals = [];
       this.appliedHistoricCorrections = [];
+      this.lektoratProgress = null;
       this.correctedHtml = null;
       this.hasErrors = false;
       this.checkDone = false;
@@ -125,6 +127,7 @@ export const historyMethods = {
     // (wurde durch die Korrektur ersetzt) → separate, kompakte Sektion in der Fehlerliste.
     const stillVisible = new Set(findings.map(f => f.original));
     const seenOriginals = new Set();
+    this.lektoratProgress = null;
     this.appliedHistoricCorrections = appliedEntries.filter(e => {
       if (!e.original || stillVisible.has(e.original) || seenOriginals.has(e.original)) return false;
       seenOriginals.add(e.original);

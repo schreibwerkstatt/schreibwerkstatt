@@ -24,7 +24,7 @@ Vier Festlegungen, die keine Schicht verwischen darf:
 
 **Ausrichtung hat einen Träger:** `data-align` an der Zelle, und die **Kopfzelle ist für ihre Spalte autoritativ**. Die kompaktere Alternative (`data-align="l,r,r"` an der Tabelle) scheitert daran, dass CSS `text-align` nicht aus einer Spaltenangabe ableiten kann; `style` ist per harter Regel ausgeschlossen. Zwei Träger wären eine Drift-Quelle.
 
-**Zellen tragen nur Inline-Inhalt** (Auszeichnung, Quellen-Chip, Querverweis). Keine Blöcke, keine verschachtelten Tabellen, kein `colspan`/`rowspan`. Der Gitter-Dialog erzwingt das ohnehin; für den PDF-Messer ist es die Grenze zwischen „Spaltenbreiten berechnen" und „Textsatz-Projekt". Trifft `tableModel()` auf verbundene Zellen oder Blockinhalt (Import-Markup), meldet es `lossy: true` — der Dialog warnt **vor** dem Speichern, statt still zu planieren.
+**Zellen tragen nur Inline-Inhalt** (Auszeichnung, Quellen-Chip, Querverweis). Keine Blöcke, keine verschachtelten Tabellen, kein `colspan`/`rowspan`. Der Gitter-Dialog erzwingt das ohnehin; für den PDF-Messer ist es die Grenze zwischen „Spaltenbreiten berechnen" und „Textsatz-Projekt". Trifft `tableModel()` auf Markup, das `buildTableHtml` nicht wiedergibt, meldet es `lossy: true` und die Gründe in `lossyReasons` (`TABLE_LOSSY_REASONS`: verbundene Zellen, Blockinhalt, Zeilen bzw. Spalten über dem Deckel, `<th>` ausserhalb der Kopfzeile, von der Spalte abweichende Zellausrichtung) — der Dialog nennt sie **vor** dem Speichern einzeln, statt still zu planieren.
 
 **`scope="col"`** an den Kopfzellen ist Pflicht: die Angabe, aus der ein Screenreader die Spaltenzuordnung liest.
 
@@ -36,11 +36,15 @@ Slash-Item `/tabelle` → [toolbar/table.js](../public/js/editor/notebook/toolba
 
 **Warum ein Dialog und keine bearbeitbare Tabelle im Text:** Chromium bäckt beim Verschmelzen von Zellen die berechneten CSS-Werte als Inline-`style` ein (dieselbe Ursache wie bei den Blockgrenzen von `figure`/`blockquote`/`pre`), und `style` darf nach der Regel „Styles nur in public/css" nicht in die Persistenz. Dazu kämen Zell-Selektion, Löschen über Zellgrenzen und ein eigener Undo-Pfad.
 
+**Bearbeiten behält das `data-bid`.** `buildTableHtml` vergibt keines; `applyTable` überträgt es von der bearbeiteten Tabelle auf den neuen Knoten. Ohne das vergäbe `ensureBlockIds` beim Speichern eine neue ID, und jeder Querverweis auf die Tabelle liefe ins Leere (E2E, mutationsgeprüft).
+
 Der Block ist deshalb **atomar** (`contenteditable="false"` via `markTablesAtomic`, gesetzt in [mount-html.js](../public/js/editor/shared/mount-html.js)) und wird ausschliesslich im Dialog bearbeitet; ein Klick darauf öffnet ihn ([editor-toolbar-card.js](../public/js/cards/editor-toolbar-card.js)). Focus-Editor und Bucheditor **stellen nur dar** — gleiche Regel wie beim Diagramm.
 
 **Tabellen stehen bewusst NICHT in `ATOMIC_BLOCK_TAGS`.** Dort landet, was ein einzelnes Backspace am Anfang des Folgeabsatzes löschen darf (`<hr>`, `<figure>`). Eine Datentabelle so zu verlieren wäre zu teuer; der Löschweg ist der „Tabelle entfernen"-Knopf im Dialog — dieselbe Wahl wie beim Diagramm.
 
-**Auszeichnung überlebt, solange die Zelle unangetastet bleibt.** Das Modell führt pro Zelle `{ html, text, rich }`; der Dialog bindet `text`. Ändert der Nutzer den Text, fällt `rich` auf false und die Auszeichnung wird durch den Klartext ersetzt. Eine nicht angefasste Zelle behält ihr `html` — inklusive Quellen-Chip und Querverweis.
+**Auszeichnung überlebt, solange die Zelle unangetastet bleibt.** Das Modell führt pro Zelle `{ html, text, rich }`; der Dialog bindet `text`. Ändert der Nutzer den Text, fällt `rich` auf false und die Auszeichnung wird durch den Klartext ersetzt. Eine nicht angefasste Zelle behält ihr `html` — inklusive Quellen-Chip und Querverweis. Der Dialog hinterlegt solche Zellen (`.is-rich`) und sagt, dass eine Textänderung die Auszeichnung ersetzt. Die Beschriftung folgt derselben Regel: `captionHtml` wird geschrieben, solange `caption` gleich `captionText` ist.
+
+Eine abgeschaltete Kopfzeile bleibt bis zum Schliessen des Dialogs im Stash; Wiedereinschalten bringt ihren Inhalt zurück. Eine Tabelle, die nur aus der Kopfzeile besteht, öffnet mit ihrem Kopf und einer leeren Datenzeile.
 
 **Geprüft wird, wo geschrieben wird.** Im Manuskript ist die Tabelle aus dem LanguageTool-Stream geschnitten (der Block ist nicht editierbar, ein Vorschlag hätte keine Schreibstelle); die Zellenfelder des Dialogs tragen `data-spellcheck="spelling"`.
 

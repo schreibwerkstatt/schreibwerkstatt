@@ -105,7 +105,7 @@ body {
 }
 
 @media (min-width: 960px) {
-  body { padding: var(--space-2xl) var(--space-xl) 56px; max-width: 1600px; }
+  body { padding: var(--space-2xl) var(--space-xl) 56px; max-width: 2000px; }
 }
 
 h1 {

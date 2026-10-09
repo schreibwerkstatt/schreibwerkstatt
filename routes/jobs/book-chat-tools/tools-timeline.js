@@ -15,12 +15,11 @@ const {
   listTimelineEventChapters,
   listTimelineEventPages,
   findDatedEvents,
-  getBirthEvent,
 } = require('../../../db/book-chat/timeline');
 const { getFigureRow } = require('../../../db/book-chat/figures');
 const { listFigureAges } = require('../../../db/figure-ages');
 const { getBookSettings } = require('../../../db/book-settings');
-const { parseDatum } = require('../../../lib/datum-parse');
+const { birthCandidates, resolveBirth } = require('../../../lib/figure-birth');
 const { _truncateResult, _findFigure } = require('./shared');
 
 // ── list_continuity_issues ────────────────────────────────────────────────────
@@ -198,18 +197,6 @@ function ageAt(birth, at) {
   return out;
 }
 
-function _birthCandidates(bookId, userEmail, fig) {
-  const out = [];
-  const row = getFigureRow(fig.id);
-  if (row?.geburtstag) {
-    const p = parseDatum(row.geburtstag);
-    if (Number.isInteger(p.year)) out.push({ quelle: 'steckbrief', y: p.year, m: p.month || null, d: p.day || null, label: row.geburtstag });
-  }
-  const evt = getBirthEvent(bookId, userEmail, fig.id);
-  if (evt?.y != null) out.push({ quelle: 'geburts_ereignis', y: evt.y, m: evt.m || null, d: evt.d || null });
-  return out;
-}
-
 function tool_get_figure_age(input, ctx) {
   const userEmail = ctx.userEmail || '';
   if (!input?.figur_id && !input?.figur_name) return { error: 'figur_id oder figur_name erforderlich.' };
@@ -217,16 +204,14 @@ function tool_get_figure_age(input, ctx) {
   if (!fig) return { error: 'Figur nicht gefunden', hint: 'Prüfe die Figurenliste im System-Prompt.' };
 
   const ageRow = listFigureAges(ctx.bookId, userEmail).find(a => a.fig_id === fig.fig_id) || null;
-  const candidates = _birthCandidates(ctx.bookId, userEmail, fig);
-  if (ageRow?.geburtsjahr != null) candidates.push({ quelle: 'alters_index', y: ageRow.geburtsjahr, m: null, d: null });
-  // Vorrang: Steckbrief (gehört dem Autor) › Geburts-Ereignis › Alters-Index.
-  const birth = candidates[0] || null;
-  const years = [...new Set(candidates.map(c => c.y))];
+  const row = getFigureRow(fig.id);
+  const { birth, widerspruch } = resolveBirth(
+    birthCandidates(ctx.bookId, userEmail, { id: fig.id, geburtstag: row?.geburtstag }, ageRow?.geburtsjahr ?? null));
 
   const out = {
     figur: { fig_id: fig.fig_id, name: fig.name },
     geburt: birth ? { jahr: birth.y, ...(birth.m ? { monat: birth.m } : {}), ...(birth.d ? { tag: birth.d } : {}), quelle: birth.quelle } : null,
-    ...(years.length > 1 ? { geburtsjahr_widerspruch: candidates.map(c => ({ quelle: c.quelle, jahr: c.y })) } : {}),
+    ...(widerspruch ? { geburtsjahr_widerspruch: widerspruch } : {}),
     zeitlinie_real: !!getBookSettings(ctx.bookId, userEmail)?.zeitlinie_real,
   };
 

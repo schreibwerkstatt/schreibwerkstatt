@@ -64,6 +64,16 @@ Code: [public/js/editor/lektorat.js](../public/js/editor/lektorat.js) (Workflow)
 - **Als angenommen gespeichert wird nur, was im Text gelandet ist.** Befunde, die `_applyCorrections` überspringt, fehlen in `applied_errors_json` und bleiben offen — sonst zählte die Fehler-Heatmap sie als erledigt.
 - **`x-html`-Sinks** (`analysisOut`, `batchStatus`, `checkStatus`) nur mit `escHtml`-geschleusten KI-/Seiten-Feldern.
 
+### Fortschritt seit dem letzten Lektorat
+
+Nach einem Abschnitts-Lektorat vergleicht der Job den neuen Lauf mit dem Vorlauf derselben Seite und desselben Users (`progressSincePrevious` in [routes/jobs/lektorat-page.js](../routes/jobs/lektorat-page.js), Kern [lib/lektorat-progress.js](../lib/lektorat-progress.js)) und liefert ihn als `result.progress`; die Befundliste zeigt ihn als Kopfblock (`lektoratProgress` im Root-State). Kein KI-Call, keine Prompt-Änderung — das Lektorat selbst prüft weiterhin jeden Lauf unbefangen.
+
+- **Behoben entscheidet der Text, nicht das Modell.** Ein Befund des Vorlaufs gilt als behoben, wenn sein `original` nicht mehr im geprüften Text steht. Steht die Stelle unverändert da und der neue Lauf meldet sie nicht, ist das `notReported` — Modell-Streuung, ausdrücklich keine Verbesserung, und so beschriftet.
+- **Abgleich per `original` als Multimenge**, Whitespace normalisiert; dieselbe Lesart wie die Zählregel der Heatmap.
+- **Vorlauf = jüngster Check vor dem gemeldeten.** Bei History-Dedup ist der gemeldete der wiederverwendete Eintrag, verglichen wird mit dem davor.
+- **Nur direkt nach einem Lauf**, nicht beim Laden eines History-Eintrags (dort fehlt der Text, gegen den der Vorlauf zu prüfen wäre) und nicht im Buch-Lektorat. Ein Stale-Refilter im `onDone` verwirft den Block.
+- Gegated: [tests/unit/lektorat-progress.test.mjs](../tests/unit/lektorat-progress.test.mjs).
+
 ## Auswertung: Fehler-Heatmap + Fehlerdichte-Trend
 
 Code: [lib/lektorat-findings.js](../lib/lektorat-findings.js) (Zählregel), [lib/fehler-heatmap.js](../lib/fehler-heatmap.js) + [db/lektorat-heatmap.js](../db/lektorat-heatmap.js) (Live-Matrix, pro User), [lib/lektorat-metrics.js](../lib/lektorat-metrics.js) (Fassungs-Kennzahl, buchweit), [public/js/book/fehler-heatmap.js](../public/js/book/fehler-heatmap.js) (Anzeige).

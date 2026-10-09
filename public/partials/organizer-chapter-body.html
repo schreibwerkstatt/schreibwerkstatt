@@ -27,7 +27,9 @@
          :disabled="organizerSaving"
          autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other" data-spellcheck="spelling"
          :aria-label="$app.t('bookOrganizer.renameChapter')">
-  <span class="organizer-chapter-meta tag" x-text="ch.pages.length === 1 ? $app.t('sidebar.pagesCountOne') : $app.t('sidebar.pagesCount', { n: ch.pages.length })"></span>
+  <span class="organizer-chapter-meta tag" x-text="$app.t('sidebar.pagesCountShort', { n: ch.pages.length })"
+        :data-tip="ch.pages.length === 1 ? $app.t('sidebar.pagesCountOne') : $app.t('sidebar.pagesCount', { n: ch.pages.length })"
+        :aria-label="ch.pages.length === 1 ? $app.t('sidebar.pagesCountOne') : $app.t('sidebar.pagesCount', { n: ch.pages.length })"></span>
   <span class="organizer-chapter-meta tag" x-show="ch.subchapters?.length"
         x-text="$app.t('bookOrganizer.subchaptersCount', { n: ch.subchapters?.length || 0 })"></span>
   <div class="organizer-chapter-actions">

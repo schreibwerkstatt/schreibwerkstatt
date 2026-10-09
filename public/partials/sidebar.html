@@ -115,7 +115,9 @@
         <span class="tree-chapter-meta">
           <span class="tag tree-chapter-excluded-tag" x-show="item.excluded" x-text="t('sidebar.excludedBadge')"
                 :data-tip="t('sidebar.excludedTitle', { name: item.name })"></span>
-          <span class="tag" x-show="_chapterPageCount(item) >= 1" x-text="_chapterPageCount(item) === 1 ? t('sidebar.pagesCountOne') : t('sidebar.pagesCount', { n: _chapterPageCount(item) })"></span>
+          <span class="tag" x-show="_chapterPageCount(item) >= 1" x-text="t('sidebar.pagesCountShort', { n: _chapterPageCount(item) })"
+                :data-tip="_chapterPageCount(item) === 1 ? t('sidebar.pagesCountOne') : t('sidebar.pagesCount', { n: _chapterPageCount(item) })"
+                :aria-label="_chapterPageCount(item) === 1 ? t('sidebar.pagesCountOne') : t('sidebar.pagesCount', { n: _chapterPageCount(item) })"></span>
           <template x-if="item.stats">
             <span class="tok-badge tok-neutral"
               x-text="item.stats.badge"

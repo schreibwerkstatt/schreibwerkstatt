@@ -1,4 +1,4 @@
-<!-- Kapitel-Review: Makrobewertung + verdichtete Seitenstatistik eines Kapitels -->
+<!-- Kapitel-Übersicht: Kennzahlen, Bewertung und Abschnitte eines Kapitels -->
 <!--
   Alpine.data-Sub-Komponente — siehe public/js/cards/kapitel-review-card.js.
   `showKapitelReviewCard` bleibt am Root. Fachlicher State + Job-Flow in der
@@ -114,14 +114,6 @@
     </div>
   </div>
 
-  <!-- Bewertungsergebnis zuerst: Fortschritt/Status/Output direkt unter dem
-       Header, damit das eigentliche Urteil nicht unter der Seiten-Verwaltung
-       vergraben ist. -->
-  <div class="progress-bar-wrap" x-show="kapitelReviewProgress > 0">
-    <div class="progress-bar" :style="{ '--progress': kapitelReviewProgress + '%' }"></div>
-  </div>
-  <div class="card-status" x-show="kapitelReviewStatus" x-html="kapitelReviewStatus"></div>
-
   <!-- Kapitel-Dashboard: Kennzahlen-Kopf aus vorhandenen Quellen, kein KI-Call
        (partials/kapitelreview-dashboard.html). Steht VOR dem Bewertungstext:
        die Kacheln sind die Lage des Kapitels, der Text darunter das Urteil
@@ -129,58 +121,74 @@
        trotzdem oben sichtbar bleibt. -->
   <div id="partial-kapitelreview-dashboard"></div>
 
-  <!-- Aktuelle Bewertung = jüngster Verlaufseintrag (bleibt nach Reload
-       stehen). `kapitelReviewOut` ist nur der Rückfall, wenn der Verlauf
-       nach einem Lauf nicht lud. -->
-  <div x-show="kapitelReviewOut" x-html="kapitelReviewOut"></div>
-  <template x-if="!kapitelReviewOut && kapitelReviewLatest()">
-    <div>
-      <div class="kapitel-review-latest-meta">
-        <span class="history-date" x-text="$app.formatDate(kapitelReviewLatest().reviewed_at)"></span>
-        <span x-show="kapitelReviewScopeLabel(kapitelReviewLatest())" class="tag" x-text="kapitelReviewScopeLabel(kapitelReviewLatest())"></span>
-        <span class="tag" x-text="kapitelReviewLatest().model"></span>
-        <button type="button" class="icon-btn icon-btn--ghost"
-                @click="deleteKapitelReview(kapitelReviewLatest().id)"
-                :data-tip="$app.t('common.deleteEntry')" :aria-label="$app.t('common.deleteEntry')">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
-        </button>
-      </div>
-      <div x-html="_renderKapitelReviewHtml(kapitelReviewLatest().review_json)"></div>
+  <!-- Bewertung: eigener Abschnitt mit Trennlinie und Titel, damit das KI-
+       Urteil nicht als weitere Statistik-Zeile unter den Kacheln liest.
+       Fortschritt, aktuelles Urteil und Verlauf gehoeren zusammen. Nur
+       sichtbar, wenn es etwas zu zeigen gibt — ohne Lauf fuehrt die
+       Bewertungs-Kachel im Dashboard zum Start. -->
+  <section class="card-section kapitel-review-verdict"
+           x-show="kapitelReviewProgress > 0 || kapitelReviewStatus || kapitelReviewOut || kapitelReviewLatest()">
+    <div class="card-section-head">
+      <h3 class="card-section-title" x-text="$app.t('kapitelReview.verdictHeading')"></h3>
     </div>
-  </template>
+    <div class="progress-bar-wrap" x-show="kapitelReviewProgress > 0">
+      <div class="progress-bar" :style="{ '--progress': kapitelReviewProgress + '%' }"></div>
+    </div>
+    <div class="card-status" x-show="kapitelReviewStatus" x-html="kapitelReviewStatus"></div>
+
+    <!-- Aktuelle Bewertung = jüngster Verlaufseintrag (bleibt nach Reload
+         stehen). `kapitelReviewOut` ist nur der Rückfall, wenn der Verlauf
+         nach einem Lauf nicht lud. -->
+    <div x-show="kapitelReviewOut" x-html="kapitelReviewOut"></div>
+    <template x-if="!kapitelReviewOut && kapitelReviewLatest()">
+      <div>
+        <div class="kapitel-review-latest-meta">
+          <span class="history-date" x-text="$app.formatDate(kapitelReviewLatest().reviewed_at)"></span>
+          <span x-show="kapitelReviewScopeLabel(kapitelReviewLatest())" class="tag" x-text="kapitelReviewScopeLabel(kapitelReviewLatest())"></span>
+          <span class="tag" x-text="kapitelReviewLatest().model"></span>
+          <button type="button" class="icon-btn icon-btn--ghost"
+                  @click="deleteKapitelReview(kapitelReviewLatest().id)"
+                  :data-tip="$app.t('common.deleteEntry')" :aria-label="$app.t('common.deleteEntry')">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+          </button>
+        </div>
+        <div x-html="_renderKapitelReviewHtml(kapitelReviewLatest().review_json)"></div>
+      </div>
+    </template>
+
+    <!-- Verlauf für das aktuell gewählte Kapitel: ohne den jüngsten Eintrag,
+         der steht oben als aktuelle Bewertung. `index` bleibt der Index in der
+         vollen Liste, damit die Notenänderung den richtigen Vorgänger findet. -->
+    <div x-show="kapitelReviewCurrentHistory().length > 1" class="card-history-section">
+      <div class="history-heading" x-text="$app.t('kapitelReview.history')"></div>
+      <template x-for="(entry, index) in kapitelReviewCurrentHistory()" :key="entry.id">
+        <template x-if="index > 0">
+          <div>
+            <div class="history-item" :class="{ 'history-item--open': selectedKapitelReviewId === entry.id }"
+                 @click="selectedKapitelReviewId = selectedKapitelReviewId === entry.id ? null : entry.id">
+              <span class="history-date" x-text="$app.formatDate(entry.reviewed_at)"></span>
+              <span x-show="entry.review_json?.gesamtnote" class="badge badge-ok review-stars"
+                :data-tip="noteTip(entry.review_json?.gesamtnote)"
+                x-html="renderStars(entry.review_json?.gesamtnote)"></span>
+              <span x-show="kapitelReviewNoteDelta(index) !== null"
+                class="badge review-trend"
+                :class="kapitelReviewNoteDelta(index) > 0 ? 'badge-ok' : 'badge-err'"
+                :data-tip="$app.t('kapitelReview.trendTip')"
+                x-text="(kapitelReviewNoteDelta(index) > 0 ? '+' : '−') + Math.abs(kapitelReviewNoteDelta(index)).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH', { minimumFractionDigits: 1, maximumFractionDigits: 2 })"></span>
+              <span x-show="kapitelReviewScopeLabel(entry)" class="tag" x-text="kapitelReviewScopeLabel(entry)"></span>
+              <span class="tag" x-text="entry.model"></span>
+              <span class="history-chevron" :class="{ open: selectedKapitelReviewId === entry.id }" aria-hidden="true"></span>
+            </div>
+            <div x-show="selectedKapitelReviewId === entry.id" class="history-detail">
+              <div x-html="entry.review_json ? _renderKapitelReviewHtml(entry.review_json) : ''"></div>
+              <button type="button" class="btn-delete-history" @click.stop="deleteKapitelReview(entry.id)" :data-tip="$app.t('common.deleteEntry')" x-text="$app.t('common.deleteEntry')"></button>
+            </div>
+          </div>
+        </template>
+      </template>
+    </div>
+  </section>
 
   <!-- Seitenliste + Sub-Kapitel + Quick-Add (partials/kapitelreview-pages.html) -->
   <div id="partial-kapitelreview-pages"></div>
-
-  <!-- Verlauf für das aktuell gewählte Kapitel: ohne den jüngsten Eintrag,
-       der steht oben als aktuelle Bewertung. `index` bleibt der Index in der
-       vollen Liste, damit die Notenänderung den richtigen Vorgänger findet. -->
-  <div x-show="kapitelReviewCurrentHistory().length > 1" class="card-history-section">
-    <div class="history-heading" x-text="$app.t('kapitelReview.history')"></div>
-    <template x-for="(entry, index) in kapitelReviewCurrentHistory()" :key="entry.id">
-      <template x-if="index > 0">
-        <div>
-          <div class="history-item" :class="{ 'history-item--open': selectedKapitelReviewId === entry.id }"
-               @click="selectedKapitelReviewId = selectedKapitelReviewId === entry.id ? null : entry.id">
-            <span class="history-date" x-text="$app.formatDate(entry.reviewed_at)"></span>
-            <span x-show="entry.review_json?.gesamtnote" class="badge badge-ok review-stars"
-              :data-tip="noteTip(entry.review_json?.gesamtnote)"
-              x-html="renderStars(entry.review_json?.gesamtnote)"></span>
-            <span x-show="kapitelReviewNoteDelta(index) !== null"
-              class="badge review-trend"
-              :class="kapitelReviewNoteDelta(index) > 0 ? 'badge-ok' : 'badge-err'"
-              :data-tip="$app.t('kapitelReview.trendTip')"
-              x-text="(kapitelReviewNoteDelta(index) > 0 ? '+' : '−') + Math.abs(kapitelReviewNoteDelta(index)).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH', { minimumFractionDigits: 1, maximumFractionDigits: 2 })"></span>
-            <span x-show="kapitelReviewScopeLabel(entry)" class="tag" x-text="kapitelReviewScopeLabel(entry)"></span>
-            <span class="tag" x-text="entry.model"></span>
-            <span class="history-chevron" :class="{ open: selectedKapitelReviewId === entry.id }" aria-hidden="true"></span>
-          </div>
-          <div x-show="selectedKapitelReviewId === entry.id" class="history-detail">
-            <div x-html="entry.review_json ? _renderKapitelReviewHtml(entry.review_json) : ''"></div>
-            <button type="button" class="btn-delete-history" @click.stop="deleteKapitelReview(entry.id)" :data-tip="$app.t('common.deleteEntry')" x-text="$app.t('common.deleteEntry')"></button>
-          </div>
-        </div>
-      </template>
-    </template>
-  </div>
 </div>

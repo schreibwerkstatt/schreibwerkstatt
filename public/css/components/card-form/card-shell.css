@@ -59,9 +59,13 @@
      als Direkt-Kind im Header sitzt — sonst ruecken reine Action-Icon-Leisten
      (z.B. Seitenbaum-Header) unnoetig weit vom rechten Rand ein.
      Nur Direkt-Kind — `.btn-card-close` wird auch in Session-/History-Zeilen
-     wiederverwendet, die nicht im Header sitzen. */
-  .card-header:has(> .btn-card-close) { padding-right: var(--space-xl); }
-  .card-header > .btn-card-close { position: absolute; top: 0; right: 0; margin-left: 0; }
+     wiederverwendet, die nicht im Header sitzen.
+     Nur im Column-Stack: ein Header mit Titelspalte bleibt mobil einzeilig
+     (Regel unten) — dort sitzt der Close-Button im Flex-Fluss hinter den
+     Aktionen wie auf Desktop. Absolut verankert ueberlappte er die Action-Icons,
+     weil sein Touch-Target (40px) breiter ist als das reservierte Padding. */
+  .card-header:not(:has(.card-header-titlebar)):has(> .btn-card-close) { padding-right: var(--space-xl); }
+  .card-header:not(:has(.card-header-titlebar)) > .btn-card-close { position: absolute; top: 0; right: 0; margin-left: 0; }
 }
 
 .card-title {

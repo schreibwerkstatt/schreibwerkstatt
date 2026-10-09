@@ -21,6 +21,7 @@ const { lastParagraph, firstParagraph, findPreviousPage, findNextPage } = requir
 const { finalizeFehler, effectiveStylisticCap, _runSig } = require('./lektorat-filter');
 const userDictionary = require('../../db/user-dictionary');
 const { MAX_PROMPT_WORDS, dictionaryWordsOnPage, dropDictionaryFindings } = require('./lektorat-dictionary');
+const { lektoratProgress } = require('../../lib/lektorat-progress');
 
 function _sigHash(obj) {
   return crypto.createHash('sha1').update(JSON.stringify(obj ?? null)).digest('hex').slice(0, 12);
@@ -39,6 +40,17 @@ function _pageHasCitations(pageId) {
 const _lastPageCheckStmt = db.prepare(`
   SELECT id, errors_json FROM page_checks
    WHERE page_id = ? AND user_email IS ?
+   ORDER BY checked_at DESC, id DESC
+   LIMIT 1
+`);
+// Vorlauf eines History-Eintrags (für den Fortschritts-Vergleich): der jüngste
+// Check derselben Seite und desselben Users VOR dem gegebenen. Bei History-Dedup
+// ist der gegebene der wiederverwendete Eintrag — verglichen wird dann mit dem
+// Lauf davor, nicht mit sich selbst.
+const _prevPageCheckStmt = db.prepare(`
+  SELECT checked_at, errors_json, applied_errors_json FROM page_checks
+   WHERE page_id = ? AND user_email IS ? AND id != ?
+     AND checked_at < (SELECT checked_at FROM page_checks WHERE id = ?)
    ORDER BY checked_at DESC, id DESC
    LIMIT 1
 `);
@@ -246,7 +258,17 @@ async function checkOnePage(run, {
     stilanalyse: result.stilanalyse || null,
     fazit: result.fazit || null,
     checkId, historyDedup, cached: !!cached,
+    text,
   };
 }
 
-module.exports = { prepareLektoratRun, makeNeighbourLoader, checkOnePage };
+// Fortschritt gegenüber dem Vorlauf der Seite (lib/lektorat-progress.js); null
+// ohne Vorlauf. Nur das Abschnitts-Lektorat zeigt ihn, darum nicht in checkOnePage.
+function progressSincePrevious(pageId, userEmail, r) {
+  const id = Number(r.checkId);
+  if (!id) return null;
+  const prev = _prevPageCheckStmt.get(parseInt(pageId, 10), userEmail || null, id, id);
+  return lektoratProgress(prev, r.fehler, r.text);
+}
+
+module.exports = { prepareLektoratRun, makeNeighbourLoader, checkOnePage, progressSincePrevious };

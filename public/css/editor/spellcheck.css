@@ -54,6 +54,8 @@
   padding: var(--space-sm);
   max-width: 280px;
   min-width: 180px;
+  /* position.js kappt max-height, wenn weder unter noch ueber dem Wort Platz ist. */
+  overflow-y: auto;
   /* UI-Popup; nicht erben vom Reading-Frame-Mount (Notebook/Focus scrollContainer). */
   font-family: var(--font-sans);
   font-size: var(--font-size-sm);

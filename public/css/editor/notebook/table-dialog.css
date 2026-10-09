@@ -43,6 +43,13 @@
 /* --- Warnung bei verlustbehaftetem Quell-Markup (verbundene Zellen,
        Blockinhalt). Sie steht VOR dem Speichern, weil der Dialog diese Fälle
        nicht darstellen kann und das Übernehmen sie planiert. --- */
+.table-dialog-warn p,
+.table-dialog-warn ul {
+  margin: 0;
+}
+.table-dialog-warn ul {
+  padding-left: var(--space-md);
+}
 .table-dialog-warn {
   margin: 0;
   padding: var(--space-6) var(--space-10);
@@ -152,6 +159,12 @@
 .table-grid-input:focus {
   outline: 2px solid var(--color-primary);
   outline-offset: -2px;
+}
+/* Zelle mit Auszeichnung (Quellen-Chip, Querverweis, fett …). Das Feld zeigt
+   nur den Klartext; eine Textänderung ersetzt die Auszeichnung — die Markierung
+   sagt das, bevor getippt wird. */
+.table-grid-input.is-rich {
+  background: var(--color-accent-soft);
 }
 .table-grid-input--head {
   font-weight: var(--fw-bold);

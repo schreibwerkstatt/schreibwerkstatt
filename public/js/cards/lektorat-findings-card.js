@@ -49,6 +49,8 @@ export function registerLektoratFindingsCard() {
 
     _findingKind(typ) { return findingKind(typ); },
     _findingBadgeClass(typ) { return findingBadgeClass(typ); },
+    // Typ-Delta im Fortschritts-Block: echtes Minuszeichen, Plus explizit.
+    _progressDelta(d) { return d < 0 ? '−' + Math.abs(d) : '+' + d; },
 
     ...lektoratEvidenceMethods,
 

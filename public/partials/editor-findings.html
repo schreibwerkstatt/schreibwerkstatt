@@ -4,6 +4,53 @@
 <div x-data="lektoratFindingsCard"
      x-show="$app.checkDone"
      class="lektorat-split-findings">
+  <!-- Fortschritt seit dem vorherigen Lektorat dieses Abschnitts
+       (lib/lektorat-progress.js): Vergleich ohne KI, nur direkt nach einem Lauf. -->
+  <template x-if="$app.lektoratProgress">
+    <div class="lektorat-progress" x-data="collapsible()">
+      <div class="lektorat-progress-head">
+        <span class="lektorat-progress-title" x-text="$app.t('editor.progress.title', { when: $app.formatRelativeShort($app.lektoratProgress.prevCheckedAt) })"></span>
+        <span class="lektorat-progress-total" x-text="$app.t('editor.progress.total', { before: $app.lektoratProgress.prevCount, now: $app.lektoratProgress.count })"></span>
+      </div>
+      <div class="lektorat-progress-counts" x-show="$app.lektoratProgress.prevCount + $app.lektoratProgress.count > 0">
+        <span class="lektorat-progress-fixed" x-show="$app.lektoratProgress.fixed > 0"
+              x-text="$app.t('editor.progress.fixed', { n: $app.lektoratProgress.fixed })
+                      + ($app.lektoratProgress.viaApply > 0 ? ' (' + $app.t('editor.progress.viaApply', { n: $app.lektoratProgress.viaApply }) + ')' : '')"></span>
+        <span x-show="$app.lektoratProgress.remaining > 0" x-text="$app.t('editor.progress.remaining', { n: $app.lektoratProgress.remaining })"></span>
+        <span class="lektorat-progress-added" x-show="$app.lektoratProgress.added > 0" x-text="$app.t('editor.progress.added', { n: $app.lektoratProgress.added })"></span>
+      </div>
+      <div class="lektorat-progress-counts" x-show="$app.lektoratProgress.prevCount + $app.lektoratProgress.count === 0"
+           x-text="$app.t('editor.progress.none')"></div>
+      <div class="lektorat-progress-types" x-show="$app.lektoratProgress.byType.length > 0">
+        <template x-for="d in $app.lektoratProgress.byType" :key="d.typ">
+          <span class="tag" :class="d.delta < 0 ? 'lektorat-progress-better' : 'lektorat-progress-worse'"
+                :data-tip="$app.t('editor.progress.typeTip')"
+                x-text="$app.t('finding.' + d.typ) + ' ' + _progressDelta(d.delta)"></span>
+        </template>
+      </div>
+      <p class="lektorat-progress-note" x-show="$app.lektoratProgress.notReported > 0"
+         x-text="$app.t('editor.progress.notReported', { n: $app.lektoratProgress.notReported })"></p>
+      <template x-if="$app.lektoratProgress.fixedItems.length > 0">
+        <div>
+          <button type="button" class="collapsible-toggle" x-bind="trigger">
+            <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+            <span x-text="$app.t('editor.progress.showFixed', { n: $app.lektoratProgress.fixedItems.length })"></span>
+          </button>
+          <div x-bind="panel" x-cloak>
+            <template x-for="(f, i) in $app.lektoratProgress.fixedItems" :key="i">
+              <div class="applied-history-item">
+                <span class="badge" :class="_findingBadgeClass(f.typ)" x-text="$app.t('finding.' + f.typ)"></span>
+                <span class="applied-history-text">
+                  <span class="finding-original" x-text="f.original"></span>
+                </span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+  </template>
+
   <!-- Fehlerfrei -->
   <div x-show="$app.lektoratFindings.length === 0" class="finding ok">
     <span class="badge badge-ok" x-text="$app.t('editor.findings.okBadge')"></span> &nbsp;<span x-text="$app.t('editor.findings.ok')"></span>

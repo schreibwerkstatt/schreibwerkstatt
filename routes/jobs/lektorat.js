@@ -19,7 +19,7 @@ const { pageBookGuard } = require('../../lib/page-guard');
 const { listChaptersForBook, pageChapters } = require('../../db/content-names');
 const appSettings = require('../../lib/app-settings');
 const { objektivRuns, splitEnabled } = require('./lektorat-split');
-const { prepareLektoratRun, makeNeighbourLoader, checkOnePage } = require('./lektorat-page');
+const { prepareLektoratRun, makeNeighbourLoader, checkOnePage, progressSincePrevious } = require('./lektorat-page');
 
 const lektoratRouter = express.Router();
 
@@ -54,6 +54,10 @@ async function runCheckJob(jobId, pageId, bookId, userEmail) {
     if (r.empty) { completeJob(jobId, { empty: true }); return; }
     const { pd } = r;
     if (r.historyDedup) logger.info(`History-Dedup: identische Findings wie page_check #${r.checkId}, kein neuer Eintrag.`);
+    // Vergleich mit dem Vorlauf ist Zugabe: scheitert er, bleibt das Ergebnis gültig.
+    let progress = null;
+    try { progress = progressSincePrevious(pageId, userEmail, r); }
+    catch (e) { logger.warn(`Fortschritts-Vergleich fehlgeschlagen (page=${pageId}): ${e.message}`); }
 
     completeJob(jobId, {
       fehler: r.fehler,
@@ -64,6 +68,7 @@ async function runCheckJob(jobId, pageId, bookId, userEmail) {
       updatedAt: pd.updated_at || null,
       pageName: pd.name,
       checkId: r.checkId,
+      progress,
       tokensIn: tok.in,
       tokensOut: tok.out,
     }, tps(tok), `«${pd.name}» page=${pageId}, chap=${pd.chapter_id || '-'}, ${r.fehler.length} Beanstandungen${r.historyDedup ? ' (dedup)' : ''}`);

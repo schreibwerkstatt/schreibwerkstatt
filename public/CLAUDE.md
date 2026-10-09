@@ -12,7 +12,7 @@ Gilt zusaetzlich zur Root-[CLAUDE.md](../CLAUDE.md); tiefer liegen [css/CLAUDE.m
        x-modelable="value" x-model="selectedRef"
        x-effect="options = computeOptionsInline()"></div>
   ```
-  - `init()` setzt automatisch: `combobox-wrap`-Klasse (+ `--compact` per Default), document-Mousedown (Outside-Close), Element-Keydown (Tastatur-Nav). Kein `@click.outside`, kein `@keydown`, keine `class`-Attribute mehr im Konsumenten-Markup.
+  - `init()` setzt automatisch: `combobox-wrap`-Klasse (+ `--compact` per Default), document-Mousedown (Outside-Close), Element-Keydown (Tastatur-Nav). Das Dropdown hängt an `x-if="open"`: geschlossene Comboboxen rendern weder Liste noch x-anchor-Nachführung — nie auf `x-show` zurückstellen (sonst rechnet jeder Scroll-Frame die Position aller Comboboxen nach). Kein `@click.outside`, kein `@keydown`, keine `class`-Attribute mehr im Konsumenten-Markup.
   - Object-Form für Variante non-compact (selten, z.B. Buchwahl in Hero-Row): `combobox({ placeholder: t('…'), compact: false })`.
   - `options`: Array `[{ value, label }]`. Inline-Expression im `x-effect` aufbauen (siehe DESIGN.md "Reaktivität bei Datenquelle aus Karten-Scope" — Method-Indirection trackt nicht zuverlässig).
   - `x-modelable="value" x-model="ref"` koppelt internen `value`-State an äusseres Feld. Ohne `x-modelable` greift `@combobox-change` nicht in den Parent-State durch.
