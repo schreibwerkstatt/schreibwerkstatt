@@ -2962,6 +2962,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [tokens.css](public/css/tokens.css) | Cascade-Layer-Order, `@font-face`, `@import` der Token-Module aus `tokens/`. Slim Facade — keine Tokens direkt drin. Unlayered. |
 | [card-accents.css](public/css/card-accents.css) | `.card--<key> { --card-accent: var(--card-accent-<key>); }` — SSoT für Karten-Akzentfarben (alle Karten). |
 | [chat.css](public/css/chat.css) | Abschnitts-/Buch-Chat. |
+| [components/chat-history-search.css](public/css/components/chat-history-search.css) | Suche im Verlauf von Abschnitts-/Buch-Chat (Suchzeile, Treffer, angesprungene Nachricht). |
 | [search.css](public/css/search.css) | Volltext-Suche, Buchwahl. |
 | [tokens-est.css](public/css/tokens-est.css) | Token-Schätzung Inline-Badges + Tooltip. Nur das — der Figuren-Bestand, den die Datei entgegen ihrem Namen lange mittrug, liegt in `entities/figuren*.css`. |
 | [landing.css](public/css/landing.css) | Landing-/Register-/Login-Seiten (kein SPA-Bundle). |

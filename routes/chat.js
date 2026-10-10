@@ -10,6 +10,8 @@ const chatQuality = require('../db/chat-quality');
 const { htmlToText } = require('./jobs/shared');
 const { setContext } = require('../lib/log-context');
 const { resolvePageBookId } = require('../lib/content-ownership');
+const { searchChatHistory } = require('../lib/chat-search');
+const { enqueueChatEmbedIndexJob } = require('./jobs/chat-embed-index');
 
 const router = express.Router();
 router.param('book_id', aclParamGuard('viewer'));
@@ -134,6 +136,23 @@ router.post('/session/ideen', jsonBody, (req, res) => createBookScopedSession(re
 }));
 
 router.get('/sessions/ideen/:book_id', (req, res) => listBookScopedSessions(req, res, { kind: 'ideen' }));
+
+/** Suche im eigenen Verlauf (docs/chats.md#suche-im-verlauf): Wortlaut + Bedeutung
+ *  über die Abschnitts- (`kind=page`, optional `page_id`) bzw. Buch-Chats
+ *  (`kind=book`) des Users in diesem Buch. Sind Runden noch nicht vektorisiert,
+ *  stösst die Suche den Index-Lauf an (`indexing`) — bis dahin findet sie sie
+ *  über den Wortlaut. */
+router.get('/search/:book_id', async (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, 300);
+  const kind = req.query.kind === 'page' ? 'page' : req.query.kind === 'book' ? 'book' : null;
+  if (!q || !kind) return res.status(400).json({ error_code: 'INVALID_QUERY' });
+  const pageId = kind === 'page' && req.query.page_id ? toIntId(req.query.page_id) : null;
+  const result = await searchChatHistory({
+    bookId: req.bookId, userEmail: sessionEmail(req), query: q, kinds: [kind], pageId,
+  });
+  const indexing = result.pending > 0 && !!enqueueChatEmbedIndexJob(req.bookId);
+  res.json({ ...result, indexing });
+});
 
 /** Alle Sessions einer Seite (neueste zuerst, vollständig — gleiche Begründung
  *  wie bei den Buch-Sessions oben: ein Zeilen-Deckel liesse ältere Gespräche

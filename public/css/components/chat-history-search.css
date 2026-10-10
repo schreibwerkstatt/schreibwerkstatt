@@ -1,0 +1,66 @@
+@layer components {
+/* Suche im Chat-Verlauf (partials/chat-history-search.html) — Abschnitts- und
+   Buch-Chat. Grundform der Treffer-Zeile ist .chat-session-item (chat.css),
+   die Suchzeile .filter-bar (card-blocks.css); hier nur die Abweichungen. */
+
+/* Sitzt direkt über der Gesprächsliste: kein Trennstrich, kleiner Abstand. */
+.chat-hist-search {
+  margin-bottom: var(--space-xs);
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.chat-hist-search .filter-search-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-hist-hit { align-items: flex-start; }
+.chat-hist-hit-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2xs);
+}
+.chat-hist-hit-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+}
+.chat-hist-hit-snippet {
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.chat-hist-hit-snippet mark {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  padding: 0 var(--space-1);
+}
+
+/* Trefferart: Wortlaut (Rahmen), Bedeutung (getönt), beides (voll). */
+.chat-hist-match {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-accent);
+}
+.chat-hist-match--meaning { background: var(--color-accent-soft); }
+.chat-hist-match--both { background: var(--color-accent); }
+
+/* Angesprungene Nachricht: kurzes Aufleuchten, danach normal. */
+.chat-msg--hit .chat-msg-bubble { animation: chat-hit-flash 2.4s ease-out; }
+@keyframes chat-hit-flash {
+  from { box-shadow: 0 0 0 2px var(--color-accent); }
+  to   { box-shadow: 0 0 0 2px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-msg--hit .chat-msg-bubble { animation: none; box-shadow: 0 0 0 2px var(--color-accent); }
+}
+}

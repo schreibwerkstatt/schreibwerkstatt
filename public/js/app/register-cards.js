@@ -41,6 +41,7 @@ import { registerReferenceCard } from '../cards/reference-card.js';
 import { registerRechercheCard } from '../cards/recherche-card.js';
 import { registerSourcesCard } from '../cards/sources-card.js';
 import { registerBookChatCard } from '../cards/book-chat-card.js';
+import { registerChatHistorySearch } from '../chat/chat-history-search.js';
 import { registerKontinuitaetCard } from '../cards/kontinuitaet-card.js';
 import { registerErzaehlprofilCard } from '../cards/erzaehlprofil-card.js';
 import { registerTagebuchRueckblickCard } from '../cards/tagebuch-rueckblick-card.js';
@@ -201,6 +202,7 @@ export function registerAllCards() {
   registerBookReviewCard();
   registerKapitelReviewCard();
   registerChatCard();
+  registerChatHistorySearch();
   registerIdeenCard();
   registerIdeenBoardCard();
   registerReferenceCard();

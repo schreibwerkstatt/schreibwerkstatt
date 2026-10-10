@@ -15,6 +15,11 @@ daneben: die zwei nullbaren FKs beschreiben den Anker vollständig. Ein
 Seiten-Umzug in ein anderes Buch ([localdb.js](../lib/content-store/backends/localdb.js)#`movePage`)
 macht die Ideen der Seite zu Buch-Ideen des Quellbuchs, statt sie mitzunehmen.
 
+Abschnitts- und Buch-Chat können eine Idee an einem Abschnitt oder Kapitel **vorschlagen**
+(bemerkter Widerspruch, Fehler, offener Punkt); angelegt wird sie erst, wenn der
+User sie dort erfasst — über dieselbe Route wie die Ideen-Karte
+([chats.md](chats.md#ideen-vorschläge-abschnitts--und-buch-chat)).
+
 Zwei Oberflächen, dieselben Zeilen:
 
 | | Ideen-Karte | Ideen-Board |

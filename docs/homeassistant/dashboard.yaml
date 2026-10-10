@@ -36,8 +36,10 @@ views:
 
       - type: glance
         title: Heute
-        columns: 4
+        columns: 5
         entities:
+          - entity: sensor.schreibwerkstatt_chars_today
+            name: Zeichen
           - entity: sensor.schreibwerkstatt_words_today
             name: Wörter
           - entity: sensor.schreibwerkstatt_cost_usd_today

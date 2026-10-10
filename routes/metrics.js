@@ -3,6 +3,8 @@
 // (Scope `metrics:read`). Cache-Control: no-store — jeder Abruf liest Live-State.
 //   GET /metrics       Prometheus-Text 0.0.4 (Prometheus, Grafana, HA-YAML)
 //   GET /metrics.json  selbstbeschreibendes JSON (Home-Assistant-Integration)
+//   GET /metrics/history.json  Tagesreihen aus book_stats_history (Nachladen
+//                              der Langzeitstatistik in Home Assistant)
 // Pro-User-Kennzahlen liefern beide nur, wenn der Token zusaetzlich den Scope
 // `metrics:users` traegt. Der Router wird mit vollen Pfaden an der Wurzel
 // montiert (server.js), damit `/metrics.json` neben `/metrics` liegen kann.
@@ -10,6 +12,7 @@
 const express = require('express');
 const { requireBearer, tokenHasScope } = require('../lib/bearer-auth');
 const { collectMetrics, collectMetricsJson } = require('../lib/metrics-collector');
+const { collectHistoryJson } = require('../lib/metrics/history');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -34,6 +37,16 @@ router.get('/metrics.json', requireBearer('metrics:read'), (req, res) => {
     res.json(collectMetricsJson({ includeUsers: _includeUsers(req) }));
   } catch (e) {
     logger.error(`/metrics.json collect failed: ${e.message}`);
+    res.status(500).json({ error_code: 'METRICS_COLLECT_FAILED' });
+  }
+});
+
+router.get('/metrics/history.json', requireBearer('metrics:read'), (req, res) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json(collectHistoryJson({ includeUsers: _includeUsers(req) }));
+  } catch (e) {
+    logger.error(`/metrics/history.json collect failed: ${e.message}`);
     res.status(500).json({ error_code: 'METRICS_COLLECT_FAILED' });
   }
 });

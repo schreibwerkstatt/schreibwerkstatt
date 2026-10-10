@@ -25,6 +25,7 @@ export function registerBookChatCard() {
     bookChatStatus: '',
     _bookChatPollTimer: null,
     _bookChatGen: 0,           // Generationszähler gegen späte Responses nach Reset (chat-base.js)
+    _hitMsgId: null,           // Treffer der Verlaufssuche: Sprungziel + Hervorhebung (chat-base.js)
     _lifecycle: null,
 
     init() {

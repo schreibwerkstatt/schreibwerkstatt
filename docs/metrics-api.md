@@ -48,6 +48,7 @@ Katalog: [lib/metrics/defs.js](../lib/metrics/defs.js) — eine Beschreibung je 
 ### Content
 
 - `sw_books`, `sw_pages`, `sw_chapters` — Gauge, `COUNT(*)`.
+- `sw_books_written` — Gauge, Bücher mit `SUM(page_stats.chars) > 0`; Basis für „Zeichen pro Buch" in der Integration, damit leere und Test-Bücher den Schnitt nicht drücken.
 - `sw_chars`, `sw_words` — Gauge, `SUM(page_stats.chars|words)`.
 - `sw_normseiten` — Gauge, `round(sw_chars / 1800)` (Normseite = 1800 Zeichen).
 
@@ -56,6 +57,9 @@ Katalog: [lib/metrics/defs.js](../lib/metrics/defs.js) — eine Beschreibung je 
 - `sw_writing_seconds_today`, `sw_lektorat_seconds_today` — Gauge, `SUM(seconds)` aus `writing_time` / `lektorat_time` für `date = localIsoDate(new Date())` ([lib/local-date.js](../lib/local-date.js)).
 - `sw_stt_seconds_today`, `sw_stt_chars_today` — Gauge, `SUM(seconds)` / `SUM(chars)` aus `stt_time` (Diktat-Nutzung) für `date = localIsoDate(new Date())`.
 - `sw_words_today` — Netto-Wörter heute: aktuelle `SUM(page_stats.words)` je Buch minus dessen letzter `book_stats_history`-Snapshot vor heute (Tageslauf 23:00 lokal). Gelöschter Text zählt negativ; Bücher ohne Snapshot (heute neu oder importiert) fehlen bewusst, sonst zählte ein Import als geschrieben.
+- `sw_chars_today` — Netto-Zeichen heute, Rechnung wie `sw_words_today`.
+
+Netto heute (`sw_words_today`, `sw_chars_today` und die Pro-User-Pendants) hat `state_class: total` mit `reset: day`, nicht `measurement`: HA summiert dann die Änderungen, und die Tages-*Änderung* einer Statistik ist das Netto des Tages (auch negativ). Als Messwert bliebe nur das Tagesmaximum — wer abends streicht, stünde mit dem Höchststand im Verlauf.
 
 ### Job-Queue (In-Memory)
 
@@ -101,8 +105,8 @@ Nur User mit Status `active`, Labels `{user, user_name}` (E-Mail, Anzeigename). 
 
 - `sw_user_writing_seconds_today`, `sw_user_lektorat_seconds_today`, `sw_user_stt_seconds_today` — Zeiterfassung heute.
 - `sw_user_daily_goal_percent` — Schreibzeit heute / `app_users.daily_goal_minutes`; nur für User mit gesetztem Tagesziel.
-- `sw_user_words_today` — Netto-Wörter heute in eigenen Büchern (`books.owner_email`, Rechnung wie `sw_words_today`).
-- `sw_user_books`, `sw_user_words` — eigene Bücher und deren Wörter.
+- `sw_user_words_today`, `sw_user_chars_today` — Netto-Wörter/-Zeichen heute in eigenen Büchern (`books.owner_email`, Rechnung wie `sw_words_today`).
+- `sw_user_books`, `sw_user_words`, `sw_user_chars` — eigene Bücher und deren Wörter/Zeichen.
 - `sw_user_cost_usd_today`, `sw_user_cost_usd_month`, `sw_user_cost_usd_total` — Ledger-Kosten je User.
 - `sw_user_last_seen_timestamp_seconds` — `last_seen_at` als Unix-Sekunden.
 
@@ -177,6 +181,33 @@ Die Admin-UI im Tab **API / Metrics** zeigt diese Snippets aufklappbar inkl. Hos
 
 Fertiges Dashboard: [grafana/schreibwerkstatt.json](grafana/schreibwerkstatt.json). Import via Grafana → *Dashboards → New → Import → Upload JSON file* → Datasource `${DS_PROMETHEUS}` auswählen. Panels: Übersicht (Build/User/Aktiv), Inhalt (Bücher/Kapitel/Abschnitte/Zeichen/Wörter + Korpus-Wachstum), Schreib-Aktivität heute, Job-Queue (Running/Queued/Completion-Rate/Fehler/Kumuliert), Tokens + Kosten (Cache-Hit-Ratio, Cost-Rate, Token-Rates, Provider/Model-Tabelle).
 
+## Verlauf für Home Assistant
+
+`GET /metrics/history.json` (gleiche Auth, Pro-User-Reihen nur mit `metrics:users`) — Tagesreihen aus `book_stats_history` und den Zeittabellen, unter den Namen und Labels von `/metrics.json`. Die Integration schreibt sie beim Start in die Langzeitstatistik der passenden Sensoren, nur für Tage vor deren erster aufgezeichneter Statistik ([lib/metrics/history.js](../lib/metrics/history.js)).
+
+```json
+{
+  "schema": 1,
+  "instance_id": "3f1c9a52-…",
+  "generated_at": "2026-10-10T08:00:00.000Z",
+  "timezone": "Europe/Zurich",
+  "today": "2026-10-10",
+  "includes_users": true,
+  "series": [
+    { "name": "sw_chars", "labels": {}, "points": [["2026-10-08", 412000], ["2026-10-09", 415300]] },
+    { "name": "sw_user_chars_today", "labels": { "user": "anna@…", "user_name": "Anna" }, "points": [["2026-10-09", 3300]] }
+  ]
+}
+```
+
+| Reihe | Regel |
+|---|---|
+| `sw_books`, `sw_books_written`, `sw_chars`, `sw_words`, `sw_normseiten`, `sw_user_books/chars/words` | Stand je Datum: je Buch der letzte Snapshot bis dahin. Letzte 365 Tage täglich, älter Monatsend-Stände (Ausdünnung in [lib/cache-cleanup.js](../lib/cache-cleanup.js)). Gelöschte Bücher fehlen samt Verlauf (CASCADE). |
+| `sw_chars_today`, `sw_words_today`, `sw_user_*_today` | Netto je Tag = Snapshot minus vorheriger Snapshot je Buch; nur wo auch der Vortag einen Snapshot hat (tägliches Fenster). Der erste Snapshot eines Buchs zählt nicht (Import), wie live. |
+| `sw_writing/lektorat/stt_seconds_today`, `sw_user_*_seconds_today` | Tagessummen der Zeittabellen, nur Tage mit Einträgen. |
+
+Heute fehlt immer — der Tag läuft noch, die Live-Werte decken ihn ab.
+
 ## Pflicht-Invarianten
 
 - **Mount vor Guard.** `/metrics` MUSS in [server.js](../server.js) **vor** dem Session-Guard montiert werden. Andernfalls redirected der Guard externe Scraper auf `/login` und der Token wird nie geprüft.
@@ -197,7 +228,8 @@ Fertiges Dashboard: [grafana/schreibwerkstatt.json](grafana/schreibwerkstatt.jso
 - [lib/metrics/collect.js](../lib/metrics/collect.js) — Erhebung als Samples
 - [lib/metrics/format.js](../lib/metrics/format.js) — Prometheus-Text + JSON
 - [db/metrics-queries.js](../db/metrics-queries.js) — Aggregat-Abfragen
-- [routes/metrics.js](../routes/metrics.js) — öffentliche Endpunkte `/metrics`, `/metrics.json`
+- [lib/metrics/history.js](../lib/metrics/history.js) — Tagesreihen für `/metrics/history.json`
+- [routes/metrics.js](../routes/metrics.js) — öffentliche Endpunkte `/metrics`, `/metrics.json`, `/metrics/history.json`
 - [routes/admin-api-tokens.js](../routes/admin-api-tokens.js) — Admin-CRUD
 - [public/partials/admin-settings-api.html](../public/partials/admin-settings-api.html) — Tab `api`
 - [public/js/admin/admin-settings.js](../public/js/admin/admin-settings.js) — `adminApiTokens*`-Methoden

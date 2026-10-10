@@ -59,7 +59,9 @@ export function makeChatMethods(cfg) {
     }
   }
 
-  async function loadSession(sessionId) {
+  // `jumpToMsgId`: Treffer der Verlaufssuche (chat-history-search.js) — statt ans
+  // Ende scrollt die Karte zu dieser Nachricht und hebt sie hervor (`_hitMsgId`).
+  async function loadSession(sessionId, { jumpToMsgId = null } = {}) {
     const g = gen(this);
     try {
       // Session-Payload und Active-Job-Check parallel — beide Reads idempotent,
@@ -76,6 +78,7 @@ export function makeChatMethods(cfg) {
       this[p.sessionId] = data.id;
       this[p.messages] = data.messages || [];
       this[p.status] = '';
+      this._hitMsgId = jumpToMsgId;
       if (cfg.onAfterSessionLoad) cfg.onAfterSessionLoad.call(this);
       this.$nextTick(() => scrollToBottom.call(this));
 
@@ -114,6 +117,7 @@ export function makeChatMethods(cfg) {
       this[p.sessionId] = id;
       this[p.messages] = [];
       this[p.status] = '';
+      this._hitMsgId = null;
       await loadSessions.call(this);
     } catch (e) {
       console.error(`[startNew${L}Session]`, e);
@@ -213,9 +217,15 @@ export function makeChatMethods(cfg) {
     this[p.status] = '';
   }
 
+  // Mit gesetztem Suchtreffer (`_hitMsgId`) bleibt die Ansicht auf ihm stehen —
+  // auch für die späteren Aufrufe beim Öffnen der Karte; Senden und neue Session
+  // heben das wieder auf.
   function scrollToBottom() {
     const el = document.getElementById(cfg.scrollElId);
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const hit = this._hitMsgId != null ? el.querySelector(`[data-msg-id="${this._hitMsgId}"]`) : null;
+    if (hit) { el.scrollTop += hit.getBoundingClientRect().top - el.getBoundingClientRect().top - el.clientHeight / 3; return; }
+    el.scrollTop = el.scrollHeight;
   }
 
   // Wird beim $watch(showXxxCard) aufgerufen, wenn die Karte geöffnet wird.
@@ -238,7 +248,7 @@ export function makeChatMethods(cfg) {
 
   m[`startNew${L}Session`] = function () { return startNewSession.call(this); };
   m[`load${L}Sessions`]    = function () { return loadSessions.call(this); };
-  m[`load${L}Session`]     = function (id) { return loadSession.call(this, id); };
+  m[`load${L}Session`]     = function (id, opts) { return loadSession.call(this, id, opts); };
 
   m[`delete${L}Session`] = async function (id) {
     const root = window.__app;
@@ -295,6 +305,7 @@ export function makeChatMethods(cfg) {
     this[p.input] = '';
     this[p.loading] = true;
     this[p.status] = '';
+    this._hitMsgId = null;
     if (isRetry) {
       lastMsg.sendError = false;
     } else {

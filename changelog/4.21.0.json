@@ -1,0 +1,21 @@
+{
+  "version": "4.21.0",
+  "date": "2026-10-10",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Abschnitts-Chat und Buch-Chat: Über «Frühere Gespräche» steht ein Suchfeld. Es findet Gespräche nach Wortlaut und nach Sinn und springt direkt zur gefundenen Antwort.",
+      "en": "Section chat and book chat: a search field now sits above «Previous conversations». It finds conversations by wording and by meaning and jumps straight to the matching answer."
+    },
+    {
+      "kind": "neu",
+      "de": "Abschnitts-Chat und Buch-Chat schlagen Widersprüche und offene Punkte als Idee am Abschnitt oder Kapitel vor. Mit «Als Idee erfassen» landet sie im Ideen-Board, vorher lässt sich der Text anpassen.",
+      "en": "Section chat and book chat now suggest contradictions and open points as an idea on a section or chapter. «Note as idea» adds it to the idea board, and the text can be edited first."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buch-Chat: Er kann jetzt Ihre früheren Gespräche zum Buch durchsuchen und sich so auf schon Besprochenes beziehen.",
+      "en": "Book chat can now search your earlier conversations about the book and refer back to what was already discussed."
+    }
+  ]
+}

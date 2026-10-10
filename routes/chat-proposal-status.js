@@ -1,7 +1,8 @@
 'use strict';
 // Status eines Chat-Vorschlags persistieren (context_info.proposals[i] der
 // Assistant-Nachricht) — geteilt von Plot-Chat (PATCH /plot/chat-proposal) und
-// Ideen-Chat (PATCH /ideen/chat-proposal). Das Übernehmen selbst läuft im
+// den Ideen-Vorschlägen (PATCH /ideen/chat-proposal: Ideen-Chat sowie Abschnitts-
+// und Buch-Chat, lib/chat-idee-proposals.js). Das Übernehmen selbst läuft im
 // Frontend über die normalen Routen des jeweiligen Boards (gleiche Validierung
 // wie jede Bearbeitung); hier wird nur festgehalten, DASS und WOMIT übernommen
 // bzw. dass verworfen wurde — sonst stünde der Vorschlag nach einem Reload
@@ -26,8 +27,9 @@ const { setContext } = require('../lib/log-context');
 
 const ACTIONS = new Set(['applied', 'discarded', 'reopen']);
 
-/** Router mit `PATCH /chat-proposal` für Sessions der Art `kind` (Buch-ACL editor). */
-function makeChatProposalStatusRouter({ kind }) {
+/** Router mit `PATCH /chat-proposal` für Sessions der Arten `kinds` (Buch-ACL editor). */
+function makeChatProposalStatusRouter({ kinds }) {
+  const allowed = new Set(kinds);
   const router = express.Router();
   const jsonBody = express.json();
 
@@ -44,7 +46,7 @@ function makeChatProposalStatusRouter({ kind }) {
     ).get(messageId);
     // Besitz über die Session (pro User). Fremde Nachricht = 404, kein 403.
     const session = msg ? getOwnedSession(msg.session_id, userEmail) : null;
-    if (!session || session.kind !== kind) return res.status(404).json({ error_code: 'PROPOSAL_NOT_FOUND' });
+    if (!session || !allowed.has(session.kind)) return res.status(404).json({ error_code: 'PROPOSAL_NOT_FOUND' });
     if (!guardBook(req, res, session.book_id, 'editor')) return;
     setContext({ book: session.book_id });
 

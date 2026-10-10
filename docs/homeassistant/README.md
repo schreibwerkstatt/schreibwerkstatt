@@ -49,6 +49,7 @@ Inhalt von [dashboard.yaml](dashboard.yaml) als neues Dashboard anlegen: Setting
 | `sensor.schreibwerkstatt_users_active` / `_invited` / `_suspended` | `sw_users{status}` | Count |
 | `sensor.schreibwerkstatt_active_users_24h` / `_7d` | `sw_active_users_24h/7d` | Count |
 | `sensor.schreibwerkstatt_books` / `_pages` / `_chapters` | `sw_books/pages/chapters` | Count |
+| `sensor.schreibwerkstatt_books_written` | `sw_books_written` (Bücher mit Text) | Count |
 | `sensor.schreibwerkstatt_chars` / `_words` | `sw_chars/words` | Total |
 | `sensor.schreibwerkstatt_normseiten` | Template (chars / 1800) | Total |
 | `sensor.schreibwerkstatt_writing_seconds_today` / `_minutes` | `sw_writing_seconds_today` | Duration |
@@ -56,6 +57,7 @@ Inhalt von [dashboard.yaml](dashboard.yaml) als neues Dashboard anlegen: Setting
 | `sensor.schreibwerkstatt_stt_seconds_today` / `_minutes` | `sw_stt_seconds_today` | Duration |
 | `sensor.schreibwerkstatt_stt_chars_today` | `sw_stt_chars_today` | Count |
 | `sensor.schreibwerkstatt_words_today` | `sw_words_today` (netto, kann negativ sein) | Count |
+| `sensor.schreibwerkstatt_chars_today` | `sw_chars_today` (netto, kann negativ sein) | Count |
 | `sensor.schreibwerkstatt_jobs_running` / `_queued` | `sw_jobs_running/queued` | Gauge |
 | `sensor.schreibwerkstatt_jobs_in_memory` | `sw_jobs_in_memory` (Sum) | Gauge |
 | `sensor.schreibwerkstatt_jobs_done_24h` / `_failed_24h` | `sw_jobs_ended_24h{status}` | Gauge |

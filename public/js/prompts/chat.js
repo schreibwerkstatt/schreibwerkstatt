@@ -4,6 +4,7 @@
 import { _isLocal, JSON_ONLY } from './state.js';
 import { _obj, _str } from './schema-utils.js';
 import { SYSTEM_CHAT, SYSTEM_BOOK_CHAT } from './core.js';
+import { PAGE_CHAT_IDEEN_RULES } from './page-chat.js';
 
 /**
  * Figuren-Block der Chat-Prompts — gebudgetet.
@@ -307,7 +308,8 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     '      "begruendung": "kurze Begründung"',
     '    }',
     '  ],',
-    '  "titel_varianten": ["Titelvariante"]',
+    '  "titel_varianten": ["Titelvariante"],',
+    '  "ideen": [{ "inhalt": "Pendenz als knapper Stichpunkt", "begruendung": "kurz: was du bemerkt hast", "ort": "abschnitt" }]',
     '}',
     '',
     'VORSCHLÄGE-REGELN:',
@@ -317,6 +319,8 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     '- ersatz muss den Stil des Autors beibehalten.',
     '- vorschlaege ist nur dann ein leeres Array, wenn die Frage rein inhaltlich/konzeptionell ist und keine Textstelle betrifft (z.B. Plotfragen, Figurenmotivation).',
     '- titel_varianten nur, wenn der Autor nach einem Titel, einer Überschrift oder Headline fragt: dann 3 bis 5 kurze, unterschiedliche Varianten (nur der Titel, ohne Anführungszeichen oder Nummerierung). Sonst ein leeres Array.',
+    '',
+    ...PAGE_CHAT_IDEEN_RULES,
     ...(_isLocal ? [] : ['', JSON_ONLY]),
   );
 
@@ -585,14 +589,5 @@ export function buildChatTitlePrompt() {
 export const SCHEMA_CHAT_TITLE = _obj({ titel: _str });
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
-
-export const SCHEMA_CHAT = _obj({
-  antwort: _str,
-  vorschlaege: {
-    type: 'array',
-    items: _obj({ original: _str, ersatz: _str, begruendung: _str }),
-  },
-  titel_varianten: { type: 'array', items: _str },
-});
 
 export const SCHEMA_BOOK_CHAT = _obj({ antwort: _str });

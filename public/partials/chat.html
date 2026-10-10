@@ -29,7 +29,7 @@
     <div x-show="chatMessages.length === 0" class="chat-empty" x-text="$app.t('chat.emptyPage', { name: $app.currentPage?.name || '' })"></div>
 
     <template x-for="(msg, msgIdx) in chatMessages" :key="msgIdx">
-      <div :class="'chat-msg chat-msg--' + msg.role">
+      <div :class="'chat-msg chat-msg--' + msg.role + (msg.id != null && msg.id === _hitMsgId ? ' chat-msg--hit' : '')" :data-msg-id="msg.id">
         <div class="chat-msg-bubble">
           <div x-show="msg.role === 'user'" class="chat-msg-text" x-text="msg.content"></div>
           <div x-show="msg.role === 'assistant'" class="chat-msg-text" x-html="_renderChatMarkdown(msg.content)"></div>
@@ -42,6 +42,8 @@
         <!-- Änderungsvorschläge + Titelvarianten (nur Seiten-Chat) -->
         <!-- @include chat-vorschlaege -->
         <!-- @include chat-titel-varianten -->
+        <!-- Ideen-Vorschläge (Abschnitts- und Buch-Chat) -->
+        <!-- @include chat-idee-vorschlaege -->
       </div>
     </template>
 
@@ -69,9 +71,9 @@
   </div>
   <div class="chat-input-hint" x-text="$app.t('chat.inputHint')"></div>
 
-  <div x-show="chatSessions.length > 0" class="card-history-section">
-    <div class="chat-history-title" x-text="$app.t('chat.history')"></div>
-    <template x-for="s in chatSessions" :key="s.id">
+  <div class="card-history-section" x-data="chatHistorySearch('page')">
+    <!-- @include chat-history-search -->
+    <div x-show="!histActive"><template x-for="s in chatSessions" :key="s.id">
       <div
         class="chat-session-item hover-reveal-host"
         :class="s.id === chatSessionId ? 'chat-session-item--active' : ''"
@@ -81,7 +83,7 @@
         <div class="chat-session-meta"><span x-show="isChatSessionRunning(s.id)" class="spinner chat-session-running" role="status" :aria-label="$app.t('chat.sessionRunning')" :data-tip="$app.t('chat.sessionRunning')"></span><span x-text="$app.formatDate(s.last_message_at)"></span></div>
         <button type="button" class="chat-session-delete btn-card-close hover-reveal" :disabled="isChatSessionRunning(s.id)" @click.stop="deleteChatSession(s.id)" :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
       </div>
-    </template>
+    </template></div>
   </div>
 </div>
 
@@ -114,7 +116,7 @@
     <div x-show="bookChatMessages.length === 0" class="chat-empty" x-text="$app.t('chat.emptyBook', { name: $app.selectedBookName || '' })"></div>
 
     <template x-for="(msg, msgIdx) in bookChatMessages" :key="msgIdx">
-      <div :class="'chat-msg chat-msg--' + msg.role">
+      <div :class="'chat-msg chat-msg--' + msg.role + (msg.id != null && msg.id === _hitMsgId ? ' chat-msg--hit' : '')" :data-msg-id="msg.id">
         <div class="chat-msg-bubble">
           <div x-show="msg.role === 'user'" class="chat-msg-text" x-text="msg.content"></div>
           <div x-show="msg.role === 'assistant'" class="chat-msg-text" x-html="_renderChatMarkdown(msg.content)"></div>
@@ -172,6 +174,8 @@
           <div x-show="msg.role === 'assistant' && _chatTokenInfo(msg)" class="chat-token-info" :title="_chatTokenTitle(msg)" x-text="_chatTokenInfo(msg) + (_bookChatCost(msg) ? ' · ' + _bookChatCost(msg) : '')"></div>
           <!-- @include chat-feedback -->
         </div>
+        <!-- Ideen-Vorschläge (Abschnitts- und Buch-Chat) -->
+        <!-- @include chat-idee-vorschlaege -->
       </div>
     </template>
 
@@ -198,9 +202,9 @@
   </div>
   <div class="chat-input-hint" x-text="$app.t('chat.inputHint')"></div>
 
-  <div x-show="bookChatSessions.length > 0" class="card-history-section">
-    <div class="chat-history-title" x-text="$app.t('chat.history')"></div>
-    <template x-for="s in bookChatSessions" :key="s.id">
+  <div x-show="bookChatSessions.length > 0" class="card-history-section" x-data="chatHistorySearch('book')">
+    <!-- @include chat-history-search -->
+    <div x-show="!histActive"><template x-for="s in bookChatSessions" :key="s.id">
       <div
         class="chat-session-item hover-reveal-host"
         :class="s.id === bookChatSessionId ? 'chat-session-item--active' : ''"
@@ -210,6 +214,6 @@
         <div class="chat-session-meta"><span x-show="isBookChatSessionRunning(s.id)" class="spinner chat-session-running" role="status" :aria-label="$app.t('chat.sessionRunning')" :data-tip="$app.t('chat.sessionRunning')"></span><span x-text="$app.formatDate(s.last_message_at)"></span></div>
         <button type="button" class="chat-session-delete btn-card-close hover-reveal" :disabled="isBookChatSessionRunning(s.id)" @click.stop="deleteBookChatSession(s.id)" :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
       </div>
-    </template>
+    </template></div>
   </div>
 </div>

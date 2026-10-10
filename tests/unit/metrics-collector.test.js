@@ -94,9 +94,14 @@ test('JSON: Vertragsform, Werte und Datenschutzgrenze', () => {
   }
   assert.strictEqual(sample(j, 'sw_cost_usd_today'), 0.25);
   assert.strictEqual(sample(j, 'sw_words_today'), 200);
+  assert.strictEqual(sample(j, 'sw_chars_today'), 1200);
+  assert.strictEqual(sample(j, 'sw_books_written'), 1);
+  assert.strictEqual(j.metrics.find(m => m.name === 'sw_chars_today').state_class, 'total');
   assert.strictEqual(sample(j, 'sw_user_daily_goal_percent', l => l.user === 'a@x.test'), 50);
   assert.strictEqual(sample(j, 'sw_user_cost_usd_total', l => l.user === 'a@x.test'), 1.25);
   assert.strictEqual(sample(j, 'sw_user_words_today', l => l.user === 'a@x.test'), 200);
+  assert.strictEqual(sample(j, 'sw_user_chars_today', l => l.user === 'a@x.test'), 1200);
+  assert.strictEqual(sample(j, 'sw_user_chars', l => l.user === 'a@x.test'), 7200);
   assert.strictEqual(sample(j, 'sw_user_books', l => l.user === 'b@x.test'), undefined, 'gesperrte User fehlen');
   assert.doesNotMatch(JSON.stringify(j), /Geheimer Titel/, 'keine Buchtitel');
 

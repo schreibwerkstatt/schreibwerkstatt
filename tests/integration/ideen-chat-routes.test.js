@@ -5,8 +5,9 @@
 //    dem Speichern der Frage). Der Erfolgsfall startet einen echten KI-Job und
 //    wird hier bewusst nicht gefahren (Handler: tests/unit/ideen-chat-tools.test.mjs).
 //  - PATCH /ideen/chat-proposal: Status übernommen/verworfen/wieder offen,
-//    Besitz über die Session, nur kind='ideen' — ein Plot-Vorschlag ist über
-//    diese Route nicht erreichbar (geteilte Fabrik routes/chat-proposal-status.js).
+//    Besitz über die Session, nur kind='ideen' sowie die Ideen-Vorschläge aus
+//    Abschnitts- (kind='page') und Buch-Chat (kind='book') — ein Plot-Vorschlag
+//    ist über diese Route nicht erreichbar (geteilte Fabrik routes/chat-proposal-status.js).
 //  - PATCH /ideen/:id greift nicht für /chat-proposal (Mount-Reihenfolge).
 
 const test = require('node:test');
@@ -23,7 +24,7 @@ const BOOK = 9512;
 const NOW = '2026-01-01T00:00:00.000Z';
 
 let ctx; let db; let server; let baseUrl; let appSettings;
-let ideenSessionId; let plotSessionId; let msgId; let plotMsgId;
+let ideenSessionId; let plotSessionId; let msgId; let plotMsgId; let pageMsgId; let bookMsgId;
 
 test.before(async () => {
   ctx = bootstrap();
@@ -52,6 +53,14 @@ test.before(async () => {
   ).run(sid, JSON.stringify({ mode: 'ideen', proposals }), NOW).lastInsertRowid;
   msgId = mkMsg(ideenSessionId);
   plotMsgId = mkMsg(plotSessionId);
+  // Abschnitts- und Buch-Chat schlagen Ideen am Abschnitt vor (lib/chat-idee-proposals.js).
+  const PAGE = 951201;
+  db.prepare("INSERT INTO pages (page_id, book_id, page_name, updated_at) VALUES (?, ?, 'Abschnitt', ?)").run(PAGE, BOOK, NOW);
+  const pageSessionId = db.prepare(
+    "INSERT INTO chat_sessions (book_id, page_id, kind, user_email, created_at, last_message_at) VALUES (?, ?, 'page', ?, ?, ?)"
+  ).run(BOOK, PAGE, OWNER, NOW, NOW).lastInsertRowid;
+  pageMsgId = mkMsg(pageSessionId);
+  bookMsgId = mkMsg(mkSession('book'));
 
   const app = express();
   app.use((req, _res, next) => { req.session = { user: { email: req.get('x-user') || OWNER } }; next(); });
@@ -119,6 +128,15 @@ test('PATCH /ideen/chat-proposal: verwerfen + wieder öffnen, anderer Index unbe
   assert.ok(proposalsOf(msgId)[0].applied_at, 'Index 0 bleibt übernommen');
   assert.equal((await call('PATCH', '/ideen/chat-proposal', { message_id: msgId, index: 1, action: 'reopen' })).status, 200);
   assert.equal(proposalsOf(msgId)[1].status, undefined);
+});
+
+test('PATCH /ideen/chat-proposal: Ideen-Vorschläge aus Abschnitts- und Buch-Chat', async () => {
+  for (const id of [pageMsgId, bookMsgId]) {
+    const r = await call('PATCH', '/ideen/chat-proposal', { message_id: id, index: 0, action: 'applied', applied_id: 7 });
+    assert.equal(r.status, 200);
+    assert.equal(proposalsOf(id)[0].applied_id, 7);
+    assert.equal((await call('PATCH', '/ideen/chat-proposal', { message_id: id, index: 0, action: 'applied' }, LEKTOR)).status, 404);
+  }
 });
 
 test('PATCH /ideen/chat-proposal: fremde Session, Plot-Nachricht, Unsinn → 404/400', async () => {

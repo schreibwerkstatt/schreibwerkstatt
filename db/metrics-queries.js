@@ -22,26 +22,41 @@ const countPages        = _one('SELECT COUNT(*) AS n FROM pages');
 const countChapters     = _one('SELECT COUNT(*) AS n FROM chapters');
 const sumChars          = _one('SELECT COALESCE(SUM(chars),0) AS n FROM page_stats');
 const sumWords          = _one('SELECT COALESCE(SUM(words),0) AS n FROM page_stats');
+const booksWritten      = _one(`SELECT COUNT(*) AS n FROM
+                                   (SELECT book_id FROM page_stats GROUP BY book_id HAVING SUM(chars) > 0)`);
 const booksByOwner      = _all(`SELECT owner_email AS email, COUNT(*) AS n FROM books
                                  WHERE owner_email IS NOT NULL GROUP BY owner_email`);
 const wordsByOwner      = _all(`SELECT b.owner_email AS email, COALESCE(SUM(ps.words),0) AS n
                                   FROM page_stats ps JOIN books b ON b.book_id = ps.book_id
                                  WHERE b.owner_email IS NOT NULL GROUP BY b.owner_email`);
+const charsByOwner      = _all(`SELECT b.owner_email AS email, COALESCE(SUM(ps.chars),0) AS n
+                                  FROM page_stats ps JOIN books b ON b.book_id = ps.book_id
+                                 WHERE b.owner_email IS NOT NULL GROUP BY b.owner_email`);
 
-// Netto-Woerter heute je Buch: aktueller Stand minus letzter Tages-Snapshot vor
+// Netto-Woerter (delta) und -Zeichen (chars_delta) heute je Buch: aktueller Stand minus letzter Tages-Snapshot vor
 // heute (book_stats_history, lokales Datum, Lauf um 23:00). Buecher ohne
 // Snapshot (heute neu/importiert) fehlen bewusst — sonst zaehlte ein Import
 // als geschriebener Text.
 const _wordsTodayByBook = db.prepare(`
   SELECT b.book_id, b.owner_email AS email,
          COALESCE((SELECT SUM(words) FROM page_stats WHERE book_id = b.book_id), 0)
-           - h.words AS delta
+           - h.words AS delta,
+         COALESCE((SELECT SUM(chars) FROM page_stats WHERE book_id = b.book_id), 0)
+           - h.chars AS chars_delta
     FROM books b
     JOIN book_stats_history h ON h.book_id = b.book_id
    WHERE h.recorded_at = (SELECT MAX(recorded_at) FROM book_stats_history
                            WHERE book_id = b.book_id AND recorded_at < ?)
 `);
 function wordsTodayByBook(today) { return _wordsTodayByBook.all(today); }
+
+// Alle Tages-Snapshots vor `before` (lokales Datum), fuer /metrics/history.json.
+const historyRows = _all(`
+  SELECT h.book_id, h.recorded_at AS date, COALESCE(h.words, 0) AS words,
+         COALESCE(h.chars, 0) AS chars, b.owner_email AS email
+    FROM book_stats_history h JOIN books b ON b.book_id = h.book_id
+   WHERE h.recorded_at < ?
+   ORDER BY h.recorded_at, h.book_id`);
 
 // ── Zeiterfassung (lokales Datum) ───────────────────────────────────────────
 const _TIME_TABLES = new Set(['writing_time', 'lektorat_time', 'stt_time']);
@@ -53,6 +68,13 @@ for (const t of _TIME_TABLES) {
 }
 function secondsOn(table, date)       { return _timeTotal[table].get(date).n; }
 function secondsByUserOn(table, date) { return _timeByUser[table].all(date); }
+// Tagessummen vor `before` fuer /metrics/history.json, gesamt und je User.
+const _timeHistory = {};
+for (const t of _TIME_TABLES) {
+  _timeHistory[t] = db.prepare(`SELECT date, user_email AS email, COALESCE(SUM(seconds),0) AS n
+                                  FROM ${t} WHERE date < ? GROUP BY date, user_email ORDER BY date`);
+}
+function secondsHistory(table, before) { return _timeHistory[table].all(before); }
 const sttCharsOn        = _one('SELECT COALESCE(SUM(chars),0) AS n FROM stt_time WHERE date = ?');
 
 // ── Jobs ────────────────────────────────────────────────────────────────────
@@ -90,9 +112,9 @@ const activeDevices        = _all(`SELECT COALESCE(platform,'unknown') AS platfo
 
 module.exports = {
   usersByStatus, usersSeenSince, activeUsers,
-  countBooks, countPages, countChapters, sumChars, sumWords,
-  booksByOwner, wordsByOwner, wordsTodayByBook,
-  secondsOn, secondsByUserOn, sttCharsOn,
+  countBooks, countPages, countChapters, sumChars, sumWords, booksWritten, historyRows,
+  booksByOwner, wordsByOwner, charsByOwner, wordsTodayByBook,
+  secondsOn, secondsByUserOn, secondsHistory, sttCharsOn,
   jobRunsByTypeStatus, jobRunsEndedSince,
   ledgerByModel, ledgerUsdSince, ledgerUsdByType, ledgerUsdByUser, ledgerUsdByUserSince,
   jsErrorsSince, pendingRegistrations, activeDevices,

@@ -42,7 +42,7 @@ const get = (path, token) =>
   fetch(baseUrl + path, { headers: token ? { Authorization: `Bearer ${token}` } : {}, redirect: 'manual' });
 
 test('Ohne Bearer: 401 BEARER_REQUIRED auf beiden Endpunkten', async () => {
-  for (const p of ['/metrics', '/metrics.json']) {
+  for (const p of ['/metrics', '/metrics.json', '/metrics/history.json']) {
     const res = await get(p);
     assert.equal(res.status, 401);
     assert.match(res.headers.get('www-authenticate') || '', /^Bearer/);
@@ -62,6 +62,10 @@ test('metrics:read: Summen ja, Pro-User-Werte nein', async () => {
   assert.equal(j.schema, 1);
   assert.equal(j.includes_users, false);
   assert.ok(!j.metrics.some(m => m.per_user));
+  const h = await get('/metrics/history.json', plain_token);
+  assert.equal(h.status, 200);
+  assert.equal(h.headers.get('cache-control'), 'no-store');
+  assert.deepEqual((await h.json()).series, []);
 });
 
 test('include_users: Scope gesetzt, Audit geschrieben, Pro-User-Werte geliefert', async () => {

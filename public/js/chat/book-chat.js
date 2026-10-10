@@ -1,9 +1,11 @@
 import { makeChatMethods } from './chat-base.js';
 import { fetchJson } from '../utils.js';
 import { EVT } from '../events.js';
+import { chatIdeeProposalMethods } from './chat-idee-proposals.js';
 
 // Buch-Chat-Methoden (werden in Alpine.data('bookChatCard') gespreadet).
-// Keine Vorschläge – nur freie Konversation über das gesamte Buch (Agent-Flow).
+// Keine Textvorschläge – freie Konversation über das gesamte Buch (Agent-Flow);
+// einzig Ideen-Vorschläge an einem Abschnitt (chat-idee-proposals.js).
 
 // Werkzeug-Argumente als kurze Zeile für den ausklappbaren Werkzeug-Verlauf.
 // Reiner Text — das Template bindet ihn per x-text (kein x-html).
@@ -37,6 +39,8 @@ export function toolRows(toolCalls, t = null) {
 }
 
 export const bookChatMethods = {
+  ...chatIdeeProposalMethods,
+
   _bookChatToolRows(msg) {
     return toolRows(msg?.context_info?.tool_calls, (k, p) => window.__app.t(k, p));
   },

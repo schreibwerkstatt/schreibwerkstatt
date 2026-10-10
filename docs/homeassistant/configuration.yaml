@@ -140,6 +140,14 @@ rest:
           {{ ((value | regex_findall('sw_books (\d+)')) + ['0']) | first | int(0) }}
         state_class: measurement
 
+      - name: Schreibwerkstatt Books Written
+        unique_id: sw_books_written
+        icon: mdi:book-check
+        unit_of_measurement: "Bücher"
+        value_template: >
+          {{ ((value | regex_findall('sw_books_written (\d+)')) + ['0']) | first | int(0) }}
+        state_class: measurement
+
       - name: Schreibwerkstatt Pages
         unique_id: sw_pages
         icon: mdi:file-document-multiple
@@ -222,6 +230,14 @@ rest:
         unit_of_measurement: "Wörter"
         value_template: >
           {{ ((value | regex_findall('sw_words_today (-?\d+)')) + ['0']) | first | int(0) }}
+        state_class: measurement
+
+      - name: Schreibwerkstatt Chars Today
+        unique_id: sw_chars_today
+        icon: mdi:format-letter-case
+        unit_of_measurement: Zeichen
+        value_template: >
+          {{ ((value | regex_findall('sw_chars_today (-?\d+)')) + ['0']) | first | int(0) }}
         state_class: measurement
 
       # ---- Job-Queue (In-Memory, resettet bei Server-Restart) ----

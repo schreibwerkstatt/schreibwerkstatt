@@ -1,7 +1,7 @@
 // Werkzeug-Definitionen für den Agentic Buch-Chat (aus chat.js ausgelagert).
-// Anthropic-Tool-Format (name/description/input_schema). lib/ai.js liest daraus direkt.
-// Beschreibungen bewusst kurz — kosten Input-Tokens.
-// Übersicht aller Tools: docs/buchchat-tools.md
+// Anthropic-Tool-Format (name/description/input_schema), lib/ai.js liest daraus direkt;
+// Beschreibungen bewusst kurz — kosten Input-Tokens. Übersicht: docs/buchchat-tools.md
+import { CHAT_HISTORY_TOOL } from './book-chat-tools-history.js';
 
 export const BOOK_CHAT_TOOLS = [
   {
@@ -511,7 +511,7 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'final_answer',
-    description: 'Liefert die finale Antwort an den User. Rufe dieses Werkzeug als ALLERLETZTEN Aufruf einer Runde — danach folgt keine weitere Iteration und keine weitere Recherche. Pflicht-Endpunkt: jede Antwort an den User MUSS über dieses Werkzeug laufen. Freitext ohne final_answer wird nicht als Antwort akzeptiert. Schreibe die Antwort in der Sprache der Userfrage. Wenn du in der antwort wörtlich zitierst: hänge JEDES Zitat in das Feld `zitate` mit {page_id, offset, length, quote} aus quote_passage/quote_match/search_passages. Der Server validiert post-hoc und zeigt die Zitate als Fussnoten; ungültige werden markiert. Fragen zu realen Ereignissen oder Fakten AUSSERHALB des Manuskripts (Geschichte, Orte, Technik, Personen der Wirklichkeit) kannst du nicht nachprüfen — du hast keine Web-Suche: sag das offen, beantworte nur, was das Buch hergibt, und setze `recherche_hinweis: true` mit einer präzisen `recherche_frage` für den Recherche-Chat.',
+    description: 'Liefert die finale Antwort an den User. Rufe dieses Werkzeug als ALLERLETZTEN Aufruf einer Runde — danach folgt keine weitere Iteration und keine weitere Recherche. Pflicht-Endpunkt: jede Antwort an den User MUSS über dieses Werkzeug laufen. Freitext ohne final_answer wird nicht als Antwort akzeptiert. Schreibe die Antwort in der Sprache der Userfrage. Wenn du in der antwort wörtlich zitierst: hänge JEDES Zitat in das Feld `zitate` mit {page_id, offset, length, quote} aus quote_passage/quote_match/search_passages. Der Server validiert post-hoc und zeigt die Zitate als Fussnoten; ungültige werden markiert. Fragen zu realen Ereignissen oder Fakten AUSSERHALB des Manuskripts (Geschichte, Orte, Technik, Personen der Wirklichkeit) kannst du nicht nachprüfen — du hast keine Web-Suche: sag das offen, beantworte nur, was das Buch hergibt, und setze `recherche_hinweis: true` mit einer präzisen `recherche_frage` für den Recherche-Chat. Bemerkst du beim Antworten einen Widerspruch, inhaltlichen Fehler oder offenen Punkt an einer konkreten Stelle, biete ihn in `ideen` an — der Autor kann ihn dann als Idee (Pendenz) an diesem Abschnitt oder Kapitel festhalten.',
     input_schema: {
       type: 'object',
       properties: {
@@ -532,10 +532,18 @@ export const BOOK_CHAT_TOOLS = [
         },
         recherche_hinweis: { type: 'boolean', description: 'Optional: true, wenn die Frage (auch) reale Fakten ausserhalb des Manuskripts betrifft, die nur eine Web-Recherche klären kann.' },
         recherche_frage:   { type: 'string',  description: 'Optional (mit recherche_hinweis): die Frage, eigenständig formuliert, wie sie der Recherche-Chat bekommen soll.' },
+        ideen: { type: 'array',
+          description: 'Optional, höchstens 3: Pendenzen, die der Autor als Idee an einem Abschnitt oder Kapitel festhalten kann (er bestätigt jede einzeln, nichts wird automatisch angelegt). Nur für etwas, das du in dieser Runde tatsächlich bemerkt hast — ein Widerspruch zwischen Stellen, ein inhaltlicher Fehler, eine Unstimmigkeit, ein offener Punkt — oder wenn der Autor bittet, etwas zu notieren. Anker ist GENAU EINER: page_id für den Abschnitt, an dem die Korrektur ansetzen muss (bei einem Widerspruch die Stelle, die abweicht), ODER chapter_id, wenn der Punkt ein ganzes Kapitel betrifft (Zeitlinie, Ablauf über mehrere Abschnitte). Keine Idee, die laut list_ideen schon offen ist.',
+          items: { type: 'object', required: ['inhalt'], properties: {
+            page_id: { type: 'integer', description: 'Abschnitts-ID des Ankers (aus einem Werkzeug-Ergebnis, nicht geraten).' }, chapter_id: { type: 'integer', description: 'Statt page_id: Kapitel-ID des Ankers (aus list_chapters o.ä.).' },
+            inhalt:      { type: 'string',  description: 'Knapper, eigenständig verständlicher Stichpunkt ohne Bezug auf diesen Chat, z.B. «Augenfarbe von Lena: hier grün, in Kapitel 2 blau — vereinheitlichen».' },
+            begruendung: { type: 'string',  description: 'Optional: kurz, was du bemerkt hast.' },
+          } },
+        },
       },
       required: ['antwort'],
     },
-  },
+  }, CHAT_HISTORY_TOOL,
 ];
 
 // ── Slim-Werkzeugsatz (lokale/kleine Modelle) ─────────────────────────────────

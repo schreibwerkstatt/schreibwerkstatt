@@ -20,6 +20,7 @@ const { annotateVorschlagMatches } = require('./page-chat-verify');
 const { preContextPassages, retrievalQuery } = require('./book-chat-retrieval');
 const embed = require('../../../lib/embed');
 const appSettings = require('../../../lib/app-settings');
+const { normalizeChatIdeeProposals } = require('../../../lib/chat-idee-proposals');
 
 // Zeichendeckel des Buch-Kontext-Blocks: der kleinere Wert aus dem Erst-Kontext-
 // Deckel des Buch-Chats und 10 % des Seiten-Chat-Budgets — der Block ist Beiwerk,
@@ -51,7 +52,7 @@ async function _pageChatBookContext(session, query, budget, signal, userEmail, l
 async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
   const logger = makeJobLogger(jobId);
   const {
-    buildChatSystemPrompt, SCHEMA_CHAT, formatHistoryVorschlaege, historyTrimNote, formatPageChange,
+    buildChatSystemPrompt, SCHEMA_CHAT, formatHistoryVorschlaege, formatHistoryIdeen, historyTrimNote, formatPageChange,
     buildPageChatBookContext,
   } = await getPrompts(userEmail);
   const aiCfg = getContextConfigFor(resolveProvider({ userEmail }));
@@ -112,8 +113,15 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg) });
 
     const annotate = (r) => {
-      if (r.role !== 'assistant' || !r.vorschlaege) return '';
-      try { return formatHistoryVorschlaege(JSON.parse(r.vorschlaege)); } catch { return ''; }
+      if (r.role !== 'assistant') return '';
+      const parts = [];
+      if (r.vorschlaege) {
+        try { parts.push(formatHistoryVorschlaege(JSON.parse(r.vorschlaege))); } catch { /* kaputtes JSON: ohne Anhang */ }
+      }
+      if (r.context_info) {
+        try { parts.push(formatHistoryIdeen(JSON.parse(r.context_info).proposals)); } catch { /* dito */ }
+      }
+      return parts.filter(Boolean).join('\n\n');
     };
     const fullHistory = buildChatMessageHistory(session.id, { annotate }).slice(0, -1);
 
@@ -163,7 +171,11 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     updateJob(jobId, { tokensIn, tokensOut, cacheReadIn, cacheCreationIn, cacheCreation1hIn });
     if (truncated) throw i18nError('job.error.aiTruncated', { max: aiCfg.maxTokensOut, tokIn: tokensIn, tokOut: tokensOut, total: tokensIn + tokensOut });
 
-    const { antwort, vorschlaege, titel_varianten: titelVarianten, fallback, lostVorschlaege } = _parseChatResponse(text);
+    const { antwort, vorschlaege, titel_varianten: titelVarianten, ideen: rawIdeen, fallback, lostVorschlaege } = _parseChatResponse(text);
+    // Ideen-Vorschläge: Anker = dieser Abschnitt (eine page_id des Modells darf
+    // auf einen anderen Abschnitt desselben Buchs zeigen). Nichts wird angelegt —
+    // der User erfasst jeden einzeln (POST /ideen).
+    const ideenProposals = normalizeChatIdeeProposals(rawIdeen, { bookId: session.book_id, defaultPageId: session.page_id });
     // Fundstellen-Prüfung gegen den Text, den das Modell gesehen hat: „Stelle nie
     // gefunden" ist eine andere Aussage als „inzwischen veraltet" (UI).
     await annotateVorschlagMatches(vorschlaege, pageText);
@@ -179,6 +191,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       ...(fallback ? { parse_fallback: true } : {}),
       ...(lostVorschlaege ? { lost_vorschlaege: true } : {}),
       ...(titelVarianten.length ? { titel_varianten: titelVarianten } : {}),
+      ...(ideenProposals.length ? { proposals: ideenProposals } : {}),
       ...(dropped > 0 ? { history_trimmed: dropped } : {}),
       ...(bookCtxText ? { book_context: { count: bookCtx.hits.length, chars: bookCtx.chars } } : {}),
     };
@@ -205,7 +218,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       tokensIn, tokensOut,
       // Titel folgt asynchron (unten); das Frontend holt ihn mit der Historie nach.
       titlePending: !session.title,
-    }, chatTps, `«${session.page_name || '-'}» session=${sessionId}, ${vorschlaege.length} Vorschläge`);
+    }, chatTps, `«${session.page_name || '-'}» session=${sessionId}, ${vorschlaege.length} Vorschläge, ${ideenProposals.length} Ideen`);
     // Titel NACH completeJob: ein zweiter KI-Call vor dem Job-Ende hielt die
     // fertige Antwort um seine ganze Laufzeit zurück. Non-fatal, persistiert selbst.
     void generateSessionTitle({ session, userMessage: message, assistantAnswer: antwort, provider, logger });

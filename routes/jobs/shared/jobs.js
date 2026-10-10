@@ -326,6 +326,7 @@ const JOB_TYPE_LABELS = {
   'source-detect':         'job.label.sourceDetect',
   'source-pdf-draft':      'job.label.sourcePdfDraft',
   'source-embed-index':    'job.label.sourceEmbedIndex',
+  'chat-embed-index':      'job.label.chatEmbedIndex',
   'stilprofil':            'job.label.stilprofil',
   'autorenprofil':         'job.label.autorenprofil',
   'struktur-check':        'job.label.strukturCheck',

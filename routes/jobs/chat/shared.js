@@ -85,6 +85,8 @@ function _parseChatResponse(text) {
       antwort: r.parsed.antwort,
       vorschlaege: _sanitizeVorschlaege(r.parsed.vorschlaege),
       titel_varianten: _sanitizeTitelVarianten(r.parsed.titel_varianten),
+      // Roh — Anker-Prüfung + Normalisierung im Job (lib/chat-idee-proposals.js).
+      ideen: Array.isArray(r.parsed.ideen) ? r.parsed.ideen : [],
       fallback: false,
       lostVorschlaege: false,
     };
@@ -92,12 +94,13 @@ function _parseChatResponse(text) {
   // r.ok-aber-antwort-leer = Modell schrieb Prosa und trailing leeres `{}`,
   // das extractBalancedJson erwischt hat. Roh-Prosa speichern, fence weg.
   if (r.ok) {
-    return { antwort: stripTrailingEmptyJson(text) || text, vorschlaege: [], titel_varianten: [], fallback: true, lostVorschlaege: _lostVorschlaege(text) };
+    return { antwort: stripTrailingEmptyJson(text) || text, vorschlaege: [], titel_varianten: [], ideen: [], fallback: true, lostVorschlaege: _lostVorschlaege(text) };
   }
   return {
     antwort: r.partial.antwort ?? stripTrailingEmptyJson(r.partial._raw ?? text) ?? text,
     vorschlaege: [],
     titel_varianten: [],
+    ideen: [],
     fallback: true,
     lostVorschlaege: _lostVorschlaege(text),
   };

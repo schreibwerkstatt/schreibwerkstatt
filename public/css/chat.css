@@ -304,6 +304,18 @@
   font-size: var(--font-size-xs);
   color: var(--color-warn-text);
 }
+/* Ideen-Vorschläge (Abschnitts- und Buch-Chat, chat-idee-vorschlaege.html) */
+.chat-msg .chat-idee-vorschlaege { margin-top: var(--space-6); }
+.chat-idee-anchor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-xs);
+  font-size: var(--font-size-xs);
+}
+.chat-idee-text { overflow-wrap: anywhere; white-space: pre-wrap; margin-bottom: var(--space-xs); }
+.chat-idee-edit { width: 100%; margin-bottom: var(--space-xs); }
 /* Titelvarianten (Seiten-Chat) */
 .chat-titel-varianten {
   border: 0.5px solid var(--color-border);

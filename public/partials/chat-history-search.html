@@ -1,0 +1,36 @@
+<!--
+  Suche im Verlauf — Fragment, eingebunden in die Verlaufs-Sektion von
+  Abschnitts- und Buch-Chat. Komponente: x-data="chatHistorySearch('page'|'book')"
+  am Einbindungsort (public/js/chat/chat-history-search.js).
+  `hit.snippet` ist serverseitig escaped (lib/chat-search.js), nur <mark> um die
+  Fundstellen ist Markup.
+-->
+<div class="chat-history-title" x-text="$app.t('chat.history')"></div>
+<div class="filter-bar chat-hist-search">
+  <input type="search" class="filter-search-input" x-model="histQuery"
+         @input="onHistInput()" @keydown.enter.prevent="runHistSearch()" @keydown.escape.stop="clearHistSearch()"
+         :placeholder="$app.t('chat.historySearch.placeholder')" :aria-label="$app.t('chat.historySearch.placeholder')">
+  <div class="seg-toggle" x-show="histKind === 'page'">
+    <button type="button" :class="{ 'seg-toggle--active': histScope === 'page' }" @click="setHistScope('page')" x-text="$app.t('chat.historySearch.scopePage')"></button>
+    <button type="button" :class="{ 'seg-toggle--active': histScope === 'book' }" @click="setHistScope('book')" x-text="$app.t('chat.historySearch.scopeBook')"></button>
+  </div>
+  <span x-show="histLoading" class="spinner chat-session-running" role="status" :aria-label="$app.t('chat.historySearch.searching')"></span>
+</div>
+<div x-show="histActive && histSearched" class="chat-hist-results">
+  <p x-show="histError" class="card-form-error" x-text="histError"></p>
+  <p x-show="histNote" class="card-hint" x-text="histNote"></p>
+  <p x-show="!histError && !histHits.length" class="muted-msg" x-text="$app.t('chat.historySearch.empty')"></p>
+  <template x-for="hit in histHits" :key="hit.message_id">
+    <div class="chat-session-item chat-hist-hit" @click="openHistHit(hit)">
+      <div class="chat-hist-hit-body">
+        <div class="chat-hist-hit-head">
+          <span class="chat-session-preview" x-text="hit.title || $app.t('chat.previewEmpty')"></span>
+          <span class="chat-hist-match" :class="'chat-hist-match--' + hit.match" :data-tip="histHitTip(hit)" :aria-label="histHitTip(hit)"></span>
+          <span class="chat-session-meta" x-text="$app.formatDate(hit.created_at)"></span>
+        </div>
+        <span x-show="hit.page_id && histKind === 'page' && histScope === 'book'" class="entity-ref" x-entity-ref="{ type: 'seite', id: hit.page_id, static: true, preview: false }"></span>
+        <div class="chat-hist-hit-snippet" x-html="hit.snippet"></div>
+      </div>
+    </div>
+  </template>
+</div>

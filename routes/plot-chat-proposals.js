@@ -5,4 +5,4 @@
 
 const { makeChatProposalStatusRouter } = require('./chat-proposal-status');
 
-module.exports = { plotChatProposalsRouter: makeChatProposalStatusRouter({ kind: 'plot' }) };
+module.exports = { plotChatProposalsRouter: makeChatProposalStatusRouter({ kinds: ['plot'] }) };

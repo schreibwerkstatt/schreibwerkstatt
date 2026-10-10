@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 323, 179 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram` + `search_meta`).
+Stand: Schema-Version 324, 181 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -280,6 +280,7 @@ erDiagram
 
   chat_sessions ||--o{ chat_messages     : has
   chat_sessions ||--o{ chat_images       : "generated in chat"
+  chat_messages ||--o{ chat_semantic_chunks : "round embedded"
 ```
 
 ---
@@ -1579,6 +1580,25 @@ erDiagram
     TEXT    feedback_at
     TEXT    created_at
   }
+  chat_messages_fts {
+    TEXT content "FTS5 External Content auf chat_messages (content_rowid=id) — unicode61 remove_diacritics 2"
+    %% Gepflegt ausschliesslich per Trigger chat_messages_fts_ai/_ad/_au (auch bei
+    %% FK-CASCADE und Import). Wortlaut-Hälfte der Verlaufssuche (lib/chat-search.js).
+  }
+  chat_semantic_chunks {
+    INTEGER id           PK
+    INTEGER message_id   FK "Antwort der Runde, ON DELETE CASCADE"
+    INTEGER chunk_ix     "Chunk-Reihenfolge innerhalb der Runde"
+    TEXT    content_hash
+    TEXT    model         "Aktives Embedding-Modell (Modellwechsel → Runde wieder offen)"
+    INTEGER dim
+    BLOB    vector        "Float32-BLOB (lib/embed-chunk.js)"
+    TEXT    text          "Chunk-Text (Frage + Antwort), Snippet-Quelle"
+    TEXT    created_at
+    %% Bedeutungs-Hälfte der Verlaufssuche (Abschnitts- + Buch-Chat). Eigene Tabelle
+    %% statt kind in semantic_chunks: Chats sind pro User und kein Buchinhalt.
+    %% UNIQUE(message_id, chunk_ix, model). Job chat-embed-index, Nacht-Cron.
+  }
   chat_images {
     INTEGER id          PK
     INTEGER session_id  FK
@@ -2422,6 +2442,7 @@ erDiagram
 
   chat_sessions ||--o{ chat_messages : has
   chat_sessions ||--o{ chat_images   : "generated in chat"
+  chat_messages ||--o{ chat_semantic_chunks : "round embedded"
   user_invites  ||--o{ registration_requests : "linked invite"
 ```
 

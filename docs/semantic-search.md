@@ -125,6 +125,8 @@ Migrationen **240** + **251** + **259** ([db/migrations.js](../db/migrations.js)
 
 **`kind='research'` — warum im Buch-Index und nicht in einer eigenen Tabelle.** `research_items` ist buchgebunden wie Seite/Szene/Figur; eine zweite Tabelle wäre eine Kopie mit anderem FK. Der User-Pool `sources` bekam dagegen `source_semantic_chunks`, weil Quellen **personen**-gebunden sind (kein `book_id`) — das ist der Unterschied, an dem die Entscheidung hängt, nicht „PDF ja/nein". Indexgut ist `title + body + doc_text` am Stück; bei einem Dokument-Eintrag ist der PDF-Volltext der weitaus grösste Anteil. **Archivierte Einträge werden mitindexiert** — der FTS5-Index tut es auch, und die Hybrid-Fusion mischt beide Ranglisten: ein einseitiger Filter liesse FTS-Kandidaten ohne semantisches Gegenstück auftauchen.
 
+**Chat-Verläufe liegen nicht hier**, sondern in `chat_semantic_chunks` (pro User, kein Buchinhalt) — gleicher Endpunkt, eigener Job `chat-embed-index`; siehe [chats.md](chats.md#suche-im-verlauf).
+
 **Frische nach einem PDF-Upload:** `POST /research/:id/doc` ruft `enqueueEmbedIndexJob(bookId)` ([routes/jobs/embed-index.js](../routes/jobs/embed-index.js)) — non-fatal, dedupt gegen einen laufenden Job des Buchs. Ohne das bliebe ein frisch hochgeladenes PDF bis zum Nacht-Cron nur per Wortmatch auffindbar. Der Delta-Cache macht den Lauf billig: nur die Chunks des neuen Dokuments werden embeddet.
 
 **`semantic_index_state`** (`book_id` + `model` als PK, `indexed_at`; CASCADE mit dem Buch) hält das Ende des letzten **vollständigen** Laufs. Quelle für `indexReady` und für `lastIndexedAt`/`staleCount` der Such-Karte (`indexStatus`).

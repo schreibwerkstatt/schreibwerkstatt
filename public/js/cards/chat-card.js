@@ -32,6 +32,7 @@ export function registerChatCard() {
     _chatPollTimer: null,
     _chatTitleTimer: null,     // verzögerter Historien-Nachzug für den KI-Titel (chat.js#onPollDone)
     _chatGen: 0,               // Generationszähler gegen späte Responses nach Reset (chat-base.js)
+    _hitMsgId: null,           // Treffer der Verlaufssuche: Sprungziel + Hervorhebung (chat-base.js)
     _chatPendingRefresh: false,
     // Flush vor dem Senden gescheitert → der Chat sieht den gespeicherten Stand
     // (Hinweis über dem Eingabefeld, chat.js#onBeforeSend).

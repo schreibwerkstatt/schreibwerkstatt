@@ -19,6 +19,7 @@ const { getSessionWithBookName } = require('../../../db/chat-sessions');
 const { getPageWithChapter } = require('../../../db/book-chat/text');
 const { figurenBlockChars, weltfaktenBlockChars, _parseChatResponse } = require('./shared');
 const { runBookChatJob, _applyBookChatAiOverrides } = require('./book-chat');
+const { normalizeChatIdeeProposals } = require('../../../lib/chat-idee-proposals');
 
 // ── Agentic Buch-Chat (Tool-Use) ───────────────────────────────────────────────
 // Ersetzt runBookChatJob bei API_PROVIDER=claude (und BOOK_CHAT_MODE != 'classic').
@@ -120,6 +121,9 @@ async function _consumeFinalAnswer(finalUse, ctx, toolLog, iterNum, logger) {
   if (zitate && zitate.length) ctx.citations = _buildCitations(zitate, citationValidation);
   const hint = _rechercheHint(finalUse.input);
   if (hint) ctx.recherche = hint;
+  // Ideen-Vorschläge: nur Abschnitte dieses Buchs, nichts wird angelegt — der
+  // User erfasst jeden einzeln (POST /ideen, lib/chat-idee-proposals.js).
+  ctx.ideenProposals = normalizeChatIdeeProposals(finalUse.input?.ideen, { bookId: ctx.bookId });
   return JSON.stringify({ antwort });
 }
 
@@ -274,9 +278,10 @@ const runBookChatJobAgent = makeAgenticChatJob({
         // Strukturierte Kürzung in executeTool auf denselben Deckel wie der harte
         // Schnitt im Loop — sonst schneidet der Loop mitten in ein JSON-Ergebnis.
         resultCapChars: toolResultCap,
-        // final_answer: validierte Zitate (Fussnoten) + Recherche-Hinweis.
+        // final_answer: validierte Zitate (Fussnoten), Recherche-Hinweis, Ideen-Vorschläge.
         citations: null,
         recherche: null,
+        ideenProposals: [],
         // Welcher Werkzeugsatz lief — landet in context_info (Kosten-Diagnose:
         // ein Slim-Lauf beantwortet manche Frage nicht, das muss sichtbar sein).
         toolSet, toolsOffered: tools.length,
@@ -314,6 +319,7 @@ const runBookChatJobAgent = makeAgenticChatJob({
     ...(costUsd > 0 ? { cost_usd: Math.round(costUsd * 10000) / 10000 } : {}),
     ...(ctx.citations?.length ? { citations: ctx.citations } : {}),
     ...(ctx.recherche ? { recherche_hinweis: true, recherche_frage: ctx.recherche.frage } : {}),
+    ...(ctx.ideenProposals?.length ? { proposals: ctx.ideenProposals } : {}),
     ...(ctx.toolSet ? { tool_set: ctx.toolSet, tools_offered: ctx.toolsOffered } : {}),
     ...(ctx.preContext ? { pre_context: ctx.preContext } : {}),
     // Im Chat generierte Bilder — Frontend rendert sie unter der Antwort.

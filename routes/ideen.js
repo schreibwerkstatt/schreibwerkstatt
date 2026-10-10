@@ -29,9 +29,11 @@ const logger = require('../logger');
 const router = express.Router();
 const jsonBody = express.json();
 
-// Status der Ideen-Chat-Vorschläge (übernommen/verworfen) — PATCH /ideen/chat-proposal.
+// Status der Ideen-Vorschläge aus Chats (übernommen/verworfen) — PATCH /ideen/chat-proposal.
+// Ideen-Chat (`ideen`) sowie Abschnitts- (`page`) und Buch-Chat (`book`), die
+// Ideen an einem Abschnitt vorschlagen (lib/chat-idee-proposals.js).
 // Vor `/:id` registriert, sonst griffe PATCH /:id mit id='chat-proposal'.
-router.use('/', require('./chat-proposal-status').makeChatProposalStatusRouter({ kind: 'ideen' }));
+router.use('/', require('./chat-proposal-status').makeChatProposalStatusRouter({ kinds: ['ideen', 'page', 'book'] }));
 
 const MAX_LEN = 4000;
 

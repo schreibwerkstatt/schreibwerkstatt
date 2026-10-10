@@ -321,12 +321,11 @@ export {
   BOOK_CHAT_SLIM_TOOL_NAMES,
   BOOK_CHAT_FORCE_FINAL_INSTRUCTION,
   BOOK_CHAT_BUDGET_FINAL_INSTRUCTION,
-  SCHEMA_CHAT,
   SCHEMA_BOOK_CHAT,
   SCHEMA_CHAT_TITLE,
 } from './prompts/chat.js';
 
-export { formatHistoryVorschlaege, historyTrimNote, formatPageChange, buildPageChatBookContext } from './prompts/page-chat.js';
+export { SCHEMA_CHAT, formatHistoryVorschlaege, formatHistoryIdeen, historyTrimNote, formatPageChange, buildPageChatBookContext } from './prompts/page-chat.js';
 
 // Buch-Chat-only: Gliederungs-Block (klassisch) + Aussenwelt-Regel.
 export { buildGliederungBlock } from './prompts/book-outline.js';

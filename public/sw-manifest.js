@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "0b2bf743e84d452b";
+self.__SHELL_BUILD = "5c14c548615a2a6b";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -64,6 +64,7 @@ self.__SHELL_MANIFEST = [
   "/css/components/card-form/card-blocks.css",
   "/css/components/card-form/card-shell.css",
   "/css/components/card-form/form-elements.css",
+  "/css/components/chat-history-search.css",
   "/css/components/color-picker.css",
   "/css/components/combobox.css",
   "/css/components/comment-rail.css",
@@ -513,6 +514,8 @@ self.__SHELL_MANIFEST = [
   "/js/catalog-filter.js",
   "/js/chat/book-chat.js",
   "/js/chat/chat-base.js",
+  "/js/chat/chat-history-search.js",
+  "/js/chat/chat-idee-proposals.js",
   "/js/chat/chat.js",
   "/js/chat/ideen-chat-proposals.js",
   "/js/chat/ideen-chat.js",
@@ -685,6 +688,7 @@ self.__SHELL_MANIFEST = [
   "/js/prompts/autorenprofil.js",
   "/js/prompts/blocks-fach.js",
   "/js/prompts/blocks.js",
+  "/js/prompts/book-chat-tools-history.js",
   "/js/prompts/book-chat-tools.js",
   "/js/prompts/book-outline.js",
   "/js/prompts/chat.js",
@@ -892,6 +896,8 @@ self.__SHELL_MANIFEST = [
   "/partials/buchorganizer.html",
   "/partials/buchreview.html",
   "/partials/chat-feedback.html",
+  "/partials/chat-history-search.html",
+  "/partials/chat-idee-vorschlaege.html",
   "/partials/chat-titel-varianten.html",
   "/partials/chat-vorschlaege.html",
   "/partials/chat.html",

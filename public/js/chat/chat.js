@@ -2,6 +2,7 @@ import { makeChatMethods } from './chat-base.js';
 import { fetchJson } from '../utils.js';
 import { pageChatMarksMethods } from './page-chat-marks.js';
 import { pageChatApplyMethods } from './page-chat-apply.js';
+import { chatIdeeProposalMethods } from './chat-idee-proposals.js';
 
 // Seiten-Chat-Methoden (werden in Alpine.data('chatCard') gespreadet).
 // Gemeinsame Logik kommt aus chat-base.js; hier nur Seiten-Chat-Spezifika:
@@ -120,4 +121,6 @@ export const chatMethods = {
   },
   ...pageChatMarksMethods,
   ...pageChatApplyMethods,
+  // Ideen-Vorschläge (Widerspruch/Fehler als Pendenz am Abschnitt festhalten).
+  ...chatIdeeProposalMethods,
 };
