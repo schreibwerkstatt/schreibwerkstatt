@@ -45,6 +45,19 @@ async function addAct(page, name) {
   await expect(page.locator(`${BOARD} .plot-column-title`, { hasText: name })).toBeVisible();
 }
 
+// Reste eines abgebrochenen Vorversuchs entfernen: die Spec legt echte Akte in der
+// geteilten DB an, und ein Retry nach einem Abbruch mitten im Lauf fände den alten
+// Akt noch vor — das Undo des neuen liesse dann eine gleichnamige Spalte stehen.
+async function removeLeftoverActs(page) {
+  await page.evaluate(async (names) => {
+    const bookId = window.Alpine.store('nav').selectedBookId;
+    const { acts } = await (await fetch(`/plot?book_id=${bookId}`)).json();
+    for (const a of acts.filter((x) => names.includes(x.name))) {
+      await fetch(`/plot/acts/${a.id}`, { method: 'DELETE' });
+    }
+  }, [ACT_NAME, ACT_RENAMED]);
+}
+
 const undoBtn = (page) => page.locator('.card--plot .card-actions button').first();
 const redoBtn = (page) => page.locator('.card--plot .card-actions button').nth(1);
 const actTitle = (page, name) => page.locator(`${BOARD} .plot-column-title`, { hasText: name });
@@ -53,6 +66,7 @@ test('Undo/Redo: Akt anlegen, umbenennen, Bogen anlegen — serverseitig zurück
   const guard = attachConsoleGuard(page);
   await bootApp(page);
   await selectSeededBook(page);
+  await removeLeftoverActs(page);
   await openPlot(page);
 
   // Leerer Stack → beide Buttons deaktiviert.
