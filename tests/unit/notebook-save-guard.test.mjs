@@ -140,7 +140,7 @@ test('classifySaveError + isRetryableSaveError', () => {
   assert.equal(classifySaveError({ status: 503 }), 'server');
   assert.equal(classifySaveError({ status: 429 }), 'server');
   assert.equal(classifySaveError({ status: 400 }), 'rejected');
-  for (const k of [null, 'network', 'server', 'auth']) assert.equal(isRetryableSaveError(k), true, k);
+  for (const k of [null, 'network', 'server', 'auth', 'conflict']) assert.equal(isRetryableSaveError(k), true, k);
   for (const k of ['locked', 'forbidden', 'notFound', 'rejected']) assert.equal(isRetryableSaveError(k), false, k);
 });
 

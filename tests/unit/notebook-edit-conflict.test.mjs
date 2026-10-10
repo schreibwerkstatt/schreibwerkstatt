@@ -497,3 +497,86 @@ test('saveEdit: Seitenwechsel während PUT + Netzfehler → Draft für A mit Sav
   assert.equal(drafts[0].pageId, 1);
   assert.equal(drafts[0].html, '<p>A-neu mit genug Text</p>', 'kein HTML von Seite B im Draft von A');
 });
+
+// --- Eigener verspäteter Save (sent-saves.js) ---------------------------------
+// Hängende Verbindung: die PUTs mehrerer Autosave-Runden kommen gesammelt an,
+// der älteste geht durch. Der Server-Stand ist dann ein eigener Zwischenstand —
+// kein Konflikt, der lokale Stand wird auf den Server-Stempel gespeichert.
+
+const ssMem = new Map();
+globalThis.sessionStorage = globalThis.sessionStorage || {
+  getItem: (k) => (ssMem.has(k) ? ssMem.get(k) : null),
+  setItem: (k, v) => { ssMem.set(k, String(v)); },
+  removeItem: (k) => { ssMem.delete(k); },
+};
+const { recordSentSave, isOwnSentSave } = await import('../../public/js/editor/notebook/sent-saves.js');
+
+test('sent-saves: Server-Normalform (&#160;) trifft den gesendeten Editor-Stand', () => {
+  recordSentSave(77, '<p data-bid="a">Hallo&nbsp;Welt</p>');
+  assert.equal(isOwnSentSave(77, '<p data-bid="a">Hallo&#160;Welt</p>'), true);
+  assert.equal(isOwnSentSave(77, '<p data-bid="a">Hallo Welt!</p>'), false);
+  assert.equal(isOwnSentSave(78, '<p data-bid="a">Hallo&#160;Welt</p>'), false, 'pro Seite');
+});
+
+test('quickSave: 409 gegen eigenen verspäteten Save → lokaler Stand auf Server-Stempel, kein Modal', async () => {
+  const app = setSwitchApp();
+  app.currentPage.id = 81;
+  app.originalHtml = '<p data-bid="a">Anfang</p><p data-bid="b">Mitte</p>';
+  const older = '<p data-bid="a">Anfang</p><p data-bid="b">Mitte eins</p>';
+  const el = document.createElement('div');
+  el.innerHTML = '<p data-bid="a">Anfang</p><p data-bid="b">Mitte eins zwei drei</p>';
+  const ctx = mergeCtx(el);
+  let opened = 0;
+  ctx._openConflictResolution = () => { opened++; };
+  let reads = 0;
+  mockLoadPage(async () => {
+    reads++;
+    if (reads === 1) return { updated_at: '2026-01-01T00:00:00Z' };
+    return { updated_at: '2026-02-02T00:00:00Z', html: older };
+  });
+  const puts = [];
+  contentRepo.savePage = async (id, payload) => {
+    puts.push(payload);
+    // Der ältere Zwischenstand war schon abgeschickt, seine Antwort ging verloren.
+    if (puts.length === 1) { recordSentSave(81, older); throw conflict409(); }
+    return { updated_at: '2026-03-03T00:00:00Z' };
+  };
+  await ctx.quickSave();
+  assert.equal(opened, 0);
+  assert.equal(puts.length, 2);
+  assert.equal(puts[1].html, '<p data-bid="a">Anfang</p><p data-bid="b">Mitte eins zwei drei</p>');
+  assert.equal(puts[1].expected_updated_at, '2026-02-02T00:00:00Z');
+});
+
+test('quickSave: 409 gegen fremden Stand im selben Block → weiterhin Auflösung', async () => {
+  const app = setSwitchApp();
+  app.currentPage.id = 82;
+  app.originalHtml = '<p data-bid="a">Anfang</p><p data-bid="b">Mitte</p>';
+  const el = document.createElement('div');
+  el.innerHTML = '<p data-bid="a">Anfang</p><p data-bid="b">Mitte lokal</p>';
+  const ctx = mergeCtx(el);
+  let opened = 0;
+  ctx._openConflictResolution = () => { opened++; };
+  ctx._keepAsDraft = () => {};
+  let reads = 0;
+  mockLoadPage(async () => (++reads === 1
+    ? { updated_at: '2026-01-01T00:00:00Z' }
+    : { updated_at: '2026-02-02T00:00:00Z', html: '<p data-bid="a">Anfang</p><p data-bid="b">Mitte fremd</p>' }));
+  let puts = 0;
+  contentRepo.savePage = async () => { puts++; throw conflict409(); };
+  await ctx.quickSave();
+  assert.equal(opened, 1);
+  assert.equal(puts, 1);
+});
+
+test('_reconcileDraftWithServer: Server-Stand = eigener Zwischenstand → Draft ohne Konflikt', () => {
+  const app = setDraftApp();
+  app.currentPage.id = 83;
+  app.originalHtml = '<p data-bid="a">Anfang</p><p data-bid="b">Mitte eins</p>';
+  recordSentSave(83, app.originalHtml);
+  const draft = {
+    html: '<p data-bid="a">Anfang</p><p data-bid="b">Mitte eins zwei</p>',
+    originalHtml: draftBase, originalUpdatedAt: '2026-01-01T00:00:00Z',
+  };
+  assert.deepEqual(notebookEditMethods._reconcileDraftWithServer(draft), { html: draft.html });
+});

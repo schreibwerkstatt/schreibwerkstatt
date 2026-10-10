@@ -29,11 +29,19 @@ export function wordDiff(a, b) {
   const m = y.length;
   if ((n + 1) * (m + 1) > MAX_CELLS) return null;
 
-  // LCS-Längen von hinten: L[i][j] = LCS(x[i..], y[j..]).
+  // Gewichtete LCS von hinten: L[i][j] = bestes Gewicht für x[i..], y[j..].
+  // Ein Wort-Treffer wiegt mehr als alle Whitespace-Treffer zusammen — sonst
+  // gleicht „a b X c" vs. „a Y b c" die Leerzeichen statt des Worts „b" ab
+  // (gleich viele Token), und ein unverändertes Wort erscheint als gelöscht +
+  // eingefügt. Whitespace zählt 1, damit er unter gleichwertigen Wegen Gleichtext
+  // bleibt statt an der Änderung zu hängen.
+  const WORD = n + m + 1;
+  const w = (tok) => (/^\s+$/.test(tok) ? 1 : WORD);
   const L = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
-      L[i][j] = x[i] === y[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+      const skip = Math.max(L[i + 1][j], L[i][j + 1]);
+      L[i][j] = x[i] === y[j] ? Math.max(L[i + 1][j + 1] + w(x[i]), skip) : skip;
     }
   }
 
@@ -46,7 +54,7 @@ export function wordDiff(a, b) {
   let i = 0;
   let j = 0;
   while (i < n && j < m) {
-    if (x[i] === y[j]) { push('eq', x[i]); i++; j++; }
+    if (x[i] === y[j] && L[i][j] === L[i + 1][j + 1] + w(x[i])) { push('eq', x[i]); i++; j++; }
     else if (L[i + 1][j] >= L[i][j + 1]) { push('del', x[i]); i++; }
     else { push('add', y[j]); j++; }
   }

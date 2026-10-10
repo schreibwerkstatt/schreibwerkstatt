@@ -13,6 +13,10 @@ const jsonBody = express.json({ limit: '10mb' });
 const NAME_MAX = 255;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function _validDeviceId(s) { return typeof s === 'string' && UUID_RE.test(s); }
+// Client-gelieferte Diagnose-Kennung (Tab-ID, Save-Weg) für eine Logzeile:
+// nur [A-Za-z0-9_-], gedeckelt — sonst könnte der Body Zeilenumbrüche ins Log
+// schreiben.
+function _logToken(s) { return typeof s === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(s) ? s : '-'; }
 
 
 // Beschreibt den anfragenden Client fuer Logs. Bei Device-Token-Auth (nativer
@@ -63,7 +67,7 @@ function _fail(res, e, opName) {
 }
 
 module.exports = {
-  jsonBody, NAME_MAX, UUID_RE, _validDeviceId,
+  jsonBody, NAME_MAX, UUID_RE, _validDeviceId, _logToken,
   _clientLabel, _deviceTokenLabel,
   _guardPage, _guardChapter, _fail,
 };

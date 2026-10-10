@@ -10,6 +10,7 @@
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { startPoll, runningJobStatus } from './job-helpers.js';
 import { tzOpts, localeTag } from '../utils.js';
+import { EVT } from '../events.js';
 
 export function registerFolderImportCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -55,6 +56,20 @@ export function registerFolderImportCard() {
         },
         onViewReset: () => this.reset(),
       });
+      // Mit der installierten App geöffnete .swbook (app/boot/file-launch.js):
+      // sofort übernehmen, falls sie vor dieser Karte da war, sonst per Event.
+      window.addEventListener(EVT.IMPORT_FILE_LAUNCHED, () => this._takeLaunchedFile(),
+        { signal: this._lifecycle.signal });
+      this._takeLaunchedFile();
+    },
+
+    _takeLaunchedFile() {
+      const pending = window.__pendingImportFile;
+      if (!pending?.file) return;
+      window.__pendingImportFile = null;
+      this.reset();
+      this.importKind = pending.kind;
+      this.setFile(pending.file);
     },
 
     destroy() {

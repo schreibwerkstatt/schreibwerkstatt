@@ -106,18 +106,44 @@
   color: var(--color-muted);
 }
 
-.conflict-block__code {
+/* Klartext des Blocks (conflict-diff.js#blockText) mit Wort-Diff: in „Meine
+   Version" ist markiert, was nur dort steht (durchgestrichen = fehlt in der
+   anderen), in „Andere Version", was nur dort steht. */
+.conflict-block__text {
   margin: 0;
   padding: var(--space-sm);
   background: var(--color-bg);
   border: 0.5px solid var(--color-border);
   border-radius: var(--radius-sm);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: var(--font-size-sm);
+  line-height: 1.5;
   white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 180px;
+  overflow-wrap: anywhere;
+  max-height: 220px;
   overflow-y: auto;
+}
+
+.conflict-diff__del {
+  background: var(--color-mark-del-bg);
+  color: var(--color-mark-del-text);
+  text-decoration: line-through;
+  text-decoration-color: var(--color-mark-del-strike);
+}
+
+.conflict-diff__add {
+  background: var(--color-mark-ins-bg);
+  color: var(--color-mark-ins-text);
+}
+
+.conflict-block__deleted {
+  color: var(--color-muted);
+}
+
+.conflict-block__note {
+  margin: 0;
+  padding: var(--space-xs) var(--space-sm) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-muted);
 }
 
 .conflict-modal__actions {

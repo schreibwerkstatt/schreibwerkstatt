@@ -21,6 +21,12 @@
 //                  synchronisiertem Entwurf (Reconnect-Outbox, app-outbox.js).
 //                  Speist den Offline-Banner. Die aktuell offene Edit-Seite ist
 //                  ausgenommen (sie ist „live", sonst flackert der Zähler).
+//   offlineCapable — ein Service Worker kontrolliert die Seite; nur dann gibt
+//                  es „Buch offline halten" (app/app-offline-books.js).
+//   offlinePinned  — IDs (Strings) der Bücher, die dieses Konto offline hält.
+//   offlineBooks   — Stand je Buch laut SW: { [id]: { at, total, failed } }.
+//   offlineProgress — laufender Sync je Buch: { [id]: { done, total } }.
+//   storagePersisted — Browser hat dauerhaften Speicher gewährt.
 //   devMode        — Local-Dev-/Dev-Admin-Modus (LOCAL_DEV_MODE). Blendet z.B.
 //                  den Logout-Eintrag der Command-Palette aus.
 
@@ -32,6 +38,11 @@ export function registerSessionStore() {
     serverOffline: false,
     isOffline: false,
     pendingSyncCount: 0,
+    offlineCapable: false,
+    offlinePinned: [],
+    offlineBooks: {},
+    offlineProgress: {},
+    storagePersisted: false,
     devMode: false,
   });
 }

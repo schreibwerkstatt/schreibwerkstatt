@@ -270,6 +270,7 @@ const PUBLIC_ASSETS = new Set([
   '/sw.js',
   '/icon-192.png',
   '/icon-512.png',
+  '/icon-maskable-512.png',
   '/schreibwerkstatt_icon.svg',
   // Lucide-Icon-Sprite: der Share-Reader-Vorlese-Dock (share-reader/tts.js)
   // referenziert Icons via <use href="/icons.svg#…">. Ohne Freigabe landet der
@@ -283,6 +284,8 @@ const PUBLIC_ASSETS = new Set([
   // SW selbst. Faellt die Session aus, kaeme sonst Login-HTML zurueck und die
   // SW-Auswertung scheiterte an nosniff.
   '/sw-manifest.js',
+  // Zweites importScripts des SW („Buch offline halten") — gleicher Grund.
+  '/sw-offline.js',
   // ALTCHA-PoW-Widget (Custom-Element): von register.html + /login per
   // dynamic `<script type="module">` nachgeladen, sobald ALTCHA aktiv ist.
   '/vendor/altcha-3.0.11.min.js',

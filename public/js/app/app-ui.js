@@ -247,6 +247,12 @@ export const appUiMethods = {
     if (kind === 'unsaved') return this.t('edit.status.unsaved');
     if (kind === 'saving') return this.t('edit.status.saving');
     if (kind === 'offline' && !isRetryableSaveError(this.saveFailKind)) return this.t('edit.status.failed');
+    // Konflikt: der Server hat geantwortet, die Verbindung steht — «Offline»
+    // hiesse den User auf ein Netz warten, das nie fehlte.
+    if (kind === 'offline' && this.saveFailKind === 'conflict') return this.t('edit.status.conflict');
+    // Keine Antwort, aber der Browser meldet Netz (WLAN steht, Server bzw.
+    // Leitung hängt): nicht «Offline» sagen.
+    if (kind === 'offline' && this._saveUnreachable()) return this.t('edit.status.unreachable');
     if (kind === 'offline') {
       return when
         ? this.t('edit.status.offlineWith', { when })
@@ -257,12 +263,21 @@ export const appUiMethods = {
     return '';
   },
 
+  // Netz-/Serverfehler, während der Browser online meldet.
+  _saveUnreachable() {
+    const k = this.saveFailKind;
+    return (k === 'network' || k === 'server')
+      && !(typeof navigator !== 'undefined' && navigator.onLine === false);
+  },
+
   // Tooltip pro Kind — Detail zum Status-Pill (data-tip CSS-Hover).
   saveIndicatorTip() {
     const kind = this._saveStatus().kind;
     if (kind === 'unsaved') return this.t('edit.status.unsavedTip');
     if (kind === 'saving') return this.t('edit.status.savingTip');
     if (kind === 'offline' && !isRetryableSaveError(this.saveFailKind)) return this.t('edit.status.failedTip');
+    if (kind === 'offline' && this.saveFailKind === 'conflict') return this.t('edit.status.conflictTip');
+    if (kind === 'offline' && this._saveUnreachable()) return this.t('edit.status.unreachableTip');
     if (kind === 'offline') return this.t('edit.status.offlineTip');
     if (kind === 'draft') return this.t('editor.draftTitle');
     if (kind === 'saved') return this.t('editor.savedTitle');

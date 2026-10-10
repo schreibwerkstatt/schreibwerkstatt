@@ -19,6 +19,8 @@
 // Feld-Bedeutung:
 //   appReady        — SSoT für „Boot komplett" (Ende von init()). Reveal-Gate.
 //   updateAvailable — neuer Service-Worker wartet; Banner bietet Reload an.
+//   updateRequired  — Server-Protokoll ist neuer als die Shell (shell-protocol.js);
+//                   das Update ist Pflicht, das Banner sagt es so.
 //   bossScreenActive— Chef-Taste (F9 im Seiten-Editor): schwarzer Vollbild-Vorhang.
 //   themePref       — Theme-Wahl ('auto'|'light'|'dark'), in localStorage gespiegelt.
 //   uiLocale        — UI-Sprache ('de'|'en'); Quelle für t()/tRaw() + Date-Locale.
@@ -43,6 +45,7 @@ export function registerShellStore() {
   window.Alpine.store('shell', {
     appReady: false,
     updateAvailable: false,
+    updateRequired: false,
     bossScreenActive: false,
     themePref: 'auto',
     uiLocale: '',

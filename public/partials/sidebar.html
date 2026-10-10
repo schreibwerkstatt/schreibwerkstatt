@@ -6,6 +6,13 @@
               :data-tip="t('sidebar.loadPages')" :aria-label="t('sidebar.loadPages')">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
       </button>
+      <button type="button" class="icon-btn icon-btn--ghost" x-show="$store.session.offlineCapable"
+              @click="toggleBookOffline($store.nav.selectedBookId)" :disabled="!$store.nav.selectedBookId"
+              :class="{ 'is-active': isBookOffline($store.nav.selectedBookId) }"
+              :aria-pressed="isBookOffline($store.nav.selectedBookId)"
+              :data-tip="offlineBookTip($store.nav.selectedBookId)" :aria-label="offlineBookTip($store.nav.selectedBookId)">
+        <svg class="icon" aria-hidden="true"><use :href="isBookOffline($store.nav.selectedBookId) ? '/icons.svg#cloud-check' : '/icons.svg#cloud-download'"/></svg>
+      </button>
       <button type="button" class="icon-btn icon-btn--ghost" @click="toggleBookOrganizerCard()" :disabled="!$store.nav.selectedBookId"
               :class="{ 'is-active': showBookOrganizerCard }"
               :data-tip="t('tile.bookOrganizer.title')" :aria-label="t('tile.bookOrganizer')">

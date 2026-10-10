@@ -6,7 +6,7 @@ import { contentRepo } from '../../../repo/content.js';
 import { readDraft, writeDraft, clearDraft } from '../../draft-storage.js';
 import { stripLektoratMarks } from '../../shared/html-clean.js';
 import { isNoChange } from '../../shared/save-pipeline.js';
-import { savePage, isPageConflict, readConflictBody } from '../../shared/page-api.js';
+import { savePage as putPage, isPageConflict, readConflictBody } from '../../shared/page-api.js';
 import { checkPageConflict, conflictBannerFrom } from '../../shared/page-conflict.js';
 import { conflictText } from '../../shared/conflict-text.js';
 import { mergeBlocks, mergedToHtml, buildResolvedHtml } from '../../shared/block-merge.js';
@@ -21,6 +21,15 @@ import { mountEditorHtml } from '../../shared/mount-html.js';
 import { captureBlockCaret, restoreBlockCaret } from '../../shared/block-caret.js';
 import { findBlock } from '../../shared/dom-block.js';
 import { EVT } from '../../../events.js';
+import { recordSentSave, isOwnSentSave } from '../sent-saves.js';
+
+// Jeder Notebook-PUT läuft hier durch: der Stand wird VOR dem Request als
+// abgeschickt vermerkt — geht die Antwort verloren, erkennt der nächste Merge
+// den Server-Stand trotzdem als eigenen (../sent-saves.js).
+async function savePage(pageId, body) {
+  recordSentSave(pageId, body?.html);
+  return putPage(pageId, body);
+}
 
 // Auto-Save: idle-debounce + max-Cap. Regel und Werte liegen in
 // editor/shared/autosave.js — geteilt mit dem Bucheditor, damit die beiden
@@ -44,4 +53,4 @@ export const AUTOSAVE_KEY = 'page';
 // `window.__app` (Root). Aufruf von extern: über die Trampoline-Forwarder
 // in [trampoline.js] am Root-Spread (`app.startEdit()` → `__notebookCard.startEdit()`).
 
-export { EVT, FEATURE_BLOCK_MERGE, ZOOM_MAX, ZOOM_MIN, buildResolvedHtml, captureBlockCaret, checkPageConflict, clearDraft, clearNormalSnapshot, conflictBannerFrom, conflictText, contentRepo, editorHost, findBlock, findInHtml, getActiveEditorContainer, handleEditorCopy, handleEditorCut, handleEditorPaste, htmlToText, installEditCounter, isNoChange, isPageConflict, localeTag, mergeBlocks, mergedToHtml, mountEditorHtml, readConflictBody, readDraft, readEditorPrefs, restoreBlockCaret, runQuoteNormalize, savePage, sortByPosition, stripLektoratMarks, trackMerge, tzOpts, writeDraft, writeEditorPrefs, writeNormalSnapshot };
+export { EVT, FEATURE_BLOCK_MERGE, ZOOM_MAX, ZOOM_MIN, buildResolvedHtml, captureBlockCaret, checkPageConflict, clearDraft, clearNormalSnapshot, conflictBannerFrom, conflictText, contentRepo, editorHost, findBlock, findInHtml, getActiveEditorContainer, handleEditorCopy, handleEditorCut, handleEditorPaste, htmlToText, installEditCounter, isNoChange, isOwnSentSave, isPageConflict, localeTag, mergeBlocks, mergedToHtml, mountEditorHtml, readConflictBody, readDraft, readEditorPrefs, restoreBlockCaret, runQuoteNormalize, savePage, sortByPosition, stripLektoratMarks, trackMerge, tzOpts, writeDraft, writeEditorPrefs, writeNormalSnapshot };

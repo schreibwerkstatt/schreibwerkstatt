@@ -164,6 +164,12 @@ test('Konflikt-Modal: kein Abbruch per Klick daneben, kein Hintergrund-Save, Abb
     await page.evaluate(() => window.__app.saveEdit());
     await expect(page.locator('.conflict-modal')).toBeVisible();
 
+    // Vorschau: Klartext mit Wort-Diff, kein rohes Block-HTML.
+    const previews = page.locator('.conflict-block__text');
+    await expect(previews.nth(0).locator('.conflict-diff__del')).toHaveText(/LOKAL/);
+    await expect(previews.nth(1).locator('.conflict-diff__add')).toHaveText(/FERN/);
+    await expect(page.locator('.conflict-block__previews')).not.toContainText('data-bid');
+
     // Klick neben das Modal (Overlay-Ecke) schliesst nichts.
     await page.mouse.click(5, 5);
     await expect(page.locator('.conflict-modal')).toBeVisible();

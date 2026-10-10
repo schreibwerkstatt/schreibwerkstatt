@@ -13,7 +13,10 @@ import { EVT } from '../events.js';
 import { reconcileSessionCaches } from './boot/session-change.js';
 import { installContentUpdatedBridge } from './boot/content-updated.js';
 import { setDraftOwner } from '../editor/draft-storage.js';
+import { installFileLaunch } from './boot/file-launch.js';
 import { sweepStaleJobKeys } from '../storage-sweep.js';
+import { SHELL_PROTOCOL } from '../shell-protocol.js';
+import { isUpdateRequired } from './boot/update-policy.js';
 
 export const appInitMethods = {
   // AbortController `_abortCtrl` (initialisiert via app-state.js) hält alle
@@ -75,6 +78,8 @@ export const appInitMethods = {
     // Reconnect-Outbox: flusht ALLE offline gesicherten Notebook-Drafts (nicht
     // nur die offene Seite) beim Wiederverbinden + speist den Pending-Zähler.
     this._installOutbox(signal);
+    // „Buch offline halten": SW-Meldungen + Re-Sync beim Wiederverbinden.
+    this._installOfflineBooks(signal);
     window.addEventListener(EVT.JOB_FINISHED, (e) => this._onJobFinished(e.detail), { signal });
     // Zweite Haelfte von Stale-While-Revalidate: der SW meldet, wenn seine
     // Hintergrund-Revalidierung von dem abweicht, was er ausgeliefert hat —
@@ -216,6 +221,10 @@ export const appInitMethods = {
       // Boot noch ungefiltert lief, wird danach neu gerechnet.
       setDraftOwner(cfg.user?.email);
       this._refreshPendingSyncCount();
+      // Offline gehaltene Bücher sind ebenfalls pro Konto gemerkt.
+      this._initOfflineBooksForUser();
+      // Mit der installierten App geöffnete .swbook → Import-Karte.
+      if (cfg.user) installFileLaunch();
       // Verwaiste Job-Merker räumen — abseits des Boot-Pfads, ein Request.
       if (cfg.user) setTimeout(() => sweepStaleJobKeys(() => fetchJson('/jobs/queue')), 5000);
       // First-Login-Willkommens-Banner („Erste Schritte"): non-blocking laden,
@@ -266,6 +275,14 @@ export const appInitMethods = {
       } else if (cfg.shellBuild && window.__SHELL_BUILD) {
         // Generation stimmt → Loop-Breaker-Zähler des Update-Banners zurücksetzen.
         try { sessionStorage.removeItem('sw-update-attempts'); } catch {}
+      }
+      // Pflicht-Update: der Server spricht ein neueres Shell-Protokoll, als diese
+      // Shell kennt (shell-protocol.js). Ein stale /config kann hier nur einen
+      // ÄLTEREN Stand melden, also kein Fehlalarm ohne Frisch-Bestätigung.
+      if (isUpdateRequired(cfg.shellProtocol, SHELL_PROTOCOL)) {
+        this.$store.shell.updateRequired = true;
+        if (window.__requireUpdate) window.__requireUpdate();
+        else window.__updateRequiredPending = true;
       }
       this.$store.config.languagetoolEnabled = !!cfg.languagetool?.enabled;
       if (Number.isFinite(cfg.languagetool?.debounceMs)) {

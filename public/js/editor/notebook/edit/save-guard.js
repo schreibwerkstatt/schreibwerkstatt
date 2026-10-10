@@ -6,6 +6,7 @@
 import { clearDraft, editorHost, isNoChange, localeTag, readDraft, tzOpts, writeDraft } from './_shared.js';
 import { syncLiveBlockIds } from '../block-ids.js';
 import { classifySaveError, isRetryableSaveError } from '../save-errors.js';
+import { noteSaveOutage } from '../save-outage.js';
 
 export const saveGuardMethods = {
   // Riegel für jeden Save, den der User nicht selbst ausgelöst hat (Autosave-
@@ -60,6 +61,7 @@ export const saveGuardMethods = {
     const kind = classifySaveError(e);
     app.saveOffline = true;
     app.saveFailKind = kind;
+    noteSaveOutage(app.currentPage?.id, { kind, status: e?.status });
     return this._saveFailureText(kind, e, { offlineKey });
   },
 

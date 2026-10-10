@@ -20,7 +20,13 @@ export function classifySaveError(e) {
 // Netz zurück, Server wieder da, nach dem Neu-Anmelden (401 → Session-Banner).
 // Gesperrt/kein Recht/gelöscht/abgewiesen ändert sich durch Wiederholen nicht —
 // dort hielte der Online-/Fokus-Retry die Seite in einer Endlosschleife.
-const RETRYABLE = new Set(['network', 'server', 'auth']);
+//
+// 'conflict' setzen die Konfliktpfade selbst (classifySaveError liefert es nie):
+// der Server hat geantwortet und den Save wegen eines neueren Stands
+// abgewiesen. Wiederholbar, weil der nächste Save erneut prüft und mergt — ein
+// eigener verspäteter Save (sent-saves.js) löst sich dort von selbst. Die
+// Statuszeile sagt aber «Konflikt», nicht «Offline»: die Verbindung steht.
+const RETRYABLE = new Set(['network', 'server', 'auth', 'conflict']);
 
 export function isRetryableSaveError(kind) {
   return !kind || RETRYABLE.has(kind);

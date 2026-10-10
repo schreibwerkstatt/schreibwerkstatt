@@ -10,7 +10,7 @@ const { getPromptConfig } = require('../lib/prompts-loader');
 const { toIntId } = require('../lib/validate');
 const appSettings = require('../lib/app-settings');
 const { researchChatGate } = require('../lib/research-chat-gate');
-const { getVersion, getShellBuild } = require('../lib/version');
+const { getVersion, getShellBuild, getShellProtocol } = require('../lib/version');
 const { getLatestVersion: getLatestChangelogVersion } = require('../lib/changelog');
 const { MAX_INPUT_BYTES: PDF_MAX_BYTES } = require('../lib/pdf-attachment');
 const { sessionEmail } = require('../lib/acl');
@@ -96,6 +96,9 @@ router.get('/config', (req, res) => {
     appName: appSettings.get('app.name') || 'Schreibwerkstatt',
     appVersion: getVersion(),
     shellBuild: getShellBuild(),
+    // Protokoll-Stand der Web-Shell (public/js/shell-protocol.js); liegt die
+    // offene Shell darunter, ist das Update Pflicht (boot/update-policy.js).
+    shellProtocol: getShellProtocol(),
     // Neuigkeiten-Punkt am Hilfe-Knopf: nur die beiden Versionen, nie die Liste
     // selbst (die holt der Reiter lazy ueber GET /changelog). `changelogSeen`
     // ist der quittierte Stand des Users; null = noch nie geoeffnet.

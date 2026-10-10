@@ -12,7 +12,7 @@ const bookAccess = require('../../db/book-access');
 const { toIntId } = require('../../lib/validate');
 const { resolveChapterBookId } = require('../../lib/content-ownership');
 const { guardBook, sessionEmail } = require('../../lib/acl');
-const { jsonBody, NAME_MAX, _validDeviceId, _deviceTokenLabel, _guardPage, _fail } = require('./shared');
+const { jsonBody, NAME_MAX, _validDeviceId, _logToken, _deviceTokenLabel, _guardPage, _fail } = require('./shared');
 const { htmlToPlainText } = require('../../lib/html-text');
 const logger = require('../../logger');
 
@@ -68,7 +68,9 @@ function register(router) {
       if (e.code === 'PAGE_CONFLICT') {
         // Messpunkt fuer die Konflikt-Haeufigkeit: welches Geraet mit welchem
         // Stempel gegen welchen Server-Stand lief (sonst nirgends erfasst).
-        logger.info(`PAGE_CONFLICT Seite ${pageId}: Geraet ${req.body?.device_id || '-'} erwartete ${req.body?.expected_updated_at}, Server ${e.serverUpdatedAt} (Geraet ${e.serverEditorDevice || e.serverEditorEmail || '-'}).`);
+        // Tab + Weg trennen zwei Tabs desselben Browsers bzw. Autosave, Retry
+        // und Outbox — die Device-ID allein ist in allen Tabs gleich.
+        logger.info(`PAGE_CONFLICT Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} Weg ${_logToken(req.body?.save_reason)} erwartete ${req.body?.expected_updated_at}, Server ${e.serverUpdatedAt} (Geraet ${e.serverEditorDevice || e.serverEditorEmail || '-'}).`);
         return res.status(409).json({
           error_code: 'PAGE_CONFLICT',
           server_updated_at: e.serverUpdatedAt || null,

@@ -1,5 +1,7 @@
 // Teil von notebookEditMethods (siehe Facade edit.js).
 import { clearDraft, clearNormalSnapshot, editorHost, findInHtml, getActiveEditorContainer, htmlToText, installEditCounter, isNoChange, isPageConflict, mountEditorHtml, readConflictBody, readDraft, readEditorPrefs, savePage, sortByPosition, stripLektoratMarks, writeDraft, writeNormalSnapshot } from './_shared.js';
+import { startLiveEdit, stopLiveEdit } from '../../live-edit.js';
+import { noteEditStartDuringOutage, noteSaveRecovered } from '../save-outage.js';
 
 export const lifecycleMethods = {
   // Container-Lookup: einziger Eintrittspunkt für beide Modi.
@@ -82,6 +84,8 @@ export const lifecycleMethods = {
     // Sidebar-Lektorat-Status flippt auf 'warn' (updated_at > checkedAt) — Server-Map nachladen.
     app.refreshPageAges?.();
     clearDraft(pageId ?? app.currentPage?.id);
+    // Lief davor ein Save-Ausfall, jetzt als eine Zeile melden (save-outage.js).
+    noteSaveRecovered(pageId ?? app.currentPage?.id);
     // Autosave-Zyklus schliessen: der Max-Timer läuft ab dem ERSTEN Dirty-Mark
     // und wird von `_scheduleAutosave` nur neu gesetzt, wenn er null ist. Ohne
     // Reset hier würde der 120-s-Cap der nächsten Tipp-Serie noch von der
@@ -137,6 +141,7 @@ export const lifecycleMethods = {
     this._uninstallFormatMarks();
     app._editCounterCtx?.teardown?.();
     app._stopPresenceHeartbeat?.();
+    stopLiveEdit();
     app._releaseEditLock?.(app.currentPage?.id);
     this._historyClear?.();
     app.editMode = false;
@@ -276,6 +281,11 @@ export const lifecycleMethods = {
     // Presence-Heartbeat: anderen Usern signalisieren „hier editiert wer".
     // Stopp im cancelEdit/saveEdit (Non-Focus-Pfad).
     app._startPresenceHeartbeat?.(app.currentPage.id);
+    // Live-Edit-Marker: die Outbox anderer Tabs lässt den Draft dieses
+    // Abschnitts in Ruhe, solange dieser Tab ihn bearbeitet (../../live-edit.js).
+    startLiveEdit(app.currentPage.id);
+    // Offener Save-Ausfall dieses Tabs (z.B. Reload mitten im Ausfall).
+    noteEditStartDuringOutage(app.currentPage.id);
     // Soft-Edit-Lock: zusaetzliches UI-Signal mit Ablaufzeit; OCC-Pfad bleibt
     // das echte Safety-Net. Fremder Lock → foreignEditLock-Banner.
     app._acquireEditLock?.(app.currentPage.id);
@@ -403,6 +413,7 @@ export const lifecycleMethods = {
           pageName: pin.pageName,
           source,
           expectedUpdatedAt: pre.expectedAt,
+          reason: 'save',
         });
         if (!this._stillEditing(pin.pageId)) { this._releaseDraftAfterSave(pin.pageId, pre.saveHtml, saved); return; }
         const typedDuringSave = this._applySaveSuccess(saved, pre.saveHtml);
@@ -455,8 +466,9 @@ export const lifecycleMethods = {
   },
 
 
-  // Stilles Speichern (Ctrl+S / Auto-Save): bleibt im Editor.
-  async quickSave() {
+  // Stilles Speichern (Ctrl+S / Auto-Save): bleibt im Editor. `reason` nennt
+  // den Auslöser nur fürs PAGE_CONFLICT-Log (autosave, retry; sonst 'quick').
+  async quickSave(reason = 'quick') {
     const app = editorHost();
     if (!app || !app.editMode || !app.currentPage || app.editSaving) return;
     // Offenes Konflikt-Modal: es entscheidet. Ein stiller Save liefe in den
@@ -516,6 +528,7 @@ export const lifecycleMethods = {
         pageName: pin.pageName,
         source,
         expectedUpdatedAt: pre.expectedAt,
+        reason,
       });
       if (!this._stillEditing(pin.pageId)) { this._releaseDraftAfterSave(pin.pageId, pre.saveHtml, saved); return; }
       this._applySaveSuccess(saved, pre.saveHtml);

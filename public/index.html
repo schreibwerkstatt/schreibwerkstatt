@@ -407,8 +407,8 @@
   <span class="session-banner-text" x-text="$store.session.pendingSyncCount > 0 ? t($store.session.pendingSyncCount === 1 ? 'session.offlinePendingOne' : 'session.offlinePendingMany', { count: $store.session.pendingSyncCount }) : t('session.offlineMode')"></span>
 </div>
 
-<div class="session-banner" role="status" x-show="$store.shell.updateAvailable && !$store.session.sessionExpired" x-cloak>
-  <span class="session-banner-text" x-text="t('session.updateAvailable')"></span>
+<div class="session-banner" role="status" x-show="($store.shell.updateAvailable || $store.shell.updateRequired) && !$store.session.sessionExpired" x-cloak>
+  <span class="session-banner-text" x-text="t($store.shell.updateRequired ? 'session.updateRequired' : 'session.updateAvailable')"></span>
   <button type="button" class="session-banner-btn" @click="applyUpdate()" x-text="t('session.applyUpdate')"></button>
 </div>
 

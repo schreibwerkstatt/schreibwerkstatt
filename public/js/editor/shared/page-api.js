@@ -21,8 +21,8 @@ import { buildSavePayload } from './save-pipeline.js';
 // Führt den PUT durch. Wirft mit dem ursprünglichen Error-Objekt — Aufrufer
 // entscheidet, ob 409 als Konflikt-Modal oder als stilles Banner gerendert
 // wird (saveEdit vs. quickSave-Pfad).
-export async function savePage(pageId, { html, pageName, source, expectedUpdatedAt }) {
-  const payload = buildSavePayload({ html, pageName, source, expectedUpdatedAt });
+export async function savePage(pageId, { html, pageName, source, expectedUpdatedAt, reason }) {
+  const payload = buildSavePayload({ html, pageName, source, expectedUpdatedAt, reason });
   return contentRepo.savePage(pageId, payload);
 }
 

@@ -43,15 +43,23 @@
                     :class="{ 'is-active': conflictResolution.decisions[c.bid] === 'both' }"
                     x-text="t('edit.conflict.block.takeBoth')"></button>
           </div>
+          <p class="conflict-block__note" x-show="c.view.formatOnly"
+             x-text="t('edit.conflict.block.formatOnly')"></p>
           <div class="conflict-block__previews">
-            <div class="conflict-block__preview">
-              <span class="conflict-block__label" x-text="t('edit.conflict.block.takeLocal')"></span>
-              <pre class="conflict-block__code" x-text="c.local_html || '—'"></pre>
-            </div>
-            <div class="conflict-block__preview">
-              <span class="conflict-block__label" x-text="t('edit.conflict.block.takeRemote')"></span>
-              <pre class="conflict-block__code" x-text="c.remote_html || '—'"></pre>
-            </div>
+            <template x-for="side in ['local', 'remote']" :key="side">
+              <div class="conflict-block__preview">
+                <span class="conflict-block__label"
+                      x-text="t(side === 'local' ? 'edit.conflict.block.takeLocal' : 'edit.conflict.block.takeRemote')"></span>
+                <div class="conflict-block__text">
+                  <template x-if="c.view[side]">
+                    <span><template x-for="(part, pi) in c.view[side]" :key="pi"><span :class="'conflict-diff__' + part.t" x-text="part.v"></span></template></span>
+                  </template>
+                  <template x-if="!c.view[side]">
+                    <em class="conflict-block__deleted" x-text="t('edit.conflict.block.deleted')"></em>
+                  </template>
+                </div>
+              </div>
+            </template>
           </div>
         </li>
       </template>

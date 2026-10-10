@@ -6,6 +6,7 @@
 
 import { stripFocusArtefacts } from '../utils.js';
 import { getDeviceId } from '../device-id.js';
+import { getTabId } from '../tab-id.js';
 import { EVT } from '../events.js';
 
 const GET_TIMEOUT_MS = 30000;
@@ -107,15 +108,31 @@ async function _write(method, path, body, invalidationPaths) {
   }
 }
 
+// Navigations-Reads (Buchliste, Baum): `fresh` heisst hier „lieber den
+// Serverstand" — kein Read-Modify-Write hängt daran. Scheitert der frische Read
+// am Netz (der SW antwortet dann 503 `{ error: 'offline' }`), ist der Cache die
+// richtige Antwort: sonst öffnet ein Buchwechsel im Zug nicht einmal ein Buch,
+// das komplett offline liegt (Buchwechsel liest fresh, tree/load.js#readsFresh).
+// Abschnitts-Reads bekommen diesen Rückfall bewusst NICHT — ihr `fresh` ist die
+// Konsistenzzusage vor einem Schreiben.
+async function _getNav(path, opts = {}) {
+  try {
+    return await _get(path, opts);
+  } catch (e) {
+    if (!opts.fresh || e?.status !== 503 || e?.body?.error !== 'offline') throw e;
+    return _get(path, { ...opts, fresh: false });
+  }
+}
+
 export const contentRepo = {
   // GET /content/books → [{id, name, slug, description, updated_at, created_at}]
-  listBooks(opts)               { return _get('books', opts); },
+  listBooks(opts)               { return _getNav('books', opts); },
 
   // GET /content/books/:id → einzelnes Buch (Domain-Shape).
   loadBook(id, opts)            { return _get('books/' + id, opts); },
 
   // GET /content/books/:id/tree → { chapters: [{...c, pages: [...]}], topPages: [...] }
-  bookTree(id, opts)            { return _get('books/' + id + '/tree', opts); },
+  bookTree(id, opts)            { return _getNav('books/' + id + '/tree', opts); },
 
   // Sortier-SSoT.
   // GET → { tree, updated_at, updated_by }; PUT { order_json } setzt den
@@ -149,7 +166,8 @@ export const contentRepo = {
     const hasHtml = typeof body?.html === 'string';
     // Geraet-Stempel nur bei Body-Change: macht den geraete-bewussten /changes-Feed
     // praezise (eigener Browser-Save wird ausgefiltert, andere Geraete nicht).
-    const payload = hasHtml ? { ...body, device_id: getDeviceId() } : body;
+    // `client_tab` trennt Tabs desselben Browsers im PAGE_CONFLICT-Log.
+    const payload = hasHtml ? { ...body, device_id: getDeviceId(), client_tab: getTabId() } : body;
     const inv = hasHtml ? ['pages/' + id, 'pages/' + id + '/revisions'] : ['pages/' + id];
     const out = await _write('PUT', 'pages/' + id, payload, inv);
     if (hasHtml && typeof window !== 'undefined') {

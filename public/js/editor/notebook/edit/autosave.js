@@ -10,7 +10,7 @@
 // speichern. Der Notebook-Editor bearbeitet immer nur EINE Seite, darum ein
 // fester Key statt einer pageId — `_stopAutosave` läuft beim Seitenwechsel und
 // kennt die alte Seite dann schon nicht mehr.
-import { AUTOSAVE_KEY, DRAFT_DEBOUNCE_MS, clearDraft, createAutosaveTimers, createTimerBag, editorHost, isNoChange, stripLektoratMarks, writeDraft } from './_shared.js';
+import { AUTOSAVE_KEY, DRAFT_DEBOUNCE_MS, clearDraft, createAutosaveTimers, createTimerBag, editorHost, isNoChange, stripLektoratMarks, writeDraft, writeNormalSnapshot } from './_shared.js';
 
 // Lazy, weil dieses Modul keinen eigenen init-Hook hat und der Host beim ersten
 // Tastendruck sicher steht.
@@ -57,6 +57,10 @@ export const autosaveMethods = {
     const ok = writeDraft(app.currentPage.id, html, app.originalHtml, app.currentPage.updated_at);
     app.draftPersistFailed = !ok;
     if (ok) app.lastDraftSavedAt = Date.now();
+    // Reload-Snapshot auffrischen: seine TTL zählt ab der letzten Eingabe, nicht
+    // ab dem Betreten des Edit-Modus — sonst landet nach über einer Stunde
+    // Schreiben ein F5 in der Leseansicht statt im Editor (notebook/storage.js).
+    if (ok) writeNormalSnapshot(app.currentPage.id);
   },
 
 
@@ -106,7 +110,7 @@ export const autosaveMethods = {
     const app = editorHost();
     if (!app) return;
     this._clearAutosaveTimers();
-    if (app.editDirty && this._canBackgroundSave(pageId)) this.quickSave();
+    if (app.editDirty && this._canBackgroundSave(pageId)) this.quickSave('autosave');
   },
 
 
@@ -126,7 +130,7 @@ export const autosaveMethods = {
     // Modal und keiner nach einem Fehler, den Wiederholen nicht behebt.
     const retry = () => {
       if (app.editDirty && app.saveOffline && this._canBackgroundSave()) {
-        this.quickSave();
+        this.quickSave('retry');
       }
     };
     app._onlineHandler = retry;

@@ -158,4 +158,7 @@ export const EVT = {
   SESSION_EXPIRED: 'session-expired',           // kein detail
   APP_UPDATE_AVAILABLE: 'app:update-available', // kein detail
   FILE_DROP: 'file-drop',                       // detail: { files }
+  // Die installierte Web-App wurde mit einer Datei geöffnet (Manifest-
+  // `file_handlers`, app/boot/file-launch.js) → Import-Karte übernimmt sie.
+  IMPORT_FILE_LAUNCHED: 'import:file-launched', // detail: { file, kind: 'swbook' }
 };

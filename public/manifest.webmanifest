@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "Schreibwerkstatt",
   "short_name": "Schreibwerkstatt",
   "description": "Schreiben, Lektorat und Buchanalyse mit KI.",
@@ -8,6 +9,9 @@
   "lang": "de",
   "background_color": "#f7f7f5",
   "theme_color": "#f7f7f5",
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
   "icons": [
     {
       "src": "/icon-192.png",
@@ -22,10 +26,44 @@
       "purpose": "any"
     },
     {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
       "src": "/schreibwerkstatt_icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Meine Bücher",
+      "short_name": "Bücher",
+      "url": "/#meine-buecher",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Meine Statistik",
+      "short_name": "Statistik",
+      "url": "/#meine-statistik",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Importieren",
+      "short_name": "Import",
+      "url": "/#import",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "/",
+      "accept": {
+        "application/x-schreibwerkstatt-book": [".swbook"]
+      }
     }
   ]
 }

@@ -44,12 +44,11 @@
 //  - Schreibende Requests (PUT/POST/DELETE): nie behandelt (method-Check am Anfang)
 //  - Auth/KI/Job-Queue/SSE: Network-Only, nie cachen
 
-// Generierte Manifest-/Build-Konstanten (self.__SHELL_BUILD, self.__SHELL_MANIFEST).
-// Wird mit der SW-Registrierung persistiert → auch beim Offline-Start verfügbar.
-// updateViaCache:'none' (Registrierung in app.js) erzwingt frische Revalidierung
-// dieser Importe beim Update-Check, sodass ein neuer Build zuverlässig erkannt wird.
-importScripts('/sw-manifest.js');
-
+// Generierte Build-Konstanten (self.__SHELL_BUILD/__SHELL_MANIFEST) + „Buch offline
+// halten" (self.__swOffline, sw-offline.js). Mit der Registrierung persistiert →
+// auch offline da; updateViaCache:'none' revalidiert beide beim Update-Check.
+importScripts('/sw-manifest.js', '/sw-offline.js');
+const OFFLINE = self.__swOffline || null;
 const SHELL_BUILD = self.__SHELL_BUILD || 'dev';
 const SHELL_MANIFEST = Array.isArray(self.__SHELL_MANIFEST) ? self.__SHELL_MANIFEST : [];
 const MANIFEST_SET = new Set(SHELL_MANIFEST);
@@ -63,7 +62,7 @@ const CONFIG_CACHE = 'schreibwerkstatt-config-v2';
 // Versionsstabile Assets (vendor/*, fonts/*) leben generationsunabhängig hier,
 // damit sie nicht bei jedem Deploy mit dem SHELL_CACHE weggeworfen werden.
 const VENDOR_CACHE = 'schreibwerkstatt-vendor-v1';
-const ACTIVE_CACHES = new Set([SHELL_CACHE, CONTENT_CACHE, CONFIG_CACHE, VENDOR_CACHE]);
+const ACTIVE_CACHES = new Set([SHELL_CACHE, CONTENT_CACHE, CONFIG_CACHE, VENDOR_CACHE, OFFLINE?.CACHE]);
 const SHELL_PATH = '/index.html';
 const CONFIG_PATH = '/config';
 
@@ -624,7 +623,7 @@ async function _handleSwr(req, cacheName, { cacheKey = null, content = true } = 
           key = new Request(u.toString());
         }
         await cw.put(key, net.clone());
-        if (content) await _evictContentCache(cw);
+        if (content) { await _evictContentCache(cw); await OFFLINE?.refresh(key, net.clone()); }
       }
       return net;
     } catch {
@@ -632,7 +631,8 @@ async function _handleSwr(req, cacheName, { cacheKey = null, content = true } = 
     }
   }
   const cache = await caches.open(cacheName);
-  const cached = await cache.match(cacheKey || req);
+  // Nach einem Miss der Rückfall auf ein offline gehaltenes Buch (nie verdrängt).
+  const cached = await cache.match(cacheKey || req) || (content ? await OFFLINE?.match(req) : undefined);
   // Der Server darf widersprechen. Deklariert die GECACHTE Antwort `no-cache`
   // oder `no-store`, ist sie als Stale-Antwort nicht zugelassen — dann gilt
   // Netz-zuerst. Betrifft heute die drei `/content/*/release.json` (dort steht
@@ -655,7 +655,7 @@ async function _handleSwr(req, cacheName, { cacheKey = null, content = true } = 
       // Der Vergleich muss VOR dem cache.put laufen, sonst ist der alte Stand weg.
       const drifted = worthDiffing && !(await _samePayload(cachedEtag, cachedClone, res));
       await cache.put(cacheKey || req, res.clone());
-      if (content) await _evictContentCache(cache);
+      if (content) { await _evictContentCache(cache); await OFFLINE?.refresh(req, res.clone()); }
       if (drifted) notifyContentUpdated(url.pathname);
     }
     return res;
@@ -713,12 +713,7 @@ async function _handleNetworkFirst(req, cacheName) {
     }
     return net;
   } catch {
-    const cached = await cache.match(req);
-    if (cached) return cached;
-    return new Response(JSON.stringify({ error: 'offline' }), {
-      status: 503,
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-    });
+    return (await cache.match(req)) || offlineJson();
   }
 }
 
@@ -777,10 +772,7 @@ self.addEventListener('message', (event) => {
   if (SESSION_CACHE_DROP_TYPES.has(event.data?.type)) {
     const type = event.data.type;
     event.waitUntil((async () => {
-      await Promise.all([
-        caches.delete(CONTENT_CACHE),
-        caches.delete(CONFIG_CACHE),
-      ]);
+      await Promise.all([caches.delete(CONTENT_CACHE), caches.delete(CONFIG_CACHE), OFFLINE?.drop()]);
       event.source?.postMessage?.({ type: type + '-done' });
     })());
   }
@@ -789,10 +781,12 @@ self.addEventListener('message', (event) => {
   // Read-Modify-Write-Pfad (Lektorat-Save, Chat-Vorschlag) überschreibt damit
   // frische User-Edits mit Stale-Daten. paths sind /content/*-Subpfade
   // ohne `/content/`-Prefix.
+  // Offline gehaltene Bücher werden dagegen nachgeladen, nicht gelöscht.
   if (event.data?.type === 'invalidate-content') {
     const paths = Array.isArray(event.data.paths) ? event.data.paths : [];
-    event.waitUntil(_invalidateCacheEntries(CONTENT_CACHE, paths, '/content/'));
+    event.waitUntil(Promise.all([_invalidateCacheEntries(CONTENT_CACHE, paths, '/content/'), OFFLINE?.invalidate(paths)]));
   }
+  OFFLINE?.handleMessage(event);
 });
 
 async function _invalidateCacheEntries(cacheName, paths, prefix) {

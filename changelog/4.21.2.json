@@ -1,0 +1,36 @@
+{
+  "version": "4.21.2",
+  "date": "2026-10-10",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Seitenleiste, Knopf „Buch offline halten“: alle Abschnitte eines Buchs werden auf diesem Gerät abgelegt. So lässt sich das ganze Buch auch ohne Verbindung öffnen und lesen.",
+      "en": "Sidebar, “Keep book offline” button: every section of a book is stored on this device. The whole book then opens and reads without a connection."
+    },
+    {
+      "kind": "neu",
+      "de": "Installierte App: Schreibwerkstatt-Bücher (.swbook) lassen sich per Doppelklick öffnen. Die Datei landet direkt im Import.",
+      "en": "Installed app: Schreibwerkstatt books (.swbook) can be opened with a double-click. The file goes straight to the import."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Speicheranzeige im Editor: sie unterscheidet jetzt „offline“, „Server nicht erreichbar“ und „Konflikt“. Der Stand bleibt in jedem Fall lokal erhalten und wird nachgespeichert.",
+      "en": "Save status in the editor now distinguishes “offline”, “server unreachable” and “conflict”. Your text is kept locally in every case and saved later."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Konflikt-Auswahl beim Speichern: die Unterschiede werden Wort für Wort markiert. Gelöschte Absätze und reine Formatierungsunterschiede sind eigens gekennzeichnet.",
+      "en": "Conflict choice when saving: differences are highlighted word by word. Deleted paragraphs and formatting-only differences are marked separately."
+    },
+    {
+      "kind": "verbessert",
+      "de": "App-Updates werden automatisch eingespielt, aber nie, solange in einem Fenster geschrieben wird. Ist eine Version zu alt, erscheint ein Hinweis, erst zu speichern und dann neu zu laden.",
+      "en": "App updates are applied automatically, but never while you are writing in any window. If a version is too old, a notice asks you to save first and then reload."
+    },
+    {
+      "kind": "behoben",
+      "de": "Editor: bei langsamer Verbindung wurde das eigene Speichern manchmal als Konflikt gemeldet. Auch derselbe Abschnitt in zwei Browser-Tabs überschreibt sich nicht mehr gegenseitig.",
+      "en": "Editor: on a slow connection your own save was sometimes reported as a conflict. The same section open in two browser tabs no longer overwrites itself either."
+    }
+  ]
+}

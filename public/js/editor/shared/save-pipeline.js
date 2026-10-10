@@ -33,16 +33,20 @@ export function isNoChange(currentHtml, originalHtml) {
 // sich auf die Pflichtfelder verlassen.
 const VALID_SOURCES = new Set(['main', 'focus', 'book', 'lektorat-apply', 'chat-apply']);
 
-export function buildSavePayload({ html, pageName, source, expectedUpdatedAt }) {
+// `reason` (optional): welcher Weg den Save ausgelöst hat (autosave, retry,
+// outbox …) — nur Diagnose, der Server schreibt es in die PAGE_CONFLICT-Zeile.
+export function buildSavePayload({ html, pageName, source, expectedUpdatedAt, reason }) {
   if (typeof html !== 'string') throw new Error('buildSavePayload: html required');
   if (!pageName) throw new Error('buildSavePayload: pageName required');
   if (!VALID_SOURCES.has(source)) {
     throw new Error(`buildSavePayload: invalid source ${JSON.stringify(source)}`);
   }
-  return {
+  const payload = {
     html,
     name: pageName,
     source,
     expected_updated_at: expectedUpdatedAt || null,
   };
+  if (reason) payload.save_reason = reason;
+  return payload;
 }

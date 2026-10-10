@@ -9,6 +9,8 @@
 // Letztere läuft über den localStorage-Draft in `editor/draft-storage.js`
 // (separater Mechanismus für unsavable Inhalte; persistiert pro Page).
 
+// Die TTL zählt ab der letzten Eingabe: `startEdit` schreibt den Snapshot, und
+// jeder Draft-Write frischt ihn auf (edit/autosave.js#_flushDraftSaveNow).
 const NORMAL_SNAPSHOT_KEY = 'normal.snapshot';
 const NORMAL_SNAPSHOT_TTL_MS = 60 * 60 * 1000;
 

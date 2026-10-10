@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "43309f88e70ca060";
+self.__SHELL_BUILD = "bf45812901a1e9f7";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -197,6 +197,7 @@ self.__SHELL_MANIFEST = [
   "/js/app/app-jobs-core.js",
   "/js/app/app-komplett.js",
   "/js/app/app-navigation.js",
+  "/js/app/app-offline-books.js",
   "/js/app/app-onboarding.js",
   "/js/app/app-outbox.js",
   "/js/app/app-root-getters.js",
@@ -210,11 +211,14 @@ self.__SHELL_MANIFEST = [
   "/js/app/app-view/page.js",
   "/js/app/app-view/scroll.js",
   "/js/app/app-view/share.js",
+  "/js/app/boot/busy-lock.js",
   "/js/app/boot/content-updated.js",
   "/js/app/boot/fetch-guard.js",
+  "/js/app/boot/file-launch.js",
   "/js/app/boot/internal-links.js",
   "/js/app/boot/session-change.js",
   "/js/app/boot/sw-register.js",
+  "/js/app/boot/update-policy.js",
   "/js/app/register-cards.js",
   "/js/avatar.js",
   "/js/book-organizer.js",
@@ -565,6 +569,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/focus/viewport.js",
   "/js/editor/lektorat-evidence.js",
   "/js/editor/lektorat.js",
+  "/js/editor/live-edit.js",
   "/js/editor/notebook/block-ids.js",
   "/js/editor/notebook/card.js",
   "/js/editor/notebook/edit.js",
@@ -581,6 +586,8 @@ self.__SHELL_MANIFEST = [
   "/js/editor/notebook/history.js",
   "/js/editor/notebook/index.js",
   "/js/editor/notebook/save-errors.js",
+  "/js/editor/notebook/save-outage.js",
+  "/js/editor/notebook/sent-saves.js",
   "/js/editor/notebook/split-html.js",
   "/js/editor/notebook/storage.js",
   "/js/editor/notebook/stt-dictation.js",
@@ -607,6 +614,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/shared/autosave.js",
   "/js/editor/shared/block-caret.js",
   "/js/editor/shared/block-merge.js",
+  "/js/editor/shared/conflict-diff.js",
   "/js/editor/shared/conflict-text.js",
   "/js/editor/shared/dom-block.js",
   "/js/editor/shared/edit-counter.js",
@@ -766,6 +774,7 @@ self.__SHELL_MANIFEST = [
   "/js/share-reader/wakelock.js",
   "/js/share-theme-init.js",
   "/js/shared/stopwords-de.js",
+  "/js/shell-protocol.js",
   "/js/sortable-dnd.js",
   "/js/sortable-table.js",
   "/js/sources/cite-html.js",
@@ -793,6 +802,7 @@ self.__SHELL_MANIFEST = [
   "/js/storage-sweep.js",
   "/js/streak-grid.js",
   "/js/structure-title.js",
+  "/js/tab-id.js",
   "/js/table/table-html.js",
   "/js/tabs.js",
   "/js/theme-init.js",

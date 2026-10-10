@@ -45,7 +45,7 @@ test('Save: saveEdit existiert + ruft PUT', () => {
 });
 
 test('Quick-Save (Auto-Save während Edit): quickSave existiert', () => {
-  assert.match(editSrc, /async quickSave\s*\(\)/, 'quickSave-Methode fehlt');
+  assert.match(editSrc, /async quickSave\s*\(/, 'quickSave-Methode fehlt');
 });
 
 test('Cancel ohne Save: cancelEdit existiert', () => {

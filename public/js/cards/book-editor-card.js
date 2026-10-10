@@ -29,6 +29,7 @@ import { renderDiagramsIn, clearRenderedDiagrams } from '../diagram/mermaid-view
 import { stampCaptionNumbers, clearCaptionNumbers } from '../xrefs/caption-preview.js';
 import { EVT } from '../events.js';
 import { tErrorRaw } from '../i18n.js';
+import { registerBusySource } from '../app/boot/update-policy.js';
 
 // Re-Export für Tests/Konsumenten: die Facade ist der Einstieg.
 export { applySaveOutcome } from './book-editor/save.js';
@@ -178,6 +179,10 @@ export function registerBookEditorCard() {
           e.returnValue = '';
         }
       }, { signal: this._lifecycle.signal });
+      // Gleiche Aussage für die Update-Politik: kein Generationswechsel über
+      // ungespeicherte Blöcke hinweg (app/boot/update-policy.js#isBusy).
+      const unregisterBusy = registerBusySource(() => this.dirtyCount > 0 || this.savingCount > 0);
+      this._lifecycle.signal.addEventListener('abort', unregisterBusy, { once: true });
 
       // Cmd/Ctrl+F-Routing via editor-find-card: dispatcht hierher, wenn die
       // Karte sichtbar ist.

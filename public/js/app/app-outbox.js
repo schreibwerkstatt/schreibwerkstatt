@@ -24,6 +24,7 @@
 // zur Laufzeit die Root-Komponente, darum greifen `this.$store`, `this.editMode`
 // etc. Nur Plain-Methoden, keine Getter (Spread-Getter-Falle).
 import { listDraftPageIds, readDraft, clearDraft } from '../editor/draft-storage.js';
+import { isLiveEditedElsewhere } from '../editor/live-edit.js';
 import { savePage, isPageConflict } from '../editor/shared/page-api.js';
 import { mergeBlocks, mergedToHtml } from '../editor/shared/block-merge.js';
 import { contentRepo } from '../repo/content.js';
@@ -69,7 +70,9 @@ export const appOutboxMethods = {
   // nicht als „wartend" — sonst flackert der Zähler bei jedem Tippen.
   _refreshPendingSyncCount() {
     const openId = (this.editMode && this.currentPage?.id) ? Number(this.currentPage.id) : null;
-    const count = listDraftPageIds().filter((id) => id !== openId).length;
+    // Ein Abschnitt, den ein anderer Tab gerade bearbeitet, wartet nicht — er
+    // ist dort live.
+    const count = listDraftPageIds().filter((id) => id !== openId && !isLiveEditedElsewhere(id)).length;
     if (this.$store.session.pendingSyncCount !== count) {
       this.$store.session.pendingSyncCount = count;
     }
@@ -134,6 +137,10 @@ export const appOutboxMethods = {
     // zum Editieren geöffnet, gehört sie dem Live-Editor (autosave.js) — headless
     // nicht dazwischenfunken, sonst clearen wir den Draft unter seinen Füssen weg.
     if (this.editMode && Number(this.currentPage?.id) === pageId) return 'skip';
+    // Ein anderer Tab bearbeitet den Abschnitt: der Draft ist sein laufender
+    // Stand, gespeichert wird er dort (editor/live-edit.js). Ein Push von hier
+    // liefe mit dessen altem Stempel in den Save des anderen Tabs.
+    if (isLiveEditedElsewhere(pageId)) return 'skip';
     // Offenes Konflikt-Modal dieser Seite: dort fällt die Entscheidung.
     if (Number(this.conflictResolution?.pageId) === pageId) return 'skip';
     // Ohne Basis-Stempel kein OCC-Guard: der PUT überschriebe jede
@@ -144,7 +151,7 @@ export const appOutboxMethods = {
     try {
       await savePage(pageId, {
         html: draft.html, pageName: name, source: 'main',
-        expectedUpdatedAt: draft.originalUpdatedAt,
+        expectedUpdatedAt: draft.originalUpdatedAt, reason: 'outbox',
       });
       clearDraft(pageId);
       return 'ok';
@@ -180,7 +187,7 @@ export const appOutboxMethods = {
     try {
       await savePage(pageId, {
         html: mergedToHtml(m.merged), pageName: name, source: 'main',
-        expectedUpdatedAt: remote.updated_at,
+        expectedUpdatedAt: remote.updated_at, reason: 'outbox-merge',
       });
       clearDraft(pageId);
       return 'ok';

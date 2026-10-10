@@ -1,6 +1,8 @@
 // Teil von notebookEditMethods (siehe Facade edit.js).
-import { FEATURE_BLOCK_MERGE, buildResolvedHtml, captureBlockCaret, checkPageConflict, clearDraft, conflictBannerFrom, conflictText, contentRepo, editorHost, isPageConflict, mergeBlocks, mergedToHtml, mountEditorHtml, isNoChange, readConflictBody, readDraft, restoreBlockCaret, savePage, stripLektoratMarks, trackMerge, writeDraft } from './_shared.js';
+import { FEATURE_BLOCK_MERGE, buildResolvedHtml, captureBlockCaret, checkPageConflict, clearDraft, conflictBannerFrom, conflictText, contentRepo, editorHost, isOwnSentSave, isPageConflict, mergeBlocks, mergedToHtml, mountEditorHtml, isNoChange, readConflictBody, readDraft, restoreBlockCaret, savePage, stripLektoratMarks, trackMerge, writeDraft } from './_shared.js';
 import { classifySaveError } from '../save-errors.js';
+import { conflictDiffView } from '../../shared/conflict-diff.js';
+import { noteSaveOutage } from '../save-outage.js';
 
 // Läuft die Abbrechen-Rückfrage schon? Esc (window-Listener im Partial) und
 // der Knopf dürfen keinen zweiten Dialog über den ersten legen.
@@ -55,6 +57,10 @@ export const conflictMethods = {
     app.draftPersistFailed = !draftOk;
     if (draftOk) app.lastDraftSavedAt = Date.now();
     app.saveOffline = true;
+    // Fehlerklasse Konflikt: die Statuszeile sagt dann nicht «Offline». Ein
+    // Netz-/Serverfehler setzt danach über _noteSaveFailure seine eigene.
+    app.saveFailKind = 'conflict';
+    noteSaveOutage(pageId, { kind: 'conflict' });
     if (banner) app.editConflict = banner;
     if (statusKey) app.setStatus(app.t(statusKey), false, statusMs);
   },
@@ -92,7 +98,8 @@ export const conflictMethods = {
     if (merge?.merged) {
       // Stiller Auto-Merge: nicht-kollidierende Block-Edits zusammengeführt.
       app.editConflict = null;
-      return { proceed: true, saveHtml: merge.saveHtml, expectedAt: merge.expectedAt, merged: true };
+      // Eigener verspäteter Save: nichts zusammengeführt — kein «zusammengeführt»-Hinweis.
+      return { proceed: true, saveHtml: merge.saveHtml, expectedAt: merge.expectedAt, merged: !merge.own };
     }
 
     // Kein Merge (Flag off / leere Base / Read-Fehler) → klassischer Pfad.
@@ -100,6 +107,8 @@ export const conflictMethods = {
     app.editConflict = banner;
     if (silent) {
       app.saveOffline = true;
+      app.saveFailKind = 'conflict';
+      noteSaveOutage(pageId, { kind: 'conflict' });
       app.setStatus(this._conflictHintText(banner), false, 8000);
       return { proceed: false };
     }
@@ -148,6 +157,7 @@ export const conflictMethods = {
     try {
       const saved = await savePage(pageId, {
         html: merge.saveHtml, pageName, source, expectedUpdatedAt: merge.expectedAt,
+        reason: merge.own ? 'own-echo' : 'remerge',
       });
       return { saved, html: merge.saveHtml };
     } catch (e) {
@@ -227,7 +237,10 @@ export const conflictMethods = {
   //    sonst direkt nach der Auflösung gegen einen veralteten Stand.
   //  - Ersetzt ein Folge-Konflikt (409 beim Übernehmen) ein offenes Modal
   //    derselben Seite, bleiben bereits getroffene Entscheidungen stehen.
-  _openConflictResolution({ merged, conflicts, source, remoteUpdatedAt }) {
+  //  - `view` je Konflikt: Klartext + Wort-Diff für die Vorschau
+  //    (shared/conflict-diff.js); übernommen wird das rohe Block-HTML.
+  _openConflictResolution({ merged, conflicts: rawConflicts, source, remoteUpdatedAt }) {
+    const conflicts = rawConflicts.map(c => ({ ...c, view: conflictDiffView(c) }));
     const app = editorHost();
     const pageId = app.currentPage?.id;
     const prev = app.conflictResolution?.pageId === pageId ? app.conflictResolution.decisions : null;
@@ -251,7 +264,8 @@ export const conflictMethods = {
   // remoteHtml/remoteUpdatedAt können aus _checkPageConflict mitgegeben werden
   // (spart einen fresh-Load); fehlen sie (409-Race), wird frisch geladen.
   // Rückgabe:
-  //   { merged:true, saveHtml, expectedAt } — kollisionsfrei, Aufrufer speichert saveHtml.
+  //   { merged:true, saveHtml, expectedAt } — kollisionsfrei, Aufrufer speichert saveHtml
+  //     (`own:true`: Remote war ein eigener verspäteter Save, saveHtml = lokal).
   //   { conflict:true } — Auflösungs-Banner geöffnet, Aufrufer bricht ab.
   //   { stale:true } — Seite während des Remote-Reads gewechselt.
   //   null — kein Merge (Flag off / leere Base / Read-Fehler) → klassischer Pfad.
@@ -284,6 +298,11 @@ export const conflictMethods = {
         this._ensureLiveBlockIds();
         localHtml = stripLektoratMarks(el.innerHTML);
       }
+    }
+    // Server-Stand ist ein eigener, verspätet angekommener Save dieses Tabs
+    // (../sent-saves.js): der lokale Stand ist sein Nachfahre, kein Merge.
+    if (isOwnSentSave(pageId, remoteHtml)) {
+      return { merged: true, own: true, saveHtml: localHtml, expectedAt: remoteUpdatedAt };
     }
     const m = this._computeBlockMerge(localHtml, remoteHtml);
     if (!m) return null;
@@ -349,7 +368,7 @@ export const conflictMethods = {
       // nächsten Öffnen (startEdit → _reconcileDraftWithServer) noch einmal
       // gegen den schon eingearbeiteten Remote-Stand.
       this._flushDraftSaveNow();
-      app.setStatus(app.t('edit.conflict.merged.silent'), false, 5000);
+      if (!merge.own) app.setStatus(app.t('edit.conflict.merged.silent'), false, 5000);
       return;
     }
     app.editConflict = this._conflictBannerFrom({
@@ -379,6 +398,9 @@ export const conflictMethods = {
         || draft.originalUpdatedAt === serverAt || !draft.originalHtml) {
       return { html: draft.html };
     }
+    // Server-Stand ist ein Zwischenstand, den dieser Tab selbst geschickt hat
+    // (Antwort verloren, danach neu geladen): der Draft ist sein Nachfahre.
+    if (isOwnSentSave(app.currentPage.id, serverHtml)) return { html: draft.html };
     let m;
     try { m = mergeBlocks(draft.originalHtml, draft.html, serverHtml); }
     catch (e) {
@@ -430,6 +452,7 @@ export const conflictMethods = {
         pageName,
         source,
         expectedUpdatedAt: cr.remoteUpdatedAt,
+        reason: 'resolve',
       });
       // Auf dem Server ist die Auflösung; den State einer inzwischen geöffneten
       // anderen Seite fasst sie nicht an.
