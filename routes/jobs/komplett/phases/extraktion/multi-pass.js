@@ -28,14 +28,68 @@ function _chunkCallParts(ctx, chunk, chText, systemBlocks) {
   };
 }
 
+// Figuren-IDs eines Extraktions-Outputs gelten nur in DIESEM Output: jeder Call beginnt
+// laut Prompt bei fig_1. Hängt man einen zweiten Output (Gap-Runde, zweite Hälfte des
+// Halbierungs-Retry) an einen Chunk-Eintrag, teilen sich zwei Figuren eine id, und
+// annotateBeziehungenNames bindet die Beziehungs-Ziele an den falschen Namen. Darum
+// bekommt jede Beziehung VOR dem Anhängen den Namen ihres Ziels aus dem eigenen Output,
+// und die angehängten Figuren werden über das Maximum des Bestands hinaus neu nummeriert.
+function _annotateOwnNames(figuren) {
+  const nameById = new Map();
+  for (const f of (figuren || [])) if (f?.id != null && f.name) nameById.set(String(f.id), f.name);
+  for (const f of (figuren || [])) {
+    for (const bz of (f?.beziehungen || [])) {
+      if (!bz || bz.name) continue;
+      const nm = nameById.get(String(bz.figur_id ?? ''));
+      if (nm) bz.name = nm;
+    }
+  }
+}
+function _maxFigIdx(figuren) {
+  let max = 0;
+  for (const f of (figuren || [])) { const m = /^fig_(\d+)$/.exec(f?.id || ''); if (m) max = Math.max(max, +m[1]); }
+  return max;
+}
+/** Hängt `added` an `base` an: beide Seiten mit eigenen Zielnamen annotieren, `added`
+ *  kollisionsfrei neu nummerieren (auch die Beziehungs-Ziele innerhalb von `added`). */
+function appendFigurenKollisionsfrei(base, added) {
+  _annotateOwnNames(base);
+  _annotateOwnNames(added);
+  let next = _maxFigIdx(base);
+  const remap = new Map();
+  for (const f of (added || [])) {
+    const nid = 'fig_' + (++next);
+    if (f.id != null) remap.set(String(f.id), nid);
+    f.id = nid;
+  }
+  for (const f of (added || [])) {
+    for (const bz of (f?.beziehungen || [])) {
+      if (bz && remap.has(String(bz.figur_id ?? ''))) bz.figur_id = remap.get(String(bz.figur_id));
+    }
+  }
+  base.push(...(added || []));
+  return base;
+}
+
 /** Vereinigt die Array-Felder zweier Extraktions-Resultate (Halbierungs-Retry). */
 function _concatExtractResults(a, b) {
   const out = {};
   for (const k of new Set([...Object.keys(a || {}), ...Object.keys(b || {})])) {
     const va = a?.[k], vb = b?.[k];
+    if (k === 'figuren') { out[k] = appendFigurenKollisionsfrei([...(va || [])], [...(vb || [])]); continue; }
     out[k] = (Array.isArray(va) || Array.isArray(vb)) ? [...(va || []), ...(vb || [])] : (va ?? vb);
   }
   return out;
+}
+
+// Pflichtfelder einer Chunk-Extraktion: fehlt eines, ist die Antwort nicht die verlangte —
+// sie würde als «Kapitel ohne Figuren/Orte/Szenen» gecacht. Wie eine Truncation ein
+// nicht-fataler Chunk-Ausfall (kein Cache, Teilfehler-Warnung).
+const CHUNK_REQUIRED = ['figuren', 'orte', 'szenen'];
+function assertChunkFields(res, label) {
+  const missing = CHUNK_REQUIRED.filter(k => !Array.isArray(res?.[k]));
+  if (missing.length) throw i18nError('job.error.extractFieldMissing', { label: `${label} (${missing.join(', ')})` });
+  return res;
 }
 
 
@@ -133,7 +187,10 @@ async function runMultiPassCompletenessGaps(ctx, { chunkTexts, chapters, concurr
     const f = perChunk[i].value;
     for (const s of STREAMS) {
       const items = f[s.name];
-      if (items?.length && s.arr[i]) { s.arr[i][s.field].push(...items); totals[s.name] += items.length; }
+      if (!items?.length || !s.arr[i]) continue;
+      if (s.name === 'figuren') appendFigurenKollisionsfrei(s.arr[i][s.field], items);
+      else s.arr[i][s.field].push(...items);
+      totals[s.name] += items.length;
     }
   }
   if (totals.figuren || totals.orte || totals.fakten || totals.szenen)
@@ -155,9 +212,9 @@ async function _extractCloudChunk(ctx, { chunk, chText, chunkLabel, claudeExtrac
   const { jobId, bookName, call, tok, log, prompts, sys, extractTier } = ctx;
   const parts = _chunkCallParts(ctx, chunk, chText, sys.SYSTEM_KOMPLETT_EXTRAKTION_BLOCKS);
   const extractOnce = (label, pages, sysBlocks, text) => retryOnTransientAi(() => call(jobId, tok,
-    prompts.buildExtraktionKomplettChapterPrompt(chunk.name, bookName, pages.length, text),
+    prompts.buildExtraktionKomplettChapterPrompt(chunk.name, bookName, pages.length, text, ctx.katalogBlock),
     sysBlocks, null, null, claudeExtractCap, 0.2, null, prompts.SCHEMA_KOMPLETT_EXTRAKTION, extractTier,
-  ), { log, label });
+  ), { log, label }).then(res => assertChunkFields(res, label));
   try {
     return await extractOnce(chunkLabel, chunk.pages, parts.system, parts.chText);
   } catch (e) {
@@ -268,7 +325,7 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
       else {
         log.info(`${chunkLabel} Pass A (Figuren) – KI-Call…`);
         passA = await callExtract(`${chunkLabel} Pass A`,
-          prompts.buildExtraktionFigurenPassPrompt(chunk.name, bookName, chunk.pages.length, chText),
+          prompts.buildExtraktionFigurenPassPrompt(chunk.name, bookName, chunk.pages.length, chText, ctx.katalogBlock),
           sys.SYSTEM_KOMPLETT_FIGUREN_PASS_BLOCKS, null, null, 8000, prompts.SCHEMA_KOMPLETT_FIGUREN_PASS);
         saveChapterExtractCache(bookIdInt, email, figKey, pagesSig, passA, effectiveProvider);
       }
@@ -278,7 +335,7 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
       else {
         log.info(`${chunkLabel} Pass B (Orte/Szenen) – KI-Call…`);
         passB = await callExtract(`${chunkLabel} Pass B`,
-          prompts.buildExtraktionOrtePassPrompt(chunk.name, bookName, chunk.pages.length, chText),
+          prompts.buildExtraktionOrtePassPrompt(chunk.name, bookName, chunk.pages.length, chText, ctx.katalogBlock),
           sys.SYSTEM_KOMPLETT_ORTE_PASS_BLOCKS, null, null, 6000, prompts.SCHEMA_KOMPLETT_ORTE_PASS);
         saveChapterExtractCache(bookIdInt, email, ortKey, pagesSig, passB, effectiveProvider);
       }
@@ -329,7 +386,8 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
       .filter(({ r }) => r.status === 'rejected')
       .map(({ ct, r }) => ({ name: ct.chunk.name, message: r.reason?.message || 'unbekannt' }));
     const details = failedInfo.map(f => `${f.name}: ${f.message}`).join('; ');
-    const onlyTruncation = failedInfo.every(f => f.message === 'job.error.aiTruncated');
+    const SOFT = new Set(['job.error.aiTruncated', 'job.error.extractFieldMissing']);
+    const onlyTruncation = failedInfo.every(f => SOFT.has(f.message));
     const someSucceeded = (settled.length - failedChunks.length) > 0;
     // Truncation einzelner Chunks ist nicht-fatal, SOLANGE mindestens ein Chunk
     // Daten lieferte: das lokale Modell dreht bei dichten Kapiteln in Wiederholungs-
@@ -365,4 +423,4 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
   return { chapters, partialFailure };
 }
 
-module.exports = { extractMultiPass };
+module.exports = { extractMultiPass, appendFigurenKollisionsfrei };

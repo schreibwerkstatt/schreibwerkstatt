@@ -193,3 +193,80 @@ test('buildAttributeContradictions: Auftritt nach dem Tod, keine Hochzeit, nur v
   assert.equal(buildAttributeContradictions(bookId, USER).some(c => c.attribut === 'Lebendig/tot'), false,
     'ohne Kapitelreihenfolge kein Tod-Kandidat');
 });
+
+// ── Verworfene Befunde (discard_reason): sichtbar, nie offen, nie Triage-Quelle ──
+test('verworfene Befunde: getrennt geliefert, nicht offen, nicht übernommen, wiederherstellbar', () => {
+  const bookId = newBook();
+  const chMap = { 'Kap 3': addChapter(bookId, 'Kap 3', 1), 'Kap 5': addChapter(bookId, 'Kap 5', 2) };
+  const figMap = { Marek: 'fig_1' };
+  addFigur(bookId, 'fig_1', 'Marek');
+  const { discardedIssues } = continuity.saveContinuityCheck(bookId, USER, 's', 'm',
+    [issue('Kap 3: «Er trug den blauen Mantel»', 'Kap 5: «Der Mantel war grün»', { typ: 'objekt' })],
+    figMap, chMap,
+    [{ ...issue(MAREK_A, MAREK_B), discard: { reason: 'verify', detail: '  Rückblende   in Kap 5. ' } },
+     { ...issue('Kap 3: «Lena lachte»', 'Kap 5: «Lena weinte»', { figuren: [] }), discard: { reason: 'entwarnung' } }]);
+  assert.equal(discardedIssues.length, 2);
+  const latest = continuity.getLatestContinuityCheck(bookId, USER);
+  assert.equal(latest.issues.length, 1, 'nur der offene Befund steht in issues');
+  assert.deepEqual(latest.discarded.map(d => [d.discard_reason, d.discard_detail, d.discarded, d.dismissed]),
+    [['verify', 'Rückblende in Kap 5.', true, false], ['entwarnung', null, true, false]]);
+  // In der DB tragen Verwürfe dismissed=1 — Leser offener Befunde (Buch-Chat filtert
+  // `dismissed = 0`) lassen sie so ohne eigene Änderung aus.
+  const raw = db.prepare('SELECT dismissed FROM continuity_issues WHERE id = ?').get(latest.discarded[0].id);
+  assert.equal(raw.dismissed, 1);
+
+  // Folge-Lauf meldet den verworfenen Marek-Befund als echten: er ist OFFEN, nicht
+  // „kein Fehler" — ein Pipeline-Verwurf ist keine Entscheidung des Autors.
+  continuity.saveContinuityCheck(bookId, USER, 's2', 'm', [issue(MAREK_A, MAREK_B)], figMap, chMap);
+  const next = continuity.getLatestContinuityCheck(bookId, USER);
+  assert.equal(next.issues[0].dismissed, false);
+  assert.deepEqual(next.discarded, []);
+});
+
+test('„doch ein Fehler": Aufheben macht den Verwurf zum offenen Befund', () => {
+  const bookId = newBook();
+  const chMap = { 'Kap 3': addChapter(bookId, 'Kap 3', 1), 'Kap 5': addChapter(bookId, 'Kap 5', 2) };
+  continuity.saveContinuityCheck(bookId, USER, 's', 'm', [], {}, chMap,
+    [{ ...issue(MAREK_A, MAREK_B), discard: { reason: 'zitat' } }]);
+  const d = continuity.getLatestContinuityCheck(bookId, USER).discarded[0];
+  continuity.setContinuityIssueDismissed(d.id, false);
+  const after = continuity.getLatestContinuityCheck(bookId, USER);
+  assert.deepEqual(after.discarded, []);
+  assert.equal(after.issues.length, 1);
+  assert.equal(after.issues[0].dismissed, false);
+  assert.equal(after.issues[0].resolved, false);
+});
+
+test('CHECK: discard_reason nur mit dismissed=1 und bekanntem Grund', () => {
+  const bookId = newBook();
+  continuity.saveContinuityCheck(bookId, USER, 's', 'm', [issue(MAREK_A, MAREK_B)], {}, {});
+  const id = continuity.getLatestContinuityCheck(bookId, USER).issues[0].id;
+  assert.throws(() => db.prepare("UPDATE continuity_issues SET discard_reason = 'verify' WHERE id = ?").run(id));
+  assert.throws(() => db.prepare("UPDATE continuity_issues SET dismissed = 1, discard_reason = 'egal' WHERE id = ?").run(id));
+});
+
+// ── Ausgemusterte Figuren (stale) fallen aus F4- und Anachronismus-Daten ─────────
+test('F4/Anachronismus: Ereignisse ausgemusterter Figuren zählen nicht (db/figures/active.js)', () => {
+  const { listFigureDeathsWithChapterNames, listDatedLifeEventsWithChapterNames } = require('../../db/content-names');
+  const { buildAnachronismusData } = require('../../routes/jobs/komplett/job-shared');
+  const bookId = newBook();
+  const k1 = addChapter(bookId, 'Eins', 1);
+  const aktiv = addFigur(bookId, 'fig_a', 'Anna');
+  const alt = addFigur(bookId, 'fig_x', 'Xaver');
+  db.prepare('UPDATE figures SET stale = 1 WHERE id = ?').run(alt);
+  const ev = db.prepare(`INSERT INTO figure_events (figure_id, datum, datum_year, ereignis, subtyp, chapter_id, datum_unsicher)
+                         VALUES (?, ?, ?, ?, ?, ?, 0)`);
+  ev.run(aktiv, '1970', 1970, 'stirbt', 'tod', k1);
+  ev.run(alt, '1800', 1800, 'stirbt', 'tod', k1);
+  ev.run(alt, '1790', 1790, 'geboren', 'geburt', k1);
+  assert.deepEqual(listFigureDeathsWithChapterNames(bookId, USER).map(r => r.fig_name), ['Anna']);
+  assert.deepEqual(listDatedLifeEventsWithChapterNames(bookId, USER).map(r => r.fig_name), ['Anna']);
+
+  // Anachronismus-Fallback (noch kein Zeitstrahl): Spanne nur aus aktiven Figuren.
+  db.prepare('INSERT INTO book_settings (book_id, zeitlinie_real, updated_at) VALUES (?, 1, ?)').run(bookId, NOW);
+  db.prepare('INSERT INTO world_facts (book_id, kategorie, subjekt, fakt, user_email) VALUES (?, ?, ?, ?, ?)')
+    .run(bookId, 'technik', 'Telefon', 'Anna telefoniert mit dem Handy', USER);
+  const data = buildAnachronismusData(bookId, USER);
+  assert.equal(data.minYear, 1970, 'Xavers 1790/1800 spannen keine Erzählzeit');
+  assert.equal(data.maxYear, 1970);
+});

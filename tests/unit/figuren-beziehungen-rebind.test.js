@@ -112,15 +112,17 @@ test('rebindBeziehungenByName entfernt Selbst-Referenzen', () => {
   assert.equal(figuren[0].beziehungen.length, 0);
 });
 
-test('rebindBeziehungenByName ist ein No-op ohne Namen (KI-Konsolidierungs-Pfad)', () => {
+test('rebindBeziehungenByName verwirft Kanten ohne Zielnamen (chunk-lokale id nach Neunummerierung)', () => {
+  // Der Rebind läuft nur dort, wo global neu nummeriert wird. Ohne Namen ist die
+  // figur_id chunk-lokal und träfe die Figur, die zufällig denselben Index hat.
   const figuren = [
-    { id: 'k1', name: 'A', beziehungen: [{ figur_id: 'k2', typ: 'freund' }] },
-    { id: 'k2', name: 'B', beziehungen: [] },
+    { id: 'fig_1', name: 'A', beziehungen: [{ figur_id: 'fig_2', typ: 'freund' }] },
+    { id: 'fig_2', name: 'B', beziehungen: [] },
   ];
   const { rebound, dropped } = rebindBeziehungenByName(figuren, NOLOG);
   assert.equal(rebound, 0);
-  assert.equal(dropped, 0);
-  assert.equal(figuren[0].beziehungen[0].figur_id, 'k2');
+  assert.equal(dropped, 1);
+  assert.equal(figuren[0].beziehungen.length, 0);
 });
 
 test('rebindBeziehungenByName ist idempotent', () => {

@@ -81,7 +81,7 @@
 
   <!-- Filter-Leiste — MUSS ausserhalb x-if bleiben, sonst trackt Alpine x-effect
        der Comboboxen die Parent-Reaktivität nicht und options bleibt leer. -->
-  <div x-show="kontinuitaetResult?.issues?.length > 0" class="filter-bar" x-cloak>
+  <div x-show="kontinuitaetAllIssues().length > 0" class="filter-bar" x-cloak>
     <div class="tabs">
       <button type="button" class="tabs-btn"
               :class="{ 'tabs-btn--active': $store.catalogUi.kontinuitaetFilters.schwere === '' }"
@@ -110,10 +110,18 @@
                 @click="$store.catalogUi.kontinuitaetFilters.status = st"
                 x-text="$app.t('kontinuitaet.status.' + (st || 'active'))"></button>
       </template>
+      <!-- Von der Prüfung selbst verworfene Befunde (Entwarnung, erfundenes Zitat, Verify). -->
+      <button type="button" class="tabs-btn" x-show="kontinuitaetDiscardedCount() > 0"
+              :class="{ 'tabs-btn--active': $store.catalogUi.kontinuitaetFilters.status === 'discarded' }"
+              :aria-pressed="$store.catalogUi.kontinuitaetFilters.status === 'discarded' ? 'true' : 'false'"
+              @click="$store.catalogUi.kontinuitaetFilters.status = 'discarded'">
+        <span x-text="$app.t('kontinuitaet.status.discarded')"></span>
+        <span class="tabs-btn-count" x-text="kontinuitaetDiscardedCount()"></span>
+      </button>
     </div>
     <div x-data="catalogFilter('figur')"
          x-modelable="value" x-model="$store.catalogUi.kontinuitaetFilters.figurId"
-         x-effect="options = $store.catalog.figuren.filter(f => (kontinuitaetResult?.issues||[]).some(i => i.fig_ids?.length ? i.fig_ids.includes(f.id) : (i.figuren||[]).includes(f.name))).map(f => ({value: f.id, label: f.kurzname || f.name}))"
+         x-effect="options = $store.catalog.figuren.filter(f => kontinuitaetAllIssues().some(i => i.fig_ids?.length ? i.fig_ids.includes(f.id) : (i.figuren||[]).includes(f.name))).map(f => ({value: f.id, label: f.kurzname || f.name}))"
          >
     </div>
     <div x-data="catalogFilter('chapter')"
@@ -128,9 +136,10 @@
     <div class="kontinuitaet-result">
 
       <!-- Keine Probleme -->
-      <div x-show="kontinuitaetResult.issues?.length === 0" class="kontinuitaet-ok" x-text="$app.t('kontinuitaet.noIssues')"></div>
+      <div x-show="kontinuitaetResult.issues?.length === 0 && $store.catalogUi.kontinuitaetFilters.status !== 'discarded'" class="kontinuitaet-ok" x-text="$app.t('kontinuitaet.noIssues')"></div>
+      <p x-show="$store.catalogUi.kontinuitaetFilters.status === 'discarded'" class="card-hint" x-text="$app.t('kontinuitaet.discard.hint')"></p>
       <!-- Alle weggefiltert -->
-      <div x-show="kontinuitaetResult.issues?.length > 0 && kontinuitaetIssuesSorted().length === 0" class="kontinuitaet-nomatch">
+      <div x-show="kontinuitaetIssuesInStatus().length > 0 && kontinuitaetIssuesSorted().length === 0" class="kontinuitaet-nomatch">
         <span x-text="$app.t('kontinuitaet.noMatch')"></span>
         <button type="button" class="btn-compact" @click="kontinuitaetResetFilters()" x-text="$app.t('kontinuitaet.resetFilters')"></button>
       </div>

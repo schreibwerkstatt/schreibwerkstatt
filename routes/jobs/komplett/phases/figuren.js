@@ -14,6 +14,8 @@ const {
 const { komplettMaxTokens } = require('./tokens');
 const { providerClass, getContextConfigFor } = require('../../../../lib/ai');
 const { COST_LABEL, costTier } = require('../cost-labels');
+const { ankerHints, mergeHints } = require('../katalog-anker');
+const { figureHintKey } = require('../../../../lib/entity-match');
 
 // Riegel gegen einen kollabierten Figuren-Katalog. Der Reconcile mustert jede nicht
 // wiedergefundene Bestandsfigur aus (`onMissing: 'stale'`) — liefert die
@@ -116,7 +118,8 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
     // der Fallback unten. Dann lieber sofort dorthin, statt den Cap erst leerzuschreiben
     // (lokal zweistellige Minuten für ein Ergebnis, das verworfen wird).
     const fit = consolidationFitsCap({
-      promptText: konsolPrompt, charsPerToken: getContextConfigFor(effectiveProvider).charsPerToken, cap,
+      promptText: konsolPrompt, dataText: JSON.stringify(preMerged.flatMap(c => c.figuren || [])),
+      charsPerToken: getContextConfigFor(effectiveProvider).charsPerToken, cap,
     });
     let figResult;
     if (!fit.fits) {
@@ -183,11 +186,20 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
   // Graubereich des Cross-Run-Matchings vom Judge beurteilen lassen, BEVOR gespeichert
   // wird: die Schreibfunktion darf keinen KI-Call machen, und ohne Urteil bliebe eine
   // Namensvariante als zweiter Eintrag stehen (und die alte Zeile als stale-Dublette).
-  let figHint = null;
+  // Katalog-Anker zuerst (katalog-anker.js): was die Extraktion einer Bestandsfigur
+  // zugeordnet hat, ist entschieden. Der Judge sieht nur noch den Rest-Graubereich.
+  const anker = ctx.katalogAnker
+    ? ankerHints(figuren, { prefix: 'K', validIds: ctx.katalogAnker.figIds, keyOf: figureHintKey })
+    : { hint: new Map(), conflicts: 0 };
+  if (anker.hint.size || anker.conflicts) {
+    log.info(`Katalog-Anker Figuren: ${anker.hint.size} verankert${anker.conflicts ? `, ${anker.conflicts} doppelt beanspruchte Katalog-IDs der Regel überlassen` : ''}.`);
+  }
+  let figHint = anker.hint.size ? anker.hint : null;
   try {
-    const plan = planFigurenMatch(bookIdInt, figuren, email);
+    const plan = planFigurenMatch(bookIdInt, figuren, email, figHint);
     if (plan.unsure.length) {
-      figHint = await judgeEntityPairs(ctx, 'figur', { incoming: figuren, existing: plan.existing, unsure: plan.unsure });
+      const judged = await judgeEntityPairs(ctx, 'figur', { incoming: figuren, existing: plan.existing, unsure: plan.unsure });
+      if (judged?.size) figHint = mergeHints(anker.hint, judged);
     }
   } catch (e) {
     if (e.name === 'AbortError') throw e;
@@ -203,6 +215,9 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
   const { rowIdByFigId } = saveFigurenToDb(bookIdInt, figuren, email, idMaps, {
     reconcile: true, onMissing: 'stale',
     matchHint: figHint && figHint.size ? figHint : null,
+    // Teil-Lauf ohne «Beziehungen»: bestehende KI-Kanten (auch die kapitelübergreifenden
+    // aus P3b) bleiben stehen, statt mit den Figuren neu aufgebaut zu werden.
+    keepKiRelations: ctx.scope ? ctx.scope.beziehungen === false : false,
   });
   log.info(`${figuren.length} Figuren gespeichert (reconciled, id-stabil).`);
   // Vom Autor beim Zusammenführen bestätigte Namen (figure_aliases) der gematchten

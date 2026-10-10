@@ -14,6 +14,13 @@ const { NOW_ISO_SQL } = require('./now');
 
 // Full-Replace pro (Buch, User): die Phase regeneriert das gesamte Profil bei jedem
 // Lauf (nur wenn der Konsolidierungs-Checkpoint nicht greift). Themen als CASCADE-Kind.
+// Ausnahme `opts.keepChapterIds`: Kapitel, deren Profil-Call im Multi-Pass scheiterte —
+// ihre bisherige Zeile bleibt stehen, statt mit dem Full-Replace zu verschwinden.
+//
+// sort_order = Position des Kapitels in der Buchreihenfolge (`opts.chapterOrder`, Liste
+// der chapter_ids wie der Job sie liest; ohne sie die Kapitel-`position`), NICHT die
+// Array-Position der Modell-Antwort: der Buch-Befund liest daraus seine Kapitel-Achse,
+// und ein vertauschtes Antwort-Array verschöbe jede Lücken- und Spannen-Messung.
 //
 // Nur Einträge, die sich einem echten Kapitel zuordnen lassen, werden gespeichert:
 // Abschnitte ohne Kapitel (Vorwort o. ä., Gruppe «Sonstige Abschnitte») und vom Modell
@@ -21,10 +28,16 @@ const { NOW_ISO_SQL } = require('./now');
 // der Kapitel-Achse des Buch-Befunds als zusätzliches Kapitel und verschiebt dessen
 // Schwellen. `p.chapter_id` (Multi-Pass kennt die ID) hat Vorrang vor dem Namens-Lookup.
 // Die Abweichung von der Soll-Erzählform wird zur Lesezeit berechnet, nicht hier.
-function saveChapterNarrativeProfiles(bookId, userEmail, profiles, chNameToId, figNameToId) {
+function saveChapterNarrativeProfiles(bookId, userEmail, profiles, chNameToId, figNameToId, opts = {}) {
   const bookIdInt = parseInt(bookId);
   const email = userEmail || null;
   const list = Array.isArray(profiles) ? profiles : [];
+  const keep = new Set((opts.keepChapterIds || []).map(Number).filter(Number.isFinite));
+  const order = Array.isArray(opts.chapterOrder) && opts.chapterOrder.length
+    ? opts.chapterOrder.map(Number)
+    : db.prepare('SELECT chapter_id FROM chapters WHERE book_id = ? ORDER BY position, chapter_id').all(bookIdInt).map(r => r.chapter_id);
+  const rank = new Map(order.map((id, i) => [id, i]));
+  const rankOf = (chId) => (rank.has(Number(chId)) ? rank.get(Number(chId)) : order.length);
   // TEXT-fig_id (KI/Katalog) → INTEGER figures.id (FK-Target).
   const figRows = db.prepare(
     'SELECT id, fig_id FROM figures WHERE book_id = ? AND user_email IS ?'
@@ -32,7 +45,15 @@ function saveChapterNarrativeProfiles(bookId, userEmail, profiles, chNameToId, f
   const figIdToRowId = Object.fromEntries(figRows.map(r => [r.fig_id, r.id]));
   let saved = 0;
   db.transaction(() => {
-    db.prepare('DELETE FROM chapter_narrative_profile WHERE book_id = ? AND user_email IS ?').run(bookIdInt, email);
+    const keepRows = keep.size
+      ? db.prepare('SELECT id, chapter_id FROM chapter_narrative_profile WHERE book_id = ? AND user_email IS ? AND chapter_id IS NOT NULL')
+        .all(bookIdInt, email).filter(r => keep.has(Number(r.chapter_id)))
+      : [];
+    const keepIds = keepRows.map(r => r.id);
+    db.prepare(`DELETE FROM chapter_narrative_profile WHERE book_id = ? AND user_email IS ?
+      ${keepIds.length ? `AND id NOT IN (${keepIds.map(() => '?').join(',')})` : ''}`).run(bookIdInt, email, ...keepIds);
+    const updSort = db.prepare('UPDATE chapter_narrative_profile SET sort_order = ? WHERE id = ?');
+    for (const r of keepRows) updSort.run(rankOf(r.chapter_id), r.id);
     const insP = db.prepare(`INSERT INTO chapter_narrative_profile
       (book_id, user_email, chapter_id, perspektive, erzaehlzeit, erzaehler_figur_id, erzaehler_figur,
        pov_konfidenz, pov_beleg, intensitaet, intensitaet_begruendung, zusammenfassung, sort_order, updated_at)
@@ -40,13 +61,13 @@ function saveChapterNarrativeProfiles(bookId, userEmail, profiles, chNameToId, f
     const insT = db.prepare(
       'INSERT INTO chapter_narrative_themes (profile_id, thema, typ, belege, sort_order) VALUES (?, ?, ?, ?, ?)'
     );
-    const seen = new Set();
+    const seen = new Set(keepRows.map(r => Number(r.chapter_id)));
     for (const p of list) {
       const chId = p?.chapter_id != null
         ? p.chapter_id
         : ((p?.kapitel != null && chNameToId?.[p.kapitel] != null) ? chNameToId[p.kapitel] : null);
-      if (chId == null || seen.has(chId)) continue;
-      seen.add(chId);
+      if (chId == null || seen.has(Number(chId))) continue;
+      seen.add(Number(chId));
       const figName = p.erzaehler_figur ? String(p.erzaehler_figur).trim() : '';
       const figTextId = figName ? (figNameToId?.[figName] || null) : null;
       const figRowId = figTextId ? (figIdToRowId[figTextId] ?? null) : null;
@@ -59,7 +80,7 @@ function saveChapterNarrativeProfiles(bookId, userEmail, profiles, chNameToId, f
       const { lastInsertRowid: pid } = insP.run(
         bookIdInt, email, chId, p.perspektive || null, p.erzaehlzeit || null,
         figRowId, figRowId ? null : (figName || null),
-        konf, p.pov_beleg || null, inten, p.intensitaet_begruendung || null, p.zusammenfassung || null, saved,
+        konf, p.pov_beleg || null, inten, p.intensitaet_begruendung || null, p.zusammenfassung || null, rankOf(chId),
       );
       const themen = Array.isArray(p.themen) ? p.themen : [];
       themen.forEach((t, j) => {

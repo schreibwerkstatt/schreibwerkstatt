@@ -145,6 +145,12 @@ export const appKomplettMethods = {
         // Kosten pro Call-Klasse: neben dem Coverage-Score, damit „billiger geworden"
         // und „schlechterer Recall" im selben Blick vergleichbar sind.
         this.$store.jobs.alleAktualisierenCost = job?.result?.costByPhase || null;
+        // Die Prüfung (Kontinuität, Erzählprofil) hat die Analyse als eigene Jobs
+        // eingereiht — die Footer-Queue sofort nachladen, damit sie sichtbar sind.
+        const pruefJobs = job?.result?.pruefJobs || {};
+        for (const [type, pJobId] of Object.entries(pruefJobs)) {
+          window.dispatchEvent(new CustomEvent(EVT.JOB_ENQUEUED, { detail: { type, jobId: pJobId } }));
+        }
         try {
           // _loadKontinuitaetHistory lebt auf kontinuitaetCard (nicht im Root) —
           // Card per card:refresh-Event reloaden lassen (Lifecycle hört darauf).
@@ -161,7 +167,9 @@ export const appKomplettMethods = {
           // Loading-Flag MUSS auch dann zurück, wenn ein Sibling-Reload wirft —
           // sonst bleibt Button-Ring + Status-Panel auf "running" hängen.
           this.$store.jobs.alleAktualisierenLoading = false;
-          const doneMsg = this.t('common.finished');
+          const doneMsg = Object.keys(pruefJobs).length
+            ? this.t('komplett.pruefungEingereiht')
+            : this.t('common.finished');
           this.$store.jobs.alleAktualisierenStatus = doneMsg;
           clearStatusAfter(this.$store.jobs, 'alleAktualisierenStatus', doneMsg, 4000);
         }
@@ -188,8 +196,8 @@ export const appKomplettMethods = {
     //   songsConsolidate=56 = Ende Phase 3 Songs (55→56)
     //   chapterRelations=58 = Ende Phase 3b (56→58, nur Multi-Pass)
     //   szenenEvents=78     = Ende Szenen-Remap/Save (58→78)
-    //   timeline=82         = Ende aiCall Phase 6 (78→82)
-    //   continuity=97       = Ende aiCall Phase 8 (82→97, breite Range für langen Call)
+    //   timeline=97         = Ende Phase 6 (78→97); Kontinuität und Erzählprofil laufen
+    //                         danach als eigene Prüf-Jobs und stehen in der Footer-Queue
     // Im Single-Pass wird Phase 3b übersprungen (Server setzt passMode='single'),
     // damit sie auch im UI nicht als „erledigt" erscheint.
     // `scope`: der Schritt, an dem die Phase haengt. Ist er abgewaehlt, faellt die
@@ -204,8 +212,7 @@ export const appKomplettMethods = {
       { key: 'phase.songsConsolidate',   threshold: 56, scope: 'songs' },
       { key: 'phase.chapterRelations',   threshold: 58, onlyMulti: true, scope: 'beziehungen' },
       { key: 'phase.szenenEvents',       threshold: 78, scope: ['szenen', 'ereignisse'] },
-      { key: 'phase.timeline',           threshold: 82, scope: 'ereignisse' },
-      { key: 'phase.continuity',         threshold: 97, scope: 'kontinuitaet' },
+      { key: 'phase.timeline',           threshold: 97, scope: 'ereignisse' },
     ];
     const inScope = (ph) => {
       if (!ph.scope) return true;

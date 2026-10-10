@@ -44,7 +44,10 @@ function _toResponse(result, prompt, system) {
 
 async function callAI(prompt, system, onProgress, _maxTok, _signal, _provider, jsonSchema) {
   const sys = _systemText(system);
-  const entry = { prompt, system: sys, schema: jsonSchema, schemaKeys: jsonSchema ? Object.keys(jsonSchema?.properties || {}) : [] };
+  // jobType aus dem ALS-Kontext der Queue: die Komplettanalyse reiht Prüf-Jobs nach dem
+  // Katalog ein, deren Calls im selben Log landen — Tests zählen pro Job-Typ.
+  const jobType = require('../../../lib/log-context').getContext().job || null;
+  const entry = { prompt, system: sys, schema: jsonSchema, schemaKeys: jsonSchema ? Object.keys(jsonSchema?.properties || {}) : [], jobType };
   log.push(entry);
   for (const h of handlers) {
     if (h.match(entry)) {

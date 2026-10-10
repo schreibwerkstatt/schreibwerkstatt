@@ -424,15 +424,19 @@ function restoreAnalysis(bookId, data, ctx) {
   }
   const insCi = db.prepare(`INSERT INTO continuity_issues
     (check_id,book_id,user_email,schwere,typ,beschreibung,stelle_a,stelle_b,empfehlung,quelle,sort_order,updated_at,
-     resolved,resolved_at,dismissed,dismissed_at,page_a_id,page_b_id)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+     resolved,resolved_at,dismissed,dismissed_at,page_a_id,page_b_id,discard_reason,discard_detail)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  // Pipeline-Verwurf (discard_reason) mitnehmen: ohne ihn käme ein verworfener Befund als
+  // „kein Fehler" des Autors an und vererbte sich auf spätere Läufe. Unbekannter Grund → kein Verwurf.
+  const _DISCARD = new Set(['entwarnung', 'zitat', 'verify']);
   for (const r of arr('continuityIssues')) {
     const cid = checkMap.get(r.check_id);
     if (!cid) continue;
+    const discard = _DISCARD.has(r.discard_reason) ? r.discard_reason : null;
     const res = insCi.run(cid, bookId, email, r.schwere ?? null, r.typ ?? null, r.beschreibung ?? null,
       r.stelle_a ?? null, r.stelle_b ?? null, r.empfehlung ?? null, _httpUrlOrNull(r.quelle), r.sort_order ?? 0, r.updated_at ?? null,
-      r.resolved ?? 0, r.resolved_at ?? null, r.dismissed ?? 0, r.dismissed_at ?? null,
-      pageOf(r.page_a_id), pageOf(r.page_b_id));
+      r.resolved ?? 0, r.resolved_at ?? null, discard ? 1 : (r.dismissed ?? 0), r.dismissed_at ?? null,
+      pageOf(r.page_a_id), pageOf(r.page_b_id), discard, discard ? (r.discard_detail ?? null) : null);
     issueMap.set(r.id, res.lastInsertRowid);
   }
   const insCif = db.prepare('INSERT INTO continuity_issue_figures (issue_id,figure_id,figur_name,sort_order) VALUES (?,?,?,?)');

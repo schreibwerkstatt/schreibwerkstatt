@@ -213,7 +213,8 @@ async function runZeitstrahl(ctx, opts = {}) {
   const ztPrompt = prompts.buildZeitstrahlConsolidationPrompt(zeitstrahlEvents);
   const ztCap = komplettMaxTokens(effectiveProvider);
   const ztFit = consolidationFitsCap({
-    promptText: ztPrompt, charsPerToken: getContextConfigFor(effectiveProvider).charsPerToken, cap: ztCap,
+    promptText: ztPrompt, dataText: JSON.stringify(zeitstrahlEvents),
+    charsPerToken: getContextConfigFor(effectiveProvider).charsPerToken, cap: ztCap,
   });
   if (!ztFit.fits) {
     saveZeitstrahlEvents(bookIdInt, email, zeitstrahlEvents, idMaps.chNameToId, idMaps.pageNameToIdByChapter);
@@ -256,4 +257,23 @@ async function runZeitstrahl(ctx, opts = {}) {
   if (!silent) updateJob(jobId, { progress: 82 });
 }
 
-module.exports = { runPhase3b, runZeitstrahl };
+/** P6 als Endphase der Komplettanalyse: ein Fehler im Zeitstrahl (Konsolidierungs-Call
+ *  oder DB-Save) darf den bereits gültig gespeicherten Katalog nicht über failJob kippen —
+ *  Warnung statt Abbruch. AbortError (User-Abbruch) schlägt durch. `skip` (Teil-Lauf ohne
+ *  «Ereignisse»): bestehende `zeitstrahl_events` bleiben stehen, der Aufruf entfällt. */
+async function runZeitstrahlPhase(ctx, { skip = false } = {}) {
+  if (skip) {
+    ctx.log.info('Zeitstrahl (P6) auf Wunsch übersprungen – bestehender Zeitstrahl bleibt.');
+    updateJob(ctx.jobId, { progress: 97 });
+    return;
+  }
+  try { await runZeitstrahl(ctx); }
+  catch (e) {
+    if (e.name === 'AbortError') throw e;
+    ctx.log.warn(`Zeitstrahl-Phase fehlgeschlagen (Katalog bleibt erhalten): ${e.message}`);
+    ctx.warnings.push({ key: 'job.warn.timelineFailed' });
+  }
+  updateJob(ctx.jobId, { progress: 97 });
+}
+
+module.exports = { runPhase3b, runZeitstrahl, runZeitstrahlPhase };

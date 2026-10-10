@@ -31,7 +31,7 @@ const COST_LABEL = Object.freeze({
   // vervielfachen und damit ihren eigenen Hebel haben.
   extractGap: 'extractGap',
   // Vollständigkeits-Audit + der daraus gespeiste gezielte Nachzieh-Pass.
-  // Hebel: ai.komplett.coverage_audit_chapters, ai.komplett.coverage_feedback.
+  // Hebel: ai.komplett.coverage_audit_chapters.
   coverage: 'coverage',
   // Figuren-Konsolidierung (P2), Alias-Cluster, Soziogramm-Refine,
   // kapitelübergreifende Beziehungen (P3b). Hebel: Konsolidierungs-Modell/-Effort.

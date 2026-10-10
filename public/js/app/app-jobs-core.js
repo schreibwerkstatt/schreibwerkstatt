@@ -143,6 +143,13 @@ export const appJobsCoreMethods = {
       }
       this.loadLastKomplettRun?.(this.$store.nav.selectedBookId);
     }
+    // Prüf-Jobs nach der Komplettanalyse (Kontinuität, Erzählprofil) laufen als eigene
+    // Jobs ohne Per-Card-Poller, wenn die Analyse sie eingereiht hat: die Karte beim Ende
+    // nachladen lassen, sonst zeigt sie bis zum nächsten Öffnen den alten Stand.
+    if ((detail.type === 'kontinuitaet' || detail.type === 'erzaehlprofil')
+        && detail.job?.status === 'done' && isCurrentBook) {
+      window.dispatchEvent(new CustomEvent(EVT.CARD_REFRESH, { detail: { name: detail.type } }));
+    }
     this._maybeShowJobToast(detail);
     // Reichweitenmessung: ein Ereignis pro beendetem Job. Dieser Handler ist die
     // einzige Stelle, an der JEDER Job-Typ genau einmal vorbeikommt — die

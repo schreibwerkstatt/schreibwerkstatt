@@ -10,6 +10,9 @@
 
 const { db } = require('./connection');
 const { listWorldFacts } = require('./world-facts');
+// «Aktive Figur» (stale = 0) — SSoT für jeden Lesepfad, der Figuren-Daten in einen
+// KI-Kontext reicht: Ereignisse einer ausgemusterten Figur fallen mit ihr.
+const { activeFigureSql } = require('./figures/active');
 
 function _inClause(ids) {
   return { sql: `(${ids.map(() => '?').join(',')})`, values: ids };
@@ -35,6 +38,13 @@ function chapterIdsByName(bookId) {
 }
 
 // ── Seiten ──────────────────────────────────────────────────────────────────
+
+const _stmtPageNamesForBook = db.prepare('SELECT page_id, page_name FROM pages WHERE book_id = ?');
+
+/** Alle Seiten eines Buchs als { page_id, page_name } (Metadaten, kein Inhalt). */
+function listPageNamesForBook(bookId) {
+  return _stmtPageNamesForBook.all(bookId);
+}
 
 const _stmtPageTitle = db.prepare('SELECT page_name AS title, book_id FROM pages WHERE page_id = ?');
 
@@ -66,14 +76,14 @@ function pageChapters(pageIds) {
 
 // ── Namens-JOINs abgeleiteter Tabellen ─────────────────────────────────────
 
-/** Figuren-Ereignisse eines Buchs mit Figur- und Kapitelname (Plot-KI-Kontext). */
+/** Figuren-Ereignisse der aktiven Figuren eines Buchs mit Figur- und Kapitelname (Plot-KI-Kontext). */
 function listFigureEventsWithNames(bookId, userEmail, limit) {
   return db.prepare(`
     SELECT fe.datum, fe.ereignis, fe.typ, f.name AS figur, c.chapter_name AS kapitel
       FROM figure_events fe
       JOIN figures f ON f.id = fe.figure_id
       LEFT JOIN chapters c ON c.chapter_id = fe.chapter_id
-     WHERE f.book_id = ? AND f.user_email = ?
+     WHERE f.book_id = ? AND f.user_email = ? AND ${activeFigureSql('f')}
      ORDER BY fe.sort_order, fe.id
      LIMIT ?
   `).all(bookId, userEmail, limit);
@@ -119,15 +129,15 @@ function listWorldFactsWithChapterNames(bookId, userEmail, kategorien) {
 
 // ── Attribut-Widerspruchs-Detektor (F4, routes/jobs/komplett/attribute-check.js) ──
 
-/** Tod-Ereignisse der Figuren eines Buchs mit Figur- und Kapitelname. Nur Ereignisse MIT
- *  Kapitel (inner JOIN) — ohne Kapitel lässt sich kein „später" bestimmen. */
+/** Tod-Ereignisse der aktiven Figuren eines Buchs mit Figur- und Kapitelname. Nur Ereignisse
+ *  MIT Kapitel (inner JOIN) — ohne Kapitel lässt sich kein „später" bestimmen. */
 function listFigureDeathsWithChapterNames(bookId, userEmail) {
   return db.prepare(`
     SELECT fe.figure_id, f.name AS fig_name, fe.ereignis, fe.chapter_id, fe.page_id, c.chapter_name
       FROM figure_events fe
       JOIN figures f ON f.id = fe.figure_id
       JOIN chapters c ON c.chapter_id = fe.chapter_id
-     WHERE f.book_id = ? AND f.user_email IS ? AND fe.subtyp = 'tod'
+     WHERE f.book_id = ? AND f.user_email IS ? AND ${activeFigureSql('f')} AND fe.subtyp = 'tod'
      ORDER BY fe.sort_order, fe.id
   `).all(bookId, userEmail);
 }
@@ -146,7 +156,7 @@ function listFigureScenesWithChapterNames(figureId) {
   return _stmtFigureScenesWithChapter.all(figureId);
 }
 
-/** Sicher datierte Geburt-/Tod-Ereignisse der Figuren eines Buchs mit Figur- und
+/** Sicher datierte Geburt-/Tod-Ereignisse der aktiven Figuren eines Buchs mit Figur- und
  *  Kapitelname (Kapitel optional → chapter_name NULL). */
 function listDatedLifeEventsWithChapterNames(bookId, userEmail) {
   return db.prepare(`
@@ -154,7 +164,7 @@ function listDatedLifeEventsWithChapterNames(bookId, userEmail) {
       FROM figure_events fe
       JOIN figures f ON f.id = fe.figure_id
       LEFT JOIN chapters c ON c.chapter_id = fe.chapter_id
-     WHERE f.book_id = ? AND f.user_email IS ? AND fe.datum_unsicher = 0
+     WHERE f.book_id = ? AND f.user_email IS ? AND ${activeFigureSql('f')} AND fe.datum_unsicher = 0
        AND fe.datum_year IS NOT NULL AND fe.subtyp IN ('geburt','tod')
      ORDER BY fe.sort_order, fe.id
   `).all(bookId, userEmail);
@@ -163,6 +173,7 @@ function listDatedLifeEventsWithChapterNames(bookId, userEmail) {
 module.exports = {
   listChaptersForBook,
   chapterIdsByName,
+  listPageNamesForBook,
   pageTitle,
   pagePreviewTexts,
   pageChapters,

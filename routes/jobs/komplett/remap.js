@@ -283,65 +283,6 @@ function saveSzenenAndEvents(bookIdInt, email, szenen, assignments, locIdToDbId,
   return { szenenCount: writeSzenen ? szenen.length : 0, eventsCount };
 }
 
-// Patterns, mit denen die KI eine eigene Entwarnung signalisiert — Fallback hinter dem
-// Pflichtfeld `entwarnung` (SCHEMA_KONTINUITAET_PROBLEME): nicht jeder Provider-Pfad
-// erzwingt das Schema, und das Modell hält die Selbstcheck-Regel nicht zuverlässig ein.
-// Synchron mit dem Prompt-Selbstcheck in public/js/prompts/komplett/schema-strings.js
-// (PROBLEME_RULES, «Selbstcheck …»). Deutsch und Englisch (EN-Locale).
-//
-// Zwei Felder, zwei Massstäbe:
-//  - `empfehlung` schlägt laut Prompt eine Lösung vor und formuliert deren Ziel legitim
-//    positiv («… damit kein Widerspruch entsteht», «… damit die Zeitlinie konsistent
-//    bleibt») — dort zählen nur die eindeutigen Selbst-Annullierungen (SELF_CANCEL_HARD).
-//  - `beschreibung` benennt den Befund. Entwarnend sind dort zusätzlich «kein (echter/
-//    wirklicher) Widerspruch», «das ist korrekt», «passt zusammen», «unproblematisch»,
-//    «lässt sich erklären durch …», «Kein Problem» nur als Satzanfang/Gesamturteil (nicht
-//    «der Sprint ist für sie kein Problem») und «konsistent/stimmig» nur PRÄDIKATIV am
-//    Satzende über den Befund selbst («Die Angaben sind (in sich) konsistent.»,
-//    «insgesamt stimmig») — nicht adverbial («spricht konsistent Berlinerisch») und
-//    nicht verneint («sind nie konsistent», «nicht durchgängig konsistent»).
-const SELF_CANCEL_HARD = /\b(entwarnung|wird\s+nicht\s+gemeldet|eintrag\s+entfernen|remove\s+(?:this\s+)?entry|not\s+to\s+be\s+reported)\b/i;
-const SELF_CANCEL_DESC_HARD = new RegExp([
-  '\\bkein(?:en)?\\s+(?:(?:echte[rns]?|wirkliche[rns]?|tatsächliche[rns]?)\\s+)?widerspruch\\b',
-  '\\bdas\\s+ist\\s+korrekt\\b',
-  '\\bpass(?:t|en)\\s+(?:doch\\s+|also\\s+)?zusammen\\b',
-  '\\bunproblematisch\\b',
-  'l(?:ä|ae)sst\\s+sich\\s+erkl(?:ä|ae)ren\\s+durch',
-  '\\bno\\s+(?:(?:real|actual|genuine|true)\\s+)?contradiction\\b',
-  '\\bnot\\s+(?:a|an)\\s+(?:(?:real|actual|genuine|true)\\s+)?(?:contradiction|inconsistency)\\b',
-  '\\bcan\\s+be\\s+explained\\s+by\\b',
-].join('|'), 'i');
-// «Kein Problem» / «No issue» nur am Satzanfang oder als Gesamturteil.
-const SELF_CANCEL_VERDICT = /(?:^|[.!?;:–—]\s*|\b(?:also|insgesamt|daher|somit|overall|so)\s+)(?:(?:das\s+ist|es\s+ist|ist|this\s+is|it\s+is)\s+)?(?:kein(?:e)?\s+(?:(?:echtes|wirkliches)\s+)?problem|no\s+(?:(?:real|actual)\s+)?(?:issue|problem))\b/i;
-// Prädikatives «konsistent/stimmig» am Satzende (oder mit «mit/zu …»-Ergänzung), bis zu
-// fünf Wörter hinter der Kopula. Der Zwischenraum wird gesondert auf Verneinung geprüft.
-const _COPULA = '(?:ist|sind|bleibt|bleiben|wirkt|wirken|erscheint|erscheinen|scheint|scheinen|war|waren|is|are|remains|remain|seems|seem|appears|appear|was|were)';
-const SELF_CANCEL_PREDICATIVE = new RegExp(
-  `\\b${_COPULA}\\s+((?:[^\\s.!?;]+\\s+){0,5}?)(konsistent|stimmig|consistent|coherent)(?=\\s*(?:[.!?;]|$|[–—]\\s)|\\s+(?:mit|zu|zum|zur|with)\\b)`,
-  'gi');
-const SELF_CANCEL_OVERALL = /\binsgesamt\s+(?:konsistent|stimmig)\b|\boverall\s+consistent\b/i;
-const _NEGATION = /\b(?:nicht|kaum|wenig|nie|niemals|keineswegs|keinesfalls|weder|nirgends|not|never|hardly|neither|nor|no\s+longer)\b/i;
-
-function _predicativeEntwarnung(text) {
-  SELF_CANCEL_PREDICATIVE.lastIndex = 0;
-  let m;
-  while ((m = SELF_CANCEL_PREDICATIVE.exec(text))) {
-    if (!_NEGATION.test(m[1] || '')) return true;
-  }
-  return false;
-}
-
-function _isSelfCancelled(p) {
-  if (!p || typeof p !== 'object') return false;
-  const beschr = typeof p.beschreibung === 'string' ? p.beschreibung : '';
-  const empf = typeof p.empfehlung === 'string' ? p.empfehlung : '';
-  return SELF_CANCEL_HARD.test(beschr) || SELF_CANCEL_HARD.test(empf)
-    || SELF_CANCEL_DESC_HARD.test(beschr)
-    || SELF_CANCEL_VERDICT.test(beschr)
-    || SELF_CANCEL_OVERALL.test(beschr)
-    || _predicativeEntwarnung(beschr);
-}
-
 // Server-Spiegel von KONTINUITAET_TYPEN (public/js/prompts/komplett/schema-strings.js,
 // ESM — hier kein Import möglich) plus `faktenfehler` (Faktencheck-Job). Ein unbekannter
 // typ (Freitext-Pfad ohne Schema-Zwang) wird beim Speichern zu `sonstiges` — sonst
@@ -375,24 +316,52 @@ function _httpUrl(v) {
   return /^https?:\/\//i.test(s) ? s : null;
 }
 
+// Selbst-Entwarnung: massgeblich ist ausschliesslich das Pflichtfeld `entwarnung`
+// (SCHEMA_KONTINUITAET_PROBLEME, PROBLEME_RULES in public/js/prompts/komplett/schema-
+// strings.js). Kein Text-Fallback über die Prosa: ein Muster wie «bis Kapitel 5 konsistent»
+// steht genauso in echten Befunden, und ein verworfener Befund ist jetzt sichtbar
+// (Karte «Verworfen») — ein übersehenes Feld kostet einen Klick, ein falscher Regex-
+// Treffer kostete einen echten Fehler. Der String «true» zählt mit: Provider-Pfade ohne
+// Schema-Zwang liefern Booleans gelegentlich als Text.
+function _isEntwarnung(p) {
+  return p?.entwarnung === true || (typeof p?.entwarnung === 'string' && p.entwarnung.trim().toLowerCase() === 'true');
+}
+
 /** Speichert Kontinuitätsprüfung in die DB (eine Zeile pro Issue + Bridge-Tabellen
- *  für Figuren-/Kapitel-Referenzen). Gibt normalizedIssues zurück, oder null bei
- *  ungültiger Antwort.
+ *  für Figuren-/Kapitel-Referenzen). Gibt normalizedIssues (die offenen Befunde)
+ *  zurück, oder null bei ungültiger Antwort.
+ *
+ *  Verworfen wird nie still: Selbst-Entwarnungen (`entwarnung`), Befunde mit erfundenem
+ *  Zitat und die von der Verify-Stufe abgelehnten (`kontResult.verworfen`, siehe
+ *  job-shared.js#verifyKontinuitaetProbleme) landen mit Grund als verworfene Zeilen im
+ *  selben Check (db/continuity.js, `discard_reason`).
+ *
  *  opts.pageContents: geladene Seiten ({id,title,chapter,chapter_id,text}) — Basis der
  *    Beleg-Prüfung und der Seiten-Anker (page_a_id/page_b_id).
  *  opts.requireQuoteEvidence: Zitate sind wörtliche Buchsätze (Single-Pass) → ein
- *    Befund mit einem im Buch nicht auffindbaren Zitat gilt als erfunden.
+ *    Befund mit einem im Buch nicht auffindbaren Zitat gilt als erfunden. Satzzeichen-
+ *    Abweichungen zählen nicht (quote-verify `ignorePunctuation`).
  *  opts.chapterFacts: Multi-Pass-Fakten ({kapitel,fakten[{fakt,seite}]}) — dort zitiert
- *    das Modell Fakten statt Buchsätzen; der Seitenname des Fakts liefert den Anker. */
+ *    das Modell Fakten statt Buchsätzen; der Seitenname des Fakts liefert den Anker.
+ *  opts.stats: optionales Objekt, in das `discarded` (Anzahl verworfener Befunde dieses
+ *    Laufs) geschrieben wird — fürs Job-Result. */
 function saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, chNameToId, effectiveProvider, log, opts = {}) {
-  const { pageContents = null, requireQuoteEvidence = false, chapterFacts = null } = opts;
+  const { pageContents = null, requireQuoteEvidence = false, chapterFacts = null, stats = null } = opts;
   if (typeof kontResult?.zusammenfassung === 'undefined') return null;
-  const rawProbleme = (Array.isArray(kontResult.probleme) ? kontResult.probleme : [])
-    .filter(p => p && typeof p === 'object' && !Array.isArray(p));
-  // Selbst-Entwarnung: das Pflichtfeld zuerst, der Text-Fallback dahinter.
-  let filtered = rawProbleme.filter(p => p.entwarnung !== true && !_isSelfCancelled(p));
-  const dropped = rawProbleme.length - filtered.length;
-  if (dropped > 0) log.warn(`Kontinuität: ${dropped} Selbst-Entwarnungen verworfen.`);
+  const isObj = (p) => p && typeof p === 'object' && !Array.isArray(p);
+  const rawProbleme = (Array.isArray(kontResult.probleme) ? kontResult.probleme : []).filter(isObj);
+  const discarded = [];
+  // Verify-Verwürfe (Multi-Pass) kommen vom Aufrufer mit Grund.
+  for (const v of (Array.isArray(kontResult.verworfen) ? kontResult.verworfen : [])) {
+    if (isObj(v?.problem)) discarded.push({ p: v.problem, reason: 'verify', detail: _str(v.grund) || null });
+  }
+  let filtered = [];
+  for (const p of rawProbleme) {
+    if (_isEntwarnung(p)) discarded.push({ p, reason: 'entwarnung', detail: null });
+    else filtered.push(p);
+  }
+  const selfCancelled = discarded.filter(d => d.reason === 'entwarnung').length;
+  if (selfCancelled > 0) log.warn(`Kontinuität: ${selfCancelled} Selbst-Entwarnung(en) verworfen (als «verworfen» gespeichert).`);
   const kapOf = (p) => _asList(p.kapitel).map(_refToString).filter(Boolean);
 
   const pages = buildPageIndex(pageContents);
@@ -401,19 +370,24 @@ function saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, chNam
   // → dort hat die separate Verify-Stufe den Originaltext geprüft.
   if (requireQuoteEvidence && pages.length) {
     const hayNorm = pages.map(p => p.norm).join(' ');
-    const before = filtered.length;
+    const hayLoose = pages.map(p => p.loose).join(' ');
     // Befunde des Attribut-Detektors (F4, attribute-check.js, `_source: 'attr'`) tragen
     // synthetische Stellen («Geburtsjahr: 1952 (Kapitel 3)», Szenentitel, Attributwerte
     // mit Anführungszeichen) — kein Buchzitat, also auch nichts, was erfunden sein könnte.
     // Ein Zitat unter der Mindestgrösse (_stelleQuote) gilt als «kein Zitat»: weder
     // Beleg noch Fabrikations-Nachweis.
-    filtered = filtered.filter(p => {
-      if (p._source === ATTR_SOURCE) return true;
+    const kept = [];
+    let evDropped = 0;
+    for (const p of filtered) {
       const kapitel = kapOf(p);
-      return !quotesFabricated([_stelleQuote(_str(p.stelle_a), { kapitel }), _stelleQuote(_str(p.stelle_b), { kapitel })], hayNorm);
-    });
-    const evDropped = before - filtered.length;
-    if (evDropped > 0) log.warn(`Kontinuität: ${evDropped} Problem(e) mit erfundenem Beleg-Zitat (nicht im Buchtext) verworfen.`);
+      const fabricated = p._source !== ATTR_SOURCE && quotesFabricated(
+        [_stelleQuote(_str(p.stelle_a), { kapitel }), _stelleQuote(_str(p.stelle_b), { kapitel })],
+        hayNorm, { hayLoose });
+      if (fabricated) { discarded.push({ p, reason: 'zitat', detail: null }); evDropped++; }
+      else kept.push(p);
+    }
+    filtered = kept;
+    if (evDropped > 0) log.warn(`Kontinuität: ${evDropped} Problem(e) mit erfundenem Beleg-Zitat (nicht im Buchtext) verworfen (als «verworfen» gespeichert).`);
   }
 
   const facts = chapterFacts ? buildFactIndex(chapterFacts) : null;
@@ -421,7 +395,7 @@ function saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, chNam
     const page = locateStelle(_refToString(stelle) || '', _stelleQuote(stelle, { kapitel }), pages, { kapitel, facts });
     return page ? page.id : null;
   };
-  const issues = filtered.map(p => {
+  const toIssue = (p) => {
     const kapitel = kapOf(p);
     const stelleA = _str(p.stelle_a);
     const stelleB = _str(p.stelle_b);
@@ -434,13 +408,16 @@ function saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, chNam
       figuren: _asList(p.figuren).map(_refToString).filter(Boolean),
       kapitel,
     };
-  });
+  };
+  const issues = filtered.map(toIssue);
+  const discardedIssues = discarded.map(d => ({ ...toIssue(d.p), discard: { reason: d.reason, detail: d.detail } }));
   const { normalizedIssues } = saveContinuityCheck(
     bookIdInt, email, kontResult.zusammenfassung || '',
-    _modelName(effectiveProvider), issues, figNameToId, chNameToId,
+    _modelName(effectiveProvider), issues, figNameToId, chNameToId, discardedIssues,
   );
+  if (stats && typeof stats === 'object') stats.discarded = (stats.discarded || 0) + discardedIssues.length;
   const carried = normalizedIssues.filter(i => i.resolved || i.dismissed).length;
-  log.info(`Kontinuitätsprüfung gespeichert (${normalizedIssues.length} Probleme${carried ? `, Triage von ${carried} übernommen` : ''}).`);
+  log.info(`Kontinuitätsprüfung gespeichert (${normalizedIssues.length} Probleme${carried ? `, Triage von ${carried} übernommen` : ''}${discardedIssues.length ? `, ${discardedIssues.length} verworfen` : ''}).`);
   // Faktencheck-Befunde aus dem Urteils-Cache in den neuen Check nachziehen — sonst
   // verdeckte jeder Kontinuitätslauf (Komplettanalyse wie Standalone) die belegten
   // Abweichungen bis zum nächsten Faktencheck. Kein KI-Call, keine Web-Suche.
@@ -455,5 +432,5 @@ function saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, chNam
 }
 
 module.exports = {
-  planSzenenMatch, resolveSzenenForSave, remapSzenen, remapAssignments, saveSzenenAndEvents, saveKontinuitaetResult, _isSelfCancelled,
+  planSzenenMatch, resolveSzenenForSave, remapSzenen, remapAssignments, saveSzenenAndEvents, saveKontinuitaetResult, _isEntwarnung,
   KONTINUITAET_TYPEN };

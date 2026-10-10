@@ -4,13 +4,31 @@
 import { _isLocal } from '../../state.js';
 
 /**
+ * Bestehender Katalog als Identitäts-Anker (Komplettanalyse ab dem zweiten Lauf). Der
+ * Block nennt jede Bestandsfigur bzw. jeden Bestandsort mit stabiler Katalog-ID; das
+ * Modell trägt die ID in «katalog_id» ein, wenn es dieselbe Figur/denselben Ort meint —
+ * auch unter anderem Namen. So entscheidet der Text (über das Modell), wer wer ist,
+ * statt einer Namens-Heuristik nach dem Lauf. Steht im User-Turn, nicht im System:
+ * der geteilte 1h-Präfix (Buch-/Kapiteltext) bleibt byte-identisch.
+ */
+export function buildKatalogAnkerBlock(katalogBlock) {
+  if (!katalogBlock) return '';
+  return `
+
+<katalog>
+${katalogBlock}
+</katalog>
+Katalog-Abgleich: Meint eine Figur bzw. ein Schauplatz im Text einen Eintrag aus <katalog> – auch unter Spitznamen, Titel, Teilnamen oder nach einer Umbenennung –, trage dessen ID (z.B. «K12», «O7») in «katalog_id» ein und verwende als «name» den Namen, wie er im Text steht. Neue Figuren/Orte, die im Katalog fehlen: «katalog_id» leer. Vergib eine Katalog-ID nur, wenn du dir sicher bist, dass es derselbe ist – zwei verschiedene Personen mit gleichem Nachnamen sind zwei Einträge. Jede Katalog-ID höchstens einmal pro Antwort.`;
+}
+
+/**
  * Kombinierter Vollextraktion-Prompt (P1 + P5 in einem Call):
  * Figuren + Schauplätze + Kontinuitätsfakten + Szenen + Lebensereignisse.
  *
  * Schema und Regeln leben im System-Prompt (SYSTEM_KOMPLETT_EXTRAKTION) – diese User-Message
  * enthält nur den Kapiteltext und den chapter-spezifischen Kapitelnamen-Hinweis.
  */
-export function buildExtraktionKomplettChapterPrompt(chapterName, bookName, pageCount, chText) {
+export function buildExtraktionKomplettChapterPrompt(chapterName, bookName, pageCount, chText, katalogBlock = null) {
   const isSinglePass = chapterName === 'Gesamtbuch';
   const scope = isSinglePass ? `dem Buch «${bookName}»` : `dem Kapitel «${chapterName}» des Buchs «${bookName}»`;
   const kapitelNote = isSinglePass
@@ -25,13 +43,13 @@ Extrahiere aus ${scope} in einem Durchgang: alle Figuren, alle Schauplätze, all
 </aufgabe>
 
 ${kapitelNote}
-${seiteNote}
+${seiteNote}${buildKatalogAnkerBlock(katalogBlock)}
 
 ${textBlock}`;
 }
 
 /** Welle 4 · #11 – Pass A: nur Figuren + Lebensereignisse (Lokalmodus). */
-export function buildExtraktionFigurenPassPrompt(chapterName, bookName, pageCount, chText) {
+export function buildExtraktionFigurenPassPrompt(chapterName, bookName, pageCount, chText, katalogBlock = null) {
   const isSinglePass = chapterName === 'Gesamtbuch';
   const scope = isSinglePass ? `dem Buch «${bookName}»` : `dem Kapitel «${chapterName}» des Buchs «${bookName}»`;
   const kapitelNote = isSinglePass
@@ -44,13 +62,13 @@ export function buildExtraktionFigurenPassPrompt(chapterName, bookName, pageCoun
 Extrahiere aus ${scope} AUSSCHLIESSLICH: alle Figuren (inkl. Beziehungen) und alle Lebensereignisse der Figuren. Keine Orte, keine Fakten, keine Szenen – die werden separat extrahiert.
 </aufgabe>
 
-${kapitelNote}
+${kapitelNote}${buildKatalogAnkerBlock(katalogBlock)}
 
 ${textBlock}`;
 }
 
 /** Claude-Single-Pass A1: nur Figuren-Stammdaten (OHNE Beziehungen) + Lebensereignisse. */
-export function buildExtraktionFigurenStammPrompt(chapterName, bookName, pageCount, chText) {
+export function buildExtraktionFigurenStammPrompt(chapterName, bookName, pageCount, chText, katalogBlock = null) {
   const isSinglePass = chapterName === 'Gesamtbuch';
   const scope = isSinglePass ? `dem Buch «${bookName}»` : `dem Kapitel «${chapterName}» des Buchs «${bookName}»`;
   const kapitelNote = isSinglePass
@@ -63,7 +81,7 @@ export function buildExtraktionFigurenStammPrompt(chapterName, bookName, pageCou
 Extrahiere aus ${scope} AUSSCHLIESSLICH: alle Figuren-Stammdaten (OHNE Beziehungen und OHNE Lebensereignisse – beide werden in separaten Pässen erfasst). Keine Orte, keine Fakten, keine Szenen.
 </aufgabe>
 
-${kapitelNote}
+${kapitelNote}${buildKatalogAnkerBlock(katalogBlock)}
 
 ${textBlock}`;
 }
@@ -91,7 +109,7 @@ ${textBlock}`;
 }
 
 /** Welle 4 · #11 – Pass B: nur Orte + Fakten + Szenen (Lokalmodus). */
-export function buildExtraktionOrtePassPrompt(chapterName, bookName, pageCount, chText) {
+export function buildExtraktionOrtePassPrompt(chapterName, bookName, pageCount, chText, katalogBlock = null) {
   const isSinglePass = chapterName === 'Gesamtbuch';
   const scope = isSinglePass ? `dem Buch «${bookName}»` : `dem Kapitel «${chapterName}» des Buchs «${bookName}»`;
   const kapitelNote = isSinglePass
@@ -105,7 +123,7 @@ export function buildExtraktionOrtePassPrompt(chapterName, bookName, pageCount, 
 Extrahiere aus ${scope} AUSSCHLIESSLICH: alle Schauplätze, alle Musikstücke/Songs${faktenPart} und alle Szenen. Figuren-Stammdaten nicht – die sind separat erfasst. In Szenen und Songs nur Figurennamen/IDs als Referenz nennen.
 </aufgabe>
 
-${kapitelNote}
+${kapitelNote}${buildKatalogAnkerBlock(katalogBlock)}
 
 ${textBlock}`;
 }

@@ -11,6 +11,20 @@ const { getContextConfigFor } = require('../../../../lib/ai');
 const { COST_LABEL, costTier } = require('../cost-labels');
 const { dedupeLocationsWithinRun, scoreLocationPair, SAME } = require('../../../../lib/entity-match');
 const { judgeEntityPairs } = require('../entity-reconcile');
+const { ankerHints, mergeHints } = require('../katalog-anker');
+const { locationHintKey } = require('../../../../lib/entity-match');
+const { countActiveLocations } = require('../../../../db/katalog-anker');
+const { loadOrteFromDb, countSongsInDb } = require('../scope');
+
+// Kollaps-Riegel wie bei den Figuren (phases/figuren.js): liefert die Konsolidierung bei
+// einem gewachsenen Bestand (fast) nichts, würde der Reconcile den ganzen Ortskatalog
+// ausmustern bzw. saveSongsToDb die Musikbibliothek samt Deep-Links löschen. Dann bleibt
+// der Bestand stehen, und der Lauf meldet die Degradierung.
+const KOLLAPS_MIN_BESTAND = 5;
+const KOLLAPS_MIN_ANTEIL = 0.3;
+function _kollabiert(bestand, neu) {
+  return bestand >= KOLLAPS_MIN_BESTAND && neu < Math.ceil(bestand * KOLLAPS_MIN_ANTEIL);
+}
 
 /** Vereinigt die Kapitel-Liste von `src` in `target.kapitel` (in place): Kapitel per
  *  Name (String oder { name, haeufigkeit }), je Kapitel die höhere Häufigkeit. */
@@ -212,11 +226,25 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
   // Graubereich des Cross-Run-Matchings vom Judge beurteilen lassen, BEVOR gespeichert
   // wird (Begründung siehe entity-reconcile.js): «Kreuz (Olten)» vs. «Kreuz (Bern)»
   // trennt die Regel selbst, «Schulhaus Frohheim» vs. «Frohheim-Schule Olten» nicht.
-  let ortHint = null;
+  const bestand = countActiveLocations(bookIdInt, email);
+  if (_kollabiert(bestand, orte.length)) {
+    log.error(`Orte-Konsolidierung kollabiert: ${orte.length} Orte gegen ${bestand} aktive im Katalog – Bestand bleibt.`);
+    ctx.warnings?.push({ key: 'job.warn.orteKollaps', params: { neu: orte.length, aktiv: bestand } });
+    return loadOrteFromDb(bookIdInt, email);
+  }
+  // Katalog-Anker zuerst, dann der Judge für den Rest-Graubereich (wie Phase 2).
+  const anker = ctx.katalogAnker
+    ? ankerHints(orte, { prefix: 'O', validIds: ctx.katalogAnker.ortIds, keyOf: locationHintKey })
+    : { hint: new Map(), conflicts: 0 };
+  if (anker.hint.size || anker.conflicts) {
+    log.info(`Katalog-Anker Orte: ${anker.hint.size} verankert${anker.conflicts ? `, ${anker.conflicts} doppelt beanspruchte Katalog-IDs der Regel überlassen` : ''}.`);
+  }
+  let ortHint = anker.hint.size ? anker.hint : null;
   try {
-    const plan = planOrteMatch(bookIdInt, orte, email, idMaps.chNameToId);
+    const plan = planOrteMatch(bookIdInt, orte, email, idMaps.chNameToId, ortHint);
     if (plan.unsure.length) {
-      ortHint = await judgeEntityPairs(ctx, 'ort', { incoming: orte, existing: plan.existing, unsure: plan.unsure });
+      const judged = await judgeEntityPairs(ctx, 'ort', { incoming: orte, existing: plan.existing, unsure: plan.unsure });
+      if (judged?.size) ortHint = mergeHints(anker.hint, judged);
     }
   } catch (e) {
     if (e.name === 'AbortError') throw e;
@@ -335,6 +363,12 @@ async function runPhase3Songs(ctx, chapterSongs, figurenKompakt, isSinglePass, f
       updateJob(jobId, { progress: 56 });
     }
   }
+  const songBestand = countSongsInDb(bookIdInt, email);
+  if (_kollabiert(songBestand, songs.length)) {
+    log.error(`Songs-Konsolidierung kollabiert: ${songs.length} Songs gegen ${songBestand} im Katalog – Bestand bleibt.`);
+    ctx.warnings?.push({ key: 'job.warn.songsKollaps', params: { neu: songs.length, aktiv: songBestand } });
+    return { songs: [], songsCount: songBestand };
+  }
   saveSongsToDb(bookIdInt, songs, email, idMaps.chNameToId, idMaps.pageNameToIdByChapter);
   // Suchindex wie Figuren/Orte/Szenen (remap.js): Full-Replace der Songs des Buchs.
   searchIndex.removeKindForBook('song', bookIdInt);
@@ -368,7 +402,8 @@ function _orteKonsolPrompt(ctx, chapterOrte, figurenKompakt) {
   const promptText = prompts.buildLocationsConsolidationPrompt(bookName, chapterOrte, figurenKompakt);
   const cap = komplettMaxTokens(effectiveProvider);
   const fit = consolidationFitsCap({
-    promptText, charsPerToken: getContextConfigFor(effectiveProvider).charsPerToken, cap,
+    promptText, dataText: JSON.stringify((chapterOrte || []).flatMap(c => c.orte || [])),
+    charsPerToken: getContextConfigFor(effectiveProvider).charsPerToken, cap,
   });
   return { promptText, cap, fit };
 }
@@ -399,6 +434,7 @@ async function runPhase3OrteCall(ctx, chapterOrte, figurenKompaktForPrompt) {
     // P2-Ergebnis verwerfen. null zurückgeben; runPhase3 fällt dann auf den regelbasierten
     // Orte-Merge zurück (kapitel-extrahierte Orte), statt den Job zu killen.
     log.warn(`Orte-Konsolidierung (parallel) fehlgeschlagen (${e.message}) – Fallback auf kapitel-extrahierte Orte.`);
+    ctx.warnings?.push({ key: 'job.warn.orteKonsolidierungDegraded' });
     return null;
   }
 }

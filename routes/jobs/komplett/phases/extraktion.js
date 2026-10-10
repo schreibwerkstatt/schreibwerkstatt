@@ -2,13 +2,19 @@
 // Phase 1: Vollextraktion (Single-/Multi-Pass) + additiver Completeness-/Gap-Pass.
 // Multi-Pass (Chunks, Delta-Cache, Halbierungs-Retry): ./extraktion/multi-pass.js.
 const {
-  saveCheckpoint, loadChapterExtractCache, saveChapterExtractCache, getBookSettings,
+  saveCheckpoint, loadCheckpoint, loadChapterExtractCache, saveChapterExtractCache, getBookSettings,
 } = require('../../../../db/schema');
+
+// Merker «Single-Pass ist an diesem Buch am Output-Cap gerissen». Ohne ihn startet jeder
+// Folgelauf A1/B/C wieder über das ganze Buch, lässt sie bis zum Cap laufen und verwirft
+// sie, bevor der Multi-Pass-Fallback greift — bezahlt und weggeworfen, in jedem Lauf.
+// Gilt, solange das Buch nicht deutlich kleiner geworden ist (Toleranz 10 %).
+const SP_TRUNC_CP_TYPE = 'komplett-singlepass-truncated';
 const {
   i18nError, settledAll, retryOnTransientAi, splitGroupsIntoChunks, updateJob, toSystemBlocks,
 } = require('../../shared');
 const {
-  buildBookSystemBlockText, buildBookPagesSig, sampleChapters, computeCoverageScore,
+  buildBookSystemBlockText, buildBookPagesSig,
 } = require('../utils');
 const { mergeBeziehungenIntoFiguren, _normalizeName } = require('../figuren-merge');
 const appSettings = require('../../../../lib/app-settings');
@@ -52,6 +58,10 @@ async function runCompletenessGap(ctx, {
   const seen = new Set((knownNames || []).map(n => _normalizeName(n)).filter(Boolean));
   const display = (knownNames || []).filter(Boolean);
   const fresh = [];
+  // Eine gescheiterte Runde ist ein Teilfehler: die bis dahin gefundenen Items gehen in
+  // den Lauf ein, aber der Single-Pass-Cache darf den Stand ohne Long-Tail nicht
+  // einfrieren (gleiches Gate wie der :gap-Eintrag im Multi-Pass).
+  fresh.failed = false;
   for (let round = 1; round <= maxPasses; round++) {
     updateJob(jobId, { statusText });
     let res;
@@ -59,9 +69,12 @@ async function runCompletenessGap(ctx, {
       res = await retryOnTransientAi(() => call(jobId, tok,
         buildPrompt(display), systemBlocks, null, null, claudeExtractCap, 0.2, null, schema, gapTier,
       ), { log, label: `${label} (Gap ${round}/${maxPasses})` });
+      const raw = extractItems(res);
+      if (!Array.isArray(raw)) throw i18nError('job.error.extractFieldMissing', { label });
     } catch (e) {
       if (e.name === 'AbortError') throw e;
       log.warn(`${label} Gap-Pass ${round} fehlgeschlagen (${e.message}) – übersprungen.`);
+      fresh.failed = true;
       break;
     }
     const items = (extractItems(res) || []).filter(isValid);
@@ -146,6 +159,8 @@ async function runSinglePassCompletenessGaps(ctx, { bookSystemBlock, claudeExtra
   const freshOrte   = orteRes.status   === 'fulfilled' ? (orteRes.value   || []) : [];
   const freshFakten = faktenRes.status === 'fulfilled' ? (faktenRes.value || []) : [];
   const freshSzenen = szenenRes.status === 'fulfilled' ? (szenenRes.value || []) : [];
+  const gapFailed = [figRes, orteRes, faktenRes, szenenRes]
+    .some(r => r.status !== 'fulfilled' || r.value?.failed === true);
 
   if (freshFig.length) {
     // Frische, kollisionsfreie IDs (Gap-Output beginnt wieder bei fig_1).
@@ -175,7 +190,7 @@ async function runSinglePassCompletenessGaps(ctx, { bookSystemBlock, claudeExtra
     passB.szenen = knownSzenen.concat(freshSzenen);
     log.info(`Completeness: +${freshSzenen.length} Szenen ergänzt (gesamt ${passB.szenen.length}).`);
   }
-  return { stammFiguren, passB };
+  return { stammFiguren, passB, gapFailed };
 }
 
 /**
@@ -199,7 +214,9 @@ async function runEventsPassBatched(ctx, { bookSystemBlock, claudeExtractCap, st
   const assignments = [];
   let failed = false;
   for (const r of settled) {
-    if (r.status === 'fulfilled') assignments.push(...(Array.isArray(r.value?.assignments) ? r.value.assignments : []));
+    // Ohne assignments-Feld ist die Antwort nicht die verlangte — als Teilfehler werten,
+    // sonst gälte der Batch als «Figuren ohne Ereignisse» und würde gecacht.
+    if (r.status === 'fulfilled' && Array.isArray(r.value?.assignments)) assignments.push(...r.value.assignments);
     else failed = true;
   }
   return { assignments, failed, batches: batches.length };
@@ -231,80 +248,10 @@ async function runRelationsPassBatched(ctx, { bookSystemBlock, claudeExtractCap,
   const flatBz = [];
   let failed = false;
   for (const r of settled) {
-    if (r.status === 'fulfilled') flatBz.push(...(Array.isArray(r.value?.beziehungen) ? r.value.beziehungen : []));
+    if (r.status === 'fulfilled' && Array.isArray(r.value?.beziehungen)) flatBz.push(...r.value.beziehungen);
     else failed = true;
   }
   return { flatBz, failed, batches: batches.length };
-}
-
-/**
- * Coverage-Feedback (nur Claude Single-Pass, gegated): der Vollständigkeits-Audit läuft VOR
- * E/A2 an einer Kapitel-Stichprobe und speist die namentlich als fehlend gemeldeten Figuren/
- * Schauplätze als gezielten Nachzieh-Pass ein — statt sie nur am Ende als Metrik zu zeigen.
- * Rein additiv, non-fatal. Mutiert nichts in place; gibt `{ stammFiguren, passB }` zurück.
- */
-async function runCoverageFeedback(ctx, { bookSystemBlock, claudeExtractCap, stammFiguren, passB }) {
-  const { jobId, bookName, call, tok, log, prompts, sys, groups, groupOrder, coverageTier } = ctx;
-  const n = ctx.coverageAuditChapters || 0;
-  if (n <= 0) return { stammFiguren, passB };
-  const samples = sampleChapters(groups, groupOrder, n);
-  if (!samples.length) return { stammFiguren, passB };
-  updateJob(jobId, { statusText: 'job.phase.coverageFeedback' });
-  const figNames = stammFiguren.map(f => f.name).filter(Boolean);
-  const orteNames = (passB.orte || []).map(o => o.name).filter(Boolean);
-  const audit = await settledAll(samples.map(s => () => retryOnTransientAi(() => call(jobId, tok,
-    prompts.buildCoverageAuditPrompt(bookName, s.name, s.chText, figNames, orteNames),
-    toSystemBlocks(sys.SYSTEM_KOMPLETT_EXTRAKTION_BLOCKS), null, null, claudeExtractCap, 0.2, null,
-    prompts.SCHEMA_COVERAGE_AUDIT, coverageTier,
-  ), { log, label: `Coverage-Feedback «${s.name}»` })), { concurrency: 3 });
-  const ok = audit.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
-  if (!ok.length) return { stammFiguren, passB };
-  const cov = computeCoverageScore(ok);
-  const knownFig = new Set(stammFiguren.map(f => _normalizeName(f.name)).filter(Boolean));
-  const knownOrt = new Set((passB.orte || []).map(o => _normalizeName(o.name)).filter(Boolean));
-  const missFig = [...new Set((cov.missingFiguren || []).filter(Boolean))].filter(nm => !knownFig.has(_normalizeName(nm)));
-  const missOrt = [...new Set((cov.missingOrte || []).filter(Boolean))].filter(nm => !knownOrt.has(_normalizeName(nm)));
-  if (!missFig.length && !missOrt.length) {
-    log.info(`Coverage-Feedback: Score ${cov.score == null ? 'n/a' : cov.score}, keine fehlenden Namen für Nachzieh-Pass.`);
-    return { stammFiguren, passB };
-  }
-  log.info(`Coverage-Feedback: Score ${cov.score == null ? 'n/a' : cov.score} – gezielter Nachzieh-Pass für ${missFig.length} Figur(en), ${missOrt.length} Ort(e).`);
-  const [figRes, orteRes] = await settledAll([
-    missFig.length ? () => retryOnTransientAi(() => call(jobId, tok,
-      prompts.buildTargetedFigurenPrompt(bookName, missFig),
-      [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KOMPLETT_FIGUREN_STAMM_BLOCKS, '1h')],
-      null, null, claudeExtractCap, 0.2, null, prompts.SCHEMA_KOMPLETT_FIGUREN_STAMM, coverageTier,
-    ), { log, label: 'Coverage-Feedback Figuren' }) : () => null,
-    missOrt.length ? () => retryOnTransientAi(() => call(jobId, tok,
-      prompts.buildTargetedOrtePrompt(bookName, missOrt),
-      [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KOMPLETT_ORTE_PASS_BLOCKS, '1h')],
-      null, null, claudeExtractCap, 0.2, null, prompts.SCHEMA_KOMPLETT_ORTE_PASS, coverageTier,
-    ), { log, label: 'Coverage-Feedback Orte' }) : () => null,
-  ], { concurrency: 2 });
-
-  let outFig = stammFiguren, outB = passB;
-  if (figRes.status === 'fulfilled' && Array.isArray(figRes.value?.figuren)) {
-    const fresh = figRes.value.figuren.filter(f => f && f.name && !knownFig.has(_normalizeName(f.name)));
-    if (fresh.length) {
-      let maxIdx = 0;
-      for (const f of stammFiguren) { const m = /^fig_(\d+)$/.exec(f.id || ''); if (m) maxIdx = Math.max(maxIdx, +m[1]); }
-      for (const f of fresh) f.id = 'fig_' + (++maxIdx);
-      outFig = stammFiguren.concat(fresh);
-      log.info(`Coverage-Feedback: +${fresh.length} Figur(en) ergänzt (gesamt ${outFig.length}).`);
-    }
-  }
-  if (orteRes.status === 'fulfilled' && Array.isArray(orteRes.value?.orte)) {
-    const knownO = new Set((passB.orte || []).map(o => _normalizeName(o.name)).filter(Boolean));
-    const fresh = orteRes.value.orte.filter(o => o && o.name && !knownO.has(_normalizeName(o.name)));
-    if (fresh.length) {
-      let maxIdx = 0;
-      for (const o of (passB.orte || [])) { const m = /^ort_(\d+)$/.exec(o.id || ''); if (m) maxIdx = Math.max(maxIdx, +m[1]); }
-      for (const o of fresh) o.id = 'ort_' + (++maxIdx);
-      outB = { ...passB, orte: (passB.orte || []).concat(fresh) };
-      log.info(`Coverage-Feedback: +${fresh.length} Ort(e) ergänzt (gesamt ${outB.orte.length}).`);
-    }
-  }
-  return { stammFiguren: outFig, passB: outB };
 }
 
 /**
@@ -342,10 +289,14 @@ async function runSceneBackfill(ctx, { bookSystemBlock, claudeExtractCap, passB 
     ), { log, label: 'Szenen-Backfill' });
   } catch (e) {
     if (e.name === 'AbortError') throw e;
-    log.warn(`Szenen-Backfill fehlgeschlagen (${e.message}) – übersprungen.`);
-    return passB;
+    log.warn(`Szenen-Backfill fehlgeschlagen (${e.message}) – übersprungen, Cache wird nicht geschrieben.`);
+    return { ...passB, __backfillFailed: true };
   }
-  const fresh = (Array.isArray(res?.szenen) ? res.szenen : []).filter(s => s && s.titel);
+  if (!Array.isArray(res?.szenen)) {
+    log.warn('Szenen-Backfill ohne szenen-Feld – übersprungen, Cache wird nicht geschrieben.');
+    return { ...passB, __backfillFailed: true };
+  }
+  const fresh = res.szenen.filter(s => s && s.titel);
   if (!fresh.length) return passB;
   // Dedup gegen bestehende Szenen (titel+kapitel, normalisiert).
   const seen = new Set((passB.szenen || []).map(s => `${_normalizeName(s.titel)}|${_normalizeName(s.kapitel)}`));
@@ -363,7 +314,7 @@ async function runSceneBackfill(ctx, { bookSystemBlock, claudeExtractCap, passB 
 
 /**
  * Single-Pass Claude: A1 (Figuren-Stamm) + B (Orte/Szenen) + C (Fakten) parallel, dann
- * Completeness-Gaps, Coverage-Feedback + Szenen-Backfill, dann E (Events) + A2 (Beziehungen)
+ * Completeness-Gaps + Szenen-Backfill, dann E (Events) + A2 (Beziehungen)
  * aus der finalen Figurenliste. Alle Calls teilen den 1h-Buchtext-Block (cache_read; Phase 8
  * trifft denselben Prefix); kleinere Schemas pro Call senken das Truncation-Risiko. Gibt
  * `{ passA, passB, failed }` zurück — der Caller bildet daraus partialFailure (Cache-/
@@ -371,19 +322,19 @@ async function runSceneBackfill(ctx, { bookSystemBlock, claudeExtractCap, passB 
  */
 async function extractSinglePassSplit(ctx, { claudeExtractCap }) {
   const { jobId, bookName, call, tok, log, prompts, sys, pageContents, fullBookText, extractTier } = ctx;
-  const failed = { relations: false, fakten: false, events: false };
+  const failed = { relations: false, fakten: false, events: false, gaps: false };
 
   // Fakten als eigener Call (C): volle Modell-Aufmerksamkeit auf dichte Faktenerfassung
   // statt im 4-Array-Orte-Pass um Output-Budget zu konkurrieren.
   const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, fullBookText), ttl: '1h', sharedPrefix: true };
   const [stammRes, orteRes, faktenRes] = await settledAll([
     () => retryOnTransientAi(() => call(jobId, tok,
-      prompts.buildExtraktionFigurenStammPrompt('Gesamtbuch', bookName, pageContents.length, null),
+      prompts.buildExtraktionFigurenStammPrompt('Gesamtbuch', bookName, pageContents.length, null, ctx.katalogBlock),
       [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KOMPLETT_FIGUREN_STAMM_BLOCKS, '1h')],
       12, 20, claudeExtractCap, 0.2, null, prompts.SCHEMA_KOMPLETT_FIGUREN_STAMM, extractTier,
     ), { log, label: 'Single-Pass Figuren-Stamm (A1)' }),
     () => retryOnTransientAi(() => call(jobId, tok,
-      prompts.buildExtraktionOrtePassPrompt('Gesamtbuch', bookName, pageContents.length, null),
+      prompts.buildExtraktionOrtePassPrompt('Gesamtbuch', bookName, pageContents.length, null, ctx.katalogBlock),
       [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KOMPLETT_ORTE_PASS_BLOCKS, '1h')],
       12, 20, claudeExtractCap, 0.2, null, prompts.SCHEMA_KOMPLETT_ORTE_PASS, extractTier,
     ), { log, label: 'Single-Pass Orte/Szenen (B)' }),
@@ -409,6 +360,9 @@ async function extractSinglePassSplit(ctx, { claudeExtractCap }) {
   // legitim ortloses Buch liefert fulfilled mit leerem Array und cached korrekt.
   if (orteRes.status === 'rejected') throw orteRes.reason;
   const passB = orteRes.value || {};
+  // Pflichtfelder von B: fehlt eines, ist die Antwort nicht die verlangte — sie würde
+  // als «Buch ohne Orte/Szenen» gecacht. Ein legitim leeres Buch liefert [].
+  if (!Array.isArray(passB.orte) || !Array.isArray(passB.szenen)) throw i18nError('job.error.extractFieldMissing', { label: 'B' });
   // Fakten-Pass (C): nicht fatal, abgeschnitten → kapitelgruppenweise Rettung
   // (./extraktion/fakten-pass.js). Ein Ausfall hinterlässt leere Fakten + Warnung.
   const fc = await resolveSinglePassFakten(ctx, faktenRes, { bookSystemBlock, claudeExtractCap });
@@ -423,26 +377,23 @@ async function extractSinglePassSplit(ctx, { claudeExtractCap }) {
   let workingB = passB;
   const completenessPasses = ctx.completenessPasses || 0;
   if (completenessPasses > 0) {
-    ({ stammFiguren, passB: workingB } = await runSinglePassCompletenessGaps(ctx, {
+    let gapFailed;
+    ({ stammFiguren, passB: workingB, gapFailed } = await runSinglePassCompletenessGaps(ctx, {
       bookSystemBlock, claudeExtractCap, stammFiguren, passB, faktenFailed: failed.fakten,
     }));
+    if (gapFailed) failed.gaps = true;
   }
 
-  // Coverage-Feedback (#2) + Szenen-Backfill (#3), beide gegated + non-fatal. VOR E/A2, damit
-  // per Coverage-Feedback ergänzte Figuren gleich Events/Beziehungen bekommen. Beide mutieren
-  // stammFiguren / workingB, die anschliessend gecacht werden (Enablement/Parameter stecken in
-  // der cacheVersion → Toggle invalidiert den __singlepass__-Cache).
-  if (ctx.coverageFeedbackEnabled) {
-    ({ stammFiguren, passB: workingB } = await runCoverageFeedback(ctx, {
-      bookSystemBlock, claudeExtractCap, stammFiguren, passB: workingB,
-    }));
-  }
+  // Szenen-Backfill (#3), gegated + non-fatal. Mutiert workingB, das anschliessend gecacht
+  // wird (Enablement/Parameter stecken in der cacheVersion). Scheitert er, ist das wie eine
+  // gescheiterte Gap-Runde ein Teilfehler: der Lauf nimmt den Stand, der Cache nicht.
   if (ctx.sceneBackfillEnabled) {
     workingB = await runSceneBackfill(ctx, { bookSystemBlock, claudeExtractCap, passB: workingB });
+    if (workingB.__backfillFailed) { failed.gaps = true; delete workingB.__backfillFailed; }
   }
 
   // E (Lebensereignisse) + A2 (Beziehungen): beide gegen den gecachten Buchtext-Block mit der
-  // finalen Figurenliste (post-Completeness/-Coverage-Feedback). Grosse Casts werden pro Pass
+  // finalen Figurenliste (nach den Completeness-Gaps). Grosse Casts werden pro Pass
   // in Batches (ai.komplett.figure_batch_size) parallelisiert (kleinere, robustere Outputs).
   // E und A2 laufen zueinander parallel (Promise.all); jeder Pass intern concurrency-gecappt.
   // Non-fatal: erfolgreiche (Teil-)Ergebnisse werden angewendet, ein Teilfehler setzt nur
@@ -488,12 +439,12 @@ async function extractSinglePassSplit(ctx, { claudeExtractCap }) {
 async function extractSinglePassLocal(ctx, { callExtract }) {
   const { bookName, prompts, sys, pageContents, fullBookText } = ctx;
   const r = await callExtract('Single-Pass Extraktion (lokal)',
-    prompts.buildExtraktionKomplettChapterPrompt('Gesamtbuch', bookName, pageContents.length, fullBookText),
+    prompts.buildExtraktionKomplettChapterPrompt('Gesamtbuch', bookName, pageContents.length, fullBookText, ctx.katalogBlock),
     sys.SYSTEM_KOMPLETT_EXTRAKTION_BLOCKS, 12, 28, 16000, prompts.SCHEMA_KOMPLETT_EXTRAKTION);
   return {
     passA: { figuren: r?.figuren, assignments: r?.assignments },
     passB: { orte: r?.orte, songs: r?.songs, fakten: r?.fakten, szenen: r?.szenen },
-    failed: { relations: false, fakten: false, events: false },
+    failed: { relations: false, fakten: false, events: false, gaps: false },
   };
 }
 
@@ -550,9 +501,11 @@ async function extractSinglePass(ctx, { claudeExtractCap, callExtract }) {
   // Seitenedition). Cache-Skip + Checkpoint-Skip (partialFailure fliesst nach oben).
   // Ausgefallener Fakten-Pass: der Job darf den bestehenden Index nicht mit [] ersetzen.
   if (failed.fakten) ctx.faktenFailure = { all: true, kapitel: [] };
-  const partialFailure = failed.relations || failed.fakten || failed.events;
+  const partialFailure = failed.relations || failed.fakten || failed.events || failed.gaps;
+  if (failed.gaps) ctx.warnings?.push({ key: 'job.warn.gapsFailed' });
   if (partialFailure) {
-    const which = [failed.relations && 'A2 (Beziehungen)', failed.fakten && 'C (Fakten)', failed.events && 'E (Events)']
+    const which = [failed.relations && 'A2 (Beziehungen)', failed.fakten && 'C (Fakten)', failed.events && 'E (Events)',
+      failed.gaps && 'Gap-/Backfill-Pässe']
       .filter(Boolean).join(', ');
     log.warn(`Single-Pass Cache + Checkpoint übersprungen – ${which} gescheitert, Teilstand wird nicht eingefroren.`);
   } else {
@@ -619,6 +572,20 @@ async function runPhase1(ctx) {
   log.info(`Phase 1 – ${totalChars} Zeichen, ${effectiveProvider} → ${totalChars <= extractLimit ? 'Single-Pass' : `Multi-Pass (${groupOrder.length} Kapitel → ${chunkOrder.length} Chunks)`}`);
 
   let result;
+  const truncMarker = loadCheckpoint(SP_TRUNC_CP_TYPE, ctx.bookIdInt, ctx.email);
+  const knownTooDense = providerClass(effectiveProvider) === 'cloud'
+    && truncMarker?.provider === effectiveProvider
+    && Number(truncMarker.totalChars) > 0 && totalChars >= Number(truncMarker.totalChars) * 0.9;
+  if (totalChars <= extractLimit && knownTooDense) {
+    const fbPerChunk = Math.max(10000, Math.floor(extractLimit / 2));
+    const fb = splitGroupsIntoChunks(groups, groupOrder, fbPerChunk);
+    if (fb.chunkOrder.length > 1) {
+      log.info(`Phase 1 – Single-Pass riss zuletzt am Output-Cap (${truncMarker.totalChars} Zeichen) – direkt Multi-Pass (${fb.chunkOrder.length} Chunks).`);
+      const r = await extractMultiPass(ctx, { chunks: fb.chunks, chunkOrder: fb.chunkOrder, claudeExtractCap, callExtract });
+      writePhase1Checkpoint(ctx, r.chapters, r.partialFailure);
+      return r.chapters;
+    }
+  }
   if (totalChars <= extractLimit) {
     try {
       result = await extractSinglePass(ctx, { claudeExtractCap, callExtract });
@@ -633,6 +600,7 @@ async function runPhase1(ctx) {
         const fbPerChunk = Math.max(10000, Math.floor(extractLimit / 2));
         const { chunkOrder: fbOrder, chunks: fbChunks } = splitGroupsIntoChunks(groups, groupOrder, fbPerChunk);
         if (fbOrder.length > 1) {
+          saveCheckpoint(SP_TRUNC_CP_TYPE, ctx.bookIdInt, ctx.email, { totalChars, provider: effectiveProvider });
           log.warn(`Single-Pass-Extraktion truncated – Fallback auf Multi-Pass (${fbOrder.length} Chunks à ≤${fbPerChunk} Zeichen).`);
           result = await extractMultiPass(ctx, { chunks: fbChunks, chunkOrder: fbOrder, claudeExtractCap, callExtract });
         } else {

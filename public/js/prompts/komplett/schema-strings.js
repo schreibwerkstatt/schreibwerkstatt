@@ -8,6 +8,7 @@ export const FIGUREN_BASIS_SCHEMA = `{
   "figuren": [
     {
       "id": "fig_1",
+      "katalog_id": "ID aus dem mitgegebenen Katalog (z.B. K12), wenn die Figur dort schon steht; sonst leer",
       "name": "Vollständiger Name",
       "kurzname": "Vorname oder Spitzname",
       "typ": "hauptfigur|nebenfigur|antagonist|mentor|randfigur|andere",
@@ -45,6 +46,7 @@ export const FIGUREN_STAMM_SCHEMA = FIGUREN_BASIS_SCHEMA
 
 export const figurenBasisRules = (kontext = '') => `Regeln:
 - Eindeutige IDs (fig_1, fig_2, …)
+- katalog_id: nur aus einem mitgegebenen Katalog übernehmen (Katalog-Abgleich), sonst leer lassen; nie erfinden. Bei Zusammenführung zweier Einträge die vorhandene katalog_id behalten; zwei Einträge mit VERSCHIEDENER katalog_id nie zusammenführen.
 - beziehungen.figur_id: nur IDs aus dieser Liste; jede Beziehung nur einmal eintragen
 - kapitel: absteigend nach Häufigkeit; name = immer der Kapitelname (aus dem ## Kapitel-Header über dem Abschnitt oder aus dem Prompt-Kontext) – NIEMALS Abschnittstitel als Kapitelnamen verwenden. haeufigkeit (= Anzahl Abschnitte mit aktivem Auftreten) NUR ergänzen wenn >1; bei Einzelauftreten weglassen.
 - typ: Figuren-Archetyp. hauptfigur=trägt zentral die Handlung, antagonist=Gegenspieler, mentor=Anleiter/Lehrerin, nebenfigur=klar identifizierbarer Sekundärcharakter mit mehreren Auftritten, randfigur=tritt nur am Rand in Erscheinung (kaum mehr als Erwähnung), andere=nicht zuordenbar. NICHT mit praesenz verwechseln (Typ = Rolle, Präsenz = Handlungsgewicht).
@@ -78,6 +80,7 @@ export const ORTE_SCHEMA = `{
   "orte": [
     {
       "id": "ort_1",
+      "katalog_id": "ID aus dem mitgegebenen Katalog (z.B. O7), wenn der Schauplatz dort schon steht; sonst leer",
       "name": "Name des Schauplatz",
       "typ": "stadt|gebaeude|raum|landschaft|region|andere",
       "beschreibung": "2-3 Sätze zu Erscheinungsbild, Atmosphäre, Bedeutung für die Handlung",
@@ -92,6 +95,7 @@ export const ORTE_SCHEMA = `{
 
 export const ORTE_RULES = `Regeln:
 - Eindeutige IDs (ort_1, ort_2, …)
+- katalog_id: nur aus einem mitgegebenen Katalog übernehmen, sonst leer lassen; zwei Orte mit verschiedener katalog_id nie zusammenführen.
 - SEHR GROSSZÜGIG erfassen: alle Schauplätze inklusive Nebenschauplätze und einmaliger Erwähnungen; lieber inkludieren als weglassen. haeufigkeit=1 ist gültig.
 - figuren_namen: Klarnamen der Figuren, die am Ort auftreten – exakt wie im Text (vollständiger Name oder Spitzname, KEINE ID); leeres Array wenn keine Figur klar zuordenbar
 - kapitel: flaches Array der Kapitelnamen (Strings), in denen der Ort aktiv vorkommt – jeder Kapitelname höchstens einmal
@@ -236,8 +240,8 @@ Regeln:
 - Reasoning-First: «_reasoning» MUSS das erste Feld im JSON-Output sein. Denke dort schrittweise nach, BEVOR du «probleme» befüllst. Reihenfolge der Schritte: (1) Fakten, (2) paarweise Vergleiche, (3) verworfene Kandidaten mit Grund, (4) bestätigte Befunde. Knapp halten, Stichpunkte reichen.
 - «probleme» enthält NUR die im _reasoning unter (4) bestätigten Befunde – jeden verworfenen Kandidaten lässt du weg, NIE als Eintrag mit «Eintrag entfernen»-Empfehlung.
 - WICHTIG: Kommst du bei der Analyse zum Schluss, dass KEIN echtes Problem vorliegt (z.B. «konsistent», «passt», «kein echter Widerspruch»), dann den Kandidaten NICHT melden. Das «probleme»-Array ist AUSSCHLIESSLICH für bestätigte Befunde da – nicht für Zwischenüberlegungen, geprüfte-aber-verworfene Kandidaten oder Entwarnungen.
-- entwarnung: PFLICHTFELD, Normalfall false. Stellst du erst beim Ausformulieren eines Eintrags fest, dass der Befund sich auflöst (Rückblende, plausibel vergangene Zeit, zwei verschiedene Figuren, bewusste Ellipse …), setze entwarnung=true — der Eintrag wird dann verworfen. Besser: ihn ganz weglassen.
-- Selbstcheck vor dem Antworten: Lies jede «beschreibung» UND jede «empfehlung» gegen. Entwarnt einer der beiden Texte den Befund selbst – etwa «kein Widerspruch», «kein echter/wirklicher Widerspruch», «die Angaben sind konsistent/stimmig», «passt zusammen», «wird nicht gemeldet», «Entwarnung», «unproblematisch», «das ist korrekt», «Kein Problem.», «Eintrag entfernen», «lässt sich erklären durch …» –, dann den ganzen Eintrag ersatzlos aus dem Array entfernen (oder entwarnung=true). «beschreibung» muss den Befund positiv benennen, «empfehlung» muss eine Lösung vorschlagen – niemals «Eintrag entfernen» oder ähnliche Selbst-Annullierungen.
+- entwarnung: PFLICHTFELD, Normalfall false. Es ist der EINZIGE Weg, einen Eintrag zurückzunehmen: Stellst du erst beim Ausformulieren fest, dass der Befund sich auflöst (Rückblende, plausibel vergangene Zeit, zwei verschiedene Figuren, bewusste Ellipse …), setze entwarnung=true — der Eintrag wird dann als verworfen abgelegt. Eine Entwarnung in Prosa («kein Widerspruch», «passt zusammen», «Eintrag entfernen» …) bei entwarnung=false wird NICHT erkannt und landet als echter Befund beim Autor.
+- Selbstcheck vor dem Antworten: Lies jede «beschreibung» UND jede «empfehlung» gegen. Entwarnt einer der beiden Texte den Befund selbst – etwa «kein Widerspruch», «kein echter/wirklicher Widerspruch», «die Angaben sind konsistent/stimmig», «passt zusammen», «wird nicht gemeldet», «Entwarnung», «unproblematisch», «das ist korrekt», «Kein Problem.», «Eintrag entfernen», «lässt sich erklären durch …» –, dann den Eintrag weglassen oder entwarnung=true setzen; nie mit entwarnung=false stehen lassen. «beschreibung» muss den Befund positiv benennen, «empfehlung» muss eine Lösung vorschlagen – niemals «Eintrag entfernen» oder ähnliche Selbst-Annullierungen.
 - schwere: «kritisch» = klarer Logikfehler der dem Leser sofort auffällt und zwingend korrigiert werden muss; «mittel» = wahrscheinlicher Fehler der den Leser stören könnte; «niedrig» = mögliche Inkonsistenz die eventuell beabsichtigt ist
 - Soziolekt-Probleme: nur wenn klar ein Sprachmuster etabliert wurde und dann ohne Begründung bricht – nicht melden wenn Figur wenig Dialoganteil hat
 - figuren: PFLICHTFELD – immer angeben, mindestens []; Namen exakt wie in der Figurenliste; [] nur wenn wirklich keine Figur betroffen (rein ortsbezogene Befunde)

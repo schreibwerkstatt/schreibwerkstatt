@@ -9,6 +9,16 @@
 // wiedererkannten Befunden (lib/continuity-carryover.js); „erledigt" nicht — ein
 // wiedergefundener Befund ist nicht behoben. Alte Checks bleiben dafür stehen;
 // angezeigt wird nur der neueste.
+//
+// Verworfene Befunde (`discard_reason` gesetzt): was die Pipeline selbst aussortiert hat
+// (Entwarnung des Modells, erfundenes Zitat, Verify-Urteil) wird mit Grund gespeichert
+// statt still zu verschwinden. Sie tragen dismissed = 1, damit jeder Leser offener
+// Befunde sie schon über das bestehende Flag auslässt; getLatestContinuityCheck liefert
+// sie getrennt (`discarded`), und die Triage-Übernahme sieht sie nicht — ein Pipeline-
+// Verwurf ist keine Entscheidung des Autors. „Doch ein Fehler" = dismissed aufheben.
+
+const DISCARD_REASONS = ['entwarnung', 'zitat', 'verify'];
+const DISCARD_DETAIL_MAX = 500;
 
 const { db } = require('./connection');
 // Prepared Statements dieses Moduls sitzen auf migrierten Spalten — die
@@ -25,8 +35,9 @@ const _insContinuityCheck = db.prepare(
 const _insContinuityIssue = db.prepare(
   `INSERT INTO continuity_issues
    (check_id, book_id, user_email, schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung, quelle,
-    page_a_id, page_b_id, resolved, resolved_at, dismissed, dismissed_at, sort_order, updated_at)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})`
+    page_a_id, page_b_id, resolved, resolved_at, dismissed, dismissed_at, discard_reason, discard_detail,
+    sort_order, updated_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})`
 );
 const _insContinuityIssueFig = db.prepare(
   `INSERT INTO continuity_issue_figures (issue_id, figure_id, figur_name, sort_order) VALUES (?, ?, ?, ?)`
@@ -68,10 +79,16 @@ function _resolveRefs(it, figNameToId, figIdToRowId, chNameToId) {
 // Eine Issue-Zeile + Figuren-/Kapitel-Bridges anlegen und die Frontend-Normalform
 // zurückgeben. Geteilt von saveContinuityCheck (Voll-Check) und saveFaktencheckIssues
 // (Anhang an bestehenden Check). `status` = übernommener Triage-Status oder null
-// (carryOverStatus vererbt nur `dismissed`).
-function _persistOneContinuityIssue(cid, bookIdInt, email, it, refs, status, sortIndex) {
-  const resolved = !!status?.resolved;
-  const dismissed = !!status?.dismissed;
+// (carryOverStatus vererbt nur `dismissed`); `discard` = { reason, detail } eines
+// Pipeline-Verwurfs (dann immer dismissed, nie übernommen).
+function _persistOneContinuityIssue(cid, bookIdInt, email, it, refs, status, sortIndex, discard = null) {
+  const discardReason = discard && DISCARD_REASONS.includes(discard.reason) ? discard.reason : null;
+  const discardDetail = discardReason && discard.detail
+    ? String(discard.detail).replace(/\s+/g, ' ').trim().slice(0, DISCARD_DETAIL_MAX) || null
+    : null;
+  const resolved = !discardReason && !!status?.resolved;
+  const dismissed = !!discardReason || !!status?.dismissed;
+  const dismissedAt = discardReason ? new Date().toISOString() : (status?.dismissed_at || null);
   const { lastInsertRowid: issueId } = _insContinuityIssue.run(
     cid, bookIdInt, email,
     it.schwere || null, it.typ || null, it.beschreibung || null,
@@ -79,14 +96,17 @@ function _persistOneContinuityIssue(cid, bookIdInt, email, it, refs, status, sor
     it.quelle || null,
     it.page_a_id ?? null, it.page_b_id ?? null,
     resolved ? 1 : 0, resolved ? (status.resolved_at || null) : null,
-    dismissed ? 1 : 0, dismissed ? (status.dismissed_at || null) : null,
+    dismissed ? 1 : 0, dismissed ? dismissedAt : null,
+    discardReason, discardDetail,
     sortIndex,
   );
   refs.figs.forEach((f, j) => _insContinuityIssueFig.run(issueId, f.rowId, f.name, j));
   refs.chs.forEach((c, j) => { if (c.cid != null) _insContinuityIssueCh.run(issueId, c.cid, j); });
   return {
     id: issueId,
-    resolved, dismissed,
+    ...(discardReason
+      ? { resolved: false, dismissed: false, discarded: true, discard_reason: discardReason, discard_detail: discardDetail }
+      : { resolved, dismissed }),
     schwere: it.schwere || null, typ: it.typ || null,
     beschreibung: it.beschreibung || null,
     stelle_a: it.stelle_a || null, stelle_b: it.stelle_b || null,
@@ -112,9 +132,11 @@ function _figIdToRowIdMap(bookIdInt, email) {
 // Speichern bei einem Buch mit Nacht-Cron über Monate billig.
 const PRIOR_CHECKS_LIMIT = 20;
 
-/** Befunde der letzten PRIOR_CHECKS_LIMIT Checks dieses Buchs, ALLE Status (auch
+/** Befunde der letzten PRIOR_CHECKS_LIMIT Checks dieses Buchs, ALLE Triage-Status (auch
  *  offene — eine jüngere offene Zeile schlägt eine ältere verworfene), neueste
- *  zuerst — Kandidaten für carryOverStatus. Kapitel als aufgelöste IDs, Figuren als Namen. */
+ *  zuerst — Kandidaten für carryOverStatus. Ohne Pipeline-Verwürfe (`discard_reason`):
+ *  sie sind keine Autoren-Entscheidung und dürfen weder „kein Fehler" vererben noch
+ *  eine ältere Entscheidung verdecken. Kapitel als aufgelöste IDs, Figuren als Namen. */
 function _priorIssues(bookIdInt, email) {
   const rows = db.prepare(`
     SELECT ci.id, ci.check_id, ci.typ, ci.stelle_a, ci.stelle_b, ci.dismissed, ci.dismissed_at
@@ -122,6 +144,7 @@ function _priorIssues(bookIdInt, email) {
       JOIN (SELECT id, checked_at FROM continuity_checks
              WHERE book_id = ? AND user_email IS ?
              ORDER BY checked_at DESC, id DESC LIMIT ${PRIOR_CHECKS_LIMIT}) cc ON cc.id = ci.check_id
+     WHERE ci.discard_reason IS NULL
      ORDER BY cc.checked_at DESC, cc.id DESC, ci.id DESC
   `).all(bookIdInt, email);
   if (!rows.length) return [];
@@ -157,12 +180,16 @@ function _persistIssues(cid, bookIdInt, email, issuesArr, sortStart, figNameToId
  *  issues: [{schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung, quelle?,
  *            page_a_id?, page_b_id?, figuren:[Namen], kapitel:[Namen]}]
  *  figNameToId / chNameToId: Auflösungs-Maps (Name → fig_id / chapter_id).
- *  Gibt { checkId, normalizedIssues } zurück (Frontend-Form mit fig_ids/chapter_ids
- *  und übernommenem Triage-Status). */
-function saveContinuityCheck(bookId, userEmail, summary, model, issues, figNameToId, chNameToId) {
+ *  discarded: von der Pipeline verworfene Befunde in derselben Form plus
+ *    `discard: { reason: 'entwarnung'|'zitat'|'verify', detail? }` — hinter den offenen
+ *    einsortiert, ohne Triage-Übernahme.
+ *  Gibt { checkId, normalizedIssues, discardedIssues } zurück (Frontend-Form mit
+ *  fig_ids/chapter_ids und übernommenem Triage-Status). */
+function saveContinuityCheck(bookId, userEmail, summary, model, issues, figNameToId, chNameToId, discarded = []) {
   const bookIdInt = parseInt(bookId);
   const email = userEmail || null;
   let normalizedIssues = [];
+  let discardedIssues = [];
   let checkId = null;
   db.transaction(() => {
     const { lastInsertRowid: cid } = _insContinuityCheck.run(
@@ -172,8 +199,17 @@ function saveContinuityCheck(bookId, userEmail, summary, model, issues, figNameT
     const issuesArr = Array.isArray(issues) ? issues : [];
     normalizedIssues = _persistIssues(cid, bookIdInt, email, issuesArr, 0, figNameToId, chNameToId)
       .map(({ id, ...rest }) => rest);
+    const discArr = (Array.isArray(discarded) ? discarded : []).filter(d => d && typeof d === 'object');
+    if (discArr.length) {
+      const figIdToRowId = _figIdToRowIdMap(bookIdInt, email);
+      discardedIssues = discArr.map((it, i) => _persistOneContinuityIssue(
+        cid, bookIdInt, email, it,
+        _resolveRefs(it, figNameToId, figIdToRowId, chNameToId),
+        null, issuesArr.length + i, it.discard || { reason: 'verify' },
+      )).map(({ id, ...rest }) => rest);
+    }
   })();
-  return { checkId, normalizedIssues };
+  return { checkId, normalizedIssues, discardedIssues };
 }
 
 // Faktencheck-Befunde (typ='faktenfehler') an den NEUESTEN Kontinuitäts-Check anhängen,
@@ -226,7 +262,7 @@ function getLatestContinuityCheck(bookId, userEmail) {
   if (!row) return null;
   const issueRows = db.prepare(`
     SELECT id, schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung, quelle,
-           resolved, dismissed, page_a_id, page_b_id
+           resolved, dismissed, page_a_id, page_b_id, discard_reason, discard_detail
     FROM continuity_issues
     WHERE check_id = ?
     ORDER BY sort_order, id
@@ -259,7 +295,7 @@ function getLatestContinuityCheck(bookId, userEmail) {
     if (r.chapter_name) bucket.kapitel.push(r.chapter_name);
     if (r.chapter_id != null) bucket.chapter_ids.push(r.chapter_id);
   }
-  const issues = issueRows.map(r => ({
+  const toIssue = (r) => ({
     id: r.id,
     resolved: !!r.resolved,
     dismissed: !!r.dismissed,
@@ -271,8 +307,15 @@ function getLatestContinuityCheck(bookId, userEmail) {
     fig_ids: figByIssue.get(r.id)?.fig_ids || [],
     kapitel: chByIssue.get(r.id)?.kapitel || [],
     chapter_ids: chByIssue.get(r.id)?.chapter_ids || [],
+  });
+  // `issues` = was der Check als Befund führt (offen, erledigt, „kein Fehler"); die
+  // Pipeline-Verwürfe getrennt in `discarded` — jeder Leser von `issues` sieht sie so nie.
+  const issues = issueRows.filter(r => !r.discard_reason).map(toIssue);
+  const discarded = issueRows.filter(r => r.discard_reason).map(r => ({
+    ...toIssue(r), dismissed: false, discarded: true,
+    discard_reason: r.discard_reason, discard_detail: r.discard_detail || null,
   }));
-  return { id: row.id, checked_at: row.checked_at, issues, summary: row.summary, model: row.model };
+  return { id: row.id, checked_at: row.checked_at, issues, discarded, summary: row.summary, model: row.model };
 }
 
 /** book_id eines Issues (fuer ACL/Log-Context vor der Mutation). null wenn unbekannt. */
@@ -305,13 +348,15 @@ function setContinuityIssueResolved(issueId, resolved) {
 }
 
 /** Markiert ein Issue als „kein Fehler" (Fehlalarm) bzw. hebt das auf. Der Status wird
- *  von späteren Läufen übernommen (carryOverStatus). */
+ *  von späteren Läufen übernommen (carryOverStatus). Beides macht aus einem Pipeline-
+ *  Verwurf eine Autoren-Entscheidung: Aufheben = „doch ein Fehler" (wieder offen),
+ *  Setzen = „kein Fehler" mit Übernahme. `discard_reason` fällt darum in beiden Fällen. */
 function setContinuityIssueDismissed(issueId, dismissed) {
   const id = parseInt(issueId);
   if (!id) return false;
   const now = dismissed ? new Date().toISOString() : null;
   const info = db.prepare(
-    'UPDATE continuity_issues SET dismissed = ?, dismissed_at = ? WHERE id = ?'
+    'UPDATE continuity_issues SET dismissed = ?, dismissed_at = ?, discard_reason = NULL, discard_detail = NULL WHERE id = ?'
   ).run(dismissed ? 1 : 0, now, id);
   return info.changes > 0;
 }
@@ -324,4 +369,5 @@ module.exports = {
   getContinuityIssueScope,
   setContinuityIssueResolved,
   setContinuityIssueDismissed,
+  DISCARD_REASONS,
 };

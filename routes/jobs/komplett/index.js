@@ -27,25 +27,15 @@ const komplettRouter = express.Router();
 // Handler zusätzlich editor+ (guardBook).
 komplettRouter.param('book_id', aclParamGuard('viewer'));
 
-// Teil-Jobs, die die Komplettanalyse selbst enthält (P8 Kontinuität, Phase Erzählprofil).
-// Läuft für Buch + User schon eine Komplettanalyse, startet der Standalone-Lauf nicht
-// parallel: zwei Läufe schrieben denselben Check/dasselbe Profil, und der Standalone-
-// Lauf läse den Katalog, während die Komplettanalyse ihn neu schreibt.
-//  - enthält der laufende Umfang den Schritt → deren Job-ID zurück (`existing: true`,
-//    `komplett: true`) — derselbe Vertrag wie die Dedup gegen den eigenen Typ; der
-//    Client pollt bis «fertig» und lädt dann das Ergebnis, das die Komplettanalyse schreibt.
-//  - ist der Schritt abgewählt → 409 KOMPLETT_ANALYSIS_RUNNING (nach dem Lauf erneut).
-// Der laufende Umfang ist der zuletzt gespeicherte: POST /komplett-analyse schreibt ihn
-// vor dem Start (saveKomplettScope), der Nacht-Cron läuft ohne Umfang (= alles) — dort
-// antwortet die Route bei abgewähltem Schritt konservativ mit 409.
-// Gegenrichtung (Komplettanalyse gegen laufenden Standalone-Job): POST /komplett-analyse
-// und Nacht-Cron über scope.js#activeStepJob.
-function _komplettDedup(res, bookId, userEmail, step) {
+// Prüf-Jobs (Kontinuität, Erzählprofil) lesen den Katalog. Läuft für Buch + User eine
+// Komplettanalyse, schreibt sie ihn gerade neu — dann startet die Prüfung nicht parallel,
+// sondern antwortet 409 KOMPLETT_ANALYSIS_RUNNING. Ist der Schritt im Umfang der Analyse,
+// reiht diese die Prüfung nach dem Katalog selbst ein (./pruef-jobs.js); sonst nach ihrem
+// Ende erneut starten. Gegenrichtung (Analyse gegen laufende Prüfung): scope.js#activeStepJob.
+function _komplettDedup(res, bookId, userEmail) {
   const komplettId = findActiveJobId('komplett-analyse', bookId, userEmail);
   if (!komplettId) return false;
-  const scope = normalizeKomplettScope(getKomplettScope(bookId, userEmail));
-  if (scope[step]) res.json({ jobId: komplettId, existing: true, komplett: true });
-  else res.status(409).json({ error_code: 'KOMPLETT_ANALYSIS_RUNNING', jobId: komplettId, params: { jobId: komplettId } });
+  res.status(409).json({ error_code: 'KOMPLETT_ANALYSIS_RUNNING', jobId: komplettId, params: { jobId: komplettId } });
   return true;
 }
 
@@ -86,10 +76,10 @@ komplettRouter.post('/komplett-analyse', jsonBody, (req, res) => {
   // ein Schreiber. Ein separat gespeicherter „Standard" neben dem zuletzt gestarteten
   // Umfang wären zwei Zustände, von denen der sichtbare nicht zwingend der wirksame ist.
   const scope = normalizeKomplettScope(req.body?.scope);
-  // Läuft ein Standalone-Job eines enthaltenen Schritts, nicht parallel starten (zwei
-  // Läufe schrieben denselben Check bzw. dasselbe Profil) — vor saveKomplettScope, damit
-  // ein abgewiesener Start die Vorbelegung nicht verschiebt.
-  const stepJob = activeStepJob(book_id, userEmail, scope);
+  // Läuft ein Prüf-Job, nicht parallel starten: er läse den Katalog, während die Analyse
+  // ihn neu schreibt — vor saveKomplettScope, damit ein abgewiesener Start die
+  // Vorbelegung nicht verschiebt.
+  const stepJob = activeStepJob(book_id, userEmail);
   if (stepJob) {
     return res.status(409).json({ error_code: 'KOMPLETT_STEP_JOB_RUNNING', jobId: stepJob.jobId, step: stepJob.step });
   }
@@ -100,6 +90,7 @@ komplettRouter.post('/komplett-analyse', jsonBody, (req, res) => {
   if (req.body?.force === true) {
     const deleted = deleteChapterExtractCache(book_id, userEmail || '');
     deleteCheckpoint('komplett-consolidation', book_id, userEmail || '');
+    deleteCheckpoint('komplett-singlepass-truncated', book_id, userEmail || '');
     logger.info(`Komplettanalyse: Neu-Erstellung angefordert – ${deleted} Cache-Eintraege geleert.`);
   }
   const label = book_name ? 'job.label.komplettBook' : 'job.label.komplett';
@@ -122,7 +113,7 @@ komplettRouter.post('/kontinuitaet', jsonBody, (req, res) => {
   // Dieselbe Entscheidung wie `/config` komplett.continuity und das Ueberspringen der
   // Phase im Job; dieser Guard erzwingt sie serverseitig (Defense-in-depth).
   if (effectiveProviderClass({ userEmail }) !== 'cloud') return res.status(400).json({ error_code: 'CONTINUITY_PROVIDER_UNSUPPORTED' });
-  if (_komplettDedup(res, book_id, userEmail, 'kontinuitaet')) return;
+  if (_komplettDedup(res, book_id, userEmail)) return;
   const existing = findActiveJobId('kontinuitaet', book_id, userEmail);
   if (existing) return res.json({ jobId: existing, existing: true });
   const label = book_name ? 'job.label.kontinuitaetBook' : 'job.label.kontinuitaet';
@@ -197,7 +188,7 @@ komplettRouter.post('/erzaehlprofil', jsonBody, (req, res) => {
   // Erzählprofil braucht die Cloud-Klasse (Single-Pass). Serverseitiger Guard analog
   // Kontinuität (Defense-in-depth), gleiche Entscheidung wie `/config`.
   if (effectiveProviderClass({ userEmail }) !== 'cloud') return res.status(400).json({ error_code: 'NARRATIVE_PROFILE_PROVIDER_UNSUPPORTED' });
-  if (_komplettDedup(res, book_id, userEmail, 'erzaehlprofil')) return;
+  if (_komplettDedup(res, book_id, userEmail)) return;
   const existing = findActiveJobId('erzaehlprofil', book_id, userEmail);
   if (existing) return res.json({ jobId: existing, existing: true });
   const label = book_name ? 'job.label.erzaehlprofilBook' : 'job.label.erzaehlprofil';
@@ -236,6 +227,7 @@ komplettRouter.delete('/chapter-cache/:book_id', (req, res) => {
   // F5: den Konsolidierungs-Checkpoint mitlöschen — sonst würde ein Re-Run nach dem Cache-Leeren
   // zwar Phase 1 neu extrahieren, aber (bei gleichem Inhalt) P2–P8 weiterhin überspringen.
   deleteCheckpoint('komplett-consolidation', bookId, userEmail);
+  deleteCheckpoint('komplett-singlepass-truncated', bookId, userEmail);
   res.json({ ok: true, deleted });
 });
 

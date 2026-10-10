@@ -4,6 +4,7 @@
 // Originaltext), Anachronismus-Datenbasis, Per-Job-Claude-Overrides.
 
 const { db, getBookSettings } = require('../../../db/schema');
+const { activeFigureSql } = require('../../../db/figures/active');
 const appSettings = require('../../../lib/app-settings');
 const { providerClass } = require('../../../lib/ai');
 const { updateJob, settledAll, jobAbortControllers, i18nError } = require('../shared');
@@ -115,8 +116,9 @@ function _chapterPageTexts(groups, groupOrder, kapitelNames) {
 }
 
 // Filtert die Probleme des Fakten-Checks: verwirft nur explizit als unecht
-// eingestufte (bestaetigt=false); nicht lokalisierbare/fehlgeschlagene bleiben
-// konservativ erhalten. Nur Cloud-Klasse (lokale Provider: zu kleines Kontextfenster
+// eingestufte (bestaetigt=false) — sie gehen mit `grund` als `result.verworfen` zurück
+// und werden als verworfene Befunde gespeichert; nicht lokalisierbare/fehlgeschlagene
+// bleiben konservativ erhalten. Nur Cloud-Klasse (lokale Provider: zu kleines Kontextfenster
 // für zuverlässige Verify-Urteile, Mutex serialisiert zudem jeden Call).
 // `chapterFacts` (Multi-Pass-Fakten mit Seitennamen) + `ctx.pageContents`: das Modell
 // zitiert im Multi-Pass Fakt-Aussagen, keine Buchsätze — der wörtliche Treffer bleibt
@@ -197,6 +199,7 @@ async function verifyKontinuitaetProbleme(ctx, result, fromPct, toPct, { chapter
       if (!keep) {
         const grund = String(v?.grund || '').replace(/\s+/g, ' ').trim().slice(0, 300);
         log.info(`Kontinuität Verify verwirft «${String(p.beschreibung || '').slice(0, 120)}»: ${grund || '(kein Grund angegeben)'}`);
+        return { p, keep, grund };
       }
       return { p, keep };
     } catch (e) {
@@ -211,10 +214,17 @@ async function verifyKontinuitaetProbleme(ctx, result, fromPct, toPct, { chapter
   if (aborted) throw aborted.reason;
   const verdicts = settled.map((r, i) => r.status === 'fulfilled' ? r.value : { p: probleme[i], keep: true });
   const kept = verdicts.filter(v => v.keep).map(v => v.p);
+  // Verworfene mit Grund weiterreichen — saveKontinuitaetResult (remap.js) speichert sie
+  // als verworfene Befunde, statt sie still fallen zu lassen. Frühere Verwürfe desselben
+  // Ergebnisses (falls schon gesetzt) bleiben erhalten.
+  const verworfen = [
+    ...(Array.isArray(result?.verworfen) ? result.verworfen : []),
+    ...verdicts.filter(v => !v.keep).map(v => ({ problem: v.p, grund: v.grund || '' })),
+  ];
   const dropped = probleme.length - kept.length;
   if (dropped > 0) log.info(`Kontinuität Verify: ${dropped}/${probleme.length} False-Positive(s) verworfen.`);
   updateJob(jobId, { progress: toPct });
-  return { ...result, probleme: kept };
+  return { ...result, probleme: kept, verworfen };
 }
 
 // ── Anachronismus-Datenbasis für die Kontinuitätsprüfung ─────────────────────
@@ -242,7 +252,8 @@ function buildAnachronismusData(bookIdInt, email) {
   // Kanonische Quelle ist der konsolidierte Zeitstrahl (zeitstrahl_events) — dieselbe
   // Menge, aus der Ereignisse-Karte und Figuren-Jahr ableiten. Nur wenn (noch) kein
   // Zeitstrahl konsolidiert wurde, Fallback auf die rohen figure_events, damit ein reiner
-  // Kontinuitäts-Lauf ohne vorherige Komplettanalyse nicht leer ausgeht.
+  // Kontinuitäts-Lauf ohne vorherige Komplettanalyse nicht leer ausgeht — dort nur Ereignisse
+  // aktiver Figuren (db/figures/active.js): eine ausgemusterte Figur spannt keine Erzählzeit.
   const hasZeitstrahl = !!db.prepare(
     'SELECT 1 FROM zeitstrahl_events WHERE book_id = ? AND user_email IS ? LIMIT 1'
   ).get(bookIdInt, email);
@@ -256,7 +267,8 @@ function buildAnachronismusData(bookIdInt, email) {
     : db.prepare(`
         SELECT MIN(fe.datum_year) AS minY, MAX(COALESCE(fe.datum_ende_year, fe.datum_year)) AS maxY
           FROM figure_events fe JOIN figures f ON f.id = fe.figure_id
-         WHERE f.book_id = ? AND f.user_email IS ? AND fe.datum_unsicher = 0 AND fe.datum_year IS NOT NULL
+         WHERE f.book_id = ? AND f.user_email IS ? AND ${activeFigureSql('f')}
+           AND fe.datum_unsicher = 0 AND fe.datum_year IS NOT NULL
       `).get(bookIdInt, email);
   if (!yearRow || yearRow.minY == null) return null;
   const minYear = yearRow.minY, maxYear = yearRow.maxY;
@@ -274,7 +286,7 @@ function buildAnachronismusData(bookIdInt, email) {
         SELECT fe.chapter_id AS chapter_id, MIN(fe.datum_year) AS minY,
                MAX(COALESCE(fe.datum_ende_year, fe.datum_year)) AS maxY
           FROM figure_events fe JOIN figures f ON f.id = fe.figure_id
-         WHERE f.book_id = ? AND f.user_email IS ? AND fe.datum_unsicher = 0
+         WHERE f.book_id = ? AND f.user_email IS ? AND ${activeFigureSql('f')} AND fe.datum_unsicher = 0
            AND fe.datum_year IS NOT NULL AND fe.chapter_id IS NOT NULL
          GROUP BY fe.chapter_id
       `).all(bookIdInt, email);

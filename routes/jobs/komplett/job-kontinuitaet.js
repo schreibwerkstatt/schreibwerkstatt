@@ -236,19 +236,23 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
       }
     }
 
+    // `discarded`: Befunde, die Entwarnung, Beleg-Prüfung oder Verify verworfen haben —
+    // gespeichert mit Grund (Karte «Verworfen»), hier nur gezählt.
+    const saveStats = { discarded: 0 };
     const normalizedProbleme = saveKontinuitaetResult(bookIdInt, email, result, figNameToId, chNameToId, effectiveProvider, log,
-      { pageContents, requireQuoteEvidence: !chapterFactsForSave, chapterFacts: chapterFactsForSave });
+      { pageContents, requireQuoteEvidence: !chapterFactsForSave, chapterFacts: chapterFactsForSave, stats: saveStats });
     deleteCheckpoint('kontinuitaet', bookIdInt, email);
     log.info(`Phasen-Timing: ${pt.summary()}`);
     const costByPhase = summarizeCostByPhase(tok);
     completeJob(jobId, {
       count: normalizedProbleme.length,
+      discarded: saveStats.discarded,
       issues: normalizedProbleme,
       zusammenfassung: result.zusammenfassung,
       warnings,
       tokensIn: tok.in, tokensOut: tok.out,
       ...(costByPhase ? { costByPhase } : {}),
-    }, tps(tok), `${normalizedProbleme.length} Probleme${warnings.length ? ` warn=${warnings.length}` : ''}`);
+    }, tps(tok), `${normalizedProbleme.length} Probleme${saveStats.discarded ? ` verworfen=${saveStats.discarded}` : ''}${warnings.length ? ` warn=${warnings.length}` : ''}`);
   } catch (e) {
     if (e.name !== 'AbortError') log.error(`Fehler: ${e.message}`);
     failJob(jobId, e);

@@ -12,6 +12,9 @@ const { bootstrap, waitForJob } = require('./_helpers/setup');
 const { buildBookPagesSig } = require('../../routes/jobs/komplett/utils');
 
 let ctx;
+// Nur die Calls der Komplettanalyse selbst — die danach eingereihten Prüf-Jobs
+// (Kontinuität, Erzählprofil) haben eigene Tests (kontinuitaet.test.js).
+const komplettLog = () => ctx.mockAi.log.filter(e => e.jobType === 'komplett-analyse');
 test.before(() => { ctx = bootstrap(); });
 test.after(() => { ctx.cleanup(); });
 
@@ -152,8 +155,11 @@ test('Komplettanalyse Single-Pass: 1 Kapitel, P1 + P8 → done', async () => {
   assert.equal(job.result.szenenCount, 1);
   assert.equal(job.passMode, 'single');
 
-  // Exactly 6 AI calls: A1 + B + C + E + A2 + P8 (Completeness aus, siehe beforeEach).
-  assert.equal(ctx.mockAi.log.length, 6, `expected 6 AI calls, got ${ctx.mockAi.log.length}`);
+  // Exactly 5 AI calls: A1 + B + C + E + A2 (Completeness aus, siehe beforeEach). Die
+  // Kontinuitätsprüfung ist kein Teil des Katalog-Jobs mehr — er reiht sie danach ein.
+  assert.equal(komplettLog().length, 5, `expected 5 AI calls, got ${komplettLog().length}`);
+  assert.ok(job.result.pruefJobs?.kontinuitaet, 'die Kontinuitätsprüfung wird als eigener Job eingereiht');
+  assert.equal(komplettLog().some(e => e.schemaKeys.includes('probleme')), false, 'kein P8-Call im Katalog-Job');
 
   // Figures saved (Anna + Bert).
   const figRows = ctx.dbSchema.db.prepare(
@@ -285,8 +291,8 @@ test('Komplettanalyse Single-Pass: Completeness-Pass ergänzt übersehene Figure
     ).all(BOOK_ID, 'tester@test.dev').map(r => r.name);
     assert.deepEqual(figNames, ['Anna', 'Bert', 'Clara']);
 
-    // 10 Calls: A1 + B + C + Figuren-Gap + Orte-Gap + Fakten-Gap + Szenen-Gap + E + A2 + P8.
-    assert.equal(ctx.mockAi.log.length, 10, `expected 10 AI calls, got ${ctx.mockAi.log.length}`);
+    // 9 Calls: A1 + B + C + Figuren-Gap + Orte-Gap + Fakten-Gap + Szenen-Gap + E + A2.
+    assert.equal(komplettLog().length, 9, `expected 9 AI calls, got ${komplettLog().length}`);
   } finally {
     appSettings.set('ai.komplett.completeness_passes', 0);
   }
@@ -365,7 +371,7 @@ test('Komplettanalyse: leeres Buch → result.empty, kein AI-Call', async () => 
   const job = await waitForJob(ctx.shared, jobId);
   assert.equal(job.status, 'done');
   assert.equal(job.result.empty, true);
-  assert.equal(ctx.mockAi.log.length, 0);
+  assert.equal(komplettLog().length, 0);
 });
 
 function seedMultiChapterBook(bookId, chapters = 3) {
@@ -456,9 +462,9 @@ test('Komplettanalyse Multi-Pass: 3 Kapitel → 3 P1-Chunks + Konsol-Calls', asy
   assert.equal(job.result.figCount, 1);
   assert.equal(job.result.orteCount, 1);
 
-  // 3 P1 chunks + 1 P2 + 1 P3 + 1 P8 = 6.
+  // 3 P1 chunks + 1 P2 + 1 P3 = 5 (P8 läuft als eigener Prüf-Job).
   // (P3b skipped: figuren.length=1 < 2; Zeitstrahl skipped: 0 events; Soziogramm skipped: < 4 figuren.)
-  assert.equal(ctx.mockAi.log.length, 6, `expected 6 AI calls, got ${ctx.mockAi.log.length}`);
+  assert.equal(komplettLog().length, 5, `expected 5 AI calls, got ${komplettLog().length}: ${komplettLog().map(e => e.schemaKeys.join("+")).join(" | ")}`);
 
   // Per-chunk cache populated (3 entries, eine pro Kapitel).
   const cacheRows = ctx.dbSchema.db.prepare(
@@ -497,8 +503,8 @@ test('Komplettanalyse Delta-Cache: Touch einer Seite → nur dieser Chunk re-ext
     ctx.komplett.runKomplettAnalyseJob(jobId1, BOOK_ID, 'Buch', 'tester@test.dev', 'claude'),
   );
   await waitForJob(ctx.shared, jobId1, { timeoutMs: 10000 });
-  const run1Calls = ctx.mockAi.log.length;
-  assert.equal(run1Calls, 6, `run 1: expected 6 AI calls, got ${run1Calls}`);
+  const run1Calls = komplettLog().length;
+  assert.equal(run1Calls, 5, `run 1: expected 5 AI calls, got ${run1Calls}`);
 
   // Touch one page: change updated_at on page 3001 (chapter 2).
   const cur = ctx.dbSeed;
@@ -534,10 +540,10 @@ test('Komplettanalyse Delta-Cache: Touch einer Seite → nur dieser Chunk re-ext
     ctx.komplett.runKomplettAnalyseJob(jobId2, BOOK_ID, 'Buch', 'tester@test.dev', 'claude'),
   );
   await waitForJob(ctx.shared, jobId2, { timeoutMs: 10000 });
-  const run2Calls = ctx.mockAi.log.length - run1Calls;
-  // Expected: 1 P1 chunk re-extract + 1 P2 + 1 P3 + 1 P8 = 4 calls.
+  const run2Calls = komplettLog().length - run1Calls;
+  // Expected: 1 P1 chunk re-extract + 1 P2 + 1 P3 = 3 calls.
   // (Other 2 chunks served from cache.)
-  assert.equal(run2Calls, 4, `delta-cache run: expected 4 AI calls, got ${run2Calls}`);
+  assert.equal(run2Calls, 3, `delta-cache run: expected 3 AI calls, got ${run2Calls}`);
 });
 
 test('Komplettanalyse Delta-Cache: Kapitel umbenannt → nur dessen Chunk re-extrahiert (Rename-Invalidation)', async () => {
@@ -570,8 +576,8 @@ test('Komplettanalyse Delta-Cache: Kapitel umbenannt → nur dessen Chunk re-ext
     ctx.komplett.runKomplettAnalyseJob(jobId1, BOOK_ID, 'Buch', 'tester@test.dev', 'claude'),
   );
   await waitForJob(ctx.shared, jobId1, { timeoutMs: 10000 });
-  const run1Calls = ctx.mockAi.log.length;
-  assert.equal(run1Calls, 6, `run 1: expected 6 AI calls, got ${run1Calls}`);
+  const run1Calls = komplettLog().length;
+  assert.equal(run1Calls, 5, `run 1: expected 5 AI calls, got ${run1Calls}`);
 
   // Kapitel 2 UMBENENNEN — Seiten + updated_at unverändert. Einzige Änderung: chapter_name.
   const chapters = [
@@ -594,9 +600,9 @@ test('Komplettanalyse Delta-Cache: Kapitel umbenannt → nur dessen Chunk re-ext
     ctx.komplett.runKomplettAnalyseJob(jobId2, BOOK_ID, 'Buch', 'tester@test.dev', 'claude'),
   );
   await waitForJob(ctx.shared, jobId2, { timeoutMs: 10000 });
-  const run2Calls = ctx.mockAi.log.length - run1Calls;
-  // 1 Chunk re-extract + P2 + P3 + P8 = 4 (ohne Rename-Invalidation wären es nur 3).
-  assert.equal(run2Calls, 4, `rename-invalidation run: expected 4 AI calls, got ${run2Calls}`);
+  const run2Calls = komplettLog().length - run1Calls;
+  // 1 Chunk re-extract + P2 + P3 = 3 (ohne Rename-Invalidation wären es nur 2).
+  assert.equal(run2Calls, 3, `rename-invalidation run: expected 3 AI calls, got ${run2Calls}`);
 });
 
 test('Komplettanalyse Checkpoint-Recovery: p1_full_done → überspringt Phase 1', async () => {
@@ -607,20 +613,21 @@ test('Komplettanalyse Checkpoint-Recovery: p1_full_done → überspringt Phase 1
   // bookPagesSig MUSS dem entsprechen, was der Job aus dem aktuellen Seitenstand
   // berechnet — sonst verwirft die Staleness-Gate den Checkpoint und P1 läuft neu.
   const prompts = await ctx.shared.getPrompts();
-  // cacheVersion-Format spiegelt job.js exakt:
-  //   model:KOMPLETT_EXTRACT_VERSION:cp<completeness_passes>:esp<cap>:cf<coverageFeedback>:cac<auditChapters>:sb<sceneBackfill>:sbm<minChars>
-  // (Der :esp…-Suffix nur für Claude.) beforeEach setzt completeness_passes=0 und
-  // coverage_audit_chapters=0 → cf0/cac0; extract_single_pass_cap unset → esp0; scene_backfill
-  // Default true → sb1, scene_backfill_min_chars Default 3000 → sbm3000.
+  // cacheVersion-Format spiegelt job-komplett.js: die Basis aus routes/jobs/komplett/
+  // signatures.js (aufgelöstes Modell + Effort, System-Blöcke dieses Buchs, Extraktions-
+  // Prompt-Version), dahinter cp<completeness_passes> und — nur Claude — der Single-Pass-
+  // Suffix. beforeEach setzt completeness_passes=0; extract_single_pass_cap unset → esp0;
+  // scene_backfill Default true → sb1, scene_backfill_min_chars Default 3000 → sbm3000.
   const _s = require('../../lib/app-settings');
+  const { extractCacheBase } = require('../../routes/jobs/komplett/signatures');
+  const sys = await ctx.shared.getBookPrompts(BOOK_ID, 'tester@test.dev');
   const completenessPasses = Math.max(0, Math.min(3, parseInt(_s.get('ai.komplett.completeness_passes'), 10) || 0));
   const extractCapChars = Math.max(0, parseInt(_s.get('ai.komplett.extract_single_pass_cap'), 10) || 0);
-  const coverageAuditChapters = Math.max(0, Math.min(20, parseInt(_s.get('ai.komplett.coverage_audit_chapters'), 10) || 0));
-  const coverageFeedbackEnabled = coverageAuditChapters > 0 && _s.get('ai.komplett.coverage_feedback') !== false;
   const sceneBackfillEnabled = _s.get('ai.komplett.scene_backfill') !== false;
   const sceneBackfillMinChars = Math.max(500, parseInt(_s.get('ai.komplett.scene_backfill_min_chars'), 10) || 3000);
-  const singlePassAug = `:esp${extractCapChars}:cf${coverageFeedbackEnabled ? 1 : 0}:cac${coverageAuditChapters}:sb${sceneBackfillEnabled ? 1 : 0}:sbm${sceneBackfillMinChars}`;
-  const cacheVersion = `${ctx.shared._modelName('claude')}:${prompts.KOMPLETT_EXTRACT_VERSION || ''}:cp${completenessPasses}${singlePassAug}`;
+  const singlePassAug = `:esp${extractCapChars}:sb${sceneBackfillEnabled ? 1 : 0}:sbm${sceneBackfillMinChars}`;
+  const base = extractCacheBase({ provider: 'claude', tier: {}, sys, extractVersion: prompts.KOMPLETT_EXTRACT_VERSION || '' });
+  const cacheVersion = `${base}:cp${completenessPasses}${singlePassAug}`;
   const pageMeta = [
     { id: 3000, updated_at: '2026-01-01', chapter_id: 2000, chapter: 'Kapitel 1' },
     { id: 3001, updated_at: '2026-01-01', chapter_id: 2001, chapter: 'Kapitel 2' },
@@ -678,8 +685,8 @@ test('Komplettanalyse Checkpoint-Recovery: p1_full_done → überspringt Phase 1
   );
   const job = await waitForJob(ctx.shared, jobId, { timeoutMs: 10000 });
   assert.equal(job.status, 'done', `expected done, got ${job.status}: ${job.error || ''}`);
-  // Resume path: P2 + P3 + P8 = 3 calls. No P1.
-  assert.equal(ctx.mockAi.log.length, 3, `resume: expected 3 AI calls (no P1), got ${ctx.mockAi.log.length}`);
+  // Resume path: P2 + P3 = 2 calls. No P1.
+  assert.equal(komplettLog().length, 2, `resume: expected 2 AI calls (no P1), got ${komplettLog().length}`);
 
   // Checkpoint deleted after success.
   const cp = ctx.dbSchema.loadCheckpoint('komplett-analyse', BOOK_ID, 'tester@test.dev');
@@ -722,11 +729,11 @@ test('Komplettanalyse Checkpoint-Invalid: altes Format → ignoriert, voller Lau
   );
   const job = await waitForJob(ctx.shared, jobId, { timeoutMs: 10000 });
   assert.equal(job.status, 'done');
-  // Full run: 3 P1 + P2 + P3 + P8 = 6 calls.
-  assert.equal(ctx.mockAi.log.length, 6, `full re-run after invalid checkpoint: expected 6, got ${ctx.mockAi.log.length}`);
+  // Full run: 3 P1 + P2 + P3 = 5 calls.
+  assert.equal(komplettLog().length, 5, `full re-run after invalid checkpoint: expected 5, got ${komplettLog().length}`);
 });
 
-test('Komplettanalyse: Cache-Hit Phase 1 → nur P8 ruft AI', async () => {
+test('Komplettanalyse: Cache-Hit Phase 1 + Konsolidierungs-Checkpoint → kein KI-Call', async () => {
   const BOOK_ID = 52;
   seedTinyBook(BOOK_ID);
 
@@ -755,18 +762,18 @@ test('Komplettanalyse: Cache-Hit Phase 1 → nur P8 ruft AI', async () => {
     kontinuitaetResponse(),
   );
 
-  // Run 1: populates cache (A1 + B + C + E + A2 + P8 = 6 calls; Completeness aus).
+  // Run 1: populates cache (A1 + B + C + E + A2 = 5 calls; Completeness aus).
   const jobId1 = ctx.shared.createJob('komplett-analyse', BOOK_ID, 'tester@test.dev', 'job.label.komplett');
   ctx.shared.enqueueJob(jobId1, () =>
     ctx.komplett.runKomplettAnalyseJob(jobId1, BOOK_ID, 'Buch', 'tester@test.dev', 'claude'),
   );
   await waitForJob(ctx.shared, jobId1, { timeoutMs: 8000 });
-  assert.equal(ctx.mockAi.log.length, 6, 'run 1: 6 AI calls (A1+B+C+E+A2+P8)');
+  assert.equal(komplettLog().length, 5, 'run 1: 5 AI calls (A1+B+C+E+A2)');
 
   // Run 2: same book. Phase-1-Delta-Cache HIT → identischer Katalog → identische
   // Konsolidierungs-Sig → F5-Konsolidierungs-Checkpoint HIT → P2–P8 (inkl. P8) komplett
   // übersprungen. Erwartung daher 0 KI-Calls (unter dem Vor-F5-Design war es 1 = nur P8).
-  const callsBeforeRun2 = ctx.mockAi.log.length;
+  const callsBeforeRun2 = komplettLog().length;
   const jobId2 = ctx.shared.createJob('komplett-analyse', BOOK_ID, 'tester@test.dev', 'job.label.komplett');
   ctx.shared.enqueueJob(jobId2, () =>
     ctx.komplett.runKomplettAnalyseJob(jobId2, BOOK_ID, 'Buch', 'tester@test.dev', 'claude'),
@@ -774,7 +781,7 @@ test('Komplettanalyse: Cache-Hit Phase 1 → nur P8 ruft AI', async () => {
   const job2 = await waitForJob(ctx.shared, jobId2, { timeoutMs: 8000 });
   assert.equal(job2.status, 'done');
   assert.equal(job2.result?.consolidationSkipped, true, 'run 2 should short-circuit via consolidation checkpoint');
-  const run2Calls = ctx.mockAi.log.length - callsBeforeRun2;
+  const run2Calls = komplettLog().length - callsBeforeRun2;
   assert.equal(run2Calls, 0, `cache-hit + consolidation-checkpoint run: expected 0 AI calls, got ${run2Calls}`);
 });
 
@@ -837,7 +844,7 @@ test('Komplettanalyse Phase 2 Soziogramm: >=4 Figuren → Refine-Call überschre
   assert.equal(job.result.figCount, 4);
 
   // Soziogramm-Refine-Call ist gelaufen.
-  assert.equal(ctx.mockAi.log.filter(isSoziogramm).length, 1, 'expected exactly 1 Soziogramm-Refine call');
+  assert.equal(komplettLog().filter(isSoziogramm).length, 1, 'expected exactly 1 Soziogramm-Refine call');
 
   // sozialschicht von fig_1 stammt aus dem Refine-Call ('oben'), nicht aus P2 ('mitte').
   const f1 = ctx.dbSchema.db.prepare(
@@ -897,7 +904,7 @@ test('Komplettanalyse Phase 3 Orte-Konsolidierung: Konsol-Output dedupliziert di
   assert.equal(job.status, 'done', `expected done, got ${job.status}: ${job.error || ''}`);
 
   // Genau 1 Orte-Konsol-Call.
-  assert.equal(ctx.mockAi.log.filter(isOrteKonsol).length, 1, 'expected exactly 1 Orte-Konsol call');
+  assert.equal(komplettLog().filter(isOrteKonsol).length, 1, 'expected exactly 1 Orte-Konsol call');
 
   // DB hält die konsolidierten 2 Orte (Konsol-Output), nicht die 6 rohen Kapitel-Vorkommen.
   const orte = ctx.dbSchema.db.prepare(
@@ -1184,7 +1191,7 @@ test('Komplettanalyse Phase 6 Zeitstrahl >=5 Events: Konsol-Call läuft, persist
   assert.equal(job.status, 'done', `expected done, got ${job.status}: ${job.error || ''}`);
 
   // Zeitstrahl-Konsolidierung lief (>=5 Events).
-  assert.equal(ctx.mockAi.log.filter(isZeitstrahl).length, 1, 'expected exactly 1 Zeitstrahl-Konsol call');
+  assert.equal(komplettLog().filter(isZeitstrahl).length, 1, 'expected exactly 1 Zeitstrahl-Konsol call');
 
   // DB hält die 3 konsolidierten Events (Konsol-Output), nicht die 6 rohen.
   const rows = ctx.dbSchema.db.prepare(
@@ -1207,7 +1214,7 @@ test('Komplettanalyse Phase 6 Zeitstrahl <5 Events: Direkt-Speichern ohne KI-Cal
   assert.equal(job.status, 'done', `expected done, got ${job.status}: ${job.error || ''}`);
 
   // Kein Zeitstrahl-Konsol-Call.
-  assert.equal(ctx.mockAi.log.filter(isZeitstrahl).length, 0, 'expected no Zeitstrahl-Konsol call under threshold');
+  assert.equal(komplettLog().filter(isZeitstrahl).length, 0, 'expected no Zeitstrahl-Konsol call under threshold');
 
   // Die 3 Events wurden direkt (aus figure_events gegroupt) gespeichert.
   const rows = ctx.dbSchema.db.prepare(
@@ -1286,7 +1293,7 @@ test('Komplettanalyse F4: buildAttributeContradictions findet Jahres-Konflikt ei
 
 // ── #4: E/A2-Batching ─────────────────────────────────────────────────────────
 // figure_batch_size=1 zwingt Anna + Bert in getrennte E- und A2-Batches. Erwartet:
-// A1 + B + C + 2×E + 2×A2 + P8 = 8 Calls; Katalog unverändert (Beziehung dedupliziert).
+// A1 + B + C + 2×E + 2×A2 = 7 Calls; Katalog unverändert (Beziehung dedupliziert).
 test('Komplettanalyse #4: figure_batch_size=1 → E + A2 batchen, Katalog korrekt', async () => {
   const BOOK_ID = 120;
   seedTinyBook(BOOK_ID);
@@ -1307,8 +1314,8 @@ test('Komplettanalyse #4: figure_batch_size=1 → E + A2 batchen, Katalog korrek
     const job = await waitForJob(ctx.shared, jobId, { timeoutMs: 8000 });
     assert.equal(job.status, 'done', `expected done, got ${job.status}: ${job.error || ''}`);
     assert.equal(job.result.figCount, 2);
-    // A1 + B + C + E(Anna) + E(Bert) + A2(Anna-Scope) + A2(Bert-Scope) + P8 = 8.
-    assert.equal(ctx.mockAi.log.length, 8, `expected 8 AI calls (batched E+A2), got ${ctx.mockAi.log.length}`);
+    // A1 + B + C + E(Anna) + E(Bert) + A2(Anna-Scope) + A2(Bert-Scope) = 7.
+    assert.equal(komplettLog().length, 7, `expected 7 AI calls (batched E+A2), got ${komplettLog().length}`);
     // Beziehung trotz doppelter Emission (beide A2-Batches) via Paar-Dedup nur EINMAL.
     const relRows = ctx.dbSchema.db.prepare('SELECT COUNT(*) AS n FROM figure_relations WHERE book_id = ?').get(BOOK_ID);
     assert.equal(relRows.n, 1, `expected 1 deduped relation, got ${relRows.n}`);
@@ -1395,19 +1402,12 @@ test('Komplettanalyse #3: Szenen-Backfill ergänzt Szenen für ein szenenloses K
 // ── #2: Coverage-Feedback ─────────────────────────────────────────────────────
 // Der Vollständigkeits-Audit meldet eine fehlende Figur → gezielter Nachzieh-Pass ergänzt sie
 // additiv (vor E/A2), sodass figCount steigt.
-test('Komplettanalyse #2: Coverage-Feedback zieht eine vom Audit gemeldete fehlende Figur nach', async () => {
+test('Komplettanalyse Coverage-Audit ist reine Messung: eine gemeldete fehlende Figur wird NICHT angelegt', async () => {
   const BOOK_ID = 123;
   const email = 'tester@test.dev';
   seedTinyBook(BOOK_ID);
   const appSettings = require('../../lib/app-settings');
   appSettings.set('ai.komplett.coverage_audit_chapters', 1);
-
-  // Gezielter Figuren-Nachzieh-Call ZUERST (Prompt-Marker «fehlende_figuren» + figuren-Schema).
-  ctx.mockAi.on(
-    (e) => e.schemaKeys.includes('figuren') && e.prompt.includes('fehlende_figuren'),
-    { figuren: [{ id: 'fig_1', name: 'Clara', kurzname: 'Clara', typ: 'nebenfigur', beschreibung: 'vom Audit gefunden', sozialschicht: 'mitte', praesenz: 'punktuell', kapitel: [{ name: 'Kapitel Eins', haeufigkeit: 1 }], eigenschaften: [], schluesselzitate: [] }] },
-  );
-  // Audit-Call (forward + end) meldet Clara als fehlend.
   ctx.mockAi.on(
     (e) => e.schemaKeys.includes('erkannte_figuren') && e.schemaKeys.includes('fehlende_figuren'),
     { erkannte_figuren: 2, fehlende_figuren: ['Clara'], erkannte_orte: 1, fehlende_orte: [] },
@@ -1417,27 +1417,64 @@ test('Komplettanalyse #2: Coverage-Feedback zieht eine vom Audit gemeldete fehle
   ctx.mockAi.on((e) => e.schemaKeys.length === 1 && e.schemaKeys.includes('fakten'), faktenPassResponse());
   ctx.mockAi.on((e) => e.schemaKeys.length === 1 && e.schemaKeys.includes('assignments'), eventsPassResponse());
   ctx.mockAi.on((e) => e.schemaKeys.length === 1 && e.schemaKeys.includes('beziehungen'), beziehungenResponse());
-  ctx.mockAi.on((e) => e.schemaKeys.includes('zusammenfassung') && e.schemaKeys.includes('probleme'), kontinuitaetResponse());
-
   try {
     const jobId = ctx.shared.createJob('komplett-analyse', BOOK_ID, email, 'job.label.komplett');
     ctx.shared.enqueueJob(jobId, () =>
-      ctx.komplett.runKomplettAnalyseJob(jobId, BOOK_ID, 'Buch', email, 'claude'));
+      ctx.komplett.runKomplettAnalyseJob(jobId, BOOK_ID, 'Buch', email, 'claude', { scope: { kontinuitaet: false, erzaehlprofil: false } }));
     const job = await waitForJob(ctx.shared, jobId, { timeoutMs: 8000 });
     assert.equal(job.status, 'done', `expected done, got ${job.status}: ${job.error || ''}`);
-    assert.equal(job.result.figCount, 3, 'Coverage-Feedback ergänzt die fehlende Figur Clara');
-    const names = ctx.dbSchema.db.prepare('SELECT name FROM figures WHERE book_id = ? ORDER BY name').all(BOOK_ID).map(r => r.name);
-    assert.deepEqual(names, ['Anna', 'Bert', 'Clara']);
+    // Die Messung meldet die Lücke — sie bessert nicht auf denselben Kapiteln nach,
+    // die sie danach misst (das schönte den Score).
+    assert.equal(job.result.figCount, 2);
+    assert.ok(job.result.coverage, 'Coverage-Score im Job-Result');
+    assert.deepEqual(job.result.coverage.missingFiguren, ['Clara']);
   } finally {
     appSettings.set('ai.komplett.coverage_audit_chapters', 0);
   }
+});
+
+// ── Katalog-Anker: der Bestand ist die Identitäts-Autorität eines Folgelaufs ──
+test('Komplettanalyse Katalog-Anker: umbenannte Figur behält ihre id, keine Dublette', async () => {
+  const BOOK_ID = 124;
+  const email = 'tester@test.dev';
+  seedTinyBook(BOOK_ID);
+  let stamm = figurenStammResponse();
+  ctx.mockAi.on((e) => e.schemaKeys.includes('figuren') && !e.schemaKeys.includes('assignments') && !e.schemaKeys.includes('orte'), () => stamm);
+  ctx.mockAi.on((e) => e.schemaKeys.includes('orte') && e.schemaKeys.includes('szenen') && !e.schemaKeys.includes('figuren'), ortePassResponse());
+  ctx.mockAi.on((e) => e.schemaKeys.length === 1 && e.schemaKeys.includes('fakten'), faktenPassResponse());
+  ctx.mockAi.on((e) => e.schemaKeys.length === 1 && e.schemaKeys.includes('assignments'), eventsPassResponse());
+  ctx.mockAi.on((e) => e.schemaKeys.length === 1 && e.schemaKeys.includes('beziehungen'), beziehungenResponse());
+  const run = async () => {
+    const jobId = ctx.shared.createJob('komplett-analyse', BOOK_ID, email, 'job.label.komplett');
+    ctx.shared.enqueueJob(jobId, () =>
+      ctx.komplett.runKomplettAnalyseJob(jobId, BOOK_ID, 'Buch', email, 'claude', { scope: { kontinuitaet: false, erzaehlprofil: false } }));
+    return waitForJob(ctx.shared, jobId, { timeoutMs: 8000 });
+  };
+  assert.equal((await run()).status, 'done');
+  const bert = ctx.dbSchema.db.prepare("SELECT id FROM figures WHERE book_id = ? AND name = 'Bert'").get(BOOK_ID);
+  assert.ok(bert);
+
+  // Zweiter Lauf: Text geändert (Cache-MISS), die Extraktion nennt Bert jetzt «Herbert
+  // Kunz» — ohne gemeinsames Namens-Token und ohne Indizien —, verankert ihn aber im Katalog.
+  ctx.dbSchema.deleteChapterExtractCache(BOOK_ID, email);
+  ctx.dbSchema.deleteCheckpoint('komplett-consolidation', BOOK_ID, email);
+  stamm = figurenStammResponse();
+  stamm.figuren[1] = { ...stamm.figuren[1], name: 'Herbert Kunz', kurzname: '', katalog_id: `K${bert.id}` };
+  const before = ctx.mockAi.log.length;
+  assert.equal((await run()).status, 'done');
+  const a1 = ctx.mockAi.log.slice(before).find(e => e.jobType === 'komplett-analyse' && e.schemaKeys.includes('figuren'));
+  assert.match(a1.prompt, /<katalog>[\s\S]*K\d+ · Bert/, 'der Katalog steht mit stabilen IDs im Prompt');
+
+  const rows = ctx.dbSchema.db.prepare('SELECT id, name, stale FROM figures WHERE book_id = ? ORDER BY id').all(BOOK_ID);
+  assert.equal(rows.filter(r => !r.stale).length, 2, 'keine Dublette, keine Ausmusterung');
+  assert.equal(rows.find(r => r.id === bert.id).name, 'Herbert Kunz', 'dieselbe Zeile trägt den neuen Namen');
 });
 
 // ── Teil-Lauf: Lauf-Umfang (lib/komplett-scope.js) ──────────────────────────
 // Der Umfang waehlt aus, welche Schritte ein Lauf neu berechnet. Wer nach einer
 // Kapitel-Aenderung nur den Katalog auffrischt, spart Wartezeit und Geld, ohne an
 // der Extraktionsqualitaet zu drehen.
-test('Komplettanalyse Teil-Lauf: Umfang ohne «kontinuitaet» überspringt P8 und friert den Konsolidierungs-Checkpoint NICHT ein', async () => {
+test('Komplettanalyse Teil-Lauf: ohne «kontinuitaet» wird keine Prüfung eingereiht, der Katalog-Checkpoint gilt trotzdem', async () => {
   const BOOK_ID = 131;
   const email = 'tester@test.dev';
   seedTinyBook(BOOK_ID);
@@ -1460,19 +1497,37 @@ test('Komplettanalyse Teil-Lauf: Umfang ohne «kontinuitaet» überspringt P8 un
   // Der Katalog ist vollständig — nur das Urteil fehlt.
   assert.ok(job.result.figCount >= 2, `Katalog trotz Teil-Lauf gefüllt (fig=${job.result.figCount})`);
 
-  // KEIN Kontinuitäts-Call gelaufen.
-  const kontCalls = ctx.mockAi.log.filter(e => e.schemaKeys?.includes('probleme')).length;
-  assert.equal(kontCalls, 0, 'P8 darf bei abgewähltem Schritt gar nicht aufrufen');
-  // Und kein Check persistiert (das vorherige Ergebnis bleibt, hier: keins).
+  // Keine Prüfung eingereiht, kein Check geschrieben.
+  assert.equal(job.result.pruefJobs?.kontinuitaet, undefined, 'abgewählte Prüfung wird nicht eingereiht');
+  assert.equal(ctx.mockAi.log.some(e => e.schemaKeys?.includes('probleme')), false);
   const checks = ctx.dbSchema.db.prepare('SELECT COUNT(*) n FROM continuity_checks WHERE book_id = ?').get(BOOK_ID);
   assert.equal(checks.n, 0, 'ein abgewählter Schritt darf keinen Kontinuitäts-Check schreiben');
   assert.deepEqual(job.result.skippedSteps, ['kontinuitaet'], 'der Teil-Lauf weist die abgewählten Schritte aus');
 
-  // DIE zentrale Invariante: der Konsolidierungs-Marker behauptet „P2–P8 erledigt".
-  // Nach einem Teil-Lauf stimmt das nicht — sonst bliebe der nächste Voll-Lauf am
-  // Short-Circuit hängen und würde P8 nie nachholen.
+  // Die Prüfung hängt nicht am Konsolidierungs-Marker (sie ist ein eigener Job): der
+  // Katalog ist vollständig gelaufen, also darf der Marker stehen.
   const marker = ctx.dbSchema.loadCheckpoint('komplett-consolidation', BOOK_ID, email);
-  assert.equal(marker, null, 'Teil-Lauf darf keinen Konsolidierungs-Checkpoint schreiben');
+  assert.ok(marker?.sig, 'Katalog-Voll-Lauf ohne Prüfung schreibt den Checkpoint');
+});
+
+test('Komplettanalyse Teil-Lauf: abgewählter Katalog-Schritt friert den Konsolidierungs-Checkpoint NICHT ein', async () => {
+  const BOOK_ID = 134;
+  const email = 'tester@test.dev';
+  seedTinyBook(BOOK_ID);
+  ctx.mockAi.on((e) => e.schemaKeys.includes('figuren') && !e.schemaKeys.includes('assignments') && !e.schemaKeys.includes('orte'), figurenStammResponse());
+  ctx.mockAi.on((e) => e.schemaKeys.includes('orte') && e.schemaKeys.includes('szenen') && !e.schemaKeys.includes('figuren'), ortePassResponse());
+  ctx.mockAi.on((e) => e.schemaKeys.length === 1 && e.schemaKeys.includes('fakten'), faktenPassResponse());
+  ctx.mockAi.on((e) => e.schemaKeys.length === 1 && e.schemaKeys.includes('assignments'), eventsPassResponse());
+  ctx.mockAi.on((e) => e.schemaKeys.length === 1 && e.schemaKeys.includes('beziehungen'), beziehungenResponse());
+  const jobId = ctx.shared.createJob('komplett-analyse', BOOK_ID, email, 'job.label.komplett');
+  ctx.shared.enqueueJob(jobId, () =>
+    ctx.komplett.runKomplettAnalyseJob(jobId, BOOK_ID, 'Buch', email, 'claude',
+      { scope: { songs: false, kontinuitaet: false, erzaehlprofil: false } }));
+  const job = await waitForJob(ctx.shared, jobId, { timeoutMs: 8000 });
+  assert.equal(job.status, 'done', `expected done, got ${job.status}: ${job.error || ''}`);
+  // Der Marker behauptet „P2–P6 sind für diesen Stand erledigt" — nach einem Lauf ohne
+  // Songs stimmt das nicht; sonst holte der nächste Voll-Lauf die Songs nie nach.
+  assert.equal(ctx.dbSchema.loadCheckpoint('komplett-consolidation', BOOK_ID, email), null);
 });
 
 // Ein abgewaehlter Katalog-Schritt heisst «nicht neu berechnen», nicht «leeren». Die
@@ -1541,10 +1596,16 @@ test('Komplettanalyse Voll-Lauf schreibt den Konsolidierungs-Checkpoint (Gegenpr
   const job = await waitForJob(ctx.shared, jobId, { timeoutMs: 8000 });
 
   assert.equal(job.status, 'done', `expected done, got ${job.status}: ${job.error || ''}`);
-  const kontCalls = ctx.mockAi.log.filter(e => e.schemaKeys?.includes('probleme')).length;
-  assert.equal(kontCalls, 1, 'Voll-Lauf ruft P8 auf');
   const marker = ctx.dbSchema.loadCheckpoint('komplett-consolidation', BOOK_ID, email);
   assert.ok(marker && marker.sig, 'Voll-Lauf schreibt den Konsolidierungs-Checkpoint');
+  // Die Prüfung läuft als eigener Job NACH dem Katalog und schreibt ihren Check.
+  assert.equal(komplettLog().some(e => e.schemaKeys?.includes('probleme')), false, 'kein P8 im Katalog-Job');
+  const kontJobId = job.result.pruefJobs?.kontinuitaet;
+  assert.ok(kontJobId, 'Voll-Lauf reiht die Kontinuitätsprüfung ein');
+  const kontJob = await waitForJob(ctx.shared, kontJobId, { timeoutMs: 8000 });
+  assert.equal(kontJob.status, 'done', `Prüf-Job: ${kontJob.status} ${kontJob.error || ''}`);
+  const checks = ctx.dbSchema.db.prepare('SELECT COUNT(*) n FROM continuity_checks WHERE book_id = ?').get(BOOK_ID);
+  assert.equal(checks.n, 1, 'der Prüf-Job schreibt den Kontinuitäts-Check');
 });
 
 // ── Kapitel-Auftritte: der abgeleitete Index wird am Laufende aufgebaut ────────

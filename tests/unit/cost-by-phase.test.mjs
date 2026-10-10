@@ -139,12 +139,23 @@ test('summarizeCostByPhase: teuerster Bucket zuerst, USD auf Cent gerundet', () 
 // Tripwire: der Extraktions-Effort MUSS in die cacheVersion. Ohne ihn liefert ein
 // Effort-Wechsel weiterhin den alten `__singlepass__`-Katalog aus book_extract_cache
 // — die Umstellung sähe dann wirkungslos aus, obwohl sie nur nicht griff.
-test('cacheVersion enthält den Extraktions-Effort', () => {
+test('cacheVersion enthält Modell und Effort des Extraktions-Tiers, wie der Call sie auflöst', async () => {
   const src = readFileSync(new URL('../../routes/jobs/komplett/job-komplett.js', import.meta.url), 'utf8');
-  assert.match(src, /extractTier\.effort/,
-    'job-komplett.js muss extractTier.effort in die cacheVersion einrechnen');
+  const chunkLine = src.split('\n').find(l => l.includes('const chunkCacheVersion ='));
+  assert.match(chunkLine || '', /extractCacheBase\(\{[^}]*tier: extractTier/,
+    'chunkCacheVersion muss über extractCacheBase mit dem Extraktions-Tier gebaut werden');
   const cacheVersionLine = src.split('\n').find(l => l.includes('const cacheVersion ='));
-  assert.ok(cacheVersionLine, 'cacheVersion-Zuweisung nicht gefunden');
-  assert.match(cacheVersionLine, /effortAug/,
-    'der Effort-Anteil fehlt im cacheVersion-String');
+  assert.match(cacheVersionLine || '', /chunkCacheVersion/, 'cacheVersion baut auf chunkCacheVersion auf');
+  // Effort wirkt auch, wenn er nur über den Job-Bag (effort.komplett) kommt.
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const { extractCacheBase } = require('../../routes/jobs/komplett/signatures.js');
+  const { runWithContext } = require('../../lib/log-context.js');
+  const base = (effort) => runWithContext
+    ? runWithContext({ aiJob: { provider: 'claude', model: 'claude-opus-4-8', effort } },
+      () => extractCacheBase({ provider: 'claude', tier: {}, sys: {}, extractVersion: 'v' }))
+    : null;
+  if (base('high') != null) {
+    assert.notEqual(base('high'), base('medium'), 'ein geerbter Effort-Wechsel muss die Signatur verschieben');
+  }
 });

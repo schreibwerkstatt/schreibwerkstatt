@@ -66,7 +66,11 @@ function rebindBeziehungenByName(figuren, log) {
   for (const f of (figuren || [])) {
     if (!Array.isArray(f?.beziehungen)) continue;
     f.beziehungen = f.beziehungen.filter(bz => {
-      if (!bz || !bz.name) return true;
+      if (!bz) return false;
+      // Ohne Zielnamen ist die figur_id chunk-lokal und nach der globalen Neunummerierung
+      // bedeutungslos — sie träfe die Figur, die zufällig denselben Index hat. Verwerfen:
+      // eine fehlende Kante ist besser als eine zur falschen Figur.
+      if (!bz.name) { dropped++; return false; }
       const target = idByName.get(_normalizeName(bz.name));
       if (!target || target === f.id) { dropped++; return false; }
       if (target !== bz.figur_id) { bz.figur_id = target; rebound++; }

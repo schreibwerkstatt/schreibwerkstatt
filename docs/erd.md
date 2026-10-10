@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 321, 178 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram` + `search_meta`).
+Stand: Schema-Version 323, 179 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -77,6 +77,7 @@ erDiagram
   books ||--o{ chapter_review_cache  : has
   books ||--o{ book_review_cache     : has
   books ||--o{ ungrouped_review_cache : has
+  books ||--o{ ungrouped_extract_cache : has
   books ||--o{ chapter_macro_review_cache : has
   books ||--o{ tagebuch_rueckblick_cache : has
   books ||--o{ tagebuch_rueckblicke  : has
@@ -1173,10 +1174,12 @@ erDiagram
     TEXT    quelle "Beleg-URL des Faktencheck-Befunds (typ=faktenfehler); NULL bei allen anderen Typen"
     INTEGER sort_order
     TEXT    updated_at
-    INTEGER resolved "erledigt-Flag; spaetere Laeufe uebernehmen es fuer denselben Befund (lib/continuity-carryover.js)"
+    INTEGER resolved "erledigt-Flag; gilt nur fuer diesen Lauf (wird nicht uebernommen)"
     TEXT    resolved_at
-    INTEGER dismissed "kein Fehler (Fehlalarm); wird wie resolved uebernommen"
+    INTEGER dismissed "kein Fehler (Fehlalarm) bzw. Pipeline-Verwurf; Autoren-dismissed uebernehmen spaetere Laeufe (lib/continuity-carryover.js)"
     TEXT    dismissed_at
+    TEXT    discard_reason "entwarnung|zitat|verify — von der Pipeline verworfen (dann dismissed=1, keine Triage-Uebernahme); NULL = kein Verwurf"
+    TEXT    discard_detail "Begruendung des Verwurfs (Verify-grund) oder NULL"
     INTEGER page_a_id FK "SET NULL — Seite von stelle_a (Zitat bzw. zitierter Fakt im Text gefunden)"
     INTEGER page_b_id FK "SET NULL — Seite von stelle_b"
   }
@@ -1726,6 +1729,15 @@ erDiagram
     TEXT    provider     PK
     TEXT    pages_sig
     TEXT    review_json
+    TEXT    cached_at
+  }
+  ungrouped_extract_cache {
+    INTEGER book_id      PK,FK
+    TEXT    user_email   PK
+    TEXT    phase        PK
+    TEXT    provider     PK
+    TEXT    pages_sig
+    TEXT    extract_json
     TEXT    cached_at
   }
   chapter_macro_review_cache {

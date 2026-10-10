@@ -140,7 +140,7 @@ test('kein Graubereich → kein Call', async () => {
   assert.equal(ctx._calls.length, 0, 'kein Prompt gebaut');
 });
 
-test('Gattungs-Hint-Keys: Figur = fig_id, Szene = titel|kapitel', async () => {
+test('Gattungs-Hint-Keys: Figur = fig_id, Szene = titel|kapitel|seite', async () => {
   const ctxF = makeCtx({ answer: { paare: [{ nr: 1, gleich: true }] } });
   const hF = await judgeEntityPairs(ctxF, 'figur', {
     incoming: [{ id: 'fig_7', name: 'Gerold', kapitel: [{ name: 'K1' }] }],
@@ -155,7 +155,7 @@ test('Gattungs-Hint-Keys: Figur = fig_id, Szene = titel|kapitel', async () => {
     existing: [{ id: 9, titel: 'Ankunft am Bahnhof', chapter_id: 3 }],
     unsure: [{ index: 0, existingId: 9, sim: 0.7, evidence: 1 }],
   });
-  assert.equal(hS.get('ankunft|3'), 9);
+  assert.equal(hS.get('ankunft|3|'), 9);
 });
 
 test('Gate: nicht-Claude und ausgeschaltetes Setting fahren keinen Call', async () => {

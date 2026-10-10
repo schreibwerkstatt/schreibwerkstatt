@@ -109,3 +109,58 @@ test('Kapitelname in «» lässt den Befund nicht als erfunden fallen', () => {
   const q = _stelleQuote('Kapitel «Der Angriff»: «Marek lag reglos unter den Trümmern»');
   assert.equal(quotesFabricated([q], hay), false);
 });
+
+// ── Satzzeichen-Toleranz (quote-verify `ignorePunctuation`) ───────────────────
+const TRUEMMER = buildPageIndex([
+  { id: 7, title: 'Nacht', chapter: 'Kapitel 2', chapter_id: 20, text: 'Er lag unter den Trümmern, und niemand kam. Erst am Morgen – viel zu spät – hörte man ihn.' },
+]);
+
+test('quotesFabricated: fehlendes Komma macht ein Zitat nicht erfunden (mit hayLoose)', () => {
+  const hayNorm = TRUEMMER.map(p => p.norm).join(' ');
+  const hayLoose = TRUEMMER.map(p => p.loose).join(' ');
+  const q = ['Trümmern und niemand kam'];
+  assert.equal(quotesFabricated(q, hayNorm), true, 'ohne Toleranz: strenger Abgleich wie bisher');
+  assert.equal(quotesFabricated(q, hayNorm, { hayLoose }), false);
+  // Gedankenstrich statt Komma, Auslassung statt Komma
+  assert.equal(quotesFabricated(['Erst am Morgen, viel zu spät, hörte man ihn'], hayNorm, { hayLoose }), false);
+  assert.equal(quotesFabricated(['Trümmern … und niemand kam'], hayNorm, { hayLoose }), false);
+  // ein echt erfundenes Zitat bleibt erfunden
+  assert.equal(quotesFabricated(['Trümmern und alle kamen sofort'], hayNorm, { hayLoose }), true);
+});
+
+test('locateStelle/excerptOnPage: Zitat mit abweichenden Satzzeichen findet Seite und Fenster', () => {
+  const p = locateStelle('Kapitel 2: «Trümmern und niemand kam»', 'Trümmern und niemand kam', TRUEMMER, { kapitel: ['Kapitel 2'] });
+  assert.equal(p?.id, 7);
+  const ex = excerptOnPage(p, 'Erst am Morgen, viel zu spät, hörte man ihn', 10);
+  assert.equal(ex.located, true);
+  assert.match(ex.text, /viel zu spät/);
+});
+
+// ── locateFact: kapitel-aware, keine Zwei-Wort-Fakten als Universal-Treffer ──
+const { locateFact } = require('../../lib/continuity-evidence');
+
+test('locateFact: ein Zwei-Wort-Fakt gewinnt nicht gegen jedes Zitat mit diesen Wörtern', () => {
+  const facts = buildFactIndex([
+    { kapitel: 'Kapitel 1', fakten: [{ subjekt: 'Marek', fakt: 'tot', seite: 'A' }] },
+    { kapitel: 'Kapitel 4', fakten: [{ subjekt: 'Marek', fakt: 'trägt im Winter einen roten Mantel aus Wolle', seite: 'B' }] },
+  ]);
+  const hit = locateFact('Marek trägt den roten Mantel aus Wolle, er liegt tot im Winter', facts);
+  assert.equal(hit?.seite, 'B', 'der spezifische Fakt gewinnt, nicht «Marek: tot» mit 2/2');
+  assert.equal(locateFact('Marek war gestern schon fast tot vor Müdigkeit', facts), null,
+    'zwei gemeinsame Wörter reichen nicht für einen Paraphrase-Treffer');
+});
+
+test('locateFact: Fakten der im Befund genannten Kapitel gehen vor', () => {
+  const facts = buildFactIndex([
+    { kapitel: 'Kapitel 1', fakten: [{ subjekt: 'Lena', fakt: 'hat blaue Augen und trägt eine Brille', seite: 'Früh' }] },
+    { kapitel: 'Kapitel 9', fakten: [{ subjekt: 'Lena', fakt: 'hat blaue Augen und trägt eine Brille', seite: 'Spät' }] },
+  ]);
+  const text = 'Lena hat blaue Augen und trägt eine Brille';
+  assert.equal(locateFact(text, facts)?.seite, 'Früh', 'ohne Kapitel: Buchreihenfolge');
+  assert.equal(locateFact(text, facts, { kapitel: ['Kapitel 9'] })?.seite, 'Spät');
+  // Paraphrase: dieselbe Präferenz
+  const para = 'Lena trägt eine Brille, ihre Augen sind blau';
+  assert.equal(locateFact(para, facts, { kapitel: ['Kapitel 9'] })?.seite, 'Spät');
+  // genanntes Kapitel ohne Treffer → Fallback aufs übrige Buch
+  assert.equal(locateFact(text, facts, { kapitel: ['Kapitel 5'] })?.seite, 'Früh');
+});

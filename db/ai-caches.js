@@ -29,6 +29,13 @@ const { requireUserEmail: _requireUserEmail } = require('./write-helpers');
 
 function _parseChapterKey(key) {
   if (key === '__singlepass__') return { book: true };
+  // Seiten ohne Kapitel: eigene Tabelle (ungrouped_extract_cache, Migration 323).
+  const u = String(key).match(/^__ungrouped__(__sub\d+)?(?::(.+))?$/);
+  if (u) {
+    const sub = u[1] ? u[1].slice(2) : '';
+    const phaseSuffix = u[2] || '';
+    return { ungrouped: true, phase: sub ? (phaseSuffix ? `${sub}:${phaseSuffix}` : sub) : phaseSuffix };
+  }
   const m = String(key).match(/^(\d+)(__sub\d+)?(?::(.+))?$/);
   if (!m) return null;
   const chapterId = parseInt(m[1]);
@@ -50,6 +57,15 @@ const _saveChapterCache = db.prepare(
    (book_id, user_email, chapter_id, phase, provider, pages_sig, extract_json, cached_at)
    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 );
+const _loadUngroupedExtractCache = db.prepare(
+  `SELECT extract_json FROM ungrouped_extract_cache
+   WHERE book_id = ? AND user_email = ? AND phase = ? AND provider = ? AND pages_sig = ?`
+);
+const _saveUngroupedExtractCache = db.prepare(
+  `INSERT OR REPLACE INTO ungrouped_extract_cache
+   (book_id, user_email, phase, provider, pages_sig, extract_json, cached_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?)`
+);
 const _loadBookCache = db.prepare(
   `SELECT extract_json FROM book_extract_cache
    WHERE book_id = ? AND user_email = ? AND provider = ? AND pages_sig = ?`
@@ -65,7 +81,9 @@ function loadChapterExtractCache(bookId, userEmail, chapterKey, pagesSig, provid
   if (!parsed) return null;
   const row = parsed.book
     ? _loadBookCache.get(parseInt(bookId), userEmail || '', provider || '', pagesSig)
-    : _loadChapterCache.get(parseInt(bookId), userEmail || '', parsed.chapterId, parsed.phase, provider || '', pagesSig);
+    : parsed.ungrouped
+      ? _loadUngroupedExtractCache.get(parseInt(bookId), userEmail || '', parsed.phase, provider || '', pagesSig)
+      : _loadChapterCache.get(parseInt(bookId), userEmail || '', parsed.chapterId, parsed.phase, provider || '', pagesSig);
   if (!row) return null;
   try { return JSON.parse(row.extract_json); } catch { return null; }
 }
@@ -78,6 +96,8 @@ function saveChapterExtractCache(bookId, userEmail, chapterKey, pagesSig, extrac
   const now = new Date().toISOString();
   if (parsed.book) {
     _saveBookCache.run(parseInt(bookId), email, provider || '', pagesSig, json, now);
+  } else if (parsed.ungrouped) {
+    _saveUngroupedExtractCache.run(parseInt(bookId), email, parsed.phase, provider || '', pagesSig, json, now);
   } else {
     _saveChapterCache.run(parseInt(bookId), email, parsed.chapterId, parsed.phase, provider || '', pagesSig, json, now);
   }
@@ -89,11 +109,15 @@ const _deleteChapterCache = db.prepare(
 const _deleteBookCache = db.prepare(
   `DELETE FROM book_extract_cache WHERE book_id = ? AND user_email = ?`
 );
+const _deleteUngroupedExtractCache = db.prepare(
+  `DELETE FROM ungrouped_extract_cache WHERE book_id = ? AND user_email = ?`
+);
 
 function deleteChapterExtractCache(bookId, userEmail) {
   const c = _deleteChapterCache.run(parseInt(bookId), userEmail || '').changes;
   const b = _deleteBookCache.run(parseInt(bookId), userEmail || '').changes;
-  return c + b;
+  const u = _deleteUngroupedExtractCache.run(parseInt(bookId), userEmail || '').changes;
+  return c + b + u;
 }
 
 // ── Delta-Cache: Buch-Review (Kapitelanalyse + Single-Pass-Review) ────────────

@@ -148,13 +148,18 @@ test('Komplettanalyse: laufender Standalone-Kontinuitäts-/Erzählprofil-Job →
   assert.equal(getKomplettScope(BOOK, ME).songs, false, 'abgewiesener Start verschiebt die Vorbelegung nicht');
 });
 
-test('activeStepJob: abgewählter Schritt blockiert nicht, fremder User auch nicht', () => {
+test('activeStepJob: jeder laufende Prüf-Job blockiert (auch der Faktencheck), ein fremder User nicht', () => {
+  // Die Prüf-Jobs lesen den Katalog, den die Analyse neu schreibt — unabhängig davon,
+  // ob der Schritt in ihrem Umfang steht.
   const shared = require('../../routes/jobs/shared');
   const { activeStepJob } = require('../../routes/jobs/komplett/scope');
+  clearJobs();
   const id = shared.createJob('kontinuitaet', BOOK, ME, 'job.label.kontinuitaet');
-  assert.deepEqual(activeStepJob(BOOK, ME, null), { jobId: id, step: 'kontinuitaet' });
-  assert.equal(activeStepJob(BOOK, ME, { kontinuitaet: false }), null);
-  assert.equal(activeStepJob(BOOK, COLLEAGUE, null), null);
+  assert.deepEqual(activeStepJob(BOOK, ME), { jobId: id, step: 'kontinuitaet' });
+  assert.equal(activeStepJob(BOOK, COLLEAGUE), null);
+  clearJobs();
+  const fc = shared.createJob('faktencheck', BOOK, ME, 'job.label.faktencheck');
+  assert.deepEqual(activeStepJob(BOOK, ME), { jobId: fc, step: 'faktencheck' });
 });
 
 test('DELETE /chapter-cache/:book_id: Viewer → 403, Editor → 200', async () => {
@@ -167,18 +172,19 @@ test('DELETE /chapter-cache/:book_id: Viewer → 403, Editor → 200', async () 
   assert.equal(e.json.ok, true);
 });
 
-test('Kontinuität/Erzählprofil: laufende Komplettanalyse mit dem Schritt → deren Job-ID', async () => {
+test('Kontinuität/Erzählprofil: laufende Komplettanalyse (auch MIT dem Schritt) → 409, keine Prüfung parallel', async () => {
+  // Die Analyse schreibt den Katalog gerade neu; steht der Schritt in ihrem Umfang,
+  // reiht sie die Prüfung danach selbst ein (pruef-jobs.js).
   const shared = require('../../routes/jobs/shared');
   const komplettId = shared.createJob('komplett-analyse', BOOK, ME, 'job.label.komplett');
   for (const path of ['/jobs/kontinuitaet', '/jobs/erzaehlprofil']) {
     const r = await api('POST', path, { book_id: BOOK });
-    assert.equal(r.status, 200, path);
+    assert.equal(r.status, 409, path);
+    assert.equal(r.json.error_code, 'KOMPLETT_ANALYSIS_RUNNING', path);
     assert.equal(r.json.jobId, komplettId, path);
-    assert.equal(r.json.existing, true);
-    assert.equal(r.json.komplett, true);
   }
-  assert.equal(shared.findActiveJobId('kontinuitaet', BOOK, ME), null, 'kein zweiter P8-Job');
-  assert.equal(shared.findActiveJobId('erzaehlprofil', BOOK, ME), null, 'kein zweiter Erzählprofil-Job');
+  assert.equal(shared.findActiveJobId('kontinuitaet', BOOK, ME), null, 'kein P8-Job parallel');
+  assert.equal(shared.findActiveJobId('erzaehlprofil', BOOK, ME), null, 'kein Erzählprofil-Job parallel');
 });
 
 test('Kontinuität: laufende Komplettanalyse OHNE den Schritt → 409 KOMPLETT_ANALYSIS_RUNNING', async () => {

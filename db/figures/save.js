@@ -403,8 +403,10 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
       _collectRelations(f, idMaps, allRelations);
     }
 
-    // 7. Beziehungen.
-    _writeRelations(bookId, em, manual, prevRels, figIdToRowId, allRelations, validIds);
+    // 7. Beziehungen. `keepKiRelations` (Teil-Lauf ohne «Beziehungen»): die bestehenden
+    //    KI-Kanten bleiben stehen — darunter die kapitelübergreifenden aus P3b, die dieser
+    //    Lauf nicht neu berechnet —, neue kommen hinzu, Doppeltes fällt am UNIQUE weg.
+    _writeRelations(bookId, em, manual, prevRels, figIdToRowId, allRelations, validIds, { keepKi: opts.keepKiRelations === true });
     // Lauf-fig_id → figures.id: der Job haengt damit die Aliasse der gematchten
     // Bestandsfiguren an die Namens-Aufloesung der Szenen/Ereignisse.
     return { rowIdByFigId: figIdToRowId };
@@ -421,9 +423,9 @@ const _relSame = (a, b) => _txt(a.beschreibung) === _txt(b.beschreibung)
 //   Katalog-PUT (manual=true): der Body ist autoritativ (Full-Replace). Eine
 //     unveränderte KI-Beziehung behält origin='ki'; neue oder in Beschreibung/
 //     Machtverhältnis geänderte werden 'manual', eine schon manuelle bleibt es.
-function _writeRelations(bookId, em, manual, prevRels, figIdToRowId, allRelations, validIds) {
+function _writeRelations(bookId, em, manual, prevRels, figIdToRowId, allRelations, validIds, { keepKi = false } = {}) {
   const insRel = db.prepare(
-    'INSERT INTO figure_relations (book_id, from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, belege, user_email, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    `INSERT ${keepKi ? 'OR IGNORE ' : ''}INTO figure_relations (book_id, from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, belege, user_email, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const rows = [];
   for (const r of dedupRelations(allRelations, validIds, { byTyp: manual })) {
@@ -442,7 +444,7 @@ function _writeRelations(bookId, em, manual, prevRels, figIdToRowId, allRelation
     }
     return;
   }
-  db.prepare("DELETE FROM figure_relations WHERE book_id = ? AND user_email IS ? AND origin = 'ki'").run(bookId, em);
+  if (!keepKi) db.prepare("DELETE FROM figure_relations WHERE book_id = ? AND user_email IS ? AND origin = 'ki'").run(bookId, em);
   const manualKeys = new Set(prevRels.filter(p => p.origin === 'manual')
     .map(p => relationKey(p.from_fig_id, p.to_fig_id, p.typ)));
   for (const r of rows) {

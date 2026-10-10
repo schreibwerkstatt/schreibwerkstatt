@@ -6,7 +6,7 @@
   <div class="entity-row"
        role="button" tabindex="0"
        :aria-expanded="selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i) ? 'true' : 'false'"
-       :class="{ 'entity-row--selected': selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i), 'entity-row--resolved': issue.resolved || issue.dismissed }"
+       :class="{ 'entity-row--selected': selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i), 'entity-row--resolved': issue.resolved || issue.dismissed || issue.discarded }"
        @click="kontinuitaetToggleIssue(issue, i)"
        @keydown.enter.self.prevent="kontinuitaetToggleIssue(issue, i)"
        @keydown.space.self.prevent="kontinuitaetToggleIssue(issue, i)">
@@ -31,8 +31,8 @@
         </span>
       </template>
     </span>
-    <span x-show="issue.resolved || issue.dismissed" class="kontinuitaet-resolved-badge"
-          x-text="$app.t(issue.dismissed ? 'kontinuitaet.dismissed' : 'kontinuitaet.resolved')"></span>
+    <span x-show="issue.resolved || issue.dismissed || issue.discarded" class="kontinuitaet-resolved-badge"
+          x-text="$app.t(issue.discarded ? 'kontinuitaet.discarded' : (issue.dismissed ? 'kontinuitaet.dismissed' : 'kontinuitaet.resolved'))"></span>
     <span class="history-chevron" :class="{ open: selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i) }" aria-hidden="true"></span>
   </div>
   <div x-show="selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i)" class="entity-detail" x-cloak>
@@ -50,7 +50,21 @@
         <span class="entity-meta-value" x-text="issue.quelle"></span>
       </template>
     </div>
-    <div class="kontinuitaet-detail-actions">
+    <div x-show="issue.discarded" class="entity-meta-row kontinuitaet-discard">
+      <span class="entity-meta-label" x-text="$app.t('kontinuitaet.discard.reasonLabel')"></span>
+      <span class="entity-meta-value" x-text="kontinuitaetDiscardReasonText(issue)"></span>
+    </div>
+    <div x-show="issue.discarded && issue.discard_detail" class="entity-meta-row kontinuitaet-discard">
+      <span class="entity-meta-label" x-text="$app.t('kontinuitaet.discard.detailLabel')"></span>
+      <span class="entity-meta-value" x-text="issue.discard_detail"></span>
+    </div>
+    <div class="kontinuitaet-detail-actions" x-show="issue.discarded">
+      <button type="button" class="kontinuitaet-resolve-btn"
+              :data-tip="$app.t('kontinuitaet.restoreTip')"
+              @click.stop="kontinuitaetRestoreDiscarded(issue)"
+              x-text="$app.t('kontinuitaet.restore')"></button>
+    </div>
+    <div class="kontinuitaet-detail-actions" x-show="!issue.discarded">
       <button type="button" class="kontinuitaet-resolve-btn"
               :class="{ 'kontinuitaet-resolve-btn--done': issue.resolved }"
               :data-tip="$app.t('kontinuitaet.resolveTip')"

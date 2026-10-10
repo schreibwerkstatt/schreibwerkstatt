@@ -23,6 +23,7 @@ const _bzItem = () => _obj(_isLocal
 // Halluzination/Bloat. Analog zum machtverhaltnis-Gating in _bzItem.
 const _figurSchemaProps = () => ({
   id: _str,
+  katalog_id: _str,
   name: _str,
   kurzname: _str,
   typ: _str,
@@ -66,6 +67,7 @@ let _figurStammSchema = _obj(_figurStammSchemaProps());
 
 const _ortSchema = _obj({
   id: _str,
+  katalog_id: _str,
   name: _str,
   typ: _str,
   beschreibung: _str,
@@ -286,7 +288,8 @@ export const SCHEMA_KONTINUITAET_VERIFY = _obj({
 // Grammar lokaler Provider (ollama/llama) genau das vom Prompt geforderte Reasoning.
 // `typ` als Enum (Schema == Prompt-Enum, KONTINUITAET_TYPEN); `entwarnung` zuletzt:
 // die Selbst-Entwarnung des Modells nach dem Ausformulieren — saveKontinuitaetResult
-// verwirft Einträge mit entwarnung===true.
+// legt Einträge mit entwarnung===true als verworfen ab (einziges Entwarnungs-Signal,
+// kein Text-Fallback über die Prosa).
 export const SCHEMA_KONTINUITAET_PROBLEME = _obj({
   _reasoning: _str,
   probleme: {

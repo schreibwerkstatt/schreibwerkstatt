@@ -106,7 +106,7 @@ test('Stufe 2: «Anna» verschmilzt nicht Anna Weber und Anna Schmid zu einer Fi
 });
 
 test('Stufe 2: eindeutiger Kurzname geht im Vollnamen auf, der Vollname ist Kanon', () => {
-  const w = { geschlecht: 'weiblich', kapitel: [{ name: 'K1' }] };
+  const w = { geschlecht: 'weiblich', beruf: 'Lehrerin', kapitel: [{ name: 'K1' }] };
   const { figuren, idRemap } = mergeDuplicateFiguren([
     { id: 'fig_1', name: 'Anna', ...w },
     { id: 'fig_2', name: 'Anna Weber', ...w },
@@ -117,12 +117,33 @@ test('Stufe 2: eindeutiger Kurzname geht im Vollnamen auf, der Vollname ist Kano
   assert.equal(idRemap.fig_1, 'fig_2');
 });
 
+test('Stufe 2: Teilname mit nur Allerwelts-Indizien (Geschlecht, Typ, Kapitel) bleibt getrennt', () => {
+  const w = { geschlecht: 'weiblich', typ: 'nebenfigur', kapitel: [{ name: 'K1' }] };
+  const { figuren } = mergeDuplicateFiguren([
+    { id: 'fig_1', name: 'Anna', ...w },
+    { id: 'fig_2', name: 'Anna Weber', ...w },
+  ]);
+  assert.equal(figuren.length, 2);
+});
+
+test('Katalog-Anker: gleicher Anker verschmilzt trotz verschiedener Namen, verschiedene Anker nie', () => {
+  const { figuren } = mergeDuplicateFiguren([
+    { id: 'fig_1', name: 'der Alte', katalog_id: 'K7' },
+    { id: 'fig_2', name: 'Gerold Brunner', katalog_id: 'K7', beschreibung: 'lang' },
+    { id: 'fig_3', name: 'Gerold Brunner', katalog_id: 'K9' },
+  ]);
+  assert.equal(figuren.length, 2);
+  const k7 = figuren.find(f => f.katalog_id === 'K7');
+  assert.ok(k7, 'K7 bleibt eine Figur');
+  assert.ok(figuren.find(f => f.katalog_id === 'K9'), 'K9 bleibt eigenständig trotz gleichen Namens');
+});
+
 // ── Befund 8: idRemap-Ketten ──────────────────────────────────────────────────
 test('mergeDuplicate: Beziehung über eine Remap-Kette (fig_7→fig_3→…) bleibt erhalten', () => {
   const { figuren } = mergeDuplicateFiguren([
-    { id: 'fig_1', name: 'Anna', geschlecht: 'w', typ: 'hauptfigur', kapitel: [{ name: 'K1' }] },
+    { id: 'fig_1', name: 'Anna', geschlecht: 'w', typ: 'hauptfigur', beruf: 'Lehrerin', kapitel: [{ name: 'K1' }] },
     { id: 'fig_2', name: 'Max', beziehungen: [{ figur_id: 'fig_7', typ: 'freund' }] },
-    { id: 'fig_3', name: 'Anna Weber', beschreibung: 'lang lang', geschlecht: 'w', typ: 'hauptfigur', kapitel: [{ name: 'K1' }] },
+    { id: 'fig_3', name: 'Anna Weber', beschreibung: 'lang lang', geschlecht: 'w', typ: 'hauptfigur', beruf: 'Lehrerin', kapitel: [{ name: 'K1' }] },
     { id: 'fig_7', name: 'Anna Weber', beschreibung: 'x' },
   ]);
   assert.equal(figuren.length, 2);
@@ -132,7 +153,7 @@ test('mergeDuplicate: Beziehung über eine Remap-Kette (fig_7→fig_3→…) ble
 });
 
 test('mergeDuplicate: Kette Stufe 1 → Stufe 2 wird bis zum Kanon aufgelöst', () => {
-  const w = { geschlecht: 'w', typ: 'hauptfigur', kapitel: [{ name: 'K1' }] };
+  const w = { geschlecht: 'w', typ: 'hauptfigur', beruf: 'Lehrerin', kapitel: [{ name: 'K1' }] };
   const { figuren, idRemap } = mergeDuplicateFiguren([
     { id: 'fig_1', name: 'Anna', beschreibung: 'längere Beschreibung', ...w },
     { id: 'fig_5', name: 'Anna', ...w },

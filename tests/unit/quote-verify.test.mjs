@@ -104,3 +104,19 @@ test('belegHaystack sammelt die Zitate der Teil-Analysen', () => {
   // Im Multi-Pass darf die Synthese NUR aus diesen Zitaten zitieren.
   assert.ok(!quoteFoundIn('Der Nebel lag über dem Fluss.', norm(hay)));
 });
+
+// ── Option ignorePunctuation (nur Kontinuitäts-Belegprüfung) ────────────────────
+test('ignorePunctuation: Komma/Strich/Auslassung-Varianten gelten als gefunden', () => {
+  const raw = 'Er lag unter den Trümmern, und niemand kam.';
+  const loose = normalizeForQuoteMatch(raw, { ignorePunctuation: true });
+  assert.ok(quoteFoundIn('Trümmern und niemand kam', loose, { ignorePunctuation: true }));
+  assert.ok(quoteFoundIn('Trümmern – und niemand kam', loose, { ignorePunctuation: true }));
+  assert.ok(quoteFoundIn('«Trümmern … und niemand kam»', loose, { ignorePunctuation: true }));
+  assert.ok(!quoteFoundIn('Trümmern und alle kamen', loose, { ignorePunctuation: true }));
+});
+
+test('ohne Option bleibt der Abgleich streng (Bewertung, Ideen-Chat)', () => {
+  const raw = 'Er lag unter den Trümmern, und niemand kam.';
+  assert.ok(!quoteFoundIn('Trümmern und niemand kam', norm(raw)));
+  assert.equal(norm(raw), 'er lag unter den trümmern, und niemand kam.');
+});

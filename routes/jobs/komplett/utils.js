@@ -1,4 +1,5 @@
 'use strict';
+const { nameTokens, salutationGender } = require('../../../lib/name-normalize');
 
 const crypto = require('crypto');
 
@@ -33,10 +34,15 @@ function _refToString(v) {
  *  `reserve` (Default 0.9) hält Luft für den Schätzfehler in beide Richtungen. Bewusst
  *  grosszügig: ein fälschlich übersprungener Call kostet Qualität, ein fälschlich
  *  geführter nur Zeit — im Zweifel also lieber rufen. */
-function consolidationFitsCap({ promptText, charsPerToken, cap, reserve = 0.9 }) {
+// `dataText`: nur die eingespeisten Daten (JSON der Figuren/Orte/Ereignisse) — DAS schreibt
+// eine Konsolidierung zurück, nicht Schema, Regeln und Aufgabentext des Prompts. Ohne
+// `dataText` wird der ganze Prompt geschätzt (Rückfall); das überschätzt um den statischen
+// Teil und zwang kleine Kataloge unnötig auf den regelbasierten Fallback.
+function consolidationFitsCap({ promptText, dataText, charsPerToken, cap, reserve = 0.9 }) {
   const cpt = Number(charsPerToken) > 0 ? Number(charsPerToken) : 4;
   const capN = Number(cap) > 0 ? Number(cap) : 0;
-  const estOut = Math.ceil(String(promptText || '').length / cpt);
+  const basis = dataText != null ? dataText : promptText;
+  const estOut = Math.ceil(String(basis || '').length / cpt);
   // Ohne brauchbares Cap nicht raten — dann lieber rufen (bisheriges Verhalten).
   if (!capN) return { estOut, cap: capN, fits: true };
   return { estOut, cap: capN, fits: estOut <= capN * reserve };
@@ -254,6 +260,18 @@ function buildFigNameLookup(figuren, chapterFiguren, chapterAssignments, chapter
     }
   }
 
+  // Geschlecht je Figur (Feld, sonst Anrede im Namen) — der Token-Fallback darf
+  // «Frau Weber» nicht an «Herrn Weber» oder an die Tochter «Anna Weber» (weiblich, aber
+  // ohne Anrede-Beleg) binden, nur weil sie das einzige «weber» im Katalog ist.
+  const genderById = new Map();
+  const _gKey = (g) => {
+    const v = String(g || '').toLowerCase();
+    if (/^(m|männlich|maennlich|male|mann)$/.test(v)) return 'm';
+    if (/^(w|f|weiblich|female|frau)$/.test(v)) return 'f';
+    return null;
+  };
+  for (const fig of figuren) genderById.set(fig.id, _gKey(fig.geschlecht) || salutationGender(fig.name) || null);
+
   function tryTokenFallback(name) {
     // KI liefert figur_name gelegentlich als Objekt statt String. Call-Sites
     // normalisieren via _refToString; dieser Guard macht den Helper zusätzlich
@@ -261,15 +279,28 @@ function buildFigNameLookup(figuren, chapterFiguren, chapterAssignments, chapter
     // und den gesamten Job nach bereits gespeichertem Katalog killen).
     if (typeof name !== 'string') return;
     if (!name || nameToId[name] || nameToIdLower[name.toLowerCase()]) return;
-    const tokens = new Set(name.toLowerCase().split(/[\s\-\.]+/).filter(t => t.length > 2));
+    // Anrede/Titel zählen nicht als Namens-Token («Frau», «Herr», «Dr.»), sonst trüge
+    // «Frau» allein einen Treffer. Die Anrede liefert stattdessen das Geschlecht.
+    const tokens = new Set(nameTokens(name).filter(t => t.length > 2));
     if (!tokens.size) return;
+    const wantGender = salutationGender(name);
     const seen = new Set();
     const matches = [];
     for (const [canon, fid] of Object.entries(nameToId)) {
       if (seen.has(fid)) continue;
-      const overlap = canon.toLowerCase().split(/[\s\-\.]+/)
-        .filter(t => t.length > 2 && tokens.has(t)).length;
-      if (overlap > 0) { seen.add(fid); matches.push(fid); }
+      const canonTokens = nameTokens(canon).filter(t => t.length > 2);
+      const overlap = canonTokens.filter(t => tokens.has(t)).length;
+      if (!overlap) continue;
+      // Nur der Nachname gemeinsam und eine Anrede im Namen: das Geschlecht muss belegt
+      // passen. Ein einzelnes geteiltes Token ohne Anrede bindet nur, wenn es der ganze
+      // gesuchte Name ist (Kurzform «Weber» → «Anna Weber»), nicht ein Teil davon.
+      if (wantGender) {
+        const g = genderById.get(fid);
+        if (g !== wantGender) continue;
+      } else if (overlap < 2 && tokens.size > 1) {
+        continue;
+      }
+      seen.add(fid); matches.push(fid);
     }
     if (matches.length === 1) {
       nameToId[name] = matches[0];

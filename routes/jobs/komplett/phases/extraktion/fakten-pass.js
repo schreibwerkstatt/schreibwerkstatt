@@ -32,7 +32,8 @@ async function _rescueFaktenPassSplit(ctx, { bookSystemBlock, claudeExtractCap }
   ), { log, label: `Single-Pass Fakten (C) Teil ${i + 1}/${buckets.length}` })));
   const bad = results.find(r => r.status === 'rejected');
   if (bad) throw bad.reason;
-  return { fakten: results.flatMap(r => r.value?.fakten || []) };
+  if (results.some(r => !Array.isArray(r.value?.fakten))) throw i18nError('job.error.extractFieldMissing', { label: 'C' });
+  return { fakten: results.flatMap(r => r.value.fakten) };
 }
 
 /** Ergebnis des Fakten-Calls (settled) → `{ fakten, failed }`. Nicht fatal: ein
@@ -46,9 +47,11 @@ async function resolveSinglePassFakten(ctx, faktenRes, { bookSystemBlock, claude
     res = await _rescueFaktenPassSplit(ctx, { bookSystemBlock, claudeExtractCap })
       .then(value => ({ status: 'fulfilled', value }), reason => ({ status: 'rejected', reason }));
   }
-  if (res.status === 'fulfilled') return { fakten: res.value?.fakten || [], failed: false };
-  if (res.reason?.name === 'AbortError') throw res.reason;
-  ctx.log.warn(`Single-Pass Fakten-Pass (C) fehlgeschlagen, Fakten leer: ${res.reason?.message}`);
+  // Ohne fakten-Feld ist die Antwort nicht die verlangte: als Ausfall werten, sonst
+  // ersetzte ein leerer Index den bestehenden und umginge den faktenFailure-Schutz.
+  if (res.status === 'fulfilled' && Array.isArray(res.value?.fakten)) return { fakten: res.value.fakten, failed: false };
+  if (res.status === 'rejected' && res.reason?.name === 'AbortError') throw res.reason;
+  ctx.log.warn(`Single-Pass Fakten-Pass (C) fehlgeschlagen, Fakten leer: ${res.status === 'rejected' ? res.reason?.message : 'fakten-Feld fehlt'}`);
   ctx.warnings?.push({ key: 'job.warn.faktenFailed' });
   return { fakten: [], failed: true };
 }

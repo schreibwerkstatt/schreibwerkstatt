@@ -77,22 +77,24 @@ async function runErzaehlprofilJob(jobId, bookId, bookName, userEmail, provider 
     const fullBookText = buildSinglePassBookText(groups, groupOrder);
     pt.mark('Laden');
 
+    // Teil-Degradierungen der Phase (übersprungene Kapitel, Autoren-Befund) → Job-Result.
+    const warnings = [];
     const ctx = {
       jobId, bookIdInt, bookName, email, call, tok, log, effectiveProvider,
       singlePassLimit, totalChars, fullBookText, pageContents, groups, groupOrder,
-      idMaps: { chNameToId }, prompts, sys,
+      idMaps: { chNameToId }, prompts, sys, warnings,
       // Einziger Leser des Buchblocks → 5-min-Write statt 1h (../call.js#withTtl).
       bookBlockTtl: '5m',
     };
     const saved = await runErzaehlprofil(ctx, { figNameToId, fromPct: 55, toPct: 98 });
     pt.mark('Erzählprofil');
     log.info(`Phasen-Timing: ${pt.summary()}`);
-    if (!saved) { completeJob(jobId, { empty: true }, tps(tok), 'keine Kapitel'); return; }
+    if (!saved) { completeJob(jobId, { empty: true, warnings }, tps(tok), 'keine Kapitel'); return; }
     const costByPhase = summarizeCostByPhase(tok);
     completeJob(jobId, {
-      count: saved, tokensIn: tok.in, tokensOut: tok.out,
+      count: saved, warnings, tokensIn: tok.in, tokensOut: tok.out,
       ...(costByPhase ? { costByPhase } : {}),
-    }, tps(tok), `${saved} Kapitel`);
+    }, tps(tok), `${saved} Kapitel${warnings.length ? ` warn=${warnings.length}` : ''}`);
   } catch (e) {
     if (e.name !== 'AbortError') log.error(`Fehler: ${e.message}`);
     failJob(jobId, e);

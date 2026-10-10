@@ -4,7 +4,13 @@
 // ../figuren-merge.js.
 
 const { normName: _normalizeName, nameTokens: _nameTokens } = require('../../../../lib/name-normalize');
-const { figureEvidence, FIGURE_CONTRADICTION } = require('../../../../lib/entity-match');
+const { figureEvidence, figureDistinctive, FIGURE_CONTRADICTION } = require('../../../../lib/entity-match');
+
+// Katalog-Anker (`katalog_id`): die Extraktion meldet, welche Bestandsfigur sie meint.
+// Zwei Einträge mit VERSCHIEDENEM Anker sind zwei Figuren, egal wie ähnlich die Namen
+// sind; gleicher Anker ist dieselbe Figur, egal wie verschieden die Namen sind.
+function _anchor(f) { const k = f?.katalog_id; return k == null || k === '' ? null : String(k); }
+function _anchorConflict(a, b) { const x = _anchor(a), y = _anchor(b); return !!(x && y && x !== y); }
 
 /** Mergt duplizierte Figuren anhand des normalisierten Namens (case-insensitive).
  *  Fängt Fälle ab, in denen kleine Modelle (Ollama/llama) die Dedup-Regel in
@@ -29,6 +35,7 @@ function _arcWeight(a) {
 }
 
 function _mergeFigurInto(canon, other) {
+  if (!_anchor(canon) && _anchor(other)) canon.katalog_id = other.katalog_id;
   for (const field of ['kurzname', 'typ', 'geburtstag', 'geschlecht', 'beruf', 'wohnadresse', 'sozialschicht',
                        'aeusseres', 'stimme', 'hintergrund',
                        'rolle', 'motivation', 'konflikt', 'entwicklung', 'erste_erwaehnung', 'praesenz']) {
@@ -70,11 +77,20 @@ function _relKeys(f, byName) {
     .map(x => (byName ? _normalizeName(x?.name) : x?.figur_id))
     .filter(Boolean);
 }
+function _view(f, relationsByName) {
+  return { ...f, chapters: (f.kapitel || []).map(k => k?.name ?? k), relations: _relKeys(f, relationsByName) };
+}
 function _indicatorScore(a, b, { relationsByName = false } = {}) {
-  return figureEvidence(
-    { ...a, chapters: (a.kapitel || []).map(k => k?.name ?? k), relations: _relKeys(a, relationsByName) },
-    { ...b, chapters: (b.kapitel || []).map(k => k?.name ?? k), relations: _relKeys(b, relationsByName) },
-  );
+  if (_anchorConflict(a, b)) return FIGURE_CONTRADICTION - 1;
+  return figureEvidence(_view(a, relationsByName), _view(b, relationsByName));
+}
+/** Darf ein Teilnamen-Treffer verschmelzen? Typ, Geschlecht und gemeinsames Kapitel sind
+ *  fast immer gesetzt — sie tragen den Merge nur zusammen mit einem unterscheidenden
+ *  Indiz (Beruf, Geburtsjahr, Beziehung) oder zwei geteilten Namens-Token. */
+function _partialMergeOk(a, b, opts = {}) {
+  if (_indicatorScore(a, b, opts) < 2) return false;
+  const shared = _nameTokens(a.name).filter(t => _nameTokens(b.name).includes(t)).length;
+  return shared >= 2 || figureDistinctive(_view(a, opts.relationsByName), _view(b, opts.relationsByName)) >= 1;
 }
 
 /** Merkt sich einen aufgegangenen Namen am Kanon (`__aliasNamen`), damit Beziehungs-
@@ -161,7 +177,7 @@ function _mergeByPartialName(figuren, idRemap) {
       // Der kürzere Partner einer echten Teilmenge darf nicht mehrdeutig sein.
       if (iInJ && !jInI && ambiguous.has(i)) continue;
       if (jInI && !iInJ && ambiguous.has(j)) continue;
-      if (_indicatorScore(figuren[i], figuren[j]) < 2) continue;
+      if (!_partialMergeOk(figuren[i], figuren[j])) continue;
       const ri = find(i), rj = find(j);
       if (ri !== rj) parent[Math.max(ri, rj)] = Math.min(ri, rj);
     }
@@ -236,12 +252,18 @@ function preMergeChapterFiguren(chapterFiguren) {
       // eindeutig ist: passt «Dr. Brunner» zu «Herr Brunner» UND «Frau Brunner», bleibt
       // er eigenständig (Ambiguität ⇒ kein Merge), es sei denn, die Indizien zeichnen
       // genau einen Kandidaten mit ≥ 2 Punkten aus.
-      let canon = _pickUnambiguous(canonical.get(key) || [], f, { relationsByName: true });
-      let partial = false;
+      // Gleicher Katalog-Anker: dieselbe Figur, auch unter anderem Namen.
+      const anchor = _anchor(f);
+      let canon = anchor ? (canonicalList.find(e => _anchor(e.figur) === anchor)?.figur || null) : null;
+      let partial = !!canon && _normalizeName(canon.name) !== key;
+      if (!canon) canon = _pickUnambiguous(canonical.get(key) || [], f, { relationsByName: true });
 
       if (!canon) {
         const tokA = _nameTokens(f.name);
         if (tokA.length) {
+          // Alle passenden Kanon-Einträge sammeln: passt «Anna» zu «Anna Weber» UND
+          // «Anna Schmid», ist offen, wen sie meint → kein Merge (wie _mergeByPartialName).
+          const hits = [];
           for (const entry of canonicalList) {
             if (entry.normKey === key) continue; // gleicher Schlüssel: oben entschieden
             const tokB = _nameTokens(entry.figur.name);
@@ -250,10 +272,9 @@ function preMergeChapterFiguren(chapterFiguren) {
             const bInA = tokB.every(t => tokA.includes(t));
             if (!aInB && !bInA) continue;
             // Beziehungen über Zielnamen: `figur_id` ist chunk-lokal (siehe _indicatorScore).
-            if (_indicatorScore(entry.figur, f, { relationsByName: true }) >= 2) {
-              canon = entry.figur; partial = true; break;
-            }
+            if (_partialMergeOk(entry.figur, f, { relationsByName: true })) hits.push(entry.figur);
           }
+          if (hits.length === 1) { canon = hits[0]; partial = true; }
         }
       }
 
@@ -265,6 +286,7 @@ function preMergeChapterFiguren(chapterFiguren) {
           if (!canon[field] && f[field]) canon[field] = f[field];
         }
         if (_arcWeight(f.arc) > _arcWeight(canon.arc)) canon.arc = f.arc;
+        if (!_anchor(canon) && anchor) canon.katalog_id = f.katalog_id;
         const zit = new Set([...(canon.schluesselzitate || []), ...(f.schluesselzitate || [])]);
         canon.schluesselzitate = [...zit].slice(0, 5);
         const eig = new Set([...(canon.eigenschaften || []), ...(f.eigenschaften || [])]);
@@ -302,7 +324,21 @@ function preMergeChapterFiguren(chapterFiguren) {
   return { chapterFiguren: merged, dupesRemoved };
 }
 
-function mergeDuplicateFiguren(figuren) {
+function mergeDuplicateFiguren(figurenIn) {
+  const idRemap = {};
+  // Stufe 0: gleicher Katalog-Anker ⇒ dieselbe Figur (auch bei verschiedenen Namen).
+  const byAnchor = new Map();
+  const figuren = [];
+  for (const f of figurenIn) {
+    const a = _anchor(f);
+    if (!a) { figuren.push(f); continue; }
+    const canon = byAnchor.get(a);
+    if (!canon) { const c = { ...f }; byAnchor.set(a, c); figuren.push(c); continue; }
+    idRemap[f.id] = canon.id;
+    _mergeFigurInto(canon, f);
+    _addAlias(canon, f.name);
+  }
+  const stage0Saved = figurenIn.length - figuren.length;
   const groups = new Map();
   for (const f of figuren) {
     const key = _normalizeName(f.name);
@@ -311,7 +347,6 @@ function mergeDuplicateFiguren(figuren) {
     groups.get(key).push(f);
   }
 
-  const idRemap = {};
   let stage1 = [];
   // Figuren ohne verwertbaren Namen bleiben unverändert stehen (nicht still verwerfen).
   for (const f of figuren) if (!_normalizeName(f.name)) stage1.push(f);
@@ -339,7 +374,7 @@ function mergeDuplicateFiguren(figuren) {
       stage1.push(canon);
     }
   }
-  const stage1Saved = figuren.length - stage1.length;
+  const stage1Saved = stage0Saved + figuren.length - stage1.length;
 
   const stage2 = _mergeByPartialName(stage1, idRemap);
   const stage2Saved = stage1.length - stage2.length;

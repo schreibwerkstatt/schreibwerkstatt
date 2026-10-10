@@ -81,3 +81,57 @@ test('Beleg-Prüfung: Kapitelname in «», Soft-Hyphen im Text und «[…]» las
   assert.equal(out[0].page_a_id, 93101);
   assert.equal(out[0].page_b_id, 93102);
 });
+
+// ── Verwürfe sichtbar statt still ─────────────────────────────────────────────
+const latest = () => ctx.dbSchema.getLatestContinuityCheck(BOOK, EMAIL);
+
+test('Prosa-«konsistent» ohne entwarnung bleibt Befund («bis Kapitel 5 konsistent, in Kapitel 9 grün»)', () => {
+  const probleme = [
+    { schwere: 'mittel', typ: 'figur', beschreibung: 'Lenas Augenfarbe ist bis Kapitel 5 konsistent, in Kapitel 9 grün.',
+      stelle_a: '', stelle_b: '', empfehlung: 'Augenfarbe vereinheitlichen.', figuren: ['Lena'], kapitel: [], entwarnung: false },
+    { schwere: 'mittel', typ: 'figur', beschreibung: 'Die Angaben sind in sich konsistent.',
+      stelle_a: '', stelle_b: '', empfehlung: 'Keine Aktion.', figuren: [], kapitel: [], entwarnung: false },
+  ];
+  const out = saveKontinuitaetResult(BOOK, EMAIL, { zusammenfassung: 'x', probleme }, {}, {}, 'claude', log);
+  assert.equal(out.length, 2, 'kein Regex-Verwurf über die Prosa mehr');
+  assert.equal(out[0].beschreibung, probleme[0].beschreibung);
+});
+
+test('Entwarnung, erfundenes Zitat und Verify-Urteil landen mit Grund unter «verworfen»', () => {
+  const stats = {};
+  const echt = { schwere: 'kritisch', typ: 'figur', beschreibung: 'Marek stirbt und lebt.',
+    stelle_a: 'Die Flucht: «Marek lag reglos unter den Trümmern»', stelle_b: 'Die Rückkehr: «Marek öffnete die Tür und lachte»',
+    empfehlung: 'Erklären.', figuren: ['Marek'], kapitel: ['Die Flucht', 'Die Rückkehr'], entwarnung: false };
+  const out = saveKontinuitaetResult(BOOK, EMAIL, {
+    zusammenfassung: 'x',
+    probleme: [
+      echt,
+      { ...echt, beschreibung: 'Entwarnt.', entwarnung: true },
+      { ...echt, beschreibung: 'Erfunden.', stelle_a: 'Die Flucht: «Marek tanzte fröhlich durch den Saal»' },
+    ],
+    verworfen: [{ problem: { ...echt, beschreibung: 'Verify sagt nein.' }, grund: 'Rückblende in der Rückkehr.' }],
+  }, {}, {}, 'claude', log, { pageContents: PAGES, requireQuoteEvidence: true, stats });
+  assert.equal(out.length, 1);
+  assert.equal(stats.discarded, 3);
+  const check = latest();
+  assert.deepEqual(check.issues.map(i => i.beschreibung), ['Marek stirbt und lebt.']);
+  assert.deepEqual(check.discarded.map(d => [d.beschreibung, d.discard_reason, d.discard_detail]), [
+    ['Verify sagt nein.', 'verify', 'Rückblende in der Rückkehr.'],
+    ['Entwarnt.', 'entwarnung', null],
+    ['Erfunden.', 'zitat', null],
+  ]);
+});
+
+test('Beleg-Prüfung: Satzzeichen-Abweichung im Zitat ist kein erfundenes Zitat', () => {
+  // Text: «Marek lag re­glos unter den Trümmern, niemand rührte sich.» — Zitat ohne Komma.
+  const out = saveKontinuitaetResult(BOOK, EMAIL, { zusammenfassung: 'x', probleme: [
+    { schwere: 'kritisch', typ: 'figur', beschreibung: 'Marek stirbt und lebt.',
+      stelle_a: 'Die Flucht: «unter den Trümmern niemand rührte sich»',
+      stelle_b: 'Die Rückkehr: «Marek öffnete die Tür – und lachte laut»',
+      empfehlung: 'Erklären.', figuren: ['Marek'], kapitel: ['Die Flucht', 'Die Rückkehr'], entwarnung: false },
+  ] }, {}, {}, 'claude', log, { pageContents: PAGES, requireQuoteEvidence: true });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].page_a_id, 93101);
+  assert.equal(out[0].page_b_id, 93102);
+  assert.deepEqual(latest().discarded, []);
+});

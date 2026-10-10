@@ -7,6 +7,7 @@ import { i18nMarkerKey } from '../i18n.js';
 import { startPoll, runningJobStatus } from '../cards/job-helpers.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { memoMethods } from '../cards/card-memo.js';
+import { nameGuardMethods } from './kontinuitaet-nameguard.js';
 
 // Server-Fehlercodes der Start-Routen → Hinweis in der Karte (Rest: generisch).
 const START_ERROR_KEYS = {
@@ -19,9 +20,13 @@ const START_ERROR_KEYS = {
 
 // Triage-Status eines Befunds (Filter `status`): '' = aktiv (offen + erledigt, ohne
 // „kein Fehler"), 'open' = nur offene, 'resolved' = nur erledigte, 'dismissed' = nur
-// als „kein Fehler" markierte.
-export const KONTINUITAET_STATUS_FILTERS = ['', 'open', 'resolved', 'dismissed'];
+// als „kein Fehler" markierte, 'discarded' = von der Prüfung selbst verworfene
+// (Entwarnung, erfundenes Zitat, Verify) — sie liegen in `result.discarded`, nie in
+// `result.issues`, und zählen in keinem anderen Filter.
+export const KONTINUITAET_STATUS_FILTERS = ['', 'open', 'resolved', 'dismissed', 'discarded'];
 function _matchesStatus(issue, status) {
+  if (status === 'discarded') return !!issue.discarded;
+  if (issue.discarded) return false;
   if (status === 'dismissed') return !!issue.dismissed;
   if (issue.dismissed) return false;
   if (status === 'open') return !issue.resolved;
@@ -42,6 +47,11 @@ export function kontinuitaetSeverity(issue) {
 export function kontinuitaetSafeUrl(url) {
   const u = typeof url === 'string' ? url.trim() : '';
   return /^https?:\/\//i.test(u) ? u : '';
+}
+
+// Quell-Liste je Status-Filter: die Verworfenen sind eine eigene Liste des Checks.
+export function kontinuitaetSource(result, status) {
+  return (status === 'discarded' ? result?.discarded : result?.issues) || [];
 }
 
 export const kontinuitaetMethods = {
@@ -156,6 +166,10 @@ export const kontinuitaetMethods = {
       this._memos = {};
       this.kontinuitaetLoadError = false;
       this.kontinuitaetResult = data;
+      // Tab «Verworfen» ist nur sichtbar, solange es Verworfene gibt — sonst stünde der
+      // Filter auf einer leeren, unsichtbaren Liste.
+      const filters = Alpine.store('catalogUi').kontinuitaetFilters;
+      if (filters.status === 'discarded' && !data?.discarded?.length) filters.status = '';
     } catch (e) {
       if (!isSelectedBook(bookId)) return;
       // Nur ohne angezeigtes Ergebnis zum Fehlerzustand: ein fehlgeschlagener
@@ -221,7 +235,7 @@ export const kontinuitaetMethods = {
   // viermal pro Render liest und jeder Durchlauf den Kapitelnamen-Index neu aufbaute.
   kontinuitaetIssuesFiltered() {
     const filters = Alpine.store('catalogUi').kontinuitaetFilters;
-    const issues = this.kontinuitaetResult?.issues || [];
+    const issues = kontinuitaetSource(this.kontinuitaetResult, filters.status || '');
     const chapters = this._kontinuitaetChapters();
     const figuren = window.__app.$store.catalog.figuren || [];
     return this._memo(
@@ -360,7 +374,45 @@ export const kontinuitaetMethods = {
   // damit „Kritisch 3" auch drei sichtbare Zeilen meint.
   kontinuitaetIssuesInStatus() {
     const status = Alpine.store('catalogUi').kontinuitaetFilters.status || '';
-    return (this.kontinuitaetResult?.issues || []).filter(i => _matchesStatus(i, status));
+    return kontinuitaetSource(this.kontinuitaetResult, status).filter(i => _matchesStatus(i, status));
+  },
+
+  // Anzahl der von der Prüfung verworfenen Befunde (Tab «Verworfen (N)»).
+  kontinuitaetDiscardedCount() {
+    return (this.kontinuitaetResult?.discarded || []).length;
+  },
+
+  // Befunde des Checks insgesamt (geführte + verworfene) — für Filterleiste und Leer-Zustände.
+  kontinuitaetAllIssues() {
+    const r = this.kontinuitaetResult;
+    return [...(r?.issues || []), ...(r?.discarded || [])];
+  },
+
+  // Grund eines Verwurfs als Satz (i18n), Rohwert als Fallback.
+  kontinuitaetDiscardReasonText(issue) {
+    const key = 'kontinuitaet.discard.reason.' + (issue?.discard_reason || '');
+    const t = window.__app.t(key);
+    return t === key ? (issue?.discard_reason || '') : t;
+  },
+
+  // „Doch ein Fehler": Verwurf aufheben → der Befund ist wieder offen (Server setzt
+  // dismissed=0 und löscht den Verwurfsgrund). Danach neu laden, weil der Befund von
+  // `discarded` nach `issues` wandert.
+  async kontinuitaetRestoreDiscarded(issue) {
+    if (!issue || issue.id == null || !issue.discarded) return;
+    const bookId = Alpine.store('nav').selectedBookId;
+    try {
+      await fetchJson('/jobs/kontinuitaet/issue/' + issue.id + '/dismissed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dismissed: false }),
+      });
+      if (!isSelectedBook(bookId)) return;
+      await this._loadKontinuitaetHistory();
+    } catch (e) {
+      this._kontinuitaetTriageFailed();
+      console.error('[kontinuitaetRestoreDiscarded]', e);
+    }
   },
 
   // Tab-Zähler { all, kritisch, mittel, niedrig } im aktuellen Status-Filter,
@@ -368,7 +420,7 @@ export const kontinuitaetMethods = {
   // sieben Lesezugriffe).
   kontinuitaetSeverityCounts() {
     const status = Alpine.store('catalogUi').kontinuitaetFilters.status || '';
-    const issues = this.kontinuitaetResult?.issues || [];
+    const issues = kontinuitaetSource(this.kontinuitaetResult, status);
     return this._memo('counts', [issues, status], () => {
       const counts = { all: 0, kritisch: 0, mittel: 0, niedrig: 0 };
       for (const i of issues) {
@@ -398,7 +450,7 @@ export const kontinuitaetMethods = {
       return chapterNames.has(c) ? c : null;
     };
     const names = new Set();
-    for (const issue of (this.kontinuitaetResult?.issues || [])) {
+    for (const issue of this.kontinuitaetAllIssues()) {
       if (issue.chapter_ids?.length) {
         for (const id of issue.chapter_ids) { const n = chapters.byId.get(id)?.name; if (n) names.add(n); }
       }
@@ -516,65 +568,6 @@ export const kontinuitaetMethods = {
     return !!this._kontinuitaetResolveStelleDetail(stelle, issue, side)?.approx;
   },
 
-  // ── Namens-/Konsistenz-Waechter ────────────────────────────────────────────
-  // Regelbasierte Erkennung buchweiter Schreibvarianten/Tippfehler von Eigennamen
-  // (Figuren + Orte). Synchroner Endpunkt, kein KI-Job. Auf Knopfdruck.
-  // Das Ergebnis trägt seine bookId mit: nameGuardIgnore schreibt die Ignore-Liste
-  // des Buchs, zu dem der Cluster gehört, nicht des gerade gewählten.
-  async nameGuardRun() {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId || this.nameGuardLoading) return;
-    this.nameGuardLoading = true;
-    try {
-      const data = await fetchJson('/name-guard/' + bookId + '/check', { method: 'POST' });
-      if (!isSelectedBook(bookId)) return;
-      this.nameGuardResult = { ...data, bookId };
-      this.selectedNameGuardKey = null;
-    } catch (e) {
-      if (!isSelectedBook(bookId)) return;
-      console.error('[nameGuardRun]', e);
-      this.nameGuardResult = { clusters: [], error: true, bookId };
-    } finally {
-      // Nach Buchwechsel hat der Reset nameGuardLoading schon zurückgesetzt.
-      if (isSelectedBook(bookId)) this.nameGuardLoading = false;
-    }
-  },
-
-  nameGuardKey(cluster) {
-    return 'ng:' + (cluster?.canonical || '');
-  },
-
-  // Cluster-Zeile auf-/zuklappen (Klick + Enter/Space).
-  nameGuardToggle(cluster) {
-    const key = this.nameGuardKey(cluster);
-    this.selectedNameGuardKey = this.selectedNameGuardKey === key ? null : key;
-  },
-
-  nameGuardConfidenceSeverity(conf) {
-    // Auf die bestehende severity-tag-Farbskala mappen (Farbe = Aufmerksamkeit):
-    // hohe Konfidenz = stark hervorgehoben.
-    return conf === 'hoch' ? 'kritisch' : (conf === 'mittel' ? 'mittel' : 'niedrig');
-  },
-
-  // Eine Variante als gewollt akzeptieren → serverseitige Ignore-Liste + lokal entfernen.
-  async nameGuardIgnore(cluster, variant) {
-    const result = this.nameGuardResult;
-    const bookId = result?.bookId;
-    if (!bookId || !cluster || !variant || !isSelectedBook(bookId)) return;
-    try {
-      await fetchJson('/name-guard/' + bookId + '/ignore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ canonical: cluster.canonical, variant: variant.form }),
-      });
-      // Gespeichert ist es; die lokale Liste nur anfassen, wenn sie noch dieses Ergebnis zeigt.
-      if (!isSelectedBook(bookId) || this.nameGuardResult !== result) return;
-      cluster.variants = (cluster.variants || []).filter(v => v.form !== variant.form);
-      if (!cluster.variants.length && this.nameGuardResult?.clusters) {
-        this.nameGuardResult.clusters = this.nameGuardResult.clusters.filter(c => c !== cluster);
-      }
-    } catch (e) {
-      console.error('[nameGuardIgnore]', e);
-    }
-  },
+  // Namens-/Konsistenz-Waechter (eigenes Modul, gleiche Karte).
+  ...nameGuardMethods,
 };

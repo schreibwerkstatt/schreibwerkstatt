@@ -171,3 +171,16 @@ test('maxParallelCalls: unbekannter Provider fällt auf claude zurück', () => {
     assert.equal(ctx.ai.maxParallelCalls('quatsch'), ctx.ai.maxParallelCalls('claude'));
   } finally { ctx.teardown(); }
 });
+
+test('consolidationFitsCap: mit dataText zählt nur, was die Konsolidierung zurückschreibt', () => {
+  const ctx = _bootstrap();
+  try {
+    const schema = 'x'.repeat(40000);   // statischer Teil: Schema, Regeln, Aufgabe
+    const data = 'y'.repeat(4000);      // eingespeiste Figuren
+    const ganz = ctx.utils.consolidationFitsCap({ promptText: schema + data, charsPerToken: 4, cap: 4000 });
+    const nurDaten = ctx.utils.consolidationFitsCap({ promptText: schema + data, dataText: data, charsPerToken: 4, cap: 4000 });
+    assert.equal(ganz.fits, false);
+    assert.equal(nurDaten.fits, true);
+    assert.equal(nurDaten.estOut, 1000);
+  } finally { ctx.teardown(); }
+});

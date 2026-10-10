@@ -82,3 +82,26 @@ test('zwei ähnliche neue Befunde: nur der mit dem besten Überlapp erbt', () =>
   assert.equal(out[0], null);
   assert.equal(out[1]?.dismissed, true);
 });
+
+// ── Toleranz bei Figuren-/Kapitelmengen ───────────────────────────────────────
+test('eine Figur mehr oder weniger: „kein Fehler" bleibt', () => {
+  const mehr = { ...PRIOR, figuren: ['Marek', 'Lena'] };
+  const weniger = { ...PRIOR, figuren: [] };
+  assert.equal(carryOverStatus([mehr], [PRIOR])[0]?.dismissed, true);
+  assert.equal(carryOverStatus([weniger], [PRIOR])[0]?.dismissed, true);
+  // Teilmenge mit zwei Figuren Unterschied ist ebenfalls derselbe Befund
+  const viele = { ...PRIOR, figuren: ['Marek', 'Lena', 'Jonas'] };
+  assert.equal(carryOverStatus([viele], [PRIOR])[0]?.dismissed, true);
+});
+
+test('ein Kapitel mehr oder weniger: „kein Fehler" bleibt; disjunkte Kapitel nicht', () => {
+  assert.equal(carryOverStatus([{ ...PRIOR, chapter_ids: [3, 5, 7] }], [PRIOR])[0]?.dismissed, true);
+  assert.equal(carryOverStatus([{ ...PRIOR, chapter_ids: [3] }], [PRIOR])[0]?.dismissed, true);
+  assert.equal(carryOverStatus([{ ...PRIOR, chapter_ids: [8, 9] }], [PRIOR])[0], null);
+});
+
+test('disjunkte Figurenmengen bleiben verschiedene Befunde', () => {
+  const p = { ...PRIOR, figuren: ['Marek', 'Lena'] };
+  const n = { ...PRIOR, figuren: ['Jonas', 'Petra'] };
+  assert.equal(sameIssue(issueSignature(n), issueSignature(p)), false);
+});
