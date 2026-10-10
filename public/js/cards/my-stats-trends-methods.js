@@ -17,8 +17,9 @@ export const myStatsTrendMethods = {
     const from = w.from;
     const to = w.to || localIsoDate();
     if (!w.active || !from) return { available: false };
-    return this._memo('periodCmp', [this.myStatsHistory, this.myStatsWriting, from, to], () =>
-      computePeriodComparison(this.myStatsHistory, this.myStatsWriting, from, to));
+    const detail = this.myStatsData?.books_detail;
+    return this._memo('periodCmp', [this.myStatsHistory, this.myStatsWriting, detail, from, to], () =>
+      computePeriodComparison(this.myStatsHistory, this.myStatsWriting, from, to, { booksDetail: detail }));
   },
   myStatsHasPeriodCmp() { return this.myStatsPeriodComparison().available; },
   // Delta als Anzeige-Text: Prozent, wenn eine Vergleichsbasis existiert; sonst
@@ -49,23 +50,27 @@ export const myStatsTrendMethods = {
   myStatsHasOverallForecast() { return this.myStatsOverallForecast().hasData; },
   myStatsOverallForecastLabel() {
     const f = this.myStatsOverallForecast();
-    const t = window.__app.t;
     if (!f.hasData) return '';
-    if (f.stalled) return t('mystats.overallForecast.stalled', { n: this._myStatsFmt(f.booksOpen) });
-    return t('mystats.overallForecast.eta', { n: this._myStatsFmt(f.booksOpen), date: this.myStatsDateLabel(f.forecastDate) });
+    if (f.stalled) return this._myStatsPlural('mystats.overallForecast.stalled', f.booksOpen);
+    return this._myStatsPlural('mystats.overallForecast.eta', f.booksOpen, {
+      date: this.myStatsDateLabel(f.forecastDate),
+      chars: this._myStatsFmt(Math.round(f.dailyChars)),
+    });
   },
 
   // ── Streak-Heatmap-Zellenklasse je Modus ─────────────────────────────────────
   // 'activity' faerbt nach Schreibminuten-Quartil (level 0..4). 'goal' faerbt
   // binaer gegen das Tagesziel: erreicht (goal-hit) / aktiv-aber-verfehlt
-  // (goal-miss) / inaktiv (lvl0). Zukunftszellen bleiben ausgegraut.
+  // (goal-miss) / inaktiv (lvl0). Zukunftszellen bleiben ausgegraut. Vergleich
+  // in Sekunden — dieselbe Regel wie die Ziel-Serie (computeGoalAttainment);
+  // gerundete Minuten liessen 29:30 min als „30 min erreicht" durchgehen.
   myStatsStreakCellClass(cell) {
     if (!cell) return 'overview-streak-cell--empty';
     if (cell.future) return 'overview-streak-cell--future';
     if (this.myStatsStreakMode === 'goal' && this.myStatsHasGoal) {
       if (!cell.active) return 'overview-streak-cell--lvl0';
-      const goalMin = this.myStatsGoal().goalMinutes || 0;
-      return (cell.minutes || 0) >= goalMin ? 'overview-streak-cell--goal-hit' : 'overview-streak-cell--goal-miss';
+      const goalSec = (this.myStatsGoal().goalMinutes || 0) * 60;
+      return (cell.seconds || 0) >= goalSec ? 'overview-streak-cell--goal-hit' : 'overview-streak-cell--goal-miss';
     }
     return 'overview-streak-cell--lvl' + cell.level;
   },
@@ -75,4 +80,20 @@ export const myStatsTrendMethods = {
     return this._memo('vocabTrend', [this.myStatsHistory], () => computeVocabTrend(this.myStatsHistory));
   },
   myStatsHasVocab() { return this.myStatsVocabTrend().hasData; },
+
+  // ── Zugaengliche Kurzfassungen (Screenreader) ────────────────────────────────
+  // Heatmap: Zusammenfassung der sichtbaren 52 Wochen statt 364 stummer Zellen.
+  myStatsStreakAria() {
+    const s = this.myStatsStreak();
+    return window.__app.t('mystats.streakAria', {
+      active: this._myStatsFmt(s.gridActiveDays),
+      current: this._myStatsPlural('mystats.days', s.gridCurrentStreak),
+      longest: this._myStatsPlural('mystats.days', s.gridLongestStreak),
+    });
+  },
+  // Aufwands-Balken: beide Anteile, nicht nur das Schreiben.
+  myStatsEffortAria() {
+    const e = this.myStatsEffort();
+    return window.__app.t('mystats.effortAria', { write: e.writingPct, edit: e.lektoratPct });
+  },
 };

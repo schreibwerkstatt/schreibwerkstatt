@@ -21,6 +21,9 @@ const CHAPTER_BAR_KINDS = {
   },
   lektoratTime: {
     compute: 'overviewChapterLektoratTime',
+    // Lektoratszeit ist pro User erfasst (/history/lektorat-time liest nur die
+    // eigene) — anders als die Findings, die alle Prüfungen des Buchs zählen.
+    scopeKey: 'overview.scope.own',
     median: (_ctx, row) => row.medianLabel,
     value: (_ctx, row) => row.durationLabel,
   },
@@ -40,6 +43,12 @@ export const kapitelMethods = {
     const first = this.overviewChapterBars(kind)[0];
     if (!cfg || !first?.showMedian) return '';
     return cfg.median(this, first);
+  },
+
+  // Reichweite der Kennzahl („nur deine"), leer wenn buchweit.
+  overviewChapterBarScope(kind) {
+    const key = CHAPTER_BAR_KINDS[kind]?.scopeKey;
+    return key ? window.__app.t(key) : '';
   },
 
   overviewChapterBarValue(kind, row) {
@@ -71,7 +80,7 @@ export const kapitelMethods = {
     if (!app) return [];
     const tree = Alpine.store('nav').tree || [];
     const tokEsts = app.tokEsts || {};
-    return this._memo('chapterDist', [tree, tokEsts],
+    return this._memo('chapterDist', [tree, tokEsts, this._chapterRollup()],
       () => this._computeChapterDistribution(tree, tokEsts));
   },
 
@@ -82,6 +91,7 @@ export const kapitelMethods = {
       (buckets) => {
         for (const item of tree) {
           if (item.type !== 'chapter' || item.solo) continue;
+          // rootOf → null für ausgeschlossene Kapitel samt Unterkapiteln.
           const root = rootOf(item.id);
           if (!root) continue;
           const b = buckets.get(Number(root.id));
@@ -113,7 +123,7 @@ export const kapitelMethods = {
     const heat = this.overviewHeat;
     if (!heat || !Array.isArray(heat.chapters) || !heat.matrix) return [];
     const tree = Alpine.store('nav').tree || [];
-    return this._memo('chapterFindings', [heat, tree], () => this._computeChapterFindings(heat));
+    return this._memo('chapterFindings', [heat, tree, this._chapterRollup()], () => this._computeChapterFindings(heat));
   },
 
   _computeChapterFindings(heat) {
@@ -155,7 +165,7 @@ export const kapitelMethods = {
   overviewChapterLektoratTime() {
     const tree = Alpine.store('nav').tree || [];
     const lt = this.overviewLektoratTime;
-    return this._memo('chapterLektoratTime', [tree, lt], () => this._computeChapterLektoratTime(lt));
+    return this._memo('chapterLektoratTime', [tree, lt, this._chapterRollup()], () => this._computeChapterLektoratTime(lt));
   },
 
   _computeChapterLektoratTime(lt) {

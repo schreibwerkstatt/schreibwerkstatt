@@ -152,9 +152,15 @@
 }
 .mystats-range-sep { color: var(--color-muted); }
 
-/* „gesamt"-Tag auf Lifetime-Werten bei aktivem Zeitraum-Filter (eckig). */
-.mystats-alltime-tag {
+/* Geltungs-Tag jeder Kachel („im Zeitraum" / „gesamt" / „aktuell" /
+   „letzte 52 Wochen", myStatsScope) — eckig. Auch für das „netto"-Tag neben
+   einem negativen Zeitraum-Umfang. */
+.mystats-scope-tag {
   display: inline-flex;
+  /* Im Kachel-Label nicht die Versalien/Sperrung des Labels erben: das Tag
+     sieht in Label und Kennzahl-Zeile gleich aus. */
+  text-transform: none;
+  letter-spacing: normal;
   align-items: center;
   margin-left: var(--space-xs);
   padding: 0 var(--space-2xs);
@@ -165,6 +171,25 @@
   border-radius: var(--radius-sm);
   vertical-align: middle;
 }
+/* Geltungs-Tag der Heatmap (letzte 52 Wochen) über dem Raster, rechtsbündig. */
+.mystats-grid-scope {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-2xs);
+}
+
+/* Leerzustand des Entwicklungs-Charts: liegt über dem leeren Canvas, das im
+   Layout bleibt (sonst misst ein späteres Rendern ein 0×0-Element). */
+.mystats-chart-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  text-align: center;
+}
+
 /* Gesamt-Kennzahlen-Zeile (Bücher/Kapitel/Wortschatz) unter der Hero-Zahl. */
 .mystats-state-row {
   align-items: center;

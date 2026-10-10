@@ -8,9 +8,11 @@
 //   /history/rueckblick-coverage/:id   → Rückblick-Heatmap (nur buchtyp 'tagebuch')
 //   /history/stats-stale/:book_id      → Server-Urteil Stats-Staleness (Auto-Sync)
 //   /history/page-stats/:book_id       → tokEsts-Refresh nach Auto-Sync
-//   /usage/page/recent                 → zuletzt geöffnete Seiten
+//   /usage/page/recent                 → zuletzt geöffnete Abschnitte (mit Puffer, siehe load.js)
 //   /figures/:book_id, /figures/scenes/:book_id → Figuren/Szenen + Präsenz-Matrix
 //   /locations/:book_id                → Schauplätze + Präsenz-Matrix
+//     (Figuren/Schauplätze: liegt der Katalog des offenen Buchs schon im
+//     catalog-Store, wird er wiederverwendet; der Refresh fragt immer neu)
 //   /songs/:book_id                    → Soundtrack-Tile
 //   /booksettings/:book_id             → Buchtyp, is_finished, Schreibziel/Deadline
 //   /plot?book_id, /motifs?book_id     → optionale Planungswerkzeuge (Tile aus, wenn leer)
@@ -26,11 +28,16 @@
 // Visualisierungen sind reines Inline-SVG (kein Chart.js): Overview soll
 // instant beim Buchwechsel sichtbar sein, ohne Lazy-Lib-Load.
 //
+// Fehler vs. Recht: ein 403 (Betrachter ohne editor-Recht auf Figuren, Szenen,
+// Schauplätze, Songs) ist kein Ladefehler — das Tile bleibt aus, der
+// Fehler-Banner nicht (`overviewForbidden` statt `overviewLoadErrors`).
+//
 // Facade: spreadet alle Sub-Module in `bookOverviewMethods`. Sub-Methoden
 // nutzen `this._memo` aus `load.js` (gemeinsamer Memo-Speicher pro Card).
 // Reine Compute-Kerne ohne Alpine-Bindung liegen daneben und werden von den
 // Fachmodulen importiert statt gespreadet: `presence.js` (Matrix-Mechanik der
-// drei Präsenz-Tiles), `diverging.js` (Median-Balken der Kapitel-Tiles).
+// drei Präsenz-Tiles), `diverging.js` (Median-Balken der Kapitel-Tiles),
+// `ranking.js` (Top-Listen-Auswahl), `iso-day.js` (Kalendertag-Arithmetik).
 import { loadMethods } from './book-overview/load.js';
 import { presenceMethods } from './book-overview/presence.js';
 import { statsMethods } from './book-overview/stats.js';

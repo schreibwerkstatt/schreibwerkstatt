@@ -1,6 +1,6 @@
 'use strict';
 // Text-fokussierte Tools: Seiten + Kapiteltexte laden, Volltext-/Regex-Suche,
-// Zitate via Offset oder Pattern, Dialogerkennung, Erst-/Letztauftritt. Die
+// Zitate via Offset oder Pattern, Dialogerkennung. Die
 // semantische Suche (search_similar) liegt in tools-similar.js.
 
 const { htmlToText } = require('../shared');
@@ -22,14 +22,9 @@ const {
 const {
   listPagesForPassageSearch,
   getPageWithChapter,
-  getChapterInBook,
-  listChapterPages,
   listPagesForDialogue,
   getLatestPageCheck,
-  getLocationRefByLocId,
-  listLocationChaptersWithNames,
 } = require('../../../db/book-chat/text');
-const { listFigureMentionsWithPages } = require('../../../db/book-chat/figures');
 
 // ── search_passages ───────────────────────────────────────────────────────────
 
@@ -217,6 +212,8 @@ async function tool_get_pages(input, ctx) {
   const toFetch = ids.slice(0, limit);
   const results = [];
   const missing = [];
+  const pathById = new Map((await contentStore.bookOutline(ctx.bookId))
+    .filter(n => n.type === 'page' && n.depth > 1).map(n => [n.id, contentStore.formatChapterPath(n.path)]));
   for (const pageId of toFetch) {
     if (ctx.jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
     // Buch-Scope VOR dem Laden: die ids kommen vom Modell (und damit indirekt aus
@@ -235,6 +232,7 @@ async function tool_get_pages(input, ctx) {
         page_id: pageId,
         page_name: pageRow?.page_name || pd.name || `#${pageId}`,
         chapter_name: pageRow?.chapter_name || null,
+        ...(pathById.has(pageId) ? { chapter_path: pathById.get(pageId) } : {}),
         ...pageWindow(text, offset, maxChars),
         ...(latestCheck ? { latest_check: latestCheck } : {}),
       });
@@ -253,21 +251,29 @@ async function tool_get_pages(input, ctx) {
 
 // ── get_chapter_text ─────────────────────────────────────────────────────────
 
+// Lesereihenfolge aus der Gliederung (contentStore.bookOutline). Standardmässig
+// samt Unterkapiteln: «Kapitel 2» meint das Kapitel mit allem, was darin steht —
+// ein Oberkapitel ohne eigene Abschnitte lieferte sonst gar keinen Text.
 async function tool_get_chapter_text(input, ctx) {
   const chapterId = input?.chapter_id;
   if (!Number.isInteger(chapterId)) return { error: 'chapter_id fehlt', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'chapter_id' } };
-  const chapter = getChapterInBook(chapterId, ctx.bookId);
+  const outline = await contentStore.bookOutline(ctx.bookId);
+  const chapter = outline.find(n => n.type === 'chapter' && n.id === chapterId);
   if (!chapter) return { error: 'Kapitel nicht im aktuellen Buch.', errorKey: 'chat.toolError.chapterNotInBook' };
 
-  const pageRows = listChapterPages(chapterId, ctx.bookId);
-  if (!pageRows.length) {
-    return {
-      chapter_id:   chapter.chapter_id,
-      chapter_name: chapter.chapter_name,
-      pages:        [],
-      total_pages:  0,
-    };
-  }
+  const includeSub = input?.include_subchapters !== false;
+  const subchapters = outline
+    .filter(n => n.type === 'chapter' && n.id !== chapterId && n.chapter_ids.includes(chapterId))
+    .map(n => ({ chapter_id: n.id, chapter_name: n.name, depth: n.depth, parent_chapter_id: n.parent_id }));
+  const pageRows = contentStore.chapterPages(outline, chapterId, { includeSubchapters: includeSub });
+  const head = {
+    chapter_id:   chapter.id,
+    chapter_name: chapter.name,
+    depth:        chapter.depth,
+    ...(chapter.depth > 1 ? { chapter_path: contentStore.formatChapterPath(chapter.path) } : {}),
+    ...(subchapters.length ? { subchapters, include_subchapters: includeSub } : {}),
+  };
+  if (!pageRows.length) return { ...head, pages: [], total_pages: 0 };
 
   const maxPages = Math.min(MAX_PAGES_PER_FETCH,
     Math.max(1, Number.isInteger(input?.max_pages) ? input.max_pages : pageRows.length));
@@ -281,26 +287,27 @@ async function tool_get_chapter_text(input, ctx) {
   for (const row of toFetch) {
     if (ctx.jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
     try {
-      const pd = await contentStore.loadPage(row.page_id);
+      const pd = await contentStore.loadPage(row.id);
       const text = htmlToText(pd.html || '');
       results.push({
-        page_id:   row.page_id,
-        page_name: row.page_name,
+        page_id:   row.id,
+        page_name: row.name,
+        // Abschnitt eines Unterkapitels: sein direktes Kapitel mitnennen.
+        ...(row.chapter_id !== chapterId ? { chapter_id: row.chapter_id, chapter_name: row.path[row.path.length - 1] } : {}),
         ...pageWindow(text, offset, maxCharsPerPage),
       });
     } catch (e) {
-      missing.push({ page_id: row.page_id, error: e.message });
+      missing.push({ page_id: row.id, error: e.message });
     }
   }
 
   return _truncateResult({
-    chapter_id:   chapter.chapter_id,
-    chapter_name: chapter.chapter_name,
+    ...head,
     total_pages:  pageRows.length,
     ...(results.some(r => r.truncated) ? { hint: WINDOW_HINT } : {}),
     pages:        results,
     ...(missing.length ? { missing } : {}),
-    ...(dropped > 0 ? { dropped, note: `${dropped} weitere Abschnitte nicht geladen (max ${maxPages}).` } : {}),
+    ...(dropped > 0 ? { dropped, note: `${dropped} weitere Abschnitte nicht geladen (max ${maxPages}); in Lesereihenfolge via get_pages nachladen.` } : {}),
   });
 }
 
@@ -497,88 +504,6 @@ function tool_get_dialogue(input, ctx) {
   });
 }
 
-// ── find_first_last_mention ───────────────────────────────────────────────────
-
-function tool_find_first_last_mention(input, ctx) {
-  const userEmail = ctx.userEmail || null;
-  const hasFigSelector = (typeof input?.figur_id === 'string' && input.figur_id.trim())
-                      || (typeof input?.figur_name === 'string' && input.figur_name.trim());
-  const hasLocSelector = typeof input?.loc_id === 'string' && input.loc_id.trim();
-
-  if (!hasFigSelector && !hasLocSelector) {
-    return { error: 'figur_id, figur_name oder loc_id erforderlich.', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'figur_id/figur_name/loc_id' } };
-  }
-
-  if (hasFigSelector) {
-    const figRow = _findFigure(input, ctx);
-    if (!figRow) {
-      return { error: 'Figur nicht gefunden', errorKey: 'chat.toolError.figureNotFound', hint: 'Pruefe die Figurenliste im System-Prompt.' };
-    }
-    const mentions = listFigureMentionsWithPages(figRow.id, ctx.bookId);
-    if (!mentions.length) {
-      return {
-        fig_id: figRow.fig_id,
-        name: figRow.name,
-        error: 'Keine Index-Erwaehnung vorhanden. Komplettanalyse/Sync ausfuehren.', errorKey: 'chat.toolError.noIndex',
-      };
-    }
-    const first = mentions[0];
-    const last  = mentions[mentions.length - 1];
-    const total = mentions.reduce((s, m) => s + m.count, 0);
-    return {
-      fig_id: figRow.fig_id,
-      name: figRow.name,
-      total_mentions: total,
-      pages_with_mention: mentions.length,
-      first_appearance: {
-        chapter_id: first.chapter_id,
-        chapter_name: first.chapter_name || '(ohne Kapitel)',
-        page_id: first.page_id,
-        page_name: first.page_name,
-        first_offset: first.first_offset,
-        count: first.count,
-      },
-      last_appearance: {
-        chapter_id: last.chapter_id,
-        chapter_name: last.chapter_name || '(ohne Kapitel)',
-        page_id: last.page_id,
-        page_name: last.page_name,
-        count: last.count,
-      },
-    };
-  }
-
-  const locRow = getLocationRefByLocId(ctx.bookId, userEmail, input.loc_id.trim());
-  if (!locRow) {
-    return { error: 'Ort nicht gefunden', errorKey: 'chat.toolError.locationNotFound', hint: 'Pruefe loc_id via list_locations.' };
-  }
-  const chRows = listLocationChaptersWithNames(locRow.id);
-  if (!chRows.length) {
-    return {
-      loc_id: locRow.loc_id,
-      name: locRow.name,
-      error: 'Keine Index-Erwaehnung vorhanden. Komplettanalyse/Sync ausfuehren.', errorKey: 'chat.toolError.noIndex',
-    };
-  }
-  const first = chRows[0];
-  const last  = chRows[chRows.length - 1];
-  return {
-    loc_id: locRow.loc_id,
-    name: locRow.name,
-    chapters_with_mention: chRows.length,
-    first_appearance: {
-      chapter_id: first.chapter_id,
-      chapter_name: first.chapter_name || '(ohne Kapitel)',
-      haeufigkeit: first.haeufigkeit,
-    },
-    last_appearance: {
-      chapter_id: last.chapter_id,
-      chapter_name: last.chapter_name || '(ohne Kapitel)',
-      haeufigkeit: last.haeufigkeit,
-    },
-  };
-}
-
 module.exports = {
   tool_search_passages,
   tool_get_pages,
@@ -586,6 +511,5 @@ module.exports = {
   tool_quote_passage,
   tool_quote_match,
   tool_get_dialogue,
-  tool_find_first_last_mention,
   pageWindow,
 };

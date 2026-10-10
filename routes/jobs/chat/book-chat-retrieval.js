@@ -144,7 +144,7 @@ async function selectPassagesSemantic(bookId, query, budgetChars, signal) {
  *     (resolveEntityTitle-Scope).
  *   topK, chars — Default `jobs.book_chat.pre_rag_top_k` / `…pre_rag_chars`; 0 = aus.
  *   excludePageIds — Seiten, die schon vollständig im Prompt stehen (Seiten-Chat).
- * Rückgabe: { hits:[{ kind, entity_id, title, score, text }], chars } oder null
+ * Rückgabe: { hits:[{ kind, entity_id, title, chapter_path?, score, text }], chars } oder null
  * (abgeschaltet / keine Treffer). Ein fehlender Index liefert schlicht keine Treffer.
  */
 async function preContextPassages(bookId, query, {
@@ -169,6 +169,14 @@ async function preContextPassages(bookId, query, {
   }
   if (!kept.length) return null;
 
+  // Abschnitts-Treffer: Kapitelpfad mitgeben, damit der Ausschnitt im Buch verortbar ist.
+  const pathById = new Map();
+  if (kept.some(h => h.kind === 'page')) {
+    for (const n of await contentStore.bookOutline(bookId)) {
+      if (n.type === 'page' && n.path.length) pathById.set(n.id, contentStore.formatChapterPath(n.path));
+    }
+  }
+
   const hits = [];
   let used = 0;
   for (const item of _expand(kept)) {
@@ -180,6 +188,7 @@ async function preContextPassages(bookId, query, {
       kind: h.kind,
       entity_id: h.entity_id,
       title: h.title,
+      ...(h.kind === 'page' && pathById.has(h.entity_id) ? { chapter_path: pathById.get(h.entity_id) } : {}),
       score: Math.round(h.score * 1000) / 1000,
       text,
     });

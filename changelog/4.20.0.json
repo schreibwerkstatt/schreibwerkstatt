@@ -1,0 +1,66 @@
+{
+  "version": "4.20.0",
+  "date": "2026-10-10",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Kontinuitäts-Karte, Filter «Verworfen»: Befunde, die die Prüfung selbst aussortiert hat, stehen dort mit Begründung. Mit «Doch ein Fehler» wird ein solcher Befund wieder als offener Fehler geführt.",
+      "en": "Continuity card, «Discarded» filter: findings the check sorted out itself are listed there with the reason. «An error after all» turns such a finding back into an open error."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Komplettanalyse: Figuren und Schauplätze, die schon im Katalog stehen, werden bei weiteren Durchgängen zuverlässig wiedererkannt. Ähnlich klingende Namen verschmelzen nicht mehr zu einer Figur.",
+      "en": "Full analysis: characters and locations already in the catalogue are reliably recognised on later runs. Similar-sounding names no longer merge into one character."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Komplettanalyse: Kontinuitätsprüfung und Erzählprofil laufen nach dem Katalog als eigene Aufträge in der Warteschlange. Scheitert einer davon, bleibt der fertige Katalog trotzdem erhalten.",
+      "en": "Full analysis: the continuity check and narrative profile now run as separate tasks in the queue after the catalogue. If one of them fails, the finished catalogue is kept."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lektorat eines Abschnitts: Es sieht jetzt auch den Anschluss ans vorige und nächste Kapitel. Am Ende eines unfertigen Buchs gilt die letzte Szene nicht mehr als abgebrochen.",
+      "en": "Section proofreading now also sees the transition to the previous and next chapter. At the end of an unfinished book, the last scene is no longer flagged as cut off."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Kapitel-Bewertung: Bei einem Buch, das noch entsteht, wird das zuletzt geschriebene Kapitel nicht mehr als fehlender Schluss benotet.",
+      "en": "Chapter review: in a book still being written, the most recently written chapter is no longer graded as a missing ending."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buch-Chat: Er kennt jetzt die ganze Gliederung samt Unterkapiteln in Lesereihenfolge. Fragen wie «Was passiert in Teil 2?» beantwortet er auch, wenn Teil 2 nur aus Unterkapiteln besteht.",
+      "en": "Book chat now knows the full outline including subchapters in reading order. It answers questions like «What happens in part 2?» even when part 2 consists only of subchapters."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Meine Statistik: Kennzahlen sagen jetzt, ob sie für den Zeitraum oder gesamt gelten, und erklären sich per Tooltip. Der Zuwachs heisst «Netto-Zuwachs» und das Diagramm zeigt die Einheit und das Tagesziel.",
+      "en": "My statistics: figures now say whether they cover the period or all time and explain themselves in a tooltip. Growth is labelled «net growth», and the chart shows its unit and the daily goal."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buchübersicht: Zahlen und Noten erscheinen im Format der eingestellten Sprache, und Einzahl-Angaben wie «1 Tag» stimmen. Lässt sich ein Bereich nicht laden, steht ein Hinweis da statt einer leeren Kachel.",
+      "en": "Book overview: numbers and grades appear in the format of your language, and singular labels like «1 day» are correct. If a section fails to load, a notice appears instead of an empty tile."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Synonyme im Kontextmenü erscheinen schneller. In den Einstellungen lässt sich dafür ein eigenes, schnelles Modell wählen.",
+      "en": "Synonyms in the context menu appear faster. A separate, fast model can be chosen for them in the settings."
+    },
+    {
+      "kind": "behoben",
+      "de": "Nach einem Import aus Ordner, Manuskript oder Buch-Datei zählte der ganze Text im Tagesring und in «Meine Statistik» als heute geschrieben.",
+      "en": "After importing from a folder, manuscript or book file, the whole text counted as written today in the daily ring and in «My statistics»."
+    },
+    {
+      "kind": "behoben",
+      "de": "Struktur-Karte auf dem Handy: Ein langer Kapitelname machte die ganze Karte breiter als den Bildschirm.",
+      "en": "Structure card on phones: a long chapter name made the whole card wider than the screen."
+    },
+    {
+      "kind": "behoben",
+      "de": "Abgeschnittene Verweise auf Beats, Motive oder Ideen liessen sich nicht ganz lesen. Beim Überfahren erscheint jetzt der volle Text.",
+      "en": "Truncated references to beats, motifs or ideas could not be read in full. Hovering now shows the full text."
+    }
+  ]
+}

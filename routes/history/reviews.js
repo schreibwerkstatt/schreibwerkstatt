@@ -10,6 +10,7 @@ const {
 const { toIntId } = require('../../lib/validate');
 const { sessionEmail } = require('../../lib/acl');
 const { buildRueckblickCoverage } = require('../jobs/rueckblick-dates');
+const { listPageNamesForBook } = require('../../db/content-names');
 const logger = require('../../logger');
 
 function register(router) {
@@ -98,7 +99,7 @@ function register(router) {
   router.get('/rueckblick-coverage/:book_id', (req, res) => {
     const user_email = sessionEmail(req);
     const bookId = req.bookId;
-    const pages = db.prepare('SELECT page_id, page_name FROM pages WHERE book_id = ?').all(bookId);
+    const pages = listPageNamesForBook(bookId);
     // Jüngster Rückblick je Zeitraum (user-spezifisch — tagebuch_rueckblicke ist persönlich).
     const rbRows = db.prepare(`
       WITH ranked AS (

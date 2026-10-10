@@ -17,7 +17,7 @@ export const motivMethods = {
   overviewMotifPresence() {
     const motifs = this.overviewMotifs?.motifs || [];
     const tree = Alpine.store('nav').tree || [];
-    return this._memo('motifPresence', [motifs, tree],
+    return this._memo('motifPresence', [motifs, tree, this._chapterRollup()],
       () => this._computeMotifPresence(motifs));
   },
 

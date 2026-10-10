@@ -98,7 +98,7 @@ function _applyBookChatAiOverrides(effectiveProvider, logger) {
 
 async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
   const logger = makeJobLogger(jobId);
-  const { buildBookChatSystemPrompt, SCHEMA_BOOK_CHAT } = await getPrompts(userEmail);
+  const { buildBookChatSystemPrompt, buildGliederungBlock, SCHEMA_BOOK_CHAT } = await getPrompts(userEmail);
   const effectiveProvider = resolveProvider({ userEmail });
   _applyBookChatAiOverrides(effectiveProvider, logger);
   const aiCfg = getContextConfigFor(effectiveProvider);
@@ -133,9 +133,14 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // entsteht erst unten, und ein zu knapp gerechnetes Textbudget ist teurer als ein
     // paar ungenutzte Zeichen.
     const FIGUREN_MAX_CHARS = figurenBlockChars(aiCfg);
+    // Gliederung (Kapitel/Unterkapitel/Abschnitte in Lesereihenfolge): ordnet die
+    // Auszüge im Buch ein. Gedeckelt auf einen Anteil des Budgets; ihre tatsächliche
+    // Länge geht vom Textbudget ab (der Block steht schon fest).
+    const outline = await contentStore.bookOutline(session.book_id);
+    const gliederung = buildGliederungBlock(outline, { maxChars: Math.max(2000, Math.floor(aiCfg.inputBudgetChars * 0.08)) });
     const TEXT_CHAR_BUDGET = Math.max(
       20000,
-      Math.floor((aiCfg.inputBudgetChars - historyChars - SYSTEM_OVERHEAD_CHARS - FIGUREN_MAX_CHARS) * 0.98)
+      Math.floor((aiCfg.inputBudgetChars - historyChars - SYSTEM_OVERHEAD_CHARS - FIGUREN_MAX_CHARS - (gliederung?.length || 0)) * 0.98)
     );
 
     // ── Retrieval: Mini-RAG mit Keyword-Fallback ────────────────────────────────
@@ -246,6 +251,13 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       totalPages = pageContents.length;
     }
 
+    // Auswahl nach Relevanz, Darstellung in Lesereihenfolge mit Kapitelpfad.
+    const pageNodes = new Map();
+    for (const n of outline) if (n.type === 'page') pageNodes.set(n.id, { ord: pageNodes.size, path: n.path });
+    selectedPages = selectedPages
+      .map(p => ({ ...p, chapter_path: contentStore.formatChapterPath(pageNodes.get(p.id)?.path) }))
+      .sort((a, b) => (pageNodes.get(a.id)?.ord ?? Infinity) - (pageNodes.get(b.id)?.ord ?? Infinity));
+
     logger.info(
       `Kontext: ${selectedPages.length}/${totalPages} ${retrievalMode === 'semantic' ? 'Auszüge' : 'Seiten'} ` +
       `(${usedChars}/${TEXT_CHAR_BUDGET} Zeichen, Hist ${Math.round(historyChars / 1000)}k Zeichen, ` +
@@ -256,7 +268,7 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const figuren = getFiguren(session.book_id, userEmail);
     const review  = getLatestReview(session.book_id, userEmail);
     const systemPrompt = buildBookChatSystemPrompt(session.book_name || '', selectedPages, figuren, review, bookChatSys,
-      { excerpt: retrievalMode === 'semantic', figurenMaxChars: FIGUREN_MAX_CHARS });
+      { excerpt: retrievalMode === 'semantic', figurenMaxChars: FIGUREN_MAX_CHARS, gliederung });
     const contextInfo = {
       pages:      selectedPages.map(p => ({ name: p.name, id: p.id, slug: p.slug, book_slug: p.book_slug })),
       totalPages,

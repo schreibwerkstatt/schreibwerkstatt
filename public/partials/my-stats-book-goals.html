@@ -5,7 +5,10 @@
      Helfer in public/js/cards/my-stats-card.js / my-stats-compute.js. -->
 <template x-if="myStatsHasBookGoals">
   <div class="overview-tile overview-tile--wide">
-    <div class="overview-tile-label" x-text="$app.t('mystats.bookGoals.title')"></div>
+    <div class="overview-tile-label">
+      <span x-text="$app.t('mystats.bookGoals.title')"></span>
+      <span class="mystats-scope-tag" x-text="myStatsScope('current')"></span>
+    </div>
     <div class="table-scroll">
       <table class="mystats-goals-table"
              x-data="sortableTable({
@@ -61,7 +64,8 @@
               <td>
                 <template x-if="row.hasGoal">
                   <div class="mystats-goals-progress">
-                    <div class="progress-bar-wrap">
+                    <div class="progress-bar-wrap" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+                         :aria-valuenow="row.pct" :aria-label="$app.t('mystats.bookGoals.progress')">
                       <div class="progress-bar"
                            :class="row.reached ? 'progress-bar--reached' : (row.status === 'overdue' ? 'progress-bar--overdue' : '')"
                            :style="{ '--progress': row.pct + '%' }"></div>
@@ -76,11 +80,14 @@
                       x-text="myStatsGoalStatusLabel(row)"></span>
                 <span class="mystats-goals-sub" x-show="row.deadline"
                       x-text="myStatsDeadlineLabel(row.deadline)"></span>
-                <!-- Fertigstellungs-Prognose (Tempo der letzten ~30 Tage) -->
+                <!-- Fertigstellungs-Prognose (Tempo der letzten ~30 Tage, bei jüngeren
+                     Büchern seit dem ersten Snapshot) + das Tempo dahinter -->
                 <span class="mystats-goals-forecast"
                       :class="row.onTrack === false ? 'mystats-goals-forecast--behind' : (row.onTrack === true ? 'mystats-goals-forecast--ontrack' : '')"
                       x-show="row.forecastDate || row.forecastStalled"
                       x-text="myStatsForecastLabel(row)"></span>
+                <span class="mystats-goals-sub" x-show="row.hasGoal && !row.reached && myStatsPaceLabel(row)"
+                      x-text="myStatsPaceLabel(row)"></span>
                 <span class="mystats-goals-sub" x-show="row.requiredPerDay"
                       x-text="$app.t('mystats.bookGoals.requiredPerDay', { n: _myStatsFmt(row.requiredPerDay) })"></span>
               </td>

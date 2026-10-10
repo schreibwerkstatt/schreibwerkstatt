@@ -1,17 +1,25 @@
-<!-- Letzte Bewertung als 6 Sterne + Trend-Pfeil -->
+<!-- Letzte Bewertung als 6 Sterne + Trend-Pfeil. Bewertungen sind pro User
+     (nur die eigenen). Fehlt die Gesamtnote, zeigt die Kachel weder Sterne noch
+     Trend (siehe book-overview/review.js#reviewScore). -->
 <template x-if="overviewLastReview">
   <div class="overview-tile internal-link"
        @click="$app.toggleBookReviewCard()"
-       :aria-label="$app.t('overview.lastReview')"
+       :aria-label="overviewReviewAria()"
        :data-tip="$app.t('overview.openReview')">
-    <div class="overview-tile-label" x-text="$app.t('overview.lastReview')"></div>
-    <div class="overview-stars" :aria-label="overviewStarsAriaLabel()" :data-tip="overviewStarsAriaLabel()">
-      <template x-for="(s, i) in overviewStars(overviewLastReview?.review_json?.gesamtnote)" :key="i">
+    <div class="overview-tile-head">
+      <div class="overview-tile-label" x-text="$app.t('overview.lastReview')"></div>
+      <span class="overview-tile-scope" x-text="$app.t('overview.scope.own')"></span>
+    </div>
+    <div class="overview-stars" x-show="overviewReviewScore() !== null"
+         :aria-label="overviewStarsAriaLabel()" :data-tip="overviewStarsAriaLabel()">
+      <template x-for="(s, i) in overviewStars(overviewReviewScore())" :key="i">
         <span class="overview-star"
               :class="s.full ? 'overview-star--full' : s.half ? 'overview-star--half' : 'overview-star--empty'"
               aria-hidden="true">★</span>
       </template>
     </div>
+    <div class="card-hint" x-show="overviewReviewScore() === null" x-cloak
+         x-text="$app.t('overview.reviewNoScore')"></div>
     <div class="overview-review-meta">
       <span class="overview-review-date" x-text="$app.formatDate(overviewLastReview?.reviewed_at)"></span>
       <span class="overview-review-trend" x-show="overviewReviewTrendDisplay()"

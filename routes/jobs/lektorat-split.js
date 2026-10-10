@@ -142,6 +142,8 @@ async function lektoratAnalyze({ jobId, tok, text, local, prompts, system, promp
     // Benutzer-Wörterbuch: der Objektiv-Pass ist der, der Rechtschreibung prüft.
     woerterbuch: promptOpts.woerterbuch,
     langCode: promptOpts.langCode,
+    // Schreibstelle: ein abgebrochener letzter Satz ist dort kein Grammatik-Befund.
+    schreibfront: promptOpts.schreibfront,
     // Buchtyp entscheidet, welche objektiven Typen es überhaupt gibt (Fach-Profile:
     // nur rechtschreibung + grammatik, kein Dialogformat/Figurenkonsistenz).
     buchtyp,

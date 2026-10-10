@@ -31,7 +31,7 @@ export const orteMethods = {
   overviewOrtPresence() {
     const orte = this.overviewOrte || [];
     const tree = Alpine.store('nav').tree || [];
-    return this._memo('ortPresence', [orte, tree],
+    return this._memo('ortPresence', [orte, tree, this._chapterRollup()],
       () => this._computeOrtPresence(orte));
   },
 

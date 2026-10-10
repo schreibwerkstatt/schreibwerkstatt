@@ -27,6 +27,8 @@ const MAX_ZEITSTRAHL       = 40;
 const MAX_MOTIVE           = 40;
 const MAX_PLAN_BEATS       = 30;
 const MAX_KAPITEL_IDEEN    = 20;
+const MAX_OFFENE_BEATS     = 25;
+const MAX_UNGESCHRIEBEN    = 10;
 
 function _truncString(s, n) {
   if (!s) return '';
@@ -344,7 +346,99 @@ function loadChapterIdeenContext(bookId, userEmail, chapterIds = []) {
   }
 }
 
+/** Kapitel, die HINTER dem letzten Kapitel mit Text angelegt, aber noch leer
+ *  sind — die Hüllen, die eine Autorin für Späteres anlegt. Pure.
+ *
+ *  Why: «Kapitel 3 von 12» las sich wie ein Buch mit neun geschriebenen
+ *  Folgekapiteln. Leere Kapitel VOR dem letzten geschriebenen zählen nicht: das
+ *  sind Lücken im Text, keine ausstehende Fortsetzung.
+ *
+ *  @param {Array<{id:number|string, name:string}>} chaptersFlat  Buchreihenfolge
+ *  @param {Set<string>} writtenIds  Kapitel-IDs (String) mit Text
+ *  @returns {{ namen: string[], gesamt: number }|null}
+ */
+function trailingUnwrittenChapters(chaptersFlat, writtenIds) {
+  let last = -1;
+  chaptersFlat.forEach((c, i) => { if (writtenIds.has(String(c.id))) last = i; });
+  if (last === -1) return null;
+  const rest = chaptersFlat.slice(last + 1).filter(c => !writtenIds.has(String(c.id)));
+  if (!rest.length) return null;
+  return { namen: rest.slice(0, MAX_UNGESCHRIEBEN).map(c => c.name), gesamt: rest.length };
+}
+
+/** Noch geplante Beats der Plot-Werkstatt (Status «geplant», nicht verworfen) in
+ *  Lesereihenfolge — für die BUCHbewertung eines unfertigen Werks: wohin der
+ *  bisher geschriebene Text laut Plan noch führen soll. Autor-Absicht, keine
+ *  Textwahrheit. null ohne solche Beats (Block entfällt).
+ *
+ *  @param {Map<string,string>} chapterNameById  für die Zuordnung «Kapitel: …»
+ *  @returns {{ beats: object[], gesamt: number, verankert: boolean }|null}
+ */
+function loadOpenPlanBeats(bookId, userEmail, chapterNameById = new Map()) {
+  if (!bookId) return null;
+  try {
+    const threads = plotDb.listThreads(bookId, userEmail);
+    const threadById = new Map(threads.map(t => [t.id, t]));
+    const offen = plotDb.listBeats(bookId, userEmail).filter(b => !b.verworfen && b.status === 'geplant');
+    if (!offen.length) return null;
+    const acts = plotDb.listActs(bookId, userEmail);
+    const actById = new Map(acts.map(a => [a.id, a]));
+    const ordered = beatsInReadingOrder({ acts, threads, beats: offen });
+    const verankert = plotDb.beatAnchorLastRun(bookId, userEmail) != null;
+    const occ = verankert ? plotDb.beatOccurrenceMap(bookId, userEmail, {}) : null;
+    const beats = ordered.slice(0, MAX_OFFENE_BEATS).map(b => {
+      const t = b.thread_id != null ? threadById.get(b.thread_id) : null;
+      const chId = b.chapter_id || t?.chapter_id || null;
+      return {
+        titel: b.titel,
+        beschreibung: _truncString(b.beschreibung, 200),
+        kapitel: chId ? (chapterNameById.get(String(chId)) || null) : null,
+        akt: actById.get(b.act_id)?.name || null,
+        strang: t?.name || null,
+        intensitaet: b.intensitaet || null,
+        im_text: verankert ? (occ.get(b.id)?.count || 0) : null,
+      };
+    });
+    return { beats, gesamt: offen.length, verankert };
+  } catch {
+    return null;   // Plot-Werkstatt ist optional
+  }
+}
+
+/** Werkstand für die Bewertungs-Prompts: null, wenn das Buch als abgeschlossen
+ *  markiert ist (dann trägt der System-Prompt «Werk abgeschlossen»), sonst
+ *  `{ inArbeit: true }`, mit `zielProzent`, wenn ein Zielumfang gesetzt ist und
+ *  der Aufrufer die geschriebene Zeichenzahl kennt.
+ *
+ *  Die Kapitelbewertung übergibt bewusst KEINE Zeichenzahl: der Prozentwert
+ *  hängt am ganzen Buch und invalidierte sonst den Kapitel-Cache bei jeder
+ *  Änderung in einem anderen Kapitel.
+ *
+ *  @param {object|null} bookSettings  Ausgabe von getBookSettings
+ *  @param {number|null} [writtenChars]
+ *  `ungeschrieben`/`geplant` nur für die Buchbewertung (trailingUnwrittenChapters,
+ *  loadOpenPlanBeats).
+ *
+ *  @returns {{ inArbeit: true, zielProzent: number|null, ungeschrieben?: object, geplant?: object }|null}
+ */
+function werkstandFor(bookSettings, writtenChars = null, { ungeschrieben = null, geplant = null } = {}) {
+  if (bookSettings?.is_finished) return null;
+  const goal = Number(bookSettings?.goal_target_chars) || 0;
+  const zielProzent = goal > 0 && writtenChars != null
+    ? Math.round((writtenChars / goal) * 100)
+    : null;
+  return {
+    inArbeit: true, zielProzent,
+    // Nur gesetzt, wenn vorhanden — die Signatur bleibt sonst wortgleich.
+    ...(ungeschrieben ? { ungeschrieben } : {}),
+    ...(geplant ? { geplant } : {}),
+  };
+}
+
 module.exports = {
+  werkstandFor,
+  trailingUnwrittenChapters,
+  loadOpenPlanBeats,
   loadChapterIdeenContext,
   loadChapterPlanContext,
   loadWeltContext,

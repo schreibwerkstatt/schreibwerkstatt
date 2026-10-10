@@ -1,7 +1,8 @@
 'use strict';
-// Figuren-fokussierte Tools: Pronomenzählung, Auftritte, Beziehungen, Voll-Profil.
+// Figuren-fokussierte Tools: Pronomenzählung, Auftritte, Erst-/Letztauftritt
+// (auch für Orte), Beziehungen, Voll-Profil.
 
-const { _truncateResult, _findFigure } = require('./shared');
+const { _truncateResult, _findFigure, sortByReadingOrder } = require('./shared');
 const {
   listPronounCountsWithChapters,
   listFigureMentionsWithPages,
@@ -15,6 +16,7 @@ const {
   listFigureTagNames,
   listRelationsOfFigure,
 } = require('../../../db/book-chat/figures');
+const { getLocationRefByLocId, listLocationChaptersWithNames } = require('../../../db/book-chat/text');
 
 // ── count_pronouns ────────────────────────────────────────────────────────────
 
@@ -72,13 +74,13 @@ function tool_count_pronouns(input, ctx) {
 
 // ── get_figure_mentions ───────────────────────────────────────────────────────
 
-function tool_get_figure_mentions(input, ctx) {
+async function tool_get_figure_mentions(input, ctx) {
   const figRow = _findFigure(input, ctx);
   if (!figRow) {
     return { error: 'Figur nicht gefunden', errorKey: 'chat.toolError.figureNotFound', hint: 'Prüfe die Figurenliste im System-Prompt.' };
   }
 
-  const mentions = listFigureMentionsWithPages(figRow.id, ctx.bookId);
+  const mentions = await sortByReadingOrder(ctx.bookId, listFigureMentionsWithPages(figRow.id, ctx.bookId));
 
   if (!mentions.length) {
     return {
@@ -242,9 +244,92 @@ function tool_get_figure_profile(input, ctx) {
   });
 }
 
+// ── find_first_last_mention ───────────────────────────────────────────────────
+
+async function tool_find_first_last_mention(input, ctx) {
+  const userEmail = ctx.userEmail || null;
+  const hasFigSelector = (typeof input?.figur_id === 'string' && input.figur_id.trim())
+                      || (typeof input?.figur_name === 'string' && input.figur_name.trim());
+  const hasLocSelector = typeof input?.loc_id === 'string' && input.loc_id.trim();
+
+  if (!hasFigSelector && !hasLocSelector) {
+    return { error: 'figur_id, figur_name oder loc_id erforderlich.', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'figur_id/figur_name/loc_id' } };
+  }
+
+  if (hasFigSelector) {
+    const figRow = _findFigure(input, ctx);
+    if (!figRow) {
+      return { error: 'Figur nicht gefunden', errorKey: 'chat.toolError.figureNotFound', hint: 'Pruefe die Figurenliste im System-Prompt.' };
+    }
+    const mentions = await sortByReadingOrder(ctx.bookId, listFigureMentionsWithPages(figRow.id, ctx.bookId));
+    if (!mentions.length) {
+      return {
+        fig_id: figRow.fig_id,
+        name: figRow.name,
+        error: 'Keine Index-Erwaehnung vorhanden. Komplettanalyse/Sync ausfuehren.', errorKey: 'chat.toolError.noIndex',
+      };
+    }
+    const first = mentions[0];
+    const last  = mentions[mentions.length - 1];
+    const total = mentions.reduce((s, m) => s + m.count, 0);
+    return {
+      fig_id: figRow.fig_id,
+      name: figRow.name,
+      total_mentions: total,
+      pages_with_mention: mentions.length,
+      first_appearance: {
+        chapter_id: first.chapter_id,
+        chapter_name: first.chapter_name || '(ohne Kapitel)',
+        page_id: first.page_id,
+        page_name: first.page_name,
+        first_offset: first.first_offset,
+        count: first.count,
+      },
+      last_appearance: {
+        chapter_id: last.chapter_id,
+        chapter_name: last.chapter_name || '(ohne Kapitel)',
+        page_id: last.page_id,
+        page_name: last.page_name,
+        count: last.count,
+      },
+    };
+  }
+
+  const locRow = getLocationRefByLocId(ctx.bookId, userEmail, input.loc_id.trim());
+  if (!locRow) {
+    return { error: 'Ort nicht gefunden', errorKey: 'chat.toolError.locationNotFound', hint: 'Pruefe loc_id via list_locations.' };
+  }
+  const chRows = listLocationChaptersWithNames(locRow.id);
+  if (!chRows.length) {
+    return {
+      loc_id: locRow.loc_id,
+      name: locRow.name,
+      error: 'Keine Index-Erwaehnung vorhanden. Komplettanalyse/Sync ausfuehren.', errorKey: 'chat.toolError.noIndex',
+    };
+  }
+  const first = chRows[0];
+  const last  = chRows[chRows.length - 1];
+  return {
+    loc_id: locRow.loc_id,
+    name: locRow.name,
+    chapters_with_mention: chRows.length,
+    first_appearance: {
+      chapter_id: first.chapter_id,
+      chapter_name: first.chapter_name || '(ohne Kapitel)',
+      haeufigkeit: first.haeufigkeit,
+    },
+    last_appearance: {
+      chapter_id: last.chapter_id,
+      chapter_name: last.chapter_name || '(ohne Kapitel)',
+      haeufigkeit: last.haeufigkeit,
+    },
+  };
+}
+
 module.exports = {
   tool_count_pronouns,
   tool_get_figure_mentions,
   tool_get_figure_relations,
   tool_get_figure_profile,
+  tool_find_first_last_mention,
 };

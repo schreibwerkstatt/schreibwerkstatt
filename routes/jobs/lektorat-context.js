@@ -36,30 +36,32 @@ function firstParagraph(text, maxChars = NEIGHBOUR_EXCERPT_CHARS) {
   return cut > maxChars / 3 ? head.slice(0, cut) : head;
 }
 
-// Gibt die Seite zurück, die im Abstand `offset` (-1 = vorher, +1 = nachher) zu
-// `currentPageId` liegt – bevorzugt im selben Kapitel, sonst im ganzen Buch.
-// Kapitelgrenzen werden nicht überschritten: die erste/letzte Seite eines
-// Kapitels hat keinen Nachbarn auf dieser Seite.
-function findNeighbourPage(pages, currentPageId, currentChapterId, offset) {
-  if (!Array.isArray(pages) || !pages.length) return null;
-  const sameChapter = currentChapterId
-    ? pages.filter(p => String(p.chapter_id || '') === String(currentChapterId))
-    : pages;
-  const byPos = (list) => list.slice().sort((a, b) => (a.position || 0) - (b.position || 0));
-  const pool = byPos(sameChapter.length > 0 ? sameChapter : pages);
-  const at = (list, i) => (i >= 0 && i < list.length ? list[i] : null);
-  const idx = pool.findIndex(p => String(p.id) === String(currentPageId));
-  if (idx !== -1) return at(pool, idx + offset);
-  // Fallback: falls die aktuelle Seite nicht in der Kapitel-Liste ist, Nachbar im ganzen Buch nehmen
-  if (currentChapterId && sameChapter.length === 0) {
-    const allSorted = byPos(pages);
-    const i2 = allSorted.findIndex(p => String(p.id) === String(currentPageId));
-    return i2 === -1 ? null : at(allSorted, i2 + offset);
-  }
-  return null;
+// Seiten in Leserichtung neben `currentPageId`: `offset` -1 = davor, +1 = danach,
+// nächste zuerst, höchstens `max` Stück. `pages` MUSS in Buchreihenfolge kommen
+// (loadOrderedBookContents) — `pages.position` ist kapitel-lokal und taugt nicht
+// über Kapitelgrenzen hinweg.
+//
+// Kapitelgrenzen werden überschritten. Why: wer nur einen Abschnitt pro Kapitel
+// schreibt, bekam sonst NIE einen Nachbarn zu sehen, und der Abschnittsanfang
+// stand ohne jeden Anschluss da. Ob ein Nachbar aus einem anderen Kapitel stammt,
+// sagt `isChapterChange`; der Prompt kennzeichnet ihn als Kapitelwechsel.
+// Mehrere Kandidaten, weil leere Abschnitte (angelegt, noch ungeschrieben) keinen
+// Text liefern und übersprungen werden.
+function neighbourPages(pages, currentPageId, offset, max = 1) {
+  if (!Array.isArray(pages) || !pages.length) return [];
+  const idx = pages.findIndex(p => String(p.id) === String(currentPageId));
+  if (idx === -1) return [];
+  const out = [];
+  for (let i = idx + offset; i >= 0 && i < pages.length && out.length < max; i += offset) out.push(pages[i]);
+  return out;
 }
-const findPreviousPage = (pages, id, chapterId) => findNeighbourPage(pages, id, chapterId, -1);
-const findNextPage     = (pages, id, chapterId) => findNeighbourPage(pages, id, chapterId, +1);
+const findPreviousPage = (pages, id) => neighbourPages(pages, id, -1)[0] || null;
+const findNextPage     = (pages, id) => neighbourPages(pages, id, +1)[0] || null;
+
+function isChapterChange(page, neighbour) {
+  if (!page || !neighbour) return false;
+  return String(page.chapter_id || '') !== String(neighbour.chapter_id || '');
+}
 
 // Findings verwerfen, deren «original» nicht auf der geprüften Seite steht,
 // wohl aber in einem Nachbarseiten-Auszug: das Modell hat den Lesekontext
@@ -81,5 +83,5 @@ function dropNeighbourFindings(fehler, pageText, excerpts) {
 
 module.exports = {
   NEIGHBOUR_EXCERPT_CHARS, lastParagraph, firstParagraph,
-  findPreviousPage, findNextPage, dropNeighbourFindings,
+  neighbourPages, findPreviousPage, findNextPage, isChapterChange, dropNeighbourFindings,
 };

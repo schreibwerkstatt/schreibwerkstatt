@@ -90,3 +90,19 @@ test('divergingRows: Ursprungsfelder bleiben erhalten', () => {
   assert.equal(out[0].extra, 'x');
   assert.equal(out[0].id, 9);
 });
+
+test('divergingRows: Median 0 → Balken nach v/max rechts, keine Prozentangabe', () => {
+  // Drei von fünf Kapiteln ohne Wert → Median 0. Eine Abweichung „in Prozent
+  // von 0" gibt es nicht; die Balken skalieren nach dem Maximum.
+  const out = divergingRows(rows(0, 0, 0, 50, 100), { valueOf });
+  assert.equal(out[0].median, 0);
+  assert.deepEqual(out.map(r => r.showDelta), [false, false, false, false, false]);
+  assert.deepEqual(out.map(r => r.barWidthPct), [0, 0, 0, HALF_TRACK_PCT / 2, HALF_TRACK_PCT]);
+  assert.ok(out.every(r => r.barLeftPct === 50), 'alle Balken wachsen nach rechts');
+  assert.deepEqual(out.map(r => r.isAbove), [false, false, false, true, true]);
+});
+
+test('divergingRows: Median > 0 → showDelta gesetzt', () => {
+  const out = divergingRows(rows(50, 100, 200), { valueOf });
+  assert.ok(out.every(r => r.showDelta));
+});

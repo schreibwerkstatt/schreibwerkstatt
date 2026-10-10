@@ -14,16 +14,26 @@
 // Live-Delta fuer heute = Σ-chars aus tokEsts − letzter Snapshot strikt vor
 // heute. Der Donut (Ziel-Semantik) klemmt negativ auf 0 (Lösch-Edits zählen
 // nicht zurück); die Netto-Bilanz in makeDayDelta behält das Minus. Fehlt
-// einer der beiden Werte (z.B. neues Buch ohne Vortagssnapshot), liefert der
-// Donut 0 — er bleibt leer statt falsch optimistisch zu fuellen.
-import { aggregateLiveBookStats, localIsoDate, CHARS_PER_NORMSEITE } from './utils.js';
+// einer der beiden Werte (Vortagssnapshot fehlt, Live-Stand unvollstaendig),
+// liefert der Donut 0 — er bleibt leer statt falsch optimistisch zu fuellen.
+// Ausnahme auf ausdrueckliche Anforderung (`newBookBaseline`, nur die
+// Buch-Uebersicht nach erfolgreich geladenem, aber leerem Verlauf): ein Buch
+// ganz ohne Snapshot (noch kein Cron-Lauf seit der Anlage) zaehlt den
+// vollstaendigen Live-Stand gegen 0 — alles Geschriebene ist von heute. Ein
+// fehlgeschlagener Verlaufs-Load sieht genauso leer aus; darum entscheidet der
+// Aufrufer, der den Unterschied kennt, nicht diese Funktion.
+//
+// `pages` (optional, alle Funktionen): die Seitenliste des Buchs. Mit ihr gilt
+// der Live-Stand nur, wenn tokEsts JEDE Seite kennt (completeLiveBookStats) —
+// eine Teilsumme waehrend des Nachladens waere sonst ein grosser Minus-Tag.
+import { completeLiveBookStats, localIsoDate, CHARS_PER_NORMSEITE } from './utils.js';
 
 // Netto-Bilanz von heute, VORZEICHENBEHAFTET: Live-Σ (bzw. heutiger Snapshot,
 // solange tokEsts leer ist) minus letzter Snapshot strikt vor heute. `null`,
 // wenn einer der beiden Werte fehlt. Grundlage von `computeCharsTodayDelta`
 // (Ziel-Semantik, geklemmt) und `makeDayDelta` (Netto-Bilanz, mit Minus).
-function signedTodayDelta(stats, tokEsts, todayIso) {
-  const liveChars = aggregateLiveBookStats(tokEsts).chars;
+function signedTodayDelta(stats, tokEsts, todayIso, pages) {
+  const live = completeLiveBookStats(tokEsts, pages);
   let cronTodayChars = null;
   let prevChars = null;
   const a = Array.isArray(stats) ? stats : [];
@@ -39,7 +49,7 @@ function signedTodayDelta(stats, tokEsts, todayIso) {
       break;
     }
   }
-  const curChars = liveChars > 0 ? liveChars : cronTodayChars;
+  const curChars = live ? live.chars : cronTodayChars;
   if (curChars == null || prevChars == null) return null;
   return curChars - prevChars;
 }
@@ -47,8 +57,13 @@ function signedTodayDelta(stats, tokEsts, todayIso) {
 // Reine Zahl: heute geschriebene Zeichen (Live-Σ minus Vortagssnapshot),
 // auf 0 geklemmt. Wird vom Donut konsumiert; 7-Tage-Bar und Streak lesen
 // dieselbe Bilanz ungeklemmt über makeDayDelta, damit nichts auseinander driftet.
-export function computeCharsTodayDelta(stats = [], tokEsts = {}) {
-  return Math.max(0, signedTodayDelta(stats, tokEsts, localIsoDate()) ?? 0);
+export function computeCharsTodayDelta(stats = [], tokEsts = {}, { pages, todayIso = localIsoDate(), newBookBaseline = false } = {}) {
+  const hasSnapshot = Array.isArray(stats) && stats.some(r => r?.recorded_at);
+  if (newBookBaseline && !hasSnapshot && Array.isArray(pages)) {
+    const live = completeLiveBookStats(tokEsts, pages);
+    return live ? Math.max(0, live.chars) : 0;
+  }
+  return Math.max(0, signedTodayDelta(stats, tokEsts, todayIso, pages) ?? 0);
 }
 
 // Kalendertag `n` Tage vor `iso` — reine Kalenderarithmetik ueber einen
@@ -96,11 +111,12 @@ function buildCumMap(stats) {
  * @param {Array}  opts.stats     /history/book-stats-Rows { recorded_at, chars }.
  * @param {object} opts.tokEsts   Live-Zeichenstand pro Seite.
  * @param {string} [opts.todayIso] Heutiger Kalendertag (TZ-aware).
+ * @param {Array}  [opts.pages]   Seiten des Buchs (Vollstaendigkeit des Live-Stands).
  * @returns {(iso: string) => number|null}
  */
-export function makeDayDelta({ stats = [], tokEsts = {}, todayIso = localIsoDate() } = {}) {
+export function makeDayDelta({ stats = [], tokEsts = {}, todayIso = localIsoDate(), pages } = {}) {
   const { cumByIso, sortedIsos } = buildCumMap(stats);
-  const todayDelta = signedTodayDelta(stats, tokEsts, todayIso);
+  const todayDelta = signedTodayDelta(stats, tokEsts, todayIso, pages);
   return (iso) => {
     // Heute zaehlt der Live-Stand — er ist frischer als jeder Cron-Snapshot.
     // Mit Vorzeichen: ein Loesch-Tag ist auch HEUTE schon ein negativer Tag,
@@ -122,9 +138,9 @@ function clampDay(dayDelta, iso) {
 
 // Letzte `days` Kalendertage (aeltester zuerst) als Balken-Daten fuer das
 // Header-Popover. Heute-Balken = Live-Delta, deckt sich mit dem Donut.
-export function computeWeekBars({ stats = [], tokEsts = {}, days = 7, goalChars = CHARS_PER_NORMSEITE, todayIso = localIsoDate() } = {}) {
+export function computeWeekBars({ stats = [], tokEsts = {}, days = 7, goalChars = CHARS_PER_NORMSEITE, todayIso = localIsoDate(), pages } = {}) {
   const goal = Math.max(1, Number(goalChars) || CHARS_PER_NORMSEITE);
-  const dayDelta = makeDayDelta({ stats, tokEsts, todayIso });
+  const dayDelta = makeDayDelta({ stats, tokEsts, todayIso, pages });
   const out = [];
   for (let i = days - 1; i >= 0; i--) {
     const iso = isoMinusDays(todayIso, i);
@@ -143,8 +159,8 @@ export function computeWeekBars({ stats = [], tokEsts = {}, days = 7, goalChars 
 // Aktuelle Schreib-Serie: aufeinanderfolgende Tage mit Zeichen > 0, rueckwaerts
 // ab heute. Ist heute noch 0 geschrieben, bricht das die Serie nicht sofort
 // (Kulanz) — gezaehlt wird dann ab gestern.
-export function computeWritingStreak({ stats = [], tokEsts = {}, maxLookback = 400, todayIso = localIsoDate() } = {}) {
-  const dayDelta = makeDayDelta({ stats, tokEsts, todayIso });
+export function computeWritingStreak({ stats = [], tokEsts = {}, maxLookback = 400, todayIso = localIsoDate(), pages } = {}) {
+  const dayDelta = makeDayDelta({ stats, tokEsts, todayIso, pages });
   const todayChars = clampDay(dayDelta, todayIso);
   let streak = 0;
   for (let i = (todayChars === 0 ? 1 : 0); i < maxLookback; i++) {
@@ -157,9 +173,9 @@ export function computeWritingStreak({ stats = [], tokEsts = {}, maxLookback = 4
 
 // Donut-Geometrie + Flags. Caller waehlt Radius r (28 fuer Overview-Tile,
 // 14 fuer Header-Donut).
-export function computeTodayRing({ stats = [], tokEsts = {}, goalChars = CHARS_PER_NORMSEITE, r = 28 } = {}) {
+export function computeTodayRing({ stats = [], tokEsts = {}, goalChars = CHARS_PER_NORMSEITE, r = 28, pages, todayIso = localIsoDate(), newBookBaseline = false } = {}) {
   const goal = Math.max(1, Number(goalChars) || CHARS_PER_NORMSEITE);
-  const chars = computeCharsTodayDelta(stats, tokEsts);
+  const chars = computeCharsTodayDelta(stats, tokEsts, { pages, todayIso, newBookBaseline });
   const pct = Math.max(0, Math.min(100, Math.round((chars / goal) * 100)));
   const circ = 2 * Math.PI * r;
   const dash = (pct / 100) * circ;

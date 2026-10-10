@@ -57,11 +57,20 @@ test('buildPresenceMatrix: leere Zelle bleibt bei 0 %', () => {
 
 test('buildPresenceMatrix: Einmal-Treffer verdrängen wiederkehrende Entitäten nicht', () => {
   const out = buildPresenceMatrix([
+    cand('einmal1', 'Einmal 1', [[1, 1]]),
+    cand('wieder', 'Wiederkehrend', [[1, 1], [2, 1]]),
+    cand('einmal2', 'Einmal 2', [[1, 1]]),
+  ], CHAPTERS, { maxCols: 2 });
+  assert.deepEqual(out.cols.map(c => c.id), ['wieder', 'einmal1'], 'Wiederkehrende vorn, Rest füllt auf');
+});
+
+test('buildPresenceMatrix: freie Spalten füllen Einmal-Treffer auf', () => {
+  const out = buildPresenceMatrix([
     cand('wieder', 'Wiederkehrend', [[1, 1], [2, 1]]),
     cand('einmal1', 'Einmal 1', [[1, 1]]),
     cand('einmal2', 'Einmal 2', [[1, 1]]),
   ], CHAPTERS);
-  assert.deepEqual(out.cols.map(c => c.id), ['wieder']);
+  assert.deepEqual(out.cols.map(c => c.id), ['wieder', 'einmal1', 'einmal2']);
 });
 
 test('buildPresenceMatrix: Fallback zeigt Einmal-Treffer, wenn nichts wiederkehrt', () => {

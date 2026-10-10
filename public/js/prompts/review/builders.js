@@ -15,14 +15,14 @@ import {
   _buildOutputFormat, _buildKapitelanalyseFormat,
 } from './format.js';
 import {
-  _buildReviewSchwerpunktBlock, _buildChapterPositionBlock,
+  _buildReviewSchwerpunktBlock, _buildChapterPositionBlock, _buildWerkstandBlock,
   _buildKomplettContextBlock, _buildMotivContextBlock,
   _buildStrukturContextBlock, _strukturAchse,
   _buildWeltContextBlock, _weltAchse,
   _buildPlanContextBlock, _planAchse, _buildIdeenContextBlock,
 } from './context.js';
 
-export function buildBookReviewSinglePassPrompt(bookName, pageCount, bookText, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null, reviewSchwerpunkt = '', komplettContext = null, motivContext = null, strukturContext = null, weltContext = null } = {}) {
+export function buildBookReviewSinglePassPrompt(bookName, pageCount, bookText, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null, reviewSchwerpunkt = '', komplettContext = null, motivContext = null, strukturContext = null, weltContext = null, werkstand = null } = {}) {
   const axes = bookReviewAxes(buchtyp);
   const kategorien = empfehlungKategorien(buchtyp, 'book');
   const werk = werkPhrase(buchtyp);
@@ -33,13 +33,14 @@ export function buildBookReviewSinglePassPrompt(bookName, pageCount, bookText, {
   const motivBlock = _buildMotivContextBlock(motivContext);
   const strukturBlock = _buildStrukturContextBlock(strukturContext, { achse: _strukturAchse(axes) });
   const weltBlock = _buildWeltContextBlock(weltContext, { achse: _weltAchse(axes) });
+  const werkstandBlock = _buildWerkstandBlock(werkstand);
   return `<aufgabe>
 Bewerte ${werkAkk} «${bookName}» kritisch und umfassend.
 </aufgabe>
 ${_buildAchsenBlock(axes, reviewGewichtung(buchtyp, 'book'))}
 ${_buildNotenskala(axes, notenTiers(buchtyp, 'book'), { scope: 'book', werk })}
 ${_buildEmpfehlungenBlock({ kategorien, scope: 'book', werk, quelle: 'Text' })}
-${schwerpunktBlock}${povBlock}${kontextBlock}${motivBlock}${strukturBlock}${weltBlock}
+${werkstandBlock}${schwerpunktBlock}${povBlock}${kontextBlock}${motivBlock}${strukturBlock}${weltBlock}
 ${_buildOutputFormat(axes, { scope: 'book', kategorien, zitatQuelle: 'dem Text' })}
 <buchinhalt seiten="${pageCount}">
 ${bookText}
@@ -91,13 +92,13 @@ ${chText}
 // Fokus: die seitenübergreifenden Achsen des Profils – Dinge, die beim
 // Seiten-Lektorat (Mikro-Fehler) und bei der Buchbewertung (Gesamtnote)
 // naturgemäss nicht erfasst werden.
-export function buildChapterReviewPrompt(chapterName, bookName, pageCount, chText, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null, reviewSchwerpunkt = '', komplettContext = null, position = null, strukturContext = null, planContext = null, ideenContext = null } = {}) {
+export function buildChapterReviewPrompt(chapterName, bookName, pageCount, chText, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null, reviewSchwerpunkt = '', komplettContext = null, position = null, strukturContext = null, planContext = null, ideenContext = null, werkstand = null } = {}) {
   const axes = chapterReviewAxes(buchtyp);
   const kategorien = empfehlungKategorien(buchtyp, 'chapter');
   const werk = werkPhrase(buchtyp);
   const povBlock = _buildErzaehlformBlock(erzaehlperspektive, erzaehlzeit, buchtyp, 'review');
   const schwerpunktBlock = _buildReviewSchwerpunktBlock(reviewSchwerpunkt);
-  const positionBlock = _buildChapterPositionBlock(position);
+  const positionBlock = _buildChapterPositionBlock(position, werkstand);
   const kontextBlock = _buildKomplettContextBlock(komplettContext);
   const strukturBlock = _buildStrukturContextBlock(strukturContext, { achse: _strukturAchse(axes) });
   const planBlock = _buildPlanContextBlock(planContext, { achse: _planAchse(axes) });
@@ -116,7 +117,7 @@ ${chText}
 </kapitelinhalt>`;
 }
 
-export function buildBookReviewMultiPassPrompt(bookName, chapterAnalyses, totalPageCount, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null, reviewSchwerpunkt = '', komplettContext = null, motivContext = null, strukturContext = null, weltContext = null } = {}) {
+export function buildBookReviewMultiPassPrompt(bookName, chapterAnalyses, totalPageCount, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null, reviewSchwerpunkt = '', komplettContext = null, motivContext = null, strukturContext = null, weltContext = null, werkstand = null } = {}) {
   const axes = bookReviewAxes(buchtyp);
   const kategorien = empfehlungKategorien(buchtyp, 'book');
   const werk = werkPhrase(buchtyp);
@@ -128,6 +129,7 @@ export function buildBookReviewMultiPassPrompt(bookName, chapterAnalyses, totalP
   const motivBlock = _buildMotivContextBlock(motivContext);
   const strukturBlock = _buildStrukturContextBlock(strukturContext, { achse: _strukturAchse(axes) });
   const weltBlock = _buildWeltContextBlock(weltContext, { achse: _weltAchse(axes) });
+  const werkstandBlock = _buildWerkstandBlock(werkstand);
   // Ein zu langes Kapitel kommt als mehrere Teil-Analysen an (`kapitelNr` gleich,
   // `teil` gesetzt). Gezählt und nummeriert wird nach Kapiteln, nicht nach Analysen —
   // sonst hielte das Modell die Teile für eigenständige Kapitel gleichen Namens.
@@ -157,7 +159,7 @@ ${_buildEmpfehlungenBlock({ kategorien, scope: 'book', werk, quelle: 'Text' })}
 HINWEIS: Für "beispielzitate" stehen im Multi-Pass keine Volltexte zur Verfügung.
 Nutze ausschliesslich die je Kapitel gelieferten "Belegzitate" und übernimm sie
 wörtlich. Liefern die Analysen keine, setze "beispielzitate" auf [] statt zu raten.
-${schwerpunktBlock}${povBlock}${kontextBlock}${motivBlock}${strukturBlock}${weltBlock}
+${werkstandBlock}${schwerpunktBlock}${povBlock}${kontextBlock}${motivBlock}${strukturBlock}${weltBlock}
 <kapitelanalysen kapitel="${kapitelCount}" analysen="${chapterAnalyses.length}" seiten="${totalPageCount}">
 ${synthIn}
 </kapitelanalysen>
@@ -168,14 +170,14 @@ ${_buildOutputFormat(axes, { scope: 'book', kategorien, zitatQuelle: 'einem Bele
 // Kapitel das Input-Budget des Modells sprengt. Sub-Chunks wurden zuvor mit
 // `buildChapterAnalysisPrompt` analysiert und werden hier zu einer
 // Kapitelbewertung zusammengeführt.
-export function buildChapterReviewMultiPassPrompt(chapterName, bookName, subAnalyses, totalPageCount, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null, reviewSchwerpunkt = '', komplettContext = null, position = null, strukturContext = null, planContext = null, ideenContext = null } = {}) {
+export function buildChapterReviewMultiPassPrompt(chapterName, bookName, subAnalyses, totalPageCount, { erzaehlperspektive = null, erzaehlzeit = null, buchtyp = null, reviewSchwerpunkt = '', komplettContext = null, position = null, strukturContext = null, planContext = null, ideenContext = null, werkstand = null } = {}) {
   const axes = chapterReviewAxes(buchtyp);
   const kategorien = empfehlungKategorien(buchtyp, 'chapter');
   const werk = werkPhrase(buchtyp);
   const felder = chapterAnalysisFelder(buchtyp);
   const povBlock = _buildErzaehlformBlock(erzaehlperspektive, erzaehlzeit, buchtyp, 'review');
   const schwerpunktBlock = _buildReviewSchwerpunktBlock(reviewSchwerpunkt);
-  const positionBlock = _buildChapterPositionBlock(position);
+  const positionBlock = _buildChapterPositionBlock(position, werkstand);
   const kontextBlock = _buildKomplettContextBlock(komplettContext);
   const strukturBlock = _buildStrukturContextBlock(strukturContext, { achse: _strukturAchse(axes) });
   const planBlock = _buildPlanContextBlock(planContext, { achse: _planAchse(axes) });

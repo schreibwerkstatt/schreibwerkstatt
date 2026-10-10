@@ -103,7 +103,7 @@ test('Kontinuität: Zusammenfassung, Zähler, Filter, Detail, Quelle', async ({ 
   await expect(detail1.locator('.kontinuitaet-quelle a')).toHaveCount(0);
   await expect(detail1.locator('.kontinuitaet-quelle')).toContainText('javascript:alert(1)');
   // Aktionsknopf heisst «Als Fehlalarm markieren», das Badge bleibt «Kein Fehler».
-  await expect(detail1.locator('.kontinuitaet-resolve-btn').nth(1)).toHaveText(await tr(page, 'kontinuitaet.dismiss'));
+  await expect(detail1.locator('.kontinuitaet-resolve-btn:visible').nth(1)).toHaveText(await tr(page, 'kontinuitaet.dismiss'));
 
   // Befund 2: http(s)-Quelle ist ein Link, Stelle ohne Abschnitt als Kapitelanfang gekennzeichnet.
   const second = rows.nth(1);
@@ -127,7 +127,7 @@ test('Kontinuität: fehlgeschlagener Triage-Call rollt sichtbar zurück', async 
   const first = card.locator('.entity-list .entity-row').first();
   await expect(first).toBeVisible({ timeout: 20000 });
   await first.locator('.severity-tag').click();
-  const btn = card.locator('.entity-detail').first().locator('.kontinuitaet-resolve-btn').first();
+  const btn = card.locator('.entity-detail').first().locator('.kontinuitaet-resolve-btn:visible').first();
   const label = await tr(page, 'kontinuitaet.markResolved');
   await expect(btn).toHaveText(label);
   await btn.click();

@@ -59,6 +59,7 @@
 }
 
 .ort-encounters {
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-xs) var(--space-md);
@@ -67,6 +68,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2xs);
+  min-width: 0;
+  max-width: 100%;
 }
 .ort-encounter-count {
   color: var(--color-muted);

@@ -91,6 +91,35 @@ export function aggregateLiveBookStats(tokEsts) {
   return { chars, words, tok };
 }
 
+// Live-Σ nur, wenn sie das GANZE Buch abdeckt — sonst `null`, und der Aufrufer
+// faellt auf den Cron-Snapshot zurueck. `tokEsts` fuellt sich nach einem
+// Buchwechsel schrittweise (Cache-Treffer, dann Hintergrund-Abgleich, dann
+// sichtbare Sidebar-Zeilen); eine Teilsumme sieht aus wie ein Buch, das
+// geschrumpft ist, und ergaebe im Heute-Ring und in der 7-Tage-Bilanz einen
+// grossen negativen Tag. Summiert wird ueber `pages` (die Seiten des Buchs),
+// nicht ueber alle Keys: ein Eintrag einer inzwischen geloeschten Seite zaehlt
+// nicht mit.
+//
+// Ohne `pages` (Aufrufer, die keine Seitenliste kennen) gilt die Summe, sobald
+// sie positiv ist (keine Vollstaendigkeits-Pruefung moeglich).
+export function completeLiveBookStats(tokEsts, pages) {
+  const ts = tokEsts || {};
+  if (!Array.isArray(pages)) {
+    const agg = aggregateLiveBookStats(ts);
+    return agg.chars > 0 ? agg : null;
+  }
+  if (!pages.length) return null;
+  let chars = 0, words = 0, tok = 0;
+  for (const p of pages) {
+    const e = ts[p?.id];
+    if (!e) return null;
+    chars += Number(e.chars) || 0;
+    words += Number(e.words) || 0;
+    tok += Number(e.tok) || 0;
+  }
+  return { chars, words, tok };
+}
+
 // Ein `Intl.NumberFormat` pro (Locale, Dezimalstellen). `toLocaleString` mit
 // Options-Objekt baut den Formatter bei JEDEM Aufruf neu — das kostet rund 15 µs
 // und faellt auf, sobald eine Tabelle vierstellig viele Zellen formatiert

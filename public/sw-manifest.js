@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "4215a48928a25378";
+self.__SHELL_BUILD = "0b2bf743e84d452b";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -232,6 +232,7 @@ self.__SHELL_MANIFEST = [
   "/js/book-overview/figuren.js",
   "/js/book-overview/format.js",
   "/js/book-overview/ideen.js",
+  "/js/book-overview/iso-day.js",
   "/js/book-overview/kapitel.js",
   "/js/book-overview/load.js",
   "/js/book-overview/motiv.js",
@@ -286,6 +287,7 @@ self.__SHELL_MANIFEST = [
   "/js/book/ideen-shared.js",
   "/js/book/ideen.js",
   "/js/book/kapitel-review.js",
+  "/js/book/kontinuitaet-nameguard.js",
   "/js/book/kontinuitaet.js",
   "/js/book/lektorat-time.js",
   "/js/book/motiv.js",
@@ -454,6 +456,11 @@ self.__SHELL_MANIFEST = [
   "/js/cards/my-stats-category.js",
   "/js/cards/my-stats-chart-methods.js",
   "/js/cards/my-stats-compute.js",
+  "/js/cards/my-stats-compute/goals.js",
+  "/js/cards/my-stats-compute/readability.js",
+  "/js/cards/my-stats-compute/rhythm.js",
+  "/js/cards/my-stats-compute/series.js",
+  "/js/cards/my-stats-compute/volume.js",
   "/js/cards/my-stats-trends-methods.js",
   "/js/cards/my-stats-trends.js",
   "/js/cards/nav-store.js",
@@ -679,6 +686,7 @@ self.__SHELL_MANIFEST = [
   "/js/prompts/blocks-fach.js",
   "/js/prompts/blocks.js",
   "/js/prompts/book-chat-tools.js",
+  "/js/prompts/book-outline.js",
   "/js/prompts/chat.js",
   "/js/prompts/core.js",
   "/js/prompts/figur-alter.js",
@@ -698,6 +706,7 @@ self.__SHELL_MANIFEST = [
   "/js/prompts/komplett/kontinuitaet.js",
   "/js/prompts/komplett/schema-strings.js",
   "/js/prompts/komplett/schemas.js",
+  "/js/prompts/lektorat-nachbar.js",
   "/js/prompts/lektorat-objektiv.js",
   "/js/prompts/lektorat-typen.js",
   "/js/prompts/lektorat.js",

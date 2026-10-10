@@ -6,17 +6,21 @@
      -trends-methods.js. Umfasst: Streak-Heatmap (+ Ziel-Modus), Wochentags-Muster,
      Session-Kennzahlen. -->
 
-<!-- Schreibrhythmus: Kennzahlen-Grid + Streak-Heatmap -->
+<!-- Schreibrhythmus: Kennzahlen-Grid (ganzes Zeitfenster) + Streak-Heatmap
+     (immer die letzten 52 Wochen des Fensters, eigenes Geltungs-Tag). -->
 <template x-if="myStatsHasRhythm">
   <div class="overview-tile overview-tile--wide">
-    <div class="overview-tile-label" x-text="$app.t('mystats.rhythm')"></div>
+    <div class="overview-tile-label">
+      <span x-text="$app.t('mystats.rhythm')"></span>
+      <span class="mystats-scope-tag" x-text="myStatsScope('window')"></span>
+    </div>
     <div class="overview-consistency-grid">
       <div class="overview-consistency-item">
-        <span class="overview-consistency-value" x-text="$app.t('mystats.days', { n: myStatsStreak().currentStreak })"></span>
+        <span class="overview-consistency-value" x-text="_myStatsPlural('mystats.days', myStatsStreak().currentStreak)"></span>
         <span class="overview-consistency-label" x-text="$app.t('mystats.streakCurrent')"></span>
       </div>
       <div class="overview-consistency-item">
-        <span class="overview-consistency-value" x-text="$app.t('mystats.days', { n: myStatsStreak().longestStreak })"></span>
+        <span class="overview-consistency-value" x-text="_myStatsPlural('mystats.days', myStatsStreak().longestStreak)"></span>
         <span class="overview-consistency-label" x-text="$app.t('mystats.streakLongest')"></span>
       </div>
       <div class="overview-consistency-item">
@@ -49,7 +53,10 @@
     </div>
 
     <!-- Streak-Heatmap: 52×7 GitHub-Stil, aktive Schreibtage bzw. Ziel-Tage -->
-    <div class="overview-streak-grid" role="img" :aria-label="$app.t('mystats.rhythm')">
+    <div class="mystats-grid-scope">
+      <span class="mystats-scope-tag" x-text="myStatsScope('grid')"></span>
+    </div>
+    <div class="overview-streak-grid" role="img" :aria-label="myStatsStreakAria()">
       <template x-for="(week, wi) in myStatsStreak().weeks" :key="wi">
         <div class="overview-streak-week">
           <template x-for="(cell, di) in week" :key="di">
@@ -90,10 +97,14 @@
 <!-- Wochentags-Muster: 7 Balken Mo..So (Summe Schreibminuten) -->
 <template x-if="myStatsHasRhythm">
   <div class="overview-tile overview-tile--medium">
-    <div class="overview-tile-label" x-text="$app.t('mystats.weekdayPattern')"></div>
+    <div class="overview-tile-label">
+      <span x-text="$app.t('mystats.weekdayPattern')"></span>
+      <span class="mystats-scope-tag" x-text="myStatsScope('window')"></span>
+    </div>
     <div class="overview-weekday-bars">
       <template x-for="(d, i) in myStatsWeekdays()" :key="i">
-        <div class="overview-weekday-col"
+        <div class="overview-weekday-col" role="img"
+             :aria-label="$app.t('mystats.weekdayTip', { day: myStatsWeekdayLabels()[i], time: myStatsMinFmt(d.minutes) })"
              :data-tip="$app.t('mystats.weekdayTip', { day: myStatsWeekdayLabels()[i], time: myStatsMinFmt(d.minutes) })">
           <div class="overview-weekday-track">
             <div class="overview-weekday-fill" :style="{ '--progress': d.pct + '%' }"></div>
@@ -109,7 +120,10 @@
      Aus writing_session (heartbeat-abgeleitet), zeitraum-bewusst. -->
 <template x-if="myStatsHasSessions()">
   <div class="overview-tile overview-tile--medium">
-    <div class="overview-tile-label" x-text="$app.t('mystats.sessions')"></div>
+    <div class="overview-tile-label">
+      <span x-text="$app.t('mystats.sessions')"></span>
+      <span class="mystats-scope-tag" x-text="myStatsScope('window')"></span>
+    </div>
     <div class="overview-consistency-grid">
       <div class="overview-consistency-item">
         <span class="overview-consistency-value" x-text="_myStatsFmt(myStatsSessionStats().count)"></span>

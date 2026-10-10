@@ -19,7 +19,7 @@ const { pageBookGuard } = require('../../lib/page-guard');
 const { listChaptersForBook, pageChapters } = require('../../db/content-names');
 const appSettings = require('../../lib/app-settings');
 const { objektivRuns, splitEnabled } = require('./lektorat-split');
-const { prepareLektoratRun, makeNeighbourLoader, checkOnePage, progressSincePrevious } = require('./lektorat-page');
+const { prepareLektoratRun, makeNeighbourLoader, loadLektoratPageList, checkOnePage, progressSincePrevious } = require('./lektorat-page');
 
 const lektoratRouter = express.Router();
 
@@ -35,7 +35,7 @@ async function runCheckJob(jobId, pageId, bookId, userEmail) {
     // Nachbarkontext, dort entfällt auch der Seiten-Roundtrip.
     let pages = null;
     if (bookId && !run.local) {
-      try { pages = await contentStore.listPages(bookId); }
+      try { pages = await loadLektoratPageList(bookId); }
       catch (e) { logger.warn(`Nachbarseiten-Kontext konnte nicht geladen werden (page=${pageId}): ${e.message}`); }
     }
     const tok = { in: 0, out: 0, ms: 0 };
@@ -107,6 +107,12 @@ async function runBatchCheckJob(jobId, bookId, userEmail) {
     const concurrency = Math.max(1, Math.floor(rawConcurrency / callsPerPage));
     const tok = { in: 0, out: 0, ms: 0, inflight: new Map() };
     const neighbourParas = makeNeighbourLoader();
+    // Nachbarn in Buchreihenfolge über Kapitelgrenzen; geprüft wird weiter `pages`.
+    let orderedPages = null;
+    if (!run.local) {
+      try { orderedPages = await loadLektoratPageList(bookId); }
+      catch (e) { logger.warn(`Nachbarseiten-Kontext konnte nicht geladen werden: ${e.message}`); }
+    }
     const chapterNameOf = (id) => chapterNameById[String(id)] || null;
     let done = 0, skippedEmpty = 0, totalErrors = 0;
     const failed = [];
@@ -126,7 +132,7 @@ async function runBatchCheckJob(jobId, bookId, userEmail) {
         // Bei Pool>1 sind feinere Pct-Ranges pro Item nicht sinnvoll (mehrere
         // Calls schreiben gleichzeitig den Job-Progress) — darum ohne fromPct/toPct.
         const r = await checkOnePage(run, {
-          jobId, tok, pageId: p.id, pages, neighbourParas, chapterNameOf,
+          jobId, tok, pageId: p.id, pages: orderedPages, neighbourParas, chapterNameOf,
           onCacheHit: () => logger.info(`${tag} – Cache-HIT`),
         });
         if (r.empty) { skippedEmpty++; tick(p); return; }

@@ -21,7 +21,7 @@
         </div>
         <div class="overview-substat">
           <span class="overview-substat-value" x-text="_fmtNum(overviewLatest()?.page_count)"></span>
-          <span class="overview-substat-unit" x-text="$app.t('bookstats.unit.s')"></span>
+          <span class="overview-substat-unit" x-text="$app.t('overview.unit.sections')"></span>
         </div>
         <div class="overview-substat">
           <span class="overview-substat-value" x-text="_fmtNum(overviewLatest()?.chapter_count)"></span>
@@ -33,5 +33,9 @@
         </div>
       </div>
     </div>
+    <!-- Live-Stand noch unvollständig (Buchwechsel, Abgleich läuft): die Zahlen
+         stammen aus dem letzten Snapshot — mit dessen Tag. -->
+    <div class="card-hint" x-show="overviewSnapshotAsOf()" x-cloak
+         x-text="$app.t('overview.asOf', { date: overviewSnapshotAsOf() })"></div>
   </div>
 </template>

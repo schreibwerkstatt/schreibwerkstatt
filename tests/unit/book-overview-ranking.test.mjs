@@ -15,14 +15,25 @@ test('leere Eingabe → leere Liste', () => {
   assert.deepEqual(rankPreferRecurring(null, { valueOf: val }), []);
 });
 
-test('Stufe 1: wiederkehrende Eintraege verdraengen Einmal-Treffer', () => {
+test('Stufe 1: wiederkehrende Eintraege stehen vorn, Einmal-Treffer fuellen auf', () => {
   const out = rank([
     { name: 'einmal-a', n: 1 },
     { name: 'oft', n: 9 },
     { name: 'einmal-b', n: 1 },
     { name: 'zweimal', n: 2 },
+    { name: 'ohne', n: 0 },
   ]);
-  assert.deepEqual(names(out), ['oft', 'zweimal']);
+  assert.deepEqual(names(out), ['oft', 'zweimal', 'einmal-a', 'einmal-b'], 'ohne Fundstelle faellt weg');
+});
+
+test('Stufe 1: Einmal-Treffer verdraengen keine Wiederkehrenden, wenn das Limit knapp ist', () => {
+  const out = rank([
+    { name: 'einmal-a', n: 1 },
+    { name: 'oft', n: 9 },
+    { name: 'einmal-b', n: 1 },
+    { name: 'zweimal', n: 2 },
+  ], { limit: 3 });
+  assert.deepEqual(names(out), ['oft', 'zweimal', 'einmal-a']);
 });
 
 test('Stufe 2: ohne Wiederkehrende zaehlen die Eintraege mit Fundstellen', () => {
@@ -60,8 +71,9 @@ test('Eingabe wird nicht mutiert', () => {
 
 test('minRecurring ist die Schwelle der ersten Stufe', () => {
   assert.equal(RECURRING_MIN, 2);
-  const items = [{ name: 'a', n: 2 }, { name: 'b', n: 1 }];
-  assert.deepEqual(names(rank(items)), ['a']);
+  const items = [{ name: 'a', n: 2 }, { name: 'b', n: 1 }, { name: 'c', n: 3 }];
+  assert.deepEqual(names(rank(items)), ['c', 'a', 'b']);
+  assert.deepEqual(names(rank(items, { limit: 2 })), ['c', 'a']);
   // Schwelle hoeher → niemand ist „wiederkehrend", Stufe 2 greift.
-  assert.deepEqual(names(rank(items, { minRecurring: 5 })), ['a', 'b']);
+  assert.deepEqual(names(rank(items, { minRecurring: 5 })), ['c', 'a', 'b']);
 });

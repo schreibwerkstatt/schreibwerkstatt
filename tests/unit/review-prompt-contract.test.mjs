@@ -194,3 +194,90 @@ test('Zitat-Regel kündigt die serverseitige Prüfung an', () => {
     assert.match(p, /serverseitig gegen den Text geprüft/);
   }
 });
+
+// ── Werkstand ────────────────────────────────────────────────────────────────
+// Ein nicht abgeschlossenes Werk wird sonst als ganzes bewertet: fehlender
+// Schluss und fehlender Mittelteil drücken die Note, und «Kapitel 1 von 1» liest
+// sich als Schlusskapitel, das einlösen muss.
+
+const POS_LETZTES = { index: 2, total: 2, prevName: 'K1', nextName: '' };
+const POS_ERSTES  = { index: 1, total: 2, prevName: '', nextName: 'K2' };
+
+test('ohne Werkstand (abgeschlossen) entsteht kein Block', () => {
+  for (const p of Object.values(alleReviewPrompts('roman'))) {
+    assert.ok(!p.includes('WERKSTAND'), 'Werkstand-Block ohne Werkstand');
+  }
+  const k = R.buildChapterReviewPrompt('K', 'B', 2, TEXT, { buchtyp: 'roman', position: POS_LETZTES });
+  assert.match(k, /Kapitel 2 von 2\./);
+  assert.ok(!k.includes('KEIN Schlusskapitel'));
+});
+
+test('Buchbewertung: Werkstand landet in Single- und Multi-Pass', () => {
+  const o = { buchtyp: 'roman', werkstand: { inArbeit: true, zielProzent: null } };
+  for (const p of [
+    R.buildBookReviewSinglePassPrompt('B', 3, TEXT, o),
+    R.buildBookReviewMultiPassPrompt('B', [ANALYSE()], 3, o),
+  ]) {
+    assert.match(p, /WERKSTAND: IN ARBEIT/);
+    assert.match(p, /KEIN Mangel/);
+    assert.ok(p.indexOf('WERKSTAND') < p.indexOf('<output_format>'), 'Block steht hinter dem Antwort-Template');
+  }
+});
+
+test('Werkstand ohne Zielumfang bleibt bedingt, mit unterschrittenem Ziel wird er hart', () => {
+  const ohne = R.buildBookReviewSinglePassPrompt('B', 3, TEXT, { werkstand: { inArbeit: true, zielProzent: null } });
+  assert.match(ohne, /kann darum der bisher geschriebene Teil sein/);
+  assert.match(ohne, /erkennbar als abgeschlossenes Ganzes/);
+
+  const frueh = R.buildBookReviewSinglePassPrompt('B', 3, TEXT, { werkstand: { inArbeit: true, zielProzent: 12 } });
+  assert.match(frueh, /etwa 12 % geschrieben/);
+  assert.match(frueh, /NICHT das ganze Werk/);
+  assert.ok(!frueh.includes('erkennbar als abgeschlossenes Ganzes'));
+
+  const fast = R.buildBookReviewSinglePassPrompt('B', 3, TEXT, { werkstand: { inArbeit: true, zielProzent: 95 } });
+  assert.match(fast, /erkennbar als abgeschlossenes Ganzes/);
+});
+
+test('Kapitelbewertung: das letzte Kapitel eines unfertigen Werks ist kein Schlusskapitel', () => {
+  const werkstand = { inArbeit: true, zielProzent: null };
+  for (const build of [
+    (o) => R.buildChapterReviewPrompt('K', 'B', 2, TEXT, o),
+    (o) => R.buildChapterReviewMultiPassPrompt('K', 'B', [ANALYSE()], 2, o),
+  ]) {
+    const letztes = build({ buchtyp: 'roman', position: POS_LETZTES, werkstand });
+    assert.match(letztes, /Kapitel 2 von bisher 2\./);
+    assert.match(letztes, /KEIN Schlusskapitel/);
+
+    const erstes = build({ buchtyp: 'roman', position: POS_ERSTES, werkstand });
+    assert.match(erstes, /Kapitel 1 von bisher 2\./);
+    assert.ok(!erstes.includes('KEIN Schlusskapitel'), 'Schreibfront-Satz an einem früheren Kapitel');
+  }
+});
+
+test('Kapitelbewertung: gemessene Schreibfront schlägt die Baum-Position, leere Folgekapitel werden genannt', () => {
+  const werkstand = { inArbeit: true, zielProzent: null };
+  const front = R.buildChapterReviewPrompt('K', 'B', 2, TEXT, {
+    buchtyp: 'roman', werkstand,
+    position: { index: 1, total: 3, prevName: '', nextName: '', front: true, ungeschrieben: { namen: ['K2', 'K3'], gesamt: 2 } },
+  });
+  assert.match(front, /KEIN Schlusskapitel/);
+  assert.match(front, /2 Kapitel angelegt, aber noch ungeschrieben: «K2», «K3»/);
+
+  const nichtFront = R.buildChapterReviewPrompt('K', 'B', 2, TEXT, {
+    buchtyp: 'roman', werkstand, position: { ...POS_LETZTES, front: false },
+  });
+  assert.ok(!nichtFront.includes('KEIN Schlusskapitel'), 'Text folgt noch: keine Schreibfront');
+});
+
+test('Buchbewertung: Werkstand nennt leere Folgekapitel und noch geplante Beats als Absicht', () => {
+  const p = R.buildBookReviewSinglePassPrompt('B', 1, TEXT, { werkstand: {
+    inArbeit: true, zielProzent: null,
+    ungeschrieben: { namen: ['K2'], gesamt: 1 },
+    geplant: { beats: [{ titel: 'Verrat', beschreibung: 'Anna verrät Tom', kapitel: 'K2', intensitaet: 4, im_text: null }], gesamt: 1, verankert: false },
+  } });
+  const block = p.slice(p.indexOf('=== WERKSTAND'), p.indexOf('=== ENDE WERKSTAND'));
+  assert.match(block, /ungeschrieben \(1 Kapitel nach dem bisherigen Text\): «K2»/);
+  assert.match(block, /NOCH GEPLANT/);
+  assert.match(block, /KEINE Textwahrheit/);
+  assert.match(block, /«Verrat» \[Kapitel: K2\] – Anna verrät Tom/);
+});

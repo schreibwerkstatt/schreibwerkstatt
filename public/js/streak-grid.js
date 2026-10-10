@@ -45,12 +45,14 @@ export function buildStreakGrid({
   weeks = STREAK_WEEKS,
   decorate = null,
 } = {}) {
-  // Mittag → DST-Drift-sicher beim ±n Tagen.
-  const today = new Date(todayLocal);
-  today.setHours(12, 0, 0, 0);
-  const dowMon = (today.getDay() + 6) % 7; // Mo=0 ... So=6
+  // Heute = App-TZ-Datum; Wochentag und alle Tagesschritte per ISO-/UTC-
+  // Arithmetik. Kein getDay()/setHours() der Browser-TZ: steht der Browser in
+  // einer anderen Zone als die App, laege das Raster sonst einen Tag daneben.
+  const isoToday = localIsoDate(new Date(todayLocal));
+  const [ty, tm, td] = isoToday.split('-').map(Number);
+  const dowMon = (new Date(Date.UTC(ty, tm - 1, td)).getUTCDay() + 6) % 7; // Mo=0 ... So=6
   const startOffset = (weeks - 1) * 7 + dowMon;
-  const isoToday = localIsoDate(today);
+  const today = new Date(todayLocal);
 
   // Tageswerte EINMAL ziehen — Raster und Serien-Zaehlung lesen dieselbe Reihe
   // statt jede fuer sich zu rechnen (das war die dritte Kopie der Regel).

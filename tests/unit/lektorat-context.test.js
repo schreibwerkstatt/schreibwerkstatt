@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  lastParagraph, firstParagraph, findPreviousPage, findNextPage, dropNeighbourFindings,
+  lastParagraph, firstParagraph, findPreviousPage, findNextPage, neighbourPages, isChapterChange, dropNeighbourFindings,
 } = require('../../routes/jobs/lektorat-context');
 
 test('firstParagraph liefert den ersten Absatz', () => {
@@ -26,17 +26,27 @@ test('lastParagraph liefert den letzten Absatz', () => {
   assert.equal(lastParagraph('Erster Absatz.\n\nZweiter Absatz.'), 'Zweiter Absatz.');
 });
 
-test('findPreviousPage / findNextPage bleiben im Kapitel', () => {
+test('Nachbarn folgen der Buchreihenfolge und überschreiten Kapitelgrenzen', () => {
+  // Ein Abschnitt pro Kapitel: ohne Grenzübertritt gäbe es nie einen Nachbarn.
   const pages = [
-    { id: 1, chapter_id: 10, position: 1 },
-    { id: 2, chapter_id: 10, position: 2 },
-    { id: 3, chapter_id: 10, position: 3 },
-    { id: 4, chapter_id: 20, position: 1 },
+    { id: 1, chapter_id: 10 },
+    { id: 2, chapter_id: 20 },
+    { id: 3, chapter_id: 30 },
   ];
-  assert.equal(findPreviousPage(pages, 2, 10).id, 1);
-  assert.equal(findNextPage(pages, 2, 10).id, 3);
-  assert.equal(findPreviousPage(pages, 1, 10), null);
-  assert.equal(findNextPage(pages, 3, 10), null, 'Kapitelgrenze wird nicht ueberschritten');
+  assert.equal(findPreviousPage(pages, 2).id, 1);
+  assert.equal(findNextPage(pages, 2).id, 3);
+  assert.equal(findPreviousPage(pages, 1), null);
+  assert.equal(findNextPage(pages, 3), null);
+  assert.equal(isChapterChange({ chapter_id: 20 }, pages[0]), true);
+  assert.equal(isChapterChange({ chapter_id: 10 }, { chapter_id: 10 }), false);
+  assert.equal(isChapterChange({ chapter_id: 10 }, null), false);
+});
+
+test('neighbourPages liefert die nächsten Kandidaten zuerst (leere werden übersprungen)', () => {
+  const pages = [1, 2, 3, 4, 5].map(id => ({ id, chapter_id: id }));
+  assert.deepEqual(neighbourPages(pages, 2, +1, 2).map(p => p.id), [3, 4]);
+  assert.deepEqual(neighbourPages(pages, 4, -1, 5).map(p => p.id), [3, 2, 1]);
+  assert.deepEqual(neighbourPages(pages, 99, +1, 2), []);
 });
 
 test('dropNeighbourFindings verwirft Findings, die nur im Auszug stehen', () => {

@@ -27,6 +27,18 @@ test('server localIsoDaysAgo: chronologisch + DST-stabil', () => {
   assert.ok(dates.has(today));
 });
 
+test('server localIsoDaysAgo: Anker ist das tz-Datum, nicht die Prozess-Zeitzone', () => {
+  // 00:30 in Zuerich am 11.10. = 22:30 UTC am 10.10.
+  const base = new Date('2026-10-10T22:30:00Z');
+  assert.equal(localIsoDate(base, 'Europe/Zurich'), '2026-10-11');
+  assert.equal(localIsoDaysAgo(0, base, 'Europe/Zurich'), '2026-10-11');
+  assert.equal(localIsoDaysAgo(1, base, 'Europe/Zurich'), '2026-10-10');
+  // DST-Ende (25.10.2026): 24-h-Schritte duerfen keinen Tag doppelt treffen.
+  const dst = new Date('2026-10-26T10:00:00Z');
+  assert.equal(localIsoDaysAgo(1, dst, 'Europe/Zurich'), '2026-10-25');
+  assert.equal(localIsoDaysAgo(2, dst, 'Europe/Zurich'), '2026-10-24');
+});
+
 test('server currentTz: app_settings-aware Fallback', () => {
   const tz = currentTz();
   assert.ok(typeof tz === 'string' && tz.length > 0);

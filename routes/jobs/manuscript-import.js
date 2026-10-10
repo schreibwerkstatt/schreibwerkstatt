@@ -31,6 +31,7 @@ const { guardBook, sessionEmail } = require('../../lib/acl');
 const bookAccess = require('../../db/book-access');
 const { getBookLocale } = require('../../db/schema');
 const logger = require('../../logger');
+const { seedImportBaseline } = require('../../lib/import-baseline');
 
 const router = express.Router();
 
@@ -208,12 +209,8 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
 
     if (pagesCreated > 0) {
       updateJob(jobId, { progress: 95, statusText: 'job.manuscript-import.syncing' });
-      try {
-        const { syncBook } = require('../sync');
-        await syncBook(effBookId, ctx);
-      } catch (e) {
-        audit('warn', `Stats-Sync fail: ${e.message}`);
-      }
+      await seedImportBaseline(effBookId, userEmail,
+        { info: m => audit('info', m), warn: m => audit('warn', m) }, 'Manuskript-Import');
     }
 
     completeJob(jobId, {

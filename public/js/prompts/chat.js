@@ -342,6 +342,15 @@ export const BOOK_CHAT_FORCE_FINAL_INSTRUCTION =
   + 'Wenn die Recherche unvollständig blieb, beantworte die Frage so weit wie möglich mit dem Vorhandenen und weise kurz darauf hin, was nicht abgedeckt werden konnte. '
   + 'Sprache der Antwort: die der Userfrage.';
 
+// Synthese-Aufforderung, wenn der Kosten-Deckel pro Antwort
+// (`jobs.book_chat.max_input_tokens_per_answer`) erreicht ist — Gegenstück zu
+// BOOK_CHAT_FORCE_FINAL_INSTRUCTION (Iterationsdeckel), gleicher Ablauf.
+export const BOOK_CHAT_BUDGET_FINAL_INSTRUCTION =
+  'Das Recherche-Budget für diese Antwort ist aufgebraucht — keine weitere Recherche mehr möglich. '
+  + 'Fasse JETZT aus den bereits gesammelten Informationen die bestmögliche Antwort zusammen und liefere sie über das Werkzeug `final_answer`. '
+  + 'Wenn die Recherche unvollständig blieb, beantworte die Frage so weit wie möglich und nenne kurz, was offen blieb. '
+  + 'Sprache der Antwort: die der Userfrage.';
+
 // Rückgabe: Array mit EINEM System-Cache-Block (ttl '1h'): der über die Session
 //   stabile Anteil (System, Werkzeug-Strategie, Figuren, Welt-Fakten, Review,
 //   final_answer-Pflicht). Tools + dieser Block + der bisherige Verlauf sind der
@@ -369,6 +378,7 @@ export function buildBookChatAgentSystemPrompt(bookName, figuren, review, system
     '',
     'Du hast Zugriff auf Werkzeuge, die Fragen über das gesamte Buch aus einem vorberechneten Index beantworten. Nutze sie, bevor du antwortest, wann immer die Frage gemessen oder aus konkreten Textstellen belegt werden kann:',
     ...ifAny(['count_pronouns', 'get_stil_metrics'], '- Häufigkeit, Verteilung, Erzählperspektive → count_pronouns, get_stil_metrics'),
+    ...ifAny(['list_chapters'], '- Aufbau, Reihenfolge, was steht vor/nach X, in welchem Teil/Unterkapitel → list_chapters (Gliederung in Lesereihenfolge)'),
     ...ifAny(['get_figure_mentions'], '- Figurenverteilung, erstes Auftreten → get_figure_mentions, list_chapters'),
     ...ifAny(['search_passages', 'quote_match'], `- Konkrete Textstellen oder Zitate → search_passages, quote_match${has('quote_passage') ? ', quote_passage' : ''}`),
     ...(semantic && has('search_similar') ? ['- Stellen nach SINN oder Eigenschaft (Stilmittel, Stimmung, Motiv, Umschreibung) → search_similar'] : []),
@@ -471,7 +481,8 @@ export function buildBookChatPreContext(passages) {
     '`entity_id` eines Abschnitts (kind page) geht als page_id in `get_pages`/`quote_match`. Wörtliche Zitate IMMER über quote_match/quote_passage verifizieren, nie aus diesem Ausschnitt abschreiben.)',
   );
   for (const p of list) {
-    head.push(`--- ${p.kind}: «${p.title}» (entity_id ${p.entity_id}, score ${p.score}) ---`, p.text, '');
+    const where = p.chapter_path ? `, Kapitel: ${p.chapter_path}` : '';
+    head.push(`--- ${p.kind}: «${p.title}» (entity_id ${p.entity_id}${where}, score ${p.score}) ---`, p.text, '');
   }
   return head.join('\n');
 }
@@ -496,6 +507,10 @@ export function buildBookChatSystemPrompt(bookName, relevantPages, figuren, revi
     `Buch: «${bookName}»`,
   ];
 
+  // Gliederung (opts.gliederung, fertiger Text aus buildGliederungBlock): buch-stabil,
+  // darum im gecachten Block 1 — sie ordnet die Auszüge aus Block 2 im Buch ein.
+  if (opts.gliederung) stable.push('', opts.gliederung);
+
   const figBlock = buildFigurenBlock(figuren, { maxChars: opts.figurenMaxChars });
   if (figBlock) stable.push('', figBlock.text);
 
@@ -513,14 +528,18 @@ export function buildBookChatSystemPrompt(bookName, relevantPages, figuren, revi
     // excerpt=true: die Textstellen sind semantisch retrievte Chunk-Auszüge (Mini-RAG),
     // nicht ganze Seiten — das Modell darf daraus nicht auf Vollständigkeit der Seite schliessen.
     const excerpt = opts.excerpt === true;
+    // Reihenfolge = Lesereihenfolge (der Job sortiert nach der Gliederung); der
+    // Kapitelpfad sagt, wo der Abschnitt im Buch steht.
     if (excerpt) {
       volatil.push('=== RELEVANTE TEXTSTELLEN AUS DEM BUCH ===');
-      volatil.push('(Bedeutungs-relevanteste Auszüge, nach Ähnlichkeit sortiert; können unvollständig sein.)');
+      volatil.push('(Bedeutungs-relevanteste Auszüge, in Lesereihenfolge; können unvollständig sein. Was dazwischen steht, fehlt.)');
     } else {
       volatil.push('=== RELEVANTE ABSCHNITTE AUS DEM BUCH ===');
+      volatil.push('(In Lesereihenfolge; eine Auswahl, nicht das ganze Buch.)');
     }
     for (const page of relevantPages) {
-      volatil.push(excerpt ? `--- Auszug aus Abschnitt: ${page.name} ---` : `--- Abschnitt: ${page.name} ---`);
+      const where = page.chapter_path ? ` (Kapitel: ${page.chapter_path})` : '';
+      volatil.push(excerpt ? `--- Auszug aus Abschnitt: ${page.name}${where} ---` : `--- Abschnitt: ${page.name}${where} ---`);
       volatil.push(page.text);
       volatil.push('');
     }

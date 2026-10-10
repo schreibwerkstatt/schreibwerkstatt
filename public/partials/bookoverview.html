@@ -29,7 +29,7 @@
     <button type="button" class="btn-compact" @click="loadBookOverview($store.nav.selectedBookId, { fresh: true })" :disabled="overviewLoading" x-text="$app.t('overview.refresh')"></button>
   </div>
 
-  <div class="overview-grid" x-show="overviewLatest() || overviewCoverage?.total_pages > 0 || $store.nav.pages.length > 0">
+  <div class="overview-grid overview-grid--cq" x-show="overviewLatest() || overviewCoverage?.total_pages > 0 || $store.nav.pages.length > 0">
     <div id="partial-bookoverview-snapshot"></div>
     <div id="partial-bookoverview-charts"></div>
     <div id="partial-bookoverview-diary"></div>

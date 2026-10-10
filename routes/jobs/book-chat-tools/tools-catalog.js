@@ -10,6 +10,7 @@ const pageRevisions = require('../../../db/page-revisions');
 const { _truncateResult, _findFigure, resultCapFor } = require('./shared');
 const { isIdeeStatus, isOpenIdeeStatus, normalizeIdeeStatus } = require('../../../lib/ideen-status');
 const { listLocationChaptersWithNames } = require('../../../db/book-chat/text');
+const contentStore = require('../../../lib/content-store');
 const { attachLinks: attachIdeaLinks } = require('../../../db/ideen');
 const {
   listChaptersWithStats, listPagesWithStats, getPageHeader, listIdeenWithPlaces,
@@ -26,44 +27,72 @@ const {
 // der Kapitelliste — wird gekürzt, verliert das Modell die hintersten Kapitel, nie
 // die Summen. Seiten als Tupel `[page_id, page_name, words]` statt Objekten (spart
 // die Schlüssel pro Seite, bei Büchern mit hunderten Seiten der Hauptteil). Passt
-// die Liste nicht in den Ergebnis-Deckel, wird sie kapitelweise abgeschnitten und
+// die Liste nicht in den Ergebnis-Deckel, wird sie eintragsweise abgeschnitten und
 // `next_offset` genannt — kein String-Schnitt mitten in einer Seite.
+//
+// `chapters` ist die Gliederung in Lesereihenfolge (contentStore.bookOutline, SSoT
+// order_json): ein Eintrag je zusammenhängender Strecke. Unterkapitel tragen
+// `depth`/`parent_chapter_id`; Abschnitte eines Kapitels, die NACH seinen
+// Unterkapiteln stehen, kommen als eigener Eintrag mit `continued: true`;
+// Abschnitte ohne Kapitel als Eintrag mit `chapter_id: null` an ihrer Stelle.
 
 const LIST_CHAPTERS_PAGE_FORMAT = '[page_id, page_name, words]';
 
-function tool_list_chapters(input, ctx) {
-  const chapterRows = listChaptersWithStats(ctx.bookId);
-
-  // Seiten mit ihren Kapitelzuordnungen laden – inkl. Seiten ohne Kapitel (chapter_id IS NULL)
+async function tool_list_chapters(input, ctx) {
+  const outline = await contentStore.bookOutline(ctx.bookId);
+  const chapterWords = new Map(listChaptersWithStats(ctx.bookId).map(r => [r.chapter_id, r.words]));
   const pageRows = listPagesWithStats(ctx.bookId);
+  const pageStats = new Map(pageRows.map(p => [p.page_id, p]));
 
-  const pagesByChapter = new Map();
-  const orphanPages = [];
-  let totalWords = 0, totalPages = 0, totalChars = 0;
-  for (const p of pageRows) {
-    totalPages++;
-    totalWords += p.words;
-    totalChars += p.chars;
-    const entry = [p.page_id, p.page_name, p.words];
-    if (p.chapter_id == null) orphanPages.push(entry);
-    else {
-      if (!pagesByChapter.has(p.chapter_id)) pagesByChapter.set(p.chapter_id, []);
-      pagesByChapter.get(p.chapter_id).push(entry);
-    }
+  let totalWords = 0, totalChars = 0;
+  for (const p of pageRows) { totalWords += p.words; totalChars += p.chars; }
+
+  // Wortsumme je Kapitel inkl. Unterkapitel (nur ausgewiesen, wenn es welche hat).
+  const subtreeWords = new Map();
+  const hasSub = new Set();
+  for (const n of outline) {
+    if (n.type === 'chapter' && n.parent_id != null) hasSub.add(n.parent_id);
+    if (n.type !== 'page') continue;
+    const w = pageStats.get(n.id)?.words || 0;
+    for (const cid of n.chapter_ids) subtreeWords.set(cid, (subtreeWords.get(cid) || 0) + w);
   }
 
-  const allChapters = chapterRows.map(r => ({
-    chapter_id:   r.chapter_id,
-    chapter_name: r.chapter_name,
-    words:        r.words,
-    pages:        pagesByChapter.get(r.chapter_id) || [],
-  }));
+  const allChapters = [];
+  const chapterNodes = new Map();
+  let cur = null;
+  let totalChapters = 0;
+  for (const n of outline) {
+    if (n.type === 'chapter') {
+      totalChapters++;
+      chapterNodes.set(n.id, n);
+      cur = {
+        chapter_id:   n.id,
+        chapter_name: n.name,
+        depth:        n.depth,
+        ...(n.parent_id != null ? { parent_chapter_id: n.parent_id } : {}),
+        words:        chapterWords.get(n.id) || 0,
+        ...(hasSub.has(n.id) ? { words_total: subtreeWords.get(n.id) || 0 } : {}),
+        pages:        [],
+      };
+      allChapters.push(cur);
+      continue;
+    }
+    if (!cur || cur.chapter_id !== n.chapter_id) {
+      const ch = n.chapter_id != null ? chapterNodes.get(n.chapter_id) : null;
+      cur = ch
+        ? { chapter_id: ch.id, chapter_name: ch.name, depth: ch.depth, continued: true, pages: [] }
+        : { chapter_id: null, depth: 0, pages: [] };
+      allChapters.push(cur);
+    }
+    cur.pages.push([n.id, n.name, pageStats.get(n.id)?.words || 0]);
+  }
 
   const offset = Math.max(0, Number.isInteger(input?.offset) ? input.offset : 0);
   const limit  = Number.isInteger(input?.limit) && input.limit > 0 ? input.limit : allChapters.length;
   const head = {
-    total_chapters: allChapters.length,
-    total_pages:    totalPages,
+    total_chapters: totalChapters,
+    ...(allChapters.length !== totalChapters ? { total_entries: allChapters.length } : {}),
+    total_pages:    pageRows.length,
     total_words:    totalWords,
     hint:           _listChaptersHint(totalChars, ctx.inputBudgetChars),
     page_format:    LIST_CHAPTERS_PAGE_FORMAT,
@@ -76,17 +105,16 @@ function tool_list_chapters(input, ctx) {
     ...head,
     offset,
     chapters: list,
-    ...(offset === 0 && orphanPages.length ? { pages_without_chapter: orphanPages } : {}),
     ...(offset + list.length < allChapters.length ? { next_offset: offset + list.length } : {}),
   });
   let out = build(shown);
-  // Kapitelweise kürzen, bis es passt (mindestens ein Kapitel bleibt).
+  // Eintragsweise kürzen, bis es passt (mindestens ein Eintrag bleibt).
   while (shown.length > 1 && JSON.stringify(out).length > cap) {
     shown = shown.slice(0, Math.max(1, Math.floor(shown.length * 0.75)));
     out = build(shown);
   }
   if (out.next_offset != null) {
-    out.paging_hint = `Weitere Kapitel: list_chapters mit offset=${out.next_offset} aufrufen.`;
+    out.paging_hint = `Weitere Einträge: list_chapters mit offset=${out.next_offset} aufrufen.`;
   }
   return _truncateResult(out, cap);
 }

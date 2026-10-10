@@ -101,7 +101,6 @@ const CATEGORIES = [
       'lib/page-index.js': 686,
       'lib/content-store/backends/localdb.js': 635,
       'routes/jobs/komplett/phases/extraktion.js': 657,
-      'routes/usersettings.js': 641,
     },
   },
   // Einzeldateien ausserhalb der Verzeichnis-Walks: der Server-Einstieg und der

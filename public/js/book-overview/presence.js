@@ -42,9 +42,9 @@ export function bucketByRoot(entries, resolveRoot) {
  * Präsenz-Matrix aus vor-aggregierten Kandidaten bauen.
  *
  * Spaltenauswahl über die geteilte Regel aus ./ranking.js: nach Fundstellen
- * absteigend, bevorzugt mehrfach belegte Entitäten. Einmal-Treffer würden die
- * Top-Spalten sonst fluten und die wiederkehrenden verdrängen — sie kommen
- * nur als Fallback zum Zug, wenn gar nichts mehrfach vorkommt.
+ * absteigend, mehrfach belegte Entitäten zuerst. Einmal-Treffer würden die
+ * Top-Spalten sonst fluten und die wiederkehrenden verdrängen — sie füllen nur
+ * die Spalten auf, die nach den wiederkehrenden noch frei sind.
  *
  * Skalierung: ein globales Maximum über alle Zellen. Spalten-Normierung wurde
  * verworfen, weil Entitäten oft nur in einem Kapitel auftauchen → 100 % selbst

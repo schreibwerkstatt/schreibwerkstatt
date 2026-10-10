@@ -17,7 +17,7 @@ const {
 } = require('./shared');
 const contentStore = require('../../lib/content-store');
 const { narrativeLabels } = require('./narrative-labels');
-const { loadChapterReviewKomplettContext, loadStrukturContext, loadChapterPlanContext, loadChapterIdeenContext } = require('./review-context');
+const { loadChapterReviewKomplettContext, loadStrukturContext, loadChapterPlanContext, loadChapterIdeenContext, werkstandFor } = require('./review-context');
 const { applyQuoteVerification, belegHaystack } = require('../../lib/quote-verify');
 const { toIntId } = require('../../lib/validate');
 const appSettings = require('../../lib/app-settings');
@@ -38,6 +38,22 @@ const CACHE_REV = 2;
 const kapitelRouter = express.Router();
 
 // ── Job: Kapitel-Review (Makrobewertung eines einzelnen Kapitels) ────────────
+// Folgt in `laterPages` (Buchreihenfolge) noch Text? Lädt der Reihe nach und
+// hört beim ersten Abschnitt mit Text auf — im Normalfall ein einziger Load.
+// Leere Hüllen werden übersprungen. Mindestlänge wie die Buchbewertung
+// (loadPageContents, 50 Zeichen). Nach SCAN_MAX leeren Abschnitten ohne Befund:
+// null (unbekannt) — dann wird nichts behauptet.
+const FRONT_MIN_CHARS = 50;
+const FRONT_SCAN_MAX = 40;
+async function _textFollows(laterPages, signal) {
+  for (const p of laterPages.slice(0, FRONT_SCAN_MAX)) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    const pd = await contentStore.loadPage(p.id).catch(e => { throw contentHttpError(e); });
+    if (htmlToText(pd.html).trim().length >= FRONT_MIN_CHARS) return true;
+  }
+  return laterPages.length > FRONT_SCAN_MAX ? null : false;
+}
+
 async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookName, userEmail, { includeSubchapters = false } = {}) {
   const logger = makeJobLogger(jobId);
   const prompts = await getPrompts(userEmail);
@@ -140,6 +156,22 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
         nextName: nextIdx < chaptersFlat.length ? chaptersFlat[nextIdx].name : '',
       };
     }
+    // Werkstand: im unfertigen Buch ist das Kapitel, hinter dem kein Text mehr
+    // folgt, die Schreibfront, kein Schlusskapitel. Ohne Zeichenzahl — siehe
+    // werkstandFor. Die Folgekapitel sind dann angelegte, leere Hüllen.
+    const werkstand = werkstandFor(bookSettings);
+    if (werkstand && position) {
+      const lastIdx = allPages.reduce((m, p, i) => (chapterIds.has(String(p.chapter_id || '')) ? i : m), -1);
+      const follows = await _textFollows(allPages.slice(lastIdx + 1), jobAbortControllers.get(jobId)?.signal);
+      if (follows === false) {
+        const rest = chaptersFlat.slice(flatIdx + 1).filter(c => !chapterIds.has(String(c.id)));
+        position.front = true;
+        position.nextName = '';
+        if (rest.length) position.ungeschrieben = { namen: rest.slice(0, 8).map(c => c.name), gesamt: rest.length };
+      } else if (follows === true) {
+        position.front = false;
+      }
+    }
 
     // Stilprofil fliesst in SYSTEM_KAPITELREVIEW (Referenz-Framing) → Cache-Bust bei Profil-Änderung.
     // Komplettanalyse-Kontext + Position ebenfalls in die Sig, damit ein neuer
@@ -147,6 +179,8 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
     const optionsSig = _sigHash({
       rev: CACHE_REV, narrative, schwerpunkt: reviewSchwerpunkt, includeSubchapters,
       stilprofil: bookSettings?.stilprofil || '', komplettContext, position, strukturContext,
+      // Nur wenn in Arbeit: abgeschlossene Bücher behalten ihre Signatur.
+      ...(werkstand ? { werkstand } : {}),
       // Nur wenn vorhanden: ohne Plot-Planung bleibt die Signatur wortgleich, und
       // bestehende Cache-Einträge dieser Kapitel treffen weiter.
       ...(planContext ? { planContext } : {}),
@@ -242,7 +276,7 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
       const chText = _buildText(contents);
       updateJob(jobId, { progress: 65, statusText: 'job.phase.aiChapterReview' });
       r = await aiCall(jobId, tok,
-        buildChapterReviewPrompt(chapterName, bookName, contents.length, chText, { ...narrative, reviewSchwerpunkt, komplettContext, position, strukturContext, planContext, ideenContext }),
+        buildChapterReviewPrompt(chapterName, bookName, contents.length, chText, { ...narrative, reviewSchwerpunkt, komplettContext, position, werkstand, strukturContext, planContext, ideenContext }),
         SYSTEM_KAPITELREVIEW,
         65, 97, 5000, 0.2, null, undefined, SCHEMA_CHAPTER_REVIEW,
       );
@@ -284,7 +318,7 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
 
       updateJob(jobId, { progress: 90, statusText: 'job.phase.finalReview' });
       r = await aiCall(jobId, tok,
-        buildChapterReviewMultiPassPrompt(chapterName, bookName, subAnalyses, contents.length, { ...narrative, reviewSchwerpunkt, komplettContext, position, strukturContext, planContext, ideenContext }),
+        buildChapterReviewMultiPassPrompt(chapterName, bookName, subAnalyses, contents.length, { ...narrative, reviewSchwerpunkt, komplettContext, position, werkstand, strukturContext, planContext, ideenContext }),
         SYSTEM_KAPITELREVIEW,
         90, 97, 5000, 0.2, null, undefined, SCHEMA_CHAPTER_REVIEW,
       );

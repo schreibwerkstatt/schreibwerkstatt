@@ -15,7 +15,8 @@ const {
 const { toIntId } = require('../../lib/validate');
 const { setContext } = require('../../lib/log-context');
 const appSettings = require('../../lib/app-settings');
-const { resolveProvider } = require('../../lib/ai');
+const { resolveProvider, _claudeUsesAdaptiveThinking } = require('../../lib/ai');
+const { usesOwnAccess } = require('../../lib/ai/profile');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 
 const synonymeRouter = express.Router();
@@ -29,6 +30,33 @@ function _synonymKeyHash(wort, satz, bookSettings, cacheVersion) {
   return crypto.createHash('sha1').update(raw).digest('hex');
 }
 
+// Modell + Effort der Synonymsuche als EIN Job-Bag (setContext ersetzt `aiJob` ganz).
+// Nur Claude. Die Suche ist ein interaktiver Kurz-Call: `ai.claude.model.synonym`
+// erlaubt ein schnelles Modell neben einem schweren globalen, `ai.claude.effort.synonym`
+// (Default 'low') verhindert, dass ein denkendes Modell fuer eine Wortliste lange
+// stumm nachdenkt. Effort nur bei adaptivem Denken — aeltere Modelle kuerzten sonst
+// die sichtbare Antwort. Rueckgabe: das effektiv laufende Modell + `:e=<effort>`
+// fuer die cacheVersion.
+function applySynonymAiOverrides(effectiveProvider, logger) {
+  const baseModel = _modelName(effectiveProvider);
+  if (effectiveProvider !== 'claude') return { model: baseModel, cacheSuffix: '' };
+  // Eigener Zugang: jobOverride ignoriert das Instanz-Modell, die cacheVersion auch.
+  const override = usesOwnAccess() ? '' : String(appSettings.get('ai.claude.model.synonym') || '').trim();
+  const model = override || baseModel;
+  const bag = { provider: 'claude' };
+  if (override) bag.model = override;
+  let cacheSuffix = '';
+  if (_claudeUsesAdaptiveThinking(model)) {
+    const effort = String(appSettings.get('ai.claude.effort.synonym') || '').trim().toLowerCase();
+    if (effort) { bag.effort = effort; cacheSuffix = `:e=${effort}`; }
+  }
+  if (Object.keys(bag).length > 1) {
+    setContext({ aiJob: bag });
+    logger.info(`Synonym-Override: ${JSON.stringify(bag)}.`);
+  }
+  return { model, cacheSuffix };
+}
+
 async function runSynonymJob(jobId, wort, satz, bookId, userEmail, pageId) {
   const logger = makeJobLogger(jobId);
   const pageTag = pageId ? ` page=${pageId}` : '';
@@ -37,7 +65,8 @@ async function runSynonymJob(jobId, wort, satz, bookId, userEmail, pageId) {
   const { SYSTEM_SYNONYM } = await getBookPrompts(bookId, userEmail);
   const bookSettings = bookId ? getBookSettings(bookId, userEmail) : null;
   const effectiveProvider = resolveProvider({ userEmail });
-  const cacheVersion = `${_modelName(effectiveProvider)}:${PROMPTS_VERSION || ''}`;
+  const { model, cacheSuffix } = applySynonymAiOverrides(effectiveProvider, logger);
+  const cacheVersion = `${model}${cacheSuffix}:${PROMPTS_VERSION || ''}`;
   const keyHash = _synonymKeyHash(wort, satz, bookSettings, cacheVersion);
   try {
     logger.info(`Start: «${wort}»${pageTag}`);
@@ -103,4 +132,4 @@ synonymeRouter.post('/synonym', jsonBody, (req, res) => {
   res.json({ jobId });
 });
 
-module.exports = { synonymeRouter, runSynonymJob };
+module.exports = { synonymeRouter, runSynonymJob, applySynonymAiOverrides };

@@ -11,6 +11,16 @@ import { tileFormatMethods } from '../cards/tile-format.js';
 export const formatMethods = {
   ...tileFormatMethods,
 
+  // Zähl-String mit Singular-Variante: `n === 1` → `<key>One` (Projekt-
+  // Konvention, z.B. sidebar.pagesCountOne), sonst `<key>` mit `{n}`
+  // lokalisiert formatiert. Weitere Platzhalter über `params`.
+  _tCount(key, n, params = {}) {
+    const app = window.__app;
+    const num = Number(n) || 0;
+    if (Math.abs(num) === 1) return app.t(key + 'One', params);
+    return app.t(key, { ...params, n: this._fmtNum(num) });
+  },
+
   // ── Tile-Click-Handler ───────────────────────────────────────────────────
   _openLengthStats(range = 30, metric = 'chars') {
     window.dispatchEvent(new CustomEvent(EVT.BOOK_STATS_SELECT, { detail: { metric, range } }));

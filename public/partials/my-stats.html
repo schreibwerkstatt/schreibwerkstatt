@@ -13,9 +13,9 @@
   <p class="card-hint card-section" x-text="$app.t('mystats.allBooksNote')"></p>
 
   <!-- Globaler Zeitraum-Filter: Presets (30/90/365 T, alles) ODER freie Von/Bis-Auswahl.
-       Steuert die ganze Karte. Lifetime-Werte (Bücher/Kapitel/Wortschatz, Lesbarkeit,
-       Meilensteine) bleiben Gesamtwerte (Hinweis-Tag). -->
-  <div class="mystats-range" x-show="!myStatsLoading && !myStatsError && myStatsData && myStatsData.books > 0" x-cloak>
+       Jede Kachel trägt ein Geltungs-Tag (myStatsScope): „im Zeitraum" folgt dem Filter,
+       „gesamt"/„aktuell"/„letzte 52 Wochen" nicht. Regeln: docs/my-stats.md. -->
+  <div class="mystats-range" x-show="!myStatsLoading && !myStatsError && myStatsHasContent" x-cloak>
     <div class="btn-group">
       <template x-for="r in [{v:30,k:'30'},{v:90,k:'90'},{v:365,k:'365'},{v:0,k:'all'}]" :key="r.v">
         <button type="button" class="btn-compact"
@@ -27,11 +27,11 @@
     <div class="mystats-range-custom">
       <input type="date" class="mystats-date-input" x-model="myStatsFrom"
              @change="myStatsRangeDays = 0; _onRangeChange()"
-             :max="myStatsTo || null" :aria-label="$app.t('mystats.rangeFrom')">
+             :aria-label="$app.t('mystats.rangeFrom')">
       <span class="mystats-range-sep" aria-hidden="true">–</span>
       <input type="date" class="mystats-date-input" x-model="myStatsTo"
              @change="myStatsRangeDays = 0; _onRangeChange()"
-             :min="myStatsFrom || null" :aria-label="$app.t('mystats.rangeToLabel')">
+             :aria-label="$app.t('mystats.rangeToLabel')">
       <button type="button" class="btn-compact" x-show="myStatsFrom || myStatsTo"
               @click="myStatsSetPreset(0)" x-text="$app.t('mystats.rangeClear')"></button>
     </div>
@@ -41,15 +41,22 @@
   <p x-show="myStatsError" x-cloak class="card-form-error" x-text="myStatsError"></p>
   <p x-show="myStatsIsEmpty" x-cloak class="muted-msg" x-text="$app.t('mystats.empty')"></p>
 
-  <div class="overview-grid" x-show="!myStatsLoading && !myStatsError && myStatsData && myStatsData.books > 0">
-    <!-- HERO: Zeichen gross + Sekundär-Kennzahlen inline -->
-    <template x-if="myStatsData && myStatsData.books > 0">
+  <div class="overview-grid" x-show="!myStatsLoading && !myStatsError && myStatsHasContent">
+    <!-- HERO: Zeichen gross + Sekundär-Kennzahlen inline. Im Zeitraum = Netto-
+         Bestandsdifferenz (inkl. Importe, Löschungen, Co-Autor:innen). -->
+    <template x-if="myStatsHasContent">
     <div class="overview-tile overview-tile--hero">
-      <div class="overview-tile-label" x-text="myStatsWindowActive ? $app.t('mystats.volumeInRange') : $app.t('mystats.volume')"></div>
+      <div class="overview-tile-label">
+        <span x-text="myStatsWindowActive ? $app.t('mystats.volumeInRange') : $app.t('mystats.volume')"
+              :data-tip="myStatsWindowActive ? $app.t('mystats.volumeInRangeTip') : null"></span>
+        <span class="mystats-scope-tag" x-text="myStatsScope('window')"></span>
+      </div>
       <div class="overview-hero-row">
         <div class="overview-hero-num">
           <span class="overview-hero-value" x-text="_myStatsFmt(myStatsVolume().chars)"></span>
           <span class="overview-hero-unit" x-text="$app.t('mystats.chars')"></span>
+          <span class="mystats-scope-tag" x-show="myStatsVolume().chars < 0" x-cloak
+                :data-tip="$app.t('mystats.netTip')" x-text="$app.t('mystats.net')"></span>
         </div>
         <div class="overview-substats">
           <div class="overview-substat">
@@ -62,7 +69,7 @@
           </div>
           <div class="overview-substat">
             <span class="overview-substat-value" x-text="_myStatsFmt(myStatsVolume().pages)"></span>
-            <span class="overview-substat-unit" x-text="$app.t('mystats.pages')"></span>
+            <span class="overview-substat-unit" x-text="myStatsVolume().pages === 1 ? $app.t('mystats.pagesOne') : $app.t('mystats.pages')"></span>
           </div>
           <div class="overview-substat">
             <span class="overview-substat-value" x-text="myStatsWritingTime()"></span>
@@ -70,23 +77,27 @@
           </div>
         </div>
       </div>
+      <!-- Mind. ein Buch hat keinen Snapshot vor dem Zeitraum (Historie reicht nicht
+           so weit) → Basis ist sein erster Stand im Zeitraum, der Wert ein Näherungswert. -->
+      <p class="card-hint card-hint--sm" x-show="myStatsWindowActive && myStatsVolume().approximated" x-cloak
+         x-text="$app.t('mystats.approxHint')"></p>
 
-      <!-- Gesamt-Kennzahlen (immer all-time, auch bei aktivem Zeitraum): Bücher,
-           Kapitel, Wortschatz sind Bestandswerte, kein Zeitraum-Zuwachs. -->
+      <!-- Gesamt-Kennzahlen (immer aktueller Stand, auch bei aktivem Zeitraum): Bücher,
+           Kapitel, Wortformen sind Bestandswerte, kein Zeitraum-Zuwachs. -->
       <div class="overview-substats mystats-state-row">
         <div class="overview-substat">
           <span class="overview-substat-value" x-text="_myStatsFmt(myStatsData.books)"></span>
-          <span class="overview-substat-unit" x-text="$app.t('mystats.books')"></span>
+          <span class="overview-substat-unit" x-text="myStatsData.books === 1 ? $app.t('mystats.booksOne') : $app.t('mystats.books')"></span>
         </div>
         <div class="overview-substat">
           <span class="overview-substat-value" x-text="_myStatsFmt(myStatsData.chapters)"></span>
           <span class="overview-substat-unit" x-text="$app.t('mystats.chapters')"></span>
         </div>
-        <div class="overview-substat" x-show="myStatsData.unique_words > 0">
+        <div class="overview-substat" x-show="myStatsData.unique_words > 0" :data-tip="$app.t('mystats.uniqueWordsTip')">
           <span class="overview-substat-value" x-text="_myStatsFmt(myStatsData.unique_words)"></span>
           <span class="overview-substat-unit" x-text="$app.t('mystats.uniqueWords')"></span>
         </div>
-        <span class="mystats-alltime-tag" x-show="myStatsWindowActive" x-text="$app.t('mystats.allTimeTag')"></span>
+        <span class="mystats-scope-tag" x-text="myStatsScope('current')"></span>
       </div>
 
       <!-- Diese Woche vs. letzte Woche (geschriebene Zeichen) — nur ohne aktiven Zeitraum -->
@@ -106,6 +117,36 @@
          display:contents-Wrapper → Tiles bleiben Grid-Kinder. -->
     <div id="partial-my-stats-rhythm"></div>
 
+    <!-- Vorperioden-Vergleich: aktiver Zeitraum vs. gleich lange Periode davor
+         (Zeichen-Zuwachs + Schreibzeit). Nur bei aktivem, nach vorne begrenztem
+         Zeitraum sichtbar. -->
+    <template x-if="myStatsHasPeriodCmp()">
+      <div class="overview-tile overview-tile--medium">
+        <div class="overview-tile-label">
+          <span x-text="$app.t('mystats.periodCompare')"></span>
+          <span class="mystats-scope-tag" x-text="myStatsScope('window')"></span>
+        </div>
+        <div class="overview-consistency-grid">
+          <div class="overview-consistency-item">
+            <span class="overview-consistency-value overview-trend-pct"
+                  :class="myStatsPeriodComparison().chars.dir > 0 ? 'overview-trend-pct--up' : myStatsPeriodComparison().chars.dir < 0 ? 'overview-trend-pct--down' : ''"
+                  x-text="myStatsCmpText(myStatsPeriodComparison().chars)"></span>
+            <span class="overview-consistency-label" x-text="$app.t('mystats.cmpChars')"></span>
+          </div>
+          <div class="overview-consistency-item">
+            <span class="overview-consistency-value overview-trend-pct"
+                  :class="myStatsPeriodComparison().writingSeconds.dir > 0 ? 'overview-trend-pct--up' : myStatsPeriodComparison().writingSeconds.dir < 0 ? 'overview-trend-pct--down' : ''"
+                  x-text="myStatsCmpText(myStatsPeriodComparison().writingSeconds)"></span>
+            <span class="overview-consistency-label" x-text="$app.t('mystats.cmpWriting')"></span>
+          </div>
+        </div>
+        <p class="card-hint card-hint--sm"
+           x-text="$app.t('mystats.cmpNote', { from: myStatsDateLabel(myStatsPeriodComparison().prevFrom), to: myStatsDateLabel(myStatsPeriodComparison().prevTo) })"></p>
+        <p class="card-hint card-hint--sm" x-show="myStatsPeriodComparison().approximated" x-cloak
+           x-text="$app.t('mystats.approxHint')"></p>
+      </div>
+    </template>
+
     <!-- Insight-Tiles (Lesbarkeit, Aufwand, Pro-Buch-Zeit) ausgelagert wg.
          250-LOC-Partial-Limit. display:contents-Wrapper → Tiles bleiben Grid-Kinder. -->
     <div id="partial-my-stats-insights"></div>
@@ -114,11 +155,11 @@
     <div id="partial-my-stats-book-goals"></div>
 
     <!-- Meilensteine: erreichte Badges + nächstes Ziel -->
-    <template x-if="myStatsData && myStatsData.books > 0 && (myStatsMilestones().achieved.length || myStatsMilestones().next)">
+    <template x-if="myStatsHasContent && (myStatsMilestones().achieved.length || myStatsMilestones().next)">
       <div class="overview-tile overview-tile--medium">
         <div class="overview-tile-label">
           <span x-text="$app.t('mystats.milestones')"></span>
-          <span class="mystats-alltime-tag" x-show="myStatsWindowActive" x-text="$app.t('mystats.allTimeTag')"></span>
+          <span class="mystats-scope-tag" x-text="myStatsScope('lifetime')"></span>
         </div>
         <div class="mystats-badges">
           <template x-for="m in myStatsMilestones().achieved" :key="m.category">
@@ -131,7 +172,9 @@
               <span x-text="$app.t('mystats.nextGoal')"></span>
               <span x-text="myStatsMilestoneLabel(myStatsMilestones().next.category, myStatsMilestones().next.target)"></span>
             </div>
-            <div class="progress-bar-wrap">
+            <div class="progress-bar-wrap" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+                 :aria-valuenow="myStatsMilestones().next.progress"
+                 :aria-label="myStatsMilestoneLabel(myStatsMilestones().next.category, myStatsMilestones().next.target)">
               <div class="progress-bar" :style="{ '--progress': myStatsMilestones().next.progress + '%' }"></div>
             </div>
           </div>
@@ -142,7 +185,10 @@
     <!-- Entwicklung über die Zeit -->
     <template x-if="myStatsHasChart">
       <div class="overview-tile overview-tile--wide mystats-chart-tile">
-        <div class="overview-tile-label" x-text="$app.t('mystats.development')"></div>
+        <div class="overview-tile-label">
+          <span x-text="$app.t('mystats.development')"></span>
+          <span class="mystats-scope-tag" x-text="myStatsScope('window')"></span>
+        </div>
         <div class="mystats-controls">
           <div class="btn-group">
             <template x-for="m in [{v:'total',k:'total'},{v:'byBook',k:'byBook'}]" :key="m.v">
@@ -180,7 +226,11 @@
           </div>
         </div>
         <div class="mystats-chart-wrap">
-          <canvas id="my-stats-chart" role="img" :aria-label="$app.t('mystats.chartFallback')"><span x-text="$app.t('mystats.chartFallback')"></span></canvas>
+          <canvas id="my-stats-chart" role="img" :aria-label="myStatsChartAria()"><span x-text="myStatsChartAria()"></span></canvas>
+          <!-- Leerzustand über dem (leeren) Canvas — das Canvas bleibt im Layout,
+               damit ein späteres Rendern nicht in ein 0×0-Element zeichnet. -->
+          <p class="muted-msg mystats-chart-empty" x-show="myStatsChartEmpty" x-cloak
+             x-text="myStatsChartEmpty === 'noHistory' ? $app.t('mystats.chart.noHistory') : $app.t('mystats.chart.noData')"></p>
         </div>
       </div>
     </template>

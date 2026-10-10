@@ -47,7 +47,7 @@ const TOOLS = {
   quote_passage:          text.tool_quote_passage,
   quote_match:            text.tool_quote_match,
   get_dialogue:           text.tool_get_dialogue,
-  find_first_last_mention: text.tool_find_first_last_mention,
+  find_first_last_mention: figures.tool_find_first_last_mention,
 
   get_reviews:            analysis.tool_get_reviews,
   get_lektorat_hotspots:  analysis.tool_get_lektorat_hotspots,

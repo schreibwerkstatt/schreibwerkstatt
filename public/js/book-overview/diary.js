@@ -6,28 +6,11 @@
 //
 // Compute-Bodies sind als pure `_computeXxx` extrahiert (Alpine-frei testbar);
 // die memoizierten Wrapper nutzen den gemeinsamen `this._memo` aus load.js.
-import { localIsoDate } from '../utils.js';
 import { quartileLevelFor, currentMonthKey } from '../book/ymheatmap.js';
+import { isoAddDays as _addDays, isoDaysBetween as _dayDiff, isoWeekday } from './iso-day.js';
 
 // Tagebuch-Seitennamen sind 'YYYY-MM-DD' (gleiche Mechanik wie diary-calendar).
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})\b/;
-
-// Datums-Arithmetik über Mittags-Anker (lokal), DST-sicher beim ±n Tage.
-function _isoToNoon(iso) {
-  const [y, m, d] = String(iso).split('-').map(Number);
-  return new Date(y, m - 1, d, 12, 0, 0, 0);
-}
-function _dayDiff(isoFrom, isoTo) {
-  return Math.round((_isoToNoon(isoTo) - _isoToNoon(isoFrom)) / 86400000);
-}
-function _addDays(iso, n) {
-  const d = _isoToNoon(iso);
-  d.setDate(d.getDate() + n);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${dd}`;
-}
 function _prevMonthKey(monthKey) {
   let [y, m] = monthKey.split('-').map(Number);
   m -= 1;
@@ -90,8 +73,8 @@ export const diaryMethods = {
 
   diaryGapsConsistency() {
     const pages = Alpine.store('nav').pages || [];
-    return this._memo('diaryGaps', [pages, this.overviewToday], () =>
-      this._computeDiaryGapsConsistency(this._diaryEntryDates(pages), localIsoDate()));
+    return this._memo('diaryGaps', [pages, this._todayIso()], () =>
+      this._computeDiaryGapsConsistency(this._diaryEntryDates(pages), this._todayIso()));
   },
 
   // ── Wochentag-Rhythmus ─────────────────────────────────────────────────────
@@ -101,7 +84,8 @@ export const diaryMethods = {
     const counts = new Array(7).fill(0);
     const chars = new Array(7).fill(0);
     for (const e of (entries || [])) {
-      const jsDay = _isoToNoon(e.iso).getDay();
+      const jsDay = isoWeekday(e.iso);
+      if (!Number.isInteger(jsDay)) continue;
       counts[jsDay]++;
       chars[jsDay] += Number(e.chars || 0);
     }
@@ -128,12 +112,12 @@ export const diaryMethods = {
       }
       const en = this._uiLocale() === 'en';
       const rows = this._computeDiaryWeekdayRhythm(entries, !en);
-      const fmt = this._dateFmt({ weekday: 'short' });
       // 2024-01-01 ist ein Montag — daraus jsDay → Label-Map ableiten.
+      // Kalendertag-Label über _isoDayLabel (UTC-Mittag + timeZone UTC).
       const labelByDay = {};
       for (let i = 0; i < 7; i++) {
-        const dt = new Date(2024, 0, 1 + i, 12);
-        labelByDay[dt.getDay()] = fmt.format(dt);
+        const iso = _addDays('2024-01-01', i);
+        labelByDay[isoWeekday(iso)] = this._isoDayLabel(iso, { weekday: 'short' });
       }
       return rows.map(r => ({ ...r, weekday: labelByDay[r.jsDay] }));
     });
@@ -213,7 +197,7 @@ export const diaryMethods = {
   rueckblickCellTip(cell) {
     const app = window.__app;
     const period = `${this.rueckblickMonthLabels()[cell.monthIdx - 1]} ${cell.key.slice(0, 4)}`;
-    const entriesPart = app.t('overview.rueckblickHeatmap.tooltip.entries', { n: this._fmtNum(cell.entries) });
+    const entriesPart = this._tCount('overview.rueckblickHeatmap.tooltip.entries', cell.entries);
     const rbPart = cell.hasRueckblick
       ? app.t('overview.rueckblickHeatmap.tooltip.hasRueckblick', { date: this.rueckblickCreatedLabel(cell.createdAt) })
       : app.t('overview.rueckblickHeatmap.tooltip.noRueckblick');

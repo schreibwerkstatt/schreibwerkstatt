@@ -5,7 +5,7 @@
   <div class="overview-tile overview-tile--wide">
     <div class="overview-tile-head">
       <div class="overview-tile-label" x-text="$app.t('overview.goal.title')"></div>
-      <div class="overview-goal-deadline" x-show="overviewGoalProjection().deadlineIso" x-cloak
+      <div class="overview-goal-deadline" x-show="overviewGoalProjection().deadlineIso && !overviewGoalProjection().deadlinePassed" x-cloak
            x-text="$app.t('overview.goal.deadline', { date: overviewGoalDateLabel(overviewGoalProjection().deadlineIso) })"></div>
     </div>
 
@@ -27,8 +27,11 @@
         <span x-text="$app.t('overview.goal.reached')"></span>
       </span>
       <span class="overview-goal-status overview-goal-status--stalled"
+            x-show="overviewGoalProjection().deadlinePassed" x-cloak
+            x-text="$app.t('overview.goal.deadlinePassed', { date: overviewGoalDateLabel(overviewGoalProjection().deadlineIso) })"></span>
+      <span class="overview-goal-status overview-goal-status--stalled"
             x-show="!overviewGoalProjection().reached && overviewGoalProjection().stalled" x-cloak
-            x-text="$app.t('overview.goal.stalled', { n: overviewGoalProjection().stalledDays })"></span>
+            x-text="_tCount('overview.goal.stalled', overviewGoalProjection().stalledDays)"></span>
       <span class="overview-goal-status"
             x-show="overviewGoalProjection().insufficientHistory" x-cloak
             x-text="$app.t('overview.goal.tooLittleHistory')"></span>
@@ -47,20 +50,22 @@
             x-show="overviewGoalProjection().requiredPace && !overviewGoalProjection().reached" x-cloak
             x-text="$app.t('overview.goal.required', { n: _fmtNum(overviewGoalProjection().requiredPace) })"></span>
       <span class="overview-trend-pct"
-            x-show="overviewGoalProjection().deadlineIso && !overviewGoalProjection().reached && overviewGoalProjection().daysBuffer !== null"
+            x-show="overviewGoalProjection().deadlineIso && !overviewGoalProjection().reached && !overviewGoalProjection().deadlinePassed && overviewGoalProjection().daysBuffer !== null"
             x-cloak
             :class="overviewGoalProjection().onTrack ? 'overview-trend-pct--up' : 'overview-trend-pct--down'"
             x-text="overviewGoalProjection().onTrack
-              ? $app.t('overview.goal.buffer', { n: overviewGoalProjection().daysBuffer })
-              : $app.t('overview.goal.late', { n: Math.abs(overviewGoalProjection().daysBuffer) })"></span>
+              ? _tCount('overview.goal.buffer', overviewGoalProjection().daysBuffer)
+              : _tCount('overview.goal.late', Math.abs(overviewGoalProjection().daysBuffer))"></span>
       <span class="overview-trend-pct overview-trend-pct--down"
-            x-show="overviewGoalProjection().deadlineIso && !overviewGoalProjection().reached && overviewGoalProjection().stalled"
+            x-show="overviewGoalProjection().deadlineIso && !overviewGoalProjection().reached && !overviewGoalProjection().deadlinePassed && overviewGoalProjection().stalled"
             x-cloak x-text="$app.t('overview.goal.unreachable')"></span>
     </div>
   </div>
 </template>
 
 <!-- Sparkline mit Gradient-Fill + farb-codiert + Endpunkt-Marker.
+     Aus, solange die Schreibziel-Kachel steht: die trägt Stand, Fortschritt und
+     den 30-Tage-Schnitt bereits — die Kurve wäre dieselbe Aussage ein zweites Mal.
      SVG ist aria-hidden — Trend-Prozent darunter trägt die Info,
      das Tile selbst hat ein zusammenfassendes aria-label.
      `x-id` ist Pflicht: `$id()` memoisiert pro ELEMENT und zieht ohne einen
@@ -68,7 +73,7 @@
      das `url(#…)` der Fläche stehen auf zwei verschiedenen Elementen — ohne die
      Klammer zeigt die Füllung auf eine ID, die es nicht gibt, und bleibt
      unsichtbar. -->
-<template x-if="!overviewIsFinished && overviewSparkline().d">
+<template x-if="!overviewIsFinished && !overviewHasGoal() && overviewSparkline().d">
   <div class="overview-tile internal-link"
        x-id="['sl-grad']"
        @click="_openLengthStats(30, 'chars')"
@@ -133,10 +138,12 @@
   </div>
 </template>
 
-<!-- Heute-Ring: Tagesziel-Donut, pulsiert bei aktivem Schreibtag.
+<!-- Heute-Ring: Tagesziel-Donut, pulsiert bei aktivem Schreibtag. Sichtbar mit
+     Snapshot-Verlauf oder — neues Buch — mit vollständigem Live-Stand
+     (overviewShowTodayRing).
      Goal-Auflösung (book_settings.daily_goal_chars → Default eine Normseite/Tag)
      steckt in overviewTodayRing(). -->
-<template x-if="!overviewIsFinished && overviewStats && overviewStats.length > 0">
+<template x-if="!overviewIsFinished && overviewShowTodayRing()">
   <div class="overview-tile internal-link"
        @click="_openLengthStats(7, 'delta_chars')"
        :aria-label="$app.t('overview.today.aria', { chars: _fmtNum(overviewTodayRing().chars), goal: _fmtNum(overviewTodayRing().goal), pct: overviewTodayRing().pct })"
@@ -178,12 +185,13 @@
     <div class="overview-tile-head">
       <div class="overview-tile-label" x-text="$app.t('overview.streak.title')"></div>
       <div class="overview-streak-meta">
-        <span class="overview-streak-stat" x-text="$app.t('overview.streak.current', { n: overviewStreakHeatmap().currentStreak })"></span>
-        <span class="overview-streak-stat" x-text="$app.t('overview.streak.longest', { n: overviewStreakHeatmap().longestStreak })"></span>
-        <span class="overview-streak-stat" x-text="$app.t('overview.streak.totalActive', { n: overviewStreakHeatmap().totalActiveDays })"></span>
+        <span class="overview-streak-stat" x-text="_tCount('overview.streak.current', overviewStreakHeatmap().currentStreak)"></span>
+        <span class="overview-streak-stat" x-text="_tCount('overview.streak.longest', overviewStreakHeatmap().longestStreak)"></span>
+        <span class="overview-streak-stat" x-text="_tCount('overview.streak.totalActive', overviewStreakHeatmap().totalActiveDays)"></span>
       </div>
     </div>
-    <div class="overview-streak-grid" role="img" :aria-label="$app.t('overview.streak.title')">
+    <div class="overview-streak-grid" role="img"
+         :aria-label="$app.t('overview.streak.title') + ': ' + _tCount('overview.streak.current', overviewStreakHeatmap().currentStreak) + ', ' + _tCount('overview.streak.longest', overviewStreakHeatmap().longestStreak) + ', ' + _tCount('overview.streak.totalActive', overviewStreakHeatmap().totalActiveDays)">
       <template x-for="(week, wi) in overviewStreakHeatmap().weeks" :key="wi">
         <div class="overview-streak-week">
           <template x-for="(cell, di) in week" :key="di">

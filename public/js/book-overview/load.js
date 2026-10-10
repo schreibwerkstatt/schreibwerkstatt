@@ -9,6 +9,31 @@ import { memoMethods } from '../cards/card-memo.js';
 
 const fetchJsonRetry = (url, opts) => fetchJsonRetryBase(url, opts, 'bookOverview');
 
+// Recent-Kachel: mehr anfragen als anzeigen. Der Endpunkt kennt auch Abschnitte,
+// die inzwischen gelöscht oder in ein anderes Buch verschoben sind; die fallen
+// beim Abgleich mit nav.pages heraus, und die Liste bliebe sonst kürzer.
+export const RECENT_FETCH_LIMIT = 8;
+export const RECENT_SHOW_LIMIT = 5;
+
+// Bereits geladener Katalog (Alpine.store('catalog')) für das aktuelle Buch, oder
+// null. Der Katalog wird beim Buchwechsel geleert (app-view/bookscope.js#
+// _resetBookScopedState) und nur von Ladern mit Buchwechsel-Guard befüllt —
+// ein nicht-leerer Katalog gehört also zum offenen Buch. Leer heisst „nicht
+// geladen" ODER „keine Einträge"; beides führt zum eigenen Fetch.
+function _catalogList(name) {
+  try {
+    const list = (typeof Alpine !== 'undefined') ? Alpine.store('catalog')?.[name] : null;
+    return Array.isArray(list) && list.length ? list : null;
+  } catch { return null; }
+}
+
+// 403 = dem Betrachter fehlt das Recht auf diesen Endpunkt (Figuren, Szenen,
+// Schauplätze, Songs verlangen editor). Das ist ein erwarteter Zustand, kein
+// Ladefehler — das Tile bleibt aus, der Fehler-Banner nicht.
+export function isForbidden(e) {
+  return e?.status === 403;
+}
+
 // Initialer Tile-State der Karte. SSoT für BEIDE Seiten: die Card-Registrierung
 // spreadet das Objekt als Startzustand, `resetBookOverview` weist es beim
 // Buchwechsel erneut zu. Vorher waren das zwei handgepflegte Listen mit je 19
@@ -39,7 +64,20 @@ export function initialOverviewState() {
     overviewMotifs: null,
     overviewLexiconData: null,
     overviewLoadErrors: [],
+    // Endpunkte, die mit 403 antworteten (fehlendes Recht, kein Fehler).
+    overviewForbidden: [],
   };
+}
+
+// True, wenn nav.pages zum Buch `bookId` gehört und nicht leer ist. Primär
+// über `_treeBookId` (gesetzt direkt nach dem Baum-Bau in tree/load.js), sonst
+// über die book_id der Seiten selbst.
+export function treeBelongsTo(app, bookId) {
+  const pages = Alpine.store('nav').pages || [];
+  if (!pages.length) return false;
+  const treeBook = app?._treeBookId;
+  if (treeBook != null) return String(treeBook) === String(bookId);
+  return pages.every(p => p.book_id == null || String(p.book_id) === String(bookId));
 }
 
 export const loadMethods = {
@@ -62,16 +100,27 @@ export const loadMethods = {
     this._loadingBookId = bookId;
     this.overviewLoading = true;
     this.overviewBookId = bookId;
+    // Fehlerstand des vorigen Loads verwerfen: der Banner gilt dem laufenden.
+    this.overviewLoadErrors = [];
     // Fehlgeschlagene Endpoints sammeln (nach dem einen Retry aus fetchJsonRetry),
     // statt sie still zu schlucken — die Overview zeigt danach einen dezenten
     // Hinweis + Retry, damit ein ausgefallenes Tile nicht als „keine Daten"
     // missverstanden wird.
     const failed = [];
+    const forbidden = [];
     const guard = (key, fallback) => (e) => {
+      if (isForbidden(e)) { forbidden.push(key); return fallback; }
       failed.push(key);
       console.warn(`[bookOverview] ${key} fehlgeschlagen`, e);
       return fallback;
     };
+    // Figuren, Schauplätze, Szenen: liegt der Katalog fürs offene Buch schon vor
+    // (loadPages lädt die Figuren, Orte-/Szenen-Karte und Palette den Rest), dieselbe
+    // Antwort wiederverwenden statt erneut zu holen. Der ausdrückliche
+    // Refresh (`fresh`) fragt immer den Server.
+    const cachedFiguren = opts.fresh ? null : _catalogList('figuren');
+    const cachedOrte = opts.fresh ? null : _catalogList('orte');
+    const cachedSzenen = opts.fresh ? null : _catalogList('szenen');
     try {
       // Plot-Board + Motiv-Konstellation sind optionale Planungswerkzeuge (pro
       // Buch + User, editor-skopiert für Plot). Ihr Fehlen ist normal (nie geplant)
@@ -86,10 +135,10 @@ export const loadMethods = {
         fetchJsonRetry(`/history/coverage/${bookId}`).catch(guard('coverage', null)),
         fetchJsonRetry(`/history/fehler-heatmap/${bookId}?mode=open`).catch(guard('heat', null)),
         fetchJsonRetry(`/history/review/${bookId}`).catch(guard('review', [])),
-        fetchJsonRetry(`/usage/page/recent?book_id=${bookId}&limit=5`).catch(guard('recent', [])),
-        fetchJsonRetry(`/figures/${bookId}`).catch(guard('figuren', null)),
-        fetchJsonRetry(`/figures/scenes/${bookId}`).catch(guard('szenen', null)),
-        fetchJsonRetry(`/locations/${bookId}`).catch(guard('orte', null)),
+        fetchJsonRetry(`/usage/page/recent?book_id=${bookId}&limit=${RECENT_FETCH_LIMIT}`).catch(guard('recent', [])),
+        cachedFiguren ? { figuren: cachedFiguren } : fetchJsonRetry(`/figures/${bookId}`).catch(guard('figuren', null)),
+        cachedSzenen ? { szenen: cachedSzenen } : fetchJsonRetry(`/figures/scenes/${bookId}`).catch(guard('szenen', null)),
+        cachedOrte ? { orte: cachedOrte, fromCatalog: true } : fetchJsonRetry(`/locations/${bookId}`).catch(guard('orte', null)),
         fetchJsonRetry(`/songs/${bookId}`).catch(guard('songs', null)),
         fetchJsonRetry(`/history/lektorat-time/${bookId}`).catch(guard('lektorat', null)),
         fetchJsonRetry(`/plot?book_id=${bookId}`).catch(() => null),
@@ -117,7 +166,7 @@ export const loadMethods = {
       // Name und Sprungziel aus `catalog.orte` auflösen. Den lädt sonst nur die
       // Orte-Karte — ohne ihn stünde in der Kachel die loc_-ID. Gleiche Antwort
       // wie loadOrte, also einspeisen, solange der Katalog leer ist.
-      if (Array.isArray(orte?.orte) && !Alpine.store('catalog').orte.length) {
+      if (!orte?.fromCatalog && Array.isArray(orte?.orte) && !Alpine.store('catalog').orte?.length) {
         Alpine.store('catalog').orte = orte.orte;
         Alpine.store('catalogUi').orteUpdatedAt = orte.updated_at || null;
       }
@@ -142,6 +191,7 @@ export const loadMethods = {
         this.overviewRueckblickCoverage = cov || null;
       }
       this.overviewLoadErrors = failed;
+      this.overviewForbidden = forbidden;
     } catch (e) {
       console.error('[loadBookOverview]', e);
       // Unerwarteter Fehler beim Zuweisen: Hinweis + Retry zeigen, statt den
@@ -206,15 +256,18 @@ export const loadMethods = {
     if (this._staleCheckBookId === bookId) return;
     this._staleCheckBookId = bookId;
     try {
-      // Nach Buchwechsel kann Alpine.store('nav').pages noch leer sein (loadPages async).
-      // Kurz pollen, dann aufgeben.
-      for (let i = 0; i < 30 && (!Alpine.store('nav').pages || !Alpine.store('nav').pages.length); i++) {
+      // Nach Buchwechsel steht in nav.pages noch der Baum des VORIGEN Buchs,
+      // bis loadPages den neuen gebaut hat. Kurz pollen, bis der Baum zum
+      // aktuellen Buch gehört, dann aufgeben — mit fremden Seiten-IDs fiele das
+      // Server-Urteil zwangsläufig auf „stale" und stiesse einen unnötigen
+      // /sync/book an.
+      for (let i = 0; i < 30 && !treeBelongsTo(app, bookId); i++) {
         await new Promise(r => setTimeout(r, 100));
         if (this._overviewAborted()) return;
         if (Alpine.store('nav').selectedBookId !== bookId) return;
       }
+      if (!treeBelongsTo(app, bookId)) return;
       const pages = Alpine.store('nav').pages || [];
-      if (!pages.length) return;
       const payload = pages.map(p => ({ id: p.id, updated_at: p.updated_at }));
       const verdict = await fetchJsonRetry(`/history/stats-stale/${bookId}`, {
         method: 'POST',
@@ -294,6 +347,9 @@ export const loadMethods = {
   // ein Handlungsaufruf ohne erreichbares Ziel wäre eine Sackgasse.
   overviewNeedsAnalysis() {
     if (this.overviewIsTagebuch()) return false;
+    // Ohne Leserecht auf die Analyse-Ergebnisse (Betrachter: 403) sind die
+    // Zählkacheln nicht leer, sondern unsichtbar — kein Handlungsaufruf.
+    if ((this.overviewForbidden || []).length) return false;
     if (komplettHiddenFor(this.overviewBuchtyp)) return false;
     if (!(Alpine.store('nav').pages || []).length) return false;
     return this.overviewFigurenCount() === 0
@@ -312,14 +368,29 @@ export const loadMethods = {
   // ausgeklammert — verzerren sonst Median/Skalierung. Name-Map als
   // Fallback für Server-Rows, die nur `chapter_name` ohne `chapter_id`
   // liefern (Backfill-Lücken).
+  //
+  // Von Export und Analyse ausgeschlossene Kapitel (`excluded`, kaskadiert auf
+  // alle Unterkapitel wie lib/load-contents.js#_excludedChapterIds) zählen in
+  // keiner Kapitel-Kachel: sie fehlen in `roots`, und `rootOf`/`rootOfName`
+  // liefern für sie `null` — Verteilung, Präsenz-Matrizen, Findings,
+  // Lektoratszeit und alle Mediane sehen sie nicht. `anyRootOf` ignoriert den
+  // Ausschluss (Hero: die Gliederung des Buchs zählt alle Kapitel).
+  //
+  // `excluded` wird im Baum in place umgeschaltet (tree-context-menu.js#
+  // setChapterExcluded), ohne `tree` neu zuzuweisen — darum steckt die Menge
+  // der ausgeschlossenen IDs als Signatur in den Deps. Konsumenten-Memos
+  // führen das Rollup-Objekt selbst als Dep.
   _chapterRollup() {
     const tree = Alpine.store('nav').tree || [];
-    return this._memo('rollup', [tree], () => {
+    let exSig = '';
+    for (const i of tree) if (i.type === 'chapter' && i.excluded) exSig += i.id + ',';
+    return this._memo('rollup', [tree, exSig], () => {
       const chs = tree.filter(i => i.type === 'chapter' && !i.solo);
       const byId = new Map(chs.map(c => [Number(c.id), c]));
       const byName = new Map(chs.map(c => [c.name, c]));
       const rootCache = new Map();
-      const rootOf = (id) => {
+      const exCache = new Map();
+      const anyRootOf = (id) => {
         if (id == null) return null;
         const key = Number(id);
         if (rootCache.has(key)) return rootCache.get(key);
@@ -333,6 +404,20 @@ export const loadMethods = {
         for (const k of path) rootCache.set(k, cur || null);
         return cur || null;
       };
+      const isExcluded = (id) => {
+        if (id == null) return false;
+        const key = Number(id);
+        if (exCache.has(key)) return exCache.get(key);
+        let cur = byId.get(key);
+        let out = false;
+        for (let guard = 0; cur && guard < 64; guard++) {
+          if (cur.excluded) { out = true; break; }
+          cur = cur.parent_id != null ? byId.get(Number(cur.parent_id)) : null;
+        }
+        exCache.set(key, out);
+        return out;
+      };
+      const rootOf = (id) => (isExcluded(id) ? null : anyRootOf(id));
       const rootOfName = (name) => {
         if (!name) return null;
         const ch = byName.get(name);
@@ -341,8 +426,8 @@ export const loadMethods = {
       // Root = ohne parent_id. Stabiler als depth===1 (legacy/tree-Fixtures
       // ohne depth-Annotation funktionieren weiter; Tree-Walker setzt depth=1
       // genau dann, wenn parent_id === null).
-      const roots = chs.filter(c => c.parent_id == null);
-      return { roots, rootOf, rootOfName, byId, byName };
+      const roots = chs.filter(c => c.parent_id == null && !c.excluded);
+      return { roots, rootOf, rootOfName, anyRootOf, isExcluded, byId, byName };
     });
   },
 };

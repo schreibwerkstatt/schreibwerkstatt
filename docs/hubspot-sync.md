@@ -110,7 +110,7 @@ Gated: `initial_import_done_at IS NULL`. Zweiter Aufruf → Job-Fail mit `HUBSPO
    - `contentStore.createPage(...)` + `upsertLink(...)`.
    - `updateJob` mit Key `job.hubspot.import.progress`, Params `{ done }`.
 4. Am Ende `markInitialImportDone(conn.id)`.
-5. Wenn `imported > 0`: `syncBook(...)` + Vortags-Baseline-Snapshot in `book_stats_history` (identisches Pattern zu Blog-Import — verhindert verfälschte „heute geschrieben"-Statistik).
+5. Wenn `imported > 0`: `lib/import-baseline.js#seedImportBaseline` — `syncBook(...)` + Vortags-Baseline-Snapshot in `book_stats_history` (derselbe Helfer wie bei allen anderen Importen — verhindert verfälschte „heute geschrieben"-Statistik).
 
 ### `runHubspotPushJob(jobId, bookId, userEmail, pageIds[])`
 

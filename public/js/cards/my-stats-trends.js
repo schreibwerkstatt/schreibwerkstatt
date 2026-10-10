@@ -1,10 +1,10 @@
 // Pure Compute-Funktionen fuer die neueren „Meine Statistik"-Kacheln
 // (Vorperioden-Vergleich, Session-Kennzahlen, Gesamt-Prognose, Wortschatz-Trend).
 // Bewusst frei von Alpine/DOM → unit-testbar (tests/unit/my-stats-compute.test.mjs).
-// Ausgelagert aus my-stats-compute.js, damit jene unter dem 600-LOC-Cap bleibt.
+// Eigenes Modul neben der Compute-Facade (my-stats-compute.js + Subfolder).
 
 import { localIsoDate, localIsoDaysAgo } from '../utils.js';
-import { computeVolumeDelta, isoAddDays, isoDayDiff,
+import { computeVolumeDelta, isoAddDays, isoDayDiff, commonBookIds, TREND_REF_DAYS,
          latestSnapshotPerBook, snapshotPerBookOnOrBefore } from './my-stats-compute.js';
 
 // Schreib-Sekunden einer writing/lektorat-Reihe im Fenster [from, to] (inklusive).
@@ -37,16 +37,18 @@ function mkDelta(cur, prev) {
 // Vergleich des aktiven Zeitraums mit der unmittelbar davorliegenden, gleich
 // langen Periode. `historyRows` (book_stats_history) liefert den Zeichen-Zuwachs
 // (Delta der kumulierten Snapshots), `writingRows` die Schreibsekunden. from/to
-// sind ISO-Tagesdaten (inklusive); beide muessen gesetzt sein.
-export function computePeriodComparison(historyRows, writingRows, fromIso, toIso) {
+// sind ISO-Tagesdaten (inklusive); beide muessen gesetzt sein. `opts` geht an
+// computeVolumeDelta (Live-Stand + Anlagedaten) — dieselbe Basis-Regel wie die
+// Zeitraum-Kachel, sonst widersprechen sich Zahl und Vergleich.
+export function computePeriodComparison(historyRows, writingRows, fromIso, toIso, opts = {}) {
   if (!fromIso || !toIso) return { available: false };
   const len = isoDayDiff(fromIso, toIso) + 1; // inklusive Tage
   if (len < 1) return { available: false };
   const prevTo = isoAddDays(fromIso, -1);
   const prevFrom = isoAddDays(prevTo, -(len - 1));
 
-  const curVol = computeVolumeDelta(historyRows, fromIso, toIso);
-  const prevVol = computeVolumeDelta(historyRows, prevFrom, prevTo);
+  const curVol = computeVolumeDelta(historyRows, fromIso, toIso, opts);
+  const prevVol = computeVolumeDelta(historyRows, prevFrom, prevTo, opts);
   const curSec = sumSecondsInWindow(writingRows, fromIso, toIso);
   const prevSec = sumSecondsInWindow(writingRows, prevFrom, prevTo);
 
@@ -56,6 +58,7 @@ export function computePeriodComparison(historyRows, writingRows, fromIso, toIso
     prevFrom,
     prevTo,
     chars: mkDelta(curVol.chars, prevVol.chars),
+    approximated: curVol.approximated || prevVol.approximated,
     writingSeconds: mkDelta(curSec, prevSec),
   };
 }
@@ -119,27 +122,32 @@ export function computeOverallForecast(bookGoals, todayLocal = new Date()) {
 }
 
 // Wortformen-Trend: Summe der unique_words ueber das letzte Snapshot je Buch,
-// verglichen mit dem Stand ~30 Tage zuvor. Trend ∈ {-1,0,1} (richtungsneutral,
-// analog computeReadability). total = aktuelle Summe der Wortformen. Misst
-// ueberwiegend Buchlaenge, darum im UI nicht „Wortschatz" (docs/wortschatz.md);
-// die laengenrobusten Masse stehen im Autorenprofil und in der Buchstatistik.
+// verglichen mit dem Stand vor TREND_REF_DAYS Tagen (`refIso`) — der Trend nur
+// ueber die Buecher, die zu beiden Zeitpunkten existierten (ein neues Buch
+// liesse die Summe sonst springen). total = aktuelle Summe der Wortformen, je
+// Buch gezaehlt und addiert (dasselbe Wort in zwei Buechern zaehlt zweimal).
+// Misst ueberwiegend Buchlaenge, darum im UI nicht „Wortschatz"
+// (docs/wortschatz.md); die laengenrobusten Masse stehen im Autorenprofil und
+// in der Buchstatistik.
 export function computeVocabTrend(historyRows, todayLocal = new Date()) {
-  const today = new Date(todayLocal); today.setHours(12, 0, 0, 0);
   const latest = latestSnapshotPerBook(historyRows);
-  const past = snapshotPerBookOnOrBefore(historyRows, localIsoDaysAgo(30, today));
-  const sumVocab = (map) => {
+  const refIso = localIsoDaysAgo(TREND_REF_DAYS, new Date(todayLocal));
+  const past = snapshotPerBookOnOrBefore(historyRows, refIso);
+  const common = commonBookIds(latest, past);
+  const sumVocab = (map, onlyIds = null) => {
     let s = 0;
-    for (const r of map.values()) s += Number(r.unique_words) || 0;
+    for (const [id, r] of map) if (!onlyIds || onlyIds.has(id)) s += Number(r.unique_words) || 0;
     return s;
   };
   const total = sumVocab(latest);
   if (total <= 0) return { hasData: false };
-  const before = sumVocab(past);
+  const now = sumVocab(latest, common);
+  const before = sumVocab(past, common);
   let trend = 0;
   if (before > 0) {
-    const d = total - before;
+    const d = now - before;
     const eps = before * 0.01; // 1 % Rauschband
     trend = d > eps ? 1 : d < -eps ? -1 : 0;
   }
-  return { hasData: true, total, trend };
+  return { hasData: true, total, trend, refIso, trendBooks: common.size };
 }

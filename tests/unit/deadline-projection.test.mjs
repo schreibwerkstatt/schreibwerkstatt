@@ -154,3 +154,28 @@ test('computeDeadlineProjection: stalledDays folgt der tatsaechlichen Spanne', (
   assert.equal(r.stalled, true);
   assert.equal(r.stalledDays, 10);
 });
+
+test('computeDeadlineProjection: Deadline in der Vergangenheit → deadlinePassed', () => {
+  const stats = [
+    { recorded_at: '2026-05-21', chars: 10000 },
+    { recorded_at: ISO_TODAY,    chars: 40000 },
+  ];
+  const r = computeDeadlineProjection(stats, 0, { targetChars: 100000, deadlineIso: '2026-06-01', todayIso: ISO_TODAY });
+  assert.equal(r.deadlinePassed, true);
+  assert.equal(r.daysUntilDeadline, -19);
+  assert.equal(r.requiredPace, null);
+  // Erreicht → kein „überschritten", auch wenn die Deadline vorbei ist.
+  const done = computeDeadlineProjection(stats, 0, { targetChars: 30000, deadlineIso: '2026-06-01', todayIso: ISO_TODAY });
+  assert.equal(done.deadlinePassed, false);
+  // Deadline heute ist noch nicht überschritten.
+  const today = computeDeadlineProjection(stats, 0, { targetChars: 100000, deadlineIso: ISO_TODAY, todayIso: ISO_TODAY });
+  assert.equal(today.deadlinePassed, false);
+});
+
+test('computeDeadlineProjection: todayIso hat Vorrang vor todayLocal', () => {
+  // Kalendertag kommt aus appTimezone (localIsoDate), nicht aus dem Browser-
+  // Kalender — der Aufrufer reicht ihn als ISO-String durch.
+  const stats = [{ recorded_at: '2026-05-21', chars: 10000 }];
+  const r = computeDeadlineProjection(stats, 40000, { targetChars: 100000, todayIso: '2026-06-21', todayLocal: TODAY });
+  assert.equal(r.historyDays, 31);
+});

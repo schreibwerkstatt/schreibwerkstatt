@@ -21,6 +21,7 @@ const bookAccess = require('../../db/book-access');
 const { db } = require('../../db/connection');
 const logger = require('../../logger');
 const { sessionEmail } = require('../../lib/acl');
+const { seedImportBaseline } = require('../../lib/import-baseline');
 
 const router = express.Router();
 
@@ -131,26 +132,7 @@ async function runBookImportJob(jobId, { userEmail }) {
       }
     }
 
-    // Stats syncen + Vortags-Baseline (analog folder-import: Tages-Donut braucht
-    // einen prevChars-Snapshot vor heute).
-    if (pagesCreated > 0) {
-      try {
-        const { syncBook } = require('../sync');
-        const { localIsoDate, localIsoDaysAgo } = require('../../lib/local-date');
-        await syncBook(bookId, ctx);
-        const yesterday = localIsoDaysAgo(1);
-        const today = localIsoDate();
-        db.prepare(`
-          INSERT INTO book_stats_history (book_id, recorded_at, page_count, words, chars, tok, unique_words, chapter_count, avg_sentence_len, avg_lix, avg_flesch_de)
-          SELECT book_id, ?, page_count, words, chars, tok, unique_words, chapter_count, avg_sentence_len, avg_lix, avg_flesch_de
-            FROM book_stats_history WHERE book_id = ? AND recorded_at = ?
-          ON CONFLICT(book_id, recorded_at) DO UPDATE SET
-            page_count=excluded.page_count, words=excluded.words, chars=excluded.chars, tok=excluded.tok,
-            unique_words=excluded.unique_words, chapter_count=excluded.chapter_count,
-            avg_sentence_len=excluded.avg_sentence_len, avg_lix=excluded.avg_lix, avg_flesch_de=excluded.avg_flesch_de
-        `).run(yesterday, bookId, today);
-      } catch (e) { log.warn(`book-import: Baseline-Snapshot fail: ${e.message}`); }
-    }
+    if (pagesCreated > 0) await seedImportBaseline(bookId, userEmail, log, '.swbook-Import');
 
     completeJob(jobId, { bookId, bookName: bookJson.book.name, pagesCreated, chaptersCreated, cappedChapters, extras: extrasResult });
   } catch (e) {

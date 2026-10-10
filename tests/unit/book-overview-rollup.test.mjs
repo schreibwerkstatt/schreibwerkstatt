@@ -166,7 +166,7 @@ test('overviewFigurePresence: Szenen aus Sub-Kapiteln in Root-Spalte', () => {
   assert.equal(cellBertA.value, 1);
 });
 
-test('overviewFigurePresence: Einmal-Szenen-Statisten verdrängen Hauptfiguren nicht', () => {
+test('overviewFigurePresence: Hauptfiguren vorn, Einmal-Statisten füllen auf', () => {
   const tree = makeTree();
   const ctx = makeCtx(tree);
   ctx.overviewFiguren = [
@@ -179,10 +179,10 @@ test('overviewFigurePresence: Einmal-Szenen-Statisten verdrängen Hauptfiguren n
     { chapter_id: 1, fig_ids: ['statist'] },
   ];
   const out = ctx.overviewFigurePresence();
-  assert.deepEqual(out.cols.map(f => f.id), ['haupt'], 'nur die mehrfach auftretende Figur');
+  assert.deepEqual(out.cols.map(f => f.id), ['haupt', 'statist'], 'mehrfach auftretende Figur zuerst');
 });
 
-test('overviewTopFiguren: bevorzugt Figuren mit mehreren Szenen', () => {
+test('overviewTopFiguren: Figuren mit mehreren Szenen stehen vorn', () => {
   const tree = makeTree();
   const ctx = makeCtx(tree);
   ctx.overviewFiguren = [
@@ -194,7 +194,7 @@ test('overviewTopFiguren: bevorzugt Figuren mit mehreren Szenen', () => {
     { chapter_id: 5, fig_ids: ['haupt'] },
     { chapter_id: 1, fig_ids: ['statist'] },
   ];
-  assert.deepEqual(ctx.overviewTopFiguren().map(f => f.id), ['haupt']);
+  assert.deepEqual(ctx.overviewTopFiguren().map(f => f.id), ['haupt', 'statist']);
 });
 
 test('overviewOrtPresence: location-Kapitel-rows aggregiert', () => {
@@ -219,7 +219,7 @@ test('overviewOrtPresence: location-Kapitel-rows aggregiert', () => {
   assert.equal(rowB.cells[0].value, 4);
 });
 
-test('overviewOrtPresence: Einmal-Nennungen verdrängen wiederkehrende Orte nicht', () => {
+test('overviewOrtPresence: wiederkehrende Orte vorn, Einmal-Nennungen füllen auf', () => {
   const tree = makeTree();
   const ctx = makeCtx(tree);
   // Ein wiederkehrender Ort (2 Kapitel) + zwei Einmal-Nennungen aus demselben Kapitel.
@@ -236,7 +236,7 @@ test('overviewOrtPresence: Einmal-Nennungen verdrängen wiederkehrende Orte nich
     ] },
   ];
   const out = ctx.overviewOrtPresence();
-  assert.deepEqual(out.cols.map(p => p.id), ['wieder'], 'nur der mehrfach erwähnte Ort');
+  assert.deepEqual(out.cols.map(p => p.id), ['wieder', 'einmal1', 'einmal2'], 'mehrfach erwähnter Ort zuerst');
 });
 
 test('overviewOrtPresence: Fallback zeigt Einmal-Nennungen, wenn kein Ort wiederkehrt', () => {
@@ -250,7 +250,7 @@ test('overviewOrtPresence: Fallback zeigt Einmal-Nennungen, wenn kein Ort wieder
   assert.equal(out.cols.length, 2, 'Fallback: beide Einmal-Orte sichtbar');
 });
 
-test('overviewTopOrte: bevorzugt mehrfach erwähnte Schauplätze', () => {
+test('overviewTopOrte: mehrfach erwähnte Schauplätze stehen vorn', () => {
   const tree = makeTree();
   const ctx = makeCtx(tree);
   ctx.overviewOrte = [
@@ -260,7 +260,7 @@ test('overviewTopOrte: bevorzugt mehrfach erwähnte Schauplätze', () => {
     ] },
     { id: 'einmal', name: 'Gasse', kapitel: [{ chapter_id: 1, name: 'Root A', haeufigkeit: 1 }] },
   ];
-  assert.deepEqual(ctx.overviewTopOrte().map(o => o.id), ['wieder']);
+  assert.deepEqual(ctx.overviewTopOrte().map(o => o.id), ['wieder', 'einmal']);
 });
 
 test('overviewLatest.chapter_count: Sub-Kapitel zählen nicht eigenständig', () => {
@@ -278,4 +278,61 @@ test('overviewLatest.chapter_count: Sub-Kapitel zählen nicht eigenständig', ()
   const ctx = { _memos: {}, overviewStats: [], ...bookOverviewMethods };
   const latest = ctx.overviewLatest();
   assert.equal(latest.chapter_count, 2, 'zwei Roots — nicht fünf');
+});
+
+// Ausgeschlossene Kapitel (`excluded`, kaskadiert auf Unterkapitel) fehlen in
+// allen Kapitel-Kacheln; die Hero-Gliederung zählt sie weiter.
+function distTokEsts() {
+  return {
+    100: { chars: 1000 }, 101: { chars: 500 },
+    110: { chars: 300 }, 111: { chars: 200 },
+    120: { chars: 800 }, 130: { chars: 100 },
+    200: { chars: 2000 },
+  };
+}
+
+test('ausgeschlossenes Unterkapitel: Zeichen fehlen in der Verteilung (inkl. Unter-Unterkapitel)', () => {
+  const tree = makeTree();
+  tree.find(c => c.id === 3).excluded = true; // Sub A2 + darunter Sub A2a
+  globalThis.window = { __app: { tree, tokEsts: distTokEsts(), pages: [] } };
+  const ctx = { _memos: {}, ...bookOverviewMethods };
+  const a = ctx.overviewChapterDistribution().find(r => r.id === 1);
+  assert.equal(a.chars, 1000 + 500 + 300 + 200, 'Sub A2 (800) und Sub A2a (100) fehlen');
+  assert.equal(a.pages, 4);
+});
+
+test('ausgeschlossenes Wurzel-Kapitel: fehlt als Zeile in Verteilung und Präsenz-Matrix', () => {
+  const tree = makeTree();
+  tree.find(c => c.id === 5).excluded = true;
+  globalThis.window = { __app: { tree, tokEsts: distTokEsts(), pages: [] } };
+  const ctx = { _memos: {}, ...bookOverviewMethods };
+  assert.deepEqual(ctx.overviewChapterDistribution().map(r => r.id), [1]);
+  ctx.overviewOrte = [
+    { id: 'o', name: 'Markt', kapitel: [
+      { chapter_id: 1, name: 'Root A', haeufigkeit: 2 },
+      { chapter_id: 5, name: 'Root B', haeufigkeit: 9 },
+    ] },
+  ];
+  const m = ctx.overviewOrtPresence();
+  assert.deepEqual(m.rows.map(r => r.id), [1]);
+  assert.equal(m.rows[0].cells[0].value, 2);
+});
+
+test('Ausschluss in place umgeschaltet → Rollup rechnet neu (Signatur in den Deps)', () => {
+  const tree = makeTree();
+  globalThis.window = { __app: { tree, tokEsts: distTokEsts(), pages: [] } };
+  const ctx = { _memos: {}, ...bookOverviewMethods };
+  assert.equal(ctx.overviewChapterDistribution().length, 2);
+  tree.find(c => c.id === 5).excluded = true; // gleiche tree-Referenz
+  assert.equal(ctx.overviewChapterDistribution().length, 1);
+});
+
+test('overviewLatest.chapter_count zählt ausgeschlossene Kapitel mit', () => {
+  const tree = makeTree();
+  tree.find(c => c.id === 5).excluded = true;
+  const pages = [{ id: 100, chapter_id: 1 }, { id: 200, chapter_id: 5 }];
+  const tokEsts = { 100: { chars: 10 }, 200: { chars: 20 } };
+  globalThis.window = { __app: { tree, tokEsts, pages } };
+  const ctx = { _memos: {}, overviewStats: [], ...bookOverviewMethods };
+  assert.equal(ctx.overviewLatest().chapter_count, 2);
 });

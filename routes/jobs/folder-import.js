@@ -24,6 +24,7 @@ const bookAccess = require('../../db/book-access');
 const { getBookLocale } = require('../../db/schema');
 const { db } = require('../../db/connection');
 const logger = require('../../logger');
+const { seedImportBaseline } = require('../../lib/import-baseline');
 
 const router = express.Router();
 
@@ -470,29 +471,9 @@ async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, gr
 
     audit('info', `Import abgeschlossen: ${pagesCreated} Seiten, ${chapterByYear.size} Jahres-Kapitel, ${chapterByYearMonth.size} Monats-Sub-Kapitel, ${skipped.length} skipped`);
 
-    // Stats syncen + Vortags-Baseline setzen. Ohne prevChars-Snapshot vor heute
-    // bleibt der Tages-Donut auf 0 (siehe public/js/today-ring.js). Import-Stand
-    // wandert auf gestern, damit Schreiben heute korrekt als Delta zaehlt.
     if (pagesCreated > 0) {
-      try {
-        const { syncBook } = require('../sync');
-        const { localIsoDate, localIsoDaysAgo } = require('../../lib/local-date');
-        await syncBook(effBookId, { session: { user: { email: userEmail } } });
-        const yesterday = localIsoDaysAgo(1);
-        const today = localIsoDate();
-        db.prepare(`
-          INSERT INTO book_stats_history (book_id, recorded_at, page_count, words, chars, tok, unique_words, chapter_count, avg_sentence_len, avg_lix, avg_flesch_de)
-          SELECT book_id, ?, page_count, words, chars, tok, unique_words, chapter_count, avg_sentence_len, avg_lix, avg_flesch_de
-            FROM book_stats_history WHERE book_id = ? AND recorded_at = ?
-          ON CONFLICT(book_id, recorded_at) DO UPDATE SET
-            page_count=excluded.page_count, words=excluded.words, chars=excluded.chars, tok=excluded.tok,
-            unique_words=excluded.unique_words, chapter_count=excluded.chapter_count,
-            avg_sentence_len=excluded.avg_sentence_len, avg_lix=excluded.avg_lix, avg_flesch_de=excluded.avg_flesch_de
-        `).run(yesterday, effBookId, today);
-        audit('info', `Vortags-Baseline gesetzt (${yesterday})`);
-      } catch (e) {
-        audit('warn', `Baseline-Snapshot fail: ${e.message}`);
-      }
+      await seedImportBaseline(effBookId, userEmail,
+        { info: m => audit('info', m), warn: m => audit('warn', m) }, 'Ordner-Import');
     }
 
     completeJob(jobId, {

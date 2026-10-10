@@ -8,13 +8,15 @@
 // bookstats.js). Sie sind darum an dieses Modul gebunden und werden nur ueber
 // die hier exportierten Methoden angefasst.
 import { loadChart } from '../lazy-libs.js';
-import { localeTag, tzOpts } from '../utils.js';
+import { localeTag, localIsoDate, dateTimeFormat } from '../utils.js';
 import { createChartHolder, cssVar } from './chart-holder.js';
-import { bucketizeIso, aggregateByBucket } from './my-stats-compute.js';
+import { bucketizeIso, bucketRange, aggregateByBucket } from './my-stats-compute.js';
 
 
 // Chart-Metriken: content aus book_stats_history (Summe pro Tag), writing aus
 // writing_time. Label-Keys werden zur Render-Zeit via t() aufgeloest (Locale-live).
+// Die Zeit-Metriken tragen keine Einheit im Namen — die haengt an der
+// Granularitaet (min/Tag, min/Woche, min/Monat) und kommt aus TIME_UNIT_KEYS.
 const METRIC_KEYS = {
   chars:         'mystats.metric.chars',
   normseiten:    'mystats.metric.normseiten',
@@ -34,7 +36,25 @@ export const BOOK_COLORS = [
   '#6aaf4e', '#b06ad0', '#d98f5e', '#4e8fd0',
 ];
 
+const TIME_UNIT_KEYS = {
+  day:   'mystats.unit.minPerDay',
+  week:  'mystats.unit.minPerWeek',
+  month: 'mystats.unit.minPerMonth',
+};
+
 const _holder = createChartHolder();
+
+// Achsen-Label eines Bucket-Schluessels (ISO-Datum). Ein Kalenderdatum ist
+// keine Uhrzeit: formatiert wird der UTC-Mittag in timeZone 'UTC', damit keine
+// Zeitzone (weder Browser noch App) das Datum um einen Tag verschiebt.
+function bucketLabel(iso, gran, uiLocale) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const at = new Date(Date.UTC(y, m - 1, d, 12));
+  const opts = gran === 'month'
+    ? { month: 'short', year: '2-digit', timeZone: 'UTC' }
+    : { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'UTC' };
+  return dateTimeFormat(uiLocale, opts).format(at);
+}
 
 export const myStatsChartMethods = {
   // Vom destroy() der Karte gerufen: Modul-State freigeben, sonst ueberlebt der
@@ -61,6 +81,30 @@ export const myStatsChartMethods = {
     return b?.name || (window.__app.t('mystats.unknownBook') + ' ' + bookId);
   },
 
+  // Einheit der Zeit-Metriken je Granularitaet („min/Tag" …); kumuliert: „min".
+  myStatsTimeUnit() {
+    const t = window.__app.t;
+    if (this.myStatsCumulative) return t('mystats.unit.min');
+    return t(TIME_UNIT_KEYS[this.myStatsChartGran] || TIME_UNIT_KEYS.day);
+  },
+
+  // Zeit-Metrik gewaehlt (Schreib-/Lektoratszeit)?
+  myStatsIsTimeMetric() {
+    return this.myStatsMetric === 'writing' || this.myStatsMetric === 'lektorat';
+  },
+
+  // Zugaenglicher Name des Diagramms: Kennzahl + Zeitraum (+ Einheit).
+  myStatsChartAria() {
+    const t = window.__app.t;
+    const metric = t(METRIC_KEYS[this.myStatsMetric] || this.myStatsMetric)
+      + (this.myStatsIsTimeMetric() ? ' (' + this.myStatsTimeUnit() + ')' : '');
+    const w = this.myStatsWindow();
+    const range = w.active
+      ? t('mystats.chart.ariaRange', { from: w.from ? this.myStatsDateLabel(w.from) : '…', to: w.to ? this.myStatsDateLabel(w.to) : '…' })
+      : t('mystats.chart.ariaAll');
+    return t('mystats.chart.aria', { metric, range });
+  },
+
   async renderMyStatsChart() {
     const canvas = document.getElementById('my-stats-chart');
     if (!canvas) return;
@@ -80,27 +124,31 @@ export const myStatsChartMethods = {
     const metric = this.myStatsMetric;
     // Zeit-Metriken (Schreib- bzw. Lektoratszeit) sind Tages-Deltas in Sekunden;
     // Inhalts-Metriken sind kumulative book_stats_history-Snapshots.
-    const isTime = metric === 'writing' || metric === 'lektorat';
+    const isTime = this.myStatsIsTimeMetric();
     const timeSrc = metric === 'lektorat' ? this.myStatsLektorat : this.myStatsWriting;
     const byBook = this.myStatsChartMode === 'byBook';
+    const cumulative = this.myStatsCumulative && isTime;
+
+    // Leerzustand: ohne jede Snapshot-Historie (Buecher da, Nacht-Sync noch nicht
+    // gelaufen) ein eigener Hinweis, sonst „keine Daten im Zeitraum".
+    if (!isTime && !this.myStatsHistory.length) { this.myStatsChartEmpty = 'noHistory'; return; }
 
     // Quelle vereinheitlichen auf { book_id, date, raw }.
     const src = isTime ? timeSrc : this.myStatsHistory;
     let rows = src.map(r => ({ book_id: r.book_id, date: r.recorded_at || r.date, raw: r }));
-    if (!rows.length) return;
-
     const win = this.myStatsWindow();
     if (win.from) rows = rows.filter(r => r.date >= win.from);
     if (win.to)   rows = rows.filter(r => r.date <= win.to);
-    if (!rows.length) return;
+    const hasValue = isTime ? rows.some(r => (Number(r.raw.seconds) || 0) > 0) : rows.length > 0;
+    if (!hasValue) { this.myStatsChartEmpty = 'noData'; return; }
+    this.myStatsChartEmpty = '';
 
     // Nur bis zum letzten vollständigen Sync zeigen: book_stats_history bekommt
     // pro Buch eine Tageszeile vom Nacht-Cron. Ein manueller Einzelbuch-Sync
     // mitten am Tag (oder ein noch ausstehender Nachtlauf) erzeugt sonst einen
     // Teil-Tages-Punkt mit weniger Büchern als der Vortag — als künstlicher
     // Einbruch sichtbar. Darum jüngste Tage abschneiden, solange ihre Buch-Zahl
-    // unter der des Vortags liegt. Nur für Content-Historie — Zeit-Metriken sind
-    // naturgemäss dünn (nur aktive Tage) und kennen kein „vollständiges" Tagesbild.
+    // unter der des Vortags liegt. Nur für Content-Historie.
     if (!isTime) {
       const allDates = [...new Set(rows.map(r => r.date))].sort();
       const booksOn = new Map();
@@ -126,29 +174,44 @@ export const myStatsChartMethods = {
     const gran = this.myStatsChartGran;
     const aggMode = isTime ? 'sum' : 'last';
 
-    // X-Achse = sortierte eindeutige Buckets über alle Bücher.
-    const buckets = [...new Set(rows.map(r => bucketizeIso(r.date, gran)))].sort();
+    // X-Achse. Zeit-Metriken: lueckenlose Kalender-Buckets vom Fensteranfang
+    // (ohne Fenster: erster Datentag) bis Fensterende bzw. heute — ein Tag ohne
+    // Schreibzeit ist eine 0, keine Luecke, die die Achse zusammenschiebt.
+    // Inhalts-Metriken: die Snapshot-Tage selbst (Linie verbindet Bestaende).
+    const today = localIsoDate();
+    let buckets;
+    if (isTime) {
+      const first = rows.reduce((m, r) => (!m || r.date < m ? r.date : m), null);
+      const to = win.to && win.to < today ? win.to : today;
+      buckets = bucketRange(win.from || first, to, gran);
+    } else {
+      buckets = [...new Set(rows.map(r => bucketizeIso(r.date, gran)))].sort();
+    }
 
-    const tag = localeTag(Alpine.store('shell').uiLocale);
-    const labels = buckets.map(b => {
-      if (gran === 'month') return new Date(b + 'T12:00:00').toLocaleDateString(tag, tzOpts({ month: 'short', year: '2-digit' }));
-      const [y, m, dd] = b.split('-');
-      return `${dd}.${m}.${y.slice(2)}`;
-    });
+    const uiLocale = Alpine.store('shell').uiLocale;
+    const tag = localeTag(uiLocale);
+    const labels = buckets.map(b => bucketLabel(b, gran, uiLocale));
 
-    const metricLabel = window.__app.t(METRIC_KEYS[metric] || metric);
+    const unit = isTime ? this.myStatsTimeUnit() : '';
+    const metricLabel = window.__app.t(METRIC_KEYS[metric] || metric) + (unit ? ` (${unit})` : '');
     const isDecimal = metric === 'normseiten';
     const fmt = v => (v == null) ? '' : (isDecimal
-      ? v.toLocaleString(localeTag, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-      : Math.round(v).toLocaleString(localeTag));
+      ? v.toLocaleString(tag, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+      : Math.round(v).toLocaleString(tag));
 
     const primary  = cssVar('--color-primary');
+    const success  = cssVar('--color-success');
     const muted    = cssVar('--color-muted');
     const gridLine = cssVar('--color-border');
 
+    // Zeit-Metriken taeglich als Balken (ein Tageswert ist eine Menge, kein
+    // Verlauf); kumuliert als Linie. Inhalts-Metriken immer Linie.
+    const asBars = isTime && !cumulative;
+    const accumulate = (series) => { let acc = 0; return series.map(v => (acc += (v || 0))); };
+
     let datasets;
     if (byBook) {
-      // Eine Linie pro Buch (Reihenfolge nach erstem Auftreten = stabile Farbe).
+      // Eine Reihe pro Buch (Reihenfolge nach erstem Auftreten = stabile Farbe).
       const order = [];
       const perBook = new Map(); // book_id → [{ date, value }]
       for (const r of rows) {
@@ -158,19 +221,23 @@ export const myStatsChartMethods = {
       datasets = order.map((bid, i) => {
         const color = BOOK_COLORS[i % BOOK_COLORS.length];
         const bmap = new Map(aggregateByBucket(perBook.get(bid), gran, aggMode).map(x => [x.bucket, x.value]));
-        return {
-          label: this._bookName(bid),
-          data: buckets.map(b => bmap.has(b) ? bmap.get(b) : null),
-          borderColor: color,
-          backgroundColor: color,
-          pointBackgroundColor: color,
-          borderWidth: 2,
-          tension: 0.3,
-          pointRadius: 2,
-          pointHoverRadius: 5,
-          fill: false,
-          spanGaps: true,
-        };
+        let data = buckets.map(b => bmap.has(b) ? bmap.get(b) : (isTime ? 0 : null));
+        if (cumulative) data = accumulate(data);
+        return asBars
+          ? { label: this._bookName(bid), data, backgroundColor: color, borderWidth: 0, stack: 'books' }
+          : {
+            label: this._bookName(bid),
+            data,
+            borderColor: color,
+            backgroundColor: color,
+            pointBackgroundColor: color,
+            borderWidth: 2,
+            tension: 0.3,
+            pointRadius: 2,
+            pointHoverRadius: 5,
+            fill: false,
+            spanGaps: true,
+          };
       });
     } else {
       // Gesamt: erst Summe pro Tag über alle Bücher, dann auf Buckets verdichten.
@@ -182,29 +249,47 @@ export const myStatsChartMethods = {
       // Kumuliert nur fuer Zeit-Metriken sinnvoll (Bucket-Deltas aufsummiert →
       // total investierte Zeit). Inhaltsmetriken sind bereits kumulative
       // Snapshot-Groessen, daher dort kein Cumulative-Toggle im UI.
-      if (this.myStatsCumulative && isTime) {
-        let acc = 0;
-        series = series.map(v => (acc += v));
-      }
-      datasets = [{
-        label: metricLabel,
-        data: series,
-        borderColor: primary,
-        backgroundColor: primary + '12',
-        pointBackgroundColor: primary,
-        borderWidth: 2,
-        tension: 0.35,
-        pointRadius: 3,
-        pointHoverRadius: 6,
-        fill: true,
-        spanGaps: false,
-      }];
+      if (cumulative) series = accumulate(series);
+      datasets = [asBars
+        ? { label: metricLabel, data: series, backgroundColor: primary, borderWidth: 0 }
+        : {
+          label: metricLabel,
+          data: series,
+          borderColor: primary,
+          backgroundColor: primary + '12',
+          pointBackgroundColor: primary,
+          borderWidth: 2,
+          tension: 0.35,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          fill: true,
+          spanGaps: false,
+        }];
+    }
+
+    // Ziellinie: nur Schreibzeit pro Tag mit gesetztem Tagesziel — fuer Woche/
+    // Monat oder kumuliert gaebe es keinen sinnvoll vergleichbaren Zielwert.
+    const goal = this.myStatsGoal();
+    if (metric === 'writing' && gran === 'day' && !cumulative && goal.active) {
+      datasets.push({
+        type: 'line',
+        label: window.__app.t('mystats.chart.goalLine', { n: goal.goalMinutes }),
+        data: buckets.map(() => goal.goalMinutes),
+        borderColor: success,
+        borderDash: [4, 4],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        fill: false,
+        order: -1,
+      });
     }
 
     this._ensureThemeObserver();
 
+    const stacked = asBars && byBook;
     _holder.set(new window.Chart(canvas, {
-      type: 'line',
+      type: asBars ? 'bar' : 'line',
       data: { labels, datasets },
       options: {
         responsive: true,
@@ -212,17 +297,19 @@ export const myStatsChartMethods = {
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: {
-            display: byBook,
+            display: byBook || datasets.length > 1,
             position: 'bottom',
             labels: { boxWidth: 12, boxHeight: 12, font: { size: 11 }, color: muted, usePointStyle: true },
           },
           tooltip: { callbacks: { label: ctx => ctx.parsed.y == null ? null : ` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
         },
         scales: {
-          x: { grid: { color: gridLine }, ticks: { font: { size: 11 }, color: muted, maxTicksLimit: 12 } },
+          x: { stacked, grid: { color: gridLine }, ticks: { font: { size: 11 }, color: muted, maxTicksLimit: 12 } },
           y: {
+            stacked,
             grid: { color: gridLine },
-            beginAtZero: isTime || byBook,
+            beginAtZero: true,
+            title: { display: !!unit, text: unit, color: muted, font: { size: 11 } },
             ticks: {
               font: { size: 11 }, color: muted,
               callback: v => fmt(v),

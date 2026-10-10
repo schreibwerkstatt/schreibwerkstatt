@@ -446,12 +446,15 @@ export const bookscopeMethods = {
 
 
   // Header-Today-Ring: kleiner Donut (r=14). Shared Math mit Overview-Tile in
-  // [public/js/today-ring.js] — beide Donuts driften nie auseinander.
+  // [public/js/today-ring.js] — beide Donuts driften nie auseinander. `pages`
+  // gibt der Rechnung die Seitenliste: ein erst teilweise gefuelltes tokEsts
+  // (Buchwechsel) gilt nicht als Live-Stand, sondern faellt auf den Snapshot.
   headerTodayRing() {
     const progress = this.$store.progress;
     return computeTodayRing({
       stats: progress.dailyProgressStats,
       tokEsts: this.tokEsts,
+      pages: this.$store.nav.pages,
       goalChars: progress.dailyProgressDailyGoalChars || 1500,
       r: 14,
     });
@@ -464,6 +467,7 @@ export const bookscopeMethods = {
     return computeWeekBars({
       stats: progress.dailyProgressStats,
       tokEsts: this.tokEsts,
+      pages: this.$store.nav.pages,
       goalChars: progress.dailyProgressDailyGoalChars || 1500,
     });
   },
@@ -473,6 +477,7 @@ export const bookscopeMethods = {
     return computeWritingStreak({
       stats: progress.dailyProgressStats,
       tokEsts: this.tokEsts,
+      pages: this.$store.nav.pages,
     });
   },
 
@@ -483,6 +488,7 @@ export const bookscopeMethods = {
     return computeTodayRing({
       stats: progress.dailyProgressStats,
       tokEsts: this.tokEsts,
+      pages: this.$store.nav.pages,
       goalChars: progress.dailyProgressDailyGoalChars || 1500,
       r: 26,
     });

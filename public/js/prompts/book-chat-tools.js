@@ -6,12 +6,12 @@
 export const BOOK_CHAT_TOOLS = [
   {
     name: 'list_chapters',
-    description: 'Liefert die Kapitel- und Abschnittsliste: vorne total_chapters/total_pages/total_words/hint, dann pro Kapitel chapter_id, Name, Wortzahl und pages (= Abschnitte) als Tupel [page_id, page_name, words] (siehe page_format). Bei grossen Büchern paginiert: steht next_offset im Ergebnis, mit offset=next_offset weiterblättern. Nutze dies für einen Überblick – und um page_ids für get_pages zu bekommen. Nicht nutzen für Detailstatistik eines einzelnen Kapitels (Dialoganteil, Top-Figuren-Erwähnungen) – dafür `get_stil_metrics` (scope=chapter, include_figures).',
+    description: 'Liefert die Gliederung des Buchs in Lesereihenfolge: vorne total_chapters/total_pages/total_words/hint, dann `chapters` als Einträge in Manuskript-Reihenfolge. Pro Kapitel-Eintrag chapter_id, Name, depth (1 = Kapitel, 2 = Unterkapitel, 3 = Unter-Unterkapitel), parent_chapter_id bei Unterkapiteln, words (eigene Abschnitte), words_total (inkl. Unterkapitel, nur wenn es welche hat) und pages (= Abschnitte) als Tupel [page_id, page_name, words] (siehe page_format). Ein Eintrag mit continued=true trägt Abschnitte desselben Kapitels, die NACH seinen Unterkapiteln stehen; chapter_id=null sind Abschnitte ohne Kapitel an genau dieser Stelle. Die Reihenfolge der Einträge IST die Lesereihenfolge — Fragen wie «was kommt vor/nach X», «in welchem Teil steht Y» daraus beantworten. Bei grossen Büchern paginiert: steht next_offset im Ergebnis, mit offset=next_offset weiterblättern. Nicht nutzen für Detailstatistik eines einzelnen Kapitels (Dialoganteil, Top-Figuren-Erwähnungen) – dafür `get_stil_metrics` (scope=chapter, include_figures).',
     input_schema: {
       type: 'object',
       properties: {
-        offset: { type: 'integer', description: 'Optional: erstes Kapitel (0-basiert, default 0). Aus next_offset übernehmen.' },
-        limit:  { type: 'integer', description: 'Optional: max. Anzahl Kapitel (default alle, die in die Antwort passen).' },
+        offset: { type: 'integer', description: 'Optional: erster Eintrag (0-basiert, default 0). Aus next_offset übernehmen.' },
+        limit:  { type: 'integer', description: 'Optional: max. Anzahl Einträge (default alle, die in die Antwort passen).' },
       },
       required: [],
     },
@@ -87,7 +87,7 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'get_pages',
-    description: 'Lädt den vollen Text bestimmter Abschnitte (bei Bedarf für Zitate oder Detail-Analyse). Bis zu 20 Abschnitte pro Aufruf – bei kleinen Büchern kannst du in einem Call das ganze Buch laden (page_ids vorher via list_chapters holen). Falls für den Abschnitt ein gespeichertes Lektorat existiert, kommt es als latest_check {checked_at, error_count, fazit, stilanalyse} mit. Schwergewichtig (Volltext) – nicht nutzen für blosse Trefferlisten oder „wo kommt X vor?", dafür `search_passages` / `get_figure_mentions`. Für ein ganzes Kapitel bequemer: `get_chapter_text`. Nicht zur Massen-Inspektion ganzer Bücher aufrufen, wenn ein Aggregat-Tool (z.B. `get_stil_metrics`, `get_lektorat_hotspots`) die Frage direkt beantwortet. Lange Abschnitte kommen in Fenstern: jeder Abschnitt trägt page_chars; ist er gekürzt (truncated=true), steht next_offset dabei — mit offset=next_offset (und denselben ids) weiterlesen, bis kein next_offset mehr kommt. So liest du auch einen 60 000-Zeichen-Abschnitt vollständig, nicht nur seinen Anfang.',
+    description: 'Lädt den vollen Text bestimmter Abschnitte (bei Bedarf für Zitate oder Detail-Analyse), mit chapter_name und bei Unterkapiteln chapter_path («Teil › Kapitel › Unterkapitel»). Bis zu 20 Abschnitte pro Aufruf – bei kleinen Büchern kannst du in einem Call das ganze Buch laden (page_ids vorher via list_chapters holen). Falls für den Abschnitt ein gespeichertes Lektorat existiert, kommt es als latest_check {checked_at, error_count, fazit, stilanalyse} mit. Schwergewichtig (Volltext) – nicht nutzen für blosse Trefferlisten oder „wo kommt X vor?", dafür `search_passages` / `get_figure_mentions`. Für ein ganzes Kapitel bequemer: `get_chapter_text`. Nicht zur Massen-Inspektion ganzer Bücher aufrufen, wenn ein Aggregat-Tool (z.B. `get_stil_metrics`, `get_lektorat_hotspots`) die Frage direkt beantwortet. Lange Abschnitte kommen in Fenstern: jeder Abschnitt trägt page_chars; ist er gekürzt (truncated=true), steht next_offset dabei — mit offset=next_offset (und denselben ids) weiterlesen, bis kein next_offset mehr kommt. So liest du auch einen 60 000-Zeichen-Abschnitt vollständig, nicht nur seinen Anfang.',
     input_schema: {
       type: 'object',
       properties: {
@@ -100,11 +100,12 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'get_chapter_text',
-    description: 'Lädt den Volltext aller Abschnitte eines Kapitels in einem Call (max 20 Abschnitte, automatische Sortierung nach page_id). Spart die Sequenz list_chapters → get_pages. Liefert total_pages + pages[{page_id,page_name,text,page_chars,truncated,next_offset?}]. Ideal für "fasse Kapitel X zusammen", "wie endet Kapitel 3?", "welche Szenen sind in Kapitel 2?". Falls das Kapitel >20 Abschnitte hat, kommt `dropped` zurück — restliche Abschnitte dann gezielt via `get_pages` nachladen. Ist ein Abschnitt gekürzt (truncated=true, oft bei Kapiteln aus einem einzigen langen Abschnitt), mit offset=next_offset weiterlesen — für das Ende eines Kapitels nicht beim Anfang stehen bleiben.',
+    description: 'Lädt den Volltext aller Abschnitte eines Kapitels in einem Call, in Lesereihenfolge und standardmässig INKLUSIVE seiner Unterkapitel (max 20 Abschnitte). Spart die Sequenz list_chapters → get_pages. Liefert total_pages, bei Unterkapiteln subchapters[] + pages[{page_id,page_name,chapter_id?,chapter_name? (= Unterkapitel des Abschnitts),text,page_chars,truncated,next_offset?}]. Ideal für "fasse Kapitel X zusammen", "wie endet Kapitel 3?", "welche Szenen sind in Kapitel 2?". Falls das Kapitel >20 Abschnitte hat, kommt `dropped` zurück — restliche Abschnitte dann gezielt via `get_pages` nachladen. Ist ein Abschnitt gekürzt (truncated=true, oft bei Kapiteln aus einem einzigen langen Abschnitt), mit offset=next_offset weiterlesen — für das Ende eines Kapitels nicht beim Anfang stehen bleiben.',
     input_schema: {
       type: 'object',
       properties: {
         chapter_id:         { type: 'integer', description: 'Kapitel-ID aus list_chapters (Pflicht).' },
+        include_subchapters: { type: 'boolean', description: 'Abschnitte der Unterkapitel mitladen (Default true). false = nur die direkt im Kapitel stehenden Abschnitte.' },
         max_pages:          { type: 'integer', description: 'Anzahl Abschnitte max. (1-20, Default: alle Abschnitte des Kapitels bis 20).' },
         max_chars_per_page: { type: 'integer', description: 'Fenstergrösse pro Abschnitt in Zeichen. Server clamped automatisch ans Kontextfenster.' },
         offset:             { type: 'integer', description: 'Zeichen-Offset im Abschnittstext, ab dem gelesen wird (Default 0) — gilt für jeden Abschnitt des Kapitels. Zum Weiterblättern next_offset aus dem vorigen Ergebnis übergeben.' },
@@ -589,12 +590,3 @@ export const BOOK_CHAT_OUTSIDE_WORLD_RULE = [
   'Ausnahme: was der Autor selbst recherchiert hat, steht im Recherche-Board (list_research_items/read_research_item). Das darfst du heranziehen — kennzeichne es als gesammeltes Material des Autors, nicht als geprüfte Tatsache und nicht als Buchstelle.',
   'Ausnahme: allgemeine Lebensnormen (Einschulung mit etwa 6 Jahren, Volljährigkeit mit 18, übliches Pensionsalter, Schwangerschaftsdauer u.ä.) darfst du als PRÜFMASSSTAB an die Daten des Buchs anlegen, z.B. «wann sollte X eingeschult werden?» oder «passt das Alter von X zu diesem Ereignis?». Kennzeichne die Norm als Allgemeinwissen (nicht als Buchstelle) und nenne, dass sie je nach Land und Epoche abweichen kann; Alter rechnest du dabei mit `get_figure_age`. Das ist kein Fall für den Recherche-Chat — setze `recherche_hinweis` nur, wenn die Antwort an einer konkreten historischen oder regionalen Tatsache hängt.',
 ].join('\n');
-
-// Synthese-Aufforderung, wenn der Kosten-Deckel pro Antwort
-// (`jobs.book_chat.max_input_tokens_per_answer`) erreicht ist — Gegenstück zu
-// BOOK_CHAT_FORCE_FINAL_INSTRUCTION (Iterationsdeckel), gleicher Ablauf.
-export const BOOK_CHAT_BUDGET_FINAL_INSTRUCTION =
-  'Das Recherche-Budget für diese Antwort ist aufgebraucht — keine weitere Recherche mehr möglich. '
-  + 'Fasse JETZT aus den bereits gesammelten Informationen die bestmögliche Antwort zusammen und liefere sie über das Werkzeug `final_answer`. '
-  + 'Wenn die Recherche unvollständig blieb, beantworte die Frage so weit wie möglich und nenne kurz, was offen blieb. '
-  + 'Sprache der Antwort: die der Userfrage.';

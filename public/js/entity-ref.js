@@ -254,11 +254,24 @@ export function registerEntityRef() {
       if (el.tagName === 'BUTTON' || !model?.open) return;
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e); }
     };
+    // Abgeschnittenes Label ohne Tooltip und ohne Vorschau (Typen ohne Katalog:
+    // Beat, Motiv, Idee, …): der volle Text kommt als Tooltip, gemessen erst beim
+    // Überfahren. Läuft am Element vor dem delegierten Listener in tooltip.js.
+    const onHint = () => {
+      if (!model || model.title || model.preview) return;
+      const label = el.querySelector('.entity-ref__label');
+      if (label && label.scrollWidth > label.clientWidth) el.setAttribute('data-tip', model.label);
+      else el.removeAttribute('data-tip');
+    };
     el.addEventListener('click', onClick);
     el.addEventListener('keydown', onKey);
+    el.addEventListener('mouseover', onHint);
+    el.addEventListener('focusin', onHint);
     cleanup(() => {
       el.removeEventListener('click', onClick);
       el.removeEventListener('keydown', onKey);
+      el.removeEventListener('mouseover', onHint);
+      el.removeEventListener('focusin', onHint);
     });
   });
 }

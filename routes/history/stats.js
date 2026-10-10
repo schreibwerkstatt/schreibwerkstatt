@@ -106,12 +106,11 @@ function register(router) {
   router.get('/book-stats/:book_id', (req, res) => {
     const bookId = req.bookId;
     const rows = db.prepare(`
-      SELECT bsh.id, bsh.book_id, b.name AS book_name, bsh.recorded_at,
+      SELECT bsh.id, bsh.book_id, bsh.recorded_at,
              bsh.page_count, bsh.words, bsh.chars, bsh.tok, bsh.unique_words,
              bsh.chapter_count, bsh.avg_sentence_len, bsh.avg_lix, bsh.avg_flesch_de,
              bsh.mattr, bsh.mtld, bsh.lex_density, bsh.hapax_ratio
       FROM book_stats_history bsh
-      LEFT JOIN books b ON b.book_id = bsh.book_id
       WHERE bsh.book_id = ?
       ORDER BY bsh.recorded_at ASC
     `).all(bookId);

@@ -206,7 +206,7 @@ export const adminSettingsMethods = {
   adminClaudeOverrideCount() {
     const keys = [
       'ai.claude.model.lektorat', 'ai.claude.model.komplett', 'ai.claude.model.komplett.extract',
-      'ai.claude.model.bookchat', 'ai.claude.context_window', 'ai.claude.max_tokens_out',
+      'ai.claude.model.bookchat', 'ai.claude.model.synonym', 'ai.claude.context_window', 'ai.claude.max_tokens_out',
       'ai.claude.context_window.komplett', 'ai.claude.max_tokens_out.komplett', 'ai.claude.timeout_ms.komplett',
       'ai.claude.context_window.bookchat', 'ai.claude.max_tokens_out.bookchat', 'ai.claude.timeout_ms.bookchat',
     ];

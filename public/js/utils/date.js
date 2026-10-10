@@ -110,13 +110,19 @@ export function localDayDiff(then, now = new Date()) {
   return Math.round((dNow - dThen) / 86400000);
 }
 
-// Lokales ISO-Datum n Tage in der Vergangenheit, kollisionssicher über
-// DST-Wechsel (Math via getTime + 86_400_000 ist DST-blind, kann an
-// Umstellungs-Tagen um 1h driften). Wir reduzieren zur Mittagszeit, weil
-// Mittag in jeder TZ am gleichen Tag bleibt.
+// Reine Tages-Arithmetik auf ISO-Datumsstrings (YYYY-MM-DD), TZ-frei via UTC:
+// UTC kennt keine DST, Tagesschritte sind exakt. `iso` + n Kalendertage.
+export function isoAddDays(iso, n) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0, 10);
+}
+
+// Lokales ISO-Datum n App-Tage vor `base`: erst das App-TZ-Datum von `base`
+// bestimmen (localIsoDate), dann reine ISO-Tagesarithmetik. Kein Rechnen auf
+// Uhrzeiten der Browser-TZ — steht der Browser in einer anderen Zone als
+// `appTimezone`, verschob ein Browser-Mittag-Anker das Datum um einen Tag.
 export function localIsoDaysAgo(n, base = new Date()) {
-  const noon = new Date(base);
-  noon.setHours(12, 0, 0, 0);
-  noon.setDate(noon.getDate() - n);
-  return localIsoDate(noon);
+  return isoAddDays(localIsoDate(base), -n);
 }

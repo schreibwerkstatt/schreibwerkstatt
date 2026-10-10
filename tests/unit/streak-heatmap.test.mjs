@@ -23,6 +23,9 @@ function isoDaysAgo(n) { return localIsoDaysAgo(n); }
 function makeCtx(stats = [], tokEsts = null) {
   if (tokEsts !== null) globalThis.window.__app.tokEsts = tokEsts;
   else globalThis.window.__app.tokEsts = {};
+  // Seitenliste des Buchs = genau die Seiten in tokEsts: der Live-Stand gilt
+  // nur, wenn er jede Seite kennt (utils/format.js#completeLiveBookStats).
+  globalThis.window.__app.pages = Object.keys(globalThis.window.__app.tokEsts).map(id => ({ id: Number(id) }));
   // Ganze Facade spreaden statt Methoden einzeln durchzureichen: die Stats-
   // Methoden greifen quer auf Helper anderer Submodule zu (_memo aus load,
   // _uiLocale/_numFmt/_dateFmt aus format).
@@ -162,14 +165,45 @@ test('overviewTodayRing: Live-tokEsts überschreiben Cron-Snapshot', () => {
   assert.equal(r.active, true);
 });
 
-test('overviewTodayRing: nur Live-tokEsts, kein Snapshot → 0 (kein Vergleich möglich)', () => {
-  // Erstaufruf vor erstem Sync: tokEsts vorhanden, history leer.
-  // Cumulative-Stand wäre falsche Anzeige, daher 0.
-  const tokEsts = { 1: { chars: 5000 } };
+test('overviewTodayRing: neues Buch ohne Snapshot → vollständiger Live-Stand zählt ab Tag eins', () => {
+  // Verlauf erfolgreich geladen, aber leer (noch kein Cron-Lauf seit der
+  // Anlage): alles Geschriebene ist von heute.
+  const tokEsts = { 1: { chars: 1000 }, 2: { chars: 200 } };
   const ctx = makeCtx([], tokEsts);
+  assert.equal(ctx.overviewShowTodayRing(), true);
   const r = ctx.overviewTodayRing(1500);
-  assert.equal(r.chars, 0);
-  assert.equal(r.active, false);
+  assert.equal(r.chars, 1200);
+  assert.equal(r.active, true);
+});
+
+test('overviewTodayRing: kein Snapshot, aber Live-Stand unvollständig → 0, Ring aus', () => {
+  const ctx = makeCtx([], { 1: { chars: 5000 } });
+  globalThis.window.__app.pages = [{ id: 1 }, { id: 2 }];
+  assert.equal(ctx.overviewShowTodayRing(), false);
+  assert.equal(ctx.overviewTodayRing(1500).chars, 0);
+});
+
+test('overviewTodayRing: Verlaufs-Load gescheitert → kein Neues-Buch-Fall', () => {
+  // Ein fehlgeschlagener /history/book-stats sieht leer aus wie ein neues Buch
+  // — der Bestand darf dann nicht als „heute geschrieben" erscheinen.
+  const ctx = makeCtx([], { 1: { chars: 5000 } });
+  ctx.overviewLoadErrors = ['stats'];
+  assert.equal(ctx.overviewShowTodayRing(), false);
+  assert.equal(ctx.overviewTodayRing(1500).chars, 0);
+});
+
+test('overviewTodayRing: Live-Stand unvollständig → Snapshot statt Teilsumme', () => {
+  // Vortag 10'000 Zeichen, Snapshot heute 10'300. tokEsts kennt erst eine von
+  // zwei Seiten (2'000) — als Live-Stand gelesen wäre das ein Minus-Tag.
+  const stats = [
+    { recorded_at: isoDaysAgo(1), chars: 10000 },
+    { recorded_at: localIsoDate(), chars: 10300 },
+  ];
+  const ctx = makeCtx(stats, { 1: { chars: 2000 } });
+  globalThis.window.__app.pages = [{ id: 1 }, { id: 2 }];
+  assert.equal(ctx.overviewTodayRing(1500).chars, 300);
+  assert.equal(ctx.overviewLatest().chars, 10300, 'Hero zeigt den Snapshot');
+  assert.equal(ctx.overviewLatest().fromSnapshot, true);
 });
 
 test('overviewTodayRing: nur prior Snapshot, kein heute, kein Live → 0', () => {

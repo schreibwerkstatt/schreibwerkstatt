@@ -16,7 +16,7 @@ const {
   jsonBody,
 } = require('./shared');
 const { narrativeLabels } = require('./narrative-labels');
-const { loadReviewKomplettContext, loadReviewMotivContext, loadStrukturContext, loadWeltContext } = require('./review-context');
+const { loadReviewKomplettContext, loadReviewMotivContext, loadStrukturContext, loadWeltContext, werkstandFor, trailingUnwrittenChapters, loadOpenPlanBeats } = require('./review-context');
 const { applyQuoteVerification, belegHaystack } = require('../../lib/quote-verify');
 const { toIntId } = require('../../lib/validate');
 const contentStore = require('../../lib/content-store');
@@ -151,7 +151,7 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
   let optionsSig = _sigHash({ schwerpunkt: reviewSchwerpunkt, komplettContext, motivContext, narrative, systemSigBook });
   try {
     updateJob(jobId, { statusText: 'job.phase.loadingPages', progress: 0 });
-    const { chMap, pages } = await loadOrderedBookContents(bookId)
+    const { chMap, chaptersFlat, pages } = await loadOrderedBookContents(bookId)
       .catch(e => { throw contentHttpError(e); });
 
     if (!pages.length) { completeJob(jobId, { empty: true }); return; }
@@ -186,8 +186,17 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
       logger.info(`Weltaufbau-Befunde: ${weltContext.gesamt} Welt-Fakten, `
         + `${weltContext.kapitelAbdeckung.mitFakten}/${weltContext.kapitelAbdeckung.gesamt} Kapitel mit Fakt – fliessen in die Bewertung ein.`);
     }
-    const reviewOptions = { ...reviewBaseOptions, strukturContext, weltContext };
     const totalChars = pageContents.reduce((s, p) => s + p.text.length, 0);
+    // Werkstand (nicht abgeschlossen, ggf. Anteil am Zielumfang): ohne ihn bewertet
+    // das Modell den bisher geschriebenen Anfang als ganzes Werk.
+    // Dazu: angelegte, noch leere Kapitel hinter dem Geschriebenen und die noch
+    // geplanten Beats der Plot-Werkstatt (wohin der Text laut Plan noch führt).
+    const werkstand = bookSettings?.is_finished ? null : werkstandFor(bookSettings, totalChars, {
+      ungeschrieben: trailingUnwrittenChapters(chaptersFlat, new Set(groupOrder)),
+      geplant: loadOpenPlanBeats(bookIdInt, email, new Map(chaptersFlat.map(c => [String(c.id), c.name]))),
+    });
+    if (werkstand) optionsSig = _sigHash({ optionsSig, werkstand });
+    const reviewOptions = { ...reviewBaseOptions, strukturContext, weltContext, werkstand };
     let r;
     // Auf welcher Grundlage die Note steht: Volltext oder verdichtete
     // Kapitelanalysen. Die beiden sind nicht vergleichbar (Zusammenfassungen

@@ -49,26 +49,6 @@ function getPageWithChapter(pageId) {
   return _stmtPageWithChapter.get(pageId);
 }
 
-const _stmtChapterInBook = db.prepare(
-  'SELECT chapter_id, chapter_name FROM chapters WHERE chapter_id = ? AND book_id = ?'
-);
-
-/** `{ chapter_id, chapter_name }` oder undefined, wenn das Kapitel nicht im Buch liegt. */
-function getChapterInBook(chapterId, bookId) {
-  return _stmtChapterInBook.get(chapterId, bookId);
-}
-
-const _stmtChapterPages = db.prepare(`
-    SELECT page_id, page_name FROM pages
-    WHERE chapter_id = ? AND book_id = ?
-    ORDER BY position, page_id
-  `);
-
-/** Seiten eines Kapitels in Leserichtung (nur ID + Name). */
-function listChapterPages(chapterId, bookId) {
-  return _stmtChapterPages.all(chapterId, bookId);
-}
-
 /** Seiten mit body_html für get_dialogue in Leserichtung, optional auf
  *  `chapterId` und/oder `pageId` begrenzt. */
 function listPagesForDialogue(bookId, { chapterId = null, pageId = null } = {}) {
@@ -121,8 +101,6 @@ function listLocationChaptersWithNames(locationId) {
 module.exports = {
   listPagesForPassageSearch,
   getPageWithChapter,
-  getChapterInBook,
-  listChapterPages,
   listPagesForDialogue,
   getLatestPageCheck,
   getLocationRefByLocId,

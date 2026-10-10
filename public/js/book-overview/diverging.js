@@ -37,7 +37,12 @@ export function median(values, { round = false } = {}) {
  *   erst ab zwei Zeilen setzen. Bei Tiles mit Wertungs-Semantik (Findings,
  *   Lektoratszeit) wäre „schlechtestes Kapitel" bei genau einem Kapitel absurd.
  * @returns {Array<object>} `items` + { median, showMedian, deltaPct,
- *   barWidthPct, barLeftPct, isAbove, isMax, isMin }.
+ *   showDelta, barWidthPct, barLeftPct, isAbove, isMax, isMin }.
+ *
+ * Median 0 (mehr als die Hälfte der Kapitel ohne Wert): eine Abweichung in
+ * Prozent von 0 gibt es nicht. Die Balken skalieren dann nach `v / max` auf der
+ * rechten Seite, `deltaPct` bleibt 0 und `showDelta` false — das Tile blendet
+ * die Prozent-Beschriftung aus, statt bei jedem Kapitel „+0 %" zu zeigen.
  */
 export function divergingRows(items, {
   valueOf,
@@ -58,21 +63,26 @@ export function divergingRows(items, {
   const spread = max !== min;
   const extremesOk = !extremesNeedTwo || (rows.length >= 2 && spread);
 
+  const zeroMedian = showMedian && med === 0;
   const deltas = values.map(v => (med > 0 ? Math.round(((v - med) / med) * 100) : 0));
   const maxAbsDelta = Math.max(1, ...deltas.map(Math.abs));
+  const maxPos = Math.max(0, max);
 
   return rows.map((item, i) => {
     const v = values[i];
     const deltaPct = deltas[i];
-    const halfPct = showMedian ? (Math.abs(deltaPct) / maxAbsDelta) * half : 0;
+    let halfPct = 0;
+    if (zeroMedian) halfPct = maxPos > 0 && v > 0 ? (v / maxPos) * half : 0;
+    else if (showMedian) halfPct = (Math.abs(deltaPct) / maxAbsDelta) * half;
     return {
       ...item,
       median: med,
       showMedian,
       deltaPct,
+      showDelta: showMedian && !zeroMedian,
       barWidthPct: halfPct,
-      barLeftPct: deltaPct >= 0 ? 50 : 50 - halfPct,
-      isAbove: deltaPct > 0,
+      barLeftPct: zeroMedian || deltaPct >= 0 ? 50 : 50 - halfPct,
+      isAbove: zeroMedian ? v > 0 : deltaPct > 0,
       isMax: extremesOk && max > 0 && v === max,
       isMin: extremesOk && spread && v === min,
     };

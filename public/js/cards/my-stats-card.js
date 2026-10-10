@@ -4,12 +4,12 @@
 // `toggleMyStatsCard` leben im Root (generiert aus EXCLUSIVE_CARDS). Daten:
 // `GET /me/profile-stats` (Tiles) + `GET /me/profile-stats-history` (Chart).
 
-import { localeTag, localIsoDate, localIsoDaysAgo, tzOpts } from '../utils.js';
+import { localeTag, localIsoDate, dateTimeFormat } from '../utils.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { computeWritingTimeStreak, computeWeekdayPattern, computeDerived, computeMilestones,
          computeReadability, computeWeeklyDelta, computePerBookTime, computeEffortSplit,
          computeVolumeDelta, computeHourPattern, computeGoalAttainment, computeBookGoals,
-         filterByWindow } from './my-stats-compute.js';
+         filterByWindow, resolveWindow } from './my-stats-compute.js';
 import { computeVolumeByCategory } from './my-stats-category.js';
 import { myStatsTrendMethods } from './my-stats-trends-methods.js';
 import { myStatsChartMethods, BOOK_COLORS } from './my-stats-chart-methods.js';
@@ -45,6 +45,9 @@ export function registerMyStatsCard() {
     myStatsCumulative: false,  // nur fuer Metrik 'writing' (kumulierte Schreibzeit)
     myStatsLoading: false,
     myStatsError: '',
+    // Leerzustand des Entwicklungs-Charts: '' | 'noData' (nichts im Zeitraum) |
+    // 'noHistory' (noch kein Nacht-Snapshot). Gesetzt von renderMyStatsChart().
+    myStatsChartEmpty: '',
     _memos: {},
     _lifecycle: null,
 
@@ -98,24 +101,26 @@ export function registerMyStatsCard() {
       this.$nextTick(() => requestAnimationFrame(() => this.renderMyStatsChart()));
     },
 
-    get myStatsHasChart() {
-      return this.myStatsHistory.length > 0 || this.myStatsWriting.length > 0;
+    // Chart-Kachel steht, sobald es Inhalt gibt — auch ohne Historie (dann
+    // erklaert der Leerzustand, dass sich der Verlauf nachts fuellt).
+    get myStatsHasChart() { return this.myStatsHasContent; },
+
+    // Eigene Buecher mit Inhalt oder erfasster Schreibzeit — Gate fuer die Kacheln.
+    get myStatsHasContent() {
+      const d = this.myStatsData;
+      return !!d && ((Number(d.chars) || 0) > 0 || (Number(d.writing_seconds) || 0) > 0);
     },
 
     // Memo-Helper (cards/card-memo.js); Reset bei jedem Daten-Reload via this._memos = {} in loadMyStats().
     ...memoMethods,
 
     // ── Zeitraum-Filter (steuert die ganze Karte) ──────────────────────────
-    // Aktives Fenster { active, from, to } (ISO, inklusive; null = unbegrenzt).
-    // Custom Von/Bis hat Vorrang vor dem Tages-Preset; kein Filter aktiv = alles.
+    // Aktives Fenster { active, from, to } — Regeln in resolveWindow
+    // (my-stats-compute/series.js): Custom vor Preset, vertauschtes Von/Bis als
+    // Bereich, Preset N Tage = genau N Tage inklusive heute.
     myStatsWindow() {
-      if (this.myStatsFrom || this.myStatsTo) {
-        return { active: true, from: this.myStatsFrom || null, to: this.myStatsTo || null };
-      }
-      if (this.myStatsRangeDays > 0) {
-        return { active: true, from: localIsoDaysAgo(this.myStatsRangeDays), to: localIsoDate() };
-      }
-      return { active: false, from: null, to: null };
+      return resolveWindow({ rangeDays: this.myStatsRangeDays, from: this.myStatsFrom,
+                             to: this.myStatsTo, todayIso: localIsoDate() });
     },
     get myStatsWindowActive() { return this.myStatsWindow().active; },
 
@@ -142,26 +147,36 @@ export function registerMyStatsCard() {
       this._onRangeChange();
     },
     _onRangeChange() {
+      // Vertauschtes Von/Bis in den Feldern tauschen, damit Anzeige und Rechnung
+      // denselben Bereich zeigen.
+      if (this.myStatsFrom && this.myStatsTo && this.myStatsFrom > this.myStatsTo) {
+        [this.myStatsFrom, this.myStatsTo] = [this.myStatsTo, this.myStatsFrom];
+      }
       // Memos haengen an from/to → aktualisieren sich selbst; nur Chart neu zeichnen.
       this.$nextTick(() => requestAnimationFrame(() => this.renderMyStatsChart()));
     },
 
-    // Im Zeitraum produzierter Umfang (Zeichen/Woerter/Seiten). Ohne Filter:
-    // Live-Gesamtstand aus page_stats; mit Filter: Snapshot-Delta aus der Historie.
+    // Im Zeitraum produzierter Netto-Umfang (Zeichen/Woerter/Abschnitte). Ohne
+    // Filter: Live-Gesamtstand aus page_stats; mit Filter: Endstand (Live-Stand,
+    // wenn das Fenster bis heute reicht) minus Snapshot-Basis vor dem Fenster.
+    // `approximated`: fuer mind. ein Buch fehlt der Snapshot vor dem Fenster.
     myStatsVolume() {
       const w = this.myStatsWindow();
       if (!w.active) {
         const d = this.myStatsData || {};
-        return { chars: d.chars || 0, words: d.words || 0, pages: d.pages || 0 };
+        return { chars: d.chars || 0, words: d.words || 0, pages: d.pages || 0, approximated: false };
       }
-      return this._memo('volume', [this.myStatsHistory, w.from, w.to], () =>
-        computeVolumeDelta(this.myStatsHistory, w.from, w.to));
+      const detail = this.myStatsData?.books_detail;
+      return this._memo('volume', [this.myStatsHistory, detail, w.from, w.to], () =>
+        computeVolumeDelta(this.myStatsHistory, w.from, w.to, { booksDetail: detail }));
     },
 
     // ── Schreibrhythmus (aus der gefilterten writing-Zeitreihe) ────────────
+    // Raster = letzte 52 Wochen (ungefiltert), Serien-Kennzahlen = Zeitfenster.
     myStatsStreak() {
       const win = this._winWriting();
-      return this._memo('streak', [win], () => computeWritingTimeStreak(win));
+      return this._memo('streak', [this.myStatsWriting, win], () =>
+        computeWritingTimeStreak(this.myStatsWriting, new Date(), win));
     },
     myStatsWeekdays() {
       const win = this._winWriting();
@@ -177,6 +192,7 @@ export function registerMyStatsCard() {
         computeDerived(data, win));
     },
     // Meilensteine sind Lifetime-Achievements → immer ueber ALLE Daten, nie gefiltert.
+    // `books` zaehlt dort nur Buecher mit Inhalt (books_detail).
     myStatsMilestones() {
       return this._memo('milestones', [this.myStatsData, this.myStatsWriting], () =>
         computeMilestones(this.myStatsData, computeDerived(this.myStatsData, this.myStatsWriting)));
@@ -186,19 +202,25 @@ export function registerMyStatsCard() {
       return (this.myStatsWriting || []).length > 0;
     },
 
-    // Wochentags-Kurzlabels Mo..So (Locale-aware, TZ-bereinigt).
+    // Wochentags-Kurzlabels Mo..So (Locale-aware), memoized pro Locale.
+    // Kalendertage, keine Zeitpunkte: UTC-Mittag in timeZone 'UTC' formatiert.
     myStatsWeekdayLabels() {
-      const tag = localeTag(Alpine.store('shell').uiLocale);
-      const fmt = new Intl.DateTimeFormat(tag, tzOpts({ weekday: 'short' }));
-      const monRef = new Date(2027, 0, 4); // 2027-01-04 ist ein Montag
-      return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(monRef.getTime() + i * 86400000)));
+      const uiLocale = Alpine.store('shell').uiLocale;
+      return this._memo('weekdayLabels', [uiLocale], () => {
+        const fmt = dateTimeFormat(uiLocale, { weekday: 'short', timeZone: 'UTC' });
+        const monRef = Date.UTC(2027, 0, 4, 12); // 2027-01-04 ist ein Montag
+        return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(monRef + i * 86400000)));
+      });
     },
 
-    // Datum eines Streak-/Bestleistungs-Tages lesbar formatieren.
+    // ISO-Kalenderdatum lesbar formatieren (gecachter Formatter; UTC-Mittag in
+    // timeZone 'UTC', damit keine Zeitzone das Datum verschiebt).
     myStatsDateLabel(iso) {
       if (!iso) return '';
-      const tag = localeTag(Alpine.store('shell').uiLocale);
-      return new Date(iso + 'T12:00:00').toLocaleDateString(tag, tzOpts({ day: 'numeric', month: 'short', year: 'numeric' }));
+      const [y, m, d] = iso.split('-').map(Number);
+      const fmt = dateTimeFormat(Alpine.store('shell').uiLocale,
+        { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+      return fmt.format(new Date(Date.UTC(y, m - 1, d, 12)));
     },
 
     // Minuten kompakt: „2 h 10 min" / „45 min".
@@ -210,7 +232,26 @@ export function registerMyStatsCard() {
     },
 
     myStatsMilestoneLabel(category, target) {
-      return window.__app.t(MILESTONE_LABELS[category] || 'mystats.milestone.chars', { n: this._myStatsFmt(target) });
+      return this._myStatsPlural(MILESTONE_LABELS[category] || 'mystats.milestone.chars', target);
+    },
+
+    // i18n mit Einzahl: n === 1 → Key + 'One' (Konvention wie sidebar.pagesCountOne).
+    // `{n}` wird locale-formatiert; weitere Parameter via `params`.
+    _myStatsPlural(key, n, params = {}) {
+      const num = Number(n) || 0;
+      return window.__app.t(num === 1 ? key + 'One' : key, { ...params, n: this._myStatsFmt(num) });
+    },
+
+    // Geltungsbereich einer Kachel als Tag-Text:
+    //   'window'   folgt dem Zeitraum-Filter („im Zeitraum" bzw. „gesamt")
+    //   'lifetime' immer gesamt
+    //   'grid'     Heatmap-Raster (letzte 52 Wochen)
+    //   'current'  aktueller Stand (live)
+    //   'today'    nur heute
+    myStatsScope(kind) {
+      const t = window.__app.t;
+      if (kind === 'window') return this.myStatsWindowActive ? t('mystats.scope.window') : t('mystats.scope.lifetime');
+      return t('mystats.scope.' + kind);
     },
 
     // ── Lesbarkeit (1), Aufwand (2), Pro-Buch-Zeit (3), Wochen-Delta (4) ────
@@ -218,7 +259,13 @@ export function registerMyStatsCard() {
       return this._memo('readability', [this.myStatsHistory], () => computeReadability(this.myStatsHistory));
     },
     myStatsWeekDelta() {
-      return this._memo('weekDelta', [this.myStatsHistory], () => computeWeeklyDelta(this.myStatsHistory));
+      const detail = this.myStatsData?.books_detail;
+      return this._memo('weekDelta', [this.myStatsHistory, detail], () =>
+        computeWeeklyDelta(this.myStatsHistory, new Date(), detail));
+    },
+    // Tooltip der Trendpfeile: welcher Stand der Vergleich ist.
+    myStatsTrendTip(refIso) {
+      return refIso ? window.__app.t('mystats.trendTip', { date: this.myStatsDateLabel(refIso) }) : '';
     },
     myStatsEffort() {
       if (!this.myStatsWindowActive) {
@@ -308,18 +355,29 @@ export function registerMyStatsCard() {
       const t = window.__app.t;
       if (row.status === 'reached') return t('mystats.bookGoals.reached');
       if (row.status === 'overdue') return t('mystats.bookGoals.overdue');
-      if (row.status === 'due')     return t('mystats.bookGoals.due', { n: row.daysRemaining });
+      if (row.status === 'due')     return this._myStatsPlural('mystats.bookGoals.due', row.daysRemaining);
       if (row.status === 'open')    return t('mystats.bookGoals.open');
       return t('mystats.bookGoals.none');
     },
 
     // Fertigstellungs-Prognose in Klartext: „fertig ~ 12. Aug 2026" bzw. bei
     // fehlendem/zu langsamem Tempo der Stillstand-Hinweis.
+    // Mit Frist zusaetzlich „im Plan"/„hinter Plan" als Text (nicht nur Farbe).
     myStatsForecastLabel(row) {
       const t = window.__app.t;
       if (row.forecastStalled) return t('mystats.bookGoals.forecastStalled');
-      if (row.forecastDate) return t('mystats.bookGoals.forecast', { date: this.myStatsDateLabel(row.forecastDate) });
-      return '';
+      if (!row.forecastDate) return '';
+      const base = t('mystats.bookGoals.forecast', { date: this.myStatsDateLabel(row.forecastDate) });
+      if (row.onTrack === true) return base + ' · ' + t('mystats.bookGoals.onTrack');
+      if (row.onTrack === false) return base + ' · ' + t('mystats.bookGoals.behind');
+      return base;
+    },
+
+    // Das Tempo hinter der Prognose: „⌀ 1’200 Z/Tag, letzte 30 T".
+    myStatsPaceLabel(row) {
+      if (!row.paceDays || !(row.recentDailyChars > 0)) return '';
+      return this._myStatsPlural('mystats.bookGoals.pace', row.paceDays,
+        { chars: this._myStatsFmt(row.recentDailyChars), days: row.paceDays });
     },
 
     // Zahl mit einer Nachkommastelle (Lesbarkeitswerte), Locale-aware.
@@ -367,7 +425,7 @@ export function registerMyStatsCard() {
     },
 
     get myStatsIsEmpty() {
-      return !this.myStatsLoading && !this.myStatsError && (!this.myStatsData || this.myStatsData.books === 0);
+      return !this.myStatsLoading && !this.myStatsError && !this.myStatsHasContent;
     },
   }));
 }

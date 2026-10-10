@@ -59,6 +59,7 @@ In [lib/content-store/index.js](../lib/content-store/index.js):
 
 - **`bookTree(bookId, ctx)`** — Output: `{ chapters: [top-level], topPages: [] }`. Jedes Kapitel hat `{ ...meta, pages: [], subchapters: [] }` (rekursiv selbe Shape). Direkt verbrauchbar für nested UI.
 - **`flattenTree(tree)`** — depth-first Liste `[{ page, chapterId, chapterName, depth }]`. `chapterName` ist das direkt umschliessende Kapitel. Genutzt von [routes/book-editor.js](../routes/book-editor.js) für flache Page-Liste.
+- **`bookOutline(bookId)`** ([lib/content-store/outline.js](../lib/content-store/outline.js)) — Knoten in Lesereihenfolge direkt aus dem Tree, **Kapitel und Abschnitte verschränkt** (`bookTree` trennt `pages[]`/`subchapters[]` und verliert damit, ob ein Abschnitt vor oder nach einem Unterkapitel steht). Kapitel `{ type:'chapter', id, name, depth, parent_id, path, chapter_ids }`, Abschnitt `{ type:'page', id, name, chapter_id, depth, path, chapter_ids }` (`depth` 0 = ohne Kapitel). Dazu `chapterPages(outline, id, { includeSubchapters })` und `formatChapterPath(path)`. Ist der Tree ungültig, baut es ungespeichert aus den Positionen. Genutzt vom Buch-Chat (Werkzeuge + klassischer Prompt, [buchchat-tools.md](buchchat-tools.md)).
 - **`walkAllChapters(tree, cb)`** — Iterator über alle Kapitel-Ebenen.
 
 In [lib/content-store/backends/localdb.js](../lib/content-store/backends/localdb.js): das Kapitel-Shape (`_chapterRow`) führt `parent_chapter_id` — Pflicht, damit `coalesce.js`/Export-Builder die Tiefe berechnen können.

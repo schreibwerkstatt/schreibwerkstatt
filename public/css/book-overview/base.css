@@ -99,12 +99,27 @@
 }
 
 /* Hero-Tiles (Snapshot + Trend) sind doppelt so breit wie normale Tiles
-   auf grösseren Viewports — visuelle Hierarchie. Medium-Tiles (Presence,
-   Findings) ebenfalls span 2 — keine volle Zeilenbreite, sonst zu viel
-   Whitespace bei wenigen Spalten/kurzen Bars. */
-@media (min-width: 720px) {
+   — visuelle Hierarchie. Medium-Tiles (Presence, Findings) ebenfalls span 2 —
+   keine volle Zeilenbreite, sonst zu viel Whitespace bei wenigen
+   Spalten/kurzen Bars.
+
+   Buch-Übersicht (`.overview-grid--cq`): der Span hängt an der Breite des
+   GRIDS, nicht des Viewports. Neben Sidebar und Editor-Spalte kann das Grid
+   bei breitem Fenster einspaltig sein; ein span 2 erzeugte dort eine
+   implizite zweite Spur, und jede Kachel der Zeile rutschte halb aus dem Bild.
+   Ab 720px Grid-Breite hat `auto-fit, minmax(220px, 1fr)` sicher ≥ 3 Spuren.
+   Kein `container-type` auf den übrigen Grids: „Meine Statistik" trägt im
+   Grid eine Combobox, deren `x-anchor`-Dropdown ein Query-Container als
+   Containing-Block versetzen würde (public/css/CLAUDE.md). Sie behalten den
+   Viewport-Span. */
+.overview-grid--cq { container: overview-grid / inline-size; }
+@container overview-grid (min-width: 720px) {
   .overview-tile--hero { grid-column: span 2; }
   .overview-tile--medium { grid-column: span 2; }
+}
+@media (min-width: 720px) {
+  .overview-grid:not(.overview-grid--cq) .overview-tile--hero { grid-column: span 2; }
+  .overview-grid:not(.overview-grid--cq) .overview-tile--medium { grid-column: span 2; }
 }
 
 .overview-tile-label {
@@ -132,6 +147,14 @@
   white-space: nowrap;
   margin-left: auto;
 }
+/* Reichweite einer Kennzahl („alle Nutzer" / „nur deine") neben dem Label —
+   Coverage, Lektoratszeit und Bewertung zählen verschieden weit. */
+.overview-tile-scope {
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+  font-style: italic;
+  white-space: nowrap;
+}
 
 /* Trend-Pct: shared Up/Down-Farben (Sparkline, 7-Tage, Chapter-Delta, Review). */
 .overview-trend-pct {
@@ -145,7 +168,7 @@
   .overview-grid {
     grid-template-columns: 1fr;
   }
-  .overview-tile--hero { grid-column: 1 / -1; }
+  .overview-grid:not(.overview-grid--cq) .overview-tile--hero { grid-column: 1 / -1; }
 }
 
 @media (max-width: 480px) {

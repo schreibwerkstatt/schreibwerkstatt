@@ -18,8 +18,9 @@ const { buildBibliography, resolveCitesInHtml } = require('../../lib/bibliograph
 const { makeImageResolver } = require('../../lib/wp-media');
 const { classifyPull, newer } = require('../../lib/blog-merge');
 const {
-  createPageFromPost, applyPostToPage, resolveYearChapter, seedImportBaseline,
+  createPageFromPost, applyPostToPage, resolveYearChapter,
 } = require('../../lib/blog-pull');
+const { seedImportBaseline } = require('../../lib/import-baseline');
 const { splitDatePrefix, outgoingTitle } = require('../../lib/blog-title');
 const { assertBlogBook } = require('../../lib/buchtyp');
 const { getHeadline, headlineUpdatedAt } = require('../../db/headline');

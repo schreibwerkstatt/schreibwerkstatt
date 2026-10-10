@@ -2,9 +2,13 @@
 <template x-if="overviewCoverage && overviewCoverage.total_pages > 0">
   <div class="overview-tile internal-link"
        @click="$app.toggleFehlerHeatmapCard()"
-       :aria-label="$app.t('overview.lektorat') + ': ' + overviewCoverageRing().pct + '%, ' + $app.t('overview.coverageMeta', { checked: (overviewCoverage?.checked_pages ?? 0), total: (overviewCoverage?.total_pages ?? 0) })"
+       :aria-label="$app.t('overview.lektorat') + ' (' + $app.t('overview.scope.allUsers') + '): ' + overviewCoverageRing().pct + '%, ' + overviewCoverageMeta()"
        :data-tip="$app.t('overview.openHeatmap')">
-    <div class="overview-tile-label" x-text="$app.t('overview.lektorat')"></div>
+    <!-- Reichweite: die Abdeckung zählt die Prüfungen ALLER Nutzer des Buchs. -->
+    <div class="overview-tile-head">
+      <div class="overview-tile-label" x-text="$app.t('overview.lektorat')"></div>
+      <span class="overview-tile-scope" x-text="$app.t('overview.scope.allUsers')"></span>
+    </div>
     <div class="overview-donut-row">
       <svg class="overview-donut" :class="{ 'overview-donut--empty': overviewCoverageRing().pct === 0 }" viewBox="0 0 72 72" aria-hidden="true">
         <circle cx="36" cy="36" :r="overviewCoverageRing().r"
@@ -18,8 +22,7 @@
               x-text="overviewCoverageRing().pct + '%'"></text>
       </svg>
       <div class="overview-donut-meta">
-        <div class="overview-donut-meta-checked"
-             x-text="$app.t('overview.coverageMeta', { checked: (overviewCoverage?.checked_pages ?? 0), total: (overviewCoverage?.total_pages ?? 0) })"></div>
+        <div class="overview-donut-meta-checked" x-text="overviewCoverageMeta()"></div>
       </div>
     </div>
   </div>
@@ -29,7 +32,7 @@
 <template x-if="overviewTopFehler().length > 0">
   <div class="overview-tile internal-link"
        @click="$app.toggleFehlerHeatmapCard()"
-       :aria-label="$app.t('overview.topErrors')"
+       :aria-label="overviewTopFehlerAria()"
        :data-tip="$app.t('overview.openHeatmap')">
     <div class="overview-tile-label" x-text="$app.t('overview.topErrors')"></div>
     <ul class="overview-error-bars">
@@ -40,7 +43,7 @@
             <span class="overview-error-count" x-text="_fmtNum(e.count)"></span>
           </div>
           <div class="overview-error-bar-track">
-            <div class="overview-error-bar-fill" :style="{ width: e.pct + '%' }"></div>
+            <div class="overview-error-bar-fill" :style="{ '--progress': e.pct + '%' }"></div>
           </div>
         </li>
       </template>

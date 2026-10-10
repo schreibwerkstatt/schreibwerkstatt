@@ -12,7 +12,7 @@
      einer Hauptfigur erscheint gestrichelt (`inherited`). Klick → Beat im Board. -->
 <div class="entity-meta-row plot-backlinks" x-show="beatsFor(beatOwnerId).length">
   <span class="entity-meta-label" x-text="$app.t('plot.backlinks.label')"></span>
-  <span class="entity-refs">
+  <span class="entity-refs entity-refs--wrap">
     <template x-for="beat in beatsFor(beatOwnerId)" :key="beat.id">
       <button type="button" class="entity-ref"
               x-entity-ref="{ type: 'beat', id: beat.id, label: beat.titel, inherited: !!beat.inherited, title: beatChipTip(beat) }"></button>

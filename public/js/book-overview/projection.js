@@ -4,7 +4,8 @@
 // Quelle ist der book_stats_history-Snapshot-Verlauf (overviewStats) plus der
 // Live-Zeichenstand aus tokEsts. Schnitt = Zeichen-Zuwachs der letzten 30 Tage
 // geteilt durch die tatsaechliche Snapshot-Spanne, ohne Struktur-Spruenge.
-import { localIsoDate, localIsoDaysAgo, aggregateLiveBookStats } from '../utils.js';
+import { localIsoDate } from '../utils.js';
+import { isoAddDays, isoDaysBetween } from './iso-day.js';
 
 const PACE_WINDOW_DAYS = 30;
 
@@ -19,31 +20,16 @@ export const JUMP_CHARS_PER_DAY = 30000;
 // von 0 keine Aussage (frisches Buch, Ziel eben gesetzt), sondern Datenmangel.
 export const MIN_HISTORY_DAYS = 7;
 
-// Tages-Arithmetik auf ISO-Strings (YYYY-MM-DD), TZ-frei via UTC (DST-sicher).
-function isoAddDays(iso, n) {
-  const [y, m, d] = iso.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + n);
-  return dt.toISOString().slice(0, 10);
-}
-
-// Ganztage-Differenz b - a (positiv = b liegt nach a).
-function isoDaysBetween(aIso, bIso) {
-  const [ay, am, ad] = aIso.split('-').map(Number);
-  const [by, bm, bd] = bIso.split('-').map(Number);
-  const a = Date.UTC(ay, am - 1, ad);
-  const b = Date.UTC(by, bm - 1, bd);
-  return Math.round((b - a) / 86400000);
-}
-
 /**
  * Deadline-Projektion fuer ein Buch.
  * @param {Array} stats   book_stats_history-Rows { recorded_at (YYYY-MM-DD), chars } aufsteigend.
- * @param {number} liveChars  Live-Gesamtzeichen (aus tokEsts); 0 = unbekannt → Fallback Snapshot.
- * @param {{targetChars:number, deadlineIso?:string, todayLocal?:Date}} opts
+ * @param {number|null} liveChars  Vollständiger Live-Stand (aus tokEsts); null/0 = unbekannt → Fallback Snapshot.
+ * @param {{targetChars:number, deadlineIso?:string, todayIso?:string, todayLocal?:Date}} opts
+ *   `todayIso` (appTimezone-Kalendertag) hat Vorrang; `todayLocal` wird nur
+ *   per localIsoDate() auf einen Kalendertag abgebildet.
  * @returns {object} { active, ... } — bei fehlendem Ziel { active:false }.
  */
-export function computeDeadlineProjection(stats, liveChars, { targetChars, deadlineIso = null, todayLocal = new Date() } = {}) {
+export function computeDeadlineProjection(stats, liveChars, { targetChars, deadlineIso = null, todayIso = null, todayLocal = new Date() } = {}) {
   const target = Math.round(Number(targetChars) || 0);
   if (!target || target <= 0) return { active: false };
 
@@ -51,12 +37,11 @@ export function computeDeadlineProjection(stats, liveChars, { targetChars, deadl
   const latestSnap = rows.length ? (Number(rows[rows.length - 1].chars) || 0) : 0;
   const current = (Number(liveChars) || 0) > 0 ? Math.round(Number(liveChars)) : latestSnap;
 
-  const today = new Date(todayLocal); today.setHours(12, 0, 0, 0);
-  const isoToday = localIsoDate(today);
+  const isoToday = todayIso || localIsoDate(new Date(todayLocal));
 
   // Basis-Snapshot fuer den Schnitt: letzter Snapshot am/vor (heute − 30 Tage).
   // Fehlt einer (Buch juenger als 30 Tage), nimm den aeltesten Snapshot.
-  const cutoffIso = localIsoDaysAgo(PACE_WINDOW_DAYS, today);
+  const cutoffIso = isoAddDays(isoToday, -PACE_WINDOW_DAYS);
   const dated = rows.filter(s => s.recorded_at && s.recorded_at <= isoToday);
   let baseIdx = -1;
   for (let i = 0; i < dated.length; i++) {
@@ -106,6 +91,9 @@ export function computeDeadlineProjection(stats, liveChars, { targetChars, deadl
     stalled: !reached && pace <= 0 && !insufficientHistory,
     stalledDays: Math.min(PACE_WINDOW_DAYS, historyDays),
     deadlineIso: deadlineIso || null,
+    // Deadline liegt vor heute (und Ziel nicht erreicht): eigener Zustand
+    // „überschritten seit …" statt Puffer-/Verzug-Prognose.
+    deadlinePassed: false,
     daysNeeded: null,
     projectedFinishIso: null,
     daysUntilDeadline: null,
@@ -127,6 +115,7 @@ export function computeDeadlineProjection(stats, liveChars, { targetChars, deadl
   if (deadlineIso) {
     const daysUntilDeadline = isoDaysBetween(isoToday, deadlineIso);
     result.daysUntilDeadline = daysUntilDeadline;
+    result.deadlinePassed = !reached && daysUntilDeadline < 0;
     // Noetiger Schnitt, um die Deadline zu treffen (Restzeichen / Resttage).
     result.requiredPace = (!reached && daysUntilDeadline > 0) ? Math.ceil(remaining / daysUntilDeadline) : null;
     if (result.projectedFinishIso) {
@@ -149,9 +138,11 @@ export const projectionMethods = {
     const tokEsts = window.__app?.tokEsts || {};
     const target = this.overviewGoalTargetChars;
     const deadline = this.overviewGoalDeadline;
-    return this._memo('goalProjection', [stats, tokEsts, target, deadline, this.overviewToday], () => {
-      const liveChars = aggregateLiveBookStats(tokEsts).chars;
-      return computeDeadlineProjection(stats, liveChars, { targetChars: target, deadlineIso: deadline });
+    const pages = Alpine.store('nav').pages || [];
+    const todayIso = this._todayIso();
+    return this._memo('goalProjection', [stats, tokEsts, pages, target, deadline, todayIso], () => {
+      const live = this._liveTotals();
+      return computeDeadlineProjection(stats, live ? live.chars : null, { targetChars: target, deadlineIso: deadline, todayIso });
     });
   },
 
@@ -161,12 +152,9 @@ export const projectionMethods = {
     return this.overviewGoalProjection().active;
   },
 
-  // Projiziertes Fertigdatum / Deadline lesbar formatieren. Mittags-Anker plus
-  // Formatter in appTimezone (via _dateFmt → tzOpts): ein Mitternachts-Anker
-  // würde bei abweichender App-Zeitzone auf den Vortag kippen.
+  // Projiziertes Fertigdatum / Deadline lesbar formatieren — ein Kalendertag,
+  // darum über _isoDayLabel (UTC-Mittag + timeZone UTC, siehe stats.js).
   overviewGoalDateLabel(iso) {
-    if (!iso) return '';
-    return this._dateFmt({ day: 'numeric', month: 'short', year: 'numeric' })
-      .format(new Date(iso + 'T12:00:00'));
+    return iso ? this._isoDayLabel(iso) : '';
   },
 };

@@ -5,7 +5,7 @@
 //   · Komplettanalyse (Figuren/Beziehungen/Kontinuität/Zeitstrahl) = Kartei-Wahrheit,
 //   · Motiv-Werkstatt = Absicht des Autors (Soll), keine Textwahrheit,
 //   · Struktur-Check = Messung am Text (Ist),
-//   · Genre-Schwerpunkt + Kapitel-Position = Rahmen, kein Befund.
+//   · Genre-Schwerpunkt + Kapitel-Position + Werkstand = Rahmen, kein Befund.
 
 import { textsorte, textsorteLabel } from '../textsorten.js';
 
@@ -31,15 +31,106 @@ function _buildReviewSchwerpunktBlock(schwerpunkt) {
  * @param {{index:number,total:number,prevName?:string,nextName?:string}|null} position
  * @returns {string} Block oder '' (wenn keine Position bekannt)
  */
-function _buildChapterPositionBlock(position) {
+function _buildChapterPositionBlock(position, werkstand = null) {
   if (!position || !position.total) return '';
   const nachbarn = [];
   if (position.prevName) nachbarn.push(`Vorheriges Kapitel: «${position.prevName}».`);
   if (position.nextName) nachbarn.push(`Nächstes Kapitel: «${position.nextName}».`);
+  const inArbeit = !!werkstand?.inArbeit;
+  // Im unfertigen Werk ist das Kapitel, hinter dem kein Text mehr folgt, die
+  // Schreibfront, kein Schluss: ohne diesen Satz las das Modell «Kapitel 1 von 1»
+  // als Schlusskapitel, das einlösen muss — und benotete den fehlenden Schluss.
+  // `position.front` misst der Job am Text (leere Folgekapitel zählen nicht);
+  // fehlt die Messung, gilt das letzte Kapitel im Baum.
+  const istFront = inArbeit && (position.front ?? position.index === position.total);
+  const ung = position.ungeschrieben;
+  const huellen = istFront && ung?.namen?.length
+    ? `\nDanach sind ${ung.gesamt} Kapitel angelegt, aber noch ungeschrieben: ${ung.namen.map(n => `«${n}»`).join(', ')}${ung.gesamt > ung.namen.length ? ' …' : ''}. Sie sind geplant, nicht leer gelassen — ihr Fehlen ist kein Befund.`
+    : '';
+  const front = istFront
+    ? `\nDas Werk ist NICHT abgeschlossen: dies ist das bisher letzte geschriebene Kapitel, KEIN Schlusskapitel. Bewerte nicht, ob es den Bogen einlöst. Das Kapitel selbst kann noch unfertig sein — bricht es mitten in einer Szene, einem Bogen oder einem Gedankengang ab, ist das der Schreibstand und kein Mangel; bewertet wird, was geschrieben ist.${huellen}`
+    : '';
   return `
-Position im Buch: Kapitel ${position.index} von ${position.total}.${nachbarn.length ? '\n' + nachbarn.join(' ') : ''}
-Bewerte den Bogen dieses Kapitels relativ zu seiner FUNKTION im Ganzen, nicht absolut: ein frühes Aufbau-/Ruhekapitel darf bewusst langsamer sein, ein Wende- oder Schlusskapitel muss einlösen. Ein ruhiges Kapitel an der richtigen Stelle ist kein Mangel.
+Position im Buch: Kapitel ${position.index} von ${inArbeit ? 'bisher ' : ''}${position.total}.${nachbarn.length ? '\n' + nachbarn.join(' ') : ''}
+Bewerte den Bogen dieses Kapitels relativ zu seiner FUNKTION im Ganzen, nicht absolut: ein frühes Aufbau-/Ruhekapitel darf bewusst langsamer sein, ein Wende- oder Schlusskapitel muss einlösen. Ein ruhiges Kapitel an der richtigen Stelle ist kein Mangel.${front}
 `;
+}
+
+/**
+ * Werkstand für die BUCHbewertung: das Werk ist nicht als abgeschlossen markiert.
+ *
+ * Why: die Achsen fragen nach dem Bogen über das Ganze (Spannungskurve,
+ * Mittelteil, Schluss). Ohne Hinweis bewertet das Modell den bisher geschriebenen
+ * Anfang als vollständiges Werk und benotet fehlende Teile als Mängel.
+ *
+ * `is_finished = 0` ist aber auch der Default jedes nie markierten, fertigen
+ * Buchs — darum ohne Zielumfang nur bedingt formuliert («endet der Text offen …»).
+ * Erst ein Zielumfang, der deutlich unterschritten ist, macht die Aussage hart.
+ *
+ * @param {{inArbeit:boolean, zielProzent?:number|null}|null} werkstand
+ * @returns {string} Block oder '' (abgeschlossen / unbekannt)
+ */
+function _buildWerkstandBlock(werkstand) {
+  if (!werkstand?.inArbeit) return '';
+  const p = werkstand.zielProzent;
+  const sicher = p != null && p < 90;
+  const ziel = p != null
+    ? ` Gemessen am Zielumfang des Autors ist es bisher zu etwa ${p} % geschrieben.`
+    : '';
+  const lage = sicher
+    ? 'Der vorliegende Text ist der bisher geschriebene Teil, NICHT das ganze Werk.'
+    : 'Der vorliegende Text kann darum der bisher geschriebene Teil sein statt des ganzen Werks.';
+  const ausnahme = sicher
+    ? ''
+    : '\n· Liest sich der Text erkennbar als abgeschlossenes Ganzes, bewerte ihn als solches.';
+  const ung = werkstand.ungeschrieben;
+  const huellen = ung?.namen?.length
+    ? `\nNoch angelegt, aber ungeschrieben (${ung.gesamt} Kapitel nach dem bisherigen Text): ${ung.namen.map(n => `«${n}»`).join(', ')}${ung.gesamt > ung.namen.length ? ' …' : ''}.`
+    : '';
+  return `
+=== WERKSTAND: IN ARBEIT ===
+Der Autor hat das Werk NICHT als abgeschlossen markiert.${ziel}
+${lage}
+· Endet der Text offen – ohne Auflösung, mitten in einem Bogen, einer Szene oder einem Gedankengang –, ist das der
+  Schreibstand und KEIN Mangel. Bewerte die Achsen, die den Verlauf über das Ganze betreffen,
+  an dem, was der bisherige Text aufbaut und verspricht (Exposition, gesetzte Konflikte und
+  Fragen, Fallhöhe, Sog). Fehlender Höhepunkt, fehlender Mittelteil oder fehlender Schluss
+  sind keine Befunde und drücken die Note nicht.
+· Das gilt nur für das FEHLEN von Teilen: was geschrieben ist, bewertest du mit vollem Massstab.
+· Empfehlungen dürfen sich auf den weiteren Verlauf richten (was der bisherige Text einlösen
+  muss), statt einen Schluss einzufordern.${ausnahme}${huellen}${_geplantTeil(werkstand.geplant)}
+=== ENDE WERKSTAND ===
+`;
+}
+
+/**
+ * Noch geplante Beats im Werkstand-Block. Wie der Plan-Block der Kapitelbewertung
+ * AUTOR-ABSICHT, keine Textwahrheit: das Modell soll den bisherigen Text daran
+ * lesen, wohin er führen soll (trägt die Exposition das Geplante?), nicht den
+ * Plan bewerten oder ihn als geschrieben behandeln.
+ */
+function _geplantTeil(ctx) {
+  if (!ctx?.beats?.length) return '';
+  const lines = ctx.beats.map(b => {
+    const ort = [b.kapitel && `Kapitel: ${b.kapitel}`, b.akt && `Akt: ${b.akt}`, b.strang && `Strang: ${b.strang}`].filter(Boolean).join(' · ');
+    const meta = [
+      b.intensitaet ? `Spannung ${b.intensitaet}/5` : '',
+      b.im_text == null ? '' : `im Text wiedergefunden: ${b.im_text}×`,
+    ].filter(Boolean).join(' · ');
+    return `- «${b.titel}»${ort ? ` [${ort}]` : ''}${b.beschreibung ? ` – ${b.beschreibung}` : ''}${meta ? `\n    ${meta}` : ''}`;
+  });
+  const gekappt = ctx.gesamt > ctx.beats.length ? `\n(${ctx.gesamt - ctx.beats.length} weitere nicht gelistet.)` : '';
+  const ist = ctx.verankert
+    ? '«im Text wiedergefunden» ist eine semantische Suche, kein Beweis: ein Beat mit Treffern ist offenbar schon geschrieben, nur nicht als eingearbeitet markiert.'
+    : 'Ob einzelne davon schon im Text stehen, ist nicht abgeglichen — entscheide es am Text.';
+  return `
+
+NOCH GEPLANT (Plot-Werkstatt, Absicht des Autors, KEINE Textwahrheit), in Lesereihenfolge des Plans:
+Lies den bisherigen Text daran, wohin er führen soll: Legt er an, was das Geplante braucht (Figuren,
+Konflikte, Fragen, Fallhöhe)? Bewerte NICHT den Plan, erfinde nichts daraus in den Text hinein, und
+behandle Geplantes nicht als geschrieben. Ein bewusstes Abweichen vom Plan ist kein Fehler.
+${ist}
+${lines.join('\n')}${gekappt}`;
 }
 
 /**
@@ -393,7 +484,7 @@ ${parts.join('\n\n')}
 }
 
 export {
-  _buildReviewSchwerpunktBlock, _buildChapterPositionBlock,
+  _buildReviewSchwerpunktBlock, _buildChapterPositionBlock, _buildWerkstandBlock,
   _buildKomplettContextBlock, _strukturAchse, _buildStrukturContextBlock,
   _buildMotivContextBlock, _weltAchse, _buildWeltContextBlock,
   _planAchse, _buildPlanContextBlock, _buildIdeenContextBlock,

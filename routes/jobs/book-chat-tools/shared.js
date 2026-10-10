@@ -12,6 +12,7 @@ const {
 const { getLocationName } = require('../../../db/locations-read');
 const { getWorldFactTitle } = require('../../../db/world-facts');
 const { itemTitle: getResearchItemTitle } = require('../../../db/research-items');
+const contentStore = require('../../../lib/content-store');
 
 // Obergrenzen schützen das Token-Budget gegen ausufernde Tool-Calls. Skaliert mit
 // MODEL_CONTEXT, damit User mit grösserem Kontextfenster reichere Tool-Antworten
@@ -82,6 +83,17 @@ function _findFigure(input, ctx) {
   return row;
 }
 
+/** Abschnitts-Zeilen (`page_id`) in Lesereihenfolge der Gliederung sortieren
+ *  (contentStore.bookOutline, SSoT order_json). SQL-Sortierung nach
+ *  chapters/pages.position reicht dafür nicht: pages.position zählt pro Bucket, und
+ *  Abschnitte ohne Kapitel (position NULL) landeten vorn statt an ihrer Stelle. */
+async function sortByReadingOrder(bookId, rows) {
+  const outline = await contentStore.bookOutline(bookId);
+  const ord = new Map();
+  for (const n of outline) if (n.type === 'page') ord.set(n.id, ord.size);
+  return rows.slice().sort((a, b) => (ord.get(a.page_id) ?? Infinity) - (ord.get(b.page_id) ?? Infinity));
+}
+
 module.exports = {
   MAX_RESULT_CHARS,
   MAX_CHARS_PER_PAGE,
@@ -93,4 +105,5 @@ module.exports = {
   resultCapFor,
   _findFigure,
   resolveEntityTitle,
+  sortByReadingOrder,
 };

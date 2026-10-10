@@ -718,3 +718,205 @@ test('computeVocabTrend: Summe unique_words + Trend ggue. ~30 Tagen', () => {
 test('computeVocabTrend: kein Wortschatz → hasData false', () => {
   assert.equal(computeVocabTrend([]).hasData, false);
 });
+
+// ── Regressionen (Review „Meine Statistik") ─────────────────────────────────
+const C = await import('../../public/js/cards/my-stats-compute.js');
+const T = await import('../../public/js/cards/my-stats-trends.js');
+const { myStatsTrendMethods } = await import('../../public/js/cards/my-stats-trends-methods.js');
+const { localIsoDate, configureAppTimezone, appTimezone } = await import('../../public/js/utils.js');
+
+test('computeVolumeDelta: Historie reicht nicht vor den Zeitraum → Basis = erster Stand im Zeitraum, approximiert', () => {
+  // „1 J": Buch existiert seit 2024, Snapshots nur ab T-364 (aelter geloescht).
+  const today = localIsoDate();
+  const from = C.isoAddDays(today, -364);
+  const rows = [];
+  for (let i = 364; i >= 1; i--) rows.push({ book_id: 1, recorded_at: C.isoAddDays(today, -i), chars: 500000 + (364 - i) * 100 });
+  const detail = [{ book_id: 1, chars: 500000 + 363 * 100, words: 0, pages: 0, created_at: '2024-01-01' }];
+  const v = C.computeVolumeDelta(rows, from, today, { booksDetail: detail, todayIso: today });
+  assert.equal(v.chars, 363 * 100, 'Zuwachs seit dem ersten Stand, nicht der ganze Bestand');
+  assert.equal(v.approximated, true);
+  assert.deepEqual(v.approxBooks, [1]);
+});
+
+test('computeVolumeDelta: Basis = juengster Snapshot vor dem Fenster, auch aus der Monats-Ausduennung', () => {
+  const rows = [
+    { book_id: 1, recorded_at: '2025-08-31', chars: 1000 }, // Monatsend-Stand (ausgeduennt)
+    { book_id: 1, recorded_at: '2025-10-20', chars: 1500 },
+    { book_id: 1, recorded_at: '2026-10-01', chars: 4000 },
+  ];
+  const v = C.computeVolumeDelta(rows, '2025-10-05', '2026-10-01');
+  assert.equal(v.chars, 3000, '4000 − 1000 (letzter Stand <= from−1)');
+  assert.equal(v.approximated, false);
+});
+
+test('computeVolumeDelta: neues Buch ohne Anlagedatum vor dem Fenster → voller Zuwachs, nicht approximiert', () => {
+  const today = localIsoDate();
+  const rows = [{ book_id: 2, recorded_at: C.isoAddDays(today, -10), chars: 800 }];
+  const detail = [{ book_id: 2, chars: 800, created_at: C.isoAddDays(today, -12) }];
+  const v = C.computeVolumeDelta(rows, C.isoAddDays(today, -29), today, { booksDetail: detail, todayIso: today });
+  assert.equal(v.chars, 800);
+  assert.equal(v.approximated, false);
+});
+
+test('computeVolumeDelta: Fenster bis heute zaehlt den Live-Stand (heutiger Snapshot fehlt noch)', () => {
+  const today = localIsoDate();
+  const rows = [
+    { book_id: 1, recorded_at: C.isoAddDays(today, -40), chars: 1000, words: 100, page_count: 1 },
+    { book_id: 1, recorded_at: C.isoAddDays(today, -1), chars: 3000, words: 300, page_count: 2 },
+  ];
+  const detail = [{ book_id: 1, chars: 3500, words: 350, pages: 3, created_at: '2020-01-01' }];
+  const v = C.computeVolumeDelta(rows, C.isoAddDays(today, -29), today, { booksDetail: detail, todayIso: today });
+  assert.equal(v.chars, 2500, 'Live 3500 − Basis 1000');
+  assert.equal(v.words, 250);
+  assert.equal(v.pages, 2);
+  assert.equal(v.usesLive, true);
+  // Fenster, das vor heute endet, bleibt beim Snapshot.
+  const past = C.computeVolumeDelta(rows, C.isoAddDays(today, -29), C.isoAddDays(today, -1), { booksDetail: detail, todayIso: today });
+  assert.equal(past.chars, 2000);
+});
+
+test('computePeriodComparison: dieselbe Basis-Regel wie die Zeitraum-Kachel', () => {
+  const today = localIsoDate();
+  const rows = [];
+  for (let i = 200; i >= 1; i--) rows.push({ book_id: 1, recorded_at: C.isoAddDays(today, -i), chars: 10000 + (200 - i) * 10 });
+  const detail = [{ book_id: 1, chars: 10000 + 199 * 10, created_at: '2020-01-01' }];
+  const from = C.isoAddDays(today, -364);
+  const pc = T.computePeriodComparison(rows, [], from, today, { booksDetail: detail, todayIso: today });
+  const vol = C.computeVolumeDelta(rows, from, today, { booksDetail: detail, todayIso: today });
+  assert.equal(pc.chars.cur, vol.chars);
+  assert.equal(pc.chars.cur, 199 * 10, 'nicht der Bestand von ~12’000');
+  assert.equal(pc.approximated, true);
+});
+
+test('computeGoalAttainment: laengste Ziel-Serie reisst an Tagen ohne Eintrag', () => {
+  const rows = [
+    { book_id: 1, date: isoDaysAgo(10), seconds: 3600 },
+    { book_id: 1, date: isoDaysAgo(5), seconds: 3600 },
+    { book_id: 1, date: isoDaysAgo(2), seconds: 3600 },
+  ];
+  const g = computeGoalAttainment(rows, 30, 0);
+  assert.equal(g.longestStreak, 1, 'drei einzelne Tage sind keine 3er-Serie');
+  assert.equal(g.daysHit, 3);
+  assert.equal(g.currentStreak, 0, 'gestern verfehlt (kein Eintrag), heute offen');
+});
+
+test('computeBookGoals: junges Buch (< 30 Tage Historie) bekommt eine Prognose aus seinem aeltesten Snapshot', () => {
+  const hist = [
+    { book_id: 7, recorded_at: isoDaysAgo(10), chars: 10000 },
+    { book_id: 7, recorded_at: isoDaysAgo(1), chars: 40000 },
+  ];
+  const [r] = computeBookGoals([{ book_id: 7, chars: 40000, goal_target_chars: 100000 }], hist);
+  assert.equal(r.forecastStalled, false);
+  assert.equal(r.paceDays, 9);
+  assert.equal(r.recentDailyChars, Math.round(30000 / 9));
+  assert.ok(r.forecastDate);
+  const overall = T.computeOverallForecast([r]);
+  assert.equal(overall.stalled, false);
+  assert.ok(overall.dailyChars > 0);
+});
+
+test('computeWritingTimeStreak: Serien-Kennzahlen ueber das ganze Fenster, passend zu computeDerived', () => {
+  const rows = [
+    { book_id: 1, date: isoDaysAgo(500), seconds: 36000 }, // ausserhalb des 52-Wochen-Rasters
+    { book_id: 1, date: isoDaysAgo(1), seconds: 600 },
+  ];
+  const s = computeWritingTimeStreak(rows);
+  const d = computeDerived({}, rows);
+  assert.equal(s.totalActiveDays, d.activeDays, 'gleicher Nenner wie der Tagesschnitt');
+  assert.equal(s.totalActiveDays, 2);
+  assert.equal(s.gridActiveDays, 1, 'Raster zeigt nur die letzten 52 Wochen');
+  // Raster aus der vollen Reihe, Kennzahlen aus dem Fenster.
+  const win = rows.filter(r => r.date >= isoDaysAgo(29));
+  const w = computeWritingTimeStreak(rows, new Date(), win);
+  assert.equal(w.totalActiveDays, 1);
+  assert.equal(w.gridActiveDays, 1);
+});
+
+test('computeStreakStats: laengste Serie ueber Kalendertage, aktuelle endet heute oder gestern', () => {
+  const m = new Map([['2026-05-01', 1], ['2026-05-02', 1], ['2026-05-04', 1], ['2026-05-05', 1], ['2026-05-06', 1], ['2026-05-08', 0]]);
+  const s = C.computeStreakStats(m, '2026-05-07');
+  assert.equal(s.longestStreak, 3);
+  assert.equal(s.activeDays, 5);
+  assert.equal(s.currentStreak, 3, 'heute (07.) offen, Serie 04.–06. laeuft');
+});
+
+test('computeMilestones: „1 Buch" zaehlt nur Buecher mit Inhalt', () => {
+  const data = { chars: 0, words: 0, books: 2, books_detail: [{ book_id: 1, chars: 0 }, { book_id: 2, chars: 0 }] };
+  const m = computeMilestones(data, { activeDays: 0 });
+  assert.equal(m.achieved.find(a => a.category === 'books'), undefined);
+  const m2 = computeMilestones({ ...data, books_detail: [{ book_id: 1, chars: 10 }, { book_id: 2, chars: 0 }] }, { activeDays: 0 });
+  assert.deepEqual(m2.achieved.find(a => a.category === 'books'), { category: 'books', target: 1 });
+});
+
+test('resolveWindow: Preset N Tage = genau N Tage inkl. heute; vertauschtes Von/Bis wird getauscht', () => {
+  const w30 = C.resolveWindow({ rangeDays: 30, todayIso: '2026-10-10' });
+  assert.equal(C.isoDayDiff(w30.from, w30.to) + 1, 30);
+  assert.equal(w30.from, '2026-09-11');
+  const w365 = C.resolveWindow({ rangeDays: 365, todayIso: '2026-10-10' });
+  assert.equal(C.isoDayDiff(w365.from, w365.to) + 1, 365);
+  const sw = C.resolveWindow({ from: '2026-09-20', to: '2026-09-01', todayIso: '2026-10-10' });
+  assert.deepEqual(sw, { active: true, from: '2026-09-01', to: '2026-09-20' });
+  assert.deepEqual(C.resolveWindow({ todayIso: '2026-10-10' }), { active: false, from: null, to: null });
+});
+
+test('bucketRange: lueckenlose Achse fuer Tag/Woche/Monat', () => {
+  assert.deepEqual(C.bucketRange('2026-01-30', '2026-02-02', 'day'), ['2026-01-30', '2026-01-31', '2026-02-01', '2026-02-02']);
+  assert.deepEqual(C.bucketRange('2026-01-01', '2026-01-20', 'week'), ['2025-12-29', '2026-01-05', '2026-01-12', '2026-01-19']);
+  assert.deepEqual(C.bucketRange('2025-11-15', '2026-02-03', 'month'), ['2025-11-01', '2025-12-01', '2026-01-01', '2026-02-01']);
+  assert.deepEqual(C.bucketRange('2026-02-03', '2026-01-01', 'day'), []);
+});
+
+test('Heatmap-Ziel-Modus vergleicht Sekunden, nicht gerundete Minuten', () => {
+  const ctx = { ...myStatsTrendMethods, myStatsStreakMode: 'goal', myStatsHasGoal: true,
+                myStatsGoal: () => ({ goalMinutes: 30 }) };
+  // 29:50 min rundet auf 30 — das Ziel ist trotzdem verfehlt (wie in der Ziel-Serie).
+  assert.equal(ctx.myStatsStreakCellClass({ active: true, seconds: 1790, minutes: 30 }), 'overview-streak-cell--goal-miss');
+  assert.equal(ctx.myStatsStreakCellClass({ active: true, seconds: 1800, minutes: 30 }), 'overview-streak-cell--goal-hit');
+});
+
+test('computeReadability / computeVocabTrend: Trend nur ueber Buecher, die zu beiden Zeitpunkten existierten', () => {
+  const rows = [
+    { book_id: 1, recorded_at: isoDaysAgo(40), chars: 1000, avg_flesch_de: 60, unique_words: 1000 },
+    { book_id: 1, recorded_at: isoDaysAgo(1), chars: 1000, avg_flesch_de: 60, unique_words: 1000 },
+    // Neues, sehr schweres Buch — darf den Trend nicht kippen.
+    { book_id: 2, recorded_at: isoDaysAgo(2), chars: 50000, avg_flesch_de: 20, unique_words: 9000 },
+  ];
+  const r = computeReadability(rows);
+  assert.equal(r.fleschTrend, 0);
+  assert.equal(r.trendBooks, 1);
+  assert.equal(r.refIso, isoDaysAgo(30));
+  const v = T.computeVocabTrend(rows);
+  assert.equal(v.total, 10000, 'Anzeige summiert alle Buecher');
+  assert.equal(v.trend, 0, 'Trend ohne das neue Buch');
+});
+
+// ── Browser-TZ ≠ App-TZ ─────────────────────────────────────────────────────
+// Browser in Kiritimati (UTC+14), App in Zuerich (UTC+2 im Sommer):
+// 2026-05-20T21:30Z ist in Zuerich der 20. Mai 23:30, im Browser schon der 21.
+async function withBrowserTz(tz, fn) {
+  const prevTz = process.env.TZ, prevApp = appTimezone;
+  process.env.TZ = tz;
+  configureAppTimezone('Europe/Zurich');
+  try { return await fn(); }
+  finally {
+    if (prevTz === undefined) delete process.env.TZ; else process.env.TZ = prevTz;
+    configureAppTimezone(prevApp);
+  }
+}
+const TZ_NOW = new Date(Date.UTC(2026, 4, 20, 21, 30));
+
+test('TZ: computeGoalAttainment rechnet „heute" im App-Datum, nicht im Browser-Datum', async () => {
+  await withBrowserTz('Pacific/Kiritimati', () => {
+    const rows = [{ book_id: 1, date: '2026-05-20', seconds: 3600 }, { book_id: 1, date: '2026-05-19', seconds: 3600 }];
+    const g = computeGoalAttainment(rows, 30, null, TZ_NOW);
+    assert.equal(g.reachedToday, true, 'heute = 20. Mai (Zuerich)');
+    assert.equal(g.currentStreak, 2);
+  });
+});
+
+test('TZ: computeReadability-Vergleichsstand = App-Datum − 30', async () => {
+  await withBrowserTz('Pacific/Kiritimati', () => {
+    const r = computeReadability([{ book_id: 1, recorded_at: '2026-05-01', chars: 10, avg_flesch_de: 50 }], TZ_NOW);
+    assert.equal(r.refIso, '2026-04-20');
+  });
+});

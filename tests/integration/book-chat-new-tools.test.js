@@ -172,15 +172,15 @@ test('diff_page_revisions: < 2 Revisionen → Fehler', () => {
 
 // ── find_first_last_mention ─────────────────────────────────────────────────
 
-test('find_first_last_mention: liefert Fehler ohne Argument', () => {
-  const result = bookChatTools.TOOLS.find_first_last_mention(
+test('find_first_last_mention: liefert Fehler ohne Argument', async () => {
+  const result = await bookChatTools.TOOLS.find_first_last_mention(
     {},
     { bookId: 8001, userEmail: 'alice@example.com' }
   );
   assert.match(result.error, /figur|loc_id/i);
 });
 
-test('find_first_last_mention: figur ohne Index → freundlicher Fehler', () => {
+test('find_first_last_mention: figur ohne Index → freundlicher Fehler', async () => {
   const BOOK_ID = 8040;
   ctx.dbSeed.setBook({
     books: [{ id: BOOK_ID, name: 'FL' }],
@@ -193,7 +193,7 @@ test('find_first_last_mention: figur ohne Index → freundlicher Fehler', () => 
     VALUES (?, ?, 'fig_1', 'Anna', 'Anna', ?)
   `).run(BOOK_ID, 'alice@example.com', new Date().toISOString());
 
-  const result = bookChatTools.TOOLS.find_first_last_mention(
+  const result = await bookChatTools.TOOLS.find_first_last_mention(
     { figur_id: 'fig_1' },
     { bookId: BOOK_ID, userEmail: 'alice@example.com' }
   );

@@ -11,13 +11,13 @@ const {
   getPageMotifs,
   loadLektoratCache, saveLektoratCache,
 } = require('../../db/schema');
-const { getPrompts, getBookPrompts, htmlToTextForPrompt, contentHttpError } = require('./shared');
+const { getPrompts, getBookPrompts, htmlToTextForPrompt, contentHttpError, loadOrderedBookContents } = require('./shared');
 const contentStore = require('../../lib/content-store');
 const { resolveProvider, effectiveProviderClass } = require('../../lib/ai');
 const { narrativeLabels } = require('./narrative-labels');
 const { effectiveTextsorte } = require('../../db/textsorte');
 const { lektoratAnalyze, applyLektoratAiOverrides } = require('./lektorat-split');
-const { lastParagraph, firstParagraph, findPreviousPage, findNextPage } = require('./lektorat-context');
+const { lastParagraph, firstParagraph, neighbourPages, isChapterChange } = require('./lektorat-context');
 const { finalizeFehler, effectiveStylisticCap, _runSig } = require('./lektorat-filter');
 const userDictionary = require('../../db/user-dictionary');
 const { MAX_PROMPT_WORDS, dictionaryWordsOnPage, dropDictionaryFindings } = require('./lektorat-dictionary');
@@ -97,6 +97,30 @@ async function prepareLektoratRun(bookId, userEmail, logger) {
 // Kontext, nicht kritisch). `htmlToTextForPrompt` ist Pflicht, nicht Geschmack:
 // die Absatz-Helfer splitten auf `\n{2,}` – aus der einzeiligen Variante können
 // sie keinen Absatz schneiden und liefern stattdessen 600 Zeichen Rohtext.
+// Leere Abschnitte (angelegt, noch ungeschrieben) liefern keinen Auszug; so viele
+// werden in jeder Richtung höchstens übersprungen.
+const NEIGHBOUR_SCAN = 5;
+
+// Nächster Nachbar mit Text in Richtung `offset`: { page, paras } oder null.
+async function _nearestWithText(pages, pageId, offset, neighbourParas) {
+  for (const p of neighbourPages(pages, pageId, offset, NEIGHBOUR_SCAN)) {
+    const paras = await neighbourParas(p);
+    if (paras && (offset < 0 ? paras.last : paras.first)) return { page: p, paras };
+  }
+  return null;
+}
+
+// Seitenliste fürs Lektorat: Buchreihenfolge (inkl. ausgeschlossener Kapitel —
+// geprüft wird jede Seite) und je Seite der Name ihres Kapitels für die
+// Kennzeichnung eines Kapitelwechsels im Nachbarkontext.
+async function loadLektoratPageList(bookId) {
+  const { chMap, pages } = await loadOrderedBookContents(bookId, { includeExcluded: true });
+  return pages.map(p => ({
+    ...p,
+    chapter_name: p.chapter_id ? (String(chMap[p.chapter_id] || '').split(' › ').pop() || null) : null,
+  }));
+}
+
 function makeNeighbourLoader() {
   const cache = new Map();
   const load = async (page) => {
@@ -121,8 +145,9 @@ function _validTypen(run, textsorte) {
   return new Set(run.prompts.lektoratTypen(run.bookSettings?.buchtyp || null, { local: run.local, textsorte }));
 }
 
-// Prüft eine Seite. `pages` = Seitenliste des Buchs (für Nachbarseiten), null
-// ohne Buchkontext. `neighbourParas` aus makeNeighbourLoader(). `chapterNameOf`
+// Prüft eine Seite. `pages` = Seitenliste des Buchs in Buchreihenfolge mit
+// `chapter_name` (für Nachbarseiten, siehe loadLektoratPageList), null ohne
+// Buchkontext. `neighbourParas` aus makeNeighbourLoader(). `chapterNameOf`
 // liefert den Kapitelnamen zu einer chapter_id. `fromPct`/`toPct` nur beim
 // Seiten-Lektorat (feiner Fortschritt über die Teil-Calls); der Batch steuert den
 // Balken über den Seitenzähler.
@@ -163,16 +188,27 @@ async function checkOnePage(run, {
   // Nachbarseiten: letzter Absatz der Vorseite, erster der Folgeseite als
   // Lesekontext. Lokale Provider: komplett überspringen – der Block wird für
   // _isLocal im Prompt ohnehin gedroppt.
+  // Über Kapitelgrenzen hinweg; ein Nachbar aus einem anderen Kapitel trägt
+  // dessen Namen als `previousChapter`/`nextChapter` (Prompt: Kapitelwechsel).
   let previousExcerpt = null;
   let nextExcerpt = null;
+  let previousChapter = null;
+  let nextChapter = null;
+  // Schreibfront: im nicht abgeschlossenen Werk folgt auf diesen Abschnitt kein
+  // Text mehr. Nur feststellbar, wenn die Seitenliste geladen ist.
+  let schreibfront = false;
   if (!local && pages && neighbourParas) {
     neighbourParas.remember?.(pageId, text);
+    const self = { chapter_id: pd.chapter_id };
     const [prev, next] = await Promise.all([
-      neighbourParas(findPreviousPage(pages, pageId, pd.chapter_id)),
-      neighbourParas(findNextPage(pages, pageId, pd.chapter_id)),
+      _nearestWithText(pages, pageId, -1, neighbourParas),
+      _nearestWithText(pages, pageId, +1, neighbourParas),
     ]);
-    previousExcerpt = prev?.last || null;
-    nextExcerpt = next?.first || null;
+    previousExcerpt = prev?.paras.last || null;
+    nextExcerpt = next?.paras.first || null;
+    if (isChapterChange(self, prev?.page)) previousChapter = prev.page.chapter_name || '';
+    if (isChapterChange(self, next?.page)) nextChapter = next.page.chapter_name || '';
+    schreibfront = !bookSettings?.is_finished && !nextExcerpt;
   }
   const neighbour = { text, excerpts: [previousExcerpt, nextExcerpt] };
 
@@ -195,6 +231,10 @@ async function checkOnePage(run, {
     sw: run.stopwords, er: run.erklaerungRule, kr: run.korrekturRegeln,
     stp: bookSettings?.stilprofil || '',
     pe: previousExcerpt, ne: nextExcerpt, cn: chapterName, pn: pd.name, cv: run.cacheVersion, lc: langCode,
+    // Nur gesetzt, wenn zutreffend: Seiten mitten im Kapitel behalten ihren Cache.
+    ...(previousChapter != null ? { pc: previousChapter } : {}),
+    ...(nextChapter != null ? { nc: nextChapter } : {}),
+    ...(schreibfront ? { sf: 1 } : {}),
     bl: hatBelege,
     // Nur gesetzt, wenn die Seite Wörterbuch-Wörter trägt: ein leeres `wb` würde
     // jede bestehende Cache-Zeile ohne Grund invalidieren.
@@ -229,7 +269,7 @@ async function checkOnePage(run, {
         pageName: pd.name, chapterName,
         ...narrativeLabels(bookSettings),
         textsorte,
-        previousExcerpt, nextExcerpt,
+        previousExcerpt, nextExcerpt, previousChapter, nextChapter, schreibfront,
         langCode,
       },
     });
@@ -271,4 +311,4 @@ function progressSincePrevious(pageId, userEmail, r) {
   return lektoratProgress(prev, r.fehler, r.text);
 }
 
-module.exports = { prepareLektoratRun, makeNeighbourLoader, checkOnePage, progressSincePrevious };
+module.exports = { prepareLektoratRun, makeNeighbourLoader, loadLektoratPageList, checkOnePage, progressSincePrevious };

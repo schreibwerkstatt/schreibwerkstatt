@@ -70,6 +70,18 @@ export const wortschatzMethods = {
     return !role || hasMinRole(role, min);
   },
 
+  // aria-label der Kachel: Titel + Kennzahl (bzw. Hinweis ohne Scan) — das
+  // Label ersetzt den Inhalt der role=button-Kachel für Screenreader.
+  overviewLexiconAria() {
+    const app = window.__app;
+    const lex = this.overviewLexicon();
+    const title = app.t('tile.wortschatz');
+    if (!lex) return title;
+    if (!lex.scanned) return title + ': ' + app.t('overview.lexicon.noScan');
+    const unit = app.t(lex.metric === 'mattr' ? 'wortschatz.kpi.mattr' : 'wortschatz.kpi.mtld');
+    return title + ': ' + this.overviewLexNum(lex.value, lex.decimals) + ' ' + unit;
+  },
+
   overviewOpenWortschatz() {
     if (this.overviewCanOpenWortschatz()) window.__app?.toggleWortschatzCard?.();
   },

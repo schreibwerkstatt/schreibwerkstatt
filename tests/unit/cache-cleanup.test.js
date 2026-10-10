@@ -79,9 +79,23 @@ const SEED_STMTS = [
   `INSERT INTO page_checks (page_id, checked_at) VALUES (1, ${STALE})`,
   `INSERT INTO page_checks (page_id, checked_at) VALUES (2, ${FRESH})`,
 
-  `INSERT INTO book_stats_history (book_id, recorded_at) VALUES (1, datetime('now','-400 days'))`,
   `INSERT INTO book_stats_history (book_id, recorded_at) VALUES (1, ${FRESH})`,
 ];
+// book_stats_history: Ausduennung statt TTL. Feste Monate weit vor der
+// 365-Tage-Grenze (2020), damit der Test nicht vom heutigen Datum abhaengt:
+// Buch 1 hat drei Tage im Januar + einen im Februar, Buch 2 zwei Tage im Januar.
+// Erwartet: je (Buch, Monat) bleibt nur der letzte Snapshot.
+const THIN_ROWS = [
+  [1, '2020-01-03'], [1, '2020-01-17'], [1, '2020-01-31'],
+  [1, '2020-02-10'],
+  [2, '2020-01-05'], [2, '2020-01-20'],
+];
+for (const [bid, d] of THIN_ROWS) {
+  SEED_STMTS.push(`INSERT INTO book_stats_history (book_id, recorded_at) VALUES (${bid}, '${d}')`);
+}
+// Juenger als 365 Tage: taeglich erhalten, auch mehrere im selben Monat.
+SEED_STMTS.push(`INSERT INTO book_stats_history (book_id, recorded_at) VALUES (1, date('now','-30 days'))`);
+SEED_STMTS.push(`INSERT INTO book_stats_history (book_id, recorded_at) VALUES (1, date('now','-31 days'))`);
 for (const stmt of SEED_STMTS) db.prepare(stmt).run();
 
 const { runCacheCleanup, POLICIES } = require('../../lib/cache-cleanup');
@@ -139,9 +153,21 @@ test('page_checks: bleibt vollstaendig erhalten (nicht geprunt)', () => {
   assert.deepEqual(rows.map(r => r.page_id), [1, 2]);
 });
 
-test('book_stats_history: 400 Tage alt weg (TTL 365)', () => {
-  const cnt = db.prepare('SELECT COUNT(*) AS c FROM book_stats_history').get().c;
-  assert.equal(cnt, 1);
+test('book_stats_history: aelter als 365 Tage → je Buch und Monat nur der letzte Snapshot', () => {
+  const old = db.prepare(`SELECT book_id, recorded_at FROM book_stats_history
+                           WHERE recorded_at < '2021-01-01' ORDER BY book_id, recorded_at`).all();
+  assert.deepEqual(old.map(r => [r.book_id, r.recorded_at]), [
+    [1, '2020-01-31'], [1, '2020-02-10'], [2, '2020-01-20'],
+  ]);
+});
+
+test('book_stats_history: juengste 365 Tage bleiben taeglich', () => {
+  const recent = db.prepare(`SELECT COUNT(*) AS c FROM book_stats_history
+                              WHERE recorded_at >= date('now','-365 days')`).get().c;
+  assert.equal(recent, 3, 'FRESH + die zwei Tage vor ~einem Monat');
+  const entry = summary.tables.find(t => t.table === 'book_stats_history');
+  assert.equal(entry.kind, 'thin-monthly');
+  assert.equal(entry.removed, 3);
 });
 
 test('summary.totalRemoved >= 6 (eine pro getesteter Tabelle, page_checks ausgenommen)', () => {

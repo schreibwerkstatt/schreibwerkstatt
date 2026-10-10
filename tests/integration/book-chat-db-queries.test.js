@@ -122,29 +122,35 @@ test.after(() => { ctx.cleanup(); });
 
 // ── Katalog ─────────────────────────────────────────────────────────────────
 
-test('list_chapters: Kapitel und Seiten in Leserichtung, Seite ohne Kapitel separat', () => {
-  const r = call('list_chapters');
-  assert.deepEqual(r.chapters.map(c => c.chapter_name), ['Eins', 'Zwei']);
+test('list_chapters: Gliederung in Leserichtung, Abschnitte ohne Kapitel an ihrer Stelle', async () => {
+  const r = await call('list_chapters');
+  // P-ohne steht (position 0) vor den Kapiteln; P-fremdkap (Kapitel aus fremdem
+  // Buch, ausserhalb der Gliederung) hinten als Eintrag ohne Kapitel.
+  assert.deepEqual(r.chapters.map(c => c.chapter_name ?? null), [null, 'Eins', 'Zwei', null]);
+  assert.deepEqual(r.chapters[0].pages.map(p => p[1]), ['P-ohne']);
+  assert.equal(r.chapters[0].depth, 0);
   // Seiten kompakt als Tupel [page_id, page_name, words] (page_format).
   assert.equal(r.page_format, '[page_id, page_name, words]');
-  assert.deepEqual(r.chapters[0].pages.map(p => p[1]), ['P-Eins-a', 'P-Eins-b']);
-  assert.equal(r.chapters[0].words, 13);
-  assert.deepEqual(r.pages_without_chapter.map(p => p[1]), ['P-ohne']);
+  assert.deepEqual(r.chapters[1].pages.map(p => p[1]), ['P-Eins-a', 'P-Eins-b']);
+  assert.equal(r.chapters[1].words, 13);
+  assert.equal(r.chapters[1].depth, 1);
+  assert.equal(r.chapters[1].parent_chapter_id, undefined);
+  assert.equal(r.total_chapters, 2);
+  assert.equal(r.total_entries, 4);
   assert.equal(r.total_pages, 5);
   // Zusammenfassung steht VOR der Kapitelliste (überlebt jeden Schnitt).
   const keys = Object.keys(r);
   assert.ok(keys.indexOf('total_words') < keys.indexOf('chapters'));
 });
 
-test('list_chapters: Paginierung über offset/limit mit next_offset', () => {
-  const r1 = call('list_chapters', { limit: 1 });
-  assert.deepEqual(r1.chapters.map(c => c.chapter_name), ['Eins']);
-  assert.equal(r1.next_offset, 1);
+test('list_chapters: Paginierung über offset/limit mit next_offset', async () => {
+  const r1 = await call('list_chapters', { limit: 2 });
+  assert.deepEqual(r1.chapters.map(c => c.chapter_name ?? null), [null, 'Eins']);
+  assert.equal(r1.next_offset, 2);
   assert.equal(r1.total_chapters, 2);
-  const r2 = call('list_chapters', { offset: 1, limit: 1 });
-  assert.deepEqual(r2.chapters.map(c => c.chapter_name), ['Zwei']);
+  const r2 = await call('list_chapters', { offset: 2, limit: 2 });
+  assert.deepEqual(r2.chapters.map(c => c.chapter_name ?? null), ['Zwei', null]);
   assert.equal(r2.next_offset, undefined);
-  assert.equal(r2.pages_without_chapter, undefined);
 });
 
 test('list_ideen: Kapitelname über Seite oder Kapitel, Kapitel-Filter deckt beide Anker', () => {
@@ -188,13 +194,13 @@ test('count_pronouns per_chapter: Seiten ohne Kapitel unter „(ohne Kapitel)"',
   assert.deepEqual(byName['(ohne Kapitel)'].wir, { narr: 1, dlg: 0 });
 });
 
-test('get_figure_mentions + find_first_last_mention: erste/letzte Seite in Leserichtung', () => {
-  const m = call('get_figure_mentions', { figur_id: 'fig_anna' });
+test('get_figure_mentions + find_first_last_mention: erste/letzte Seite in Leserichtung', async () => {
+  const m = await call('get_figure_mentions', { figur_id: 'fig_anna' });
   assert.equal(m.total_mentions, 4);
-  // ohne Kapitel (position NULL) zuerst, dann Eins vor Zwei
+  // Gliederungs-Reihenfolge: P-ohne (vor den Kapiteln), dann Eins vor Zwei
   assert.equal(m.first_appearance.page_name, 'P-ohne');
   assert.equal(m.last_appearance.page_name, 'P-Zwei');
-  const f = call('find_first_last_mention', { figur_id: 'fig_anna' });
+  const f = await call('find_first_last_mention', { figur_id: 'fig_anna' });
   assert.equal(f.first_appearance.first_offset, 14);
   assert.equal(f.last_appearance.chapter_name, 'Zwei');
 });
@@ -384,11 +390,11 @@ test('list_scenes / list_songs: Figuren- und Orts-Bridges, loc_id-Filter im Buch
   assert.deepEqual(g.songs[0].figuren, [{ fig_id: 'fig_nord', name: 'Anna Nord', kontext_typ: 'singt' }]);
 });
 
-test('find_first_last_mention (Ort): loc_id getrimmt, Buch- und User-Scope', () => {
-  const r = callO('find_first_last_mention', { loc_id: ' loc_hafen ' });
+test('find_first_last_mention (Ort): loc_id getrimmt, Buch- und User-Scope', async () => {
+  const r = await callO('find_first_last_mention', { loc_id: ' loc_hafen ' });
   assert.equal(r.name, 'Hafen');
-  assert.equal(call('find_first_last_mention', { loc_id: 'loc_hafen' }).name, 'Hafen im Nachbarbuch');
-  assert.match(callO('find_first_last_mention', { loc_id: 'loc_hafen' }, V).error, /^Ort nicht gefunden/);
+  assert.equal((await call('find_first_last_mention', { loc_id: 'loc_hafen' })).name, 'Hafen im Nachbarbuch');
+  assert.match((await callO('find_first_last_mention', { loc_id: 'loc_hafen' }, V)).error, /^Ort nicht gefunden/);
 });
 
 test('list_continuity_issues: nur jüngster Check des Users, Figuren mit Freitext-Fallback', () => {

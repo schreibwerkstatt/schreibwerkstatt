@@ -1,12 +1,14 @@
 <!-- Wortschatz: MTLD (ersatzweise MATTR) + Median der übrigen Bücher des Besitzers.
-     Ohne Scan ein Hinweis-Tile. Klick öffnet die Wortschatz-Karte (editor+; für
-     Betrachter reine Anzeige). Logik in book-overview/wortschatz.js. -->
-<template x-if="overviewLexicon()">
+     Ohne Scan ein Hinweis-Tile — nur für alle, die die Wortschatz-Karte öffnen kann;
+     einem Betrachter böte es eine Handlung, die er nicht hat. Klick öffnet die
+     Wortschatz-Karte (editor+; für Betrachter reine Anzeige). Logik in
+     book-overview/wortschatz.js. -->
+<template x-if="overviewLexicon() && (overviewLexicon().scanned || overviewCanOpenWortschatz())">
   <div class="overview-tile"
        :class="{ 'internal-link': overviewCanOpenWortschatz(), 'overview-tile--cta': !overviewLexicon().scanned }"
        @click="overviewOpenWortschatz()"
        :data-tip="overviewCanOpenWortschatz() ? $app.t('overview.lexicon.open') : null"
-       :aria-label="$app.t('tile.wortschatz')">
+       :aria-label="overviewLexiconAria()">
     <div class="overview-tile-head">
       <span class="overview-tile-label" x-text="$app.t('tile.wortschatz')"></span>
       <span class="overview-tile-median" x-show="overviewLexicon().stale" x-cloak

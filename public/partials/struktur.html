@@ -55,7 +55,8 @@
 
   <div x-show="!strukturHasRows" class="muted-msg muted-msg--spaced" x-text="$app.t('struktur.empty')"></div>
 
-  <table class="data-table struktur-table" x-show="strukturHasRows"
+  <div class="table-scroll" x-show="strukturHasRows">
+  <table class="data-table struktur-table"
          x-data="sortableTable({
            rows: () => strukturRows(),
            defaultKey: '_rank',
@@ -114,6 +115,7 @@
       </template>
     </tbody>
   </table>
+  </div>
 
   <!-- Detail des offenen Befunds. Bewusst UNTER der Tabelle statt als
        aufgeklappte Zeile: die Regel-Liste ist mehrzeilig und sprengt jede

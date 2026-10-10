@@ -108,3 +108,27 @@ test('valueForIso wird pro Kalendertag genau einmal gefragt', () => {
   assert.ok([...seen.values()].every(n => n === 1), 'kein Tag doppelt abgefragt');
   assert.equal(seen.size, (STREAK_WEEKS - 1) * 7 + 2 + 1, 'genau die Tage bis heute');
 });
+
+// ── Browser-TZ ≠ App-TZ ─────────────────────────────────────────────────────
+// Browser in Kiritimati (UTC+14), App in Zuerich: 2026-05-20T21:30Z ist in der
+// App noch Mittwoch, der 20. — im Browser schon Donnerstag. Raster, Wochentag
+// und „N Tage zurueck" muessen dem App-Datum folgen.
+test('TZ: Raster und localIsoDaysAgo folgen dem App-Datum, nicht der Browser-TZ', async () => {
+  const { configureAppTimezone, appTimezone, localIsoDaysAgo: daysAgo } = await import('../../public/js/utils.js');
+  const prevTz = process.env.TZ, prevApp = appTimezone;
+  process.env.TZ = 'Pacific/Kiritimati';
+  configureAppTimezone('Europe/Zurich');
+  try {
+    const now = new Date(Date.UTC(2026, 4, 20, 21, 30));
+    assert.equal(daysAgo(0, now), '2026-05-20');
+    assert.equal(daysAgo(1, now), '2026-05-19');
+    assert.equal(daysAgo(30, now), '2026-04-20');
+    const out = buildStreakGrid({ valueForIso: () => 1, todayLocal: now });
+    const last = out.weeks[STREAK_WEEKS - 1];
+    assert.equal(last[2].iso, '2026-05-20', 'Mittwoch-Zeile traegt heute');
+    assert.equal(last[3].future, true, 'Donnerstag ist in der App-Zeit noch Zukunft');
+  } finally {
+    if (prevTz === undefined) delete process.env.TZ; else process.env.TZ = prevTz;
+    configureAppTimezone(prevApp);
+  }
+});

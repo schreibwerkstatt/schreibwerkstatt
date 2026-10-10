@@ -287,6 +287,38 @@ test('Nachbarkontext: ohne Auszuege kein Block, lokal nie', () => {
   assert.ok(!local.includes('<nachbarkontext>'));
 });
 
+// Nachbarn aus einem anderen Kapitel tragen ihr Kapitel im Label und die
+// Freigabe des harten Schnitts — sonst läse das Modell den Kapitelwechsel als Bruch.
+test('Nachbarkontext: Auszug aus anderem Kapitel ist als Kapitelwechsel gekennzeichnet', () => {
+  prompts.configurePrompts(cfg, 'claude');
+  const p = prompts.buildLektoratPrompt(SAMPLE, {
+    langCode: 'de', previousExcerpt: 'VORHER', nextExcerpt: 'NACHHER', previousChapter: 'Ankunft', nextChapter: null,
+  });
+  assert.ok(p.includes('Letzter Absatz des vorherigen Kapitels «Ankunft» (Kapitelwechsel)'));
+  assert.ok(p.includes('Erster Absatz des nächsten Abschnitts'), 'gleiches Kapitel bleibt «Abschnitt»');
+  assert.ok(p.includes('an dieser Grenze normal und kein Bruch'));
+  const ohne = prompts.buildLektoratPrompt(SAMPLE, { langCode: 'de', previousExcerpt: 'VORHER', nextExcerpt: 'NACHHER' });
+  assert.ok(!ohne.includes('Kapitelwechsel'), 'ohne Kapitelwechsel keine Kennzeichnung');
+});
+
+// Schreibstelle: im unfertigen Werk ohne Folgetext ist die angefangene letzte
+// Einheit kein Befund — in allen Pässen, die sie werten könnten.
+test('Schreibstelle: angefangene letzte Szene ist kein Befund (Kombi, Stil, Objektiv), lokal nie', () => {
+  prompts.configurePrompts(cfg, 'claude');
+  const roman = prompts.buildLektoratPrompt(SAMPLE, { langCode: 'de', buchtyp: 'roman', schreibfront: true });
+  assert.ok(roman.includes('SCHREIBSTELLE') && roman.includes('die letzte Szene'));
+  assert.ok(roman.includes('noch in «szenen»'));
+  const fach = prompts.buildStilLektoratPrompt(SAMPLE, { langCode: 'de', buchtyp: 'sachbuch', schreibfront: true });
+  assert.ok(fach.includes('der letzte Gedankengang') && !fach.includes('noch in «szenen»'));
+  const obj = prompts.buildObjektivLektoratPrompt(SAMPLE, { langCode: 'de', schreibfront: true });
+  assert.ok(obj.includes('KEIN «grammatik»-Befund'));
+  assert.ok(!prompts.buildLektoratPrompt(SAMPLE, { langCode: 'de' }).includes('SCHREIBSTELLE'));
+  assert.ok(!prompts.buildObjektivLektoratPrompt(SAMPLE, { langCode: 'de' }).includes('SCHREIBSTELLE'));
+  prompts.configurePrompts(cfg, 'ollama');
+  assert.ok(!prompts.buildLektoratPrompt(SAMPLE, { langCode: 'de', schreibfront: true }).includes('SCHREIBSTELLE'));
+  prompts.configurePrompts(cfg, 'claude');
+});
+
 // Die Stil-Obergrenze im Prompt folgt `stylisticCap` (Server: ai.lektorat_stylistic_cap).
 // Ein fest verdrahteter Wert liefe gegen den Handler-Backstop auseinander, der nach
 // Textposition kappt — dann fielen die guten Funde am Seitenende weg.

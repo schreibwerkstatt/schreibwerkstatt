@@ -10,13 +10,26 @@
   flex-wrap: wrap;
   gap: var(--space-xs);
   align-items: center;
+  /* Die Reihe sitzt meist als Flex-Item in einer Meta-Zeile: ohne min-width: 0
+     wäre ihre Mindestbreite der breiteste nowrap-Chip, das max-width: 100% des
+     Chips griffe nie, und ein langer Titel schöbe die Karte in die Breite. */
+  min-width: 0;
+  max-width: 100%;
 }
+
+/* Reihe mit frei getexteten Titeln beliebiger Länge (Beats): Chips brechen um,
+   statt den Titel abzuschneiden. Sonst gilt die einzeilige Ellipsis. */
+.entity-refs--wrap > .entity-ref { min-width: 0; white-space: normal; }
+.entity-refs--wrap .entity-ref__label { overflow-wrap: anywhere; }
 
 .entity-ref {
   display: inline-flex;
   align-items: baseline;
   gap: var(--space-2xs);
   max-width: 100%;
+  /* Als Flex-Item (Beleg-Zeile, Begegnung, Meta-Zeile) darf der Chip unter
+     seine nowrap-Inhaltsbreite schrumpfen; das Label kürzt dann mit Ellipsis. */
+  min-width: 0;
   margin: 0;
   padding: 0.15em 0.5em;
   border: 1px solid var(--color-border);

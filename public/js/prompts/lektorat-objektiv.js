@@ -30,6 +30,9 @@ export function buildObjektivLektoratPrompt(text, {
   langCode = 'de',
   buchtyp = null,
   textsorte = null,
+  // Werk nicht abgeschlossen, hinter dem Abschnitt folgt kein Text (siehe
+  // prompts/lektorat-nachbar.js): der letzte Satz kann mitten im Schreiben enden.
+  schreibfront = false,
 } = {}) {
   const en = langCode === 'en';
   // Objektiv-Enum aus dem Buchtyp-Profil: in den Fach-Profilen bleiben nur
@@ -43,6 +46,9 @@ export function buildObjektivLektoratPrompt(text, {
   if (chapterName) metaParts.push(en ? `Chapter: «${chapterName}»` : `Kapitel: «${chapterName}»`);
   if (pageName)    metaParts.push(en ? `Section: «${pageName}»` : `Abschnitt: «${pageName}»`);
   const metaBlock = metaParts.length ? `\n${en ? 'Location in the book' : 'Verortung im Buch'}: ${metaParts.join(' · ')}\n` : '';
+  const schreibfrontBlock = !schreibfront ? '' : en
+    ? '\nWRITING POSITION: the work is unfinished and this section is where the author is currently writing. If the final sentence breaks off mid-sentence, that is work in progress, NOT a grammar finding.\n'
+    : '\nSCHREIBSTELLE: Das Werk ist nicht abgeschlossen, an diesem Abschnitt wird gerade geschrieben. Bricht der letzte Satz mitten ab, ist das der Schreibstand und KEIN «grammatik»-Befund.\n';
 
   const typEnum = objektivTypen.join('|');
   const dedupPrio = typPrioritaetString(objektivTypen);
@@ -143,7 +149,7 @@ SELBSTKONTROLLE (vor dem Antworten):
   return `<aufgabe>
 ${aufgabe}
 </aufgabe>
-${metaBlock}${puritaetBlock}
+${metaBlock}${schreibfrontBlock}${puritaetBlock}
 ${dedupBlock}
 <output_format>
 ${schemaBlock}

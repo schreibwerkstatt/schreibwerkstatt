@@ -138,3 +138,72 @@ test('geerbte Referenz: gleiches Label, Zusatz „Strang", Herkunft in der Vorsc
   await expect(pop).toBeVisible();
   await expect(pop.locator('.entity-ref-preview__meta')).toContainText('Vom Strang geerbt');
 });
+
+test('Handy: lange Beat-Titel in einer Meta-Zeile brechen um statt die Karte zu verbreitern', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await bootApp(page);
+  await selectSeededBook(page);
+  const long = 'Grete entdeckt im Morgengrauen, dass der Untermieter längst ausgezogen ist und die Miete trotzdem weiterläuft';
+  await page.evaluate((title) => {
+    const box = document.createElement('div');
+    box.id = 'entity-ref-row-probe';
+    box.style.width = '320px';
+    // Gleiche Struktur wie plot-backlinks.html (mit Wrap) und eine Reihe ohne.
+    box.innerHTML = ['entity-refs entity-refs--wrap', 'entity-refs'].map(cls => `
+      <div class="entity-meta-row">
+        <span class="entity-meta-label">Im Plot</span>
+        <span class="${cls}">
+          <button type="button" class="entity-ref"></button>
+        </span>
+      </div>`).join('');
+    for (const b of box.querySelectorAll('.entity-ref')) {
+      b.setAttribute('x-entity-ref', `{ type: 'beat', id: 1, label: ${JSON.stringify(title)} }`);
+    }
+    document.querySelector('main, body').prepend(box);
+    Alpine.initTree(box);
+  }, long);
+
+  const rows = page.locator('#entity-ref-row-probe .entity-meta-row');
+  for (const i of [0, 1]) {
+    const [rowW, chipRight, rowRight] = await rows.nth(i).evaluate(r => {
+      const c = r.querySelector('.entity-ref').getBoundingClientRect();
+      return [r.scrollWidth - r.clientWidth, c.right, r.getBoundingClientRect().right];
+    });
+    expect(rowW).toBe(0);
+    expect(chipRight).toBeLessThanOrEqual(rowRight + 0.5);
+  }
+  // Wrap-Reihe: der ganze Titel steht da, mehrzeilig.
+  const wrapLabel = rows.nth(0).locator('.entity-ref__label');
+  await expect(wrapLabel).toHaveText(long);
+  expect(await wrapLabel.evaluate(el => el.scrollWidth <= el.clientWidth && el.getClientRects().length >= 1
+    && el.getBoundingClientRect().height > parseFloat(getComputedStyle(el).lineHeight) * 1.5)).toBe(true);
+  // Standard-Reihe: einzeilig mit Ellipsis.
+  expect(await rows.nth(1).locator('.entity-ref__label').evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
+});
+
+test('abgeschnittenes Label ohne Vorschau zeigt den vollen Titel als Tooltip', async ({ page }) => {
+  await bootApp(page);
+  await selectSeededBook(page);
+  const long = 'Ein Beat mit einem Titel, der in einem schmalen Kasten niemals ganz Platz hat';
+  await page.evaluate((title) => {
+    const box = document.createElement('div');
+    box.id = 'entity-ref-tip-probe';
+    box.className = 'entity-refs';
+    box.style.width = '160px';
+    for (const label of [title, 'Kurz']) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'entity-ref';
+      b.setAttribute('x-entity-ref', `{ type: 'beat', id: 1, label: ${JSON.stringify(label)} }`);
+      box.appendChild(b);
+    }
+    document.querySelector('main, body').prepend(box);
+    Alpine.initTree(box);
+  }, long);
+  const refs = page.locator('#entity-ref-tip-probe .entity-ref');
+  await refs.nth(0).hover();
+  await expect(refs.nth(0)).toHaveAttribute('data-tip', long);
+  await expect(page.locator('.tip-visible')).toContainText(long);
+  await refs.nth(1).hover();
+  await expect(refs.nth(1)).not.toHaveAttribute('data-tip', /./);
+});

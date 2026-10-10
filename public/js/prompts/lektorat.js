@@ -61,6 +61,7 @@ import {
   _buildWoerterbuchBlock,
 } from './blocks.js';
 import { textsorteLabel } from './textsorten.js';
+import { _buildNachbarBlocks } from './lektorat-nachbar.js';
 import { STOPWORDS, ERKLAERUNG_RULE, KORREKTUR_REGELN } from './core.js';
 
 // ── Das «szenen»-Feld, je Bewertungseinheit ───────────────────────────────────
@@ -125,6 +126,13 @@ function _buildLektoratPromptBody(text, textLabel, {
   textsorte = null,
   previousExcerpt = null,
   nextExcerpt = null,
+  // Name des Nachbarkapitels, wenn der Auszug aus einem ANDEREN Kapitel stammt
+  // (Kapitelwechsel); null = gleiches Kapitel bzw. kein Auszug.
+  previousChapter = null,
+  nextChapter = null,
+  // Werk nicht abgeschlossen und hinter diesem Abschnitt folgt kein Text mehr:
+  // der Abschnitt ist die aktuelle Schreibstelle (routes/jobs/lektorat-page.js).
+  schreibfront = false,
   // Mengen-Obergrenze für stilistische Funde DIESES Abschnitts; der Server reicht die
   // nach Textlänge skalierte Zahl durch (routes/jobs/lektorat-filter.js#effectiveStylisticCap),
   // dessen Backstop denselben Wert kappt. Steht im User-Prompt neben dem Seitentext,
@@ -234,23 +242,10 @@ function _buildLektoratPromptBody(text, textLabel, {
   // gewollte Wort in seiner «korrektur» ebenso wenig «verbessern».
   const woerterbuchBlock = woerterbuch.length ? `\n${_buildWoerterbuchBlock(woerterbuch, langCode)}\n` : '';
 
-  // Nachbarseiten-Auszüge: reiner Lesekontext für Übergänge und die Stil-/
-  // Szenenbewertung – lokal gedroppt (kleine Modelle prüfen solche Fragmente
-  // trotz Verbot mit). Der Server verwirft zusätzlich Findings, deren «original»
-  // nur in einem Auszug steht (routes/jobs/lektorat-context.js#dropNeighbourFindings).
-  const fortsetzung = !nextExcerpt
-    ? 'z.B. ob der Abschnittsanfang sauber an das Vorherige anschliesst.'
-    : fach
-    ? 'z.B. ob ein Gedankengang im nächsten Abschnitt weitergeht. Einen Gedankengang, der erkennbar fortgesetzt wird, nicht als unvollständig oder abgebrochen bewerten.'
-    : einheit === EINHEIT_EINTRAG
-    ? 'z.B. ob ein Datum oder ein Thema abgerissen ist. Ein Eintrag, der mitten im Satz abbricht, ist ein Befund – ein Eintrag, der ohne Überleitung zum nächsten weitergeht, nicht: das ist im Tagebuch der Normalfall.'
-    : 'z.B. ob eine Szene im nächsten Abschnitt weitergeht oder ein scheinbar abrupter Schluss bewusst offen bleibt. Eine Szene, die erkennbar fortgesetzt wird, nicht als unvollständig oder abgebrochen bewerten.';
-  const nachbarBlock = (_isLocal || (!previousExcerpt && !nextExcerpt)) ? '' : `
-<nachbarkontext>
-Die folgenden Auszüge gehören NICHT zum geprüften Abschnitt. Sie zeigen nur, wie der Text ${[previousExcerpt && 'davor endet', nextExcerpt && 'danach weitergeht'].filter(Boolean).join(' und ')} – als Lesekontext für Übergänge (Tempus, Perspektive, Pronomen, Anschluss) und für «stilanalyse»${fach ? '' : '/«szenen»'}: ${fortsetzung}
-PFLICHT: Nichts aus diesen Auszügen bewerten oder in «fehler» aufnehmen – jedes «original» stammt ausschliesslich aus <originaltext>. Den Inhalt der Auszüge in «stilanalyse»/«fazit» nicht nacherzählen.
-${previousExcerpt ? `<vorherige_seite label="Letzter Absatz des vorherigen Abschnitts">\n${previousExcerpt}\n</vorherige_seite>\n` : ''}${nextExcerpt ? `<naechste_seite label="Erster Absatz des nächsten Abschnitts">\n${nextExcerpt}\n</naechste_seite>\n` : ''}</nachbarkontext>
-`;
+  const { nachbarBlock, schreibfrontBlock } = _buildNachbarBlocks({
+    previousExcerpt, nextExcerpt, previousChapter, nextChapter, schreibfront,
+    fach, eintrag: einheit === EINHEIT_EINTRAG, local: _isLocal,
+  });
 
   // Typ-Enum des Laufs. Der lokale Modus reduziert zusätzlich (kein show_vs_tell,
   // passiv, perspektivbruch, tempuswechsel – diese Typen verlangen nuanciertes
@@ -499,7 +494,7 @@ ${journal ? _buildJournalStilBlock(typen) : fach ? _buildFachStilBlock(typen) : 
 ${fach ? _buildFachWiederholungBlock(stopwords) : _buildWiederholungBlock(stopwords)}
 ${aktiv('schwaches_verb') ? _buildSchwacheVerbenBlock() : ''}
 ${_buildFuellwortBlock()}
-${spezialBlocks}${figurenBlock}${beziehungenBlock}${orteBlock}${motivBlock}${belegBlock}${woerterbuchBlock}${nachbarBlock}
+${spezialBlocks}${figurenBlock}${beziehungenBlock}${orteBlock}${motivBlock}${belegBlock}${woerterbuchBlock}${nachbarBlock}${schreibfrontBlock}
 ${selbstkontrollBlock}
 <originaltext label="${textLabel.replace(/:\s*$/, '')}">
 ${text}
