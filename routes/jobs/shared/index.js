@@ -67,6 +67,7 @@ module.exports = {
   cleanPageTextForAi: ai.cleanPageTextForAi,
 
   loadOrderedBookContents: loader.loadOrderedBookContents,
+  idMapsFromContents: loader.idMapsFromContents,
   loadPageContents: loader.loadPageContents,
   groupByChapter: loader.groupByChapter,
   buildSinglePassBookText: loader.buildSinglePassBookText,

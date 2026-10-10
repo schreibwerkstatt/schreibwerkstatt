@@ -35,12 +35,13 @@ Das Radar ist kein eigener Menüpunkt, sondern der Tab „Doppelungen" der Buchl
 - **Index fehlt / veraltet:** die Karte baut ihn selbst (`/jobs/embed-index`). `staleCount` > 0 → Hinweis „seit dem letzten Index-Lauf geändert"; ist der Index neuer als `indexedAt` des Ergebnisses → Hinweis „neu prüfen".
 - **Gespeichertes Ergebnis:** Paare mit einer Seite, die nicht mehr in der Navigationsliste des Buchs steht, blendet die Karte aus. Namen kommen zur Lesezeit aus Nav-Store bzw. Figuren-Katalog.
 - **Passagen** stehen eingeklappt auf fünf Zeilen, „Ganze Passage" klappt auf.
+- **Zusammenführen** (nur Figuren-Paare) klappt eine Richtungswahl auf («welche Figur bleibt?»); nach Bestätigung läuft der Figuren-Merge (`POST /figures/:book_id/merge` mit `source_id`/`target_id`, editor-ACL, Merge-Kern [db/entity-merge.js](../db/entity-merge.js), Client-Weg [book/figur-merge.js](../public/js/book/figur-merge.js)). Gemergt wird über die Zeilen-IDs des Laufs, nicht über die `fig_id` — die vergibt jede Komplettanalyse neu. Name und Kurzname der Quelle werden dauerhafte Aliasse des Ziels ([komplett.md](komplett.md) „Manuelles Zusammenführen"); alle Paare mit der Quelle verschwinden sofort aus der Liste.
 - **Ignorieren** speichert das Paar (`POST /redundancy/:book_id/dismissals`, normiert a < b, beide Anker müssen zum Buch bzw. zu den Figuren des Users gehören) und nimmt es sofort aus der Liste. „wieder anzeigen" löscht alle ignorierten Paare des Buchs; sie erscheinen ab dem nächsten Lauf wieder.
 
 ## Datenmodell
 
 - `redundancy_runs` — PK (`book_id`, `user_email`), CASCADE mit Buch und Konto. Reine Ableitung.
-- `redundancy_dismissals` — `kind` `page|figure` mit XOR-Ankern `page_a_id/page_b_id` bzw. `figure_a_id/figure_b_id`, CHECK auf a < b, Eindeutigkeit über partielle Unique-Indexe. CASCADE auf alle Anker: wird eine Seite gelöscht oder eine Figur von der Komplettanalyse neu angelegt, verfällt das Paar.
+- `redundancy_dismissals` — `kind` `page|figure` mit XOR-Ankern `page_a_id/page_b_id` bzw. `figure_a_id/figure_b_id`, CHECK auf a < b, Eindeutigkeit über partielle Unique-Indexe. CASCADE auf alle Anker: wird eine Seite gelöscht oder eine Figur von der Komplettanalyse neu angelegt, verfällt das Paar. Ein Figuren-Merge schreibt die Paare der Quelle aufs Ziel um (das Paar Quelle↔Ziel fällt weg).
 
 ## Tests
 

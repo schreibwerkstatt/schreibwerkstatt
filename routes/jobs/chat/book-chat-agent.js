@@ -68,6 +68,16 @@ function _toolResultCapChars(maxIter, aiCfg) {
   return Math.max(4000, Math.floor(aiCfg.inputBudgetChars / (maxIter * 6)));
 }
 
+// Deckel pro Werkzeug-Runde. Der Prompt fordert gebündelte Aufrufe (mehrere
+// get_chapter_text in einer Runde) — ungedeckelt hängt eine einzige Runde mit vielen
+// Volltexten aber mehr an, als das Fenster trägt, und erst der NÄCHSTE Call merkt
+// es. Zahl: genug für breites Bündeln, nicht für einen Rundumschlag. Summe: ein
+// Viertel des Input-Budgets, mindestens zwei volle Einzelergebnisse.
+const AGENT_MAX_TOOLS_PER_ROUND = 8;
+function _roundResultCapChars(aiCfg, toolResultCap) {
+  return Math.max(toolResultCap * 2, Math.floor((aiCfg.inputBudgetChars || 0) * 0.25));
+}
+
 // final_answer-Tool-Use auswerten: Zitate validieren (Beweisspur, nicht blockierend),
 // toolLog-Eintrag schreiben und den antwort-Envelope zurückgeben. Geteilt zwischen
 // der regulären Loop-Terminierung und dem erzwungenen Synthese-Turn.
@@ -185,8 +195,8 @@ const runBookChatJobAgent = makeAgenticChatJob({
 
   async prepare({ session, userEmail, aiCfg, logger, jobSignal, message, history }) {
     const {
-      buildBookChatAgentSystemPrompt, BOOK_CHAT_TOOLS, BOOK_CHAT_SLIM_TOOL_NAMES, BOOK_CHAT_FORCE_FINAL_INSTRUCTION,
-      BOOK_CHAT_OUTSIDE_WORLD_RULE, BOOK_CHAT_BUDGET_FINAL_INSTRUCTION,
+      buildBookChatAgentSystemPrompt, buildBookChatPreContext, BOOK_CHAT_TOOLS, BOOK_CHAT_SLIM_TOOL_NAMES,
+      BOOK_CHAT_FORCE_FINAL_INSTRUCTION, BOOK_CHAT_OUTSIDE_WORLD_RULE, BOOK_CHAT_BUDGET_FINAL_INSTRUCTION,
     } = await getPrompts(userEmail);
     const figuren = getFiguren(session.book_id, userEmail);
     const review  = getLatestReview(session.book_id, userEmail);
@@ -224,16 +234,21 @@ const runBookChatJobAgent = makeAgenticChatJob({
     const systemPrompt = buildBookChatAgentSystemPrompt(
       session.book_name || '', figuren, review, bookChatSys, maxToolIter,
       {
-        passages: preContext?.hits || [], semantic: embOn, toolNames: tools.map(t => t.name),
+        semantic: embOn, toolNames: tools.map(t => t.name),
         figurenMaxChars, welt, weltfaktenMaxChars,
       },
     );
+    // Erst-Kontext: pro Frage andere Bytes — darum NICHT im System-Prompt, sondern als
+    // Textblock vor der Frage in deren User-Nachricht (userPreamble). So bleiben
+    // Werkzeuge + System + Historie ein stabiler Cache-Präfix über die Turns.
+    const userPreamble = `${buildBookChatPreContext(preContext?.hits || [])}\n\n=== FRAGE ===`;
     // Aussenwelt-Regel an den stabilen Block 1 (gecacht, buch-unabhängig): der
     // Buch-Chat hat keine Web-Suche und verweist auf den Recherche-Chat.
     if (BOOK_CHAT_OUTSIDE_WORLD_RULE && systemPrompt[0]?.text) {
       systemPrompt[0] = { ...systemPrompt[0], text: `${systemPrompt[0].text}\n\n${BOOK_CHAT_OUTSIDE_WORLD_RULE}` };
     }
     const toolResultCap = _toolResultCapChars(maxToolIter, aiCfg);
+    const roundResultCapChars = _roundResultCapChars(aiCfg, toolResultCap);
     const inputTokenCap = _bookChatInputTokenCap();
     logger.info(`Werkzeugsatz: ${toolSet} (${tools.length} Werkzeuge), max ${maxToolIter} Iterationen, Provider=${provider}/${providerClass(provider, { userEmail })}.`);
     logger.info(`System-Prompt: ${systemPrompt.reduce((n, b) => n + (b.text?.length || 0), 0)} Zeichen `
@@ -247,6 +262,10 @@ const runBookChatJobAgent = makeAgenticChatJob({
       tokenBudget: _bookChatTokenBudget(aiCfg),
       toolResultCap,
       inputTokenCap,
+      maxToolsPerRound: AGENT_MAX_TOOLS_PER_ROUND,
+      roundResultCapChars,
+      userPreamble,
+      cacheHistory: true,
       forceFinalInstruction: BOOK_CHAT_FORCE_FINAL_INSTRUCTION,
       inputCapInstruction: BOOK_CHAT_BUDGET_FINAL_INSTRUCTION,
       ctx: {

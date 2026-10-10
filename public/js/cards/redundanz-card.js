@@ -21,6 +21,7 @@ export function registerRedundanzCard() {
     redundanzOpen: {},           // aufgeklappte Passagen, key = Paar + Seite
     redundanzDismissedCount: 0,
     redundanzBusyKey: null,
+    redundanzMergeKey: null,     // Figuren-Paar mit offener Richtungswahl (Zusammenführen)
     redundanzIndexing: false,
     redundanzIndexProgress: 0,
     _redundanzPollTimer: null,
@@ -48,6 +49,7 @@ export function registerRedundanzCard() {
         ctx.redundanzOpen = {};
         ctx.redundanzDismissedCount = 0;
         ctx.redundanzBusyKey = null;
+        ctx.redundanzMergeKey = null;
         ctx.redundanzIndexing = false;
         ctx.redundanzIndexProgress = 0;
       };

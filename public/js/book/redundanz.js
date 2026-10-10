@@ -10,6 +10,7 @@ import { startPoll } from '../cards/job-helpers.js';
 import { tRaw } from '../i18n.js';
 import { tzOpts } from '../utils/date.js';
 import { fetchJson } from '../utils/net.js';
+import { mergeFigurPair, figurMergeMessage } from './figur-merge.js';
 
 // Fallback-Bänder (bge-m3-Cosinus), falls /config noch nicht geladen ist. Die
 // massgeblichen Werte stehen in Alpine.store('config').redundancyThresholds
@@ -342,5 +343,46 @@ export const redundanzMethods = {
   // nicht-triviale Signal; duplicate = namensgleich/-überlappend).
   redundanzDupeKindLabel(kind) {
     return tRaw('redundanz.fig.kind.' + (kind === 'alias' ? 'alias' : 'duplicate'));
+  },
+
+  // Zusammenführen eines Figuren-Paars ──────────────────────────────────────
+  // Der Knopf klappt eine Richtungswahl auf («welche Figur bleibt?»); erst die
+  // Wahl löst Bestätigung + Merge aus (book/figur-merge.js). Gemergt wird über die
+  // Zeilen-IDs des Laufs (a_id/b_id), nicht über die fig_id — die vergibt jede
+  // Komplettanalyse neu.
+  toggleRedundanzMerge(pair) {
+    const key = pairKey('figure', pair);
+    this.redundanzMergeKey = this.redundanzMergeKey === key ? null : key;
+  },
+  redundanzMergeOpen(pair) { return this.redundanzMergeKey === pairKey('figure', pair); },
+
+  async redundanzMergeKeep(pair, keepSide) {
+    const bookId = Alpine.store('nav').selectedBookId;
+    if (!bookId || !this.redundanzResult || this.redundanzBusyKey) return;
+    const keep = keepSide === 'a' ? 'a' : 'b';
+    const drop = keep === 'a' ? 'b' : 'a';
+    const side = (s) => ({ rowId: pair[s + '_id'], name: this.redundanzFigurName(pair[s + '_fig_id'], pair[s + '_name']) });
+    const source = side(drop), target = side(keep);
+    const key = pairKey('figure', pair);
+    this.redundanzBusyKey = key;
+    try {
+      const data = await mergeFigurPair(bookId, source, target);
+      if (!data || String(Alpine.store('nav').selectedBookId) !== String(bookId)) return;
+      // Die Quelle gibt es nicht mehr: jedes Paar mit ihr ist erledigt.
+      const gone = source.rowId;
+      const f = this.redundanzResult.figures || {};
+      const pairs = (f.pairs || []).filter(p => p.a_id !== gone && p.b_id !== gone);
+      this.redundanzResult = {
+        ...this.redundanzResult,
+        figures: { ...f, pairs, totalFound: Math.max(0, (f.totalFound || 0) - ((f.pairs || []).length - pairs.length)) },
+      };
+      this.redundanzMergeKey = null;
+      this.redundanzStatus = figurMergeMessage(data, source, target);
+    } catch (e) {
+      console.error('[redundanz] zusammenführen:', e);
+      this.redundanzStatus = e.message || tRaw('redundanz.mergeError');
+    } finally {
+      this.redundanzBusyKey = null;
+    }
   },
 };

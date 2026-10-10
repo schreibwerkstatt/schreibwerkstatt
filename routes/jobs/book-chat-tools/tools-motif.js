@@ -117,7 +117,7 @@ function tool_get_motif_occurrences(input, ctx) {
   const motif = _findMotifByIdOrName(input, ctx);
   if (!motif) {
     return {
-      error: 'Motiv nicht gefunden',
+      error: 'Motiv nicht gefunden', errorKey: 'chat.toolError.notFound',
       hint: 'Per motif_id oder motif_name (exakt oder Substring, case-insensitive) suchen — IDs/Namen aus get_motifs.',
     };
   }

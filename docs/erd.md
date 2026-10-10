@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 320, 177 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram` + `search_meta`).
+Stand: Schema-Version 321, 178 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -254,6 +254,7 @@ erDiagram
   figures ||--o{ draft_figures           : "imported as"
   figures ||--o| figure_ages             : "age index"
   figures ||--o{ figure_age_belege       : "age evidence"
+  figures ||--o{ figure_aliases          : "alias"
 
   locations ||--o{ scene_locations       : in
   locations ||--o{ location_figures      : has
@@ -849,6 +850,15 @@ erDiagram
     INTEGER stale        "1 = in letzter Komplettanalyse nicht mehr erkannt; Reconcile behält id + markiert statt zu löschen"
     INTEGER manually_edited "0|1, Autor hat Stammdaten im Katalog-PUT geaendert/angelegt → Analyse ueberschreibt kuratierte Felder + Eigenschaften nicht"
     TEXT    ki_name      "Name aus der letzten Komplettanalyse; Cross-Run-Match laeuft ueber COALESCE(ki_name, name)"
+    TEXT    ki_geschlecht "Geschlecht aus der letzten Komplettanalyse; Indizien-Vergleich bei manually_edited=1"
+    TEXT    ki_geburtstag "Geburtsdatum aus der letzten Komplettanalyse; Indizien-Vergleich bei manually_edited=1"
+  }
+  figure_aliases {
+    INTEGER id         PK
+    INTEGER figure_id  FK "CASCADE"
+    INTEGER book_id    FK "CASCADE"
+    TEXT    alias      "Anzeigeform, UNIQUE(figure_id, alias); beim Merge aus Name/Kurzname der Quelle"
+    TEXT    created_at
   }
   figure_tags {
     INTEGER figure_id PK,FK
@@ -1122,6 +1132,7 @@ erDiagram
     TEXT    result_json "vollständiges Job-Result (vorschlaege oder { konflikte, fazit })"
     TEXT    model
   }
+  figures ||--o{ figure_aliases : "alias (CASCADE)"
   figures ||--o| figure_ages : "age index (CASCADE)"
   figures ||--o{ figure_age_belege : "age evidence (CASCADE)"
   books ||--o{ figure_age_scans : "scan head (CASCADE)"

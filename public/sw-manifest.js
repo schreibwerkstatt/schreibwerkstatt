@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "5c8ff04166734cf3";
+self.__SHELL_BUILD = "4215a48928a25378";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -266,9 +266,11 @@ self.__SHELL_MANIFEST = [
   "/js/book/erzaehlprofil.js",
   "/js/book/export.js",
   "/js/book/fehler-heatmap.js",
+  "/js/book/figur-merge.js",
   "/js/book/figur-typen.js",
   "/js/book/figuren-alter.js",
   "/js/book/figuren-lebenslauf.js",
+  "/js/book/figuren-pflege.js",
   "/js/book/figuren-presence.js",
   "/js/book/figuren.js",
   "/js/book/finetune-export.js",
@@ -553,6 +555,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/focus/viewport.js",
   "/js/editor/lektorat-evidence.js",
   "/js/editor/lektorat.js",
+  "/js/editor/notebook/block-ids.js",
   "/js/editor/notebook/card.js",
   "/js/editor/notebook/edit.js",
   "/js/editor/notebook/edit/_shared.js",
@@ -560,12 +563,14 @@ self.__SHELL_MANIFEST = [
   "/js/editor/notebook/edit/conflict.js",
   "/js/editor/notebook/edit/input.js",
   "/js/editor/notebook/edit/lifecycle.js",
+  "/js/editor/notebook/edit/save-guard.js",
   "/js/editor/notebook/edit/split.js",
   "/js/editor/notebook/edit/view.js",
   "/js/editor/notebook/entities.js",
   "/js/editor/notebook/format-marks.js",
   "/js/editor/notebook/history.js",
   "/js/editor/notebook/index.js",
+  "/js/editor/notebook/save-errors.js",
   "/js/editor/notebook/split-html.js",
   "/js/editor/notebook/storage.js",
   "/js/editor/notebook/stt-dictation.js",
@@ -795,6 +800,7 @@ self.__SHELL_MANIFEST = [
   "/js/utils/html.js",
   "/js/utils/markdown.js",
   "/js/utils/net.js",
+  "/js/utils/text-match.js",
   "/js/xrefs/caption-preview.js",
   "/js/xrefs/target-cache.js",
   "/js/xrefs/xref-anchor.js",
@@ -913,6 +919,7 @@ self.__SHELL_MANIFEST = [
   "/partials/figur-werkstatt.html",
   "/partials/figuren-alter.html",
   "/partials/figuren-detail-charakter.html",
+  "/partials/figuren-detail-edit.html",
   "/partials/figuren-detail-imbuch.html",
   "/partials/figuren-detail-steckbrief.html",
   "/partials/figuren-detail.html",

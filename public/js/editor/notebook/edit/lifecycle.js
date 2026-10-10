@@ -1,5 +1,5 @@
 // Teil von notebookEditMethods (siehe Facade edit.js).
-import { clearDraft, clearNormalSnapshot, editorHost, findInHtml, getActiveEditorContainer, htmlToText, installEditCounter, isNoChange, isPageConflict, localeTag, mountEditorHtml, readConflictBody, readDraft, readEditorPrefs, savePage, sortByPosition, stripLektoratMarks, tzOpts, writeDraft, writeNormalSnapshot } from './_shared.js';
+import { clearDraft, clearNormalSnapshot, editorHost, findInHtml, getActiveEditorContainer, htmlToText, installEditCounter, isNoChange, isPageConflict, mountEditorHtml, readConflictBody, readDraft, readEditorPrefs, savePage, sortByPosition, stripLektoratMarks, writeDraft, writeNormalSnapshot } from './_shared.js';
 
 export const lifecycleMethods = {
   // Container-Lookup: einziger Eintrittspunkt für beide Modi.
@@ -59,17 +59,26 @@ export const lifecycleMethods = {
   // er ab, bleibt die Session dirty, der Draft wird auf der neuen Basis neu
   // geschrieben und der Autosave neu geplant. Rueckgabe `true` = es gibt noch
   // Ungespeichertes (saveEdit baut die Session dann nicht ab).
+  //
+  // Neue Basis ist die Antwort des Servers (`saved.html`), nicht das gesendete
+  // HTML: der Server vergibt beim Write Block-IDs (lib/html-clean.js#
+  // ensureBlockIds), und der nächste Block-Merge braucht als gemeinsamen
+  // Vorfahren genau die Fassung, die ein anderes Gerät jetzt lädt. Die IDs
+  // wandern per Attribut auch ins Live-DOM (kein Remount: Caret, IME und
+  // Undo-Stack bleiben unberührt).
   _applySaveSuccess(saved, html, { pageId = null, applyToEditor = false } = {}) {
     const app = editorHost();
     if (!app) return false;
+    const serverHtml = typeof saved?.html === 'string' ? saved.html : html;
     if (applyToEditor) this._applyMergedToEditor(html);
     const liveEl = !applyToEditor && app.editMode ? this._getEditEl?.() : null;
     const typedDuringSave = !!liveEl && !isNoChange(stripLektoratMarks(liveEl.innerHTML), html);
     if (saved?.updated_at && app.currentPage) app.currentPage.updated_at = saved.updated_at;
-    app.originalHtml = html;
-    app.currentPageEmpty = !htmlToText(html).trim();
-    this._filterFindingsAfterSave(html);
-    app._syncPageStatsAfterSave?.(app.currentPage, html);
+    app.originalHtml = serverHtml;
+    this._ensureLiveBlockIds(serverHtml);
+    app.currentPageEmpty = !htmlToText(serverHtml).trim();
+    this._filterFindingsAfterSave(serverHtml);
+    app._syncPageStatsAfterSave?.(app.currentPage, serverHtml);
     // Sidebar-Lektorat-Status flippt auf 'warn' (updated_at > checkedAt) — Server-Map nachladen.
     app.refreshPageAges?.();
     clearDraft(pageId ?? app.currentPage?.id);
@@ -83,6 +92,7 @@ export const lifecycleMethods = {
     app.draftPersistFailed = false;
     app.editDirty = false;
     app.saveOffline = false;
+    app.saveFailKind = null;
     app.editConflict = null;
     if (typedDuringSave) {
       app.editDirty = true;
@@ -113,7 +123,11 @@ export const lifecycleMethods = {
   _teardownEditSession({ keepDraft = false } = {}) {
     const app = editorHost();
     if (!app) return;
-    if (!keepDraft) {
+    if (keepDraft) {
+      // Offenen 500-ms-Debounce einlösen, bevor `_stopAutosave` ihn verwirft:
+      // sonst fehlte dem behaltenen Draft das zuletzt Getippte.
+      this._flushDraftSaveNow();
+    } else {
       if (app.currentPage) clearDraft(app.currentPage.id);
       app.pendingDraft = null;
     }
@@ -129,6 +143,7 @@ export const lifecycleMethods = {
     app.editDirty = false;
     app.editSaving = false;
     app.saveOffline = false;
+    app.saveFailKind = null;
     app.draftPersistFailed = false;
     app.lastDraftSavedAt = null;
     // Konflikt-State gehört zur Session: der Banner (`x-show="editConflict"` in
@@ -198,6 +213,7 @@ export const lifecycleMethods = {
     app.editDirty = false;
     app.editSaving = false;
     app.saveOffline = false;
+    app.saveFailKind = null;
     app.pendingDraft = null;
     // Auto-Fokus-Caret (setTimeout focus() weiter unten) ist KEIN bewusster
     // Anker — erst ein Klick ins Feld setzt sttCaretUserSet (STT haengt sonst
@@ -221,7 +237,7 @@ export const lifecycleMethods = {
     // Remote-Änderung still zurück.
     const draft = readDraft(app.currentPage.id);
     let draftConflict = null;
-    if (draft && draft.html && draft.html !== app.originalHtml) {
+    if (draft && draft.html && !isNoChange(draft.html, app.originalHtml)) {
       const restored = this._reconcileDraftWithServer(draft);
       initialHtml = restored.html;
       draftConflict = restored.conflict || null;
@@ -322,9 +338,13 @@ export const lifecycleMethods = {
     // den letzten Stand — ein Aufruf von aussen (z. B. der Konflikt-Banner)
     // würde sonst verworfenen Text zurückschreiben. Spiegelt den quickSave-Guard.
     if (!app.editMode) return;
+    // Offenes Konflikt-Modal entscheidet, welche Fassung gilt — ein Save daneben
+    // liefe in denselben Merge und setzte die Auflösung zurück.
+    if (app.conflictResolution) return;
     if (!app.canEdit?.()) return;
     const el = this._getEditEl();
     if (!el) return;
+    this._ensureLiveBlockIds();
     const newHtml = stripLektoratMarks(el.innerHTML);
     if (isNoChange(newHtml, app.originalHtml)) {
       // Im Fokusmodus nicht aus Edit-/Fokusmodus herausfallen, wenn
@@ -384,7 +404,7 @@ export const lifecycleMethods = {
           source,
           expectedUpdatedAt: pre.expectedAt,
         });
-        if (!this._stillEditing(pin.pageId)) { clearDraft(pin.pageId); return; }
+        if (!this._stillEditing(pin.pageId)) { this._releaseDraftAfterSave(pin.pageId, pre.saveHtml, saved); return; }
         const typedDuringSave = this._applySaveSuccess(saved, pre.saveHtml);
         // Kein extra setStatus vor dem Teardown — Save-Indicator in der Subline
         // zeigt schon "gespeichert HH:MM"; doppelte Notification wäre redundant.
@@ -408,7 +428,7 @@ export const lifecycleMethods = {
           if (retry?.stale) { this._keepPinnedDraft(pin); return; }
           if (retry?.conflict) return;
           if (retry) {
-            if (!this._stillEditing(pin.pageId)) { clearDraft(pin.pageId); return; }
+            if (!this._stillEditing(pin.pageId)) { this._releaseDraftAfterSave(pin.pageId, retry.html, retry.saved); return; }
             this._applySaveSuccess(retry.saved, retry.html);
             app.setStatus(app.t('edit.conflict.merged.silent'), false, 3000);
             return;
@@ -420,14 +440,14 @@ export const lifecycleMethods = {
           return;
         }
         console.error('[saveEdit]', e);
-        // Netzwerkfehler → Draft behalten, Offline-Modus aktivieren, Auto-Retry.
+        // Draft behalten, Fehlerklasse merken (Netz/5xx → Auto-Retry; 423/403/
+        // 404 → kein Retry, Hinweis bleibt stehen).
         this._keepAsDraft({
-          pageId: pin.pageId, html: this._liveHtmlFor(pin),
-          statusKey: navigator.onLine ? null : 'edit.offlineSaved',
+          pageId: pin.pageId, html: this._liveHtmlFor(pin), statusKey: null,
           base: pin.baseHtml, baseUpdatedAt: pin.baseUpdatedAt,
         });
         if (!this._stillEditing(pin.pageId)) return;
-        if (navigator.onLine) app.setStatus(app.t('edit.saveFailed', { msg: e.message }), false, 8000);
+        app.setStatus(this._noteSaveFailure(e, { offlineKey: 'edit.offlineSaved' }), false, 8000);
       }
     } finally {
       app.editSaving = false;
@@ -439,11 +459,17 @@ export const lifecycleMethods = {
   async quickSave() {
     const app = editorHost();
     if (!app || !app.editMode || !app.currentPage || app.editSaving) return;
+    // Offenes Konflikt-Modal: es entscheidet. Ein stiller Save liefe in den
+    // Merge, öffnete das Modal neu und setzte die Entscheidungen zurück
+    // (Ctrl+S, Fokus-Exit, Abschnitts-Chat — die Timer-/Retry-Wege sperrt
+    // schon `_canBackgroundSave`). Der Draft liegt seit dem Konflikt.
+    if (app.conflictResolution) return;
     // Ohne Edit-Recht kein Auto-Save (Defense; startEdit blockt
     // ohnehin den Eintritt — aber Race mit Role-Refresh waehrend Edit-Session).
     if (!app.canEdit?.()) return;
     const el = this._getEditEl();
     if (!el) return;
+    this._ensureLiveBlockIds();
     const newHtml = stripLektoratMarks(el.innerHTML);
     if (isNoChange(newHtml, app.originalHtml)) {
       app.editDirty = false;
@@ -491,7 +517,7 @@ export const lifecycleMethods = {
         source,
         expectedUpdatedAt: pre.expectedAt,
       });
-      if (!this._stillEditing(pin.pageId)) { clearDraft(pin.pageId); return; }
+      if (!this._stillEditing(pin.pageId)) { this._releaseDraftAfterSave(pin.pageId, pre.saveHtml, saved); return; }
       this._applySaveSuccess(saved, pre.saveHtml);
       // Kein setStatus — Save-Indicator in der Subline zeigt schon
       // "gespeichert HH:MM"; doppelte Notification wäre redundant.
@@ -508,7 +534,7 @@ export const lifecycleMethods = {
         });
         if (retry?.stale || retry?.conflict) return;
         if (retry) {
-          if (!this._stillEditing(pin.pageId)) { clearDraft(pin.pageId); return; }
+          if (!this._stillEditing(pin.pageId)) { this._releaseDraftAfterSave(pin.pageId, retry.html, retry.saved); return; }
           this._applySaveSuccess(retry.saved, retry.html);
           return;
         }
@@ -524,15 +550,12 @@ export const lifecycleMethods = {
       // Draft liegt seit dem Save-Start; Offline-Flag/Status nur für die Seite,
       // die noch offen ist.
       if (!this._stillEditing(pin.pageId)) return;
-      app.saveOffline = true;
-      // navigator.onLine ist hier nur noch Hinweis fuer die Wortwahl, kein Gate:
-      // bei echtem Offline die freundlichere Meldung, sonst generischer Retry-Hinweis.
-      if (!navigator.onLine) {
-        const tag = localeTag(app.$store.shell.uiLocale);
-        app.setStatus(app.t('edit.offlineSavedAt', { time: new Date().toLocaleTimeString(tag, tzOpts()) }), false, 3000);
-      } else {
-        app.setStatus(app.t('edit.saveFailedRetry'), false, 6000);
-      }
+      // Fehlerklasse entscheidet über Retry und Wortlaut: Netz/5xx wartet auf
+      // den nächsten Anlass (online/Fokus), 423/403/404 nicht — sonst liefe bei
+      // jedem Fokus derselbe abgewiesene PUT. navigator.onLine ist nur Hinweis
+      // für die Wortwahl, kein Gate.
+      const msg = this._noteSaveFailure(e);
+      app.setStatus(msg, false, app.saveFailKind === 'network' && !navigator.onLine ? 3000 : 8000);
     } finally {
       app.editSaving = false;
     }

@@ -1,4 +1,4 @@
-import { escHtml, fetchJson, SAFETY_HTML_RATIO, replaceInHtml, skipReason, stripFocusArtefacts } from '../utils.js';
+import { escHtml, fetchJson, SAFETY_HTML_RATIO, countInHtml, replaceInHtml, skipReason, stripFocusArtefacts } from '../utils.js';
 import { sortByPosition, isHardFinding } from '../book/page-view.js';
 import { contentRepo } from '../repo/content.js';
 import { savePage } from './shared/page-api.js';
@@ -20,10 +20,17 @@ export const lektoratMethods = {
   // Finding, dessen `original` erst durch eine vorherige Korrektur verschwindet,
   // ist `notFound` und nicht `boundary`.
   // Aufrufer ohne Interesse an den Skips lassen den Parameter weg.
-  _applyCorrections(html, fehler, outSkipped) {
+  // `checkAmbiguous` (nur Abschnitts-Chat): eine mehrfach vorkommende Stelle wird
+  // als 'ambiguous' übersprungen statt das erste Vorkommen zu ersetzen. Das
+  // Lektorat prüft das bewusst nicht (tests/unit/lektorat-apply-guard.test.mjs).
+  _applyCorrections(html, fehler, outSkipped, { checkAmbiguous = false } = {}) {
     let result = html;
     for (const f of fehler) {
       if (!f.original || !f.korrektur || f.original === f.korrektur) continue;
+      if (checkAmbiguous && countInHtml(result, f.original) > 1) {
+        if (outSkipped) outSkipped.push({ f, reason: 'ambiguous' });
+        continue;
+      }
       const next = replaceInHtml(result, f.original, f.korrektur);
       if (next === result) {
         if (outSkipped) outSkipped.push({ f, reason: skipReason(result, f.original) });
@@ -58,7 +65,8 @@ export const lektoratMethods = {
   // weder Ziel noch Name des PUT verschieben. `stale: true` im Ergebnis sagt
   // dem Aufrufer, dass inzwischen eine andere Seite offen ist — deren View-State
   // (originalHtml, updated_at) fasst er dann nicht an.
-  async _loadApplyAndSave(selectedErrors, onProgress, source = 'lektorat-apply') {
+  // `opts.checkAmbiguous` reicht an `_applyCorrections` durch (Abschnitts-Chat).
+  async _loadApplyAndSave(selectedErrors, onProgress, source = 'lektorat-apply', { checkAmbiguous = false } = {}) {
     const pageId = this.currentPage.id;
     const pageName = this.currentPage.name;
     onProgress(10, this.t('lektorat.loadingPage'));
@@ -67,7 +75,7 @@ export const lektoratMethods = {
 
     const skipped = [];
     let finalHtml = selectedErrors.length > 0
-      ? this._applyCorrections(page.html, selectedErrors, skipped)
+      ? this._applyCorrections(page.html, selectedErrors, skipped, { checkAmbiguous })
       : page.html;
 
     // KI-Korrekturen/Vorschläge liefern oft gerade `"`/`'` — auf Buch-Style

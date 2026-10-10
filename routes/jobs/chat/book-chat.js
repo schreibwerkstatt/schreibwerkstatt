@@ -19,7 +19,7 @@ const embed = require('../../../lib/embed');
 const { selectPassagesSemantic, retrievalQuery } = require('./book-chat-retrieval');
 const { setContext } = require('../../../lib/log-context');
 const appSettings = require('../../../lib/app-settings');
-const { recordChatLedgerForMessage } = require('../../../db/cost-ledger');
+const { recordChatLedgerForMessage, recordChatLedgerForFailedRun } = require('../../../db/cost-ledger');
 const { getSessionWithBookName } = require('../../../db/chat-sessions');
 const {
   _parseChatResponse, figurenBlockChars,
@@ -102,10 +102,14 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
   const effectiveProvider = resolveProvider({ userEmail });
   _applyBookChatAiOverrides(effectiveProvider, logger);
   const aiCfg = getContextConfigFor(effectiveProvider);
+  // Verbrauch des KI-Calls, falls der Lauf danach ohne Antwort endet (Truncation):
+  // landet dann über recordChatLedgerForFailedRun im Ledger statt nirgends.
+  let session = null;
+  let spent = null;
   try {
     updateJob(jobId, { statusText: 'job.phase.preparing', progress: 5 });
 
-    const session = getSessionWithBookName(parseInt(sessionId), userEmail);
+    session = getSessionWithBookName(parseInt(sessionId), userEmail);
     if (!session) throw i18nError('job.error.sessionNotFound');
     logger.info(`Start: «${session.book_name || '-'}» session=${sessionId}, msg-len=${message.length}`);
 
@@ -281,6 +285,7 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // erst am Streaming-Ende; ohne diesen Update bleibt die Status-Anzeige auf
     // einem Zwischenstand und weicht von der DB-Nachricht ab).
     updateJob(jobId, { tokensIn, tokensOut, cacheReadIn, cacheCreationIn, cacheCreation1hIn });
+    spent = { provider, model, tokensIn, tokensOut, cacheReadIn, cacheCreationIn, cacheCreation1hIn };
     if (truncated) throw i18nError('job.error.aiTruncated', { max: aiCfg.maxTokensOut, tokIn: tokensIn, tokOut: tokensOut, total: tokensIn + tokensOut });
 
     const { antwort, fallback } = _parseChatResponse(text);
@@ -295,6 +300,7 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       INSERT INTO chat_messages (session_id, role, content, tokens_in, tokens_out, cache_read_in, cache_creation_in, cache_creation_1h_in, provider, model, tps, context_info, created_at)
       VALUES (?, 'assistant', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(session.id, antwort, tokensIn, tokensOut, cacheReadIn, cacheCreationIn, cacheCreation1hIn, provider, model, bookChatTps, JSON.stringify(contextInfo), assistantNow);
+    spent = null;
     db.prepare('UPDATE chat_sessions SET last_message_at = ? WHERE id = ?').run(assistantNow, session.id);
     recordChatLedgerForMessage(asstMsgResult.lastInsertRowid);
     const sessionTitle = await generateSessionTitle({ session, userMessage: message, assistantAnswer: antwort, provider: effectiveProvider, logger });
@@ -308,6 +314,12 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       ...(sessionTitle ? { sessionTitle } : {}),
     }, bookChatTps, `«${session.book_name || '-'}» session=${sessionId}, ${selectedPages.length}/${totalPages} Seiten`);
   } catch (e) {
+    if (spent && session) {
+      recordChatLedgerForFailedRun({
+        jobId, userEmail, kind: 'book', bookId: session.book_id, ...spent,
+        provider: spent.provider || effectiveProvider,
+      });
+    }
     if (e.name !== 'AbortError') logger.error(`Fehler: ${e.message}`, { stack: e.stack });
     failJob(jobId, e);
   }

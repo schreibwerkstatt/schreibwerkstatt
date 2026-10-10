@@ -44,6 +44,9 @@ export const autosaveMethods = {
     if (!app.editMode || !app.currentPage) return;
     const el = this._getEditEl();
     if (!el) return;
+    // Der Draft ist Eingabe eines späteren Merges (startEdit →
+    // _reconcileDraftWithServer, Outbox) — doppelte IDs darin verlören dort Text.
+    this._ensureLiveBlockIds();
     const html = stripLektoratMarks(el.innerHTML);
     if (isNoChange(html, app.originalHtml)) {
       clearDraft(app.currentPage.id);
@@ -88,21 +91,29 @@ export const autosaveMethods = {
   // Auslöser wird pro Aufruf übergeben statt beim Bau des Bags eingefangen: der
   // Bag lebt am Host und überlebt ein Neu-Mounten der Karte, ein eingefangenes
   // `this` zeigte danach auf eine tote Instanz.
+  //
+  // Die Seite wird beim Planen festgehalten: feuert der Timer, nachdem die
+  // Session auf eine andere Seite gewechselt hat, speichert er nicht dort.
   _scheduleAutosave() {
     const app = editorHost();
     if (!app) return;
-    autosaveTimers(app).schedule(AUTOSAVE_KEY, () => this._fireAutosave());
+    const pageId = app.currentPage?.id ?? null;
+    autosaveTimers(app).schedule(AUTOSAVE_KEY, () => this._fireAutosave(pageId));
   },
 
 
-  _fireAutosave() {
+  _fireAutosave(pageId = null) {
     const app = editorHost();
     if (!app) return;
     this._clearAutosaveTimers();
-    if (app.editMode && app.editDirty && !app.editSaving) this.quickSave();
+    if (app.editDirty && this._canBackgroundSave(pageId)) this.quickSave();
   },
 
 
+  // Fenster-Listener der Edit-Session: Retry-Anlässe für einen
+  // hängengebliebenen Save und der Draft-Flush beim Verstecken des Tabs. Beide
+  // leben genau so lange wie die Session — Abbau in `_uninstallOnlineRetry`
+  // (Teardown, Pflicht-Invariante #11).
   _installOnlineRetry() {
     const app = editorHost();
     if (!app || app._onlineHandler) return;
@@ -111,8 +122,10 @@ export const autosaveMethods = {
     // nicht bei einem transienten Server-Blip oder einem faelschlichen
     // navigator.onLine-`false`. Tab-Refokus (visibilitychange/focus) ist der
     // zuverlaessige zweite Anlass, den Netzwerkversuch erneut zu wagen.
+    // Gegated über `_canBackgroundSave`: kein Retry unter offenem Konflikt-
+    // Modal und keiner nach einem Fehler, den Wiederholen nicht behebt.
     const retry = () => {
-      if (app.editMode && app.editDirty && app.saveOffline && !app.editSaving) {
+      if (app.editDirty && app.saveOffline && this._canBackgroundSave()) {
         this.quickSave();
       }
     };
@@ -121,6 +134,15 @@ export const autosaveMethods = {
     window.addEventListener('online', app._onlineHandler);
     window.addEventListener('focus', app._onlineHandler);
     document.addEventListener('visibilitychange', app._onlineVisHandler);
+    // Draft sofort sichern, wenn der Tab verschwindet (Tab-/Fensterwechsel,
+    // Schliessen, Mobile-App in den Hintergrund): der 500-ms-Debounce kann
+    // dort nicht mehr feuern, das zuletzt Getippte wäre sonst nirgends.
+    // `pagehide` deckt das Entladen ab, `visibilitychange` den Fall, dass der
+    // Browser den versteckten Tab später ohne weiteres Event verwirft.
+    app._hideFlushHandler = () => this._flushDraftSaveNow();
+    app._hideFlushVisHandler = () => { if (document.visibilityState === 'hidden') this._flushDraftSaveNow(); };
+    window.addEventListener('pagehide', app._hideFlushHandler);
+    document.addEventListener('visibilitychange', app._hideFlushVisHandler);
   },
 
 
@@ -132,6 +154,14 @@ export const autosaveMethods = {
     if (app._onlineVisHandler) {
       document.removeEventListener('visibilitychange', app._onlineVisHandler);
       app._onlineVisHandler = null;
+    }
+    if (app._hideFlushHandler) {
+      window.removeEventListener('pagehide', app._hideFlushHandler);
+      app._hideFlushHandler = null;
+    }
+    if (app._hideFlushVisHandler) {
+      document.removeEventListener('visibilitychange', app._hideFlushVisHandler);
+      app._hideFlushVisHandler = null;
     }
     app._onlineHandler = null;
   },

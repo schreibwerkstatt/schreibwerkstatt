@@ -14,6 +14,9 @@
 //     nicht angefasst).
 // Beide Wege prüfen dieselben Guards: Stelle fehlt → 'notFound', mehrdeutig →
 // 'ambiguous', No-Op von `replaceInHtml` → `skipReason` (Link/Marker/Absatzgrenze).
+// Der Server-Weg prüft Mehrdeutigkeit zweimal: gegen den ersten Load (nichts
+// speichern, wenn alles scheitert) und gegen den zweiten in `_loadApplyAndSave`.
+// Übernehmen/Rückgängig nur mit Schreibrecht (`canEdit`) — der PUT verlangt editor.
 
 import { escHtml, countInHtml, replaceInHtml, skipReason, clearStatusAfter, stripFocusArtefacts } from '../utils.js';
 import { contentRepo } from '../repo/content.js';
@@ -26,10 +29,24 @@ const REASON_KEYS = {
   boundary: 'chat.crossesBlockBoundary',
   focus: 'chat.applyFocusBlocked',
   notEditing: 'chat.pageNotLoaded',
+  busy: 'chat.applyBusy',
 };
 // Rückgängig: „nicht gefunden" heisst hier „der eingesetzte Text wurde seither
 // verändert" — eine andere Aussage als beim Übernehmen.
 const UNDO_REASON_KEYS = { ...REASON_KEYS, notFound: 'chat.undoChanged', ambiguous: 'chat.undoAmbiguous' };
+
+/** Lokalisierter Text eines gescheiterten Speicherns/Ladens — nach HTTP-Status
+ *  statt der rohen Fehlermeldung („HTTP 409"). */
+export function saveErrorText(t, e) {
+  const s = e?.status;
+  if (s === 409) return t('chat.saveConflict');
+  if (s === 403) return t('chat.saveForbidden');
+  if (s === 423) return t('chat.saveLocked');
+  if (s === 0 || e instanceof TypeError || e?.name === 'TimeoutError') return t('chat.saveNetwork');
+  if (typeof s === 'number') return t('chat.saveFailedStatus', { status: s });
+  // Ohne Status: eigene, schon lokalisierte Abbrüche (z.B. lektorat.unsafeHtml).
+  return e?.message ? t('chat.saveFailedPrefix') + e.message : t('chat.pageLoadFailed');
+}
 
 /** Guard einer Ersetzung `from → to` gegen `html`: null = ersetzbar, sonst Grund. */
 export function replacementBlocker(html, from, to) {
@@ -43,8 +60,10 @@ export function replacementBlocker(html, from, to) {
 export const pageChatApplyMethods = {
 
   // Kern: führt Ersetzungen `[{ from, to }]` auf der offenen Seite aus.
-  // Liefert { mode: 'editor'|'server', done: [item], failed: [{ item, reason }] }
-  // oder null, wenn die Seite unterwegs gewechselt hat (dann nichts anfassen).
+  // Liefert { mode: 'editor'|'server', done: [item], failed: [{ item, reason }], stale? }
+  // oder null, wenn die Seite vor dem Speichern gewechselt hat (nichts geschrieben).
+  // `stale: true`: gespeichert, aber inzwischen ist eine andere Seite offen — der
+  // Aufrufer persistiert den Vorschlags-Status, fasst den View-State aber nicht an.
   async _runChatReplacements(items) {
     const root = window.__app;
     if (!root.currentPage) return { mode: 'server', done: [], failed: items.map(item => ({ item, reason: 'notEditing' })) };
@@ -60,52 +79,64 @@ export const pageChatApplyMethods = {
       return { mode: 'editor', done, failed };
     }
 
+    // Läuft schon ein Server-Apply (Lektorat-Save, anderer Vorschlag)? Dann
+    // nicht parallel schreiben — und dessen Fortschritt nicht zurücksetzen.
+    if (root.saveApplying != null) return { mode: 'server', done: [], failed: items.map(item => ({ item, reason: 'busy' })) };
+
     // Seite beim Start pinnen: der User kann zwischen den awaits wechseln; der
     // Vorschlag gehört zu der Seite, auf der er entstand.
     const pageIdAtStart = root.currentPage.id;
     const samePage = () => root.currentPage?.id === pageIdAtStart;
-    // `fresh: true`: der Guard muss den aktuellen Server-Stand sehen, sonst
-    // überschreibt der folgende PUT Edits, die seit dem letzten GET kamen.
-    const page = await contentRepo.loadPage(pageIdAtStart, { fresh: true });
-    if (!samePage()) return null;
-    // Sequenziell gegen den mitwandernden Stand prüfen: zwei Vorschläge auf
-    // dieselbe Stelle dürfen nicht beide als ersetzbar gelten.
-    let html = stripFocusArtefacts(page.html || '');
-    const eligible = [];
-    const failed = [];
-    for (const item of items) {
-      const reason = replacementBlocker(html, item.from, item.to);
-      if (reason) { failed.push({ item, reason }); continue; }
-      html = replaceInHtml(html, item.from, item.to);
-      eligible.push(item);
-    }
-    if (!eligible.length) return { mode: 'server', done: [], failed };
-
-    const corrections = eligible.map(item => ({ original: item.from, korrektur: item.to, _item: item }));
-    // onProgress setzt saveApplying (→ Editor-Progressbar) und chatStatus.
-    const { finalHtml, skipped, stale } = await root._loadApplyAndSave(
-      corrections,
-      (pct, text) => {
-        root.saveApplying = pct;
-        if (text) this.chatStatus = `<span class="spinner"></span>${escHtml(text)}`;
-      },
-      'chat-apply',
-    );
-    const skippedItems = new Set((skipped || []).map(s => s.f?._item));
-    const done = [];
-    for (const c of corrections) {
-      if (skippedItems.has(c._item)) {
-        const s = skipped.find(x => x.f?._item === c._item);
-        failed.push({ item: c._item, reason: s?.reason || 'boundary' });
-      } else {
-        done.push(c._item);
+    // Synchron VOR dem ersten await: `saveApplying` sperrt Bearbeiten/Fokus
+    // (startEdit, editor-page-actions.html) — sonst öffnet ein Klick während des
+    // Ladens den Editor auf dem alten Stand, und dessen Autosave überschriebe
+    // die Übernahme.
+    root.saveApplying = 5;
+    try {
+      // `fresh: true`: der Guard muss den aktuellen Server-Stand sehen, sonst
+      // überschreibt der folgende PUT Edits, die seit dem letzten GET kamen.
+      const page = await contentRepo.loadPage(pageIdAtStart, { fresh: true });
+      if (!samePage()) return null;
+      // Sequenziell gegen den mitwandernden Stand prüfen: zwei Vorschläge auf
+      // dieselbe Stelle dürfen nicht beide als ersetzbar gelten.
+      let html = stripFocusArtefacts(page.html || '');
+      const eligible = [];
+      const failed = [];
+      for (const item of items) {
+        const reason = replacementBlocker(html, item.from, item.to);
+        if (reason) { failed.push({ item, reason }); continue; }
+        html = replaceInHtml(html, item.from, item.to);
+        eligible.push(item);
       }
+      if (!eligible.length) return { mode: 'server', done: [], failed };
+
+      const corrections = eligible.map(item => ({ original: item.from, korrektur: item.to, _item: item }));
+      // onProgress setzt saveApplying (→ Editor-Progressbar) und chatStatus.
+      // `checkAmbiguous`: `_loadApplyAndSave` lädt ein zweites Mal frisch — was
+      // inzwischen mehrdeutig wurde, wird dort übersprungen statt blind ersetzt.
+      const { finalHtml, skipped } = await root._loadApplyAndSave(
+        corrections,
+        (pct, text) => {
+          root.saveApplying = pct;
+          if (text) this.chatStatus = `<span class="spinner"></span>${escHtml(text)}`;
+        },
+        'chat-apply',
+        { checkAmbiguous: true },
+      );
+      const skippedByItem = new Map((skipped || []).map(s => [s.f?._item, s.reason]));
+      const done = [];
+      for (const c of corrections) {
+        if (skippedByItem.has(c._item)) failed.push({ item: c._item, reason: skippedByItem.get(c._item) || 'boundary' });
+        else done.push(c._item);
+      }
+      if (!samePage()) return { mode: 'server', done, failed, stale: true };
+      root.originalHtml = finalHtml;
+      this._chatPendingRefresh = true;
+      root.updatePageView();
+      return { mode: 'server', done, failed };
+    } finally {
+      root.saveApplying = null;
     }
-    if (stale || !samePage()) return null;
-    root.originalHtml = finalHtml;
-    this._chatPendingRefresh = true;
-    root.updatePageView();
-    return { mode: 'server', done, failed };
   },
 
   async _patchChatVorschlag(msgId, vIdx, action, body) {
@@ -134,6 +165,7 @@ export const pageChatApplyMethods = {
     const root = window.__app;
     const msg = this.chatMessages[msgIdx];
     if (!msg || !Array.isArray(msg.vorschlaege)) return;
+    if (!root.canEdit?.()) return;
     const msgId = msg.id;
     const gen = this._chatGen;
     const items = vIdxs
@@ -146,6 +178,9 @@ export const pageChatApplyMethods = {
       const res = await this._runChatReplacements(items);
       if (!res) return;
       for (const { item, reason } of res.failed) item.v._error = root.t(REASON_KEYS[reason] || REASON_KEYS.boundary);
+      // Gespeichert ist gespeichert — auch wenn inzwischen eine andere Seite
+      // offen ist (res.stale): der Status gehört persistiert, sonst stünde der
+      // Vorschlag beim nächsten Laden wieder offen da, obwohl der Text ersetzt ist.
       for (const item of res.done) {
         item.v._applied = true;
         item.v.applied = true;
@@ -153,7 +188,7 @@ export const pageChatApplyMethods = {
         delete item.v.status;
         this._patchChatVorschlag(msgId, item.vIdx, 'applied', { applied: true });
       }
-      if (this._chatGen !== gen) return;
+      if (res.stale || this._chatGen !== gen) return;
       if (items.length > 1) {
         if (res.done.length) this._chatStatusFlash('chat.applyAllResult', { applied: res.done.length, skipped: res.failed.length });
         else this.chatStatus = '';
@@ -164,12 +199,11 @@ export const pageChatApplyMethods = {
       }
     } catch (e) {
       console.error('[applyChatVorschlag]', e);
-      const errMsg = e?.message ? root.t('chat.saveFailedPrefix') + e.message : root.t('chat.pageLoadFailed');
+      const errMsg = saveErrorText(root.t.bind(root), e);
       for (const { v } of items) v._error = errMsg;
       this.chatStatus = '';
     } finally {
       for (const { v } of items) v._applying = false;
-      root.saveApplying = null;
       if (this._chatGen === gen) this._refreshVorschlagStates();
     }
   },
@@ -178,21 +212,21 @@ export const pageChatApplyMethods = {
     return this._applyChatVorschlaege(msgIdx, [vIdx]);
   },
 
-  // „Alle passenden übernehmen": nur offene, nicht veraltete Vorschläge der
-  // Nachricht. Mehrdeutige/blockierte fallen im Guard heraus und behalten ihre
-  // Begründung am Vorschlag.
+  // „Alle passenden übernehmen": nur offene Vorschläge der Nachricht, deren
+  // Stelle eindeutig dasteht. Blockierte fallen im Guard heraus und behalten
+  // ihre Begründung am Vorschlag.
   applyAllChatVorschlaege(msgIdx) {
     const msg = this.chatMessages[msgIdx];
     if (!msg || !Array.isArray(msg.vorschlaege)) return;
     const vIdxs = msg.vorschlaege
-      .map((v, i) => (!v._applied && !v._discarded && !v._stale ? i : -1))
+      .map((v, i) => (!v._applied && !v._discarded && !v._stale && !v._notFound && !v._ambiguous ? i : -1))
       .filter(i => i >= 0);
     return this._applyChatVorschlaege(msgIdx, vIdxs);
   },
 
   chatOpenVorschlagCount(msg) {
     if (!Array.isArray(msg?.vorschlaege)) return 0;
-    return msg.vorschlaege.filter(v => !v._applied && !v._discarded && !v._stale).length;
+    return msg.vorschlaege.filter(v => !v._applied && !v._discarded && !v._stale && !v._notFound && !v._ambiguous).length;
   },
 
   // Rückgängig: der eingesetzte Text muss noch genau einmal und unverändert in
@@ -202,6 +236,7 @@ export const pageChatApplyMethods = {
     const msg = this.chatMessages[msgIdx];
     const v = msg?.vorschlaege?.[vIdx];
     if (!v || !v._applied || v._applying) return;
+    if (!root.canEdit?.()) return;
     const msgId = msg.id;
     const gen = this._chatGen;
     v._applying = true;
@@ -216,13 +251,12 @@ export const pageChatApplyMethods = {
       v._applied = false;
       delete v.applied;
       this._patchChatVorschlag(msgId, vIdx, 'applied', { applied: false });
-      if (this._chatGen === gen) this._chatStatusFlash(res.mode === 'editor' ? 'chat.undoneInEditor' : 'chat.undone');
+      if (!res.stale && this._chatGen === gen) this._chatStatusFlash(res.mode === 'editor' ? 'chat.undoneInEditor' : 'chat.undone');
     } catch (e) {
       console.error('[undoChatVorschlag]', e);
-      v._error = root.t('chat.saveFailedPrefix') + (e?.message || '');
+      v._error = saveErrorText(root.t.bind(root), e);
     } finally {
       v._applying = false;
-      root.saveApplying = null;
       if (this._chatGen === gen) this._refreshVorschlagStates();
     }
   },

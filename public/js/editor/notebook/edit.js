@@ -8,6 +8,7 @@ import { inputMethods } from './edit/input.js';
 import { autosaveMethods } from './edit/autosave.js';
 import { viewMethods } from './edit/view.js';
 import { splitMethods } from './edit/split.js';
+import { saveGuardMethods } from './edit/save-guard.js';
 
 export const notebookEditMethods = {
   ...conflictMethods,
@@ -16,4 +17,5 @@ export const notebookEditMethods = {
   ...autosaveMethods,
   ...viewMethods,
   ...splitMethods,
+  ...saveGuardMethods,
 };

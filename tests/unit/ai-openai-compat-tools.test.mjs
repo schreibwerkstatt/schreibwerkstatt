@@ -220,3 +220,26 @@ test('Tool-Modus: Folge-Runde schickt tool_result als role:tool zurück', async 
     assert.deepEqual(sent[3], { role: 'tool', tool_call_id: 'aaaaaaaaa', content: '{"chapters":[]}' });
   } finally { ctx.teardown(); ep.close(); }
 });
+
+test('Tool-Ablehnung vs. Kontext-Überlauf: nur eindeutige Werkzeug-Meldungen schalten zurück', () => {
+  const ep = { url: 'http://127.0.0.1:9' };
+  const ctx = _bootstrap(ep.url);
+  try {
+    const { _isToolsUnsupportedDetail } = require_('../../lib/ai/openai-compat');
+    for (const d of [
+      'tools are not supported for this model',
+      '{"error":{"message":"tool_choice is not supported"}}',
+      'This model does not support tools',
+      'Function calling is not enabled / not supported by this backend',
+      'Unrecognized request argument supplied: tools',
+      'unknown field `tools`',
+    ]) assert.equal(_isToolsUnsupportedDetail(d), true, d);
+    for (const d of [
+      "This model's maximum context length is 32768 tokens. However, you requested 40000 tokens (38000 in the messages, 2000 in the functions).",
+      'the request exceeds the available context size, try increasing it',
+      'context length exceeded',
+      'Invalid value for tool_call_id: missing',
+      '',
+    ]) assert.equal(_isToolsUnsupportedDetail(d), false, d);
+  } finally { ctx.teardown(); }
+});

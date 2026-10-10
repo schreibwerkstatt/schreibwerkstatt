@@ -97,7 +97,7 @@ function tool_get_werkstatt_draft(input, ctx) {
   const draft = _findDraftByNameOrId(input, ctx);
   if (!draft) {
     return {
-      error: 'Werkstatt-Draft nicht gefunden',
+      error: 'Werkstatt-Draft nicht gefunden', errorKey: 'chat.toolError.notFound',
       hint: 'Per draft_id (aus list_werkstatt_drafts) oder figur_name suchen.',
     };
   }

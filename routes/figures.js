@@ -1,6 +1,8 @@
 const express = require('express');
 const { db, saveFigurenToDb, getChapterFigures, listFigurenWithDetails } = require('../db/schema');
+const { validateFigurePatch, patchFigure } = require('../db/figures');
 const { mergeFigures } = require('../db/entity-merge');
+const { loadOrderedBookContents, idMapsFromContents } = require('./jobs/shared/loader');
 const { recomputeBookFigureMentions } = require('../lib/page-index');
 const { toIntId } = require('../lib/validate');
 const { aclParamGuard, sessionEmail } = require('../lib/acl');
@@ -60,16 +62,21 @@ function _validateFigurenBody(figuren) {
 }
 
 // Figuren eines Buchs speichern (überschreibt)
-router.put('/:book_id', jsonBody, (req, res) => {
+router.put('/:book_id', jsonBody, async (req, res) => {
   const userEmail = sessionEmail(req);
   const bookId = req.bookId;
   const figuren = req.body?.figuren ?? [];
   const invalid = _validateFigurenBody(figuren);
   if (invalid) return res.status(400).json(invalid);
+  // Namens→ID-Maps über den Content-Store (derselbe Bau wie in der Komplettanalyse,
+  // inkl. ausgeschlossener Kapitel — der Katalog kennt auch deren Seiten). Ohne sie
+  // fielen erste_erwaehnung_page_id und die Beleg-IDs der Beziehungen bei jedem
+  // Katalog-Save auf NULL; mitgebrachte IDs dieses Buchs bleiben als Rückfall stehen.
+  const idMaps = idMapsFromContents(await loadOrderedBookContents(bookId, { includeExcluded: true }));
   // Reconcile per fig_id (round-trippt stabil durch GET→PUT): behaltene Figuren
   // behalten ihre figures.id → externe Referenzen (Plot/Recherche/Events) überleben
   // den manuellen Save. Im Katalog entfernte Figuren werden gelöscht (User autoritativ).
-  saveFigurenToDb(bookId, figuren, userEmail, null, { reconcile: true, matchBy: 'figId', onMissing: 'delete' });
+  saveFigurenToDb(bookId, figuren, userEmail, idMaps, { reconcile: true, matchBy: 'figId', onMissing: 'delete' });
   // Response sofort – Mentions-Neuberechnung läuft im Hintergrund. Auf grossen Büchern
   // (>500 Seiten × >50 Figuren) braucht der Regex-Scan mehrere Sekunden.
   res.json({ ok: true });
@@ -100,15 +107,27 @@ router.put('/:book_id', jsonBody, (req, res) => {
 // verloren gingen — bewusst OHNE stale-Gate, weil der Reconcile dieselbe Figur
 // gelegentlich auch als zwei aktive Einträge auseinanderhält.
 // `source`/`target` sind `figures.fig_id` (TEXT) — dieselbe Kennung, die GET als
-// `id` ausliefert und die der Einzel-Delete-Handler nimmt.
+// `id` ausliefert und die der Einzel-Delete-Handler nimmt. Alternativ
+// `source_id`/`target_id` (figures.id): das Redundanz-Radar trägt die Zeilen-IDs
+// seines Laufs — die fig_id wird von jeder Komplettanalyse neu vergeben und zeigte
+// nach einem Lauf womöglich auf eine andere Figur. Besitz-Prüfung in beiden Fällen
+// über Buch + User.
 router.post('/:book_id/merge', jsonBody, (req, res) => {
   const bookId = req.bookId;
-  const src = String(req.body?.source || '').trim();
-  const tgt = String(req.body?.target || '').trim();
+  const userEmail = sessionEmail(req);
+  const byRowId = req.body?.source_id != null || req.body?.target_id != null;
+  let src, tgt, get;
+  if (byRowId) {
+    src = toIntId(req.body?.source_id);
+    tgt = toIntId(req.body?.target_id);
+    get = db.prepare('SELECT id FROM figures WHERE id = ? AND book_id = ? AND user_email IS ?');
+  } else {
+    src = String(req.body?.source || '').trim();
+    tgt = String(req.body?.target || '').trim();
+    get = db.prepare('SELECT id FROM figures WHERE fig_id = ? AND book_id = ? AND user_email IS ?');
+  }
   if (!src || !tgt) return res.status(400).json({ error_code: 'INVALID_ID' });
   if (src === tgt) return res.status(409).json({ error_code: 'SAME_ENTITY' });
-  const userEmail = sessionEmail(req);
-  const get = db.prepare('SELECT id FROM figures WHERE fig_id = ? AND book_id = ? AND user_email IS ?');
   const sRow = get.get(src, bookId, userEmail);
   const tRow = get.get(tgt, bookId, userEmail);
   if (!sRow) return res.status(404).json({ error_code: 'NOT_FOUND', side: 'source' });
@@ -116,6 +135,9 @@ router.post('/:book_id/merge', jsonBody, (req, res) => {
   if (sRow.id === tRow.id) return res.status(409).json({ error_code: 'SAME_ENTITY' });
 
   const result = mergeFigures(bookId, userEmail, sRow.id, tRow.id);
+  if (result.draftsUnlinked.length) {
+    logger.info(`Figuren-Merge: ${result.draftsUnlinked.length} Werkstatt-Figur(en) der Quelle von der Katalogfigur gelöst (Ziel hat schon eine).`);
+  }
   // Index-Pflege wie beim Einzel-Delete: Quelle raus, Ziel neu schreiben (der
   // Feld-Backfill kann seinen FTS-Text verändert haben).
   // semantic_chunks.figure_id hängt per ON DELETE CASCADE an figures — kein
@@ -134,6 +156,33 @@ router.post('/:book_id/merge', jsonBody, (req, res) => {
       logger.warn(`Figuren-Mentions nach Merge (Buch ${bookId}) fehlgeschlagen: ${e.message}`);
     }
   });
+});
+
+// Einzelne Figur im Katalog pflegen (Steckbrief der Figurenkarte). Nur die
+// übergebenen Felder dieser Figur; setzt manually_edited (Autorenpflege schlägt
+// Analyse). Schreibkern + Validierung: db/figures/patch.js. `:fig_id` ist die
+// öffentliche Kennung (figures.fig_id), wie GET sie als `id` liefert.
+router.patch('/:book_id/:fig_id', jsonBody, (req, res) => {
+  const figId = String(req.params.fig_id || '').trim();
+  if (!figId) return res.status(400).json({ error_code: 'INVALID_ID' });
+  const { fields, error } = validateFigurePatch(req.body);
+  if (error) return res.status(400).json(error);
+  const bookId = req.bookId;
+  const userEmail = sessionEmail(req);
+  const r = patchFigure(bookId, userEmail, figId, fields);
+  if (!r) return res.status(404).json({ error_code: 'NOT_FOUND' });
+  if (r.changed.length) searchIndex.upsertFigure(r.id);
+  res.json({ ok: true, changed: r.changed });
+  // Name/Kurzname speisen den Erwähnungs-Scan — wie beim PUT im Hintergrund.
+  if (r.nameChanged) {
+    setImmediate(() => {
+      try {
+        recomputeBookFigureMentions(bookId, userEmail);
+      } catch (e) {
+        logger.warn(`Figuren-Mentions nach Steckbrief-Änderung (Buch ${bookId}) fehlgeschlagen: ${e.message}`);
+      }
+    });
+  }
 });
 
 // Bulk-Cleanup: alle STALE Figuren eines Buchs auf einmal löschen (Danger-Zone). Pendant

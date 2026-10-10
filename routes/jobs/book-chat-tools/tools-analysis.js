@@ -33,7 +33,7 @@ function _getBookReview(ctx) {
   let parsed = null;
   try { parsed = row.review_json ? JSON.parse(row.review_json) : null; } catch { parsed = null; }
   if (!parsed) {
-    return { scope: 'book', error: 'Buchbewertung kann nicht geparst werden.', reviewed_at: row.reviewed_at };
+    return { scope: 'book', error: 'Buchbewertung kann nicht geparst werden.', errorKey: 'chat.toolError.reviewUnreadable', reviewed_at: row.reviewed_at };
   }
   const fazit = parsed.fazit || null;
   return _truncateResult({
@@ -387,10 +387,10 @@ function tool_find_repetitions(input, ctx) {
 
   const filter = {};
   if (scope === 'chapter') {
-    if (!Number.isInteger(input?.chapter_id)) return { error: 'chapter_id fehlt (scope=chapter)' };
+    if (!Number.isInteger(input?.chapter_id)) return { error: 'chapter_id fehlt (scope=chapter)', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'chapter_id' } };
     filter.chapterId = input.chapter_id;
   } else if (scope === 'page') {
-    if (!Number.isInteger(input?.page_id)) return { error: 'page_id fehlt (scope=page)' };
+    if (!Number.isInteger(input?.page_id)) return { error: 'page_id fehlt (scope=page)', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'page_id' } };
     filter.pageId = input.page_id;
   }
   const pages = listPagesWithBody(ctx.bookId, filter);

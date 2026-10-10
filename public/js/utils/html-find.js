@@ -4,6 +4,7 @@
 
 import { CITE_CLASS, CITE_ATTR_SRC } from '../sources/cite-html.js';
 import { XREF_CLASS, XREF_ATTR_ID } from '../xrefs/xref-html.js';
+import { foldQuotes, normalizeMatchText } from './text-match.js';
 
 // Dekodiert eine einzelne HTML-Entity (z.B. &bdquo;) via Browser-Parser.
 // Gibt null zurück, wenn sich die Entity nicht auflöst.
@@ -20,7 +21,12 @@ function _decodeHtmlEntity(entity) {
  * - Tags werden entfernt; Tag-Grenzen wirken wie Whitespace.
  * - Aufeinanderfolgender Whitespace wird auf einzelne Spaces kollabiert.
  * - Entities werden via Browser-Parser dekodiert.
+ * - Anführungszeichen werden in `text` gefaltet (`foldQuotes`, längenerhaltend):
+ *   „ “ ” « » gelten als `"`, ‚ ‘ ’ ‹ › als `'` — die KI schreibt sie selten im
+ *   Buch-Stil. `raw` ist dieselbe Sicht ungefaltet (gleiche Indizes).
  * - Pro Text-Zeichen `text[i]` gilt: es stammt aus dem HTML-Bereich [starts[i], ends[i]).
+ *   Ein Space aus Tag-Grenze/Whitespace-Lauf ist nullbreit an der Position des
+ *   folgenden Zeichens (starts[i] === ends[i]).
  */
 function _buildHtmlTextMap(html) {
   const chars = [];
@@ -77,44 +83,78 @@ function _buildHtmlTextMap(html) {
     pushChar(c, i, i + 1);
     i++;
   }
-  return { text: chars.join(''), starts, ends };
+  const raw = chars.join('');
+  return { text: foldQuotes(raw), raw, starts, ends };
+}
+
+// Exakter Roh-Treffer nur im Fliesstext: nicht in einem Tag (Attributwerte wie
+// href/alt/data-*) und nicht mitten in einer Entity (`amp` in `&amp;`). Die
+// Nadel selbst darf kein Markup-Zeichen tragen — dann entscheidet die Text-View.
+function _exactInText(html, needle) {
+  if (/[<>&]/.test(needle)) return -1;
+  let from = 0;
+  for (;;) {
+    const idx = html.indexOf(needle, from);
+    if (idx === -1) return -1;
+    const inTag = html.lastIndexOf('<', idx) > html.lastIndexOf('>', idx);
+    const amp = html.lastIndexOf('&', idx);
+    const inEntity = amp !== -1 && amp > html.lastIndexOf(';', idx) && idx - amp <= 10
+      && /^&[#a-zA-Z0-9]*$/.test(html.slice(amp, idx));
+    if (!inTag && !inEntity) return idx;
+    from = idx + 1;
+  }
+}
+
+// Fundort von `needle` samt Text-View-Position (für den Wort-Diff-Ersatz).
+// `map` ist null beim exakten Roh-Treffer (dann liegt kein Tag im Bereich).
+function _locate(html, needle) {
+  if (!html || !needle) return null;
+  const trimmed = String(needle).trim();
+  if (!trimmed) return null;
+  // Ränder ohne Whitespace: der Bereich schliesst nie Leerraum am Rand ein,
+  // sonst verklebte ein Ersatz ohne denselben Rand die Nachbarwörter.
+  const exact = _exactInText(html, trimmed);
+  if (exact !== -1) return { htmlStart: exact, htmlEnd: exact + trimmed.length, map: null };
+
+  const normalized = normalizeMatchText(trimmed);
+  if (!normalized) return null;
+  const map = _buildHtmlTextMap(html);
+  const idx = map.text.indexOf(normalized);
+  if (idx === -1) return null;
+  return {
+    htmlStart: map.starts[idx], htmlEnd: map.ends[idx + normalized.length - 1],
+    map, textStart: idx, textLen: normalized.length,
+  };
 }
 
 /**
- * Sucht `needle` in `html`. Exakter Substring-Match hat Vorrang; sonst
- * toleranter Match über die Text-View (Tags ignorieren, Entities dekodieren,
- * Whitespace kollabieren). Gibt { htmlStart, htmlEnd } zurück oder null.
+ * Sucht `needle` in `html`. Exakter Substring-Match im Fliesstext hat Vorrang
+ * (nie in Attributen oder Entities); sonst toleranter Match über die Text-View
+ * (Tags ignorieren, Entities dekodieren, Whitespace kollabieren, Anführungs-
+ * zeichen falten). Ränder-Whitespace der Nadel zählt nicht mit. Gibt
+ * { htmlStart, htmlEnd } zurück oder null.
  *
  * Typischer Fall: Chat-/Lektorat-KI sieht die Seite als Plaintext und
  * liefert `Er sagte das magische Wort.`, im HTML steht aber
  * `Er sagte <em>das magische</em> Wort.`. Der Tolerant-Match findet die
- * Stelle trotzdem; die `<em>`-Tags fallen beim Ersatz weg, was akzeptabel
- * ist, weil die KI ohnehin eine neue Formulierung vorschlägt.
+ * Stelle trotzdem; `replaceInHtml` ersetzt darin nur die geänderten Wörter.
  */
 export function findInHtml(html, needle) {
-  if (!html || !needle) return null;
-  const exact = html.indexOf(needle);
-  if (exact !== -1) return { htmlStart: exact, htmlEnd: exact + needle.length };
-
-  const normalized = needle.replace(/\s+/g, ' ').trim();
-  if (!normalized) return null;
-  const { text, starts, ends } = _buildHtmlTextMap(html);
-  const idx = text.indexOf(normalized);
-  if (idx === -1) return null;
-  return { htmlStart: starts[idx], htmlEnd: ends[idx + normalized.length - 1] };
+  const m = _locate(html, needle);
+  return m ? { htmlStart: m.htmlStart, htmlEnd: m.htmlEnd } : null;
 }
 
 /**
  * Zählt die nicht-überlappenden Vorkommen von `needle` in `html` über dieselbe
  * Text-View wie `findInHtml` (Tags ignorieren, Entities dekodieren, Whitespace
- * kollabieren). Dient der Ambiguitäts-Erkennung vor einer Ersetzung: `findInHtml`
- * greift immer das erste Vorkommen, was bei mehrdeutigen Phrasen die falsche
- * Stelle treffen würde. Kommt der Text mehrfach vor, kann statt still-falscher
- * Ersetzung abgebrochen werden.
+ * kollabieren, Anführungszeichen falten). Dient der Ambiguitäts-Erkennung vor
+ * einer Ersetzung: `findInHtml` greift immer das erste Vorkommen, was bei
+ * mehrdeutigen Phrasen die falsche Stelle treffen würde. Kommt der Text mehrfach
+ * vor, kann statt still-falscher Ersetzung abgebrochen werden.
  */
 export function countInHtml(html, needle) {
   if (!html || !needle) return 0;
-  const normalized = needle.replace(/\s+/g, ' ').trim();
+  const normalized = normalizeMatchText(needle);
   if (!normalized) return 0;
   const { text } = _buildHtmlTextMap(html);
   let count = 0;
@@ -257,12 +297,156 @@ function _splitOrphanTags(slice) {
   return { orphanOpens: stack.map(s => s.full), orphanCloses };
 }
 
+// Ersatztext für den Fliesstext eines Text-Nodes: nur `&`, `<`, `>` maskieren.
+// Anführungszeichen bleiben Zeichen (im Text-Inhalt brauchen sie kein Escape),
+// damit die Anführungszeichen-Normalisierung nach dem Übernehmen und die
+// Stats-Normalform sie als Zeichen sehen und nicht als `&quot;`.
+function _escText(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Ersatz für einen Bereich, dessen Waisen-Tags erhalten bleiben müssen. Liegt
+// ein Close VOR einem Open im Bereich (`…</em> und <strong>…`), steht der Text
+// zwischen beiden — sonst verschachtelte `<strong>X</em>` falsch.
+function _withOrphans(removed, inserted) {
+  if (!removed.includes('<')) return inserted;
+  const { orphanOpens, orphanCloses } = _splitOrphanTags(removed);
+  if (orphanOpens.length && orphanCloses.length) return orphanCloses.join('') + inserted + orphanOpens.join('');
+  return orphanOpens.join('') + inserted + orphanCloses.join('');
+}
+
+// Token wie im Wort-Diff der Vorschlagskarten (chat/word-diff.js): Wörter (mit
+// Bindestrich/Apostroph im Wort), Whitespace-Läufe, einzelne Satzzeichen.
+const _TOKEN_RE = /[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*|\s+|[^\s\p{L}\p{N}]/gu;
+const _DIFF_MAX_CELLS = 250000;
+
+function _tokens(s) {
+  const out = [];
+  for (const m of s.matchAll(_TOKEN_RE)) {
+    const v = /^\s/.test(m[0]) ? ' ' : m[0];
+    out.push({ v, fold: foldQuotes(v), at: m.index, len: m[0].length });
+  }
+  return out;
+}
+
+// Token gleich? Gerade Anführungszeichen im Ersatz sind „egal" (die KI kennt
+// den Buch-Stil nicht) — ein typografisches, das vom Text abweicht, ist dagegen
+// eine gewollte Änderung (Lektorat: „falsche Anführungszeichen").
+const _tokEq = (x, y) => x.v === y.v || x.fold === y.v;
+
+// Geänderte Abschnitte zwischen den Token-Folgen `a` (Text) und `b` (Ersatz),
+// per LCS: [{ aFrom, aTo, bFrom, bTo }] in Leserichtung. null = zu gross.
+function _diffHunks(a, b) {
+  const n = a.length;
+  const m = b.length;
+  if ((n + 1) * (m + 1) > _DIFF_MAX_CELLS) return null;
+  const L = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      L[i][j] = _tokEq(a[i], b[j]) ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    }
+  }
+  const hunks = [];
+  let cur = null;
+  let i = 0;
+  let j = 0;
+  const open = () => { if (!cur) cur = { aFrom: i, aTo: i, bFrom: j, bTo: j }; };
+  while (i < n || j < m) {
+    if (i < n && j < m && _tokEq(a[i], b[j])) {
+      if (cur) { hunks.push(cur); cur = null; }
+      i++; j++;
+    } else if (j >= m || (i < n && L[i + 1][j] >= L[i][j + 1])) {
+      open(); i++; cur.aTo = i;
+    } else {
+      open(); j++; cur.bTo = j;
+    }
+  }
+  if (cur) hunks.push(cur);
+  return hunks;
+}
+
+// Leere Inline-Paare ohne Attribute, die das Löschen eines ganz ausgezeichneten
+// Worts hinterlässt (`<em></em>`), fallen weg — nur im ersetzten Bereich.
+const _EMPTY_INLINE_RE = /<(em|strong|b|i|u|s|mark|small|sub|sup|span)>(\s*)<\/\1>/gi;
+function _dropEmptyInline(s) {
+  let prev;
+  do { prev = s; s = s.replace(_EMPTY_INLINE_RE, '$2'); } while (s !== prev);
+  return s;
+}
+
+// Fenster für `_dropEmptyInline`: der ersetzte Bereich plus die Tags, die ihm
+// unmittelbar anliegen (das `<em>` eines am Bereichsanfang gelöschten Worts
+// steht vor dem Bereich).
+function _tagRunBefore(html, pos) {
+  while (pos > 0 && html[pos - 1] === '>') {
+    const lt = html.lastIndexOf('<', pos - 1);
+    if (lt === -1) break;
+    pos = lt;
+  }
+  return pos;
+}
+function _tagRunAfter(html, pos) {
+  while (html[pos] === '<') {
+    const gt = html.indexOf('>', pos);
+    if (gt === -1) break;
+    pos = gt + 1;
+  }
+  return pos;
+}
+
+// Wort-Diff-Ersatz eines toleranten Treffers: nur die geänderten
+// Token werden ersetzt, unveränderte Wörter bleiben samt Auszeichnung stehen
+// (`Er sagte <em>das magische</em> Wort` → `das geheime Wort` ergibt
+// `Er sagte <em>das geheime</em> Wort`). null = Diff nicht machbar.
+function _replaceByWordDiff(html, loc, replacement) {
+  const { map, textStart, textLen } = loc;
+  const a = _tokens(map.raw.slice(textStart, textStart + textLen));
+  const b = _tokens(replacement);
+  const hunks = _diffHunks(a, b);
+  if (!hunks) return null;
+  const { starts, ends } = map;
+  const base = loc.htmlStart;
+  let mid = html.slice(loc.htmlStart, loc.htmlEnd);
+  // Von hinten nach vorn: frühere Positionen bleiben gültig.
+  for (let h = hunks.length - 1; h >= 0; h--) {
+    const { aFrom, aTo, bFrom, bTo } = hunks[h];
+    const p0 = textStart + (aFrom < a.length ? a[aFrom].at : textLen);
+    // Start: hinter dem letzten unveränderten Zeichen — so fällt ein entfernter
+    // Leerraum samt der Tags darin mit weg (Waisen-Tags rettet _withOrphans).
+    let hs = p0 > textStart ? ends[p0 - 1] : loc.htmlStart;
+    // Reine Einfügung hinter einem Leerraum: vor die öffnenden Tags des
+    // folgenden Worts, nicht hinein (`Ein <em>roter</em>` + „grosser" →
+    // `Ein grosser <em>roter</em>`, nicht kursiv).
+    if (aTo === aFrom && p0 > textStart && starts[p0 - 1] === ends[p0 - 1]) {
+      hs = Math.max(_tagRunBefore(html, hs), ends[p0 - 2] ?? loc.htmlStart, loc.htmlStart);
+    }
+    let he = hs;
+    if (aTo > aFrom) {
+      const last = a[aTo - 1];
+      he = ends[textStart + last.at + last.len - 1];
+    }
+    const added = _escText(b.slice(bFrom, bTo).map(t => t.v).join(''));
+    const removed = mid.slice(hs - base, he - base);
+    mid = mid.slice(0, hs - base) + _withOrphans(removed, added) + mid.slice(he - base);
+  }
+  const lo = _tagRunBefore(html, loc.htmlStart);
+  const hi = _tagRunAfter(html, loc.htmlEnd);
+  const win = html.slice(lo, loc.htmlStart) + mid + html.slice(loc.htmlEnd, hi);
+  return html.slice(0, lo) + _dropEmptyInline(win) + html.slice(hi);
+}
+
 /**
- * Ersetzt `needle` im HTML durch `replacement`. Nutzt `findInHtml` für die
- * Position. Wenn der Match nur Inline-Tag-Grenzen kreuzt (toleranter Match),
- * bleiben Waisen-Tags innerhalb der ersetzten Range erhalten, sonst zerbricht
- * die Tag-Balance (typisch: KI ändert Phrase, die ein `<em>kursiv</em>` umfasst,
- * dabei darf weder das öffnende noch das schliessende Tag verloren gehen).
+ * Ersetzt `needle` im HTML durch `replacement` (Klartext — wird für den
+ * Fliesstext maskiert, nie als Markup eingesetzt). Position wie `findInHtml`;
+ * Rand-Whitespace von Nadel und Ersatz zählt nicht (der Bereich schliesst ihn
+ * nie ein, ein Ersatz mit eigenem Rand verdoppelte bzw. verlöre Leerraum).
+ *
+ * Beim toleranten Treffer (Inline-Tags, Entities, Whitespace oder eine
+ * Anführungszeichen-Variante im Bereich) wird per Wort-Diff nur ersetzt, was
+ * sich ändert — unveränderte Wörter behalten ihre Auszeichnung (`<em>`,
+ * `<strong>` …) und ihre Anführungszeichen im Buch-Stil. Waisen-Tags innerhalb eines ersetzten Abschnitts
+ * bleiben erhalten, sonst zerbricht die Tag-Balance. Ist der Diff zu gross,
+ * wird der ganze Bereich ersetzt (mit demselben Waisen-Schutz).
  *
  * Kreuzt der Match dagegen eine BLOCK-Grenze (`</p><p>`, `</li><li>`, Heading,
  * Tabelle …), umschliesst er einen Zeilenumbruch (`<br>`), einen vollständigen
@@ -282,24 +466,27 @@ function _splitOrphanTags(slice) {
  */
 export function replaceInHtml(html, needle, replacement) {
   if (!html || !needle) return html;
-  const m = findInHtml(html, needle);
+  const m = _locate(html, needle);
   if (!m) return html;
   const removed = html.slice(m.htmlStart, m.htmlEnd);
   // Keinen Zeilenumbruch hinzufuegen: `korrektur` ist reiner Ersatz-Fliesstext.
   // Ein rohes \n darin (KI-Artefakt) wanderte sonst verbatim ins HTML und wuerde
   // in umbruch-erhaltenden Bloecken (<pre>, .poem) als sichtbarer Umbruch gerendert.
-  let inserted = String(replacement).replace(/[\r\n]+/g, ' ');
+  const text = String(replacement ?? '').replace(/[\r\n]+/g, ' ').trim();
   if (removed.includes('<')) {
     if (_crossesBlockBoundary(removed)) return html;
     if (_crossesLineBreak(removed)) return html;
     if (_containsBalancedAnchor(removed)) return html;
     if (_containsBalancedMarker(removed)) return html;
-    const { orphanOpens, orphanCloses } = _splitOrphanTags(removed);
-    if (orphanOpens.length || orphanCloses.length) {
-      inserted = orphanOpens.join('') + inserted + orphanCloses.join('');
-    }
   }
-  return html.slice(0, m.htmlStart) + inserted + html.slice(m.htmlEnd);
+  // Toleranter Treffer (Tags, Entities, Whitespace oder Anführungszeichen-
+  // Variante im Bereich): per Wort-Diff ersetzen — so überleben Auszeichnung und
+  // die Anführungszeichen des Buchs in unveränderten Wörtern.
+  if (m.map) {
+    const out = _replaceByWordDiff(html, m, text.replace(/\s+/g, ' '));
+    if (out != null) return out;
+  }
+  return html.slice(0, m.htmlStart) + _withOrphans(removed, _escText(text)) + html.slice(m.htmlEnd);
 }
 
 /**
@@ -308,13 +495,12 @@ export function replaceInHtml(html, needle, replacement) {
  * dem nichts ersetzt, sondern etwas angehängt wird — der Belegvorschlag setzt so
  * den Kurzbeleg hinter einen unbelegten Satz.
  *
- * WARUM NICHT `replaceInHtml(html, satz, satz + beleg)`: dort wird der ganze
- * Match-Bereich durch den gelieferten String ersetzt. Bei einer KORREKTUR ist
- * das richtig (die KI schlägt eine neue Formulierung vor, Auszeichnung im Alten
- * ist damit ohnehin hinfällig), beim EINFÜGEN wäre es stiller Datenverlust: ein
- * `<em>` oder eine bestehende Quellenangabe INNERHALB des Satzes ist ein
- * balanciertes Inline-Paar, das `_splitOrphanTags` nicht rettet. Hier wird
- * ausschliesslich an einer Position gespleisst, es fällt nichts weg.
+ * WARUM NICHT `replaceInHtml(html, satz, satz + beleg)`: `replaceInHtml` setzt
+ * ausschliesslich maskierten KLARTEXT ein (eine Korrektur ist nie Markup) — der
+ * Chip käme als sichtbarer Quelltext an. Und ein Satz, der schon eine
+ * Quellenangabe umschliesst, wäre dort blockiert (`spansMarker`). Hier wird
+ * ausschliesslich an einer Position gespleisst, es fällt nichts weg; `insertion`
+ * ist vertrauenswürdiges Markup des Aufrufers.
  *
  * Der Einfügepunkt wandert über unmittelbar folgende SCHLIESSENDE Inline-Tags
  * hinweg: endet der Satz auf einem betonten Wort (`…<em>Satz.</em>`), gehört der

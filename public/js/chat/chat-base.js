@@ -331,8 +331,29 @@ export function makeChatMethods(cfg) {
       // gehört die Lauf-Anzeige hin, während der User anderswo liest.
       await loadSessions.call(this);
     } catch (e) {
-      console.error(`[send${L}Message]`, e);
       if (gen(this) !== g) return;
+      // Für dieses Gespräch läuft schon ein Lauf (zweiter Tab/zweites Gerät): der
+      // Server hat die Nachricht NICHT gespeichert. Optimistische Nachricht zurück-
+      // nehmen, Text im Eingabefeld lassen, Hinweis zeigen und den laufenden Job
+      // über loadSession (Active-Check) sichtbar machen.
+      if (e?.status === 409 && e?.code === 'CHAT_JOB_RUNNING') {
+        const msgs = this[p.messages];
+        const tail = msgs[msgs.length - 1];
+        if (tail && tail.clientMsgId === clientMsgId) msgs.pop();
+        this[p.input] = msg;
+        this[p.loading] = false;
+        const hint = `<span class="muted-msg">${escHtml(root.t('error.CHAT_JOB_RUNNING'))}</span>`;
+        if (this[p.sessionId] === sessionId) {
+          try { await loadSession.call(this, sessionId); }
+          catch (err) { console.error(`[send${L}Message] reload`, err); }
+        }
+        if (gen(this) !== g) return;
+        // loadSession leert den Status; ohne laufenden Poll bleibt der Hinweis stehen,
+        // mit Poll übernimmt die Fortschrittszeile.
+        if (!this[p.pollTimer]) this[p.status] = hint;
+        return;
+      }
+      console.error(`[send${L}Message]`, e);
       // Optimistische Msg behalten + sendError markieren + Input restaurieren,
       // damit User mit selber UUID erneut senden kann (Server dedupt dann).
       const tail = this[p.messages][this[p.messages].length - 1];

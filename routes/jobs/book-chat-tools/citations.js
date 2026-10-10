@@ -5,6 +5,24 @@
 const { resolvePageBookId } = require('../../../lib/content-ownership');
 const contentStore = require('../../../lib/content-store');
 const { htmlToPlainText } = require('../../../lib/html-text');
+const { normalizeForQuoteMatch, quoteFoundIn } = require('../../../lib/quote-verify');
+
+// Stimmt das Zitat, aber nicht die Position (Modell hat offset/length verzählt — der
+// häufigste Grund für quote_mismatch), wird es im Seitentext NEU VERANKERT statt als
+// ungültig markiert: exakt (nächste Fundstelle zum genannten offset), sonst tolerant
+// gegenüber Anführungs-/Strich-/Whitespace-Varianten (lib/quote-verify.js). Kostet
+// keinen KI-Call und zeigt weiter das Zitat, das das Modell gemeint hat — anders als
+// `actual` (Text an der falschen Position) oder ein zweiter Synthese-Turn.
+const RELOCATE_MIN_CHARS = 12;
+function _relocate(text, quote, offset) {
+  if (typeof quote !== 'string' || quote.trim().length < RELOCATE_MIN_CHARS) return null;
+  let best = -1;
+  for (let at = text.indexOf(quote); at >= 0; at = text.indexOf(quote, at + 1)) {
+    if (best < 0 || Math.abs(at - offset) < Math.abs(best - offset)) best = at;
+  }
+  if (best >= 0) return { offset: best, length: quote.length, match: 'exact' };
+  return quoteFoundIn(quote, normalizeForQuoteMatch(text)) ? { match: 'tolerant' } : null;
+}
 
 async function validateFinalAnswerCitations(zitate, ctx) {
   if (!Array.isArray(zitate) || !zitate.length) return [];
@@ -35,11 +53,19 @@ async function validateFinalAnswerCitations(zitate, ctx) {
         continue;
       }
     }
-    if (offset < 0 || offset + length > text.length) {
+    const inRange = offset >= 0 && offset + length <= text.length;
+    const actual = inRange ? text.slice(offset, offset + length) : null;
+    if (quote != null && actual !== quote) {
+      const moved = _relocate(text, quote, offset);
+      if (moved) {
+        out.push({ page_id: pageId, offset: moved.offset ?? offset, length: moved.length ?? length, valid: true, relocated: moved.match });
+        continue;
+      }
+    }
+    if (!inRange) {
       out.push({ page_id: pageId, offset, length, valid: false, reason: 'out_of_range', page_chars: text.length });
       continue;
     }
-    const actual = text.slice(offset, offset + length);
     const valid  = quote == null ? true : actual === quote;
     out.push({
       page_id: pageId,
@@ -52,4 +78,4 @@ async function validateFinalAnswerCitations(zitate, ctx) {
   return out;
 }
 
-module.exports = { validateFinalAnswerCitations };
+module.exports = { validateFinalAnswerCitations, _relocate };

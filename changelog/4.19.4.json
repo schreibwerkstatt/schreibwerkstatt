@@ -1,0 +1,81 @@
+{
+  "version": "4.19.4",
+  "date": "2026-10-10",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Figuren-Karte: Mit «Steckbrief bearbeiten» lassen sich Name, Typ und Beschreibung einer Figur direkt ändern. Gepflegte Figuren tragen das Abzeichen «vom Autor gepflegt», und die Komplettanalyse überschreibt die Angaben nicht.",
+      "en": "Characters card: «Edit profile» lets you change a character's name, type and description directly. Curated characters carry the «curated by author» badge, and the full analysis does not overwrite your entries."
+    },
+    {
+      "kind": "neu",
+      "de": "Buchlandkarte, Reiter «Doppelungen»: Zwei Figuren, die dieselbe Person sind, lassen sich dort direkt zusammenführen. In der Figuren-Karte geht das auch bei Figuren, die nicht mehr im Text vorkommen.",
+      "en": "Book map, «Duplicates» tab: two characters that are the same person can now be merged right there. In the Characters card this also works for characters no longer found in the text."
+    },
+    {
+      "kind": "neu",
+      "de": "Abschnitts-Chat: Eine laufende Antwort lässt sich jetzt mit «Abbrechen» stoppen.",
+      "en": "Section chat: a running answer can now be stopped with «Cancel»."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Zusammengeführte Figuren tauchen nach der nächsten Komplettanalyse nicht mehr als eigene Figur auf. Alter, Sprechweise und «ignoriert»-Entscheide gehen beim Zusammenführen nicht mehr verloren.",
+      "en": "Merged characters no longer reappear as a separate character after the next full analysis. Age, speech style and «ignored» decisions are no longer lost when merging."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Vorschläge aus Abschnitts-Chat und Lektorat übernehmen: Kursiv- und Fettschrift der unveränderten Wörter bleibt erhalten, und typografische Anführungszeichen stören das Finden der Stelle nicht mehr.",
+      "en": "Applying suggestions from the section chat and proofreading: italics and bold on unchanged words are kept, and typographic quotation marks no longer prevent the passage from being found."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Abschnitts-Chat: Ein Vorschlag, dessen Stelle es im Text nie gab, heisst jetzt «nicht gefunden» statt «veraltet».",
+      "en": "Section chat: a suggestion whose passage never existed in the text is now marked «not found» instead of «outdated»."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buch-Chat: Bei langen Recherchen endet er jetzt mit einer Antwort aus dem Gefundenen, statt bei einem halben Satz wie «Ich schaue nach …» stehen zu bleiben.",
+      "en": "Book chat: on long research it now ends with an answer from what it found, instead of stopping at a half sentence like «Let me check …»."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Alle Chats: Wer eine Frage schickt, während noch eine Antwort läuft, sieht jetzt einen Hinweis. Die Frage bleibt im Eingabefeld, statt still zu verschwinden.",
+      "en": "All chats: sending a question while an answer is still running now shows a notice. The question stays in the input field instead of silently disappearing."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Abschnitt bearbeiten: Scheitert das Speichern, steht jetzt der Grund da, etwa «gesperrt von …» oder «keine Berechtigung», statt pauschal «offline».",
+      "en": "Editing a section: if saving fails, the reason is now shown, such as «locked by …» or «no permission», instead of a blanket «offline»."
+    },
+    {
+      "kind": "behoben",
+      "de": "Abschnitt bearbeiten auf zwei Geräten: Bei gleichzeitigen Änderungen erschien kein Auflösungs-Dialog, und Änderungen des anderen Geräts konnten verloren gehen.",
+      "en": "Editing a section on two devices: with simultaneous changes no resolution dialog appeared, and the other device's changes could be lost."
+    },
+    {
+      "kind": "behoben",
+      "de": "Abschnitt bearbeiten: Ein mit Enter geteilter Absatz verlor manchmal eine Hälfte, wenn gleichzeitig ein anderes Gerät denselben Abschnitt speicherte.",
+      "en": "Editing a section: a paragraph split with Enter sometimes lost one half when another device saved the same section at the same time."
+    },
+    {
+      "kind": "behoben",
+      "de": "Abschnitt bearbeiten: Die zuletzt getippten Zeichen gingen verloren, wenn der Tab gleich danach geschlossen oder eine andere Karte geöffnet wurde.",
+      "en": "Editing a section: the last characters typed were lost when the tab was closed or another card opened right afterwards."
+    },
+    {
+      "kind": "behoben",
+      "de": "Abschnitts-Chat: Eine Frage im Bearbeiten-Modus konnte Änderungen, die ein anderes Gerät inzwischen gespeichert hatte, wieder rückgängig machen.",
+      "en": "Section chat: asking a question while editing could undo changes another device had saved in the meantime."
+    },
+    {
+      "kind": "behoben",
+      "de": "Abschnitts-Chat: Nach dem Übernehmen eines Vorschlags war «Rückgängig» oft gesperrt, und für Lektoren endete «Übernehmen» in einer Fehlermeldung.",
+      "en": "Section chat: after applying a suggestion «Undo» was often blocked, and for proofreaders «Apply» ended in an error message."
+    },
+    {
+      "kind": "behoben",
+      "de": "Chats: Figuren, die nicht mehr im Buch vorkommen, wurden der KI noch als bekannte Figuren genannt. Eine umbenannte Figur erschien so doppelt.",
+      "en": "Chats: characters no longer in the book were still given to the AI as known characters. A renamed character thus appeared twice."
+    }
+  ]
+}

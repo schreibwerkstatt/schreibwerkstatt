@@ -33,6 +33,7 @@ import { subtypIcon } from './ereignisse/subtyp.js';
 import { typRank, compareNames } from '../book/figur-typen.js';
 import { memoMethods } from './card-memo.js';
 import { plotBacklinkMethods } from '../book/plot-backlinks.js';
+import { figurPflegeMethods } from '../book/figuren-pflege.js';
 
 // Pure Filter+Sort der Figurenliste. Aus dem memoized Wrapper extrahiert, damit
 // sie ohne Alpine-Root testbar bleibt. `chapterMap` = Kapitel-Name → Reihenfolge-
@@ -110,6 +111,18 @@ export function registerFigurenCard() {
     // Oeffnung fuellt es mit den praesentesten Figuren.
     figurenLebenslaufIds: [],
     figurenLebenslaufFilters: { suche: '', typ: '' },
+    // Katalog-Pflege (book/figuren-pflege.js): Steckbrief-Formular einer Figur
+    // (`figurEditId` = fig_id der Figur in Bearbeitung) und «zusammenführen mit…»
+    // einer ausgemusterten Figur (`figurMergeSourceId`).
+    figurEditId: null,
+    figurEditDraft: {},
+    figurEditBusy: false,
+    figurEditError: '',
+    figurMergeSourceId: null,
+    figurMergeTargetId: '',
+    figurMergeBusy: false,
+    figurMergeError: '',
+    figurPflegeMessage: '',
     _figurenNetwork: null,
     _figurenHash: null,
     _figurenNodes: null,
@@ -157,6 +170,7 @@ export function registerFigurenCard() {
           ctx._memos = {};
           ctx.figurenGraphKapitel = null;
           ctx._resetFigurenAlter();
+          ctx._resetFigurPflege();
           if (!root.showFiguresCard) return;
           const bookId = Alpine.store('nav').selectedBookId;
           if (!bookId) return;
@@ -178,6 +192,7 @@ export function registerFigurenCard() {
         onViewReset: (e, ctx) => {
           destroyNet();
           ctx._resetFigurenAlter();
+          ctx._resetFigurPflege();
           ctx.figurenGraphModus = 'figur';
           ctx.figurenGraphKapitel = null;
           ctx.figurenGraphFullscreen = false;
@@ -329,5 +344,6 @@ export function registerFigurenCard() {
     ...figurenAlterMethods,
     ...figurenLebenslaufMethods,
     ...plotBacklinkMethods,
+    ...figurPflegeMethods,
   }));
 }

@@ -126,12 +126,12 @@ function tool_list_research_items(input, ctx) {
 // ── read_research_item ───────────────────────────────────────────────────────
 function tool_read_research_item(input, ctx) {
   const id = parseInt(input.id, 10);
-  if (!id) return { error: 'id fehlt oder ungültig.' };
+  if (!id) return { error: 'id fehlt oder ungültig.', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'id' } };
   const row = db.prepare(
     `SELECT id, kind, title, body, source, doc_name, doc_text, status
        FROM research_items WHERE id = ? AND book_id = ?`
   ).get(id, ctx.bookId);
-  if (!row) return { error: 'Eintrag nicht gefunden.' };
+  if (!row) return { error: 'Eintrag nicht gefunden.', errorKey: 'chat.toolError.notFound' };
   const tags = db.prepare('SELECT tag FROM research_item_tags WHERE item_id = ? ORDER BY tag').all(id).map(t => t.tag);
   const urls = db.prepare('SELECT url, label FROM research_item_urls WHERE item_id = ? ORDER BY position, id')
     .all(id).map(u => ({ url: u.url, label: u.label || '' }));
@@ -182,9 +182,9 @@ const PASSAGE_TOPK_MAX = 15;
 
 async function tool_search_research_passages(input, ctx) {
   const q = String(input.q || '').trim();
-  if (!q) return { error: 'q fehlt.' };
+  if (!q) return { error: 'q fehlt.', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'q' } };
   if (!embed.isEnabled()) {
-    return { error: 'Semantische Suche ist nicht aktiviert. Nutze list_research_items (Wortsuche).' };
+    return { error: 'Semantische Suche ist nicht aktiviert. Nutze list_research_items (Wortsuche).', errorKey: 'chat.toolError.semanticUnavailable' };
   }
   const topK = Math.min(Math.max(parseInt(input.top_k, 10) || PASSAGE_TOPK_DEFAULT, 1), PASSAGE_TOPK_MAX);
   const itemId = input.item_id ? parseInt(input.item_id, 10) : null;
@@ -196,7 +196,7 @@ async function tool_search_research_passages(input, ctx) {
       const row = db.prepare(
         "SELECT id, COALESCE(NULLIF(title,''), doc_name) AS title FROM research_items WHERE id = ? AND book_id = ?"
       ).get(itemId, ctx.bookId);
-      if (!row) return { error: 'Eintrag nicht gefunden.' };
+      if (!row) return { error: 'Eintrag nicht gefunden.', errorKey: 'chat.toolError.notFound' };
       const passages = await semanticRetrieval.passagesInEntity('research', itemId, q, { topK, signal: ctx.jobSignal });
       return {
         item_id: itemId, title: row.title || '', q,
@@ -232,7 +232,7 @@ async function tool_search_research_passages(input, ctx) {
     // Loop mit einem {error} weiter, obwohl der User gestoppt hat.
     if (e?.name === 'AbortError') throw e;
     ctx.logger?.warn?.(`[research-chat] Passagen-Suche fehlgeschlagen: ${e.message}`);
-    return { error: `Semantische Suche nicht verfügbar (${e.message}). Nutze list_research_items (Wortsuche).` };
+    return { error: `Semantische Suche nicht verfügbar (${e.message}). Nutze list_research_items (Wortsuche).`, errorKey: 'chat.toolError.semanticUnavailable' };
   }
 }
 
@@ -317,7 +317,7 @@ async function tool_lookup_literature(input, ctx) {
       return { treffer: [view] };
     }
     const q = String(input.q || '').trim();
-    if (!q) return { error: 'q, doi oder isbn angeben.' };
+    if (!q) return { error: 'q, doi oder isbn angeben.', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'q/doi/isbn' } };
     const register = ['artikel', 'buch', 'beide'].includes(input.register) ? input.register : 'beide';
     const { hits, failed } = await sourceLookup.searchLiterature(q, { register, rows: input.anzahl || LITERATURE_ROWS_DEFAULT });
     const views = hits.map(h => _literatureView(h.draft, h.register));
@@ -329,7 +329,7 @@ async function tool_lookup_literature(input, ctx) {
     };
   } catch (e) {
     ctx?.logger?.warn?.(`[research-chat] Literatur-Suche fehlgeschlagen: ${e.message}`);
-    return { error: 'Literatur-Register nicht erreichbar. Nutze web_search.' };
+    return { error: 'Literatur-Register nicht erreichbar. Nutze web_search.', errorKey: 'chat.toolError.serviceUnavailable' };
   }
 }
 

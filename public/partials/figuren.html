@@ -99,6 +99,7 @@
     <div class="figur-list-header">
       <div class="history-heading" x-text="$app.t('figuren.heading')"></div>
     </div>
+    <p class="card-form-saved" x-show="figurPflegeMessage" x-cloak x-text="figurPflegeMessage"></p>
 
      <!-- Filter -->
     <div x-show="$store.catalog.figuren.length > 0 && figurenKapitelListe().length > 0" class="filter-bar">
@@ -136,6 +137,11 @@
           <span class="figur-typ-dot" :class="'figur-typ-dot--' + (f.typ || 'unknown')"></span>
           <span class="figur-name" x-text="f.name"></span>
           <span x-show="f.stale" class="tag tag--stale" :data-tip="$app.t('figuren.staleHint')" x-text="$app.t('figuren.staleBadge')"></span>
+          <span x-show="f.manually_edited" class="tag tag--curated" :data-tip="$app.t('figuren.curatedHint')" x-text="$app.t('figuren.curatedBadge')"></span>
+          <button type="button" x-show="f.stale" class="btn-compact entity-row-delete"
+                  :aria-expanded="figurMergeSourceId === f.id"
+                  @click.stop="toggleFigurMerge(f)"
+                  :data-tip="$app.t('figuren.mergeStaleTip')" x-text="$app.t('figuren.mergeStale')"></button>
           <button type="button" x-show="f.stale" class="icon-btn danger entity-row-delete"
                   @click.stop="$app.deleteStaleFigur(f)"
                   :aria-label="$app.t('common.delete')" :data-tip="$app.t('entity.deleteStale')">
@@ -155,6 +161,21 @@
           </template>
           <span class="history-chevron" :class="{ open: $store.catalogUi.selectedFigurId === f.id }" aria-hidden="true"></span>
         </div>
+        <!-- Ausgemusterte Figur in eine aktive zusammenführen (book/figuren-pflege.js):
+             Ziel wählen, Bestätigung im Dialog. Die ausgemusterte wird gelöscht, ihr Name
+             wird dauerhafter Alias des Ziels. -->
+        <template x-if="f.stale && figurMergeSourceId === f.id">
+          <div class="figur-merge-panel">
+            <span class="card-hint" x-text="$app.t('figuren.mergeStaleQuestion', { name: f.name })"></span>
+            <div x-data="combobox($app.t('merge.targetPlaceholder'))"
+                 x-modelable="value" x-model="figurMergeTargetId"
+                 x-effect="options = $store.catalog.figuren.filter(x => !x.stale && x.id !== f.id).map(x => ({ value: x.id, label: x.name }))"></div>
+            <button type="button" class="btn-compact danger" :disabled="!figurMergeTargetId || figurMergeBusy"
+                    @click="confirmFigurMerge(f)" x-text="$app.t('merge.button')"></button>
+            <button type="button" class="btn-compact" @click="toggleFigurMerge(f)" x-text="$app.t('common.cancel')"></button>
+            <p class="card-form-error" x-show="figurMergeError" x-text="figurMergeError"></p>
+          </div>
+        </template>
         <!-- @include figuren-detail -->
       </div>
     </template>

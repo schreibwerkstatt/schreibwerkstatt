@@ -7,11 +7,15 @@
      kehrt beim Schliessen an den Auslöser zurück (beides macht der Trap).
      `.noscroll` friert den Hintergrund ein; weil `html` `scrollbar-gutter:
      stable` trägt (css/layout/base.css), setzt das Plugin nur `overflow:
-     hidden` und kompensiert keine Scrollbar-Breite — kein Layout-Sprung. -->
+     hidden` und kompensiert keine Scrollbar-Breite — kein Layout-Sprung.
+     Kein `@click.outside`: Abbrechen verwirft die eigene Fassung und geht nur
+     ausdrücklich (Knopf, Esc) und nach Rückfrage (cancelConflictResolution).
+     Die Methoden liegen in der Notebook-Karte; dieses Partial läuft im
+     Root-Scope und erreicht sie über die Trampoline (notebook/trampoline.js). -->
 <div class="conflict-overlay" x-show="conflictResolution" x-cloak role="alert"
      x-trap.inert.noscroll="conflictResolution"
      aria-modal="true" @keydown.escape.window="conflictResolution && cancelConflictResolution()">
-  <div class="conflict-modal" @click.outside="cancelConflictResolution()">
+  <div class="conflict-modal">
     <header class="conflict-modal__head">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#alert-triangle"/></svg>
       <h2 class="conflict-modal__title"

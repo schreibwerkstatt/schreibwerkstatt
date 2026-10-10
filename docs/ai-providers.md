@@ -104,10 +104,14 @@ die Übersetzung für OpenAI-Function-Calling liegt in
 - **`tool_call_id` verbatim zurück** (Mistral validiert auf 9 alphanumerische
   Zeichen); Ersatz-IDs entstehen nur, wenn der Endpunkt gar keine liefert.
 
-Lehnt ein Endpunkt Werkzeuge ab (400/404/422 mit Tool-Bezug), trägt der Fehler den Code
-`AI_TOOLS_UNSUPPORTED` — der Buch-Chat fällt damit auf den klassischen Pfad zurück
-(`fallbackJob` in `makeAgenticChatJob`) statt den Job zu verlieren. Ollama hat noch
-keinen Pfad: `/api/chat` kann `tools`, aber in eigenem Wire-Format.
+Lehnt ein Endpunkt Werkzeuge ab (400/404/422 mit eindeutiger Tool-Ablehnung, erkannt in
+`_isToolsUnsupportedDetail`), trägt der Fehler den Code `AI_TOOLS_UNSUPPORTED` — der
+Buch-Chat fällt damit auf den klassischen Pfad zurück (`fallbackJob` in
+`makeAgenticChatJob`) statt den Job zu verlieren. Ein Kontextlängen-Fehler zählt **nie**
+als Tool-Ablehnung, auch wenn er «functions» erwähnt («… tokens in the messages and
+functions»), und der Rückfall greift nur, solange im Lauf noch kein Call geantwortet hat —
+mitten im Lauf wäre er ein stiller Neustart auf anderem Weg. Ollama hat noch keinen Pfad:
+`/api/chat` kann `tools`, aber in eigenem Wire-Format.
 
 Beide entfernten Provider (`claude`, `openai-compat`) haben Hard-Timeout und Retry-Ladder; Details unter „Timeout + Retry“.
 

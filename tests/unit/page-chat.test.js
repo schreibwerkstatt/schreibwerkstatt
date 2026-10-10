@@ -270,3 +270,42 @@ test('runChatJob: Seite über dem Deckel → eigener Fehler statt Kontext-Überl
   assert.equal(job.error, 'job.error.pageChatPageTooLarge');
   assert.equal(aiCalls.length, 0);
 });
+
+// ── Fundstellen-Prüfung beim Erzeugen (routes/jobs/chat/page-chat-verify.js) ──
+test('_sanitizeVorschlaege: original/ersatz getrimmt gespeichert', () => {
+  assert.deepEqual(_sanitizeVorschlaege([{ original: ' bellt laut ', ersatz: 'bellt leise ' }]),
+    [{ original: 'bellt laut', ersatz: 'bellt leise' }]);
+});
+
+test('runChatJob: original gegen den Abschnittstext geprüft → match not_found/ambiguous, Modell-Feld verworfen', async () => {
+  const pageId = 82091;
+  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, body_html, updated_at) VALUES (?, ?, 'Seite 2', ?, datetime('now'))`)
+    .run(pageId, BOOK, '<p>Sie sagte: «Komm her». Er kam.</p><p>Er kam.</p>');
+  const sid = newSession({ pageId });
+  nextReply = () => JSON.stringify({
+    antwort: 'Vorschläge',
+    vorschlaege: [
+      { original: 'sagte: "Komm her"', ersatz: 'rief: "Komm her"', match: 'not_found' },
+      { original: 'Er kam.', ersatz: 'Er ging.' },
+      { original: 'Das steht nirgends', ersatz: 'Anders' },
+    ],
+    titel_varianten: [],
+  });
+  aiCalls.length = 0;
+  const job = await runJob(sid, 'Verbessere');
+  assert.equal(job.status, 'done', job.error);
+  // Prompt-Text mit Absatzgrenze (htmlToTextForPrompt).
+  assert.match(sysText(aiCalls[0].system), /Er kam\.\n\nEr kam\./);
+  const row = db.prepare(`SELECT vorschlaege FROM chat_messages WHERE session_id = ? AND role = 'assistant' ORDER BY id DESC LIMIT 1`).get(sid);
+  const vs = JSON.parse(row.vorschlaege);
+  assert.equal(vs[0].match, undefined, 'Anführungszeichen-Variante gilt als gefunden; Modell-`match` verworfen');
+  assert.equal(vs[1].match, 'ambiguous');
+  assert.equal(vs[2].match, 'not_found');
+});
+
+test('formatHistoryVorschlaege: nicht gefundener offener Vorschlag wird markiert', async () => {
+  const { formatHistoryVorschlaege } = await import('../../public/js/prompts.js');
+  const out = formatHistoryVorschlaege([{ original: 'a', ersatz: 'b', match: 'not_found' }, { original: 'c', ersatz: 'd' }]);
+  assert.match(out, /\[offen, Stelle nicht im Text gefunden\] «a»/);
+  assert.match(out, /\[offen\] «c»/);
+});

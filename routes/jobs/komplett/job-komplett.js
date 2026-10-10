@@ -19,7 +19,7 @@ const bookAccess = require('../../../db/book-access');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, contentHttpError,
   getPrompts, getBookPrompts,
-  loadOrderedBookContents, loadPageContents, groupByChapter, buildSinglePassBookText, cleanPageTextForAi,
+  loadOrderedBookContents, idMapsFromContents, loadPageContents, groupByChapter, buildSinglePassBookText, cleanPageTextForAi,
   chunkLimitsFor, resolveExtractSinglePassLimit, BATCH_SIZE, jobAbortControllers,
   _modelName, fmtTok, tps,
   createJob, enqueueJob, findActiveJobId,
@@ -156,20 +156,10 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
       });
     }, jobAbortControllers.get(jobId)?.signal);
 
-    const idMaps = {
-      chNameToId,
-      // Kapitel-scoped Page-Lookup gegen Namenskollisionen: derselbe Seitenname
-      // kann in mehreren Kapiteln existieren (z.B. «Der Vater» als Kapitelname
-      // und als Page-Titel in einem anderen Kapitel). Key 0 = Seiten ohne Kapitel.
-      pageNameToIdByChapter: (() => {
-        const map = {};
-        for (const p of pages) {
-          const k = p.chapter_id ?? 0;
-          (map[k] ??= {})[p.name] = p.id;
-        }
-        return map;
-      })(),
-    };
+    // Kapitel-scoped Page-Lookup gegen Namenskollisionen (derselbe Seitenname kann
+    // in mehreren Kapiteln existieren) — SSoT shared/loader.js#idMapsFromContents,
+    // derselbe Bau wie im Katalog-PUT (routes/figures.js).
+    const idMaps = idMapsFromContents({ chNameToId, pages });
     // Kapitel-Umbenennung invalidiert den Multi-Pass-Delta-Cache über den Kapitelnamen
     // im Chunk-pages_sig (phases.js) — keine separate Invalidierungs-Funktion mehr nötig.
 

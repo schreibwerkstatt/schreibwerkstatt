@@ -52,13 +52,13 @@ const RERANK_DOC_MAXCHARS = 2000;
 
 async function tool_search_passages(input, ctx) {
   const pattern = (input.pattern || '').trim();
-  if (!pattern) return { error: 'pattern fehlt' };
+  if (!pattern) return { error: 'pattern fehlt', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'pattern' } };
   const isRegex = !!input.regex;
   const maxResults = Math.min(Math.max(1, input.max_results || 10), MAX_SEARCH_RESULTS);
 
   let re;
   try { re = _buildSearchRegex(pattern, isRegex); }
-  catch (e) { return { error: `Ungueltiges Regex-Muster: ${e.message}` }; }
+  catch (e) { return { error: `Ungueltiges Regex-Muster: ${e.message}`, errorKey: 'chat.toolError.invalidParam', errorParams: { param: 'pattern' } }; }
 
   // FTS5 verengt nur den Literal-Pfad; Regex muss alle Buchseiten scannen.
   let candidatePageIds = null;
@@ -210,7 +210,7 @@ function _latestCheckForPage(pageId, userEmail) {
 
 async function tool_get_pages(input, ctx) {
   const ids = Array.isArray(input.ids) ? input.ids.filter(n => Number.isInteger(n)) : [];
-  if (!ids.length) return { error: 'ids fehlen oder leer' };
+  if (!ids.length) return { error: 'ids fehlen oder leer', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'ids' } };
   const limit = Math.min(MAX_PAGES_PER_FETCH, ids.length);
   const maxChars = _perPageChars(input.max_chars_per_page, ctx);
   const offset = Number.isInteger(input.offset) && input.offset > 0 ? input.offset : 0;
@@ -255,9 +255,9 @@ async function tool_get_pages(input, ctx) {
 
 async function tool_get_chapter_text(input, ctx) {
   const chapterId = input?.chapter_id;
-  if (!Number.isInteger(chapterId)) return { error: 'chapter_id fehlt' };
+  if (!Number.isInteger(chapterId)) return { error: 'chapter_id fehlt', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'chapter_id' } };
   const chapter = getChapterInBook(chapterId, ctx.bookId);
-  if (!chapter) return { error: 'Kapitel nicht im aktuellen Buch.' };
+  if (!chapter) return { error: 'Kapitel nicht im aktuellen Buch.', errorKey: 'chat.toolError.chapterNotInBook' };
 
   const pageRows = listChapterPages(chapterId, ctx.bookId);
   if (!pageRows.length) {
@@ -314,22 +314,22 @@ async function tool_quote_passage(input, ctx) {
   const pageId = input?.page_id;
   const offset = input?.offset;
   const length = input?.length;
-  if (!Number.isInteger(pageId)) return { error: 'page_id fehlt' };
-  if (!Number.isInteger(offset) || offset < 0) return { error: 'offset (>= 0) fehlt' };
-  if (!Number.isInteger(length) || length <= 0) return { error: 'length (> 0) fehlt' };
-  if (length > QUOTE_MAX_LENGTH) return { error: `length zu gross (max ${QUOTE_MAX_LENGTH}).` };
+  if (!Number.isInteger(pageId)) return { error: 'page_id fehlt', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'page_id' } };
+  if (!Number.isInteger(offset) || offset < 0) return { error: 'offset (>= 0) fehlt', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'offset' } };
+  if (!Number.isInteger(length) || length <= 0) return { error: 'length (> 0) fehlt', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'length' } };
+  if (length > QUOTE_MAX_LENGTH) return { error: `length zu gross (max ${QUOTE_MAX_LENGTH}).`, errorKey: 'chat.toolError.invalidParam', errorParams: { param: 'length' } };
 
   const contextChars = Math.min(QUOTE_MAX_CONTEXT, Math.max(0, Number.isInteger(input?.context_chars) ? input.context_chars : QUOTE_DEFAULT_CONTEXT));
 
   const pageRow = getPageWithChapter(pageId);
   if (!pageRow || pageRow.book_id !== ctx.bookId) {
-    return { error: 'Abschnitt nicht im aktuellen Buch.' };
+    return { error: 'Abschnitt nicht im aktuellen Buch.', errorKey: 'chat.toolError.pageNotInBook' };
   }
   if (ctx.jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const pd = await contentStore.loadPage(pageId);
   const text = htmlToPlainText(pd.html || '');
   if (offset >= text.length) {
-    return { error: `offset (${offset}) liegt ausserhalb des Texts (Laenge ${text.length}).` };
+    return { error: `offset (${offset}) liegt ausserhalb des Texts (Laenge ${text.length}).`, errorKey: 'chat.toolError.invalidParam', errorParams: { param: 'offset' } };
   }
   const end = Math.min(text.length, offset + length);
   const quote = text.slice(offset, end);
@@ -359,10 +359,10 @@ const QUOTE_MATCH_MAX_PATTERN     = 800;
 async function tool_quote_match(input, ctx) {
   const pageId  = input?.page_id;
   const pattern = (input?.pattern || '').toString();
-  if (!Number.isInteger(pageId)) return { error: 'page_id fehlt' };
-  if (!pattern)                  return { error: 'pattern fehlt' };
+  if (!Number.isInteger(pageId)) return { error: 'page_id fehlt', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'page_id' } };
+  if (!pattern)                  return { error: 'pattern fehlt', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'pattern' } };
   if (pattern.length > QUOTE_MATCH_MAX_PATTERN) {
-    return { error: `pattern zu lang (max ${QUOTE_MATCH_MAX_PATTERN}).` };
+    return { error: `pattern zu lang (max ${QUOTE_MATCH_MAX_PATTERN}).`, errorKey: 'chat.toolError.invalidParam', errorParams: { param: 'pattern' } };
   }
   const occurrence   = Number.isInteger(input?.occurrence) && input.occurrence >= 1 ? input.occurrence : 1;
   const contextChars = Math.min(QUOTE_MAX_CONTEXT, Math.max(0,
@@ -370,7 +370,7 @@ async function tool_quote_match(input, ctx) {
 
   const pageRow = getPageWithChapter(pageId);
   if (!pageRow || pageRow.book_id !== ctx.bookId) {
-    return { error: 'Abschnitt nicht im aktuellen Buch.' };
+    return { error: 'Abschnitt nicht im aktuellen Buch.', errorKey: 'chat.toolError.pageNotInBook' };
   }
   if (ctx.jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const pd = await contentStore.loadPage(pageId);
@@ -388,7 +388,7 @@ async function tool_quote_match(input, ctx) {
   }
   if (indices.length === 0) {
     return {
-      error: 'pattern nicht gefunden.',
+      error: 'pattern nicht gefunden.', errorKey: 'chat.toolError.patternNotFound',
       page_id:    pageId,
       page_chars: text.length,
       total_matches: 0,
@@ -396,7 +396,7 @@ async function tool_quote_match(input, ctx) {
   }
   if (occurrence > indices.length) {
     return {
-      error: `Nur ${indices.length} Treffer im Abschnitt (occurrence=${occurrence}).`,
+      error: `Nur ${indices.length} Treffer im Abschnitt (occurrence=${occurrence}).`, errorKey: 'chat.toolError.patternNotFound',
       page_id:    pageId,
       total_matches: indices.length,
     };
@@ -446,7 +446,7 @@ function tool_get_dialogue(input, ctx) {
   let figNames = null;
   if (input?.figur_id || input?.figur_name) {
     figRow = _findFigure(input, ctx);
-    if (!figRow) return { error: 'Figur nicht gefunden' };
+    if (!figRow) return { error: 'Figur nicht gefunden', errorKey: 'chat.toolError.figureNotFound' };
     figNames = _figureNamePatterns(figRow).map(n => n.toLowerCase());
   }
 
@@ -506,20 +506,20 @@ function tool_find_first_last_mention(input, ctx) {
   const hasLocSelector = typeof input?.loc_id === 'string' && input.loc_id.trim();
 
   if (!hasFigSelector && !hasLocSelector) {
-    return { error: 'figur_id, figur_name oder loc_id erforderlich.' };
+    return { error: 'figur_id, figur_name oder loc_id erforderlich.', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'figur_id/figur_name/loc_id' } };
   }
 
   if (hasFigSelector) {
     const figRow = _findFigure(input, ctx);
     if (!figRow) {
-      return { error: 'Figur nicht gefunden', hint: 'Pruefe die Figurenliste im System-Prompt.' };
+      return { error: 'Figur nicht gefunden', errorKey: 'chat.toolError.figureNotFound', hint: 'Pruefe die Figurenliste im System-Prompt.' };
     }
     const mentions = listFigureMentionsWithPages(figRow.id, ctx.bookId);
     if (!mentions.length) {
       return {
         fig_id: figRow.fig_id,
         name: figRow.name,
-        error: 'Keine Index-Erwaehnung vorhanden. Komplettanalyse/Sync ausfuehren.',
+        error: 'Keine Index-Erwaehnung vorhanden. Komplettanalyse/Sync ausfuehren.', errorKey: 'chat.toolError.noIndex',
       };
     }
     const first = mentions[0];
@@ -550,14 +550,14 @@ function tool_find_first_last_mention(input, ctx) {
 
   const locRow = getLocationRefByLocId(ctx.bookId, userEmail, input.loc_id.trim());
   if (!locRow) {
-    return { error: 'Ort nicht gefunden', hint: 'Pruefe loc_id via list_locations.' };
+    return { error: 'Ort nicht gefunden', errorKey: 'chat.toolError.locationNotFound', hint: 'Pruefe loc_id via list_locations.' };
   }
   const chRows = listLocationChaptersWithNames(locRow.id);
   if (!chRows.length) {
     return {
       loc_id: locRow.loc_id,
       name: locRow.name,
-      error: 'Keine Index-Erwaehnung vorhanden. Komplettanalyse/Sync ausfuehren.',
+      error: 'Keine Index-Erwaehnung vorhanden. Komplettanalyse/Sync ausfuehren.', errorKey: 'chat.toolError.noIndex',
     };
   }
   const first = chRows[0];

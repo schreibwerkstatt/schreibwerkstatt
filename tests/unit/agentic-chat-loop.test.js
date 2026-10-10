@@ -72,8 +72,10 @@ function makeJob(over = {}) {
     async executeTool(name, input, ctx) {
       executed.push(name);
       if (name === 'side_effect') ctx.effects.push(input.v);
+      if (over.toolResult) return over.toolResult(name, input);
       return { ok: true, name };
     },
+    ...(over.fallbackJob ? { fallbackJob: over.fallbackJob } : {}),
     consumeFinalAnswer: ({ finalUse }) => JSON.stringify({ antwort: finalUse.input?.antwort ?? '' }),
     parseFinal: (finalText) => {
       const o = JSON.parse(finalText);
@@ -83,6 +85,14 @@ function makeJob(over = {}) {
     buildSummary: () => 'summary',
   });
   return { run, executed, ctx: () => captured };
+}
+
+async function runFailing(job, sessionId) {
+  const jobId = createJob('book-chat', BOOK, USER, 'x');
+  await job.run(jobId, sessionId, 1, 'Frage?', USER);
+  const j = jobs.get(jobId);
+  assert.equal(j.status, 'error', 'Job muss scheitern');
+  return { jobId, job: j };
 }
 
 async function runJob(job, sessionId) {
@@ -116,11 +126,20 @@ test('(b) Budget-Überschreitung in derselben Runde verwirft final_answer nicht'
   assert.equal(out.content, 'trotzdem da');
 });
 
-test('(b) Budget-Überschreitung ohne final_answer → contextExceeded-Marker', async () => {
-  mockCalls([res({ stopReason: 'tool_use', tokensIn: 5_000_000, toolUses: [tu('lookup')] })]);
-  const out = await runJob(makeJob({ prep: { tokenBudget: 1000 } }), newSession());
-  assert.equal(out.content, '__i18n:chat.errors.contextExceeded__');
+test('(b) Budget-Überschreitung ohne final_answer → Runde nicht ausgeführt, Synthese statt Erzähltext', async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', tokensIn: 5_000_000, text: 'Ich schaue nach …', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'aus dem Gesammelten' })] }),
+  ]);
+  const job = makeJob({ prep: { tokenBudget: 1000, inputCapInstruction: 'BUDGET' } });
+  const out = await runJob(job, newSession());
+  assert.equal(out.content, 'aus dem Gesammelten');
   assert.equal(out.ci.stop, 'context_budget');
+  assert.deepEqual(job.executed, [], 'die Runde über dem Budget wird nicht mehr ausgeführt');
+  assert.deepEqual(calls[1].tools, ['final_answer']);
+  assert.equal(calls[1].messages.at(-1).content, 'BUDGET');
+  // Kein halber Assistant-Turn mit tool_use ohne tool_result.
+  assert.equal(calls[1].messages.some(m => m.role === 'assistant' && Array.isArray(m.content)), false);
 });
 
 test('(c) pause_turn: Assistant-Inhalt anhängen und weiterlaufen, kein Abschluss', async () => {
@@ -189,4 +208,160 @@ test('toolsForIter: Werkzeugliste pro Runde aus dem Hook, Synthese bleibt bei fi
   assert.deepEqual(calls[1].tools, ['final_answer']);
   assert.deepEqual(seen.map(s => s.iter), [0, 1]);
   assert.equal(seen[0].webSearches, 0);
+});
+
+
+test('Synthese-Turn: abgeschnittene Antwort ist ein Fehler, keine Antwort', async () => {
+  mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'max_tokens', truncated: true, text: 'Halbe Ant' }),
+  ]);
+  const sid = newSession();
+  const { job } = await runFailing(makeJob({ prep: { maxToolIter: 1 } }), sid);
+  assert.equal(job.error, 'job.error.aiTruncated');
+  const n = db.prepare(`SELECT COUNT(*) AS n FROM chat_messages WHERE session_id = ? AND role = 'assistant'`).get(sid).n;
+  assert.equal(n, 0);
+});
+
+test('Synthese-Turn: Provider-Fehler endet als Job-Fehler (i18n) und bucht die Runden ins Ledger', async () => {
+  let n = 0;
+  ai.callAIWithTools = async () => {
+    n++;
+    if (n === 1) return res({ stopReason: 'tool_use', tokensIn: 700, tokensOut: 30, toolUses: [tu('lookup')] });
+    const e = new Error('Claude 529: overloaded'); e.code = 'AI_OVERLOADED'; e.status = 529; throw e;
+  };
+  const { jobId, job } = await runFailing(makeJob({ prep: { maxToolIter: 1 } }), newSession());
+  assert.equal(job.error, 'job.error.agentSynthesisOverloaded');
+  const row = db.prepare(`SELECT source, type, tokens_in, tokens_out FROM ai_cost_ledger WHERE source_ref = ?`).get(`chatjob:${jobId}`);
+  assert.deepEqual({ ...row }, { source: 'chat', type: 'book', tokens_in: 700, tokens_out: 30 });
+});
+
+test('Synthese-Turn: final_answer mit kaputtem Argument-JSON → Fehler statt leerer Antwort', async () => {
+  mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'tool_use', toolUses: [{ id: 'f1', name: 'final_answer', input: {}, parseError: 'Unexpected end' }] }),
+  ]);
+  const { job } = await runFailing(makeJob({ prep: { maxToolIter: 1 } }), newSession());
+  assert.equal(job.error, 'job.error.agentFinalAnswerInvalid');
+});
+
+test('parseError: Werkzeug wird nicht mit {} ausgeführt, Modell bekommt ehrliches tool_result', async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [{ id: 'l1', name: 'lookup', input: {}, parseError: 'Bad JSON' }, { id: 'f0', name: 'final_answer', input: {}, parseError: 'x' }] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'zweiter Anlauf' })] }),
+  ]);
+  const job = makeJob();
+  const out = await runJob(job, newSession());
+  assert.equal(out.content, 'zweiter Anlauf');
+  assert.deepEqual(job.executed, []);
+  const results = calls[1].messages.at(-1).content;
+  assert.equal(results.length, 2, 'jeder tool_use bekommt genau ein tool_result');
+  assert.ok(results.every(r => r.is_error && /kein gültiges JSON/.test(r.content)));
+  assert.doesNotMatch(results[0].content, /errorKey/, 'UI-Key geht nicht ans Modell');
+});
+
+test('Deckel pro Runde: überzählige Aufrufe bekommen ein tool_result statt ausgeführt zu werden', async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup', {}, 'a'), tu('lookup', {}, 'b'), tu('lookup', {}, 'c')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'ok' })] }),
+  ]);
+  const job = makeJob({ prep: { maxToolsPerRound: 2 } });
+  await runJob(job, newSession());
+  assert.equal(job.executed.length, 2);
+  const results = calls[1].messages.at(-1).content;
+  assert.deepEqual(results.map(r => r.tool_use_id), ['a', 'b', 'c']);
+  assert.equal(results[2].is_error, true);
+  assert.match(results[2].content, /höchstens 2/);
+  const log = job.ctx().toolLog;
+  assert.equal(log[2].errorKey, 'chat.toolError.roundLimit');
+});
+
+test('Kontextfenster-Schutz vor dem Call: Synthese mit gekürzten Ergebnissen der letzten Runde', async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', tokensIn: 100, toolUses: [tu('lookup')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'gekürzt synthetisiert' })] }),
+  ]);
+  const job = makeJob({ prep: { tokenBudget: 2000, inputCapInstruction: 'BUDGET' }, toolResult: () => ({ text: 'x'.repeat(40000) }) });
+  const out = await runJob(job, newSession());
+  assert.equal(out.content, 'gekürzt synthetisiert');
+  assert.equal(out.ci.stop, 'context_budget');
+  assert.equal(calls.length, 2, 'keine zweite Recherche-Runde');
+  assert.deepEqual(calls[1].tools, ['final_answer']);
+  const toolMsg = calls[1].messages.at(-2).content;
+  assert.match(toolMsg[0].content, /gekürzt: Kontext-Budget/);
+  assert.ok(toolMsg[0].content.length < 40000);
+});
+
+test('AI_TOOLS_UNSUPPORTED nach beantworteter Runde: kein Rückfall, Job-Fehler', async () => {
+  let n = 0;
+  ai.callAIWithTools = async () => {
+    n++;
+    if (n === 1) return res({ stopReason: 'tool_use', toolUses: [tu('lookup')] });
+    const e = new Error('tools nicht unterstützt'); e.code = 'AI_TOOLS_UNSUPPORTED'; throw e;
+  };
+  let fellBack = false;
+  await runFailing(makeJob({ fallbackJob: async () => { fellBack = true; } }), newSession());
+  assert.equal(fellBack, false);
+});
+
+test('userPreamble + cacheHistory: Erst-Kontext vor der Frage, Breakpoint am Historien-Ende', async () => {
+  const sid = newSession();
+  // Verlauf: frühere Runde + aktuelle Frage (newSession legte 'Frage?' an).
+  db.prepare(`DELETE FROM chat_messages WHERE session_id = ?`).run(sid);
+  const ins = db.prepare(`INSERT INTO chat_messages (session_id, role, content, created_at) VALUES (?, ?, ?, ?)`);
+  ins.run(sid, 'user', 'alt', '2026-01-01T00:00:01Z');
+  ins.run(sid, 'assistant', 'alte Antwort', '2026-01-01T00:00:02Z');
+  ins.run(sid, 'user', 'Frage?', '2026-01-01T00:00:03Z');
+  const calls = mockCalls([res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'ok' })] })]);
+  await runJob(makeJob({ prep: { userPreamble: 'ERST-KONTEXT', cacheHistory: true } }), sid);
+  const msgs = calls[0].messages;
+  assert.equal(msgs.length, 3);
+  assert.equal(msgs[1].cacheBreakpoint, true);
+  assert.deepEqual(msgs[2].content.map(b => b.text.trim()), ['ERST-KONTEXT', 'Frage?']);
+  const stored = db.prepare(`SELECT content FROM chat_messages WHERE session_id = ? AND role = 'user' ORDER BY id DESC`).get(sid);
+  assert.equal(stored.content, 'Frage?', 'persistiert wird nur die Frage');
+});
+
+test('buildAgenticHistory: Rollen alternieren ab user, Marker neutralisiert, Belege angehängt', () => {
+  const { buildAgenticHistory } = require('../../routes/jobs/agentic-chat');
+  const sid = newSession();
+  db.prepare(`DELETE FROM chat_messages WHERE session_id = ?`).run(sid);
+  const ins = db.prepare(`INSERT INTO chat_messages (session_id, role, content, context_info, created_at) VALUES (?, ?, ?, ?, ?)`);
+  let t = 0;
+  const at = () => new Date(Date.UTC(2026, 0, 1, 0, 0, ++t)).toISOString();
+  ins.run(sid, 'user', 'Anker-Frage', null, at());
+  ins.run(sid, 'assistant', 'Anker-Antwort', null, at());
+  for (let i = 0; i < 6; i++) {
+    ins.run(sid, 'user', `F${i}`, null, at());
+    const ci = i === 5 ? JSON.stringify({ citations: [{ n: 1, page_id: 7, page_name: 'Kap 1', quote: 'Stefan war achtundzwanzig.', valid: true }, { n: 2, quote: 'erfunden', valid: false }] }) : null;
+    ins.run(sid, 'assistant', i === 4 ? '__i18n:chat.errors.maxIterReached__' : `A${i}`, ci, at());
+  }
+  ins.run(sid, 'user', 'aktuell', null, at());
+  // 15 Nachrichten, Tail von 8 beginnt mit einer Antwort (A2) → muss wegfallen.
+  const h = buildAgenticHistory(sid, 8);
+  assert.deepEqual(h.slice(0, 3).map(m => m.content), ['Anker-Frage', 'Anker-Antwort', 'F3']);
+  assert.equal(h[0].role, 'user');
+  for (let i = 1; i < h.length; i++) assert.notEqual(h[i].role, h[i - 1].role, `Rollen-Folge bei ${i}`);
+  assert.equal(h.at(-1).content, 'aktuell');
+  const joined = h.map(m => m.content).join('\n');
+  assert.doesNotMatch(joined, /__i18n:/);
+  assert.match(joined, /Keine inhaltliche Antwort/);
+  assert.match(joined, /Belege dieser Antwort: \(1\) Abschnitt «Kap 1» \(page_id 7\): «Stefan war achtundzwanzig\.»/);
+  assert.doesNotMatch(joined, /erfunden/);
+});
+
+test('_handleChatPost: laufender Job derselben Session → 409, Nachricht wird nicht gespeichert', () => {
+  const { _handleChatPost } = require('../../routes/jobs/chat/shared');
+  const sid = newSession();
+  const before = db.prepare(`SELECT COUNT(*) AS n FROM chat_messages WHERE session_id = ?`).get(sid).n;
+  const running = createJob('book-chat', BOOK, USER, 'x', null, sid);
+  let status = 200, body = null;
+  const resStub = { status(c) { status = c; return this; }, json(b) { body = b; return this; } };
+  _handleChatPost({ body: { session_id: sid, message: 'Neue Frage' }, session: { user: { email: USER } } }, resStub, {
+    jobType: 'book-chat', kind: 'book', labelFn: () => ({ key: 'x' }), runFn: () => {},
+  });
+  assert.equal(status, 409);
+  assert.deepEqual(body, { error_code: 'CHAT_JOB_RUNNING', jobId: running });
+  const after = db.prepare(`SELECT COUNT(*) AS n FROM chat_messages WHERE session_id = ?`).get(sid).n;
+  assert.equal(after, before);
 });

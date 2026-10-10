@@ -63,13 +63,13 @@ test('Ganze-Absatz-Korrektur behaelt den <p>-Wrapper (kein verschwundener Block)
 });
 
 test('Korrektur ueber eine <em>-Spanne behaelt Absatz + Tag-Balance', () => {
-  // Inline-Tags innerhalb des Matches werden als Waisen erhalten (Orphan-Tag-Schutz),
-  // damit die Tag-Balance nicht zerbricht.
+  // Wort-Diff-Ersatz: nur das geänderte Wort wird ersetzt, die <em>-Spanne um
+  // die unveränderten Wörter bleibt stehen — Tag-Balance und Absatz intakt.
   const html = '<p>Er sagte <em>das magische</em> Wort.</p>';
   const out = applyCorrections(html, [{ original: 'das magische Wort', korrektur: 'das geheime Wort', typ: 'grammatik' }]);
   assert.equal(countTag(out, 'p'), 1);
   assert.equal((out.match(/<em\b/g) || []).length, (out.match(/<\/em>/g) || []).length);
-  assert.ok(out.includes('das geheime Wort'));
+  assert.equal(out, '<p>Er sagte <em>das geheime</em> Wort.</p>');
 });
 
 test('Mehrere Findings nacheinander: kein Absatz-Text geht verloren', () => {

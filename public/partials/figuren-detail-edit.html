@@ -1,0 +1,50 @@
+<!-- Figur-Detail: Steckbrief bearbeiten (Katalog-Pflege)
+     Fragment der Figurenübersicht — eingebunden via `<!-- @include figuren-detail-edit -->`
+     in figuren-detail.html (string-seitiger Include, weil der Block INNERHALB des
+     `x-for` über die Figuren steht). Scope: `figurenCard` + Schleifenvariable `f`.
+     Methods + Feldliste: public/js/book/figuren-pflege.js. Server: PATCH
+     /figures/:book_id/:fig_id (db/figures/patch.js) — setzt «vom Autor gepflegt».
+
+     Zwei x-if-Varianten pro Textfeld statt eines `:data-spellcheck`: der
+     Spellcheck-Dispatcher greift Felder über einen statischen Attribut-Selektor
+     (Muster sources-form.html). -->
+<template x-if="figurEditId === f.id">
+  <section class="figur-group figur-edit">
+    <h4 class="figur-group-title" x-text="$app.t('figuren.edit.title')"></h4>
+    <p class="card-hint" x-text="$app.t('figuren.edit.hint')"></p>
+    <div class="card-form-grid">
+      <template x-for="d in figurEditFields()" :key="d.key">
+        <div class="card-form-row" :class="{ 'card-form-row--top': d.area }">
+          <label class="card-form-label" :for="'figur-edit-' + f.id + '-' + d.key" x-text="$app.t('figuren.field.' + d.key)"></label>
+          <div class="card-form-field">
+            <template x-if="d.options">
+              <div x-data="combobox({ placeholder: $app.t('figuren.field.' + d.key), emptyLabel: $app.t('figuren.edit.unset'), compact: false })"
+                   x-modelable="value" x-model="figurEditDraft[d.key]"
+                   x-effect="options = figurEditOptions(d.options)"></div>
+            </template>
+            <template x-if="!d.options && d.area">
+              <textarea class="card-form-textarea" rows="3" :id="'figur-edit-' + f.id + '-' + d.key"
+                        x-model="figurEditDraft[d.key]" :maxlength="d.max" data-spellcheck="spelling"></textarea>
+            </template>
+            <template x-if="!d.options && !d.area && d.spell">
+              <input type="text" class="card-form-input" :id="'figur-edit-' + f.id + '-' + d.key"
+                     x-model="figurEditDraft[d.key]" :maxlength="d.max" data-spellcheck="spelling">
+            </template>
+            <template x-if="!d.options && !d.area && !d.spell">
+              <input type="text" class="card-form-input" :id="'figur-edit-' + f.id + '-' + d.key"
+                     x-model="figurEditDraft[d.key]" :maxlength="d.max">
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+    <div class="figur-edit-actions">
+      <button type="button" class="primary" :disabled="figurEditBusy" @click="saveFigurEdit(f)">
+        <span x-show="figurEditBusy" class="spinner"></span>
+        <span x-text="$app.t('common.save')"></span>
+      </button>
+      <button type="button" :disabled="figurEditBusy" @click="cancelFigurEdit()" x-text="$app.t('common.cancel')"></button>
+    </div>
+    <p class="card-form-error" x-show="figurEditError" x-text="figurEditError"></p>
+  </section>
+</template>

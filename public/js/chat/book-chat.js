@@ -16,8 +16,10 @@ export function formatToolInput(input, max = 160) {
 }
 
 // Zeilen des Werkzeug-Verlaufs: alle Tool-Calls ausser final_answer (das ist die
-// Antwort selbst), mit Runde, Dauer, gekürzt/Fehler.
-export function toolRows(toolCalls) {
+// Antwort selbst), mit Runde, Dauer, gekürzt/Fehler. `error` ist der Text fürs
+// Modell (deutsch); hat das Werkzeug einen `errorKey` mitgeliefert, übersetzt `t`
+// ihn für die Anzeige. Ohne Key bleibt der Rohtext (unerwartete Ausnahme).
+export function toolRows(toolCalls, t = null) {
   if (!Array.isArray(toolCalls)) return [];
   return toolCalls
     .filter(tc => tc && tc.name !== 'final_answer')
@@ -28,12 +30,16 @@ export function toolRows(toolCalls) {
       durationMs: Number.isFinite(tc.durationMs) ? tc.durationMs : null,
       truncated: !!tc.truncated,
       failed: tc.ok === false,
-      error: tc.error ? String(tc.error).slice(0, 200) : '',
+      error: (tc.errorKey && t)
+        ? t(tc.errorKey, tc.errorParams || {})
+        : (tc.error ? String(tc.error).slice(0, 200) : ''),
     }));
 }
 
 export const bookChatMethods = {
-  _bookChatToolRows(msg) { return toolRows(msg?.context_info?.tool_calls); },
+  _bookChatToolRows(msg) {
+    return toolRows(msg?.context_info?.tool_calls, (k, p) => window.__app.t(k, p));
+  },
 
   // Validierte Zitate aus final_answer (context_info.citations) als Fussnoten.
   bookChatCitations(msg) {
@@ -54,6 +60,7 @@ export const bookChatMethods = {
     const r = msg?.context_info?.stop_reason;
     if (r === 'input_cap') return window.__app.t('chat.stopInputCap');
     if (r === 'max_iter') return window.__app.t('chat.stopMaxIter');
+    if (r === 'context_budget') return window.__app.t('chat.stopContextBudget');
     return '';
   },
 

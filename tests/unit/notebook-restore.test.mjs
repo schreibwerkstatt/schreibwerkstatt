@@ -4,10 +4,12 @@
 // ist UND (b) ein abweichender lokaler Draft existiert — sonst würde der User aus
 // „viewing" ungewollt in den Edit-Modus gezwungen.
 //
-// Setup: sessionStorage/localStorage als In-Memory-Stubs; window.__app als Host.
+// Setup: sessionStorage/localStorage als In-Memory-Stubs; window.__app als Host;
+// linkedom liefert den DOMParser für den Draft-Vergleich.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { DOMParser } from 'linkedom';
 
 function memStore() {
   const m = new Map();
@@ -22,6 +24,8 @@ function memStore() {
 globalThis.sessionStorage = memStore();
 globalThis.localStorage = memStore();
 globalThis.window = globalThis;
+// Draft-Vergleich läuft über isNoChange → normalizeForCompare (DOMParser).
+globalThis.DOMParser = DOMParser;
 
 const { notebookCardMethods } = await import('../../public/js/editor/notebook/card.js');
 const { writeDraft } = await import('../../public/js/editor/notebook/../draft-storage.js');
@@ -36,6 +40,7 @@ function setApp(extra = {}) {
     focusActive: false,
     showEditorCard: true,
     currentPage: { id: 5 },
+    originalHtml: '<p>server</p>',
     renderedPageHtml: '<p>server</p>',
     _started: 0,
     startEdit() { this._started++; },
@@ -71,6 +76,18 @@ test('_tryRestoreNotebook: Draft = Server-Stand → kein startEdit', () => {
   const ctx = ctxWith({ pageId: 5 });
   ctx._tryRestoreNotebook();
   assert.equal(app._started, 0, 'gleicher Inhalt ist kein „unsaved" → kein Edit');
+});
+
+test('_tryRestoreNotebook: Draft = Server-Stand, Leseansicht dekoriert → kein startEdit', () => {
+  // renderedPageHtml trägt Marken der Leseansicht; verglichen wird mit der
+  // Server-Fassung (originalHtml), sonst zwänge jeder Reload in den Edit-Modus.
+  localStorage.clear();
+  writeDraft(5, '<p>server</p>', '<p>server</p>', null);
+  const app = setApp({ renderedPageHtml: '<p><span class="figure-mark">server</span></p>' });
+  const ctx = ctxWith({ pageId: 5 });
+  ctx._tryRestoreNotebook();
+  assert.equal(app._started, 0, 'Dekoration der Leseansicht ist keine Änderung');
+  assert.equal(ctx._notebookRestoreSnapshot, null, 'Snapshot konsumiert');
 });
 
 test('_tryRestoreNotebook: falsche Seite → No-op, Snapshot bleibt (wartet auf richtige Seite)', () => {

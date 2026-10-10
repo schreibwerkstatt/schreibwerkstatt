@@ -18,7 +18,11 @@ const {
 
 // Nur die drei Modell-Felder überleben: `applied`/`applied_at`/`status` setzt
 // ausschliesslich der User über die PATCH-Routen (routes/chat.js) — ein Modell,
-// das sie mitliefert, darf keinen Vorschlag als erledigt ausgeben.
+// das sie mitliefert, darf keinen Vorschlag als erledigt ausgeben. Auch `match`
+// (Fundstellen-Prüfung) setzt erst der Job (page-chat-verify.js), nie das Modell.
+// `original`/`ersatz` getrimmt gespeichert: die Fundstelle schliesst nie Rand-
+// Leerraum ein, ein Ersatz mit eigenem Rand verklebte sonst Nachbarwörter bzw.
+// verdoppelte den Leerraum.
 function _sanitizeVorschlaege(arr) {
   if (!Array.isArray(arr)) return [];
   const out = [];
@@ -27,8 +31,8 @@ function _sanitizeVorschlaege(arr) {
     const ers  = typeof v?.ersatz   === 'string' ? v.ersatz.trim()   : '';
     if (!orig || !ers || orig === ers) continue;
     out.push({
-      original: v.original,
-      ersatz: v.ersatz,
+      original: orig,
+      ersatz: ers,
       ...(typeof v.begruendung === 'string' && v.begruendung.trim() ? { begruendung: v.begruendung } : {}),
     });
   }
@@ -151,8 +155,14 @@ function _handleChatPost(req, res, { jobType, kind, labelFn, runFn, preflight, c
     if (dup) return res.json({ jobId: dup.job_id || null, existing: true });
   }
 
+  // Läuft für diese Session schon ein Job (zweiter Tab, zweites Gerät), wird die neue
+  // Nachricht NICHT gespeichert — ein 200 mit der fremden jobId liesse sie im Client
+  // optimistisch stehen, obwohl sie nie beantwortet wird. 409 + jobId: der Client
+  // nimmt die Nachricht zurück, behält den Text im Eingabefeld und kann den
+  // laufenden Job verfolgen. (Wiederholung DERSELBEN Nachricht fängt oben die
+  // client_msg_id-Idempotenz ab.)
   const existing = findActiveJobId(jobType, session_id, userEmail);
-  if (existing) return res.json({ jobId: existing, existing: true });
+  if (existing) return res.status(409).json({ error_code: 'CHAT_JOB_RUNNING', jobId: existing });
 
   const session = getSessionForJob(session_id, userEmail);
   if (!session || session.kind !== kind) return res.status(404).json({ error_code: 'SESSION_NOT_FOUND' });

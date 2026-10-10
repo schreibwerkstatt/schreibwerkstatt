@@ -35,17 +35,21 @@
 // Index braucht keinen Caller-Schritt: seine Zeilen fallen per FK-CASCADE mit der
 // Quelle. Dieses Modul haelt sich frei von lib/-Abhaengigkeiten.
 //
-// GRENZE, die keine Schicht verschweigen darf: es gibt keinen persistenten Alias.
-// Steht der Name der Quelle noch im Buchtext, legt die naechste Komplettanalyse
-// dafuer wieder einen Eintrag an — die umgehaengten Referenzen bleiben beim Ziel,
-// der verwaiste Eintrag kann aber neu entstehen. Der Name der Quelle wandert
-// darum als `kurzname` ans Ziel (falls dort leer): buildFigNameLookup
-// (routes/jobs/komplett/utils.js) liest kurzname, sodass Szenen/Events mit dem
-// alten Namen wenigstens im Remap auf das Ziel aufloesen.
+// Figuren tragen einen persistenten Alias: Name und Kurzname der Quelle (samt deren
+// eigenen Aliassen) landen in `figure_aliases` des Ziels (db/figures/aliases.js).
+// Der Cross-Run-Abgleich der Komplettanalyse (planFigurenMatch) und die Namens-
+// Aufloesung der Szenen/Ereignisse (buildFigNameLookup) lesen sie — steht der Name
+// der Quelle noch im Buchtext, landet er beim naechsten Lauf auf dem Ziel statt als
+// neuer Eintrag. Zusaetzlich wandert der Quell-Name als `kurzname` ans Ziel (falls
+// dort leer), damit der Erwaehnungs-Scan (lib/page-index.js) ihn mitzaehlt.
+// GRENZE: Schauplaetze und Szenen haben keinen Alias — dort kann ein Eintrag mit
+// dem Namen der Quelle beim naechsten Lauf neu entstehen.
 
 const { db } = require('./connection');
 const { NOW_ISO_SQL } = require('./now');
 const { normName } = require('../lib/name-normalize');
+const { relationKey } = require('./figures/refs');
+const { addFigureAliases } = require('./figures/aliases');
 
 // Skalar-Felder, die aus der Quelle nachgefuellt werden — aber NUR, wenn sie beim
 // Ziel leer sind. Bestandswerte des Ziels werden nie ueberschrieben (Muster
@@ -115,7 +119,8 @@ function _fillEmpty(table, fields, source, target, extra = {}) {
 
 // ── Figuren ───────────────────────────────────────────────────────────────────
 // Verschmilzt `sourceId` in `targetId` und loescht die Quelle. Eine Transaktion.
-// Gibt { moved, filled, eventsDeduped, relationsDropped } zurueck.
+// Gibt { moved, filled, eventsDeduped, relationsDropped, draftsUnlinked,
+// aliasesAdded } zurueck.
 function mergeFigures(bookId, userEmail, sourceId, targetId) {
   const em = userEmail || null;
   return db.transaction(() => {
@@ -202,17 +207,18 @@ function mergeFigures(bookId, userEmail, sourceId, targetId) {
     relationsDropped += db.prepare(
       'DELETE FROM figure_relations WHERE from_fig_id = to_fig_id AND from_fig_id = ?'
     ).run(targetId).changes;
-    // Ungeordnete Paar-Dubletten GLEICHEN Typs, die nach dem Remap doppelt am Ziel
-    // haengen (A→B und B→A). Nur bei gleichem Typ, damit keine Richtungsinformation
-    // eines gerichteten Beziehungstyps verloren geht. Die vom Autor angelegte Zeile
+    // Paar-Dubletten, die nach dem Remap doppelt am Ziel haengen: gleicher Typ in
+    // beiden Richtungen (A→B, B→A freund) ODER das inverse Paar eines gerichteten
+    // Typs (A→B elternteil ≡ B→A kind). Schluessel ist derselbe `relationKey`, mit dem
+    // der Analyse-Schreibpfad manuelle gegen KI-Beziehungen abgleicht — verschiedene
+    // Typen auf einem Paar bleiben stehen. Die vom Autor angelegte Zeile
     // (origin='manual') gewinnt vor der der Analyse.
     const relRows = db.prepare(
       "SELECT id, from_fig_id, to_fig_id, typ, beschreibung FROM figure_relations WHERE book_id = ? AND user_email IS ? AND (from_fig_id = ? OR to_fig_id = ?) ORDER BY (origin = 'manual') DESC, id"
     ).all(bookId, em, targetId, targetId);
     const relSeen = new Set();
     for (const r of relRows) {
-      const [a, b] = r.from_fig_id < r.to_fig_id ? [r.from_fig_id, r.to_fig_id] : [r.to_fig_id, r.from_fig_id];
-      const key = `${a}|${b}|${r.typ}`;
+      const key = relationKey(r.from_fig_id, r.to_fig_id, r.typ);
       if (relSeen.has(key)) {
         db.prepare('DELETE FROM figure_relations WHERE id = ?').run(r.id);
         relationsDropped++;
@@ -252,17 +258,74 @@ function mergeFigures(bookId, userEmail, sourceId, targetId) {
     ).run(targetId, sourceId).changes;
     db.prepare('DELETE FROM research_item_links WHERE figure_id = ?').run(sourceId);
 
-    // Nullable Einzel-Referenzen (ON DELETE SET NULL) — schlichtes UPDATE.
+    // Figuren-Listen eines Zeitstrahl-Ereignisses bzw. Kontinuitaets-Befunds (eigene
+    // id, kein UNIQUE): stehen Quelle UND Ziel am selben Ereignis/Befund, faellt die
+    // Quell-Zeile weg — ein Umhaengen ergaebe dieselbe Figur zweimal in der Liste.
+    db.prepare(`DELETE FROM zeitstrahl_event_figures WHERE figure_id = ?
+      AND event_id IN (SELECT event_id FROM zeitstrahl_event_figures WHERE figure_id = ?)`).run(sourceId, targetId);
     moved.timeline = db.prepare('UPDATE zeitstrahl_event_figures SET figure_id = ? WHERE figure_id = ?')
       .run(targetId, sourceId).changes;
+    db.prepare(`DELETE FROM continuity_issue_figures WHERE figure_id = ?
+      AND issue_id IN (SELECT issue_id FROM continuity_issue_figures WHERE figure_id = ?)`).run(sourceId, targetId);
     moved.continuity = db.prepare('UPDATE continuity_issue_figures SET figure_id = ? WHERE figure_id = ?')
       .run(targetId, sourceId).changes;
+    // Nullable Einzel-Referenzen (ON DELETE SET NULL) — schlichtes UPDATE.
     moved.profiles = db.prepare('UPDATE chapter_narrative_profile SET erzaehler_figur_id = ? WHERE erzaehler_figur_id = ?')
       .run(targetId, sourceId).changes;
-    moved.drafts = db.prepare('UPDATE draft_figures SET source_figure_id = ? WHERE source_figure_id = ?')
-      .run(targetId, sourceId).changes;
+    // Werkstatt-Figuren: hat derselbe User schon eine Werkstatt-Figur auf dem Ziel,
+    // verliert die der Quelle ihre Import-Referenz (NULL) statt eine zweite
+    // Werkstatt-Figur auf dieselbe Katalogfigur zu stellen (der Import verbietet
+    // genau das, 409 ALREADY_IMPORTED). Die Mindmap bleibt; das Ergebnis nennt sie.
+    const draftsUnlinked = [];
+    moved.drafts = 0;
+    const hasTargetDraft = db.prepare('SELECT 1 FROM draft_figures WHERE source_figure_id = ? AND user_email = ?');
+    for (const d of db.prepare('SELECT id, name, user_email FROM draft_figures WHERE source_figure_id = ?').all(sourceId)) {
+      if (hasTargetDraft.get(targetId, d.user_email)) {
+        db.prepare('UPDATE draft_figures SET source_figure_id = NULL WHERE id = ?').run(d.id);
+        draftsUnlinked.push({ id: d.id, name: d.name });
+      } else {
+        moved.drafts += db.prepare('UPDATE draft_figures SET source_figure_id = ? WHERE id = ?').run(targetId, d.id).changes;
+      }
+    }
     moved.threads = db.prepare('UPDATE plot_threads SET figure_id = ? WHERE figure_id = ?')
       .run(targetId, sourceId).changes;
+
+    // Ignorierte Redundanz-Paare (kind='figure', normiert a < b): auf das Ziel
+    // umschreiben. Ein Paar Quelle↔Ziel faellt weg (es gibt nur noch eine Figur),
+    // ein Paar, das das Ziel schon hat, ebenfalls (OR IGNORE am partiellen UNIQUE).
+    moved.dismissals = 0;
+    const insDis = db.prepare(`INSERT OR IGNORE INTO redundancy_dismissals
+      (book_id, user_email, kind, figure_a_id, figure_b_id, created_at) VALUES (?, ?, 'figure', ?, ?, ?)`);
+    for (const r of db.prepare(`SELECT id, book_id, user_email, figure_a_id, figure_b_id, created_at
+        FROM redundancy_dismissals WHERE kind = 'figure' AND (figure_a_id = ? OR figure_b_id = ?)`).all(sourceId, sourceId)) {
+      const other = r.figure_a_id === sourceId ? r.figure_b_id : r.figure_a_id;
+      db.prepare('DELETE FROM redundancy_dismissals WHERE id = ?').run(r.id);
+      if (other === targetId) continue;
+      moved.dismissals += insDis.run(r.book_id, r.user_email, Math.min(other, targetId), Math.max(other, targetId), r.created_at).changes;
+    }
+
+    // Abgeleitete 1:1-Zeilen aus Scans (Alters-Index samt Belegen, Idiolekt): das
+    // Ziel hat Vorrang. Fehlt ihm die Zeile, uebernimmt es die der Quelle (sonst
+    // stuende es bis zum naechsten Scan ohne Alter/Idiolekt da); hat es eine, faellt
+    // die der Quelle per CASCADE.
+    if (!db.prepare('SELECT 1 FROM figure_ages WHERE figure_id = ?').get(targetId)) {
+      moved.ages = db.prepare('UPDATE figure_ages SET figure_id = ? WHERE figure_id = ?').run(targetId, sourceId).changes;
+      if (moved.ages) {
+        moved.ageBelege = db.prepare('UPDATE figure_age_belege SET figure_id = ? WHERE figure_id = ?')
+          .run(targetId, sourceId).changes;
+      }
+    }
+    if (!db.prepare('SELECT 1 FROM figure_idiolect WHERE figure_id = ?').get(targetId)) {
+      moved.idiolect = db.prepare('UPDATE figure_idiolect SET figure_id = ? WHERE figure_id = ?').run(targetId, sourceId).changes;
+    }
+
+    // Persistente Aliasse: Name + Kurzname der Quelle und ihre eigenen Aliasse. VOR
+    // dem Feld-Backfill, der den Quell-Namen sonst als kurzname des Ziels eintraegt
+    // und ihn damit aus der Alias-Liste dedupliziert (ein Kurzname zaehlt im
+    // Abgleich nur als Token, ein Alias als Name).
+    const sourceAliases = db.prepare('SELECT alias FROM figure_aliases WHERE figure_id = ? ORDER BY id')
+      .all(sourceId).map(r => r.alias);
+    const aliasesAdded = addFigureAliases(targetId, bookId, [source.name, source.kurzname, ...sourceAliases]);
 
     // Quell-Name als kurzname des Ziels sichern (nur wenn dort leer UND der Name
     // sich wirklich unterscheidet — bei gleichnamigen Dubletten waere kurzname ==
@@ -283,6 +346,7 @@ function mergeFigures(bookId, userEmail, sourceId, targetId) {
       kind: 'figure', sourceId, targetId,
       sourceName: source.name, targetName: target.name,
       moved, filled, eventsDeduped: evDrop.length, relationsDropped,
+      draftsUnlinked, aliasesAdded,
     };
   })();
 }

@@ -297,7 +297,8 @@
   background: var(--color-mark-ins-bg);
   color: var(--color-mark-ins-text);
 }
-/* Hinweise unter einer Antwort (Parse-Fallback, gekürzter Verlauf). */
+/* Hinweise unter einer Antwort (Parse-Fallback, gekürzter Verlauf) und über dem
+   Eingabefeld des Abschnitts-Chats (Flush vor dem Senden gescheitert). */
 .chat-msg-hint {
   margin-top: var(--space-xs);
   font-size: var(--font-size-xs);

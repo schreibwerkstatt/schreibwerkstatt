@@ -104,8 +104,9 @@ export function registerBookSettingsCard() {
     staleCleanupError: '',
     // Verwaiste Einträge zusammenführen (Danger-Zone) — siehe book/book-settings/merge.js.
     // Kandidatenlisten karten-lokal: die Entitäten-Karten sind zu den Bucheinstellungen
-    // exklusiv und laden ihre Kataloge beim Öffnen selbst.
-    mergeCandidatesLoaded: false,
+    // exklusiv und laden ihre Kataloge beim Öffnen selbst. `mergeCandidatesBookId`:
+    // Buch, zu dem die geladenen Listen gehören (null = nichts geladen).
+    mergeCandidatesBookId: null,
     mergeLoading: false,
     mergeBusy: false,
     mergeMessage: '',
@@ -185,7 +186,7 @@ export function registerBookSettingsCard() {
           staleCleanupError: '',
           // Merge-Panel: Kandidaten gehören zum alten Buch → verwerfen, nicht
           // weiterschleppen. Factory-Reset, darum frische Objekt-Literale.
-          mergeCandidatesLoaded: false,
+          mergeCandidatesBookId: null,
           mergeLoading: false,
           mergeBusy: false,
           mergeMessage: '',

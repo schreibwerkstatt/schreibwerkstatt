@@ -39,11 +39,11 @@ function _clampDiffPart(s) {
 
 function tool_diff_page_revisions(input, ctx) {
   const pageId = input?.page_id;
-  if (!Number.isInteger(pageId)) return { error: 'page_id fehlt' };
+  if (!Number.isInteger(pageId)) return { error: 'page_id fehlt', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'page_id' } };
 
   const pageRow = getPageWithChapter(pageId);
   if (!pageRow || pageRow.book_id !== ctx.bookId) {
-    return { error: 'Abschnitt nicht im aktuellen Buch.' };
+    return { error: 'Abschnitt nicht im aktuellen Buch.', errorKey: 'chat.toolError.pageNotInBook' };
   }
 
   let fromRev = null;
@@ -51,14 +51,14 @@ function tool_diff_page_revisions(input, ctx) {
   if (Number.isInteger(input?.from_rev_id) && Number.isInteger(input?.to_rev_id)) {
     fromRev = pageRevisions.get(input.from_rev_id);
     toRev   = pageRevisions.get(input.to_rev_id);
-    if (!fromRev || !toRev) return { error: 'Revision-ID nicht gefunden.' };
+    if (!fromRev || !toRev) return { error: 'Revision-ID nicht gefunden.', errorKey: 'chat.toolError.notFound' };
     if (fromRev.page_id !== pageId || toRev.page_id !== pageId) {
-      return { error: 'Revision gehoert nicht zum Abschnitt.' };
+      return { error: 'Revision gehoert nicht zum Abschnitt.', errorKey: 'chat.toolError.notFound' };
     }
   } else {
     const recent = pageRevisions.listForPage(pageId, 2);
     if (recent.length < 2) {
-      return { error: 'Weniger als 2 Revisionen vorhanden.', total_revisions: recent.length };
+      return { error: 'Weniger als 2 Revisionen vorhanden.', errorKey: 'chat.toolError.tooFewRevisions', total_revisions: recent.length };
     }
     toRev   = pageRevisions.get(recent[0].id);
     fromRev = pageRevisions.get(recent[1].id);

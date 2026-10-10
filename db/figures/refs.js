@@ -104,11 +104,15 @@ function enrichBelegWithIds(beleg, idMaps) {
   } else if (!kapitel) {
     kapitel = a;   // unauflösbar – bereinigter Rohname dient nur der Anzeige
   }
-  const chId = (kapitel && chMap[kapitel]) ?? null;
+  // Mitgebrachte IDs (Katalog-PUT: GET→PUT-Round-Trip) bleiben stehen, wenn der Name
+  // sich nicht aufloesen laesst — aber nur, wenn sie zu DIESEM Buch gehoeren
+  // (idMaps.validChapterIds/validPageIds; ohne die Sets wird nichts uebernommen).
+  const keepId = (v, set) => (Number.isInteger(v) && set?.has(v) ? v : null);
+  const chId = ((kapitel && chMap[kapitel]) ?? null) ?? keepId(beleg.chapter_id, idMaps?.validChapterIds);
   const effSeite = (seite && seite !== kapitel && !isUngroupedChapterName(seite))
     ? seite : null;
   const pId = effSeite
-    ? (idMaps?.pageNameToIdByChapter?.[chId ?? 0]?.[effSeite] ?? null)
+    ? ((idMaps?.pageNameToIdByChapter?.[chId ?? 0]?.[effSeite] ?? null) ?? keepId(beleg.page_id, idMaps?.validPageIds))
     : null;
   return {
     kapitel: kapitel || null,

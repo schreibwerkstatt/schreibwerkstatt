@@ -1,5 +1,6 @@
 import { fetchText, tzOpts, formatRelativeShort, charBadgeLabel, localeTag } from '../utils.js';
 import { avatarHue } from '../avatar.js';
+import { isRetryableSaveError } from '../editor/notebook/save-errors.js';
 
 // Pure Filter-Logik für die Szenen-Liste. Getrennt von Alpine-Getter, damit
 // Unit-Tests den Kapitel-Filter direkt gegen Fixtures prüfen können.
@@ -245,6 +246,7 @@ export const appUiMethods = {
     const when = ts ? this._formatSaveTs(ts) : '';
     if (kind === 'unsaved') return this.t('edit.status.unsaved');
     if (kind === 'saving') return this.t('edit.status.saving');
+    if (kind === 'offline' && !isRetryableSaveError(this.saveFailKind)) return this.t('edit.status.failed');
     if (kind === 'offline') {
       return when
         ? this.t('edit.status.offlineWith', { when })
@@ -260,6 +262,7 @@ export const appUiMethods = {
     const kind = this._saveStatus().kind;
     if (kind === 'unsaved') return this.t('edit.status.unsavedTip');
     if (kind === 'saving') return this.t('edit.status.savingTip');
+    if (kind === 'offline' && !isRetryableSaveError(this.saveFailKind)) return this.t('edit.status.failedTip');
     if (kind === 'offline') return this.t('edit.status.offlineTip');
     if (kind === 'draft') return this.t('editor.draftTitle');
     if (kind === 'saved') return this.t('editor.savedTitle');

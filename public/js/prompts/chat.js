@@ -313,6 +313,7 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     'VORSCHLÄGE-REGELN:',
     '- Wenn du stilistische, inhaltliche oder sprachliche Schwächen erkennst oder der Autor nach Verbesserungen fragt: liefere mindestens einen konkreten Vorschlag mit original und ersatz.',
     '- original muss zeichengenau mit dem Abschnittstext übereinstimmen und darin genau einmal vorkommen (sonst etwas mehr Kontext mitnehmen).',
+    '- original liegt innerhalb EINES Absatzes (Absätze sind im Abschnittsinhalt durch Leerzeilen getrennt): über eine Absatzgrenze hinweg lässt sich nichts ersetzen — betrifft eine Änderung mehrere Absätze, liefere je Absatz einen eigenen Vorschlag.',
     '- ersatz muss den Stil des Autors beibehalten.',
     '- vorschlaege ist nur dann ein leeres Array, wenn die Frage rein inhaltlich/konzeptionell ist und keine Textstelle betrifft (z.B. Plotfragen, Figurenmotivation).',
     '- titel_varianten nur, wenn der Autor nach einem Titel, einer Überschrift oder Headline fragt: dann 3 bis 5 kurze, unterschiedliche Varianten (nur der Titel, ohne Anführungszeichen oder Nummerierung). Sonst ein leeres Array.',
@@ -341,15 +342,13 @@ export const BOOK_CHAT_FORCE_FINAL_INSTRUCTION =
   + 'Wenn die Recherche unvollständig blieb, beantworte die Frage so weit wie möglich mit dem Vorhandenen und weise kurz darauf hin, was nicht abgedeckt werden konnte. '
   + 'Sprache der Antwort: die der Userfrage.';
 
-// Rückgabe: Array von System-Cache-Blöcken (wie buildBookChatSystemPrompt).
-//   Block 1 (ttl '1h'): der über die Session stabile Anteil (System, Werkzeug-
-//     Strategie, Figuren, Review, final_answer-Pflicht). Tools + dieser Block sind
-//     der Cache-Präfix jeder Iteration — deshalb steht hier alles, was sich
-//     innerhalb der Session nicht ändert.
-//   Block 2 (cache:false): der Erst-Kontext (semantisch nächste Passagen zur
-//     AKTUELLEN Frage). Bewusst ohne Breakpoint: er trägt pro Frage andere Bytes,
-//     ein Breakpoint wäre ein cache_write, das nie gelesen wird. Steht am Ende,
-//     damit Block 1 ein stabiler Präfix bleibt.
+// Rückgabe: Array mit EINEM System-Cache-Block (ttl '1h'): der über die Session
+//   stabile Anteil (System, Werkzeug-Strategie, Figuren, Welt-Fakten, Review,
+//   final_answer-Pflicht). Tools + dieser Block + der bisherige Verlauf sind der
+//   Cache-Präfix jeder Iteration und jedes Turns. Der Erst-Kontext (semantisch
+//   nächste Passagen zur AKTUELLEN Frage, buildBookChatPreContext) gehört NICHT
+//   hierher: er trägt pro Frage andere Bytes und steht darum vor der Frage in
+//   deren User-Nachricht (routes/jobs/chat/book-chat-agent.js, `userPreamble`).
 export function buildBookChatAgentSystemPrompt(bookName, figuren, review, systemOverride = null, maxToolIter = 6, opts = {}) {
   // opts.semantic === false: der Embedding-Endpunkt fehlt, `search_similar` wird dem
   // Modell gar nicht angeboten (Filter in routes/jobs/chat/book-chat.js#prepare) — dann
@@ -383,7 +382,7 @@ export function buildBookChatAgentSystemPrompt(bookName, figuren, review, system
     '',
     'Rufe Werkzeuge an, bevor du vermutest.',
     'KOSTEN-LEITER — nimm die billigste Quelle, die die Frage beantwortet, und HÖRE DANN AUF:',
-    '  Stufe 1 (gratis, schon da): der ERST-KONTEXT am Ende dieses Prompts (semantisch nächste Passagen zur aktuellen Frage) plus die Blöcke FIGUREN, WELT-FAKTEN und BUCHBEWERTUNG. Beantwortet das die Frage, rufst du SOFORT `final_answer` — ohne ein einziges Recherche-Werkzeug.',
+    '  Stufe 1 (gratis, schon da): der ERST-KONTEXT direkt vor der aktuellen Frage (in derselben Nachricht; semantisch nächste Passagen zu ihr) plus die Blöcke FIGUREN, WELT-FAKTEN und BUCHBEWERTUNG. Beantwortet das die Frage, rufst du SOFORT `final_answer` — ohne ein einziges Recherche-Werkzeug.',
     `  Stufe 2 (billig, gezielt): ${semantic && has('search_similar') ? '`search_similar` (Sinn), ' : ''}\`search_passages\` (Wortlaut), \`get_figure_profile\`, \`get_figure_mentions\`, \`get_timeline\`, \`quote_match\`. Diese liefern Passagen, keine Volltexte.`,
     '  Stufe 3 (teuer, Volltext): `get_pages`, `get_chapter_text`. Nur wenn die Frage den ZUSAMMENHANG längerer Passagen braucht — Zusammenfassen, Aufbau/Dramaturgie eines Kapitels, Auswahl über den ganzen Text.',
     'Schmale Faktenfragen — Alter, Datum, Beruf, Wohnort, Verwandtschaft, «wann hat X …», «wie heisst Y» — werden auf Stufe 1 oder 2 beantwortet. Lade dafür NIE ein ganzes Kapitel und nie das ganze Buch: ein einzelner Fakt steht in einer Passage, nicht in einem Kapitel.',
@@ -444,15 +443,14 @@ export function buildBookChatAgentSystemPrompt(bookName, figuren, review, system
     );
   }
 
-  return [
-    { text: parts.join('\n'), ttl: '1h' },
-    { text: buildBookChatPreContext(opts.passages), cache: false },
-  ];
+  return [{ text: parts.join('\n'), ttl: '1h' }];
 }
 
 /**
  * Erst-Kontext-Block des agentischen Buch-Chats: die semantisch nächsten Passagen
  * zur aktuellen Frage, vorab geholt über dieselbe Pipeline wie `search_similar`.
+ * Steht als eigener Textblock vor der Frage in deren User-Nachricht (nicht im
+ * System-Prompt — dort bräche er den Cache-Präfix).
  * `passages` = [{ kind, entity_id, title, score, text }] (siehe
  * routes/jobs/chat/book-chat-retrieval.js#preContextPassages) oder leer/null.
  *

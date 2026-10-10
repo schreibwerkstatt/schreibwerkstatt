@@ -11,6 +11,15 @@
 // Block-Kollisionen bleiben als Draft liegen und werden gelöst, sobald der User
 // die betroffene Seite öffnet (bestehender conflict.js-Pfad).
 //
+// Gepusht wird auch der Draft, den ein Seitenwechsel mit ungespeicherten
+// Änderungen stehen lässt (`_teardownEditSession({ keepDraft: true })`): wer
+// eine Seite verlässt, verwirft damit nichts — der Autosave hätte denselben
+// Stand ohnehin gespeichert. Voraussetzung ist der Stempel der Basis
+// (`originalUpdatedAt`): nur mit ihm läuft der PUT durch den OCC-Guard, und
+// eine zwischenzeitliche Remote-Änderung wird gemergt statt überschrieben.
+// Ein Draft ohne Stempel (Alt-Format) wird darum nie automatisch gepusht; er
+// wartet auf den `pendingDraft`-Banner der Seite.
+//
 // Als Methoden-Modul in die `lektorat`-Root gespreadet (app.js) — `this` ist
 // zur Laufzeit die Root-Komponente, darum greifen `this.$store`, `this.editMode`
 // etc. Nur Plain-Methoden, keine Getter (Spread-Getter-Falle).
@@ -125,12 +134,17 @@ export const appOutboxMethods = {
     // zum Editieren geöffnet, gehört sie dem Live-Editor (autosave.js) — headless
     // nicht dazwischenfunken, sonst clearen wir den Draft unter seinen Füssen weg.
     if (this.editMode && Number(this.currentPage?.id) === pageId) return 'skip';
+    // Offenes Konflikt-Modal dieser Seite: dort fällt die Entscheidung.
+    if (Number(this.conflictResolution?.pageId) === pageId) return 'skip';
+    // Ohne Basis-Stempel kein OCC-Guard: der PUT überschriebe jede
+    // Remote-Änderung still. Bleibt liegen, bis der User die Seite öffnet.
+    if (!draft.originalUpdatedAt) return 'skip';
     const name = this._pageNameById(pageId);
     if (!name) return 'skip'; // Fremd-Buch/unbekannt → beim Laden des Buchs erneut
     try {
       await savePage(pageId, {
         html: draft.html, pageName: name, source: 'main',
-        expectedUpdatedAt: draft.originalUpdatedAt || null,
+        expectedUpdatedAt: draft.originalUpdatedAt,
       });
       clearDraft(pageId);
       return 'ok';

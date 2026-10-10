@@ -3,10 +3,12 @@
   x-for über chatMessages): Änderungsvorschläge einer Seiten-Chat-Antwort.
   Erwartet `msg` + `msgIdx` aus dem umgebenden x-for. Methoden: chat/page-chat-apply.js
   (Übernehmen/Rückgängig/Verwerfen), chat/page-chat-marks.js (Zustand, Stelle zeigen).
+  Übernehmen/Rückgängig nur mit Schreibrecht ($app.canEdit()) — der PUT verlangt editor;
+  Lektoren sehen die Vorschläge und können sie verwerfen.
 -->
 <template x-if="msg.role === 'assistant' && msg.vorschlaege && msg.vorschlaege.length > 0">
   <div class="chat-vorschlaege">
-    <div x-show="chatOpenVorschlagCount(msg) > 1" class="chat-vorschlaege-actions">
+    <div x-show="$app.canEdit() && chatOpenVorschlagCount(msg) > 1" class="chat-vorschlaege-actions">
       <button type="button" class="chat-vorschlag-btn"
         @click="applyAllChatVorschlaege(msgIdx)"
         :disabled="chatLoading || msg.vorschlaege.some(x => x._applying)"
@@ -14,18 +16,18 @@
     </div>
     <template x-for="(v, vIdx) in msg.vorschlaege" :key="vIdx">
       <div class="chat-vorschlag"
-        :class="{ 'chat-vorschlag--applied': v._applied, 'chat-vorschlag--discarded': v._discarded, 'chat-vorschlag--stale': v._stale }"
+        :class="{ 'chat-vorschlag--applied': v._applied, 'chat-vorschlag--discarded': v._discarded, 'chat-vorschlag--stale': v._stale || v._notFound }"
         @mouseenter="locateChatVorschlag(v)" @mouseleave="unlocateChatVorschlag()">
         <div class="chat-vorschlag-header">
           <span class="chat-vorschlag-label"
-            x-text="v._applied ? $app.t('chat.applied') : v._discarded ? $app.t('chat.discarded') : v._stale ? $app.t('chat.staleSuggestion') : $app.t('chat.suggestion')"></span>
+            x-text="v._applied ? $app.t('chat.applied') : v._discarded ? $app.t('chat.discarded') : v._notFound ? $app.t('chat.notFoundSuggestion') : v._stale ? $app.t('chat.staleSuggestion') : v._ambiguous ? $app.t('chat.ambiguousSuggestion') : $app.t('chat.suggestion')"></span>
           <span class="chat-vorschlag-actions">
-            <button type="button" class="chat-vorschlag-btn" x-show="!v._applied && !v._discarded"
+            <button type="button" class="chat-vorschlag-btn" x-show="$app.canEdit() && !v._applied && !v._discarded"
               @click="applyChatVorschlag(v, msgIdx, vIdx)" :disabled="!!v._applying || chatLoading">
               <span x-show="v._applying" class="spinner"></span>
               <span x-text="v._applying ? $app.t('common.saving') : $app.t('chat.apply')"></span>
             </button>
-            <button type="button" class="chat-vorschlag-btn" x-show="v._applied"
+            <button type="button" class="chat-vorschlag-btn" x-show="$app.canEdit() && v._applied"
               @click="undoChatVorschlag(msgIdx, vIdx)" :disabled="!v._undoable || !!v._applying || chatLoading"
               :data-tip="v._undoable ? null : $app.t('chat.undoChanged')" x-text="$app.t('chat.undo')"></button>
             <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" x-show="!v._applied"

@@ -75,7 +75,7 @@ function tool_count_pronouns(input, ctx) {
 function tool_get_figure_mentions(input, ctx) {
   const figRow = _findFigure(input, ctx);
   if (!figRow) {
-    return { error: 'Figur nicht gefunden', hint: 'Prüfe die Figurenliste im System-Prompt.' };
+    return { error: 'Figur nicht gefunden', errorKey: 'chat.toolError.figureNotFound', hint: 'Prüfe die Figurenliste im System-Prompt.' };
   }
 
   const mentions = listFigureMentionsWithPages(figRow.id, ctx.bookId);
@@ -132,7 +132,7 @@ function tool_get_figure_relations(input, ctx) {
   let focus = null;
   if (input?.figur_id || input?.figur_name) {
     focus = _findFigure(input, ctx);
-    if (!focus) return { error: 'Figur nicht gefunden', hint: 'Prüfe die Figurenliste im System-Prompt.' };
+    if (!focus) return { error: 'Figur nicht gefunden', errorKey: 'chat.toolError.figureNotFound', hint: 'Prüfe die Figurenliste im System-Prompt.' };
   }
 
   const rows = listFigureRelationsWithNames(ctx.bookId, userEmail);
@@ -176,7 +176,7 @@ function tool_get_figure_relations(input, ctx) {
 function tool_get_figure_profile(input, ctx) {
   const userEmail = ctx.userEmail || null;
   const figRow = _findFigure(input, ctx);
-  if (!figRow) return { error: 'Figur nicht gefunden', hint: 'Prüfe die Figurenliste im System-Prompt.' };
+  if (!figRow) return { error: 'Figur nicht gefunden', errorKey: 'chat.toolError.figureNotFound', hint: 'Prüfe die Figurenliste im System-Prompt.' };
 
   const f = getFigureRow(figRow.id);
 

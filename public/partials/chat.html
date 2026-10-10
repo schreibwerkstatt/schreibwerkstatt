@@ -10,6 +10,9 @@
       <span class="card-title" x-text="$app.t('chat.title')"></span>
     </div>
     <div class="card-actions">
+      <button type="button" class="icon-btn icon-btn--ghost" x-show="isChatSessionRunning(chatSessionId)" @click="cancelChatRun()" :data-tip="$app.t('chat.cancelRunTip')" :aria-label="$app.t('chat.cancelRun')">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#square"/></svg>
+      </button>
       <button type="button" class="icon-btn icon-btn--ghost" @click="startNewChatSession()" :disabled="chatLoading" :data-tip="$app.t('chat.newSessionTitle')" :aria-label="$app.t('chat.newSession')">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
       </button>
@@ -22,7 +25,7 @@
   </div>
   <div x-show="chatStatus" class="card-status" x-html="chatStatus"></div>
 
-  <div id="chat-messages" class="chat-messages">
+  <div id="chat-messages" class="chat-messages" @pointerenter="onChatPointerEnter()">
     <div x-show="chatMessages.length === 0" class="chat-empty" x-text="$app.t('chat.emptyPage', { name: $app.currentPage?.name || '' })"></div>
 
     <template x-for="(msg, msgIdx) in chatMessages" :key="msgIdx">
@@ -48,6 +51,7 @@
     </div>
   </div>
 
+  <div x-show="chatFlushFailed" class="chat-msg-hint" x-text="$app.t('chat.flushFailed')"></div>
   <div class="chat-input-row">
     <textarea
       class="chat-input"

@@ -11,6 +11,7 @@ const {
   getBookSettings,
 } = require('../../../db/schema');
 const { narrativeLabels } = require('../narrative-labels');
+const { activeFigureSql } = require('../../../db/figures');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, contentHttpError,
   getPrompts, getBookPrompts, toSystemBlocks,
@@ -69,7 +70,7 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
     // Bekannte Figuren + Orte aus DB laden
     const figRows = db.prepare(`
       SELECT f.fig_id, f.name, f.typ, f.beschreibung FROM figures f
-      WHERE f.book_id = ? AND f.user_email IS ? ORDER BY f.sort_order
+      WHERE f.book_id = ? AND f.user_email IS ? AND ${activeFigureSql('f')} ORDER BY f.sort_order
     `).all(bookIdInt, email);
     const figurenKompakt = figRows.map(f => ({ name: f.name, typ: f.typ || 'andere', beschreibung: f.beschreibung || '' }));
     const figNameToId = Object.fromEntries(figRows.map(r => [r.name, r.fig_id]));

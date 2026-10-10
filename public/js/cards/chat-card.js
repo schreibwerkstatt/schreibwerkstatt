@@ -4,13 +4,14 @@
 //
 // Eigener State: chatSessions, chatMessages, chatSessionId, chatInput,
 //   chatLoading, chatRunningSessionId, chatProgress, chatStatus, _chatPollTimer,
-//   _chatTitleTimer, _chatPendingRefresh.
+//   _chatTitleTimer, _chatPendingRefresh, chatFlushFailed.
 // Geteilt über Alpine.store('pageChat'): die offenen Vorschläge als Inline-
 //   Marken der Leseansicht (cards/page-chat-store.js).
 // Root behält: showChatCard (Hash-Router), currentPage, originalHtml,
 //   saveApplying, lektoratFindings, checkDone, _checkDoneBeforeChat,
 //   _loadApplyAndSave, _applyTextReplacement, renameCurrentPage,
-//   updatePageView, t.
+//   updatePageView, quickSave, _pullRemoteIntoEditor, _refetchCurrentPage,
+//   cancelJob, canEdit, t.
 
 import { chatMethods } from '../chat/chat.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
@@ -32,6 +33,9 @@ export function registerChatCard() {
     _chatTitleTimer: null,     // verzögerter Historien-Nachzug für den KI-Titel (chat.js#onPollDone)
     _chatGen: 0,               // Generationszähler gegen späte Responses nach Reset (chat-base.js)
     _chatPendingRefresh: false,
+    // Flush vor dem Senden gescheitert → der Chat sieht den gespeicherten Stand
+    // (Hinweis über dem Eingabefeld, chat.js#onBeforeSend).
+    chatFlushFailed: false,
     _lifecycle: null,
 
     init() {
@@ -66,9 +70,22 @@ export function registerChatCard() {
         this.unlocateChatVorschlag();
         window.__app?.updatePageView?.();
       });
+      // Seitenstand gewechselt (Bearbeiten beendet/abgebrochen, gespeichert,
+      // Remote-Stand übernommen, Fassung zurückgeholt) → Vorschlags-Zustände
+      // neu prüfen: veraltet, wieder offen nach Rückgängig im Editor, …
+      this.$watch(() => [window.__app?.originalHtml, window.__app?.editMode], () => {
+        if (window.__app?.showChatCard && this.chatMessages.length) this._refreshVorschlagStates();
+      });
     },
 
     destroy() { this._lifecycle?.destroy(); },
+
+    // Im Edit-Modus ändert jeder Tastendruck den Stand, ohne dass ein Signal am
+    // Root ankommt (Strg+Z inklusive) — geprüft wird, sobald der User zum Chat
+    // wechselt, um dort zu handeln.
+    onChatPointerEnter() {
+      if (window.__app?.editMode && this.chatMessages.length) this._refreshVorschlagStates();
+    },
 
     ...chatMethods,
   }));

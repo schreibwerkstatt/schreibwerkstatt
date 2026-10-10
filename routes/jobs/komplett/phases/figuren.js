@@ -1,7 +1,7 @@
 'use strict';
 // Phase 2: Figuren konsolidieren + Soziogramm + Name→ID-Lookup.
 const { saveFigurenToDb, updateFigurenSoziogramm } = require('../../../../db/schema');
-const { planFigurenMatch } = require('../../../../db/figures');
+const { planFigurenMatch, countActiveFigures, listFigureAliasesByFigure } = require('../../../../db/figures');
 const { judgeEntityPairs } = require('../entity-reconcile');
 const { recomputeBookFigureMentions } = require('../../../../lib/page-index');
 const { i18nError, updateJob } = require('../../shared');
@@ -14,6 +14,23 @@ const {
 const { komplettMaxTokens } = require('./tokens');
 const { providerClass, getContextConfigFor } = require('../../../../lib/ai');
 const { COST_LABEL, costTier } = require('../cost-labels');
+
+// Riegel gegen einen kollabierten Figuren-Katalog. Der Reconcile mustert jede nicht
+// wiedergefundene Bestandsfigur aus (`onMissing: 'stale'`) — liefert die
+// Konsolidierung bei einem gewachsenen Katalog (fast) nichts (leeres `figuren: []`,
+// ein Modell, das nur die Hauptfiguren nennt), würde ein einziger Lauf den ganzen
+// Katalog als «nicht mehr im Text» markieren und alle KI-Kontexte leeren. Ab
+// KOLLAPS_MIN_BESTAND aktiven Figuren muss der Lauf mindestens KOLLAPS_MIN_ANTEIL
+// davon (nach Merge + Nachtrag aus Szenen/Ereignissen) wiederbringen, sonst bricht
+// der Job ab, bevor etwas geschrieben ist. Ein Buch, das wirklich so stark
+// geschrumpft ist, räumt der Autor in der Danger-Zone auf (verwaiste löschen).
+const KOLLAPS_MIN_BESTAND = 5;
+const KOLLAPS_MIN_ANTEIL = 0.3;
+function assertFigurenNichtKollabiert(aktiv, neu) {
+  if (aktiv >= KOLLAPS_MIN_BESTAND && neu < Math.ceil(aktiv * KOLLAPS_MIN_ANTEIL)) {
+    throw i18nError('job.error.figurenKollaps', { neu, aktiv });
+  }
+}
 
 /** Phase 2: Figuren konsolidieren + Soziogramm + Name→ID Lookup.
  *  Single-Pass-Optimierung: Wenn Phase 1 im Single-Pass-Modus lief (ein „Kapitel"
@@ -176,11 +193,32 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
     if (e.name === 'AbortError') throw e;
     log.warn(`Figuren-Match-Judge übersprungen (${e.message}) – Matching bleibt regelbasiert.`);
   }
-  saveFigurenToDb(bookIdInt, figuren, email, idMaps, {
+  const aktivVorher = countActiveFigures(bookIdInt, email);
+  try {
+    assertFigurenNichtKollabiert(aktivVorher, figuren.length);
+  } catch (e) {
+    log.error(`Figuren-Konsolidierung kollabiert: ${figuren.length} Figuren gegen ${aktivVorher} aktive im Katalog – Abbruch vor dem Speichern.`);
+    throw e;
+  }
+  const { rowIdByFigId } = saveFigurenToDb(bookIdInt, figuren, email, idMaps, {
     reconcile: true, onMissing: 'stale',
     matchHint: figHint && figHint.size ? figHint : null,
   });
   log.info(`${figuren.length} Figuren gespeichert (reconciled, id-stabil).`);
+  // Vom Autor beim Zusammenführen bestätigte Namen (figure_aliases) der gematchten
+  // Bestandsfiguren an die Namens-Auflösung der Szenen/Ereignisse hängen
+  // (buildFigNameLookup liest `__aliasNamen` nachrangig zu Vollnamen).
+  try {
+    const aliasesByRow = listFigureAliasesByFigure(bookIdInt, email);
+    if (aliasesByRow.size) {
+      for (const f of figuren) {
+        const al = aliasesByRow.get(rowIdByFigId?.[f.id]);
+        if (al?.length) f.__aliasNamen = [...(f.__aliasNamen || []), ...al];
+      }
+    }
+  } catch (e) {
+    log.warn(`Figuren-Aliasse für den Remap nicht geladen: ${e.message}`);
+  }
   try {
     const { figures: figCount, pagesProcessed } = recomputeBookFigureMentions(bookIdInt, email);
     log.info(`Figuren-Mentions aktualisiert (${figCount} Figuren × ${pagesProcessed} Seiten).`);
@@ -246,4 +284,4 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
   return { figuren, figNameToId, figNameToIdLower, figurenKompakt, idRemap, isSinglePass };
 }
 
-module.exports = { runPhase2 };
+module.exports = { runPhase2, assertFigurenNichtKollabiert, KOLLAPS_MIN_BESTAND, KOLLAPS_MIN_ANTEIL };

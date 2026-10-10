@@ -16,10 +16,10 @@ const { insertChatImage } = require('../../../db/chat-images');
 
 async function tool_generate_image(input, ctx) {
   if (!imageGenEnabled()) {
-    return { error: 'Bildgenerierung ist nicht aktiviert.' };
+    return { error: 'Bildgenerierung ist nicht aktiviert.', errorKey: 'chat.toolError.imageDisabled' };
   }
   const prompt = String(input?.prompt || '').trim();
-  if (!prompt) return { error: 'Pflichtfeld `prompt` fehlt.' };
+  if (!prompt) return { error: 'Pflichtfeld `prompt` fehlt.', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'prompt' } };
   const size = typeof input?.size === 'string' && input.size.trim() ? input.size.trim() : undefined;
 
   let result;
@@ -29,7 +29,7 @@ async function tool_generate_image(input, ctx) {
     if (e?.name === 'AbortError') throw e;
     const code = e instanceof ImageGenError ? e.code : 'image_error';
     ctx.logger?.warn?.(`generate_image fehlgeschlagen (${code}): ${e.message}`);
-    return { error: `Bildgenerierung fehlgeschlagen (${code}).` };
+    return { error: `Bildgenerierung fehlgeschlagen (${code}).`, errorKey: 'chat.toolError.imageFailed' };
   }
 
   const imageId = insertChatImage({

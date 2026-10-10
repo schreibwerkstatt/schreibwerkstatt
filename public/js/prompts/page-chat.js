@@ -18,7 +18,10 @@ function _clip(s, n = CLIP) {
 export function formatHistoryVorschlaege(vorschlaege) {
   if (!Array.isArray(vorschlaege) || vorschlaege.length === 0) return '';
   const lines = vorschlaege.map((v, i) => {
-    const status = v?.applied ? 'übernommen' : v?.status === 'discarded' ? 'verworfen' : 'offen';
+    const status = v?.applied ? 'übernommen'
+      : v?.status === 'discarded' ? 'verworfen'
+      : v?.match === 'not_found' ? 'offen, Stelle nicht im Text gefunden'
+      : 'offen';
     return `${i + 1}. [${status}] «${_clip(v?.original)}» → «${_clip(v?.ersatz)}»`;
   });
   return ['[Deine Änderungsvorschläge in dieser Antwort, Status beim Autor:', ...lines, ']'].join('\n');

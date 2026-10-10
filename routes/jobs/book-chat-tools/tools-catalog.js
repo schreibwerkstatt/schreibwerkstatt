@@ -231,7 +231,7 @@ function tool_list_songs(input, ctx) {
   let figFilterId = null;
   if (input?.figur_id || input?.figur_name) {
     const figRow = _findFigure(input, ctx);
-    if (!figRow) return { error: 'Figur nicht gefunden' };
+    if (!figRow) return { error: 'Figur nicht gefunden', errorKey: 'chat.toolError.figureNotFound' };
     figFilterId = figRow.id;
   }
 
@@ -292,7 +292,7 @@ function tool_get_location_profile(input, ctx) {
   if (!locRow && input?.name) {
     locRow = findLocationByName(ctx.bookId, userEmail, input.name);
   }
-  if (!locRow) return { error: 'Ort nicht gefunden. Erst list_locations rufen, um loc_id/Name zu ermitteln.' };
+  if (!locRow) return { error: 'Ort nicht gefunden. Erst list_locations rufen, um loc_id/Name zu ermitteln.', errorKey: 'chat.toolError.locationNotFound' };
 
   const kapitel = listLocationChaptersWithNames(locRow.id).map(r => ({ chapter_id: r.chapter_id, chapter_name: r.chapter_name || null, haeufigkeit: r.haeufigkeit }));
 
@@ -336,13 +336,13 @@ function tool_list_scenes(input, ctx) {
   let figFilterId = null;
   if (input?.figur_id || input?.figur_name) {
     const figRow = _findFigure(input, ctx);
-    if (!figRow) return { error: 'Figur nicht gefunden' };
+    if (!figRow) return { error: 'Figur nicht gefunden', errorKey: 'chat.toolError.figureNotFound' };
     figFilterId = figRow.id;
   }
   let locFilterId = null;
   if (input?.loc_id) {
     const locRow = getLocationIdByLocId(ctx.bookId, input.loc_id, userEmail);
-    if (!locRow) return { error: 'Ort nicht gefunden' };
+    if (!locRow) return { error: 'Ort nicht gefunden', errorKey: 'chat.toolError.locationNotFound' };
     locFilterId = locRow.id;
   }
 
@@ -477,11 +477,11 @@ const LIST_REVISIONS_MAX_LIMIT     = 100;
 
 function tool_list_revisions(input, ctx) {
   const pageId = input?.page_id;
-  if (!Number.isInteger(pageId)) return { error: 'page_id fehlt' };
+  if (!Number.isInteger(pageId)) return { error: 'page_id fehlt', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'page_id' } };
 
   const pageRow = getPageHeader(pageId);
   if (!pageRow || pageRow.book_id !== ctx.bookId) {
-    return { error: 'Abschnitt nicht im aktuellen Buch.' };
+    return { error: 'Abschnitt nicht im aktuellen Buch.', errorKey: 'chat.toolError.pageNotInBook' };
   }
 
   const limit = Math.min(Math.max(1, input?.limit || LIST_REVISIONS_DEFAULT_LIMIT), LIST_REVISIONS_MAX_LIMIT);
@@ -521,7 +521,7 @@ function tool_list_world_facts(input, ctx) {
   const kategorie = typeof input?.kategorie === 'string' && input.kategorie.trim() ? input.kategorie.trim().toLowerCase() : null;
   const subjekt   = typeof input?.subjekt === 'string' && input.subjekt.trim() ? input.subjekt.trim() : null;
   if (kategorie !== null && !FAKT_KATEGORIE_WL.has(kategorie)) {
-    return { fakten: [], error: `Unbekannte kategorie «${kategorie}». Gültige Werte: ${[...FAKT_KATEGORIE_WL].join(', ')}.` };
+    return { fakten: [], error: `Unbekannte kategorie «${kategorie}». Gültige Werte: ${[...FAKT_KATEGORIE_WL].join(', ')}.`, errorKey: 'chat.toolError.invalidParam', errorParams: { param: 'kategorie' } };
   }
 
   const rows = listWorldFacts(ctx.bookId, userEmail, { kategorien: kategorie ? [kategorie] : null, subjekt, withRefuted: true });

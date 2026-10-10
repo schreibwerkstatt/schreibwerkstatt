@@ -6,6 +6,7 @@
 // Generiert keinen Buchtext und schlägt keine neuen Entitäten vor.
 const express = require('express');
 const { db } = require('../../db/schema');
+const { activeFigureSql } = require('../../db/figures');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   aiCall, getPrompts, tps,
@@ -56,7 +57,9 @@ const ART_TO_KIND = { figur: 'figure', ort: 'location', szene: 'scene', beat: 'b
 function _loadCandidates(bookId, userEmail) {
   const q = (sql) => db.prepare(sql).all(bookId, userEmail).slice(0, MAX_CANDIDATES);
   return {
-    figur:  q('SELECT id, fig_id AS ref_id, name AS label, typ, beruf, rolle, beschreibung FROM figures WHERE book_id = ? AND user_email = ? ORDER BY sort_order, name'),
+    // Nur aktive Figuren (db/figures/active.js): eine ausgemusterte Figur steht nicht
+    // mehr im Text und taugt nicht als Vorschlag für eine neue Verknüpfung.
+    figur:  q(`SELECT id, fig_id AS ref_id, name AS label, typ, beruf, rolle, beschreibung FROM figures f WHERE book_id = ? AND user_email = ? AND ${activeFigureSql('f')} ORDER BY sort_order, name`),
     ort:    q('SELECT id, loc_id AS ref_id, name AS label, typ, land, beschreibung FROM locations WHERE book_id = ? AND user_email = ? ORDER BY sort_order, name'),
     szene:  q('SELECT id, titel AS label, kommentar FROM figure_scenes WHERE book_id = ? AND user_email = ? ORDER BY sort_order, titel'),
     beat:   q('SELECT id, titel AS label, status, beschreibung FROM plot_beats WHERE book_id = ? AND user_email = ? ORDER BY sort_order, titel'),

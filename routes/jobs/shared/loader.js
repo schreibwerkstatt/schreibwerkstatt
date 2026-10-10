@@ -102,6 +102,26 @@ async function loadOrderedBookContents(bookId, { includeExcluded = false } = {})
   return { chMap, chNameToId, chaptersFlat, pages };
 }
 
+// Namens→ID-Maps fuer Schreibpfade, die KI-/Katalog-Namen auf Kapitel/Seiten
+// aufloesen (db/figures/refs.js#resolveErstePageId/#enrichBelegWithIds). Pure aus
+// dem Ergebnis von loadOrderedBookContents. Kapitel-scoped Page-Lookup gegen
+// Namenskollisionen: derselbe Seitenname kann in mehreren Kapiteln existieren;
+// Key 0 = Seiten ohne Kapitel. `validPageIds`/`validChapterIds` erlauben dem
+// Katalog-PUT, mitgebrachte IDs zu behalten, wenn sie zu diesem Buch gehoeren.
+function idMapsFromContents({ chNameToId, pages }) {
+  const pageNameToIdByChapter = {};
+  for (const p of pages) {
+    const k = p.chapter_id ?? 0;
+    (pageNameToIdByChapter[k] ??= {})[p.name] = p.id;
+  }
+  return {
+    chNameToId,
+    pageNameToIdByChapter,
+    validPageIds: new Set(pages.map(p => p.id)),
+    validChapterIds: new Set(Object.values(chNameToId)),
+  };
+}
+
 async function loadPageContents(pages, chMap, minLength, onBatch, signal = null) {
   // Vor-Filter via preview_text aus dem pages-Cache: wenn ein gespeicherter
   // Preview kürzer als minLength ist, ist auch der Volltext zu kurz und wir
@@ -178,6 +198,6 @@ function buildSinglePassBookText(groups, groupOrder) {
 
 module.exports = {
   SINGLE_PASS_LIMIT, PER_CHUNK_LIMIT, BATCH_SIZE, chunkLimitsFor, resolveExtractSinglePassLimit,
-  loadOrderedBookContents,
+  loadOrderedBookContents, idMapsFromContents,
   loadPageContents, groupByChapter, splitGroupsIntoChunks, halveChunkPages, pageSigSuffix, buildSinglePassBookText,
 };

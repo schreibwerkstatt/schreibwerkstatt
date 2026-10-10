@@ -8,6 +8,7 @@
 
 import { readNormalSnapshot, clearNormalSnapshot } from './storage.js';
 import { readDraft } from '../draft-storage.js';
+import { isNoChange } from '../shared/save-pipeline.js';
 import { DIAGRAMS_REDRAWN, renderDiagramsIn } from '../../diagram/mermaid-view.js';
 import { stampCaptionNumbers } from '../../xrefs/caption-preview.js';
 
@@ -15,10 +16,14 @@ import { stampCaptionNumbers } from '../../xrefs/caption-preview.js';
 // existiert. Ohne Draft hat der User keinen nennenswerten Edit-State —
 // Snapshot-Reste aus exitFocusMode/_closeOtherMainCards würden den User sonst
 // ungewollt aus „viewing" zurück in den Edit-Modus zwingen.
-function hasUnsavedDraft(pageId, currentHtml) {
+// Verglichen wird gegen die Server-Fassung (`originalHtml`) mit derselben
+// Normalform wie der Dirty-Check — nicht gegen `renderedPageHtml`: die
+// Leseansicht ist dekoriert (Figuren-/Befund-Marken, Legenden-Nummern) und
+// wiche von jedem Draft ab, auch einem ohne echte Änderung.
+function hasUnsavedDraft(pageId, serverHtml) {
   const draft = readDraft(pageId);
   if (!draft || !draft.html) return false;
-  return draft.html !== currentHtml;
+  return !isNoChange(draft.html, serverHtml);
 }
 
 export const notebookCardMethods = {
@@ -46,10 +51,10 @@ export const notebookCardMethods = {
     if (app.editMode || app.focusActive) return;
     if (!app.showEditorCard) return;
     if (!app.currentPage || app.currentPage.id !== snap.pageId) return;
-    if (!app.renderedPageHtml) return;
+    if (!app.renderedPageHtml || app.originalHtml == null) return;
     this._notebookRestoreSnapshot = null;
     clearNormalSnapshot();
-    if (!hasUnsavedDraft(snap.pageId, app.renderedPageHtml)) return;
+    if (!hasUnsavedDraft(snap.pageId, app.originalHtml)) return;
     app.startEdit?.();
   },
 

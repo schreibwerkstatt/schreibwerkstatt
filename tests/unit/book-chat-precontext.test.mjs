@@ -1,10 +1,9 @@
 // Erst-Kontext des agentischen Buch-Chats: Block-Form + Cache-Lage.
 //
-// Gegenstand ist die Kosten-Invariante aus docs/buchchat-tools.md: der Erst-Kontext
-// steht als LETZTER System-Block und traegt KEINEN Cache-Breakpoint (er wechselt pro
-// Frage), waehrend Block 1 der stabile Praefix ueber alle Iterationen bleibt. Faellt
-// das um, bezahlt jede Iteration Tools + System erneut — genau der Kostenpfad, den
-// der Erst-Kontext schliessen soll.
+// Gegenstand ist die Kosten-Invariante aus docs/buchchat-tools.md: der System-Prompt
+// ist EIN stabiler 1h-Block; der Erst-Kontext wechselt pro Frage und steht darum NICHT
+// im System, sondern vor der Frage in deren User-Nachricht. Fiele er zurück ins
+// System, wären Werkzeuge + System + Verlauf über die Turns kein stabiler Präfix mehr.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -22,18 +21,14 @@ const PASSAGES = [
   { kind: 'figure', entity_id: 3, title: 'Stefan', score: 0.44, text: 'Lehrer, in Bern aufgewachsen.' },
 ];
 
-test('Agent-System-Prompt: zwei Bloecke, Erst-Kontext zuletzt und ohne Breakpoint', () => {
+test('Agent-System-Prompt: ein stabiler Block, Erst-Kontext nicht im System', () => {
   const blocks = buildBookChatAgentSystemPrompt('Buch', null, null, null, 12, { passages: PASSAGES });
   assert.equal(Array.isArray(blocks), true, 'Rueckgabe muss ein Block-Array sein');
-  assert.equal(blocks.length, 2);
-  // Block 1: stabiler Praefix mit Extended-TTL.
+  assert.equal(blocks.length, 1);
   assert.equal(blocks[0].ttl, '1h');
   assert.notEqual(blocks[0].cache, false);
-  // Block 2: volatil, KEIN Breakpoint, und er ist der letzte.
-  assert.equal(blocks[1].cache, false);
-  assert.equal(blocks[1].ttl, undefined);
-  assert.match(blocks[1].text, /ERST-KONTEXT/);
   assert.doesNotMatch(blocks[0].text, /ERST-KONTEXT: SEMANTISCH/);
+  assert.doesNotMatch(blocks[0].text, /achtundzwanzig/);
 });
 
 test('Agent-System-Prompt: Kosten-Leiter steht im stabilen Block', () => {

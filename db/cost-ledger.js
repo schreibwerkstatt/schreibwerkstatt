@@ -9,11 +9,15 @@
 // angefasst; alle Kosten-/Token-Aggregate (Admin-Usage, Budget-Gate,
 // Daily-Usage, /metrics) lesen daraus.
 //
-// Schreib-Chokepoints (genau zwei, sonst Doppelzaehlung):
+// Schreib-Chokepoints (genau drei, sonst Doppelzaehlung):
 //   - recordJobLedger(jobId)            ← db/schema.js#endJobRun (alle Jobs
 //                                         AUSSER chat-sourced Typen)
-//   - recordChatLedgerForMessage(id)    ← routes/jobs/chat.js (pro Assistant-
-//                                         Nachricht; Seiten- + Buch-Chat)
+//   - recordChatLedgerForMessage(id)    ← Chat-Jobs (pro Assistant-Nachricht)
+//   - recordChatLedgerForFailedRun(…)   ← Chat-Jobs, die OHNE Assistant-Nachricht
+//                                         enden (Fehler/Abbruch nach bezahlten
+//                                         Runden). Schliesst sich mit dem
+//                                         vorigen aus: der Aufrufer bucht nur,
+//                                         solange keine Nachricht persistiert ist.
 // Chat-Jobs laufen ebenfalls durch endJobRun (Lifecycle), ihr Verbrauch lebt
 // aber in chat_messages — darum schliesst recordJobLedger die Typen 'chat'/
 // 'book-chat' aus. Spiegelt lib/usage-sources#excludeChatSourcedSql.
@@ -139,6 +143,36 @@ function recordChatLedgerForMessage(messageId) {
   }
 }
 
+// Verbrauch eines Chat-Laufs, der ohne Assistant-Nachricht endet (Provider-Fehler,
+// Abbruch, Truncation nach bezahlten Werkzeug-Runden). Ohne diese Zeile fehlten
+// genau die teuersten Läufe im Ledger — und damit im Budget-Gate. source_ref
+// `chatjob:<jobId>` (idempotent wie die anderen Recorder). Niemals werfen.
+function recordChatLedgerForFailedRun({
+  jobId, userEmail, kind, bookId, provider, model,
+  tokensIn = 0, tokensOut = 0, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0, webSearches = 0,
+}) {
+  try {
+    if (!(tokensIn > 0 || tokensOut > 0 || webSearches > 0)) return;
+    _record({
+      ts: new Date().toISOString(),
+      user_email: userEmail,
+      source: 'chat',
+      type: kind,
+      book_id: bookId,
+      provider, model,
+      tokens_in: tokensIn,
+      tokens_out: tokensOut,
+      cache_read_in: cacheReadIn,
+      cache_creation_in: cacheCreationIn,
+      cache_creation_1h_in: cacheCreation1hIn,
+      web_searches: webSearches,
+      source_ref: `chatjob:${jobId}`,
+    });
+  } catch (e) {
+    logger.error(`[cost-ledger] recordChatLedgerForFailedRun(${jobId}) fehlgeschlagen: ${e.message}`);
+  }
+}
+
 // ── Lese-Helfer ─────────────────────────────────────────────────────────────
 
 // Rohe Ledger-Zeilen in [fromIso, toIso). Optionale Filter user/provider/source.
@@ -185,6 +219,7 @@ function claudeByDayModel(fromDay, toDay) {
 }
 
 module.exports = {
+  recordChatLedgerForFailedRun,
   recordJobLedger,
   recordChatLedgerForMessage,
   queryRange,

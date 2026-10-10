@@ -123,6 +123,10 @@
                   <span class="redundanz-score" :class="redundanzScoreClass(pair.score)"
                         x-text="Math.round(pair.score * 100) + '%'"></span>
                   <button type="button" class="redundanz-link" :disabled="!!redundanzBusyKey"
+                          :aria-expanded="redundanzMergeOpen(pair)"
+                          :data-tip="$app.t('redundanz.mergeTip')"
+                          @click="toggleRedundanzMerge(pair)" x-text="$app.t('redundanz.merge')"></button>
+                  <button type="button" class="redundanz-link" :disabled="!!redundanzBusyKey"
                           :data-tip="$app.t('redundanz.dismissTip')"
                           @click="dismissRedundanzPair('figure', pair)" x-text="$app.t('redundanz.dismiss')"></button>
                 </div>
@@ -132,6 +136,17 @@
                   <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: pair.b_fig_id, label: redundanzFigurName(pair.b_fig_id, pair.b_name) }"></button>
                   <span class="tag redundanz-dupe-kind" :class="'redundanz-dupe-kind--' + pair.dupeKind"
                         x-text="redundanzDupeKindLabel(pair.dupeKind)"></span>
+                </div>
+                <!-- Richtungswahl: welche Figur bleibt (Ziel); die andere wird hineingeführt
+                     und gelöscht. Bestätigung folgt im Dialog (book/figur-merge.js). -->
+                <div class="redundanz-merge-choice" x-show="redundanzMergeOpen(pair)" x-cloak>
+                  <span class="card-hint" x-text="$app.t('redundanz.mergeKeepQuestion')"></span>
+                  <template x-for="side in ['a', 'b']" :key="side">
+                    <button type="button" class="btn-compact" :disabled="!!redundanzBusyKey"
+                            @click="redundanzMergeKeep(pair, side)"
+                            x-text="$app.t('redundanz.mergeKeep', { name: redundanzFigurName(pair[side + '_fig_id'], pair[side + '_name']) })"></button>
+                  </template>
+                  <button type="button" class="redundanz-link" @click="toggleRedundanzMerge(pair)" x-text="$app.t('common.cancel')"></button>
                 </div>
               </li>
             </template>

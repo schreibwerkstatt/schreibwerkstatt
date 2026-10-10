@@ -480,3 +480,35 @@
 }
 
 }
+
+/* Vom Autor gepflegte Figur (figures.manually_edited): die Komplettanalyse
+   überschreibt ihre Stammdaten nicht mehr. Ruhig getönt, kein Warnsignal. */
+.tag--curated {
+  background: color-mix(in srgb, var(--palette-green) 16%, var(--color-surface));
+  color: var(--color-text);
+}
+
+/* Aktionen im Figur-Detail (Ähnliche Stellen, Steckbrief bearbeiten) nebeneinander. */
+.figur-detail .figur-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+/* Steckbrief-Formular: Knopfzeile unter dem Formular-Raster. */
+.figur-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+/* «zusammenführen mit…» unter einer ausgemusterten Figur: Frage, Ziel-Combobox,
+   Knöpfe in einer umbrechenden Zeile. */
+.figur-merge-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6) var(--space-sm);
+  padding: var(--space-xs) var(--space-sm) var(--space-sm);
+}
+.figur-merge-panel .card-form-error { flex-basis: 100%; }

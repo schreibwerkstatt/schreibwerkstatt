@@ -315,6 +315,7 @@ export {
   buildChatSystemPrompt,
   buildBookChatSystemPrompt,
   buildBookChatAgentSystemPrompt,
+  buildBookChatPreContext,
   buildChatTitlePrompt,
   BOOK_CHAT_TOOLS,
   BOOK_CHAT_SLIM_TOOL_NAMES,

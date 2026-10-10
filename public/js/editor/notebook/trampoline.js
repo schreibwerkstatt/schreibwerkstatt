@@ -42,6 +42,11 @@ export const notebookTrampoline = {
   notebookCanRedo() { return !!card()?.notebookCanRedo(); },
   // Banner rendert im Root-Scope, bevor die Sub gemountet ist → '' statt undefined.
   editConflictBannerText() { return card()?.editConflictBannerText() ?? ''; },
+  // Konflikt-Auflösungs-Modal (partials/conflict-resolution.html) — Root-Scope.
+  resolveBlock(bid, choice) { card()?.resolveBlock(bid, choice); },
+  resolveAllConflicts(choice) { card()?.resolveAllConflicts(choice); },
+  submitConflictResolution() { return card()?.submitConflictResolution(); },
+  cancelConflictResolution() { return card()?.cancelConflictResolution(); },
 
   // Half-public — von Templates/anderen Modulen (synonyme, find, focus, toolbar,
   // app-view, book-editor-card) erwartet.

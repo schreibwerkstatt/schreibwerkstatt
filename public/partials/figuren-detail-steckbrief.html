@@ -6,7 +6,7 @@
      Schleifenvariable `f`; Root-Zugriffe laufen über `$app`.
 -->
 <!-- ===== Gruppe: Steckbrief (objektive Fakten) ===== -->
-<section class="figur-group" x-show="$app.figurJahrLabel(f) || f.geburtsjahr != null || f.rolle || f.beruf || (f.sozialschicht && f.sozialschicht !== 'andere') || f.praesenz || f.wohnadresse || f.erste_erwaehnung || f.aeusseres || f.stimme">
+<section class="figur-group" x-show="figurEditId !== f.id && ($app.figurJahrLabel(f) || f.geburtsjahr != null || f.rolle || f.beruf || (f.sozialschicht && f.sozialschicht !== 'andere') || f.praesenz || f.wohnadresse || f.erste_erwaehnung || f.aeusseres || f.stimme)">
   <h4 class="figur-group-title" x-text="$app.t('figuren.group.steckbrief')"></h4>
   <dl class="figur-steckbrief-grid">
     <template x-if="$app.figurJahrLabel(f)">

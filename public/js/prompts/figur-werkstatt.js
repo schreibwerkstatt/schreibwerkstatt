@@ -13,10 +13,22 @@ const SEVERITY_ENUM = ['kritisch', 'stark', 'mittel', 'schwach', 'niedrig'];
 // User wählt einen Mindmap-Knoten (z.B. "Steckbrief > Hintergrund") und bekommt
 // 3–7 Sub-Ideen, die zur Figur und zum Buchkontext passen.
 
+// Bestehende Buchfiguren, relevanteste zuerst (der Loader sortiert nach Kapitel-
+// Auftritten). Die ersten FIGUREN_DETAIL_MAX mit Typ + Beschreibung (Abgrenzung von
+// Rolle/Funktion), alle weiteren bis FIGUREN_NAMEN_MAX nur als Namen — die
+// Namenskonflikt-Prüfung braucht jeden Namen, nicht jede Beschreibung.
+const FIGUREN_DETAIL_MAX = 50;
+const FIGUREN_NAMEN_MAX = 400;
+function _figurName(f) {
+  return `${f.name}${f.kurzname && f.kurzname !== f.name ? ` («${f.kurzname}»)` : ''}`;
+}
 function _figurenLines(figuren) {
-  return (figuren || []).slice(0, 50)
-    .map(f => `- ${f.name}${f.typ ? ` [${f.typ}]` : ''}${f.beschreibung ? `: ${f.beschreibung.slice(0, 120)}` : ''}`)
-    .join('\n');
+  const list = figuren || [];
+  const lines = list.slice(0, FIGUREN_DETAIL_MAX)
+    .map(f => `- ${_figurName(f)}${f.typ ? ` [${f.typ}]` : ''}${f.beschreibung ? `: ${f.beschreibung.slice(0, 120)}` : ''}`);
+  const rest = list.slice(FIGUREN_DETAIL_MAX, FIGUREN_NAMEN_MAX);
+  if (rest.length) lines.push(`- Weitere Figuren (nur Namen): ${rest.map(_figurName).join(', ')}`);
+  return lines.join('\n');
 }
 
 function _orteLines(orte) {

@@ -106,7 +106,7 @@ function tool_get_timeline(input, ctx) {
   let focusFig = null;
   if (input?.figur_id || input?.figur_name) {
     focusFig = _findFigure(input, ctx);
-    if (!focusFig) return { error: 'Figur nicht gefunden', hint: 'Prüfe die Figurenliste im System-Prompt.' };
+    if (!focusFig) return { error: 'Figur nicht gefunden', errorKey: 'chat.toolError.figureNotFound', hint: 'Prüfe die Figurenliste im System-Prompt.' };
   }
   const typFilter = typeof input?.typ === 'string' ? input.typ.toLowerCase() : null;
   const limit = Math.min(200, Math.max(1, Number.isInteger(input?.limit) ? input.limit : TIMELINE_DEFAULT_LIMIT));
@@ -199,9 +199,9 @@ function ageAt(birth, at) {
 
 function tool_get_figure_age(input, ctx) {
   const userEmail = ctx.userEmail || '';
-  if (!input?.figur_id && !input?.figur_name) return { error: 'figur_id oder figur_name erforderlich.' };
+  if (!input?.figur_id && !input?.figur_name) return { error: 'figur_id oder figur_name erforderlich.', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'figur_id/figur_name' } };
   const fig = _findFigure(input, ctx);
-  if (!fig) return { error: 'Figur nicht gefunden', hint: 'Prüfe die Figurenliste im System-Prompt.' };
+  if (!fig) return { error: 'Figur nicht gefunden', errorKey: 'chat.toolError.figureNotFound', hint: 'Prüfe die Figurenliste im System-Prompt.' };
 
   const ageRow = listFigureAges(ctx.bookId, userEmail).find(a => a.fig_id === fig.fig_id) || null;
   const row = getFigureRow(fig.id);

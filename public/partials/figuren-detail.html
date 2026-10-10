@@ -15,7 +15,15 @@
 <template x-if="$store.catalogUi.selectedFigurId === f.id">
 <div class="figur-detail">
   <p x-show="f.beschreibung" x-text="f.beschreibung" class="figur-beschreibung"></p>
-  <button type="button" class="btn-compact figur-detail-actions" x-show="$store.config.semanticSearchEnabled" @click.stop="$app.findSimilar('figure', f.id, f.name)" x-text="$app.t('search.semantic.similarEntity')"></button>
+  <div class="figur-detail-actions">
+    <button type="button" class="btn-compact" x-show="$store.config.semanticSearchEnabled" @click.stop="$app.findSimilar('figure', f.id, f.name)" x-text="$app.t('search.semantic.similarEntity')"></button>
+    <button type="button" class="btn-compact" x-show="figurEditId !== f.id" @click.stop="startFigurEdit(f)">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+      <span x-text="$app.t('figuren.edit.open')"></span>
+    </button>
+  </div>
+
+  <!-- @include figuren-detail-edit -->
 
   <!-- @include figuren-detail-steckbrief -->
 

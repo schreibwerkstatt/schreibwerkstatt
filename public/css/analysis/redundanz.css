@@ -200,3 +200,13 @@
 }
 
 }
+
+/* Richtungswahl beim Zusammenführen eines Figuren-Paars: volle Breite unter
+   Score-Spalte und Paar, Knöpfe umbrechend (Mobile). */
+.redundanz-merge-choice {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6) var(--space-sm);
+}

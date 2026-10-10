@@ -120,6 +120,21 @@ test('Dirty-Edit: Remote-Edit in anderem Block wird vor dem Speichern still geme
   expect(st.dirty).toBe(true);
   expect(st.conflict).toBeNull();
   expect(st.resolution).toBeNull();
+  // Der Draft steht auf der neuen Basis (Remote-Stand + dessen Stempel): mit
+  // der alten liefe er beim naechsten Oeffnen noch einmal gegen den schon
+  // eingearbeiteten Remote-Stand.
+  const draft = await page.evaluate(() => {
+    const pid = window.__app.currentPage.id;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k.startsWith('editor_draft_') && k.endsWith(':' + pid)) return JSON.parse(localStorage.getItem(k));
+      if (k === 'editor_draft_' + pid) return JSON.parse(localStorage.getItem(k));
+    }
+    return null;
+  });
+  expect(draft?.originalUpdatedAt).toBe(await page.evaluate(() => window.__app.currentPage.updated_at));
+  expect(draft?.originalHtml).toContain('WAKEPROBE_DIRTY');
+  expect(draft?.html).toContain('LOCALPROBE_DIRTY');
 
   await page.evaluate(() => window.__app.quickSave());
   const html = await page.evaluate(async () => {

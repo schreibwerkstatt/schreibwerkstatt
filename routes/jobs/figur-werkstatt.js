@@ -13,6 +13,7 @@ const {
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
 const { db } = require('../../db/connection');
+const { activeFigureSql } = require('../../db/figures');
 const { listWorldFacts, worldFactsScanState } = require('../../db/world-facts');
 const { getDraftFigure, insertWerkstattRun } = require('../../db/draft-figures');
 const { scopedDraft } = require('../draft-figures-acl');
@@ -54,18 +55,24 @@ function _findKnoten(node, targetId, trail = []) {
 }
 
 // ── Buch-Kontext-Loader ─────────────────────────────────────────────────────
-// Liefert Figuren (Name+Typ+Beschreibung) und Orte (Name+Typ) eines Buchs;
+// Liefert Figuren (Name+Kurzname+Typ+Beschreibung) und Orte (Name+Typ) eines Buchs;
 // per-User-skopiert. Genutzt für Brainstorm (Abgrenzungs-Kontext, damit KI
 // keine Doppelung produziert) und Consistency-Check (Stimmigkeit gegen
 // Buchwelt). Die Werkstatt-Figur selbst faellt raus — per source_figure_id UND
 // per Namensvergleich; sonst lehnt die KI eigene Eigenschaften als „Doppelung
 // mit Buchfigur" ab bzw. meldet jeden importierten Aspekt als Namenskonflikt.
+//
+// Nur AKTIVE Figuren (db/figures/active.js) — eine ausgemusterte steht nicht mehr
+// im Text. Kein harter Deckel: die Namenskonflikt-Prüfung braucht ALLE Namen; der
+// Prompt (prompts/figur-werkstatt.js#_figurenLines) zeigt die relevantesten mit
+// Beschreibung und den Rest nur als Namen. Relevanz = Summe der Kapitel-Auftritte
+// (figure_appearances), dann Katalog-Reihenfolge.
 const _stmtBookFiguren = db.prepare(`
-  SELECT name, typ, beschreibung
-    FROM figures
-   WHERE book_id = ? AND user_email = ? AND (? IS NULL OR id != ?)
-   ORDER BY sort_order, name
-   LIMIT 50
+  SELECT f.name, f.kurzname, f.typ, f.beschreibung,
+         COALESCE((SELECT SUM(fa.haeufigkeit) FROM figure_appearances fa WHERE fa.figure_id = f.id), 0) AS auftritte
+    FROM figures f
+   WHERE f.book_id = ? AND f.user_email = ? AND ${activeFigureSql('f')} AND (? IS NULL OR f.id != ?)
+   ORDER BY auftritte DESC, f.sort_order, f.name
 `);
 function _loadBookFiguren(draft, userEmail) {
   const exclude = draft.source_figure_id != null ? parseInt(draft.source_figure_id) : null;
@@ -75,7 +82,8 @@ function _loadBookFiguren(draft, userEmail) {
   const nameNorm = (draft.name || '').trim().toLowerCase();
   return _stmtBookFiguren
     .all(parseInt(draft.book_id), userEmail, exclude, exclude)
-    .filter(f => (f.name || '').trim().toLowerCase() !== nameNorm);
+    .filter(f => (f.name || '').trim().toLowerCase() !== nameNorm)
+    .map(({ auftritte, ...f }) => f);
 }
 
 function _loadBookOrte(bookId, userEmail) {
@@ -97,7 +105,7 @@ function _loadBookBeziehungen(bookId, userEmail) {
       FROM figure_relations r
       JOIN figures ff ON ff.id = r.from_fig_id
       JOIN figures tf ON tf.id = r.to_fig_id
-     WHERE r.book_id = ? AND r.user_email IS ?
+     WHERE r.book_id = ? AND r.user_email IS ? AND ${activeFigureSql('ff')} AND ${activeFigureSql('tf')}
      ORDER BY ff.name, tf.name
      LIMIT 60
   `).all(parseInt(bookId), userEmail);

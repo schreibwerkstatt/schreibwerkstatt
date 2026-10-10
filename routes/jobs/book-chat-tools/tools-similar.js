@@ -115,12 +115,12 @@ function locateInPageText(pageText, needle) {
 }
 
 async function tool_search_similar(input, ctx) {
-  if (!embed.isEnabled()) return { error: 'Embedding-Backend nicht konfiguriert.' };
+  if (!embed.isEnabled()) return { error: 'Embedding-Backend nicht konfiguriert.', errorKey: 'chat.toolError.semanticUnavailable' };
   const query = (input.query || '').trim();
-  if (!query) return { error: 'query fehlt' };
+  if (!query) return { error: 'query fehlt', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'query' } };
   const kinds = Array.isArray(input.kinds) && input.kinds.length
     ? input.kinds.filter(k => ALLOWED_KINDS.includes(k)) : BOOK_KINDS;
-  if (!kinds.length) return { error: `kinds: erlaubt sind ${ALLOWED_KINDS.join(', ')}.` };
+  if (!kinds.length) return { error: `kinds: erlaubt sind ${ALLOWED_KINDS.join(', ')}.`, errorKey: 'chat.toolError.invalidParam', errorParams: { param: 'kinds' } };
   const topK = Math.min(Math.max(1, input.limit || 20), 50);
 
   // Volle Qualitäts-Pipeline (Retrieval → Hybrid-Fusion → Reranking), damit der
@@ -135,7 +135,7 @@ async function tool_search_similar(input, ctx) {
   }
   catch (e) {
     if (e?.name === 'AbortError') throw e;
-    return { error: `Embedding-Endpunkt nicht erreichbar: ${e.message}` };
+    return { error: `Embedding-Endpunkt nicht erreichbar: ${e.message}`, errorKey: 'chat.toolError.semanticUnavailable' };
   }
 
   const snippetChars = Math.min(

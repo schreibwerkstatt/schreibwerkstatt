@@ -140,13 +140,13 @@ test('span.cite OHNE data-src ist Fremdmarkup, kein Marker -> Ersetzung laeuft',
   const html = '<p>Er nannte <span class="cite">ein Werk</span> im Text.</p>';
   const res = replaceInHtml(html, 'Er nannte ein Werk im Text.', 'Er erwähnte ein Werk im Text.');
   assert.notEqual(res, html);
-  assert.ok(res.includes('Er erwähnte ein Werk im Text.'));
+  assert.equal(res, '<p>Er erwähnte <span class="cite">ein Werk</span> im Text.</p>');
 });
 
 test('Gewoehnlicher <span> blockiert nicht (nur Marker-Spans zaehlen)', () => {
   const html = '<p>Er sagte <span class="hervor">das magische</span> Wort.</p>';
   const res = replaceInHtml(html, 'das magische Wort', 'das geheime Wort');
-  assert.ok(res.includes('das geheime Wort'));
+  assert.equal(res, '<p>Er sagte <span class="hervor">das geheime</span> Wort.</p>');
 });
 
 test('Waisen-Marker (Open davor) wird wieder angeklebt statt blockiert', () => {
@@ -167,5 +167,5 @@ test('replaceInHtml: Waisen-</a> im Treffer (Open davor) wird wieder angeklebt',
   const res = replaceInHtml(html, 'Website lohnt', 'Seite lohnt');
   assert.ok(res.includes('href="https://example.com"'), 'Link muss erhalten bleiben');
   assert.ok(res.includes('</a>'), 'schliessendes Tag muss erhalten bleiben');
-  assert.ok(res.includes('Seite lohnt'), 'Ersetzung muss greifen');
+  assert.equal(res, '<p><a href="https://example.com">unsere Seite</a> lohnt sich.</p>', 'Ersetzung muss greifen');
 });

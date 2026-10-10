@@ -2,6 +2,7 @@ const { db } = require('../connection');
 const { NOW_ISO_SQL } = require('../now');
 const { matchFiguren } = require('../../lib/entity-match');
 const { dedupRelations, relationKey, _cleanRefName, resolveErstePageId, enrichBelegWithIds, _arcToFlat } = require('./refs');
+const { listFigureAliasesByFigure } = require('./aliases');
 require('../migrations');
 
 // Cross-Run-Matching (Bestand ↔ neue Analyse-Figuren) liegt in
@@ -14,12 +15,13 @@ require('../migrations');
 // KI-Call machen (harte Regel). Der Job beurteilt sie vorab und reicht das Ergebnis
 // als `opts.matchHint` herein (siehe routes/jobs/komplett/entity-reconcile.js).
 
-// Bestands-Row → Match-Kandidat. `chapters` kommt als Set von Kapitelnamen.
+// Bestands-Row → Match-Kandidat. `chapters` kommt als Set von Kapitelnamen,
+// `aliases` aus figure_aliases (vom Autor beim Zusammenfuehren bestaetigt).
 function _figMatchCandidateFromRow(ex) {
   return {
     id: ex.id, name: ex.name, kurzname: ex.kurzname, beruf: ex.beruf,
     geburtstag: ex.geburtstag, geschlecht: ex.geschlecht, typ: ex.typ,
-    chapters: ex.chapters,
+    chapters: ex.chapters, aliases: ex.aliases,
   };
 }
 
@@ -42,9 +44,18 @@ function planFigurenMatch(bookId, figuren, userEmail, hint = null) {
   // Gematcht wird gegen den Namen, den die Analyse zuletzt geliefert hat (`ki_name`):
   // eine vom Autor umbenannte Figur heisst im Text weiter so. Ohne ki_name (im Katalog
   // angelegt) matcht sie ueber ihren eigenen Namen. Muster: locations-write.js.
-  const existingRows = db.prepare(
-    'SELECT id, fig_id, COALESCE(ki_name, name) AS name, kurzname, beruf, geburtstag, geschlecht, typ FROM figures WHERE book_id = ? AND user_email IS ?'
+  // Dieselbe Regel fuer die Widerspruchs-Indizien Geschlecht/Geburtsdatum: bei einer
+  // gepflegten Figur (manually_edited) zaehlt der letzte Analysewert (`ki_*`), nicht
+  // die Korrektur des Autors — sonst laese figureEvidence die Korrektur als
+  // Widerspruch zur naechsten Analyse und die Figur kaeme als Dublette zurueck.
+  // Unbekannter Analysewert (Altbestand vor Migration 321) = kein Indiz.
+  const existingRows = db.prepare(`
+    SELECT id, fig_id, COALESCE(ki_name, name) AS name, kurzname, beruf, typ,
+           CASE WHEN manually_edited = 1 THEN ki_geburtstag ELSE geburtstag END AS geburtstag,
+           CASE WHEN manually_edited = 1 THEN ki_geschlecht ELSE geschlecht END AS geschlecht
+      FROM figures WHERE book_id = ? AND user_email IS ?`
   ).all(bookId, em);
+  const aliasesByFig = listFigureAliasesByFigure(bookId, em);
   const chapRows = db.prepare(`
     SELECT fa.figure_id AS fid, c.chapter_name AS cname
     FROM figure_appearances fa
@@ -56,7 +67,10 @@ function planFigurenMatch(bookId, figuren, userEmail, hint = null) {
     if (!chaptersByFig.has(r.fid)) chaptersByFig.set(r.fid, new Set());
     chaptersByFig.get(r.fid).add(r.cname);
   }
-  for (const ex of existingRows) ex.chapters = chaptersByFig.get(ex.id) || new Set();
+  for (const ex of existingRows) {
+    ex.chapters = chaptersByFig.get(ex.id) || new Set();
+    ex.aliases = aliasesByFig.get(ex.id) || [];
+  }
   const plan = matchFiguren(
     existingRows.map(_figMatchCandidateFromRow),
     figuren.map(_figMatchCandidateFromIncoming),
@@ -74,7 +88,14 @@ function _figFields(f, idMaps) {
   // Auflösen: zuerst in den Kapiteln der Figur (figure_appearances) suchen,
   // dann globaler Unambiguous-Match. Kein Name → null.
   const ersteErwaehnung = _cleanRefName(f.erste_erwaehnung);
-  const erstPageId = resolveErstePageId(ersteErwaehnung, f.kapitel, idMaps);
+  // Vom Aufrufer mitgebrachte page_id (Katalog-PUT: GET→PUT-Round-Trip) bleibt
+  // stehen, wenn der Name sich nicht aufloesen laesst — aber nur, wenn sie eine
+  // Seite DIESES Buchs ist (idMaps.validPageIds).
+  const givenPageId = Number.isInteger(f.erste_erwaehnung_page_id) && idMaps?.validPageIds?.has(f.erste_erwaehnung_page_id)
+    ? f.erste_erwaehnung_page_id : null;
+  const erstPageId = ersteErwaehnung
+    ? (resolveErstePageId(ersteErwaehnung, f.kapitel, idMaps) ?? givenPageId)
+    : null;
   const arcJson = (f.arc && typeof f.arc === 'object') ? JSON.stringify(f.arc)
     : (typeof f.arc === 'string' && f.arc ? f.arc : null);
   const entwicklungFlat = f.entwicklung || _arcToFlat(f.arc) || null;
@@ -204,8 +225,9 @@ function saveFigurenToDb(bookId, figuren, userEmail, idMaps, opts = {}) {
       INSERT INTO figures
         (book_id, fig_id, name, kurzname, typ, geburtstag, geschlecht, beruf, wohnadresse, aeusseres, stimme, hintergrund,
          beschreibung, sozialschicht, praesenz, rolle, motivation, konflikt, entwicklung, arc,
-         erste_erwaehnung, erste_erwaehnung_page_id, schluesselzitate, sort_order, user_email, ki_name, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})`);
+         erste_erwaehnung, erste_erwaehnung_page_id, schluesselzitate, sort_order, user_email, ki_name,
+         ki_geschlecht, ki_geburtstag, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})`);
     const insTag = db.prepare('INSERT OR IGNORE INTO figure_tags (figure_id, tag) VALUES (?, ?)');
     const insRel = db.prepare('INSERT INTO figure_relations (book_id, from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, belege, user_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
 
@@ -223,7 +245,7 @@ function saveFigurenToDb(bookId, figuren, userEmail, idMaps, opts = {}) {
         f.beschreibung || null, f.sozialschicht || null,
         f.praesenz || null, f.rolle || null, f.motivation || null, f.konflikt || null,
         v.entwicklungFlat, v.arcJson, v.ersteErwaehnung, v.erstPageId, v.zitate,
-        i, em, f.name
+        i, em, f.name, f.geschlecht || null, f.geburtstag || null
       );
       figIdToRowId[f.id] = fid;
       _writeFigTags(insTag, fid, f);
@@ -264,7 +286,7 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
   const onMissing = opts.onMissing === 'stale' ? 'stale' : 'delete';
   const matchBy = opts.matchBy === 'figId' ? 'figId' : 'identity';
   const manual = matchBy === 'figId';
-  db.transaction(() => {
+  return db.transaction(() => {
     // 1./2. Bestand + Match: auch stale-Figuren sind Match-Kandidaten — eine
     //    wiederaufgetauchte Figur soll revived werden. Der identity-Pfad geht durch
     //    planFigurenMatch (dieselbe Funktion, die der Job vor dem Judge ruft).
@@ -321,14 +343,18 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
         stimme, hintergrund, beschreibung, sozialschicht, praesenz, rolle, motivation, konflikt,
         entwicklung, arc, erste_erwaehnung, erste_erwaehnung_page_id, schluesselzitate, sort_order`.split(',').map(c => c.trim());
     const insFig = db.prepare(`
-      INSERT INTO figures (${_cols.join(', ')}, book_id, user_email, manually_edited, ki_name, stale, updated_at)
-      VALUES (${_cols.map(c => '@' + c).join(', ')}, @book_id, @user_email, @manually_edited, @ki_name, 0, ${NOW_ISO_SQL})`);
-    // identity-Match setzt stale=0 (re-detektiert) und den ki_name des Laufs; figId-Match
-    // lässt stale unangetastet (User kuratiert; eine orphan-Figur bleibt orphan).
+      INSERT INTO figures (${_cols.join(', ')}, book_id, user_email, manually_edited, ki_name,
+        ki_geschlecht, ki_geburtstag, stale, updated_at)
+      VALUES (${_cols.map(c => '@' + c).join(', ')}, @book_id, @user_email, @manually_edited, @ki_name,
+        @ki_geschlecht, @ki_geburtstag, 0, ${NOW_ISO_SQL})`);
+    // identity-Match setzt stale=0 (re-detektiert) und den ki_name/ki_geschlecht/
+    // ki_geburtstag des Laufs; figId-Match lässt stale und die ki_*-Werte unangetastet
+    // (User kuratiert; eine orphan-Figur bleibt orphan, der letzte Analysewert bleibt
+    // der Vergleichsmassstab für den nächsten Lauf).
     const updFig = db.prepare(`
       UPDATE figures SET ${_cols.map(c => `${c} = @${c}`).join(', ')},
         manually_edited = @manually_edited, ki_name = COALESCE(@ki_name, ki_name),
-        ${manual ? '' : 'stale = 0, '}updated_at = ${NOW_ISO_SQL}
+        ${manual ? '' : 'ki_geschlecht = @ki_geschlecht, ki_geburtstag = @ki_geburtstag, stale = 0, '}updated_at = ${NOW_ISO_SQL}
       WHERE id = @id`);
     const delTag = db.prepare('DELETE FROM figure_tags WHERE figure_id = ?');
     const insTag = db.prepare('INSERT OR IGNORE INTO figure_tags (figure_id, tag) VALUES (?, ?)');
@@ -354,7 +380,10 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
           for (const k of CURATED_FIELDS) cols[k] = prev[k];
           writeTags = false;
         }
-        updFig.run({ ...cols, manually_edited: edited, ki_name: manual ? null : f.name, id: existingId });
+        updFig.run({
+          ...cols, manually_edited: edited, ki_name: manual ? null : f.name, id: existingId,
+          ...(manual ? {} : { ki_geschlecht: f.geschlecht || null, ki_geburtstag: f.geburtstag || null }),
+        });
         fid = existingId;
         // Analyse-Kinder neu schreiben (CASCADE-Kinder ohne externe Refs). Die Kapitel-
         // Vorkommen bleiben hier unangetastet — sie sind ein abgeleiteter Index, den
@@ -365,6 +394,8 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
           ...cols, book_id: bookId, user_email: em,
           // Im Katalog angelegt = vom Autor kuratiert; kein Analyse-Name.
           manually_edited: manual ? 1 : 0, ki_name: manual ? null : f.name,
+          ki_geschlecht: manual ? null : (f.geschlecht || null),
+          ki_geburtstag: manual ? null : (f.geburtstag || null),
         }).lastInsertRowid;
       }
       figIdToRowId[f.id] = fid;
@@ -374,6 +405,9 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
 
     // 7. Beziehungen.
     _writeRelations(bookId, em, manual, prevRels, figIdToRowId, allRelations, validIds);
+    // Lauf-fig_id → figures.id: der Job haengt damit die Aliasse der gematchten
+    // Bestandsfiguren an die Namens-Aufloesung der Szenen/Ereignisse.
+    return { rowIdByFigId: figIdToRowId };
   })();
 }
 

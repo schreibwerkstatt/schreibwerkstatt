@@ -8,7 +8,7 @@ const { callAIChat, chatTemperature, getContextConfigFor, resolveProvider } = re
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   getPrompts, getBookPrompts,
-  htmlToText, jobAbortControllers,
+  htmlToText, htmlToTextForPrompt, jobAbortControllers,
   getFiguren, getLatestReview, getLatestPageCheck, getOpenIdeen, buildChatMessageHistory,
 } = require('../shared');
 const contentStore = require('../../../lib/content-store');
@@ -16,6 +16,7 @@ const { generateSessionTitle } = require('../chat-title');
 const { recordChatLedgerForMessage } = require('../../../db/cost-ledger');
 const { _parseChatResponse, figurenBlockChars } = require('./shared');
 const { pageChatBudget, computePageChangeHunks, fitHistory } = require('./page-chat-context');
+const { annotateVorschlagMatches } = require('./page-chat-verify');
 const { preContextPassages, retrievalQuery } = require('./book-chat-retrieval');
 const embed = require('../../../lib/embed');
 const appSettings = require('../../../lib/app-settings');
@@ -73,7 +74,15 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       logger.warn(`Seiteninhalt konnte nicht geladen werden: ${e.message}`);
       throw i18nError('job.error.pageChatLoadFailed');
     }
+    // Zwei Sichten derselben Seite: `pageText` (kompakt, einzeilig) ist die
+    // Vergleichsform — Diff gegen den Stand beim Chat-Start (`opening_page_text`,
+    // gleiche Normalform) und Fundstellen-Prüfung der Vorschläge. `promptText`
+    // behält Absatzgrenzen als Leerzeilen: das Modell sieht Absätze und Dialog-
+    // wechsel und schlägt keine `original` über eine Absatzgrenze vor (die der
+    // Apply-Guard ohnehin abwiese). Der Matcher kollabiert Whitespace, `\n\n` in
+    // einem `original` ist darum unschädlich.
     const pageText = htmlToText(pd.html || '');
+    const promptText = htmlToTextForPrompt(pd.html || '');
     const pageUpdatedAt = pd.updated_at || null;
     const pageChapterId = pd.chapter_id ?? null;
     session.page_name = pd.name || null;
@@ -81,8 +90,8 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // Budget (routes/jobs/chat/page-chat-context.js): Seitentext gedeckelt, Stand
     // beim Chat-Start nur als Diff, Verlauf auf den Rest gekürzt.
     const budget = pageChatBudget(aiCfg);
-    if (pageText.length > budget.pageMax) {
-      throw i18nError('job.error.pageChatPageTooLarge', { chars: pageText.length, max: budget.pageMax });
+    if (promptText.length > budget.pageMax) {
+      throw i18nError('job.error.pageChatPageTooLarge', { chars: promptText.length, max: budget.pageMax });
     }
     logger.info(`Start: «${session.page_name || '-'}» session=${sessionId}, page=${session.page_id || '-'}, msg-len=${message.length}`);
 
@@ -99,7 +108,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const pageChangeNote = pageChange ? formatPageChange(pageChange) : null;
     // Figuren sind hier kapitel-gefiltert, aber ebenfalls Volldossiers → gebudgetet
     // (gleicher Deckel wie im Buch-Chat, siehe figurenBlockChars).
-    const systemPrompt = buildChatSystemPrompt(session.page_name || '–', pageText, figuren, review,
+    const systemPrompt = buildChatSystemPrompt(session.page_name || '–', promptText, figuren, review,
       chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg) });
 
     const annotate = (r) => {
@@ -155,6 +164,11 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     if (truncated) throw i18nError('job.error.aiTruncated', { max: aiCfg.maxTokensOut, tokIn: tokensIn, tokOut: tokensOut, total: tokensIn + tokensOut });
 
     const { antwort, vorschlaege, titel_varianten: titelVarianten, fallback, lostVorschlaege } = _parseChatResponse(text);
+    // Fundstellen-Prüfung gegen den Text, den das Modell gesehen hat: „Stelle nie
+    // gefunden" ist eine andere Aussage als „inzwischen veraltet" (UI).
+    await annotateVorschlagMatches(vorschlaege, pageText);
+    const unmatched = vorschlaege.filter(v => v.match).length;
+    if (unmatched) logger.info(`${unmatched} von ${vorschlaege.length} Vorschlägen ohne eindeutige Fundstelle.`);
     if (fallback) {
       logger.warn(`Chat-Antwort kein valides JSON – Rohtext (gesäubert) wird gespeichert${lostVorschlaege ? ', Vorschläge verloren' : ''}.`);
     }

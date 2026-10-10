@@ -9,12 +9,17 @@
 // Ereignisse). Hier wählt der Autor Quelle + Ziel; der Server hängt alle Referenzen
 // um und löscht die Quelle (Merge-Kern db/entity-merge.js).
 //
-// Grenze, die das Panel auch sichtbar sagt (merge.hint): es gibt keinen dauerhaften
-// Alias. Steht der Name der Quelle noch im Buchtext, legt die nächste
-// Komplettanalyse dafür wieder einen Eintrag an — die umgehängten Referenzen
-// bleiben beim Ziel, der verwaiste Eintrag kann aber neu entstehen.
+// Grenze, die das Panel auch sichtbar sagt (merge.hint): nur Figuren bekommen einen
+// dauerhaften Alias (figure_aliases). Bei Schauplätzen und Szenen legt die nächste
+// Komplettanalyse für einen Namen, der noch im Buchtext steht, wieder einen Eintrag
+// an — die umgehängten Referenzen bleiben beim Ziel.
+//
+// Buchwechsel während eines Requests: die Kandidaten tragen das Buch, zu dem sie
+// gehören (`mergeCandidatesBookId`); eine Antwort, die nach dem Wechsel eintrifft,
+// wird verworfen statt in die Listen des neuen Buchs geschrieben.
 
 import { fetchJson } from './_shared.js';
+import { figurMergeMessage } from '../figur-merge.js';
 
 // Pro Gattung: Endpunkt-Basis, Listen-Feld der GET-Antwort, Namensfeld und die
 // Body-Schlüssel des POST. Die `id` ist bei Figuren/Schauplätzen die öffentliche
@@ -39,12 +44,16 @@ export const mergeMethods = {
   async loadMergeCandidates() {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) return;
+    const isCurrent = () => String(Alpine.store('nav').selectedBookId) === String(bookId);
     this.mergeLoading = true;
     this.mergeError = '';
     try {
       const results = await Promise.all(
         MERGE_KINDS.map(k => fetchJson(MERGE_KIND_CFG[k].url(bookId)).catch(() => null)),
       );
+      // Buch inzwischen gewechselt: der book:changed-Reset hat den State schon
+      // geleert — die Listen des alten Buchs nicht hineinschreiben.
+      if (!isCurrent()) return;
       MERGE_KINDS.forEach((kind, i) => {
         const cfg = MERGE_KIND_CFG[kind];
         const rows = results[i]?.[cfg.list] || [];
@@ -52,12 +61,12 @@ export const mergeMethods = {
           .map(r => ({ id: String(r.id), name: r[cfg.nameKey] || '', stale: !!r.stale }))
           .sort((a, b) => (b.stale - a.stale) || a.name.localeCompare(b.name));
       });
-      this.mergeCandidatesLoaded = true;
+      this.mergeCandidatesBookId = String(bookId);
     } catch (e) {
       console.error('[loadMergeCandidates]', e);
-      this.mergeError = window.__app.t('merge.loadError');
+      if (isCurrent()) this.mergeError = window.__app.t('merge.loadError');
     } finally {
-      this.mergeLoading = false;
+      if (isCurrent()) this.mergeLoading = false;
     }
   },
 
@@ -67,11 +76,12 @@ export const mergeMethods = {
   onMergeSectionVisible(tab) {
     if (tab !== 'danger') return;
     // Guard + Fetch bewusst NACH dem Effect-Lauf (queueMicrotask): würden
-    // `mergeCandidatesLoaded`/`mergeLoading` synchron im x-effect gelesen, wären sie
+    // `mergeCandidatesBookId`/`mergeLoading` synchron im x-effect gelesen, wären sie
     // dessen Abhängigkeiten — und `loadMergeCandidates` schreibt genau sie, der
     // Effect würde sich also selbst nachtriggern. So hängt er nur am aktiven Tab.
     queueMicrotask(() => {
-      if (this.mergeCandidatesLoaded || this.mergeLoading) return;
+      const bookId = Alpine.store('nav').selectedBookId;
+      if (!bookId || this.mergeCandidatesBookId === String(bookId) || this.mergeLoading) return;
       this.loadMergeCandidates();
     });
   },
@@ -100,6 +110,7 @@ export const mergeMethods = {
       danger: true,
     })) return;
 
+    const isCurrent = () => String(Alpine.store('nav').selectedBookId) === String(bookId);
     this.mergeBusy = true;
     this.mergeError = '';
     this.mergeMessage = '';
@@ -111,26 +122,29 @@ export const mergeMethods = {
       });
       const data = await r.json().catch(() => null);
       if (!r.ok) throw new Error(window.__app.tError(data));
+      // Buch gewechselt, während der Merge lief: er ist geschehen, aber Meldung,
+      // Auswahl und Kandidaten gehören dem alten Buch — der Reset hat sie geleert.
+      if (!isCurrent()) return;
 
       // `moved` zählt die umgehängten Zeilen pro Brücke — für den User genügt die Summe.
       const moved = Object.values(data?.moved || {}).reduce((a, n) => a + (Number(n) || 0), 0);
-      this.mergeMessage = window.__app.t('merge.done', { source: src.name, target: tgt.name, n: moved });
+      this.mergeMessage = kind === 'figur'
+        ? figurMergeMessage(data, src, tgt)
+        : window.__app.t('merge.done', { source: src.name, target: tgt.name, n: moved });
       this.mergeSel[kind] = { source: '', target: '' };
       // Offene/zwischengespeicherte Kataloge nachziehen, damit die gelöschte Quelle
       // aus den Entitäten-Karten verschwindet (gleiches Vorgehen wie beim
       // stale-Bulk-Cleanup in admin.js).
-      if (String(Alpine.store('nav').selectedBookId) === String(bookId)) {
-        window.__app.loadFiguren?.(bookId);
-        window.__app.loadOrte?.(bookId);
-        window.__app.loadSzenen?.(bookId);
-      }
+      window.__app.loadFiguren?.(bookId);
+      window.__app.loadOrte?.(bookId);
+      window.__app.loadSzenen?.(bookId);
       await this.loadMergeCandidates();
       if (this._mergeMsgTimer) clearTimeout(this._mergeMsgTimer);
       this._mergeMsgTimer = setTimeout(() => { this.mergeMessage = ''; this._mergeMsgTimer = null; }, 8000);
     } catch (e) {
-      this.mergeError = e.message;
+      if (isCurrent()) this.mergeError = e.message;
     } finally {
-      this.mergeBusy = false;
+      if (isCurrent()) this.mergeBusy = false;
     }
   },
 };

@@ -203,6 +203,10 @@ const notebookState = () => ({
   editDirty: false,
   editSaving: false,
   saveOffline: false,
+  // Fehlerklasse des letzten gescheiterten Saves (editor/notebook/save-errors.js:
+  // 'network'|'server'|'auth'|'locked'|'forbidden'|'notFound'|'rejected'),
+  // null nach Erfolg. Steuert Auto-Retry und Wortlaut der Statuszeile.
+  saveFailKind: null,
   pageEditorFullscreen: false,
   pageEditorZoom: 1,
   pageEditorFitWidth: false,

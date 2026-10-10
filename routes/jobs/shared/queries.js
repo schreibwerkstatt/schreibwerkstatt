@@ -1,5 +1,6 @@
 'use strict';
 const { db } = require('../../../db/schema');
+const { activeFigureSql } = require('../../../db/figures');
 const { openStatusSql } = require('../../../lib/ideen-status');
 const { listFigureAges } = require('../../../db/figure-ages');
 const { birthCandidates, resolveBirth } = require('../../../lib/figure-birth');
@@ -67,7 +68,12 @@ function getLatestReview(bookId, userEmail) {
   try { return JSON.parse(row.review_json); } catch { return null; }
 }
 
-/** Alle Figuren eines Buchs (user-spezifisch) als kompaktes Objekt-Array.
+/** Alle AKTIVEN Figuren eines Buchs (user-spezifisch) als kompaktes Objekt-Array —
+ *  der Figuren-Kontext von Abschnitts-, Buch- und Plot-Chat sowie Rückblick.
+ *  Ausgemusterte Figuren (`stale = 1`, «nicht mehr im Text») fallen samt ihren
+ *  Ereignissen, Beziehungen (beide Enden), Schauplätzen und Szenen heraus
+ *  (SSoT db/figures/active.js#activeFigureSql); ebenso ausgemusterte Schauplätze
+ *  und Szenen selbst.
  *  chapterId (optional, Number): filtert auf Figuren/Orte/Szenen, die in
  *  diesem Kapitel auftreten. Übergabe per stabiler chapter_id (nicht Name) —
  *  Snapshot-Spalten existieren nicht mehr, alle Anzeige-Werte werden zur
@@ -82,7 +88,7 @@ function getFiguren(bookId, userEmail, chapterId = null) {
     LEFT JOIN figure_tags        ft ON ft.figure_id = f.id
     LEFT JOIN figure_appearances fa ON fa.figure_id = f.id
     LEFT JOIN chapters           c  ON c.chapter_id = fa.chapter_id
-    WHERE f.book_id = ? AND f.user_email = ?
+    WHERE f.book_id = ? AND f.user_email = ? AND ${activeFigureSql('f')}
     ${chapterId != null ? 'AND EXISTS (SELECT 1 FROM figure_appearances fa2 WHERE fa2.figure_id = f.id AND fa2.chapter_id = ?)' : ''}
     GROUP BY f.id
     ORDER BY f.sort_order
@@ -94,7 +100,7 @@ function getFiguren(bookId, userEmail, chapterId = null) {
     FROM figure_events fe
     JOIN figures f ON f.id = fe.figure_id
     LEFT JOIN chapters c ON c.chapter_id = fe.chapter_id
-    WHERE f.book_id = ? AND f.user_email = ?
+    WHERE f.book_id = ? AND f.user_email = ? AND ${activeFigureSql('f')}
     ORDER BY fe.sort_order
   `).all(bookId, userEmail);
   const eventsByFigId = {};
@@ -114,7 +120,7 @@ function getFiguren(bookId, userEmail, chapterId = null) {
     FROM figure_relations r
     JOIN figures ff ON ff.id = r.from_fig_id
     JOIN figures ft ON ft.id = r.to_fig_id
-    WHERE r.book_id = ? AND r.user_email = ?
+    WHERE r.book_id = ? AND r.user_email = ? AND ${activeFigureSql('ff')} AND ${activeFigureSql('ft')}
   `).all(bookId, userEmail);
   const relsByFigId = {};
   for (const r of relRows) {
@@ -136,14 +142,14 @@ function getFiguren(bookId, userEmail, chapterId = null) {
     JOIN figures f ON f.id = lf.figure_id
     JOIN locations l ON l.id = lf.location_id
     JOIN location_chapters lc ON lc.location_id = l.id AND lc.chapter_id = ?
-    WHERE l.book_id = ? AND l.user_email = ?
+    WHERE l.book_id = ? AND l.user_email = ? AND l.stale = 0 AND ${activeFigureSql('f')}
     ORDER BY l.sort_order
   ` : `
     SELECT f.fig_id, l.name, l.typ, l.beschreibung, l.stimmung
     FROM location_figures lf
     JOIN figures f ON f.id = lf.figure_id
     JOIN locations l ON l.id = lf.location_id
-    WHERE l.book_id = ? AND l.user_email = ?
+    WHERE l.book_id = ? AND l.user_email = ? AND l.stale = 0 AND ${activeFigureSql('f')}
     ORDER BY l.sort_order
   `).all(...locParams);
   const locsByFigId = {};
@@ -164,7 +170,7 @@ function getFiguren(bookId, userEmail, chapterId = null) {
     JOIN figures f ON f.id = sf.figure_id
     JOIN figure_scenes fs ON fs.id = sf.scene_id
     LEFT JOIN chapters c ON c.chapter_id = fs.chapter_id
-    WHERE fs.book_id = ? AND fs.user_email = ? AND fs.chapter_id = ?
+    WHERE fs.book_id = ? AND fs.user_email = ? AND fs.chapter_id = ? AND fs.stale = 0 AND ${activeFigureSql('f')}
     ORDER BY fs.sort_order
   ` : `
     SELECT f.fig_id, fs.titel, c.chapter_name AS kapitel, fs.wertung, fs.kommentar
@@ -172,7 +178,7 @@ function getFiguren(bookId, userEmail, chapterId = null) {
     JOIN figures f ON f.id = sf.figure_id
     JOIN figure_scenes fs ON fs.id = sf.scene_id
     LEFT JOIN chapters c ON c.chapter_id = fs.chapter_id
-    WHERE fs.book_id = ? AND fs.user_email = ?
+    WHERE fs.book_id = ? AND fs.user_email = ? AND fs.stale = 0 AND ${activeFigureSql('f')}
     ORDER BY fs.sort_order
   `).all(...sceneParams);
   const scenesByFigId = {};
@@ -225,12 +231,14 @@ function getFiguren(bookId, userEmail, chapterId = null) {
  *
  * `annotate(row)` (optional) hängt an eine Nachricht einen Zusatz an — der
  * Seiten-Chat gibt so die früheren `vorschlaege` samt Status mit (die Zeile trägt
- * `role`, `content`, `vorschlaege` als JSON-String). Ohne `annotate` ist die
- * Historie reiner Gesprächstext (Buch-/Recherche-Chat).
+ * `role`, `content`, `vorschlaege` und `context_info` als JSON-String; der Buch-Chat
+ * hängt so die validierten Belege früherer Antworten an, siehe
+ * routes/jobs/agentic-chat.js#buildAgenticHistory). Ohne `annotate` ist die
+ * Historie reiner Gesprächstext.
  */
 function buildChatMessageHistory(sessionId, { annotate = null } = {}) {
   const rows = db.prepare(`
-    SELECT role, content, vorschlaege FROM chat_messages
+    SELECT role, content, vorschlaege, context_info FROM chat_messages
     WHERE session_id = ? ORDER BY created_at ASC
   `).all(sessionId);
   const out = [];
