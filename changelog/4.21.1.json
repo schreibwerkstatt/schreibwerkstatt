@@ -1,0 +1,11 @@
+{
+  "version": "4.21.1",
+  "date": "2026-10-10",
+  "entries": [
+    {
+      "kind": "behoben",
+      "de": "Motiv-Werkstatt, Plot-Werkstatt und Figuren-Werkstatt: Ist die Suche beim Verankern kurz nicht erreichbar, bleiben die bisherigen Fundstellen stehen. Bisher konnten sie durch viele unpassende Stellen ersetzt werden; jetzt erscheint ein Hinweis, es später erneut zu versuchen.",
+      "en": "Motif, plot and character workshops: if search is briefly unavailable while anchoring, the existing occurrences are kept. Previously they could be replaced by many unrelated passages; now a message asks you to try again later."
+    }
+  ]
+}

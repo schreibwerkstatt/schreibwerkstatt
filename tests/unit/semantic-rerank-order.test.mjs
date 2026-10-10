@@ -110,3 +110,22 @@ test('semanticQuery: rerank.min_score > 0 ist ein Tor — ungeprüfter Rest komm
   const hits = await semanticQuery(1, 'frage', { topK: 5 });
   assert.deepEqual(hits.map(h => h.entity_id), [3]);
 });
+
+// strictRerank: speichernde Anker-Jobs (Motiv-Scan, Beat-/Figuren-Anker) dürfen
+// bei Reranker-Ausfall nicht still die ungefilterte Retrieval-Liste bekommen,
+// solange das Tor (min_score > 0) konfiguriert ist — sonst Full-Replace mit Rauschen.
+test('semanticQuery strictRerank: Ausfall bei gesetztem Tor wirft', async () => {
+  mockRetrieval(10);
+  mockRerank({ topN: 3, minScore: 0.3, fn: async () => { const e = new Error('HTTP 500'); e.rerankDown = true; throw e; } });
+  await assert.rejects(semanticQuery(1, 'frage', { topK: 5, strictRerank: true }), /500/);
+  // Ohne strict: stiller Fallback auf die Retrieval-Reihenfolge (Such-Karte, Chats).
+  const hits = await semanticQuery(1, 'frage', { topK: 5 });
+  assert.equal(hits.length, 5);
+});
+
+test('semanticQuery strictRerank: ohne Tor (min_score 0) bleibt der Fallback still', async () => {
+  mockRetrieval(10);
+  mockRerank({ topN: 3, minScore: 0, fn: async () => { throw new Error('HTTP 500'); } });
+  const hits = await semanticQuery(1, 'frage', { topK: 5, strictRerank: true });
+  assert.equal(hits.length, 5);
+});

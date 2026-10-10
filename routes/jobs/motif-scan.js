@@ -14,7 +14,7 @@ const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob,
   createJob, enqueueJob, findActiveJobId, jsonBody, jobAbortControllers,
-  startBookJob,
+  startBookJob, i18nError,
 } = require('./shared');
 const motifsDb = require('../../db/motifs');
 const embed = require('../../lib/embed');
@@ -78,7 +78,7 @@ async function _scanMotif(bookId, motif, useSemantic, signalFn, topK, userEmail 
   if (useSemantic) {
     const query = [motif.name, motif.beschreibung].map(s => String(s || '').trim()).filter(Boolean).join('. ');
     if (query) {
-      const hits = await retrieval.semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK, signal: signalFn() });
+      const hits = await retrieval.semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK, signal: signalFn(), strictRerank: true });
       for (const h of hits) {
         // Als Konfidenz zählt der rohe Cosinus (0–1, absolut interpretierbar für
         // %-Anzeige + Score-Floor). Reine FTS-Fusions-Kandidaten (kein Cosinus)
@@ -134,10 +134,22 @@ async function runMotifScanJob(jobId, bookId, userEmail) {
     updateJob(jobId, { statusText: 'job.phase.motivScan', statusParams: { done: 0, total: motifs.length }, progress: 5 });
 
     let totalOcc = 0;
+    let failed = 0;
     for (let i = 0; i < motifs.length; i++) {
       throwIfAborted();
       const motif = motifs[i];
-      const rows = await _scanMotif(bookId, motif, useSemantic, signal, topK, userEmail);
+      // Ein Fehler (Embedding-/Rerank-Endpunkt weg) kostet nur dieses Motiv:
+      // seine bisherigen Fundstellen bleiben stehen — ein Full-Replace mit dem,
+      // was ohne Semantik/Rerank-Tor übrig bliebe, wäre keine Aussage über den Text.
+      let rows;
+      try {
+        rows = await _scanMotif(bookId, motif, useSemantic, signal, topK, userEmail);
+      } catch (e) {
+        if (e.name === 'AbortError') throw e;
+        failed++;
+        log.warn(`Motiv-Scan: Motiv ${motif.id} übersprungen: ${e.message}`);
+        continue;
+      }
       motifsDb.replaceOccurrences(motif.id, bookId, rows);
       totalOcc += rows.length;
       updateJob(jobId, {
@@ -146,8 +158,9 @@ async function runMotifScanJob(jobId, bookId, userEmail) {
       });
     }
 
-    log.info(`Motiv-Scan ${bookId}: ${motifs.length} Motive, ${totalOcc} Fundstellen (semantisch=${useSemantic}, topK=${topK}).`);
-    completeJob(jobId, { motifs: motifs.length, occurrences: totalOcc, semantic: useSemantic }, null,
+    log.info(`Motiv-Scan ${bookId}: ${motifs.length} Motive, ${totalOcc} Fundstellen, ${failed} fehlgeschlagen (semantisch=${useSemantic}, topK=${topK}).`);
+    if (motifs.length && failed === motifs.length) throw i18nError('job.error.anchorSearchDown');
+    completeJob(jobId, { motifs: motifs.length, occurrences: totalOcc, failed, semantic: useSemantic }, null,
       `${motifs.length} Motive, ${totalOcc} Fundstellen`);
   } catch (e) {
     if (e.name !== 'AbortError') log.error(`Motiv-Scan Fehler: ${e.message}`, { stack: e.stack });

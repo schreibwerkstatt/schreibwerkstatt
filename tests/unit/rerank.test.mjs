@@ -88,3 +88,59 @@ test('_rerankBatched: Fehler in einem Paket wirft (Aufrufer fällt zurück)', as
     return part.map((_, i) => ({ index: i, score: 0.5 }));
   }), /422/);
 });
+
+// Circuit-Breaker: nach einem transienten Ausfall (alle Retries verbraucht)
+// scheitern Folgeaufrufe sofort, ohne den Endpunkt erneut zu treffen — ein
+// Anker-Job mit vielen Anfragen lief sonst je Anfrage die volle Retry-Kette.
+test('rerank: Breaker öffnet nach transientem Ausfall, Folgeaufruf trifft den Endpunkt nicht', async (t) => {
+  const rerankMod = require('../../lib/rerank.js');
+  const appSettings = require('../../lib/app-settings.js');
+  const embed = require('../../lib/embed.js');
+  const origGet = appSettings.get, origEmbed = embed.isEnabled, origFetch = globalThis.fetch;
+  const origBase = rerankMod._testing.retryBaseMs;
+  t.after(() => {
+    appSettings.get = origGet; embed.isEnabled = origEmbed; globalThis.fetch = origFetch;
+    rerankMod._testing.retryBaseMs = origBase; rerankMod._resetBreaker();
+  });
+  const cfg = { 'rerank.enabled': true, 'rerank.host': 'http://rerank.test' };
+  appSettings.get = (k) => (k in cfg ? cfg[k] : origGet(k));
+  embed.isEnabled = () => true;
+  rerankMod._testing.retryBaseMs = 1;
+  rerankMod._resetBreaker();
+
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; return new Response('down', { status: 500 }); };
+  await assert.rejects(rerankMod.rerank('q', ['a', 'b']), (e) => e.rerankDown === true && !e.breakerOpen);
+  assert.equal(calls, 4, 'ein Versuch + drei Retries');
+
+  await assert.rejects(rerankMod.rerank('q', ['a', 'b']), (e) => e.breakerOpen === true);
+  assert.equal(calls, 4, 'offener Breaker trifft den Endpunkt nicht');
+
+  // Nach Reset (= Cooldown abgelaufen) wird wieder probiert; Erfolg schliesst.
+  rerankMod._resetBreaker();
+  globalThis.fetch = async () => { calls++; return Response.json({ results: [{ index: 1, relevance_score: 0.9 }] }); };
+  const out = await rerankMod.rerank('q', ['a', 'b']);
+  assert.deepEqual(out.map(o => o.index), [1]);
+  assert.equal(calls, 5);
+});
+
+test('rerank: nicht-transienter Fehler (4xx) öffnet den Breaker nicht', async (t) => {
+  const rerankMod = require('../../lib/rerank.js');
+  const appSettings = require('../../lib/app-settings.js');
+  const embed = require('../../lib/embed.js');
+  const origGet = appSettings.get, origEmbed = embed.isEnabled, origFetch = globalThis.fetch;
+  t.after(() => {
+    appSettings.get = origGet; embed.isEnabled = origEmbed; globalThis.fetch = origFetch;
+    rerankMod._resetBreaker();
+  });
+  const cfg = { 'rerank.enabled': true, 'rerank.host': 'http://rerank.test' };
+  appSettings.get = (k) => (k in cfg ? cfg[k] : origGet(k));
+  embed.isEnabled = () => true;
+  rerankMod._resetBreaker();
+
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; return new Response('bad', { status: 422 }); };
+  await assert.rejects(rerankMod.rerank('q', ['a']), (e) => !e.rerankDown);
+  await assert.rejects(rerankMod.rerank('q', ['a']), (e) => !e.breakerOpen);
+  assert.equal(calls, 2);
+});

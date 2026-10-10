@@ -97,7 +97,7 @@ function _ownHit(userEmail) {
 
 async function _anchorKern(bookId, query, signalFn, minScore, userEmail) {
   if (!query) return [];
-  const hits = await retrieval.semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn() });
+  const hits = await retrieval.semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn(), strictRerank: true });
   return _occsFromHits(hits, minScore, _ownHit(userEmail));
 }
 
@@ -134,7 +134,7 @@ async function runFigurAnchorJob(jobId, bookId, userEmail) {
       statusParams: { done: 0, total: drafts.length }, progress: 5,
     });
 
-    let totalOcc = 0, scanned = 0;
+    let totalOcc = 0, scanned = 0, kerne = 0, failed = 0;
     for (let i = 0; i < drafts.length; i++) {
       throwIfAborted();
       const draft = drafts[i];
@@ -147,7 +147,18 @@ async function runFigurAnchorJob(jobId, bookId, userEmail) {
         scanned++;
         for (const kern of PSYCHE_KERNE) {
           throwIfAborted();
-          const rows = await _anchorKern(bookId, _kernQuery(draft.name, psy[kern]), signal, floor, userEmail);
+          kerne++;
+          // Ein Fehler (Embedding-/Rerank-Endpunkt weg) kostet nur diesen Kern:
+          // seine bisherigen Fundstellen bleiben stehen.
+          let rows;
+          try {
+            rows = await _anchorKern(bookId, _kernQuery(draft.name, psy[kern]), signal, floor, userEmail);
+          } catch (e) {
+            if (e.name === 'AbortError') throw e;
+            failed++;
+            log.warn(`Figur-Anchor: Draft ${draft.id}/${kern} übersprungen: ${e.message}`);
+            continue;
+          }
           occDb.replaceKernOccurrences(draft.id, bookId, kern, rows);
           totalOcc += rows.length;
         }
@@ -159,7 +170,9 @@ async function runFigurAnchorJob(jobId, bookId, userEmail) {
       });
     }
 
-    log.info(`Figur-Anchor ${bookId}: ${scanned}/${drafts.length} Drafts mit Kernen, ${totalOcc} Fundstellen.`);
+    log.info(`Figur-Anchor ${bookId}: ${scanned}/${drafts.length} Drafts mit Kernen, ${totalOcc} Fundstellen, ${failed} Kerne fehlgeschlagen.`);
+    // Kein Kern durchgekommen → Fehler statt `done` (figurAnchorState zählt `done` als „verankert").
+    if (kerne && failed === kerne) throw i18nError('job.error.anchorSearchDown');
     completeJob(jobId, { drafts: scanned, occurrences: totalOcc, semantic: true }, null,
       `${scanned} Figuren, ${totalOcc} Fundstellen`);
   } catch (e) {

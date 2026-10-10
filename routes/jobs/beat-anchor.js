@@ -71,7 +71,7 @@ async function _anchorBeat(bookId, beat, useSemantic, signalFn, minScore = 0, op
   if (!query) return [];
 
   if (useSemantic) {
-    const hits = await retrieval.semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn() });
+    const hits = await retrieval.semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn(), strictRerank: true });
     for (const h of hits) {
       if (h.semScore == null) continue;
       if (!own(h)) continue;
@@ -138,7 +138,7 @@ async function runBeatAnchorJob(jobId, bookId, userEmail) {
       const beat = beats[i];
       const promote = beat.status !== 'im_buch';
       const minScore = promote ? promoteFloor : confirmFloor;
-      // Ein Fehler (Embedding-Endpunkt weg, kaputte Query) kostet nur diesen Beat:
+      // Ein Fehler (Embedding-/Rerank-Endpunkt weg, kaputte Query) kostet nur diesen Beat:
       // geloggt, übersprungen, seine bisherigen Fundstellen bleiben stehen (kein
       // Full-Replace mit [] — ein Ausfall ist keine Aussage „nicht im Text").
       let rows;
@@ -159,6 +159,9 @@ async function runBeatAnchorJob(jobId, bookId, userEmail) {
     }
 
     log.info(`Beat-Anchor ${bookId}: ${beats.length} Beats, ${totalOcc} Fundstellen, ${failed} fehlgeschlagen (semantisch=${useSemantic}).`);
+    // Kein Beat durchgekommen → Fehler statt `done`: ein `done`-Lauf zählt als
+    // „verankert" (beatAnchorLastRun), obwohl nichts gesucht wurde.
+    if (beats.length && failed === beats.length) throw i18nError('job.error.anchorSearchDown');
     completeJob(jobId, { beats: beats.length, occurrences: totalOcc, failed, semantic: useSemantic }, null,
       `${beats.length} Beats, ${totalOcc} Fundstellen`);
   } catch (e) {

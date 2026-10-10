@@ -6952,6 +6952,7 @@
   "job.phase.figurAlterConsolidate": "Consolidating statements…",
   "job.error.figurAnchorNoSemantic": "Character anchoring needs semantic search, but no embedding backend is configured.",
   "job.error.anchorNoIndex": "This book's semantic index is not ready yet (first build or model change). Existing occurrences are kept — please run again once indexing has finished.",
+  "job.error.anchorSearchDown": "Semantic search or the reranker is currently unreachable. Existing occurrences are kept — please try again later.",
   "job.error.figurAlterNoFiguren": "No characters recorded for this book. Run the book analysis first.",
   "job.error.figurAlterNoText": "No book text found.",
   "job.error.figurAlterMissing": "The AI response contained no findings list.",

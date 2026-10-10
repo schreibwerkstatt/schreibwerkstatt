@@ -6952,6 +6952,7 @@
   "job.phase.figurAlterConsolidate": "Angaben werden verdichtet …",
   "job.error.figurAnchorNoSemantic": "Für die Figuren-Verankerung ist keine semantische Suche eingerichtet (Embedding-Backend fehlt).",
   "job.error.anchorNoIndex": "Der semantische Index dieses Buchs ist noch nicht fertig (erster Aufbau oder Modellwechsel). Bisherige Fundstellen bleiben stehen — bitte nach dem Index-Lauf erneut starten.",
+  "job.error.anchorSearchDown": "Die semantische Suche bzw. der Reranker ist gerade nicht erreichbar. Bisherige Fundstellen bleiben stehen — bitte später erneut starten.",
   "job.error.figurAlterNoFiguren": "Für dieses Buch sind keine Figuren erfasst. Starte zuerst die Buchanalyse.",
   "job.error.figurAlterNoText": "Kein Buchtext gefunden.",
   "job.error.figurAlterMissing": "Die KI-Antwort enthielt keine Funde-Liste.",
