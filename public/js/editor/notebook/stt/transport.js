@@ -43,7 +43,7 @@ export const sttTransportMethods = {
   // behandelt). Transiente Fehler (Netzwerk-Throw, 408/5xx) werden bis zu
   // STT_MAX_RETRY-mal wiederholt, bevor der Fehler-Toast kommt — ein kurzer
   // Upstream-Haenger kostet so keinen Satz. 404 (Feature aus) und 4xx
-  // (z. B. 413/415) werden NICHT wiederholt. `signal` (Session-AbortController)
+  // (z. B. 413/415, 424 = Upstream lehnt dauerhaft ab) werden NICHT wiederholt. `signal` (Session-AbortController)
   // beendet Request UND Retry-Wait sofort und still beim Stop — ein
   // abgebrochenes Segment liefert `null` ohne Fehler-Toast.
   async _sttFetchTranscript(blob, mime, attempt, signal) {

@@ -1,7 +1,7 @@
 'use strict';
 // Integration-Test fuer /stt/transcribe. Mockt den OpenAI-kompatiblen Whisper-
 // Upstream via globalem fetch-Stub und prueft: disabled->404, kein/falsches
-// Audio->400/415, enabled->Forward+{text}, Upstream-Fehler->502, Timeout->408,
+// Audio->400/415, enabled->Forward+{text}, Upstream-Fehler->502 (transient) bzw. 424 (dauerhaft), Timeout->408,
 // Buch-Locale gewinnt als Sprache, Secret bleibt server-seitig.
 
 const test = require('node:test');
@@ -176,6 +176,39 @@ test('upstream 500 -> 502 stt_upstream', async () => {
   const j = await r.json();
   assert.equal(j.error, 'stt_upstream');
   assert.equal(j.upstream_status, 500);
+});
+
+test('upstream 400 (unbekanntes Modell) -> 424 stt_upstream_rejected, Fehlertext im Log', async () => {
+  setStt({ enabled: true, host: 'http://whisper.lan:8000', model: 'Systran/faster-whisper-large-v3' });
+  const logger = require('../../logger');
+  const lines = [];
+  const capture = (info) => { lines.push(String(info.message)); };
+  logger.on('data', capture);
+  fetchHandler = async () => new Response(
+    JSON.stringify({ error: 'Invalid model name passed in model=Systran/faster-whisper-large-v3' }),
+    { status: 400, headers: { 'Content-Type': 'application/json' } });
+  try {
+    const r = await postAudio(Buffer.from('d'));
+    assert.equal(r.status, 424);
+    const j = await r.json();
+    assert.equal(j.error_code, 'STT_UPSTREAM_REJECTED');
+    assert.equal(j.upstream_status, 400);
+    await new Promise(res => setImmediate(res));
+    const line = lines.find(l => l.includes('upstream 400'));
+    assert.ok(line, `kein upstream-400-Log in ${JSON.stringify(lines)}`);
+    assert.match(line, /Invalid model name/);
+    assert.match(line, /model=Systran\/faster-whisper-large-v3/);
+  } finally {
+    logger.off('data', capture);
+  }
+});
+
+test('upstream 429 -> 502 (transient, Client wiederholt)', async () => {
+  setStt({ enabled: true, host: 'http://whisper.lan:8000' });
+  fetchHandler = async () => new Response('slow down', { status: 429 });
+  const r = await postAudio(Buffer.from('d'));
+  assert.equal(r.status, 502);
+  assert.equal((await r.json()).upstream_status, 429);
 });
 
 test('upstream abort -> 408 stt_timeout', async () => {

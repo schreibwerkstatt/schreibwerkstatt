@@ -17,7 +17,13 @@
 // Content-Type — keine Multipart-Dep noetig. Server baut daraus die Multipart-
 // FormData an den Whisper-Endpunkt (file mit korrekter Extension, model,
 // language). Audio wird nur durchgereicht, nie persistiert, nie geloggt
-// (nur Metadaten: Segmentgroesse, Latenz, Upstream-Status).
+// (nur Metadaten: Segmentgroesse, Latenz, Upstream-Status, bei Upstream-
+// Fehlern die gekuerzte Fehlermeldung des Upstreams).
+//
+// Upstream-Fehler: transient (5xx, 408/425/429) -> 502 STT_UPSTREAM, der
+// Client wiederholt. Dauerhaft (uebrige 4xx: unbekanntes Modell, Key ohne
+// Recht, kaputte Anfrage) -> 424 STT_UPSTREAM_REJECTED, der Client wiederholt
+// NICHT — ein Konfigurationsfehler verschwindet nicht durch Warten.
 
 const express = require('express');
 const logger = require('../logger');
@@ -28,6 +34,18 @@ const { getBookLocale } = require('../db/schema');
 const { sessionEmail } = require('../lib/acl');
 
 const router = express.Router();
+
+const UPSTREAM_TRANSIENT = new Set([408, 425, 429]);
+const UPSTREAM_ERR_MAX_CHARS = 300;
+
+// Fehlertext des Upstreams fuers Log: einzeilig, gekuerzt. Ohne ihn steht im
+// App-Log nur der Status, und die Ursache (z. B. LiteLLM "Invalid model name")
+// ist nur im Upstream-Container zu finden.
+async function upstreamErrorText(res) {
+  const raw = await res.text().catch(() => '');
+  const flat = raw.replace(/\s+/g, ' ').trim();
+  return flat.length > UPSTREAM_ERR_MAX_CHARS ? `${flat.slice(0, UPSTREAM_ERR_MAX_CHARS)}…` : flat;
+}
 const AUDIO_MAX = 5 * 1024 * 1024; // 5 MB — kurze VAD-Segmente
 const UPSTREAM_TIMEOUT_DEFAULT_MS = 30_000;
 const UPSTREAM_TIMEOUT_MIN_MS = 5_000;
@@ -129,8 +147,13 @@ router.post('/transcribe', rawAudioBody, async (req, res) => {
       signal: ctrl.signal,
     });
     if (!upstream.ok) {
-      log.warn(`upstream ${upstream.status} ${ctx} latency=${Date.now() - t0}ms`);
-      return res.status(502).json({ error_code: 'STT_UPSTREAM', error: 'stt_upstream', upstream_status: upstream.status });
+      const status = upstream.status;
+      const detail = await upstreamErrorText(upstream);
+      log.warn(`upstream ${status} ${ctx} model=${model || '-'} latency=${Date.now() - t0}ms${detail ? ` body=${detail}` : ''}`);
+      const permanent = status >= 400 && status < 500 && !UPSTREAM_TRANSIENT.has(status);
+      return permanent
+        ? res.status(424).json({ error_code: 'STT_UPSTREAM_REJECTED', error: 'stt_upstream_rejected', upstream_status: status })
+        : res.status(502).json({ error_code: 'STT_UPSTREAM', error: 'stt_upstream', upstream_status: status });
     }
     const json = await upstream.json().catch(() => null);
     const text = typeof json?.text === 'string' ? json.text : '';
