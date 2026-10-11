@@ -14,6 +14,51 @@
   </div>
   <p class="card-hint komplett-scope-hint" x-text="t('komplett.scope.hint')"></p>
 
+  <!-- Indikation «Lohnt sich ein Lauf?»: Änderungen seit dem letzten erfolgreichen
+       Lauf, ohne KI-Call berechnet (routes/jobs/komplett/delta.js). Nur Hinweis —
+       der Start bleibt immer möglich. -->
+  <section class="komplett-delta" :class="komplettDeltaLevel() && 'komplett-delta--' + komplettDeltaLevel()"
+           x-show="komplettDeltaState !== 'idle'" aria-live="polite">
+    <p class="card-hint komplett-delta-muted" x-show="komplettDeltaState === 'loading'" x-text="t('komplett.delta.loading')"></p>
+    <p class="card-hint komplett-delta-muted" x-show="komplettDeltaState === 'error'" x-text="t('komplett.delta.error')"></p>
+    <template x-if="komplettDeltaState === 'ready' && komplettDelta">
+      <div class="komplett-delta-body">
+        <div class="komplett-delta-head">
+          <span class="komplett-delta-dot" aria-hidden="true"></span>
+          <span class="komplett-delta-verdict" x-text="t('komplett.delta.level.' + komplettDeltaLevel())"></span>
+        </div>
+        <p class="card-hint" x-show="komplettDeltaLevel() === 'never'" x-text="t('komplett.delta.neverHint')"></p>
+        <p class="komplett-delta-line" x-show="komplettDelta.lastRun" x-text="komplettDeltaLastRunText()"></p>
+        <p class="komplett-delta-line" x-show="komplettDelta.changedChars > 0" x-text="komplettDeltaChangedText()"></p>
+        <p class="komplett-delta-line" x-show="komplettDelta.newPages > 0 || komplettDelta.deletedPages > 0"
+           x-text="t('komplett.delta.pagesNewDeleted', { neu: komplettDelta.newPages, del: komplettDelta.deletedPages })"></p>
+        <div class="komplett-delta-list" x-show="komplettDelta.topChapters?.some(c => c.id)">
+          <span class="komplett-delta-label" x-text="t('komplett.delta.chapters')"></span>
+          <template x-for="c in (komplettDelta.topChapters || []).filter(c => c.id)" :key="c.id">
+            <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: c.id, static: true }"></button>
+          </template>
+        </div>
+        <div class="komplett-delta-list" x-show="komplettDelta.novelNames?.length">
+          <span class="komplett-delta-label" x-text="t('komplett.delta.names')"></span>
+          <template x-for="n in (komplettDelta.novelNames || [])" :key="n.name">
+            <span class="komplett-delta-term" x-text="n.name + ' ×' + n.count"></span>
+          </template>
+        </div>
+        <div class="komplett-delta-list" x-show="komplettDelta.affectedFigures?.count">
+          <span class="komplett-delta-label" x-text="t('komplett.delta.figures')"></span>
+          <template x-for="f in (komplettDelta.affectedFigures?.list || [])" :key="f.id">
+            <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: f.id, name: f.name, static: true }"></button>
+          </template>
+          <span class="komplett-delta-muted" x-show="komplettDelta.affectedFigures.count > komplettDelta.affectedFigures.list.length"
+                x-text="'+' + (komplettDelta.affectedFigures.count - komplettDelta.affectedFigures.list.length)"></span>
+        </div>
+        <p class="card-hint" x-show="komplettDelta.approx" x-text="t('komplett.delta.approx')"></p>
+        <p class="card-hint" x-show="komplettDeltaLevel() === 'optional' || komplettDeltaLevel() === 'low'"
+           x-text="t('komplett.delta.tipKatalog')"></p>
+      </div>
+    </template>
+  </section>
+
   <div class="komplett-scope-body">
     <!-- Kern: keine Schalter. Ein Schritt, den man nicht abwählen kann, braucht
          keinen Schalter, der so tut, als ginge es. -->

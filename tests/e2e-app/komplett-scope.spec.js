@@ -67,3 +67,15 @@ test('Kein Schritt gewaehlt → der Lauf laesst sich nicht starten', async ({ pa
   // Zustand fuer nachfolgende Specs zuruecksetzen (geteilte smoke.db/Session).
   await page.evaluate(() => { window.__app.setKomplettScopePreset('all'); window.__app.komplettScopeOpen = false; });
 });
+
+test('Indikation «Lohnt sich ein Lauf?» rendert die Empfehlung', async ({ page }) => {
+  await page.evaluate(() => window.__app.alleAktualisieren());
+  const dialog = page.locator('dialog.komplett-scope-dialog');
+  await expect(dialog).toBeVisible();
+  // Seed-Buch ohne abgeschlossenen Lauf → Stufe «never», der Hinweis steht sichtbar drin.
+  const box = dialog.locator('.komplett-delta');
+  await expect(box).toHaveClass(/komplett-delta--never/);
+  await expect(box.locator('.komplett-delta-verdict')).toHaveText(/Noch nie analysiert|Never analysed/);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+});

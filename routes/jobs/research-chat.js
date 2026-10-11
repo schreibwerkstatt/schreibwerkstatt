@@ -38,6 +38,7 @@ const runResearchChatJob = makeAgenticChatJob({
   // Guard erzwingt es hier zur Sicherheit serverseitig.
   callProvider: 'claude',
   resolveProvider: () => 'claude',
+  effortSettingKey: 'ai.claude.effort.researchchat',
   // Dieselbe Prüfung blockt schon POST /jobs/research-chat (vor dem Speichern der
   // Frage); hier nochmals, weil Setting/Provider zwischen POST und Queue-Start
   // wechseln können.
@@ -107,11 +108,12 @@ const runResearchChatJob = makeAgenticChatJob({
 
     return {
       systemPrompt,
-      // Erste Runde schon unter dem Gesamtdeckel (wirkt auch ohne Runden-Hook).
+      // Ein Deckel kleiner als der Rundenwert greift schon hier (max_uses = Deckel).
+      // Danach bleibt die Liste für den ganzen Lauf gleich (Prompt-Cache).
       tools: toolsForRound(tools, 0, maxWebSearches),
-      // Web-Such-Gesamtdeckel über alle Runden: der Loop fragt pro Runde nach der
-      // Werkzeugliste (max_uses = Rest, Werkzeug weg bei 0).
-      toolsForIter: ({ webSearches }) => toolsForRound(tools, webSearches, maxWebSearches),
+      // Web-Such-Gesamtdeckel über alle Runden: erreicht → keine weitere Runde,
+      // Synthese aus den Treffern.
+      stopBeforeRound: ({ webSearches }) => (webSearches >= maxWebSearches ? 'web_cap' : null),
       maxToolIter,
       tokenBudget: aiCfg.inputBudgetTokens,
       toolResultCap: null,   // kein Cap — Recherche-Tool-Results sind klein und truncieren würde Fundstücke verstümmeln

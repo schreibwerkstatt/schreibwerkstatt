@@ -20,6 +20,7 @@ const { jsonBody, createJob, enqueueJob, findActiveJobId } = require('../shared'
 const { runKomplettAnalyseJob, runKontinuitaetJob, runErzaehlprofilJob, runFaktencheckJob, runKomplettAnalyseAll } = require('./job');
 const { normalizeKomplettScope } = require('../../../lib/komplett-scope');
 const { activeStepJob } = require('./scope');
+const { computeKomplettDelta } = require('./delta');
 const logger = require('../../../logger');
 
 const komplettRouter = express.Router();
@@ -217,6 +218,12 @@ komplettRouter.get('/erzaehlprofil/:book_id', (req, res) => {
 // (POST /komplett-analyse), damit es nur einen Schreibpfad gibt.
 komplettRouter.get('/komplett-scope/:book_id', (req, res) => {
   res.json({ scope: getKomplettScope(req.bookId, sessionEmail(req)) });
+});
+
+// Indikation im Start-Modal: Änderungen seit dem letzten erfolgreichen Lauf und ob
+// sich ein neuer lohnt (./delta.js). viewer+, reine Lese-Frage ohne KI-Call.
+komplettRouter.get('/komplett-delta/:book_id', async (req, res) => {
+  res.json(await computeKomplettDelta(req.bookId, sessionEmail(req)));
 });
 
 komplettRouter.delete('/chapter-cache/:book_id', (req, res) => {

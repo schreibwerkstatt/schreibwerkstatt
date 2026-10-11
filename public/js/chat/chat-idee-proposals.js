@@ -12,29 +12,9 @@
 
 import { fetchJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
+import { persistProposalStatus } from './proposal-status.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
-
-async function _patchStatus(msg, index, action, appliedId = null) {
-  const { proposal } = await fetchJson('/ideen/chat-proposal', {
-    method: 'PATCH',
-    headers: JSON_HEADERS,
-    body: JSON.stringify({
-      message_id: msg.id, index, action,
-      ...(appliedId ? { applied_id: appliedId } : {}),
-    }),
-  });
-  return proposal;
-}
-
-// Persistierten Stand übernehmen, transiente Felder behalten.
-function _merge(p, proposal) {
-  if (!proposal) return;
-  for (const k of ['applied_at', 'applied_id', 'status']) {
-    if (k in proposal) p[k] = proposal[k];
-    else delete p[k];
-  }
-}
 
 // Sidebar-Plakette + Zähler des offenen Abschnitts bzw. Kapitels nachziehen
 // (eine neue Idee ist offen). Gleiche Maps wie book/ideen.js#_setTreeIdeenCount.
@@ -102,7 +82,7 @@ export const chatIdeeProposalMethods = {
         p.fields = { ...p.fields, content };
         p._editing = false;
       }
-      _merge(p, await _patchStatus(msg, idx, 'applied', p._createdId));
+      await persistProposalStatus('/ideen/chat-proposal', msg, idx, 'applied', p._createdId);
     } catch (e) {
       console.error('[captureChatIdee]', e);
       p._error = tFetchError(e);
@@ -117,7 +97,7 @@ export const chatIdeeProposalMethods = {
     p._busy = true;
     p._error = '';
     try {
-      _merge(p, await _patchStatus(msg, idx, p.status === 'discarded' ? 'reopen' : 'discarded'));
+      await persistProposalStatus('/ideen/chat-proposal', msg, idx, p.status === 'discarded' ? 'reopen' : 'discarded');
       p._editing = false;
     } catch (e) {
       console.error('[toggleDiscardChatIdee]', e);

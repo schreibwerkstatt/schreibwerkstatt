@@ -12,6 +12,7 @@
 import { fetchJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
 import { wordDiff } from './word-diff.js';
+import { persistProposalStatus } from './proposal-status.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const CREATE_KIND = { beat_create: 'beat', act_create: 'act', thread_create: 'thread' };
@@ -206,19 +207,6 @@ export const plotProposalMethods = {
     if (id) this.scrollToBeat(id);
   },
 
-  async _patchPlotProposal(msg, pi, action, appliedId = null) {
-    const res = await fetchJson('/plot/chat-proposal', {
-      method: 'PATCH', headers: JSON_HEADERS,
-      body: JSON.stringify({ message_id: msg.id, index: pi, action, ...(appliedId ? { applied_id: appliedId } : {}) }),
-    });
-    const p = this.plotProposals(msg)[pi];
-    if (p && res?.proposal) {
-      for (const k of ['applied_at', 'applied_id', 'status']) {
-        if (k in res.proposal) p[k] = res.proposal[k]; else delete p[k];
-      }
-    }
-  },
-
   async applyPlotProposal(msg, pi) {
     const app = window.__app;
     const list = this.plotProposals(msg);
@@ -243,7 +231,7 @@ export const plotProposalMethods = {
     this.busy = false;
     this.errorMessage = '';
     try {
-      await this._patchPlotProposal(msg, pi, 'applied', appliedId);
+      await persistProposalStatus('/plot/chat-proposal', msg, pi, 'applied', appliedId);
     } catch (e) {
       // Das Board ist geändert, nur der Status fehlt — sichtbar machen statt
       // verschlucken (ein Reload zeigte den Vorschlag sonst wieder offen).
@@ -256,7 +244,7 @@ export const plotProposalMethods = {
     if (!p || p._applying) return;
     p._error = '';
     try {
-      await this._patchPlotProposal(msg, pi, discard ? 'discarded' : 'reopen');
+      await persistProposalStatus('/plot/chat-proposal', msg, pi, discard ? 'discarded' : 'reopen');
     } catch (e) {
       p._error = tFetchError(e);
     }

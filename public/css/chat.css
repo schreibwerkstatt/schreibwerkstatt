@@ -429,11 +429,15 @@
   margin-right: var(--space-1);
 }
 .chat-session-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
   font-size: var(--font-size-micro);
   color: var(--color-subtle);
   white-space: nowrap;
   flex-shrink: 0;
 }
+.chat-session-meta .chat-session-running { margin: 0; }
 .chat-session-delete {
   display: inline-flex;
   align-items: center;

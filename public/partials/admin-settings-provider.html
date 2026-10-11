@@ -21,6 +21,11 @@
         <div x-data="settingField({ k: 'ai.claude.effort.komplett', label: 'admin.settings.label.aiClaudeEffortKomplett', ph: 'high', help: 'admin.settings.help.komplettEffort' })"></div>
         <div x-data="settingField({ k: 'ai.claude.effort.review', label: 'admin.settings.label.aiClaudeEffortReview', ph: 'high', help: 'admin.settings.help.reviewEffort' })"></div>
         <div x-data="settingField({ k: 'ai.claude.effort.synonym', label: 'admin.settings.label.aiClaudeEffortSynonym', ph: 'low', help: 'admin.settings.help.synonymEffort' })"></div>
+        <div x-data="settingField({ k: 'ai.claude.effort.bookchat', label: 'admin.settings.label.aiClaudeEffortBookchat', ph: 'medium', help: 'admin.settings.help.chatEffort' })"></div>
+        <div x-data="settingField({ k: 'ai.claude.effort.researchchat', label: 'admin.settings.label.aiClaudeEffortResearchchat', ph: 'medium', help: 'admin.settings.help.chatEffort' })"></div>
+        <div x-data="settingField({ k: 'ai.claude.effort.plotchat', label: 'admin.settings.label.aiClaudeEffortPlotchat', ph: 'medium', help: 'admin.settings.help.chatEffort' })"></div>
+        <div x-data="settingField({ k: 'ai.claude.effort.ideenchat', label: 'admin.settings.label.aiClaudeEffortIdeenchat', ph: 'medium', help: 'admin.settings.help.chatEffort' })"></div>
+        <div x-data="settingField({ k: 'ai.claude.refusal_fallback', type: 'toggle', label: 'admin.settings.label.aiClaudeRefusalFallback', help: 'admin.settings.help.refusalFallback' })"></div>
 
         <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.claude.billingTitle')"></span></h4>
         <small class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.claude.billingIntro')"></small>

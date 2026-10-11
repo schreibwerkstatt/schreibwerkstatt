@@ -1,4 +1,4 @@
-import { fetchJson, clearStatusAfter, formatLastRun } from '../utils.js';
+import { fetchJson, clearStatusAfter, formatLastRun, localeTag } from '../utils.js';
 import { EVT } from '../events.js';
 import { tFetchError } from '../i18n.js';
 import { KOMPLETT_STEPS, KOMPLETT_CORE_STEPS, KOMPLETT_STEP_KEYS,
@@ -32,6 +32,8 @@ export const appKomplettMethods = {
     await this._ensurePartial('komplett-scope');
     this.komplettScopeOpen = true;
     const bookId = this.$store.nav.selectedBookId;
+    // Indikation parallel — sie liest das ganze Buch und darf die Schalter nicht aufhalten.
+    this._loadKomplettDelta(bookId);
     try {
       // Vorbelegung ist der zuletzt GESTARTETE Umfang (serverseitig, pro Buch + User).
       const { scope } = await fetchJson(`/jobs/komplett-scope/${bookId}`);
@@ -45,6 +47,41 @@ export const appKomplettMethods = {
     } finally {
       this.komplettScopeLoading = false;
     }
+  },
+
+  async _loadKomplettDelta(bookId) {
+    this.komplettDelta = null;
+    this.komplettDeltaState = 'loading';
+    try {
+      const delta = await fetchJson(`/jobs/komplett-delta/${bookId}`);
+      if (this.$store.nav.selectedBookId !== bookId) return;
+      this.komplettDelta = delta;
+      this.komplettDeltaState = 'ready';
+    } catch (e) {
+      console.error('[komplettDelta]', e);
+      if (this.$store.nav.selectedBookId === bookId) this.komplettDeltaState = 'error';
+    }
+  },
+
+  komplettDeltaLevel() { return this.komplettDelta?.verdict?.level || null; },
+
+  komplettDeltaLastRunText() {
+    const run = this.komplettDelta?.lastRun;
+    if (!run) return '';
+    const when = formatLastRun(run.endedAt, (k, p) => this.t(k, p), this.$store.shell.uiLocale);
+    return run.usd != null && run.usd > 0
+      ? this.t('komplett.delta.lastRunCost', { when, usd: run.usd.toFixed(2) })
+      : this.t('komplett.delta.lastRun', { when });
+  },
+
+  komplettDeltaChangedText() {
+    const d = this.komplettDelta;
+    if (!d?.changedChars) return '';
+    const ratio = d.totalChars > 0 ? (d.changedChars / d.totalChars) * 100 : 100;
+    const pct = new Intl.NumberFormat(localeTag(this.$store.shell.uiLocale), {
+      maximumFractionDigits: ratio < 10 ? 1 : 0,
+    }).format(Math.min(ratio, 100));
+    return this.t('komplett.delta.changed', { pct, pages: d.changedPages, chapters: d.chapterCount });
   },
 
   // Schritte, die dem User angeboten werden. Die Cloud-Klasse ist dieselbe Bedingung,

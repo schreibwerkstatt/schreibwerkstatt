@@ -85,8 +85,9 @@ export const SCHEMA_RESEARCH_LINK = _obj({
 // Recherche-Items vor (User bestätigt). Rückwärtsgewandt: schreibt NIE Buchtext.
 
 export const RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION =
-  'Du hast die maximale Zahl an Recherche-Iterationen erreicht — keine weitere Suche mehr möglich. '
+  'Die Recherche für diese Antwort ist beendet (Iterationen oder Web-Suchen aufgebraucht) — keine weitere Suche mehr. '
   + 'Fasse JETZT aus dem bereits Gesammelten die bestmögliche Antwort zusammen und liefere sie über das Werkzeug `final_answer`. '
+  + 'Rufe kein anderes Werkzeug mehr auf, auch keine Web-Suche. '
   + 'Wenn etwas offen blieb, weise kurz darauf hin. Sprache der Antwort: die der Userfrage.';
 
 /**

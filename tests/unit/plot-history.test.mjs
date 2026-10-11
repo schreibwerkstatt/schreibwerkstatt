@@ -214,10 +214,9 @@ test('jede schreibende Plot-Methode zeichnet auf oder leert die Historie', () =>
     'public/js/chat/plot-chat-proposals.js',
   ];
   // _placePlotAct: Platzierung eines gerade angelegten Akts, dessen create-act-
-  // Record das Undo samt Platz trägt. _patchPlotProposal: Vorschlags-Status,
-  // keine Board-Daten.
+  // Record das Undo samt Platz trägt.
   const exempt = new Set(['_persistCells', 'deleteConsistencyRun', 'deleteBrainstormRun',
-    '_placePlotAct', '_patchPlotProposal']);
+    '_placePlotAct']);
   const offenders = [];
   for (const f of files) {
     const src = readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8');

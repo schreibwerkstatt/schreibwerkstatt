@@ -2,7 +2,8 @@
 // Geteilter agentischer Loop (routes/jobs/agentic-chat.js) mit gemocktem
 // callAIWithTools: Reihenfolge final_answer ↔ andere Werkzeuge, Budget-Abbruch,
 // pause_turn (serverseitige Web-Suche), leere Antwort, Kosten-Deckel pro Antwort,
-// toolsForIter-Hook und web_search-Queries in context_info.
+// stopBeforeRound-Hook, konstante Werkzeugliste im Synthese-Turn, Ablehnung
+// (refusal), Zwischenstände in der Statuszeile und web_search-Queries in context_info.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -16,7 +17,8 @@ const { db } = require('../../db/connection');
 const appUsers = require('../../db/app-users');
 const ai = require('../../lib/ai');
 const { createJob, jobs } = require('../../routes/jobs/shared');
-const { makeAgenticChatJob, EMPTY_ANSWER_MARKER } = require('../../routes/jobs/agentic-chat');
+const { makeAgenticChatJob, EMPTY_ANSWER_MARKER, REFUSAL_MARKER } = require('../../routes/jobs/agentic-chat');
+const appSettings = require('../../lib/app-settings');
 
 const USER = 'loop@example.com';
 const BOOK = 81001;
@@ -33,6 +35,7 @@ function newSession() {
 
 const FINAL = { name: 'final_answer' };
 const TOOLS = [{ name: 'side_effect' }, { name: 'lookup' }, FINAL];
+const ALL = TOOLS.map(t => t.name);
 
 function res(over) {
   return {
@@ -76,6 +79,7 @@ function makeJob(over = {}) {
       return { ok: true, name };
     },
     ...(over.fallbackJob ? { fallbackJob: over.fallbackJob } : {}),
+    ...(over.config || {}),
     consumeFinalAnswer: ({ finalUse }) => JSON.stringify({ antwort: finalUse.input?.antwort ?? '' }),
     parseFinal: (finalText) => {
       const o = JSON.parse(finalText);
@@ -136,7 +140,7 @@ test('(b) Budget-Überschreitung ohne final_answer → Runde nicht ausgeführt, 
   assert.equal(out.content, 'aus dem Gesammelten');
   assert.equal(out.ci.stop, 'context_budget');
   assert.deepEqual(job.executed, [], 'die Runde über dem Budget wird nicht mehr ausgeführt');
-  assert.deepEqual(calls[1].tools, ['final_answer']);
+  assert.deepEqual(calls[1].tools, ALL, 'Werkzeugliste bleibt im Synthese-Turn gleich (Cache-Präfix)');
   assert.equal(calls[1].messages.at(-1).content, 'BUDGET');
   // Kein halber Assistant-Turn mit tool_use ohne tool_result.
   assert.equal(calls[1].messages.some(m => m.role === 'assistant' && Array.isArray(m.content)), false);
@@ -170,7 +174,31 @@ test('(d) leere Prosa-Antwort → i18n-Marker', async () => {
   assert.equal(out.content, EMPTY_ANSWER_MARKER);
 });
 
-test('Kosten-Deckel: kumulierte Input-Tokens erreicht → Synthese nur mit final_answer', async () => {
+test('stop_reason tool_use ohne tool_use-Block, ohne Text → Synthese statt leerer User-Nachricht', async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'tool_use', rawContentBlocks: [{ type: 'thinking', thinking: '', signature: 's' }] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'gerettet' })] }),
+  ]);
+  const out = await runJob(makeJob({ prep: { inputCapInstruction: 'BUDGET' } }), newSession());
+  assert.equal(out.content, 'gerettet');
+  assert.equal(out.ci.stop, 'empty_tool_turn');
+  assert.deepEqual(calls[2].tools, ALL, 'Werkzeugliste bleibt im Synthese-Turn gleich (Cache-Präfix)');
+  assert.equal(calls[2].messages.at(-1).content, 'FORCE');
+  for (const m of calls[2].messages) {
+    if (m.role === 'user') assert.ok(Array.isArray(m.content) ? m.content.length : String(m.content).trim(), 'keine leere User-Nachricht');
+  }
+});
+
+test('stop_reason tool_use ohne tool_use-Block, mit Text → Prosa-Abschluss', async () => {
+  const calls = mockCalls([res({ stopReason: 'tool_use', text: 'Direkte Antwort' })]);
+  const out = await runJob(makeJob(), newSession());
+  assert.equal(out.content, 'Direkte Antwort');
+  assert.equal(out.ci.stop, 'prose');
+  assert.equal(calls.length, 1);
+});
+
+test('Kosten-Deckel: kumulierte Input-Tokens erreicht → Synthese mit unveränderter Werkzeugliste', async () => {
   const calls = mockCalls([
     res({ stopReason: 'tool_use', tokensIn: 600, toolUses: [tu('lookup')] }),
     res({ stopReason: 'tool_use', tokensIn: 600, toolUses: [tu('final_answer', { antwort: 'synthetisiert' })] }),
@@ -178,7 +206,7 @@ test('Kosten-Deckel: kumulierte Input-Tokens erreicht → Synthese nur mit final
   const out = await runJob(makeJob({ prep: { inputTokenCap: 500, inputCapInstruction: 'BUDGET' } }), newSession());
   assert.equal(out.content, 'synthetisiert');
   assert.equal(out.ci.stop, 'input_cap');
-  assert.deepEqual(calls[1].tools, ['final_answer']);
+  assert.deepEqual(calls[1].tools, ALL, 'Werkzeugliste bleibt im Synthese-Turn gleich (Cache-Präfix)');
   assert.equal(calls[1].messages.at(-1).content, 'BUDGET');
 });
 
@@ -193,23 +221,99 @@ test('Iterationsdeckel: Synthese-Turn mit forceFinalInstruction', async () => {
   assert.equal(calls[2].messages.at(-1).content, 'FORCE');
 });
 
-test('toolsForIter: Werkzeugliste pro Runde aus dem Hook, Synthese bleibt bei final_answer', async () => {
+test('stopBeforeRound: Hook beendet die Recherche vor der nächsten Runde → Synthese', async () => {
   const seen = [];
   const calls = mockCalls([
     res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
-    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'ok' })] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'nach Deckel' })] }),
   ]);
-  const toolsForIter = ({ iter, webSearches }) => {
-    seen.push({ iter, webSearches });
-    return iter === 0 ? [TOOLS[1], FINAL] : [FINAL];
-  };
-  await runJob(makeJob({ prep: { toolsForIter } }), newSession());
-  assert.deepEqual(calls[0].tools, ['lookup', 'final_answer']);
-  assert.deepEqual(calls[1].tools, ['final_answer']);
-  assert.deepEqual(seen.map(s => s.iter), [0, 1]);
-  assert.equal(seen[0].webSearches, 0);
+  const stopBeforeRound = ({ iter, webSearches }) => { seen.push({ iter, webSearches }); return 'web_cap'; };
+  const out = await runJob(makeJob({ prep: { stopBeforeRound } }), newSession());
+  assert.equal(out.content, 'nach Deckel');
+  assert.equal(out.ci.stop, 'web_cap');
+  assert.deepEqual(seen, [{ iter: 1, webSearches: 0 }], 'Runde 1 läuft immer, gefragt wird ab Runde 2');
+  assert.deepEqual(calls.map(c => c.tools), [ALL, ALL]);
+  assert.equal(calls[1].messages.at(-1).content, 'FORCE');
 });
 
+test('Synthese-Turn: Werkzeug statt Antwort → «nicht ausgeführt» + zweiter Versuch', async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'tool_use', rawContentBlocks: [{ type: 'tool_use', id: 'x1', name: 'lookup', input: {} }], toolUses: [tu('lookup', {}, 'x1')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'beim zweiten Mal' })] }),
+  ]);
+  const job = makeJob({ prep: { maxToolIter: 1 } });
+  const out = await runJob(job, newSession());
+  assert.equal(out.content, 'beim zweiten Mal');
+  assert.deepEqual(job.executed, ['lookup'], 'der Synthese-Aufruf wird nicht ausgeführt');
+  const last = calls[2].messages.at(-1);
+  assert.equal(last.role, 'user');
+  assert.equal(last.content[0].tool_use_id, 'x1');
+  assert.equal(last.content[0].is_error, true);
+  assert.equal(last.content.at(-1).text, 'FORCE');
+  assert.equal(job.ctx().toolLog.at(-1).errorKey, 'chat.toolError.synthesisOnly');
+});
+
+test('Synthese-Turn: zweimal Werkzeug statt Antwort → Hinweis statt Endlosschleife', async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup', {}, 'y1')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup', {}, 'y2')] }),
+  ]);
+  const out = await runJob(makeJob({ prep: { maxToolIter: 1 } }), newSession());
+  assert.equal(calls.length, 3);
+  assert.equal(out.content, '__i18n:chat.errors.maxIterReached__');
+});
+
+test('refusal in einer Runde: Hinweis gespeichert, Werkzeuge der Runde nicht ausgeführt', async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'refusal', stopDetails: { category: 'bio' }, text: 'Teil', toolUses: [tu('side_effect', { v: 1 })] }),
+  ]);
+  const job = makeJob();
+  const out = await runJob(job, newSession());
+  assert.equal(out.content, REFUSAL_MARKER);
+  assert.equal(out.ci.stop, 'refusal');
+  assert.deepEqual(job.executed, []);
+  assert.equal(calls.length, 1);
+});
+
+test('refusal im Synthese-Turn: Hinweis statt Fehler', async () => {
+  mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'refusal', stopDetails: null }),
+  ]);
+  const out = await runJob(makeJob({ prep: { maxToolIter: 1 } }), newSession());
+  assert.equal(out.content, REFUSAL_MARKER);
+  assert.equal(out.ci.stop, 'refusal');
+});
+
+test('Zwischenstand (note) des Providers landet in der Statuszeile', async () => {
+  let jobRef = null;
+  ai.callAIWithTools = async (_m, _s, _t, onProgress) => {
+    onProgress({ note: 'Ich prüfe das Alter von Manuel.' });
+    jobRef = { ...jobs.get(lastJobId) };
+    return res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'ok' })] });
+  };
+  const lastJobId = createJob('book-chat', BOOK, USER, 'x');
+  jobs.get(lastJobId).status = 'running';   // updateJob schreibt nur laufende Jobs (sonst Queue)
+  await makeJob().run(lastJobId, newSession(), 1, 'Frage?', USER);
+  assert.equal(jobRef.statusText, 'job.phase.agentNote');
+  assert.deepEqual(jobRef.statusParams, { current: 1, total: 4, note: 'Ich prüfe das Alter von Manuel.' });
+});
+
+test('effortSettingKey: Claude-Effort des Chats geht in den Job-Bag, bestehender Bag bleibt', async () => {
+  const { runWithContext, getContext } = require('../../lib/log-context');
+  appSettings.set('ai.claude.effort.plotchat', 'high');
+  let bag = null;
+  ai.callAIWithTools = async () => {
+    bag = getContext()?.aiJob;
+    return res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'ok' })] });
+  };
+  const jobId = createJob('book-chat', BOOK, USER, 'x');
+  await runWithContext({ aiJob: { provider: 'claude', model: 'claude-opus-5-5' } }, () =>
+    makeJob({ config: { effortSettingKey: 'ai.claude.effort.plotchat' } }).run(jobId, newSession(), 1, 'Frage?', USER));
+  assert.deepEqual(bag, { provider: 'claude', model: 'claude-opus-5-5', effort: 'high' });
+});
 
 test('Synthese-Turn: abgeschnittene Antwort ist ein Fehler, keine Antwort', async () => {
   mockCalls([
@@ -286,7 +390,7 @@ test('Kontextfenster-Schutz vor dem Call: Synthese mit gekürzten Ergebnissen de
   assert.equal(out.content, 'gekürzt synthetisiert');
   assert.equal(out.ci.stop, 'context_budget');
   assert.equal(calls.length, 2, 'keine zweite Recherche-Runde');
-  assert.deepEqual(calls[1].tools, ['final_answer']);
+  assert.deepEqual(calls[1].tools, ALL, 'Werkzeugliste bleibt im Synthese-Turn gleich (Cache-Präfix)');
   const toolMsg = calls[1].messages.at(-2).content;
   assert.match(toolMsg[0].content, /gekürzt: Kontext-Budget/);
   assert.ok(toolMsg[0].content.length < 40000);

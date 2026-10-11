@@ -338,11 +338,13 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
  */
 // Synthese-Aufforderung für den Fall, dass die Werkzeug-Iterationen erschöpft
 // sind, ohne dass das Modell final_answer gerufen hat. Statt mit einem Fehler
-// aufzugeben, wird das Modell mit dieser Nachricht (und nur noch final_answer als
-// verfügbarem Werkzeug) gezwungen, aus dem bereits Gesammelten zu antworten.
+// aufzugeben, verlangt diese Nachricht die Antwort aus dem bereits Gesammelten. Die
+// Werkzeugliste bleibt dabei unverändert (Prompt-Cache, routes/jobs/agentic-chat/
+// loop.js) — darum sagt die Anweisung selbst, dass nur noch final_answer zählt.
 export const BOOK_CHAT_FORCE_FINAL_INSTRUCTION =
   'Du hast die maximale Zahl an Recherche-Iterationen erreicht — keine weitere Recherche mehr möglich. '
   + 'Fasse JETZT aus den bereits gesammelten Informationen die bestmögliche Antwort zusammen und liefere sie über das Werkzeug `final_answer`. '
+  + 'Rufe kein anderes Werkzeug mehr auf als `final_answer` — weitere Aufrufe werden nicht ausgeführt. '
   + 'Wenn die Recherche unvollständig blieb, beantworte die Frage so weit wie möglich mit dem Vorhandenen und weise kurz darauf hin, was nicht abgedeckt werden konnte. '
   + 'Sprache der Antwort: die der Userfrage.';
 
@@ -352,6 +354,7 @@ export const BOOK_CHAT_FORCE_FINAL_INSTRUCTION =
 export const BOOK_CHAT_BUDGET_FINAL_INSTRUCTION =
   'Das Recherche-Budget für diese Antwort ist aufgebraucht — keine weitere Recherche mehr möglich. '
   + 'Fasse JETZT aus den bereits gesammelten Informationen die bestmögliche Antwort zusammen und liefere sie über das Werkzeug `final_answer`. '
+  + 'Rufe kein anderes Werkzeug mehr auf als `final_answer` — weitere Aufrufe werden nicht ausgeführt. '
   + 'Wenn die Recherche unvollständig blieb, beantworte die Frage so weit wie möglich und nenne kurz, was offen blieb. '
   + 'Sprache der Antwort: die der Userfrage.';
 

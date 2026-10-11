@@ -55,7 +55,7 @@ function _bookChatTokenBudget(aiCfg) {
 // Kosten-Deckel pro Antwort: kumulierte Input-Tokens über alle Iterationen (inkl.
 // Cache-Lesen — der Wert, den auch die Token-Anzeige zeigt). Prompt-Caching macht
 // eine Runde billig, aber nicht gratis: zwölf Runden mit Kapitel-Volltexten summieren
-// sich auf Millionen Tokens. Erreicht → erzwungene Synthese-Runde (nur final_answer),
+// sich auf Millionen Tokens. Erreicht → erzwungene Synthese-Runde (Antwort via final_answer),
 // kein Hart-Abbruch. 0 = aus.
 function _bookChatInputTokenCap() {
   const v = parseInt(appSettings.get('jobs.book_chat.max_input_tokens_per_answer'), 10);

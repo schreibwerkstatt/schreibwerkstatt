@@ -44,6 +44,64 @@
 
 .komplett-scope-hint { margin-top: var(--space-2xs); }
 
+/* Indikation «Lohnt sich ein Lauf?» (routes/jobs/komplett/delta.js). Der Akzent
+   links trägt die Empfehlung; Text bleibt in Grundfarbe, damit nichts alarmiert,
+   was nur ein Hinweis ist. */
+.komplett-delta {
+  --delta-accent: var(--color-border);
+  margin-top: var(--card-gap-section);
+  padding: var(--space-sm) var(--space-md);
+  border-left: 3px solid var(--delta-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-bg);
+}
+.komplett-delta--never,
+.komplett-delta--recommended { --delta-accent: var(--color-ok-text); }
+.komplett-delta--optional    { --delta-accent: var(--color-warn-text); }
+.komplett-delta--low,
+.komplett-delta--skip        { --delta-accent: var(--color-muted); }
+
+.komplett-delta-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+.komplett-delta-body .card-hint { margin: 0; }
+.komplett-delta-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.komplett-delta-dot {
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 50%;
+  background: var(--delta-accent);
+  flex: none;
+}
+.komplett-delta-verdict { font-weight: 600; }
+.komplett-delta-line {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+.komplett-delta-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2xs);
+  font-size: var(--font-size-sm);
+}
+.komplett-delta-label { color: var(--color-muted); }
+.komplett-delta-term {
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius-md);
+  background: var(--color-tag-bg);
+}
+.komplett-delta-muted {
+  margin: 0;
+  color: var(--color-muted);
+}
+
 .komplett-scope-body {
   display: flex;
   flex-direction: column;

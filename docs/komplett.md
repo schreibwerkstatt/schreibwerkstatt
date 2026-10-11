@@ -8,6 +8,7 @@ Kern-Pipeline, die ein ganzes Buch in einem Hintergrund-Job in den strukturierte
 |---|---|---|---|
 | `/jobs/komplett-analyse` | POST | editor | Pipeline `runKomplettAnalyseJob`; `scope` = Lauf-Umfang (Default ohne Angabe: alles an), `force` = Delta-Cache + Checkpoint vorher leeren. Speichert den Umfang als Vorbelegung. `409 KOMPLETT_STEP_JOB_RUNNING`, solange ein Standalone-Job eines enthaltenen Schritts läuft |
 | `/jobs/komplett-scope/:book_id` | GET | viewer | Zuletzt gestarteter Lauf-Umfang (Vorbelegung des Modals) |
+| `/jobs/komplett-delta/:book_id` | GET | viewer | Indikation im Start-Modal: Änderungen seit dem letzten erfolgreichen Lauf + Empfehlung (siehe «Lohnt sich ein Lauf?») |
 | `/jobs/kontinuitaet` | POST | editor | Nur Phase 8 `runKontinuitaetJob` (eigenständig, Knopf „Kontinuität neu prüfen" in der Karte) |
 | `/jobs/kontinuitaet/:book_id` | GET | viewer | Letztes gespeichertes Check-Ergebnis |
 | `/jobs/kontinuitaet/issue/:issue_id/resolved` | POST | editor | Issue als erledigt/offen markieren |
@@ -19,6 +20,17 @@ Dedup pro POST über `findActiveJobId(type, bookId, userEmail)` — ein bereits 
 **Triage-Routen** (`…/issue/:issue_id/resolved|dismissed`) nehmen nur Issues des eigenen Checks an (Checks sind pro Buch + User geführt); ein fremdes Issue und ein Issue aus einem Buch ohne Leserecht antworten wie ein unbekanntes mit `404 ISSUE_NOT_FOUND` (kein Existenz-Leak über 403), erst danach prüft `guardBook` editor+. `DELETE /jobs/chapter-cache/:book_id` läuft unter dem viewer-Param-Guard des Routers und prüft im Handler editor+ über `guardBook`.
 
 **Nacht-Cron `runKomplettAnalyseAll`** ([job.js](../routes/jobs/komplett/job.js)): **derzeit deaktiviert** — die `cron.schedule`-Registrierung in [server.js](../server.js) ist auskommentiert; die Funktion existiert, wird aber ausserhalb von Tests nicht aufgerufen. Bei Reaktivierung reiht sie pro Buch × pro berechtigtem aktiven User (`book_access`, Privacy-Boundary) einen `komplett-analyse`-Job ein. Provider aus `ai.provider` (Default `claude`; gültige Werte `claude`/`ollama`/`openai-compat`); bei `ollama`/`openai-compat` übersprungen, wenn der jeweilige Host nicht konfiguriert ist (bei `claude` läuft er immer). Überspringt (Buch, User)-Kombinationen, für die schon eine Komplettanalyse oder ein Standalone-Kontinuitäts-/Erzählprofil-Job läuft.
+
+## Lohnt sich ein Lauf?
+
+Das Start-Modal zeigt über den Schaltern eine Indikation ([delta.js](../routes/jobs/komplett/delta.js), Rechenlogik + Schwellen [lib/komplett-delta.js](../lib/komplett-delta.js), Lesepfade [db/komplett-delta.js](../db/komplett-delta.js)). **Kein KI-Call** — die Antwort muss beim Öffnen sofort da sein und soll gerade einen teuren Lauf ersparen können.
+
+- **Basis** ist der Text, den der letzte erfolgreiche Lauf (Buch + User) gelesen hat: pro seither geändertem Abschnitt die jüngste `page_revisions`-Zeile bis zu dessen `started_at`. Die Revisions-Retention dünnt ältere Stände aus; liegt die Basis mehr als einen Tag vor dem Lauf, kommt `approx: true` zurück (eher überschätzt). Ein Abschnitt ohne Basis zählt als ganz neu. Seither gelöschte Abschnitte (`page_deletions`, nicht wiederhergestellt) zählen mit.
+- **Satzweise statt zeichengenau:** ein Satz-Multiset-Vergleich zählt Umformulierungen, aber keine reinen Umstellungen — ein verschobener Absatz bringt dem Katalog nichts Neues. Gleicher Seitensatz wie der Job (ausgeschlossene Kapitel, Stub-Abschnitte < 30 Zeichen fallen weg).
+- **Neue Namen oder Begriffe:** grosse Wörter im hinzugekommenen Text, nicht am Satzanfang, mindestens zweimal, die weder im übrigen Buch, im alten Stand noch im Katalog (Name, Kurzname, Aliase, Schauplätze) stehen. Im Deutschen sind auch Substantive gross — darum wird die Liste gezeigt, nicht nur gezählt. **Betroffene Figuren:** Bestandsfiguren, deren Namensbestandteil (ohne Anreden wie «Herr»/«Frau») im hinzugekommenen Text fällt; dazu die fünf am stärksten geänderten Kapitel.
+- **Empfehlung** (`verdict.level`): `never` (noch kein Lauf) · `skip` (nichts geändert) · `low` (unter 2 % des Texts, keine neuen Namen/Abschnitte) · `optional` (≥ 2 %, oder neue Namen, neue/gelöschte Abschnitte — der Hinweis nennt «Nur Katalog» als günstigeren Umfang) · `recommended` (≥ 10 % oder ≥ 3 neue Namen). Dazu Dauer seit dem Lauf und dessen Kosten aus `ai_cost_ledger`.
+
+Semantische Ähnlichkeit (Embeddings) fliesst bewusst nicht ein: die Analyse extrahiert Entitäten und Fakten, und dafür sind neue Sätze und neue Namen das genauere Signal als eine Vektor-Distanz.
 
 ## Single-Pass vs. Multi-Pass
 

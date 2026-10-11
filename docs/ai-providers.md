@@ -84,7 +84,7 @@ Alle KI-Konfig liegt in der `app_settings`-Tabelle. Admin-PUT via `/admin/settin
 verschiedene Fragen an diesen zwei Stellen heissen: der Job wählt den agentischen
 Pfad, und der erste Call wirft «Tool-Use nicht unterstützt».
 
-Der Loop selbst ([agentic-chat.js](../routes/jobs/agentic-chat.js)) spricht **eine**
+Der Loop selbst ([agentic-chat/](../routes/jobs/agentic-chat/)) spricht **eine**
 Sprache: die kanonische Anthropic-Form (`tools[{name, description, input_schema}]`,
 Content-Blöcke `tool_use`/`tool_result`). Jeder Provider übersetzt selbst und liefert
 sein Ergebnis wieder in dieser Form (`toolUses` / `stopReason` / `rawContentBlocks`);

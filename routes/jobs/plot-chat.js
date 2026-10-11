@@ -81,6 +81,7 @@ const runPlotChatJob = makeAgenticChatJob({
   errLabel: 'Plot-Chat',
   callProvider: undefined,
   resolveProvider: (userEmail) => resolveProvider({ userEmail }),
+  effortSettingKey: 'ai.claude.effort.plotchat',
 
   loadSession: (sessionId, userEmail) => getSessionWithBookName(parseInt(sessionId), userEmail, 'plot'),
 

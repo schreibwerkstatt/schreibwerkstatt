@@ -1,7 +1,7 @@
 'use strict';
 // Reine Hilfen des Recherche-Chats (routes/jobs/research-chat.js), ausgelagert
 // damit sie ohne Loop/KI unit-testbar sind:
-//   toolsForRound          — Web-Such-Gesamtdeckel pro Antwort
+//   toolsForRound          — Werkzeugliste unter dem Web-Such-Gesamtdeckel
 //   validateAnswerSources  — `final_answer.quellen` gegen die Web-Treffer des Jobs
 //   sessionProposalMemory  — frühere Vorschläge der Session (für den System-Prompt)
 //   proposalsOnlyFallback  — Antworttext, wenn nur Vorschläge, aber kein Text kamen
@@ -15,19 +15,16 @@ const { itemIdsAtPlace } = require('../../db/research-items');
 const { htmlToTextForPrompt } = require('./shared');
 
 /**
- * Werkzeugliste für EINE Runde unter dem Web-Such-Gesamtdeckel.
- * `max_uses` des serverseitigen `web_search` sinkt auf den Rest des Deckels; ist
- * er aufgebraucht, fällt das Werkzeug weg (die Historie darf `server_tool_use`-
- * Blöcke ohne deklariertes Werkzeug tragen — der erzwungene Synthese-Turn des
- * Loops macht es genauso).
- *
- * Cache-Rücksicht: Werkzeuge stehen vorne in der Render-Reihenfolge des Prompt-
- * Caches. Solange der Rest ≥ dem Rundenwert bleibt, kommt dasselbe Objekt
- * (bitgleich) zurück — der Cache bricht nur in der Runde, in der der Deckel
- * tatsächlich greift, nicht in jeder.
+ * Werkzeugliste unter dem Web-Such-Gesamtdeckel: `max_uses` des serverseitigen
+ * `web_search` höchstens der Rest des Deckels, bei aufgebrauchtem Deckel fällt das
+ * Werkzeug weg. Der Recherche-Chat ruft das einmal beim Start — die Liste bleibt
+ * danach für den ganzen Lauf gleich, weil Werkzeuge vorn im Prompt-Cache stehen und
+ * Thinking-Blöcke an den unveränderten Gesprächsanfang gebunden sind. Den Deckel
+ * über die Runden hält der Loop-Hook `stopBeforeRound` (Synthese statt weiterer
+ * Runde); eine Runde kann ihn darum um höchstens den Rundenwert überschreiten.
  *
  * @param {Array} tools  Basisliste (mit `web_search`, `max_uses` = Rundenwert)
- * @param {number} used  bisher in diesem Job gelaufene Web-Suchen
+ * @param {number} used  bisher gelaufene Web-Suchen
  * @param {number} cap   Gesamtdeckel (jobs.research_chat.max_web_searches)
  */
 function toolsForRound(tools, used, cap) {

@@ -60,6 +60,7 @@ export const PLOT_CHAT_SLIM_READ_TOOL_NAMES = [
 export const PLOT_CHAT_FORCE_FINAL_INSTRUCTION =
   'Du hast die maximale Zahl an Werkzeug-Iterationen erreicht — keine weiteren Lese-Aufrufe mehr. '
   + 'Fasse JETZT aus dem Gesammelten die bestmögliche Antwort zusammen und liefere sie über `final_answer`. '
+  + 'Rufe kein anderes Werkzeug mehr auf als `final_answer` — weitere Aufrufe werden nicht ausgeführt. '
   + 'Bereits abgegebene Vorschläge bleiben gültig; wiederhole sie nicht. Sprache der Antwort: die der Userfrage.';
 
 const _BEGRUENDUNG = { type: 'string', description: 'Ein bis zwei Sätze: warum diese Änderung den Plot stärkt (Bezug auf Figur, Bogen, Szene oder Text). Pflicht.' };

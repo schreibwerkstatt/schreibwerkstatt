@@ -19,7 +19,7 @@ Keine neue Tabelle: Sessions in `chat_sessions` mit **`kind='ideen'`** (Migratio
 
 ## Agentischer Job
 
-Geteilter Loop [agentic-chat.js](../routes/jobs/agentic-chat.js) (`makeAgenticChatJob`). Cap `jobs.ideen_chat.max_tool_iter` (Default 8, Admin → Jobs) — Vorschlags-Aufrufe zählen mit.
+Geteilter Loop [agentic-chat/](../routes/jobs/agentic-chat/) (`makeAgenticChatJob`). Cap `jobs.ideen_chat.max_tool_iter` (Default 8, Admin → Jobs) — Vorschlags-Aufrufe zählen mit.
 
 **System-Prompt** ([prompts/ideen-chat.js](../public/js/prompts/ideen-chat.js)#`buildIdeenChatSystemPrompt`), zwei Cache-Blöcke:
 - Block 1 (`ttl: '1h'`): Rolle, die vier Aufgaben, Beleg-Pflicht, Werkzeug-Strategie, Sprachnorm + Buch-Kontext.

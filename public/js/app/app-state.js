@@ -388,6 +388,9 @@ const cardsState = () => ({
   // Checkpoint. Bewusst NICHT Teil des gespeicherten Umfangs — eine Neu-Erstellung ist
   // eine Entscheidung für DIESEN Lauf und darf sich nicht stillschweigend wiederholen.
   komplettScopeForce: false,
+  // Indikation «Lohnt sich ein Lauf?» im selben Modal (GET /jobs/komplett-delta).
+  komplettDelta: null,
+  komplettDeltaState: 'idle', // idle | loading | ready | error
   showAvatarMenu: false,
   // Overflow-Menü ("⋯") der Seiten-Action-Leiste (Notebook-Seitenansicht).
   pageActionsMenuOpen: false,

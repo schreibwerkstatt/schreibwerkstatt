@@ -18,7 +18,7 @@ Keine neue Tabelle: Sessions in `chat_sessions` mit **`kind='plot'`** (Migration
 
 ## Agentischer Job ([routes/jobs/plot-chat.js](../routes/jobs/plot-chat.js))
 
-Geteilter agentischer Loop ([agentic-chat.js](../routes/jobs/agentic-chat.js), `makeAgenticChatJob`). Cap `jobs.plot_chat.max_tool_iter` (Default 8, Admin → Jobs) — Vorschlags-Aufrufe zählen als Runden mit.
+Geteilter agentischer Loop ([agentic-chat/](../routes/jobs/agentic-chat/), `makeAgenticChatJob`). Cap `jobs.plot_chat.max_tool_iter` (Default 8, Admin → Jobs) — Vorschlags-Aufrufe zählen als Runden mit.
 
 **System-Prompt** ([prompts/plot-chat.js](../public/js/prompts/plot-chat.js)#`buildPlotChatSystemPrompt`), zwei Cache-Blöcke:
 - Block 1 (`ttl: '1h'`): Dramaturgen-Rolle, Vorschlags-Regeln, Werkzeug-Strategie, Sprachnorm + Buch-Kontext (`getResearchPromptContext`: Buchtyp, Autoren-Angaben, Hauptland).

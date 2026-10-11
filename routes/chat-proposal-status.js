@@ -7,6 +7,8 @@
 // wie jede Bearbeitung); hier wird nur festgehalten, DASS und WOMIT übernommen
 // bzw. dass verworfen wurde — sonst stünde der Vorschlag nach einem Reload
 // wieder offen da und der nächste Turn hielte ihn für unbearbeitet.
+// Frontend-Gegenstück (ein Aufruf für alle Konsumenten):
+// public/js/chat/proposal-status.js#persistProposalStatus.
 //
 // PATCH <mount>/chat-proposal
 //   Body: { message_id, index, action: 'applied'|'discarded'|'reopen', applied_id? }

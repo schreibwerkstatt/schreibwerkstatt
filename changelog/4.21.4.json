@@ -1,0 +1,26 @@
+{
+  "version": "4.21.4",
+  "date": "2026-10-11",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Komplettanalyse: vor dem Start zeigt das Fenster, wie viel sich seit der letzten Analyse geändert hat und welche neuen Namen dazugekommen sind. So sehen Sie auf einen Blick, ob sich ein neuer Durchgang lohnt.",
+      "en": "Full analysis: before starting, the dialog shows how much has changed since the last analysis and which new names have appeared. You can see at a glance whether another run is worth it."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buch-, Recherche-, Plot- und Ideen-Chat: während die KI arbeitet, zeigt die Statuszeile kurz, woran sie gerade ist. Antworten kommen ausserdem schneller und günstiger zustande.",
+      "en": "Book, research, plot and ideas chat: while the AI is working, the status line briefly shows what it is doing. Answers also arrive faster and at lower cost."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Ideen-Chat: neue Ideen schlägt er nur noch vor, wenn Sie danach fragen oder im Board wirklich etwas fehlt.",
+      "en": "Ideas chat: it now only suggests new ideas when you ask for them or when something is genuinely missing from the board."
+    },
+    {
+      "kind": "behoben",
+      "de": "Buch-, Recherche-, Plot- und Ideen-Chat: lehnte der Sicherheitsfilter der KI eine harmlose Frage ab, blieb die Antwort leer oder brach mit einem Fehler ab. Jetzt springt ein anderes Modell ein, sonst erscheint ein verständlicher Hinweis.",
+      "en": "Book, research, plot and ideas chat: when the AI's safety filter rejected a harmless question, the answer stayed empty or failed with an error. Another model now steps in, otherwise a clear notice appears."
+    }
+  ]
+}

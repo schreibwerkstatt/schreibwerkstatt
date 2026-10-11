@@ -13,6 +13,7 @@
 import { fetchJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
 import { wordDiff } from './word-diff.js';
+import { persistProposalStatus } from './proposal-status.js';
 import { IDEE_OPEN_STATUSES } from '../book/ideen-shared.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -131,19 +132,6 @@ export const ideenProposalMethods = {
     return window.__app.t(`ideen.link.kind.${p?.target_kind}`);
   },
 
-  async _patchIdeenProposal(msg, pi, action, appliedId = null) {
-    const res = await fetchJson('/ideen/chat-proposal', {
-      method: 'PATCH', headers: JSON_HEADERS,
-      body: JSON.stringify({ message_id: msg.id, index: pi, action, ...(appliedId ? { applied_id: appliedId } : {}) }),
-    });
-    const p = this.ideenProposals(msg)[pi];
-    if (p && res?.proposal) {
-      for (const k of ['applied_at', 'applied_id', 'status']) {
-        if (k in res.proposal) p[k] = res.proposal[k]; else delete p[k];
-      }
-    }
-  },
-
   async applyIdeenProposal(msg, pi) {
     const app = window.__app;
     const list = this.ideenProposals(msg);
@@ -169,7 +157,7 @@ export const ideenProposalMethods = {
     this._publishCounts();
     await this._ensureBoardSortables();
     try {
-      await this._patchIdeenProposal(msg, pi, 'applied', appliedId);
+      await persistProposalStatus('/ideen/chat-proposal', msg, pi, 'applied', appliedId);
     } catch {
       // Das Board ist geändert, nur der Status fehlt — sichtbar machen statt
       // verschlucken (ein Reload zeigte den Vorschlag sonst wieder offen).
@@ -182,7 +170,7 @@ export const ideenProposalMethods = {
     if (!p || p._applying) return;
     p._error = '';
     try {
-      await this._patchIdeenProposal(msg, pi, discard ? 'discarded' : 'reopen');
+      await persistProposalStatus('/ideen/chat-proposal', msg, pi, discard ? 'discarded' : 'reopen');
     } catch (e) {
       p._error = tFetchError(e);
     }

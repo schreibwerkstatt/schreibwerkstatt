@@ -84,6 +84,7 @@ const runIdeenChatJob = makeAgenticChatJob({
   errLabel: 'Ideen-Chat',
   callProvider: undefined,
   resolveProvider: (userEmail) => resolveProvider({ userEmail }),
+  effortSettingKey: 'ai.claude.effort.ideenchat',
 
   loadSession: (sessionId, userEmail) => getSessionWithBookName(parseInt(sessionId), userEmail, 'ideen'),
 

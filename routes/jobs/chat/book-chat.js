@@ -74,8 +74,10 @@ function _bookChatAiOverrides(effectiveProvider) {
   if (maxTokensOut > 0) bag.maxTokensOut = maxTokensOut;
   if (timeoutMs > 0) bag.timeoutMs = timeoutMs;
   // effort (output_config) für Opus 4.5+/Sonnet 4.6: low|medium|high|xhigh|max. Leer =
-  // API-Default (high). lib/ai.js klemmt Tier-Mismatch (max→Opus-only, xhigh→Opus-4.7+)
-  // automatisch auf high. Claude-API-Eigenheit — kein openai-compat-Pendant.
+  // Modell-Default (Opus 5.5: medium, sonst high). lib/ai.js klemmt Tier-Mismatch
+  // (max→Opus-only, xhigh→Opus-4.7+) automatisch auf high. Claude-API-Eigenheit —
+  // kein openai-compat-Pendant. Die drei übrigen agentischen Chats setzen ihren
+  // Effort über `effortSettingKey` im Loop (agentic-chat/helpers.js#applyChatEffort).
   if (p === 'claude') {
     const effort = String(appSettings.get('ai.claude.effort.bookchat') || '').trim();
     if (effort) bag.effort = effort;
