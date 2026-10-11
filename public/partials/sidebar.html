@@ -29,38 +29,8 @@
       </button>
     </div>
   </div>
-  <!-- Suche + Expand/Collapse -->
-  <div class="search-wrap sidebar-search-wrap">
-    <span class="search-affix">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#search"/></svg>
-      <input type="text" x-model.debounce.200ms="pageSearch" @keydown="onPageSearchKeydown($event)" :placeholder="t('sidebar.searchPage')" :aria-label="t('sidebar.searchPage')" :data-tip="withHotkey(t('sidebar.searchPageTitle'), 'treeSearch')" class="page-search">
-      <button type="button" class="search-clear--icon" x-show="pageSearch" @click="pageSearch=''" :aria-label="t('search.clear')" :data-tip="t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
-    </span>
-    <div class="btn-group sidebar-action-group">
-      <button type="button" class="icon-btn"
-              x-show="isTagebuch()"
-              :aria-pressed="sidebarMode === 'calendar'"
-              @click="toggleSidebarMode()"
-              :data-tip="sidebarMode === 'calendar' ? t('sidebar.modeToggle.tree') : t('sidebar.modeToggle.calendar')"
-              :aria-label="sidebarMode === 'calendar' ? t('sidebar.modeToggle.tree') : t('sidebar.modeToggle.calendar')">
-        <svg class="icon" aria-hidden="true">
-          <use :href="sidebarMode === 'calendar' ? '/icons.svg#list' : '/icons.svg#calendar'"/>
-        </svg>
-      </button>
-      <button type="button" class="icon-btn"
-              x-show="sidebarMode !== 'calendar'"
-              @click="setAllChaptersOpen(true)"
-              :disabled="!!pageSearch"
-              :data-tip="t('sidebar.expandAll')"
-              :aria-label="t('sidebar.expandAll')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-down"/></svg></button>
-      <button type="button" class="icon-btn"
-              x-show="sidebarMode !== 'calendar'"
-              @click="setAllChaptersOpen(false)"
-              :disabled="!!pageSearch"
-              :data-tip="t('sidebar.collapseAll')"
-              :aria-label="t('sidebar.collapseAll')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-up"/></svg></button>
-    </div>
-  </div>
+  <!-- Suche, Expand/Collapse, Stand-Filter — nested Partial (sidebar-search.html). -->
+  <div id="partial-sidebar-search" class="display-contents"></div>
 
   <!-- Diary-Calendar — eingebettetes Partial. Lädt nested via _loadPartials. -->
   <div id="partial-sidebar-calendar" x-show="sidebarMode === 'calendar'" x-cloak></div>
@@ -106,6 +76,7 @@
              'tree-chapter-header--empty': item.pages.length === 0 && !item.hasChildren,
              'tree-chapter-header--active': showKapitelReviewCard && String(kapitelReviewChapterId) === String(item.id),
              'tree-chapter-header--reviewable': _bookQualifiesForChapterReview() && (item.pages.length > 0 || item.hasChildren),
+             [editStatusClass(chapterEditStatus(item))]: true,
            }"
            :data-tip="!pageSearch
              ? ((item.pages.length === 0 && !item.hasChildren)
@@ -118,7 +89,9 @@
            @contextmenu="_openPagetreeContextMenu($event, { kind: 'chapter', id: item.id, name: item.name, excluded: item.excluded })">
         <span class="history-chevron" :class="{ open: item.open }" x-show="item.pages.length > 0 || item.hasChildren"
               @click.stop="if (!pageSearch && (item.pages.length > 0 || item.hasChildren)) toggleChapterOpen(item)"></span>
-        <span x-text="item.name"></span>
+        <span class="tree-chapter-name"><span x-text="item.name"></span><span class="edit-status-meter"
+              :class="editStatusClass(chapterEditStatus(item))"
+              :data-tip="editStatusTipLine(chapterEditStatus(item)) || null"></span></span>
         <span class="tree-chapter-meta">
           <span class="tag tree-chapter-excluded-tag" x-show="item.excluded" x-text="t('sidebar.excludedBadge')"
                 :data-tip="t('sidebar.excludedTitle', { name: item.name })"></span>
@@ -153,7 +126,7 @@
                preventDefault nur ohne Modifier. Plaketten darin brauchen
                @click.stop.prevent, sonst navigierte der Link mit. -->
           <a class="page-item"
-               :class="{ selected: currentPage?.id === page.id, 'page-item--empty': tokEsts[page.id] && tokEsts[page.id].words === 0, 'page-item--kb-active': _pageSearchActiveId === page.id, 'page-item--remote-edit': $store.collab.recentRemoteEdits.has(page.id) }"
+               :class="{ selected: currentPage?.id === page.id, 'page-item--empty': tokEsts[page.id] && tokEsts[page.id].words === 0, 'page-item--kb-active': _pageSearchActiveId === page.id, 'page-item--remote-edit': $store.collab.recentRemoteEdits.has(page.id), [editStatusClass(pageEditStatus(page.id))]: true }"
                :href="'#book/' + $store.nav.selectedBookId + '/page/' + page.id"
                :data-page-id="page.id"
                role="treeitem"
@@ -175,6 +148,9 @@
                 @mouseleave.stop="_hideStatusTip()"></span>
               <span x-text="_isSingleSectionChapter(item) ? item.name : page.name"></span>
               <span class="page-item-section-name" x-show="_isSingleSectionChapter(item) && !sameStructureTitle(item.name, page.name)" x-text="page.name"></span>
+              <span class="edit-status-meter"
+                    :class="editStatusClass(pageEditStatus(page.id))"
+                    :data-tip="editStatusTipLine(pageEditStatus(page.id)) || null"></span>
               <template x-for="p in presenceFor(page.id)" :key="p.device_id || p.user_email">
                 <span class="presence-pip"
                       :class="{ 'presence-pip--self': p.is_self }"

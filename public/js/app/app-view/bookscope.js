@@ -59,6 +59,7 @@ export const bookscopeMethods = {
     badges.chapterPlotBeatCounts = {};
     badges.shareCommentCounts = {};
     badges.shareLinkCounts = {};
+    badges.editStatus = {};
     this.currentPageRechercheCount = 0;
     this.currentPagePlotBeatCount = 0;
     this.currentPageShareCommentCount = 0;

@@ -9,6 +9,8 @@ Dazu Dubletten zusammenführen, Verknüpfungen zu Beat, Strang, Motiv, Werkstatt
 
 **Platzierung:** wie der Plot-Chat — ab 1280px eigene, sticky Spalte rechts neben dem Board (`.ideen-split` in [entities/ideen-chat.css](../public/css/entities/ideen-chat.css)), schmaler steht das Panel per `order: -1` über dem Board. Das leere Gespräch bietet drei Schnellstart-Aufträge (Erledigt-Check, Orte, Dubletten).
 
+Gliederung und Ideenliste im Prompt tragen den Bearbeitungsstand je Abschnitt; offene Pendenzen an fertigen Abschnitten prüft der Chat zuerst ([bearbeitungsstand.md](bearbeitungsstand.md#fertig-aber-offene-pendenzen)).
+
 ## Provider — zwei Pfade
 
 Gleiche Aufteilung wie im Plot-Chat ([plot-chat.md](plot-chat.md#provider--zwei-pfade)): `runIdeenChatJobDispatch` ([routes/jobs/ideen-chat.js](../routes/jobs/ideen-chat.js)) wählt am effektiven Provider. **Agentisch** mit Lese-Werkzeugen + `propose_*`, lokale Provider mit dem kleineren Satz `IDEEN_CHAT_SLIM_READ_TOOL_NAMES` und dem lokalen Iterationsdeckel des Buch-Chats. **Klassisch** ([ideen-chat-classic.js](../routes/jobs/ideen-chat-classic.js), auch als `fallbackJob` bei `AI_TOOLS_UNSUPPORTED`): ein JSON-Call `{ antwort, vorschlaege: [{ werkzeug, …Felder }] }` (`SCHEMA_IDEEN_CHAT_CLASSIC`), jeder Eintrag läuft durch dieselben Handler; Abgelehntes fällt still heraus und zählt in `context_info.rejected`. Ohne Werkzeuge sieht das Modell nur die semantisch nächsten Passagen zur Frage — der Prompt erlaubt «erledigt» dort nur, wenn die einlösende Stelle in diesen Passagen steht.

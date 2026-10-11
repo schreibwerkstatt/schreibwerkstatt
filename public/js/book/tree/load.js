@@ -289,6 +289,7 @@ export const treeLoadMethods = {
         badges.chapterPlotBeatCounts = {};
         badges.shareCommentCounts = {};
         badges.shareLinkCounts = {};
+        badges.editStatus = {};
       }
       this._tokenEstGen++;
       // Frische-Entscheidung: readsFresh (siehe FRESH_SOURCES oben).

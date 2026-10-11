@@ -156,7 +156,7 @@ router.post('/check', express.json({ limit: '600kb' }), async (req, res) => {
     let filtered = all;
     try {
       filtered = filterMatches(all, {
-        words: userEmail ? dict.getCheckSet(userEmail, bookId, language) : null,
+        dict: userEmail ? dict.getCheckDict(userEmail, bookId, language) : null,
         names: bookId ? buildNameSet(ltNames.listBookNames(bookId)) : null,
         rules: userEmail ? ltRules.getCheckSet(userEmail, bookId) : null,
       });

@@ -11,6 +11,7 @@
 //   tree/permissions.js — ACL-Rolle + Entity-Flag pro Buch, canEdit/canReview/isViewer, Buchtyp.
 //   tree/open-state.js  — Persistenter Collapse-State + Chapter-Header-Aktivierung.
 //   tree/stats.js       — Seiten-Status/Tooltips, Page-Stats-Sync, Kapitel-Aggregation.
+//   tree/edit-status.js — Bearbeitungsstand: laden, setzen, Kapitelstand ableiten.
 //   tree/ui.js          — Sidebar-Tooltip-Helper (Token-Badge + Page-Status).
 //   tree/keyboard.js    — Tastatur-/Fokus-Fuehrung (ARIA-Tree, ein Tab-Stopp) +
 //                         Aufdecken der geoeffneten Seite.
@@ -21,6 +22,7 @@ import { treeCatchUpMethods } from './tree/catchup.js';
 import { treePermissionsMethods } from './tree/permissions.js';
 import { treeOpenStateMethods } from './tree/open-state.js';
 import { treeStatsMethods } from './tree/stats.js';
+import { treeEditStatusMethods } from './tree/edit-status.js';
 import { treeUiMethods } from './tree/ui.js';
 import { treeKeyboardMethods } from './tree/keyboard.js';
 
@@ -32,6 +34,7 @@ export const treeMethods = {
   ...treePermissionsMethods,
   ...treeOpenStateMethods,
   ...treeStatsMethods,
+  ...treeEditStatusMethods,
   ...treeUiMethods,
   ...treeKeyboardMethods,
 };

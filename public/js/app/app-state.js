@@ -454,6 +454,7 @@ const lektoratState = () => ({
   tokEsts: {},
   _tokenEstGen: 0,
   pageLastChecked: {},
+  treeEditFilter: false, // Seitenbaum: nur unfertige Abschnitte (tree/edit-status.js)
   // Buchweite Badge-Count-Maps (ideenCounts, chapterIdeenCounts, rechercheCounts,
   // chapterRechercheCounts, plotBeatCounts, chapterPlotBeatCounts,
   // shareCommentCounts, shareLinkCounts) leben in Alpine.store('badges')

@@ -11,11 +11,12 @@
 //   - lang = '*'      -> sprachuebergreifend
 //   - lang = 'de-CH'  -> nur fuer diese Locale
 //
-// Case-insensitive Lookup: Speicherung in Original-Case fuer Display, Vergleich
-// ueber lower-cased Set.
+// Case-insensitive Lookup: Speicherung in Original-Case — fuer Display und weil
+// die Grossschreibung ein Nomen markiert (Genitiv, lib/dictionary-forms.js).
 
 const { db } = require('./connection');
 const { NOW_ISO_SQL } = require('./now');
+const { buildDictionary } = require('../lib/dictionary-forms');
 
 const _stmtList = db.prepare(
   `SELECT word, book_id, lang, created_at FROM user_dictionary
@@ -42,14 +43,11 @@ function listForUser(userEmail) {
   return _stmtList.all(userEmail);
 }
 
-function getCheckSet(userEmail, bookId, lang) {
-  if (!userEmail) return new Set();
+/** Abgleich-Struktur { words, nouns } (lib/dictionary-forms.js#buildDictionary). */
+function getCheckDict(userEmail, bookId, lang) {
+  if (!userEmail) return buildDictionary([]);
   const rows = _stmtListForCheck.all(userEmail, bookId || null, lang || 'auto');
-  const set = new Set();
-  for (const r of rows) {
-    if (r.word) set.add(r.word.toLowerCase());
-  }
-  return set;
+  return buildDictionary(rows.map(r => r.word));
 }
 
 function add(userEmail, { word, bookId = 0, lang = '*' }) {
@@ -64,4 +62,4 @@ function remove(userEmail, { word, bookId = 0, lang = '*' }) {
   return _stmtDelete.run(userEmail, bookId || null, word, lang || '*').changes;
 }
 
-module.exports = { listForUser, getCheckSet, add, remove };
+module.exports = { listForUser, getCheckDict, add, remove };

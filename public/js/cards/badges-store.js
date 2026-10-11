@@ -25,6 +25,11 @@
 //   shareCommentCounts     — page_id    → offene Reviewer-Kommentare aus Share-Links.
 //   shareLinkCounts        — page_id    → aktive Share-Links, die die Seite enthalten.
 //
+// Ausnahme vom Count-Schema, weil Baum, Organizer, Übersicht und Statistik sie
+// teilen (docs/bearbeitungsstand.md):
+//   editStatus             — page_id    → Bearbeitungsstand { status, stale, updated_by, … }.
+//   editStatusChain        — Stufen-Kette des Buchs (Array, geordnet).
+//
 // Die abgeleiteten `currentPage*Count`-Skalare der offenen Seite bleiben am Root
 // (pageState/lektoratState) — sie hängen an `currentPage`, nicht buchweit.
 
@@ -39,5 +44,7 @@ export function registerBadgesStore() {
     chapterPlotBeatCounts: {},
     shareCommentCounts: {},
     shareLinkCounts: {},
+    editStatus: {},
+    editStatusChain: [],
   });
 }

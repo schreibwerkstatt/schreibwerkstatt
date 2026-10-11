@@ -13,25 +13,26 @@ const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
 const { dictionaryWordsOnPage, dropDictionaryFindings } = require('../../routes/jobs/lektorat-dictionary');
+const { buildDictionary } = require('../../lib/dictionary-forms');
 
 const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'prompt-config.json'), 'utf8'));
 const prompts = await import(pathToFileURL(path.join(ROOT, 'public', 'js', 'prompts.js')).href);
 
 test('dictionaryWordsOnPage: nur ganze Wörter der Seite, in Seiten-Schreibweise, sortiert', () => {
-  const set = new Set(['chuchichäschtli', 'zmorge', 'gspänli', 'ort']);
+  const set = buildDictionary(['chuchichäschtli', 'zmorge', 'gspänli', 'ort']);
   const text = 'Am Morgen gab es Zmorge. Das Chuchichäschtli war leer. Im Dorf …';
   // «ort» steht nur als Teil von «Dorf» — kein Treffer.
   assert.deepEqual(dictionaryWordsOnPage(set, text), ['Chuchichäschtli', 'Zmorge']);
 });
 
 test('dictionaryWordsOnPage: leeres Set / leerer Text', () => {
-  assert.deepEqual(dictionaryWordsOnPage(new Set(), 'Text'), []);
-  assert.deepEqual(dictionaryWordsOnPage(new Set(['a']), ''), []);
+  assert.deepEqual(dictionaryWordsOnPage(buildDictionary([]), 'Text'), []);
+  assert.deepEqual(dictionaryWordsOnPage(buildDictionary(['a']), ''), []);
   assert.deepEqual(dictionaryWordsOnPage(null, 'Text'), []);
 });
 
 test('dictionaryWordsOnPage: Regex-Sonderzeichen im Eintrag', () => {
-  assert.deepEqual(dictionaryWordsOnPage(new Set(['c++']), 'Er schrieb C++ am Abend.'), ['C++']);
+  assert.deepEqual(dictionaryWordsOnPage(buildDictionary(['c++']), 'Er schrieb C++ am Abend.'), ['C++']);
 });
 
 test('dropDictionaryFindings: verwirft Rechtschreib-Findings auf Wörterbuch-Wörtern, auch mit Satzzeichen', () => {
@@ -43,6 +44,20 @@ test('dropDictionaryFindings: verwirft Rechtschreib-Findings auf Wörterbuch-Wö
   ];
   const out = dropDictionaryFindings(fehler, ['Chuchichäschtli', 'Zmorge']);
   assert.deepEqual(out.map(f => f.original), ['Fahrad', 'Chuchichäschtli']);
+});
+
+test('dictionaryWordsOnPage: Genitiv nur bei Nomen, jede Form der Seite', () => {
+  const dict = buildDictionary(['Riggenbach', 'Niklaus', 'schnachte']);
+  const text = 'Riggenbachs Hof. Riggenbach kam. Niklaus\' Frau. Er schnachtes und schnachte.';
+  assert.deepEqual(dictionaryWordsOnPage(dict, text), ['Niklaus\'', 'Riggenbach', 'Riggenbachs', 'schnachte']);
+});
+
+test('dropDictionaryFindings: Genitivform aus der Seitenliste, auch mit Apostroph', () => {
+  const fehler = [
+    { typ: 'rechtschreibung', original: 'Riggenbachs', korrektur: 'x' },
+    { typ: 'rechtschreibung', original: '«Niklaus\'»', korrektur: 'y' },
+  ];
+  assert.deepEqual(dropDictionaryFindings(fehler, ['Niklaus\'', 'Riggenbachs']), []);
 });
 
 test('dropDictionaryFindings: ohne Wörterbuch unverändert', () => {

@@ -41,7 +41,16 @@ export const treeStatsMethods = {
     return this.t(`${prefix}On`, { date: _fmtDateShort(d, this.$store.shell.uiLocale), time });
   },
 
+  // Erste Zeile: der Bearbeitungsstand (docs/bearbeitungsstand.md), falls
+  // gesetzt — danach die Lektorats-Aktualitaet, die der Punkt selbst anzeigt.
   pageStatusTooltip(page) {
+    const stand = this.editStatusTipLine(this.pageEditStatus(page.id));
+    const conflict = this.editStatusFinalOpenLine(page.id);
+    const lines = this._lektoratTooltipLines(page);
+    return [stand, conflict, ...lines].filter(Boolean);
+  },
+
+  _lektoratTooltipLines(page) {
     const rec = this.pageLastChecked?.[page.id];
     const updatedAt = page.updated_at ? new Date(page.updated_at) : null;
     const pageLine = updatedAt ? this._fmtRelativeLine(updatedAt, 'sidebar.status.pageUpdated') : '';

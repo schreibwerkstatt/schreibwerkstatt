@@ -61,7 +61,38 @@ function cleanupStuckJobRuns() {
   return result.changes;
 }
 
+const _stmtLastDone = db.prepare(`
+  SELECT r.job_id, r.started_at, r.ended_at, r.tokens_in, r.tokens_out, l.usd
+    FROM job_runs r
+    LEFT JOIN ai_cost_ledger l ON l.source_ref = 'job:' || r.job_id
+   WHERE r.type = ? AND r.book_id = ? AND r.user_email IS ? AND r.status = 'done'
+   ORDER BY r.ended_at DESC
+   LIMIT 1
+`);
+// Rückfall: job_runs hält nur so lange wie `app.job_runs_retention_days` (lib/cache-cleanup.js), das Kostenbuch bleibt.
+// Es kennt keinen Status — darum nur Läufe VOR der ältesten job_runs-Zeile: was
+// danach liegt, steht noch in job_runs, und fehlt es dort als 'done', war es keiner.
+// `ts` ist das Laufende; ein Start ist nicht überliefert. Chat-Typen bucht das
+// Kostenbuch nicht als Job — für sie bleibt es bei job_runs.
+const _stmtLastLedger = db.prepare(`
+  SELECT substr(source_ref, 5) AS job_id, NULL AS started_at, ts AS ended_at,
+         tokens_in, tokens_out, usd
+    FROM ai_cost_ledger
+   WHERE source = 'job' AND type = ? AND book_id = ? AND user_email IS ?
+     AND ts < COALESCE((SELECT MIN(queued_at) FROM job_runs), '9999')
+   ORDER BY ts DESC
+   LIMIT 1
+`);
+
+/** Letzter erfolgreicher Lauf eines Job-Typs für Buch + User, auch jenseits der
+ *  job_runs-Aufbewahrung; sonst null. */
+function lastDoneJobRun(type, bookId, userEmail) {
+  const em = userEmail || null;
+  return _stmtLastDone.get(type, bookId, em) || _stmtLastLedger.get(type, bookId, em) || null;
+}
+
 module.exports = {
+  lastDoneJobRun,
   insertJobRun,
   startJobRun,
   endJobRun,

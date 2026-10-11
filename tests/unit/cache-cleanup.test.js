@@ -72,7 +72,7 @@ const SEED_STMTS = [
   `INSERT INTO job_runs VALUES ('old-done','x','done', ${STALE}, NULL, NULL)`,
   `INSERT INTO job_runs VALUES ('old-queued','x','queued', ${STALE}, NULL, NULL)`,
   `INSERT INTO job_runs VALUES ('fresh-done','x','done', ${FRESH}, NULL, NULL)`,
-  // Chat-Job-Typen: 365 Tage statt 30 (Fehlerquote der Chats, db/chat-quality.js).
+  // Chat-Job-Typen: eigene Frist (Fehlerquote der Chats, db/chat-quality.js).
   `INSERT INTO job_runs VALUES ('old-chat-error','book-chat','error', ${STALE}, NULL, NULL)`,
   `INSERT INTO job_runs VALUES ('ancient-chat-error','chat','error', datetime('now','-400 days'), NULL, NULL)`,
 
@@ -99,8 +99,17 @@ SEED_STMTS.push(`INSERT INTO book_stats_history (book_id, recorded_at) VALUES (1
 for (const stmt of SEED_STMTS) db.prepare(stmt).run();
 
 const { runCacheCleanup, POLICIES } = require('../../lib/cache-cleanup');
+const { DEFAULTS } = require('../../lib/app-settings/registry');
 
-const summary = runCacheCleanup();
+// Fristen als Settings injiziert: lib/app-settings zoege sonst die volle
+// Migrationspipeline in die Minimal-DB.
+const settingsWith = (vals) => (k) => vals[k];
+const SETTINGS = settingsWith({
+  'app.job_runs_retention_days': 30,
+  'app.chat_job_runs_retention_days': 365,
+});
+
+const summary = runCacheCleanup({ getSetting: SETTINGS });
 
 test('POLICIES enthaelt alle erwarteten Tabellen', () => {
   const names = POLICIES.map(p => p.table);
@@ -142,10 +151,51 @@ test('job_runs: stale queued bleibt (status-Filter), stale done weg', () => {
   assert.ok(!ids.includes('old-done'));
 });
 
-test('job_runs: Chat-Typen bleiben 365 Tage (200 Tage alt bleibt, 400 Tage alt weg)', () => {
+test('job_runs: Chat-Typen mit eigener Frist (365: 200 Tage alt bleibt, 400 Tage alt weg)', () => {
   const ids = db.prepare('SELECT job_id FROM job_runs').all().map(r => r.job_id);
   assert.ok(ids.includes('old-chat-error'));
   assert.ok(!ids.includes('ancient-chat-error'));
+});
+
+test('job_runs: Frist 0 = nie loeschen, je Setting getrennt', () => {
+  db.prepare(`INSERT INTO job_runs VALUES ('keep-done','x','done', datetime('now','-3000 days'), NULL, NULL)`).run();
+  db.prepare(`INSERT INTO job_runs VALUES ('keep-chat','chat','done', datetime('now','-3000 days'), NULL, NULL)`).run();
+  const r = runCacheCleanup({ getSetting: settingsWith({
+    'app.job_runs_retention_days': 0,
+    'app.chat_job_runs_retention_days': 0,
+  }) });
+  const ids = db.prepare('SELECT job_id FROM job_runs').all().map(x => x.job_id);
+  assert.ok(ids.includes('keep-done'));
+  assert.ok(ids.includes('keep-chat'));
+  const jr = r.tables.filter(t => t.table === 'job_runs');
+  assert.equal(jr.length, 2);
+  assert.ok(jr.every(t => t.skipped === 'keep-forever' && t.removed === 0));
+
+  // Nur die Nicht-Chat-Frist aktiv → die Chat-Zeile bleibt.
+  runCacheCleanup({ getSetting: settingsWith({
+    'app.job_runs_retention_days': 30,
+    'app.chat_job_runs_retention_days': 0,
+  }) });
+  const after = db.prepare('SELECT job_id FROM job_runs').all().map(x => x.job_id);
+  assert.ok(!after.includes('keep-done'));
+  assert.ok(after.includes('keep-chat'));
+  db.prepare(`DELETE FROM job_runs WHERE job_id = 'keep-chat'`).run();
+});
+
+test('job_runs: ungueltige Frist → Fehler im Summary, kein Delete', () => {
+  db.prepare(`INSERT INTO job_runs VALUES ('bad-ttl','x','done', datetime('now','-3000 days'), NULL, NULL)`).run();
+  const r = runCacheCleanup({ getSetting: settingsWith({
+    'app.job_runs_retention_days': -5,
+    'app.chat_job_runs_retention_days': 365,
+  }) });
+  assert.ok(r.tables.some(t => t.table === 'job_runs' && t.error));
+  assert.ok(db.prepare(`SELECT 1 FROM job_runs WHERE job_id = 'bad-ttl'`).get());
+  db.prepare(`DELETE FROM job_runs WHERE job_id = 'bad-ttl'`).run();
+});
+
+test('Registry-Defaults der job_runs-Fristen: 365 Tage, Chats nie', () => {
+  assert.equal(DEFAULTS['app.job_runs_retention_days'], 365);
+  assert.equal(DEFAULTS['app.chat_job_runs_retention_days'], 0);
 });
 
 test('page_checks: bleibt vollstaendig erhalten (nicht geprunt)', () => {
@@ -182,10 +232,10 @@ test('Tabellen, die nicht im Test-Schema sind, werden uebersprungen', () => {
 });
 
 test('Re-Run ist idempotent (kein Throw)', () => {
-  const second = runCacheCleanup();
+  const second = runCacheCleanup({ getSetting: SETTINGS });
   assert.equal(second.totalRemoved, 0);
 });
 
 test('Vacuum-Flag laeuft fehlerfrei', () => {
-  assert.doesNotThrow(() => runCacheCleanup({ vacuum: true }));
+  assert.doesNotThrow(() => runCacheCleanup({ vacuum: true, getSetting: SETTINGS }));
 });

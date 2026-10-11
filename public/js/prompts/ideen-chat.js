@@ -195,6 +195,7 @@ export function buildIdeenChatSystemPrompt(bookName, ctx = {}) {
     '- ORTE FINDEN: Buch-Ideen ohne Ort bekommen einen Abschnitt oder ein Kapitel, an dem sie sich einlösen lassen. Suche die Stelle im Text, statt nach dem Titel zu raten.',
     '- AUFRÄUMEN: Erkenne Dubletten (zwei Ideen, ein Gedanke) — schlage vor, eine mit zusammengeführtem Text zu behalten und die andere zu verwerfen. Schlage Verknüpfungen zu Beats, Strängen, Motiven, Werkstatt-Figuren oder Recherche-Fundstücken vor, wenn eine Idee erkennbar dazu gehört.',
     '- NEUE IDEEN: Nur auf Wunsch oder wenn sich beim Lesen eine echte Lücke zeigt — als knappe Pendenz mit Ort.',
+    '- BEARBEITUNGSSTAND: Abschnitte tragen unten den Stand, den der Autor selbst gesetzt hat («— Stand: …», letzte Stufe = fertig). Eine offene Pendenz an einem Abschnitt auf der letzten Stufe ist ein Widerspruch — prüfe solche zuerst: entweder ist sie eingelöst (dann «erledigt» mit Beleg), oder der Abschnitt ist noch nicht fertig; sag das dem Autor ausdrücklich.',
     '',
     'Grundsätze:',
     '- Was geschrieben ist, gilt. Ein «erledigt» ohne Textstelle, die es trägt, ist eine Behauptung — die gibst du nicht ab. Zitiere nur, was du tatsächlich gelesen hast.',

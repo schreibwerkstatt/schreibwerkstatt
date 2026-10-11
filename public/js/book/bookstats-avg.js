@@ -17,6 +17,7 @@ const DAY_MS = 86400000;
 const STOCK_METRICS = new Set([
   'chars', 'normseiten', 'words', 'page_count', 'tok', 'unique_words',
   'writing_cumulative', 'lektorat_cumulative', 'stt_cumulative',
+  'status_done', 'status_set',
 ]);
 
 const FLOW_METRICS = new Set([

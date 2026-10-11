@@ -1,10 +1,12 @@
-// Redaktions-Status: Drift-Gate über die Stufenkette + Verhalten der Frische-
+// Bearbeitungsstand: Drift-Gate über die Stufenketten + Verhalten der Frische-
 // Prüfung.
 //
-// SSoT ist public/js/redaktion/status.js. Drei Schichten führen eigene Kopien,
-// weil sie in anderen Modulsystemen leben oder synchron validieren MÜSSEN:
-//   1. db/redaktion.js#REDAKTION_STATUS (CJS-Spiegel, Schreibpfad-Validierung)
-//   2. der CHECK-Constraint von `page_editorial_status.status` (Migration 268)
+// SSoT sind die beiden Ketten in public/js/redaktion/status.js. Drei Schichten
+// führen eigene Kopien, weil sie in anderen Modulsystemen leben oder synchron
+// validieren MÜSSEN:
+//   1. db/redaktion.js (CJS-Spiegel, Schreibpfad-Validierung)
+//   2. der CHECK-Constraint von `page_editorial_status.status` (Migration 325,
+//      Vereinigung beider Ketten)
 //   3. public/js/i18n/{de,en}.json (`redaktion.status.<key>`)
 //
 // Eine Stufe, die nur in der SSoT landet, wird von der Route mit 400
@@ -29,50 +31,87 @@ const require = createRequire(import.meta.url);
 
 useTmpDb('redaktion');
 
-const { REDAKTION_STATUS, REDAKTION_STATUS_DONE, statusRank, statusLabelKey } =
-  await import(pathToFileURL(path.join(ROOT, 'public/js/redaktion/status.js')).href);
+const {
+  REDAKTION_STATUS, REDAKTION_STATUS_DONE, MANUSKRIPT_STATUS, MANUSKRIPT_STATUS_DONE,
+  statusRank, statusLabelKey, statusChain, weakestStatus, statusDistribution,
+} = await import(pathToFileURL(path.join(ROOT, 'public/js/redaktion/status.js')).href);
+
+const ALLE = [...REDAKTION_STATUS, ...MANUSKRIPT_STATUS];
 
 // ── Drift ────────────────────────────────────────────────────────────────────
 
-test('Stufenkette ist geordnet, eindeutig und endet auf der Fertig-Stufe', () => {
-  assert.equal(REDAKTION_STATUS.length, new Set(REDAKTION_STATUS).size, 'Duplikate in der Kette');
-  assert.ok(REDAKTION_STATUS.length >= 2, 'eine Kette braucht mindestens zwei Stufen');
-  // Die Kette ist ein Weg, kein Sack: die Fertig-Stufe steht am Ende, sonst
-  // laeuft „weiter als" gegen die Anzeige-Reihenfolge.
-  assert.equal(REDAKTION_STATUS.at(-1), REDAKTION_STATUS_DONE);
-  for (let i = 1; i < REDAKTION_STATUS.length; i++) {
-    assert.ok(statusRank(REDAKTION_STATUS[i]) > statusRank(REDAKTION_STATUS[i - 1]));
+test('beide Stufenketten sind geordnet, eindeutig und enden auf der Fertig-Stufe', () => {
+  for (const [kette, fertig] of [[REDAKTION_STATUS, REDAKTION_STATUS_DONE], [MANUSKRIPT_STATUS, MANUSKRIPT_STATUS_DONE]]) {
+    assert.equal(kette.length, new Set(kette).size, 'Duplikate in der Kette');
+    assert.ok(kette.length >= 2, 'eine Kette braucht mindestens zwei Stufen');
+    // Die Kette ist ein Weg, kein Sack: die Fertig-Stufe steht am Ende, sonst
+    // laeuft „weiter als" gegen die Anzeige-Reihenfolge.
+    assert.equal(kette.at(-1), fertig);
+    for (let i = 1; i < kette.length; i++) {
+      assert.ok(statusRank(kette[i]) > statusRank(kette[i - 1]));
+    }
   }
+  // Gleich lang, damit Rang und Farbskala ueber beide Ketten tragen.
+  assert.equal(REDAKTION_STATUS.length, MANUSKRIPT_STATUS.length);
+  assert.equal(new Set(ALLE).size, ALLE.length, 'die Ketten teilen keine Stufe');
+  assert.equal(statusChain(true), REDAKTION_STATUS);
+  assert.equal(statusChain(false), MANUSKRIPT_STATUS);
   for (const v of [null, undefined, '', 'gibtsnicht']) assert.equal(statusRank(v), -1, String(v));
+});
+
+test('Kapitelstand ist die schwaechste Stufe; ein Abschnitt ohne Stufe zieht auf null', () => {
+  assert.equal(weakestStatus([]), null);
+  const w = weakestStatus([{ status: 'final' }, { status: 'redigiert', stale: true }, { status: 'final' }]);
+  assert.equal(w.status, 'redigiert');
+  assert.equal(w.stale, true);
+  assert.equal(w.set, 3);
+  const offen = weakestStatus([{ status: 'final' }, null]);
+  assert.equal(offen.status, null);
+  assert.equal(offen.set, 1);
+  assert.equal(offen.total, 2);
+});
+
+test('Verteilung zaehlt ohne Stufe und ueberholte mit', () => {
+  const by = { 1: { status: 'final', stale: true }, 2: { status: 'rohfassung' }, 4: { status: 'roh' } };
+  const c = statusDistribution([1, 2, 3, 4], by, MANUSKRIPT_STATUS);
+  assert.equal(c.final, 1);
+  assert.equal(c.rohfassung, 1);
+  assert.equal(c.ohne, 2, 'fehlend + Stufe der anderen Kette');
+  assert.equal(c.stale, 1);
 });
 
 test('db/redaktion.js spiegelt die Kette und validiert danach', () => {
   const cjs = require(path.join(ROOT, 'db/redaktion.js'));
   assert.deepEqual(cjs.REDAKTION_STATUS, REDAKTION_STATUS, 'CJS-Spiegel weicht ab');
+  assert.deepEqual(cjs.MANUSKRIPT_STATUS, MANUSKRIPT_STATUS, 'CJS-Spiegel weicht ab');
   assert.equal(cjs.REDAKTION_STATUS_DONE, REDAKTION_STATUS_DONE);
-  for (const k of REDAKTION_STATUS) assert.ok(cjs.isValidRedaktionStatus(k), k);
+  assert.equal(cjs.MANUSKRIPT_STATUS_DONE, MANUSKRIPT_STATUS_DONE);
+  for (const k of ALLE) assert.ok(cjs.isValidRedaktionStatus(k), k);
   for (const k of ['', 'roman', null, 42, 'ROH']) {
     assert.ok(!cjs.isValidRedaktionStatus(k), String(k));
   }
+  // Mit Kette nur deren Stufen.
+  assert.ok(!cjs.isValidRedaktionStatus('final', REDAKTION_STATUS));
+  assert.ok(!cjs.isValidRedaktionStatus('roh', MANUSKRIPT_STATUS));
 });
 
-test('CHECK-Constraint der Tabelle kennt genau dieselben Stufen', () => {
+test('CHECK-Constraint der Tabelle kennt genau die Stufen beider Ketten', () => {
   const { db } = require(path.join(ROOT, 'db/connection.js'));
   require(path.join(ROOT, 'db/migrations.js'));
   const sql = db.prepare(
     "SELECT sql FROM sqlite_master WHERE name = 'page_editorial_status'",
   ).get()?.sql;
-  assert.ok(sql, 'Tabelle page_editorial_status fehlt — Migration 268 nicht gelaufen?');
+  assert.ok(sql, 'Tabelle page_editorial_status fehlt — Migration 325 nicht gelaufen?');
   const inList = sql.match(/status\s+IN\s*\(([^)]+)\)/i);
   assert.ok(inList, 'CHECK-Constraint auf status nicht gefunden');
   const werte = inList[1].split(',').map(s => s.trim().replace(/^'|'$/g, ''));
-  assert.deepEqual(werte, REDAKTION_STATUS, 'CHECK-Constraint weicht von der Kette ab');
+  assert.deepEqual(werte, ALLE, 'CHECK-Constraint weicht von den Ketten ab');
 });
 
 test('jede Stufe hat ein Label in beiden Locales, dazu die Rahmen-Keys', () => {
   for (const locale of ['de', 'en']) {
     const i18n = JSON.parse(fs.readFileSync(path.join(ROOT, `public/js/i18n/${locale}.json`), 'utf8'));
-    for (const k of REDAKTION_STATUS) {
+    for (const k of ALLE) {
       assert.ok(i18n[statusLabelKey(k)], `${locale}: ${statusLabelKey(k)} fehlt`);
     }
     for (const k of ['redaktion.status.none', 'redaktion.setStatus', 'redaktion.staleHint',
@@ -208,3 +247,14 @@ test('Löschen der Seite nimmt die Stufe mit (CASCADE)', () => {
   );
 });
 
+
+test('Serien-Lektorat überspringt nur fertige, seither unveränderte Abschnitte', () => {
+  const { doneUnchangedPageIds, MANUSKRIPT_STATUS: KETTE } = require(path.join(ROOT, 'db/redaktion.js'));
+  const { bookId, pages } = seed();
+  setPageStatus(pages[0], bookId, { status: 'final' });
+  setPageStatus(pages[1], bookId, { status: 'final' });
+  setPageStatus(pages[2], bookId, { status: 'redigiert' });
+  // Abschnitt B nach dem Setzen bearbeitet → läuft wieder mit.
+  db.prepare('UPDATE pages SET updated_at = ? WHERE page_id = ?').run('2099-01-01T00:00:00.000Z', pages[1]);
+  assert.deepEqual([...doneUnchangedPageIds(bookId, KETTE)], [pages[0]]);
+});

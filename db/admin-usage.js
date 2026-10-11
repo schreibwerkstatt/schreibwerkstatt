@@ -3,7 +3,7 @@
 //
 // KOSTEN-AGGREGATE (Pro-User-Summen, monatliche Totals) lesen aus dem
 // persistenten Kosten-Ledger (db/cost-ledger) mit zur Schreib-Zeit
-// eingefrorener usd — entkoppelt von der job_runs-Wegwerf-Historie (30-Tage-
+// eingefrorener usd — entkoppelt von der job_runs-Wegwerf-Historie (Aufbewahrungs-
 // Prune), sodass aeltere Zeitraeume nicht mehr schrumpfen.
 // DETAIL-LISTEN (getJobRuns/getChatMessages, paginierte Row-Ansichten mit
 // Label/Status/Session-Infos) lesen weiterhin direkt aus job_runs/chat_messages

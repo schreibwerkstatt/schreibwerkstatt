@@ -113,7 +113,7 @@ function _aggregateOcc(rows, opts) {
 // `beat-anchor`-Jobs dieses (Buch, User) aus job_runs — ein Lauf mit 0 Fundstellen
 // zählt damit genauso als „gelaufen" wie einer mit Treffern (aus den Fundstellen
 // allein wäre er unsichtbar). Der START, nicht das Ende: ein während des Laufs
-// geänderter Beat gilt danach weiter als veraltet. job_runs wird nach 30 Tagen
+// geänderter Beat gilt danach weiter als veraltet. job_runs wird nach der Aufbewahrungsfrist
 // geprunt; der Nacht-Cron (anchorAllBooks) verankert jeden Scope mit Beats täglich
 // neu, und MAX(occurrences.created_at) bleibt als zweite Quelle — verschwindet die
 // Spur trotzdem, bietet die Karte schlimmstenfalls einen überflüssigen Neulauf an.

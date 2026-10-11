@@ -2,7 +2,7 @@
 // Aggregierte Token-Verbrauchsstatistik pro Tag.
 // Quelle: das persistente Kosten-Ledger (db/cost-ledger / Tabelle
 // ai_cost_ledger). Es traegt Job- und Chat-Verbrauch bereits getrennt (Spalte
-// `source`) und ueberlebt den 30-Tage-Prune von job_runs — daher schrumpfen
+// `source`) und ueberlebt den Aufbewahrungs-Prune von job_runs — daher schrumpfen
 // aeltere Tage nicht mehr.
 //
 // Granularität: Tag × User × Provider × Modell × Quelle/Typ.

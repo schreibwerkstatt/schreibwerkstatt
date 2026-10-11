@@ -3,8 +3,8 @@
 .book-stats-chart-wrap {
   position: relative;
   width: 100%;
-  /* 220px Plotflaeche + Platz fuer die Legende der Ø-Overlays darunter. */
-  height: 248px;
+  /* 250px Plotflaeche + Platz fuer die Legende der Ø-Overlays darunter. */
+  height: 280px;
   margin: var(--space-md) 0 var(--space-10);
 }
 

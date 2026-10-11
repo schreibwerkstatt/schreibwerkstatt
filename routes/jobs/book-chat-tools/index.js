@@ -18,6 +18,7 @@ const motif = require('./tools-motif');
 const image = require('./tools-image');
 const research = require('./tools-research');
 const chatHistory = require('./tools-chat-history');
+const editStatus = require('./tools-edit-status');
 const { validateFinalAnswerCitations } = require('./citations');
 
 const TOOLS = {
@@ -72,6 +73,8 @@ const TOOLS = {
   generate_image:         image.tool_generate_image,
 
   search_chat_history:    chatHistory.tool_search_chat_history,
+
+  get_edit_status:        editStatus.tool_get_edit_status,
 };
 
 async function executeTool(name, input, ctx) {

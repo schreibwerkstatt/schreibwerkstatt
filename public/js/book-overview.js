@@ -17,6 +17,7 @@
 //   /booksettings/:book_id             → Buchtyp, is_finished, Schreibziel/Deadline
 //   /plot?book_id, /motifs?book_id     → optionale Planungswerkzeuge (Tile aus, wenn leer)
 //   /lexicon/:book_id                  → Wortschatz-Tile (MTLD/MATTR + Peer-Median)
+//   $store.badges.editStatus           → Bearbeitungsstand (lädt der Seitenbaum, kein eigener Fetch)
 //
 // Reaktivität / Memoization:
 // Aggregat-Methoden cachen ihr Ergebnis in `_memos` via `_memo(key, deps, fn)`:
@@ -56,6 +57,7 @@ import { plotMethods } from './book-overview/plot.js';
 import { ideenMethods } from './book-overview/ideen.js';
 import { motivMethods } from './book-overview/motiv.js';
 import { wortschatzMethods } from './book-overview/wortschatz.js';
+import { editStatusMethods } from './book-overview/edit-status.js';
 
 export const bookOverviewMethods = {
   ...loadMethods,
@@ -76,4 +78,5 @@ export const bookOverviewMethods = {
   ...ideenMethods,
   ...motivMethods,
   ...wortschatzMethods,
+  ...editStatusMethods,
 };

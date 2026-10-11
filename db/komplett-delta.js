@@ -4,19 +4,12 @@
 // gelesen hat (jüngste Revision bis zu seinem Start), und Löschungen seither.
 const { db } = require('./connection');
 require('./migrations');
+const { lastDoneJobRun } = require('./job-runs');
 
-const _lastRun = db.prepare(`
-  SELECT r.job_id, r.started_at, r.ended_at, r.tokens_in, r.tokens_out, l.usd
-    FROM job_runs r
-    LEFT JOIN ai_cost_ledger l ON l.source_ref = 'job:' || r.job_id
-   WHERE r.type = 'komplett-analyse' AND r.book_id = ? AND r.user_email IS ? AND r.status = 'done'
-   ORDER BY r.ended_at DESC
-   LIMIT 1
-`);
-
-/** Letzter erfolgreicher Lauf für Buch + User, oder null. */
+/** Letzter erfolgreicher Lauf für Buch + User, oder null (auch jenseits der
+ *  job_runs-Aufbewahrung, siehe db/job-runs.js#lastDoneJobRun). */
 function lastKomplettRun(bookId, userEmail) {
-  return _lastRun.get(bookId, userEmail || null) || null;
+  return lastDoneJobRun('komplett-analyse', bookId, userEmail);
 }
 
 // Pro Seite: jüngste Revision bis `since` (Basis) und die älteste überhaupt

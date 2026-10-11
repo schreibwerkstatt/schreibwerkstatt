@@ -8,7 +8,7 @@
 <div class="card card--kapitel" x-data="kapitelReviewCard" x-show="$app.showKapitelReviewCard" x-cloak>
   <div class="card-header card-header--subline">
     <div class="card-header-titlebar">
-      <span class="card-eyebrow" x-text="kapitelReviewSelectedChapter()?.name || $app.selectedBookName"></span>
+      <span class="card-eyebrow edit-status-meter" :class="$app.editStatusClass($app.chapterEditStatus(kapitelReviewSelectedChapter()))" :data-tip="$app.editStatusTipLine($app.chapterEditStatus(kapitelReviewSelectedChapter())) || null" x-text="kapitelReviewSelectedChapter()?.name || $app.selectedBookName"></span>
       <span class="card-title" x-text="$app.t('kapitelReview.title')"></span>
       <div class="card-subline" x-show="kapitelReviewLastEditAt()">
         <span x-show="kapitelReviewLastEditAt()" x-text="$app.t('kapitelReview.lastEdit', { when: $app.formatDate(kapitelReviewLastEditAt()) })"></span>
@@ -89,6 +89,13 @@
               <span class="btn-count" x-text="$store.badges.chapterPlotBeatCounts[$app.kapitelReviewChapterId]" :data-tip="$app.t('plot.chapterBeatsCountTitle', { n: $store.badges.chapterPlotBeatCounts[$app.kapitelReviewChapterId] })"></span>
             </button>
             <div class="context-menu-sep" role="separator" x-show="$app.kapitelReviewChapterId"></div>
+            <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+                    x-show="$app.kapitelReviewChapterId"
+                    :disabled="$app.batchLoading"
+                    @click="$app.batchCheck($app.kapitelReviewChapterId)">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#spell-check"/></svg>
+              <span x-text="$app.t('pagetreeCtx.lektorierenChapter')"></span>
+            </button>
             <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
                     x-show="$app.kapitelReviewChapterId"
                     @click="$app.openShareLinksForChapter($app.kapitelReviewChapterId)">

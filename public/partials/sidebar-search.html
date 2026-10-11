@@ -1,0 +1,42 @@
+<!-- Kopf des Seitenbaums: Suche, Expand/Collapse, Kalender-Umschalter und der
+     Stand-Filter. Aus sidebar.html ausgelagert (Partial-LOC-Deckel); Scope: Root. -->
+<div class="search-wrap sidebar-search-wrap">
+  <span class="search-affix">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#search"/></svg>
+    <input type="text" x-model.debounce.200ms="pageSearch" @keydown="onPageSearchKeydown($event)" :placeholder="t('sidebar.searchPage')" :aria-label="t('sidebar.searchPage')" :data-tip="withHotkey(t('sidebar.searchPageTitle'), 'treeSearch')" class="page-search">
+    <button type="button" class="search-clear--icon" x-show="pageSearch" @click="pageSearch=''" :aria-label="t('search.clear')" :data-tip="t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+  </span>
+  <div class="btn-group sidebar-action-group">
+    <button type="button" class="icon-btn"
+            x-show="isTagebuch()"
+            :aria-pressed="sidebarMode === 'calendar'"
+            @click="toggleSidebarMode()"
+            :data-tip="sidebarMode === 'calendar' ? t('sidebar.modeToggle.tree') : t('sidebar.modeToggle.calendar')"
+            :aria-label="sidebarMode === 'calendar' ? t('sidebar.modeToggle.tree') : t('sidebar.modeToggle.calendar')">
+      <svg class="icon" aria-hidden="true">
+        <use :href="sidebarMode === 'calendar' ? '/icons.svg#list' : '/icons.svg#calendar'"/>
+      </svg>
+    </button>
+    <button type="button" class="icon-btn"
+            x-show="sidebarMode !== 'calendar'"
+            @click="setAllChaptersOpen(true)"
+            :disabled="!!pageSearch"
+            :data-tip="t('sidebar.expandAll')"
+            :aria-label="t('sidebar.expandAll')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-down"/></svg></button>
+    <button type="button" class="icon-btn"
+            x-show="sidebarMode !== 'calendar'"
+            @click="setAllChaptersOpen(false)"
+            :disabled="!!pageSearch"
+            :data-tip="t('sidebar.collapseAll')"
+            :aria-label="t('sidebar.collapseAll')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-up"/></svg></button>
+    <!-- Stand-Filter (docs/bearbeitungsstand.md): nur Abschnitte, die noch nicht
+         auf der letzten Stufe stehen oder seither bearbeitet wurden. -->
+    <button type="button" class="icon-btn"
+            x-show="sidebarMode !== 'calendar' && $store.badges.editStatusChain.length > 0"
+            :class="{ 'is-active': treeEditFilter }"
+            :aria-pressed="treeEditFilter ? 'true' : 'false'"
+            @click="treeEditFilter = !treeEditFilter"
+            :data-tip="t('editStatus.filterTip')"
+            :aria-label="t('editStatus.filterTip')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#list-filter"/></svg></button>
+  </div>
+</div>

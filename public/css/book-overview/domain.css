@@ -98,6 +98,25 @@
 .overview-stacked-key--schwach::before { background: var(--color-err-text); }
 .overview-stacked-key--ohne::before    { background: var(--color-border); }
 
+/* ── Bearbeitungsstand: Stufen der Buch-Kette nach Rang ────────────────────── */
+/* Rang statt Stufenname, damit Redaktions- und Manuskript-Kette dieselbe Skala
+   tragen: gedämpft → Akzent → grün (fertig). Dieselbe Richtung wie die
+   Organizer-Plaketten (book/buchorganizer.css). */
+.overview-stacked-seg--status0, .overview-stacked-key--status0::before { background: var(--color-subtle); }
+.overview-stacked-seg--status1, .overview-stacked-key--status1::before { background: color-mix(in srgb, var(--color-accent) 50%, var(--color-border)); }
+.overview-stacked-seg--status2, .overview-stacked-key--status2::before { background: var(--color-accent); }
+.overview-stacked-seg--status3, .overview-stacked-key--status3::before { background: var(--color-success); }
+.overview-edit-status-body { display: flex; flex-direction: column; gap: var(--space-xs); }
+.overview-edit-status-headline { font-variant-numeric: tabular-nums; }
+.overview-edit-status-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-10);
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+}
+.overview-edit-status-stale { color: var(--color-warn-text); }
+
 /* ── Plot-Board-Snapshot: Status-Verteilung + Meta + Drift-Warnung ─────────── */
 /* Status-Segmente der geteilten `.overview-stacked-bar`: geplant (Akzent),
    im_buch (grün = eingearbeitet), verworfen (gedämpft). */

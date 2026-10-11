@@ -1,6 +1,6 @@
 # Lektorat
 
-KI-Prüfung einer Seite (Abschnitts-Lektorat, Job `check`) oder aller Seiten eines Buchs (Buch-Lektorat, Job `batch-check`). Ergebnis: eine Liste von Befunden (`fehler`) mit zeichengenauem `original`, Vorschlag `korrektur` und `erklaerung`, dazu `szenen`, `stilanalyse`, `fazit`. Befunde landen in `page_checks` (History) und werden in der Notebook-Leseansicht markiert, ausgewählt und übernommen.
+KI-Prüfung einer Seite (Abschnitts-Lektorat, Job `check`) oder aller Seiten eines Buchs bzw. eines Kapitels (Buch-/Kapitel-Lektorat, Job `batch-check`). Ergebnis: eine Liste von Befunden (`fehler`) mit zeichengenauem `original`, Vorschlag `korrektur` und `erklaerung`, dazu `szenen`, `stilanalyse`, `fazit`. Befunde landen in `page_checks` (History) und werden in der Notebook-Leseansicht markiert, ausgewählt und übernommen. Fertige, seither unveränderte Abschnitte lässt der Serien-Lauf aus ([bearbeitungsstand.md](bearbeitungsstand.md#serien-lektorat)).
 
 ## Pipeline (Server)
 
@@ -35,6 +35,8 @@ Drei Felder ausser den Befunden: `szenen` (benotete Textbausteine), `stilanalyse
 `szenen` ist ein Persistenzformat (`page_checks.szenen_json`, drei Spalten `titel`/`wertung`/`kommentar`), dessen **Inhalt** vom Buchtyp abhängt: `szene` (erzählende Werke), `teilschritt` (Sachbuch, Essay, Blog, Wissenschaft, Journalismus), `eintrag` (Tagebuch). Die Form bleibt, die Frage an `wertung` wechselt — ein Tagebucheintrag wird nicht an Spannung und Figurenentwicklung gemessen, sondern daran, ob seine Stimme trägt. Achse: `lektoratEinheit` in [lektorat-typen.js](../public/js/prompts/lektorat-typen.js), Feldtexte im `SZENEN_FELD`-SSoT in [lektorat.js](../public/js/prompts/lektorat.js). Die Spaltennamen bleiben aus Kompatibilitätsgründen `szene-*`/`wertung`, auch wenn der Buchtyp keine Szene mehr meint; der Panel-Heading ist deshalb bewusst nicht buchtyp-skopiert (eine Migration, nur für ein Überschrift-Wort, wäre unverhältnismässig).
 
 ### Buch-Lektorat
+
+Mit `chapter_id` prüft derselbe Job nur die Abschnitte dieses Kapitels samt aller Unterkapitel, in Lesereihenfolge (`chapterPages` über `bookOutline`); der Nachbarkontext bleibt buchweit. Einstieg: Kontextmenü am Kapitelkopf in der Sidebar und Mehr-Menü der Kapitelansicht (`batchCheck(chapterId)`). Dedup bleibt pro Buch und User — es läuft höchstens ein Serien-Lauf, ein zweiter Start hängt sich an den laufenden.
 
 Seiten laufen in einem Worker-Pool; `ai.lektorat_batch_concurrency` deckelt die gleichzeitigen **Calls**, der Seiten-Pool ist der Quotient durch die Calls pro Seite (Split: `objective_runs + 1`). Das Ergebnis trennt `done` (geprüft), `skippedEmpty` (leere Seiten, zählen für den Fortschritt als erledigt) und `failed` (`[{ id, name }]`, Prüfung gescheitert) — das Frontend nennt gescheiterte Seiten beim Namen. Abbruch (`AbortError`) beendet den ganzen Lauf, jeder andere Seitenfehler nur diese Seite.
 

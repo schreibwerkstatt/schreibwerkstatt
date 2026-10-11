@@ -2,6 +2,7 @@
 // Liest SYSTEM_CHAT/SYSTEM_BOOK_CHAT live-bound aus core.js (von configurePrompts gesetzt).
 
 import { _isLocal, JSON_ONLY } from './state.js';
+import { buildEditStatusBlock } from './edit-status-block.js';
 import { _obj, _str } from './schema-utils.js';
 import { SYSTEM_CHAT, SYSTEM_BOOK_CHAT } from './core.js';
 import { PAGE_CHAT_IDEEN_RULES } from './page-chat.js';
@@ -262,6 +263,7 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
   ];
 
   page.push('=== ABSCHNITTSINHALT ===', pageText, '');
+  if (opts.editStatus) page.push(...buildEditStatusBlock(opts.editStatus));
   if (pageChangeNote) {
     page.push(
       '=== ÄNDERUNGEN DES AUTORS SEIT CHAT-START ([-entfernt-] {+eingefügt+}) ===',
@@ -393,6 +395,7 @@ export function buildBookChatAgentSystemPrompt(bookName, figuren, review, system
     ...ifAny(['get_figure_profile', 'get_figure_relations'], '- Wer ist X, wer kennt wen → get_figure_profile, get_figure_relations'),
     ...ifAny(['get_lektorat_hotspots', 'get_lektorat_findings'], '- Lektorat: Übersicht → get_lektorat_hotspots, konkrete Findings → get_lektorat_findings'),
     ...ifAny(['get_reviews'], '- Kapitel-Qualität, Stärken/Schwächen → get_reviews'),
+    ...ifAny(['get_edit_status'], '- Wie weit ist das Buch/Kapitel, was ist noch Rohfassung, was wurde seit «fertig» wieder angefasst, woran als Nächstes arbeiten → get_edit_status (Selbsteinschätzung des Autors, kein Qualitätsurteil)'),
     ...ifAny(['get_plot_board'], '- Geplante Handlung / Beat-Board / was noch nicht geschrieben ist → get_plot_board'),
     ...ifAny(['get_motifs', 'get_motif_occurrences'], '- Geplante Themen & Motive, Soll/Ist-Abgleich (welche Motive fehlen im Text) → get_motifs, get_motif_occurrences'),
     ...ifAny(['list_research_items', 'read_research_item'], '- Recherche-Material des Autors (gesammelte Fakten, Zitate, Quellen; was zu einem Kapitel gehört, was noch nicht eingearbeitet ist; stimmt der Text mit dem Gesammelten überein?) → list_research_items, read_research_item'),

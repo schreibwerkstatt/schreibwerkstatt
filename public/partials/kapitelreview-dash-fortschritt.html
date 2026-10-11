@@ -1,0 +1,63 @@
+<!--
+  Kapitel-Fortschritt — Bearbeitungsstand der Abschnitte (docs/bearbeitungsstand.md)
+  und die unfertigen Abschnitte, die liegen bleiben. Kein KI-Call, keine eigene
+  Quelle: Stufen aus $store.badges, Segment-Klassen wie in der Buchuebersicht.
+  Compute: public/js/cards/kapitel-fortschritt.js, Methode `kdFortschritt()`.
+  Erst ab zwei Abschnitten: bei einem sagt eine Verteilung nichts.
+  Als Fragment eingebunden (`@include`), weil das Dashboard-Raster in einem
+  <template> liegt.
+-->
+<template x-if="kdFortschritt().total > 1 && $store.badges.editStatusChain.length > 0">
+  <div class="overview-tile overview-tile--medium kapitel-dash-progress"
+       :aria-label="$app.t('kapitelReview.dash.progress')">
+    <div class="overview-tile-head">
+      <span class="overview-tile-label"
+            :data-tip="$app.t('kapitelReview.dash.progressTip')"
+            x-text="$app.t('kapitelReview.dash.progress')"></span>
+      <span class="overview-tile-median" x-show="kdFortschritt().set > 0"
+            x-text="$app.t('overview.editStatusDone', { n: _fmtNum(kdFortschritt().doneN), total: _fmtNum(kdFortschritt().total), status: kdFortschritt().doneLabel })"></span>
+    </div>
+
+    <template x-if="kdFortschritt().set === 0">
+      <div class="muted-msg muted-msg--sm" x-text="$app.t('overview.editStatusEmpty')"></div>
+    </template>
+    <template x-if="kdFortschritt().set > 0">
+      <div class="kapitel-dash-progress-dist">
+        <div class="overview-stacked-bar">
+          <template x-for="s in kdFortschritt().segments" :key="s.key">
+            <div class="overview-stacked-seg" :class="'overview-stacked-seg--' + s.cls"
+                 :style="{ flex: s.n }" :data-tip="s.label + ': ' + s.n"></div>
+          </template>
+        </div>
+        <div class="overview-stacked-legend">
+          <template x-for="s in kdFortschritt().segments" :key="s.key">
+            <span class="overview-stacked-key" :class="'overview-stacked-key--' + s.cls"
+                  x-text="s.label + ' ' + _fmtNum(s.n)"></span>
+          </template>
+          <span class="kapitel-dash-progress-stale" x-show="kdFortschritt().stale > 0"
+                :data-tip="$app.t('overview.editStatusStaleTip')"
+                x-text="$app.t('overview.editStatusStale', { n: kdFortschritt().stale })"></span>
+        </div>
+      </div>
+    </template>
+
+    <!-- Unfertige Abschnitte, die seit BRACH_DAYS nicht gespeichert wurden,
+         der aelteste zuerst. -->
+    <template x-if="kdFortschritt().brachTotal > 0">
+      <div class="kapitel-dash-progress-idle">
+        <div class="kapitel-dash-foot-label"
+             x-text="$app.t('kapitelReview.dash.progressIdle', { n: kdFortschritt().brachTotal, days: kdFortschritt().brachDays, status: kdFortschritt().doneLabel })"></div>
+        <ul class="kapitel-dash-progress-idle-list">
+          <template x-for="b in kdFortschritt().brach" :key="b.page.id">
+            <li class="kapitel-dash-progress-idle-row">
+              <button type="button" class="entity-ref"
+                      x-entity-ref="{ type: 'seite', id: b.page.id, label: b.name }"></button>
+              <span class="kapitel-dash-progress-idle-days"
+                    x-text="b.label + ' · ' + $app.t('kapitelReview.dash.progressIdleDays', { n: b.days })"></span>
+            </li>
+          </template>
+        </ul>
+      </div>
+    </template>
+  </div>
+</template>

@@ -107,9 +107,10 @@
                 <span class="history-chevron" :class="{ open: !lane.collapsed }" aria-hidden="true"></span>
               </button>
               <button type="button" class="ideen-board-lane-title internal-link"
+                      :class="laneEditStatusClass(lane.lane)"
                       @click="openLane(lane.lane)"
                       :disabled="lane.lane.kind === 'unknown' || lane.lane.kind === 'book'"
-                      :data-tip="$app.t('ideenBoard.openLane')"
+                      :data-tip="[$app.t('ideenBoard.openLane'), laneEditStatusTip(lane.lane)].filter(Boolean).join(' · ')"
                       x-text="laneLabel(lane.lane)"></button>
             </div>
             <div class="ideen-board-lane-meta">
@@ -122,6 +123,9 @@
                 <span x-text="$app.t('ideenBoard.lanePages', { n: lane.childLanes })"></span>
               </button>
               <span class="ideen-board-lane-count" x-text="lane.count"></span>
+              <span class="badge badge-warn ideen-board-final-conflict" x-show="laneFinalConflict(lane) > 0"
+                    :data-tip="$app.t('editStatus.finalOpenTip', { n: laneFinalConflict(lane) })"
+                    x-text="$app.t('editStatus.finalOpen')"></span>
             </div>
           </div>
 

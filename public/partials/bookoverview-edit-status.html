@@ -1,0 +1,47 @@
+<!-- Bearbeitungsstand (docs/bearbeitungsstand.md): Verteilung der Abschnitte über
+     die Stufen der Buch-Kette, fertige Kapitel, seither bearbeitete. Compute:
+     book-overview/edit-status.js#overviewEditStatus. Ohne gesetzte Stufe zeigt
+     die Kachel, wie man eine setzt — sonst wüsste niemand, dass es den Stand gibt.
+     Klick öffnet den Buchorganizer (Stufen-Spalte je Abschnitt). -->
+<template x-if="overviewEditStatus().total > 0 && $store.badges.editStatusChain.length > 0">
+  <div class="overview-tile internal-link overview-edit-status"
+       @click="$app.toggleBookOrganizerCard()"
+       :data-tip="$app.t('overview.openOrganizer')"
+       :aria-label="$app.t('overview.editStatus') + ': ' + $app.t('overview.editStatusDone', { n: overviewEditStatus().doneN, total: overviewEditStatus().total, status: overviewEditStatus().doneLabel })">
+    <div class="overview-tile-head">
+      <div class="overview-tile-label" x-text="$app.t('overview.editStatus')"></div>
+    </div>
+    <template x-if="overviewEditStatus().set === 0">
+      <div class="muted-msg muted-msg--sm" x-text="$app.t('overview.editStatusEmpty')"></div>
+    </template>
+    <template x-if="overviewEditStatus().set > 0">
+      <div class="overview-edit-status-body">
+        <div class="overview-edit-status-headline"
+             x-text="$app.t('overview.editStatusDone', { n: _fmtNum(overviewEditStatus().doneN), total: _fmtNum(overviewEditStatus().total), status: overviewEditStatus().doneLabel })"></div>
+        <div class="overview-stacked-bar">
+          <template x-for="s in overviewEditStatus().segments" :key="s.key">
+            <div class="overview-stacked-seg" :class="'overview-stacked-seg--' + s.cls"
+                 :style="{ flex: s.n }" :data-tip="s.label + ': ' + s.n"></div>
+          </template>
+        </div>
+        <div class="overview-stacked-legend">
+          <template x-for="s in overviewEditStatus().segments" :key="s.key">
+            <span class="overview-stacked-key" :class="'overview-stacked-key--' + s.cls"
+                  x-text="s.label + ' ' + _fmtNum(s.n)"></span>
+          </template>
+        </div>
+        <div class="overview-edit-status-meta">
+          <span x-show="overviewEditStatus().chapters > 0"
+                x-text="$app.t('overview.editStatusChapters', { status: overviewEditStatus().doneLabel, n: overviewEditStatus().chaptersDone, total: overviewEditStatus().chapters })"></span>
+          <span class="overview-edit-status-stale internal-link" x-show="overviewEditStatus().finalOpen > 0"
+                @click.stop="$app.toggleIdeenBoardCard()"
+                :data-tip="$app.t('overview.editStatusFinalOpenTip')"
+                x-text="$app.t('overview.editStatusFinalOpen', { n: overviewEditStatus().finalOpen, status: overviewEditStatus().doneLabel })"></span>
+          <span class="overview-edit-status-stale" x-show="overviewEditStatus().stale > 0"
+                :data-tip="$app.t('overview.editStatusStaleTip')"
+                x-text="$app.t('overview.editStatusStale', { n: overviewEditStatus().stale })"></span>
+        </div>
+      </div>
+    </template>
+  </div>
+</template>

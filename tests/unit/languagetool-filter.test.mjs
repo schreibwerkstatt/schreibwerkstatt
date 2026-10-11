@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { filterMatches, buildNameSet } = require('../../lib/languagetool-filter.js');
+const { buildDictionary } = require('../../lib/dictionary-forms.js');
 
 function mk(word, { rule = 'GERMAN_SPELLER_RULE', cat = 'TYPOS' } = {}) {
   return {
@@ -25,7 +26,7 @@ test('ohne Filterquellen: unveraendert', () => {
 
 test('Woerterbuch: case-insensitive, auch fuer Nicht-Rechtschreib-Treffer', () => {
   const ms = [mk('Hugo'), mk('Otto'), mk('hugo', { rule: 'DE_CASE', cat: 'CASING' })];
-  assert.deepEqual(words(filterMatches(ms, { words: new Set(['hugo']) })), ['Otto']);
+  assert.deepEqual(words(filterMatches(ms, { dict: buildDictionary(['hugo']) })), ['Otto']);
 });
 
 test('Buchnamen: Einzelwoerter, Kurzname, Genitiv — nur gegen Rechtschreib-Treffer', () => {
@@ -42,5 +43,11 @@ test('abgeschaltete Regeln', () => {
 
 test('Treffer ohne context bleibt stehen', () => {
   const ms = [{ rule: { id: 'X' } }];
-  assert.deepEqual(filterMatches(ms, { words: new Set(['foo']) }), ms);
+  assert.deepEqual(filterMatches(ms, { dict: buildDictionary(['foo']) }), ms);
+});
+
+test('Woerterbuch-Genitiv: nur fuer grossgeschriebene Eintraege (Nomen)', () => {
+  const dict = buildDictionary(['Riggenbach', 'Säliwald', 'Niklaus', 'schnachte']);
+  const ms = [mk('Riggenbachs'), mk('Säliwaldes'), mk('Niklaus\''), mk('schnachtes'), mk('Riggenbachn')];
+  assert.deepEqual(words(filterMatches(ms, { dict })), ['schnachtes', 'Riggenbachn']);
 });

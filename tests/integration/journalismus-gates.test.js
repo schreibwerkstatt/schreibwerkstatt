@@ -7,13 +7,16 @@
 // geprueft ist: dass jede der drei Routen den Guard ueberhaupt ruft, und mit
 // welchen Argumenten.
 //
+// `/redaktion` gehoert nicht mehr dazu: der Bearbeitungsstand gilt fuer jeden
+// Buchtyp, nur die Stufen-Kette haengt am Typ (tests/integration/bearbeitungsstand.test.js).
+//
 // Zwei Antwortformen, und die Unterscheidung ist Absicht:
 //   LESEND auf Buch-Ebene → 200 mit `enabled: false` und leerer Nutzlast. Die
 //     Karten fragen unabhaengig vom Buchtyp und sollen nicht in einen
 //     Fehlerpfad laufen, nur weil gerade ein Roman offen ist.
-//   SCHREIBEND auf Seiten-Ebene → 400 NOT_JOURNALISTIC_BOOK. Ein Titel oder ein
-//     Redaktions-Status an einem Roman ist keine leere Antwort wert, sondern
-//     ein Fehler.
+//   SCHREIBEND auf Seiten-Ebene → 400 NOT_JOURNALISTIC_BOOK. Ein Titel oder
+//     eine Textsorte an einem Roman ist keine leere Antwort wert, sondern ein
+//     Fehler.
 //
 // `blog` muss ueberall durchkommen: der Apparat gilt fuer beide publizistischen
 // Typen (lib/buchtyp.js#JOURNALISTIC), nur der Blog-SYNC haengt allein an `blog`.
@@ -37,7 +40,6 @@ function startServer() {
     const app = express();
     app.use((req, _res, next) => { req.session = { user: { email: sessionUser } }; next(); });
     app.use('/headline', require('../../routes/headline'));
-    app.use('/redaktion', require('../../routes/redaktion'));
     app.use('/textsorte', require('../../routes/textsorte'));
     server = app.listen(0, () => {
       baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -108,9 +110,9 @@ function seed(bookId, buchtyp, user = 'autor@test.dev') {
 
 // ── Lesend auf Buch-Ebene: enabled-Flag statt Fehler ─────────────────────────
 
-test('Roman: die drei Lese-Routen antworten 200 mit enabled:false', async () => {
+test('Roman: die Lese-Routen antworten 200 mit enabled:false', async () => {
   const { bookId } = seed(8801, 'roman');
-  for (const pfad of ['/headline', '/redaktion', '/textsorte']) {
+  for (const pfad of ['/headline', '/textsorte']) {
     const r = await api('GET', `${pfad}/${bookId}`);
     assert.equal(r.status, 200, `${pfad}: kein Fehlerpfad fuer die Karte`);
     assert.equal(r.json.enabled, false, `${pfad}: enabled muss false sein`);
@@ -139,7 +141,7 @@ test('journalismus und blog: enabled:true, Nutzlast kommt', async () => {
     assert.equal(r.json.enabled, true, `${typ}: enabled`);
     assert.equal(r.json.pages[String(pageId)]?.titel, 'Schlagzeile', `${typ}: Nutzlast`);
 
-    for (const pfad of ['/redaktion', '/textsorte']) {
+    for (const pfad of ['/textsorte']) {
       const x = await api('GET', `${pfad}/${bookId}`);
       assert.equal(x.json.enabled, true, `${typ} ${pfad}: enabled`);
     }
@@ -151,7 +153,6 @@ test('journalismus und blog: enabled:true, Nutzlast kommt', async () => {
 const schreibwege = (pageId) => [
   ['PUT', `/headline/page/${pageId}`, { titel: 'X' }],
   ['POST', `/headline/page/${pageId}/variants`, { feld: 'titel', text: 'X' }],
-  ['PUT', `/redaktion/page/${pageId}`, { status: 'roh' }],
   ['PUT', `/textsorte/page/${pageId}`, { textsorte: 'bericht' }],
 ];
 

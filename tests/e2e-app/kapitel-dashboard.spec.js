@@ -203,3 +203,60 @@ test('Kapitel wechseln rechnet das Dashboard neu', async ({ page }) => {
 
   guard.assertClean('Kapitel-Dashboard: Kapitelwechsel');
 });
+
+// Kachel „Fortschritt": Bearbeitungsstand der Abschnitte aus $store.badges.
+// Die Eingaben werden gesetzt, nicht aus dem Seed gelesen — sonst haengt die
+// Erwartung am Zufallsstand des geteilten Wegwerf-Buchs.
+test('Fortschritt zeigt den Bearbeitungsstand und was liegen bleibt', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  await page.route('**/history/fehler-heatmap/**', json({ chapters: [], matrix: {}, details: {} }));
+  await page.route(`**/history/lektorat-time/${bookId}`, json({ per_chapter: [] }));
+
+  const ch = await page.evaluate(() => {
+    const c = window.Alpine.store('nav').tree
+      .find(i => i.type === 'chapter' && !i.solo && (i.pages || []).length >= 2);
+    return c ? { id: c.id, pageIds: c.pages.map(p => p.id) } : null;
+  });
+  expect(ch, 'Seed-Buch braucht ein Kapitel mit >= 2 Abschnitten').not.toBeNull();
+  const [p1, p2] = ch.pageIds;
+
+  // p1: final, seit 60 Tagen unberuehrt — darf NICHT als liegen geblieben gelten.
+  // p2: redigiert, seither geaendert, seit 60 Tagen unberuehrt.
+  // Uebrige Abschnitte: ohne Stufe, frisch.
+  await page.evaluate(({ id, p1, p2 }) => {
+    const day = 86400000;
+    const pages = window.Alpine.store('nav').tree.find(i => String(i.id) === String(id)).pages;
+    for (const p of pages) p.updated_at = new Date(Date.now() - day).toISOString();
+    for (const pid of [p1, p2]) pages.find(p => p.id === pid).updated_at = new Date(Date.now() - 60 * day).toISOString();
+    const badges = window.Alpine.store('badges');
+    badges.editStatusChain = ['rohfassung', 'ueberarbeitet', 'redigiert', 'final'];
+    badges.editStatus = {
+      [String(p1)]: { status: 'final' },
+      [String(p2)]: { status: 'redigiert', stale: true },
+    };
+    window.__app.kapitelReviewChapterId = String(id);
+    return window.__app.toggleKapitelReviewCard();
+  }, { id: ch.id, p1, p2 });
+
+  const tile = page.locator('.card--kapitel .kapitel-dash-progress');
+  await expect(tile).toBeVisible({ timeout: 20000 });
+  const n = ch.pageIds.length;
+  await expect(tile.locator('.overview-tile-median')).toHaveText(new RegExp(`1\\D+${n}`));
+  await expect(tile.locator('.overview-stacked-seg--status3')).toBeVisible();
+  await expect(tile.locator('.overview-stacked-seg--status2')).toBeVisible();
+  await expect(tile.locator('.overview-stacked-seg--status0')).toHaveCount(0);
+  await expect(tile.locator('.overview-stacked-seg--ohne')).toHaveCount(n > 2 ? 1 : 0);
+  // Ein echtes Segment hat Breite — ein Flex-Wert, der nicht greift, liesse es auf 0.
+  const w = await tile.locator('.overview-stacked-seg--status3').evaluate(el => el.getBoundingClientRect().width);
+  expect(w).toBeGreaterThan(0);
+  await expect(tile.locator('.kapitel-dash-progress-stale')).toBeVisible();
+
+  const idle = tile.locator('.kapitel-dash-progress-idle-row');
+  await expect(idle).toHaveCount(1);
+  await expect(idle.locator('.entity-ref--seite')).toBeVisible();
+  await expect(idle.locator('.kapitel-dash-progress-idle-days')).toContainText('60');
+
+  guard.assertClean('Kapitel-Dashboard: Fortschritt');
+});

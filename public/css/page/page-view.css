@@ -433,4 +433,22 @@
   .page-aha__text { flex-basis: 100%; }
 }
 
+
+/* Bearbeitungsstand im Kopf des Notebook-Editors (editor-page-status.html):
+   Plakette als Knopf, Farben aus book/buchorganizer.css (badge--redaktion-*).
+   Ohne Stufe gedämpft, damit die leere Plakette nicht wie ein Status liest. */
+.editor-edit-status { display: inline-flex; }
+.editor-edit-status__trigger {
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+.editor-edit-status__trigger:disabled { cursor: default; }
+.badge--edit-none {
+  background: transparent;
+  color: var(--color-muted);
+  outline: 1px dashed var(--color-border);
+  outline-offset: -1px;
+}
+.editor-edit-status__menu { right: auto; left: 0; }
 }

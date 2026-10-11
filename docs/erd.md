@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 324, 181 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 325, 182 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -159,6 +159,7 @@ erDiagram
   pages ||--|| page_textsorte        : has
   pages ||--|| page_structure_checks : has
   pages ||--|| page_editorial_status : has
+  pages ||--o{ page_editorial_status_events : has
   pages ||--|| page_headline        : has
   pages ||--o{ page_headline_variants : has
   pages ||--|| page_stats            : has
@@ -461,11 +462,17 @@ erDiagram
   page_editorial_status {
     INTEGER page_id            PK,FK "ON DELETE CASCADE"
     INTEGER book_id            FK "ON DELETE CASCADE"
-    TEXT    status             "roh|gegengelesen|schlussredigiert|freigegeben (CHECK)"
-    TEXT    note               "Freitext der Redaktion, max. 500 Zeichen"
+    TEXT    status             "Redaktions- ODER Manuskript-Kette, je Buchtyp (CHECK: Vereinigung)"
+    TEXT    note               "Freitext, max. 500 Zeichen"
     TEXT    content_updated_at "pages.updated_at beim Setzen — Anker der Stale-Erkennung"
     TEXT    updated_by         FK "app_users(email), ON DELETE SET NULL"
     TEXT    updated_at
+  }
+  page_editorial_status_events {
+    INTEGER id      PK
+    INTEGER page_id FK "ON DELETE CASCADE"
+    TEXT    status  "neue Stufe, NULL = entfernt (CHECK wie page_editorial_status)"
+    TEXT    at      "Zeitpunkt des Wechsels — Quelle der Zeitreihe in der Buchstatistik"
   }
   ideen {
     INTEGER id          PK

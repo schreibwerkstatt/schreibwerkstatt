@@ -14,7 +14,8 @@
 import { escHtml, fetchJson, formatNumber, heatmapCellVars, HEATMAP_MIN_WORDS, localeTag, minMaxBy, tzOpts } from '../utils.js';
 import { loadChart } from '../lazy-libs.js';
 import { isSelectedBook } from '../cards/book-guard.js';
-import { createChartHolder, cssVar } from '../cards/chart-holder.js';
+import { createChartHolder } from '../cards/chart-holder.js';
+import { chartPalette, crosshairPlugin, lineDataset, timeSeriesOptions, withAlpha } from '../cards/chart-style.js';
 import { memoMethods } from '../cards/card-memo.js';
 
 
@@ -284,70 +285,50 @@ export const fehlerHeatmapMethods = {
     const data = points.map(v => this._fehlerTrendPer1k(v));
     const approx = points.map(v => fehlerTrendDenominator(v).approx);
 
-    const accent = cssVar('--color-primary');
-    const muted = cssVar('--color-muted');
-    const gridLine = cssVar('--color-border');
+    const pal = chartPalette();
+    const color = pal.primary;
 
     _ensureTrendThemeObserver(this);
 
+    const options = timeSeriesOptions(pal);
+    options.plugins.tooltip.callbacks = {
+      title: (items) => {
+        const v = points[items[0]?.dataIndex];
+        if (!v) return '';
+        const when = v.created_at ? new Date(v.created_at).toLocaleDateString(tag, tzOpts({ day: 'numeric', month: 'short', year: 'numeric' })) : '';
+        return when ? `${items[0].label} · ${when}` : items[0].label;
+      },
+      label: (ctx) => {
+        const y = ctx.parsed.y;
+        if (y == null) return '';
+        return ` ${formatNumber(y, Alpine.store('shell').uiLocale, 1)} ${window.__app.t('fehlerHeatmap.trend.per1kUnit')}`;
+      },
+      afterLabel: (ctx) => (approx[ctx.dataIndex] ? ` ${window.__app.t('fehlerHeatmap.trend.approxPoint')}` : ''),
+    };
+    options.scales.y.beginAtZero = true;
+    options.scales.y.ticks.callback = (v) => formatNumber(v, Alpine.store('shell').uiLocale, 1);
+
+    // Fassungen sind wenige, jede zählt → Punkte immer sichtbar.
     _trend.set(new window.Chart(canvas, {
       type: 'line',
       data: {
         labels,
-        datasets: [{
+        datasets: [lineDataset(pal, color, {
           label: window.__app.t('fehlerHeatmap.trend.yLabel'),
           data,
-          borderColor: accent,
-          backgroundColor: accent + '12',
-          borderWidth: 2,
-          tension: 0.35,
-          pointRadius: 4,
-          pointHoverRadius: 6,
+          area: true,
+          sparse: true,
           // Näherungs-Punkte (Nenner = Buchumfang) hohl, ihre Strecken gestrichelt.
-          pointBackgroundColor: approx.map(a => (a ? 'transparent' : accent)),
-          pointBorderColor: accent,
+          pointBackgroundColor: approx.map(a => (a ? pal.surface : color)),
+          pointBorderColor: approx.map(a => (a ? color : pal.surface)),
           segment: {
             borderDash: (ctx) => (approx[ctx.p0DataIndex] || approx[ctx.p1DataIndex] ? [4, 4] : undefined),
           },
-          fill: true,
           spanGaps: true,
-        }],
+        })],
       },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              title: (items) => {
-                const v = points[items[0]?.dataIndex];
-                if (!v) return '';
-                const when = v.created_at ? new Date(v.created_at).toLocaleDateString(tag, tzOpts({ day: '2-digit', month: '2-digit', year: '2-digit' })) : '';
-                return when ? `${items[0].label} · ${when}` : items[0].label;
-              },
-              label: (ctx) => {
-                const y = ctx.parsed.y;
-                if (y == null) return '';
-                return ` ${formatNumber(y, Alpine.store('shell').uiLocale, 1)} ${window.__app.t('fehlerHeatmap.trend.per1kUnit')}`;
-              },
-              afterLabel: (ctx) => (approx[ctx.dataIndex] ? ` ${window.__app.t('fehlerHeatmap.trend.approxPoint')}` : ''),
-            },
-          },
-        },
-        scales: {
-          x: { grid: { color: gridLine }, ticks: { font: { size: 11 }, color: muted } },
-          y: {
-            grid: { color: gridLine },
-            beginAtZero: true,
-            ticks: {
-              font: { size: 11 },
-              color: muted,
-              callback: (v) => formatNumber(v, Alpine.store('shell').uiLocale, 1),
-            },
-          },
-        },
-      },
+      options,
+      plugins: [crosshairPlugin(withAlpha(pal.muted, 0.5))],
     }));
   },
 

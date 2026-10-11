@@ -15,6 +15,7 @@ const { db } = require('../../db/schema');
 const { listBoardIdeen, listIdeaLinkTargets } = require('../../db/ideen');
 const { getBookIdeenStages } = require('../../db/book-settings');
 const { IDEA_LINK_KINDS, isOpenIdeeStatus } = require('../../lib/ideen-status');
+const { listBookStatus } = require('../../db/redaktion');
 
 const OPEN_PREVIEW = 400;
 const CLOSED_PREVIEW = 140;
@@ -41,7 +42,17 @@ function loadIdeenState(bookId, userEmail, tree = {}) {
     chapterNames: new Map(chaptersFlat.map(c => [c.id, c.path || c.name])),
     chapterDepth: depthById,
     pageById: new Map(pages.map(p => [p.id, p])),
+    // Bearbeitungsstand je Abschnitt (docs/bearbeitungsstand.md) — steht an den
+    // Abschnitten der Outlines, damit «final + offene Pendenz» auffaellt.
+    editStatus: listBookStatus(bookId),
   };
+}
+
+// « — Stand: final (seither geändert)» oder leer.
+function _standSuffix(state, pageId) {
+  const e = state.editStatus?.[String(pageId)];
+  if (!e?.status) return '';
+  return ` — Stand: ${e.status}${e.stale ? ' (seither geändert)' : ''}`;
 }
 
 function _oneLine(s, max) {
@@ -86,7 +97,7 @@ function ideenOutline(state) {
   const pageBlock = (p, indent) => {
     const list = state.ideen.filter(i => i.page_id === p.id);
     if (!list.length) return;
-    out.push(`${indent}ABSCHNITT [page#${p.id}] «${p.name}»`);
+    out.push(`${indent}ABSCHNITT [page#${p.id}] «${p.name}»${_standSuffix(state, p.id)}`);
     list.forEach(i => out.push(indent + _ideeLine(i)));
     take(list);
   };
@@ -122,9 +133,9 @@ function gliederungOutline(state) {
   for (const c of state.chaptersFlat) {
     const indent = '  '.repeat(state.chapterDepth.get(c.id) || 0);
     out.push(`${indent}- Kapitel [chapter#${c.id}] «${c.name}»`);
-    for (const p of pagesByChapter.get(c.id) || []) out.push(`${indent}  · Abschnitt [page#${p.id}] «${p.name}»`);
+    for (const p of pagesByChapter.get(c.id) || []) out.push(`${indent}  · Abschnitt [page#${p.id}] «${p.name}»${_standSuffix(state, p.id)}`);
   }
-  for (const p of pagesByChapter.get(null) || []) out.push(`- Abschnitt [page#${p.id}] «${p.name}» (ohne Kapitel)`);
+  for (const p of pagesByChapter.get(null) || []) out.push(`- Abschnitt [page#${p.id}] «${p.name}» (ohne Kapitel)${_standSuffix(state, p.id)}`);
   return out.join('\n');
 }
 

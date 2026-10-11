@@ -3,7 +3,7 @@
 //
 // Eine Zeile pro abgerechnetem KI-Call mit zur Schreib-Zeit EINGEFRORENER
 // USD-Kosten (costUsd zum Zeitpunkt des Calls). Zweck: die Kostenhistorie von
-// der Job-Wegwerf-Historie entkoppeln — job_runs wird nach 30 Tagen geprunt
+// der Job-Wegwerf-Historie entkoppeln — job_runs wird nach der Aufbewahrungsfrist geprunt
 // (lib/cache-cleanup.js), wodurch jede zur Lese-Zeit re-computete Aggregation
 // ueber aeltere Zeitraeume schrumpfte. Das Ledger wird vom Cleanup NIE
 // angefasst; alle Kosten-/Token-Aggregate (Admin-Usage, Budget-Gate,

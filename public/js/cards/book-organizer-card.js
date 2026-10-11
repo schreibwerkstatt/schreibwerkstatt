@@ -38,12 +38,10 @@ const freshState = () => ({
   activeRowCombo: null, // '<pageId>:<kind>' der gerade montierten Zeilen-Combobox
   organizerStatus: '',
   organizerSaving: false,
-  // Redaktions-Status (Slice book-organizer/redaktion.js). `redaktionEnabled`
-  // haengt am Buchtyp und kommt vom Server — solange es false ist, rendert die
-  // Zeile keine Stufen-Spalte.
+  // Bearbeitungsstand (Slice book-organizer/redaktion.js). Die Stufen selbst
+  // liegen in $store.badges.editStatus; `redaktionEnabled` wird true, sobald die
+  // Kette des Buchs geladen ist — bis dahin rendert die Zeile keine Spalte.
   redaktionEnabled: false,
-  redaktionByPage: {},   // { [page_id]: { status, stale, updated_by, … } }
-  redaktionCounts: null, // { roh, gegengelesen, …, ohne } oder null
   redaktionSaving: {},   // { [page_id]: true } waehrend des PUT
   _undoStack: [],
   _redoStack: [],

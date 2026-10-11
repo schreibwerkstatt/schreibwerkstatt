@@ -6,8 +6,9 @@ import { attachDismiss, detachDismiss } from '../cards/dismiss.js';
 //   page    → Öffnen, Editieren (Notebook), Teilen, Exportieren, Neues Kapitel,
 //             Löschen (danger)
 //   chapter → Öffnen (Header-Activate = Toggle + ggf. Kapitel-Review), Kapitel
-//             bewerten, Teilen, Exportieren, Neues Kapitel, Neue Seite,
+//             lektorieren, Kapitel bewerten, Teilen, Exportieren, Neues Kapitel, Neue Seite,
 //             Aus-/Einschliessen
+//   beide   → Bearbeitungsstand (Abschnitt: eigene Stufe; Kapitel: alle darunter)
 //   page mit `single` (Ein-Abschnitt-Kapitel, eine Sidebar-Zeile) → die
 //             Seiten-Eintraege PLUS die Kapitel-Eintraege; Umbenennen, Teilen
 //             und Exportieren wirken auf das Kapitel (`chapterId`), Umbenennen
@@ -227,6 +228,36 @@ export const treeContextMenuMethods = {
     await this.selectPage(page);
     if (this.currentPage?.id !== page.id) return; // siehe pagetreeCtxEdit
     this.runCheck?.();
+  },
+
+  // Alle Abschnitte des Kapitels (inkl. Unterkapitel) als Serien-Lektorat.
+  pagetreeCtxLektorierenChapter() {
+    const target = this.pageTreeMenuTarget;
+    this._hidePagetreeContextMenu();
+    if (!target || target.kind !== 'chapter') return;
+    this.batchCheck?.(target.id);
+  },
+
+  // Markierte Stufe im Bearbeitungsstand-Block: am Abschnitt seine eigene, am
+  // Kapitelkopf die schwaechste darunter (tree/edit-status.js).
+  _pagetreeCtxStatus(target = this.pageTreeMenuTarget) {
+    if (!target) return null;
+    if (target.kind === 'page') return this.pageEditStatus(target.id)?.status || null;
+    return this.chapterEditStatus(this._findTreeChapter(target.id))?.status || null;
+  },
+
+  // Abschnitt: Klick auf die aktive Stufe nimmt sie zurueck. Kapitel: setzt
+  // alle Abschnitte darunter (Rueckfrage bei abweichenden Einzelstaenden).
+  async pagetreeCtxSetStatus(status) {
+    const target = this.pageTreeMenuTarget;
+    const current = this._pagetreeCtxStatus(target);
+    this._hidePagetreeContextMenu();
+    if (!target) return;
+    if (target.kind === 'page') {
+      await this.setPageEditStatus(target.id, current === status ? null : status);
+    } else {
+      await this.setChapterEditStatus(target.id, status);
+    }
   },
 
   // Seite oder Kapitel umbenennen (Titel per appPrompt, vorbelegt).

@@ -29,6 +29,7 @@ import { fetchJson, charsToNormseiten, fmtExactDuration } from '../utils.js';
 import { komplettHiddenFor } from './feature-registry.js';
 import { computeGrowth } from './kapitel-growth.js';
 import { computeKapitelStil } from './kapitel-stil.js';
+import { computeFortschritt } from './kapitel-fortschritt.js';
 
 // Lesegeschwindigkeit fuer die Lesezeit-Angabe des Umfang-Tiles. Bewusst eine
 // runde, konservative Zahl fuer stilles Lesen belletristischer Prosa — die
@@ -300,6 +301,27 @@ export const kapitelDashboardMethods = {
     const bookChars = window.__app.tokTotals?.chars || 0;
     return this._memo('kdUmfang', [pages, tokEsts, bookChars],
       () => computeUmfang(pages, tokEsts, bookChars));
+  },
+
+  // Bearbeitungsstand der Abschnitte + liegen gebliebene (kapitel-fortschritt.js).
+  // Die Kachel erscheint erst ab zwei Abschnitten: bei einem einzigen sagt eine
+  // Verteilung nichts, das Wachstum zeigt schon die Entwicklungs-Kachel.
+  // Labels hier statt im Template: sie haengen an der UI-Sprache (Dep).
+  kdFortschritt() {
+    const pages = this.kdScopePages();
+    const badges = Alpine.store('badges');
+    const map = badges.editStatus;
+    const chain = badges.editStatusChain;
+    return this._memo('kdFortschritt', [pages, map, chain, this._uiLocale()], () => {
+      const f = computeFortschritt(pages, map, chain);
+      const label = (s) => window.__app.t(s ? 'redaktion.status.' + s : 'redaktion.status.none');
+      return {
+        ...f,
+        doneLabel: f.done ? label(f.done) : '',
+        segments: f.segments.map(s => ({ ...s, label: label(s.key === 'ohne' ? null : s.key) })),
+        brach: f.brach.map(b => ({ ...b, label: label(b.status) })),
+      };
+    });
   },
 
   // „Kapitel 4 von 17" — Position in der Lese-Reihenfolge. Gezaehlt werden

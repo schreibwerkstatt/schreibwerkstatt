@@ -84,7 +84,7 @@ Lies das Doc, **bevor** du im jeweiligen Bereich etwas änderst — nicht danach
 
 **Editoren:** [notebook-editor.md](docs/notebook-editor.md) · [focus-editor.md](docs/focus-editor.md) + [Klickliste](docs/focus-editor-acceptance.md) · [book-editor.md](docs/book-editor.md)
 
-**Manuskript-Bausteine:** [quellen.md](docs/quellen.md) Belegen + Verzeichnis · [xrefs.md](docs/xrefs.md) Querverweise · [diagramme.md](docs/diagramme.md) Mermaid · [tabellen.md](docs/tabellen.md) · [chapter-hierarchy.md](docs/chapter-hierarchy.md) · [fassungen.md](docs/fassungen.md) Snapshots
+**Manuskript-Bausteine:** [quellen.md](docs/quellen.md) Belegen + Verzeichnis · [xrefs.md](docs/xrefs.md) Querverweise · [diagramme.md](docs/diagramme.md) Mermaid · [tabellen.md](docs/tabellen.md) · [chapter-hierarchy.md](docs/chapter-hierarchy.md) · [fassungen.md](docs/fassungen.md) Snapshots · [bearbeitungsstand.md](docs/bearbeitungsstand.md) Stand pro Abschnitt, Kapitel = schwächster
 
 **Analyse:** [lektorat.md](docs/lektorat.md) Abschnitts-/Buch-Lektorat, Befund-Klassen · [stil-heatmap.md](docs/stil-heatmap.md) Kapitel-P90, Satzanfänge, Ich-Anteil · [komplett.md](docs/komplett.md) Kern-Pipeline + Welt-Fakten · [schauplaetze.md](docs/schauplaetze.md) Orte-Katalog: Pflege, Hierarchie, was die Analyse respektiert · [wortschatz.md](docs/wortschatz.md) · [semantic-search.md](docs/semantic-search.md) Embeddings + Buchlandkarte · [redundanz.md](docs/redundanz.md) Redundanz-Radar: Doppelungen, Figuren-Dubletten, Ignorieren · [graph.md](docs/graph.md) Figuren-Graph · [my-stats.md](docs/my-stats.md) Meine Statistik: Quellen, Zeitfenster, Snapshot-Ausdünnung
 

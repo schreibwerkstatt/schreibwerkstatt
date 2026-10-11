@@ -152,7 +152,8 @@ export const treeBuildMethods = {
     return false;
   },
 
-  // Gecachte Seiten-Stats, Lektorats-Alter und die sechs Plaketten-Zaehler.
+  // Gecachte Seiten-Stats, Lektorats-Alter, Bearbeitungsstand und die
+  // Plaketten-Zaehler.
   //
   // Bewusst acht getrennte Endpunkte statt eines gebuendelten: sie haben vier
   // verschiedene Zugriffsmodelle — Ideen sind buch- UND user-skopiert und
@@ -172,6 +173,7 @@ export const treeBuildMethods = {
       rechercheMap, chapterRechercheMap,
       shareCommentMap, shareLinkMap,
       plotBeatMap, chapterPlotBeatMap,
+      pageStatusRes,
     ] = await Promise.all([
       fetchJson('/history/page-stats/' + bookId, { signal }).catch(() => ({})),
       fetchJson('/history/page-ages/' + bookId, { signal }).catch(() => ({})),
@@ -183,6 +185,7 @@ export const treeBuildMethods = {
       fetchJson('/share/api/page-link-counts?book_id=' + bookId, { signal }).catch(() => ({})),
       fetchJson('/plot/page-beat-counts?book_id=' + bookId, { signal }).catch(() => ({})),
       fetchJson('/plot/chapter-beat-counts?book_id=' + bookId, { signal }).catch(() => ({})),
+      fetchJson('/redaktion/' + bookId, { signal }).catch(() => ({})),
     ]);
     // Da kein Endpunkt mehr wirft, landet auch ein Abbruch (Buchwechsel) hier —
     // mit leeren Maps, die nicht ueber das neue Buch geschrieben werden duerfen.
@@ -198,6 +201,7 @@ export const treeBuildMethods = {
     badges.shareLinkCounts = shareLinkMap || {};
     badges.plotBeatCounts = plotBeatMap || {};
     badges.chapterPlotBeatCounts = chapterPlotBeatMap || {};
+    this._applyPageStatus(pageStatusRes);
 
     // Editor-Badge der offenen Seite mit frischer Map abgleichen (Race: Seite
     // kann vor dem Counts-Fetch via restoreLastPage geöffnet worden sein).

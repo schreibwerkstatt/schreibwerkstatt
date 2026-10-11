@@ -87,7 +87,7 @@ async function prepareLektoratRun(bookId, userEmail, logger) {
     bookSettings: bookId ? getBookSettings(bookId, userEmail) : null,
     // Benutzer-Wörterbuch des prüfenden Users (Buch- + globale Einträge, passende
     // Locale) — dieselbe Menge, die den LanguageTool-Spellcheck filtert.
-    dictSet: userDictionary.getCheckSet(userEmail, bookId, locale),
+    dict: userDictionary.getCheckDict(userEmail, bookId, locale),
     local: _isLocalProvider(userEmail),
   };
 }
@@ -183,7 +183,7 @@ async function checkOnePage(run, {
   const hatBelege          = _pageHasCitations(pageId);
   const chapterName        = pd.chapter_id ? (chapterNameOf(pd.chapter_id) || null) : null;
   // Wörterbuch-Wörter dieser Seite: Prompt-Liste + Backstop (lektorat-dictionary.js).
-  const woerterbuch        = dictionaryWordsOnPage(run.dictSet, text);
+  const woerterbuch        = dictionaryWordsOnPage(run.dict, text);
 
   // Nachbarseiten: letzter Absatz der Vorseite, erster der Folgeseite als
   // Lesekontext. Lokale Provider: komplett überspringen – der Block wird für

@@ -21,10 +21,10 @@
 // Snapshot, der nach einer Umbenennung falsch dasteht.
 
 import { loadChart } from '../lazy-libs.js';
-import { BOOK_COLORS } from '../cards/my-stats-chart-methods.js';
 import { startPoll } from '../cards/job-helpers.js';
 import { tRaw } from '../i18n.js';
 import { createChartHolder, cssVar } from '../cards/chart-holder.js';
+import { chartOptions, chartPalette, seriesColor, valueAxis } from '../cards/chart-style.js';
 import { dateTimeFormat } from '../utils.js';
 
 // Ausserhalb von Alpine gehalten, damit der Reaktivitäts-Proxy die Chart.js-
@@ -52,22 +52,6 @@ const ALPHA_OFF = '22';
 // wie der Tab, und „Neu zeichnen" holt den aktuellen Stand.
 const _resultCache = new Map();
 
-// Kapitelfarbe nach Gliederungs-Position. Die ersten zwölf aus der App-Palette,
-// danach Goldener-Winkel-Farbtöne — sonst trügen Kapitel 1 und 13 dieselbe
-// Farbe und die Karte zeigte eine Überlagerung, die es nicht gibt.
-function _chapterColor(ix) {
-  if (ix < BOOK_COLORS.length) return BOOK_COLORS[ix];
-  const hue = ((ix - BOOK_COLORS.length) * 137.508 + 20) % 360;
-  return _hslHex(hue, 0.55, 0.52);
-}
-
-function _hslHex(h, s, l) {
-  const k = (n) => (n + h / 30) % 12;
-  const a = s * Math.min(l, 1 - l);
-  const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
-  const hex = (v) => Math.round(v * 255).toString(16).padStart(2, '0');
-  return '#' + hex(f(0)) + hex(f(8)) + hex(f(4));
-}
 
 /** Vom destroy() der Karte gerufen: Modul-State freigeben. */
 export function _destroyBookMapChart() {
@@ -241,12 +225,13 @@ export const buchlandkarteMethods = {
     }
 
     const muted = cssVar('--color-muted');
+    const surface = cssVar('--color-surface');
     const out = [];
     let colorIx = 0;
     for (const chapterId of order) {
       const key = chapterId == null ? '' : String(chapterId);
       const pts = groups.get(key);
-      const color = chapterId == null ? muted : _chapterColor(colorIx++);
+      const color = chapterId == null ? muted : seriesColor(colorIx++);
       if (!pts?.length) continue;
       out.push({
         label: this.bookMapChapterName(chapterId),
@@ -257,7 +242,8 @@ export const buchlandkarteMethods = {
           r: R_BASE + Math.min(R_MAX_BONUS, Math.max(0, (pt.chunks || 1) - 1)),
         })),
         backgroundColor: color + ALPHA_ON,
-        borderColor: color,
+        // Fuge in Flächenfarbe trennt überlappende Punkte, statt sie zu verkleben.
+        borderColor: surface,
         borderWidth: 1,
         pointRadius: ctx => ctx.raw?.r ?? R_BASE,
         pointHoverRadius: ctx => (ctx.raw?.r ?? R_BASE) + 3,
@@ -275,24 +261,20 @@ export const buchlandkarteMethods = {
     _destroyBookMapChart();
     _ensureThemeObserver(this);
 
-    const muted = cssVar('--color-muted');
-    const gridLine = cssVar('--color-border');
+    const pal = chartPalette();
     const t = (k, p) => window.__app?.t?.(k, p) || k;
 
+    const base = chartOptions(pal, { legend: true, legendKind: 'items' });
+    base.plugins.tooltip.callbacks = {
+      label: ctx => ` ${this.bookMapPageName(ctx.raw?.pageId)} — ${ctx.dataset.label}`,
+    };
     _map.set(new Chart(canvas, {
       type: 'scatter',
       data: { datasets: this._bookMapDatasets(res.pages) },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'bottom', labels: { color: muted, boxWidth: 10, font: { size: 11 } } },
-          tooltip: {
-            callbacks: {
-              label: ctx => ` ${this.bookMapPageName(ctx.raw?.pageId)} — ${ctx.dataset.label}`,
-            },
-          },
-        },
+        ...base,
+        // Streudiagramm: der Punkt unter dem Zeiger, nicht alle mit gleichem Index.
+        interaction: { mode: 'nearest', intersect: true },
         onClick: (_evt, elements) => {
           const el = elements?.[0];
           if (!el) return;
@@ -310,8 +292,8 @@ export const buchlandkarteMethods = {
           //
           // Zahlenwerte sind bedeutungslos → keine Ticks. Das Gitter bleibt als
           // Orientierung für Abstände.
-          x: { min: -1, max: 1, grid: { color: gridLine }, ticks: { display: false }, title: { display: false } },
-          y: { min: -1, max: 1, grid: { color: gridLine }, ticks: { display: false }, title: { display: false } },
+          x: valueAxis(pal, { min: -1, max: 1, ticks: { display: false } }),
+          y: valueAxis(pal, { min: -1, max: 1, ticks: { display: false } }),
         },
       },
     }));
@@ -346,7 +328,7 @@ export const buchlandkarteMethods = {
     for (const ds of chart.data.datasets) {
       const on = focus == null || ds.chapterId === focus || (nearest != null && ds.chapterId === nearest);
       ds.backgroundColor = ds._color + (on ? ALPHA_ON : ALPHA_OFF);
-      ds.borderColor = on ? ds._color : ds._color + ALPHA_OFF;
+      ds.borderWidth = on ? 1 : 0;
     }
     chart.update('none');
   },

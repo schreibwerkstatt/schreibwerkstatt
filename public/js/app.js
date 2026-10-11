@@ -166,6 +166,9 @@ document.addEventListener('alpine:init', () => {
 
     get filteredTree() {
       const tree = this.$store.nav.tree;
+      // Stand-Filter (tree/edit-status.js): arbeitet auf dem Such-Ergebnis bzw.
+      // dem ganzen Baum und klappt alles auf, wie die Suche.
+      if (this.treeEditFilter) return this._editFilterTree(this.pageSearch ? this._searchTree(tree) : tree);
       if (!this.pageSearch) {
         // BEWUSST NICHT memoisiert — anders als der Search-Branch unten.
         // Dieser Zweig haengt an `item.open`, und das wird IN PLACE mutiert
@@ -191,6 +194,10 @@ document.addEventListener('alpine:init', () => {
         };
         return tree.filter(isVisible);
       }
+      return this._searchTree(tree);
+    },
+
+    _searchTree(tree) {
       const q = this.pageSearch.toLowerCase();
       // Memo: Search-Branch ist N²-Gefahr (filteredTree wird pro Page-Row
       // gelesen). Ref-Vergleich `tree` + identische Query → Cache-Hit.

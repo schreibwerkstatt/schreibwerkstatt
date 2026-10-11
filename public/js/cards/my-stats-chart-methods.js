@@ -9,7 +9,11 @@
 // die hier exportierten Methoden angefasst.
 import { loadChart } from '../lazy-libs.js';
 import { localeTag, localIsoDate, dateTimeFormat } from '../utils.js';
-import { createChartHolder, cssVar } from './chart-holder.js';
+import { createChartHolder } from './chart-holder.js';
+import {
+  barDataset, calendarAxisLabel, calendarTooltipLabel, categoryAxis, chartOptions, chartPalette,
+  compactTick, crosshairPlugin, lineDataset, refLineDataset, seriesColor, valueAxis, withAlpha,
+} from './chart-style.js';
 import { bucketizeIso, bucketRange, aggregateByBucket } from './my-stats-compute.js';
 
 
@@ -28,14 +32,6 @@ const METRIC_KEYS = {
   lektorat:      'mystats.metric.lektorat',
 };
 
-// Farbpalette fuer Pro-Buch-Linien — mittlere Saettigung, lesbar auf Light+Dark.
-// Auch von der Kategorie-Kachel der Karte genutzt, darum exportiert.
-export const BOOK_COLORS = [
-  '#5b6ee1', '#e08a3c', '#3fae6e', '#c45fa0',
-  '#c9a93a', '#46a7bd', '#d05a5a', '#8f7ae0',
-  '#6aaf4e', '#b06ad0', '#d98f5e', '#4e8fd0',
-];
-
 const TIME_UNIT_KEYS = {
   day:   'mystats.unit.minPerDay',
   week:  'mystats.unit.minPerWeek',
@@ -47,13 +43,11 @@ const _holder = createChartHolder();
 // Achsen-Label eines Bucket-Schluessels (ISO-Datum). Ein Kalenderdatum ist
 // keine Uhrzeit: formatiert wird der UTC-Mittag in timeZone 'UTC', damit keine
 // Zeitzone (weder Browser noch App) das Datum um einen Tag verschiebt.
-function bucketLabel(iso, gran, uiLocale) {
+function bucketLabel(iso, gran, uiLocale, withYear) {
+  if (gran !== 'month') return calendarAxisLabel(iso, uiLocale, withYear);
   const [y, m, d] = iso.split('-').map(Number);
-  const at = new Date(Date.UTC(y, m - 1, d, 12));
-  const opts = gran === 'month'
-    ? { month: 'short', year: '2-digit', timeZone: 'UTC' }
-    : { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'UTC' };
-  return dateTimeFormat(uiLocale, opts).format(at);
+  return dateTimeFormat(uiLocale, { month: 'short', year: '2-digit', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(y, m - 1, d, 12)));
 }
 
 export const myStatsChartMethods = {
@@ -190,7 +184,8 @@ export const myStatsChartMethods = {
 
     const uiLocale = Alpine.store('shell').uiLocale;
     const tag = localeTag(uiLocale);
-    const labels = buckets.map(b => bucketLabel(b, gran, uiLocale));
+    const spansYears = buckets.length > 1 && buckets[0].slice(0, 4) !== buckets[buckets.length - 1].slice(0, 4);
+    const labels = buckets.map(b => bucketLabel(b, gran, uiLocale, spansYears));
 
     const unit = isTime ? this.myStatsTimeUnit() : '';
     const metricLabel = window.__app.t(METRIC_KEYS[metric] || metric) + (unit ? ` (${unit})` : '');
@@ -199,10 +194,8 @@ export const myStatsChartMethods = {
       ? v.toLocaleString(tag, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
       : Math.round(v).toLocaleString(tag));
 
-    const primary  = cssVar('--color-primary');
-    const success  = cssVar('--color-success');
-    const muted    = cssVar('--color-muted');
-    const gridLine = cssVar('--color-border');
+    const pal = chartPalette();
+    const { primary, success } = pal;
 
     // Zeit-Metriken taeglich als Balken (ein Tageswert ist eine Menge, kein
     // Verlauf); kumuliert als Linie. Inhalts-Metriken immer Linie.
@@ -219,25 +212,13 @@ export const myStatsChartMethods = {
         perBook.get(r.book_id).push({ date: r.date, value: valOf(r.raw) });
       }
       datasets = order.map((bid, i) => {
-        const color = BOOK_COLORS[i % BOOK_COLORS.length];
+        const color = seriesColor(i);
         const bmap = new Map(aggregateByBucket(perBook.get(bid), gran, aggMode).map(x => [x.bucket, x.value]));
         let data = buckets.map(b => bmap.has(b) ? bmap.get(b) : (isTime ? 0 : null));
         if (cumulative) data = accumulate(data);
         return asBars
-          ? { label: this._bookName(bid), data, backgroundColor: color, borderWidth: 0, stack: 'books' }
-          : {
-            label: this._bookName(bid),
-            data,
-            borderColor: color,
-            backgroundColor: color,
-            pointBackgroundColor: color,
-            borderWidth: 2,
-            tension: 0.3,
-            pointRadius: 2,
-            pointHoverRadius: 5,
-            fill: false,
-            spanGaps: true,
-          };
+          ? barDataset(pal, color, { label: this._bookName(bid), data, stacked: true, stack: 'books' })
+          : lineDataset(pal, color, { label: this._bookName(bid), data, sparse: buckets.length <= 14, spanGaps: true });
       });
     } else {
       // Gesamt: erst Summe pro Tag über alle Bücher, dann auf Buckets verdichten.
@@ -251,73 +232,51 @@ export const myStatsChartMethods = {
       // Snapshot-Groessen, daher dort kein Cumulative-Toggle im UI.
       if (cumulative) series = accumulate(series);
       datasets = [asBars
-        ? { label: metricLabel, data: series, backgroundColor: primary, borderWidth: 0 }
-        : {
-          label: metricLabel,
-          data: series,
-          borderColor: primary,
-          backgroundColor: primary + '12',
-          pointBackgroundColor: primary,
-          borderWidth: 2,
-          tension: 0.35,
-          pointRadius: 3,
-          pointHoverRadius: 6,
-          fill: true,
-          spanGaps: false,
-        }];
+        ? barDataset(pal, primary, { label: metricLabel, data: series })
+        : lineDataset(pal, primary, { label: metricLabel, data: series, area: true, sparse: buckets.length <= 14, spanGaps: false })];
     }
 
     // Ziellinie: nur Schreibzeit pro Tag mit gesetztem Tagesziel — fuer Woche/
     // Monat oder kumuliert gaebe es keinen sinnvoll vergleichbaren Zielwert.
     const goal = this.myStatsGoal();
     if (metric === 'writing' && gran === 'day' && !cumulative && goal.active) {
-      datasets.push({
-        type: 'line',
+      datasets.push(refLineDataset(success, {
         label: window.__app.t('mystats.chart.goalLine', { n: goal.goalMinutes }),
         data: buckets.map(() => goal.goalMinutes),
-        borderColor: success,
-        borderDash: [4, 4],
-        borderWidth: 1.5,
-        pointRadius: 0,
-        pointHoverRadius: 0,
-        fill: false,
+        dash: [4, 4],
         order: -1,
-      });
+      }));
     }
 
     this._ensureThemeObserver();
 
     const stacked = asBars && byBook;
+    const options = chartOptions(pal, { legend: byBook || datasets.length > 1 });
+    options.plugins.tooltip.callbacks = {
+      // Tag-Buckets mit vollem Datum; Woche/Monat behalten ihr Achsenlabel.
+      title: items => (!items.length ? '' : gran === 'day' ? calendarTooltipLabel(buckets[items[0].dataIndex], uiLocale) : items[0].label),
+      label: ctx => (ctx.parsed.y == null ? null : ` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`),
+    };
+    // Gestapelt: Nullwerte einzelner Bücher nicht als eigene Tooltip-Zeile.
+    if (stacked) options.plugins.tooltip.filter = item => item.parsed.y !== 0;
+    options.scales = {
+      x: categoryAxis(pal, { stacked }),
+      y: valueAxis(pal, {
+        stacked,
+        beginAtZero: true,
+        title: unit ? { display: true, text: unit } : null,
+        ticks: {
+          callback: compactTick(tag, fmt),
+          stepSize: (metric === 'page_count' || metric === 'chapter_count') ? 1 : undefined,
+        },
+      }),
+    };
+
     _holder.set(new window.Chart(canvas, {
       type: asBars ? 'bar' : 'line',
       data: { labels, datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: {
-            display: byBook || datasets.length > 1,
-            position: 'bottom',
-            labels: { boxWidth: 12, boxHeight: 12, font: { size: 11 }, color: muted, usePointStyle: true },
-          },
-          tooltip: { callbacks: { label: ctx => ctx.parsed.y == null ? null : ` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
-        },
-        scales: {
-          x: { stacked, grid: { color: gridLine }, ticks: { font: { size: 11 }, color: muted, maxTicksLimit: 12 } },
-          y: {
-            stacked,
-            grid: { color: gridLine },
-            beginAtZero: true,
-            title: { display: !!unit, text: unit, color: muted, font: { size: 11 } },
-            ticks: {
-              font: { size: 11 }, color: muted,
-              callback: v => fmt(v),
-              stepSize: (metric === 'page_count' || metric === 'chapter_count') ? 1 : undefined,
-            },
-          },
-        },
-      },
+      options,
+      plugins: [crosshairPlugin(withAlpha(pal.muted, 0.5))],
     }));
   },
 };

@@ -422,9 +422,25 @@ export const lektoratMethods = {
     }
   },
 
-  async batchCheck() {
+  // Serien-Lektorat: ganzes Buch oder — mit `chapterId` — ein Kapitel samt
+  // Unterkapiteln. Gleicher Job (`batch-check`), gleiche Statuszeile.
+  async batchCheck(chapterId = null) {
     if (!this.$store.nav.pages.length) return;
-    if (!await this.appConfirm({ message: this.t('lektorat.batchConfirm', { n: this.$store.nav.pages.length }) })) return;
+    const chapter = chapterId != null ? this._findTreeChapter(chapterId) : null;
+    if (chapterId != null && !chapter) return;
+    const all = chapter ? this._chapterPageCount(chapter) : this.$store.nav.pages.length;
+    if (!all) return;
+    // Final markierte, seither unveraenderte Abschnitte prueft der Server nicht
+    // (skip_final, docs/bearbeitungsstand.md) — die Rueckfrage nennt beide Zahlen.
+    const ids = chapter ? this._chapterSubtreePageIds(chapter) : this.$store.nav.pages.map(p => p.id);
+    const skipped = this.doneUnchangedCount(ids);
+    const n = all - skipped;
+    if (n === 0) { this.batchStatus = escHtml(this.t('lektorat.batchAllFinal', { n: skipped })); return; }
+    let message = chapter
+      ? this.t('lektorat.batchConfirmChapter', { n, name: chapter.name })
+      : this.t('lektorat.batchConfirm', { n });
+    if (skipped > 0) message += '\n\n' + this.t('lektorat.batchSkipFinal', { n: skipped });
+    if (!await this.appConfirm({ message })) return;
     this.batchLoading = true;
     this.batchProgress = 0;
     this.batchStatus = this._runningJobStatus(this.t('common.starting'), 0, 0);
@@ -432,7 +448,12 @@ export const lektoratMethods = {
       const { jobId } = await fetchJson('/jobs/batch-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: parseInt(this.$store.nav.selectedBookId), book_name: this.selectedBookName || null }),
+        body: JSON.stringify({
+          book_id: parseInt(this.$store.nav.selectedBookId),
+          book_name: this.selectedBookName || null,
+          ...(chapter ? { chapter_id: parseInt(chapter.id, 10) } : {}),
+          skip_final: true,
+        }),
       });
       lsSet('lektorat_batchcheck_job_' + this.$store.nav.selectedBookId, jobId);
       this.startBatchPoll(jobId);
@@ -465,13 +486,19 @@ export const lektoratMethods = {
       onDone: async (job) => {
         this.batchLoading = false;
         setTimeout(() => { this.batchProgress = 0; }, 400);
-        if (job.result?.empty) { this.batchStatus = this.t('lektorat.batchNoPages'); return; }
+        if (job.result?.empty) {
+          this.batchStatus = job.result.skippedFinal > 0
+            ? this.t('lektorat.batchAllFinal', { n: job.result.skippedFinal })
+            : this.t(job.result.chapterId != null ? 'lektorat.batchNoPagesChapter' : 'lektorat.batchNoPages');
+          return;
+        }
         const r = job.result;
         // Leere und gescheiterte Seiten getrennt nennen — „X/Y geprüft" allein
         // lässt offen, ob der Rest leer war oder ein Fehler ihn übersprungen hat.
         // x-html-Sink: Seitennamen escapen.
         let status = escHtml(this.t('lektorat.batchDone', { done: r.done, total: r.pageCount, errors: r.totalErrors }));
         if (r.skippedEmpty > 0) status += ' ' + escHtml(this.t('lektorat.batchSkippedEmpty', { n: r.skippedEmpty }));
+        if (r.skippedFinal > 0) status += ' ' + escHtml(this.t('lektorat.batchSkippedFinal', { n: r.skippedFinal }));
         const failed = Array.isArray(r.failed) ? r.failed : [];
         if (failed.length > 0) {
           const MAX_NAMES = 5;

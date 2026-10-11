@@ -36,6 +36,15 @@
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#spell-check"/></svg>
           <span x-text="t('pagetreeCtx.lektorieren')"></span>
         </button>
+        <!-- Bei einer Ein-Abschnitt-Zeile wäre das Kapitel-Lektorat dasselbe wie
+             «Lektorieren» darüber — nur am echten Kapitelkopf zeigen. -->
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="pageTreeMenuTarget.kind === 'chapter'"
+                :disabled="batchLoading"
+                @click="pagetreeCtxLektorierenChapter()">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#spell-check"/></svg>
+          <span x-text="t('pagetreeCtx.lektorierenChapter')"></span>
+        </button>
         <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
                 x-show="_pagetreeCtxChapterId() != null"
                 @click="pagetreeCtxReviewChapter()">
@@ -85,6 +94,25 @@
               <svg class="icon" aria-hidden="true"><use :href="'/icons.svg#' + (pageTreeMenuTarget.excluded ? 'rotate-cw' : 'archive')"/></svg>
               <span x-text="pageTreeMenuTarget.excluded ? t('pagetreeCtx.includeChapter') : t('pagetreeCtx.excludeChapter')"></span>
             </button>
+          </div>
+        </template>
+        <!-- Bearbeitungsstand (docs/bearbeitungsstand.md). Am Abschnitt: dessen
+             Stufe, Klick auf die aktive nimmt sie zurueck. Am Kapitelkopf: setzt
+             alle Abschnitte darunter; markiert ist die schwaechste Stufe. -->
+        <template x-if="canEdit() && $store.badges.editStatusChain.length > 0">
+          <div role="group" :aria-label="t('editStatus.label')">
+            <div class="context-menu-sep" role="separator"></div>
+            <div class="context-menu-header context-menu-header--inline"
+                 x-text="pageTreeMenuTarget.kind === 'chapter' ? t('editStatus.setChapter') : t('editStatus.label')"></div>
+            <template x-for="st in $store.badges.editStatusChain" :key="st">
+              <button type="button" class="context-menu-item context-menu-item--icon" role="menuitemradio"
+                      :class="{ 'context-menu-item--on': _pagetreeCtxStatus() === st }"
+                      :aria-checked="_pagetreeCtxStatus() === st"
+                      @click="pagetreeCtxSetStatus(st)">
+                <svg class="icon" aria-hidden="true"><use :href="_pagetreeCtxStatus() === st ? '/icons.svg#check' : '/icons.svg#circle'"/></svg>
+                <span x-text="editStatusLabel(st)"></span>
+              </button>
+            </template>
           </div>
         </template>
         <template x-if="pageTreeMenuTarget.kind === 'page' && canEdit()">

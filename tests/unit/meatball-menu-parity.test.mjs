@@ -25,7 +25,10 @@ const CHAPTER_PARTIAL = fileURLToPath(new URL('../../public/partials/kapitelrevi
 
 // Icon-Token von Aktionen, die NUR im Kapitel-Meatball vorkommen dürfen.
 // state-abhängiges :href (Toggle) → die alphabetisch sortierten Icon-Literale.
-const CHAPTER_ONLY = new Set(['archive|rotate-cw']); // Vom Export ausschliessen / wieder einschliessen
+const CHAPTER_ONLY = new Set([
+  'archive|rotate-cw', // Vom Export ausschliessen / wieder einschliessen
+  'spell-check',       // Kapitel lektorieren (Seite: eigener Toolbar-Knopf)
+]);
 
 // Sprite-Icon-ID eines Menü-Eintrags. Statisches href="…#id" → id;
 // state-abhängiges :href="'…#' + (cond ? 'a' : 'b')" → sortierte Literale 'a|b'.

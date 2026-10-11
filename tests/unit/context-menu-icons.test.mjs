@@ -102,6 +102,9 @@ test('Context-Menu-Trigger: aria-haspopup="menu" sitzt nur auf Icon-Buttons (kei
       // Plot-Anchor-Badge trägt die Fundstellen-Zahl als Text (Content-Trigger, kein
       // Aktions-Icon) und öffnet das Content-Fundstellen-Popover — Ausnahme wie Avatar.
       if (hasClass(btn, 'plot-beat-anchor')) continue;
+      // Bearbeitungsstand-Plakette im Notebook-Kopf zeigt die aktuelle Stufe als
+      // Text und öffnet deren Auswahl — ein Wert-Trigger wie eine Combobox.
+      if (hasClass(btn, 'editor-edit-status__trigger')) continue;
       if (!hasSpriteIcon(btn)) {
         const txt = (btn.textContent || '').replace(/\s+/g, '');
         offenders.push(`${file}: Menü-Trigger ohne Sprite-Icon (Text "${txt.slice(0, 12)}") → more-horizontal-Icon nutzen`);

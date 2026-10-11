@@ -27,6 +27,7 @@ export function registerBookStatsCard() {
     writingTimeData: null,
     lektoratTimeData: null,
     sttTimeData: null,
+    statusHistoryData: null,
     _lifecycle: null,
 
     init() {
@@ -66,6 +67,7 @@ export function registerBookStatsCard() {
           writingTimeData: null,
           lektoratTimeData: null,
           sttTimeData: null,
+          statusHistoryData: null,
         },
         onViewReset: (e, ctx) => {
           ctx.bookStatsData = [];
@@ -76,6 +78,7 @@ export function registerBookStatsCard() {
           ctx.writingTimeData = null;
           ctx.lektoratTimeData = null;
           ctx.sttTimeData = null;
+          ctx.statusHistoryData = null;
           _destroyStatsChart();
         },
         extraListeners: [{ type: 'book-stats:select', handler: onSelect }],

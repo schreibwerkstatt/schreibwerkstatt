@@ -21,6 +21,9 @@ const { preContextPassages, retrievalQuery } = require('./book-chat-retrieval');
 const embed = require('../../../lib/embed');
 const appSettings = require('../../../lib/app-settings');
 const { normalizeChatIdeeProposals } = require('../../../lib/chat-idee-proposals');
+const { getPageStatus, statusChain } = require('../../../db/redaktion');
+const { getBookSettings } = require('../../../db/book-settings');
+const { isJournalisticBook } = require('../../../lib/buchtyp');
 
 // Zeichendeckel des Buch-Kontext-Blocks: der kleinere Wert aus dem Erst-Kontext-
 // Deckel des Buch-Chats und 10 % des Seiten-Chat-Budgets — der Block ist Beiwerk,
@@ -109,8 +112,13 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const pageChangeNote = pageChange ? formatPageChange(pageChange) : null;
     // Figuren sind hier kapitel-gefiltert, aber ebenfalls Volldossiers → gebudgetet
     // (gleicher Deckel wie im Buch-Chat, siehe figurenBlockChars).
+    // Bearbeitungsstand des Abschnitts (docs/bearbeitungsstand.md): steuert die
+    // Art des Feedbacks (Rohfassung → Aufbau, final → Feinschliff).
+    const stand = session.page_id ? getPageStatus(session.page_id) : null;
+    const chain = stand ? statusChain(isJournalisticBook(getBookSettings(session.book_id, userEmail))) : [];
+    const editStatus = stand && chain.includes(stand.status) ? { status: stand.status, stale: stand.stale, chain } : null;
     const systemPrompt = buildChatSystemPrompt(session.page_name || '–', promptText, figuren, review,
-      chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg) });
+      chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg), editStatus });
 
     const annotate = (r) => {
       if (r.role !== 'assistant') return '';

@@ -433,10 +433,11 @@
 }
 .organizer-lengthdist .overview-chapter-list { margin-top: var(--space-2xs); }
 
-/* Redaktions-Status (journalistische Bücher) — Plakette zeigt, Combobox setzt.
-   Subklassen von .badge (components/buttons-badges.css), gleiche Bauform wie die
-   Sync-Pills darüber. Die vier Stufen laufen als Farbverlauf von „unfertig"
-   (gedämpft) zu „raus damit" (grün); Zwischenstufen tönen den Karten-Akzent
+/* Bearbeitungsstand — Plakette zeigt, Combobox setzt. Beide Ketten (Redaktion
+   für journalistische Bücher, Manuskript für alle anderen) teilen die Skala je
+   Rang. Subklassen von .badge (components/buttons-badges.css), gleiche Bauform
+   wie die Sync-Pills darüber. Die vier Stufen laufen als Farbverlauf von
+   „unfertig" (gedämpft) zu „fertig" (grün); Zwischenstufen tönen den Karten-Akzent
    auf, damit die Kette als eine Skala lesbar bleibt und nicht als vier Zustände
    ohne Richtung. */
 .organizer-redaktion-combo {
@@ -451,20 +452,24 @@
   padding: var(--space-xs) var(--space-sm);
 }
 .organizer-redaktion-badge { flex: none; }
-.badge--redaktion-roh {
+.badge--redaktion-roh,
+.badge--redaktion-rohfassung {
   background: var(--color-tag-bg);
   color: var(--color-muted);
 }
-.badge--redaktion-gegengelesen {
+.badge--redaktion-gegengelesen,
+.badge--redaktion-ueberarbeitet {
   background: color-mix(in srgb, var(--card-accent) 14%, transparent);
   color: var(--card-accent);
 }
-.badge--redaktion-schlussredigiert {
+.badge--redaktion-schlussredigiert,
+.badge--redaktion-redigiert {
   background: color-mix(in srgb, var(--card-accent) 28%, transparent);
   color: var(--card-accent);
   font-weight: var(--fw-semibold);
 }
-.badge--redaktion-freigegeben {
+.badge--redaktion-freigegeben,
+.badge--redaktion-final {
   background: var(--color-ok-bg);
   color: var(--color-ok-text);
   font-weight: var(--fw-semibold);
@@ -473,7 +478,8 @@
    Farbe: die Stufe bleibt ablesbar, der gestrichelte Rahmen sagt „gilt so nicht
    mehr". Ein umgefärbtes Badge würde die Information verschlucken, die es
    gerade zu zeigen gilt. */
-.organizer-redaktion-badge--stale {
+.organizer-redaktion-badge--stale,
+.badge--edit-stale {
   outline: 1px dashed var(--color-warn-text);
   outline-offset: 1px;
 }

@@ -15,7 +15,11 @@ const {
 const contentStore = require('../../lib/content-store');
 const { toIntId } = require('../../lib/validate');
 const { guardBook, sessionEmail } = require('../../lib/acl');
+const { setContext } = require('../../lib/log-context');
 const { pageBookGuard } = require('../../lib/page-guard');
+const { statusChain, doneUnchangedPageIds } = require('../../db/redaktion');
+const { isJournalisticBook } = require('../../lib/buchtyp');
+const { getBookSettings } = require('../../db/book-settings');
 const { listChaptersForBook, pageChapters } = require('../../db/content-names');
 const appSettings = require('../../lib/app-settings');
 const { objektivRuns, splitEnabled } = require('./lektorat-split');
@@ -82,7 +86,9 @@ async function runCheckJob(jobId, pageId, bookId, userEmail) {
 // Ergebnis: `done` = geprüfte Seiten, `skippedEmpty` = leere Seiten (zählen für
 // den Fortschritt als erledigt), `failed` = [{ id, name }] der Seiten, deren
 // Prüfung scheiterte — das Frontend nennt sie, statt sie im Log zu verstecken.
-async function runBatchCheckJob(jobId, bookId, userEmail) {
+// Mit `chapterId` nur die Abschnitte dieses Kapitels samt aller Unterkapitel,
+// in Lesereihenfolge; Nachbarkontext bleibt buchweit (Kapitelgrenzen inklusive).
+async function runBatchCheckJob(jobId, bookId, userEmail, chapterId = null, { skipFinal = false } = {}) {
   const logger = makeJobLogger(jobId);
   try {
     const run = await prepareLektoratRun(bookId, userEmail, logger);
@@ -90,9 +96,25 @@ async function runBatchCheckJob(jobId, bookId, userEmail) {
     const chapterNameById = Object.fromEntries(
       listChaptersForBook(parseInt(bookId, 10)).map(r => [String(r.chapter_id), r.chapter_name]));
     updateJob(jobId, { statusText: 'job.phase.loadingPages', progress: 0 });
-    const pages = await contentStore.listPages(bookId).catch(e => { throw contentHttpError(e); });
-    if (!pages.length) { completeJob(jobId, { empty: true }); return; }
-    logger.info(`Start: ${pages.length} Seiten`);
+    let pages = await contentStore.listPages(bookId).catch(e => { throw contentHttpError(e); });
+    if (chapterId != null) {
+      const outline = await contentStore.bookOutline(bookId).catch(e => { throw contentHttpError(e); });
+      const byId = new Map(pages.map(p => [p.id, p]));
+      pages = contentStore.chapterPages(outline, chapterId).map(n => byId.get(n.id)).filter(Boolean);
+    }
+    // Bearbeitungsstand (docs/bearbeitungsstand.md): final markierte, seither
+    // unveraenderte Abschnitte ueberspringen — der Autor hat sie abgeschlossen,
+    // eine erneute Pruefung kostet nur. Seither bearbeitete laufen wieder mit.
+    let skippedFinal = 0;
+    if (skipFinal) {
+      const chain = statusChain(isJournalisticBook(getBookSettings(bookId, userEmail)));
+      const finalIds = doneUnchangedPageIds(bookId, chain);
+      const before = pages.length;
+      pages = pages.filter(p => !finalIds.has(p.id));
+      skippedFinal = before - pages.length;
+    }
+    if (!pages.length) { completeJob(jobId, { empty: true, chapterId, skippedFinal }); return; }
+    logger.info(`Start: ${pages.length} Seiten${chapterId != null ? ` (Kapitel ${chapterId})` : ''}${skippedFinal ? `, ${skippedFinal} final übersprungen` : ''}`);
 
     // Cloud-Provider verträgt parallele Calls; lokale Provider (Ollama/llama.cpp) sind
     // bereits via Mutex in lib/ai.js serialisiert – Pool=1 verhindert pile-up im aiCall.
@@ -159,7 +181,7 @@ async function runBatchCheckJob(jobId, bookId, userEmail) {
     await Promise.all(workers);
 
     completeJob(jobId, {
-      pageCount: pages.length, done, skippedEmpty, failed, totalErrors,
+      chapterId, pageCount: pages.length, done, skippedEmpty, skippedFinal, failed, totalErrors,
       tokensIn: tok.in, tokensOut: tok.out,
     }, tps(tok), `${done}/${pages.length} Seiten, ${skippedEmpty} leer, ${failed.length} Fehler, ${totalErrors} Beanstandungen`);
   } catch (e) {
@@ -185,18 +207,31 @@ lektoratRouter.post('/check', jsonBody, (req, res) => {
   res.json({ jobId });
 });
 
+// Optional `chapter_id`: nur dieses Kapitel (inkl. Unterkapitel). Dedup bleibt
+// pro Buch — die Sidebar zeigt genau einen Serien-Lauf, ein Kapitel-Lauf und
+// ein Buch-Lauf nebeneinander hätten keinen Platz und prüften doppelt.
 lektoratRouter.post('/batch-check', jsonBody, (req, res) => {
   const { book_name } = req.body;
   const book_id = toIntId(req.body?.book_id);
   if (!book_id) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
+  setContext({ book: book_id });
   if (!guardBook(req, res, book_id, 'lektor')) return;
+  let chapter = null;
+  if (req.body?.chapter_id != null) {
+    const chapterId = toIntId(req.body.chapter_id);
+    chapter = chapterId ? listChaptersForBook(book_id).find(c => c.chapter_id === chapterId) : null;
+    if (!chapter) return res.status(404).json({ error_code: 'CHAPTER_NOT_IN_BOOK' });
+  }
   const userEmail = sessionEmail(req);
   const existing = findActiveJobId('batch-check', book_id, userEmail);
   if (existing) return res.json({ jobId: existing, existing: true });
-  const label = book_name ? 'job.label.batchCheckBook' : 'job.label.batchCheck';
-  const labelParams = book_name ? { name: book_name } : null;
+  const label = chapter ? 'job.label.batchCheckChapter'
+    : book_name ? 'job.label.batchCheckBook' : 'job.label.batchCheck';
+  const labelParams = chapter ? { name: chapter.chapter_name }
+    : book_name ? { name: book_name } : null;
   const jobId = createJob('batch-check', book_id, userEmail, label, labelParams);
-  enqueueJob(jobId, () => runBatchCheckJob(jobId, book_id, userEmail));
+  const skipFinal = req.body?.skip_final === true;
+  enqueueJob(jobId, () => runBatchCheckJob(jobId, book_id, userEmail, chapter ? chapter.chapter_id : null, { skipFinal }));
   res.json({ jobId });
 });
 

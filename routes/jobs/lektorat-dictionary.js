@@ -12,16 +12,24 @@
 // Obergrenze für den Prompt-Block; der Backstop prüft unabhängig davon alle.
 const MAX_PROMPT_WORDS = 200;
 
+const { genitiveSuffixSource } = require('../../lib/dictionary-forms');
+
 const _escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// Wörterbuch-Einträge (lower-cased Set aus getCheckSet), die im Seitentext als
-// ganzes Wort vorkommen. Rückgabe sortiert, in der Schreibweise der Seite.
-function dictionaryWordsOnPage(dictSet, text) {
-  if (!dictSet || !dictSet.size || !text) return [];
+// Wörterbuch-Einträge ({ words, nouns } aus getCheckDict), die im Seitentext als
+// ganzes Wort vorkommen — bei Nomen auch im Genitiv (lib/dictionary-forms.js).
+// Rückgabe: jede vorkommende Form in der Schreibweise der Seite, sortiert. So
+// stehen «Riggenbach» und «Riggenbachs» beide im Prompt und im Backstop.
+function dictionaryWordsOnPage(dict, text) {
+  if (!dict || !dict.words?.size || !text) return [];
   const found = new Map();
-  for (const w of dictSet) {
-    const m = text.match(new RegExp(`(?<![\\p{L}\\p{N}])${_escRe(w)}(?![\\p{L}\\p{N}])`, 'iu'));
-    if (m) found.set(w, m[0]);
+  for (const w of dict.words) {
+    const suffix = dict.nouns.has(w) ? genitiveSuffixSource(w) : '';
+    const re = new RegExp(`(?<![\\p{L}\\p{N}])${_escRe(w)}${suffix}(?![\\p{L}\\p{N}])`, 'giu');
+    for (const m of text.matchAll(re)) {
+      const key = m[0].toLowerCase();
+      if (!found.has(key)) found.set(key, m[0]);
+    }
   }
   return [...found.values()].sort((a, b) => a.localeCompare(b));
 }
@@ -35,7 +43,8 @@ const _bareWord = (s) => String(s || '').trim()
 // ein Grammatikfehler im Satz um ein Wörterbuch-Wort ist weiterhin einer.
 function dropDictionaryFindings(fehler, dictWords) {
   if (!Array.isArray(fehler) || !dictWords?.length) return fehler;
-  const set = new Set(dictWords.map(w => w.toLowerCase()));
+  // Beide Seiten gleich abstreifen: «Niklaus'» steht so in der Seitenliste.
+  const set = new Set(dictWords.map(w => _bareWord(w).toLowerCase()));
   return fehler.filter(f => f?.typ !== 'rechtschreibung' || !set.has(_bareWord(f.original).toLowerCase()));
 }
 

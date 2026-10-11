@@ -1,0 +1,51 @@
+{
+  "version": "4.22.0",
+  "date": "2026-10-11",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Bearbeitungsstand für jedes Buch: per Rechtsklick im Seitenbaum setzen Sie für einen Abschnitt oder ein ganzes Kapitel Rohfassung, überarbeitet, redigiert oder final. Der Stand erscheint im Seitenbaum, im Buchorganizer und im Kopf des Abschnitts.",
+      "en": "Editing status for every book: right-click a section or a whole chapter in the page tree to mark it as first draft, revised, edited or final. The status appears in the page tree, the book organizer and the section header."
+    },
+    {
+      "kind": "neu",
+      "de": "Fortschritt im Blick: die Buchübersicht hat eine Kachel «Bearbeitungsstand», die Buchstatistik zeigt den Verlauf und die Kapitelbewertung eine Kachel «Fortschritt». Ein Filter im Seitenbaum zeigt nur, was noch nicht fertig ist.",
+      "en": "Progress at a glance: the book overview has an «Editing status» tile, book statistics show its history and chapter review has a «Progress» tile. A page tree filter shows only what is not finished yet."
+    },
+    {
+      "kind": "neu",
+      "de": "Kapitel lektorieren: per Rechtsklick auf ein Kapitel im Seitenbaum prüft das Lektorat alle Abschnitte dieses Kapitels samt Unterkapiteln.",
+      "en": "Proofread a chapter: right-click a chapter in the page tree to proofread all its sections, including subchapters."
+    },
+    {
+      "kind": "neu",
+      "de": "Ist ein Kapitel oder das ganze Buch vollständig fertig, bietet die App an, diesen Stand als Fassung zu speichern.",
+      "en": "When a chapter or the whole book is completely finished, the app offers to save that state as a version."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buch-Lektorat: fertige Abschnitte, die Sie seither nicht mehr bearbeitet haben, werden übersprungen. Das spart Zeit und Kosten.",
+      "en": "Book proofreading: finished sections you have not edited since are skipped. This saves time and cost."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Abschnitts-, Buch-, Plot- und Ideen-Chat kennen den Bearbeitungsstand: bei fertigen Abschnitten schlagen sie nur noch Feinschliff vor, und der Ideen-Chat prüft offene Ideen an fertigen Abschnitten zuerst.",
+      "en": "Section, book, plot and ideas chat know the editing status: for finished sections they only suggest polishing, and the ideas chat checks open ideas on finished sections first."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Wörterbuch: ein grossgeschrieben eingetragenes Wort gilt auch im Genitiv als richtig, etwa «Riggenbachs» oder «Niklaus'».",
+      "en": "Dictionary: a word added with a capital letter is also accepted in the genitive, such as «Riggenbachs» or «Niklaus'»."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Die Verlaufskurven in Meine Statistik, Fehler-Heatmap und Buchlandkarte haben einen ruhigeren, einheitlichen Look mit Fadenkreuz beim Überfahren.",
+      "en": "The trend charts in My statistics, the error heatmap and the book map have a calmer, consistent look with a crosshair on hover."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Einstellungen (Admin): wie lange der Verlauf der KI-Aufträge und der Chats aufbewahrt wird, lässt sich jetzt getrennt festlegen.",
+      "en": "Settings (admin): how long the history of AI tasks and of chats is kept can now be set separately."
+    }
+  ]
+}

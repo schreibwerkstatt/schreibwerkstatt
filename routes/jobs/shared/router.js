@@ -1,6 +1,7 @@
 'use strict';
 const express = require('express');
 const { db } = require('../../../db/schema');
+const { lastDoneJobRun } = require('../../../db/job-runs');
 const { toIntId, inClause } = require('../../../lib/validate');
 const { jobs } = require('./state');
 const { jobView, queueItems } = require('./serialize');
@@ -66,12 +67,7 @@ sharedRouter.get('/last-run', (req, res) => {
   const { type } = req.query;
   const bookId = toIntId(req.query.book_id);
   if (!type || !bookId) return res.status(400).json({ error_code: 'TYPE_BOOKID_REQUIRED' });
-  const userEmail = sessionEmail(req);
-  const row = db.prepare(`
-    SELECT ended_at FROM job_runs
-    WHERE type = ? AND book_id = ? AND user_email = ? AND status = 'done'
-    ORDER BY ended_at DESC LIMIT 1
-  `).get(type, bookId, userEmail);
+  const row = lastDoneJobRun(type, bookId, sessionEmail(req));
   res.json({ lastRun: row?.ended_at || null });
 });
 

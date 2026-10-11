@@ -55,7 +55,7 @@ weiter, statt sie als „erlaubt" zu deuten). Auf Buch-Ebene, wo `aclParamGuard`
 die ACL schon erledigt hat, bleibt `journalisticBookSettings(req, bookId)`.
 
 **Lesende Buch-Routen antworten `enabled: false`, schreibende mit einem
-Fehler** — `/headline`, `/redaktion` und `/textsorte` einheitlich. Die Karten
+Fehler** — `/headline` und `/textsorte` einheitlich. Die Karten
 fragen unabhängig vom Buchtyp und sollen nicht in einen Fehlerpfad laufen, nur
 weil gerade ein Roman offen ist. Vertrag gegated durch
 [page-guard.test.mjs](../tests/unit/page-guard.test.mjs).
@@ -282,48 +282,11 @@ aufgeklappte Zeile, die der Filter ausblendet, wird geschlossen
 
 ## Redaktions-Status
 
-Rohfassung → gegengelesen → schlussredigiert → freigegeben. Plakette pro Zeile im
-**Buchorganizer**.
-
-**Neben den Fassungen, nicht in ihnen:** eine Fassung
-([fassungen.md](fassungen.md)) ist ein Zustand des TEXTES (Archiv,
-wiederherstellbar), der Redaktions-Status eine Aussage über den PROZESS („darf
-das raus?"). Die Fassungs-Mechanik bleibt unangetastet.
-
-### Datenmodell (Migration 268)
-
-`page_editorial_status` — eine Zeile je Seite, CHECK über die vier Stufen,
-`updated_by` als FK auf `app_users(email)`.
-
-SSoT der Kette: [public/js/redaktion/status.js](../public/js/redaktion/status.js)
-(ESM) mit CJS-Spiegel in [db/redaktion.js](../db/redaktion.js). Die Liste ist
-**geordnet** — sie ist der Weg durch die Redaktion, nicht eine Menge erlaubter
-Werte; daraus kommen Anzeige-Reihenfolge und `statusRank`.
-
-### Die Stale-Erkennung ist der Kern
-
-Eine Freigabe auf einem Text, der sich seither geändert hat, ist keine Freigabe
-mehr — „freigegeben" auf einem inzwischen überarbeiteten Beitrag ist die
-gefährlichste Anzeige, die dieses Feature haben kann. Darum hält
-`content_updated_at` fest, **worauf** sich der Status bezog, und `_mapRow`
-berechnet `stale` an **genau einer Stelle**.
-
-**Anker ist `pages.updated_at`, nicht `page_stats.content_sig`.** Den
-Signatur-Index schreibt nur der Sync-Cron
-([lib/page-index.js](../lib/page-index.js)#`writePageIndex`, gerufen aus
-[routes/sync.js](../routes/sync.js)); ein vor einer Stunde überarbeiteter Beitrag
-sähe darüber weiterhin „freigegeben, unverändert" aus.
-
-Der Anker kommt aus der Seite, **nie vom Aufrufer** — sonst könnte ein Client
-einen Status auf einen Textstand stempeln, den es nie gab.
-
-### Route
-
-`GET /redaktion/:book_id` (ab `viewer` — ein Gegenleser muss den Stand sehen),
-`PUT /redaktion/page/:page_id` (ab `editor` — eine Stufe weiterzuschalten ist
-eine Entscheidung). Nicht-journalistische Bücher bekommen `enabled: false` mit
-leerer Map statt eines Fehlers: die Organizer-Zeile fragt unabhängig vom Buchtyp
-und soll nicht in einen Fehlerpfad laufen.
+Roh → gegengelesen → schlussredigiert → freigegeben, Plakette pro Zeile im
+**Buchorganizer**. Das ist die redaktionelle Kette des allgemeinen
+Bearbeitungsstands: Datenmodell, Stale-Erkennung, Route und Oberflächen in
+**[bearbeitungsstand.md](bearbeitungsstand.md)**. Journalistisch ist dort nur die
+Wahl der Kette, kein Gate.
 
 ---
 

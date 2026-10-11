@@ -125,7 +125,7 @@
 
         <template x-if="block.kind === 'chapter'">
           <div class="book-editor-chapter-header">
-            <span class="book-editor-chapter-name" x-text="block.name"></span>
+            <span class="book-editor-chapter-name edit-status-meter" :class="$app.editStatusClass($app.chapterEditStatus(($store.nav.tree || []).find(i => i.type === 'chapter' && i.id === block.chapterId)))" x-text="block.name"></span>
             <span x-show="$store.badges.chapterIdeenCounts[block.chapterId] > 0" class="ideen-count-badge internal-link"
                   @click.stop="$app.openIdeenForChapter(block.chapterId)" x-text="$store.badges.chapterIdeenCounts[block.chapterId]"
                   :data-tip="$app.t('ideen.openCountTitle', { n: $store.badges.chapterIdeenCounts[block.chapterId] })"></span>
@@ -143,7 +143,7 @@
                  'book-editor-page-card--error': !!block.saveError,
                }">
             <div class="book-editor-page-header">
-              <span class="book-editor-page-name" x-text="block.dupTitle ? '' : block.name"></span>
+              <span class="book-editor-page-name edit-status-meter" :class="$app.editStatusClass($app.pageEditStatus(block.pageId))" :data-tip="$app.editStatusTipLine($app.pageEditStatus(block.pageId)) || null" x-text="block.dupTitle ? '' : block.name"></span>
               <span x-show="$store.badges.ideenCounts[block.pageId] > 0" class="ideen-count-badge internal-link"
                     @click.stop="$app.openIdeenForPage(block.pageId)" x-text="$store.badges.ideenCounts[block.pageId]"
                     :data-tip="$app.t('ideen.openCountTitle', { n: $store.badges.ideenCounts[block.pageId] })"></span>

@@ -12,7 +12,8 @@ import { computeWritingTimeStreak, computeWeekdayPattern, computeDerived, comput
          filterByWindow, resolveWindow } from './my-stats-compute.js';
 import { computeVolumeByCategory } from './my-stats-category.js';
 import { myStatsTrendMethods } from './my-stats-trends-methods.js';
-import { myStatsChartMethods, BOOK_COLORS } from './my-stats-chart-methods.js';
+import { myStatsChartMethods } from './my-stats-chart-methods.js';
+import { seriesColor } from './chart-style.js';
 import { memoMethods } from './card-memo.js';
 
 // Meilenstein-Label-Keys pro Kategorie (Wert via {n} interpoliert).
@@ -338,7 +339,7 @@ export function registerMyStatsCard() {
         computeVolumeByCategory(this.myStatsData?.books_detail).map((r, i) => ({
           ...r,
           name: r.categoryId == null ? window.__app.t('mystats.category.none') : r.name,
-          color: r.color || BOOK_COLORS[i % BOOK_COLORS.length],
+          color: r.color || seriesColor(i % 12),
         })));
     },
     // Mindestens zwei Gruppen ODER eine echte Kategorie → Aufschluesselung lohnt.

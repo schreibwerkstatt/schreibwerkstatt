@@ -39,6 +39,9 @@ export const PLOT_CHAT_READ_TOOL_NAMES = [
   'list_ideen',
   'list_continuity_issues',
   'get_reviews',
+  // Bearbeitungsstand: welche Kapitel sind fertig, wo landet ein neuer Beat in
+  // einer Rohfassung statt in einem abgeschlossenen Kapitel.
+  'get_edit_status',
 ];
 
 // Teilmenge für lokale Provider (kein Prompt-Caching, kleineres Modell): der
@@ -289,6 +292,7 @@ export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
     ...ifAny(['get_chapter_text', 'get_pages'], '- Ganze Kapitel lesen (teuer, nur wenn der Zusammenhang nötig ist) → get_chapter_text'),
     ...ifAny(['list_world_facts'], '- Weltregeln, gegen die ein Beat nicht verstossen darf → list_world_facts'),
     ...ifAny(['get_motifs'], '- Themen & Motive → get_motifs'),
+    ...ifAny(['get_edit_status'], '- Wie weit welche Kapitel sind (vom Autor gesetzter Bearbeitungsstand) → get_edit_status — ein neuer Beat in einem als fertig markierten Kapitel heisst Umbau: sag das dazu'),
     '',
     `Maximal ${maxToolIter} Werkzeug-Iterationen pro Antwort (eine Iteration = eine Runde, nicht ein Aufruf). Bündle unabhängige Aufrufe in EINER Runde. Vorschlags-Aufrufe zählen mit — gib alle Vorschläge möglichst in einer Runde ab.`,
     'Liefere die Antwort IMMER über `final_answer`. Sprache: passe dich der Userfrage an, nicht diesem Prompt.',

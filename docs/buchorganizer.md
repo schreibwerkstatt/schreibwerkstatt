@@ -15,7 +15,7 @@ Code: [public/js/cards/book-organizer-card.js](../public/js/cards/book-organizer
 | `book-organizer/crud.js` | Create/Rename/Delete für Kapitel + Seiten + `movePageToBook`, jeweils Server-Call + Mirror + History-Push; Rename-Tracking (`_trackRename`). |
 | `book-organizer/history.js` | Undo/Redo-Stacks (FIFO max 10), Record-Typen, `_applyInverse`/`_applyForward`, Stale-Prüfung, Lösch-Undo über den Papierkorb. |
 | `book-organizer/view.js` | Collapse-State pro Kapitel, Suchfilter (`filteredWorkTree`/`filteredSoloPages`), Combobox-Optionen, Lazy-Zeilen-Comboboxen (`isRowCombo`/`openRowCombo`/`closeRowCombo`), Jump-to-Chapter, `_findChapter`, Kapitel-Längenverteilung, Zahlen-Formatter (`_fmtNum`/`_fmtDec1` über `numberFormat`). |
-| `book-organizer/redaktion.js` | Redaktions-Stufe pro Beitrag (nur journalistische Bücher, Gate `redaktionEnabled` vom Server): laden, setzen, Plakette + Stale-Hinweis. Siehe [journalismus.md](journalismus.md). |
+| `book-organizer/redaktion.js` | Bearbeitungsstand pro Abschnitt (Kette je Buchtyp): laden, setzen, Plakette + Stale-Hinweis. Der Stand liegt in `$store.badges.editStatus`, nicht in der Karte. Siehe [bearbeitungsstand.md](bearbeitungsstand.md). |
 
 Spread-Reihenfolge in der Facade: dnd → persist → mirror → crud → history → view → redaktion. Slices teilen `this`-State, kein Cross-Import zwischen Slices — geteilte Konstanten kommen aus `constants.js`.
 

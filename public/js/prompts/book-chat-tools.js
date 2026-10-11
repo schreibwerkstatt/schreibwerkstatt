@@ -2,7 +2,7 @@
 // Anthropic-Tool-Format (name/description/input_schema), lib/ai.js liest daraus direkt;
 // Beschreibungen bewusst kurz — kosten Input-Tokens. Übersicht: docs/buchchat-tools.md
 import { CHAT_HISTORY_TOOL } from './book-chat-tools-history.js';
-
+import { EDIT_STATUS_TOOL } from './book-chat-tools-edit-status.js';
 export const BOOK_CHAT_TOOLS = [
   {
     name: 'list_chapters',
@@ -543,7 +543,7 @@ export const BOOK_CHAT_TOOLS = [
       },
       required: ['antwort'],
     },
-  }, CHAT_HISTORY_TOOL,
+  }, CHAT_HISTORY_TOOL, EDIT_STATUS_TOOL,
 ];
 
 // ── Slim-Werkzeugsatz (lokale/kleine Modelle) ─────────────────────────────────

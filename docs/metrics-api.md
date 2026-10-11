@@ -76,7 +76,7 @@ Inspiziert die in CJS geteilten Maps aus [routes/jobs/shared/state.js](../routes
 
 ### Tokens + Kosten
 
-Aus dem Kosten-Ledger `ai_cost_ledger` ([db/cost-ledger.js](../db/cost-ledger.js)): `usd` ist pro Zeile zur Call-Zeit eingefroren, die Job-/Chat-Trennung erledigt die Schreib-Seite. Damit bleiben die Counter monoton, auch wenn der 30-Tage-Prune `job_runs` leert.
+Aus dem Kosten-Ledger `ai_cost_ledger` ([db/cost-ledger.js](../db/cost-ledger.js)): `usd` ist pro Zeile zur Call-Zeit eingefroren, die Job-/Chat-Trennung erledigt die Schreib-Seite. Damit bleiben die Counter monoton, auch wenn der Aufbewahrungs-Prune `job_runs` leert.
 
 - `sw_tokens_in_total{provider,model}`
 - `sw_tokens_out_total{provider,model}`

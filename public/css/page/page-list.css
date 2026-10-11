@@ -103,6 +103,42 @@
 .page-status-warn    { background: var(--color-err-border); }
 .page-status-none    { background: transparent; border-color: var(--color-subtle); }
 
+/* Bearbeitungsstand (docs/bearbeitungsstand.md): vier Segmente hinter dem
+   Namen, gefuellt bis zur Stufe (Rang 0–3 der Buch-Kette). Form statt Farbe als
+   Unterscheidung zum runden Lektorats-Punkt davor; die letzte Stufe wechselt in
+   die Ok-Farbe. `--stale` (seit dem Setzen geaendert) zeigt die Stufe gedaempft
+   in der Pending-Farbe — die Stufe gilt fuer den aktuellen Text nicht mehr.
+   Traeger ist immer ein echtes `.edit-status-meter`-Element — im Seitenbaum ein
+   leeres Span hinter dem Namen, damit es einen eigenen Tooltip (`data-tip`)
+   tragen kann, was ein Pseudo-Element am Zeilen-Element nicht koennte; sonst
+   der Name selbst (Bahnen des Ideen-Boards, Kapitelüberschriften im
+   Bucheditor). */
+.edit-status--0 { --edit-status-n: 1; }
+.edit-status--1 { --edit-status-n: 2; }
+.edit-status--2 { --edit-status-n: 3; }
+.edit-status--3 { --edit-status-n: 4; --edit-status-color: var(--color-ok-border); }
+.edit-status--stale { --edit-status-color: var(--color-pending); }
+.edit-status-meter:is(.edit-status--0, .edit-status--1, .edit-status--2, .edit-status--3)::after {
+  content: "";
+  display: inline-block;
+  flex-shrink: 0;
+  width: 15px;
+  height: 7px;
+  margin-left: var(--space-xs);
+  vertical-align: middle;
+  background: linear-gradient(90deg,
+    var(--edit-status-color, var(--color-accent)) calc(var(--edit-status-n) * 4px),
+    var(--color-border) 0);
+  -webkit-mask: repeating-linear-gradient(90deg, #000 0 3px, transparent 3px 4px);
+  mask: repeating-linear-gradient(90deg, #000 0 3px, transparent 3px 4px);
+}
+/* Abschnittszeile: Flex-Item neben dem Lektorats-Punkt, oben buendig wie er. */
+.page-name > .edit-status-meter {
+  display: flex;
+  flex-shrink: 0;
+  margin-top: var(--space-5);
+}
+
 /* Sanfter Indikator: Anzahl offener Ideen pro Seite. Sitzt rechts neben den
    tok-badges. Outline statt Fläche — liest sich als Marker, nicht als weitere
    Stat-Zahl, und kollidiert nicht mit langen Titeln. */

@@ -31,6 +31,13 @@
   --card-gap-section: var(--space-lg);  /* 16px — zwischen zwei Abschnitten */
   --card-gap-tight:   var(--space-sm);  /*  8px — innerhalb eines Abschnitts */
 
+  /* === Layout-Rinne — der Abstand ZWISCHEN den Spalten ===
+     Eine Stufe fuer jede Spaltengrenze: Seitenbaum | Hauptspalte und
+     Hauptspalte | rechtes Panel (Chat/Ideen/Referenz). Benannt, damit beide
+     Grenzen dieselbe Entscheidung bleiben; der Sidebar-Resize-Griff rechnet
+     seine Mittellage daraus. Konsumenten: layout/twocolumn.css. */
+  --layout-gap: var(--space-lg);  /* 16px */
+
   /* === Padding-Tokens — wiederkehrende Zellgrössen === */
   --pad-btn-compact: 7px 10px;       /* compact button */
   --pad-badge:       4px 8px;        /* Badge/Tag/kleiner Pill */

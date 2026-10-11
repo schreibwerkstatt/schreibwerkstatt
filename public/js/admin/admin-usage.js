@@ -4,6 +4,7 @@
 // Buchtitel.
 
 import { loadChart } from '../lazy-libs.js';
+import { barDataset, categoryAxis, chartOptions, chartPalette, seriesColor, valueAxis } from '../cards/chart-style.js';
 import { localIsoDate, tzOpts, localeTag, fetchJson, sendJson } from '../utils.js';
 import { tFetchErrorRaw } from '../i18n.js';
 
@@ -399,7 +400,11 @@ export const adminUsageMethods = {
     let Chart;
     try { Chart = await loadChart(); } catch { return; }
     if (this.adminUsageTab !== 'summary') return;
-    const palette = ['#5b8def', '#23bf81', '#f0a23a', '#e85c79', '#9b7ce3', '#23b0bf'];
+    const pal = chartPalette();
+    const tag = localeTag(Alpine.store('shell').uiLocale);
+    const usd = new Intl.NumberFormat(tag, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+    const usdAxis = new Intl.NumberFormat(tag, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+    const usdTip = ctx => ` ${usd.format(ctx.parsed?.x ?? ctx.parsed?.y ?? ctx.parsed ?? 0)}`;
 
     const destroy = (key) => {
       if (this._adminUsageCharts?.[key]) {
@@ -411,6 +416,20 @@ export const adminUsageMethods = {
     // Nur auf sichtbarem Canvas instanziieren (offsetParent === null ⇒ display:none-Vorfahr).
     const visible = (el) => el && el.offsetParent !== null;
 
+    // Balken mit langen Labels (E-Mails, Job-Typen) liegend: Text bleibt lesbar.
+    const barOptions = () => {
+      const o = chartOptions(pal);
+      o.animation = false;
+      o.indexAxis = 'y';
+      o.interaction = { mode: 'nearest', axis: 'y', intersect: false };
+      o.plugins.tooltip.callbacks = { label: usdTip };
+      o.scales = {
+        x: valueAxis(pal, { beginAtZero: true, ticks: { maxRotation: 0, callback: v => usdAxis.format(v) } }),
+        y: categoryAxis(pal, { ticks: { autoSkip: false, maxTicksLimit: undefined } }),
+      };
+      return o;
+    };
+
     // Top-User-Bar
     const topUsers = (data.topUsers || []).slice(0, 10);
     const elUsers = this.$refs?.chartUsers;
@@ -420,27 +439,38 @@ export const adminUsageMethods = {
         type: 'bar',
         data: {
           labels: topUsers.map(u => u.email),
-          datasets: [{
+          datasets: [barDataset(pal, pal.primary, {
             label: 'USD',
             data: topUsers.map(u => Number(u.usd?.toFixed?.(4) || u.usd || 0)),
-            backgroundColor: palette[0],
-          }],
+          })],
         },
-        options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } } },
+        options: barOptions(),
       });
     }
-    // Pro-Modell-Pie
+    // Pro-Modell-Ring
     const byModel = data.byModel || [];
     const elModel = this.$refs?.chartModel;
     if (visible(elModel) && byModel.length) {
       destroy('model');
+      const o = chartOptions(pal, { legend: true, legendKind: 'items' });
+      o.animation = false;
+      o.cutout = '68%';
+      o.interaction = { mode: 'nearest', intersect: true };
+      o.plugins.tooltip.callbacks = { label: usdTip };
       this._adminUsageCharts.model = new Chart(elModel.getContext('2d'), {
         type: 'doughnut',
         data: {
           labels: byModel.map(m => m.model),
-          datasets: [{ data: byModel.map(m => Number(m.usd?.toFixed?.(4) || m.usd || 0)), backgroundColor: palette }],
+          datasets: [{
+            data: byModel.map(m => Number(m.usd?.toFixed?.(4) || m.usd || 0)),
+            backgroundColor: byModel.map((_, i) => seriesColor(i)),
+            borderColor: pal.surface,
+            borderWidth: 2,
+            borderRadius: 3,
+            hoverOffset: 4,
+          }],
         },
-        options: { responsive: true, maintainAspectRatio: false, animation: false },
+        options: o,
       });
     }
     // Pro-Job-Typ-Bar
@@ -452,9 +482,12 @@ export const adminUsageMethods = {
         type: 'bar',
         data: {
           labels: byType.map(t => this._adminUsageTypeLabel(t.type)),
-          datasets: [{ label: 'USD', data: byType.map(t => Number(t.usd?.toFixed?.(4) || t.usd || 0)), backgroundColor: palette[2] }],
+          datasets: [barDataset(pal, pal.accent, {
+            label: 'USD',
+            data: byType.map(t => Number(t.usd?.toFixed?.(4) || t.usd || 0)),
+          })],
         },
-        options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } } },
+        options: barOptions(),
       });
     }
   },

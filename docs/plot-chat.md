@@ -4,6 +4,8 @@ Agentischer Chat als **Panel in der Plot-Werkstatt** (Markup [public/partials/pl
 
 **Platzierung:** ab 1280px eigene, sticky Spalte rechts neben dem Board (`.plot-split` in [book/plot/chat.css](../public/css/book/plot/chat.css)); schmaler klappt das Panel per `order: -1` über das Board. Das Board behält seinen horizontalen Scroll.
 
+Liest den Bearbeitungsstand über `get_edit_status` (ein Beat in einem fertigen Kapitel heisst Umbau, [bearbeitungsstand.md](bearbeitungsstand.md)).
+
 ## Provider — zwei Pfade
 
 **Jeder Provider.** `runPlotChatJobDispatch` ([routes/jobs/plot-chat.js](../routes/jobs/plot-chat.js)) wählt am effektiven Provider (`providerSupportsTools`, [lib/ai/config.js](../lib/ai/config.js)):
