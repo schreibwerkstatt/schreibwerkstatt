@@ -29,7 +29,7 @@ export function registerSttStore() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.store('stt', {
     enabled: false,
-    vad: { silenceMs: 800, threshold: 0.015, maxSegmentS: 30 },
+    vad: { silenceMs: 1200, threshold: 0.015, maxSegmentS: 30 },
     recording: false,
     pending: false,
     transcribing: 0,

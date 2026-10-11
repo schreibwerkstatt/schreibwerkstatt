@@ -2,7 +2,8 @@
 // Integration-Test fuer /stt/transcribe. Mockt den OpenAI-kompatiblen Whisper-
 // Upstream via globalem fetch-Stub und prueft: disabled->404, kein/falsches
 // Audio->400/415, enabled->Forward+{text}, Upstream-Fehler->502 (transient) bzw. 424 (dauerhaft), Timeout->408,
-// Buch-Locale gewinnt als Sprache, Secret bleibt server-seitig.
+// Buch-Locale gewinnt als Sprache, Secret bleibt server-seitig, Vortext als
+// Prompt + Echo-Filter, ß->ss fuer Schweizer Buecher.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -60,10 +61,10 @@ function setStt({ enabled, host, model = 'whisper-1', apiKey = '', language = 'd
   appSettings.clearCache();
 }
 
-function postAudio(body, { contentType = 'audio/webm;codecs=opus', query = '' } = {}) {
+function postAudio(body, { contentType = 'audio/webm;codecs=opus', query = '', headers = {} } = {}) {
   return originalFetch(`${baseUrl}/stt/transcribe${query}`, {
     method: 'POST',
-    headers: { 'Content-Type': contentType },
+    headers: { 'Content-Type': contentType, ...headers },
     body,
   });
 }
@@ -145,6 +146,85 @@ test('Buch-Locale gewinnt als Sprache (de-CH -> de)', async () => {
   assert.equal(sawLang, 'de');
   db.prepare('DELETE FROM book_settings WHERE book_id = ?').run(910001);
   db.prepare('DELETE FROM books WHERE book_id = ?').run(910001);
+});
+
+function withBook(bookId, region, fn) {
+  const { db } = require('../../db/connection');
+  const now = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
+  db.prepare(`INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, ?, ${now}, ${now})`)
+    .run(bookId, `stt-book-${bookId}`);
+  db.prepare(`INSERT INTO book_settings (book_id, language, region, updated_at) VALUES (?, ?, ?, ${now})`)
+    .run(bookId, 'de', region);
+  return Promise.resolve(fn()).finally(() => {
+    db.prepare('DELETE FROM book_settings WHERE book_id = ?').run(bookId);
+    db.prepare('DELETE FROM books WHERE book_id = ?').run(bookId);
+  });
+}
+
+function whisperReplies(text, seen = {}) {
+  return async (_url, opts) => {
+    seen.prompt = opts.body.get('prompt');
+    return new Response(JSON.stringify({ text }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+}
+
+test('Schweizer Buch: ß -> ss im Transkript, deutsches Buch unveraendert', async () => {
+  setStt({ enabled: true, host: 'http://whisper.lan:8000' });
+  fetchHandler = whisperReplies('Ich heiße David und gehe die Straße entlang.');
+  await withBook(910002, 'CH', async () => {
+    const r = await postAudio(Buffer.from('d'), { query: '?bookId=910002' });
+    assert.equal((await r.json()).text, 'Ich heisse David und gehe die Strasse entlang.');
+  });
+  await withBook(910003, 'DE', async () => {
+    const r = await postAudio(Buffer.from('d'), { query: '?bookId=910003' });
+    assert.equal((await r.json()).text, 'Ich heiße David und gehe die Straße entlang.');
+  });
+});
+
+test('Vortext aus X-Stt-Prompt geht als prompt mit, gekuerzt ab Wortgrenze', async () => {
+  setStt({ enabled: true, host: 'http://whisper.lan:8000' });
+  const seen = {};
+  fetchHandler = whisperReplies('Weiter im Text.', seen);
+  const long = `${'Anfang '.repeat(60)}Das Ende vom Lied.`;
+  const r = await postAudio(Buffer.from('d'), { headers: { 'X-Stt-Prompt': encodeURIComponent(long) } });
+  assert.equal(r.status, 200);
+  assert.ok(seen.prompt.length <= 200, `prompt zu lang: ${seen.prompt.length}`);
+  assert.ok(seen.prompt.endsWith('Das Ende vom Lied.'));
+  assert.ok(seen.prompt.startsWith('Anfang'), `nicht an Wortgrenze: ${seen.prompt.slice(0, 20)}`);
+
+  fetchHandler = whisperReplies('x', seen);
+  await postAudio(Buffer.from('d'));
+  assert.equal(seen.prompt, null, 'ohne Header kein prompt-Feld');
+});
+
+test('Prompt-Echo wird verworfen, kurze Wiederholung nicht', async () => {
+  setStt({ enabled: true, host: 'http://whisper.lan:8000' });
+  const prompt = encodeURIComponent('Gestern war ich am See. Das Wasser war kalt und klar.');
+  fetchHandler = whisperReplies('Das Wasser war kalt und klar.');
+  let r = await postAudio(Buffer.from('d'), { headers: { 'X-Stt-Prompt': prompt } });
+  assert.equal((await r.json()).text, '');
+
+  fetchHandler = whisperReplies('am See');
+  r = await postAudio(Buffer.from('d'), { headers: { 'X-Stt-Prompt': prompt } });
+  assert.equal((await r.json()).text, 'am See');
+
+  fetchHandler = whisperReplies('Danach ging ich nach Hause.');
+  r = await postAudio(Buffer.from('d'), { headers: { 'X-Stt-Prompt': prompt } });
+  assert.equal((await r.json()).text, 'Danach ging ich nach Hause.');
+});
+
+test('Schweizer Buch: Prompt ebenfalls mit ss, Echo greift trotz ß-Umschrift', async () => {
+  setStt({ enabled: true, host: 'http://whisper.lan:8000' });
+  const seen = {};
+  fetchHandler = whisperReplies('Die Strasse war nass und leer.', seen);
+  await withBook(910004, 'CH', async () => {
+    const r = await postAudio(Buffer.from('d'), {
+      query: '?bookId=910004',
+      headers: { 'X-Stt-Prompt': encodeURIComponent('Die Straße war nass und leer.') },
+    });
+    assert.equal(seen.prompt, 'Die Strasse war nass und leer.');
+    assert.equal((await r.json()).text, '');
+  });
 });
 
 test('temperature aus App-Setting wird forwarded (Default 0)', async () => {

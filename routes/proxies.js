@@ -117,7 +117,7 @@ router.get('/config', (req, res) => {
         && !!String(appSettings.get('stt.host') || '').trim(),
       provider: 'openai-compat',
       vad: {
-        silenceMs:    Number(appSettings.get('stt.vad.silence_ms')) || 800,
+        silenceMs:    Number(appSettings.get('stt.vad.silence_ms')) || 1200,
         threshold:    Number(appSettings.get('stt.vad.threshold')) || 0.015,
         maxSegmentS:  Number(appSettings.get('stt.vad.max_segment_s')) || 30,
       },

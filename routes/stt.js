@@ -20,6 +20,13 @@
 // (nur Metadaten: Segmentgroesse, Latenz, Upstream-Status, bei Upstream-
 // Fehlern die gekuerzte Fehlermeldung des Upstreams).
 //
+// Kontext: der Client schickt im Header `X-Stt-Prompt` (URI-kodiert) den Text
+// links vom Einfuegepunkt; er geht als Whisper-`prompt` mit, damit das Modell
+// Schreibweise und Zeichensetzung des bestehenden Textes fortsetzt. Wiederholt
+// Whisper bei einem stillen Segment nur den Prompt, wird das als `echo`
+// verworfen. Region CH/LI: ß -> ss (Whisper kennt nur "de" und schreibt
+// bundesdeutsch).
+//
 // Upstream-Fehler: transient (5xx, 408/425/429) -> 502 STT_UPSTREAM, der
 // Client wiederholt. Dauerhaft (uebrige 4xx: unbekanntes Modell, Key ohne
 // Recht, kaputte Anfrage) -> 424 STT_UPSTREAM_REJECTED, der Client wiederholt
@@ -34,6 +41,45 @@ const { getBookLocale } = require('../db/schema');
 const { sessionEmail } = require('../lib/acl');
 
 const router = express.Router();
+
+const PROMPT_MAX_CHARS = 200;
+const ECHO_MIN_CHARS = 12;
+const ESZETT_REGIONS = new Set(['ch', 'li']);
+
+// Kontext-Prompt aus dem Header: dekodiert, einzeilig, auf die letzten
+// PROMPT_MAX_CHARS Zeichen ab einer Wortgrenze gekuerzt (Whisper nutzt ohnehin
+// nur das Ende eines langen Prompts).
+function readPrompt(req) {
+  const raw = req.headers['x-stt-prompt'];
+  if (typeof raw !== 'string' || !raw) return '';
+  let text;
+  try { text = decodeURIComponent(raw); } catch { return ''; }
+  text = text.replace(/\s+/g, ' ').trim();
+  if (text.length <= PROMPT_MAX_CHARS) return text;
+  const tail = text.slice(-PROMPT_MAX_CHARS);
+  const cut = tail.indexOf(' ');
+  return cut >= 0 ? tail.slice(cut + 1) : tail;
+}
+
+function foldForEcho(s) {
+  // ß und ss gleichsetzen: Prompt (Schweizer Buch: ss) und Whisper-Antwort (ß)
+  // schreiben dasselbe Wort verschieden.
+  return String(s).toLowerCase().replace(/ß/g, 'ss').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+// Whisper wiederholt bei stillen/unklaren Segmenten gern den Prompt (oder
+// dessen letzten Satz). Ein Transkript, das vollstaendig im Prompt steht, ist
+// darum keine Sprache. Erst ab ECHO_MIN_CHARS — ein kurzes „und dann" darf
+// natuerlich mehrfach vorkommen.
+function isPromptEcho(text, prompt) {
+  if (!prompt) return false;
+  const t = foldForEcho(text);
+  return t.length >= ECHO_MIN_CHARS && foldForEcho(prompt).includes(t);
+}
+
+function swissSpelling(text) {
+  return text.replace(/ß/g, 'ss').replace(/ẞ/g, 'SS');
+}
 
 const UPSTREAM_TRANSIENT = new Set([408, 425, 429]);
 const UPSTREAM_ERR_MAX_CHARS = 300;
@@ -114,13 +160,17 @@ router.post('/transcribe', rawAudioBody, async (req, res) => {
 
   // Book ist SSoT fuer Locale: bookId vorhanden -> getBookLocale gewinnt.
   // stt.language nur Fallback (Aufrufe ohne Buchscope). Whisper erwartet einen
-  // ISO-639-1-Code (de/en), keine Region — Locale wie "de-CH" auf "de" kuerzen.
-  let language = '';
+  // ISO-639-1-Code (de/en), keine Region — Locale wie "de-CH" auf "de" kuerzen;
+  // die Region entscheidet nur noch ueber die ß->ss-Umschrift.
+  let locale = '';
   if (bookId) {
-    try { language = getBookLocale(bookId, userEmail) || ''; } catch { /* noop */ }
+    try { locale = getBookLocale(bookId, userEmail) || ''; } catch { /* noop */ }
   }
-  if (!language) language = String(appSettings.get('stt.language') || '');
-  language = language.split('-')[0].trim().toLowerCase();
+  if (!locale) locale = String(appSettings.get('stt.language') || '');
+  const [language = '', region = ''] = locale.trim().toLowerCase().split('-');
+  const swiss = language === 'de' && ESZETT_REGIONS.has(region);
+  const rawPrompt = readPrompt(req);
+  const prompt = swiss ? swissSpelling(rawPrompt) : rawPrompt;
 
   const model = String(appSettings.get('stt.model') || '').trim();
   const apiKey = String(appSettings.get('stt.api_key') || '').trim();
@@ -133,6 +183,7 @@ router.post('/transcribe', rawAudioBody, async (req, res) => {
     form.append('file', new Blob([req.body], { type: mime }), `segment.${ext}`);
     if (model) form.append('model', model);
     if (language) form.append('language', language);
+    if (prompt) form.append('prompt', prompt);
     form.append('response_format', 'json');
     // Sampling-Temperatur (App-Setting, Default 0 = deterministisch, weniger
     // Halluzinationen bei stillen/unklaren Segmenten).
@@ -156,10 +207,14 @@ router.post('/transcribe', rawAudioBody, async (req, res) => {
         : res.status(502).json({ error_code: 'STT_UPSTREAM', error: 'stt_upstream', upstream_status: status });
     }
     const json = await upstream.json().catch(() => null);
-    const text = typeof json?.text === 'string' ? json.text : '';
-    // Leeres Resultat (Stille/VAD-Fehltrigger/Whisper-Guard) als eigenen Marker —
-    // sonst nicht von einem echten Treffer unterscheidbar.
-    log.info(`${text.length ? 'ok' : 'empty'} ${ctx} lang=${language || '-'} chars=${text.length} ${Date.now() - t0}ms`);
+    let text = typeof json?.text === 'string' ? json.text : '';
+    const echo = isPromptEcho(text, prompt);
+    if (echo) text = '';
+    else if (swiss) text = swissSpelling(text);
+    // Leeres Resultat (Stille/VAD-Fehltrigger/Whisper-Guard) und Prompt-Echo als
+    // eigene Marker — sonst nicht von einem echten Treffer unterscheidbar.
+    const kind = echo ? 'echo' : (text.length ? 'ok' : 'empty');
+    log.info(`${kind} ${ctx} lang=${language || '-'}${swiss ? '-ch' : ''} prompt=${prompt.length} chars=${text.length} ${Date.now() - t0}ms`);
     return res.json({ text });
   } catch (err) {
     const isAbort = err && (err.name === 'AbortError' || err.code === 'ABORT_ERR');

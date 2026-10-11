@@ -371,3 +371,22 @@ test('Mic-Permission verweigert -> i18n-Fehler, kein Crash', async ({ page, cons
   // Recording wurde nicht gestartet.
   expect(await page.evaluate(() => window.__sttApp.$store.stt.recording)).toBe(false);
 });
+
+test('Vortext links vom Einfuegepunkt geht als X-Stt-Prompt mit', async ({ page }) => {
+  const prompts = [];
+  await page.route('**/stt/transcribe*', async (route) => {
+    const h = route.request().headers()['x-stt-prompt'];
+    prompts.push(h == null ? null : decodeURIComponent(h));
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ text: 'Hallo Welt' }) });
+  });
+  await ready(page, HARNESS + '?enabled=true');
+  await placeCaret(page);
+  await dictateOneSegment(page);
+  // Zweites Segment: der Prompt traegt jetzt auch das erste Transkript.
+  await page.evaluate(() => { window.__voice = true; });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { window.__voice = false; });
+  await page.waitForFunction(() => (document.getElementById('editor').textContent.match(/Hallo Welt/g) || []).length === 2);
+  expect(prompts[0]).toBe('Start.');
+  expect(prompts[1]).toBe('Start. Hallo Welt');
+});

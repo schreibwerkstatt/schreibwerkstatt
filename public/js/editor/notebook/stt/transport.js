@@ -14,6 +14,9 @@ const STT_MAX_RETRY = 3;
 const STT_RETRY_DELAY_MS = 800; // Basis; Backoff = base * 2^attempt, gedeckelt
 const STT_RETRY_MAX_DELAY_MS = 6000;
 const STT_RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+// Vortext fuer den Whisper-Prompt; der Server kuerzt auf die letzten 200
+// Zeichen ab einer Wortgrenze, etwas Ueberhang gibt ihm dafuer Spielraum.
+const STT_PROMPT_CHARS = 300;
 
 export const sttTransportMethods = {
   // Transkribiert ein Segment und fuegt es ein. Der Fetch startet sofort (mehrere
@@ -27,7 +30,8 @@ export const sttTransportMethods = {
   _sttSendSegment(rt, blob, mime, boundaryKind) {
     if (!rt || rt.dead) return;
     this._sttBusyOn(); // Indikator „transkribiert" (mit Mindest-Standzeit)
-    const fetchP = this._sttFetchTranscript(blob, mime, 0, rt.abort.signal)
+    const prompt = this._sttPromptContext();
+    const fetchP = this._sttFetchTranscript(blob, mime, 0, rt.abort.signal, prompt)
       .finally(() => this._sttBusyOff());
     rt.insertChain = rt.insertChain
       .then(async () => {
@@ -46,7 +50,17 @@ export const sttTransportMethods = {
   // (z. B. 413/415, 424 = Upstream lehnt dauerhaft ab) werden NICHT wiederholt. `signal` (Session-AbortController)
   // beendet Request UND Retry-Wait sofort und still beim Stop — ein
   // abgebrochenes Segment liefert `null` ohne Fehler-Toast.
-  async _sttFetchTranscript(blob, mime, attempt, signal) {
+  // Text links vom Einfuegepunkt als Whisper-Kontext: das Modell setzt dann
+  // Schreibweise und Zeichensetzung des bestehenden Textes fort. Gelesen beim
+  // SENDEN — ein vorheriges Segment, dessen Transkript noch aussteht, fehlt
+  // darin; das kostet nur Kontext, keine Reihenfolge. Der Server kuerzt und
+  // filtert Prompt-Echos.
+  _sttPromptContext() {
+    const range = this._sttResolveRange?.();
+    return range ? this._sttTextBefore(range, STT_PROMPT_CHARS).trim() : '';
+  },
+
+  async _sttFetchTranscript(blob, mime, attempt, signal, prompt = '') {
     if (signal?.aborted) return null; // Session beendet -> still verwerfen
     const params = new URLSearchParams();
     if (this.$store.nav.selectedBookId) params.set('bookId', this.$store.nav.selectedBookId);
@@ -56,7 +70,9 @@ export const sttTransportMethods = {
     try {
       res = await fetch(`/stt/transcribe${qs}`, {
         method: 'POST',
-        headers: { 'Content-Type': mime },
+        headers: prompt
+          ? { 'Content-Type': mime, 'X-Stt-Prompt': encodeURIComponent(prompt) }
+          : { 'Content-Type': mime },
         body: blob,
         signal,
       });
@@ -64,7 +80,7 @@ export const sttTransportMethods = {
       if (signal?.aborted || e?.name === 'AbortError') return null; // Stop -> kein Toast/Retry
       if (attempt < STT_MAX_RETRY) {
         await this._sttDelay(this._sttRetryDelay(attempt), signal);
-        return this._sttFetchTranscript(blob, mime, attempt + 1, signal);
+        return this._sttFetchTranscript(blob, mime, attempt + 1, signal, prompt);
       }
       this._sttToastFailed();
       return null;
@@ -78,7 +94,7 @@ export const sttTransportMethods = {
     if (!res.ok) {
       if (STT_RETRYABLE_STATUS.has(res.status) && attempt < STT_MAX_RETRY) {
         await this._sttDelay(this._sttRetryDelay(attempt), signal);
-        return this._sttFetchTranscript(blob, mime, attempt + 1, signal);
+        return this._sttFetchTranscript(blob, mime, attempt + 1, signal, prompt);
       }
       this._sttToastFailed();
       return null;
