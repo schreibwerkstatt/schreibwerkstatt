@@ -1,0 +1,21 @@
+{
+  "version": "4.21.3",
+  "date": "2026-10-11",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Diktat im Editor: die Erkennung berücksichtigt jetzt den Text vor der Schreibmarke und erkennt Namen und Fachwörter dadurch besser. Längere Sprechpausen werden abgewartet, sodass weniger Satzfetzen entstehen.",
+      "en": "Dictation in the editor now takes the text before the cursor into account and recognizes names and terms better. It waits through longer pauses, so fewer sentence fragments appear."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Diktat in Büchern für die Schweiz und Liechtenstein: «ß» wird automatisch als «ss» geschrieben.",
+      "en": "Dictation in books for Switzerland and Liechtenstein: “ß” is written as “ss” automatically."
+    },
+    {
+      "kind": "behoben",
+      "de": "Diktat: lehnte der Erkennungsdienst eine Aufnahme grundsätzlich ab, kam die Fehlermeldung erst nach mehreren Wiederholungen. Sie erscheint jetzt sofort.",
+      "en": "Dictation: when the recognition service rejected a recording outright, the error only appeared after several retries. It now shows up right away."
+    }
+  ]
+}

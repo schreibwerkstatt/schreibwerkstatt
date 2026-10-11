@@ -18,10 +18,13 @@ const { bootApp, selectSeededBook } = require('./_helpers/app');
 test.describe.configure({ mode: 'serial' });
 
 // 11 Tage, taeglich +1000 Zeichen — Ø-Zuwachs 1000/Tag, 7000/Woche.
+// Relativ zu heute: die Zeitraum-Filter (z. B. 30 Tage) schneiden ab heute ab,
+// feste Kalenderdaten fielen sonst irgendwann aus dem Fenster.
 function seedRows() {
   const rows = [];
+  const now = new Date();
   for (let i = 0; i < 11; i++) {
-    const d = new Date(Date.UTC(2026, 8, 1 + i)).toISOString().slice(0, 10);
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 10 + i)).toISOString().slice(0, 10);
     rows.push({
       recorded_at: d,
       chars: 10000 + i * 1000,
