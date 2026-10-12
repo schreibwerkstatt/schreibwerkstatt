@@ -3,7 +3,7 @@
 // Standalone-Kontinuitätscheck): Verify-Stufe (False-Positive-Filter gegen den
 // Originaltext), Anachronismus-Datenbasis, Per-Job-Claude-Overrides.
 
-const { db, getBookSettings } = require('../../../db/schema');
+const { db, getBookSettings, getBookLocale } = require('../../../db/schema');
 const { activeFigureSql } = require('../../../db/figures/active');
 const appSettings = require('../../../lib/app-settings');
 const { providerClass } = require('../../../lib/ai');
@@ -467,7 +467,16 @@ function _komplettAiOverrides(effectiveProvider) {
   return Object.keys(bag).length > 1 ? { aiJob: bag } : null;
 }
 
+// Text-Optionen fuer jeden Seitenlader der Komplettanalyse (loader.js#loadPageContents)
+// und den Delta-Vergleich: Nachrichtenverlaeufe mit Zeilenart, Marken in der
+// Buchsprache (docs/nachrichtenverlauf.md). Ein Ort, damit Lauf und Delta denselben
+// Text sehen — sonst zaehlte jede Seite mit Verlauf als geaendert.
+function komplettTextOpts(bookId, userEmail) {
+  return { msgRows: true, langCode: (getBookLocale(bookId, userEmail || null) || 'de-CH').split('-')[0] };
+}
+
 module.exports = {
+  komplettTextOpts,
   _semanticExcerpt,
   _verifyExcerpt, verifyKontinuitaetProbleme,
   buildAnachronismusData, _komplettAiOverrides,

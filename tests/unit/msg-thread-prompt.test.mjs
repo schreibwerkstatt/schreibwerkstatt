@@ -70,3 +70,15 @@ test('Abschnitts-Chat: Hinweis nur mit Verlauf', () => {
   assert.ok(build({ hatNachrichten: true }).includes('Hinweis Nachrichtenverlauf'));
   assert.ok(!build({}).includes('Hinweis Nachrichtenverlauf'));
 });
+
+test('Komplettanalyse (msgRows): jede Zeile trägt ihre Art, Startmarke erklärt die Zeichen', () => {
+  const { htmlToText } = require('../../routes/jobs/shared/ai.js');
+  const html = '<p>Davor.</p><div class="msg-thread"><p class="msg-meta">Di, 23:14</p><p class="msg-name">Lena</p>'
+    + '<p class="msg-in">bist du wach?</p><p class="msg-out">jetzt schon</p><p>ohne Klasse</p><p class="msg-out"><br></p></div>';
+  const de = htmlToText(html, { msgRows: true });
+  assert.match(de, /^Davor\. \[Nachrichtenverlauf \(SMS\/Chat der Figuren, .*«→» = gesendet .*\] \[Di, 23:14\] Lena: bist du wach\? → jetzt schon ohne Klasse \[Ende Nachrichtenverlauf\]$/);
+  assert.match(htmlToText(html, { msgRows: true, langCode: 'en' }), /\[Message thread \(the characters' text\/chat, .*\[End of message thread\]$/);
+  // Ohne Option (Embeddings, Review, Finetune, …) bleibt der Text wie bisher.
+  assert.equal(htmlToText(html), htmlToText(html, { msgRows: false }));
+  assert.ok(!htmlToText(html).includes('→'));
+});

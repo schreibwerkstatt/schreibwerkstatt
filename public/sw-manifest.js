@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "5c14dd0a6712643d";
+self.__SHELL_BUILD = "6ffb8f275846bf20";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",

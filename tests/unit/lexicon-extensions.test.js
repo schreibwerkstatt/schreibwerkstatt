@@ -15,6 +15,7 @@ const { tokenize, tokenizeSegments } = require('../../lib/lexicon/tokenize');
 const { buildNameStopwords } = require('../../lib/lexicon/names');
 const { analyzeChapters, DELTA_MIN_TOKENS } = require('../../lib/lexicon/chapters');
 const { analyzeIdiolect, IDIOLECT_MIN_TOKENS } = require('../../lib/lexicon/idiolect');
+const { msgUtterances } = require('../../lib/html-text');
 const { analyzeBook } = require('../../lib/lexicon/analyze');
 const { keynessFor } = require('../../lib/lexicon/keyness');
 const { frequencies } = require('../../lib/lexicon/tokenize');
@@ -155,6 +156,55 @@ test('analyzeIdiolect: Zuordnung nur bei genau einer Figur im Erzähltext', () =
   const bruno = rows.find(r => r.figure_id === 2);
   assert.ok(bruno.terms.some(t => t.term === 'jawohl'));
   assert.ok(coverage > 0 && coverage < 1, 'Abdeckung offengelegt');
+});
+
+test('msgUtterances: Absenderzeile gilt bis zur nächsten, ausgehend ohne Sprecher', () => {
+  const u = msgUtterances([[
+    { kind: 'in', text: 'vor dem Namen' },
+    { kind: 'name', text: 'Anna' },
+    { kind: 'in', text: 'eins' },
+    { kind: 'meta', text: '14:32' },
+    { kind: 'out', text: 'zwei' },
+    { kind: 'in', text: 'drei' },
+    { kind: 'name', text: 'Bruno' },
+    { kind: 'in', text: 'vier' },
+  ], [{ kind: 'in', text: 'neuer Verlauf' }]]);
+  assert.deepEqual(u, [
+    { sender: null, text: 'vor dem Namen' },
+    { sender: 'Anna', text: 'eins' },
+    { sender: null, text: 'zwei' },
+    { sender: 'Anna', text: 'drei' },
+    { sender: 'Bruno', text: 'vier' },
+    { sender: null, text: 'neuer Verlauf' },
+  ]);
+});
+
+test('analyzeIdiolect: Nachrichten gehören der Figur aus der Absenderzeile', () => {
+  const msgs = (k, word, sender) => Array.from({ length: k }, (_, i) => ({ sender, text: `${word} ding${i} ${word} sache${i} ${word}` }));
+  const { rows, coverage, dialogTokens } = analyzeIdiolect([], figures, deps, {
+    utterances: [
+      ...msgs(40, 'gewiss', 'Anna'),
+      ...msgs(40, 'jawohl', 'Bruno'),
+      ...msgs(5, 'egal', null),          // ausgehend → unzugeordnet
+      ...msgs(5, 'egal', 'Anna, Bruno'), // zwei Figuren → unzugeordnet
+    ],
+  });
+  const anna = rows.find(r => r.figure_id === 1);
+  assert.ok(anna.terms.some(t => t.term === 'gewiss'));
+  assert.equal(anna.utterances, 40);
+  assert.ok(rows.find(r => r.figure_id === 2).terms.some(t => t.term === 'jawohl'));
+  assert.equal(dialogTokens, 90 * 5, 'alle Nachrichten zählen als Rede');
+  assert.ok(coverage > 0 && coverage < 1);
+});
+
+test('analyzeBook: Nachrichten im Idiolekt, aber nicht doppelt als Erzähl-Absatz', async () => {
+  const lines = Array.from({ length: 40 }, (_, i) => `<p class="msg-in">gewiss ding${i} gewiss sache${i} gewiss</p>`).join('');
+  const html = `<p>Anna schrieb.</p><div class="msg-thread"><p class="msg-name">Anna</p>${lines}<p class="msg-out">«nein», sagte Bruno</p></div>`;
+  const { idiolect, stats } = await analyzeBook([page(1, null, html)], { idiolect: { figures, deps } });
+  const anna = idiolect.find(r => r.figure_id === 1);
+  assert.equal(anna.utterances, 40);
+  assert.equal(idiolect.some(r => r.figure_id === 2), false, 'Inquit in einer ausgehenden Nachricht ordnet nicht zu');
+  assert.ok(stats.tokens >= 200, 'Nachrichten bleiben im Wortschatz');
 });
 
 test('analyzeIdiolect: zu wenig Rede → keine Zeile', () => {

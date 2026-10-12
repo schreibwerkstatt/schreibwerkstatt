@@ -9,6 +9,7 @@
 // „Anteil am Buch" sich auf den Text bezieht, den die Analyse tatsächlich sieht.
 const { loadOrderedBookContents, loadPageContents } = require('../shared/loader');
 const { htmlToText } = require('../shared/ai');
+const { komplettTextOpts } = require('./job-shared');
 const { lastKomplettRun, revisionBaselines, deletionsSince } = require('../../../db/komplett-delta');
 const { listKatalogAnker } = require('../../../db/katalog-anker');
 const { textDelta, catalogWordSet, novelNames, affectedFigures, komplettVerdict } = require('../../../lib/komplett-delta');
@@ -19,7 +20,8 @@ const CAP_WORD = /[A-ZÄÖÜ][\p{L}\-']*/gu;
 async function computeKomplettDelta(bookId, userEmail) {
   const run = lastKomplettRun(bookId, userEmail);
   const { chMap, pages } = await loadOrderedBookContents(bookId);
-  const contents = await loadPageContents(pages, chMap, MIN_PAGE_CHARS);
+  const textOpts = komplettTextOpts(bookId, userEmail);
+  const contents = await loadPageContents(pages, chMap, MIN_PAGE_CHARS, null, null, textOpts);
   const totalChars = contents.reduce((s, p) => s + p.text.length, 0);
 
   const lastRun = run ? {
@@ -44,7 +46,7 @@ async function computeKomplettDelta(bookId, userEmail) {
     const base = baselines.get(p.id);
     let d;
     if (base?.html != null) {
-      const oldText = htmlToText(base.html).trim();
+      const oldText = htmlToText(base.html, textOpts).trim();
       oldTexts.push(oldText);
       d = textDelta(oldText, p.text);
       // Die Retention dünnt alte Revisionen aus: liegt die Basis deutlich vor dem

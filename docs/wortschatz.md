@@ -408,6 +408,15 @@ falsch zugeordnete — ein falscher Satz macht aus zwei Stimmen eine. Folge: Ich
 und Wechselrede ohne Inquit-Formel bleiben unzugeordnet. Der zugeordnete Anteil steht
 als `book_lexicon.idiolect_coverage` über der Tabelle.
 
+**Nachrichtenverlauf** ([nachrichtenverlauf.md](nachrichtenverlauf.md)): jede Nachricht
+ist eine Äusserung, der Sprecher kommt aus der **Absenderzeile**, nicht aus dem
+Erzähltext. Eine eingehende Nachricht gehört der Figur, die die geltende Absenderzeile
+nennt (genau eine, gleiche Namensmuster); die Zeile gilt bis zur nächsten im selben
+Verlauf, auch über ausgehende Nachrichten hinweg. **Ausgehende** Nachrichten bleiben
+unzugeordnet — wem das Telefon gehört, steht nirgends. Alle Nachrichten zählen als Rede
+in die Abdeckung; als Erzähl-Absatz läuft eine Verlaufszeile nicht zusätzlich durch die
+Inquit-Regel (`msgUtterances` in [idiolect.js](../lib/lexicon/idiolect.js)).
+
 Gleichnamige Figuren (Kopien desselben Stammeintrags unter verschiedenen Konten)
 bilden eine Gruppe und bekommen dieselbe Zeile; der Lesepfad zeigt die Figuren des
 Betrachters, ersatzweise die des Besitzers. Eine Figur braucht mindestens

@@ -90,8 +90,8 @@ export const notebookCardMethods = {
   },
 
   // Kastenhöhe der Leseansicht (`--pcv-max-h`) nachmessen, sobald sie steht.
-  // Bilder und Diagramme kennt die Schätzung aus dem Seiten-HTML nur als
-  // Pauschale; gemessen wird in book/page-view.js#`_measuredPageViewPx`, und
+  // Bilder, Diagramme und Nachrichtenverläufe kennt die Schätzung aus dem
+  // Seiten-HTML nicht bzw. nur als Pauschale; gemessen wird in book/page-view.js#`_measuredPageViewPx`, und
   // zwar erst, wenn alle Bilder geladen sind. Auslöser: Seitenwechsel/
   // Re-Render, Rückkehr aus dem Edit-Modus (die Leseansicht war
   // `display:none`, `scrollHeight` 0) und jedes `load`/`error` eines Bildes.

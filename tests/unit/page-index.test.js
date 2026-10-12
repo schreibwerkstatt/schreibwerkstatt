@@ -209,3 +209,54 @@ test('tokenizeNamesForStopwords: strippt Namen in lowercase-Tokens, filtert Bloc
   assert.ok(!tokens.has('herr'), 'blocklist: herr ausgeschlossen');
   assert.ok(!tokens.has('dr'),   'zu kurz: dr ausgeschlossen');
 });
+
+// ── Nachrichtenverlauf als Dialog ────────────────────────────────────────────
+const { htmlToPlainText, htmlToPlainTextWithMsgRanges } = require('../../lib/html-text');
+
+test('htmlToPlainTextWithMsgRanges: Text zeichengleich mit htmlToPlainText', () => {
+  const samples = [
+    '<p>Sie wartete.</p><div class="msg-thread"><p class="msg-name">Lena</p><p class="msg-in">bist du  schon da?</p><p class="msg-out"> gleich, 5 min </p><p class="msg-meta">Di, 14:32</p></div><p>Dann kam er.</p>',
+    '<div class="msg-thread"><p class="msg-in"></p><p class="msg-out">&nbsp;ok&amp;tschüss&#160;</p></div>',
+    '<div class="msg-thread"><p>ohne Klasse</p></div>',
+    '<p>Kein Verlauf, «Rede».</p>',
+    '',
+  ];
+  for (const html of samples) {
+    assert.equal(htmlToPlainTextWithMsgRanges(html).text, htmlToPlainText(html), html);
+  }
+});
+
+test('htmlToPlainTextWithMsgRanges: nur Nachrichten, nicht Absender/Zeit', () => {
+  const html = '<p>Sie wartete.</p><div class="msg-thread"><p class="msg-name">Lena</p><p class="msg-in">bist du schon da?</p><p class="msg-out">gleich, 5 min</p><p class="msg-meta">Di, 14:32</p><p>ich auch</p><p class="msg-in"> </p></div>';
+  const { text, msgRanges } = htmlToPlainTextWithMsgRanges(html);
+  assert.deepEqual(msgRanges.map(([a, b]) => text.slice(a, b)), ['bist du schon da?', 'gleich, 5 min', 'ich auch']);
+});
+
+test('Dialog: Nachrichten eines Verlaufs zählen ohne Anführungszeichen als Rede', () => {
+  const html = '<p>Ich starrte aufs Handy.</p><div class="msg-thread"><p class="msg-in">ich bin da</p><p class="msg-out">ich auch</p></div>';
+  const { text, msgRanges } = htmlToPlainTextWithMsgRanges(html);
+  const ohne = computePronounsAndDialog(text);
+  assert.equal(ohne.dialog_chars, 0, 'ohne Bereiche sieht die Heuristik keine Rede');
+  const mit = computePronounsAndDialog(text, msgRanges);
+  assert.equal(mit.dialog_chars, 'ich bin da'.length + 'ich auch'.length);
+  assert.equal(mit.pronoun_counts.ich.narr, 1, 'Ich im Erzähltext');
+  assert.equal(mit.pronoun_counts.ich.dlg, 2, 'ich in beiden Nachrichten');
+});
+
+test('Dialog: Anführungszeichen in einer Nachricht zählen nicht doppelt', () => {
+  const html = '<div class="msg-thread"><p class="msg-in">er sagte «nein»</p></div>';
+  const { text, msgRanges } = htmlToPlainTextWithMsgRanges(html);
+  assert.deepEqual(findDialogRanges(text, msgRanges), [[0, text.length]]);
+});
+
+test('Satzmetriken: Nachrichten kleben nicht an den Erzählsätzen', () => {
+  const { computePageIndex } = require('../../lib/page-index');
+  const { stripMsgThreads } = require('../../lib/html-text');
+  const html = '<p>Sie wartete am Bahnhof.</p><div class="msg-thread"><p class="msg-in">bist du schon da</p><p class="msg-out">gleich 5 min</p></div><p>Dann kam er endlich.</p>';
+  const { text, msgRanges } = htmlToPlainTextWithMsgRanges(html);
+  const proseText = htmlToPlainText(stripMsgThreads(html));
+  const idx = computePageIndex(text, { msgRanges, proseText });
+  assert.deepEqual(JSON.parse(idx.sentence_lens), [4, 4], 'zwei Erzählsätze, keine Chat-Zeilen');
+  assert.equal(idx.sentences, 2);
+  assert.equal(idx.dialog_chars, 'bist du schon da'.length + 'gleich 5 min'.length, 'Dialog weiter mit Nachrichten');
+});

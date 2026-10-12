@@ -7,6 +7,7 @@ import { isPageConflict, savePage } from '../editor/shared/page-api.js';
 import { setTodoCheckedAt, todoBoxIndex } from '../editor/shared/todo-html.js';
 import { closestCiteEl } from '../sources/cite-html.js';
 import { DIAGRAM_SEL } from '../diagram/mermaid-html.js';
+import { MSG_THREAD_SEL } from '../messages/msg-html.js';
 import { contentRepo } from '../repo/content.js';
 import { tRaw } from '../i18n.js';
 import { _sanitizeFigur } from './figuren.js';
@@ -227,9 +228,11 @@ export const pageViewMethods = {
   /** Ist-Höhe der Leseansicht, wenn ihr DOM zur aktuellen Seite gehört und
    *  fertig aufgebaut ist.
    *
-   *  Nur für Seiten mit Diagramm oder Bild: deren Höhe lässt sich aus dem Text
-   *  nicht ableiten (zwei Zeilen Mermaid-Code können 400 px Grafik sein, ein
-   *  `<img>` hat gar keinen Text), die Wortzahl-Schätzung kennt sie also nicht.
+   *  Nur für Seiten mit Diagramm, Bild oder Nachrichtenverlauf: deren Höhe
+   *  lässt sich aus dem Text nicht ableiten (zwei Zeilen Mermaid-Code können
+   *  400 px Grafik sein, ein `<img>` hat gar keinen Text, ein Verlauf bricht
+   *  in schmale Blasen mit Abstand je Nachricht und eigenen Namens-/Meta-Zeilen
+   *  um), die Wortzahl-Schätzung kennt sie also nicht.
    *  Ohne Messung deckelt `--pcv-max-h` den Kasten auf die Prosa-Höhe und die
    *  Grafik verschwindet hinter einer inneren Scrollbar.
    *
@@ -247,12 +250,15 @@ export const pageViewMethods = {
    *  Der Notebook-Editor braucht das nicht: `.page-content-view--editing`
    *  deckelt fest auf `70vh` und wächst bis dahin mit seinem Inhalt, auch beim
    *  Tippen und mit frisch eingefügten Bildern. */
-  _measuredPageViewPx(diagramCount, imageCount) {
+  _measuredPageViewPx(diagramCount, imageCount, threadCount) {
     const view = document.querySelector('.page-content-view:not(.page-content-view--editing):not(.revision-viewer__content)');
     if (!view) return 0;
     const imgs = [...view.querySelectorAll('img')];
     if (view.querySelectorAll(DIAGRAM_SEL).length !== diagramCount) return 0;
     if (imgs.length !== imageCount) return 0;
+    // Verläufe rendern synchron mit dem HTML — die Zahl stellt nur sicher,
+    // dass nicht noch die Vorgängerseite im DOM steht.
+    if (view.querySelectorAll(MSG_THREAD_SEL).length !== threadCount) return 0;
     // Fehlgeschlagene Diagramme zählen mit: der Fehlerknoten trägt dieselbe
     // Klasse, und der Quelltext daneben braucht ebenfalls Platz.
     if (view.querySelectorAll('.mermaid-render').length !== diagramCount) return 0;
@@ -276,14 +282,15 @@ export const pageViewMethods = {
       const doc = new DOMParser().parseFromString(this.originalHtml, 'text/html');
       const diagrams = [...(doc.body?.querySelectorAll(DIAGRAM_SEL) || [])];
       const imageCount = doc.body?.querySelectorAll('img').length || 0;
+      const threadCount = doc.body?.querySelectorAll(MSG_THREAD_SEL).length || 0;
       // Diagramm-Notation zählt nirgends als Prosa (gleiche Regel wie
       // html-text/TTS/LanguageTool): Quelltext raus aus der Wortzahl, die
       // Blockhöhe kommt separat dazu.
       for (const d of diagrams) d.remove();
       const text = (doc.body?.textContent || '').trim();
       words = text ? text.split(/\s+/).length : 0;
-      if (diagrams.length || imageCount) {
-        measuredPx = this._measuredPageViewPx(diagrams.length, imageCount);
+      if (diagrams.length || imageCount || threadCount) {
+        measuredPx = this._measuredPageViewPx(diagrams.length, imageCount, threadCount);
         // Schätzung bis zum Render: Pauschale pro Grafik, mindestens aber die
         // Quelltexthöhe (Edit-Modus, mermaid nicht geladen, ungültiger Code —
         // dort steht der `<pre>` mit ~20 px Zeilenhöhe).

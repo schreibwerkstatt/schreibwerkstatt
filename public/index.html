@@ -731,7 +731,7 @@
         @cancel.prevent="_resolveConfirmDialog(false)"
         @click="if ($event.target === $el) _resolveConfirmDialog(false)">
   <div class="confirm-dialog-message" x-text="confirmDialogMessage"></div>
-  <input type="text" class="confirm-dialog-input"
+  <input type="text" class="confirm-dialog-field"
          x-show="confirmDialogInput"
          x-ref="confirmDialogInput"
          x-model="confirmDialogInputValue"

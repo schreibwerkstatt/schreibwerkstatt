@@ -41,7 +41,7 @@ const {
   buildPrelimFigurenKompakt, runPhase3OrteCall,
   runZeitstrahlPhase, runCoverageAudit, komplettMaxTokens,
 } = require('./phases');
-const { _komplettAiOverrides, resolveRemapNames } = require('./job-shared');
+const { _komplettAiOverrides, resolveRemapNames, komplettTextOpts } = require('./job-shared');
 const { loadOrteFromDb, countSongsInDb, countSzenenInDb, activeStepJob } = require('./scope');
 const { normalizeKomplettScope, isFullKomplettScope, skippedKomplettSteps, KOMPLETT_STEPS } = require('../../../lib/komplett-scope');
 const { enqueuePruefJobs } = require('./pruef-jobs');
@@ -158,7 +158,7 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
         statusText: 'job.phase.readingPages',
         statusParams: { from: i + 1, to: Math.min(i + BATCH_SIZE, total), total },
       });
-    }, jobAbortControllers.get(jobId)?.signal);
+    }, jobAbortControllers.get(jobId)?.signal, komplettTextOpts(bookId, email));
 
     // Kapitel-scoped Page-Lookup gegen Namenskollisionen (derselbe Seitenname kann
     // in mehreren Kapiteln existieren) — SSoT shared/loader.js#idMapsFromContents,

@@ -35,13 +35,20 @@ test('Editor-Block-IDs spiegeln den Server-Selektor', () => {
   assert.match(read('public/js/editor/notebook/block-ids.js'), new RegExp(`div\\.${MSG_THREAD_CLASS}`));
 });
 
-test('LanguageTool-Mapping schneidet den Verlauf mit demselben Selektor', () => {
-  assert.match(read('public/js/cards/editor-spellcheck/mapping.js'), new RegExp(`const MSG_SKIP_SEL = '${MSG_THREAD_SEL.replace('.', '\\.')}';`));
+test('LanguageTool prüft den Verlauf, jede Zeile als eigener Absatz', async () => {
+  const { parseHTML } = await import('linkedom');
+  const { buildOffsetTable } = await import('../../public/js/cards/editor-spellcheck/mapping.js');
+  const { document } = parseHTML(`<div id="r"><p>Davor.</p><div class="${MSG_THREAD_CLASS}"><p class="msg-in">bist du da</p><p class="msg-out">gleich</p></div></div>`);
+  assert.equal(buildOffsetTable(document.getElementById('r')).text, 'Davor.\n\nbist du da\n\ngleich');
 });
 
 test('Text-Pfade (Prompt-Marken, TXT, WordPress) kennen die Klassen', async () => {
-  const { markMsgThreads } = await import('../../lib/html-text.js');
+  const { markMsgThreads, htmlToPlainTextWithMsgRanges } = await import('../../lib/html-text.js');
   assert.match(markMsgThreads(`<div class="${MSG_THREAD_CLASS}"><p>x</p></div>`), /^<p>\[/);
+  // Dialog-Erkennung: Nachrichten sind Rede, Absender und Zeit nicht.
+  const lines = Object.values(MSG_KIND_CLASS).map(c => `<p class="${c}">${c}</p>`).join('');
+  const { text, msgRanges } = htmlToPlainTextWithMsgRanges(`<div class="${MSG_THREAD_CLASS}">${lines}</div>`);
+  assert.deepEqual(msgRanges.map(([a, b]) => text.slice(a, b)), [MSG_KIND_CLASS.in, MSG_KIND_CLASS.out]);
   const txt = read('lib/export-builders/txt.js');
   assert.match(txt, new RegExp(`\\\\b${MSG_THREAD_CLASS}\\\\b`));
   for (const c of ['msg-name', 'msg-meta', 'msg-out']) assert.ok(KIND_CLASSES.includes(c) && txt.includes(`'${c}'`), `txt: ${c}`);

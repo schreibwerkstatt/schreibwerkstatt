@@ -16,7 +16,7 @@ const appSettings = require('../../../lib/app-settings');
 const { setContext } = require('../../../lib/log-context');
 const { makePhaseTimer } = require('./utils');
 const { runErzaehlprofil } = require('./phases');
-const { _komplettAiOverrides } = require('./job-shared');
+const { _komplettAiOverrides, komplettTextOpts } = require('./job-shared');
 const { providerClass, resolveProvider } = require('../../../lib/ai');
 
 async function runErzaehlprofilJob(jobId, bookId, bookName, userEmail, provider = undefined) {
@@ -59,7 +59,7 @@ async function runErzaehlprofilJob(jobId, bookId, bookName, userEmail, provider 
         statusText: 'job.phase.readingPages',
         statusParams: { from: i + 1, to: Math.min(i + BATCH_SIZE, total), total },
       });
-    }, jobAbortControllers.get(jobId)?.signal);
+    }, jobAbortControllers.get(jobId)?.signal, komplettTextOpts(bookId, email));
 
     // Buchtext-Preprocessing nur Cloud-Klasse (identisch zu job-komplett/-kontinuitaet).
     if (providerClass(effectiveProvider) === 'cloud') {

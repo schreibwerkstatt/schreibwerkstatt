@@ -1,4 +1,5 @@
-// Höhe des NOTEBOOK-Seitenkastens mit Bildern, gegen die ECHTE App.
+// Höhe des NOTEBOOK-Seitenkastens mit Bildern und Nachrichtenverläufen,
+// gegen die ECHTE App (Verlauf: Testfall am Dateiende).
 //
 // WARUM DIESE SCHICHT: die Invariante hängt an der CSS-Höhenkette
 // (`--pcv-max-h` → `max-height` von `.page-content-view`, Padding, Zoom) und am
@@ -32,15 +33,15 @@ const IMG_SRC = 'data:image/svg+xml,' + encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="${IMG_H}"><rect width="300" height="${IMG_H}" fill="#88a"/></svg>`,
 );
 
-async function openFreshPage(page, bookId) {
-  const id = await page.evaluate(async (bid) => {
+async function openFreshPage(page, bookId, html = '<p>Kurz.</p>') {
+  const id = await page.evaluate(async ({ bid, html }) => {
     const { contentRepo } = await import('/js/repo/content.js');
-    const created = await contentRepo.createPage({ book_id: parseInt(bid, 10), name: 'Bildhoehe', html: '<p>Kurz.</p>' });
+    const created = await contentRepo.createPage({ book_id: parseInt(bid, 10), name: 'Bildhoehe', html });
     await window.__app.loadPages();
     const p = window.Alpine.store('nav').pages.find((x) => x.id === created.id);
     await window.__app.selectPage(p);
     return created.id;
-  }, bookId);
+  }, { bid: bookId, html });
   await page.waitForFunction(() => window.__app.showEditorCard === true, null, { timeout: 15000 });
   return id;
 }
@@ -89,6 +90,36 @@ test('Bild: Seitenkasten wächst im Edit-Modus und in der Leseansicht mit', asyn
   const pageId = await openFreshPage(page, bookId);
   try {
     await checkHeights(page);
+  } finally {
+    await deletePage(page, pageId);
+  }
+});
+
+// Nachrichtenverlauf: kurze Nachrichten, jede eine eigene Blase mit Abstand —
+// die Wortzahl-Schätzung (≈7 Wörter/Zeile) sieht hier drei Zeilen Prosa, der
+// gerenderte Verlauf ist ein Vielfaches davon hoch. Ohne Messung deckelt
+// `--pcv-max-h` den Kasten auf die Schätzung und das Ende des Verlaufs liegt
+// hinter einer inneren Scrollbar.
+const THREAD_LINES = 10;
+const THREAD_HTML = '<p>Kurz.</p><div class="msg-thread"><p class="msg-name">Lena</p>'
+  + Array.from({ length: THREAD_LINES }, (_, i) => `<p class="${i % 2 ? 'msg-out' : 'msg-in'}">ok ${i}</p>`).join('')
+  + '<p class="msg-meta">Dienstag, 14:32</p></div>';
+
+test('Nachrichtenverlauf: Leseansicht misst statt zu schätzen', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const pageId = await openFreshPage(page, bookId, THREAD_HTML);
+  try {
+    await page.waitForSelector(`${READ_SEL} .msg-thread`, { timeout: 15000 });
+    // Nicht vakuös: der Verlauf ragt deutlich über den Mindestdeckel (20 %
+    // Fensterhöhe, darunter fiele die Schätzung) und bleibt unter dem
+    // Höchstdeckel (80 %, darüber scrollt der Kasten zu Recht).
+    const { contentPx, vh } = await page.evaluate((s) => ({
+      contentPx: document.querySelector(s).scrollHeight, vh: window.innerHeight,
+    }), READ_SEL);
+    expect(contentPx).toBeGreaterThan(vh * 0.2 + 100);
+    expect(contentPx).toBeLessThan(vh * 0.8);
+    await expect.poll(() => overflowPx(page, READ_SEL), { timeout: 5000 }).toBeLessThanOrEqual(0);
   } finally {
     await deletePage(page, pageId);
   }

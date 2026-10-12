@@ -1,0 +1,41 @@
+{
+  "version": "4.23.2",
+  "date": "2026-10-12",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Nachrichtenverlauf: Tab wechselt nur noch zwischen links und rechts. Absender und Hinweis setzt die Leiste über dem Verlauf; der Hinweis nimmt neben der Uhrzeit auch Datum oder Chatname auf.",
+      "en": "Message thread: Tab now only switches between left and right. Sender and note are set via the bar above the thread; the note takes a date or chat name as well as the time."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Nachrichtenverlauf: am Bildschirm steht er jetzt in der Buchschrift, so wie ihn auch PDF, Word und EPUB setzen.",
+      "en": "Message thread: on screen it now uses the book font, the same way PDF, Word and EPUB set it."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Stil-Heatmap und Autorenprofil zählen Nachrichten aus einem Nachrichtenverlauf als Dialog. Satzlänge und Lesbarkeit werden davon nicht mehr verzerrt.",
+      "en": "Style heatmap and author profile count messages in a message thread as dialogue. Sentence length and readability are no longer skewed by them."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Wortschatz, Reiter Figuren: eingehende Nachrichten zählen jetzt zur Stimme der Figur, die in der Absenderzeile steht.",
+      "en": "Vocabulary, Characters tab: incoming messages now count towards the voice of the character named in the sender line."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Komplettanalyse: in Nachrichtenverläufen erkennt sie jetzt, wer schreibt, wer antwortet und wann.",
+      "en": "Full analysis: in message threads it now recognises who writes, who replies and when."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Die Rechtschreibprüfung prüft jetzt auch Nachrichten im Nachrichtenverlauf, jede Zeile für sich.",
+      "en": "Spell check now also checks messages in a message thread, each line on its own."
+    },
+    {
+      "kind": "behoben",
+      "de": "Passwort-Manager wie Bitwarden boten in Eingabefeldern von Dialogen und im Einladungsfeld beim Teilen ihr Anmelde-Menü an. Das passiert nicht mehr.",
+      "en": "Password managers such as Bitwarden offered their sign-in menu in dialog input fields and in the sharing invite field. That no longer happens."
+    }
+  ]
+}

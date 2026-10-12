@@ -47,7 +47,7 @@
   flex-direction: column;
   gap: var(--space-6);
 }
-.image-dialog-input {
+.image-dialog-field {
   width: 100%;
 }
 /* Der Hinweis unter einem Feld gehört zu diesem Feld — der Abstand zum

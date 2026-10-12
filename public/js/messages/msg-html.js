@@ -34,8 +34,7 @@ export const MSG_THREAD_CLASS = 'msg-thread';
 export const MSG_THREAD_SEL = `div.${MSG_THREAD_CLASS}`;
 export const MSG_LINE_SEL = `${MSG_THREAD_SEL} > p`;
 
-// Zeilenarten in der Reihenfolge, in der Tab sie durchlaeuft: die beiden
-// Richtungen zuerst, weil ein Gespraech zu zweit nur zwischen ihnen wechselt.
+// Zeilenarten in der Reihenfolge der Zeilenleiste.
 export const MSG_KINDS = ['in', 'out', 'name', 'meta'];
 export const MSG_KIND_CLASS = {
   in: 'msg-in',
@@ -75,16 +74,17 @@ export function setMsgKind(line, kind) {
   line.classList.add(MSG_KIND_CLASS[kind]);
 }
 
-// Naechste Zeilenart im Tab-Zyklus (`step` = 1 vorwaerts, -1 rueckwaerts).
-export function cycleMsgKind(kind, step = 1) {
-  const i = MSG_KINDS.indexOf(kind);
-  const n = MSG_KINDS.length;
-  return MSG_KINDS[((i < 0 ? 0 : i) + step + n) % n];
+// Zeilenart nach Tab: wechselt nur die Seite (Eingang <-> Ausgang). Absender
+// und Hinweis setzt allein die Zeilenleiste — ein Zyklus ueber alle vier Arten
+// machte aus einer Nachricht nach zwei Tabs eine Namenszeile, die wie eine
+// Ueberschrift aussieht. Aus Absender/Hinweis fuehrt Tab zurueck zur Nachricht.
+export function toggleMsgSide(kind) {
+  return kind === 'in' ? 'out' : 'in';
 }
 
 // Zeilenart der Zeile, die Enter hinter `line` anlegt. Nach einer Nachricht
 // schreibt dieselbe Seite weiter; nach einem Absender folgt seine Nachricht;
-// nach einer Zeitangabe die Richtung der Nachricht davor (oder eingehend).
+// nach einem Hinweis die Richtung der Nachricht davor (oder eingehend).
 export function nextLineKind(line) {
   const kind = msgKind(line);
   if (kind === 'in' || kind === 'out') return kind;

@@ -10,7 +10,7 @@ const { computePageIndex, writePageIndex, writeFigureMentionsForPageAllUsers, lo
 const { invalidateBookPageCache } = require('./jobs/chat');
 const { localIsoDate } = require('../lib/local-date');
 const searchIndex = require('../lib/search');
-const { htmlToPlainText, stripTableBlocks } = require('../lib/html-text');
+const { htmlToPlainText, htmlToPlainTextWithMsgRanges, stripMsgThreads, stripTableBlocks } = require('../lib/html-text');
 const { stampLexiconHistory, bookLanguage } = require('../db/lexicon');
 const { MATTR_WINDOW } = require('../lib/lexicon/measures');
 
@@ -213,12 +213,15 @@ async function syncBook(bookId, ctx) {
       // `styleText` ist der Prosatext fuer die satzbasierten Stil-Metriken —
       // dort ist „1.2 Mio" kein Satz und verzerrt Satzlaenge, Satzanfaenge und
       // Flesch/LIX. Begruendung in lib/html-text.js#stripTableBlocks.
-      const styleText = htmlToText(stripTableBlocks(pd.html || ''));
-      return { page_id: p.id, book_id: bookId, tok, words, chars, updated_at: p.updated_at || null, cached_at: now, wordList, sentences, preview, fullText: text, styleText };
+      // Nachrichten eines Verlaufs zaehlen als Dialog (`msgRanges`), die
+      // Satzmetriken laufen ohne Verlauf (`proseText`, lib/html-text.js#stripMsgThreads).
+      const { text: styleText, msgRanges } = htmlToPlainTextWithMsgRanges(stripTableBlocks(pd.html || ''));
+      const proseText = htmlToText(stripMsgThreads(stripTableBlocks(pd.html || '')));
+      return { page_id: p.id, book_id: bookId, tok, words, chars, updated_at: p.updated_at || null, cached_at: now, wordList, sentences, preview, fullText: text, styleText, msgRanges, proseText };
     }));
     for (const r of results) {
       if (r.status === 'fulfilled') {
-        const { wordList, sentences, preview, fullText, styleText, ...statsItem } = r.value;
+        const { wordList, sentences, preview, fullText, styleText, msgRanges, proseText, ...statsItem } = r.value;
         statsItems.push(statsItem);
         previewItems.push({ page_id: r.value.page_id, preview_text: preview || null });
         totalWords += r.value.words;
@@ -229,7 +232,7 @@ async function syncBook(bookId, ctx) {
 
         // Stil-Index auf dem Prosatext, Figuren-Erwaehnungen auf dem Volltext:
         // eine in einer Tabellenzelle genannte Figur ist genannt.
-        const indexResult = computePageIndex(styleText, { extraStopwords, language });
+        const indexResult = computePageIndex(styleText, { extraStopwords, language, msgRanges, proseText });
         indexItems.push({ page_id: r.value.page_id, index: indexResult, fullText });
       }
     }

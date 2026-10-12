@@ -5,7 +5,7 @@
 
 const { htmlToText } = require('../shared');
 const contentStore = require('../../../lib/content-store');
-const { htmlToPlainText } = require('../../../lib/html-text');
+const { htmlToPlainText, htmlToPlainTextWithMsgRanges } = require('../../../lib/html-text');
 const { findDialogRanges } = require('../../../lib/page-index');
 const searchIndex = require('../../../lib/search');
 const semanticRetrieval = require('../../../lib/semantic-retrieval');
@@ -466,8 +466,8 @@ function tool_get_dialogue(input, ctx) {
   const results = [];
   let totalFound = 0;
   for (const p of pages) {
-    const text = htmlToPlainText(p.body_html);
-    const ranges = findDialogRanges(text);
+    const { text, msgRanges } = htmlToPlainTextWithMsgRanges(p.body_html);
+    const ranges = findDialogRanges(text, msgRanges);
     for (const [a, b] of ranges) {
       const segment = text.slice(a, b).trim();
       if (segment.length < minLen) continue;
@@ -500,7 +500,7 @@ function tool_get_dialogue(input, ctx) {
     results,
     total_results: totalFound,
     ...(totalFound > results.length ? { truncated: true, shown: results.length } : {}),
-    hint: 'Heuristische Dialog-Erkennung (Anfuehrungszeichen, Speech-Verb+Doppelpunkt, Em-Dash). Einfache gerade Quotes werden ignoriert.',
+    hint: 'Heuristische Dialog-Erkennung (Anfuehrungszeichen, Speech-Verb+Doppelpunkt, Em-Dash, Nachrichten eines SMS-/Chat-Verlaufs). Einfache gerade Quotes werden ignoriert.',
   });
 }
 

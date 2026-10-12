@@ -178,8 +178,10 @@ function cleanPageTextForAi(text) {
 //     ausschneidet (lib/search.js → htmlToPlainText). Zwei Indexe auf zwei
 //     verschiedenen Texten.
 // Ausschnitt-Regex ist die SSoT aus lib/html-text.js — keine Kopie hier.
-function htmlToText(html) {
-  return _decodeEntities(summarizeTableBlocks(markMsgThreads(stripDiagramBlocks(html))).replace(/<[^>]+>/g, ' '), HTML_NAMED_ENTITIES)
+// `msgRows`: Zeilenart jeder Verlaufszeile im Text, Marken in `langCode`
+// (Komplettanalyse, lib/html-text.js#markMsgThreads `rows`).
+function htmlToText(html, { msgRows = false, langCode = 'de' } = {}) {
+  return _decodeEntities(summarizeTableBlocks(markMsgThreads(stripDiagramBlocks(html), { rows: msgRows, langCode })).replace(/<[^>]+>/g, ' '), HTML_NAMED_ENTITIES)
     .replace(/\s+/g, ' ').trim();
 }
 

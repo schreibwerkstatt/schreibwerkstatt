@@ -107,7 +107,7 @@ test('Wortschatz-Analyse laeuft ueber stripTableBlocks', () => {
 
 test('Stil-Metriken laufen auf dem Prosatext, Figuren-Erwaehnungen auf dem Volltext', () => {
   const src = read('routes/sync.js');
-  assert.match(src, /styleText\s*=\s*htmlToText\(stripTableBlocks\(/,
+  assert.match(src, /text: styleText[^}]*\}\s*=\s*htmlToPlainTextWithMsgRanges\(stripTableBlocks\(/,
     'computePageIndex braucht den Text ohne Tabellen');
   assert.match(src, /computePageIndex\(styleText/);
   assert.match(src, /indexItems\.push\(\{[^}]*fullText/,
@@ -124,7 +124,7 @@ test('Prompt: Tabelle wird verdichtet, nicht geschnitten', () => {
 
 test('beide Prompt-Textpfade nutzen die Kurzform', () => {
   const src = read('routes/jobs/shared/ai.js');
-  assert.match(src, /function htmlToText\(html\)[\s\S]{0,200}summarizeTableBlocks/);
+  assert.match(src, /function htmlToText\(html\b[^)]*\)[\s\S]{0,200}summarizeTableBlocks/);
   assert.match(src, /function htmlToTextForPrompt\(html\b[^)]*\)[\s\S]{0,200}summarizeTableBlocks/);
 });
 

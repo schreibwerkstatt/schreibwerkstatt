@@ -27,7 +27,7 @@ const { makePhaseTimer, buildBookSystemBlockText } = require('./utils');
 const { saveKontinuitaetResult } = require('./remap');
 const { komplettMaxTokens } = require('./phases');
 const {
-  buildAnachronismusData, verifyKontinuitaetProbleme, runAttributeContradictionCheck, _komplettAiOverrides,
+  buildAnachronismusData, verifyKontinuitaetProbleme, runAttributeContradictionCheck, _komplettAiOverrides, komplettTextOpts,
 } = require('./job-shared');
 const { COST_LABEL, costTier } = require('./cost-labels');
 
@@ -88,7 +88,7 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
         statusText: 'job.phase.readingPages',
         statusParams: { from: i + 1, to: Math.min(i + BATCH_SIZE, total), total },
       });
-    }, jobAbortControllers.get(jobId)?.signal);
+    }, jobAbortControllers.get(jobId)?.signal, komplettTextOpts(bookId, email));
 
     // Buchtext-Preprocessing nur Cloud-Klasse (siehe runKomplettAnalyseJob).
     if (providerClass(effectiveProvider) === 'cloud') {

@@ -72,6 +72,19 @@ test.describe('Notebook — Nachrichtenverlauf', () => {
     await expectNoInlineStyle(page, 'nach dem Tippen');
   });
 
+  test('Tab wechselt nur die Seite, nie zu Absender oder Zeit', async ({ page }) => {
+    await enterNotebookEdit(page);
+    await seed(page, THREAD, '.msg-in', 'end');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    expect(await readHtml(page)).toContain('<p class="msg-in">Hallo</p>');
+    await page.keyboard.press('Shift+Tab');
+    expect(await readHtml(page)).toContain('<p class="msg-out">Hallo</p>');
+    await seed(page, '<div class="msg-thread"><p class="msg-name">Lena</p></div>', '.msg-name', 'end');
+    await page.keyboard.press('Tab');
+    expect(await readHtml(page)).toBe('<div class="msg-thread"><p class="msg-in">Lena</p></div>');
+  });
+
   test('Enter mitten in der Zeile teilt sie, die Art bleibt', async ({ page }) => {
     await enterNotebookEdit(page);
     await seed(page, THREAD, '.msg-out', 'end');

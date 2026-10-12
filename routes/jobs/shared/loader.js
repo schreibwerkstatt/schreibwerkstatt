@@ -122,7 +122,9 @@ function idMapsFromContents({ chNameToId, pages }) {
   };
 }
 
-async function loadPageContents(pages, chMap, minLength, onBatch, signal = null) {
+// `textOpts` geht an ./ai.js#htmlToText — `{ msgRows, langCode }` setzt nur die
+// Komplettanalyse (komplett/utils.js#komplettTextOpts, auch im Delta-Vergleich).
+async function loadPageContents(pages, chMap, minLength, onBatch, signal = null, textOpts = {}) {
   // Vor-Filter via preview_text aus dem pages-Cache: wenn ein gespeicherter
   // Preview kürzer als minLength ist, ist auch der Volltext zu kurz und wir
   // sparen das Volltext-Laden (oft 100+ leere Stub-Pages pro Buch).
@@ -157,7 +159,7 @@ async function loadPageContents(pages, chMap, minLength, onBatch, signal = null)
     },
   }).then(loaded => loaded
     .map(pd => {
-      const text = htmlToText(pd.html).trim();
+      const text = htmlToText(pd.html, textOpts).trim();
       if (text.length < minLength) return null;
       return {
         id: pd.id,

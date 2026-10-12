@@ -1,6 +1,6 @@
 // editorToolbarCard: Nachrichtenverlauf (div.msg-thread) im Notebook-Editor —
 // Tastatur (Enter/Tab/Backspace/Delete) und die schwebende Zeilenleiste
-// (Eingang/Ausgang/Absender/Zeit). `this` = Sub-Komponente (editorToolbarCard).
+// (Eingang/Ausgang/Absender/Hinweis). `this` = Sub-Komponente (editorToolbarCard).
 //
 // Nur Notebook: Focus-Editor und Bucheditor stellen den Verlauf dar, bringen
 // aber keinen Bedienpfad mit. Die Handler laufen im Dispatcher hinter dem
@@ -15,7 +15,7 @@
 
 import { getEditEl, placeCaretIn, caretAtBlockStart, caretAtBlockEnd } from './_shared.js';
 import {
-  closestMsgLine, msgKind, setMsgKind, cycleMsgKind, nextLineKind, createMsgLine,
+  closestMsgLine, msgKind, setMsgKind, toggleMsgSide, nextLineKind, createMsgLine,
   MSG_THREAD_CLASS,
 } from '../../../messages/msg-html.js';
 
@@ -92,13 +92,13 @@ export const msgThreadMethods = {
     return true;
   },
 
-  // Tab / Shift+Tab: Zeilenart durchschalten (Eingang → Ausgang → Absender →
-  // Zeit). Ausserhalb eines Verlaufs bleibt Tab beim Browser.
+  // Tab / Shift+Tab: Seite wechseln (Eingang ↔ Ausgang, siehe toggleMsgSide).
+  // Ausserhalb eines Verlaufs bleibt Tab beim Browser.
   _kbMsgTab(e, app) {
     const hit = caretLine();
     if (!hit) return false;
     e.preventDefault();
-    setMsgKind(hit.line, cycleMsgKind(msgKind(hit.line), e.shiftKey ? -1 : 1));
+    setMsgKind(hit.line, toggleMsgSide(msgKind(hit.line)));
     app._markEditDirty?.();
     this._updateMsgBar();
     return true;

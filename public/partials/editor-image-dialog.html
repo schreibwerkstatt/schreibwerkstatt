@@ -28,7 +28,7 @@
       <div class="image-dialog-fields">
         <label class="card-form-label" for="image-alt-input"
                x-text="$app.t('editor.image.alt')"></label>
-        <input type="text" id="image-alt-input" class="image-dialog-input"
+        <input type="text" id="image-alt-input" class="image-dialog-field"
                x-ref="imageAltInput" x-model="imageAlt"
                data-spellcheck="spelling" autocomplete="off"
                :placeholder="$app.t('editor.image.altPlaceholder')">
@@ -36,7 +36,7 @@
 
         <label class="card-form-label" for="image-credit-input"
                x-text="$app.t('editor.image.credit')"></label>
-        <input type="text" id="image-credit-input" class="image-dialog-input"
+        <input type="text" id="image-credit-input" class="image-dialog-field"
                x-model="imageCredit"
                data-spellcheck="spelling" autocomplete="off"
                :placeholder="$app.t('editor.image.creditPlaceholder')">
