@@ -153,6 +153,16 @@ export function registerPageRevisionsCard() {
       return out && out !== key ? out : src;
     },
 
+    // «Abschnitt teilen» schreibt Kopf und Schwanz mit Quelle 'split' und dem
+    // Verweis auf die andere Haelfte ins Summary (lib/content-store#splitPage):
+    // `split → #<id>` (hintere Haelfte ging dorthin) bzw. `split from #<id>`.
+    // Name/Sprung/geloeschte Seite erledigt x-entity-ref.
+    splitLink(rev) {
+      if (rev?.source !== 'split') return null;
+      const m = /^split (→|from) #(\d+)$/.exec(String(rev.summary || ''));
+      return m ? { dir: m[1] === '→' ? 'to' : 'from', pageId: Number(m[2]) } : null;
+    },
+
     // Nummer gegen `total`, nicht gegen die Fenstergroesse: die Liste ist DESC
     // und beginnt immer bei der juengsten Revision, Index 0 ist also Nummer
     // `total`. Gegen `revisions.length` gerechnet wuerde dieselbe Revision nach

@@ -48,6 +48,7 @@
       </button>
       <button type="button" x-show="bubbleMsgOk" class="edit-bubble-btn edit-bubble-btn--msg" @click="toolbarToMsgThread('in')" :data-tip="$app.t('editor.toolbar.msgConvertInTitle')" :aria-label="$app.t('editor.toolbar.msgConvertInTitle')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#message-square"/></svg><svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-left"/></svg></button>
       <button type="button" x-show="bubbleMsgOk" class="edit-bubble-btn edit-bubble-btn--msg" @click="toolbarToMsgThread('out')" :data-tip="$app.t('editor.toolbar.msgConvertOutTitle')" :aria-label="$app.t('editor.toolbar.msgConvertOutTitle')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#message-square"/></svg><svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-right"/></svg></button>
+      <button type="button" x-show="bubbleMsgUnwrapOk" class="edit-bubble-btn edit-bubble-btn--msg edit-bubble-btn--msg-unwrap" @click="toolbarFromMsgThread()" :data-tip="$app.t('editor.toolbar.msgUnwrapTitle')" :aria-label="$app.t('editor.toolbar.msgUnwrapTitle')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#message-square"/></svg><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
     </div>
   </template>
 

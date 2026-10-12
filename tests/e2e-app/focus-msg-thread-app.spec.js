@@ -139,4 +139,15 @@ test.describe('Focus — Nachrichtenverlauf', () => {
     await page.keyboard.press('Tab');
     expect(await readHtml(page)).toContain('<p class="msg-in">Hallo</p>');
   });
+
+  // Der Kurzweg «Name:» + Enter → Absender ist Notebook-only: der Focus-Editor
+  // zeigt keine Zeilenarten, es verschwände nur der Doppelpunkt.
+  test('«Name:» + Enter bleibt im Focus-Editor eine Nachricht', async ({ page }) => {
+    await enterFocus(page);
+    await seed(page, '.msg-out', 'end');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Tom:');
+    await page.keyboard.press('Enter');
+    expect(await readHtml(page)).toContain('<p class="msg-out">Tom:</p><p class="msg-out"><br></p>');
+  });
 });

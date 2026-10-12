@@ -127,6 +127,32 @@ export function nextLineKind(line) {
   return 'in';
 }
 
+// Absender aus einer getippten Zeile `Name:` (Enter-Kurzweg im Notebook-Editor,
+// editor/notebook/toolbar/msg-thread.js#_kbMsgEnter). Liefert den Namen ohne
+// Doppelpunkt oder null. Die Zeile muss NUR aus dem Namen bestehen — «Achtung:
+// Zug fällt aus» bleibt eine Nachricht. Erlaubt: Buchstaben, Ziffern, Leerzeichen
+// und die Zeichen, die in Namen vorkommen (Bindestrich, Apostroph, Punkt wie in
+// «Dr. Graf»); mindestens ein Buchstabe, höchstens MSG_NAME_MAX Zeichen.
+export const MSG_NAME_MAX = 30;
+const NAME_LINE_RE = /^([\p{L}\p{N}][\p{L}\p{N} .'’-]*?)\s*:$/u;
+export function msgNameFromTyped(text) {
+  const m = NAME_LINE_RE.exec((text || '').replace(/ /g, ' ').trim());
+  if (!m) return null;
+  const name = m[1].trim();
+  if (name.length > MSG_NAME_MAX || !/\p{L}/u.test(name)) return null;
+  return name;
+}
+
+// Leer = kein Text und kein eingebetteter Inhalt (Bild, Chip-Ersatz o.ä.).
+// Leere Inline-Hüllen (`<em></em>`, die ein Schnitt am Formatrand
+// zurücklässt) zählen nicht: eine solche Zeile hat keine Zeilenhöhe und
+// schrumpft am Bildschirm auf ihr Blasen-Padding.
+const MSG_LINE_CONTENT_SEL = 'img, hr, input, iframe, object, embed, video, audio, svg, canvas';
+export function isEmptyMsgLine(line) {
+  if ((line?.textContent || '').trim()) return false;
+  return !line?.querySelector(MSG_LINE_CONTENT_SEL);
+}
+
 // Leere Zeile der Art `kind`, mit <br> als Caret-Slot.
 export function createMsgLine(kind = 'in', doc = document) {
   const p = doc.createElement('p');

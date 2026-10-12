@@ -1,4 +1,6 @@
-// editorToolbarCard: markierte Absätze → Nachrichtenverlauf (Bubble-Leiste).
+// editorToolbarCard: markierte Absätze → Nachrichtenverlauf (Bubble-Leiste)
+// und zurück: markierte Verlaufszeilen → schlichte Absätze (Bubble-Leiste und
+// Zeilenleiste).
 // `this` = Sub-Komponente (editorToolbarCard), Root-Zugriffe via window.__app.
 //
 // Jeder erfasste Absatz wird eine Nachricht; die erste bekommt die gewählte
@@ -13,7 +15,7 @@
 
 import { getEditEl } from './_shared.js';
 import {
-  isMsgThreadEl, setMsgKind, toggleMsgSide, MSG_THREAD_CLASS,
+  isMsgThreadEl, setMsgKind, toggleMsgSide, closestMsgLine, isEmptyMsgLine, MSG_THREAD_CLASS, MSG_KIND_CLASS,
 } from '../../../messages/msg-html.js';
 
 // Öffnende/schliessende Zeichen, die eine ganze Zeile als Rede umschliessen
@@ -38,6 +40,28 @@ export function msgConvertTargets(range, editEl) {
   if (!blocks.length) return [];
   const plain = blocks.every(b => b.tagName === 'P' && !b.className);
   return plain ? blocks : [];
+}
+
+// Verlaufszeilen, die die Selektion berührt; bei kollabierter Range die
+// Caret-Zeile. Erfasst die Selektion daneben Erzählabsätze, zählen nur die
+// Zeilen. Kein Treffer → [].
+export function msgUnwrapTargets(range, editEl) {
+  if (!range || !editEl) return [];
+  if (range.collapsed) {
+    const line = closestMsgLine(range.startContainer, editEl);
+    return line ? [line] : [];
+  }
+  const out = [];
+  for (const thread of editEl.querySelectorAll(`:scope > .${MSG_THREAD_CLASS}`)) {
+    if (!range.intersectsNode(thread)) continue;
+    for (const line of thread.children) {
+      if (!range.intersectsNode(line)) continue;
+      // Selektion, die genau am Anfang der nächsten Zeile endet (Dreifachklick).
+      if (out.length && range.endContainer === line && range.endOffset === 0) continue;
+      out.push(line);
+    }
+  }
+  return out;
 }
 
 function textNodes(el) {
@@ -69,10 +93,6 @@ export function stripLineQuotes(line) {
   first.data = first.data.slice(0, lead) + first.data.slice(lead + 1);
 }
 
-function isEmptyLine(p) {
-  return !(p.textContent || '').trim() && !p.querySelector(':not(br)');
-}
-
 export const msgConvertMethods = {
   // `firstKind` = 'in' | 'out': Seite der ersten Nachricht.
   toolbarToMsgThread(firstKind) {
@@ -82,7 +102,7 @@ export const msgConvertMethods = {
     const sel = document.getSelection();
     if (!editEl || !sel || sel.rangeCount === 0) return;
     const blocks = msgConvertTargets(sel.getRangeAt(0), editEl);
-    const lines = blocks.filter(b => !isEmptyLine(b));
+    const lines = blocks.filter(b => !isEmptyMsgLine(b));
     if (!lines.length) return;
 
     // Vorher-Stand als eigenen Undo-Schritt einfrieren (offene Tipp-Serie
@@ -117,5 +137,68 @@ export const msgConvertMethods = {
     this.bubbleShow = false;
     app._markEditDirty?.();
     app._historyPushNow?.();
+  },
+
+  // Markierte Verlaufszeilen (oder die Caret-Zeile) werden schlichte Absätze;
+  // der Verlauf teilt sich an der Stelle, leere Restteile fallen weg. Die
+  // Zeilenart geht verloren, der Text bleibt wie er ist.
+  toolbarFromMsgThread() {
+    const app = window.__app;
+    if (!app?.editMode || app.focusActive) return;
+    const editEl = getEditEl();
+    const sel = document.getSelection();
+    if (!editEl || !sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    const lines = msgUnwrapTargets(range, editEl);
+    if (!lines.length) return;
+    const collapsed = range.collapsed;
+    const caret = collapsed ? { node: range.startContainer, offset: range.startOffset } : null;
+
+    app._historyPushNow?.();
+
+    const picked = new Set(lines);
+    const threads = [...new Set(lines.map(l => l.parentNode))];
+    for (const thread of threads) {
+      // Zeilen in Läufe gliedern: Verlaufsstücke und gelöste Absätze im Wechsel.
+      const parts = [];
+      for (const line of [...thread.children]) {
+        const loose = picked.has(line);
+        const last = parts[parts.length - 1];
+        if (last && last.loose === loose) last.nodes.push(line);
+        else parts.push({ loose, nodes: [line] });
+      }
+      for (const part of parts) {
+        if (part.loose) {
+          for (const p of part.nodes) {
+            for (const c of Object.values(MSG_KIND_CLASS)) p.classList.remove(c);
+            if (!p.classList.length) p.removeAttribute('class');
+            thread.before(p);
+          }
+        } else {
+          const piece = document.createElement('div');
+          piece.className = MSG_THREAD_CLASS;
+          piece.append(...part.nodes);
+          thread.before(piece);
+        }
+      }
+      thread.remove();
+    }
+
+    const r = document.createRange();
+    if (caret?.node.isConnected) {
+      r.setStart(caret.node, caret.offset);
+      r.collapse(true);
+    } else {
+      const last = lines[lines.length - 1];
+      r.setStart(lines[0], 0);
+      r.setEnd(last, last.childNodes.length);
+      if (collapsed) r.collapse(true);
+    }
+    sel.removeAllRanges();
+    sel.addRange(r);
+    app._markEditDirty?.();
+    app._historyPushNow?.();
+    this._updateMsgBar();
+    this._updateBubble();
   },
 };

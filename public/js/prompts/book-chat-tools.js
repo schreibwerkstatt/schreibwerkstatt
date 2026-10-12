@@ -446,7 +446,7 @@ export const BOOK_CHAT_TOOLS = [
   },
   {
     name: 'list_revisions',
-    description: 'Listet die gespeicherten Revisionen eines Abschnitts (neueste zuerst): rev_id, created_at, source (focus/main/book/chat-apply/lektorat-apply/import/conflict), chars, words, summary. Plus total_revisions. Voraussetzung, um gezielt `diff_page_revisions` zwischen bestimmten Revisionen zu rufen, statt nur den Default-Pfad (zwei jüngste) zu nehmen.',
+    description: 'Listet die gespeicherten Revisionen eines Abschnitts (neueste zuerst): rev_id, created_at, source (focus/main/book/chat-apply/lektorat-apply/import/conflict/macapp/split — split = Abschnitt geteilt, summary nennt die andere Hälfte), chars, words, summary. Plus total_revisions. Voraussetzung, um gezielt `diff_page_revisions` zwischen bestimmten Revisionen zu rufen, statt nur den Default-Pfad (zwei jüngste) zu nehmen.',
     input_schema: {
       type: 'object',
       properties: {

@@ -25,6 +25,7 @@ export function registerEditorToolbarCard() {
     bubbleShow: false,
     bubbleSingleWord: false,
     bubbleMsgOk: false,
+    bubbleMsgUnwrapOk: false,
     bubbleX: 0,
     bubbleY: 0,
     slashShow: false,

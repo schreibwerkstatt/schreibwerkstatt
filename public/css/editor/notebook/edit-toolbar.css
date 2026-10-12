@@ -376,3 +376,5 @@
 }
 .edit-msg-btn:hover { color: var(--color-text); background: var(--color-bg); }
 .edit-msg-btn--active { color: var(--color-accent-text); background: var(--color-bg); font-weight: 600; }
+.edit-msg-btn--unwrap { display: inline-flex; align-items: center; border-left: 1px solid var(--color-border); }
+.edit-msg-btn--unwrap .icon { width: 1em; height: 1em; }

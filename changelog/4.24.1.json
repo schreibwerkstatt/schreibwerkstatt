@@ -1,0 +1,26 @@
+{
+  "version": "4.24.1",
+  "date": "2026-10-12",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Nachrichtenverlauf: ein neuer Knopf in der Formatierungsleiste und in der Zeilenleiste löst markierte Zeilen wieder aus dem Verlauf. Sie werden normale Absätze, der Text bleibt erhalten.",
+      "en": "Message thread: a new button in the formatting bar and in the line bar takes selected lines back out of the thread. They become normal paragraphs and keep their text."
+    },
+    {
+      "kind": "neu",
+      "de": "Nachrichtenverlauf: wer eine Zeile nur mit „Name:“ tippt und Enter drückt, macht daraus einen Absender. Die nächste Nachricht steht gleich auf derselben Seite.",
+      "en": "Message thread: typing just “Name:” on a line and pressing Enter turns it into a sender name. The next message continues on the same side."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Versionsgeschichte eines Abschnitts: nach „Abschnitt hier teilen“ ist die Version als „Geteilt“ markiert. Ein Link führt direkt zur anderen Hälfte.",
+      "en": "Section version history: after “Split section here”, the version is marked as “Split”. A link leads straight to the other half."
+    },
+    {
+      "kind": "behoben",
+      "de": "Nachrichtenverlauf: eine mit Enter neu angelegte leere Zeile schrumpfte manchmal zu einem schmalen Streifen. Sie hat jetzt wieder die normale Zeilenhöhe.",
+      "en": "Message thread: an empty line created with Enter sometimes shrank to a thin strip. It now has the normal line height again."
+    }
+  ]
+}

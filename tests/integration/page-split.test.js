@@ -169,14 +169,17 @@ test('Split: Kopf bleibt, Schwanz wird neue Seite direkt dahinter im selben Kapi
   assert.ok(pos[PAGE] < pos[t.id] && pos[t.id] < pos[PAGE_B], JSON.stringify(pos));
 
   // Revisionen: Stand vor dem Teilen + Kopf; neue Seite mit Schwanz.
-  const revs = db.prepare('SELECT body_html, summary FROM page_revisions WHERE page_id = ? ORDER BY id').all(PAGE);
+  const revs = db.prepare('SELECT body_html, summary, source FROM page_revisions WHERE page_id = ? ORDER BY id').all(PAGE);
   assert.equal(revs.length, 2);
   assert.match(revs[0].body_html, /mitten im Satz/, 'ungeteilter Stand in der Geschichte');
   assert.equal(revs[0].summary, 'before split');
-  assert.match(revs[1].summary, /^split → #/);
-  const tailRevs = db.prepare('SELECT summary FROM page_revisions WHERE page_id = ?').all(t.id);
+  assert.equal(revs[0].source, 'main', 'Stand vor dem Teilen ist ein gewoehnlicher Save');
+  assert.equal(revs[1].summary, `split → #${t.id}`);
+  assert.equal(revs[1].source, 'split');
+  const tailRevs = db.prepare('SELECT summary, source FROM page_revisions WHERE page_id = ?').all(t.id);
   assert.equal(tailRevs.length, 1);
   assert.equal(tailRevs[0].summary, `split from #${PAGE}`);
+  assert.equal(tailRevs[0].source, 'split');
 
   // Bilder: nur im Schwanz → neue Seite; in beiden → bleibt.
   const owner = (id) => db.prepare('SELECT page_id FROM page_images WHERE id = ?').get(id).page_id;

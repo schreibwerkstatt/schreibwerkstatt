@@ -3,7 +3,8 @@
 // (Eingang/Ausgang/Absender/Hinweis). `this` = Sub-Komponente (editorToolbarCard).
 //
 // Der Focus-Editor nutzt Enter und die Merges mit (Dispatcher-Ausnahme am
-// Focus-Hard-Stop in keydown.js); Tab und die Zeilenleiste bleiben Notebook —
+// Focus-Hard-Stop in keydown.js); Tab, die Zeilenleiste und der Kurzweg
+// «Name:» + Enter bleiben Notebook —
 // der Focus-Editor zeigt die Zeilenarten nicht, ein Seitenwechsel per Tab
 // bliebe dort unsichtbar. Die Leiste ist im Template auf `!$app.focusActive`
 // gegated. Der Bucheditor stellt den Verlauf dar, bedient ihn aber nicht.
@@ -18,8 +19,9 @@
 import { getEditEl, placeCaretIn, caretAtBlockStart, caretAtBlockEnd } from './_shared.js';
 import {
   closestMsgLine, msgKind, setMsgKind, toggleMsgSide, nextLineKind, createMsgLine,
-  MSG_THREAD_CLASS,
+  msgNameFromTyped, isEmptyMsgLine, MSG_THREAD_CLASS,
 } from '../../../messages/msg-html.js';
+import { dropEmptyInline } from '../split-html.js';
 
 const BAR_GAP = 4;
 
@@ -33,11 +35,6 @@ function caretLine() {
   return line ? { editEl, sel, range, line } : null;
 }
 
-// Leer = kein Text und kein eingebettetes Element (Bild, Chip) ausser <br>.
-function lineIsEmpty(line) {
-  if ((line.textContent || '').trim()) return false;
-  return !line.querySelector(':not(br)');
-}
 
 export const msgThreadMethods = {
   // Dispatcher-Einstieg. true = Event konsumiert.
@@ -58,7 +55,7 @@ export const msgThreadMethods = {
     const { line, range } = hit;
     e.preventDefault();
     const thread = line.parentNode;
-    if (range.collapsed && lineIsEmpty(line)) {
+    if (range.collapsed && isEmptyMsgLine(line)) {
       const out = document.createElement('p');
       out.appendChild(document.createElement('br'));
       const rest = [];
@@ -77,6 +74,10 @@ export const msgThreadMethods = {
       return true;
     }
     if (!range.collapsed) range.deleteContents();
+    const name = this._typedMsgName(line, range, app);
+    // Eigener Undo-Schritt VOR dem Umbau: Cmd+Z nimmt nur die Umwandlung zurück,
+    // «Name:» steht danach wieder als Nachricht da, die neue Zeile bleibt.
+    if (name) app._historyPushNow?.();
     const atStart = caretAtBlockStart(range, line);
     const tailRange = document.createRange();
     tailRange.setStart(range.startContainer, range.startOffset);
@@ -84,14 +85,37 @@ export const msgThreadMethods = {
     const frag = tailRange.extractContents();
     const next = createMsgLine(atStart ? msgKind(line) : nextLineKind(line));
     next.replaceChildren(frag);
-    // Beide Hälften brauchen einen Caret-Slot, wenn der Schnitt am Rand lag.
-    if (lineIsEmpty(next)) next.replaceChildren(document.createElement('br'));
-    if (lineIsEmpty(line)) line.replaceChildren(document.createElement('br'));
+    // Ein Schnitt am Rand einer Formatierung lässt leere Hüllen zurück
+    // (`<em></em>`); weg damit. Beide Hälften brauchen einen Caret-Slot, wenn
+    // der Schnitt am Rand lag — sonst fehlt der Zeile die Höhe.
+    dropEmptyInline(line);
+    dropEmptyInline(next);
+    if (isEmptyMsgLine(next)) next.replaceChildren(document.createElement('br'));
+    if (isEmptyMsgLine(line)) line.replaceChildren(document.createElement('br'));
     line.insertAdjacentElement('afterend', next);
     placeCaretIn(next);
+    if (name) {
+      app._historyPushNow?.();
+      line.replaceChildren(document.createTextNode(name));
+      setMsgKind(line, 'name');
+    }
     app._markEditDirty?.();
     this._updateMsgBar();
     return true;
+  },
+
+  // Kurzweg zum Absender: eine Nachricht, die nur aus «Name:» besteht, wird beim
+  // Enter am Zeilenende zur Absenderzeile (Doppelpunkt fällt weg). Nur Notebook —
+  // der Focus-Editor zeigt keine Zeilenarten, dort verschwände bloss der
+  // Doppelpunkt. Nur reiner Text: eine formatierte oder verlinkte Zeile bleibt.
+  // Die neue Zeile behält die Seite der getippten (nextLineKind), der Absender
+  // steht damit auf der Seite, auf der er getippt wurde.
+  _typedMsgName(line, range, app) {
+    if (app.focusActive) return null;
+    const kind = msgKind(line);
+    if (kind !== 'in' && kind !== 'out') return null;
+    if (!caretAtBlockEnd(range, line) || line.querySelector(':not(br)')) return null;
+    return msgNameFromTyped(line.textContent);
   },
 
   // Tab / Shift+Tab: Seite wechseln (Eingang ↔ Ausgang, siehe toggleMsgSide).

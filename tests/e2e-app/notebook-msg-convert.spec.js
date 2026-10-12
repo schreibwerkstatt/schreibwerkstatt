@@ -1,7 +1,9 @@
 // Markierte Absätze → Nachrichtenverlauf im NOTEBOOK-Editor, gegen die ECHTE
 // App: Bubble-Knöpfe nur bei schlichten Absätzen, Seitenwahl der ersten
 // Nachricht, abwechselnde Seiten, Anführungszeichen weg, Merge mit einem
-// angrenzenden Verlauf, Undo als ein Schritt.
+// angrenzenden Verlauf, Undo als ein Schritt. Und zurück: markierte
+// Verlaufszeilen (Bubble) bzw. die Caret-Zeile (Zeilenleiste) werden
+// schlichte Absätze, der Verlauf teilt sich.
 //
 // WARUM DIESE SCHICHT: die Bubble hängt an `selectionchange` und am echten
 // Template (x-show auf `bubbleMsgOk`); ein Fixture-Harness lädt beides nicht.
@@ -12,6 +14,9 @@ const { bootApp, selectSeededBook } = require('./_helpers/app');
 const EDIT_SEL = '#editor-card .page-content-view--editing';
 const BTN_IN = '.edit-bubble-btn--msg >> nth=0';
 const BTN_OUT = '.edit-bubble-btn--msg >> nth=1';
+const BTN_UNWRAP = '.edit-bubble-btn--msg-unwrap';
+const THREAD = '<p>Vorher</p><div class="msg-thread"><p id="a" class="msg-name">Lena</p>'
+  + '<p id="b" class="msg-in">eins</p><p id="c" class="msg-out">zwei</p><p id="d" class="msg-in">drei</p></div><p>Nachher</p>';
 
 async function enterNotebookEdit(page) {
   await bootApp(page);
@@ -82,5 +87,52 @@ test.describe('Notebook — Absätze in Nachrichtenverlauf umwandeln', () => {
     await expect(page.locator(BTN_IN)).toBeHidden();
     await seedSelect(page, '<div class="msg-thread"><p id="a" class="msg-in">x</p></div>', '#a', '#a');
     await expect(page.locator(BTN_IN)).toBeHidden();
+  });
+});
+
+test.describe('Notebook — Zeilen aus dem Nachrichtenverlauf lösen', () => {
+  test('Bubble: markierte Zeilen mitten im Verlauf werden Absätze, der Verlauf teilt sich', async ({ page }) => {
+    await enterNotebookEdit(page);
+    await seedSelect(page, THREAD, '#b', '#c');
+    await expect(page.locator(BTN_UNWRAP)).toBeVisible();
+    await expect(page.locator(BTN_IN)).toBeHidden();
+    await page.locator(BTN_UNWRAP).click();
+    expect(await readHtml(page)).toBe('<p>Vorher</p><div class="msg-thread"><p id="a" class="msg-name">Lena</p></div>'
+      + '<p id="b">eins</p><p id="c">zwei</p>'
+      + '<div class="msg-thread"><p id="d" class="msg-in">drei</p></div><p>Nachher</p>');
+    expect(await page.locator(`${EDIT_SEL} [style]`).count()).toBe(0);
+
+    await page.evaluate(() => window.__app.notebookUndo());
+    expect(await readHtml(page)).toBe(THREAD);
+  });
+
+  test('Bubble: ganzer Verlauf samt Erzählabsatz markiert, Verlauf verschwindet', async ({ page }) => {
+    await enterNotebookEdit(page);
+    await seedSelect(page, THREAD, ':scope > p:first-child', '#d');
+    await page.locator(BTN_UNWRAP).click();
+    expect(await readHtml(page)).toBe('<p>Vorher</p><p id="a">Lena</p><p id="b">eins</p>'
+      + '<p id="c">zwei</p><p id="d">drei</p><p>Nachher</p>');
+  });
+
+  test('Zeilenleiste: Lösen-Knopf macht die Caret-Zeile zum Absatz, weitertippen bleibt drin', async ({ page }) => {
+    await enterNotebookEdit(page);
+    await page.evaluate((html) => {
+      const editEl = document.querySelector('#editor-card .page-content-view--editing');
+      editEl.innerHTML = html;
+      editEl.focus({ preventScroll: true });
+      const r = document.createRange();
+      r.selectNodeContents(editEl.querySelector('#d'));
+      r.collapse(false);
+      document.getSelection().removeAllRanges();
+      document.getSelection().addRange(r);
+    }, THREAD);
+    const bar = page.locator('.edit-msg-bar');
+    await expect(bar).toBeVisible();
+    await bar.locator('.edit-msg-btn--unwrap').click();
+    expect(await readHtml(page)).toBe('<p>Vorher</p><div class="msg-thread"><p id="a" class="msg-name">Lena</p>'
+      + '<p id="b" class="msg-in">eins</p><p id="c" class="msg-out">zwei</p></div><p id="d">drei</p><p>Nachher</p>');
+    await expect(bar).toBeHidden();
+    await page.keyboard.type('!');
+    expect(await readHtml(page)).toContain('<p id="d">drei!</p>');
   });
 });

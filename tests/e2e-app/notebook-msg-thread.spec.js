@@ -94,6 +94,33 @@ test.describe('Notebook — Nachrichtenverlauf', () => {
       + '<p class="msg-out">H</p><p class="msg-out">i</p></div><p>Nachher</p>');
   });
 
+  // Ein Schnitt am Rand einer Formatierung liess `<em></em>` zurück: die Zeile
+  // galt als nicht leer, bekam keinen <br>-Slot und schrumpfte aufs Padding.
+  test('Enter am Rand einer Formatierung: neue Zeile hat volle Höhe', async ({ page }) => {
+    await enterNotebookEdit(page);
+    const lineHeights = () => page.evaluate(() => [...document
+      .querySelectorAll('#editor-card .page-content-view--editing .msg-thread > p')].map(p => p.offsetHeight));
+
+    await seed(page, '<div class="msg-thread"><p class="msg-in">hallo <em>du</em></p></div>', '.msg-in em', 'end');
+    await page.keyboard.press('Enter');
+    expect(await readHtml(page)).toBe('<div class="msg-thread"><p class="msg-in">hallo <em>du</em></p><p class="msg-in"><br></p></div>');
+    let [full, fresh] = await lineHeights();
+    // ±2 px: Firefox rundet eine Zeile mit Kursivschnitt einen Pixel höher;
+    // der Fehler war ein Einbruch aufs Blasen-Padding (~11 px).
+    expect(Math.abs(fresh - full), 'leere Zeile so hoch wie eine beschriebene').toBeLessThanOrEqual(2);
+
+    await seed(page, '<div class="msg-thread"><p class="msg-in"><b>hallo</b> du</p></div>', '.msg-in b', 'start');
+    await page.keyboard.press('Enter');
+    expect(await readHtml(page)).toBe('<div class="msg-thread"><p class="msg-in"><br></p><p class="msg-in"><b>hallo</b> du</p></div>');
+    [fresh, full] = await lineHeights();
+    expect(Math.abs(fresh - full)).toBeLessThanOrEqual(2);
+
+    // Die leere Zeile verlässt den Verlauf mit dem nächsten Enter wie jede andere.
+    await seed(page, '<div class="msg-thread"><p class="msg-in">hallo</p><p class="msg-in"><em></em></p></div>', '.msg-in:last-child', 'start');
+    await page.keyboard.press('Enter');
+    expect(await readHtml(page)).toBe('<div class="msg-thread"><p class="msg-in">hallo</p></div><p><br></p>');
+  });
+
   test('Backspace/Delete verschmelzen Zeilen ohne Inline-style', async ({ page }) => {
     await enterNotebookEdit(page);
     await seed(page, THREAD, '.msg-out', 'start');
@@ -197,5 +224,41 @@ test.describe('Notebook — Nachrichtenverlauf', () => {
     await page.keyboard.type('Neu');
     expect(await readHtml(page)).toBe('<div class="msg-thread"><p class="msg-name">Tom</p>'
       + '<p class="msg-out">Neu</p><p class="msg-out">Hi</p></div>');
+  });
+
+  // Kurzweg zum Absender: «Name:» + Enter. Undo nimmt nur die Umwandlung zurück.
+  test('«Name:» + Enter wird Absender, Cmd+Z nimmt nur die Umwandlung zurück', async ({ page }) => {
+    await enterNotebookEdit(page);
+    await seed(page, '<div class="msg-thread"><p class="msg-out">Hi</p></div>', '.msg-out', 'end');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Tante Rosa:');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Wann kommst du?');
+    expect(await readHtml(page)).toBe('<div class="msg-thread"><p class="msg-out">Hi</p>'
+      + '<p class="msg-name">Tante Rosa</p><p class="msg-out">Wann kommst du?</p></div>');
+
+    await seed(page, '<div class="msg-thread"><p class="msg-in">Hi</p></div>', '.msg-in', 'end');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Anna:');
+    await page.keyboard.press('Enter');
+    expect(await readHtml(page)).toBe('<div class="msg-thread"><p class="msg-in">Hi</p>'
+      + '<p class="msg-name">Anna</p><p class="msg-in"><br></p></div>');
+    await page.keyboard.press('ControlOrMeta+z');
+    expect(await readHtml(page)).toBe('<div class="msg-thread"><p class="msg-in">Hi</p>'
+      + '<p class="msg-in">Anna:</p><p class="msg-in"><br></p></div>');
+  });
+
+  test('Text nach dem Doppelpunkt oder Caret mitten in der Zeile: bleibt Nachricht', async ({ page }) => {
+    await enterNotebookEdit(page);
+    await seed(page, '<div class="msg-thread"><p class="msg-in">Achtung: Zug fällt aus</p></div>', '.msg-in', 'end');
+    await page.keyboard.press('Enter');
+    expect(await readHtml(page)).toBe('<div class="msg-thread"><p class="msg-in">Achtung: Zug fällt aus</p>'
+      + '<p class="msg-in"><br></p></div>');
+
+    await seed(page, '<div class="msg-thread"><p class="msg-in">Anna:</p></div>', '.msg-in', 'end');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Enter');
+    expect(await readHtml(page)).toBe('<div class="msg-thread"><p class="msg-in">Anna</p>'
+      + '<p class="msg-in">:</p></div>');
   });
 });

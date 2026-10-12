@@ -2,6 +2,8 @@
      setzt die Art der Caret-Zeile (Eingang/Ausgang/Absender/Hinweis). Sichtbar,
      solange der Caret in einer Verlaufszeile steht; Tab/Shift+Tab wechseln
      nur die Seite (Eingang/Ausgang), Absender und Hinweis gibt es nur hier.
+     Der letzte Knopf löst die Zeile (oder die markierten Zeilen) aus dem
+     Verlauf: sie werden schlichte Absätze (msg-convert.js).
      Scope: editorToolbarCard, Methoden in
      public/js/editor/notebook/toolbar/msg-thread.js. Nach <body> teleportiert
      (position:fixed, wie die Bubble-Toolbar); @mousedown.prevent hält Fokus und
@@ -22,5 +24,11 @@
               :data-tip="$app.t('editor.msg.kind.' + k + 'Tip')"
               x-text="$app.t('editor.msg.kind.' + k)"></button>
     </template>
+    <button type="button" class="edit-msg-btn edit-msg-btn--unwrap"
+            @click="toolbarFromMsgThread()"
+            :data-tip="$app.t('editor.msg.unwrapTip')"
+            :aria-label="$app.t('editor.msg.unwrapTip')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+    </button>
   </div>
 </template>

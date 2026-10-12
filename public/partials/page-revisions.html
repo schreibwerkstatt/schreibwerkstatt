@@ -24,6 +24,12 @@
            :data-tip="$app.t('editor.revisions.viewer.openTitle')">
         <span class="history-date" x-text="$app.formatDate(rev.created_at)"></span>
         <span class="badge badge-ok" x-text="sourceLabel(rev.source)"></span>
+        <template x-if="splitLink(rev)">
+          <span class="revision-split" @keydown.enter.stop @keydown.space.stop>
+            <span class="revision-split__dir" x-text="$app.t('editor.revisions.split.' + splitLink(rev).dir)"></span>
+            <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: splitLink(rev).pageId }"></button>
+          </span>
+        </template>
         <span class="tag" x-show="rev.client"
               :data-tip="$app.t('editor.revisions.clientTitle')"
               x-text="rev.client"></span>

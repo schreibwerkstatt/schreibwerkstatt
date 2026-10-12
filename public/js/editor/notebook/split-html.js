@@ -118,7 +118,8 @@ function _splitBlock(block, container, offset) {
 }
 
 // Inline-Hüllen, die der Schnitt leer zurückgelassen hat (`<em></em>`).
-function _dropEmptyInline(el) {
+// Auch vom Enter im Nachrichtenverlauf genutzt (toolbar/msg-thread.js).
+export function dropEmptyInline(el) {
   for (const c of Array.from(el.querySelectorAll('*')).reverse()) {
     if (VOID_TAGS.has(c.tagName)) continue;
     if (!c.childNodes.length) c.remove();
@@ -153,8 +154,8 @@ export function splitAtPoint(root, container, offset) {
         const second = _splitBlock(top, container, offset);
         second.removeAttribute('data-bid');
         for (const d of second.querySelectorAll('[data-bid]')) d.removeAttribute('data-bid');
-        _dropEmptyInline(top);
-        _dropEmptyInline(second);
+        dropEmptyInline(top);
+        dropEmptyInline(second);
         boundary = topIdx + 1;
       }
     } else {

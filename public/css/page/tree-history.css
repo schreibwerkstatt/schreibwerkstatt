@@ -315,6 +315,10 @@
 .revision-delta--neg { background: var(--color-err-bg); color: var(--color-err-text); }
 .revision-delta--zero { opacity: 0.6; }
 
+/* Teilen-Verweis: Richtung + Entitäts-Referenz auf die andere Haelfte. */
+.revision-split { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+.revision-split__dir { font-size: var(--font-size-xs); color: var(--color-muted); }
+
 .sidebar-empty-book {
   display: flex;
   flex-direction: column;
