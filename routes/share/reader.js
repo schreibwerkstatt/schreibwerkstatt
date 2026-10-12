@@ -22,7 +22,7 @@ const {
   ANCHOR_BID_RE, READER_TOKEN_RE, READER_EMAIL_RE, TOKEN_RE,
   serializeCommentForReader, escHtml, detectLang, isExpired,
   fillTemplate, paragraphifyIntro, backfillScopeBlockIds, loadContentForLink,
-  buildTocBlock, renderGone, htmlToPlainLength, renderContentDiagrams,
+  buildTocBlock, renderGone, htmlToPlainLength, renderContentDiagrams, editStatusText,
 } = H;
 
 // Lesezeit-Schaetzung: durchschnittliche stille Lesegeschwindigkeit ~1100
@@ -77,12 +77,12 @@ function register(router) {
       logger.warn(`[share/reader] 410 ${gone} token=${token.slice(0, 8)} book=${link.book_id}`);
       return renderGone(req, res, gone);
     }
-    const lang = detectLang(req);
     // Legacy-/Import-Seiten ohne data-bid einmalig nachziehen, damit verankerte
     // Kommentare (Selektions-Button + schwebende Leiste) funktionieren — auch fuer
     // Links, die vor dem Backfill-on-create angelegt wurden. Idempotent, additiv.
     await backfillScopeBlockIds(link);
-    const content = await loadContentForLink(link);
+    const lang = detectLang(req);
+    const content = await loadContentForLink(link, { lang });
     if (!content) return res.status(404).type('html').send('Not found');
 
     const introAuthor = link.owner_display_name || tServer('share.reader.anon_author', lang);
@@ -97,7 +97,8 @@ function register(router) {
     const tocBlock = link.show_toc ? buildTocBlock(content, lang) : '';
     const layoutClass = tocBlock ? 'share-layout--has-toc' : '';
 
-    // Umfang + Lesezeit (dem Leser oben angezeigt). Zeichen als Primaerkennzahl,
+    // Umfang + Lesezeit (dem Leser oben angezeigt), beim Abschnitts-Share dazu
+    // der Bearbeitungsstand (Buch/Kapitel: je Abschnitt unter der Ueberschrift). Zeichen als Primaerkennzahl,
     // Minuten als abgeleitete Schaetzung (min. 1).
     const contentChars = htmlToPlainLength(content.html);
     const readMinutes = Math.max(1, Math.round(contentChars / CHARS_PER_MINUTE));
@@ -105,6 +106,7 @@ function register(router) {
       ? `<div class="share-header__meta">
           <span class="share-header__meta-item">${escHtml(tServerParams('share.reader.char_count', { count: contentChars.toLocaleString(lang === 'en' ? 'en-US' : 'de-CH') }, lang))}</span>
           <span class="share-header__meta-item">${escHtml(tServerParams('share.reader.reading_time', { min: readMinutes }, lang))}</span>
+          ${content.editStatus ? `<span class="share-header__meta-item">${escHtml(editStatusText(content.editStatus, lang))}</span>` : ''}
         </div>`
       : '';
 

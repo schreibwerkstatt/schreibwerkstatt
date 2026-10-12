@@ -227,3 +227,84 @@ test('Abbruch waehrend des Laufs: Status cancelled, der vorige Index bleibt steh
   assert.equal(rows.length, 1, 'vorheriger Index unveraendert');
   assert.equal(rows[0].alter_von, 40);
 });
+
+test('Nachrichtenverlauf: Chat-Zeile klebt nicht an der Erzählung, Absenderzeile macht den Sprecher', async () => {
+  const BOOK_ID = 960;
+  ctx.dbSeed.setBook({
+    chapters: [{ id: 9610, book_id: BOOK_ID, name: 'Kap 1' }],
+    pages: [{ id: 9620, book_id: BOOK_ID, chapter_id: 9610, name: 'S 1', updated_at: '' }],
+    pageBodies: {
+      9620: '<p>Anna Berg starrte aufs Handy.</p>'
+        + '<div class="msg-thread"><p class="msg-name">Lena</p><p class="msg-in">werd morgen 30 jahre alt lol</p>'
+        + '<p class="msg-out">bin jetzt 18 jahre alt</p></div>'
+        + '<p>Anna legte das Handy weg. Sie war 42 Jahre alt und müde.</p>',
+    },
+  });
+  seedFiguren(BOOK_ID, [
+    { id: 'f_anna', name: 'Anna Berg', kurzname: 'Anna', typ: 'hauptfigur' },
+    { id: 'f_lena', name: 'Lena', typ: 'nebenfigur' },
+  ]);
+  ctx.mockAi.on(
+    (e) => e.schemaKeys.includes('funde'),
+    () => ({
+      funde: [
+        { figur: 'Anna Berg', art: 'alter', wert: 42, bezugsjahr: null, unsicher: false, zitat: 'Sie war 42 Jahre alt und müde', begruendung: 'wörtlich' },
+        // Die ausgehende Nachricht ist keine Stelle von Anna → Zitat-Pruefung
+        { figur: 'Anna Berg', art: 'alter', wert: 18, bezugsjahr: null, unsicher: false, zitat: 'bin jetzt 18 jahre alt', begruendung: 'Nachricht' },
+        { figur: 'Lena', art: 'alter', wert: 30, bezugsjahr: null, unsicher: false, zitat: 'werd morgen 30 jahre alt', begruendung: 'Absenderzeile' },
+      ],
+    }),
+  );
+
+  const job = await runJob(BOOK_ID);
+  assert.equal(job.status, 'done', `expected done, got ${job.status}: ${job.error || ''}`);
+  assert.equal(job.result.verworfen.zitat, 1, 'Annas 18 aus der ausgehenden Nachricht ist nicht belegt');
+
+  const rows = require('../../db/figure-ages').listFigureAges(BOOK_ID, USER);
+  const anna = rows.find(r => r.fig_id === 'f_anna');
+  const lena = rows.find(r => r.fig_id === 'f_lena');
+  assert.equal(anna.alter_von, 42);
+  assert.equal(anna.alter_bis, 42, 'kein Widerspruch 18 vs. 42');
+  assert.equal(lena.alter_von, 30, 'Nachricht über die Absenderzeile Lena zugeordnet');
+});
+
+test('Absatzgrenzen: eine Ueberschrift mit Figurennamen ist keine direkte Nennung', async () => {
+  const BOOK_ID = 970;
+  ctx.dbSeed.setBook({
+    chapters: [{ id: 9710, book_id: BOOK_ID, name: 'Kap 1' }],
+    pages: [{ id: 9720, book_id: BOOK_ID, chapter_id: 9710, name: 'S 1', updated_at: '' }],
+    pageBodies: { 9720: '<h2>Anna</h2><p>Die Frau am Fenster war 70 Jahre alt.</p>' },
+  });
+  seedFiguren(BOOK_ID, [{ id: 'f_anna', name: 'Anna', typ: 'hauptfigur' }]);
+  let prompt = '';
+  ctx.mockAi.on((e) => e.schemaKeys.includes('funde'), (e) => { prompt = e.prompt || ''; return { funde: [] }; });
+
+  const job = await runJob(BOOK_ID, { force: true });
+  assert.equal(job.status, 'done', job.error || '');
+  assert.match(prompt, /\[Figur steht im Satz davor\] Anna Die Frau am Fenster war 70 Jahre alt\./);
+});
+
+test('Mehrdeutiges Zitat: die genannte Stellennummer bestimmt das Sprungziel', async () => {
+  const BOOK_ID = 980;
+  ctx.dbSeed.setBook({
+    chapters: [{ id: 9810, book_id: BOOK_ID, name: 'Kap 1' }],
+    pages: [
+      { id: 9820, book_id: BOOK_ID, chapter_id: 9810, name: 'S 1', updated_at: '' },
+      { id: 9821, book_id: BOOK_ID, chapter_id: 9810, name: 'S 2', updated_at: '' },
+    ],
+    pageBodies: {
+      9820: '<p>Mara war vierzig Jahre alt, sagte man.</p>',
+      9821: '<p>Mara war vierzig Jahre alt, sagte sie selbst.</p>',
+    },
+  });
+  seedFiguren(BOOK_ID, [{ id: 'f_mara', name: 'Mara', typ: 'hauptfigur' }]);
+  ctx.mockAi.on(
+    (e) => e.schemaKeys.includes('funde'),
+    () => ({ funde: [{ figur: 'Mara', art: 'alter', wert: 40, bezugsjahr: null, unsicher: false, stelle: '1.2', zitat: 'Mara war vierzig Jahre alt', begruendung: '' }] }),
+  );
+
+  const job = await runJob(BOOK_ID, { force: true });
+  assert.equal(job.status, 'done', job.error || '');
+  const [row] = require('../../db/figure-ages').listFigureAges(BOOK_ID, USER);
+  assert.equal(row.belege[0].page_id, 9821, 'Stelle 1.2 = zweite Seite, nicht die erste Fundstelle');
+});

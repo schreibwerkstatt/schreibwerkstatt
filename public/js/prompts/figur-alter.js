@@ -68,6 +68,7 @@ Regeln:
 - "art": "alter" = Alter in Jahren, "geburtsjahr" = Jahr der Geburt, "todesjahr" = Jahr des Todes.
 - "wert" ist eine ganze Zahl. Ein ausgeschriebenes Zahlwort ("zwoelf", "einundvierzig") wird zur Ziffer. Bei "an ihrem sechzehnten Geburtstag" ist der Wert 16.
 - "bezugsjahr": das Jahr, in dem dieses Alter gilt — nur wenn die Stelle es nennt oder der Kontext es eindeutig hergibt. Sonst leer lassen.
+- "stelle" ist die Nummer der Stelle, aus der das Zitat stammt, so wie sie oben in Klammern steht (z.B. "1.3").
 - "zitat" ist ein WOERTLICHES Stueck der oben vorgelegten Stelle (hoechstens 200 Zeichen), in dem die Angabe steht. Nicht umformulieren, nicht zusammensetzen, nicht uebersetzen — die Autorin springt darueber an die Fundstelle, und ein veraendertes Zitat findet sie nicht.
 - "unsicher": true, wenn die Stelle die Angabe nur nahelegt (Pronomen-Bezug unklar, Zahl koennte etwas anderes meinen, Rueckblende ungewiss). Ein unsicherer Fund ist brauchbar, ein als sicher ausgegebener falscher nicht.
 - Eine Stelle, in der die Zahl NICHTS mit einem Alter zu tun hat (Uhrzeit, Hausnummer, Geldbetrag, Anzahl von Dingen, Jahreszahl eines Ereignisses ohne Bezug zur Figur), ergibt keinen Fund.
@@ -79,7 +80,7 @@ Regeln:
 Antworte mit diesem JSON-Schema:
 {
   "funde": [
-    { "figur": "Name wie oben", "art": "alter", "wert": 12, "bezugsjahr": 1912, "unsicher": false, "zitat": "woertliches Stueck der Stelle", "begruendung": "in einem Satz, woraus sich das ergibt" }
+    { "figur": "Name wie oben", "art": "alter", "wert": 12, "bezugsjahr": 1912, "unsicher": false, "stelle": "1.1", "zitat": "woertliches Stueck der Stelle", "begruendung": "in einem Satz, woraus sich das ergibt" }
   ]
 }`;
 }
@@ -93,6 +94,7 @@ export const SCHEMA_FIGUR_ALTER = _obj({
       wert: _num,
       bezugsjahr: _num,
       unsicher: { type: 'boolean' },
+      stelle: _str,
       zitat: _str,
       begruendung: _str,
     }),

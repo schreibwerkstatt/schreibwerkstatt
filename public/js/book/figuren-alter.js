@@ -37,6 +37,13 @@ export function computeAlterRows(figuren, ages, { suche = '', typ = '', nur = ''
     // am Katalog per Definition nicht kennt (das liest nur das kuratierte Feld).
     // Ohne Lauf bleibt der Katalog-Wert — die Tabelle soll ohne Analyse arbeiten.
     const abgeleitet = a?.gerechnet ?? f.alter_im_roman ?? null;
+    // Ohne Lauf dieselbe Herkunft und Sicherheit, die die Verdichtung vergaebe
+    // (lib/figure-age/consolidate.js): ein Geburtsjahr aus dem Steckbrief ist
+    // „kuratiert" und das Alter daraus „aus Geburtsjahr" (0.75), nur ein
+    // Geburtsjahr aus dem Zeitstrahl-Ereignis ist „Zeitstrahl" (0.5). Sonst
+    // wechselte dieselbe Zahl mit dem ersten Lauf Plakette und Ton.
+    const gebKuratiert = /\b\d{4}\b/.test(f.geburtstag || '');
+    const katalogQuelle = gebKuratiert ? 'geburtsjahr' : 'zeitstrahl';
     const row = {
       id: f.id,
       name: f.name,
@@ -46,7 +53,7 @@ export function computeAlterRows(figuren, ages, { suche = '', typ = '', nur = ''
       // Alphabet der Typ-Keys (sonst stuende „andere" vor „hauptfigur").
       typ_rank: typRank(f.typ || 'andere'),
       geburtsjahr: a?.geburtsjahr ?? (f.geburtsjahr ?? null),
-      geburtsjahr_quelle: a?.geburtsjahr_quelle ?? (f.geburtsjahr != null ? 'zeitstrahl' : null),
+      geburtsjahr_quelle: a?.geburtsjahr_quelle ?? (f.geburtsjahr != null ? (gebKuratiert ? 'kuratiert' : 'zeitstrahl') : null),
       geburtstag: f.geburtstag || null,
       alter_von: alterVon,
       alter_bis: alterBis,
@@ -54,8 +61,8 @@ export function computeAlterRows(figuren, ages, { suche = '', typ = '', nur = ''
       jahr_im_roman: f.jahr_im_roman ?? null,
       bezugsjahr_von: a?.bezugsjahr_von ?? null,
       bezugsjahr_bis: a?.bezugsjahr_bis ?? null,
-      quelle: a?.quelle ?? (abgeleitet != null ? 'zeitstrahl' : null),
-      konfidenz: a?.konfidenz ?? (abgeleitet != null ? 0.5 : 0),
+      quelle: a?.quelle ?? (abgeleitet != null ? katalogQuelle : null),
+      konfidenz: a?.konfidenz ?? (abgeleitet != null ? (katalogQuelle === 'geburtsjahr' ? 0.75 : 0.5) : 0),
       widerspruch: a?.widerspruch ?? null,
       belege: a?.belege ?? [],
       // Ein Wert steht hier nur, wenn irgendeine Quelle etwas hergibt.

@@ -417,8 +417,10 @@
     outline: none;
   }
   .book-editor-page-body p { margin-block: 0.7em; }
-  .book-editor-page-body p:first-child { margin-block-start: 0.3em; }
-  .book-editor-page-body p:last-child { margin-block-end: 0.3em; }
+  /* `:where()` hält die Spezifität auf der von `p` — sonst schlüge die Regel
+     die gleich spezifischen Block-Regeln der SSoT (Blasen im Verlauf). */
+  .book-editor-page-body p:where(:first-child) { margin-block-start: 0.3em; }
+  .book-editor-page-body p:where(:last-child) { margin-block-end: 0.3em; }
   /* Alle sechs Ebenen, nicht nur h1–h3: Grössen kommen aus der geteilten SSoT
      (components/manuscript-content.css), Gewicht/Abstand/Schnitt sind hier
      Stream-spezifisch und müssen über die Ebenen hinweg gleich laufen. */

@@ -5,7 +5,9 @@
    Reader-Abweichungen: Überschriftengrössen in px (eigene Lese-Skala), das
    Prosa-Absatzmodell und der Szenentrenner-Asterismus.
    Die Regeln hier sind unlayered und gewinnen deshalb gegen die
-   `@layer components`-Defaults der SSoT — unabhängig von der Lade-Reihenfolge. */
+   `@layer components`-Defaults der SSoT — unabhängig von der Lade-Reihenfolge.
+   Ausnahme ist das Absatzmodell (`p`): es steht im Layer, damit die Absätze
+   in SSoT-Blöcken (Nachrichtenverlauf, Gedicht) über die Spezifität gewinnen. */
 
 .share-content h1, .share-content h2, .share-content h3 {
   font-family: inherit;
@@ -44,7 +46,28 @@
 .share-content h4 { font-size: 17px; }
 .share-content h5 { font-size: 15px; }
 .share-content h6 { font-size: 14px; }
-.share-content p { margin: 0 0 1em; hyphens: auto; }
+/* Absatzmodell im `@layer components` statt unlayered: eine unlayered Regel
+   schlüge jede Layer-Regel der SSoT, auch die spezifischeren für Absätze in
+   Blöcken (Nachrichtenverlauf, Gedicht) — jede Blase bekäme 1em Abstand und
+   Silbentrennung. Im selben Layer entscheidet die Spezifität, die Block-Regeln
+   gewinnen, ohne hier wiederholt zu werden. */
+@layer components {
+  .share-content p { margin: 0 0 1em; hyphens: auto; }
+}
+
+/* Bearbeitungsstand des Abschnitts — kleiner Hinweis direkt unter der
+   Abschnitts-Überschrift (Markup aus lib/share-helpers.js). Bewusst leise:
+   eine Randnotiz für den Leser, keine Plakette. Die Fertig-Stufe (Rang 3)
+   trägt die Akzentfarbe, alle früheren bleiben gedämpft. */
+.share-content .share-status {
+  margin: -0.3em 0 1em;
+  font-family: var(--share-font-ui);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--share-muted);
+  hyphens: none;
+}
+.share-content .share-status--r3 { color: var(--share-accent); }
 
 /* Vorspann (Lead) publizistischer Beiträge — steht als erster Block des
    Beitrags, den er eröffnet (Dachzeile und Schlagzeile stehen im Masthead
@@ -82,7 +105,9 @@
    sichtbar, was ein neuer Absatz ist und was nur ein Zeilenumbruch. Aktiviert via
    share-content--prose (für alle erzählenden Buchtypen; Sach-/Web-Text nutzt das
    identische margin-Modell oben — siehe NON_PROSE_BUCHTYPEN in routes/share.js). */
-.share-content--prose p { margin: 0 0 1em; }
+@layer components {
+  .share-content--prose p { margin: 0 0 1em; }
+}
 /* KEINE Initiale (Drop Cap) am Prosa-Einstieg — bewusst entfernt und nicht
    wieder einzuführen: der vergrösserte erste Buchstabe liest sich als Signal
    („hier beginnt etwas Besonderes"), wo keines gemeint ist, und traf je nach

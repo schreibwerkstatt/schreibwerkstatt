@@ -10,8 +10,9 @@
 // VERBATIM eingefügt (bereits via lib/html-clean.js sanitisiert, trägt data-bid
 // für Kommentar-Anker). Niemals beides vertauschen — roher Name = XSS-Sink,
 // doppelt-escaptes html = kaputte Anzeige. Dasselbe gilt für
-// entry.headBefore/headAfter: fertiges Markup aus lib/headline-render.js, das
-// seine Textwerte dort bereits escaped hat.
+// entry.headBefore/headAfter: fertiges Markup aus lib/headline-render.js bzw.
+// lib/share-helpers.js (Bearbeitungsstand), das seine Textwerte dort bereits
+// escaped hat.
 
 import { escHtml } from './utils/escape.js';
 import { sameStructureTitle } from './structure-title.js';
@@ -59,7 +60,10 @@ export function renderStreamHtml(entries, opts = {}) {
         && sameStructureTitle(e.name, pendingChapter.name);
       pendingChapter = null;
       if (dupOfChapter) {
+        // Die Ueberschrift entfaellt, `headAfter` nicht: ein Nicht-Beitrag traegt
+        // dort nur Zusatz-Markup (Share: Bearbeitungsstand), das sonst verloren ginge.
         sections.push(`<section class="${o.pageSectionClass}">
+            ${e.headAfter || ''}
             <div class="${o.pageBodyClass}">${e.html || ''}</div>
           </section>`);
         continue;

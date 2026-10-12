@@ -179,7 +179,9 @@ export const TTS_SKIP_DECOR_SEL = 'ins.lektorat-ins, ins.chat-mark-ins';
 // nicht kommt.
 // Kopie von public/js/table/table-html.js#TABLE_SEL, gegated durch
 // tests/unit/table-drift.test.mjs.
-export const TTS_SKIP_BLOCK_SEL = 'pre.mermaid, .mermaid-render, table';
+// `.share-status`: Bearbeitungsstand-Hinweis der Share-Leseansicht
+// (lib/share-helpers.js) — Metadata, kein Beitragstext.
+export const TTS_SKIP_BLOCK_SEL = 'pre.mermaid, .mermaid-render, table, .share-status';
 
 
 // ── Vorlese-Bloecke ─────────────────────────────────────────────────────────

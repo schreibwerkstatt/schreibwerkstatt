@@ -140,3 +140,31 @@ test('Outline-Chevron klappt ein Kapitel ein', async ({ page }) => {
   expect(await card(page).locator('.book-editor-outline-page').count()).toBeLessThan(before);
   guard.assertClean('Bucheditor: Outline');
 });
+
+// Nachrichtenverlauf: die Blasen-Regeln kommen aus der SSoT
+// (components/manuscript-content.css). Die Stream-Absatzregeln des Bucheditors
+// (book-editor.css, gleicher Layer, später geladen) dürfen sie nicht
+// überschreiben — `p:first-child`/`p:last-child` waren gleich spezifisch und
+// gaben der ersten und letzten Blase Rand. Nur Anzeige, kein Save.
+test('Nachrichtenverlauf: Blasen ohne Stream-Absatzrand', async ({ page }) => {
+  await openBookEditor(page);
+  const m = await page.evaluate(() => {
+    const body = document.querySelector('.card--bookeditor .book-editor-page-body');
+    const thread = document.createElement('div');
+    thread.className = 'msg-thread';
+    thread.innerHTML = '<p class="msg-in">Hallo</p><p class="msg-out">Hi</p><p class="msg-in">Wo bist du?</p>';
+    body.appendChild(thread);
+    const rows = [...thread.children];
+    const out = {
+      margins: rows.map(p => [getComputedStyle(p).marginTop, getComputedStyle(p).marginBottom]),
+      outRight: rows[1].getBoundingClientRect().right > rows[0].getBoundingClientRect().right,
+    };
+    thread.remove();
+    return out;
+  });
+  for (const [top, bottom] of m.margins) {
+    expect(top).toBe('0px');
+    expect(bottom).toBe('0px');
+  }
+  expect(m.outRight).toBe(true);
+});

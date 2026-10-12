@@ -1,0 +1,36 @@
+{
+  "version": "4.23.3",
+  "date": "2026-10-12",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Geteilter Link: die Leseansicht zeigt jetzt den Bearbeitungsstand jedes Abschnitts als kleinen Hinweis unter der Überschrift. Beim geteilten Einzelabschnitt steht er oben neben der Lesezeit.",
+      "en": "Shared link: the reading view now shows each section's editing status as a small note under its heading. For a single shared section it appears at the top next to the reading time."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figuren-Karte, Reiter „Alter“: die Analyse findet mehr Altersangaben, etwa „Sie war damals zwölf“, und springt beim Klick auf den Beleg an die richtige Stelle.",
+      "en": "Characters card, “Age” tab: the analysis finds more age mentions, such as “She was twelve back then”, and a click on the evidence jumps to the right place."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figuren-Karte, Reiter „Alter“: weicht das Geburtsjahr im Zeitstrahl vom Text ab, wird das jetzt gemeldet. Eine verstorbene Figur wird nicht älter als bei ihrem Tod.",
+      "en": "Characters card, “Age” tab: if the birth year in the timeline differs from the text, this is now reported. A character who has died no longer ages past their death."
+    },
+    {
+      "kind": "behoben",
+      "de": "Figuren-Karte, Reiter „Alter“: ein Alter aus einem Nachrichtenverlauf oder einer Überschrift wurde manchmal der falschen Figur zugeordnet. Das passiert nicht mehr.",
+      "en": "Characters card, “Age” tab: an age from a message thread or a heading was sometimes assigned to the wrong character. That no longer happens."
+    },
+    {
+      "kind": "behoben",
+      "de": "Figuren-Karte, Reiter „Alter“: vor der ersten Analyse trug dasselbe Alter eine andere Herkunft und Farbe als danach. Jetzt bleibt beides gleich.",
+      "en": "Characters card, “Age” tab: before the first analysis the same age showed a different source and colour than afterwards. Both now stay the same."
+    },
+    {
+      "kind": "behoben",
+      "de": "Nachrichtenverlauf: in der Leseansicht eines geteilten Links und im Bucheditor standen die Sprechblasen mit zu grossem Abstand und mit Silbentrennung. Sie sehen jetzt aus wie im Abschnitt.",
+      "en": "Message thread: in a shared link's reading view and in the book editor, the bubbles had too much spacing and were hyphenated. They now look the same as in the section."
+    }
+  ]
+}

@@ -100,3 +100,79 @@ test('consolidateFigure: zwei verschiedene Geburtsjahre im Text sind ein Widersp
   assert.equal(row.geburtsjahr, 1850);
   assert.deepEqual(row.widerspruch.map(w => [w.typ, w.a, w.b, w.page_id]), [['geburtsjahrText', 1850, 1856, 9]]);
 });
+
+// ── Zahlwort ohne „Jahre", Englisch, Fenster um die Angabe ─────────────────
+const { scanPage, clipSatz, consolidateFigure } = require('../../lib/figure-age');
+
+const annaIdx = () => buildNameIndex([{ id: 1, patterns: [{ text: 'Anna Berg' }, { text: 'Anna' }] }]);
+const werte = (text) => scanPage(text, annaIdx(), {}).flatMap(c => c.signale.filter(s => s.art === 'alter').map(s => s.wert));
+
+test('Grobfilter laesst das blosse Zahlwort durch: „Sie war damals zwölf", „im Alter von vierzig"', () => {
+  assert.deepEqual(werte('Anna kam nach Hause. Sie war damals zwölf.'), [12]);
+  assert.deepEqual(werte('Im Alter von vierzig heiratete Anna.'), [40]);
+});
+
+test('Kopula: „wird", zwei Adverbien, Ziffer — aber keine Mengen, Uhrzeiten, Jahreszahlen', () => {
+  assert.deepEqual(werte('Anna wird morgen vierzig.'), [40]);
+  assert.deepEqual(werte('Anna war damals erst zwölf.'), [12]);
+  assert.deepEqual(werte('Anna war 12.'), [12]);
+  assert.deepEqual(werte('Anna war 12 Minuten zu spät.'), []);
+  assert.deepEqual(werte('Anna war um 12.30 da.'), []);
+  assert.deepEqual(werte('Anna war 1912 in Wien.'), []);
+});
+
+test('Englisch: Zahlwoerter in Mustern und in der Zahl-Pruefung, „one" ist kein Alter', () => {
+  assert.deepEqual(werte('Anna was twelve years old.'), [12]);
+  assert.deepEqual(werte('Anna turned forty-two.'), [42]);
+  assert.deepEqual(werte('Anna was one of them.'), []);
+  assert.ok(numbersIn('she turned forty-two').has(42));
+  assert.ok(!numbersIn('one of them').has(1));
+});
+
+test('Langer Satz: das Fenster behaelt die Angabe statt sie abzuschneiden', () => {
+  const vorsatz = 'Anna ging ' + 'sehr langsam und nachdenklich durch die verschneiten Gassen der Altstadt, '.repeat(5) + 'bis sie ankam.';
+  const [ind] = scanPage(`${vorsatz} Sie war damals 12 Jahre alt.`, annaIdx(), {});
+  assert.ok(ind.indirekt);
+  assert.ok(ind.satz.length <= 320);
+  assert.match(ind.satz, /12 Jahre alt\.$/);
+
+  const [dir] = scanPage('Anna, die an diesem Morgen ' + 'lange und ausführlich über alles Mögliche nachgedacht hatte, '.repeat(5) + 'war 12 Jahre alt.', annaIdx(), {});
+  assert.match(dir.satz, /12 Jahre alt/);
+  // Woertliches Stueck des Texts, ohne Auslassungszeichen — die Zitat-Pruefung
+  // sucht das Zitat darin.
+  assert.ok(!dir.satz.includes('…'));
+});
+
+test('clipSatz nimmt die Nennung der Figur mit, wenn sie ins Fenster passt', () => {
+  const text = 'Vorspann '.repeat(40) + 'Anna Berg sagte, sie sei 33 Jahre alt' + ' und Nachspann'.repeat(30);
+  const out = clipSatz(text, annaIdx(), [1]);
+  assert.ok(out.length <= 320);
+  assert.match(out, /Anna Berg sagte, sie sei 33 Jahre alt/);
+});
+
+test('Absatzende ist eine Satzgrenze: Ueberschrift klebt nicht am naechsten Absatz', () => {
+  const [c] = scanPage('Anna\n\nDie Frau am Fenster war 70 Jahre alt.', annaIdx(), {});
+  assert.equal(c.indirekt, true, 'Ueberschrift nur als Satz davor, nicht als direkte Nennung');
+});
+
+// ── Verdichtung: Geburtsjahr der Zeile traegt die Rechnung ─────────────────
+test('consolidateFigure: Text-Geburtsjahr gegen Zeitstrahl-Geburtsereignis → Rechnung passt zur Zeile + Befund', () => {
+  const row = consolidateFigure({
+    funde: [{ art: 'geburtsjahr', wert: 1960, ordinal: 0, offset: 0, zitat: 'Anna, 1960 geboren', page_id: 4 }],
+    kuratiert: { geburtstag: null },
+    zeitstrahl: { jahr_im_roman: 2000, geburtsjahr: 1955, alter_im_roman: 45 },
+  });
+  assert.equal(row.geburtsjahr, 1960);
+  assert.equal(row.gerechnet, 40, 'gerechnet mit dem angezeigten Geburtsjahr, nicht mit 1955');
+  assert.deepEqual(row.widerspruch.map(w => [w.typ, w.a, w.b]), [['geburtsjahrZeitstrahl', 1955, 1960]]);
+});
+
+test('consolidateFigure: Todesjahr im Text deckelt das Ankerjahr', () => {
+  const row = consolidateFigure({
+    funde: [{ art: 'todesjahr', wert: 1950, ordinal: 0, offset: 0, zitat: 'Er starb 1950 in Bern', page_id: 4 }],
+    kuratiert: { geburtstag: '1900' },
+    zeitstrahl: { jahr_im_roman: 1990, geburtsjahr: 1900, alter_im_roman: 90 },
+  });
+  assert.equal(row.gerechnet, 50);
+  assert.equal(row.bezugsjahr_von, 1950);
+});

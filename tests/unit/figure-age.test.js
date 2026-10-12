@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 
 const {
   germanNumberWord, germanOrdinalWord, extractAgeSignals, numbersIn,
-  splitSentences, buildNameIndex, scanPage, selectCandidates, consolidateFigure,
+  splitSentences, buildNameIndex, scanPage, scanMsgUtterances, selectCandidates, consolidateFigure,
 } = require('../../lib/figure-age');
 
 test('Zahlwoerter inkl. Komposita und Umlaut-Varianten', () => {
@@ -85,6 +85,57 @@ test('scanPage bindet die Angabe an die Figur — auch ueber den Pronomen-Anschl
 test('scanPage: Zahl ohne Figur im Fenster ergibt keinen Kandidaten', () => {
   const idx = buildNameIndex([{ id: 1, patterns: [{ text: 'Anna' }] }]);
   assert.equal(scanPage('Der Zug fuhr 1912 ab. Es regnete.', idx, {}).length, 0);
+});
+
+// ── Nachrichtenverlauf ──────────────────────────────────────────────────────
+// Derselbe Weg wie routes/jobs/figur-alter.js: Erzaehltext ohne Verlauf durch
+// scanPage, die Nachrichten zeilenweise mit Absender durch scanMsgUtterances.
+const { htmlToPlainText, hasMsgThread, msgThreadLines, msgUtterances, stripMsgThreads } = require('../../lib/html-text');
+
+function scanHtml(html) {
+  const idx = buildNameIndex([
+    { id: 1, patterns: [{ text: 'Anna Berg' }, { text: 'Anna' }] },
+    { id: 2, patterns: [{ text: 'Lena' }] },
+  ]);
+  const prose = htmlToPlainText(stripMsgThreads(html));
+  const hits = scanPage(prose, idx, { page_id: 1 });
+  if (hasMsgThread(html)) hits.push(...scanMsgUtterances(msgUtterances(msgThreadLines(html)), idx, { page_id: 1, offset: prose.length }));
+  const who = { 1: 'Anna', 2: 'Lena' };
+  return hits.map(h => `${who[h.figure_id]}:${h.signale[0].wert}:${h.indirekt ? 'indirekt' : 'direkt'}`).sort();
+}
+const T = (inner) => `<div class="msg-thread">${inner}</div>`;
+
+test('Verlauf: Nachricht am Ende klebt nicht an der Erzählung danach', () => {
+  const html = T('<p class="msg-in">bin jetzt 18 jahre alt</p>') + '<p>Anna legte das Handy weg. Sie war 42 Jahre alt und müde.</p>';
+  assert.deepEqual(scanHtml(html), ['Anna:42:indirekt'], 'keine 18 für Anna');
+});
+
+test('Verlauf: Absenderzeile macht den Sprecher, nicht die Erzählung davor', () => {
+  const html = '<p>Anna starrte aufs Handy.</p>' + T('<p class="msg-name">Lena</p><p class="msg-in">werd morgen 30 jahre alt lol</p>');
+  assert.deepEqual(scanHtml(html), ['Lena:30:indirekt']);
+});
+
+test('Verlauf: im Text genannte Figur ist direkt gemeint, der Absender nur indirekt', () => {
+  const html = T('<p class="msg-name">Lena</p><p class="msg-in">Anna wird am Samstag 40 Jahre alt, kommst du?</p>');
+  assert.deepEqual(scanHtml(html), ['Anna:40:direkt', 'Lena:40:indirekt']);
+});
+
+test('Verlauf: ausgehende Nachricht greift nicht auf die Erzählung davor zurück', () => {
+  const html = '<p>Lena schrieb Anna.</p>' + T('<p class="msg-out">ich bin 16 jahre alt und darf das</p>');
+  assert.deepEqual(scanHtml(html), []);
+});
+
+test('Verlauf: Gruppenchat — jede Absenderzeile gilt für ihre Nachrichten', () => {
+  const html = T('<p class="msg-name">Lena</p><p class="msg-in">ich werd 30 jahre alt</p><p class="msg-out">ich bin 25 jahre alt</p><p class="msg-name">Anna</p><p class="msg-in">ich auch 30 jahre alt haha</p><p class="msg-meta">12.03.2019</p>');
+  assert.deepEqual(scanHtml(html), ['Anna:30:indirekt', 'Lena:30:indirekt']);
+});
+
+test('Verlauf: Satz zeigt den Absender, Geburtsjahr wird erkannt', () => {
+  const idx = buildNameIndex([{ id: 2, patterns: [{ text: 'Lena' }] }]);
+  const [hit] = scanMsgUtterances([{ sender: 'Lena', text: 'jahrgang 1998 wieso' }], idx, { page_id: 3, offset: 99 });
+  assert.equal(hit.satz, 'Lena: jahrgang 1998 wieso');
+  assert.equal(hit.signale[0].art, 'geburtsjahr');
+  assert.equal(hit.offset, 99);
 });
 
 test('selectCandidates deckt den Buchbogen ab und meldet den Deckel', () => {

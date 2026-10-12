@@ -41,7 +41,13 @@ unplausible Werte (`isPlausibleWert`: Alter 0–130, Geburts-/Todesjahr 1000–2
 Artikel („ein", „eine", „einen" …) zählt in `numbersIn` nicht als Eins.
 
 Die Verwerfungs-Zähler stehen im Job-Ergebnis (`verworfen.zitat` / `.zahl` / `.wert` /
-`.figur`) und im Log — ein stiller Filter liest sich wie „mehr gab es nicht".
+`.figur`) und im Log — ein stiller Filter liest sich wie „mehr gab es nicht". `.wert`
+zählt auch eine ungültige `art` und einen fehlenden Zahlenwert; `.zitat` nur Zitate, die
+zu kurz sind oder in keiner vorgelegten Stelle stehen.
+
+**Sprungziel.** Das Modell nennt zu jedem Fund die Nummer der Stelle (`stelle`, „2.3"
+wie im Prompt). Steht dasselbe Zitat in mehreren vorgelegten Stellen, bestimmt sie die
+Seite; ohne passende Nummer gilt die erste Fundstelle.
 
 ## Satzfenster
 
@@ -50,6 +56,37 @@ Zahl vor einem Wort („am 3. Mai 1850", „zum 40. Geburtstag") und nicht hinte
 und Initialen („geb. 1850", „Dr. Berg") — genau dort stehen Geburts- und Altersangaben.
 Eine Jahreszahl am Satzende bleibt eine Grenze. Ordinal-Geburtstage werden als ganzes
 Wort zerlegt („dritten", „ersten", „zwanzigsten", „einundzwanzigsten").
+
+**Absatzgrenzen sind Satzgrenzen.** Der Job baut den Seitentext mit `htmlToTextForPrompt`
+(Blockgrenzen als Umbruch, rohe Umbrüche im Quell-HTML vorher eingeebnet), nicht mit dem
+einzeiligen `htmlToText` — sonst klebte eine Überschrift „Anna" oder eine Dialogzeile
+ohne Schlusspunkt am nächsten Absatz und wurde zur direkten Nennung.
+
+**Der Grobfilter** (`COARSE_RE`, [patterns.js](../lib/figure-age/patterns.js)) vor den
+Mustern muss jede Form durchlassen, an der ein Muster greift — auch das blosse Zahlwort
+(„Sie war damals zwölf", „im Alter von vierzig"). Er liegt darum neben den Mustern, nicht
+im Scan. Das Kopula-Muster kennt `war/ist/wird/werde/…` mit bis zu zwei Zeitadverbien,
+Ziffer und Zahlwort, Deutsch und Englisch, und lässt Mengen („12 Minuten", „12.30 Uhr")
+und Jahreszahlen liegen.
+
+**Fenster um die Angabe.** Ein Kandidatensatz geht mit höchstens 320 Zeichen an das
+Modell, geschnitten um die (erste harte) Angabe, nicht ab dem Satzanfang: ein langer
+Vorsatz („Figur steht im Satz davor") verdrängte die Zahl sonst, und die Zitat-Prüfung
+verwürfe ein korrektes Zitat (`clipSatz`, [scan.js](../lib/figure-age/scan.js)). Die
+nächste Nennung der Figur kommt mit, wenn sie ins Fenster passt; geschnitten wird an
+Wortgrenzen ohne Auslassungszeichen.
+
+**Nachrichtenverläufe** ([nachrichtenverlauf.md](nachrichtenverlauf.md)) laufen nicht durch
+das Satzfenster: Chat-Zeilen tragen selten Satzzeichen und klebten sonst an Absenderzeile,
+Nachbarnachricht und Erzählsatz — „bin jetzt 18 jahre alt" vor „Anna legte das Handy weg."
+wurde zur direkten Angabe über Anna. Der Job liest das Seiten-HTML (`loadPageContents`
+mit `keepHtml`); der Erzähltext läuft **ohne** Verlauf durch `scanPage` (auch als Live-Text
+der semantischen Nachlese), jede Nachricht einzeln durch `scanMsgUtterances`
+([scan.js](../lib/figure-age/scan.js)): eine im Text genannte Figur ist direkt gemeint, der
+Absender aus der geltenden Namenszeile ([html-text.js](../lib/html-text.js)#`msgUtterances`)
+indirekt; der Satz trägt ihn als „Name: …" voran. Ausgehende Nachrichten und eingehende ohne
+Namenszeile ergeben nur mit Figur im Text etwas — kein Rückgriff auf den Satz davor, denn wem
+das Telefon gehört, steht nirgends.
 
 ## Bündel und Abbruch
 
@@ -64,11 +101,15 @@ auslösen).
 `gerechnet` = `jahr_im_roman − geburtsjahr`, wobei `jahr_im_roman` das **jüngste
 datierte Ereignis dieser Figur** ist ([lib/figure-years.js](../lib/figure-years.js)) —
 nicht das Ende des Buchs. Eine Figur, die 1987 aus der Geschichte verschwindet,
-während das Buch bis 2003 läuft, ist fünf und nicht einundzwanzig. Vorrang hat
-deshalb die kanonische Rechnung `alter_im_roman` (dieselbe Zahl, die der Figuren-
-Katalog anzeigt); nur wenn die fehlt, weil das Geburtsjahr **nur im Text** steht
-(`alter_im_roman` liest ausschliesslich das kuratierte Feld), zieht die Verdichtung
-sie aus Bezugsjahr − Geburtsjahr nach.
+während das Buch bis 2003 läuft, ist fünf und nicht einundzwanzig.
+
+Gerechnet wird mit dem Geburtsjahr **dieser Zeile** (Steckbrief › Text › Zeitstrahl-
+Geburtsereignis), nicht mit dem fertigen `alter_im_roman`: das stützt sich auf das
+Geburtsjahr des Zeitstrahls, und stünde in der Zeile eines aus dem Text, passten
+Geburtsjahr und gerechnetes Alter nicht zusammen. Bei gleichem Geburtsjahr ist es
+dieselbe Zahl wie im Figuren-Katalog. Ein **Todesjahr** aus dem Text deckelt das
+Ankerjahr — eine Figur, an die 1990 noch erinnert wird, die aber 1950 starb, wird
+nicht älter als bei ihrem Tod.
 
 Die buchweite Jahresspanne (`bookYearSpan`) ist deshalb **nur Rahmen für den
 Prompt** und geht nicht in die Verdichtung ein.
@@ -114,6 +155,12 @@ wurde, müsste sonst aktiv gelöscht werden — und genau das vergisst man.
   eine Scheinantwort.
 - **Zwei verschiedene Geburtsjahre im Text sind ein Befund** (`widerspruch.typ =
   'geburtsjahrText'`), genau wie die Abweichung vom Steckbrief. Gezählt wird das erste.
+  Ohne Steckbrief-Eintrag gilt dasselbe für Text gegen Geburtsereignis im Zeitstrahl
+  (`'geburtsjahrZeitstrahl'`); der Text gewinnt.
+- **Ohne Lauf dieselbe Herkunft wie nach dem Lauf.** Ein Alter, das der Katalog aus dem
+  Steckbrief-Geburtsjahr rechnet, heisst schon vor der Analyse „aus Geburtsjahr" (Ton
+  mittel), nur eines aus dem Zeitstrahl-Geburtsereignis „aus Zeitstrahl" — sonst
+  wechselte dieselbe Zahl mit dem ersten Lauf Plakette und Ton.
 - **„Alter sinkt im Buchverlauf" ist ein Hinweis, kein Fehler.** Rückblenden sind
   legitim. Das Badge heisst darum `prüfen`, nicht „falsch".
 - **Nur die Zeitlinien-Achse ist gegated.** Der gerechnete Wert setzt
@@ -122,8 +169,10 @@ wurde, müsste sonst aktiv gelöscht werden — und genau das vergisst man.
 - **`AGE_ANALYSIS_VERSION`** ([lib/figure-age.js](../lib/figure-age.js)) gehört in die
   `content_sig`. Wer Muster, Verdichtung oder Prompt ändert, erhöht sie — sonst
   überspringt der Delta-Skip den nächsten Lauf.
-- **Der Figurenstamm gehört in die `content_sig`.** Eine neu angelegte Figur ändert das
-  Ergebnis, ohne dass eine Seite angefasst wurde.
+- **Der Figurenstamm und die Zeitlinie gehören in die `content_sig`.** Eine neu
+  angelegte Figur ändert das Ergebnis, ohne dass eine Seite angefasst wurde; ebenso
+  `zeitlinie_real` und je Figur Ankerjahr + Geburtsjahr aus `computeFigureYears`, an
+  denen `gerechnet` hängt.
 
 ## Wege
 
@@ -134,8 +183,9 @@ wurde, müsste sonst aktiv gelöscht werden — und genau das vergisst man.
 - Lesen: `GET /figures/:book_id/alter` ([routes/figures-alter.js](../routes/figures-alter.js), ab `viewer`).
   Zeilen sind nach `figures.fig_id` geschlüsselt — die Kennung, die der Katalog als
   `id` nach vorne gibt.
-- Analysieren: `POST /jobs/figur-alter` (ab `editor`, `force: true` überspringt den
-  Delta-Skip — manuell ausgelöst heisst „ich will jetzt eine Zahl sehen").
+- Analysieren: `POST /jobs/figur-alter` (ab `editor`, nur ein ausdrückliches
+  `force: true` überspringt den Delta-Skip — der Knopf der Karte setzt es, manuell
+  ausgelöst heisst „ich will jetzt eine Zahl sehen"; ohne Angabe gilt der Delta-Skip).
 - Tests: [tests/unit/figure-age.test.js](../tests/unit/figure-age.test.js) +
   [figure-age-befunde.test.js](../tests/unit/figure-age-befunde.test.js) (reine
   Schichten), [tests/integration/figur-alter.test.js](../tests/integration/figur-alter.test.js)

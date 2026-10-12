@@ -117,6 +117,14 @@ Antwort trägt `stale` und den Anker, die der Client nicht selbst bilden kann.
   frühe Stufen → Inhalt und Aufbau zuerst, die letzten beiden → nur Feinschliff.
 - **Ideen-Chat**: Gliederung und Ideenliste tragen «— Stand: …» an jedem
   Abschnitt; eine offene Pendenz an einem fertigen Abschnitt prüft er zuerst.
+- **Share-Leseansicht** (öffentlich, Leser-Sicht, [share-link.md](share-link.md)):
+  leiser Hinweis «Stand: …» — bei Buch-/Kapitel-Share unter jeder
+  Abschnitts-Überschrift (auch wenn die Überschrift wegen Gleichnamigkeit mit
+  dem Kapitel entfällt), beim Abschnitts-Share im Masthead neben Umfang und
+  Lesezeit. Server-gerendert in [lib/share-helpers.js](../lib/share-helpers.js)
+  (`_statusLookup`, nur Stufen der Buch-Kette); `stale` zeigt der Leser nicht.
+  Der Block zählt nicht zum Umfang und wird nicht vorgelesen
+  (`TTS_SKIP_BLOCK_SEL`).
 
 ## Fertig, aber offene Pendenzen
 

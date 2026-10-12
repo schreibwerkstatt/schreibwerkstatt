@@ -25,7 +25,7 @@ const crypto = require('crypto');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, jsonBody, jobAbortControllers,
   aiCall, getPrompts, getBookPrompts,
-  loadOrderedBookContents, loadPageContents,
+  loadOrderedBookContents, loadPageContents, htmlToTextForPrompt,
   chunkLimitsFor, tps, _modelName,
   startBookJob,
 } = require('./shared');
@@ -35,8 +35,9 @@ const { getBookSettings } = require('../../db/book-settings');
 const { replaceFigureAges, getFigureAgeScan } = require('../../db/figure-ages');
 const { computeFigureYears, bookYearSpan } = require('../../lib/figure-years');
 const { buildFigureNamePatterns } = require('../../lib/page-index');
+const { hasMsgThread, msgThreadLines, msgUtterances, stripMsgThreads } = require('../../lib/html-text');
 const {
-  AGE_ANALYSIS_VERSION, buildNameIndex, scanPage, selectCandidates, isStrong,
+  AGE_ANALYSIS_VERSION, buildNameIndex, scanPage, scanMsgUtterances, selectCandidates, isStrong,
   numbersIn, consolidateFigure, foldWord, passageStellen, isPlausibleWert,
 } = require('../../lib/figure-age');
 const embed = require('../../lib/embed');
@@ -67,16 +68,30 @@ function _norm(s) {
 }
 
 /** Signatur des Laufs: Buchstand (Seiten + updated_at in Leserichtung), Figuren-
- *  stamm (Namen + kuratiertes Geburtsjahr) und die Analyse-Version. Aendert sich
- *  nichts davon, ist das Ergebnis dasselbe. Der Figurenstamm gehoert mit hinein —
- *  eine neu angelegte Figur veraendert das Ergebnis, ohne dass eine Seite
- *  angefasst wurde. */
-function computeContentSig(pages, figuren, model) {
+ *  stamm (Namen + kuratiertes Geburtsjahr), die Zeitlinie (Schalter `zeitlinie_real`
+ *  und je Figur Ankerjahr + Geburtsjahr aus lib/figure-years.js) und die Analyse-
+ *  Version. Aendert sich nichts davon, ist das Ergebnis dasselbe. Der Figurenstamm
+ *  gehoert mit hinein — eine neu angelegte Figur veraendert das Ergebnis, ohne dass
+ *  eine Seite angefasst wurde; die Zeitlinie, weil `gerechnet` an ihr haengt. */
+function computeContentSig(pages, figuren, model, { zeitlinieReal = false, yearMap = null } = {}) {
   const h = crypto.createHash('sha1');
-  h.update(`v${AGE_ANALYSIS_VERSION}|${model || ''}`);
+  h.update(`v${AGE_ANALYSIS_VERSION}|${model || ''}|z${zeitlinieReal ? 1 : 0}`);
   for (const p of pages) h.update(`|p${p.id}:${p.updated_at || ''}`);
-  for (const f of figuren) h.update(`|f${f.id}:${f.name}:${f.kurzname || ''}:${f.geburtstag || ''}`);
+  for (const f of figuren) {
+    const y = yearMap?.get(f.id);
+    h.update(`|f${f.id}:${f.name}:${f.kurzname || ''}:${f.geburtstag || ''}:${y?.jahr_im_roman ?? ''}:${y?.geburtsjahr ?? ''}`);
+  }
   return h.digest('hex');
+}
+
+/** Seitentext MIT Absatzgrenzen (`\n`) fuer die Satzfenster: `htmlToText` ebnet
+ *  sie ein, und dann klebte eine Ueberschrift oder eine Dialogzeile ohne
+ *  Schlusspunkt am naechsten Absatz — „<h2>Anna</h2><p>Die Frau war 70 Jahre
+ *  alt.</p>" gab Anna die 70 als direkte Angabe. Rohe Umbrueche im Quell-HTML
+ *  sind dagegen bedeutungslos und werden vorher eingeebnet, sonst schnitte
+ *  splitSentences mitten im Absatz. */
+function proseWithBlocks(html) {
+  return htmlToTextForPrompt(String(html || '').replace(/\s+/g, ' '));
 }
 
 // Ausschnitt aus dem Live-Text um einen Index-Treffer (Chunk ~1500 Zeichen).
@@ -151,13 +166,16 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
     if (!figuren.length) throw i18nError('job.error.figurAlterNoFiguren');
 
     const { chMap, pages } = await loadOrderedBookContents(bookId);
-    const pageContents = await loadPageContents(pages, chMap, 1, null, signal());
+    const pageContents = await loadPageContents(pages, chMap, 1, null, signal(), { keepHtml: true });
     if (!pageContents.some(p => p.text)) throw i18nError('job.error.figurAlterNoText');
 
     // Delta-Skip: derselbe Buchstand + derselbe Figurenstamm ergeben dasselbe
     // Ergebnis. Der Knopf in der Karte setzt `force` — manuell ausgeloest heisst
     // „ich will jetzt eine Zahl sehen" (gleiche Haltung wie beim Wortschatz-Scan).
-    const sig = computeContentSig(pageContents, figuren, model);
+    const settings = getBookSettings(bookId, userEmail);
+    const zeitlinieReal = !!settings?.zeitlinie_real;
+    const yearMap = computeFigureYears(bookId, userEmail);
+    const sig = computeContentSig(pageContents, figuren, model, { zeitlinieReal, yearMap });
     const prev = getFigureAgeScan(bookId, userEmail);
     if (!force && prev && prev.content_sig === sig && prev.age_version === AGE_ANALYSIS_VERSION) {
       logger.info(`Alters-Analyse uebersprungen (unveraendert): book=${bookId} sig=${sig.slice(0, 8)}`);
@@ -176,14 +194,22 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
     for (let i = 0; i < pageContents.length; i++) {
       throwIfAborted();
       const p = pageContents[i];
-      pageText.set(p.id, p.text || '');
-      pageMeta.set(p.id, { page_name: p.title || null, chapter: p.chapter || null, chapter_id: p.chapter_id ?? null, ordinal: i });
-      for (const c of scanPage(p.text, nameIndex, {
+      // Nachrichtenverlaeufe getrennt (lib/figure-age/scan.js#scanMsgUtterances):
+      // im Fliesstext klebten Chat-Zeilen ohne Satzzeichen an Absender und
+      // Erzaehlsatz. Der Erzaehltext laeuft ohne Verlauf durch scanPage — auch als
+      // Live-Text der semantischen Nachlese, sonst klebte es dort erneut.
+      const withMsgs = hasMsgThread(p.html);
+      const prose = proseWithBlocks(withMsgs ? stripMsgThreads(p.html) : p.html);
+      const meta = {
         page_id: p.id, page_name: p.title || null, chapter: p.chapter || null,
         chapter_id: p.chapter_id ?? null, ordinal: i,
-      })) {
-        byFigur.get(c.figure_id)?.push(c);
-      }
+      };
+      pageText.set(p.id, prose);
+      pageMeta.set(p.id, { page_name: meta.page_name, chapter: meta.chapter, chapter_id: meta.chapter_id, ordinal: i });
+      const funde = scanPage(prose, nameIndex, meta);
+      if (withMsgs) funde.push(...scanMsgUtterances(msgUtterances(msgThreadLines(p.html)), nameIndex, { ...meta, offset: prose.length }));
+      for (const c of funde) byFigur.get(c.figure_id)?.push(c);
+      p.html = null;
       if (i % 50 === 0) updateJob(jobId, { statusText: 'job.phase.figurAlterCollect', progress: 4 + Math.floor((i / pageContents.length) * 8) });
     }
 
@@ -228,10 +254,7 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
       });
     }
 
-    const settings = getBookSettings(bookId, userEmail);
-    const zeitlinieReal = !!settings?.zeitlinie_real;
     const buchJahre = zeitlinieReal ? bookYearSpan(bookId, userEmail) : null;
-    const yearMap = computeFigureYears(bookId, userEmail);
     const { BUCH_KONTEXT } = await getBookPrompts(bookId, userEmail);
     const systemPrompt = buildFigurAlterSystemPrompt();
 
@@ -262,7 +285,11 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
     const fundeByFigur = new Map();
     let verworfenZitat = 0, verworfenZahl = 0, verworfenFigur = 0, verworfenWert = 0;
 
-    function consume(funde, stellenOf) {
+    // `stellenOf`: Figur → ihre vorgelegten Stellen; `labelOf`: Stelle → ihre
+    // Nummer im Prompt („2.3"). Das Modell nennt die Nummer mit — steht dasselbe
+    // Zitat in mehreren Stellen (eine wiederholte Wendung auf zwei Seiten),
+    // entscheidet sie das Sprungziel statt der zufaellig ersten Fundstelle.
+    function consume(funde, stellenOf, labelOf) {
       for (const v of Array.isArray(funde) ? funde : []) {
         if (!v || typeof v !== 'object') continue;
         const fig = nameLookup.get(foldWord(v.figur));
@@ -270,7 +297,9 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
         const art = ['alter', 'geburtsjahr', 'todesjahr'].includes(v.art) ? v.art : null;
         const wert = Number.isFinite(Number(v.wert)) ? Math.round(Number(v.wert)) : null;
         const zitat = typeof v.zitat === 'string' ? v.zitat.trim() : '';
-        if (!art || wert == null || zitat.length < MIN_ZITAT_CHARS) { verworfenZitat++; continue; }
+        // Ungueltige Art oder kein Zahlenwert ist ein Wert-Problem, kein Zitat-Problem.
+        if (!art || wert == null) { verworfenWert++; continue; }
+        if (zitat.length < MIN_ZITAT_CHARS) { verworfenZitat++; continue; }
         // Plausibilitaet: ein Geburtsjahr 12 oder ein Alter 400 ist eine Verwechslung,
         // auch wenn die Zahl im Zitat steht.
         if (!isPlausibleWert(art, wert)) { verworfenWert++; continue; }
@@ -281,8 +310,10 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
         // eine Messung. Gleiche Haltung wie bei den Belegzitaten der Bewertung
         // (lib/quote-verify.js), hier nur mit engerem Heuhaufen.
         const nz = _norm(zitat);
-        const treffer = (stellenOf.get(fig.id) || []).find(s => _norm(s.satz).includes(nz));
-        if (!treffer) { verworfenZitat++; continue; }
+        const kandidaten = (stellenOf.get(fig.id) || []).filter(s => _norm(s.satz).includes(nz));
+        if (!kandidaten.length) { verworfenZitat++; continue; }
+        const genannt = typeof v.stelle === 'string' ? v.stelle.trim().replace(/^\(|\)$/g, '') : '';
+        const treffer = kandidaten.find(s => labelOf.get(s) === genannt) || kandidaten[0];
 
         // Zahl-Pruefung: der Wert muss im Zitat vorkommen — als Ziffer oder als
         // Zahlwort. Faellt das weg, wandern gerechnete und geratene Werte als
@@ -338,6 +369,8 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
         progress: from,
       });
       const stellenOf = new Map(bundle.map(b => [b.fig.id, b.stellen]));
+      const labelOf = new Map();
+      bundle.forEach((b, i) => b.stellen.forEach((st, k) => labelOf.set(st, `${i + 1}.${k + 1}`)));
       let result;
       try {
         result = await aiCall(jobId, tok,
@@ -360,7 +393,7 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
       // Pflichtfeld: fehlt `funde`, hat der Provider nicht geantwortet wie
       // verlangt. Ein leeres ARRAY ist dagegen gueltig (Stellen ohne Aussage).
       if (!Array.isArray(result?.funde)) throw i18nError('job.error.figurAlterMissing');
-      consume(result.funde, stellenOf);
+      consume(result.funde, stellenOf, labelOf);
       done++;
     }
 
@@ -420,7 +453,7 @@ const figurAlterRouter = express.Router();
 // 'editor': das Ergebnis ist ein Analyse-Index am Buch, kein Lesevorgang.
 figurAlterRouter.post('/figur-alter', jsonBody, (req, res) => startBookJob(req, res, {
   type: 'figur-alter', minRole: 'editor', label: 'job.label.figurAlter',
-  run: (jobId, { bookId, userEmail }) => runFigurAlterJob(jobId, bookId, userEmail, { force: req.body?.force !== false }),
+  run: (jobId, { bookId, userEmail }) => runFigurAlterJob(jobId, bookId, userEmail, { force: req.body?.force === true }),
 }));
 
 module.exports = { figurAlterRouter, runFigurAlterJob };

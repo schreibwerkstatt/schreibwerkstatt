@@ -124,7 +124,9 @@ function idMapsFromContents({ chNameToId, pages }) {
 
 // `textOpts` geht an ./ai.js#htmlToText — `{ msgRows, langCode }` setzt nur die
 // Komplettanalyse (komplett/utils.js#komplettTextOpts, auch im Delta-Vergleich).
-async function loadPageContents(pages, chMap, minLength, onBatch, signal = null, textOpts = {}) {
+// `keepHtml: true` reicht zusaetzlich das Seiten-HTML durch (Alters-Analyse: sie
+// liest Nachrichtenverlaeufe zeilenweise aus dem Markup, figur-alter.js).
+async function loadPageContents(pages, chMap, minLength, onBatch, signal = null, { keepHtml = false, ...textOpts } = {}) {
   // Vor-Filter via preview_text aus dem pages-Cache: wenn ein gespeicherter
   // Preview kürzer als minLength ist, ist auch der Volltext zu kurz und wir
   // sparen das Volltext-Laden (oft 100+ leere Stub-Pages pro Buch).
@@ -168,6 +170,7 @@ async function loadPageContents(pages, chMap, minLength, onBatch, signal = null,
         chapter_id: pd.chapter_id || null,
         chapter: pd.chapter_id ? (chMap[pd.chapter_id] || 'Kapitel') : null,
         text,
+        ...(keepHtml ? { html: pd.html || '' } : {}),
       };
     })
     .filter(Boolean));

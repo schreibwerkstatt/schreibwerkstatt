@@ -23,7 +23,10 @@
    Überschriftengrössen, Edit-Modus-Zustände) bleiben in den jeweiligen Dateien
    und überschreiben von dort — die App-Konsumenten laden nach dieser Datei
    (gleicher @layer → Quell-Reihenfolge entscheidet), die Share-Regeln sind
-   unlayered und gewinnen dadurch ohnehin. */
+   unlayered und gewinnen dadurch ohnehin. Eine allgemeine `p`-Regel darf in
+   keinem Konsumenten unlayered stehen oder die Spezifität der Block-Regeln
+   (`.poem p`, `.msg-thread > p`) erreichen — sonst überschreibt sie die
+   Absätze in Blöcken, und der Block müsste dort neu gesetzt werden. */
 @layer components {
 
   /* --- Token-Brücke: App-Konsumenten --- */
@@ -295,7 +298,7 @@
     white-space: pre-line;
     hyphens: none;
   }
-  :is(.page-content-view, .book-editor-page-body, .share-content) .poem p { margin: 0 0 0.3em 0; text-indent: 0; }
+  :is(.page-content-view, .book-editor-page-body, .share-content) .poem p { margin: 0 0 0.3em 0; text-indent: 0; hyphens: none; }
 
   /* --- Nachrichtenverlauf (Slash `/msgthread`, div.msg-thread). Markup-SSoT:
          public/js/messages/msg-html.js. Am Bildschirm als dezente Blasen,
@@ -316,6 +319,7 @@
     text-indent: 0;
     text-align: start;
     max-width: 80%;
+    hyphens: none;
     padding: 0.3em 0.7em;
     border-radius: var(--mc-radius);
     background: var(--mc-surface-alt);

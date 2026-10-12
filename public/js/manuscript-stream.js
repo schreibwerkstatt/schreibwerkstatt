@@ -87,7 +87,8 @@ export function fromSnapshotTree(tree) {
 //
 // `opts.pageHead(p, pd)` darf je Seite `{ name, before, after }` liefern und
 // damit den Titel-Kopf beisteuern (Aufrufer: lib/share-helpers.js mit
-// lib/headline-render.js). Fehlt der Callback, bleibt alles wie gehabt — dieses
+// lib/headline-render.js). Ein Kopf macht die Seite zum Beitrag (`article`),
+// ausser er sagt `article: false` (nur Zusatz-Markup, z. B. Bearbeitungsstand). Fehlt der Callback, bleibt alles wie gehabt — dieses
 // Modul kennt die Titel-Werkstatt nicht.
 export function fromGroups(groups, opts = {}) {
   const head = typeof opts.pageHead === 'function' ? opts.pageHead : null;
@@ -100,7 +101,8 @@ export function fromGroups(groups, opts = {}) {
       _pushPage(out, {
         name: (h && h.name) || pd.name,
         html: pd.html, id: pd.id, depth: 0, chapterId: g.chapterId ?? null,
-        headBefore: h && h.before, headAfter: h && h.after, article: !!h,
+        headBefore: h && h.before, headAfter: h && h.after,
+        article: h ? (h.article ?? true) : false,
       });
     }
   }
