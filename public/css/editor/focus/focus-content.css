@@ -174,11 +174,37 @@
    in Chrome mit styleWithCSS=true schreibt inline-styles statt <b>; sonst
    wäre Bold im Fokus-Modus unsichtbar trotz funktionierendem Shortcut. */
 
-/* Tabellen-Layout stört den Lese-/Schreibfluss – komplett ausblenden.
-   Im Edit-Modus bleibt das Markup im DOM erhalten und wird beim Verlassen
-   wieder sichtbar. */
+/* Tabellen als schlichte Texttabelle: Haarlinien, Fliesstext-Schrift, kein
+   Kopfzeilen-Hintergrund. NICHT ausblenden — eine unsichtbare Tabelle löscht
+   man mit einem einzigen Backspace im Absatz dahinter oder mit einer Auswahl
+   über sie hinweg, ohne es zu merken. Bearbeitet wird sie hier nicht: sie ist
+   atomar (`contenteditable="false"`, gesetzt beim Notebook-Mount und mit dem
+   Mirror übernommen, in den nativen Clients beim Standalone-Mount),
+   Backspace/Delete an ihrer Grenze fängt shared/block-edge.js#`protectNeighbour` ab.
+   Sie nimmt nie den Caret auf, ist also nie der aktive Block — gedimmt wie
+   jeder nicht-aktive Block (gleicher Guard wie die Dim-Regel in focus-mode.css). */
 .focus-editor__content table {
-  display: none;
+  border-collapse: collapse;
+  margin: 0.4em 0;
+  max-width: 100%;
+  font-size: 0.85em;
+  line-height: 1.5;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.focus-editor__content :is(th, td) {
+  border: 1px solid var(--color-border);
+  padding: 0.15em 0.6em;
+  text-align: start;
+  vertical-align: top;
+  font-weight: inherit;
+}
+.focus-editor__content caption {
+  caption-side: top;
+  text-align: start;
+  padding-bottom: 0.2em;
+}
+.focus-editor.is-active:not(.focus-mode--typewriter-only) .focus-editor__content table {
+  opacity: var(--focus-dim-opacity);
 }
 
 /* Bilder (immer <figure><img><figcaption>) nicht spurlos verstecken – ein

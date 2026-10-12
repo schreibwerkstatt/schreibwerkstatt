@@ -12,8 +12,10 @@
 //      focusActive oder editDirty.
 //   2. Sonst wird eingespielt, sobald der Tab im Hintergrund liegt oder lange
 //      genug keine Eingabe kam.
-//   3. Ein Pflicht-Update hängt nur noch an ungespeicherten Änderungen.
-//   4. Server und Shell lesen den Protokoll-Stand aus DERSELBEN Datei.
+//   3. Ein Tab, der mit veralteter Shell gebootet hat, wartet nicht auf den
+//      Leerlauf — aber auch er nie beim Editieren.
+//   4. Ein Pflicht-Update hängt nur noch an ungespeicherten Änderungen.
+//   5. Server und Shell lesen den Protokoll-Stand aus DERSELBEN Datei.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -41,6 +43,13 @@ test('shouldAutoApply: Hintergrund-Tab oder Leerlauf', () => {
   assert.equal(shouldAutoApply({ hidden: true, idleMs: 0, busy: false, online: true }), true);
   assert.equal(shouldAutoApply({ hidden: false, idleMs: AUTO_APPLY_IDLE_MS, busy: false, online: true }), true);
   assert.equal(shouldAutoApply({ hidden: false, idleMs: AUTO_APPLY_IDLE_MS - 1, busy: false, online: true }), false);
+});
+
+test('shouldAutoApply: veraltet gebooteter Tab spielt sofort ein, ausser beim Editieren', () => {
+  assert.equal(shouldAutoApply({ hidden: false, idleMs: 0, busy: false, online: true, staleBoot: true }), true);
+  assert.equal(shouldAutoApply({ hidden: false, idleMs: 0, busy: true, online: true, staleBoot: true }), false);
+  assert.equal(shouldAutoApply({ hidden: false, idleMs: 0, busy: false, online: false, staleBoot: true }), false);
+  assert.equal(shouldAutoApply({ hidden: false, idleMs: 0, busy: false, online: true }), false);
 });
 
 test('isUpdateRequired: nur ein NEUERES Server-Protokoll erzwingt', () => {

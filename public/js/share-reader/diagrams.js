@@ -23,6 +23,8 @@
 // Faellt mermaid aus (Ladefehler, offline), bleibt der Quelltext im `<pre>`
 // stehen. Das ist der Grund, warum der Traeger ein `<pre>` ist.
 
+import { mermaidThemeConfig } from './mermaid-theme.js';
+
 const DIAGRAM_SEL = 'pre.mermaid';
 const RENDER_CLASS = 'mermaid-render';
 const VENDOR_SRC = '/vendor/mermaid-11.16.0.min.js';
@@ -70,13 +72,14 @@ export async function setupDiagrams(root) {
   // `htmlLabels: false` ist Pflicht, nicht Geschmack: mit HTML-Labels steckt
   // mermaid <foreignObject> ins SVG, und das rendert kein E-Book-Reader und kein
   // Rasterizer. `securityLevel: 'strict'` schaltet Klick-Handler und rohes HTML
-  // in Labels ab — der Diagramm-Code stammt aus dem Manuskript.
+  // in Labels ab — der Diagramm-Code stammt aus dem Manuskript. Farben aus der
+  // App-Palette, dieselbe wie im Server-Render.
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'strict',
     htmlLabels: false,
     flowchart: { htmlLabels: false, useMaxWidth: true },
-    theme: readerTheme(),
+    ...mermaidThemeConfig(readerTheme()),
     fontFamily: 'inherit',
   });
 

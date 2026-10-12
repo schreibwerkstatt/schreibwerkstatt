@@ -7,6 +7,7 @@
 import { getEditEl, placeCaretIn, _brLeftOfCaret, _formatStamp, findTodoLi, findPoemP, findFigcaption, findBlock, topLevelBlock, caretAtBlockStart, caretAtBlockEnd, MERGE_BLOCK_TAGS, ATOMIC_BLOCK_TAGS, BOUNDARY_WRAPPER_SEL, wrapperInnerBlocks } from './_shared.js';
 import { createTodoItem, TODO_TEXT_SEL, TODO_LIST_SEL } from '../../shared/todo-html.js';
 import { matchHistoryCommand } from '../../shared/shortcuts.js';
+import { mergeBlocksManually } from '../../shared/block-edge.js';
 
 const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock']);
 
@@ -39,11 +40,30 @@ export const keydownMethods = {
     if (this._kbHorizontalRule(e, app)) return;
     if (this._kbLink(e, app)) return;
     if (this._kbUndoRedo(e, app)) return;
+    if (this._kbProtectedNeighbour(e, app)) {
+      if (app.focusActive) getEditEl()?.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
 
     // Ab hier hört die Toolbar im Focus-Modus auf — Slash-Menü und Block-
     // Transforms sind dort nicht erlaubt. B/I/U liefen oben bzw. via Browser-
-    // Default weiter.
-    if (app.focusActive) return;
+    // Default weiter. Ausnahme sind Enter im Nachrichtenverlauf (Doppel-Enter
+    // verlässt ihn, sonst wurde weitergetippte Erzählung zur Nachricht) und
+    // Backspace/Delete an Blockgrenzen: dort laufen dieselben Handler wie im
+    // Notebook (Verlauf, Wrapper, Checkbox-Liste), und den schlichten Merge
+    // zweier Geschwisterblöcke übernimmt der Focus-Editor selbst. Der aktive
+    // Absatz trägt eine eigene Spotlight-Farbe, Chromium bäckt diesen
+    // Unterschied beim Merge als Inline-`style` ein; im `.poem` (Focus-CSS:
+    // `display: contents`) verwirft der Default sogar ganze Verse.
+    if (app.focusActive) {
+      if (this._kbMsgThread(e, app) || this._kbTodoDelete(e, app) || this._kbFigureCaption(e, app)
+          || this._kbBlockBoundary(e, app) || this._kbFocusMerge(e, app)) {
+        // Manuelle DOM-Mutation feuert kein `input`: Absatz-Markierung und
+        // Fokus-Undo hängen daran (Invarianten 18 + 19 in docs/focus-editor.md).
+        getEditEl()?.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      return;
+    }
 
     if (this._kbDeleteBlock(e, app)) return;
     // Nachrichtenverlauf vor den generischen Grenzen: Zeilen-Merges innerhalb
@@ -416,7 +436,9 @@ export const keydownMethods = {
     const fig = cap.closest('figure');
     if (!fig || !editEl.contains(fig)) return false;
     e.preventDefault();
-    if ((cap.textContent || '').trim()) return true; // erst den Legendentext löschen
+    // Erst den Legendentext löschen. Im Focus-Editor nie das Bild: dort steht
+    // es nur als gedimmtes Symbol, sein Verlust fiele nicht auf.
+    if ((cap.textContent || '').trim() || app.focusActive) return true;
     const p = document.createElement('p');
     p.appendChild(document.createElement('br'));
     fig.parentNode.replaceChild(p, fig);
@@ -431,7 +453,8 @@ export const keydownMethods = {
   // ein und lässt den Wrapper teils ganz verschwinden. Vier symmetrische Fälle,
   // je nachdem ob der Caret innerhalb des Wrappers oder im Nachbarabsatz sitzt.
   // Merges INNERHALB eines Wrappers (Zeile 2 auf Zeile 1) bleiben beim Default —
-  // die sind nachweislich sauber.
+  // die sind im Notebook nachweislich sauber (im Focus-Editor nicht, dort
+  // übernimmt `_kbFocusMerge`).
   _kbBlockBoundary(e, app) {
     if (e.key !== 'Backspace' && e.key !== 'Delete') return false;
     const editEl = getEditEl();
@@ -538,30 +561,8 @@ export const keydownMethods = {
     return true;
   },
 
-  // Verschmilzt `source` (gesamter Inhalt inkl. weicher <br>-Umbrüche) ans Ende
-  // von `receiver` und entfernt `source`. Setzt den Caret an die Naht zwischen
-  // Alt-Inhalt und angehängtem Inhalt. Ersetzt das native Merge-Verhalten, das
-  // bei <br>-haltigen Absätzen nur die erste Zeile übernimmt und den Rest zu
-  // einem neuen Absatz abspaltet.
+  // Verschmilzt `source` ans Ende von `receiver` (shared/block-edge.js).
   _mergeBlocksManually(receiver, source) {
-    // Ein alleinstehendes <br> ist Platzhalter, nicht Inhalt: auf BEIDEN Seiten
-    // wegräumen, sonst bleibt eine Leerzeile vor (Receiver) bzw. hinter (Source)
-    // dem angehängten Text stehen. Der Source-Fall tritt nur über den Checkbox-
-    // Pfad auf — `_kbDeleteBlock` merged ausschliesslich Quellen mit Text.
-    const placeholderOnly = (el) => el.childNodes.length === 1 && el.firstChild.nodeName === 'BR';
-    if (placeholderOnly(receiver)) receiver.removeChild(receiver.firstChild);
-    if (placeholderOnly(source)) source.removeChild(source.firstChild);
-    const anchor = receiver.lastChild; // Naht-Anker (null, wenn Receiver leer war)
-    while (source.firstChild) receiver.appendChild(source.firstChild);
-    source.remove();
-    const sel = document.getSelection();
-    if (!sel) return;
-    const r = document.createRange();
-    if (anchor && anchor.nodeType === 3) r.setStart(anchor, anchor.textContent.length);
-    else if (anchor) r.setStartAfter(anchor);
-    else r.setStart(receiver, 0);
-    r.collapse(true);
-    sel.removeAllRanges();
-    sel.addRange(r);
+    mergeBlocksManually(receiver, source);
   },
 };

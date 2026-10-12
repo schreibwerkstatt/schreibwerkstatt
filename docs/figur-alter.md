@@ -83,10 +83,10 @@ wurde zur direkten Angabe über Anna. Der Job liest das Seiten-HTML (`loadPageCo
 mit `keepHtml`); der Erzähltext läuft **ohne** Verlauf durch `scanPage` (auch als Live-Text
 der semantischen Nachlese), jede Nachricht einzeln durch `scanMsgUtterances`
 ([scan.js](../lib/figure-age/scan.js)): eine im Text genannte Figur ist direkt gemeint, der
-Absender aus der geltenden Namenszeile ([html-text.js](../lib/html-text.js)#`msgUtterances`)
-indirekt; der Satz trägt ihn als „Name: …" voran. Ausgehende Nachrichten und eingehende ohne
-Namenszeile ergeben nur mit Figur im Text etwas — kein Rückgriff auf den Satz davor, denn wem
-das Telefon gehört, steht nirgends.
+Absender aus der geltenden Namenszeile seiner Seite ([html-text.js](../lib/html-text.js)#`msgUtterances`)
+indirekt; der Satz trägt ihn als „Name: …" voran. Nachrichten ohne Namenszeile ihrer Seite —
+meist die ausgehenden — ergeben nur mit Figur im Text etwas — kein Rückgriff auf den Satz
+davor, denn wem das Telefon gehört, steht nur in einer Namenszeile.
 
 ## Bündel und Abbruch
 

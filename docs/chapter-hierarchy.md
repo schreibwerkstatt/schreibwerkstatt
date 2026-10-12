@@ -134,7 +134,7 @@ Frontend [public/js/cards/kapitel-review-card.js](../public/js/cards/kapitel-rev
 [lib/pdf-render/index.js](../lib/pdf-render/index.js):
 
 - **TOC-Plan**: `tocCounters[3]`; bei depth d → `counters[d-1]++`, tiefere reset; Label via `_chapterLabelNested`; TOC-Level = `depth - 1`. Seiten-Eintraege kommen mit `isPage: true` + `parentLevel` dazu (Level = `depth`).
-- **Body-Loop** ([lib/pdf-render/body.js](../lib/pdf-render/body.js)): depth → Heading-Größe (h1/h2/h3), Align (centered nur depth=1), `spaceBeforeMm`-Faktor (1.0 / 0.4 / 0.2), Break-Verhalten (depth>1 nur bei `breakBeforeSubchapter`), DropCap nur depth=1, `titleRule` nur depth=1. Seitentitel = h4, linksbuendig, `pageTitleRule`. PDF-Lesezeichen sind ein echter Baum (`outlineStack`: Kapitel der Tiefe d haengt an `stack[d-1]`, die Seite an `stack[depth]`) — die Leiste spiegelt damit dieselbe Gliederung wie das Verzeichnis.
+- **Body-Loop** ([lib/pdf-render/body.js](../lib/pdf-render/body.js)): depth → Heading-Größe (h1/h2/h3), Align (depth=1 nach `titleStyle`, tiefer nach `subTitleAlign`), `spaceBeforeMm`-Faktor (1.0 / 0.4 / 0.2), Break-Verhalten (depth>1 nur bei `breakBeforeSubchapter`), DropCap nur depth=1, Linie depth=1 bei `titleRule`/`left-rule`, tiefer bei `subTitleRule`. Seitentitel = h4, `pageTitleAlign`, `pageTitleRule`. Linienart und Kapitelnummer: [publikation-export.md](publikation-export.md#überschriften-gestaltung-pdf--epub). PDF-Lesezeichen sind ein echter Baum (`outlineStack`: Kapitel der Tiefe d haengt an `stack[d-1]`, die Seite an `stack[depth]`) — die Leiste spiegelt damit dieselbe Gliederung wie das Verzeichnis.
 
 ## Andere Export-Builder
 
@@ -142,7 +142,7 @@ Frontend [public/js/cards/kapitel-review-card.js](../public/js/cards/kapitel-rev
 
 - **HTML/MD**: Kapitel-Heading via depth+1 (Top = h2 / `##`, depth 2 = h3 / `###`, depth 3 = h4 / `####`); Page-Heading eine Stufe tiefer, gecapped bei 6.
 - **DOCX** ([lib/export-builders/docx.js](../lib/export-builders/docx.js)): depth → Word-Heading 1..3, **Seitentitel auf Heading 4** (`PAGE_HEADING_LEVEL`); Umbruch vor Kapiteln via `chapter.pageBreakBefore` (+ `breakBeforeSubchapter` fuer depth>1) und vor Seiten via `chapter.pageBreakBetweenPages` — immer am Ueberschriften-Absatz selbst, nie als vorangestellter Leerabsatz. `toc.includePages` wie im PDF; das Word-TOC-**Feld** kann nur einen zusammenhaengenden `\o "1-N"`-Bereich, exakt schneiden kann nur `mode: 'static'`.
-- **EPUB**: NavMap-NCX hat 2 Ebenen — depth-1 wird auf `__level: min(1, depth-1)` gemapped (Sub-Sub-Kapitel kollabiert in Outline auf Level 1, Content vollständig erhalten).
+- **EPUB**: NavMap-NCX hat 2 Ebenen — depth-1 wird auf `__level: min(1, depth-1)` gemapped (Sub-Sub-Kapitel kollabiert in Outline auf Level 1, Content vollständig erhalten). Die Überschrift im Inhalt folgt dagegen der echten Tiefe: h1/h2/h3.
 - **TXT**: unverändert (Plain-Text ohne Heading-Markup).
 
 ## Andere `chapter_id`-Konsumenten

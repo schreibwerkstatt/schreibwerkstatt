@@ -1,0 +1,104 @@
+<!-- EPUB-Export · Ueberschriften-Gestaltung im Struktur-Tab (Fragment, via @include
+     in epub-export.html): Kapitelnummer, Titel-Stil, Linie/Ornament, Ausrichtung.
+     Werte SSoT lib/heading-style.js, Auswahllisten public/js/cards/export-heading-style.js. -->
+      <div class="card-form-row" x-show="pub.epub_chapter_numbering !== 'none'">
+        <label class="card-form-label" x-text="$app.t('export.heading.numberPrefix')"></label>
+        <div class="card-form-field">
+          <div x-data="combobox($app.t('export.heading.numberPrefix'))"
+               x-modelable="value" x-model="pub.epub_number_prefix"
+               x-effect="options = headingStyleOptions('numberPrefix')"></div>
+          <p class="card-form-field-note" x-text="$app.t('export.heading.numberPrefixHint')"></p>
+        </div>
+      </div>
+      <div class="card-form-row" x-show="pub.epub_chapter_numbering !== 'none' && pub.epub_number_prefix === 'custom'">
+        <label class="card-form-label" for="epubx-number-prefix" x-text="$app.t('export.heading.numberPrefixText')"></label>
+        <input type="text" id="epubx-number-prefix" class="card-form-input" maxlength="30" data-spellcheck="spelling"
+               x-model="pub.epub_number_prefix_text" :disabled="!canEditPublication()"
+               :placeholder="$app.t('export.heading.numberPrefixPlaceholder')">
+      </div>
+      <div class="card-form-row" x-show="pub.epub_chapter_numbering !== 'none'">
+        <label class="card-form-label" x-text="$app.t('export.heading.numberCase')"></label>
+        <div x-data="combobox($app.t('export.heading.numberCase'))"
+             x-modelable="value" x-model="pub.epub_number_case"
+             x-effect="options = headingStyleOptions('numberCase')"></div>
+      </div>
+      <div class="card-form-row" x-show="pub.epub_chapter_numbering !== 'none'">
+        <label class="card-form-label" x-text="$app.t('export.heading.numberSizePct')"></label>
+        <input type="text" x-data="numInput({ integer: true, min: 40, max: 100 })"
+               x-modelable="value" x-model="pub.epub_number_size_pct" :disabled="!canEditPublication()">
+      </div>
+      <div class="card-form-row" x-show="pub.epub_chapter_numbering !== 'none'">
+        <label class="book-settings-option">
+          <input type="checkbox" x-model="pub.epub_chapter_number_divider" :disabled="!canEditPublication()">
+          <span x-text="$app.t('export.heading.numberDivider')"></span>
+        </label>
+      </div>
+      <div class="card-form-row" x-show="pub.epub_chapter_numbering !== 'none'">
+        <label class="book-settings-option">
+          <input type="checkbox" x-model="pub.epub_number_tracking" :disabled="!canEditPublication()">
+          <span x-text="$app.t('export.heading.numberTracking')"></span>
+        </label>
+      </div>
+
+      <p class="card-form-section-divider" x-text="$app.t('export.heading.group')"></p>
+      <div class="card-form-row">
+        <label class="card-form-label" x-text="$app.t('epubExport.field.titleStyle')"></label>
+        <div x-data="combobox($app.t('epubExport.field.titleStyle'))"
+             x-modelable="value" x-model="pub.epub_chapter_title_style"
+             x-effect="options = chapterTitleStyleOptions()"></div>
+      </div>
+      <div class="card-form-row" x-show="pub.epub_chapter_title_style !== 'left-rule'">
+        <label class="book-settings-option">
+          <input type="checkbox" x-model="pub.epub_chapter_rule" :disabled="!canEditPublication()">
+          <span x-text="$app.t('export.heading.chapterRule')"></span>
+        </label>
+      </div>
+      <p class="card-form-field-note" x-show="pub.epub_chapter_title_style === 'left-rule'" x-text="$app.t('export.heading.leftRuleHint')"></p>
+      <div class="card-form-row">
+        <label class="book-settings-option">
+          <input type="checkbox" x-model="pub.epub_sub_title_rule" :disabled="!canEditPublication()">
+          <span x-text="$app.t('export.heading.subTitleRule')"></span>
+        </label>
+      </div>
+      <div class="card-form-row">
+        <label class="book-settings-option">
+          <input type="checkbox" x-model="pub.epub_page_rule" :disabled="!canEditPublication()">
+          <span x-text="$app.t('export.heading.pageTitleRule')"></span>
+        </label>
+      </div>
+      <div class="card-form-row" x-show="(pub.epub_chapter_title_style === 'left-rule' || pub.epub_chapter_rule || pub.epub_sub_title_rule || pub.epub_page_rule)">
+        <label class="card-form-label" x-text="$app.t('export.heading.ruleStyle')"></label>
+        <div x-data="combobox($app.t('export.heading.ruleStyle'))"
+             x-modelable="value" x-model="pub.epub_rule_style"
+             x-effect="options = headingStyleOptions('ruleStyle')"></div>
+      </div>
+      <div class="card-form-row" x-show="(pub.epub_chapter_title_style === 'left-rule' || pub.epub_chapter_rule || pub.epub_sub_title_rule || pub.epub_page_rule) && headingRuleIsSized(pub.epub_rule_style)">
+        <label class="card-form-label" x-text="$app.t('export.heading.ruleWeight')"></label>
+        <div x-data="combobox($app.t('export.heading.ruleWeight'))"
+             x-modelable="value" x-model="pub.epub_rule_weight"
+             x-effect="options = headingStyleOptions('ruleWeight')"></div>
+      </div>
+      <div class="card-form-row" x-show="(pub.epub_chapter_title_style === 'left-rule' || pub.epub_chapter_rule || pub.epub_sub_title_rule || pub.epub_page_rule) && headingRuleIsSized(pub.epub_rule_style)">
+        <label class="card-form-label" x-text="$app.t('export.heading.ruleWidth')"></label>
+        <div x-data="combobox($app.t('export.heading.ruleWidth'))"
+             x-modelable="value" x-model="pub.epub_rule_width"
+             x-effect="options = headingStyleOptions('ruleWidth')"></div>
+      </div>
+      <div class="card-form-row" x-show="(pub.epub_chapter_title_style === 'left-rule' || pub.epub_chapter_rule || pub.epub_sub_title_rule || pub.epub_page_rule)">
+        <label class="card-form-label" x-text="$app.t('export.heading.rulePosition')"></label>
+        <div x-data="combobox($app.t('export.heading.rulePosition'))"
+             x-modelable="value" x-model="pub.epub_rule_position"
+             x-effect="options = headingStyleOptions('rulePosition')"></div>
+      </div>
+      <div class="card-form-row">
+        <label class="card-form-label" x-text="$app.t('export.heading.subTitleAlign')"></label>
+        <div x-data="combobox($app.t('export.heading.subTitleAlign'))"
+             x-modelable="value" x-model="pub.epub_sub_title_align"
+             x-effect="options = headingStyleOptions('subTitleAlign')"></div>
+      </div>
+      <div class="card-form-row">
+        <label class="card-form-label" x-text="$app.t('export.heading.pageTitleAlign')"></label>
+        <div x-data="combobox($app.t('export.heading.pageTitleAlign'))"
+             x-modelable="value" x-model="pub.epub_page_title_align"
+             x-effect="options = headingStyleOptions('pageTitleAlign')"></div>
+      </div>

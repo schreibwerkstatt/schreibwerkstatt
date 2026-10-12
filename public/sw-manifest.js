@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "058a540009324297";
+self.__SHELL_BUILD = "65137edd0e381f7a";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -438,6 +438,7 @@ self.__SHELL_MANIFEST = [
   "/js/cards/erzaehlprofil-card.js",
   "/js/cards/export-card-base.js",
   "/js/cards/export-card.js",
+  "/js/cards/export-heading-style.js",
   "/js/cards/feature-registry.js",
   "/js/cards/fehler-heatmap-card.js",
   "/js/cards/figur-werkstatt-card.js",
@@ -547,6 +548,7 @@ self.__SHELL_MANIFEST = [
   "/js/credential-login.js",
   "/js/device-id.js",
   "/js/diagram/mermaid-html.js",
+  "/js/diagram/mermaid-theme.js",
   "/js/diagram/mermaid-view.js",
   "/js/editor/book-editor-comments.js",
   "/js/editor/comment-rail-core.js",
@@ -603,12 +605,14 @@ self.__SHELL_MANIFEST = [
   "/js/editor/notebook/stt/transport.js",
   "/js/editor/notebook/toolbar.js",
   "/js/editor/notebook/toolbar/_shared.js",
+  "/js/editor/notebook/toolbar/block-edge.js",
   "/js/editor/notebook/toolbar/bubble.js",
   "/js/editor/notebook/toolbar/caret-panel.js",
   "/js/editor/notebook/toolbar/cite.js",
   "/js/editor/notebook/toolbar/diagram.js",
   "/js/editor/notebook/toolbar/image.js",
   "/js/editor/notebook/toolbar/keydown.js",
+  "/js/editor/notebook/toolbar/msg-convert.js",
   "/js/editor/notebook/toolbar/msg-thread.js",
   "/js/editor/notebook/toolbar/slash.js",
   "/js/editor/notebook/toolbar/table.js",
@@ -620,6 +624,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/shared/auto-slot.js",
   "/js/editor/shared/autosave.js",
   "/js/editor/shared/block-caret.js",
+  "/js/editor/shared/block-edge.js",
   "/js/editor/shared/block-merge.js",
   "/js/editor/shared/conflict-diff.js",
   "/js/editor/shared/conflict-text.js",
@@ -772,6 +777,7 @@ self.__SHELL_MANIFEST = [
   "/js/share-reader/identity.js",
   "/js/share-reader/layout.js",
   "/js/share-reader/menu.js",
+  "/js/share-reader/mermaid-theme.js",
   "/js/share-reader/progress.js",
   "/js/share-reader/read-depth.js",
   "/js/share-reader/reading-prefs.js",
@@ -949,6 +955,7 @@ self.__SHELL_MANIFEST = [
   "/partials/editor-synonyme.html",
   "/partials/editor-table-dialog.html",
   "/partials/editor-toolbar.html",
+  "/partials/epub-export-headings.html",
   "/partials/epub-export.html",
   "/partials/ereignisse.html",
   "/partials/erzaehlprofil-befund.html",

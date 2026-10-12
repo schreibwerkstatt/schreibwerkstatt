@@ -29,6 +29,16 @@ import { isNoChange } from '../shared/save-pipeline.js';
 import { stripLektoratMarks } from '../shared/html-clean.js';
 import { handleEditorPastePlain, handleEditorCopy, handleEditorCut } from '../shared/paste.js';
 import { createEditHistory } from '../shared/edit-history.js';
+import { protectNeighbour, focusMerge } from '../shared/block-edge.js';
+import { TODO_LIST_SEL } from '../shared/todo-html.js';
+import { MSG_THREAD_SEL } from '../../messages/msg-html.js';
+import { markTablesAtomic } from '../../table/table-html.js';
+
+// Blöcke, deren Grenzen in der SPA eigene Toolbar-Handler bedienen (Checkbox-
+// Liste, Nachrichtenverlauf). Ohne Toolbar bleiben sie beim Default, statt
+// vom schlichten Geschwister-Merge erfasst zu werden — der zöge sonst eine
+// Checkbox in die Zeile darüber.
+const MERGE_SKIP_SEL = `${TODO_LIST_SEL}, ${MSG_THREAD_SEL}`;
 
 const DEFAULT_AUTOSAVE_MS = 1500;
 // Abstand für den Neuversuch nach einem fehlgeschlagenen Save.
@@ -199,6 +209,10 @@ export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT
   // Pfad (kein fremder Input).
   const page = await bridge.loadPage();
   content.innerHTML = (page && page.html) || '<p><br></p>';
+  // Tabellen sind atomar wie im Notebook-Mount (Eingabe nur im Gitter-Dialog
+  // der Web-App). Laufzeit-Attribut: stripLektoratMarks entfernt es vor
+  // Vergleich und Save.
+  markTablesAtomic(content);
   // Vor dem originalHtml-Capture normalisieren (Invariante 11c): sonst zeigt
   // der pre-wrap-Block rohe Umbrüche aus Alt-Beständen als Phantom-Zeilen —
   // und ein späteres Einebnen wäre gegenüber `originalHtml` eine Änderung, die
@@ -226,7 +240,7 @@ export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT
   // (`mountEditorHtml` trimmt Textraender ebenfalls nicht).
   const history = createEditHistory({
     getRoot: () => content,
-    mountHtml: (el, html) => { el.innerHTML = html; collapseSoftNewlines(el, { trimEdges: false }); },
+    mountHtml: (el, html) => { el.innerHTML = html; collapseSoftNewlines(el, { trimEdges: false }); markTablesAtomic(el); },
   });
   history.reset(content.innerHTML);
 
@@ -265,6 +279,21 @@ export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT
   // Kopieren/Ausschneiden schreiben analog nur text/plain ins Clipboard.
   content.addEventListener('copy', (e) => { handleEditorCopy(e); });
   content.addEventListener('cut', (e) => { if (handleEditorCut(e)) host._markEditDirty(); });
+
+  // Grenzschutz beim Löschen (shared/block-edge.js) — in der SPA übernimmt ihn
+  // die Notebook-Toolbar, die hier nicht geladen ist. Geschützt ist nur die
+  // Tabelle: Bild und Trennlinie bleiben beim Default, weil die Schalen sie
+  // selbst anlegen und zeigen (Android: `insertHr`, sichtbare Linie im Host-
+  // CSS) — dort wäre Backspace der einzige Weg, sie wieder loszuwerden. Der
+  // Geschwister-Merge vermeidet eingebackene Inline-`style`. Manuelle DOM-
+  // Mutation feuert kein `input`: Dirty-Flag, Absatz-Markierung und Undo-
+  // Historie hängen daran.
+  const changed = () => content.dispatchEvent(new Event('input', { bubbles: true }));
+  content.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.defaultPrevented) return;
+    if (protectNeighbour(e, content, { onChange: changed })) return;
+    focusMerge(e, content, { skipSel: MERGE_SKIP_SEL, onChange: changed });
+  });
 
   controller.enterFocusMode();
 
@@ -306,6 +335,7 @@ export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT
       controller._focusTeardown();
       controller._focusState = 'idle';
       content.innerHTML = (next && next.html) || '<p><br></p>';
+      markTablesAtomic(content);
       collapseSoftNewlines(content);   // wie beim Mount, vor originalHtml
       host.currentPage = next ? { id: next.id, name: next.name } : null;
       host.renderedPageHtml = content.innerHTML;

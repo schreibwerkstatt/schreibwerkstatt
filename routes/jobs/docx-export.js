@@ -79,8 +79,9 @@ async function runDocxExportJob(jobId, { scope, entityId, profileId, includeSubc
     if (ctrl?.signal.aborted) throw new Error('job.cancelled');
 
     updateJob(jobId, { progress: 50, statusText: 'job.phase.renderDocx' });
-    const lang = (book?.id ? getBookSettings(book.id)?.language : null) || 'de';
-    const opts = { lang, config: profile.config, scope };
+    const settings = book?.id ? getBookSettings(book.id) : null;
+    const lang = settings?.language || 'de';
+    const opts = { lang, region: settings?.region || null, config: profile.config, scope };
     if (book?.id) {
       // Quellenverzeichnis + Kurzbeleg-Kontext der gerenderten Einheit
       // (lib/bibliography.js). Nummern im numerischen Stil folgen der Einheit.

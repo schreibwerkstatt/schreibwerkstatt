@@ -164,4 +164,38 @@ test.describe('Notebook — Nachrichtenverlauf', () => {
     expect(Math.abs(geo.or - geo.tr)).toBeLessThan(2);
     expect(geo.ol).toBeGreaterThan(geo.tl + (geo.tr - geo.tl) / 2);
   });
+
+  test('Absender steht auf der Seite seiner Nachricht, Tab nimmt ihn mit', async ({ page }) => {
+    await enterNotebookEdit(page);
+    const NAMED = '<div class="msg-thread"><p class="msg-name">Lena</p><p class="msg-in">Hallo</p>'
+      + '<p class="msg-name">Tom</p><p class="msg-meta">14:32</p><p class="msg-out">Hi</p></div>';
+    await seed(page, NAMED, '.msg-out', 'end');
+    const side = () => page.evaluate(() => {
+      const root = document.querySelector('#editor-card .page-content-view--editing');
+      const t = root.querySelector('.msg-thread').getBoundingClientRect();
+      const mid = t.left + t.width / 2;
+      return [...root.querySelectorAll('.msg-name')].map((n) => (n.getBoundingClientRect().left > mid ? 'right' : 'left'));
+    });
+    expect(await side()).toEqual(['left', 'right']);
+    // Tab auf der Nachricht wechselt die Seite — der Name wandert mit.
+    await page.keyboard.press('Tab');
+    expect(await side()).toEqual(['left', 'left']);
+    await page.keyboard.press('Tab');
+    expect(await side()).toEqual(['left', 'right']);
+    // Hinweis kursiv, Absender nicht: am Bildschirm unterscheidbar.
+    const styles = await page.evaluate(() => {
+      const root = document.querySelector('#editor-card .page-content-view--editing');
+      return ['.msg-name', '.msg-meta'].map((s) => getComputedStyle(root.querySelector(s)).fontStyle);
+    });
+    expect(styles).toEqual(['normal', 'italic']);
+  });
+
+  test('Enter nach einem Absender über einer ausgehenden Nachricht schreibt ausgehend', async ({ page }) => {
+    await enterNotebookEdit(page);
+    await seed(page, '<div class="msg-thread"><p class="msg-name">Tom</p><p class="msg-out">Hi</p></div>', '.msg-name', 'end');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Neu');
+    expect(await readHtml(page)).toBe('<div class="msg-thread"><p class="msg-name">Tom</p>'
+      + '<p class="msg-out">Neu</p><p class="msg-out">Hi</p></div>');
+  });
 });

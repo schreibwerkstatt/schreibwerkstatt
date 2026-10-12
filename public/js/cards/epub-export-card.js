@@ -16,6 +16,7 @@
 // export-card-base.js (geteilt mit PDF + DOCX).
 
 import { EVT } from '../events.js';
+import { headingStyleSlice } from './export-heading-style.js';
 import { exportScopeSlice, exportJobSlice, unnumberedChipsSlice, exportSnapshotSlice } from './export-card-base.js';
 
 const _EMPTY_META = () => ({
@@ -45,6 +46,7 @@ export function registerEpubExportCard() {
   window.Alpine.data('epubExportCard', () => ({
     ...exportScopeSlice(),
     ...exportSnapshotSlice(),
+    ...headingStyleSlice(),
     ...exportJobSlice({
       jobPath: '/jobs/epub-export',
       defaultFilename: 'book.epub',

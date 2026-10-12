@@ -36,7 +36,7 @@ const PORT_FF = 8767 + SHARD * 2;
 
 // `mkdir -p`: tests/.tmp/ ist gitignored und fehlt in jedem frischen Checkout (CI).
 const serve = (db, port) =>
-  `mkdir -p ./tests/.tmp && rm -f ${db} ${db}-wal ${db}-shm && DB_PATH=${db} LOCAL_DEV_MODE=true LOCAL_DEV_SEED=true PORT=${port} SESSION_SECRET=smoke-secret-do-not-use-in-prod node server.js`;
+  `mkdir -p ./tests/.tmp && rm -f ${db} ${db}-wal ${db}-shm && DB_PATH=${db} LOCAL_DEV_MODE=true LOCAL_DEV_SEED=true LOCAL_DEV_SEED_SHOWCASE=false PORT=${port} SESSION_SECRET=smoke-secret-do-not-use-in-prod node server.js`;
 
 module.exports = {
   testDir: './tests/e2e-app',
@@ -71,7 +71,7 @@ module.exports = {
     // doppelt zu fahren kostete rund die Haelfte der Suite-Laufzeit.
     {
       name: 'firefox',
-      testMatch: ['**/smoke.spec.js', '**/focus-editor-app.spec.js', '**/focus-acceptance-app.spec.js', '**/notebook-*.spec.js'],
+      testMatch: ['**/smoke.spec.js', '**/focus-editor-app.spec.js', '**/focus-acceptance-app.spec.js', '**/focus-msg-thread-app.spec.js', '**/focus-blocks-app.spec.js', '**/notebook-*.spec.js'],
       use: { browserName: 'firefox', baseURL: `http://localhost:${PORT_FF}` },
     },
   ].filter((p) => ENGINES.includes(p.name)),

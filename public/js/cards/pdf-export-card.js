@@ -14,6 +14,7 @@
 // export-card-base.js (geteilt mit EPUB + DOCX).
 
 import { EVT } from '../events.js';
+import { headingStyleSlice } from './export-heading-style.js';
 import { exportScopeSlice, exportJobSlice, unnumberedChipsSlice, exportSnapshotSlice, profileTransferSlice, uniqueProfileName } from './export-card-base.js';
 import * as presets from './pdf-export-presets.js';
 import * as templates from './pdf-export-templates.js';
@@ -66,6 +67,7 @@ export function registerPdfExportCard() {
     }),
     ...profileTransferSlice({ basePath: '/pdf-export', type: 'pdf-export-profile', i18nPrefix: 'pdfExport' }),
     ...pdfExportUiSlice(),
+    ...headingStyleSlice(),
 
     profiles: [],
     activeProfileId: null,

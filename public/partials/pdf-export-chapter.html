@@ -20,6 +20,49 @@
 ></div>
             </div>
           </div>
+          <div class="card-form-row" x-show="activeProfile.config.chapter.numbering !== 'none'">
+            <label class="card-form-label" x-text="$app.t('export.heading.numberPrefix')"></label>
+            <div class="card-form-field">
+              <div x-data="combobox($app.t('export.heading.numberPrefix'))"
+                   x-modelable="value" x-model="activeProfile.config.chapter.numberPrefix"
+                   x-effect="options = headingStyleOptions('numberPrefix')"></div>
+              <p class="card-form-field-note" x-text="$app.t('export.heading.numberPrefixHint')"></p>
+            </div>
+          </div>
+          <div class="card-form-row" x-show="activeProfile.config.chapter.numbering !== 'none' && activeProfile.config.chapter.numberPrefix === 'custom'">
+            <label class="card-form-label" x-text="$app.t('export.heading.numberPrefixText')"></label>
+            <div class="card-form-field">
+              <input type="text" class="card-form-input" maxlength="30" data-spellcheck="spelling"
+                     x-model="activeProfile.config.chapter.numberPrefixText" :placeholder="$app.t('export.heading.numberPrefixPlaceholder')">
+            </div>
+          </div>
+          <div class="card-form-row" x-show="uiMode === 'expert' && activeProfile.config.chapter.numbering !== 'none'">
+            <label class="card-form-label" x-text="$app.t('export.heading.numberCase')"></label>
+            <div class="card-form-field">
+              <div x-data="combobox($app.t('export.heading.numberCase'))"
+                   x-modelable="value" x-model="activeProfile.config.chapter.numberCase"
+                   x-effect="options = headingStyleOptions('numberCase')"></div>
+            </div>
+          </div>
+          <div class="card-form-row" x-show="uiMode === 'expert' && activeProfile.config.chapter.numbering !== 'none'">
+            <label class="card-form-label" x-text="$app.t('export.heading.numberSizePct')"></label>
+            <div class="card-form-field">
+              <input type="text" x-data="numInput({ integer: true, min: 40, max: 100 })" x-modelable="value" x-model="activeProfile.config.chapter.numberSizePct" class="pdfx-num-input">
+            </div>
+          </div>
+          <div class="card-form-row" x-show="activeProfile.config.chapter.numbering !== 'none'">
+            <label class="card-form-label">&nbsp;</label>
+            <div class="card-form-field">
+              <label class="pdfx-check">
+                <input type="checkbox" x-model="activeProfile.config.chapter.numberDivider">
+                <span x-text="$app.t('export.heading.numberDivider')"></span>
+              </label>
+              <label class="pdfx-check" x-show="uiMode === 'expert'">
+                <input type="checkbox" x-model="activeProfile.config.chapter.numberTracking">
+                <span x-text="$app.t('export.heading.numberTracking')"></span>
+              </label>
+            </div>
+          </div>
           <div class="card-form-row card-form-row--top"
                x-show="uiMode === 'expert' && activeProfile.config.chapter.numbering !== 'none'">
             <label class="card-form-label" x-text="$app.t('pdfExport.chapter.unnumberedChapters')"></label>
@@ -77,14 +120,6 @@
                 <input type="checkbox" x-model="activeProfile.config.chapter.dropCap">
                 <span x-text="$app.t('pdfExport.chapter.dropCap')"></span>
               </label>
-              <label class="pdfx-check">
-                <input type="checkbox" x-model="activeProfile.config.chapter.titleRule">
-                <span x-text="$app.t('pdfExport.chapter.titleRule')"></span>
-              </label>
-              <label class="pdfx-check" x-show="activeProfile.config.chapter.pageStructure === 'nested'">
-                <input type="checkbox" x-model="activeProfile.config.chapter.pageTitleRule">
-                <span x-text="$app.t('pdfExport.chapter.pageTitleRule')"></span>
-              </label>
               <label class="pdfx-check" x-show="activeProfile.config.chapter.breakBefore !== 'none'">
                 <input type="checkbox" x-model="activeProfile.config.chapter.breakBeforeSubchapter">
                 <span x-text="$app.t('pdfExport.chapter.breakBeforeSubchapter')"></span>
@@ -93,6 +128,74 @@
                 <input type="checkbox" x-model="activeProfile.config.chapter.firstChapterOnRecto">
                 <span x-text="$app.t('pdfExport.chapter.firstChapterOnRecto')"></span>
               </label>
+            </div>
+          </div>
+
+          <p class="card-form-section-divider" x-text="$app.t('export.heading.group')"></p>
+          <div class="card-form-row">
+            <label class="card-form-label" x-text="$app.t('export.heading.rules')"></label>
+            <div class="card-form-field">
+              <label class="pdfx-check" x-show="activeProfile.config.chapter.titleStyle !== 'left-rule'">
+                <input type="checkbox" x-model="activeProfile.config.chapter.titleRule">
+                <span x-text="$app.t('export.heading.chapterRule')"></span>
+              </label>
+              <label class="pdfx-check">
+                <input type="checkbox" x-model="activeProfile.config.chapter.subTitleRule">
+                <span x-text="$app.t('export.heading.subTitleRule')"></span>
+              </label>
+              <label class="pdfx-check" x-show="activeProfile.config.chapter.pageStructure === 'nested'">
+                <input type="checkbox" x-model="activeProfile.config.chapter.pageTitleRule">
+                <span x-text="$app.t('export.heading.pageTitleRule')"></span>
+              </label>
+              <p class="card-form-field-note" x-show="activeProfile.config.chapter.titleStyle === 'left-rule'" x-text="$app.t('export.heading.leftRuleHint')"></p>
+            </div>
+          </div>
+          <div class="card-form-row" x-show="(activeProfile.config.chapter.titleStyle === 'left-rule' || activeProfile.config.chapter.titleRule || activeProfile.config.chapter.subTitleRule || (activeProfile.config.chapter.pageStructure === 'nested' && activeProfile.config.chapter.pageTitleRule))">
+            <label class="card-form-label" x-text="$app.t('export.heading.ruleStyle')"></label>
+            <div class="card-form-field">
+              <div x-data="combobox($app.t('export.heading.ruleStyle'))"
+                   x-modelable="value" x-model="activeProfile.config.chapter.ruleStyle"
+                   x-effect="options = headingStyleOptions('ruleStyle')"></div>
+            </div>
+          </div>
+          <div class="card-form-row" x-show="uiMode === 'expert' && (activeProfile.config.chapter.titleStyle === 'left-rule' || activeProfile.config.chapter.titleRule || activeProfile.config.chapter.subTitleRule || (activeProfile.config.chapter.pageStructure === 'nested' && activeProfile.config.chapter.pageTitleRule)) && headingRuleIsSized(activeProfile.config.chapter.ruleStyle)">
+            <label class="card-form-label" x-text="$app.t('export.heading.ruleWeight')"></label>
+            <div class="card-form-field">
+              <div x-data="combobox($app.t('export.heading.ruleWeight'))"
+                   x-modelable="value" x-model="activeProfile.config.chapter.ruleWeight"
+                   x-effect="options = headingStyleOptions('ruleWeight')"></div>
+            </div>
+          </div>
+          <div class="card-form-row" x-show="uiMode === 'expert' && (activeProfile.config.chapter.titleStyle === 'left-rule' || activeProfile.config.chapter.titleRule || activeProfile.config.chapter.subTitleRule || (activeProfile.config.chapter.pageStructure === 'nested' && activeProfile.config.chapter.pageTitleRule)) && headingRuleIsSized(activeProfile.config.chapter.ruleStyle)">
+            <label class="card-form-label" x-text="$app.t('export.heading.ruleWidth')"></label>
+            <div class="card-form-field">
+              <div x-data="combobox($app.t('export.heading.ruleWidth'))"
+                   x-modelable="value" x-model="activeProfile.config.chapter.ruleWidth"
+                   x-effect="options = headingStyleOptions('ruleWidth')"></div>
+            </div>
+          </div>
+          <div class="card-form-row" x-show="(activeProfile.config.chapter.titleStyle === 'left-rule' || activeProfile.config.chapter.titleRule || activeProfile.config.chapter.subTitleRule || (activeProfile.config.chapter.pageStructure === 'nested' && activeProfile.config.chapter.pageTitleRule))">
+            <label class="card-form-label" x-text="$app.t('export.heading.rulePosition')"></label>
+            <div class="card-form-field">
+              <div x-data="combobox($app.t('export.heading.rulePosition'))"
+                   x-modelable="value" x-model="activeProfile.config.chapter.rulePosition"
+                   x-effect="options = headingStyleOptions('rulePosition')"></div>
+            </div>
+          </div>
+          <div class="card-form-row" x-show="uiMode === 'expert'">
+            <label class="card-form-label" x-text="$app.t('export.heading.subTitleAlign')"></label>
+            <div class="card-form-field">
+              <div x-data="combobox($app.t('export.heading.subTitleAlign'))"
+                   x-modelable="value" x-model="activeProfile.config.chapter.subTitleAlign"
+                   x-effect="options = headingStyleOptions('subTitleAlign')"></div>
+            </div>
+          </div>
+          <div class="card-form-row" x-show="uiMode === 'expert' && activeProfile.config.chapter.pageStructure === 'nested'">
+            <label class="card-form-label" x-text="$app.t('export.heading.pageTitleAlign')"></label>
+            <div class="card-form-field">
+              <div x-data="combobox($app.t('export.heading.pageTitleAlign'))"
+                   x-modelable="value" x-model="activeProfile.config.chapter.pageTitleAlign"
+                   x-effect="options = headingStyleOptions('pageTitleAlign')"></div>
             </div>
           </div>
 

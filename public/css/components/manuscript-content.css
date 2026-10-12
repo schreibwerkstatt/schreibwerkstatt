@@ -338,12 +338,26 @@
     font-size: 0.85em;
   }
   :is(.page-content-view, .book-editor-page-body, .share-content) .msg-thread > p.msg-name {
-    margin-top: 0.35em;
+    /* Kleiner und eng an seiner Nachricht: der Name ist Etikett, kein Absatz —
+       im Gruppenchat steht er über fast jeder Nachricht. Der negative Rand
+       nimmt einen Teil des Flex-Gaps zurück. */
+    font-size: 0.75em;
+    line-height: 1.2;
+    margin-top: 0.2em;
+    margin-bottom: -0.15em;
     font-weight: 600;
+  }
+  /* Absender auf der Seite seiner Nachricht (msg-html.js#msgNameSides): die
+     erste Nachricht danach, ein Hinweis dazwischen übersprungen. Nur der
+     Bildschirm leitet das per :has() ab; EPUB und HTML-Export bekommen die
+     Export-Klasse msg-name-out. */
+  :is(.page-content-view, .book-editor-page-body, .share-content) .msg-thread > p.msg-name:has(+ p.msg-out, + p.msg-meta + p.msg-out) {
+    align-self: flex-end;
   }
   :is(.page-content-view, .book-editor-page-body, .share-content) .msg-thread > p.msg-meta {
     align-self: center;
     margin-block: 0.35em;
+    font-style: italic;
   }
 
   /* --- Checkbox-Listen (Slash `/todo`). Markup-SSoT:

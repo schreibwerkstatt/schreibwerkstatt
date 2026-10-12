@@ -57,6 +57,54 @@ Bei Änderungen, die Mobile/Tastatur berühren (`viewport.js`, `--focus-vh`,
 `cursor-hide.js`): Punkt 1–5 zusätzlich in der Chrome-Device-Emulation (iPhone-Profil)
 mit eingeblendeter Tastatur-Simulation.
 
+## Native Clients
+
+Pflicht bei jeder Änderung an einer Datei des OTA-Editor-Bundles ([lib/editor-bundle.js](../lib/editor-bundle.js):
+`ENTRY_MODULES`-Closure + `CSS_FILES`). Beide nativen Clients laden sie beim nächsten Deploy ohne App-Update
+([clients.md](clients.md)):
+
+- **macOS** ([schreibwerkstatt/focuseditor](https://github.com/schreibwerkstatt/focuseditor)): Glue-Skripte und
+  Host-CSS als Strings in `schreibwerkstatt-focuseditor/Web/*.swift`.
+- **Android** ([schreibwerkstatt/mobile](https://github.com/schreibwerkstatt/mobile)): `app/src/main/assets/editor-host/`
+  (`host.html`, `editor-host.css`) plus Kotlin-Strings.
+
+```
+npm run check:clients                    # beide Repos nach ~/.cache holen/aktualisieren, gegen den Arbeitsstand prüfen
+npm run check:clients -- --client mac    # nur einer (mac | android); --verbose listet alle Kontaktstellen
+```
+
+Massstab ist **Breaking Change, nicht Feature-Parität**: was neu ins Bundle kommt, lädt der Client einfach mit.
+Geprüft wird, ob etwas wegfällt, worauf der Client-Code sich verlässt. Das Skript zieht diese Kontaktstellen bei
+jedem Lauf frisch aus den Repos: Module, Exporte, Optionen an `mountStandaloneFocus`/`create…Controller`, Felder des
+eigenen Bridge-Objekts, Handle-/Host-/Controller-Felder (bis in Interna wie `_focusUpdateActive`), Klassen
+(auch das Checklisten-Markup, das Android selbst anlegt, gegen [todo-html.js](../public/js/editor/shared/todo-html.js)),
+CSS-Variablen, Highlight-Namen und Manifest-Felder.
+
+- **FEHLT** (Exit 1) — Breaking Change. Nicht deployen, bevor der Client nachgezogen ist oder der Name bleibt.
+- **BERÜHRT** — die Kontaktstelle existiert noch, eine Datei mit ihr ist geändert. An der genannten Client-Zeile
+  lesen, ob die Semantik noch trägt — vor allem die `!important`-Overrides auf `.focus-editor__content`
+  (macOS: Typografie und `padding-bottom` aus `--focus-vh`/`--focus-anchor`; Android: eigene Puffer
+  `--sw-pad-top`/`--sw-pad-bottom`, `box-sizing`, `<hr>` und Checkliste).
+
+**Hervorhebung.** Beide Clients docken an die Fokus-Hervorhebung an: macOS koppelt seinen Dimm-Regler über
+`--focus-dim-opacity` und die Farbe von `::highlight(focus-sentence-dim)`, schaltet die Stufen über
+`setGranularity` (Fallback: `focus-mode--*`-Klassen + `controller._focusUpdateActive`); Android ersetzt
+`host.typewriterAnchor` durch einen Getter, der der Tastatur folgt. Dass das nicht nur benannt ist, sondern
+**wirkt**, prüft der Vertragstest [tests/e2e/_helpers/focus-client-contract.js](../tests/e2e/_helpers/focus-client-contract.js)
+in Chromium und in WebKit, der Engine des macOS-Clients (`focus-client-contract{,.webkit}.spec.js`, beide Teil von
+`npm run test:focus`): jede Abdunkelung in Absatz-, Satz- und Drei-Absatz-Stufe folgt `--focus-dim-opacity`
+(bzw. `--focus-near-opacity`), keine Blockart bleibt ungedimmt, Schreibmaschine dimmt nichts, der Satz-Modus
+läuft über `focus-sentence-dim`, und die Engine liest den Anker bei jedem Recenter neu. Eine neue Dimm-Regel
+mit fest verdrahteter Opacity macht ihn rot.
+
+Was beide Prüfungen nicht sehen, weil die Schalen anders leben als die SPA ([standalone.js](../public/js/editor/focus/standalone.js)):
+kein Alpine, keine Notebook-Toolbar (`notebook/toolbar/keydown.js` läuft dort **nicht** — Grenzschutz und
+Geschwister-Merge kommen aus `shared/block-edge.js`, Verlauf und Checkbox-Liste bleiben beim Browser-Default),
+Mount ohne `shared/mount-html.js` (nur Tabellen werden atomar gemacht, Diagramme/Abbildungen/Quellen-Chips nicht),
+Undo über das native Menü statt `keydown`. Eine Änderung, die eine dieser SPA-Leistungen voraussetzt, zusätzlich in
+[tests/e2e/focus-standalone.spec.js](../tests/e2e/focus-standalone.spec.js) bzw. dem WebKit-Projekt
+(`env -u GIO_MODULE_DIR npx playwright test --project=webkit`, Engine des macOS-Clients) gegenprüfen.
+
 ## Danach
 
 ```

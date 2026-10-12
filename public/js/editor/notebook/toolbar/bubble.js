@@ -4,6 +4,7 @@
 
 import { getEditEl, WORD_RE, _normalizeLinkUrl, _applyLinkAtRange, caretRangeIn, findAnchor } from './_shared.js';
 import { panelAnchorFor } from './caret-panel.js';
+import { msgConvertTargets } from './msg-convert.js';
 
 export const bubbleMethods = {
   _updateBubble() {
@@ -29,6 +30,7 @@ export const bubbleMethods = {
     this.bubbleShow = true;
     const text = sel.toString().trim();
     this.bubbleSingleWord = !!text && WORD_RE.test(text);
+    this.bubbleMsgOk = msgConvertTargets(range, getEditEl()).length > 0;
   },
 
   _applyInline(command) {

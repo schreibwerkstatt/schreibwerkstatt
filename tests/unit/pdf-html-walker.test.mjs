@@ -58,6 +58,13 @@ test('Listen mit ordered/unordered + verschachtelte Inline-Styles', () => {
   assert.equal(blocks[0].kind, 'list');
   assert.equal(blocks[0].ordered, true);
   assert.equal(blocks[0].items.length, 2);
+  assert.equal(blocks[0].start, undefined, 'ohne start-Attribut zählt die Liste ab 1');
+});
+
+test('<ol start> trägt die fortgesetzte Nummerierung in den Block', () => {
+  const blocks = parseHtmlToBlocks('<ol start="4"><li>Vier</li></ol><ul start="4"><li>x</li></ul>');
+  assert.equal(blocks[0].start, 4);
+  assert.equal(blocks[1].start, undefined, '<ul> hat keine Nummerierung');
 });
 
 test('Tabellen werden als table-Block gelesen, nicht als Fliesstext', () => {

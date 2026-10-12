@@ -24,6 +24,7 @@
 
 import { loadMermaid } from '../lazy-libs.js';
 import { collectDiagrams, diagramCode, diagramKey, isDiagramEl } from './mermaid-html.js';
+import { mermaidThemeConfig } from './mermaid-theme.js';
 
 // Klasse des eingefuegten Render-Knotens. Traegt den Schluessel des Quelltexts,
 // damit ein zweiter Lauf ueber denselben Container nicht neu rendert.
@@ -88,19 +89,21 @@ let _initTheme = null;
  *
  *  `securityLevel: 'strict'` schaltet Klick-Handler und rohes HTML in Labels ab.
  *  Der Diagramm-Code kommt aus dem Manuskript und ist damit User-Eingabe; er
- *  darf kein Skript in die Seite tragen. */
+ *  darf kein Skript in die Seite tragen.
+ *
+ *  Farben aus der App-Palette (mermaid-theme.js), dieselbe wie im Server-Render. */
 function _init(mermaid, theme) {
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'strict',
     htmlLabels: false,
     flowchart: { htmlLabels: false, useMaxWidth: true },
-    theme,
+    ...mermaidThemeConfig(theme),
     fontFamily: 'Inter, system-ui, sans-serif',
   });
 }
 
-/** Aktuelles Theme der App auf ein Mermaid-Theme abbilden. */
+/** Aktuelles Theme der App auf einen Paletten-Schluessel abbilden. */
 export function mermaidTheme() {
   const dark = document.documentElement.dataset.theme === 'dark'
     || (!document.documentElement.dataset.theme

@@ -22,6 +22,7 @@ const { defaultConfig: pdfDefaults, validateConfig: validatePdf } = await import
 const { buildEpub } = await import('../../../lib/export-builders/epub/build.js');
 const { _buildCss } = await import('../../../lib/export-builders/epub/css.js');
 const { validateMeta } = await import('../../../lib/publication-meta.js');
+const { buildHtml } = await import('../../../lib/export-builders/html.js');
 
 const THREAD = '<div class="msg-thread">'
   + '<p class="msg-name">Lena</p>'
@@ -61,9 +62,9 @@ test('Markdown + Substack: Zitatblock, Ausgehend mit Pfeil', async () => {
   assert.match(sub, /<blockquote><p><strong>Lena:<\/strong><br>bist du <em>schon<\/em> da\?<br>→ gleich, 5 min/);
 });
 
-async function docxXml(style) {
+async function docxXml(style, html = HTML) {
   const config = validateDocx({ messages: { style } });
-  const zip = await JSZip.loadAsync(await buildDocxProfile(bundleOf(HTML), { config, lang: 'de' }));
+  const zip = await JSZip.loadAsync(await buildDocxProfile(bundleOf(html), { config, lang: 'de' }));
   return zip.file('word/document.xml').async('string');
 }
 
@@ -120,4 +121,29 @@ test('EPUB: Klassen überleben den Build, Sprechblasen-CSS nur mit Option', asyn
   const bub = _buildCss({ epub_msg_style: 'bubbles' });
   assert.match(bub, /\.msg-thread p:not\(\.msg-name\):not\(\.msg-meta\) \{[^}]*border-radius/);
   assert.match(bub, /\.msg-thread p\.msg-out:not\(\.msg-name\):not\(\.msg-meta\) \{[^}]*margin-left: auto[^}]*background/);
+});
+
+// Absender auf beiden Seiten: der Name übernimmt die Seite der ersten Nachricht
+// darunter (Hinweis dazwischen übersprungen), alle Ausgabewege mit Anordnung.
+const BOTH = '<div class="msg-thread">'
+  + '<p class="msg-name">Lena</p><p class="msg-in">bist du da?</p>'
+  + '<p class="msg-name">Tom</p><p class="msg-meta">14:32</p><p class="msg-out">gleich</p>'
+  + '</div>';
+
+test('Absender: Seite der Nachricht darunter — Walker, Word, EPUB, HTML-Export', async () => {
+  const lines = parseHtmlToBlocks(BOTH)[0].lines;
+  assert.deepEqual(lines.map(l => l.side || null), ['in', null, 'out', null, null]);
+  const docx = await docxXml('plain', BOTH);
+  assert.match(docx, /<w:jc w:val="right"\/>(?:(?!<\/w:p>)[\s\S])*Tom/, 'Word: Tom rechts');
+  assert.doesNotMatch(docx, /<w:jc w:val="right"\/>(?:(?!<\/w:p>)[\s\S])*Lena/, 'Word: Lena links');
+  const buf = await buildEpub({ ...bundleOf(BOTH), scope: 'book' }, { lang: 'de', author: 'A', meta: {} });
+  const zip = await JSZip.loadAsync(buf);
+  const names = Object.keys(zip.files).filter(n => /\.xhtml$/.test(n));
+  const all = (await Promise.all(names.map(n => zip.file(n).async('string')))).join('\n');
+  assert.match(all, /<p class="msg-name msg-name-out">Tom<\/p>/);
+  assert.match(all, /<p class="msg-name">Lena<\/p>/);
+  assert.match(_buildCss({}), /\.msg-thread p\.msg-name-out \{[^}]*text-align: right/);
+  const html = (await buildHtml(bundleOf(BOTH), {})).toString('utf8');
+  assert.match(html, /<p class="msg-name msg-name-out">Tom<\/p>/);
+  assert.match(html, /\.msg-thread p\.msg-name-out \{[^}]*text-align: right/);
 });

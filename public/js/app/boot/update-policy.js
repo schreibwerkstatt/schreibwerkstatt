@@ -10,6 +10,10 @@
 //
 // DIE ANTWORT: aktivieren, sobald nichts verloren gehen kann —
 //   • beim Boot (es wurde noch nichts getippt),
+//   • in einem Tab, der mit einer veralteten Shell gebootet hat (`staleBoot`:
+//     das Update tauchte erst kurz nach dem Laden auf — ein neuer Tab nach
+//     einem Deploy wird vom alten SW bedient, und dessen Nachfolger installiert
+//     erst, wenn der Tab schon läuft),
 //   • wenn der Tab im Hintergrund liegt oder AUTO_APPLY_IDLE_MS ohne Eingabe war.
 // Wer editiert (Edit-/Fokusmodus, ungespeicherte Änderungen, auch im
 // Bucheditor), bekommt das Banner — und zwar in JEDEM Tab: skip-waiting wirkt
@@ -19,6 +23,9 @@
 
 export const AUTO_APPLY_IDLE_MS = 120_000;
 export const AUTO_APPLY_TICK_MS = 15_000;
+// Taucht ein Update so kurz nach dem Laden auf, hat dieser Tab die alte Shell
+// gebootet — er gilt als `staleBoot` und wartet nicht auf den Leerlauf.
+export const BOOT_STALE_WINDOW_MS = 30_000;
 
 // Weitere Editier-Zustände ausserhalb der Root: der Bucheditor führt seinen
 // eigenen Block-Zustand (dirty/saving) und trägt sich hier ein
@@ -41,9 +48,9 @@ export function isBusy(app) {
   return false;
 }
 
-export function shouldAutoApply({ hidden, idleMs, busy, online }) {
+export function shouldAutoApply({ hidden, idleMs, busy, online, staleBoot = false }) {
   if (busy || !online) return false;
-  return !!hidden || idleMs >= AUTO_APPLY_IDLE_MS;
+  return !!hidden || !!staleBoot || idleMs >= AUTO_APPLY_IDLE_MS;
 }
 
 export function isUpdateRequired(serverProtocol, clientProtocol) {

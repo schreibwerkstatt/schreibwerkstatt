@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
-const { MSG_THREAD_CLASS, MSG_THREAD_SEL, MSG_KIND_CLASS } = await import('../../public/js/messages/msg-html.js');
+const { MSG_THREAD_CLASS, MSG_THREAD_SEL, MSG_KIND_CLASS, msgNameSides } = await import('../../public/js/messages/msg-html.js');
 const KIND_CLASSES = Object.values(MSG_KIND_CLASS);
 
 test('html-walker: Klassenkopie deckungsgleich', () => {
@@ -73,4 +73,21 @@ test('Paste-Allowlist lässt Verlauf und Zeilenarten durch', () => {
   const src = read('public/js/utils/html.js');
   assert.match(src, /MSG_THREAD_CLASS/);
   assert.match(src, /MSG_KIND_CLASS/);
+});
+
+test('Absender-Seite: Server-Kopie rechnet wie die SSoT', async () => {
+  const { msgNameSides: serverSides } = await import('../../lib/msg-lines.js');
+  const cases = [
+    ['name', 'in'], ['name', 'out'], ['name', 'meta', 'out'], ['name', 'name', 'out'],
+    ['name'], ['in', 'name', 'meta', 'meta', 'out', 'name', 'in'], [],
+  ];
+  for (const kinds of cases) assert.deepEqual(serverSides(kinds), msgNameSides(kinds), kinds.join(','));
+  assert.deepEqual(msgNameSides(['name', 'meta', 'out', 'name']), ['out', null, null, 'in']);
+});
+
+test('Export-Klasse msg-name-out: Erzeuger und beide Export-Stylesheets', () => {
+  assert.match(read('lib/html-text.js'), /msg-name-out/);
+  for (const f of ['lib/export-builders/epub/css.js', 'lib/export-builders/html.js']) {
+    assert.match(read(f), /\.msg-thread p\.msg-name-out \{/, f);
+  }
 });

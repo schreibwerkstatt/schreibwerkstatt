@@ -53,6 +53,7 @@ Diese Regeln setzt ein Hook ([.claude/settings.json](.claude/settings.json), [sc
 | `public/sw-manifest.js` nach Asset-Änderung regenerieren | `regen-sw-manifest.js` (automatisch) | [docs/caching.md](docs/caching.md) |
 | `npm run squash:regen` + [docs/erd.md](docs/erd.md) nach jeder Migration | `drift-reminders.js` + Drift-Tests | [db/CLAUDE.md](db/CLAUDE.md) |
 | Neue `/metrics`-Kennzahl ⇒ Home-Assistant-Configs im selben Commit | `drift-reminders.js` | [docs/homeassistant/README.md](docs/homeassistant/README.md) |
+| OTA-Editor-Bundle geändert ⇒ `npm run check:clients` (Breaking Changes macOS + Android) | `drift-reminders.js` | [docs/focus-editor-acceptance.md](docs/focus-editor-acceptance.md#native-clients) |
 | Unit-Tests vor dem Commit | `stop-run-unit-tests.js` (Turn-Ende) | unten, „Tests" |
 | Editor-/Chat-/Kommentar-Mehrdeutigkeit im Prompt | `prompt-disambiguation.js` (injiziert Hinweis) | oben, „Bevor du anfängst" |
 | Nur auf `main` — kein Branch, kein Worktree, kein Subagent mit `isolation: "worktree"` | `main-only-guard.js` **blockt** | unten, „Arbeitsweise" |

@@ -88,6 +88,14 @@ test('_applySlashItem: list → <ul><li>', () => {
   assert.ok(editEl.querySelector('ul > li'), 'ul>li erzeugt');
 });
 
+test('_applySlashItem: olist → <ol><li>, gleichwertig zur Aufzählung', () => {
+  const { editEl, block } = mountBlock('p');
+  const item = SLASH_ITEMS.find((i) => i.key === 'olist');
+  assert.ok(item, 'nummerierte Liste steht im Slash-Menü');
+  slashCtx(block)._applySlashItem(item);
+  assert.ok(editEl.querySelector('ol > li'), 'ol>li erzeugt');
+});
+
 test('_applySlashItem: todo → <ul class="todo"><li class="todo-item"> mit Checkbox', () => {
   const { editEl, block } = mountBlock('p');
   slashCtx(block)._applySlashItem({ key: 'todo', tag: 'ul', className: 'todo', todoList: true, group: 'block' });
@@ -212,10 +220,10 @@ test('jeder Wrapper-erzeugende SLASH_ITEM ist in BOUNDARY_WRAPPER_SEL erfasst', 
 });
 
 test('BOUNDARY_WRAPPER_SEL erfasst auch die nicht per Slash erzeugbaren Wrapper', () => {
-  // `pre` und `ol` entstehen über Paste/Import, nicht über das Slash-Menü —
-  // ihre Grenzen brauchen dieselbe Behandlung. Ohne diese Zeile könnte man sie
+  // `pre` entsteht über Paste/Import, nicht über das Slash-Menü — seine
+  // Grenzen brauchen dieselbe Behandlung. Ohne diese Zeile könnte man es
   // beim Aufräumen des Selektors für „ungenutzt" halten und entfernen.
-  for (const tag of ['pre', 'ol']) {
+  for (const tag of ['pre']) {
     assert.ok(document.createElement(tag).matches(BOUNDARY_WRAPPER_SEL),
       `<${tag}> muss von BOUNDARY_WRAPPER_SEL erfasst sein (Paste-/Import-Pfad)`);
   }

@@ -1,7 +1,7 @@
 ---
 description: Versionsnummer erhöhen + Git-Tag + GitHub-Release erstellen
 argument-hint: "[patch|minor|major|x.y.z]  (Default: patch)"
-allowed-tools: Bash(git:*), Bash(gh:*), Bash(npm run version:sync), Bash(npm run sw:manifest), Bash(npm run squash:regen), Bash(npm run test:unit), Bash(npm test), Read, Write
+allowed-tools: Bash(git:*), Bash(gh:*), Bash(npm run version:sync), Bash(npm run sw:manifest), Bash(npm run squash:regen), Bash(npm run test:unit), Bash(npm test), Bash(npm run check:clients:*), Read, Write
 ---
 
 Du führst einen Release der App durch. SSoT der Version ist die Datei `VERSION` im Projektroot; `package.json#version` folgt via `npm run version:sync`. Zu **jeder** Version gehören Release-Notizen in `changelog/<version>.json` — die App zeigt sie den Usern unter **Hilfe → Neuigkeiten** ([changelog/README.md](../../changelog/README.md)).
@@ -50,7 +50,8 @@ Schritt 11 committet den **gesamten** Tree — auch Fremdarbeit, die nicht durch
 
 10a. `npm run sw:manifest` — Content-Hash `__SHELL_BUILD` in `public/sw-manifest.js` neu berechnen (gegated durch `sw-manifest-drift.test`).
 10b. Enthält der Tree eine neue Migration in `db/migrations.js`: `npm run squash:regen` (bei Recreate-Pattern `FORCE_LEGACY_MIGRATIONS=1 npm run squash:regen`) und [docs/erd.md](../../docs/erd.md)-Stand prüfen.
-10c. `npm test` — die **volle** Suite (Import-Gate → Unit → Integration → E2E → Smoke), nicht nur `test:unit`. Unit deckt `sw-manifest-drift`, `squash-drift`, `erd-drift`, `loc-limits` **und `changelog`** ab; Letzteres läuft erst hier scharf, weil `VERSION` schon auf dem neuen Wert steht: fehlt `changelog/<neueVersion>.json` oder fehlt einem Eintrag `de`/`en`, ist der Lauf rot. E2E und Smoke fangen, was Unit nicht sieht — ein Harness, das zu einer Code-Änderung nicht mehr passt, läuft in CI in Timeouts samt Retries, und das Job-Timeout bricht die Pipeline ab, bevor deployt wird. **Rot ⇒ abbrechen**, kein Tag, kein Push — Ursache klären statt Tests anpassen, Stand melden. Scheitert eine fremde Spec, erst einen Rest-Server auf den Smoke-Ports 8766–8773 ausschliessen (alte `smoke*.db`, oder ein gleichzeitiger Smoke-Lauf einer anderen Sitzung), dann erneut laufen lassen.
+10c. `npm run check:clients -- --base v<letzteVersion>` — Breaking-Change-Gate für die nativen Clients (macOS, Android). Der Deploy nach dem Release liefert das Editor-Bundle per OTA an beide aus, ohne App-Update ([docs/focus-editor-acceptance.md](../../docs/focus-editor-acceptance.md#native-clients)). **Exit ≠ 0 ⇒ abbrechen**, kein Tag, kein Push: Exit 1 = eine Kontaktstelle FEHLT (Client-Code greift auf etwas zu, das es nicht mehr gibt), Exit 2 = der Check lief nicht (z. B. `gh`/Netz) — auch das ist kein Grün. Die BERÜHRT-Liste (Kontaktstelle existiert, Datei seit dem letzten Release geändert) bricht nicht ab: an der genannten Client-Zeile lesen, ob die Semantik noch trägt, und die Liste im Abschlussbericht nennen. Trägt sie erkennbar nicht mehr ⇒ abbrechen wie bei FEHLT.
+10d. `npm test` — die **volle** Suite (Import-Gate → Unit → Integration → E2E → Smoke), nicht nur `test:unit`. Unit deckt `sw-manifest-drift`, `squash-drift`, `erd-drift`, `loc-limits` **und `changelog`** ab; Letzteres läuft erst hier scharf, weil `VERSION` schon auf dem neuen Wert steht: fehlt `changelog/<neueVersion>.json` oder fehlt einem Eintrag `de`/`en`, ist der Lauf rot. E2E und Smoke fangen, was Unit nicht sieht — ein Harness, das zu einer Code-Änderung nicht mehr passt, läuft in CI in Timeouts samt Retries, und das Job-Timeout bricht die Pipeline ab, bevor deployt wird. **Rot ⇒ abbrechen**, kein Tag, kein Push — Ursache klären statt Tests anpassen, Stand melden. Scheitert eine fremde Spec, erst einen Rest-Server auf den Smoke-Ports 8766–8773 ausschliessen (alte `smoke*.db`, oder ein gleichzeitiger Smoke-Lauf einer anderen Sitzung), dann erneut laufen lassen.
 
 ## Durchführung
 
@@ -75,6 +76,6 @@ Schritt 11 committet den **gesamten** Tree — auch Fremdarbeit, die nicht durch
 
 ## Abschluss
 
-Melde knapp: alte → neue Version, Anzahl Release-Notizen, Commit-Hash, Tag, und die URL des erstellten GitHub-Releases. Erwähne, dass die Notizen den Usern beim nächsten Laden unter **Hilfe → Neuigkeiten** erscheinen (mit Punkt am „?"-Knopf, bis sie gelesen sind).
+Melde knapp: alte → neue Version, Anzahl Release-Notizen, Commit-Hash, Tag, die URL des erstellten GitHub-Releases und das Ergebnis des Client-Gates (Schritt 10c: Kontaktstellen je Client, BERÜHRT-Stellen falls vorhanden). Erwähne, dass die Notizen den Usern beim nächsten Laden unter **Hilfe → Neuigkeiten** erscheinen (mit Punkt am „?"-Knopf, bis sie gelesen sind).
 
 Bei jedem Fehlschlag eines Schritts **stoppen** und den Stand berichten — mit der Angabe, was schon committet/gepusht/getaggt ist und was fehlt, damit der nächste Lauf dort aufsetzt. Kein `gh release create` ohne gepushten Tag, und kein „mache ich später" für Commit oder Push.

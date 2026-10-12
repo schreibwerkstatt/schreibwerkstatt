@@ -140,7 +140,7 @@ async function runPdfExportJob(jobId, { scope, entityId, profileId, includeSubch
 
     checkCancelled();
 
-    const { language: bookLang } = getBookSettings(book.id, userEmail);
+    const { language: bookLang, region: bookRegion } = getBookSettings(book.id, userEmail);
     const standard = profile.config.pdfa?.standard || (profile.config.pdfa?.enabled ? 'pdfa' : 'none');
 
     // Buch-weite Publikations-Metadaten in config.extras spiegeln, damit die
@@ -233,7 +233,7 @@ async function runPdfExportJob(jobId, { scope, entityId, profileId, includeSubch
       const meta = {};
       buffer = await renderPdfBuffer({
         book, groups, profile,
-        coverBuf, authorImageBuf, lang: bookLang,
+        coverBuf, authorImageBuf, lang: bookLang, region: bookRegion,
         scope, chapter, page, meta, bibliography,
         signal, sample,
       });

@@ -13,6 +13,7 @@
 //   • public/css/**.css (neu)   → DESIGN.md „CSS-File-Inventar" + index.html
 //                                 (gegated durch design-css-inventory-drift.test)
 //   • public/partials/*.html (neu, unverdrahtet) → Wiring + ggf. DESIGN.md-Pattern
+//   • Datei des OTA-Editor-Bundles     → npm run check:clients (macOS + Android)
 // Die CSS-/Partial-Zweige sind selbst-loeschend: sie feuern nur, solange das
 // Artefakt fehlt — nicht bei Edits an bereits dokumentierten/verdrahteten Dateien.
 
@@ -97,6 +98,16 @@ process.stdin.on('end', () => {
         '  • bringt es ein neues UI-Pattern? → erst in DESIGN.md dokumentieren (Markup + CSS-Datei + Use-Case), dann verwenden (Regel „UI-Patterns nur aus DESIGN.md")',
       );
     }
+  }
+
+  // Datei im OTA-Editor-Bundle (lib/editor-bundle.js: ENTRY_MODULES-Closure +
+  // CSS_FILES) → der macOS-Client lädt sie beim nächsten Deploy. Pfad-Näherung
+  // statt Closure-Berechnung: der Hook läuft bei jedem Edit und muss schnell sein.
+  if (/\/public\/(js\/editor\/(focus|shared)\/|js\/messages\/|js\/cards\/editor-(spellcheck|synonyme)\/|css\/editor\/(focus|shared)\/|css\/tokens\/|css\/editor\/(spellcheck|synonym-menu)\.css)/.test(p)
+      || /\/lib\/editor-bundle\.js$/.test(p)) {
+    reminders.push(
+      'Datei des OTA-Editor-Bundles bearbeitet → vor dem Commit npm run check:clients (Breaking Changes für macOS + Android; Ablauf: docs/focus-editor-acceptance.md#native-clients).',
+    );
   }
 
   if (/\/lib\/metrics\/defs\.js$/.test(p)) {

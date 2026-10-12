@@ -24,6 +24,7 @@ export function registerEditorToolbarCard() {
   window.Alpine.data('editorToolbarCard', () => ({
     bubbleShow: false,
     bubbleSingleWord: false,
+    bubbleMsgOk: false,
     bubbleX: 0,
     bubbleY: 0,
     slashShow: false,

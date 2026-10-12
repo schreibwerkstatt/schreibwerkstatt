@@ -22,6 +22,9 @@ const _META_COLS = [
   'epub_cover_fit', 'epub_numerals', 'epub_toc_depth',
   'epub_subchapter_pagebreak', 'epub_chapter_rule', 'epub_page_rule', 'epub_toc_enabled',
   'epub_chapter_number_divider', 'epub_msg_style',
+  'epub_rule_style', 'epub_rule_weight', 'epub_rule_width', 'epub_rule_position',
+  'epub_number_prefix', 'epub_number_prefix_text', 'epub_number_case', 'epub_number_tracking',
+  'epub_number_size_pct', 'epub_sub_title_align', 'epub_sub_title_rule', 'epub_page_title_align',
 ];
 
 // 0/1-Spalten — beim Upsert aus bool zu Integer wandeln, beim Lesen via
@@ -30,7 +33,7 @@ const _META_COLS = [
 const _BOOL_COLS = [
   'epub_justify', 'epub_hyphenation', 'epub_chapter_pagebreak', 'epub_drop_caps', 'epub_nest_pages_in_toc',
   'epub_subchapter_pagebreak', 'epub_chapter_rule', 'epub_page_rule', 'epub_toc_enabled',
-  'epub_chapter_number_divider',
+  'epub_chapter_number_divider', 'epub_number_tracking', 'epub_sub_title_rule',
 ];
 
 // JSON-Array-Spalten — beim Upsert aus Array zu JSON-String serialisieren, beim

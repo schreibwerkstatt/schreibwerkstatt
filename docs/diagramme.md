@@ -148,6 +148,33 @@ Import aus `/js/diagram/` zöge dem anonymen Leser das App-Bundle in die
 Leseansicht. Dieselbe Lage wie `TTS_BLOCK_SEL`. Die Vendor-Datei selbst steht
 einzeln in `PUBLIC_ASSETS` (`/vendor/` ist nicht pauschal pre-auth freigegeben).
 
+## Palette
+
+Diagramme tragen die Farben der App, nicht mermaids Standard-Themes: Knoten in
+der Feder-Gold-Tönung (`--color-accent-bg` auf `--color-surface`, Rand
+`--color-accent`), Nebenflächen im Marken-Blau, Gruppen auf Papier, Linien in
+`--color-muted`. SSoT ist [public/js/diagram/mermaid-theme.js](../public/js/diagram/mermaid-theme.js)#`mermaidThemeConfig(theme)`,
+gespreadet in jedes `mermaid.initialize` — Server-Render (Bildschirm **und**
+Export), Dialog-Vorschau und Share-Reader-Rückfall. Die Schlüssel bleiben
+`default` (hell) und `dark`; was sie bedeuten, steht nur dort.
+
+- **`theme: 'base'` ist Pflicht** — nur das base-Theme respektiert
+  `themeVariables`; nicht gesetzte Werte leitet mermaid aus den gesetzten ab.
+- **Hex-Kopien statt CSS-Variablen.** Der Server rendert im Headless-Chromium
+  ohne App-CSS, die Farben stehen danach gebacken im SVG. Die Basistöne in
+  `MERMAID_TOKENS` sind Kopien aus [tokens/colors.css](../public/css/tokens/colors.css)
+  (Name = Token ohne `--color-`); getönte Flächen werden aus ihnen **gerechnet**,
+  weil die Tokens dort rgba-Overlays sind und mermaid nur deckende Werte
+  versteht. Ein geändertes Token macht den Drift-Test rot, statt die Diagramme
+  still in der alten Farbe stehen zu lassen.
+- **Der Share-Reader hat eine Kopie** ([share-reader/mermaid-theme.js](../public/js/share-reader/mermaid-theme.js)),
+  aus demselben Grund wie `diagrams.js`. Änderungen immer zuerst im Original.
+- **Palette geändert ⇒ `RENDER_VERSION` in [lib/mermaid-render.js](../lib/mermaid-render.js)
+  hochzählen**, sonst liefert `mermaid_cache` die alten Bilder weiter.
+
+Gegated: [tests/unit/mermaid-drift.test.mjs](../tests/unit/mermaid-drift.test.mjs)
+(Tokens gegen `colors.css`, nur deckende Werte, Reader-Kopie inhaltsgleich).
+
 ## Export
 
 Jeder Ausgabeweg löst Diagramme **vor seinem Walker** auf — dieselbe Stelle und
@@ -167,11 +194,12 @@ die eigentliche Arbeit macht [lib/diagram-export.js](../lib/diagram-export.js).
 | WordPress | — | Quelltext als `wp:code`-Block, siehe unten |
 | HubSpot | — | Quelltext in `<pre>` |
 
-**Der Export rendert immer hell.** Kein Ausgabeweg gibt ein `theme` an
-`resolveDiagramsInGroups`/`resolveDiagramsInHtml` weiter, der Renderer nimmt
-also `default`. Ein Manuskript-PDF, ein DOCX für das Lektorat oder ein EPUB sind
-Dokumente zum Drucken und Weitergeben; der Dunkelmodus ist eine Eigenschaft des
-Bildschirms, an dem gelesen wird, nicht des Dokuments.
+**Der Export rendert immer hell**, in der hellen App-Palette (siehe „Palette").
+Kein Ausgabeweg gibt ein `theme` an `resolveDiagramsInGroups`/`resolveDiagramsInHtml`
+weiter, der Renderer nimmt also `default`. Ein Manuskript-PDF, ein DOCX für das
+Lektorat oder ein EPUB sind Dokumente zum Drucken und Weitergeben; der
+Dunkelmodus ist eine Eigenschaft des Bildschirms, an dem gelesen wird, nicht des
+Dokuments.
 
 **Default ist `'code'`, also nichts tun.** Ein Builder, der Bilder tragen kann,
 wählt aktiv `svg` oder `png`. Bewusst diese Richtung: ein vergessenes Opt-in

@@ -431,7 +431,7 @@ test('buildEpub: unnumbered cascade — markiertes Top-Kapitel zieht Sub-Kapitel
   const e1 = await zip.file('OEBPS/entry_1.xhtml').async('string');
   const e2 = await zip.file('OEBPS/entry_2.xhtml').async('string');
   assert.ok(e0.includes('<h1>Teil</h1>') && !e0.includes('epub-chapter-num'), 'Top-Kapitel ohne Nummer');
-  assert.ok(e1.includes('<h1>Unterkapitel</h1>') && !e1.includes('epub-chapter-num'), 'Sub-Kapitel erbt unnumbered via Cascade');
+  assert.ok(e1.includes('<h2>Unterkapitel</h2>') && !e1.includes('epub-chapter-num'), 'Sub-Kapitel erbt unnumbered via Cascade');
   assert.ok(e2.includes('class="epub-chapter-num">1</span>') && e2.includes('class="epub-chapter-name">Echtes</span>'), 'erstes echtes Kapitel ist 1 (Cascade verbrauchte keine Nummer)');
 });
 
@@ -610,11 +610,12 @@ test('buildEpub: titleStyle left-rule + epub_page_rule + Sub-Wrapper', async () 
   const zip = await JSZip.loadAsync(buf);
   const chap0 = await zip.file('OEBPS/chap_0.xhtml').async('string');
   assert.ok(chap0.includes('epub-chapter-head--ts-left-rule') && chap0.includes('epub-chapter-head--top'), 'Top-Wrapper-Klassen');
-  assert.ok(chap0.includes('epub-title-rule'), 'left-rule zeichnet den Titel-Strich (auch ohne epub_chapter_rule)');
+  assert.ok(chap0.includes('class="epub-rule'), 'left-rule zeichnet den Titel-Strich (auch ohne epub_chapter_rule)');
   const page0 = await zip.file('OEBPS/chap_0_p_0.xhtml').async('string');
-  assert.ok(page0.includes('epub-page-rule'), 'Seitentitel-Strich bei epub_page_rule');
+  assert.ok(/<h2 class="epub-page-title[^"]*">S1<\/h2><hr class="epub-rule/.test(page0), 'Seitentitel-Strich bei epub_page_rule');
   const sub = await zip.file('OEBPS/entry_1.xhtml').async('string');
-  assert.ok(sub.includes('epub-chapter-head--sub') && !sub.includes('epub-title-rule'), 'Sub-Kapitel: --sub-Klasse, kein Titel-Strich');
+  assert.ok(sub.includes('epub-chapter-head--sub') && !sub.includes('epub-rule'), 'Sub-Kapitel: --sub-Klasse, kein Titel-Strich');
+  assert.ok(sub.includes('<h2>Zwei</h2>'), 'Sub-Kapitel als h2, nicht h1');
 });
 
 test('buildEpub: epub_toc_enabled=false entfernt TOC aus der Spine, Nav bleibt im Manifest', async () => {

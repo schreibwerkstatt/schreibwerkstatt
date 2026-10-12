@@ -193,3 +193,50 @@ test('Server- und Frontend-Kopie von htmlToPlainText bleiben gleichauf', async (
   ];
   for (const c of cases) assert.equal(srv(c), htmlToPlainText(c), c);
 });
+
+// ── Palette (public/js/diagram/mermaid-theme.js) ─────────────────────────────
+
+/** Token-Werte eines Blocks aus colors.css (`:root {` bzw. Dark-Override). */
+function cssTokens(css, opener) {
+  const start = css.indexOf(opener);
+  assert.ok(start >= 0, `${opener} nicht in colors.css`);
+  const body = css.slice(start, css.indexOf('\n}', start));
+  const out = {};
+  for (const m of body.matchAll(/--color-([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\s*;/g)) out[m[1]] = m[2].toLowerCase();
+  return out;
+}
+
+test('Diagramm-Palette: Basistoene sind Kopien der App-Tokens', async () => {
+  const { MERMAID_TOKENS } = await import('../../public/js/diagram/mermaid-theme.js');
+  const css = readFileSync(resolve(ROOT, 'public', 'css', 'tokens', 'colors.css'), 'utf8');
+  const blocks = { default: cssTokens(css, ':root {'), dark: cssTokens(css, ':root[data-theme="dark"] {') };
+  for (const theme of ['default', 'dark']) {
+    for (const [name, hex] of Object.entries(MERMAID_TOKENS[theme])) {
+      assert.equal(hex, blocks[theme][name],
+        `${theme}: --color-${name} in mermaid-theme.js (${hex}) weicht von colors.css ab (${blocks[theme][name]})`);
+    }
+  }
+});
+
+test('Diagramm-Palette: nur deckende Hex-Werte (mermaid rechnet mit ihnen)', async () => {
+  const { mermaidThemeConfig } = await import('../../public/js/diagram/mermaid-theme.js');
+  for (const theme of ['default', 'dark']) {
+    const cfg = mermaidThemeConfig(theme);
+    assert.equal(cfg.theme, 'base', 'nur das base-Theme respektiert themeVariables');
+    for (const [k, v] of Object.entries(cfg.themeVariables)) {
+      if (k === 'darkMode' || k === 'fontFamily') continue;
+      assert.match(v, /^#[0-9a-f]{6}$/, `${theme}.${k} = ${v}`);
+    }
+  }
+  assert.equal(mermaidThemeConfig('dark').themeVariables.darkMode, true);
+  assert.equal(mermaidThemeConfig('irgendwas').themeVariables.darkMode, false, 'Unbekanntes faellt auf hell');
+});
+
+test('Share-Reader-Kopie der Palette liefert dieselbe Konfiguration', async () => {
+  const app = await import('../../public/js/diagram/mermaid-theme.js');
+  const reader = await import('../../public/js/share-reader/mermaid-theme.js');
+  assert.deepEqual(reader.MERMAID_TOKENS, app.MERMAID_TOKENS);
+  for (const theme of ['default', 'dark']) {
+    assert.deepEqual(reader.mermaidThemeConfig(theme), app.mermaidThemeConfig(theme), theme);
+  }
+});

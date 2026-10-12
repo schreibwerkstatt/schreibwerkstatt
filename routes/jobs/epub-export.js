@@ -76,10 +76,12 @@ async function runEpubExportJob(jobId, { scope, entityId, includeSubchapters, sn
     if (ctrl?.signal.aborted) throw new Error('job.cancelled');
 
     updateJob(jobId, { progress: 40, statusText: 'job.phase.renderEpub' });
-    const lang = (book?.id ? getBookSettings(book.id)?.language : null) || 'de';
+    const settings = book?.id ? getBookSettings(book.id) : null;
+    const lang = settings?.language || 'de';
     // Provenienz-Nachweis im OPF: Instanz-Domain (wo) + exportierender User (wer).
     const opts = {
       lang,
+      region: settings?.region || null,
       instanceUrl: (appSettings.get('app.public_url') || '').replace(/\/$/, ''),
       exportedBy: userEmail || '',
     };

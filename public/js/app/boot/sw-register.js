@@ -3,7 +3,7 @@ import { lsGet } from '../../safe-storage.js';
 import { fetchJson } from '../../utils.js';
 import { SHELL_PROTOCOL } from '../../shell-protocol.js';
 import {
-  AUTO_APPLY_TICK_MS, isBusy, shouldAutoApply, isUpdateRequired, shouldForceUpdate,
+  AUTO_APPLY_TICK_MS, BOOT_STALE_WINDOW_MS, isBusy, shouldAutoApply, isUpdateRequired, shouldForceUpdate,
 } from './update-policy.js';
 import { createBusyLock, activateIfNobodyBusy } from './busy-lock.js';
 
@@ -41,6 +41,13 @@ export function registerServiceWorker() {
       // der Default ('imports') den HTTP-Cache für importierte Skripte, und ein
       // neuer Build (nur Manifest-Hash geändert) würde u.U. nicht erkannt.
       const reg = await navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
+      // Veraltet gebootet (update-policy.js#BOOT_STALE_WINDOW_MS): ein neuer Tab
+      // nach einem Deploy bekommt die alte Shell vom alten SW, und erst seine
+      // eigene Navigation stösst den Install des Nachfolgers an. Läuft der beim
+      // Laden schon oder taucht er kurz danach auf, wird er nach dem Install
+      // sofort eingespielt statt erst nach dem Leerlauf.
+      const bootAt = Date.now();
+      let staleBoot = !!reg.installing && !!navigator.serviceWorker.controller;
       // Periodisch nach Updates fragen — ohne aktiven update()-Call wartet
       // der Browser u.U. Stunden bis Tage, bis er einen neuen SW
       // einspielt; v.a. auf Mobile (Tab im Hintergrund / SW gekillt) sieht
@@ -134,6 +141,9 @@ export function registerServiceWorker() {
         // Editiert ein ANDERER Tab, bleibt die Aktivierung aus und der Reload
         // unten ist der Rückfall (Loop-Schutz greift).
         if (await activateWaiting()) return;
+        // Der Nachfolger installiert noch: ein Reload jetzt bekäme wieder die
+        // alte Shell vom alten SW. Stattdessen nach dem Install einspielen.
+        if (reg.installing) { staleBoot = true; return; }
         let last = 0;
         try { last = Number(sessionStorage.getItem('sw-coherent-reload') || 0); } catch {}
         const now = Date.now();
@@ -223,6 +233,7 @@ export function registerServiceWorker() {
           idleMs: Date.now() - lastInput,
           busy: isBusy(app),
           online: navigator.onLine,
+          staleBoot,
         })) activateWaiting();
       };
       setInterval(tryAutoApply, AUTO_APPLY_TICK_MS);
@@ -242,6 +253,7 @@ export function registerServiceWorker() {
       };
       reg.addEventListener('updatefound', () => {
         const nw = reg.installing;
+        if (navigator.serviceWorker.controller && Date.now() - bootAt < BOOT_STALE_WINDOW_MS) staleBoot = true;
         nw?.addEventListener('statechange', () => {
           if (nw.state === 'installed') notify(nw);
         });

@@ -179,6 +179,24 @@ test('msgUtterances: Absenderzeile gilt bis zur nächsten, ausgehend ohne Sprech
   ]);
 });
 
+test('msgUtterances: Absender über ausgehenden gilt für die ausgehende Seite', () => {
+  const u = msgUtterances([[
+    { kind: 'name', text: 'Anna' },
+    { kind: 'in', text: 'eins' },
+    { kind: 'name', text: 'Bruno' },
+    { kind: 'meta', text: '14:32' },
+    { kind: 'out', text: 'zwei' },
+    { kind: 'in', text: 'drei' },
+    { kind: 'out', text: 'vier' },
+  ]]);
+  assert.deepEqual(u, [
+    { sender: 'Anna', text: 'eins' },
+    { sender: 'Bruno', text: 'zwei' },
+    { sender: 'Anna', text: 'drei' },
+    { sender: 'Bruno', text: 'vier' },
+  ]);
+});
+
 test('analyzeIdiolect: Nachrichten gehören der Figur aus der Absenderzeile', () => {
   const msgs = (k, word, sender) => Array.from({ length: k }, (_, i) => ({ sender, text: `${word} ding${i} ${word} sache${i} ${word}` }));
   const { rows, coverage, dialogTokens } = analyzeIdiolect([], figures, deps, {

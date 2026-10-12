@@ -2,9 +2,11 @@
 // Tastatur (Enter/Tab/Backspace/Delete) und die schwebende Zeilenleiste
 // (Eingang/Ausgang/Absender/Hinweis). `this` = Sub-Komponente (editorToolbarCard).
 //
-// Nur Notebook: Focus-Editor und Bucheditor stellen den Verlauf dar, bringen
-// aber keinen Bedienpfad mit. Die Handler laufen im Dispatcher hinter dem
-// Focus-Hard-Stop, die Leiste ist im Template auf `!$app.focusActive` gegated.
+// Der Focus-Editor nutzt Enter und die Merges mit (Dispatcher-Ausnahme am
+// Focus-Hard-Stop in keydown.js); Tab und die Zeilenleiste bleiben Notebook —
+// der Focus-Editor zeigt die Zeilenarten nicht, ein Seitenwechsel per Tab
+// bliebe dort unsichtbar. Die Leiste ist im Template auf `!$app.focusActive`
+// gegated. Der Bucheditor stellt den Verlauf dar, bedient ihn aber nicht.
 //
 // Warum Merges hier selbst gemacht werden: die Zeilen eines Verlaufs tragen
 // unterschiedliche Klassen (rechts-/linksbündig, Absender klein). Chromium bäckt
@@ -95,6 +97,7 @@ export const msgThreadMethods = {
   // Tab / Shift+Tab: Seite wechseln (Eingang ↔ Ausgang, siehe toggleMsgSide).
   // Ausserhalb eines Verlaufs bleibt Tab beim Browser.
   _kbMsgTab(e, app) {
+    if (app.focusActive) return false;
     const hit = caretLine();
     if (!hit) return false;
     e.preventDefault();

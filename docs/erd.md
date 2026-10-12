@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 326, 182 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 327, 182 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -2194,6 +2194,18 @@ erDiagram
     INTEGER epub_toc_depth "TOC-Tiefe"
     INTEGER epub_chapter_number_divider "0|1 Strich Nr↔Titel"
     TEXT    epub_msg_style "plain|bubbles Nachrichtenverlauf"
+    TEXT    epub_rule_style "single|double|dotted|dashed|stars|asterism|diamond|dots"
+    TEXT    epub_rule_weight "hairline|thin|medium|thick"
+    TEXT    epub_rule_width "auto|short|third|full"
+    TEXT    epub_rule_position "below|above|both"
+    TEXT    epub_number_prefix "none|chapter|part|custom"
+    TEXT    epub_number_prefix_text "eigener Praefix"
+    TEXT    epub_number_case "normal|uppercase|smallcaps"
+    INTEGER epub_number_tracking "0|1 Sperrung Nummer"
+    INTEGER epub_number_size_pct "40-100 % der Titelgroesse"
+    TEXT    epub_sub_title_align "left|center"
+    INTEGER epub_sub_title_rule "0|1"
+    TEXT    epub_page_title_align "left|center"
     TEXT    created_at
     TEXT    updated_at
   }

@@ -34,6 +34,8 @@
 .edit-bubble-btn--link .icon { width: 1em; height: 1em; }
 .edit-bubble-btn--cite   { display: inline-flex; align-items: center; padding-inline: var(--space-sm); border-left: 1px solid var(--color-border); }
 .edit-bubble-btn--cite .icon { width: 1em; height: 1em; }
+.edit-bubble-btn--msg    { display: inline-flex; align-items: center; gap: var(--space-2xs); padding-inline: var(--space-sm); border-left: 1px solid var(--color-border); }
+.edit-bubble-btn--msg .icon { width: 1em; height: 1em; }
 
 .edit-link-bar {
   position: fixed;
@@ -285,6 +287,7 @@
   font-style: italic;
 }
 .edit-slash-item--list .edit-slash-label,
+.edit-slash-item--olist .edit-slash-label,
 .edit-slash-item--todo .edit-slash-label {
   display: inline-flex;
   align-items: center;
@@ -297,6 +300,13 @@
   height: 5px;
   border-radius: 50%;
   background: currentColor;
+}
+.edit-slash-item--olist .edit-slash-label::before {
+  content: "1.";
+  flex: none;
+  min-width: 11px;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
 }
 .edit-slash-item--todo .edit-slash-label::before {
   content: "";

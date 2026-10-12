@@ -1,0 +1,46 @@
+{
+  "version": "4.24.0",
+  "date": "2026-10-12",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "PDF- und EPUB-Export, Bereich „Überschriften gestalten“: Linienart samt Ornamenten, Strichstärke, Länge und Lage der Linie, ein Wort wie „Kapitel“ vor der Nummer und die Ausrichtung der Unterkapitel lassen sich jetzt einstellen. Beide Formate verstehen dieselben Einstellungen.",
+      "en": "PDF and EPUB export, “Style headings” section: rule style including ornaments, thickness, length and position, a word such as “Chapter” before the number and the alignment of subchapters can now be set. Both formats understand the same settings."
+    },
+    {
+      "kind": "neu",
+      "de": "Nachrichtenverlauf: markierte Absätze lassen sich über zwei neue Knöpfe in der Formatierungsleiste in einen Verlauf umwandeln. Die erste Nachricht ist wahlweise eingehend oder ausgehend, danach wechseln die Seiten ab.",
+      "en": "Message thread: selected paragraphs can be turned into a thread with two new buttons in the formatting bar. The first message is incoming or outgoing as you choose, after that the sides alternate."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Nachrichtenverlauf: ein Absender lässt sich jetzt auch über ausgehende Nachrichten setzen und steht auf deren Seite. Auch der Export nach PDF und Word setzt ihn dort.",
+      "en": "Message thread: a sender name can now also be placed above outgoing messages and appears on their side. The PDF and Word export place it there too."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fokusmodus: Tabellen bleiben als schlichte Tabelle sichtbar und lassen sich nicht mehr versehentlich wegtippen. Im Nachrichtenverlauf funktionieren Enter und Löschen jetzt wie in der normalen Abschnittsansicht.",
+      "en": "Focus mode: tables stay visible as a plain table and can no longer be deleted by accident. In a message thread, Enter and deleting now work as in the normal section view."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Diagramme erscheinen jetzt in den Farben der App statt in fremden Standardfarben, auf dem Bildschirm wie im Export.",
+      "en": "Diagrams now appear in the app's colours instead of foreign default colours, both on screen and in exports."
+    },
+    {
+      "kind": "verbessert",
+      "de": "PDF- und EPUB-Export: im EPUB sind Unterkapitel jetzt auch als Unterüberschriften gesetzt. Ausgeschriebene Kapitelnummern folgen der Region des Buchs, in der Schweiz also „Dreissig“.",
+      "en": "PDF and EPUB export: in the EPUB, subchapters are now also set as subheadings. Spelled-out chapter numbers follow the book's region, so Swiss books get “Dreissig”."
+    },
+    {
+      "kind": "behoben",
+      "de": "Fokusmodus: wer zwei Absätze mit der Rücktaste zusammenfügte, bekam manchmal eine abweichende Textfarbe mit ins Manuskript. Das passiert nicht mehr.",
+      "en": "Focus mode: joining two paragraphs with Backspace sometimes carried a different text colour into the manuscript. That no longer happens."
+    },
+    {
+      "kind": "behoben",
+      "de": "Ein neu geöffneter Tab direkt nach einem Update lief manchmal noch mit der alten Version. Er lädt jetzt von selbst neu, sobald nichts verloren geht.",
+      "en": "A tab opened right after an update sometimes still ran the old version. It now reloads by itself as soon as nothing would be lost."
+    }
+  ]
+}

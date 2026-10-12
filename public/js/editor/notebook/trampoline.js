@@ -54,6 +54,8 @@ export const notebookTrampoline = {
   _onEditCopy(e) { card()?._onEditCopy(e); },
   _onEditCut(e) { card()?._onEditCut(e); },
   _markEditDirty() { card()?._markEditDirty(); },
+  // Eigener Undo-Schritt für Block-Umbauten aus der Toolbar (msg-convert.js).
+  _historyPushNow() { card()?._historyPushNow(); },
   // Seiten-Chat: Ersetzung im Live-Editor statt Server-Write (edit/input.js).
   _applyTextReplacement(original, replacement) {
     return card()?._applyTextReplacement(original, replacement) ?? { ok: false, reason: 'notEditing' };

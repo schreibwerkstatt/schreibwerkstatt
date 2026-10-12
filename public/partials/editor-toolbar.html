@@ -46,6 +46,8 @@
               :aria-label="$app.t('editor.toolbar.xrefTitle')">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#list-tree"/></svg>
       </button>
+      <button type="button" x-show="bubbleMsgOk" class="edit-bubble-btn edit-bubble-btn--msg" @click="toolbarToMsgThread('in')" :data-tip="$app.t('editor.toolbar.msgConvertInTitle')" :aria-label="$app.t('editor.toolbar.msgConvertInTitle')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#message-square"/></svg><svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-left"/></svg></button>
+      <button type="button" x-show="bubbleMsgOk" class="edit-bubble-btn edit-bubble-btn--msg" @click="toolbarToMsgThread('out')" :data-tip="$app.t('editor.toolbar.msgConvertOutTitle')" :aria-label="$app.t('editor.toolbar.msgConvertOutTitle')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#message-square"/></svg><svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-right"/></svg></button>
     </div>
   </template>
 

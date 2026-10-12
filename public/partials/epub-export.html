@@ -158,24 +158,6 @@
              x-effect="options = imprintPositionOptions()"></div>
       </div>
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.titleStyle')"></label>
-        <div x-data="combobox($app.t('epubExport.field.titleStyle'))"
-             x-modelable="value" x-model="pub.epub_chapter_title_style"
-             x-effect="options = chapterTitleStyleOptions()"></div>
-      </div>
-      <div class="card-form-row" x-show="pub.epub_chapter_title_style !== 'left-rule'">
-        <label class="book-settings-option">
-          <input type="checkbox" x-model="pub.epub_chapter_rule" :disabled="!canEditPublication()">
-          <span x-text="$app.t('epubExport.field.chapterRule')"></span>
-        </label>
-      </div>
-      <div class="card-form-row">
-        <label class="book-settings-option">
-          <input type="checkbox" x-model="pub.epub_page_rule" :disabled="!canEditPublication()">
-          <span x-text="$app.t('epubExport.field.pageRule')"></span>
-        </label>
-      </div>
-      <div class="card-form-row">
         <label class="card-form-label" x-text="$app.t('epubExport.field.sceneSep')"></label>
         <div x-data="combobox($app.t('epubExport.field.sceneSep'))"
              x-modelable="value" x-model="pub.epub_scene_separator"
@@ -192,12 +174,6 @@
         <div x-data="combobox($app.t('epubExport.field.numberingMode'))"
              x-modelable="value" x-model="pub.epub_chapter_numbering_mode"
              x-effect="options = chapterNumberingModeOptions()"></div>
-      </div>
-      <div class="card-form-row" x-show="pub.epub_chapter_numbering !== 'none'">
-        <label class="book-settings-option">
-          <input type="checkbox" x-model="pub.epub_chapter_number_divider" :disabled="!canEditPublication()">
-          <span x-text="$app.t('epubExport.field.chapterNumberDivider')"></span>
-        </label>
       </div>
       <div class="card-form-row card-form-row--top" x-show="pub.epub_chapter_numbering !== 'none'">
         <label class="card-form-label" x-text="$app.t('epubExport.field.unnumberedChapters')"></label>
@@ -218,6 +194,7 @@
           <p class="card-form-field-note" x-text="$app.t('epubExport.field.unnumberedHint')"></p>
         </div>
       </div>
+      <!-- @include epub-export-headings -->
       <div class="card-form-row">
         <label class="book-settings-option">
           <input type="checkbox" x-model="pub.epub_chapter_pagebreak" :disabled="!canEditPublication()">

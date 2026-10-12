@@ -43,6 +43,7 @@ export const SLASH_ITEMS = [
   { key: 'poem',       tag: 'div', className: 'poem', wrapP: true,       group: 'block' },
   { key: 'msgthread',  tag: 'div', className: MSG_THREAD_CLASS, innerClass: MSG_KIND_CLASS.in, wrapP: true, group: 'block' },
   { key: 'list',       tag: 'ul', list: true,                           group: 'block' },
+  { key: 'olist',      tag: 'ol', list: true,                           group: 'block' },
   { key: 'todo',       tag: 'ul', className: TODO_LIST_CLASS, todoList: true, group: 'block' },
   { key: 'hr',         tag: 'hr',                          group: 'break' },
   { key: 'pagebreak',  tag: 'hr', className: 'pagebreak',  group: 'break' },
@@ -122,19 +123,9 @@ export function findAnchor(node, root) {
   return findAncestor(node, root, 'a');
 }
 
-// Absatz-artige Top-Level-Blöcke, deren Verschmelzung über eine Absatzgrenze
-// hinweg (Backspace am Anfang / Delete am Ende) wir bei weichen Umbrüchen
-// selbst übernehmen. Listen, Tabellen, Gedichte, <pre>, <hr> bleiben aussen
-// vor — dort ist das native bzw. das HR-Verhalten gewünscht.
-export const MERGE_BLOCK_TAGS = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
-
-// Blöcke, die sich wie ein einzelnes Zeichen verhalten, aber keinen Caret
-// aufnehmen: sie lassen sich nicht selektieren, also gibt es ohne eigenen
-// Lösch-Pfad überhaupt keinen. `<hr>` ist ein echtes void-Element; ein
-// `<figure>` ist es nicht, hat aber dieselbe Eigenschaft — die einzige
-// Caret-Position darin ist die `<figcaption>`, und für das Bild selbst gibt es
-// (anders als bei `<hr>`, siehe `hr-selected`) keine Klick-Auswahl.
-export const ATOMIC_BLOCK_TAGS = new Set(['HR', 'FIGURE']);
+// Merge- und Atom-Blöcke: SSoT im geteilten Grenzschutz (auch der Standalone-
+// Focus-Editor der nativen Clients nutzt ihn), hier für die Toolbar re-exportiert.
+export { MERGE_BLOCK_TAGS, ATOMIC_BLOCK_TAGS } from '../../shared/block-edge.js';
 
 // Wrapper-Blöcke mit eigener Formatierung. Chromium bäckt beim Merge über deren
 // Grenze die BERECHNETEN CSS-Werte des Quellblocks als Inline-`style` ein („um
