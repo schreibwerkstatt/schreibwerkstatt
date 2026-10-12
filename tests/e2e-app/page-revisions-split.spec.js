@@ -76,7 +76,14 @@ test('Split-Revision: Enter auf dem Verweis springt, öffnet keine Revisionsansi
     comp.open = true;
   }, { other });
   const ref = page.locator('.page-revisions-list .revision-split .entity-ref');
-  await ref.focus();
+  // x-entity-ref löst den Namen asynchron auf; bis dahin ist der Knopf disabled
+  // und nimmt weder Fokus noch Enter. Der Editor kann den Fokus nach dem
+  // Seitenwechsel noch einmal an sich ziehen — darum fokussieren, bis er sitzt.
+  await expect(ref).toBeEnabled();
+  await expect(async () => {
+    await ref.focus();
+    await expect(ref).toBeFocused({ timeout: 500 });
+  }).toPass({ timeout: 10000 });
   await page.keyboard.press('Enter');
   await expect.poll(() => page.evaluate(() => window.__app.currentPage?.id)).toBe(other);
   expect(await page.evaluate(() => window.__viewerOpened)).toBe(0);
