@@ -133,6 +133,8 @@
              x-modelable="value" x-model="pub.epub_numerals"
              x-effect="options = numeralsOptions()"></div>
       </div>
+      <div class="card-form-row"><label class="card-form-label" x-text="$app.t('export.messages.group')"></label>
+        <div x-data="combobox($app.t('export.messages.group'))" x-modelable="value" x-model="pub.epub_msg_style" x-effect="options = [{ value: 'plain', label: $app.t('export.messages.style.plain') }, { value: 'bubbles', label: $app.t('export.messages.style.bubbles') }]"></div></div>
     </section>
 
     <!-- Struktur -->

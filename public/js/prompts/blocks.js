@@ -226,6 +226,28 @@ Wörterbuch des Autors (diese Schreibweisen sind gewollt und KEINE Rechtschreibf
 ${liste}`;
 }
 
+// Nachrichtenverlauf (div.msg-thread) im Abschnitt: Chat-Schreibweise ist
+// Figurenrede. Nur gebaut, wenn der Abschnitt einen Verlauf enthaelt
+// (`hatNachrichten`). Die Marken-Wortlaute spiegeln lib/html-text.js#MSG_THREAD_MARKS
+// (CJS, hier nicht importierbar) — gegated durch tests/unit/msg-thread-drift.test.mjs.
+export function _buildNachrichtenBlock(langCode = 'de') {
+  return langCode === 'en'
+    ? `
+Message threads (texts/chat — the characters' own spelling):
+- Text between «[Message thread (text/chat, the characters' own spelling)]» and «[End of message thread]» are the characters' phone/chat messages; each line is one message, a sender name or a timestamp
+- Chat spelling is character speech, NOT an error: lowercase, abbreviations («5 min», «lol», «omw»), missing or doubled punctuation («??», «!!!»), emojis, slang and dialect are neither reported nor "corrected"
+- Report only what is clearly unintended and does not belong to the character's voice — when in doubt, leave it out
+- Short single lines are not choppy style, not repetition and not a sentence-structure error
+- Never touch sender names or timestamps; «original» and «korrektur» never span two lines of the thread; never quote the bracketed markers themselves — they are not part of the text`
+    : `
+Nachrichtenverläufe (SMS/Chat — Schreibweise der Figuren):
+- Text zwischen «[Nachrichtenverlauf (SMS/Chat, Schreibweise der Figuren)]» und «[Ende Nachrichtenverlauf]» sind Handy-/Chatnachrichten der Figuren; jede Zeile ist eine Nachricht, ein Absendername oder ein Zeitstempel
+- Chat-Schreibweise ist Figurenrede, KEIN Fehler: Kleinschreibung, Abkürzungen («5 min», «lg», «hdl»), fehlende oder doppelte Satzzeichen («??», «!!!»), Emojis, Umgangssprache und Dialekt weder melden noch «korrigieren»
+- Nur melden, was eindeutig ungewollt ist und nicht zur Stimme der Figur gehört — im Zweifel weglassen
+- Kurze Einzelzeilen sind kein abgehackter Stil, keine Wiederholung und kein Satzbaufehler
+- Absendernamen und Zeitstempel nie anfassen; «original» und «korrektur» nie über zwei Zeilen des Verlaufs spannen; die Marken in eckigen Klammern selbst nie zitieren — sie stehen nicht im Text`;
+}
+
 export function _buildShowVsTellBlock(einheit = EINHEIT_SZENE) {
   // Die Meldeschwelle hängt an der Bewertungseinheit. Der Typ bleibt überall
   // derselbe (Zustand behauptet statt gezeigt ist in jeder Textsorte ein Befund);

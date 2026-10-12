@@ -12,6 +12,7 @@ const {
   getFiguren, getLatestReview, getLatestPageCheck, getOpenIdeen, buildChatMessageHistory,
 } = require('../shared');
 const contentStore = require('../../../lib/content-store');
+const { hasMsgThread } = require('../../../lib/html-text');
 const { generateSessionTitle } = require('../chat-title');
 const { recordChatLedgerForMessage } = require('../../../db/cost-ledger');
 const { _parseChatResponse, figurenBlockChars } = require('./shared');
@@ -118,7 +119,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const chain = stand ? statusChain(isJournalisticBook(getBookSettings(session.book_id, userEmail))) : [];
     const editStatus = stand && chain.includes(stand.status) ? { status: stand.status, stale: stand.stale, chain } : null;
     const systemPrompt = buildChatSystemPrompt(session.page_name || '–', promptText, figuren, review,
-      chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg), editStatus });
+      chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg), editStatus, hatNachrichten: hasMsgThread(pd.html) });
 
     const annotate = (r) => {
       if (r.role !== 'assistant') return '';

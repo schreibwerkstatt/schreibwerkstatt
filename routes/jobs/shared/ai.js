@@ -7,7 +7,7 @@ const {
 const { costUsd } = require('../../../lib/pricing');
 const logger = require('../../../logger');
 const appSettings = require('../../../lib/app-settings');
-const { stripDiagramBlocks, summarizeTableBlocks } = require('../../../lib/html-text');
+const { stripDiagramBlocks, summarizeTableBlocks, markMsgThreads } = require('../../../lib/html-text');
 const { jobAbortControllers } = require('./state');
 const { updateJob, i18nError, fmtTok } = require('./jobs');
 
@@ -179,7 +179,7 @@ function cleanPageTextForAi(text) {
 //     verschiedenen Texten.
 // Ausschnitt-Regex ist die SSoT aus lib/html-text.js — keine Kopie hier.
 function htmlToText(html) {
-  return _decodeEntities(summarizeTableBlocks(stripDiagramBlocks(html)).replace(/<[^>]+>/g, ' '), HTML_NAMED_ENTITIES)
+  return _decodeEntities(summarizeTableBlocks(markMsgThreads(stripDiagramBlocks(html))).replace(/<[^>]+>/g, ' '), HTML_NAMED_ENTITIES)
     .replace(/\s+/g, ' ').trim();
 }
 
@@ -193,8 +193,9 @@ function htmlToText(html) {
 // figure, figcaption, table, tr, section, article. Inline-Tags werden weiterhin
 // zu Space — nur Blockgrenzen tragen einen Umbruch. Entspricht damit der Sicht
 // des Lektorat-Prompts, der die Seite als Prosa mit Absätzen liest.
-function htmlToTextForPrompt(html) {
-  return _decodeEntities(summarizeTableBlocks(stripDiagramBlocks(html))
+// `langCode` waehlt die Sprache der Nachrichtenverlauf-Marken (lib/html-text.js).
+function htmlToTextForPrompt(html, { langCode = 'de' } = {}) {
+  return _decodeEntities(summarizeTableBlocks(markMsgThreads(stripDiagramBlocks(html), { langCode }))
     .replace(/<\/(p|div|li|h[1-6]|blockquote|pre|ul|ol|figure|figcaption|table|tr|section|article)\s*>/gi, '\n\n')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<hr\s*\/?>/gi, '\n\n')

@@ -235,16 +235,13 @@
     </div>
   </template>
 
-  <!-- Diagramm-Dialog (Quelltext + Vorschau). Eigenes Partial, weil diese Datei
-       sonst über das 250-Zeilen-Limit läuft. Kein Teleport nötig: ein offenes
-       <dialog> rendert im Top-Layer, unabhängig davon, wo es im DOM hängt. -->
+  <!-- Eigene Partials, weil diese Datei sonst über das 250-Zeilen-Limit läuft:
+       Diagramm-Dialog (Quelltext + Vorschau), Tabellen-Dialog (Gitter +
+       Beschriftung), Bild-Dialog (Ersatztext + Bildnachweis) — ohne Teleport,
+       ein offenes <dialog> rendert im Top-Layer, egal wo es im DOM hängt — und
+       die Zeilenleiste des Nachrichtenverlaufs (teleportiert sich selbst). -->
   <div id="partial-editor-diagram-dialog"></div>
-
-  <!-- Tabellen-Dialog (Gitter + Beschriftung). Eigenes Partial aus demselben
-       Grund wie der Diagramm-Dialog; ebenfalls ohne Teleport. -->
   <div id="partial-editor-table-dialog"></div>
-
-  <!-- Bild-Dialog (Ersatztext + Bildnachweis). Eigenes Partial aus demselben
-       Grund; ebenfalls ohne Teleport. -->
   <div id="partial-editor-image-dialog"></div>
+  <div id="partial-editor-msg-bar"></div>
 </div>

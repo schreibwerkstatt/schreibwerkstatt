@@ -17,6 +17,7 @@ import {
   _buildFigurenkonsistenzBlock,
   _buildBelegBlock,
   _buildWoerterbuchBlock,
+  _buildNachrichtenBlock,
 } from './blocks.js';
 
 export function buildObjektivLektoratPrompt(text, {
@@ -26,6 +27,7 @@ export function buildObjektivLektoratPrompt(text, {
   pageName = null,
   chapterName = null,
   hatBelege = false,
+  hatNachrichten = false,
   woerterbuch = [],
   langCode = 'de',
   buchtyp = null,
@@ -127,6 +129,9 @@ Enthält der Text keine objektiven Fehler, gib { "fehler": [] } zurück.`;
   // Grammatik und wuerde „Mueller 2020" bzw. „[12]" sonst anstreichen.
   const belegBlock = hatBelege ? `\n${_buildBelegBlock(langCode)}\n` : '';
   const woerterbuchBlock = woerterbuch.length ? `\n${_buildWoerterbuchBlock(woerterbuch, langCode)}\n` : '';
+  // Dieser Pass prüft Rechtschreibung und Zeichensetzung — genau das, was die
+  // Chat-Schreibweise eines Nachrichtenverlaufs sonst als Fehler meldet.
+  const nachrichtenBlock = hatNachrichten ? `\n${_buildNachrichtenBlock(langCode)}\n` : '';
 
   const selbstkontroll = en
     ? `
@@ -157,7 +162,7 @@ ${schemaBlock}
 ${_buildRechtschreibungBlock(langCode)}
 ${_buildGrammatikBlock(langCode)}
 ${hatDialogformat ? _buildDialogformatBlock(langCode) : ''}
-${figurenkonsistenzBlock}${figurenBlock}${beziehungenBlock}${orteBlock}${belegBlock}${woerterbuchBlock}
+${figurenkonsistenzBlock}${figurenBlock}${beziehungenBlock}${orteBlock}${belegBlock}${woerterbuchBlock}${nachrichtenBlock}
 ${selbstkontroll}
 <originaltext label="${en ? 'Original text' : 'Originaltext'}">
 ${text}

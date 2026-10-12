@@ -111,7 +111,7 @@ test('sanitizePasteHtml: <style>-Block samt Inhalt weg', () => {
   assert.ok(out.includes('<p>Text</p>'));
 });
 
-// ────────── <div>: nur .poem überlebt ──────────
+// ────────── <div>: nur .poem / .msg-thread überlebt ──────────
 
 test('sanitizePasteHtml: nacktes <div> wird unwrapped', () => {
   const out = sanitizePasteHtml('<div>Inhalt</div>');
@@ -125,6 +125,18 @@ test('sanitizePasteHtml: <div class="poem"> bleibt, Klasse auf "poem" normalisie
   assert.equal(out.indexOf('extra'), -1);
   assert.ok(out.includes('Vers 1'));
   assert.ok(out.includes('Vers 2'));
+});
+
+test('sanitizePasteHtml: Nachrichtenverlauf behält Wrapper und Zeilenarten', () => {
+  const out = sanitizePasteHtml('<div class="msg-thread x"><p class="msg-out MsoNormal">Hi</p><p class="msg-name">Lena</p></div>');
+  assert.ok(out.includes('<div class="msg-thread">'), `Verlauf fehlt: ${out}`);
+  assert.ok(out.includes('<p class="msg-out">Hi</p>'), `Zeilenart fehlt: ${out}`);
+  assert.ok(out.includes('<p class="msg-name">Lena</p>'));
+});
+
+test('sanitizePasteHtml: Zeilenklasse ausserhalb eines Verlaufs und Fremdklassen fallen', () => {
+  const out = sanitizePasteHtml('<p class="msg-out">lose</p><p class="MsoNormal">Word</p>');
+  assert.equal(out.indexOf('class='), -1, out);
 });
 
 // ────────── Attribute werden gestrippt (ausser Whitelist) ──────────

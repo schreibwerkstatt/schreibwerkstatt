@@ -4,6 +4,9 @@
 
 import { isCiteEl, CITE_ATTR_SRC, CITE_ATTR_LOC, CITE_ATTR_MODE } from '../sources/cite-html.js';
 import { isXrefEl, XREF_ATTR_KIND, XREF_ATTR_ID, XREF_ATTR_FMT } from '../xrefs/xref-html.js';
+import { MSG_THREAD_CLASS, MSG_THREAD_SEL, MSG_KIND_CLASS } from '../messages/msg-html.js';
+
+const MSG_LINE_CLASSES = new Set(Object.values(MSG_KIND_CLASS));
 
 // Sicherheitscheck vor dem Speichern: < 50 % wirkt unvollständig → Abbruch
 export const SAFETY_HTML_RATIO = 0.5;
@@ -113,7 +116,10 @@ const PASTE_ALLOWED_TAGS = new Set([
 // (insbesondere on*-Handler, style, id, class, data-*).
 const PASTE_ALLOWED_ATTRS = {
   A: new Set(['href']),
-  DIV: new Set(['class']),  // nur .poem (siehe Filter unten)
+  DIV: new Set(['class']),  // nur .poem / .msg-thread (siehe Filter unten)
+  // Zeilenarten des Nachrichtenverlaufs (msg-in/-out/-name/-meta); jede andere
+  // Klasse filtert der Zweig unten wieder heraus.
+  P: new Set(['class']),
   // SPAN ist ausschliesslich fuer den Quellen-Chip erlaubt, nicht als
   // allgemeiner Inline-Container — Word-/Web-Pastes bestehen zur Haelfte aus
   // <span>-Huellen. Der Filter unten unwrappt jeden Span, der kein gueltiger
@@ -141,7 +147,8 @@ const PASTE_ALLOWED_ATTRS = {
  * - Whitelist-Tags bleiben (Inhalt wandert mit), unbekannte Tags werden
  *   unwrapped (Text bleibt, Hülle weg).
  * - Skripte/Styles/Metadaten + ihre Subtrees fliegen komplett raus.
- * - `<div>` bleibt nur als `<div class="poem">`, sonst unwrapped.
+ * - `<div>` bleibt nur als `<div class="poem">` oder `<div class="msg-thread">`,
+ *   sonst unwrapped; `<p>` behält nur Zeilenklassen des Nachrichtenverlaufs.
  * - Alle Attribute weg, ausser denen in `PASTE_ALLOWED_ATTRS`.
  * - Anschliessend durch `cleanContentArtefacts` für inline-style-Reste.
  */
@@ -161,7 +168,7 @@ export function sanitizePasteHtml(html) {
     const all = Array.from(root.querySelectorAll('*'));
     for (const el of all) {
       const tag = el.tagName;
-      if (tag === 'DIV' && !(el.getAttribute('class') || '').split(/\s+/).includes('poem')) {
+      if (tag === 'DIV' && !_pasteDivClass(el)) {
         _unwrap(el);
         changed = true;
         continue;
@@ -175,7 +182,8 @@ export function sanitizePasteHtml(html) {
       for (const attr of Array.from(el.attributes)) {
         if (!allowedAttrs || !allowedAttrs.has(attr.name)) el.removeAttribute(attr.name);
       }
-      if (tag === 'DIV') el.setAttribute('class', 'poem');
+      if (tag === 'DIV') el.setAttribute('class', _pasteDivClass(el));
+      if (tag === 'P') _keepMsgLineClass(el);
       // Span nur als Quellen-Chip ODER Querverweis zulassen; alles andere verliert
       // die Huelle. Muss NACH dem Attribut-Filter laufen — die Praedikate pruefen
       // class+data-*, die vorher noch mit Fremdattributen vermischt sein koennten.
@@ -192,6 +200,26 @@ export function sanitizePasteHtml(html) {
   }
 
   return cleanContentArtefacts(root.innerHTML);
+}
+
+// Klasse, unter der ein eingefügter `<div>` überlebt — '' = auspacken.
+function _pasteDivClass(el) {
+  const cls = (el.getAttribute('class') || '').split(/\s+/);
+  if (cls.includes('poem')) return 'poem';
+  if (cls.includes(MSG_THREAD_CLASS)) return MSG_THREAD_CLASS;
+  return '';
+}
+
+// Am `<p>` nur die Zeilenart des Nachrichtenverlaufs stehen lassen (Word bringt
+// `MsoNormal` & Co. mit). Ausserhalb eines Verlaufs ist sie bedeutungslos und
+// fällt ebenfalls.
+function _keepMsgLineClass(el) {
+  const inThread = el.parentElement?.matches?.(MSG_THREAD_SEL);
+  const kind = inThread
+    ? (el.getAttribute('class') || '').split(/\s+/).find((c) => MSG_LINE_CLASSES.has(c))
+    : null;
+  if (kind) el.setAttribute('class', kind);
+  else el.removeAttribute('class');
 }
 
 function _unwrap(el) {

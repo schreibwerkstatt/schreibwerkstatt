@@ -21,7 +21,7 @@ const _META_COLS = [
   'epub_imprint_position', 'epub_chapter_title_style', 'epub_heading_font', 'epub_heading_scale',
   'epub_cover_fit', 'epub_numerals', 'epub_toc_depth',
   'epub_subchapter_pagebreak', 'epub_chapter_rule', 'epub_page_rule', 'epub_toc_enabled',
-  'epub_chapter_number_divider',
+  'epub_chapter_number_divider', 'epub_msg_style',
 ];
 
 // 0/1-Spalten — beim Upsert aus bool zu Integer wandeln, beim Lesen via

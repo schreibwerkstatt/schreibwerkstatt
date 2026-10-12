@@ -20,6 +20,12 @@ export const SCHEMA_CHAT = _obj({
   },
 });
 
+// Steht der Abschnitt mit einem Nachrichtenverlauf (div.msg-thread) im Prompt,
+// folgt dieser Hinweis dem Abschnittsinhalt. Marken-Wortlaut: lib/html-text.js
+// (der Chat-Prompt ist deutsch, die Marken darum auch). Lektorat-Pendant:
+// blocks.js#_buildNachrichtenBlock.
+export const PAGE_CHAT_NACHRICHTEN_HINWEIS = 'Hinweis Nachrichtenverlauf: Text zwischen «[Nachrichtenverlauf (SMS/Chat, Schreibweise der Figuren)]» und «[Ende Nachrichtenverlauf]» sind Handy-/Chatnachrichten der Figuren, jede Zeile eine Nachricht, ein Absendername oder ein Zeitstempel. Kleinschreibung, Abkürzungen, fehlende oder doppelte Satzzeichen, Emojis und Umgangssprache sind dort gewollte Figurenrede — schlage dafür keine vorschlaege vor, ausser der Autor fragt ausdrücklich danach. Ein Vorschlag dort betrifft immer nur EINE Zeile, nie Absendername oder Zeitstempel, und zitiert nie die Marken selbst.';
+
 // Regeln zum Feld `ideen`: Pendenzen, die der Autor als Idee am Abschnitt
 // oder an dessen Kapitel festhält (er bestätigt jede einzeln; Normalisierung
 // lib/chat-idee-proposals.js).

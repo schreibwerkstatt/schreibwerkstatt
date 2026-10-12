@@ -22,6 +22,7 @@ const { finalizeFehler, effectiveStylisticCap, _runSig } = require('./lektorat-f
 const userDictionary = require('../../db/user-dictionary');
 const { MAX_PROMPT_WORDS, dictionaryWordsOnPage, dropDictionaryFindings } = require('./lektorat-dictionary');
 const { lektoratProgress } = require('../../lib/lektorat-progress');
+const { hasMsgThread } = require('../../lib/html-text');
 
 function _sigHash(obj) {
   return crypto.createHash('sha1').update(JSON.stringify(obj ?? null)).digest('hex').slice(0, 12);
@@ -168,7 +169,7 @@ async function checkOnePage(run, {
   // normalisieren `\s+` → ' ' beim Match, so dass `\n\n` in `original`
   // sicher ist (und cross-block-Ersetzungen schon durch die Block-Grenze
   // des Merge-Guards abgewiesen werden).
-  const text = htmlToTextForPrompt(html).trim();
+  const text = htmlToTextForPrompt(html, { langCode }).trim();
   if (!text) return { empty: true, pd };
 
   // Kapitelkontext: Figuren, Beziehungen, Schauplätze (falls Komplettanalyse
@@ -181,6 +182,7 @@ async function checkOnePage(run, {
   // Quellennachweise: auch lokal relevant (kleine Modelle korrigieren
   // Klammer-Einschuebe besonders gern weg).
   const hatBelege          = _pageHasCitations(pageId);
+  const hatNachrichten     = hasMsgThread(html);
   const chapterName        = pd.chapter_id ? (chapterNameOf(pd.chapter_id) || null) : null;
   // Wörterbuch-Wörter dieser Seite: Prompt-Liste + Backstop (lektorat-dictionary.js).
   const woerterbuch        = dictionaryWordsOnPage(run.dict, text);
@@ -236,6 +238,8 @@ async function checkOnePage(run, {
     ...(nextChapter != null ? { nc: nextChapter } : {}),
     ...(schreibfront ? { sf: 1 } : {}),
     bl: hatBelege,
+    // Nur gesetzt, wenn zutreffend: Seiten ohne Verlauf behalten ihren Cache.
+    ...(hatNachrichten ? { nv: 1 } : {}),
     // Nur gesetzt, wenn die Seite Wörterbuch-Wörter trägt: ein leeres `wb` würde
     // jede bestehende Cache-Zeile ohne Grund invalidieren.
     ...(woerterbuch.length ? { wb: woerterbuch } : {}),
@@ -262,7 +266,7 @@ async function checkOnePage(run, {
         stopwords: run.stopwords,
         erklaerungRule: run.erklaerungRule,
         korrekturRegeln: run.korrekturRegeln,
-        figuren, figurenBeziehungen, orte, motive, hatBelege,
+        figuren, figurenBeziehungen, orte, motive, hatBelege, hatNachrichten,
         woerterbuch: woerterbuch.slice(0, MAX_PROMPT_WORDS),
         // Wirksame Obergrenze skaliert mit der Textlänge – derselbe Wert wie im Backstop.
         stylisticCap: effectiveStylisticCap(text.length),

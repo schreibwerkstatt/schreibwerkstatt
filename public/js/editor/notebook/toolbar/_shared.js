@@ -7,6 +7,7 @@ import { tzOpts, localeTag } from '../../../utils.js';
 import { CARET_BLOCK_SEL, findBlock, topLevelBlock, caretAtBlockStart, caretAtBlockEnd } from '../../shared/dom-block.js';
 import { brLeftOfCaret } from '../../shared/soft-break.js';
 import { TODO_ITEM_SEL, TODO_LIST_CLASS } from '../../shared/todo-html.js';
+import { MSG_THREAD_CLASS, MSG_THREAD_SEL, MSG_KIND_CLASS } from '../../../messages/msg-html.js';
 
 export { getEditEl, placeCaretIn, WORD_RE };
 // Caret-Range im Edit-Feld + Ende-Anker leben in editor/utils.js (auch vom
@@ -23,7 +24,8 @@ export { CARET_BLOCK_SEL, findBlock, topLevelBlock, caretAtBlockStart, caretAtBl
 export { brLeftOfCaret as _brLeftOfCaret };
 
 // Blocktyp-Definitionen für Slash-Transform. `tag` ist das Zielelement;
-// `className` optional (aktuell für .poem + .todo). `list: true` wrappt den
+// `className` optional (aktuell für .poem, .msg-thread + .todo). `innerClass`
+// setzt die Klasse des inneren <p> bei `wrapP`. `list: true` wrappt den
 // Inhalt in ein <li>. `todoList: true` erzeugt eine Checkbox-Liste.
 // `insertText: 'date'|'time'|'datetime'` ersetzt den Block durch einen
 // formatierten Datums-/Zeit-Stempel.
@@ -39,6 +41,7 @@ export const SLASH_ITEMS = [
   { key: 'h3',         tag: 'h3',         group: 'block' },
   { key: 'blockquote', tag: 'blockquote', wrapP: true,                   group: 'block' },
   { key: 'poem',       tag: 'div', className: 'poem', wrapP: true,       group: 'block' },
+  { key: 'msgthread',  tag: 'div', className: MSG_THREAD_CLASS, innerClass: MSG_KIND_CLASS.in, wrapP: true, group: 'block' },
   { key: 'list',       tag: 'ul', list: true,                           group: 'block' },
   { key: 'todo',       tag: 'ul', className: TODO_LIST_CLASS, todoList: true, group: 'block' },
   { key: 'hr',         tag: 'hr',                          group: 'break' },
@@ -145,7 +148,7 @@ export const ATOMIC_BLOCK_TAGS = new Set(['HR', 'FIGURE']);
 // seine Grenz-Behandlung. Gegated durch tests/unit/notebook-toolbar.test.mjs.
 // `pre` und `ol` stehen vorsorglich drin, obwohl (noch) kein Slash-Item sie
 // erzeugt — sie entstehen über Paste/Import.
-export const BOUNDARY_WRAPPER_SEL = `blockquote, div.poem, pre, ul:not(.${TODO_LIST_CLASS}), ol`;
+export const BOUNDARY_WRAPPER_SEL = `blockquote, div.poem, ${MSG_THREAD_SEL}, pre, ul:not(.${TODO_LIST_CLASS}), ol`;
 
 // Die text-tragenden Kind-Blöcke eines Wrapper-Blocks, in Dokumentordnung.
 // `<pre>` trägt seinen Text direkt und ist damit sein eigener einziger

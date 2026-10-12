@@ -1,4 +1,6 @@
-import { escHtml, fetchJson, SAFETY_HTML_RATIO, countInHtml, replaceInHtml, skipReason, stripFocusArtefacts } from '../utils.js';
+import { escHtml, fetchJson, SAFETY_HTML_RATIO, countInHtml, replaceInHtml, findInHtml, skipReason, stripFocusArtefacts } from '../utils.js';
+import { insideClassDiv } from '../utils/html-container.js';
+import { MSG_THREAD_CLASS } from '../messages/msg-html.js';
 import { sortByPosition, isHardFinding } from '../book/page-view.js';
 import { contentRepo } from '../repo/content.js';
 import { savePage } from './shared/page-api.js';
@@ -8,7 +10,33 @@ import { lsSet } from '../safe-storage.js';
 // Lektorat-Workflow-Methoden (werden in die Alpine-Komponente gespreadet)
 // `this` bezieht sich auf die Alpine-Komponente.
 
+// Befund-Ort „im Nachrichtenverlauf", gemerkt pro geprüftem HTML-Stand: die
+// Befundliste fragt bei jedem Render. Ausserhalb von Alpine, damit das Merken
+// keinen Effekt auslöst.
+let _threadMemoHtml = null;
+const _threadMemo = new Map();
+function _inMsgThread(html, original) {
+  if (!html || !original) return false;
+  if (html !== _threadMemoHtml) { _threadMemoHtml = html; _threadMemo.clear(); }
+  if (!_threadMemo.has(original)) {
+    const m = findInHtml(html, original);
+    _threadMemo.set(original, !!m && insideClassDiv(html, m.htmlStart, MSG_THREAD_CLASS));
+  }
+  return _threadMemo.get(original);
+}
+
 export const lektoratMethods = {
+  // Befund steht in einem Nachrichtenverlauf: Chat-Schreibweise ist Figurenrede.
+  // Solche Befunde sind nie vorausgewählt — „Korrekturen speichern" soll keine
+  // SMS-Sprache glattbügeln, die der Autor nicht einzeln angehakt hat.
+  findingInMsgThread(f) {
+    return _inMsgThread(this.originalHtml, f?.original);
+  },
+
+  findingPreselected(f) {
+    return isHardFinding(f.typ) && !this.findingInMsgThread(f);
+  },
+
   // `outSkipped` (optional): sammelt Korrekturen, die replaceInHtml unangetastet
   // liess (No-Op), als `{ f, reason }`. Vier Gründe, die der User auseinander
   // halten MUSS — „Stelle existiert nicht mehr" (Seite wurde zwischenzeitlich
@@ -288,16 +316,19 @@ export const lektoratMethods = {
         }
         this.originalHtml = base;
         this.lektoratFindings = findings;
-        // Default selected: nur „harte" Typen (page-view.js#findingKind). Weiche und redaktionelle default unselected.
-        this.selectedFindings = findings.map(f => isHardFinding(f.typ));
+        // Default selected: nur „harte" Typen (page-view.js#findingKind) ausserhalb
+        // eines Nachrichtenverlaufs. Weiche und redaktionelle default unselected.
+        this.selectedFindings = findings.map(f => this.findingPreselected(f));
         this.appliedOriginals = [];
         // Im Stale-Fall ist der Vergleich gegen einen Text gerechnet, den es nicht
         // mehr gibt — dann lieber keiner als ein falscher.
         this.lektoratProgress = staleRefiltered ? null : (r.progress || null);
         const hardErrors = findings.filter(f => isHardFinding(f.typ));
         this.hasErrors = hardErrors.length > 0;
-        this.correctedHtml = hardErrors.length > 0
-          ? this._applyCorrections(base, hardErrors)
+        // Vorschau = Auswahl (wie _recomputeCorrectedHtml), nicht alle harten Befunde.
+        const preselected = findings.filter((_, i) => this.selectedFindings[i]);
+        this.correctedHtml = preselected.length > 0
+          ? this._applyCorrections(base, preselected)
           : base;
         this.updatePageView();
         let out = '';

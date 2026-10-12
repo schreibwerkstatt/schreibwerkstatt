@@ -297,6 +297,52 @@
   }
   :is(.page-content-view, .book-editor-page-body, .share-content) .poem p { margin: 0 0 0.3em 0; text-indent: 0; }
 
+  /* --- Nachrichtenverlauf (Slash `/msgthread`, div.msg-thread). Markup-SSoT:
+         public/js/messages/msg-html.js. Am Bildschirm als dezente Blasen,
+         damit Ein- und Ausgang beim Schreiben sofort unterscheidbar sind;
+         die Exporte setzen typografisch (Profil-Option „Sprechblasen"). Ein
+         <p> ohne Zeilenklasse ist eingehend. --- */
+  :is(.page-content-view, .book-editor-page-body, .share-content) .msg-thread {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25em;
+    margin: 0.8em 0;
+    font-family: var(--font-sans, system-ui, sans-serif);
+    font-size: 0.92em;
+    hyphens: none;
+  }
+  :is(.page-content-view, .book-editor-page-body, .share-content) .msg-thread > p {
+    margin: 0;
+    text-indent: 0;
+    text-align: start;
+    max-width: 80%;
+    padding: 0.3em 0.7em;
+    border-radius: var(--mc-radius);
+    background: var(--mc-surface-alt);
+    border: 1px solid var(--mc-border);
+  }
+  :is(.page-content-view, .book-editor-page-body, .share-content) .msg-thread > p.msg-out {
+    align-self: flex-end;
+    background: color-mix(in srgb, var(--mc-accent) 10%, transparent);
+    border-color: color-mix(in srgb, var(--mc-accent) 30%, transparent);
+  }
+  :is(.page-content-view, .book-editor-page-body, .share-content) .msg-thread > p:is(.msg-name, .msg-meta) {
+    background: none;
+    border: none;
+    padding-block: 0;
+    color: var(--mc-subtle);
+    font-size: 0.85em;
+  }
+  :is(.page-content-view, .book-editor-page-body, .share-content) .msg-thread > p.msg-name {
+    margin-top: 0.35em;
+    font-weight: 600;
+  }
+  :is(.page-content-view, .book-editor-page-body, .share-content) .msg-thread > p.msg-meta {
+    align-self: center;
+    margin-block: 0.35em;
+  }
+
   /* --- Checkbox-Listen (Slash `/todo`). Markup-SSoT:
          <ul class="todo">
            <li class="todo-item"><input type="checkbox"><span class="todo-text">…</span></li>

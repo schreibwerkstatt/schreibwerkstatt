@@ -108,6 +108,14 @@ export function registerEditorToolbarCard() {
     // die Vorschau-Quelle im Dialog, `imageAlt`/`imageCredit` die beiden
     // bearbeitbaren Felder, `_imageEl` die angeklickte `<figure>`. Einen
     // Einfüge-Weg gibt es nicht — Abbildungen entstehen im Slash-Menü.
+    // Zeilenleiste des Nachrichtenverlaufs (siehe editor/notebook/toolbar/
+    // msg-thread.js). `msgBarKind` ist die Art der Caret-Zeile, `_msgLine` die
+    // Zeile selbst — Ziel der Leistenknöpfe.
+    msgBarShow: false,
+    msgBarX: 0,
+    msgBarY: 0,
+    msgBarKind: 'in',
+    _msgLine: null,
     imageSrc: '',
     imageAlt: '',
     imageCredit: '',
@@ -119,12 +127,16 @@ export function registerEditorToolbarCard() {
       this._toolbarAbort = abort;
       const signal = abort.signal;
 
-      document.addEventListener('selectionchange', () => this._updateBubble(), { signal });
+      document.addEventListener('selectionchange', () => {
+        this._updateBubble();
+        this._updateMsgBar();
+      }, { signal });
       // Capture-Phase, damit auch Scroll-Events in internen Containern
       // (editor-preview-wrap) mitbekommen werden.
       window.addEventListener('scroll', () => {
         if (this.bubbleShow) this._updateBubble();
         if (this.slashShow) this._updateSlashPosition();
+        if (this.msgBarShow) this._updateMsgBar();
       }, { capture: true, signal });
 
       // Mobile-Tastatur: sie schrumpft/verschiebt den visualViewport, ohne dass

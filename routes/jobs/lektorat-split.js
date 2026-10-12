@@ -141,6 +141,8 @@ async function lektoratAnalyze({ jobId, tok, text, local, prompts, system, promp
     hatBelege: promptOpts.hatBelege,
     // Benutzer-Wörterbuch: der Objektiv-Pass ist der, der Rechtschreibung prüft.
     woerterbuch: promptOpts.woerterbuch,
+    // Chat-Schreibweise im Nachrichtenverlauf: vor allem hier, wo Satzzeichen geprüft werden.
+    hatNachrichten: promptOpts.hatNachrichten,
     langCode: promptOpts.langCode,
     // Schreibstelle: ein abgebrochener letzter Satz ist dort kein Grammatik-Befund.
     schreibfront: promptOpts.schreibfront,

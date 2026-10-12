@@ -311,10 +311,11 @@ export const slashMethods = {
       replaceBlockOutsideList(editEl, block, replacement);
       caretTarget = li;
     } else if (item.wrapP) {
-      // blockquote / .poem → enthält ein <p> als Schreibfläche.
+      // blockquote / .poem / .msg-thread → enthält ein <p> als Schreibfläche.
       replacement = document.createElement(item.tag);
       if (item.className) replacement.className = item.className;
       const p = document.createElement('p');
+      if (item.innerClass) p.className = item.innerClass;
       p.innerHTML = '<br>';
       replacement.appendChild(p);
       replaceBlockOutsideList(editEl, block, replacement);

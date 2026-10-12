@@ -59,12 +59,20 @@ const DIAGRAM_SKIP_SEL = 'pre.mermaid';
 // App-Bundle-Importen. Gegated durch tests/unit/table-drift.test.mjs.
 const TABLE_SKIP_SEL = 'table';
 
+// Nachrichtenverlauf (SMS/Chat im Manuskript): Kleinschreibung, „5 min", fehlende
+// Satzzeichen und Abkürzungen sind dort Figurenrede, nicht Fehler — jede Zeile
+// erzeugte eine Meldung. Geschnitten wie das Diagramm: der Block steht für sich,
+// Nachbar-Textknoten kleben nicht zusammen. Kopie von MSG_THREAD_SEL aus
+// public/js/messages/msg-html.js (dieses Modul hält sich frei von
+// App-Bundle-Importen), gegated durch tests/unit/msg-thread-drift.test.mjs.
+const MSG_SKIP_SEL = 'div.msg-thread';
+
 function _isSkippedIsland(el) {
   if (!el || el.nodeType !== 1) return false;
   const cl = el.classList;
   if (!cl) return false;
   if (cl.contains('lt-popover') || cl.contains('lt-badge')) return true;
-  return !!el.matches && (el.matches(DIAGRAM_SKIP_SEL) || el.matches(TABLE_SKIP_SEL));
+  return !!el.matches && (el.matches(DIAGRAM_SKIP_SEL) || el.matches(TABLE_SKIP_SEL) || el.matches(MSG_SKIP_SEL));
 }
 
 // Quellen-Chips (Quellennachweise) werden NICHT aus dem Stream geschnitten, sondern

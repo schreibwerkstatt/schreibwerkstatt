@@ -64,6 +64,7 @@ export const HELP_EXTRAS = [
   { key: 'xrefs',         group: 'write' },
   { key: 'diagrams',      group: 'write' },
   { key: 'tables',        group: 'write' },
+  { key: 'messages',      group: 'write' },
   { key: 'interview',     group: 'write', buchtyp: ['journalismus', 'blog'], needs: ['service'] },
   { key: 'pageHistory',   group: 'write' },
   { key: 'kapitelReview', group: 'review' },

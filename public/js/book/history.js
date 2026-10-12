@@ -134,13 +134,16 @@ export const historyMethods = {
       return true;
     });
 
-    // Selection: bereits angewendete Korrekturen + weiche/redaktionelle Typen default unselected
-    this.selectedFindings = findings.map(f => !appliedSet.has(f.original) && isHardFinding(f.typ));
+    // Selection: bereits angewendete Korrekturen, weiche/redaktionelle Typen und
+    // Befunde im Nachrichtenverlauf default unselected (editor/lektorat.js#findingPreselected)
+    this.selectedFindings = findings.map(f => !appliedSet.has(f.original) && this.findingPreselected(f));
 
     const hardErrors = findings.filter(f => isHardFinding(f.typ));
     this.hasErrors = hardErrors.length > 0;
-    this.correctedHtml = hardErrors.length > 0
-      ? this._applyCorrections(this.originalHtml, hardErrors)
+    // Vorschau = Auswahl (wie _recomputeCorrectedHtml), nicht alle harten Befunde.
+    const preselected = findings.filter((_, i) => this.selectedFindings[i]);
+    this.correctedHtml = preselected.length > 0
+      ? this._applyCorrections(this.originalHtml, preselected)
       : this.originalHtml;
 
     this.checkDone = true;

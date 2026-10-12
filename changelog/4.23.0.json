@@ -1,0 +1,26 @@
+{
+  "version": "4.23.0",
+  "date": "2026-10-12",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Nachrichtenverlauf im Abschnitt: über das Slash-Menü fügen Sie SMS- oder Chat-Verläufe ein, mit eingehenden und ausgehenden Nachrichten, Absender und Uhrzeit. Tab oder die Leiste über dem Block wechselt die Zeilenart.",
+      "en": "Message thread in sections: use the slash menu to insert text or chat conversations with incoming and outgoing messages, sender and time. Tab or the bar above the block switches the line type."
+    },
+    {
+      "kind": "neu",
+      "de": "PDF-, Word- und EPUB-Export setzen Nachrichtenverläufe als Buchsatz oder auf Wunsch mit leichten Sprechblasen. Die Wahl finden Sie bei den Schrift-, Layout- bzw. Typografie-Einstellungen des Exports.",
+      "en": "PDF, Word and EPUB export set message threads in book style or, if you like, with light speech bubbles. The option is in the export's font, layout or typography settings."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lektorat und Rechtschreibprüfung lassen die Chat-Sprache in Nachrichtenverläufen stehen. Befunde dort sind markiert und nicht vorausgewählt.",
+      "en": "Proofreading and spell check leave the chat language in message threads alone. Findings there are marked and not preselected."
+    },
+    {
+      "kind": "behoben",
+      "de": "Lektorat: eine Korrektur über das Ende einer Verszeile hinweg klebte im Gedicht zwei Verse zusammen. Solche Korrekturen werden jetzt übersprungen.",
+      "en": "Proofreading: a correction spanning the end of a verse line joined two lines of a poem together. Such corrections are now skipped."
+    }
+  ]
+}

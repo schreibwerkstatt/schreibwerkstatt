@@ -165,3 +165,40 @@ test('Wort-Diff: Block-/Link-/Marker-Guards bleiben vor dem Diff', () => {
   const block = '<p>Er ging nach Hause.</p><p>Dann schlief er ein.</p>';
   assert.equal(replaceInHtml(block, 'nach Hause. Dann', 'heim. Dann'), block);
 });
+
+// Vers-Umbrueche: im Gedicht steht der Umbruch als <p>, <br> oder — nach Paste/
+// Import — als rohes `\n` unter `white-space: pre-line`. Eine Korrektur ueber
+// die Zeilengrenze darf keinen davon schlucken; innerhalb einer Zeile greift sie.
+test('Gedicht: Korrektur innerhalb einer Verszeile greift, Umbrüche bleiben', () => {
+  const nl = '<div class="poem"><p>Der Mond ist aufgegagen\ndie goldnen Sternlein</p></div>';
+  assert.equal(replaceInHtml(nl, 'ist aufgegagen', 'ist aufgegangen'),
+    '<div class="poem"><p>Der Mond ist aufgegangen\ndie goldnen Sternlein</p></div>');
+  const ps = '<div class="poem"><p>Der Mond ist aufgegagen</p><p>die goldnen</p></div>';
+  assert.equal(replaceInHtml(ps, 'aufgegagen', 'aufgegangen'),
+    '<div class="poem"><p>Der Mond ist aufgegangen</p><p>die goldnen</p></div>');
+});
+
+test('Gedicht: Korrektur über einen Vers-Umbruch wird übersprungen (<p>, <br>, \\n)', () => {
+  for (const html of [
+    '<div class="poem"><p>Der Mond ist ja aufgegangen</p><p>die goldnen Sternlein</p></div>',
+    '<div class="poem"><p>Der Mond ist ja aufgegangen<br>die goldnen Sternlein</p></div>',
+    '<div class="poem"><p>Der Mond ist ja aufgegangen\ndie goldnen Sternlein</p></div>',
+    '<pre>Der Mond ist ja aufgegangen\ndie goldnen Sternlein</pre>',
+  ]) {
+    assert.equal(replaceInHtml(html, 'ist ja aufgegangen die goldnen', 'ist aufgegangen die goldnen'), html);
+    assert.equal(replaceInHtml(html, 'Der Mond ist ja aufgegangen die goldnen Sternlein', 'Aufgegangen ist der Mond'), html);
+  }
+});
+
+test('Quelltext-\\n ausserhalb von Gedicht/pre bremst die Korrektur nicht', () => {
+  const html = '<div class="poem"><p>Vers</p></div><p>Er ging\nnach Huase.</p>';
+  assert.equal(replaceInHtml(html, 'ging nach Huase', 'ging nach Hause'),
+    '<div class="poem"><p>Vers</p></div><p>Er ging\nnach Hause.</p>');
+});
+
+test('Nachrichtenverlauf: Korrektur bleibt in ihrer Zeile, Zeilenklassen bleiben', () => {
+  const html = '<div class="msg-thread"><p class="msg-name">Lena</p><p class="msg-in">bist du schon daa?</p><p class="msg-out">gleich</p></div>';
+  assert.equal(replaceInHtml(html, 'schon daa?', 'schon da?'),
+    '<div class="msg-thread"><p class="msg-name">Lena</p><p class="msg-in">bist du schon da?</p><p class="msg-out">gleich</p></div>');
+  assert.equal(replaceInHtml(html, 'daa? gleich', 'da? Gleich'), html);
+});

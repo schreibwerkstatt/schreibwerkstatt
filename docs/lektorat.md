@@ -50,13 +50,15 @@ Code: [public/js/editor/lektorat.js](../public/js/editor/lektorat.js) (Workflow)
 
 ### Befund-Klassen
 
-`findingKind(typ)` in `page-view.js` ist die einzige Quelle für Vorauswahl und Farbe:
+`findingKind(typ)` in `page-view.js` ist die einzige Quelle für die Farbe und, mit einer Ausnahme, für die Vorauswahl:
 
 | Klasse | Typen | Vorausgewählt | Farbe |
 |---|---|---|---|
 | hart | Mechanik + Konsistenz/Form (rechtschreibung, grammatik, dialogformat, namens-/figuren-/schauplatzmerkmal, anrede, begriffsinkonsistenz, autorenform, konjunktiv) | ja | rot |
 | weich | `stil` + `SOFT_TYPEN` (Stil, Handwerk, hedging, Tempus-/Perspektivbruch) | nein | orange |
 | redaktionell | `EDITORIAL_TYPEN`: unbelegt, zuschreibung, wertung | **nie** | wertfrei (Akzent-Kante, `badge-neutral`) |
+
+**Ausnahme Nachrichtenverlauf:** ein Befund, dessen Stelle in einem `div.msg-thread` liegt, ist auch als harter Befund **nicht** vorausgewählt und trägt das Tag „im Nachrichtenverlauf" (`findingPreselected` / `findingInMsgThread` in [lektorat.js](../public/js/editor/lektorat.js), beide Ladewege: frische Prüfung und History-Eintrag). Die Vorschau `correctedHtml` folgt der Auswahl, nicht den harten Typen. **Why:** Chat-Schreibweise ist Figurenrede; ohne die Ausnahme nähme „Korrekturen speichern" eine «korrigierte» SMS-Sprache mit, die der Autor nie einzeln angehakt hat. Gegated: [tests/e2e-app/lektorat-findings-msg-thread.spec.js](../tests/e2e-app/lektorat-findings-msg-thread.spec.js).
 
 **Why redaktionell:** die Korrektur dieser Typen schreibt die *Aussage* um (abschwächen, Zuschreibung streichen, Wertung neutralisieren). Oft ist ein Beleg die richtige Antwort (Belegvorschlag am Befund), nicht die Umformulierung. Ein Sammel-„Übernehmen" darf solche Änderungen nicht mitnehmen.
 
@@ -65,7 +67,7 @@ Code: [public/js/editor/lektorat.js](../public/js/editor/lektorat.js) (Workflow)
 - **Kein Lektorat auf ungespeicherten Edits** (`editDirty`/`saveOffline` → blockiert).
 - **Staleness im `onDone`:** frischen Seitenstempel selbst holen und bei Fremd-Write über `sortByPosition(base, fehler)` refiltern statt pauschal verwerfen — Regel in [routes/jobs/CLAUDE.md](../routes/jobs/CLAUDE.md), gegated durch [tests/unit/job-result-staleness.test.mjs](../tests/unit/job-result-staleness.test.mjs).
 - **Übernehmen:** Seite frisch laden → `_applyCorrections` (sequenziell, No-Ops mit Grund `notFound`/`spansLink`/`spansMarker`/`boundary`) → Quote-Normalisierung → Grössen-Check → `savePage(..., expectedUpdatedAt)` (409 bei Fremd-Write). Seite ist ab Start gepinnt; ein Seitenwechsel verschiebt Ziel und Namen des PUT nicht.
-- **Ersetzungs-Kern** ([html-find.js](../public/js/utils/html-find.js), geteilt mit dem Abschnitts-Chat): Fundstelle über eine Text-View (Tags → Space, Entities dekodiert, Whitespace kollabiert, Anführungszeichen gefaltet über [text-match.js](../public/js/utils/text-match.js) — `„“”«»` gelten als `"`, `‚‘’‹›` als `'`); ein exakter Roh-Treffer zählt nur im Fliesstext, nie in Attributen (`href`/`alt`/`data-*`) oder Entities. Die Korrektur ist **Klartext** und wird maskiert eingesetzt (`&`/`<`/`>`), nie als Markup. Beim toleranten Treffer ersetzt `replaceInHtml` per **Wort-Diff** nur die geänderten Token — unveränderte Wörter behalten `<em>`/`<strong>` und die Buch-Anführungszeichen; gerade Anführungszeichen in der Korrektur gelten als „egal", typografische als gewollte Änderung. Rand-Whitespace von Nadel und Korrektur zählt nicht.
+- **Ersetzungs-Kern** ([html-find.js](../public/js/utils/html-find.js), geteilt mit dem Abschnitts-Chat): Fundstelle über eine Text-View (Tags → Space, Entities dekodiert, Whitespace kollabiert, Anführungszeichen gefaltet über [text-match.js](../public/js/utils/text-match.js) — `„“”«»` gelten als `"`, `‚‘’‹›` als `'`); ein exakter Roh-Treffer zählt nur im Fliesstext, nie in Attributen (`href`/`alt`/`data-*`) oder Entities. Die Korrektur ist **Klartext** und wird maskiert eingesetzt (`&`/`<`/`>`), nie als Markup. Beim toleranten Treffer ersetzt `replaceInHtml` per **Wort-Diff** nur die geänderten Token — unveränderte Wörter behalten `<em>`/`<strong>` und die Buch-Anführungszeichen; gerade Anführungszeichen in der Korrektur gelten als „egal", typografische als gewollte Änderung. Rand-Whitespace von Nadel und Korrektur zählt nicht. Eine Korrektur über einen **Vers- oder Zeilenumbruch** wird übersprungen (`boundary`): über eine Blockgrenze, ein `<br>` und ein rohes `\n` in `div.poem`/`<pre>` (dort `white-space: pre-line`, entsteht nach Paste/Import) — sonst klebten zwei Verse zusammen. Gegated: [tests/unit/html-find-tolerant.test.mjs](../tests/unit/html-find-tolerant.test.mjs).
 - **Als angenommen gespeichert wird nur, was im Text gelandet ist.** Befunde, die `_applyCorrections` überspringt, fehlen in `applied_errors_json` und bleiben offen — sonst zählte die Fehler-Heatmap sie als erledigt.
 - **`x-html`-Sinks** (`analysisOut`, `batchStatus`, `checkStatus`) nur mit `escHtml`-geschleusten KI-/Seiten-Feldern.
 

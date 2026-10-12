@@ -1,0 +1,25 @@
+<!-- Zeilenleiste des Nachrichtenverlaufs (div.msg-thread) im Notebook-Editor:
+     setzt die Art der Caret-Zeile (Eingang/Ausgang/Absender/Zeit). Sichtbar,
+     solange der Caret in einer Verlaufszeile steht; Tab/Shift+Tab schalten
+     dieselben Arten per Tastatur durch. Scope: editorToolbarCard, Methoden in
+     public/js/editor/notebook/toolbar/msg-thread.js. Nach <body> teleportiert
+     (position:fixed, wie die Bubble-Toolbar); @mousedown.prevent hält Fokus und
+     Caret im Editor. -->
+<template x-teleport="body">
+  <div x-show="msgBarShow && $app.editMode && !$app.focusActive" x-cloak
+       x-ref="msgBar"
+       class="edit-msg-bar"
+       role="toolbar"
+       :aria-label="$app.t('editor.msg.barLabel')"
+       :style="{ left: msgBarX + 'px', top: msgBarY + 'px' }"
+       @mousedown.prevent>
+    <template x-for="k in ['in', 'out', 'name', 'meta']" :key="k">
+      <button type="button" class="edit-msg-btn"
+              :class="{ 'edit-msg-btn--active': msgBarKind === k }"
+              :aria-pressed="msgBarKind === k"
+              @click="setMsgLineKind(k)"
+              :data-tip="$app.t('editor.msg.kind.' + k + 'Tip')"
+              x-text="$app.t('editor.msg.kind.' + k)"></button>
+    </template>
+  </div>
+</template>

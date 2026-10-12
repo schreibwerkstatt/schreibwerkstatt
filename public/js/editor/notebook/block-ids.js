@@ -18,10 +18,11 @@
 // Reine DOM-Funktionen ohne Karten-State; gesetzt werden nur Attribute — kein
 // Inhalt, kein Caret, kein Undo-Schritt, kein input-Event.
 
-// Spiegel von lib/html-clean.js#_BID_BLOCK_SEL (+ `div.poem`). Weicht er ab,
+// Spiegel von lib/html-clean.js#_BID_BLOCK_SEL (+ `div.poem`, `div.msg-thread`
+// aus _STRUCTURAL_DIV_CLASSES). Weicht er ab,
 // vergibt der Server für die Differenz eigene IDs, und die Fassungen laufen
 // wieder auseinander.
-const BID_SEL = 'p,h1,h2,h3,h4,h5,h6,ul,ol,blockquote,pre,hr,figure,table,div.poem';
+const BID_SEL = 'p,h1,h2,h3,h4,h5,h6,ul,ol,blockquote,pre,hr,figure,table,div.poem,div.msg-thread';
 
 // Gleiches Format wie lib/html-clean.js#_newBid: 8 Zufallsbytes als Hex.
 export function newBid() {

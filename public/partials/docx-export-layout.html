@@ -57,4 +57,12 @@
       <span x-text="$app.t('docxExport.field.skipFirstPage')"></span>
     </label>
   </div>
+  <!-- Nachrichtenverlauf (SMS/Chat, div.msg-thread): lib/export-builders/docx-messages.js -->
+  <p class="card-form-section-divider" x-text="$app.t('export.messages.group')"></p>
+  <div class="card-form-row">
+    <label class="card-form-label" x-text="$app.t('export.messages.style')"></label>
+    <div x-data="combobox($app.t('export.messages.style'))"
+         x-modelable="value" x-model="activeProfile.config.messages.style"
+         x-effect="options = [{ value: 'plain', label: $app.t('export.messages.style.plain') }, { value: 'bubbles', label: $app.t('export.messages.style.bubblesWord') }]"></div>
+  </div>
 </section>

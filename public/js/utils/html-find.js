@@ -5,6 +5,7 @@
 import { CITE_CLASS, CITE_ATTR_SRC } from '../sources/cite-html.js';
 import { XREF_CLASS, XREF_ATTR_ID } from '../xrefs/xref-html.js';
 import { foldQuotes, normalizeMatchText } from './text-match.js';
+import { insideClassDiv } from './html-container.js';
 
 // Dekodiert eine einzelne HTML-Entity (z.B. &bdquo;) via Browser-Parser.
 // Gibt null zurück, wenn sich die Entity nicht auflöst.
@@ -202,6 +203,16 @@ function _crossesBlockBoundary(slice) {
 // einer Block-Grenze bleibt der Text darum unveraendert statt korrumpiert.
 function _crossesLineBreak(slice) {
   return /<br\b[^>]*>/i.test(slice);
+}
+
+// Dasselbe ohne Tag: in `div.poem` (pre-line) und `<pre>` steht der Umbruch nach
+// Paste/Import als rohes `\n`, das die Text-View zu einem Space kollabiert —
+// ausserhalb dieser Bloecke ist ein `\n` nur Quelltext und darf mitgehen.
+function _crossesPreservedNewline(html, start, end) {
+  if (!/[\r\n]/.test(html.slice(start, end))) return false;
+  const before = html.slice(0, start);
+  if (before.lastIndexOf('<pre') > before.lastIndexOf('</pre')) return true;
+  return insideClassDiv(html, start, 'poem');
 }
 
 // True, wenn der Slice ein VOLLSTAENDIG umschlossenes <a>…</a> enthaelt (Open
@@ -449,7 +460,8 @@ function _replaceByWordDiff(html, loc, replacement) {
  * wird der ganze Bereich ersetzt (mit demselben Waisen-Schutz).
  *
  * Kreuzt der Match dagegen eine BLOCK-Grenze (`</p><p>`, `</li><li>`, Heading,
- * Tabelle …), umschliesst er einen Zeilenumbruch (`<br>`), einen vollständigen
+ * Tabelle …), umschliesst er einen Zeilenumbruch (`<br>`, oder ein rohes `\n`
+ * in `div.poem`/`<pre>`), einen vollständigen
  * Hyperlink (`<a>…</a>`) ODER einen vollständigen Marker-Span (Quellenangabe,
  * Querverweis), wird NICHT ersetzt: eine Block-Grenzen-Ersetzung würde Absätze
  * zerstören, ein umspannter `<br>` würde als sichtbarer Zeilenumbruch ersatzlos
@@ -473,6 +485,7 @@ export function replaceInHtml(html, needle, replacement) {
   // Ein rohes \n darin (KI-Artefakt) wanderte sonst verbatim ins HTML und wuerde
   // in umbruch-erhaltenden Bloecken (<pre>, .poem) als sichtbarer Umbruch gerendert.
   const text = String(replacement ?? '').replace(/[\r\n]+/g, ' ').trim();
+  if (_crossesPreservedNewline(html, m.htmlStart, m.htmlEnd)) return html;
   if (removed.includes('<')) {
     if (_crossesBlockBoundary(removed)) return html;
     if (_crossesLineBreak(removed)) return html;
@@ -568,7 +581,8 @@ export function matchSpansMarker(html, needle) {
  *                   einen vollständigen Querverweis; ersetzen würde den Zeiger
  *                   (`data-src` bzw. `data-xref-id`) verwerfen und nur toten
  *                   Klartext zurücklassen.
- *   'boundary'    — der Match kreuzt eine Block-Grenze oder einen `<br>`.
+ *   'boundary'    — der Match kreuzt eine Block-Grenze, einen `<br>` oder einen
+ *                   Vers-Umbruch (`\n` in `div.poem`/`<pre>`).
  *
  * Nur für den No-Op-Fall gedacht; auf einer erfolgreich ersetzbaren Stelle
  * aufgerufen liefert es 'boundary' (der Aufrufer fragt dort nicht).

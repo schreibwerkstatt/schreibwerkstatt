@@ -75,6 +75,7 @@
           <span class="badge" :class="_findingBadgeClass(f.typ)" x-text="$app.t('finding.' + f.typ)"
                 :data-tip="_findingKind(f.typ) === 'editorial' ? $app.t('editor.findings.editorialTip') : null"></span>
           <span x-show="$app.appliedOriginals.includes(f.original)" class="tag" x-text="$app.t('editor.findings.applied')"></span>
+          <span x-show="$app.findingInMsgThread(f)" class="tag" x-text="$app.t('editor.findings.inMsgThread')" :data-tip="$app.t('editor.findings.inMsgThreadTip')"></span>
           <span class="finding-content">
             <span class="finding-original" x-text="f.original"></span>
 

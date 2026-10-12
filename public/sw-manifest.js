@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "d668d05e037eb98b";
+self.__SHELL_BUILD = "43280d964f683161";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -609,6 +609,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/notebook/toolbar/diagram.js",
   "/js/editor/notebook/toolbar/image.js",
   "/js/editor/notebook/toolbar/keydown.js",
+  "/js/editor/notebook/toolbar/msg-thread.js",
   "/js/editor/notebook/toolbar/slash.js",
   "/js/editor/notebook/toolbar/table.js",
   "/js/editor/notebook/toolbar/xref.js",
@@ -693,6 +694,7 @@ self.__SHELL_MANIFEST = [
   "/js/manuscript-render.js",
   "/js/manuscript-stream.js",
   "/js/menu.js",
+  "/js/messages/msg-html.js",
   "/js/modal.js",
   "/js/num-input.js",
   "/js/page-revision-diff.js",
@@ -827,6 +829,7 @@ self.__SHELL_MANIFEST = [
   "/js/utils/date.js",
   "/js/utils/escape.js",
   "/js/utils/format.js",
+  "/js/utils/html-container.js",
   "/js/utils/html-find.js",
   "/js/utils/html.js",
   "/js/utils/markdown.js",
@@ -937,6 +940,7 @@ self.__SHELL_MANIFEST = [
   "/partials/editor-findings.html",
   "/partials/editor-focus.html",
   "/partials/editor-image-dialog.html",
+  "/partials/editor-msg-bar.html",
   "/partials/editor-notebook.html",
   "/partials/editor-page-actions.html",
   "/partials/editor-page-head.html",

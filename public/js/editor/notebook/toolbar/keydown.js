@@ -46,6 +46,9 @@ export const keydownMethods = {
     if (app.focusActive) return;
 
     if (this._kbDeleteBlock(e, app)) return;
+    // Nachrichtenverlauf vor den generischen Grenzen: Zeilen-Merges innerhalb
+    // des Verlaufs, Enter/Tab für Zeilenarten (toolbar/msg-thread.js).
+    if (this._kbMsgThread(e, app)) return;
     // Struktur-Grenzen: spezifisch vor generisch. `_kbTodoDelete` und
     // `_kbFigureCaption` schützen je ein Void-Element (Checkbox bzw. Bild),
     // `_kbBlockBoundary` deckt die übrigen formatierten Wrapper ab.

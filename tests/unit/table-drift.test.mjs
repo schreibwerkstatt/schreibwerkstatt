@@ -125,7 +125,7 @@ test('Prompt: Tabelle wird verdichtet, nicht geschnitten', () => {
 test('beide Prompt-Textpfade nutzen die Kurzform', () => {
   const src = read('routes/jobs/shared/ai.js');
   assert.match(src, /function htmlToText\(html\)[\s\S]{0,200}summarizeTableBlocks/);
-  assert.match(src, /function htmlToTextForPrompt\(html\)[\s\S]{0,200}summarizeTableBlocks/);
+  assert.match(src, /function htmlToTextForPrompt\(html\b[^)]*\)[\s\S]{0,200}summarizeTableBlocks/);
 });
 
 test('summarizeTableBlocks bleibt bei kaputtem Markup harmlos', () => {

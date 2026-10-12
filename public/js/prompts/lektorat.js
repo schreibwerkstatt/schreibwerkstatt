@@ -59,6 +59,7 @@ import {
   _buildAiSmellBlock,
   _buildBelegBlock,
   _buildWoerterbuchBlock,
+  _buildNachrichtenBlock,
 } from './blocks.js';
 import { textsorteLabel } from './textsorten.js';
 import { _buildNachbarBlocks } from './lektorat-nachbar.js';
@@ -139,6 +140,8 @@ function _buildLektoratPromptBody(text, textLabel, {
   // nicht im gecachten System-Block – eine längenabhängige Zahl bricht keinen Cache.
   stylisticCap = 10,
   hatBelege = false,
+  // Abschnitt enthält einen Nachrichtenverlauf (div.msg-thread) → Chat-Regelblock.
+  hatNachrichten = false,
   woerterbuch = [],
   langCode = 'de',
   mode = 'full',
@@ -241,6 +244,8 @@ function _buildLektoratPromptBody(text, textLabel, {
   // Benutzer-Wörterbuch: auch im Stil-Pass und lokal — ein Stil-Vorschlag soll das
   // gewollte Wort in seiner «korrektur» ebenso wenig «verbessern».
   const woerterbuchBlock = woerterbuch.length ? `\n${_buildWoerterbuchBlock(woerterbuch, langCode)}\n` : '';
+  // Chat-Schreibweise der Figuren: wie der Beleg-Block auch lokal.
+  const nachrichtenBlock = hatNachrichten ? `\n${_buildNachrichtenBlock(langCode)}\n` : '';
 
   const { nachbarBlock, schreibfrontBlock } = _buildNachbarBlocks({
     previousExcerpt, nextExcerpt, previousChapter, nextChapter, schreibfront,
@@ -494,7 +499,7 @@ ${journal ? _buildJournalStilBlock(typen) : fach ? _buildFachStilBlock(typen) : 
 ${fach ? _buildFachWiederholungBlock(stopwords) : _buildWiederholungBlock(stopwords)}
 ${aktiv('schwaches_verb') ? _buildSchwacheVerbenBlock() : ''}
 ${_buildFuellwortBlock()}
-${spezialBlocks}${figurenBlock}${beziehungenBlock}${orteBlock}${motivBlock}${belegBlock}${woerterbuchBlock}${nachbarBlock}${schreibfrontBlock}
+${spezialBlocks}${figurenBlock}${beziehungenBlock}${orteBlock}${motivBlock}${belegBlock}${woerterbuchBlock}${nachrichtenBlock}${nachbarBlock}${schreibfrontBlock}
 ${selbstkontrollBlock}
 <originaltext label="${textLabel.replace(/:\s*$/, '')}">
 ${text}
