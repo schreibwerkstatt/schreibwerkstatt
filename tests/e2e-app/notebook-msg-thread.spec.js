@@ -116,6 +116,28 @@ test.describe('Notebook — Nachrichtenverlauf', () => {
     await expect(bar).toBeHidden();
   });
 
+  // Die Vollbild-Karte liegt als CSS-Overlay über <body>; der Tooltip-Layer muss
+  // darüber liegen, sonst ist die Leiste sichtbar, ihr Tooltip aber verdeckt.
+  test('Zeilenleiste: Tooltip bleibt im Vollbild sichtbar', async ({ page }) => {
+    await enterNotebookEdit(page);
+    await page.evaluate(() => { window.__app.pageEditorFullscreen = true; });
+    await page.waitForSelector('#editor-card.editor-card--fullscreen');
+    await seed(page, THREAD, '.msg-in', 'end');
+    const btn = page.locator('.edit-msg-bar .edit-msg-btn').nth(1);
+    await expect(btn).toBeVisible();
+    await btn.hover();
+    await expect(page.locator('.tip-layer.tip-visible')).toBeVisible();
+    const onTop = await page.evaluate(() => {
+      const layer = document.querySelector('.tip-layer');
+      const r = layer.getBoundingClientRect();
+      layer.style.pointerEvents = 'auto';
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      layer.style.pointerEvents = '';
+      return layer.contains(hit);
+    });
+    expect(onTop, 'Tooltip liegt über der Vollbild-Karte').toBe(true);
+  });
+
   test('Bildschirm: ausgehend rechts, eingehend links', async ({ page }) => {
     await enterNotebookEdit(page);
     await seed(page, THREAD, '.msg-in', 'end');

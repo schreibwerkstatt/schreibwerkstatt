@@ -105,8 +105,24 @@
         <span class="shortcuts-desc" x-text="t('shortcuts.item.softBreak')"></span>
       </div>
       <div class="shortcuts-row">
+        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.del')"></kbd> / <kbd x-text="t('shortcuts.key.backspace')"></kbd></span>
+        <span class="shortcuts-desc" x-text="t('shortcuts.item.deleteBlock')"></span>
+      </div>
+      <div class="shortcuts-row">
         <span class="shortcuts-keys"><kbd>/</kbd></span>
         <span class="shortcuts-desc" x-text="t('shortcuts.item.slashMenu')"></span>
+      </div>
+      <div class="shortcuts-row">
+        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.tab')"></kbd> / <kbd x-text="t('shortcuts.key.shift')"></kbd>+<kbd x-text="t('shortcuts.key.tab')"></kbd></span>
+        <span class="shortcuts-desc" x-text="t('shortcuts.item.msgKind')"></span>
+      </div>
+      <div class="shortcuts-row">
+        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.enter')"></kbd></span>
+        <span class="shortcuts-desc" x-text="t('shortcuts.item.msgEnter')"></span>
+      </div>
+      <div class="shortcuts-row">
+        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.enter')"></kbd> <kbd x-text="t('shortcuts.key.enter')"></kbd></span>
+        <span class="shortcuts-desc" x-text="t('shortcuts.item.blockExit')"></span>
       </div>
       <div class="shortcuts-row">
         <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.cmdCtrl')"></kbd>+<kbd x-text="t('shortcuts.key.shift')"></kbd>+<kbd>S</kbd></span>
@@ -138,77 +154,7 @@
       </div>
     </div>
 
-    <div class="shortcuts-section">
-      <div class="card-section-title" x-text="t('shortcuts.section.navigation')"></div>
-      <div class="shortcuts-row">
-        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.tab')"></kbd></span>
-        <span class="shortcuts-desc" x-text="t('shortcuts.item.skipLink')"></span>
-      </div>
-      <div class="shortcuts-row">
-        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.arrows')"></kbd> / <kbd x-text="t('shortcuts.key.enter')"></kbd></span>
-        <span class="shortcuts-desc" x-text="t('shortcuts.item.treeArrows')"></span>
-      </div>
-      <div class="shortcuts-row">
-        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.arrowsLR')"></kbd></span>
-        <span class="shortcuts-desc" x-text="t('shortcuts.item.treeChapter')"></span>
-      </div>
-      <div class="shortcuts-row">
-        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.home')"></kbd> / <kbd x-text="t('shortcuts.key.end')"></kbd></span>
-        <span class="shortcuts-desc" x-text="t('shortcuts.item.treeHomeEnd')"></span>
-      </div>
-      <div class="shortcuts-row">
-        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.alt')"></kbd>+<kbd>J</kbd> / <kbd x-text="t('shortcuts.key.alt')"></kbd>+<kbd>K</kbd></span>
-        <span class="shortcuts-desc" x-text="t('shortcuts.item.findingsNav')"></span>
-      </div>
-      <div class="shortcuts-row">
-        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.enter')"></kbd> / <kbd x-text="t('shortcuts.key.shift')"></kbd>+<kbd x-text="t('shortcuts.key.enter')"></kbd></span>
-        <span class="shortcuts-desc" x-text="t('shortcuts.item.findNext')"></span>
-      </div>
-    </div>
-
-    <div class="shortcuts-section">
-      <div class="card-section-title" x-text="t('shortcuts.section.organizer')"></div>
-      <div class="shortcuts-row">
-        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.tab')"></kbd> / <kbd x-text="t('shortcuts.key.shift')"></kbd>+<kbd x-text="t('shortcuts.key.tab')"></kbd></span>
-        <span class="shortcuts-desc" x-text="t('shortcuts.item.organizerIndent')"></span>
-      </div>
-      <div class="shortcuts-row">
-        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.cmdCtrl')"></kbd>+<kbd>Z</kbd></span>
-        <span class="shortcuts-desc" x-text="t('shortcuts.item.undo')"></span>
-      </div>
-      <div class="shortcuts-row">
-        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.cmdCtrl')"></kbd>+<kbd x-text="t('shortcuts.key.shift')"></kbd>+<kbd>Z</kbd> / <kbd x-text="t('shortcuts.key.cmdCtrl')"></kbd>+<kbd>Y</kbd></span>
-        <span class="shortcuts-desc" x-text="t('shortcuts.item.redo')"></span>
-      </div>
-    </div>
-
-    <div class="shortcuts-section">
-      <div class="card-section-title" x-text="t('shortcuts.section.mindmap')"></div>
-      <div class="shortcuts-row">
-        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.arrows')"></kbd> <kbd x-text="t('shortcuts.key.arrowsLR')"></kbd></span>
-        <span class="shortcuts-desc" x-text="t('shortcuts.item.mindmapNav')"></span>
-      </div>
-      <div class="shortcuts-row">
-        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.tab')"></kbd></span>
-        <span class="shortcuts-desc" x-text="t('shortcuts.item.mindmapAddChild')"></span>
-      </div>
-      <div class="shortcuts-row">
-        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.enter')"></kbd></span>
-        <span class="shortcuts-desc" x-text="t('shortcuts.item.mindmapAddSibling')"></span>
-      </div>
-      <div class="shortcuts-row">
-        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.f2')"></kbd></span>
-        <span class="shortcuts-desc" x-text="t('shortcuts.item.mindmapRename')"></span>
-      </div>
-      <div class="shortcuts-row">
-        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.del')"></kbd></span>
-        <span class="shortcuts-desc" x-text="t('shortcuts.item.mindmapDelete')"></span>
-      </div>
-      <div class="shortcuts-row">
-        <span class="shortcuts-keys"><kbd x-text="t('shortcuts.key.rightClick')"></kbd></span>
-        <span class="shortcuts-desc" x-text="t('shortcuts.item.mindmapMenu')"></span>
-      </div>
-    </div>
+    <div id="partial-shortcuts-more"></div>
 
   <div class="shortcuts-footer" x-text="t('shortcuts.footer')"></div>
 </dialog>

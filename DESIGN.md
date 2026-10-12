@@ -2472,7 +2472,7 @@ Hat eine Aktion ein Tastenkürzel, nennt ihr Tooltip es mit: `Bearbeiten (⌘E)`
 
 **SSoT der IDs + Formatierung:** [public/js/hotkeys.js](public/js/hotkeys.js) (`HOTKEYS`). Plattform-Weiche über `$store.shell.isMac`: Mac zeigt Modifier-Glyphen in der dortigen Reihenfolge ⌃⌥⇧⌘ direkt am Key (`⌘⇧E`), sonst lokalisierte Namen mit `+` (`Strg+Shift+E`).
 
-Die Tabelle listet **nur Kürzel, die an einem Element hängen** — die vollständige Dokumentation ist das Kürzel-Overlay ([partials/shortcuts.html](public/partials/shortcuts.html), `?`). Neues Kürzel an einem Icon: Eintrag in `HOTKEYS` **und** Zeile im Overlay; beides gegated durch [tests/unit/hotkey-tips.test.mjs](tests/unit/hotkey-tips.test.mjs) (Kürzel identisch in beiden Quellen, keine unbekannte oder unbenutzte ID).
+Die Tabelle listet **nur Kürzel, die an einem Element hängen** — die vollständige Dokumentation ist das Kürzel-Overlay ([partials/shortcuts.html](public/partials/shortcuts.html) mit dem nachgeladenen zweiten Teil [shortcuts-more.html](public/partials/shortcuts-more.html), `?`). Neues Kürzel an einem Icon: Eintrag in `HOTKEYS` **und** Zeile im Overlay; beides gegated durch [tests/unit/hotkey-tips.test.mjs](tests/unit/hotkey-tips.test.mjs) (Kürzel identisch in beiden Quellen, keine unbekannte oder unbenutzte ID).
 
 ---
 

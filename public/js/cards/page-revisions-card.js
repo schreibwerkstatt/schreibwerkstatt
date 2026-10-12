@@ -308,6 +308,17 @@ export function registerPageRevisionsCard() {
       if (this.viewerRev) await this.restore(this.viewerRev);
     },
 
+    // Cmd/Ctrl+Enter bei offener Ansicht: wiederherstellen und das Event hier
+    // beenden. Window-Capture, damit der Body-Listener für Ctrl+Enter
+    // (Lektorat starten) es nicht zusätzlich bekommt. Bei geschlossener
+    // Ansicht bleibt das Event unberührt.
+    onViewerRestoreKey(event) {
+      if (!this.viewerOpen || !(event.metaKey || event.ctrlKey)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.restoreFromViewer();
+    },
+
     // Vorgaengerin einer beliebigen Listen-Revision. Liste DESC sortiert
     // (juengste zuerst) → der "Stand davor" ist der naechstaeltere = idx+1.
     _prevRevFor(rev) {

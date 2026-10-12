@@ -98,6 +98,21 @@ export const shortcutsMethods = {
     return this._focusInputEl(document.querySelector('.page-search'));
   },
 
+  // Ctrl/Cmd+Shift+F: offene Volltextsuche bleibt offen (Toggle würde sie
+  // schliessen), dann Eingabe fokussieren, sobald sie sichtbar ist — beim
+  // ersten Öffnen steht sie nach Partial-Load + Karten-Transition erst einige
+  // Frames später; ein unsichtbares Feld nimmt keinen Fokus an.
+  async _openSearchFocused() {
+    if (!this.showSearchCard) await this.toggleSearchCard?.();
+    const until = performance.now() + 2000;
+    const tryFocus = () => {
+      const el = document.querySelector('.search-q');
+      if (el && el.offsetParent) { this._focusInputEl(el); return; }
+      if (performance.now() < until) requestAnimationFrame(tryFocus);
+    };
+    requestAnimationFrame(tryFocus);
+  },
+
   // Pages aus filteredTree als flache, navigierbare Liste – Reihenfolge wie
   // sichtbar. Jedes Tree-Item ist ein Kapitel; Solo-Seiten stecken als
   // Pseudo-Kapitel mit einer Seite darin (tree/build.js).
@@ -191,6 +206,15 @@ export const shortcutsMethods = {
       if (!this.editMode || this.focusActive || !this.$store.stt.enabled) return;
       event.preventDefault();
       this.toggleSttDictation?.();
+      return;
+    }
+    if (event.shiftKey && key === 'f') {
+      // Volltextsuche öffnen + Eingabe fokussieren. Nicht aus einem Editor
+      // heraus: die Karte ist exklusiv und schlösse ihn mitten im Schreiben.
+      if (this.editMode || this.focusActive || this.showBookEditorCard) return;
+      if (!this.$store.nav.selectedBookId) return;
+      event.preventDefault();
+      this._openSearchFocused();
       return;
     }
     if (event.shiftKey) return;

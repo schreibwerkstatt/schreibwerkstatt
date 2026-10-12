@@ -85,8 +85,7 @@
           @keydown.escape="closeViewer()"
           @keydown.left.prevent="hasPrevRev() && gotoRev('prev')"
           @keydown.right.prevent="hasNextRev() && gotoRev('next')"
-          @keydown.window.meta.enter.prevent="viewerOpen && restoreFromViewer()"
-          @keydown.window.ctrl.enter.prevent="viewerOpen && restoreFromViewer()">
+          @keydown.window.capture.enter="onViewerRestoreKey($event)">
     <template x-if="viewerOpen && viewerRev">
       <div class="revision-viewer__inner">
         <header class="revision-viewer__head">

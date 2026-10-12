@@ -34,7 +34,8 @@ export function registerEditorFindCard() {
       // Suche triggern (Event an die Sub), sonst Browser-Suche.
       // Bewusst im Sub statt auf dem Body-Keydown: hält die Logik beim Feature.
       window.addEventListener('keydown', (event) => {
-        const isFind = (event.metaKey || event.ctrlKey) && !event.altKey && (event.key === 'f' || event.key === 'F');
+        // Ohne Shift: Ctrl/Cmd+Shift+F ist die Volltextsuche (editor/shortcuts.js).
+        const isFind = (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && (event.key === 'f' || event.key === 'F');
         if (!isFind) return;
         const app = window.__app;
         if (!app) return;

@@ -1,11 +1,13 @@
 @layer components {
 /* === Geteilter Tooltip-Layer für [data-tip] ===
-   Ein einziges Element pro Seite, von public/js/tooltip.js positioniert. */
+   Ein einziges Element pro Seite, von public/js/tooltip.js positioniert.
+   Liegt über --z-toolbar: auslösende Knöpfe sitzen auch in der Vollbild-Karte
+   (--z-overlay) und in nach <body> teleportierten Editor-Leisten. */
 .tip-layer {
   position: fixed;
   top: 0;
   left: 0;
-  z-index: var(--z-popover);
+  z-index: var(--z-tooltip);
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.08s ease;

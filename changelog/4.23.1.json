@@ -1,0 +1,26 @@
+{
+  "version": "4.23.1",
+  "date": "2026-10-12",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Strg+Shift+F (am Mac ⌘⇧F) öffnet die Volltextsuche im Buch und setzt den Cursor gleich ins Suchfeld. Aus einem offenen Editor heraus greift das Kürzel nicht, damit nichts mitten im Schreiben schliesst.",
+      "en": "Ctrl+Shift+F (⌘⇧F on Mac) opens the book's full-text search with the cursor already in the search field. It does nothing while an editor is open, so nothing closes mid-sentence."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Die Tastenkürzel-Übersicht (Taste ?) ist jetzt vollständig, mit neuen Bereichen für Bucheditor, Vorlesen und Fassungen sowie Werkstätten und Chats. Bei jedem Kürzel steht, in welchem Editor es gilt.",
+      "en": "The keyboard shortcut overview (? key) is now complete, with new sections for the book editor, read-aloud and versions, and workshops and chats. Each shortcut says which editor it applies to."
+    },
+    {
+      "kind": "behoben",
+      "de": "Tooltips an Knöpfen in einer Karte im Vollbild und in den Editor-Leisten waren verdeckt. Sie erscheinen jetzt wieder vorne.",
+      "en": "Tooltips on buttons in a full-screen card and in the editor toolbars were hidden. They now show in front again."
+    },
+    {
+      "kind": "behoben",
+      "de": "Abschnittsverlauf: Strg+Enter in der Fassungsansicht stellte die Fassung wieder her und startete zusätzlich ein Lektorat. Jetzt wird nur noch wiederhergestellt.",
+      "en": "Section history: Ctrl+Enter in the version view restored the version and also started a proofreading run. It now only restores."
+    }
+  ]
+}

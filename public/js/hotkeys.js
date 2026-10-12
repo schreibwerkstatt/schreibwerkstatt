@@ -1,6 +1,6 @@
 // SSoT der Tastenkürzel-Hinweise IM TOOLTIP eines Action-Icons ("Fett (⌘B)").
 //
-// Das Kürzel-Overlay ([partials/shortcuts.html](../partials/shortcuts.html), `?`)
+// Das Kürzel-Overlay ([partials/shortcuts.html](../partials/shortcuts.html) + shortcuts-more.html, `?`)
 // dokumentiert alle Kürzel vollständig; hier stehen nur die, die zusätzlich an
 // einem Icon hängen — der Hinweis soll neben der Aktion stehen, statt im Overlay
 // gesucht werden zu müssen. Kürzel ohne Icon (F9-Chef-Taste, Tab-Einrückung im
