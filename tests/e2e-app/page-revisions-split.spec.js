@@ -8,7 +8,7 @@
 // Direktive und Seitenbaum sieht nur die gebootete App.
 
 const { test, expect } = require('../e2e/_helpers/fixtures');
-const { bootApp, selectSeededBook } = require('./_helpers/app');
+const { bootApp, selectSeededBook, focusUntilItSticks } = require('./_helpers/app');
 
 test('Split-Revision: Badge + Verweis auf die andere Hälfte, Klick springt dorthin', async ({ page }) => {
   await bootApp(page);
@@ -78,12 +78,9 @@ test('Split-Revision: Enter auf dem Verweis springt, öffnet keine Revisionsansi
   const ref = page.locator('.page-revisions-list .revision-split .entity-ref');
   // x-entity-ref löst den Namen asynchron auf; bis dahin ist der Knopf disabled
   // und nimmt weder Fokus noch Enter. Der Editor kann den Fokus nach dem
-  // Seitenwechsel noch einmal an sich ziehen — darum fokussieren, bis er sitzt.
+  // Seitenwechsel noch einmal an sich ziehen — darum nachfassen, bis er sitzt.
   await expect(ref).toBeEnabled();
-  await expect(async () => {
-    await ref.focus();
-    await expect(ref).toBeFocused({ timeout: 500 });
-  }).toPass({ timeout: 10000 });
+  await focusUntilItSticks(ref);
   await page.keyboard.press('Enter');
   await expect.poll(() => page.evaluate(() => window.__app.currentPage?.id)).toBe(other);
   expect(await page.evaluate(() => window.__viewerOpened)).toBe(0);

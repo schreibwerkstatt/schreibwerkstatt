@@ -4,6 +4,8 @@
 // internen Root-/Store-Details (window.__app, Alpine.store('nav')), die sich beim
 // Refactoring verschieben — dann bricht eine Stelle, nicht jede Spec.
 
+const { expect } = require('@playwright/test');
+
 // App-Boot abwarten: Alpine-Root in window.__app verfuegbar + Buecher geladen.
 async function bootApp(page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -65,4 +67,18 @@ async function selectSeededBook(page) {
   return bookId;
 }
 
-module.exports = { bootApp, waitBooted, reboot, selectSeededBook };
+// Fokus setzen und NACHFASSEN, bis er wirklich sitzt. `locator.focus()` ist ein
+// einmaliger Aufruf ohne Wartebedingung: der Editor zieht den Fokus nach dem
+// Seitenwechsel/Kartenwechsel gelegentlich noch an sich, und Alpine ersetzt
+// `x-for`-Zeilen beim Filterwechsel. Der folgende Tastendruck geht dann ins
+// Leere — je nach Maschinenlast trifft das lokal nie und in CI dreimal
+// hintereinander (kontinuitaet-card, 2026-10-12/13). Wer per Tastatur prüft,
+// fasst hiermit nach, statt auf `toBeFocused` zu vertrauen.
+async function focusUntilItSticks(locator, { timeout = 10000 } = {}) {
+  await expect(async () => {
+    await locator.focus();
+    await expect(locator).toBeFocused({ timeout: 500 });
+  }).toPass({ timeout });
+}
+
+module.exports = { bootApp, waitBooted, reboot, selectSeededBook, focusUntilItSticks };

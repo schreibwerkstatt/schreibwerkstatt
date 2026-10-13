@@ -11,7 +11,7 @@
 
 const { test, expect } = require('@playwright/test');
 const { attachConsoleGuard } = require('../e2e/_helpers/console-guard');
-const { bootApp, selectSeededBook } = require('./_helpers/app');
+const { bootApp, selectSeededBook, focusUntilItSticks } = require('./_helpers/app');
 
 test.describe.configure({ mode: 'serial' });
 
@@ -91,10 +91,12 @@ test('Kontinuität: Zusammenfassung, Zähler, Filter, Detail, Quelle', async ({ 
   await card.locator('.kontinuitaet-nomatch button').click();
   await expect(rows).toHaveCount(3);
 
-  // Tastatur: Enter auf der Zeile klappt auf.
+  // Tastatur: Enter auf der Zeile klappt auf. Nach dem Filter-Reset zieht der
+  // Editor den Fokus gelegentlich noch an sich — darum nachfassen, bis er sitzt
+  // (_helpers/app.js#focusUntilItSticks).
   const first = rows.first();
   await expect(first).toHaveAttribute('aria-expanded', 'false');
-  await first.focus();
+  await focusUntilItSticks(first);
   await page.keyboard.press('Enter');
   await expect(first).toHaveAttribute('aria-expanded', 'true');
   const detail1 = card.locator('.entity-detail').first();
@@ -109,7 +111,7 @@ test('Kontinuität: Zusammenfassung, Zähler, Filter, Detail, Quelle', async ({ 
   const second = rows.nth(1);
   await expect(second.locator('.kontinuitaet-approx').first()).toBeVisible();
   await expect(first.locator('.kontinuitaet-approx').first()).toBeHidden();
-  await second.focus();
+  await focusUntilItSticks(second);
   await page.keyboard.press('Space');
   await expect(second).toHaveAttribute('aria-expanded', 'true');
   await expect(card.locator('.entity-detail').nth(1).locator('.kontinuitaet-quelle a')).toHaveAttribute('href', 'https://example.org/beleg');
