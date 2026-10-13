@@ -3,7 +3,7 @@ import { lsGet } from '../../safe-storage.js';
 import { fetchJson } from '../../utils.js';
 import { SHELL_PROTOCOL } from '../../shell-protocol.js';
 import {
-  AUTO_APPLY_TICK_MS, BOOT_STALE_WINDOW_MS, isBusy, shouldAutoApply, isUpdateRequired, shouldForceUpdate,
+  AUTO_APPLY_TICK_MS, BOOT_STALE_WINDOW_MS, isBusy, shouldAutoApply, shouldHealSkew, isUpdateRequired, shouldForceUpdate,
 } from './update-policy.js';
 import { createBusyLock, activateIfNobodyBusy } from './busy-lock.js';
 
@@ -71,15 +71,30 @@ export function registerServiceWorker() {
       // würde die Seite direkt nach dem ersten Laden nochmal reloaden.
       const hadController = !!navigator.serviceWorker.controller;
       let reloaded = false;
+      // Skew-Marke: der neue SW kontrolliert dieses Dokument, die geladenen
+      // Module sind aber noch die der alten Generation (public/sw.js#activate
+      // macht bewusst kein clients.claim — der Wechsel passiert nur per
+      // skip-waiting). Solange die Marke steht, liefert der SW neue Partials
+      // gegen alte Cards → ReferenceError auf jedem erst jetzt genutzten
+      // Feld. `healSkew` räumt das nach, sobald das gefahrlos geht; das Banner
+      // bleibt die Ansage, der Poll die Tat.
+      let skewed = false;
+      const healSkew = () => {
+        if (!shouldHealSkew({ skewed, reloaded, busy: isBusy(window.__app), online: navigator.onLine })) return;
+        reloaded = true;
+        location.reload();
+      };
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (!hadController) return;
         if (reloaded) return;
-        reloaded = true;
         const app = window.__app;
         // Niemals auto-reloaden, wenn der User aktiv editiert oder im
-        // Fokusmodus liest/schreibt (update-policy.js#isBusy).
+        // Fokusmodus liest/schreibt (update-policy.js#isBusy). Der Tab ist
+        // damit aber schief — `healSkew` holt den Reload nach, sobald das
+        // Editieren endet.
         if (isBusy(app)) {
           app.$store.shell.updateAvailable = true;
+          skewed = true;
           return;
         }
         // Offline nicht reloaden: der frisch aktivierte SW hat die alte
@@ -87,11 +102,13 @@ export function registerServiceWorker() {
         // liegt (iOS evictiert Einzeleinträge), weiss hier niemand. Fehlt
         // offline auch nur ein Modul, bootet Alpine nicht und der Body bleibt
         // hinter dem data-app-loading-Gate unsichtbar (schwarz). Die laufende
-        // Seite dagegen funktioniert. Stattdessen Banner; Reload kommt beim
-        // nächsten Online-Wechsel.
+        // Seite dagegen funktioniert. Stattdessen Banner; der Reload kommt beim
+        // nächsten Online-Wechsel — und auch dann erst, wenn nicht mehr
+        // editiert wird (nicht blind reloaden, während getippt wird).
         if (!navigator.onLine) {
           if (app) app.$store.shell.updateAvailable = true;
-          window.addEventListener('online', () => location.reload(), { once: true });
+          skewed = true;
+          window.addEventListener('online', healSkew, { once: true });
           return;
         }
         location.reload();
@@ -102,7 +119,9 @@ export function registerServiceWorker() {
       // bei jeder Eingabe (markInput unten) — sonst könnte ein anderer Tab in
       // der Lücke zwischen erstem Tastendruck und nächstem Tick aktivieren.
       const busyLock = createBusyLock({ isBusy: () => isBusy(window.__app) });
-      setInterval(busyLock.sync, 1000);
+      // Der Takt prüft beides: den Lock nachziehen und einen schiefen Tab
+      // heilen, sobald das Editieren endet (siehe `healSkew` oben).
+      setInterval(() => { busyLock.sync(); healSkew(); }, 1000);
 
       // Den wartenden SW aktivieren — aber nur, wenn in KEINEM Tab editiert
       // wird: skip-waiting wechselt die Generation für alle Tabs der Origin.

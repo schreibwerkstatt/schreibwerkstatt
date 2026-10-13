@@ -3,25 +3,31 @@
      Auswahl. Dort, wo man am Text arbeitet, statt nur per Rechtsklick im Baum.
      Klick auf die aktive Stufe nimmt sie zurück (wie im Baum-Menü). Ohne
      Schreibrecht bleibt die Plakette eine reine Anzeige.
-     Scope: Root. Methoden in book/tree/edit-status.js. -->
+     Scope: Root. Methoden in book/tree/edit-status.js.
+
+     `currentPage?.id` durchgehend, auch obwohl das x-if currentPage prüft:
+     Alpine wertet das x-if asynchron aus, zwischen Prüfung und Effekt der
+     inneren Bindings kann currentPage schon null sein (Buch-/Seitenwechsel
+     setzt zurück) — ohne `?.` warf die Plakette dann
+     "Cannot read properties of null (reading 'id')". -->
 <template x-if="currentPage && $store.badges.editStatusChain.length > 0">
   <span x-data="menu()" class="editor-edit-status">
     <button type="button" class="badge editor-edit-status__trigger"
-            :class="editStatusBadgeClass(pageEditStatus(currentPage.id))"
+            :class="editStatusBadgeClass(pageEditStatus(currentPage?.id))"
             x-bind="trigger"
             aria-haspopup="menu"
             :disabled="!canEdit()"
-            :data-tip="editStatusTipLine(pageEditStatus(currentPage.id)) || t('editStatus.setHint')"
-            :aria-label="t('editStatus.label') + ': ' + editStatusLabel(pageEditStatus(currentPage.id)?.status)"
-            x-text="editStatusLabel(pageEditStatus(currentPage.id)?.status)"></button>
+            :data-tip="editStatusTipLine(pageEditStatus(currentPage?.id)) || t('editStatus.setHint')"
+            :aria-label="t('editStatus.label') + ': ' + editStatusLabel(pageEditStatus(currentPage?.id)?.status)"
+            x-text="editStatusLabel(pageEditStatus(currentPage?.id)?.status)"></button>
     <div class="context-menu context-menu--dropdown editor-edit-status__menu" x-bind="panel" x-cloak>
       <div class="context-menu-header" x-text="t('editStatus.label')"></div>
       <template x-for="st in $store.badges.editStatusChain" :key="st">
         <button type="button" class="context-menu-item context-menu-item--icon" role="menuitemradio"
-                :class="{ 'context-menu-item--on': pageEditStatus(currentPage.id)?.status === st }"
-                :aria-checked="pageEditStatus(currentPage.id)?.status === st"
-                @click="setPageEditStatus(currentPage.id, pageEditStatus(currentPage.id)?.status === st ? null : st)">
-          <svg class="icon" aria-hidden="true"><use :href="pageEditStatus(currentPage.id)?.status === st ? '/icons.svg#check' : '/icons.svg#circle'"/></svg>
+                :class="{ 'context-menu-item--on': pageEditStatus(currentPage?.id)?.status === st }"
+                :aria-checked="pageEditStatus(currentPage?.id)?.status === st"
+                @click="setPageEditStatus(currentPage?.id, pageEditStatus(currentPage?.id)?.status === st ? null : st)">
+          <svg class="icon" aria-hidden="true"><use :href="pageEditStatus(currentPage?.id)?.status === st ? '/icons.svg#check' : '/icons.svg#circle'"/></svg>
           <span x-text="editStatusLabel(st)"></span>
         </button>
       </template>

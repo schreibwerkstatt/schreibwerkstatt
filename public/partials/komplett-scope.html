@@ -49,8 +49,8 @@
           <template x-for="f in (komplettDelta.affectedFigures?.list || [])" :key="f.id">
             <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: f.id, name: f.name, static: true }"></button>
           </template>
-          <span class="komplett-delta-muted" x-show="komplettDelta.affectedFigures.count > komplettDelta.affectedFigures.list.length"
-                x-text="'+' + (komplettDelta.affectedFigures.count - komplettDelta.affectedFigures.list.length)"></span>
+          <span class="komplett-delta-muted" x-show="komplettDelta.affectedFigures?.count > (komplettDelta.affectedFigures?.list?.length || 0)"
+                x-text="'+' + (komplettDelta.affectedFigures?.count - (komplettDelta.affectedFigures?.list?.length || 0))"></span>
         </div>
         <p class="card-hint" x-show="komplettDelta.approx" x-text="t('komplett.delta.approx')"></p>
         <p class="card-hint" x-show="komplettDeltaLevel() === 'optional' || komplettDeltaLevel() === 'low'"

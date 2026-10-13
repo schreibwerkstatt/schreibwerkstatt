@@ -1,0 +1,21 @@
+{
+  "version": "4.24.3",
+  "date": "2026-10-13",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Nach einem Update konnte die Seite halb stehen bleiben: einzelne Stellen fehlten, bis neu geladen wurde. Jetzt lädt sie sich von selbst, sobald du nicht mehr am Text bist.",
+      "en": "After an update the page could stay half-broken: some parts were missing until a reload. It now reloads by itself as soon as you step away from the text."
+    },
+    {
+      "kind": "behoben",
+      "de": "Bearbeitungsstand über dem offenen Abschnitt: die Plakette verschwand beim Wechsel zwischen Buch und Abschnitt. Sie bleibt jetzt stehen.",
+      "en": "Editing status above the open section: the badge disappeared when switching between book and section. It now stays."
+    },
+    {
+      "kind": "behoben",
+      "de": "Komplettanalyse: der Zusatz, wie viele Figuren über die genannten hinaus betroffen sind, fehlte manchmal ganz.",
+      "en": "Full analysis: the note on how many characters are affected beyond the ones listed was sometimes missing entirely."
+    }
+  ]
+}

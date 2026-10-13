@@ -18,6 +18,9 @@
 // Wer editiert (Edit-/Fokusmodus, ungespeicherte Änderungen, auch im
 // Bucheditor), bekommt das Banner — und zwar in JEDEM Tab: skip-waiting wirkt
 // origin-weit, die Sperre über alle Tabs liegt in busy-lock.js.
+// Wechselt die Generation trotzdem, während dieser Tab editiert, ist er
+// ab da schief (neue Partials gegen alte Module) und wird nachgeräumt, sobald
+// das Editieren endet — `shouldHealSkew` unten.
 // Ein Pflicht-Update (shell-protocol.js) wartet nur noch auf ungespeicherte
 // Änderungen, nicht mehr auf den Edit- oder Fokusmodus selbst.
 
@@ -61,4 +64,17 @@ export function isUpdateRequired(serverProtocol, clientProtocol) {
 
 export function shouldForceUpdate({ dirty, online }) {
   return !dirty && !!online;
+}
+
+// Skew-Heilung. Nach einem `controllerchange` ohne Reload (Tab war busy oder
+// offline) kontrolliert der NEUE Service Worker ein Dokument, dessen Module
+// noch ALTE sind: jeder ab da lazy nachgeladene Partial wird gegen die alte
+// Card ausgewertet und wirft `ReferenceError` auf Felder, die erst der neue
+// Build kennt (`splitLink`, `bubbleMsgUnwrapOk` …). Das Banner allein heilt
+// nichts — es wartet auf einen Klick, den der User nicht kennt. Stattdessen:
+// den Reload nachholen, sobald er gefahrlos ist, also weder beim Editieren
+// noch offline. `reloaded` sperrt den zweiten Versuch (der Reload ist der Fix;
+// ein weiterer Versuch in derselben Sitzung bräuchte eine neue Generation).
+export function shouldHealSkew({ skewed, reloaded, busy, online }) {
+  return !!skewed && !reloaded && !busy && !!online;
 }

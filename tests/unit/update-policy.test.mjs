@@ -16,11 +16,14 @@
 //      Leerlauf — aber auch er nie beim Editieren.
 //   4. Ein Pflicht-Update hängt nur noch an ungespeicherten Änderungen.
 //   5. Server und Shell lesen den Protokoll-Stand aus DERSELBEN Datei.
+//   6. Ein Tab, der beim Generationswechsel editiert hat, wird nachgeräumt,
+//      sobald das Editieren endet — sonst liefert der neue SW neue Partials
+//      gegen seine alten Module (ReferenceError auf neue Card-Felder).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import {
-  AUTO_APPLY_IDLE_MS, isBusy, shouldAutoApply, isUpdateRequired, shouldForceUpdate,
+  AUTO_APPLY_IDLE_MS, isBusy, shouldAutoApply, shouldHealSkew, isUpdateRequired, shouldForceUpdate,
 } from '../../public/js/app/boot/update-policy.js';
 import { SHELL_PROTOCOL } from '../../public/js/shell-protocol.js';
 
@@ -69,4 +72,12 @@ test('shouldForceUpdate: wartet nur auf ungespeicherte Änderungen', () => {
 test('Server meldet denselben Protokoll-Stand, den die Shell mitträgt', () => {
   const { getShellProtocol } = require('../../lib/version.js');
   assert.equal(getShellProtocol(), SHELL_PROTOCOL);
+});
+
+test('shouldHealSkew: nur ein schiefer Tab, und nie beim Editieren oder offline', () => {
+  assert.equal(shouldHealSkew({ skewed: true, reloaded: false, busy: false, online: true }), true);
+  assert.equal(shouldHealSkew({ skewed: false, reloaded: false, busy: false, online: true }), false);
+  assert.equal(shouldHealSkew({ skewed: true, reloaded: true, busy: false, online: true }), false);
+  assert.equal(shouldHealSkew({ skewed: true, reloaded: false, busy: true, online: true }), false);
+  assert.equal(shouldHealSkew({ skewed: true, reloaded: false, busy: false, online: false }), false);
 });
