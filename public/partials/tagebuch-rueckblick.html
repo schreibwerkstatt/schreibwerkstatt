@@ -1,17 +1,16 @@
 <!-- Tagebuch-Rückblick (nur Buchtyp 'tagebuch') -->
 <!--
   Alpine.data-Sub-Komponente — siehe public/js/cards/tagebuch-rueckblick-card.js.
-  `showTagebuchRueckblickCard` bleibt am Root (Hash-Router + Exklusivität);
-  fachlicher State (Zeitraum/Result/Loading/Progress/Status, PollTimer) lebt in
-  der Sub. KI-Felder via x-text (auto-escaped) — kein x-html-Sink.
+  `showTagebuchRueckblickCard` bleibt am Root (Hash-Router + Exklusivität).
+  Zwei Zustände unter derselben Zeitraum-Leiste: Übersicht (Erstellen-Aufruf +
+  Kalender/Liste früherer Rückblicke) und Rückblick (Lesetext, Tage, Facetten).
+  KI-Felder via x-text (auto-escaped) — kein x-html-Sink ausser dem Job-Status.
 -->
 <div class="card card--tagebuchRueckblick" x-data="tagebuchRueckblickCard" x-show="$app.showTagebuchRueckblickCard" x-cloak>
   <div class="card-header">
     <div class="card-header-titlebar">
       <span class="card-eyebrow" x-text="$app.selectedBookName"></span>
-      <span class="card-title">
-        <span x-text="$app.t('rueckblick.title')"></span><span class="rb-title-period" x-show="viewingZeitraumLabel()" x-cloak x-text="viewingZeitraumLabel()"></span>
-      </span>
+      <span class="card-title" x-text="$app.t('rueckblick.title')"></span>
     </div>
     <div class="card-actions rb-actions">
       <div class="rb-zeitraum">
@@ -19,19 +18,49 @@
              x-modelable="value" x-model="rueckblickZeitraum"
              x-effect="options = availableZeitraeume()"></div>
       </div>
-      <button type="button" class="icon-btn icon-btn--ghost" @click="runTagebuchRueckblick()"
-              :disabled="rueckblickLoading || !rueckblickZeitraum || rueckblickUpToDate()"
-              :data-tip="hasRueckblickResult() ? $app.t('rueckblick.rerun') : $app.t('rueckblick.start')"
-              :aria-label="hasRueckblickResult() ? $app.t('rueckblick.rerun') : $app.t('rueckblick.start')">
-        <span x-show="rueckblickLoading" class="spinner"></span>
-        <svg x-show="!rueckblickLoading" class="icon" aria-hidden="true"><use href="/icons.svg#scroll"/></svg>
-      </button>
-      <button type="button" class="icon-btn icon-btn--ghost" x-show="hasRueckblickResult() || rueckblickEmpty" x-cloak
-              @click="closeRueckblick()"
-              :data-tip="$app.t('rueckblick.close')" :aria-label="$app.t('rueckblick.close')">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
-      </button>
     </div>
+  </div>
+
+  <!-- Zeitraum-Leiste: ‹ Zeitraum ›, Kennzahlen, Aktionen, Aktualität -->
+  <div class="rb-period" x-show="rueckblickZeitraum" x-cloak>
+    <div class="rb-period-row">
+      <div class="rb-period-nav">
+        <button type="button" class="icon-btn icon-btn--ghost" @click="gotoNeighbor(-1)"
+                :disabled="rueckblickLoading || !rbNeighbor(-1)"
+                :data-tip="$app.t('rueckblick.prev')" :aria-label="$app.t('rueckblick.prev')">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-left"/></svg>
+        </button>
+        <h2 class="rb-period-label" x-text="zeitraumLabel(rueckblickZeitraum)"></h2>
+        <button type="button" class="icon-btn icon-btn--ghost" @click="gotoNeighbor(1)"
+                :disabled="rueckblickLoading || !rbNeighbor(1)"
+                :data-tip="$app.t('rueckblick.next')" :aria-label="$app.t('rueckblick.next')">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-right"/></svg>
+        </button>
+      </div>
+      <div class="rb-period-actions">
+        <button type="button" class="btn-compact"
+                x-show="!hasRueckblickResult() && !rueckblickLoading && rbLatestEntry()" x-cloak
+                @click="openRueckblickHistory(rbLatestEntry())" x-text="$app.t('rueckblick.show')"></button>
+        <!-- Gewichtung folgt der Aktualität: Erstellen ist Haupt-CTA ohne Rückblick,
+             Nebenaktion bei aktuellem, normaler Knopf bei veraltetem. -->
+        <button type="button" class="btn-compact"
+                :class="{ primary: !rbLatestEntry(), 'btn-compact--ghost': rueckblickUpToDate() }"
+                @click="runTagebuchRueckblick()" :disabled="!canRunRueckblick()">
+          <span x-show="rueckblickLoading" class="spinner"></span>
+          <span x-text="rbLatestEntry() ? $app.t('rueckblick.rerun') : $app.t('rueckblick.start')"></span>
+        </button>
+        <button type="button" class="icon-btn icon-btn--ghost" x-show="hasRueckblickResult()" x-cloak
+                @click="closeRueckblick()"
+                :data-tip="$app.t('rueckblick.backToOverview')" :aria-label="$app.t('rueckblick.backToOverview')">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+        </button>
+      </div>
+    </div>
+    <p class="card-hint rb-period-meta" x-show="hasRueckblickResult() ? rbViewedMeta() : rbEntryCount()"
+       x-text="hasRueckblickResult() ? rbViewedMeta() : rbCountLabel(rbEntryCount())"></p>
+    <p class="card-hint rb-fresh" x-show="!rueckblickLoading && rbFreshnessHint()" x-cloak
+       :class="{ 'card-hint--warn': ['changed', 'model'].includes(rueckblickFreshness().state) }"
+       x-text="rbFreshnessHint()"></p>
   </div>
 
   <div class="progress-bar-wrap" x-show="rueckblickProgress > 0">
@@ -39,104 +68,88 @@
   </div>
   <div class="card-status" x-html="rueckblickStatus"></div>
 
-  <!-- Neugenerierung gesperrt: Einträge des Zeitraums unverändert seit Generierung -->
-  <div class="rb-uptodate" x-show="rueckblickUpToDate() && !rueckblickLoading" x-cloak>
-    <span x-text="$app.t('rueckblick.upToDate')"></span>
-  </div>
-
   <!-- Leerzustand: keine datierten Einträge im Zeitraum -->
-  <div class="rb-empty" x-show="rueckblickEmpty" x-cloak>
-    <span x-text="$app.t('rueckblick.empty')"></span>
-  </div>
+  <p class="muted-msg rb-empty" x-cloak
+     x-show="rueckblickEmpty || (rbCoverage && rueckblickZeitraum && !rbEntryCount() && !rbLatestEntry())"
+     x-text="$app.t('rueckblick.empty')"></p>
 
-  <!-- Ergebnis: editorial — Reflexion zuerst, Stichwort-Facetten, Tage als Akzent-Liste -->
-  <div class="rb-result" x-show="hasRueckblickResult()" x-cloak>
-    <!-- Zusammenfassung als ruhiger Lesetext -->
+  <!-- Rückblick: Betrachtung zuerst, dann die Tage, dann worüber/wer/wo -->
+  <article class="rb-result" x-show="hasRueckblickResult()" x-cloak>
     <div class="rb-essay">
       <template x-for="(para, i) in rueckblickParagraphs()" :key="i">
         <p x-text="para"></p>
       </template>
     </div>
 
-    <!-- Facetten: worüber / wer / wo — sortierte Chips (häufigste zuerst), Zähler
-         nur bei Wiederholung. Klick → Belegtage in der Inline-Leiste unten. -->
-    <div class="rb-facets"
-         x-show="rueckblickResult?.themen?.length || rueckblickResult?.personen?.length || rueckblickResult?.orte?.length">
-      <div class="rb-facet" x-show="rueckblickResult?.themen?.length">
-        <span class="rb-facet-label" x-text="$app.t('rueckblick.facet.worueber')"></span>
-        <span class="rb-facet-chips">
-          <template x-for="(t, i) in rbThemen()" :key="i">
-            <button type="button" class="rb-chip" :class="{ 'rb-chip--active': rbBeleg.key === 'themen:'+t.label }"
-                    @click="toggleBeleg('themen:'+t.label, t.label, t.belege)"
-                    :data-tip="$app.t('rueckblick.showReferences')">
-              <span x-text="t.label"></span>
-              <span class="rb-chip-count" x-show="t.haeufigkeit > 1" x-text="t.haeufigkeit"></span>
-            </button>
-          </template>
-        </span>
-      </div>
-      <div class="rb-facet" x-show="rueckblickResult?.personen?.length">
-        <span class="rb-facet-label" x-text="$app.t('rueckblick.facet.wer')"></span>
-        <span class="rb-facet-chips">
-          <template x-for="(p, i) in rbPersonen()" :key="i">
-            <button type="button" class="rb-chip" :class="{ 'rb-chip--active': rbBeleg.key === 'personen:'+p.name }"
-                    @click="toggleBeleg('personen:'+p.name, p.name, p.belege)"
-                    :data-tip="$app.t('rueckblick.showReferences')">
-              <span x-text="p.name"></span>
-              <span class="rb-chip-count" x-show="p.haeufigkeit > 1" x-text="p.haeufigkeit"></span>
-            </button>
-          </template>
-        </span>
-      </div>
-      <div class="rb-facet" x-show="rueckblickResult?.orte?.length">
-        <span class="rb-facet-label" x-text="$app.t('rueckblick.facet.wo')"></span>
-        <span class="rb-facet-chips">
-          <template x-for="(o, i) in rbOrte()" :key="i">
-            <button type="button" class="rb-chip" :class="{ 'rb-chip--active': rbBeleg.key === 'orte:'+o.name }"
-                    @click="toggleBeleg('orte:'+o.name, o.name, o.belege)"
-                    :data-tip="$app.t('rueckblick.showReferences')">
-              <span x-text="o.name"></span>
-              <span class="rb-chip-count" x-show="o.haeufigkeit > 1" x-text="o.haeufigkeit"></span>
-            </button>
-          </template>
-        </span>
-      </div>
-
-      <!-- Belegtage des aktiven Stichworts (inline, keine Fehlplatzierung) -->
-      <div class="rb-belege-strip" x-show="rbBeleg.key" x-cloak>
-        <span class="rb-belege-strip-label" x-text="rbBeleg.label"></span>
-        <span class="rb-belege-strip-days">
-          <template x-for="(d, i) in rbBeleg.belege" :key="i">
-            <button type="button" class="rb-belege-day" @click="gotoBelegTag(d)" x-text="belegLabel(d)"></button>
-          </template>
-          <span class="rb-belege-strip-empty" x-show="!rbBeleg.belege.length" x-text="$app.t('rueckblick.belegeEmpty')"></span>
-        </span>
-      </div>
-    </div>
-
-    <!-- Bemerkenswerte Tage als Akzent-Liste -->
-    <div class="rb-days" x-show="rueckblickResult?.bemerkenswerteTage?.length">
-      <div class="history-heading" x-text="$app.t('rueckblick.tage')"></div>
-      <ul class="rb-tage">
+    <section class="rb-days" x-show="rueckblickResult?.bemerkenswerteTage?.length">
+      <h3 class="card-section-title" x-text="$app.t('rueckblick.tage')"></h3>
+      <ol class="rb-tage">
         <template x-for="(tag, i) in (rueckblickResult?.bemerkenswerteTage || [])" :key="i">
           <li class="rb-tag-item">
             <button type="button" class="rb-tag-datum" @click="gotoRueckblickTag(tag.datum)"
-                    x-text="belegLabel(tag.datum)"></button>
+                    :disabled="!canGotoTag(tag.datum)" x-text="belegLabel(tag.datum)"></button>
             <span class="rb-tag-text" x-text="tag.begruendung"></span>
           </li>
         </template>
-      </ul>
-    </div>
-  </div>
+      </ol>
+    </section>
 
-  <!-- History: früher generierte Rückblicke (re-öffenbar) — Kalender (default)
-       oder Liste. Kalender zeigt das Jahr×Monat-Raster der gespeicherten
-       Rückblicke; Liste bleibt als durchsuchbarer Zusatz. -->
-  <div x-show="rueckblickHistory.length > 0"
-       class="card-history-section"
-       :class="{ 'card-history-section--borderless': !hasRueckblickResult() && !rueckblickEmpty }">
-    <div class="rb-history-head">
-      <div class="history-heading" x-text="$app.t('rueckblick.history')"></div>
+    <!-- Facetten: sortierte Chips (häufigste zuerst). Klick → Belegleiste. -->
+    <section class="rb-facets"
+             x-show="rueckblickResult?.themen?.length || rueckblickResult?.personen?.length || rueckblickResult?.orte?.length">
+      <template x-for="facet in [
+          { key: 'themen', label: 'rueckblick.facet.worueber', items: rbThemen(), name: 'label' },
+          { key: 'personen', label: 'rueckblick.facet.wer', items: rbPersonen(), name: 'name' },
+          { key: 'orte', label: 'rueckblick.facet.wo', items: rbOrte(), name: 'name' } ]" :key="facet.key">
+        <div class="rb-facet" x-show="facet.items.length">
+          <span class="rb-facet-label" x-text="$app.t(facet.label)"></span>
+          <span class="rb-facet-chips">
+            <template x-for="(it, i) in facet.items" :key="i">
+              <button type="button" class="rb-chip" :class="{ 'rb-chip--active': rbBeleg.key === facet.key + ':' + it[facet.name] }"
+                      @click="toggleBeleg(facet.key + ':' + it[facet.name], it[facet.name], it.belege)"
+                      :aria-pressed="rbBeleg.key === facet.key + ':' + it[facet.name]"
+                      :data-tip="$app.t('rueckblick.showReferences')">
+                <span x-text="it[facet.name]"></span>
+                <span class="rb-chip-count" x-show="it.haeufigkeit > 1" x-text="it.haeufigkeit"></span>
+              </button>
+            </template>
+          </span>
+        </div>
+      </template>
+
+      <!-- Belege des aktiven Stichworts: Zeitleiste über den Zeitraum + Tage -->
+      <div class="rb-belege-strip" x-show="rbBeleg.key" x-cloak>
+        <div class="rb-belege-head">
+          <span class="rb-belege-strip-label" x-text="rbBeleg.label"></span>
+          <template x-if="rbBelegRef()">
+            <button type="button" class="entity-ref" x-entity-ref="rbBelegRef()"></button>
+          </template>
+          <span class="card-hint" x-text="rbCountLabel(rbBeleg.belege.length)"></span>
+        </div>
+        <div class="rb-timeline" aria-hidden="true" x-show="rbTimeline().length">
+          <template x-for="tk in rbTimeline()" :key="tk.datum">
+            <span class="rb-timeline-tick" :class="{ 'rb-timeline-tick--hit': tk.beleg }"
+                  :style="{ '--pos': tk.pos + '%' }"></span>
+          </template>
+        </div>
+        <div class="rb-timeline-edges" aria-hidden="true" x-show="rbTimeline().length">
+          <span x-text="rbTimelineEdges()[0]"></span><span x-text="rbTimelineEdges()[1]"></span>
+        </div>
+        <div class="rb-belege-strip-days">
+          <template x-for="(d, i) in rbBeleg.belege" :key="i">
+            <button type="button" class="rb-belege-day" @click="gotoBelegTag(d)"
+                    :disabled="!canGotoTag(d)" x-text="belegLabel(d)"></button>
+          </template>
+          <span class="card-hint" x-show="!rbBeleg.belege.length" x-text="$app.t('rueckblick.belegeEmpty')"></span>
+        </div>
+      </div>
+    </section>
+  </article>
+
+  <!-- Übersicht: frühere Rückblicke als Kalender (default) oder Liste -->
+  <section class="rb-overview" x-show="!hasRueckblickResult() && rueckblickHistory.length > 0" x-cloak>
+    <div class="card-section-head">
+      <h3 class="card-section-title" x-text="$app.t('rueckblick.history')"></h3>
       <div class="tabs rb-history-tabs">
         <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': rbHistoryView === 'cal' }"
                 @click="rbHistoryView = 'cal'" x-text="$app.t('rueckblick.viewCalendar')"></button>
@@ -145,9 +158,8 @@
       </div>
     </div>
 
-    <!-- Kalender-Ansicht (Jahr×Monat-Heatmap, siehe components/year-month-heatmap.css).
-         --ymheat-max deckelt die Höhe bei vielen Jahren (dann scrollt das Raster). -->
-    <div class="ymheat rb-ymheat" x-show="rbHistoryView === 'cal'" x-cloak
+    <!-- Kalender (Jahr×Monat aus der Coverage, components/year-month-heatmap.css) -->
+    <div class="ymheat rb-ymheat" x-show="rbHistoryView === 'cal'"
          :style="{ '--ymheat-max': rueckblickCalendar().years.length > 6 ? '70vh' : 'none' }">
       <div class="ymheat-scroll">
         <div class="ymheat-grid">
@@ -160,13 +172,13 @@
           <template x-for="row in rueckblickCalendar().years" :key="row.year">
             <div class="ymheat-row">
               <button type="button" class="ymheat-year"
-                      :class="{ 'ymheat-year--has': row.hasRueckblick, 'ymheat-year--active': row.selected }"
+                      :class="{ 'ymheat-year--has': row.hasRueckblick, 'ymheat-year--active': row.yearKey === rueckblickZeitraum }"
                       :disabled="!row.hasRueckblick && !row.hasEntries"
                       @click="openCalendarYear(row)" :data-tip="rbCalYearTip(row)" :aria-label="rbCalYearTip(row)"
                       x-text="row.year"></button>
               <template x-for="cell in row.months" :key="cell.key">
                 <button type="button" class="ymheat-cell"
-                        :class="'ymheat-cell--lvl' + cell.level + (cell.hasRueckblick ? ' ymheat-cell--has' : '') + (cell.isCurrent ? ' ymheat-cell--current' : '') + (cell.selected ? ' ymheat-cell--active' : '')"
+                        :class="'ymheat-cell--lvl' + cell.level + (cell.hasRueckblick ? ' ymheat-cell--has' : '') + (cell.isCurrent ? ' ymheat-cell--current' : '') + (cell.key === rueckblickZeitraum ? ' ymheat-cell--active' : '')"
                         :disabled="!cell.hasRueckblick && !cell.hasEntries"
                         @click="openCalendarCell(cell)" :data-tip="rbCalCellTip(cell)" :aria-label="rbCalCellTip(cell)"></button>
               </template>
@@ -188,40 +200,38 @@
       </div>
     </div>
 
-    <!-- Listen-Ansicht -->
+    <!-- Liste: jüngste Läufe zuerst, Suche über Zeitraum + Inhalt -->
     <div x-show="rbHistoryView === 'list'" x-cloak>
-      <span class="filter-search-wrap rb-history-search-wrap" x-show="rueckblickHistory.length > 2">
-        <input type="text" class="filter-search-input rb-history-search" x-model="rbHistorySearch"
-               :placeholder="$app.t('rueckblick.historySearch')" :aria-label="$app.t('rueckblick.historySearch')">
-        <button type="button" class="search-clear--icon" x-show="rbHistorySearch" @click="rbHistorySearch=''"
-                :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
-        </button>
-      </span>
+      <div class="filter-bar" x-show="rueckblickHistory.length > 2">
+        <span class="filter-search-wrap rb-history-search-wrap">
+          <input type="text" class="filter-search-input" x-model="rbHistorySearch"
+                 :placeholder="$app.t('rueckblick.historySearch')" :aria-label="$app.t('rueckblick.historySearch')">
+          <button type="button" class="search-clear--icon" x-show="rbHistorySearch" @click="rbHistorySearch=''"
+                  :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+          </button>
+        </span>
+      </div>
       <template x-for="entry in filteredRueckblickHistory()" :key="entry.id">
-        <div>
-          <div class="history-item hover-reveal-host" :class="{ 'history-item--active': selectedRueckblickId === entry.id }"
-               @click="openRueckblickHistory(entry)">
-            <span class="rb-history-zeitraum" x-text="zeitraumLabel(entry.zeitraum)"></span>
-            <span class="history-date" x-text="rueckblickEntryDate(entry.created_at)"></span>
-            <span class="tag" x-show="entry.model" x-text="entry.model"></span>
-            <button type="button" class="history-item-delete hover-reveal" @click.stop="deleteRueckblickHistory(entry.id)"
-                    :data-tip="$app.t('common.deleteEntry')" :aria-label="$app.t('common.deleteEntry')">
-              <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
-            </button>
-          </div>
+        <div class="history-item hover-reveal-host" :class="{ 'history-item--active': selectedRueckblickId === entry.id }"
+             @click="openRueckblickHistory(entry)">
+          <span class="rb-history-zeitraum" x-text="zeitraumLabel(entry.zeitraum)"></span>
+          <span class="history-date" x-text="rueckblickEntryDate(entry.created_at)"></span>
+          <span class="history-date" x-show="entry.entry_count" x-text="rbCountLabel(entry.entry_count)"></span>
+          <span class="tag" x-show="entry.model" x-text="entry.model"></span>
+          <button type="button" class="history-item-delete hover-reveal" @click.stop="deleteRueckblickHistory(entry.id)"
+                  :data-tip="$app.t('common.deleteEntry')" :aria-label="$app.t('common.deleteEntry')">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+          </button>
         </div>
       </template>
-      <div class="rb-empty" x-show="rbHistorySearch && !filteredRueckblickHistory().length" x-cloak
-           x-text="$app.t('rueckblick.historyNoMatch')"></div>
+      <p class="muted-msg" x-show="rbHistorySearch && !filteredRueckblickHistory().length" x-cloak
+         x-text="$app.t('rueckblick.historyNoMatch')"></p>
     </div>
-  </div>
+  </section>
 
   <!-- Hinweis, solange noch kein Rückblick gespeichert wurde -->
-  <div class="card-history-section rb-history-empty"
-       :class="{ 'card-history-section--borderless': !hasRueckblickResult() && !rueckblickEmpty }"
-       x-show="rbHistoryLoaded && !rueckblickHistory.length && !rueckblickLoading" x-cloak>
-    <div class="history-heading" x-text="$app.t('rueckblick.history')"></div>
-    <p class="rb-history-empty-text" x-text="$app.t('rueckblick.historyEmpty')"></p>
-  </div>
+  <p class="card-hint rb-history-empty" x-cloak
+     x-show="rbHistoryLoaded && !rueckblickHistory.length && !rueckblickLoading && !hasRueckblickResult()"
+     x-text="$app.t('rueckblick.historyEmpty')"></p>
 </div>

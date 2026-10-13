@@ -1,8 +1,9 @@
 // Alpine.data('tagebuchRueckblickCard') — Sub-Komponente des Tagebuch-Rückblicks.
 // Nur bei Buchtyp 'tagebuch' (Gate via feature-registry requiresBuchtyp).
 //
-// Eigener State: rueckblickZeitraum, rueckblickResult, rueckblickEmpty,
-//   rueckblickLoading, rueckblickProgress, rueckblickStatus, _rueckblickPollTimer.
+// Eigener State: Zeitraum, Ergebnis, Lade-/Fortschritts-State, History
+//   (Metadaten aller Läufe, Ergebnisse lazy in _rbResults), Coverage (Datums-
+//   SSoT vom Server), aktuelles Modell, Suche, aktive Belege.
 // Root behält: showTagebuchRueckblickCard (Hash-Router + Exklusivität).
 // Job-Polling/run/onVisible: createCardJobFeature. Struktur-Ergebnis wird in
 // onDone gespeichert und im Partial via x-for/x-text gerendert (auto-escaped).
@@ -23,11 +24,17 @@ export function registerTagebuchRueckblickCard() {
     rueckblickStatus: '',
     rueckblickHistory: [],
     rbHistoryLoaded: false,
+    rbCoverage: null,
+    rbCurrentModel: '',
     selectedRueckblickId: null,
     rbHistorySearch: '',
+    rbSearchIds: [],
     rbHistoryView: 'cal',
     rbBeleg: { key: null, label: '', belege: [] },
+    // Geladene Ergebnisse je History-id (die Liste trägt nur Metadaten).
+    _rbResults: {},
     _rueckblickPollTimer: null,
+    _rbSearchTimer: null,
     _lifecycle: null,
     // Memo-Speicher von tagebuch-rueckblick.js#_memo. MUSS hier deklariert
     // sein: legt ihn erst der Helper per `this._memos = {}` an, schreibt
@@ -64,7 +71,7 @@ export function registerTagebuchRueckblickCard() {
       this._lifecycle = setupCardLifecycle(this, {
         name: 'tagebuchRueckblick',
         showFlag: 'showTagebuchRueckblickCard',
-        timerKeys: ['_rueckblickPollTimer'],
+        timerKeys: ['_rueckblickPollTimer', '_rbSearchTimer'],
         onShow: () => this._onVisibleRueckblick(),
         resetState: {
           rueckblickResult: null,
@@ -74,9 +81,13 @@ export function registerTagebuchRueckblickCard() {
           rueckblickStatus: '',
           rueckblickHistory: [],
           rbHistoryLoaded: false,
+          rbCoverage: null,
+          rbCurrentModel: '',
           selectedRueckblickId: null,
           rbHistorySearch: '',
+          rbSearchIds: [],
           rbHistoryView: 'cal',
+          _rbResults: {},
           rbBeleg: { key: null, label: '', belege: [] },
         },
         extraListeners: [
@@ -99,10 +110,9 @@ export function registerTagebuchRueckblickCard() {
         else if (!id && this.selectedRueckblickId) this.closeRueckblick();
       });
       // Zeitraum-Wechsel (Combobox): vorhandenen Rückblick des Zeitraums anzeigen
-      // (kein Auto-Run). So passt die Anzeige zur Neugenerierungs-Sperre — bei
-      // gesperrtem Button ist der gespeicherte Rückblick sichtbar. Ist bereits ein
-      // Eintrag desselben Zeitraums offen (z. B. per History-Klick auf einen
-      // älteren Lauf), nicht auf den jüngsten umschalten.
+      // (kein Auto-Run), sonst den Erstellen-Aufruf. Ist bereits ein Eintrag
+      // desselben Zeitraums offen (z. B. per History-Klick auf einen älteren
+      // Lauf), nicht auf den jüngsten umschalten.
       this.$watch('rueckblickZeitraum', (z) => {
         if (this.rueckblickLoading) return;
         const sel = (this.rueckblickHistory || []).find(e => e.id === this.selectedRueckblickId);
@@ -113,6 +123,12 @@ export function registerTagebuchRueckblickCard() {
         this.rueckblickEmpty = false;
         this.selectedRueckblickId = null;
         this.clearBeleg();
+      });
+      // Inhaltssuche der History: serverseitig, entprellt.
+      this.$watch('rbHistorySearch', (q) => {
+        clearTimeout(this._rbSearchTimer);
+        if (!String(q || '').trim()) { this.rbSearchIds = []; return; }
+        this._rbSearchTimer = setTimeout(() => this.searchRueckblicke(q), 250);
       });
     },
 
@@ -142,9 +158,12 @@ export function registerTagebuchRueckblickCard() {
         alreadyRunning: 'common.analysisAlreadyRunning',
       },
       progressResetDelay: 400,
+      // Angezeigten Rückblick räumen (auch einen älteren Lauf), Zeitraum bleibt.
       beforeRun() {
         this.rueckblickResult = null;
         this.rueckblickEmpty = false;
+        this.selectedRueckblickId = null;
+        this.clearBeleg();
       },
       buildPayload() {
         return {
@@ -159,17 +178,21 @@ export function registerTagebuchRueckblickCard() {
           this.rueckblickStatus = '';
           return;
         }
-        this.rueckblickResult = job.result?.rueckblick || null;
+        const result = job.result?.rueckblick || null;
+        this.rueckblickResult = result;
         this.rueckblickEmpty = false;
         this.rueckblickStatus = '';
         this.selectedRueckblickId = null;
         this.rbBeleg = { key: null, label: '', belege: [] };
-        // History wurde serverseitig fortgeschrieben → Liste aktualisieren, dann
+        // History + Coverage wurden serverseitig fortgeschrieben → neu laden, dann
         // den neu entstandenen (oder bestehenden) Eintrag des Zeitraums auswählen,
-        // damit der Permalink stimmt.
-        await this.loadRueckblickHistory();
+        // damit Permalink und Meta-Zeile stimmen.
+        await Promise.all([this.loadRueckblickHistory(), this.loadRueckblickCoverage()]);
         const fresh = (this.rueckblickHistory || []).find(en => en.zeitraum === this.rueckblickZeitraum);
-        if (fresh) this.selectedRueckblickId = fresh.id;
+        if (fresh) {
+          if (result) this._rbResults[fresh.id] = result;
+          this.selectedRueckblickId = fresh.id;
+        }
       },
       async onOpen() {
         const nav = window.Alpine.store('nav');
@@ -179,8 +202,10 @@ export function registerTagebuchRueckblickCard() {
         // vor dem Default). Sonst jüngster Monat als Default.
         const pending = nav.pendingRueckblickZeitraum;
         if (pending) { nav.pendingRueckblickZeitraum = null; this.rueckblickZeitraum = pending; }
+        // History vor dem Default-Zeitraum: der $watch auf rueckblickZeitraum
+        // sucht dort den vorhandenen Rückblick. Coverage liefert den Default.
+        await Promise.all([this.loadRueckblickHistory(), this.loadRueckblickCoverage()]);
         if (!this.rueckblickZeitraum) this.rueckblickZeitraum = this.defaultZeitraum();
-        await this.loadRueckblickHistory();
         if (entryId) {
           this._openRueckblickEntryById(entryId);
         } else {

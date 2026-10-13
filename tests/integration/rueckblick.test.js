@@ -262,3 +262,35 @@ test('kein content-store-Write: Buchinhalt bleibt unverändert', async () => {
   const after = ctx.dbSchema.db.prepare('SELECT page_id, body_html, updated_at FROM pages WHERE book_id = ? ORDER BY page_id').all(BOOK_ID);
   assert.deepEqual(after, before, 'Seiteninhalt/updated_at unverändert (Job ist rein lesend)');
 });
+
+test('Belegprüfung: Daten ausserhalb der Einträge fallen, haeufigkeit aus den Belegen', async () => {
+  const BOOK_ID = 710;
+  seedDiary(BOOK_ID, ['2024-11-02', '2024-11-09']);
+  ctx.mockAi.on((e) => e.schemaKeys.includes('zusammenfassung'), {
+    themen: [
+      { label: 'Garten', haeufigkeit: 7, belege: ['2024-11-02', '2024-11-30'] },
+      { label: 'Erfunden', haeufigkeit: 1, belege: ['2023-01-01'] },
+    ],
+    personen: [{ name: 'Anna', haeufigkeit: 3 }],
+    orte: [],
+    bemerkenswerteTage: [{ datum: '2024-11-09', begruendung: 'echt' }, { datum: '2024-11-15', begruendung: 'erfunden' }],
+    zusammenfassung: 'November.',
+  });
+
+  const jobId = ctx.shared.createJob('rueckblick', BOOK_ID, 'tester@test.dev', 'job.label.rueckblick', { zeitraum: '2024-11' }, `${BOOK_ID}:2024-11`);
+  ctx.shared.enqueueJob(jobId, () =>
+    ctx.rueckblick.runRueckblickJob(jobId, BOOK_ID, 'tester@test.dev', '2024-11'));
+  const job = await waitForJob(ctx.shared, jobId);
+
+  assert.equal(job.status, 'done', `expected done, got ${job.status}: ${job.error || ''}`);
+  const r = job.result.rueckblick;
+  assert.deepEqual(r.themen, [{ label: 'Garten', haeufigkeit: 1, belege: ['2024-11-02'] }]);
+  assert.deepEqual(r.personen, [], 'Person ohne Beleg entfällt');
+  assert.deepEqual(r.bemerkenswerteTage.map(t => t.datum), ['2024-11-09']);
+
+  // Gespeichert wird das geprüfte Ergebnis (History + Cache).
+  const hist = ctx.dbSchema.db.prepare(
+    'SELECT result_json FROM tagebuch_rueckblicke WHERE book_id = ? AND user_email = ?'
+  ).get(BOOK_ID, 'tester@test.dev');
+  assert.deepEqual(JSON.parse(hist.result_json).themen, r.themen);
+});

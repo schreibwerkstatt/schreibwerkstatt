@@ -1,57 +1,84 @@
 @layer components {
 /* Tagebuch-Rückblick-Karte. Akzent via var(--card-accent) (.card--tagebuchRueckblick
-   → card-accents.css). Badges eckig (--radius-sm). Mobile-Breakpoint im selben File. */
-
-/* Zeitraum im Card-Title: zeigt, welchen Rückblick man gerade anschaut. Akzent-
-   farbe (Karten-Hue) hebt ihn vom Funktions-Titel ab, ohne Trennzeichen. */
-.card--tagebuchRueckblick .rb-title-period {
-  margin-left: var(--space-sm);
-  color: var(--card-accent);
-  font-weight: var(--fw-regular);
-}
-
-/* Hinweis, solange der User noch keinen Rückblick gespeichert hat. */
-.card--tagebuchRueckblick .rb-history-empty-text {
-  margin: 0;
-  color: var(--color-muted);
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-}
-
-.card--tagebuchRueckblick .rb-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-}
+   → card-accents.css). Aufbau: Zeitraum-Leiste (‹ Zeitraum ›, Meta, Aktionen) über
+   zwei Zuständen — Rückblick (Lesetext, Tage, Facetten) oder Übersicht
+   (Kalender/Liste). Mobile-Breakpoint im selben File. */
 
 .card--tagebuchRueckblick .rb-zeitraum {
   min-width: 12rem;
 }
 
+/* ── Zeitraum-Leiste ─────────────────────────────────────────────────────── */
+.card--tagebuchRueckblick .rb-period {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.card--tagebuchRueckblick .rb-period-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.card--tagebuchRueckblick .rb-period-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
+/* Der Zeitraum ist die Überschrift des Rückblicks — Serif wie ein Kapitel-
+   titel, Akzentfarbe der Karte. */
+.card--tagebuchRueckblick .rb-period-label {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: var(--font-size-xl);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-tight);
+  color: var(--card-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.card--tagebuchRueckblick .rb-period-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* Meta + Aktualität stehen bündig unter dem Label (nach dem ‹-Knopf). */
+.card--tagebuchRueckblick .rb-period-meta,
+.card--tagebuchRueckblick .rb-fresh {
+  padding-left: var(--space-xl);
+}
+
 .card--tagebuchRueckblick .rb-empty {
-  color: var(--color-muted);
-  padding: var(--space-md) 0;
-  font-size: var(--font-size-sm);
-}
-
-/* Hinweis bei gesperrter Neugenerierung (Einträge unverändert seit Generierung). */
-.card--tagebuchRueckblick .rb-uptodate {
-  color: var(--color-muted);
-  padding: var(--space-2xs) 0;
-  font-size: var(--font-size-sm);
-}
-
-/* Zusammenfassung: ruhiger Lesetext, volle Kartenbreite. Trägt das
-   Editorial-Gewicht der Karte — Reflexion zuerst. */
-.card--tagebuchRueckblick .rb-essay {
   margin-top: var(--space-md);
+}
+
+/* ── Rückblick ───────────────────────────────────────────────────────────── */
+.card--tagebuchRueckblick .rb-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  margin-top: var(--space-lg);
+}
+
+/* Die Betrachtung trägt das Gewicht der Karte: Serif-Lesetext auf
+   Lesebreite, nicht über die ganze Karte gezogen. */
+.card--tagebuchRueckblick .rb-essay {
+  max-width: 68ch;
 }
 
 .card--tagebuchRueckblick .rb-essay p {
   margin: 0 0 var(--space-md);
+  font-family: var(--font-serif);
   font-size: var(--font-size-md);
-  line-height: 1.75;
+  line-height: var(--lh-relaxed);
   color: var(--color-text);
 }
 
@@ -59,17 +86,69 @@
   margin-bottom: 0;
 }
 
-/* Facetten: worüber / wer / wo. Label-Spalte links, Chips rechts (eckig, nach
-   Häufigkeit sortiert). Der Zähler erscheint nur bei Wiederholung und tritt als
-   kleine gedämpfte Zahl zurück. Klick markiert das Chip und zeigt die Belegtage
-   in der Inline-Leiste darunter. */
+/* Bemerkenswerte Tage: chronologisch, Datum als Sprungmarke links. */
+.card--tagebuchRueckblick .rb-tage {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-width: 68ch;
+}
+
+.card--tagebuchRueckblick .rb-tag-item {
+  display: grid;
+  grid-template-columns: 9.5em 1fr;
+  gap: var(--space-2xs) var(--space-md);
+  align-items: baseline;
+  padding-left: var(--space-sm);
+  border-left: 3px solid var(--card-accent);
+}
+
+.card--tagebuchRueckblick .rb-tag-datum,
+.card--tagebuchRueckblick .rb-belege-day {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--card-accent);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.card--tagebuchRueckblick .rb-tag-datum {
+  font-weight: var(--fw-semibold);
+}
+
+.card--tagebuchRueckblick .rb-tag-datum:hover:not(:disabled),
+.card--tagebuchRueckblick .rb-belege-day:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+/* Tag ohne auffindbaren Abschnitt (gelöscht/umbenannt): sichtbar, aber still. */
+.card--tagebuchRueckblick .rb-tag-datum:disabled,
+.card--tagebuchRueckblick .rb-belege-day:disabled {
+  color: var(--color-muted);
+  cursor: default;
+  opacity: 1;
+}
+
+.card--tagebuchRueckblick .rb-tag-text {
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  line-height: var(--lh-base);
+}
+
+/* Facetten: worüber / wer / wo. Label-Spalte links, Chips rechts. */
 .card--tagebuchRueckblick .rb-facets {
-  margin-top: var(--space-lg);
-  padding-top: var(--space-lg);
-  border-top: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border);
 }
 
 .card--tagebuchRueckblick .rb-facet {
@@ -88,13 +167,13 @@
 .card--tagebuchRueckblick .rb-facet-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2xs);
+  gap: var(--space-xs);
 }
 
 .card--tagebuchRueckblick .rb-chip {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--space-2xs);
+  gap: var(--space-xs);
   padding: var(--space-2xs) var(--space-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -111,8 +190,7 @@
 
 .card--tagebuchRueckblick .rb-chip--active {
   border-color: var(--card-accent);
-  border-left-width: 3px;
-  background: var(--color-hover);
+  background: color-mix(in srgb, var(--card-accent) 12%, var(--color-surface));
 }
 
 .card--tagebuchRueckblick .rb-chip-count {
@@ -121,17 +199,22 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Belegtage-Leiste: erscheint unter den Facetten, wenn ein Chip aktiv ist. */
+/* Belege des aktiven Stichworts: Kopf, Zeitleiste, Tagesliste. */
 .card--tagebuchRueckblick .rb-belege-strip {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-2xs) var(--space-sm);
-  margin-top: var(--space-2xs);
-  padding: var(--space-sm) var(--space-md);
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
   border-left: 3px solid var(--card-accent);
   background: var(--color-hover);
   border-radius: var(--radius-sm);
+}
+
+.card--tagebuchRueckblick .rb-belege-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
 }
 
 .card--tagebuchRueckblick .rb-belege-strip-label {
@@ -140,73 +223,49 @@
   color: var(--color-text);
 }
 
+/* Zeitleiste: jeder Eintragstag ein feiner Strich, Belegtage als volle
+   Akzent-Striche. Position kommt als --pos (Prozent) aus rbTimeline(). */
+.card--tagebuchRueckblick .rb-timeline {
+  position: relative;
+  height: 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.card--tagebuchRueckblick .rb-timeline-tick {
+  position: absolute;
+  bottom: 0;
+  left: var(--pos);
+  width: 2px;
+  height: 35%;
+  translate: -50% 0;
+  background: var(--color-muted);
+  opacity: 0.6;
+}
+
+.card--tagebuchRueckblick .rb-timeline-tick--hit {
+  height: 100%;
+  width: 3px;
+  background: var(--card-accent);
+  opacity: 1;
+}
+
+.card--tagebuchRueckblick .rb-timeline-edges {
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+}
+
 .card--tagebuchRueckblick .rb-belege-strip-days {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2xs) var(--space-sm);
-}
-
-.card--tagebuchRueckblick .rb-belege-day {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--card-accent);
-  font-size: var(--font-size-sm);
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-}
-
-.card--tagebuchRueckblick .rb-belege-day:hover {
-  text-decoration: underline;
-}
-
-.card--tagebuchRueckblick .rb-belege-strip-empty {
-  color: var(--color-muted);
-  font-size: var(--font-size-sm);
-}
-
-/* Bemerkenswerte Tage: Akzent-Liste mit linker Akzentkante (Karten-Hue). */
-.card--tagebuchRueckblick .rb-days {
-  margin-top: var(--space-lg);
-}
-
-.card--tagebuchRueckblick .rb-tage {
-  list-style: none;
-  margin: var(--space-sm) 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.card--tagebuchRueckblick .rb-tag-item {
-  display: grid;
-  grid-template-columns: auto 1fr;
   gap: var(--space-2xs) var(--space-md);
-  align-items: baseline;
-  padding-left: var(--space-sm);
-  border-left: 3px solid var(--card-accent);
 }
 
-.card--tagebuchRueckblick .rb-tag-datum {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--card-accent);
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--fw-semibold);
-  font-size: var(--font-size-sm);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.card--tagebuchRueckblick .rb-tag-datum:hover {
-  text-decoration: underline;
-}
-
-.card--tagebuchRueckblick .rb-tag-text {
-  color: var(--color-text);
-  line-height: 1.5;
+/* ── Übersicht ───────────────────────────────────────────────────────────── */
+.card--tagebuchRueckblick .rb-overview,
+.card--tagebuchRueckblick .rb-history-empty {
+  margin-top: var(--space-lg);
 }
 
 .card--tagebuchRueckblick .rb-history-zeitraum {
@@ -216,49 +275,42 @@
 }
 
 .card--tagebuchRueckblick .rb-history-search-wrap {
-  display: flex;
-  width: 100%;
+  flex: 1 1 18rem;
   max-width: 18rem;
-  margin: var(--space-xs) 0 var(--space-sm);
 }
 
-.card--tagebuchRueckblick .rb-history-search {
+.card--tagebuchRueckblick .rb-history-search-wrap .filter-search-input {
   width: 100%;
-  padding: var(--space-xs) 26px var(--space-xs) var(--space-sm);
-  border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-size: var(--font-size-sm);
 }
 
-.card--tagebuchRueckblick .rb-history-search:focus {
-  outline: none;
-  border-color: var(--color-border-focus);
-}
-
-/* History-Kopf: Überschrift links, Ansichts-Toggle (Kalender/Liste) rechts. */
-.card--tagebuchRueckblick .rb-history-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  flex-wrap: wrap;
-}
-
-/* Kalender-Ansicht der History nutzt das geteilte Jahr×Monat-Heatmap-Pattern
-   (.ymheat-*, components/year-month-heatmap.css). Hier nur die karten-spezifische
-   Anbindung: Akzent = Karten-Hue (statt globalem Overview-Akzent), Abstand nach
-   oben. Die responsive Höhe steuert das Partial via --ymheat-max. */
+/* Kalender nutzt das geteilte Jahr×Monat-Pattern (.ymheat-*, components/
+   year-month-heatmap.css); hier nur der Karten-Hue. Höhe steuert das
+   Partial via --ymheat-max. */
 .card--tagebuchRueckblick .rb-ymheat {
   --ymheat-accent: var(--card-accent);
-  margin-top: var(--space-sm);
+  max-width: 44rem;
 }
 
 @media (max-width: 720px) {
-  .card--tagebuchRueckblick .rb-facet {
+  .card--tagebuchRueckblick .rb-facet,
+  .card--tagebuchRueckblick .rb-tag-item {
     grid-template-columns: 1fr;
     gap: var(--space-2xs);
+  }
+  .card--tagebuchRueckblick .rb-period-meta,
+  .card--tagebuchRueckblick .rb-fresh {
+    padding-left: 0;
+  }
+  .card--tagebuchRueckblick .rb-period-label {
+    font-size: var(--font-size-lg);
+  }
+  .card--tagebuchRueckblick .rb-history-search-wrap {
+    max-width: none;
+  }
+  /* Kopfzeile bleibt mobil einzeilig — die Combobox darf dem Titel nicht
+     die Breite nehmen. */
+  .card--tagebuchRueckblick .rb-zeitraum {
+    min-width: 9rem;
   }
 }
 }

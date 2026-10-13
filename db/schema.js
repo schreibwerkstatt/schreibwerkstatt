@@ -128,6 +128,8 @@ module.exports = {
   touchRueckblickEntryCount: rueckblick.touchRueckblickEntryCount,
   latestRueckblickJson:      rueckblick.latestRueckblickJson,
   listRueckblicke:           rueckblick.listRueckblicke,
+  getRueckblick:             rueckblick.getRueckblick,
+  searchRueckblickIds:       rueckblick.searchRueckblickIds,
   deleteRueckblick:          rueckblick.deleteRueckblick,
   // chapter-reviews (Verlauf der Kapitelbewertung)
   insertChapterReview:       chapterReviews.insertChapterReview,

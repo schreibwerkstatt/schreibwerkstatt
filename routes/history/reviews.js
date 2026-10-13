@@ -4,6 +4,7 @@
 
 const {
   db, listChapterReviewHistory, deleteChapterReview,
+  listRueckblicke, getRueckblick, searchRueckblickIds, deleteRueckblick,
   listBookReviewHistory, deleteBookReview,
   deleteReviewCache, deleteChapterMacroReviewCache,
 } = require('../../db/schema');
@@ -11,6 +12,9 @@ const { toIntId } = require('../../lib/validate');
 const { sessionEmail } = require('../../lib/acl');
 const { buildRueckblickCoverage } = require('../jobs/rueckblick-dates');
 const { listPageNamesForBook } = require('../../db/content-names');
+const { resolveProvider } = require('../../lib/ai');
+const { _modelName } = require('../jobs/shared/model');
+const { setContext } = require('../../lib/log-context');
 const logger = require('../../logger');
 
 function register(router) {
@@ -23,14 +27,23 @@ function register(router) {
     res.json({ ok: true });
   });
 
-  // Tagebuch-Rückblick (History-Eintrag) löschen
+  // Tagebuch-Rückblick (History-Eintrag) löschen. Rückblicke sind persönlich —
+  // der user_email-Filter ist die Rechteprüfung.
   router.delete('/rueckblick/:id', (req, res) => {
-    const user_email = sessionEmail(req);
     const id = toIntId(req.params.id);
     if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
-    db.prepare('DELETE FROM tagebuch_rueckblicke WHERE id = ? AND user_email = ?')
-      .run(id, user_email);
+    deleteRueckblick(id, sessionEmail(req));
     res.json({ ok: true });
+  });
+
+  // Einzelner Rückblick samt Ergebnis (die Liste trägt nur Metadaten).
+  router.get('/rueckblick-entry/:id', (req, res) => {
+    const id = toIntId(req.params.id);
+    if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
+    const row = getRueckblick(id, sessionEmail(req));
+    if (!row) return res.status(404).json({ error_code: 'NOT_FOUND' });
+    setContext({ book: row.book_id });
+    res.json(row);
   });
 
   // Kompletter History-Reset für ein Buch: löscht page_checks, book_reviews und
@@ -72,24 +85,22 @@ function register(router) {
     res.json(listBookReviewHistory(req.bookId, sessionEmail(req)));
   });
 
-  // Tagebuch-Rückblicke: letzte 20 generierte Rückblicke eines Buchs (re-öffenbar).
+  // Tagebuch-Rückblicke eines Buchs: ALLE Läufe als Metadaten (ohne Ergebnis,
+  // das lädt /rueckblick-entry/:id beim Öffnen) + das Modell, mit dem ein neuer
+  // Lauf jetzt erstellt würde — die Karte bietet damit Neu-Erstellen an, wenn
+  // ein Rückblick von einem älteren Modell stammt.
   router.get('/rueckblick/:book_id', (req, res) => {
-    const user_email = sessionEmail(req);
-    const bookId = req.bookId;
-    const rows = db.prepare(`
-      SELECT id, zeitraum, result_json, model, entry_count, created_at
-      FROM tagebuch_rueckblicke
-      WHERE book_id = ? AND user_email = ?
-      ORDER BY created_at DESC LIMIT 20`).all(bookId, user_email);
-    // Pro-Zeile parsen: eine einzelne kaputte result_json-Zeile darf nicht die
-    // ganze Liste 500en (sonst lädt die History gar nicht → Rückblick-Karte bleibt
-    // leer). Fehlerhafte Zeile → result_json: null (Frontend blendet sie aus).
-    res.json(rows.map(r => {
-      let result_json = null;
-      try { result_json = JSON.parse(r.result_json || 'null'); }
-      catch (e) { logger.warn(`[history/rueckblick] kaputte result_json in Zeile id=${r.id}: ${e.message}`); }
-      return { ...r, result_json };
-    }));
+    const userEmail = sessionEmail(req);
+    res.json({
+      current_model: _modelName(resolveProvider({ userEmail }), { userEmail }),
+      entries: listRueckblicke(req.bookId, userEmail),
+    });
+  });
+
+  // Volltextsuche im Inhalt der Rückblicke → passende IDs. Die Suche nach dem
+  // lokalisierten Zeitraum-Label macht die Karte selbst.
+  router.get('/rueckblick-search/:book_id', (req, res) => {
+    res.json({ ids: searchRueckblickIds(req.bookId, sessionEmail(req), req.query.q) });
   });
 
   // Rückblick-Heatmap-Coverage: aggregiert datierte Seiten (Monats-/Jahres-Buckets)

@@ -39,9 +39,9 @@ function chapterIdsByName(bookId) {
 
 // ── Seiten ──────────────────────────────────────────────────────────────────
 
-const _stmtPageNamesForBook = db.prepare('SELECT page_id, page_name FROM pages WHERE book_id = ?');
+const _stmtPageNamesForBook = db.prepare('SELECT page_id, page_name, updated_at FROM pages WHERE book_id = ?');
 
-/** Alle Seiten eines Buchs als { page_id, page_name } (Metadaten, kein Inhalt). */
+/** Alle Seiten eines Buchs als { page_id, page_name, updated_at } (Metadaten, kein Inhalt). */
 function listPageNamesForBook(bookId) {
   return _stmtPageNamesForBook.all(bookId);
 }

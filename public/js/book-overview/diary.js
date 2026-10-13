@@ -6,7 +6,7 @@
 //
 // Compute-Bodies sind als pure `_computeXxx` extrahiert (Alpine-frei testbar);
 // die memoizierten Wrapper nutzen den gemeinsamen `this._memo` aus load.js.
-import { quartileLevelFor, currentMonthKey } from '../book/ymheatmap.js';
+import { buildYmHeatRows } from '../book/ymheatmap.js';
 import { isoAddDays as _addDays, isoDaysBetween as _dayDiff, isoWeekday } from './iso-day.js';
 
 // Tagebuch-Seitennamen sind 'YYYY-MM-DD' (gleiche Mechanik wie diary-calendar).
@@ -128,47 +128,7 @@ export const diaryMethods = {
   //             minYear, maxYear }. Quartil-Bucketing (Level 1..4) über die
   //             positiven Monats-Eintragszahlen — analog overviewStreakHeatmap.
   _computeRueckblickHeatmap(coverage) {
-    const empty = { years: [], maxEntries: 0 };
-    if (!coverage || coverage.minYear == null || coverage.maxYear == null) return empty;
-    const months = coverage.months || {};
-    const years = coverage.years || {};
-
-    const counts = [];
-    for (const k of Object.keys(months)) {
-      const e = months[k]?.entries || 0;
-      if (e > 0) counts.push(e);
-    }
-    const levelFor = quartileLevelFor(counts);
-    const todayKey = currentMonthKey();
-    const maxEntries = counts.length ? Math.max(...counts) : 0;
-
-    const rows = [];
-    for (let y = coverage.maxYear; y >= coverage.minYear; y--) {
-      const yKey = String(y);
-      const yCov = years[yKey] || null;
-      const mArr = [];
-      for (let mi = 1; mi <= 12; mi++) {
-        const key = `${yKey}-${String(mi).padStart(2, '0')}`;
-        const mc = months[key] || null;
-        const rb = mc?.rueckblick || null;
-        mArr.push({
-          key,
-          monthIdx: mi,
-          entries: mc?.entries || 0,
-          level: levelFor(mc?.entries || 0),
-          isCurrent: key === todayKey,
-          hasRueckblick: !!rb,
-          createdAt: rb?.created_at || null,
-        });
-      }
-      rows.push({
-        year: y,
-        hasRueckblick: !!(yCov && yCov.rueckblick),
-        yearCreatedAt: yCov?.rueckblick?.created_at || null,
-        months: mArr,
-      });
-    }
-    return { years: rows, maxEntries };
+    return buildYmHeatRows(coverage);
   },
 
   overviewRueckblickHeatmap() {

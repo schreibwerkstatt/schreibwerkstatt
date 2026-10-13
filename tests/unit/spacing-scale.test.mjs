@@ -62,7 +62,6 @@ const ALLOW = {
   'css/layout/base.css': 3,
   'css/page/page-content-skeleton.css': 1,
   'css/page/stt-dock.css': 1,
-  'css/page/tagebuch-rueckblick.css': 1,
   'css/page/tts-dock.css': 1,
   'css/search.css': 4,
 };

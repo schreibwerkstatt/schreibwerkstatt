@@ -49,10 +49,21 @@ const _insertRueckblick = db.prepare(
   `INSERT INTO tagebuch_rueckblicke (book_id, user_email, zeitraum, result_json, model, entry_count, created_at)
    VALUES (?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})`
 );
+// Liste ohne result_json und ohne Limit: Kalender, Zeitraum-Auswahl und
+// Aktualitäts-Hinweis der Karte brauchen ALLE Zeiträume, das Ergebnis selbst
+// lädt die Karte erst beim Öffnen (getRueckblick) — ein langjähriges Tagebuch
+// käme sonst mit jedem Kartenöffnen als Megabyte-Payload.
 const _listRueckblicke = db.prepare(
-  `SELECT id, zeitraum, result_json, model, entry_count, created_at
+  `SELECT id, zeitraum, model, entry_count, created_at
    FROM tagebuch_rueckblicke WHERE book_id = ? AND user_email = ?
-   ORDER BY created_at DESC LIMIT ?`
+   ORDER BY created_at DESC, id DESC`
+);
+const _listRueckblickJson = db.prepare(
+  `SELECT id, result_json FROM tagebuch_rueckblicke WHERE book_id = ? AND user_email = ?`
+);
+const _getRueckblick = db.prepare(
+  `SELECT id, book_id, zeitraum, result_json, model, entry_count, created_at
+   FROM tagebuch_rueckblicke WHERE id = ? AND user_email = ?`
 );
 const _latestRueckblickJson = db.prepare(
   `SELECT result_json FROM tagebuch_rueckblicke
@@ -94,9 +105,43 @@ function latestRueckblickJson(bookId, userEmail, zeitraum) {
   return row ? row.result_json : null;
 }
 
-function listRueckblicke(bookId, userEmail, limit = 20) {
-  return _listRueckblicke.all(parseInt(bookId), userEmail || '', limit)
-    .map(r => ({ ...r, result_json: JSON.parse(r.result_json || 'null') }));
+function listRueckblicke(bookId, userEmail) {
+  return _listRueckblicke.all(parseInt(bookId), userEmail || '');
+}
+
+function _parseResult(row) {
+  try { return JSON.parse(row.result_json || 'null'); }
+  catch { return null; }
+}
+
+// Ein History-Eintrag samt Ergebnis (oder null). Kaputtes result_json → null im
+// Feld, die Zeile bleibt löschbar.
+function getRueckblick(id, userEmail) {
+  const row = _getRueckblick.get(parseInt(id), userEmail || '');
+  return row ? { ...row, result_json: _parseResult(row) } : null;
+}
+
+// Durchsuchbarer Inhalt eines Ergebnisses: Zusammenfassung, Facetten-Namen,
+// Begründungen der bemerkenswerten Tage. Nicht das rohe JSON — sonst träfe
+// eine Suche nach «name» oder «label» jeden Eintrag.
+function _haystack(r) {
+  if (!r) return '';
+  return [
+    r.zusammenfassung || '',
+    ...(r.themen || []).map(t => t?.label),
+    ...(r.personen || []).map(p => p?.name),
+    ...(r.orte || []).map(o => o?.name),
+    ...(r.bemerkenswerteTage || []).map(t => t?.begruendung),
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+// IDs der Rückblicke eines Buchs, deren Inhalt `q` enthält (case-insensitiv).
+function searchRueckblickIds(bookId, userEmail, q) {
+  const needle = String(q || '').trim().toLowerCase();
+  if (!needle) return [];
+  return _listRueckblickJson.all(parseInt(bookId), userEmail || '')
+    .filter(row => _haystack(_parseResult(row)).includes(needle))
+    .map(row => row.id);
 }
 
 function deleteRueckblick(id, userEmail) {
@@ -111,5 +156,7 @@ module.exports = {
   touchRueckblickEntryCount,
   latestRueckblickJson,
   listRueckblicke,
+  getRueckblick,
+  searchRueckblickIds,
   deleteRueckblick,
 };

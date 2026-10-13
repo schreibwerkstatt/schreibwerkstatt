@@ -10,10 +10,12 @@ const appSettings = require('../../../lib/app-settings');
 // desselben Providers mit verschiedenen Modellen wuerden sich sonst Cache-Zeilen
 // teilen — der `provider`-Anteil im PRIMARY KEY der Cache-Tabellen unterscheidet
 // sie ja nicht. Ergebnis waere ein Treffer aus einem anderen Modell.
-function _modelName(prov) {
-  if (prov === 'ollama') return aiSetting('ollama', 'model') || 'llama3.2';
-  if (prov === 'openai-compat') return aiSetting('openai-compat', 'model') || 'llama3.2';
-  return aiSetting('claude', 'model') || 'claude-sonnet-4-6';
+// `opts` ({ userEmail }) nur ausserhalb eines Job-/Request-Kontexts nötig; sonst
+// liest aiSetting den User aus dem ALS-Context.
+function _modelName(prov, opts) {
+  if (prov === 'ollama') return aiSetting('ollama', 'model', opts) || 'llama3.2';
+  if (prov === 'openai-compat') return aiSetting('openai-compat', 'model', opts) || 'llama3.2';
+  return aiSetting('claude', 'model', opts) || 'claude-sonnet-4-6';
 }
 
 // Effort der Buch- und Kapitelbewertung (`ai.claude.effort.review`) als Job-Bag binden.

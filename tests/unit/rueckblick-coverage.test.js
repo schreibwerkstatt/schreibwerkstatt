@@ -4,7 +4,7 @@
 // entryDate gegen gemischte Page-Namen, Jahr- vs. Monats-Rückblick-Match.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildRueckblickCoverage, previousZeitraum } = require('../../routes/jobs/rueckblick-dates');
+const { buildRueckblickCoverage, previousZeitraum, verifyRueckblickBelege } = require('../../routes/jobs/rueckblick-dates');
 
 test('previousZeitraum: Monat → Vor-Monat, Jahres-Übergang, Jahr → Vorjahr', () => {
   assert.equal(previousZeitraum('2024-03'), '2024-02');
@@ -52,5 +52,54 @@ test('buildRueckblickCoverage: verwaister Rückblick erweitert die Jahr-Range', 
 });
 
 test('buildRueckblickCoverage: leer', () => {
-  assert.deepEqual(buildRueckblickCoverage([], []), { months: {}, years: {}, minYear: null, maxYear: null });
+  assert.deepEqual(buildRueckblickCoverage([], []), { months: {}, years: {}, days: {}, minYear: null, maxYear: null });
+});
+
+test('buildRueckblickCoverage: newest je Bucket + Tag → erste Seite des Tages', () => {
+  const pages = [
+    { page_id: 9, page_name: '2024-03-01', updated_at: '2024-03-05T10:00:00Z' },
+    { page_id: 3, page_name: '2024-03-01', updated_at: '2024-03-02T10:00:00Z' },
+    { page_id: 4, page_name: '2024-03-20', updated_at: '2024-04-01T00:00:00Z' },
+    { page_id: 5, page_name: '2024-07' }, // Monat ohne Tag → kein days-Eintrag
+  ];
+  const cov = buildRueckblickCoverage(pages, []);
+  assert.equal(cov.months['2024-03'].entries, 3);
+  assert.equal(cov.months['2024-03'].newest, Date.parse('2024-04-01T00:00:00Z'));
+  assert.equal(cov.years['2024'].newest, Date.parse('2024-04-01T00:00:00Z'));
+  assert.equal(cov.days['2024-03-01'], 3, 'kleinste page_id gewinnt');
+  assert.equal(cov.days['2024-03-20'], 4);
+  assert.equal(cov.days['2024-07'], undefined);
+});
+
+test('verifyRueckblickBelege: unbekannte Daten fallen, haeufigkeit = verbliebene Belege', () => {
+  const r = {
+    themen: [
+      { label: 'Arbeit', haeufigkeit: 9, belege: ['2024-03-04', '2024-03-31', '2024-03-04'] },
+      { label: 'Erfunden', haeufigkeit: 2, belege: ['1999-01-01'] },
+    ],
+    personen: [{ name: 'Anna', haeufigkeit: 3 }], // ohne Belege → entfällt
+    orte: [{ name: ' Zürich ', belege: ['2024-03-12 (Dienstag)'] }],
+    bemerkenswerteTage: [
+      { datum: '2024-03-12', begruendung: 'b' },
+      { datum: '2024-02-30', begruendung: 'erfunden' },
+      { datum: '2024-03-04', begruendung: 'a' },
+      { datum: '2024-03-04', begruendung: 'doppelt' },
+    ],
+    zusammenfassung: 'Text',
+  };
+  const { result, dropped } = verifyRueckblickBelege(r, ['2024-03-04', '2024-03-12']);
+  assert.deepEqual(result.themen, [{ label: 'Arbeit', haeufigkeit: 1, belege: ['2024-03-04'] }]);
+  assert.deepEqual(result.personen, []);
+  assert.deepEqual(result.orte, [{ name: 'Zürich', haeufigkeit: 1, belege: ['2024-03-12'] }]);
+  assert.deepEqual(result.bemerkenswerteTage.map(t => t.datum), ['2024-03-04', '2024-03-12'], 'chronologisch, ohne Dubletten/Erfundenes');
+  assert.equal(result.zusammenfassung, 'Text');
+  assert.ok(dropped >= 5);
+});
+
+test('verifyRueckblickBelege: idempotent', () => {
+  const dates = ['2024-03-04'];
+  const once = verifyRueckblickBelege({ themen: [{ label: 'A', belege: ['2024-03-04'] }], zusammenfassung: 'x' }, dates).result;
+  const twice = verifyRueckblickBelege(once, dates);
+  assert.deepEqual(twice.result, once);
+  assert.equal(twice.dropped, 0);
 });

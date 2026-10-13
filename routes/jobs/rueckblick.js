@@ -19,7 +19,10 @@ const {
   jsonBody,
   startBookJob,
 } = require('./shared');
-const { parseZeitraum: _parseZeitraum, entryDate: _entryDate, matchesZeitraum: _matchesZeitraum, previousZeitraum: _previousZeitraum } = require('./rueckblick-dates');
+const {
+  parseZeitraum: _parseZeitraum, entryDate: _entryDate, matchesZeitraum: _matchesZeitraum,
+  previousZeitraum: _previousZeitraum, verifyRueckblickBelege,
+} = require('./rueckblick-dates');
 const crypto = require('crypto');
 const { toIntId } = require('../../lib/validate');
 
@@ -196,8 +199,14 @@ async function runRueckblickJob(jobId, bookId, userEmail, zeitraum) {
       if (!r || typeof r.zusammenfassung !== 'string' || !r.zusammenfassung.trim()) {
         throw i18nError('job.error.rueckblickEmpty');
       }
-      saveRueckblickCache(bookIdInt, email, zeitraum, pagesSig, r, effectiveProvider);
     }
+
+    // Belege gegen die vorgelegten Eintragsdaten prüfen — auch bei Cache-HIT,
+    // damit ältere, ungeprüft gecachte Ergebnisse nachgezogen werden.
+    const verified = verifyRueckblickBelege(r, entries.map(e => e.datum));
+    if (verified.dropped) logger.info(`Rückblick «${zeitraum}»: ${verified.dropped} unbelegte Angabe(n) verworfen.`);
+    r = verified.result;
+    if (!fromCache || verified.dropped) saveRueckblickCache(bookIdInt, email, zeitraum, pagesSig, r, effectiveProvider);
 
     // History-Zeile nur bei inhaltlich neuem Ergebnis → re-öffenbar. Identische
     // Re-Runs / Cache-HITs (gleicher Zeitraum, gleiches result_json) erzeugen

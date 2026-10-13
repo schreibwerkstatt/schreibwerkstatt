@@ -13,7 +13,7 @@
 <body>
   <!-- Slim-Variante des Partials. Combobox durch <select> ersetzt (wie das
        Ereignisse-Harness die catalogFilter-Combobox umgeht). Render-Block für
-       Themen/Personen/Orte/Tage/Zusammenfassung 1:1 aus dem Partial. -->
+       Themen/Tage/Zusammenfassung/Belege nach dem Partial (data-test-Hooks). -->
   <div id="root" class="card card--tagebuchRueckblick" x-data="tagebuchRueckblickCard" x-show="$app.showTagebuchRueckblickCard">
     <div class="card-actions rb-actions">
       <select data-test="zeitraum" x-model="rueckblickZeitraum">
@@ -22,11 +22,12 @@
           <option :value="opt.value" x-text="opt.label"></option>
         </template>
       </select>
-      <button type="button" data-test="run" @click="runTagebuchRueckblick()" :disabled="rueckblickLoading || !rueckblickZeitraum">
-        <span x-text="hasRueckblickResult() ? 'rerun' : 'run'"></span>
+      <button type="button" data-test="run" @click="runTagebuchRueckblick()" :disabled="!canRunRueckblick()">
+        <span x-text="rbLatestEntry() ? 'rerun' : 'run'"></span>
       </button>
     </div>
 
+    <p data-test="fresh" x-text="rueckblickFreshness().state"></p>
     <div class="rb-empty" data-test="empty" x-show="rueckblickEmpty">leer</div>
 
     <div class="rb-result" data-test="result" x-show="hasRueckblickResult()">
@@ -47,6 +48,11 @@
         </span>
         <!-- Belegtage des aktiven Stichworts (inline) -->
         <div class="rb-belege-strip" data-test="belege-strip" x-show="rbBeleg.key">
+          <div class="rb-timeline" data-test="timeline">
+            <template x-for="tk in rbTimeline()" :key="tk.datum">
+              <span class="rb-timeline-tick" :class="{ 'rb-timeline-tick--hit': tk.beleg }" :style="{ '--pos': tk.pos + '%' }"></span>
+            </template>
+          </div>
           <span class="rb-belege-strip-label" x-text="rbBeleg.label"></span>
           <span class="rb-belege-strip-days">
             <template x-for="(d, i) in rbBeleg.belege" :key="i">
@@ -58,7 +64,8 @@
       <ul class="rb-tage" data-test="tage">
         <template x-for="(tag, i) in (rueckblickResult?.bemerkenswerteTage || [])" :key="i">
           <li class="rb-tag-item">
-            <span class="internal-link rb-tag-datum" :data-test="'tag-' + tag.datum" @click="gotoRueckblickTag(tag.datum)" x-text="tag.datum"></span>
+            <button type="button" class="rb-tag-datum" :data-test="'tag-' + tag.datum" @click="gotoRueckblickTag(tag.datum)"
+                    :disabled="!canGotoTag(tag.datum)" x-text="tag.datum"></button>
             <span class="rb-tag-text" x-text="tag.begruendung"></span>
           </li>
         </template>
@@ -85,19 +92,49 @@
     // Antworten, damit kein Netzwerkfehler den Console-Guard auslöst.
     const _resp = (obj) => ({ ok: true, status: 200, json: async () => obj, clone() { return _resp(obj); } });
     window.__selectedTag = null;
-    // Mock-History für /history/rueckblick/:bookId (2 frühere Rückblicke).
+    // History-Liste: nur Metadaten; Ergebnisse kommen per /history/rueckblick-entry/:id.
+    window.__MOCK_RESULTS = {
+      11: { themen: [{ label: 'April-Thema', haeufigkeit: 1, belege: ['2024-04-02'] }], personen: [], orte: [], bemerkenswerteTage: [], zusammenfassung: 'April-Rückblick.' },
+      12: { themen: [], personen: [], orte: [], bemerkenswerteTage: [], zusammenfassung: 'März-Rückblick.' },
+    };
     window.__MOCK_HISTORY = [
-      { id: 11, zeitraum: '2024-04', model: 'claude', created_at: '2024-05-01T09:00:00Z',
-        result_json: { themen: [{ label: 'April-Thema', haeufigkeit: 1, belege: [] }], personen: [], orte: [], bemerkenswerteTage: [], zusammenfassung: 'April-Rückblick.' } },
-      { id: 12, zeitraum: '2024-03', model: 'claude', created_at: '2024-04-01T09:00:00Z',
-        result_json: { themen: [], personen: [], orte: [], bemerkenswerteTage: [], zusammenfassung: 'März-Rückblick.' } },
+      { id: 11, zeitraum: '2024-04', model: 'claude', entry_count: 1, created_at: '2024-05-01T09:00:00Z' },
+      { id: 12, zeitraum: '2024-03', model: 'claude', entry_count: 2, created_at: '2024-04-01T09:00:00Z' },
     ];
+    // Coverage = Server-SSoT der Datierung (routes/jobs/rueckblick-dates.js).
+    window.__MOCK_COVERAGE = {
+      months: {
+        '2023-12': { entries: 1, newest: 0, rueckblick: null },
+        '2024-03': { entries: 2, newest: 0, rueckblick: { id: 12, created_at: '2024-04-01T09:00:00Z' } },
+        '2024-04': { entries: 1, newest: 0, rueckblick: { id: 11, created_at: '2024-05-01T09:00:00Z' } },
+      },
+      years: {
+        '2023': { entries: 1, newest: 0, rueckblick: null },
+        '2024': { entries: 3, newest: 0, rueckblick: null },
+      },
+      days: { '2023-12-31': 4, '2024-03-04': 1, '2024-03-15': 2, '2024-04-02': 3 },
+      minYear: 2023, maxYear: 2024,
+    };
     window.fetch = async (url, opts) => {
-      if (String(url).includes('/jobs/active')) return _resp({ jobId: null });
-      if (String(url).includes('/jobs/rueckblick')) return _resp({ jobId: 'mock-job-1' });
-      if (String(url).includes('/history/rueckblick/')) {
+      const u = String(url);
+      if (u.includes('/jobs/active')) return _resp({ jobId: null });
+      if (u.includes('/jobs/rueckblick')) return _resp({ jobId: 'mock-job-1' });
+      if (u.includes('/history/rueckblick-coverage/')) return _resp(window.__MOCK_COVERAGE);
+      if (u.includes('/history/rueckblick-search/')) {
+        const q = decodeURIComponent(u.split('q=')[1] || '').toLowerCase();
+        const ids = Object.entries(window.__MOCK_RESULTS)
+          .filter(([, r]) => JSON.stringify(r).toLowerCase().includes(q)).map(([id]) => Number(id));
+        return _resp({ ids });
+      }
+      const entry = /\/history\/rueckblick-entry\/(\d+)/.exec(u);
+      if (entry) {
+        const id = Number(entry[1]);
+        const meta = window.__MOCK_HISTORY.find(e => e.id === id);
+        return _resp({ ...meta, result_json: window.__MOCK_RESULTS[id] });
+      }
+      if (u.includes('/history/rueckblick/')) {
         if (opts?.method === 'DELETE') return _resp({ ok: true });
-        return _resp(window.__MOCK_HISTORY);
+        return _resp({ current_model: 'claude', entries: window.__MOCK_HISTORY });
       }
       return _resp({});
     };

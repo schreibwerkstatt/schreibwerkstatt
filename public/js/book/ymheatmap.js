@@ -29,3 +29,55 @@ export function quartileLevelFor(counts) {
 export function currentMonthKey() {
   return localIsoDate().slice(0, 7);
 }
+
+// Jahr×Monat-Zeilen aus der serverseitigen Rückblick-Coverage
+// (GET /history/rueckblick-coverage, routes/jobs/rueckblick-dates.js
+// #buildRueckblickCoverage). Beide Konsumenten — Overview-Heatmap und Kalender
+// der Rückblick-Karte — rechnen hier, damit sie dieselben Monate gleich zählen
+// und färben. `selectedId` markiert den in der Karte geöffneten Rückblick.
+//   → { years: [{ year, yearKey, hasEntries, hasRueckblick, entryId,
+//                 yearCreatedAt, selected, months: [12 Zellen] }], maxEntries }
+export function buildYmHeatRows(coverage, { selectedId = null } = {}) {
+  const empty = { years: [], maxEntries: 0 };
+  if (!coverage || coverage.minYear == null || coverage.maxYear == null) return empty;
+  const months = coverage.months || {};
+  const years = coverage.years || {};
+  const counts = Object.values(months).map(m => m?.entries || 0).filter(n => n > 0);
+  const levelFor = quartileLevelFor(counts);
+  const todayKey = currentMonthKey();
+  const isSel = (rb) => !!(rb && selectedId != null && String(rb.id) === String(selectedId));
+  const rows = [];
+  for (let y = coverage.maxYear; y >= coverage.minYear; y--) {
+    const yearKey = String(y);
+    const yRb = years[yearKey]?.rueckblick || null;
+    const cells = [];
+    for (let mi = 1; mi <= 12; mi++) {
+      const key = `${yearKey}-${String(mi).padStart(2, '0')}`;
+      const entries = months[key]?.entries || 0;
+      const rb = months[key]?.rueckblick || null;
+      cells.push({
+        key,
+        monthIdx: mi,
+        entries,
+        level: levelFor(entries),
+        hasEntries: entries > 0,
+        isCurrent: key === todayKey,
+        hasRueckblick: !!rb,
+        entryId: rb?.id ?? null,
+        createdAt: rb?.created_at || null,
+        selected: isSel(rb),
+      });
+    }
+    rows.push({
+      year: y,
+      yearKey,
+      hasEntries: (years[yearKey]?.entries || 0) > 0 || cells.some(c => c.hasEntries),
+      hasRueckblick: !!yRb,
+      entryId: yRb?.id ?? null,
+      yearCreatedAt: yRb?.created_at || null,
+      selected: isSel(yRb),
+      months: cells,
+    });
+  }
+  return { years: rows, maxEntries: counts.length ? Math.max(...counts) : 0 };
+}

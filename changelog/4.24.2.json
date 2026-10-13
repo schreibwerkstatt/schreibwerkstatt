@@ -1,0 +1,36 @@
+{
+  "version": "4.24.2",
+  "date": "2026-10-13",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Tagebuch-Rückblick: der gewählte Zeitraum steht jetzt zwischen zwei Pfeilen, darunter wie viele Einträge er umfasst und wann der Rückblick entstanden ist. Der Rückblick selbst liest sich als Text, ältere stehen in der Übersicht darunter.",
+      "en": "Diary retrospective: the selected period now sits between two arrows, with the number of entries it covers and when the retrospective was made below it. The retrospective itself reads as text, older ones wait in the overview below."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Tagebuch-Rückblick: „Neu erstellen“ ist jetzt immer möglich. Statt den Knopf zu sperren, sagt die Karte, wenn seit dem letzten Rückblick Einträge dazugekommen, geändert oder gelöscht wurden.",
+      "en": "Diary retrospective: “Recreate” is now always possible. Instead of locking the button, the card tells you when entries have been added, changed or deleted since the last retrospective."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Tagebuch-Rückblick: die Liste führt jetzt alle gespeicherten Rückblicke, nicht nur die zwanzig jüngsten. Die Suche findet einen Zeitraum aber auch über seinen Inhalt: Zusammenfassung, Themen, Personen und Orte.",
+      "en": "Diary retrospective: the list now holds every saved retrospective, not just the twenty most recent ones. The search finds a period by its content too: summary, topics, people and places."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Tagebuch-Rückblick: ein Klick auf ein Stichwort zeigt eine Zeitleiste über den ganzen Zeitraum, in der die Tage mit Beleg hervorgehoben sind.",
+      "en": "Diary retrospective: clicking a keyword shows a timeline across the whole period, with the days that are cited highlighted."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Tagebuch-Rückblick: beim Löschen eines Rückblicks fragt die Karte erst nach. Die Tagebucheinträge selbst bleiben dabei unverändert.",
+      "en": "Diary retrospective: deleting a retrospective asks for confirmation first. The diary entries themselves stay unchanged."
+    },
+    {
+      "kind": "behoben",
+      "de": "Tagebuch-Rückblick: Monate mit datierten Einträgen fehlten in der Zeitraum-Auswahl und im Kalender. Sie stehen jetzt dort, auch wenn das Datum im Titel ausgeschrieben ist.",
+      "en": "Diary retrospective: months with dated entries were missing from the period selection and the calendar. They are there now, even when the date in the title is spelled out."
+    }
+  ]
+}
