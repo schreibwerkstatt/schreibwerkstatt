@@ -14,6 +14,8 @@
 //      zugeklapptes Kapitel auf.
 //   5. Ein Reload desselben Buchs (Job/Wake) behält Suche und Baum; ein
 //      gescheiterter Reload leert den Baum nicht und meldet `false`.
+//   6. Ein Ein-Abschnitt-Kapitel führt den Kapitelnamen als Ganzes — der
+//      lange Abschnittstitel daneben darf ihn nicht auf zwei Zeilen pressen.
 
 const { test, expect } = require('../e2e/_helpers/fixtures');
 const { bootApp, selectSeededBook } = require('./_helpers/app');
@@ -114,5 +116,51 @@ test.describe('Seitenbaum', () => {
     expect(res).toBe(false);
     expect(await page.evaluate(() => window.Alpine.store('nav').tree.length)).toBe(before);
     await expect(page.locator(`${TREE} a.page-item`).first()).toBeVisible();
+  });
+
+  // Ein-Abschnitt-Kapitel (Blog-Buch mit Jahres-Kapiteln): kurzer Kapitelname
+  // neben langem Beitragstitel. Vorher presste der Titel den vier Zeichen
+  // langen Namen auf zwei Zeilen ("20" / "22") — Layout, kein Datenfehler,
+  // darum hier gegen die echte App gemessen.
+  test('Ein-Abschnitt-Kapitel: kurzer Kapitelname bricht nicht mitten im Wort um', async ({ page }) => {
+    const bookId = await page.evaluate(() => window.Alpine.store('nav').selectedBookId);
+    const made = await page.evaluate(async (id) => {
+      const post = (url, payload) => fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).then(r => r.json());
+      const chapter = await post('/content/chapters', { book_id: id, name: '2022' });
+      const created = await post('/content/pages', {
+        chapter_id: chapter.id,
+        name: '2022-02-16. dot.kunden – Fünf Tipps damit dein Unternehmen Software Engineers findet',
+        html: '<p>Ein Absatz.</p>',
+      });
+      return { chapterId: chapter.id, pageId: created.id };
+    }, bookId);
+
+    try {
+      await page.evaluate(() => window.__app.loadPages({ source: 'job' }));
+      const row = page.locator(`${TREE} a.page-item[data-page-id="${made.pageId}"]`);
+      await expect(row).toBeVisible();
+      const name = row.locator('span.page-item--chapter-name');
+      await expect(name).toHaveText('2022');
+      // getClientRects() zaehlt bei einem Flex-Item (Block-Box) nur die Box selbst
+      // — eine Range um den Text zaehlt die echten Zeilenboxen. Ohne den Fix
+      // stand der Jahresname in vier einzeiligen Stuecken ("2"/"0"/"2"/"2").
+      const lines = await name.evaluate((el) => {
+        const r = document.createRange();
+        r.selectNodeContents(el);
+        return r.getClientRects().length;
+      });
+      expect(lines).toBe(1);
+    } finally {
+      // Der Seed wird von allen Specs dieser Suite geteilt: Kapitel und Seite
+      // wieder entfernen, damit die folgenden Specs den Ausgangszustand sehen.
+      await page.evaluate(async (m) => {
+        await fetch(`/content/pages/${m.pageId}`, { method: 'DELETE' });
+        await fetch(`/content/chapters/${m.chapterId}`, { method: 'DELETE' });
+        await window.__app.loadPages({ source: 'job' });
+      }, made);
+    }
   });
 });

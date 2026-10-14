@@ -1,0 +1,16 @@
+{
+  "version": "4.24.6",
+  "date": "2026-10-14",
+  "entries": [
+    {
+      "kind": "behoben",
+      "de": "Das Lektorat meldete bei jedem Link, dem ein Punkt oder Komma folgt, einen Grammatikfehler wegen eines Leerzeichens, das im Text gar nicht steht. Solche Befunde gibt es nicht mehr.",
+      "en": "The proofread report flagged a spacing error after every link followed by a full stop or comma, complaining about a space that is not in your text at all. Such findings no longer appear."
+    },
+    {
+      "kind": "behoben",
+      "de": "Im Abschnittsbaum stehen Kapitelnamen nicht mehr auf zwei Zeilen verteilt. Bei Blog-Büchern mit Jahreskapiteln erschien „2022“ vorher als „20“ über „22“.",
+      "en": "Chapter names in the section tree no longer break across two lines. In blog books with year chapters, “2022” used to appear as “20” above “22”."
+    }
+  ]
+}

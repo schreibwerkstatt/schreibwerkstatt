@@ -81,3 +81,57 @@ test('htmlToTextForPrompt: Sprecherwechsel bleibt ein Absatz-Umbruch', () => {
   assert.ok(blocks[0].endsWith('sagte Anna.'));
   assert.ok(blocks[1].startsWith('„Dann geh'));
 });
+
+// Bug: Tag-Grenzen wurden blind zu Leerzeichen, also sah der Prompt-Text hinter
+// jedem Link ein Space, das der Editor nicht rendert — und das Lektorat meldete
+// genau das als Grammatikfehler („Vor dem Satzschlusspunkt steht kein
+// Leerzeichen", «Asianometry .» / «» ,»), obwohl im Text nichts zu korrigieren war.
+test('Punkt/Komma direkt nach einem Link: kein Phantom-Leerzeichen', () => {
+  const html = '<p>so mein Berichterstatter <a href="https://www.asianometry.com/">Asianometry</a>.</p>'
+    + '<p>Vibe-Coding als <a href="https://de.wikipedia.org/wiki/Vibe-Coding">«Art der Softwareentwicklung»</a>, mittels KI.</p>';
+  const out = htmlToTextForPrompt(html);
+  assert.ok(out.includes('Asianometry.'), 'Punkt klebt am Linktext, kein Space davor');
+  assert.ok(!out.includes('Asianometry .'));
+  assert.ok(out.includes('«Art der Softwareentwicklung»,'), 'Komma klebt an der Klammer');
+  assert.ok(!out.includes('» ,'));
+});
+
+test('beide htmlToText-Varianten behandeln Satzzeichen an Tag-Grenzen gleich', () => {
+  const html = '<p>Er sagte <em>(laut</em>), dann <a href="x">ging</a> er.</p>';
+  assert.equal(htmlToTextForPrompt(html), 'Er sagte (laut), dann ging er.');
+  assert.equal(htmlToText(html), 'Er sagte (laut), dann ging er.');
+});
+
+test('echtes getipptes Leerzeichen vor Satzzeichen bleibt (kein Befund-Verstecker)', () => {
+  const html = '<p>Wort <em>x</em> , Tippfehler.</p>';
+  assert.equal(htmlToTextForPrompt(html), 'Wort x , Tippfehler.');
+});
+
+test('Wortzeichen an beiden Seiten einer Tag-Grenze bleiben getrennt', () => {
+  assert.equal(htmlToText('<p>Wort</em><em>Wort</em></p>'), 'Wort Wort');
+});
+
+// Drift-Gate über beide Seiten derselben Sicht: was die KI im Prompt-Text
+// zitiert, muss die Fundstellen-View des Browsers wiederfinden
+// (public/js/utils/html-find.js), sonst fällt der Befund als „nicht gefunden“
+// ersatzlos heraus. Beide tragen dieselbe Tag-Grenzen-Regel
+// (lib/html-text.js#stripTagsKeepPunctuation ↔ `_tagGapIsSpace`).
+// html-find.js legt seinen Entity-Decoder nur an, wenn `document` existiert —
+// ohne Stub bleiben Entities in der View wörtlich, was für diese Fixtures
+// (keine Entities) reicht und keinen Browser-Rumpel im Test braucht.
+const { countInHtml } = await import('../../public/js/utils/html-find.js');
+
+const TAG_GAP_CASES = [
+  '<p>so mein Berichterstatter <a href="https://www.asianometry.com/">Asianometry</a>.</p>',
+  '<p>Vibe-Coding als <a href="https://de.wikipedia.org/wiki/Vibe-Coding">«Art der Softwareentwicklung»</a>, mittels KI.</p>',
+  '<p>Der Satz ist <em>schön</em>. Er geht <strong>weiter</strong>!</p>',
+  '<p>(<a href="https://x.ch">Klammer</a>) und <em>Wort</em>: <strong>dann</strong> los.</p>',
+  '<p>Zitat „<em>Er sagte</em>“ war falsch.</p>',
+  '<p>Wort <em>x</em> , Tippfehler bleibt.</p>',
+];
+
+for (const html of TAG_GAP_CASES) {
+  test(`Fundstellen-View findet den Prompt-Text: ${htmlToText(html).slice(0, 42)}…`, () => {
+    assert.equal(countInHtml(html, htmlToText(html)), 1, 'Prompt-Text muss in der View auffindbar sein');
+  });
+}

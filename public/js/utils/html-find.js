@@ -4,7 +4,7 @@
 
 import { CITE_CLASS, CITE_ATTR_SRC } from '../sources/cite-html.js';
 import { XREF_CLASS, XREF_ATTR_ID } from '../xrefs/xref-html.js';
-import { foldQuotes, normalizeMatchText } from './text-match.js';
+import { foldQuotes, normalizeMatchText, tagGapIsSpace } from './text-match.js';
 import { insideClassDiv } from './html-container.js';
 
 // Dekodiert eine einzelne HTML-Entity (z.B. &bdquo;) via Browser-Parser.
@@ -19,7 +19,8 @@ function _decodeHtmlEntity(entity) {
 
 /**
  * Baut eine Text-View von `html` mit Positions-Map zurück ins Original-HTML.
- * - Tags werden entfernt; Tag-Grenzen wirken wie Whitespace.
+ * - Tags werden entfernt; Tag-Grenzen wirken wie Whitespace — ausser an einem
+ *   Satzzeichen, wo der Editor keinen Leerraum rendert (`tagGapIsSpace`).
  * - Aufeinanderfolgender Whitespace wird auf einzelne Spaces kollabiert.
  * - Entities werden via Browser-Parser dekodiert.
  * - Anführungszeichen werden in `text` gefaltet (`foldQuotes`, längenerhaltend):
@@ -57,7 +58,7 @@ function _buildHtmlTextMap(html) {
     if (c === '<') {
       const gt = html.indexOf('>', i);
       if (gt === -1) break;
-      markSpace();
+      if (tagGapIsSpace(html, i, gt + 1)) markSpace();
       i = gt + 1;
       continue;
     }

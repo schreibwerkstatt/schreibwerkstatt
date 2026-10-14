@@ -109,8 +109,35 @@ test('replaceInHtml: Rückgängig über maskierten Ersatz stellt das Original wi
   assert.equal(replaceInHtml(applied, 'Tom & Jerry', 'Tom und Jerry'), html);
 });
 
-// ── Rand-Whitespace ──────────────────────────────────────────────────────────
+// ── Tag-Grenze an Satzzeichen ─────────────────────────────────────────────────
+// Die View muss dieselbe Sicht zeigen wie der Prompt-Text, aus dem die KI ihr
+// `original` zitiert (lib/html-text.js#stripTagsKeepPunctuation): der Editor
+// rendert hinter `</a>` kein Leerzeichen. Zeigte die View hier eines, fände ein
+// Befund wie «Asianometry.» seine Stelle nicht und fiele ersatzlos heraus.
 
+test('countInHtml: Punkt/Komma nach einem Tag ohne Phantom-Leerzeichen', () => {
+  const html = '<p>so mein Berichterstatter <a href="https://www.asianometry.com/">Asianometry</a>.</p>';
+  assert.equal(countInHtml(html, 'Asianometry.'), 1, 'so steht es im Prompt-Text');
+  assert.equal(countInHtml(html, 'Asianometry .'), 0, 'die Phantom-Form gibt es im Text nicht');
+});
+
+test('countInHtml: echtes Leerzeichen vor einem Komma bleibt ein Leerzeichen', () => {
+  const html = '<p>Wort <em>x</em> , Tippfehler.</p>';
+  assert.equal(countInHtml(html, 'Wort x ,'), 1, 'getipptes Leerzeichen zählt');
+  assert.equal(countInHtml(html, 'Wort x,'), 0);
+});
+
+test('countInHtml: Wortzeichen an beiden Seiten einer Tag-Grenze bleiben getrennt', () => {
+  assert.equal(countInHtml('<p>Wort</em><em>Wort</em></p>', 'Wort Wort'), 1);
+});
+
+test('replaceInHtml: Korrektur bis zum Punkt hinter einem Tag greift', () => {
+  const html = '<p>Der Satz ist <em>schön</em>. Er ging.</p>';
+  assert.equal(replaceInHtml(html, 'Der Satz ist schön.', 'Der Satz war schön.'),
+    '<p>Der Satz war <em>schön</em>. Er ging.</p>');
+});
+
+// ── Rand-Whitespace ──────────────────────────────────────────────────────────
 test('replaceInHtml: Rand-Whitespace der Nadel verklebt keine Wörter', () => {
   assert.equal(replaceInHtml('<p>Tom und Jerry</p>', ' und ', 'sowie'), '<p>Tom sowie Jerry</p>');
   assert.equal(replaceInHtml('<p>Tom und Jerry</p>', 'und ', ' sowie '), '<p>Tom sowie Jerry</p>');

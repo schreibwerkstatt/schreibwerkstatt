@@ -146,7 +146,8 @@
               <span class="page-status-dot" :class="'page-status-' + pageStatus(page)"
                 @mouseenter.stop="_showStatusTip($el, page)"
                 @mouseleave.stop="_hideStatusTip()"></span>
-              <span x-text="_isSingleSectionChapter(item) ? item.name : page.name"></span>
+              <span :class="{ 'page-item--chapter-name': _isSingleSectionChapter(item) }"
+                    x-text="_isSingleSectionChapter(item) ? item.name : page.name"></span>
               <span class="page-item-section-name" x-show="_isSingleSectionChapter(item) && !sameStructureTitle(item.name, page.name)" x-text="page.name"></span>
               <span class="edit-status-meter"
                     :class="editStatusClass(pageEditStatus(page.id))"

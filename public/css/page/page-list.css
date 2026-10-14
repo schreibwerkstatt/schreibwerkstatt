@@ -89,6 +89,17 @@
   font-size: var(--font-size-xs);
   align-self: center;
 }
+/* Kapitelname in der Ein-Abschnitt-Zeile (Blog-Buch: der Jahresname eines
+   Jahres-Kapitels). Bleibt als Ganzes stehen: mit `min-width: 0` +
+   `overflow-wrap: anywhere` von oben presste der lange Abschnittstitel den
+   vier Zeichen langen Namen auf zwei Zeilen ("20" / "22"). `min-width: auto`
+   nimmt die automatische Mindestbreite (längstes Wort), `overflow-wrap: normal`
+   erlaubt nur noch Wortumbrüche — ein langer Kapitelname darf weiterhin
+   umbrechen, ein Jahresname nie mittendrin. */
+.page-item .page-name > span.page-item--chapter-name {
+  min-width: auto;
+  overflow-wrap: normal;
+}
 
 .page-status-dot {
   flex-shrink: 0;
