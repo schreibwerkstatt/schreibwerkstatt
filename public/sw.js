@@ -208,13 +208,13 @@ async function precacheWithRetry(cache, paths) {
   await Promise.all(paths.map((p, i) => cache.put(p, fetched[i])));
 }
 
-// Ein gescheiterter Install hinterlässt nichts Sichtbares: ohne aktiven SW
-// bleibt die Seite einfach unkontrolliert. Darum meldet der SW ihn selbst an
-// dieselbe Telemetrie wie failsafe-reveal.js (kind 'boot'). Nur Precache-
-// Fehler — ein Install ohne Session scheitert absichtlich und hätte ohnehin
-// keine Session für den Report. Best-effort: der Report darf den Install-
-// Fehler nie überdecken.
+// Ein gescheiterter Install hinterlässt nichts Sichtbares: ohne aktiven SW bleibt
+// die Seite einfach unkontrolliert. Darum meldet der SW ihn selbst an dieselbe
+// Telemetrie wie failsafe-reveal.js (kind 'boot') — JEDEN Abbruch, auch den der
+// Session-Probe in fillGeneration vor dem ersten Manifest-Asset. Best-effort;
+// Reichweite und Grenze des Reports: docs/caching.md.
 async function reportInstallFailure(err) {
+  const fortschritt = err?.precacheTotal ? ` ok=${err.precacheDone}/${err.precacheTotal}` : '';
   try {
     await fetch(new Request('/telemetry/js-error', {
       method: 'POST',
@@ -222,8 +222,8 @@ async function reportInstallFailure(err) {
       credentials: 'same-origin',
       body: JSON.stringify({
         kind: 'boot',
-        message: `SW-Install gescheitert: ${err.message} [build=${SHELL_BUILD} ok=${err.precacheDone}/${err.precacheTotal}]`,
-        source: err.precachePath,
+        message: `SW-Install gescheitert: ${err.message} [build=${SHELL_BUILD}${fortschritt}]`,
+        source: err.precachePath || null,
       }),
     }));
   } catch {}
@@ -316,7 +316,7 @@ self.addEventListener('install', (event) => {
     try {
       await fillGeneration();
     } catch (err) {
-      if (err?.precachePath) await reportInstallFailure(err);
+      await reportInstallFailure(err);
       throw err;
     }
     // Bewusst KEIN skipWaiting hier: der neue SW bleibt `waiting`, bis der

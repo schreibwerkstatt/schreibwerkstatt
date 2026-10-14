@@ -1,0 +1,11 @@
+{
+  "version": "4.24.4",
+  "date": "2026-10-14",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Die Seite konnte beim Laden so lange hängen, dass nichts mehr kam. Sie richtet sich jetzt früher ein und startet danach meistens deutlich schneller.",
+      "en": "The page could hang while loading for so long that nothing appeared. It now gets ready earlier and usually starts considerably faster afterwards."
+    }
+  ]
+}

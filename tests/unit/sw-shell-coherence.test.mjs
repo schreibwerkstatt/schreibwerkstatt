@@ -266,10 +266,12 @@ test('handleNavigate liefert 503 statt zu haengen, wenn offline und Cache leer',
 test('Install bricht ab, wenn `/` die Landing-Seite liefert — nach EINEM Request', async () => {
   const cache = makeCache({});
   const seen = [];
+  const reports = [];
   const ctx = loadSw({
     cache,
     fetchImpl: async (req) => {
       seen.push(req.pathname);
+      if (req.pathname === '/telemetry/js-error') { reports.push(JSON.parse(req.body)); return new FakeResponse('{}'); }
       return req.pathname === '/' ? new FakeResponse('<h1>Landing</h1>') : new FakeResponse('asset');
     },
   });
@@ -277,8 +279,14 @@ test('Install bricht ab, wenn `/` die Landing-Seite liefert — nach EINEM Reque
   await assert.rejects(runInstall(ctx),
     'Ohne Session ist diese Generation nicht installierbar — sie waere nur Muell.');
   assert.deepEqual(cache.writes, [], 'nichts gecacht: die alte Generation bleibt heil');
-  assert.deepEqual(seen, ['/'],
+  assert.deepEqual(seen, ['/', '/telemetry/js-error'],
     'Die Shell-Antwort klaert die Lage allein — kein Precache-Sturm ueber ~800 Assets.');
+  assert.equal(reports.length, 1,
+    'Der Abbruch an der Session-Probe ist selbst der meldepflichtige Grund: ohne diesen Report bleibt ein dauerhaft unkontrollierter Browser ohne jede Spur, die ihn verursacht hat.');
+  assert.match(reports[0].message, /SW-Install gescheitert: Install abgebrochen/);
+  assert.match(reports[0].message, /build=testbuild\]/,
+    'Ohne Precache-Fehler gibt es keine Fortschrittsangabe — kein "ok=undefined/undefined".');
+  assert.equal(reports[0].source, null);
 });
 
 test('Precache cacht keine umgeleitete Antwort (Auth-Guard → /login)', async () => {

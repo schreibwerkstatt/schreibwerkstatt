@@ -112,10 +112,10 @@
   // ZWEI Vorbedingungen, ohne die die Heilung nicht heilt, sondern schadet —
   // beide sind teuer erkauft, weil ihr Fehlen sich selbst reproduziert:
   //  1. `readyState === 'complete'`. Laeuft der Load noch, ist das kein Ausfall,
-  //     sondern Latenz — die Shell zieht ~200 Module. Die Heilung wirft dann
+  //     sondern Latenz — die Shell zieht ~670 Module. Die Heilung wirft dann
   //     genau den Cache weg, der den naechsten Load schnell machen wuerde, und
   //     der Folge-Load ist wieder kalt: derselbe Watchdog feuert erneut.
-  //     Darum einmalig Nachfrist statt Heilung.
+  //     Darum wartet der Watchdog, BIS der Load durch ist.
   //  2. Ein Service-Worker kontrolliert die Seite. Die Heilung repariert genau
   //     EINEN Fall — eine Generations-Inkohaerenz, bei der der SW Shell-Markup
   //     und Module aus verschiedenen Generationen ausliefert. Ohne Controller
@@ -127,11 +127,26 @@
   //     unkontrolliert und kalt zurueck.
   var HEAL_AFTER_MS = 10000;
   var GRACE_MS = 10000;
-  function bootWatchdog(isRetry) {
+  // Deckel der Nachfrist: haengt der Load laenger, ist Warten nicht mehr
+  // sinnvoll (der Body ist seit 8s enthüllt, der User arbeitet) — dann wird die
+  // Latenz gemeldet statt weiter abgewartet.
+  var MAX_LATENCY_MS = 60000;
+  function bootWatchdog() {
     if (window.__app) return;
     var secs = Math.round(performance.now() / 1000);
-    if (!isRetry && document.readyState !== 'complete') {
-      setTimeout(function () { bootWatchdog(true); }, GRACE_MS);
+    // Die Nachfrist gilt fuer JEDEN Aufruf, nicht nur fuer den ersten: nur so
+    // bleibt die Vorbedingung 1 auch beim Retry eine Tatsache und nicht eine
+    // Vermutung aus dem ersten Takt. Der Watchdog wartet damit auf den Load, bis
+    // er entweder fertig ist (dann ist ein fehlendes __app ein echter Ausfall)
+    // oder der Deckel ihn beendet — gemeldet wird in beiden Faellen, geheilt
+    // nur im ersten.
+    if (document.readyState !== 'complete') {
+      if (performance.now() < MAX_LATENCY_MS) {
+        setTimeout(bootWatchdog, GRACE_MS);
+        return;
+      }
+      bootReport('Langsamer Boot: Load nach ' + secs + 's noch nicht fertig, Alpine laeuft noch nicht');
+      reveal();
       return;
     }
     var alreadyHealed = false;

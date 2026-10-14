@@ -7,6 +7,24 @@ import {
 } from './update-policy.js';
 import { createBusyLock, activateIfNobodyBusy } from './busy-lock.js';
 
+// Registrierung an DOMContentLoaded, NICHT an `load`. Das `load`-Event feuert
+// erst, wenn jedes Subresource durch ist — auf einer noch unkontrollierten
+// Seite also erst nach den ~670 Modul-Requests der Shell, die der Precache
+// gerade beschleunigen soll: die Registrierung hing damit am `load`, das sie
+// selbst teuer macht, und ein kalter Start mit langsamer Leitung blieb für
+// immer kalt. DOMContentLoaded kommt, sobald der Modul-Graph ausgewertet ist —
+// die Ladearbeit der Seite ist vorbei, der Precache konkurriert nicht mehr mit
+// ihr (der Grund für das bewusst späte Registrieren), Bilder/Fonts/Late-Assets
+// blockieren die Registrierung aber nicht mehr.
+//
+// Modul-Skripte sind deferred: DOMContentLoaded kann zum Aufrufzeitpunkt noch
+// nicht gefeuert sein, obwohl readyState schon 'interactive' steht. Nur
+// 'complete' heisst sicher, dass es vorbei ist.
+function whenDomReady(fn) {
+  if (document.readyState === 'complete') { fn(); return; }
+  document.addEventListener('DOMContentLoaded', fn, { once: true });
+}
+
 // Service Worker: cached SPA-Shell für Offline/Zug-Modus. Nur über HTTPS bzw.
 // localhost registrierbar. Fehler schlucken – SW ist Progressive Enhancement.
 // Dev/Localhost: SW deaktiviert (Cache-Artefakte beim Entwickeln eklig).
@@ -34,7 +52,7 @@ export function registerServiceWorker() {
     return;
   }
 
-  window.addEventListener('load', async () => {
+  whenDomReady(async () => {
     try {
       // updateViaCache:'none' → Update-Checks revalidieren sw.js UND seine
       // importScripts (/sw-manifest.js) immer frisch vom Netz. Ohne das nutzt
