@@ -1,0 +1,16 @@
+{
+  "version": "4.24.5",
+  "date": "2026-10-14",
+  "entries": [
+    {
+      "kind": "behoben",
+      "de": "⌘E startet den Notebook-Editor für den geöffneten Abschnitt. War kein Abschnitt offen, öffnete der Browser stattdessen eine Websuche (etwa mit Claude oder Google).",
+      "en": "⌘E opens the notebook editor for the open section. When no section was open, the browser started a web search (Claude or Google) instead."
+    },
+    {
+      "kind": "behoben",
+      "de": "⌘P springt wie angekündigt in die Abschnittsbaum-Suche und öffnet nicht mehr den Druck-Dialog des Browsers.",
+      "en": "⌘P focuses the section-tree search as documented and no longer opens the browser's print dialog."
+    }
+  ]
+}

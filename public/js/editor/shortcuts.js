@@ -183,21 +183,32 @@ export const shortcutsMethods = {
   // Cmd/Ctrl+Shift+Leertaste → Diktat starten/abschliessen (nur Notebook-Edit)
   // Cmd/Ctrl+P → Seitenbaum-Filter
   // Cmd/Ctrl+K → Command-Palette
-  // Greift auch in Inputs/Editor – preventDefault ist Pflicht (sonst Browser-Print/Find).
+  // Greift auch in Inputs/Editor. preventDefault ist Pflicht — der Browser
+  // hat eigene Belegungen für genau diese Chords: ⌘E = Suche mit dem
+  // Standard-Suchanbieter, ⌘P = Drucken. Zwei Zweige sind bewusst NICHT
+  // abgefangen: ⌘⇧E (gehört handleFocusHotkey) und ⌘⇧Leertaste (ohne
+  // Edit-Modus muss die System-Diktation durchkommen).
   handleNavHotkey(event) {
     if (!(event.ctrlKey || event.metaKey)) return;
     const key = (event.key || '').toLowerCase();
     if (event.altKey) return;
     if (key === 'e') {
       if (event.shiftKey) return;
-      // Ctrl+Shift+E ist belegt (Focus-Toggle), plain Ctrl+E → Notebook-Edit
+      // Ctrl+Shift+E ist belegt (Focus-Toggle), plain Ctrl+E → Notebook-Edit.
+      // preventDefault VOR den Zustands-Guards, nicht danach: der Chord gehört
+      // der App und darf nie an den Browser fallen. Chrome belegt Cmd/Ctrl+E
+      // für „Auswahl mit der Standardsuche suchen" — ohne dieses preventDefault
+      // öffnet der Tastendruck den Suchanbieter des Browsers und der Editor geht
+      // überhaupt nicht auf. Ohne offene Seite wird der Chord still geschluckt
+      // (wie ⌘⇧F im Bucheditor); die globale Statuszeile (#status) hängt im
+      // Notebook-Partial und wäre in dem Zustand gar nicht sichtbar.
+      event.preventDefault();
       if (!this.currentPage) return;
       if (this.editMode) {
         this.quickSave?.();
       } else {
         this.startEdit?.();
       }
-      event.preventDefault();
       return;
     }
     if (event.shiftKey && (event.code === 'Space' || key === ' ')) {
@@ -219,8 +230,11 @@ export const shortcutsMethods = {
     }
     if (event.shiftKey) return;
     if (key === 'p') {
-      if (!this.focusTreeSearch()) return;
+      // Wie ⌘E: der Chord gehört der App, deshalb vorher preventDefault —
+      // sonst öffnet der Druck den Druck-Dialog des Browsers, sobald der
+      // Baumfilter nicht im DOM steht (kein Buch gewählt).
       event.preventDefault();
+      this.focusTreeSearch();
     } else if (key === 'k') {
       event.preventDefault();
       window.dispatchEvent(new CustomEvent(EVT.PALETTE_OPEN));
