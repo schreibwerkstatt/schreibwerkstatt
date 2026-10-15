@@ -29,6 +29,7 @@
     <div class="progress-bar" :style="{ '--progress': orteProgress + '%' }"></div>
   </div>
   <div x-show="orteStatus" class="card-status" x-html="orteStatus"></div>
+  <div x-show="orteError" class="card-status card-status--error" role="alert" x-text="orteError"></div>
 
   <!-- Neuanlage: Formular über der Liste (Bearbeiten erscheint im Detail der Zeile) -->
   <template x-if="ortEdit.mode === 'new'">
@@ -94,6 +95,13 @@
          >
     </div>
     <span class="filter-count" x-text="orteFiltered.length + ' / ' + $store.catalog.orte.length"></span>
+  </div>
+
+  <!-- Verwaiste Schauplätze: Hinweis + Sammel-Löschen (Einzel-Löschen an der Zeile) -->
+  <div x-show="staleCount > 0" class="stale-cleanup-row">
+    <span class="card-hint" :data-tip="$app.t('orte.staleHint')" x-text="$app.t('orte.staleSummary', { n: staleCount })"></span>
+    <button type="button" class="btn-compact danger" :disabled="staleDeleting" @click="deleteAllStale()"
+            x-text="$app.t('orte.deleteAllStale')"></button>
   </div>
 
   <!-- @include orte-list -->

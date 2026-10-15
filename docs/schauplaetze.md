@@ -36,6 +36,7 @@ Die Analyse extrahiert die Hierarchie bewusst nicht: ein neues Feld im Orte-Sche
 ## Löschen und Zusammenführen
 
 - Löschen nur für verwaiste (`stale`) und selbst angelegte Orte (`NOT_DELETABLE`, 409 sonst) — ein aktiver Analyse-Ort käme mit dem nächsten Lauf zurück.
+- Beide Wege gibt es einzeln (Papierkorb an der Zeile) und gesammelt: `DELETE /locations/:book_id/stale` löscht alle verwaisten Orte des Buchs. Die Karte zeigt sie als `.stale-cleanup-row` unter der Filterleiste (Hinweis + Knopf, geteiltes Vokabular mit der Szenen-Karte, CSS `card-blocks.css`) und lädt den Katalog danach **neu**, statt lokal zu filtern — Kinder eines gelöschten Ortes fallen per `SET NULL` auf die Wurzel zurück. Selbst angelegte Orte sind nie `stale` und bleiben unangetastet. Denselben Endpunkt nutzt die Danger-Zone der Bucheinstellungen.
 - Dubletten führt der Autor im Detail einer Zeile zusammen («Zusammenführen mit …», `POST …/merge`); dasselbe Panel steht in den Bucheinstellungen → Danger-Zone. Merge-Kern und seine Grenze (kein persistenter Alias): [komplett.md](komplett.md) „Manuelles Zusammenführen".
 
 ## Auswertung im Detail
@@ -46,4 +47,4 @@ Deterministisch aus dem geladenen Katalog ([public/js/book/orte-insights.js](../
 
 `locations.typ` ist Freitext; die bekannten Werte und ihre Labels stehen in [public/js/book/ort-typen.js](../public/js/book/ort-typen.js) (`orte.typ.<key>` in beiden Locales). Die Liste muss das Typ-Enum des Analyse-Schemas decken — gegated durch [tests/unit/ort-typen.test.mjs](../tests/unit/ort-typen.test.mjs). Unbekannte Werte erscheinen als Rohwert. Ein Typ-Key ist eine Persistenz-Konstante: ergänzen ja, umbenennen nein.
 
-Tests: [tests/integration/locations-manual.test.js](../tests/integration/locations-manual.test.js), [tests/unit/orte-insights.test.mjs](../tests/unit/orte-insights.test.mjs), Merge in [tests/unit/entity-merge.test.js](../tests/unit/entity-merge.test.js).
+Tests: [tests/integration/locations-manual.test.js](../tests/integration/locations-manual.test.js), [tests/unit/orte-insights.test.mjs](../tests/unit/orte-insights.test.mjs), Karte + Pflege in [tests/e2e-app/orte-pflege.spec.js](../tests/e2e-app/orte-pflege.spec.js), Merge in [tests/unit/entity-merge.test.js](../tests/unit/entity-merge.test.js).

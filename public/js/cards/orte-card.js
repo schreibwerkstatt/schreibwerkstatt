@@ -25,6 +25,8 @@ export function registerOrteCard() {
     orteLoading: false,
     orteProgress: 0,
     orteStatus: '',
+    orteError: '',
+    staleDeleting: false,
     viewMode: lsGet('orte.viewMode') === 'grid' ? 'grid' : 'list', // 'list' | 'grid' | 'map'
     // Geo-Karte (View-Mode 'map') — siehe book/orte-map.js.
     orteRealEnabled: false,   // book_settings.orte_real → blendet Karten-Tab ein
@@ -75,7 +77,7 @@ export function registerOrteCard() {
         name: 'orte',
         showFlag: 'showOrteCard',
         timerKeys: ['_ortePollTimer', '_geocodeJobTimer', '_orteMapStatusTimer'],
-        resetState: { plotBacklinks: {}, orteLoading: false, orteProgress: 0, orteStatus: '', orteRealEnabled: false, geocodingId: null, geocodingAll: false, highlightOrtId: null, orteMapStatus: '', ortMergeTarget: '' },
+        resetState: { plotBacklinks: {}, orteLoading: false, orteProgress: 0, orteStatus: '', orteError: '', staleDeleting: false, orteRealEnabled: false, geocodingId: null, geocodingAll: false, highlightOrtId: null, orteMapStatus: '', ortMergeTarget: '' },
         load: (root) => { this.loadPlotBacklinks('location'); return root.loadOrte(Alpine.store('nav').selectedBookId); },
         onShow: async (root) => {
           const tasks = [root.loadOrte(Alpine.store('nav').selectedBookId), this.loadOrteReal(), this.loadPlotBacklinks('location')];
@@ -122,6 +124,42 @@ export function registerOrteCard() {
     ortDepth(id) {
       this.orteFiltered;
       return this._orteFilteredCache?.depth.get(id) || 0;
+    },
+
+    // Verwaiste Orte («nicht mehr im Text»): sie stehen mit Stale-Badge in der
+    // Liste und sind einzeln löschbar; die Sammelzeile darunter räumt sie auf.
+    // Selbst angelegte Orte sind nie stale und bleiben unangetastet.
+    get staleCount() {
+      const orte = window.__app.$store.catalog.orte;
+      return this._memo('stale', [orte], () => orte.filter(o => o.stale).length);
+    },
+
+    // Alle verwaisten Schauplätze des Buchs auf einmal (derselbe Endpunkt wie die
+    // Danger-Zone der Bucheinstellungen). Danach wird der Katalog neu geladen
+    // statt lokal gefiltert: Kinder eines gelöschten Ortes fallen per SET NULL
+    // auf die Wurzel zurück und stehen sonst unter einem nicht mehr existierenden
+    // Elternort.
+    async deleteAllStale() {
+      const n = this.staleCount;
+      if (!n || this.staleDeleting) return;
+      const app = window.__app;
+      if (!await app.appConfirm({
+        message: app.t('orte.confirmDeleteAllStale', { n }),
+        confirmLabel: app.t('common.delete'), danger: true,
+      })) return;
+      const bookId = Alpine.store('nav').selectedBookId;
+      this.staleDeleting = true;
+      this.orteError = '';
+      try {
+        const r = await fetch(`/locations/${bookId}/stale`, { method: 'DELETE' });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        await app.loadOrte(bookId);
+      } catch (e) {
+        console.error('[orte.deleteAllStale]', e);
+        this.orteError = app.t('orte.deleteFailed');
+      } finally {
+        this.staleDeleting = false;
+      }
     },
 
     // Unterorte direkt unter ihren Elternort ziehen (Tiefensuche, Geschwister in

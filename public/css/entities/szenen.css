@@ -121,15 +121,6 @@
 /* === Liste === */
 .szenen-liste-section { padding: var(--space-xs) 0; }
 
-/* Stale-Hinweis + Sammel-Löschen unter der Filterleiste. */
-.szenen-stale-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-sm);
-}
-
 /* Zeilen-Hauptteil: Titel + einzeiliger Anriss des KI-Kommentars. */
 .szenen-row-main {
   display: flex;

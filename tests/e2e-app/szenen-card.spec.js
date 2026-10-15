@@ -64,7 +64,7 @@ test('Szenen-Liste: Buchreihenfolge, Zaehler ohne stale, Verteilung filtert', as
   // «Alle» zaehlt nur Szenen im Text; die stale-Szene hat eine eigene Zeile.
   const tabs = card.locator('.filter-bar .tabs-btn');
   await expect(tabs.first().locator('.tabs-btn-count')).toHaveText('3');
-  await expect(card.locator('.szenen-stale-row')).toBeVisible();
+  await expect(card.locator('.stale-cleanup-row')).toBeVisible();
 
   // Suche trifft auch den Kommentar.
   await card.locator('.filter-search-input').fill('dialog');
@@ -114,9 +114,9 @@ test('Szenen: stale-Szenen gesammelt loeschen', async ({ page }) => {
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, deleted: { scenes: 1 } }) });
   });
 
-  await card.locator('.szenen-stale-row button').click();
+  await card.locator('.stale-cleanup-row button').click();
   await page.locator('#app-confirm-dialog .confirm-dialog-btn--danger').click();
-  await expect(card.locator('.szenen-stale-row')).toBeHidden();
+  await expect(card.locator('.stale-cleanup-row')).toBeHidden();
   await expect(card.locator('.entity-list .entity-row')).toHaveCount(3);
   expect(deleted).toBe(true);
 

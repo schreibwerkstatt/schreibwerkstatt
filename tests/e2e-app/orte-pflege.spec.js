@@ -80,3 +80,57 @@ test('schauplätze: anlegen, Unterort eingerückt, bearbeiten, Typ übersetzt, l
     await fetch(`/locations/${bookId}/${id}`, { method: 'DELETE' });
   }, { bookId, id: ids.hotel });
 });
+
+test('schauplätze: verwaiste Orte gesammelt löschen', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+
+  // Katalog mit einem verwaisten Elternort; die Kapelle hängt an ihm und überlebt
+  // das Löschen (SET NULL) — genau das Verhalten prüft der Test.
+  let orte = [
+    { id: 'ort_1', name: 'Verwaltenhof', typ: 'gebaeude', stale: true, kapitel: [], figuren: [] },
+    { id: 'man_9', name: `Kapelle ${RUN}`, typ: 'raum', parent: 'ort_1', manually_created: true, kapitel: [], figuren: [] },
+    { id: 'ort_2', name: 'Zollhaus', typ: 'gebaeude', kapitel: [], figuren: [] },
+  ];
+  let gets = 0;
+  await page.route(`**/locations/${bookId}`, (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    gets++;
+    return route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ orte, updated_at: '2026-10-01T10:00:00Z' }),
+    });
+  });
+  let bulk = null;
+  await page.route(`**/locations/${bookId}/stale`, (route) => {
+    bulk = route.request().method();
+    const gone = new Set(orte.filter(o => o.stale).map(o => o.id));
+    orte = orte.filter(o => !gone.has(o.id)).map(o => (gone.has(o.parent) ? { ...o, parent: null } : o));
+    return route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ ok: true, deleted: { locations: gone.size } }),
+    });
+  });
+
+  await page.evaluate(() => window.__app.toggleOrteCard());
+  const card = page.locator(CARD);
+  await expect(card.locator('.ort-list .entity-row')).toHaveCount(3);
+  const kapelleItem = card.locator('.ort-list > div', { has: page.locator('.entity-row[data-ortid="man_9"]') });
+  await expect(kapelleItem).toHaveClass(/ort-list-item--child/);
+
+  // Sammelzeile: Hinweis mit Anzahl + ein Knopf für alle verwaisten Orte.
+  const row = card.locator('.stale-cleanup-row');
+  await expect(row).toBeVisible();
+  await expect(row.locator('.card-hint')).toContainText('1');
+  await row.locator('button').click();
+  const getsBefore = gets;
+  await page.locator('#app-confirm-dialog[open] .confirm-dialog-btn--danger').click();
+
+  await expect(row).toBeHidden();
+  expect(bulk).toBe('DELETE');
+  // Katalog neu gelesen statt lokal gefiltert (wie beim Einzel-Löschen): nur der
+  // Server weiss, dass die Kinder eines gelöschten Ortes auf die Wurzel gefallen sind.
+  await expect.poll(() => gets).toBeGreaterThan(getsBefore);
+  await expect(card.locator('.ort-list .entity-row')).toHaveCount(2);
+  await expect(kapelleItem).not.toHaveClass(/ort-list-item--child/);
+});

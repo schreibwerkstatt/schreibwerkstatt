@@ -106,7 +106,7 @@
       <span class="filter-count" x-text="szenenFiltered.length + ' / ' + $store.catalog.szenen.length"></span>
     </div>
     <!-- Stale-Szenen: Hinweis + Sammel-Löschen (Einzel-Löschen an der Zeile) -->
-    <div x-show="staleCount > 0" class="szenen-stale-row">
+    <div x-show="staleCount > 0" class="stale-cleanup-row">
       <span class="card-hint" :data-tip="$app.t('szenen.staleHint')" x-text="$app.t('szenen.staleSummary', { n: staleCount })"></span>
       <button type="button" class="btn-compact danger" :disabled="staleDeleting" @click="deleteAllStale()"
               x-text="$app.t('szenen.deleteAllStale')"></button>

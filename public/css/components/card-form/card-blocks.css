@@ -264,6 +264,19 @@
   .filter-count { width: 100%; text-align: right; }
 }
 
+/* === 8b. Stale-Sammelzeile ==================================================
+   Hinweis + Sammel-Knopf fuer die Katalogeintraege, die die letzte Komplett-
+   analyse nicht mehr im Text gefunden hat („nicht mehr im Text"), unter der
+   Filterleiste, ueber der Liste. Zwei Karten (Szenen, Schauplaetze) nutzen sie —
+   darum hier als geteiltes Vokabular, nicht in einer der beiden CSS-Dateien. */
+.stale-cleanup-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
 
 /* Zeitstempel in der Karten-Subline („Stand: …"). Karten-Kopf-Vokabular, kein
    Feature-Element: ueber ein Dutzend Karten setzen ihn. */

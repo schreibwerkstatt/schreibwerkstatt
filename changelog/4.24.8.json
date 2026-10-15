@@ -1,0 +1,11 @@
+{
+  "version": "4.24.8",
+  "date": "2026-10-15",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Schauplätze-Karte, unter der Filterleiste: «Alle aus dem Katalog löschen» entfernt auf einen Schlag alle Schauplätze, die nicht mehr im Text stehen.",
+      "en": "Locations card, below the filter bar: “Delete all from catalogue” removes in one go every location that is no longer in the text."
+    }
+  ]
+}
