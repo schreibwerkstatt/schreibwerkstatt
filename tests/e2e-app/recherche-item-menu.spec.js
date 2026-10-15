@@ -1,8 +1,9 @@
 // Recherche-Board: das Aktionsmenue eines Fundstuecks (recherche-item-menu.html)
 // muss ganz sichtbar und bedienbar sein, auch wenn sein Container kuerzer ist
 // als das Menue — ein kurzer Fund im Detail-Dialog (der per Overflow klippt)
-// und eine Liste mit einem einzigen Eintrag. Geometrie-Aussage gegen das echte
-// Shell-CSS, darum hier und nicht im Fixture-Harness.
+// und eine Liste mit einem einzigen Eintrag. Dazu seine Schliessregeln (Scroll,
+// Doppelklick), die beide in board.js#toggleItemMenu liegen. Geometrie-Aussage
+// gegen das echte Shell-CSS, darum hier und nicht im Fixture-Harness.
 const { test, expect } = require('../e2e/_helpers/fixtures');
 const { bootApp, selectSeededBook } = require('./_helpers/app');
 
@@ -22,6 +23,22 @@ async function expectMenuFullyUsable(page, menu) {
   });
   expect(res.inViewport, 'Menue liegt ganz im Viewport').toBe(true);
   expect(res.hitInside, 'letzter Menueeintrag ist nicht geklippt').toBe(true);
+}
+
+// Menue oeffnen und die Menue-Aussage pruefen. Wiederholt wird der Klick nur,
+// wenn das Menue nicht aufging — die Liste rendert bei laufendem Job
+// (Recherche-Wortliste, Scraper) neu, und ein Klick mitten darin erreicht den
+// Trigger-Handler nicht. Wichtig ist das Warten zwischen den Versuchen:
+// `isVisible()` ohne Wartezeit sieht das Menue noch nicht, ein zweiter Klick
+// toggle.zt es im selben Frame wieder zu (board.js#toggleItemMenu). Die
+// Geometrie wird danach weiterhin streng geprueft — ein Menue, das gar nicht
+// aufgeht, faellt durch.
+async function openAndCheckMenu(page, trigger, menu) {
+  for (let i = 0; i < 3; i++) {
+    await trigger.click();
+    if (await menu.waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false)) break;
+  }
+  await expectMenuFullyUsable(page, menu);
 }
 
 test('recherche: Aktionsmenue bei kurzem Inhalt nicht geklippt (Detail-Dialog + Liste mit einem Eintrag)', async ({ page }) => {
@@ -45,8 +62,9 @@ test('recherche: Aktionsmenue bei kurzem Inhalt nicht geklippt (Detail-Dialog + 
   await expect(page.locator('#recherche-card')).toBeVisible();
   const row = page.locator(`[data-research-id="${itemId}"]`);
   await expect(row).toBeVisible();
-  await row.locator('.research-item-actions > .icon-btn[aria-haspopup="menu"]').click();
-  await expectMenuFullyUsable(page, row.locator('.research-item-menu'));
+  await openAndCheckMenu(page,
+    row.locator('.research-item-actions > .icon-btn[aria-haspopup="menu"]'),
+    row.locator('.research-item-menu'));
   await page.keyboard.press('Escape');
   await expect(row.locator('.research-item-menu')).toBeHidden();
 
@@ -54,8 +72,85 @@ test('recherche: Aktionsmenue bei kurzem Inhalt nicht geklippt (Detail-Dialog + 
   await page.evaluate(([b, i]) => { location.hash = `#book/${b}/recherche/${i}`; }, [bookId, itemId]);
   const dlg = page.locator('.research-dialog[open]');
   await expect(dlg).toBeVisible();
-  await dlg.locator('.research-dialog__actions > .icon-btn[aria-haspopup="menu"]').click();
-  await expectMenuFullyUsable(page, dlg.locator('.research-item-menu'));
+  await openAndCheckMenu(page,
+    dlg.locator('.research-dialog__actions > .icon-btn[aria-haspopup="menu"]'),
+    dlg.locator('.research-item-menu'));
+});
+
+// Scroll-Fall: das Menue haengt an den Viewport-Koordinaten des Triggers
+// (menuPos aus dessen Rect), also schliesst es nur, was den Trigger auch bewegt.
+// Ein Scroll daneben — eine andere Liste, ein Job-Hinweis, der die Seite um ein
+// paar Pixel verschiebt — laesst es verankert; vorher riss es das Menue da
+// grundlos zu, mitten im Oeffnungsklick des Users.
+test('recherche: Aktionsmenue schliesst nur beim Scroll, der den Trigger bewegt', async ({ page }) => {
+  // Niedriger Viewport, damit die Recherche-Karte sicher ueber den Bildschirm
+  // ragt und die Seite ueberhaupt scrollt — sonst waere der Fall "Trigger
+  // wandert" nicht herstellbar.
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const itemId = await page.evaluate(async (id) => {
+    const made = await fetch('/research', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ book_id: id, kind: 'note', title: 'Scroll' }),
+    }).then(r => r.json());
+    return made.id;
+  }, bookId);
+
+  await page.evaluate((id) => { location.hash = `#book/${id}/recherche`; }, bookId);
+  const row = page.locator(`[data-research-id="${itemId}"]`);
+  await expect(row).toBeVisible();
+  // Scrollposition mit Spiel nach oben UND unten, damit beide Bewegungen
+  // wirklich stattfinden (am Seitenende waere scrollBy ein No-op).
+  await page.evaluate(() => window.scrollTo(0, 140));
+  const menu = row.locator('.research-item-menu');
+  await openAndCheckMenu(page,
+    row.locator('.research-item-actions > .icon-btn[aria-haspopup="menu"]'), menu);
+
+  // Scroll-Ereignis ohne Ortswechsel: der Trigger steht, das Menue bleibt.
+  await page.evaluate(() => window.dispatchEvent(new Event('scroll')));
+  await page.waitForTimeout(150);
+  await expect(menu).toBeVisible();
+
+  // Die Seite selbst scrollt: der Trigger wandert mit, das Menue schliesst.
+  await page.evaluate(() => window.scrollTo(0, 240));
+  await expect(menu).toBeHidden();
+});
+
+// Doppelklick: zwei Klicks kurz nacheinander sind ein verklickter Doppelklick
+// (schnelle Maus, Touch, ein Test-Runner, der eine Aktion wiederholt) und
+// KEIN Schliessen — im reinen Toggle faelle das Menue im selben Frame wieder zu.
+// Nach der Frist schaltet derselbe Trigger weiterhin normal (board.js#
+// toggleItemMenu, MENU_TOGGLE_GRACE_MS).
+test('recherche: Aktionsmenue ueberlebt einen Doppelklick und schaltet danach', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const itemId = await page.evaluate(async (id) => {
+    const made = await fetch('/research', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ book_id: id, kind: 'note', title: 'Doppelklick' }),
+    }).then(r => r.json());
+    return made.id;
+  }, bookId);
+
+  await page.evaluate((id) => { location.hash = `#book/${id}/recherche`; }, bookId);
+  const row = page.locator(`[data-research-id="${itemId}"]`);
+  await expect(row).toBeVisible();
+  const trigger = row.locator('.research-item-actions > .icon-btn[aria-haspopup="menu"]');
+  const menu = row.locator('.research-item-menu');
+  await trigger.click();
+  await expect(menu).toBeVisible();
+
+  // Zweiter Klick ohne Rundenzeit dazwischen (ein echter Doppelklick) — als
+  // DOM-Event ausgeloest, damit die Frist nicht von der Maschine abhaengt.
+  await trigger.evaluate((el) => el.click());
+  await page.waitForTimeout(200);
+  await expect(menu).toBeVisible();
+
+  // Nach der Frist ist derselbe Trigger wieder ein Schalter.
+  await page.waitForTimeout(400);
+  await trigger.click();
+  await expect(menu).toBeHidden();
 });
 
 // Status-Board: die Karte hebt sich beim Hover per transform an; laeuft beim

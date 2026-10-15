@@ -7,6 +7,11 @@ import { computePopoverPos, refinePopoverPos } from '../../popover-anchor.js';
 import { attachDismiss, detachDismiss } from '../../cards/dismiss.js';
 import { KINDS, LINK_KINDS, emptyDraft as _emptyDraft } from './shared.js';
 
+// Fenster, in dem ein wiederholter Klick auf denselben Trigger NICHT als
+// Schliessen gilt (toggleItemMenu). Kurz genug, dass die Zwei-Klick-Bedienung
+// fluessig bleibt, lang genug, um einen Doppelklick zu schlucken.
+const MENU_TOGGLE_GRACE_MS = 300;
+
 export const rechercheBoardMethods = {
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   async loadRecherche() {
@@ -109,7 +114,7 @@ export const rechercheBoardMethods = {
     // beim Buchwechsel aus dem localStorage restauriert — vor dem Nachladen.
     // Ein Reset hier gewänne gegen den restaurierten Stand. Den ausdrücklichen
     // Weg „alles zurücksetzen" gibt es weiter über `clearFilters()`.
-    this.menuOpenId = null;
+    this.closeItemMenu();
     this.linkPickerItemId = null;
     this.suggestions = {};
     this.errorMessage = '';
@@ -135,16 +140,34 @@ export const rechercheBoardMethods = {
   // lange Menü sonst ab. Das Menü ist das Geschwister des Triggers — ein x-ref
   // taugt im x-for nicht (letzte Instanz gewinnt).
   toggleItemMenu(ev, key) {
-    if (this.menuOpenId === key) { this.closeItemMenu(); return; }
+    // Derselbe Klick binnen der Oeffnungs-Frist ist ein durchgerutschter
+    // Doppelklick (schnelle Maus, unempfindliches Touch, ein Test-Runner, der
+    // eine Aktion wiederholt), kein Schliessen: im Toggle-Fall waere das
+    // gerade geoeffnete Menue im selben Frame wieder zu und die
+    // Zwei-Klick-Bedienung unmoeglich. Danach schaltet derselbe Trigger
+    // weiterhin normal.
+    if (this.menuOpenId === key) {
+      if (Date.now() - this._menuOpenedAt < MENU_TOGGLE_GRACE_MS) return;
+      this.closeItemMenu();
+      return;
+    }
     const trigger = ev.currentTarget;
     const rect = trigger.getBoundingClientRect();
     this.menuPos = computePopoverPos(rect, 220, 400);
+    this._menuAnchorEl = trigger;
+    this._menuAnchorRect = { top: rect.top, left: rect.left };
+    this._menuOpenedAt = Date.now();
     this.menuOpenId = key;
     if (!this._itemMenuDismiss) {
-      // Scroll schliesst — ausser im Menü selbst (max-height + interner Scroll).
+      // Scroll schliesst — ausser im Menü selbst (max-height + interner Scroll)
+      // und ausser, wenn der Anker stehen bleibt: das Menü hängt an den
+      // Viewport-Koordinaten des Triggers, ein daneben scrollender Bereich
+      // (andere Liste, ein Job-Hinweis, der die Seite um ein paar Pixel
+      // verschiebt) liesse es verankert und riss es sonst grundlos zu.
       const ctrl = attachDismiss(() => this.closeItemMenu(), { scroll: false });
       window.addEventListener('scroll', (e) => {
-        if (!e.target?.closest?.('.research-item-menu')) this.closeItemMenu();
+        if (e.target?.closest?.('.research-item-menu')) return;
+        if (this._menuAnchorMoved()) this.closeItemMenu();
       }, { capture: true, passive: true, signal: ctrl.signal });
       this._itemMenuDismiss = ctrl;
     }
@@ -155,7 +178,19 @@ export const rechercheBoardMethods = {
   },
   closeItemMenu() {
     this.menuOpenId = null;
+    this._menuAnchorEl = null;
+    this._menuAnchorRect = null;
+    this._menuOpenedAt = 0;
     detachDismiss(this, '_itemMenuDismiss');
+  },
+  // Hat sich der Trigger seit dem Oeffnen bewegt? 1px Toleranz, damit
+  // Rundung und Subpixel-Rauschen den Menue-Schluss nicht ausloesen.
+  _menuAnchorMoved() {
+    const el = this._menuAnchorEl;
+    const open = this._menuAnchorRect;
+    if (!el || !open || !this.menuOpenId) return false;
+    const now = el.getBoundingClientRect();
+    return Math.abs(now.top - open.top) > 1 || Math.abs(now.left - open.left) > 1;
   },
 
   // ── Filter ───────────────────────────────────────────────────────────────

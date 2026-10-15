@@ -88,6 +88,12 @@ export function registerRechercheCard() {
 
     menuOpenId: null,
     menuPos: { top: 0, left: 0 },
+// Anker des Aktionsmenues: Trigger-Element + dessen Rect beim Oeffnen.
+    // Traeger von „Scroll schliesst nur, wenn der Trigger mitwandert"
+    // (board.js#_menuAnchorMoved) — transient, wird beim Schliessen genullt.
+    _menuAnchorEl: null,
+    _menuAnchorRect: null,
+    _menuOpenedAt: 0,
 
     // Native-Fullscreen-Status (gespiegelt vom fullscreenchange-Listener) —
     // mehr Platz fürs Karten-Board. Toggle in rechercheMethods.toggleRechercheFullscreen.
