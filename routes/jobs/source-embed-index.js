@@ -25,6 +25,7 @@ const { db } = require('../../db/schema');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   createJob, enqueueJob, findActiveJobId, jsonBody, jobAbortControllers, jobs,
+  setJobModel, EMBED_PROVIDER,
 } = require('./shared');
 const embed = require('../../lib/embed');
 const { chunkText, contentHash } = require('../../lib/embed-chunk');
@@ -57,6 +58,7 @@ async function runSourceEmbedIndexJob(jobId, userEmail) {
   try {
     if (!embed.isEnabled()) throw i18nError('job.error.embedDisabled');
     const { model, dim, passagePrefix } = embed.getConfig();
+    setJobModel(jobId, EMBED_PROVIDER, model);
     const signal = () => jobAbortControllers.get(jobId)?.signal;
     const throwIfAborted = () => {
       if (signal()?.aborted) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }

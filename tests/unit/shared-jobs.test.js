@@ -175,6 +175,45 @@ test('createJob: Modell-Recording (global vs. komplett vs. book-chat)', () => {
   assert.equal(modelOf(komplettNoOverride), 'claude-sonnet-4-6');
 });
 
+// ── createJob: Embedding-Typen tragen provider 'embed', nicht den Chat-Provider
+// Die drei Embedding-Jobs fahren /v1/embeddings, keinen Chat-Call. Ohne den
+// EMBED_JOB_TYPES-Zweig wies Job-Statistik/Admin-Nutzung/metrics für jeden Lauf
+// das globale Chat-Modell aus (Bug: „claude" bei bge-m3).
+test('createJob: Embedding-Typen buchen provider=embed + embed.model', () => {
+  const appSettings = require('../../lib/app-settings');
+  appSettings.set('ai.provider', 'claude');
+  appSettings.set('ai.claude.model', 'claude-opus-5-5');
+  appSettings.set('embed.model', 'bge-m3');
+  const rowOf = (jobId) => db.prepare('SELECT provider, model FROM job_runs WHERE job_id = ?').get(jobId);
+
+  for (const type of ['embed-index', 'source-embed-index', 'chat-embed-index']) {
+    const id = shared.createJob(type, 'me1', null, null);
+    assert.equal(shared.jobs.get(id).provider, 'embed', `${type}: provider im Job-Record`);
+    assert.equal(shared.jobs.get(id).model, 'bge-m3', `${type}: Modell im Job-Record`);
+    assert.deepEqual(rowOf(id), { provider: 'embed', model: 'bge-m3' }, `${type}: job_runs-Zeile`);
+  }
+
+  // Ein anderes Embedding-Modell schlägt durch — es bleibt beim Chat-Override-Schutz
+  // (der darf einem Embedding-Lauf nichts vorschreiben).
+  appSettings.set('embed.model', 'nomic-embed-text');
+  appSettings.set('ai.claude.model.komplett', 'claude-opus-4-8');
+  const id2 = shared.createJob('embed-index', 'me2', null, null);
+  assert.deepEqual(rowOf(id2), { provider: 'embed', model: 'nomic-embed-text' });
+  appSettings.set('embed.model', 'bge-m3');
+  appSettings.set('ai.claude.model.komplett', '');
+});
+
+test('setJobModel: Lauf-Start zieht das tatsächlich benutzte Modell nach', () => {
+  const appSettings = require('../../lib/app-settings');
+  appSettings.set('embed.model', 'bge-m3');
+  const id = shared.createJob('embed-index', 'me3', null, null);
+  // Admin dreht embed.model zwischen Einreihen und Start um — der Record muss
+  // das Modell führen, mit dem der Lauf wirklich eingebettet hat.
+  shared.setJobModel(id, shared.EMBED_PROVIDER, 'qwen3-embedding');
+  assert.equal(shared.jobs.get(id).model, 'qwen3-embedding');
+  assert.equal(db.prepare('SELECT model FROM job_runs WHERE job_id = ?').get(id).model, 'qwen3-embedding');
+});
+
 test('retryOnTransientAi: Erfolg im ersten Versuch ruft fn nur einmal', async () => {
   let calls = 0;
   const out = await shared.retryOnTransientAi(async () => { calls++; return 'ok'; });

@@ -38,6 +38,12 @@ function insertJobRun(job) {
 function startJobRun(jobId) {
   _stmtStartJobRun.run(jobId);
 }
+// Provider/Modell nachtragen, wenn der Job-Lauf die echte Konfiguration gelesen hat
+// (Embedding-Jobs: `embed.model` statt des globalen Chat-Modells). Das Ledger wird in
+// endJobRun aus dieser Zeile geschrieben, der Write muss also vor dem Laufende liegen.
+function updateJobRunModel(jobId, provider, model) {
+  db.prepare('UPDATE job_runs SET provider = ?, model = ? WHERE job_id = ?').run(provider || null, model || null, jobId);
+}
 function endJobRun(jobId, status, tokensIn, tokensOut, cacheReadIn, cacheCreationIn, cacheCreation1hIn, tokensPerSec, error, errorParams = null) {
   const paramsJson = errorParams ? JSON.stringify(errorParams) : null;
   _stmtEndJobRun.run(
@@ -95,6 +101,7 @@ module.exports = {
   lastDoneJobRun,
   insertJobRun,
   startJobRun,
+  updateJobRunModel,
   endJobRun,
   cleanupStuckJobRuns,
 };

@@ -45,6 +45,7 @@ module.exports = {
   // job-runs / checkpoints
   insertJobRun:        jobRuns.insertJobRun,
   startJobRun:         jobRuns.startJobRun,
+  updateJobRunModel:   jobRuns.updateJobRunModel,
   endJobRun:           jobRuns.endJobRun,
   cleanupStuckJobRuns: jobRuns.cleanupStuckJobRuns,
   saveCheckpoint:   jobCheckpoints.saveCheckpoint,

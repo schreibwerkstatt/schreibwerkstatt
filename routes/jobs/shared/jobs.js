@@ -1,7 +1,7 @@
 'use strict';
 const { randomUUID } = require('crypto');
 const logger = require('../../../logger');
-const { insertJobRun, endJobRun } = require('../../../db/schema');
+const { insertJobRun, endJobRun, updateJobRunModel } = require('../../../db/schema');
 const { MAX_TOKENS_OUT, resolveProvider } = require('../../../lib/ai');
 const appSettings = require('../../../lib/app-settings');
 const { jobs, runningJobs, jobAbortControllers, jobQueue, jobKey, jobDedupKey } = require('./state');
@@ -9,6 +9,7 @@ const { _scheduleJobCleanup } = require('./queue');
 const { emitJobChange, emitQueueShift } = require('./events');
 const { _modelName } = require('./model');
 const jobLogBuffer = require('../../../lib/job-log-buffer');
+const embed = require('../../../lib/embed');
 
 // Job-Ctx (type/user/book) wird via ALS in `drainQueue` gesetzt – jeder
 // `logger.*`-Call innerhalb der Job-Funktion erbt ihn automatisch.
@@ -101,28 +102,44 @@ function findActiveJobId(type, entityId, userEmail) {
   return null;
 }
 
+// Job-Typen, die den selbst gehosteten Embedding-Endpunkt nutzen (embed.*) statt
+// einen Chat-Provider. Provider-Marke im Job-Record und Kosten-Ledger.
+const EMBED_PROVIDER = 'embed';
+const EMBED_JOB_TYPES = new Set(['embed-index', 'source-embed-index', 'chat-embed-index']);
+
 function createJob(type, bookId, userEmail, label, labelParams = null, dedupId = null) {
   const id = randomUUID();
   const dedupValue = dedupId != null ? String(dedupId) : null;
   const key = jobKey(type, dedupValue ?? bookId, userEmail);
-  // Effektiver (per-User aufgeloester) Provider, nicht der globale: der Job laeuft mit dem
-  // Provider des zugewiesenen KI-Profils, und job_runs.provider/model sind die Grundlage
-  // der Kostenrechnung. Ohne Aufloesung verbucht ein Profil-Lauf unter fremdem Tarif.
-  const provider = resolveProvider({ userEmail: userEmail || null });
-  let model = _modelName(provider);
-  // Einzelne Job-Familien fahren ein eigenes Modell (Per-Job-Override in den App-Settings,
-  // gespiegelt von _komplettAiOverrides, _bookChatAiOverrides bzw.
-  // applyLektoratAiOverrides). Dann muss
-  // job_runs.model das TATSÄCHLICH genutzte Modell spiegeln, nicht das globale — sonst
-  // verbucht das Kosten-Tracking z.B. einen Opus-Lauf zum Sonnet-Default-Tarif.
-  // Buch-Chat- und Lektorat-Override sind claude-only, der Komplett-Override nicht.
-  let overrideKey = null;
-  if (type === 'komplett-analyse' || type === 'kontinuitaet') overrideKey = `ai.${provider}.model.komplett`;
-  else if (type === 'book-chat' && provider === 'claude') overrideKey = 'ai.claude.model.bookchat';
-  else if ((type === 'check' || type === 'batch-check') && provider === 'claude') overrideKey = 'ai.claude.model.lektorat';
-  if (overrideKey) {
-    const overrideModel = String(appSettings.get(overrideKey) || '').trim();
-    if (overrideModel) model = overrideModel;
+  // Embedding-Läufe fahren keinen Chat-Call, sondern /v1/embeddings. Sie lösen darum
+  // gar keinen Chat-Provider auf, sondern tragen die Embedding-Marke samt `embed.model` —
+  // sonst wies die Job-Statistik für jeden Lauf das globale Chat-Modell aus (Bug: „claude"
+  // bei bge-m3). Der Endpunkt ist self-hosted; costUsd gibt für provider != 'claude'
+  // ohnehin 0 zurück.
+  let provider, model;
+  if (EMBED_JOB_TYPES.has(type)) {
+    provider = EMBED_PROVIDER;
+    model = embed.getConfig().model;
+  } else {
+    // Effektiver (per-User aufgeloester) Provider, nicht der globale: der Job laeuft mit dem
+    // Provider des zugewiesenen KI-Profils, und job_runs.provider/model sind die Grundlage
+    // der Kostenrechnung. Ohne Aufloesung verbucht ein Profil-Lauf unter fremdem Tarif.
+    provider = resolveProvider({ userEmail: userEmail || null });
+    model = _modelName(provider);
+    // Einzelne Job-Familien fahren ein eigenes Modell (Per-Job-Override in den App-Settings,
+    // gespiegelt von _komplettAiOverrides, _bookChatAiOverrides bzw.
+    // applyLektoratAiOverrides). Dann muss
+    // job_runs.model das TATSÄCHLICH genutzte Modell spiegeln, nicht das globale — sonst
+    // verbucht das Kosten-Tracking z.B. einen Opus-Lauf zum Sonnet-Default-Tarif.
+    // Buch-Chat- und Lektorat-Override sind claude-only, der Komplett-Override nicht.
+    let overrideKey = null;
+    if (type === 'komplett-analyse' || type === 'kontinuitaet') overrideKey = `ai.${provider}.model.komplett`;
+    else if (type === 'book-chat' && provider === 'claude') overrideKey = 'ai.claude.model.bookchat';
+    else if ((type === 'check' || type === 'batch-check') && provider === 'claude') overrideKey = 'ai.claude.model.lektorat';
+    if (overrideKey) {
+      const overrideModel = String(appSettings.get(overrideKey) || '').trim();
+      if (overrideModel) model = overrideModel;
+    }
   }
   jobs.set(id, {
     id, type, bookId: String(bookId), dedupId: dedupValue, userEmail: userEmail || null,
@@ -162,6 +179,21 @@ function updateJob(id, updates) {
     Object.assign(job, updates);
   }
   emitJobChange(job);
+}
+
+// Provider/Modell im Job-Record nachziehen, wenn der Lauf die echte Konfiguration
+// gelesen hat (`embed.getConfig()`). createJob kennt sie nur zum Einreihen-Zeitpunkt;
+// ändert ein Admin `embed.model` zwischen Einreihen und Start, soll der Record trotzdem
+// das Modell führen, mit dem tatsächlich embeddet wurde. Kein Status-Gate wie updateJob —
+// der Job läuft zu diesem Zeitpunkt. Das Ledger entsteht in endJobRun aus der frischen
+// job_runs-Zeile, dieser Write muss also vorher stattfinden.
+function setJobModel(id, provider, model) {
+  const job = jobs.get(id);
+  if (!job) return;
+  job.provider = provider;
+  job.model = model;
+  try { updateJobRunModel(id, provider, model); }
+  catch (e) { logger.error(`updateJobRunModel: ${e.message}`, _jobLogCtx(job)); }
 }
 
 function completeJob(id, result, tokensPerSec = null, detail = null) {
@@ -343,6 +375,7 @@ module.exports = {
   fmtTok, fmtDuration, _jobDurationFmt, _jobLogCtx, tps,
   i18nError, contentHttpError, emptyScopeError,
   findActiveJobId,
-  createJob, updateJob, completeJob, failJob, cancelJob,
+  createJob, updateJob, setJobModel, completeJob, failJob, cancelJob,
+  EMBED_PROVIDER, EMBED_JOB_TYPES,
   JOB_TYPE_LABELS, STATS_EXCLUDED_TYPES,
 };

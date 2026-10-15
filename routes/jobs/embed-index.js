@@ -34,6 +34,7 @@ const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   createJob, enqueueJob, findActiveJobId, jsonBody, jobAbortControllers,
   loadOrderedBookContents, htmlToTextForPrompt, BATCH_SIZE, jobs,
+  setJobModel, EMBED_PROVIDER,
 } = require('./shared');
 const embed = require('../../lib/embed');
 const { chunkText, contentHash } = require('../../lib/embed-chunk');
@@ -119,6 +120,9 @@ async function runEmbedIndexJob(jobId, bookId, userEmail) {
   try {
     if (!embed.isEnabled()) throw i18nError('job.error.embedDisabled');
     const { model, dim, passagePrefix } = embed.getConfig();
+    // Modell, mit dem dieser Lauf tatsächlich einbettet, in den Job-Record spiegeln
+    // (Statistik, Kosten-Ledger, Fertig-Log) — createJob kennt nur den Enqueue-Stand.
+    setJobModel(jobId, EMBED_PROVIDER, model);
     const signal = () => jobAbortControllers.get(jobId)?.signal;
     const throwIfAborted = () => {
       if (signal()?.aborted) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }

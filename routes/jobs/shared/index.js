@@ -47,6 +47,8 @@ module.exports = {
   startBookJob: require('./start-job').startBookJob,
   createJob: jobsMod.createJob,
   updateJob: jobsMod.updateJob,
+  setJobModel: jobsMod.setJobModel,
+  EMBED_PROVIDER: jobsMod.EMBED_PROVIDER,
   tps: jobsMod.tps,
   completeJob: jobsMod.completeJob,
   failJob: jobsMod.failJob,

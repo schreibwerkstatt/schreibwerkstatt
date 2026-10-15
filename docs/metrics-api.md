@@ -88,7 +88,7 @@ Aus dem Kosten-Ledger `ai_cost_ledger` ([db/cost-ledger.js](../db/cost-ledger.js
 - `sw_cost_usd_by_type_total{source,type}` — Counter, Kosten je Quelle (`job`/`chat`) und Job- bzw. Session-Typ.
 - `sw_billed_usd_month`, `sw_billed_diff_usd_month` — von Anthropic abgerechnete Kosten im laufenden **UTC**-Monat und Abweichung zum Ledger über die abgerechneten Tage ([lib/anthropic-billing.js](../lib/anthropic-billing.js)`#buildReport`). Nur mit hinterlegtem Admin-Key; sonst fehlen beide ganz („nicht konfiguriert" ist nicht „0 abgerechnet").
 
-Lokale Provider (`ollama`, `llama`) liefern Cost 0 (Strom/Compute des Betreibers, nicht App-Sache).
+Lokale Provider (`ollama`, `llama`) liefern Cost 0 (Strom/Compute des Betreibers, nicht App-Sache). Dasselbe gilt für `provider="embed"` — die Embedding-Jobs (`embed-index`, `source-embed-index`, `chat-embed-index`) fahren den selbst gehosteten `/v1/embeddings`-Endpunkt und zählen keine Chat-Tokens; ihr `model`-Label ist `embed.model`, nicht ein Chat-Modell (siehe [semantic-search.md](semantic-search.md#index-job--post-jobsembed-index)).
 
 ### Block-Level-Merge
 

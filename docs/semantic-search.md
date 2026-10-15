@@ -104,6 +104,8 @@ Erstlauf kann dauern (embeddet alles); Folgeläufe embetten nur Geändertes. Feh
 
 **Batch-Retry gegen transiente Aussetzer:** [lib/embed.js](../lib/embed.js)#`_withRetry` wiederholt jeden HTTP-Batch bis zu 3× mit linearem Backoff (800 ms × Versuch), wenn der Fehler transient ist — Netz-Blip (`fetch failed`), Timeout, HTTP 429/5xx, unvollständige Antwort (`err.retriable`). Nicht-transiente Fehler (HTTP 4xx ausser 429) und echter Job-Cancel (`signal`) werfen sofort. So reisst bei grossen Büchern (viele Batches) nicht mehr ein einzelner Backend-Zucker den ganzen Index-Lauf ab.
 
+**Provider/Modell im Job-Record:** die drei Embedding-Job-Typen (`embed-index`, `source-embed-index`, `chat-embed-index`) fahren keinen Chat-Call — sie stehen darum in `job_runs`/`ai_cost_ledger` unter `provider = 'embed'` mit `model = embed.model` (`EMBED_JOB_TYPES`/`EMBED_PROVIDER` in [routes/jobs/shared/jobs.js](../routes/jobs/shared/jobs.js)). `createJob` trägt sie dort schon beim Einreihen ein; der Lauf zieht sie mit `setJobModel` nochmals nach, weil er `embed.getConfig()` erst beim Start liest. **Why:** ohne diesen Zweig trug der Record den globalen Chat-Provider — die Job-Statistik, die Admin-Nutzung, die `/metrics`-Labels (`sw_tokens_*`, `sw_cost_usd_total{provider,model}`) und das Fertig-Log wiesen für jeden Lauf Claude aus, obwohl das Embedding-Modell lief. Migration **329** trägt dieselbe Korrektur für die Altläufe nach. Kosten bleiben 0: `costUsd` gibt für alles ausser `provider='claude'` 0 zurück, und der Endpunkt ist self-hosted.
+
 ### Query — `GET /search/semantic`
 
 [routes/search.js:118](../routes/search.js). Rolle **`viewer`**, immer buch-skopiert. Zwei Modi:

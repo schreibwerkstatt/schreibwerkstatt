@@ -1,0 +1,11 @@
+{
+  "version": "4.24.7",
+  "date": "2026-10-15",
+  "entries": [
+    {
+      "kind": "behoben",
+      "de": "Im Reiter «Jobs» der Admin-Nutzung stand bei den Semantik-Jobs ein Claude-Modell, obwohl die Suche mit einem eigenen Modell läuft. Dort steht jetzt das wirklich verwendete Modell, auch bei den bereits erfassten Einträgen.",
+      "en": "In the admin usage view's «Jobs» tab, semantic jobs showed a Claude model even though the search runs on a model of its own. The model actually used is now shown there, including for entries recorded earlier."
+    }
+  ]
+}
