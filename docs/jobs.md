@@ -115,6 +115,8 @@ Frontend rendert `t(job.error, job.errorParams)`. Sentinel-Key `'job.cancelled'`
 
 `statusParams`-Reset, `errorParams`-Forward und `cancelled`-Flag sind in [shared/jobs.js](../routes/jobs/shared/jobs.js) zentralisiert — keine Duplikation in Job-Modulen.
 
+**Log:** `err.message` ist nur der i18n-Key. Geworfene Fehler loggt `failJob` zentral mit Params; eine Stelle, die einen i18nError **schluckt** (Soft-Fail mit Fallback, `settledAll`-`reason`), schreibt `${i18nErrText(e)}` statt `${e.message}` — sonst fehlen im Log genau die Angaben, die den Fehler eingrenzen (Kapitel, Token-Deckel, fehlende Feldliste). Nicht-i18n-Fehler kommen unverändert zurück; Werte > 200 Zeichen werden gekappt.
+
 ## Job-Typen (Inventar)
 
 `check`, `batch-check`, `komplett-analyse`, `review`, `chapter-review`, `book-chat`, `chat`, `synonym`, `finetune-export`, `pdf-export`, `kontinuitaet`. Map in `JOB_TYPE_LABELS` ([shared/jobs.js](../routes/jobs/shared/jobs.js)).

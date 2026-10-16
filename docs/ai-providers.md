@@ -141,7 +141,7 @@ Hard-Check beim Boot **pro Provider**: `max_tokens_out + contextSafetyMargin(con
 
 **Messen statt raten:** `npm run calibrate:tokens -- --book <id>` ([scripts/calibrate-chars-per-token.js](../scripts/calibrate-chars-per-token.js)) misst die tatsächliche Rate deutschen Buchtexts gegen `/v1/messages/count_tokens` (kostenlos, kein Inferenz-Call) und vergleicht sie mit der Annahme aus `_claudeCharsPerToken` — dieselbe Funktion, aus der die Budgets fallen, keine Kopie. Gemessen wird die **Differenz** zweier Probenlängen, damit der konstante Request-Overhead herausfällt. Liegt die Annahme ÜBER dem gemessenen Wert, passt weniger Text ins Fenster als gerechnet → Kontext-Overflow mitten im Job (Exit-Code 1). Nach jedem Modellwechsel laufen lassen: der Tokenizer der modernen Generation (Opus 4.7+/Sonnet 5+/Fable) produziert ~1×–1.35× so viele Tokens wie der ältere.
 
-**Per-Provider via `getContextConfigFor(provider)`** ([lib/ai.js:968](../lib/ai.js#L968)): liefert `{ contextWindow, maxTokensOut, charsPerToken, safetyMargin, inputBudgetTokens, inputBudgetChars }` aus `ai.<provider>.context_window` + `ai.<provider>.max_tokens_out`. Fallback-Defaults: Claude aus dem effektiven Modell (`_claudeModelContext`), `ollama=32000`, `openai-compat=32000` (`PROVIDER_CONTEXT_DEFAULTS`). `charsPerToken` kommt **pro Provider** (`claude=3` bzw. modell-abhängig ≤2.5, lokal `4`) und nicht aus der globalen Boot-Konstante — im Mischbetrieb (KI-Profile) bekäme ein Claude-Call sonst die Rate eines lokalen Tokenizers und damit ein um ein Drittel zu grosses Zeichenbudget. Ein explizit gesetztes `ai.chars_per_token` übersteuert weiterhin alle Provider. Boot-Konstanten bleiben Claude-spezifisch für Backwards-Compat; neue Code-Pfade mit auflösbarem `userEmail` nutzen den Helper.
+**Per-Provider via `getContextConfigFor(provider)`** ([lib/ai.js:968](../lib/ai.js#L968)): liefert `{ contextWindow, maxTokensOut, charsPerToken, safetyMargin, inputBudgetTokens, inputBudgetChars }` aus `ai.<provider>.context_window` + `ai.<provider>.max_tokens_out`. Fallback-Defaults: Claude aus dem effektiven Modell (`_claudeModelContext`), `ollama=32000`, `openai-compat=32000` (`PROVIDER_CONTEXT_DEFAULTS`). `charsPerToken` kommt **pro Provider** (`claude=3` bzw. modell-abhängig 2.5 für Opus 4.7–4.9 und 2.1 für die 5er-Generation, lokal `4`) und nicht aus der globalen Boot-Konstante — im Mischbetrieb (KI-Profile) bekäme ein Claude-Call sonst die Rate eines lokalen Tokenizers und damit ein um ein Drittel zu grosses Zeichenbudget. Ein explizit gesetztes `ai.chars_per_token` übersteuert weiterhin alle Provider. Boot-Konstanten bleiben Claude-spezifisch für Backwards-Compat; neue Code-Pfade mit auflösbarem `userEmail` nutzen den Helper.
 
 Job-Konstanten skalieren automatisch:
 - `SINGLE_PASS_LIMIT = 0.7 × INPUT_BUDGET_CHARS`
@@ -196,7 +196,7 @@ const parsed = parseJSON(text);
 if (!parsed.fehler) throw new Error('Pflichtfeld `fehler` fehlt.');
 ```
 
-`truncated`-Check zuerst, dann Parse, dann Pflichtfeld-Check.
+`truncated`-Check zuerst, dann Parse, dann Pflichtfeld-Check. `aiCall` ([routes/jobs/shared/ai.js](../routes/jobs/shared/ai.js)) prüft zwischen Truncation und Parse zusätzlich `stopReason === 'refusal'` und wirft `job.error.aiRefusal` — eine Ablehnung liefert leeren oder abgebrochenen Text, der sonst als Parse-Fehler oder «Pflichtfeld fehlt» am Aufrufer ankäme. Der Claude-Text-Pfad schickt dafür denselben Refusal-Fallback wie der Tool-Pfad ([buchchat-tools.md](buchchat-tools.md)); nach einem Modellwechsel mitten in der Antwort verwirft er den Text vor dem `fallback`-Block. Endet ein Text-Call anders als `end_turn` mit Text (und nicht durch `max_tokens`), loggt `_logUnusualStop` Grund, Textlänge und `stop_details`. Gegated: [tests/unit/claude-text-refusal.test.mjs](../tests/unit/claude-text-refusal.test.mjs).
 
 ## JSON-Parse-Fallback-Kette
 
@@ -276,6 +276,7 @@ Rückgabe enthält:
 - `tokensOut` — generierte Output-Tokens.
 - `cacheReadIn`, `cacheCreationIn` — Claude only, sonst 0.
 - `truncated: bool` — `stop_reason === 'max_tokens'`.
+- `stopReason` (+ `stopDetails` bei `refusal`) — Claude: roher `stop_reason`; `model` ist nach einem Refusal-Fallback das bedienende Modell.
 - `genDurationMs` — Generation-Dauer ohne Setup-Zeit.
 
 Lokale Provider: bei vollständigem Cache-Hit (`prompt_eval_count=0`) Fallback auf Char-Schätzung, damit Anzeige nicht 0 wird. Während Streaming KEIN Schätzwert für `tokIn` — sonst weicht Job-Status vom finalen `usage` ab.

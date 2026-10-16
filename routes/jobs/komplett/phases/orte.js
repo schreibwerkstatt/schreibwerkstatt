@@ -4,7 +4,7 @@
 const { saveOrteToDb, saveSongsToDb, planOrteMatch } = require('../../../../db/schema');
 const { songKey, listSongIdsForBook } = require('../../../../db/songs');
 const searchIndex = require('../../../../lib/search');
-const { updateJob } = require('../../shared');
+const { updateJob, i18nErrText } = require('../../shared');
 const { _remapFigNames, consolidationFitsCap } = require('../utils');
 const { komplettMaxTokens } = require('./tokens');
 const { getContextConfigFor } = require('../../../../lib/ai');
@@ -191,7 +191,7 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
           // Ein Konsolidierungs-Fehler (typisch: aiTruncated, wenn ein kleines lokales Modell
           // viele Orte in einen Output packen müsste, Parse-Fehler, erschöpfter Retry) darf den
           // gesamten Job – inkl. bereits gespeicherter Figuren/Soziogramm/Fakten – NICHT verwerfen.
-          log.warn(`Orte-Konsolidierung fehlgeschlagen (${e.message}) – Fallback auf kapitel-extrahierte Orte.`);
+          log.warn(`Orte-Konsolidierung fehlgeschlagen (${i18nErrText(e)}) – Fallback auf kapitel-extrahierte Orte.`);
           ctx.warnings?.push({ key: 'job.warn.orteKonsolidierungDegraded' });
           orteResultRaw = null;
         }
@@ -248,7 +248,7 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
     }
   } catch (e) {
     if (e.name === 'AbortError') throw e;
-    log.warn(`Orte-Match-Judge übersprungen (${e.message}) – Matching bleibt regelbasiert.`);
+    log.warn(`Orte-Match-Judge übersprungen (${i18nErrText(e)}) – Matching bleibt regelbasiert.`);
   }
   saveOrteToDb(bookIdInt, orte, email, idMaps.chNameToId, idMaps.pageNameToIdByChapter,
     { preserveExistingCoords: true, matchBy: 'name', onMissing: 'stale',
@@ -343,7 +343,7 @@ async function runPhase3Songs(ctx, chapterSongs, figurenKompakt, isSinglePass, f
         // Wie Orte/Figuren/Zeitstrahl: nicht katalog-kritisch – die Songs sind kapitelweise
         // bereits extrahiert. Ein Konsolidierungs-Fehler (typisch: aiTruncated) darf den Job
         // inkl. bereits gespeicherter Figuren/Orte NICHT verwerfen.
-        log.warn(`Songs-Konsolidierung fehlgeschlagen (${e.message}) – Fallback auf kapitel-extrahierte Songs.`);
+        log.warn(`Songs-Konsolidierung fehlgeschlagen (${i18nErrText(e)}) – Fallback auf kapitel-extrahierte Songs.`);
         ctx.warnings?.push({ key: 'job.warn.songsKonsolidierungDegraded' });
       }
       if (Array.isArray(songsResultRaw?.songs)) {
@@ -433,7 +433,7 @@ async function runPhase3OrteCall(ctx, chapterOrte, figurenKompaktForPrompt) {
     // Läuft parallel zu Phase 2 (Figuren) in Promise.all – ein Reject würde auch das
     // P2-Ergebnis verwerfen. null zurückgeben; runPhase3 fällt dann auf den regelbasierten
     // Orte-Merge zurück (kapitel-extrahierte Orte), statt den Job zu killen.
-    log.warn(`Orte-Konsolidierung (parallel) fehlgeschlagen (${e.message}) – Fallback auf kapitel-extrahierte Orte.`);
+        log.warn(`Orte-Konsolidierung (parallel) fehlgeschlagen (${i18nErrText(e)}) – Fallback auf kapitel-extrahierte Orte.`);
     ctx.warnings?.push({ key: 'job.warn.orteKonsolidierungDegraded' });
     return null;
   }

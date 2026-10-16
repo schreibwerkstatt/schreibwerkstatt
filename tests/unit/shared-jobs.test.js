@@ -283,3 +283,40 @@ test('retryOnTransientAi: nach tries-Verschoepfung wird letzter Fehler geworfen'
   );
   assert.equal(calls, 2);
 });
+
+// ── i18nErrText: Key + Params fürs Log ──────────────────────────────────────
+// `err.message` ist nur der i18n-Key; die Params (welches Kapitel, welcher
+// Token-Deckel, welche Feldliste) stehen in `err.i18nParams` und gingen in jedem
+// `log.warn(`… ${e.message}`)` verloren — die Logzeile blieb nicht grepbar.
+test('i18nErrText: rendert Key + Params, ohne Params unverändert', () => {
+  const { i18nError, i18nErrText } = shared;
+  assert.equal(i18nErrText(i18nError('job.error.extractFieldMissing')), 'job.error.extractFieldMissing');
+  assert.equal(
+    i18nErrText(i18nError('job.error.extractFieldMissing', { label: 'Chunk 6/6 «Der Erfolgreiche» (orte, szene)' })),
+    'job.error.extractFieldMissing {label="Chunk 6/6 «Der Erfolgreiche» (orte, szene)"}',
+  );
+  assert.equal(
+    i18nErrText(i18nError('job.error.aiTruncated', { max: 16000, tokIn: 300000, tokOut: 16000, total: 316000 })),
+    'job.error.aiTruncated {max=16000, tokIn=300000, tokOut=16000, total=316000}',
+  );
+});
+
+test('i18nErrText: Nicht-i18n-Fehler bleiben unverändert (kein Params-Nonsense)', () => {
+  const { i18nErrText } = shared;
+  assert.equal(i18nErrText(new Error('ECONNRESET')), 'ECONNRESET');
+  assert.equal(i18nErrText(new TypeError('x is not a function')), 'x is not a function');
+  // Array-Params sind keine Key-Map — nichts anhängen, statt `0=…, 1=…` zu loggen.
+  const arrErr = new Error('job.error.x'); arrErr.i18nParams = ['a', 'b'];
+  assert.equal(i18nErrText(arrErr), 'job.error.x');
+  // Leere/blanke Werte raus, damit `{}`-Rauschen im Log bleibt.
+  assert.equal(i18nErrText(Object.assign(new Error('k'), { i18nParams: { a: null, b: '', c: undefined } })), 'k');
+  assert.equal(i18nErrText(undefined), '');
+  assert.equal(i18nErrText('nur ein String'), 'nur ein String');
+});
+
+test('i18nErrText: lange Werte werden gekappt (Log-Zeile bleibt lesbar)', () => {
+  const { i18nError, i18nErrText } = shared;
+  const out = i18nErrText(i18nError('job.error.contentStore', { status: 500, text: 'x'.repeat(500) }));
+  assert.match(out, /^job\.error\.contentStore \{status=500, text="x+…"\}$/);
+  assert.ok(out.length < 260, `gekappte Zeile bleibt kurz (${out.length})`);
+});

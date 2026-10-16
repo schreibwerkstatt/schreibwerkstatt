@@ -3,7 +3,7 @@
 // (Cloud: Extraktions-Tier, Halbierungs-Retry bei Truncation) und additiver Gap-Pass.
 // Facade: ../extraktion.js (runPhase1 wählt Single- oder Multi-Pass).
 const { loadChapterExtractCache, saveChapterExtractCache, getBookSettings } = require('../../../../../db/schema');
-const { i18nError, settledAll, retryOnTransientAi, updateJob, toSystemBlocks, halveChunkPages, pageSigSuffix } = require('../../../shared');
+const { i18nError, i18nErrText, settledAll, retryOnTransientAi, updateJob, toSystemBlocks, halveChunkPages, pageSigSuffix } = require('../../../shared');
 const { buildChapterSystemBlockText, bookSettingsSigPart, extractField } = require('../../utils');
 const { _normalizeName } = require('../../figuren-merge');
 const appSettings = require('../../../../../lib/app-settings');
@@ -156,7 +156,7 @@ async function runMultiPassCompletenessGaps(ctx, { chunkTexts, chapters, concurr
         ), { log, label: `${chunkLabel} (Gap ${round}/${completenessPasses})` });
       } catch (e) {
         if (e.name === 'AbortError') throw e;
-        log.warn(`${chunkLabel} Gap-Pass ${round} fehlgeschlagen (${e.message}) – übersprungen.`);
+        log.warn(`${chunkLabel} Gap-Pass ${round} fehlgeschlagen (${i18nErrText(e)}) – übersprungen.`);
         roundFailed = true;
         break;
       }
@@ -366,7 +366,7 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
   }
   for (let i = 0; i < settled.length; i++) {
     if (settled[i].status === 'rejected')
-      log.warn(`Vollextraktion «${chunkTexts[i].chunk.name}» übersprungen: ${settled[i].reason?.message}`);
+      log.warn(`Vollextraktion «${chunkTexts[i].chunk.name}» übersprungen: ${i18nErrText(settled[i].reason)}`);
   }
   const chapters = {
     chapterFiguren:     extractField(settled, chunkTexts, 'figuren'),
@@ -384,9 +384,9 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
     const failedInfo = chunkTexts
       .map((ct, i) => ({ ct, r: settled[i] }))
       .filter(({ r }) => r.status === 'rejected')
-      .map(({ ct, r }) => ({ name: ct.chunk.name, message: r.reason?.message || 'unbekannt' }));
-    const details = failedInfo.map(f => `${f.name}: ${f.message}`).join('; ');
-    const SOFT = new Set(['job.error.aiTruncated', 'job.error.extractFieldMissing']);
+      .map(({ ct, r }) => ({ name: ct.chunk.name, message: r.reason?.message || 'unbekannt', logText: i18nErrText(r.reason) }));
+    const details = failedInfo.map(f => `${f.name}: ${f.logText}`).join('; ');
+    const SOFT = new Set(['job.error.aiTruncated', 'job.error.extractFieldMissing', 'job.error.aiRefusal']);
     const onlyTruncation = failedInfo.every(f => SOFT.has(f.message));
     const someSucceeded = (settled.length - failedChunks.length) > 0;
     // Truncation einzelner Chunks ist nicht-fatal, SOLANGE mindestens ein Chunk

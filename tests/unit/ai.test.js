@@ -71,6 +71,16 @@ test('_claudeCharsPerToken: moderne Generation ≤ 2.5, ältere darüber und unt
   }
 });
 
+// 5er-Generation: auf Prod gemessen 2.09 Zeichen/Token (Opus 5.5, ganzes Buch im Prompt).
+// Mit der 4.7+-Rate 2.5 schätzte jede Vorabprüfung ein Fünftel zu wenig Tokens.
+test('_claudeCharsPerToken: 5er-Generation rechnet feiner als Opus 4.7+', () => {
+  const { _claudeCharsPerToken } = require('../../lib/ai');
+  for (const m of ['claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-haiku-5-5']) {
+    assert.ok(_claudeCharsPerToken(m) <= 2.1, `${m} sollte ≤2.1 chars/token rechnen`);
+  }
+  assert.equal(_claudeCharsPerToken('claude-opus-4-8'), 2.5);
+});
+
 // effort (output_config) ist auf Opus 4.5+ und Sonnet 4.6 verfügbar; Sonnet 4.5 /
 // Haiku 4.5 / leeres Modell lehnen ab (400). _claudeOutputConfigParams sendet effort
 // nur, wenn das Modell es akzeptiert (sonst stille Auslassung statt 400).

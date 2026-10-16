@@ -23,7 +23,7 @@ delete process.env.ADMIN_EMAIL;
 require('../../db/migrations');
 const { db } = require('../../db/connection');
 const appSettings = require('../../lib/app-settings');
-const { judgeEntityPairs, isJudgeEnabled, JUDGE_PAIR_CAP } = require('../../routes/jobs/komplett/entity-reconcile');
+const { judgeEntityPairs, isJudgeEnabled, rankJudgePairs, JUDGE_PAIR_CAP, JUDGE_MAX_CALLS } = require('../../routes/jobs/komplett/entity-reconcile');
 
 // Minimaler ctx: nur was judgeEntityPairs anfasst.
 function makeCtx({ answer, throwErr = null, provider = 'claude' } = {}) {
@@ -122,15 +122,52 @@ test('ein Incoming bekommt nur EIN Ziel, eine Bestands-Zeile nur EIN Incoming', 
   assert.equal(hints.get('ort_1'), 21);
 });
 
-test('Deckel: mehr Verdachtsfaelle als JUDGE_PAIR_CAP werden nicht alle vorgelegt', async () => {
-  const n = JUDGE_PAIR_CAP + 6;
+test('Deckel: mehr als JUDGE_PAIR_CAP Paare gehen in mehrere Calls, ueber dem Gesamtdeckel nicht', async () => {
+  const mk = (n) => ({
+    incoming: Array.from({ length: n }, (_, i) => ({ id: `ort_${i}`, name: `Ort ${i}` })),
+    existing: Array.from({ length: n }, (_, i) => ({ id: 100 + i, name: `Ort ${i} alt` })),
+    unsure: Array.from({ length: n }, (_, i) => ({ index: i, existingId: 100 + i, sim: 0.5, evidence: 1 })),
+  });
+  const ctx = makeCtx({ answer: { paare: [] } });
+  await judgeEntityPairs(ctx, 'ort', mk(JUDGE_PAIR_CAP + 6));
+  assert.deepEqual(ctx._calls.map(c => c.pairs.length), [JUDGE_PAIR_CAP, 6]);
+
+  const ctxMax = makeCtx({ answer: { paare: [] } });
+  await judgeEntityPairs(ctxMax, 'ort', mk(JUDGE_PAIR_CAP * JUDGE_MAX_CALLS + 10));
+  assert.equal(ctxMax._calls.length, JUDGE_MAX_CALLS);
+  assert.equal(ctxMax._calls.reduce((s, c) => s + c.pairs.length, 0), JUDGE_PAIR_CAP * JUDGE_MAX_CALLS);
+});
+
+test('rankJudgePairs: erst der beste Kandidat jedes Incomings, hoechstens zwei je Incoming', () => {
+  // Incoming 0 hat viele starke Kandidaten, Incoming 1 nur einen schwachen: der schwache
+  // Erstkandidat kommt vor den Zweitkandidaten von Incoming 0, der dritte faellt weg.
+  const unsure = [
+    { index: 0, existingId: 1, sim: 0.9, evidence: 2 },
+    { index: 0, existingId: 2, sim: 0.8, evidence: 2 },
+    { index: 0, existingId: 3, sim: 0.7, evidence: 2 },
+    { index: 0, existingId: 1, sim: 0.9, evidence: 2 }, // Dublette
+    { index: 1, existingId: 4, sim: 0.3, evidence: 1 },
+  ];
+  const { ranked, total } = rankJudgePairs(unsure);
+  assert.equal(total, 4);
+  assert.deepEqual(ranked.map(u => `${u.index}:${u.existingId}`), ['0:1', '1:4', '0:2']);
+});
+
+test('ein gescheiterter Teil kostet nur seine Paare', async () => {
+  const n = JUDGE_PAIR_CAP + 1;
   const incoming = Array.from({ length: n }, (_, i) => ({ id: `ort_${i}`, name: `Ort ${i}` }));
   const existing = Array.from({ length: n }, (_, i) => ({ id: 100 + i, name: `Ort ${i} alt` }));
-  const unsure = Array.from({ length: n }, (_, i) => ({ index: i, existingId: 100 + i, sim: 0.5, evidence: 1 }));
-  const ctx = makeCtx({ answer: { paare: [] } });
-  await judgeEntityPairs(ctx, 'ort', { incoming, existing, unsure });
-  assert.equal(ctx._calls.length, 1);
-  assert.equal(ctx._calls[0].pairs.length, JUDGE_PAIR_CAP);
+  const unsure = Array.from({ length: n }, (_, i) => ({ index: i, existingId: 100 + i, sim: 0.9 - i / 1000, evidence: 1 }));
+  let call = 0;
+  const ctx = makeCtx();
+  ctx.call = async () => {
+    call++;
+    if (call === 1) throw new Error('upstream 500');
+    return { paare: [{ nr: n, gleich: true }] };
+  };
+  const hints = await judgeEntityPairs(ctx, 'ort', { incoming, existing, unsure });
+  assert.equal(hints.get(`ort_${n - 1}`), 100 + n - 1);
+  assert.deepEqual(ctx.warnings, [{ key: 'job.warn.entityMatchDegraded' }]);
 });
 
 test('kein Graubereich → kein Call', async () => {

@@ -13,7 +13,7 @@ const {
 const { narrativeLabels } = require('../narrative-labels');
 const { activeFigureSql } = require('../../../db/figures');
 const {
-  makeJobLogger, updateJob, completeJob, failJob, i18nError, contentHttpError,
+  makeJobLogger, updateJob, completeJob, failJob, i18nError, i18nErrText, contentHttpError,
   getPrompts, getBookPrompts, toSystemBlocks,
   loadOrderedBookContents, loadPageContents, groupByChapter, buildSinglePassBookText, cleanPageTextForAi,
   chunkLimitsFor, BATCH_SIZE, jobAbortControllers,
@@ -168,7 +168,7 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
           chapterFacts.push({ gi, kapitel: group.name, fakten: chResult.fakten || [] });
         } catch (e) {
           if (e.name === 'AbortError') throw e;
-          log.warn(`Fakten «${group.name}» übersprungen (Retry folgt): ${e.message}`);
+          log.warn(`Fakten «${group.name}» übersprungen (Retry folgt): ${i18nErrText(e)}`);
           if (!failedGis.includes(gi)) failedGis.push(gi);
         }
         saveCheckpoint('kontinuitaet', bookIdInt, email, { bookSig, chapterFacts, nextGi: gi + 1, failedGis });
@@ -192,7 +192,7 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
           } catch (e) {
             if (e.name === 'AbortError') throw e;
             stillFailed.push(group.name);
-            log.warn(`Fakten «${group.name}» auch im Retry fehlgeschlagen: ${e.message}`);
+            log.warn(`Fakten «${group.name}» auch im Retry fehlgeschlagen: ${i18nErrText(e)}`);
           }
         }
         failedGis = [];
@@ -231,7 +231,7 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
         if (attrFindings.length) result = { ...result, probleme: [...(result.probleme || []), ...attrFindings] };
       } catch (e) {
         if (e.name === 'AbortError') throw e;
-        log.warn(`Attribut-Widerspruchs-Detektor fehlgeschlagen (ignoriert): ${e.message}`);
+        log.warn(`Attribut-Widerspruchs-Detektor fehlgeschlagen (ignoriert): ${i18nErrText(e)}`);
         warnings.push({ key: 'job.warn.attributeCheckFailed' });
       }
     }

@@ -56,6 +56,7 @@ module.exports = {
   findActiveJobId: jobsMod.findActiveJobId,
   fmtTok: jobsMod.fmtTok,
   i18nError: jobsMod.i18nError,
+  i18nErrText: jobsMod.i18nErrText,
   contentHttpError: jobsMod.contentHttpError,
   emptyScopeError: jobsMod.emptyScopeError,
 

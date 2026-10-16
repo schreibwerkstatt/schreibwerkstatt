@@ -7,7 +7,7 @@ const { db, getBookSettings, getBookLocale } = require('../../../db/schema');
 const { activeFigureSql } = require('../../../db/figures/active');
 const appSettings = require('../../../lib/app-settings');
 const { providerClass } = require('../../../lib/ai');
-const { updateJob, settledAll, jobAbortControllers, i18nError } = require('../shared');
+const { updateJob, settledAll, jobAbortControllers, i18nError, i18nErrText } = require('../shared');
 const { _stelleQuote, _refToString } = require('./utils');
 const { COST_LABEL, costTier } = require('./cost-labels');
 const rerank = require('../../../lib/rerank');
@@ -204,7 +204,7 @@ async function verifyKontinuitaetProbleme(ctx, result, fromPct, toPct, { chapter
       return { p, keep };
     } catch (e) {
       if (e.name === 'AbortError') throw e;
-      log.warn(`Kontinuität Verify übersprungen: ${e.message}`);
+      log.warn(`Kontinuität Verify übersprungen: ${i18nErrText(e)}`);
       return { p, keep: true };
     }
   }), { concurrency: claudeConcurrency, warmup: true });
@@ -391,7 +391,7 @@ async function resolveRemapNames(ctx, { chapterSzenen, chapterAssignments, figur
     if (!Array.isArray(res?.zuordnungen)) throw i18nError('job.error.nameResolutionMissing');
   } catch (e) {
     if (e.name === 'AbortError') throw e;
-    log.warn(`Remap-Rescue Namensauflösung fehlgeschlagen (ignoriert): ${e.message}`);
+    log.warn(`Remap-Rescue Namensauflösung fehlgeschlagen (ignoriert): ${i18nErrText(e)}`);
     return 0;
   }
   const catalogByLower = new Map((figuren || []).map(f => [String(f.name || '').toLowerCase(), f.id]));

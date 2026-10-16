@@ -9,7 +9,7 @@ const {
   listDatedLifeEventsWithChapterNames,
 } = require('../../../db/content-names');
 const { listWorldFacts } = require('../../../db/world-facts');
-const { updateJob, settledAll } = require('../shared');
+const { updateJob, settledAll, i18nErrText } = require('../shared');
 const { COST_LABEL, costTier } = require('./cost-labels');
 
 // Herkunfts-Marke jedes F4-Befunds. saveKontinuitaetResult (remap.js) überspringt für
@@ -220,7 +220,7 @@ async function runAttributeContradictionCheck(ctx, fromPct, toPct) {
   // keine verneinten — nicht still schlucken.
   const failed = settled.filter(r => r.status === 'rejected');
   if (failed.length) {
-    log.warn(`Attribut-Widerspruchs-Detektor: ${failed.length}/${candidates.length} Urteile fehlgeschlagen (${failed[0].reason?.message || failed[0].reason}).`);
+    log.warn(`Attribut-Widerspruchs-Detektor: ${failed.length}/${candidates.length} Urteile fehlgeschlagen (${i18nErrText(failed[0].reason) || failed[0].reason}).`);
     if (Array.isArray(warnings)) {
       warnings.push({ key: 'job.warn.attributeCheckPartial', params: { failed: failed.length, total: candidates.length } });
     }

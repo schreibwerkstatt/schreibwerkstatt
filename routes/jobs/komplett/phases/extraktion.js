@@ -11,7 +11,7 @@ const {
 // Gilt, solange das Buch nicht deutlich kleiner geworden ist (Toleranz 10 %).
 const SP_TRUNC_CP_TYPE = 'komplett-singlepass-truncated';
 const {
-  i18nError, settledAll, retryOnTransientAi, splitGroupsIntoChunks, updateJob, toSystemBlocks,
+  i18nError, i18nErrText, settledAll, retryOnTransientAi, splitGroupsIntoChunks, updateJob, toSystemBlocks,
 } = require('../../shared');
 const {
   buildBookSystemBlockText, buildBookPagesSig,
@@ -73,7 +73,7 @@ async function runCompletenessGap(ctx, {
       if (!Array.isArray(raw)) throw i18nError('job.error.extractFieldMissing', { label });
     } catch (e) {
       if (e.name === 'AbortError') throw e;
-      log.warn(`${label} Gap-Pass ${round} fehlgeschlagen (${e.message}) – übersprungen.`);
+      log.warn(`${label} Gap-Pass ${round} fehlgeschlagen (${i18nErrText(e)}) – übersprungen.`);
       fresh.failed = true;
       break;
     }
@@ -289,7 +289,7 @@ async function runSceneBackfill(ctx, { bookSystemBlock, claudeExtractCap, passB 
     ), { log, label: 'Szenen-Backfill' });
   } catch (e) {
     if (e.name === 'AbortError') throw e;
-    log.warn(`Szenen-Backfill fehlgeschlagen (${e.message}) – übersprungen, Cache wird nicht geschrieben.`);
+    log.warn(`Szenen-Backfill fehlgeschlagen (${i18nErrText(e)}) – übersprungen, Cache wird nicht geschrieben.`);
     return { ...passB, __backfillFailed: true };
   }
   if (!Array.isArray(res?.szenen)) {

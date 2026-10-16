@@ -17,7 +17,7 @@ const CONSOLIDATION_CP_TYPE = 'komplett-consolidation';
 const appUsers = require('../../../db/app-users');
 const bookAccess = require('../../../db/book-access');
 const {
-  makeJobLogger, updateJob, completeJob, failJob, i18nError, contentHttpError,
+  makeJobLogger, updateJob, completeJob, failJob, i18nError, i18nErrText, contentHttpError,
   getPrompts, getBookPrompts,
   loadOrderedBookContents, idMapsFromContents, loadPageContents, groupByChapter, buildSinglePassBookText, cleanPageTextForAi,
   chunkLimitsFor, resolveExtractSinglePassLimit, BATCH_SIZE, jobAbortControllers,
@@ -406,7 +406,7 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
         }
       } catch (e) {
         if (e.name === 'AbortError') throw e;
-        log.warn(`Szenen-Match-Judge übersprungen (${e.message}) – Matching bleibt regelbasiert.`);
+        log.warn(`Szenen-Match-Judge übersprungen (${i18nErrText(e)}) – Matching bleibt regelbasiert.`);
       }
       szenenResult = saveSzenenAndEvents(bookIdInt, email, szenen, assignments, locIdToDbId, idMaps, log, jobId,
         { resolved: szenenResolved, matchHint: szeneHint && szeneHint.size ? szeneHint : null,
@@ -428,7 +428,7 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
       const { figuren: appFiguren, paare } = rebuildFigureAppearances(bookIdInt, email, figuren, idMaps);
       log.info(`Kapitel-Auftritte neu aufgebaut – ${paare} Paare für ${appFiguren} Figuren (figure_appearances).`);
     } catch (e) {
-      log.warn(`Kapitel-Auftritts-Aufbau fehlgeschlagen: ${e.message}`);
+      log.warn(`Kapitel-Auftritts-Aufbau fehlgeschlagen: ${i18nErrText(e)}`);
     }
     pt.mark('P5 Szenen');
 

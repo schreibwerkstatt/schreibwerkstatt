@@ -26,17 +26,46 @@
 // darf nie einen Merge erzwingen und nie den Job kippen.
 
 const appSettings = require('../../../lib/app-settings');
-const { updateJob } = require('../shared');
+const { updateJob, i18nErrText, settledAll } = require('../shared');
 const { locationHintKey, figureHintKey, sceneHintKey } = require('../../../lib/entity-match');
 const { komplettMaxTokens } = require('./phases/tokens');
 const { providerClass } = require('../../../lib/ai');
 const { COST_LABEL, costTier } = require('./cost-labels');
 
-// Deckel auf die vorgelegten Paare. Der Graubereich ist normalerweise klein (einstellig
-// bis wenige Dutzend); ist er gross, ist meist die Extraktion instabil — dann hilft ein
-// noch grösserer Call nicht, und die Kosten laufen weg. Die stärksten Kandidaten
-// (höchste Namens-Ähnlichkeit, dann Indizien) kommen zuerst.
+// Paare pro Call und Calls pro Gattung. Der Graubereich ist bei Figuren und Orten meist
+// klein; bei Szenen paart der Planer innerhalb eines Kapitels jede neue mit jeder
+// bestehenden Szene (bei ~200 Szenen weit über tausend Paare). Darum zählt die Auswahl
+// mehr als der Deckel: pro Incoming nur die JUDGE_RANKS stärksten Kandidaten, und
+// zuerst der beste Kandidat JEDES Incomings, bevor ein Zweitkandidat drankommt — sonst
+// belegen wenige Incomings mit vielen ähnlichen Kandidaten den ganzen Deckel. Mehrere
+// kleine Calls statt eines grossen: ein Paar kostet wenig, ein gescheiterter Call
+// verliert nur seinen Teil.
 const JUDGE_PAIR_CAP = 24;
+const JUDGE_MAX_CALLS = 4;
+const JUDGE_RANKS = 2;
+const JUDGE_CONCURRENCY = 2;
+
+/** Ordnet die unsicheren Paare für den Judge: ohne Dubletten, je Incoming höchstens
+ *  JUDGE_RANKS Kandidaten, Rang vor Stärke (alle Erstkandidaten zuerst), innerhalb eines
+ *  Rangs nach Namens-Ähnlichkeit, dann Indizien. Rein. */
+function rankJudgePairs(unsure) {
+  const byIndex = new Map();
+  const seen = new Set();
+  for (const u of (unsure || [])) {
+    const key = `${u.index}|${u.existingId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (!byIndex.has(u.index)) byIndex.set(u.index, []);
+    byIndex.get(u.index).push(u);
+  }
+  const strength = (a, b) => (b.sim - a.sim) || (b.evidence - a.evidence);
+  const ranked = [];
+  for (const list of byIndex.values()) {
+    list.sort(strength).slice(0, JUDGE_RANKS).forEach((u, rank) => ranked.push({ u, rank }));
+  }
+  ranked.sort((x, y) => (x.rank - y.rank) || strength(x.u, y.u));
+  return { ranked: ranked.map(r => r.u), total: seen.size };
+}
 
 function isJudgeEnabled(effectiveProvider) {
   if (providerClass(effectiveProvider) !== 'cloud') return false;
@@ -96,47 +125,53 @@ async function judgeEntityPairs(ctx, kind, { incoming, existing, unsure }) {
   if (!unsure?.length) return hints;
 
   const exById = new Map(existing.map(r => [r.id, r]));
-  // Pro (Incoming, Bestands-Zeile) nur ein Paar; stärkste zuerst, dann Deckel.
-  const seen = new Set();
+  const { ranked, total } = rankJudgePairs(unsure);
   const pairs = [];
-  for (const u of [...unsure].sort((a, b) => (b.sim - a.sim) || (b.evidence - a.evidence))) {
-    const key = `${u.index}|${u.existingId}`;
-    if (seen.has(key)) continue;
+  for (const u of ranked) {
     const inc = incoming[u.index];
     const ex = exById.get(u.existingId);
     if (!inc || !ex) continue;
-    seen.add(key);
     pairs.push({ nr: pairs.length + 1, u, a: _sideOfIncoming(kind, inc, ctx), b: _sideOfExisting(kind, ex) });
-    if (pairs.length >= JUDGE_PAIR_CAP) break;
+    if (pairs.length >= JUDGE_PAIR_CAP * JUDGE_MAX_CALLS) break;
   }
   if (!pairs.length) return hints;
-  const dropped = new Set(unsure.map(u => `${u.index}|${u.existingId}`)).size - pairs.length;
-  if (dropped > 0) log.info(`Entitäten-Judge (${kind}): ${dropped} weitere Verdachtsfälle nicht vorgelegt (Deckel ${JUDGE_PAIR_CAP}) – sie bleiben getrennt.`);
+  const dropped = total - pairs.length;
+  if (dropped > 0) log.info(`Entitäten-Judge (${kind}): ${dropped} von ${total} Verdachtsfällen nicht vorgelegt (je Eintrag höchstens ${JUDGE_RANKS} Kandidaten, Deckel ${JUDGE_PAIR_CAP}×${JUDGE_MAX_CALLS}) – sie bleiben getrennt.`);
 
   updateJob(jobId, { statusText: 'job.phase.entityMatchJudge' });
-  let res;
-  try {
-    res = await call(jobId, tok,
-      prompts.buildEntityMatchJudgePrompt(bookName, kind, pairs.map(p => ({ nr: p.nr, a: p.a, b: p.b }))),
-      sys.SYSTEM_ORTE_BLOCKS, null, null, undefined, 0.2, komplettMaxTokens(effectiveProvider),
-      prompts.SCHEMA_ENTITY_MATCH, costTier(COST_LABEL.match),
-    );
-  } catch (e) {
-    if (e.name === 'AbortError') throw e;
-    log.warn(`Entitäten-Judge (${kind}) übersprungen (${e.message}) – Matching bleibt regelbasiert.`);
-    ctx.warnings?.push({ key: 'job.warn.entityMatchDegraded' });
-    return hints;
-  }
-  if (!Array.isArray(res?.paare)) {
-    log.warn(`Entitäten-Judge (${kind}): Antwort ohne paare-Array – Matching bleibt regelbasiert.`);
-    ctx.warnings?.push({ key: 'job.warn.entityMatchDegraded' });
-    return hints;
-  }
+  const batches = [];
+  for (let i = 0; i < pairs.length; i += JUDGE_PAIR_CAP) batches.push(pairs.slice(i, i + JUDGE_PAIR_CAP));
+  const settled = await settledAll(batches.map(batch => () => call(jobId, tok,
+    prompts.buildEntityMatchJudgePrompt(bookName, kind, batch.map(p => ({ nr: p.nr, a: p.a, b: p.b }))),
+    sys.SYSTEM_ORTE_BLOCKS, null, null, undefined, 0.2, komplettMaxTokens(effectiveProvider),
+    prompts.SCHEMA_ENTITY_MATCH, costTier(COST_LABEL.match),
+  )), batches.length > 1 ? { concurrency: JUDGE_CONCURRENCY } : {});
+  const aborted = settled.find(r => r.status === 'rejected' && r.reason?.name === 'AbortError');
+  if (aborted) throw aborted.reason;
+  const paare = [];
+  let failed = 0;
+  settled.forEach((r, bi) => {
+    const label = batches.length > 1 ? ` Teil ${bi + 1}/${batches.length}` : '';
+    if (r.status === 'rejected') {
+      failed++;
+      log.warn(`Entitäten-Judge (${kind})${label} übersprungen (${i18nErrText(r.reason)}) – diese Paare bleiben regelbasiert.`);
+    } else if (!Array.isArray(r.value?.paare)) {
+      failed++;
+      log.warn(`Entitäten-Judge (${kind})${label}: Antwort ohne paare-Array – diese Paare bleiben regelbasiert.`);
+    } else {
+      paare.push(...r.value.paare);
+    }
+  });
+  if (failed) ctx.warnings?.push({ key: 'job.warn.entityMatchDegraded' });
+  if (failed === batches.length) return hints;
+  // «Erstes Urteil gilt» (unten) braucht die Rangfolge, nicht die Ankunftsreihenfolge
+  // der Teil-Antworten.
+  paare.sort((x, y) => Number(x?.nr) - Number(y?.nr));
 
   const keyOf = HINT_KEY[kind];
   const usedExisting = new Set();
   let confirmed = 0;
-  for (const v of res.paare) {
+  for (const v of paare) {
     if (v?.gleich !== true) continue;
     const p = pairs.find(x => x.nr === Number(v.nr));
     if (!p) continue;
@@ -153,4 +188,4 @@ async function judgeEntityPairs(ctx, kind, { incoming, existing, unsure }) {
   return hints;
 }
 
-module.exports = { judgeEntityPairs, isJudgeEnabled, JUDGE_PAIR_CAP };
+module.exports = { judgeEntityPairs, isJudgeEnabled, rankJudgePairs, JUDGE_PAIR_CAP, JUDGE_MAX_CALLS };

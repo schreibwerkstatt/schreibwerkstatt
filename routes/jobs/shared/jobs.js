@@ -65,6 +65,34 @@ function i18nError(key, params = null) {
   return err;
 }
 
+// Log-Zeilen sind hart gedeckelt: ein Body-Text oder ein Kapitelname, der hier
+// ungekürzt mitläuft, macht eine grepbare Logzeile unbrauchbar.
+const I18N_LOG_PARAM_MAX = 200;
+
+/**
+ * Rendert einen Fehler fürs LOG: i18n-Key + Params. `err.message` ist nur der
+ * i18n-Key (das Frontend übersetzt über `t(key, params)`), die Params stehen in
+ * `err.i18nParams` — ein `log.warn(\`… ${e.message}\`)` wirft genau die Information
+ * weg, die den Fehler eingrenzt (welches Kapitel, welcher Token-Deckel, welche
+ * Feldliste fehlte). PFLICHT an jeder Log-Stelle, die einen i18nError SCHLUCKT
+ * (Soft-Fail mit Fallback); geworfene Fehler laufen über `failJob`, das es
+ * zentral anwendet. Ein Nicht-i18n-Fehler kommt unverändert zurück.
+ */
+function i18nErrText(err) {
+  const msg = (err && typeof err.message === 'string') ? err.message : String(err ?? '');
+  const params = err?.i18nParams;
+  if (!params || typeof params !== 'object' || Array.isArray(params)) return msg;
+  const parts = Object.entries(params)
+    .filter(([, v]) => v !== null && v !== undefined && v !== '')
+    .map(([k, v]) => {
+      const isStr = typeof v === 'string';
+      const raw = isStr ? v : (() => { try { return JSON.stringify(v); } catch { return String(v); } })();
+      const cut = raw.length > I18N_LOG_PARAM_MAX ? `${raw.slice(0, I18N_LOG_PARAM_MAX)}…` : raw;
+      return `${k}=${isStr ? JSON.stringify(cut) : cut}`;
+    });
+  return parts.length ? `${msg} {${parts.join(', ')}}` : msg;
+}
+
 /**
  * Helper: content-store-Errors mit `e.status` in i18nError-Form uebersetzen.
  * Job-Handler wrappen ihre content-store-Calls damit. Andere Fehler (Abort,
@@ -245,7 +273,7 @@ function failJob(id, err) {
   if (isCancelled) {
     logger.info(`Abgebrochen (${_jobDurationFmt(job.startedAt)})`, _jobLogCtx(job));
   } else {
-    logger.warn(`Fehlgeschlagen (${_jobDurationFmt(job.startedAt)}): ${errorMsg}`, _jobLogCtx(job));
+    logger.warn(`Fehlgeschlagen (${_jobDurationFmt(job.startedAt)}): ${i18nErrText(err)}`, _jobLogCtx(job));
   }
   // Log-Snapshot + Stack synchron auf job stashen, BEVOR Buffer geleert wird;
   // notify-Pfad ist async fire-and-forget und liest die Felder aus job.
@@ -373,7 +401,7 @@ const STATS_EXCLUDED_TYPES = ['figures', 'soziogramm', 'szenen', 'locations', 'f
 module.exports = {
   makeJobLogger,
   fmtTok, fmtDuration, _jobDurationFmt, _jobLogCtx, tps,
-  i18nError, contentHttpError, emptyScopeError,
+  i18nError, i18nErrText, contentHttpError, emptyScopeError,
   findActiveJobId,
   createJob, updateJob, setJobModel, completeJob, failJob, cancelJob,
   EMBED_PROVIDER, EMBED_JOB_TYPES,

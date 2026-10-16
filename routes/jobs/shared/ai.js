@@ -459,7 +459,7 @@ async function aiCall(jobId, tok, prompt, system, fromPct, toPct, expectedChars 
   } finally {
     setThinking(false);
   }
-  const { text, truncated, tokensIn, tokensOut, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0, genDurationMs } = aiRes;
+  const { text, truncated, stopReason, tokensIn, tokensOut, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0, genDurationMs } = aiRes;
   tok.inflight?.delete(callId);
   tok.in += tokensIn;
   tok.out += tokensOut;
@@ -486,6 +486,9 @@ async function aiCall(jobId, tok, prompt, system, fromPct, toPct, expectedChars 
   }
   updateJob(jobId, finalUpdates);
   if (truncated) throw i18nError('job.error.aiTruncated', { max: maxTokensOverride, tokIn: tokensIn, tokOut: tokensOut, total: tokensIn + tokensOut });
+  // Ablehnung (auch nach einem Refusal-Fallback): der Text ist leer oder bricht ab —
+  // eigener Fehler statt eines Parse-Fehlers oder eines «Pflichtfeld fehlt» am Aufrufer.
+  if (stopReason === 'refusal') throw i18nError('job.error.aiRefusal');
   return parseJSON(text);
 }
 

@@ -2,7 +2,7 @@
 // Phase 3b: kapitelübergreifende Beziehungen (Multi-Pass) · Phase 6: Zeitstrahl.
 const { addFigurenBeziehungen, saveZeitstrahlEvents } = require('../../../../db/schema');
 const { listFigureEventsForTimeline } = require('../../../../db/zeitstrahl');
-const { i18nError, updateJob, toSystemBlocks } = require('../../shared');
+const { i18nError, i18nErrText, updateJob, toSystemBlocks } = require('../../shared');
 const { buildBookSystemBlockText, consolidationFitsCap } = require('../utils');
 const { komplettMaxTokens } = require('./tokens');
 const { providerClass, getContextConfigFor } = require('../../../../lib/ai');
@@ -98,7 +98,7 @@ async function runPhase3b(ctx, figuren) {
       }
     }
   } catch (e) {
-    log.warn(`Phase 3b Co-Occurrence-Auswahl fehlgeschlagen, Fallback auf Trunkierung: ${e.message}`);
+    log.warn(`Phase 3b Co-Occurrence-Auswahl fehlgeschlagen, Fallback auf Trunkierung: ${i18nErrText(e)}`);
   }
 
   if (!textForPrompt) {
@@ -243,7 +243,7 @@ async function runZeitstrahl(ctx, opts = {}) {
     // (typisch: aiTruncated bei vielen Events + kleinem lokalem Output-Cap, Parse-Fehler,
     // erschöpfter Retry) darf den gesamten Katalog NICHT verwerfen – Figuren/Orte/Szenen
     // sind längst gespeichert. Fallback: pre-gruppierte Events direkt persistieren.
-    log.warn(`Zeitstrahl-Konsolidierung fehlgeschlagen, speichere ${zeitstrahlEvents.length} pre-gruppierte Events direkt: ${e.message}`);
+    log.warn(`Zeitstrahl-Konsolidierung fehlgeschlagen, speichere ${zeitstrahlEvents.length} pre-gruppierte Events direkt: ${i18nErrText(e)}`);
     // Degradierung user-sichtbar machen (wie Soziogramm/Orte/Songs/P3b/P8) — sonst sieht
     // der User nur „done" und kann holistisch-konsolidiert nicht von roh-durchgereicht
     // unterscheiden. Kein Datenverlust (Events bleiben gruppiert + persistiert).
@@ -270,7 +270,7 @@ async function runZeitstrahlPhase(ctx, { skip = false } = {}) {
   try { await runZeitstrahl(ctx); }
   catch (e) {
     if (e.name === 'AbortError') throw e;
-    ctx.log.warn(`Zeitstrahl-Phase fehlgeschlagen (Katalog bleibt erhalten): ${e.message}`);
+    ctx.log.warn(`Zeitstrahl-Phase fehlgeschlagen (Katalog bleibt erhalten): ${i18nErrText(e)}`);
     ctx.warnings.push({ key: 'job.warn.timelineFailed' });
   }
   updateJob(ctx.jobId, { progress: 97 });

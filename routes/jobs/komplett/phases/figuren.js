@@ -4,7 +4,7 @@ const { saveFigurenToDb, updateFigurenSoziogramm } = require('../../../../db/sch
 const { planFigurenMatch, countActiveFigures, listFigureAliasesByFigure } = require('../../../../db/figures');
 const { judgeEntityPairs } = require('../entity-reconcile');
 const { recomputeBookFigureMentions } = require('../../../../lib/page-index');
-const { i18nError, updateJob } = require('../../shared');
+const { i18nError, i18nErrText, updateJob } = require('../../shared');
 const { buildFigNameLookup, consolidationFitsCap } = require('../utils');
 const {
   preMergeChapterFiguren, applySozialschichtModeVote, mergeDuplicateFiguren,
@@ -12,6 +12,7 @@ const {
   annotateBeziehungenNames, rebindBeziehungenByName,
 } = require('../figuren-merge');
 const { komplettMaxTokens } = require('./tokens');
+const { runKonsolBatched, KONSOL_SINGLE_RESERVE } = require('./figuren-konsol');
 const { providerClass, getContextConfigFor } = require('../../../../lib/ai');
 const { COST_LABEL, costTier } = require('../cost-labels');
 const { ankerHints, mergeHints } = require('../katalog-anker');
@@ -94,7 +95,7 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
           if (renamed > 0) aliasMap = am;
         } catch (e) {
           if (e.name === 'AbortError') throw e;
-          log.warn(`Alias-Cluster übersprungen (${e.message}) – Konsolidierung unverändert.`);
+          log.warn(`Alias-Cluster übersprungen (${i18nErrText(e)}) – Konsolidierung unverändert.`);
           ctx.warnings?.push({ key: 'job.warn.aliasClusterDegraded' });
         }
       }
@@ -113,23 +114,43 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
       return list;
     };
     const cap = komplettMaxTokens(effectiveProvider);
+    const cpt = getContextConfigFor(effectiveProvider).charsPerToken;
+    const isCloud = providerClass(effectiveProvider) === 'cloud';
     const konsolPrompt = prompts.buildFiguresBasisConsolidationPrompt(bookName, preMerged, sys.BUCH_KONTEXT || '');
-    // Preflight: würde die Antwort das Cap sprengen, ist die Truncation sicher — und mit ihr
-    // der Fallback unten. Dann lieber sofort dorthin, statt den Cap erst leerzuschreiben
-    // (lokal zweistellige Minuten für ein Ergebnis, das verworfen wird).
+    // Preflight: würde die Antwort das Cap sprengen, ist die Truncation sicher. Cloud-Klasse
+    // denkt adaptiv, und das Reasoning zählt gegen dasselbe Cap — dort darf das JSON nur die
+    // Hälfte belegen, sonst geht's in Teilen (./figuren-konsol.js). Lokal direkt in den
+    // regelbasierten Fallback, statt den Cap erst leerzuschreiben (lokal zweistellige
+    // Minuten für ein Ergebnis, das verworfen wird).
     const fit = consolidationFitsCap({
       promptText: konsolPrompt, dataText: JSON.stringify(preMerged.flatMap(c => c.figuren || [])),
-      charsPerToken: getContextConfigFor(effectiveProvider).charsPerToken, cap,
+      charsPerToken: cpt, cap, reserve: isCloud ? KONSOL_SINGLE_RESERVE : 0.9,
     });
-    let figResult;
-    if (!fit.fits) {
+    const degrade = (reason) => {
       const fallback = fallbackFiguren();
-      log.warn(`Phase-2-Figuren-Konsolidierung übersprungen – erwarteter Output ~${fit.estOut} Tokens `
-        + `über dem Cap ${fit.cap} (Truncation wäre sicher). Fallback auf ${fallback.length} pre-gemergte `
-        + 'Figuren. Abhilfe: ai.komplett.extract_max_tokens erhöhen oder das Buch in mehr Kapitel gliedern.');
+      log.warn(`Phase-2-Figuren-Konsolidierung übersprungen (${reason}) – Fallback auf ${fallback.length} pre-gemergte Figuren.`);
       ctx.warnings?.push({ key: 'job.warn.figurenKonsolidierungDegraded' });
-      figResult = { figuren: fallback };
       updateJob(jobId, { progress: figProgressEnd });
+      return { figuren: fallback };
+    };
+    // Teil-Konsolidierung; scheitert sie ganz, bleibt der regelbasierte Fallback.
+    const batched = async (why) => {
+      log.info(`Phase-2-Figuren-Konsolidierung geteilt – ${why}.`);
+      try {
+        const res = await runKonsolBatched(ctx, preMerged, { cap, charsPerToken: cpt, fromPct: 30, toPct: figProgressEnd });
+        if (res.degraded) ctx.warnings?.push({ key: 'job.warn.figurenKonsolidierungDegraded' });
+        return { figuren: res.figuren, batched: true };
+      } catch (e) {
+        if (e.name === 'AbortError') throw e;
+        return degrade(i18nErrText(e));
+      }
+    };
+    let figResult;
+    if (!fit.fits && isCloud) {
+      figResult = await batched(`erwarteter Output ~${fit.estOut} Tokens über ${Math.round(KONSOL_SINGLE_RESERVE * 100)} % des Caps ${fit.cap}`);
+    } else if (!fit.fits) {
+      figResult = degrade(`erwarteter Output ~${fit.estOut} Tokens über dem Cap ${fit.cap}, Truncation wäre sicher; `
+        + 'Abhilfe: ai.komplett.extract_max_tokens erhöhen oder das Buch in mehr Kapitel gliedern');
     } else {
       try {
         figResult = await call(jobId, tok,
@@ -140,26 +161,18 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
         if (!Array.isArray(figResult?.figuren)) throw i18nError('job.error.figurenMissing');
       } catch (e) {
         if (e.name === 'AbortError') throw e;
-        // Konsolidierungs-Call fehlgeschlagen (typisch: aiTruncated, wenn ein kleines lokales Modell
-        // viele Figuren in einen Output packen müsste). Statt den gesamten Job – inkl. mehrstündiger
-        // Phase-1-Arbeit – zu verwerfen, auf die bereits regelbasiert pre-gemergten Figuren zurückfallen.
-        // mergeDuplicateFiguren + backfill unten laufen ohnehin noch.
-        // Chunk-lokale fig_ids sind NICHT global eindeutig (jeder Chunk beginnt bei fig_1);
-        // normalerweise vergibt Phase 2 eindeutige IDs. Im Fallback selbst neu durchnummerieren,
-        // sonst kollidieren gleiche Chunk-Indizes verschiedener Figuren im
-        // UNIQUE(book_id, fig_id, user_email) von saveFigurenToDb. Die Beziehungen zeigen
-        // danach auf die alten, chunk-lokalen ids — `rebindBeziehungenByName` unten bindet sie
-        // über die zuvor angereicherten Namen neu (ohne das landeten sie auf fremden Figuren).
-        const fallback = fallbackFiguren();
-        log.warn(`Phase-2-Figuren-Konsolidierung übersprungen (${e.message}) – Fallback auf ${fallback.length} pre-gemergte Figuren.`);
-        ctx.warnings?.push({ key: 'job.warn.figurenKonsolidierungDegraded' });
-        figResult = { figuren: fallback };
-        updateJob(jobId, { progress: figProgressEnd });
+        // Truncation trotz Preflight (das Reasoning lässt sich nicht vorab schätzen): in
+        // Teilen nochmals, statt die ganze Zusammenführung zu verlieren.
+        if (isCloud && e.message === 'job.error.aiTruncated') figResult = await batched('Einzel-Call truncierte');
+        // Sonst (typisch: aiTruncated bei einem kleinen lokalen Modell) nicht den ganzen Job
+        // – inkl. mehrstündiger Phase-1-Arbeit – verwerfen, sondern auf die pre-gemergten
+        // Figuren zurückfallen. mergeDuplicateFiguren + backfill unten laufen ohnehin noch.
+        else figResult = degrade(i18nErrText(e));
       }
     }
-    // `f.id ||` erhält die im Fallback vergebenen ids (und damit den dort gemachten
-    // Rebind); die KI-Konsolidierung bringt ihre eigene, in sich konsistente ID-Welt mit
-    // und wird bewusst NICHT nachgebunden.
+    // `f.id ||` erhält die im Fallback und in der Teil-Konsolidierung vergebenen ids (und
+    // damit den dort gemachten Rebind); die Einzel-Konsolidierung bringt ihre eigene, in
+    // sich konsistente ID-Welt mit und wird bewusst NICHT nachgebunden.
     figuren = figResult.figuren.map((f, i) => ({ ...f, id: f.id || ('fig_' + (i + 1)) }));
   }
   const { figuren: mergedFiguren, mergedCount, stage1Saved, stage2Saved, idRemap } = mergeDuplicateFiguren(figuren);
@@ -203,7 +216,7 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
     }
   } catch (e) {
     if (e.name === 'AbortError') throw e;
-    log.warn(`Figuren-Match-Judge übersprungen (${e.message}) – Matching bleibt regelbasiert.`);
+    log.warn(`Figuren-Match-Judge übersprungen (${i18nErrText(e)}) – Matching bleibt regelbasiert.`);
   }
   const aktivVorher = countActiveFigures(bookIdInt, email);
   try {

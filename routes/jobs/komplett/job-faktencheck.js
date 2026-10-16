@@ -18,7 +18,7 @@ const {
   listWorldFacts, getFactVerdicts, saveFactVerdicts, worldFactKey, faktenfehlerIssues,
 } = require('../../../db/schema');
 const {
-  makeJobLogger, updateJob, completeJob, failJob, i18nError,
+  makeJobLogger, updateJob, completeJob, failJob, i18nError, i18nErrText,
   getPrompts,
   jobAbortControllers, settledAll, tps,
   recordCallCost, summarizeCostByPhase, formatCostByPhase,
@@ -259,7 +259,7 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
       updateJob(jobId, { progress: Math.min(92, 10 + Math.round((done / candidates.length) * 80)) });
       let v;
       try { v = _validVerdict(parseJSON(text)); }
-      catch (e) { log.warn(`Faktencheck-Urteil unbrauchbar (Fakt #${cand.id}): ${e.message}`); throw e; }
+      catch (e) { log.warn(`Faktencheck-Urteil unbrauchbar (Fakt #${cand.id}): ${i18nErrText(e)}`); throw e; }
       // «falsch» zählt nur MIT belegender Quelle — sonst als «unklar» gespeichert, damit
       // ein späterer Lauf es erneut versucht.
       const quelle = String(v.quelle || '').trim();
@@ -285,7 +285,7 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
     const failed = settled.filter(r => r.status === 'rejected');
     if (failed.length) {
       warnings.push({ key: 'job.warn.factcheckJudgeFailed', params: { count: failed.length, checked: candidates.length } });
-      log.warn(`Faktencheck: ${failed.length}/${candidates.length} Urteile verworfen (${failed[0].reason?.message || failed[0].reason}).`);
+      log.warn(`Faktencheck: ${failed.length}/${candidates.length} Urteile verworfen (${i18nErrText(failed[0].reason) || failed[0].reason}).`);
     }
     const judged = settled.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
     saveFactVerdicts(bookIdInt, email, judged);

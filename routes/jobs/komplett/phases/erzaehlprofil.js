@@ -12,7 +12,7 @@
 // das es so nicht mehr gibt).
 const { saveChapterNarrativeProfiles, getBookSettings } = require('../../../../db/schema');
 const { getNarrativeReport, saveAutorenBefund, deleteAutorenBefund } = require('../../../../db/narrative-report');
-const { updateJob, toSystemBlocks, retryOnTransientAi, settledAll, i18nError } = require('../../shared');
+const { updateJob, toSystemBlocks, retryOnTransientAi, settledAll, i18nError, i18nErrText } = require('../../shared');
 const { buildBookSystemBlockText } = require('../utils');
 const { komplettMaxTokens } = require('./tokens');
 const { COST_LABEL, costTier } = require('../cost-labels');
@@ -99,7 +99,7 @@ async function runErzaehlprofil(ctx, opts = {}) {
       await runAutorenBefund(ctx, { declared, fromPct: toPct, toPct });
     } catch (e) {
       if (e.name === 'AbortError') throw e;
-      log.warn(`Autoren-Befund übersprungen, alter Befund entfernt: ${e.message}`);
+      log.warn(`Autoren-Befund übersprungen, alter Befund entfernt: ${i18nErrText(e)}`);
       deleteAutorenBefund(bookIdInt, email);
       warn({ key: 'job.warn.autorenBefundFailed' });
     }

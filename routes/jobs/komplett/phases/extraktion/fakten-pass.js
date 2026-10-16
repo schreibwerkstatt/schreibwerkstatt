@@ -2,7 +2,7 @@
 // Single-Pass-Fakten-Call (C) auswerten: Erfolg übernehmen, eine Trunkierung
 // kapitelgruppenweise retten, einen Ausfall als leere Fakten + Warnung melden.
 // Ausgelagert aus ../extraktion.js (LOC-Cap).
-const { i18nError, settledAll, retryOnTransientAi, toSystemBlocks } = require('../../../shared');
+const { i18nError, i18nErrText, settledAll, retryOnTransientAi, toSystemBlocks } = require('../../../shared');
 
 /** Rettung für einen am Output-Deckel abgeschnittenen Single-Pass-Fakten-Call: die
  *  Kapitel in bis zu drei etwa gleich lange Gruppen teilen und je Gruppe einen C-Call
@@ -51,7 +51,7 @@ async function resolveSinglePassFakten(ctx, faktenRes, { bookSystemBlock, claude
   // ersetzte ein leerer Index den bestehenden und umginge den faktenFailure-Schutz.
   if (res.status === 'fulfilled' && Array.isArray(res.value?.fakten)) return { fakten: res.value.fakten, failed: false };
   if (res.status === 'rejected' && res.reason?.name === 'AbortError') throw res.reason;
-  ctx.log.warn(`Single-Pass Fakten-Pass (C) fehlgeschlagen, Fakten leer: ${res.status === 'rejected' ? res.reason?.message : 'fakten-Feld fehlt'}`);
+  ctx.log.warn(`Single-Pass Fakten-Pass (C) fehlgeschlagen, Fakten leer: ${res.status === 'rejected' ? i18nErrText(res.reason) : 'fakten-Feld fehlt'}`);
   ctx.warnings?.push({ key: 'job.warn.faktenFailed' });
   return { fakten: [], failed: true };
 }

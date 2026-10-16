@@ -1,4 +1,10 @@
 'use strict';
+// Leaf-Import, NICHT die `../shared`-Facade: die Facade lädt `shared/ai.js`, das
+// `callAI` per Destructure einfängt – läge das schon beim Top-Level-Require dieses
+// Moduls im Cache, würde der Test-Stub (tests/integration/_helpers/mock-ai.js,
+// ersetzt den `lib/ai`-Cache-Eintrag erst in bootstrap()) nicht mehr greifen und
+// der Integrationstest ginge echt ans Netz.
+const { i18nErrText } = require('../shared/jobs');
 const { nameTokens, salutationGender } = require('../../../lib/name-normalize');
 
 const crypto = require('crypto');
@@ -219,7 +225,7 @@ async function runNonCritical(label, fn, log, { warnings = null, warnKey = null 
   try {
     return await fn();
   } catch (e) {
-    log.warn(`${label} fehlgeschlagen (ignoriert): ${e.message}`);
+    log.warn(`${label} fehlgeschlagen (ignoriert): ${i18nErrText(e)}`);
     if (warnings && warnKey) warnings.push({ key: warnKey });
     return null;
   }
