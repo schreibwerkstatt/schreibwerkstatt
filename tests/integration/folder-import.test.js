@@ -110,6 +110,29 @@ test('folder-import (merge): docx + odt aus YYYY/Monat → Kapitel pro Jahr, Sei
   for (const p of pages) assert.ok(subIds.has(p.chapter_id), `Page ${p.name} sollte an Month-Sub-Chapter haengen`);
 });
 
+test('folder-import: Buch ohne Buchtyp wird Tagebuch, gesetzter Typ bleibt', async () => {
+  const userEmail = 'tester@test.dev';
+  const { db } = require('../../db/connection');
+  const { getBookSettings } = require('../../db/schema');
+  const run = async (book, tag) => {
+    db.prepare(`INSERT OR IGNORE INTO book_access (book_id, user_email, role, granted_at) VALUES (?, ?, 'owner', '2026-01-01T00:00:00.000Z')`).run(book.id, userEmail);
+    const buffer = await buildArchive([['2024/01/2024-01-02.docx', await makeDocx('Eintrag.')]]);
+    const jobId = ctx.shared.createJob('folder-import', book.id, userEmail, 'job.label.folderImport', { name: tag }, `merge:${book.id}:${tag}`);
+    folderImport.importBuffers.set(jobId, { buffer, mode: 'merge', bookName: '', bookId: book.id });
+    await folderImport.runFolderImportJob(jobId, { userEmail, mode: 'merge', bookName: '', bookId: book.id });
+    assert.equal(ctx.shared.jobs.get(jobId).status, 'done');
+  };
+  const session = { session: { user: { email: userEmail } } };
+  const untyped = await contentStore.createBook({ name: 'Ohne Typ', owner_email: userEmail }, session);
+  await run(untyped, 'untyped');
+  assert.equal(getBookSettings(untyped.id, userEmail).buchtyp, 'tagebuch');
+
+  const memoir = await contentStore.createBook({ name: 'Memoiren', owner_email: userEmail }, session);
+  db.prepare(`INSERT INTO book_settings (book_id, language, region, updated_at, buchtyp) VALUES (?, 'de', 'CH', '2026-01-01T00:00:00.000Z', 'autobiografie')`).run(memoir.id);
+  await run(memoir, 'memoir');
+  assert.equal(getBookSettings(memoir.id, userEmail).buchtyp, 'autobiografie');
+});
+
 test('folder-import: leeres Archiv → failJob mit emptyArchive', async () => {
   const userEmail = 'tester@test.dev';
   const book = await contentStore.createBook(

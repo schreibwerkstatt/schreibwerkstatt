@@ -25,6 +25,9 @@
 // bei `lyrik` bewusst auseinander — im Lektorat bleibt Lyrik narrativ (Wiederholung
 // und starke Bilder sind dort Kunstmittel, das ist die richtige Fehler-Brille), in
 // der Bewertung braucht sie ein eigenes Set (Plot und Figuren existieren nicht).
+// Dasselbe gilt für `tagebuch`: das Lektorat bleibt narrativ (mit der Einheit
+// `eintrag`), die Bewertung misst Stimme, Beobachtung, Reflexion und Rhythmus
+// statt Plot und Dramaturgie.
 
 // ── Achsen-Definitionen ──────────────────────────────────────────────────────
 // key = JSON-Feldname = i18n-Suffix. hint = Prompt-Text der Achse.
@@ -62,6 +65,24 @@ const AXIS = {
   verdichtung:     'Verdichtung: Trägt jede Zeile? Leerlauf, erklärende Zeilen, überflüssige Auflösung des Bildes.',
   stimme:          'Eigenstimme und Variation über den Band, Wiedererkennbarkeit, Gefahr der Manier.',
   komposition:     'Komposition des Ganzen: Reihenfolge, Bogen, Gruppenbildung, Anfang und Schluss.',
+
+  // tagebuchisch
+  beobachtung:     'Beobachtungsschärfe: konkrete Details, Sinneseindrücke, genaue Benennung von Menschen, Orten und Vorgängen statt Allgemeinplatz.',
+  reflexion:       'Reflexion: Verhältnis von Bericht und Deutung, Selbstbefragung, Erkenntnis, die über das blosse Festhalten hinausgeht.',
+  rhythmus:        'Rhythmus der Einträge: Länge, Dichte und Abstände, Wechsel von knapper Notiz und ausgeführtem Eintrag.',
+};
+
+// Tagebuch: dieselben Keys wie anderswo, aber auf die schreibende Person und
+// die Folge der Einträge bezogen (der Lyrik-Hint von `stimme` spricht vom Band).
+const TAGEBUCH_AXIS_OVERRIDE = {
+  stimme:          'Eigenstimme der schreibenden Person: Unverwechselbarkeit, Ehrlichkeit, Variation über die Einträge, Gefahr der Selbststilisierung.',
+  thema:           'Wiederkehrende Themen, Personen und Fragen über die Zeit, erkennbare Entwicklung der schreibenden Person.',
+};
+const TAGEBUCH_CHAPTER_AXIS_OVERRIDE = {
+  stimme:          'Eigenstimme in den Einträgen dieses Zeitabschnitts: Unverwechselbarkeit, Ehrlichkeit, Variation.',
+  beobachtung:     'Konkretheit der Einträge dieses Zeitabschnitts: Details, Sinneseindrücke, genaue Benennung.',
+  reflexion:       'Verhältnis von Bericht und Deutung in diesem Zeitabschnitt, Selbstbefragung, Erkenntnis.',
+  rhythmus:        'Länge, Dichte und Abstände der Einträge in diesem Zeitabschnitt.',
 };
 
 // Kapitel-Ebene: dieselben Keys, aber auf den Abschnitt bezogen formuliert.
@@ -94,7 +115,7 @@ function _axes(keys, override = null) {
 // ── Profile ──────────────────────────────────────────────────────────────────
 
 const PROFILE = {
-  // Erzählende Werke: Roman, Krimi, Fantasy, Autobiografie, Tagebuch, Satire …
+  // Erzählende Werke: Roman, Krimi, Fantasy, Autobiografie, Satire …
   narrativ: {
     werk: { nom: 'das Buch', akk: 'das Buch' },
     bookAxes:    _axes(['struktur', 'stil', 'plot', 'figuren', 'dramaturgie', 'pacing', 'thema']),
@@ -228,6 +249,34 @@ const PROFILE = {
   },
 };
 
+PROFILE.tagebuch = {
+  // Tagebuch: datierte Einträge in Ich-Form. Kein Plot, keine Dramaturgie, keine
+  // Szenen — Fragmente und Notizstil sind Genre, kein Mangel. Die Kapitel sind
+  // Zeitabschnitte (Jahr/Monat), keine Handlungseinheiten.
+  werk: { nom: 'das Tagebuch', akk: 'das Tagebuch' },
+  bookAxes:    _axes(['stimme', 'stil', 'beobachtung', 'reflexion', 'rhythmus', 'thema'], TAGEBUCH_AXIS_OVERRIDE),
+  chapterAxes: _axes(['stimme', 'beobachtung', 'reflexion', 'rhythmus'], TAGEBUCH_CHAPTER_AXIS_OVERRIDE),
+  bookGewichtung:    'Stimme, Beobachtung und Reflexion tragen die Gesamtnote stärker als sprachliche Einzelmängel. Fragmente, Abkürzungen und Notizstil sind Genre, kein Mangel; gemessen wird nicht an Spannung oder Handlung.',
+  chapterGewichtung: 'Stimme und Beobachtung sind die zentralen Bewertungskriterien dieses Zeitabschnitts und fliessen stärker in die Gesamtnote ein als sprachliche Einzelmängel.',
+  bookTiers: {
+    mangelhaft: 'mangelhaft – blosse Ereignisliste ohne Stimme, Beobachtung oder Deutung.',
+    schwach:    'einzelne Einträge tragen, das Ganze bleibt Protokoll (Allgemeinplätze, keine Selbstbefragung).',
+    solide:     'solide geführt, ehrlich und konkret, ohne herausstechende Stimme.',
+    sehrGut:    'sehr gut – eigene Stimme, genau beobachtet, die Entwicklung über die Zeit wird lesbar.',
+  },
+  chapterTiers: {
+    mangelhaft: 'mangelhaft – die Einträge dieses Zeitabschnitts bleiben Stichworte ohne Gehalt.',
+    schwach:    'einzelne Einträge tragen, der Zeitabschnitt als Ganzes nicht.',
+    solide:     'solider Zeitabschnitt, konkret und ehrlich notiert.',
+    sehrGut:    'sehr gut – dichte, genaue Einträge mit erkennbarer Stimme.',
+  },
+  analyse: [
+    { key: 'stimme_kurz', label: 'Stimme', hint: 'Wie klingt die schreibende Person in diesem Zeitabschnitt, was verschiebt sich.' },
+    { key: 'beobachtung_kurz', label: 'Beobachtung', hint: 'Konkrete Details und Sinneseindrücke vs. Allgemeinplätze.' },
+    { key: 'reflexion_kurz', label: 'Reflexion', hint: 'Wo wird gedeutet und befragt, wo nur berichtet.' },
+  ],
+};
+
 // buchtyp-Key (prompt-config.json `buchtypen`) → Profil. Alles Ungenannte,
 // inkl. null/unbekannt, fällt auf 'narrativ' zurück.
 const PROFIL_BY_BUCHTYP = {
@@ -237,6 +286,7 @@ const PROFIL_BY_BUCHTYP = {
   blog:         'sachlich',
   journalismus: 'journalistisch',
   lyrik:        'lyrisch',
+  tagebuch:     'tagebuch',
 };
 
 /** Profilname für einen Buchtyp. Unbekannt/null → 'narrativ'. */

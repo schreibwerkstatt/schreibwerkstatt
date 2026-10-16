@@ -120,7 +120,7 @@ export const crudMethods = {
 
   async createPage(chapterId) {
     const root = window.__app;
-    const isDiary = typeof root.isTagebuch === 'function' && root.isTagebuch();
+    const isDiary = root.isTagebuch();
     const name = await root.appPrompt({
       message: root.t('bookOrganizer.promptPageName'),
       placeholder: root.t('bookOrganizer.placeholderPageName'),

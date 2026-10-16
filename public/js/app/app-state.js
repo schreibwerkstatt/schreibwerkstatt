@@ -113,9 +113,11 @@ const navigationState = () => ({
   newChapterCreating: false,
   newChapterError: '',
   // Diary-Calendar (Tagebuch-Bücher): Sidebar-Mode (Tree vs. Kalender) und
-  // aktiver Monat. `sidebarMode` startet 'tree'; auf Buchwechsel setzt
-  // tree.js#loadPages bei buchtyp='tagebuch' auf 'calendar'.
+  // aktiver Monat. `sidebarMode` startet 'tree'; auf Buch- oder Buchtyp-Wechsel
+  // setzt tree/load.js#loadPages bei buchtyp='tagebuch' auf 'calendar'.
+  // `_sidebarModeBuchtyp` ist der Buchtyp, für den der Mode zuletzt gesetzt wurde.
   sidebarMode: 'tree',
+  _sidebarModeBuchtyp: null,
   diaryCalendarYearMonth: null,
   _diaryCalendarJumpModel: '',
   // Diary-Rückblick „An diesem Tag" + Zeitraum-Suche (rein lesend, kein KI-Call).

@@ -18,7 +18,7 @@
 const express = require('express');
 const { emitItem, setItemKind, setItemDocText } = require('../db/research-items');
 const {
-  getTranscript, getAudio, createTranscript, dropAudio,
+  getTranscript, getAudio, getAudioMeta, getAudioRange, createTranscript, dropAudio,
   listSegments, getSegment, listSpeakers, speakerLabels, setSpeaker, speakerKeys,
 } = require('../db/interview');
 const {
@@ -27,6 +27,7 @@ const {
 } = require('../lib/interview-transcribe');
 const { createSource, linkSource, getSource } = require('../db/sources');
 const { toIntId } = require('../lib/validate');
+const { resolveByteRange } = require('../lib/http-util');
 const { sessionEmail } = require('../lib/acl');
 const { scopedItem } = require('./research-acl');
 const searchIndex = require('../lib/search');
@@ -39,6 +40,9 @@ const jsonBody = express.json();
 const rawAudio = express.raw({ type: ['audio/*', 'video/mp4', 'video/webm'], limit: AUDIO_MAX_BYTES + 1024 });
 
 const AUDIONAME_MAX = 200;
+// Deckel einer Range-Antwort. 2 MB sind bei Sprach-Bitraten Minuten Audio — der
+// Player fragt nach, bevor er sie abgespielt hat.
+const AUDIO_RANGE_CHUNK = 2 * 1024 * 1024;
 
 // Zugriffs-Vorspann: `scopedItem` aus routes/research-acl.js — dasselbe
 // Fundstueck, dieselbe Buch-ACL wie im Board und in den Medien-Routen. Der Guard
@@ -98,35 +102,34 @@ interviewMediaRouter.get('/:id/audio', (req, res) => {
   const s = scopedItem(req, res, 'viewer');
   if (!s) return;
   const { id } = s;
-  const row = getAudio(id);
-  if (!row?.audio) return res.status(404).json({ error_code: 'NO_AUDIO' });
+  const meta = getAudioMeta(id);
+  if (!meta?.size) return res.status(404).json({ error_code: 'NO_AUDIO' });
 
-  const buf = row.audio;
-  const mime = row.audio_mime || 'application/octet-stream';
-  res.set('Content-Type', mime);
+  const size = meta.size;
+  res.set('Content-Type', meta.audio_mime || 'application/octet-stream');
   res.set('Accept-Ranges', 'bytes');
   res.set('Cache-Control', 'private, max-age=3600');
   res.set('X-Content-Type-Options', 'nosniff');
 
-  const range = String(req.headers.range || '');
-  const m = /^bytes=(\d*)-(\d*)$/.exec(range);
-  if (!m) {
-    res.set('Content-Length', String(buf.length));
-    return res.send(buf);
+  const range = resolveByteRange(req.headers.range, size, AUDIO_RANGE_CHUNK);
+  if (!range) {
+    // Voller Download ohne Range (Speichern-unter): der einzige Weg, der den
+    // ganzen BLOB zieht. Ein Medien-Element fragt immer mit Range an.
+    const row = getAudio(id);
+    res.set('Content-Length', String(size));
+    return res.send(row.audio);
   }
-  let start = m[1] === '' ? null : parseInt(m[1], 10);
-  let end = m[2] === '' ? null : parseInt(m[2], 10);
-  if (start === null && end === null) return res.status(416).end();
-  if (start === null) { start = Math.max(0, buf.length - end); end = buf.length - 1; }
-  if (end === null || end >= buf.length) end = buf.length - 1;
-  if (start > end || start >= buf.length) {
-    res.set('Content-Range', `bytes */${buf.length}`);
+  if (range.unsatisfiable) {
+    res.set('Content-Range', `bytes */${size}`);
     return res.status(416).end();
   }
+  const { start, end } = range;
+  const chunk = getAudioRange(id, start, end - start + 1);
+  if (!chunk) return res.status(404).json({ error_code: 'NO_AUDIO' });
   res.status(206);
-  res.set('Content-Range', `bytes ${start}-${end}/${buf.length}`);
-  res.set('Content-Length', String(end - start + 1));
-  res.send(buf.subarray(start, end + 1));
+  res.set('Content-Range', `bytes ${start}-${end}/${size}`);
+  res.set('Content-Length', String(chunk.length));
+  res.send(chunk);
 });
 
 /** Aufnahme löschen, Wortlaut behalten. */

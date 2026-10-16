@@ -9,6 +9,7 @@
 
 import { fetchJson, sendJson } from '../../utils/net.js';
 import { statusLabelKey, weakestStatus } from '../../redaktion/status.js';
+import { bedenkenHinweis } from '../../redaktion/bedenken.js';
 
 // Memos ausserhalb von Alpine: in den reaktiven Root geschrieben, loeste jedes
 // Nachtragen (Map.set im Render) einen erneuten Render aus. Es gibt genau eine
@@ -155,15 +156,18 @@ export const treeEditStatusMethods = {
     if (!this.canEdit() || pageId == null) return;
     const key = String(pageId);
     const before = this._doneScopes();
+    let bedenken = null;
     try {
       const r = await sendJson(`/redaktion/page/${pageId}`, 'PUT', { status: status || null });
       const next = { ...this.$store.badges.editStatus };
       if (r.entry) next[key] = r.entry; else delete next[key];
       this.$store.badges.editStatus = next;
+      bedenken = r.bedenken;
     } catch {
       this.setStatus(this.t('redaktion.saveFailed'));
       return;
     }
+    await this.reportReleaseBedenken(bedenken);
     await this._offerSnapshot(before);
   },
 
@@ -181,6 +185,7 @@ export const treeEditStatusMethods = {
       confirmLabel: this.t('editStatus.confirmChapterOk'),
     })) return;
     const before = this._doneScopes();
+    let bedenken = null;
     try {
       const r = await sendJson(`/redaktion/chapter/${chapterId}`, 'PUT', { status: status || null });
       const next = { ...this.$store.badges.editStatus };
@@ -188,11 +193,29 @@ export const treeEditStatusMethods = {
         if (entry) next[key] = entry; else delete next[key];
       }
       this.$store.badges.editStatus = next;
+      bedenken = r.bedenken;
     } catch {
       this.setStatus(this.t('redaktion.saveFailed'));
       return;
     }
+    await this.reportReleaseBedenken(bedenken, { chapter: true });
     await this._offerSnapshot(before);
+  },
+
+  // Beim Freigeben meldet der Server, was dagegen spricht (Form verfehlt, belegter
+  // O-Ton ohne Autorisierung; lib/freigabe-bedenken.js). Hinweis, kein Gate: die
+  // Stufe ist bereits gesetzt. Der Knopf fuehrt in die Uebersicht der
+  // Struktur-Karte. Auch vom Buchorganizer aufgerufen (window.__app).
+  async reportReleaseBedenken(bedenken, { chapter = false } = {}) {
+    const message = bedenkenHinweis(bedenken, { chapter }, (k, p) => this.t(k, p));
+    if (!message) return;
+    if (!await this.appConfirm({
+      message,
+      confirmLabel: this.t('freigabe.bedenken.open'),
+      cancelLabel: this.t('freigabe.bedenken.dismiss'),
+    })) return;
+    // Offen: Re-Klick laedt neu (onReclick 'refresh'); zu: oeffnen laedt.
+    this.toggleStrukturCard();
   },
 
   // Fertige Einheiten: Kapitel der obersten Ebene, deren schwaechste Stufe die

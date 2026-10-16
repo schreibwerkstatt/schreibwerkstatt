@@ -1,6 +1,7 @@
 // Diary-Calendar: Sidebar-Alternative für Bücher mit buchtyp='tagebuch'.
-// Aggregiert `pages` mit `YYYY-MM-DD`-Namen zu Monats-Grid; Klick auf Tag ruft
-// `selectPage(page)`. Eingebunden ins Root via spread in tree.js.
+// Aggregiert `pages` mit `YYYY-MM-DD`-Namen (diary-date.js) zu Monats-Grid;
+// Klick auf einen Tag mit Eintrag ruft `selectPage(page)`, auf einen leeren Tag
+// bis heute legt er den Eintrag an. Eingebunden ins Root via spread in tree.js.
 //
 // Performance: `diaryCalendarPagesMap` läuft einmal pro Load + Cache-Invalidation
 // in `loadPages`. Bei 2'400 Diary-Pages ist der Build ~3 ms (Regex-Match pro
@@ -10,6 +11,7 @@ import { contentRepo } from '../repo/content.js';
 import { dateTimeFormat, fetchJson, localeTag, localIsoDate, tzOpts } from '../utils.js';
 import { insertChapterItem } from './tree/load.js';
 import { isSelectedBook } from '../cards/book-guard.js';
+import { diaryDayKey } from './diary-date.js';
 
 // Abbruch-Signal der Anlage-Kette in _createDiaryEntry: Buch während eines
 // awaits gewechselt. Kein Fehler für den User (er hat das Buch selbst gewechselt).
@@ -47,6 +49,23 @@ export function _computeRange(map, from, to) {
   }
   out.sort((a, b) => b.key.localeCompare(a.key));
   return out;
+}
+
+// Pure: Startmonat des Kalenders ohne User-Wahl. `months` absteigend wie
+// diaryCalendarMonths(); `todayMonthKey` = 'YYYY-MM'. Liefert den jüngsten Monat
+// mit Einträgen, der nicht in der Zukunft liegt, oder null.
+export function _computeStartMonth(months, todayMonthKey) {
+  const hit = (months || []).find(m => m.key <= todayMonthKey);
+  return hit ? { year: hit.year, month: hit.month } : null;
+}
+
+// Pure: alle Pages mit Tagesdatum chronologisch, gleicher Tag in Eingangsreihenfolge.
+export function _computeSortedEntries(pages) {
+  return pages
+    .map((page, i) => ({ page, i, key: diaryDayKey(page?.name) }))
+    .filter(e => e.key)
+    .sort((a, b) => a.key.localeCompare(b.key) || a.i - b.i)
+    .map(e => e.page);
 }
 
 function _ensureCache(app) {
@@ -91,11 +110,8 @@ export const diaryCalendarMethods = {
     if (cache.pagesRef === this.$store.nav.pages && cache.map) return cache.map;
     const m = new Map();
     for (const p of (this.$store.nav.pages || [])) {
-      const md = (p.name || '').match(/^(\d{4})-(\d{2})-(\d{2})\b/);
-      if (md) {
-        const key = `${md[1]}-${md[2]}-${md[3]}`;
-        if (!m.has(key)) m.set(key, p);
-      }
+      const key = diaryDayKey(p.name);
+      if (key && !m.has(key)) m.set(key, p);
     }
     cache.pagesRef = this.$store.nav.pages;
     cache.map = m;
@@ -131,19 +147,17 @@ export const diaryCalendarMethods = {
     return list;
   },
 
-  // {year, month} — entweder explizite User-Wahl oder aktueller Monat.
-  // Fällt zurück auf neuesten Monat mit Einträgen nur, wenn heute schon
-  // ein Eintrag existiert (damit der «heute hinzufügen»-Button den
-  // richtigen Monat im Grid anzeigt).
+  // {year, month} — explizite User-Wahl, sonst der aktuelle Monat, solange er
+  // Einträge hat; sonst der jüngste Monat mit Einträgen bis heute (ein ruhendes
+  // Tagebuch öffnet nicht auf einem leeren Raster). «Heute eintragen» springt
+  // nach der Anlage selbst in den aktuellen Monat.
   diaryCalendarCurrentMonth() {
     if (this.diaryCalendarYearMonth) return this.diaryCalendarYearMonth;
     // „Heute" in der App-Zeitzone — dieselbe Quelle wie isToday im Grid.
     const todayIso = localIsoDate();
     const now = { year: parseInt(todayIso.slice(0, 4), 10), month: parseInt(todayIso.slice(5, 7), 10) };
-    if (!this.diaryHasTodayEntry()) return now;
-    const months = this.diaryCalendarMonths();
-    if (months[0]) return { year: months[0].year, month: months[0].month };
-    return now;
+    const latest = _computeStartMonth(this.diaryCalendarMonths(), todayIso.slice(0, 7));
+    return latest || now;
   },
 
   // 6x7-Grid, jeweils { date:'YYYY-MM-DD', dayNum, inMonth, hasPage, page, isToday }.
@@ -154,6 +168,7 @@ export const diaryCalendarMethods = {
     const dayOfWeek = (first.getUTCDay() + 6) % 7;
     const map = this.diaryCalendarPagesMap();
     const todayIso = localIsoDate();
+    const editable = !!this.canEdit?.();
     const cells = [];
     for (let i = 0; i < 42; i++) {
       const off = i - dayOfWeek;
@@ -167,6 +182,8 @@ export const diaryCalendarMethods = {
         hasPage: !!page,
         page,
         isToday: ds === todayIso,
+        // Leerer Tag bis heute: Klick legt den Eintrag an (Nachtrag).
+        canCreate: !page && editable && ds <= todayIso,
       });
     }
     return cells;
@@ -217,8 +234,8 @@ export const diaryCalendarMethods = {
   },
 
   selectDiaryCalendarDay(cell) {
-    if (!cell?.page) return;
-    this.selectPage(cell.page);
+    if (cell?.page) { this.selectPage(cell.page); return; }
+    if (cell?.canCreate) this._createDiaryEntry(cell.date);
   },
 
   // Heute-Button-Handler. Öffnet bestehenden Eintrag oder legt neuen an.
@@ -387,16 +404,15 @@ export const diaryCalendarMethods = {
     }
   },
 
-  // Sortiert Diary-Pages chronologisch (älteste zuerst). Cache wie pagesMap.
+  // Sortiert ALLE datierten Diary-Pages chronologisch (älteste zuerst). Zwei
+  // Abschnitte am selben Tag stehen beide drin (Reihenfolge wie im Baum) — sonst
+  // hätte der zweite keine Vor/Zurück-Navigation. Cache wie pagesMap.
   _diarySortedPages() {
     const cache = _ensureCache(this);
-    if (cache.pagesRef === this.$store.nav.pages && cache.sorted) return cache.sorted;
     this.diaryCalendarPagesMap();
-    const entries = [...cache.map.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([, page]) => page);
-    cache.sorted = entries;
-    return entries;
+    if (cache.sorted) return cache.sorted;
+    cache.sorted = _computeSortedEntries(this.$store.nav.pages || []);
+    return cache.sorted;
   },
 
   diaryPrevPage() {

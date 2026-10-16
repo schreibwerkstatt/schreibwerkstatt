@@ -152,6 +152,13 @@
                     x-text="blockStatusLine(block)"></span>
             </div>
 
+            <!-- Titel-Kopf: Metadata, ausserhalb des Bodys (book-editor/head.js). -->
+            <div class="book-editor-head" x-show="headShown(block)" x-cloak><template x-for="feld in headFieldList()" :key="feld">
+              <textarea rows="1" class="book-editor-head__field" :class="'book-editor-head__field--' + feld" x-show="headFieldShown(block, feld)" data-spellcheck="spelling"
+                        :value="headValue(block.pageId, feld)" :placeholder="$app.t('headline.field.' + feld)" :aria-label="$app.t('headline.field.' + feld)"
+                        :readonly="!$app.canEdit()" x-init="$nextTick(() => headAutosize($el))" @input="headAutosize($el)" @keydown="headKeydown(feld, $event)" @blur="headSave(block, feld, $event.target)"></textarea>
+            </template></div>
+
             <!-- Body wird imperativ via _mountBlockEl gefüllt; _maybeRehydrate
                  refresht inaktive Blöcke bei externen Mutationen (Find/Replace,
                  Reload). HTML-Quelle ist der Content-Store (server-cleant). -->

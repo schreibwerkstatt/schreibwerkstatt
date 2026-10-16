@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "988bb12fb64bce56";
+self.__SHELL_BUILD = "9432c15d53f8dff6";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -101,6 +101,7 @@ self.__SHELL_MANIFEST = [
   "/css/components/tooltip.css",
   "/css/components/user-chip.css",
   "/css/components/year-month-heatmap.css",
+  "/css/editor/book/book-editor-head.css",
   "/css/editor/book/book-editor.css",
   "/css/editor/figur-lookup.css",
   "/css/editor/focus/focus-content.css",
@@ -269,6 +270,7 @@ self.__SHELL_MANIFEST = [
   "/js/book/bookstats.js",
   "/js/book/buchlandkarte.js",
   "/js/book/diary-calendar.js",
+  "/js/book/diary-date.js",
   "/js/book/ereignisse.js",
   "/js/book/erzaehlprofil.js",
   "/js/book/export.js",
@@ -387,6 +389,7 @@ self.__SHELL_MANIFEST = [
   "/js/cards/book-create-card.js",
   "/js/cards/book-editor-card.js",
   "/js/cards/book-editor/find.js",
+  "/js/cards/book-editor/head.js",
   "/js/cards/book-editor/history.js",
   "/js/cards/book-editor/outline.js",
   "/js/cards/book-editor/save.js",
@@ -483,6 +486,7 @@ self.__SHELL_MANIFEST = [
   "/js/cards/palette-card.js",
   "/js/cards/palette-fuzzy.js",
   "/js/cards/palette-providers.js",
+  "/js/cards/palette-sections.js",
   "/js/cards/pdf-export-card.js",
   "/js/cards/pdf-export-geometry.js",
   "/js/cards/pdf-export-presets.js",
@@ -759,6 +763,7 @@ self.__SHELL_MANIFEST = [
   "/js/prompts/tagebuch.js",
   "/js/prompts/textsorten.js",
   "/js/radio-group.js",
+  "/js/redaktion/bedenken.js",
   "/js/redaktion/status.js",
   "/js/register.js",
   "/js/repo/content.js",

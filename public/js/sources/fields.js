@@ -39,10 +39,13 @@ export const OTON_CHANNELS = ['persoenlich', 'telefon', 'video', 'mail', 'medien
 export const OTON_AUTH = ['keine', 'ausstehend', 'freigegeben', 'abgelehnt'];
 
 /** Autorisierungsstand, der einen O-Ton im Text blockieren sollte. `null` zaehlt
- *  wie `keine` – ohne Angabe ist nichts freigegeben, aber auch nichts abgelehnt. */
+ *  wie `keine` – ohne Angabe ist nichts freigegeben, aber auch nichts abgelehnt.
+ *  CJS-Spiegel: db/sources/shared.js (Freigabe-Bedenken auf dem Server). */
+export const OTON_AUTH_BLOCKING = ['ausstehend', 'abgelehnt'];
+
 export function otonBlocking(src) {
   if (src?.csl_type !== 'interview') return false;
-  return src?.oton_auth === 'ausstehend' || src?.oton_auth === 'abgelehnt';
+  return OTON_AUTH_BLOCKING.includes(src?.oton_auth);
 }
 
 // Immer sichtbar, vor den typspezifischen Feldern.

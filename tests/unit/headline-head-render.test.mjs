@@ -383,3 +383,25 @@ test('Plaintext schreibt die Dachzeile nicht in Versalien um', () => {
   const src = fs.readFileSync(path.join(ROOT, 'lib/export-builders/txt.js'), 'utf8');
   assert.ok(!/toUpperCase|toLocaleUpperCase/.test(src));
 });
+
+test('Share-Inhaltsverzeichnis: der Teaser steht in der Übersicht, escaped, nicht im Beitrag', async () => {
+  const { _tocWithTeasers, buildTocBlock } = require(path.join(ROOT, 'lib/share-helpers.js'));
+  const groups = [{ chapterId: 1, chapter: { name: 'Ressort' }, pages: [
+    { p: { id: 11, name: 'Beitrag 1', hl: { ...FULL, teaser: 'Kurz <b>&</b> klar.' } }, pd: {} },
+    { p: { id: 12, name: 'Beitrag 2', hl: null }, pd: {} },
+  ] }];
+  const toc = [
+    { level: 1, label: 'Ressort', anchor: 'c1', chapterId: 1 },
+    { level: 2, label: FULL.titel, anchor: 'p11', chapterId: 1, pageId: 11 },
+    { level: 2, label: 'Beitrag 2', anchor: 'p12', chapterId: 1, pageId: 12 },
+  ];
+  const out = _tocWithTeasers(toc, groups);
+  assert.equal(out[1].teaser, 'Kurz <b>&</b> klar.');
+  assert.equal(out[0].teaser, undefined, 'Kapitel-Eintraege tragen keinen Teaser');
+  assert.equal(out[2].teaser, undefined);
+  assert.equal(_tocWithTeasers(toc, [{ pages: [{ p: { id: 11 } }] }]), toc, 'ohne Teaser bleibt die Liste dieselbe');
+
+  const html = buildTocBlock({ toc: out }, 'de');
+  assert.ok(html.includes('<p class="share-toc__teaser">Kurz &lt;b&gt;&amp;&lt;/b&gt; klar.</p>'));
+  assert.equal((html.match(/share-toc__teaser/g) || []).length, 1);
+});

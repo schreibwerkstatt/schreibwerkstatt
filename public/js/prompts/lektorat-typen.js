@@ -176,8 +176,12 @@ const LOCAL_SET = new Set([
  * @param {{local?: boolean, stilOnly?: boolean, textsorte?: string|null}} opts
  */
 export function lektoratTypen(buchtyp, { local = false, stilOnly = false, textsorte = null } = {}) {
-  let typen = PROFILE[lektoratProfil(buchtyp)];
-  if (istMeinungsform(textsorte)) typen = typen.filter(t => t !== 'wertung');
+  const profil = lektoratProfil(buchtyp);
+  let typen = PROFILE[profil];
+  // Ausdruecklich am Profil, nicht an der Textsorte allein: eine nach einem
+  // Buchtyp-Wechsel liegengebliebene Textsorte darf ein anderes Profil nicht
+  // beschneiden — auch dann nicht, wenn es eines Tages selbst `wertung` fuehrt.
+  if (profil === 'journalistisch' && istMeinungsform(textsorte)) typen = typen.filter(t => t !== 'wertung');
   if (local)    typen = typen.filter(t => LOCAL_SET.has(t));
   if (stilOnly) typen = typen.filter(t => !OBJEKTIV_SET.has(t));
   return typen;

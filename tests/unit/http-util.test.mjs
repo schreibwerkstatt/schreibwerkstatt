@@ -106,3 +106,19 @@ test('safeFetch: accept() darf vor dem Lesen abbrechen', async () => {
   }), (e) => e.code === 'NOT_HTML');
   assert.equal(read, false);
 });
+
+test('resolveByteRange: Einzelbereich, Suffix, offenes Ende, Deckel', () => {
+  const { resolveByteRange } = require('../../lib/http-util');
+  assert.equal(resolveByteRange(undefined, 100), null);
+  assert.equal(resolveByteRange('items=0-1', 100), null);
+  assert.deepEqual(resolveByteRange('bytes=0-9', 100), { start: 0, end: 9 });
+  assert.deepEqual(resolveByteRange('bytes=90-', 100), { start: 90, end: 99 });
+  assert.deepEqual(resolveByteRange('bytes=-10', 100), { start: 90, end: 99 });
+  assert.deepEqual(resolveByteRange('bytes=0-500', 100), { start: 0, end: 99 });
+  assert.deepEqual(resolveByteRange('bytes=-', 100), { unsatisfiable: true });
+  assert.deepEqual(resolveByteRange('bytes=100-', 100), { unsatisfiable: true });
+  assert.deepEqual(resolveByteRange('bytes=5-2', 100), { unsatisfiable: true });
+  // `<audio>` fragt `bytes=0-` an — gedeckelt, nicht die ganze Datei.
+  assert.deepEqual(resolveByteRange('bytes=0-', 100, 16), { start: 0, end: 15 });
+  assert.deepEqual(resolveByteRange('bytes=-50', 100, 16), { start: 50, end: 65 });
+});

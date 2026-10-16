@@ -6,6 +6,7 @@ const {
   setBookXrefSettings, setBookTextsorte, setBookIsFinished, setBookResearchSettings,
 } = require('../db/schema');
 const { isValidTextsorte } = require('../db/textsorte');
+const { journalisticBookSettings } = require('../lib/page-guard');
 const { aclParamGuard, sessionEmail } = require('../lib/acl');
 const logger = require('../logger');
 const { captureSnapshot } = require('./snapshots');
@@ -252,6 +253,12 @@ router.put('/:book_id/xrefs', aclParamGuard('editor'), jsonBody, (req, res) => {
  *  Eigener Endpunkt wie /citation und /xrefs. */
 router.put('/:book_id/textsorte', aclParamGuard('editor'), jsonBody, (req, res) => {
   const bookId = req.bookId;
+  // Gleiches Gate wie `PUT /textsorte/page/:page_id`: ausserhalb eines
+  // publizistischen Buchs gibt es keine Textsorte, und ein hier gesetzter Default
+  // laege still neben jedem Abschnitt.
+  if (!journalisticBookSettings(req, bookId)) {
+    return res.status(400).json({ error_code: 'NOT_JOURNALISTIC_BOOK' });
+  }
   const raw = req.body?.textsorte;
   const value = raw == null || raw === '' ? null : String(raw);
   if (value !== null && !isValidTextsorte(value)) {

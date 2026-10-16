@@ -1,6 +1,6 @@
 <!-- Diary-Calendar-Sidebar. Sichtbar bei isTagebuch() && sidebarMode === 'calendar'.
      Monats-Grid (Montag-Start) mit Tag-Cells; Tag mit Page = klickbar gefüllt,
-     leerer Tag = grau. Header zeigt Monats-Label + Prev/Next-Stepper +
+     leerer Tag bis heute = klickbar zum Nachtragen (canCreate), sonst grau. Header zeigt Monats-Label + Prev/Next-Stepper +
      Combobox zum Sprung auf Monat mit Einträgen. -->
 <div class="sidebar-calendar" x-show="isTagebuch() && sidebarMode === 'calendar'" x-cloak>
   <div class="sidebar-calendar-header">
@@ -50,10 +50,11 @@
                 'sidebar-calendar-day--out': !cell.inMonth,
                 'sidebar-calendar-day--has-page': cell.hasPage,
                 'sidebar-calendar-day--today': cell.isToday,
+                'sidebar-calendar-day--creatable': cell.canCreate,
                 'sidebar-calendar-day--active': cell.hasPage && currentPage && cell.page && currentPage.id === cell.page.id,
               }"
-              :disabled="!cell.hasPage"
-              :data-tip="cell.hasPage ? cell.page.name : ''"
+              :disabled="!cell.hasPage && !cell.canCreate"
+              :data-tip="cell.hasPage ? cell.page.name : (cell.canCreate ? t('calendar.createDayTip', { date: _diaryDateLabel(cell.date) }) : '')"
               @click="selectDiaryCalendarDay(cell)">
         <span x-text="cell.dayNum"></span>
       </button>

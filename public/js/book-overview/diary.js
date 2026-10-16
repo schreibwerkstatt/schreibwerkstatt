@@ -8,9 +8,7 @@
 // die memoizierten Wrapper nutzen den gemeinsamen `this._memo` aus load.js.
 import { buildYmHeatRows } from '../book/ymheatmap.js';
 import { isoAddDays as _addDays, isoDaysBetween as _dayDiff, isoWeekday } from './iso-day.js';
-
-// Tagebuch-Seitennamen sind 'YYYY-MM-DD' (gleiche Mechanik wie diary-calendar).
-const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})\b/;
+import { diaryDayKey } from '../book/diary-date.js';
 function _prevMonthKey(monthKey) {
   let [y, m] = monthKey.split('-').map(Number);
   m -= 1;
@@ -24,8 +22,8 @@ export const diaryMethods = {
   _diaryEntryDates(pages) {
     const set = new Set();
     for (const p of (pages || [])) {
-      const m = ISO_DATE_RE.exec(p?.name || '');
-      if (m) set.add(`${m[1]}-${m[2]}-${m[3]}`);
+      const key = diaryDayKey(p?.name);
+      if (key) set.add(key);
     }
     return [...set].sort();
   },
@@ -106,9 +104,9 @@ export const diaryMethods = {
     return this._memo('diaryWeekday', [pages, tokEsts, this._uiLocale()], () => {
       const entries = [];
       for (const p of pages) {
-        const m = ISO_DATE_RE.exec(p?.name || '');
-        if (!m) continue;
-        entries.push({ iso: `${m[1]}-${m[2]}-${m[3]}`, chars: Number(tokEsts[p.id]?.chars || 0) });
+        const iso = diaryDayKey(p?.name);
+        if (!iso) continue;
+        entries.push({ iso, chars: Number(tokEsts[p.id]?.chars || 0) });
       }
       const en = this._uiLocale() === 'en';
       const rows = this._computeDiaryWeekdayRhythm(entries, !en);

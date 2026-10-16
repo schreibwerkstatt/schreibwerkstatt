@@ -19,6 +19,7 @@ import {
 } from '../prompts/textsorten.js';
 import { memoMethods } from '../cards/card-memo.js';
 import { lsSet } from '../safe-storage.js';
+import { bedenkenRows } from '../redaktion/bedenken.js';
 
 const LS_KEY = (bookId) => `struktur_job_${bookId}`;
 
@@ -52,6 +53,31 @@ export const strukturMethods = {
     } catch {
       if (isSelectedBook(bookId)) this.strukturLoadError = true;
     }
+    await this.loadStrukturBedenken(bookId);
+  },
+
+  /** Freigabe-Bedenken des Buchs. Nicht fatal: ohne sie fehlt nur die Übersicht,
+   *  die Textsorten-Tabelle bleibt brauchbar. Nach dem Struktur-Lauf neu geholt,
+   *  weil ein neues Urteil ein Bedenken setzen oder aufheben kann. */
+  async loadStrukturBedenken(bookId = window.Alpine?.store('nav')?.selectedBookId) {
+    if (!bookId) return;
+    try {
+      const data = await fetchJson(`/redaktion/${bookId}/bedenken`);
+      if (!isSelectedBook(bookId)) return;
+      this.strukturBedenken = data.pages || {};
+    } catch {
+      if (isSelectedBook(bookId)) this.strukturBedenken = {};
+    }
+  },
+
+  /** Übersicht «vor der Freigabe offen», freigegebene zuerst. */
+  strukturBedenkenRows() {
+    const pages = window.__app?.$store?.nav?.pages || [];
+    const badges = window.Alpine?.store('badges');
+    const status = badges?.editStatus || {};
+    const done = (badges?.editStatusChain || []).at(-1) || null;
+    return this._memo('bedenken', [this.strukturBedenken, pages, status, done],
+      () => bedenkenRows(this.strukturBedenken, pages, status, done));
   },
 
   /**
@@ -141,6 +167,8 @@ export const strukturMethods = {
       if (v) this.strukturPageMap[String(row.id)] = v;
       else delete this.strukturPageMap[String(row.id)];
       this._strukturRev++;
+      // Ein Befund gilt nur zur geltenden Textsorte — die Bedenken verschieben sich mit.
+      this.loadStrukturBedenken();
     } catch {
       this.strukturError = window.__app.t('struktur.saveError');
     }
@@ -155,6 +183,7 @@ export const strukturMethods = {
       await sendJson(`/booksettings/${bookId}/textsorte`, 'PUT', { textsorte: v });
       this.strukturBookTextsorte = v || '';
       this._strukturRev++;
+      this.loadStrukturBedenken();
     } catch {
       this.strukturError = window.__app.t('struktur.saveError');
     }

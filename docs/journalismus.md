@@ -5,9 +5,10 @@ Beitrag mit eigener Textsorte, und der Apparat drumherum ist redaktionell statt
 literarisch. `blog` ist der zweite publizistische Typ — er teilt den Titelapparat
 und die Freigabe-Stufen, hat aber WordPress statt Druck als Ziel.
 
-Diese Datei beschreibt die **redaktionelle Werkbank**. Was daneben liegt und
-eigene Dokus hat: [quellen.md](quellen.md) (Belegen, inkl. der O-Ton-Felder an
-der Quelle), [blog-sync.md](blog-sync.md), [semantic-search.md](semantic-search.md).
+Diese Datei beschreibt die **redaktionelle Werkbank**, inklusive der O-Ton-Felder
+an der Quelle (Abschnitt «O-Töne in den Artikel»). Was daneben liegt und eigene
+Dokus hat: [quellen.md](quellen.md) (Belegen), [blog-sync.md](blog-sync.md),
+[semantic-search.md](semantic-search.md).
 
 ## Buchtyp-Gate
 
@@ -149,8 +150,11 @@ soll sich nicht ändern, weil jemand den Titel umformuliert hat.
 
 **Der Teaser gehört nicht in den Beitrag.** Er ist der Anreisser für Übersichten
 und Vorschaukarten; im Artikel selbst wäre er die Wiederholung des Leads mit
-anderen Worten. Er verlässt die App nur als WordPress-`excerpt` bzw.
-HubSpot-`postSummary` und wird ausschliesslich in der Titel-Werkstatt gepflegt (Feldliste
+anderen Worten. Er erscheint nur dort, wofür er geschrieben ist: als
+WordPress-`excerpt` bzw. HubSpot-`postSummary` und unter dem Eintrag im
+Inhaltsverzeichnis des Buch-/Kapitel-Share (`_tocWithTeasers` in
+[lib/share-helpers.js](../lib/share-helpers.js), `teaserText` aus der
+Kopf-SSoT). Gepflegt wird er ausschliesslich in der Titel-Werkstatt (Feldliste
 [channels.js](../public/js/headline/channels.js)#`HEADLINE_HEAD_FIELDS` vs.
 `HEADLINE_FIELDS`).
 
@@ -214,11 +218,10 @@ und Lineal bei Fokus (oder dauerhaft, sobald ein Kanal reisst), der Sprung in
 die Werkstatt beim Überfahren. Die volle Kanal-Tabelle, die Varianten und der
 Teaser bleiben dort — im Editor soll der Kopf schmal sein.
 
-**Nur der Notebook-Editor.** Der Focus-Editor ist der Vollbild-Schreibmodus: ein
+**Nicht im Focus-Editor.** Der Focus-Editor ist der Vollbild-Schreibmodus: ein
 Kopf über der Schreiblinie griffe in seine Höhenkette ein, und er blendet mit
-Absicht alles aus, was nicht der laufende Satz ist. Der Bucheditor zeigt den
-Manuskript-Stream über das ganze Ressort — dort gehört der Kopf an jeden Beitrag
-im Stream und nicht an eine Karte; eigenes Vorhaben.
+Absicht alles aus, was nicht der laufende Satz ist. Der Bucheditor trägt den
+Kopf an jedem Beitrag selbst (nächster Abschnitt).
 
 **Ein-/ausblendbar** über das `heading`-Icon, und zwar **nur im
 Bearbeitungsmodus** — Edit-Toolbar
@@ -254,6 +257,26 @@ auslösen noch stören, und `pages.updated_at` bewegt sich durch ihn nicht. Nach
 dem Speichern feuert er `card:refresh` auf `titelwerkstatt`: die zeigt dieselben
 Felder in ihrer Übersicht und stünde sonst auf dem alten Titel.
 
+### Kopf im Bucheditor
+
+[book-editor/head.js](../public/js/cards/book-editor/head.js), Markup im
+Seiten-Block von [book-editor.html](../public/partials/book-editor.html), CSS
+[book-editor-head.css](../public/css/editor/book/book-editor-head.css). Im
+Manuskript-Stream über das ganze Ressort steht der Kopf an **jedem** Beitrag —
+zwischen Caption (Ordnungsname, Status) und Text. Geladen wird er in einem Call
+für das ganze Buch (`GET /headline/:book_id`), gespeichert feldweise beim
+Verlassen über `PUT /headline/page/:id`, wie im Notebook-Kopf.
+
+- **Ausserhalb des Bodys.** Der Kopf ist kein `[data-book-editor-page]`-Inhalt:
+  er gelangt weder in `block.html` noch in Dirty-Vergleich, Undo-Verlauf,
+  Find/Replace oder Kommentar-Anker, und sein Speicherweg bewegt
+  `pages.updated_at` nicht (Pflicht-Invariante 17 in
+  [book-editor.md](book-editor.md#pflicht-invarianten)).
+- **Leere Felder nur am aktiven Beitrag** und nur für Schreibberechtigte — an
+  allen anderen Beiträgen nähme ein leerer Kopf Platz weg, ohne etwas zu sagen.
+- **Kein Lineal, keine Varianten, kein Teaser.** Der Stream soll schmal bleiben;
+  die Kanal-Tabelle und die Varianten bleiben der Titel-Werkstatt.
+
 ### Karte
 
 `titelwerkstatt` ([public/js/cards/titelwerkstatt-card.js](../public/js/cards/titelwerkstatt-card.js),
@@ -287,6 +310,40 @@ Roh → gegengelesen → schlussredigiert → freigegeben, Plakette pro Zeile im
 Bearbeitungsstands: Datenmodell, Stale-Erkennung, Route und Oberflächen in
 **[bearbeitungsstand.md](bearbeitungsstand.md)**. Journalistisch ist dort nur die
 Wahl der Kette, kein Gate.
+
+---
+
+## Freigabe-Bedenken
+
+SSoT [lib/freigabe-bedenken.js](../lib/freigabe-bedenken.js). Zwei Messungen,
+die es ohnehin gibt, an der Stelle zusammengeführt, an der sie zählen — beim
+Freigeben:
+
+1. **Form:** Struktur-Urteil «verfehlt» oder «lückenhaft» — nur, wenn der Befund
+   zur **geltenden** Textsorte gehört (dieselbe Regel wie in der Struktur-Karte).
+   Ein ungeprüfter Beitrag trägt kein Bedenken: unbekannt ist nicht schlecht,
+   und eine Warnung an jedem ungeprüften Text übertönte die echte.
+2. **O-Ton:** der Beitrag zitiert eine Interview-Quelle, deren `oton_auth`
+   blockiert (`OTON_AUTH_BLOCKING`: `ausstehend`, `abgelehnt`; ESM-SSoT
+   [sources/fields.js](../public/js/sources/fields.js)#`otonBlocking`,
+   CJS-Spiegel in [db/sources/shared.js](../db/sources/shared.js), gegated durch
+   [oton-auth-drift.test.mjs](../tests/unit/oton-auth-drift.test.mjs)). Die
+   Fundstellen kommen aus dem Zitat-Index `source_citations`
+   (`listBlockingOtonCitations`) — also «wo steht der unautorisierte O-Ton», nicht
+   bloss «welche Quelle ist unautorisiert».
+
+**Hinweis, kein Gate.** `PUT /redaktion/page/:id` bzw. `/chapter/:id` setzen die
+Stufe trotzdem und liefern `bedenken` mit; Seitenbaum und Buchorganizer zeigen
+den Hinweis über `reportReleaseBedenken` (Root, Wortlaut in
+[redaktion/bedenken.js](../public/js/redaktion/bedenken.js)) mit einem Sprung in
+die Übersicht. Ein Verbot zwänge zu einem Workaround (Stufe überspringen, Quelle
+umetikettieren), der genau die Information vernichtet.
+
+**Übersicht «Vor der Freigabe offen»** in der Struktur-Karte
+(`GET /redaktion/:book_id/bedenken`): alle Beiträge mit Bedenken, bereits
+freigegebene oben, je O-Ton ein Verweis auf die Quelle mit ihrem
+Autorisierungsstand. Die Karte lädt sie nach jedem Struktur-Lauf und nach jedem
+Textsorten-Wechsel neu — beides kann ein Bedenken setzen oder aufheben.
 
 ---
 
@@ -363,8 +420,8 @@ Markup-Quelle, `insertOTonBlock` in
 
 Daraus folgt ohne Zutun: der O-Ton trägt bis ins Quellenverzeichnis, in den
 Anmerkungsapparat, in die Zitat-Anteil-Kennzahl und in jeden Exportweg, und die
-Warnung bei fehlender Zitatautorisierung (`oton_auth`, siehe
-[quellen.md](quellen.md)) greift wie bei jeder anderen Quelle. Ein zweiter
+Warnung bei fehlender Zitatautorisierung (`oton_auth`, Quellen-Karte und
+«Freigabe-Bedenken») greift wie bei jeder anderen Quelle. Ein zweiter
 Zitat-Träger daneben müsste all das nachbauen.
 
 - **Die Stellenangabe ist die Zeitmarke.** Bei einem Gespräch ist sie das, was
@@ -398,7 +455,12 @@ sieht.
 ### Aufnahme
 
 Bis 200 MB, Range-fähig ausgeliefert (ohne `Accept-Ranges` lädt der Browser bei
-jedem Klick auf eine Zeitmarke die ganze Datei neu). Die Aufnahme lässt sich
+jedem Klick auf eine Zeitmarke die ganze Datei neu). Eine Range-Antwort liest
+**nur den Ausschnitt** aus SQLite (`getAudioRange`, SQL-`substr`) und ist auf
+2 MB gedeckelt (`resolveByteRange` in [lib/http-util.js](../lib/http-util.js)) —
+ein `<audio>` fragt zum Start `bytes=0-` an, ohne Deckel wäre das die ganze
+Datei. Den vollen BLOB ziehen nur der Transkriptionslauf und ein Download ohne
+Range-Header. Die Aufnahme lässt sich
 verwerfen, ohne den Wortlaut zu verlieren — sie ist der grosse Teil im Backup.
 
 ---
@@ -410,7 +472,10 @@ verwerfen, ohne den Wortlaut zu verlieren — sie ist der grosse Teil im Backup.
   [prompts/textsorten.js](../public/js/prompts/textsorten.js),
   Vorrangregel nur in [db/textsorte.js](../db/textsorte.js)#`effectiveTextsorte`.
 - **Struktur-Check** (`page_structure_checks`, Job `struktur-check`): prüft die
-  FORM gegen den Soll-Katalog der Textsorte, nicht die Sprache. Das **Vokabular
+  FORM gegen den Soll-Katalog der Textsorte, nicht die Sprache. Die Karte gilt
+  für **beide** publizistischen Typen und ist zugleich der einzige Ort, an dem
+  die Textsorte gesetzt wird (Buch-Default über `PUT /booksettings/:id/textsorte`,
+  mit demselben Buchtyp-Gate wie der Seiten-Override). Das **Vokabular
   des Befunds** (`STRUKTUR_STATUS` / `STRUKTUR_URTEILE` / `W_FRAGEN` samt
   Rang-Maps) liegt in derselben SSoT wie der Katalog, über den es urteilt —
   [prompts/textsorten.js](../public/js/prompts/textsorten.js). Vier Schichten
@@ -425,8 +490,11 @@ verwerfen, ohne den Wortlaut zu verlieren — sie ist der grosse Teil im Backup.
   [struktur-vokabular-drift.test.mjs](../tests/unit/struktur-vokabular-drift.test.mjs).
 - **Lektorat-Profil**: die Textsorte schneidet `wertung` in den Meinungsformen
   aus dem Typ-Set — im Kommentar ist die Wertung der Zweck, nicht der Mangel.
-- **O-Ton-Felder an der Quelle** (`sources.oton_*`) — siehe
-  [quellen.md](quellen.md).
+  Der Schnitt hängt ausdrücklich am journalistischen Profil, nicht an der
+  Textsorte allein: eine nach einem Buchtyp-Wechsel liegengebliebene Textsorte
+  darf kein anderes Profil beschneiden.
+- **O-Ton-Felder an der Quelle** (`sources.oton_*`: Rolle, Kanal, Datum,
+  Autorisierung) — siehe «O-Töne in den Artikel» und «Freigabe-Bedenken».
 
 ## Pflicht-Invarianten
 
@@ -437,6 +505,8 @@ verwerfen, ohne den Wortlaut zu verlieren — sie ist der grosse Teil im Backup.
 - **Keine erfundene Sprecherzuordnung**, keine erfundenen Quellen-Metadaten,
   keine geratene Formtreue.
 - **Zeichenlimits validieren nicht.** Wer das ändert, dreht das Feature um.
+- **Freigabe-Bedenken blockieren nicht.** Die Stufe wird gesetzt, die Bedenken
+  gehen in der Antwort mit.
 - **Der Titel-Kopf wird nie in `pages.content` persistiert.** Er ist ein
   Render-Artefakt aus `page_headline` — dieselbe Regel wie beim
   Quellenverzeichnis und beim Anmerkungsapparat. Wer ihn in den Fliesstext
@@ -469,6 +539,17 @@ verwerfen, ohne den Wortlaut zu verlieren — sie ist der grosse Teil im Backup.
   Kanäle, Teil-PUT, Varianten-Tausch),
   [interview-transcribe.test.mjs](../tests/unit/interview-transcribe.test.mjs)
   (Zeitmarken-Drift Server↔Browser, Redebeiträge, Volltext, Format-Whitelist),
-  [textsorten-drift.test.mjs](../tests/unit/textsorten-drift.test.mjs).
-- Smoke: die Titel-Werkstatt läuft registry-getrieben in
+  [textsorten-drift.test.mjs](../tests/unit/textsorten-drift.test.mjs),
+  [oton-auth-drift.test.mjs](../tests/unit/oton-auth-drift.test.mjs),
+  [freigabe-bedenken.test.mjs](../tests/unit/freigabe-bedenken.test.mjs)
+  (Wortlaut, Sortierung der Übersicht),
+  [headline-head-render.test.mjs](../tests/unit/headline-head-render.test.mjs)
+  (u. a. Teaser im Share-Inhaltsverzeichnis).
+- Integration: [journalismus-gates.test.js](../tests/integration/journalismus-gates.test.js)
+  (Buchtyp-Gates inkl. Buch-Default der Textsorte),
+  [bearbeitungsstand.test.js](../tests/integration/bearbeitungsstand.test.js)
+  (Freigabe-Bedenken an der HTTP-Schicht),
+  [interview-audio-range.test.js](../tests/integration/interview-audio-range.test.js)
+  (Ausschnitt-Lesen der Aufnahme).
+- Smoke: Titel-Werkstatt und Struktur-Karte laufen registry-getrieben in
   [smoke.spec.js](../tests/e2e-app/smoke.spec.js) mit.

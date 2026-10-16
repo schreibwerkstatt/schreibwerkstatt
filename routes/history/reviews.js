@@ -6,7 +6,7 @@ const {
   db, listChapterReviewHistory, deleteChapterReview,
   listRueckblicke, getRueckblick, searchRueckblickIds, deleteRueckblick,
   listBookReviewHistory, deleteBookReview,
-  deleteReviewCache, deleteChapterMacroReviewCache,
+  deleteReviewCache, deleteChapterMacroReviewCache, deleteRueckblickCache,
 } = require('../../db/schema');
 const { toIntId } = require('../../lib/validate');
 const { sessionEmail } = require('../../lib/acl');
@@ -68,7 +68,8 @@ function register(router) {
       chat_sessions:    delSessions.run(book_id, user_email).changes,
       werkstatt_runs:   delWerkRuns.run(book_id, user_email).changes,
       rueckblicke:      delRueckblicke.run(book_id, user_email).changes,
-      review_cache:     deleteReviewCache(book_id, user_email) + deleteChapterMacroReviewCache(book_id, user_email),
+      review_cache:     deleteReviewCache(book_id, user_email) + deleteChapterMacroReviewCache(book_id, user_email)
+                        + deleteRueckblickCache(book_id, user_email),
     }))();
 
     logger.info(

@@ -103,6 +103,14 @@
   border-color: var(--color-primary);
 }
 
+.sidebar-calendar-day--creatable {
+  cursor: pointer;
+}
+.sidebar-calendar-day--creatable:hover {
+  border-color: var(--color-border);
+  color: var(--color-primary);
+}
+
 .sidebar-calendar-day--today {
   outline: 1px dashed var(--color-primary);
   outline-offset: -2px;

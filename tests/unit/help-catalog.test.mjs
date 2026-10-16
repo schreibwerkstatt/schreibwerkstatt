@@ -73,7 +73,7 @@ test('Hilfe-Katalog: Gruppen in HELP_GROUPS-Reihenfolge, keine leeren', () => {
 test('Hilfe-Katalog: Buchtyp filtert wie die Registry', () => {
   const roman = new Set(allEntries(buildHelpSections({ selectedBookId: 1, bookRole: 'owner', buchtyp: 'roman' })).map(e => e.key));
   assert.ok(roman.has('figuren'));
-  assert.ok(!roman.has('struktur'), 'Struktur-Check nur bei Journalismus');
+  assert.ok(!roman.has('struktur'), 'Struktur-Check nur in publizistischen Buechern');
   assert.ok(!roman.has('tagebuchRueckblick'));
   assert.ok(!roman.has('extra.blogSync'));
 
@@ -83,6 +83,12 @@ test('Hilfe-Katalog: Buchtyp filtert wie die Registry', () => {
   assert.ok(journ.has('extra.interview'));
   assert.ok(!journ.has('figuren'), 'Figuren sind im Ressort ausgeblendet');
   assert.ok(!journ.has('action.komplett'));
+
+  // Der redaktionelle Apparat gilt fuer beide publizistischen Typen — die
+  // Struktur-Karte ist dort auch der einzige Ort, an dem die Textsorte gesetzt wird.
+  const blog = new Set(allEntries(buildHelpSections({ selectedBookId: 1, bookRole: 'owner', buchtyp: 'blog' })).map(e => e.key));
+  assert.ok(blog.has('struktur'), 'Struktur-Check auch im Blog');
+  assert.ok(blog.has('titelwerkstatt'));
 });
 
 test('Hilfe-Katalog: Rolle blendet Karten ueber der eigenen Rolle aus', () => {

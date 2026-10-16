@@ -39,7 +39,8 @@ test('Profil-Zuordnung: nur die Nicht-Erzähl-Buchtypen weichen von narrativ ab'
   assert.equal(reviewProfil('journalismus'), 'journalistisch');
   assert.equal(reviewProfil('lyrik'), 'lyrisch');
   for (const bt of ['sachbuch', 'essay', 'blog']) assert.equal(reviewProfil(bt), 'sachlich', bt);
-  for (const bt of ['roman', 'krimi', 'historisch', 'fantasy_scifi', 'tagebuch',
+  assert.equal(reviewProfil('tagebuch'), 'tagebuch');
+  for (const bt of ['roman', 'krimi', 'historisch', 'fantasy_scifi',
     'autobiografie', 'satire', 'kurzgeschichten', 'andere', null, undefined, 'gibtsnicht']) {
     assert.equal(reviewProfil(bt), 'narrativ', String(bt));
   }
@@ -56,7 +57,7 @@ test('Lyrik weicht bewusst vom Lektorat-Profil ab', async () => {
 // ── 2. Achsen-Inhalt ─────────────────────────────────────────────────────────
 
 test('Nicht-Erzähl-Profile führen keine narrativen Achsen', () => {
-  for (const bt of ['wissenschaft', 'sachbuch', 'journalismus', 'lyrik']) {
+  for (const bt of ['wissenschaft', 'sachbuch', 'journalismus', 'lyrik', 'tagebuch']) {
     const keys = [...bookReviewAxes(bt), ...chapterReviewAxes(bt)].map(a => a.key);
     for (const narrativ of ['plot', 'figuren', 'dramaturgie', 'pacing', 'perspektive']) {
       assert.ok(!keys.includes(narrativ), `${bt} darf Achse «${narrativ}» nicht führen`);
@@ -84,7 +85,7 @@ test('jedes Profil ist vollständig: Achsen, Tiers, Analyse-Felder, Werk-Phrase'
   for (const profil of REVIEW_PROFIL_KEYS) {
     // Über einen Buchtyp desselben Profils gehen (die API nimmt Buchtypen).
     const bt = { narrativ: 'roman', sachlich: 'sachbuch', wissenschaft: 'wissenschaft',
-      journalistisch: 'journalismus', lyrisch: 'lyrik' }[profil];
+      journalistisch: 'journalismus', lyrisch: 'lyrik', tagebuch: 'tagebuch' }[profil];
     assert.ok(bt, `kein Test-Buchtyp für Profil «${profil}»`);
     assert.equal(reviewProfil(bt), profil);
     for (const scope of ['book', 'chapter']) {
@@ -111,7 +112,7 @@ test('jedes Profil ist vollständig: Achsen, Tiers, Analyse-Felder, Werk-Phrase'
 // ── 3. Prompt ↔ Schema ↔ Kategorien ──────────────────────────────────────────
 
 test('Schema-Felder == Achsen des Profils, Note zuletzt', () => {
-  for (const bt of ['roman', 'sachbuch', 'wissenschaft', 'journalismus', 'lyrik']) {
+  for (const bt of ['roman', 'sachbuch', 'wissenschaft', 'journalismus', 'lyrik', 'tagebuch']) {
     for (const [build, axesFn, scope] of [
       [R.buildReviewSchema, bookReviewAxes, 'book'],
       [R.buildChapterReviewSchema, chapterReviewAxes, 'chapter'],
@@ -130,7 +131,7 @@ test('Schema-Felder == Achsen des Profils, Note zuletzt', () => {
 });
 
 test('Kapitelanalyse-Schema führt funktion_kurz und die Profil-Felder', () => {
-  for (const bt of ['roman', 'sachbuch', 'wissenschaft', 'journalismus', 'lyrik']) {
+  for (const bt of ['roman', 'sachbuch', 'wissenschaft', 'journalismus', 'lyrik', 'tagebuch']) {
     const keys = Object.keys(R.buildChapterAnalysisSchema({ buchtyp: bt }).properties);
     assert.deepEqual(keys.slice(0, 3), ['themen', 'stil', 'funktion_kurz'], bt);
     assert.deepEqual(keys.slice(3, 6), chapterAnalysisFelder(bt).map(f => f.key), bt);
@@ -156,7 +157,7 @@ test('jede Achse und jede Kategorie hat ein Label in beiden Locales', () => {
 });
 
 test('Union-Listen decken alle Profile ab', () => {
-  for (const bt of ['roman', 'sachbuch', 'wissenschaft', 'journalismus', 'lyrik']) {
+  for (const bt of ['roman', 'sachbuch', 'wissenschaft', 'journalismus', 'lyrik', 'tagebuch']) {
     for (const a of bookReviewAxes(bt))    assert.ok(ALLE_BOOK_AXES.includes(a.key), a.key);
     for (const a of chapterReviewAxes(bt)) assert.ok(ALLE_CHAPTER_AXES.includes(a.key), a.key);
     for (const scope of ['book', 'chapter']) {

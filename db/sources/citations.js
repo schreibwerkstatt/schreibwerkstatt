@@ -6,6 +6,7 @@
 // Seiten-Write komplett ersetzt und NIE inkrementell fortgeschrieben.
 
 const { db } = require('../connection');
+const { OTON_AUTH_BLOCKING } = require('./shared');
 
 // ── Fund-Index source_citations ──────────────────────────────────────────────
 // Wahrheit ist der Quellen-Marker im Seiten-HTML; diese Tabelle ist reine
@@ -101,6 +102,30 @@ function listPageCitations(pageId) {
   return _stmtCitesForPage.all(parseInt(pageId));
 }
 
+// Belegte O-Toene ohne Autorisierung: Seiten eines Buchs, die eine Interview-
+// Quelle zitieren, deren `oton_auth` blockiert (OTON_AUTH_BLOCKING). Grundlage
+// der Freigabe-Bedenken (lib/freigabe-bedenken.js) — «wo stehen unautorisierte
+// Zitate im Text», nicht bloss «welche Quelle ist unautorisiert».
+const _stmtBlockingOtonCites = db.prepare(`
+  SELECT sc.page_id, sc.count, s.id AS source_id, s.title, s.oton_auth
+    FROM source_citations sc
+    JOIN pages p   ON p.page_id = sc.page_id
+    JOIN sources s ON s.id = sc.source_id
+   WHERE p.book_id = @book
+     AND (@page IS NULL OR sc.page_id = @page)
+     AND s.csl_type = 'interview'
+     AND s.oton_auth IN (SELECT value FROM json_each(@blocking))
+   ORDER BY p.position, sc.first_offset
+`);
+
+function listBlockingOtonCitations(bookId, pageId = null) {
+  return _stmtBlockingOtonCites.all({
+    book: parseInt(bookId),
+    page: pageId == null ? null : parseInt(pageId),
+    blocking: JSON.stringify(OTON_AUTH_BLOCKING),
+  });
+}
+
 // ── Zitat-Kennzahlen des Buchs ───────────────────────────────────────────────
 // Der Zitat-Anteil ist eine Verhaeltniszahl: woertlich uebernommene Zeichen
 // gegen die Zeichen des Manuskripts. Der Zaehler kommt aus dem Fund-Index, der
@@ -155,5 +180,5 @@ function getBookQuoteStats(bookId) {
 
 module.exports = {
   replacePageCitations, listBookCitations, listPageCitations, listSourceCitations,
-  getBookQuoteStats,
+  listBlockingOtonCitations, getBookQuoteStats,
 };

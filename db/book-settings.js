@@ -126,6 +126,15 @@ const _updateBookXrefSettings = db.prepare(`
     updated_at=excluded.updated_at
 `);
 
+/** Buchtyp eines Buchs OHNE book_settings-Zeile: der Default-Buchtyp des
+ *  anfragenden Users. Eigene Funktion, weil die Buchliste (GET /content/books)
+ *  den Typ ohne getBookSettings je Buch liest und sonst einen anderen Typ
+ *  meldete als Prompts und Buchübersicht. */
+function fallbackBuchtyp(userEmail) {
+  if (!userEmail) return null;
+  return require('./app-users').getUser(userEmail)?.default_buchtyp || null;
+}
+
 /** Gibt {language, region, buchtyp, buch_kontext, erzaehlperspektive, erzaehlzeit, is_finished, allow_lektor_book_chat, daily_goal_chars, entities_enabled} für ein Buch zurück.
  *  Fehlt die book_settings-Zeile, werden – wenn vorhanden – die User-Defaults
  *  (default_language/region/buchtyp) als Fallback verwendet. `daily_goal_chars`
@@ -159,7 +168,7 @@ function getBookSettings(bookId, userEmail = null) {
     if (u && (u.default_language || u.default_buchtyp)) {
       const language = u.default_language || 'de';
       const region   = u.default_region   || (language === 'en' ? 'US' : 'CH');
-      return { language, region, buchtyp: u.default_buchtyp || null, buch_kontext: null, stilprofil: null, erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 0, daily_goal_chars: null, goal_target_chars: null, goal_deadline: null, entities_enabled: 0, orte_real: 0, schauplatz_land: null, zeitlinie_real: 0, weltfakten_real_pruefen: 0, exclude_from_stats: 0, textsorte: null, ideen_stages: normalizeIdeeStages(null), ...RESEARCH_DEFAULTS, ...CITATION_DEFAULTS, ...XREF_DEFAULTS };
+      return { language, region, buchtyp: fallbackBuchtyp(userEmail), buch_kontext: null, stilprofil: null, erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 0, daily_goal_chars: null, goal_target_chars: null, goal_deadline: null, entities_enabled: 0, orte_real: 0, schauplatz_land: null, zeitlinie_real: 0, weltfakten_real_pruefen: 0, exclude_from_stats: 0, textsorte: null, ideen_stages: normalizeIdeeStages(null), ...RESEARCH_DEFAULTS, ...CITATION_DEFAULTS, ...XREF_DEFAULTS };
     }
   }
   return { language: 'de', region: 'CH', buchtyp: null, buch_kontext: null, stilprofil: null, erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 0, daily_goal_chars: null, goal_target_chars: null, goal_deadline: null, entities_enabled: 0, orte_real: 0, schauplatz_land: null, zeitlinie_real: 0, weltfakten_real_pruefen: 0, exclude_from_stats: 0, textsorte: null, ideen_stages: normalizeIdeeStages(null), ...RESEARCH_DEFAULTS, ...CITATION_DEFAULTS, ...XREF_DEFAULTS };
@@ -212,6 +221,20 @@ function setBookEntitiesEnabled(bookId, enabled) {
 const _updateBookTextsorte = db.prepare(
   'UPDATE book_settings SET textsorte = ?, updated_at = ? WHERE book_id = ?',
 );
+// Buchtyp allein setzen (Ordner-Import legt ein Tagebuch an). UPSERT, weil das
+// frisch angelegte Buch noch keine Zeile hat; Sprache/Region kommen dann aus
+// demselben User-Fallback wie bei getBookSettings, damit die Monatsnamen der
+// Kapitel und die Buch-Locale übereinstimmen.
+const _upsertBookBuchtyp = db.prepare(`
+  INSERT INTO book_settings (book_id, language, region, buchtyp, updated_at)
+  VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT(book_id) DO UPDATE SET buchtyp = excluded.buchtyp, updated_at = excluded.updated_at
+`);
+function setBookBuchtyp(bookId, buchtyp, userEmail = null) {
+  const { language, region } = getBookSettings(bookId, userEmail);
+  _upsertBookBuchtyp.run(parseInt(bookId), language, region, buchtyp || null, new Date().toISOString());
+}
+
 function setBookTextsorte(bookId, textsorte) {
   const value = textsorte == null || textsorte === '' ? null : String(textsorte);
   // Kein UPSERT: ohne book_settings-Zeile gibt es noch keinen Buchtyp, und eine
@@ -340,6 +363,7 @@ function seedBookStilprofil(bookId, stilprofil) {
 
 module.exports = {
   getBookSettings,
+  fallbackBuchtyp,
   seedBookStilprofil,
   getBookLocale,
   saveBookSettings,
@@ -347,6 +371,7 @@ module.exports = {
   setBookIsFinished,
   setBookStilprofil,
   setBookTextsorte,
+  setBookBuchtyp,
   setBookCitationSettings,
   setBookResearchSettings,
   setBookXrefSettings,

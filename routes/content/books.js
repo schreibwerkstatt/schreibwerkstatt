@@ -11,6 +11,7 @@ const pageDeletions = require('../../db/page-deletions');
 const pageChanges = require('../../db/page-changes');
 const bookAccess = require('../../db/book-access');
 const bookShelf = require('../../db/book-shelf');
+const { fallbackBuchtyp } = require('../../db/book-settings');
 const { db } = require('../../db/connection');
 const { toIntId } = require('../../lib/validate');
 const { setContext } = require('../../lib/log-context');
@@ -56,15 +57,18 @@ function register(router) {
     const roleByBook = new Map(accessRows.map(r => [r.book_id, r.role]));
     try {
       const all = await contentStore.listBooks(req);
+      const userFallbackBuchtyp = fallbackBuchtyp(email);
       const meta = new Map(
         db.prepare(`
-          SELECT b.book_id, b.owner_email, b.category_id, s.buchtyp
+          SELECT b.book_id, b.owner_email, b.category_id, s.buchtyp, s.book_id AS settings_book_id
           FROM books b
           LEFT JOIN book_settings s ON s.book_id = b.book_id
         `).all().map(r => [r.book_id, {
           owner_email: r.owner_email,
           category_id: r.category_id,
-          buchtyp: r.buchtyp,
+          // Ohne Settings-Zeile derselbe User-Default wie getBookSettings — sonst
+          // bekäme ein solches Buch Tagebuch-Prompts, aber keinen Kalender.
+          buchtyp: r.settings_book_id == null ? userFallbackBuchtyp : r.buchtyp,
         }])
       );
       // Regal-Zustand (angeheftet/archiviert) je Buch fuer DIESEN User. Er

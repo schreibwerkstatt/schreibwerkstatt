@@ -165,3 +165,61 @@ test('Verlauf: je Tag die Verteilung nach dem letzten Wechsel', async () => {
   assert.equal(day.redigiert, 1);
   assert.equal(day.rohfassung, 0, 'der Zwischenstand des Tages zaehlt nicht');
 });
+
+// ── Freigabe-Bedenken (lib/freigabe-bedenken.js) ─────────────────────────────
+
+function seedBedenken(bookId) {
+  const s = seed(bookId, 'journalismus');
+  const { createSource, linkSource } = require('../../db/sources');
+  const offen = createSource('autor@test.dev', { csl_type: 'interview', title: 'Gespraech Keller', authors: [{ literal: 'Keller' }], oton_auth: 'ausstehend' });
+  const frei  = createSource('autor@test.dev', { csl_type: 'interview', title: 'Gespraech Frei', authors: [{ literal: 'Frei' }], oton_auth: 'freigegeben' });
+  linkSource(bookId, offen.id, 'autor@test.dev');
+  linkSource(bookId, frei.id, 'autor@test.dev');
+  const cite = db.prepare('INSERT INTO source_citations (source_id, page_id, count, first_offset) VALUES (?, ?, 1, 0)');
+  cite.run(offen.id, s.pages[0]);
+  cite.run(frei.id, s.pages[1]);
+  const { saveStructureCheck, setPageTextsorte } = require('../../db/textsorte');
+  db.prepare("UPDATE book_settings SET textsorte = 'bericht' WHERE book_id = ?").run(bookId);
+  saveStructureCheck(s.pages[1], bookId, { textsorte: 'bericht', gesamturteil: 'verfehlt', result: {} });
+  saveStructureCheck(s.pages[3], bookId, { textsorte: 'bericht', gesamturteil: 'traegt', result: {} });
+  // Befund gegen eine inzwischen geaenderte Textsorte: zaehlt nicht mehr.
+  saveStructureCheck(s.pages[2], bookId, { textsorte: 'bericht', gesamturteil: 'verfehlt', result: {} });
+  setPageTextsorte(s.pages[2], bookId, 'kommentar');
+  return { ...s, offen, frei };
+}
+
+test('Freigeben liefert Bedenken mit: unautorisierter O-Ton bzw. verfehlte Form', async () => {
+  for (const t of ['source_citations', 'book_source_links', 'sources', 'page_structure_checks', 'page_textsorte']) db.prepare(`DELETE FROM ${t}`).run();
+  const s = seedBedenken(7790);
+
+  let r = await api('PUT', `/redaktion/page/${s.pages[0]}`, { status: 'freigegeben' });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.entry.status, 'freigegeben', 'Hinweis, kein Gate: die Stufe ist gesetzt');
+  assert.equal(r.json.bedenken.struktur, null);
+  assert.deepEqual(r.json.bedenken.otone.map(o => [o.source_id, o.oton_auth]), [[s.offen.id, 'ausstehend']]);
+
+  r = await api('PUT', `/redaktion/page/${s.pages[1]}`, { status: 'freigegeben' });
+  assert.equal(r.json.bedenken.struktur.urteil, 'verfehlt');
+  assert.deepEqual(r.json.bedenken.otone, [], 'autorisierter O-Ton ist kein Bedenken');
+
+  r = await api('PUT', `/redaktion/page/${s.pages[3]}`, { status: 'freigegeben' });
+  assert.equal(r.json.bedenken, null, 'tragende Form ohne O-Ton: nichts zu melden');
+
+  r = await api('PUT', `/redaktion/page/${s.pages[0]}`, { status: 'gegengelesen' });
+  assert.equal(r.json.bedenken, null, 'nur die Freigabe fragt');
+
+  r = await api('PUT', `/redaktion/chapter/${s.chA}`, { status: 'freigegeben' });
+  assert.deepEqual(Object.keys(r.json.bedenken).sort(), [String(s.pages[0]), String(s.pages[1])].sort(),
+    'A.1-1 (pages[2]) traegt einen Befund gegen die alte Textsorte und zaehlt nicht');
+
+  r = await api('GET', `/redaktion/${s.bookId}/bedenken`);
+  assert.equal(r.json.enabled, true);
+  assert.deepEqual(Object.keys(r.json.pages).sort(), [String(s.pages[0]), String(s.pages[1])].sort());
+  assert.equal(r.json.pages[s.pages[0]].otone[0].title, 'Gespraech Keller');
+});
+
+test('Freigabe-Bedenken: Roman → enabled:false', async () => {
+  const s = seed(7791, 'roman');
+  const r = await api('GET', `/redaktion/${s.bookId}/bedenken`);
+  assert.deepEqual(r.json, { enabled: false, pages: {} });
+});

@@ -7,9 +7,9 @@
 //
 // NUR DER NOTEBOOK-EDITOR. Der Focus-Editor ist der Vollbild-Schreibmodus — ein
 // Kopf über der Schreiblinie griffe in seine Höhenkette ein, und er blendet aus
-// gutem Grund alles aus, was nicht der laufende Satz ist. Der Bucheditor zeigt
-// den Manuskript-Stream über das ganze Ressort; dort gehört der Kopf an jeden
-// Beitrag und nicht an eine Karte (eigenes Vorhaben, siehe docs/journalismus.md).
+// gutem Grund alles aus, was nicht der laufende Satz ist. Der Bucheditor trägt
+// den Kopf an jedem Beitrag im Stream selbst (cards/book-editor/head.js) —
+// dieselbe Route, eigene Darstellung, keine geteilte Karte.
 //
 // ZWEITER SCHREIBPFAD, BEWUSST GETRENNT: gespeichert wird über
 // `PUT /headline/page/:id` (dieselbe Route wie in der Titel-Werkstatt), NICHT

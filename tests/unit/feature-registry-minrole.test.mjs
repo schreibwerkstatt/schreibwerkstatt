@@ -70,26 +70,33 @@ function _expectedAt(buchtyp) {
     .map(f => f.key).sort();
 }
 
-test('featuresVisibleFor(editor, buchtyp=tagebuch): alle ausser den fremd-typisierten', () => {
+test('featuresVisibleFor(editor, buchtyp=tagebuch): ohne Plot/Szenen/Figur-Werkstatt und fremd-typisierte', () => {
   assert.deepEqual(_visibleAt('editor', 'tagebuch'), _expectedAt('tagebuch'));
-  // Tagebuch blendet NICHTS aus (kein hiddenForBuchtyp nennt es) — die
-  // Gegenprobe zum journalistischen Fall. Es fehlen nur die Karten, die einen
-  // ANDEREN Buchtyp verlangen.
+  // Tagebuch blendet genau die erfindenden/dramaturgischen Werkzeuge aus; die
+  // Buchwelt (Figuren, Orte, Ereignisse, Kontinuitaet) bleibt — der Rückblick
+  // nutzt Figuren und Orte als Kontext.
+  const hidden = FEATURES
+    .filter(f => (f.hiddenForBuchtyp || []).includes('tagebuch'))
+    .map(f => f.key).sort();
+  assert.deepEqual(hidden, ['plot', 'szenen', 'werkstatt']);
+  const visible = new Set(_visibleAt('editor', 'tagebuch'));
+  for (const k of ['figuren', 'orte', 'ereignisse', 'tagebuchRueckblick']) assert.ok(visible.has(k), k);
   const nurFremdTypisiert = FEATURES
     .filter(f => f.requiresBuchtyp && !matchesRequiredBuchtyp(f, 'tagebuch'))
     .map(f => f.key).sort();
   assert.deepEqual(nurFremdTypisiert, ['struktur', 'titelwerkstatt']);
-  assert.ok(FEATURES.every(f => !(f.hiddenForBuchtyp || []).includes('tagebuch')));
 });
 
-// Die Listen-Form von `requiresBuchtyp`: der Titelapparat gilt fuer BEIDE
-// publizistischen Typen, der Struktur-Check nur fuers Ressort. Ohne diesen Fall
+// Die Listen-Form von `requiresBuchtyp`: Titelapparat und Struktur-Check gelten
+// fuer BEIDE publizistischen Typen. Ohne diesen Fall
 // faellt eine Rueckkehr zum Einzel-Key nicht auf — die Karte verschwaende dann
 // lautlos aus dem Blog.
-test('featuresVisibleFor(editor, buchtyp=blog): Titel-Werkstatt ja, Struktur nein', () => {
+test('featuresVisibleFor(editor, buchtyp=blog): Titel-Werkstatt und Struktur', () => {
   const visible = new Set(_visibleAt('editor', 'blog'));
   assert.ok(visible.has('titelwerkstatt'), 'titelwerkstatt muss im Blog erscheinen');
-  assert.ok(!visible.has('struktur'), 'struktur ist ressort-eigen');
+  // Die Struktur-Karte ist der einzige Ort, an dem die Textsorte gesetzt wird —
+  // ohne sie bekaeme ein Blog auch in der Titel-Werkstatt nie eine Form.
+  assert.ok(visible.has('struktur'), 'struktur gilt fuer beide publizistischen Typen');
   assert.deepEqual(_visibleAt('editor', 'blog'), _expectedAt('blog'));
 });
 

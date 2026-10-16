@@ -61,6 +61,21 @@ export function fuzzyMatch(query, target) {
   return best;
 }
 
+// Steht die Query zusammenhängend an einem Wortanfang des Targets? Gate für
+// Sekundärtexte (Beschreibung, Gruppe, Aliasse): eine Fuzzy-Subsequenz ist in
+// einer langen Beschreibung fast immer erfüllt — "rot" träfe so ein Viertel
+// aller Karten, ohne dass eines der Wörter mit "rot" beginnt.
+export function hasWordPrefix(query, target) {
+  if (!query || !target) return false;
+  const q = normalize(query).trim();
+  const t = normalize(target);
+  if (!q) return false;
+  for (let i = t.indexOf(q); i >= 0; i = t.indexOf(q, i + 1)) {
+    if (i === 0 || WORD_BOUNDARY.test(t[i - 1])) return true;
+  }
+  return false;
+}
+
 export function highlight(target, indices) {
   if (!indices || !indices.length) return escHtml(target);
   let out = '';

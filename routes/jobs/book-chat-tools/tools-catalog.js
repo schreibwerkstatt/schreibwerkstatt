@@ -6,6 +6,7 @@
 const { getBookSettings, getBookName, worldFactsScanState } = require('../../../db/schema');
 const { listWorldFacts, FAKT_KATEGORIE_WL } = require('../../../db/world-facts');
 const { narrativeLabels } = require('../narrative-labels');
+const { getPromptConfig } = require('../../../lib/prompts-loader');
 const pageRevisions = require('../../../db/page-revisions');
 const { _truncateResult, _findFigure, resultCapFor } = require('./shared');
 const { isIdeeStatus, isOpenIdeeStatus, normalizeIdeeStatus } = require('../../../lib/ideen-status');
@@ -416,24 +417,13 @@ function tool_list_scenes(input, ctx) {
 
 // ── get_book_settings ─────────────────────────────────────────────────────────
 
-const BUCHTYP_LABELS_DE = {
-  roman: 'Roman',
-  kurzgeschichten: 'Kurzgeschichten',
-  gesellschaft: 'Gesellschaftsroman',
-  krimi: 'Krimi / Thriller',
-  historisch: 'Historischer Roman',
-  fantasy_scifi: 'Fantasy / Science-Fiction',
-  erotik: 'Erotik',
-  jugend: 'Jugendbuch / Kinderbuch',
-  autobiografie: 'Autobiografie / Memoir',
-  tagebuch: 'Tagebuch',
-  sachbuch: 'Sachbuch',
-  lyrik: 'Lyrik',
-  essay: 'Essay',
-  blog: 'Blog',
-  satire: 'Satire',
-  andere: 'Andere',
-};
+// Label aus prompt-config.json (`buchtypen.<sprache>.<key>.label`, SSoT der
+// Buchtypen) in der Buchsprache; Deutsch als Fallback, dann der rohe Key.
+function _buchtypLabel(buchtyp, language) {
+  if (!buchtyp) return null;
+  const typen = getPromptConfig().buchtypen || {};
+  return typen[language]?.[buchtyp]?.label || typen.de?.[buchtyp]?.label || buchtyp;
+}
 
 function tool_get_book_settings(_input, ctx) {
   const userEmail = ctx.userEmail || null;
@@ -446,7 +436,7 @@ function tool_get_book_settings(_input, ctx) {
     region:                   settings.region,
     locale:                   `${settings.language}-${settings.region}`,
     buchtyp:                  settings.buchtyp || null,
-    buchtyp_label:            settings.buchtyp ? (BUCHTYP_LABELS_DE[settings.buchtyp] || settings.buchtyp) : null,
+    buchtyp_label:            _buchtypLabel(settings.buchtyp, settings.language),
     erzaehlperspektive:       settings.erzaehlperspektive || null,
     erzaehlperspektive_label: labels.erzaehlperspektive,
     erzaehlzeit:              settings.erzaehlzeit || null,

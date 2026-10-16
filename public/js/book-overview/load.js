@@ -185,7 +185,7 @@ export const loadMethods = {
       // Rückblick-Heatmap-Coverage nur für Tagebücher laden — der Buchtyp steht
       // erst nach `settings` fest, daher sequenziell (non-Tagebuch fetcht nie).
       this.overviewRueckblickCoverage = null;
-      if (this.overviewBuchtyp === 'tagebuch') {
+      if (this.overviewIsTagebuch()) {
         const cov = await fetchJsonRetry(`/history/rueckblick-coverage/${bookId}`).catch(guard('rueckblick', null));
         if (this.overviewBookId !== bookId) return;
         this.overviewRueckblickCoverage = cov || null;
@@ -342,7 +342,8 @@ export const loadMethods = {
   // True, wenn das Buch Seiten hat, die Komplettanalyse (Figuren/Schauplätze/
   // Szenen) aber noch nie gelaufen ist — dann zeigt die Overview ein einzelnes
   // CTA-Tile statt drei leerer Zählkacheln kommentarlos auszublenden. Tagebücher
-  // haben bewusst keine narrative Analyse und sind ausgenommen; Buchtypen, in
+  // sind ausgenommen: dort sind die Zählkacheln ausgeblendet, die Analyse ist
+  // optional (Figuren/Orte als Rückblick-Kontext) und kein Pflichtschritt; Buchtypen, in
   // denen die Komplettanalyse gar nicht angeboten wird (Ressort), ebenfalls —
   // ein Handlungsaufruf ohne erreichbares Ziel wäre eine Sackgasse.
   overviewNeedsAnalysis() {

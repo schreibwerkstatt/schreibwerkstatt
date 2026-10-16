@@ -25,6 +25,8 @@ const {
 } = require('./rueckblick-dates');
 const crypto = require('crypto');
 const { toIntId } = require('../../lib/validate');
+const { sessionEmail } = require('../../lib/acl');
+const { isTagebuchBook } = require('../../lib/buchtyp');
 
 const rueckblickRouter = express.Router();
 
@@ -238,6 +240,9 @@ rueckblickRouter.post('/rueckblick', jsonBody, (req, res) => {
     type: 'rueckblick', minRole: 'editor', label: 'job.label.rueckblick', labelParams: { zeitraum },
     // dedupId mischt den Zeitraum ein, damit Monat ≠ Jahr nicht gegeneinander dedupen.
     dedupId: (bookId) => `${bookId}:${zeitraum}`,
+    // Autoritatives Typ-Gate: die Karte ist nur im Frontend über die Registry
+    // (requiresBuchtyp) auf Tagebücher beschränkt.
+    precheck: (bookId) => (isTagebuchBook(bookId, sessionEmail(req)) ? null : 'NOT_DIARY_BOOK'),
     run: (jobId, { bookId, userEmail }) => runRueckblickJob(jobId, bookId, userEmail, zeitraum),
   });
 });

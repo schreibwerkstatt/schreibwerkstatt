@@ -11,13 +11,33 @@
 //   available  – immer true für Provider-Items (sie würden gar nicht in der Liste
 //                stehen, wenn die zugrundeliegende Ressource fehlte)
 //
-// Prefix-Routing (`#`, `@`, `!`, `>`) wird in palette-card.js geparsed; dieser
-// Modul-Layer kennt nur den Provider-Set + Limits.
+// Optionale Hooks: prepare(root) lädt eine noch leere Datenquelle nach (die
+// Palette ruft alle beim Öffnen), cancel() bricht laufende Anfragen ab (beim
+// Schliessen). Prefix-Routing (`#`, `!`, `@`, `$`, `%`, `&`, `?`, `>`) parst
+// `parseQuery` unten; die Sektionen baut palette-sections.js.
 
 import { fuzzyMatch } from './palette-fuzzy.js';
 import { EVT } from '../events.js';
 
 const PER_PROVIDER_LIMIT = 8;
+// Wartezeit, bevor die Volltextsuche eine Anfrage stellt — ohne sie ginge jeder
+// Tastendruck als eigener FTS-Request an den Server.
+const FULLTEXT_DEBOUNCE_MS = 200;
+
+// Erster Abschnitt im Teilbaum eines Kapitels. Der Tree ist flach in
+// Vorordnung (`depth`); ein Kapitel ohne eigene Abschnitte, das nur
+// Unterkapitel trägt, springt so in deren ersten Abschnitt.
+export function firstPageInChapter(tree, chapterId) {
+  const list = Array.isArray(tree) ? tree : [];
+  const at = list.findIndex(t => t.type === 'chapter' && String(t.id) === String(chapterId));
+  if (at < 0) return null;
+  const depth = list[at].depth || 1;
+  for (let i = at; i < list.length; i++) {
+    if (i > at && (list[i].depth || 1) <= depth) break;
+    if (list[i].pages?.length) return list[i].pages[0];
+  }
+  return null;
+}
 
 // Volltextsuche-Treffer-Aktivierung. Identische Dispatch-Logik wie
 // searchCard#activateHit, dupliziert hier weil die Palette keine Sub-Karten-
@@ -32,7 +52,8 @@ function _runFulltextHit(root, hit) {
       if (ch && typeof root.openKapitelReviewForChapter === 'function') {
         return root.openKapitelReviewForChapter(hit.entity_id);
       }
-      if (ch?.pages?.[0]) return root.selectPage(ch.pages[0]);
+      const first = firstPageInChapter(tree, hit.entity_id);
+      if (first) return root.selectPage(first);
       return;
     }
     case 'book': {
@@ -54,18 +75,24 @@ function _runFulltextHit(root, hit) {
   }
 }
 
-// In-Flight-Guard für lazy provider-prepare Calls. Ohne Guard feuert jeder
-// Keystroke `loadFiguren/Orte/Szenen` neu, bis der Fetch antwortet (Liste leer
-// = guard-bedingung unverändert). Set hält pro Buch+Provider eine pending
-// Promise; nach Resolve/Reject Eintrag löschen.
+// Lazy-Nachladen einer leeren Datenquelle, einmal pro Buch. Zwei Guards:
+// `_inFlight` gegen Parallel-Starts, `_loadedList` gegen Wiederholung, wenn die
+// Antwort schlicht leer war (Buch ohne Orte) — sonst lüde jeder Aufruf neu.
+// Gemerkt wird die Listen-REFERENZ nach dem Laden: setzt ein Buchwechsel die
+// Quelle zurück (Loader und Resets weisen neu zu, nie push), ist sie eine andere
+// und darf erneut laden.
 const _inFlight = new Set();
-function _onceForBook(bookId, providerKey, runner) {
+const _loadedList = new Map();
+function _ensureLoaded(providerKey, getList, runner) {
+  const bookId = Alpine.store('nav').selectedBookId;
+  if (!bookId || getList().length) return;
   const tag = providerKey + ':' + bookId;
-  if (_inFlight.has(tag)) return;
+  if (_inFlight.has(tag) || _loadedList.get(tag) === getList()) return;
   _inFlight.add(tag);
+  const done = () => { _inFlight.delete(tag); _loadedList.set(tag, getList()); };
   let p;
-  try { p = runner(); } catch { _inFlight.delete(tag); return; }
-  Promise.resolve(p).finally(() => _inFlight.delete(tag));
+  try { p = runner(bookId); } catch { done(); return; }
+  Promise.resolve(p).catch(() => {}).finally(done);
 }
 
 function rank(items) {
@@ -133,8 +160,9 @@ export const PROVIDERS = [
                 && typeof r.kapitelReviewChapterOptions === 'function'
                 && r.kapitelReviewChapterOptions().some(x => String(x.id) === String(c.id))) {
               r.openKapitelReviewForChapter(c.id);
-            } else if (c.pages?.[0]) {
-              r.selectPage(c.pages[0]);
+            } else {
+              const first = firstPageInChapter(Alpine.store('nav').tree, c.id);
+              if (first) r.selectPage(first);
             }
           },
         });
@@ -158,19 +186,17 @@ export const PROVIDERS = [
     // damit die Palette sie auch findet, wenn die Werkstatt-Karte nie geöffnet
     // wurde.
     prepare(root) {
-      if (Alpine.store('nav').selectedBookId && !(root.$store.catalog.figuren && root.$store.catalog.figuren.length) && typeof root.loadFiguren === 'function') {
-        _onceForBook(Alpine.store('nav').selectedBookId, 'figuren', () => root.loadFiguren(Alpine.store('nav').selectedBookId));
+      if (typeof root.loadFiguren === 'function') {
+        _ensureLoaded('figuren', () => this.list(root), (bookId) => root.loadFiguren(bookId));
       }
-      if (Alpine.store('nav').selectedBookId && !this.drafts(root).length) {
-        _onceForBook(Alpine.store('nav').selectedBookId, 'werkstatt-drafts', async () => {
-          try {
-            const r = await fetch(`/draft-figures/${Alpine.store('nav').selectedBookId}`, { credentials: 'same-origin' });
-            if (!r.ok) return;
-            const data = await r.json();
-            root.$store.nav.werkstattDrafts = Array.isArray(data) ? data : [];
-          } catch { /* still searchable nach Karten-Open */ }
-        });
-      }
+      _ensureLoaded('werkstatt-drafts', () => this.drafts(root), async (bookId) => {
+        const r = await fetch(`/draft-figures/${bookId}`, { credentials: 'same-origin' });
+        if (!r.ok) return;
+        const data = await r.json();
+        // Buch inzwischen gewechselt → Antwort gehört nicht mehr in den Store.
+        if (Alpine.store('nav').selectedBookId !== bookId) return;
+        root.$store.nav.werkstattDrafts = Array.isArray(data) ? data : [];
+      });
     },
     search(root, q, t) {
       const items = this.list(root);
@@ -221,9 +247,8 @@ export const PROVIDERS = [
     },
     // Orte werden sonst nur beim Öffnen der Orte-Karte geladen.
     prepare(root) {
-      if (Alpine.store('nav').selectedBookId && !(root.$store.catalog.orte && root.$store.catalog.orte.length) && typeof root.loadOrte === 'function') {
-        _onceForBook(Alpine.store('nav').selectedBookId, 'orte', () => root.loadOrte(Alpine.store('nav').selectedBookId));
-      }
+      if (typeof root.loadOrte !== 'function') return;
+      _ensureLoaded('orte', () => this.list(root), (bookId) => root.loadOrte(bookId));
     },
     search(root, q, _t) {
       const items = this.list(root);
@@ -247,45 +272,54 @@ export const PROVIDERS = [
     },
   },
   {
-    // Volltextsuche-Provider. Async — feuert
-    // `/search?q=...` und cached pro Query bis zur naechsten Eingabe.
+    // Volltextsuche-Provider. Async: `request` stellt die Anfrage entprellt,
+    // bricht die vorige ab und übernimmt nur die Antwort zur JÜNGSTEN Query —
+    // eine spät eintreffende ältere Antwort würde sonst den Cache überschreiben.
+    // Treffer landen in `_cache`; 'palette:rerender' lässt die Palette neu rechnen.
     key: 'fulltext',
     prefix: '?',
     sectionKey: 'palette.section.fulltext',
-    _cache: { q: '', book: '', items: null },
-    _inflight: null,
+    _cache: { key: '', items: [] },
+    _wantKey: '',
+    _timer: null,
+    _abort: null,
     list() { return []; },
-    prepare(root) {
-      const q = (this._lastQuery || '').trim();
-      if (q.length < 2) return;
-      const bookId = Alpine.store('nav').selectedBookId || '';
-      const cacheKey = q + '|' + bookId;
-      if (this._cache && (this._cache.q + '|' + this._cache.book) === cacheKey) return;
-      if (this._inflight === cacheKey) return;
-      this._inflight = cacheKey;
-      const url = new URLSearchParams({ q, kind: 'page,chapter,figure,location,scene,idea', limit: '12' });
-      if (bookId) url.set('book_id', String(bookId));
-      fetch('/search?' + url.toString(), { credentials: 'same-origin' })
-        .then(r => r.ok ? r.json() : { hits: [] })
-        .then(data => {
-          this._cache = { q, book: bookId, items: Array.isArray(data.hits) ? data.hits : [] };
-          // Re-Render der Palette anstossen — sonst zeigt sie das Cache-Miss-
-          // Snapshot von vorhin bis zum naechsten Keystroke. palette-card
-          // lauscht auf 'palette:rerender' und invalidiert Sections-Cache.
-          window.dispatchEvent(new CustomEvent(EVT.PALETTE_RERENDER));
-        })
-        .catch(() => { this._cache = { q, book: bookId, items: [] }; })
-        .finally(() => { if (this._inflight === cacheKey) this._inflight = null; });
+    request(q, bookId) {
+      const key = q + '|' + bookId;
+      if (this._cache.key === key || this._wantKey === key) return;
+      this.cancel();
+      this._wantKey = key;
+      this._timer = setTimeout(() => {
+        this._timer = null;
+        const ctrl = new AbortController();
+        this._abort = ctrl;
+        const url = new URLSearchParams({ q, kind: 'page,chapter,figure,location,scene,idea', limit: '12' });
+        if (bookId) url.set('book_id', String(bookId));
+        fetch('/search?' + url.toString(), { credentials: 'same-origin', signal: ctrl.signal })
+          .then(r => r.ok ? r.json() : { hits: [] })
+          .catch(e => (e?.name === 'AbortError' ? null : { hits: [] }))
+          .then(data => {
+            if (!data || this._wantKey !== key) return;
+            this._cache = { key, items: Array.isArray(data.hits) ? data.hits : [] };
+            this._wantKey = '';
+            window.dispatchEvent(new CustomEvent(EVT.PALETTE_RERENDER));
+          })
+          .finally(() => { if (this._abort === ctrl) this._abort = null; });
+      }, FULLTEXT_DEBOUNCE_MS);
+    },
+    cancel() {
+      if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+      this._abort?.abort();
+      this._abort = null;
+      this._wantKey = '';
     },
     search(root, q, t) {
-      this._lastQuery = q;
-      this.prepare(root);
-      if (!q || q.length < 2) return [];
+      const query = (q || '').trim();
+      if (query.length < 2) return [];
       const bookId = Alpine.store('nav').selectedBookId || '';
-      const cacheKey = q + '|' + bookId;
-      if (!this._cache || (this._cache.q + '|' + this._cache.book) !== cacheKey) return [];
-      const items = this._cache.items || [];
-      return items.slice(0, PER_PROVIDER_LIMIT).map(h => ({
+      this.request(query, bookId);
+      if (this._cache.key !== query + '|' + bookId) return [];
+      return this._cache.items.slice(0, PER_PROVIDER_LIMIT).map(h => ({
         key: 'fts:' + h.kind + ':' + h.entity_id,
         providerKey: 'fulltext',
         label: h.title || (t('search.untitled') || ''),
@@ -307,9 +341,8 @@ export const PROVIDERS = [
     },
     // Szenen werden sonst nur beim Öffnen der Szenen-Karte geladen.
     prepare(root) {
-      if (Alpine.store('nav').selectedBookId && !(root.$store.catalog.szenen && root.$store.catalog.szenen.length) && typeof root.loadSzenen === 'function') {
-        _onceForBook(Alpine.store('nav').selectedBookId, 'szenen', () => root.loadSzenen(Alpine.store('nav').selectedBookId));
-      }
+      if (typeof root.loadSzenen !== 'function') return;
+      _ensureLoaded('szenen', () => this.list(root), (bookId) => root.loadSzenen(bookId));
     },
     search(root, q, _t) {
       const items = this.list(root);
@@ -341,9 +374,8 @@ export const PROVIDERS = [
     },
     // Der Zeitstrahl wird sonst nur beim Öffnen der Ereignisse-Karte geladen.
     prepare(root) {
-      if (Alpine.store('nav').selectedBookId && !this.list(root).length && typeof root._reloadZeitstrahl === 'function') {
-        _onceForBook(Alpine.store('nav').selectedBookId, 'ereignisse', () => root._reloadZeitstrahl());
-      }
+      if (typeof root._reloadZeitstrahl !== 'function') return;
+      _ensureLoaded('ereignisse', () => this.list(root), () => root._reloadZeitstrahl());
     },
     search(root, q, _t) {
       const items = this.list(root);

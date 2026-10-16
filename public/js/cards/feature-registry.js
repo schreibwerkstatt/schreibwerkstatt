@@ -18,7 +18,11 @@
 //                     journalistisches Ressort hat keine Figuren, keinen Plot,
 //                     keine Motive und keinen Buchsatz — diese Karten dort
 //                     anzubieten liesse das Produkt wie ein Romanwerkzeug mit
-//                     Journalismus-Aufkleber wirken. Gate greift in Palette
+//                     Journalismus-Aufkleber wirken. Ein Tagebuch hat keinen
+//                     Plot, keine Szenendramaturgie und keine erfundenen
+//                     Figuren (Beat-Board, Szenen, Figur-Werkstatt fallen weg);
+//                     Figuren, Orte, Ereignisse und Kontinuitaet bleiben — der
+//                     Rückblick nutzt Figuren und Orte als Kontext. Gate greift in Palette
 //                     (featuresVisibleFor), in isFeatureAvailable UND im
 //                     generischen Toggle (_toggleCardGeneric), damit auch ein
 //                     Deep-Link (#plot) die Karte nicht oeffnet.
@@ -86,9 +90,11 @@ export const FEATURES = [
   // Tagebuch-Rückblick: nur bei Buchtyp 'tagebuch'. Rückwärtsgewandte KI-Verdichtung.
   { key: 'tagebuchRueckblick', kind: 'toggle', group: 'review', labelKey: 'tile.tagebuchRueckblick', descKey: 'tile.tagebuchRueckblick.desc', flag: 'showTagebuchRueckblickCard', toggle: 'toggleTagebuchRueckblickCard', requiresBook: true, minRole: 'editor', requiresBuchtyp: 'tagebuch',
     aliases: ['rückblick','rueckblick','retrospective','diary','tagebuch','jahresrückblick','monatsrückblick','review'] },
-  // Struktur-Check: nur bei Buchtyp 'journalismus'. Prueft die FORM der Textsorte
+  // Struktur-Check: beide publizistischen Buchtypen. Prueft die FORM der Textsorte
   // (Lead, Aufbau, Gegenposition), nicht die Sprache — das macht das Lektorat.
-  { key: 'struktur',       kind: 'toggle', group: 'review', labelKey: 'tile.struktur',       descKey: 'tile.struktur.desc',       flag: 'showStrukturCard',       toggle: 'toggleStrukturCard',       requiresBook: true, minRole: 'editor', requiresBuchtyp: 'journalismus',
+  // Die Karte ist zugleich der einzige Ort, an dem die Textsorte gesetzt wird; ohne
+  // sie bekaeme ein Blog auch in der Titel-Werkstatt nie eine Form.
+  { key: 'struktur',       kind: 'toggle', group: 'review', labelKey: 'tile.struktur',       descKey: 'tile.struktur.desc',       flag: 'showStrukturCard',       toggle: 'toggleStrukturCard',       requiresBook: true, minRole: 'editor', requiresBuchtyp: JOURNALISTIC_BUCHTYPEN,
     aliases: ['struktur','textsorte','textsorten','lead','vorspann','aufbau','nachricht','bericht','reportage','kommentar','glosse','interview','portraet','porträt','feature','rezension','w-fragen','pyramide','redaktion','journalismus','structure','genre'] },
   // Titel-Werkstatt: Dachzeile/Titel/Lead/Teaser als Metadata der Seite. Gilt
   // fuer beide publizistischen Buchtypen — ein Blog braucht denselben
@@ -98,9 +104,9 @@ export const FEATURES = [
   // Welt & Plot — World-Cards: editor+ (für Viewer/Lektor nicht relevant).
   { key: 'figuren',        kind: 'toggle', group: 'world',  labelKey: 'tile.figuren',        descKey: 'tile.figuren.desc',        flag: 'showFiguresCard',        toggle: 'toggleFiguresCard',        requiresBook: true, minRole: 'editor', dependsOnKomplett: true, hiddenForBuchtyp: ['journalismus'],
     aliases: ['characters','personen','cast','protagonist','antagonist','soziogramm','graph'] },
-  { key: 'werkstatt',      kind: 'toggle', group: 'world',  labelKey: 'tile.werkstatt',      descKey: 'tile.werkstatt.desc',      flag: 'showFigurWerkstattCard', toggle: 'toggleFigurWerkstattCard', requiresBook: true, minRole: 'editor', hiddenForBuchtyp: ['journalismus'],
+  { key: 'werkstatt',      kind: 'toggle', group: 'world',  labelKey: 'tile.werkstatt',      descKey: 'tile.werkstatt.desc',      flag: 'showFigurWerkstattCard', toggle: 'toggleFigurWerkstattCard', requiresBook: true, minRole: 'editor', hiddenForBuchtyp: ['journalismus', 'tagebuch'],
     aliases: ['workshop','mindmap','draft','entwurf','brainstorm','character','figur','vorwaerts'] },
-  { key: 'szenen',         kind: 'toggle', group: 'world',  labelKey: 'tile.szenen',         descKey: 'tile.szenen.desc',         flag: 'showSzenenCard',         toggle: 'toggleSzenenCard',         requiresBook: true, minRole: 'editor', dependsOnKomplett: true, hiddenForBuchtyp: ['journalismus'],
+  { key: 'szenen',         kind: 'toggle', group: 'world',  labelKey: 'tile.szenen',         descKey: 'tile.szenen.desc',         flag: 'showSzenenCard',         toggle: 'toggleSzenenCard',         requiresBook: true, minRole: 'editor', dependsOnKomplett: true, hiddenForBuchtyp: ['journalismus', 'tagebuch'],
     aliases: ['scenes','beats','sequences','akt'] },
   { key: 'orte',           kind: 'toggle', group: 'world',  labelKey: 'tile.orte',           descKey: 'tile.orte.desc',           flag: 'showOrteCard',           toggle: 'toggleOrteCard',           requiresBook: true, minRole: 'editor', dependsOnKomplett: true, hiddenForBuchtyp: ['journalismus'],
     aliases: ['locations','schauplaetze','places','setting','welt','world'] },
@@ -108,7 +114,7 @@ export const FEATURES = [
     aliases: ['musik','music','songs','musikstuecke','musikstücke','playlist','soundtrack','band','interpret','tracks'] },
   { key: 'ereignisse',     kind: 'toggle', group: 'world',  labelKey: 'tile.events',         descKey: 'tile.events.desc',         flag: 'showEreignisseCard',     toggle: 'toggleEreignisseCard',     requiresBook: true, minRole: 'editor', dependsOnKomplett: true, hiddenForBuchtyp: ['journalismus'],
     aliases: ['events','timeline','zeitstrahl','plot','chronologie'] },
-  { key: 'plot',           kind: 'toggle', group: 'world',  labelKey: 'tile.plot',           descKey: 'tile.plot.desc',           flag: 'showPlotCard',           toggle: 'togglePlotCard',           requiresBook: true, minRole: 'editor', hiddenForBuchtyp: ['journalismus'],
+  { key: 'plot',           kind: 'toggle', group: 'world',  labelKey: 'tile.plot',           descKey: 'tile.plot.desc',           flag: 'showPlotCard',           toggle: 'togglePlotCard',           requiresBook: true, minRole: 'editor', hiddenForBuchtyp: ['journalismus', 'tagebuch'],
     aliases: ['plot','handlung','beat','beat-board','board','akt','struktur','outline','dramaturgie','story','plotten','beats','skizze','wendepunkt'] },
   { key: 'motiv',          kind: 'toggle', group: 'world',  labelKey: 'tile.motiv',          descKey: 'tile.motiv.desc',          flag: 'showMotivCard',          toggle: 'toggleMotivCard',          requiresBook: true, minRole: 'editor', hiddenForBuchtyp: ['journalismus'],
     aliases: ['motiv','motive','thema','themen','theme','motif','leitmotiv','symbol','symbolik','konstellation','bildsprache','metapher'] },
@@ -205,7 +211,7 @@ export const ACTIONS = [
     aliases: ['esc','dismiss','reset','schliessen'],
     run: (root) => { root._closeOtherMainCards(null); root._maybeOpenBookOverview({ restoreLastPage: false }); } },
   { key: 'action.komplett',       kind: 'action', group: 'app', labelKey: 'palette.action.komplett',  descKey: 'palette.action.komplett.desc',
-    requiresBook: true, hiddenForBuchtyp: KOMPLETT_HIDDEN_BUCHTYPEN,
+    requiresBook: true, minRole: 'editor', hiddenForBuchtyp: KOMPLETT_HIDDEN_BUCHTYPEN,
     aliases: ['analyse','vollanalyse','reload','aktualisieren','refresh','komplett'],
     run: (root) => { root.alleAktualisieren(); } },
   { key: 'action.swReload',       kind: 'action', group: 'app', labelKey: 'palette.action.swReload',  descKey: 'palette.action.swReload.desc',
@@ -262,12 +268,12 @@ export const EXCLUSIVE_CARDS = [
   { key: 'bookReview',     flag: 'showBookReviewCard',     toggle: 'toggleBookReviewCard',     onReclick: 'refresh', partial: 'buchreview' },
   { key: 'kapitelReview',  flag: 'showKapitelReviewCard',  toggle: 'toggleKapitelReviewCard',  bespoke: true, partial: 'kapitelreview' },
   { key: 'figures',        flag: 'showFiguresCard',        toggle: 'toggleFiguresCard',        onReclick: 'refresh', refreshName: 'figuren', partial: 'figuren', hiddenForBuchtyp: ['journalismus'] },
-  { key: 'figurWerkstatt', flag: 'showFigurWerkstattCard', toggle: 'toggleFigurWerkstattCard', onReclick: 'refresh', requiresBook: true, extraRefreshOnOpen: true, partial: 'figur-werkstatt', hiddenForBuchtyp: ['journalismus'] },
-  { key: 'szenen',         flag: 'showSzenenCard',         toggle: 'toggleSzenenCard',         onReclick: 'refresh', partial: 'szenen', hiddenForBuchtyp: ['journalismus'],
+  { key: 'figurWerkstatt', flag: 'showFigurWerkstattCard', toggle: 'toggleFigurWerkstattCard', onReclick: 'refresh', requiresBook: true, extraRefreshOnOpen: true, partial: 'figur-werkstatt', hiddenForBuchtyp: ['journalismus', 'tagebuch'] },
+  { key: 'szenen',         flag: 'showSzenenCard',         toggle: 'toggleSzenenCard',         onReclick: 'refresh', partial: 'szenen', hiddenForBuchtyp: ['journalismus', 'tagebuch'],
     loadDeps: [{ method: 'loadFiguren', skipIfNonEmpty: 'figuren' }, { method: 'loadOrte', skipIfNonEmpty: 'orte' }] },
   { key: 'ereignisse',     flag: 'showEreignisseCard',     toggle: 'toggleEreignisseCard',     onReclick: 'refresh', partial: 'ereignisse', hiddenForBuchtyp: ['journalismus'],
     loadDeps: [{ method: 'loadFiguren', skipIfNonEmpty: 'figuren' }] },
-  { key: 'plot',           flag: 'showPlotCard',           toggle: 'togglePlotCard',           onReclick: 'refresh', requiresBook: true, partial: 'plot', hiddenForBuchtyp: ['journalismus'],
+  { key: 'plot',           flag: 'showPlotCard',           toggle: 'togglePlotCard',           onReclick: 'refresh', requiresBook: true, partial: 'plot', hiddenForBuchtyp: ['journalismus', 'tagebuch'],
     loadDeps: [{ method: 'loadFiguren', skipIfNonEmpty: 'figuren' }] },
   { key: 'motiv',          flag: 'showMotivCard',          toggle: 'toggleMotivCard',          onReclick: 'refresh', requiresBook: true, partial: 'motiv', hiddenForBuchtyp: ['journalismus'],
     loadDeps: [{ method: 'loadFiguren', skipIfNonEmpty: 'figuren' }] },
@@ -280,7 +286,7 @@ export const EXCLUSIVE_CARDS = [
   { key: 'fehlerHeatmap',  flag: 'showFehlerHeatmapCard',  toggle: 'toggleFehlerHeatmapCard',  onReclick: 'close', partial: 'fehler-heatmap' },
   { key: 'buchlandkarte',  flag: 'showBuchlandkarteCard',  toggle: 'toggleBuchlandkarteCard',  onReclick: 'close', requiresBook: true, partial: 'buchlandkarte' },
   { key: 'wortschatz',     flag: 'showWortschatzCard',     toggle: 'toggleWortschatzCard',     onReclick: 'refresh', requiresBook: true, partial: 'wortschatz' },
-  { key: 'struktur',       flag: 'showStrukturCard',       toggle: 'toggleStrukturCard',       onReclick: 'refresh', requiresBook: true, requiresBuchtyp: 'journalismus', partial: 'struktur' },
+  { key: 'struktur',       flag: 'showStrukturCard',       toggle: 'toggleStrukturCard',       onReclick: 'refresh', requiresBook: true, requiresBuchtyp: JOURNALISTIC_BUCHTYPEN, partial: 'struktur' },
   { key: 'titelwerkstatt', flag: 'showTitelwerkstattCard', toggle: 'toggleTitelwerkstattCard', onReclick: 'refresh', requiresBook: true, requiresBuchtyp: JOURNALISTIC_BUCHTYPEN, partial: 'titelwerkstatt' },
   { key: 'bookChat',       flag: 'showBookChatCard',       toggle: 'toggleBookChatCard',       onReclick: 'refresh', requiresBook: true, auditEvent: 'bookChatOpened', partial: 'chat' },
   { key: 'orte',           flag: 'showOrteCard',           toggle: 'toggleOrteCard',           onReclick: 'refresh', partial: 'orte', hiddenForBuchtyp: ['journalismus'],
@@ -417,4 +423,15 @@ export function featuresVisibleFor(features, role, buchtyp = null, cloudModelEff
     const min = f.minRole || 'editor';
     return hasMinRole(role, min) && byBuchtyp(f) && byCloud(f);
   });
+}
+
+// Sichtbare globale Aktionen. Anders als bei Karten gibt es keinen Rollen-
+// Default: eine Aktion ohne `minRole` (Theme, Sprache, Abmelden …) steht jeder
+// Rolle offen. Ohne Buch-Rolle (kein Buch gewählt) greifen nur Buchtyp und
+// Cloud-Modell — `requiresBook` deaktiviert die Aktion dann, statt sie zu verstecken.
+export function actionsVisibleFor(actions, role, buchtyp = null, cloudModelEffective = true) {
+  return actions.filter(a => matchesRequiredBuchtyp(a, buchtyp)
+    && !hiddenForBuchtyp(a, buchtyp)
+    && (!a.requiresCloudModel || cloudModelEffective)
+    && (!role || !a.minRole || hasMinRole(role, a.minRole)));
 }

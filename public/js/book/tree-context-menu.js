@@ -374,7 +374,7 @@ export const treeContextMenuMethods = {
     if (chapterId == null || !this.canEdit()) return;
     const item = this._findTreeChapter(chapterId);
     if (!item || item.solo) return;
-    const isDiary = typeof this.isTagebuch === 'function' && this.isTagebuch();
+    const isDiary = this.isTagebuch();
     const name = await this.appPrompt({
       message: this.t('pagetreeCtx.newPagePrompt'),
       placeholder: this.t('pagetreeCtx.newPagePlaceholder'),

@@ -1,6 +1,6 @@
-// Alpine.data('strukturCard') — Struktur-Werkstatt journalistischer Beiträge.
-// Nur bei Buchtyp 'journalismus' sichtbar (Gate via feature-registry
-// requiresBuchtyp). Fachlicher State lebt hier, der showStrukturCard-Flag im
+// Alpine.data('strukturCard') — Struktur-Werkstatt publizistischer Beiträge.
+// Nur bei den Buchtypen 'journalismus' und 'blog' sichtbar (Gate via
+// feature-registry requiresBuchtyp). Fachlicher State lebt hier, der showStrukturCard-Flag im
 // Root (Hash-Router, Exklusivität).
 
 import { strukturMethods } from '../book/struktur.js';
@@ -15,6 +15,9 @@ export function registerStrukturCard() {
     strukturPageMap: {},
     // { [page_id]: check } — letzter Struktur-Befund je Seite.
     strukturChecks: {},
+    // { [page_id]: { struktur, otone } } — was gegen die Freigabe spricht
+    // (GET /redaktion/:book_id/bedenken, lib/freigabe-bedenken.js).
+    strukturBedenken: {},
     // Aufgeklappte Zeile (page_id) oder null.
     strukturOpenId: null,
     strukturRunning: false,
@@ -49,6 +52,7 @@ export function registerStrukturCard() {
         ctx.strukturBookTextsorte = '';
         ctx.strukturPageMap = {};
         ctx.strukturChecks = {};
+        ctx.strukturBedenken = {};
         ctx.strukturOpenId = null;
         ctx.strukturRunning = false;
         ctx.strukturProgress = 0;

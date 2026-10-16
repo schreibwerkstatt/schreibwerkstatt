@@ -79,6 +79,8 @@ export const redaktionMethods = {
       const next = { ...badges.editStatus };
       if (r.entry) next[key] = r.entry; else delete next[key];
       badges.editStatus = next;
+      // Bedenken beim Freigeben: derselbe Hinweis wie im Seitenbaum (Root-SSoT).
+      if (r.bedenken) window.__app?.reportReleaseBedenken?.(r.bedenken);
     } catch (_) {
       // Die Map bleibt auf dem letzten bestaetigten Stand — sie wurde vor der
       // Antwort nicht angefasst.

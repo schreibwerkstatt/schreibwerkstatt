@@ -7,6 +7,7 @@
 //   find.js    — Find/Replace über den ganzen Stream
 //   outline.js — Inhaltsverzeichnis + IntersectionObserver
 //   history.js — Undo/Redo pro Seite (eigener Verlauf statt Browser-Stack)
+//   head.js    — Titel-Kopf je Beitrag (publizistische Bücher)
 // Kommentar-Leiste: editor/book-editor-comments.js.
 //
 // Click-aktiviert-Block: Default contenteditable=false; Klick setzt aktive
@@ -21,6 +22,7 @@ import { bookEditorOutlineMethods, buildOutlineNodes } from './book-editor/outli
 import { sameStructureTitle } from '../structure-title.js';
 import { bookEditorSaveMethods } from './book-editor/save.js';
 import { bookEditorHistoryMethods } from './book-editor/history.js';
+import { bookEditorHeadMethods } from './book-editor/head.js';
 import { stripFocusArtefacts, fetchJson } from '../utils.js';
 import { handleEditorPaste, handleEditorCopy, handleEditorCut } from '../editor/shared/paste.js';
 import { createAutosaveTimers } from '../editor/shared/autosave.js';
@@ -79,6 +81,7 @@ const sessionState = () => ({
   commentFilterReviewer: '',
   commentStackHeight: 0,   // Höhe des verankerten Karten-Stapels (px), treibt --comments-stack-height
   _pendingGotoBid: null,
+  heads: {},   // page_id → { dachzeile, titel, lead } (book-editor/head.js)
 
   _memos: {},
 });
@@ -296,6 +299,7 @@ export function registerBookEditorCard() {
         });
         // Verankerte Leser-Kommentare des Buchs laden + über den Stream auflösen.
         this._loadBookComments();
+        this._loadHeads(bookId, token);
       } catch (e) {
         if (token !== this._loadToken) return;
         this.loading = false;
@@ -308,6 +312,7 @@ export function registerBookEditorCard() {
     ...bookEditorFindMethods,
     ...bookEditorOutlineMethods,
     ...bookEditorHistoryMethods,
+    ...bookEditorHeadMethods,
 
     // Cache hit nur, wenn ALLE Source-Refs (deps) identisch zur letzten Compute
     // sind. Reset über this._memos = {} im Lade-Pfad.

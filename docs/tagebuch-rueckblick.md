@@ -1,6 +1,6 @@
 # Tagebuch-Rückblick
 
-Rückwärtsgewandte KI-Verdichtung der datierten Einträge eines Zeitraums (Monat `YYYY-MM` oder Jahr `YYYY`) — nur bei Buchtyp `tagebuch`. Der Rückblick liest, er schreibt nie in den Buchtext.
+Rückwärtsgewandte KI-Verdichtung der datierten Einträge eines Zeitraums (Monat `YYYY-MM` oder Jahr `YYYY`) — nur bei Buchtyp `tagebuch`: die Karte über `requiresBuchtyp` in der Feature-Registry, der Job autoritativ über `isTagebuchBook` ([lib/buchtyp.js](../lib/buchtyp.js), sonst `400 NOT_DIARY_BOOK`). Der Rückblick liest, er schreibt nie in den Buchtext.
 
 | Schicht | Ort |
 |---|---|
@@ -22,13 +22,16 @@ Rückwärtsgewandte KI-Verdichtung der datierten Einträge eines Zeitraums (Mona
 
 ## Datierung: Coverage ist die SSoT
 
-`GET /history/rueckblick-coverage/:book_id` (`buildRueckblickCoverage`) liefert je Monat/Jahr `entries`, `newest` (jüngstes `updated_at`, ms) und den jüngsten Rückblick, dazu `days` (Tagesdatum → `page_id`). Karte und Overview-Heatmap lesen **nur** diese Buckets — Zeitraum-Auswahl, Kalender (`buildYmHeatRows` in [ymheatmap.js](../public/js/book/ymheatmap.js)), Aktualität und Sprung zum Tag. Kein Frontend-Modul parst Abschnittsnamen selbst. **Why:** der Job datiert über `parseDatum`, eine Regex im Browser nur `YYYY-MM-DD`; Abschnitte mit freier Datumsschreibung landeten sonst im Rückblick, aber nicht in Auswahl und Kalender.
+`GET /history/rueckblick-coverage/:book_id` (`buildRueckblickCoverage`) liefert je Monat/Jahr `entries`, `newest` (jüngstes `updated_at`, ms) und den jüngsten Rückblick, dazu `days` (Tagesdatum → `page_id`). Rückblick-Karte und Overview-Heatmap lesen **nur** diese Buckets — Zeitraum-Auswahl, Kalender der Karte (`buildYmHeatRows` in [ymheatmap.js](../public/js/book/ymheatmap.js)), Aktualität und Sprung zum Tag — und parsen Abschnittsnamen nicht selbst. **Why:** der Job datiert über `parseDatum`; Abschnitte mit freier Datumsschreibung landeten sonst im Rückblick, aber nicht in Auswahl und Kalender der Karte.
+
+Die **tagesgenauen** Tagebuch-Ansichten (Sidebar-Kalender, Vor/Zurück-Navigation, «An diesem Tag», Zeitraum-Suche, Overview-Kacheln «Lücken & Konsistenz» und «Wochentag-Rhythmus») datieren dagegen nur über den Namen `YYYY-MM-DD` — SSoT `diaryDayKey` in [diary-date.js](../public/js/book/diary-date.js). **Why:** sie brauchen einen Kalendertag, ein «2020-03 Thema» hat keinen; und jeder Weg, der Einträge anlegt (Kalender, Kontextmenü, Buch-Organizer, Ordner-Import), schreibt genau diese Form. Ein frei datierter Abschnitt zählt also im Rückblick seines Monats mit, erscheint aber nicht im Sidebar-Kalender.
 
 ## History
 
 - `GET /history/rueckblick/:book_id` → `{ current_model, entries }`: **alle** Läufe als Metadaten (ohne `result_json`, ohne Limit). Das Ergebnis lädt die Karte beim Öffnen über `GET /history/rueckblick-entry/:id`. **Why:** Kalender, Auswahl und Aktualität brauchen alle Zeiträume; mit vollem JSON wäre ein langjähriges Tagebuch eine Megabyte-Antwort pro Kartenöffnen.
 - `GET /history/rueckblick-search/:book_id?q=` → `{ ids }`: Inhaltssuche über Zusammenfassung, Facetten-Namen und Begründungen (nicht über das rohe JSON). Den lokalisierten Zeitraum-Namen sucht die Karte selbst.
 - Rückblicke sind persönlich: jede Zeile trägt `user_email`, Lesen/Löschen filtert darauf.
+- Der History-Reset eines Buchs (`DELETE /history/book/:book_id`) löscht die Rückblicke **und** den Endergebnis-Cache des Users — sonst lieferte der nächste Lauf wortgleich das alte Ergebnis.
 
 ## Aktualität — Hinweis, keine Sperre
 

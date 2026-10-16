@@ -39,6 +39,10 @@ const TEXT_FIELDS = [
 // Deckungsgleich mit OTON_CHANNELS/OTON_AUTH in public/js/sources/fields.js.
 const OTON_CHANNELS = ['persoenlich', 'telefon', 'video', 'mail', 'medienkonferenz', 'andere'];
 const OTON_AUTH = ['keine', 'ausstehend', 'freigegeben', 'abgelehnt'];
+// Stufen, die einen O-Ton im Text blockieren — Spiegel von OTON_AUTH_BLOCKING
+// (`otonBlocking`) in public/js/sources/fields.js. `keine` und null blockieren
+// nicht: ohne Angabe ist nichts freigegeben, aber auch nichts abgelehnt.
+const OTON_AUTH_BLOCKING = ['ausstehend', 'abgelehnt'];
 
 const MAX_FIELD_LEN = 500;
 const MAX_NOTE_LEN = 4000;
@@ -227,7 +231,7 @@ function _values(src, base = null) {
 }
 
 module.exports = {
-  CSL_TYPES, TEXT_FIELDS, OTON_CHANNELS, OTON_AUTH,
+  CSL_TYPES, TEXT_FIELDS, OTON_CHANNELS, OTON_AUTH, OTON_AUTH_BLOCKING,
   MAX_FIELD_LEN, MAX_NOTE_LEN, MAX_PERSONS, MAX_TAGS, MAX_TAG_LEN,
   str: _str, normalizePersons, normalizeTags,
   BOOK_COUNT_SQL: _BOOK_COUNT_SQL,

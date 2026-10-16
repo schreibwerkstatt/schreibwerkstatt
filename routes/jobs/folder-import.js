@@ -21,7 +21,8 @@ const { setContext } = require('../../lib/log-context');
 const { resolveProvider } = require('../../lib/ai');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const bookAccess = require('../../db/book-access');
-const { getBookLocale } = require('../../db/schema');
+const { getBookLocale, getBookSettings, setBookBuchtyp } = require('../../db/schema');
+const { BUCHTYP_TAGEBUCH } = require('../../lib/buchtyp');
 const { db } = require('../../db/connection');
 const logger = require('../../logger');
 const { seedImportBaseline } = require('../../lib/import-baseline');
@@ -342,6 +343,12 @@ async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, gr
     }
     if (!effBookId) throw i18nError('job.error.bookMissing');
     setContext({ book: effBookId });
+    // Ohne Buchtyp fehlen Kalender, Eintrag-Navigation und Rückblick. Ein neues
+    // Buch wird darum zum Tagebuch; ein bestehendes nur, wenn es noch keinen Typ
+    // hat — ein bewusst gewählter Typ (z.B. Memoiren) bleibt stehen.
+    if (mode === 'new-book' || !getBookSettings(effBookId, userEmail).buchtyp) {
+      setBookBuchtyp(effBookId, BUCHTYP_TAGEBUCH, userEmail);
+    }
 
     // Kapitel-Cache: pro Jahr ein Top-Level-Chapter, pro Jahr+Monat ein
     // Sub-Chapter (parent_chapter_id = Jahr-Chapter-ID).

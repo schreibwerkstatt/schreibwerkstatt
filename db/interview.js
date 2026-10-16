@@ -35,11 +35,32 @@ function getTranscript(itemId) {
   return { ...r, diarisiert: !!r.diarisiert, has_audio: !!r.has_audio };
 }
 
-/** Audio-BLOB samt Mime — nur fuer die Ausliefer-Route. */
+/** Audio-BLOB samt Mime, komplett — fuer den Transkriptionslauf und den vollen
+ *  Download ohne Range-Header. Die Wiedergabe geht ueber `getAudioRange`. */
 function getAudio(itemId) {
   return db.prepare(
     'SELECT audio, audio_mime, audio_name FROM interview_transcripts WHERE item_id = ?',
   ).get(parseInt(itemId)) || null;
+}
+
+/** Mime, Name und Groesse der Aufnahme, ohne den BLOB zu lesen — `length()`
+ *  auf einer BLOB-Spalte liest SQLite aus dem Record-Header. */
+function getAudioMeta(itemId) {
+  const r = db.prepare(
+    'SELECT audio_mime, audio_name, length(audio) AS size FROM interview_transcripts WHERE item_id = ? AND audio IS NOT NULL',
+  ).get(parseInt(itemId));
+  return r || null;
+}
+
+/** Ein Ausschnitt der Aufnahme (`start` 0-basiert, `len` Bytes). Bewusst ueber
+ *  `substr` statt `getAudio().subarray`: so wandert nur der Ausschnitt in den
+ *  Prozess, nicht bei jedem Sprung auf eine Zeitmarke die ganze Aufnahme
+ *  (gemessen bei 150 MB: rund +25 MB statt +480 MB RSS pro Request). */
+function getAudioRange(itemId, start, len) {
+  const r = db.prepare(
+    'SELECT substr(audio, ?, ?) AS chunk FROM interview_transcripts WHERE item_id = ?',
+  ).get(start + 1, len, parseInt(itemId));
+  return r?.chunk || null;
 }
 
 /** Aufnahme ablegen und den Lauf als wartend markieren. */
@@ -193,7 +214,7 @@ function speakerKeys(itemId) {
 
 module.exports = {
   TRANSCRIPT_STATUS,
-  getTranscript, getAudio, createTranscript, setStatus, dropAudio,
+  getTranscript, getAudio, getAudioMeta, getAudioRange, createTranscript, setStatus, dropAudio,
   listSegments, getSegment, replaceSegments,
   listSpeakers, speakerLabels, setSpeaker, speakerKeys,
 };

@@ -41,6 +41,7 @@ function startServer() {
     app.use((req, _res, next) => { req.session = { user: { email: sessionUser } }; next(); });
     app.use('/headline', require('../../routes/headline'));
     app.use('/textsorte', require('../../routes/textsorte'));
+    app.use('/booksettings', require('../../routes/booksettings'));
     server = app.listen(0, () => {
       baseUrl = `http://127.0.0.1:${server.address().port}`;
       resolve();
@@ -208,4 +209,18 @@ test('das Buch kommt aus der Seite, nicht aus dem Body', async () => {
   const r = await api('PUT', `/textsorte/page/${fremd.pageId}`,
     { textsorte: 'bericht', book_id: meins.bookId });
   assert.equal(r.status, 403, 'eine behauptete book_id darf den ACL-Guard nicht umlenken');
+});
+
+// ── Buch-Default der Textsorte: dasselbe Gate wie der Seiten-Override ────────
+
+test('Buch-Default der Textsorte: nur in publizistischen Buechern', async () => {
+  seed(8813, 'roman');
+  const r = await api('PUT', '/booksettings/8813/textsorte', { textsorte: 'kommentar' });
+  assert.equal(r.status, 400);
+  assert.equal(r.json.error_code, 'NOT_JOURNALISTIC_BOOK');
+  for (const [id, typ] of [[8814, 'journalismus'], [8815, 'blog']]) {
+    seed(id, typ);
+    const ok = await api('PUT', `/booksettings/${id}/textsorte`, { textsorte: 'kommentar' });
+    assert.equal(ok.status, 200, `${typ} → ${JSON.stringify(ok.json)}`);
+  }
 });

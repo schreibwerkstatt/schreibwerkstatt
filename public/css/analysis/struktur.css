@@ -47,6 +47,42 @@
     color: var(--color-err-text);
   }
 
+  /* Vor der Freigabe offen — Liste unter den Hinweisen, über der Tabelle. */
+  .struktur-bedenken-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+
+  .struktur-bedenken-item {
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-warn-text);
+    border-radius: var(--radius-md);
+  }
+
+  .struktur-bedenken-head,
+  .struktur-bedenken-oton {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .struktur-bedenken-oton {
+    margin-top: var(--space-xs);
+    padding-left: var(--space-md);
+    font-size: var(--font-size-sm);
+  }
+
+  .tag.struktur-bedenken-released {
+    background: var(--color-err-bg);
+    color: var(--color-err-text);
+  }
+
   .struktur-detail {
     margin-top: var(--space-20);
     padding: var(--space-lg);

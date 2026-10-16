@@ -380,7 +380,13 @@ test('startBookJob: 400 ohne book_id, 403 fremdes Buch, sonst Job mit String-Ded
   assert.equal(foreign.status, 403);
   assert.equal(ctx.shared.jobs.size, before);
 
+  // Der Rückblick ist Tagebüchern vorbehalten (lib/buchtyp.js#isTagebuchBook).
+  const prevSettings = db.prepare('SELECT buchtyp FROM book_settings WHERE book_id = ?').get(MY_BOOK);
+  db.prepare(`INSERT INTO book_settings (book_id, language, region, updated_at, buchtyp) VALUES (?, 'de', 'CH', ?, 'tagebuch')
+              ON CONFLICT(book_id) DO UPDATE SET buchtyp = 'tagebuch'`).run(MY_BOOK, NOW);
   const ok = await api('POST', '/jobs/rueckblick', { book_id: MY_BOOK, zeitraum: '2026' });
+  if (prevSettings) db.prepare('UPDATE book_settings SET buchtyp = ? WHERE book_id = ?').run(prevSettings.buchtyp, MY_BOOK);
+  else db.prepare('DELETE FROM book_settings WHERE book_id = ?').run(MY_BOOK);
   assert.equal(ok.status, 200);
   const job = ctx.shared.jobs.get(ok.json.jobId);
   assert.equal(job.type, 'rueckblick');

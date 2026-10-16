@@ -257,14 +257,15 @@ export const treeLoadMethods = {
     const bookSwitch = String(this._treeBookId ?? '') !== String(bookId) || opts.source === 'login';
     this.treeLoading = true;
     this.treeSwitching = bookSwitch;
-    // Sidebar-Mode SYNCHRON vor dem Page-Fetch setzen: Tagebuch öffnet Kalender,
-    // sonst Tree. Buchtyp ist aus der bereits geladenen `books`-Liste sofort
-    // bekannt (currentBuchtyp), daher kein Warten auf den Fetch nötig — sonst
-    // sieht der User für die Fetch-Dauer den Tree und es springt danach in den
-    // Kalender. User-Auswahl überlebt Buchwechsel/Reload bewusst nicht, damit
-    // Tagebuch-User den Kalender verlässlich beim Aufruf sehen.
-    this.sidebarMode = this.isTagebuch() ? 'calendar' : 'tree';
-    this.diaryCalendarYearMonth = null;
+    // Sidebar-Mode SYNCHRON vor dem Fetch (Buchtyp steht schon in der books-
+    // Liste): Tagebuch → Kalender, sonst Tree. Nur bei Buch- oder Typwechsel —
+    // ein Reload desselben Buchs lässt Baum-/Kalender-Wahl und Monat stehen.
+    const buchtyp = this.currentBuchtyp();
+    if (bookSwitch || this._sidebarModeBuchtyp !== buchtyp) {
+      this.sidebarMode = this.isTagebuch() ? 'calendar' : 'tree';
+      this.diaryCalendarYearMonth = null;
+    }
+    this._sidebarModeBuchtyp = buchtyp;
     this.diaryAnniversaryOpen = this._loadDiaryAnniversaryOpen();
     try {
       this.setStatus(this.t('tree.loadingPages'), true);

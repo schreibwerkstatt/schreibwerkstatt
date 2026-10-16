@@ -1,0 +1,66 @@
+{
+  "version": "4.25.0",
+  "date": "2026-10-16",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Tagebuch, Kalender in der Seitenleiste: ein Klick auf einen leeren Tag bis heute legt den Eintrag an, auch nachträglich. Über dem Editor springen Sie zum vorherigen oder nächsten Eintrag.",
+      "en": "Diary, calendar in the sidebar: clicking an empty day up to today creates that entry, even after the fact. Above the editor you jump to the previous or next entry."
+    },
+    {
+      "kind": "neu",
+      "de": "Bucheditor in Journalismus- und Blog-Büchern: über jedem Beitrag stehen Dachzeile, Titel und Lead und lassen sich direkt dort bearbeiten.",
+      "en": "Book editor in journalism and blog books: kicker, headline and lead sit above each piece and can be edited right there."
+    },
+    {
+      "kind": "neu",
+      "de": "Freigabe in Journalismus- und Blog-Büchern: wer einen Beitrag freigibt, sieht einen Hinweis, wenn die Form nicht trägt oder O-Töne noch nicht autorisiert sind. Die Struktur-Karte sammelt alles unter «Vor der Freigabe offen».",
+      "en": "Release in journalism and blog books: releasing a piece shows a notice if its form falls short or quotes are not yet authorised. The Structure card collects them under “Open before release”."
+    },
+    {
+      "kind": "neu",
+      "de": "Buch- und Kapitelbewertung im Tagebuch: bewertet werden jetzt Eigenstimme, Beobachtung, Reflexion und der Rhythmus der Einträge statt Plot und Dramaturgie.",
+      "en": "Book and chapter review in diaries: they now assess personal voice, observation, reflection and the rhythm of entries instead of plot and drama."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Tagebuch: «An diesem Tag» zeigt jetzt alle früheren Jahre am selben Kalendertag, nicht nur das letzte. Beat-Board, Szenen und Figur-Werkstatt sind in Tagebüchern ausgeblendet.",
+      "en": "Diary: “On this day” now shows every earlier year on the same calendar day, not just last year. Beat board, scenes and character workshop are hidden in diaries."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Ordner-Import von Tagebuch-Einträgen: das Buch wird dabei automatisch zum Tagebuch, damit Kalender und Rückblick sofort bereitstehen.",
+      "en": "Folder import of diary entries: the book automatically becomes a diary, so calendar and review are available right away."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Struktur-Karte gibt es jetzt auch in Blog-Büchern. Im Inhaltsverzeichnis des Lese-Links steht unter jedem Beitrag sein Teaser.",
+      "en": "The Structure card is now available in blog books too. In the read link’s table of contents, each piece shows its teaser."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Interview-Aufnahmen in der Recherche-Karte starten schneller, und auch in langen Aufnahmen springt der Player ohne Wartezeit an jede Stelle.",
+      "en": "Interview recordings in the Research card start faster, and the player jumps to any point without waiting, even in long recordings."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Komplettanalyse sehr grosser Bücher: die Figurenliste wird jetzt auch bei vielen Figuren sauber zusammengeführt, und eine einzelne fehlgeschlagene Teilantwort bricht die Analyse nicht mehr ab.",
+      "en": "Full analysis of very large books: the character list is now merged cleanly even with many characters, and a single failed partial answer no longer stops the analysis."
+    },
+    {
+      "kind": "behoben",
+      "de": "Lektorat: ein Absatz, der mit Anführungszeichen oder Auslassungspunkten begann, wurde mit dem vorigen Absatz zusammengelesen und erzeugte falsche Befunde an der Absatzgrenze.",
+      "en": "Proofreading: a paragraph starting with quotation marks or an ellipsis was read together with the previous one, producing wrong findings at the paragraph break."
+    },
+    {
+      "kind": "behoben",
+      "de": "Recherche-Karte: das Aktionsmenü eines Fundstücks schloss sich manchmal gleich nach dem Öffnen wieder.",
+      "en": "Research card: an item’s action menu sometimes closed again right after opening."
+    },
+    {
+      "kind": "behoben",
+      "de": "Rückblick im Tagebuch: nach dem Zurücksetzen des Verlaufs kam beim nächsten Erstellen wortgleich der alte Rückblick zurück.",
+      "en": "Diary review: after resetting the history, the next run returned the old review word for word."
+    }
+  ]
+}

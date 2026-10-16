@@ -84,6 +84,8 @@ module.exports = {
   getChapterNarrativeProfile:   narrativeProfiles.getChapterNarrativeProfile,
   // buch-einstellungen
   getBookSettings:         bookSettings.getBookSettings,
+  fallbackBuchtyp:         bookSettings.fallbackBuchtyp,
+  setBookBuchtyp:          bookSettings.setBookBuchtyp,
   getBookLocale:           bookSettings.getBookLocale,
   saveBookSettings:        bookSettings.saveBookSettings,
   setBookEntitiesEnabled:  bookSettings.setBookEntitiesEnabled,

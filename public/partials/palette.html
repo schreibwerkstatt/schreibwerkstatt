@@ -48,8 +48,8 @@
         </div>
         <div class="palette-list" id="palette-listbox" role="listbox">
           <template x-for="section in paletteSections()" :key="section.key">
-            <div class="palette-section">
-              <div class="palette-section-label" x-text="$app.t(section.labelKey)"></div>
+            <div class="palette-section" role="group" :aria-labelledby="paletteSectionLabelId(section.key)">
+              <div class="palette-section-label" :id="paletteSectionLabelId(section.key)" x-text="$app.t(section.labelKey)"></div>
               <template x-for="item in section.items" :key="section.key + ':' + item.key">
                 <button type="button"
                         class="palette-item"
@@ -61,7 +61,7 @@
                         }"
                         :data-tip="!item.available && item.reasonKey ? $app.t(item.reasonKey) : null"
                         @click="activateItem(item)"
-                        @mouseenter="onItemHover(section.key, item.key)"
+                        @pointermove="onItemPointerMove($event, section.key, item.key)"
                         role="option"
                         :aria-selected="paletteIsActive(section.key, item.key)"
                         :aria-disabled="!item.available">

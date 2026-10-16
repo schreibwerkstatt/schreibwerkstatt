@@ -70,8 +70,9 @@ Wechsel des Tages.
 |---|---|---|
 | `GET /redaktion/:book_id` | viewer | `{ enabled: true, journalistic, stufen, pages: {page_id → Eintrag}, counts }` |
 | `GET /redaktion/:book_id/history` | viewer | `{ stufen, daily: [{date, <stufe>: n…}] }` |
-| `PUT /redaktion/page/:page_id` | editor | `{ status, note? }`: ohne `note` bleibt die Notiz stehen |
-| `PUT /redaktion/chapter/:chapter_id` | editor | alle Abschnitte inkl. Unterkapitel, Buch aus dem Kapitel |
+| `GET /redaktion/:book_id/bedenken` | viewer | `{ enabled, pages: {page_id → { struktur, otone }} }` — nur publizistische Bücher, sonst `enabled: false` |
+| `PUT /redaktion/page/:page_id` | editor | `{ status, note? }`: ohne `note` bleibt die Notiz stehen; Antwort trägt `bedenken` (Objekt oder `null`) |
+| `PUT /redaktion/chapter/:chapter_id` | editor | alle Abschnitte inkl. Unterkapitel, Buch aus dem Kapitel; `bedenken` als Map page_id → Objekt |
 
 Setzen erst ab `editor`: eine Stufe weiterzuschalten ist eine Entscheidung,
 keine Ansicht.
@@ -134,6 +135,19 @@ wird sichtbar im Baum-Tooltip, in der Übersichtskachel (Klick öffnet das
 Ideen-Board), an der Bahn im Ideen-Board (Plakette «fertig, aber offen»,
 [ideen-board/edit-status.js](../public/js/book/ideen-board/edit-status.js)) und
 im Ideen-Chat. Quelle der offenen Ideen ist `$store.badges.ideenCounts`.
+
+## Freigegeben trotz Bedenken
+
+Das publizistische Gegenstück: wer einen Beitrag auf «freigegeben» setzt,
+bekommt in der Antwort mit, was dagegen spricht — Struktur-Urteil «verfehlt»
+oder «lückenhaft» (nur zur geltenden Textsorte) und belegte O-Töne, deren
+Autorisierung `ausstehend` oder `abgelehnt` ist. SSoT
+[lib/freigabe-bedenken.js](../lib/freigabe-bedenken.js). **Hinweis, kein Gate:**
+die Stufe ist gesetzt, der Seitenbaum und der Buchorganizer zeigen den Hinweis
+(`reportReleaseBedenken`, Root) mit einem Sprung in die Übersicht der
+Struktur-Karte («Vor der Freigabe offen»). Ein ungeprüfter Beitrag trägt kein
+Struktur-Bedenken — unbekannt ist nicht schlecht. Details:
+[journalismus.md](journalismus.md#freigabe-bedenken).
 
 ## Serien-Lektorat
 

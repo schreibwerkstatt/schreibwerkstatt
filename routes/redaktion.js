@@ -11,8 +11,9 @@ const express = require('express');
 const { aclParamGuard, guardBook, sessionEmail } = require('../lib/acl');
 const {
   listBookStatus, setPageStatus, setPagesStatus, statusCounts, statusHistory,
-  statusChain, isValidRedaktionStatus,
+  statusChain, isValidRedaktionStatus, REDAKTION_STATUS_DONE,
 } = require('../db/redaktion');
+const { bedenkenForPage, bedenkenForPages } = require('../lib/freigabe-bedenken');
 const { pageBookGuard } = require('../lib/page-guard');
 const { getBookSettings } = require('../db/schema');
 const { isJournalisticBook } = require('../lib/buchtyp');
@@ -63,13 +64,28 @@ router.get('/:book_id/history', aclParamGuard('viewer'), (req, res) => {
   res.json({ stufen: chain, daily: statusHistory(req.bookId, chain) });
 });
 
+/** Was gegen die Freigabe der Beiträge eines Buchs spricht (Struktur-Urteil,
+ *  belegte O-Töne ohne Autorisierung) — die Übersicht dazu, unabhängig von der
+ *  Stufe. Nur publizistische Bücher; sonst `enabled: false` wie die Geschwister. */
+router.get('/:book_id/bedenken', aclParamGuard('viewer'), (req, res) => {
+  if (!_journalistic(req, req.bookId)) return res.json({ enabled: false, pages: {} });
+  res.json({ enabled: true, pages: bedenkenForPages(req.bookId) });
+});
+
+/** Beim Freigeben die Bedenken mitliefern. Hinweis, kein Gate: die Stufe ist
+ *  bereits gesetzt (Begründung in lib/freigabe-bedenken.js). */
+function _releaseBedenken(journalistic, status, fn) {
+  return journalistic && status === REDAKTION_STATUS_DONE ? fn() : null;
+}
+
 /** Stufe einer Seite setzen (`status: null` entfernt sie). `note` nur, wenn
  *  mitgeschickt — sonst bleibt die bestehende Notiz stehen. */
 router.put('/page/:page_id', jsonBody, (req, res) => {
   const g = pageBookGuard(req, res, { minRole: 'editor' });
   if (!g) return;
   const { pageId, bookId, settings } = g;
-  const chain = statusChain(_journalistic(req, bookId, settings));
+  const journalistic = _journalistic(req, bookId, settings);
+  const chain = statusChain(journalistic);
   const status = _readStatus(req, res, chain);
   if (status === undefined) return;
   const row = setPageStatus(pageId, bookId, {
@@ -78,7 +94,10 @@ router.put('/page/:page_id', jsonBody, (req, res) => {
     userEmail: sessionEmail(req),
     chain,
   });
-  res.json({ ok: true, page_id: pageId, entry: row, counts: statusCounts(bookId, chain) });
+  res.json({
+    ok: true, page_id: pageId, entry: row, counts: statusCounts(bookId, chain),
+    bedenken: _releaseBedenken(journalistic, status, () => bedenkenForPage(bookId, pageId)),
+  });
 });
 
 /** Dieselbe Stufe fuer alle Abschnitte eines Kapitels, inkl. Unterkapitel. Das
@@ -89,13 +108,17 @@ router.put('/chapter/:chapter_id', jsonBody, async (req, res) => {
   const bookId = resolveChapterBookId(chapterId);
   if (!bookId) return res.status(404).json({ error_code: 'CHAPTER_NOT_FOUND' });
   if (!guardBook(req, res, bookId, 'editor')) return;
-  const chain = statusChain(_journalistic(req, bookId));
+  const journalistic = _journalistic(req, bookId);
+  const chain = statusChain(journalistic);
   const status = _readStatus(req, res, chain);
   if (status === undefined) return;
   const outline = await contentStore.bookOutline(bookId);
   const pageIds = contentStore.chapterPages(outline, chapterId).map(n => n.id);
   const entries = setPagesStatus(pageIds, bookId, { status, userEmail: sessionEmail(req), chain });
-  res.json({ ok: true, chapter_id: chapterId, entries, counts: statusCounts(bookId, chain) });
+  res.json({
+    ok: true, chapter_id: chapterId, entries, counts: statusCounts(bookId, chain),
+    bedenken: _releaseBedenken(journalistic, status, () => bedenkenForPages(bookId, pageIds)),
+  });
 });
 
 module.exports = router;

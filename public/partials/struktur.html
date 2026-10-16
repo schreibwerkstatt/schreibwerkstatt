@@ -2,8 +2,8 @@
 <!--
   Alpine.data-Sub-Komponente — siehe public/js/cards/struktur-card.js.
   `showStrukturCard` + `toggleStrukturCard` bleiben im Root (Hash-Router,
-  Exklusivität). Nur bei Buchtyp 'journalismus' erreichbar (feature-registry
-  `requiresBuchtyp`).
+  Exklusivität). Nur bei den Buchtypen 'journalismus' und 'blog' erreichbar
+  (feature-registry `requiresBuchtyp`).
 
   Rein rückwärtsgewandt: setzt das SOLL (Textsorte) und zeigt das IST
   (Struktur-Befund aus `page_structure_checks`) — schreibt nie in den Buchtext.
@@ -54,6 +54,36 @@
        x-text="$app.t('struktur.missingHint', { n: strukturOhneTextsorte })"></div>
 
   <div x-show="!strukturHasRows" class="muted-msg muted-msg--spaced" x-text="$app.t('struktur.empty')"></div>
+
+  <!-- Vor der Freigabe offen: Form verfehlt/lückenhaft oder belegter O-Ton ohne
+       Autorisierung (lib/freigabe-bedenken.js). Freigegebene Beiträge oben —
+       dort ist der Widerspruch schon publiziert oder kurz davor. -->
+  <section class="card-section struktur-bedenken" x-show="strukturBedenkenRows().length > 0" x-cloak>
+    <div class="card-section-head">
+      <span class="card-section-title"
+            x-text="$app.t('struktur.bedenken.title', { n: strukturBedenkenRows().length })"></span>
+    </div>
+    <p class="card-hint" x-text="$app.t('struktur.bedenken.hint')"></p>
+    <ul class="struktur-bedenken-list">
+      <template x-for="b in strukturBedenkenRows()" :key="b.id">
+        <li class="struktur-bedenken-item">
+          <div class="struktur-bedenken-head">
+            <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: b.id }"></button>
+            <span class="tag struktur-bedenken-released" x-show="b.released"
+                  x-text="$app.t('struktur.bedenken.released')"></span>
+            <span class="tag" x-show="b.struktur" :class="'struktur-urteil--' + b.struktur?.urteil"
+                  x-text="$app.t('struktur.bedenken.form', { urteil: $app.t('struktur.urteil.' + b.struktur?.urteil) })"></span>
+          </div>
+          <template x-for="o in b.otone" :key="o.source_id">
+            <div class="struktur-bedenken-oton">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'quelle', id: o.source_id, label: o.title }"></button>
+              <span class="badge-warn" x-text="$app.t('sources.oton.blocked.' + o.oton_auth)"></span>
+            </div>
+          </template>
+        </li>
+      </template>
+    </ul>
+  </section>
 
   <div class="table-scroll" x-show="strukturHasRows">
   <table class="data-table struktur-table"

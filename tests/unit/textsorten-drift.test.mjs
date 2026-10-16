@@ -97,7 +97,7 @@ test('`wertung` fällt in den Meinungsformen aus dem Lektorat-Typ-Set', async ()
       `wertung darf bei ${k} nicht geprüft werden`);
   }
   // Die Textsorte darf ausserhalb des journalistischen Profils nichts ändern.
-  for (const bt of ['roman', 'sachbuch', 'wissenschaft']) {
+  for (const bt of ['roman', 'sachbuch', 'wissenschaft', 'blog', null]) {
     assert.deepEqual(lektoratTypen(bt, { textsorte: 'kommentar' }), lektoratTypen(bt));
   }
 });

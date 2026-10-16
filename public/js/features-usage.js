@@ -8,6 +8,15 @@ import { FEATURES, DEFAULT_RECENT_KEYS, featureByKey } from './cards/feature-reg
 import { fetchJson } from './utils.js';
 import { EVT } from './events.js';
 
+// Einmal-Quelle fuer den naechsten /usage/track-Call einer Karte. Die Palette
+// markiert vor dem Toggle; gezaehlt wird weiterhin nur vom Show-Flag-Watch,
+// der die Quelle verbraucht. Modul-lokal statt Root-State: rein transient,
+// nichts rendert davon.
+let _pendingUsageSource = null;
+export function markNextUsageSource(key, source) {
+  _pendingUsageSource = { key, source };
+}
+
 export const featuresUsageMethods = {
   // Wird in init() aufgerufen, sobald Alpine $watch bereitsteht.
   setupFeatureUsageWatchers() {
@@ -25,11 +34,15 @@ export const featuresUsageMethods = {
   },
 
   async _trackFeatureUsage(key) {
+    // Quelle (z.B. 'palette') nur, wenn sie zu genau dieser Oeffnung gehoert.
+    const pending = _pendingUsageSource;
+    _pendingUsageSource = null;
+    const source = pending?.key === key ? pending.source : undefined;
     try {
       await fetch('/usage/track', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, book_id: this.$store.nav.selectedBookId || null }),
+        body: JSON.stringify({ key, source, book_id: this.$store.nav.selectedBookId || null }),
         credentials: 'same-origin',
       });
     } catch (e) {

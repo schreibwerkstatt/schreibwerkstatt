@@ -87,6 +87,29 @@ test('Devmode-Seed: vollstaendiger Seed bei allen Guards + leerer DB', () => {
   }
 });
 
+test('Devmode-Seed: Tagebuch mit buchtyp, Jahr-Kapiteln und Einträgen bis heute', () => {
+  const ctx = _isolatedDb();
+  try {
+    process.env.LOCAL_DEV_MODE = 'true';
+    const r = ctx.devSeed.runDevSeedIfNeeded();
+    assert.ok(r.diaryBookId);
+    const s = ctx.db.prepare('SELECT buchtyp FROM book_settings WHERE book_id = ?').get(r.diaryBookId);
+    assert.equal(s.buchtyp, 'tagebuch');
+    const pages = ctx.db.prepare('SELECT p.page_name, c.chapter_name FROM pages p JOIN chapters c ON c.chapter_id = p.chapter_id WHERE p.book_id = ? ORDER BY p.position').all(r.diaryBookId);
+    assert.equal(pages.length, r.diaryEntries);
+    assert.ok(pages.length >= 8);
+    for (const p of pages) {
+      assert.match(p.page_name, /^\d{4}-\d{2}-\d{2}$/);
+      assert.equal(p.chapter_name, p.page_name.slice(0, 4), 'Eintrag im Jahr-Kapitel');
+    }
+    assert.deepEqual(pages.map(p => p.page_name), [...pages.map(p => p.page_name)].sort(), 'chronologisch');
+    assert.equal(ctx.db.pragma('foreign_key_check').length, 0);
+  } finally {
+    delete process.env.LOCAL_DEV_MODE;
+    ctx.cleanup();
+  }
+});
+
 test('Devmode-Seed: Share-Links + Kommentare (verankert, allgemein, Reply, resolved, changed)', () => {
   const ctx = _isolatedDb();
   try {
@@ -148,7 +171,7 @@ test('Devmode-Seed: idempotent (zweiter Call no-op)', () => {
     const r2 = ctx.devSeed.runDevSeedIfNeeded();
     assert.equal(r2, null);
     const bookCount = ctx.db.prepare('SELECT COUNT(*) AS c FROM books').get().c;
-    assert.equal(bookCount, 1, 'kein zweites Buch nach Re-Call');
+    assert.equal(bookCount, 2, 'Testbuch + Tagebuch, keine weiteren nach Re-Call');
   } finally {
     delete process.env.LOCAL_DEV_MODE;
     ctx.cleanup();
