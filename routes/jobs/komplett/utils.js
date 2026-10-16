@@ -1,10 +1,4 @@
 'use strict';
-// Leaf-Import, NICHT die `../shared`-Facade: die Facade lädt `shared/ai.js`, das
-// `callAI` per Destructure einfängt – läge das schon beim Top-Level-Require dieses
-// Moduls im Cache, würde der Test-Stub (tests/integration/_helpers/mock-ai.js,
-// ersetzt den `lib/ai`-Cache-Eintrag erst in bootstrap()) nicht mehr greifen und
-// der Integrationstest ginge echt ans Netz.
-const { i18nErrText } = require('../shared/jobs');
 const { nameTokens, salutationGender } = require('../../../lib/name-normalize');
 
 const crypto = require('crypto');
@@ -225,6 +219,10 @@ async function runNonCritical(label, fn, log, { warnings = null, warnKey = null 
   try {
     return await fn();
   } catch (e) {
+    // Lazy require: `shared/jobs` öffnet beim Laden die DB-Verbindung. Dieses Modul
+    // wird von Tests vor bootstrap() geladen (komplett.test.js) — ein Top-Level-
+    // Import bände die Verbindung an das DB_PATH von davor statt an die Test-DB.
+    const { i18nErrText } = require('../shared/jobs');
     log.warn(`${label} fehlgeschlagen (ignoriert): ${i18nErrText(e)}`);
     if (warnings && warnKey) warnings.push({ key: warnKey });
     return null;
