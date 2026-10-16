@@ -52,28 +52,36 @@ export function countInText(text, needle) {
 
 // Zeichen, die sich nach LINKS binden (Punkt, Komma, …, schliessende Klammer,
 // schliessendes Anfuehrungszeichen) bzw. nach RECHTS (oeffnende Klammer, «, „).
-// Zeichen-Klassen-SSoT ist die Server-Zwilling-Kopie in
-// lib/html-text.js#stripTagsKeepPunctuation.
-const _BINDS_LEFT = /[.,;:!?%…»›“”‘’)\]}]/;
-const _BINDS_RIGHT = /[([{«‹„‚]/;
+// Block-Tags (`BLOCK_TAG`) sind immer Wortgrenze, auch in einem Lauf mit
+// Inline-Tags — dort bricht der Editor um. Zeichen-Klassen-SSoT ist der
+// Server-Zwilling lib/html-text.js#stripTagsKeepPunctuation (Begründung dort);
+// beide Seiten sind gegen Drift gegated (tests/unit/lektorat-html-prompt.test.mjs).
+export const BINDS_LEFT = /[.,;:!?%…»›“”‘’)\]}]/;
+export const BINDS_RIGHT = /[([{«‹„‚]/;
+export const BLOCK_TAG = /^<\/?(?:p|div|li|ul|ol|dl|dt|dd|h[1-6]|blockquote|pre|figure|figcaption|table|thead|tbody|tfoot|tr|td|th|caption|section|article|aside|header|footer|nav|br|hr)(?=[\s/>])/i;
+
+const _isBlockTag = (html, lt, gt) => BLOCK_TAG.test(html.slice(lt, gt + 1));
 
 // Erstes Zeichen neben einem (vielleicht mehreren) Tag-Lauf. Der Lauf wird
 // übersprungen, weil `stripTagsKeepPunctuation` die Marken eines Laufs
 // einstimmig auflöst — sonst entstünde zwischen zwei Tags ein Space, den die
-// Nachbarn nicht wollen. Whitespace wird NICHT übersprungen: ein vorhandenes
-// Leerzeichen trennt ohnehin, und genau dann bleibt es beim Space.
+// Nachbarn nicht wollen. Ein Block-Tag im Lauf liefert ' ' (trennt immer).
+// Whitespace wird NICHT übersprungen: ein vorhandenes Leerzeichen trennt
+// ohnehin, und genau dann bleibt es beim Space.
 function _charBesideTags(html, from, dir) {
   let i = from;
   while (i >= 0 && i < html.length) {
     if (dir < 0 && html[i] === '>') {
       const lt = html.lastIndexOf('<', i);
       if (lt === -1) return '';
+      if (_isBlockTag(html, lt, i)) return ' ';
       i = lt - 1;
       continue;
     }
     if (dir > 0 && html[i] === '<') {
       const gt = html.indexOf('>', i);
       if (gt === -1) return '';
+      if (_isBlockTag(html, i, gt)) return ' ';
       i = gt + 1;
       continue;
     }
@@ -90,9 +98,10 @@ function _charBesideTags(html, from, dir) {
  *  zeigen — sonst findet ein Befund wie «Asianometry.» (so steht es im Prompt)
  *  seine Stelle nicht und fällt als „nicht gefunden“ ersatzlos heraus. */
 export function tagGapIsSpace(html, tagStart, tagEnd) {
+  if (_isBlockTag(html, tagStart, tagEnd - 1)) return true;
   const prev = _charBesideTags(html, tagStart - 1, -1);
   const next = _charBesideTags(html, tagEnd, +1);
   if (!prev || !next) return true;
   if (/\s/.test(prev) || /\s/.test(next)) return true;
-  return !(_BINDS_RIGHT.test(prev) || _BINDS_LEFT.test(next));
+  return !(BINDS_RIGHT.test(prev) || BINDS_LEFT.test(next));
 }

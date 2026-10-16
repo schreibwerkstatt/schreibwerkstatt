@@ -128,6 +128,10 @@ const TAG_GAP_CASES = [
   '<p>(<a href="https://x.ch">Klammer</a>) und <em>Wort</em>: <strong>dann</strong> los.</p>',
   '<p>Zitat „<em>Er sagte</em>“ war falsch.</p>',
   '<p>Wort <em>x</em> , Tippfehler bleibt.</p>',
+  '<p>Er ging.</p><p>»Hallo«, sagte sie.</p>',
+  '<p>He said</p><p>“Hello,” she said.</p>',
+  '<p>Liste</p><ul><li>…und dann</li></ul>',
+  '<p>Ende mit <em>Link</em></p><p>(Fortsetzung)</p>',
 ];
 
 for (const html of TAG_GAP_CASES) {
@@ -135,3 +139,36 @@ for (const html of TAG_GAP_CASES) {
     assert.equal(countInHtml(html, htmlToText(html)), 1, 'Prompt-Text muss in der View auffindbar sein');
   });
 }
+
+// Block-Tags trennen immer: die Satzzeichen-Klassen sind nicht eindeutig genug
+// für eine Absatzgrenze (`“` oeffnet im Englischen, `»` in »…«, `…` am
+// Absatzanfang). Ohne die Regel klebte der kompakte `htmlToText` (ohne
+// Absatz-Umbrüche) die Absätze aneinander.
+test('Absatzgrenze vor öffnendem Anführungszeichen/Auslassung bleibt Space', () => {
+  assert.equal(htmlToText('<p>Er ging.</p><p>»Hallo«, sagte sie.</p>'), 'Er ging. »Hallo«, sagte sie.');
+  assert.equal(htmlToText('<p>He said</p><p>“Hello,” she said.</p>'), 'He said “Hello,” she said.');
+  assert.equal(htmlToText('<p>Liste</p><ul><li>…und dann</li></ul>'), 'Liste …und dann');
+  assert.equal(htmlToText('Zeile<br>“Neu”'), 'Zeile “Neu”');
+});
+
+test('Block-Tag in einem Lauf mit Inline-Tags trennt ebenfalls', () => {
+  assert.equal(htmlToText('<p>Er ging.</em></p><p><em>»Hallo«</em></p>'), 'Er ging. »Hallo«');
+  // Inline-Grenze im selben Absatz bleibt ohne Space.
+  assert.equal(htmlToText('<p>Ein <a href="x">Link</a>.</p><p>Weiter</p>'), 'Ein Link. Weiter');
+});
+
+test('Prompt-Variante: Absätze bleiben Absätze, auch vor »', () => {
+  assert.equal(htmlToTextForPrompt('<p>Er ging.</p><p>»Hallo«</p>'), 'Er ging.\n\n»Hallo«');
+});
+
+// Drift-Gate der beiden Zwillinge (Server sync, Browser ESM — die ESM-Bridge
+// ist async und taugt fuer den synchronen Prompt-Pfad nicht).
+const { TAG_GAP_CLASSES } = await import('../../lib/html-text.js');
+const textMatch = await import('../../public/js/utils/text-match.js');
+
+test('Tag-Grenzen-Regeln: Server und Fundstellen-View identisch', () => {
+  assert.equal(textMatch.BINDS_LEFT.source, TAG_GAP_CLASSES.bindsLeft.source);
+  assert.equal(textMatch.BINDS_RIGHT.source, TAG_GAP_CLASSES.bindsRight.source);
+  assert.equal(textMatch.BLOCK_TAG.source, TAG_GAP_CLASSES.blockTag.source);
+  assert.equal(textMatch.BLOCK_TAG.flags, TAG_GAP_CLASSES.blockTag.flags);
+});
