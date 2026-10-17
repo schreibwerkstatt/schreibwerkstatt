@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "9432c15d53f8dff6";
+self.__SHELL_BUILD = "ca840240b2841926";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -239,7 +239,6 @@ self.__SHELL_MANIFEST = [
   "/js/book-overview/figuren.js",
   "/js/book-overview/format.js",
   "/js/book-overview/ideen.js",
-  "/js/book-overview/iso-day.js",
   "/js/book-overview/kapitel.js",
   "/js/book-overview/load.js",
   "/js/book-overview/motiv.js",
@@ -579,6 +578,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/focus/trampoline.js",
   "/js/editor/focus/typewriter.js",
   "/js/editor/focus/viewport.js",
+  "/js/editor/lektorat-analysis.js",
   "/js/editor/lektorat-evidence.js",
   "/js/editor/lektorat.js",
   "/js/editor/live-edit.js",
@@ -843,6 +843,7 @@ self.__SHELL_MANIFEST = [
   "/js/utils/html-container.js",
   "/js/utils/html-find.js",
   "/js/utils/html.js",
+  "/js/utils/iso-day.js",
   "/js/utils/markdown.js",
   "/js/utils/net.js",
   "/js/utils/text-match.js",

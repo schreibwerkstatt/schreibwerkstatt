@@ -47,6 +47,8 @@ function seed() {
   if (!appUsers.getUser(OWNER)) appUsers.createUser({ email: OWNER, displayName: 'Autor' });
   db.prepare(`INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`)
     .run(BOOK_ID, 'TTS-Buch', now, now);
+  // Share-Links leben nur, solange ihr Ersteller die Buchrolle hat (isExpired).
+  require('../../db/book-access').grantAccess(BOOK_ID, OWNER, 'owner', OWNER);
   db.prepare(`INSERT INTO book_settings (book_id, language, region, updated_at) VALUES (?, ?, ?, ?)`)
     .run(BOOK_ID, 'de', 'CH', now);
   db.prepare(`INSERT INTO pages (page_id, book_id, page_name, position, updated_at, body_html)

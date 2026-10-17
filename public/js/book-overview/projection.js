@@ -5,7 +5,7 @@
 // Live-Zeichenstand aus tokEsts. Schnitt = Zeichen-Zuwachs der letzten 30 Tage
 // geteilt durch die tatsaechliche Snapshot-Spanne, ohne Struktur-Spruenge.
 import { localIsoDate } from '../utils.js';
-import { isoAddDays, isoDaysBetween } from './iso-day.js';
+import { isoAddDays, isoDaysBetween } from '../utils/iso-day.js';
 
 const PACE_WINDOW_DAYS = 30;
 

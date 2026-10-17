@@ -13,16 +13,20 @@
 //   - recordJobLedger(jobId)            ← db/schema.js#endJobRun (alle Jobs
 //                                         AUSSER chat-sourced Typen)
 //   - recordChatLedgerForMessage(id)    ← Chat-Jobs (pro Assistant-Nachricht)
-//   - recordChatLedgerForFailedRun(…)   ← Chat-Jobs, die OHNE Assistant-Nachricht
-//                                         enden (Fehler/Abbruch nach bezahlten
-//                                         Runden). Schliesst sich mit dem
-//                                         vorigen aus: der Aufrufer bucht nur,
-//                                         solange keine Nachricht persistiert ist.
+//   - recordChatLedgerEntry(…)          ← Chat-Verbrauch OHNE Assistant-Nachricht:
+//                                         Chat-Läufe, die nach bezahlten Runden
+//                                         scheitern/abbrechen (`chatjob:<jobId>`),
+//                                         und der Session-Titel-Call
+//                                         (routes/jobs/chat-title.js,
+//                                         `chatjob:title:<sessionId>`). Schliesst
+//                                         sich mit dem vorigen aus: ein Lauf bucht
+//                                         hier nur, solange keine Nachricht
+//                                         persistiert ist.
 // Chat-Jobs laufen ebenfalls durch endJobRun (Lifecycle), ihr Verbrauch lebt
 // aber in chat_messages — darum schliesst recordJobLedger die Typen 'chat'/
 // 'book-chat' aus. Spiegelt lib/usage-sources#excludeChatSourcedSql.
 //
-// source_ref ('job:<job_id>' | 'chatmsg:<id>') ist ein opaker Trace-/Idempotenz-
+// source_ref ('job:<job_id>' | 'chatmsg:<id>' | 'chatjob:<…>') ist ein opaker Trace-/Idempotenz-
 // Schluessel mit UNIQUE-Constraint — INSERT OR IGNORE macht beide Recorder
 // re-entry-sicher. Bewusst KEIN Integer-FK: muss den Prune der Quellzeile
 // ueberleben.
@@ -143,11 +147,13 @@ function recordChatLedgerForMessage(messageId) {
   }
 }
 
-// Verbrauch eines Chat-Laufs, der ohne Assistant-Nachricht endet (Provider-Fehler,
-// Abbruch, Truncation nach bezahlten Werkzeug-Runden). Ohne diese Zeile fehlten
-// genau die teuersten Läufe im Ledger — und damit im Budget-Gate. source_ref
-// `chatjob:<jobId>` (idempotent wie die anderen Recorder). Niemals werfen.
-function recordChatLedgerForFailedRun({
+// Chat-Verbrauch, der an keiner Assistant-Nachricht hängt: ein Chat-Lauf, der
+// ohne Nachricht endet (Provider-Fehler, Abbruch, Truncation nach bezahlten
+// Werkzeug-Runden), oder der Session-Titel-Call. Ohne diese Zeile fehlten genau
+// die teuersten Läufe im Ledger — und damit im Budget-Gate. source_ref
+// `chatjob:<jobId>` (idempotent wie die anderen Recorder; der Titel-Call
+// übergibt `title:<sessionId>` als jobId). Niemals werfen.
+function recordChatLedgerEntry({
   jobId, userEmail, kind, bookId, provider, model,
   tokensIn = 0, tokensOut = 0, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0, webSearches = 0,
 }) {
@@ -169,7 +175,7 @@ function recordChatLedgerForFailedRun({
       source_ref: `chatjob:${jobId}`,
     });
   } catch (e) {
-    logger.error(`[cost-ledger] recordChatLedgerForFailedRun(${jobId}) fehlgeschlagen: ${e.message}`);
+    logger.error(`[cost-ledger] recordChatLedgerEntry(${jobId}) fehlgeschlagen: ${e.message}`);
   }
 }
 
@@ -219,7 +225,7 @@ function claudeByDayModel(fromDay, toDay) {
 }
 
 module.exports = {
-  recordChatLedgerForFailedRun,
+  recordChatLedgerEntry,
   recordJobLedger,
   recordChatLedgerForMessage,
   queryRange,

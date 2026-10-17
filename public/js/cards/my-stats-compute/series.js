@@ -4,22 +4,11 @@
 // Alle Datumsrechnungen laufen auf ISO-Tagesstrings (YYYY-MM-DD) per UTC —
 // nie auf Uhrzeiten der Browser-TZ, die von der App-Zeitzone abweichen kann.
 
-import { isoAddDays } from '../../utils.js';
+import { isoAddDays, isoDaysBetween, isoWeekdayMon } from '../../utils/iso-day.js';
 
-export { isoAddDays };
-
-// Differenz b - a in Kalendertagen (ISO YYYY-MM-DD), TZ-frei via UTC.
-export function isoDayDiff(aIso, bIso) {
-  const [ay, am, ad] = aIso.split('-').map(Number);
-  const [by, bm, bd] = bIso.split('-').map(Number);
-  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
-}
-
-// Wochentag eines ISO-Datums, Mo=0 … So=6 (UTC-Mittag, TZ-frei).
-export function isoDowMon(iso) {
-  const [y, m, d] = iso.split('-').map(Number);
-  return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
-}
+// Kalendertag-Arithmetik: SSoT utils/iso-day.js, hier fuer die Compute-Module
+// und die Facade re-exportiert.
+export { isoAddDays, isoDaysBetween, isoWeekdayMon };
 
 // Tages-ISO → Bucket-Schluessel je Granularitaet. Der Schluessel ist selbst ein
 // sortierbares ISO-Datum (Monday-of-week bzw. Monatserster), damit X-Achse +
@@ -29,7 +18,7 @@ export function isoDowMon(iso) {
 //   'month' → erster Tag des Monats
 export function bucketizeIso(iso, gran) {
   if (gran === 'month') return iso.slice(0, 7) + '-01';
-  if (gran === 'week') return isoAddDays(iso, -isoDowMon(iso));
+  if (gran === 'week') return isoAddDays(iso, -isoWeekdayMon(iso));
   return iso;
 }
 

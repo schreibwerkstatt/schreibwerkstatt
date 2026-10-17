@@ -7,7 +7,7 @@
 // Compute-Bodies sind als pure `_computeXxx` extrahiert (Alpine-frei testbar);
 // die memoizierten Wrapper nutzen den gemeinsamen `this._memo` aus load.js.
 import { buildYmHeatRows } from '../book/ymheatmap.js';
-import { isoAddDays as _addDays, isoDaysBetween as _dayDiff, isoWeekday } from './iso-day.js';
+import { isoAddDays as _addDays, isoDaysBetween as _dayDiff, isoWeekday } from '../utils/iso-day.js';
 import { diaryDayKey } from '../book/diary-date.js';
 function _prevMonthKey(monthKey) {
   let [y, m] = monthKey.split('-').map(Number);

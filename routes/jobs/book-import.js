@@ -7,44 +7,50 @@
 // routes/book-migration.js. Spiegelt das Buffer-Map-Pattern von folder-import.
 
 const express = require('express');
-const JSZip = require('jszip');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   jobs, createJob, enqueueJob, findActiveJobId,
 } = require('./shared');
-const contentStore = require('../../lib/content-store');
 const { validateManifest, validateBookJson, planFromNodes, normalizeIncludes } = require('../../lib/book-bundle');
 const { restoreExtras } = require('../../db/book-migration-data');
 const { materializeOps, applyBundleSettings } = require('../../lib/bundle-apply');
 const { setContext } = require('../../lib/log-context');
-const bookAccess = require('../../db/book-access');
-const { db } = require('../../db/connection');
-const logger = require('../../logger');
+const { createOwnedBook, bookNameError, BOOK_NAME_MAX } = require('../../lib/book-create');
+const { openCappedZip } = require('../../lib/zip-limits');
+const { ImportBufferStore, contentHash } = require('../../lib/import-buffers');
 const { sessionEmail } = require('../../lib/acl');
 const { seedImportBaseline } = require('../../lib/import-baseline');
 
 const router = express.Router();
 
-const MAX_ZIP_BYTES = 200 * 1024 * 1024;
+const MB = 1024 * 1024;
+const MAX_ZIP_BYTES = 200 * MB;
 const BUFFER_TTL_MS = 30 * 60 * 1000;
 
-// jobId -> { buffer }
-const importBuffers = new Map();
+// Entpackt-Deckel fuer ein .swbook (lib/zip-limits.js). book.json eines sehr
+// grossen Buchs liegt im einstelligen MB-Bereich, Analyse-/Chat-Bloecke etwas
+// darueber; 256 MB pro Eintrag bleiben unter der V8-String-Grenze.
+const SWBOOK_ZIP_LIMITS = Object.freeze({
+  maxEntries: 100,
+  maxEntryBytes: 256 * MB,
+  maxTotalBytes: 512 * MB,
+});
 
-function _scheduleBufferCleanup(jobId) {
-  const t = setTimeout(() => importBuffers.delete(jobId), BUFFER_TTL_MS);
-  t.unref?.();
-}
+// jobId -> { buffer, userEmail }. Ein offener Upload pro User, Summe gedeckelt.
+const importBuffers = new ImportBufferStore({
+  ttlMs: BUFFER_TTL_MS,
+  maxPerUser: 1,
+  maxTotalBytes: 2 * MAX_ZIP_BYTES,
+});
 
 async function _readJsonEntry(zip, name) {
-  const entry = zip.file(name);
-  if (!entry) return null;
-  const text = await entry.async('string');
+  const text = await zip.read(name, 'string');
+  if (text == null) return null;
   try { return JSON.parse(text); }
   catch { throw i18nError('job.error.badManifest'); }
 }
 
-async function runBookImportJob(jobId, { userEmail }) {
+async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMITS }) {
   const log = makeJobLogger(jobId);
   const ctx = { session: { user: { email: userEmail } } };
   try {
@@ -52,7 +58,7 @@ async function runBookImportJob(jobId, { userEmail }) {
     if (!entry) throw i18nError('job.error.importBufferMissing');
 
     updateJob(jobId, { progress: 5, statusText: 'job.book-import.unpacking' });
-    const zip = await JSZip.loadAsync(entry.buffer);
+    const zip = await openCappedZip(entry.buffer, zipLimits);
 
     updateJob(jobId, { progress: 10, statusText: 'job.book-import.validating' });
     const manifest = await _readJsonEntry(zip, 'manifest.json');
@@ -66,24 +72,20 @@ async function runBookImportJob(jobId, { userEmail }) {
     try { validateBookJson(bookJson); }
     catch { throw i18nError('job.error.swbookEmpty'); }
 
+    // Gleiche Namensregel wie die Buch-Karte (lib/book-create.js).
+    const bookName = String(bookJson.book.name || '').trim();
+    if (bookNameError(bookName)) throw i18nError('job.error.bookNameInvalid', { max: BOOK_NAME_MAX });
+    const description = typeof bookJson.book.description === 'string' ? bookJson.book.description : '';
+
     const { ops, cappedChapters } = planFromNodes(bookJson.tree);
     if (cappedChapters) log.warn(`book-import: ${cappedChapters} Kapitel jenseits Tiefe 3 gekappt`);
 
-    // Buch anlegen + Owner-Grant.
+    // Buch + Owner-Grant als Einheit; scheitert der Grant, bricht der Job ab.
     updateJob(jobId, { progress: 20, statusText: 'job.book-import.creatingBook' });
-    const created = await contentStore.createBook(
-      { name: bookJson.book.name, description: bookJson.book.description || '', owner_email: userEmail },
-      ctx,
-    );
+    const created = await createOwnedBook({ name: bookName, description }, userEmail, ctx);
     const bookId = created.id;
     setContext({ book: bookId });
-    try {
-      contentStore.setBookOwner(bookId, userEmail, { onlyIfUnset: true });
-      bookAccess.grantAccess(bookId, userEmail, 'owner', userEmail);
-    } catch (gErr) {
-      logger.warn(`Auto-Owner-Grant fuer book=${bookId} fehlgeschlagen: ${gErr.message}`);
-    }
-    log.info(`book-import: Buch «${bookJson.book.name}» angelegt (id=${bookId})`);
+    log.info(`book-import: Buch «${bookName}» angelegt (id=${bookId})`);
 
     // Buch-Konfig (authored). allow_lektor_book_chat bewusst auf 0 — ACL-relevant,
     // instanzspezifisch.
@@ -134,7 +136,7 @@ async function runBookImportJob(jobId, { userEmail }) {
 
     if (pagesCreated > 0) await seedImportBaseline(bookId, userEmail, log, '.swbook-Import');
 
-    completeJob(jobId, { bookId, bookName: bookJson.book.name, pagesCreated, chaptersCreated, cappedChapters, extras: extrasResult });
+    completeJob(jobId, { bookId, bookName, pagesCreated, chaptersCreated, cappedChapters, extras: extrasResult });
   } catch (e) {
     if (e?.name !== 'AbortError') log.error(`book-import job ${jobId}: ${e.message}`, { stack: e.stack });
     failJob(jobId, e);
@@ -159,18 +161,20 @@ router.post('/book-import', rawZipBody, async (req, res) => {
     return res.status(413).json({ error_code: 'ZIP_TOO_LARGE' });
   }
 
-  // Dedup ueber Buffer-Groesse + User: zwei identische Uploads parallel sind der
-  // einzige praktisch deckbare Fall; bewusst grob.
-  const dedupKey = `swbook:${req.body.length}`;
+  // Dedup ueber den Inhalts-Hash + User: derselbe Upload zweimal ergibt
+  // denselben Job; verschiedene Dateien gleicher Groesse bleiben verschieden.
+  const dedupKey = `swbook:${contentHash(req.body)}`;
   const existing = findActiveJobId('book-import', dedupKey, userEmail);
   if (existing) return res.json({ jobId: existing, deduplicated: true });
 
+  const admission = importBuffers.admissionError(userEmail, req.body.length);
+  if (admission) return res.status(429).json({ error_code: admission });
+
   const jobId = createJob('book-import', 0, userEmail, 'job.label.bookImport', {}, dedupKey);
-  importBuffers.set(jobId, { buffer: req.body });
-  _scheduleBufferCleanup(jobId);
+  importBuffers.put(jobId, { buffer: req.body, userEmail });
 
   enqueueJob(jobId, () => runBookImportJob(jobId, { userEmail }));
   res.status(202).json({ jobId });
 });
 
-module.exports = { bookImportRouter: router, runBookImportJob, importBuffers };
+module.exports = { bookImportRouter: router, runBookImportJob, importBuffers, SWBOOK_ZIP_LIMITS };

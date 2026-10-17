@@ -8,9 +8,11 @@ const logger = require('../../logger');
 const { resolvePageBookId, resolveChapterBookId } = require('../../lib/content-ownership');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const deviceTokens = require('../../db/device-tokens');
+const { BOOK_NAME_MAX } = require('../../lib/book-create');
 
 const jsonBody = express.json({ limit: '10mb' });
-const NAME_MAX = 255;
+// Namensdeckel der Gliederung (Buch, Kapitel, Abschnitt): eine Quelle, lib/book-create.js.
+const NAME_MAX = BOOK_NAME_MAX;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function _validDeviceId(s) { return typeof s === 'string' && UUID_RE.test(s); }
 // Client-gelieferte Diagnose-Kennung (Tab-ID, Save-Weg) für eine Logzeile:
@@ -66,8 +68,17 @@ function _fail(res, e, opName) {
   });
 }
 
+// Fail-closed-Sanitizer des Content-Stores (lib/content-store/backends/localdb.js
+// #_cleanHtmlSafe): eigener error_code statt CONTENT_FAILED, damit der Client
+// `t('error.HTML_SANITIZE_FAILED')` zeigt. true = Antwort ist raus.
+function _sendSanitizeFailed(res, e) {
+  if (e?.code !== 'HTML_SANITIZE_FAILED') return false;
+  res.status(422).json({ error_code: 'HTML_SANITIZE_FAILED' });
+  return true;
+}
+
 module.exports = {
   jsonBody, NAME_MAX, UUID_RE, _validDeviceId, _logToken,
   _clientLabel, _deviceTokenLabel,
-  _guardPage, _guardChapter, _fail,
+  _guardPage, _guardChapter, _fail, _sendSanitizeFailed,
 };

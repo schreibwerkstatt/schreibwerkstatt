@@ -10,26 +10,20 @@
 // Vortag als „heute".
 //
 // Kalendertage werden ausschliesslich als ISO-Strings gerechnet, verankert auf
-// `overviewToday` (= localIsoDate(), appTimezone) — siehe ./iso-day.js. Labels
-// eines ISO-Tags formatiert `_isoDayLabel` am UTC-Mittag mit `timeZone: 'UTC'`:
+// `overviewToday` (= localIsoDate(), appTimezone) — siehe utils/iso-day.js. Labels
+// eines ISO-Tags formatiert `_isoDayLabel` (cards/tile-format.js) am UTC-Mittag mit `timeZone: 'UTC'`:
 // so zeigt das Label genau den Kalendertag des Strings, egal in welcher Zone
 // Browser und App stehen.
 import { localIsoDate, completeLiveBookStats, CHARS_PER_NORMSEITE } from '../utils.js';
 import { computeTodayRing, makeDayDelta } from '../today-ring.js';
 import { buildStreakGrid } from '../streak-grid.js';
-import { isoAddDays, isoLastDays, isoNoonUtc } from './iso-day.js';
+import { isoAddDays, isoLastDays } from '../utils/iso-day.js';
 
 export const statsMethods = {
   // Heutiger Kalendertag (appTimezone). `overviewToday` ist das reaktive Feld
   // der Karte; ohne Karte (Unit-Tests) direkt aus localIsoDate().
   _todayIso() {
     return this.overviewToday || localIsoDate();
-  },
-
-  // Label eines ISO-Kalendertags (siehe Modulkopf: UTC-Mittag + timeZone UTC).
-  _isoDayLabel(iso, opts = { day: 'numeric', month: 'short', year: 'numeric' }) {
-    const d = isoNoonUtc(iso);
-    return d ? this._dateFmt({ ...opts, timeZone: 'UTC' }).format(d) : '';
   },
 
   // Live-Stand des ganzen Buchs aus tokEsts — `null`, solange tokEsts nicht

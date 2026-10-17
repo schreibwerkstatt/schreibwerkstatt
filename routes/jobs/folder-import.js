@@ -8,7 +8,6 @@
 // ZIP-Buffer landet beim POST in `importBuffers`-Map und wird vom Worker konsumiert.
 
 const express = require('express');
-const JSZip = require('jszip');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   aiCall, getPrompts, jobs, createJob, enqueueJob, findActiveJobId,
@@ -20,17 +19,25 @@ const { toIntId } = require('../../lib/validate');
 const { setContext } = require('../../lib/log-context');
 const { resolveProvider } = require('../../lib/ai');
 const { guardBook, sessionEmail } = require('../../lib/acl');
-const bookAccess = require('../../db/book-access');
 const { getBookLocale, getBookSettings, setBookBuchtyp } = require('../../db/schema');
 const { BUCHTYP_TAGEBUCH } = require('../../lib/buchtyp');
-const { db } = require('../../db/connection');
-const logger = require('../../logger');
+const { createOwnedBook, bookNameError, BOOK_NAME_MAX } = require('../../lib/book-create');
+const { openCappedZip, ZipLimitError } = require('../../lib/zip-limits');
+const { ImportBufferStore } = require('../../lib/import-buffers');
 const { seedImportBaseline } = require('../../lib/import-baseline');
 
 const router = express.Router();
 
 const MAX_ZIP_BYTES = 200 * 1024 * 1024;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
+// Entpackt-Deckel fuers ganze Archiv (lib/zip-limits.js). Einzeldateien
+// deckelt MAX_FILE_BYTES beim Lesen (zu gross → uebersprungen); die Summe
+// deckelt die CPU-/Zeitkosten eines Archivs voller grosser Dateien.
+const FOLDER_ZIP_LIMITS = Object.freeze({
+  maxEntries: 20000,
+  maxEntryBytes: 1024 * 1024 * 1024,
+  maxTotalBytes: 1024 * 1024 * 1024,
+});
 const CONFIDENCE_THRESHOLD = 0.8;
 const AI_SAMPLE_SIZE = 30;
 const BUFFER_TTL_MS = 30 * 60 * 1000;
@@ -44,13 +51,12 @@ const GROUPINGS = new Set(['year-month', 'year', 'flat']);
 const MONTH_NAMES_DE = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 const MONTH_NAMES_EN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-// jobId -> { buffer, mode, bookName, bookId }
-const importBuffers = new Map();
-
-function _scheduleBufferCleanup(jobId) {
-  const t = setTimeout(() => importBuffers.delete(jobId), BUFFER_TTL_MS);
-  t.unref?.();
-}
+// jobId -> { buffer, userEmail, mode, bookName, bookId }. Deckel: lib/import-buffers.js.
+const importBuffers = new ImportBufferStore({
+  ttlMs: BUFFER_TTL_MS,
+  maxPerUser: 1,
+  maxTotalBytes: 2 * MAX_ZIP_BYTES,
+});
 
 function _parsePath(p) {
   // Erwartet: "<YYYY>/<Monat>/<Datei>". Trim Mac-Resource-Forks und Hidden-Files.
@@ -77,7 +83,7 @@ function _monthFromRaw(monthRaw) {
   return parseMonthToken(monthRaw);
 }
 
-async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, grouping = 'year-month' }) {
+async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, grouping = 'year-month', zipLimits = FOLDER_ZIP_LIMITS }) {
   const log = makeJobLogger(jobId);
   // Audit-Log: jeder User-relevante Schritt landet hier UND in den Winston-Logs.
   // Result-JSON liefert das Array ans Frontend (Collapsible "Import-Log").
@@ -98,7 +104,8 @@ async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, gr
     const { buffer } = entry;
 
     updateJob(jobId, { progress: 5, statusText: 'job.folder-import.unpacking' });
-    const zip = await JSZip.loadAsync(buffer);
+    const reader = await openCappedZip(buffer, zipLimits);
+    const { zip } = reader;
 
     const files = [];
     zip.forEach((relativePath, file) => {
@@ -186,15 +193,15 @@ async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, gr
 
       // Datei jetzt parsen — entweder fuer Date-Fallback oder fuer
       // spaeteren Page-Insert.
+      // Gedeckelt WAEHREND des Entpackens: eine zu grosse Datei wird
+      // uebersprungen, bevor sie ganz im Speicher liegt. Reisst das Archiv
+      // den Gesamtdeckel, bricht der Job ab.
       let buf;
       try {
-        buf = await f.zipEntry.async('nodebuffer');
+        buf = await reader.read(f.zipEntry, 'nodebuffer', { maxBytes: MAX_FILE_BYTES });
       } catch (e) {
-        recordSkip(f.relativePath, 'ZIP_READ_FAILED');
-        continue;
-      }
-      if (buf.length > MAX_FILE_BYTES) {
-        recordSkip(f.relativePath, 'FILE_TOO_LARGE');
+        if (e instanceof ZipLimitError && e.reason === 'total') throw e;
+        recordSkip(f.relativePath, e instanceof ZipLimitError ? 'FILE_TOO_LARGE' : 'ZIP_READ_FAILED');
         continue;
       }
       let parsed;
@@ -202,7 +209,7 @@ async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, gr
         parsed = await parseImportFile(f.file, buf);
       } catch (e) {
         audit('warn', `Parse fail ${f.relativePath}: ${e.message}`);
-        recordSkip(f.relativePath, 'PARSE_FAILED');
+        recordSkip(f.relativePath, e instanceof ZipLimitError ? 'FILE_TOO_LARGE' : 'PARSE_FAILED');
         continue;
       }
       if (!parsed) {
@@ -331,14 +338,8 @@ async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, gr
     let effBookId = bookId;
     if (mode === 'new-book') {
       updateJob(jobId, { progress: 28, statusText: 'job.folder-import.creatingBook' });
-      const created = await contentStore.createBook({ name: bookName, owner_email: userEmail }, { session: { user: { email: userEmail } } });
+      const created = await createOwnedBook({ name: bookName }, userEmail, { session: { user: { email: userEmail } } });
       effBookId = created.id;
-      try {
-        contentStore.setBookOwner(effBookId, userEmail, { onlyIfUnset: true });
-        bookAccess.grantAccess(effBookId, userEmail, 'owner', userEmail);
-      } catch (gErr) {
-        logger.warn(`Auto-Owner-Grant fuer book=${effBookId} fehlgeschlagen: ${gErr.message}`);
-      }
       audit('info', `Buch erstellt: «${bookName}» id=${effBookId}`);
     }
     if (!effBookId) throw i18nError('job.error.bookMissing');
@@ -518,6 +519,9 @@ router.post('/folder-import', rawZipBody, async (req, res) => {
   if (mode === 'new-book' && !bookName) {
     return res.status(400).json({ error_code: 'BOOK_NAME_REQUIRED' });
   }
+  if (mode === 'new-book' && bookNameError(bookName)) {
+    return res.status(400).json({ error_code: 'NAME_TOO_LONG', params: { max: BOOK_NAME_MAX } });
+  }
   if (mode === 'merge' && !bookId) {
     return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
   }
@@ -537,6 +541,9 @@ router.post('/folder-import', rawZipBody, async (req, res) => {
   const existing = findActiveJobId('folder-import', dedupKey, userEmail);
   if (existing) return res.json({ jobId: existing, deduplicated: true });
 
+  const admission = importBuffers.admissionError(userEmail, req.body.length);
+  if (admission) return res.status(429).json({ error_code: admission });
+
   const jobId = createJob(
     'folder-import',
     bookId || 0,
@@ -545,11 +552,10 @@ router.post('/folder-import', rawZipBody, async (req, res) => {
     { name: bookName || `Book #${bookId}` },
     dedupKey,
   );
-  importBuffers.set(jobId, { buffer: req.body, mode, bookName, bookId });
-  _scheduleBufferCleanup(jobId);
+  importBuffers.put(jobId, { buffer: req.body, userEmail, mode, bookName, bookId });
 
   enqueueJob(jobId, () => runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, grouping }));
   res.status(202).json({ jobId });
 });
 
-module.exports = { folderImportRouter: router, runFolderImportJob, importBuffers };
+module.exports = { folderImportRouter: router, runFolderImportJob, importBuffers, FOLDER_ZIP_LIMITS };

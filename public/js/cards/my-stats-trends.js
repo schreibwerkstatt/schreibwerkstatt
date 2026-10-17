@@ -4,7 +4,7 @@
 // Eigenes Modul neben der Compute-Facade (my-stats-compute.js + Subfolder).
 
 import { localIsoDate, localIsoDaysAgo } from '../utils.js';
-import { computeVolumeDelta, isoAddDays, isoDayDiff, commonBookIds, TREND_REF_DAYS,
+import { computeVolumeDelta, isoAddDays, isoDaysBetween, commonBookIds, TREND_REF_DAYS,
          latestSnapshotPerBook, snapshotPerBookOnOrBefore } from './my-stats-compute.js';
 
 // Schreib-Sekunden einer writing/lektorat-Reihe im Fenster [from, to] (inklusive).
@@ -42,7 +42,7 @@ function mkDelta(cur, prev) {
 // Zeitraum-Kachel, sonst widersprechen sich Zahl und Vergleich.
 export function computePeriodComparison(historyRows, writingRows, fromIso, toIso, opts = {}) {
   if (!fromIso || !toIso) return { available: false };
-  const len = isoDayDiff(fromIso, toIso) + 1; // inklusive Tage
+  const len = isoDaysBetween(fromIso, toIso) + 1; // inklusive Tage
   if (len < 1) return { available: false };
   const prevTo = isoAddDays(fromIso, -1);
   const prevFrom = isoAddDays(prevTo, -(len - 1));

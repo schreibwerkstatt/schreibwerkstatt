@@ -11,6 +11,7 @@ const { db } = require('../connection');
 require('../migrations');
 const { inClause } = require('../../lib/validate');
 const { openStatusSql } = require('../../lib/ideen-status');
+const { likeContains } = require('../like-escape');
 
 // ── Kapitel + Seiten ────────────────────────────────────────────────────────
 
@@ -182,14 +183,15 @@ const _stmtLocationByName = db.prepare(`
              l.erste_erwaehnung, l.erste_erwaehnung_page_id, p.page_name AS erste_erwaehnung_page_name
       FROM locations l
       LEFT JOIN pages p ON p.page_id = l.erste_erwaehnung_page_id
-      WHERE l.book_id = ? AND l.user_email IS ? AND l.name LIKE ?
+      WHERE l.book_id = ? AND l.user_email IS ? AND l.name LIKE ? ESCAPE '\\'
       ORDER BY CASE WHEN l.name = ? THEN 0 ELSE 1 END, l.sort_order, l.id
       LIMIT 1
     `);
 
-/** Ort per Namens-Teilstring (LIKE, exakter Treffer zuerst). */
+/** Ort per Namens-Teilstring (LIKE, exakter Treffer zuerst). `name` kommt von der
+ *  KI — `%`/`_`/`\` darin sind Text, keine Platzhalter. */
 function findLocationByName(bookId, userEmail, name) {
-  return _stmtLocationByName.get(bookId, userEmail, `%${name}%`, name);
+  return _stmtLocationByName.get(bookId, userEmail, likeContains(name), name);
 }
 
 const _stmtLocationScenes = db.prepare(`

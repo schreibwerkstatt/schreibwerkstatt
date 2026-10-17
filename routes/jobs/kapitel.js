@@ -7,7 +7,8 @@ const {
   insertChapterReview,
 } = require('../../db/schema');
 const {
-  makeJobLogger, updateJob, completeJob, failJob, i18nError, contentHttpError,
+  makeJobLogger, updateJob, completeJob, failJob, contentHttpError,
+  normalizeGesamtnote, assertChapterAnalysis,
   aiCall, getPrompts, getBookPrompts,
   jobAbortControllers,
   htmlToText, splitGroupsIntoChunks, loadOrderedBookContents,
@@ -309,6 +310,8 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
           SYSTEM_KAPITELANALYSE,
           fromPct, toPct, 1500, 0.2, null, undefined, SCHEMA_CHAPTER_ANALYSIS,
         );
+        // Leere Teil-Analyse nicht still in die Synthese tragen (wie review.js).
+        assertChapterAnalysis(ca, chunkOrder.length > 1 ? `${chapterName} (${i + 1}/${chunkOrder.length})` : chapterName);
         // Vor der Synthese verifizieren: die Belegzitate der Teil-Analysen sind
         // ab hier die einzige Zitatquelle der Kapitelbewertung.
         const droppedQ = applyQuoteVerification(ca, chunkText, 'zitate');
@@ -327,7 +330,9 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
       basis = 'multi';
     }
 
-    if (r?.gesamtnote == null) throw i18nError('job.error.gesamtnoteMissing');
+    // Pflichtfeld prüfen UND normalisieren (Zahl 1–6), bevor das Ergebnis in den
+    // Kapitel-Cache und den Verlauf geht — wie die Buchbewertung (review.js).
+    normalizeGesamtnote(r);
     // Grundlage + Achsen-Profil ins Ergebnis (siehe routes/jobs/review.js).
     r.basis = basis;
     r.profil = profil;

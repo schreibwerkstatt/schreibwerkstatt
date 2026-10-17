@@ -1,9 +1,10 @@
 // History-Methoden (werden in die Alpine-Komponente gespreadet)
 // `this` bezieht sich auf die Alpine-Komponente.
 
-import { escHtml, fetchJson } from '../utils.js';
+import { fetchJson } from '../utils.js';
 import { sortByPosition, isHardFinding } from './page-view.js';
 import { contentRepo } from '../repo/content.js';
+import { renderLektoratAnalysisHtml } from '../editor/lektorat-analysis.js';
 
 export const historyMethods = {
   async loadPageHistory(pageId) {
@@ -151,29 +152,14 @@ export const historyMethods = {
     this.lastCheckId = entry.id;
     this.activeHistoryEntryId = entry.id;
 
-    // Szenen, Stilanalyse, Fazit in analysisOut rendern
-    let out = '';
-    const szenen = entry.szenen_json || [];
-    if (szenen.length > 0) {
-      const wertungBadge = w => {
-        if (w === 'stark')   return '<span class="badge badge-ok">stark</span>';
-        if (w === 'schwach') return '<span class="badge badge-err">schwach</span>';
-        return '<span class="badge badge-warn">mittel</span>';
-      };
-      const rows = szenen.map(s =>
-        `<div class="szene-item">
-          <div class="szene-header">${wertungBadge(s.wertung)} <span class="szene-titel">${escHtml(s.titel)}</span></div>
-          ${s.kommentar ? `<div class="szene-kommentar">${escHtml(s.kommentar)}</div>` : ''}
-        </div>`
-      ).join('');
-      out += `<div class="stilbox"><div class="bewertung-section-title">Szenen</div>${rows}</div>`;
-    }
-    if (entry.stilanalyse) out += `<div class="stilbox"><div class="bewertung-section-title">Stilanalyse</div>${escHtml(entry.stilanalyse)}</div>`;
-    if (entry.fazit) out += `<div class="fazit">${escHtml(entry.fazit)}</div>`;
-    this.analysisOut = out;
+    // Szenen, Stilanalyse, Fazit in analysisOut rendern — derselbe Renderer wie
+    // beim frischen Lauf (editor/lektorat-analysis.js).
+    this.analysisOut = renderLektoratAnalysisHtml((k, p) => this.t(k, p), {
+      szenen: entry.szenen_json, stilanalyse: entry.stilanalyse, fazit: entry.fazit,
+    });
 
     this.updatePageView();
-    this.setStatus(`Verlaufseintrag vom ${this.formatDate(entry.checked_at)} geladen.`, false, 4000);
+    this.setStatus(this.t('lektorat.historyEntryLoaded', { date: this.formatDate(entry.checked_at) }), false, 4000);
 
     // Nach oben zur Seitenansicht scrollen
     document.getElementById('editor-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });

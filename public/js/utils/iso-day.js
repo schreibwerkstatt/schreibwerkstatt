@@ -1,4 +1,5 @@
-// Kalendertag-Arithmetik der Buch-Uebersicht auf ISO-Strings (YYYY-MM-DD).
+// Kalendertag-Arithmetik auf ISO-Strings (YYYY-MM-DD) — SSoT fuer das ganze
+// Frontend (Buch-Uebersicht, Kapitel-Wachstum, Meine Statistik, Streak-Grid).
 //
 // Der Anker ist immer `localIsoDate()` (appTimezone), die Rechnung danach reine
 // Kalenderarithmetik ueber einen UTC-Mittag — unabhaengig von der Zeitzone des
@@ -6,7 +7,7 @@
 // rechnet dagegen im Kalender des BROWSERS: steht der in einer anderen Zone als
 // die App, landet „heute" auf dem Vor- oder Folgetag der Server-Buckets.
 //
-// Pure Funktionen (Alpine-/DOM-frei) → unit-testbar, siehe
+// Pure Funktionen (Alpine-/DOM-frei, keine Imports) → unit-testbar, siehe
 // tests/unit/book-overview-iso-day.test.mjs.
 
 const ISO_RE = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -38,6 +39,12 @@ export function isoDaysBetween(aIso, bIso) {
 export function isoWeekday(iso) {
   const d = isoNoonUtc(iso);
   return d ? d.getUTCDay() : NaN;
+}
+
+/** Wochentag eines ISO-Tags, Montag-basiert (0 = Montag … 6 = Sonntag). */
+export function isoWeekdayMon(iso) {
+  const wd = isoWeekday(iso);
+  return Number.isNaN(wd) ? NaN : (wd + 6) % 7;
 }
 
 /** Die letzten `days` Kalendertage bis einschliesslich `todayIso`, ältester zuerst. */

@@ -1,0 +1,36 @@
+{
+  "version": "4.25.1",
+  "date": "2026-10-17",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Teilen, Liste «Bestehende Links»: als Buch-Owner sehen Sie auch die Links Ihrer Mitarbeitenden samt Namen und können sie widerrufen. Verliert jemand den Zugang zum Buch, gelten seine Links als widerrufen.",
+      "en": "Sharing, “Existing links” list: as book owner you also see your collaborators’ links with their name and can revoke them. If someone loses access to the book, their links count as revoked."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Chats und Synonyme antworten auch dann zügig, wenn gerade eine lange Analyse läuft – sie warten nicht mehr hinter ihr in der Warteschlange.",
+      "en": "Chats and synonyms now answer promptly even while a long analysis is running – they no longer wait behind it in the queue."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Bricht eine KI-Anfrage ab, nennt die Meldung jetzt den Grund: Anbieter überlastet, Verbindung abgerissen oder unlesbare Antwort – samt Hinweis, ob ein neuer Versuch hilft.",
+      "en": "When an AI request fails, the message now names the reason: provider overloaded, connection dropped or unreadable answer – and whether trying again helps."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Import von Büchern, Ordnern und WordPress: ein zweiter Import für dasselbe Buch startet erst, wenn der erste fertig ist, und zu grosse Archive werden mit klarer Meldung abgelehnt.",
+      "en": "Importing books, folders and WordPress: a second import for the same book only starts once the first one is done, and oversized archives are rejected with a clear message."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lektorat: ein aus dem Verlauf geöffneter Eintrag zeigt jetzt auch Szenen, Stilanalyse und Fazit, mit einem Hinweis auf sein Datum.",
+      "en": "Proofreading: an entry opened from the history now also shows scenes, style analysis and conclusion, with a note of its date."
+    },
+    {
+      "kind": "behoben",
+      "de": "Tagebuch und Statistik zeigten bei manchen Zeitzonen-Einstellungen den Wochentag oder das Datum eines Eintrags um einen Tag verschoben.",
+      "en": "Diary and statistics showed the weekday or date of an entry shifted by one day with some time zone settings."
+    }
+  ]
+}

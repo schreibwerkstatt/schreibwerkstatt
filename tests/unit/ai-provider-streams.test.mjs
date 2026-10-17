@@ -170,7 +170,7 @@ test('openai-compat: Fehler-Chunk im SSE-Stream wirft mit der Server-Meldung', a
   appSettings.set('ai.openai-compat.retry_max', 1, 'test@example.com');
   try {
     await assert.rejects(_callOpenAICompat(PROMPT, 'sys', null, null, null),
-      (e) => /context length exceeded/.test(e.message));
+      (e) => e.message === 'job.error.aiStreamError' && /context length exceeded/.test(e.i18nParams?.detail));
   } finally { ep.close(); }
 });
 
@@ -183,7 +183,7 @@ test('Ollama: Fehler-Chunk im NDJSON-Stream wirft mit der Server-Meldung', async
   appSettings.set('ai.ollama.host', ep.url, 'test@example.com');
   try {
     await assert.rejects(_callOllama(PROMPT, 'sys', null, null, null),
-      (e) => /more system memory/.test(e.message));
+      (e) => e.message === 'job.error.aiStreamError' && /more system memory/.test(e.i18nParams?.detail));
   } finally { ep.close(); }
 });
 

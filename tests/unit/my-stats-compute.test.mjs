@@ -850,10 +850,10 @@ test('computeMilestones: „1 Buch" zaehlt nur Buecher mit Inhalt', () => {
 
 test('resolveWindow: Preset N Tage = genau N Tage inkl. heute; vertauschtes Von/Bis wird getauscht', () => {
   const w30 = C.resolveWindow({ rangeDays: 30, todayIso: '2026-10-10' });
-  assert.equal(C.isoDayDiff(w30.from, w30.to) + 1, 30);
+  assert.equal(C.isoDaysBetween(w30.from, w30.to) + 1, 30);
   assert.equal(w30.from, '2026-09-11');
   const w365 = C.resolveWindow({ rangeDays: 365, todayIso: '2026-10-10' });
-  assert.equal(C.isoDayDiff(w365.from, w365.to) + 1, 365);
+  assert.equal(C.isoDaysBetween(w365.from, w365.to) + 1, 365);
   const sw = C.resolveWindow({ from: '2026-09-20', to: '2026-09-01', todayIso: '2026-10-10' });
   assert.deepEqual(sw, { active: true, from: '2026-09-01', to: '2026-09-20' });
   assert.deepEqual(C.resolveWindow({ todayIso: '2026-10-10' }), { active: false, from: null, to: null });

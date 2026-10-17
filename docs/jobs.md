@@ -10,7 +10,12 @@ queued → running → done | error | cancelled
 ```
 
 - In-Memory `Map<jobId, job>` ([state.js](../routes/jobs/shared/state.js)) — Job-Daten leben in Prozess-RAM, kein DB-Persist (DB nur für `job_runs`-History via `db/schema.startJobRun`/`endJobRun`).
-- Concurrency: `MAX_CONCURRENT_JOBS` (Default 2) — drainQueue spawned bis zum Cap. FIFO `jobQueue`.
+- Concurrency: zwei Spuren in **einer** FIFO `jobQueue` ([queue.js](../routes/jobs/shared/queue.js)#`drainQueue`):
+  - **Allgemeine Slots** `jobs.max_concurrent` (App-Setting, Default **1**, Env-Bootstrap `MAX_CONCURRENT_JOBS`) — jeder Job-Typ, FIFO. Default 1, weil lange Analysen nacheinander laufen sollen und lokale Provider ihre Calls ohnehin serialisieren.
+  - **Reservierte Slots** `jobs.interactive_slots` (Default **2**, 0 = keine Reserve) — nur für kurze interaktive Typen (`INTERACTIVE_JOB_TYPES` in [state.js](../routes/jobs/shared/state.js): die fünf Chats + `synonym`). Ein interaktiver Job nimmt zuerst einen reservierten, dann einen allgemeinen Slot; ein schwerer Job nur einen allgemeinen. **Why:** eine stundenlange Komplettanalyse im allgemeinen Slot hielt sonst jeden Chat-Turn aller User an.
+  - FIFO gilt **innerhalb jeder Spur**: der Scan läuft in Einreihungs-Reihenfolge, ein Job überholt nur Einträge, die selbst gerade keinen Slot bekommen. Die Warteposition (`job.queuedPos`) zählt in der eigenen Spur (`queuePosition`).
+  - Ein neuer Typ kommt nur in `INTERACTIVE_JOB_TYPES`, wenn er wenige, kurze KI-Calls macht — ein langer Job dort blockiert genau die Spur, die er freihalten soll.
+  - Lokale Provider (Ollama-Mutex, openai-compat-Semaphor) serialisieren weiterhin pro **Call**: ein Chat in der Reserve wartet höchstens auf den gerade laufenden Call der Analyse, nicht auf den ganzen Job.
 - Cleanup: `_scheduleJobCleanup` löscht terminale Jobs nach 2 h aus `jobs`-Map und `runningJobs`-Map.
 - AbortController pro Job (`jobAbortControllers.get(id)`) — `cancelJob` triggert `.abort()`, KI-Calls hören via `signal`-Param.
 
@@ -56,6 +61,8 @@ Key: `${type}:${dedupId ?? bookId}:${userEmail}`.
 - Default-Dedup: ein Job pro (`type`, `bookId`, `userEmail`) gleichzeitig.
 - Pro-Entity: `dedupId` setzen für Sub-Targets (z.B. Lektorat pro `pageId`, Kapitel-Review pro `chapterId`).
 - `runningJobs` hält Einträge auch nach Abschluss bis `_scheduleJobCleanup` greift — `findActiveJobId` filtert auf `status in ('queued','running')`.
+- **Pro Buch statt pro User:** Jobs, die geteilte Buch-Ressourcen schreiben, dedupen zusätzlich buchweit. Blog-Import und -Pull ([blog-sync.js](../routes/jobs/blog-sync.js)#`_activeBookSyncJob`): läuft für das Buch schon ein Import/Pull (egal von wem), antwortet die Route `409 BLOG_SYNC_RUNNING` — die fremde Job-ID taugt nicht, weil `GET /jobs/:id` nur eigene Jobs zeigt.
+- **Job-Log-Puffer** ([lib/job-log-buffer.js](../lib/job-log-buffer.js)): `createJob` öffnet ihn, `completeJob`/`failJob`/`cancelJob` räumen ihn. Log-Zeilen mit der jobId eines beendeten Jobs (Fire-and-forget-Nachlauf mit geerbtem ALS-Context) werden verworfen; offene Puffer sind gedeckelt.
 
 ## Frontend-Integration
 
@@ -70,9 +77,11 @@ startPoll(this, {
   onProgress: (job) => { /* statusText, tokens */ },
   onDone:     (job) => { /* job.result */ },
   onError:    (job) => { /* job.error, job.errorParams */ },
-  onNotFound: ()    => { /* 404 → server restart, job lost */ },
+  onNotFound: ()    => { /* 404/403 → job lost or book access revoked */ },
 });
 ```
+
+**Lesezugriff `GET /jobs/:id`** ([shared/router.js](../routes/jobs/shared/router.js)): nur der Starter (`job.userEmail`) sieht seinen Job, fremde Jobs antworten wie unbekannte (`404 JOB_NOT_FOUND`) — Status und `result` tragen Buchinhalte. Hat der Job ein Buch (`job.bookId`), prüft die Route zusätzlich über `guardBook(…, 'viewer')`, ob der Zugriff seit dem Start entzogen wurde (`403 NO_BOOK_ACCESS`); Jobs ohne Buch (Import vor der Buchanlage, Autorenprofil, Quellen-Index) brauchen nur die E-Mail. `startPoll` behandelt 403 wie 404: Poll stoppt, `onNotFound`.
 
 **Push-Kanal (SSE):** der Job-Kanal des gemeinsamen Event-Streams `GET /events/stream` ([routes/events/stream.js](../routes/events/stream.js), Kanal [shared/stream.js](../routes/jobs/shared/stream.js)`#attachJobChannel`; der zweite Kanal ist das Buch-Abo der Collab-Schicht, siehe [clients.md](clients.md)) pusht die Jobs des Session-Users — Event `job` (Snapshot wie `/jobs/:id`, **ohne** `result`) und `queue` (dieselbe Liste wie `/jobs/queue`, direkt nach dem Connect und nach jeder Änderung). Quelle ist der Bus in [shared/events.js](../routes/jobs/shared/events.js), gefeuert ausschliesslich aus dem Lifecycle (`enqueueJob`/Start, `updateJob`, `completeJob`, `failJob`, `cancelJob`) — ein Job-Modul, das den Job-Zustand an diesen Funktionen vorbei mutiert, erscheint nicht im Stream. Progress wird pro Verbindung gedrosselt (`FLUSH_MS`), Terminal-Status flusht sofort. Die Client-Form eines Jobs baut [shared/serialize.js](../routes/jobs/shared/serialize.js) für Poll- und Push-Pfad gemeinsam.
 
@@ -85,7 +94,7 @@ Client: [public/js/event-stream.js](../public/js/event-stream.js), eine EventSou
 ## Reconnect & Persistence-Lücke
 
 Server-Restart verliert In-Memory-Jobs. Mitigation:
-- `localStorage` per Card hält `lsKey: jobId` während der Job läuft. Bei `onNotFound` (404) → cleanup.
+- `localStorage` per Card hält `lsKey: jobId` während der Job läuft. Bei `onNotFound` (404/403) → cleanup.
 - `checkPendingJobs()` (Root, [public/js/app/app-jobs-core.js](../public/js/app/app-jobs-core.js)) liest `/jobs/queue` beim Login und dispatched `job:reconnect` `{ type, jobId, job, extra? }` → Karten übernehmen Loading-State + starten Polling.
 
 ## Events am `window`

@@ -38,6 +38,8 @@ function seed() {
   if (!appUsers.getUser(OWNER)) appUsers.createUser({ email: OWNER, displayName: 'Autor Anna' });
   db.prepare(`INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`)
     .run(BOOK_ID, 'Live-Buch', now, now);
+  // Share-Links leben nur, solange ihr Ersteller die Buchrolle hat (isExpired).
+  require('../../db/book-access').grantAccess(BOOK_ID, OWNER, 'owner', OWNER);
   db.prepare(`INSERT INTO chapters (chapter_id, book_id, chapter_name, position, updated_at)
               VALUES (?, ?, ?, 0, ?)`).run(CHAPTER_ID, BOOK_ID, 'Kapitel Eins', now);
   db.prepare(`INSERT INTO pages (page_id, book_id, page_name, chapter_id, position, updated_at, body_html)

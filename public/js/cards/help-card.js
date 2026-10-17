@@ -19,7 +19,7 @@
 // Reiters quittiert (POST /changelog/seen) und aktualisiert den Store lokal
 // mit — ohne das bliebe der Punkt bis zum naechsten Reload stehen.
 
-import { localeTag, tzOpts } from '../utils.js';
+import { formatIsoDay } from '../utils.js';
 import { featureByKey } from './feature-registry.js';
 import { buildHelpSections } from './help-catalog.js';
 import { memoMethods } from './card-memo.js';
@@ -187,13 +187,11 @@ export function registerHelpCard() {
       return (loc === 'en' ? entry?.en : entry?.de) || entry?.de || '';
     },
 
-    /** Release-Datum (YYYY-MM-DD) in der App-Zeitzone/Locale. */
+    /** Release-Datum (YYYY-MM-DD) als Kalendertag in der UI-Locale. */
     changelogDate(iso) {
       if (!iso) return '';
-      const d = new Date(iso + 'T12:00:00Z');
-      if (Number.isNaN(d.getTime())) return iso;
-      const loc = localeTag(window.Alpine.store('shell')?.uiLocale);
-      return d.toLocaleDateString(loc, tzOpts({ year: 'numeric', month: '2-digit', day: '2-digit' }));
+      return formatIsoDay(iso, window.Alpine.store('shell')?.uiLocale,
+        { year: 'numeric', month: '2-digit', day: '2-digit' }) || iso;
     },
 
     /** War dieses Release beim Oeffnen der Karte noch ungelesen? Plakette am

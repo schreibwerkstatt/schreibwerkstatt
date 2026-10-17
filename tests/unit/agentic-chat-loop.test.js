@@ -340,6 +340,18 @@ test('Synthese-Turn: Provider-Fehler endet als Job-Fehler (i18n) und bucht die R
   assert.deepEqual({ ...row }, { source: 'chat', type: 'book', tokens_in: 700, tokens_out: 30 });
 });
 
+test('Synthese-Turn: Überlast mit eigenem i18n-Key (overloadError) bleibt agentSynthesisOverloaded', async () => {
+  const { overloadError } = require('../../lib/ai/shared');
+  let n = 0;
+  ai.callAIWithTools = async () => {
+    n++;
+    if (n === 1) return res({ stopReason: 'tool_use', toolUses: [tu('lookup')] });
+    throw overloadError('Claude', 529);
+  };
+  const { job } = await runFailing(makeJob({ prep: { maxToolIter: 1 } }), newSession());
+  assert.equal(job.error, 'job.error.agentSynthesisOverloaded');
+});
+
 test('Synthese-Turn: final_answer mit kaputtem Argument-JSON → Fehler statt leerer Antwort', async () => {
   mockCalls([
     res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),

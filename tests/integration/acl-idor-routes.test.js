@@ -10,7 +10,8 @@
 //   - GET  /plot, /ideen/counts — ein Nicht-ACL-Fehler beim Rollen-Lookup darf
 //     nicht als „erlaubt" durchgehen (guardBook statt `return !sendACLError`)
 //   - PATCH/DELETE /share/api/comments/:id — nur der Link-Owner
-//   - GET  /jobs/:id           — fremde Jobs antworten wie unbekannte (404)
+//   - GET  /jobs/:id           — fremde Jobs antworten wie unbekannte (404),
+//     entzogener Buchzugriff → 403
 //
 // Fährt die echten Router unter Express hoch; die Fake-Session liefert den User.
 
@@ -204,6 +205,29 @@ test('GET /jobs/:id: eigener Job lesbar, fremder Job → 404', async () => {
   assert.equal(foreign.json.error_code, 'JOB_NOT_FOUND');
   sessionUser = ME;
   await waitForJob(ctx.shared, r.json.jobId);
+});
+
+test('GET /jobs/:id: entzogener Buchzugriff → 403; Job ohne Buch bleibt per E-Mail lesbar', async () => {
+  const { revokeAccess } = require('../../db/book-access');
+  const r = await api('POST', '/jobs/check', { page_id: MY_PAGE });
+  assert.equal(r.status, 200);
+  assert.equal((await api('GET', `/jobs/${r.json.jobId}`)).status, 200);
+  revokeAccess(MY_BOOK, ME);
+  const revoked = await api('GET', `/jobs/${r.json.jobId}`);
+  assert.equal(revoked.status, 403);
+  assert.equal(revoked.json.error_code, 'NO_BOOK_ACCESS');
+  await waitForJob(ctx.shared, r.json.jobId);
+
+  const bookless = ctx.shared.createJob('autorenprofil', 0, ME, 'job.label.autorenprofil');
+  try {
+    const own = await api('GET', `/jobs/${bookless}`);
+    assert.equal(own.status, 200);
+    assert.equal(own.json.id, bookless);
+    sessionUser = OTHER;
+    assert.equal((await api('GET', `/jobs/${bookless}`)).status, 404);
+  } finally {
+    ctx.shared.jobs.delete(bookless);
+  }
 });
 
 // ── Usage ───────────────────────────────────────────────────────────────────
@@ -450,4 +474,17 @@ test('GET /chat/sessions/:page_id: vollständige Liste (kein 20er-Deckel), Previ
   assert.equal(r.status, 200);
   assert.equal(r.json.length, 25);
   assert.ok(r.json.every(s => s.preview.length <= 200));
+});
+
+test('GET /chat/sessions/:page_id: ohne Buchzugriff 403 — auch für eigene Sessions', async () => {
+  seedPageChat();
+  // Zugriff entzogen: die eigenen Sessions (inkl. Preview) bleiben verborgen.
+  db.prepare('DELETE FROM book_access WHERE book_id = ? AND user_email = ?').run(MY_BOOK, ME);
+  const r = await api('GET', `/chat/sessions/${MY_PAGE}`);
+  assert.equal(r.status, 403);
+  assert.ok(!Array.isArray(r.json));
+  // Fremde Seite: 403, unbekannte Seite: 404, ungültige ID: 400.
+  assert.equal((await api('GET', `/chat/sessions/${FOREIGN_PAGE}`)).status, 403);
+  assert.equal((await api('GET', '/chat/sessions/999999')).status, 404);
+  assert.equal((await api('GET', '/chat/sessions/abc')).status, 400);
 });

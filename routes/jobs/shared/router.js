@@ -5,7 +5,7 @@ const { lastDoneJobRun } = require('../../../db/job-runs');
 const { toIntId, inClause } = require('../../../lib/validate');
 const { jobs } = require('./state');
 const { jobView, queueItems } = require('./serialize');
-const { sessionEmail } = require('../../../lib/acl');
+const { guardBook, sessionEmail } = require('../../../lib/acl');
 const {
   cancelJob, findActiveJobId, fmtTok, fmtDuration,
   JOB_TYPE_LABELS, STATS_EXCLUDED_TYPES,
@@ -138,6 +138,10 @@ sharedRouter.get('/:id', (req, res) => {
   if (!job || (job.userEmail && job.userEmail !== sessionEmail(req))) {
     return res.status(404).json({ error_code: 'JOB_NOT_FOUND' });
   }
+  // Buchzugriff kann seit dem Start entzogen worden sein; ein Job ohne Buch
+  // (Import vor Buchanlage, Autorenprofil, Quellen-Index) braucht nur die E-Mail.
+  const bookId = toIntId(job.bookId);
+  if (bookId && !guardBook(req, res, bookId, 'viewer')) return;
   res.json(jobView(job));
 });
 

@@ -3,6 +3,7 @@
 // re-exportiert werden. Interne Aufteilung nach Domäne unter `utils/`:
 //   format.js    — Zahlen/Dauer/Token/Umfang/Locale + Compute-Helper (Min/Max, Heatmap)
 //   date.js      — Zeitzone (appTimezone/tzOpts) + ISO-Datum + relative Zeit-Formatter
+//   iso-day.js   — Kalendertag-Arithmetik auf ISO-Strings (UTC-Mittag-Anker)
 //   escape.js    — HTML-Escape-Atome (escHtml/escMd)
 //   net.js       — Fetch-Wrapper + Status-Reset
 //   html.js      — HTML-Bereinigung (Paste-Sanitizing, Style-/Leerblock-Cleanup)
@@ -14,6 +15,7 @@
 // für alle Importer sichtbar mutieren.
 export * from './utils/format.js';
 export * from './utils/date.js';
+export * from './utils/iso-day.js';
 export * from './utils/escape.js';
 export * from './utils/net.js';
 export * from './utils/html.js';

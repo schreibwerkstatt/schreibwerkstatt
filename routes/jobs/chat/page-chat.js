@@ -173,14 +173,15 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // Caching der Konversationshistorie greift. Mit Buch-Kontext steht vor dem
     // Verlauf ein Block, der jede Frage wechselt — ein Breakpoint auf der letzten
     // Nachricht wäre dann ein cache_write, das nie gelesen wird.
-    const { text, truncated, tokensIn, tokensOut, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0, provider, model, genDurationMs } = await callAIChat(aiMessages, systemPrompt, onProgress, null, signal, undefined, SCHEMA_CHAT, chatTemperature(), !bookCtxText);
+    const aiRes = await callAIChat(aiMessages, systemPrompt, onProgress, null, signal, undefined, SCHEMA_CHAT, chatTemperature(), !bookCtxText);
+    const { text, truncated, tokensIn, tokensOut, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0, provider, model, genDurationMs } = aiRes;
     // Job-State auf echte Provider-Werte setzen, damit Status-Anzeige und
     // gespeicherte Chat-Nachricht dieselben Tokens zeigen (statt eines
     // Streaming-Zwischenstands).
     updateJob(jobId, { tokensIn, tokensOut, cacheReadIn, cacheCreationIn, cacheCreation1hIn });
     if (truncated) throw i18nError('job.error.aiTruncated', { max: aiCfg.maxTokensOut, tokIn: tokensIn, tokOut: tokensOut, total: tokensIn + tokensOut });
 
-    const { antwort, vorschlaege, titel_varianten: titelVarianten, ideen: rawIdeen, fallback, lostVorschlaege } = _parseChatResponse(text);
+    const { antwort, vorschlaege, titel_varianten: titelVarianten, ideen: rawIdeen, fallback, lostVorschlaege } = _parseChatResponse(text, aiRes, logger);
     // Ideen-Vorschläge: Anker = dieser Abschnitt (eine page_id des Modells darf
     // auf einen anderen Abschnitt desselben Buchs zeigen). Nichts wird angelegt —
     // der User erfasst jeden einzeln (POST /ideen).

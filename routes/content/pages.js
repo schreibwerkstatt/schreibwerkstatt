@@ -12,7 +12,7 @@ const bookAccess = require('../../db/book-access');
 const { toIntId } = require('../../lib/validate');
 const { resolveChapterBookId } = require('../../lib/content-ownership');
 const { guardBook, sessionEmail } = require('../../lib/acl');
-const { jsonBody, NAME_MAX, _validDeviceId, _logToken, _deviceTokenLabel, _guardPage, _fail } = require('./shared');
+const { jsonBody, NAME_MAX, _validDeviceId, _logToken, _deviceTokenLabel, _guardPage, _fail, _sendSanitizeFailed } = require('./shared');
 const { htmlToPlainText } = require('../../lib/html-text');
 const logger = require('../../logger');
 
@@ -82,6 +82,7 @@ function register(router) {
           server_editor_device: e.serverEditorDevice || null,
         });
       }
+      if (_sendSanitizeFailed(res, e)) return;
       _fail(res, e, 'PUT /content/pages/:id');
     }
   });
@@ -194,6 +195,7 @@ function register(router) {
       res.json({ ok: true, page: saved, restored_from: revId });
     } catch (e) {
       if (e.code === 'EMPTY_BODY') return res.status(400).json({ error_code: 'EMPTY_BODY' });
+      if (_sendSanitizeFailed(res, e)) return;
       _fail(res, e, 'POST /content/pages/:id/revisions/:rev/restore');
     }
   });
@@ -222,7 +224,10 @@ function register(router) {
         html: req.body?.html,
       }, req);
       res.json(created);
-    } catch (e) { _fail(res, e, 'POST /content/pages'); }
+    } catch (e) {
+      if (_sendSanitizeFailed(res, e)) return;
+      _fail(res, e, 'POST /content/pages');
+    }
   });
 
   // POST /content/pages/:page_id/move — Seite in ein anderes Buch verschieben.
@@ -311,6 +316,7 @@ function register(router) {
         });
       }
       if (e.code === 'NOT_FOUND') return res.status(404).json({ error_code: 'PAGE_NOT_FOUND' });
+      if (_sendSanitizeFailed(res, e)) return;
       _fail(res, e, 'POST /content/pages/:id/split');
     }
   });

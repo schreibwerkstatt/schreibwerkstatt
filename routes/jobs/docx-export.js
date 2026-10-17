@@ -176,6 +176,9 @@ router.get('/docx-export/:id/file', (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) return res.status(404).json({ error_code: 'JOB_NOT_FOUND' });
   if (job.userEmail !== userEmail) return res.status(403).json({ error_code: 'FORBIDDEN' });
+  // Buchzugriff kann seit dem Export entzogen worden sein.
+  const jobBookId = toIntId(job.bookId);
+  if (jobBookId && !guardBook(req, res, jobBookId, 'viewer')) return;
   if (job.status !== 'done') return res.status(409).json({ error_code: 'JOB_NOT_READY', params: { status: job.status } });
   const r = docxResults.get(req.params.id);
   if (!r) return res.status(410).json({ error_code: 'RESULT_EXPIRED' });

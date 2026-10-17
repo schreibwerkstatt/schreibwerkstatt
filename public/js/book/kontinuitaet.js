@@ -111,7 +111,7 @@ export const kontinuitaetMethods = {
         onProgress: (job) => {
           this.kontinuitaetStatus = runningJobStatus(
             root.t, job.statusText, job.tokensIn, job.tokensOut,
-            Alpine.store('config').claudeMaxTokens, job.progress, job.tps, job.statusParams);
+            Alpine.store('config').claudeMaxTokens, job.progress, job.tokensPerSec, job.statusParams);
         },
         onDone: async (job) => {
           clearRunState();

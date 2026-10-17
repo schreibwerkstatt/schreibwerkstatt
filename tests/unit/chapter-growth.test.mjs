@@ -189,3 +189,21 @@ test('das Partial traegt denselben viewBox wie growthGeometry()', () => {
   // einen Verlauf, den es nicht gibt (jeder `$id`-Aufruf zaehlte sonst hoch).
   assert.match(html, /x-id="\['kd-grow'\]"/);
 });
+
+test('isoAddDays/isoDiffDays rechnen unabhaengig von Browser-TZ und appTimezone', async () => {
+  // Browser in Pacific/Kiritimati (UTC+14), App in Pacific/Pago_Pago (UTC−11):
+  // ein Browser-Mittag liegt in der App-Zone noch am Vortag. Die Kalender-
+  // arithmetik darf davon nichts merken. Kindprozess, weil TZ beim Start greift.
+  const { execFileSync } = await import('node:child_process');
+  const mod = new URL('../../public/js/cards/kapitel-growth.js', import.meta.url).href;
+  const utils = new URL('../../public/js/utils/date.js', import.meta.url).href;
+  const script = `
+    globalThis.window = globalThis.window || {};
+    (await import(${JSON.stringify(utils)})).configureAppTimezone('Pacific/Pago_Pago');
+    const m = await import(${JSON.stringify(mod)});
+    console.log(JSON.stringify([m.isoAddDays('2026-03-28', 2), m.isoAddDays('2026-01-01', -1), m.isoDiffDays('2025-12-31', '2026-01-02')]));
+  `;
+  const out = execFileSync(process.execPath, ['--input-type=module', '-e', script],
+    { env: { ...process.env, TZ: 'Pacific/Kiritimati' }, encoding: 'utf8' });
+  assert.deepEqual(JSON.parse(out.trim().split('\n').pop()), ['2026-03-30', '2025-12-31', 2]);
+});

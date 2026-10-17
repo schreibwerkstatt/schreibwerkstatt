@@ -154,13 +154,17 @@ Ein `span.cite` mit unbrauchbarem `data-src` (`"0"`, `"abc"`) ist laut SSoT kein
 
 ## Sync-Jobs
 
+**Import und Pull sind pro Buch exklusiv** (`BOOK_EXCLUSIVE_TYPES` in [routes/jobs/blog-sync.js](../routes/jobs/blog-sync.js)#`_activeBookSyncJob`): beide legen Seiten und Links an. Läuft für das Buch schon einer der beiden — egal von wem —, antwortet `POST /jobs/blog-import` bzw. `/jobs/blog-pull` mit `409 BLOG_SYNC_RUNNING`; den eigenen laufenden Job desselben Typs bekommt der Aufrufer wie üblich als `{ jobId, existing: true }` zurück.
+
+**Seite + Link entstehen idempotent** über `lib/blog-pull.js#createLinkedPageFromPost` (Import und Pull-Create): ein schon verlinkter Post wird übersprungen; verliert der Lauf zwischen Check und Link das Rennen um `UNIQUE(blog_id, wp_post_id)`, entfernt er die eben angelegte Seite wieder, statt sie verwaist im Buch zu lassen.
+
 ### `runBlogImportJob(bookId)` — einmalig
 
 Gated: `initial_import_done_at IS NULL`. Zweiter Aufruf → 400 `ALREADY_IMPORTED`.
 
 1. paginate `listPosts({ perPage: 100 })`
 2. pro Post: **bereits verlinkt → überspringen** (`job.result.skipped`). Ein abgebrochener Import hinterlässt Links ohne `initial_import_done_at`; ohne den Skip scheiterte jeder weitere Lauf an `UNIQUE(blog_id, wp_post_id)`.
-3. sonst Page anlegen (`lib/blog-pull.js#createPageFromPost`, Name siehe „Titel") + Link mit `wp_modified_at = post.modified_gmt`, `last_pulled_at = jetzt`
+3. sonst Page + Link anlegen (`createLinkedPageFromPost`, Name siehe „Titel"), Link mit `wp_modified_at = post.modified_gmt`, `last_pulled_at = jetzt`
 4. Status via `updateJob` mit Key `job.blog.import.progress`, Params `{done, total}`
 5. am Ende `initial_import_done_at`, `last_pull_at = Start des Laufs`
 
@@ -169,8 +173,8 @@ Gated: `initial_import_done_at IS NULL`. Zweiter Aufruf → 400 `ALREADY_IMPORTE
 Voraussetzung: Initial-Import durch. Sonst 400 `IMPORT_FIRST`.
 
 1. `listPosts({ modifiedAfter: conn.last_pull_at })` paginieren
-2. pro Post: 4-Fall-LWW aus „Konflikt-Strategie"; `update` schreibt über `applyPostToPage` (HTML, Titel, Lead, Teaser)
-3. neue Posts (kein Link) → Page anlegen + Link
+2. pro Post: 4-Fall-LWW aus „Konflikt-Strategie"; `update` schreibt über `applyPostToPage` (HTML, Titel, Lead, Teaser) mit `expected_updated_at` = dem Seitenstand, auf dem `classifyPull` entschieden hat. Speichert jemand die Seite während des Pulls, wirft `savePage` `PAGE_CONFLICT` — der Pull überschreibt dann nicht, sondern setzt `conflict_state='detected'` und zählt den Post als Konflikt wie einen LWW-Konflikt.
+3. neue Posts (kein Link) → `createLinkedPageFromPost`
 4. `last_pull_at = Start des Laufs` — ein Stempel vom Ende liesse Posts aus, die WordPress während des Laufs geändert hat
 
 ### `runBlogPushJob(bookId, pageIds[])` — manuell, Multi-Select
@@ -269,7 +273,7 @@ Buchtyp-Label in [prompt-config.json](../prompt-config.json):
 - Connect-Test: `users/me` muss `capabilities.edit_posts === true` zurückgeben.
 - 401 von WP → Job-Fehler `blog.error.authFailed`
 - Buchtyp-Gate serverseitig hart: Connect/Import/Pull/Push prüfen `buchtyp === 'blog'`, sonst 400 `BLOG_REQUIRES_BLOG_TYPE`
-- Job-Dedup via `findActiveJobId` verhindert parallele Pull/Push pro Buch
+- Job-Dedup via `findActiveJobId` verhindert doppelte Läufe desselben Typs pro User; Import und Pull sind zusätzlich buchweit exklusiv (`409 BLOG_SYNC_RUNNING`, siehe „Sync-Jobs")
 - `setContext({ book: bookId })` in jedem Job-POST (Logging-Slot)
 
 ## Tests

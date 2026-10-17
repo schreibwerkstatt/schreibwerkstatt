@@ -3,7 +3,7 @@
 // Bewusst frei von Alpine/DOM → unit-testbar (tests/unit/my-stats-compute.test.mjs).
 // Kennzahl-Definitionen und Datenquellen: docs/my-stats.md.
 
-export { isoAddDays, isoDayDiff, isoDowMon, bucketizeIso, bucketRange, aggregateByBucket,
+export { isoAddDays, isoDaysBetween, isoWeekdayMon, bucketizeIso, bucketRange, aggregateByBucket,
          filterByWindow, secondsByDate, latestSnapshotPerBook, earliestSnapshotPerBook,
          snapshotPerBookOnOrBefore, firstSnapshotPerBookInWindow, resolveWindow } from './my-stats-compute/series.js';
 export { computeVolumeDelta, computeWeeklyDelta, HISTORY_DAILY_DAYS } from './my-stats-compute/volume.js';

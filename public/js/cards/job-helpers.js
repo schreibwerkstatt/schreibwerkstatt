@@ -82,7 +82,9 @@ export function startPoll(ctx, config) {
     try {
       const resp = await fetch('/jobs/' + config.jobId);
       if (stale()) return;
-      if (resp.status === 404) {
+      // 403: Buchzugriff seit dem Start entzogen — der Job bleibt unerreichbar,
+      // weiterpollen brächte nichts.
+      if (resp.status === 404 || resp.status === 403) {
         stop();
         config.onNotFound?.();
         return;
@@ -153,7 +155,7 @@ export function runningJobStatus(translate, statusText, tokIn, tokOut, maxTokOut
     const cachePart = ((tokIn || 0) > 0 && (cacheReadIn || 0) > 0)
       ? ` · ${translate('chat.tokenCacheShare', { pct: Math.round((cacheReadIn / tokIn) * 100) })}`
       : '';
-    tokInfo = ` · ${inPart}↓${fmtTok(tokOut || 0)} Tokens${pctPart}${cachePart}${tpsPart}`;
+    tokInfo = ` · ${inPart}${escHtml(translate('job.tokensOut', { n: fmtTok(tokOut || 0) }))}${pctPart}${cachePart}${tpsPart}`;
   }
   // statusText kann ein i18n-Key sein (z.B. 'job.phase.extracting') oder freier
   // Text — tRaw liefert unbekannte Keys 1:1 zurück.

@@ -7,6 +7,7 @@ const appUsers = require('../db/app-users');
 const bookAccess = require('../db/book-access');
 const bookCategories = require('../db/book-categories');
 const books = require('../db/books');
+const shareLinks = require('../db/share-links');
 const { guardBook, aclParamGuard, sessionEmail } = require('../lib/acl');
 const { resolvePageBookId } = require('../lib/content-ownership');
 const { db } = require('../db/connection');
@@ -21,6 +22,17 @@ const jsonBody = express.json({ limit: '64kb' });
 const VALID_SHARE_ROLES = ['editor', 'lektor', 'viewer'];
 
 function _normEmail(e) { return (e || '').toString().trim().toLowerCase(); }
+
+// Share-Links leben nur, solange ihr Ersteller die Rolle hat, mit der er sie
+// anlegen durfte (db/share-links.js#SHARE_CREATE_MIN_ROLE). Faellt er darunter
+// oder ganz raus, werden seine Links auf diesem Buch widerrufen — sonst liest
+// ein Ausgeladener ueber den alten Token weiter mit, und Fremde mit ihm.
+function _revokeSharesIfBelowShareRole(bookId, email, newRole) {
+  if (newRole && bookAccess.hasMinRole(newRole, shareLinks.SHARE_CREATE_MIN_ROLE)) return 0;
+  const n = shareLinks.revokeSharesByOwnerOnBook(email, bookId);
+  if (n) logger.info(`Share-Links widerrufen: book=${bookId} ${email} n=${n} (Rolle ${newRole || 'entzogen'})`);
+  return n;
+}
 
 function _notifyBookShared({ target, granter, bookId, role }) {
   try {
@@ -83,6 +95,7 @@ router.post('/:book_id/share', aclParamGuard('owner'), jsonBody, (req, res) => {
   try {
     db.transaction(() => {
       bookAccess.grantAccess(req.bookId, target, role, granter);
+      _revokeSharesIfBelowShareRole(req.bookId, target, role);
       db.prepare(`
         INSERT INTO book_share_invites (book_id, invitee_email, role, invited_by, invited_at, accepted_at)
         VALUES (?, ?, ?, ?, ${NOW_ISO_SQL}, ${NOW_ISO_SQL})
@@ -122,7 +135,10 @@ router.put('/:book_id/access/:email', aclParamGuard('owner'), jsonBody, (req, re
   if (current === 'owner') {
     return res.status(409).json({ error_code: 'OWNER_NOT_DOWNGRADABLE', detail: 'Use /transfer-ownership instead' });
   }
-  bookAccess.grantAccess(req.bookId, target, role, sessionEmail(req));
+  db.transaction(() => {
+    bookAccess.grantAccess(req.bookId, target, role, sessionEmail(req));
+    _revokeSharesIfBelowShareRole(req.bookId, target, role);
+  })();
   logger.info(`Buch-Rolle geaendert: book=${req.bookId} ${target} ${current}→${role} by ${sessionEmail(req)}`);
   res.json({ ok: true, email: target, role });
 });
@@ -137,7 +153,10 @@ router.delete('/:book_id/access/:email', aclParamGuard('owner'), (req, res) => {
   if (current === 'owner') {
     return res.status(409).json({ error_code: 'CANNOT_REVOKE_OWNER' });
   }
-  bookAccess.revokeAccess(req.bookId, target);
+  db.transaction(() => {
+    bookAccess.revokeAccess(req.bookId, target);
+    _revokeSharesIfBelowShareRole(req.bookId, target, null);
+  })();
   logger.info(`Buch-Zugriff entzogen: book=${req.bookId} ${target} (was ${current}) by ${sessionEmail(req)}`);
   res.json({ ok: true });
 });
@@ -169,8 +188,8 @@ router.post('/:book_id/transfer-ownership', aclParamGuard('owner'), jsonBody, (r
 // Hier nur Zuordnung auf das Buch — editor+ erforderlich.
 
 router.get('/:book_id/category', aclParamGuard('viewer'), (req, res) => {
-  const row = db.prepare('SELECT category_id FROM books WHERE book_id = ?').get(req.bookId);
-  const category = row?.category_id ? bookCategories.get(row.category_id) : null;
+  const assigned = bookCategories.getForBooks([req.bookId]).get(req.bookId);
+  const category = assigned ? bookCategories.get(assigned.id) : null;
   res.json({ category });
 });
 

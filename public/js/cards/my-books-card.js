@@ -17,7 +17,7 @@
 // `/me/books` — zusammengefuehrt in my-books-compute.js.
 
 import { setupCardLifecycle } from './card-lifecycle.js';
-import { localeTag, tzOpts } from '../utils.js';
+import { localeTag, tzOpts, formatIsoDay } from '../utils.js';
 import {
   SHELF_TABS, mergeShelfRows, filterShelfRows, pinnedFirst, shelfTotals, mayToggleFinished,
 } from './my-books-compute.js';
@@ -207,10 +207,13 @@ export function registerMyBooksCard() {
     // Zeilen erfunden.
     myBooksDate(value) {
       if (!value) return '–';
-      const d = new Date(value.length === 10 ? value + 'T12:00:00Z' : value);
+      const opts = { year: 'numeric', month: '2-digit', day: '2-digit' };
+      const uiLocale = window.Alpine.store('shell').uiLocale;
+      // Reiner Kalendertag: genau dieser Tag, ohne TZ-Umrechnung.
+      if (value.length === 10) return formatIsoDay(value, uiLocale, opts) || '–';
+      const d = new Date(value);
       if (Number.isNaN(d.getTime())) return '–';
-      const loc = localeTag(window.Alpine.store('shell').uiLocale);
-      return d.toLocaleDateString(loc, tzOpts({ year: 'numeric', month: '2-digit', day: '2-digit' }));
+      return d.toLocaleDateString(localeTag(uiLocale), tzOpts(opts));
     },
   }));
 }

@@ -13,6 +13,7 @@ const searchIndex = require('../lib/search');
 const { htmlToPlainText, htmlToPlainTextWithMsgRanges, stripMsgThreads, stripTableBlocks } = require('../lib/html-text');
 const { stampLexiconHistory, bookLanguage } = require('../db/lexicon');
 const { MATTR_WINDOW } = require('../lib/lexicon/measures');
+const { listChaptersForBook, listPageNamesForBook } = require('../db/content-names');
 
 const router = express.Router();
 // Sync ist Write-Pfad (Pages-Upsert, Stats-Recompute) → editor+.
@@ -40,7 +41,7 @@ function _errDetail(e) {
 }
 
 // Event-Loop-Yield zwischen Backfill-Batches. Die Stats-/Preview-Schleifen lesen
-// pro Seite synchron aus better-sqlite3 (`loadPage`); bei einem grossen Tagebuch
+// je Batch synchron aus better-sqlite3 (`loadPagesBatch`); bei einem grossen Tagebuch
 // (tausende Seiten) blockiert das sonst den single-threaded Server, sodass ein
 // interaktiver Seiten-GET beim Buchwechsel bis zum 30s-Client-Timeout hinter dem
 // Backfill ansteht. setImmediate gibt den Loop frei — ein blosses `await` yieldet
@@ -108,7 +109,7 @@ const _delChapterCacheByChapterId = db.prepare(
 // angelegte Seite fuer geloescht. Geloescht wird nur ueber contentStore.delete*.
 function _upsertPagesCache(bookId, pages, chapters) {
   // Kapitel-Umbenennungen erkennen → Extrakt-Cache für alle User invalidieren.
-  const storedChapters = db.prepare('SELECT chapter_id, chapter_name FROM chapters WHERE book_id = ?').all(bookId);
+  const storedChapters = listChaptersForBook(bookId);
   const storedChMap = Object.fromEntries(storedChapters.map(c => [c.chapter_id, c.chapter_name]));
   for (const c of chapters) {
     if (storedChMap[c.id] !== undefined && storedChMap[c.id] !== c.name) {
@@ -126,6 +127,14 @@ function _upsertPagesCache(bookId, pages, chapters) {
 }
 
 const PREVIEW_CHARS = 800;
+// Seiten je Batch-Query (contentStore.loadPagesBatch) zwischen zwei _yield().
+const PAGE_BATCH = 20;
+
+// Seiten-Bodies eines Slices in EINER Abfrage. Im Sync-Fenster geloeschte
+// Seiten fallen still heraus (wie zuvor der einzelne loadPage-Fehler).
+function _loadSlice(slice, ctx) {
+  return contentStore.loadPagesBatch(slice, ctx, { onError: () => null });
+}
 
 async function syncPagesCache(bookId, ctx) {
   const [pages, chapters, bookMeta] = await Promise.all([
@@ -137,23 +146,22 @@ async function syncPagesCache(bookId, ctx) {
   _upsertPagesCache(bookId, pages, chapters);
 
   // Vorschautexte nur für Seiten ohne gecachten Preview laden (neue Seiten oder nach Migration)
-  const needsPreview = new Set(
-    db.prepare('SELECT page_id FROM pages WHERE book_id = ? AND preview_text IS NULL')
-      .all(bookId).map(r => r.page_id)
-  );
-  const toFetch = pages.filter(p => needsPreview.has(p.id));
+  // listPages liefert preview_text mit — kein zweiter Lesepfad auf `pages`.
+  const toFetch = pages.filter(p => p.preview_text == null);
   if (toFetch.length) {
-    const stmtPrev = db.prepare('UPDATE pages SET preview_text = ? WHERE page_id = ?');
-    const BATCH = 5;
-    for (let i = 0; i < toFetch.length; i += BATCH) {
+    for (let i = 0; i < toFetch.length; i += PAGE_BATCH) {
       if (i > 0) await _yield();
-      await Promise.allSettled(toFetch.slice(i, i + BATCH).map(async p => {
+      let loaded;
+      try { loaded = await _loadSlice(toFetch.slice(i, i + PAGE_BATCH), ctx); }
+      catch { continue; /* Batch überspringen */ }
+      const items = [];
+      for (const pd of loaded) {
         try {
-          const pd = await contentStore.loadPage(p.id, ctx);
           const text = htmlToText(pd.html || '').trim();
-          stmtPrev.run(text ? text.slice(0, PREVIEW_CHARS) : null, p.id);
+          items.push({ page_id: pd.id, preview_text: text ? text.slice(0, PREVIEW_CHARS) : null });
         } catch { /* einzelne Seite überspringen */ }
-      }));
+      }
+      contentStore.setPagePreviews(items);
     }
   }
 
@@ -173,7 +181,6 @@ async function syncBook(bookId, ctx) {
   // bookName lokal weiterhin fuer Logger; book_stats_history.book_name wurde
   // in Mig 78 entfernt — Anzeige laeuft jetzt ueber JOIN auf books(name).
   const now = new Date().toISOString();
-  const BATCH = 5;
   const statsItems = [];
   const globalWordSet = new Set();
   let totalWords = 0, totalChars = 0, totalTok = 0, totalSentences = 0;
@@ -200,41 +207,45 @@ async function syncBook(bookId, ctx) {
 
   const previewItems = [];
   const indexItems = [];
-  for (let i = 0; i < pages.length; i += BATCH) {
+  const computePage = (p, pd) => {
+    const text = htmlToText(pd.html || '');
+    const { words, chars, tok, wordList, sentences } = computeStats(pd.html || '');
+    const preview = text.trim().slice(0, PREVIEW_CHARS);
+    // Zwei Textformen mit Absicht: `text` ist der Umfang (Tabellenzellen sind
+    // geschriebener Inhalt und zaehlen in page_stats + Volltextindex),
+    // `styleText` ist der Prosatext fuer die satzbasierten Stil-Metriken —
+    // dort ist „1.2 Mio" kein Satz und verzerrt Satzlaenge, Satzanfaenge und
+    // Flesch/LIX. Begruendung in lib/html-text.js#stripTableBlocks.
+    // Nachrichten eines Verlaufs zaehlen als Dialog (`msgRanges`), die
+    // Satzmetriken laufen ohne Verlauf (`proseText`, lib/html-text.js#stripMsgThreads).
+    const { text: styleText, msgRanges } = htmlToPlainTextWithMsgRanges(stripTableBlocks(pd.html || ''));
+    const proseText = htmlToText(stripMsgThreads(stripTableBlocks(pd.html || '')));
+    return { page_id: p.id, book_id: bookId, tok, words, chars, updated_at: p.updated_at || null, cached_at: now, wordList, sentences, preview, fullText: text, styleText, msgRanges, proseText };
+  };
+  for (let i = 0; i < pages.length; i += PAGE_BATCH) {
     if (i > 0) await _yield();
-    const batch = pages.slice(i, i + BATCH);
-    const results = await Promise.allSettled(batch.map(async p => {
-      const pd = await contentStore.loadPage(p.id, ctx);
-      const text = htmlToText(pd.html || '');
-      const { words, chars, tok, wordList, sentences } = computeStats(pd.html || '');
-      const preview = text.trim().slice(0, PREVIEW_CHARS);
-      // Zwei Textformen mit Absicht: `text` ist der Umfang (Tabellenzellen sind
-      // geschriebener Inhalt und zaehlen in page_stats + Volltextindex),
-      // `styleText` ist der Prosatext fuer die satzbasierten Stil-Metriken —
-      // dort ist „1.2 Mio" kein Satz und verzerrt Satzlaenge, Satzanfaenge und
-      // Flesch/LIX. Begruendung in lib/html-text.js#stripTableBlocks.
-      // Nachrichten eines Verlaufs zaehlen als Dialog (`msgRanges`), die
-      // Satzmetriken laufen ohne Verlauf (`proseText`, lib/html-text.js#stripMsgThreads).
-      const { text: styleText, msgRanges } = htmlToPlainTextWithMsgRanges(stripTableBlocks(pd.html || ''));
-      const proseText = htmlToText(stripMsgThreads(stripTableBlocks(pd.html || '')));
-      return { page_id: p.id, book_id: bookId, tok, words, chars, updated_at: p.updated_at || null, cached_at: now, wordList, sentences, preview, fullText: text, styleText, msgRanges, proseText };
-    }));
-    for (const r of results) {
-      if (r.status === 'fulfilled') {
-        const { wordList, sentences, preview, fullText, styleText, msgRanges, proseText, ...statsItem } = r.value;
-        statsItems.push(statsItem);
-        previewItems.push({ page_id: r.value.page_id, preview_text: preview || null });
-        totalWords += r.value.words;
-        totalChars += r.value.chars;
-        totalTok += r.value.tok;
-        totalSentences += sentences;
-        for (const w of wordList) globalWordSet.add(w.toLowerCase());
+    const batch = pages.slice(i, i + PAGE_BATCH);
+    const metaById = new Map(batch.map(p => [p.id, p]));
+    let loaded = [];
+    try { loaded = await _loadSlice(batch, ctx); }
+    catch (e) { logger.warn(`Sync Buch ${bookId}: Seiten-Batch übersprungen: ${e.message}`); }
+    for (const pd of loaded) {
+      let value;
+      try { value = computePage(metaById.get(pd.id) || pd, pd); }
+      catch (e) { logger.warn(`Sync Buch ${bookId}: Seite ${pd.id} übersprungen: ${e.message}`); continue; }
+      const { wordList, sentences, preview, fullText, styleText, msgRanges, proseText, ...statsItem } = value;
+      statsItems.push(statsItem);
+      previewItems.push({ page_id: value.page_id, preview_text: preview || null });
+      totalWords += value.words;
+      totalChars += value.chars;
+      totalTok += value.tok;
+      totalSentences += sentences;
+      for (const w of wordList) globalWordSet.add(w.toLowerCase());
 
-        // Stil-Index auf dem Prosatext, Figuren-Erwaehnungen auf dem Volltext:
-        // eine in einer Tabellenzelle genannte Figur ist genannt.
-        const indexResult = computePageIndex(styleText, { extraStopwords, language, msgRanges, proseText });
-        indexItems.push({ page_id: r.value.page_id, index: indexResult, fullText });
-      }
+      // Stil-Index auf dem Prosatext, Figuren-Erwaehnungen auf dem Volltext:
+      // eine in einer Tabellenzelle genannte Figur ist genannt.
+      const indexResult = computePageIndex(styleText, { extraStopwords, language, msgRanges, proseText });
+      indexItems.push({ page_id: value.page_id, index: indexResult, fullText });
     }
   }
   const uniqueWords = globalWordSet.size;
@@ -257,17 +268,12 @@ async function syncBook(bookId, ctx) {
   _upsertPagesCache(bookId, pages, chapters);
   // Im Sync-Fenster geloeschte Seiten fallen raus: page_stats/Index haengen per
   // FK an pages, und eine Seite darf nicht ueber den Sync zurueckkommen.
-  const livePageIds = new Set(
-    db.prepare('SELECT page_id FROM pages WHERE book_id = ?').all(bookId).map(r => r.page_id)
-  );
+  const livePageIds = new Set(listPageNamesForBook(bookId).map(r => r.page_id));
   const isLive = (it) => livePageIds.has(it.page_id);
   upsertPageStatsMany(statsItems.filter(isLive));
   const liveIndexItems = indexItems.filter(isLive);
 
-  if (previewItems.length) {
-    const stmtPrev = db.prepare('UPDATE pages SET preview_text = ? WHERE page_id = ?');
-    db.transaction(() => { for (const item of previewItems) stmtPrev.run(item.preview_text, item.page_id); })();
-  }
+  contentStore.setPagePreviews(previewItems);
 
   // Index-Felder (Pronomen, Dialog, Sätze, Content-Sig) schreiben —
   // muss nach upsertPageStatsMany laufen, weil es UPDATE auf existierende Rows nutzt.
@@ -322,7 +328,9 @@ async function syncBook(bookId, ctx) {
 }
 
 async function _syncAllBooksInner() {
-  const books = db.prepare('SELECT book_id FROM books ORDER BY book_id').all();
+  const books = (await contentStore.listBooks(null))
+    .map(b => ({ book_id: b.id }))
+    .sort((a, b) => a.book_id - b.book_id);
   if (!books.length) {
     logger.info('Sync: keine Buecher vorhanden.');
     return;
@@ -384,16 +392,18 @@ async function _recomputeStalePageStats(bookId, pages, requestedSet, ctx) {
 
   const now = new Date().toISOString();
   const newItems = [];
-  const BATCH = 10;
-  for (let i = 0; i < stale.length; i += BATCH) {
+  for (let i = 0; i < stale.length; i += PAGE_BATCH) {
     if (i > 0) await _yield();
-    const slice = stale.slice(i, i + BATCH);
-    const results = await Promise.allSettled(slice.map(async p => {
-      const pd = await contentStore.loadPage(p.id, ctx);
+    const slice = stale.slice(i, i + PAGE_BATCH);
+    const metaById = new Map(slice.map(p => [p.id, p]));
+    let loaded = [];
+    try { loaded = await _loadSlice(slice, ctx); }
+    catch (e) { logger.warn(`page-stats Buch ${bookId}: Seiten-Batch übersprungen: ${e.message}`); }
+    for (const pd of loaded) {
+      const p = metaById.get(pd.id) || pd;
       const { words, chars, tok } = computeStats(pd.html || '');
-      return { page_id: p.id, book_id: bookId, tok, words, chars, updated_at: p.updated_at || null, cached_at: now };
-    }));
-    for (const r of results) if (r.status === 'fulfilled') newItems.push(r.value);
+      newItems.push({ page_id: p.id, book_id: bookId, tok, words, chars, updated_at: p.updated_at || null, cached_at: now });
+    }
   }
   if (newItems.length) upsertPageStatsMany(newItems);
   return { computed: newItems.length, total: pages.length };
@@ -414,11 +424,6 @@ async function _backfillPageStatsFull(bookId, ctx) {
 // kein Chapter-Aufwand — viewport-priorisiert, daher nicht coalesced.
 async function _backfillPageStatsLazy(bookId, requestedIds, ctx) {
   const pages = await contentStore.listPages(bookId, ctx);
-  const bookRow = db.prepare('SELECT 1 FROM books WHERE book_id = ?').get(bookId);
-  if (!bookRow) {
-    const bookMeta = await contentStore.loadBook(bookId, ctx).catch(() => null);
-    if (bookMeta) upsertBook(bookMeta);
-  }
   const want = new Set(requestedIds);
   return _recomputeStalePageStats(bookId, pages, want, ctx);
 }

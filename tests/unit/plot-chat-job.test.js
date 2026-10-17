@@ -149,3 +149,26 @@ test('Endpunkt lehnt Werkzeuge zur Laufzeit ab → derselbe Job klassisch', asyn
   const msg = db.prepare('SELECT content FROM chat_messages WHERE id = ?').get(j.result.assistant_message_id);
   assert.equal(msg.content, 'Klassisch beantwortet.');
 });
+
+test('Klassischer Pfad: Ablehnung (stop_reason refusal) → Hinweis-Marker, Vorschläge verfallen', async () => {
+  const { runPlotChatJobDispatch } = require('../../routes/jobs/plot-chat');
+  const { REFUSAL_MARKER } = require('../../routes/jobs/agentic-chat');
+  appSettings.set('ai.provider', 'ollama');
+  ai.callAIWithTools = async () => { throw new Error('agentischer Pfad darf nicht laufen'); };
+  ai.callAIChat = async () => ({
+    text: JSON.stringify({ antwort: 'Teil', vorschlaege: [{ werkzeug: 'propose_beat', act_id: act.id, titel: 'X', begruendung: 'y' }] }),
+    truncated: false, stopReason: 'refusal', stopDetails: { category: 'x' },
+    tokensIn: 50, tokensOut: 2, provider: 'ollama', model: 'llama3.2',
+  });
+  const sid = newSession();
+  const jobId = createJob('plot-chat', BOOK, USER, 'x');
+  await runPlotChatJobDispatch(jobId, sid, 1, 'Beat?', USER);
+  appSettings.set('ai.provider', 'claude');
+  const j = jobs.get(jobId);
+  assert.equal(j.status, 'done', `Job nicht done: ${j.error}`);
+  const msg = db.prepare('SELECT content, context_info FROM chat_messages WHERE id = ?').get(j.result.assistant_message_id);
+  assert.equal(msg.content, REFUSAL_MARKER);
+  const ci = JSON.parse(msg.context_info);
+  assert.equal(ci.refused, true);
+  assert.equal(ci.proposals, undefined);
+});

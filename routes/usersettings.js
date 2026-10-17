@@ -400,12 +400,25 @@ router.delete('/account', jsonBody, async (req, res) => {
     }
 
     await accountDelete.deleteAccount(email, { ip, userAgent });
-    // Session-Cookie entwerten. Device-Tokens sind bereits geloescht — ab hier
-    // beantwortet der Auth-Guard jeden Bearer-Request mit 401.
+    // Session-Cookie entwerten. Device-Tokens und die gespeicherten Sitzungen
+    // anderer Geraete hat deleteAccount bereits entfernt — ab hier beantwortet
+    // der Auth-Guard jeden Request dieses Kontos mit 401.
     req.session.destroy(() => res.json({ ok: true }));
   } catch (e) {
     logger.error(`Konto-Selbstloeschung fehlgeschlagen: ${e.message}`, { user: email });
-    if (!res.headersSent) res.status(500).json({ error_code: 'ACCOUNT_DELETE_FAILED', detail: e.message });
+    if (res.headersSent) return;
+    // Eigene Buecher liessen sich nicht loeschen → Konto bleibt bestehen
+    // (lib/account-delete.js). Gleicher Vertragscode, `reason` fuer den Client;
+    // ein zweiter Aufruf versucht es erneut.
+    if (e.code === 'OWNED_BOOKS_NOT_DELETED') {
+      return res.status(500).json({
+        error_code: 'ACCOUNT_DELETE_FAILED',
+        reason: e.code,
+        failed_books: (e.failedBooks || []).length,
+        detail: e.message,
+      });
+    }
+    res.status(500).json({ error_code: 'ACCOUNT_DELETE_FAILED', detail: e.message });
   }
 });
 

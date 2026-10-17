@@ -1,6 +1,7 @@
     <!-- Jobs-Tab -->
     <section x-show="adminSettingsTab === 'jobs'" class="admin-settings-section">
       <div x-data="settingField({ k: 'jobs.max_concurrent', type: 'num', label: 'admin.settings.label.jobsMaxConcurrent', num: { step: 1, min: 1, max: 8 } })"></div>
+      <div x-data="settingField({ k: 'jobs.interactive_slots', type: 'num', label: 'admin.settings.label.jobsInteractiveSlots', help: 'admin.settings.help.jobsInteractiveSlots', num: { step: 1, min: 0, max: 8 } })"></div>
       <div x-data="settingField({ k: 'jobs.book_chat.mode', type: 'select', label: 'admin.settings.label.jobsBookChatMode', opts: [{ value: 'auto', label: 'auto' }, { value: 'agent', label: 'agent' }, { value: 'classic', label: 'classic' }] })"></div>
       <div x-data="settingField({ k: 'jobs.book_chat.max_tool_iter', type: 'num', label: 'admin.settings.label.jobsBookChatMaxToolIter', num: { step: 1, min: 1, max: 50 } })"></div>
       <div x-data="settingField({ k: 'jobs.book_chat.max_tool_iter_local', type: 'num', label: 'admin.settings.label.jobsBookChatMaxToolIterLocal', num: { step: 1, min: 0, max: 50 }, help: 'admin.settings.help.jobsBookChatMaxToolIterLocal' })"></div>

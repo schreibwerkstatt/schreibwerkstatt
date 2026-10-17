@@ -71,22 +71,28 @@ function restoreResearch(bookId, data, ctx) {
     if (iid && r.tag) insTag.run(iid, r.tag);
   }
 
-  const targetOf = {
+  // target_kind kommt aus der Import-Datei: Lookup nur ueber eigene Keys einer
+  // prototypfreien Map — `constructor`/`toString` liefen sonst in den Prototyp,
+  // die Spalte waere `undefined` (SQL-Syntaxfehler, ganzer Restore rollt zurueck).
+  // Unbekannte Arten fallen weg wie ein nicht aufloesbares Ziel.
+  const targetOf = Object.assign(Object.create(null), {
     chapter:  (r) => chapterOf(r.chapter_id),
     page:     (r) => pageOf(r.page_id),
     figure:   (r) => em.figure?.get(r.figure_id) ?? null,
     location: (r) => em.location?.get(r.location_id) ?? null,
     scene:    (r) => em.scene?.get(r.scene_id) ?? null,
-  };
-  const COL = { chapter: 'chapter_id', page: 'page_id', figure: 'figure_id', location: 'location_id', scene: 'scene_id' };
+  });
+  const COL = Object.assign(Object.create(null),
+    { chapter: 'chapter_id', page: 'page_id', figure: 'figure_id', location: 'location_id', scene: 'scene_id' });
   let linksDropped = 0;
   let links = 0;
   for (const r of arr('links')) {
     const iid = itemMap.get(r.item_id);
-    const tid = iid && targetOf[r.target_kind] ? targetOf[r.target_kind](r) : null;
+    const kind = typeof r.target_kind === 'string' && Object.hasOwn(COL, r.target_kind) ? r.target_kind : null;
+    const tid = iid && kind ? targetOf[kind](r) : null;
     if (!tid) { if (iid) linksDropped += 1; continue; }
-    db.prepare(`INSERT INTO research_item_links (item_id,target_kind,${COL[r.target_kind]},created_at) VALUES (?,?,?,?)`)
-      .run(iid, r.target_kind, tid, r.created_at || _now());
+    db.prepare(`INSERT INTO research_item_links (item_id,target_kind,${COL[kind]},created_at) VALUES (?,?,?,?)`)
+      .run(iid, kind, tid, r.created_at || _now());
     links += 1;
   }
 

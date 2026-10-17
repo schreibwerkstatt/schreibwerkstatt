@@ -4,6 +4,7 @@ import { MSG_THREAD_CLASS } from '../messages/msg-html.js';
 import { sortByPosition, isHardFinding } from '../book/page-view.js';
 import { contentRepo } from '../repo/content.js';
 import { savePage } from './shared/page-api.js';
+import { renderLektoratAnalysisHtml } from './lektorat-analysis.js';
 import { runQuoteNormalizeHtml } from './shared/quote-normalize.js';
 import { lsSet } from '../safe-storage.js';
 
@@ -342,23 +343,9 @@ export const lektoratMethods = {
             total: fehler.length,
           }))}</div>`;
         }
-        const szenen = r.szenen || [];
-        if (szenen.length > 0) {
-          const wertungBadge = w => {
-            if (w === 'stark')   return `<span class="badge badge-ok">${escHtml(this.t('szenen.rating.stark'))}</span>`;
-            if (w === 'schwach') return `<span class="badge badge-err">${escHtml(this.t('szenen.rating.schwach'))}</span>`;
-            return `<span class="badge badge-warn">${escHtml(this.t('szenen.rating.mittel'))}</span>`;
-          };
-          const rows = szenen.map(s =>
-            `<div class="szene-item">
-              <div class="szene-header">${wertungBadge(s.wertung)} <span class="szene-titel">${escHtml(s.titel)}</span></div>
-              ${s.kommentar ? `<div class="szene-kommentar">${escHtml(s.kommentar)}</div>` : ''}
-            </div>`
-          ).join('');
-          out += `<div class="stilbox"><div class="bewertung-section-title">${escHtml(this.t('lektorat.section.szenen'))}</div>${rows}</div>`;
-        }
-        if (r.stilanalyse) out += `<div class="stilbox"><div class="bewertung-section-title">${escHtml(this.t('lektorat.section.stilanalyse'))}</div>${escHtml(r.stilanalyse)}</div>`;
-        if (r.fazit) out += `<div class="fazit">${escHtml(r.fazit)}</div>`;
+        out += renderLektoratAnalysisHtml((k, p) => this.t(k, p), {
+          szenen: r.szenen, stilanalyse: r.stilanalyse, fazit: r.fazit,
+        });
         this.analysisOut = out;
         this.checkDone = true;
         this.lastCheckId = r.checkId || null;

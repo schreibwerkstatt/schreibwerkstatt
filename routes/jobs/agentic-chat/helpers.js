@@ -60,12 +60,14 @@ function _fitMessagesToBudget(messages, estimate, budgetTokens, charsPerToken) {
 // Platzhalter-Antwort («formuliere konkreter» wäre bei einer 529 eine falsche Auskunft).
 // Schon i18n-keyed Fehler (Timeout, Kontext-Überlauf …) reisen unverändert weiter.
 function _synthesisError(e) {
-  if (/^(job|error)\./.test(String(e?.message || ''))) return e;
+  // Überlast zuerst: sie trägt selbst schon einen Key (job.error.aiOverloaded),
+  // der Synthese-spezifische Text soll ihn trotzdem ersetzen.
   if (e?.code === 'AI_OVERLOADED') {
     const err = i18nError('job.error.agentSynthesisOverloaded', { status: e.status || '–' });
     err.code = e.code;
     return err;
   }
+  if (/^(job|error)\./.test(String(e?.message || ''))) return e;
   const err = i18nError('job.error.agentSynthesisFailed', { msg: String(e?.message || e).slice(0, 300) });
   if (e?.code) err.code = e.code;
   return err;

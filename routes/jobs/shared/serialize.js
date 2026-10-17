@@ -1,15 +1,16 @@
 'use strict';
-const { jobs, jobQueue } = require('./state');
+const { jobs, queuePosition } = require('./state');
 
 // Client-Sicht eines Jobs — gemeinsame Form für `GET /jobs/:id`, `GET /jobs/queue`
 // und den SSE-Stream (`GET /jobs/stream`). Ein Ort, damit Poll- und Push-Pfad
 // dem Frontend nie unterschiedliche Felder liefern.
 
-// Ein wartender Job zeigt seine Position in der FIFO statt des gespeicherten
-// statusText — die Position ändert sich, ohne dass der Job selbst angefasst wird.
+// Ein wartender Job zeigt seine Position in der FIFO seiner Spur (interaktiv vs.
+// allgemein, queue.js) statt des gespeicherten statusText — die Position ändert
+// sich, ohne dass der Job selbst angefasst wird.
 function _liveStatus(job) {
   if (job.status !== 'queued') return { statusText: job.statusText, statusParams: job.statusParams };
-  const pos = jobQueue.findIndex(e => e.jobId === job.id) + 1;
+  const pos = queuePosition(job.id);
   return pos > 0
     ? { statusText: 'job.queuedPos', statusParams: { pos } }
     : { statusText: 'job.queued', statusParams: null };

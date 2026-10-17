@@ -9,6 +9,7 @@
 const { db } = require('../connection');
 require('../migrations');
 const { inClause } = require('../../lib/validate');
+const { likeContains } = require('../like-escape');
 
 // ── list_continuity_issues ──────────────────────────────────────────────────
 
@@ -149,7 +150,7 @@ const _stmtFigEventsLike = db.prepare(`
 /** Datierte Ereignisse von (Buch, User), deren Text `needle` enthält (Teilstring,
  *  case-insensitive für ASCII). Unsicher datierte bleiben drin, `unsicher` markiert sie. */
 function findDatedEvents(bookId, userEmail, needle, limit = 10) {
-  const like = '%' + String(needle).replace(/[\\%_]/g, c => '\\' + c) + '%';
+  const like = likeContains(needle);
   const stmt = _hasZeitstrahl(bookId, userEmail) ? _stmtZsEventsLike : _stmtFigEventsLike;
   return stmt.all(bookId, userEmail || '', like, limit);
 }

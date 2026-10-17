@@ -29,7 +29,13 @@ export const appKomplettMethods = {
     this.komplettScopeLoading = true;
     // Partial lazy nachladen, BEVOR das Flag gesetzt wird — der Dialog gehoert
     // nicht in den Cold-Boot-Satz (die meisten Sitzungen oeffnen ihn nie).
-    await this._ensurePartial('komplett-scope');
+    // _ensurePartial wirft nicht, sondern liefert false (Fetch fehlgeschlagen):
+    // dann kein Flag ohne Markup — der Knopf wirkte sonst tot.
+    if (!await this._ensurePartial('komplett-scope')) {
+      this.komplettScopeLoading = false;
+      this.setStatus(this.t('app.komplettScopeLoadError'), false, 6000);
+      return;
+    }
     this.komplettScopeOpen = true;
     const bookId = this.$store.nav.selectedBookId;
     // Indikation parallel — sie liest das ganze Buch und darf die Schalter nicht aufhalten.

@@ -11,7 +11,7 @@
 // aus `utils` statt ueber `toLocaleString`: ein Tile formatiert pro Render
 // dreistellig viele Werte, und `Number#toLocaleString` baut den Formatter bei
 // jedem Aufruf neu.
-import { charsToNormseiten, numberFormat, dateTimeFormat } from '../utils.js';
+import { charsToNormseiten, numberFormat, dateTimeFormat, formatIsoDay } from '../utils.js';
 
 export const tileFormatMethods = {
   // Aktuelle UI-Sprache ('de' | 'en'). Eine Stelle, damit die
@@ -28,6 +28,12 @@ export const tileFormatMethods = {
   // Gecachter Datums-Formatter fuer die aktuelle UI-Sprache (timeZone via tzOpts).
   _dateFmt(opts) {
     return dateTimeFormat(this._uiLocale(), opts);
+  },
+
+  // Label eines ISO-Kalendertags (utils/date.js#formatIsoDay: UTC-Mittag +
+  // timeZone UTC — kein Kippen auf den Nachbartag bei TZ-Differenz).
+  _isoDayLabel(iso, opts) {
+    return formatIsoDay(iso, this._uiLocale(), opts);
   },
 
   _fmtNum(n) {

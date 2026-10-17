@@ -10,6 +10,7 @@ const { setContext } = require('../lib/log-context');
 const appUsers = require('../db/app-users');
 const bookAccess = require('../db/book-access');
 const { db } = require('../db/connection');
+const { escapeLike } = require('../db/like-escape');
 const contentStore = require('../lib/content-store');
 const { toIntId } = require('../lib/validate');
 const logger = require('../logger');
@@ -81,7 +82,7 @@ function _ftsPairBytes(vtab, weightExpr) {
   // Footprint = Bytegroesse aller Backing-Tabellen (<vtab>_data/_idx/_content/_docsize/_config).
   const backing = db.prepare(
     `SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE ? ESCAPE '\\'`)
-    .all(vtab.replace(/_/g, '\\_') + '\\_%').map(r => r.name).filter(n => _IDENT.test(n));
+    .all(escapeLike(vtab) + '\\_%').map(r => r.name).filter(n => _IDENT.test(n));
   let total = 0;
   for (const t of backing) {
     total += db.prepare(`SELECT COALESCE(SUM(${_sumColsExpr(_colsOf(t), 't')}), 0) AS s FROM "${t}" t`).get().s;

@@ -62,7 +62,7 @@
 //
 // Fehlerpfade: ein Provider-Fehler (auch im Synthese-Turn) endet als Job-Fehler mit
 // i18n-Meldung — nie als gespeicherte Platzhalter-Antwort. Was bis dahin verbraucht
-// wurde, landet trotzdem im Kosten-Ledger (recordChatLedgerForFailedRun).
+// wurde, landet trotzdem im Kosten-Ledger (recordChatLedgerEntry).
 
 const { db } = require('../../../db/schema');
 // Spät gebunden (ai.callAIWithTools statt Destructuring): der Loop-Unit-Test ersetzt
@@ -74,7 +74,7 @@ const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   jobAbortControllers,
 } = require('../shared');
-const { recordChatLedgerForMessage, recordChatLedgerForFailedRun } = require('../../../db/cost-ledger');
+const { recordChatLedgerForMessage, recordChatLedgerEntry } = require('../../../db/cost-ledger');
 const { generateSessionTitle } = require('../chat-title');
 const {
   buildAgenticHistory, REFUSAL_MARKER, _ensureNonEmptyFinal, _proseFinal,
@@ -451,7 +451,7 @@ function makeAgenticChatJob(config) {
       db.prepare('UPDATE chat_sessions SET last_message_at = ? WHERE id = ?').run(assistantNow, session.id);
       recordChatLedgerForMessage(asstMsgResult.lastInsertRowid);
 
-      const sessionTitle = await generateSessionTitle({ session, userMessage: message, assistantAnswer: antwort, provider, logger });
+      const sessionTitle = await generateSessionTitle({ session, userMessage: message, assistantAnswer: antwort, provider, logger, signal: jobSignal });
 
       const base = {
         session_id: session.id,
@@ -475,7 +475,7 @@ function makeAgenticChatJob(config) {
       // Bezahlte Runden eines gescheiterten/abgebrochenen Laufs: ohne Assistant-
       // Nachricht fehlte ihr Verbrauch sonst im Ledger (Budget-Gate, Admin-Usage).
       if (!persisted && session) {
-        recordChatLedgerForFailedRun({
+        recordChatLedgerEntry({
           jobId, userEmail: session.user_email || userEmail, kind: session.kind, bookId: session.book_id,
           provider, model: state.lastModel || _defaultModelFor(provider),
           tokensIn: state.totalTokIn, tokensOut: state.totalTokOut,

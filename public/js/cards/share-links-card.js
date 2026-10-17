@@ -1,6 +1,8 @@
 // Alpine.data('shareLinksCard') — Sub-Komponente "Geteilte Links".
 // Listet alle Share-Links des Users zum aktuellen Buch (Create/Revoke/Patch) +
-// Unread-Badge via owner_last_seen_at. Kommentare werden NICHT mehr in der Karte
+// Unread-Badge via owner_last_seen_at. Der Buch-Owner sieht zusätzlich die Links
+// anderer Mitarbeiter (`mine: false`, mit Ersteller) und kann sie widerrufen;
+// Bearbeiten, Kommentare und Statistik bleiben beim Ersteller. Kommentare werden NICHT mehr in der Karte
 // angezeigt: „Kommentare anzeigen" wechselt in die passende Editor-Ansicht
 // (Seiten-Share → Notebook-Leseansicht, Buch-/Kapitel-Share → Bucheditor), wo die
 // Kommentar-Leiste verankerte UND allgemeine Threads zeigt und voll bedienbar ist.
@@ -177,6 +179,8 @@ export function registerShareLinksCard() {
           cur.feedback_count = r.feedback_count;
           cur.comment_count = r.comment_count;
           cur.unread_count = r.unread_count;
+          cur.creator_access = r.creator_access;
+          cur.revoked_at = r.revoked_at;
         }
       } else {
         this.links = rows;
@@ -189,8 +193,16 @@ export function registerShareLinksCard() {
 
     linkStatus(link) {
       if (link.revoked_at) return 'revoked';
+      // Ersteller hat die nötige Buchrolle verloren → für Leser bereits tot.
+      if (link.creator_access === false) return 'revoked';
       if (link.expires_at && new Date(link.expires_at) < new Date()) return 'expired';
       return 'active';
+    },
+
+    // „Angelegt von …" nur an fremden Links (Buch-Owner-Sicht).
+    creatorLabel(link) {
+      if (link.mine !== false) return '';
+      return window.__app.t('share.list.createdBy', { name: link.owner_display_name || link.owner_email || '' });
     },
 
     targetLabel(link) {

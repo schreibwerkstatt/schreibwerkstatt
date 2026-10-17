@@ -4,7 +4,7 @@
 // Buch-Chat-Seiten-Cache (klassischer Pfad) inkl. Invalidierung.
 
 const { parseJSONLenient } = require('../../../lib/ai');
-const { stripTrailingEmptyJson } = require('../agentic-chat');
+const { stripTrailingEmptyJson, EMPTY_ANSWER_MARKER, REFUSAL_MARKER } = require('../agentic-chat');
 const { toIntId } = require('../../../lib/validate');
 const { db, getBookSettings } = require('../../../db/schema');
 const { getSessionForJob } = require('../../../db/chat-sessions');
@@ -75,7 +75,39 @@ function _lostVorschlaege(text) {
   return /"vorschlaege"\s*:\s*\[\s*\{/.test(String(text || ''));
 }
 
-function _parseChatResponse(text) {
+// Ablehnung im klassischen (Ein-Call-)Pfad: wie der agentische Loop
+// (agentic-chat/loop.js#refusalFinal) — gespeichert wird der Hinweis-Marker, ein
+// teilweise gestreamter Text verfällt. Liefert den Marker oder null.
+// `aiRes` = Ergebnis von callAI/callAIChat ({ stopReason, stopDetails }).
+function classicRefusalAnswer(aiRes, log = logger) {
+  if (aiRes?.stopReason !== 'refusal') return null;
+  const cat = aiRes.stopDetails?.category || '-';
+  log.warn(`Ablehnung durch Sicherheits-Klassifikator (Kategorie ${cat}) – Hinweis statt Antwort.`);
+  return REFUSAL_MARKER;
+}
+
+// Leere Antwort nie als leere Assistant-Nachricht speichern (dieselbe Regel wie
+// agentic-chat/history.js#_ensureNonEmptyFinal): der Marker sagt dem User, dass
+// nichts kam, statt einer stummen Sprechblase.
+function _nonEmptyAntwort(antwort) {
+  return (typeof antwort === 'string' && antwort.trim()) ? antwort : EMPTY_ANSWER_MARKER;
+}
+
+function _parseChatResponse(text, aiRes = null, log = logger) {
+  const refusal = classicRefusalAnswer(aiRes, log);
+  if (refusal) {
+    return { antwort: refusal, vorschlaege: [], titel_varianten: [], ideen: [], fallback: false, lostVorschlaege: false, refused: true };
+  }
+  // Leerer Text: gar nicht erst parsen (die Fallback-Kette schriebe einen
+  // Parse-Dump für etwas, das nie JSON war).
+  if (!String(text ?? '').trim()) {
+    return { antwort: EMPTY_ANSWER_MARKER, vorschlaege: [], titel_varianten: [], ideen: [], fallback: false, lostVorschlaege: false };
+  }
+  const r = _parseChatResponseRaw(text);
+  return { ...r, antwort: _nonEmptyAntwort(r.antwort) };
+}
+
+function _parseChatResponseRaw(text) {
   // Lenient: bei kaputtem JSON (z.B. unescaptes `"` oder typografische Quotes
   // im Modell-Output) wenigstens `antwort` per Regex retten. Vorschläge gehen
   // nur sicher zu extrahieren, wenn Gesamt-JSON valid ist.
@@ -93,6 +125,19 @@ function _parseChatResponse(text) {
   }
   // r.ok-aber-antwort-leer = Modell schrieb Prosa und trailing leeres `{}`,
   // das extractBalancedJson erwischt hat. Roh-Prosa speichern, fence weg.
+  // `antwort` als Feld vorhanden, aber leer: das Modell hat geantwortet, nur ohne
+  // Text — kein Prosa-Fall, sonst stünde das rohe `{"antwort":""}` im Chat. Die
+  // Vorschläge bleiben, die Antwort wird zum Leer-Marker (_parseChatResponse).
+  if (r.ok && r.parsed && typeof r.parsed === 'object' && 'antwort' in r.parsed) {
+    return {
+      antwort: '',
+      vorschlaege: _sanitizeVorschlaege(r.parsed.vorschlaege),
+      titel_varianten: _sanitizeTitelVarianten(r.parsed.titel_varianten),
+      ideen: Array.isArray(r.parsed.ideen) ? r.parsed.ideen : [],
+      fallback: false,
+      lostVorschlaege: false,
+    };
+  }
   if (r.ok) {
     return { antwort: stripTrailingEmptyJson(text) || text, vorschlaege: [], titel_varianten: [], ideen: [], fallback: true, lostVorschlaege: _lostVorschlaege(text) };
   }
@@ -244,6 +289,6 @@ function weltfaktenBlockChars(aiCfg) {
 }
 
 module.exports = {
-  _sanitizeVorschlaege, _sanitizeTitelVarianten, _parseChatResponse, _handleChatPost, figurenBlockChars, weltfaktenBlockChars,
+  _sanitizeVorschlaege, _sanitizeTitelVarianten, _parseChatResponse, classicRefusalAnswer, _handleChatPost, figurenBlockChars, weltfaktenBlockChars,
   bookPageCache, BOOK_PAGE_CACHE_TTL_MS, BOOK_PAGE_CACHE_MAX, invalidateBookPageCache,
 };

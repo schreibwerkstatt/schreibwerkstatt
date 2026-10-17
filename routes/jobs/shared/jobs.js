@@ -182,6 +182,7 @@ function createJob(type, bookId, userEmail, label, labelParams = null, dedupId =
     cancelled: false,
   });
   jobAbortControllers.set(id, new AbortController());
+  jobLogBuffer.open(id);
   try { insertJobRun({ id, type, bookId: String(bookId), userEmail, label, provider, model }); } catch (e) {
     logger.error(`insertJobRun: ${e.message}`, { job: type, user: userEmail, book: bookId });
   }

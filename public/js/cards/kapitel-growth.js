@@ -22,26 +22,18 @@
 //     null, und der ausgewiesene Zuwachs gilt AB diesem Datum — die Kachel sagt
 //     das Datum darum immer dazu.
 import { localIsoDate } from '../utils.js';
+import { isoAddDays, isoDaysBetween as isoDiffDays } from '../utils/iso-day.js';
 
 // Obergrenze der Kurvenpunkte. Die Achse wird in gleich breite Zeitscheiben
 // geteilt: gleich weite Punkte UND zeitproportionale Lage zugleich. Bei kurzen
 // Zeitraeumen bleibt es bei Tagesscheiben.
 export const MAX_POINTS = 48;
 
-const _noon = (iso) => new Date(`${iso}T12:00:00`);
-
-/** Tage zwischen zwei ISO-Datums-Strings (b − a). Mittags-Anker gegen den
- *  DST-Sprung, gleiche Regel wie in den Tages-Helfern von utils.js. */
-export function isoDiffDays(a, b) {
-  return Math.round((_noon(b).getTime() - _noon(a).getTime()) / 86400000);
-}
-
-/** ISO-Datum + n Tage. */
-export function isoAddDays(iso, n) {
-  const d = _noon(iso);
-  d.setDate(d.getDate() + n);
-  return localIsoDate(d);
-}
+/** Tage zwischen zwei ISO-Datums-Strings (b − a) und ISO-Datum + n Tage:
+ *  reine Kalenderarithmetik ueber den UTC-Mittag (SSoT utils/iso-day.js).
+ *  Kein Browser-Mittag: liegen Browser-TZ und appTimezone mehr als 12 h
+ *  auseinander, landete localIsoDate() eines Browser-Mittags auf dem Nachbartag. */
+export { isoDiffDays, isoAddDays };
 
 /**
  * Reihen mehrerer Kapitel zu EINER Reihe des Scopes verschmelzen.

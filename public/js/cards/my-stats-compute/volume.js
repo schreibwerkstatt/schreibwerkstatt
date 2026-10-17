@@ -3,7 +3,7 @@
 // Regeln + Begriffe: docs/my-stats.md „Umfang im Zeitraum".
 
 import { localIsoDate } from '../../utils.js';
-import { isoAddDays, isoDayDiff, isoDowMon, latestSnapshotPerBook, earliestSnapshotPerBook,
+import { isoAddDays, isoDaysBetween, isoWeekdayMon, latestSnapshotPerBook, earliestSnapshotPerBook,
          snapshotPerBookOnOrBefore, firstSnapshotPerBookInWindow } from './series.js';
 
 // Tagesgenaue Aufbewahrung der Snapshot-Historie (lib/cache-cleanup.js,
@@ -74,8 +74,8 @@ export function computeVolumeDelta(historyRows, fromIso, toIso, opts = {}) {
     if (created) return String(created).slice(0, 10) < fromIso;
     const first = earliest.get(id)?.recorded_at;
     if (!first || !globalEarliest || globalEarliest < fromIso) return false;
-    if (Math.abs(isoDayDiff(retentionEdge, globalEarliest)) > TRUNCATION_SLACK_DAYS) return false;
-    return isoDayDiff(globalEarliest, first) <= TRUNCATION_SLACK_DAYS;
+    if (Math.abs(isoDaysBetween(retentionEdge, globalEarliest)) > TRUNCATION_SLACK_DAYS) return false;
+    return isoDaysBetween(globalEarliest, first) <= TRUNCATION_SLACK_DAYS;
   };
 
   let chars = 0, words = 0, pages = 0;
@@ -104,7 +104,7 @@ export function computeVolumeDelta(historyRows, fromIso, toIso, opts = {}) {
 // `booksDetail` zaehlt der heutige Live-Stand mit.
 export function computeWeeklyDelta(historyRows, todayLocal = new Date(), booksDetail = null) {
   const isoToday = localIsoDate(new Date(todayLocal));
-  const monday = isoAddDays(isoToday, -isoDowMon(isoToday));
+  const monday = isoAddDays(isoToday, -isoWeekdayMon(isoToday));
   const lastMonday = isoAddDays(monday, -7);
   const lastSunday = isoAddDays(monday, -1);
   const opts = { todayIso: isoToday, booksDetail: booksDetail || undefined };

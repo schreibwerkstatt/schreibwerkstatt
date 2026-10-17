@@ -13,7 +13,7 @@ const {
   chunkLimitsFor, BATCH_SIZE, jobAbortControllers, settledAll,
   _modelName, applyReviewAiOverrides, tps,
   jobs, runningJobs, createJob, enqueueJob, jobKey, findActiveJobId,
-  jsonBody,
+  jsonBody, normalizeGesamtnote, assertChapterAnalysis,
 } = require('./shared');
 const { narrativeLabels } = require('./narrative-labels');
 const { loadReviewKomplettContext, loadReviewMotivContext, loadStrukturContext, loadWeltContext, werkstandFor, trailingUnwrittenChapters, loadOpenPlanBeats } = require('./review-context');
@@ -50,29 +50,6 @@ function buildSynthesisSig(chapterSigs, { bookName, optionsSig, cacheVersion }) 
 function _systemChars(system) {
   if (Array.isArray(system)) return system.reduce((s, b) => s + (b?.text?.length || 0), 0);
   return String(system || '').length;
-}
-
-// Pflichtfeld der Bewertung prüfen und normalisieren, BEVOR das Ergebnis in den
-// Cache geht — ein kaputtes Ergebnis im Cache käme sonst bei jedem Lauf wieder.
-// Skala 1.0–6.0; ein Zahl-String wird zur Zahl, sonst bleibt der Wert unberührt.
-function normalizeGesamtnote(r) {
-  const raw = r?.gesamtnote;
-  if (raw == null || raw === '') throw i18nError('job.error.gesamtnoteMissing');
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 1 || n > 6) {
-    throw i18nError('job.error.gesamtnoteInvalid', { note: String(raw) });
-  }
-  r.gesamtnote = n;
-  return r;
-}
-
-// Eine leere Kapitelanalyse ginge still als «–» in die Synthese ein und
-// verzerrte die Note, ohne dass es jemand sieht.
-function assertChapterAnalysis(ca, name) {
-  const filled = (v) => typeof v === 'string' && v.trim().length > 0;
-  if (!ca || !(filled(ca.themen) || filled(ca.funktion_kurz))) {
-    throw i18nError('job.error.chapterAnalysisEmpty', { name });
-  }
 }
 
 // Ordnet jedem Chunk sein Kapitel (1-basiert in Lesereihenfolge) und — bei

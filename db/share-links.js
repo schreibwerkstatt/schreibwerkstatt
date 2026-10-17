@@ -4,6 +4,12 @@ const crypto = require('crypto');
 const { db } = require('./connection');
 const { NOW_ISO_SQL } = require('./now');
 
+// Mindestrolle auf dem Buch, um Share-Links anzulegen/zu bearbeiten — und um
+// sie am Leben zu halten: faellt der Ersteller darunter (Zugriff entzogen,
+// herabgestuft), gilt sein Link als widerrufen (lib/share-helpers.js#isExpired,
+// routes/book-access.js).
+const SHARE_CREATE_MIN_ROLE = 'editor';
+
 function newToken() {
   return crypto.randomBytes(16).toString('base64url');
 }
@@ -75,11 +81,13 @@ function listSharesByOwner(ownerEmail) {
   `).all(ownerEmail);
 }
 
-function listSharesByOwnerAndBook(ownerEmail, bookId) {
-  return db.prepare(`
+// Spaltenliste der Buch-Listen (Statistik-Aggregate + Kapitel-/Seitenname per
+// JOIN). Geteilt zwischen der Ersteller-Sicht und der Buch-Owner-Sicht.
+const _BOOK_LIST_SELECT = `
     SELECT sl.*,
            p.page_name AS page_name,
            c.chapter_name AS chapter_name,
+           u.display_name AS owner_display_name,
            (SELECT COUNT(DISTINCT sv.ip_hash) FROM share_views sv
               WHERE sv.share_token = sl.token AND sv.ip_hash IS NOT NULL) AS unique_views,
            (SELECT CAST(AVG(sv.duration_ms) AS INTEGER) FROM share_views sv
@@ -96,9 +104,22 @@ function listSharesByOwnerAndBook(ownerEmail, bookId) {
     FROM share_links sl
     LEFT JOIN pages p ON p.page_id = sl.page_id
     LEFT JOIN chapters c ON c.chapter_id = sl.chapter_id
+    LEFT JOIN app_users u ON u.email = sl.owner_email`;
+
+function listSharesByOwnerAndBook(ownerEmail, bookId) {
+  return db.prepare(`${_BOOK_LIST_SELECT}
     WHERE sl.owner_email = ? AND sl.book_id = ?
     ORDER BY sl.created_at DESC
   `).all(ownerEmail, bookId);
+}
+
+// Alle Links eines Buchs, egal wer sie angelegt hat — Sicht des Buch-Owners,
+// der fremde Links auf seinem Buch sehen und widerrufen koennen muss.
+function listSharesForBook(bookId) {
+  return db.prepare(`${_BOOK_LIST_SELECT}
+    WHERE sl.book_id = ?
+    ORDER BY sl.created_at DESC
+  `).all(bookId);
 }
 
 function revokeShareLink(token, ownerEmail) {
@@ -107,6 +128,28 @@ function revokeShareLink(token, ownerEmail) {
     WHERE token = ? AND owner_email = ? AND revoked_at IS NULL
   `).run(token, ownerEmail);
   return r.changes > 0;
+}
+
+// Widerruf durch den Buch-Owner: trifft jeden Link des Buchs, auch fremde.
+// book_id im WHERE bindet den Token an das Buch, dessen Owner-Rolle die Route
+// geprueft hat.
+function revokeShareLinkOnBook(token, bookId) {
+  const r = db.prepare(`
+    UPDATE share_links SET revoked_at = ${NOW_ISO_SQL}
+    WHERE token = ? AND book_id = ? AND revoked_at IS NULL
+  `).run(token, bookId);
+  return r.changes > 0;
+}
+
+// Alle noch aktiven Links eines Erstellers auf einem Buch widerrufen — beim
+// Entzug des Buchzugriffs bzw. beim Herabstufen unter SHARE_CREATE_MIN_ROLE.
+// Liefert die Anzahl widerrufener Links.
+function revokeSharesByOwnerOnBook(ownerEmail, bookId) {
+  const r = db.prepare(`
+    UPDATE share_links SET revoked_at = ${NOW_ISO_SQL}
+    WHERE owner_email = ? AND book_id = ? AND revoked_at IS NULL
+  `).run(String(ownerEmail || '').trim().toLowerCase(), bookId);
+  return r.changes;
 }
 
 function updateShareLink(token, ownerEmail, { intro, expiresAt, showToc }) {
@@ -129,8 +172,25 @@ function incrementViewCount(token) {
 // Gesamtzaehler (view_count) UND legt eine share_views-Zeile fuer die feinere
 // Statistik an (eindeutige Besucher via ip_hash, Lesedauer folgt per Beacon).
 // Liefert die view_id, damit der Reader die Verweildauer nachtragen kann.
+//
+// Dedupe: derselbe Besucher (Token + ip_hash) innerhalb von VIEW_DEDUPE_MS
+// bekommt die bestehende view_id zurueck (Beacons mergen per MAX), es entsteht
+// keine neue Zeile. Sonst schreibt jeder Reload (oder ein Skript in der
+// Schleife) unbegrenzt Zeilen in die oeffentlich erreichbare Tabelle. Der
+// Gesamtzaehler view_count zaehlt weiter jeden Aufruf — er waechst nicht im
+// Speicher.
+const VIEW_DEDUPE_MS = 30 * 60 * 1000;
 function recordShareView(token, ipHash = null) {
   incrementViewCount(token);
+  if (ipHash) {
+    const cutoff = new Date(Date.now() - VIEW_DEDUPE_MS).toISOString();
+    const recent = db.prepare(`
+      SELECT id FROM share_views
+      WHERE share_token = ? AND ip_hash = ? AND viewed_at > ?
+      ORDER BY id DESC LIMIT 1
+    `).get(token, ipHash, cutoff);
+    if (recent) return recent.id;
+  }
   const r = db.prepare(`
     INSERT INTO share_views (share_token, ip_hash, viewed_at)
     VALUES (?, ?, ${NOW_ISO_SQL})
@@ -460,7 +520,12 @@ module.exports = {
   getShareLinkByToken,
   listSharesByOwner,
   listSharesByOwnerAndBook,
+  listSharesForBook,
   revokeShareLink,
+  revokeShareLinkOnBook,
+  revokeSharesByOwnerOnBook,
+  SHARE_CREATE_MIN_ROLE,
+  VIEW_DEDUPE_MS,
   updateShareLink,
   incrementViewCount,
   recordShareView,

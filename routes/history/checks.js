@@ -4,6 +4,7 @@
 // Seiten-Alter und Abdeckung.
 
 const { db } = require('../../db/schema');
+const { getOwnedCheck, listPageChecks } = require('../../db/page-checks');
 const { toIntId } = require('../../lib/validate');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const { resolvePageBookId } = require('../../lib/content-ownership');
@@ -27,12 +28,7 @@ function register(router) {
 
     // Erst Ownership prüfen (user_email-Scope), dann updaten. Verhindert ID-Raten
     // über Buch-/User-Grenzen und liefert verifizierte book_id für das Log.
-    const row = db.prepare(`
-      SELECT pc.page_id, p.page_name, pc.book_id, pc.chapter_id
-      FROM page_checks pc
-      LEFT JOIN pages p ON p.page_id = pc.page_id
-      WHERE pc.id = ? AND pc.user_email = ?
-    `).get(id, user_email);
+    const row = getOwnedCheck(id, user_email);
     if (!row) return res.status(404).json({ error_code: 'NOT_FOUND' });
     if (!row.book_id) return res.status(400).json({ error_code: 'CHECK_HAS_NO_BOOK' });
     if (!guardBook(req, res, row.book_id, 'lektor')) return;
@@ -66,13 +62,7 @@ function register(router) {
     const bookId = resolvePageBookId(pageId);
     if (!bookId) return res.status(404).json({ error_code: 'PAGE_NOT_FOUND' });
     if (!guardBook(req, res, bookId, 'viewer')) return;
-    const rows = db.prepare(`
-      SELECT pc.id, pc.page_id, p.page_name, pc.book_id, pc.chapter_id, pc.checked_at,
-             pc.error_count, pc.stilanalyse, pc.fazit, pc.model, pc.saved, pc.saved_at
-      FROM page_checks pc
-      LEFT JOIN pages p ON p.page_id = pc.page_id
-      WHERE pc.page_id = ? AND pc.user_email = ?
-      ORDER BY pc.checked_at DESC LIMIT 20`).all(pageId, user_email);
+    const rows = listPageChecks(pageId, user_email, 20);
     res.json(rows.map(r => ({ ...r, saved: !!r.saved })));
   });
 

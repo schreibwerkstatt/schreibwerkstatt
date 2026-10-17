@@ -351,7 +351,6 @@ export const kapitelDashboardMethods = {
     return this._memo('kdGrowth', [data, ids, pages, tokEsts, this._uiLocale()], () => {
       const g = computeGrowth(data?.chapters, ids, pages, tokEsts);
       if (!g) return null;
-      const dateFmt = this._dateFmt({ day: 'numeric', month: 'short', year: 'numeric' });
       const numFmt = this._numFmt();
       const unit = window.__app?.t?.('bookstats.unit.z') || 'Z';
       return {
@@ -361,9 +360,8 @@ export const kapitelDashboardMethods = {
              :             'var(--color-accent)',
         points: g.points.map(p => ({
           ...p,
-          // Mittags-Anker: ein Mitternachts-Anker koennte in der App-Zeitzone
-          // auf den Vortag kippen (gleiche Regel wie die Buch-Sparkline).
-          label: dateFmt.format(new Date(p.iso + 'T12:00:00'))
+          // Kalendertag-Label wie die Buch-Sparkline (tile-format.js#_isoDayLabel).
+          label: this._isoDayLabel(p.iso)
                + ': ' + numFmt.format(p.chars) + ' ' + unit,
         })),
       };
@@ -371,13 +369,11 @@ export const kapitelDashboardMethods = {
   },
 
   // Tages-Datum (YYYY-MM-DD) fuer die Entwicklungs-Kachel. NICHT `$app.formatDate`:
-  // das haengt eine Uhrzeit an, die eine Tagesangabe nicht hat, und legt den
-  // Wert auf UTC-Mitternacht — der Mittags-Anker haelt die Angabe in der
-  // App-Zeitzone auf demselben Tag.
+  // das haengt eine Uhrzeit an, die eine Tagesangabe nicht hat. Kalendertag-
+  // Label ueber tile-format.js#_isoDayLabel (UTC-Mittag + timeZone UTC).
   kdDateLabel(iso) {
     if (!iso) return '';
-    return this._dateFmt({ day: '2-digit', month: '2-digit', year: 'numeric' })
-      .format(new Date(iso + 'T12:00:00'));
+    return this._isoDayLabel(iso, { day: '2-digit', month: '2-digit', year: 'numeric' });
   },
 
   // Stil + Lesbarkeit des Scopes neben dem Buchschnitt (Kachel „Stil",

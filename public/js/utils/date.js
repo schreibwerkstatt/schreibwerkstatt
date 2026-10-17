@@ -2,6 +2,10 @@
 // Alle Date-Display-Pfade hängen an `appTimezone`, damit GUI-Zeit zur
 // Server-Zeit passt.
 import { localeTag } from './format.js';
+import { isoAddDays, isoNoonUtc } from './iso-day.js';
+
+// Direkt-Importeure von utils/date.js (native Editor-Hosts im OTA-Bundle) behalten isoAddDays.
+export { isoAddDays };
 
 // App-weite Zeitzone (Single Source of Truth, kommt vom Server via /config
 // → app_settings.app.timezone). Treibt localIsoDate, Date-Display-Formatter
@@ -110,19 +114,22 @@ export function localDayDiff(then, now = new Date()) {
   return Math.round((dNow - dThen) / 86400000);
 }
 
-// Reine Tages-Arithmetik auf ISO-Datumsstrings (YYYY-MM-DD), TZ-frei via UTC:
-// UTC kennt keine DST, Tagesschritte sind exakt. `iso` + n Kalendertage.
-export function isoAddDays(iso, n) {
-  const [y, m, d] = iso.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + n);
-  return dt.toISOString().slice(0, 10);
-}
-
 // Lokales ISO-Datum n App-Tage vor `base`: erst das App-TZ-Datum von `base`
-// bestimmen (localIsoDate), dann reine ISO-Tagesarithmetik. Kein Rechnen auf
+// bestimmen (localIsoDate), dann reine ISO-Tagesarithmetik (utils/iso-day.js). Kein Rechnen auf
 // Uhrzeiten der Browser-TZ — steht der Browser in einer anderen Zone als
 // `appTimezone`, verschob ein Browser-Mittag-Anker das Datum um einen Tag.
 export function localIsoDaysAgo(n, base = new Date()) {
   return isoAddDays(localIsoDate(base), -n);
+}
+
+// Label eines ISO-Kalendertags (YYYY-MM-DD, auch Prefix eines Zeitstempels):
+// UTC-Mittag + `timeZone: 'UTC'` zeigt genau den Kalendertag des Strings —
+// egal in welcher Zone Browser und App stehen. Ein Browser-Mittag
+// (`iso + 'T12:00:00'`) oder ein UTC-Mittag in appTimezone formatiert kippt
+// dagegen auf den Nachbartag, sobald eine der Zonen >12 h von UTC bzw. von der
+// anderen entfernt ist. Ein Tag ist eine Kalenderangabe, keine Uhrzeit — die
+// appTimezone-Regel (tzOpts) gilt fuer Zeitpunkte. '' bei ungueltigem Input.
+export function formatIsoDay(iso, uiLocale, opts = { day: 'numeric', month: 'short', year: 'numeric' }) {
+  const d = isoNoonUtc(iso);
+  return d ? dateTimeFormat(uiLocale, { ...opts, timeZone: 'UTC' }).format(d) : '';
 }

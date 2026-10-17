@@ -2,7 +2,7 @@
 // Regeln: docs/my-stats.md „Bücher & Ziele / Prognose".
 
 import { localIsoDate, localIsoDaysAgo } from '../../utils.js';
-import { isoAddDays, isoDayDiff, latestSnapshotPerBook, earliestSnapshotPerBook,
+import { isoAddDays, isoDaysBetween, latestSnapshotPerBook, earliestSnapshotPerBook,
          snapshotPerBookOnOrBefore } from './series.js';
 
 // Fenster (Tage) fuer die Tempo-Schaetzung der Fertigstellungs-Prognose: juengster
@@ -42,7 +42,7 @@ export function computeBookGoals(booksDetail, historyRows = [], todayLocal = new
     const hasGoal = goal > 0;
     const deadline = b.goal_deadline || null;
     const reached = hasGoal && chars >= goal;
-    const daysRemaining = deadline ? isoDayDiff(isoToday, deadline) : null;
+    const daysRemaining = deadline ? isoDaysBetween(isoToday, deadline) : null;
 
     let status;
     if (!hasGoal) status = 'none';
@@ -63,7 +63,7 @@ export function computeBookGoals(booksDetail, historyRows = [], todayLocal = new
     const pastSnap = pacePast.get(b.book_id) || paceEarliest.get(b.book_id);
     let recentDailyChars = 0, paceDays = null;
     if (latestSnap && pastSnap && latestSnap.recorded_at > pastSnap.recorded_at) {
-      paceDays = Math.max(1, isoDayDiff(pastSnap.recorded_at, latestSnap.recorded_at));
+      paceDays = Math.max(1, isoDaysBetween(pastSnap.recorded_at, latestSnap.recorded_at));
       recentDailyChars = Math.max(0, ((Number(latestSnap.chars) || 0) - (Number(pastSnap.chars) || 0)) / paceDays);
     }
     const remainingChars = hasGoal ? Math.max(0, goal - chars) : 0;

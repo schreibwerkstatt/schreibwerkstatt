@@ -4,7 +4,7 @@
 
 import { localIsoDate } from '../../utils.js';
 import { buildStreakGrid, STREAK_WEEKS } from '../../streak-grid.js';
-import { isoAddDays, isoDayDiff, isoDowMon, secondsByDate } from './series.js';
+import { isoAddDays, isoDaysBetween, isoWeekdayMon, secondsByDate } from './series.js';
 
 /**
  * Serien-Kennzahlen ueber ALLE Tage einer Tageswert-Map (nicht nur ueber das
@@ -21,7 +21,7 @@ export function computeStreakStats(valueByIso, isoToday, hit = (v) => v > 0) {
   const days = [...valueByIso.entries()].filter(([, v]) => hit(Number(v) || 0)).map(([iso]) => iso).sort();
   let longest = 0, run = 0, prev = null;
   for (const iso of days) {
-    run = prev && isoDayDiff(prev, iso) === 1 ? run + 1 : 1;
+    run = prev && isoDaysBetween(prev, iso) === 1 ? run + 1 : 1;
     if (run > longest) longest = run;
     prev = iso;
   }
@@ -77,7 +77,7 @@ export function computeWeekdayPattern(writingRows) {
   const days = [0, 0, 0, 0, 0, 0, 0];
   for (const [iso, s] of secByDate) {
     if (s <= 0) continue;
-    const idx = isoDowMon(iso);
+    const idx = isoWeekdayMon(iso);
     sec[idx] += s;
     days[idx] += 1;
   }

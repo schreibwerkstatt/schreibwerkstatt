@@ -18,8 +18,10 @@ const { setContext } = require('../../lib/log-context');
 const { resolvePageBookId } = require('../../lib/content-ownership');
 const { guardBook, aclParamGuard, sessionEmail } = require('../../lib/acl');
 const { localIsoDaysAgo } = require('../../lib/local-date');
+const { createOwnedBook, bookNameError, BOOK_NAME_MAX } = require('../../lib/book-create');
+const { listBookListMeta } = require('../../db/book-list-meta');
 const logger = require('../../logger');
-const { jsonBody, NAME_MAX, _validDeviceId, _fail } = require('./shared');
+const { jsonBody, _validDeviceId, _fail } = require('./shared');
 
 const SYNC_PAGE_LIMIT = 200;
 
@@ -59,16 +61,12 @@ function register(router) {
       const all = await contentStore.listBooks(req);
       const userFallbackBuchtyp = fallbackBuchtyp(email);
       const meta = new Map(
-        db.prepare(`
-          SELECT b.book_id, b.owner_email, b.category_id, s.buchtyp, s.book_id AS settings_book_id
-          FROM books b
-          LEFT JOIN book_settings s ON s.book_id = b.book_id
-        `).all().map(r => [r.book_id, {
+        listBookListMeta().map(r => [r.book_id, {
           owner_email: r.owner_email,
           category_id: r.category_id,
           // Ohne Settings-Zeile derselbe User-Default wie getBookSettings — sonst
           // bekäme ein solches Buch Tagebuch-Prompts, aber keinen Kalender.
-          buchtyp: r.settings_book_id == null ? userFallbackBuchtyp : r.buchtyp,
+          buchtyp: r.has_settings ? r.buchtyp : userFallbackBuchtyp,
         }])
       );
       // Regal-Zustand (angeheftet/archiviert) je Buch fuer DIESEN User. Er
@@ -326,7 +324,7 @@ function register(router) {
     if (hasName) {
       const trimmed = body.name.trim();
       if (!trimmed) return res.status(400).json({ error_code: 'NAME_REQUIRED' });
-      if (trimmed.length > NAME_MAX) return res.status(400).json({ error_code: 'NAME_TOO_LONG', params: { max: NAME_MAX } });
+      if (trimmed.length > BOOK_NAME_MAX) return res.status(400).json({ error_code: 'NAME_TOO_LONG', params: { max: BOOK_NAME_MAX } });
       body.name = trimmed;
     }
     try { res.json(await contentStore.updateBook(req.bookId, body, req)); }
@@ -368,18 +366,14 @@ function register(router) {
     if (!email) return res.status(401).json({ error_code: 'NOT_LOGGED_IN' });
     const name = (req.body?.name || '').toString().trim();
     const description = (req.body?.description || '').toString().trim();
-    if (!name) return res.status(400).json({ error_code: 'NAME_REQUIRED' });
-    if (name.length > NAME_MAX) return res.status(400).json({ error_code: 'NAME_TOO_LONG', params: { max: NAME_MAX } });
+    const nameErr = bookNameError(name);
+    if (nameErr === 'NAME_REQUIRED') return res.status(400).json({ error_code: nameErr });
+    if (nameErr) return res.status(400).json({ error_code: nameErr, params: { max: BOOK_NAME_MAX } });
     try {
-      const created = await contentStore.createBook({ name, description }, req);
+      // Buch + Owner + Grant als Einheit (lib/book-create.js): scheitert der
+      // Grant, gibt es kein Buch und einen Fehler statt eines unsichtbaren Buchs.
+      const created = await createOwnedBook({ name, description }, email, req);
       setContext({ book: created.id });
-      // Owner-Grant + books.owner_email setzen (idempotent).
-      try {
-        contentStore.setBookOwner(created.id, email, { onlyIfUnset: true });
-        bookAccess.grantAccess(created.id, email, 'owner', email);
-      } catch (gErr) {
-        logger.warn(`Auto-Owner-Grant fuer book=${created.id} fehlgeschlagen: ${gErr.message}`);
-      }
       // Baseline-Snapshot Vortag: gibt dem Tages-Donut einen prevChars-Wert,
       // damit erstes Schreiben am Anlege-Tag bereits korrekt als Delta zaehlt.
       try {
@@ -393,6 +387,10 @@ function register(router) {
       logger.info(`Buch erstellt id=${created.id} name="${created.name}" owner=${email}`);
       res.json({ ...created, role: 'owner' });
     } catch (e) {
+      if (e?.code === 'BOOK_OWNER_GRANT_FAILED') {
+        logger.warn(`Buch erstellen fehlgeschlagen: Owner-Grant (${e.cause?.message || e.message})`);
+        return res.status(500).json({ error_code: 'CREATE_FAILED', status: 500, detail: e.cause?.message || e.message });
+      }
       const status = e?.status || 500;
       let detail = '';
       try {

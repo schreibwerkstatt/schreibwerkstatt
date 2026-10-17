@@ -26,7 +26,7 @@
 // `pages` (optional, alle Funktionen): die Seitenliste des Buchs. Mit ihr gilt
 // der Live-Stand nur, wenn tokEsts JEDE Seite kennt (completeLiveBookStats) —
 // eine Teilsumme waehrend des Nachladens waere sonst ein grosser Minus-Tag.
-import { completeLiveBookStats, localIsoDate, CHARS_PER_NORMSEITE } from './utils.js';
+import { completeLiveBookStats, localIsoDate, CHARS_PER_NORMSEITE, isoAddDays } from './utils.js';
 
 // Netto-Bilanz von heute, VORZEICHENBEHAFTET: Live-Σ (bzw. heutiger Snapshot,
 // solange tokEsts leer ist) minus letzter Snapshot strikt vor heute. `null`,
@@ -66,14 +66,9 @@ export function computeCharsTodayDelta(stats = [], tokEsts = {}, { pages, todayI
   return Math.max(0, signedTodayDelta(stats, tokEsts, todayIso, pages) ?? 0);
 }
 
-// Kalendertag `n` Tage vor `iso` — reine Kalenderarithmetik ueber einen
-// UTC-Mittag-Anker, damit kein DST-/TZ-Drift entsteht. Der `iso`-Startpunkt
-// kommt TZ-korrekt aus localIsoDate().
-function isoMinusDays(iso, n) {
-  const d = new Date(iso + 'T12:00:00Z');
-  d.setUTCDate(d.getUTCDate() - n);
-  return d.toISOString().slice(0, 10);
-}
+// Kalendertag `n` Tage vor `iso` (utils/iso-day.js, UTC-Mittag-Anker). Der
+// `iso`-Startpunkt kommt TZ-korrekt aus localIsoDate().
+const isoMinusDays = (iso, n) => isoAddDays(iso, -n);
 
 // Kumulativ-Zeichen am letzten Snapshot <= iso (Snapshots sind kumulative
 // Tagesstaende; fehlt ein Tag, gilt der letzte davor). Dieses Nachziehen ist

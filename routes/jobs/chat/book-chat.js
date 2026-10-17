@@ -19,7 +19,7 @@ const embed = require('../../../lib/embed');
 const { selectPassagesSemantic, retrievalQuery } = require('./book-chat-retrieval');
 const { setContext } = require('../../../lib/log-context');
 const appSettings = require('../../../lib/app-settings');
-const { recordChatLedgerForMessage, recordChatLedgerForFailedRun } = require('../../../db/cost-ledger');
+const { recordChatLedgerForMessage, recordChatLedgerEntry } = require('../../../db/cost-ledger');
 const { getSessionWithBookName } = require('../../../db/chat-sessions');
 const {
   _parseChatResponse, figurenBlockChars,
@@ -105,7 +105,7 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
   _applyBookChatAiOverrides(effectiveProvider, logger);
   const aiCfg = getContextConfigFor(effectiveProvider);
   // Verbrauch des KI-Calls, falls der Lauf danach ohne Antwort endet (Truncation):
-  // landet dann über recordChatLedgerForFailedRun im Ledger statt nirgends.
+  // landet dann über recordChatLedgerEntry im Ledger statt nirgends.
   let session = null;
   let spent = null;
   try {
@@ -294,7 +294,8 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // Kein cacheLastMessage: der System-Prompt (Block 2: keyword-selektierte
     // Seiten) ändert sich jede Runde, das würde den Messages-Cache ohnehin
     // invalidieren. Gecacht wird nur der stabile Block 1 (System/Figuren/Review).
-    const { text, truncated, tokensIn, tokensOut, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0, provider, model, genDurationMs } = await callAIChat(aiMessages, systemPrompt, onProgress, null, jobSignal, undefined, SCHEMA_BOOK_CHAT, chatTemperature());
+    const aiRes = await callAIChat(aiMessages, systemPrompt, onProgress, null, jobSignal, undefined, SCHEMA_BOOK_CHAT, chatTemperature());
+    const { text, truncated, tokensIn, tokensOut, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0, provider, model, genDurationMs } = aiRes;
     // Job-State auf echte Provider-Werte setzen (Ollama/Llama melden prompt_tokens
     // erst am Streaming-Ende; ohne diesen Update bleibt die Status-Anzeige auf
     // einem Zwischenstand und weicht von der DB-Nachricht ab).
@@ -302,7 +303,7 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     spent = { provider, model, tokensIn, tokensOut, cacheReadIn, cacheCreationIn, cacheCreation1hIn };
     if (truncated) throw i18nError('job.error.aiTruncated', { max: aiCfg.maxTokensOut, tokIn: tokensIn, tokOut: tokensOut, total: tokensIn + tokensOut });
 
-    const { antwort, fallback } = _parseChatResponse(text);
+    const { antwort, fallback } = _parseChatResponse(text, aiRes, logger);
     if (fallback) {
       logger.warn('Buch-Chat-Antwort kein valides JSON – Rohtext (gesäubert) wird gespeichert.');
     }
@@ -317,7 +318,7 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     spent = null;
     db.prepare('UPDATE chat_sessions SET last_message_at = ? WHERE id = ?').run(assistantNow, session.id);
     recordChatLedgerForMessage(asstMsgResult.lastInsertRowid);
-    const sessionTitle = await generateSessionTitle({ session, userMessage: message, assistantAnswer: antwort, provider: effectiveProvider, logger });
+    const sessionTitle = await generateSessionTitle({ session, userMessage: message, assistantAnswer: antwort, provider: effectiveProvider, logger, signal: jobSignal });
     completeJob(jobId, {
       session_id: session.id,
       user_message_id: userMsgId,
@@ -329,7 +330,7 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     }, bookChatTps, `«${session.book_name || '-'}» session=${sessionId}, ${selectedPages.length}/${totalPages} Seiten`);
   } catch (e) {
     if (spent && session) {
-      recordChatLedgerForFailedRun({
+      recordChatLedgerEntry({
         jobId, userEmail, kind: 'book', bookId: session.book_id, ...spent,
         provider: spent.provider || effectiveProvider,
       });

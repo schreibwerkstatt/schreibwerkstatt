@@ -9,12 +9,11 @@ const {
   deleteReviewCache, deleteChapterMacroReviewCache, deleteRueckblickCache,
 } = require('../../db/schema');
 const { toIntId } = require('../../lib/validate');
-const { sessionEmail } = require('../../lib/acl');
+const { guardBook, sessionEmail } = require('../../lib/acl');
 const { buildRueckblickCoverage } = require('../jobs/rueckblick-dates');
 const { listPageNamesForBook } = require('../../db/content-names');
 const { resolveProvider } = require('../../lib/ai');
 const { _modelName } = require('../jobs/shared/model');
-const { setContext } = require('../../lib/log-context');
 const logger = require('../../logger');
 
 function register(router) {
@@ -42,7 +41,9 @@ function register(router) {
     if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
     const row = getRueckblick(id, sessionEmail(req));
     if (!row) return res.status(404).json({ error_code: 'NOT_FOUND' });
-    setContext({ book: row.book_id });
+    // Persoenlich (user_email-Filter), aber buchgebunden: der Inhalt zitiert das
+    // Buch — nach Entzug des Buchzugriffs nicht mehr lesbar.
+    if (row.book_id != null && !guardBook(req, res, row.book_id, 'viewer')) return;
     res.json(row);
   });
 

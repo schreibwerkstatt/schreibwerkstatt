@@ -28,7 +28,9 @@ const {
 const { toIntId } = require('../../lib/validate');
 const { setContext } = require('../../lib/log-context');
 const { guardBook, sessionEmail } = require('../../lib/acl');
-const bookAccess = require('../../db/book-access');
+const { createOwnedBook, bookNameError, BOOK_NAME_MAX } = require('../../lib/book-create');
+const { ZipLimitError } = require('../../lib/zip-limits');
+const { ImportBufferStore } = require('../../lib/import-buffers');
 const { getBookLocale } = require('../../db/schema');
 const logger = require('../../logger');
 const { seedImportBaseline } = require('../../lib/import-baseline');
@@ -39,13 +41,12 @@ const MAX_DOC_BYTES = 50 * 1024 * 1024;
 const BUFFER_TTL_MS = 30 * 60 * 1000;
 const PREVIEW_NODE_CAP = 400;
 
-// jobId -> { buffer, filename }
-const manuscriptBuffers = new Map();
-
-function _scheduleBufferCleanup(jobId) {
-  const t = setTimeout(() => manuscriptBuffers.delete(jobId), BUFFER_TTL_MS);
-  t.unref?.();
-}
+// jobId -> { buffer, userEmail, filename }. Deckel: lib/import-buffers.js.
+const manuscriptBuffers = new ImportBufferStore({
+  ttlMs: BUFFER_TTL_MS,
+  maxPerUser: 1,
+  maxTotalBytes: 4 * MAX_DOC_BYTES,
+});
 
 // Namen fuer Seiten/Kapitel ohne eigene Ueberschrift. Buch-Locale entscheidet,
 // nicht hartcodiert deutsch (gleiche Regel wie die Monatsnamen im Folder-Import).
@@ -63,7 +64,15 @@ async function _parseDocument(filename, buffer) {
     err.error_code = 'UNSUPPORTED_EXT';
     throw err;
   }
-  const parsed = await parseImportFile(filename, buffer);
+  let parsed;
+  try {
+    parsed = await parseImportFile(filename, buffer);
+  } catch (e) {
+    // Entpackt zu gross (DOCX/ODT sind ZIPs, lib/zip-limits.js): eigener Code
+    // statt PARSE_FAILED, die i18n-Meldung steht schon im Fehler.
+    if (e instanceof ZipLimitError) e.error_code = 'DOCUMENT_TOO_LARGE';
+    throw e;
+  }
   if (!parsed) {
     const err = i18nError('job.error.unsupportedDocument');
     err.error_code = 'UNSUPPORTED_EXT';
@@ -120,17 +129,8 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
     let effBookId = bookId;
     if (mode === 'new-book') {
       updateJob(jobId, { progress: 25, statusText: 'job.manuscript-import.creatingBook' });
-      const created = await contentStore.createBook(
-        { name: bookName, owner_email: userEmail },
-        { session: { user: { email: userEmail } } },
-      );
+      const created = await createOwnedBook({ name: bookName }, userEmail, { session: { user: { email: userEmail } } });
       effBookId = created.id;
-      try {
-        contentStore.setBookOwner(effBookId, userEmail, { onlyIfUnset: true });
-        bookAccess.grantAccess(effBookId, userEmail, 'owner', userEmail);
-      } catch (gErr) {
-        logger.warn(`Auto-Owner-Grant fuer book=${effBookId} fehlgeschlagen: ${gErr.message}`);
-      }
       audit('info', `Buch erstellt: «${bookName}» id=${effBookId}`);
     }
     if (!effBookId) throw i18nError('job.error.bookMissing');
@@ -283,7 +283,7 @@ router.post('/manuscript-import/preview', rawDocBody, async (req, res) => {
       warnings: [...(parsed.warnings || []), ...split.warnings],
     });
   } catch (e) {
-    if (e.error_code) return res.status(400).json({ error_code: e.error_code });
+    if (e.error_code) return res.status(e.error_code === 'DOCUMENT_TOO_LARGE' ? 413 : 400).json({ error_code: e.error_code });
     logger.warn(`manuscript-import preview fail: ${e.message}`);
     res.status(422).json({ error_code: 'PARSE_FAILED' });
   }
@@ -298,6 +298,9 @@ router.post('/manuscript-import', rawDocBody, async (req, res) => {
   const bookId = mode === 'merge' ? toIntId(req.query?.book_id) : null;
 
   if (mode === 'new-book' && !bookName) return res.status(400).json({ error_code: 'BOOK_NAME_REQUIRED' });
+  if (mode === 'new-book' && bookNameError(bookName)) {
+    return res.status(400).json({ error_code: 'NAME_TOO_LONG', params: { max: BOOK_NAME_MAX } });
+  }
   if (mode === 'merge' && !bookId) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
 
   const guarded = _guardBody(req, res);
@@ -311,6 +314,9 @@ router.post('/manuscript-import', rawDocBody, async (req, res) => {
   const existing = findActiveJobId('manuscript-import', dedupKey, userEmail);
   if (existing) return res.json({ jobId: existing, deduplicated: true });
 
+  const admission = manuscriptBuffers.admissionError(userEmail, req.body.length);
+  if (admission) return res.status(429).json({ error_code: admission });
+
   const jobId = createJob(
     'manuscript-import',
     bookId || 0,
@@ -319,8 +325,7 @@ router.post('/manuscript-import', rawDocBody, async (req, res) => {
     { name: bookName || `Book #${bookId}` },
     dedupKey,
   );
-  manuscriptBuffers.set(jobId, { buffer: req.body, filename: guarded.filename });
-  _scheduleBufferCleanup(jobId);
+  manuscriptBuffers.put(jobId, { buffer: req.body, userEmail, filename: guarded.filename });
 
   enqueueJob(jobId, () => runManuscriptImportJob(jobId, {
     userEmail, mode, bookName, bookId,

@@ -17,7 +17,10 @@ Unbekannte Werte fallen serverseitig auf `year-month` zurück (`GROUPINGS`-Set i
 ## Architektur
 
 - **Route:** `POST /jobs/folder-import` ([routes/jobs/folder-import.js](../routes/jobs/folder-import.js)). Body = raw ZIP (`application/zip`, Limit 200 MB). Query: `mode`, `book_name` (new-book) / `book_id` (merge), `grouping` (`year-month` | `year` | `flat`, Default `year-month`).
-- **Buffer-Map:** ZIP landet in modulinterner `importBuffers`-Map (TTL 30 min), Worker konsumiert + cleart in `finally`.
+- **Annahme-Fehler:** leerer Body → `400 EMPTY_BODY`, ZIP > 200 MB → `413 ZIP_TOO_LARGE`, `new-book` ohne Namen → `400 BOOK_NAME_REQUIRED`, Name über `BOOK_NAME_MAX` ([lib/book-create.js](../lib/book-create.js)) → `400 NAME_TOO_LONG` mit `params.max`, `merge` ohne Editor-Recht → `403` (`guardBook`).
+- **Buffer-Map:** ZIP landet in `importBuffers` ([lib/import-buffers.js](../lib/import-buffers.js)#`ImportBufferStore`, TTL 30 min), Worker konsumiert + cleart in `finally`. Deckel: ein offener Upload pro User (`429 IMPORT_PENDING`), Summe über alle User (`429 IMPORT_CAPACITY`).
+- **Entpacken gedeckelt:** das Archiv wird über `openCappedZip` ([lib/zip-limits.js](../lib/zip-limits.js)) mit `FOLDER_ZIP_LIMITS` (Einträge, Gesamt-Bytes) gelesen; gezählt wird **während** des Inflatens, nicht nach der deklarierten Grösse. Eine Einzeldatei über 10 MB wird beim Entpacken abgebrochen und als `FILE_TOO_LARGE` übersprungen; reisst das Archiv den Gesamtdeckel, endet der Job mit `job.error.archiveTooLarge`. DOCX/ODT sind selbst ZIPs: ihre Parser deckeln das Innenleben mit `DOC_ZIP_LIMITS` — eine Überschreitung dort zählt ebenfalls als `FILE_TOO_LARGE`.
+- **Neues Buch:** `createOwnedBook` ([lib/book-create.js](../lib/book-create.js)) — Buch + Owner-Grant als Einheit.
 - **Worker:** `runFolderImportJob` ist Job-Queue-konform (Pflicht: KI-Calls nur via Queue). Phasen via `updateJob({ statusText, statusParams })` als i18n-Keys (`job.folder-import.*`).
 - **Parser:** [lib/import-parsers/](../lib/import-parsers/)
   - `docx.js` — `mammoth.convertToHtml`. Bilder droppen, Warnings sammeln.
@@ -85,7 +88,7 @@ Im Merge-Modus werden bestehende Year- und Month-Sub-Chapter aus dem Buch eingel
   1. `extractTitle()` pro File: alle mit Thema → Page-Name = `YYYY-MM-DD <Thema>` (eigene Pages).
   2. Files ohne Thema werden in den ersten Eintrag des Tages **gemerged** (HTML konkateniert mit `<hr class="day-merge">`). Mixed-Fall: themaless-Files gehen ins erste themaful-Target. Garantiert: ein Tag = ein Eintrag pro „Thema", kein nackter `(2)`-Suffix mehr für reine Datums-Pages.
   - Restliches `(2)`-Suffix greift weiter für synthetische Datums-Quellen (`month-only`/`year-only`) bei identischem aufgelösten Page-Namen.
-- **Datei-Limit 10 MB pro Datei**, ZIP-Limit 200 MB, Mac-Resource-Forks (`._*`, `__MACOSX/`, `.DS_Store`) gefiltert.
+- **Datei-Limit 10 MB pro Datei** (entpackt), ZIP-Limit 200 MB, Mac-Resource-Forks (`._*`, `__MACOSX/`, `.DS_Store`) gefiltert.
 
 ## Frontend
 
@@ -98,7 +101,7 @@ Karte [public/js/cards/folder-import-card.js](../public/js/cards/folder-import-c
 | `BAD_PATH` | Pfad matched nicht `YYYY/Monat/Datei` |
 | `UNSUPPORTED_EXT` | Endung nicht in `SUPPORTED_EXTS` (`.docx`, `.doc`, `.odt`, `.abw`) |
 | `NO_DATE` | Weder Regel noch AI konnten Datum ableiten |
-| `FILE_TOO_LARGE` | > 10 MB pro Datei |
+| `FILE_TOO_LARGE` | > 10 MB pro Datei beim Entpacken, oder das DOCX/ODT-Innenleben reisst `DOC_ZIP_LIMITS` |
 | `PARSE_FAILED` | mammoth/odt-Parser warf |
 | `ZIP_READ_FAILED` | JSZip konnte Entry nicht entpacken |
 | `CREATE_FAILED` | Content-Store-Page-Create warf |

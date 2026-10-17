@@ -59,6 +59,8 @@ module.exports = {
   i18nErrText: jobsMod.i18nErrText,
   contentHttpError: jobsMod.contentHttpError,
   emptyScopeError: jobsMod.emptyScopeError,
+  normalizeGesamtnote: require('./review-validate').normalizeGesamtnote,
+  assertChapterAnalysis: require('./review-validate').assertChapterAnalysis,
 
   _modelName: model._modelName,
   applyReviewAiOverrides: model.applyReviewAiOverrides,

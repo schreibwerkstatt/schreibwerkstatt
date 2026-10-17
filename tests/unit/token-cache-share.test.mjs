@@ -6,7 +6,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runningJobStatus } from '../../public/js/cards/job-helpers.js';
 
-const t = (k, p) => (k === 'chat.tokenCacheShare' ? `${p.pct} % Cache` : k);
+const t = (k, p) => (k === 'chat.tokenCacheShare' ? `${p.pct} % Cache`
+  : k === 'job.tokensOut' ? `↓${p.n} Tokens` : k);
 
 test('Cache-Quote erscheint im Status, wenn cacheReadIn gesetzt ist', () => {
   const html = runningJobStatus(t, 'job.phase.aiReply', 1000, 200, 0, 0, 0, null, 900);

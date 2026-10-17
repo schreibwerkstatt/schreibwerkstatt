@@ -8,7 +8,7 @@
 // Page), wir wollen aber nicht pro Render rebuilden.
 
 import { contentRepo } from '../repo/content.js';
-import { dateTimeFormat, fetchJson, localeTag, localIsoDate, tzOpts } from '../utils.js';
+import { dateTimeFormat, fetchJson, formatIsoDay, localIsoDate } from '../utils.js';
 import { insertChapterItem } from './tree/load.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { diaryDayKey } from './diary-date.js';
@@ -488,17 +488,14 @@ export const diaryCalendarMethods = {
     return list;
   },
 
-  // Wochentag (lang) eines `YYYY-MM-DD`. Noon-UTC + tzOpts → kein TZ-Tagessprung.
+  // Wochentag (lang) eines `YYYY-MM-DD` — Kalendertag-Label (utils/date.js#formatIsoDay).
   _diaryWeekdayLabel(dateIso) {
-    const locale = localeTag(this.$store.shell.uiLocale);
-    return new Date(`${dateIso}T12:00:00Z`).toLocaleDateString(locale, tzOpts({ weekday: 'long' }));
+    return formatIsoDay(dateIso, this.$store.shell.uiLocale, { weekday: 'long' });
   },
 
   // Volles Datum (z.B. „3. Juni 2025") eines `YYYY-MM-DD`.
   _diaryDateLabel(dateIso) {
-    const locale = localeTag(this.$store.shell.uiLocale);
-    return new Date(`${dateIso}T12:00:00Z`).toLocaleDateString(
-      locale, tzOpts({ day: 'numeric', month: 'long', year: 'numeric' }));
+    return formatIsoDay(dateIso, this.$store.shell.uiLocale, { day: 'numeric', month: 'long', year: 'numeric' });
   },
 
   diaryAnniversaryYearsAgoLabel(yearsAgo) {

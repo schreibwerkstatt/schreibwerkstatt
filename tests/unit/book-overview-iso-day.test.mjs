@@ -1,10 +1,10 @@
-// Kalendertag-Arithmetik der Buch-Uebersicht (public/js/book-overview/iso-day.js)
+// Kalendertag-Arithmetik der Buch-Uebersicht (public/js/utils/iso-day.js)
 // und die Vollstaendigkeits-Regel des Live-Stands (utils/format.js#
 // completeLiveBookStats), auf der Hero, Heute-Ring, 7-Tage-Bilanz und
 // Schreibziel-Prognose stehen.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isoAddDays, isoDaysBetween, isoWeekday, isoLastDays, isoNoonUtc } from '../../public/js/book-overview/iso-day.js';
+import { isoAddDays, isoDaysBetween, isoWeekday, isoLastDays, isoNoonUtc } from '../../public/js/utils/iso-day.js';
 import { completeLiveBookStats } from '../../public/js/utils.js';
 import { computeTodayRing, makeDayDelta } from '../../public/js/today-ring.js';
 

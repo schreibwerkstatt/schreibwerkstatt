@@ -6,7 +6,7 @@
 
 const contentStore = require('../../lib/content-store');
 const shareLinks = require('../../db/share-links');
-const { guardBook, sessionEmail } = require('../../lib/acl');
+const { guardBook, resolveBookRole, sessionEmail } = require('../../lib/acl');
 const { setContext } = require('../../lib/log-context');
 const notify = require('../../lib/notify');
 const logger = require('../../logger');
@@ -20,16 +20,59 @@ function requireSession(req, res, next) {
   next();
 }
 
+// Eigenen Link (Ersteller = Session) laden und den Buchzugriff des Erstellers
+// pruefen. Antwortet selbst (404 bzw. 401/403 via guardBook) und liefert dann
+// null. Ohne den Buch-Guard behielte ein Ersteller, dem der Buchzugriff
+// entzogen wurde, ueber seine Links Zugriff auf Kommentare und Statistik.
+function ownLink(req, res, minRole) {
+  const token = String(req.params.token || '');
+  const link = shareLinks.getShareLinkByToken(token);
+  if (!link || link.owner_email !== sessionEmail(req)) {
+    res.status(404).json({ error_code: 'NOT_FOUND' });
+    return null;
+  }
+  setContext({ book: link.book_id });
+  if (!guardBook(req, res, link.book_id, minRole)) return null;
+  return link;
+}
+
+// Kommentar → Link → Buch-Guard fuer die Owner-Aktionen per Kommentar-ID.
+// Fremde/unbekannte IDs → 404 (die SQL-Seite filtert zusaetzlich auf owner_email).
+function guardComment(req, res, id) {
+  const c = shareLinks.getCommentById(id);
+  const link = c ? shareLinks.getShareLinkByToken(c.share_token) : null;
+  if (!link || link.owner_email !== sessionEmail(req)) {
+    res.status(404).json({ error_code: 'NOT_FOUND' });
+    return false;
+  }
+  return guardBook(req, res, link.book_id, shareLinks.SHARE_CREATE_MIN_ROLE);
+}
+
+// Zeile fuer die Owner-Karte: `mine` (selbst angelegt → Bearbeiten/Kommentare/
+// Statistik) und `creator_access` (Ersteller hat noch die noetige Buchrolle —
+// sonst ist der Link fuer Leser bereits tot, siehe share-helpers#isExpired).
+function _listRow(row, me) {
+  return {
+    ...row,
+    mine: row.owner_email === me,
+    creator_access: !H.creatorLostAccess(row),
+  };
+}
+
 function register(router) {
   router.get('/api/links', requireSession, (req, res) => {
-    const ownerEmail = sessionEmail(req);
+    const me = sessionEmail(req);
     const bookId = parseInt(req.query.book_id, 10);
+    if (bookId && !guardBook(req, res, bookId, 'viewer')) return;
     try {
-      const rows = bookId
-        ? shareLinks.listSharesByOwnerAndBook(ownerEmail, bookId)
-        : shareLinks.listSharesByOwner(ownerEmail);
-      if (bookId) setContext({ book: bookId });
-      res.json(rows);
+      // Buch-Owner sieht alle Links seines Buchs (auch die anderer Mitarbeiter),
+      // alle anderen nur die eigenen.
+      const rows = !bookId
+        ? shareLinks.listSharesByOwner(me)
+        : req.bookRole === 'owner'
+          ? shareLinks.listSharesForBook(bookId)
+          : shareLinks.listSharesByOwnerAndBook(me, bookId);
+      res.json(rows.map(r => _listRow(r, me)));
     } catch (e) {
       logger.error('[share/api/links GET] ' + e.message);
       res.status(500).json({ error_code: 'DB_ERROR' });
@@ -46,7 +89,7 @@ function register(router) {
     const ownerEmail = sessionEmail(req);
     const bookId = parseInt(req.query.book_id, 10);
     if (!Number.isInteger(bookId) || bookId <= 0) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
-    setContext({ book: bookId });
+    if (!guardBook(req, res, bookId, 'viewer')) return;
     try {
       const rows = shareLinks.openReaderCommentsForBook(ownerEmail, bookId);
       const counts = {};
@@ -81,7 +124,7 @@ function register(router) {
     const ownerEmail = sessionEmail(req);
     const bookId = parseInt(req.query.book_id, 10);
     if (!Number.isInteger(bookId) || bookId <= 0) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
-    setContext({ book: bookId });
+    if (!guardBook(req, res, bookId, 'viewer')) return;
     try {
       const links = shareLinks.activeLinksForOwnerBook(ownerEmail, bookId);
       let bookCount = 0;
@@ -115,7 +158,7 @@ function register(router) {
     const ownerEmail = sessionEmail(req);
     const bookId = parseInt(req.params.book_id, 10);
     if (!Number.isInteger(bookId) || bookId <= 0) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
-    setContext({ book: bookId });
+    if (!guardBook(req, res, bookId, 'viewer')) return;
     try {
       const rows = shareLinks.listCommentsByOwnerBook(ownerEmail, bookId);
       if (req.query.mark_seen === '1') shareLinks.markOwnerSeenForBook(ownerEmail, bookId);
@@ -162,7 +205,7 @@ function register(router) {
       return res.status(404).json({ error_code: 'TARGET_NOT_FOUND' });
     }
 
-    if (!guardBook(req, res, bookId, 'editor')) return;
+    if (!guardBook(req, res, bookId, shareLinks.SHARE_CREATE_MIN_ROLE)) return;
 
     try {
       const created = shareLinks.createShareLink({
@@ -187,9 +230,7 @@ function register(router) {
   router.patch('/api/links/:token', requireSession, jsonBody, (req, res) => {
     const ownerEmail = sessionEmail(req);
     const token = String(req.params.token || '');
-    const link = shareLinks.getShareLinkByToken(token);
-    if (!link || link.owner_email !== ownerEmail) return res.status(404).json({ error_code: 'NOT_FOUND' });
-    setContext({ book: link.book_id });
+    if (!ownLink(req, res, shareLinks.SHARE_CREATE_MIN_ROLE)) return;
     const patch = {};
     if ('intro' in (req.body || {})) {
       const intro = req.body.intro;
@@ -220,12 +261,21 @@ function register(router) {
     const ownerEmail = sessionEmail(req);
     const token = String(req.params.token || '');
     const link = shareLinks.getShareLinkByToken(token);
-    if (!link || link.owner_email !== ownerEmail) return res.status(404).json({ error_code: 'NOT_FOUND' });
+    if (!link) return res.status(404).json({ error_code: 'NOT_FOUND' });
     setContext({ book: link.book_id });
+    // Eigener Link: der Ersteller darf ihn immer widerrufen (auch ohne Buchrolle —
+    // Widerrufen gibt nichts preis). Fremder Link: nur der Buch-Owner. Alle
+    // anderen bekommen 404, damit der Token kein Existenz-Orakel ist.
+    const mine = link.owner_email === ownerEmail;
+    if (!mine && resolveBookRole(req, link.book_id) !== 'owner') {
+      return res.status(404).json({ error_code: 'NOT_FOUND' });
+    }
     try {
-      const ok = shareLinks.revokeShareLink(token, ownerEmail);
+      const ok = mine
+        ? shareLinks.revokeShareLink(token, ownerEmail)
+        : shareLinks.revokeShareLinkOnBook(token, link.book_id);
       if (!ok) return res.status(409).json({ error_code: 'ALREADY_REVOKED' });
-      logger.info(`[share/api/links DELETE] token=${token.slice(0, 8)} book=${link.book_id}`);
+      logger.info(`[share/api/links DELETE] token=${token.slice(0, 8)} book=${link.book_id}${mine ? '' : ' (Buch-Owner)'}`);
       res.json({ ok: true });
     } catch (e) {
       logger.error('[share/api/links DELETE] ' + e.message);
@@ -236,9 +286,8 @@ function register(router) {
   router.get('/api/links/:token/comments', requireSession, (req, res) => {
     const ownerEmail = sessionEmail(req);
     const token = String(req.params.token || '');
-    const link = shareLinks.getShareLinkByToken(token);
-    if (!link || link.owner_email !== ownerEmail) return res.status(404).json({ error_code: 'NOT_FOUND' });
-    setContext({ book: link.book_id });
+    const link = ownLink(req, res, 'viewer');
+    if (!link) return;
     try {
       const rows = shareLinks.listCommentsByToken(token, { order: 'desc' });
       if (req.query.mark_seen === '1') shareLinks.markOwnerSeen(token, ownerEmail);
@@ -252,11 +301,9 @@ function register(router) {
   // Kapitel-Drop-off eines Links (Autor): pro Kapitel Ø-Lesetiefe + Anzahl der
   // Aufrufe, die es erreicht haben. Nur bei Buch-/Kapitel-Shares gefüllt.
   router.get('/api/links/:token/read-depth', requireSession, (req, res) => {
-    const ownerEmail = sessionEmail(req);
     const token = String(req.params.token || '');
-    const link = shareLinks.getShareLinkByToken(token);
-    if (!link || link.owner_email !== ownerEmail) return res.status(404).json({ error_code: 'NOT_FOUND' });
-    setContext({ book: link.book_id });
+    const link = ownLink(req, res, 'viewer');
+    if (!link) return;
     try {
       res.json({ chapters: shareLinks.readDepthByToken(token) });
     } catch (e) {
@@ -267,11 +314,9 @@ function register(router) {
 
   // Gesamt-Fazits eines Links (Autor): Sternewertung + Freitext pro Leser.
   router.get('/api/links/:token/feedback', requireSession, (req, res) => {
-    const ownerEmail = sessionEmail(req);
     const token = String(req.params.token || '');
-    const link = shareLinks.getShareLinkByToken(token);
-    if (!link || link.owner_email !== ownerEmail) return res.status(404).json({ error_code: 'NOT_FOUND' });
-    setContext({ book: link.book_id });
+    const link = ownLink(req, res, 'viewer');
+    if (!link) return;
     try {
       res.json({ feedback: shareLinks.listFeedbackByToken(token) });
     } catch (e) {
@@ -285,11 +330,8 @@ function register(router) {
   // Chapter-Share = Block in den Kapitel-Seiten suchen (Anker speichert keine
   // page_id).
   router.get('/api/links/:token/locate', requireSession, async (req, res) => {
-    const ownerEmail = sessionEmail(req);
-    const token = String(req.params.token || '');
-    const link = shareLinks.getShareLinkByToken(token);
-    if (!link || link.owner_email !== ownerEmail) return res.status(404).json({ error_code: 'NOT_FOUND' });
-    setContext({ book: link.book_id });
+    const link = ownLink(req, res, 'viewer');
+    if (!link) return;
     const bid = String(req.query?.bid || '').toLowerCase();
     if (!ANCHOR_BID_RE.test(bid)) return res.status(400).json({ error_code: 'INVALID_ANCHOR' });
     if (link.kind === 'page') return res.json({ page_id: link.page_id });
@@ -308,9 +350,8 @@ function register(router) {
   router.post('/api/links/:token/comments', requireSession, jsonBody, (req, res) => {
     const ownerEmail = sessionEmail(req);
     const token = String(req.params.token || '');
-    const link = shareLinks.getShareLinkByToken(token);
-    if (!link || link.owner_email !== ownerEmail) return res.status(404).json({ error_code: 'NOT_FOUND' });
-    setContext({ book: link.book_id });
+    const link = ownLink(req, res, shareLinks.SHARE_CREATE_MIN_ROLE);
+    if (!link) return;
     const body = String((req.body?.body || '')).trim();
     if (!body) return res.status(400).json({ error_code: 'BODY_REQUIRED' });
     if (body.length > H.BODY_MAX) return res.status(400).json({ error_code: 'BODY_TOO_LONG' });
@@ -338,6 +379,7 @@ function register(router) {
     const ownerEmail = sessionEmail(req);
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
+    if (!guardComment(req, res, id)) return;
     const resolved = req.body?.resolved !== false;
     try {
       const ok = shareLinks.setCommentResolved(id, ownerEmail, resolved);
@@ -353,6 +395,7 @@ function register(router) {
     const ownerEmail = sessionEmail(req);
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
+    if (!guardComment(req, res, id)) return;
     try {
       const ok = shareLinks.deleteComment(id, ownerEmail);
       if (!ok) return res.status(404).json({ error_code: 'NOT_FOUND' });

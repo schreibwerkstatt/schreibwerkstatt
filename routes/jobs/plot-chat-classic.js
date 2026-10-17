@@ -16,6 +16,7 @@ const { db } = require('../../db/schema');
 const ai = require('../../lib/ai');
 const { chatTemperature, getContextConfigFor, resolveProvider, parseJSONLenient } = ai;
 const { buildAgenticHistory } = require('./agentic-chat');
+const { classicRefusalAnswer } = require('./chat/shared');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, getPrompts, jobAbortControllers,
 } = require('./shared');
@@ -103,14 +104,17 @@ async function runPlotChatJobClassic(jobId, sessionId, userMsgId, message, userE
     };
     const {
       text, truncated, tokensIn, tokensOut, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0,
-      provider: usedProvider, model, genDurationMs,
+      provider: usedProvider, model, genDurationMs, stopReason, stopDetails,
     } = await ai.callAIChat(aiMessages, systemPrompt, onProgress, null, jobSignal, undefined, SCHEMA_PLOT_CHAT_CLASSIC, chatTemperature());
     updateJob(jobId, { tokensIn, tokensOut, cacheReadIn, cacheCreationIn, cacheCreation1hIn });
     if (truncated) throw i18nError('job.error.aiTruncated', { max: aiCfg.maxTokensOut, tokIn: tokensIn, tokOut: tokensOut, total: tokensIn + tokensOut });
 
-    const r = parseJSONLenient(text, ['antwort']);
+    // Ablehnung: Hinweis-Marker statt Antwort, Teil-Output samt Vorschlägen verfällt
+    // (wie im agentischen Pfad und im Abschnitts-/Buch-Chat).
+    const refusal = classicRefusalAnswer({ stopReason, stopDetails }, logger);
+    const r = refusal ? { ok: false, partial: {} } : parseJSONLenient(text, ['antwort']);
     const parsed = r.ok ? r.parsed : r.partial;
-    let antwort = typeof parsed?.antwort === 'string' ? parsed.antwort.trim() : '';
+    let antwort = refusal || (typeof parsed?.antwort === 'string' ? parsed.antwort.trim() : '');
     const ctx = { ...base.toolCtx, proposals: [] };
     const { proposals, rejected } = await collectClassicProposals(r.ok ? parsed.vorschlaege : [], ctx, logger);
     if (!antwort) antwort = proposals.length ? '__i18n:plot.chat.proposalsOnly__' : '__i18n:chat.errors.emptyAnswer__';
@@ -120,7 +124,8 @@ async function runPlotChatJobClassic(jobId, sessionId, userMsgId, message, userE
       ...(passages.length ? { pre_context: { count: passages.length } } : {}),
       ...(proposals.length ? { proposals } : {}),
       ...(rejected ? { rejected } : {}),
-      ...(r.ok ? {} : { parse_fallback: true }),
+      ...(r.ok || refusal ? {} : { parse_fallback: true }),
+      ...(refusal ? { refused: true } : {}),
     };
     const now = new Date().toISOString();
     const tps = (genDurationMs != null && tokensOut > 0) ? tokensOut / (genDurationMs / 1000) : null;
@@ -130,7 +135,7 @@ async function runPlotChatJobClassic(jobId, sessionId, userMsgId, message, userE
     `).run(session.id, antwort, tokensIn, tokensOut, cacheReadIn, cacheCreationIn, cacheCreation1hIn, usedProvider, model, tps, JSON.stringify(contextInfo), now);
     db.prepare('UPDATE chat_sessions SET last_message_at = ? WHERE id = ?').run(now, session.id);
     recordChatLedgerForMessage(asst.lastInsertRowid);
-    const sessionTitle = await generateSessionTitle({ session, userMessage: message, assistantAnswer: antwort, provider, logger });
+    const sessionTitle = await generateSessionTitle({ session, userMessage: message, assistantAnswer: antwort, provider, logger, signal: jobSignal });
     completeJob(jobId, {
       session_id: session.id, user_message_id: userMsgId, assistant_message_id: asst.lastInsertRowid,
       tokensIn, tokensOut, proposals: proposals.length,

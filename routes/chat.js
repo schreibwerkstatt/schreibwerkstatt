@@ -9,7 +9,6 @@ const chatSessions = require('../db/chat-sessions');
 const chatQuality = require('../db/chat-quality');
 const { htmlToText } = require('./jobs/shared');
 const { setContext } = require('../lib/log-context');
-const { resolvePageBookId } = require('../lib/content-ownership');
 const { searchChatHistory } = require('../lib/chat-search');
 const { enqueueChatEmbedIndexJob } = require('./jobs/chat-embed-index');
 
@@ -157,13 +156,13 @@ router.get('/search/:book_id', async (req, res) => {
 /** Alle Sessions einer Seite (neueste zuerst, vollständig — gleiche Begründung
  *  wie bei den Buch-Sessions oben: ein Zeilen-Deckel liesse ältere Gespräche
  *  unerreichbar in der DB liegen). Leere Sessions werden ausgefiltert, der
- *  `preview` ist serverseitig gekappt. */
+ *  `preview` ist serverseitig gekappt. Eigene Sessions, aber buchgebunden:
+ *  ohne Lesezugriff aufs Buch der Seite kein Zugriff (der Preview zitiert den
+ *  Gesprächsinhalt) — pageBookGuard leitet das Buch aus der Seite ab. */
 router.get('/sessions/:page_id', (req, res) => {
-  const pageId = toIntId(req.params.page_id);
-  if (!pageId) return res.status(400).json({ error_code: 'INVALID_ID' });
-  const bookId = resolvePageBookId(pageId);
-  if (bookId) setContext({ book: bookId });
-  res.json(chatSessions.listPageSessions(pageId, sessionEmail(req), PREVIEW_CHARS));
+  const g = pageBookGuard(req, res, { minRole: 'viewer' });
+  if (!g) return;
+  res.json(chatSessions.listPageSessions(g.pageId, sessionEmail(req), PREVIEW_CHARS));
 });
 
 /** Session mit allen Nachrichten laden. Der Öffnungs-Snapshot
@@ -174,7 +173,9 @@ router.get('/session/:id', (req, res) => {
   if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
   const session = chatSessions.getOwnedSession(id, userEmail);
   if (!session) return res.status(404).json({ error_code: 'SESSION_NOT_FOUND' });
-  if (session.book_id) setContext({ book: session.book_id });
+  // Eigene Session, aber buchgebunden: nach Entzug des Buchzugriffs nicht mehr
+  // lesbar (Nachrichten zitieren den Buchtext). guardBook setzt den Log-Context.
+  if (session.book_id && !guardBook(req, res, session.book_id, 'viewer')) return;
 
   const messages = db.prepare(`
     SELECT id, role, content, vorschlaege, tokens_in, tokens_out,

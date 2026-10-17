@@ -22,6 +22,7 @@ const { buildCorrectionSamples } = require('./samples/correction');
 const { buildAuthorChatSamples } = require('./samples/author-chat');
 const { buildAiAugmentSamples } = require('./samples/ai-augment');
 const { guardBook, sessionEmail } = require('../../../lib/acl');
+const { toIntId } = require('../../../lib/validate');
 
 const finetuneExportRouter = express.Router();
 
@@ -236,6 +237,9 @@ finetuneExportRouter.get('/finetune-export/:id/:kind.jsonl', (req, res) => {
   if (!job) return res.status(404).json({ error_code: 'JOB_NOT_FOUND' });
   if (job.userEmail !== userEmail) return res.status(403).json({ error_code: 'FORBIDDEN' });
   if (job.type !== 'finetune-export') return res.status(400).json({ error_code: 'JOB_TYPE_MISMATCH' });
+  // Buchzugriff kann seit dem Export entzogen worden sein.
+  const jobBookId = toIntId(job.bookId);
+  if (jobBookId && !guardBook(req, res, jobBookId, 'viewer')) return;
   if (job.status !== 'done') return res.status(409).json({ error_code: 'JOB_NOT_DONE' });
   const kind = req.params.kind;
   if (kind !== 'train' && kind !== 'val') return res.status(400).json({ error_code: 'INVALID_KIND' });

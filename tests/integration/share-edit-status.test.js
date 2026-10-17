@@ -37,6 +37,8 @@ function seed() {
   if (!appUsers.getUser(OWNER)) appUsers.createUser({ email: OWNER, displayName: 'Autor' });
   db.prepare(`INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`)
     .run(BOOK_ID, 'Stand-Buch', now, now);
+  // Share-Links leben nur, solange ihr Ersteller die Buchrolle hat (isExpired).
+  require('../../db/book-access').grantAccess(BOOK_ID, OWNER, 'owner', OWNER);
   const ch = db.prepare(`INSERT INTO chapters (chapter_id, book_id, chapter_name, position, updated_at) VALUES (?, ?, ?, ?, ?)`);
   ch.run(CH_A, BOOK_ID, 'Kapitel Eins', 0, now);
   ch.run(CH_B, BOOK_ID, 'Kapitel Zwei', 1, now);

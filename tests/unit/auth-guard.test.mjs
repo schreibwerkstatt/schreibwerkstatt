@@ -23,6 +23,10 @@ const express = require('express');
 require('../../lib/async-routes').install();
 const { errorHandler } = require('../../lib/async-routes');
 const { makeAuthGuard, wantsLoginRedirect } = require('../../lib/auth-guard');
+// Eine Sitzung gilt nur mit bestehendem, nicht gesperrtem Konto (Auth-Guard
+// prueft app_users) — darum das Test-Konto anlegen.
+const appUsers = require('../../db/app-users');
+appUsers.createUser({ email: 'a@b.c', displayName: 'A' });
 
 function makeApp({ user = null } = {}) {
   const app = express();
@@ -130,4 +134,29 @@ test('body-parser-Fehler behalten ihren 4xx-Status als JSON', async () => {
     assert.equal(broken.status, 400);
     assert.deepEqual(await broken.json(), { error_code: 'INVALID_JSON' });
   });
+});
+
+test('Sitzung ohne app_users-Row (Konto geloescht) → 401, gesperrt ebenso', async () => {
+  await withServer(makeApp({ user: { email: 'geist@b.c' } }), async (base) => {
+    const res = await fetch(`${base}/ideen/list`, { redirect: 'manual', headers: { 'sec-fetch-mode': 'cors', accept: '*/*' } });
+    assert.equal(res.status, 401);
+  });
+  appUsers.createUser({ email: 'gesperrt@b.c', displayName: 'G', status: 'suspended' });
+  await withServer(makeApp({ user: { email: 'gesperrt@b.c' } }), async (base) => {
+    const res = await fetch(`${base}/ideen/list`, { redirect: 'manual', headers: { 'sec-fetch-mode': 'cors', accept: '*/*' } });
+    assert.equal(res.status, 401);
+  });
+});
+
+test('ENV-Admin (Notfall-Zugang) bleibt angemeldet, auch gesperrt', async () => {
+  appUsers.createUser({ email: 'notfall@b.c', displayName: 'N', status: 'suspended' });
+  process.env.ADMIN_EMAIL = 'Notfall@B.c';
+  try {
+    await withServer(makeApp({ user: { email: 'notfall@b.c' } }), async (base) => {
+      const res = await fetch(`${base}/ideen/list`, { redirect: 'manual', headers: { 'sec-fetch-mode': 'cors', accept: '*/*' } });
+      assert.equal(res.status, 200);
+    });
+  } finally {
+    delete process.env.ADMIN_EMAIL;
+  }
 });

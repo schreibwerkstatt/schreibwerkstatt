@@ -311,9 +311,16 @@ function register(router) {
     let readerName = req.body?.reader_name != null ? String(req.body.reader_name).trim().slice(0, READER_NAME_MAX) : null;
     if (!readerName) readerName = null;
 
-    const ip = req.ip || req.connection?.remoteAddress || '';
+    // reader_token waehlt der Client — ohne Drossel waere jeder neue Token ein
+    // neuer UPSERT-Schluessel. Eigene Buckets (Praefix), Limit wie Kommentare.
+    const ipHash = rateLimit.hashIp(req.ip || req.connection?.remoteAddress || '');
+    const rl = rateLimit.check(`feedback:${token}`, ipHash);
+    if (!rl.allowed) {
+      res.setHeader('Retry-After', String(rl.retryAfterSec));
+      return res.status(429).json({ error_code: 'RATE_LIMITED', retry_after: rl.retryAfterSec });
+    }
     try {
-      shareLinks.upsertFeedback(token, { readerToken, readerName, rating, body, ipHash: rateLimit.hashIp(ip) });
+      shareLinks.upsertFeedback(token, { readerToken, readerName, rating, body, ipHash });
     } catch (e) {
       logger.warn(`[share/feedback] upsert fehlgeschlagen: ${e.message}`);
       return res.status(500).json({ error_code: 'ERR' });

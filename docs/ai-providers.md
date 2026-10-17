@@ -208,7 +208,7 @@ if (!parsed.fehler) throw new Error('Pflichtfeld `fehler` fehlt.');
 4. `jsonrepair()` (toleranter Repairer).
 5. `escapeUnescapedQuotes()` — escapet ASCII-`"` mitten in String-Werten (typisch: lokale Modelle vergessen Escape bei Anführungszeichen-Beispielen).
 6. `jsonrepair(escaped)`.
-7. Bei Fail: `_dumpParseFail` schreibt Rohtext in `ai_parse_fails/` (rotiert auf 50 Files), wirft mit Position-Preview.
+7. Bei Fail: `_dumpParseFail` schreibt Rohtext in `ai_parse_fails/` (rotiert auf 50 Files) und loggt die Parser-Meldung; geworfen wird `job.error.parseFailed` (`code: 'AI_PARSE_FAILED'`, `i18nParams: { pos, len }`, Parser-Meldung + Ausschnitt in `err.detail`). Derselbe Key steht in der Notify-Skip-Liste (`mail.notify.skip_errors`, [lib/notify.js](../lib/notify.js)) — ein Parse-Fehler ist Modell-Drift, kein Crash für die Admin-Mail.
 
 `parseJSONLenient(text, [stringFields])` — schluckt Parse-Fehler, extrahiert benannte String-Felder einzeln per Regex (akzeptiert ASCII + typografische + DE/CH/FR-Quotes). Für User-Prosa-Rettung statt Job-Fail.
 
@@ -240,6 +240,28 @@ Nicht-retryable: alle anderen Status-Codes.
 ## Timeouts (Claude)
 
 Hard-Timeout via `ai.claude.timeout_ms` (Default 600 000 ms = 10 min). `_combineSignals` merged User-Cancel und Timeout in einen AbortController. Marker `state.timedOut` unterscheidet Timeout (`code: 'AI_TIMEOUT'`) von User-Cancel (`AbortError`).
+
+## Provider-Fehler: i18n-Key, Detail ins Log
+
+Kein Provider wirft rohen Server-Text als `err.message` — `failJob` legt die Message als `job.error` ab, das Frontend rendert `t(job.error, errorParams)`. Alle Fehlerpfade laufen über `providerError(key, { provider, status, detail })` ([lib/ai/shared.js](../lib/ai/shared.js)): technische Meldung vollständig ins Log und in `err.detail`, gekürzt als `detail`-Param in die Meldung.
+
+| Key | Wann |
+|---|---|
+| `job.error.aiHttpError` | Nicht-2xx-Antwort, die nicht transient ist (`{ provider, status, detail }`) |
+| `job.error.aiStreamError` | Fehler-Event/-Chunk im Stream (`{"error":…}` bzw. Claude `type: error`) |
+| `job.error.aiRequestFailed` | fetch scheitert ohne Verbindungs-Klasse (die geht als `error.*_UNREACHABLE`) |
+| `job.error.aiStreamInterrupted` | Verbindung mitten in der Antwort abgerissen; `code: 'AI_STREAM_INTERRUPTED'`, transient für `retryOnTransientAi` |
+| `job.error.aiOverloaded` | 429/529/5xx nach erschöpfter Retry-Leiter (`code: 'AI_OVERLOADED'`) |
+
+**Kein `err.status` an HTTP-Fehlern:** [lib/notify.js](../lib/notify.js) unterdrückt die Admin-Mail für 4xx-`status`; ein falsch konfiguriertes Modell (Provider-404) soll aber gemeldet werden. Der HTTP-Status steht in `i18nParams.status`.
+
+## Unvollständiger Stream = `truncated`
+
+Endet ein Stream ohne Endmarke, riss die Verbindung ab — der Text ist ein Teilstück, das `jsonrepair` sonst still zu „gültigem" JSON flickt. Alle drei Provider melden das als `truncated: true` (+ `incomplete: true`), damit der Aufrufer am Pflicht-`truncated`-Check wirft:
+
+- **Claude:** weder `stop_reason` im `message_delta` noch `message_stop` gesehen (`_makeUsageAcc().result()`).
+- **Ollama:** NDJSON-Stream endet ohne `done: true`-Chunk.
+- **openai-compat:** weder `finish_reason` noch `data: [DONE]`.
 
 ## Connection-Fehler (lokal)
 
@@ -275,7 +297,7 @@ Rückgabe enthält:
 - `tokensIn` — Input-Tokens (inklusive Cache-Read + Cache-Creation bei Claude).
 - `tokensOut` — generierte Output-Tokens.
 - `cacheReadIn`, `cacheCreationIn` — Claude only, sonst 0.
-- `truncated: bool` — `stop_reason === 'max_tokens'`.
+- `truncated: bool` — `stop_reason === 'max_tokens'` **oder** Stream ohne Endmarke (siehe [Unvollständiger Stream](#unvollständiger-stream--truncated)).
 - `stopReason` (+ `stopDetails` bei `refusal`) — Claude: roher `stop_reason`; `model` ist nach einem Refusal-Fallback das bedienende Modell.
 - `genDurationMs` — Generation-Dauer ohne Setup-Zeit.
 
@@ -347,7 +369,7 @@ Ollama hat bewusst keinen Override-Satz: dort ist das Modell an das geladene Gew
 
 ### Timeout + Retry: geteilte Mechanik, provider-eigene Auslöser
 
-`combineSignals` / `timeoutError` / `withOverloadRetry` / `parseRetryAfter` / `retryDelayMs` / `overloadError` liegen einmal in [lib/ai/shared.js](../lib/ai/shared.js) und werden von Claude **und** openai-compat benutzt (Ollama nutzt nur den Timeout). Der Timeout deckt fetch **und** jedes `reader.read()` im Stream und endet als `AI_TIMEOUT` mit i18n-Key `job.error.aiTimeout`. Ein Fehler-Chunk im Stream (`{"error":…}`) wirft mit der Server-Meldung, statt still mit leerem Text zu enden. Provider-eigen bleibt nur, **welche** Antwort transient ist:
+`combineSignals` / `timeoutError` / `withOverloadRetry` / `parseRetryAfter` / `retryDelayMs` / `overloadError` liegen einmal in [lib/ai/shared.js](../lib/ai/shared.js) und werden von Claude **und** openai-compat benutzt (Ollama nutzt nur den Timeout). Der Timeout deckt fetch **und** jedes `reader.read()` im Stream und endet als `AI_TIMEOUT` mit i18n-Key `job.error.aiTimeout`. Ein Fehler-Chunk im Stream (`{"error":…}`) wirft `job.error.aiStreamError` mit der Server-Meldung als `detail`, statt still mit leerem Text zu enden (siehe [Provider-Fehler](#provider-fehler-i18n-key-detail-ins-log)). Provider-eigen bleibt nur, **welche** Antwort transient ist:
 
 | Provider | Hard-Timeout | Retry-Versuche | transient |
 |----------|--------------|----------------|-----------|

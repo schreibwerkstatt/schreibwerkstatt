@@ -196,7 +196,7 @@ test('Tool-Modus: anderer 400er bleibt ein normaler Fehler (kein falscher Rückf
   try {
     await assert.rejects(
       () => ctx.ai.callAIWithTools([{ role: 'user', content: 'x' }], SYSTEM, TOOLS, null, null, null, 'openai-compat'),
-      (e) => e.code !== 'AI_TOOLS_UNSUPPORTED' && /400/.test(e.message),
+      (e) => e.code !== 'AI_TOOLS_UNSUPPORTED' && e.message === 'job.error.aiHttpError' && e.i18nParams?.status === 400,
     );
   } finally { ctx.teardown(); ep.close(); }
 });

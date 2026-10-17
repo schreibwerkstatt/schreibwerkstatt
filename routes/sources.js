@@ -387,6 +387,9 @@ router.get('/', (req, res) => {
 
 // ── Einzelne Quelle ──────────────────────────────────────────────────────────
 // Optionales `book_id` waehlt die Kennzahl-Sicht (buch-skopiert statt Pool).
+// `canRead` prueft die QUELLE, nicht das Buch: die buch-skopierten Kennzahlen
+// (cite_count/cite_pages/quote_chars) verraten etwas ueber das genannte Buch und
+// brauchen darum zusaetzlich Leserecht dort — gleiche Schranke wie /:id/citations.
 router.get('/:id', (req, res) => {
   const id = toIntId(req.params.id);
   if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
@@ -394,6 +397,7 @@ router.get('/:id', (req, res) => {
   const src = getSource(id, bookId || null);
   if (!src) return res.status(404).json({ error_code: 'NOT_FOUND' });
   if (!canRead(req, src)) return res.status(403).json({ error_code: 'NO_BOOK_ACCESS' });
+  if (bookId && !guardBook(req, res, bookId, 'viewer')) return;
   res.json(src);
 });
 

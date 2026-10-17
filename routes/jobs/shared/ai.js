@@ -21,9 +21,17 @@ const { updateJob, i18nError, fmtTok } = require('./jobs');
 function _isTransientAiError(e) {
   if (!e) return false;
   if (e.code === 'AI_TIMEOUT') return true;
+  // Mitten im Stream abgerissene Verbindung (Provider wirft sie als i18n-Key mit
+  // dem Original-Fehler als `cause`, lib/ai/shared.js#providerError).
+  if (e.code === 'AI_STREAM_INTERRUPTED') return true;
   const msg = (e.message || '').toLowerCase();
   if (msg.includes('terminated')) return true;
-  if (e.cause && /UND_ERR_SOCKET|ECONNRESET|other side closed/i.test(String(e.cause?.code || e.cause?.message || ''))) return true;
+  if (String(e.cause?.message || '').toLowerCase().includes('terminated')) return true;
+  // Netzwerk-Ursache direkt oder eine Ebene tiefer (Provider wickeln den fetch-Fehler
+  // als `cause` in einen i18n-keyed Fehler, dessen `cause` wiederum die Socket-Ursache trägt).
+  for (const c of [e.cause, e.cause?.cause]) {
+    if (c && /UND_ERR_SOCKET|ECONNRESET|other side closed/i.test(String(c.code || c.message || ''))) return true;
+  }
   return false;
 }
 
@@ -458,9 +466,13 @@ async function aiCall(jobId, tok, prompt, system, fromPct, toPct, expectedChars 
     aiRes = await callAI(prompt, system, onProgress, maxTokensOverride, signal, effProvider, jsonSchema, tier);
   } finally {
     setThinking(false);
+    // Auch auf dem Fehlerpfad räumen: ein geworfener Call (Abbruch, Timeout,
+    // Provider-Fehler) liesse sonst seinen Streaming-Zwischenstand im geteilten
+    // `inflight`-Topf stehen — jeder folgende Progress-Tick der parallelen Calls
+    // zählte die toten Tokens weiter mit (retryOnTransientAi, settledAll).
+    tok.inflight?.delete(callId);
   }
   const { text, truncated, stopReason, tokensIn, tokensOut, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0, genDurationMs } = aiRes;
-  tok.inflight?.delete(callId);
   tok.in += tokensIn;
   tok.out += tokensOut;
   tok.cacheRead = (tok.cacheRead || 0) + cacheReadIn;

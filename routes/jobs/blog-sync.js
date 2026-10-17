@@ -2,12 +2,15 @@
 // Blog-Sync-Jobs: einmaliger Initial-Import, manueller Delta-Pull, selektiver Push.
 // Mapping 1 Blog == 1 Buch, 1 WP-Post == 1 Page. Block-Editor-HTML round-trips via
 // lib/wp-html.js (Gutenberg-Block-Markup). Konflikt-Strategie: Timestamp-LWW (siehe
-// docs/blog-sync.md). Job-Dedup pro (type, bookId, user) via findActiveJobId.
+// docs/blog-sync.md). Import + Pull schreiben Seiten und Links eines Buchs und
+// laufen darum pro BUCH exklusiv (nicht pro User): die Verbindung gehoert dem
+// Buch, zwei Mitautoren duerften sonst denselben Post doppelt anlegen. Push und
+// Reconcile: Dedup pro (type, bookId, user) via findActiveJobId.
 
 const express = require('express');
 const {
   createJob, updateJob, completeJob, failJob,
-  enqueueJob, findActiveJobId, jobAbortControllers,
+  enqueueJob, findActiveJobId, jobAbortControllers, jobs,
   makeJobLogger, jsonBody,
 } = require('./shared');
 const blogs = require('../../db/blogs');
@@ -18,7 +21,7 @@ const { buildBibliography, resolveCitesInHtml } = require('../../lib/bibliograph
 const { makeImageResolver } = require('../../lib/wp-media');
 const { classifyPull, newer } = require('../../lib/blog-merge');
 const {
-  createPageFromPost, applyPostToPage, resolveYearChapter,
+  applyPostToPage, createLinkedPageFromPost, postYear,
 } = require('../../lib/blog-pull');
 const { seedImportBaseline } = require('../../lib/import-baseline');
 const { splitDatePrefix, outgoingTitle } = require('../../lib/blog-title');
@@ -35,12 +38,6 @@ function _abortSignal(jobId) {
   return jobAbortControllers.get(jobId)?.signal || null;
 }
 
-function _postYear(post) {
-  const src = post.date_gmt || post.date || post.modified_gmt || '';
-  const y = String(src).slice(0, 4);
-  return /^\d{4}$/.test(y) ? y : 'Undatiert';
-}
-
 function _resolveBlogConn(bookId) {
   const conn = blogs.getConnection(bookId);
   if (!conn) {
@@ -53,6 +50,19 @@ function _resolveBlogConn(bookId) {
 
 function _requireBlogBook(bookId, userEmail) {
   return assertBlogBook(bookId, userEmail, 'BLOG_REQUIRES_BLOG_TYPE');
+}
+
+// Job-Typen, die Seiten + Links eines Buchs anlegen: pro Buch exklusiv.
+const BOOK_EXCLUSIVE_TYPES = new Set(['blog-import', 'blog-pull']);
+
+/** Aktiver (queued/running) Import/Pull fuer dieses Buch, egal von wem. */
+function _activeBookSyncJob(bookId) {
+  const key = String(bookId);
+  for (const job of jobs.values()) {
+    if (!BOOK_EXCLUSIVE_TYPES.has(job.type) || job.bookId !== key) continue;
+    if (job.status === 'queued' || job.status === 'running') return job;
+  }
+  return null;
 }
 
 async function runBlogImportJob(jobId, bookId, userEmail) {
@@ -94,25 +104,15 @@ async function runBlogImportJob(jobId, bookId, userEmail) {
         // `initial_import_done_at`. Der naechste Lauf ueberspringt sie, statt an
         // UNIQUE(blog_id, wp_post_id) zu scheitern (und davor eine verwaiste
         // Seite anzulegen).
-        const existingLink = blogs.getLinkByPost(conn.id, post.id);
-        if (existingLink) {
+        const created = await createLinkedPageFromPost({
+          conn, bookId, post, chapterCache, userEmail, citeStats, logger,
+          wpModifiedAt: post.modified_gmt || post.date_gmt || '',
+        });
+        if (!created) {
           skipped++;
           continue;
         }
-        const year = _postYear(post);
-        const chapterId = await resolveYearChapter(bookId, year, chapterCache);
-        const created = await createPageFromPost({ bookId, chapterId, post, userEmail, citeStats });
-        const pageName = created.name;
-        blogs.upsertLink({
-          pageId: created.id,
-          blogId: conn.id,
-          wpPostId: post.id,
-          wpModifiedAt: post.modified_gmt || post.date_gmt || '',
-          wpStatus: post.status || null,
-          wpSlug: post.slug || null,
-          lastPulledAt: new Date().toISOString(),
-        });
-        logger.info(`Blog-Import: WP-Post ${post.id} -> Page ${created.id} "${pageName}" (Kapitel ${year})`);
+        logger.info(`Blog-Import: WP-Post ${post.id} -> Page ${created.id} "${created.name}" (Kapitel ${postYear(post)})`);
         imported++;
         updateJob(jobId, {
           statusText: 'job.blog.import.progress',
@@ -185,20 +185,14 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
         const wpModified = post.modified_gmt || post.date_gmt || '';
 
         if (!link) {
-          const year = _postYear(post);
-          const chapterId = await resolveYearChapter(bookId, year, chapterCache);
-          const createdPage = await createPageFromPost({ bookId, chapterId, post, userEmail, citeStats });
-          const pageName = createdPage.name;
-          blogs.upsertLink({
-            pageId: createdPage.id,
-            blogId: conn.id,
-            wpPostId: post.id,
-            wpModifiedAt: wpModified,
-            wpStatus: post.status || null,
-            wpSlug: post.slug || null,
-            lastPulledAt: new Date().toISOString(),
+          const createdPage = await createLinkedPageFromPost({
+            conn, bookId, post, chapterCache, userEmail, citeStats, logger, wpModifiedAt: wpModified,
           });
-          logger.info(`Blog-Pull: WP-Post ${post.id} -> Page ${createdPage.id} "${pageName}" neu angelegt`);
+          if (!createdPage) {
+            skipped++;
+            continue;
+          }
+          logger.info(`Blog-Pull: WP-Post ${post.id} -> Page ${createdPage.id} "${createdPage.name}" neu angelegt`);
           created++;
           continue;
         }
@@ -226,9 +220,22 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
           continue;
         }
         if (action === 'update') {
-          const { name: newName } = await applyPostToPage({
-            pageId: link.page_id, bookId, pageRow, post, userEmail, citeStats,
-          });
+          let newName;
+          try {
+            // Stempel, auf dem classifyPull entschieden hat: speichert jemand die
+            // Seite dazwischen, wirft savePage 409 statt seine Aenderung zu
+            // ueberschreiben — das ist dann ein Konflikt wie oben.
+            ({ name: newName } = await applyPostToPage({
+              pageId: link.page_id, bookId, pageRow, post, userEmail, citeStats,
+              expectedUpdatedAt: pageRow.updated_at,
+            }));
+          } catch (e) {
+            if (e?.code !== 'PAGE_CONFLICT') throw e;
+            blogs.setConflictState(link.page_id, 'detected');
+            logger.info(`Blog-Pull: Page ${link.page_id} "${pageRow.name}" (WP-Post ${post.id}) waehrend des Pulls lokal geaendert – Konflikt statt Ueberschreiben`);
+            conflicts++;
+            continue;
+          }
           if (newName) renamed.push({ pageId: link.page_id, name: newName });
           blogs.markLinkPulled(link.page_id, {
             wpModifiedAt: wpModified,
@@ -521,6 +528,7 @@ blogSyncRouter.post('/blog-import', jsonBody, (req, res) => {
   catch (e) { return res.status(400).json({ error_code: e.code }); }
   const existing = findActiveJobId('blog-import', book_id, userEmail);
   if (existing) return res.json({ jobId: existing, existing: true });
+  if (_activeBookSyncJob(book_id)) return res.status(409).json({ error_code: 'BLOG_SYNC_RUNNING' });
   const jobId = createJob('blog-import', book_id, userEmail, 'job.label.blogImport');
   enqueueJob(jobId, () => runBlogImportJob(jobId, book_id, userEmail));
   res.json({ jobId });
@@ -536,6 +544,10 @@ blogSyncRouter.post('/blog-pull', jsonBody, (req, res) => {
   catch (e) { return res.status(400).json({ error_code: e.code }); }
   const existing = findActiveJobId('blog-pull', book_id, userEmail);
   if (existing) return res.json({ jobId: existing, existing: true });
+  // Pro Buch exklusiv: ein Import/Pull eines Mitautors (oder der eigene Import)
+  // laeuft schon. Dessen Job-ID bekommt der zweite User nicht — GET /jobs/:id
+  // zeigt nur eigene Jobs —, darum ein eigener Fehlercode statt eines Pollings ins Leere.
+  if (_activeBookSyncJob(book_id)) return res.status(409).json({ error_code: 'BLOG_SYNC_RUNNING' });
   const jobId = createJob('blog-pull', book_id, userEmail, 'job.label.blogPull');
   enqueueJob(jobId, () => runBlogPullJob(jobId, book_id, userEmail));
   res.json({ jobId });
@@ -573,4 +585,4 @@ blogSyncRouter.post('/blog-push', jsonBody, (req, res) => {
   res.json({ jobId });
 });
 
-module.exports = { blogSyncRouter, runBlogImportJob, runBlogPullJob, runBlogPushJob, runBlogReconcileJob };
+module.exports = { blogSyncRouter, runBlogImportJob, runBlogPullJob, runBlogPushJob, runBlogReconcileJob, _activeBookSyncJob };

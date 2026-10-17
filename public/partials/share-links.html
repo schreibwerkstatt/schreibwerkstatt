@@ -86,6 +86,7 @@
                   x-text="$app.t('share.status.' + linkStatus(link))"></span>
             <span class="share-row__target" x-text="targetLabel(link)"></span>
             <span class="share-row__kind" x-text="$app.t('share.kind.' + link.kind)"></span>
+            <span class="share-row__kind" x-show="link.mine === false" x-text="creatorLabel(link)"></span>
           </div>
           <div class="share-row__counts">
             <span class="share-row__count" x-text="$app.t('share.views.label', { count: link.view_count || 0 })"></span>
@@ -99,6 +100,7 @@
               <span x-text="$app.t('share.feedback.summary', { avg: link.avg_rating, count: link.feedback_count })"></span>
             </span>
             <button type="button" class="share-row__comments-btn"
+                    x-show="link.mine !== false"
                     @click="showCommentsForLink(link)"
                     :data-tip="$app.t('share.comments.show')">
               <span x-text="$app.t('share.comments.countLabel', { count: link.comment_count || 0 })"></span>
@@ -106,7 +108,7 @@
                     x-text="$app.t('share.unread.badge', { count: link.unread_count })"></span>
             </button>
             <button type="button" class="share-row__stats-btn"
-                    x-show="link.kind !== 'page' || link.feedback_count > 0"
+                    x-show="link.mine !== false && (link.kind !== 'page' || link.feedback_count > 0)"
                     @click="toggleStats(link)"
                     :aria-expanded="expandedStatsToken === link.token ? 'true' : 'false'"
                     x-text="expandedStatsToken === link.token ? $app.t('share.stats.hide') : $app.t('share.stats.show')"></button>
@@ -190,10 +192,10 @@
         </template>
 
         <div class="share-row__actions">
-          <template x-if="editingToken !== link.token && linkStatus(link) === 'active'">
+          <template x-if="link.mine !== false && editingToken !== link.token && linkStatus(link) === 'active'">
             <button type="button" class="icon-btn icon-btn--ghost" @click="startEdit(link)" :data-tip="$app.t('share.edit')" :aria-label="$app.t('share.edit')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg></button>
           </template>
-          <template x-if="linkStatus(link) === 'active'">
+          <template x-if="linkStatus(link) === 'active' || (link.creator_access === false && !link.revoked_at)">
             <button type="button" class="icon-btn icon-btn--ghost" @click="revokeLink(link.token)" :data-tip="$app.t('share.revoke')" :aria-label="$app.t('share.revoke')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
           </template>
         </div>

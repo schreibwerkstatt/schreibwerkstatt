@@ -43,7 +43,9 @@ Die Zuordnung reist als Positions-String `chapter,page,content,content,content,c
 - **`POST /jobs/manuscript-import/preview`** — synchron, schreibt nichts. Liefert `chapterCount`, `pageCount`, `headingCounts`, die Gliederung (Namen + Zeichenzahl, **kein** HTML — der Body eines Romans soll nicht zweimal über die Leitung) und `outlineTruncated` ab `PREVIEW_NODE_CAP = 400` Knoten. **Kein KI-Call**, darum ausserhalb der Job-Queue (Muster wie `/sources/lookup`).
 - **`POST /jobs/manuscript-import`** — Job-Queue, legt an. Query: `filename` (Pflicht, bestimmt den Parser), `map`, `keep_headings=1`, `mode` (`new-book`/`merge`), `book_name` bzw. `book_id`.
 
-Body ist in beiden Fällen das rohe Dokument (`application/octet-stream`, Limit 50 MB). Der Buffer landet in `manuscriptBuffers` (TTL 30 min) und wird vom Worker konsumiert — Muster wie der Folder-Import.
+Body ist in beiden Fällen das rohe Dokument (`application/octet-stream`, Limit 50 MB). Der Buffer landet in `manuscriptBuffers` ([lib/import-buffers.js](../lib/import-buffers.js)#`ImportBufferStore`, TTL 30 min: ein offener Upload pro User, Summe über alle User gedeckelt) und wird vom Worker konsumiert — Muster wie der Folder-Import. Ein neues Buch entsteht über `createOwnedBook` ([lib/book-create.js](../lib/book-create.js)), Buch + Owner-Grant als Einheit.
+
+DOCX und ODT sind ZIPs: ihre Parser entpacken gedeckelt mit `DOC_ZIP_LIMITS` ([lib/zip-limits.js](../lib/zip-limits.js)), gezählt **während** des Inflatens. Reisst das Innenleben den Deckel, antwortet die Vorschau `413 DOCUMENT_TOO_LARGE`; im Job endet der Lauf mit `job.error.archiveTooLarge`.
 
 Parser sind dieselben wie dort ([lib/import-parsers/dispatch.js](../lib/import-parsers/dispatch.js), `SUPPORTED_EXTS`). Der ODT-Parser deckelt Überschriften bei `h3`; tiefere Ebenen gibt es dort also nicht zu verteilen.
 
@@ -53,9 +55,12 @@ Parser sind dieselben wie dort ([lib/import-parsers/dispatch.js](../lib/import-p
 |---|---|
 | `UNSUPPORTED_EXT` | `filename` fehlt oder trägt keine unterstützte Endung |
 | `EMPTY_BODY` | kein Dokument im Body |
-| `DOCUMENT_TOO_LARGE` | > 50 MB |
+| `DOCUMENT_TOO_LARGE` (413) | > 50 MB, oder DOCX/ODT entpackt über `DOC_ZIP_LIMITS` |
 | `PARSE_FAILED` | Parser warf (nur Vorschau; im Job wird der Job rot) |
 | `BOOK_NAME_REQUIRED` / `BOOK_ID_REQUIRED` | Modus-Pflichtfeld fehlt |
+| `NAME_TOO_LONG` | Buchname über `BOOK_NAME_MAX` ([lib/book-create.js](../lib/book-create.js)), `params.max` |
+| `IMPORT_PENDING` (429) | der User hat schon einen offenen Upload |
+| `IMPORT_CAPACITY` (429) | Summe der wartenden Uploads aller User am Deckel |
 | `job.error.noPagesFound` | Zerlegung ergab keine Seite — praktisch immer eine unpassende Zuordnung |
 
 ## Pflicht-Invarianten
