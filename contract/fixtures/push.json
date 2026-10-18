@@ -1,0 +1,26 @@
+{
+  "operation": "PUT /content/pages/{page_id}",
+  "request": {
+    "method": "PUT",
+    "path": "/content/pages/70001",
+    "body": {
+      "html": "<p data-bid=\"c0000000000000a1\">Erster Absatz, am Mac.</p><p data-bid=\"c0000000000000a2\">Zweiter Absatz.</p><p data-bid=\"c0000000000000a3\">Dritter Absatz.</p>",
+      "expected_updated_at": "2026-01-01T00:00:00.000Z",
+      "source": "macapp",
+      "device_id": "9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f",
+      "save_id": "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed",
+      "own_save_ids": []
+    }
+  },
+  "status": 200,
+  "response": {
+    "id": 70001,
+    "book_id": 7001,
+    "chapter_id": 7101,
+    "name": "Anfang",
+    "position": 0,
+    "html": "<p data-bid=\"c0000000000000a1\">Erster Absatz, am Mac.</p><p data-bid=\"c0000000000000a2\">Zweiter Absatz.</p><p data-bid=\"c0000000000000a3\">Dritter Absatz.</p>",
+    "updated_at": "2026-01-02T00:00:00.000Z",
+    "last_save_id": "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"
+  }
+}

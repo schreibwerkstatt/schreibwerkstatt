@@ -540,11 +540,13 @@ function clearForeignModels(bookId, model) {
   return n;
 }
 
-const { loadChunksForPairing, loadFigureVectorsForPairing, loadPageChunksWithChapter } = require('./semantic-chunks/pairing');
+const {
+  loadChunksForPairing, loadFigureVectorsForPairing, loadPageChunksWithChapter, listPoleCandidates, loadPoleVector,
+} = require('./semantic-chunks/pairing');
 
 module.exports = {
   getEntityChunks, reusableVectors, dropRecycled, ownedEntityFilter, replaceEntity, remove, searchSimilar, searchInEntity, getEntityVector, getEntityText,
   bookStats, clearForeignModels, pruneMissing, indexStatus,
   entityExists, neighborText, mergeOverlap, lastIndexedAt, markIndexed, isIndexed,
-  loadChunksForPairing, loadFigureVectorsForPairing, loadPageChunksWithChapter,
+  loadChunksForPairing, loadFigureVectorsForPairing, loadPageChunksWithChapter, listPoleCandidates, loadPoleVector,
 };

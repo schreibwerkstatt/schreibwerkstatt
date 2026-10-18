@@ -1,0 +1,11 @@
+{
+  "operation": "DELETE /content/pages/{page_id}",
+  "request": {
+    "method": "DELETE",
+    "path": "/content/pages/70004"
+  },
+  "status": 200,
+  "response": {
+    "ok": true
+  }
+}

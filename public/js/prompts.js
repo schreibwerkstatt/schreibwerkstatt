@@ -341,6 +341,11 @@ export {
   SCHEMA_STILPROFIL,
 } from './prompts/stilprofil.js';
 export {
+  buildBookMapAxisSystem,
+  buildBookMapAxisPrompt,
+  SCHEMA_BOOK_MAP_AXES,
+} from './prompts/buchlandkarte.js';
+export {
   buildAutorenprofilPrompt,
   SCHEMA_AUTORENPROFIL,
   AUTORENPROFIL_METRIC_LABELS,

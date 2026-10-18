@@ -14,6 +14,7 @@ const { getVersion, getShellBuild, getShellProtocol } = require('../lib/version'
 const { getLatestVersion: getLatestChangelogVersion } = require('../lib/changelog');
 const { MAX_INPUT_BYTES: PDF_MAX_BYTES } = require('../lib/pdf-attachment');
 const { sessionEmail } = require('../lib/acl');
+const { clientContract } = require('../lib/client-contract');
 
 const router = express.Router();
 
@@ -99,6 +100,9 @@ router.get('/config', (req, res) => {
     // Protokoll-Stand der Web-Shell (public/js/shell-protocol.js); liegt die
     // offene Shell darunter, ist das Update Pflicht (boot/update-policy.js).
     shellProtocol: getShellProtocol(),
+    // Vertragsstand der nativen Clients (contract/version.json): `api` fuer
+    // Feature-Erkennung der REST-Flaeche, `editorApi` = Major des Editor-Bundles.
+    clientContract: clientContract(),
     // Neuigkeiten-Punkt am Hilfe-Knopf: nur die beiden Versionen, nie die Liste
     // selbst (die holt der Reiter lazy ueber GET /changelog). `changelogSeen`
     // ist der quittierte Stand des Users; null = noch nie geoeffnet.

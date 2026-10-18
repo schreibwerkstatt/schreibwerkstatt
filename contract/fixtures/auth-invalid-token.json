@@ -1,0 +1,11 @@
+{
+  "operation": "GET /content/books",
+  "request": {
+    "method": "GET",
+    "path": "/content/books"
+  },
+  "status": 401,
+  "response": {
+    "error_code": "NOT_LOGGED_IN"
+  }
+}

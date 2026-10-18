@@ -1,0 +1,12 @@
+{
+  "operation": "GET /booksettings/{book_id}",
+  "request": {
+    "method": "GET",
+    "path": "/booksettings/7001"
+  },
+  "status": 200,
+  "response": {
+    "language": "de",
+    "region": "CH"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "operation": "POST /jobs/check",
+  "request": {
+    "method": "POST",
+    "path": "/jobs/check",
+    "body": {
+      "page_id": 70001,
+      "book_id": 7001,
+      "page_name": "Anfang"
+    }
+  },
+  "status": 200,
+  "response": {
+    "jobId": "<volatile>"
+  }
+}

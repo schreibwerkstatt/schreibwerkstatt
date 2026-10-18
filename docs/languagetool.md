@@ -173,7 +173,7 @@ Fallback bei fehlendem API-Support: `badge.update('disabled')`, sonst läuft die
 
 **Regel abschalten:** mit Buch „in diesem Buch", sonst global; POST `/languagetool/rules` über die Controller-Dep `disableRule`. Alle Squiggles derselben Regel fallen sofort weg, dann Force-Check.
 
-**Optionale Knöpfe nur mit Übersetzung:** „Alle ignorieren", „Ins Buch-Wörterbuch" und „Regel abschalten" rendert der Popover nur, wenn `i18n(key) !== key`. Der macOS-Client zieht den Controller per OTA-Bundle, löst Strings aber über seine eigene i18n-Bridge auf, die für unbekannte Keys den rohen Key liefert — dort erscheinen die Knöpfe erst, wenn der Client (bzw. [assets/macclient-i18n/](../assets/macclient-i18n/)) die Keys kennt und die Requests verdrahtet sind. Bewusst nicht in die OTA-Override-Kataloge gelegt: ob der Client `getBookId` liefert und `/languagetool/rules` erreicht, entscheidet die Client-Seite.
+**Optionale Knöpfe nur mit Übersetzung:** „Alle ignorieren", „Ins Buch-Wörterbuch" und „Regel abschalten" rendert der Popover nur, wenn `i18n(key) !== key`. Der macOS-Client zieht den Controller per OTA-Bundle, löst Strings aber über seine eigene i18n-Bridge auf, die für unbekannte Keys den rohen Key liefert — dort erscheinen die Knöpfe erst, wenn die gebündelten Kataloge des Clients die Keys kennen und die Requests verdrahtet sind — beides entscheidet die Client-Seite (`getBookId`, `/languagetool/rules`).
 
 **Badge** (`.lt-badge`): floating oben-rechts vom Editor (`offsetTop+6`, `offsetLeft+offsetWidth-8`), States `loading|matches|clean|extension|error|disabled|idle` mit Lucide-Icons + Tooltip via `data-tip`.
 

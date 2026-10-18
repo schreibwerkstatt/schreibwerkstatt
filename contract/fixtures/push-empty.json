@@ -1,0 +1,12 @@
+{
+  "operation": "PUT /content/pages/{page_id}",
+  "request": {
+    "method": "PUT",
+    "path": "/content/pages/70001",
+    "body": {}
+  },
+  "status": 400,
+  "response": {
+    "error_code": "EMPTY_BODY"
+  }
+}

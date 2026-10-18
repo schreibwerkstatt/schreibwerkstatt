@@ -1,0 +1,18 @@
+{
+  "operation": "GET /content/pages/{page_id}",
+  "request": {
+    "method": "GET",
+    "path": "/content/pages/70001"
+  },
+  "status": 200,
+  "response": {
+    "id": 70001,
+    "book_id": 7001,
+    "chapter_id": 7101,
+    "name": "Anfang",
+    "position": 0,
+    "html": "<p data-bid=\"c0000000000000a1\">Erster Absatz.</p><p data-bid=\"c0000000000000a2\">Zweiter Absatz.</p><p data-bid=\"c0000000000000a3\">Dritter Absatz.</p>",
+    "updated_at": "2026-01-01T00:00:00.000Z",
+    "last_save_id": null
+  }
+}

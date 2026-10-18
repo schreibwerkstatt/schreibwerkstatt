@@ -1,0 +1,14 @@
+{
+  "operation": "PUT /content/pages/{page_id}",
+  "request": {
+    "method": "PUT",
+    "path": "/content/pages/70001",
+    "body": {
+      "html": "<p>Aus fremdem Tab.</p>"
+    }
+  },
+  "status": 403,
+  "response": {
+    "error_code": "DEVICE_SCOPE_FORBIDDEN"
+  }
+}

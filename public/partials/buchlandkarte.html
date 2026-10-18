@@ -1,9 +1,10 @@
 <!-- Buchlandkarte: Semantik-Index als Landkarte und als Doppelungs-Radar -->
 <!--
   Tab-Hülle ohne eigenen State. `showBuchlandkarteCard`, `toggleBuchlandkarteCard`
-  und `buchlandkarteTab` ('map' | 'redundanz') liegen im Root: Exklusivität,
-  Hash-Router (#landkarte / #redundanz) und Job-Sprung setzen den Tab von aussen.
-  Jedes Panel ist eine eigene Alpine.data-Sub-Komponente mit eigenem Lifecycle.
+  und `buchlandkarteTab` ('map' | 'matrix' | 'redundanz') liegen im Root:
+  Exklusivität, Hash-Router (#landkarte / #buchverlauf / #redundanz) und
+  Job-Sprung setzen den Tab von aussen. Landkarte und Verlauf teilen sich eine
+  Sub-Komponente (ein Job-Ergebnis), Doppelungen hat eine eigene.
 -->
 <div class="card card--buchlandkarte" x-show="$app.showBuchlandkarteCard" x-cloak>
   <div class="card-header">
@@ -19,6 +20,12 @@
                 :aria-selected="$app.buchlandkarteTab === 'map' ? 'true' : 'false'"
                 @click="$app.buchlandkarteTab = 'map'"
                 x-text="$app.t('buchlandkarte.tab.map')"></button>
+        <button type="button" class="tabs-btn" role="tab" id="buchlandkarte-tab-matrix"
+                aria-controls="buchlandkarte-panel-map"
+                :class="{ 'tabs-btn--active': $app.buchlandkarteTab === 'matrix' }"
+                :aria-selected="$app.buchlandkarteTab === 'matrix' ? 'true' : 'false'"
+                @click="$app.buchlandkarteTab = 'matrix'"
+                x-text="$app.t('buchlandkarte.tab.matrix')"></button>
         <button type="button" class="tabs-btn" role="tab" id="buchlandkarte-tab-redundanz"
                 aria-controls="buchlandkarte-panel-redundanz"
                 :class="{ 'tabs-btn--active': $app.buchlandkarteTab === 'redundanz' }"

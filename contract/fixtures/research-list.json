@@ -1,0 +1,25 @@
+{
+  "operation": "GET /research",
+  "request": {
+    "method": "GET",
+    "path": "/research?book_id=7001&sort=updated"
+  },
+  "status": 200,
+  "response": [
+    {
+      "id": 1,
+      "kind": "link",
+      "title": "Geteilter Link",
+      "source": null,
+      "created_at": "2026-01-02T00:00:00.000Z",
+      "updated_at": "2026-01-02T00:00:00.000Z",
+      "body_snippet": "Aus der Android-App geteilt.",
+      "urls": [
+        {
+          "url": "https://example.org/artikel",
+          "label": ""
+        }
+      ]
+    }
+  ]
+}

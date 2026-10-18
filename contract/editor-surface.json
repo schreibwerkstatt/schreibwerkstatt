@@ -1,0 +1,309 @@
+{
+  "$comment": "Deklarierte Kontaktstellen des OTA-Editor-Bundles (contract/README.md). Erzeugt mit `npm run contract:surface`; geprüft von tests/unit/editor-surface.test.js.",
+  "editorApi": 1,
+  "bridgeRequired": [
+    "loadPage",
+    "savePage"
+  ],
+  "surface": {
+    "modules": {
+      "js/cards/editor-spellcheck/controller.js": [
+        "android",
+        "mac"
+      ],
+      "js/cards/editor-synonyme/controller.js": [
+        "mac"
+      ],
+      "js/editor/focus/standalone.js": [
+        "android",
+        "mac"
+      ],
+      "js/editor/focus/typewriter.js": [
+        "mac"
+      ],
+      "js/editor/shared/apply-replacement.js": [
+        "android",
+        "mac"
+      ],
+      "js/editor/shared/block-merge.js": [
+        "mac"
+      ],
+      "js/editor/shared/quote-normalize.js": [
+        "mac"
+      ]
+    },
+    "exports": {
+      "applySpellcheckReplacement": [
+        "android",
+        "mac"
+      ],
+      "buildResolvedHtml": [
+        "mac"
+      ],
+      "createSpellcheckController": [
+        "android",
+        "mac"
+      ],
+      "createSynonymController": [
+        "mac"
+      ],
+      "mergeBlocks": [
+        "mac"
+      ],
+      "mergedToHtml": [
+        "mac"
+      ],
+      "mountStandaloneFocus": [
+        "android",
+        "mac"
+      ],
+      "normalizeQuotes": [
+        "mac"
+      ],
+      "parseBlocks": [
+        "mac"
+      ],
+      "resolveQuoteStyle": [
+        "mac"
+      ]
+    },
+    "options": {
+      "bridge.granularity": [
+        "android",
+        "mac"
+      ],
+      "bridge.loadPage": [
+        "android",
+        "mac"
+      ],
+      "bridge.savePage": [
+        "android",
+        "mac"
+      ],
+      "bridge.typewriterAnchor": [
+        "android"
+      ],
+      "createSpellcheckController.addWord": [
+        "android",
+        "mac"
+      ],
+      "createSpellcheckController.checkText": [
+        "android",
+        "mac"
+      ],
+      "createSpellcheckController.editorKind": [
+        "android",
+        "mac"
+      ],
+      "createSpellcheckController.getBookId": [
+        "android",
+        "mac"
+      ],
+      "createSpellcheckController.getBookLocale": [
+        "android",
+        "mac"
+      ],
+      "createSpellcheckController.getDebounceMs": [
+        "android",
+        "mac"
+      ],
+      "createSpellcheckController.getHtml": [
+        "android",
+        "mac"
+      ],
+      "createSpellcheckController.getPageId": [
+        "android",
+        "mac"
+      ],
+      "createSpellcheckController.i18n": [
+        "android",
+        "mac"
+      ],
+      "createSpellcheckController.isEnabled": [
+        "android",
+        "mac"
+      ],
+      "createSpellcheckController.onApplyReplacement": [
+        "android",
+        "mac"
+      ],
+      "createSpellcheckController.root": [
+        "android",
+        "mac"
+      ],
+      "createSpellcheckController.scrollContainer": [
+        "android",
+        "mac"
+      ],
+      "createSynonymController.getBookId": [
+        "mac"
+      ],
+      "createSynonymController.getPageId": [
+        "mac"
+      ],
+      "createSynonymController.i18n": [
+        "mac"
+      ],
+      "createSynonymController.isEnabled": [
+        "mac"
+      ],
+      "createSynonymController.lookupAi": [
+        "mac"
+      ],
+      "createSynonymController.lookupThesaurus": [
+        "mac"
+      ],
+      "createSynonymController.onApplyReplacement": [
+        "mac"
+      ],
+      "createSynonymController.root": [
+        "mac"
+      ],
+      "mountStandaloneFocus.bridge": [
+        "android"
+      ],
+      "mountStandaloneFocus.mount": [
+        "android"
+      ]
+    },
+    "members": {
+      "_focusUpdateActive": [
+        "mac"
+      ],
+      "controller": [
+        "mac"
+      ],
+      "editDirty": [
+        "mac"
+      ],
+      "focusGranularity": [
+        "mac"
+      ],
+      "host": [
+        "android",
+        "mac"
+      ],
+      "quickSave": [
+        "mac"
+      ],
+      "save": [
+        "android",
+        "mac"
+      ],
+      "setGranularity": [
+        "android",
+        "mac"
+      ],
+      "setPage": [
+        "android",
+        "mac"
+      ],
+      "typewriterAnchor": [
+        "android"
+      ]
+    },
+    "classes": {
+      "figur-lookup": [
+        "mac"
+      ],
+      "focus-cursor-hidden": [
+        "mac"
+      ],
+      "focus-editor": [
+        "android",
+        "mac"
+      ],
+      "focus-editor__content": [
+        "android",
+        "mac"
+      ],
+      "focus-editor__topbar": [
+        "mac"
+      ],
+      "focus-mode": [
+        "mac"
+      ],
+      "focus-mode--": [
+        "mac"
+      ],
+      "focus-mode--paragraph": [
+        "mac"
+      ],
+      "focus-mode--sentence": [
+        "mac"
+      ],
+      "focus-mode--typewriter-only": [
+        "mac"
+      ],
+      "focus-mode--window-3": [
+        "mac"
+      ],
+      "is-active": [
+        "android",
+        "mac"
+      ],
+      "lt-badge": [
+        "mac"
+      ],
+      "lt-popover": [
+        "mac"
+      ],
+      "synonym-menu": [
+        "mac"
+      ],
+      "synonym-picker": [
+        "mac"
+      ],
+      "todo": [
+        "android"
+      ],
+      "todo-item": [
+        "android"
+      ],
+      "todo-text": [
+        "android"
+      ]
+    },
+    "cssVars": {
+      "--color-bg": [
+        "android",
+        "mac"
+      ],
+      "--color-muted": [
+        "android"
+      ],
+      "--color-primary": [
+        "android"
+      ],
+      "--color-text": [
+        "mac"
+      ],
+      "--focus-anchor": [
+        "mac"
+      ],
+      "--focus-dim-opacity": [
+        "mac"
+      ],
+      "--focus-vh": [
+        "mac"
+      ]
+    },
+    "highlights": {
+      "focus-sentence-dim": [
+        "mac"
+      ]
+    },
+    "manifest": {
+      "cssFiles": [
+        "android",
+        "mac"
+      ],
+      "editorApi": [
+        "mac"
+      ],
+      "sourceCommit": [
+        "mac"
+      ]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "operation": "POST /jobs/synonym",
+  "request": {
+    "method": "POST",
+    "path": "/jobs/synonym",
+    "body": {
+      "wort": "Absatz",
+      "satz": "Erster Absatz, am Mac.",
+      "book_id": 7001,
+      "page_id": "70001"
+    }
+  },
+  "status": 200,
+  "response": {
+    "jobId": "<volatile>"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "operation": "POST /content/pages/{page_id}/revisions/{rev_id}/restore",
+  "request": {
+    "method": "POST",
+    "path": "/content/pages/70001/revisions/1/restore",
+    "body": {}
+  },
+  "status": 200,
+  "response": {
+    "ok": true,
+    "restored_from": 1,
+    "page": {
+      "id": 70001,
+      "book_id": 7001,
+      "chapter_id": 7101,
+      "name": "Anfang",
+      "position": 0,
+      "html": "<p data-bid=\"c0000000000000a1\">Erster Absatz, am Mac.</p><p data-bid=\"c0000000000000a2\">Zweiter Absatz.</p><p data-bid=\"c0000000000000a3\">Dritter Absatz.</p>",
+      "updated_at": "2026-01-02T00:00:00.000Z",
+      "last_save_id": null
+    }
+  }
+}

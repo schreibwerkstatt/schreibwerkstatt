@@ -138,6 +138,19 @@ jobs:
       - name: Integration-Tests ausführen (Job-Pipeline mit Mock-AI)
         run: npm run test:integration
 
+      # Bundle gegen main beider Client-Repos (contract/README.md): eine
+      # fehlende Kontaktstelle bricht einen ausgelieferten macOS-/Android-Client
+      # und ist rot. Exit 3 = Repo nicht erreichbar → Warnung, kein Bruch: ein
+      # GitHub-Ausfall soll keinen Deploy blockieren. „Undeklariert" warnt nur
+      # (der Client nutzt etwas, das nicht in contract/editor-surface.json steht).
+      - name: Client-Kompatibilität (Editor-Bundle gegen macOS + Android)
+        run: |
+          set +e
+          node scripts/check-clients-compat.js --base HEAD~1
+          rc=$?
+          if [ $rc -eq 3 ]; then echo "::warning::Client-Repos nicht erreichbar — Kompatibilität ungeprüft"; exit 0; fi
+          exit $rc
+
   e2e:
     name: Playwright-E2E
     # Fork-PRs auf GitHub-Infra (siehe checks-and-unit) — fremder Code nie auf

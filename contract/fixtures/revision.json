@@ -1,0 +1,24 @@
+{
+  "operation": "GET /content/pages/{page_id}/revisions/{rev_id}",
+  "request": {
+    "method": "GET",
+    "path": "/content/pages/70001/revisions/1"
+  },
+  "status": 200,
+  "response": {
+    "revision": {
+      "id": 1,
+      "page_id": 70001,
+      "book_id": 7001,
+      "chars": 54,
+      "words": 8,
+      "tok": 18,
+      "source": "macapp",
+      "user_email": "autor@test.dev",
+      "client": "macOS-App",
+      "created_at": "2026-01-02T00:00:00.000Z",
+      "summary": null,
+      "body_html": "<p data-bid=\"c0000000000000a1\">Erster Absatz, am Mac.</p><p data-bid=\"c0000000000000a2\">Zweiter Absatz.</p><p data-bid=\"c0000000000000a3\">Dritter Absatz.</p>"
+    }
+  }
+}

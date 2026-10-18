@@ -1,0 +1,21 @@
+{
+  "operation": "PUT /content/pages/{page_id}",
+  "request": {
+    "method": "PUT",
+    "path": "/content/pages/70002",
+    "body": {
+      "name": "Mitte, umbenannt"
+    }
+  },
+  "status": 200,
+  "response": {
+    "id": 70002,
+    "book_id": 7001,
+    "chapter_id": 7102,
+    "name": "Mitte, umbenannt",
+    "position": 0,
+    "html": "<p data-bid=\"c0000000000000b1\">Im Unterkapitel.</p>",
+    "updated_at": "2026-01-02T00:00:00.000Z",
+    "last_save_id": null
+  }
+}

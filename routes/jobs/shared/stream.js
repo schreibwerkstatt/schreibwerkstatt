@@ -1,7 +1,7 @@
 'use strict';
 const { jobs } = require('./state');
 const { bus } = require('./events');
-const { jobView, queueItems, hasQueuedJob } = require('./serialize');
+const { jobView, queueItems, hasQueuedJob, isJobVisibleTo } = require('./serialize');
 
 // Job-Kanal des Event-Streams (GET /events/stream, routes/events/stream.js):
 // pusht die Jobs des eingeloggten Users.
@@ -14,8 +14,8 @@ const { jobView, queueItems, hasQueuedJob } = require('./serialize');
 // Der Kanal ist ein Beschleuniger über dem Polling, kein Ersatz: nach einem
 // Reconnect holt der Client über die `queue`-Liste und einen /jobs/:id-Tick nach,
 // was er verpasst hat. Das Ergebnis eines fertigen Jobs holt er ebenfalls über
-// /jobs/:id. Nur Jobs des Session-Users — die Filterung nach `userEmail` ist die
-// ganze ACL, genau wie bei /jobs/queue.
+// /jobs/:id. Nur Jobs, die der Session-User sehen darf (isJobVisibleTo: eigene
+// plus Buch-System-Jobs seiner Bücher) — dieselbe ACL wie bei /jobs/queue.
 //
 // Drossel: Streaming-Progress feuert updateJob pro Chunk. Änderungen werden pro
 // Verbindung gesammelt und höchstens alle FLUSH_MS geschrieben; ein Terminal-
@@ -49,7 +49,7 @@ function attachJobChannel(write, userEmail) {
   };
 
   const onChange = (job, terminal) => {
-    if (job.userEmail !== userEmail) return;
+    if (!isJobVisibleTo(job, userEmail)) return;
     pending.add(job.id);
     schedule(terminal);
   };

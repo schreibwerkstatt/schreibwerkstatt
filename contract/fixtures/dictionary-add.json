@@ -1,0 +1,16 @@
+{
+  "operation": "POST /dictionary",
+  "request": {
+    "method": "POST",
+    "path": "/dictionary",
+    "body": {
+      "word": "Schreibwerkstatt",
+      "bookId": 0,
+      "lang": "*"
+    }
+  },
+  "status": 200,
+  "response": {
+    "ok": true
+  }
+}

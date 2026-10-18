@@ -1,0 +1,47 @@
+{
+  "operation": "GET /content/books/{book_id}/sync",
+  "request": {
+    "method": "GET",
+    "path": "/content/books/7001/sync?since=2026-01-02T00%3A00%3A00.000Z&since_id=0&limit=200"
+  },
+  "status": 200,
+  "response": {
+    "now": "2026-01-02T00:00:00.000Z",
+    "pages": [
+      {
+        "page_id": 70002,
+        "page_name": "Mitte, umbenannt",
+        "chapter_id": 7102,
+        "updated_at": "2026-01-02T00:00:00.000Z",
+        "html": "<p data-bid=\"c0000000000000b1\">Im Unterkapitel.</p>"
+      },
+      {
+        "page_id": 70001,
+        "page_name": "Anfang",
+        "chapter_id": 7101,
+        "updated_at": "2026-01-02T00:00:00.000Z",
+        "html": "<p data-bid=\"c0000000000000a1\">Erster Absatz, am Mac.</p><p data-bid=\"c0000000000000a2\">Zweiter Absatz.</p><p data-bid=\"c0000000000000a3\">Dritter Absatz.</p>"
+      },
+      {
+        "page_id": 1000001,
+        "page_name": "2026-10-18",
+        "chapter_id": 7102,
+        "updated_at": "2026-01-02T00:00:00.000Z",
+        "html": "<p data-bid=\"f000000000000001\">Tagebuch.</p>"
+      }
+    ],
+    "deleted": [
+      {
+        "page_id": 70004,
+        "page_name": "Verworfen",
+        "deleted_at": "2026-01-02T00:00:00.000Z"
+      }
+    ],
+    "has_more": false,
+    "deleted_has_more": false,
+    "cursor": {
+      "since": "2026-01-02T00:00:00.000Z",
+      "since_id": 1000001
+    }
+  }
+}

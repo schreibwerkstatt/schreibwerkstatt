@@ -4,7 +4,7 @@ const { db } = require('../../../db/schema');
 const { lastDoneJobRun } = require('../../../db/job-runs');
 const { toIntId, inClause } = require('../../../lib/validate');
 const { jobs } = require('./state');
-const { jobView, queueItems } = require('./serialize');
+const { jobView, queueItems, BOOK_SYSTEM_JOB_TYPES } = require('./serialize');
 const { guardBook, sessionEmail } = require('../../../lib/acl');
 const {
   cancelJob, findActiveJobId, fmtTok, fmtDuration,
@@ -111,12 +111,9 @@ sharedRouter.get('/runs', (req, res) => {
   }));
 });
 
-// Buch-System-Jobs (userEmail null, eine Sperre pro Buch für alle User): der
-// Embedding-Index. Suche und Buchlandkarte hängen sich an einen laufenden Lauf —
-// mit der Session-E-Mail fände findActiveJobId ihn nie. Dafür muss der Aufrufer
-// das Buch sehen dürfen.
-const BOOK_SYSTEM_JOB_TYPES = new Set(['embed-index']);
-
+// Buch-System-Jobs (BOOK_SYSTEM_JOB_TYPES, userEmail null): Suche und
+// Buchlandkarte hängen sich an einen laufenden Lauf — mit der Session-E-Mail fände
+// findActiveJobId ihn nie. Dafür muss der Aufrufer das Buch sehen dürfen.
 sharedRouter.get('/active', (req, res) => {
   const { type, book_id, page_id } = req.query;
   const entityId = page_id || book_id;

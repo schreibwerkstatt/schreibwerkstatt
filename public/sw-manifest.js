@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "81d00c9fb85401ad";
+self.__SHELL_BUILD = "4483d37d01c011e4";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -269,6 +269,10 @@ self.__SHELL_MANIFEST = [
   "/js/book/bookstats-avg.js",
   "/js/book/bookstats.js",
   "/js/book/buchlandkarte.js",
+  "/js/book/buchlandkarte/axes.js",
+  "/js/book/buchlandkarte/cache.js",
+  "/js/book/buchlandkarte/map.js",
+  "/js/book/buchlandkarte/matrix.js",
   "/js/book/diary-calendar.js",
   "/js/book/diary-date.js",
   "/js/book/ereignisse.js",
@@ -721,6 +725,7 @@ self.__SHELL_MANIFEST = [
   "/js/prompts/book-chat-tools-history.js",
   "/js/prompts/book-chat-tools.js",
   "/js/prompts/book-outline.js",
+  "/js/prompts/buchlandkarte.js",
   "/js/prompts/chat-pre-context.js",
   "/js/prompts/chat.js",
   "/js/prompts/core.js",
@@ -932,8 +937,11 @@ self.__SHELL_MANIFEST = [
   "/partials/bookoverview-wortschatz.html",
   "/partials/bookoverview.html",
   "/partials/bookstats.html",
+  "/partials/buchlandkarte-map-controls.html",
   "/partials/buchlandkarte-map.html",
+  "/partials/buchlandkarte-matrix.html",
   "/partials/buchlandkarte-redundanz.html",
+  "/partials/buchlandkarte-tables.html",
   "/partials/buchlandkarte.html",
   "/partials/buchorganizer.html",
   "/partials/buchreview.html",

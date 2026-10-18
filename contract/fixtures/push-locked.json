@@ -1,0 +1,17 @@
+{
+  "operation": "PUT /content/pages/{page_id}",
+  "request": {
+    "method": "PUT",
+    "path": "/content/pages/70005",
+    "body": {
+      "html": "<p>Trotzdem.</p>",
+      "expected_updated_at": "2026-01-01T00:00:00.000Z"
+    }
+  },
+  "status": 423,
+  "response": {
+    "error_code": "PAGE_LOCKED",
+    "locked_by_email": "mitarbeit@test.dev",
+    "expires_at": "2026-01-02T00:00:00.000Z"
+  }
+}

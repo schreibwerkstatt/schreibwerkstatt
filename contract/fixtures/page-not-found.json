@@ -1,0 +1,11 @@
+{
+  "operation": "GET /content/pages/{page_id}",
+  "request": {
+    "method": "GET",
+    "path": "/content/pages/79999"
+  },
+  "status": 404,
+  "response": {
+    "error_code": "PAGE_NOT_FOUND"
+  }
+}

@@ -1,0 +1,119 @@
+<!-- Buchlandkarte, Tab „Verlauf": Ähnlichkeitsmatrix in Lesereihenfolge, Bruchstellen, Echos -->
+<!--
+  Teil von buchlandkarte-map.html (Scope: buchlandkarteCard, gleiches
+  Job-Ergebnis wie die Landkarte). Die Matrix projiziert nicht: jede Zelle ist
+  eine Paar-Ähnlichkeit im Vollraum. Zeichnen: book/buchlandkarte/matrix.js.
+-->
+<div x-show="$app.buchlandkarteTab === 'matrix'">
+  <div x-show="!bookMapHasMatrix()" class="muted-msg muted-msg--spaced"
+       x-text="$app.t('buchlandkarte.empty')"></div>
+
+  <template x-if="bookMapHasMatrix()">
+    <div>
+      <p class="buchlandkarte-section-hint" x-text="$app.t('buchlandkarte.matrix.legend')"></p>
+      <div class="buchlandkarte-matrix-wrap" x-resize="_drawBookMatrix()">
+        <canvas id="bookMatrixCanvas" role="img"
+                @mousemove="bookMatrixHover($event)" @mouseleave="bookMapMatrixHover = null"
+                @click="bookMatrixPick($event)"></canvas>
+      </div>
+      <div class="buchlandkarte-scale">
+        <span x-text="$app.t('buchlandkarte.matrix.low')"></span>
+        <span class="buchlandkarte-scale-bar buchlandkarte-scale-bar--matrix" aria-hidden="true"></span>
+        <span x-text="$app.t('buchlandkarte.matrix.high')"></span>
+      </div>
+      <p class="buchlandkarte-cell" x-text="bookMatrixCellText() || $app.t('buchlandkarte.matrix.hoverHint')"></p>
+      <div class="buchlandkarte-cell-refs" x-show="bookMapMatrixPick">
+        <template x-for="p in bookMatrixPickRefs()" :key="p.id">
+          <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: p.id, label: p.name }"></button>
+        </template>
+      </div>
+
+      <!-- Bruchstellen: Spitzen der Novelty-Kurve -->
+      <div class="buchlandkarte-section">
+        <h3 class="section-heading" x-text="$app.t('buchlandkarte.matrix.boundaries')"></h3>
+        <p class="buchlandkarte-section-hint" x-text="$app.t('buchlandkarte.matrix.boundariesHint')"></p>
+        <div class="buchlandkarte-novelty-wrap" x-show="bookMapResult.matrix.novelty.some(v => v != null)">
+          <canvas id="bookNoveltyCanvas" role="img" :aria-label="$app.t('buchlandkarte.matrix.noveltyAria')"></canvas>
+        </div>
+        <p class="buchlandkarte-section-hint" x-show="bookMapBoundarySummary()" x-text="bookMapBoundarySummary()"></p>
+        <div x-show="!bookMapResult.matrix.boundaries.length" class="muted-msg"
+             x-text="$app.t('buchlandkarte.matrix.noBoundaries')"></div>
+        <template x-if="bookMapResult.matrix.boundaries.length">
+          <div class="table-scroll">
+            <table class="buchlandkarte-table"
+                   x-data="sortableTable({
+                     rows: () => bookMapBoundaryRows(),
+                     defaultKey: 'ix',
+                     defaultDir: 'asc',
+                     persistKey: 'buchlandkarte.boundaries',
+                     types: { ix: 'number', strengthPct: 'number' },
+                   })">
+              <thead>
+                <tr>
+                  <th class="sortable-th" :class="sortClass('ix')" :aria-sort="ariaSort('ix')"
+                      @click="sortBy('ix')" x-text="$app.t('buchlandkarte.col.boundaryAt')"></th>
+                  <th class="sortable-th" :class="sortClass('place')" :aria-sort="ariaSort('place')"
+                      @click="sortBy('place')" x-text="$app.t('buchlandkarte.col.place')"></th>
+                  <th class="sortable-th" :class="sortClass('strengthPct')" :aria-sort="ariaSort('strengthPct')"
+                      @click="sortBy('strengthPct')" x-text="$app.t('buchlandkarte.col.strength')"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="row in sorted" :key="row.ix">
+                  <tr>
+                    <td><button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: row.pageId, label: row.name }"></button></td>
+                    <td :class="{ 'buchlandkarte-inside': !row.atChapter }" x-text="row.place"></td>
+                    <td class="buchlandkarte-num" x-text="row.strengthPct + '%'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </template>
+      </div>
+
+      <!-- Echos: weit auseinanderliegende, aber ähnliche Abschnitte -->
+      <div class="buchlandkarte-section">
+        <h3 class="section-heading" x-text="$app.t('buchlandkarte.matrix.echoes')"></h3>
+        <p class="buchlandkarte-section-hint" x-text="$app.t('buchlandkarte.matrix.echoesHint')"></p>
+        <div x-show="!bookMapResult.matrix.echoes.length" class="muted-msg"
+             x-text="$app.t('buchlandkarte.matrix.noEchoes')"></div>
+        <template x-if="bookMapResult.matrix.echoes.length">
+          <div class="table-scroll">
+            <table class="buchlandkarte-table"
+                   x-data="sortableTable({
+                     rows: () => bookMapEchoRows(),
+                     defaultKey: 'scorePct',
+                     defaultDir: 'desc',
+                     persistKey: 'buchlandkarte.echoes',
+                     types: { scorePct: 'number', gap: 'number' },
+                   })">
+              <thead>
+                <tr>
+                  <th class="sortable-th" :class="sortClass('aName')" :aria-sort="ariaSort('aName')"
+                      @click="sortBy('aName')" x-text="$app.t('buchlandkarte.col.earlier')"></th>
+                  <th class="sortable-th" :class="sortClass('bName')" :aria-sort="ariaSort('bName')"
+                      @click="sortBy('bName')" x-text="$app.t('buchlandkarte.col.later')"></th>
+                  <th class="sortable-th" :class="sortClass('gap')" :aria-sort="ariaSort('gap')"
+                      @click="sortBy('gap')" x-text="$app.t('buchlandkarte.col.gap')"></th>
+                  <th class="sortable-th" :class="sortClass('scorePct')" :aria-sort="ariaSort('scorePct')"
+                      @click="sortBy('scorePct')" x-text="$app.t('buchlandkarte.col.similarity')"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="row in sorted" :key="row.key">
+                  <tr>
+                    <td><button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: row.aId, label: row.aName }"></button></td>
+                    <td><button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: row.bId, label: row.bName }"></button></td>
+                    <td class="buchlandkarte-num" x-text="row.gap"></td>
+                    <td class="buchlandkarte-num" x-text="row.scorePct + '%'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </template>
+      </div>
+    </div>
+  </template>
+</div>

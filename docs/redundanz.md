@@ -30,7 +30,7 @@ Ein Lauf pro Buch und User (Dedup an der `book_id`). Läuft schon einer mit ande
 
 ## Karte
 
-Das Radar ist kein eigener Menüpunkt, sondern der Tab „Doppelungen" der Buchlandkarte ([semantic-search.md](semantic-search.md)). Der Tab steht im Root (`buchlandkarteTab`), damit `#…/redundanz` und der Sprung aus der Job-Anzeige ihn direkt öffnen; `#…/landkarte` öffnet den Tab „Landkarte". Beide Panels laden beim Öffnen der Karte, unabhängig vom aktiven Tab.
+Das Radar ist kein eigener Menüpunkt, sondern der Tab „Doppelungen" der Buchlandkarte ([semantic-search.md](semantic-search.md)). Der Tab steht im Root (`buchlandkarteTab`), damit `#…/redundanz` und der Sprung aus der Job-Anzeige ihn direkt öffnen; `#…/landkarte` öffnet den Tab „Landkarte", `#…/buchverlauf` den Tab „Verlauf". Alle Panels laden beim Öffnen der Karte, unabhängig vom aktiven Tab.
 
 - **Öffnen der Karte** lädt parallel den Index-Stand (`/search/semantic/status`), den letzten Lauf (`GET /redundancy/:book_id`) und hängt sich an einen laufenden `redundancy`- bzw. `embed-index`-Job wieder an (`/jobs/active`). Die Job-Anzeige in der Fusszeile führt für beide Typen in diesen Tab.
 - **Index fehlt / veraltet:** die Karte baut ihn selbst (`/jobs/embed-index`). `staleCount` > 0 → Hinweis „seit dem letzten Index-Lauf geändert"; ist der Index neuer als `indexedAt` des Ergebnisses → Hinweis „neu prüfen".

@@ -812,7 +812,7 @@
       <template x-if="job.status === 'running' && job.progress > 0">
         <span class="job-queue-pill-progress" x-text="job.progress + '%'"></span>
       </template>
-      <button type="button" class="job-queue-cancel-btn" @click.stop="cancelJob(job.id)" :data-tip="t('jobQueue.cancel')" :aria-label="t('jobQueue.cancel')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+      <button type="button" class="job-queue-cancel-btn" x-show="job.canCancel" @click.stop="cancelJob(job.id)" :data-tip="t('jobQueue.cancel')" :aria-label="t('jobQueue.cancel')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
     </div>
   </template>
   <button type="button"

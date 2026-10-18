@@ -1,0 +1,12 @@
+{
+  "operation": "GET /content/editor-bundle.zip",
+  "request": {
+    "method": "GET",
+    "path": "/content/editor-bundle.zip",
+    "headers": {
+      "X-Editor-Api": "1"
+    }
+  },
+  "status": 304,
+  "response": null
+}

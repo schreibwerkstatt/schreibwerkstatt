@@ -1,0 +1,24 @@
+{
+  "operation": "POST /content/pages",
+  "request": {
+    "method": "POST",
+    "path": "/content/pages",
+    "body": {
+      "book_id": 7001,
+      "chapter_id": 7102,
+      "name": "2026-10-18",
+      "html": "<p>Tagebuch.</p>"
+    }
+  },
+  "status": 200,
+  "response": {
+    "id": 1000001,
+    "book_id": 7001,
+    "chapter_id": 7102,
+    "name": "2026-10-18",
+    "position": 3,
+    "html": "<p data-bid=\"f000000000000001\">Tagebuch.</p>",
+    "updated_at": "2026-01-02T00:00:00.000Z",
+    "last_save_id": null
+  }
+}

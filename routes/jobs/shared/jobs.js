@@ -397,6 +397,7 @@ const JOB_TYPE_LABELS = {
   'lexicon-scan':          'job.label.lexiconScan',
   'redundancy':            'job.label.redundancy',
   'book-map':              'job.label.bookMap',
+  'book-map-label':        'job.label.bookMapLabel',
   'research-chat':         'job.label.researchChat',
   'plot-chat':             'job.label.plotChat',
   'ideen-chat':            'job.label.ideenChat',

@@ -1,0 +1,36 @@
+{
+  "version": "4.28.0",
+  "date": "2026-10-18",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Buchlandkarte, Tab «Verlauf»: jeder Abschnitt wird mit jedem verglichen, in Lesereihenfolge. So sehen Sie, wo das Buch inhaltlich umschlägt und welche weit auseinanderliegenden Abschnitte sich ähneln.",
+      "en": "Book map, “Course” tab: every section is compared with every other, in reading order. You see where the book changes direction and which sections far apart resemble each other."
+    },
+    {
+      "kind": "neu",
+      "de": "Buchlandkarte, «Eigene Pole»: die Achsen lassen sich selbst festlegen, etwa Figur gegen Figur, Ort gegen Ort oder Begriff gegen Begriff. Mit «Achsen benennen (KI)» sagt die KI, was die Achsen trennen.",
+      "en": "Book map, “Own poles”: you can set the axes yourself, e.g. character against character, place against place or term against term. “Name axes (AI)” lets the AI say what the axes separate."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buchlandkarte: mit «Passagen» wird jeder Teil eines langen Abschnitts ein eigener Punkt. Die Färbung kann statt nach Kapitel auch dem Buchverlauf vom Anfang zum Ende folgen.",
+      "en": "Book map: with “Passages”, each part of a long section becomes its own point. Instead of by chapter, the colouring can also follow the book from beginning to end."
+    },
+    {
+      "kind": "verbessert",
+      "de": "macOS- und Android-App: hat ein anderes Gerät denselben Abschnitt geändert, werden Änderungen an verschiedenen Absätzen zusammengeführt. Ein Konflikt erscheint nur noch bei Überschneidungen.",
+      "en": "macOS and Android app: if another device changed the same section, edits to different paragraphs are merged. A conflict only appears when edits overlap."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Job-Anzeige in der Fusszeile: wird der Semantik-Index eines Buchs aufgebaut, sehen das alle, die an diesem Buch arbeiten — auch wenn jemand anderes ihn gestartet hat.",
+      "en": "Job display in the footer: when a book’s semantic index is being built, everyone working on that book sees it, even if someone else started it."
+    },
+    {
+      "kind": "behoben",
+      "de": "Bucheditor, Gliederung: beim schnellen Scrollen standen mehrere Abschnitte halb markiert nebeneinander und der Hintergrund flackerte.",
+      "en": "Book editor, outline: when scrolling fast, several sections appeared half highlighted at once and the background flickered."
+    }
+  ]
+}

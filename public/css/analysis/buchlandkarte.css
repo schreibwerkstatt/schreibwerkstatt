@@ -1,8 +1,9 @@
 @layer components {
 /* === Buchlandkarte ===
-   Tab-Hülle mit zwei Panels: Landkarte (Chart.js-Scatter plus zwei
-   Kennzahl-Tabellen, hier) und Doppelungen (redundanz.css). Akzentfarbe kommt
-   über --card-accent (card-accents.css), nicht hier. */
+   Tab-Hülle mit drei Tabs: Landkarte (Chart.js-Scatter plus Achsen-Enden und
+   Kennzahl-Tabellen) und Verlauf (Ähnlichkeitsmatrix auf Canvas plus
+   Novelty-Kurve) hier, Doppelungen in redundanz.css. Akzentfarbe kommt über
+   --card-accent (card-accents.css), nicht hier. */
 
 /* Aktionszeile je Panel: die Lauf-Knöpfe gehören zur Sub-Komponente, die
    Kopfzeile der Hülle trägt nur die Tabs. */
@@ -116,5 +117,130 @@
   color: var(--color-warn-text);
 }
 .buchlandkarte-split .entity-ref { margin-left: var(--space-3); }
+
+
+/* Optionen des nächsten Laufs links, Lauf-Knopf rechts. */
+.buchlandkarte-options,
+.buchlandkarte-view {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-right: auto;
+}
+.buchlandkarte-view { margin: var(--space-sm) 0; }
+.buchlandkarte-view-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+}
+
+/* Pol-Editor: je Achse eine Zeile „A gegen B". */
+.buchlandkarte-poles { margin-bottom: var(--space-sm); }
+.buchlandkarte-pole-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-6) 0;
+}
+.buchlandkarte-pole {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+}
+.buchlandkarte-pole-vs {
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+}
+.buchlandkarte-pole-text { min-width: 12ch; }
+
+/* Farbskala unter Karte (Verlauf) bzw. Matrix. */
+.buchlandkarte-scale {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+  margin: var(--space-3) 0;
+}
+.buchlandkarte-scale-bar {
+  display: inline-block;
+  width: 120px;
+  height: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+}
+/* Dieselben zwei Farben wie ORDER_FROM/ORDER_TO in book/buchlandkarte/map.js. */
+.buchlandkarte-scale-bar--order { background: linear-gradient(to right, #5b6ee1, #e08a3c); }
+/* Dieselben zwei Token wie die Matrix-Farbskala in book/buchlandkarte/matrix.js. */
+.buchlandkarte-scale-bar--matrix { background: linear-gradient(to right, var(--color-surface), var(--color-primary)); }
+
+/* Achsen-Enden: Titel, KI-Satz, dann je Ende eine Zeile Abschnitte. */
+.buchlandkarte-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+.buchlandkarte-axis {
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.buchlandkarte-axis-title { font-weight: 600; font-size: var(--font-size-sm); }
+.buchlandkarte-axis-diff {
+  font-size: var(--font-size-sm);
+  color: var(--color-muted);
+  margin: var(--space-3) 0;
+}
+.buchlandkarte-axis-end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-6);
+  margin-top: var(--space-3);
+}
+.buchlandkarte-axis-end-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+  min-width: 10ch;
+}
+
+/* Matrix: quadratisch wie die Karte — Zeile und Spalte sind dieselbe Achse. */
+.buchlandkarte-matrix-wrap {
+  width: 100%;
+  max-width: 640px;
+  margin: var(--space-sm) auto;
+}
+.buchlandkarte-matrix-wrap > canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  cursor: crosshair;
+  border: 1px solid var(--color-border);
+}
+.buchlandkarte-cell {
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+  text-align: center;
+  margin: var(--space-3) 0;
+  min-height: 1.4em;
+}
+.buchlandkarte-cell-refs {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+.buchlandkarte-novelty-wrap {
+  position: relative;
+  height: 140px;
+  margin: var(--space-sm) 0;
+}
+.buchlandkarte-novelty-wrap > canvas { cursor: pointer; }
+/* Bruch mitten im Kapitel: der interessantere Befund, leise hervorgehoben. */
+.buchlandkarte-inside { color: var(--color-warn-text); }
 
 }

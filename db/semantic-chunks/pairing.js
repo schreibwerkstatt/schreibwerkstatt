@@ -80,10 +80,10 @@ function loadFigureVectorsForPairing(bookId, userEmail, model) {
 //
 // `book_id` doppelt geprueft (an den Chunks UND an der Seite): Chunks und Seite
 // muessen im selben Buch liegen, sonst gehoert der Punkt nicht in diese Landkarte.
-// Rueckgabe: [{ entity_id, chapter_id, text, vector:Float32Array }].
+// Rueckgabe: [{ entity_id, chunk_ix, chapter_id, text, vector:Float32Array }].
 function loadPageChunksWithChapter(bookId, model) {
   const rows = db.prepare(`
-    SELECT sc.entity_id, sc.text, sc.vector, p.chapter_id
+    SELECT sc.entity_id, sc.chunk_ix, sc.text, sc.vector, p.chapter_id
       FROM semantic_chunks sc
       JOIN pages p ON p.page_id = sc.entity_id
      WHERE sc.book_id = ? AND sc.model = ? AND sc.kind = 'page'
@@ -92,10 +92,69 @@ function loadPageChunksWithChapter(bookId, model) {
   `).all(bookId, model, bookId);
   return rows.map(r => ({
     entity_id: r.entity_id,
+    chunk_ix: r.chunk_ix,
     chapter_id: r.chapter_id ?? null,
     text: r.text,
     vector: blobToVector(r.vector),
   }));
 }
 
-module.exports = { loadChunksForPairing, loadFigureVectorsForPairing, loadPageChunksWithChapter };
+// Pol-Kandidaten der Buchlandkarte: Figuren und Schauplätze des Users, die im
+// Index dieses Buchs unter `model` liegen. Gleicher Scope wie die Figuren-
+// Dubletten (eigener User, keine stale-Figur) — der Index führt Figuren und Orte
+// buchweit über alle User. Der Name ist ein Auswahl-Label für den Pol-Wähler,
+// keine Anzeige eines Ergebnisses.
+// Rückgabe: [{ kind:'figure'|'location', id, name }], je Art nach Name sortiert.
+function listPoleCandidates(bookId, userEmail, model) {
+  const figs = db.prepare(`
+    SELECT DISTINCT f.id, f.name FROM figures f
+      JOIN semantic_chunks sc ON sc.kind = 'figure' AND sc.entity_id = f.id
+     WHERE f.book_id = ? AND f.user_email IS ? AND f.stale = 0
+       AND sc.book_id = ? AND sc.model = ?
+     ORDER BY f.name COLLATE NOCASE
+  `).all(bookId, userEmail || null, bookId, model);
+  const locs = db.prepare(`
+    SELECT DISTINCT l.id, l.name FROM locations l
+      JOIN semantic_chunks sc ON sc.kind = 'location' AND sc.entity_id = l.id
+     WHERE l.book_id = ? AND l.user_email IS ?
+       AND sc.book_id = ? AND sc.model = ?
+     ORDER BY l.name COLLATE NOCASE
+  `).all(bookId, userEmail || null, bookId, model);
+  return [
+    ...figs.map(r => ({ kind: 'figure', id: r.id, name: r.name })),
+    ...locs.map(r => ({ kind: 'location', id: r.id, name: r.name })),
+  ];
+}
+
+// Gemittelter Vektor einer Figur oder eines Schauplatzes als Pol der
+// Buchlandkarte — nur, wenn die Entität dem User gehört, im Buch liegt und
+// unter `model` indiziert ist (sonst null). Die Besitzprüfung steckt im SQL,
+// nicht beim Aufrufer: die Entitäts-ID kommt aus dem Request.
+function loadPoleVector(bookId, userEmail, model, kind, entityId) {
+  const table = kind === 'figure' ? 'figures' : kind === 'location' ? 'locations' : null;
+  if (!table) return null;
+  const staleCond = kind === 'figure' ? 'AND e.stale = 0' : '';
+  const rows = db.prepare(`
+    SELECT sc.vector FROM semantic_chunks sc
+      JOIN ${table} e ON e.id = sc.entity_id
+     WHERE sc.kind = ? AND sc.entity_id = ? AND sc.book_id = ? AND sc.model = ?
+       AND e.book_id = ? AND e.user_email IS ? ${staleCond}
+     ORDER BY sc.chunk_ix
+  `).all(kind, entityId, bookId, model, bookId, userEmail || null);
+  if (!rows.length) return null;
+  let acc = null;
+  let count = 0;
+  for (const r of rows) {
+    const v = blobToVector(r.vector);
+    if (!acc) acc = new Float64Array(v.length);
+    if (v.length !== acc.length) continue;
+    for (let i = 0; i < v.length; i++) acc[i] += v[i];
+    count++;
+  }
+  return count ? acc : null;
+}
+
+module.exports = {
+  loadChunksForPairing, loadFigureVectorsForPairing, loadPageChunksWithChapter,
+  listPoleCandidates, loadPoleVector,
+};

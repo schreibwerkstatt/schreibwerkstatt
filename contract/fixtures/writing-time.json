@@ -1,0 +1,16 @@
+{
+  "operation": "POST /history/writing-time",
+  "request": {
+    "method": "POST",
+    "path": "/history/writing-time",
+    "body": {
+      "book_id": 7001,
+      "seconds": 30
+    }
+  },
+  "status": 200,
+  "response": {
+    "ok": true,
+    "added": 30
+  }
+}

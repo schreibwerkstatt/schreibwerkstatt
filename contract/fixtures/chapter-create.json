@@ -1,0 +1,21 @@
+{
+  "operation": "POST /content/chapters",
+  "request": {
+    "method": "POST",
+    "path": "/content/chapters",
+    "body": {
+      "book_id": 7001,
+      "name": "Oktober",
+      "position": 10,
+      "parent_chapter_id": 7101
+    }
+  },
+  "status": 200,
+  "response": {
+    "id": 1000001,
+    "book_id": 7001,
+    "name": "Oktober",
+    "position": 10,
+    "parent_chapter_id": 7101
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "operation": "GET /content/editor-bundle.zip",
+  "request": {
+    "method": "GET",
+    "path": "/content/editor-bundle.zip",
+    "headers": {
+      "X-Editor-Api": "99"
+    }
+  },
+  "status": 409,
+  "response": {
+    "error_code": "EDITOR_API_UNSUPPORTED",
+    "params": {
+      "client": [
+        99
+      ],
+      "server": 1
+    }
+  }
+}

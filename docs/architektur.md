@@ -42,7 +42,8 @@ Browser → NGINX (HTTPS) → Express (Port 3737)
   /lexicon/:book_id  → Wortschatz-Analyse lesen (abgeleitete Kennzahlen + Ranglisten, read-only)
   /jobs/lexicon-scan → Wortschatz-Scan: laengenrobuste Diversitaetsmasse + Lieblingswoerter + Wendungen (kein KI-Call)
   /jobs/manuscript-import → EIN Word-/ODT-Dokument nach Ueberschriften-Ebenen in Kapitel + Seiten zerlegen (Zuordnung h1..h6 kommt vom User); …/preview liefert dieselbe Gliederung synchron, ohne zu schreiben — kein KI-Call
-  /jobs/book-map   → Buchlandkarte: PCA-Projektion der Seiten-Vektoren + Kapitel-Kohaesion + Ausreisser (kein KI-Call, kein Embedding-Call — liest nur den bestehenden Index)
+  /jobs/book-map   → Buchlandkarte: PCA- oder Pol-Projektion (Abschnitte oder Passagen) + Ähnlichkeitsmatrix in Lesereihenfolge mit Bruchstellen/Echos + Kapitel-Kohaesion + Ausreisser (kein KI-Call; Embedding-Call nur für Freitext-Pole)
+  /jobs/book-map-label → Buchlandkarte: KI benennt die PCA-Achsen aus den Abschnitten an ihren Enden
   /jobs/redundancy → Redundanz-Radar: All-Pairs-Cosinus ueber die Seiten-Chunks des Index + Figuren-Dubletten (kein KI-Call, kein Embedding-Call)
   /capture         → Erfassen aus der Browser-Erweiterung: Recherche-Fundstueck und/oder Quelle in EINER Transaktion (`routes/capture.js`), Scope `capture:write`, kein KI-Call
   /songs/*         → Songs-Feature (Buch-Soundtrack)

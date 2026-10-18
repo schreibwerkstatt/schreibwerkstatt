@@ -1,0 +1,3185 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Schreibwerkstatt — Client-Vertrag (macOS, Android)",
+    "version": "api 1 · editorApi 1",
+    "description": "Die REST-Fläche, die die nativen Clients nutzen. Regeln, Versionen und Ablauf: contract/README.md. Antworten dürfen Felder tragen, die hier nicht stehen — ein Client ignoriert sie.",
+    "x-api": 1,
+    "x-editor-api": 1
+  },
+  "components": {
+    "securitySchemes": {
+      "deviceToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Device-Token `swd_…` (Profil → Geräte)."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error_code": {
+            "type": "string",
+            "description": "Maschinenlesbarer Fehlercode — der Vertrag. Texte übersetzt der Client selbst."
+          },
+          "params": {
+            "type": "object",
+            "description": "Optionale Parameter zum Code (z.B. `field`, `allowed`)."
+          },
+          "detail": {
+            "description": "Optionale Diagnose; nicht zum Anzeigen bestimmt."
+          }
+        },
+        "required": [
+          "error_code"
+        ]
+      },
+      "ClientContract": {
+        "type": "object",
+        "properties": {
+          "api": {
+            "type": "integer",
+            "description": "Revision der REST-Fläche (contract/version.json). Steigt bei jeder Vertragsänderung; Feature-Erkennung per `api >= n`."
+          },
+          "editorApi": {
+            "type": "integer",
+            "description": "Major des OTA-Editor-Bundles. Steigt nur bei einem Bruch."
+          }
+        },
+        "required": [
+          "api",
+          "editorApi"
+        ]
+      },
+      "Config": {
+        "type": "object",
+        "properties": {
+          "clientContract": {
+            "$ref": "#/components/schemas/ClientContract"
+          },
+          "languagetool": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "debounceMs": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "enabled",
+              "debounceMs"
+            ]
+          },
+          "stt": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "vad": {
+                "type": "object",
+                "properties": {
+                  "silenceMs": {
+                    "type": "integer"
+                  },
+                  "threshold": {
+                    "type": "number"
+                  },
+                  "maxSegmentS": {
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          },
+          "userSettings": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "locale": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "focus_granularity": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "clientContract",
+          "languagetool",
+          "stt"
+        ]
+      },
+      "Book": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "description": "Rolle des anfragenden Users: owner | editor | lektor | viewer"
+          },
+          "owner_email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "buchtyp": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role"
+        ]
+      },
+      "TreePage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "chapter_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "position": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "chapter_id",
+          "updated_at"
+        ]
+      },
+      "TreeChapter": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "parent_chapter_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TreePage"
+            }
+          },
+          "subchapters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TreeChapter"
+            },
+            "description": "Unterkapitel, gleiche Form (rekursiv)."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "pages"
+        ]
+      },
+      "Tree": {
+        "type": "object",
+        "properties": {
+          "chapters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TreeChapter"
+            }
+          },
+          "topPages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TreePage"
+            },
+            "description": "Abschnitte ohne Kapitel."
+          }
+        },
+        "required": [
+          "chapters",
+          "topPages"
+        ]
+      },
+      "SyncPage": {
+        "type": "object",
+        "properties": {
+          "page_id": {
+            "type": "integer"
+          },
+          "page_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "chapter_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          },
+          "html": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "page_id"
+        ]
+      },
+      "SyncDeleted": {
+        "type": "object",
+        "properties": {
+          "page_id": {
+            "type": "integer"
+          },
+          "page_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deleted_at": {
+            "type": "string",
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "page_id"
+        ]
+      },
+      "SyncCursor": {
+        "type": "object",
+        "properties": {
+          "since": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nächster `since`-Parameter; null = noch kein Stand.",
+            "format": "date-time"
+          },
+          "since_id": {
+            "type": "integer",
+            "description": "Nächster `since_id`-Parameter (Keyset-Gleichstand)."
+          }
+        },
+        "required": [
+          "since",
+          "since_id"
+        ]
+      },
+      "SyncResponse": {
+        "type": "object",
+        "properties": {
+          "now": {
+            "type": "string",
+            "description": "Serverzeit der Antwort.",
+            "format": "date-time"
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncPage"
+            },
+            "description": "Seit dem Cursor geänderte Abschnitte inkl. eigener Edits, mit vollem HTML."
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncDeleted"
+            },
+            "description": "Seit `since` gelöschte Abschnitte; leer beim Voll-Pull. Idempotent anwenden."
+          },
+          "has_more": {
+            "type": "boolean",
+            "description": "true → mit `cursor` weiter pagen."
+          },
+          "deleted_has_more": {
+            "type": "boolean",
+            "description": "true → `deleted` gedeckelt; Abgleich über `…/tree`."
+          },
+          "cursor": {
+            "$ref": "#/components/schemas/SyncCursor"
+          }
+        },
+        "required": [
+          "now",
+          "pages",
+          "deleted",
+          "has_more",
+          "deleted_has_more",
+          "cursor"
+        ]
+      },
+      "Page": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "book_id": {
+            "type": "integer"
+          },
+          "chapter_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "html": {
+            "type": "string",
+            "description": "Abschnitts-HTML; Blöcke tragen `data-bid` (Basis des Block-Merge)."
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          },
+          "last_save_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Save-Kennung des Writes, der diesen Stand schrieb (kleingeschrieben); null nach einem Write ohne Kennung.",
+            "format": "uuid"
+          },
+          "save_match": {
+            "enum": [
+              "replay",
+              "own"
+            ],
+            "description": "Nur PUT: `replay` = Wiederholung, nichts geschrieben · `own` = veralteter Stempel, aber der Server-Stand war ein eigener früherer Push."
+          },
+          "merged": {
+            "const": true,
+            "description": "Nur PUT mit `base_html`: der Server hat gegen einen fremden Stand kollisionsfrei block-gemergt. `html` ist der neue Stand — lokal übernehmen. Der gemergte Write trägt keine Save-Kennung (`last_save_id: null`): Wiederholung und Nachfolger laufen erneut durch den Merge — Nachfolger mit `base_html` = zuletzt gesendetem Stand."
+          }
+        },
+        "required": [
+          "id",
+          "book_id",
+          "name",
+          "html",
+          "updated_at",
+          "last_save_id"
+        ]
+      },
+      "PageSaveRequest": {
+        "type": "object",
+        "properties": {
+          "html": {
+            "type": "string",
+            "description": "Neuer Abschnitts-HTML-Stand."
+          },
+          "name": {
+            "type": "string",
+            "description": "Neuer Name (Umbenennen; allein oder mit `html`)."
+          },
+          "expected_updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stempel der Basis, auf der geschrieben wurde. Veraltet → 409 PAGE_CONFLICT.",
+            "format": "date-time"
+          },
+          "base_html": {
+            "type": "string",
+            "description": "Optional: HTML der Basis. Dann mergt der Server bei veraltetem Stempel selbst (Antwort `merged: true` bzw. 409 mit `merge_conflicts`)."
+          },
+          "source": {
+            "type": "string",
+            "description": "Herkunft der Fassung: `macapp` | `main` | …"
+          },
+          "device_id": {
+            "type": "string",
+            "description": "Stabile Geräte-UUID.",
+            "format": "uuid"
+          },
+          "save_id": {
+            "type": "string",
+            "description": "Kennung dieses Pushs, neu je Push; eine Wiederholung trägt dieselbe.",
+            "format": "uuid"
+          },
+          "own_save_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Kennungen früherer unbeantworteter Pushs desselben Schreibers seit der Basis, älteste zuerst. Der Server wertet die letzten 16 aus."
+          }
+        }
+      },
+      "PageConflict": {
+        "type": "object",
+        "properties": {
+          "error_code": {
+            "const": "PAGE_CONFLICT"
+          },
+          "server_updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Aktueller Server-Stempel.",
+            "format": "date-time"
+          },
+          "server_editor_email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "server_editor_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "server_is_self": {
+            "type": "boolean",
+            "description": "Der fremde Stand stammt vom selben Konto (Zweitgerät)."
+          },
+          "server_editor_device": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Gerätename, nur für eigene Geräte."
+          },
+          "merge_conflicts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Nur wenn `base_html` mitkam: `data-bid` der Blöcke, die beide Seiten verschieden geändert haben. Nichts geschrieben."
+          }
+        },
+        "required": [
+          "error_code",
+          "server_updated_at",
+          "server_is_self"
+        ]
+      },
+      "PageLocked": {
+        "type": "object",
+        "properties": {
+          "error_code": {
+            "const": "PAGE_LOCKED"
+          },
+          "locked_by_email": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "error_code",
+          "locked_by_email",
+          "expires_at"
+        ]
+      },
+      "CreatePageRequest": {
+        "type": "object",
+        "properties": {
+          "book_id": {
+            "type": "integer"
+          },
+          "chapter_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Tagebuch: ISO-Tag `YYYY-MM-DD`."
+          },
+          "html": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "CreateChapterRequest": {
+        "type": "object",
+        "properties": {
+          "book_id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "parent_chapter_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "book_id",
+          "name"
+        ]
+      },
+      "Chapter": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "book_id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "parent_chapter_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "book_id",
+          "name"
+        ]
+      },
+      "Revision": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "page_id": {
+            "type": "integer"
+          },
+          "book_id": {
+            "type": "integer"
+          },
+          "chars": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "words": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tok": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user_email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "client": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Client-Label (Browser/OS bzw. nativer Client)."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "body_html": {
+            "type": "string",
+            "description": "Nur in der Detail-Antwort."
+          }
+        },
+        "required": [
+          "id",
+          "page_id",
+          "created_at"
+        ]
+      },
+      "RevisionList": {
+        "type": "object",
+        "properties": {
+          "revisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Revision"
+            }
+          },
+          "has_more": {
+            "type": "boolean"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revisions"
+        ]
+      },
+      "RevisionDetail": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "$ref": "#/components/schemas/Revision"
+          }
+        },
+        "required": [
+          "revision"
+        ]
+      },
+      "RestoreResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "restored_from": {
+            "type": "integer"
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "ok",
+          "restored_from"
+        ]
+      },
+      "Ok": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "DevicePingRequest": {
+        "type": "object",
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "page_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "device_id"
+        ]
+      },
+      "DevicePingResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "self_page_device_count": {
+            "type": "integer"
+          },
+          "self_book_device_count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "WritingTimeRequest": {
+        "type": "object",
+        "properties": {
+          "book_id": {
+            "type": "integer"
+          },
+          "seconds": {
+            "type": "integer",
+            "description": "Delta seit dem letzten Ping, idle-gedeckelt."
+          }
+        },
+        "required": [
+          "book_id",
+          "seconds"
+        ]
+      },
+      "WritingTimeResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "added": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "DictionaryAddRequest": {
+        "type": "object",
+        "properties": {
+          "word": {
+            "type": "string"
+          },
+          "bookId": {
+            "type": "integer",
+            "description": "0 = alle Bücher."
+          },
+          "lang": {
+            "type": "string",
+            "description": "`*` = alle Sprachen."
+          }
+        },
+        "required": [
+          "word"
+        ]
+      },
+      "BookSettings": {
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "language",
+          "region"
+        ]
+      },
+      "ResearchUrl": {
+        "type": "object",
+        "properties": {
+          "url_id": {
+            "type": "integer",
+            "description": "Nur in Server-Antworten."
+          },
+          "url": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "ResearchCreateRequest": {
+        "type": "object",
+        "properties": {
+          "book_id": {
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "note",
+              "link",
+              "quote",
+              "fact",
+              "image"
+            ],
+            "description": "Unbekannt → still `note`."
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "body": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResearchUrl"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "book_id"
+        ]
+      },
+      "ResearchItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "book_id": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "body": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pinned": {
+            "type": "integer",
+            "description": "0/1 (SQLite), kein JSON-Boolean."
+          },
+          "archived": {
+            "type": "integer",
+            "description": "0/1."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResearchUrl"
+            }
+          },
+          "has_image": {
+            "type": "boolean"
+          },
+          "has_doc": {
+            "type": "boolean"
+          },
+          "doc_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "book_id",
+          "kind",
+          "urls"
+        ]
+      },
+      "ResearchClientItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          },
+          "body_snippet": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Auf 200 Zeichen normalisierter Anriss; der volle Text geht an Device-Token-Requests nicht mit."
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResearchUrl"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "urls"
+        ]
+      },
+      "JobCreated": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "Id zum Pollen über `GET /jobs/{job_id}`.",
+            "x-volatile": true
+          },
+          "existing": {
+            "type": "boolean",
+            "description": "Ein Lauf für dasselbe Ziel war schon offen — wird gleich gepollt."
+          }
+        },
+        "required": [
+          "jobId"
+        ]
+      },
+      "CheckJobResult": {
+        "type": "object",
+        "properties": {
+          "fehler": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "Beanstandung; die Felder liest die Web-App, der Client zählt nur."
+            }
+          }
+        },
+        "required": [
+          "fehler"
+        ]
+      },
+      "Synonym": {
+        "type": "object",
+        "properties": {
+          "wort": {
+            "type": "string"
+          },
+          "hinweis": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "wort"
+        ]
+      },
+      "SynonymJobResult": {
+        "type": "object",
+        "properties": {
+          "synonyme": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Synonym"
+            }
+          }
+        },
+        "required": [
+          "synonyme"
+        ]
+      },
+      "JobStatus": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "x-volatile": true
+          },
+          "type": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "done",
+              "error",
+              "cancelled"
+            ]
+          },
+          "progress": {
+            "type": "integer"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Fehler als i18n-Key (z.B. `job.error.…`) oder Freitext."
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CheckJobResult"
+              },
+              {
+                "$ref": "#/components/schemas/SynonymJobResult"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Gesetzt bei `done`; Form je Job-Typ."
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "result"
+        ]
+      },
+      "DeviceToken": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "device_name": {
+            "type": "string"
+          },
+          "platform": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scopes": {
+            "type": "string"
+          },
+          "client_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "device_name",
+          "scopes",
+          "created_at"
+        ]
+      },
+      "DeviceTokenList": {
+        "type": "object",
+        "properties": {
+          "tokens": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeviceToken"
+            }
+          }
+        },
+        "required": [
+          "tokens"
+        ]
+      },
+      "AccountDeleteRequest": {
+        "type": "object",
+        "properties": {
+          "confirm": {
+            "const": "DELETE",
+            "description": "Konstanter Protokollwert, nicht lokalisiert."
+          }
+        },
+        "required": [
+          "confirm"
+        ]
+      },
+      "AccountDeleteResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "demo_reset": {
+            "type": "boolean",
+            "description": "Demo-Konto: zurückgesetzt statt gelöscht, Tokens bleiben gültig."
+          },
+          "scheduled_purge_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Derzeit nie gesetzt (sofortige Löschung).",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "BundleManifest": {
+        "type": "object",
+        "properties": {
+          "sourceCommit": {
+            "type": "string",
+            "description": "Kurz-Hash des Server-Commits.",
+            "x-volatile": true
+          },
+          "editorApi": {
+            "type": "integer",
+            "description": "Major des Bundle-Vertrags; muss zu `X-Editor-Api` passen."
+          },
+          "jsFiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "x-volatile": true
+          },
+          "cssFiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "x-volatile": true
+          },
+          "extraAssets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "x-volatile": true
+          }
+        },
+        "required": [
+          "sourceCommit",
+          "editorApi",
+          "jsFiles",
+          "cssFiles"
+        ]
+      },
+      "EditorApiUnsupported": {
+        "type": "object",
+        "properties": {
+          "error_code": {
+            "const": "EDITOR_API_UNSUPPORTED"
+          },
+          "params": {
+            "type": "object",
+            "properties": {
+              "client": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "server": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "client",
+              "server"
+            ]
+          }
+        },
+        "required": [
+          "error_code",
+          "params"
+        ]
+      },
+      "LtCheckRequest": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "bookId": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "pageId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "SynonymJobRequest": {
+        "type": "object",
+        "properties": {
+          "wort": {
+            "type": "string"
+          },
+          "satz": {
+            "type": "string"
+          },
+          "book_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "page_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "wort"
+        ]
+      },
+      "CheckJobRequest": {
+        "type": "object",
+        "properties": {
+          "page_id": {
+            "type": "integer"
+          },
+          "book_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "page_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "page_id"
+        ]
+      },
+      "SynonymList": {
+        "type": "object",
+        "properties": {
+          "synonyme": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Synonym"
+            }
+          },
+          "disabled": {
+            "type": "boolean"
+          },
+          "lemma": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Transcript": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "deviceToken": []
+    }
+  ],
+  "paths": {
+    "/config": {
+      "get": {
+        "x-clients": [
+          "macos",
+          "android"
+        ],
+        "summary": "Server-Konfiguration (Vertragsstand, LanguageTool, STT, User-Einstellungen)",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Config"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/content/books": {
+      "get": {
+        "x-clients": [
+          "macos",
+          "android"
+        ],
+        "summary": "Bücher des Users",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Book"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/content/books/{book_id}/tree": {
+      "get": {
+        "x-clients": [
+          "macos",
+          "android"
+        ],
+        "summary": "Gliederung: Kapitel (rekursiv) und Abschnitte",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tree"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/content/books/{book_id}/sync": {
+      "get": {
+        "x-clients": [
+          "macos",
+          "android"
+        ],
+        "summary": "Delta-Pull für den lokalen Spiegel",
+        "description": "Keyset-Cursor `(updated_at, page_id)`. Ohne `since` = Voll-Pull. Paginieren bis `has_more=false`.",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "`cursor.since` der vorigen Antwort."
+          },
+          {
+            "name": "since_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "`cursor.since_id` der vorigen Antwort."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/content/books/{book_id}/device-ping": {
+      "post": {
+        "x-clients": [
+          "android"
+        ],
+        "summary": "Buch-Heartbeat (Multi-Device-Erkennung im Browser)",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DevicePingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevicePingResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/content/pages": {
+      "post": {
+        "x-clients": [
+          "macos",
+          "android"
+        ],
+        "summary": "Abschnitt anlegen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "error_code: BOOKID_REQ | NAME_REQ | INVALID_VALUE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/content/pages/{page_id}": {
+      "get": {
+        "x-clients": [
+          "macos",
+          "android"
+        ],
+        "summary": "Abschnitt mit HTML",
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "error_code: PAGE_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "x-clients": [
+          "macos",
+          "android"
+        ],
+        "summary": "Push (Body und/oder Name)",
+        "description": "Optimistic Concurrency über `expected_updated_at`. Veraltet → 409, ausser:\n- `save_id` = Server-`last_save_id` → 200 `save_match: \"replay\"` (nichts geschrieben);\n- Server-`last_save_id` ∈ `own_save_ids` → 200 `save_match: \"own\"`;\n- `base_html` mitgeschickt und Block-Merge kollisionsfrei → 200 `merged: true` (geschrieben; `html` übernehmen).\nEchte Block-Kollision mit `base_html` → 409 mit `merge_conflicts`.",
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageSaveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Weder `html` noch `name`. error_code: EMPTY_BODY",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageConflict"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Nichts geschrieben; derselbe Push scheitert erneut. error_code: HTML_SANITIZE_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "423": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageLocked"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "x-clients": [
+          "macos"
+        ],
+        "summary": "Abschnitt löschen",
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "device_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/content/pages/{page_id}/revisions": {
+      "get": {
+        "x-clients": [
+          "macos",
+          "android"
+        ],
+        "summary": "Fassungen eines Abschnitts (ohne HTML)",
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevisionList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/content/pages/{page_id}/revisions/{rev_id}": {
+      "get": {
+        "x-clients": [
+          "macos",
+          "android"
+        ],
+        "summary": "Eine Fassung mit HTML",
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "rev_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevisionDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "error_code: REVISION_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/content/pages/{page_id}/revisions/{rev_id}/restore": {
+      "post": {
+        "x-clients": [
+          "macos",
+          "android"
+        ],
+        "summary": "Fassung wiederherstellen",
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "rev_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "error_code: REVISION_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/content/chapters": {
+      "post": {
+        "x-clients": [
+          "android"
+        ],
+        "summary": "Kapitel anlegen (Tagebuch: Jahr/Monat)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChapterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Chapter"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/content/editor-bundle.zip": {
+      "get": {
+        "x-clients": [
+          "macos",
+          "android"
+        ],
+        "summary": "OTA-Editor-Bundle (ZIP mit bundle-manifest.json)",
+        "description": "Header `X-Editor-Api` = Majors, die die Schale kann (`1` oder `1,2`); ohne Header gilt 1. `If-None-Match` mit dem ETag → 304.",
+        "parameters": [
+          {
+            "name": "X-Editor-Api",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ZIP; `bundle-manifest.json` hat die Form `BundleManifest`.",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "x-manifest": {
+              "$ref": "#/components/schemas/BundleManifest"
+            }
+          },
+          "304": {
+            "description": "Unverändert."
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Kein passender Major — gecachtes Bundle behalten, Update-Hinweis zeigen.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorApiUnsupported"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/research": {
+      "get": {
+        "x-clients": [
+          "android"
+        ],
+        "summary": "Recherche-Board eines Buchs (reduzierte Form für Device-Token)",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResearchClientItem"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "error_code: INVALID_ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "x-clients": [
+          "android"
+        ],
+        "summary": "Fundstück anlegen (geteilter Link)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResearchCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "error_code: BOOKID_REQ | EMPTY",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Trägt `existing_id`; übersteuerbar mit `allow_duplicate: true`. error_code: DUPLICATE_URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dictionary": {
+      "post": {
+        "x-clients": [
+          "macos",
+          "android"
+        ],
+        "summary": "Wort ins persönliche Wörterbuch",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DictionaryAddRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/history/writing-time": {
+      "post": {
+        "x-clients": [
+          "macos",
+          "android"
+        ],
+        "summary": "Schreibzeit-Heartbeat",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WritingTimeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WritingTimeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/booksettings/{book_id}": {
+      "get": {
+        "x-clients": [
+          "macos"
+        ],
+        "summary": "Buch-Einstellungen (Sprache/Region)",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/export/book/{book_id}/md": {
+      "get": {
+        "x-clients": [
+          "macos"
+        ],
+        "summary": "Buch als Markdown",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Markdown-Text.",
+            "content": {
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/check": {
+      "post": {
+        "x-clients": [
+          "macos"
+        ],
+        "summary": "Lektorat des offenen Abschnitts starten",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckJobRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobCreated"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/synonym": {
+      "post": {
+        "x-clients": [
+          "macos"
+        ],
+        "summary": "KI-Synonyme starten",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SynonymJobRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobCreated"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{job_id}": {
+      "get": {
+        "x-clients": [
+          "macos"
+        ],
+        "summary": "Job-Status pollen",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "error_code: JOB_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/device-tokens": {
+      "get": {
+        "x-clients": [
+          "macos"
+        ],
+        "summary": "Eigene Device-Tokens (prüft nebenbei, ob das Token gilt)",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceTokenList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/account": {
+      "delete": {
+        "x-clients": [
+          "macos"
+        ],
+        "summary": "Konto löschen (App-Store-Guideline 5.1.1(v))",
+        "description": "Ein 404 OHNE `error_code` heisst «Server kennt die Route nicht» → Browser-Fallback `…/#profil`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountDeleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeleteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "error_code: CONFIRM_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "error_code: ACCOUNT_DELETE_FORBIDDEN | DEVICE_SCOPE_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "error_code: USER_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "error_code: ACCOUNT_DELETE_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/languagetool/check": {
+      "post": {
+        "x-clients": [
+          "macos",
+          "android"
+        ],
+        "x-contract-untested": "Proxy auf den admin-konfigurierten LanguageTool-Server; die Antwort ist dessen Format.",
+        "summary": "Rechtschreibprüfung (Durchreichen an LanguageTool)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LtCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "LanguageTool-Antwort (`matches[]`)."
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openthesaurus/synonyms": {
+      "get": {
+        "x-clients": [
+          "macos"
+        ],
+        "x-contract-untested": "Proxy auf OpenThesaurus (externer Dienst).",
+        "summary": "Synonyme aus OpenThesaurus",
+        "parameters": [
+          {
+            "name": "word",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SynonymList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stt/transcribe": {
+      "post": {
+        "x-clients": [
+          "android"
+        ],
+        "x-contract-untested": "Proxy auf den admin-konfigurierten STT-Dienst.",
+        "summary": "Diktat-Segment transkribieren",
+        "parameters": [
+          {
+            "name": "bookId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "pageId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "audio/wav": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transcript"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

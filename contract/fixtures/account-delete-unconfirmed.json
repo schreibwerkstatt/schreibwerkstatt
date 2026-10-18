@@ -1,0 +1,14 @@
+{
+  "operation": "DELETE /me/account",
+  "request": {
+    "method": "DELETE",
+    "path": "/me/account",
+    "body": {
+      "confirm": "delete"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error_code": "CONFIRM_REQUIRED"
+  }
+}

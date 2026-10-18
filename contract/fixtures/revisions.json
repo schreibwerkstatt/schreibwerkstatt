@@ -1,0 +1,40 @@
+{
+  "operation": "GET /content/pages/{page_id}/revisions",
+  "request": {
+    "method": "GET",
+    "path": "/content/pages/70001/revisions?limit=100"
+  },
+  "status": 200,
+  "response": {
+    "revisions": [
+      {
+        "id": 2,
+        "page_id": 70001,
+        "book_id": 7001,
+        "chars": 63,
+        "words": 9,
+        "tok": 21,
+        "source": "macapp",
+        "user_email": "autor@test.dev",
+        "client": "macOS-App",
+        "created_at": "2026-01-02T00:00:00.000Z",
+        "summary": null
+      },
+      {
+        "id": 1,
+        "page_id": 70001,
+        "book_id": 7001,
+        "chars": 54,
+        "words": 8,
+        "tok": 18,
+        "source": "macapp",
+        "user_email": "autor@test.dev",
+        "client": "macOS-App",
+        "created_at": "2026-01-02T00:00:00.000Z",
+        "summary": null
+      }
+    ],
+    "has_more": false,
+    "total": 2
+  }
+}

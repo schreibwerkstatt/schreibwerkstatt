@@ -1,0 +1,55 @@
+{
+  "operation": "GET /content/books/{book_id}/sync",
+  "request": {
+    "method": "GET",
+    "path": "/content/books/7001/sync?limit=200"
+  },
+  "status": 200,
+  "response": {
+    "now": "2026-01-02T00:00:00.000Z",
+    "pages": [
+      {
+        "page_id": 70001,
+        "page_name": "Anfang",
+        "chapter_id": 7101,
+        "updated_at": "2026-01-01T00:00:00.000Z",
+        "html": "<p data-bid=\"c0000000000000a1\">Erster Absatz.</p><p data-bid=\"c0000000000000a2\">Zweiter Absatz.</p><p data-bid=\"c0000000000000a3\">Dritter Absatz.</p>"
+      },
+      {
+        "page_id": 70002,
+        "page_name": "Mitte",
+        "chapter_id": 7102,
+        "updated_at": "2026-01-01T00:00:00.000Z",
+        "html": "<p data-bid=\"c0000000000000b1\">Im Unterkapitel.</p>"
+      },
+      {
+        "page_id": 70003,
+        "page_name": "Vorwort",
+        "chapter_id": null,
+        "updated_at": "2026-01-01T00:00:00.000Z",
+        "html": "<p data-bid=\"c0000000000000c1\">Ohne Kapitel.</p>"
+      },
+      {
+        "page_id": 70004,
+        "page_name": "Verworfen",
+        "chapter_id": 7101,
+        "updated_at": "2026-01-01T00:00:00.000Z",
+        "html": "<p data-bid=\"c0000000000000d1\">Fliegt raus.</p>"
+      },
+      {
+        "page_id": 70005,
+        "page_name": "Im Lektorat",
+        "chapter_id": 7101,
+        "updated_at": "2026-01-01T00:00:00.000Z",
+        "html": "<p data-bid=\"c0000000000000e1\">Gesperrt.</p>"
+      }
+    ],
+    "deleted": [],
+    "has_more": false,
+    "deleted_has_more": false,
+    "cursor": {
+      "since": "2026-01-01T00:00:00.000Z",
+      "since_id": 70005
+    }
+  }
+}

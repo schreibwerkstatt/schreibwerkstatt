@@ -54,6 +54,7 @@ Diese Regeln setzt ein Hook ([.claude/settings.json](.claude/settings.json), [sc
 | `npm run squash:regen` + [docs/erd.md](docs/erd.md) nach jeder Migration | `drift-reminders.js` + Drift-Tests | [db/CLAUDE.md](db/CLAUDE.md) |
 | Neue `/metrics`-Kennzahl ⇒ Home-Assistant-Configs im selben Commit | `drift-reminders.js` | [docs/homeassistant/README.md](docs/homeassistant/README.md) |
 | OTA-Editor-Bundle geändert ⇒ `npm run check:clients` (Breaking Changes macOS + Android) | `drift-reminders.js` | [docs/focus-editor-acceptance.md](docs/focus-editor-acceptance.md#native-clients) |
+| Client-Fläche (REST + Bundle) nur über den Vertrag ändern — additiv, Server vor Clients, `api`/`editorApi` + CHANGELOG | [client-contract.test.js](tests/integration/client-contract.test.js) + [editor-surface.test.js](tests/unit/editor-surface.test.js) + CI-Schritt «Client-Kompatibilität»; `drift-reminders.js` | [contract/README.md](contract/README.md) |
 | Unit-Tests vor dem Commit | `stop-run-unit-tests.js` (Turn-Ende) | unten, „Tests" |
 | Editor-/Chat-/Kommentar-Mehrdeutigkeit im Prompt | `prompt-disambiguation.js` (injiziert Hinweis) | oben, „Bevor du anfängst" |
 | Nur auf `main` — kein Branch, kein Worktree, kein Subagent mit `isolation: "worktree"` | `main-only-guard.js` **blockt** | unten, „Arbeitsweise" |
@@ -97,7 +98,7 @@ Lies das Doc, **bevor** du im jeweiligen Bereich etwas änderst — nicht danach
 
 **Ein-/Ausgabe:** [publikation-export.md](docs/publikation-export.md) PDF + EPUB · [word-export.md](docs/word-export.md) · [finetuning.md](docs/finetuning.md) · [folder-import.md](docs/folder-import.md) · [manuscript-import.md](docs/manuscript-import.md) · [book-migration.md](docs/book-migration.md) `.swbook` · [share-link.md](docs/share-link.md) öffentlicher Reader + drei Kommentar-Oberflächen
 
-**Dienste:** [languagetool.md](docs/languagetool.md) · [stt.md](docs/stt.md) Diktat · [tts.md](docs/tts.md) Vorlesen · [image.md](docs/image.md) Bildgenerierung · [geocode.md](docs/geocode.md) · [clients.md](docs/clients.md) native Clients + Erweiterung, Client-Vertrag · [metrics-api.md](docs/metrics-api.md) · [homeassistant/](docs/homeassistant/)
+**Dienste:** [languagetool.md](docs/languagetool.md) · [stt.md](docs/stt.md) Diktat · [tts.md](docs/tts.md) Vorlesen · [image.md](docs/image.md) Bildgenerierung · [geocode.md](docs/geocode.md) · [clients.md](docs/clients.md) native Clients + Erweiterung · [contract/](contract/README.md) Client-Vertrag maschinenlesbar (OpenAPI, Fixtures, Bundle-Fläche) · [metrics-api.md](docs/metrics-api.md) · [homeassistant/](docs/homeassistant/)
 
 Die drei Sync-Proxy-Ausnahmen zur Job-Queue-Regel sind LanguageTool, STT und TTS — sonst gilt sie ohne Ausnahme.
 

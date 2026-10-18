@@ -1,11 +1,11 @@
 'use strict';
 // Content-Routes: OTA-/Release-Assets der nativen Clients — Focus-Editor-Bundle
-// (macOS), macclient-i18n-Overrides, Release-Discovery (macOS, Android, Chrome).
+// (macOS), Release-Discovery (macOS, Android, Chrome).
 // Alle ETag-konditional (If-None-Match → 304). Auth via globalem Guard.
 
 const { createHash } = require('node:crypto');
 const editorBundle = require('../../lib/editor-bundle');
-const macclientI18n = require('../../lib/macclient-i18n');
+const { editorApiCompatible } = require('../../lib/client-contract');
 const macclientRelease = require('../../lib/macclient-release');
 const androidclientRelease = require('../../lib/androidclient-release');
 const extensionRelease = require('../../lib/extension-release');
@@ -31,8 +31,23 @@ function register(router) {
   // ETag = sha256(sourceCommit + sortierte Datei-Hashes). Bei If-None-Match mit
   // passendem ETag → 304 ohne Body, sodass der Client bei jedem Online-Start
   // konditional anfragen kann, ohne ein unveraendertes Bundle neu zu laden.
+  //
+  // Bundle-Major: der Client meldet per `X-Editor-Api` (z.B. `1` oder `1,2`),
+  // welche Majors seine Schale kann; ohne Header gilt 1 (Build vor der
+  // Versionierung). Passt der Server-Major nicht, gibt es kein Bundle, sondern
+  // 409 EDITOR_API_UNSUPPORTED — der Client behaelt sein gecachtes Bundle und
+  // zeigt den Update-Hinweis, statt ein Bundle zu laden, das seine Bridge nicht
+  // bedienen kann (contract/README.md).
   router.get('/editor-bundle.zip', async (req, res) => {
     try {
+      const compat = editorApiCompatible(req.get('x-editor-api'));
+      if (!compat.ok) {
+        logger.info(`editor-bundle.zip: Major ${compat.server} passt nicht zum Client (${_clientLabel(req)}, kann ${compat.client.join(',')})`);
+        return res.status(409).json({
+          error_code: 'EDITOR_API_UNSUPPORTED',
+          params: { client: compat.client, server: compat.server },
+        });
+      }
       const { etag, buffer } = await editorBundle.getBundle();
       res.set('ETag', etag);
       res.set('Cache-Control', 'no-cache'); // immer revalidieren (via If-None-Match)
@@ -46,33 +61,6 @@ function register(router) {
       logger.info(`editor-bundle.zip: ausgeliefert (${client}, ${(buffer.length / 1024).toFixed(0)} KB, etag=${etag.slice(0, 12)})`);
       res.send(buffer);
     } catch (e) { _fail(res, e, 'GET /content/editor-bundle.zip'); }
-  });
-
-  // GET /content/macclient-i18n.json — OTA-Override der UI-Strings des nativen
-  // macOS-Clients (schreibwerkstatt-focuseditor). Body: { de: {…}, en: {…} },
-  // flaches Key→Value je Locale. Der Client liefert dieselben Kataloge gebuendelt
-  // mit; dieser Endpunkt erlaubt es, einzelne Keys zentral zu ueberschreiben —
-  // fehlende Keys fallen im Client auf den gebuendelten Stand zurueck. SSoT der
-  // Server-Overrides: assets/macclient-i18n/{de,en}.json (Details in
-  // [lib/macclient-i18n.js](../lib/macclient-i18n.js)).
-  //
-  // Auth: globaler Guard (server.js) — Session ODER Device-Token, wie alle
-  // /content/-Routen. ETag = sha256(Body); bei If-None-Match mit passendem ETag →
-  // 304 ohne Body, sodass der Client konditional anfragen kann.
-  router.get('/macclient-i18n.json', (req, res) => {
-    try {
-      const { etag, body } = macclientI18n.getCatalogs();
-      res.set('ETag', etag);
-      res.set('Cache-Control', 'no-cache'); // immer revalidieren (via If-None-Match)
-      const client = _clientLabel(req);
-      if (req.headers['if-none-match'] === etag) {
-        logger.info(`macclient-i18n.json: 304 unveraendert (${client}, etag=${etag.slice(1, 13)})`);
-        return res.status(304).end();
-      }
-      res.set('Content-Type', 'application/json; charset=utf-8');
-      logger.info(`macclient-i18n.json: ausgeliefert (${client}, ${(Buffer.byteLength(body) / 1024).toFixed(1)} KB, etag=${etag.slice(1, 13)})`);
-      res.send(body);
-    } catch (e) { _fail(res, e, 'GET /content/macclient-i18n.json'); }
   });
 
   // GET /content/macclient/release.json — Installationsweg + freigegebene Version

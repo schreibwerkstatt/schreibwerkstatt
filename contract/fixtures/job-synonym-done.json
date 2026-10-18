@@ -1,0 +1,23 @@
+{
+  "operation": "GET /jobs/{job_id}",
+  "request": {
+    "method": "GET",
+    "path": "/jobs/<job-id>"
+  },
+  "status": 200,
+  "response": {
+    "id": "<volatile>",
+    "type": "synonym",
+    "status": "done",
+    "progress": 100,
+    "error": null,
+    "result": {
+      "synonyme": [
+        {
+          "wort": "Abschnitt",
+          "hinweis": "neutral"
+        }
+      ]
+    }
+  }
+}

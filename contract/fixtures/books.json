@@ -1,0 +1,18 @@
+{
+  "operation": "GET /content/books",
+  "request": {
+    "method": "GET",
+    "path": "/content/books"
+  },
+  "status": 200,
+  "response": [
+    {
+      "id": 7001,
+      "name": "Vertragsbuch",
+      "slug": null,
+      "role": "owner",
+      "owner_email": null,
+      "buchtyp": null
+    }
+  ]
+}

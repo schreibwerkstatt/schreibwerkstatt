@@ -1,0 +1,9 @@
+{
+  "operation": "GET /export/book/{book_id}/md",
+  "request": {
+    "method": "GET",
+    "path": "/export/book/7001/md"
+  },
+  "status": 200,
+  "response": "# Vertragsbuch\n\nOhne Kapitel.\n\n## Teil eins\n\n### Anfang\n\nErster Absatz, am Mac.\n\nZweiter Absatz.\n\nDritter Absatz.\n\n### Im Lektorat\n\nGesperrt.\n\n### Unterkapitel\n\n#### Mitte, umbenannt\n\nIm Unterkapitel.\n\n#### 2026-10-18\n\nTagebuch.\n"
+}

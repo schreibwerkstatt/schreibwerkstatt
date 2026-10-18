@@ -14,6 +14,7 @@
 //                                 (gegated durch design-css-inventory-drift.test)
 //   • public/partials/*.html (neu, unverdrahtet) → Wiring + ggf. DESIGN.md-Pattern
 //   • Datei des OTA-Editor-Bundles     → npm run check:clients (macOS + Android)
+//   • Route/Schicht der Client-Fläche  → client-contract-Test, ggf. contract:fixtures
 // Die CSS-/Partial-Zweige sind selbst-loeschend: sie feuern nur, solange das
 // Artefakt fehlt — nicht bei Edits an bereits dokumentierten/verdrahteten Dateien.
 
@@ -107,6 +108,17 @@ process.stdin.on('end', () => {
       || /\/lib\/editor-bundle\.js$/.test(p)) {
     reminders.push(
       'Datei des OTA-Editor-Bundles bearbeitet → vor dem Commit npm run check:clients (Breaking Changes für macOS + Android; Ablauf: docs/focus-editor-acceptance.md#native-clients).',
+    );
+  }
+
+  // Route/Schicht, die die nativen Clients aufrufen, oder der Vertrag selbst
+  // (contract/README.md). Pfad-Näherung wie oben; die Wahrheit ist
+  // tests/integration/client-contract.test.js.
+  if (/\/routes\/(content\/(pages|books|chapters|assets)|proxies|research|usersettings|dictionary|booksettings|history\/time-tracking|jobs\/(synonyme|lektorat))\.js$/.test(p)
+      || /\/lib\/(content-store\/|page-merge\.js|client-contract\.js|device-(auth|scopes)\.js)/.test(p)
+      || /\/contract\/(spec\/|version\.json)/.test(p)) {
+    reminders.push(
+      'Client-Fläche (macOS/Android) berührt → node --test tests/integration/client-contract.test.js. Gewollte Vertragsänderung: npm run contract:build + contract:fixtures, contract/version.json api +1, contract/CHANGELOG.md (Ablauf: contract/README.md).',
     );
   }
 

@@ -1,75 +1,39 @@
-// buchlandkarteMethods — Buchlandkarte: die Seiten des Buchs als Punktwolke über
-// dem Embedding-Index. Rein rückwärtsgewandt (liest den Index, schreibt nie in
-// den Buchtext). Die Projektion und alle Kennzahlen rechnet der Server als Job
-// (POST /jobs/book-map, Mathematik in lib/book-map.js); diese Methoden triggern
-// ihn, pollen und zeichnen. Gespreadet in cards/buchlandkarte-card.js.
+// buchlandkarteMethods — Buchlandkarte: die Abschnitte des Buchs über dem
+// Embedding-Index, als Karte (Tab „Landkarte") und als Ähnlichkeitsmatrix in
+// Lesereihenfolge (Tab „Verlauf"). Rein rückwärtsgewandt (liest den Index,
+// schreibt nie in den Buchtext). Projektion, Matrix und alle Kennzahlen rechnet
+// der Server als Job (POST /jobs/book-map, Mathematik in lib/book-map.js);
+// diese Methoden triggern ihn, pollen und zeichnen. Gespreadet in
+// cards/buchlandkarte-card.js.
 //
-// WAS DIE KARTE ZEIGT: Nähe. Zwei Punkte nebeneinander heissen „diese zwei Seiten
-// reden über dasselbe" — und damit werden drei Dinge sichtbar, die eine
-// Trefferliste nicht zeigen kann: übereinanderliegende Kapitel-Wolken (zwei
-// Kapitel erzählen dasselbe), ein in zwei Wolken zerfallendes Kapitel (ein
-// Teilungsvorschlag) und die Seite weit draussen (der Exkurs, der Blindtext).
-//
-// WAS DIE ACHSEN NICHT SIND: sie haben keine Bedeutung und bekommen darum keine
-// Beschriftung — nur die relative Lage zählt. Wieviel von der Wolke das Bild
-// überhaupt zeigt, sagt `explainedVariance`; das wird ausgewiesen statt
-// verschwiegen (gleiche Ehrlichkeitsregel wie beim Einmalwort-Deckel des
-// Wortschatzes).
+// Aufteilung: Lauf, Namen und Kennzahl-Tabellen hier; Karte
+// (buchlandkarte/map.js), Achsen + Pole + KI-Benennung (buchlandkarte/axes.js)
+// und Matrix (buchlandkarte/matrix.js) in eigenen Modulen.
 //
 // SEITEN- UND KAPITELNAMEN kommen aus der ohnehin geladenen Navigationsliste
 // (`$store.nav.pages`), nie aus dem Job-Ergebnis: ein Name dort wäre ein
-// Snapshot, der nach einer Umbenennung falsch dasteht.
+// Snapshot, der nach einer Umbenennung falsch dasteht. Einzige Ausnahme sind
+// die Pol-Labels (Figur/Ort/Begriff), die die Achse so beschriften, wie sie
+// gerechnet wurde.
 
-import { loadChart } from '../lazy-libs.js';
 import { startPoll } from '../cards/job-helpers.js';
 import { tRaw } from '../i18n.js';
-import { createChartHolder, cssVar } from '../cards/chart-holder.js';
-import { chartOptions, chartPalette, seriesColor, valueAxis } from '../cards/chart-style.js';
 import { dateTimeFormat } from '../utils.js';
+import { mapMethods, _destroyBookMapChart as _destroyMap, _disconnectBookMapThemeObserver as _disconnectMap } from './buchlandkarte/map.js';
+import { axesMethods, emptyBookMapPoles } from './buchlandkarte/axes.js';
+import { matrixMethods, _destroyBookMatrix, _disconnectBookMatrixThemeObserver } from './buchlandkarte/matrix.js';
+import { resultCache } from './buchlandkarte/cache.js';
 
-// Ausserhalb von Alpine gehalten, damit der Reaktivitäts-Proxy die Chart.js-
-// Instanz nicht beschädigt (gleiche Begründung wie in book/bookstats.js).
-const _map = createChartHolder();
+export { emptyBookMapPoles };
 
-// Punkt-Radius: Grundgrösse plus ein wenig für die Länge der Seite (Chunk-Zahl).
-// Bewusst flach gedeckelt — die Karte soll Lage zeigen, nicht Umfang, und grosse
-// Scheiben verdecken ihre Nachbarn.
-const R_BASE = 3;
-const R_MAX_BONUS = 4;
-
-// Unter drei Punkten gibt `project2d` keine Projektion zurueck (alle Koordinaten
-// 0) — dieselbe Untergrenze wie dort. Ein Bild mit zwei Punkten in der Mitte und
-// „0% der Streuung" darunter waere kein Ergebnis, sondern eine Irritation.
-const MIN_MAP_POINTS = 3;
-
-// Abgeblendete Kapitel bei aktiver Hervorhebung: Alpha-Suffix der Hex-Farbe.
-const ALPHA_ON = 'cc';
-const ALPHA_OFF = '22';
-
-// Letztes Ergebnis je Buch für die Dauer der Browser-Sitzung (Modul-State,
-// kein localStorage): Schliessen der Karte oder ein Buchwechsel kostet sonst
-// einen neuen Lauf. Kein persistierter Index — das Ergebnis bleibt nur so lange
-// wie der Tab, und „Neu zeichnen" holt den aktuellen Stand.
-const _resultCache = new Map();
-
-
-/** Vom destroy() der Karte gerufen: Modul-State freigeben. */
+/** Vom destroy() der Karte und vor jedem Lauf gerufen: beide Charts freigeben. */
 export function _destroyBookMapChart() {
-  _map.destroy();
+  _destroyMap();
+  _destroyBookMatrix();
 }
 export function _disconnectBookMapThemeObserver() {
-  _map.disconnect();
-}
-
-// Ein Canvas kann keine CSS-Custom-Properties auflösen — beim Theme-Wechsel muss
-// darum neu gezeichnet werden (gleiche Regel wie im Figuren-Graph, siehe
-// graph-kit.js#observeThemeChange).
-function _ensureThemeObserver(component) {
-  _map.ensureThemeRedraw(() => {
-    if (!window.__app?.showBuchlandkarteCard || window.__app.buchlandkarteTab !== 'map') return;
-    _destroyBookMapChart();
-    component.renderBookMap();
-  });
+  _disconnectMap();
+  _disconnectBookMatrixThemeObserver();
 }
 
 export const buchlandkarteMethods = {
@@ -118,10 +82,31 @@ export const buchlandkarteMethods = {
   restoreBookMapResult() {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId || this.bookMapResult || this.bookMapLoading) return;
-    const cached = _resultCache.get(String(bookId));
+    const cached = resultCache.get(String(bookId));
     if (!cached) return;
-    this.bookMapResult = cached;
-    this.$nextTick(() => this.renderBookMap());
+    this._adoptBookMapResult(cached);
+  },
+
+  /** Ergebnis übernehmen und die Bedienelemente auf seine Optionen setzen. */
+  _adoptBookMapResult(res) {
+    this.bookMapResult = res;
+    const opts = res.options || {};
+    this.bookMapGranularity = opts.granularity === 'chunk' ? 'chunk' : 'page';
+    this.bookMapAxisMode = opts.poles ? 'poles' : 'pca';
+    if (opts.poles) this.bookMapPoles = this._bookMapPolesFromOptions(opts.poles);
+    this.bookMapAxisPair = this._bookMapDefaultPair();
+    this.bookMapLabels = res._labels || null;
+    this.bookMapLabelStatus = '';
+    this.bookMapMatrixPick = null;
+    this.bookMapMatrixHover = null;
+    this.$nextTick(() => this._renderBookMapTab());
+  },
+
+  /** Den sichtbaren Tab zeichnen (Canvas existiert nur im sichtbaren Panel). */
+  _renderBookMapTab() {
+    const tab = window.__app?.buchlandkarteTab;
+    if (tab === 'matrix') this.renderBookMatrix();
+    else this.renderBookMap();
   },
 
   /** Meta-Zeile zum Index-Stand der berechneten Karte (leer, wenn nichts zu sagen ist). */
@@ -142,10 +127,16 @@ export const buchlandkarteMethods = {
   // ── Lauf ──────────────────────────────────────────────────────────────────
 
   // Kein Auto-Run beim Öffnen: die Projektion ist der teuerste Teil und soll
-  // eine bewusste Handlung bleiben (wie beim Redundanz-Radar).
+  // eine bewusste Handlung bleiben (wie beim Redundanz-Radar). Die Optionen
+  // (Passagen statt Abschnitte, eigene Pole) gelten für den nächsten Lauf.
   async runBookMap() {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId || this.bookMapLoading) return;
+    let poles = null;
+    if (this.bookMapAxisMode === 'poles') {
+      poles = this._bookMapPolesPayload();
+      if (!poles) { this.bookMapStatus = tRaw('buchlandkarte.poles.incomplete'); return; }
+    }
     this.bookMapLoading = true;
     this.bookMapProgress = 0;
     this.bookMapResult = null;
@@ -156,7 +147,7 @@ export const buchlandkarteMethods = {
       const r = await fetch('/jobs/book-map', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId }),
+        body: JSON.stringify({ book_id: bookId, granularity: this.bookMapGranularity, poles }),
       });
       const j = await r.json().catch(() => ({}));
       // Buch während des POST gewechselt: onBookChanged hat die Anzeige schon
@@ -182,10 +173,12 @@ export const buchlandkarteMethods = {
   // angezeigt wird es dann nicht.
   _pollBookMap(jobId, bookId) {
     const stale = () => Alpine.store('nav').selectedBookId !== bookId;
-    const failed = () => {
+    const failed = (job) => {
       if (stale()) return;
       this.bookMapLoading = false;
-      this.bookMapStatus = tRaw('buchlandkarte.error');
+      this.bookMapStatus = job?.error && job.error.startsWith('job.')
+        ? window.__app.t(job.error, job.errorParams)
+        : tRaw('buchlandkarte.error');
     };
     startPoll(this, {
       timerProp: '_bookMapPollTimer',
@@ -193,160 +186,18 @@ export const buchlandkarteMethods = {
       intervalMs: 1000,
       progressProp: 'bookMapProgress',
       onDone: (j) => {
-        if (bookId && j.result) _resultCache.set(String(bookId), j.result);
+        const res = j.result || { pages: [], chapters: [], outliers: [] };
+        if (bookId && j.result) resultCache.set(String(bookId), res);
         if (stale()) return;
         this.bookMapLoading = false;
         this.bookMapProgress = 100;
-        this.bookMapResult = j.result || { pages: [], chapters: [], outliers: [] };
         this.bookMapStatus = '';
         // Canvas existiert erst, wenn das Ergebnis-Template gerendert ist.
-        this.$nextTick(() => this.renderBookMap());
+        this._adoptBookMapResult(res);
       },
       onError: failed,
-      onNotFound: failed,
+      onNotFound: () => failed(null),
     });
-  },
-
-  // ── Zeichnen ──────────────────────────────────────────────────────────────
-
-  /**
-   * Punkte nach Kapitel in Chart.js-Datasets gruppieren. Reihenfolge = Buch-
-   * Reihenfolge (aus der Navigationsliste), damit die Legende der Gliederung
-   * folgt. Die Farbe hängt an der Position des Kapitels in der GLIEDERUNG,
-   * nicht an der Zahl der Kapitel mit Punkten — sonst verschöbe die erste
-   * indizierte Seite eines frühen Kapitels alle Farben dahinter.
-   * Seiten ohne Kapitel kommen als letzte, neutral gefärbte Gruppe.
-   */
-  _bookMapDatasets(pages) {
-    const order = [];
-    const seen = new Set();
-    for (const p of (Alpine.store('nav').pages || [])) {
-      const key = p.chapter_id == null ? '' : String(p.chapter_id);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      order.push(p.chapter_id ?? null);
-    }
-    // Kapitel, die die Navigationsliste nicht kennt (Seite verschoben, Liste
-    // noch nicht neu geladen), hinten anhängen statt verschweigen.
-    for (const pt of pages) {
-      const key = pt.chapterId == null ? '' : String(pt.chapterId);
-      if (!seen.has(key)) { seen.add(key); order.push(pt.chapterId ?? null); }
-    }
-
-    const groups = new Map();
-    for (const pt of pages) {
-      const key = pt.chapterId == null ? '' : String(pt.chapterId);
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(pt);
-    }
-
-    const muted = cssVar('--color-muted');
-    const surface = cssVar('--color-surface');
-    const out = [];
-    let colorIx = 0;
-    for (const chapterId of order) {
-      const key = chapterId == null ? '' : String(chapterId);
-      const pts = groups.get(key);
-      const color = chapterId == null ? muted : seriesColor(colorIx++);
-      if (!pts?.length) continue;
-      out.push({
-        label: this.bookMapChapterName(chapterId),
-        chapterId: chapterId ?? null,
-        _color: color,
-        data: pts.map(pt => ({
-          x: pt.x, y: pt.y, pageId: pt.id,
-          r: R_BASE + Math.min(R_MAX_BONUS, Math.max(0, (pt.chunks || 1) - 1)),
-        })),
-        backgroundColor: color + ALPHA_ON,
-        // Fuge in Flächenfarbe trennt überlappende Punkte, statt sie zu verkleben.
-        borderColor: surface,
-        borderWidth: 1,
-        pointRadius: ctx => ctx.raw?.r ?? R_BASE,
-        pointHoverRadius: ctx => (ctx.raw?.r ?? R_BASE) + 3,
-      });
-    }
-    return out;
-  },
-
-  async renderBookMap() {
-    const res = this.bookMapResult;
-    if (!this.bookMapHasMap()) return;
-    const canvas = document.getElementById('bookMapCanvas');
-    if (!canvas) return;
-    try { await loadChart(); } catch { return; }
-    _destroyBookMapChart();
-    _ensureThemeObserver(this);
-
-    const pal = chartPalette();
-    const t = (k, p) => window.__app?.t?.(k, p) || k;
-
-    const base = chartOptions(pal, { legend: true, legendKind: 'items' });
-    base.plugins.tooltip.callbacks = {
-      label: ctx => ` ${this.bookMapPageName(ctx.raw?.pageId)} — ${ctx.dataset.label}`,
-    };
-    _map.set(new Chart(canvas, {
-      type: 'scatter',
-      data: { datasets: this._bookMapDatasets(res.pages) },
-      options: {
-        ...base,
-        // Streudiagramm: der Punkt unter dem Zeiger, nicht alle mit gleichem Index.
-        interaction: { mode: 'nearest', intersect: true },
-        onClick: (_evt, elements) => {
-          const el = elements?.[0];
-          if (!el) return;
-          const pt = _map.get()?.data?.datasets?.[el.datasetIndex]?.data?.[el.index];
-          if (pt?.pageId) this.bookMapGotoPage(pt.pageId);
-        },
-        scales: {
-          // FESTER Wertebereich auf BEIDEN Achsen, nicht Chart.js' Auto-Fit.
-          // `project2d` skaliert x und y mit DEMSELBEN Faktor in die Box [-1,1];
-          // liesse man Chart.js selbst skalieren, streckte es eine schmale
-          // y-Streuung auf die volle Canvas-Höhe — und genau die Verzerrung,
-          // die die Projektion vermeidet, käme in der Anzeige zurück.
-          // Zusammen mit dem quadratischen Rahmen (--> buchlandkarte.css,
-          // aspect-ratio: 1) ergibt das gleiche Einheiten auf beiden Achsen.
-          //
-          // Zahlenwerte sind bedeutungslos → keine Ticks. Das Gitter bleibt als
-          // Orientierung für Abstände.
-          x: valueAxis(pal, { min: -1, max: 1, ticks: { display: false } }),
-          y: valueAxis(pal, { min: -1, max: 1, ticks: { display: false } }),
-        },
-      },
-    }));
-    // Für Screenreader und als Titel-Attribut: das Canvas selbst ist stumm.
-    canvas.setAttribute('aria-label', t('buchlandkarte.canvasAria', { n: res.pages.length }));
-    // Nach Theme-Redraw oder Cache-Restore die Hervorhebung wieder anlegen.
-    this._applyBookMapFocus();
-  },
-
-  // ── Hervorhebung ──────────────────────────────────────────────────────────
-
-  /**
-   * Kapitel hervorheben: es selbst und sein nächstes Kapitel in voller Farbe,
-   * alle anderen abgeblendet — so wird „liegen die zwei Wolken übereinander?"
-   * sichtbar statt nur als Zahl. Zweiter Klick hebt die Hervorhebung auf.
-   */
-  bookMapToggleFocus(chapterId) {
-    this.bookMapFocusChapter = this.bookMapFocusChapter === chapterId ? null : chapterId;
-    this._applyBookMapFocus();
-  },
-
-  bookMapIsFocused(chapterId) {
-    return this.bookMapFocusChapter != null && this.bookMapFocusChapter === chapterId;
-  },
-
-  _applyBookMapFocus() {
-    const chart = _map.get();
-    if (!chart) return;
-    const focus = this.bookMapFocusChapter;
-    const nearest = focus == null ? null
-      : (this.bookMapResult?.chapters || []).find(c => c.chapterId === focus)?.nearestChapterId ?? null;
-    for (const ds of chart.data.datasets) {
-      const on = focus == null || ds.chapterId === focus || (nearest != null && ds.chapterId === nearest);
-      ds.backgroundColor = ds._color + (on ? ALPHA_ON : ALPHA_OFF);
-      ds.borderWidth = on ? 1 : 0;
-    }
-    chart.update('none');
   },
 
   // ── Kennzahlen-Zeilen fürs Template ───────────────────────────────────────
@@ -402,24 +253,7 @@ export const buchlandkarteMethods = {
     }));
   },
 
-  /** Reicht die Datenlage fuer eine Karte? Sonst nur die Kennzahlen darunter. */
-  bookMapHasMap() {
-    return (this.bookMapResult?.pages?.length || 0) >= MIN_MAP_POINTS;
-  },
-
-  /**
-   * Aussagekraft der Projektion als Band für den Hinweistext. Unter einem
-   * Drittel erklärter Streuung ist das Bild eine schwache Skizze und darf keine
-   * Nähe behaupten — der Hinweis sagt das, statt es dem Betrachter zu überlassen.
-   */
-  bookMapVarianceBand() {
-    const v = this.bookMapResult?.explainedVariance ?? 0;
-    if (v >= 0.5) return 'strong';
-    if (v >= 0.3) return 'ok';
-    return 'weak';
-  },
-
-  bookMapVariancePct() {
-    return Math.round((this.bookMapResult?.explainedVariance ?? 0) * 100);
-  },
+  ...mapMethods,
+  ...axesMethods,
+  ...matrixMethods,
 };

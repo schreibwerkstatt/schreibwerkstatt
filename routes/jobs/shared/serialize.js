@@ -1,5 +1,6 @@
 'use strict';
 const { jobs, queuePosition } = require('./state');
+const { getBookRole } = require('../../../db/book-access');
 
 // Client-Sicht eines Jobs — gemeinsame Form für `GET /jobs/:id`, `GET /jobs/queue`
 // und den SSE-Stream (`GET /jobs/stream`). Ein Ort, damit Poll- und Push-Pfad
@@ -39,11 +40,24 @@ function jobView(job, { withResult = true } = {}) {
   return view;
 }
 
-// Aktive (queued/running) Jobs eines Users — Footer-Liste.
+// Buch-System-Jobs (userEmail null, eine Sperre pro Buch für alle User): die
+// Embedding-Indizes. Sichtbar für jeden, der das Buch sehen darf — sonst liefe der
+// Index, den Cron, Auto-Index oder ein Upload anstösst, unsichtbar. Abbrechen darf
+// ihn niemand über die Job-Leiste (cancelJob prüft den Besitzer).
+const BOOK_SYSTEM_JOB_TYPES = new Set(['embed-index', 'chat-embed-index']);
+
+// Darf der Session-User diesen Job in Job-Leiste und Stream sehen?
+function isJobVisibleTo(job, userEmail) {
+  if (job.userEmail) return job.userEmail === userEmail;
+  if (!userEmail || !BOOK_SYSTEM_JOB_TYPES.has(job.type)) return false;
+  return !!getBookRole(job.bookId, userEmail);
+}
+
+// Aktive (queued/running) Jobs, die der User sehen darf — Footer-Liste.
 function queueItems(userEmail) {
   const result = [];
   for (const [, job] of jobs) {
-    if (job.userEmail !== userEmail) continue;
+    if (!isJobVisibleTo(job, userEmail)) continue;
     if (job.status !== 'queued' && job.status !== 'running') continue;
     result.push({
       id: job.id,
@@ -59,7 +73,7 @@ function queueItems(userEmail) {
       tokensOut: job.tokensOut || 0,
       maxTokensOut: job.maxTokensOut || 0,
       tokensPerSec: job.tokensPerSec || 0,
-      canCancel: true,
+      canCancel: job.userEmail === userEmail,
     });
   }
   return result;
@@ -67,9 +81,9 @@ function queueItems(userEmail) {
 
 function hasQueuedJob(userEmail) {
   for (const [, job] of jobs) {
-    if (job.userEmail === userEmail && job.status === 'queued') return true;
+    if (job.status === 'queued' && isJobVisibleTo(job, userEmail)) return true;
   }
   return false;
 }
 
-module.exports = { jobView, queueItems, hasQueuedJob };
+module.exports = { jobView, queueItems, hasQueuedJob, isJobVisibleTo, BOOK_SYSTEM_JOB_TYPES };

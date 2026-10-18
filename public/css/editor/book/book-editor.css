@@ -241,7 +241,11 @@
     border-left: 2px solid transparent;
     margin-inline-start: -2px;
     /* Keine Transition: IO-Updates beim Scrollen sollen instant durchschalten,
-       nicht fade — sonst wirkt Active-Wechsel verzögert + ruckelnd. */
+       nicht fade — sonst wirkt Active-Wechsel verzögert + ruckelnd. Explizit
+       `none`, weil die globale `button`-Regel (buttons-badges.css) sonst
+       background/border-color/color überblendet: beim Fast-Scroll stehen dann
+       mehrere Zeilen halb markiert nebeneinander und der Hintergrund flackert. */
+    transition: none;
   }
   .book-editor-outline-page:hover {
     background: color-mix(in srgb, var(--card-accent, currentColor) 5%, transparent);

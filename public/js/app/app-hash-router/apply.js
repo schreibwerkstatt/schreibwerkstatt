@@ -27,6 +27,7 @@ const SIMPLE_HASH_VIEWS = {
   'fehler':       'fehlerHeatmap',
   'redundanz':    'buchlandkarte',
   'landkarte':    'buchlandkarte',
+  'buchverlauf':  'buchlandkarte',
   'wortschatz':   'wortschatz',
   'struktur':     'struktur',
   'titel':        'titelwerkstatt',
@@ -47,6 +48,7 @@ const SIMPLE_HASH_VIEWS = {
 const HASH_VIEW_TABS = {
   'landkarte': ['buchlandkarteTab', 'map'],
   'redundanz': ['buchlandkarteTab', 'redundanz'],
+  'buchverlauf': ['buchlandkarteTab', 'matrix'],
 };
 
 export const hashApplyMethods = {

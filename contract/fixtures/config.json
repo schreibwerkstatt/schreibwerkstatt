@@ -1,0 +1,31 @@
+{
+  "operation": "GET /config",
+  "request": {
+    "method": "GET",
+    "path": "/config"
+  },
+  "status": 200,
+  "response": {
+    "clientContract": {
+      "api": 1,
+      "editorApi": 1
+    },
+    "languagetool": {
+      "enabled": false,
+      "debounceMs": 1500
+    },
+    "stt": {
+      "enabled": false,
+      "provider": "openai-compat",
+      "vad": {
+        "silenceMs": 1200,
+        "threshold": 0.015,
+        "maxSegmentS": 30
+      }
+    },
+    "userSettings": {
+      "locale": "de",
+      "focus_granularity": null
+    }
+  }
+}

@@ -1,0 +1,60 @@
+<!-- Buchlandkarte: Aktionszeile + Optionen des nächsten Laufs (Punkte, Achsen, Pole) -->
+<!--
+  Teil von buchlandkarte-map.html (Scope: buchlandkarteCard). Die Optionen
+  gelten für den NÄCHSTEN Lauf; Achsenpaar und Färbung eines fertigen
+  Ergebnisses wechseln ohne Lauf (Anzeige-Zeile über der Karte).
+-->
+<div class="buchlandkarte-toolbar" x-show="bookMapCanRun">
+  <template x-if="$app.buchlandkarteTab === 'map'">
+    <div class="buchlandkarte-options">
+      <span class="buchlandkarte-view-label" x-text="$app.t('buchlandkarte.opt.points')"></span>
+      <div class="seg-toggle" role="group" :aria-label="$app.t('buchlandkarte.opt.points')">
+        <button type="button" :class="{ 'seg-toggle--active': bookMapGranularity === 'page' }"
+                :aria-pressed="bookMapGranularity === 'page' ? 'true' : 'false'"
+                :title="$app.t('buchlandkarte.opt.pagesHint')"
+                @click="bookMapGranularity = 'page'" x-text="$app.t('buchlandkarte.opt.pages')"></button>
+        <button type="button" :class="{ 'seg-toggle--active': bookMapGranularity === 'chunk' }"
+                :aria-pressed="bookMapGranularity === 'chunk' ? 'true' : 'false'"
+                :title="$app.t('buchlandkarte.opt.chunksHint')"
+                @click="bookMapGranularity = 'chunk'" x-text="$app.t('buchlandkarte.opt.chunks')"></button>
+      </div>
+      <span class="buchlandkarte-view-label" x-text="$app.t('buchlandkarte.opt.axes')"></span>
+      <div class="seg-toggle" role="group" :aria-label="$app.t('buchlandkarte.opt.axes')">
+        <button type="button" :class="{ 'seg-toggle--active': bookMapAxisMode === 'pca' }"
+                :aria-pressed="bookMapAxisMode === 'pca' ? 'true' : 'false'"
+                :title="$app.t('buchlandkarte.opt.pcaHint')"
+                @click="bookMapAxisMode = 'pca'" x-text="$app.t('buchlandkarte.opt.pca')"></button>
+        <button type="button" :class="{ 'seg-toggle--active': bookMapAxisMode === 'poles' }"
+                :aria-pressed="bookMapAxisMode === 'poles' ? 'true' : 'false'"
+                :title="$app.t('buchlandkarte.opt.polesHint')"
+                @click="bookMapAxisMode = 'poles'" x-text="$app.t('buchlandkarte.opt.poles')"></button>
+      </div>
+    </div>
+  </template>
+  <button type="button" class="primary" data-label-ok
+          :disabled="bookMapLoading"
+          @click="runBookMap()"
+          x-text="$app.t(bookMapResult ? 'buchlandkarte.rerun' : 'buchlandkarte.run')"></button>
+</div>
+
+<!-- Pol-Editor: waagrechtes Paar Pflicht, senkrechtes optional -->
+<div class="buchlandkarte-poles" x-show="bookMapCanRun && bookMapAxisMode === 'poles' && $app.buchlandkarteTab === 'map'">
+  <p class="buchlandkarte-section-hint" x-text="$app.t('buchlandkarte.poles.hint')"></p>
+  <template x-for="row in [{ key: 'x', slots: ['xa', 'xb'] }, { key: 'y', slots: ['ya', 'yb'] }]" :key="row.key">
+    <div class="buchlandkarte-pole-row">
+      <span class="buchlandkarte-view-label" x-text="$app.t('buchlandkarte.poles.' + row.key)"></span>
+      <template x-for="(slot, i) in row.slots" :key="slot">
+        <div class="buchlandkarte-pole">
+          <span x-show="i === 1" class="buchlandkarte-pole-vs" x-text="$app.t('buchlandkarte.poles.vs')"></span>
+          <div x-data="combobox($app.t('buchlandkarte.poles.choose'), $app.t('buchlandkarte.poles.none'))"
+               x-modelable="value" x-model="bookMapPoles[slot].sel"
+               x-effect="bookMapResult; options = bookMapPoleOptions()"></div>
+          <input type="text" class="buchlandkarte-pole-text" maxlength="200"
+                 x-show="bookMapPoles[slot].sel === 'text'" x-model="bookMapPoles[slot].text"
+                 :placeholder="$app.t('buchlandkarte.poles.textPlaceholder')"
+                 :aria-label="$app.t('buchlandkarte.poles.textPlaceholder')">
+        </div>
+      </template>
+    </div>
+  </template>
+</div>

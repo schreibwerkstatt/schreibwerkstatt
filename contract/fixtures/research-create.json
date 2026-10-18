@@ -1,0 +1,44 @@
+{
+  "operation": "POST /research",
+  "request": {
+    "method": "POST",
+    "path": "/research",
+    "body": {
+      "book_id": 7001,
+      "kind": "link",
+      "title": "Geteilter Link",
+      "body": "Aus der Android-App geteilt.",
+      "urls": [
+        {
+          "url": "https://example.org/artikel",
+          "label": ""
+        }
+      ],
+      "tags": []
+    }
+  },
+  "status": 200,
+  "response": {
+    "id": 1,
+    "book_id": 7001,
+    "kind": "link",
+    "title": "Geteilter Link",
+    "body": "Aus der Android-App geteilt.",
+    "source": null,
+    "pinned": 0,
+    "archived": 0,
+    "created_at": "2026-01-02T00:00:00.000Z",
+    "updated_at": "2026-01-02T00:00:00.000Z",
+    "tags": [],
+    "urls": [
+      {
+        "url_id": 1,
+        "url": "https://example.org/artikel",
+        "label": ""
+      }
+    ],
+    "has_image": false,
+    "has_doc": false,
+    "doc_name": null
+  }
+}

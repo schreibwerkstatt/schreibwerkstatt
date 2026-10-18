@@ -14,11 +14,38 @@ const { resolveChapterBookId } = require('../../lib/content-ownership');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const { jsonBody, NAME_MAX, _validDeviceId, _logToken, _logStamp, _deviceTokenLabel, _guardPage, _fail, _sendSanitizeFailed } = require('./shared');
 const { htmlToPlainText } = require('../../lib/html-text');
+const { mergeAgainstServer } = require('../../lib/page-merge');
 const logger = require('../../logger');
 
 // Deckel für `own_save_ids`: so viele unbestätigte Saves hat ein Schreiber
 // nach einem Funkloch höchstens offen (Autosave alle paar Sekunden).
 const OWN_SAVE_IDS_MAX = 16;
+
+// Stale-Write mit mitgeschickter Basis (`base_html`, native Clients): gegen den
+// aktuellen Stand block-mergen und kollisionsfrei schreiben (lib/page-merge.js).
+// Liefert `{ saved }` (geschrieben, `merged: true`) oder `{ conflicts }` (bids
+// der Blöcke, die beide Seiten verschieden geändert haben). Ein erneuter
+// fremder Write zwischen Lesen und Schreiben wirft wieder PAGE_CONFLICT.
+//
+// Der gemergte Write trägt KEINE Save-Kennung: sein Stand enthält fremde
+// Blöcke, die der Client erst mit der Antwort sieht. Ginge die verloren und
+// käme ein späterer Push desselben Schreibers mit dieser Kennung in
+// `own_save_ids`, nähme der Server ihn als «eigenen Nachfolger» an und
+// überschriebe die fremden Blöcke still. Ohne Kennung läuft jede Wiederholung
+// bzw. jeder Nachfolger erneut in den Merge — idempotent, nichts geht verloren.
+async function _mergeStaleWrite(pageId, req) {
+  const current = await contentStore.loadPage(pageId, req);
+  const { html, conflicts } = await mergeAgainstServer({
+    baseHtml: req.body.base_html,
+    localHtml: req.body.html,
+    remoteHtml: current.html || '',
+  });
+  if (conflicts.length) return { conflicts };
+  const body = { ...req.body, html, expected_updated_at: current.updated_at, save_id: null, own_save_ids: [] };
+  delete body.base_html;
+  const saved = await contentStore.savePage(pageId, body, req);
+  return { saved: { ...saved, merged: true } };
+}
 
 function register(router) {
   // GET /content/pages/:page_id — Volltext + Metadaten.
@@ -92,20 +119,41 @@ function register(router) {
     catch (e) {
       if (e.code === 'EMPTY_BODY') return res.status(400).json({ error_code: 'EMPTY_BODY' });
       if (e.code === 'PAGE_CONFLICT') {
+        let conflict = e;
+        let mergeConflicts = null;
+        if (typeof req.body?.base_html === 'string' && typeof req.body?.html === 'string') {
+          try {
+            const merge = await _mergeStaleWrite(pageId, req);
+            if (merge.saved) {
+              logger.info(`PAGE_MERGE Seite ${pageId}: Geraet ${req.body?.device_id || '-'} erwartete ${_logStamp(req.body?.expected_updated_at)}, kollisionsfrei gemergt, neu ${merge.saved.updated_at || '-'}.`);
+              return res.json(merge.saved);
+            }
+            mergeConflicts = merge.conflicts;
+          } catch (e2) {
+            if (e2.code !== 'PAGE_CONFLICT') {
+              if (_sendSanitizeFailed(res, e2)) return;
+              return _fail(res, e2, 'PUT /content/pages/:id (merge)');
+            }
+            conflict = e2;
+          }
+        }
         // Messpunkt fuer die Konflikt-Haeufigkeit: welches Geraet mit welchem
         // Stempel gegen welchen Server-Stand lief (sonst nirgends erfasst).
         // Tab + Weg trennen zwei Tabs desselben Browsers bzw. Autosave, Retry
         // und Outbox — die Device-ID allein ist in allen Tabs gleich.
-        logger.info(`PAGE_CONFLICT Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, Server ${e.serverUpdatedAt} (Geraet ${e.serverEditorDevice || e.serverEditorEmail || '-'}).`);
+        logger.info(`PAGE_CONFLICT Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, Server ${conflict.serverUpdatedAt} (Geraet ${conflict.serverEditorDevice || conflict.serverEditorEmail || '-'})${mergeConflicts ? `, Merge: ${mergeConflicts.length} Block-Kollision(en)` : ''}.`);
         return res.status(409).json({
           error_code: 'PAGE_CONFLICT',
-          server_updated_at: e.serverUpdatedAt || null,
-          server_editor_email: e.serverEditorEmail || null,
-          server_editor_name: e.serverEditorDisplay || e.serverEditorEmail || null,
+          server_updated_at: conflict.serverUpdatedAt || null,
+          server_editor_email: conflict.serverEditorEmail || null,
+          server_editor_name: conflict.serverEditorDisplay || conflict.serverEditorEmail || null,
           // Eigenes Zweit-Geraet statt fremder User: der Editor formuliert das
           // Konflikt-Banner danach.
-          server_is_self: !!email && e.serverEditorEmail === email,
-          server_editor_device: e.serverEditorDevice || null,
+          server_is_self: !!email && conflict.serverEditorEmail === email,
+          server_editor_device: conflict.serverEditorDevice || null,
+          // Nur wenn der Client `base_html` schickte: der Server-Merge fand
+          // echte Block-Kollisionen (data-bid) und hat nichts geschrieben.
+          ...(mergeConflicts ? { merge_conflicts: mergeConflicts } : {}),
         });
       }
       if (_sendSanitizeFailed(res, e)) return;

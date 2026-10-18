@@ -1,0 +1,68 @@
+{
+  "operation": "GET /content/books/{book_id}/tree",
+  "request": {
+    "method": "GET",
+    "path": "/content/books/7001/tree"
+  },
+  "status": 200,
+  "response": {
+    "chapters": [
+      {
+        "id": 7101,
+        "name": "Teil eins",
+        "position": 0,
+        "parent_chapter_id": null,
+        "pages": [
+          {
+            "id": 70001,
+            "name": "Anfang",
+            "chapter_id": 7101,
+            "position": 0,
+            "updated_at": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "id": 70004,
+            "name": "Verworfen",
+            "chapter_id": 7101,
+            "position": 1,
+            "updated_at": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "id": 70005,
+            "name": "Im Lektorat",
+            "chapter_id": 7101,
+            "position": 2,
+            "updated_at": "2026-01-01T00:00:00.000Z"
+          }
+        ],
+        "subchapters": [
+          {
+            "id": 7102,
+            "name": "Unterkapitel",
+            "position": 0,
+            "parent_chapter_id": 7101,
+            "pages": [
+              {
+                "id": 70002,
+                "name": "Mitte",
+                "chapter_id": 7102,
+                "position": 0,
+                "updated_at": "2026-01-01T00:00:00.000Z"
+              }
+            ],
+            "subchapters": []
+          }
+        ]
+      }
+    ],
+    "topPages": [
+      {
+        "id": 70003,
+        "name": "Vorwort",
+        "chapter_id": null,
+        "position": 0,
+        "updated_at": "2026-01-01T00:00:00.000Z"
+      }
+    ]
+  }
+}

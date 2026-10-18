@@ -335,8 +335,8 @@ const cardsState = () => ({
   showStilCard: false,
   showFehlerHeatmapCard: false,
   showBuchlandkarteCard: false,
-  // Tab der Buchlandkarte ('map' | 'redundanz'). Im Root, weil Hash-Router
-  // (#landkarte / #redundanz) und Job-Sprung ihn von aussen setzen.
+  // Tab der Buchlandkarte ('map' | 'matrix' | 'redundanz'). Im Root, weil Hash-
+  // Router (#landkarte/#buchverlauf/#redundanz) und Job-Sprung ihn setzen.
   buchlandkarteTab: 'map',
   showWortschatzCard: false,
   showStrukturCard: false,

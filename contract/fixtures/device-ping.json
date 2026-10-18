@@ -1,0 +1,17 @@
+{
+  "operation": "POST /content/books/{book_id}/device-ping",
+  "request": {
+    "method": "POST",
+    "path": "/content/books/7001/device-ping",
+    "body": {
+      "device_id": "9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f",
+      "page_id": 70001
+    }
+  },
+  "status": 200,
+  "response": {
+    "ok": true,
+    "self_page_device_count": 1,
+    "self_book_device_count": 1
+  }
+}

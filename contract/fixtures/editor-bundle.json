@@ -1,0 +1,18 @@
+{
+  "operation": "GET /content/editor-bundle.zip",
+  "request": {
+    "method": "GET",
+    "path": "/content/editor-bundle.zip",
+    "headers": {
+      "X-Editor-Api": "1"
+    }
+  },
+  "status": 200,
+  "response": {
+    "sourceCommit": "<volatile>",
+    "editorApi": 1,
+    "jsFiles": [],
+    "cssFiles": [],
+    "extraAssets": []
+  }
+}

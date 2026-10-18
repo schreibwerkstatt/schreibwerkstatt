@@ -22,9 +22,9 @@ function _norm(html) {
     .trim();
 }
 
-function _parseBlocksDOM(html) {
-  if (typeof DOMParser === 'undefined') return null;
-  const doc = new DOMParser().parseFromString(`<div id="r">${String(html || '')}</div>`, 'text/html');
+function _parseBlocksDOM(html, Parser) {
+  if (!Parser) return null;
+  const doc = new Parser().parseFromString(`<div id="r">${String(html || '')}</div>`, 'text/html');
   const root = doc.getElementById('r');
   if (!root) return [];
   const out = [];
@@ -53,8 +53,12 @@ function _parseBlocksRegex(html) {
 
 // Top-Level-Blöcke als [{ bid, tag, html }]. Blöcke ohne data-bid (frisch
 // getippt, von extern gepastet) bekommen einen Surrogat-Key → zählen als „neu".
-export function parseBlocks(html) {
-  return _parseBlocksDOM(html) ?? _parseBlocksRegex(html);
+// `opts.DOMParser` reicht einen Parser ohne Browser-Global herein (Server:
+// linkedom, lib/page-merge.js) — der Regex-Fallback trennt verschachtelte
+// Blöcke gleichen Tags (`<div><div>…</div></div>`, Listen in Listen) falsch.
+export function parseBlocks(html, opts = {}) {
+  const Parser = opts.DOMParser || (typeof DOMParser === 'undefined' ? null : DOMParser);
+  return _parseBlocksDOM(html, Parser) ?? _parseBlocksRegex(html);
 }
 
 // LCS zweier Bid-Sequenzen (gemeinsame Anker für stabile Merge-Reihenfolge).
@@ -154,7 +158,7 @@ export function buildResolvedHtml(merged, decisions = {}) {
   return parts.join('');
 }
 
-// Komfort-Wrapper: HTML-Strings rein, Merge-Resultat raus.
-export function mergeBlocks(baseHtml, localHtml, remoteHtml) {
-  return mergeBlockLists(parseBlocks(baseHtml), parseBlocks(localHtml), parseBlocks(remoteHtml));
+// Komfort-Wrapper: HTML-Strings rein, Merge-Resultat raus. `opts` wie parseBlocks.
+export function mergeBlocks(baseHtml, localHtml, remoteHtml, opts = {}) {
+  return mergeBlockLists(parseBlocks(baseHtml, opts), parseBlocks(localHtml, opts), parseBlocks(remoteHtml, opts));
 }
