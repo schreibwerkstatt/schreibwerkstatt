@@ -31,6 +31,7 @@ const { guardBook, sessionEmail } = require('../../lib/acl');
 const { createOwnedBook, discardImportedBook, bookNameError, BOOK_NAME_MAX } = require('../../lib/book-create');
 const { ZipLimitError } = require('../../lib/zip-limits');
 const { ImportBufferStore } = require('../../lib/import-buffers');
+const { makeImportAudit, warningKey } = require('../../lib/import-audit');
 const { getBookLocale } = require('../../db/schema');
 const logger = require('../../logger');
 const { seedImportBaseline } = require('../../lib/import-baseline');
@@ -106,11 +107,7 @@ function _countOutline(nodes) {
 
 async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId, headingMap, keepHeadings }) {
   const log = makeJobLogger(jobId);
-  const auditLog = [];
-  const audit = (level, msg) => {
-    auditLog.push({ level, msg, ts: new Date().toISOString() });
-    if (level === 'warn') log.warn(msg); else log.info(msg);
-  };
+  const { entries: auditLog, audit } = makeImportAudit(log);
   let createdBookId = null;   // nur new-book: Rueckbau bei Abbruch/Fehler
   try {
     const entry = manuscriptBuffers.get(jobId);
@@ -119,13 +116,13 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
     updateJob(jobId, { progress: 8, statusText: 'job.manuscript-import.parsing' });
     const parsed = await _parseDocument(entry.filename, entry.buffer);
     const docWarnings = parsed.warnings || [];
-    for (const w of docWarnings) audit('warn', `parser: ${w.code}${w.message ? ` — ${w.message}` : ''}`);
+    for (const w of docWarnings) audit('warn', warningKey(w.code), w);
 
     updateJob(jobId, { progress: 20, statusText: 'job.manuscript-import.splitting' });
     const names = _fallbackNames(mode === 'merge' ? bookId : null, userEmail);
     const split = splitManuscript(parsed.html, { headingMap, keepHeadings, ...names });
-    audit('info', `Zuordnung ${serializeHeadingMap(headingMap)} → ${split.chapterCount} Kapitel, ${split.pageCount} Seiten`);
-    for (const w of split.warnings) audit('warn', `split: ${w.code}${w.name ? ` (${w.name})` : ''}`);
+    audit('info', 'importLog.mapping', { chapters: split.chapterCount, pages: split.pageCount });
+    for (const w of split.warnings) audit('warn', warningKey(w.code), w);
     if (!split.pageCount) throw i18nError('job.error.noPagesFound');
 
     let effBookId = bookId;
@@ -134,7 +131,7 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
       const created = await createOwnedBook({ name: bookName }, userEmail, { session: { user: { email: userEmail } } });
       effBookId = created.id;
       createdBookId = created.id;
-      audit('info', `Buch erstellt: «${bookName}» id=${effBookId}`);
+      audit('info', 'importLog.bookCreated', { name: bookName });
     }
     if (!effBookId) throw i18nError('job.error.bookMissing');
     setContext({ book: effBookId });
@@ -188,7 +185,8 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
             chapterId = ch.id;
             chaptersCreated += 1;
           } catch (e) {
-            audit('warn', `createChapter fail «${node.name}»: ${e.message}`);
+            log.warn(`createChapter fail «${node.name}»: ${e.message}`);
+            audit('warn', 'importLog.chapterFailed', { name: node.name });
             failures.push({ name: node.name, reason: 'CHAPTER_FAILED' });
           }
           position += 1;
@@ -208,7 +206,8 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
             if (pg?.id) out.push({ type: 'page', id: pg.id });
             pagesCreated += 1;
           } catch (e) {
-            audit('warn', `createPage fail «${node.name}»: ${e.message}`);
+            log.warn(`createPage fail «${node.name}»: ${e.message}`);
+            audit('warn', 'importLog.pageFailed', { name: node.name });
             failures.push({ name: node.name, reason: 'PAGE_FAILED' });
           }
         }
@@ -221,12 +220,12 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
     // nimmt es nicht mehr zurueck.
     createdBookId = null;
 
-    audit('info', `Import abgeschlossen: ${pagesCreated} Seiten, ${chaptersCreated} Kapitel, ${failures.length} Fehler`);
+    audit('info', 'importLog.doneManuscript', { pages: pagesCreated, chapters: chaptersCreated, failed: failures.length });
 
     if (pagesCreated > 0) {
       updateJob(jobId, { progress: 95, statusText: 'job.manuscript-import.syncing' });
       await seedImportBaseline(effBookId, userEmail,
-        { info: m => audit('info', m), warn: m => audit('warn', m) }, 'Manuskript-Import');
+        log, 'Manuskript-Import');
     }
 
     completeJob(jobId, {

@@ -166,6 +166,14 @@
     color: var(--color-warn-text);
   }
 
+  /* Parser-/Split-Hinweise (Bilder verworfen, Tabelle geflacht …). */
+  .folder-import-warnings ul,
+  ul.folder-import-warnings {
+    margin: var(--space-xs) 0 0;
+    padding-left: var(--space-lg);
+    font-size: var(--font-size-sm);
+  }
+
   .folder-import-skipped {
     margin-top: var(--space-sm);
     max-height: 220px;

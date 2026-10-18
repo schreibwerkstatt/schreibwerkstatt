@@ -118,6 +118,17 @@
       <li class="folder-import-result-warn" x-show="result?.extras?.error"
           x-text="$app.t('folderImport.result.extrasFailed')"></li>
     </ul>
+    <div x-show="(result?.warnings?.length || 0) > 0" class="folder-import-warnings">
+      <span class="folder-import-result-warn" x-text="$app.t('folderImport.result.warnings')"></span>
+      <ul>
+        <template x-for="(w, idx) in warningList(result?.warnings)" :key="idx">
+          <li>
+            <code x-show="w.path" x-text="w.path"></code>
+            <span x-text="(w.path ? ' — ' : '') + w.text"></span>
+          </li>
+        </template>
+      </ul>
+    </div>
     <div class="card-hint" x-show="result?.headingMap"
          x-text="$app.t('folderImport.result.headingMap', { map: result?.headingMap || '' })"></div>
     <div x-data="collapsible()" x-show="(result?.outline?.length || 0) > 0" class="folder-import-outline-block">
@@ -144,7 +155,7 @@
         <template x-for="(s, idx) in (result?.skipped || [])" :key="idx">
           <li>
             <code x-text="s.path || s.name || ''"></code>
-            <span x-text="' — ' + s.reason"></span>
+            <span x-text="' — ' + skipReasonText(s.reason)"></span>
           </li>
         </template>
       </ul>
@@ -158,7 +169,7 @@
         <template x-for="(entry, idx) in (result?.auditLog || [])" :key="idx">
           <li :class="'folder-import-log-line is-' + entry.level">
             <time x-text="fmtLogTime(entry.ts)"></time>
-            <span x-text="entry.msg"></span>
+            <span x-text="logLineText(entry)"></span>
           </li>
         </template>
       </ul>

@@ -84,5 +84,10 @@
     </ul>
     <div class="card-hint" x-show="preview?.outlineTruncated"
          x-text="$app.t('folderImport.manuscript.previewTruncated')"></div>
+    <ul class="folder-import-warnings" x-show="(preview?.warnings?.length || 0) > 0">
+      <template x-for="(w, idx) in warningList(preview?.warnings)" :key="idx">
+        <li class="folder-import-result-warn" x-text="w.text"></li>
+      </template>
+    </ul>
   </div>
 </div>

@@ -193,6 +193,41 @@ export function registerFolderImportCard() {
       return true;
     },
 
+    // Parser-/Split-Warnungen ({ code, … }) als Text. Manuskript liefert sie
+    // flach, der Ordner-Import pro Datei ({ path, items }). Unbekannter Code →
+    // generischer Text mit Code statt roher Key.
+    warningText(w) {
+      const t = window.__app.t.bind(window.__app);
+      const key = 'folderImport.warning.' + w?.code;
+      const text = t(key, w || {});
+      return text === key ? t('folderImport.warning.unknown', { code: w?.code || '' }) : text;
+    },
+
+    warningList(warnings) {
+      const out = [];
+      for (const item of (warnings || [])) {
+        if (Array.isArray(item?.items)) {
+          for (const w of item.items) out.push({ path: item.path || '', text: this.warningText(w) });
+        } else {
+          out.push({ path: '', text: this.warningText(item) });
+        }
+      }
+      return out;
+    },
+
+    skipReasonText(reason) {
+      return window.__app.t('folderImport.skipReason.' + reason);
+    },
+
+    // Import-Log-Zeile: { key, params } (lib/import-audit.js); `reason` eines
+    // übersprungenen Eintrags wird mitübersetzt. Alt-Ergebnisse tragen noch `msg`.
+    logLineText(entry) {
+      if (!entry?.key) return entry?.msg || '';
+      const params = { ...(entry.params || {}) };
+      if (params.reason) params.reason = this.skipReasonText(params.reason);
+      return window.__app.t(entry.key, params);
+    },
+
     fmtLogTime(iso) {
       if (!iso) return '';
       const tag = localeTag(Alpine.store('shell').uiLocale);

@@ -16,6 +16,9 @@ const { bootApp } = require('./_helpers/app');
 
 const TMP_DIR = path.join(__dirname, '..', '.tmp');
 const DOC = path.join(TMP_DIR, 'manuscript-import-probe.docx');
+const DOC_IMG = path.join(TMP_DIR, 'manuscript-import-image.docx');
+// 1×1-PNG: Bilder verwirft der Import — die Vorschau muss das sagen.
+const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
 
 test.describe.configure({ mode: 'serial' });
 
@@ -33,6 +36,12 @@ test.beforeAll(async () => {
   }
   fs.mkdirSync(TMP_DIR, { recursive: true });
   fs.writeFileSync(DOC, await Packer.toBuffer(new Document({ sections: [{ children }] })));
+  const { ImageRun } = require('docx');
+  fs.writeFileSync(DOC_IMG, await Packer.toBuffer(new Document({ sections: [{ children: [
+    new Paragraph({ text: 'Kapitel mit Bild', heading: HeadingLevel.HEADING_1 }),
+    new Paragraph({ children: [new ImageRun({ type: 'png', data: PNG_1PX, transformation: { width: 10, height: 10 } })] }),
+    new Paragraph({ text: 'Text danach.' }),
+  ] }] })));
 });
 
 async function openManuscriptImport(page) {
@@ -107,5 +116,21 @@ test('Import legt Kapitel und Seiten nach der Zuordnung an', async ({ page }) =>
   // Die verwendete Zuordnung steht im Ergebnis — sie ist die Erklaerung dafuer,
   // warum die Gliederung so aussieht, wie sie aussieht.
   await expect(page.locator('.folder-import-result')).toContainText('chapter,page');
+  // Import-Log: übersetzte Zeilen aus { key, params }, kein roher Key.
+  const logBlock = page.locator('.folder-import-log-block');
+  await logBlock.locator('.collapsible-toggle').click();
+  await expect(logBlock.locator('.folder-import-log')).toContainText(`Buch «${bookName}» angelegt`);
+  await expect(logBlock.locator('.folder-import-log')).toContainText('Import abgeschlossen: 4 Abschnitte, 2 Kapitel, 0 Fehler');
+  await expect(logBlock.locator('.folder-import-log')).not.toContainText('importLog.');
   guard.assertClean('Manuskript-Import');
+});
+
+test('Vorschau zeigt Import-Hinweise (Bilder werden verworfen)', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await openManuscriptImport(page);
+  await page.setInputFiles('#folder-import-card .folder-import-drop input[type=file]', DOC_IMG);
+  await page.getByRole('button', { name: 'Vorschau berechnen' }).click();
+  await expect(page.locator('.folder-import-preview-row .folder-import-warnings'))
+    .toContainText('1 Bild(er) nicht übernommen');
+  guard.assertClean('Manuskript-Vorschau mit Bild');
 });
