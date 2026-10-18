@@ -3,7 +3,8 @@ import { lsGet } from '../../safe-storage.js';
 import { fetchJson } from '../../utils.js';
 import { SHELL_PROTOCOL } from '../../shell-protocol.js';
 import {
-  AUTO_APPLY_TICK_MS, BOOT_STALE_WINDOW_MS, isBusy, shouldAutoApply, shouldHealSkew, isUpdateRequired, shouldForceUpdate,
+  AUTO_APPLY_TICK_MS, BOOT_STALE_WINDOW_MS, isBusy, shouldAutoApply, shouldHealSkew, isUpdateRequired, shouldForceUpdate, hasUnsavedWork,
+  shouldCheckProtocol,
 } from './update-policy.js';
 import { createBusyLock, activateIfNobodyBusy } from './busy-lock.js';
 
@@ -97,6 +98,19 @@ export function registerServiceWorker() {
       // Feld. `healSkew` räumt das nach, sobald das gefahrlos geht; das Banner
       // bleibt die Ansage, der Poll die Tat.
       let skewed = false;
+      // Protokoll-Prüfung offen (update-policy.js#shouldCheckProtocol): ab
+      // `updatefound` bzw. schiefem `controllerchange`, bis ein frisches
+      // `/config` geantwortet hat. Ein schiefer Tab hat keinen wartenden SW
+      // mehr — ohne eigene Marke erführe gerade er nie von einem Pflicht-Update.
+      let protocolPending = false;
+      // Zählt jedes Öffnen hoch: eine Antwort, die schon VOR dem letzten
+      // `updatefound` unterwegs war, spricht für den alten Server und darf die
+      // Marke nicht schliessen.
+      let protocolEpoch = 0;
+      const markProtocolPending = () => { protocolPending = true; protocolEpoch += 1; };
+      // Unter einem SW kam das Boot-`/config` (app-init.js) womöglich aus dem
+      // SWR-Cache und meldet dann den alten Stand — einmal frisch nachfragen.
+      if (navigator.serviceWorker.controller) markProtocolPending();
       const healSkew = () => {
         if (!shouldHealSkew({ skewed, reloaded, busy: isBusy(window.__app), online: navigator.onLine })) return;
         reloaded = true;
@@ -113,6 +127,7 @@ export function registerServiceWorker() {
         if (isBusy(app)) {
           app.$store.shell.updateAvailable = true;
           skewed = true;
+          markProtocolPending();
           return;
         }
         // Offline nicht reloaden: der frisch aktivierte SW hat die alte
@@ -126,6 +141,7 @@ export function registerServiceWorker() {
         if (!navigator.onLine) {
           if (app) app.$store.shell.updateAvailable = true;
           skewed = true;
+          markProtocolPending();
           window.addEventListener('online', healSkew, { once: true });
           return;
         }
@@ -253,16 +269,44 @@ export function registerServiceWorker() {
       }
 
       // Pflicht-Update (Server-Protokoll > SHELL_PROTOCOL): wartet nur noch auf
-      // ungespeicherte Änderungen; applyUpdate heilt auch ohne wartenden SW.
+      // ungespeicherte Änderungen in irgendeinem Editor (hasUnsavedWork, auch
+      // der Bucheditor); applyUpdate heilt auch ohne wartenden SW.
       const requireUpdate = () => {
         const app = window.__app;
         if (app) app.$store.shell.updateRequired = true;
-        if (shouldForceUpdate({ dirty: !!app?.editDirty, online: navigator.onLine })) applyUpdate();
+        if (shouldForceUpdate({ dirty: hasUnsavedWork(app), online: navigator.onLine })) applyUpdate();
       };
       window.__requireUpdate = requireUpdate;
 
+      // Gegen ein frisches `/config` prüfen. Erledigt ist die Prüfung erst mit
+      // einer gültigen Antwort — ein Netzfehler lässt `protocolPending` stehen,
+      // und der Auto-Apply-Takt versucht es erneut.
+      let protocolInflight = false;
+      let protocolCheckedAt = 0;
+      const checkProtocol = ({ wake = false } = {}) => {
+        if (!shouldCheckProtocol({
+          pending: protocolPending,
+          inflight: protocolInflight,
+          online: navigator.onLine,
+          wake,
+          sinceLastMs: Date.now() - protocolCheckedAt,
+        })) return;
+        protocolInflight = true;
+        const epoch = protocolEpoch;
+        fetchJson('/config?__fresh=1').then((cfg) => {
+          if (!Number.isFinite(Number(cfg?.shellProtocol))) return;
+          if (epoch === protocolEpoch) protocolPending = false;
+          protocolCheckedAt = Date.now();
+          if (isUpdateRequired(cfg.shellProtocol, SHELL_PROTOCOL)) requireUpdate();
+        }).catch(() => {}).finally(() => { protocolInflight = false; });
+      };
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) checkProtocol({ wake: true });
+      });
+
       const tryAutoApply = () => {
         const app = window.__app;
+        checkProtocol();
         if (app?.$store?.shell?.updateRequired) { requireUpdate(); return; }
         if (!reg.waiting) return;
         if (shouldAutoApply({
@@ -276,20 +320,20 @@ export function registerServiceWorker() {
       setInterval(tryAutoApply, AUTO_APPLY_TICK_MS);
       document.addEventListener('visibilitychange', () => { if (document.hidden) tryAutoApply(); });
 
-      // Neuer SW installiert: Banner zeigen, frisch nach dem Shell-Protokoll
-      // fragen (ein Pflicht-Update kommt meist zusammen mit einem Deploy) und
-      // gleich prüfen, ob er still eingespielt werden kann.
+      // Neuer SW installiert: Banner zeigen und gleich prüfen, ob er still
+      // eingespielt werden kann. tryAutoApply fragt dabei frisch nach dem
+      // Shell-Protokoll (ein Pflicht-Update kommt meist mit einem Deploy).
       const notify = (worker) => {
         if (!worker || !navigator.serviceWorker.controller) return;
         window.__pendingWorker = worker;
         window.dispatchEvent(new CustomEvent(EVT.APP_UPDATE_AVAILABLE));
-        fetchJson('/config?__fresh=1').then((cfg) => {
-          if (isUpdateRequired(cfg?.shellProtocol, SHELL_PROTOCOL)) requireUpdate();
-        }).catch(() => {});
         tryAutoApply();
       };
       reg.addEventListener('updatefound', () => {
         const nw = reg.installing;
+        // Ab hier offen — auch wenn der Install scheitert (iOS, Quota): das
+        // Pflicht-Update heilt per applyUpdate notfalls ohne wartenden SW.
+        markProtocolPending();
         if (navigator.serviceWorker.controller && Date.now() - bootAt < BOOT_STALE_WINDOW_MS) staleBoot = true;
         nw?.addEventListener('statechange', () => {
           if (nw.state === 'installed') notify(nw);

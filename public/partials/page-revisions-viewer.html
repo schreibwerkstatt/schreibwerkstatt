@@ -1,0 +1,174 @@
+<!-- Fragment: Viewer der Revisionsliste (natives <dialog>, geoeffnet via
+     showModal() in page-revisions/viewer.js#openViewer). Eingebunden per
+     Include-Marker in page-revisions.html, im Scope von pageRevisionsCard. -->
+<dialog class="revision-viewer"
+        x-ref="viewerDialog"
+        @close="viewerOpen = false"
+        @keydown.escape="closeViewer()"
+        @keydown.left="$event.target.closest('input') || ($event.preventDefault(), hasPrevRev() && gotoRev('prev'))"
+        @keydown.right="$event.target.closest('input') || ($event.preventDefault(), hasNextRev() && gotoRev('next'))"
+        @keydown.window.capture.enter="onViewerRestoreKey($event)">
+  <template x-if="viewerOpen && viewerRev">
+    <div class="revision-viewer__inner">
+      <header class="revision-viewer__head">
+        <div class="revision-viewer__meta">
+          <h2 class="revision-viewer__title">
+            <span x-text="viewerRev.pinned && viewerRev.label ? viewerRev.label : revisionTitle(viewerRev)"></span>
+            <span class="revision-viewer__date" x-text="$app.formatDate(viewerRev.created_at)"></span>
+          </h2>
+          <span class="badge badge-ok" x-text="sourceLabel(viewerRev.source)"></span>
+          <span class="tag" x-show="summaryLabel(viewerRev)" x-text="summaryLabel(viewerRev)"></span>
+          <span class="user-chip"
+                x-show="viewerRev.user_email && $app.bookSharedFlags?.[$store.nav.selectedBookId]"
+                :class="{ 'user-chip--self': isOwnRevision(viewerRev) }"
+                :data-tip="viewerRev.user_email">
+            <span class="user-chip__avatar"
+                  :style="`--avatar-hue: ${$app.userAvatarHue(viewerRev.user_email)}`"
+                  x-text="$app.userInitials(viewerRev.user_email)"></span>
+            <span class="user-chip__name"
+                  x-text="isOwnRevision(viewerRev) ? $app.t('editor.revisions.byYou') : $app.userDisplayName(viewerRev.user_email)"></span>
+          </span>
+          <span class="tag" x-text="formatChars(viewerRev.chars) + ' ' + $app.t('editor.revisions.chars')"></span>
+          <span class="tag" x-show="viewerRev.client"
+                :data-tip="$app.t('editor.revisions.clientTitle')"
+                x-text="viewerRev.client"></span>
+        </div>
+        <button type="button"
+                class="revision-viewer__close"
+                @click="closeViewer()"
+                :data-tip="$app.t('editor.revisions.viewer.close')"
+                :aria-label="$app.t('editor.revisions.viewer.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+      </header>
+
+      <!-- Anheften + Name. Angeheftet = von der Retention ausgenommen. -->
+      <div class="revision-viewer__pin" x-show="canWrite() || viewerRev.pinned">
+        <button type="button"
+                class="revision-viewer__btn"
+                :class="{ 'is-active': viewerRev.pinned }"
+                @click="togglePin(viewerRev)"
+                :disabled="!canWrite() || pinningId === viewerRev.id"
+                :aria-pressed="!!viewerRev.pinned"
+                :data-tip="$app.t(viewerRev.pinned ? 'editor.revisions.unpinTitle' : 'editor.revisions.pinTitle')">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#pin"/></svg>
+          <span x-text="$app.t(viewerRev.pinned ? 'editor.revisions.unpin' : 'editor.revisions.pin')"></span>
+        </button>
+        <input type="text"
+               class="revision-viewer__label"
+               x-show="viewerRev.pinned"
+               x-model="viewerLabelDraft"
+               :readonly="!canWrite()"
+               maxlength="120"
+               :placeholder="$app.t('editor.revisions.labelPlaceholder')"
+               :aria-label="$app.t('editor.revisions.labelPlaceholder')"
+               data-spellcheck="spelling"
+               @keydown.enter.prevent="saveViewerLabel()"
+               @blur="saveViewerLabel()">
+      </div>
+
+      <nav class="revision-viewer__tabs" role="tablist">
+        <button type="button"
+                role="tab"
+                class="revision-viewer__tab"
+                :class="{ 'is-active': viewerMode === 'content' }"
+                :aria-selected="viewerMode === 'content'"
+                @click="setViewerMode('content')"
+                x-text="$app.t('editor.revisions.viewer.tabContent')"></button>
+        <button type="button"
+                role="tab"
+                class="revision-viewer__tab"
+                :class="{ 'is-active': viewerMode === 'diff' }"
+                :aria-selected="viewerMode === 'diff'"
+                @click="setViewerMode('diff')"
+                x-text="$app.t('editor.revisions.viewer.tabDiff')"></button>
+      </nav>
+
+      <div class="revision-viewer__body">
+        <div x-show="viewerLoading" x-cloak class="revision-viewer__hint"
+             x-text="$app.t('editor.revisions.viewer.loading')"></div>
+        <div x-show="viewerError" x-cloak class="revision-viewer__hint revision-viewer__hint--error"
+             x-text="$app.t('editor.revisions.viewer.error') + ' ' + viewerError"></div>
+
+        <!-- Inhalt-Tab: gerendertes Body-HTML der Revision. Der Server liefert
+             es ohne aktive Inhalte aus (stripActiveContent in der Detail-Route). -->
+        <div x-show="!viewerLoading && !viewerError && viewerMode === 'content'"
+             x-cloak
+             class="revision-viewer__content page-content-view"
+             x-html="viewerBody"></div>
+
+        <!-- Vergleichs-Tab: Block-/Wort-Diff gegen Vorgaengerin oder aktuellen Stand. -->
+        <div x-show="!viewerLoading && !viewerError && viewerMode === 'diff'" x-cloak
+             class="revision-viewer__diff">
+          <!-- Modus-Toggle (DESIGN.md „Tabs / Modus-Toggle"), kein Panel-Set. -->
+          <div class="revision-viewer__compare">
+            <span class="revision-viewer__compare-label" x-text="$app.t('editor.revisions.viewer.compareLabel')"></span>
+            <div class="tabs">
+              <button type="button" class="tabs-btn"
+                      :class="{ 'tabs-btn--active': viewerCompare === 'prev' }"
+                      :aria-pressed="viewerCompare === 'prev'"
+                      @click="setViewerCompare('prev')"
+                      x-text="$app.t('editor.revisions.viewer.compareWithPrev')"></button>
+              <button type="button" class="tabs-btn"
+                      :class="{ 'tabs-btn--active': viewerCompare === 'current' }"
+                      :aria-pressed="viewerCompare === 'current'"
+                      @click="setViewerCompare('current')"
+                      x-text="$app.t('editor.revisions.viewer.compareWithCurrent')"></button>
+            </div>
+          </div>
+          <div x-show="viewerDiffLoading" x-cloak class="revision-viewer__hint"
+               x-text="$app.t('editor.revisions.viewer.diffLoading')"></div>
+          <div x-show="!viewerDiffLoading && viewerDiffUnchanged" x-cloak
+               class="revision-viewer__hint"
+               x-text="$app.t(viewerCompare === 'current' ? 'editor.revisions.viewer.noChangesCurrent' : 'editor.revisions.viewer.noChanges')"></div>
+          <div x-show="!viewerDiffLoading && !viewerDiffUnchanged" x-cloak>
+            <div class="revision-diff-header" aria-hidden="true">
+              <span x-text="$app.t(viewerCompare === 'current' ? 'editor.revisions.viewer.colCurrent' : 'editor.revisions.viewer.colPrev')"></span>
+              <span x-text="$app.t('editor.revisions.viewer.colThis')"></span>
+            </div>
+            <div class="revision-diff-body" x-html="viewerDiffHtml"></div>
+          </div>
+        </div>
+      </div>
+
+      <footer class="revision-viewer__foot">
+        <div class="revision-viewer__nav">
+          <button type="button"
+                  class="revision-viewer__btn"
+                  @click="gotoRev('prev')"
+                  :disabled="!hasPrevRev()"
+                  :data-tip="$app.t('editor.revisions.viewer.prevTitle')">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-left"/></svg>
+            <span x-text="$app.t('editor.revisions.viewer.prev')"></span>
+          </button>
+          <button type="button"
+                  class="revision-viewer__btn"
+                  @click="gotoRev('next')"
+                  :disabled="!hasNextRev()"
+                  :data-tip="$app.t('editor.revisions.viewer.nextTitle')">
+            <span x-text="$app.t('editor.revisions.viewer.next')"></span>
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-right"/></svg>
+          </button>
+        </div>
+        <div class="revision-viewer__foot-actions">
+          <button type="button"
+                  class="revision-viewer__btn"
+                  @click="closeViewer()"
+                  x-text="$app.t('editor.revisions.viewer.close')"></button>
+          <button type="button"
+                  class="revision-viewer__btn"
+                  x-show="canWrite() && hasViewerPrev()"
+                  @click="restorePreviousFromViewer()"
+                  :disabled="!canRestore() || restoringId !== null || viewerLoading"
+                  :data-tip="restorePrevTip(viewerRev)"
+                  x-text="$app.t('editor.revisions.restorePrev')"></button>
+          <button type="button"
+                  class="revision-viewer__btn revision-viewer__btn--primary"
+                  x-show="canWrite()"
+                  @click="restoreFromViewer()"
+                  :disabled="!canRestore() || restoringId === viewerRev?.id || viewerLoading"
+                  :data-tip="restoreTip('')"
+                  x-text="restoringId === viewerRev?.id ? $app.t('editor.revisions.restoring') : $app.t('editor.revisions.viewer.restore')"></button>
+        </div>
+      </footer>
+    </div>
+  </template>
+</dialog>

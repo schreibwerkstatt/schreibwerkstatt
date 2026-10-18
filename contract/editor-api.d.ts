@@ -54,6 +54,21 @@ export interface FocusHandle {
    * gesichert (Promise dieses Saves).
    */
   setPage(next: BridgePage): Promise<void>;
+  /**
+   * Neuen Server-Stand DESSELBEN Abschnitts einspielen (z.B. `html` aus
+   * `PUT …/pages/{id}` → `200 merged: true`). Caret bleibt im selben Block
+   * (`data-bid`) an derselben Textstelle, die Caret-Zeile an ihrer
+   * Bildschirmposition; kein Sprung ans Ende, kein neuer Auto-Slot, kein Save.
+   * Die Undo-Historie bleibt, der Tausch ist ein Schritt. Feuert kein `input`.
+   *
+   * `false`: abgelehnt, weil seit dem zuletzt gesendeten Stand weitergeschrieben
+   * wurde — nichts geändert; der vorgemerkte Autosave pusht die Eingaben (mit
+   * dem gesendeten Stand als `base_html`), dessen Merge-Antwort folgt.
+   *
+   * Seit editorApi 1 additiv: per `typeof handle.replaceContent === 'function'`
+   * prüfen, sonst `setPage`.
+   */
+  replaceContent?(html: string): boolean;
   /** Granularität live umschalten (Klassentausch + Overlay-Neuberechnung). */
   setGranularity(g: FocusGranularity): void;
   /** Sofort speichern (vor Fenster-Schliessen, Seitenwechsel). */
@@ -62,7 +77,7 @@ export interface FocusHandle {
   destroy(): Promise<void>;
   /**
    * Undo/Redo gehören dem Editor (pro Abschnitt, nur `setPage`/`destroy`
-   * setzen zurück). Auf macOS erreicht Cmd+Z die WebView nie — das Menü
+   * setzen zurück; `replaceContent` trägt einen Schritt ein). Auf macOS erreicht Cmd+Z die WebView nie — das Menü
    * verdrahtet sich hierauf. Ein Restore feuert
    * `InputEvent('input', { inputType: 'historyUndo' | 'historyRedo' })`.
    */

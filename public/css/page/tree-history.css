@@ -319,6 +319,55 @@
 .revision-split { display: inline-flex; align-items: center; gap: var(--space-2xs); }
 .revision-split__dir { font-size: var(--font-size-xs); color: var(--color-muted); }
 
+/* Angeheftet-Abschnitt ueber der Geschichte. */
+.page-revisions-section { margin-bottom: var(--space-sm); }
+.page-revisions-section__head {
+  font-size: var(--font-size-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-muted);
+  margin-bottom: var(--space-2xs);
+}
+.page-revisions-label { font-weight: var(--fw-semibold); }
+.page-revisions-summary { color: var(--color-muted); }
+
+/* Filterzeile (Quelle/Person) unter dem Toggle. */
+.page-revisions-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+.page-revisions-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+}
+
+/* Sitzung: Kopfzeile mit Zaehl-Toggle, weitere Saves eingerueckt. */
+.page-revisions-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+  cursor: pointer;
+}
+.page-revisions-group-toggle:hover { color: var(--color-text); }
+.page-revisions-row--child { margin-left: var(--space-lg); }
+
+/* Anheft-Knopf schiebt die Aktionen nach rechts; die Restore-Knoepfe folgen
+   ohne eigenen Auto-Rand. */
+.page-revisions-list .page-revisions-pin { margin-left: auto; }
+.page-revisions-list .page-revisions-pin ~ .btn-toggle-saved { margin-left: 0; }
+.page-revisions-pin.is-active { color: var(--color-accent); }
+
 .sidebar-empty-book {
   display: flex;
   flex-direction: column;

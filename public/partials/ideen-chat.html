@@ -84,7 +84,7 @@
                         <div class="ideen-chat-proposal-row">
                           <span class="ideen-chat-proposal-field" x-text="$app.t('ideenBoard.chat.field.' + row.key)"></span>
                           <template x-if="row.diff">
-                            <span class="chat-word-diff"><template x-for="(part, di) in row.diff" :key="di"><span :class="'chat-word-diff__' + part.t" x-text="part.v"></span></template></span>
+                            <span class="chat-word-diff"><template x-for="(part, di) in row.diff" :key="di"><span :class="part.c" x-text="part.v"></span></template></span>
                           </template>
                           <template x-if="!row.diff">
                             <span><span class="finding-original" x-text="row.status ? statusLabel(row.before) : (row.before || $app.t('ideenBoard.chat.meta.bookAnchorShort'))"></span> <span class="finding-korrektur" x-text="row.status ? statusLabel(row.after) : row.after"></span></span>

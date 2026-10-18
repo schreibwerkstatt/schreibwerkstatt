@@ -33,6 +33,12 @@ import { protectNeighbour, focusMerge } from '../shared/block-edge.js';
 import { TODO_LIST_SEL } from '../shared/todo-html.js';
 import { MSG_THREAD_SEL } from '../../messages/msg-html.js';
 import { markTablesAtomic } from '../../table/table-html.js';
+import { captureCaretAnchor, restoreCaretAnchor } from './caret-anchor.js';
+import { findBlockFromNode } from './dom-blocks.js';
+import { applyBlockMarks } from './recenter.js';
+import { getCaretRect } from './typewriter.js';
+import { POINTER_GRACE_MS } from './constants.js';
+import { ensureTrailingParagraph } from '../shared/auto-slot.js';
 
 // Blöcke, deren Grenzen in der SPA eigene Toolbar-Handler bedienen (Checkbox-
 // Liste, Nachrichtenverlauf). Ohne Toolbar bleiben sie beim Default, statt
@@ -80,18 +86,43 @@ async function saveOnce(host, bridge) {
   // normalizeForCompare auf dieselbe Normalform.
   if (isNoChange(html, host.originalHtml)) { host.editDirty = false; return; }
   host.editSaving = true;
+  // Gesendeter Stand + Inhalts-Generation für `replaceContent`: der gemergte
+  // Server-Stand kommt oft noch WÄHREND `savePage` (die Schale pusht darin).
+  host._lastSentHtml = html;
+  const gen = host._contentGen;
   try {
     await bridge.savePage({ id: page.id, name: page.name, html });
     // Seite inzwischen gewechselt: `originalHtml` gehört schon der neuen
     // Seite und darf nicht mit dem alten Stand überschrieben werden (der
     // nächste Vergleich hielte die frisch geladene Seite sonst für geändert).
-    if (host.currentPage?.id === page.id) {
+    // Dasselbe, wenn `replaceContent` inzwischen einen Server-Stand
+    // eingespielt hat: der ist dann die Baseline, nicht der gesendete.
+    if (host.currentPage?.id === page.id && host._contentGen === gen) {
       host.originalHtml = html;
       host.editDirty = false;
     }
   } finally {
     host.editSaving = false;
   }
+}
+
+// Oberkante der Caret-Zeile (Client-Koordinaten); leerer Absatz ohne Text-
+// Rect → Oberkante seines Blocks.
+function caretTop(container) {
+  const r = getCaretRect(container);
+  if (r) return r.top;
+  const anchor = document.getSelection()?.anchorNode;
+  const el = anchor?.nodeType === 1 ? anchor : anchor?.parentElement;
+  return el && container.contains(el) ? el.getBoundingClientRect().top : null;
+}
+
+function caretToStart(el) {
+  if (!el) return;
+  const range = document.createRange();
+  range.setStart(el, 0);
+  range.collapse(true);
+  const sel = document.getSelection();
+  if (sel) { sel.removeAllRanges(); sel.addRange(range); }
 }
 
 // Bridge-gestützter Host. Erfüllt den editor-host-Vertrag; alles, was der
@@ -118,6 +149,10 @@ function makeHost(bridge, scheduleSave) {
     currentPage: null,
     renderedPageHtml: null,
     originalHtml: null,
+    // Zuletzt an `savePage` gegebener Stand und Zähler der Inhaltstausche
+    // durch `replaceContent` (siehe saveOnce).
+    _lastSentHtml: null,
+    _contentGen: 0,
     _figurLookupOpen: false,
     _synonymMenuOpen: false,
     _synonymPickerOpen: false,
@@ -164,8 +199,8 @@ function makeHost(bridge, scheduleSave) {
 }
 
 // Mountet den Standalone-Focus-Editor. Liefert ein Handle:
-//   { host, controller, save(), setPage(), setGranularity(), destroy(),
-//     undo(), redo(), canUndo(), canRedo() }
+//   { host, controller, save(), setPage(), replaceContent(), setGranularity(),
+//     destroy(), undo(), redo(), canUndo(), canRedo() }
 //
 // Undo/Redo liegt zusaetzlich programmatisch am Handle, weil im macOS-Client
 // Cmd+Z NIE in der WebView ankommt: das AppKit-Menue „Bearbeiten ▸ Widerrufen"
@@ -340,6 +375,7 @@ export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT
       host.currentPage = next ? { id: next.id, name: next.name } : null;
       host.renderedPageHtml = content.innerHTML;
       host.originalHtml = content.innerHTML;
+      host._lastSentHtml = null;
       host.editDirty = false;
       // Historie ist PRO SEITE: neue Seite = neue Baseline, alte Schritte weg.
       // Bewusst der einzige Reset-Punkt neben dem Mount — insbesondere NICHT
@@ -349,6 +385,82 @@ export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT
       history.reset(content.innerHTML);
       controller.enterFocusMode();
       return savedPrev;
+    },
+    // Neuen Server-Stand DESSELBEN Abschnitts einspielen, ohne Abschnittswechsel
+    // — Anlass: die Antwort `200 merged: true` auf einen Push mit `base_html`
+    // (der Server hat fremde Blöcke dazugemergt). Anders als `setPage`:
+    //   - Caret bleibt im selben Block an derselben Textstelle (caret-anchor.js,
+    //     auch im letzten Block), die Caret-Zeile bleibt an ihrer Bildschirm-
+    //     position — kein Sprung ans Ende, kein neuer Auto-Slot. Sass der Caret
+    //     im leeren Schluss-Absatz, den der Server strippt, kommt genau dieser
+    //     wieder hin.
+    //   - Die Undo-Historie bleibt; der Tausch ist EIN Schritt (davor wird eine
+    //     offene Tipp-Strecke als eigener Schritt abgeschlossen).
+    //   - Kein Save, keine Engine-Neuinstallation.
+    //
+    // Abgelehnt (Rückgabe false, nichts passiert), wenn im Editor inzwischen
+    // weitergeschrieben wurde: der Server-Stand kennt diese Eingaben nicht und
+    // überschriebe sie. Der ohnehin vorgemerkte Autosave pusht sie dann mit
+    // dem gesendeten Stand als `base_html`, der Server mergt erneut, und dessen
+    // Antwort spielt sich ein, sobald das Tippen pausiert.
+    replaceContent(html) {
+      const current = stripLektoratMarks(content.innerHTML);
+      const clean = isNoChange(current, host.originalHtml)
+        || (host._lastSentHtml != null && isNoChange(current, host._lastSentHtml));
+      if (!clean) return false;
+      clearTimeout(saveTimer);
+      saveTimer = 0;
+      history.pushNow();
+      const ctx = controller._focusState === 'active' ? controller._focusListeners : null;
+      const addr = ctx ? captureCaretAnchor(content) : null;
+      const topBefore = ctx ? caretTop(content) : null;
+
+      content.innerHTML = html || '<p><br></p>';
+      markTablesAtomic(content);
+      collapseSoftNewlines(content);   // wie beim Mount, vor originalHtml
+      host._contentGen++;
+      host.renderedPageHtml = content.innerHTML;
+      host.originalHtml = content.innerHTML;
+      host._lastSentHtml = null;
+      host.editDirty = false;
+
+      if (ctx) {
+        controller._focusAutoAddedP = null;
+        // Das `selectionchange` des Caret-Restores wie einen Klick behandeln:
+        // kein Typewriter-Recenter, der eine Zeile neben dem Anker (nach Klick
+        // oder Lese-Scroll) auf den Anker zöge.
+        ctx.pointerIntent = true;
+        clearTimeout(ctx.pointerTimer);
+        ctx.pointerTimer = setTimeout(() => { ctx.pointerIntent = false; }, POINTER_GRACE_MS);
+        // Kein Caret im Editor (Fokus beim nativen UI) → keinen erfinden.
+        if (addr?.slot) {
+          controller._focusAutoAddedP = ensureTrailingParagraph(content);
+          caretToStart(content.lastElementChild);
+        } else if (addr) {
+          restoreCaretAnchor(content, addr);
+        }
+        if (addr) {
+          try { content.focus({ preventScroll: true }); } catch { content.focus(); }
+        }
+        // Markierung synchron setzen: ohne aktiven Block dimmt die Regel den
+        // ganzen Text bis zum nächsten Frame.
+        const anchor = document.getSelection()?.anchorNode;
+        const block = anchor && content.contains(anchor) ? findBlockFromNode(anchor, content) : null;
+        if (block) applyBlockMarks(content, block, host.focusGranularity, ctx._marks);
+        ctx._lastBlock = null;
+        // Fremde Blöcke über dem Caret schöben die Schreibzeile nach unten —
+        // um genau diese Differenz nachscrollen, als programmatischer Scroll
+        // markiert (sonst hielte onScroll ihn für Lese-Scrollen).
+        const topAfter = caretTop(content);
+        if (topBefore != null && topAfter != null && topAfter !== topBefore) {
+          const box = ctx.scrollBox || content;
+          box.scrollTop += topAfter - topBefore;
+          ctx.progScroll = { box, top: box.scrollTop };
+        }
+        controller._focusUpdateActive(false);
+      }
+      history.pushNow();
+      return true;
     },
     // Programmatische Undo/Redo-Einstiegspunkte fuer das AppKit-Menue der
     // Schale (Cmd+Z erreicht die WebView nicht, siehe Modulkopf).

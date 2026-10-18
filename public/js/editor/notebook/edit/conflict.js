@@ -104,7 +104,7 @@ export const conflictMethods = {
     const merge = await this._attemptBlockMerge({
       localHtml, source, pageId, liveLocal: true,
       remoteHtml: conflict.remoteHtml, remoteUpdatedAt: conflict.remoteUpdatedAt,
-      author: conflict, via: 'precheck',
+      author: conflict, via: 'precheck', localBaseAt: expectedAt,
     });
     if (merge?.stale) return { proceed: false, stale: true };
     if (merge?.conflict) return { proceed: false }; // Auflösungs-Modal offen
@@ -155,13 +155,16 @@ export const conflictMethods = {
   //   { conflict: true } — Auflösungs-Modal offen, Aufrufer bricht ab
   //   { stale: true } — Seite inzwischen gewechselt, Aufrufer sichert nur den Draft
   //   null — kein Merge möglich → Aufrufer macht den _keepAsDraft-Fallback
-  async _retryAfterConflict({ localHtml, source, pageId, pageName, tag, liveLocal = false }) {
+  //
+  // `localBaseAt`: Stempel, auf dem `localHtml` zusätzlich zur Editor-Basis
+  // aufbaut (Auflösung: der Remote-Stand, gegen den sie getroffen wurde).
+  async _retryAfterConflict({ localHtml, source, pageId, pageName, tag, liveLocal = false, localBaseAt = null }) {
     // `editSaving` bleibt bis zum Schluss gesetzt: während Merge-Read und
     // Re-Save darf weder der Autosave-Tick noch ein zweiter Klick einen
     // parallelen PUT absetzen. Öffnet der Merge das Auflösungs-Modal, kehren
     // alle Aufrufer sofort zurück und setzen das Flag im `finally` zurück —
     // ohne dazwischenliegendes `await`, das Modal ist bis dahin nicht klickbar.
-    const merge = await this._attemptBlockMerge({ localHtml, source, pageId, liveLocal, via: tag });
+    const merge = await this._attemptBlockMerge({ localHtml, source, pageId, liveLocal, via: tag, localBaseAt });
     if (merge?.stale) return { stale: true };
     if (merge?.conflict) return { conflict: true };
     if (!merge?.merged) return null;
@@ -293,7 +296,10 @@ export const conflictMethods = {
   // das DOM. Ein Merge mit dem alten Schnappschuss löschte, was in dieser Zeit
   // getippt wurde. Aus bei submitConflictResolution: dort ist die lokale Seite
   // die getroffene Auflösung, nicht das DOM.
-  async _attemptBlockMerge({ localHtml, source, pageId, remoteHtml = null, remoteUpdatedAt = null, liveLocal = false, author = null, via = null }) {
+  //
+  // `localBaseAt`: weiterer Stempel, auf dem der lokale Stand aufbaut (neben
+  // `currentPage.updated_at`, der Editor-Basis) — für die Eigen-Save-Erkennung.
+  async _attemptBlockMerge({ localHtml, source, pageId, remoteHtml = null, remoteUpdatedAt = null, liveLocal = false, author = null, via = null, localBaseAt = null }) {
     const app = editorHost();
     if (!FEATURE_BLOCK_MERGE || !app.currentPage) return null;
     if (pageId == null) pageId = app.currentPage.id;
@@ -320,7 +326,10 @@ export const conflictMethods = {
     // (../sent-saves.js, repo/save-ids.js): der lokale Stand ist sein Nachfahre.
     // Nie über Konto + Geräte-ID: die gilt für den ganzen Browser, Bucheditor,
     // Outbox und andere Tabs — ein «eigener» Stand von dort würde überschrieben.
-    const ownFp = isOwnSentSave(pageId, remoteHtml) || isOwnServerSave(NOTEBOOK_WRITER, pageId, author?.remoteSaveId);
+    // Der Fingerabdruck zählt nur, wenn der Save gegen eine Basis ging, auf der
+    // auch der lokale Stand aufbaut — sonst ist er kein Vorfahre.
+    const localBases = [app.currentPage?.updated_at, localBaseAt];
+    const ownFp = isOwnSentSave(pageId, remoteHtml, localBases) || isOwnServerSave(NOTEBOOK_WRITER, pageId, author?.remoteSaveId);
     if (ownFp) {
       return { merged: true, own: true, saveHtml: localHtml, expectedAt: remoteUpdatedAt };
     }
@@ -406,47 +415,6 @@ export const conflictMethods = {
   },
 
 
-  // Draft-Wiederaufnahme in startEdit: ein Draft trägt seine eigene Basis
-  // (`originalHtml` + `originalUpdatedAt` beim Schreiben). Ist die Seite seither
-  // weitergeschrieben worden (anderes Gerät, anderer User), steht der Server-
-  // Stand von heute als Base und Stempel im Editor — `draft.html` direkt
-  // einzusetzen hiesse: der nächste Save läuft ohne 409 durch und nimmt die
-  // Remote-Änderung still zurück. Darum 3-Way gegen den Server-Stand, mit der
-  // Draft-Basis als gemeinsamem Vorfahren:
-  //   { html }            — Basis aktuell, oder kollisionsfrei gemergt
-  //   { html, conflict }  — echte Kollision; Aufrufer öffnet die Auflösung
-  // Ohne Draft-Basis (Alt-Draft) oder ohne Merge bleibt es beim Draft.
-  _reconcileDraftWithServer(draft) {
-    const app = editorHost();
-    const serverHtml = app.originalHtml || '';
-    const serverAt = app.currentPage?.updated_at || null;
-    if (!FEATURE_BLOCK_MERGE || !draft.originalUpdatedAt || !serverAt
-        || draft.originalUpdatedAt === serverAt || !draft.originalHtml) {
-      return { html: draft.html };
-    }
-    // Server-Stand ist ein Zwischenstand, den dieser Tab selbst geschickt hat
-    // (Antwort verloren, danach neu geladen): der Draft ist sein Nachfahre.
-    const author = remoteAuthorFrom(app.currentPage);
-    const ownFp = isOwnSentSave(app.currentPage.id, serverHtml) || isOwnServerSave(NOTEBOOK_WRITER, app.currentPage.id, author.remoteSaveId, draft.ownSaveIds);
-    if (ownFp) return { html: draft.html };
-    let m;
-    try { m = mergeBlocks(draft.originalHtml, draft.html, serverHtml); }
-    catch (e) {
-      console.warn('[draftRestore] merge failed, restore draft as-is', e);
-      return { html: draft.html };
-    }
-    if (m.conflicts.length === 0) {
-      trackMerge('silent_success');
-      return { html: mergedToHtml(m.merged), merged: true };
-    }
-    reportConflictShown({
-      pageId: app.currentPage.id, via: 'draft', baseAt: draft.originalUpdatedAt, remoteAt: serverAt, author, ownFp,
-      baseHtml: draft.originalHtml, localHtml: draft.html, remoteHtml: serverHtml, conflicts: m.conflicts,
-    });
-    return { html: draft.html, conflict: { merged: m.merged, conflicts: m.conflicts, remoteUpdatedAt: serverAt, author } };
-  },
-
-
   // Auflösungs-Entscheidung pro Block (UI). choice: 'local'|'remote'|'both'.
   resolveBlock(bid, choice) {
     const app = editorHost();
@@ -506,7 +474,7 @@ export const conflictMethods = {
         if (!this._stillEditing(cr.pageId)) return;
         const retry = await this._retryAfterConflict({
           localHtml: finalHtml, source, pageId: cr.pageId,
-          pageName, tag: 'submitConflictResolution',
+          pageName, tag: 'submitConflictResolution', localBaseAt: cr.remoteUpdatedAt,
         });
         if (retry?.stale) return;
         // _openConflictResolution hat den conflictResolution-State auf den neuen

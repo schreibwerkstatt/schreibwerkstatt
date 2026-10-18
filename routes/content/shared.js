@@ -11,6 +11,28 @@ const deviceTokens = require('../../db/device-tokens');
 const { BOOK_NAME_MAX } = require('../../lib/book-create');
 
 const jsonBody = express.json({ limit: '10mb' });
+
+// Die Lese-Endpunkte, deren Abweichung der Service Worker an die Tabs meldet
+// (Buchliste, Baum, Abschnitt — public/sw.js#CONTENT_NOTIFY_REGEX), antworten
+// konditional.
+//
+// WARUM: Der SW liefert sie als Stale-While-Revalidate aus und vergleicht die
+// Revalidierung mit dem ausgelieferten Cache-Stand, um einen leisen Nachzug
+// auszuloesen (public/sw.js#_samePayload). Mit ETag entscheidet dort ein
+// Header-Vergleich statt eines Textvergleichs ueber den ganzen Body — und im
+// Regelfall (unveraendert) beantwortet schon der HTTP-Cache des Browsers die
+// Revalidierung mit 304, also ohne ein einziges Byte Nutzlast. Der ETag kommt
+// von Express selbst (`etag: true`, schwach ueber den Body), ebenso der 304 —
+// hier fehlt nur die Erlaubnis, die Antwort ueberhaupt zu speichern.
+//
+// `max-age=0, must-revalidate` und NICHT `no-cache`: beides zwingt zur
+// Revalidierung, aber `no-cache` liest der SW als „diese Antwort darf nicht
+// stale ausgeliefert werden" (_forbidsStale) und schaltet den Pfad auf
+// Netz-zuerst um. Das waere das Gegenteil des Gewollten — Sidebar und Abschnitt
+// sollen sofort stehen und offline ueberhaupt.
+// `private`, weil die Antworten user-skopiert sind (Rolle, Regal-Zustand,
+// eigenes Geraet als letzter Bearbeiter).
+const REVALIDATE_CACHE_CONTROL = 'private, max-age=0, must-revalidate';
 // Namensdeckel der Gliederung (Buch, Kapitel, Abschnitt): eine Quelle, lib/book-create.js.
 const NAME_MAX = BOOK_NAME_MAX;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -81,7 +103,7 @@ function _sendSanitizeFailed(res, e) {
 }
 
 module.exports = {
-  jsonBody, NAME_MAX, UUID_RE, _validDeviceId, _logToken, _logStamp,
+  jsonBody, NAME_MAX, UUID_RE, REVALIDATE_CACHE_CONTROL, _validDeviceId, _logToken, _logStamp,
   _clientLabel, _deviceTokenLabel,
   _guardPage, _guardChapter, _fail, _sendSanitizeFailed,
 };

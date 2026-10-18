@@ -2,6 +2,24 @@
 
 Neueste oben. Je Abschnitt: was sich geändert hat, und was ein Client tun **muss** (Bruch, Frist) bzw. tun **darf** (neues Feld, neuer Weg). Regeln: [README.md](README.md).
 
+## api 2 · editorApi 1
+
+Revisionen eines Abschnitts, nur additiv:
+
+- **`Revision.pinned` (0/1) und `Revision.label`:** angeheftete, benannte Revisionen; die Retention löscht sie nie. Angeheftet wird im Web (`PATCH /content/pages/{page_id}/revisions/{rev_id}`, nicht Teil des Vertrags).
+- **`Revision.source` kennt `restore`:** der Write aus «Wiederherstellen» (bisher `main`). Das Summary bleibt `restored from #<id>`. Neu ist ausserdem das Summary `baseline`: der Stand eines Abschnitts vor seinem ersten Save, datiert auf dessen letzten Write.
+- **`GET …/revisions` → `older` und `pinned`:** `older` ist die Vorgängerin der ältesten gelieferten Revision (nur bei `has_more`), `pinned` sind alle angehefteten Revisionen der Seite (nur ohne Cursor).
+- **`GET …/revisions/{rev_id}` → `prev`:** Meta der unmittelbaren Vorgängerin, null bei der ältesten. `body_html` geht ohne aktive Inhalte raus (`<script>`, `on*`, `javascript:`).
+- **Dedup:** eine neue Revision entsteht jetzt auch bei Änderungen ohne Textunterschied (Formatierung, Bild, Link-Ziel, Todo-Haken, Diagramm-Quelltext). Die Liste eines Abschnitts kann deshalb dichter werden.
+
+**Clients dürfen:** `restore` als eigene Quelle beschriften (bis dahin zeigen beide Clients den Rohwert), `label` statt Datum als Titel einer angehefteten Revision zeigen und `prev` für den Vergleich mit der Vorgängerin nutzen.
+
+Bundle, additiv in editorApi 1:
+
+- **`handle.replaceContent(html): boolean`:** spielt einen neuen Server-Stand desselben Abschnitts ein, ohne ihn wie einen Abschnittswechsel zu behandeln. Caret bleibt im selben Block an derselben Textstelle (auch im letzten Block), kein Sprung ans Ende, kein Auto-Slot, kein Save; die Undo-Historie bleibt und bekommt den Tausch als einen Schritt. `false` heisst: seit dem gesendeten Stand wurde weitergeschrieben, nichts geändert — der vorgemerkte Autosave pusht diese Eingaben, und die nächste `merged: true`-Antwort spielt sich ein.
+
+**Clients dürfen:** die `html` einer `200 merged: true`-Antwort (und einen Sync-Pull der sauberen offenen Seite) per `replaceContent` statt `setPage` einspielen. Feature-Check `typeof handle.replaceContent === 'function'`, sonst wie bisher `setPage` (ältere Bundles). Rechtschreibprüfung und Zähler der Schale danach selbst anstossen — der Tausch feuert kein `input`.
+
 ## api 1 · editorApi 1
 
 Erster festgeschriebener Stand. Er beschreibt, was macOS (3.27) und Android (`65408bb`) heute nutzen, plus drei Ergänzungen:

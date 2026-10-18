@@ -104,6 +104,30 @@ html:has(.revision-viewer[open]) {
   background: var(--color-card-bg);
 }
 
+/* Anheften + Name unter dem Kopf. */
+.revision-viewer__pin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md) 0;
+}
+.revision-viewer__btn.is-active { color: var(--color-accent); }
+.revision-viewer__label { flex: 1 1 16em; min-width: 0; }
+
+/* Vergleichsrichtung ueber dem Diff. */
+.revision-viewer__compare {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+.revision-viewer__compare-label { font-size: var(--font-size-xs); color: var(--color-muted); }
+
+/* Bild als Diff-Block (page-revision-diff.js#parseBlocks, imageLabel). */
+.diff-cell--img { font-style: italic; color: var(--color-muted); }
+
 .revision-viewer__body {
   flex: 1 1 auto;
   overflow: auto;
@@ -202,16 +226,14 @@ html:has(.revision-viewer[open]) {
   background: transparent;
   border-left-color: var(--color-border);
 }
+/* Geänderte Zellen nur am Rand gefärbt: die Fläche gehört der Wort-Markierung
+   (components/diff-marks.css), sonst läge Rot auf Rot. */
 .revision-diff-body .diff-cell--removed,
 .revision-diff-body .diff-cell--changed.diff-cell--left {
-  background: var(--color-err-bg);
-  color: var(--color-err-text);
   border-left-color: var(--color-err-text);
 }
 .revision-diff-body .diff-cell--added,
 .revision-diff-body .diff-cell--changed.diff-cell--right {
-  background: var(--color-ok-bg);
-  color: var(--color-ok-text);
   border-left-color: var(--color-ok-text);
 }
 .revision-diff-body .diff-cell--empty {
@@ -269,18 +291,7 @@ html:has(.revision-viewer[open]) {
   white-space: pre-wrap;
 }
 
-/* Inline-Wort-Marker. */
-.revision-diff-body .diff-add,
-.revision-diff-body ins.diff-add {
-  text-decoration: none;
-  font-weight: var(--fw-semibold);
-}
-.revision-diff-body .diff-del,
-.revision-diff-body del.diff-del {
-  text-decoration: line-through;
-  font-weight: var(--fw-semibold);
-}
-.revision-diff-body .diff-eq { color: inherit; opacity: 0.85; }
+/* Wort-Markierung: components/diff-marks.css. */
 
 /* === Liste-Row clickable === */
 .page-revisions-list .history-item--clickable {

@@ -385,23 +385,31 @@ test('Eine Fehlerantwort meldet nichts und ueberschreibt den Cache nicht', async
   assert.deepEqual(cache.writes, []);
 });
 
-test('Ein abweichender Seiten-Body wird nicht gemeldet', () => {
-  // Er laeuft weiterhin als SWR, aber der Vergleich unterbleibt: eine Meldung
-  // haette clientseitig keinen Konsumenten (der offene Editor hat seinen
-  // eigenen Stale-Write-Schutz), und der Klon + Textvergleich fiele bei JEDEM
-  // Seiten-Read an.
-  return (async () => {
-    const p = '/content/pages/9';
-    const cache = makeCache({ [p]: new FakeResponse('ALT') });
-    const posted = [];
-    const ctx = loadSw({ cache, posted, fetchImpl: async () => new FakeResponse('NEU') });
+test('Ein abweichender Abschnitt wird gemeldet', async () => {
+  // Ohne Meldung bliebe die Lese-Ansicht auf dem Stand des letzten Besuchs, und
+  // ein Edit-Start nähme ihn als Basis.
+  const p = '/content/pages/9';
+  const cache = makeCache({ [p]: new FakeResponse('ALT') });
+  const posted = [];
+  const ctx = loadSw({ cache, posted, fetchImpl: async () => new FakeResponse('NEU') });
 
-    const res = await ctx.handleContent(new FakeRequest(p));
-    assert.equal(res.body, 'ALT', 'SWR bleibt SWR.');
-    await settle();
-    assertPosted(posted, []);
-    assert.deepEqual(cache.writes, [p], 'Der Cache wird trotzdem revalidiert.');
-  })();
+  const res = await ctx.handleContent(new FakeRequest(p));
+  assert.equal(res.body, 'ALT', 'SWR bleibt SWR.');
+  await settle();
+  assertPosted(posted, [p]);
+  assert.deepEqual(cache.writes, [p]);
+});
+
+test('Revisionsliste und Revisions-Body eines Abschnitts werden nicht gemeldet', async () => {
+  // Nur der Abschnitt selbst hat einen Konsumenten; der Anker schliesst die
+  // Unterpfade aus. Der Voll-Body einer Revision ist unveränderlich.
+  const p = '/content/pages/9/revisions/12';
+  const cache = makeCache({ [p]: new FakeResponse('ALT') });
+  const posted = [];
+  const ctx = loadSw({ cache, posted, fetchImpl: async () => new FakeResponse('NEU') });
+  await ctx.handleContent(new FakeRequest(p));
+  await settle();
+  assertPosted(posted, []);
 });
 
 // ── __fresh fuellt den Cache ──────────────────────────────────────────────

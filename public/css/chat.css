@@ -286,17 +286,6 @@
 }
 .chat-vorschlag-btn--ghost { border-color: var(--color-border); color: var(--color-muted); }
 .chat-vorschlaege-actions { display: flex; justify-content: flex-end; }
-/* Seiten-Chat-Vorschlag als Wort-Diff (chat/word-diff.js) — gleiche Farben wie die Inline-Marken. */
-.chat-word-diff__del {
-  background: var(--color-mark-del-bg);
-  color: var(--color-mark-del-text);
-  text-decoration: line-through;
-  text-decoration-color: var(--color-mark-del-strike);
-}
-.chat-word-diff__add {
-  background: var(--color-mark-ins-bg);
-  color: var(--color-mark-ins-text);
-}
 /* Hinweise unter einer Antwort (Parse-Fallback, gekürzter Verlauf) und über dem
    Eingabefeld des Abschnitts-Chats (Flush vor dem Senden gescheitert). */
 .chat-msg-hint {

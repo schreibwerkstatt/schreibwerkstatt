@@ -31,7 +31,7 @@ import { isOwnServerSave } from '../../../repo/save-ids.js';
 // (repo/save-ids.js) — der Server erkennt damit den eigenen Save selbst.
 const NOTEBOOK_WRITER = 'notebook';
 async function savePage(pageId, body) {
-  recordSentSave(pageId, body?.html);
+  recordSentSave(pageId, body?.html, body?.expectedUpdatedAt);
   return putPage(pageId, { ...body, writer: NOTEBOOK_WRITER });
 }
 

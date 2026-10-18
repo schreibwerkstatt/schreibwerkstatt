@@ -501,6 +501,9 @@ async function aiCall(jobId, tok, prompt, system, fromPct, toPct, expectedChars 
   // Ablehnung (auch nach einem Refusal-Fallback): der Text ist leer oder bricht ab —
   // eigener Fehler statt eines Parse-Fehlers oder eines «Pflichtfeld fehlt» am Aufrufer.
   if (stopReason === 'refusal') throw i18nError('job.error.aiRefusal');
+  // Leere Antwort trotz regulärem Ende: eigener Fehler mit stop_reason statt eines
+  // Parse-Fehlers über 0 Zeichen (der nur eine leere Datei in ai_parse_fails/ hinterlässt).
+  if (!text || !text.trim()) throw i18nError('job.error.aiEmpty', { stop: stopReason || '-', tokOut: tokensOut });
   return parseJSON(text);
 }
 

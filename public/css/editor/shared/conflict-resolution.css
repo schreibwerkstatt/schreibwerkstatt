@@ -150,13 +150,6 @@
   border-color: var(--color-accent);
 }
 
-.conflict-diff__del,
-.conflict-diff__add {
-  background: var(--color-mark-ins-bg);
-  color: var(--color-mark-ins-text);
-  border-radius: var(--radius-sm);
-}
-
 .conflict-block__deleted {
   color: var(--color-muted);
 }

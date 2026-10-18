@@ -12,7 +12,7 @@
 
 import { fetchJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
-import { wordDiff } from './word-diff.js';
+import { diffParts } from '../diff/diff-parts.js';
 import { persistProposalStatus } from './proposal-status.js';
 import { IDEE_OPEN_STATUSES } from '../book/ideen-shared.js';
 
@@ -85,7 +85,7 @@ export function ideenProposalStatus(p, proposals, ideen, stages = null) {
 
 /**
  * Diff-Zeilen eines Änderungs-Vorschlags fürs Template. Pure.
- * → [{ key, before, after, diff? }]  diff = wordDiff-Teile für den Text
+ * → [{ key, before, after, diff? }]  diff = markierte Wort-Diff-Teile (diff/diff-parts.js) für den Text
  */
 export function ideeUpdateRows(p) {
   if (p?.type !== 'idee_update') return [];
@@ -98,7 +98,7 @@ export function ideeUpdateRows(p) {
   if ('content' in f) {
     const before = String(b.content || '');
     const after = String(f.content || '');
-    rows.push({ key: 'content', before, after, diff: wordDiff(before, after) });
+    rows.push({ key: 'content', before, after, diff: diffParts(before, after) });
   }
   return rows;
 }

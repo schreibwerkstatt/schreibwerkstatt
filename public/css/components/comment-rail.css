@@ -79,20 +79,6 @@
 .comment-rail__quote--stale { opacity: 0.75; }
 .comment-rail-diff { font-size: 13px; line-height: 1.5; }
 .comment-rail-diff .diff-line { margin: 0; }
-.comment-rail-diff ins.diff-add {
-  text-decoration: none;
-  background: var(--cr-ok-bg, var(--color-ok-bg));
-  color: var(--cr-ok-text, var(--color-ok-text));
-  border-radius: var(--cr-radius-sm, var(--radius-sm, 0));
-  padding: 0 var(--space-2xs);
-}
-.comment-rail-diff del.diff-del {
-  text-decoration: line-through;
-  background: var(--cr-err-bg, var(--color-err-bg));
-  color: var(--cr-err-text, var(--color-err-text));
-  border-radius: var(--cr-radius-sm, var(--radius-sm, 0));
-  padding: 0 var(--space-2xs);
-}
 
 .comment-rail__comment { font-size: 14px; }
 .comment-rail__comment--reply {

@@ -165,3 +165,23 @@ test('verschachtelte Liste ist ein Block: Änderung im Unterpunkt mergt gegen Ä
   // Liste genau einmal, nicht in Teile zerrissen.
   assert.equal((r.json.html.match(/data-bid="b0000000000000b2"/g) || []).length, 1);
 });
+
+// Der SW meldet einen abweichenden Abschnitt an die Tabs (public/sw.js#
+// CONTENT_NOTIFY_REGEX) und entscheidet das per ETag. Ohne Speicher-Erlaubnis
+// samt ETag bliebe ihm nur der Textvergleich über den ganzen Body — und
+// `no-cache` schaltete den Pfad auf Netz-zuerst (kein Sofort-Render, kein Offline).
+test('GET Abschnitt antwortet konditional (ETag + must-revalidate, nicht no-cache)', async () => {
+  const res = await fetch(`${baseUrl}/content/pages/${PAGE}`);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('cache-control'), 'private, max-age=0, must-revalidate');
+  const etag = res.headers.get('etag');
+  assert.ok(etag, 'ETag fehlt');
+  // http.get statt fetch: undici setzt bei eigenem If-None-Match selbst
+  // `Cache-Control: no-cache`, und dann antwortet Express zu Recht ohne 304.
+  const status = await new Promise((resolve, reject) => {
+    require('node:http').get(`${baseUrl}/content/pages/${PAGE}`, { headers: { 'If-None-Match': etag } }, (r) => {
+      r.resume(); resolve(r.statusCode);
+    }).on('error', reject);
+  });
+  assert.equal(status, 304);
+});

@@ -91,7 +91,7 @@
                         <div class="plot-chat-proposal-row">
                           <span class="plot-chat-proposal-field" x-text="$app.t('plot.chat.field.' + row.key)"></span>
                           <template x-if="row.diff">
-                            <span class="chat-word-diff"><template x-for="(part, di) in row.diff" :key="di"><span :class="'chat-word-diff__' + part.t" x-text="part.v"></span></template></span>
+                            <span class="chat-word-diff"><template x-for="(part, di) in row.diff" :key="di"><span :class="part.c" x-text="part.v"></span></template></span>
                           </template>
                           <template x-if="!row.diff && !row.flag">
                             <span><span class="finding-original" x-text="row.before"></span> <span class="finding-korrektur" x-text="row.after"></span></span>

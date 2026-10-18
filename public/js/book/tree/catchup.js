@@ -186,7 +186,19 @@ export const treeCatchUpMethods = {
       this._scheduleTreeCatchUp('sw-revalidate');
       return;
     }
+    if (detail.kind === 'page') return void this._catchUpCurrentPage(detail.pageId);
     if (detail.kind === 'books') this._catchUpBooks();
+  },
+
+  // Offenen Abschnitt nachziehen, wenn der SW einen veralteten Stand ausgeliefert
+  // hat. Ohne das bliebe die Lese-Ansicht auf dem Stand des letzten Besuchs, und
+  // ein Edit-Start nähme ihn als Basis. Gleiche Weiche wie der Collab-Treffer
+  // (app-collab.js#_onCurrentPageRemoteEdit), nur ohne Toast — es hat niemand
+  // gerade geschrieben, die Ansicht war bloss alt.
+  _catchUpCurrentPage(pageId) {
+    if (!pageId || String(this.currentPage?.id) !== String(pageId)) return;
+    if (this.editMode) return void this._pullRemoteIntoEditor?.();
+    this._refetchCurrentPage?.().catch(() => {});
   },
 
   // Buchliste nachziehen. Direkt-Zuweisung statt `loadBooks()`: die Liste

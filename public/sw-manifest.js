@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "4483d37d01c011e4";
+self.__SHELL_BUILD = "f8d904af11e8461b";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -73,6 +73,7 @@ self.__SHELL_MANIFEST = [
   "/css/components/danger-zone.css",
   "/css/components/data-table.css",
   "/css/components/device-tokens.css",
+  "/css/components/diff-marks.css",
   "/css/components/editor-dialog.css",
   "/css/components/entity-ref.css",
   "/css/components/feature-tiles.css",
@@ -489,6 +490,7 @@ self.__SHELL_MANIFEST = [
   "/js/cards/page-chat-store.js",
   "/js/cards/page-history-card.js",
   "/js/cards/page-revisions-card.js",
+  "/js/cards/page-revisions/viewer.js",
   "/js/cards/palette-card.js",
   "/js/cards/palette-fuzzy.js",
   "/js/cards/palette-providers.js",
@@ -548,7 +550,6 @@ self.__SHELL_MANIFEST = [
   "/js/chat/research-chat-proposals.js",
   "/js/chat/research-chat-render.js",
   "/js/chat/research-chat.js",
-  "/js/chat/word-diff.js",
   "/js/client-error.js",
   "/js/collapsible.js",
   "/js/combobox.js",
@@ -560,6 +561,9 @@ self.__SHELL_MANIFEST = [
   "/js/diagram/mermaid-html.js",
   "/js/diagram/mermaid-theme.js",
   "/js/diagram/mermaid-view.js",
+  "/js/diff/diff-parts.js",
+  "/js/diff/html-blocks.js",
+  "/js/diff/word-diff.js",
   "/js/editor/book-editor-comments.js",
   "/js/editor/comment-rail-core.js",
   "/js/editor/comment-rail-layout.js",
@@ -570,6 +574,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/find.js",
   "/js/editor/focus.js",
   "/js/editor/focus/card.js",
+  "/js/editor/focus/caret-anchor.js",
   "/js/editor/focus/caret-memory.js",
   "/js/editor/focus/chrome.js",
   "/js/editor/focus/constants.js",
@@ -595,6 +600,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/notebook/edit/_shared.js",
   "/js/editor/notebook/edit/autosave.js",
   "/js/editor/notebook/edit/conflict.js",
+  "/js/editor/notebook/edit/draft-reconcile.js",
   "/js/editor/notebook/edit/input.js",
   "/js/editor/notebook/edit/lifecycle.js",
   "/js/editor/notebook/edit/save-guard.js",
@@ -715,6 +721,7 @@ self.__SHELL_MANIFEST = [
   "/js/modal.js",
   "/js/num-input.js",
   "/js/page-revision-diff.js",
+  "/js/page-revisions-groups.js",
   "/js/password-form.js",
   "/js/popover-anchor.js",
   "/js/prompts.js",
@@ -953,6 +960,7 @@ self.__SHELL_MANIFEST = [
   "/partials/chat.html",
   "/partials/collab-toast.html",
   "/partials/comment-thread-body.html",
+  "/partials/conflict-blocks.html",
   "/partials/conflict-resolution.html",
   "/partials/docx-export-frontmatter.html",
   "/partials/docx-export-layout.html",
@@ -1044,6 +1052,8 @@ self.__SHELL_MANIFEST = [
   "/partials/orte-map-view.html",
   "/partials/orte.html",
   "/partials/page-history.html",
+  "/partials/page-revisions-row.html",
+  "/partials/page-revisions-viewer.html",
   "/partials/page-revisions.html",
   "/partials/palette.html",
   "/partials/pdf-export-apparat.html",

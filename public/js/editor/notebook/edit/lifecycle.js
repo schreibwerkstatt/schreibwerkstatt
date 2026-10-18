@@ -237,15 +237,23 @@ export const lifecycleMethods = {
     // und abweichend. Kein Dialog – der User hat den Entwurf bewusst getippt,
     // ihn beim Wiedereintritt zu verwerfen wäre destruktiv.
     // Ist die Seite seit dem Draft weitergeschrieben worden, wird er gegen den
-    // Server-Stand gemergt (edit/conflict.js#_reconcileDraftWithServer) — sonst
+    // Server-Stand gemergt (edit/draft-reconcile.js#_reconcileDraftWithServer) — sonst
     // stünde alter Text unter frischem Stempel, und der nächste Save nähme die
     // Remote-Änderung still zurück.
     const draft = readDraft(app.currentPage.id);
     let draftConflict = null;
+    let pullAfterRebase = false;
     if (draft && draft.html && !isNoChange(draft.html, app.originalHtml)) {
       const restored = this._reconcileDraftWithServer(draft);
       initialHtml = restored.html;
       draftConflict = restored.conflict || null;
+      if (restored.rebase) {
+        // Ansicht älter als die Draft-Basis: Basis + Stempel gemeinsam auf die
+        // Draft-Basis, danach frisch gegen den Server nachziehen.
+        app.originalHtml = restored.rebase.html;
+        app.currentPage.updated_at = restored.rebase.updatedAt;
+        pullAfterRebase = true;
+      }
       app.editDirty = true;
       app.lastDraftSavedAt = draft.savedAt || Date.now();
     }
@@ -307,6 +315,7 @@ export const lifecycleMethods = {
     if (draftConflict) {
       this._openConflictResolution({ ...draftConflict, source: app.focusActive ? 'focus' : 'main' });
     }
+    if (pullAfterRebase) this._pullRemoteIntoEditor?.();
 
     // Layout-Prefs (Fullscreen, Seitenbreite, Steuerzeichen, Zoom) aus
     // localStorage restoren. Fit-Width skaliert die Schrift per CSS

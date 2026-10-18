@@ -398,3 +398,145 @@ test('page_revisions: listForPageKeyset — halber Cursor liest von vorne', () =
   });
   assert.equal(halfCursor.revisions.length, full.revisions.length);
 });
+
+// ── Dedup auf kanonischem HTML ───────────────────────────────────────────────
+// Eine Aenderung ohne Textunterschied ist trotzdem eine Aenderung: sonst ist die
+// juengste Revision nicht der aktuelle Stand, und ein Restore nimmt Formatierung,
+// Bilder oder Diagramme still zurueck.
+
+test('page_revisions: Aenderung ohne Textunterschied bekommt eine Revision', () => {
+  upsertBookByName(920, 'Test-Buch Canon');
+  const cases = [
+    ['<p>Hallo Welt</p>', '<p>Hallo <strong>Welt</strong></p>', 'Formatierung'],
+    ['<p>Titel</p>', '<h2>Titel</h2>', 'Ueberschrift'],
+    ['<p>A</p>', '<p>A</p><p><img src="/x.png"></p>', 'Bild'],
+    ['<pre class="mermaid">flowchart TD\nA-->B</pre>', '<pre class="mermaid">flowchart TD\nA-->C</pre>', 'Diagramm'],
+    ['<p><a href="https://a.ch">Link</a></p>', '<p><a href="https://b.ch">Link</a></p>', 'Link-Ziel'],
+    ['<ul class="todo"><li class="todo-item"><input type="checkbox">x</li></ul>',
+     '<ul class="todo"><li class="todo-item"><input type="checkbox" checked>x</li></ul>', 'Todo-Haken'],
+    ['<p>A</p><p>B</p>', '<p>A B</p>', 'Absatzgrenze'],
+  ];
+  cases.forEach(([a, b, why], i) => {
+    const pageId = 92001 + i;
+    _seedPage(920, pageId);
+    assert.ok(pageRevisions.insert({ pageId, bookId: 920, bodyHtml: a, source: 'main' }));
+    assert.ok(pageRevisions.insert({ pageId, bookId: 920, bodyHtml: b, source: 'main' }), `${why}: keine Revision`);
+  });
+});
+
+test('page_revisions: nicht-inhaltliche Markup-Unterschiede deduplizieren', () => {
+  upsertBookByName(921, 'Test-Buch Canon Dedup');
+  const cases = [
+    ['<p data-bid="b1">A</p>', '<p>A</p>', 'Block-ID'],
+    ['<p class="b a" id="x">A</p>', "<p id='x' class='a b'>A</p>", 'Attribut-/Klassen-Reihenfolge'],
+    ['<p>A<br/>B</p>', '<p>A<br>B</p>', 'br-Schreibweise'],
+    ['<p>A</p>\n<p>B</p>', '<p>A</p><p>B</p>', 'Whitespace zwischen Bloecken'],
+    ['<p><img alt="x > y" src="a.png"></p>', '<p><img src="a.png" alt="x > y"></p>', '> im Attribut'],
+  ];
+  cases.forEach(([a, b, why], i) => {
+    const pageId = 92101 + i;
+    _seedPage(921, pageId);
+    assert.ok(pageRevisions.insert({ pageId, bookId: 921, bodyHtml: a, source: 'main' }));
+    assert.equal(pageRevisions.insert({ pageId, bookId: 921, bodyHtml: b, source: 'main' }), null, `${why}: Phantom-Revision`);
+  });
+});
+
+test('page_revisions: canonicalHtml laesst Whitespace in <pre> stehen', () => {
+  const a = pageRevisions.canonicalHtml('<pre class="mermaid">A-->B\nB-->C</pre>');
+  const b = pageRevisions.canonicalHtml('<pre class="mermaid">A-->B B-->C</pre>');
+  assert.notEqual(a, b);
+});
+
+// ── Anheften, Vorgaengerin, Ausgangsstand-Zeitpunkt ──────────────────────────
+
+test('page_revisions: setPin + listPinned, Loesen verwirft den Namen', () => {
+  upsertBookByName(922, 'Test-Buch Pin');
+  _seedPage(922, 92201);
+  const id1 = pageRevisions.insert({ pageId: 92201, bookId: 922, bodyHtml: '<p>a</p>', source: 'main' });
+  pageRevisions.insert({ pageId: 92201, bookId: 922, bodyHtml: '<p>b</p>', source: 'main' });
+
+  const pinned = pageRevisions.setPin(id1, { pinned: true, label: '  vor dem Umbau  ' });
+  assert.equal(pinned.pinned, 1);
+  assert.equal(pinned.label, 'vor dem Umbau');
+  assert.deepEqual(pageRevisions.listPinned(92201).map(r => r.id), [id1]);
+
+  const long = pageRevisions.setPin(id1, { pinned: true, label: 'x'.repeat(500) });
+  assert.equal(long.label.length, pageRevisions.LABEL_MAX);
+
+  const loose = pageRevisions.setPin(id1, { pinned: false, label: 'bleibt nicht' });
+  assert.equal(loose.pinned, 0);
+  assert.equal(loose.label, null);
+  assert.deepEqual(pageRevisions.listPinned(92201), []);
+});
+
+test('page_revisions: pruneTiered loescht angeheftete Revisionen nie', () => {
+  db.prepare('DELETE FROM page_revisions').run();
+  upsertBookByName(923, 'Test-Buch Pin Prune');
+  _seedPage(923, 92301);
+  const anchor = '2026-05-25T12:00:00.000Z';
+  const anchorMs = Date.parse(anchor);
+  _insertAt(92301, 923, '<p>w_old</p>', 14, anchorMs);
+  const doomed = _insertAt(92301, 923, '<p>w_new</p>', 13.5, anchorMs);
+  _insertAt(92301, 923, '<p>jung</p>', 0.1, anchorMs);
+  pageRevisions.setPin(doomed.id, { pinned: true, label: 'Meilenstein' });
+
+  pageRevisions.pruneTiered({ floor: 1, now: anchor });
+  assert.ok(pageRevisions.get(doomed.id), 'angeheftete Revision wurde geloescht');
+});
+
+test('page_revisions: Wochen-Bucket ist die ISO-Woche, auch ueber den Jahreswechsel', () => {
+  db.prepare('DELETE FROM page_revisions').run();
+  upsertBookByName(924, 'Test-Buch ISO-Woche');
+  _seedPage(924, 92401);
+  // Di 30.12.2025 und Do 1.1.2026 liegen in derselben ISO-Woche (2026-W01).
+  const anchor = '2026-01-25T12:00:00.000Z';
+  const anchorMs = Date.parse(anchor);
+  const tue = _insertAt(92401, 924, '<p>di</p>', 26, anchorMs);
+  const thu = _insertAt(92401, 924, '<p>do</p>', 24, anchorMs);
+  _insertAt(92401, 924, '<p>jung</p>', 0.1, anchorMs);
+  assert.match(tue.created, /^2025-12-30/);
+  assert.match(thu.created, /^2026-01-01/);
+
+  pageRevisions.pruneTiered({ floor: 1, now: anchor });
+  assert.ok(pageRevisions.get(tue.id), 'aelteste der Woche fehlt');
+  assert.equal(pageRevisions.get(thu.id), null, 'zweite Revision derselben ISO-Woche blieb stehen');
+});
+
+test('page_revisions: prevOf + older am Fensterrand', () => {
+  upsertBookByName(925, 'Test-Buch Prev');
+  _seedPage(925, 92501);
+  const ins = db.prepare(`
+    INSERT INTO page_revisions (page_id, book_id, body_html, chars, words, tok, source, created_at)
+    VALUES (?, ?, ?, ?, 1, 1, 'main', ?)
+  `);
+  const base = Date.parse('2026-06-01T00:00:00.000Z');
+  for (let i = 0; i < 4; i++) ins.run(92501, 925, `<p>r${i}</p>`, i + 1, new Date(base + i * 60_000).toISOString());
+
+  const page = pageRevisions.listForPageKeyset(92501, { limit: 2 });
+  assert.deepEqual(page.revisions.map(r => r.chars), [4, 3]);
+  assert.equal(page.older?.chars, 2, 'older = Vorgaengerin der aeltesten gelieferten');
+  assert.equal(page.older.body_html, undefined, 'older ohne Body');
+
+  const all = pageRevisions.listForPageKeyset(92501, { limit: 10 });
+  assert.equal(all.older, null);
+
+  const third = pageRevisions.get(all.revisions[1].id);
+  assert.equal(pageRevisions.prevOf(third).chars, 2);
+  assert.equal(pageRevisions.prevOf(pageRevisions.get(all.revisions[3].id)), null, 'aelteste hat keine Vorgaengerin');
+});
+
+test('page_revisions: insert mit createdAt datiert den Stand zurueck', () => {
+  upsertBookByName(926, 'Test-Buch createdAt');
+  _seedPage(926, 92601);
+  const id = pageRevisions.insert({
+    pageId: 92601, bookId: 926, bodyHtml: '<p>alt</p>', source: 'main',
+    summary: 'baseline', createdAt: '2024-03-01T08:00:00.000Z',
+  });
+  assert.equal(pageRevisions.get(id).created_at, '2024-03-01T08:00:00.000Z');
+});
+
+test('page_revisions: Quelle restore ist gueltig', () => {
+  upsertBookByName(927, 'Test-Buch restore');
+  _seedPage(927, 92701);
+  assert.ok(pageRevisions.insert({ pageId: 92701, bookId: 927, bodyHtml: '<p>x</p>', source: 'restore' }));
+});

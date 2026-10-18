@@ -57,18 +57,23 @@ export function isApostrophe({ prevRaw, nextRaw, style, singleOpen, wordAfter })
 // Satzzeichen folgt (`"... will check`); Zeilenende als Schliess-Evidenz.
 function _evidence(ctx) {
   const { prevRaw, prevSig, nextRaw, nextSig } = ctx;
-  const closeEv =
-    (!!prevSig && (LETTER_DIGIT.test(prevSig) || END_PUNCT.test(prevSig))) ||
-    nextSig === '' || (!!nextSig && CLOSE_PUNCT.test(nextSig));
-  const openEv =
-    prevSig === '' ||
-    (!!nextSig && LETTER_DIGIT.test(nextSig)) ||
-    (!!prevSig && (OPEN_PUNCT.test(prevSig) || INTRO_PUNCT.test(prevSig)));
   // „Klebt" der Run am Wort davor bzw. danach? Nur Buchstaben/Ziffern zählen
   // als Kleben nach hinten — ein direkt folgendes Komma ist Schliess-Evidenz,
   // kein Rede-Anfang.
   const hugPrev = !!prevRaw && !SPACES.has(prevRaw);
   const hugNext = !!nextRaw && LETTER_DIGIT.test(nextRaw);
+  // Komma/Doppelpunkt direkt davor, Space danach, Rede offen: Begleitsatz nach
+  // der Rede (`"…neugierig," ich zeige`), keine Redeeinleitung — die steht vor
+  // einem Space (`so, «`) oder klebt am Wort danach (`sagte:«`).
+  const introClose = ctx.depth > 0 && hugPrev && !hugNext
+    && !!prevSig && INTRO_PUNCT.test(prevSig);
+  const closeEv = introClose ||
+    (!!prevSig && (LETTER_DIGIT.test(prevSig) || END_PUNCT.test(prevSig))) ||
+    nextSig === '' || (!!nextSig && CLOSE_PUNCT.test(nextSig));
+  const openEv = !introClose && (
+    prevSig === '' ||
+    (!!nextSig && LETTER_DIGIT.test(nextSig)) ||
+    (!!prevSig && (OPEN_PUNCT.test(prevSig) || INTRO_PUNCT.test(prevSig))));
   return { closeEv, openEv, hugPrev, hugNext };
 }
 

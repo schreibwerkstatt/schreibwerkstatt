@@ -126,7 +126,9 @@ export const bookEditorConflictMethods = {
     };
   },
 
-  bookConflictText(variant) {
+  // `conflictUi*`: Schnittstelle der geteilten Vorlage partials/conflict-blocks.html
+  // (Pendant im Notebook-Root: editor/notebook/trampoline.js).
+  conflictUiText(variant) {
     const app = window.__app;
     const cr = this.conflictResolution;
     if (!app || !cr) return '';
@@ -134,15 +136,15 @@ export const bookEditorConflictMethods = {
     return conflictText(app.t.bind(app), cr.author, variant, { time });
   },
 
-  bookConflictChoice(bid) {
+  conflictUiChoice(bid) {
     return this.conflictResolution?.decisions[bid] || 'local';
   },
 
-  resolveBookConflictBlock(bid, side) {
+  conflictUiPick(bid, side) {
     if (this.conflictResolution) this.conflictResolution.decisions[bid] = side;
   },
 
-  resolveAllBookConflicts(side) {
+  conflictUiPickAll(side) {
     const cr = this.conflictResolution;
     if (!cr) return;
     for (const c of cr.conflicts) cr.decisions[c.bid] = side;
@@ -151,7 +153,7 @@ export const bookEditorConflictMethods = {
   // Auflösung übernehmen: aufgelöster Stand wird der Block-Inhalt, Basis der
   // Server-Stand, dann regulär speichern. Kommt dazwischen ein weiterer
   // Remote-Save, läuft der Save erneut in den Merge.
-  submitBookConflict() {
+  conflictUiSubmit() {
     const cr = this.conflictResolution;
     if (!cr) return;
     const block = this._blockById(cr.pageId);
@@ -168,8 +170,13 @@ export const bookEditorConflictMethods = {
 
   // Schliessen ohne Entscheidung: nichts wird verworfen, der Block behält
   // seine Fassung und das Banner, gespeichert wird erst nach einer Auflösung.
-  cancelBookConflict() {
+  conflictUiCancel() {
     this.conflictResolution = null;
+  },
+
+  // Der Bucheditor speichert erst nach der Auflösung — «Übernehmen» sperrt nie.
+  conflictUiBusy() {
+    return false;
   },
 
   // «Konflikt lösen …» am Banner: frischen Server-Stand holen und neu mergen

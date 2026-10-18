@@ -37,7 +37,7 @@
         </div>
         <div class="chat-vorschlag-diff internal-link" @click="locateChatVorschlag(v, { scroll: true })" :data-tip="$app.t('chat.showInText')">
           <template x-if="v._diff">
-            <span class="chat-word-diff"><template x-for="(part, pi) in v._diff" :key="pi"><span :class="'chat-word-diff__' + part.t" x-text="part.v"></span></template></span>
+            <span class="chat-word-diff"><template x-for="(part, pi) in v._diff" :key="pi"><span :class="part.c" x-text="part.v"></span></template></span>
           </template>
           <template x-if="!v._diff">
             <span>

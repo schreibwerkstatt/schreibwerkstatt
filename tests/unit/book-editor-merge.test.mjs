@@ -85,8 +85,8 @@ test('_mergeStaleBlock: Kollision → Banner + Modal, Basis bleibt bis zur Aufl�
   assert.deepEqual(ctx.conflictResolution.conflicts.map((c) => c.bid), ['a2']);
   assert.ok(ctx.conflictResolution.conflicts[0].view, 'Diff-Ansicht fürs Modal');
 
-  ctx.resolveBookConflictBlock('a2', 'both');
-  ctx.submitBookConflict();
+  ctx.conflictUiPick('a2', 'both');
+  ctx.conflictUiSubmit();
   assert.equal(ctx.conflictResolution, null);
   assert.equal(block.html,
     P('a1', 'Eins remote.') + P('a2', 'Zwei lokal.') + P('a2', 'Zwei remote.') + P('a3', 'Drei.') + '<p>Neu lokal.</p>');

@@ -22,7 +22,9 @@
 // ab da schief (neue Partials gegen alte Module) und wird nachgeräumt, sobald
 // das Editieren endet — `shouldHealSkew` unten.
 // Ein Pflicht-Update (shell-protocol.js) wartet nur noch auf ungespeicherte
-// Änderungen, nicht mehr auf den Edit- oder Fokusmodus selbst.
+// Änderungen (`hasUnsavedWork`, alle Editoren), nicht mehr auf den Edit- oder
+// Fokusmodus selbst — und wird wiederholt geprüft, bis eine Antwort da ist
+// (`shouldCheckProtocol`).
 
 export const AUTO_APPLY_IDLE_MS = 120_000;
 export const AUTO_APPLY_TICK_MS = 15_000;
@@ -32,7 +34,8 @@ export const BOOT_STALE_WINDOW_MS = 30_000;
 
 // Weitere Editier-Zustände ausserhalb der Root: der Bucheditor führt seinen
 // eigenen Block-Zustand (dirty/saving) und trägt sich hier ein
-// (cards/book-editor-card.js). Rückgabe: Abmelde-Funktion.
+// (cards/book-editor-card.js). Rückgabe: Abmelde-Funktion. Eine Quelle meldet
+// ungespeicherte Arbeit — sie zählt für `isBusy` UND `hasUnsavedWork`.
 const busySources = new Set();
 export function registerBusySource(fn) {
   busySources.add(fn);
@@ -45,6 +48,19 @@ export function registerBusySource(fn) {
 // registrierte Quelle.
 export function isBusy(app) {
   if (app?.editMode || app?.focusActive || app?.editDirty) return true;
+  for (const fn of busySources) {
+    try { if (fn()) return true; } catch {}
+  }
+  return false;
+}
+
+// Ungespeicherte Arbeit, die ein Reload verlöre — die Schwelle des
+// Pflicht-Updates. Enger als `isBusy` (Edit-/Fokusmodus allein zählt nicht),
+// aber über ALLE Editoren: der Bucheditor hat keine lokalen Entwürfe, seine
+// ungespeicherten Blöcke wären nach dem Reload weg. `editSaving`: ein PUT ist
+// unterwegs, ein Reload machte daraus eine verlorene Save-Antwort.
+export function hasUnsavedWork(app) {
+  if (app?.editDirty || app?.editSaving) return true;
   for (const fn of busySources) {
     try { if (fn()) return true; } catch {}
   }
@@ -64,6 +80,23 @@ export function isUpdateRequired(serverProtocol, clientProtocol) {
 
 export function shouldForceUpdate({ dirty, online }) {
   return !dirty && !!online;
+}
+
+// Wann die Shell erneut gegen ein frisches `/config.shellProtocol` prüft.
+// Ein einzelner Abruf beim neu installierten SW reicht nicht: scheitert er
+// (Netz-Wackler, Aufwachen), bleibt ein editierender Tab auf der alten Shell —
+// die normale Update-Politik wartet auf `isBusy`, und ein Tab, der den
+// Generationswechsel schief erlebt hat, hat gar keinen wartenden SW mehr.
+// `pending` steht darum ab `updatefound` bzw. dem schiefen `controllerchange`,
+// bis eine Prüfung eine gültige Antwort bekam, und wird im Auto-Apply-Takt
+// wiederholt. Beim Aufwachen wird zusätzlich geprüft — gedrosselt, damit
+// Tab-Wechsel nichts kosten.
+export const PROTOCOL_WAKE_MIN_MS = 30_000;
+
+export function shouldCheckProtocol({ pending, inflight, online, wake = false, sinceLastMs = Infinity }) {
+  if (inflight || !online) return false;
+  if (pending) return true;
+  return !!wake && sinceLastMs >= PROTOCOL_WAKE_MIN_MS;
 }
 
 // Skew-Heilung. Nach einem `controllerchange` ohne Reload (Tab war busy oder

@@ -16,11 +16,14 @@ import { EVT } from '../../events.js';
 
 // '/content/books'         → { kind: 'books' }
 // '/content/books/12/tree' → { kind: 'tree', bookId: '12' }
+// '/content/pages/7'       → { kind: 'page', pageId: '7' }
 export function parseContentPath(pathname) {
   const p = String(pathname || '');
   if (p === '/content/books') return { kind: 'books' };
   const m = /^\/content\/books\/(\d+)\/tree$/.exec(p);
   if (m) return { kind: 'tree', bookId: m[1] };
+  const pm = /^\/content\/pages\/(\d+)$/.exec(p);
+  if (pm) return { kind: 'page', pageId: pm[1] };
   return null;
 }
 

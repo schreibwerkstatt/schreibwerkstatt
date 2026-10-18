@@ -1,7 +1,8 @@
 // HTML→Plain-Text Normalisierung. Frontend-Pendant zu lib/html-text.js.
 // Pflicht-Parity (CLAUDE.md „HTML→Text-Normalisierung: Frontend MUSS Server
 // matchen"). Konsumenten: book/tree.js (_syncPageStatsAfterSave),
-// page-revision-diff.js (Plain-Text-Fallback).
+// page-revision-diff.js (Plain-Text-Fallback), diff/html-blocks.js
+// (decodeEntities — Pendant zum gleichnamigen Server-Export).
 
 import { NAMED_ENTITIES } from './html-entities.js';
 
@@ -50,6 +51,8 @@ const _TABLE_BLOCK_RE = /<table\b[^>]*>[\s\S]*?<\/table\s*>/gi;
 export function stripTableBlocks(html) {
   return String(html || '').replace(_TABLE_BLOCK_RE, ' ');
 }
+
+export const decodeEntities = _decodeEntities;
 
 export function htmlToPlainText(html) {
   return _decodeEntities(stripDiagramBlocks(html).replace(/<[^>]+>/g, ' '))

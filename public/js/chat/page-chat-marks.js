@@ -7,7 +7,7 @@ import { countInHtml } from '../utils.js';
 import { foldQuotes, normalizeMatchText } from '../utils/text-match.js';
 import { stripLektoratMarks } from '../editor/shared/html-clean.js';
 import { collectTextNodes, createHighlightPair } from '../editor/shared/text-find.js';
-import { wordDiff } from './word-diff.js';
+import { diffParts } from '../diff/diff-parts.js';
 
 // CSS-Custom-Highlight (kein DOM-Eingriff — landet nie im gespeicherten HTML).
 // Nur der „current"-Name wird gemalt; Stil in css/editor/notebook/lektorat.css.
@@ -116,7 +116,7 @@ export const pageChatMarksMethods = {
         v._stale = n === 0 && !v._notFound;
         v._ambiguous = n > 1;
         v._undoable = !!html && v._applied && countInHtml(html, v.ersatz) === 1;
-        if (v._diff === undefined) v._diff = wordDiff(v.original, v.ersatz);
+        if (v._diff === undefined) v._diff = diffParts(v.original, v.ersatz);
       });
     }
     this._publishChatMarks();

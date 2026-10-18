@@ -2,7 +2,8 @@
 // (public/js/editor/shared/conflict-diff.js). Lauf: `node --test tests/unit/conflict-diff.test.mjs`
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { blockText, conflictDiffView } from '../../public/js/editor/shared/conflict-diff.js';
+import { conflictDiffView } from '../../public/js/editor/shared/conflict-diff.js';
+import { blockText } from '../../public/js/diff/html-blocks.js';
 
 const join = parts => parts.map(p => p.v).join('');
 

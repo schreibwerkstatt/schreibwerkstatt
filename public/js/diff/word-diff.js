@@ -1,15 +1,15 @@
-// Wort-Diff für die Vorschlagskarten des Seiten-Chats: zeigt „original → ersatz"
-// als einen Fliesstext mit markierten Löschungen/Einfügungen statt zweier
-// Blöcke, zwischen denen der Leser die Änderung selbst suchen muss.
+// Wort-Diff zweier Klartexte — der eine Wort-Diff aller Diff-Ansichten
+// (Chat-Vorschläge, Konflikt-Auflösung, Abschnitts-Historie, Fassungen,
+// Kommentar-Leisten); Markierung und Rendering: diff-parts.js.
 //
-// Pure (kein DOM, kein Alpine) und synchron — die Vorschläge sind kurz, ein
-// LCS über Wort-Token reicht. jsdiff (lazy-libs.js#loadDiff) wäre async und
-// brächte für ein paar Dutzend Wörter nur eine Ladeverzögerung mit.
+// Pure (kein DOM, kein Alpine) und synchron — verglichen wird je Absatz bzw.
+// Vorschlag, ein LCS über Wort-Token reicht. jsdiff (lazy-libs.js#loadDiff)
+// springt nur ein, wo die Tabelle zu gross wird (diff-parts.js#wordParts).
 //
 // Ausgabe: [{ t: 'eq'|'del'|'add', v: string }] — benachbarte Teile gleicher Art
 // sind zusammengefasst, Whitespace zwischen zwei Änderungen hängt am Gleichtext.
 // `null`, wenn die Eingabe zu gross für die quadratische Tabelle ist (Aufrufer
-// zeigt dann die zwei Blöcke).
+// zeigt dann die zwei Blöcke bzw. nimmt jsdiff).
 
 const MAX_CELLS = 250000;
 

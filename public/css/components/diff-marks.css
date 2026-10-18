@@ -1,0 +1,24 @@
+@layer components {
+/* === Wort-Diff-Markierung — eine Optik für alle Diff-Ansichten ===
+   Klassen aus public/js/diff/diff-parts.js: Abschnitts-Historie, Fassungsvergleich,
+   Fassungs-Leseansicht, Kommentar-Leisten («Stelle geändert»), Konflikt-Auflösung
+   (Notebook, Focus, Bucheditor) und die Vorschlagskarten von Abschnitts-, Plot- und
+   Ideen-Chat. Konsumenten setzen hier nur Dichte/Abstand ihres Containers, nie die
+   Markierung selbst — sonst sieht dieselbe Änderung je Ansicht anders aus. */
+
+.diff-add {
+  background: var(--color-mark-ins-bg);
+  color: var(--color-mark-ins-text);
+  text-decoration: none;
+}
+.diff-del {
+  background: var(--color-mark-del-bg);
+  color: var(--color-mark-del-text);
+  text-decoration: line-through;
+  text-decoration-color: var(--color-mark-del-strike);
+}
+/* Reine Satzzeichen nicht durchstreichen — der Strich läge unter einem
+   hochgestellten Anführungszeichen und liest sich als Lücke; die Hinterlegung
+   markiert genug. */
+.diff-del.diff-mark--punct { text-decoration: none; }
+}

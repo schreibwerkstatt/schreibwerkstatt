@@ -123,23 +123,9 @@ body.snapshot-reader-open { overflow: hidden; overscroll-behavior: contain; }
 .snapshot-reader__page--changed .book-editor-page-header { border-bottom-color: var(--color-warn-text); }
 .snapshot-reader__page--removed .book-editor-page-body { opacity: 0.75; }
 
-/* Inline-Diff-Marks (eine Spalte, Lesefluss). diffWords liefert <ins>/<del>;
-   die Block-Wrapper tragen .diff-line. */
+/* Inline-Diff (eine Spalte, Lesefluss): die Block-Wrapper tragen .diff-line,
+   die Wort-Markierung kommt aus components/diff-marks.css. */
 .snapshot-reader__diff .diff-line { margin: 0 0 0.7em; }
-.snapshot-reader__diff ins.diff-add {
-  text-decoration: none;
-  background: var(--color-ok-bg);
-  color: var(--color-ok-text);
-  border-radius: var(--radius-sm);
-  padding: 0 var(--space-2xs);
-}
-.snapshot-reader__diff del.diff-del {
-  text-decoration: line-through;
-  background: var(--color-err-bg);
-  color: var(--color-err-text);
-  border-radius: var(--radius-sm);
-  padding: 0 var(--space-2xs);
-}
 
 .snapshot-reader__added-since {
   margin-top: var(--space-lg);

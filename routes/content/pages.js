@@ -12,8 +12,9 @@ const bookAccess = require('../../db/book-access');
 const { toIntId } = require('../../lib/validate');
 const { resolveChapterBookId } = require('../../lib/content-ownership');
 const { guardBook, sessionEmail } = require('../../lib/acl');
-const { jsonBody, NAME_MAX, _validDeviceId, _logToken, _logStamp, _deviceTokenLabel, _guardPage, _fail, _sendSanitizeFailed } = require('./shared');
+const { jsonBody, NAME_MAX, REVALIDATE_CACHE_CONTROL, _validDeviceId, _logToken, _logStamp, _deviceTokenLabel, _guardPage, _fail, _sendSanitizeFailed } = require('./shared');
 const { htmlToPlainText } = require('../../lib/html-text');
+const { stripActiveContent } = require('../../lib/html-clean');
 const { mergeAgainstServer } = require('../../lib/page-merge');
 const logger = require('../../logger');
 
@@ -53,7 +54,13 @@ function register(router) {
     const pageId = toIntId(req.params.page_id);
     if (!pageId) return res.status(400).json({ error_code: 'INVALID_PAGE_ID' });
     if (_guardPage(req, res, pageId, 'viewer') == null) return;
-    try { res.json(await contentStore.loadPage(pageId, req)); }
+    try {
+      const page = await contentStore.loadPage(pageId, req);
+      // Konditional, damit der SW eine Abweichung billig erkennt und den
+      // offenen Abschnitt nachzieht (siehe shared.js#REVALIDATE_CACHE_CONTROL).
+      res.set('Cache-Control', REVALIDATE_CACHE_CONTROL);
+      res.json(page);
+    }
     catch (e) { _fail(res, e, 'GET /content/pages/:id'); }
   });
 
@@ -111,8 +118,11 @@ function register(router) {
       // den Stand geschrieben hat, gegen den ein späterer Save in 409 läuft.
       // Ohne diese Zeile ist ein Selbst-Konflikt (Antwort im Netz verloren)
       // nicht von einem fremden Schreiber desselben Geräts zu unterscheiden.
+      // `SW` (controlled/uncontrolled): ein Tab ohne SW-Kontrolle liest und
+      // schreibt am Content-Cache vorbei — Spur, wenn ein anderer Tab danach
+      // eine veraltete Ansicht zeigt.
       if (typeof req.body?.html === 'string') {
-        logger.info(`PAGE_SAVE Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, neu ${saved?.updated_at || '-'}${saved?.save_match ? ` (${saved.save_match === 'own' ? 'eigener Vorgaenger-Save' : 'Wiederholung'})` : ''}.`);
+        logger.info(`PAGE_SAVE Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} SW ${_logToken(req.body?.client_sw)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, neu ${saved?.updated_at || '-'}${saved?.save_match ? ` (${saved.save_match === 'own' ? 'eigener Vorgaenger-Save' : 'Wiederholung'})` : ''}.`);
       }
       res.json(saved);
     }
@@ -141,7 +151,7 @@ function register(router) {
         // Stempel gegen welchen Server-Stand lief (sonst nirgends erfasst).
         // Tab + Weg trennen zwei Tabs desselben Browsers bzw. Autosave, Retry
         // und Outbox — die Device-ID allein ist in allen Tabs gleich.
-        logger.info(`PAGE_CONFLICT Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, Server ${conflict.serverUpdatedAt} (Geraet ${conflict.serverEditorDevice || conflict.serverEditorEmail || '-'})${mergeConflicts ? `, Merge: ${mergeConflicts.length} Block-Kollision(en)` : ''}.`);
+        logger.info(`PAGE_CONFLICT Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} SW ${_logToken(req.body?.client_sw)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, Server ${conflict.serverUpdatedAt} (Geraet ${conflict.serverEditorDevice || conflict.serverEditorEmail || '-'})${mergeConflicts ? `, Merge: ${mergeConflicts.length} Block-Kollision(en)` : ''}.`);
         return res.status(409).json({
           error_code: 'PAGE_CONFLICT',
           server_updated_at: conflict.serverUpdatedAt || null,
@@ -211,7 +221,10 @@ function register(router) {
   // GET /content/pages/:page_id/revisions — Liste (ohne body_html).
   // Keyset-Paginierung ueber `before` (created_at der letzten gelieferten
   // Revision) + `before_id` (Tie-Break). `has_more` sagt, ob dahinter noch etwas
-  // liegt, `total` ist die Gesamtzahl fuer die Seite.
+  // liegt, `total` ist die Gesamtzahl fuer die Seite. `older` ist die
+  // Vorgaengerin der aeltesten gelieferten Revision (Meta, nur bei `has_more`),
+  // `pinned` die angehefteten Revisionen der Seite — nur auf der ersten Seite,
+  // weil sie unabhaengig vom Fenster sichtbar bleiben sollen.
   // Why `total`: die Liste zeigt ein Fenster, nicht alles — das `raw`-Bucket der
   // Retention (db/page-revisions.js#pruneTiered) haelt jeden Autosave der
   // letzten 24 h, ein Schreibtag fuellt das Fenster also allein. Ohne `total`
@@ -227,11 +240,19 @@ function register(router) {
     // Cursor nur mit BEIDEN Feldern: ein halber Cursor waere stillschweigend
     // eine Anfrage von vorne und wuerde beim Nachladen Duplikate anhaengen.
     const cursor = before && beforeId ? { before, beforeId } : {};
-    const { revisions, hasMore } = pageRevisions.listForPageKeyset(pageId, { limit, ...cursor });
-    res.json({ revisions, has_more: hasMore, total: pageRevisions.countForPage(pageId) });
+    const { revisions, hasMore, older } = pageRevisions.listForPageKeyset(pageId, { limit, ...cursor });
+    res.json({
+      revisions, has_more: hasMore, older,
+      total: pageRevisions.countForPage(pageId),
+      ...(cursor.before ? {} : { pinned: pageRevisions.listPinned(pageId) }),
+    });
   });
 
-  // GET /content/pages/:page_id/revisions/:rev_id — Voller Body fuer Vorschau.
+  // GET /content/pages/:page_id/revisions/:rev_id — Voller Body fuer Vorschau,
+  // dazu `prev` (Meta der unmittelbaren Vorgaengerin oder null) fuer den
+  // Vergleich, wenn der Client die Vorgaengerin nicht geladen hat.
+  // `stripActiveContent` beim Ausliefern: alte Revisionen stammen teils aus der
+  // Zeit vor dem Sanitizer im Schreibpfad und gehen im Viewer per x-html raus.
   router.get('/pages/:page_id/revisions/:rev_id', async (req, res) => {
     const pageId = toIntId(req.params.page_id);
     const revId = toIntId(req.params.rev_id);
@@ -239,11 +260,15 @@ function register(router) {
     if (_guardPage(req, res, pageId, 'viewer') == null) return;
     const rev = pageRevisions.get(revId);
     if (!rev || rev.page_id !== pageId) return res.status(404).json({ error_code: 'REVISION_NOT_FOUND' });
-    res.json({ revision: rev });
+    res.json({
+      revision: { ...rev, body_html: stripActiveContent(rev.body_html) },
+      prev: pageRevisions.prevOf(rev),
+    });
   });
 
   // POST /content/pages/:page_id/revisions/:rev_id/restore — Body der Revision
-  // wird via Facade als neue Revision (source='main') zurueckgeschrieben.
+  // wird via Facade als neue Revision (source='restore', Summary
+  // `restored from #<rev_id>`) zurueckgeschrieben.
   // Page-Lock + editor-Rolle wie der normale Save-Pfad.
   router.post('/pages/:page_id/revisions/:rev_id/restore', jsonBody, async (req, res) => {
     const pageId = toIntId(req.params.page_id);
@@ -263,7 +288,7 @@ function register(router) {
     try {
       const saved = await contentStore.savePage(
         pageId,
-        { html: rev.body_html, source: 'main', summary: `restored from #${revId}` },
+        { html: rev.body_html, source: 'restore', summary: `restored from #${revId}` },
         req,
       );
       res.json({ ok: true, page: saved, restored_from: revId });
@@ -271,6 +296,29 @@ function register(router) {
       if (e.code === 'EMPTY_BODY') return res.status(400).json({ error_code: 'EMPTY_BODY' });
       if (_sendSanitizeFailed(res, e)) return;
       _fail(res, e, 'POST /content/pages/:id/revisions/:rev/restore');
+    }
+  });
+
+  // PATCH /content/pages/:page_id/revisions/:rev_id — anheften/loesen + Name.
+  // Body: { pinned: bool, label?: string }. Angeheftete Revisionen nimmt die
+  // Retention aus (db/page-revisions.js#pruneTiered). editor-Rolle: das
+  // Anheften entscheidet, was dauerhaft bleibt — fuer alle Mitglieder.
+  router.patch('/pages/:page_id/revisions/:rev_id', jsonBody, async (req, res) => {
+    const pageId = toIntId(req.params.page_id);
+    const revId = toIntId(req.params.rev_id);
+    if (!pageId || !revId) return res.status(400).json({ error_code: 'INVALID_ID' });
+    if (_guardPage(req, res, pageId, 'editor') == null) return;
+    if (typeof req.body?.pinned !== 'boolean') return res.status(400).json({ error_code: 'PINNED_REQUIRED' });
+    const label = req.body.label;
+    if (label != null && typeof label !== 'string') return res.status(400).json({ error_code: 'INVALID_LABEL' });
+    const rev = pageRevisions.get(revId);
+    if (!rev || rev.page_id !== pageId) return res.status(404).json({ error_code: 'REVISION_NOT_FOUND' });
+    try {
+      const updated = pageRevisions.setPin(revId, { pinned: req.body.pinned, label });
+      const { body_html: _omit, ...meta } = updated;
+      res.json({ revision: meta });
+    } catch (e) {
+      _fail(res, e, 'PATCH /content/pages/:id/revisions/:rev');
     }
   });
 

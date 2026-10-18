@@ -54,7 +54,9 @@ const CASES = [
 
   // ── Fassungen ──────────────────────────────────────────────────────────────
   { name: 'revisions', op: 'GET /content/pages/{page_id}/revisions', path: `${p(C.PAGE_MAIN)}/revisions?limit=100`, status: 200,
-    after: (b, st) => { st.revId = b.revisions[b.revisions.length - 1].id; } },
+    // Aeltester eigener Save, nicht der Ausgangsstand (`baseline`), den der
+    // Server vor dem ersten Save der Seed-Seite ablegt.
+    after: (b, st) => { st.revId = b.revisions.filter(r => r.summary !== 'baseline').at(-1).id; } },
   { name: 'revision', op: 'GET /content/pages/{page_id}/revisions/{rev_id}', path: (st) => `${p(C.PAGE_MAIN)}/revisions/${st.revId}`, status: 200 },
   { name: 'revision-restore', op: 'POST /content/pages/{page_id}/revisions/{rev_id}/restore', method: 'POST',
     path: (st) => `${p(C.PAGE_MAIN)}/revisions/${st.revId}/restore`, status: 200, body: () => ({}) },

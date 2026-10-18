@@ -1,9 +1,14 @@
 // Tests fuer page-revision-diff: htmlToPlainText-Normalisierung, parseBlocks
-// und Side-by-Side-Diff-Rendering. diffLib (diffArrays + diffWords) wird gemockt,
-// damit der Test nicht von jsdiff abhaengt.
+// und Side-by-Side-Diff-Rendering. diffLib (diffArrays) wird gemockt, damit der
+// Test nicht von jsdiff abhaengt; der Wort-Diff innerhalb eines Absatzes laeuft
+// ueber diff/word-diff.js und braucht keinen Mock (diffWords nur als Ausweichweg
+// fuer zu grosse Absaetze).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { htmlToPlainText, parseBlocks, renderSideBySide, renderInline } from '../../public/js/page-revision-diff.js';
+// Echtes jsdiff (Server-Dependency) nur fuer die End-zu-End-Faelle unten, deren
+// Aussage am Zusammenspiel von Block-Parse und Diff haengt.
+import * as Diff from 'diff';
 
 function mockDiffLib({ arrays = [], words = [] } = {}) {
   return {
@@ -54,7 +59,7 @@ test('renderSideBySide: gepaarter Change → zwei Zellen (left=del+eq, right=ins
       { value: ' Welt' },
     ],
   });
-  const out = renderSideBySide('a', 'b', lib);
+  const out = renderSideBySide('<p>Hallo alte Welt</p>', '<p>Hallo neue Welt</p>', lib);
   assert.equal(out.unchanged, false);
   // Linke Spalte: del+eq (kein ins)
   assert.match(out.html, /diff-cell--changed diff-cell--left/);
@@ -208,7 +213,7 @@ test('renderInline: gepaarter Change → eine Zeile mit del+ins inline (keine Sp
       { value: ' Welt' },
     ],
   });
-  const out = renderInline('a', 'b', lib);
+  const out = renderInline('<p>Hallo alte Welt</p>', '<p>Hallo neue Welt</p>', lib);
   assert.equal(out.unchanged, false);
   assert.match(out.html, /diff-line--change/);
   assert.match(out.html, /<del class="diff-del">alte<\/del>/);
@@ -262,4 +267,59 @@ test('renderInline: parseBlocks-Miss → Plain-Text-Fallback rendert Change', ()
   assert.equal(out.unchanged, false);
   assert.match(out.html, /<del class="diff-del">alt<\/del>/);
   assert.match(out.html, /<ins class="diff-add">neu<\/ins>/);
+});
+
+test('renderSideBySide: Rand-Whitespace ausserhalb der Marke, Satzzeichen als diff-mark--punct', () => {
+  const lib = mockDiffLib({ arrays: [{ value: ['x'], removed: true }, { value: ['y'], added: true }] });
+  const out = renderSideBySide('<p>neugierig," ich zeige alt</p>', '<p>neugierig,‹ich zeige</p>', lib);
+  assert.match(out.html, /<del class="diff-del diff-mark--punct">&quot;<\/del><span class="diff-eq"> ich zeige <\/span>/);
+  assert.match(out.html, /<ins class="diff-add diff-mark--punct">‹<\/ins>/);
+  assert.match(out.html, / <\/span><del class="diff-del">alt<\/del>/);
+});
+
+test('parseBlocks: nur Blattbloecke — Container verdoppeln keinen Text', () => {
+  const blocks = parseBlocks('<blockquote><p>Zitat eins</p><p>Zitat zwei</p></blockquote><ul><li><p>Punkt</p></li><li>Flach</li></ul>');
+  assert.deepEqual(blocks, [
+    { tag: 'p', text: 'Zitat eins' },
+    { tag: 'p', text: 'Zitat zwei' },
+    { tag: 'p', text: 'Punkt' },
+    { tag: 'li', text: 'Flach' },
+  ]);
+});
+
+test('parseBlocks: Tabellenzellen und Bildunterschriften sind Bloecke', () => {
+  const blocks = parseBlocks('<table><tr><th>Kopf</th><td>Zelle</td></tr></table><figure><img src="a.png"><figcaption>Bildtext</figcaption></figure>');
+  assert.deepEqual(blocks.map(b => b.text), ['Kopf', 'Zelle', 'Bildtext']);
+});
+
+test('parseBlocks: Bilder nur mit imageLabel, in Dokument-Reihenfolge', () => {
+  const html = '<p>Vor <img src="/img/foto%20a.png?x=1"></p><p><img alt="Karte" src="k.png"></p><p>Nach</p>';
+  assert.deepEqual(parseBlocks(html).map(b => b.text), ['Vor', 'Nach']);
+  const withImg = parseBlocks(html, { imageLabel: (n) => `[${n}]` });
+  assert.deepEqual(withImg, [
+    { tag: 'p', text: 'Vor' },
+    { tag: 'img', text: '[foto a.png]' },
+    { tag: 'img', text: '[Karte]' },
+    { tag: 'p', text: 'Nach' },
+  ]);
+});
+
+test('renderSideBySide: Tabellenzelle geaendert → kein «unveraendert»', () => {
+  const a = '<p>Kopf</p><table><tr><td>alt</td></tr></table>';
+  const b = '<p>Kopf</p><table><tr><td>neu</td></tr></table>';
+  const out = renderSideBySide(a, b, Diff);
+  assert.equal(out.unchanged, false);
+  assert.match(out.html, /diff-add[^>]*>neu</);
+});
+
+test('renderSideBySide: eingefuegtes Bild erscheint mit imageLabel', () => {
+  const out = renderSideBySide('<p>A</p>', '<p>A</p><p><img src="x.png"></p>', Diff, { imageLabel: (n) => `Bild ${n}` });
+  assert.equal(out.unchanged, false);
+  assert.match(out.html, /diff-cell--img[\s\S]*Bild x\.png/);
+});
+
+test('renderSideBySide: reine Formatierung → unchanged (Tag-Grenze vor Satzzeichen)', () => {
+  const out = renderSideBySide('<p>Text Absatz.</p>', '<p>Text <strong>Absatz</strong>.</p>', Diff);
+  assert.equal(out.unchanged, true);
+  assert.equal(renderInline('<p>Text Absatz.</p>', '<p>Text <strong>Absatz</strong>.</p>', Diff).unchanged, true);
 });

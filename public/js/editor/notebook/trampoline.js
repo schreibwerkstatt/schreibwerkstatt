@@ -43,11 +43,16 @@ export const notebookTrampoline = {
   // Banner rendert im Root-Scope, bevor die Sub gemountet ist → '' statt undefined.
   editConflictBannerText() { return card()?.editConflictBannerText() ?? ''; },
   // Konflikt-Auflösungs-Modal (partials/conflict-resolution.html) — Root-Scope.
-  conflictResolutionText(variant) { return card()?.conflictResolutionText(variant) ?? ''; },
-  resolveBlock(bid, choice) { card()?.resolveBlock(bid, choice); },
-  resolveAllConflicts(choice) { card()?.resolveAllConflicts(choice); },
-  submitConflictResolution() { return card()?.submitConflictResolution(); },
-  cancelConflictResolution() { return card()?.cancelConflictResolution(); },
+  // `conflictUi*` ist die Schnittstelle der geteilten Vorlage
+  // partials/conflict-blocks.html; Pendant im Bucheditor:
+  // cards/book-editor/conflict.js.
+  conflictUiText(variant) { return card()?.conflictResolutionText(variant) ?? ''; },
+  conflictUiChoice(bid) { return this.conflictResolution?.decisions[bid] || 'local'; },
+  conflictUiPick(bid, choice) { card()?.resolveBlock(bid, choice); },
+  conflictUiPickAll(choice) { card()?.resolveAllConflicts(choice); },
+  conflictUiSubmit() { return card()?.submitConflictResolution(); },
+  conflictUiCancel() { return card()?.cancelConflictResolution(); },
+  conflictUiBusy() { return !!this.editSaving; },
 
   // Half-public — von Templates/anderen Modulen (synonyme, find, focus, toolbar,
   // app-view, book-editor-card) erwartet.

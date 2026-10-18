@@ -2,13 +2,13 @@
   "operation": "POST /content/pages/{page_id}/revisions/{rev_id}/restore",
   "request": {
     "method": "POST",
-    "path": "/content/pages/70001/revisions/1/restore",
+    "path": "/content/pages/70001/revisions/2/restore",
     "body": {}
   },
   "status": 200,
   "response": {
     "ok": true,
-    "restored_from": 1,
+    "restored_from": 2,
     "page": {
       "id": 70001,
       "book_id": 7001,

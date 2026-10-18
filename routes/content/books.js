@@ -21,30 +21,9 @@ const { localIsoDaysAgo } = require('../../lib/local-date');
 const { createOwnedBook, bookNameError, BOOK_NAME_MAX } = require('../../lib/book-create');
 const { listBookListMeta } = require('../../db/book-list-meta');
 const logger = require('../../logger');
-const { jsonBody, _validDeviceId, _fail } = require('./shared');
+const { jsonBody, _validDeviceId, _fail, REVALIDATE_CACHE_CONTROL } = require('./shared');
 
 const SYNC_PAGE_LIMIT = 200;
-
-// Die beiden Lese-Endpunkte, aus denen die Sidebar entsteht (Buchliste + Baum),
-// antworten konditional.
-//
-// WARUM: Der Service Worker liefert sie als Stale-While-Revalidate aus und
-// vergleicht die Revalidierung mit dem ausgelieferten Cache-Stand, um einen
-// leisen Nachzug auszuloesen (public/sw.js#_samePayload). Mit ETag entscheidet
-// dort ein Header-Vergleich statt eines Textvergleichs ueber den ganzen Body —
-// und im Regelfall (Buch unveraendert) beantwortet schon der HTTP-Cache des
-// Browsers die Revalidierung mit 304, also ohne ein einziges Byte Nutzlast.
-// Der ETag kommt von Express selbst (`etag: true`, schwach ueber den Body),
-// ebenso der 304 — hier fehlt nur die Erlaubnis, die Antwort ueberhaupt zu
-// speichern.
-//
-// `max-age=0, must-revalidate` und NICHT `no-cache`: beides zwingt zur
-// Revalidierung, aber `no-cache` liest der SW als „diese Antwort darf nicht
-// stale ausgeliefert werden" (_forbidsStale) und schaltet den Pfad auf
-// Netz-zuerst um. Das waere das Gegenteil des Gewollten — die Sidebar soll
-// sofort stehen und offline ueberhaupt.
-// `private`, weil die Antwort user-skopiert ist (Rolle, Regal-Zustand).
-const TREE_CACHE_CONTROL = 'private, max-age=0, must-revalidate';
 
 function register(router) {
   // GET /content/books — Liste der fuer den User per book_access sichtbaren
@@ -90,7 +69,7 @@ function register(router) {
           // wieder das falsche Startbuch. Sie kommt aus dem ungecachten
           // `GET /me/books/last-opened`.
         }));
-      res.set('Cache-Control', TREE_CACHE_CONTROL); // siehe TREE_CACHE_CONTROL
+      res.set('Cache-Control', REVALIDATE_CACHE_CONTROL); // siehe shared.js#REVALIDATE_CACHE_CONTROL
       res.json(visible);
     } catch (e) { _fail(res, e, 'GET /content/books'); }
   });
@@ -106,7 +85,7 @@ function register(router) {
   // GET /content/books/:book_id/tree — Hierarchie als `{ chapters, topPages }`.
   router.get('/books/:book_id/tree', aclParamGuard('viewer'), async (req, res) => {
     try {
-      res.set('Cache-Control', TREE_CACHE_CONTROL); // siehe TREE_CACHE_CONTROL
+      res.set('Cache-Control', REVALIDATE_CACHE_CONTROL); // siehe shared.js#REVALIDATE_CACHE_CONTROL
       res.json(await contentStore.bookTree(req.bookId, req));
     } catch (e) { _fail(res, e, 'GET /content/books/:id/tree'); }
   });

@@ -106,6 +106,42 @@ test('savePage dispatcht invalidate-content an SW (inkl. revisions sub-path bei 
   assert.deepEqual(postedMessages[0], { type: 'invalidate-content', paths: ['pages/7', 'pages/7/revisions'] });
 });
 
+// Harter Reload / erster Besuch: der Tab ist nicht vom SW kontrolliert (kein
+// clients.claim()). Der Bust muss trotzdem den Cache erreichen — sonst bekommt
+// der nächste kontrollierte Tab den Stand vor all den Saves dieses Tabs.
+function uncontrolledNavigator(active) {
+  globalThis.navigator.serviceWorker = {
+    controller: null,
+    getRegistration: async () => (active ? { active } : undefined),
+  };
+}
+
+test('savePage ohne SW-Controller schickt invalidate-content an registration.active', async () => {
+  const toActive = [];
+  uncontrolledNavigator({ postMessage(msg) { toActive.push(msg); } });
+  mockFetch(() => ok({ id: 7 }));
+  await contentRepo.savePage(7, { html: '<p>x</p>' });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(toActive, [{ type: 'invalidate-content', paths: ['pages/7', 'pages/7/revisions'] }]);
+});
+
+test('savePage ohne Registrierung bleibt still (kein Throw)', async () => {
+  uncontrolledNavigator(null);
+  mockFetch(() => ok({ id: 7 }));
+  await contentRepo.savePage(7, { html: '<p>x</p>' });
+  await new Promise((r) => setTimeout(r, 0));
+});
+
+test('savePage meldet die SW-Kontrolle des Tabs als client_sw', async () => {
+  let calls = mockFetch(() => ok({ id: 7 }));
+  await contentRepo.savePage(7, { html: '<p>x</p>' });
+  assert.equal(JSON.parse(calls[0].opts.body).client_sw, 'controlled');
+  uncontrolledNavigator(null);
+  calls = mockFetch(() => ok({ id: 7 }));
+  await contentRepo.savePage(7, { html: '<p>y</p>' });
+  assert.equal(JSON.parse(calls[0].opts.body).client_sw, 'uncontrolled');
+});
+
 test('savePage ohne html invalidiert nur die Seite, nicht den Revisions-Pfad', async () => {
   mockFetch(() => ok({ id: 7 }));
   await contentRepo.savePage(7, { name: 'rename only' });

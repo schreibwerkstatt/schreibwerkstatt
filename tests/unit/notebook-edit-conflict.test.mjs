@@ -513,12 +513,13 @@ globalThis.sessionStorage = globalThis.sessionStorage || {
   removeItem: (k) => { ssMem.delete(k); },
 };
 const { recordSentSave, isOwnSentSave } = await import('../../public/js/editor/notebook/sent-saves.js');
+const SS_BASE = '2026-01-01T00:00:00Z';
 
 test('sent-saves: Server-Normalform (&#160;) trifft den gesendeten Editor-Stand', () => {
-  recordSentSave(77, '<p data-bid="a">Hallo&nbsp;Welt</p>');
-  assert.equal(isOwnSentSave(77, '<p data-bid="a">Hallo&#160;Welt</p>'), true);
-  assert.equal(isOwnSentSave(77, '<p data-bid="a">Hallo Welt!</p>'), false);
-  assert.equal(isOwnSentSave(78, '<p data-bid="a">Hallo&#160;Welt</p>'), false, 'pro Seite');
+  recordSentSave(77, '<p data-bid="a">Hallo&nbsp;Welt</p>', SS_BASE);
+  assert.equal(isOwnSentSave(77, '<p data-bid="a">Hallo&#160;Welt</p>', [SS_BASE]), true);
+  assert.equal(isOwnSentSave(77, '<p data-bid="a">Hallo Welt!</p>', [SS_BASE]), false);
+  assert.equal(isOwnSentSave(78, '<p data-bid="a">Hallo&#160;Welt</p>', [SS_BASE]), false, 'pro Seite');
 });
 
 // Der Abdruck muss die echte Server-Bereinigung überstehen (cleanPageHtml +
@@ -549,16 +550,16 @@ const SERVER_CLEAN_CASES = {
   dupBid: '<p data-bid="a">Eins</p><p data-bid="a">Zwei</p>',
 };
 test('sent-saves: anderer Text unter denselben Block-IDs ist kein eigener Stand', () => {
-  recordSentSave(79, '<p data-bid="a">Anfang</p><p data-bid="b">Mitte</p>');
-  assert.equal(isOwnSentSave(79, '<p data-bid="x">Anfang</p><p data-bid="y">Mitte</p>'), true, 'nur IDs anders');
-  assert.equal(isOwnSentSave(79, '<p data-bid="a">Anfang</p><p data-bid="b">Mitte, von woanders</p>'), false);
+  recordSentSave(79, '<p data-bid="a">Anfang</p><p data-bid="b">Mitte</p>', SS_BASE);
+  assert.equal(isOwnSentSave(79, '<p data-bid="x">Anfang</p><p data-bid="y">Mitte</p>', [SS_BASE]), true, 'nur IDs anders');
+  assert.equal(isOwnSentSave(79, '<p data-bid="a">Anfang</p><p data-bid="b">Mitte, von woanders</p>', [SS_BASE]), false);
 });
 
 for (const [name, sent] of Object.entries(SERVER_CLEAN_CASES)) {
   test(`sent-saves: übersteht die Server-Bereinigung (${name})`, () => {
     const pageId = `clean-${name}`;
-    recordSentSave(pageId, sent);
-    assert.equal(isOwnSentSave(pageId, ensureBlockIds(cleanPageHtml(sent))), true, ensureBlockIds(cleanPageHtml(sent)));
+    recordSentSave(pageId, sent, SS_BASE);
+    assert.equal(isOwnSentSave(pageId, ensureBlockIds(cleanPageHtml(sent)), [SS_BASE]), true, ensureBlockIds(cleanPageHtml(sent)));
   });
 }
 
@@ -582,7 +583,7 @@ test('quickSave: 409 gegen eigenen verspäteten Save → lokaler Stand auf Serve
   contentRepo.savePage = async (id, payload) => {
     puts.push(payload);
     // Der ältere Zwischenstand war schon abgeschickt, seine Antwort ging verloren.
-    if (puts.length === 1) { recordSentSave(81, older); throw conflict409(); }
+    if (puts.length === 1) { recordSentSave(81, older, '2026-01-01T00:00:00Z'); throw conflict409(); }
     return { updated_at: '2026-03-03T00:00:00Z' };
   };
   await ctx.quickSave();
@@ -617,10 +618,86 @@ test('_reconcileDraftWithServer: Server-Stand = eigener Zwischenstand → Draft 
   const app = setDraftApp();
   app.currentPage.id = 83;
   app.originalHtml = '<p data-bid="a">Anfang</p><p data-bid="b">Mitte eins</p>';
-  recordSentSave(83, app.originalHtml);
+  recordSentSave(83, app.originalHtml, '2026-01-01T00:00:00Z');
   const draft = {
     html: '<p data-bid="a">Anfang</p><p data-bid="b">Mitte eins zwei</p>',
     originalHtml: draftBase, originalUpdatedAt: '2026-01-01T00:00:00Z',
   };
   assert.deepEqual(notebookEditMethods._reconcileDraftWithServer(draft), { html: draft.html });
+});
+
+// --- Eigener Save nur als Vorfahre, wenn die Basis passt -----------------------
+// Die Fingerabdrücke leben 24 h im sessionStorage und überstehen ein Neuladen.
+// Ein Stand, den dieser Tab am Morgen gegen eine andere Basis geschickt hat,
+// ist kein Vorfahre einer Fassung, die auf einem älteren Stand aufbaut — die
+// Abkürzung darf ihn nicht ungemergt überschreiben.
+
+test('sent-saves: gleicher Abdruck, andere Basis → kein eigener Stand', () => {
+  recordSentSave(90, '<p data-bid="a">Morgen</p>', '2026-10-18T09:27:00Z');
+  assert.equal(isOwnSentSave(90, '<p data-bid="a">Morgen</p>', ['2026-10-18T09:27:00Z']), true);
+  assert.equal(isOwnSentSave(90, '<p data-bid="a">Morgen</p>', ['2026-10-16T14:25:00Z']), false);
+  assert.equal(isOwnSentSave(90, '<p data-bid="a">Morgen</p>', []), false, 'ohne lokale Basis nie eigen');
+});
+
+test('sent-saves: Save ohne Basis wird nicht vermerkt', () => {
+  recordSentSave(91, '<p data-bid="a">ohne Stempel</p>', null);
+  assert.equal(isOwnSentSave(91, '<p data-bid="a">ohne Stempel</p>', [null, undefined]), false);
+});
+
+test('submitConflictResolution: 409 gegen eigenen Save auf anderer Basis → gemergt, nicht überschrieben', async () => {
+  const T16 = '2026-10-16T14:25:00Z';
+  const T18a = '2026-10-18T09:27:00Z';
+  const T18b = '2026-10-18T09:29:00Z';
+  const stale = '<p data-bid="a">Anfang</p><p data-bid="n">Notiz</p>';
+  const morning = '<p data-bid="a">Anfang</p><p data-bid="m1">Morgen eins</p><p data-bid="m2">Morgen zwei</p>';
+  const app = setConflictApp({
+    originalHtml: stale,
+    currentPage: { id: 92, name: 'S', updated_at: T16 },
+    conflictResolution: {
+      pageId: 92, source: 'main',
+      merged: [
+        { bid: 'a', html: '<p data-bid="a">Anfang</p>' },
+        { bid: 'n', html: '<p data-bid="n">Notiz</p>' },
+        { bid: 'x', html: '<p data-bid="x">Neu am Abend</p>' },
+      ],
+      conflicts: [], decisions: {}, remoteUpdatedAt: T16,
+    },
+  });
+  // Dieser Tab hat den Morgenstand selbst geschickt — gegen eine andere Basis.
+  recordSentSave(92, morning, T18a);
+  const el = document.createElement('div');
+  el.innerHTML = stale;
+  const ctx = mergeCtx(el);
+  mockLoadPage(async () => ({ updated_at: T18b, html: morning }));
+  const puts = [];
+  contentRepo.savePage = async (id, payload) => {
+    puts.push(payload);
+    if (puts.length === 1) throw conflict409();
+    return { updated_at: '2026-10-18T16:42:52Z', html: payload.html };
+  };
+  await ctx.submitConflictResolution();
+  assert.equal(puts.length, 2);
+  assert.equal(puts[1].save_reason, 'remerge', 'kein own-echo');
+  assert.match(puts[1].html, /Morgen eins/);
+  assert.match(puts[1].html, /Morgen zwei/);
+  assert.match(puts[1].html, /Neu am Abend/);
+  assert.equal(puts[1].expected_updated_at, T18b);
+  assert.equal(app.conflictResolution, null);
+});
+
+test('_reconcileDraftWithServer: Ansicht älter als Draft-Basis → kein Merge, Draft-Basis wird Basis', () => {
+  const app = setDraftApp();
+  app.currentPage.id = 93;
+  // Leseansicht aus dem SW-Cache: Stand vom 16.10., der Draft baut auf 18.10. auf.
+  app.currentPage.updated_at = '2026-10-16T14:25:00Z';
+  app.originalHtml = '<p data-bid="a">Anfang</p><p data-bid="n">Notiz</p>';
+  const draftBaseHtml = '<p data-bid="a">Anfang</p><p data-bid="m1">Morgen eins</p>';
+  const draft = {
+    html: '<p data-bid="a">Anfang</p><p data-bid="m1">Morgen eins</p><p data-bid="x">ungespeichert</p>',
+    originalHtml: draftBaseHtml, originalUpdatedAt: '2026-10-18T09:29:00Z',
+  };
+  const r = notebookEditMethods._reconcileDraftWithServer(draft);
+  assert.equal(r.html, draft.html, 'Draft unverändert, nichts vom Morgen fällt heraus');
+  assert.equal(r.conflict, undefined);
+  assert.deepEqual(r.rebase, { html: draftBaseHtml, updatedAt: '2026-10-18T09:29:00Z' });
 });

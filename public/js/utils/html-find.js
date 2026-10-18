@@ -327,7 +327,7 @@ function _withOrphans(removed, inserted) {
   return orphanOpens.join('') + inserted + orphanCloses.join('');
 }
 
-// Token wie im Wort-Diff der Vorschlagskarten (chat/word-diff.js): Wörter (mit
+// Token wie im Wort-Diff der Vorschlagskarten (diff/word-diff.js): Wörter (mit
 // Bindestrich/Apostroph im Wort), Whitespace-Läufe, einzelne Satzzeichen.
 const _TOKEN_RE = /[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*|\s+|[^\s\p{L}\p{N}]/gu;
 const _DIFF_MAX_CELLS = 250000;

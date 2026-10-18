@@ -247,3 +247,163 @@ test('Nach destroy() wird ein fehlgeschlagener Save nicht wiederholt', async ({ 
   await page.waitForTimeout(800);
   expect(await page.evaluate(() => window.__calls)).toBe(afterDestroy);
 });
+
+// ── replaceContent: Server-Stand desselben Abschnitts einspielen ────────────
+// 40 Absätze mit data-bid (b0…b39), damit der Container scrollt und der Caret
+// eine stabile Block-Adresse hat.
+function bidHtml(prefix = '') {
+  let h = prefix;
+  for (let i = 0; i < 40; i++) {
+    h += `<p data-bid="b${i}">Absatz ${i}: Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.</p>`;
+  }
+  return h;
+}
+
+async function loadBidPage(page) {
+  await page.evaluate(async (html) => {
+    await window.__standalone.setPage({ id: 42, name: 'Testseite', html });
+  }, bidHtml());
+  await page.waitForFunction(() => window.__standalone.controller._focusState === 'active');
+}
+
+// Caret in Block `bid` an Text-Offset `offset` setzen.
+async function caretAt(page, bid, offset) {
+  await page.evaluate(({ bid, offset }) => {
+    const c = document.querySelector('.focus-editor__content');
+    const t = c.querySelector(`[data-bid="${bid}"]`).firstChild;
+    c.focus({ preventScroll: true });
+    const r = document.createRange();
+    r.setStart(t, offset); r.collapse(true);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }, { bid, offset });
+}
+
+function caretInfo(page) {
+  return page.evaluate(() => {
+    const c = document.querySelector('.focus-editor__content');
+    const sel = window.getSelection();
+    const n = sel.anchorNode;
+    const el = n.nodeType === 1 ? n : n.parentElement;
+    let block = el; while (block && block.parentElement !== c) block = block.parentElement;
+    const r = document.createRange();
+    r.selectNodeContents(block); r.setEnd(n, sel.anchorOffset);
+    return { bid: block.dataset.bid || null, offset: r.toString().length, isLast: block === c.lastElementChild,
+      text: block.textContent };
+  });
+}
+
+test('replaceContent: Caret bleibt im Block, kein Save, kein Auto-Slot, Undo bleibt', async ({ page }) => {
+  await loadBidPage(page);
+  await caretAt(page, 'b20', 10);
+  await page.keyboard.type('X');                       // Undo-Schritt vor dem Merge
+  await page.evaluate(() => window.__standalone.save());
+  await page.evaluate(() => { window.__saveLog.length = 0; });
+  const before = await caretInfo(page);
+  expect(before).toMatchObject({ bid: 'b20', offset: 11 });
+
+  // Gemergter Server-Stand: fremder Block oben + eigene Eingabe (X) drin.
+  const ok = await page.evaluate(() => {
+    const c = document.querySelector('.focus-editor__content');
+    const own = [...c.children].filter(el => el.dataset.bid).map(el => el.outerHTML.replace(/ class="[^"]*"/, '')).join('');
+    return window.__standalone.replaceContent('<p data-bid="fremd">FREMDER BLOCK</p>' + own);
+  });
+  expect(ok).toBe(true);
+  const after = await caretInfo(page);
+  expect(after).toMatchObject({ bid: 'b20', offset: 11 });
+  const state = await page.evaluate(() => {
+    const c = document.querySelector('.focus-editor__content');
+    return {
+      first: c.firstElementChild.textContent,
+      last: c.lastElementChild.dataset.bid,
+      dirty: window.__standalone.host.editDirty,
+      canUndo: window.__standalone.canUndo(),
+      active: c.querySelector('.focus-paragraph-active')?.dataset.bid,
+    };
+  });
+  expect(state.first).toBe('FREMDER BLOCK');
+  expect(state.last).toBe('b39');                      // kein Auto-Slot angehängt
+  expect(state.dirty).toBe(false);
+  expect(state.canUndo).toBe(true);
+  expect(state.active).toBe('b20');
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => window.__saveLog.length)).toBe(0);
+
+  // Undo nimmt genau den Tausch zurück, das getippte X bleibt.
+  await page.evaluate(() => window.__standalone.undo());
+  const undone = await page.evaluate(() => document.querySelector('.focus-editor__content').innerHTML);
+  expect(undone).not.toContain('FREMDER BLOCK');
+  expect(undone).toContain('Absatz 20:X Lorem');
+});
+
+test('replaceContent: Caret im letzten Block springt nicht ans Ende', async ({ page }) => {
+  await loadBidPage(page);
+  await caretAt(page, 'b39', 5);
+  const ok = await page.evaluate((html) => window.__standalone.replaceContent(html), bidHtml('<p data-bid="fremd">FREMD</p>'));
+  expect(ok).toBe(true);
+  expect(await caretInfo(page)).toMatchObject({ bid: 'b39', offset: 5, isLast: true });
+});
+
+test('replaceContent: Caret im leeren Schluss-Absatz bleibt dort', async ({ page }) => {
+  await loadBidPage(page);
+  // setPage hat den Auto-Slot angelegt und den Caret hineingesetzt.
+  expect(await caretInfo(page)).toMatchObject({ bid: null, isLast: true, text: '' });
+  const ok = await page.evaluate((html) => window.__standalone.replaceContent(html), bidHtml('<p data-bid="fremd">FREMD</p>'));
+  expect(ok).toBe(true);
+  expect(await caretInfo(page)).toMatchObject({ bid: null, isLast: true, text: '' });
+  expect(await page.evaluate(() => document.querySelector('.focus-editor__content').lastElementChild.previousElementSibling.dataset.bid)).toBe('b39');
+});
+
+test('replaceContent: Caret-Zeile bleibt an ihrer Bildschirmposition', async ({ page }) => {
+  await loadBidPage(page);
+  await page.waitForTimeout(300);                     // Eintritts-Scroll abwarten
+  // Caret per Klick in eine Zeile NEBEN der Schreiblinie: ein Klick recentert
+  // nicht, die Zeile bleibt, wo sie ist — und muss es nach dem Tausch auch.
+  await page.evaluate(() => {
+    document.querySelector('[data-bid="b5"]').scrollIntoView({ block: 'start' });
+    document.querySelector('.focus-editor__content')
+      .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse' }));
+  });
+  await caretAt(page, 'b5', 10);
+  await page.waitForTimeout(300);
+  const top = () => page.evaluate(() => window.getSelection().getRangeAt(0).getClientRects()[0].top);
+  const before = await top();
+  let foreign = '';
+  for (let i = 0; i < 8; i++) foreign += `<p data-bid="f${i}">Fremder Absatz ${i} mit etwas Text, damit er Höhe hat.</p>`;
+  await page.evaluate((html) => window.__standalone.replaceContent(html), bidHtml(foreign));
+  expect(Math.abs((await top()) - before)).toBeLessThan(3);
+  await page.waitForTimeout(300);                     // auch kein Recenter danach
+  expect(Math.abs((await top()) - before)).toBeLessThan(3);
+});
+
+test('replaceContent lehnt ab, wenn seit dem gesendeten Stand weitergeschrieben wurde', async ({ page }) => {
+  await loadBidPage(page);
+  await caretAt(page, 'b5', 3);
+  await page.keyboard.type('NEU');
+  const ok = await page.evaluate((html) => window.__standalone.replaceContent(html), bidHtml('<p data-bid="fremd">FREMD</p>'));
+  expect(ok).toBe(false);
+  const html = await page.evaluate(() => document.querySelector('.focus-editor__content').innerHTML);
+  expect(html).toContain('NEU');
+  expect(html).not.toContain('FREMD');
+});
+
+test('replaceContent während savePage: der gesendete Stand überschreibt originalHtml nicht', async ({ page }) => {
+  await loadBidPage(page);
+  await caretAt(page, 'b5', 3);
+  await page.keyboard.type('NEU');
+  // Schale pusht in savePage und spielt die Merge-Antwort ein, bevor savePage auflöst.
+  await page.evaluate(() => {
+    window.__bridge.savePage = async (p) => {
+      window.__replaced = window.__standalone.replaceContent('<p data-bid="fremd">FREMD</p>' + p.html);
+    };
+  });
+  await page.evaluate(() => window.__standalone.save());
+  const r = await page.evaluate(() => ({
+    replaced: window.__replaced,
+    original: window.__standalone.host.originalHtml,
+    dirty: window.__standalone.host.editDirty,
+  }));
+  expect(r.replaced).toBe(true);
+  expect(r.original).toContain('FREMD');
+  expect(r.original).toContain('NEU');
+  expect(r.dirty).toBe(false);
+});

@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Schreibwerkstatt — Client-Vertrag (macOS, Android)",
-    "version": "api 1 · editorApi 1",
+    "version": "api 2 · editorApi 1",
     "description": "Die REST-Fläche, die die nativen Clients nutzen. Regeln, Versionen und Ablauf: contract/README.md. Antworten dürfen Felder tragen, die hier nicht stehen — ein Client ignoriert sie.",
-    "x-api": 1,
+    "x-api": 2,
     "x-editor-api": 1
   },
   "components": {
@@ -680,7 +680,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "focus | main | book | chat-apply | lektorat-apply | import | conflict | macapp | split | restore. Unbekannter Wert → roh anzeigen."
           },
           "user_email": {
             "type": [
@@ -704,7 +705,19 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "`baseline` = Stand vor dem ersten Save, `restored from #<id>`, `split → #<id>` / `split from #<id>`, `before split`."
+          },
+          "pinned": {
+            "type": "integer",
+            "description": "0/1: angeheftet, von der Retention ausgenommen."
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Name einer angehefteten Revision."
           },
           "body_html": {
             "type": "string",
@@ -731,6 +744,24 @@
           },
           "total": {
             "type": "integer"
+          },
+          "older": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Revision"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Vorgängerin der ältesten gelieferten Revision (nur bei `has_more`), ohne `body_html`."
+          },
+          "pinned": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Revision"
+            },
+            "description": "Angeheftete Revisionen der Seite, nur in der Antwort ohne Cursor."
           }
         },
         "required": [
@@ -742,6 +773,17 @@
         "properties": {
           "revision": {
             "$ref": "#/components/schemas/Revision"
+          },
+          "prev": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Revision"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Meta der unmittelbaren Vorgängerin (ohne `body_html`), null bei der ältesten."
           }
         },
         "required": [

@@ -106,7 +106,7 @@ Vollständiges Inventar via `ls`/`find` — hier nur Einstiege und Cluster, dami
   - Feature-eigene Submodul-Cluster (Facade-File + gleichnamiger Subfolder): `book-overview.js` + `book-overview/`, `figur-werkstatt.js` + `figur-werkstatt/`, `graph.js` + `graph/`, `cards/ereignisse-card.js` + `cards/ereignisse/` (`date`, `subtyp`, `band`, `model` — reine Module, von der Karte re-exportiert).
   - Weitere Cluster: `js/chat/`, `js/admin/`, `js/api/`, `js/i18n/`, `js/repo/`.
   - `js/prompts.js` Facade; `js/prompts/` Submodule pro Job-Typ (state, schema-utils, blocks, core, lektorat, review, komplett, chat, synonym, finetune, figur-werkstatt).
-  - Cross-cutting Top-Level: `utils.js`, `lazy-libs.js` (vis-network/Chart.js on-demand), `features-usage.js`, `user-settings.js`, `num-input.js`, `page-revision-diff.js`, `theme-init.js`, `plausible-init.js`, `tooltip.js`, `fullscreen.js`, `register.js`.
+  - Cross-cutting Top-Level: `utils.js`, `lazy-libs.js` (vis-network/Chart.js on-demand), `features-usage.js`, `user-settings.js`, `num-input.js`, `page-revision-diff.js`, `diff/` (geteilter Diff-Kern: `word-diff.js`, `diff-parts.js` Markierung, `html-blocks.js` Text-Extraktion — für Historie, Fassungen, Kommentar-Leisten, Konflikt-Auflösung und Chat-Vorschläge), `theme-init.js`, `plausible-init.js`, `tooltip.js`, `fullscreen.js`, `register.js`.
 
 ## File-Limits / Modularitaet
 

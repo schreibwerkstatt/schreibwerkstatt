@@ -34,7 +34,7 @@ test('Split-Revision: Badge + Verweis auf die andere Hälfte, Klick springt dort
       { id: 1, created_at: now, source: 'main', summary: 'before split', chars: 20 },
     ];
     comp.total = 3;
-    comp.open = true;
+    comp.listOpen = true;
   }, { other });
 
   const rows = page.locator('.page-revisions-list .history-item--clickable');
@@ -73,7 +73,7 @@ test('Split-Revision: Enter auf dem Verweis springt, öffnet keine Revisionsansi
     comp.openViewer = async () => { window.__viewerOpened++; };
     comp.revisions = [{ id: 3, created_at: new Date().toISOString(), source: 'split', summary: `split → #${other}`, chars: 10 }];
     comp.total = 1;
-    comp.open = true;
+    comp.listOpen = true;
   }, { other });
   const ref = page.locator('.page-revisions-list .revision-split .entity-ref');
   // x-entity-ref löst den Namen asynchron auf; bis dahin ist der Knopf disabled

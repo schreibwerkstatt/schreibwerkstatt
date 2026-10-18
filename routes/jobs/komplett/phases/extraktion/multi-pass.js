@@ -386,7 +386,7 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
       .filter(({ r }) => r.status === 'rejected')
       .map(({ ct, r }) => ({ name: ct.chunk.name, message: r.reason?.message || 'unbekannt', logText: i18nErrText(r.reason) }));
     const details = failedInfo.map(f => `${f.name}: ${f.logText}`).join('; ');
-    const SOFT = new Set(['job.error.aiTruncated', 'job.error.extractFieldMissing', 'job.error.aiRefusal']);
+    const SOFT = new Set(['job.error.aiTruncated', 'job.error.extractFieldMissing', 'job.error.aiRefusal', 'job.error.aiEmpty']);
     const onlyTruncation = failedInfo.every(f => SOFT.has(f.message));
     const someSucceeded = (settled.length - failedChunks.length) > 0;
     // Truncation einzelner Chunks ist nicht-fatal, SOLANGE mindestens ein Chunk

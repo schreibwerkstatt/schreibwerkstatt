@@ -1,8 +1,8 @@
-// Wort-Diff der Seiten-Chat-Vorschlagskarten (public/js/chat/word-diff.js) und
+// Wort-Diff der Seiten-Chat-Vorschlagskarten (public/js/diff/word-diff.js) und
 // Auswahl der Inline-Marken (public/js/chat/page-chat-marks.js#computeChatMarks).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { wordDiff, tokenize } from '../../public/js/chat/word-diff.js';
+import { wordDiff, tokenize } from '../../public/js/diff/word-diff.js';
 import { computeChatMarks } from '../../public/js/chat/page-chat-marks.js';
 
 const join = (parts, types) => parts.filter(p => types.includes(p.t)).map(p => p.v).join('');

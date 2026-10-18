@@ -2,19 +2,32 @@
 // Lebt unter dem Editor parallel zur
 // Lektorat-Verlaufsleiste (pageHistoryCard). Read aus
 // GET /content/pages/:id/revisions, Voll-Body aus .../:rev_id, Restore via
-// POST .../restore. Viewer ist natives <dialog>: Tabs "Inhalt | Vergleich",
-// Diff-Lib lazy.
+// POST .../restore, Anheften via PATCH .../:rev_id. Viewer (natives <dialog>)
+// in ./page-revisions/viewer.js.
+//
+// Liste: angeheftete Revisionen oben (unabhaengig vom Fenster), darunter die
+// Geschichte, Autosave-Serien zu Sitzungen gebuendelt (page-revisions-groups.js)
+// und nach Quelle/Person filterbar. Filter und Gruppen wirken nur auf die
+// Anzeige — Vorgaengerin, Zeichen-Delta und ‹/› im Viewer rechnen immer gegen
+// die vollstaendige Liste, sonst waere «Stand davor» eines gefilterten Eintrags
+// der Stand eines anderen Users.
 
 import { fetchJson, numberFormat } from '../utils.js';
 import { contentRepo } from '../repo/content.js';
-import { loadDiff } from '../lazy-libs.js';
-import { renderSideBySide } from '../page-revision-diff.js';
 import { EVT } from '../events.js';
+import { memoMethods } from './card-memo.js';
+import { groupRevisions, summaryInfo } from '../page-revisions-groups.js';
+import { viewerState, viewerMethods } from './page-revisions/viewer.js';
 
 export function registerPageRevisionsCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('pageRevisionsCard', () => ({
     revisions: [],
+    // Angeheftete Revisionen der Seite (Server liefert sie mit der ersten Seite).
+    pinnedRevs: [],
+    // Vorgaengerin der aeltesten geladenen Revision (Server: `older`) — damit
+    // Delta, Vergleich und «Stand davor» auch am Fensterrand stimmen.
+    older: null,
     // `total` = Gesamtzahl auf dem Server, `revisions` nur das geladene Fenster.
     // Beides auseinanderzuhalten ist der Kern dieser Karte: das `raw`-Bucket der
     // Retention haelt jeden Autosave der letzten 24 h, ein Schreibtag fuellt das
@@ -23,21 +36,24 @@ export function registerPageRevisionsCard() {
     total: 0,
     hasMore: false,
     loadingMore: false,
-    open: false,
+    // Liste aufgeklappt. Nicht `open`: das Feld koppelt per x-model an
+    // `collapsible`, und auf dessen Element loest `open` auf die eigene Variable
+    // des Collapsible auf — die Bindung liefe ins Leere.
+    listOpen: false,
     loading: false,
     restoringId: null,
+    pinningId: null,
+    filterSource: '',
+    filterUser: '',
+    // Aufgeklappte Sitzungen, key = id der Kopfzeile. Wird bei jedem Toggle neu
+    // zugewiesen (Memo-Deps vergleichen per Referenz).
+    expanded: {},
     _pageId: null,
+    // Re-Entry-Guard: Antworten eines frueheren Seitenwechsels verwerfen.
+    _loadSeq: 0,
+    _memos: {},
 
-    // Viewer-State (Inhalt-/Vergleichs-Modal).
-    viewerOpen: false,
-    viewerRev: null,
-    viewerBody: '',
-    viewerMode: 'content',     // 'content' | 'diff'
-    viewerLoading: false,
-    viewerError: '',
-    viewerDiffHtml: '',
-    viewerDiffUnchanged: false,
-    viewerDiffLoading: false,
+    ...viewerState(),
 
     init() {
       const app = window.__app;
@@ -67,14 +83,22 @@ export function registerPageRevisionsCard() {
     },
 
     reset() {
+      this._loadSeq++;
       this.revisions = [];
+      this.pinnedRevs = [];
+      this.older = null;
       this.total = 0;
       this.hasMore = false;
       this.loadingMore = false;
-      this.open = false;
+      this.listOpen = false;
       this.loading = false;
       this.restoringId = null;
+      this.pinningId = null;
+      this.filterSource = '';
+      this.filterUser = '';
+      this.expanded = {};
       this._pageId = null;
+      this._memos = {};
       this.closeViewer();
     },
 
@@ -89,26 +113,40 @@ export function registerPageRevisionsCard() {
     // fuellen — die Liste waere dann offline gar nicht lesbar.
     async loadRevisions(pageId, { keepDepth = false } = {}) {
       if (!pageId) return;
-      const depth = keepDepth && pageId === this._pageId
-        ? Math.min(500, this.revisions.length)
-        : 0;
+      const samePage = pageId === this._pageId;
+      const depth = keepDepth && samePage ? Math.min(500, this.revisions.length) : 0;
+      if (!samePage) {
+        // Seitenwechsel: Filter/Aufklappzustand gehoeren zur alten Seite.
+        this.filterSource = '';
+        this.filterUser = '';
+        this.expanded = {};
+        this.closeViewer();
+      }
       this._pageId = pageId;
+      const seq = ++this._loadSeq;
       this.loading = true;
       try {
         const qs = [];
         if (depth > 100) qs.push(`limit=${depth}`);
         const url = `/content/pages/${pageId}/revisions${qs.length ? '?' + qs.join('&') : ''}`;
         const data = await fetchJson(url);
+        if (seq !== this._loadSeq) return;
         this.revisions = Array.isArray(data?.revisions) ? data.revisions : [];
+        this.pinnedRevs = Array.isArray(data?.pinned) ? data.pinned : [];
+        this.older = data?.older || null;
         this.hasMore = !!data?.has_more;
         this.total = Number.isFinite(data?.total) ? data.total : this.revisions.length;
+        this._syncViewerRev();
       } catch (e) {
+        if (seq !== this._loadSeq) return;
         console.error('[pageRevisions:load]', e);
         this.revisions = [];
+        this.pinnedRevs = [];
+        this.older = null;
         this.hasMore = false;
         this.total = 0;
       } finally {
-        this.loading = false;
+        if (seq === this._loadSeq) this.loading = false;
       }
     },
 
@@ -120,16 +158,19 @@ export function registerPageRevisionsCard() {
       if (!pageId || this.loadingMore || !this.hasMore) return;
       const last = this.revisions[this.revisions.length - 1];
       if (!last?.created_at || !last?.id) return;
+      const seq = this._loadSeq;
       this.loadingMore = true;
       try {
         const url = `/content/pages/${pageId}/revisions`
           + `?before=${encodeURIComponent(last.created_at)}&before_id=${last.id}`;
         const data = await fetchJson(url);
+        if (seq !== this._loadSeq) return;
         const more = Array.isArray(data?.revisions) ? data.revisions : [];
         // Dedup gegen bereits geladene IDs: ein Restore waehrend des Blaetterns
         // laedt die Liste neu, die Antwort hier kann dann ueberlappen.
         const seen = new Set(this.revisions.map(r => r.id));
         this.revisions = this.revisions.concat(more.filter(r => !seen.has(r.id)));
+        this.older = data?.older || null;
         this.hasMore = !!data?.has_more;
         if (Number.isFinite(data?.total)) this.total = data.total;
       } catch (e) {
@@ -140,10 +181,72 @@ export function registerPageRevisionsCard() {
       }
     },
 
+    // Offene Viewer-Revision auf das frisch geladene Objekt umhaengen, damit
+    // Anheften/Name im Kopf sofort den Serverstand zeigen.
+    _syncViewerRev() {
+      if (!this.viewerRev?.id) return;
+      const id = this.viewerRev.id;
+      const fresh = this.revisions.find(r => r.id === id) || this.pinnedRevs.find(r => r.id === id);
+      if (!fresh) return;
+      if ((fresh.label || '') !== (this.viewerRev.label || '')) this.viewerLabelDraft = fresh.label || '';
+      this.viewerRev = fresh;
+    },
+
+    // ── Anzeige: Filter, Sitzungen, Zeilen ─────────────────────────────────
+    _visibleRevisions() {
+      return this._memo('visible', [this.revisions, this.filterSource, this.filterUser], () =>
+        this.revisions.filter(r =>
+          (!this.filterSource || r.source === this.filterSource)
+          && (!this.filterUser || (r.user_email || '') === this.filterUser)));
+    },
+
+    isFiltered() { return !!(this.filterSource || this.filterUser); },
+
+    // Flache Zeilen fuer das Template: Kopfzeile jeder Sitzung, bei aufgeklappter
+    // Sitzung die weiteren Saves dahinter. `size` > 1 nur an der Kopfzeile.
+    listRows() {
+      return this._memo('rows', [this._visibleRevisions(), this.expanded], () => {
+        const rows = [];
+        for (const g of groupRevisions(this._visibleRevisions())) {
+          const open = !!this.expanded[g.key];
+          rows.push({ k: `r${g.items[0].id}`, rev: g.items[0], size: g.items.length, group: g.key, open, child: false });
+          if (open) {
+            for (const rev of g.items.slice(1)) {
+              rows.push({ k: `r${rev.id}`, rev, size: 0, group: g.key, open, child: true });
+            }
+          }
+        }
+        return rows;
+      });
+    },
+
+    pinnedRows() {
+      return this._memo('pinnedRows', [this.pinnedRevs], () =>
+        this.pinnedRevs.map(rev => ({ k: `p${rev.id}`, rev, size: 0, group: null, open: false, child: false })));
+    },
+
+    toggleGroup(key) {
+      this.expanded = { ...this.expanded, [key]: !this.expanded[key] };
+    },
+
+    // Filter-Optionen nur aus dem, was in der geladenen Liste vorkommt.
+    hasSourceChoice() {
+      return new Set(this.revisions.map(r => r.source)).size > 1;
+    },
+    hasUserChoice() {
+      return new Set(this.revisions.map(r => r.user_email || '')).size > 1;
+    },
+
     isOwnRevision(rev) {
       if (!rev?.user_email) return false;
       const me = Alpine.store('session').currentUser?.email;
       return !!me && String(me).toLowerCase() === String(rev.user_email).toLowerCase();
+    },
+
+    userLabel(email) {
+      const app = window.__app;
+      if (!email) return app.t('editor.revisions.filter.noUser');
+      return this.isOwnRevision({ user_email: email }) ? app.t('editor.revisions.byYou') : app.userDisplayName(email);
     },
 
     sourceLabel(src) {
@@ -163,10 +266,26 @@ export function registerPageRevisionsCard() {
       return m ? { dir: m[1] === '→' ? 'to' : 'from', pageId: Number(m[2]) } : null;
     },
 
+    // Ausgangsstand, «vor dem Teilen», «wiederhergestellt aus Version N».
+    summaryLabel(rev) {
+      const info = summaryInfo(rev?.summary);
+      if (!info) return '';
+      const t = window.__app.t;
+      if (info.kind === 'restore') {
+        const src = this.revisions.find(r => r.id === info.revId) || this.pinnedRevs.find(r => r.id === info.revId);
+        const n = src ? this.revisionNumber(src) : null;
+        return n != null
+          ? t('editor.revisions.summary.restoreFrom', { n })
+          : t('editor.revisions.summary.restoreFromOld');
+      }
+      return t(`editor.revisions.summary.${info.kind}`);
+    },
+
     // Nummer gegen `total`, nicht gegen die Fenstergroesse: die Liste ist DESC
     // und beginnt immer bei der juengsten Revision, Index 0 ist also Nummer
     // `total`. Gegen `revisions.length` gerechnet wuerde dieselbe Revision nach
-    // jedem `loadMore()` eine andere Nummer tragen.
+    // jedem `loadMore()` eine andere Nummer tragen. Angeheftete Revisionen
+    // ausserhalb des Fensters haben keine Nummer.
     revisionNumber(rev) {
       if (!rev?.id) return null;
       const idx = this.revisions.findIndex(r => r.id === rev.id);
@@ -174,19 +293,32 @@ export function registerPageRevisionsCard() {
       return Math.max(this.total, this.revisions.length) - idx;
     },
 
+    revisionTitle(rev) {
+      const n = this.revisionNumber(rev);
+      return n != null
+        ? window.__app.t('editor.revisions.viewer.title', { n })
+        : window.__app.t('editor.revisions.viewer.titlePinned');
+    },
+
     formatChars(n) {
       return numberFormat(Alpine.store('shell').uiLocale).format(Number(n || 0));
     },
 
-    // Liste DESC sortiert (juengste zuerst). Vorgaengerin = revisions[idx+1].
-    // Aelteste Revision hat keine Vorgaengerin → null (kein Delta-Tag).
-    charsDelta(idx) {
-      const cur = this.revisions[idx];
-      const prev = this.revisions[idx + 1];
-      if (!cur || !prev) return null;
-      const a = Number(cur.chars || 0);
-      const b = Number(prev.chars || 0);
-      return a - b;
+    // Vorgaengerin = naechstaeltere Revision der vollstaendigen Liste; an der
+    // aeltesten geladenen Zeile die vom Server mitgelieferte `older`.
+    _prevRevFor(rev) {
+      if (!rev?.id) return null;
+      const idx = this.revisions.findIndex(r => r.id === rev.id);
+      if (idx < 0) return null;
+      if (idx + 1 < this.revisions.length) return this.revisions[idx + 1];
+      return this.hasMore ? this.older : null;
+    },
+    hasPrevRevFor(rev) { return !!this._prevRevFor(rev); },
+
+    charsDelta(rev) {
+      const prev = this._prevRevFor(rev);
+      if (!rev || !prev) return null;
+      return Number(rev.chars || 0) - Number(prev.chars || 0);
     },
 
     formatDelta(d) {
@@ -194,170 +326,42 @@ export function registerPageRevisionsCard() {
       return numberFormat(Alpine.store('shell').uiLocale, { signDisplay: 'exceptZero' }).format(Number(d));
     },
 
-    // ── Viewer ───────────────────────────────────────────────────────────────
-    async openViewer(rev, { keepMode = false } = {}) {
-      if (!rev?.id) return;
-      const app = window.__app;
-      const pageId = app?.currentPage?.id;
-      if (!pageId) return;
-
-      const firstOpen = !this.viewerOpen;
-      // Bei Prev/Next-Navigation den aktiven Tab beibehalten; beim Frischoeffnen
-      // immer mit 'content' starten.
-      const mode = keepMode && this.viewerMode === 'diff' ? 'diff' : 'content';
-      this.viewerOpen = true;
-      this.viewerRev = rev;
-      this.viewerMode = mode;
-      this.viewerBody = '';
-      this.viewerError = '';
-      this.viewerDiffHtml = '';
-      this.viewerDiffUnchanged = false;
-      this.viewerLoading = true;
-
-      if (firstOpen) {
-        this.$nextTick(() => {
-          const dlg = this.$refs?.viewerDialog;
-          if (dlg && typeof dlg.showModal === 'function' && !dlg.open) dlg.showModal();
-        });
-      }
-
-      try {
-        const data = await fetchJson(`/content/pages/${pageId}/revisions/${rev.id}`);
-        const rev2 = data?.revision || null;
-        if (!rev2) throw new Error('REVISION_NOT_FOUND');
-        this.viewerBody = String(rev2.body_html || '');
-      } catch (e) {
-        console.error('[pageRevisions:viewer:load]', e);
-        this.viewerError = e.message || 'load failed';
-      } finally {
-        this.viewerLoading = false;
-      }
-
-      // Vergleichs-Tab beibehalten → Diff fuer die neu geladene Revision ziehen.
-      if (this.viewerMode === 'diff' && !this.viewerError) await this._ensureDiff();
+    // ── Schreibende Aktionen ───────────────────────────────────────────────
+    // Schreibrecht wie der Server (editor). Im Notebook-Edit- und Fokusmodus
+    // gesperrt: der offene Editor-Puffer kennt den wiederhergestellten Stand
+    // nicht und wuerde ihn beim naechsten Autosave gegen sich mergen.
+    canWrite() { return !!window.__app?.canEdit?.(); },
+    editorBusy() { return !!(window.__app?.editMode || window.__app?.focusActive); },
+    canRestore() { return this.canWrite() && !this.editorBusy(); },
+    restoreTip(base) {
+      return this.editorBusy() ? window.__app.t('editor.revisions.restoreBlockedEdit') : base;
     },
 
-    // Liste DESC sortiert (juengste zuerst). 'prev' = aelter = idx+1.
-    // 'next' = neuer = idx-1.
-    _siblingRev(direction) {
-      if (!this.viewerRev?.id) return null;
-      const idx = this.revisions.findIndex(r => r.id === this.viewerRev.id);
-      if (idx < 0) return null;
-      const target = direction === 'prev' ? idx + 1 : idx - 1;
-      return this.revisions[target] || null;
-    },
-    hasPrevRev() { return !!this._siblingRev('prev'); },
-    hasNextRev() { return !!this._siblingRev('next'); },
-    gotoRev(direction) {
-      const target = this._siblingRev(direction);
-      if (target) this.openViewer(target, { keepMode: true });
+    // Tooltip von «Stand davor»: nennt das Datum des Ziels. Jenseits der letzten
+    // 24 h duennt die Retention aus — die Vorgaengerin kann dann Tage oder
+    // Wochen aelter sein als der Save davor.
+    restorePrevTip(rev) {
+      const prev = rev?.id === this.viewerRev?.id ? this._viewerPrev() : this._prevRevFor(rev);
+      if (!prev) return this.restoreTip(window.__app.t('editor.revisions.restorePrevTitle'));
+      return this.restoreTip(window.__app.t('editor.revisions.restorePrevTitleWhen', {
+        when: window.__app.formatDate(prev.created_at),
+      }));
     },
 
-    closeViewer() {
-      this.viewerOpen = false;
-      this.viewerRev = null;
-      this.viewerBody = '';
-      this.viewerMode = 'content';
-      this.viewerError = '';
-      this.viewerDiffHtml = '';
-      this.viewerDiffUnchanged = false;
-      const dlg = this.$refs?.viewerDialog;
-      if (dlg && dlg.open) dlg.close();
-    },
-
-    async setViewerMode(mode) {
-      if (mode !== 'content' && mode !== 'diff') return;
-      this.viewerMode = mode;
-      if (mode === 'diff' && !this.viewerDiffHtml && !this.viewerError) {
-        await this._ensureDiff();
-      }
-    },
-
-    // Diff vergleicht aktuelle Revision (rechte Spalte = juenger) gegen
-    // Vorgaenger-Revision (linke Spalte = aelter). Aelteste Revision: kein
-    // Vorgaenger → leerer String, alles wird als "added" gerendert.
-    async _ensureDiff() {
-      const app = window.__app;
-      if (!this.viewerBody || !this.viewerRev?.id) return;
-      this.viewerDiffLoading = true;
-      try {
-        const diffLib = await loadDiff();
-        const prevHtml = await this._loadPrevRevisionBody();
-        const skipLabel = (n) => app?.t?.('editor.revisions.viewer.diffSkip', { n }) || `… ${n} …`;
-        const out = renderSideBySide(prevHtml, this.viewerBody, diffLib, { skipLabel });
-        this.viewerDiffHtml = out.html;
-        this.viewerDiffUnchanged = out.unchanged;
-      } catch (e) {
-        console.error('[pageRevisions:viewer:diff]', e);
-        this.viewerError = e.message || 'diff failed';
-      } finally {
-        this.viewerDiffLoading = false;
-      }
-    },
-
-    // Liste ist DESC sortiert (juengste zuerst). Vorgaenger der geklickten
-    // Revision ist also der NEXT-Index. Keine Vorgaengerin → leerer String.
-    async _loadPrevRevisionBody() {
-      const idx = this.revisions.findIndex(r => r.id === this.viewerRev?.id);
-      if (idx < 0) return '';
-      const prev = this.revisions[idx + 1];
-      if (!prev?.id) return '';
-      const app = window.__app;
-      const pageId = app?.currentPage?.id;
-      if (!pageId) return '';
-      try {
-        const data = await fetchJson(`/content/pages/${pageId}/revisions/${prev.id}`);
-        return String(data?.revision?.body_html || '');
-      } catch (e) {
-        console.error('[pageRevisions:viewer:prev]', e);
-        return '';
-      }
-    },
-
-    async restoreFromViewer() {
-      if (this.viewerRev) await this.restore(this.viewerRev);
-    },
-
-    // Cmd/Ctrl+Enter bei offener Ansicht: wiederherstellen und das Event hier
-    // beenden. Window-Capture, damit der Body-Listener für Ctrl+Enter
-    // (Lektorat starten) es nicht zusätzlich bekommt. Bei geschlossener
-    // Ansicht bleibt das Event unberührt.
-    onViewerRestoreKey(event) {
-      if (!this.viewerOpen || !(event.metaKey || event.ctrlKey)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      this.restoreFromViewer();
-    },
-
-    // Vorgaengerin einer beliebigen Listen-Revision. Liste DESC sortiert
-    // (juengste zuerst) → der "Stand davor" ist der naechstaeltere = idx+1.
-    _prevRevFor(rev) {
-      if (!rev?.id) return null;
-      const idx = this.revisions.findIndex(r => r.id === rev.id);
-      if (idx < 0) return null;
-      return this.revisions[idx + 1] || null;
-    },
-    hasPrevRevFor(rev) { return !!this._prevRevFor(rev); },
-
-    // "Stand davor wiederherstellen": schreibt die Vorgaenger-Revision zurueck —
-    // also den Inhalt, der unmittelbar vor diesem Save existierte. Jede Revision
-    // ist der Stand NACH ihrem Save, daher ist Revision N+1 (aelter) bytegenau
-    // der Vor-Save-Stand von Revision N.
+    // «Stand davor wiederherstellen»: schreibt die Vorgaengerin zurueck. Exakt
+    // der Stand vor diesem Save ist das nur, solange beide im ungeduennten
+    // 24-h-Fenster liegen; aelter ist es die naechstaeltere erhaltene Revision
+    // (die Rueckfrage nennt deren Datum).
     async restorePrevious(rev) {
       const prev = this._prevRevFor(rev);
       if (prev) await this.restore(prev);
     },
 
-    async restorePreviousFromViewer() {
-      const prev = this._siblingRev('prev');
-      if (prev) await this.restore(prev);
-    },
-
     async restore(rev) {
-      if (!rev?.id || this.restoringId) return;
+      if (!rev?.id || this.restoringId || !this.canRestore()) return;
       const app = window.__app;
-      const pageId = app?.currentPage?.id;
-      if (!pageId) return;
+      const pageId = this._pageId;
+      if (!pageId || app?.currentPage?.id !== pageId) return;
       const when = app.formatDate ? app.formatDate(rev.created_at) : rev.created_at;
       if (!confirm(app.t('editor.revisions.restoreConfirm', { when }))) return;
       this.restoringId = rev.id;
@@ -380,5 +384,27 @@ export function registerPageRevisionsCard() {
         this.restoringId = null;
       }
     },
+
+    // Anheften nimmt die Revision von der Retention aus; Loesen verwirft den
+    // Namen (db/page-revisions.js#setPin). Die Liste laedt ueber das
+    // Repo-Event neu.
+    async setPinned(rev, pinned, label = null) {
+      if (!rev?.id || this.pinningId || !this.canWrite() || !this._pageId) return;
+      const app = window.__app;
+      this.pinningId = rev.id;
+      try {
+        await contentRepo.pinRevision(this._pageId, rev.id, { pinned, label });
+      } catch (e) {
+        console.error('[pageRevisions:pin]', e);
+        app.setStatus?.(app.t('editor.revisions.pinFailed') + ' ' + (e?.code || e?.message || ''), true, 6000);
+      } finally {
+        this.pinningId = null;
+      }
+    },
+
+    togglePin(rev) { return this.setPinned(rev, !rev?.pinned, rev?.label || null); },
+
+    ...memoMethods,
+    ...viewerMethods,
   }));
 }

@@ -808,3 +808,20 @@ test('fr: fragmentierte Text-Nodes (Guillemet | NBSP | Wort) bleiben idempotent'
   assert.equal(root.querySelector('p').textContent, once);
   assert.equal(once, `«${NBSP}Bonjour${NBSP}»`);
 });
+
+test('de-CH: Komma vor geradem Quote + Space danach schliesst die Rede (Begleitsatz)', () => {
+  const root = makeRoot('<p>"Okay, jetzt bin ich neugierig," ich zeige auf ihn. "Wie geht das?"</p>');
+  const style = resolveQuoteStyle('de', 'CH');
+  normalizeQuotes(root, style);
+  assert.equal(
+    root.querySelector('p').textContent,
+    '«Okay, jetzt bin ich neugierig,» ich zeige auf ihn. «Wie geht das?»',
+  );
+});
+
+test('de-CH: Redeeinleitung mit Komma/Doppelpunkt öffnet weiterhin', () => {
+  const root = makeRoot('<p>Er sagte so, "Hallo" und dann:"Tschüss".</p>');
+  const style = resolveQuoteStyle('de', 'CH');
+  normalizeQuotes(root, style);
+  assert.equal(root.querySelector('p').textContent, 'Er sagte so, «Hallo» und dann:«Tschüss».');
+});

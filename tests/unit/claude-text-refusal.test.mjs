@@ -5,6 +5,7 @@
 //   • Antwort: Modellwechsel mitten in der Antwort verwirft den Text davor (sonst stünde
 //     ein Satz des ablehnenden Modells vor dem JSON); das bedienende Modell kommt zurück.
 //   • aiCall: stop_reason 'refusal' wird `job.error.aiRefusal` statt eines Parse-Fehlers.
+//   • aiCall: leerer Text bei regulärem Ende wird `job.error.aiEmpty` (mit stop_reason).
 //
 // Lauf: `node --test tests/unit/claude-text-refusal.test.mjs`
 import { test } from 'node:test';
@@ -109,6 +110,21 @@ test('aiCall: stop_reason refusal → job.error.aiRefusal', async () => {
       runWithContext({ aiJob: { provider: 'claude', model: 'claude-opus-5-5' } },
         () => aiCall('job-x', { in: 0, out: 0, ms: 0 }, 'Gib JSON', 'sys', 0, 1, null, 0.2, 1000, 'claude')),
       (e) => e.message === 'job.error.aiRefusal',
+    );
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('aiCall: leere Antwort mit end_turn → job.error.aiEmpty mit stop_reason', async () => {
+  appSettings.set('ai.provider', 'claude');
+  const { aiCall } = require('../../routes/jobs/shared/ai');
+  globalThis.fetch = async () => sse([start(), blockStart(0, { type: 'text', text: '' }), textDelta(0, '  \n'), blockStop(0), stop('end_turn')]);
+  try {
+    await assert.rejects(
+      runWithContext({ aiJob: { provider: 'claude', model: 'claude-opus-5-5' } },
+        () => aiCall('job-x', { in: 0, out: 0, ms: 0 }, 'Gib JSON', 'sys', 0, 1, null, 0.2, 1000, 'claude')),
+      (e) => e.message === 'job.error.aiEmpty' && e.i18nParams?.stop === 'end_turn',
     );
   } finally {
     globalThis.fetch = realFetch;

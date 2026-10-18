@@ -63,12 +63,34 @@ function _httpError(method, path, status, body) {
 // die alte Fassung — ein Read-Modify-Write-Pfad (Lektorat-Save, Chat-Vorschlag)
 // ueberschreibt sonst frische Server-Edits mit Stale-Daten. Postmessage an
 // public/sw.js#invalidate-content-Handler im CONTENT_CACHE-Namespace.
+//
+// Ohne Controller (harter Reload, erster Besuch — der SW ruft bewusst kein
+// clients.claim()) geht die Nachricht an den aktiven Worker der Registrierung.
+// Der Tab selbst liest dann zwar am SW vorbei, aber der Cache gehört dem ganzen
+// Origin: der nächste kontrollierte Tab bekäme sonst den Stand vor all den
+// Saves dieses Tabs. Nicht selbst per `caches.delete` räumen — bei einem
+// offline gehaltenen Buch fiele der Read dann auf die ebenso alte Offline-Kopie
+// zurück; der SW-Handler lädt sie nach (sw-offline.js#invalidate).
 function _invalidateContentCache(paths) {
-  if (typeof navigator === 'undefined') return;
-  const ctrl = navigator.serviceWorker?.controller;
-  if (!ctrl) return;
-  const arr = Array.isArray(paths) ? paths : [paths];
-  try { ctrl.postMessage({ type: 'invalidate-content', paths: arr }); } catch {}
+  if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
+  const msg = { type: 'invalidate-content', paths: Array.isArray(paths) ? paths : [paths] };
+  const ctrl = navigator.serviceWorker.controller;
+  if (ctrl) {
+    try { ctrl.postMessage(msg); } catch {}
+    return;
+  }
+  navigator.serviceWorker.getRegistration?.()
+    .then((reg) => { try { reg?.active?.postMessage(msg); } catch {} })
+    .catch(() => {});
+}
+
+// Ob dieser Tab vom SW kontrolliert wird — Diagnosefeld `client_sw` am Page-PUT
+// (PAGE_SAVE/PAGE_CONFLICT-Log). Ein unkontrollierter Tab liest und schreibt am
+// SW-Cache vorbei; das macht den Unterschied, wenn ein anderer Tab danach eine
+// veraltete Ansicht zeigt.
+function _swState() {
+  if (typeof navigator === 'undefined' || !navigator.serviceWorker) return 'none';
+  return navigator.serviceWorker.controller ? 'controlled' : 'uncontrolled';
 }
 
 async function _get(path, { fresh = false, signal } = {}) {
@@ -172,9 +194,10 @@ export const contentRepo = {
     const hasHtml = typeof body?.html === 'string';
     // Geraet-Stempel nur bei Body-Change: macht den geraete-bewussten /changes-Feed
     // praezise (eigener Browser-Save wird ausgefiltert, andere Geraete nicht).
-    // `client_tab` trennt Tabs desselben Browsers im PAGE_CONFLICT-Log.
+    // `client_tab` trennt Tabs desselben Browsers im PAGE_CONFLICT-Log,
+    // `client_sw` sagt, ob der Tab vom SW kontrolliert wird.
     const ids = hasHtml && writer ? beginSave(writer, id, extraOwnSaveIds) : null;
-    const payload = hasHtml ? { ...body, ...ids, device_id: getDeviceId(), client_tab: getTabId() } : body;
+    const payload = hasHtml ? { ...body, ...ids, device_id: getDeviceId(), client_tab: getTabId(), client_sw: _swState() } : body;
     const inv = hasHtml ? ['pages/' + id, 'pages/' + id + '/revisions'] : ['pages/' + id];
     let out;
     try { out = await _write('PUT', 'pages/' + id, payload, inv); }
@@ -252,6 +275,18 @@ export const contentRepo = {
   async restoreRevision(pageId, revId) {
     const out = await _write('POST', `pages/${pageId}/revisions/${revId}/restore`, undefined,
       ['pages/' + pageId, 'pages/' + pageId + '/revisions']);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(EVT.PAGE_REVISIONS_CHANGED, { detail: { pageId } }));
+    }
+    return out;
+  },
+
+  // PATCH /content/pages/:id/revisions/:rev — Revision anheften/loesen + Name.
+  // Bustet Liste UND Detail: der Voll-Body ist SWR-gecacht und traegt
+  // `pinned`/`label` mit (die Karte liest beides trotzdem aus der Liste).
+  async pinRevision(pageId, revId, { pinned, label = null }) {
+    const out = await _write('PATCH', `pages/${pageId}/revisions/${revId}`, { pinned, label },
+      ['pages/' + pageId + '/revisions', `pages/${pageId}/revisions/${revId}`]);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(EVT.PAGE_REVISIONS_CHANGED, { detail: { pageId } }));
     }

@@ -11,7 +11,7 @@
 
 import { fetchJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
-import { wordDiff } from './word-diff.js';
+import { diffParts } from '../diff/diff-parts.js';
 import { persistProposalStatus } from './proposal-status.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -108,7 +108,7 @@ export function proposalStatus(p, proposals, board) {
 
 /**
  * Diff-Zeilen eines Beat-Änderungs-Vorschlags fürs Template. Pure.
- * → [{ key, before, after, diff? }]  diff = wordDiff-Teile für Titel/Beschreibung
+ * → [{ key, before, after, diff? }]  diff = markierte Wort-Diff-Teile (diff/diff-parts.js) für Titel/Beschreibung
  */
 export function beatUpdateRows(p) {
   if (p?.type !== 'beat_update') return [];
@@ -120,7 +120,7 @@ export function beatUpdateRows(p) {
     if (!(key in f)) return;
     const before = String(b[key] || '');
     const after = String(f[key] || '');
-    rows.push({ key, before, after, diff: wordDiff(before, after) });
+    rows.push({ key, before, after, diff: diffParts(before, after) });
   };
   text('titel');
   text('beschreibung');

@@ -546,16 +546,16 @@ async function _samePayload(cachedEtag, cachedClone, net) {
   catch { return false; }
 }
 
-// Fuer WELCHE Pfade lohnt der Vergleich ueberhaupt? Buchliste und Seitenbaum —
-// aus ihnen entsteht die Sidebar, und nur sie haben clientseitig einen
-// Konsumenten. Ein Seiten-Body ist ausgenommen, obwohl er ebenfalls SWR laeuft:
-// ihn zu vergleichen hiesse, bei JEDEM Seiten-Read einen Klon zu ziehen und den
-// vollen Text zu vergleichen, damit am Ende eine Meldung entsteht, die niemand
-// liest (der offene Editor hat seinen eigenen Stale-Write-Schutz).
+// Fuer WELCHE Pfade lohnt der Vergleich ueberhaupt? Buchliste, Seitenbaum
+// (Sidebar) und der Abschnitt selbst: ohne Meldung bliebe er auf dem Stand des
+// letzten Besuchs stehen, und der Editor startete auf dieser Basis. Alle drei
+// tragen einen ETag (routes/content/shared.js#REVALIDATE_CACHE_CONTROL) — der
+// Vergleich ist ein Header-Vergleich, kein Klon samt Textvergleich. Revisionen,
+// Praesenz und Changes schliesst der Anker `$` aus.
 //
 // Diese Liste sagt nur „vergleichen ja/nein". Was ein Pfad BEDEUTET, entscheidet
 // weiterhin allein der Client (boot/content-updated.js) — der SW kennt keine Karten.
-const CONTENT_NOTIFY_REGEX = /^\/content\/(?:books|books\/\d+\/tree)$/;
+const CONTENT_NOTIFY_REGEX = /^\/content\/(?:books|books\/\d+\/tree|pages\/\d+)$/;
 
 // Meldet den Tabs, dass die Hintergrund-Revalidierung dieses Pfads einen ANDEREN
 // Inhalt ergeben hat als der Cache-Hit, den sie gerade rendern.

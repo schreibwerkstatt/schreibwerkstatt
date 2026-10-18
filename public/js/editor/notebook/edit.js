@@ -3,6 +3,7 @@
 // gemeinsames `this` (in das Objekt gespreadet). Geteilte Imports/Konstanten
 // in edit/_shared.js.
 import { conflictMethods } from './edit/conflict.js';
+import { draftReconcileMethods } from './edit/draft-reconcile.js';
 import { lifecycleMethods } from './edit/lifecycle.js';
 import { inputMethods } from './edit/input.js';
 import { autosaveMethods } from './edit/autosave.js';
@@ -12,6 +13,7 @@ import { saveGuardMethods } from './edit/save-guard.js';
 
 export const notebookEditMethods = {
   ...conflictMethods,
+  ...draftReconcileMethods,
   ...lifecycleMethods,
   ...inputMethods,
   ...autosaveMethods,

@@ -9,9 +9,15 @@
 // bestätigter Save) meldet eine Kollision zwischen der eigenen alten und der
 // eigenen neuen Fassung.
 //
-// Darum merkt sich jeder Save vor dem PUT einen Fingerabdruck seines HTML.
-// Entspricht der Server-Stand einem davon, ist der lokale Stand sein
-// Nachfahre — gespeichert wird er dann ohne Merge auf den Server-Stempel.
+// Darum merkt sich jeder Save vor dem PUT einen Fingerabdruck seines HTML und
+// die Basis, gegen die er geschickt wurde (`expected_updated_at`). Entspricht
+// der Server-Stand einem davon UND baut der lokale Stand auf derselben Basis
+// auf, ist er sein Nachfahre — gespeichert wird er dann ohne Merge auf den
+// Server-Stempel. Der Fingerabdruck allein beweist das nicht: die Einträge
+// leben 24 h, überstehen ein Neuladen, und ein Stand, den dieser Tab am Morgen
+// geschickt hat, ist kein Vorfahre einer Fassung, die auf einem älteren Stand
+// aufbaut (veraltete Ansicht aus dem SW-Cache, Konflikt-Auflösung dagegen) —
+// ohne Basis-Prüfung überschriebe die Abkürzung dessen Fortschritt ungemergt.
 // sessionStorage, weil der Fall ein Neuladen überleben muss (der Draft läuft
 // beim nächsten startEdit gegen den Server-Stand) und weil er pro Tab gilt:
 // ein anderer Tab hat nie genau diesen Stand geschickt.
@@ -100,18 +106,24 @@ function read(pageId) {
   } catch { return []; }
 }
 
-export function recordSentSave(pageId, html) {
-  if (pageId == null) return;
+// `baseAt`: der Stempel, gegen den der PUT geschickt wird. Ohne ihn kann der
+// Eintrag nie als Vorfahre gelten — der Save wird nicht vermerkt.
+export function recordSentSave(pageId, html, baseAt) {
+  if (pageId == null || !baseAt) return;
   const fp = saveFingerprint(html);
   if (!fp) return;
-  const list = read(pageId).filter((e) => e.fp !== fp);
-  list.push({ fp, at: Date.now() });
+  const list = read(pageId).filter((e) => !(e.fp === fp && e.base === baseAt));
+  list.push({ fp, base: baseAt, at: Date.now() });
   try { sessionStorage.setItem(KEY_PREFIX + pageId, JSON.stringify(list.slice(-MAX_ENTRIES))); } catch { /* voll/gesperrt: Erkennung fällt aus, Merge wie bisher */ }
 }
 
-// true, wenn `serverHtml` ein Stand ist, den dieser Tab selbst abgeschickt hat.
-export function isOwnSentSave(pageId, serverHtml) {
+// true, wenn `serverHtml` ein Stand ist, den dieser Tab selbst abgeschickt hat,
+// und zwar gegen eine der Basen in `localBases` — der Stempel, auf denen der
+// lokale Stand aufbaut. Nur dann ist der lokale Stand sein Nachfahre.
+export function isOwnSentSave(pageId, serverHtml, localBases) {
   if (pageId == null) return false;
+  const bases = (localBases || []).filter(Boolean);
+  if (!bases.length) return false;
   const fp = saveFingerprint(serverHtml);
-  return !!fp && read(pageId).some((e) => e.fp === fp);
+  return !!fp && read(pageId).some((e) => e.fp === fp && bases.includes(e.base));
 }

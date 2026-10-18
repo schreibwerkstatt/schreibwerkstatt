@@ -64,7 +64,7 @@ Leere Antwort trotz Vorschlägen ist kein Abbruch: `__i18n:plot.chat.proposalsOn
   - Ziel (Beat/Akt/Strang) gelöscht → blockiert mit Grund;
   - `act_ref`/`thread_ref`, deren Akt/Strang noch nicht übernommen ist → blockiert („Übernimm zuerst den neuen Akt …");
   - Beat seit dem Vorschlag geändert (`before` ≠ Board) → Hinweis, kein Block; übernommen werden nur die gezeigten Felder.
-- Beat-Änderungen zeigen Feld für Feld vorher → nachher, Titel/Beschreibung als Wort-Diff ([word-diff.js](../public/js/chat/word-diff.js), geteilt mit dem Abschnitts-Chat).
+- Beat-Änderungen zeigen Feld für Feld vorher → nachher, Titel/Beschreibung als Wort-Diff ([word-diff.js](../public/js/diff/word-diff.js), geteilt mit dem Abschnitts-Chat).
 
 ## Pflicht-Invarianten
 

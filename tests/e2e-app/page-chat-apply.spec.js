@@ -109,8 +109,8 @@ test('Seiten-Chat (Leseansicht): Übernehmen speichert, Marke verschwindet, Rüc
 
     // Wort-Diff statt zweier Blöcke.
     const card = page.locator('#chat-card .chat-vorschlag');
-    await expect(card.locator('.chat-word-diff__del')).toHaveText('laut');
-    await expect(card.locator('.chat-word-diff__add')).toHaveText('leise');
+    await expect(card.locator('.diff-del')).toHaveText('laut');
+    await expect(card.locator('.diff-add')).toHaveText('leise');
     // Inline-Marke in der Leseansicht (über Alpine.store('pageChat')).
     await expect(page.locator(`${VIEW_SEL} .chat-mark`)).toHaveCount(1);
 

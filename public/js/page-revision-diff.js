@@ -5,53 +5,25 @@
 // Pipeline: parseBlocks(HTML) -> diffLib.diffArrays(blockTexts) -> Pair-Changes
 // (zip adjacent del+add) -> collapseContext (1 Block vor/nach jeder Change,
 // Rest als Skip) -> renderSideBySide (zwei Spalten, Word-Diff inline pro Seite).
+//
+// Text-Extraktion (diff/html-blocks.js), Wort-Diff und Markierung
+// (diff/diff-parts.js) sind dieselben wie im Konflikt-Modal und in den
+// Chat-Vorschlaegen; jsdiff ordnet hier nur die Bloecke einander zu und
+// springt beim Wort-Diff ein, wenn ein Absatz fuer die LCS-Tabelle zu gross ist.
 
 import { escHtml } from './utils.js';
 import { htmlToPlainText } from './html-text.js';
+import { parseBlocks } from './diff/html-blocks.js';
+import { markParts, partsToHtml, wordParts } from './diff/diff-parts.js';
 
-export { htmlToPlainText };
+export { htmlToPlainText, parseBlocks };
 
-const BLOCK_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'pre'];
-const BLOCK_RE = new RegExp(`<(${BLOCK_TAGS.join('|')})\\b[^>]*>([\\s\\S]*?)<\\/\\1>`, 'gi');
-
-// Browser-Pfad: DOMParser dekodiert Entities (&nbsp;, &auml;, …) und kennt
-// nested Tags. Regex-Pfad kann das nicht und laesst Entities literal stehen,
-// die danach im Diff als „Steuerzeichen" auftauchen.
-function _parseBlocksDOM(html) {
-  if (typeof DOMParser === 'undefined') return null;
-  try {
-    const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
-    const nodes = doc.body ? doc.body.querySelectorAll(BLOCK_TAGS.join(',')) : [];
-    if (!nodes.length) {
-      const text = (doc.body?.textContent || '').replace(/\s+/g, ' ').trim();
-      return text ? [{ tag: 'p', text }] : [];
-    }
-    const out = [];
-    for (const el of nodes) {
-      const tag = el.tagName.toLowerCase();
-      const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
-      if (text) out.push({ tag, text });
-    }
-    return out;
-  } catch { return null; }
-}
-
-export function parseBlocks(html) {
-  const dom = _parseBlocksDOM(html);
-  if (dom !== null) return dom;
-  const src = String(html || '');
-  const matches = [...src.matchAll(BLOCK_RE)];
-  if (!matches.length) {
-    const text = htmlToPlainText(src);
-    return text ? [{ tag: 'p', text }] : [];
-  }
-  const out = [];
-  for (const m of matches) {
-    const tag = m[1].toLowerCase();
-    const text = htmlToPlainText(m[2]);
-    if (text) out.push({ tag, text });
-  }
-  return out;
+// Fallback-Vergleich ohne Whitespace: htmlToPlainText macht aus jeder Tag-
+// Grenze ein Leerzeichen (`<strong>Absatz</strong>.` → «Absatz .»). Ohne diese
+// Toleranz meldete eine reine Formatierungs-Aenderung den ganzen Text als
+// geaendert, obwohl die Blockdiffs gleich sind.
+function _sameIgnoringSpace(a, b) {
+  return a.replace(/\s+/g, '') === b.replace(/\s+/g, '');
 }
 
 function attachBlocks(parts, oldBlocks, newBlocks) {
@@ -130,30 +102,9 @@ function cellClose(tag) {
   return `</${cellTag(tag)}>`;
 }
 
-// Renders only `removed` + `eq` parts (Alt-Spalte).
-function renderWordsLeft(oldText, newText, diffLib) {
-  const parts = diffLib.diffWords(oldText, newText);
-  let html = '';
-  for (const part of parts) {
-    if (part.added) continue;
-    const safe = escHtml(part.value);
-    if (part.removed) html += `<del class="diff-del">${safe}</del>`;
-    else html += `<span class="diff-eq">${safe}</span>`;
-  }
-  return html;
-}
-
-// Renders only `added` + `eq` parts (Neu-Spalte).
-function renderWordsRight(oldText, newText, diffLib) {
-  const parts = diffLib.diffWords(oldText, newText);
-  let html = '';
-  for (const part of parts) {
-    if (part.removed) continue;
-    const safe = escHtml(part.value);
-    if (part.added) html += `<ins class="diff-add">${safe}</ins>`;
-    else html += `<span class="diff-eq">${safe}</span>`;
-  }
-  return html;
+// Alt-Spalte: Gleichtext + Geloeschtes; Neu-Spalte: Gleichtext + Neues.
+function renderWords(oldText, newText, diffLib, side) {
+  return partsToHtml(markParts(wordParts(oldText, newText, diffLib), side), 'diff-eq');
 }
 
 function emptyCell(tag, side) {
@@ -184,10 +135,10 @@ function renderEntries(view, diffLib, skipLabel) {
       html += emptyCell(e.block.tag, 'right');
     } else if (e.kind === 'change') {
       html += cellOpen(e.from.tag, 'diff-cell--changed diff-cell--left')
-        + renderWordsLeft(e.from.text, e.to.text, diffLib)
+        + renderWords(e.from.text, e.to.text, diffLib, 'old')
         + cellClose(e.from.tag);
       html += cellOpen(e.to.tag, 'diff-cell--changed diff-cell--right')
-        + renderWordsRight(e.from.text, e.to.text, diffLib)
+        + renderWords(e.from.text, e.to.text, diffLib, 'new')
         + cellClose(e.to.tag);
     } else if (e.kind === 'skip') {
       const label = (typeof skipLabel === 'function' ? skipLabel(e.count) : defaultSkipLabel(e.count));
@@ -201,12 +152,13 @@ function renderEntries(view, diffLib, skipLabel) {
 // (rechte Spalte, jüngere Revision). `diffLib` ist das vom jsdiff-UMD-Bundle
 // exportierte Modul (window.Diff). `opts.skipLabel(n)` rendert das i18n-Label
 // fuer kollabierte Stretches; fehlt es, greift ein englischer Default.
+// `opts.imageLabel(name)` nimmt Bilder als Bloecke auf (siehe parseBlocks).
 export function renderSideBySide(oldHtml, newHtml, diffLib, opts) {
   if (!diffLib || typeof diffLib.diffWords !== 'function' || typeof diffLib.diffArrays !== 'function') {
     throw new Error('renderSideBySide: diffLib.diffWords/diffArrays missing');
   }
-  const oldBlocks = parseBlocks(oldHtml);
-  const newBlocks = parseBlocks(newHtml);
+  const oldBlocks = parseBlocks(oldHtml, opts);
+  const newBlocks = parseBlocks(newHtml, opts);
   const parts = diffLib.diffArrays(oldBlocks.map(b => b.text), newBlocks.map(b => b.text));
   const entries = attachBlocks(parts, oldBlocks, newBlocks);
   if (!entries.length || !entries.some(e => e.kind !== 'eq')) {
@@ -217,7 +169,7 @@ export function renderSideBySide(oldHtml, newHtml, diffLib, opts) {
     // werden — single-cell, ein gepaarter Change.
     const oldText = htmlToPlainText(oldHtml);
     const newText = htmlToPlainText(newHtml);
-    if (oldText === newText) return { html: '', unchanged: true };
+    if (_sameIgnoringSpace(oldText, newText)) return { html: '', unchanged: true };
     const fallbackHtml = renderEntries(
       [{ kind: 'change', from: { tag: 'p', text: oldText }, to: { tag: 'p', text: newText } }],
       diffLib,
@@ -234,15 +186,7 @@ export function renderSideBySide(oldHtml, newHtml, diffLib, opts) {
 // Rendert kombinierten Wort-Diff einer Zeile: entfernt → <del>, neu → <ins>,
 // gleich → plain. Lesefluss-Variante (eine Spalte) statt links/rechts getrennt.
 function renderWordsBoth(oldText, newText, diffLib) {
-  const parts = diffLib.diffWords(oldText, newText);
-  let html = '';
-  for (const part of parts) {
-    const safe = escHtml(part.value);
-    if (part.added) html += `<ins class="diff-add">${safe}</ins>`;
-    else if (part.removed) html += `<del class="diff-del">${safe}</del>`;
-    else html += safe;
-  }
-  return html;
+  return partsToHtml(markParts(wordParts(oldText, newText, diffLib), 'both'));
 }
 
 // Public API. Einspaltiger Inline-Diff für den Lesefluss (Manuskript-Stream):
@@ -263,7 +207,7 @@ export function renderInline(oldHtml, newHtml, diffLib) {
     // exotischen Tags rutschen durch. Plain-Text-Word-Diff als Sicherheitsnetz.
     const oldText = htmlToPlainText(oldHtml);
     const newText = htmlToPlainText(newHtml);
-    if (oldText === newText) return { html: '', unchanged: true };
+    if (_sameIgnoringSpace(oldText, newText)) return { html: '', unchanged: true };
     return { html: `<p class="diff-line diff-line--change">${renderWordsBoth(oldText, newText, diffLib)}</p>`, unchanged: false };
   }
 

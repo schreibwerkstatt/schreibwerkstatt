@@ -20,9 +20,10 @@ import { treeCatchUpMethods, catchUpReadsFresh } from '../../public/js/book/tree
 
 // ── Pfad → Bedeutung ───────────────────────────────────────────────────────
 
-test('parseContentPath erkennt die zwei Pfade mit Konsument', () => {
+test('parseContentPath erkennt die drei Pfade mit Konsument', () => {
   assert.deepEqual(parseContentPath('/content/books'), { kind: 'books' });
   assert.deepEqual(parseContentPath('/content/books/12/tree'), { kind: 'tree', bookId: '12' });
+  assert.deepEqual(parseContentPath('/content/pages/77'), { kind: 'page', pageId: '77' });
 });
 
 test('parseContentPath verwirft alles andere still', () => {
@@ -31,8 +32,9 @@ test('parseContentPath verwirft alles andere still', () => {
   for (const p of [
     '/content/books/12',            // Buch-Detail, kein Baum
     '/content/books/12/tree/extra',
-    '/content/pages/77',            // Seiten-Body: der SW vergleicht ihn gar nicht erst
     '/content/pages/77/revisions',
+    '/content/pages/77/revisions/3',
+    '/content/pages/77/presence',
     '/content/search?q=x',
     '/config',
     '',
@@ -186,9 +188,46 @@ test('Eine Buchlisten-Meldung zieht die Buchliste nach, nicht den Baum', () => {
 
 test('Eine unbekannte Meldung loest nichts aus', () => {
   const { ctx, calls } = routingCtx('3');
-  ctx._onContentUpdated({ kind: 'page', pageId: '7' });
+  ctx._onContentUpdated({ kind: 'chapter', chapterId: '7' });
   ctx._onContentUpdated(null);
   assert.deepEqual(calls, []);
+});
+
+// Abschnitt: die Lese-Ansicht stand sonst auf dem Stand des letzten Besuchs,
+// und ein Edit-Start nahm ihn als Basis (Entwurfsabgleich lief dann rückwärts).
+function pageCtx({ currentId = 7, editMode = false } = {}) {
+  const calls = [];
+  const ctx = {
+    ...treeCatchUpMethods,
+    $store: { nav: { pages: [], selectedBookId: '3' } },
+    currentPage: currentId == null ? null : { id: currentId },
+    editMode,
+    _refetchCurrentPage: async () => { calls.push('refetch'); },
+    _pullRemoteIntoEditor: () => { calls.push('pull'); },
+  };
+  return { ctx, calls };
+}
+
+test('Abschnitts-Meldung für den offenen Abschnitt lädt die Lese-Ansicht frisch', () => {
+  const { ctx, calls } = pageCtx();
+  ctx._onContentUpdated({ kind: 'page', pageId: '7' });
+  assert.deepEqual(calls, ['refetch']);
+});
+
+test('Abschnitts-Meldung im Edit-Modus läuft über den Editor-Nachzug, nie über den Refetch', () => {
+  // Ein Refetch setzte originalHtml/Stempel unter dem laufenden Editor neu —
+  // der nächste Save nähme die Remote-Änderung still zurück.
+  const { ctx, calls } = pageCtx({ editMode: true });
+  ctx._onContentUpdated({ kind: 'page', pageId: '7' });
+  assert.deepEqual(calls, ['pull']);
+});
+
+test('Abschnitts-Meldung für einen anderen Abschnitt bleibt folgenlos', () => {
+  const { ctx, calls } = pageCtx();
+  ctx._onContentUpdated({ kind: 'page', pageId: '8' });
+  const none = pageCtx({ currentId: null });
+  none.ctx._onContentUpdated({ kind: 'page', pageId: '7' });
+  assert.deepEqual([...calls, ...none.calls], []);
 });
 
 // ── Der Nachzug weicht aus, statt zu verwerfen ────────────────────────────

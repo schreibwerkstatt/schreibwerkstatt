@@ -113,12 +113,21 @@ module.exports = {
   Revision: obj({
     id: int(), page_id: int(), book_id: int(),
     chars: nul(int()), words: nul(int()), tok: nul(int()),
-    source: nul(str()), user_email: nul(str()), client: nul(str('Client-Label (Browser/OS bzw. nativer Client).')),
-    created_at: ts(), summary: nul(str()),
+    source: nul(str('focus | main | book | chat-apply | lektorat-apply | import | conflict | macapp | split | restore. Unbekannter Wert → roh anzeigen.')),
+    user_email: nul(str()), client: nul(str('Client-Label (Browser/OS bzw. nativer Client).')),
+    created_at: ts(), summary: nul(str('`baseline` = Stand vor dem ersten Save, `restored from #<id>`, `split → #<id>` / `split from #<id>`, `before split`.')),
+    pinned: int('0/1: angeheftet, von der Retention ausgenommen.'), label: nul(str('Name einer angehefteten Revision.')),
     body_html: str('Nur in der Detail-Antwort.'),
   }, ['id', 'page_id', 'created_at']),
-  RevisionList: obj({ revisions: arr(ref('Revision')), has_more: bool(), total: int() }, ['revisions']),
-  RevisionDetail: obj({ revision: ref('Revision') }, ['revision']),
+  RevisionList: obj({
+    revisions: arr(ref('Revision')), has_more: bool(), total: int(),
+    older: { ...nul(ref('Revision')), description: 'Vorgängerin der ältesten gelieferten Revision (nur bei `has_more`), ohne `body_html`.' },
+    pinned: arr(ref('Revision'), 'Angeheftete Revisionen der Seite, nur in der Antwort ohne Cursor.'),
+  }, ['revisions']),
+  RevisionDetail: obj({
+    revision: ref('Revision'),
+    prev: { ...nul(ref('Revision')), description: 'Meta der unmittelbaren Vorgängerin (ohne `body_html`), null bei der ältesten.' },
+  }, ['revision']),
   RestoreResponse: obj({ ok: bool(), restored_from: int(), page: ref('Page') }, ['ok', 'restored_from']),
 
   Ok: obj({ ok: { const: true } }, ['ok']),
