@@ -353,3 +353,18 @@ test('RIS: viele Fortsetzungszeilen werden mit Leerzeichen an den Wert gehaengt'
   const [r] = parseRis('TY  - JOUR\nTI  -  Ein\n  langer \n\nTitel\nAU  - Muster, Max\nER  - \n');
   assert.equal(r.title, 'Ein langer Titel');
 });
+
+test('BibTeX: `"` innerhalb von Klammern ist ein Zeichen, kein Zitat — keine verschluckten Eintraege', () => {
+  const r = parseBibtex(`@book{a, author={M"uller, Hans}, title={Eins}}
+@book{b, title={12" Record}, author={X, Y}}
+@book{c, title="Ein {"} Zeichen", author={Z, W}}
+@book{d, title = "Zwei, drei" # { und {vier}}, author={A, B}}`);
+  assert.deepEqual(r.map(x => x.title), ['Eins', '12" Record', 'Ein " Zeichen', 'Zwei, drei und vier']);
+  assert.equal(r[0].authors[0].family, 'Müller');
+  assert.equal(r[0].authors[0].given, 'Hans');
+});
+
+test('decodeLatex: babel-Kurzform nur nach einem Buchstaben', () => {
+  assert.equal(decodeLatex('Gr"o"se Stra"se'), 'Größe Straße');
+  assert.equal(decodeLatex('He said "Over the top"'), 'He said "Over the top"');
+});
