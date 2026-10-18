@@ -76,7 +76,7 @@ router.get('/:bookId', async (req, res) => {
   // Manuskript-Bild-BLOBs (base64) in die Page-Nodes einbetten, damit sie in die
   // Zielinstanz mitwandern (die page_images-Bytes liegen sonst nur lokal).
   const { collectReferencedImages } = require('../db/page-images');
-  const imagesByPage = collectReferencedImages(htmlById);
+  const imagesByPage = collectReferencedImages(htmlById, bookId);
   // Order-Tree: nur er kennt das Interleaving (Seite zwischen zwei Kapiteln).
   const orderTree = (() => { try { return require('../db/book-order').getOrder(bookId)?.tree || null; } catch { return null; } })();
   const nodes = treeToNodes(tree, htmlById, imagesByPage, orderTree);

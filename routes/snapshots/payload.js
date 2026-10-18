@@ -122,7 +122,7 @@ async function buildSnapshotPayload(bookId, req, { light = false } = {}) {
   let imagesByPage = null;
   if (!light) {
     const { collectReferencedImages } = require('../../db/page-images');
-    imagesByPage = collectReferencedImages(htmlById);
+    imagesByPage = collectReferencedImages(htmlById, bookId);
   }
   // Order-Tree mitnehmen: nur er kennt das Interleaving (Seite zwischen Kapiteln).
   const orderTree = (() => { try { return bookOrder.getOrder(bookId)?.tree || null; } catch { return null; } })();

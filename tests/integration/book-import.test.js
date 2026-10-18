@@ -353,3 +353,46 @@ test('Alt-Bundle mit zwei Analysen: der Import spielt nur eine ein, keine Dublet
   assert.equal(job.result.extras.analysis.skippedScopes, 1);
   assert.equal(job.result.extras.analysis.skippedRows, 3);
 });
+
+test('Fremdes Bundle: MIME-Typen der Recherche-Anhaenge laufen durch die Allowlist', async () => {
+  ctxBoot.dbSeed.setBook({
+    books: [{ id: 970, name: 'MimeQuelle' }],
+    chapters: [{ id: 9701, book_id: 970, name: 'Kap', position: 0 }],
+    pages: [{ id: 97001, book_id: 970, name: 'Seite1', chapter_id: 9701, position: 0 }],
+    pageBodies: { 97001: '<p>Text</p>' },
+  });
+  const { db } = require('../../db/connection');
+  const ins = db.prepare(`INSERT INTO research_items (book_id,user_email,kind,title,image,image_mime,doc,doc_mime,status)
+              VALUES (?,?,?,?,?,?,?,?,?)`);
+  ins.run(970, OWNER, 'image', 'boese', Buffer.from('<script>x</script>'), 'text/html',
+    Buffer.from('alert(1)'), 'text/javascript', 'offen');
+  ins.run(970, OWNER, 'image', 'gut', Buffer.from([1, 2, 3]), 'image/png',
+    Buffer.from('%PDF'), 'application/pdf', 'offen');
+
+  const job = await runImport(await buildBundleBuffer(970, { research: true }));
+  assert.equal(job.status, 'done', job.error || '');
+  const rows = db.prepare('SELECT title, image_mime, doc_mime FROM research_items WHERE book_id = ? ORDER BY title')
+    .all(job.result.bookId);
+  assert.deepEqual(rows.map(r => ({ ...r })), [
+    { title: 'boese', image_mime: null, doc_mime: null },
+    { title: 'gut', image_mime: 'image/png', doc_mime: 'application/pdf' },
+  ]);
+});
+
+test('collectReferencedImages: Bild-Referenz auf ein fremdes Buch wird nicht eingesammelt', () => {
+  ctxBoot.dbSeed.setBook({
+    books: [{ id: 980, name: 'Eigen' }, { id: 981, name: 'Fremd' }],
+    chapters: [{ id: 9801, book_id: 980, name: 'K', position: 0 }, { id: 9811, book_id: 981, name: 'K', position: 0 }],
+    pages: [
+      { id: 98001, book_id: 980, name: 'Eigene', chapter_id: 9801, position: 0 },
+      { id: 98101, book_id: 981, name: 'Fremde', chapter_id: 9811, position: 0 },
+    ],
+    pageBodies: { 98001: '<p>a</p>', 98101: '<p>b</p>' },
+  });
+  const { insertPageImage, collectReferencedImages } = require('../../db/page-images');
+  const own = insertPageImage({ pageId: 98001, mime: 'image/png', image: Buffer.from([1]) });
+  const foreign = insertPageImage({ pageId: 98101, mime: 'image/png', image: Buffer.from([2]) });
+  const html = `<img src="/content/page-image/${own}"><img src="/content/page-image/${foreign}">`;
+  const got = collectReferencedImages(new Map([[98001, html]]), 980).get(98001);
+  assert.deepEqual(got.map(i => i.oldId), [Number(own)]);
+});

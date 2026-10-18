@@ -55,9 +55,9 @@ function register(router) {
       : false;
     if (!inScope) return res.status(404).type('html').send('Not found');
 
-    const SAFE_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
-    const safe = SAFE_IMAGE_MIME.has(row.mime);
-    res.setHeader('Content-Type', safe ? row.mime : 'application/octet-stream');
+    const { safeImageMime, FALLBACK_MIME } = require('../../lib/media-mime');
+    const safe = safeImageMime(row.mime);
+    res.setHeader('Content-Type', safe || FALLBACK_MIME);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
     res.setHeader('Cache-Control', 'public, max-age=3600');

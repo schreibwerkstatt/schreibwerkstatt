@@ -393,10 +393,10 @@ function register(router) {
 
     // Defense-in-depth: nur Raster-MIMEs inline; nosniff + restriktive CSP
     // verhindern HTML/Script-Interpretation des Bild-Bodys (Stored-XSS-Schutz).
-    const SAFE_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
-    const safe = SAFE_IMAGE_MIME.has(row.mime);
-    const ext = (safe && row.mime.split('/')[1]) || 'jpg';
-    res.setHeader('Content-Type', safe ? row.mime : 'application/octet-stream');
+    const { safeImageMime, FALLBACK_MIME } = require('../../lib/media-mime');
+    const safe = safeImageMime(row.mime);
+    const ext = (safe && safe.split('/')[1]) || 'jpg';
+    res.setHeader('Content-Type', safe || FALLBACK_MIME);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
     res.setHeader('Cache-Control', 'private, max-age=3600');

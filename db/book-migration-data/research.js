@@ -39,6 +39,10 @@ function collectResearch(bookId) {
 // Sprecher-Zuordnungen verlieren ihre `source_id` (Quellen reisen nicht mit).
 function _unb64(s) { return typeof s === 'string' && s ? Buffer.from(s, 'base64') : null; }
 
+// MIME-Typen aus dem Bundle sind User-Eingabe: nur die Typen, die auch der
+// Upload erzeugt, sonst null (Auslieferung faellt dann auf einen harmlosen Typ).
+function _mime(check, v) { return v == null ? null : require('../../lib/media-mime')[check](v); }
+
 function restoreResearch(bookId, data, ctx) {
   if (!data || typeof data !== 'object') return { items: 0 };
   const { pageOf, chapterOf, email } = ctx;
@@ -54,7 +58,7 @@ function restoreResearch(bookId, data, ctx) {
     const kind = LIST_FILTER_KINDS.has(r.kind) ? r.kind : 'note';
     const status = RESEARCH_STATUS_SET.has(r.status) ? r.status : 'offen';
     const res = insItem.run(bookId, email, kind, r.title ?? null, r.body ?? null, r.source ?? null,
-      _unb64(r.image), r.image_mime ?? null, _unb64(r.doc), r.doc_mime ?? null, r.doc_name ?? null,
+      _unb64(r.image), _mime('safeImageMime', r.image_mime), _unb64(r.doc), _mime('safeDocMime', r.doc_mime), r.doc_name ?? null,
       r.doc_text ?? null, r.doc_pages ?? null, r.doc_chars ?? null, r.pinned ? 1 : 0, r.archived ? 1 : 0,
       status, r.created_at || _now(), r.updated_at || _now());
     itemMap.set(r.id, res.lastInsertRowid);
@@ -104,7 +108,7 @@ function restoreResearch(bookId, data, ctx) {
     if (!iid) continue;
     // Ein beim Export laufender Transkript-Job ist auf der Zielinstanz tot.
     const status = r.status === 'ready' ? 'ready' : 'error';
-    insTr.run(iid, bookId, _unb64(r.audio), r.audio_mime ?? null, r.audio_name ?? null, r.audio_bytes ?? null,
+    insTr.run(iid, bookId, _unb64(r.audio), _mime('safeAudioMime', r.audio_mime), r.audio_name ?? null, r.audio_bytes ?? null,
       r.duration_s ?? null, status, status === 'ready' ? (r.fehler ?? null) : (r.fehler || 'import'), r.sprache ?? null,
       r.modell ?? null, r.diarisiert ? 1 : 0, r.created_at || _now(), r.updated_at || _now());
   }

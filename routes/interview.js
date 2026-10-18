@@ -28,6 +28,7 @@ const {
 const { createSource, linkSource, getSource } = require('../db/sources');
 const { toIntId } = require('../lib/validate');
 const { resolveByteRange } = require('../lib/http-util');
+const { safeAudioMime, FALLBACK_MIME } = require('../lib/media-mime');
 const { sessionEmail } = require('../lib/acl');
 const { scopedItem } = require('./research-acl');
 const searchIndex = require('../lib/search');
@@ -106,7 +107,7 @@ interviewMediaRouter.get('/:id/audio', (req, res) => {
   if (!meta?.size) return res.status(404).json({ error_code: 'NO_AUDIO' });
 
   const size = meta.size;
-  res.set('Content-Type', meta.audio_mime || 'application/octet-stream');
+  res.set('Content-Type', safeAudioMime(meta.audio_mime) || FALLBACK_MIME);
   res.set('Accept-Ranges', 'bytes');
   res.set('Cache-Control', 'private, max-age=3600');
   res.set('X-Content-Type-Options', 'nosniff');

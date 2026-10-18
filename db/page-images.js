@@ -37,6 +37,17 @@ function getPageImage(id) {
   return _get.get(id);
 }
 
+// Bild nur, wenn es zu einer Seite von `bookId` gehoert. Pflicht fuer jeden Pfad,
+// der Bild-Bytes aus einer /content/page-image/<id>-Referenz im Seiten-HTML zieht
+// (Export, Fassung, Papierkorb): die ID steht im vom User geschriebenen HTML und
+// kann auf das Bild eines fremden Buchs zeigen.
+function getBookPageImage(id, bookId) {
+  const row = _get.get(id);
+  const b = Number(bookId);
+  if (!row || !Number.isInteger(b) || b <= 0 || Number(row.book_id) !== b) return null;
+  return row;
+}
+
 
 
 // ── Snapshot-/Migrations-Serialisierung ──────────────────────────────────────
@@ -49,8 +60,9 @@ const PAGE_IMG_REF = /\/content\/page-image\/(\d+)/g;
 
 // Pro Seite die im HTML referenzierten Bild-BLOBs als base64 sammeln.
 // Map pageId -> [{ oldId, mime, width, height, b64 }]. Nur tatsaechlich
-// referenzierte IDs (keine verwaisten Rows nach HTML-Loeschung).
-function collectReferencedImages(htmlById) {
+// referenzierte IDs (keine verwaisten Rows nach HTML-Loeschung) und nur Bilder
+// aus `bookId` (siehe getBookPageImage).
+function collectReferencedImages(htmlById, bookId) {
   const byPage = new Map();
   for (const [pageId, html] of htmlById.entries()) {
     if (!html || html.indexOf('/content/page-image/') === -1) continue;
@@ -59,7 +71,7 @@ function collectReferencedImages(htmlById) {
     while ((m = PAGE_IMG_REF.exec(html))) ids.add(parseInt(m[1], 10));
     const list = [];
     for (const id of ids) {
-      const row = getPageImage(id);
+      const row = getBookPageImage(id, bookId);
       if (row && row.image) {
         list.push({ oldId: id, mime: row.mime, width: row.width, height: row.height, b64: row.image.toString('base64') });
       }
@@ -96,5 +108,5 @@ function restorePageImages(newPageId, html, images) {
 }
 
 module.exports = {
-  insertPageImage, getPageImage, collectReferencedImages, restorePageImages,
+  insertPageImage, getPageImage, getBookPageImage, collectReferencedImages, restorePageImages,
 };

@@ -18,6 +18,7 @@ const { emitItem } = require('../db/research-items');
 const { sessionEmail } = require('../lib/acl');
 const { scopedItem } = require('./research-acl');
 const { prepareCover } = require('../lib/cover-prepare');
+const { safeImageMime, FALLBACK_MIME } = require('../lib/media-mime');
 // PDF-Anhang: geteilter Stack mit routes/sources.js (Limit, Namen, Extraktion,
 // Fehler-Codes, Auslieferungs-Header).
 const { rawPdfBody, readDocUpload, sendDoc } = require('../lib/pdf-attachment');
@@ -62,7 +63,13 @@ researchMediaRouter.get('/:id/image', (req, res) => {
   if (!scope) return;
   const row = db.prepare('SELECT image, image_mime FROM research_items WHERE id = ?').get(scope.id);
   if (!row?.image) return res.status(404).json({ error_code: 'NO_IMAGE' });
-  res.set('Content-Type', row.image_mime || 'image/jpeg');
+  // MIME kann aus einem importierten Bundle stammen: nur Raster-Typen inline,
+  // dazu nosniff + Sandbox-CSP wie bei /content/page-image.
+  const mime = row.image_mime == null ? 'image/jpeg' : safeImageMime(row.image_mime);
+  res.set('Content-Type', mime || FALLBACK_MIME);
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Content-Security-Policy', "default-src 'none'; sandbox");
+  if (!mime) res.set('Content-Disposition', 'attachment');
   res.set('Cache-Control', 'private, max-age=3600');
   res.send(row.image);
 });
