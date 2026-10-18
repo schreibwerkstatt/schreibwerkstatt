@@ -65,7 +65,7 @@
             <template x-if="prov.card.canPush(currentPage) || prov.card.pushBusy[currentPage?.id]">
               <button type="button" class="btn-compact editor-sync-push"
                       @click="prov.card.push(currentPage.id)"
-                      :disabled="!!prov.card.pushBusy[currentPage.id]"
+                      :disabled="!!prov.card.pushBusy[currentPage?.id]"
                       :data-tip="t(prov.key + '.action.push')"
                       :aria-label="t(prov.key + '.action.push')">
                 <template x-if="!prov.card.pushBusy[currentPage?.id]">
@@ -74,7 +74,7 @@
                 <template x-if="prov.card.pushBusy[currentPage?.id]">
                   <span class="display-contents">
                     <span class="spinner" aria-hidden="true"></span>
-                    <span class="editor-sync-push-pct" x-text="(prov.card.pushProgress[currentPage.id] || 0) + '%'"></span>
+                    <span class="editor-sync-push-pct" x-text="(prov.card.pushProgress[currentPage?.id] || 0) + '%'"></span>
                   </span>
                 </template>
               </button>
