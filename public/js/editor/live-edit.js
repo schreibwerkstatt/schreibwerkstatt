@@ -1,6 +1,6 @@
 // Live-Edit-Marker: welcher Abschnitt wird in welchem Tab gerade im
-// Notebook-/Focus-Editor bearbeitet — sichtbar für die anderen Tabs desselben
-// Browsers.
+// Notebook-/Focus-Editor oder im Bucheditor bearbeitet — sichtbar für die
+// anderen Tabs desselben Browsers.
 //
 // Drafts (draft-storage.js) liegen in localStorage und sind damit in allen Tabs
 // dieselben. Die Reconnect-Outbox (app/app-outbox.js) eines Tabs, in dem der
@@ -20,7 +20,11 @@ const KEY_PREFIX = 'notebook_live_edit:';
 export const LIVE_EDIT_HEARTBEAT_MS = 30 * 1000;
 export const LIVE_EDIT_STALE_MS = 5 * 60 * 1000;
 
-let _pageId = null;
+// Halter → Abschnitte. Notebook/Focus hält höchstens einen (`startLiveEdit`),
+// der Bucheditor alle Blöcke mit ungespeichertem Stand (`setLiveEditPages`).
+// Markiert wird die Vereinigung.
+const _holders = new Map();
+let _marked = new Set();
 let _timer = null;
 let _onPageHide = null;
 let _onPageShow = null;
@@ -43,32 +47,69 @@ function read(pageId) {
   } catch { return null; }
 }
 
-// Edit-Session dieses Tabs beginnt auf `pageId`. Ersetzt einen laufenden Marker.
-export function startLiveEdit(pageId) {
-  if (pageId == null) return;
-  stopLiveEdit();
-  _pageId = pageId;
-  write(pageId);
-  _timer = setInterval(() => { if (_pageId != null) write(_pageId); }, LIVE_EDIT_HEARTBEAT_MS);
-  _timer.unref?.(); // Node (Unit-Tests): Heartbeat hält den Prozess nicht offen
-  // Schliessen/Neuladen: sofort freigeben statt erst nach STALE_MS. Nur den
-  // Marker, nicht die Session — `pagehide` feuert auch beim Parken im
-  // Back-Forward-Cache, und nach `pageshow` wird weiter bearbeitet.
-  _onPageHide = () => { if (_pageId != null) removeIfOwn(_pageId); };
-  _onPageShow = () => { if (_pageId != null) write(_pageId); };
-  window.addEventListener('pagehide', _onPageHide);
-  window.addEventListener('pageshow', _onPageShow);
+function union() {
+  const out = new Set();
+  for (const ids of _holders.values()) for (const id of ids) out.add(id);
+  return out;
 }
 
-// Edit-Session endet. Entfernt den Marker nur, wenn er noch diesem Tab gehört —
-// ein anderer Tab kann denselben Abschnitt inzwischen geöffnet haben.
+function writeAll() { for (const id of _marked) write(id); }
+
+function sync() {
+  const next = union();
+  for (const id of _marked) if (!next.has(id)) removeIfOwn(id);
+  for (const id of next) if (!_marked.has(id)) write(id);
+  _marked = next;
+  if (next.size && !_timer) {
+    _timer = setInterval(writeAll, LIVE_EDIT_HEARTBEAT_MS);
+    _timer.unref?.(); // Node (Unit-Tests): Heartbeat hält den Prozess nicht offen
+    // Schliessen/Neuladen: sofort freigeben statt erst nach STALE_MS. Nur die
+    // Marker, nicht die Sessions — `pagehide` feuert auch beim Parken im
+    // Back-Forward-Cache, und nach `pageshow` wird weiter bearbeitet.
+    _onPageHide = () => { for (const id of _marked) removeIfOwn(id); };
+    _onPageShow = writeAll;
+    window.addEventListener('pagehide', _onPageHide);
+    window.addEventListener('pageshow', _onPageShow);
+  } else if (!next.size && _timer) {
+    clearInterval(_timer); _timer = null;
+    window.removeEventListener('pagehide', _onPageHide); _onPageHide = null;
+    window.removeEventListener('pageshow', _onPageShow); _onPageShow = null;
+  }
+}
+
+const norm = (pageId) => Number(pageId);
+
+// Setzt die Abschnitte eines Halters (ersetzt seine bisherigen). Leere Liste
+// gibt sie frei. Ein Marker fällt nur, wenn er noch diesem Tab gehört — ein
+// anderer Tab kann denselben Abschnitt inzwischen geöffnet haben.
+export function setLiveEditPages(holder, pageIds) {
+  const ids = new Set([...(pageIds || [])].filter((id) => id != null).map(norm));
+  if (ids.size) _holders.set(holder, ids);
+  else _holders.delete(holder);
+  sync();
+  for (const id of ids) write(id);
+}
+
+// Edit-Session des Notebook-/Focus-Editors beginnt auf `pageId`. Ersetzt einen
+// laufenden Marker.
+export function startLiveEdit(pageId) {
+  if (pageId == null) return;
+  setLiveEditPages('notebook', [pageId]);
+}
+
 export function stopLiveEdit() {
-  if (_timer) { clearInterval(_timer); _timer = null; }
-  if (_onPageHide) { window.removeEventListener('pagehide', _onPageHide); _onPageHide = null; }
-  if (_onPageShow) { window.removeEventListener('pageshow', _onPageShow); _onPageShow = null; }
-  if (_pageId == null) return;
-  removeIfOwn(_pageId);
-  _pageId = null;
+  setLiveEditPages('notebook', []);
+}
+
+// Alle Abschnitte, die DIESER Tab hält — Antwort an den Background Sync
+// (public/sw-drafts.js), der sie nicht anfassen darf.
+export function liveEditedHereIds() {
+  return [..._marked];
+}
+
+// true, wenn DIESER Tab `pageId` gerade hält (Notebook oder Bucheditor).
+export function isLiveEditedHere(pageId) {
+  return _marked.has(norm(pageId));
 }
 
 // true, wenn ein ANDERER Tab `pageId` gerade bearbeitet.

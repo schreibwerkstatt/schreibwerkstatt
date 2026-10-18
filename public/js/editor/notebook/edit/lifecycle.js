@@ -1,6 +1,6 @@
 // Teil von notebookEditMethods (siehe Facade edit.js).
 import { clearDraft, clearNormalSnapshot, editorHost, findInHtml, getActiveEditorContainer, htmlToText, installEditCounter, isNoChange, isPageConflict, mountEditorHtml, readConflictBody, readDraft, readEditorPrefs, savePage, sortByPosition, stripLektoratMarks, writeDraft, writeNormalSnapshot } from './_shared.js';
-import { startLiveEdit, stopLiveEdit } from '../../live-edit.js';
+import { isLiveEditedElsewhere, startLiveEdit, stopLiveEdit } from '../../live-edit.js';
 import { noteEditStartDuringOutage, noteSaveRecovered } from '../save-outage.js';
 
 export const lifecycleMethods = {
@@ -91,6 +91,7 @@ export const lifecycleMethods = {
     // Reset hier würde der 120-s-Cap der nächsten Tipp-Serie noch von der
     // Baseline vor diesem Save gemessen.
     this._clearAutosaveTimers();
+    this._clearSaveRetry();
     app.lastAutosaveAt = Date.now();
     app.lastDraftSavedAt = null;
     app.draftPersistFailed = false;
@@ -289,6 +290,10 @@ export const lifecycleMethods = {
     // Presence-Heartbeat: anderen Usern signalisieren „hier editiert wer".
     // Stopp im cancelEdit/saveEdit (Non-Focus-Pfad).
     app._startPresenceHeartbeat?.(app.currentPage.id);
+    // Ein anderer Tab bearbeitet denselben Abschnitt: sagen (vor dem eigenen
+    // Marker — danach sähe der Check nur noch diesen Tab). Überschrieben wird
+    // dessen Entwurf nicht, er wandert in die Sicherung (draft-storage.js).
+    if (isLiveEditedElsewhere(app.currentPage.id)) app.setStatus?.(app.t('edit.openElsewhere'), true, 8000);
     // Live-Edit-Marker: die Outbox anderer Tabs lässt den Draft dieses
     // Abschnitts in Ruhe, solange dieser Tab ihn bearbeitet (../../live-edit.js).
     startLiveEdit(app.currentPage.id);

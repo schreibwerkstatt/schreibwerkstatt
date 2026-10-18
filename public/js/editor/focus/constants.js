@@ -78,11 +78,15 @@ export function isFocusPopoverOpen(app) {
 }
 
 // Vorgemerkter Exit während eines laufenden Saves: Abfrage-Takt und Deckel.
-// Nach dem Deckel wird der Exit verworfen — ein Save, der so lange hängt, ist
-// ein Netzwerkproblem, und ein Modus-Wechsel Sekunden nach dem Tastendruck
-// käme für den User aus dem Nichts.
+// Der Deckel deckt einen Save, der bei hängender Leitung bis zum Timeout
+// läuft: Konflikt-Vorabprüfung (GET, 30 s) plus PUT (editor/notebook/
+// save-timing.js#PAGE_SAVE_TIMEOUT_MS) — sonst verfiele der Exit vorher, und
+// Escape wirkte im Zug, als reagiere die Taste nicht. Der Save endet spätestens
+// mit seinem Timeout; danach geht der Modus zu, ein gescheiterter Save lässt
+// den Text als Entwurf im Edit-Modus. Erst ein Save, der selbst den Deckel
+// überdauert, verwirft den Exit. Gegated: tests/unit/notebook-save-timing.test.mjs.
 export const EXIT_DEFER_POLL_MS = 50;
-export const EXIT_DEFER_MAX_MS = 10000;
+export const EXIT_DEFER_MAX_MS = 65000;
 
 export const HAS_IO = typeof IntersectionObserver !== 'undefined';
 export const HAS_MO = typeof MutationObserver !== 'undefined';

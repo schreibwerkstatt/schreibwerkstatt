@@ -55,6 +55,7 @@
   <link rel="stylesheet" href="css/components/help.css">
   <link rel="stylesheet" href="css/components/onboarding.css">
   <link rel="stylesheet" href="css/components/confirm-dialog.css">
+  <link rel="stylesheet" href="css/components/offline-rescue.css">
   <link rel="stylesheet" href="css/components/danger-zone.css">
   <link rel="stylesheet" href="css/components/job-toast.css">
   <link rel="stylesheet" href="css/components/user-chip.css">
@@ -409,6 +410,13 @@
   <span class="session-banner-text" x-text="$store.session.pendingSyncCount > 0 ? t($store.session.pendingSyncCount === 1 ? 'session.offlinePendingOne' : 'session.offlinePendingMany', { count: $store.session.pendingSyncCount }) : t('session.offlineMode')"></span>
 </div>
 
+<!-- Offline Entstandenes, das der Server abgewiesen hat, und lokale Sicherungen
+     (app/app-offline-rescue.js). Nie still verworfen — der Dialog unten. -->
+<div class="session-banner session-banner--rescue" role="status" x-show="offlineRescueCount > 0 && !$store.session.sessionExpired" x-cloak>
+  <span class="session-banner-text" x-text="t(offlineRescueCount === 1 ? 'offline.rescue.bannerOne' : 'offline.rescue.bannerMany', { n: offlineRescueCount })"></span>
+  <button type="button" class="session-banner-btn" @click="openOfflineRescue()" x-text="t('offline.rescue.open')"></button>
+</div>
+
 <div class="session-banner" role="status" x-show="($store.shell.updateAvailable || $store.shell.updateRequired) && !$store.session.sessionExpired" x-cloak>
   <span class="session-banner-text" x-text="t($store.shell.updateRequired ? 'session.updateRequired' : 'session.updateAvailable')"></span>
   <button type="button" class="session-banner-btn" @click="applyUpdate()" x-text="t('session.applyUpdate')"></button>
@@ -757,6 +765,38 @@
             x-ref="confirmDialogConfirmBtn"
             @click="_resolveConfirmDialog(true)"
             x-text="confirmDialogConfirmLabel"></button>
+  </div>
+</dialog>
+
+<!-- Dialog „Nicht gespeichert" (app/app-offline-rescue.js) -->
+<dialog class="offline-rescue-dialog" x-ref="offlineRescueDialog" :aria-label="t('offline.rescue.title')"
+        @click="if ($event.target === $el) closeOfflineRescue()">
+  <div class="offline-rescue-head">
+    <div class="offline-rescue-title" x-text="t('offline.rescue.title')"></div>
+    <button type="button" class="btn-close" @click="closeOfflineRescue()" :aria-label="t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+  </div>
+  <p class="offline-rescue-hint" x-text="t('offline.rescue.hint')"></p>
+  <ul class="offline-rescue-list">
+    <template x-for="item in offlineRescueItems" :key="item.id">
+      <li class="offline-rescue-item">
+        <div class="offline-rescue-item-head">
+          <span class="offline-rescue-kind" x-text="rescueKindLabel(item)"></span>
+          <span class="offline-rescue-item-title" x-show="item.title" x-text="item.title"></span>
+          <span class="offline-rescue-time" x-text="rescueTime(item)"></span>
+        </div>
+        <div class="offline-rescue-text" x-text="item.text || t('offline.rescue.empty')"></div>
+        <div class="offline-rescue-foot">
+          <span class="offline-rescue-reason" x-show="item.reason" x-text="item.reason"></span>
+          <button type="button" class="offline-rescue-btn" @click="rescueCopy(item)" x-text="t('offline.rescue.copy')"></button>
+          <button type="button" class="offline-rescue-btn offline-rescue-btn--danger" @click="rescueDiscard(item)" x-text="t('offline.rescue.discard')"></button>
+        </div>
+      </li>
+    </template>
+  </ul>
+  <div class="confirm-dialog-actions">
+    <button type="button" class="confirm-dialog-btn confirm-dialog-btn--primary" x-show="rescueHasRetry()"
+            @click="rescueRetry()" x-text="t('offline.rescue.retry')"></button>
+    <button type="button" class="confirm-dialog-btn confirm-dialog-btn--cancel" @click="closeOfflineRescue()" x-text="t('common.close')"></button>
   </div>
 </dialog>
 

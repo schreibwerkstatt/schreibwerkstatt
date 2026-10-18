@@ -37,6 +37,13 @@ select,
   background: var(--color-surface);
   color: var(--color-text);
 }
+
+/* Browser-Default fuer <textarea> ist Monospace. Klassenlose Textareas erben
+   deshalb wenigstens die UI-Schrift; Box-Optik kommt aus .card-form-textarea. */
+textarea {
+  font-family: inherit;
+}
+
 /* iOS: font-size >= 16px verhindert automatisches Zoom-in beim Fokus */
 @media (max-width: 768px) {
   input[type=text],

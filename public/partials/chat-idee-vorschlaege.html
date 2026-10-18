@@ -36,7 +36,7 @@
               : { type: 'seite', id: e.p.fields.page_id, label: e.p.labels?.anchor || undefined }"></button>
         </div>
         <template x-if="e.p._editing">
-          <textarea class="chat-idee-edit" rows="3" data-spellcheck="spelling"
+          <textarea class="card-form-textarea chat-idee-edit" rows="3" data-spellcheck="spelling"
             x-model="e.p._draft" :aria-label="$app.t('chat.ideeEditLabel')"></textarea>
         </template>
         <div x-show="!e.p._editing" class="chat-idee-text" x-text="e.p._draft ?? e.p.fields.content"></div>

@@ -381,6 +381,44 @@ seine Entscheidung. Darum lesen die planenden KI-Funktionen sie mit:
 - **Bucheditor** — Zähler der offenen Ideen an Kapitel- und Seitenkopf (aus dem
   Badges-Store, derselbe Sprung wie in der Sidebar).
 
+### Ohne Verbindung
+
+Ideen-Karte und Board schreiben über [repo/ideen-queue.js](../public/js/repo/ideen-queue.js)
+(`createIdee`, `patchIdee`, `deleteIdee`). Erreicht ein solcher Write den Server
+nicht (Netzfehler, Timeout oder SW-503 `offline` — kein HTTP-Fehler), wird er in
+IndexedDB (`schreibwerkstatt-ideen-queue`, pro Konto) vorgemerkt und die Karte
+arbeitet mit der angenommenen Zeile weiter (`pending: true`). Vorgemerkt werden
+**Anlegen, Text, Stufe, Zuordnen/Verschieben, Löschen**; Verknüpfungen,
+Reihenfolge und Stufen-Einstellungen scheitern offline wie bisher. Eine offline
+angelegte Idee trägt eine negative ID — ihre Änderungen und ihr Löschen schreiben
+in die Anlege-Operation, nie als Request. Mehrere Änderungen derselben Idee fallen
+zusammen (zuletzt gesetzt gewinnt, wie online).
+
+Jedes Anlegen trägt schon beim ersten Versuch einen `Idempotency-Key`: auch ein
+angekommener Write mit verlorener Antwort sieht wie „nicht zugestellt" aus, und das
+Nachspielen bekommt dann die erste Antwort statt einer zweiten Idee
+([lib/idempotency.js](../lib/idempotency.js)).
+
+Die Reconnect-Outbox ([app/app-outbox.js](../public/js/app/app-outbox.js)) spielt
+die Warteschlange **nach** der Struktur-Warteschlange und **vor** den Entwürfen ab.
+Eine Idee an einem offline angelegten Abschnitt (Anlegen oder Verschieben) wartet,
+bis dessen Anlegen abgespielt ist, und bekommt dann seine echte ID
+(`structure-queue.js#resolveTempId`, auch in einem späteren Durchgang) — nie geht
+eine negative ID an den Server. Die Ideen-Karte eines solchen Abschnitts zeigt bis
+dahin nur die vorgemerkten Ideen. 401 hält das Abspielen an (nach dem Login geht es
+weiter). Abgewiesenes Anlegen (Anker inzwischen gelöscht) wird einmal als Buch-Idee
+wiederholt; scheitert auch das (z.B. kein Recht mehr), bleibt der Text als `stuck`
+liegen und erscheint im Dialog «Nicht gespeichert» ([app/app-offline-rescue.js](../public/js/app/app-offline-rescue.js))
+zum Kopieren, erneut Versuchen oder ausdrücklichen Verwerfen: **ein Einfall geht
+nie still verloren**. Eine zusammengelegte Änderung, die der Server ablehnt, geht
+Feld für Feld (Text, Stufe, Ort) noch einmal — fällt nur, was er wirklich ablehnt,
+und wird gemeldet. Ein erfolgreicher Online-Write nimmt einer älteren vorgemerkten
+Änderung derselben Idee die überholten Felder weg. Danach laden beide Karten neu
+(`EVT.IDEEN_QUEUE_CHANGED`, `flushed`).
+Gelesen wird offline über den Service Worker ([caching.md](caching.md), Werkstatt-Daten);
+`overlayPendingIdeen` legt die vorgemerkten Writes über die gecachte Liste.
+Gegated durch [tests/unit/ideen-queue.test.mjs](../tests/unit/ideen-queue.test.mjs).
+
 ## 4 · Routen
 
 | Route | Zweck |

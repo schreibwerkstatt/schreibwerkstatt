@@ -26,6 +26,8 @@
 //   offlinePinned  — IDs (Strings) der Bücher, die dieses Konto offline hält.
 //   offlineBooks   — Stand je Buch laut SW: { [id]: { at, total, failed } }.
 //   offlineProgress — laufender Sync je Buch: { [id]: { done, total } }.
+//   offlineAuto    — zuletzt geöffnetes Buch automatisch offline halten:
+//                  { enabled, bookId } (pro Konto und Gerät, app-offline-books.js).
 //   storagePersisted — Browser hat dauerhaften Speicher gewährt.
 //   devMode        — Local-Dev-/Dev-Admin-Modus (LOCAL_DEV_MODE). Blendet z.B.
 //                  den Logout-Eintrag der Command-Palette aus.
@@ -42,6 +44,7 @@ export function registerSessionStore() {
     offlinePinned: [],
     offlineBooks: {},
     offlineProgress: {},
+    offlineAuto: { enabled: true, bookId: null },
     storagePersisted: false,
     devMode: false,
   });

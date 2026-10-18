@@ -54,6 +54,24 @@ export function isRetriableFetchError(err) {
 }
 
 /**
+ * True, wenn ein Request den Server nicht erreicht hat (oder nicht sicher):
+ * Netzwerkfehler (`fetchJson`: `status = 0`; roher `fetch`: TypeError ohne
+ * Status), Timeout-Abbruch (AbortError/TimeoutError) oder die 503-Antwort
+ * `{ error: 'offline' }` des Service Workers. Eine Antwort mit HTTP-Status
+ * ist nie „nicht zugestellt" — der Server hat entschieden.
+ *
+ * Gemeinsame Regel für alles, was offline vormerkt oder lokal sichert
+ * (repo/structure-queue.js, repo/ideen-queue.js, Bucheditor-Save).
+ */
+export function isNetworkError(e) {
+  if (!e) return false;
+  if (e.status === 0) return true;
+  if (e.status === 503 && e.body?.error === 'offline') return true;
+  if (typeof e.status === 'number') return false;
+  return e.name === 'TypeError' || e.name === 'AbortError' || e.name === 'TimeoutError';
+}
+
+/**
  * `fetchJson` mit EINEM Retry nach kurzem Backoff — aber nur bei transienten
  * Fehlern (siehe `isRetriableFetchError`). Für Lade-Pfade, die viele Endpoints
  * parallel abfragen und bei denen ein einzelner Blip sonst eine leere Kachel

@@ -30,14 +30,20 @@ test('angeheftetes Buch ist nach Reload ohne Netz lesbar, auch ein nie geöffnet
   await page.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 60000 });
   await page.waitForFunction(() => window.Alpine.store('session').offlineCapable === true);
 
-  // Buch per Sidebar-Knopf anheften und auf den fertigen Sync warten.
+  // Buch per Sidebar-Knopf anheften und auf den fertigen Sync warten. Der
+  // Knopf ist der Anheft-Schalter (`aria-pressed`); sein Icon zeigt schon
+  // `cloud-check`, wenn die Automatik das geöffnete Buch offline hält — darum
+  // nicht übers Icon suchen. Aus demselben Grund kann `offlineBooks[id].at`
+  // schon vor dem Klick stehen: fertig ist erst der Sync der Anheftung.
   await page.evaluate((id) => { location.hash = '#book/' + id; }, bookId);
-  const btn = page.locator('.card-actions button:has(use[href="/icons.svg#cloud-download"])');
+  const btn = page.locator('.card-actions button[aria-pressed]');
+  await expect(btn).toHaveAttribute('aria-pressed', 'false');
   await btn.click();
-  await page.waitForFunction(
-    (id) => !!window.Alpine.store('session').offlineBooks[String(id)]?.at,
-    bookId, { timeout: 60000 },
-  );
+  await page.waitForFunction((id) => {
+    const s = window.Alpine.store('session');
+    const k = String(id);
+    return s.offlinePinned.includes(k) && !s.offlineProgress[k] && !!s.offlineBooks[k]?.at;
+  }, bookId, { timeout: 60000 });
   await expect(page.locator('.card-actions button:has(use[href="/icons.svg#cloud-check"])')).toHaveAttribute('aria-pressed', 'true');
 
   // Einen Abschnitt wählen, der in dieser Sitzung nie geöffnet wurde: der

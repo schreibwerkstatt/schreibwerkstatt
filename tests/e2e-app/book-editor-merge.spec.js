@@ -110,6 +110,29 @@ test('anderer Absatz remote geändert: still gemergt, beide Änderungen gespeich
   await expect(body).toContainText('Drei M1 remote.');
 });
 
+test('Undo nach stillem Merge nimmt nur die eigene Änderung zurück, die fremde bleibt', async ({ page }) => {
+  const { pageId, body } = await seedAndOpen(page, 'M4');
+  await typeAtEndOfParagraph(page, body, 0, ' lokal');
+  expect(await remoteWrite(page, pageId, (h) => h.replace('Drei M4.', 'Drei M4 remote.'))).toBe(200);
+  await data(page, (d) => d.saveAllDirty());
+  await expect.poll(async () => (await blockState(page, pageId)).dirty, { timeout: 15000 }).toBe(false);
+  await expect(body).toContainText('Drei M4 remote.');
+
+  // Der Verlauf überlebt den Merge (gehoben, nicht verworfen) …
+  expect(await data(page, (d) => d.bookEditorCanUndo())).toBe(true);
+  await page.keyboard.press('Control+z');
+  // … und das Undo nimmt nur « lokal» heraus, nie den Remote-Absatz.
+  await expect(body).not.toContainText('Eins M4. lokal');
+  await expect(body).toContainText('Eins M4.');
+  await expect(body).toContainText('Drei M4 remote.');
+  // Gespeichert wird das Undo regulär — ohne 409, ohne die fremde Änderung zu verlieren.
+  await data(page, (d) => d.saveAllDirty());
+  await expect.poll(async () => (await readPage(page, pageId)).html, { timeout: 15000 }).not.toContain('lokal');
+  const server = (await readPage(page, pageId)).html;
+  expect(server).toContain('Drei M4 remote.');
+  expect((await blockState(page, pageId)).conflict).toBe(false);
+});
+
 test('derselbe Absatz remote geändert: Modal, «Beide behalten» übernimmt beide Fassungen', async ({ page }) => {
   const { pageId, body } = await seedAndOpen(page, 'M2');
   await typeAtEndOfParagraph(page, body, 1, ' lokal');

@@ -44,11 +44,12 @@
 //  - Schreibende Requests (PUT/POST/DELETE): nie behandelt (method-Check am Anfang)
 //  - Auth/KI/Job-Queue/SSE: Network-Only, nie cachen
 
-// Generierte Build-Konstanten (self.__SHELL_BUILD/__SHELL_MANIFEST) + „Buch offline
-// halten" (self.__swOffline, sw-offline.js). Mit der Registrierung persistiert →
-// auch offline da; updateViaCache:'none' revalidiert beide beim Update-Check.
-importScripts('/sw-manifest.js', '/sw-offline.js');
+// Build-Konstanten (self.__SHELL_BUILD/__SHELL_MANIFEST), „Buch offline halten"
+// (sw-offline.js), Entwürfe per Background Sync (sw-drafts.js), Werkstatt-Daten
+// offline (sw-domain.js). Persistiert mit der Registrierung; updateViaCache:'none'.
+importScripts('/sw-manifest.js', '/sw-offline.js', '/sw-drafts.js', '/sw-domain.js');
 const OFFLINE = self.__swOffline || null;
+const DOMAIN = self.__swDomain || null;
 const SHELL_BUILD = self.__SHELL_BUILD || 'dev';
 const SHELL_MANIFEST = Array.isArray(self.__SHELL_MANIFEST) ? self.__SHELL_MANIFEST : [];
 const MANIFEST_SET = new Set(SHELL_MANIFEST);
@@ -62,26 +63,20 @@ const CONFIG_CACHE = 'schreibwerkstatt-config-v2';
 // Versionsstabile Assets (vendor/*, fonts/*) leben generationsunabhängig hier,
 // damit sie nicht bei jedem Deploy mit dem SHELL_CACHE weggeworfen werden.
 const VENDOR_CACHE = 'schreibwerkstatt-vendor-v1';
-const ACTIVE_CACHES = new Set([SHELL_CACHE, CONTENT_CACHE, CONFIG_CACHE, VENDOR_CACHE, OFFLINE?.CACHE]);
+const ACTIVE_CACHES = new Set([SHELL_CACHE, CONTENT_CACHE, CONFIG_CACHE, VENDOR_CACHE, OFFLINE?.CACHE, DOMAIN?.CACHE]);
 const SHELL_PATH = '/index.html';
 const CONFIG_PATH = '/config';
 
 // Pfade, die niemals aus dem Cache kommen dürfen (dynamische/auth-pflichtige Daten, Streams).
-// /content/* und /config sind bewusst NICHT hier – sie haben eigene SWR-Handler.
+// /content/* und /config haben eigene SWR-Handler, die Werkstatt-Daten
+// (/figures, /ideen, /book-editor …) Netz-zuerst in sw-domain.js.
 const NEVER_CACHE_PREFIXES = [
   '/auth/',
   '/jobs',
   '/events',
-  '/history',
-  '/figures',
-  '/locations',
   '/chat',
   '/sync',
-  '/booksettings',
   '/publication',
-  '/ideen',
-  '/research',
-  '/book-editor',
   '/search',
   '/share',
 ];
@@ -772,7 +767,7 @@ self.addEventListener('message', (event) => {
   if (SESSION_CACHE_DROP_TYPES.has(event.data?.type)) {
     const type = event.data.type;
     event.waitUntil((async () => {
-      await Promise.all([caches.delete(CONTENT_CACHE), caches.delete(CONFIG_CACHE), OFFLINE?.drop()]);
+      await Promise.all([caches.delete(CONTENT_CACHE), caches.delete(CONFIG_CACHE), OFFLINE?.drop(), DOMAIN?.drop()]);
       event.source?.postMessage?.({ type: type + '-done' });
     })());
   }
@@ -823,6 +818,10 @@ self.addEventListener('fetch', (event) => {
   }
   if (url.pathname === CONFIG_PATH) {
     event.respondWith(handleConfig(req));
+    return;
+  }
+  if (DOMAIN?.handles(url)) {
+    event.respondWith(DOMAIN.respond(req, event));
     return;
   }
   if (url.pathname.startsWith('/content/')) {

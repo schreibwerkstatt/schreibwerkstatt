@@ -35,6 +35,7 @@ import { appJobsCoreMethods } from './app/app-jobs-core.js';
 import { appCollabMethods } from './app/app-collab.js';
 import { appCollabStreamMethods } from './app/app-collab-stream.js';
 import { appOutboxMethods } from './app/app-outbox.js';
+import { appOfflineRescueMethods } from './app/app-offline-rescue.js';
 import { appOfflineBooksMethods } from './app/app-offline-books.js';
 import { appViewMethods } from './app/app-view.js';
 import { appNavigationMethods } from './app/app-navigation.js';
@@ -294,6 +295,7 @@ document.addEventListener('alpine:init', () => {
     ...appCollabMethods,
     ...appCollabStreamMethods,
     ...appOutboxMethods,
+    ...appOfflineRescueMethods,
     ...appOfflineBooksMethods,
     ...appViewMethods,
     ...appNavigationMethods,

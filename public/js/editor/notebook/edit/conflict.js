@@ -231,17 +231,32 @@ export const conflictMethods = {
   // ein gemergtes Block-Set kann auf einer `<hr>` enden oder einen kindlosen
   // `<p>` enthalten — ohne Caret-Slot stünde der User danach ohne Schreib-Anker da.
   //
-  // Der gemergte Stand ist die neue Undo-Baseline: ein Undo dahinter zurück
-  // nähme die Remote-Blöcke wieder heraus, und der nächste Save liefe gegen das
-  // inzwischen übernommene `updated_at` ohne 409 durch — die Änderung des
-  // anderen Geräts wäre still überschrieben.
-  _applyMergedToEditor(html) {
+  // Undo darf nie hinter den Merge zurück: es nähme die Remote-Blöcke wieder
+  // heraus, und der nächste Save liefe gegen das inzwischen übernommene
+  // `updated_at` ohne 409 durch — die Änderung des anderen Geräts wäre still
+  // überschrieben. Zwei Wege, das zu halten:
+  //  - `rebaseFrom: { base, remote }` (stiller Merge gegen den Live-Stand,
+  //    Pull ohne eigene Änderungen): der Verlauf wird auf den Remote-Stand
+  //    gehoben (shared/history-rebase.js) — die eigenen Schritte bleiben
+  //    rückgängig machbar, die fremden Blöcke stehen in jedem Stand.
+  //  - ohne: der eingehängte Stand wird die neue Baseline (Auflösung,
+  //    Teilung, «Server-Version übernehmen» — dort ist der Verlauf davor
+  //    verworfen bzw. keine Vorgeschichte dieses Inhalts).
+  // Auch bei unverändertem DOM wird gehoben: die Basis rückt trotzdem vor, und
+  // ältere Stände kennen die Remote-Blöcke nicht.
+  _applyMergedToEditor(html, rebaseFrom = null) {
     const el = this._getEditEl();
-    if (!el || el.innerHTML === html) return;
-    const caret = captureBlockCaret(el);
-    mountEditorHtml(el, html);
-    restoreBlockCaret(el, caret);
-    this._historyReset?.(el.innerHTML);
+    if (!el) return;
+    const changed = el.innerHTML !== html;
+    if (!changed && !rebaseFrom) return;
+    if (rebaseFrom) this._historyPushNow?.();
+    if (changed) {
+      const caret = captureBlockCaret(el);
+      mountEditorHtml(el, html);
+      restoreBlockCaret(el, caret);
+    }
+    if (rebaseFrom) this._historyRebase?.(rebaseFrom.base, rebaseFrom.remote);
+    else this._historyReset?.(el.innerHTML);
   },
 
 
@@ -337,7 +352,9 @@ export const conflictMethods = {
     if (!m) return null;
     if (m.conflicts.length === 0) {
       const saveHtml = mergedToHtml(m.merged);
-      this._applyMergedToEditor(saveHtml);
+      // Nur ein Merge gegen den Live-Stand ist die Fortsetzung des Verlaufs;
+      // bei einer Auflösung ist die lokale Seite die getroffene Entscheidung.
+      this._applyMergedToEditor(saveHtml, liveLocal ? { base: app.originalHtml, remote: remoteHtml } : null);
       trackMerge('silent_success');
       return { merged: true, saveHtml, expectedAt: remoteUpdatedAt };
     }
@@ -383,7 +400,7 @@ export const conflictMethods = {
     // Tastendruck, dessen input-Event noch aussteht, ginge sonst beim
     // Überschreiben verloren.
     if (!app.editDirty && isNoChange(localHtml, app.originalHtml)) {
-      this._applyMergedToEditor(remoteHtml);
+      this._applyMergedToEditor(remoteHtml, { base: app.originalHtml, remote: remoteHtml });
       app.originalHtml = remoteHtml;
       app.currentPage.updated_at = remote.updated_at;
       app.updatePageView?.();

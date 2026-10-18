@@ -16,6 +16,7 @@ const { jsonBody, NAME_MAX, REVALIDATE_CACHE_CONTROL, _validDeviceId, _logToken,
 const { htmlToPlainText } = require('../../lib/html-text');
 const { stripActiveContent } = require('../../lib/html-clean');
 const { mergeAgainstServer } = require('../../lib/page-merge');
+const { replayIdempotent, rememberIdempotent } = require('../../lib/idempotency');
 const logger = require('../../logger');
 
 // Deckel für `own_save_ids`: so viele unbestätigte Saves hat ein Schreiber
@@ -338,6 +339,10 @@ function register(router) {
     if (chapterIdRaw && resolveChapterBookId(chapterIdRaw) !== effBookId) {
       return res.status(400).json({ error_code: 'CHAPTER_NOT_IN_BOOK' });
     }
+    // Nachgespielt aus der Offline-Warteschlange (lib/idempotency.js): derselbe
+    // Schlüssel legt nicht doppelt an.
+    const email = sessionEmail(req);
+    if (await replayIdempotent(req, res, 'POST /content/pages', email)) return;
     try {
       const created = await contentStore.createPage({
         book_id: effBookId,
@@ -345,6 +350,7 @@ function register(router) {
         name,
         html: req.body?.html,
       }, req);
+      rememberIdempotent(req, 'POST /content/pages', email, created);
       res.json(created);
     } catch (e) {
       if (_sendSanitizeFailed(res, e)) return;

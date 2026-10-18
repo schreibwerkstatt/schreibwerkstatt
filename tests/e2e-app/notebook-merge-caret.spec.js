@@ -95,3 +95,36 @@ test('Stiller Auto-Merge im Autosave: Caret bleibt im eigenen Absatz an derselbe
   expect(final.bid).toBe(before.bid);
   expect(final.text.slice(0, 6)).toBe(before.text.slice(0, 5) + 'Z');
 });
+
+// Der stille Merge hebt den Undo-Verlauf auf den Remote-Stand
+// (shared/history-rebase.js), statt ihn zu verwerfen: Strg+Z nimmt danach das
+// eigene Getippte zurück, den Remote-Absatz aber nie.
+test('Stiller Auto-Merge: Strg+Z nimmt nur das eigene Getippte zurück, der Remote-Absatz bleibt', async ({ page }) => {
+  await openPageInEdit(page, 2);
+  await caretIntoLastBlock(page);
+  await page.keyboard.type('UNDOPROBE');
+
+  const status = await page.evaluate(async (device) => {
+    const p = window.__app.currentPage;
+    const cur = await (await fetch(`/content/pages/${p.id}?__fresh=1`)).json();
+    const r = await fetch(`/content/pages/${p.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        html: `<p>REMOTE_UNDOPROBE vorne</p>${cur.html}`,
+        device_id: device, expected_updated_at: cur.updated_at,
+      }),
+    });
+    return r.status;
+  }, OTHER_DEVICE);
+  expect(status).toBe(200);
+
+  await page.evaluate(() => window.__app.quickSave());
+  await expect(page.locator(EDIT_SEL)).toContainText('REMOTE_UNDOPROBE');
+  expect(await page.evaluate(() => window.__app.notebookCanUndo())).toBe(true);
+
+  await page.keyboard.press('Control+z');
+  await expect(page.locator(EDIT_SEL)).toContainText('REMOTE_UNDOPROBE vorne');
+  const text = await page.locator(EDIT_SEL).innerText();
+  expect(text.replace('REMOTE_UNDOPROBE', '')).not.toContain('UNDOPROBE');
+});

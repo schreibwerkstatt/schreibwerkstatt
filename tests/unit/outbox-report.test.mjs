@@ -44,3 +44,28 @@ test('_reportOutboxResults: ok-Toast bei Erfolg, err-Toast bei neuem Konflikt, s
   root._reportOutboxResults(new Map([[3, 'conflict'], [9, 'skip']]));
   assert.equal(root.toasts.length, 2, 'bekannter Konflikt + skip → kein weiterer Toast');
 });
+
+// ── Wiederholung, wenn der Server nicht erreichbar ist ──────────────────────
+// Meldet der Browser weiter «online», kommt kein `online`-Event: ohne eigenen
+// Timer lägen die Entwürfe bis zum nächsten Fokuswechsel.
+const { nextOutboxBackoff, OUTBOX_RETRY_MIN_MS, OUTBOX_RETRY_MAX_MS } = await import('../../public/js/app/app-outbox.js');
+
+test('Backoff: verdoppelt sich ab dem Minimum, gedeckelt', () => {
+  assert.equal(nextOutboxBackoff(0), OUTBOX_RETRY_MIN_MS);
+  assert.equal(nextOutboxBackoff(OUTBOX_RETRY_MIN_MS), OUTBOX_RETRY_MIN_MS * 2);
+  assert.equal(nextOutboxBackoff(OUTBOX_RETRY_MAX_MS), OUTBOX_RETRY_MAX_MS);
+});
+
+test('_scheduleOutboxRetry: ein Timer, der den Flush erneut startet', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let flushes = 0;
+  const ctx = Object.assign(Object.create(appOutboxMethods), {
+    _outboxRetryTimer: null, _outboxRetryMs: 0, _flushOutbox() { flushes++; },
+  });
+  ctx._scheduleOutboxRetry();
+  ctx._scheduleOutboxRetry();   // zweiter Fehlschlag ersetzt den Timer
+  assert.equal(ctx._outboxRetryMs, OUTBOX_RETRY_MIN_MS * 2);
+  t.mock.timers.tick(OUTBOX_RETRY_MIN_MS * 2);
+  assert.equal(flushes, 1);
+  assert.equal(ctx._outboxRetryTimer, null);
+});

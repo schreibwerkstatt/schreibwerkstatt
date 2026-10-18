@@ -30,7 +30,11 @@ import { isOwnServerSave } from '../../repo/save-ids.js';
  *
  * @returns {Promise<null|{remoteUpdatedAt, remoteUserName, remoteIsSelf, remoteDevice, remoteDeviceId, remoteSaveId, remoteHtml}>}
  */
-export async function checkPageConflict(pageId, expectedUpdatedAt, { writer = null } = {}) {
+// `extraOwn`: Save-Kennungen, die ein wiederhergestellter Entwurf von seinem
+// Schreiber mitbringt (`{ id, base }`, repo/save-ids.js) — nach einem Neustart
+// fehlen sie im sessionStorage, und der eigene Save mit verlorener Antwort
+// sähe fremd aus.
+export async function checkPageConflict(pageId, expectedUpdatedAt, { writer = null, extraOwn = [] } = {}) {
   if (!expectedUpdatedAt) return null;
   // Offline kann es keinen Cross-User-Konflikt geben — der ohnehin folgende
   // PUT wird ebenfalls scheitern und in den Offline-Banner-Pfad fallen. Modal
@@ -51,7 +55,7 @@ export async function checkPageConflict(pageId, expectedUpdatedAt, { writer = nu
     return null;
   }
   if (remote.updated_at === expectedUpdatedAt) return null;
-  if (writer && isOwnServerSave(writer, pageId, remote.last_save_id, [expectedUpdatedAt])) return null;
+  if (writer && isOwnServerSave(writer, pageId, remote.last_save_id, [expectedUpdatedAt], extraOwn)) return null;
   return {
     remoteUpdatedAt: remote.updated_at,
     ...remoteAuthorFrom(remote),

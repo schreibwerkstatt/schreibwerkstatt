@@ -16,6 +16,7 @@
 const { test, expect } = require('@playwright/test');
 const { attachConsoleGuard } = require('../e2e/_helpers/console-guard');
 const { bootApp, selectSeededBook } = require('./_helpers/app');
+const { readDraftRecord } = require('./_helpers/drafts');
 
 const FOCUS = '.focus-editor__content';
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
@@ -219,13 +220,15 @@ test('#12 Offline + Escape: Edit-Modus bleibt, Entwurf ist erhalten', async ({ p
 
   const r = await page.evaluate(() => {
     const ed = document.querySelector('#editor-card .page-content-view--editing');
-    const draft = Object.keys(localStorage).some(k => k.includes('draft') && (localStorage.getItem(k) || '').includes('Offlinesatz'));
-    return { editMode: window.__app.editMode, focusActive: window.__app.focusActive, dirty: window.__app.editDirty, draft, inEditor: !!ed && ed.textContent.includes('Offlinesatz') };
+    return { editMode: window.__app.editMode, focusActive: window.__app.focusActive, dirty: window.__app.editDirty, inEditor: !!ed && ed.textContent.includes('Offlinesatz') };
   });
+  // Entwurf: localStorage-Vorlauf bzw. bestätigt in IndexedDB (editor/draft-storage.js).
+  const draftRec = await readDraftRecord(page, await page.evaluate(() => window.__app.currentPage.id));
+  r.draft = !!draftRec?.html?.includes('Offlinesatz');
   expect(r.focusActive).toBe(false);
   expect(r.editMode, 'unsauberer Exit muss im Edit-Modus bleiben').toBe(true);
   expect(r.dirty).toBe(true);
-  expect(r.draft, 'Entwurf fehlt in localStorage').toBe(true);
+  expect(r.draft, 'Entwurf fehlt im lokalen Speicher').toBe(true);
   expect(r.inEditor, 'Text fehlt im Normal-Editor').toBe(true);
   guard.assertClean();
 });

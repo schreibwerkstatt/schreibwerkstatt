@@ -291,8 +291,11 @@ const PUBLIC_ASSETS = new Set([
   // SW selbst. Faellt die Session aus, kaeme sonst Login-HTML zurueck und die
   // SW-Auswertung scheiterte an nosniff.
   '/sw-manifest.js',
-  // Zweites importScripts des SW („Buch offline halten") — gleicher Grund.
+  // Weitere importScripts des SW („Buch offline halten", Background Sync der
+  // Entwürfe, Werkstatt-Daten offline) — gleicher Grund.
   '/sw-offline.js',
+  '/sw-drafts.js',
+  '/sw-domain.js',
   // ALTCHA-PoW-Widget (Custom-Element): von register.html + /login per
   // dynamic `<script type="module">` nachgeladen, sobald ALTCHA aktiv ist.
   '/vendor/altcha-3.0.11.min.js',

@@ -12,16 +12,36 @@ import { KONTINUITAET_TYPEN } from './schema-strings.js';
 // JSON-Schema weggelassen – kleine Modelle setzen es fast immer 0 oder halluzinieren.
 // Lieber das Feld leer lassen als falsche Werte anzeigen. Für Claude bleibt es erhalten.
 
+// Listen-Deckel der Chunk-Extraktion (nur lokale Provider, die Grammar setzt `maxItems`
+// hart durch). Ohne Deckel geraten lokale Modelle in Zählschleifen — erfundene
+// Beziehungen mit hochgezählter figur_id, bis das Output-Limit reisst, und der ganze
+// Chunk-Pass ist verloren; dasselbe auf Figuren-Ebene (eine Randfigur wird immer wieder
+// neu ausgegeben). Der Figuren-Deckel muss darum so knapp sein, dass eine voll
+// ausgeschriebene Liste (~350 Tokens pro Figur) ins Extraktions-Output-Budget passt —
+// sonst reisst das Limit vor dem Deckel. Ein Kapitel-Chunk liefert legitim selten über
+// 35 Figuren. Die Konsolidierungs-Schemas unten bleiben ungedeckelt (sie fassen das
+// ganze Buch zusammen).
+const EXTRACT_MAX = {
+  figuren: 40, beziehungen: 15, belege: 5, kapitel: 100, zitate: 5, eigenschaften: 10,
+  orte: 60, songs: 30, fakten: 80, szenen: 60, namen: 40,
+  assignments: 40, lebensereignisse: 10,
+};
+const _arr = (items, max) => (_isLocal
+  ? { type: 'array', items, maxItems: EXTRACT_MAX[max] }
+  : { type: 'array', items });
+// Ungedeckelt für die Konsolidierungs-Schemas; Schema-Builder nehmen `arr` als Parameter.
+const _plainArr = (items) => ({ type: 'array', items });
+
 const _bzBeleg = _obj({ kapitel: _str, seite: _str });
-const _bzItem = () => _obj(_isLocal
-  ? { figur_id: _str, typ: _str, beschreibung: _str, belege: { type: 'array', items: _bzBeleg } }
-  : { figur_id: _str, typ: _str, machtverhaltnis: _num, beschreibung: _str, belege: { type: 'array', items: _bzBeleg } }
+const _bzItem = (arr) => _obj(_isLocal
+  ? { figur_id: _str, typ: _str, beschreibung: _str, belege: arr(_bzBeleg, 'belege') }
+  : { figur_id: _str, typ: _str, machtverhaltnis: _num, beschreibung: _str, belege: arr(_bzBeleg, 'belege') }
 );
 
 // Tiefe-Felder (aeusseres/stimme/hintergrund/arc) nur für Claude: lokale Grammar
 // (_obj → alle Properties required) würde kleine Modelle zwingen, sie zu füllen →
 // Halluzination/Bloat. Analog zum machtverhaltnis-Gating in _bzItem.
-const _figurSchemaProps = () => ({
+const _figurSchemaProps = (arr = _arr) => ({
   id: _str,
   katalog_id: _str,
   name: _str,
@@ -46,10 +66,10 @@ const _figurSchemaProps = () => ({
     ? { entwicklung: _str }
     : { arc: _obj({ typ: _str, anfang: _str, wendepunkte: { type: 'array', items: _str }, ende: _str }) }),
   erste_erwaehnung: _str,
-  schluesselzitate: { type: 'array', items: _str },
-  eigenschaften: { type: 'array', items: _str },
-  kapitel: { type: 'array', items: _obj({ name: _str, haeufigkeit: _num }) },
-  beziehungen: { type: 'array', items: _bzItem() },
+  schluesselzitate: arr(_str, 'zitate'),
+  eigenschaften: arr(_str, 'eigenschaften'),
+  kapitel: arr(_obj({ name: _str, haeufigkeit: _num }), 'kapitel'),
+  beziehungen: arr(_bzItem(arr), 'beziehungen'),
 });
 
 // _figurSchema und alle abgeleiteten Schemas werden in _rebuildKomplettSchemas() bei jedem
@@ -65,7 +85,7 @@ const _figurStammSchemaProps = () => {
 };
 let _figurStammSchema = _obj(_figurStammSchemaProps());
 
-const _ortSchema = _obj({
+const _ortSchemaWith = (arr) => _obj({
   id: _str,
   katalog_id: _str,
   name: _str,
@@ -74,11 +94,11 @@ const _ortSchema = _obj({
   land: _str,
   erste_erwaehnung: _str,
   stimmung: _str,
-  kapitel: { type: 'array', items: _obj({ name: _str, haeufigkeit: _num }) },
-  figuren_namen: { type: 'array', items: _str },
+  kapitel: arr(_obj({ name: _str, haeufigkeit: _num }), 'kapitel'),
+  figuren_namen: arr(_str, 'namen'),
 });
 
-const _songSchema = _obj({
+const _songSchemaWith = (arr) => _obj({
   id: _str,
   titel: _str,
   interpret: _str,
@@ -87,9 +107,12 @@ const _songSchema = _obj({
   beschreibung: _str,
   stimmung: _str,
   erste_erwaehnung: _str,
-  kapitel: { type: 'array', items: _obj({ name: _str, haeufigkeit: _num }) },
-  figuren_namen: { type: 'array', items: _str },
+  kapitel: arr(_obj({ name: _str, haeufigkeit: _num }), 'kapitel'),
+  figuren_namen: arr(_str, 'namen'),
 });
+
+let _ortSchema = _ortSchemaWith(_arr);
+let _songSchema = _songSchemaWith(_arr);
 
 const _faktSchema = _obj({ kategorie: _str, subjekt: _str, fakt: _str, seite: _str });
 
@@ -103,18 +126,15 @@ export let SCHEMA_FIGUREN_KONSOL = null;
 export let SCHEMA_BEZIEHUNGEN = null;
 
 function _szenenField() {
-  return {
-    type: 'array',
-    items: _obj({
-      seite: _str,
-      kapitel: _str,
-      titel: _str,
-      wertung: { type: 'string', enum: ['stark', 'mittel', 'schwach'] },
-      kommentar: _str,
-      figuren_namen: { type: 'array', items: _str },
-      orte_namen: { type: 'array', items: _str },
-    }),
-  };
+  return _arr(_obj({
+    seite: _str,
+    kapitel: _str,
+    titel: _str,
+    wertung: { type: 'string', enum: ['stark', 'mittel', 'schwach'] },
+    kommentar: _str,
+    figuren_namen: _arr(_str, 'namen'),
+    orte_namen: _arr(_str, 'namen'),
+  }), 'szenen');
 }
 
 // Whitelist für Event-Subtypen (Phase 2). KI darf nur diese Werte liefern;
@@ -150,32 +170,26 @@ const _EVENT_DATUM_FIELDS = {
 };
 
 function _assignmentsField() {
-  return {
-    type: 'array',
-    items: _obj({
-      figur_name: _str,
-      lebensereignisse: {
-        type: 'array',
-        items: _obj({
-          ..._EVENT_DATUM_FIELDS,
-          subtyp: { type: 'string', enum: EVENT_SUBTYP_ENUM },
-          ereignis: _str,
-          typ: { type: 'string', enum: ['persoenlich', 'extern'] },
-          bedeutung: _str,
-          seite: _str,
-          kapitel: _str,
-        }),
-      },
-    }),
-  };
+  return _arr(_obj({
+    figur_name: _str,
+    lebensereignisse: _arr(_obj({
+      ..._EVENT_DATUM_FIELDS,
+      subtyp: { type: 'string', enum: EVENT_SUBTYP_ENUM },
+      ereignis: _str,
+      typ: { type: 'string', enum: ['persoenlich', 'extern'] },
+      bedeutung: _str,
+      seite: _str,
+      kapitel: _str,
+    }), 'lebensereignisse'),
+  }), 'assignments');
 }
 
 function _buildExtraktionSchema() {
   return _obj({
-    figuren: { type: 'array', items: _figurSchema },
-    orte: { type: 'array', items: _ortSchema },
-    songs: { type: 'array', items: _songSchema },
-    fakten: { type: 'array', items: _faktSchema },
+    figuren: _arr(_figurSchema, 'figuren'),
+    orte: _arr(_ortSchema, 'orte'),
+    songs: _arr(_songSchema, 'songs'),
+    fakten: _arr(_faktSchema, 'fakten'),
     szenen: _szenenField(),
     assignments: _assignmentsField(),
   });
@@ -183,7 +197,7 @@ function _buildExtraktionSchema() {
 
 function _buildFigurenPassSchema() {
   return _obj({
-    figuren: { type: 'array', items: _figurSchema },
+    figuren: _arr(_figurSchema, 'figuren'),
     assignments: _assignmentsField(),
   });
 }
@@ -193,7 +207,7 @@ function _buildFigurenPassSchema() {
 // damit das gesamte Output-Budget der Event-Erfassung gewidmet ist (analog Fakten-Pass C).
 function _buildFigurenStammSchema() {
   return _obj({
-    figuren: { type: 'array', items: _figurStammSchema },
+    figuren: _arr(_figurStammSchema, 'figuren'),
   });
 }
 
@@ -209,15 +223,15 @@ function _buildEventsPassSchema() {
 // _isLocal-Gating in buildKomplettSchemaOrteSzenen (extraktion.js) passen.
 function _buildOrtePassSchema() {
   return _obj({
-    orte: { type: 'array', items: _ortSchema },
-    songs: { type: 'array', items: _songSchema },
-    ...(_isLocal ? { fakten: { type: 'array', items: _faktSchema } } : {}),
+    orte: _arr(_ortSchema, 'orte'),
+    songs: _arr(_songSchema, 'songs'),
+    ...(_isLocal ? { fakten: _arr(_faktSchema, 'fakten') } : {}),
     szenen: _szenenField(),
   });
 }
 
 function _buildFaktenPassSchema() {
-  return _obj({ fakten: { type: 'array', items: _faktSchema } });
+  return _obj({ fakten: _arr(_faktSchema, 'fakten') });
 }
 
 function _buildBeziehungenSchema() {
@@ -231,13 +245,15 @@ function _buildBeziehungenSchema() {
 export function _rebuildKomplettSchemas() {
   _figurSchema = _obj(_figurSchemaProps());
   _figurStammSchema = _obj(_figurStammSchemaProps());
+  _ortSchema = _ortSchemaWith(_arr);
+  _songSchema = _songSchemaWith(_arr);
   SCHEMA_KOMPLETT_EXTRAKTION = _buildExtraktionSchema();
   SCHEMA_KOMPLETT_FIGUREN_PASS = _buildFigurenPassSchema();
   SCHEMA_KOMPLETT_FIGUREN_STAMM = _buildFigurenStammSchema();
   SCHEMA_KOMPLETT_ORTE_PASS = _buildOrtePassSchema();
   SCHEMA_KOMPLETT_FAKTEN_PASS = _buildFaktenPassSchema();
   SCHEMA_KOMPLETT_EVENTS = _buildEventsPassSchema();
-  SCHEMA_FIGUREN_KONSOL = _obj({ figuren: { type: 'array', items: _figurSchema } });
+  SCHEMA_FIGUREN_KONSOL = _obj({ figuren: { type: 'array', items: _obj(_figurSchemaProps(_plainArr)) } });
   SCHEMA_BEZIEHUNGEN = _buildBeziehungenSchema();
 }
 
@@ -245,9 +261,9 @@ _rebuildKomplettSchemas();
 
 // ── Statische Schemas (nicht _isLocal-abhängig) ──────────────────────────────
 
-export const SCHEMA_ORTE_KONSOL = _obj({ orte: { type: 'array', items: _ortSchema } });
+export const SCHEMA_ORTE_KONSOL = _obj({ orte: { type: 'array', items: _ortSchemaWith(_plainArr) } });
 
-export const SCHEMA_SONGS_KONSOL = _obj({ songs: { type: 'array', items: _songSchema } });
+export const SCHEMA_SONGS_KONSOL = _obj({ songs: { type: 'array', items: _songSchemaWith(_plainArr) } });
 
 export const SCHEMA_SOZIOGRAMM_KONSOL = _obj({
   figuren:     { type: 'array', items: _obj({ id: _str, sozialschicht: _str }) },

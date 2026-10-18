@@ -16,7 +16,7 @@ globalThis.window = window;
 globalThis.document = window.document;
 globalThis.NodeFilter = window.NodeFilter || { SHOW_TEXT: 4 };
 
-const { createEditHistory, captureCaretOffset, restoreCaretAtOffset, changedCaretOffset } =
+const { createEditHistory, captureCaretOffset, restoreCaretAtOffset, changedCaretOffset, mapCaretOffset } =
   await import('../../public/js/editor/shared/edit-history.js');
 
 // mountHtml bewusst als schlichtes innerHTML — der Kern darf keine Pipeline
@@ -296,4 +296,92 @@ test('changedCaretOffset: Caret ans Ende des geänderten Bereichs im neuen Text'
   assert.equal(changedCaretOffset('aaa', 'aa', 0), 2);
   // Unveränderter Text (reine Formatierung): gemerkter Offset.
   assert.equal(changedCaretOffset('gleich', 'gleich', 4), 4);
+});
+
+test('reine Block-ID-Änderung ist kein eigener Undo-Schritt', () => {
+  // Save/Merge setzen data-bid als Attribut ins Live-DOM (ohne input). Ein
+  // danach eingefrorener Vorher-Stand (Paste) wäre sonst ein Schritt, dessen
+  // Undo nichts Sichtbares tut.
+  const { history, el } = makeHistory();
+  setHtml(el, '<p>start</p><p>neu</p>');
+  history.pushNow();
+  setHtml(el, '<p>start</p><p data-bid="aa11">neu</p>');
+  history.pushNow();
+  assert.equal(history.size(), 2, 'nur die ID kam dazu → Spitze aufgefrischt');
+  setHtml(el, '<p>start</p><p data-bid="aa11">neu eingefügt</p>');
+  history.pushNow();
+  history.undo();
+  assert.equal(el.innerHTML, '<p>start</p><p data-bid="aa11">neu</p>', 'Restore behält die ID');
+  history.undo();
+  assert.equal(el.innerHTML, '<p>start</p>', 'zweites Undo nimmt die Eingabe zurück');
+});
+
+test('undo/redo ohne Container bewegen den Index nicht', () => {
+  let root = null;
+  const el = window.document.getElementById('ed');
+  el.innerHTML = '<p>a</p>';
+  const history = createEditHistory({ getRoot: () => root, mountHtml: (n, h) => { n.innerHTML = h; } });
+  root = el;
+  history.reset('<p>a</p>');
+  el.innerHTML = '<p>b</p>';
+  history.pushNow();
+  root = null;
+  assert.equal(history.undo(), false);
+  assert.equal(history.index(), 1, 'Index steht noch auf dem eingehängten Stand');
+  root = el;
+  assert.equal(history.undo(), true);
+  assert.equal(el.innerHTML, '<p>a</p>');
+});
+
+test('rebase: Spitze = jetziger Inhalt, ältere Stände gemappt, Redo-Ast weg', () => {
+  const { history, el } = makeHistory();
+  setHtml(el, '<p>start 1</p>');
+  history.pushNow();
+  setHtml(el, '<p>start 12</p>');
+  history.pushNow();
+  history.undo();                    // Redo-Ast: «start 12»
+  setHtml(el, '<p>start 1</p>');
+  history.pushNow();                 // Vertrag: pushNow vor der Umschreibung
+  setHtml(el, '<p>start 1</p><p>R</p>');
+  history.rebase((h) => h + '<p>R</p>');
+  assert.equal(history.canRedo(), false);
+  assert.equal(history.size(), 2);
+  history.undo();
+  assert.equal(el.innerHTML, '<p>start</p><p>R</p>', 'älterer Stand trägt den Remote-Block');
+  history.redo();
+  assert.equal(el.innerHTML, '<p>start 1</p><p>R</p>');
+});
+
+test('rebase: ab dem ersten nicht übertragbaren Stand fällt alles Ältere weg', () => {
+  const { history, el } = makeHistory();
+  setHtml(el, '<p>a</p>'); history.pushNow();
+  setHtml(el, '<p>b</p>'); history.pushNow();
+  setHtml(el, '<p>c</p>'); history.pushNow();
+  setHtml(el, '<p>c</p><p>R</p>');
+  // «a» nicht übertragbar → «start» davor darf nicht nachrücken (keine Lücke).
+  history.rebase((h) => (h === '<p>a</p>' ? null : h + '<p>R</p>'));
+  assert.equal(history.size(), 2);
+  history.undo();
+  assert.equal(el.innerHTML, '<p>b</p><p>R</p>');
+  assert.equal(history.canUndo(), false);
+});
+
+test('rebase ohne Verlauf legt den jetzigen Inhalt als Baseline', () => {
+  const { history, el } = makeHistory();
+  history.clear();
+  setHtml(el, '<p>x</p>');
+  history.rebase(() => { throw new Error('darf nicht laufen'); });
+  assert.equal(history.size(), 1);
+  assert.equal(history.canUndo(), false);
+});
+
+test('mapCaretOffset: Anfang bleibt, Ende wandert um die Längendifferenz, Mitte ans Änderungsende', () => {
+  // Remote-Absatz «REMOTE » oben eingefügt: Caret im eigenen Text wandert mit.
+  assert.equal(mapCaretOffset('eins zwei', 'REMOTE eins zwei', 6), 13);
+  // Einfügung hinter dem Caret: Caret bleibt.
+  assert.equal(mapCaretOffset('eins zwei', 'eins zwei REMOTE', 3), 3);
+  // Caret mitten im ersetzten Bereich: ans Ende der Ersetzung.
+  assert.equal(mapCaretOffset('aXXXb', 'aYYYYYb', 2), 6);
+  assert.equal(mapCaretOffset('abc', 'abc', 2), 2);
+  assert.equal(mapCaretOffset('abc', 'xabc', null), null);
 });

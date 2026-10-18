@@ -96,6 +96,10 @@ export const EVT = {
 
   // ── Editor: Draft/Offline-Sync ───────────────────────────────────────────
   DRAFT_CHANGED: 'draft:changed',               // kein detail (Draft-Bestand hat sich geändert)
+  DRAFT_PERSIST_FAILED: 'draft:persist-failed',  // detail: { pageId } — Entwurf liess sich lokal nicht sichern (nachträglich, IndexedDB)
+  DRAFT_BACKUP: 'draft:backup',                  // detail: { pageId, kind } — Entwurf als Sicherung abgelegt (Dialog „Nicht gespeichert")
+  STRUCTURE_QUEUE_CHANGED: 'structure-queue:changed', // kein detail (offline vorgemerkte Strukturänderungen, repo/structure-queue.js)
+  IDEEN_QUEUE_CHANGED: 'ideen-queue:changed',     // { queued, flushed? } (offline vorgemerkte Ideen-Writes, repo/ideen-queue.js)
 
   // ── Editor: Synonyme ─────────────────────────────────────────────────────
   EDITOR_SYNONYM_OPEN: 'editor:synonym:open',   // detail: { word, rect }
@@ -160,6 +164,9 @@ export const EVT = {
 
   // ── App-global ───────────────────────────────────────────────────────────
   SESSION_EXPIRED: 'session-expired',           // kein detail
+  // Ohne Verbindung wurde eine ausdrückliche Server-Aktion (KI-Job, Diktat,
+  // Vorlesen) abgewiesen (app/boot/net-required.js) → einmal Toast.
+  NET_REQUIRED: 'net:required',                 // kein detail
   APP_UPDATE_AVAILABLE: 'app:update-available', // kein detail
   FILE_DROP: 'file-drop',                       // detail: { files }
   // Die installierte Web-App wurde mit einer Datei geöffnet (Manifest-

@@ -27,6 +27,7 @@
 
 import { createEditHistory } from '../../editor/shared/edit-history.js';
 import { matchHistoryCommand } from '../../editor/shared/shortcuts.js';
+import { createSnapshotRebaser } from '../../editor/shared/history-rebase.js';
 
 export const bookEditorHistoryMethods = {
   _historyFor(pageId, { create = false } = {}) {
@@ -86,6 +87,36 @@ export const bookEditorHistoryMethods = {
       this._histCaptureEl = null;
       this._histCapturePageId = null;
     }
+  },
+
+  // Kollisionsfreier Merge (book-editor/conflict.js#_applyBlockHtml): `write()`
+  // schreibt den gemergten Stand, der Verlauf wird auf den Remote-Stand gehoben
+  // statt verworfen (shared/history-rebase.js) — die eigenen Schritte bleiben
+  // rückgängig machbar, die fremden Blöcke stehen in jedem Stand. Aktiver Block:
+  // Vorher-/Nachher-Stand aus dem Live-DOM. Inaktiver: aus `block.html` über
+  // einen losgelösten Container (wie _historyRecordInactive). Liefert false,
+  // wenn die Seite keinen Verlauf hat — dann hat `write()` nicht stattgefunden.
+  _historyRebaseAround(block, write, { base, remote }) {
+    const h = this._historyFor(block.pageId);
+    if (!h) return false;
+    const el = this.activePageId === block.pageId ? null : document.createElement('div');
+    if (el) {
+      el.innerHTML = block.html;
+      this._histCaptureEl = el;
+      this._histCapturePageId = block.pageId;
+    }
+    try {
+      h.pushNow();
+      write();
+      if (el) el.innerHTML = block.html;
+      h.rebase(createSnapshotRebaser(base, remote));
+    } finally {
+      if (el) {
+        this._histCaptureEl = null;
+        this._histCapturePageId = null;
+      }
+    }
+    return true;
   },
 
   _historyPushSoon(pageId) { this._historyFor(pageId)?.pushSoon(); },

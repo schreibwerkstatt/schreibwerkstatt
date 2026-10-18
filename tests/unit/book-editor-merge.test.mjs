@@ -38,6 +38,7 @@ test('planBlockMerge: Basis ohne Block-IDs oder Flag aus → fallback', () => {
 // Minimaler Card-Scope, inaktiver Block (kein DOM).
 function ctxFor(block) {
   const enqueued = [];
+  const drafts = [];
   const ctx = {
     ...bookEditorConflictMethods,
     activePageId: null,
@@ -49,8 +50,10 @@ function ctxFor(block) {
     _blockEl: () => null,
     _conflictText: () => 'Konflikt',
     _enqueueSave: (id) => enqueued.push(id),
+    // Invariante 18: jeder Weg, der die Basis verschiebt, schreibt den Entwurf nach.
+    _writeBlockDraft: (b) => drafts.push({ pageId: b.pageId, base: b.originalUpdatedAt }),
   };
-  return { ctx, enqueued };
+  return { ctx, enqueued, drafts };
 }
 
 const blockWith = (html) => ({
@@ -60,10 +63,11 @@ const blockWith = (html) => ({
 
 test('_mergeStaleBlock: kollisionsfrei → Basis = Server-Stand, Block dirty, Re-Hydrate', () => {
   const block = blockWith(P('a1', 'Eins lokal.') + P('a2', 'Zwei.') + P('a3', 'Drei.'));
-  const { ctx } = ctxFor(block);
+  const { ctx, drafts } = ctxFor(block);
   const remoteHtml = P('a1', 'Eins.') + P('a2', 'Zwei remote.') + P('a3', 'Drei.');
   const r = ctx._mergeStaleBlock(block, { remoteHtml, remoteUpdatedAt: 'T5', remoteIsSelf: true, remoteDevice: 'Mac' });
   assert.equal(r, 'merged');
+  assert.deepEqual(drafts, [{ pageId: 7, base: 'T5' }], 'Entwurf trägt die neue Basis');
   assert.equal(block.html, P('a1', 'Eins lokal.') + P('a2', 'Zwei remote.') + P('a3', 'Drei.'));
   assert.equal(block.originalHtml, remoteHtml, 'nächster Merge rechnet gegen den Server-Stand');
   assert.equal(block.originalUpdatedAt, 'T5', 'der Save läuft gegen den neuen Stempel');
@@ -75,10 +79,11 @@ test('_mergeStaleBlock: kollisionsfrei → Basis = Server-Stand, Block dirty, Re
 
 test('_mergeStaleBlock: Kollision → Banner + Modal, Basis bleibt bis zur Auflösung', () => {
   const block = blockWith(P('a1', 'Eins.') + P('a2', 'Zwei lokal.') + P('a3', 'Drei.') + '<p>Neu lokal.</p>');
-  const { ctx, enqueued } = ctxFor(block);
+  const { ctx, enqueued, drafts } = ctxFor(block);
   const remoteHtml = P('a1', 'Eins remote.') + P('a2', 'Zwei remote.') + P('a3', 'Drei.');
   const r = ctx._mergeStaleBlock(block, { remoteHtml, remoteUpdatedAt: 'T6', remoteIsSelf: false, remoteUserName: 'Bea' });
   assert.equal(r, 'conflict');
+  assert.equal(drafts.length, 0, 'Basis bleibt bis zur Auflösung — kein Entwurf auf neuer Basis');
   assert.equal(block.conflict.mergeable, true);
   assert.equal(block.originalUpdatedAt, 'T0');
   assert.equal(ctx.conflictResolution.pageId, 7);
@@ -95,6 +100,7 @@ test('_mergeStaleBlock: Kollision → Banner + Modal, Basis bleibt bis zur Aufl�
   assert.equal(block.conflict, null);
   assert.equal(block.dirty, true);
   assert.deepEqual(enqueued, [7]);
+  assert.deepEqual(drafts, [{ pageId: 7, base: 'T6' }], 'Auflösung schreibt den Entwurf auf der neuen Basis');
 });
 
 test('_mergeStaleBlock: ein offenes Modal einer anderen Seite wird nicht ersetzt', () => {

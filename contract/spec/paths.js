@@ -72,6 +72,8 @@ module.exports = {
     post: {
       'x-clients': BOTH,
       summary: 'Abschnitt anlegen',
+      description: 'Optionaler Header `Idempotency-Key` (8–100 Zeichen `[A-Za-z0-9_-]`): derselbe Schlüssel desselben Kontos liefert 24 h lang die erste Antwort noch einmal (Header `Idempotent-Replayed: true`) statt erneut anzulegen — für ein Nachspielen nach verlorener Antwort.',
+      parameters: [{ name: 'Idempotency-Key', in: 'header', required: false, schema: str() }],
       requestBody: body('CreatePageRequest'),
       responses: { 200: json(ref('Page')), 400: error(['BOOKID_REQ', 'NAME_REQ', 'INVALID_VALUE']), ...AUTH },
     },

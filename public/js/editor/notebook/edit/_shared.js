@@ -23,16 +23,19 @@ import { findBlock } from '../../shared/dom-block.js';
 import { EVT } from '../../../events.js';
 import { recordSentSave, isOwnSentSave } from '../sent-saves.js';
 import { isOwnServerSave } from '../../../repo/save-ids.js';
+import { PAGE_SAVE_TIMEOUT_MS } from '../save-timing.js';
 
 // Jeder Notebook-PUT läuft hier durch: der Stand wird VOR dem Request als
 // abgeschickt vermerkt — geht die Antwort verloren, erkennt der nächste Merge
 // den Server-Stand trotzdem als eigenen (../sent-saves.js).
 // Zusätzlich trägt jeder PUT die Save-Kennungen des Schreibers `notebook`
 // (repo/save-ids.js) — der Server erkennt damit den eigenen Save selbst.
+// Kürzerer Write-Timeout (../save-timing.js): ein hängender PUT blockiert sonst
+// jeden weiteren Save und einen vorgemerkten Fokus-Exit.
 const NOTEBOOK_WRITER = 'notebook';
 async function savePage(pageId, body) {
   recordSentSave(pageId, body?.html, body?.expectedUpdatedAt);
-  return putPage(pageId, { ...body, writer: NOTEBOOK_WRITER });
+  return putPage(pageId, { ...body, writer: NOTEBOOK_WRITER, timeoutMs: PAGE_SAVE_TIMEOUT_MS });
 }
 
 // Auto-Save: idle-debounce + max-Cap. Regel und Werte liegen in

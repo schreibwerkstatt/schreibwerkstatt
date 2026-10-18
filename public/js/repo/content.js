@@ -9,6 +9,7 @@ import { getDeviceId } from '../device-id.js';
 import { getTabId } from '../tab-id.js';
 import { beginSave, confirmSave, dropSave } from './save-ids.js';
 import { EVT } from '../events.js';
+import { dropPendingPage, dropQueuedRename, isTempId, isUndelivered, newOpKey, patchPendingPage, pendingPage, queueCreatePage, queueRename, resolveTempId } from './structure-queue.js';
 
 const GET_TIMEOUT_MS = 30000;
 const WRITE_TIMEOUT_MS = 90000;
@@ -25,7 +26,13 @@ function _parseRetryAfter(raw) {
 
 async function _fetchWithTimeout(url, opts, timeoutMs) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(new Error('content timeout')), timeoutMs);
+  // TimeoutError: Aufrufer (utils/net.js#isNetworkError) werten ihn wie einen
+  // Netzfehler — die Antwort kam nicht an.
+  const timer = setTimeout(() => {
+    const err = new Error('content timeout');
+    err.name = 'TimeoutError';
+    ctrl.abort(err);
+  }, timeoutMs);
   // Externes Signal (z.B. Buchwechsel-Abort vom Caller) mit Timeout-Signal mergen,
   // damit `_get`/`_write` von aussen unterbrochen werden können.
   const external = opts?.signal;
@@ -110,14 +117,14 @@ async function _get(path, { fresh = false, signal } = {}) {
   }
 }
 
-async function _write(method, path, body, invalidationPaths) {
+async function _write(method, path, body, invalidationPaths, extraHeaders = null, timeoutMs = WRITE_TIMEOUT_MS) {
   const opts = {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(extraHeaders || {}) },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   };
   for (let attempt = 0; attempt <= MAX_RETRY_429; attempt++) {
-    const r = await _fetchWithTimeout('/content/' + path, opts, WRITE_TIMEOUT_MS);
+    const r = await _fetchWithTimeout('/content/' + path, opts, timeoutMs);
     if (r.ok) {
       _invalidateContentCache(invalidationPaths || path);
       return r.status === 204 ? null : r.json();
@@ -147,6 +154,20 @@ async function _getNav(path, opts = {}) {
   }
 }
 
+// Offline vormerkbar ist nur ein reines Umbenennen (repo/structure-queue.js).
+const _onlyName = (body) => !!body && typeof body.name === 'string' && Object.keys(body).every((k) => k === 'name');
+
+// Temporäre ID, deren Anlegen schon auf dem Server ist (repo/structure-queue.js
+// #resolveTempId): ein später Save, ein zweiter Tab oder ein Undo adressiert
+// dann den echten Abschnitt.
+function _realIdFor(id) {
+  return isTempId(id) ? resolveTempId(id) : null;
+}
+
+function _currentBookId() {
+  try { return globalThis.Alpine?.store('nav')?.selectedBookId ?? null; } catch { return null; }
+}
+
 export const contentRepo = {
   // GET /content/books → [{id, name, slug, description, updated_at, created_at}]
   listBooks(opts)               { return _getNav('books', opts); },
@@ -173,6 +194,14 @@ export const contentRepo = {
   // `stripFocusArtefacts` haengt der Editor-Output an, der Repo-Read normalisiert
   // ihn weg — Caller bekommen niemals den Persistenz-Backup-Marker zu sehen.
   async loadPage(id, opts) {
+    // Offline angelegt (repo/structure-queue.js): existiert nur lokal.
+    if (isTempId(id)) {
+      const pending = pendingPage(id);
+      if (pending) return pending;
+      const real = _realIdFor(id);
+      if (!real) throw _httpError('GET', 'pages/' + id, 404, { error_code: 'PAGE_NOT_FOUND' });
+      id = real;
+    }
     const page = await _get('pages/' + id, opts);
     if (page && typeof page.html === 'string') page.html = stripFocusArtefacts(page.html);
     return page;
@@ -191,7 +220,21 @@ export const contentRepo = {
   // (./save-ids.js) — der Server erkennt daran den eigenen Save mit verlorener
   // Antwort. Ohne `writer` läuft der Save wie bisher, ohne Kennung. Basis der
   // Kennung ist `expected_updated_at` — nur Vorgänger auf derselben Basis gehen mit.
-  async savePage(id, body, { writer = null, extraOwnSaveIds = [] } = {}) {
+  //
+  // `timeoutMs` kürzt den Write-Timeout für einen Aufrufer, der einen hängenden
+  // PUT lieber abbricht und neu versucht (Notebook-Editor) — die Save-Kennung
+  // macht den Abbruch sicher, falls der Server doch geschrieben hat.
+  async savePage(id, body, { writer = null, extraOwnSaveIds = [], timeoutMs = WRITE_TIMEOUT_MS } = {}) {
+    // Offline angelegter Abschnitt: der Inhalt reist mit der Anlege-Operation.
+    if (isTempId(id)) {
+      const pending = patchPendingPage(id, body || {});
+      if (pending) return pending;
+      const real = _realIdFor(id);
+      if (!real) throw _httpError('PUT', 'pages/' + id, 404, { error_code: 'PAGE_NOT_FOUND' });
+      // Schon angelegt: der Save geht an den echten Abschnitt. Die Basis der
+      // temporären Seite ist leer (kein Stempel) — sie war bis eben unsere.
+      id = real;
+    }
     const hasHtml = typeof body?.html === 'string';
     // Geraet-Stempel nur bei Body-Change: macht den geraete-bewussten /changes-Feed
     // praezise (eigener Browser-Save wird ausgefiltert, andere Geraete nicht).
@@ -201,7 +244,7 @@ export const contentRepo = {
     const payload = hasHtml ? { ...body, ...ids, device_id: getDeviceId(), client_tab: getTabId(), client_sw: _swState() } : body;
     const inv = hasHtml ? ['pages/' + id, 'pages/' + id + '/revisions'] : ['pages/' + id];
     let out;
-    try { out = await _write('PUT', 'pages/' + id, payload, inv); }
+    try { out = await _write('PUT', 'pages/' + id, payload, inv, null, timeoutMs); }
     catch (e) {
       // 4xx: der Server hat nicht geschrieben. Netzfehler/5xx: vielleicht doch.
       if (ids && e?.status >= 400 && e.status < 500) dropSave(writer, id, ids.save_id);
@@ -230,23 +273,64 @@ export const contentRepo = {
 
   // Alias fuer Strukturoperationen (rename/move/reorder ohne Body-Change).
   async updatePage(id, body) {
+    if (isTempId(id)) {
+      const real = _realIdFor(id);
+      if (real) return contentRepo.updatePage(real, body);
+      const pending = _onlyName(body) ? patchPendingPage(id, body) : null;
+      if (!pending) throw _httpError('PUT', 'pages/' + id, 409, { error_code: 'PAGE_PENDING' });
+      return pending;
+    }
     // Invalidiert auch das Buch-Tree-Listing, weil Rename/Move dort sichtbar wird.
     const inv = ['pages/' + id];
     if (body?.book_id) inv.push('books/' + body.book_id + '/tree');
-    return _write('PUT', 'pages/' + id, body, inv);
+    try {
+      const out = await _write('PUT', 'pages/' + id, body, inv);
+      if (typeof body?.name === 'string') dropQueuedRename('page', id);
+      return out;
+    } catch (e) {
+      // Offline umbenannt → vorgemerkt (repo/structure-queue.js).
+      if (isUndelivered(e) && _onlyName(body) && queueRename('page', id, body.name, { bookId: _currentBookId() })) return { id, ...body, pending: true };
+      throw e;
+    }
   },
 
   // POST /content/pages mit `{ book_id?, chapter_id?, name, html? }`.
   async createPage(body) {
     const inv = ['pages'];
     if (body?.book_id) inv.push('books/' + body.book_id + '/tree');
-    return _write('POST', 'pages', body, inv);
+    // Schlüssel schon beim ersten Versuch: kam er trotz Netzfehler an, liefert
+    // das Nachspielen denselben Abschnitt (lib/idempotency.js).
+    const opKey = newOpKey();
+    try { return await _write('POST', 'pages', body, inv, { 'Idempotency-Key': opKey }); }
+    catch (e) {
+      // Offline angelegt → temporäre ID, Abspielen beim Wiederverbinden.
+      const pending = isUndelivered(e) ? queueCreatePage(body, { bookId: _currentBookId(), opKey }) : null;
+      if (pending) return pending;
+      throw e;
+    }
+  },
+
+  // Echte Writes für das Abspielen der Warteschlange — ohne erneutes Vormerken.
+  sendQueuedStructureOp(op) {
+    if (op.op === 'createPage') {
+      const inv = ['pages'];
+      const bookId = op.body.book_id ?? op.bookId;
+      if (bookId != null) inv.push('books/' + bookId + '/tree');
+      return _write('POST', 'pages', op.body, inv, op.opKey ? { 'Idempotency-Key': op.opKey } : null);
+    }
+    if (op.kind === 'page') return _write('PUT', 'pages/' + op.id, { name: op.name }, ['pages/' + op.id, ...(op.bookId != null ? ['books/' + op.bookId + '/tree'] : [])]);
+    return _write('PUT', 'chapters/' + op.id, { name: op.name }, ['chapters/' + op.id, ...(op.bookId != null ? ['books/' + op.bookId + '/tree'] : [])]);
   },
 
   // DELETE /content/pages/:id. Liefert null. `bookId` invalidiert zusaetzlich
   // den Tree-Cache (SW-SWR wuerde die geloeschte Seite sonst als Geist zeigen,
   // bis die Hintergrund-Revalidate durch ist — dasselbe Muster wie createPage).
   async deletePage(id, { bookId } = {}) {
+    if (isTempId(id)) {
+      const real = _realIdFor(id);
+      if (!real) { dropPendingPage(id); return null; }
+      id = real;
+    }
     const deviceId = getDeviceId();
     const path = 'pages/' + id + (deviceId ? '?device_id=' + encodeURIComponent(deviceId) : '');
     const inv = ['pages/' + id];
@@ -331,7 +415,14 @@ export const contentRepo = {
     const inv = ['chapters/' + id];
     const treeBook = body?.book_id ?? bookId;
     if (treeBook != null) inv.push('books/' + treeBook + '/tree');
-    return _write('PUT', 'chapters/' + id, body, inv);
+    try {
+      const out = await _write('PUT', 'chapters/' + id, body, inv);
+      if (typeof body?.name === 'string') dropQueuedRename('chapter', id);
+      return out;
+    } catch (e) {
+      if (isUndelivered(e) && _onlyName(body) && queueRename('chapter', id, body.name, { bookId: treeBook ?? null })) return { id, ...body, pending: true };
+      throw e;
+    }
   },
 
   async deleteChapter(id, { bookId } = {}) {

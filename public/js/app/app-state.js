@@ -259,7 +259,7 @@ const notebookState = () => ({
   // (app-view/page.js#resetPage) und dieselben Timer treffen muss. Lazy in
   // edit/autosave.js gebaut; Key ist `AUTOSAVE_KEY` (eine Seite zur Zeit).
   _autosaveTimers: null,
-  _draftTimers: null,
+  _draftTimers: null, _saveRetryTimers: null, _saveRetryAttempt: 0, // + Retry-Backoff (#_scheduleSaveRetry)
   // Retry-Trigger für einen haengengebliebenen Offline-Save (edit/autosave.js).
   // Zwei Handles, weil zwei Anlaesse: `_onlineHandler` haengt an window
   // `online`+`focus`, `_onlineVisHandler` an document `visibilitychange`.

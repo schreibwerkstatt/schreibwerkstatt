@@ -61,6 +61,9 @@ export function registerIdeenCard() {
         extraListeners: [
           { type: 'ideen:reset', handler: () => this.resetIdeen() },
           { type: EVT.IDEEN_STAGES_CHANGED, handler: (e) => this._onStagesChanged(e) },
+          // Offline vorgemerkte Ideen sind auf dem Server: neu laden, damit die
+          // temporären IDs den echten weichen (repo/ideen-queue.js).
+          { type: EVT.IDEEN_QUEUE_CHANGED, handler: (e) => { if (e.detail?.flushed && window.__app.showIdeenCard) this.loadIdeen(); } },
         ],
       });
 

@@ -2,6 +2,12 @@
 
 Neueste oben. Je Abschnitt: was sich geändert hat, und was ein Client tun **muss** (Bruch, Frist) bzw. tun **darf** (neues Feld, neuer Weg). Regeln: [README.md](README.md).
 
+## api 3 · editorApi 1
+
+- **`POST /content/pages` liest den optionalen Header `Idempotency-Key`.** Derselbe Schlüssel desselben Kontos liefert 24 h lang die erste Antwort noch einmal (mit Header `Idempotent-Replayed: true`), statt einen zweiten Abschnitt anzulegen. Läuft der erste Request noch, wartet der zweite auf dessen Ausgang. Ohne Header bleibt alles wie bisher. Die Web-App schickt den Schlüssel beim ersten Versuch mit, damit ein Anlegen, dessen Antwort im Funkloch verloren ging, beim Nachspielen nicht doppelt entsteht.
+
+**Clients dürfen:** beim Anlegen eines Abschnitts einen Schlüssel erzeugen (z.B. `op-<UUID>`), lokal mit der Operation speichern und bei jeder Wiederholung derselben Operation mitschicken. Feature-Check `clientContract.api >= 3`.
+
 ## api 2 · editorApi 1
 
 Revisionen eines Abschnitts, nur additiv:

@@ -63,6 +63,11 @@
   color: var(--color-warn-text);
   border-bottom: 2px solid var(--color-warn-text);
 }
+.session-banner--rescue {
+  background: var(--color-warn-bg);
+  color: var(--color-warn-text);
+  border-bottom: 2px solid var(--color-warn-text);
+}
 :root:has(.focus-editor.is-active) .session-banner--offline {
   padding: var(--space-2xs) var(--space-10);
   font-size: var(--font-size-xs);
@@ -75,6 +80,16 @@
   pointer-events: none;
 }
 :root:has(.focus-editor.is-active) .session-banner--offline:hover { opacity: 1; }
+
+/* Ohne Verbindung: Server-pflichtige Aktionen gedimmt (KI-Chats, Diktat,
+   Vorlesen, alles mit `data-needs-net`). Bleiben klickbar — der Klick meldet
+   über app/boot/net-required.js, warum es gerade nicht geht. Eine laufende
+   Aufnahme bleibt hell: Stoppen muss offline gehen. `is-offline` setzt
+   app/app-offline-books.js. */
+:root.is-offline :is(.chat-send-btn, .tts-dock-btn, .stt-dock-btn:not(.is-recording), [data-needs-net]) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 .site-header-row {
   display: flex;

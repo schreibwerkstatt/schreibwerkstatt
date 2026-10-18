@@ -38,7 +38,8 @@
 //   onRestored(el, snap) → optional, nach Mount + Caret + Fokus. Hier setzt der
 //                          Aufrufer sein Dirty-Flag und plant Draft/Autosave.
 //   onChange()           → optional, nach jeder Änderung an canUndo/canRedo
-//                          (Push, Debounce-Start, Undo, Redo, Reset, Clear).
+//                          (Push, Debounce-Start, Undo, Redo, Reset, Clear,
+//                          Rebase).
 //                          Der Stack lebt in einer Closure und ist für ein
 //                          reaktives Framework unsichtbar — ohne diesen Hook
 //                          blieben gebundene Undo-/Redo-Buttons stehen.
@@ -49,6 +50,14 @@
 
 const DEFAULT_DEBOUNCE_MS = 500;
 const DEFAULT_MAX = 100;
+
+// Gleicher Inhalt bis auf Block-IDs. Die IDs setzen Save und Merge-Vorbereitung
+// als reine Attribute ins Live-DOM (shared/block-ids.js) — ohne `input`, also
+// ohne Push. Ein danach eingefrorener Vorher-Stand (Paste, Cut, Ersetzen)
+// unterschiede sich von der Spitze nur darin und würde ein eigener Schritt,
+// dessen Undo nichts Sichtbares tut.
+const BID_ATTR_RE = /\sdata-bid="[^"]*"/g;
+const sameContent = (a, b) => a === b || a.replace(BID_ATTR_RE, '') === b.replace(BID_ATTR_RE, '');
 
 // Caret-Position als reiner Text-Offset ab Editor-Anfang. Robust genug über
 // strukturelle Mutationen (Slash-Menü, HR-Insert, Block-Wrap im Mount): Wrapping
@@ -64,6 +73,24 @@ export function captureCaretOffset(root) {
   pre.selectNodeContents(root);
   pre.setEnd(range.startContainer, range.startOffset);
   return pre.toString().length;
+}
+
+// Text-Offset durch eine Umschreibung tragen (Rebase nach Remote-Merge): im
+// gemeinsamen Anfang bleibt er, im gemeinsamen Ende verschiebt er sich um die
+// Längendifferenz, mitten im geänderten Bereich landet er an dessen Ende.
+// Sonst zeigte ein später gemerkter Offset nach eingefügten Remote-Absätzen
+// oberhalb in den falschen Absatz.
+export function mapCaretOffset(oldText, newText, offset) {
+  if (offset == null || oldText === newText) return offset;
+  const max = Math.min(oldText.length, newText.length);
+  let pre = 0;
+  while (pre < max && oldText.charCodeAt(pre) === newText.charCodeAt(pre)) pre++;
+  let suf = 0;
+  while (suf < max - pre
+    && oldText.charCodeAt(oldText.length - 1 - suf) === newText.charCodeAt(newText.length - 1 - suf)) suf++;
+  if (offset <= pre) return offset;
+  if (offset >= oldText.length - suf) return offset + (newText.length - oldText.length);
+  return newText.length - suf;
 }
 
 // Caret nach einem Restore: ans Ende des geänderten Bereichs im NEUEN Text —
@@ -181,7 +208,9 @@ export function createEditHistory({
     if (!el) return;
     const html = el.innerHTML;
     const top = stack[idx];
-    if (top && top.html === html) return;      // Dedupe gegen die Spitze
+    // Dedupe gegen die Spitze; reine ID-Änderungen frischen sie nur auf, damit
+    // ein Restore dorthin die IDs nicht wieder abzieht.
+    if (top && sameContent(top.html, html)) { top.html = html; return; }
     if (idx < stack.length - 1) stack.length = idx + 1;   // Redo-Ast abschneiden
     stack.push({ html, caretOffset: captureCaretOffset(el) });
     if (stack.length > max) stack.splice(0, stack.length - max);
@@ -252,7 +281,9 @@ export function createEditHistory({
       // Offenen Debounce zuerst einlösen, sonst ginge die gerade getippte
       // Strecke verloren statt rückgängig gemacht zu werden.
       if (timer) { cancelTimer(); pushNow(); }
-      if (idx <= 0) return false;
+      // Ohne Container kein Restore — den Index dann auch nicht bewegen, sonst
+      // zeigt er auf einen Stand, der nie eingehängt wurde.
+      if (idx <= 0 || !getRoot()) return false;
       idx--;
       restore(stack[idx], 'historyUndo');
       notify();
@@ -265,11 +296,47 @@ export function createEditHistory({
       // Redo-Ast ab. Ohne das mountete Redo den alten Stand über die gerade
       // getippte Strecke, und die wäre nicht mehr herstellbar.
       if (timer) { cancelTimer(); pushNow(); }
-      if (idx < 0 || idx >= stack.length - 1) return false;
+      if (idx < 0 || idx >= stack.length - 1 || !getRoot()) return false;
       idx++;
       restore(stack[idx], 'historyRedo');
       notify();
       return true;
+    },
+
+    // Der Inhalt wurde von aussen umgeschrieben (kollisionsfreier Remote-Merge):
+    // Verlauf anpassen statt verwerfen. Vertrag: der Aufrufer hat UNMITTELBAR
+    // VOR der Umschreibung `pushNow()` gerufen — die Spitze ist damit der
+    // Vorher-Stand und wird durch den jetzigen Inhalt ersetzt. Jeder ältere
+    // Stand läuft durch `mapHtml(html)` (string = übertragener Stand, sonst
+    // nicht übertragbar). Ab dem ersten nicht übertragbaren Stand fällt er samt
+    // allen älteren weg: ein Undo darf nie über eine Lücke springen. Der
+    // Redo-Ast fällt immer weg — er setzte auf dem Vorher-Stand auf.
+    rebase(mapHtml) {
+      if (applying) return;
+      cancelTimer();
+      const el = getRoot();
+      if (!el) return;
+      const kept = [];
+      const scratch = el.ownerDocument.createElement('div');
+      const textOf = (h) => { scratch.innerHTML = h; return scratch.textContent || ''; };
+      for (let i = idx - 1; i >= 0; i--) {
+        let html = null;
+        try { html = mapHtml(stack[i].html); } catch { html = null; }
+        if (typeof html !== 'string') break;
+        // Gemerkter Caret mitwandern: Remote-Blöcke verschieben die Offsets.
+        const caretOffset = stack[i].caretOffset == null ? stack[i].caretOffset
+          : mapCaretOffset(textOf(stack[i].html), textOf(html), stack[i].caretOffset);
+        kept.unshift({ html, caretOffset });
+      }
+      kept.push({ html: el.innerHTML, caretOffset: captureCaretOffset(el) });
+      stack = [];
+      for (const e of kept) {
+        const top = stack[stack.length - 1];
+        if (top && sameContent(top.html, e.html)) stack[stack.length - 1] = e;
+        else stack.push(e);
+      }
+      idx = stack.length - 1;
+      notify();
     },
 
     // Nur für Tests/Diagnose — kein Konsument steuert damit Verhalten.

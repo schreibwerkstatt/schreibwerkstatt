@@ -18,6 +18,7 @@ import { checkPageConflict, remoteAuthorFrom } from '../../editor/shared/page-co
 import { conflictText } from '../../editor/shared/conflict-text.js';
 import { stripLektoratMarks } from '../../editor/shared/html-clean.js';
 import { isNoChange } from '../../editor/shared/save-pipeline.js';
+import { isOfflineError } from './blocks.js';
 
 // Wie lange der „gespeichert"-Status am Block/Outline-Punkt stehen bleibt.
 // Danach wird `savedAt` aktiv genullt — ein `Date.now()`-Vergleich im Template
@@ -48,14 +49,17 @@ export function applySaveOutcome(block, { snapshot, savedHtml, savedUpdatedAt = 
   block.conflict = null;
   block.saveError = '';
   block.savedAt = Date.now();
+  block.offline = false;
   block.dirty = block.html !== snapshot;
   return block.dirty;
 }
 
 export const bookEditorSaveMethods = {
   _markBlockDirty(block) {
+    if (!block.dirty) this._warnIfEditedElsewhere?.(block);
     block.dirty = true;
     this._autosave.schedule(block.pageId);
+    this._scheduleBlockDraft(block);
   },
 
   // ── Queue ───────────────────────────────────────────────────────────────
@@ -117,7 +121,11 @@ export const bookEditorSaveMethods = {
       // bleibt der Block dirty für den nächsten Autosave.
       for (let round = 0; round < MAX_MERGE_ROUNDS; round++) {
         if (round === 0) {
-          const conflict = await checkPageConflict(block.pageId, block.originalUpdatedAt, { writer: 'book' });
+          // Ohne Basis-Stempel (Offline-Kopie ohne `updated_at`) schriebe der
+          // Server ohne Prüfung: erst den Server-Stand holen und dagegen mergen.
+          const conflict = block.originalUpdatedAt
+            ? await checkPageConflict(block.pageId, block.originalUpdatedAt, { writer: 'book', extraOwn: block._draftOwn || [] })
+            : await this._remoteForUnstampedBlock(block);
           if (conflict && this._mergeStaleBlock(block, conflict) !== 'merged') return;
         }
         // Stand, mit dem dieser PUT losläuft — Referenz für „hat der User
@@ -130,8 +138,10 @@ export const bookEditorSaveMethods = {
             pageName: block.name,
             source: 'book',
             writer: 'book',
+            extraOwnSaveIds: block._draftOwn || [],
             expectedUpdatedAt: block.originalUpdatedAt || null,
           });
+          block._draftOwn = null;
           // Basis des nächsten Merges ist die Fassung, die der Server
           // gespeichert hat (samt dort vergebener Block-IDs) — die lädt ein
           // anderes Gerät jetzt.
@@ -141,6 +151,8 @@ export const bookEditorSaveMethods = {
             savedUpdatedAt: saved?.updated_at,
           });
           if (stillDirty) this._autosave.schedule(block.pageId);
+          // Gespeichert → Entwurf weg; weitergetippt → Entwurf auf neuer Basis.
+          this._writeBlockDraft(block);
           this._savedFlash.set(block.pageId, () => { block.savedAt = null; }, SAVED_FLASH_MS);
           app._syncPageStatsAfterSave?.({ id: block.pageId, updated_at: block.originalUpdatedAt }, newHtml);
           return;
@@ -153,11 +165,30 @@ export const bookEditorSaveMethods = {
       }
       this._autosave.schedule(block.pageId);
     } catch (e) {
+      if (isOfflineError(e) || e?.status >= 500 || e?.status === 429) {
+        // Kein Netz bzw. Server vorübergehend weg: der Stand liegt als Entwurf,
+        // der Online-Retry (drafts.js#_retryOfflineBlocks) speichert ihn nach —
+        // bei `online`/Fokus und, falls der Browser online bleibt, per Backoff.
+        block.offline = true;
+        this._writeBlockDraft(block);
+        this._scheduleOfflineRetry?.();
+        return;
+      }
       // Übersetzter Backend-Fehler statt der rohen `PUT … HTTP 4xx`-Message.
       block.saveError = e?.body ? tErrorRaw(e.body) : app.t('bookEditor.saveFailed');
     } finally {
       block.saving = false;
     }
+  },
+
+  // Block ohne Basis-Stempel: Server-Stand holen. Gleich der Basis → Stempel
+  // übernehmen und normal speichern (null); sonst wie ein veralteter Stand
+  // mergen (Rückgabe im Format von checkPageConflict).
+  async _remoteForUnstampedBlock(block) {
+    const page = await contentRepo.loadPage(block.pageId, { fresh: true });
+    if (!page?.updated_at) return null;
+    if (isNoChange(page.html || '', block.originalHtml)) { block.originalUpdatedAt = page.updated_at; return null; }
+    return { remoteUpdatedAt: page.updated_at, ...remoteAuthorFrom(page), remoteHtml: page.html || '' };
   },
 
   // Server-Stand nach einem 409. Scheitert der Read, bleibt es beim Banner aus
@@ -198,9 +229,12 @@ export const bookEditorSaveMethods = {
   resolveConflictOverwrite(block) {
     if (!block.conflict) return;
     block.originalUpdatedAt = block.conflict.remoteUpdatedAt;
+    if (typeof block.conflict.remoteHtml === 'string') block.originalHtml = block.conflict.remoteHtml;
     block.conflict = null;
     block.saveError = '';
     block.dirty = true;
+    // Basis verschoben → Entwurf nachziehen (Invariante 18, docs/book-editor.md).
+    this._writeBlockDraft(block);
     this._enqueueSave(block.pageId);
   },
 
@@ -236,6 +270,8 @@ export const bookEditorSaveMethods = {
     block.dirty = false;
     block.conflict = null;
     block.saveError = '';
+    block.offline = false;
+    this._writeBlockDraft(block);
     // Aktiver Block: `_maybeRehydrate` lässt dessen DOM in Ruhe (Invariante 3)
     // — der User sähe weiter die eigene Fassung, und der nächste Tastendruck
     // schriebe sie über die gerade übernommene. Darum erst deaktivieren.
@@ -251,6 +287,7 @@ export const bookEditorSaveMethods = {
     if (block.saving) return 'saving';
     if (block.conflict) return 'conflict';
     if (block.saveError) return 'error';
+    if (block.dirty && block.offline) return 'offline';
     if (block.dirty) return 'dirty';
     if (block.savedAt) return 'saved';
     return '';
@@ -274,6 +311,7 @@ export const bookEditorSaveMethods = {
       case 'saving': return app.t('bookEditor.status.saving');
       case 'conflict': return this._conflictText(block.conflict, 'status');
       case 'error': return block.saveError;
+      case 'offline': return app.t(block.draftFailed ? 'bookEditor.status.offlineUnsafe' : 'bookEditor.status.offline');
       case 'dirty': return app.t('bookEditor.status.dirty');
       case 'saved': return app.t('bookEditor.status.saved');
       default: return '';

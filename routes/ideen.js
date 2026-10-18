@@ -24,6 +24,7 @@ const { getBookIdeenStages, setBookIdeenStages } = require('../db/book-settings'
 const { setContext } = require('../lib/log-context');
 const ideenDb = require('../db/ideen');
 const searchIndex = require('../lib/search');
+const { replayIdempotent, rememberIdempotent } = require('../lib/idempotency');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -176,7 +177,7 @@ router.get('/', (req, res) => {
 });
 
 // Idee anlegen: page_id ODER chapter_id ODER keins von beiden (Buch-Idee).
-router.post('/', jsonBody, (req, res) => {
+router.post('/', jsonBody, async (req, res) => {
   const userEmail = sessionEmail(req);
   const bookId = toIntId(req.body?.book_id);
   const pageId = toIntId(req.body?.page_id);
@@ -194,10 +195,14 @@ router.post('/', jsonBody, (req, res) => {
     if (ankerBook !== bookId) return res.status(400).json({ error_code: 'BOOK_MISMATCH' });
   }
 
+  // Nachgespielt aus der Offline-Warteschlange (lib/idempotency.js): derselbe
+  // Schlüssel legt nicht doppelt an.
+  if (await replayIdempotent(req, res, 'POST /ideen', userEmail)) return;
   const id = ideenDb.createIdee({ bookId, pageId, chapterId, userEmail, content });
   const row = ideenDb.getIdee(id);
   searchIndex.upsertIdea(id);
   logger.info(`[ideen] create id=${id} ${pageId ? 'page=' + pageId : chapterId ? 'chapter=' + chapterId : 'book=' + bookId}`);
+  rememberIdempotent(req, 'POST /ideen', userEmail, row);
   res.json(row);
 });
 

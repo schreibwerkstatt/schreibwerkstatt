@@ -2,11 +2,15 @@
 // Liest aus FTS5 ueber GET /search. Filter: Kind-Multiselect + Buch-Scope
 // (aktuelles Buch oder alle sichtbaren). Treffer-Klick navigiert via Hash-
 // Router (Seite/Kapitel) oder oeffnet die zugehoerige Karte (Figur/Ort).
+// Ohne Verbindung durchsucht sie stattdessen die auf dem Geraet abgelegten
+// Abschnitte des aktuellen Buchs (shared/offline-search.js).
 
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { formatRelativeShort } from '../utils.js';
 import { startPoll } from './job-helpers.js';
 import { tRaw, tErrorRaw } from '../i18n.js';
+import { searchOfflineBook } from '../shared/offline-search.js';
+import { isBrowserOffline, isOfflineRejection } from '../app/boot/net-required.js';
 
 const DEBOUNCE_MS = 220;
 const DEFAULT_KINDS = ['page', 'chapter'];
@@ -30,6 +34,7 @@ export function registerSearchCard() {
     loading: false,
     errorMessage: '',
     notIndexed: false, // Server: Embedding-Index fehlt/unvollständig → Hinweis statt „keine Treffer“
+    offlineInfo: null, // Offline-Suche lief: { covered, total, noTree } — Hinweis über der Liste
     activeKinds: [...DEFAULT_KINDS],
     scopeMode: 'book', // 'book' | 'all'
     mode: 'fts', // 'fts' | 'semantic'
@@ -212,6 +217,7 @@ export function registerSearchCard() {
         this.hits = [];
         this.fallback = false;
         this.errorMessage = '';
+        this.offlineInfo = null;
         this.loading = false;
         return;
       }
@@ -231,6 +237,8 @@ export function registerSearchCard() {
       const bookId = Alpine.store('nav').selectedBookId;
       if (this.scopeMode === 'book' && bookId) params.set('book_id', String(bookId));
 
+      if (isBrowserOffline()) return this._runOfflineSearch(query, seq);
+      this.offlineInfo = null;
       try {
         const r = await fetch('/search?' + params.toString(), {
           credentials: 'same-origin',
@@ -253,11 +261,45 @@ export function registerSearchCard() {
       } catch (e) {
         if (e.name === 'AbortError') return;
         if (seq !== this._searchSeq) return;
+        // Netz weg (navigator.onLine sagte noch „online"): lokal weitersuchen.
+        if (e instanceof TypeError || isOfflineRejection(e)) return await this._runOfflineSearch(query, seq);
         this.errorMessage = tRaw('search.failed');
         this.hits = [];
       } finally {
         if (seq === this._searchSeq) this.loading = false;
       }
+    },
+
+    // Offline: nur Abschnitte + Kapitel des aktuellen Buchs, aus dem Cache.
+    // Über alle Bücher zu suchen ginge nur über Bücher, die zufällig lokal
+    // liegen — das wäre eine stille Teilantwort auf „alle Bücher".
+    async _runOfflineSearch(query, seq) {
+      const bookId = Alpine.store('nav').selectedBookId;
+      try {
+        const res = await searchOfflineBook(bookId, query, { kinds: this.activeKinds, limit: 50 });
+        if (seq !== this._searchSeq) return;
+        this.hits = res.hits;
+        this.fallback = false;
+        this.errorMessage = '';
+        this.offlineInfo = { covered: res.covered, total: res.total, noTree: res.noTree, unsupported: res.unsupportedKinds || [] };
+      } catch {
+        if (seq !== this._searchSeq) return;
+        this.hits = [];
+        this.errorMessage = tRaw('search.failed');
+      } finally {
+        if (seq === this._searchSeq) this.loading = false;
+      }
+    },
+
+    offlineHint() {
+      const i = this.offlineInfo;
+      if (!i) return '';
+      let base;
+      if (i.noTree || !i.covered) base = tRaw('search.offline.none');
+      else if (i.covered < i.total) base = tRaw('search.offline.partial', { covered: i.covered, total: i.total });
+      else base = tRaw('search.offline.full');
+      // Gewählte Arten, die nur die Serversuche kennt (Figuren, Orte, Ideen …).
+      return i.unsupported?.length ? `${base} ${tRaw('search.offline.kindsSkipped')}` : base;
     },
 
     // Semantische Suche (Embedding-basiert, immer buch-skopiert). Zwei Modi:
@@ -300,7 +342,7 @@ export function registerSearchCard() {
       } catch (e) {
         if (e.name === 'AbortError') return;
         if (seq !== this._searchSeq) return;
-        this.errorMessage = tRaw('search.semantic.failed');
+        this.errorMessage = tRaw(isOfflineRejection(e) ? 'search.semantic.offline' : 'search.semantic.failed');
         this.hits = [];
       } finally {
         if (seq === this._searchSeq) this.loading = false;

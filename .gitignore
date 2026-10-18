@@ -9,6 +9,7 @@ schreibwerkstatt.db
 schreibwerkstatt.db-*
 # Winston-Log inkl. Rotationen (schreibwerkstatt1.log …)
 schreibwerkstatt*.log*
+*.out
 ai_parse_fails/
 .DS_Store
 __pycache__/

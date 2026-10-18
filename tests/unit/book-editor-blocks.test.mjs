@@ -146,6 +146,7 @@ const takeRemoteCtx = (activePageId) => ({
   ...bookEditorSaveMethods,
   activePageId,
   _autosave: { clear: () => {} },
+  _writeBlockDraft: () => {},
 });
 
 const conflictBlock = (remoteHtml) => ({

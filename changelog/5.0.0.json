@@ -1,0 +1,51 @@
+{
+  "version": "5.0.0",
+  "date": "2026-10-18",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Schreiben ohne Verbindung: beim Bearbeiten eines Abschnitts, im Fokus-Modus und im Bucheditor wird Ihr Text auf dem Gerät gesichert. Sobald der Server wieder erreichbar ist, wird er gespeichert.",
+      "en": "Writing without a connection: when editing a section, in focus mode and in the book editor, your text is kept on the device. As soon as the server is reachable again, it is saved."
+    },
+    {
+      "kind": "neu",
+      "de": "Auch offline lassen sich Abschnitte anlegen und umbenennen sowie Ideen notieren. Die Änderungen werden vorgemerkt und beim nächsten Kontakt mit dem Server übernommen.",
+      "en": "Offline, you can also create and rename sections and jot down ideas. The changes are queued and applied the next time the server is reachable."
+    },
+    {
+      "kind": "neu",
+      "de": "«Nicht gespeichert»: lehnt der Server einen offline geschriebenen Inhalt ab, etwa weil das Kapitel gelöscht wurde, erscheint ein Hinweis. Dort können Sie den Text kopieren, erneut senden oder verwerfen.",
+      "en": "“Not saved”: if the server rejects something written offline, for example because the chapter was deleted, a notice appears. There you can copy the text, send it again or discard it."
+    },
+    {
+      "kind": "neu",
+      "de": "Einstellungen, «Offline (dieses Gerät)»: das zuletzt geöffnete Buch wird automatisch auf dem Gerät abgelegt. Ohne Verbindung bleibt es lesbar, und die Suche findet Text in seinen Abschnitten.",
+      "en": "Settings, “Offline (this device)”: the book you opened last is stored on the device automatically. Without a connection it stays readable, and search finds text in its sections."
+    },
+    {
+      "kind": "neu",
+      "de": "Versionen eines Abschnitts: wichtige Stände lassen sich anheften und benennen, sie bleiben dauerhaft erhalten. Jede Version kann mit der vorherigen oder mit dem aktuellen Stand verglichen werden.",
+      "en": "Section versions: important states can be pinned and named, and they are kept permanently. Each version can be compared with the previous one or with the current text."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Versionen eines Abschnitts: die Liste fasst die Speicherungen einer Sitzung zusammen und lässt sich nach Quelle und Person filtern.",
+      "en": "Section versions: the list groups the saves of one session together and can be filtered by source and person."
+    },
+    {
+      "kind": "verbessert",
+      "de": "«Konflikt lösen …»: der Vergleich zeigt die Unterschiede Absatz für Absatz, im Bucheditor wie beim Bearbeiten eines Abschnitts.",
+      "en": "“Resolve conflict …”: the comparison shows the differences paragraph by paragraph, in the book editor as well as when editing a section."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Ist ein Abschnitt in einem anderen Tab schon zum Bearbeiten offen, weist ein Hinweis darauf hin. So schreiben Sie nicht versehentlich an zwei Stellen.",
+      "en": "If a section is already open for editing in another tab, a notice tells you. That way you don't accidentally write in two places."
+    },
+    {
+      "kind": "behoben",
+      "de": "Nach einer kurz unterbrochenen Verbindung konnte das Speichern eine Änderung von einem anderen Gerät überschreiben. Beide Fassungen werden jetzt zusammengeführt.",
+      "en": "After a briefly interrupted connection, saving could overwrite a change made on another device. Both versions are now merged."
+    }
+  ]
+}

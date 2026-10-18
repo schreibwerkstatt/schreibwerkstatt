@@ -62,6 +62,7 @@ export const saveGuardMethods = {
     app.saveOffline = true;
     app.saveFailKind = kind;
     noteSaveOutage(app.currentPage?.id, { kind, status: e?.status });
+    this._scheduleSaveRetry(kind);
     return this._saveFailureText(kind, e, { offlineKey });
   },
 

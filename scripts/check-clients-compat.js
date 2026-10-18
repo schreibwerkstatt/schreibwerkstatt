@@ -18,9 +18,9 @@
 // nicht nur existieren, sondern WIRKEN, prüft tests/e2e/_helpers/focus-client-contract.js
 // (Chromium + WebKit).
 //
-//   node scripts/check-clients-compat.js                    # beide Clients, Repos in ~/.cache holen/aktualisieren
+//   node scripts/check-clients-compat.js                    # beide Clients, je main + neuester Release-Tag, Repos in ~/.cache holen/aktualisieren
 //   node scripts/check-clients-compat.js --client android   # nur einer (mac | android)
-//   node scripts/check-clients-compat.js --repo <pfad>      # vorhandener Checkout (nur mit --client)
+//   node scripts/check-clients-compat.js --repo <pfad>      # vorhandener Checkout statt main + Release (nur mit --client)
 //   node scripts/check-clients-compat.js --offline          # Cache ohne Pull
 //   node scripts/check-clients-compat.js --base <ref>       # „berührt"-Liste gegen <ref> (Default HEAD)
 //   node scripts/check-clients-compat.js --verbose          # alle Kontaktstellen auflisten
@@ -59,23 +59,60 @@ function arg(name) {
 const has = (name) => process.argv.includes(name);
 const git = (args, cwd = ROOT) => execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString();
 
-function checkout(id, client) {
+const cacheDir = (name) => path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'schreibwerkstatt', name);
+const repoUrl = (client) => `https://github.com/${client.repo}.git`;
+
+// Öffentliche Repos: plain git statt `gh`, damit CI ohne Login klont.
+function clone(client, dir, ref) {
+  fs.mkdirSync(path.dirname(dir), { recursive: true });
+  const args = ['clone', '--depth', '1', '-q', '-c', 'advice.detachedHead=false'];
+  if (ref) args.push('--branch', ref);
+  execFileSync('git', [...args, repoUrl(client), dir], { stdio: 'inherit' });
+}
+
+// Neuester Release-Tag (`v…`, Versions-Sortierung) — ohne GitHub-API, damit
+// CI ohne Login auskommt. Offline: der Tag des zuletzt geholten Release-Caches.
+function latestTag(client, dir) {
+  if (has('--offline')) {
+    try { return git(['describe', '--tags', '--exact-match'], dir).trim(); } catch { return null; }
+  }
+  const out = execFileSync('git', ['-c', 'versionsort.suffix=-', 'ls-remote', '--tags', '--refs', '--sort=-v:refname', repoUrl(client), 'v*'],
+    { stdio: ['ignore', 'pipe', 'pipe'] }).toString();
+  const m = out.match(/refs\/tags\/(\S+)/);
+  return m ? m[1] : null;
+}
+
+// Geprüft werden je Client zwei Stände: `main` (was als Nächstes ausgeliefert
+// wird) und der neueste Release-Tag (was auf den Geräten läuft — beim macOS-
+// Client liegen die oft Wochen auseinander). Ein expliziter Checkout
+// (--repo / SW_*_REPO) ersetzt beide.
+function checkouts(id, client) {
   const explicit = arg('--repo') || process.env[`SW_${id.toUpperCase()}_REPO`];
-  if (explicit) return path.resolve(explicit);
-  const dir = path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'schreibwerkstatt', `client-${id}`);
+  if (explicit) return [{ ref: null, dir: path.resolve(explicit) }];
+  const mainDir = cacheDir(`client-${id}`);
+  const relDir = cacheDir(`client-${id}-release`);
+  const out = [];
   try {
-    if (!fs.existsSync(path.join(dir, '.git'))) {
-      fs.mkdirSync(path.dirname(dir), { recursive: true });
-      // Öffentliche Repos: plain git statt `gh`, damit CI ohne Login klont.
-      execFileSync('git', ['clone', '--depth', '1', '-q', `https://github.com/${client.repo}.git`, dir], { stdio: 'inherit' });
-    } else if (!has('--offline')) {
-      git(['pull', '--ff-only', '-q'], dir);
+    if (!fs.existsSync(path.join(mainDir, '.git'))) clone(client, mainDir);
+    else if (!has('--offline')) git(['pull', '--ff-only', '-q'], mainDir);
+    out.push({ ref: 'main', dir: mainDir });
+
+    const tag = latestTag(client, relDir);
+    if (!tag) { console.log(`${client.label}: kein Release-Tag gefunden — nur main geprüft.`); return out; }
+    let cached = null;
+    try { cached = git(['describe', '--tags', '--exact-match'], relDir).trim(); } catch { /* kein Cache */ }
+    if (cached !== tag) {
+      fs.rmSync(relDir, { recursive: true, force: true });
+      clone(client, relDir, tag);
     }
+    // Zeigt der Tag auf denselben Commit wie main, wäre der zweite Lauf ein Duplikat.
+    if (git(['rev-parse', 'HEAD'], relDir) === git(['rev-parse', 'HEAD'], mainDir)) out[0].ref = `main = ${tag}`;
+    else out.push({ ref: tag, dir: relDir });
   } catch (e) {
     console.error(`${client.label}: Repo nicht erreichbar (${e.message.split('\n')[0]})`);
     process.exit(3);
   }
-  return dir;
+  return out;
 }
 
 function loadSurface() {
@@ -116,6 +153,39 @@ function writeSurface(results, b) {
   console.log(`\ncontract/editor-surface.json geschrieben (${Object.values(surface).reduce((n, m) => n + Object.keys(m).length, 0)} Kontaktstellen).`);
 }
 
+// Prüft einen Checkout eines Clients und druckt den Befund.
+function checkTarget(client, ref, repo, b, changed, surface) {
+  const commit = git(['log', '-1', '--format=%h %cs %s'], repo).trim();
+  const checks = checkClient(clientSources(repo, client), b);
+  const missing = checks.filter((c) => !c.ok);
+  const touched = checks.filter((c) => c.ok && c.files.some((f) => changed.has(f)));
+  const undeclared = surface ? checks.filter((c) => c.ok && !declared(surface, c)) : [];
+
+  console.log(`\n━━ ${client.label}${ref ? ` [${ref}]` : ''}: ${client.repo} @ ${commit}`);
+  console.log(`Kontaktstellen: ${checks.length}`);
+  if (has('--verbose')) {
+    for (const c of checks) console.log(`  ${c.ok ? '✓' : '✗'} ${c.label.padEnd(22)} ${c.name.padEnd(36)} ${c.at}`);
+  }
+  if (touched.length) {
+    console.log(`BERÜHRT — existiert noch, Datei geändert; Semantik gegen den Client-Code lesen (${touched.length}):`);
+    for (const c of touched) {
+      console.log(`  ${c.label.padEnd(22)} ${c.name.padEnd(36)} ${c.at}  ↔  ${c.files.filter((f) => changed.has(f)).join(', ')}`);
+    }
+  }
+  if (undeclared.length && !has('--write-surface')) {
+    console.log(`UNDEKLARIERT — nicht in contract/editor-surface.json (${undeclared.length}):`);
+    for (const c of undeclared) console.log(`  ${c.label.padEnd(22)} ${c.name.padEnd(36)} ${c.at}`);
+    if (process.env.GITHUB_ACTIONS) console.log(`::warning::${client.label}${ref ? ` [${ref}]` : ''} nutzt ${undeclared.length} nicht deklarierte Kontaktstelle(n) des Editor-Bundles`);
+  }
+  if (missing.length) {
+    console.log(`FEHLT — Breaking Change für ${client.label} (${missing.length}):`);
+    for (const c of missing) console.log(`  ${c.label.padEnd(22)} ${c.name.padEnd(36)} ${c.at}`);
+  } else {
+    console.log('Keine fehlende Kontaktstelle.');
+  }
+  return { checks, missing };
+}
+
 async function main() {
   const only = arg('--client');
   if (only && !CLIENTS[only]) { console.error(`Unbekannter Client: ${only} (mac | android)`); process.exit(2); }
@@ -141,36 +211,10 @@ async function main() {
   let failed = false;
   for (const [id, client] of Object.entries(CLIENTS)) {
     if (only && only !== id) continue;
-    const repo = checkout(id, client);
-    const commit = git(['log', '-1', '--format=%h %cs %s'], repo).trim();
-    const checks = checkClient(clientSources(repo, client), b);
-    const missing = checks.filter((c) => !c.ok);
-    const touched = checks.filter((c) => c.ok && c.files.some((f) => changed.has(f)));
-    const undeclared = surface ? checks.filter((c) => c.ok && !declared(surface, c)) : [];
-    results.push({ id, checks });
-
-    console.log(`\n━━ ${client.label}: ${client.repo} @ ${commit}`);
-    console.log(`Kontaktstellen: ${checks.length}`);
-    if (has('--verbose')) {
-      for (const c of checks) console.log(`  ${c.ok ? '✓' : '✗'} ${c.label.padEnd(22)} ${c.name.padEnd(36)} ${c.at}`);
-    }
-    if (touched.length) {
-      console.log(`BERÜHRT — existiert noch, Datei geändert; Semantik gegen den Client-Code lesen (${touched.length}):`);
-      for (const c of touched) {
-        console.log(`  ${c.label.padEnd(22)} ${c.name.padEnd(36)} ${c.at}  ↔  ${c.files.filter((f) => changed.has(f)).join(', ')}`);
-      }
-    }
-    if (undeclared.length && !has('--write-surface')) {
-      console.log(`UNDEKLARIERT — nicht in contract/editor-surface.json (${undeclared.length}):`);
-      for (const c of undeclared) console.log(`  ${c.label.padEnd(22)} ${c.name.padEnd(36)} ${c.at}`);
-      if (process.env.GITHUB_ACTIONS) console.log(`::warning::${client.label} nutzt ${undeclared.length} nicht deklarierte Kontaktstelle(n) des Editor-Bundles`);
-    }
-    if (missing.length) {
-      failed = true;
-      console.log(`FEHLT — Breaking Change für ${client.label} (${missing.length}):`);
-      for (const c of missing) console.log(`  ${c.label.padEnd(22)} ${c.name.padEnd(36)} ${c.at}`);
-    } else {
-      console.log('Keine fehlende Kontaktstelle.');
+    for (const { ref, dir } of checkouts(id, client)) {
+      const { checks, missing } = checkTarget(client, ref, dir, b, changed, surface);
+      results.push({ id, checks });
+      if (missing.length) failed = true;
     }
   }
   if (has('--write-surface')) writeSurface(results, b);

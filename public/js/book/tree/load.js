@@ -1,5 +1,6 @@
 import { fetchJson } from '../../utils.js';
 import { contentRepo } from '../../repo/content.js';
+import { whenStructureQueueReady } from '../../repo/structure-queue.js';
 import { EVT } from '../../events.js';
 import { getLastBookId } from '../../local-prefs.js';
 import { sweepOrphanBookKeys } from '../../storage-sweep.js';
@@ -306,6 +307,11 @@ export const treeLoadMethods = {
 
       // Tree-Bau (nav.pages + nav.tree + Sortier-Indexe) liegt in tree/build.js.
       this._buildTreeFromResponse(tree, bookId);
+      // Offline vorgemerkte Abschnitte/Namen über den Server-Baum legen (app-outbox.js).
+      // Die Warteschlange liegt in IndexedDB — beim Kaltstart erst geladen abwarten.
+      await whenStructureQueueReady();
+      if (this.$store.nav.selectedBookId !== bookId) return;
+      this._overlayPendingStructure?.(bookId);
       this._treeBookId = bookId;
       // Neue Baum-Identitaet → Such-Memo ist ohnehin kalt; bei Reload mit
       // aktiver Suche den kbd-Treffer auf den neuen Baum ziehen.

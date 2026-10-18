@@ -2,6 +2,7 @@
 // `this` = die ideenBoardCard-Instanz.
 
 import { fetchJson } from '../../utils.js';
+import { createIdee, patchIdee, deleteIdee as removeIdee, overlayPendingIdeen } from '../../repo/ideen-queue.js';
 import { loadSortable } from '../../lazy-libs.js';
 import {
   patchSortableOnce, revertSortable, markDragIgnore, unmarkDragIgnore, BASE_SORTABLE_OPTS,
@@ -190,7 +191,8 @@ export const ideenBoardActions = {
     this._memos = {};
     try {
       const data = await fetchJson(`/ideen/board?book_id=${bookId}`);
-      this.ideen = Array.isArray(data?.ideen) ? data.ideen : [];
+      // Offline vorgemerkte Writes darüberlegen (repo/ideen-queue.js).
+      this.ideen = await overlayPendingIdeen(Array.isArray(data?.ideen) ? data.ideen : [], (r) => String(r.book_id) === String(bookId));
       this.stages = normalizeIdeeStages(data?.stages);
       this.laneOrder = buildLaneOrder(Alpine.store('nav').tree);
       this.errorMessage = '';
@@ -257,11 +259,7 @@ export const ideenBoardActions = {
     const app = window.__app;
     this.busy = true;
     try {
-      const row = await fetchJson(`/ideen/${idee.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      const row = await patchIdee(idee, body);
       this._replaceIdee(row);
       this.errorMessage = '';
       this._publishCounts();
@@ -337,9 +335,7 @@ export const ideenBoardActions = {
     try {
       const body = { book_id: bookId, content };
       if (kind !== 'book') body[kind === 'chapter' ? 'chapter_id' : 'page_id'] = anchorId;
-      const row = await fetchJson('/ideen', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      });
+      const row = await createIdee(body);
       this.ideen = [row, ...this.ideen];
       this.newContent = '';
       this.errorMessage = '';
@@ -408,7 +404,7 @@ export const ideenBoardActions = {
     })) return;
     this.busy = true;
     try {
-      await fetchJson(`/ideen/${idee.id}`, { method: 'DELETE' });
+      await removeIdee(idee);
       this.ideen = this.ideen.filter(i => i.id !== idee.id);
       this.errorMessage = '';
       this._memos = {};

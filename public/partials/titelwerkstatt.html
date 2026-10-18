@@ -106,7 +106,7 @@
                            data-form-type="other" data-spellcheck="spelling">
                   </template>
                   <template x-if="twIsLong(feld)">
-                    <textarea class="tw-input tw-input--long" :id="'tw-' + feld + '-' + row.id" rows="3"
+                    <textarea class="card-form-textarea tw-input tw-input--long" :id="'tw-' + feld + '-' + row.id" rows="3"
                               x-model="twDraft[feld]" @blur="twSaveField(row.id, feld)"
                               :placeholder="$app.t('headline.placeholder.' + feld)"
                               data-spellcheck="spelling"></textarea>

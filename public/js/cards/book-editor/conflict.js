@@ -12,7 +12,8 @@
 // Banner mit «Meine Version übernehmen» / «Server-Version übernehmen».
 //
 // Erwartet aus der Card: `activePageId`, `conflictResolution`, `_blockById`,
-// `_blockEl`, `_autosave`, `_enqueueSave`, `_historyDrop`/`_historyFor`.
+// `_blockEl`, `_autosave`, `_enqueueSave`, `_historyDrop`/`_historyFor`/
+// `_historyRebaseAround`.
 
 import { FEATURE_BLOCK_MERGE } from '../../app/app-state.js';
 import { contentRepo } from '../../repo/content.js';
@@ -25,13 +26,22 @@ import { conflictText } from '../../editor/shared/conflict-text.js';
 import { remoteAuthorFrom } from '../../editor/shared/page-conflict.js';
 
 // Merge-Plan aus drei Fassungen. Pure und darum unit-testbar.
-//  - `{ kind: 'fallback' }`: kein Merge möglich (Flag aus, Basis ohne IDs).
+//  - `{ kind: 'fallback' }`: kein Merge möglich (Flag aus, Basis ohne IDs,
+//    Merge wirft).
 //  - `{ kind: 'clean', html }`: kollisionsfrei, `html` ist der gemergte Stand.
 //  - `{ kind: 'collision', merged, conflicts }`: mindestens eine Stelle haben
 //    beide Seiten verschieden geändert.
 export function planBlockMerge(baseHtml, localHtml, remoteHtml, { enabled = FEATURE_BLOCK_MERGE } = {}) {
   if (!enabled || !/\sdata-bid=/.test(baseHtml || '')) return { kind: 'fallback' };
-  const m = mergeBlocks(baseHtml, localHtml, remoteHtml || '');
+  let m;
+  try {
+    m = mergeBlocks(baseHtml, localHtml, remoteHtml || '');
+  } catch (e) {
+    // Wie der Notebook-Editor (#_computeBlockMerge): ein Merge, der wirft, ist
+    // kein Netzfehler — klassischer Konflikt statt „offline".
+    console.warn('[book-editor] Block-Merge gescheitert, klassischer Konflikt', e);
+    return { kind: 'fallback' };
+  }
   if (!m.conflicts.length) return { kind: 'clean', html: mergedToHtml(m.merged) };
   return { kind: 'collision', merged: m.merged, conflicts: m.conflicts };
 }
@@ -51,24 +61,31 @@ export const bookEditorConflictMethods = {
   },
 
   // Gemergten/aufgelösten Stand in den Block schreiben. Aktiver Block: DOM
-  // direkt, Caret bleibt in seinem Block (shared/block-caret.js), neue Undo-
-  // Baseline — ein Undo dahinter nähme die Remote-Blöcke wieder heraus, und der
-  // nächste Save liefe gegen den neuen Stempel ohne 409 durch. Inaktiver Block:
-  // `_rev++` → `_maybeRehydrate` schreibt ihn neu.
-  _applyBlockHtml(block, html) {
-    block.html = html;
-    this._historyDrop?.(block.pageId);
-    const el = this.activePageId === block.pageId ? this._blockEl(block.pageId) : null;
-    if (el) {
+  // direkt, Caret bleibt in seinem Block (shared/block-caret.js). Inaktiver
+  // Block: `_rev++` → `_maybeRehydrate` schreibt ihn neu.
+  //
+  // Undo darf nie hinter den Merge zurück: es nähme die Remote-Blöcke wieder
+  // heraus, und der nächste Save liefe gegen den neuen Stempel ohne 409 durch.
+  // `rebaseFrom: { base, remote }` (stiller Merge) hebt den Verlauf auf den
+  // Remote-Stand (history.js#_historyRebaseAround); ohne (Auflösung im Modal)
+  // wird der Stand die neue Baseline des aktiven Blocks bzw. der Verlauf des
+  // inaktiven verworfen.
+  _applyBlockHtml(block, html, rebaseFrom = null) {
+    const write = () => {
+      block.html = html;
+      const el = this.activePageId === block.pageId ? this._blockEl(block.pageId) : null;
+      if (!el) { block._rev++; return null; }
       if (el.innerHTML !== html) {
         const caret = captureBlockCaret(el);
         el.innerHTML = html;
         restoreBlockCaret(el, caret);
       }
-      this._historyFor?.(block.pageId, { create: true })?.reset(el.innerHTML);
-    } else {
-      block._rev++;
-    }
+      return el;
+    };
+    if (rebaseFrom && this._historyRebaseAround?.(block, write, rebaseFrom)) return;
+    this._historyDrop?.(block.pageId);
+    const el = write();
+    if (el) this._historyFor?.(block.pageId, { create: true })?.reset(el.innerHTML);
   },
 
   // Veralteter Stand eines Blocks gegen den Server-Stand. Liefert:
@@ -88,10 +105,13 @@ export const bookEditorConflictMethods = {
       remoteHtml: remote.remoteHtml,
     };
     if (plan.kind === 'clean') {
-      this._applyBlockHtml(block, plan.html);
+      this._applyBlockHtml(block, plan.html, { base: block.originalHtml, remote: remote.remoteHtml });
       block.originalHtml = remote.remoteHtml;
       block.originalUpdatedAt = remote.remoteUpdatedAt;
       block.dirty = true;
+      // Basis verschoben → Entwurf nachziehen (Invariante 18): sonst trüge er
+      // die alte Basis, und ein Neustart mergte gegen den falschen Vorfahren.
+      this._writeBlockDraft(block);
       const app = window.__app;
       app?.setStatus?.(app.t('edit.conflict.merged.silent'), false, 4000);
       return 'merged';
@@ -165,6 +185,7 @@ export const bookEditorConflictMethods = {
     block.conflict = null;
     block.saveError = '';
     block.dirty = true;
+    this._writeBlockDraft(block);
     this._enqueueSave(block.pageId);
   },
 

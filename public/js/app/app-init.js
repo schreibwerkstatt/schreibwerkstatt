@@ -12,7 +12,9 @@ import { FILTER_SCOPES } from './app-view.js';
 import { EVT } from '../events.js';
 import { reconcileSessionCaches } from './boot/session-change.js';
 import { installContentUpdatedBridge } from './boot/content-updated.js';
-import { setDraftOwner } from '../editor/draft-storage.js';
+import { setDraftOwner, whenDraftsReady } from '../editor/draft-storage.js';
+import { setIdeenQueueOwner } from '../repo/ideen-queue.js';
+import { setStructureOwner, whenStructureQueueReady } from '../repo/structure-queue.js';
 import { installFileLaunch } from './boot/file-launch.js';
 import { sweepStaleJobKeys } from '../storage-sweep.js';
 import { SHELL_PROTOCOL } from '../shell-protocol.js';
@@ -78,6 +80,7 @@ export const appInitMethods = {
     // Reconnect-Outbox: flusht ALLE offline gesicherten Notebook-Drafts (nicht
     // nur die offene Seite) beim Wiederverbinden + speist den Pending-Zähler.
     this._installOutbox(signal);
+    this._installOfflineRescue(signal);
     // „Buch offline halten": SW-Meldungen + Re-Sync beim Wiederverbinden.
     this._installOfflineBooks(signal);
     window.addEventListener(EVT.JOB_FINISHED, (e) => this._onJobFinished(e.detail), { signal });
@@ -222,6 +225,14 @@ export const appInitMethods = {
       // Entwürfe gehören dem angemeldeten User — der Pending-Zähler, der beim
       // Boot noch ungefiltert lief, wird danach neu gerechnet.
       setDraftOwner(cfg.user?.email);
+      setIdeenQueueOwner(cfg.user?.email);
+      setStructureOwner(cfg.user?.email);
+      // Entwürfe liegen in IndexedDB (asynchron gelesen): erst danach darf ein
+      // Abschnitt öffnen, sonst fehlt ihm sein Entwurf.
+      await whenDraftsReady();
+      // Ebenso die offline vorgemerkten Strukturänderungen (repo/structure-queue.js):
+      // der Baum legt sie über, der Zähler zählt sie.
+      await whenStructureQueueReady();
       this._refreshPendingSyncCount();
       // Offline gehaltene Bücher sind ebenfalls pro Konto gemerkt.
       this._initOfflineBooksForUser();

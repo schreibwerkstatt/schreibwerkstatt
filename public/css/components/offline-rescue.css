@@ -1,0 +1,114 @@
+@layer components {
+/* === Dialog „Nicht gespeichert" (app/app-offline-rescue.js) ===
+   Natives <dialog> wie der Confirm-Dialog; Liste offline entstandener Inhalte,
+   die der Server abgewiesen hat, und lokaler Entwurfs-Sicherungen.
+   Buttons aus confirm-dialog.css (.confirm-dialog-btn*). */
+.offline-rescue-dialog {
+  background: var(--color-card-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  max-width: 640px;
+  width: calc(100% - var(--space-xl));
+  max-height: calc(100dvh - var(--space-xl));
+  padding: var(--space-20) var(--space-20) var(--space-lg);
+  margin: auto;
+}
+.offline-rescue-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+.offline-rescue-dialog::backdrop {
+  background: var(--color-overlay);
+}
+.offline-rescue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+.offline-rescue-title {
+  font-weight: var(--fw-semibold);
+  font-size: var(--font-size-md);
+}
+.offline-rescue-hint {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-sm);
+}
+.offline-rescue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.offline-rescue-item {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.offline-rescue-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+.offline-rescue-kind {
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.offline-rescue-item-title {
+  font-weight: var(--fw-semibold);
+}
+.offline-rescue-time {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+}
+.offline-rescue-text {
+  font-size: var(--font-size-sm);
+  white-space: pre-wrap;
+  max-height: 8em;
+  overflow: hidden;
+  color: var(--color-text);
+}
+.offline-rescue-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-xs) var(--space-sm);
+}
+.offline-rescue-reason {
+  margin-right: auto;
+  font-size: var(--font-size-xs);
+  color: var(--color-err-text);
+}
+/* Pro Eintrag leise Knöpfe: die Hauptaktion des Dialogs ist „Erneut
+   versuchen" unten — drei volle rote Verwerfen-Flächen übertönten sie. */
+.offline-rescue-btn {
+  padding: var(--space-2xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.offline-rescue-btn:hover { background: var(--color-hover-light); }
+.offline-rescue-btn--danger {
+  border-color: transparent;
+  color: var(--color-err-text);
+}
+}

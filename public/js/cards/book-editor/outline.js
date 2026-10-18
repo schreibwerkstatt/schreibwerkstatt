@@ -128,9 +128,10 @@ export const bookEditorOutlineMethods = {
     // Mini-Status-Punkt pro Outline-Eintrag. Leitet sich aus derselben
     // Zustandsmaschine ab wie der Block-Status (`blockStatus` in der Card) —
     // die Outline kennt nur einen Fehler-Zustand, darum faltet sie
-    // conflict → error. Keine zweite Ableitung, die auseinanderlaufen kann.
+    // conflict → error (und offline → dirty: ungespeichert, lokal gesichert). Keine zweite Ableitung, die auseinanderlaufen kann.
     outlinePageStatus(block) {
       const status = this.blockStatus(block);
+      if (status === 'offline') return 'dirty';
       return status === 'conflict' ? 'error' : status;
     },
 };

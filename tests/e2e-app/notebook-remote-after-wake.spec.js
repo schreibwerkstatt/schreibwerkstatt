@@ -10,6 +10,7 @@
 
 const { test, expect } = require('../e2e/_helpers/fixtures');
 const { bootApp, selectSeededBook } = require('./_helpers/app');
+const { readDraftRecord } = require('./_helpers/drafts');
 
 const EDIT_SEL = '#editor-card .page-content-view--editing';
 // Fremdes Geraet: gueltige UUID, damit der Server sie als device_id annimmt
@@ -123,15 +124,7 @@ test('Dirty-Edit: Remote-Edit in anderem Block wird vor dem Speichern still geme
   // Der Draft steht auf der neuen Basis (Remote-Stand + dessen Stempel): mit
   // der alten liefe er beim naechsten Oeffnen noch einmal gegen den schon
   // eingearbeiteten Remote-Stand.
-  const draft = await page.evaluate(() => {
-    const pid = window.__app.currentPage.id;
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k.startsWith('editor_draft_') && k.endsWith(':' + pid)) return JSON.parse(localStorage.getItem(k));
-      if (k === 'editor_draft_' + pid) return JSON.parse(localStorage.getItem(k));
-    }
-    return null;
-  });
+  const draft = await readDraftRecord(page, await page.evaluate(() => window.__app.currentPage.id));
   expect(draft?.originalUpdatedAt).toBe(await page.evaluate(() => window.__app.currentPage.updated_at));
   expect(draft?.originalHtml).toContain('WAKEPROBE_DIRTY');
   expect(draft?.html).toContain('LOCALPROBE_DIRTY');

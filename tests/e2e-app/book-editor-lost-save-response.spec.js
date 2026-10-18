@@ -65,7 +65,7 @@ const serverHtml = (page, pageId) => page.evaluate(
 const saveAll = (page) => data(page, (d) => d.saveAllDirty());
 const firstBlock = (page) => data(page, (d) => {
   const b = d.blocks.find((x) => x.kind === 'page');
-  return { pageId: b.pageId, dirty: b.dirty, conflict: !!b.conflict, saveError: b.saveError };
+  return { pageId: b.pageId, dirty: b.dirty, conflict: !!b.conflict, saveError: b.saveError, offline: b.offline };
 });
 
 test('Verlorene Save-Antwort: der nächste Save meldet keinen Konflikt gegen sich selbst', async ({ page }) => {
@@ -75,7 +75,8 @@ test('Verlorene Save-Antwort: der nächste Save meldet keinen Konflikt gegen sic
   await saveAll(page);
   await lost.done;
   expect(lost.status()).toBe(200);
-  await expect.poll(async () => (await firstBlock(page)).saveError).not.toBe('');
+  // Antwort verloren = Netzfehler: der Block steht auf «offline», lokal gesichert.
+  await expect.poll(async () => (await firstBlock(page)).offline).toBe(true);
 
   await typeInFirstBlock(page, ' und weiter');
   await saveAll(page);
@@ -93,7 +94,8 @@ test('Gegenprobe: fremder Write nach dem verlorenen Save bleibt ein Konflikt', a
   const lost = await loseNextSaveResponse(page);
   await saveAll(page);
   await lost.done;
-  await expect.poll(async () => (await firstBlock(page)).saveError).not.toBe('');
+  // Antwort verloren = Netzfehler: der Block steht auf «offline», lokal gesichert.
+  await expect.poll(async () => (await firstBlock(page)).offline).toBe(true);
 
   // Anderer Schreiber ohne Save-Kennung (Job, alter Client) — beendet die
   // Eigen-Erkennung.

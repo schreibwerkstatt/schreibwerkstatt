@@ -93,6 +93,21 @@
       </div>
     </div>
 
+    <template x-if="$store.session.offlineCapable">
+      <div>
+        <p class="card-form-section-divider" x-text="$app.t('profile.offlineSection')"></p>
+        <div class="card-form-row">
+          <div class="card-form-field">
+            <div x-data="toggleSwitch({ label: () => $app.t('profile.offlineAuto') })"
+                 x-modelable="value" x-model="$store.session.offlineAuto.enabled"
+                 @toggle-change="$app.setOfflineAutoEnabled($event.detail)"></div>
+            <p class="card-form-field-note" x-text="$app.t('profile.offlineAutoHint')"></p>
+            <p class="card-form-field-note" x-text="$app.t($store.session.storagePersisted ? 'profile.storagePersisted' : 'profile.storageNotPersisted')"></p>
+          </div>
+        </div>
+      </div>
+    </template>
+
     <p class="card-form-saved" x-show="userSettingsSaved" x-cloak x-transition.opacity.duration.250ms x-text="$app.t('profile.savedMsg')"></p>
     <p class="card-form-error" x-show="userSettingsError" x-text="userSettingsError"></p>
 

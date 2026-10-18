@@ -12,6 +12,7 @@
 // nicht Attribution — auf einem geteilten Buch sieht jeder sein eigenes Brett.
 
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { EVT } from '../events.js';
 import { attachFullscreenSync, toggleWrapFullscreen } from '../fullscreen.js';
 import { ideenBoardMethods } from '../book/ideen-board.js';
 import { buildLaneOrder } from '../book/ideen-board/model.js';
@@ -110,6 +111,11 @@ export function registerIdeenBoardCard() {
         load: async () => { await this.loadBoard(); },
         onBookChanged: () => { this.resetBoard(); this.resetIdeenChat(); this.ideenChatOpen = false; },
         onViewReset: () => { this.resetBoard(); this.resetIdeenChat(); this.ideenChatOpen = false; },
+        // Offline vorgemerkte Ideen sind auf dem Server: neu laden, damit die
+        // temporären IDs den echten weichen (repo/ideen-queue.js).
+        extraListeners: [
+          { type: EVT.IDEEN_QUEUE_CHANGED, handler: (e) => { if (e.detail?.flushed && window.__app?.showIdeenBoardCard) this.loadBoard(); } },
+        ],
       });
 
       // Native Fullscreen-API: Status spiegeln (Toggle-Button + Esc-Exit).

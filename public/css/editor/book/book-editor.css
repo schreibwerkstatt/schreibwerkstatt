@@ -389,7 +389,7 @@
     font-style: italic;
     color: var(--color-muted);
   }
-  .book-editor-page-status--dirty   { color: var(--card-accent, currentColor); font-style: normal; }
+  .book-editor-page-status--dirty, .book-editor-page-status--offline { color: var(--card-accent, currentColor); font-style: normal; }
   .book-editor-page-status--saving  { color: var(--color-muted); }
   .book-editor-page-status--saved   { color: var(--color-muted); }
   .book-editor-page-status--error,

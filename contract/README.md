@@ -50,4 +50,4 @@ npm run contract:surface    # editor-surface.json ergänzen (nie kürzen; -- --p
 npm run check:clients       # Bundle gegen die Clients: fehlt / berührt / undeklariert
 ```
 
-Geprüft wird in CI: [tests/unit/contract-spec.test.js](../tests/unit/contract-spec.test.js) (Spec frisch, Versionen, CHANGELOG), [tests/unit/editor-surface.test.js](../tests/unit/editor-surface.test.js) (Fläche gegen Bundle), [tests/integration/client-contract.test.js](../tests/integration/client-contract.test.js) (jede Operation durch die echte Device-Token-Kette, Fixtures unverändert), dazu der CI-Schritt «Client-Kompatibilität» (`check:clients` gegen `main` beider Client-Repos).
+Geprüft wird in CI: [tests/unit/contract-spec.test.js](../tests/unit/contract-spec.test.js) (Spec frisch, Versionen, CHANGELOG), [tests/unit/editor-surface.test.js](../tests/unit/editor-surface.test.js) (Fläche gegen Bundle), [tests/integration/client-contract.test.js](../tests/integration/client-contract.test.js) (jede Operation durch die echte Device-Token-Kette, Fixtures unverändert), dazu der CI-Schritt «Client-Kompatibilität» (`check:clients` gegen `main` und den neuesten Release-Tag beider Client-Repos).

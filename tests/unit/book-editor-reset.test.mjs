@@ -73,14 +73,26 @@ test('_resetSession: wartet einen laufenden Queue-Durchlauf ab', async () => {
   assert.deepEqual(order, ['queue', 'save']);
 });
 
-test('_resetSession: nicht speicherbarer Block → Status-Hinweis', async () => {
+test('_resetSession: nicht speicherbarer Block ohne Entwurf → Warnung', async () => {
   statusCalls.length = 0;
   const card = makeCard();
-  card.blocks = [page(1, { dirty: true })];
+  card.blocks = [page(1, { dirty: true, draftFailed: true })];
   card._saveBlock = async (blk) => { blk.saveError = 'x'; };
   await card._resetSession({ reload: false });
   assert.equal(statusCalls.length, 1);
   assert.match(statusCalls[0][0], /bookEditor\.unsavedOnSwitch/);
+  assert.equal(statusCalls[0][1], true);
+});
+
+test('_resetSession: nicht speicherbarer Block mit Entwurf → Hinweis «lokal gesichert»', async () => {
+  statusCalls.length = 0;
+  const card = makeCard();
+  card.blocks = [page(1, { dirty: true })];
+  card._saveBlock = async (blk) => { blk.offline = true; };
+  await card._resetSession({ reload: false });
+  assert.equal(statusCalls.length, 1);
+  assert.match(statusCalls[0][0], /bookEditor\.keptAsDraft/);
+  assert.equal(statusCalls[0][1], false);
 });
 
 test('_resetSession: überholter Wechsel räumt nicht doppelt ab', async () => {
@@ -94,4 +106,27 @@ test('_resetSession: überholter Wechsel räumt nicht doppelt ab', async () => {
   await card._resetSession({ reload: false });
   assert.equal(card.blocks.length, 1);
   assert.equal(card.blocks[0].pageId, 9);
+});
+
+test('_load über laufender Arbeit (Re-Klick, card:refresh): erst speichern, dann neu aufbauen', async () => {
+  const card = makeCard();
+  const a = page(1, { dirty: true, html: '<p>neu</p>' });
+  card.blocks = [a];
+  const order = [];
+  card._saveBlock = async (blk) => {
+    assert.equal(card.blocks[0], a, 'Block hängt beim Save noch in der Karte');
+    order.push('save');
+    blk.dirty = false;
+  };
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    order.push('fetch');
+    return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ bookId: 7, pages: [] }) };
+  };
+  card._loadBookComments = () => {};
+  card._loadHeads = () => {};
+  card.$nextTick = () => {};
+  try { await card._load(7); }
+  finally { globalThis.fetch = origFetch; card._autosave.clearAll(); }
+  assert.deepEqual(order.slice(0, 2), ['save', 'fetch']);
 });

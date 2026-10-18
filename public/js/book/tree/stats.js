@@ -118,7 +118,9 @@ export const treeStatsMethods = {
       chars: normalized.length,
     };
     this.tokEsts = { ...this.tokEsts, [page.id]: stat };
-    if (!this.$store.nav.selectedBookId) return;
+    // Offline angelegt (temporäre ID, repo/structure-queue.js): der Server kennt
+    // den Abschnitt noch nicht.
+    if (!this.$store.nav.selectedBookId || Number(page.id) < 0) return;
     fetch('/history/page-stats/batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

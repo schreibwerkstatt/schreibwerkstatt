@@ -18,6 +18,7 @@
 // (focus/standalone.js) — die ist eine eigene Session ohne Alpine.
 
 import { createEditHistory } from '../shared/edit-history.js';
+import { createSnapshotRebaser } from '../shared/history-rebase.js';
 import { mountEditorHtml } from '../shared/mount-html.js';
 import { editorHost } from '../shared/editor-host.js';
 
@@ -53,6 +54,12 @@ export const notebookHistoryMethods = {
   _historyClear() { this._historyEnsure().clear(); },
   _historyPushSoon() { this._historyEnsure().pushSoon(); },
   _historyPushNow() { this._historyEnsure().pushNow(); },
+  // Kollisionsfreier Remote-Merge (edit/conflict.js#_applyMergedToEditor): den
+  // Verlauf auf den Remote-Stand heben statt ihn zu verwerfen. `pushNow()` muss
+  // vor dem Einhängen gelaufen sein (Vertrag von `rebase`).
+  _historyRebase(baseHtml, remoteHtml) {
+    this._historyEnsure().rebase(createSnapshotRebaser(baseHtml, remoteHtml));
+  },
 
   // `_historyRev` lesen = Abhängigkeit für Alpine (Buttons `:disabled`).
   notebookCanUndo() { void this._historyRev; return this._historyEnsure().canUndo(); },

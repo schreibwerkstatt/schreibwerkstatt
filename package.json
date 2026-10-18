@@ -1,6 +1,6 @@
 {
   "name": "schreibwerkstatt",
-  "version": "4.28.0",
+  "version": "5.0.0",
   "description": "Schreibwerkstatt — Schreiben, Lektorat und Buchanalyse mit KI",
   "license": "AGPL-3.0-or-later",
   "main": "server.js",
@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
+    "fake-indexeddb": "^6.2.6",
     "typescript": "^5.9.3"
   },
   "dependencies": {

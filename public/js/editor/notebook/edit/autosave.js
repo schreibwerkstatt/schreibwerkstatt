@@ -11,6 +11,7 @@
 // fester Key statt einer pageId — `_stopAutosave` läuft beim Seitenwechsel und
 // kennt die alte Seite dann schon nicht mehr.
 import { AUTOSAVE_KEY, DRAFT_DEBOUNCE_MS, clearDraft, createAutosaveTimers, createTimerBag, editorHost, isNoChange, stripLektoratMarks, writeDraft, writeNormalSnapshot } from './_shared.js';
+import { saveRetryDelay, wantsTimedRetry } from '../save-timing.js';
 
 // Lazy, weil dieses Modul keinen eigenen init-Hook hat und der Host beim ersten
 // Tastendruck sicher steht.
@@ -22,6 +23,11 @@ function autosaveTimers(app) {
 function draftTimers(app) {
   if (!app._draftTimers) app._draftTimers = createTimerBag();
   return app._draftTimers;
+}
+
+function retryTimers(app) {
+  if (!app._saveRetryTimers) app._saveRetryTimers = createTimerBag();
+  return app._saveRetryTimers;
 }
 
 export const autosaveMethods = {
@@ -77,6 +83,34 @@ export const autosaveMethods = {
     if (!app) return;
     this._clearAutosaveTimers();
     draftTimers(app).clear(AUTOSAVE_KEY);
+    this._clearSaveRetry();
+  },
+
+
+  // Zeitgesteuerter neuer Versuch nach einem gescheiterten Save
+  // (../save-timing.js). Aufruf aus `_noteSaveFailure`; jeder weitere
+  // Fehlversuch verdoppelt die Wartezeit, `_clearSaveRetry` (Save gelungen,
+  // Session-Ende) setzt zurück. Die Seite wird beim Planen festgehalten wie
+  // beim Autosave-Timer. Ein Save, der beim Feuern läuft, entscheidet selbst:
+  // scheitert er, plant er den nächsten Versuch, gelingt er, räumt er ab.
+  _scheduleSaveRetry(kind) {
+    const app = editorHost();
+    if (!app) return;
+    if (!wantsTimedRetry(kind)) { retryTimers(app).clear(AUTOSAVE_KEY); return; }
+    const attempt = app._saveRetryAttempt || 0;
+    app._saveRetryAttempt = attempt + 1;
+    const pageId = app.currentPage?.id ?? null;
+    retryTimers(app).set(AUTOSAVE_KEY, () => {
+      if (app.editDirty && app.saveOffline && this._canBackgroundSave(pageId)) this.quickSave('retry');
+    }, saveRetryDelay(attempt));
+  },
+
+
+  _clearSaveRetry() {
+    const app = editorHost();
+    if (!app) return;
+    retryTimers(app).clear(AUTOSAVE_KEY);
+    app._saveRetryAttempt = 0;
   },
 
 

@@ -9,10 +9,12 @@
 // Sidebar-Plakette.
 
 import { fetchJson } from '../utils.js';
+import { createIdee, patchIdee, deleteIdee as removeIdee, overlayPendingIdeen } from '../repo/ideen-queue.js';
 import { EVT } from '../events.js';
 import { IDEE_STATUSES, ideeStatus, isOpenIdee, normalizeIdeeStages } from './ideen-shared.js';
 import { computePopoverPos, refinePopoverPos } from '../popover-anchor.js';
 import { attachDismiss, detachDismiss } from '../cards/dismiss.js';
+import { isTempId as isTempPageId, resolveTempId } from '../repo/structure-queue.js';
 
 // Aktive Scope-IDs aus Root lesen. Liefert { kind, id } oder null.
 function _activeScope(app) {
@@ -31,9 +33,16 @@ export const ideenMethods = {
     if (!scope) { this.ideen = []; return; }
     this.loading = true;
     try {
-      const qs = scope.kind === 'chapter' ? `chapter_id=${scope.id}` : `page_id=${scope.id}`;
-      const rows = await fetchJson(`/ideen?${qs}`);
-      this.ideen = Array.isArray(rows) ? rows : [];
+      // Offline angelegter Abschnitt (negative, temporäre ID): auf dem Server
+      // gibt es ihn noch nicht — nur die vorgemerkten Ideen zeigen. Ist er
+      // inzwischen angelegt, gilt seine echte ID (repo/structure-queue.js).
+      let scopeId = scope.id;
+      if (scope.kind === 'page' && isTempPageId(scopeId)) scopeId = resolveTempId(scopeId);
+      const qs = scope.kind === 'chapter' ? `chapter_id=${scopeId}` : `page_id=${scopeId}`;
+      const rows = scopeId ? await fetchJson(`/ideen?${qs}`) : [];
+      // Offline vorgemerkte Writes darüberlegen (repo/ideen-queue.js).
+      const key = scope.kind === 'chapter' ? 'chapter_id' : 'page_id';
+      this.ideen = this._sortIdeen(await overlayPendingIdeen(Array.isArray(rows) ? rows : [], (r) => String(r[key]) === String(scope.id)));
       this.errorMessage = '';
       this._publishIdeenCount();
       await this._loadStages();
@@ -136,11 +145,7 @@ export const ideenMethods = {
       const body = { book_id: bookId, content };
       if (scope.kind === 'page') body.page_id = scope.id;
       else                       body.chapter_id = scope.id;
-      const row = await fetchJson('/ideen', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      const row = await createIdee(body);
       // Neueste offene Idee nach oben (Liste ist offen-zuerst, dann created_at DESC)
       this.ideen = [row, ...this.ideen];
       this.newContent = '';
@@ -172,11 +177,7 @@ export const ideenMethods = {
 
     this.busy = true;
     try {
-      const row = await fetchJson(`/ideen/${idee.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      });
+      const row = await patchIdee(idee, { content });
       this._replaceIdee(row);
       this.editingId = null;
       this.editingDraft = '';
@@ -196,11 +197,7 @@ export const ideenMethods = {
     if (!this.statuses().includes(status) || ideeStatus(idee) === status) return;
     this.busy = true;
     try {
-      const row = await fetchJson(`/ideen/${idee.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
+      const row = await patchIdee(idee, { status });
       this._replaceIdee(row);
       // Sort halten: offene oben, abgeschlossene unten — innerhalb nach created_at DESC
       this.ideen = this._sortIdeen(this.ideen);
@@ -248,11 +245,7 @@ export const ideenMethods = {
       // Body je nach Idee-Scope (within-kind move): Page-Idee → page_id,
       // Chapter-Idee → chapter_id. Backend lehnt Cross-Kind ab.
       const body = idee.page_id != null ? { page_id: targetId } : { chapter_id: targetId };
-      await fetchJson(`/ideen/${idee.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      await patchIdee(idee, body);
       this.ideen = this.ideen.filter(i => i.id !== idee.id);
       this.movingId = null;
       this.moveTargetId = '';
@@ -276,7 +269,7 @@ export const ideenMethods = {
     })) return;
     this.busy = true;
     try {
-      await fetchJson(`/ideen/${idee.id}`, { method: 'DELETE' });
+      await removeIdee(idee);
       this.ideen = this.ideen.filter(i => i.id !== idee.id);
       this.errorMessage = '';
       this._publishIdeenCount();

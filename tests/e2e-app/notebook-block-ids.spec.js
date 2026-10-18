@@ -208,14 +208,32 @@ test('Konflikt-Modal: kein Abbruch per Klick daneben, kein Hintergrund-Save, Abb
     await page.locator('#app-confirm-dialog .confirm-dialog-btn--danger').click();
     await expect(page.locator('.conflict-modal')).toBeHidden();
     await expect(page.locator(EDIT_SEL)).toContainText('Alpha FERN gemeinsamer');
-    const backup = await page.evaluate((pid) => {
+    // Die Sicherung liegt bestätigt in IndexedDB; localStorage ist nur der
+    // synchrone Vorlauf (editor/draft-storage.js) — beide Ablagen lesen.
+    await expect.poll(() => page.evaluate(async (pid) => {
+      const match = (k) => typeof k === 'string' && k.endsWith(`${pid}:discarded`);
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (k.endsWith(`${pid}:discarded`)) return JSON.parse(localStorage.getItem(k)).html;
+        if (match(k)) return JSON.parse(localStorage.getItem(k)).html;
       }
-      return null;
-    }, pageId);
-    expect(backup).toContain('LOKAL');
+      const db = await new Promise((res, rej) => {
+        const r = indexedDB.open('schreibwerkstatt-drafts', 1);
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      });
+      const html = await new Promise((res) => {
+        let hit = null;
+        const c = db.transaction('drafts').objectStore('drafts').openCursor();
+        c.onsuccess = () => {
+          const cur = c.result;
+          if (!cur) return res(hit);
+          if (match(cur.key)) hit = cur.value?.html ?? null;
+          cur.continue();
+        };
+      });
+      db.close();
+      return html;
+    }, pageId)).toContain('LOKAL');
   } finally {
     await page.evaluate(() => window.__app._teardownEditSession?.());
     await deletePage(page, pageId);

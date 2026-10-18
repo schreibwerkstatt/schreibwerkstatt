@@ -8,6 +8,8 @@
 //   outline.js — Inhaltsverzeichnis + IntersectionObserver
 //   history.js — Undo/Redo pro Seite (eigener Verlauf statt Browser-Stack)
 //   head.js    — Titel-Kopf je Beitrag (publizistische Bücher)
+//   blocks.js  — Blockliste, ohne Netz aus dem Content-Cache
+//   drafts.js  — lokale Entwürfe, Live-Markierung, Online-Retry
 // Kommentar-Leiste: editor/book-editor-comments.js.
 //
 // Click-aktiviert-Block: Default contenteditable=false; Klick setzt aktive
@@ -15,16 +17,16 @@
 
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { attachFullscreenSync, toggleWrapFullscreen } from '../fullscreen.js';
-import { fromPages } from '../manuscript-stream.js';
 import { bookEditorCommentsMethods } from '../editor/book-editor-comments.js';
 import { bookEditorFindMethods, clearHighlights } from './book-editor/find.js';
 import { bookEditorOutlineMethods, buildOutlineNodes } from './book-editor/outline.js';
-import { sameStructureTitle } from '../structure-title.js';
 import { bookEditorSaveMethods } from './book-editor/save.js';
 import { bookEditorConflictMethods } from './book-editor/conflict.js';
 import { bookEditorHistoryMethods } from './book-editor/history.js';
 import { bookEditorHeadMethods } from './book-editor/head.js';
-import { stripFocusArtefacts, fetchJson } from '../utils.js';
+import { bookEditorDraftMethods } from './book-editor/drafts.js';
+import { buildBlocksFromPages, fetchBookContents } from './book-editor/blocks.js';
+import { draftsLoaded } from '../editor/draft-storage.js';
 import { handleEditorPaste, handleEditorCopy, handleEditorCut } from '../editor/shared/paste.js';
 import { createAutosaveTimers } from '../editor/shared/autosave.js';
 import { createTimerBag } from '../editor/shared/timers.js';
@@ -36,6 +38,7 @@ import { registerBusySource } from '../app/boot/update-policy.js';
 
 // Re-Export für Tests/Konsumenten: die Facade ist der Einstieg.
 export { applySaveOutcome } from './book-editor/save.js';
+export { buildBlocksFromPages };
 
 const CLIPBOARD_HANDLERS = { paste: handleEditorPaste, cut: handleEditorCut };
 
@@ -48,6 +51,7 @@ const sessionState = () => ({
   blocks: [],
   loading: false,
   loadError: '',
+  offlineSource: false,   // Stream aus dem Content-Cache (kein Netz), drafts.js
   activePageId: null,
   saveQueue: [],
   conflictResolution: null, // Auflösungs-Modal (book-editor/conflict.js)
@@ -87,42 +91,6 @@ const sessionState = () => ({
 
   _memos: {},
 });
-
-// Build-Funktion getrennt für Unit-Tests.
-// Baut die Render-Blockliste über das geteilte Stream-Modell (fromPages) und
-// wrappt jeden Page-Entry mit dem Editor-State (dirty/saving/_rev/originalHtml).
-// stripFocusArtefacts bleibt hier (browser-only) statt im pure Modell.
-// originalUpdatedAt kommt aus der Quell-Page (das Modell trägt kein updated_at).
-export function buildBlocksFromPages(pages) {
-  const byId = new Map();
-  for (const p of (pages || [])) byId.set(p.pageId, p);
-  // `dupTitle`: erster Abschnitt, der wie sein Kapitel heisst — der Kopf zeigt
-  // dann keinen zweiten Namen (Regel wie Share-Reader/PDF, structure-title.js).
-  let pendingChapter = null;
-  return fromPages(pages).map((e) => {
-    if (e.kind === 'chapter') { pendingChapter = e; return { kind: 'chapter', chapterId: e.chapterId, name: e.name }; }
-    const src = byId.get(e.id) || {};
-    const html = stripFocusArtefacts(e.html || '');
-    const dupTitle = !!pendingChapter && pendingChapter.chapterId === e.chapterId && sameStructureTitle(e.name, pendingChapter.name);
-    pendingChapter = null;
-    return {
-      kind: 'page',
-      pageId: e.id,
-      name: e.name,
-      dupTitle,
-      chapterId: e.chapterId,
-      html,
-      originalHtml: html,
-      originalUpdatedAt: src.updated_at || null,
-      dirty: false,
-      saving: false,
-      saveError: '',
-      conflict: null,
-      savedAt: null,
-      _rev: 0,
-    };
-  });
-}
 
 export function registerBookEditorCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -177,6 +145,7 @@ export function registerBookEditorCard() {
       // Vertikale Verankerung der Kommentar-Karten: Observer für Stream-Reflow +
       // Viewport-Resize (Re-Layout). Methoden in editor/book-editor-comments.js.
       this._initCommentLayout();
+      this._initDrafts(this._lifecycle.signal);
 
       window.addEventListener('beforeunload', (e) => {
         if (this.dirtyCount > 0 || this.savingCount > 0) {
@@ -239,18 +208,12 @@ export function registerBookEditorCard() {
     // ersetzt haben.
     async _resetSession({ reload }) {
       const token = ++this._loadToken;   // überholt ein laufendes _load
-      this._autosave.clearAll();
-      const dirty = this.blocks.filter(b => b.kind === 'page' && b.dirty);
-      if (dirty.length) {
-        if (this._queueRun) { try { await this._queueRun; } catch { /* Fehler steht am Block */ } }
-        for (const b of dirty) {
-          if (b.dirty && !b.saving) await this._saveBlock(b);
-        }
-        const lost = dirty.filter(b => b.dirty).length;
-        if (lost > 0) {
-          const app = window.__app;
-          app?.setStatus?.(app.t('bookEditor.unsavedOnSwitch', { n: lost }), true, 8000);
-        }
+      const lost = await this._settleBlocks();
+      // Ungespeichert, aber als Entwurf gesichert: die Outbox sendet nach.
+      const unsafe = lost.filter(b => b.draftFailed).length;
+      if (lost.length > 0) {
+        const app = window.__app;
+        app?.setStatus?.(unsafe ? app.t('bookEditor.unsavedOnSwitch', { n: unsafe }) : app.t('bookEditor.keptAsDraft', { n: lost.length }), !!unsafe, 8000);
       }
       // Neuerer Wechsel während des Speicherns: der räumt selbst ab.
       if (token !== this._loadToken) return;
@@ -270,12 +233,36 @@ export function registerBookEditorCard() {
       if (bookId) await this._load(bookId);
     },
 
+    // Ungespeicherte/laufende Blöcke zu Ende bringen, bevor `blocks` ersetzt
+    // wird: ausstehende Entwürfe schreiben, laufenden Save abwarten, Dirty
+    // speichern. Liefert die Blöcke, die dirty geblieben sind (als Entwurf
+    // gesichert, die Outbox sendet nach). Gemeinsam für Buch-/Ansichtswechsel
+    // und Neuladen (Re-Klick auf die offene Karte).
+    async _settleBlocks() {
+      this._autosave.clearAll();
+      this._flushBlockDrafts();
+      const pending = this.blocks.filter(b => b.kind === 'page' && (b.dirty || b.saving));
+      if (!pending.length) return [];
+      if (this._queueRun) { try { await this._queueRun; } catch { /* Fehler steht am Block */ } }
+      for (const b of pending) {
+        if (b.dirty && !b.saving && !b.conflict) await this._saveBlock(b);
+      }
+      return pending.filter(b => b.dirty);
+    },
+
     // ── Laden ──────────────────────────────────────────────────────────────
     async _load(bookId) {
       if (!bookId) return;
       // Buchwechsel und showFlag-Watch können beide laden; ohne Token gewinnt
       // die langsamere Response und schreibt das alte Buch in die Karte.
       const token = ++this._loadToken;
+      // Neuladen über laufender Arbeit (Re-Klick, `card:refresh`): erst sichern.
+      // Sonst liefe ein Save auf verwaisten Block-Objekten weiter, und ein
+      // ausstehender Entwurf landete nach dem Neuaufbau.
+      if (this.blocks.some(b => b.kind === 'page' && (b.dirty || b.saving))) {
+        await this._settleBlocks();
+        if (token !== this._loadToken) return;
+      }
       this._autosave.clearAll();
       this._savedFlash.clearAll();
       this.loading = true;
@@ -285,13 +272,17 @@ export function registerBookEditorCard() {
       this._historyDropAll();
       this._memos = {};
       try {
-        const data = await fetchJson('/book-editor/' + bookId + '/contents');
+        const data = await fetchBookContents(bookId);
         if (token !== this._loadToken) return;
         this.blocks = buildBlocksFromPages(data.pages || []);
+        this.offlineSource = !!data.offline;
         this.loading = false;
-        if (data.missing > 0) {
+        this._restoreBlockDrafts();   // wartet nicht: Entwürfe stehen seit dem Start im Spiegel …
+        // … ausser IndexedDB war langsamer als der Start-Deckel: dann nachziehen.
+        draftsLoaded().then(() => { if (token === this._loadToken) this._restoreBlockDrafts({ late: true }); });
+        if (data.missing > 0 || data.offline) {
           const app = window.__app;
-          app?.setStatus?.(app.t('bookEditor.missingPages', { n: data.missing }), false, 5000);
+          app?.setStatus?.(app.t(data.offline ? 'bookEditor.offlineCopy' : 'bookEditor.missingPages', { n: data.missing }), false, 5000);
         }
         // Outline-IntersectionObserver nach Render bauen + Scroll-Fade-Scrollbar
         // am Inhaltsverzeichnis (gleiches Auto-Hide-Pattern wie der Sidebar-Tree).
@@ -316,6 +307,7 @@ export function registerBookEditorCard() {
     ...bookEditorOutlineMethods,
     ...bookEditorHistoryMethods,
     ...bookEditorHeadMethods,
+    ...bookEditorDraftMethods,
 
     // Cache hit nur, wenn ALLE Source-Refs (deps) identisch zur letzten Compute
     // sind. Reset über this._memos = {} im Lade-Pfad.

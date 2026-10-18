@@ -23,9 +23,11 @@ import { buildSavePayload } from './save-pipeline.js';
 // wird (saveEdit vs. quickSave-Pfad).
 // `writer` (`notebook`/`book`/`outbox`) + `extraOwnSaveIds`: Save-Kennungen für
 // die Eigen-Save-Erkennung bei verlorener Antwort (repo/save-ids.js).
-export async function savePage(pageId, { html, pageName, source, expectedUpdatedAt, reason, writer = null, extraOwnSaveIds = [] }) {
+// `timeoutMs`: kürzerer Write-Timeout (Notebook-Editor); ohne Angabe der
+// Repo-Default.
+export async function savePage(pageId, { html, pageName, source, expectedUpdatedAt, reason, writer = null, extraOwnSaveIds = [], timeoutMs }) {
   const payload = buildSavePayload({ html, pageName, source, expectedUpdatedAt, reason });
-  return contentRepo.savePage(pageId, payload, { writer, extraOwnSaveIds });
+  return contentRepo.savePage(pageId, payload, { writer, extraOwnSaveIds, ...(timeoutMs ? { timeoutMs } : {}) });
 }
 
 // Liefert true, wenn der Error ein PAGE_CONFLICT ist (409 + code). Aufrufer
