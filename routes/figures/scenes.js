@@ -15,6 +15,7 @@ const { toIntId } = require('../../lib/validate');
 const { listScenesWithRefs } = require('../../db/scene-catalog');
 const { sessionEmail } = require('../../lib/acl');
 const searchIndex = require('../../lib/search');
+const { enqueueEmbedIndexJob } = require('../jobs/embed-index');
 const logger = require('../../logger');
 
 const jsonBody = express.json();
@@ -69,6 +70,10 @@ function register(router) {
     // semantic_chunks.scene_id hängt per ON DELETE CASCADE an figure_scenes.
     searchIndex.remove('scene', srcId);
     searchIndex.upsertScene(tgtId);
+    // Embedding-Index: Ziel-Szene trägt jetzt Figuren/Orte der Quelle, ihr Chunk
+    // ist veraltet. Delta-Lauf; non-fatal.
+    try { enqueueEmbedIndexJob(bookId); }
+    catch (e) { logger.warn(`Szenen-Merge: Embedding-Index nicht angestossen (Buch ${bookId}): ${e.message}`); }
     logger.info(`Szenen-Merge: «${result.sourceName}» → «${result.targetName}» (Buch ${bookId}).`);
     res.json({ ok: true, ...result });
   });

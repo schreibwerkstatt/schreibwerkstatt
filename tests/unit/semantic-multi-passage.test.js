@@ -91,9 +91,10 @@ test('fuseCandidates: Passagen bleiben getrennt, FTS verschmilzt mit der besten'
 test('selectPassagesSemantic: mehrere Passagen einer Seite → ein Auszug in Textreihenfolge', async () => {
   const orig = { ...semanticRetrieval };
   const origList = contentStore.listPages;
+  const origBatch = contentStore.loadPagesBatch;
   let seenOpts = null;
   try {
-    semanticRetrieval.indexReady = () => true;
+    semanticRetrieval.indexState = () => ({ ready: true, lastIndexedAt: '2026-06-01T00:00:00.000Z' });
     semanticRetrieval.semanticQuery = async (_b, _q, opts) => {
       seenOpts = opts;
       return [
@@ -103,7 +104,10 @@ test('selectPassagesSemantic: mehrere Passagen einer Seite → ein Auszug in Tex
       ];
     };
     semanticRetrieval.withNeighbors = (hits) => hits;
-    contentStore.listPages = async () => [P_LONG, P_OTHER].map(id => ({ id, name: `Abschnitt ${id}`, slug: null, book_slug: null }));
+    contentStore.listPages = async () => [P_LONG, P_OTHER].map(id => ({ id, name: `Abschnitt ${id}`, slug: null, book_slug: null, updated_at: NOW }));
+    // Live-Text: die Passagen werden auf den aktuellen Seitentext abgebildet.
+    const live = { [P_LONG]: `<p>${'A'.repeat(80)}</p><p>mitte</p><p>${'Z'.repeat(80)}</p>`, [P_OTHER]: `<p>${'O'.repeat(80)}</p>` };
+    contentStore.loadPagesBatch = async (metas) => metas.map(m => ({ id: m.id, html: live[m.id] }));
     const r = await selectPassagesSemantic(BOOK, 'q', 10000);
     assert.equal(r.status, 'ok');
     assert.equal(seenOpts.perEntity, semanticRetrieval.PASSAGES_PER_ENTITY);
@@ -114,6 +118,7 @@ test('selectPassagesSemantic: mehrere Passagen einer Seite → ein Auszug in Tex
   } finally {
     Object.assign(semanticRetrieval, orig);
     contentStore.listPages = origList;
+    contentStore.loadPagesBatch = origBatch;
   }
 });
 
@@ -165,4 +170,15 @@ test('get_pages/get_chapter_text: Durchblättern per next_offset liefert den gan
   } finally {
     contentStore.loadPage = origLoad;
   }
+});
+
+test('searchSimilar restrictTo: nur die genannten Entitäten, Filter vor topK', () => {
+  const hits = semanticChunks.searchSimilar(BOOK, MODEL, Q, { topK: 1, restrictTo: { page: [P_OTHER] } });
+  assert.deepEqual(hits.map(h => h.entity_id), [P_OTHER]);
+  assert.deepEqual(semanticChunks.searchSimilar(BOOK, MODEL, Q, { topK: 5, restrictTo: { scene: [1] } }), []);
+});
+
+test('markIndexed: übergebener Zeitpunkt wird gestempelt', () => {
+  semanticChunks.markIndexed(BOOK, MODEL, '2026-02-03T04:05:06.000Z');
+  assert.equal(semanticChunks.lastIndexedAt(BOOK, MODEL), '2026-02-03T04:05:06.000Z');
 });

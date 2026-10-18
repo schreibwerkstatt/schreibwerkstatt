@@ -83,7 +83,7 @@ router.get('/', (req, res) => {
     });
   } catch (e) {
     logger.error(`[search] GET /search failed: ${e.message}`);
-    res.status(500).json({ error_code: 'SEARCH_FAILED', detail: e.message });
+    res.status(500).json({ error_code: 'SEARCH_FAILED' });
   }
 });
 
@@ -99,9 +99,10 @@ router.get('/', (req, res) => {
 // spiegelt die FTS-Route: { kind, entity_id, nav_id, book_id, chunk_ix, title,
 // snippet, score }, dazu `notIndexed` (Index fehlt/unvollständig → Hinweis statt
 // „keine Treffer").
-// Snippet fliesst im Frontend in einen x-html-Sink (search.html) → server-seitig
-// escapen (Hard-Rule „x-html nur mit vorab-escaptem Content"). Kein <mark> nötig
-// (semantische Treffer haben keine Wort-Offsets).
+// Snippet fliesst im Frontend in denselben x-html-Sink wie der FTS-Snippet
+// (search.html) → server-seitig escapen (Hard-Rule „x-html nur mit vorab-
+// escaptem Content"). Anders als der FTS-Snippet trägt er KEIN <mark>-Highlight:
+// semantische Treffer haben keine Wort-Offsets.
 function _escHtml(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -190,15 +191,24 @@ function _resolveSemanticHits(hits, bookId, email) {
   return searchIndex.attachNavIds(out);
 }
 
-router.get('/semantic', async (req, res) => {
-  const email = sessionEmail(req);
-  if (!email) return res.status(401).json({ error_code: 'NOT_LOGGED_IN' });
-  if (!embed.isEnabled()) return res.status(400).json({ error_code: 'EMBED_DISABLED' });
+// AbortController, der feuert, wenn der Client die Verbindung schliesst, bevor
+// die Antwort raus ist (Tippen in der Suchbox verwirft die vorige Anfrage) —
+// sonst liefen Embedding- und Rerank-Call für eine verworfene Anfrage zu Ende.
+function _clientAbort(res) {
+  const ac = new AbortController();
+  res.on('close', () => { if (!res.writableFinished) ac.abort(); });
+  return ac;
+}
 
+router.get('/semantic', async (req, res) => {
+  // Login prüft guardBook selbst (401 NOT_LOGGED_IN), EMBED_DISABLED erst nach
+  // der ACL — ohne Buchzugriff verrät die Route nichts über die Konfiguration.
   const bookId = toIntId(req.query.book_id);
   if (!bookId) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
   if (!guardBook(req, res, bookId, 'viewer')) return;
   setContext({ book: bookId });
+  const email = sessionEmail(req);
+  if (!embed.isEnabled()) return res.status(400).json({ error_code: 'EMBED_DISABLED' });
 
   // Eigene Kind-Liste statt _parseKinds: `fact` ist ein reiner Embedding-Kind
   // (kein FTS-Kind), und ohne kind-Parameter gelten alle indizierten Kinds.
@@ -208,6 +218,8 @@ router.get('/semantic', async (req, res) => {
   const topK = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
 
   const likeKind = String(req.query.like_kind || '').trim();
+  const ac = _clientAbort(res);
+  const signal = ac.signal;
 
   try {
     if (likeKind) {
@@ -222,7 +234,7 @@ router.get('/semantic', async (req, res) => {
       // Vektor, danach optionales Reranking gegen den Entitäts-Text (siehe
       // lib/semantic-retrieval#similarToEntity). Kein Hybrid — hier gibt es keinen
       // Anfragetext für die FTS-Seite.
-      const sim = await semanticRetrieval.similarToEntity(bookId, likeKind, likeId, { kinds, topK, user: email });
+      const sim = await semanticRetrieval.similarToEntity(bookId, likeKind, likeId, { kinds, topK, user: email, signal });
       const notIndexed = !!sim.notIndexed || !semanticRetrieval.indexReady(bookId);
       return res.json({ hits: sim.notIndexed ? [] : _resolveSemanticHits(sim.hits, bookId, email), mode: 'semantic', notIndexed });
     }
@@ -234,26 +246,26 @@ router.get('/semantic', async (req, res) => {
     // Stück) soll nicht nur seine eine beste Stelle zeigen. Jeder Treffer trägt
     // chunk_ix + Snippet der eigenen Passage.
     const raw = await semanticRetrieval.semanticQuery(bookId, q, {
-      kinds, topK, user: email, perEntity: semanticRetrieval.PASSAGES_PER_ENTITY,
+      kinds, topK, user: email, perEntity: semanticRetrieval.PASSAGES_PER_ENTITY, signal,
     });
     res.json({
       hits: _resolveSemanticHits(raw, bookId, email), mode: 'semantic',
       notIndexed: !semanticRetrieval.indexReady(bookId),
     });
   } catch (e) {
+    if (e.name === 'AbortError' || signal.aborted) return;
     logger.error(`[search] GET /search/semantic failed: ${e.message}`);
     res.status(503).json({ error_code: 'EMBED_UNAVAILABLE' });
   }
 });
 
 router.get('/semantic/status', (req, res) => {
-  const email = sessionEmail(req);
-  if (!email) return res.status(401).json({ error_code: 'NOT_LOGGED_IN' });
-  if (!embed.isEnabled()) return res.json({ enabled: false });
-
   const bookId = toIntId(req.query.book_id);
   if (!bookId) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
   if (!guardBook(req, res, bookId, 'viewer')) return;
+  setContext({ book: bookId });
+  const email = sessionEmail(req);
+  if (!embed.isEnabled()) return res.json({ enabled: false });
 
   const { model } = embed.getConfig();
   try {
@@ -262,7 +274,7 @@ router.get('/semantic/status', (req, res) => {
     res.json({ enabled: true, ...semanticChunks.indexStatus(bookId, model, email) });
   } catch (e) {
     logger.error(`[search] GET /search/semantic/status failed: ${e.message}`);
-    res.status(500).json({ error_code: 'STATUS_FAILED', detail: e.message });
+    res.status(500).json({ error_code: 'STATUS_FAILED' });
   }
 });
 
@@ -273,9 +285,9 @@ router.get('/semantic/status', (req, res) => {
 // Der Snippet ist ROHTEXT und wird bewusst NICHT escapt: er landet in einem
 // `x-text`-Sink (public/partials/sources-lib-search.html), der selbst escapt —
 // ein zweiter Durchgang zeigte dem Leser sichtbare `&amp;`/`&lt;` im Zitat.
-// Anders als /search/semantic, dessen Snippet ein <mark>-Highlight traegt und
-// darum ueber x-html geht. Wer den Sink hier auf x-html umstellt, muss das
-// Escaping mit umstellen.
+// Anders als /search/semantic, dessen Snippet (ohne <mark>, aber im selben
+// x-html-Sink wie der FTS-Treffer) server-seitig escapt wird. Wer den Sink hier
+// auf x-html umstellt, muss das Escaping mit umstellen.
 router.get('/sources-semantic', async (req, res) => {
   const email = sessionEmail(req);
   if (!email) return res.status(401).json({ error_code: 'NOT_LOGGED_IN' });
@@ -286,9 +298,10 @@ router.get('/sources-semantic', async (req, res) => {
   if (q.length > 500) return res.status(400).json({ error_code: 'QUERY_TOO_LONG' });
 
   const topK = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
+  const ac = _clientAbort(res);
 
   try {
-    const raw = await semanticRetrieval.semanticSourceQuery(email, q, { topK });
+    const raw = await semanticRetrieval.semanticSourceQuery(email, q, { topK, signal: ac.signal });
     const hits = raw.map(h => ({
       source_id: h.source_id,
       title: h.title || '', citekey: h.citekey || '',
@@ -297,8 +310,9 @@ router.get('/sources-semantic', async (req, res) => {
     }));
     res.json({ hits, mode: 'sources-semantic' });
   } catch (e) {
+    if (e.name === 'AbortError' || ac.signal.aborted) return;
     logger.error(`[search] GET /search/sources-semantic failed: ${e.message}`);
-    res.status(503).json({ error_code: 'EMBED_UNAVAILABLE', detail: e.message });
+    res.status(503).json({ error_code: 'EMBED_UNAVAILABLE' });
   }
 });
 

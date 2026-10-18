@@ -168,7 +168,7 @@ document.addEventListener('alpine:init', () => {
       const tree = this.$store.nav.tree;
       // Stand-Filter (tree/edit-status.js): arbeitet auf dem Such-Ergebnis bzw.
       // dem ganzen Baum und klappt alles auf, wie die Suche.
-      if (this.treeEditFilter) return this._editFilterTree(this.pageSearch ? this._searchTree(tree) : tree);
+      if (this._editFilterActive()) return this._editFilterTree(this.pageSearch ? this._searchTree(tree) : tree);
       if (!this.pageSearch) {
         // BEWUSST NICHT memoisiert — anders als der Search-Branch unten.
         // Dieser Zweig haengt an `item.open`, und das wird IN PLACE mutiert
@@ -201,22 +201,37 @@ document.addEventListener('alpine:init', () => {
       const q = this.pageSearch.toLowerCase();
       // Memo: Search-Branch ist N²-Gefahr (filteredTree wird pro Page-Row
       // gelesen). Ref-Vergleich `tree` + identische Query → Cache-Hit.
+      // `_treeRev` faengt In-Place-Aenderungen ab, die `tree` stehen lassen
+      // (tree/build.js#_bumpTreeRev) — und macht den Getter reaktiv darauf.
+      const rev = this._treeRev;
       const memo = this._filteredTreeMemo;
-      if (memo && memo.tree === tree && memo.q === q) return memo.val;
+      if (memo && memo.tree === tree && memo.q === q && memo.rev === rev) return memo.val;
       // Erste Pass: Kapitel mit matchenden Seiten finden.
       const matched = new Map(); // chapter-id -> filtered-pages[]
+      // Tiefe des juengsten Kapitels, dessen NAME traf: dessen ganzer Unterbaum
+      // gehoert zum Ergebnis. nav.tree ist depth-first (tree/load.js), der
+      // Unterbaum sind also die direkt folgenden Items mit groesserer Tiefe.
+      let nameHitDepth = null;
       for (const item of tree) {
         if (item.solo) {
+          nameHitDepth = null;
           if (item.name.toLowerCase().includes(q) || item.pages[0]?.name?.toLowerCase().includes(q)) {
             matched.set(item.id, item.pages);
           }
           continue;
         }
+        const depth = item.depth || 1;
+        if (nameHitDepth != null && depth > nameHitDepth) {
+          matched.set(item.id, item.pages);
+          continue;
+        }
+        nameHitDepth = null;
         // Trifft der Kapitelname, gehoert das ganze Kapitel zum Ergebnis (alle
-        // Seiten, auch ein leeres Kapitel mit seinem Kopf) — „Teil 2" soll den
-        // Teil finden, nicht nur Seiten, die zufaellig so heissen.
+        // Seiten und Unterkapitel, auch ein leeres Kapitel mit seinem Kopf) —
+        // „Teil 2" soll den Teil finden, nicht nur Seiten, die zufaellig so heissen.
         if (item.name?.toLowerCase().includes(q)) {
           matched.set(item.id, item.pages);
+          nameHitDepth = depth;
           continue;
         }
         const pages = item.pages.filter(p => p.name.toLowerCase().includes(q));
@@ -235,7 +250,7 @@ document.addEventListener('alpine:init', () => {
       const val = tree
         .filter(item => matched.has(item.id))
         .map(item => ({ ...item, pages: matched.get(item.id), open: true }));
-      this._filteredTreeMemo = { tree, q, val };
+      this._filteredTreeMemo = { tree, q, rev, val };
       return val;
     },
 

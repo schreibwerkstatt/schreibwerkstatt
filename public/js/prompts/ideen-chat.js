@@ -11,6 +11,7 @@
 // Deep-Doc: docs/ideen-chat.md
 
 import { _isLocal, _jsonOnly } from './state.js';
+import { buildPassageBlockLines } from './chat-pre-context.js';
 
 // Lese-Werkzeuge aus BOOK_CHAT_TOOLS, die der Ideen-Chat anbietet. Handler +
 // Schemas teilt er mit dem Buch-Chat (routes/jobs/book-chat-tools). Schwerpunkt
@@ -173,7 +174,8 @@ export function buildIdeenProposalMemoryBlock(list = []) {
  * @param {string} bookName
  * @param {object} ctx { mode ('agent'|'classic'), maxToolIter, toolNames,
  *                       bookContext, ideenOutline, gliederungOutline,
- *                       targetsOutline, stages, proposalMemory, passages }
+ *                       targetsOutline, stages, proposalMemory, passages,
+ *                       passageStatus (Index-/Suchstand, chat-pre-context.js) }
  */
 export function buildIdeenChatSystemPrompt(bookName, ctx = {}) {
   const classic = ctx.mode === 'classic';
@@ -275,18 +277,11 @@ function _finish(stable, ctx, { classic }) {
   // Textpassagen: klassisch immer (einzige Text-Grundierung), agentisch als
   // Erst-Kontext nur mit Embedding-Endpunkt (ctx.passages = Array).
   if (classic || Array.isArray(ctx.passages)) {
-    const passages = Array.isArray(ctx.passages) ? ctx.passages : [];
-    volatile.push('', '=== TEXTPASSAGEN (semantisch nächste Stellen zur Frage) ===');
-    if (passages.length) {
-      if (!classic) {
-        volatile.push('(Automatisch vorab geholt; Ausschnitte können unvollständig sein. Für einen Erledigt-Check lies den Abschnitt der Pendenz selbst.)');
-      }
-      for (const p of passages) volatile.push(`--- ${p.title || p.kind || ''} ---`, String(p.text || '').trim());
-    } else {
-      volatile.push(classic
-        ? '(keine — Embedding-Index fehlt oder kein Treffer; ohne Textstelle kein «erledigt»)'
-        : '(keine Treffer zur Frage — nutze bei Bedarf die Lese-Werkzeuge)');
-    }
+    volatile.push('', ...buildPassageBlockLines(ctx.passages, {
+      classic, status: ctx.passageStatus,
+      intro: '(Automatisch vorab geholt; Ausschnitte können unvollständig sein. Für einen Erledigt-Check lies den Abschnitt der Pendenz selbst.)',
+      emptyClassic: '(keine — Embedding-Index fehlt oder kein Treffer; ohne Textstelle kein «erledigt»)',
+    }));
   }
   return [
     { text: stable.join('\n') + (classic ? _jsonOnly() : ''), ttl: '1h' },

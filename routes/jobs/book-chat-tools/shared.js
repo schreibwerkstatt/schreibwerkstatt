@@ -13,6 +13,7 @@ const { getLocationName } = require('../../../db/locations-read');
 const { getWorldFactTitle } = require('../../../db/world-facts');
 const { itemTitle: getResearchItemTitle } = require('../../../db/research-items');
 const contentStore = require('../../../lib/content-store');
+const semanticRetrieval = require('../../../lib/semantic-retrieval');
 
 // Obergrenzen schützen das Token-Budget gegen ausufernde Tool-Calls. Skaliert mit
 // MODEL_CONTEXT, damit User mit grösserem Kontextfenster reichere Tool-Antworten
@@ -70,6 +71,59 @@ function resolveEntityTitle(kind, entityId, opts = {}) {
   return null;
 }
 
+/**
+ * Stand des Embedding-Index eines Buchs, so wie ihn ein Chat-Modell kennen muss,
+ * bevor es «keine Treffer» als «steht nicht im Buch» liest. Geteilt von
+ * `search_similar` (tools-similar.js) und den Erst-Kontext-/RAG-Blöcken der Chats
+ * (routes/jobs/chat/book-chat-retrieval.js).
+ *
+ * `ready` = vollständiger Indexlauf unter dem aktiven Modell
+ * (semanticRetrieval.indexState). `changedPageIds` = Abschnitte, deren `updated_at`
+ * nach dem Start des letzten vollständigen Laufs liegt (neu oder bearbeitet — ihr
+ * Text fehlt im Index oder liegt dort in einer älteren Fassung). `incomplete` =
+ * eines von beiden. `pages` (optional): schon geladene listPages-Zeilen, spart den
+ * zweiten Zugriff.
+ * @returns {Promise<{ ready: boolean, lastIndexedAt: string|null, changedPageIds: number[], incomplete: boolean }>}
+ */
+async function semanticIndexStatus(bookId, pages = null) {
+  const st = semanticRetrieval.indexState(bookId) || {};
+  const ready = !!st.ready;
+  const lastIndexedAt = st.lastIndexedAt || null;
+  let changedPageIds = [];
+  const since = ready && lastIndexedAt ? Date.parse(lastIndexedAt) : NaN;
+  if (Number.isFinite(since)) {
+    const rows = pages || await contentStore.listPages(bookId);
+    changedPageIds = rows
+      .filter(p => { const t = Date.parse(p.updated_at || ''); return Number.isFinite(t) && t > since; })
+      .map(p => p.id);
+  }
+  return { ready, lastIndexedAt, changedPageIds, incomplete: !ready || changedPageIds.length > 0 };
+}
+
+/** Hinweisfeld für Werkzeug-Ergebnisse über den Bedeutungs-Index (search_similar):
+ *  bei unvollständigem Index `{ index_incomplete: true, index_hint }`, sonst {}. */
+function indexIncompleteFields(status) {
+  if (!status?.incomplete) return {};
+  const hint = status.ready
+    ? `${status.changedPageIds.length} Abschnitt(e) sind seit dem letzten Indexlauf neu oder geändert und fehlen hier ganz oder in neuer Fassung.`
+    : 'Der Bedeutungs-Index dieses Buchs ist unvollständig (Indexlauf fehlt oder brach ab).';
+  return {
+    index_incomplete: true,
+    index_hint: `${hint} Fehlende Treffer heissen NICHT, dass etwas nicht im Buch steht — prüfe mit search_passages (Wortlaut) oder get_chapter_text.`,
+  };
+}
+
+// Stabile Relevanzangabe eines semanticQuery-Treffers: `rank` (1 = bester) und
+// `similarity` = roher Cosinus (semScore), gerundet; fehlt er (reiner
+// Wortlaut-Treffer), nur der Rang. Geteilt von search_similar
+// und dem Erst-Kontext (routes/jobs/chat/book-chat-retrieval.js).
+function relevanceFields(h, rank) {
+  return {
+    rank,
+    ...(Number.isFinite(h.semScore) ? { similarity: Math.round(h.semScore * 100) / 100 } : {}),
+  };
+}
+
 /** Lookup einer Figur per fig_id (exakt) oder figur_name (LIKE + Exact-Match-Bonus). */
 function _findFigure(input, ctx) {
   const userEmail = ctx.userEmail || null;
@@ -106,4 +160,7 @@ module.exports = {
   _findFigure,
   resolveEntityTitle,
   sortByReadingOrder,
+  semanticIndexStatus,
+  indexIncompleteFields,
+  relevanceFields,
 };

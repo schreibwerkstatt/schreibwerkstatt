@@ -174,6 +174,10 @@ async function _judgeOneFact(tok, userPrompt, systemPrompt, signal, callTools = 
 // Best-effort: ohne fertigen Index oder bei Backend-Fehler bleibt es bei der
 // Web-Suche allein.
 const _RESEARCH_TOP_K = 3;
+// Archivierte/verworfene Fundstücke liegen weiter im Index und fallen erst hier
+// heraus: die Suche zieht darum das Dreifache, gefiltert wird vor dem Schnitt —
+// sonst verdrängten drei verworfene Stücke jeden gültigen Beleg.
+const _RESEARCH_FETCH_K = _RESEARCH_TOP_K * 3;
 const _RESEARCH_PASSAGE_MAX = 1200;
 const _stmtResearchMeta = db.prepare(`
   SELECT ri.id, ri.title, ri.source,
@@ -190,7 +194,7 @@ async function _researchEvidence(bookIdInt, cand, signal) {
   if (!q) return [];
   let hits;
   try {
-    hits = await retrieval.semanticQuery(bookIdInt, q, { kinds: ['research'], topK: _RESEARCH_TOP_K, signal });
+    hits = await retrieval.semanticQuery(bookIdInt, q, { kinds: ['research'], topK: _RESEARCH_FETCH_K, signal });
   } catch (e) {
     if (e?.name === 'AbortError') throw e;
     return [];
@@ -204,6 +208,7 @@ async function _researchEvidence(bookIdInt, cand, signal) {
     if (!meta || !text) continue;
     const url = [meta.first_url, meta.source].map(x => String(x || '').trim()).find(x => /^https?:\/\//i.test(x)) || null;
     out.push({ titel: meta.title || '', quelle: meta.source || '', url, text });
+    if (out.length >= _RESEARCH_TOP_K) break;
   }
   return out;
 }

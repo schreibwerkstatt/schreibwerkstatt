@@ -9,13 +9,41 @@
 //   Home/End   erster/letzter sichtbarer Eintrag
 //   →          zugeklapptes Kapitel aufklappen, offenes → erstes Kind
 //   ←          offenes Kapitel zuklappen, sonst → uebergeordnetes Kapitel
+//   Buchstabe  naechster sichtbarer Eintrag, dessen Name so beginnt
+//              (Typeahead; Tippen innert TYPEAHEAD_MS setzt das Praefix fort)
 // Enter/Space bleiben am Eintrag selbst (Kapitelkopf: Aktivieren, Seite: Link).
+// Bei aktiver Suche oder Stand-Filter (`_treeIsFiltered`) ist alles offen:
+// ← springt dort direkt zum uebergeordneten Kapitel, → zum ersten Kind.
 //
 // Die Eintraege tragen `data-tree-key` und `data-tree-parent` (sidebar.html).
 // Gelesen wird der DOM, nicht `filteredTree`: sichtbar ist, was gerendert und
 // nicht per x-show versteckt ist — genau die Menge, durch die ein Pfeil gehen soll.
 
 const NAV_KEYS = new Set(['ArrowDown', 'ArrowUp', 'Home', 'End', 'ArrowRight', 'ArrowLeft']);
+const TYPEAHEAD_MS = 700;
+
+// Modul-State statt Komponenten-Feld: das Praefix ist reine Tastatur-Fuehrung,
+// kein Render-Zustand (genau eine Root-Instanz).
+let _typeahead = { prefix: '', at: 0 };
+
+function itemLabel(el) {
+  const name = el.querySelector('.tree-chapter-name, .page-name');
+  return (name?.textContent || el.textContent || '').trim().toLocaleLowerCase();
+}
+
+// Naechster Eintrag ab `from` (zyklisch), dessen Name mit `prefix` beginnt.
+// Bei einem einzelnen Zeichen ab dem FOLGENDEN Eintrag — wiederholtes Tippen
+// desselben Buchstabens laeuft so durch alle Treffer; ein laengeres Praefix
+// prueft den aktuellen Eintrag zuerst mit.
+export function typeaheadTarget(labels, from, prefix) {
+  if (!prefix || !labels.length) return -1;
+  const start = prefix.length === 1 ? from + 1 : from;
+  for (let k = 0; k < labels.length; k++) {
+    const i = (start + k + labels.length) % labels.length;
+    if (labels[i].startsWith(prefix)) return i;
+  }
+  return -1;
+}
 
 function visibleItems(root) {
   return [...root.querySelectorAll('[data-tree-key]')].filter(el => el.offsetParent !== null);
@@ -34,7 +62,9 @@ function scrollParent(el) {
 
 export const treeKeyboardMethods = {
   _onTreeKeydown(e) {
-    if (!NAV_KEYS.has(e.key) || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    const typeahead = e.key.length === 1 && e.key !== ' ';
+    if (!NAV_KEYS.has(e.key) && !typeahead) return;
     const item = e.target?.closest?.('[data-tree-key]');
     // Nur der Eintrag selbst — eine fokussierte Plakette darin behaelt ihre Tasten.
     if (!item || item !== e.target) return;
@@ -42,6 +72,20 @@ export const treeKeyboardMethods = {
     const i = items.indexOf(item);
     if (i < 0) return;
     e.preventDefault();
+    if (typeahead) {
+      const now = Date.now();
+      const ch = e.key.toLocaleLowerCase();
+      // Gleicher Buchstabe wiederholt → weiterblaettern statt „aa" suchen.
+      const prefix = now - _typeahead.at < TYPEAHEAD_MS && _typeahead.prefix !== ch
+        ? _typeahead.prefix + ch : ch;
+      _typeahead = { prefix, at: now };
+      const j = typeaheadTarget(items.map(itemLabel), i, prefix);
+      if (j < 0 || j === i) return;
+      this._treeTabStop = items[j].dataset.treeKey;
+      items[j].focus();
+      return;
+    }
+    const filtered = this._treeIsFiltered();
     const expanded = item.getAttribute('aria-expanded');
     const isChapter = item.dataset.treeKind === 'chapter';
     let target = null;
@@ -51,11 +95,11 @@ export const treeKeyboardMethods = {
       case 'Home': target = items[0]; break;
       case 'End': target = items[items.length - 1]; break;
       case 'ArrowRight':
-        if (isChapter && expanded === 'false') { this._setTreeItemOpen(item, true); return; }
-        if (isChapter && expanded === 'true') target = items[i + 1];
+        if (isChapter && expanded === 'false' && !filtered) { this._setTreeItemOpen(item, true); return; }
+        if (isChapter && expanded) target = items[i + 1];
         break;
       case 'ArrowLeft':
-        if (isChapter && expanded === 'true' && !this.pageSearch) { this._setTreeItemOpen(item, false); return; }
+        if (isChapter && expanded === 'true' && !filtered) { this._setTreeItemOpen(item, false); return; }
         if (item.dataset.treeParent) target = items.find(el => el.dataset.treeKey === item.dataset.treeParent);
         break;
     }
@@ -64,10 +108,10 @@ export const treeKeyboardMethods = {
     target.focus();
   },
 
-  // Waehrend der Suche sind alle Treffer-Kapitel offen (Kopien in
+  // Waehrend Suche/Stand-Filter sind alle Treffer-Kapitel offen (Kopien in
   // filteredTree) — Auf-/Zuklappen hat dort keine Wirkung und bleibt aus.
   _setTreeItemOpen(el, value) {
-    if (this.pageSearch) return;
+    if (this._treeIsFiltered()) return;
     const item = this._findTreeChapter?.(String(el.dataset.treeKey).slice(1));
     if (item && !item.solo) this.setChapterOpen(item, value);
   },

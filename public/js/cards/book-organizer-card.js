@@ -119,6 +119,12 @@ export function registerBookOrganizerCard() {
             if (!window.__app.showBookOrganizerCard) return;
             await this._rerender();
           } },
+          // Kapitel ausserhalb geloescht (Sidebar-Kontextmenue) — ebenso in-place
+          // aus nav.tree genommen; der naechste Order-PUT darf es nicht mehr nennen.
+          { type: EVT.CHAPTER_REMOVED, handler: async () => {
+            if (!window.__app.showBookOrganizerCard) return;
+            await this._rerender();
+          } },
           // Umbenannt im Editor-Kopf oder Sidebar-Kontextmenü (in-place
           // gespiegelt, kein pages:loaded).
           { type: EVT.TREE_RENAMED, handler: async () => {

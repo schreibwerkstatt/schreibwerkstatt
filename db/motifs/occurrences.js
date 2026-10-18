@@ -21,7 +21,11 @@ const _stmtInsertOcc = db.prepare(`
 
 // Full-Replace der Fundstellen eines Motivs (ein Scan-Ergebnis). rows:
 // [{ kind:'page'|'scene', pageId?, sceneId?, score, snippet, source }].
+// Rückgabe false, wenn das Motiv inzwischen gelöscht ist (Scan überholt von einem
+// Delete) — dann wird nichts geschrieben statt am FK zu scheitern.
+const _stmtMotifExists = db.prepare('SELECT 1 FROM motifs WHERE id = ?');
 const replaceOccurrences = db.transaction((motifId, bookId, rows) => {
+  if (!_stmtMotifExists.get(parseInt(motifId))) return false;
   _stmtDeleteOccForMotif.run(parseInt(motifId));
   for (const r of rows || []) {
     const isPage = r.kind === 'page';
@@ -34,6 +38,7 @@ const replaceOccurrences = db.transaction((motifId, bookId, rows) => {
       r.source,
     );
   }
+  return true;
 });
 
 // Fundstellen-Zahl pro Motiv fürs Graph-Rendering (Ist-Dichte). Optionaler Score-

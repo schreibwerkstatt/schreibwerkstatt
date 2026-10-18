@@ -22,6 +22,7 @@ const retrieval = require('../../lib/semantic-retrieval');
 const { getSceneTitleForUser } = require('../../db/book-chat/figures');
 const searchIndex = require('../../lib/search');
 const contentStore = require('../../lib/content-store');
+const { plainSnippet: _plainSnippet, makeLiveSnippets } = require('../../lib/anchor-snippet');
 const logger = require('../../logger');
 
 const motifScanRouter = express.Router();
@@ -55,12 +56,6 @@ function _triggerQuery(term) {
   return t.length >= TRIGGER_PREFIX_MIN ? `${t}*` : t;
 }
 
-const _TAG = /<\/?[^>]+>/g;
-const _ENT = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };
-function _plainSnippet(s) {
-  return String(s || '').replace(_TAG, '').replace(/&(amp|lt|gt|quot|#39);/g, m => _ENT[m] || m).trim().slice(0, 400);
-}
-
 function _occKey(kind, entityId) { return `${kind}:${entityId}`; }
 function _toOcc(kind, entityId, score, snippet, source) {
   const isPage = kind === 'page';
@@ -70,15 +65,20 @@ function _toOcc(kind, entityId, score, snippet, source) {
 // Fundstellen eines Motivs sammeln. Dedup pro (kind, entity) — semantischer Treffer
 // gewinnt gegen wörtlichen (höhere Vertrauensstufe); ein Ort zählt einmal (Ist-Dichte).
 // Szenen sind Analyse-Daten pro User, beide Indizes hängen nur am Buch: Szenen
-// eines Mitautors (figure_scenes.user_email) werden nie zu eigenen Fundstellen.
-async function _scanMotif(bookId, motif, useSemantic, signalFn, topK, userEmail = null) {
+// eines Mitautors (figure_scenes.user_email) werden nie zu eigenen Fundstellen;
+// der User-Scope greift schon in der Suche (vor dem topK-Schnitt), der `own`-
+// Filter bleibt als zweite Schicht.
+// `snippetFor` (hit → Auszug | null): der Job reicht lib/anchor-snippet.js#
+// makeLiveSnippets durch — Seiten-Auszug aus dem Live-Text, null = Stelle steht
+// so nicht mehr auf der Seite → semantischer Treffer verworfen. Default: Chunk-Text.
+async function _scanMotif(bookId, motif, useSemantic, signalFn, topK, userEmail = null, snippetFor = null) {
   const found = new Map();
   const own = h => h.kind !== 'scene' || getSceneTitleForUser(h.entity_id, userEmail) != null;
 
   if (useSemantic) {
     const query = [motif.name, motif.beschreibung].map(s => String(s || '').trim()).filter(Boolean).join('. ');
     if (query) {
-      const hits = await retrieval.semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK, signal: signalFn(), strictRerank: true });
+      const hits = await retrieval.semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK, signal: signalFn(), strictRerank: true, user: userEmail });
       for (const h of hits) {
         // Als Konfidenz zählt der rohe Cosinus (0–1, absolut interpretierbar für
         // %-Anzeige + Score-Floor). Reine FTS-Fusions-Kandidaten (kein Cosinus)
@@ -86,7 +86,9 @@ async function _scanMotif(bookId, motif, useSemantic, signalFn, topK, userEmail 
         // deckt Trigger-Begriffe separat und bewusst ab.
         if (h.semScore == null) continue;
         if (!own(h)) continue;
-        found.set(_occKey(h.kind, h.entity_id), _toOcc(h.kind, h.entity_id, h.semScore, _plainSnippet(h.text), 'semantic'));
+        const snippet = snippetFor ? await snippetFor(h) : _plainSnippet(h.text);
+        if (snippet == null) continue;
+        found.set(_occKey(h.kind, h.entity_id), _toOcc(h.kind, h.entity_id, h.semScore, snippet, 'semantic'));
       }
     }
   }
@@ -135,6 +137,7 @@ async function runMotifScanJob(jobId, bookId, userEmail) {
 
     let totalOcc = 0;
     let failed = 0;
+    const snippetFor = makeLiveSnippets(bookId);
     for (let i = 0; i < motifs.length; i++) {
       throwIfAborted();
       const motif = motifs[i];
@@ -143,15 +146,15 @@ async function runMotifScanJob(jobId, bookId, userEmail) {
       // was ohne Semantik/Rerank-Tor übrig bliebe, wäre keine Aussage über den Text.
       let rows;
       try {
-        rows = await _scanMotif(bookId, motif, useSemantic, signal, topK, userEmail);
+        rows = await _scanMotif(bookId, motif, useSemantic, signal, topK, userEmail, snippetFor);
       } catch (e) {
         if (e.name === 'AbortError') throw e;
         failed++;
         log.warn(`Motiv-Scan: Motiv ${motif.id} übersprungen: ${e.message}`);
         continue;
       }
-      motifsDb.replaceOccurrences(motif.id, bookId, rows);
-      totalOcc += rows.length;
+      // false = Motiv während des Laufs gelöscht → nichts zu schreiben.
+      if (motifsDb.replaceOccurrences(motif.id, bookId, rows)) totalOcc += rows.length;
       updateJob(jobId, {
         statusText: 'job.phase.motivScan', statusParams: { done: i + 1, total: motifs.length },
         progress: 5 + Math.round(((i + 1) / Math.max(motifs.length, 1)) * 90),

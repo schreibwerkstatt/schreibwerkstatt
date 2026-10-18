@@ -173,6 +173,13 @@ wurde, müsste sonst aktiv gelöscht werden — und genau das vergisst man.
   angelegte Figur ändert das Ergebnis, ohne dass eine Seite angefasst wurde; ebenso
   `zeitlinie_real` und je Figur Ankerjahr + Geburtsjahr aus `computeFigureYears`, an
   denen `gerechnet` hängt.
+- **Ob ein fertiger Index existiert, gehört in die `content_sig`** (`indexReady(bookId)`):
+  die semantische Nachlese liefert erst mit Index Stellen — ohne ihn bliebe ein Lauf
+  von vor dem Erstindex „unverändert". Nur der Bool, nicht der Zeitstempel: den setzt
+  jeder nächtliche Index-Lauf neu, die Signatur bräche sonst täglich.
+- **Semantische Stellen tragen ihre echte Position** (`offset` = Lage der
+  Live-Passage auf der Seite + Satz-Offset darin), damit `selectCandidates` sie
+  neben den Musterfunden in Leserichtung ordnet.
 
 ## Wege
 

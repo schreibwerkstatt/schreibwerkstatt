@@ -19,6 +19,7 @@
 import { fetchJson } from '../utils.js';
 import { startPoll } from '../cards/job-helpers.js';
 import { checkPdfFile, uploadPdf } from '../upload-pdf.js';
+import { tFetchError } from '../i18n.js';
 
 // Index-Job-Polling nach dem Upload: der Job läuft über die ganze Bibliothek
 // und braucht bei einem frischen Werk je nach Backend Sekunden bis Minuten.
@@ -169,7 +170,7 @@ export const sourcesDocMethods = {
       this.srcLibHits = Array.isArray(r?.hits) ? r.hits : [];
       this.srcLibRan = true;
     } catch (e) {
-      this.srcLibError = window.__app.tError(e) || e?.message || 'HTTP error';
+      this.srcLibError = tFetchError(e);
     } finally {
       this.srcLibSearching = false;
     }
@@ -186,7 +187,7 @@ export const sourcesDocMethods = {
     try {
       this.startEditSource(await fetchJson(`/sources/${h.source_id}`));
     } catch (e) {
-      this.srcLibError = window.__app.tError(e) || e.message;
+      this.srcLibError = tFetchError(e);
     }
   },
 };

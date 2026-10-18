@@ -10,13 +10,16 @@ const { activeFigureSql } = require('../../db/figures');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   aiCall, getPrompts, tps,
-  createJob, enqueueJob, findActiveJobId, jsonBody,
+  createJob, enqueueJob, findActiveJobId, jsonBody, jobAbortControllers,
+  htmlToTextForPrompt,
 } = require('./shared');
 const { toIntId } = require('../../lib/validate');
 const { setContext } = require('../../lib/log-context');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const { researchPageHits } = require('../../lib/research-retrieval');
 const { pageTitle } = require('../../db/content-names');
+const contentStore = require('../../lib/content-store');
+const { bestLivePassage } = require('../../lib/live-passage');
 
 const researchLinkRouter = express.Router();
 const MAX_CANDIDATES = 200;
@@ -25,7 +28,9 @@ const MAX_CANDIDATES = 200;
 // Manuskriptseiten stehen dem Fundstueck inhaltlich am naechsten. Das ist genau
 // die Verknuepfung, die „eingearbeitet" belegt — und die das Modell ohne den Text
 // aller Seiten nicht finden kann. `grund` ist ein Auszug der Fundstelle (Zitat,
-// sprachneutral), kein KI-Text.
+// sprachneutral), kein KI-Text — geschnitten aus dem LIVE-Seitentext, denn der
+// Index-Chunk kann hinter dem Seitenstand zurückliegen. Steht die Stelle so nicht
+// mehr auf der Seite, fällt der Vorschlag weg (lib/live-passage.js).
 const PAGE_SUGGEST_MAX = 3;
 const PAGE_SNIPPET_MAX = 160;
 
@@ -38,12 +43,16 @@ async function _semanticPageSuggestions(item, bookId, signal) {
     const meta = pageTitle(h.entity_id);
     if (!meta || meta.book_id !== bookId) continue;
     seen.add(h.entity_id);
-    const snip = String(h.text || '').replace(/\s+/g, ' ').trim();
+    const page = await contentStore.loadPage(h.entity_id).catch(() => null);
+    if (!page) continue;
+    const live = bestLivePassage(htmlToTextForPrompt(page.html || ''), h.text || '', { maxChars: PAGE_SNIPPET_MAX });
+    if (!live || !live.text) continue;
+    const snip = live.text.replace(/\s+/g, ' ').trim();
     out.push({
       target_kind: 'page',
       target_id: h.entity_id,
       label: meta.title || '',
-      grund: snip ? `„${snip.slice(0, PAGE_SNIPPET_MAX)}${snip.length > PAGE_SNIPPET_MAX ? '…' : ''}"` : '',
+      grund: `„${snip}${snip.length >= PAGE_SNIPPET_MAX ? '…' : ''}"`,
       source: 'semantic',
     });
     if (out.length >= PAGE_SUGGEST_MAX) break;
@@ -160,7 +169,8 @@ researchLinkRouter.post('/research-link', jsonBody, (req, res) => {
   const existing = findActiveJobId('research-link', entityKey, userEmail);
   if (existing) return res.json({ jobId: existing, existing: true });
   const jobId = createJob('research-link', book_id, userEmail, 'job.label.researchLink', null, entityKey);
-  enqueueJob(jobId, () => runResearchLinkJob(jobId, item_id, book_id, userEmail));
+  enqueueJob(jobId, () => runResearchLinkJob(jobId, item_id, book_id, userEmail,
+    { signal: jobAbortControllers.get(jobId)?.signal }));
   res.json({ jobId });
 });
 

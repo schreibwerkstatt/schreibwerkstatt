@@ -215,7 +215,10 @@ router.post('/test-embed', async (req, res) => {
   if (!host) return res.json({ ok: false, error: 'NO_HOST', enabled });
   const t0 = Date.now();
   try {
-    const vec = await embed.embedOne('Testsatz für die semantische Suche.');
+    // force: auch vor dem Einschalten testbar; ein Versuch mit dem Anfrage-Timeout
+    // statt der Index-Retry-Kette (sonst hängt der Admin-Request minutenlang).
+    const timeoutMs = parseInt(appSettings.get('embed.query_timeout_ms'), 10) || 30000;
+    const vec = await embed.embedOne('Testsatz für die semantische Suche.', { force: true, retries: 0, timeoutMs });
     const dim = vec ? vec.length : 0;
     return res.json({ ok: dim > 0, dim, configured_dim: cfgDim, dim_mismatch: dim > 0 && dim !== cfgDim, latency_ms: Date.now() - t0, enabled });
   } catch (e) {
@@ -236,7 +239,7 @@ router.post('/test-rerank', async (req, res) => {
     const order = await rerank.rerank('Abschied am Bahnhof', [
       'Sie standen am Gleis und winkten dem Zug nach.',
       'Das Rezept braucht drei Eier und Mehl.',
-    ]);
+    ], { probe: true });
     const ok = Array.isArray(order) && order.length > 0;
     return res.json({ ok, count: order.length, latency_ms: Date.now() - t0, enabled });
   } catch (e) {

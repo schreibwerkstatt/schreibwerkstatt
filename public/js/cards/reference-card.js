@@ -37,6 +37,7 @@
 
 import { fetchJson } from '../utils.js';
 import { EVT } from '../events.js';
+import { tErrorRaw, tRaw } from '../i18n.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { groupCitedSources } from '../sources/cited-index.js';
 import { primaryPersonLabel } from '../sources/fields.js';
@@ -45,6 +46,13 @@ import { referenceContextMethods } from './reference-context.js';
 import { referencePlanMethods, referencePlanState } from './reference-plan.js';
 
 const TABS = ['plan', 'figuren', 'orte', 'szenen', 'ereignisse', 'recherche', 'quellen', 'verwandt'];
+
+// Fehlercode der semantischen Route → eigener i18n-Key des Verwandt-Reiters
+// (gleiche Sätze wie die Such-Karte); übrige Codes über `error.<CODE>`.
+const VERWANDT_ERROR_KEYS = {
+  EMBED_UNAVAILABLE: 'search.semantic.unavailable',
+  LIKE_ENTITY_NOT_FOUND: 'search.semantic.entityNotFound',
+};
 
 export function registerReferenceCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -387,9 +395,10 @@ export function registerReferenceCard() {
         if (ctrl.signal.aborted) return;
         if (!r.ok) {
           const j = await r.json().catch(() => ({}));
-          this.verwandtError = j.error_code === 'EMBED_UNAVAILABLE'
-            ? app.t('search.semantic.unavailable')
-            : String(r.status);
+          // Fehlercode → Satz; rohe HTTP-Status erreichen den User nie.
+          const own = VERWANDT_ERROR_KEYS[j.error_code];
+          this.verwandtError = own ? app.t(own)
+            : j.error_code ? tErrorRaw(j) : app.t('search.semantic.failed');
           this.verwandtHits = []; this.verwandtKey = key;
           return;
         }
@@ -405,7 +414,8 @@ export function registerReferenceCard() {
         this.verwandtKey = key;
       } catch (e) {
         if (e.name === 'AbortError' || ctrl.signal.aborted) return;
-        this.verwandtError = e.message || 'error';
+        // fetch wirft nur bei Netzausfall (HTTP-Fehler landen oben).
+        this.verwandtError = tRaw('common.networkError');
         this.verwandtHits = []; this.verwandtKey = key;
       } finally {
         if (!ctrl.signal.aborted) this.verwandtLoading = false;

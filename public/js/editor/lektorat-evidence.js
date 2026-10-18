@@ -36,6 +36,7 @@ import { buildCiteHtml } from '../sources/cite-html.js';
 import { formatShort } from '../sources/format.js';
 import { sourceLine } from '../sources/search.js';
 import { EVT } from '../events.js';
+import { tFetchError } from '../i18n.js';
 
 // Befundtypen, fuer die ein Kurzbeleg die richtige Reparatur ist. Ein Typ-Key ist
 // eine Persistenz-Konstante (`page_checks.errors_json`) — ergaenzen ja,
@@ -79,16 +80,21 @@ export const lektoratEvidenceMethods = {
   /** Panel unter einem Befund auf-/zuklappen; beim Oeffnen Vorschlaege holen. */
   async toggleEvidence(idx) {
     if (this.evidenceOpenIdx === idx) { this.closeEvidence(); return; }
-    this.evidenceOpenIdx = idx;
-    this.evidenceHits = [];
-    this.evidenceError = '';
+    this.closeEvidence();
     const f = window.__app?.lektoratFindings?.[idx];
-    if (!f?.original) { this.closeEvidence(); return; }
+    if (!f?.original) return;
+    this.evidenceOpenIdx = idx;
+    this.evidenceClaim = f.original;
     await this._loadEvidence(f.original);
   },
 
+  // Schliessen bricht eine laufende Anfrage ab und loest ihren Controller: eine
+  // spaete Antwort fuer Panel A landet so nie in Panel B.
   closeEvidence() {
+    this._evidenceAbort?.abort();
+    this._evidenceAbort = null;
     this.evidenceOpenIdx = -1;
+    this.evidenceClaim = '';
     this.evidenceHits = [];
     this.evidenceError = '';
     this.evidenceLoading = false;
@@ -98,14 +104,23 @@ export const lektoratEvidenceMethods = {
     const app = window.__app;
     const bookId = app?.$store?.nav?.selectedBookId;
     if (!bookId) return;
+    this._evidenceAbort?.abort();
+    const ctrl = new AbortController();
+    this._evidenceAbort = ctrl;
+    // Gilt die Antwort noch dem offenen Panel? Der Controller ist das Ticket
+    // der Anfrage: jedes Schliessen, jede neue Anfrage und der Karten-Reset
+    // (lektoratEvidenceState) ersetzen ihn. Dazu derselbe Satz.
+    const current = () => this._evidenceAbort === ctrl && this.evidenceClaim === claim;
     this.evidenceLoading = true;
     try {
       const url = `/sources/evidence?book_id=${encodeURIComponent(bookId)}`
         + `&q=${encodeURIComponent(claim)}`;
-      const r = await fetchJson(url);
+      const r = await fetchJson(url, { signal: ctrl.signal });
+      if (!current()) return;
       this.evidenceHits = Array.isArray(r?.hits) ? r.hits : [];
       if (!this.evidenceHits.length) this.evidenceError = app.t('evidence.empty');
     } catch (e) {
+      if (e?.name === 'AbortError' || !current()) return;
       // Die drei Lagen, die der User auseinanderhalten muss: Backend nicht
       // konfiguriert, Satz als Anfrage untauglich, Endpunkt nicht erreichbar.
       const map = {
@@ -117,7 +132,10 @@ export const lektoratEvidenceMethods = {
       this.evidenceError = app.t(map[e?.code] || 'evidence.error');
       this.evidenceHits = [];
     } finally {
-      this.evidenceLoading = false;
+      if (current()) {
+        this.evidenceLoading = false;
+        this._evidenceAbort = null;
+      }
     }
   },
 
@@ -137,6 +155,13 @@ export const lektoratEvidenceMethods = {
     const bookId = app?.$store?.nav?.selectedBookId;
     if (!f?.original || !hit?.source?.id || !bookId || !app.currentPage?.id) return;
     if (this.evidenceBusyId != null) return;
+    // Der Vorschlag gilt nur fuer den Satz, zu dem er geholt wurde: offenes
+    // Panel = dieser Befund, Befund-Satz = Anfrage-Satz, Treffer aus der
+    // aktuellen Liste. Hat sich die Befundliste darunter verschoben (neuer
+    // Lauf, Refilter), landete der Beleg sonst hinter einem fremden Satz.
+    const claim = this.evidenceClaim;
+    if (this.evidenceOpenIdx !== idx || !claim || f.original !== claim
+        || !this.evidenceHits.some(h => h.source_id === hit.source_id)) return;
 
     this.evidenceBusyId = hit.source_id;
     this.evidenceError = '';
@@ -155,7 +180,7 @@ export const lektoratEvidenceMethods = {
       // ueber `findInHtml` immer das ERSTE Vorkommen — bei einem zweimal
       // vorkommenden Satz waere das moeglicherweise der falsche. Ein Beleg am
       // falschen Satz ist schlimmer als kein Beleg.
-      const n = countInHtml(baseHtml, f.original);
+      const n = countInHtml(baseHtml, claim);
       if (n === 0) { this.evidenceError = app.t('evidence.claimGone'); return; }
       if (n > 1) { this.evidenceError = app.t('evidence.claimAmbiguous'); return; }
 
@@ -176,7 +201,7 @@ export const lektoratEvidenceMethods = {
       const chip = buildCiteHtml({ id: hit.source.id, loc: '', text, mode: 'paraphrase' });
       if (!chip) { this.evidenceError = app.t('evidence.error'); return; }
 
-      const nextHtml = insertAfterInHtml(baseHtml, f.original, NBSP + chip);
+      const nextHtml = insertAfterInHtml(baseHtml, claim, NBSP + chip);
       if (nextHtml === baseHtml) { this.evidenceError = app.t('evidence.claimGone'); return; }
 
       const saved = await savePage(app.currentPage.id, {
@@ -198,15 +223,18 @@ export const lektoratEvidenceMethods = {
       app._recomputeCorrectedHtml?.();
       app.markPageChecked?.(app.currentPage.id);
       app._syncPageStatsAfterSave?.(app.currentPage, nextHtml);
-      this.evidenceApplied = [...this.evidenceApplied, f.original];
-      this.closeEvidence();
+      this.evidenceApplied = [...this.evidenceApplied, claim];
+      // Panel inzwischen auf einen anderen Befund gewechselt → dessen Panel
+      // offen lassen.
+      if (this.evidenceClaim === claim) this.closeEvidence();
       app.setStatus?.(app.t('evidence.inserted'), false, 5000);
     } catch (e) {
       // 409 heisst: zwischen Laden und Schreiben hat jemand anders gespeichert.
       // Kein Blind-Retry — der Satz koennte inzwischen umgeschrieben sein.
+      if (this.evidenceClaim !== claim) return;
       this.evidenceError = e?.status === 409
         ? app.t('evidence.conflict')
-        : app.t('common.errorColon') + (e?.message || '');
+        : tFetchError(e);
     } finally {
       this.evidenceBusyId = null;
     }
@@ -216,9 +244,14 @@ export const lektoratEvidenceMethods = {
 /** Anfangszustand des Slices — vom Karten-Reset mitbenutzt. */
 export const lektoratEvidenceState = () => ({
   evidenceOpenIdx: -1,
+  // Satz, zu dem das offene Panel seine Vorschlaege geholt hat.
+  evidenceClaim: '',
   evidenceHits: [],
   evidenceLoading: false,
   evidenceError: '',
   evidenceBusyId: null,
   evidenceApplied: [],
+  // AbortController der laufenden Vorschlagssuche — zugleich ihr Ticket, an dem
+  // spaete Antworten eines anderen Panels verworfen werden.
+  _evidenceAbort: null,
 });

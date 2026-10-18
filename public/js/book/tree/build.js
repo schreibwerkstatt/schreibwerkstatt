@@ -1,4 +1,5 @@
 import { fetchJson } from '../../utils.js';
+import { EVT } from '../../events.js';
 
 // nav.tree → { len, byId } fuer _chapterExcludedByAncestor.
 const chapterIndexCache = new WeakMap();
@@ -51,9 +52,12 @@ export const treeBuildMethods = {
     });
 
     // Seiten ohne Kapitel immer zuerst — danach Kapitel in Tree-Reihenfolge.
+    // Je Kapitel einmal dekoriert und am Kapitel gemerkt: Baum-Items und
+    // nav.pages teilen dieselben Objekte, ohne pro Kapitel alle Seiten zu filtern.
+    for (const c of flatChapters) c.pages = c.pages.map(decoratePage);
     const pages = [
       ...tree.topPages.map(decoratePage),
-      ...flatChapters.flatMap(c => c.pages.map(decoratePage)),
+      ...flatChapters.flatMap(c => c.pages),
     ];
     this.$store.nav.pages = pages;
 
@@ -81,12 +85,28 @@ export const treeBuildMethods = {
         open: Object.prototype.hasOwnProperty.call(openState, c.id) ? !!openState[c.id] : true,
         solo: false,
         hasChildren: (childCountMap.get(c.id) || 0) > 0,
-        pages: pages.filter(p => p.chapter_id === c.id),
+        pages: c.pages,
       })),
     ];
 
     this._rebuildTreeOrderMaps();
     this._refreshChapterStats();
+  },
+
+  // Nach jeder In-Place-Aenderung an nav.tree/nav.pages, die deren Identitaet
+  // stehen laesst. Ein Zaehler fuer alle Baum-Memos (Suche in app.js#_searchTree,
+  // Stand-Filter und Kapitelstand in tree/edit-status.js): sonst muesste jeder
+  // Schreibpfad wissen, welche Memos es gibt — und vergaesse einen.
+  _bumpTreeRev() {
+    this._filteredTreeMemo = null;
+    this._treeRev = (this._treeRev || 0) + 1;
+  },
+
+  // Zeigt die Sidebar Kopien statt des Baums (Suche oder Stand-Filter)? Dann
+  // sind alle Treffer-Kapitel offen, Auf-/Zuklappen wirkt nicht, und die
+  // Ein-Abschnitt-Regel misst am ganzen Bestand statt an den Treffern.
+  _treeIsFiltered() {
+    return !!this.pageSearch || this._editFilterActive();
   },
 
   // Sortier-Indexe aus dem aktuellen `nav.tree`/`nav.pages` neu aufbauen.
@@ -120,6 +140,10 @@ export const treeBuildMethods = {
     this._chapterIdOrderMap = chapterIdMap;
     this._pageOrderMap = nameMap;
     this._pageIdOrderMap = idMap;
+    // Jeder Pfad, der den Baum in place aendert, baut die Indexe neu (auch der
+    // Buchorganizer, book-organizer/mirror.js) — hier zaehlt darum auch die
+    // Baum-Revision mit, ohne dass jeder Pfad sie kennen muss.
+    this._bumpTreeRev?.();
   },
 
   // Der Ausschluss kaskadiert serverseitig (lib/load-contents.js#_excludedChapterIds):
@@ -225,4 +249,47 @@ export const treeBuildMethods = {
     }
     if (Object.keys(initialTokEsts).length) this.tokEsts = initialTokEsts;
   },
+
+  // Entfernt eine Seite aus dem Root-Tree + Seitenliste (z.B. Remote-Delete
+  // aus dem Collab-Feed). Kein Server-Call. Feuert EVT.PAGE_REMOVED, damit
+  // Karten mit eigener Edit-Repräsentation des Baums (Buchorganizer-
+  // workTree/soloPages) ihren Snapshot nachziehen — `pages:loaded` feuert hier
+  // nicht, weil kein Reload stattfindet.
+  _removePageFromTree(pageId) {
+    const id = Number(pageId);
+    if (!Number.isFinite(id)) return;
+    const nav = this.$store.nav;
+    let removed = false;
+    const pi = nav.pages.findIndex(p => p.id === id);
+    if (pi >= 0) { nav.pages.splice(pi, 1); removed = true; }
+    for (let i = nav.tree.length - 1; i >= 0; i--) {
+      const it = nav.tree[i];
+      if (it.type !== 'chapter') continue;
+      if (it.solo && it.pages?.[0]?.id === id) {
+        nav.tree.splice(i, 1);
+        removed = true;
+      } else {
+        const j = it.pages.findIndex(p => p.id === id);
+        if (j >= 0) { it.pages.splice(j, 1); removed = true; }
+      }
+    }
+    if (!removed) return;
+    // Die Baum-Memos (Suche, Stand-Filter, Kapitelstand) keyen auf die
+    // Identitaet von nav.tree; die splices oben lassen sie stehen → ohne Bump
+    // zeigte ein aktiver Filter die geloeschte Seite weiter.
+    this._bumpTreeRev();
+    // Alle drei Sortier-Indexe neu bauen, nicht nur den ID-Index: `_pageOrderMap`
+    // keyt auf den SEITENNAMEN und zeigte sonst weiter auf die tote Position
+    // (app/app-ui.js#_pageIdx). Ausserdem verschieben sich durch das Entfernen
+    // die Positionen aller nachfolgenden Seiten.
+    this._rebuildTreeOrderMaps();
+    this._refreshChapterStats();
+    // Neue Array-Identitaet fuer nav.pages: der Tagebuch-Kalender cacht
+    // identity-gated (diary-calendar.js, `cache.pagesRef`), der splice oben
+    // laesst die Identitaet stehen — ohne das zeigte er die geloeschte Seite
+    // weiter an, egal von wo geloescht wurde.
+    nav.pages = [...nav.pages];
+    window.dispatchEvent(new CustomEvent(EVT.PAGE_REMOVED, { detail: { pageId: id } }));
+  },
+
 };

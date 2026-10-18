@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "ca840240b2841926";
+self.__SHELL_BUILD = "d8f4d3c048434cc1";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -365,6 +365,7 @@ self.__SHELL_MANIFEST = [
   "/js/book/tree/open-state.js",
   "/js/book/tree/permissions.js",
   "/js/book/tree/stats.js",
+  "/js/book/tree/structure.js",
   "/js/book/tree/ui.js",
   "/js/book/wortschatz-cloud.js",
   "/js/book/wortschatz.js",
@@ -717,6 +718,7 @@ self.__SHELL_MANIFEST = [
   "/js/prompts/book-chat-tools-history.js",
   "/js/prompts/book-chat-tools.js",
   "/js/prompts/book-outline.js",
+  "/js/prompts/chat-pre-context.js",
   "/js/prompts/chat.js",
   "/js/prompts/core.js",
   "/js/prompts/edit-status-block.js",

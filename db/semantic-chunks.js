@@ -13,11 +13,10 @@
 // Übersetzer dafür.
 // pruneMissing() bleibt zuständig für Entitäten, die noch existieren, aber nicht
 // mehr indizierbar sind (stale-Figur/-Schauplatz) — das deckt kein FK ab. Eine in
-// ein anderes Buch verschobene Seite verliert ihre Chunks sofort (content-store
-// movePage → remove), weil sie sonst bis zum nächsten Lauf im alten Buch auffindbar
-// bliebe.
+// ein anderes Buch verschobene Seite nimmt ihre Chunks mit (movePage führt die
+// book_id im Backend nach, lib/content-store/backends/localdb-move.js).
 //
-// semantic_index_state hält pro (Buch, Modell) das Ende des letzten VOLLSTÄNDIGEN
+// semantic_index_state hält pro (Buch, Modell) den Beginn des letzten VOLLSTÄNDIGEN
 // Index-Laufs (markIndexed). Ein abgebrochener Lauf schreibt dort nichts — darum ist
 // er die Quelle für „gibt es einen brauchbaren Index" (isIndexed), nicht die blosse
 // Existenz von Chunks.
@@ -173,7 +172,7 @@ const _replaceTx = db.transaction((kind, entityId, bookId, model, dim, rows) => 
 });
 function replaceEntity(kind, entityId, bookId, model, dim, rows) {
   _replaceTx(kind, entityId, bookId, model, dim, rows || []);
-  _bumpWriteGen();
+  _bumpWriteGen(bookId);
 }
 
 // Nachbar-Passagen eines Treffers: Chunk chunkIx samt radius Chunks davor und
@@ -181,10 +180,11 @@ function replaceEntity(kind, entityId, bookId, model, dim, rows) {
 // doppelte Naht wird entfernt, damit kein Satz zweimal im Prompt steht. Für
 // Chat-Kontexte: eine Faktenfrage und ihre Antwort stehen oft in benachbarten
 // Passagen, searchSimilar liefert aber nur einzelne Chunks je Entität.
+const _selNeighbors = db.prepare(
+  'SELECT chunk_ix, text FROM semantic_chunks WHERE kind = ? AND entity_id = ? AND model = ? AND chunk_ix BETWEEN ? AND ? ORDER BY chunk_ix'
+);
 function neighborText(kind, entityId, model, chunkIx, radius = 1) {
-  const rows = db.prepare(
-    'SELECT chunk_ix, text FROM semantic_chunks WHERE kind = ? AND entity_id = ? AND model = ? AND chunk_ix BETWEEN ? AND ? ORDER BY chunk_ix'
-  ).all(kind, entityId, model, chunkIx - radius, chunkIx + radius);
+  const rows = _selNeighbors.all(kind, entityId, model, chunkIx - radius, chunkIx + radius);
   let out = '';
   for (const r of rows) out = out ? mergeOverlap(out, r.text || '') : (r.text || '');
   return out;
@@ -204,7 +204,7 @@ function mergeOverlap(a, b, maxOverlap = 600) {
 // aus den Quelltabellen aufzurufen (Pages/Scenes/Figures).
 function remove(kind, entityId) {
   _delEntityAll.run(kind, entityId);
-  _bumpWriteGen();
+  _bumpWriteGen(); // Buch unbekannt → alle Caches
 }
 
 // Vektor-Cache für searchSimilar, pro (Buch, Modell). Jede Anfrage las sonst alle
@@ -214,23 +214,50 @@ function remove(kind, entityId) {
 // (nur die Gewinner brauchen ihn, per rowid nachgeladen).
 //
 // Invalidierung über zwei Signale, geprüft vor jeder Anfrage:
-//   - _writeGen: zählt jeden Schreibweg dieses Moduls hoch (replaceEntity,
-//     remove, pruneMissing, clearForeignModels) — andere Schreiber auf semantic_chunks
-//     gibt es nicht.
+//   - Schreibzähler: jeder Schreibweg dieses Moduls zählt hoch — pro Buch
+//     (replaceEntity, pruneMissing, clearForeignModels), global nur, wenn das Buch
+//     unbekannt ist (remove). Ein Index-Lauf an Buch A schreibt Entität für
+//     Entität; ein globaler Zähler verwürfe dabei bei jeder Anfrage an Buch B
+//     dessen ganzen Cache. Andere Schreiber auf semantic_chunks gibt es nicht.
 //   - Chunk-Anzahl des Buchs: fängt die FK-CASCADE-Löschungen (Seite/Figur/Szene/
 //     Buch gelöscht), die am Modul vorbeigehen. Kaskaden löschen nur, also sinkt
 //     die Anzahl immer; Einfügen geht ausschliesslich über replaceEntity.
+// Die Vektoren liegen im Cache auf Länge 1 normiert: der Cosinus gegen einen
+// ebenfalls normierten Anfrage-Vektor ist dann das blosse Skalarprodukt (die
+// Normen jedes Chunks nicht bei jeder Anfrage neu). Null-Vektoren fallen beim
+// Laden heraus (sie ranken ohnehin nie).
 // Deckel über die Summe der gecachten Chunks (LRU nach Buch): 1024-dim bge-m3
 // ≈ 4 KB je Chunk → 30k Chunks ≈ 120 MB.
 const VEC_CACHE_MAX_CHUNKS = 30000;
 const _vecCache = new Map(); // `${bookId}|${model}` → { gen, count, rows }
-let _writeGen = 0;
-function _bumpWriteGen() { _writeGen++; }
+let _globalGen = 0;
+const _bookGen = new Map(); // bookId → Zähler
+function _bumpWriteGen(bookId) {
+  if (bookId == null) { _globalGen++; return; }
+  _bookGen.set(Number(bookId), (_bookGen.get(Number(bookId)) || 0) + 1);
+}
+function _genOf(bookId) { return `${_globalGen}.${_bookGen.get(Number(bookId)) || 0}`; }
+
+// Kopie von v auf Länge 1 normiert, null bei Null-Vektor.
+function _normalized(v) {
+  let n = 0;
+  for (let i = 0; i < v.length; i++) n += v[i] * v[i];
+  if (!(n > 0)) return null;
+  const inv = 1 / Math.sqrt(n);
+  const out = new Float32Array(v.length);
+  for (let i = 0; i < v.length; i++) out[i] = v[i] * inv;
+  return out;
+}
+function _dot(a, b) {
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d += a[i] * b[i];
+  return d;
+}
 
 const _selBookCount = db.prepare('SELECT COUNT(*) AS n FROM semantic_chunks WHERE book_id = ?');
 const _selState = db.prepare('SELECT indexed_at FROM semantic_index_state WHERE book_id = ? AND model = ?');
 const _upsertState = db.prepare(`
-  INSERT INTO semantic_index_state (book_id, model, indexed_at) VALUES (?, ?, ${NOW_ISO_SQL})
+  INSERT INTO semantic_index_state (book_id, model, indexed_at) VALUES (?, ?, COALESCE(?, ${NOW_ISO_SQL}))
   ON CONFLICT(book_id, model) DO UPDATE SET indexed_at = excluded.indexed_at
 `);
 // ORDER BY hält die Scan-Reihenfolge (und damit Gleichstands-Auflösung) stabil.
@@ -239,27 +266,22 @@ const _selBookVectors = db.prepare(
 );
 const _selChunkText = db.prepare('SELECT text FROM semantic_chunks WHERE rowid = ?');
 
-// Volle Zeilen (mit Text) für den Redundanz-Radar. ORDER BY macht dessen
-// MAX_CHUNKS-Kappung deterministisch: ohne stabile Reihenfolge schnitte .slice()
-// in SQLite-rowid-Ordnung, und welche Passagen bei einem Buch über dem Cap
-// fehlen, wäre zwischen Läufen nicht reproduzierbar.
-const _selBookKinds = db.prepare(
-  'SELECT kind, entity_id, chunk_ix, text, vector FROM semantic_chunks WHERE book_id = ? AND model = ? ORDER BY entity_id, chunk_ix'
-);
-
 function _bookVectors(bookId, model) {
   const key = `${bookId}|${model}`;
   const count = _selBookCount.get(bookId).n;
+  const gen = _genOf(bookId);
   const hit = _vecCache.get(key);
-  if (hit && hit.gen === _writeGen && hit.count === count) {
+  if (hit && hit.gen === gen && hit.count === count) {
     _vecCache.delete(key); _vecCache.set(key, hit); // LRU: ans Ende
     return hit.rows;
   }
-  const rows = _selBookVectors.all(bookId, model).map(r => ({
-    rid: r.rid, kind: r.kind, entity_id: r.entity_id, chunk_ix: r.chunk_ix, vec: blobToVector(r.vector),
-  }));
+  const rows = [];
+  for (const r of _selBookVectors.all(bookId, model)) {
+    const vec = _normalized(blobToVector(r.vector));
+    if (vec) rows.push({ rid: r.rid, kind: r.kind, entity_id: r.entity_id, chunk_ix: r.chunk_ix, vec });
+  }
   _vecCache.delete(key);
-  _vecCache.set(key, { gen: _writeGen, count, rows });
+  _vecCache.set(key, { gen, count, rows });
   let total = 0;
   for (const e of _vecCache.values()) total += e.rows.length;
   for (const [k, e] of _vecCache) {
@@ -287,6 +309,12 @@ function _bookVectors(bookId, model) {
 // 2 = keine direkten Nachbarn, die per CHUNK_OVERLAP fast denselben Text tragen).
 // Wer danach um ±radius erweitert (withNeighbors), setzt 2·radius + 1.
 //
+// restrictTo: optional { [kind]: entityIds[] } — nur diese Entitäten (Kinds ohne
+// Eintrag fallen ganz heraus), gefiltert VOR dem topK-Schnitt. Für Aufrufer, die
+// in einem bekannten Ausschnitt suchen (Kontinuitäts-Beleg: Seiten der Kapitel
+// eines Befunds) — global top-K und danach filtern verlöre in grossen Büchern
+// fast alles.
+//
 // user: optionaler User-Scope. Szenen, Figuren, Schauplätze und Welt-Fakten sind
 // Analyse-Daten PRO USER, der Index führt sie buchweit für alle. Ohne Filter VOR
 // dem topK-Schnitt füllten fremde (Co-Autor-)Treffer die Liste, und der Aufrufer,
@@ -295,9 +323,14 @@ function _bookVectors(bookId, model) {
 // buch-geteilt und bleiben ungefiltert. `undefined` (Default) = kein Filter.
 function searchSimilar(bookId, model, queryVec, {
   kinds = null, topK = 20, excludeKind = null, excludeEntityId = null, minScore = 0, user,
-  perEntity = 1, minChunkGap = 2,
+  perEntity = 1, minChunkGap = 2, restrictTo = null,
 } = {}) {
   const kindSet = kinds && kinds.length ? new Set(kinds) : null;
+  const restrict = restrictTo
+    ? new Map(Object.entries(restrictTo).map(([k, ids]) => [k, new Set((ids || []).map(Number))]))
+    : null;
+  const q = queryVec ? _normalized(queryVec) : null;
+  if (!q) return [];
   const owned = user === undefined ? null : ownedEntityFilter(bookId, user);
   const maxPer = Math.max(1, Math.floor(Number(perEntity) || 1));
   const gap = Math.max(1, Math.floor(Number(minChunkGap) || 1));
@@ -305,9 +338,11 @@ function searchSimilar(bookId, model, queryVec, {
   const best = maxPer === 1 ? new Map() : null; // key `${kind}:${entity_id}` → bester Chunk
   for (const r of _bookVectors(bookId, model)) {
     if (kindSet && !kindSet.has(r.kind)) continue;
-    if (excludeKind && r.kind === excludeKind && r.entity_id === excludeEntityId) continue;
+    if (excludeKind && r.kind === excludeKind && r.entity_id === Number(excludeEntityId)) continue;
+    if (restrict && !restrict.get(r.kind)?.has(r.entity_id)) continue;
     if (owned && !owned(r.kind, r.entity_id)) continue;
-    const score = cosineSim(queryVec, r.vec);
+    if (r.vec.length !== q.length) continue; // Fremdmodell-/Dimensions-Rest
+    const score = _dot(q, r.vec);
     if (!Number.isFinite(score)) continue;
     if (score < minScore) continue;
     const hit = { kind: r.kind, entity_id: r.entity_id, chunk_ix: r.chunk_ix, rid: r.rid, score };
@@ -371,10 +406,11 @@ function ownedEntityFilter(bookId, userEmail) {
 // Verteilung im Inneren eines langen Dokuments (Recherche-PDF), von dem mehrere
 // Passagen zur Frage passen können. Kein Embedding-Call für die Chunks — die
 // Vektoren liegen schon; der Aufrufer bringt nur den Query-Vektor mit.
+const _selEntityFull = db.prepare(
+  'SELECT chunk_ix, text, vector FROM semantic_chunks WHERE kind = ? AND entity_id = ? AND model = ? ORDER BY chunk_ix'
+);
 function searchInEntity(kind, entityId, model, queryVec, { topK = 5, minScore = 0 } = {}) {
-  const rows = db.prepare(
-    'SELECT chunk_ix, text, vector FROM semantic_chunks WHERE kind = ? AND entity_id = ? AND model = ? ORDER BY chunk_ix'
-  ).all(kind, entityId, model);
+  const rows = _selEntityFull.all(kind, entityId, model);
   const out = [];
   for (const r of rows) {
     const score = cosineSim(queryVec, blobToVector(r.vector));
@@ -382,55 +418,6 @@ function searchInEntity(kind, entityId, model, queryVec, { topK = 5, minScore = 
     out.push({ chunk_ix: r.chunk_ix, text: r.text, score });
   }
   return out.sort((a, b) => b.score - a.score).slice(0, topK);
-}
-
-// Alle Chunks eines Buches unter einem Modell für den Redundanz-Radar laden:
-// pro Chunk { entity_id, chunk_ix, text, vector:Float32Array }, gefiltert auf die
-// angegebenen kinds (Redundanz vergleicht nur Seiten). Basis des All-Pairs-
-// Cosinus in lib/redundancy.js — kein Embedding-Call, die Vektoren liegen schon.
-function loadChunksForPairing(bookId, model, kinds = ['page']) {
-  const kindSet = new Set(kinds);
-  const out = [];
-  for (const r of _selBookKinds.all(bookId, model)) {
-    if (!kindSet.has(r.kind)) continue;
-    out.push({ entity_id: r.entity_id, chunk_ix: r.chunk_ix, text: r.text, vector: blobToVector(r.vector) });
-  }
-  return out;
-}
-
-// Gemittelte Profil-Vektoren aller Figuren eines Buchs für den Figuren-Dubletten-
-// Radar (lib/redundancy.js#findFigureDuplicates). EIN Vektor je Figur (Mittel über
-// ihre Chunks unter model). Der JOIN auf figures scoped auf den anfragenden User
-// und filtert stale-Figuren — der embed-index indexiert Figuren buchweit über alle
-// User und OHNE stale-Filter, ein ungefilterter Vergleich brächte Fremd-User- und
-// verwaiste Figuren als Falsch-Treffer. Rückgabe: [{ id, fig_id, name, vector:Float32Array }]
-// (`fig_id` = öffentliche Kennung, Katalog-`id` im Frontend).
-function loadFigureVectorsForPairing(bookId, userEmail, model) {
-  const rows = db.prepare(`
-    SELECT sc.entity_id, sc.vector, f.name, f.fig_id
-      FROM semantic_chunks sc
-      JOIN figures f ON f.id = sc.entity_id
-     WHERE sc.book_id = ? AND sc.model = ? AND sc.kind = 'figure'
-       AND f.book_id = ? AND f.user_email IS ? AND f.stale = 0
-     ORDER BY sc.entity_id, sc.chunk_ix
-  `).all(bookId, model, bookId, userEmail || null);
-  const acc = new Map(); // entity_id → { name, fig_id, sum:Float32Array, count }
-  for (const r of rows) {
-    const v = blobToVector(r.vector);
-    let e = acc.get(r.entity_id);
-    if (!e) { e = { name: r.name, fig_id: r.fig_id, sum: new Float32Array(v.length), count: 0 }; acc.set(r.entity_id, e); }
-    if (v.length !== e.sum.length) continue; // Fremdmodell-Rest überspringen
-    for (let i = 0; i < v.length; i++) e.sum[i] += v[i];
-    e.count++;
-  }
-  const out = [];
-  for (const [id, e] of acc) {
-    if (!e.count) continue;
-    const vec = new Float32Array(e.sum.length);
-    for (let i = 0; i < vec.length; i++) vec[i] = e.sum[i] / e.count;
-    out.push({ id, fig_id: e.fig_id, name: e.name, vector: vec });
-  }
-  return out;
 }
 
 // Repräsentativer Vektor einer indizierten Entität = Mittel über ihre Chunks
@@ -501,17 +488,19 @@ function pruneMissing(bookId, model, kind, keepIds) {
       if (!keep.has(Number(r.entity_id))) { del.run(bookId, model, kind, r.entity_id); removed++; }
     }
   })();
-  if (removed) _bumpWriteGen();
+  if (removed) _bumpWriteGen(bookId);
   return removed;
 }
 
-// Ende des letzten VOLLSTÄNDIGEN Index-Laufs (ISO) oder null. Nur der Index-Job
+// Beginn des letzten VOLLSTÄNDIGEN Index-Laufs (ISO) oder null. Nur der Index-Job
 // schreibt ihn, und nur, wenn er bis zum Ende durchlief.
 function lastIndexedAt(bookId, model) {
   return _selState.get(bookId, model)?.indexed_at || null;
 }
-function markIndexed(bookId, model) {
-  _upsertState.run(bookId, model);
+// at: ISO-Zeitpunkt, ab dem der Stand gilt (der Index-Job übergibt seinen
+// Lauf-Beginn); ohne Angabe jetzt.
+function markIndexed(bookId, model, at = null) {
+  _upsertState.run(bookId, model, at);
 }
 // Gibt es einen brauchbaren Index? Ein Buch ohne indizierbaren Text hat nach
 // einem vollständigen Lauf zwar keinen Chunk, ist aber „indiziert".
@@ -519,7 +508,7 @@ function isIndexed(bookId, model) {
   return lastIndexedAt(bookId, model) != null;
 }
 
-// Index-Frische für die Such-Karte. lastIndexedAt = Ende des letzten vollständigen
+// Index-Frische für die Such-Karte. lastIndexedAt = Beginn des letzten vollständigen
 // Laufs (semantic_index_state). staleCount = Quell-Entitäten, deren updated_at
 // danach liegt (seither geändert oder neu hinzugekommen) — billiger Heuristik-
 // Zähler ohne Re-Hashing. Plus bookStats (total/byKind/staleModel).
@@ -547,43 +536,11 @@ function indexStatus(bookId, model, userEmail) {
 function clearForeignModels(bookId, model) {
   const n = db.prepare('DELETE FROM semantic_chunks WHERE book_id = ? AND model <> ?').run(bookId, model).changes;
   db.prepare('DELETE FROM semantic_index_state WHERE book_id = ? AND model <> ?').run(bookId, model);
-  if (n) _bumpWriteGen();
+  if (n) _bumpWriteGen(bookId);
   return n;
 }
 
-// Seiten-Chunks eines Buchs samt KAPITEL-Zuordnung fuer die Buchlandkarte
-// (lib/book-map.js). Wie loadChunksForPairing, aber mit `chapter_id` — die Karte
-// gruppiert und faerbt nach Kapitel, und die Kohaesions-Kennzahl braucht die
-// Zuordnung ueberhaupt erst.
-//
-// Der JOIN auf `pages` ist der sanktionierte Fall der Content-Store-Regel: eine
-// abgeleitete Tabelle braucht zur Lesezeit einen Wert aus `pages`, und die
-// Abfrage liegt darum in ihrem eigenen db/-Modul statt im Handler (Muster
-// db/sources/citations.js#listSourceCitations). Es kommt bewusst KEIN Seiten-NAME
-// mit: den loest das Frontend aus der ohnehin geladenen Navigationsliste auf
-// (gleiche Regel wie beim Redundanz-Radar), und eine Snapshot-Spalte waere hier
-// erst recht falsch.
-//
-// `book_id` doppelt geprueft (an den Chunks UND an der Seite): eine Seite, die in
-// ein anderes Buch verschoben wurde, haelt ihre Vektoren bis zum naechsten
-// Reindex — sie darf nicht in der Landkarte des alten Buchs auftauchen.
-// Rueckgabe: [{ entity_id, chapter_id, text, vector:Float32Array }].
-function loadPageChunksWithChapter(bookId, model) {
-  const rows = db.prepare(`
-    SELECT sc.entity_id, sc.text, sc.vector, p.chapter_id
-      FROM semantic_chunks sc
-      JOIN pages p ON p.page_id = sc.entity_id
-     WHERE sc.book_id = ? AND sc.model = ? AND sc.kind = 'page'
-       AND p.book_id = ?
-     ORDER BY sc.entity_id, sc.chunk_ix
-  `).all(bookId, model, bookId);
-  return rows.map(r => ({
-    entity_id: r.entity_id,
-    chapter_id: r.chapter_id ?? null,
-    text: r.text,
-    vector: blobToVector(r.vector),
-  }));
-}
+const { loadChunksForPairing, loadFigureVectorsForPairing, loadPageChunksWithChapter } = require('./semantic-chunks/pairing');
 
 module.exports = {
   getEntityChunks, reusableVectors, dropRecycled, ownedEntityFilter, replaceEntity, remove, searchSimilar, searchInEntity, getEntityVector, getEntityText,

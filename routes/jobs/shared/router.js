@@ -111,11 +111,23 @@ sharedRouter.get('/runs', (req, res) => {
   }));
 });
 
+// Buch-System-Jobs (userEmail null, eine Sperre pro Buch für alle User): der
+// Embedding-Index. Suche und Buchlandkarte hängen sich an einen laufenden Lauf —
+// mit der Session-E-Mail fände findActiveJobId ihn nie. Dafür muss der Aufrufer
+// das Buch sehen dürfen.
+const BOOK_SYSTEM_JOB_TYPES = new Set(['embed-index']);
+
 sharedRouter.get('/active', (req, res) => {
   const { type, book_id, page_id } = req.query;
   const entityId = page_id || book_id;
   if (!type || !entityId) return res.status(400).json({ error_code: 'TYPE_ENTITY_REQUIRED' });
-  const userEmail = sessionEmail(req);
+  let userEmail = sessionEmail(req);
+  if (BOOK_SYSTEM_JOB_TYPES.has(type)) {
+    const bookId = toIntId(book_id);
+    if (!bookId) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
+    if (!guardBook(req, res, bookId, 'viewer')) return;
+    userEmail = null;
+  }
   const jobId = findActiveJobId(type, entityId, userEmail);
   if (!jobId) return res.json({ jobId: null });
   const job = jobs.get(jobId);

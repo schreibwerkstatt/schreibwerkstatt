@@ -149,16 +149,22 @@ function listUnindexedRounds(bookId, model, { afterId = 0, limit = 200 } = {}) {
   `).all(bookId, ...SEARCHABLE_KINDS, afterId, model, limit);
 }
 
-/** Zahl der noch nicht vektorisierten Runden eines Buchs unter `model`. */
-function countUnindexedRounds(bookId, model) {
+/**
+ * Zahl der noch nicht vektorisierten Runden eines Buchs unter `model`. Mit
+ * `userEmail` nur die eigenen Gespräche dieses Users (Suche: «N deiner Runden sind
+ * noch nicht durchsuchbar» — fremde Gespräche gehen ihn nichts an); ohne alle User
+ * (Index-Job, System-Job pro Buch).
+ */
+function countUnindexedRounds(bookId, model, { userEmail = null } = {}) {
+  const userSql = userEmail ? ' AND s.user_email = ?' : '';
   return db.prepare(`
     SELECT COUNT(*) AS n
       FROM chat_messages a
       JOIN chat_sessions s ON s.id = a.session_id
-     WHERE s.book_id = ? AND s.kind IN (${SEARCHABLE_KINDS.map(() => '?').join(',')})
+     WHERE s.book_id = ? AND s.kind IN (${SEARCHABLE_KINDS.map(() => '?').join(',')})${userSql}
        AND a.role = 'assistant' AND ${_INDEXABLE}
        AND NOT EXISTS (SELECT 1 FROM chat_semantic_chunks c WHERE c.message_id = a.id AND c.model = ?)
-  `).get(bookId, ...SEARCHABLE_KINDS, model).n;
+  `).get(bookId, ...SEARCHABLE_KINDS, ...(userEmail ? [userEmail] : []), model).n;
 }
 
 /** Bücher mit mindestens einer noch nicht vektorisierten Runde (Nacht-Cron). */

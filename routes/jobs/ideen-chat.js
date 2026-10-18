@@ -25,7 +25,7 @@ const { runIdeenChatJobClassic } = require('./ideen-chat-classic');
 const embed = require('../../lib/embed');
 const appSettings = require('../../lib/app-settings');
 const { getSessionWithBookName } = require('../../db/chat-sessions');
-const { agentPreContext, retrievalQuery } = require('./chat/book-chat-retrieval');
+const { agentPreContext, preContextStatus, retrievalQuery } = require('./chat/book-chat-retrieval');
 
 function _maxToolIter(provider, userEmail) {
   const base = parseInt(appSettings.get('jobs.ideen_chat.max_tool_iter'), 10) || 8;
@@ -112,6 +112,7 @@ const runIdeenChatJob = makeAgenticChatJob({
     const systemPrompt = buildIdeenChatSystemPrompt(session.book_name || '', {
       mode: 'agent',
       passages: embOn ? (preContext?.hits || []) : null,
+      passageStatus: preContextStatus(preContext, { enabled: embOn }),
       maxToolIter,
       toolNames: tools.map(t => t.name),
       bookContext: base.bookContext,

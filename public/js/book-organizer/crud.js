@@ -35,7 +35,7 @@ export const crudMethods = {
   async _doRenameChapter(id, newName, inputEl) {
     const root = window.__app;
     try {
-      await contentRepo.updateChapter(id, { name: newName });
+      await contentRepo.updateChapter(id, { name: newName }, { bookId: Alpine.store('nav').selectedBookId });
       const ch = this._findChapter(id)?.node;
       if (ch) ch.name = newName;
       // In-place mirror: Kapitel-Eintrag in nav.tree (enthaelt alle Tiefen)
@@ -253,7 +253,7 @@ export const crudMethods = {
     const found = this._findChapter(id);
     if (!found) return false;
     return await this._runMutation(async () => {
-      await contentRepo.deleteChapter(id);
+      await contentRepo.deleteChapter(id, { bookId: nav.selectedBookId });
       for (let i = nav.tree.length - 1; i >= 0; i--) {
         const it = nav.tree[i];
         if (it.type === 'chapter' && !it.solo && it.id === id) nav.tree.splice(i, 1);

@@ -51,6 +51,15 @@
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#scale"/></svg>
           <span x-text="t('pagetreeCtx.reviewChapter')"></span>
         </button>
+        <!-- Tastatur-Zugang zu den Plaketten der Zeile: die sind ausserhalb der
+             Tab-Folge (ein Tab-Stopp im Baum, keine Bedienelemente im Link). -->
+        <template x-for="b in _pagetreeCtxBadges()" :key="b.kind">
+          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                  @click="pagetreeCtxOpenBadge(b)">
+            <svg class="icon" aria-hidden="true"><use :href="'/icons.svg#' + b.icon"/></svg>
+            <span x-text="t(b.label, { n: b.n })"></span>
+          </button>
+        </template>
         <div class="context-menu-sep" role="separator"></div>
         <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
                 @click="pagetreeCtxShare()">
@@ -89,10 +98,14 @@
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
               <span x-text="t('pagetreeCtx.newPage')"></span>
             </button>
+            <!-- Ueber einen Vorfahren ausgeschlossen: das eigene Flag zu kippen
+                 aenderte nichts (der Ausschluss kaskadiert serverseitig). -->
             <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                    :disabled="pageTreeMenuTarget.excludedByParent && !pageTreeMenuTarget.excluded"
                     @click="pagetreeCtxToggleExclude()">
               <svg class="icon" aria-hidden="true"><use :href="'/icons.svg#' + (pageTreeMenuTarget.excluded ? 'rotate-cw' : 'archive')"/></svg>
-              <span x-text="pageTreeMenuTarget.excluded ? t('pagetreeCtx.includeChapter') : t('pagetreeCtx.excludeChapter')"></span>
+              <span x-text="pageTreeMenuTarget.excluded ? t('pagetreeCtx.includeChapter')
+                : (pageTreeMenuTarget.excludedByParent ? t('pagetreeCtx.excludedByParent') : t('pagetreeCtx.excludeChapter'))"></span>
             </button>
           </div>
         </template>
@@ -115,13 +128,22 @@
             </template>
           </div>
         </template>
-        <template x-if="pageTreeMenuTarget.kind === 'page' && canEdit()">
+        <!-- Loeschen: Abschnitt; Kapitel nur leer (wie im Buchorganizer) oder als
+             Ein-Abschnitt-Zeile — dort mitsamt dem einen Abschnitt. -->
+        <template x-if="canEdit() && (pageTreeMenuTarget.kind === 'page' || pageTreeMenuTarget.empty)">
           <div>
             <div class="context-menu-sep" role="separator"></div>
             <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
+                    x-show="pageTreeMenuTarget.kind === 'page'"
                     @click="pagetreeCtxDeletePage()">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
               <span x-text="t('pagetreeCtx.delete')"></span>
+            </button>
+            <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
+                    x-show="pageTreeMenuTarget.single || pageTreeMenuTarget.empty"
+                    @click="pagetreeCtxDeleteChapter()">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+              <span x-text="t('pagetreeCtx.deleteChapter')"></span>
             </button>
           </div>
         </template>

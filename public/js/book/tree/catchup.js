@@ -95,9 +95,20 @@ export const treeCatchUpMethods = {
       // fertig: seiner ist juenger. `treeLoading` allein sieht den zweiten Fall
       // nicht, die Generation schon.
       if (this.treeLoading || (this._treeLoadGen || 0) !== loadGen) return;
+      const before = new Map(this.$store.nav.pages.map(p => [p.id, p.updated_at]));
       this._buildTreeFromResponse(tree, bookId);
-      // Neue Seiten haben noch keinen Token-Schaetzwert — ohne das bliebe ihre
-      // Plakette und die Σ-Zeile der Sidebar leer. Idempotent, holt nur Fehlendes.
+      // Anderswo bearbeitete Abschnitte: ihr Schaetzwert ist der alte Umfang.
+      // Verwerfen, damit der Nachlauf unten sie wie fehlende neu holt (der
+      // Server rechnet veraltete page_stats dabei nach, routes/sync.js).
+      const stale = this._staleTokEstIds(before);
+      if (stale.length) {
+        const next = { ...this.tokEsts };
+        for (const id of stale) delete next[id];
+        this.tokEsts = next;
+      }
+      // Neue und veraltete Seiten haben keinen Token-Schaetzwert — ohne das
+      // bliebe ihre Plakette und die Σ-Zeile der Sidebar leer bzw. alt.
+      // Idempotent, holt nur Fehlendes.
       this.loadTokenEstimates(this._tokenEstGen);
       window.dispatchEvent(new CustomEvent(EVT.PAGES_LOADED, { detail: { bookId } }));
     } catch (e) {
@@ -108,6 +119,17 @@ export const treeCatchUpMethods = {
     } finally {
       this._treeCatchUpInflight = false;
     }
+  },
+
+  // IDs der Seiten mit Schaetzwert, deren `updated_at` vom Stand `before`
+  // (Map id → updated_at vor dem Neubau) abweicht.
+  _staleTokEstIds(before) {
+    const out = [];
+    for (const p of this.$store.nav.pages) {
+      if (!this.tokEsts[p.id] || !before.has(p.id)) continue;
+      if ((before.get(p.id) || '') !== (p.updated_at || '')) out.push(p.id);
+    }
+    return out;
   },
 
   // Drift-Probe: hat eine ANDERE Partei seit dem Stand dieses Baums geschrieben?

@@ -31,7 +31,19 @@ async function tool_search_chat_history(input, ctx) {
     created_at: h.created_at,
     snippet: h.plain.length > SNIPPET_CHARS ? h.plain.slice(0, SNIPPET_CHARS) + '…' : h.plain,
   }));
-  return { query, count: results.length, results };
+  // Stand der Bedeutungssuche: ohne diese Felder läse das Modell eine reine
+  // Wortlaut-Trefferliste als vollständig.
+  const status = {};
+  if (r.semanticError) {
+    status.semantic_unavailable = true;
+    status.hint = 'Bedeutungssuche ausgefallen — nur Wortlaut-Treffer; anders formulierte frühere Gespräche fehlen.';
+  } else if (r.pending > 0) {
+    status.unindexed_rounds = r.pending;
+    status.hint = `${r.pending} frühere Gesprächsrunde(n) sind noch nicht nach Bedeutung durchsuchbar (nur nach Wortlaut).`;
+  } else if (!r.semantic) {
+    status.hint = 'Keine Bedeutungssuche konfiguriert — nur Wortlaut-Treffer.';
+  }
+  return { query, count: results.length, ...status, results };
 }
 
 module.exports = { tool_search_chat_history };

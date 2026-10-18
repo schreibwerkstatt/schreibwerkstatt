@@ -86,8 +86,41 @@ test('verifyKontinuitaetProbleme: paraphrasiertes Zitat → Live-Passage aus dem
     assert.equal(seen[0].exB, '', 'leeres stelle_b → kein Ausschnitt');
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0].opts.kinds, ['page']);
+    assert.deepEqual(calls[0].opts.restrictTo, { page: [5] }, 'Suchraum vor dem topK-Schnitt auf die Befund-Seiten');
     assert.equal(calls[0].bookId, 77);
   });
+});
+
+test('_semanticExcerpt: Rerank-Tor gilt nur für vom Cross-Encoder bewertete Treffer', async () => {
+  const rerank = require_('../../lib/rerank');
+  const orig = { isEnabled: rerank.isEnabled, getConfig: rerank.getConfig, get: appSettings.get };
+  rerank.isEnabled = () => true;
+  rerank.getConfig = () => ({ ...orig.getConfig.call(rerank), minScore: 0.4 });
+  appSettings.get = (k) => (k === 'embed.min_score' ? 0.5 : orig.get(k));
+  const live = new Map([[5, 'Der Wald lag still. Anna ging heim.']]);
+  try {
+    // Rerank bewertet, unter dem Tor → verworfen, auch bei hohem Cosinus
+    await withRetrieval({ semanticQuery: async () => ([
+      { kind: 'page', entity_id: 5, text: 'Anna ging heim', score: 0.1, rerankScore: 0.1, semScore: 0.9 },
+    ]) }, async () => {
+      assert.equal(await _semanticExcerpt(77, 'Anna', live, undefined), null);
+    });
+    // Reranker ausgefallen (rerankScore null): RRF-score klein, Cosinus über Floor → Beleg
+    await withRetrieval({ semanticQuery: async () => ([
+      { kind: 'page', entity_id: 5, text: 'Anna ging heim', score: 0.016, rerankScore: null, semScore: 0.6 },
+    ]) }, async () => {
+      const r = await _semanticExcerpt(77, 'Anna', live, undefined);
+      assert.match(r.text, /Anna ging heim/);
+    });
+    // Rerank bewertet, über dem Tor → Beleg, auch bei Cosinus unter embed.min_score
+    await withRetrieval({ semanticQuery: async () => ([
+      { kind: 'page', entity_id: 5, text: 'Anna ging heim', score: 0.8, rerankScore: 0.8, semScore: 0.3 },
+    ]) }, async () => {
+      assert.ok(await _semanticExcerpt(77, 'Anna', live, undefined));
+    });
+  } finally {
+    rerank.isEnabled = orig.isEnabled; rerank.getConfig = orig.getConfig; appSettings.get = orig.get;
+  }
 });
 
 test('_semanticExcerpt: Cosinus unter embed.min_score bzw. ohne semScore → kein Beleg', async () => {

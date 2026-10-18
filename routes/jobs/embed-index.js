@@ -155,9 +155,11 @@ async function runEmbedIndexJob(jobId, bookId, userEmail) {
         return kindCache.get(hash);
       };
       for (const ent of entities[kind]) {
-        presentIds[kind].push(ent.id);
         const chunks = chunkText(ent.text);
+        // Kein Chunk (nur Leerraum) → wie leerer Text: nicht in presentIds,
+        // pruneMissing räumt alte Chunks der Entität.
         if (!chunks.length) continue;
+        presentIds[kind].push(ent.id);
         const key = `${kind}:${ent.id}`;
         const existing = semanticChunks.getEntityChunks(kind, ent.id, model);
         // Delta-Cache über den Hash statt über die Position: verschiebt eine
@@ -256,8 +258,10 @@ async function runEmbedIndexJob(jobId, bookId, userEmail) {
     let pruned = 0;
     for (const kind of KINDS) pruned += semanticChunks.pruneMissing(bookId, model, kind, presentIds[kind]);
     // Erst jetzt gilt der Index als vollständig — Konsumenten, die „kein Treffer"
-    // als „kommt nicht vor" werten, verlassen sich darauf (isIndexed).
-    semanticChunks.markIndexed(bookId, model);
+    // als „kommt nicht vor" werten, verlassen sich darauf (isIndexed). Gestempelt
+    // wird der Lauf-BEGINN: was nach dem Sammeln geändert wurde, steht nicht im
+    // Index und muss im staleCount/Freshness-Vergleich (updated_at > Stempel) zählen.
+    semanticChunks.markIndexed(bookId, model, runStartedAt);
     semanticChunks.dropRecycled(bookId, runStartedAt);
     const dropped = semanticChunks.clearForeignModels(bookId, model);
     if (dropped) logger.info(`Fremdmodell-Chunks entfernt: ${dropped} (aktives Modell ${model}).`);
@@ -379,7 +383,9 @@ embedIndexRouter.post('/embed-index', jsonBody, (req, res) => {
   logger.info(`Index-Lauf angefordert von ${sessionEmail(req)} (Buch ${bookId}).`);
   const existing = findActiveJobId('embed-index', bookId, null);
   const jobId = enqueueEmbedIndexJob(bookId);
-  res.json(existing ? { jobId, existing: true } : { jobId });
+  // rerunQueued: der laufende Lauf sieht die jüngsten Änderungen nicht, ein
+  // Folgelauf ist vorgemerkt — wer danach scannen will, wartet auch auf ihn.
+  res.json(existing ? { jobId, existing: true, rerunQueued: _rerunRequested.has(bookId) } : { jobId });
 });
 
 module.exports = {

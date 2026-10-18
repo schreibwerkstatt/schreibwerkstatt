@@ -275,14 +275,19 @@ export const contentRepo = {
     return _write('POST', 'chapters', body, inv);
   },
 
-  async updateChapter(id, body) {
+  // `bookId` (oder `body.book_id`) zieht den Baum-Cache des Buchs mit — sonst
+  // zeigte der naechste Kaltstart aus dem SW-Cache den alten Namen/Ausschluss.
+  async updateChapter(id, body, { bookId } = {}) {
     const inv = ['chapters/' + id];
-    if (body?.book_id) inv.push('books/' + body.book_id + '/tree');
+    const treeBook = body?.book_id ?? bookId;
+    if (treeBook != null) inv.push('books/' + treeBook + '/tree');
     return _write('PUT', 'chapters/' + id, body, inv);
   },
 
-  async deleteChapter(id) {
-    return _write('DELETE', 'chapters/' + id);
+  async deleteChapter(id, { bookId } = {}) {
+    const inv = ['chapters/' + id];
+    if (bookId != null) inv.push('books/' + bookId + '/tree');
+    return _write('DELETE', 'chapters/' + id, undefined, inv);
   },
 
   // POST /content/books mit `{ name, description? }`. Server upserted lokale books-Row.

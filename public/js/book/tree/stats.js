@@ -133,20 +133,14 @@ export const treeStatsMethods = {
     }).catch(() => {});
   },
 
-  // Seitenzahl fuer das Kapitelkopf-Tag. Bei aktiver Suche die Trefferzahl (die
-  // Such-Items tragen gefilterte `pages`), sonst der ganze Subtree.
+  // Seitenzahl fuer das Kapitelkopf-Tag. Bei aktiver Suche oder Stand-Filter
+  // die Trefferzahl (die Kopien tragen gefilterte `pages`), sonst der ganze Subtree.
   _chapterPageCount(item) {
     if (!item) return 0;
-    if (this.pageSearch) return item.pages.length;
+    if (this._treeIsFiltered()) return item.pages.length;
     return item.pageTotal ?? item.pages.length;
   },
 
-  // Kapitel aus genau einem Abschnitt ohne Unterkapitel: die Sidebar zeigt es
-  // als EINE Zeile (Kapitelname, Klick oeffnet den Abschnitt) statt Kapitelkopf
-  // + gleichlautender Abschnittszeile darunter. Bei aktiver Suche tragen die
-  // Such-Kopien gefilterte `pages` — dort zaehlt der ganze Bestand
-  // (`pageTotal`), sonst verschmoelze ein Mehr-Abschnitt-Kapitel mit seinem
-  // einzigen Treffer.
   // Template-Zugang zur Namensregel (Sidebar: Untertitel nur bei abweichendem
   // Abschnittsnamen).
   sameStructureTitle(a, b) { return sameStructureTitle(a, b); },
@@ -161,10 +155,17 @@ export const treeStatsMethods = {
     return leaves.length > 0 && leaves.every(i => i.pages.length === 1);
   },
 
+  // Kapitel aus genau einem Abschnitt ohne Unterkapitel: die Sidebar zeigt es
+  // als EINE Zeile (Kapitelname, Klick oeffnet den Abschnitt) statt Kapitelkopf
+  // + gleichlautender Abschnittszeile darunter. Bei aktiver Suche oder
+  // Stand-Filter tragen die Kopien gefilterte `pages` — dort zaehlt der ganze
+  // Bestand (`pageTotal`), sonst verschmoelze ein Mehr-Abschnitt-Kapitel mit
+  // seinem einzigen Treffer, und das Kontextmenue der Zeile wirkte (Umbenennen,
+  // Teilen, Export) auf das Kapitel statt auf den Abschnitt.
   _isSingleSectionChapter(item) {
     if (!item || item.type !== 'chapter' || item.solo || item.hasChildren) return false;
     if (item.pages?.length !== 1) return false;
-    return !this.pageSearch || (item.pageTotal ?? 1) === 1;
+    return !this._treeIsFiltered() || (item.pageTotal ?? 1) === 1;
   },
 
   // Setzt `item.stats` für jedes Kapitel der aktuellen Tree-Struktur.
@@ -212,5 +213,7 @@ export const treeStatsMethods = {
           }
         : null;
     }
+    // Such-/Filter-Kopien tragen `stats`/`pageTotal` vom Kopierzeitpunkt.
+    this._bumpTreeRev();
   },
 };

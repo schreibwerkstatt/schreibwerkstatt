@@ -242,7 +242,7 @@ export const pageMethods = {
       if (it.solo && it.pages?.[0]?.id === pageId) it.name = name;
       for (const p of it.pages || []) if (p.id === pageId) p.name = name;
     }
-    this._filteredTreeMemo = null;
+    this._bumpTreeRev?.();
     this._rebuildTreeOrderMaps?.();
     // nav.pages-Identität neu setzen → invalidiert den identity-gateten
     // Diary-Kalender-Cache (er keyt auf den YYYY-MM-DD-Page-Namen).

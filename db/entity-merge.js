@@ -26,14 +26,18 @@
 //                            embed-index baut neu)
 //   motif_occurrences      → CASCADE beim Loeschen der Quelle (motif-scan baut neu)
 //   plot_beat_occurrences  → CASCADE beim Loeschen der Quelle (beat-anchor baut neu)
+//   draft_figure_occurrences → CASCADE beim Loeschen einer Quell-SZENE (FK scene_id;
+//                            figur-anchor baut neu)
 // `page_figure_mentions` wird trotzdem summiert umgehaengt (statt nur geloescht),
 // damit der Stand auch ohne anschliessendes recomputeBookFigureMentions nie
 // schlechter ist als vorher.
 //
 // Der FTS-Index bleibt Sache des Callers (searchIndex.remove/upsert) — genau wie
-// bei den bestehenden Einzel-Delete-Handlern in routes/figures.js. Der Embedding-
-// Index braucht keinen Caller-Schritt: seine Zeilen fallen per FK-CASCADE mit der
-// Quelle. Dieses Modul haelt sich frei von lib/-Abhaengigkeiten.
+// bei den bestehenden Einzel-Delete-Handlern in routes/figures.js. Ebenso der
+// Embedding-Index: die Zeilen der Quelle fallen per FK-CASCADE, der Chunk des Ziels
+// ist nach dem Feld-Backfill aber veraltet — die Merge-Routen stossen darum einen
+// Delta-Lauf an (routes/jobs/embed-index.js#enqueueEmbedIndexJob). Dieses Modul
+// haelt sich frei von lib-/Job-Abhaengigkeiten.
 //
 // Figuren tragen einen persistenten Alias: Name und Kurzname der Quelle (samt deren
 // eigenen Aliassen) landen in `figure_aliases` des Ziels (db/figures/aliases.js).

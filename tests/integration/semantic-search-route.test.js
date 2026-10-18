@@ -163,3 +163,50 @@ test('notIndexed wird durchgereicht', async () => {
   assert.equal(r.status, 200);
   assert.equal(r.json.notIndexed, true);
 });
+
+test('Backend-Fehler: 503 ohne interne Details (Embedding-Host bleibt verborgen)', async () => {
+  const origQ = semanticRetrieval.semanticQuery;
+  const origS = semanticRetrieval.semanticSourceQuery;
+  const boom = async () => { throw new Error('connect ECONNREFUSED 10.0.0.5:8080'); };
+  semanticRetrieval.semanticQuery = boom;
+  semanticRetrieval.semanticSourceQuery = boom;
+  try {
+    for (const path of [`/search/semantic?book_id=${BOOK}&q=Leuchtturm`, '/search/sources-semantic?q=Leuchtturm']) {
+      const r = await get(path);
+      assert.equal(r.status, 503, path);
+      assert.equal(r.json.error_code, 'EMBED_UNAVAILABLE', path);
+      assert.equal(r.json.detail, undefined, path);
+      assert.ok(!JSON.stringify(r.json).includes('10.0.0.5'), path);
+    }
+  } finally {
+    semanticRetrieval.semanticQuery = origQ;
+    semanticRetrieval.semanticSourceQuery = origS;
+  }
+});
+
+test('Client bricht ab → Signal an semanticQuery feuert', async () => {
+  const origQ = semanticRetrieval.semanticQuery;
+  let seenSignal = null;
+  let release;
+  const reached = new Promise(r => { release = r; });
+  semanticRetrieval.semanticQuery = (bookId, q, opts) => {
+    seenSignal = opts.signal;
+    release();
+    return new Promise((_, reject) => {
+      opts.signal.addEventListener('abort', () => {
+        const e = new Error('aborted'); e.name = 'AbortError'; reject(e);
+      });
+    });
+  };
+  try {
+    const ac = new AbortController();
+    const p = fetch(`${baseUrl}/search/semantic?book_id=${BOOK}&q=Leuchtturm`, { signal: ac.signal }).catch(e => e);
+    await reached;
+    ac.abort();
+    await p;
+    for (let i = 0; i < 50 && !seenSignal.aborted; i++) await new Promise(r => setTimeout(r, 10));
+    assert.equal(seenSignal.aborted, true);
+  } finally {
+    semanticRetrieval.semanticQuery = origQ;
+  }
+});

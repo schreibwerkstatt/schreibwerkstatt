@@ -79,23 +79,37 @@ function _verifyFloors() {
     minRerank: rr && rr.minScore > 0 ? rr.minScore : null,
   };
 }
+// Konfidenz-Tor eines Treffers. Hat der Cross-Encoder den Treffer bewertet
+// (`rerankScore` gesetzt) und ist ein Rerank-Tor konfiguriert, entscheidet allein
+// dieses. Ohne Rerank-Wert (Reranker aus/ausgefallen) gilt der rohe Cosinus gegen
+// embed.min_score — `score` wäre dann ein RRF-Wert und mit dem Rerank-Tor nicht
+// vergleichbar.
+function _passesVerifyFloor(h, { minCos, minRerank }) {
+  if (minRerank != null && h.rerankScore != null) return h.rerankScore >= minRerank;
+  return h.semScore != null && h.semScore >= minCos;
+}
 async function _semanticExcerpt(bookId, query, pageTexts, signal) {
   const q = String(query || '').trim();
   if (!q || !pageTexts || !pageTexts.size) return null;
+  // Suchraum VOR dem topK-Schnitt einschränken (`restrictTo`): ein Nachfiltern
+  // auf die Befund-Seiten liesse bei einem langen Buch leere Hände zurück, wenn
+  // die besten Treffer buchweit in fremden Kapiteln liegen.
+  const pageIds = [...pageTexts.keys()];
   let hits;
   try {
-    hits = await retrieval.semanticQuery(bookId, q, { kinds: ['page'], topK: _SEMANTIC_VERIFY_TOPK, signal });
+    hits = await retrieval.semanticQuery(bookId, q, {
+      kinds: ['page'], topK: _SEMANTIC_VERIFY_TOPK, signal, restrictTo: { page: pageIds },
+    });
   } catch (e) {
     if (e?.name === 'AbortError') throw e;
     return null; // Backend down/nicht erreichbar → keyword-Pfad behalten
   }
-  const { minCos, minRerank } = _verifyFloors();
+  const floors = _verifyFloors();
   for (const h of (hits || [])) {
     if (h.kind !== 'page') continue;
     const live = pageTexts.get(Number(h.entity_id));
     if (live == null) continue;                      // Seite ausserhalb der Befund-Kapitel
-    if (h.semScore == null || h.semScore < minCos) continue;
-    if (minRerank != null && !(h.score >= minRerank)) continue;
+    if (!_passesVerifyFloor(h, floors)) continue;
     const ex = bestLivePassage(live, h.text, { maxChars: _VERIFY_RADIUS * 2 });
     if (ex && ex.text) return { text: ex.text, located: true };
   }

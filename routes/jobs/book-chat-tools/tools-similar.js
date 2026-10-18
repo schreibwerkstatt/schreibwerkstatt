@@ -8,7 +8,7 @@ const contentStore = require('../../../lib/content-store');
 const { htmlToPlainText } = require('../../../lib/html-text');
 const embed = require('../../../lib/embed');
 const semanticRetrieval = require('../../../lib/semantic-retrieval');
-const { _truncateResult, resolveEntityTitle } = require('./shared');
+const { _truncateResult, resolveEntityTitle, semanticIndexStatus, indexIncompleteFields, relevanceFields } = require('./shared');
 const { getPageWithChapter } = require('../../../db/book-chat/text');
 
 // Snippet-Länge pro Treffer. Ein Chunk ist ~1500 Zeichen (lib/embed-chunk.js#CHUNK_CHARS).
@@ -127,16 +127,23 @@ async function tool_search_similar(input, ctx) {
   // agentische Chat dieselben scharfen Treffer bekommt wie die Such-Karte — inkl.
   // mehrerer getrennter Passagen je Abschnitt (ein Kapitel am Stück hätte sonst nur
   // eine Fundstelle). Ein Abbruch ist kein Werkzeug-Fehler: weiterwerfen.
+  // User-Scope VOR dem topK-Schnitt (semanticQuery#user): Analyse-Entitäten eines
+  // Mitautors belegen sonst Plätze, die resolveEntityTitle danach leer räumt.
   let raw;
   try {
     raw = await semanticRetrieval.semanticQuery(ctx.bookId, query, {
       kinds, topK, signal: ctx.jobSignal, perEntity: semanticRetrieval.PASSAGES_PER_ENTITY,
+      user: ctx.userEmail ?? null,
     });
   }
   catch (e) {
     if (e?.name === 'AbortError') throw e;
     return { error: `Embedding-Endpunkt nicht erreichbar: ${e.message}`, errorKey: 'chat.toolError.semanticUnavailable' };
   }
+  // Index-Stand: ein unvollständiger oder veralteter Index liefert nur einen Teil
+  // des Buchs — das Modell muss das wissen, bevor es «nicht gefunden» als «kommt
+  // nicht vor» liest.
+  const indexStatus = await semanticIndexStatus(ctx.bookId);
 
   const snippetChars = Math.min(
     Math.max(120, Number.isInteger(input.snippet_chars) ? input.snippet_chars : SIMILAR_SNIPPET_CHARS),
@@ -150,7 +157,10 @@ async function tool_search_similar(input, ctx) {
     const title = resolveEntityTitle(h.kind, h.entity_id, { userEmail: ctx.userEmail ?? null });
     if (title == null) continue; // gelöschte Entität → überspringen
     const { snippet, start, end } = centeredSnippet(h.text, query, snippetChars);
-    const r = { kind: h.kind, entity_id: h.entity_id, title, snippet, score: Math.round(h.score * 1000) / 1000 };
+    // Relevanz für das Modell: Rang + roher Cosinus (stabil, 0–1). `score` der
+    // Pipeline wechselt je nach aktiver Stufe die Skala (RRF ~0.03, Rerank, Cosinus)
+    // und sähe als RRF-Wert irrelevant aus.
+    const r = { kind: h.kind, entity_id: h.entity_id, title, snippet, ...relevanceFields(h, results.length + 1) };
     if (h.kind === 'page') {
       const row = getPageWithChapter(h.entity_id);
       if (!row || row.book_id !== ctx.bookId) continue; // Geister-Chunk eines fremden Buchs
@@ -169,7 +179,7 @@ async function tool_search_similar(input, ctx) {
     }
     results.push(r);
   }
-  return _truncateResult({ query, count: results.length, results });
+  return _truncateResult({ query, count: results.length, ...indexIncompleteFields(indexStatus), results });
 }
 
 module.exports = { tool_search_similar, centeredSnippet, locateInPageText };

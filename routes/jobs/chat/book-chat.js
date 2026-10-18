@@ -21,6 +21,7 @@ const { setContext } = require('../../../lib/log-context');
 const appSettings = require('../../../lib/app-settings');
 const { recordChatLedgerForMessage, recordChatLedgerEntry } = require('../../../db/cost-ledger');
 const { getSessionWithBookName } = require('../../../db/chat-sessions');
+const { listPagesWithStats } = require('../../../db/book-chat/catalog');
 const {
   _parseChatResponse, figurenBlockChars,
   bookPageCache, BOOK_PAGE_CACHE_TTL_MS, BOOK_PAGE_CACHE_MAX,
@@ -145,28 +146,35 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       Math.floor((aiCfg.inputBudgetChars - historyChars - SYSTEM_OVERHEAD_CHARS - FIGUREN_MAX_CHARS - (gliederung?.length || 0)) * 0.98)
     );
 
-    // ── Retrieval: Mini-RAG mit Keyword-Fallback ────────────────────────────────
-    // Bei vollständigem Embedding-Index zieht die semantische Pipeline die bedeutungs-
-    // relevantesten Auszüge (bester Chunk je Seite + Nachbar-Chunks) — dichterer,
-    // präziserer Kontext als reines Keyword-Scoring, und ohne alle Seiten zu laden.
-    // Fällt auf das Keyword-Scoring über alle Seiten zurück, wenn der Index fehlt oder
-    // unvollständig ist (Treffer deckten nur einen Teil des Buchs ab), das Backend
-    // ausfällt oder die Anfrage keine semantischen Treffer liefert. Der Grund steht in
-    // context_info.retrievalFallback. Suchtext = Frage + letzte Runde (Folgefragen).
+    // ── Retrieval: Volltext, Mini-RAG oder Keyword-Fallback ─────────────────────
+    // Passt das ganze Buch ins Text-Budget (Summe page_stats.chars), braucht es kein
+    // Retrieval: alle Abschnitte gehen in den Prompt (retrievalMode 'full') — jede
+    // Auswahl wäre dort nur ein Verlust. Sonst zieht bei vollständigem Embedding-Index
+    // die semantische Pipeline die bedeutungs-relevantesten Auszüge (Treffer-Chunks +
+    // Nachbarn, auf den Live-Seitentext abgebildet; seit dem Indexlauf geänderte Seiten
+    // per Keyword dazu). Fällt auf das Keyword-Scoring über alle Seiten zurück, wenn
+    // der Index fehlt oder unvollständig ist (Treffer deckten nur einen Teil des Buchs
+    // ab), das Backend ausfällt oder die Anfrage keine semantischen Treffer liefert.
+    // Der Grund steht in context_info.retrievalFallback. Suchtext = Frage + letzte
+    // Runde (Folgefragen) — für Semantik UND Keyword-Scoring.
+    const query = retrievalQuery(message, historyWithoutLast);
+    const scoreText = (q, text) => _scorePageRelevance(q, text, bookChatStopwords);
+    const bookChars = listPagesWithStats(session.book_id).reduce((n, p) => n + (p.chars || 0), 0);
     let selectedPages = [];
     let usedChars = 0;
     let totalPages = 0;
-    let retrievalMode = 'keyword';
-    let retrievalFallback = embed.isEnabled() ? null : 'disabled';
+    let freshPages = 0;
+    let retrievalMode = bookChars > 0 && bookChars <= TEXT_CHAR_BUDGET ? 'full' : 'keyword';
+    let retrievalFallback = retrievalMode === 'full' || embed.isEnabled() ? null : 'disabled';
 
-    if (embed.isEnabled()) {
+    if (retrievalMode !== 'full' && embed.isEnabled()) {
       updateJob(jobId, { statusText: 'job.phase.selectingPages', progress: 20 });
       try {
         const sem = await selectPassagesSemantic(
-          session.book_id, retrievalQuery(message, historyWithoutLast), TEXT_CHAR_BUDGET, jobSignal,
+          session.book_id, query, TEXT_CHAR_BUDGET, jobSignal, { userEmail, scoreText },
         );
         if (sem.status === 'ok') {
-          ({ selectedPages, usedChars, totalPages } = sem);
+          ({ selectedPages, usedChars, totalPages, freshPages } = sem);
           retrievalMode = 'semantic';
         } else {
           retrievalFallback = sem.status;
@@ -179,7 +187,7 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       }
     }
 
-    if (retrievalMode === 'keyword') {
+    if (retrievalMode !== 'semantic') {
       // ── Alle Seiten aus Cache oder frisch via Content-Store laden ─────────────
       let pageContents;
       const cached = bookPageCache.get(cacheKey);
@@ -226,11 +234,11 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
 
       // ── Relevanz-Scoring + Seitenauswahl ──────────────────────────────────────
       updateJob(jobId, { statusText: 'job.phase.selectingPages', progress: 42 });
-      const scored = pageContents.map(p => ({ ...p, score: _scorePageRelevance(message, p.text, bookChatStopwords) }));
+      const scored = pageContents.map(p => ({ ...p, score: scoreText(query, p.text) }));
       const anyScore = scored.some(p => p.score > 0);
       if (anyScore) scored.sort((a, b) => b.score - a.score);
 
-      if (!anyScore && scored.length > 0) {
+      if (retrievalMode !== 'full' && !anyScore && scored.length > 0) {
         // Gleichmässige Verteilung: jede Seite bekommt denselben Anteil → Querschnitt durch das Buch
         const perPage = Math.floor(TEXT_CHAR_BUDGET / scored.length);
         for (const p of scored) {
@@ -263,7 +271,7 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     logger.info(
       `Kontext: ${selectedPages.length}/${totalPages} ${retrievalMode === 'semantic' ? 'Auszüge' : 'Seiten'} ` +
       `(${usedChars}/${TEXT_CHAR_BUDGET} Zeichen, Hist ${Math.round(historyChars / 1000)}k Zeichen, ` +
-      `Retrieval=${retrievalMode}).`
+      `Retrieval=${retrievalMode}${freshPages ? `, ${freshPages} seit Indexlauf geänderte per Keyword` : ''}).`
     );
 
     // ── System-Prompt + KI-Aufruf ───────────────────────────────────────────────
@@ -276,6 +284,7 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       totalPages,
       retrievalMode,
       ...(retrievalFallback ? { retrievalFallback } : {}),
+      ...(freshPages ? { freshPages } : {}),
       figuren:    figuren.length > 0,
       review:     !!review,
     };

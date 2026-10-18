@@ -33,11 +33,7 @@ const figurAnchorRouter = express.Router();
 const SCAN_KINDS = ['page', 'scene'];
 const TOP_K = 25;
 
-const _TAG = /<\/?[^>]+>/g;
-const _ENT = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };
-function _plainSnippet(s) {
-  return String(s || '').replace(_TAG, '').replace(/&(amp|lt|gt|quot|#39);/g, m => _ENT[m] || m).trim().slice(0, 400);
-}
+const { plainSnippet: _plainSnippet, makeLiveSnippets } = require('../../lib/anchor-snippet');
 
 function _occKey(kind, entityId) { return `${kind}:${entityId}`; }
 function _toOcc(kind, entityId, score, snippet, source) {
@@ -95,10 +91,29 @@ function _ownHit(userEmail) {
   return h => h.kind !== 'scene' || getSceneTitleForUser(h.entity_id, userEmail) != null;
 }
 
-async function _anchorKern(bookId, query, signalFn, minScore, userEmail) {
+// Seiten-Auszüge aus dem Live-Text (lib/anchor-snippet.js): `snippetFor` liefert
+// null, wenn die Stelle so nicht mehr auf der Seite steht → Fund verworfen. Die
+// Suche ist user-skopiert (vor dem topK-Schnitt); `_ownHit` bleibt zweite Schicht.
+async function _anchorKern(bookId, query, signalFn, minScore, userEmail, snippetFor = null) {
   if (!query) return [];
-  const hits = await retrieval.semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn(), strictRerank: true });
-  return _occsFromHits(hits, minScore, _ownHit(userEmail));
+  const hits = await retrieval.semanticQuery(bookId, query, {
+    kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn(), strictRerank: true, user: userEmail,
+  });
+  const occs = _occsFromHits(hits, minScore, _ownHit(userEmail));
+  if (!snippetFor) return occs;
+  const hitOf = new Map();
+  for (const h of hits || []) {
+    const k = _occKey(h.kind, h.entity_id);
+    if (!hitOf.has(k) && h.semScore != null) hitOf.set(k, h);
+  }
+  const out = [];
+  for (const o of occs) {
+    const h = hitOf.get(_occKey(o.kind, o.kind === 'page' ? o.pageId : o.sceneId));
+    const snippet = h ? await snippetFor(h) : o.snippet;
+    if (snippet == null) continue;
+    out.push({ ...o, snippet });
+  }
+  return out;
 }
 
 async function runFigurAnchorJob(jobId, bookId, userEmail) {
@@ -135,6 +150,7 @@ async function runFigurAnchorJob(jobId, bookId, userEmail) {
     });
 
     let totalOcc = 0, scanned = 0, kerne = 0, failed = 0;
+    const snippetFor = makeLiveSnippets(bookId);
     for (let i = 0; i < drafts.length; i++) {
       throwIfAborted();
       const draft = drafts[i];
@@ -152,14 +168,15 @@ async function runFigurAnchorJob(jobId, bookId, userEmail) {
           // seine bisherigen Fundstellen bleiben stehen.
           let rows;
           try {
-            rows = await _anchorKern(bookId, _kernQuery(draft.name, psy[kern]), signal, floor, userEmail);
+            rows = await _anchorKern(bookId, _kernQuery(draft.name, psy[kern]), signal, floor, userEmail, snippetFor);
           } catch (e) {
             if (e.name === 'AbortError') throw e;
             failed++;
             log.warn(`Figur-Anchor: Draft ${draft.id}/${kern} übersprungen: ${e.message}`);
             continue;
           }
-          occDb.replaceKernOccurrences(draft.id, bookId, kern, rows);
+          // false = Draft während des Laufs gelöscht → restliche Kerne überspringen.
+          if (!occDb.replaceKernOccurrences(draft.id, bookId, kern, rows)) break;
           totalOcc += rows.length;
         }
       }
@@ -211,4 +228,4 @@ figurAnchorRouter.post('/figur-anchor', jsonBody, (req, res) => startBookJob(req
   run: (jobId, { bookId, userEmail }) => runFigurAnchorJob(jobId, bookId, userEmail),
 }));
 
-module.exports = { figurAnchorRouter, runFigurAnchorJob, anchorAllDraftFigures, _occsFromHits, _ownHit };
+module.exports = { figurAnchorRouter, runFigurAnchorJob, anchorAllDraftFigures, _occsFromHits, _ownHit, _anchorKern };

@@ -5,7 +5,8 @@
 //   tree/load.js        — Buch-/Seiten-Laden, Combobox, Kapitel-Anlage,
 //                         Token-Estimate-Backfill. Exportiert auch `insertChapterItem`.
 //   tree/build.js       — Tree-Aufbau aus der bookTree-Antwort (nav.pages/nav.tree +
-//                         Sortier-Indexe) + Nachladen der Sidebar-Plaketten.
+//                         Sortier-Indexe, Baum-Revision, Filter-Praedikat),
+//                         Seite entfernen + Nachladen der Sidebar-Plaketten.
 //   tree/catchup.js     — leiser Nachzug des Baums (SW-Revalidierung, Collab-Feed,
 //                         Drift-Probe) — die zweite Haelfte von Stale-While-Revalidate.
 //   tree/permissions.js — ACL-Rolle + Entity-Flag pro Buch, canEdit/canReview/isViewer, Buchtyp.
@@ -13,8 +14,10 @@
 //   tree/stats.js       — Seiten-Status/Tooltips, Page-Stats-Sync, Kapitel-Aggregation.
 //   tree/edit-status.js — Bearbeitungsstand: laden, setzen, Kapitelstand ableiten.
 //   tree/ui.js          — Sidebar-Tooltip-Helper (Token-Badge + Page-Status).
-//   tree/keyboard.js    — Tastatur-/Fokus-Fuehrung (ARIA-Tree, ein Tab-Stopp) +
-//                         Aufdecken der geoeffneten Seite.
+//   tree/keyboard.js    — Tastatur-/Fokus-Fuehrung (ARIA-Tree, ein Tab-Stopp,
+//                         Typeahead) + Aufdecken der geoeffneten Seite.
+//   tree/structure.js   — Abschnitt einhaengen, ersten Abschnitt anlegen,
+//                         Kapitel entfernen (ohne Reload).
 
 import { treeLoadMethods } from './tree/load.js';
 import { treeBuildMethods } from './tree/build.js';
@@ -25,6 +28,7 @@ import { treeStatsMethods } from './tree/stats.js';
 import { treeEditStatusMethods } from './tree/edit-status.js';
 import { treeUiMethods } from './tree/ui.js';
 import { treeKeyboardMethods } from './tree/keyboard.js';
+import { treeStructureMethods } from './tree/structure.js';
 
 
 export const treeMethods = {
@@ -37,4 +41,5 @@ export const treeMethods = {
   ...treeEditStatusMethods,
   ...treeUiMethods,
   ...treeKeyboardMethods,
+  ...treeStructureMethods,
 };

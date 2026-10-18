@@ -124,6 +124,10 @@ test('Ausschnitt ist escaped — nur <mark> ist Markup', async () => {
 test('Index-Job: vektorisiert offene Runden aller User, Marker nie, zweiter Lauf nichts', async () => {
   await withEmbed(async (batched) => {
     assert.equal(chatSearchDb.countUnindexedRounds(BOOK, MODEL), 4);
+    assert.equal(chatSearchDb.countUnindexedRounds(BOOK, MODEL, { userEmail: A }), 3, 'Suche zählt nur eigene Runden');
+    assert.equal(chatSearchDb.countUnindexedRounds(BOOK, MODEL, { userEmail: B }), 1);
+    const pendingA = await searchChatHistory({ bookId: BOOK, userEmail: A, query: 'Lena' });
+    assert.equal(pendingA.pending, 3);
     const res = await runIndex(BOOK);
     assert.equal(res.rounds, 4);
     assert.equal(chatSearchDb.countUnindexedRounds(BOOK, MODEL), 0);
@@ -152,6 +156,18 @@ test('Bedeutung: findet die Runde ohne gemeinsames Wort, fusioniert mit Wortlaut
 
     const otherUser = await searchChatHistory({ bookId: BOOK, userEmail: B, query: 'Lebewohl', kinds: ['page'] });
     assert.equal(otherUser.hits.length, 0, 'Vektoren anderer User bleiben unsichtbar');
+  });
+});
+
+test('Dimensions-Mismatch des Endpunkts: semanticError statt stiller Wortlaut-Suche, Werkzeug meldet es', async () => {
+  await withEmbed(async () => {
+    embed.embedQuery = async () => new Float32Array(DIM + 1);
+    const r = await searchChatHistory({ bookId: BOOK, userEmail: A, query: 'Lebewohl', kinds: ['page'] });
+    assert.equal(r.semanticError, true);
+    const { executeTool } = require('../../routes/jobs/book-chat-tools');
+    const tool = await executeTool('search_chat_history', { query: 'Lebewohl' }, { bookId: BOOK, userEmail: A, sessionId: null });
+    assert.equal(tool.semantic_unavailable, true);
+    assert.match(tool.hint, /Bedeutungssuche ausgefallen/);
   });
 });
 

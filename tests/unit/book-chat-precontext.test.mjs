@@ -57,3 +57,35 @@ test('Erst-Kontext-Block: ohne Treffer bleibt der Block mit Begruendung stehen',
     assert.match(text, /Keine Treffer/);
   }
 });
+
+test('Erst-Kontext-Block: unvollständiger Index / ausgefallene Suche / echte Leere sind drei Aussagen', () => {
+  const stale = buildBookChatPreContext([], { indexIncomplete: true, stalePages: 4 });
+  assert.match(stale, /4 Abschnitt/);
+  assert.match(stale, /NIE aus fehlenden Treffern/);
+  const err = buildBookChatPreContext([], { error: true });
+  assert.match(err, /ausgefallen/);
+  assert.doesNotMatch(err, /vollständigem Index/);
+  const none = buildBookChatPreContext([], {});
+  assert.match(none, /vollständigem Index/);
+  // Mit Treffern bleibt der Hinweis zum Teil-Index stehen.
+  assert.match(buildBookChatPreContext(PASSAGES, { indexIncomplete: true, stalePages: 1 }), /ACHTUNG/);
+});
+
+test('Erst-Kontext-Block: stabile Relevanz (Rang, Ähnlichkeit) statt Pipeline-Score', () => {
+  const text = buildBookChatPreContext([{ kind: 'page', entity_id: 9, title: 'A', chapter_path: 'Teil 1 › Kap 2', rank: 1, similarity: 0.62, text: 'x' }]);
+  assert.match(text, /entity_id 9, Kapitel: Teil 1 › Kap 2, Rang 1, Ähnlichkeit 0\.62/);
+  assert.doesNotMatch(text, /score/);
+});
+
+test('Plot-/Ideen-Chat: Textpassagen tragen kind, entity_id und Kapitelpfad', () => {
+  const p = [{ kind: 'page', entity_id: 42, title: 'Abschied', chapter_path: 'Kap 3', rank: 1, similarity: 0.5, text: 'Lena ging.' }];
+  for (const build of [facade.buildPlotChatSystemPrompt, facade.buildIdeenChatSystemPrompt]) {
+    for (const mode of ['agent', 'classic']) {
+      const blocks = build('Buch', { mode, passages: p, passageStatus: { indexIncomplete: true, stalePages: 2 } });
+      const vol = blocks[blocks.length - 1].text;
+      assert.match(vol, /--- page: «Abschied» \(entity_id 42, Kapitel: Kap 3, Rang 1/);
+      assert.match(vol, /2 Abschnitt/);
+      if (mode === 'agent') assert.match(vol, /get_pages/);
+    }
+  }
+});

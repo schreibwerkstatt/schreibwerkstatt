@@ -14,6 +14,7 @@ const logger = require('../logger');
 const { aclParamGuard, sessionEmail } = require('../lib/acl');
 const { bookParamHandler } = require('../lib/log-context');
 const searchIndex = require('../lib/search');
+const { enqueueEmbedIndexJob } = require('./jobs/embed-index');
 
 const router = express.Router();
 router.param('book_id', aclParamGuard('editor'));
@@ -78,6 +79,10 @@ router.post('/:book_id/merge', jsonBody, (req, res) => {
   const result = mergeLocations(bookId, userEmail, sId, tId);
   searchIndex.remove('location', sId);
   searchIndex.upsertLocation(tId);
+  // Embedding-Index: Ziel-Chunk ist nach dem Feld-Backfill veraltet, die Quelle
+  // fällt per CASCADE heraus. Delta-Lauf; non-fatal.
+  try { enqueueEmbedIndexJob(bookId); }
+  catch (e) { logger.warn(`Schauplatz-Merge: Embedding-Index nicht angestossen (Buch ${bookId}): ${e.message}`); }
   logger.info(`Schauplatz-Merge: «${result.sourceName}» → «${result.targetName}» (Buch ${bookId}).`);
   res.json({ ok: true, ...result });
 });

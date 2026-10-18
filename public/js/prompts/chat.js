@@ -467,36 +467,8 @@ export function buildBookChatAgentSystemPrompt(bookName, figuren, review, system
   return [{ text: parts.join('\n'), ttl: '1h' }];
 }
 
-/**
- * Erst-Kontext-Block des agentischen Buch-Chats: die semantisch nächsten Passagen
- * zur aktuellen Frage, vorab geholt über dieselbe Pipeline wie `search_similar`.
- * Steht als eigener Textblock vor der Frage in deren User-Nachricht (nicht im
- * System-Prompt — dort bräche er den Cache-Präfix).
- * `passages` = [{ kind, entity_id, title, score, text }] (siehe
- * routes/jobs/chat/book-chat-retrieval.js#preContextPassages) oder leer/null.
- *
- * Ohne Treffer bleibt der Hinweis stehen, dass Stufe 1 der Kosten-Leiter diesmal
- * leer ist — sonst deutet das Modell das Fehlen des Blocks als «kein Index» und
- * überspringt gleich auf die Volltext-Werkzeuge.
- */
-export function buildBookChatPreContext(passages) {
-  const list = Array.isArray(passages) ? passages : [];
-  const head = ['=== ERST-KONTEXT: SEMANTISCH NÄCHSTE STELLEN ZUR AKTUELLEN FRAGE ==='];
-  if (!list.length) {
-    head.push('(Keine Treffer — entweder ist die Frage nicht textbezogen oder der Bedeutungs-Index ist leer. Weiter auf Stufe 2 der Kosten-Leiter.)');
-    return head.join('\n');
-  }
-  head.push(
-    '(Automatisch vorab geholt, dieselbe Pipeline wie `search_similar`; nach Ähnlichkeit sortiert, Ausschnitte können unvollständig sein.',
-    'Beantworten diese Stellen die Frage, antworte direkt via `final_answer` — kein weiteres Werkzeug. Sonst arbeite von hier aus weiter:',
-    '`entity_id` eines Abschnitts (kind page) geht als page_id in `get_pages`/`quote_match`. Wörtliche Zitate IMMER über quote_match/quote_passage verifizieren, nie aus diesem Ausschnitt abschreiben.)',
-  );
-  for (const p of list) {
-    const where = p.chapter_path ? `, Kapitel: ${p.chapter_path}` : '';
-    head.push(`--- ${p.kind}: «${p.title}» (entity_id ${p.entity_id}${where}, score ${p.score}) ---`, p.text, '');
-  }
-  return head.join('\n');
-}
+// Erst-Kontext-Block (vor der Frage in deren User-Nachricht): ./chat-pre-context.js.
+export { buildBookChatPreContext } from './chat-pre-context.js';
 
 // Werkzeug-Definitionen für den Agentic Buch-Chat: docs/buchchat-tools.md.
 export { BOOK_CHAT_TOOLS, BOOK_CHAT_SLIM_TOOL_NAMES } from './book-chat-tools.js';

@@ -276,6 +276,7 @@ export const treeLoadMethods = {
       // alten Buch stehen zu lassen.
       if (bookSwitch) {
         this.pageSearch = '';
+        this.treeEditFilter = false;
         this.pageSearchActiveIndex = 0;
         this._pageSearchActiveId = null;
         this._filteredTreeMemo = null;
@@ -445,7 +446,7 @@ export const treeLoadMethods = {
       this._rebuildTreeOrderMaps();
       this._persistTreeOpenState();
       window.dispatchEvent(new CustomEvent(EVT.CHAPTER_ADDED, { detail: { chapterId: created.id } }));
-      if (withFirstPage) await this._createFirstSection(created); // tree-context-menu.js
+      if (withFirstPage) await this._createFirstSection(created); // tree/structure.js
       return chapterItem;
     } catch (e) {
       console.error('[createChapter]', e);
@@ -473,7 +474,8 @@ export const treeLoadMethods = {
     const bookId = this.$store.nav.selectedBookId;
     if (!bookId || !this.$store.nav.pages.length) return;
     const missing = this.$store.nav.pages.some(p => !this.tokEsts[p.id]);
-    if (!missing) return;
+    // Alles da: auch den Observer eines frueheren Laufs abbauen (Buchwechsel).
+    if (!missing) { this._teardownStatsObserver(); return; }
 
     this._setupStatsObserver(bookId, gen);
 
@@ -556,45 +558,4 @@ export const treeLoadMethods = {
     this._statsObserverState = null;
   },
 
-  // Entfernt eine Seite aus dem Root-Tree + Seitenliste (z.B. Remote-Delete
-  // aus dem Collab-Feed). Kein Server-Call. Feuert EVT.PAGE_REMOVED, damit
-  // Karten mit eigener Edit-Repräsentation des Baums (Buchorganizer-
-  // workTree/soloPages) ihren Snapshot nachziehen — `pages:loaded` feuert hier
-  // nicht, weil kein Reload stattfindet.
-  _removePageFromTree(pageId) {
-    const id = Number(pageId);
-    if (!Number.isFinite(id)) return;
-    const nav = this.$store.nav;
-    let removed = false;
-    const pi = nav.pages.findIndex(p => p.id === id);
-    if (pi >= 0) { nav.pages.splice(pi, 1); removed = true; }
-    for (let i = nav.tree.length - 1; i >= 0; i--) {
-      const it = nav.tree[i];
-      if (it.type !== 'chapter') continue;
-      if (it.solo && it.pages?.[0]?.id === id) {
-        nav.tree.splice(i, 1);
-        removed = true;
-      } else {
-        const j = it.pages.findIndex(p => p.id === id);
-        if (j >= 0) { it.pages.splice(j, 1); removed = true; }
-      }
-    }
-    if (!removed) return;
-    // Der Such-Memo (app.js#filteredTree) keyt auf die Identitaet von nav.tree;
-    // die splices oben lassen sie stehen → ohne Reset zeigte eine aktive Suche
-    // die geloeschte Seite weiter.
-    this._filteredTreeMemo = null;
-    // Alle drei Sortier-Indexe neu bauen, nicht nur den ID-Index: `_pageOrderMap`
-    // keyt auf den SEITENNAMEN und zeigte sonst weiter auf die tote Position
-    // (app/app-ui.js#_pageIdx). Ausserdem verschieben sich durch das Entfernen
-    // die Positionen aller nachfolgenden Seiten.
-    this._rebuildTreeOrderMaps();
-    this._refreshChapterStats();
-    // Neue Array-Identitaet fuer nav.pages: der Tagebuch-Kalender cacht
-    // identity-gated (diary-calendar.js, `cache.pagesRef`), der splice oben
-    // laesst die Identitaet stehen — ohne das zeigte er die geloeschte Seite
-    // weiter an, egal von wo geloescht wurde.
-    nav.pages = [...nav.pages];
-    window.dispatchEvent(new CustomEvent(EVT.PAGE_REMOVED, { detail: { pageId: id } }));
-  },
 };

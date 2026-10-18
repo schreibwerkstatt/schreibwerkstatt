@@ -102,9 +102,9 @@ const navigationState = () => ({
   pageSearchActiveIndex: 0,
   _pageSearchActiveId: null,
   _filteredTreeMemo: null,
-  // Memo von `_bookQualifiesForChapterReview()` (book/kapitel-review.js). Die
-  // Sidebar liest das Praedikat ZWEIMAL pro Kapitelzeile, obwohl es ein einziges
-  // Boolean pro Buch ist — ungecacht laeuft jede Zeile ueber den ganzen Baum.
+  _treeRev: 0, // In-Place-Revision von nav.tree fuer die Baum-Memos (tree/build.js#_bumpTreeRev)
+  // Memo von `_bookQualifiesForChapterReview()` (book/kapitel-review.js): die Sidebar
+  // liest es zweimal pro Kapitelzeile — ungecacht liefe jede Zeile ueber den Baum.
   _chapterReviewEligibleMemo: null,
   // Memo des `tokTotals`-Getters (app/app-root-getters.js). Schluessel ist
   // Identitaet + Eintragszahl von `tokEsts`.

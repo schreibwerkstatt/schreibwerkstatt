@@ -62,10 +62,12 @@ function _terms(v) {
 // Index existiert oder Quell-Entitäten seit dem letzten Lauf geändert wurden
 // (billige updated_at-Heuristik in semanticChunks.indexStatus, ohne Re-Hashing).
 // Embedding-Backend aus → kein Hinweis (Panel warnt separat via semanticActive()).
-function _embedIndexInfo(bookId) {
+// User-skopiert: geänderte Szenen/Figuren eines Mitautors machen den Index für
+// diesen User nicht veraltet (sein Motiv-Scan sieht sie ohnehin nicht).
+function _embedIndexInfo(bookId, userEmail) {
   if (!embed.isEnabled()) return { enabled: false, stale: false };
   const { model } = embed.getConfig();
-  const st = semanticChunks.indexStatus(bookId, model);
+  const st = semanticChunks.indexStatus(bookId, model, userEmail);
   return { enabled: true, indexed: st.indexed, staleCount: st.staleCount, stale: !st.indexed || st.staleCount > 0 };
 }
 
@@ -83,7 +85,7 @@ router.get('/', (req, res) => {
   if (!bookId) return res.status(400).json({ error_code: 'INVALID_ID' });
   if (!guardBook(req, res, bookId, 'viewer')) return;
   const graph = motifsDb.getGraph(bookId, userEmail, _motifFloor());
-  graph.embedIndex = _embedIndexInfo(bookId);
+  graph.embedIndex = _embedIndexInfo(bookId, userEmail);
   res.json(graph);
 });
 

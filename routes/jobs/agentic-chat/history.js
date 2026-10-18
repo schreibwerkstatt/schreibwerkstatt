@@ -93,6 +93,6 @@ function _proseFinal(text) {
 }
 
 module.exports = {
-  stripTrailingEmptyJson, buildAgenticHistory, EMPTY_ANSWER_MARKER, REFUSAL_MARKER,
+  stripTrailingEmptyJson, buildAgenticHistory, EMPTY_ANSWER_MARKER, REFUSAL_MARKER, FALLBACK_PLACEHOLDER,
   _ensureNonEmptyFinal, _proseFinal,
 };

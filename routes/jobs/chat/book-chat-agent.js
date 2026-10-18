@@ -13,7 +13,7 @@ const { executeTool, validateFinalAnswerCitations } = require('../book-chat-tool
 const { makeAgenticChatJob } = require('../agentic-chat');
 const { imageGenEnabled } = require('../../../lib/image-gen');
 const embed = require('../../../lib/embed');
-const { agentPreContext, retrievalQuery } = require('./book-chat-retrieval');
+const { agentPreContext, preContextStatus, retrievalQuery } = require('./book-chat-retrieval');
 const appSettings = require('../../../lib/app-settings');
 const { getSessionWithBookName } = require('../../../db/chat-sessions');
 const { getPageWithChapter } = require('../../../db/book-chat/text');
@@ -245,7 +245,7 @@ const runBookChatJobAgent = makeAgenticChatJob({
     // Erst-Kontext: pro Frage andere Bytes — darum NICHT im System-Prompt, sondern als
     // Textblock vor der Frage in deren User-Nachricht (userPreamble). So bleiben
     // Werkzeuge + System + Historie ein stabiler Cache-Präfix über die Turns.
-    const userPreamble = `${buildBookChatPreContext(preContext?.hits || [])}\n\n=== FRAGE ===`;
+    const userPreamble = `${buildBookChatPreContext(preContext?.hits || [], preContextStatus(preContext, { enabled: embOn }))}\n\n=== FRAGE ===`;
     // Aussenwelt-Regel an den stabilen Block 1 (gecacht, buch-unabhängig): der
     // Buch-Chat hat keine Web-Suche und verweist auf den Recherche-Chat.
     if (BOOK_CHAT_OUTSIDE_WORLD_RULE && systemPrompt[0]?.text) {

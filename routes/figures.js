@@ -8,6 +8,7 @@ const { toIntId } = require('../lib/validate');
 const { aclParamGuard, sessionEmail } = require('../lib/acl');
 const { bookParamHandler } = require('../lib/log-context');
 const searchIndex = require('../lib/search');
+const { enqueueEmbedIndexJob } = require('./jobs/embed-index');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -144,6 +145,10 @@ router.post('/:book_id/merge', jsonBody, (req, res) => {
   // eigenes Aufräumen nötig.
   searchIndex.remove('figure', sRow.id);
   searchIndex.upsertFigure(tRow.id);
+  // Embedding-Index: die Ziel-Figur trägt jetzt die Felder/Fakten der Quelle, ihr
+  // Chunk ist veraltet. Delta-Lauf (nur geänderte Chunks); non-fatal.
+  try { enqueueEmbedIndexJob(bookId); }
+  catch (e) { logger.warn(`Figuren-Merge: Embedding-Index nicht angestossen (Buch ${bookId}): ${e.message}`); }
   logger.info(`Figuren-Merge: «${result.sourceName}» → «${result.targetName}» (Buch ${bookId}).`);
   res.json({ ok: true, ...result });
   // page_figure_mentions ist abgeleitet: die Summe aus dem Merge hält den Stand

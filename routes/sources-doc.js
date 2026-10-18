@@ -73,10 +73,10 @@ router.post('/:id/doc', rawPdfBody(), async (req, res) => {
 
 // GET /sources/:id/doc  → BLOB-Stream, inline mit Original-Dateinamen (Viewer).
 router.get('/:id/doc', (req, res) => {
-  const id = toIntId(req.params.id);
-  if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
   const email = sessionEmail(req);
   if (!email) return res.status(401).json({ error_code: 'NOT_LOGGED_IN' });
+  const id = toIntId(req.params.id);
+  if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
   // Meta-Zeile OHNE BLOB: die ACL-Entscheidung darf keine 25 MB durch den
   // Prozess ziehen, nur um danach 403 zu antworten.
   const meta = getSourceDocMeta(id);

@@ -41,7 +41,7 @@ const {
   numbersIn, consolidateFigure, foldWord, passageStellen, isPlausibleWert,
 } = require('../../lib/figure-age');
 const embed = require('../../lib/embed');
-const { semanticQuery } = require('../../lib/semantic-retrieval');
+const { semanticQuery, indexReady } = require('../../lib/semantic-retrieval');
 const { bestLivePassage } = require('../../lib/live-passage');
 
 // Deckel pro Figur. Mehr Stellen heisst nicht mehr Erkenntnis: das Alter einer
@@ -72,10 +72,15 @@ function _norm(s) {
  *  und je Figur Ankerjahr + Geburtsjahr aus lib/figure-years.js) und die Analyse-
  *  Version. Aendert sich nichts davon, ist das Ergebnis dasselbe. Der Figurenstamm
  *  gehoert mit hinein — eine neu angelegte Figur veraendert das Ergebnis, ohne dass
- *  eine Seite angefasst wurde; die Zeitlinie, weil `gerechnet` an ihr haengt. */
-function computeContentSig(pages, figuren, model, { zeitlinieReal = false, yearMap = null } = {}) {
+ *  eine Seite angefasst wurde; die Zeitlinie, weil `gerechnet` an ihr haengt.
+ *  Dazu, ob ein fertiger Embedding-Index existiert (`indexReady`): die semantische
+ *  Nachlese liefert erst mit Index Stellen — ohne ihn in der Signatur bliebe ein
+ *  Lauf von vor dem Erstindex fuer immer „unveraendert". Bewusst nur der Bool,
+ *  nicht der Zeitstempel: den setzt jeder naechtliche Lauf neu, die Signatur
+ *  bräche sonst taeglich. Geaenderte Seiten stehen ohnehin per updated_at drin. */
+function computeContentSig(pages, figuren, model, { zeitlinieReal = false, yearMap = null, indexReady = false } = {}) {
   const h = crypto.createHash('sha1');
-  h.update(`v${AGE_ANALYSIS_VERSION}|${model || ''}|z${zeitlinieReal ? 1 : 0}`);
+  h.update(`v${AGE_ANALYSIS_VERSION}|${model || ''}|z${zeitlinieReal ? 1 : 0}|i${indexReady ? 1 : 0}`);
   for (const p of pages) h.update(`|p${p.id}:${p.updated_at || ''}`);
   for (const f of figuren) {
     const y = yearMap?.get(f.id);
@@ -118,8 +123,12 @@ async function _semanticStellen(bookId, fig, pageMeta, nameIndex, signal, pageTe
     if (h.kind !== 'page') continue;
     const pageId = parseInt(h.entity_id, 10);
     const meta = pageMeta.get(pageId) || {};
-    const live = bestLivePassage(pageText.get(pageId) || '', h.text || '', { maxChars: LIVE_PASSAGE_MAX });
+    const full = pageText.get(pageId) || '';
+    const live = bestLivePassage(full, h.text || '', { maxChars: LIVE_PASSAGE_MAX });
     if (!live) continue;
+    // Position der Passage auf der Seite: Sortierschluessel neben den Musterfunden
+    // (`selectCandidates` ordnet nach ordinal, dann offset).
+    const base = Math.max(0, full.indexOf(live.text));
     for (const st of passageStellen(live.text, nameIndex, fig.id)) {
       out.push({
         figure_id: fig.id,
@@ -130,7 +139,7 @@ async function _semanticStellen(bookId, fig, pageMeta, nameIndex, signal, pageTe
         chapter: meta.chapter ?? null,
         chapter_id: meta.chapter_id ?? null,
         ordinal: meta.ordinal ?? 0,
-        offset: 0,
+        offset: base + (st.offset || 0),
         indirekt: st.indirekt,
         semantisch: true,
       });
@@ -175,7 +184,7 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
     const settings = getBookSettings(bookId, userEmail);
     const zeitlinieReal = !!settings?.zeitlinie_real;
     const yearMap = computeFigureYears(bookId, userEmail);
-    const sig = computeContentSig(pageContents, figuren, model, { zeitlinieReal, yearMap });
+    const sig = computeContentSig(pageContents, figuren, model, { zeitlinieReal, yearMap, indexReady: indexReady(bookId) });
     const prev = getFigureAgeScan(bookId, userEmail);
     if (!force && prev && prev.content_sig === sig && prev.age_version === AGE_ANALYSIS_VERSION) {
       logger.info(`Alters-Analyse uebersprungen (unveraendert): book=${bookId} sig=${sig.slice(0, 8)}`);

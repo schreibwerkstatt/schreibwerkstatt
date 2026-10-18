@@ -56,13 +56,12 @@ const SNIPPET_CHARS = 600;
 // Zuordnungs-Kontext. Das Einsetzen selbst laeuft ueber den Seiten-Write und das
 // Zuordnen ueber `POST /:id/link` — beide verlangen dort ihre eigene Rolle.
 router.get('/evidence', async (req, res) => {
-  const email = sessionEmail(req);
-  if (!email) return res.status(401).json({ error_code: 'NOT_LOGGED_IN' });
-
+  // Login prüft guardBook selbst (401 NOT_LOGGED_IN) — kein eigener 401 davor.
   const bookId = toIntId(req.query.book_id);
   if (!bookId) return res.status(400).json({ error_code: 'INVALID_ID' });
   setContext({ book: bookId });
   if (!guardBook(req, res, bookId, 'viewer')) return;
+  const email = sessionEmail(req);
 
   if (!embed.isEnabled()) return res.status(400).json({ error_code: 'EMBED_DISABLED' });
 
@@ -72,8 +71,13 @@ router.get('/evidence', async (req, res) => {
 
   const topK = Math.min(Math.max(parseInt(req.query.limit, 10) || DEFAULT_TOPK, 1), MAX_TOPK);
 
+  // Schliesst der Client (Panel gewechselt, AbortController im Frontend) die
+  // Verbindung, bricht der Embedding-/Rerank-Call mit ab.
+  const ac = new AbortController();
+  res.on('close', () => { if (!res.writableFinished) ac.abort(); });
+
   try {
-    const raw = await semanticRetrieval.semanticSourceQuery(email, q, { topK });
+    const raw = await semanticRetrieval.semanticSourceQuery(email, q, { topK, signal: ac.signal });
     // Der volle Datensatz mit BUCH-Sicht (`getSource(id, bookId)`) — die
     // Kennzahlen einer Quelle sind buch-skopiert, sobald ein Buch im Spiel ist.
     // Faellt eine Quelle zwischen Query und Nachladen weg, fliegt sie still
@@ -93,8 +97,9 @@ router.get('/evidence', async (req, res) => {
     logger.info(`[quellen] evidence book=${bookId} q=${q.length}z treffer=${hits.length}`);
     res.json({ hits });
   } catch (e) {
+    if (e.name === 'AbortError' || ac.signal.aborted) return;
     logger.error(`[quellen] GET /sources/evidence failed: ${e.message}`);
-    res.status(503).json({ error_code: 'EMBED_UNAVAILABLE', detail: e.message });
+    res.status(503).json({ error_code: 'EMBED_UNAVAILABLE' });
   }
 });
 

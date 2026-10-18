@@ -1,0 +1,51 @@
+{
+  "version": "4.26.0",
+  "date": "2026-10-18",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Abschnittsbaum, Rechtsklick auf ein Kapitel: «Kapitel löschen» entfernt ein leeres Kapitel oder eines mit nur einem Abschnitt direkt im Baum. Der Abschnitt bleibt unter Fassungen wiederherstellbar.",
+      "en": "Section tree, right-click on a chapter: “Delete chapter” removes an empty chapter or one with a single section right in the tree. The section can still be restored under Versions."
+    },
+    {
+      "kind": "neu",
+      "de": "Abschnittsbaum, Rechtsklick auf eine Zeile: die verknüpften Ideen und Recherche-Einträge lassen sich von dort öffnen – auch ohne Maus.",
+      "en": "Section tree, right-click on a row: linked ideas and research entries can be opened from there – keyboard included."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Abschnittsbaum, Filter nach Bearbeitungsstand: es bleiben nur die passenden Abschnitte samt ihrem Kapitel sichtbar. Ist alles fertig, zeigt der Baum einen Hinweis mit «Filter aufheben».",
+      "en": "Section tree, filter by editing status: only matching sections and their chapter stay visible. If everything is done, the tree shows a note with “Clear filter”."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Abschnitts-, Buch-, Plot- und Ideen-Chat beziehen schon bei der ersten Antwort passende Stellen aus dem ganzen Buch ein und sagen, wenn neue Textstellen noch nicht durchsuchbar sind.",
+      "en": "Section, book, plot and ideas chat draw on matching passages from the whole book from the first answer on, and say when new passages are not searchable yet."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Motive, Plot-Werkstatt und Figuren: die gefundenen Textstellen zeigen den aktuellen Wortlaut des Abschnitts statt eines älteren Stands.",
+      "en": "Motifs, plot workshop and characters: found passages show the section’s current wording instead of an older version."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Suche, Modus «Sinngemäss»: die Suche bleibt beim gewählten Buch und sucht nach einem Buchwechsel neu. Ist der Dienst gestört, antworten Suche und Chats rasch mit einer Meldung statt lange zu warten.",
+      "en": "Search, “By meaning” mode: the search stays with the selected book and runs again after switching books. If the service is down, search and chats answer quickly with a message instead of waiting."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Redundanz-Radar: ist das Buch noch nicht vollständig für die Suche aufbereitet, erscheint ein Hinweis, und das letzte Ergebnis bleibt stehen statt «keine Doppelungen» zu melden.",
+      "en": "Redundancy radar: if the book is not fully prepared for search yet, a note appears and the last result stays instead of reporting “no duplicates”."
+    },
+    {
+      "kind": "behoben",
+      "de": "Semantische Suche: die nächtliche Aufbereitung brach bei mehreren Büchern gleichzeitig ab, sodass neue Textstellen am nächsten Tag nicht gefunden wurden.",
+      "en": "Semantic search: the nightly preparation aborted when several books were processed at once, so new passages could not be found the next day."
+    },
+    {
+      "kind": "behoben",
+      "de": "Ein in ein anderes Buch verschobener Abschnitt war dort bis zum nächsten Tag für die sinngemässe Suche unsichtbar.",
+      "en": "A section moved to another book stayed invisible to the by-meaning search there until the next day."
+    }
+  ]
+}

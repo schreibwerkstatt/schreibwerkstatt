@@ -17,6 +17,17 @@ import { bedenkenHinweis } from '../../redaktion/bedenken.js';
 let _chapterMemo = null;
 let _filterMemo = null;
 
+// Kapitel-ID → direkte Unterkapitel aus dem flachen nav.tree.
+function _childMap(tree) {
+  const kids = new Map();
+  for (const it of tree) {
+    if (it.type !== 'chapter' || it.solo || !it.parent_id) continue;
+    const arr = kids.get(it.parent_id);
+    if (arr) arr.push(it); else kids.set(it.parent_id, [it]);
+  }
+  return kids;
+}
+
 export const treeEditStatusMethods = {
   async refreshPageStatus(bookId = this.$store.nav.selectedBookId, signal) {
     if (!bookId) return;
@@ -91,17 +102,29 @@ export const treeEditStatusMethods = {
     return this.t('editStatus.finalOpenTip', { n });
   },
 
+  // Wirkt der Stand-Filter? Nur mit bekannter Kette: ohne sie (der
+  // /redaktion-Fetch ist gescheitert, etwa offline) gibt es keine letzte Stufe,
+  // gegen die gefiltert werden koennte — und der Filter-Knopf ist ausgeblendet,
+  // ein wirkender Filter liesse sich also nicht mehr abschalten.
+  _editFilterActive() {
+    return !!this.treeEditFilter && (this.$store.badges.editStatusChain || []).length > 0;
+  },
+
   // Stand-Filter des Seitenbaums: behaelt Abschnitte, die nicht auf der letzten
   // Stufe stehen oder seither bearbeitet wurden, samt ihrer Vorfahren-Kapitel;
   // alles aufgeklappt (Kopien, wie der Such-Zweig in app.js#filteredTree).
-  // Memo auf Quelle + Map + Kette: der Getter laeuft bei jedem Render.
+  // Memo auf Quelle + Map + Kette + Baum-Revision: der Getter laeuft bei jedem
+  // Render, und In-Place-Aenderungen (neuer Abschnitt, Umbenennen) lassen die
+  // Quelle identisch (tree/build.js#_bumpTreeRev).
   _editFilterTree(source) {
     const map = this.$store.badges.editStatus;
     const chain = this.$store.badges.editStatusChain || [];
-    const memo = _filterMemo;
-    if (memo && memo.source === source && memo.map === map && memo.chain === chain) return memo.val;
+    const rev = this._treeRev;
     const done = chain[chain.length - 1];
-    const keep = (p) => { const e = map[String(p.id)]; return !(e?.status === done && !e.stale); };
+    if (!done) return source;
+    const memo = _filterMemo;
+    if (memo && memo.source === source && memo.map === map && memo.chain === chain && memo.rev === rev) return memo.val;
+    const keep = (p) => { const e = map[String(p.id)]; return !(e?.status === done && !e?.stale); };
     const matched = new Map();
     for (const item of source) {
       const pages = (item.pages || []).filter(keep);
@@ -117,36 +140,39 @@ export const treeEditStatusMethods = {
     for (const id of [...matched.keys()]) addAncestors(id);
     const val = source.filter(it => matched.has(it.id))
       .map(it => ({ ...it, pages: matched.get(it.id), open: true }));
-    _filterMemo = { source, map, chain, val };
+    _filterMemo = { source, map, chain, rev, val };
     return val;
   },
 
   // Seiten-IDs eines Kapitels inkl. Unterkapitel, aus der Sidebar-Struktur.
-  _chapterSubtreePageIds(item) {
-    const tree = this.$store.nav.tree || [];
+  // `children` (Kapitel-ID → Unterkapitel) darf der Aufrufer mitgeben, der
+  // mehrere Kapitel fragt — sonst wird die Map hier einmal gebaut.
+  _chapterSubtreePageIds(item, children = null) {
+    const kids = children || _childMap(this.$store.nav.tree || []);
     const ids = [];
     const walk = (it) => {
       for (const p of it.pages || []) ids.push(p.id);
-      for (const child of tree) {
-        if (child.type === 'chapter' && !child.solo && child.parent_id === it.id) walk(child);
-      }
+      for (const child of kids.get(it.id) || []) walk(child);
     };
     walk(item);
     return ids;
   },
 
   // Kapitelstand = schwaechste Stufe darunter. Memo auf die Identitaet von Map
-  // und Baum: der Sidebar-Render fragt jedes Kapitel bei jedem Durchlauf.
+  // und Baum plus Baum-Revision: der Sidebar-Render fragt jedes Kapitel bei
+  // jedem Durchlauf, und ein neuer oder geloeschter Abschnitt aendert den Stand,
+  // ohne die Baum-Identitaet zu wechseln.
   chapterEditStatus(item) {
     if (!item || item.type !== 'chapter') return null;
     const map = this.$store.badges.editStatus;
     const tree = this.$store.nav.tree;
-    if (!_chapterMemo || _chapterMemo.map !== map || _chapterMemo.tree !== tree) {
-      _chapterMemo = { map, tree, byId: new Map() };
+    const rev = this._treeRev;
+    if (!_chapterMemo || _chapterMemo.map !== map || _chapterMemo.tree !== tree || _chapterMemo.rev !== rev) {
+      _chapterMemo = { map, tree, rev, byId: new Map(), children: _childMap(tree || []) };
     }
     const byId = _chapterMemo.byId;
     if (!byId.has(item.id)) {
-      const ids = this._chapterSubtreePageIds(item);
+      const ids = this._chapterSubtreePageIds(item, _chapterMemo.children);
       byId.set(item.id, weakestStatus(ids.map(id => map[String(id)] || null)));
     }
     return byId.get(item.id);

@@ -2,8 +2,11 @@
 // Redundanz-Radar-Job: findet buchweite Doppelungen, indem er alle Seiten-Chunks
 // des Embedding-Index paarweise per Cosinus vergleicht (lib/redundancy.js). Rein
 // rückwärtsgewandt — liest den bestehenden semantic_chunks-Index, ruft KEIN
-// Embedding-/KI-Backend und schreibt NIE in den Buchtext. Setzt einen gebauten
-// Semantik-Index voraus (embed-index-Job); ohne Chunks → leeres Ergebnis.
+// Embedding-/KI-Backend und schreibt NIE in den Buchtext. Setzt einen VOLLSTÄNDIGEN
+// Semantik-Index voraus (embed-index-Job, `indexReady`): ein halber Index (Erstlauf
+// unterbrochen, Modellwechsel) ergäbe ein Teil-Ergebnis, das als „keine Doppelungen"
+// den letzten gültigen Lauf überschriebe — darum bricht der Job dann ab und lässt
+// redundancy_runs unangetastet.
 //
 // Der O(n²)-Scan läuft blockweise mit Yield an den Event-Loop, damit er den
 // Single-Process-Server auch bei grossen Büchern nicht einfriert. Das Ergebnis
@@ -17,6 +20,7 @@ const {
   startBookJob,
 } = require('./shared');
 const embed = require('../../lib/embed');
+const retrieval = require('../../lib/semantic-retrieval');
 const appSettings = require('../../lib/app-settings');
 const contentStore = require('../../lib/content-store');
 const semanticChunks = require('../../db/semantic-chunks');
@@ -64,6 +68,7 @@ async function runRedundancyJob(jobId, bookId, opts, userEmail) {
   const logger = makeJobLogger(jobId);
   try {
     if (!embed.isEnabled()) throw i18nError('job.error.embedDisabled');
+    if (!retrieval.indexReady(bookId)) throw i18nError('job.error.redundancyNoIndex');
     const { model } = embed.getConfig();
 
     updateJob(jobId, { statusText: 'job.phase.redundancyLoad', progress: 5 });

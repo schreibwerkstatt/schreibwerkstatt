@@ -6,7 +6,7 @@
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { formatRelativeShort } from '../utils.js';
 import { startPoll } from './job-helpers.js';
-import { tRaw } from '../i18n.js';
+import { tRaw, tErrorRaw } from '../i18n.js';
 
 const DEBOUNCE_MS = 220;
 const DEFAULT_KINDS = ['page', 'chapter'];
@@ -60,7 +60,18 @@ export function registerSearchCard() {
           if (this.semanticAvailable) this.loadIndexStatus();
         },
         onBookChanged: () => {
-          if (this.scopeMode === 'book') this.runSearch();
+          // Semantik ist immer buch-skopiert (unabhängig von scopeMode): Treffer
+          // und „ähnliche Stellen zu X" gehören zum vorigen Buch. Die Quell-
+          // Entität existiert im neuen Buch nicht → likeEntity verwerfen.
+          // Ohne neues Buch fällt der Modus über den semanticAvailable-Watch
+          // auf FTS zurück.
+          if (this.mode === 'semantic') {
+            this.likeEntity = null;
+            this.notIndexed = false;
+            this.runSearch();
+          } else if (this.scopeMode === 'book') {
+            this.runSearch();
+          }
           // Index-Status ist buch-skopiert: laufenden Poll des vorigen Buches
           // stoppen und die Build-Anzeige (indexing/indexStatus) zurücksetzen,
           // sonst bleibt der Status des alten Buches stehen bzw. der alte Job
@@ -91,6 +102,12 @@ export function registerSearchCard() {
         () => (this.mode === 'semantic' || this.scopeMode === 'book') ? 'book' : 'all',
         (v) => { Alpine.store('nav').searchScope = v; },
       );
+      // Semantik-Modus ohne Grundlage (Buch abgewählt, Backend im Admin
+      // abgeschaltet) → zurück auf FTS, statt in einem Modus ohne Umschalter
+      // (die Modus-Zeile hängt an semanticAvailable) hängenzubleiben.
+      this.$watch(() => this.semanticAvailable, (ok) => {
+        if (!ok && this.mode === 'semantic') this.setMode('fts');
+      });
     },
 
     destroy() {
@@ -132,12 +149,17 @@ export function registerSearchCard() {
     async loadIndexStatus() {
       const bookId = Alpine.store('nav').selectedBookId;
       if (!bookId || !this.$store.config?.semanticSearchEnabled) return;
+      // Späte Antwort für ein inzwischen abgewähltes Buch verwerfen — sonst
+      // zeigte die Karte den Index-Stand des vorigen Buches.
+      const stale = () => Alpine.store('nav').selectedBookId !== bookId;
       try {
         const r = await fetch('/search/semantic/status?book_id=' + encodeURIComponent(bookId), { credentials: 'same-origin' });
+        if (stale()) return;
         if (!r.ok) { this.indexInfo = null; return; }
         const j = await r.json();
+        if (stale()) return;
         this.indexInfo = j.enabled ? j : null;
-      } catch { this.indexInfo = null; }
+      } catch { if (!stale()) this.indexInfo = null; }
     },
 
     // Dezenter Hinweis, welche Qualitäts-Stufen serverseitig aktiv sind (Hybrid-
@@ -216,7 +238,11 @@ export function registerSearchCard() {
         });
         if (seq !== this._searchSeq) return; // raced
         if (!r.ok) {
-          this.errorMessage = tRaw('search.failed');
+          // QUERY_TOO_LONG o.ä. sagt dem User mehr als „fehlgeschlagen".
+          const j = await r.json().catch(() => ({}));
+          if (seq !== this._searchSeq) return;
+          this.errorMessage = j.error_code && j.error_code !== 'SEARCH_FAILED'
+            ? tErrorRaw(j) : tRaw('search.failed');
           this.hits = [];
           this.fallback = false;
           return;
@@ -262,7 +288,9 @@ export function registerSearchCard() {
         if (seq !== this._searchSeq) return;
         if (!r.ok) {
           const j = await r.json().catch(() => ({}));
-          this.errorMessage = tRaw(SEMANTIC_ERROR_KEYS[j.error_code] || 'search.semantic.failed');
+          const own = SEMANTIC_ERROR_KEYS[j.error_code];
+          this.errorMessage = own ? tRaw(own)
+            : j.error_code ? tErrorRaw(j) : tRaw('search.semantic.failed');
           this.hits = []; this.notIndexed = false; return;
         }
         const data = await r.json();
@@ -310,6 +338,10 @@ export function registerSearchCard() {
           body: JSON.stringify({ book_id: bookId }),
         });
         const j = await r.json().catch(() => ({}));
+        // Buch während des POST gewechselt: onBookChanged hat die Build-Anzeige
+        // schon zurückgesetzt; der Job läuft serverseitig für das alte Buch
+        // weiter, sein Fortschritt gehört aber nicht in die Anzeige des neuen.
+        if (Alpine.store('nav').selectedBookId !== bookId) return;
         if (!r.ok || !j.jobId) {
           this.indexing = false;
           this.indexStatus = tRaw('search.semantic.indexError');
@@ -317,6 +349,7 @@ export function registerSearchCard() {
         }
         this._pollIndex(j.jobId);
       } catch {
+        if (Alpine.store('nav').selectedBookId !== bookId) return;
         this.indexing = false;
         this.indexStatus = tRaw('search.semantic.indexError');
       }

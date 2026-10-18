@@ -21,7 +21,9 @@ const plotDb = require('../../db/plot');
 const motifsDb = require('../../db/motifs');
 const embed = require('../../lib/embed');
 const { semanticQuery } = require('../../lib/semantic-retrieval');
-const { getSceneTitleForUser } = require('../../db/book-chat/figures');
+const contentStore = require('../../lib/content-store');
+const { htmlToPlainText } = require('../../lib/html-text');
+const { bestLivePassage } = require('../../lib/live-passage');
 const { getUser } = require('../../db/app-users');
 const { resolveI18n, resolveI18nTree } = require('../../lib/i18n-server');
 
@@ -183,12 +185,19 @@ function _loadFigurMotive(draft, userEmail, logger) {
 }
 
 // „Wie ist die Figur im Manuskript tatsächlich geschrieben?" — Textstellen aus der
-// semantischen Suche über den echten Buchtext (kinds page/scene). Anders als
+// semantischen Suche über den echten Buchtext (nur Seiten). Anders als
 // _loadFigurAuftritte (Szenen-Titel/Ereignis-Labels = strukturierte Extrakte) liefert
 // das die tatsächliche PROSA → der Consistency-Check erdet Mindmap-Behauptungen an
-// der geschriebenen Realität. Query = Name + Archetyp (identifizierend, NICHT die zu
-// prüfenden Eigenschaften — sonst zöge man nur bestätigende Stellen an; die Hybrid-
-// Fusion trägt den Namen wörtlich, die Semantik findet auch namenlose Erwähnungen).
+// der geschriebenen Realität. Darum keine Szenen-Treffer: deren Index-Text ist eine
+// Zusammenfassung, kein Manuskriptsatz, und stünde im Prompt als „Prosa" da.
+// Query = Name + Archetyp (identifizierend, NICHT die zu prüfenden Eigenschaften —
+// sonst zöge man nur bestätigende Stellen an; die Hybrid-Fusion trägt den Namen
+// wörtlich, die Semantik findet auch namenlose Erwähnungen).
+//
+// Der Chunk ist nur Wegweiser: der Beleg wird aus dem LIVE-Seitentext geschnitten
+// (lib/live-passage.js) — der Index kann hinter dem Seitenstand zurückliegen, und ein
+// Satz, der so nicht mehr im Buch steht, wäre ein falscher Beleg. Steht die Stelle
+// nicht mehr auf der Seite, fällt der Treffer weg.
 // Nur bei aktivem Embedding-Backend; ohne Treffer (Figur evtl. noch nicht geschrieben)
 // leer. Best-effort: ein Fehler hier failt den Job (Kern = Mindmap) nicht.
 const _TB_TAG = /<\/?[^>]+>/g;
@@ -198,6 +207,9 @@ const _TB_TAG = /<\/?[^>]+>/g;
 const TB_TOP_K = 8;
 const TB_SNIPPET_MAX = 600;
 const TB_TOTAL_MAX = 4000;
+// Live-Passage um den Treffer (Chunk ~1500 Zeichen), aus der _tbSnippet den
+// Ausschnitt um den Namen schneidet.
+const TB_LIVE_MAX = 2000;
 function _tbSnippet(s, name = '') {
   const text = String(s || '').replace(_TB_TAG, ' ').replace(/\s+/g, ' ').trim();
   if (text.length <= TB_SNIPPET_MAX) return text;
@@ -214,29 +226,26 @@ function _tbSnippet(s, name = '') {
   if (to < text.length) out = out.replace(/\s+\S*$/, '') + ' …';
   return out;
 }
-// Szene → Seite (figure_scenes ist keine pages/chapters/books-Tabelle → Direkt-SQL
-// erlaubt); die page_id macht den Beleg im Frontend anspringbar.
-const _stmtScenePageId = db.prepare('SELECT page_id FROM figure_scenes WHERE id = ? AND book_id = ?');
 async function _loadFigurTextbelege(draft, userEmail, logger, signal) {
   try {
     if (!embed.isEnabled()) return [];
     const query = [draft.name, draft.archetype].map(s => String(s || '').trim()).filter(Boolean).join('. ');
     if (!query) return [];
-    const hits = await semanticQuery(draft.book_id, query, { kinds: ['page', 'scene'], topK: TB_TOP_K, signal });
+    const bookId = parseInt(draft.book_id);
+    const hits = await semanticQuery(bookId, query, { kinds: ['page'], topK: TB_TOP_K, signal, user: userEmail });
     const out = [];
     const seenPages = new Set();
     let total = 0;
     for (const h of hits) {
-      let pageId = null;
-      if (h.kind === 'page') pageId = h.entity_id;
-      else if (h.kind === 'scene') {
-        // Szenen sind Analyse-Daten pro User; der Index hängt nur am Buch.
-        if (getSceneTitleForUser(parseInt(h.entity_id), userEmail) == null) continue;
-        pageId = _stmtScenePageId.get(parseInt(h.entity_id), parseInt(draft.book_id))?.page_id ?? null;
-      }
+      if (h.kind !== 'page') continue;
+      const pageId = h.entity_id;
       if (pageId == null || seenPages.has(pageId)) continue; // ein Ort einmal (Dichte, nicht Wiederholung)
+      const page = await contentStore.loadPage(pageId).catch(() => null);
+      if (!page || Number(page.book_id) !== bookId) continue;
+      const live = bestLivePassage(htmlToPlainText(page.html || ''), h.text || '', { maxChars: TB_LIVE_MAX });
+      if (!live || !live.text) continue;
       seenPages.add(pageId);
-      const snippet = _tbSnippet(h.text, draft.name);
+      const snippet = _tbSnippet(live.text, draft.name);
       if (!snippet) continue;
       if (total + snippet.length > TB_TOTAL_MAX) break;
       total += snippet.length;
@@ -447,4 +456,4 @@ figurWerkstattRouter.post('/werkstatt-consistency', jsonBody, (req, res) => {
 });
 
 module.exports = {
-  _tbSnippet, figurWerkstattRouter, runBrainstormJob, runConsistencyJob, _findKnotenPfad };
+  _tbSnippet, _loadFigurTextbelege, figurWerkstattRouter, runBrainstormJob, runConsistencyJob, _findKnotenPfad };

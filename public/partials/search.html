@@ -10,7 +10,7 @@
       @click="setMode('fts')" x-text="$app.t('search.mode.fts')"></button>
     <button type="button" class="search-mode-btn" :class="{ 'is-active': mode === 'semantic' }"
       @click="setMode('semantic')" x-text="$app.t('search.mode.semantic')"></button>
-    <button type="button" class="btn-compact search-index-btn" x-show="mode === 'semantic'"
+    <button type="button" class="btn-compact search-index-btn" x-show="mode === 'semantic' && $app.canReview()"
       :disabled="indexing" @click="buildIndex()"
       x-text="indexing ? (indexStatus || $app.t('search.semantic.indexing')) : (indexInfo?.indexed ? $app.t('search.semantic.rebuildIndex') : $app.t('search.semantic.buildIndex'))"></button>
     <span class="search-index-status muted-msg muted-msg--sm" x-show="!indexing && indexStatus" x-text="indexStatus"></span>
@@ -73,7 +73,7 @@
 
     <button type="button"
       class="search-scope-toggle"
-      x-show="$store.nav.selectedBookId"
+      x-show="$store.nav.selectedBookId && mode !== 'semantic'"
       :class="{ 'is-active': scopeMode === 'book' }"
       @click="toggleScope()"
       x-text="scopeMode === 'book' ? $app.t('search.scope.book') : $app.t('search.scope.all')"></button>

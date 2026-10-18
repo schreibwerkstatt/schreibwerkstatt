@@ -108,7 +108,12 @@ Antwort trägt `stale` und den Anker, die der Client nicht selbst bilden kann.
   im Kapitel.
 - **Seitenbaum-Filter** (`treeEditFilter`, Knopf neben Auf-/Zuklappen): nur
   Abschnitte, die nicht auf der letzten Stufe stehen oder seither bearbeitet
-  wurden; wirkt zusammen mit der Suche.
+  wurden; wirkt zusammen mit der Suche. Der Filter ist ein Filtermodus wie die
+  Suche (`_treeIsFiltered`): Treffer-Kapitel offen, Auf-/Zuklappen aus, ein
+  Mehr-Abschnitt-Kapitel mit einem Treffer bleibt Kapitelkopf + Abschnitt.
+  Ohne bekannte Kette (gescheiterter `/redaktion`-Fetch) wirkt er nicht
+  (`_editFilterActive`); beim Buchwechsel wird er zurückgesetzt. Steht alles
+  auf der letzten Stufe, zeigt der Baum einen Hinweis mit «Filter aufheben».
 - **Buch-Chat**: Werkzeug `get_edit_status` ([buchchat-tools.md](buchchat-tools.md)),
   nur lesend, dazu eine Routing-Zeile im System-Prompt. Den Stand setzt der
   Autor, nicht die KI. **Plot-Chat**: dasselbe Werkzeug (ein Beat in einem

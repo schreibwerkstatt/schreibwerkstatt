@@ -86,9 +86,9 @@
            @keydown.enter.prevent="_onChapterHeaderActivate(item)"
            @keydown.space.prevent="_onChapterHeaderActivate(item)"
            @click="_onChapterHeaderActivate(item)"
-           @contextmenu="_openPagetreeContextMenu($event, { kind: 'chapter', id: item.id, name: item.name, excluded: item.excluded })">
+           @contextmenu="_openPagetreeContextMenu($event, { kind: 'chapter', id: item.id, name: item.name, excluded: item.excluded, excludedByParent: _chapterExcludedByAncestor(item), empty: item.pages.length === 0 && !item.hasChildren })">
         <span class="history-chevron" :class="{ open: item.open }" x-show="item.pages.length > 0 || item.hasChildren"
-              @click.stop="if (!pageSearch && (item.pages.length > 0 || item.hasChildren)) toggleChapterOpen(item)"></span>
+              @click.stop="if (!_treeIsFiltered() && (item.pages.length > 0 || item.hasChildren)) toggleChapterOpen(item)"></span>
         <span class="tree-chapter-name"><span x-text="item.name"></span><span class="edit-status-meter"
               :class="editStatusClass(chapterEditStatus(item))"
               :data-tip="editStatusTipLine(chapterEditStatus(item)) || null"></span></span>
@@ -105,13 +105,13 @@
               @mouseleave.stop="_hideTokTip()"></span>
           </template>
           <span x-show="!item.solo && $store.badges.chapterIdeenCounts[item.id] > 0"
-                class="ideen-count-badge internal-link"
+                class="ideen-count-badge internal-link" tabindex="-1"
                 @click.stop="openIdeenForChapter(item.id)"
                 x-text="$store.badges.chapterIdeenCounts[item.id]"
                 :data-tip="t('ideen.openCountTitle', { n: $store.badges.chapterIdeenCounts[item.id] })"
                 :aria-label="t('ideen.openCountTitle', { n: $store.badges.chapterIdeenCounts[item.id] })"></span>
           <span x-show="!item.solo && $store.badges.chapterRechercheCounts[item.id] > 0"
-                class="recherche-count-badge internal-link"
+                class="recherche-count-badge internal-link" tabindex="-1"
                 @click.stop="openRechercheForChapter(item.id)"
                 x-text="$store.badges.chapterRechercheCounts[item.id]"
                 :data-tip="t('recherche.openCountTitle', { n: $store.badges.chapterRechercheCounts[item.id] })"
@@ -140,7 +140,7 @@
                @click="if ($event.button === 0 && !$event.ctrlKey && !$event.metaKey && !$event.shiftKey && !$event.altKey) { $event.preventDefault(); selectPage(page); _clearRemoteEditMark(page.id); }"
                @keydown.space.self.prevent="$el.click()"
                @contextmenu="_openPagetreeContextMenu($event, _isSingleSectionChapter(item)
-                 ? { kind: 'page', id: page.id, name: item.name, single: true, chapterId: item.id, excluded: item.excluded }
+                 ? { kind: 'page', id: page.id, name: item.name, single: true, chapterId: item.id, excluded: item.excluded, excludedByParent: _chapterExcludedByAncestor(item) }
                  : { kind: 'page', id: page.id, name: page.name })">
             <span class="page-name">
               <span class="page-status-dot" :class="'page-status-' + pageStatus(page)"
@@ -177,24 +177,24 @@
                 <span class="tok-badge tok-empty" x-text="t('sidebar.empty')"></span>
               </template>
               <span x-show="$store.badges.ideenCounts[page.id] > 0"
-                    class="ideen-count-badge internal-link"
+                    class="ideen-count-badge internal-link" tabindex="-1"
                     @click.stop.prevent="openIdeenForPage(page.id)"
                     x-text="$store.badges.ideenCounts[page.id]"
                     :data-tip="t('ideen.openCountTitle', { n: $store.badges.ideenCounts[page.id] })"
                     :aria-label="t('ideen.openCountTitle', { n: $store.badges.ideenCounts[page.id] })"></span>
               <span x-show="$store.badges.rechercheCounts[page.id] > 0"
-                    class="recherche-count-badge internal-link"
+                    class="recherche-count-badge internal-link" tabindex="-1"
                     @click.stop.prevent="openRechercheForPage(page.id)"
                     x-text="$store.badges.rechercheCounts[page.id]"
                     :data-tip="t('recherche.openCountTitle', { n: $store.badges.rechercheCounts[page.id] })"
                     :aria-label="t('recherche.openCountTitle', { n: $store.badges.rechercheCounts[page.id] })"></span>
               <template x-if="_isSingleSectionChapter(item)">
                 <span class="tok-stats-wrap">
-                  <span x-show="$store.badges.chapterIdeenCounts[item.id] > 0" class="ideen-count-badge internal-link"
+                  <span x-show="$store.badges.chapterIdeenCounts[item.id] > 0" class="ideen-count-badge internal-link" tabindex="-1"
                         @click.stop.prevent="openIdeenForChapter(item.id)" x-text="$store.badges.chapterIdeenCounts[item.id]"
                         :data-tip="t('ideen.openCountTitle', { n: $store.badges.chapterIdeenCounts[item.id] })"
                         :aria-label="t('ideen.openCountTitle', { n: $store.badges.chapterIdeenCounts[item.id] })"></span>
-                  <span x-show="$store.badges.chapterRechercheCounts[item.id] > 0" class="recherche-count-badge internal-link"
+                  <span x-show="$store.badges.chapterRechercheCounts[item.id] > 0" class="recherche-count-badge internal-link" tabindex="-1"
                         @click.stop.prevent="openRechercheForChapter(item.id)" x-text="$store.badges.chapterRechercheCounts[item.id]"
                         :data-tip="t('recherche.openCountTitle', { n: $store.badges.chapterRechercheCounts[item.id] })"
                         :aria-label="t('recherche.openCountTitle', { n: $store.badges.chapterRechercheCounts[item.id] })"></span>
@@ -209,6 +209,12 @@
   </div><!-- /page-tree -->
   <template x-if="filteredTree.length === 0 && pageSearch">
     <div class="muted-msg muted-msg--sm" x-text="t('sidebar.noPagesFound')"></div>
+  </template>
+  <template x-if="filteredTree.length === 0 && !pageSearch && _editFilterActive() && $store.nav.tree.length > 0">
+    <div class="sidebar-empty-book">
+      <div class="muted-msg muted-msg--sm" x-text="t('editStatus.filterAllDone')"></div>
+      <button type="button" @click="treeEditFilter = false" x-text="t('editStatus.filterOff')"></button>
+    </div>
   </template>
   <template x-if="!pageSearch && $store.nav.selectedBookId && $store.nav.tree.length === 0 && !treeLoading">
     <div class="sidebar-empty-book">

@@ -76,29 +76,53 @@ async function runSourceEmbedIndexJob(jobId, userEmail) {
     const presentIds = [];
     let totalChunks = 0;
 
-    for (const sourceId of _candidateIds(userEmail)) {
+    let unchanged = 0;
+    for (const cand of sourceSemanticChunks.listIndexedCandidates(userEmail)) {
       throwIfAborted();
+      const sourceId = cand.id;
       presentIds.push(sourceId);
       docHashAtCollect.set(sourceId, getSourceDocMeta(sourceId)?.doc_content_hash ?? null);
       // Volltext nur fuer die Dauer des Chunkens im Speicher.
       const chunks = chunkText(getSourceDocText(sourceId));
       if (!chunks.length) continue;
-      rowsBySource.set(sourceId, []);
       const existing = sourceSemanticChunks.getSourceChunks(sourceId, model);
+      // Delta-Cache über den Hash statt über die Position: verschiebt eine
+      // Einfügung vorne die Chunk-Grenzen, behalten die unveränderten Chunks
+      // dahinter trotzdem ihren Vektor.
+      const byHash = new Map();
+      for (const prev of existing.values()) {
+        if (prev.vector.length === dim) byHash.set(prev.content_hash, prev.vector);
+      }
+      const rows = [];
+      let samePlace = existing.size === chunks.length;
       chunks.forEach((text, ix) => {
         totalChunks++;
         const embedInput = passagePrefix ? passagePrefix + text : text;
         const hash = contentHash(embedInput);
-        const prev = existing.get(ix);
-        if (prev && prev.content_hash === hash && prev.vector.length === dim) {
-          rowsBySource.get(sourceId).push({ chunk_ix: ix, content_hash: hash, vector: prev.vector, text });
+        if (existing.get(ix)?.content_hash !== hash) samePlace = false;
+        const vec = byHash.get(hash);
+        if (vec) {
+          rows.push({ chunk_ix: ix, content_hash: hash, vector: vec, text });
         } else {
+          samePlace = false;
           pending.push({ sourceId, ix, text, embedInput, hash });
         }
       });
+      // Nichts geändert → kein Schreiben (sonst schriebe jeder Nachtlauf alle
+      // BLOBs der Bibliothek neu). Den Index-Stempel nur nachziehen, wenn die
+      // Quelle als veraltet gilt (Metadaten-Edit hebt `updated_at`, der Text
+      // blieb gleich) — sonst stünde sie dauerhaft in `staleCount`.
+      if (samePlace) {
+        unchanged++;
+        if (!cand.doc_indexed_at || cand.doc_indexed_at < cand.updated_at) {
+          markSourceIndexed(sourceId, new Date().toISOString());
+        }
+        continue;
+      }
+      rowsBySource.set(sourceId, rows);
     }
 
-    l.info(`Source-Index ${userEmail}: ${totalChunks} Chunks, davon ${pending.length} neu (${totalChunks - pending.length} aus Cache).`);
+    l.info(`Source-Index ${userEmail}: ${totalChunks} Chunks, davon ${pending.length} neu (${totalChunks - pending.length} aus Cache), ${unchanged} Quellen unverändert.`);
     updateJob(jobId, { statusText: 'job.phase.sourceEmbedding', statusParams: { done: 0, total: pending.length }, progress: 15 });
 
     const pendingBySource = new Map();
@@ -128,6 +152,11 @@ async function runSourceEmbedIndexJob(jobId, userEmail) {
       throwIfAborted();
       const slice = pending.slice(i, i + BATCH);
       const vecs = await embed.embedBatch(slice.map(p => p.embedInput), { signal: signal() });
+      // embed.dim muss zum Modell passen: ein falsch eingestellter Wert liesse
+      // jeden Vektor am Delta-Cache scheitern (jede Nacht ein Voll-Embedding)
+      // und an der Abfrage als -Infinity ranken.
+      const bad = vecs.find(v => !v || v.length !== dim);
+      if (bad) throw i18nError('job.error.embedDimMismatch', { expected: dim, actual: bad?.length ?? 0 });
       const touched = new Set();
       slice.forEach((p, j) => {
         rowsBySource.get(p.sourceId).push({ chunk_ix: p.ix, content_hash: p.hash, vector: vecs[j], text: p.text });

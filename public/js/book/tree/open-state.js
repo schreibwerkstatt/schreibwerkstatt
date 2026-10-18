@@ -3,7 +3,10 @@
 
 export const treeOpenStateMethods = {
   async _onChapterHeaderActivate(item) {
-    if (this.pageSearch) return;
+    // Waehrend Suche/Stand-Filter ist `item` eine Kopie und alles offen: das
+    // Kapitel oeffnet dort weiter seine Bewertung bzw. die Anlage des ersten
+    // Abschnitts, nur das Auf-/Zuklappen entfaellt.
+    const filtered = this._treeIsFiltered();
     // Leeres Kapitel → kapitel-review-card öffnen, damit User direkt eine
     // erste Seite anlegen kann. openKapitelReviewForChapter filtert 0-Seiten-
     // Kapitel via kapitelReviewChapterOptions() raus, deswegen direkt setzen.
@@ -18,7 +21,7 @@ export const treeOpenStateMethods = {
     // Parent-Kapitel ohne direkte Pages, aber mit Sub-Kapiteln, öffnen das
     // Review (include_subchapters greift dann automatisch, siehe kapitelReviewIncludeSubchapters).
     if (this._bookQualifiesForChapterReview()) await this.openKapitelReviewForChapter(item.id);
-    else this.toggleChapterOpen(item);
+    else if (!filtered) this.toggleChapterOpen(item);
   },
 
   // Persistenter Collapse-State des Sidebar-Trees pro (User, Buch). Default
@@ -51,16 +54,22 @@ export const treeOpenStateMethods = {
       localStorage.setItem(key, JSON.stringify(state));
     } catch { /* quota / disabled storage — ignore */ }
   },
+  // Immer am Original in nav.tree: aus dem Template kann eine Such-/Filter-Kopie
+  // kommen, deren `open` weder persistiert noch den naechsten Render ueberlebt.
+  // Bei aktivem Filter ist alles offen — Toggles bleiben dort wirkungslos.
   setChapterOpen(item, value) {
-    if (!item || item.solo) return;
-    item.open = !!value;
+    if (!item || item.solo || this._treeIsFiltered()) return;
+    const orig = this._findTreeChapter(item.id) || item;
+    orig.open = !!value;
     this._persistTreeOpenState();
   },
   toggleChapterOpen(item) {
     if (!item || item.solo) return;
-    this.setChapterOpen(item, !item.open);
+    const orig = this._findTreeChapter(item.id) || item;
+    this.setChapterOpen(orig, !orig.open);
   },
   setAllChaptersOpen(value) {
+    if (this._treeIsFiltered()) return;
     for (const item of this.$store.nav.tree) {
       if (item.type === 'chapter' && !item.solo) item.open = !!value;
     }

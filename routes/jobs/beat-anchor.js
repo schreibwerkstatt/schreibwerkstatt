@@ -31,11 +31,7 @@ const beatAnchorRouter = express.Router();
 const SCAN_KINDS = ['page', 'scene'];
 const TOP_K = 25;
 
-const _TAG = /<\/?[^>]+>/g;
-const _ENT = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };
-function _plainSnippet(s) {
-  return String(s || '').replace(_TAG, '').replace(/&(amp|lt|gt|quot|#39);/g, m => _ENT[m] || m).trim().slice(0, 400);
-}
+const { plainSnippet: _plainSnippet, makeLiveSnippets } = require('../../lib/anchor-snippet');
 
 function _occKey(kind, entityId) { return `${kind}:${entityId}`; }
 function _toOcc(kind, entityId, score, snippet, source) {
@@ -61,9 +57,15 @@ function _toOcc(kind, entityId, score, snippet, source) {
 // Treffer ist ohne Semantik ein zu schwaches Promotion-Signal.
 //
 // `userEmail` (gesetzt = Besitz-Filter): Szenen sind Analyse-Daten pro User, der
-// Embedding-/FTS-Index hängt nur am Buch — Szenen eines Mitautors fallen weg.
+// Embedding-/FTS-Index hängt nur am Buch — Szenen eines Mitautors fallen weg. Der
+// User-Scope greift schon in der Suche (vor dem topK-Schnitt); `own` bleibt als
+// zweite Schicht und für den FTS-Fallback.
+//
+// `opts.snippetFor` (hit → Auszug | null): Live-Auszug (lib/anchor-snippet.js),
+// null = Stelle steht so nicht mehr auf der Seite → Treffer verworfen. Default:
+// Chunk-Text.
 async function _anchorBeat(bookId, beat, useSemantic, signalFn, minScore = 0, opts = {}) {
-  const { promote = minScore > 0 } = opts;
+  const { promote = minScore > 0, snippetFor = null } = opts;
   const scoped = Object.prototype.hasOwnProperty.call(opts, 'userEmail');
   const own = h => !scoped || h.kind !== 'scene' || getSceneTitleForUser(h.entity_id, opts.userEmail ?? null) != null;
   const found = new Map();
@@ -71,12 +73,17 @@ async function _anchorBeat(bookId, beat, useSemantic, signalFn, minScore = 0, op
   if (!query) return [];
 
   if (useSemantic) {
-    const hits = await retrieval.semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn(), strictRerank: true });
+    const hits = await retrieval.semanticQuery(bookId, query, {
+      kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn(), strictRerank: true,
+      ...(scoped ? { user: opts.userEmail ?? null } : {}),
+    });
     for (const h of hits) {
       if (h.semScore == null) continue;
       if (!own(h)) continue;
       if (minScore > 0 && h.semScore < minScore) continue;
-      found.set(_occKey(h.kind, h.entity_id), _toOcc(h.kind, h.entity_id, h.semScore, _plainSnippet(h.text), 'semantic'));
+      const snippet = snippetFor ? await snippetFor(h) : _plainSnippet(h.text);
+      if (snippet == null) continue;
+      found.set(_occKey(h.kind, h.entity_id), _toOcc(h.kind, h.entity_id, h.semScore, snippet, 'semantic'));
     }
   } else {
     if (promote) return []; // Promotion nur mit Semantik — FTS-Titel-Treffer zu schwach.
@@ -133,6 +140,7 @@ async function runBeatAnchorJob(jobId, bookId, userEmail) {
 
     let totalOcc = 0;
     let failed = 0;
+    const snippetFor = makeLiveSnippets(bookId);
     for (let i = 0; i < beats.length; i++) {
       throwIfAborted();
       const beat = beats[i];
@@ -143,7 +151,7 @@ async function runBeatAnchorJob(jobId, bookId, userEmail) {
       // Full-Replace mit [] — ein Ausfall ist keine Aussage „nicht im Text").
       let rows;
       try {
-        rows = await _anchorBeat(bookId, beat, useSemantic, signal, minScore, { promote, userEmail });
+        rows = await _anchorBeat(bookId, beat, useSemantic, signal, minScore, { promote, userEmail, snippetFor });
       } catch (e) {
         if (e.name === 'AbortError') throw e;
         failed++;

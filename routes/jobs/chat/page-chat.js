@@ -59,7 +59,8 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     buildChatSystemPrompt, SCHEMA_CHAT, formatHistoryVorschlaege, formatHistoryIdeen, historyTrimNote, formatPageChange,
     buildPageChatBookContext,
   } = await getPrompts(userEmail);
-  const aiCfg = getContextConfigFor(resolveProvider({ userEmail }));
+  const effectiveProvider = resolveProvider({ userEmail });
+  const aiCfg = getContextConfigFor(effectiveProvider);
   try {
     updateJob(jobId, { statusText: 'job.phase.preparing', progress: 5 });
 
@@ -134,26 +135,35 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     };
     const fullHistory = buildChatMessageHistory(session.id, { annotate }).slice(0, -1);
 
-    // Buch-Kontext: pro Frage andere Bytes → eigener dritter System-Block OHNE
-    // Breakpoint am Ende; Block 1 (buch-stabil) und Block 2 (seiten-stabil) bleiben
-    // gecachte Präfixe. Suchtext = Frage + letzte Runde (Folgefragen).
+    // Buch-Kontext: pro Frage andere Bytes → NICHT im System-Prompt (er bräche den
+    // Präfix hinter Block 2, der ganze Verlauf würde jede Runde neu bezahlt), sondern
+    // als Präambel vor der Frage in deren User-Nachricht — wie der Erst-Kontext des
+    // agentischen Buch-Chats. Persistiert wird nur die Frage. Suchtext = Frage +
+    // letzte Runde (Folgefragen).
     const signal = jobAbortControllers.get(jobId)?.signal;
     const bookCtx = await _pageChatBookContext(session, retrievalQuery(message, fullHistory), budget, signal, userEmail, logger);
     const bookCtxText = bookCtx ? buildPageChatBookContext(bookCtx.hits) : '';
-    if (bookCtxText) {
-      systemPrompt.push({ text: bookCtxText, cache: false });
-      logger.info(`Buch-Kontext: ${bookCtx.hits.length} Stellen, ${bookCtx.chars} Zeichen.`);
-    }
+    const userContent = bookCtxText ? `${bookCtxText}\n\n=== FRAGE ===\n${message}` : message;
+    if (bookCtxText) logger.info(`Buch-Kontext: ${bookCtx.hits.length} Stellen, ${bookCtx.chars} Zeichen.`);
 
     // Konversationshistorie: frühere Vorschläge samt Status als Anhang der
     // jeweiligen Antwort, dann auf das Restbudget gekürzt (älteste zuerst).
     const sysChars = systemPrompt.reduce((n, b) => n + (b.text || '').length, 0);
-    const historyBudget = budget.total - sysChars - message.length;
+    const historyBudget = budget.total - sysChars - userContent.length;
     if (historyBudget < 0) {
-      throw i18nError('job.error.pageChatContextFull', { chars: sysChars + message.length, max: budget.total });
+      throw i18nError('job.error.pageChatContextFull', { chars: sysChars + userContent.length, max: budget.total });
     }
     const { messages: history, dropped } = fitHistory(fullHistory, historyBudget);
-    const aiMessages = [...history, { role: 'user', content: message }];
+    // Cache: Breakpoint auf das Ende des Verlaufs (vor der aktuellen Frage), damit der
+    // NÄCHSTE Turn System + Verlauf liest, obwohl seine Frage samt Präambel neu ist;
+    // zusätzlich der Breakpoint auf der letzten Nachricht (cacheLastMessage). Die
+    // Markierung ist kein API-Feld — lib/ai/claude.js entfernt sie; andere Provider
+    // bekommen sie gar nicht erst.
+    const markHistoryEnd = bookCtxText && effectiveProvider === 'claude' && history.length > 0;
+    const aiMessages = [
+      ...(markHistoryEnd ? [...history.slice(0, -1), { ...history.at(-1), cacheBreakpoint: true }] : history),
+      { role: 'user', content: userContent },
+    ];
     if (dropped > 0) {
       aiMessages[0] = { ...aiMessages[0], content: `${historyTrimNote(dropped)}\n\n${aiMessages[0].content}` };
       logger.info(`Verlauf gekürzt: ${dropped} ältere Nachricht(en) weggelassen (Budget ${historyBudget} Zeichen).`);
@@ -168,12 +178,10 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       updateJob(jobId, updates);
     };
 
-    // cacheLastMessage: ohne Buch-Kontext ist der System-Prompt über die Turns einer
-    // Session stabil (Block 1 buch-stabil, Block 2 seiten-stabil) und das Multi-Turn-
-    // Caching der Konversationshistorie greift. Mit Buch-Kontext steht vor dem
-    // Verlauf ein Block, der jede Frage wechselt — ein Breakpoint auf der letzten
-    // Nachricht wäre dann ein cache_write, das nie gelesen wird.
-    const aiRes = await callAIChat(aiMessages, systemPrompt, onProgress, null, signal, undefined, SCHEMA_CHAT, chatTemperature(), !bookCtxText);
+    // cacheLastMessage: der System-Prompt ist über die Turns einer Session stabil
+    // (Block 1 buch-stabil, Block 2 seiten-stabil) — der Buch-Kontext steht in der
+    // Frage —, also greift das Multi-Turn-Caching der Konversationshistorie immer.
+    const aiRes = await callAIChat(aiMessages, systemPrompt, onProgress, null, signal, undefined, SCHEMA_CHAT, chatTemperature(), true);
     const { text, truncated, tokensIn, tokensOut, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0, provider, model, genDurationMs } = aiRes;
     // Job-State auf echte Provider-Werte setzen, damit Status-Anzeige und
     // gespeicherte Chat-Nachricht dieselben Tokens zeigen (statt eines

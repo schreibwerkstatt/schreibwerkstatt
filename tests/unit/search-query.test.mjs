@@ -148,3 +148,17 @@ test('attachNavIds: figure/location bekommen ihre TEXT-ID, der Rest den PK', () 
     assert.equal(rows[0].entity_id, 11);
   } finally { teardown(); }
 });
+
+test('buildMatchQuery anyTerms: ODER ohne Füllwörter, Phrasen bleiben, Negation fällt weg', () => {
+  const { search, teardown } = _bootstrap();
+  try {
+    const q = search.buildMatchQuery('Wo trifft Anna ihren Bruder "zum ersten Mal"? -Streit', { anyTerms: true });
+    assert.equal(q, '"zum ersten Mal" OR "trifft" OR "Bruder" OR "Anna"');
+    assert.equal(search.buildMatchQuery('die und der', { anyTerms: true }), '');
+    // Deckel auf die längsten Wörter.
+    const many = Array.from({ length: 30 }, (_, i) => `wort${String(i).padStart(2, '0')}${'x'.repeat(i % 5)}`).join(' ');
+    assert.equal(search.buildMatchQuery(many, { anyTerms: true }).split(' OR ').length, 16);
+    // Ohne anyTerms bleibt das UND-Verhalten.
+    assert.equal(search.buildMatchQuery('Anna Bruder'), '"Anna" "Bruder"');
+  } finally { teardown(); }
+});

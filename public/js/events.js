@@ -31,7 +31,7 @@ export const EVT = {
   BOOK_SETTINGS_UPDATED: 'book:settings:updated', // detail: { bookId }
   PAGES_LOADED: 'pages:loaded',                 // kein detail
   // Eine Seite wurde lokal aus nav.tree/nav.pages entfernt, OHNE vollen Reload
-  // (Remote-Delete aus dem Collab-Feed, tree/load.js#_removePageFromTree).
+  // (Remote-Delete aus dem Collab-Feed, tree/build.js#_removePageFromTree).
   // Karten mit eigener Edit-Repräsentation des Baums (Buchorganizer) ziehen
   // darauf ihren Snapshot nach — `pages:loaded` feuert hier bewusst nicht.
   PAGE_REMOVED: 'page:removed',                 // detail: { pageId }
@@ -40,6 +40,10 @@ export const EVT = {
   // tree/load.js#createChapter). Der Organizer zieht darauf seinen Workstate
   // nach — sonst fehlte das Kapitel im nächsten Order-PUT (Server: MISSING_CHAPTER).
   CHAPTER_ADDED: 'chapter:added',               // detail: { chapterId }
+  // Gegenstueck: ein Kapitel wurde ausserhalb des Buchorganizers geloescht und
+  // lokal aus nav.tree entfernt (Sidebar-Kontextmenue,
+  // tree/structure.js#deleteChapterById).
+  CHAPTER_REMOVED: 'chapter:removed',           // detail: { chapterId }
   // Seite oder Kapitel wurde ausserhalb des Buchorganizers umbenannt und in
   // nav.tree/nav.pages gespiegelt (Editor-Kopf, Sidebar-Kontextmenü,
   // app-view/page.js#renamePageById, tree-context-menu.js#renameChapterById).

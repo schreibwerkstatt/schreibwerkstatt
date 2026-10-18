@@ -27,7 +27,11 @@ const _stmtInsertOcc = db.prepare(`
 
 // Full-Replace der Fundstellen EINES Kerns. rows:
 // [{ kind:'page'|'scene', pageId?, sceneId?, score, snippet, source }].
+// Rückgabe false, wenn der Draft inzwischen gelöscht ist (Lauf überholt von einem
+// Delete) — dann wird nichts geschrieben statt am FK zu scheitern.
+const _stmtDraftExists = db.prepare('SELECT 1 FROM draft_figures WHERE id = ?');
 const replaceKernOccurrences = db.transaction((draftId, bookId, kern, rows) => {
+  if (!_stmtDraftExists.get(parseInt(draftId))) return false;
   _stmtDeleteForKern.run(parseInt(draftId), kern);
   for (const r of rows || []) {
     const isPage = r.kind === 'page';
@@ -40,6 +44,7 @@ const replaceKernOccurrences = db.transaction((draftId, bookId, kern, rows) => {
       r.source,
     );
   }
+  return true;
 });
 
 // Alle Fundstellen eines Drafts raeumen — fuer Drafts, die gar keinen ausge-

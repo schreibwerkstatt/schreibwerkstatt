@@ -12,6 +12,7 @@ Buchweite Doppelungs-Suche über dem Semantik-Index ([semantic-search.md](semant
 
 ## Ablauf
 
+0. **Vollständiger Index Pflicht.** Ohne `indexReady` (Erstlauf unterbrochen, Modellwechsel) bricht der Job mit `job.error.redundancyNoIndex` ab und lässt `redundancy_runs` unangetastet — ein Teil-Index ergäbe „keine Doppelungen" und überschriebe den letzten gültigen Lauf.
 1. **Seiten aus dem Content-Store.** Der Job holt die Seiten des Buchs in Lesereihenfolge (`bookTree` + `flattenTree`). Nur Chunks dieser Seiten nehmen teil: eine gelöschte oder in ein anderes Buch verschobene Seite hält ihre Vektoren bis zum nächsten Reindex und darf kein Befund sein.
 2. **Vorbereiten.** Chunks unter 40 Zeichen und Nullvektoren fallen heraus, die übrigen werden auf Einheitslänge normiert (Cosinus = Skalarprodukt). Erst danach greift die Obergrenze von 6000 Chunks — in Buchreihenfolge, d.h. bei Überlauf fehlen die letzten Seiten des Buchs, und das Ergebnis meldet die Zahl (`truncatedChunks`).
 3. **Dreiecks-Scan.** Alle Chunk-Paare verschiedener Seiten; pro Seitenpaar zählt nur der beste Chunk-Treffer. Der Scan läuft in Blöcken von etwa 40 000 Paaren mit Yield an den Event-Loop; Blockgrösse und Fortschritt rechnen in **Paaren**, weil frühe Zeilen des Dreiecks viel teurer sind als späte.

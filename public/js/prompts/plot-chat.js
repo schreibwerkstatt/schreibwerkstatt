@@ -10,6 +10,7 @@
 // Deep-Doc: docs/plot-chat.md
 
 import { _isLocal, _jsonOnly } from './state.js';
+import { buildPassageBlockLines } from './chat-pre-context.js';
 
 // Lese-Werkzeuge aus BOOK_CHAT_TOOLS, die der Plot-Chat anbietet. Handler +
 // Schemas teilt er mit dem Buch-Chat (routes/jobs/book-chat-tools) — eine
@@ -232,7 +233,8 @@ export function buildPlotProposalMemoryBlock(list = []) {
  * @param {object} ctx { mode ('agent'|'classic'), maxToolIter, toolNames,
  *                       bookContext, boardOutline, figurenOutline,
  *                       proposalMemory, passages (classic immer; agent als
- *                       Erst-Kontext, null = ohne Embedding-Endpunkt) }
+ *                       Erst-Kontext, null = ohne Embedding-Endpunkt),
+ *                       passageStatus (Index-/Suchstand, chat-pre-context.js) }
  */
 export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
   const classic = ctx.mode === 'classic';
@@ -328,18 +330,11 @@ function _finish(stable, ctx, { classic }) {
   // Erst-Kontext nur mit Embedding-Endpunkt (ctx.passages = Array). Pro Frage andere
   // Bytes — darum hier im ungecachten Block am Ende, nie im gecachten Block 1.
   if (classic || Array.isArray(ctx.passages)) {
-    const passages = Array.isArray(ctx.passages) ? ctx.passages : [];
-    volatile.push('', '=== TEXTPASSAGEN (semantisch nächste Stellen zur Frage) ===');
-    if (passages.length) {
-      if (!classic) {
-        volatile.push('(Automatisch vorab geholt; Ausschnitte können unvollständig sein. Reichen sie, brauchst du kein Lese-Werkzeug — sonst weiter mit search_similar/get_chapter_text.)');
-      }
-      for (const p of passages) volatile.push(`--- ${p.title || p.kind || ''} ---`, String(p.text || '').trim());
-    } else {
-      volatile.push(classic
-        ? '(keine — Embedding-Index fehlt oder kein Treffer; urteile über Board und Figuren)'
-        : '(keine Treffer zur Frage — nutze bei Bedarf die Lese-Werkzeuge)');
-    }
+    volatile.push('', ...buildPassageBlockLines(ctx.passages, {
+      classic, status: ctx.passageStatus,
+      intro: '(Automatisch vorab geholt; Ausschnitte können unvollständig sein. Reichen sie, brauchst du kein Lese-Werkzeug — sonst weiter mit search_similar/get_chapter_text.)',
+      emptyClassic: '(keine — Embedding-Index fehlt oder kein Treffer; urteile über Board und Figuren)',
+    }));
   }
   return [
     { text: stable.join('\n') + (classic ? _jsonOnly() : ''), ttl: '1h' },

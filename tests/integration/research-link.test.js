@@ -213,11 +213,13 @@ test('unbekanntes Item → failJob (researchItemMissing), kein KI-Call', async (
   assert.equal(ctx.mockAi.log.length, 0);
 });
 
-test('Seiten-Vorschläge aus den Embeddings: eigene Seiten mit Auszug, fremde und schon verknüpfte fallen weg', async () => {
+test('Seiten-Vorschläge aus den Embeddings: eigene Seiten mit Live-Auszug, fremde, schon verknüpfte und umgeschriebene fallen weg', async () => {
   const BOOK_ID = 7210;
   const ids = seedWorld(BOOK_ID);
   db.prepare("INSERT INTO books (book_id, name, created_at, updated_at) VALUES (7211, 'Fremd', ?, ?)").run(NOW, NOW);
-  db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, updated_at) VALUES (721001, ?, 'Grabung', 1, ?)").run(BOOK_ID, NOW);
+  db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, body_html, updated_at) VALUES (721001, ?, 'Grabung', 1, '<p>Sie gruben in Olten.</p>', ?)").run(BOOK_ID, NOW);
+  // Index-Chunk veraltet: die Stelle steht so nicht mehr auf der Seite → kein Vorschlag.
+  db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, body_html, updated_at) VALUES (721003, ?, 'Umgeschrieben', 3, '<p>Ganz anderer Text über Maschinen.</p>', ?)").run(BOOK_ID, NOW);
   db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, updated_at) VALUES (721002, ?, 'Schon da', 2, ?)").run(BOOK_ID, NOW);
   db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, updated_at) VALUES (721101, 7211, 'Fremdseite', 1, ?)").run(NOW);
   db.prepare("INSERT INTO research_item_links (item_id, target_kind, page_id) VALUES (?, 'page', 721002)").run(ids.itemId);
@@ -234,6 +236,7 @@ test('Seiten-Vorschläge aus den Embeddings: eigene Seiten mit Auszug, fremde un
       { kind: 'page', entity_id: 721101, text: 'fremd', score: 0.9 },
       { kind: 'page', entity_id: 721001, text: 'Sie gruben   in Olten.', score: 0.8 },
       { kind: 'page', entity_id: 721002, text: 'schon verknüpft', score: 0.7 },
+      { kind: 'page', entity_id: 721003, text: 'Die Pferde standen im Regen am Fluss.', score: 0.6 },
     ] };
   };
   try {
@@ -251,7 +254,7 @@ test('Seiten-Vorschläge aus den Embeddings: eigene Seiten mit Auszug, fremde un
 test('Seiten-Vorschläge: nicht indexiertes Fundstück → Freitext-Anfrage (Array-Rückgabe)', async () => {
   const BOOK_ID = 7212;
   const ids = seedWorld(BOOK_ID);
-  db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, updated_at) VALUES (721201, ?, 'Grabung', 1, ?)").run(BOOK_ID, NOW);
+  db.prepare("INSERT INTO pages (page_id, book_id, page_name, position, body_html, updated_at) VALUES (721201, ?, 'Grabung', 1, '<p>Grabung</p>', ?)").run(BOOK_ID, NOW);
   aiReturnsLinks([]);
   const embed = require('../../lib/embed');
   const sr = require('../../lib/semantic-retrieval');

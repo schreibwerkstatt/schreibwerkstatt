@@ -129,3 +129,30 @@ test('semanticQuery strictRerank: ohne Tor (min_score 0) bleibt der Fallback sti
   const hits = await semanticQuery(1, 'frage', { topK: 5, strictRerank: true });
   assert.equal(hits.length, 5);
 });
+
+// Mit Tor bewertet der Cross-Encoder den Pool bis topK, nicht nur top_n — sonst
+// deckelte das Tor jeden Aufrufer auf top_n Treffer (Motiv-Scan bis 500).
+test('semanticQuery: mit Tor wird der Pool bis topK bewertet, nicht nur top_n', async () => {
+  mockRetrieval(10);
+  let seenDocs = 0;
+  mockRerank({
+    topN: 3, minScore: 0.3,
+    fn: async (q, docs) => { seenDocs = docs.length; return docs.map((_, i) => ({ index: i, score: 0.9 - i * 0.01 })); },
+  });
+  const hits = await semanticQuery(1, 'frage', { topK: 8 });
+  assert.equal(seenDocs, 8);
+  assert.equal(hits.length, 8);
+  assert.ok(hits.every(h => typeof h.rerankScore === 'number'));
+});
+
+// rerankScore trennt bewertete von ungeprüft angehängten Kandidaten; ohne
+// Reranker ist er null (Aufrufer prüfen das Tor gegen rerankScore, nie gegen score).
+test('semanticQuery: rerankScore nur für bewertete Kandidaten', async () => {
+  mockRetrieval(10);
+  mockRerank({ topN: 2, minScore: 0, fn: async () => [{ index: 1, score: 0.7 }, { index: 0, score: 0.4 }] });
+  const hits = await semanticQuery(1, 'frage', { topK: 4 });
+  assert.deepEqual(hits.map(h => h.rerankScore), [0.7, 0.4, null, null]);
+  mockRerank({ enabled: false });
+  const plain = await semanticQuery(1, 'frage', { topK: 3 });
+  assert.ok(plain.every(h => h.rerankScore === null));
+});

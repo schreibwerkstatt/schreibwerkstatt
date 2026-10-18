@@ -20,13 +20,13 @@
     <button type="button" class="icon-btn"
             x-show="sidebarMode !== 'calendar'"
             @click="setAllChaptersOpen(true)"
-            :disabled="!!pageSearch"
+            :disabled="_treeIsFiltered()"
             :data-tip="t('sidebar.expandAll')"
             :aria-label="t('sidebar.expandAll')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-down"/></svg></button>
     <button type="button" class="icon-btn"
             x-show="sidebarMode !== 'calendar'"
             @click="setAllChaptersOpen(false)"
-            :disabled="!!pageSearch"
+            :disabled="_treeIsFiltered()"
             :data-tip="t('sidebar.collapseAll')"
             :aria-label="t('sidebar.collapseAll')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-up"/></svg></button>
     <!-- Stand-Filter (docs/bearbeitungsstand.md): nur Abschnitte, die noch nicht

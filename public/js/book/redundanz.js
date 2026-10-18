@@ -76,11 +76,12 @@ export const redundanzMethods = {
     if (!bookId || !this.$store.config?.semanticSearchEnabled) { this.redundanzIndexInfo = null; return; }
     try {
       const r = await fetch('/search/semantic/status?book_id=' + encodeURIComponent(bookId), { credentials: 'same-origin' });
+      if (Alpine.store('nav').selectedBookId !== bookId) return;
       if (!r.ok) { this.redundanzIndexInfo = null; return; }
       const j = await r.json();
       if (Alpine.store('nav').selectedBookId !== bookId) return;
       this.redundanzIndexInfo = j.enabled ? j : null;
-    } catch { this.redundanzIndexInfo = null; }
+    } catch { if (Alpine.store('nav').selectedBookId === bookId) this.redundanzIndexInfo = null; }
   },
 
   // Zuletzt gespeichertes Ergebnis dieses Users. Läuft gerade ein Job, gewinnt
@@ -138,6 +139,9 @@ export const redundanzMethods = {
         }),
       });
       const j = await r.json().catch(() => ({}));
+      // Buch während des POST gewechselt: den Job des alten Buches nicht in der
+      // (schon zurückgesetzten) Anzeige des neuen pollen.
+      if (Alpine.store('nav').selectedBookId !== bookId) return;
       if (!r.ok || !j.jobId) {
         this.redundanzLoading = false;
         this.redundanzStatus = j.error_code === 'EMBED_DISABLED' ? tRaw('redundanz.needBackend') : tRaw('redundanz.error');
@@ -148,6 +152,7 @@ export const redundanzMethods = {
       if (j.existing) this.redundanzStatus = tRaw('redundanz.alreadyRunning');
       this._pollRedundanz(j.jobId);
     } catch (e) {
+      if (Alpine.store('nav').selectedBookId !== bookId) return;
       this.redundanzLoading = false;
       this.redundanzStatus = tRaw('common.errorColon') + (e.message || '');
     }
@@ -188,6 +193,7 @@ export const redundanzMethods = {
         body: JSON.stringify({ book_id: bookId }),
       });
       const j = await r.json().catch(() => ({}));
+      if (Alpine.store('nav').selectedBookId !== bookId) return;
       if (!r.ok || !j.jobId) {
         this.redundanzIndexing = false;
         this.redundanzStatus = tRaw('redundanz.indexError');
@@ -195,6 +201,7 @@ export const redundanzMethods = {
       }
       this._pollRedundanzIndex(j.jobId);
     } catch {
+      if (Alpine.store('nav').selectedBookId !== bookId) return;
       this.redundanzIndexing = false;
       this.redundanzStatus = tRaw('redundanz.indexError');
     }
