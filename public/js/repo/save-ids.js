@@ -10,6 +10,15 @@
 // (lib/content-store/backends/localdb.js#savePage). Ein Write ohne Kennung
 // (Job, Import, alter Client) setzt sie auf NULL und beendet die Erkennung.
 //
+// Nachfahre ist der neue Stand aber nur, wenn er auf derselben Basis aufbaut
+// wie der verlorene Save. Darum trägt jede Kennung den Stempel, gegen den ihr
+// PUT ging (`expected_updated_at`), und zählt nur bei passender Basis: die
+// Kette nach einer verlorenen Antwort läuft immer gegen denselben Stempel (der
+// Editor rückt ohne Antwort nicht vor), ein Stand auf einer anderen Basis —
+// Konflikt-Auflösung gegen einen älteren Stand, veraltete Ansicht, Rebase —
+// läuft in den Merge statt den verlorenen Save ungemergt zu überschreiben.
+// Einträge ohne Basis (Save ohne Stempel, Altbestand) zählen nie.
+//
 // «Schreiber» = Editor-Instanz in diesem Tab (`notebook`, `book`, `outbox`),
 // nicht Konto oder Gerät: Bucheditor, Notebook-Editor und andere Tabs desselben
 // Browsers schreiben mit derselben Geräte-ID, und ihr Stand darf nie als
@@ -21,11 +30,15 @@ const KEY = (writer, pageId) => `own_save_ids:${writer}:${pageId}`;
 // Gleicher Deckel wie der Server (routes/content/pages.js#OWN_SAVE_IDS_MAX).
 const MAX_IDS = 16;
 
+// Eintrag `{ id, base }`; alles andere (auch Alt-Einträge als blosser String)
+// fällt beim Lesen weg.
+const isEntry = (e) => !!e && typeof e.id === 'string' && typeof e.base === 'string' && !!e.base;
+
 function read(writer, pageId) {
   try {
     const raw = sessionStorage.getItem(KEY(writer, pageId));
     const list = raw ? JSON.parse(raw) : [];
-    return Array.isArray(list) ? list.filter((s) => typeof s === 'string') : [];
+    return Array.isArray(list) ? list.filter(isEntry) : [];
   } catch { return []; }
 }
 
@@ -45,19 +58,29 @@ function uuid() {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
-// Unbestätigte Saves dieses Schreibers für den Abschnitt (älteste zuerst).
+// Kennungen aus `entries`, deren Basis in `bases` liegt.
+function idsOnBases(entries, bases) {
+  const bs = (bases || []).filter(Boolean);
+  if (!bs.length) return [];
+  return (entries || []).filter((e) => isEntry(e) && bs.includes(e.base)).map((e) => e.id);
+}
+
+// Unbestätigte Saves dieses Schreibers für den Abschnitt (älteste zuerst), als
+// `{ id, base }` — so nimmt ein Draft sie mit.
 export function ownSaveIds(writer, pageId) {
   if (!writer || pageId == null) return [];
   return read(writer, pageId);
 }
 
-// Vor dem PUT: neue Kennung vermerken (vor dem Request — geht die Antwort
-// verloren, ist sie trotzdem bekannt). `extraOwn`: Kennungen, die ein Draft von
-// seinem Schreiber mitbringt (Outbox).
-export function beginSave(writer, pageId, extraOwn = []) {
-  const own = [...new Set([...(extraOwn || []), ...read(writer, pageId)])].slice(-MAX_IDS);
+// Vor dem PUT: neue Kennung samt Basis vermerken (vor dem Request — geht die
+// Antwort verloren, ist sie trotzdem bekannt). Mitgeschickt werden nur
+// Vorgänger auf derselben Basis. `extraOwn`: Einträge, die ein Draft von seinem
+// Schreiber mitbringt (Outbox).
+export function beginSave(writer, pageId, extraOwn = [], baseAt = null) {
+  const prior = [...(extraOwn || []), ...read(writer, pageId)];
+  const own = [...new Set(idsOnBases(prior, [baseAt]))].slice(-MAX_IDS);
   const saveId = uuid();
-  write(writer, pageId, [...read(writer, pageId), saveId]);
+  if (baseAt) write(writer, pageId, [...read(writer, pageId), { id: saveId, base: baseAt }]);
   return { save_id: saveId, own_save_ids: own };
 }
 
@@ -65,18 +88,20 @@ export function beginSave(writer, pageId, extraOwn = []) {
 // Schreiber kennt den Server-Stand wieder als Basis. Später geschickte bleiben.
 export function confirmSave(writer, pageId, saveId) {
   const list = read(writer, pageId);
-  const i = list.indexOf(saveId);
+  const i = list.findIndex((e) => e.id === saveId);
   if (i >= 0) write(writer, pageId, list.slice(i + 1));
 }
 
 // Server hat geantwortet, ohne zu schreiben (4xx, z.B. 409): die Kennung kann
 // nie der Server-Stand werden.
 export function dropSave(writer, pageId, saveId) {
-  write(writer, pageId, read(writer, pageId).filter((s) => s !== saveId));
+  write(writer, pageId, read(writer, pageId).filter((e) => e.id !== saveId));
 }
 
-// Stammt der Server-Stand (`last_save_id` aus GET/409-Body) von diesem Schreiber?
-export function isOwnServerSave(writer, pageId, lastSaveId, extraOwn = []) {
+// Stammt der Server-Stand (`last_save_id` aus GET/409-Body) von einem Save
+// dieses Schreibers, der gegen eine der `localBases` ging — der Stempel, auf
+// denen der lokale Stand aufbaut? Nur dann ist der lokale Stand sein Nachfahre.
+export function isOwnServerSave(writer, pageId, lastSaveId, localBases, extraOwn = []) {
   if (!lastSaveId) return false;
-  return (extraOwn || []).includes(lastSaveId) || ownSaveIds(writer, pageId).includes(lastSaveId);
+  return idsOnBases([...(extraOwn || []), ...ownSaveIds(writer, pageId)], localBases).includes(lastSaveId);
 }

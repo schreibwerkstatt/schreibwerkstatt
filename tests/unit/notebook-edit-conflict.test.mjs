@@ -685,6 +685,46 @@ test('submitConflictResolution: 409 gegen eigenen Save auf anderer Basis → gem
   assert.equal(app.conflictResolution, null);
 });
 
+test('submitConflictResolution: 409 gegen eigene Save-Kennung auf anderer Basis → gemergt, nicht überschrieben', async () => {
+  const { beginSave } = await import('../../public/js/repo/save-ids.js');
+  const T16 = '2026-10-16T14:25:00Z';
+  const T18a = '2026-10-18T09:27:00Z';
+  const T18b = '2026-10-18T09:29:00Z';
+  const stale = '<p data-bid="a">Anfang</p><p data-bid="n">Notiz</p>';
+  const morning = '<p data-bid="a">Anfang</p><p data-bid="m1">Morgen eins</p>';
+  const app = setConflictApp({
+    originalHtml: stale,
+    currentPage: { id: 94, name: 'S', updated_at: T16 },
+    conflictResolution: {
+      pageId: 94, source: 'main',
+      merged: [
+        { bid: 'a', html: '<p data-bid="a">Anfang</p>' },
+        { bid: 'n', html: '<p data-bid="n">Notiz</p>' },
+        { bid: 'x', html: '<p data-bid="x">Neu am Abend</p>' },
+      ],
+      conflicts: [], decisions: {}, remoteUpdatedAt: T16,
+    },
+  });
+  // Morgen-Save dieses Tabs mit verlorener Antwort — gegen eine andere Basis.
+  const { save_id: morningId } = beginSave('notebook', 94, [], T18a);
+  const el = document.createElement('div');
+  el.innerHTML = stale;
+  const ctx = mergeCtx(el);
+  mockLoadPage(async () => ({ updated_at: T18b, html: morning, last_save_id: morningId }));
+  const puts = [];
+  contentRepo.savePage = async (id, payload) => {
+    puts.push(payload);
+    if (puts.length === 1) throw conflict409();
+    return { updated_at: '2026-10-18T16:42:52Z', html: payload.html };
+  };
+  await ctx.submitConflictResolution();
+  assert.equal(puts.length, 2);
+  assert.equal(puts[1].save_reason, 'remerge', 'kein own-echo');
+  assert.match(puts[1].html, /Morgen eins/);
+  assert.match(puts[1].html, /Neu am Abend/);
+  assert.equal(app.conflictResolution, null);
+});
+
 test('_reconcileDraftWithServer: Ansicht älter als Draft-Basis → kein Merge, Draft-Basis wird Basis', () => {
   const app = setDraftApp();
   app.currentPage.id = 93;

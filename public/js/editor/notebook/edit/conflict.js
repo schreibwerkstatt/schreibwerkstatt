@@ -326,10 +326,10 @@ export const conflictMethods = {
     // (../sent-saves.js, repo/save-ids.js): der lokale Stand ist sein Nachfahre.
     // Nie über Konto + Geräte-ID: die gilt für den ganzen Browser, Bucheditor,
     // Outbox und andere Tabs — ein «eigener» Stand von dort würde überschrieben.
-    // Der Fingerabdruck zählt nur, wenn der Save gegen eine Basis ging, auf der
-    // auch der lokale Stand aufbaut — sonst ist er kein Vorfahre.
+    // Fingerabdruck und Kennung zählen nur, wenn der Save gegen eine Basis ging,
+    // auf der auch der lokale Stand aufbaut — sonst ist er kein Vorfahre.
     const localBases = [app.currentPage?.updated_at, localBaseAt];
-    const ownFp = isOwnSentSave(pageId, remoteHtml, localBases) || isOwnServerSave(NOTEBOOK_WRITER, pageId, author?.remoteSaveId);
+    const ownFp = isOwnSentSave(pageId, remoteHtml, localBases) || isOwnServerSave(NOTEBOOK_WRITER, pageId, author?.remoteSaveId, localBases);
     if (ownFp) {
       return { merged: true, own: true, saveHtml: localHtml, expectedAt: remoteUpdatedAt };
     }

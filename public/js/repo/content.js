@@ -189,14 +189,15 @@ export const contentRepo = {
   // `writer` (+ `extraOwnSaveIds` aus einem Draft): Save-Kennung und die
   // Kennungen früherer, unbestätigter Saves desselben Schreibers mitschicken
   // (./save-ids.js) — der Server erkennt daran den eigenen Save mit verlorener
-  // Antwort. Ohne `writer` läuft der Save wie bisher, ohne Kennung.
+  // Antwort. Ohne `writer` läuft der Save wie bisher, ohne Kennung. Basis der
+  // Kennung ist `expected_updated_at` — nur Vorgänger auf derselben Basis gehen mit.
   async savePage(id, body, { writer = null, extraOwnSaveIds = [] } = {}) {
     const hasHtml = typeof body?.html === 'string';
     // Geraet-Stempel nur bei Body-Change: macht den geraete-bewussten /changes-Feed
     // praezise (eigener Browser-Save wird ausgefiltert, andere Geraete nicht).
     // `client_tab` trennt Tabs desselben Browsers im PAGE_CONFLICT-Log,
     // `client_sw` sagt, ob der Tab vom SW kontrolliert wird.
-    const ids = hasHtml && writer ? beginSave(writer, id, extraOwnSaveIds) : null;
+    const ids = hasHtml && writer ? beginSave(writer, id, extraOwnSaveIds, body?.expected_updated_at) : null;
     const payload = hasHtml ? { ...body, ...ids, device_id: getDeviceId(), client_tab: getTabId(), client_sw: _swState() } : body;
     const inv = hasHtml ? ['pages/' + id, 'pages/' + id + '/revisions'] : ['pages/' + id];
     let out;

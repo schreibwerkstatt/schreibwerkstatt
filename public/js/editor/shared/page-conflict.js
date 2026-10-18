@@ -24,8 +24,9 @@ import { isOwnServerSave } from '../../repo/save-ids.js';
  * irreführend, der ohnehin folgende PUT läuft in den OCC-Guard des Backends.
  *
  * `writer` (repo/save-ids.js): stammt der abweichende Server-Stand von einem
- * Save, den derselbe Schreiber geschickt hat (Antwort verloren), ist es kein
- * Konflikt — der folgende PUT nennt die Kennung, der Server nimmt ihn an.
+ * Save, den derselbe Schreiber gegen `expectedUpdatedAt` geschickt hat (Antwort
+ * verloren), ist es kein Konflikt — der folgende PUT nennt die Kennung, der
+ * Server nimmt ihn an.
  *
  * @returns {Promise<null|{remoteUpdatedAt, remoteUserName, remoteIsSelf, remoteDevice, remoteDeviceId, remoteSaveId, remoteHtml}>}
  */
@@ -50,7 +51,7 @@ export async function checkPageConflict(pageId, expectedUpdatedAt, { writer = nu
     return null;
   }
   if (remote.updated_at === expectedUpdatedAt) return null;
-  if (writer && isOwnServerSave(writer, pageId, remote.last_save_id)) return null;
+  if (writer && isOwnServerSave(writer, pageId, remote.last_save_id, [expectedUpdatedAt])) return null;
   return {
     remoteUpdatedAt: remote.updated_at,
     ...remoteAuthorFrom(remote),

@@ -38,7 +38,7 @@ export const draftReconcileMethods = {
     // Draft-Basis geschickt hat (Antwort verloren, danach neu geladen): der
     // Draft ist sein Nachfahre.
     const author = remoteAuthorFrom(app.currentPage);
-    const ownFp = isOwnSentSave(app.currentPage.id, serverHtml, [draft.originalUpdatedAt]) || isOwnServerSave(NOTEBOOK_WRITER, app.currentPage.id, author.remoteSaveId, draft.ownSaveIds);
+    const ownFp = isOwnSentSave(app.currentPage.id, serverHtml, [draft.originalUpdatedAt]) || isOwnServerSave(NOTEBOOK_WRITER, app.currentPage.id, author.remoteSaveId, [draft.originalUpdatedAt], draft.ownSaveIds);
     if (ownFp) return { html: draft.html };
     let m;
     try { m = mergeBlocks(draft.originalHtml, draft.html, serverHtml); }
