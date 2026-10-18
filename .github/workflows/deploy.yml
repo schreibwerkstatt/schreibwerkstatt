@@ -146,7 +146,7 @@ jobs:
       - name: Client-Kompatibilität (Editor-Bundle gegen macOS + Android)
         run: |
           set +e
-          node scripts/check-clients-compat.js --base HEAD~1
+          node scripts/check-clients-compat.js
           rc=$?
           if [ $rc -eq 3 ]; then echo "::warning::Client-Repos nicht erreichbar — Kompatibilität ungeprüft"; exit 0; fi
           exit $rc

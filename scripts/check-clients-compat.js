@@ -123,8 +123,13 @@ async function main() {
 
   const b = await loadBundle();
   const base = arg('--base') || 'HEAD';
+  // Die „berührt"-Liste ist nur ein Hinweis: ist `base` nicht auflösbar
+  // (flacher CI-Checkout), fällt sie leer aus, statt den Lauf abzubrechen.
+  let diffNames = '';
+  try { diffNames = git(['diff', '--name-only', base, '--', 'public']); }
+  catch { console.log(`Basis ${base} nicht auflösbar — „berührt"-Liste entfällt.`); }
   const changed = new Set([
-    ...git(['diff', '--name-only', base, '--', 'public']).split('\n'),
+    ...diffNames.split('\n'),
     ...git(['ls-files', '--others', '--exclude-standard', '--', 'public']).split('\n'),
   ].filter(Boolean).map((f) => f.replace(/^public\//, '')));
   const changedBundle = b.bundleFiles.filter((f) => changed.has(f));
