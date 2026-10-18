@@ -396,3 +396,60 @@ test('collectReferencedImages: Bild-Referenz auf ein fremdes Buch wird nicht ein
   const got = collectReferencedImages(new Map([[98001, html]]), 980).get(98001);
   assert.deepEqual(got.map(i => i.oldId), [Number(own)]);
 });
+
+function _seedTwoPages(id) {
+  ctxBoot.dbSeed.setBook({
+    books: [{ id, name: `Quelle${id}` }],
+    chapters: [{ id: id * 10 + 1, book_id: id, name: 'Kap', position: 0 }],
+    pages: [
+      { id: id * 100 + 1, book_id: id, name: 'S1', chapter_id: id * 10 + 1, position: 0 },
+      { id: id * 100 + 2, book_id: id, name: 'S2', chapter_id: id * 10 + 1, position: 1 },
+    ],
+    pageBodies: { [id * 100 + 1]: '<p>eins</p>', [id * 100 + 2]: '<p>zwei</p>' },
+  });
+}
+const _bookNames = async () => (await contentStore.listBooks(reqCtx)).map(b => b.name);
+
+test('Teilimport: gescheiterte Abschnitte stehen im Ergebnis (failed / pagesInBundle)', async () => {
+  _seedTwoPages(990);
+  const buf = await buildBundleBuffer(990);
+  const orig = contentStore.createPage;
+  contentStore.createPage = async (body, ctx) => {
+    if (body.name === 'S2') throw new Error('sanitize failed');
+    return orig(body, ctx);
+  };
+  let job;
+  try { job = await runImport(buf); } finally { contentStore.createPage = orig; }
+  assert.equal(job.status, 'done', job.error || '');
+  assert.equal(job.result.pagesCreated, 1);
+  assert.equal(job.result.failed, 1);
+  assert.equal(job.result.pagesInBundle, 2);
+});
+
+test('Kein Abschnitt angelegt: Job-Fehler swbookNoPagesCreated, Buch zurueckgenommen', async () => {
+  _seedTwoPages(991);
+  const buf = await buildBundleBuffer(991);
+  const before = await _bookNames();
+  const orig = contentStore.createPage;
+  contentStore.createPage = async () => { throw new Error('sanitize failed'); };
+  let job;
+  try { job = await runImport(buf); } finally { contentStore.createPage = orig; }
+  assert.equal(job.status, 'error');
+  assert.equal(job.error, 'job.error.swbookNoPagesCreated');
+  assert.deepEqual(job.errorParams, { n: 2 });
+  assert.deepEqual(await _bookNames(), before);
+});
+
+test('Abbruch waehrend des Anlegens: «cancelled», Buch zurueckgenommen', async () => {
+  _seedTwoPages(992);
+  const buf = await buildBundleBuffer(992);
+  const before = await _bookNames();
+  const jobId = shared.createJob('book-import', 0, OWNER, 'job.label.bookImport', {}, `t:${Math.random()}`);
+  shared.jobs.get(jobId).status = 'running';
+  const orig = contentStore.createPage;
+  contentStore.createPage = async (body, ctx) => { shared.cancelJob(jobId, OWNER); return orig(body, ctx); };
+  bookImport.importBuffers.set(jobId, { buffer: buf });
+  try { await bookImport.runBookImportJob(jobId, { userEmail: OWNER }); } finally { contentStore.createPage = orig; }
+  assert.equal(shared.jobs.get(jobId).status, 'cancelled');
+  assert.deepEqual(await _bookNames(), before);
+});

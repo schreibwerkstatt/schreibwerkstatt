@@ -161,6 +161,11 @@
     padding-left: var(--space-lg);
   }
 
+  /* Teilimport: was fehlt, soll nicht wie eine weitere Erfolgszeile aussehen. */
+  .folder-import-result-warn {
+    color: var(--color-warn-text);
+  }
+
   .folder-import-skipped {
     margin-top: var(--space-sm);
     max-height: 220px;

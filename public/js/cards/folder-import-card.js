@@ -271,7 +271,9 @@ export function registerFolderImportCard() {
         },
         onError: (job) => {
           this.busy = false;
-          this.errorMessage = window.__app.t('folderImport.error.jobFailed', { msg: job?.error || '' });
+          // job.error ist ein i18n-Key (failJob/i18nError) — übersetzt anzeigen.
+          const msg = job?.error ? window.__app.t(job.error, job.errorParams || {}) : '';
+          this.errorMessage = window.__app.t('folderImport.error.jobFailed', { msg });
         },
         onDone: (job) => {
           this.busy = false;

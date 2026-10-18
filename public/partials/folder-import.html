@@ -109,6 +109,14 @@
           x-text="$app.t('folderImport.result.lektorat', { n: result?.extras?.lektorat?.pageChecks || 0 })"></li>
       <li x-show="result?.extras?.chats"
           x-text="$app.t('folderImport.result.chats', { sessions: result?.extras?.chats?.sessions || 0, messages: result?.extras?.chats?.messages || 0 })"></li>
+      <li x-show="result?.extras?.research"
+          x-text="$app.t('folderImport.result.research', { items: result?.extras?.research?.items || 0, links: result?.extras?.research?.links || 0 })"></li>
+      <li x-show="(result?.extras?.research?.linksDropped || 0) > 0"
+          x-text="$app.t('folderImport.result.researchLinksDropped', { n: result?.extras?.research?.linksDropped || 0 })"></li>
+      <li class="folder-import-result-warn" x-show="(result?.failed || 0) > 0"
+          x-text="$app.t('folderImport.result.failed', { n: result?.failed || 0 })"></li>
+      <li class="folder-import-result-warn" x-show="result?.extras?.error"
+          x-text="$app.t('folderImport.result.extrasFailed')"></li>
     </ul>
     <div class="card-hint" x-show="result?.headingMap"
          x-text="$app.t('folderImport.result.headingMap', { map: result?.headingMap || '' })"></div>

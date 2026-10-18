@@ -9,13 +9,13 @@
 const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
-  jobs, createJob, enqueueJob, findActiveJobId, isJobActive,
+  jobs, createJob, enqueueJob, findActiveJobId, isJobActive, throwIfCancelled,
 } = require('./shared');
 const { validateManifest, validateBookJson, planFromNodes, normalizeIncludes } = require('../../lib/book-bundle');
 const { restoreExtras } = require('../../db/book-migration-data');
 const { materializeOps, applyBundleSettings } = require('../../lib/bundle-apply');
 const { setContext } = require('../../lib/log-context');
-const { createOwnedBook, bookNameError, BOOK_NAME_MAX } = require('../../lib/book-create');
+const { createOwnedBook, discardImportedBook, bookNameError, BOOK_NAME_MAX } = require('../../lib/book-create');
 const { openCappedZip } = require('../../lib/zip-limits');
 const { ImportBufferStore, contentHash } = require('../../lib/import-buffers');
 const { sessionEmail } = require('../../lib/acl');
@@ -54,6 +54,7 @@ async function _readJsonEntry(zip, name) {
 async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMITS }) {
   const log = makeJobLogger(jobId);
   const ctx = { session: { user: { email: userEmail } } };
+  let createdBookId = null;   // Rueckbau, solange der Inhalt nicht steht
   try {
     const entry = importBuffers.get(jobId);
     if (!entry) throw i18nError('job.error.importBufferMissing');
@@ -85,6 +86,7 @@ async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMIT
     updateJob(jobId, { progress: 20, statusText: 'job.book-import.creatingBook' });
     const created = await createOwnedBook({ name: bookName, description }, userEmail, ctx);
     const bookId = created.id;
+    createdBookId = bookId;
     setContext({ book: bookId });
     log.info(`book-import: Buch «${bookName}» angelegt (id=${bookId})`);
 
@@ -99,6 +101,7 @@ async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMIT
     const applied = await materializeOps(bookId, ops, ctx, {
       replace: true,
       onProgress: (done, total) => {
+        throwIfCancelled(jobId);
         if (done % 10 !== 0 && done !== total) return;
         updateJob(jobId, {
           progress: 25 + Math.round(65 * (done / total)),
@@ -112,6 +115,14 @@ async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMIT
     const pagesCreated = applied.created.pages;
     const chaptersCreated = applied.created.chapters;
     if (applied.failed) log.warn(`book-import: ${applied.failed} Kapitel/Seiten nicht angelegt`);
+    // Das Bundle hatte Abschnitte, angelegt wurde keiner (z.B. alle am Sanitizer
+    // gescheitert): das ist kein Import, sondern ein leeres Buch, das wie ein
+    // Ergebnis aussieht. Fehler, Buch wird zurueckgenommen.
+    const pagesInBundle = ops.filter(o => o.op === 'page').length;
+    if (pagesInBundle > 0 && pagesCreated === 0) {
+      throw i18nError('job.error.swbookNoPagesCreated', { n: pagesInBundle });
+    }
+    createdBookId = null;   // Inhalt steht — spaetere Fehler nehmen das Buch nicht mehr zurueck
 
     log.info(`book-import abgeschlossen: ${pagesCreated} Seiten, ${chaptersCreated} Kapitel`);
 
@@ -137,9 +148,15 @@ async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMIT
 
     if (pagesCreated > 0) await seedImportBaseline(bookId, userEmail, log, '.swbook-Import');
 
-    completeJob(jobId, { bookId, bookName, pagesCreated, chaptersCreated, cappedChapters, extras: extrasResult });
+    // `failed`/`pagesInBundle` und ein gescheiterter Extra-Block gehen ins
+    // Ergebnis, damit die Karte einen Teilimport als solchen zeigt.
+    completeJob(jobId, {
+      bookId, bookName, pagesCreated, chaptersCreated, cappedChapters, extras: extrasResult,
+      failed: applied.failed || 0, pagesInBundle,
+    });
   } catch (e) {
     if (e?.name !== 'AbortError') log.error(`book-import job ${jobId}: ${e.message}`, { stack: e.stack });
+    if (createdBookId) await discardImportedBook(createdBookId, userEmail);
     failJob(jobId, e);
   } finally {
     importBuffers.delete(jobId);
