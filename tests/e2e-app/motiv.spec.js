@@ -115,13 +115,15 @@ test('Motiv-Werkstatt: erste Combobox-Auswahl landet sofort im Link-Puffer (dirt
   // genau EIN Klick muss reichen. Trigger vorher ZENTRIEREN: die Combobox
   // schliesst bei Window-Scroll, und der Autofokus aufs Suchfeld scrollt nach,
   // wenn das Dropdown unter dem Viewport-Rand aufginge.
+  // Schliesst die Liste zwischen Öffnen und Klick (Scroll, Re-Render im
+  // CI-Takt), neu öffnen — geprüft wird unten, dass EINE Auswahl reicht.
   const chapGroup = page.locator('.motiv-link-group').nth(2);
-  await chapGroup.evaluate((el) => el.scrollIntoView({ block: 'center' }));
-  await page.waitForTimeout(150);
-  await chapGroup.locator('.combobox-trigger').click();
   const opt = chapGroup.locator('.combobox-option').first();
-  await expect(opt).toBeVisible();
-  await opt.click();
+  await expect(async () => {
+    await chapGroup.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    if (!(await opt.isVisible())) await chapGroup.locator('.combobox-trigger').click();
+    await opt.click({ timeout: 2000 });
+  }).toPass({ timeout: 20000 });
 
   await page.waitForFunction(() => {
     const c = window.Alpine.$data(document.querySelector('.card--motiv'));
