@@ -219,7 +219,8 @@
   <template x-if="!pageSearch && $store.nav.selectedBookId && $store.nav.tree.length === 0 && !treeLoading">
     <div class="sidebar-empty-book">
       <div class="muted-msg muted-msg--sm" x-text="t('sidebar.emptyBook')"></div>
-      <button type="button" x-show="canEdit()" @click="createChapterPrompt()" x-text="t('bookOrganizer.newChapter')"></button>
+      <button type="button" class="primary" x-show="canEdit()" @click="createChapterPrompt({ firstInBook: true })" x-text="t('sidebar.emptyBookCta')"></button>
+      <div class="card-hint" x-show="canEdit()" x-text="t('sidebar.emptyBookCtaHint')"></div>
     </div>
   </template>
   </div><!-- /sidebarMode !== 'calendar' -->

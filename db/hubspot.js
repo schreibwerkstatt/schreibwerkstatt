@@ -8,6 +8,7 @@ const { db } = require('./connection');
 require('./migrations');
 const { NOW_ISO_SQL } = require('./now');
 const { encrypt, decrypt } = require('../lib/crypto');
+const { clearCachedMedia } = require('./sync-media-cache');
 
 // ── hubspot_connections ─────────────────────────────────────────────────────
 
@@ -73,6 +74,24 @@ const _stmtUpdate = db.prepare(`
    WHERE id = ?
 `);
 
+// Zielwechsel (anderer Blog oder anderes Portal): die bisherigen Links zeigen auf
+// Posts des alten Ziels. Bleiben sie stehen, aktualisiert der naechste Push den
+// Post im FALSCHEN Blog (Post-IDs sind portalweit eindeutig). Darum fallen sie
+// mit dem Wechsel weg, und der Import-Stand beginnt neu.
+const _stmtResetTarget = db.prepare(`
+  UPDATE hubspot_connections
+     SET initial_import_done_at = NULL, last_import_at = NULL, last_push_at = NULL
+   WHERE id = ?
+`);
+const _stmtDeleteLinksForConn = db.prepare('DELETE FROM hubspot_page_links WHERE hub_id = ?');
+
+function _targetChanged(existing, blogId, portalId) {
+  if (String(existing.blog_id) !== String(blogId)) return true;
+  return portalId != null && existing.portal_id != null && String(existing.portal_id) !== String(portalId);
+}
+
+/** Speichert die Verbindung. Rueckgabe: Public-Meta plus `targetChanged`
+ *  (true = Links und Import-Stand wurden verworfen). */
 function upsertConnection({ bookId, token, blogId, authorId, portalId = null }) {
   const bid = parseInt(bookId, 10);
   if (!Number.isInteger(bid) || bid <= 0) throw new Error('hubspot.upsert: invalid bookId');
@@ -82,13 +101,23 @@ function upsertConnection({ bookId, token, blogId, authorId, portalId = null }) 
 
   const enc = encrypt(token);
   const pid = portalId == null ? null : String(portalId);
-  const existing = _stmtGetByBook.get(bid);
-  if (existing) {
-    _stmtUpdate.run(enc, blogId, authorId, pid, existing.id);
-  } else {
-    _stmtInsert.run(bid, enc, blogId, authorId, pid);
-  }
-  return getConnectionPublic(bid);
+  let targetChanged = false;
+  db.transaction(() => {
+    const existing = _stmtGetByBook.get(bid);
+    if (existing) {
+      targetChanged = _targetChanged(existing, blogId, pid);
+      _stmtUpdate.run(enc, blogId, authorId, pid, existing.id);
+      if (targetChanged) {
+        _stmtDeleteLinksForConn.run(existing.id);
+        _stmtResetTarget.run(existing.id);
+        // File-Manager-Adressen des alten Portals gelten im neuen nicht.
+        clearCachedMedia({ hubId: existing.id });
+      }
+    } else {
+      _stmtInsert.run(bid, enc, blogId, authorId, pid);
+    }
+  })();
+  return { ...getConnectionPublic(bid), targetChanged };
 }
 
 const _stmtSetPortalId = db.prepare(`
@@ -122,17 +151,17 @@ function deleteConnection(bookId) {
 
 // ── hubspot_page_links ──────────────────────────────────────────────────────
 
-const _stmtGetLinkByPage = db.prepare(`
-  SELECT page_id, hub_id, hubspot_post_id, hubspot_state, hubspot_created_at, last_pushed_at, hubspot_url
-    FROM hubspot_page_links WHERE page_id = ?
-`);
+const LINK_COLS = `page_id, hub_id, hubspot_post_id, hubspot_state, hubspot_created_at,
+         hubspot_updated_at, last_pushed_at, last_pulled_at, hubspot_url, conflict_state`;
+const CONFLICT_STATES = ['detected', 'resolved-app', 'resolved-remote'];
+
+const _stmtGetLinkByPage = db.prepare(`SELECT ${LINK_COLS} FROM hubspot_page_links WHERE page_id = ?`);
 function getLinkByPage(pageId) {
   return _stmtGetLinkByPage.get(parseInt(pageId, 10)) || null;
 }
 
 const _stmtGetLinkByPost = db.prepare(`
-  SELECT page_id, hub_id, hubspot_post_id, hubspot_state, hubspot_created_at, last_pushed_at, hubspot_url
-    FROM hubspot_page_links WHERE hub_id = ? AND hubspot_post_id = ?
+  SELECT ${LINK_COLS} FROM hubspot_page_links WHERE hub_id = ? AND hubspot_post_id = ?
 `);
 function getLinkByPost(hubId, hubspotPostId) {
   return _stmtGetLinkByPost.get(parseInt(hubId, 10), String(hubspotPostId)) || null;
@@ -142,7 +171,8 @@ function getLinkByPost(hubId, hubspotPostId) {
 // dem Push raus) bewegen `pages.updated_at` nicht — der Badge braucht beide.
 const _stmtListLinksForConn = db.prepare(`
   SELECT l.page_id, l.hub_id, l.hubspot_post_id, l.hubspot_state, l.hubspot_created_at,
-         l.last_pushed_at, l.hubspot_url, h.updated_at AS headline_updated_at
+         l.hubspot_updated_at, l.last_pushed_at, l.last_pulled_at, l.hubspot_url,
+         l.conflict_state, h.updated_at AS headline_updated_at
     FROM hubspot_page_links l
     LEFT JOIN page_headline h ON h.page_id = l.page_id
    WHERE l.hub_id = ?
@@ -151,30 +181,74 @@ function listLinksForConnection(hubId) {
   return _stmtListLinksForConn.all(parseInt(hubId, 10));
 }
 
+// Ein Push (oder Import) ist ein Sync-Punkt: er setzt den Konfliktstatus zurueck.
 const _stmtUpsertLink = db.prepare(`
   INSERT INTO hubspot_page_links
-    (page_id, hub_id, hubspot_post_id, hubspot_state, hubspot_created_at, last_pushed_at, hubspot_url)
-  VALUES (?, ?, ?, ?, ?, ?, ?)
+    (page_id, hub_id, hubspot_post_id, hubspot_state, hubspot_created_at,
+     hubspot_updated_at, last_pushed_at, hubspot_url, conflict_state)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
   ON CONFLICT(page_id) DO UPDATE SET
-    hub_id            = excluded.hub_id,
-    hubspot_post_id   = excluded.hubspot_post_id,
-    hubspot_state     = excluded.hubspot_state,
-    hubspot_created_at= COALESCE(excluded.hubspot_created_at, hubspot_page_links.hubspot_created_at),
-    last_pushed_at    = COALESCE(excluded.last_pushed_at, hubspot_page_links.last_pushed_at),
-    hubspot_url       = COALESCE(excluded.hubspot_url, hubspot_page_links.hubspot_url)
+    hub_id             = excluded.hub_id,
+    hubspot_post_id    = excluded.hubspot_post_id,
+    hubspot_state      = COALESCE(excluded.hubspot_state, hubspot_page_links.hubspot_state),
+    hubspot_created_at = COALESCE(excluded.hubspot_created_at, hubspot_page_links.hubspot_created_at),
+    hubspot_updated_at = COALESCE(excluded.hubspot_updated_at, hubspot_page_links.hubspot_updated_at),
+    last_pushed_at     = COALESCE(excluded.last_pushed_at, hubspot_page_links.last_pushed_at),
+    hubspot_url        = COALESCE(excluded.hubspot_url, hubspot_page_links.hubspot_url),
+    conflict_state     = NULL
 `);
 
-function upsertLink({ pageId, hubId, hubspotPostId, hubspotState = null, hubspotCreatedAt = null, lastPushedAt = null, hubspotUrl = null }) {
+function upsertLink({
+  pageId, hubId, hubspotPostId, hubspotState = null, hubspotCreatedAt = null,
+  hubspotUpdatedAt = null, lastPushedAt = null, hubspotUrl = null,
+}) {
   _stmtUpsertLink.run(
     parseInt(pageId, 10),
     parseInt(hubId, 10),
     String(hubspotPostId),
     hubspotState,
     hubspotCreatedAt,
+    hubspotUpdatedAt || null,
     lastPushedAt,
     hubspotUrl,
   );
   return getLinkByPage(pageId);
+}
+
+const _stmtSetConflict = db.prepare('UPDATE hubspot_page_links SET conflict_state = ? WHERE page_id = ?');
+function setConflictState(pageId, state) {
+  if (state !== null && !CONFLICT_STATES.includes(state)) throw new Error('hubspot.setConflictState: invalid');
+  _stmtSetConflict.run(state, parseInt(pageId, 10));
+}
+
+// Konflikt zugunsten der App: der gesehene Draft-Stand gilt als bekannt, sonst
+// meldete die naechste Vorab-Pruefung denselben HubSpot-Edit wieder.
+const _stmtResolveApp = db.prepare(`
+  UPDATE hubspot_page_links SET hubspot_updated_at = ?, conflict_state = 'resolved-app' WHERE page_id = ?
+`);
+function markConflictResolvedApp(pageId, remoteUpdatedAt) {
+  _stmtResolveApp.run(String(remoteUpdatedAt || '') || null, parseInt(pageId, 10));
+}
+
+// „HubSpot uebernehmen": der Draft-Stand ist jetzt der gemeinsame Stand.
+const _stmtMarkPulled = db.prepare(`
+  UPDATE hubspot_page_links
+     SET hubspot_updated_at = ?, last_pulled_at = ${NOW_ISO_SQL}, conflict_state = NULL
+   WHERE page_id = ?
+`);
+function markLinkPulled(pageId, { remoteUpdatedAt }) {
+  _stmtMarkPulled.run(String(remoteUpdatedAt || '') || null, parseInt(pageId, 10));
+}
+
+// Abgleich: Status und URL des Remote nachziehen (in HubSpot publiziert → die
+// „Ansehen"-Aktion zeigt den Live-Post statt den Editor-Link des Entwurfs).
+const _stmtRefreshMeta = db.prepare(`
+  UPDATE hubspot_page_links
+     SET hubspot_state = COALESCE(?, hubspot_state), hubspot_url = COALESCE(?, hubspot_url)
+   WHERE page_id = ?
+`);
+function refreshLinkMeta(pageId, { hubspotState = null, hubspotUrl = null } = {}) {
+  return _stmtRefreshMeta.run(hubspotState, hubspotUrl, parseInt(pageId, 10)).changes > 0;
 }
 
 const _stmtDeleteLink = db.prepare('DELETE FROM hubspot_page_links WHERE page_id = ?');
@@ -194,5 +268,9 @@ module.exports = {
   getLinkByPost,
   listLinksForConnection,
   upsertLink,
+  setConflictState,
+  markConflictResolvedApp,
+  markLinkPulled,
+  refreshLinkMeta,
   deleteLink,
 };

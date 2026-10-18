@@ -94,6 +94,7 @@ export function registerHelpCard() {
       const nav = window.Alpine.store('nav') || {};
       return {
         selectedBookId: nav.selectedBookId || null,
+        hasBooks: (nav.books || []).length > 0,
         pages: nav.pages || [],
         bookRole: root.currentBookRole || null,
         buchtyp: (typeof root.currentBuchtyp === 'function' ? root.currentBuchtyp() : null) || null,

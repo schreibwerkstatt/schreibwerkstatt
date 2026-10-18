@@ -1,68 +1,49 @@
 'use strict';
-// Blog-Sync-Jobs: einmaliger Initial-Import, manueller Delta-Pull, selektiver Push.
-// Mapping 1 Blog == 1 Buch, 1 WP-Post == 1 Page. Block-Editor-HTML round-trips via
-// lib/wp-html.js (Gutenberg-Block-Markup). Konflikt-Strategie: Timestamp-LWW (siehe
-// docs/blog-sync.md). Import + Pull schreiben Seiten und Links eines Buchs und
-// laufen darum pro BUCH exklusiv (nicht pro User): die Verbindung gehoert dem
-// Buch, zwei Mitautoren duerften sonst denselben Post doppelt anlegen. Push und
-// Reconcile: Dedup pro (type, bookId, user) via findActiveJobId.
+// Blog-Sync-Jobs (WordPress): einmaliger Initial-Import, manueller Delta-Pull,
+// selektiver Push, Abgleich. Mapping 1 Blog == 1 Buch, 1 WP-Post == 1 Page.
+// Block-Editor-HTML round-trips via lib/wp-html.js (Gutenberg-Block-Markup).
+// Konflikt-Strategie: Timestamp-LWW (docs/blog-sync.md).
+//
+// Import und Pull sind WordPress-spezifisch und stehen hier. Push, Abgleich und
+// die POST-Routen teilen sich beide Blog-Syncs (routes/jobs/sync/, Adapter
+// lib/sync/providers/wordpress.js). Import + Pull schreiben Seiten und Links
+// eines Buchs und laufen darum pro BUCH exklusiv (nicht pro User).
 
 const express = require('express');
-const {
-  createJob, updateJob, completeJob, failJob,
-  enqueueJob, findActiveJobId, jobs,
-  makeJobLogger, jsonBody, i18nError,
-} = require('./shared');
+const { updateJob, completeJob, failJob, makeJobLogger } = require('./shared');
 const blogs = require('../../db/blogs');
 const contentStore = require('../../lib/content-store');
-const { createWpClient } = require('../../lib/wp-client');
-const { appToWpHtmlWithMedia, wpLossyBlocks } = require('../../lib/wp-html');
-const { buildBibliography, resolveCitesInHtml } = require('../../lib/bibliography');
-const { makeImageResolver } = require('../../lib/wp-media');
-const { classifyPull, newer } = require('../../lib/blog-merge');
+const { classifyPull } = require('../../lib/blog-merge');
 const {
   applyPostToPage, createLinkedPageFromPost, postYear,
 } = require('../../lib/blog-pull');
 const { seedImportBaseline } = require('../../lib/import-baseline');
-const { splitDatePrefix, outgoingTitle } = require('../../lib/blog-title');
-const { getHeadline, headlineUpdatedAt } = require('../../db/headline');
-const { guardBook, sessionEmail } = require('../../lib/acl');
-const { toIntId } = require('../../lib/validate');
-const { setContext } = require('../../lib/log-context');
-const { localIsoDate } = require('../../lib/local-date');
-
-const { _abortSignal, _resolveBlogConn, _requireBlogBook } = require('./blog-sync/common');
-const { runBlogReconcileJob } = require('./blog-sync/reconcile');
+const { headlineUpdatedAt } = require('../../db/headline');
+const { wpLossyBlocks } = require('../../lib/wp-html');
+const wordpress = require('../../lib/sync/providers/wordpress');
+const { runSyncPushJob, abortSignal, throwIfAborted } = require('./sync/push');
+const { runSyncReconcileJob } = require('./sync/reconcile');
+const { mountSyncJobRoute, activeBookJob } = require('./sync/routes');
 
 const blogSyncRouter = express.Router();
 
 // Job-Typen, die Seiten + Links eines Buchs anlegen: pro Buch exklusiv.
-const BOOK_EXCLUSIVE_TYPES = new Set(['blog-import', 'blog-pull']);
+const BOOK_EXCLUSIVE_TYPES = ['blog-import', 'blog-pull'];
 
 /** Aktiver (queued/running) Import/Pull fuer dieses Buch, egal von wem. */
 function _activeBookSyncJob(bookId) {
-  const key = String(bookId);
-  for (const job of jobs.values()) {
-    if (!BOOK_EXCLUSIVE_TYPES.has(job.type) || job.bookId !== key) continue;
-    if (job.status === 'queued' || job.status === 'running') return job;
-  }
-  return null;
+  return activeBookJob(bookId, BOOK_EXCLUSIVE_TYPES);
 }
 
 async function runBlogImportJob(jobId, bookId, userEmail) {
   const logger = makeJobLogger(jobId);
   try {
-    _requireBlogBook(bookId, userEmail);
-    const conn = _resolveBlogConn(bookId);
+    wordpress.requireBook(bookId, userEmail);
+    const conn = wordpress.resolveConn(bookId);
     if (conn.initialImportDoneAt) {
       throw Object.assign(new Error('BLOG_ALREADY_IMPORTED'), { code: 'BLOG_ALREADY_IMPORTED' });
     }
-    const wp = createWpClient({
-      baseUrl: conn.baseUrl,
-      username: conn.username,
-      password: conn.password,
-      signal: _abortSignal(jobId),
-    });
+    const wp = wordpress.client(conn, abortSignal(jobId));
 
     updateJob(jobId, { statusText: 'job.blog.import.fetchPage', statusParams: { page: 1 }, progress: 1 });
     const startedAt = new Date().toISOString();
@@ -77,13 +58,13 @@ async function runBlogImportJob(jobId, bookId, userEmail) {
     const citeStats = {};
 
     do {
-      if (_abortSignal(jobId)?.aborted) throw new DOMException('Aborted', 'AbortError');
+      throwIfAborted(jobId);
       const { posts, totalPages: tp, total } = await wp.listPosts({ page, perPage: 100 });
       totalPages = tp || 1;
       if (page === 1) totalCount = total;
 
       for (const post of posts) {
-        if (_abortSignal(jobId)?.aborted) throw new DOMException('Aborted', 'AbortError');
+        throwIfAborted(jobId);
         // Idempotenz: ein abgebrochener Import hinterlaesst verlinkte Posts ohne
         // `initial_import_done_at`. Der naechste Lauf ueberspringt sie, statt an
         // UNIQUE(blog_id, wp_post_id) zu scheitern (und davor eine verwaiste
@@ -129,17 +110,12 @@ async function runBlogImportJob(jobId, bookId, userEmail) {
 async function runBlogPullJob(jobId, bookId, userEmail) {
   const logger = makeJobLogger(jobId);
   try {
-    _requireBlogBook(bookId, userEmail);
-    const conn = _resolveBlogConn(bookId);
+    wordpress.requireBook(bookId, userEmail);
+    const conn = wordpress.resolveConn(bookId);
     if (!conn.initialImportDoneAt) {
       throw Object.assign(new Error('BLOG_IMPORT_FIRST'), { code: 'BLOG_IMPORT_FIRST' });
     }
-    const wp = createWpClient({
-      baseUrl: conn.baseUrl,
-      username: conn.username,
-      password: conn.password,
-      signal: _abortSignal(jobId),
-    });
+    const wp = wordpress.client(conn, abortSignal(jobId));
 
     updateJob(jobId, { statusText: 'job.blog.pull.fetch', progress: 1 });
     const startedAt = new Date().toISOString();
@@ -156,7 +132,7 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
     const citeStats = {};
 
     do {
-      if (_abortSignal(jobId)?.aborted) throw new DOMException('Aborted', 'AbortError');
+      throwIfAborted(jobId);
       const { posts, totalPages: tp } = await wp.listPosts({
         page, perPage: 100,
         modifiedAfter: conn.lastPullAt || undefined,
@@ -164,7 +140,7 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
       totalPages = tp || 1;
 
       for (const post of posts) {
-        if (_abortSignal(jobId)?.aborted) throw new DOMException('Aborted', 'AbortError');
+        throwIfAborted(jobId);
         const link = blogs.getLinkByPost(conn.id, post.id);
         const wpModified = post.modified_gmt || post.date_gmt || '';
 
@@ -181,6 +157,9 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
           continue;
         }
 
+        // Push-Sperre nachfuehren: drueben eine Galerie eingefuegt (oder wieder
+        // entfernt) aendert, ob die App den Beitrag schreiben darf.
+        blogs.setLockedBlocks(link.page_id, wpLossyBlocks(post?.content?.raw || ''));
         const pageRow = await contentStore.loadPage(link.page_id).catch(() => null);
         if (!pageRow) {
           logger.warn(`Blog-Pull: Page ${link.page_id} (WP-Post ${post.id}) nicht gefunden, uebersprungen`);
@@ -205,11 +184,12 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
         }
         if (action === 'update') {
           let newName;
+          let syncedAt;
           try {
             // Stempel, auf dem classifyPull entschieden hat: speichert jemand die
             // Seite dazwischen, wirft savePage 409 statt seine Aenderung zu
             // ueberschreiben — das ist dann ein Konflikt wie oben.
-            ({ name: newName } = await applyPostToPage({
+            ({ name: newName, syncedAt } = await applyPostToPage({
               pageId: link.page_id, bookId, pageRow, post, userEmail, citeStats,
               expectedUpdatedAt: pageRow.updated_at,
             }));
@@ -225,6 +205,7 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
             wpModifiedAt: wpModified,
             wpStatus: post.status || null,
             wpSlug: post.slug || null,
+            pulledAt: syncedAt,
           });
           logger.info(`Blog-Pull: Page ${link.page_id} "${newName || pageRow.name}" aus WP-Post ${post.id} aktualisiert`);
           updated++;
@@ -248,297 +229,25 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
   }
 }
 
-// Fehlercodes des Push, die einen eigenen `blog.error.*`-Text haben. Alles
-// andere (BLOG_HTTP_<n>, SSRF_*, Timeouts) erscheint als BLOG_PUSH_FAILED.
-const _PUSH_ERROR_KEYS = new Set([
-  'BLOG_CONFLICT', 'BLOG_REMOTE_GONE', 'BLOG_AUTH_FAILED', 'BLOG_UNSUPPORTED_BLOCKS', 'BLOG_PUSH_FAILED',
-]);
-function _pushErrorKey(code) {
-  return `blog.error.${_PUSH_ERROR_KEYS.has(code) ? code : 'BLOG_PUSH_FAILED'}`;
+function runBlogPushJob(jobId, bookId, userEmail, pageIds) {
+  return runSyncPushJob(wordpress, jobId, bookId, userEmail, pageIds);
 }
 
-async function runBlogPushJob(jobId, bookId, userEmail, pageIds) {
-  const logger = makeJobLogger(jobId);
-  try {
-    _requireBlogBook(bookId, userEmail);
-    const conn = _resolveBlogConn(bookId);
-    const wp = createWpClient({
-      baseUrl: conn.baseUrl,
-      username: conn.username,
-      password: conn.password,
-      signal: _abortSignal(jobId),
-    });
-
-    let blogOrigin = '';
-    try { blogOrigin = new URL(conn.baseUrl).origin; } catch { /* validated bei connect */ }
-    // Inline-Bilder: data-URIs / fremd-gehostete Bilder in die WP-Mediathek laden,
-    // bereits blog-gehostete unveraendert lassen. Fehler verwerfen nur das Bild.
-    let imagesUploaded = 0;
-    const _resolveImage = makeImageResolver({ wp, blogOrigin, signal: _abortSignal(jobId), logger });
-    const resolveImage = async (src) => {
-      const r = await _resolveImage(src);
-      if (r && r.src && r.src !== src) imagesUploaded++;
-      return r;
-    };
-
-    const ids = (pageIds || []).map(x => parseInt(x, 10)).filter(n => Number.isInteger(n) && n > 0);
-    if (!ids.length) throw Object.assign(new Error('BLOG_NO_PAGES'), { code: 'BLOG_NO_PAGES' });
-
-    let pushed = 0;
-    let createdRemote = 0;
-    let conflictSkipped = 0;
-    const errors = [];
-    const renamed = []; // [{ pageId, name }] — lokale Umbenennungen (Datum-Prefix)
-
-    for (let i = 0; i < ids.length; i++) {
-      if (_abortSignal(jobId)?.aborted) throw new DOMException('Aborted', 'AbortError');
-      const pageId = ids[i];
-      updateJob(jobId, {
-        statusText: 'job.blog.push.upload',
-        statusParams: { current: i + 1, total: ids.length },
-        progress: Math.round((i / ids.length) * 95) + 2,
-      });
-      const pageRow = await contentStore.loadPage(pageId).catch(() => null);
-      if (!pageRow) {
-        logger.warn(`Blog-Push: Page ${pageId} nicht gefunden`);
-        errors.push({ pageId, code: 'PAGE_NOT_FOUND' });
-        continue;
-      }
-      if (pageRow.book_id !== bookId) {
-        logger.warn(`Blog-Push: Page ${pageId} gehoert nicht zu Buch ${bookId}`);
-        errors.push({ pageId, code: 'PAGE_WRONG_BOOK' });
-        continue;
-      }
-
-      const link = blogs.getLinkByPage(pageId);
-      if (link && link.conflict_state === 'detected') {
-        logger.info(`Blog-Push: Page ${pageId} "${pageRow.name}" Konflikt offen, skip`);
-        conflictSkipped++;
-        errors.push({ pageId, code: 'BLOG_CONFLICT' });
-        continue;
-      }
-
-      // Pre-Check: hat WordPress seit dem letzten Sync einen neueren Stand? Dann
-      // ueberschriebe der Push fremde Aenderungen, die niemand gesehen hat —
-      // stattdessen Konflikt setzen, der Diff im Buchorganizer entscheidet. Vor
-      // dem Media-Pass, damit ein abgewiesener Push keine Bilder hochlaedt.
-      if (link) {
-        let current;
-        try {
-          current = await wp.getPost(link.wp_post_id);
-        } catch (e) {
-          if (e.code === 'BLOG_HTTP_404' || e.status === 404) {
-            blogs.deleteLink(pageId);
-            logger.info(`Blog-Push: Page ${pageId} "${pageRow.name}" -> WP-Post ${link.wp_post_id} weg (404), Link entfernt`);
-            errors.push({ pageId, code: 'BLOG_REMOTE_GONE' });
-          } else {
-            logger.warn(`Blog-Push: Page ${pageId} "${pageRow.name}" Pre-Check-Fehler ${e.code || e.message}`);
-            errors.push({ pageId, code: e.code || 'BLOG_PUSH_FAILED' });
-          }
-          continue;
-        }
-        const currentModified = current?.modified_gmt || current?.date_gmt || '';
-        if (newer(currentModified, link.wp_modified_at)) {
-          blogs.setConflictState(pageId, 'detected');
-          logger.info(`Blog-Push: Page ${pageId} "${pageRow.name}" — WP-Post ${link.wp_post_id} drueben geaendert (${currentModified} > ${link.wp_modified_at}), Konflikt gesetzt`);
-          conflictSkipped++;
-          errors.push({ pageId, code: 'BLOG_CONFLICT' });
-          continue;
-        }
-        // Push-Sperre: der Post enthaelt in WordPress etwas, das der Import nicht
-        // uebernimmt (Embed, Video, dynamischer Block …). Der Push ersetzt den
-        // ganzen `content` — er loeschte es im Live-Blog, ohne dass es in der App
-        // je sichtbar war. Solche Beitraege werden in WordPress bearbeitet.
-        const lossy = wpLossyBlocks(current?.content?.raw || '');
-        if (lossy.length) {
-          logger.info(`Blog-Push: Page ${pageId} "${pageRow.name}" — WP-Post ${link.wp_post_id} enthaelt nicht uebernehmbare Bloecke (${lossy.join(', ')}), gesperrt`);
-          errors.push({ pageId, code: 'BLOG_UNSUPPORTED_BLOCKS', blocks: lossy });
-          continue;
-        }
-      }
-
-      // Titel-Werkstatt: Titel, Lead und Teaser (`page_headline`) gehen mit. Nur
-      // GESETZTE Felder — ein leeres Feld ueberschreibt nichts in WordPress.
-      const hl = getHeadline(pageId);
-      const hlLead = (hl?.lead || '').trim();
-      const hlExcerpt = (hl?.teaser || '').trim();
-
-      // Quellen: die Einheit ist die SEITE — ein WP-Post ist genau eine Seite.
-      // Darum `pageIds: [pageId]`: die Nummern des numerischen Stils folgen den
-      // Fundstellen dieses einen Posts ab 1, und Chip-Text und Verzeichnis
-      // stimmen zusammen. `resolveCitesInHtml` setzt den Kurzbeleg frisch (der
-      // gespeicherte Text ist nur ein Cache) und laeuft VOR dem Block-Emitter.
-      //
-      // Bewusst pro Seite gebaut statt einmal fuer den Job: die Nummern sind
-      // per Definition seiten-spezifisch, und der Aufwand (drei indizierte
-      // SQLite-Reads) ist neben dem HTTP-Round-Trip pro Post nicht messbar.
-      const bib = await buildBibliography({ bookId, pageIds: [pageId], userEmail });
-      const appHtml = await resolveCitesInHtml(pageRow.html || pageRow.body_html || '<p></p>', bib);
-      const wpHtml = await appToWpHtmlWithMedia(appHtml, {
-        resolveImage,
-        // Verzeichnis nur bei ausdruecklich aktiviertem Blog-Anhang. Ohne das
-        // Flag bleibt es Sache der Datei-Exporte.
-        bibliography: bib.inBlog ? bib : null,
-        // Lead als markierter erster Block (der Pull holt ihn zurueck in die
-        // Werkstatt, siehe lib/wp-html.js#HEADLINE_MARKER_CLASS).
-        lead: hlLead || null,
-      });
-
-      // Beim Create: der Datum-Prefix `YYYY-MM-DD:` ist app-intern. Der lokale
-      // page_name bekommt `YYYY-MM-DD: Rest` (oder nur `YYYY-MM-DD`, falls Rest
-      // leer; bereits vorhandener Prefix wird durch heute ersetzt).
-      let localNameForCreate = pageRow.name || '';
-      let renamedLocally = false;
-      if (!link) {
-        const today = localIsoDate();
-        const { rest } = splitDatePrefix(pageRow.name);
-        localNameForCreate = rest ? `${today}: ${rest}` : today;
-        if (localNameForCreate !== pageRow.name) renamedLocally = true;
-      }
-      // WordPress-Titel (Create UND Update): Werkstatt-Titel, sonst Seitenname
-      // ohne Datum (lib/blog-title.js). Beim Update geht er immer mit, damit
-      // eine Umbenennung in der App ankommt; ein inzwischen in WordPress
-      // geaenderter Titel wird davor vom Pre-Check als Konflikt abgefangen,
-      // nicht stumm ueberschrieben.
-      const wpTitle = outgoingTitle(pageRow.name, hl);
-
-      try {
-        let remote;
-        if (link) {
-          remote = await wp.updatePost(link.wp_post_id, {
-            content: wpHtml,
-            ...(wpTitle ? { title: wpTitle } : {}),
-            ...(hlExcerpt ? { excerpt: hlExcerpt } : {}),
-          });
-        } else {
-          remote = await wp.createPost({
-            title: wpTitle,
-            content: wpHtml,
-            status: conn.defaultStatus,
-            ...(hlExcerpt ? { excerpt: hlExcerpt } : {}),
-          });
-        }
-        if (renamedLocally) {
-          await contentStore.savePage(pageId, { name: localNameForCreate }, null);
-          renamed.push({ pageId, name: localNameForCreate });
-        }
-        blogs.upsertLink({
-          pageId,
-          blogId: conn.id,
-          wpPostId: remote.id,
-          wpModifiedAt: remote.modified_gmt || remote.date_gmt || '',
-          wpStatus: remote.status || null,
-          wpSlug: remote.slug || null,
-          lastPushedAt: new Date().toISOString(),
-        });
-        if (!link) {
-          logger.info(`Blog-Push: Page ${pageId} "${localNameForCreate}" -> WP-Post ${remote.id} neu erstellt`);
-          createdRemote++;
-        } else {
-          logger.info(`Blog-Push: Page ${pageId} "${pageRow.name}" -> WP-Post ${remote.id} aktualisiert`);
-          pushed++;
-        }
-      } catch (e) {
-        // Remote-Post 404: WP-User hat Draft/Post gelöscht. Link weg, Badge
-        // flippt automatisch auf 'new' beim nächsten loadLinks. User kann
-        // erneut pushen → neuer Post wird angelegt.
-        if (link && (e.code === 'BLOG_HTTP_404' || e.status === 404)) {
-          blogs.deleteLink(pageId);
-          logger.info(`Blog-Push: Page ${pageId} "${pageRow.name}" -> WP-Post ${link.wp_post_id} weg (404), Link entfernt`);
-          errors.push({ pageId, code: 'BLOG_REMOTE_GONE' });
-        } else {
-          logger.warn(`Blog-Push: Page ${pageId} "${pageRow.name}" Fehler ${e.code || e.message}`);
-          errors.push({ pageId, code: e.code || 'BLOG_PUSH_FAILED' });
-        }
-      }
-    }
-
-    blogs.touchPush(conn.id);
-    logger.info(`Push: ${pushed} aktualisiert, ${createdRemote} neu in WP, ${conflictSkipped} Konflikt skipped, ${imagesUploaded} Bilder hochgeladen, ${errors.length} Fehler.`);
-    // Nichts gepusht, nur Fehler: der Job ist gescheitert, nicht «abgeschlossen».
-    // Sonst meldet der Toast Erfolg, waehrend der Abschnitt gesperrt oder im
-    // Konflikt ist. Der erste Grund wird gezeigt (der UI-Push schickt einen Abschnitt).
-    if (errors.length && pushed + createdRemote === 0) {
-      const first = errors[0];
-      throw i18nError(_pushErrorKey(first.code), first.blocks ? { blocks: first.blocks.join(', ') } : null);
-    }
-    completeJob(jobId, { pushed, createdRemote, conflictSkipped, imagesUploaded, errors, renamed }, null,
-      `${pushed + createdRemote} gepusht / ${errors.length} Fehler`);
-  } catch (e) {
-    if (e.name !== 'AbortError') makeJobLogger(jobId).error(`Blog-Push-Fehler: ${e.message}`);
-    failJob(jobId, e);
-  }
+function runBlogReconcileJob(jobId, bookId, userEmail) {
+  return runSyncReconcileJob(wordpress, jobId, bookId, userEmail);
 }
 
-function _aclEditor(req, res, bookId) {
-  return guardBook(req, res, bookId, 'editor');
-}
-
-blogSyncRouter.post('/blog-import', jsonBody, (req, res) => {
-  const book_id = toIntId(req.body?.book_id);
-  if (!book_id) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
-  setContext({ book: book_id });
-  if (!_aclEditor(req, res, book_id)) return;
-  const userEmail = sessionEmail(req);
-  try { _requireBlogBook(book_id, userEmail); }
-  catch (e) { return res.status(400).json({ error_code: e.code }); }
-  const existing = findActiveJobId('blog-import', book_id, userEmail);
-  if (existing) return res.json({ jobId: existing, existing: true });
-  if (_activeBookSyncJob(book_id)) return res.status(409).json({ error_code: 'BLOG_SYNC_RUNNING' });
-  const jobId = createJob('blog-import', book_id, userEmail, 'job.label.blogImport');
-  enqueueJob(jobId, () => runBlogImportJob(jobId, book_id, userEmail));
-  res.json({ jobId });
+mountSyncJobRoute(blogSyncRouter, wordpress, {
+  type: 'blog-import', label: 'job.label.blogImport', run: runBlogImportJob, bookExclusive: BOOK_EXCLUSIVE_TYPES,
 });
-
-blogSyncRouter.post('/blog-pull', jsonBody, (req, res) => {
-  const book_id = toIntId(req.body?.book_id);
-  if (!book_id) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
-  setContext({ book: book_id });
-  if (!_aclEditor(req, res, book_id)) return;
-  const userEmail = sessionEmail(req);
-  try { _requireBlogBook(book_id, userEmail); }
-  catch (e) { return res.status(400).json({ error_code: e.code }); }
-  const existing = findActiveJobId('blog-pull', book_id, userEmail);
-  if (existing) return res.json({ jobId: existing, existing: true });
-  // Pro Buch exklusiv: ein Import/Pull eines Mitautors (oder der eigene Import)
-  // laeuft schon. Dessen Job-ID bekommt der zweite User nicht — GET /jobs/:id
-  // zeigt nur eigene Jobs —, darum ein eigener Fehlercode statt eines Pollings ins Leere.
-  if (_activeBookSyncJob(book_id)) return res.status(409).json({ error_code: 'BLOG_SYNC_RUNNING' });
-  const jobId = createJob('blog-pull', book_id, userEmail, 'job.label.blogPull');
-  enqueueJob(jobId, () => runBlogPullJob(jobId, book_id, userEmail));
-  res.json({ jobId });
+mountSyncJobRoute(blogSyncRouter, wordpress, {
+  type: 'blog-pull', label: 'job.label.blogPull', run: runBlogPullJob, bookExclusive: BOOK_EXCLUSIVE_TYPES,
 });
-
-blogSyncRouter.post('/blog-reconcile', jsonBody, (req, res) => {
-  const book_id = toIntId(req.body?.book_id);
-  if (!book_id) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
-  setContext({ book: book_id });
-  if (!_aclEditor(req, res, book_id)) return;
-  const userEmail = sessionEmail(req);
-  try { _requireBlogBook(book_id, userEmail); }
-  catch (e) { return res.status(400).json({ error_code: e.code }); }
-  const existing = findActiveJobId('blog-reconcile', book_id, userEmail);
-  if (existing) return res.json({ jobId: existing, existing: true });
-  const jobId = createJob('blog-reconcile', book_id, userEmail, 'job.label.blogReconcile');
-  enqueueJob(jobId, () => runBlogReconcileJob(jobId, book_id, userEmail));
-  res.json({ jobId });
+mountSyncJobRoute(blogSyncRouter, wordpress, {
+  type: 'blog-reconcile', label: 'job.label.blogReconcile', run: runBlogReconcileJob,
 });
-
-blogSyncRouter.post('/blog-push', jsonBody, (req, res) => {
-  const book_id = toIntId(req.body?.book_id);
-  if (!book_id) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
-  setContext({ book: book_id });
-  if (!_aclEditor(req, res, book_id)) return;
-  const userEmail = sessionEmail(req);
-  try { _requireBlogBook(book_id, userEmail); }
-  catch (e) { return res.status(400).json({ error_code: e.code }); }
-  const pageIds = Array.isArray(req.body?.page_ids) ? req.body.page_ids : [];
-  if (!pageIds.length) return res.status(400).json({ error_code: 'BLOG_PAGE_IDS_REQUIRED' });
-  const existing = findActiveJobId('blog-push', book_id, userEmail);
-  if (existing) return res.json({ jobId: existing, existing: true });
-  const jobId = createJob('blog-push', book_id, userEmail, 'job.label.blogPushCount', { count: pageIds.length });
-  enqueueJob(jobId, () => runBlogPushJob(jobId, book_id, userEmail, pageIds));
-  res.json({ jobId });
+mountSyncJobRoute(blogSyncRouter, wordpress, {
+  type: 'blog-push', label: 'job.label.blogPushCount', run: runBlogPushJob, withPages: true,
 });
 
 module.exports = { blogSyncRouter, runBlogImportJob, runBlogPullJob, runBlogPushJob, runBlogReconcileJob, _activeBookSyncJob };

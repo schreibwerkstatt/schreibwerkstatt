@@ -55,14 +55,14 @@ test('Pflichtfelder: Buchtyp + Kategorie blockieren Submit, gültig persistiert 
   // Leerer Name → Submit-Button disabled (Name-Pflicht greift schon im :disabled).
   await expect(page.locator('#submit-btn')).toBeDisabled();
 
-  // Name füllen → Submit aktiv, aber Buchtyp fehlt → Validierungsfehler, kein createBook.
+  // Buchtyp ist ohne Profil-Standard mit Roman vorbelegt — keine leere Pflichtauswahl.
+  await expect(page.locator('#field-buchtyp .combobox-value')).toHaveText('Roman');
+
+  // Name füllen → Submit aktiv.
   await page.locator('.book-create-input').fill('Mein Roman');
   await expect(page.locator('#submit-btn')).toBeEnabled();
-  await page.locator('#submit-btn').click();
-  await expect(page.locator('#create-error')).toHaveText('Bitte einen Buchtyp wählen.');
-  expect(calls.createBook).toBe(0);
 
-  // Buchtyp wählen → Label propagiert; jetzt fehlt nur noch die Kategorie.
+  // Anderen Buchtyp wählen → Label propagiert; es fehlt nur noch die Kategorie.
   await selectCombo(page, 'field-buchtyp', 'Krimi / Thriller');
   await expect(page.locator('#field-buchtyp .combobox-value')).toHaveText('Krimi / Thriller');
   await page.locator('#submit-btn').click();
@@ -78,7 +78,9 @@ test('Pflichtfelder: Buchtyp + Kategorie blockieren Submit, gültig persistiert 
   expect(calls.createBook).toBe(1);
   expect(calls.booksettings).toMatchObject({ buchtyp: 'krimi', language: 'de', region: 'CH' });
   expect(calls.category).toMatchObject({ category_id: 2 });
-  await expect.poll(() => page.evaluate(() => window.__calls.openedSettings)).toBe(true);
+  // Ins neue Buch (Übersicht), nicht in die Settings-Karte.
+  await expect.poll(() => page.evaluate(() => window.location.hash)).toBe('#book/999');
+  expect(await page.evaluate(() => window.__calls.openedSettings)).toBeUndefined();
 });
 
 test('Leerer Kategorie-Pool: Kategorie-Feld verborgen, Submit ohne Kategorie gültig', async ({ page }) => {

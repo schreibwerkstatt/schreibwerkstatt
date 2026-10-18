@@ -7,6 +7,7 @@
 import { stripFocusArtefacts } from '../utils.js';
 import { getDeviceId } from '../device-id.js';
 import { getTabId } from '../tab-id.js';
+import { beginSave, confirmSave, dropSave } from './save-ids.js';
 import { EVT } from '../events.js';
 
 const GET_TIMEOUT_MS = 30000;
@@ -162,14 +163,27 @@ export const contentRepo = {
   // sich aktualisiert ohne Page-Reload. SW-Invalidation muss neben der Page
   // auch die Revisionsliste umfassen, sonst liefert SWR beim folgenden Reload
   // der Liste den Stand vor dem Save.
-  async savePage(id, body) {
+  //
+  // `writer` (+ `extraOwnSaveIds` aus einem Draft): Save-Kennung und die
+  // Kennungen früherer, unbestätigter Saves desselben Schreibers mitschicken
+  // (./save-ids.js) — der Server erkennt daran den eigenen Save mit verlorener
+  // Antwort. Ohne `writer` läuft der Save wie bisher, ohne Kennung.
+  async savePage(id, body, { writer = null, extraOwnSaveIds = [] } = {}) {
     const hasHtml = typeof body?.html === 'string';
     // Geraet-Stempel nur bei Body-Change: macht den geraete-bewussten /changes-Feed
     // praezise (eigener Browser-Save wird ausgefiltert, andere Geraete nicht).
     // `client_tab` trennt Tabs desselben Browsers im PAGE_CONFLICT-Log.
-    const payload = hasHtml ? { ...body, device_id: getDeviceId(), client_tab: getTabId() } : body;
+    const ids = hasHtml && writer ? beginSave(writer, id, extraOwnSaveIds) : null;
+    const payload = hasHtml ? { ...body, ...ids, device_id: getDeviceId(), client_tab: getTabId() } : body;
     const inv = hasHtml ? ['pages/' + id, 'pages/' + id + '/revisions'] : ['pages/' + id];
-    const out = await _write('PUT', 'pages/' + id, payload, inv);
+    let out;
+    try { out = await _write('PUT', 'pages/' + id, payload, inv); }
+    catch (e) {
+      // 4xx: der Server hat nicht geschrieben. Netzfehler/5xx: vielleicht doch.
+      if (ids && e?.status >= 400 && e.status < 500) dropSave(writer, id, ids.save_id);
+      throw e;
+    }
+    if (ids) confirmSave(writer, id, ids.save_id);
     if (hasHtml && typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(EVT.PAGE_REVISIONS_CHANGED, { detail: { pageId: id } }));
     }

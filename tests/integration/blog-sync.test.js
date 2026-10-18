@@ -391,3 +391,64 @@ test('Pull: erkennt Konflikt wenn beide Seiten nach last_pulled_at neu', async (
     restore();
   }
 });
+
+// ── Papierkorb: WordPress liefert den Post mit context=edit weiter aus ───────
+
+async function trashedSetup(bookId) {
+  seedBlogBook(bookId);
+  seedConnection(bookId);
+  const connId = blogs.getConnection(bookId).id;
+  blogs.markInitialImportDone(connId);
+  const page = await contentStore.createPage({
+    book_id: bookId, chapter_id: null, name: 'Weg', html: '<p>Text.</p>',
+  }, null);
+  blogs.upsertLink({
+    pageId: page.id, blogId: connId,
+    wpPostId: 21, wpModifiedAt: '2026-04-01T10:00:00',
+    wpStatus: 'publish', lastPulledAt: '2026-04-01T10:00:00',
+  });
+  const wp = makeWpStub({
+    posts: [{
+      id: 21, title: { rendered: 'Weg', raw: 'Weg' },
+      content: { rendered: '<p>alt</p>', raw: '<p>alt</p>' },
+      status: 'trash', slug: 'weg',
+      modified_gmt: '2026-04-01T10:00:00', date_gmt: '2026-04-01T10:00:00',
+    }],
+  });
+  return { page, wp };
+}
+
+function runJob(type, bookId, fn) {
+  const jobId = `test-${type}-${Date.now()}-${Math.random()}`;
+  const { jobs, runningJobs } = ctx.shared;
+  jobs.set(jobId, { id: jobId, type, bookId, userEmail: null, status: 'running', progress: 0, createdAt: Date.now() });
+  runningJobs.set(jobId, { type, bookId });
+  return fn(jobId).then(() => jobs.get(jobId));
+}
+
+test('Push: Post im Papierkorb → Link weg, BLOG_REMOTE_GONE, kein Update auf den Papierkorb-Post', async () => {
+  const { page, wp } = await trashedSetup(9010);
+  const restore = installFetch(wp);
+  try {
+    const job = await runJob('blog-push', 9010, (id) => blogSync.runBlogPushJob(id, 9010, null, [page.id]));
+    assert.equal(job.status, 'error');
+    assert.match(String(job.error || ''), /BLOG_REMOTE_GONE/);
+    assert.equal(blogs.getLinkByPage(page.id), null);
+    assert.equal(wp.posts.find(p => p.id === 21).content.raw, '<p>alt</p>');
+  } finally {
+    restore();
+  }
+});
+
+test('Abgleich: Post im Papierkorb gilt als verwaist', async () => {
+  const { page, wp } = await trashedSetup(9011);
+  const restore = installFetch(wp);
+  try {
+    const job = await runJob('blog-reconcile', 9011, (id) => blogSync.runBlogReconcileJob(id, 9011, null));
+    assert.equal(job.status, 'done', JSON.stringify(job.error));
+    assert.equal(job.result.removed, 1);
+    assert.equal(blogs.getLinkByPage(page.id), null);
+  } finally {
+    restore();
+  }
+});

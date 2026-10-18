@@ -162,6 +162,7 @@ export function registerPaletteCard() {
       const root = window.__app || {};
       return {
         selectedBookId: Alpine.store('nav').selectedBookId,
+        hasBooks: (Alpine.store('nav').books || []).length > 0,
         pages: Alpine.store('nav').pages,
         bookRole: root.currentBookRole || null,
         buchtyp: (typeof root.currentBuchtyp === 'function' ? root.currentBuchtyp() : null) || null,

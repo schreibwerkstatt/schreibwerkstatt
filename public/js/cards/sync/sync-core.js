@@ -13,36 +13,40 @@ function stopPushPoller(holder) {
 // Sync-Core — gemeinsame Logik für externe Buch-Sync-Provider (WordPress-Blog,
 // HubSpot-Blog, künftige Provider). `createSyncCard(spec)` liefert ein
 // Alpine.data-Objekt mit Links-Loading, Per-Page-Status, Push-Job-Trigger,
-// Progress-Polling. Provider-spezifische Erweiterungen (z.B. Konflikt-Diff bei
-// WordPress) kommen über `spreadExt` als zusätzliche Methoden/State drauf.
+// Progress-Polling, Status-Modell und Konflikt-Diff. Der Provider liefert nur
+// Endpoint, Job-Typen und die Ansicht-URL.
 //
 // Endpoint-Konvention pro Provider:
 //   GET  ${endpointBase}/${bookId}/links → { connected, links[], …providerMeta }
 //   POST /jobs/${jobType.push}  { book_id, page_ids } → { jobId }
 //
 // Provider-Spec:
-//   key           — kurzer Identifier ('blog', 'hubspot')
-//   endpointBase  — '/blog' | '/hubspot'
+//   key           — kurzer Identifier ('blog', 'hubspot'); i18n-Namensraum der
+//                   Aktionen/Fehler (`${key}.action.*`, `${key}.conflict.*`)
+//   endpointBase  — '/blog' | '/hubspot' (Routen: routes/sync-router.js)
 //   jobTypes      — { push: 'blog-push', refresh: ['blog-import','blog-pull'],
 //                     reconcile: 'blog-reconcile' }
 //                   (refresh-Liste: nach diesen Jobs `loadPages()` triggern;
 //                   nach push-/reconcile-Jobs reicht `loadLinks()`)
-//   providerMetaKey — Key aus /links-Response, der provider-spezifische Meta
-//                     trägt (z.B. 'baseUrl', 'blogId'). Wird auf `providerMeta`
-//                     gemappt; legacy Felder bleiben als Top-Level für
-//                     Backwards-Compat.
-//   computeStatus(page, link) → Status-String oder null
-//   statusLabels  — { status: 'i18n.key' }
-//   canPushStatuses — Statuswerte, bei denen Push erlaubt ist
 //   viewUrl(page, providerMeta, link) → URL-String oder '' (optional)
-//   spreadExt     — Object mit zusätzlichen State-Feldern/Methoden, wird in
-//                   das Alpine.data gespreaded (z.B. Konflikt-Handling)
 //   onBookChange  — optional, wird in book:changed nach Core-Reset gerufen
 //   pushErrorCode — Fallback-Error-Code-String
 //   confirmPush(pageId) → boolean | Promise<boolean> (optional). Wird in `push()`
 //                         vor dem Backend-Call aufgerufen; liefert `false` →
 //                         Push abgebrochen (z.B. wenn ein UI-Dialog erst eine
 //                         Bestätigung einholen muss).
+//
+// Status-Modell und Konflikt-Diff sind für alle Provider gleich (Server-Seite:
+// routes/jobs/sync/push.js, routes/sync-router.js):
+//   'new'         — kein Link, Push legt den Remote-Post an
+//   'conflict'    — beide Seiten geändert (conflict_state='detected')
+//   'locked'      — der Beitrag enthält drüben Elemente, die der Import nicht
+//                   übernimmt (`locked_blocks`, nur WordPress); der Push ist
+//                   gesperrt, weil er sie im Live-Blog löschte
+//   'push-needed' — Abschnitt oder Titel-Werkstatt jünger als der Sync-Punkt
+//   'synced'      — Stand identisch zum letzten Abgleich
+// Sync-Punkt = der jüngere von last_pulled_at/last_pushed_at — dieselbe Regel
+// wie lib/blog-merge.js#classifyPull.
 
 // Jüngster von mehreren ISO-Stamps ('' wenn keiner). Frontend-Pendant zu
 // lib/blog-merge.js#latest — beide Provider rechnen ihren Sync-Status damit.
@@ -50,6 +54,28 @@ export function latestStamp(...stamps) {
   let out = '';
   for (const s of stamps) if (s && String(s) > out) out = String(s);
   return out;
+}
+
+export const SYNC_STATUS_LABELS = {
+  new: 'sync.status.new',
+  synced: 'sync.status.synced',
+  'push-needed': 'sync.status.pushNeeded',
+  conflict: 'sync.status.conflict',
+  locked: 'sync.status.locked',
+};
+const CAN_PUSH_STATUSES = ['new', 'push-needed'];
+
+/** Badge-Status einer Seite (siehe Status-Modell oben). Titel-Werkstatt-Edits
+ *  (Titel/Lead/Teaser gehen mit dem Push raus) bewegen pages.updated_at nicht —
+ *  darum zählt headline_updated_at mit. */
+export function computeSyncStatus(page, link) {
+  if (!link) return 'new';
+  if (link.conflict_state === 'detected') return 'conflict';
+  if (link.locked_blocks) return 'locked';
+  const lastSync = latestStamp(link.last_pushed_at, link.last_pulled_at);
+  const localUpdated = latestStamp(page?.updated_at, link.headline_updated_at);
+  if (localUpdated && lastSync && localUpdated > lastSync) return 'push-needed';
+  return 'synced';
 }
 
 export function createSyncCard(spec) {
@@ -60,12 +86,6 @@ export function createSyncCard(spec) {
   const reconcileType = spec.jobTypes?.reconcile || null;
   const linkRefreshTypes = new Set([pushType, ...(reconcileType ? [reconcileType] : [])]);
   const globalWindowKey = `__${spec.key}Card`;
-  const extRaw = spec.spreadExt || {};
-  const extInit = extRaw.init;
-  const extDestroy = extRaw.destroy;
-  const ext = { ...extRaw };
-  delete ext.init;
-  delete ext.destroy;
 
   return () => {
     const base = {
@@ -75,6 +95,10 @@ export function createSyncCard(spec) {
       pushBusy: {},
       pushProgress: {},
       _pushTimers: {},
+      // Konflikt-Diff (Modal im Buchorganizer): Seite + beide Stände.
+      hasConflict: true,
+      conflictOpen: null,
+      conflictData: null,
 
       init() {
         window[globalWindowKey] = this;
@@ -87,6 +111,8 @@ export function createSyncCard(spec) {
           this.linksMap = {};
           this.pushBusy = {};
           this.pushProgress = {};
+          this.conflictOpen = null;
+          this.conflictData = null;
           if (typeof spec.onBookChange === 'function') spec.onBookChange.call(this);
         };
         this._onJobFinished = (ev) => {
@@ -105,7 +131,6 @@ export function createSyncCard(spec) {
         window.addEventListener(EVT.PAGES_LOADED, this._onPagesLoaded);
         window.addEventListener(EVT.BOOK_CHANGED, this._onBookChanged);
         window.addEventListener(EVT.JOB_FINISHED, this._onJobFinished);
-        if (typeof extInit === 'function') extInit.call(this);
       },
 
       destroy() {
@@ -115,7 +140,6 @@ export function createSyncCard(spec) {
         window.removeEventListener(EVT.BOOK_CHANGED, this._onBookChanged);
         window.removeEventListener(EVT.JOB_FINISHED, this._onJobFinished);
         if (window[globalWindowKey] === this) window[globalWindowKey] = null;
-        if (typeof extDestroy === 'function') extDestroy.call(this);
       },
 
       // Endpoint /links liefert `connected: false`, wenn Buchtyp != 'blog' oder
@@ -151,18 +175,88 @@ export function createSyncCard(spec) {
 
       statusFor(page) {
         if (!this.connected || !page) return null;
-        return spec.computeStatus(page, this.linksMap[page.id] || null);
+        return computeSyncStatus(page, this.linksMap[page.id] || null);
       },
 
       statusLabel(status) {
         if (!status) return '';
-        const key = spec.statusLabels?.[status];
+        const key = SYNC_STATUS_LABELS[status];
         return key ? (window.__app?.t(key) || '') : '';
+      },
+
+      // Tooltip des Badges. Beim gesperrten Beitrag mit den Elementen, die
+      // ihn sperren — sonst weiss niemand, was er in WordPress ändern müsste.
+      statusTip(page) {
+        const s = this.statusFor(page);
+        if (s === 'locked') {
+          const blocks = this.linksMap[page.id]?.locked_blocks || '';
+          return window.__app?.t('sync.status.lockedTip', { blocks }) || '';
+        }
+        return this.statusLabel(s);
       },
 
       canPush(page) {
         const s = this.statusFor(page);
-        return !!s && spec.canPushStatuses.includes(s);
+        return !!s && CAN_PUSH_STATUSES.includes(s);
+      },
+
+      async openConflict(pageId) {
+        const bookId = Alpine.store('nav').selectedBookId;
+        if (!bookId) return;
+        this.conflictOpen = pageId;
+        this.conflictData = null;
+        try {
+          const { contentRepo } = await import('../../repo/content.js');
+          const [remoteRes, localPage] = await Promise.all([
+            fetch(`${spec.endpointBase}/${bookId}/pages/${pageId}/remote`).then(r => r.ok ? r.json() : Promise.reject(r)),
+            // fresh: der Diff ist die Entscheidungsgrundlage „lokal oder Remote".
+            // Aus dem SWR-Cache könnte die lokale Seite ÄLTER aussehen als sie ist —
+            // der User verwürfe dann eigene Edits, die er im Diff nie gesehen hat.
+            contentRepo.loadPage(pageId, { fresh: true }),
+          ]);
+          if (!isSelectedBook(bookId) || this.conflictOpen !== pageId) return;
+          this.conflictData = {
+            pageId,
+            local: { name: localPage.name || localPage.page_name || '', html: localPage.html || localPage.body_html || '' },
+            remote: { title: remoteRes.title || '', html: remoteRes.html || '', modifiedAt: remoteRes.modifiedAt || '' },
+          };
+        } catch (e) {
+          console.error(`[sync:${spec.key}] Konflikt-Diff laden fehlgeschlagen:`, e);
+          this.conflictOpen = null;
+        }
+      },
+
+      closeConflict() {
+        this.conflictOpen = null;
+        this.conflictData = null;
+      },
+
+      // side: 'app' (App-Stand behalten, nächster Push überschreibt) |
+      //       'remote' (Remote-Stand in den Abschnitt übernehmen)
+      async resolveConflict(side) {
+        if (!this.conflictOpen) return;
+        const bookId = Alpine.store('nav').selectedBookId;
+        const pageId = this.conflictOpen;
+        try {
+          const res = await fetch(`${spec.endpointBase}/${bookId}/pages/${pageId}/resolve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resolve: side }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error_code || `${spec.key.toUpperCase()}_RESOLVE_FAILED`);
+          this.closeConflict();
+          await this.loadLinks();
+          // Der Server hat die Seite gerade überschrieben (kein Bust im Browser).
+          // Hat der Remote-Titel den Seitennamen geändert, zieht _applyPushRenames
+          // auch den offenen Editor-Titel nach (und lädt den Tree).
+          if (side === 'remote') {
+            if (data.name) this._applyPushRenames({ result: { renamed: [{ pageId, name: data.name }] } });
+            else window.__app?.loadPages?.({ source: 'job' });
+          }
+        } catch (e) {
+          console.error(`[sync:${spec.key}] Konflikt lösen fehlgeschlagen:`, e);
+        }
       },
 
       viewUrl(page) {
@@ -250,6 +344,6 @@ export function createSyncCard(spec) {
       },
     };
 
-    return Object.assign(base, ext);
+    return base;
   };
 }

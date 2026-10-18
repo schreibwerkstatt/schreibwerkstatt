@@ -152,6 +152,7 @@ export const appOutboxMethods = {
       await savePage(pageId, {
         html: draft.html, pageName: name, source: 'main',
         expectedUpdatedAt: draft.originalUpdatedAt, reason: 'outbox',
+        writer: 'outbox', extraOwnSaveIds: draft.ownSaveIds || [],
       });
       clearDraft(pageId);
       return 'ok';
@@ -187,7 +188,7 @@ export const appOutboxMethods = {
     try {
       await savePage(pageId, {
         html: mergedToHtml(m.merged), pageName: name, source: 'main',
-        expectedUpdatedAt: remote.updated_at, reason: 'outbox-merge',
+        expectedUpdatedAt: remote.updated_at, reason: 'outbox-merge', writer: 'outbox',
       });
       clearDraft(pageId);
       return 'ok';

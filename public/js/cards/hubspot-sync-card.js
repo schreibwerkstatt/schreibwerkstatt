@@ -1,22 +1,17 @@
 // Alpine.data('hubspotSyncCard') — HubSpot-Sync-Provider. Thin Wrapper über
-// `createSyncCard` (sync/sync-core.js). Status-Modell:
-//   'new'          — kein Link, Push erstellt Draft-Post.
-//   'pushed-dirty' — Link existiert, App-Page lokal geändert seit letztem
-//                    Sync-Punkt → Re-Push erlaubt (mit Warn-Dialog).
-//   'pushed'       — Link existiert, lokal seit Sync unverändert.
+// `createSyncCard` (sync/sync-core.js): Status-Modell, Push und Konflikt-Diff
+// liegen dort und gelten für alle Provider.
 //
-// Re-Push aktualisiert via PATCH den HubSpot-Draft-Buffer; die Live-Version
-// drüben bleibt unverändert, bis der User den Buffer in HubSpot publiziert.
-// HubSpot-spezifische Formatierungen (Module, CTAs, Bilder, Forms) im Live-
-// Post werden im Buffer durch den App-HTML-Body ersetzt — darum erst Dialog.
+// Re-Push aktualisiert den HubSpot-Draft-Buffer; die Live-Version drüben bleibt
+// unverändert, bis der User den Buffer in HubSpot publiziert. Ein importierter
+// Post kann HubSpot-Module, CTAs oder Formulare tragen, die der Import nicht
+// übernommen hat — im Buffer ersetzt der App-Body sie. Darum vor dem Re-Push
+// ein Dialog. (Ein Edit am Draft in HubSpot fällt dagegen in der Vorab-Prüfung
+// des Servers als Konflikt auf und wird nie still überschrieben.)
 //
 // Headless display-contents-Anker, via `$hubspot`-Magic global erreichbar.
 
-import { createSyncCard, latestStamp } from './sync/sync-core.js';
-
-function _syncBaseline(link) {
-  return link?.last_pushed_at || link?.hubspot_created_at || '';
-}
+import { createSyncCard } from './sync/sync-core.js';
 
 const hubspotSpec = {
   key: 'hubspot',
@@ -26,26 +21,10 @@ const hubspotSpec = {
     refresh: ['hubspot-import'],
     reconcile: 'hubspot-reconcile',
   },
-  computeStatus(page, link) {
-    if (!link) return 'new';
-    const baseline = _syncBaseline(link);
-    // Titel-Werkstatt-Edits (Titel/Lead/Teaser gehen mit dem Push raus)
-    // bewegen pages.updated_at nicht — beide Stamps zählen.
-    const updated = latestStamp(page?.updated_at, link.headline_updated_at);
-    if (updated && baseline && updated > baseline) return 'pushed-dirty';
-    return 'pushed';
-  },
-  statusLabels: {
-    new: 'hubspot.status.new',
-    pushed: 'hubspot.status.pushed',
-    'pushed-dirty': 'hubspot.status.pushedDirty',
-  },
-  canPushStatuses: ['new', 'pushed-dirty'],
   pushErrorCode: 'HUBSPOT_PUSH_FAILED',
   // PUBLISHED: absolute Live-Post-URL. DRAFT: Editor-URL — ohne Login waere
-  // der Draft drueben sonst nicht aufrufbar (HubSpot zeigt sonst nur Preview-
-  // Stub). `portalId` liefert `/hubspot/:bookId/links` mit, mit Self-Heal fuer
-  // Pre-150-Connections.
+  // der Draft drueben sonst nicht aufrufbar. `portalId` liefert
+  // `/hubspot/:bookId/links` mit.
   viewUrl(page, providerMeta, link) {
     if (!link) return '';
     if (link.hubspot_state === 'DRAFT' && providerMeta?.portalId && link.hubspot_post_id) {
@@ -53,17 +32,13 @@ const hubspotSpec = {
     }
     return link.hubspot_url || '';
   },
-  // Re-Push (Status 'pushed-dirty') öffnet erst einen Warn-Dialog. User muss
-  // aktiv bestätigen, dass HubSpot-spezifische Formatierungen im Buffer durch
-  // den App-Body überschrieben werden. Erst-Push ('new') läuft ohne Confirm.
   async confirmPush(pageId) {
     const root = window.__app;
     if (!root) return true;
     const page = (Alpine.store('nav').pages || []).find(p => p.id === pageId);
-    if (!page || this.statusFor(page) !== 'pushed-dirty') return true;
-    const pageName = page.name || '';
+    if (!page || this.statusFor(page) !== 'push-needed') return true;
     return !!(await root.appConfirm({
-      message: root.t('hubspot.repush.warning', { pageName }),
+      message: root.t('hubspot.repush.warning', { pageName: page.name || '' }),
       confirmLabel: root.t('hubspot.repush.confirm'),
       cancelLabel: root.t('common.cancel'),
     }));

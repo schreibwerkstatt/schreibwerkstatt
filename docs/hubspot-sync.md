@@ -1,241 +1,113 @@
 # HubSpot-Sync (Buch ↔ HubSpot-Blog)
 
-Spec für den HubSpot-Blog-Workflow eines Buchs vom Typ `blog`. Halbierte Funktion gegenüber [blog-sync.md](blog-sync.md) (WordPress): einmaliger Initial-Import + Per-Page-Push. Erst-Push erstellt einen HubSpot-Draft (`POST /cms/v3/blogs/posts`), Re-Push aktualisiert den Draft-Buffer eines bereits verknüpften Posts (`PATCH /cms/v3/blogs/posts/{id}/draft`). Kein Pull-Back, kein Conflict-Handling.
+Spec für den HubSpot-Blog-Workflow eines Buchs vom Typ `blog`. Einmaliger Initial-Import, Per-Abschnitt-Push in den **Draft-Buffer**, Abgleich. Push, Abgleich, Job-Routen, Status-Modell, Konflikt-Diff und Bild-Upload teilt HubSpot mit WordPress — **[blog-sync.md → „Geteilter Sync-Kern"](blog-sync.md#geteilter-sync-kern-wordpress--hubspot)** ist dafür die einzige Beschreibung. Hier steht nur, was HubSpot anders macht (Adapter [lib/sync/providers/hubspot.js](../lib/sync/providers/hubspot.js)).
 
 ## Eckdaten
 
-- **Mapping:** 1 Buch == 1 HubSpot-Blog (`contentGroupId`) + 1 Author (`blogAuthorId`). 1 HubSpot-Post == 1 Page in der App.
-- **Gating:** Verbindung nur konfigurierbar, wenn `buchtyp === 'blog'` (serverseitig hart gegated über `getBookSettings`).
-- **Auth:** Private Access Token (PAT, `pat-…`) via Bearer-Header. Token pro Buch verschlüsselt in der DB (`lib/crypto.js`).
-- **Trigger:** manuell. Einmaliger Initial-Import + ad-hoc Per-Page-Push (Erst-Push + Re-Push) + on-demand Reconcile (Link-Drift-Check). Kein Cron, keine Pull-Operation.
-- **Bilder:** konsequent gestrippt — Whitelist erlaubt nur Inline-/Block-Tags, kein `<img>`, kein Featured-Image-Upload, keine Medien-Embeds.
-- **Quellen:** Quellen-Chips werden zu Klartext (`span` steht in keiner Whitelist-Map, das Element wird entpackt, der Kurzbeleg bleibt im Satz) — im HubSpot-Post wäre ein Zeiger auf `sources.id` toter Ballast. Bei aktivem `bibliography_in_blog` hängt der Push das Quellenverzeichnis als `<h2>` + Liste an. **Kein Marker-Wrapper, anders als bei WordPress** ([blog-sync.md](blog-sync.md) → „Pflicht-Invariante: der Pull entfernt es wieder"): HubSpot liest nie zurück, es kann also nichts akkumulieren — und ein `<div>` würde die Allowlist ohnehin entpacken.
-- **Erst-Push:** `state: 'DRAFT'` via `POST /cms/v3/blogs/posts`. Finalisieren, Einplanen, Publizieren passiert in HubSpot.
-- **Re-Push:** `PATCH /cms/v3/blogs/posts/{id}/draft` aktualisiert den Buffer eines existierenden Posts. Live-Version drüben bleibt unverändert, bis der User den Buffer in HubSpot publiziert. Der UI-Warn-Dialog macht klar, dass HubSpot-spezifische Formatierungen (Module, CTAs, Bilder, Forms, Tags) im Buffer durch den App-HTML-Body ersetzt werden.
-- **Out-of-Scope:** Pull-Back von HubSpot-Änderungen, Featured-Image, Inline-Bilder, Tags/Topics/Categories, OAuth (PAT only), mehrere HubSpot-Blogs pro Buch.
+- **Mapping:** 1 Buch == 1 HubSpot-Blog (`contentGroupId`) + 1 Autor (`blogAuthorId`). 1 HubSpot-Post == 1 Abschnitt.
+- **Gating:** Verbindung nur konfigurierbar, wenn `buchtyp === 'blog'` (serverseitig hart, `HUBSPOT_REQUIRES_BLOG_TYPE`).
+- **Auth:** Private Access Token (PAT, `pat-…`) als Bearer. Token pro Buch verschlüsselt in der DB ([lib/crypto.js](../lib/crypto.js)). Scopes: `content` (Blog, Posts, Autoren) und `files` (Bild-Upload beim Push).
+- **Trigger:** manuell. Kein Delta-Pull — der einzige Weg zurück ist „HubSpot übernehmen" im Konflikt-Diff.
+- **Push schreibt den Draft-Buffer:** Erst-Push `POST /cms/v3/blogs/posts` mit `state: 'DRAFT'`; Re-Push `PATCH /cms/v3/blogs/posts/{id}/draft`. Die Live-Version ändert sich erst, wenn der User in HubSpot publiziert. Finalisieren, Einplanen, Slug, Meta-Description, Tags, Featured-Image: in HubSpot.
+- **Bilder:** beim Push in den File-Manager (`POST /files/v3/files`, Ordner `/schreibwerkstatt`, `PUBLIC_NOT_INDEXABLE`) — App-Seitenbilder, data-URIs und fremd gehostete Bilder; schon bei HubSpot liegende (`*.hubspotusercontent*.net`, `hubfs`) bleiben. Einmal hochgeladene Quellen merkt sich der geteilte Bild-Cache je Verbindung (`sync_media_cache.hub_id`, siehe [blog-sync.md → „Geteilter Sync-Kern"](blog-sync.md#geteilter-sync-kern-wordpress--hubspot)) — ein Re-Push lädt sie nicht erneut in den File-Manager. Beim **Import** fallen Bilder weg: sie liegen im HubSpot-CDN, das die CSP der App (`img-src`) nicht zulässt — im Manuskript stünden sie als kaputte Bilder.
+- **Quellen:** Chips werden zu Klartext (`span` steht in keiner Allowlist-Map, der Kurzbeleg bleibt im Satz). Bei `bibliography_in_blog` hängt der Push das Verzeichnis als `<h2>` + Liste an — **ohne Marker**, anders als WordPress: HubSpot liest nie zurück, es kann nichts akkumulieren.
+- **Out-of-Scope:** Delta-Pull, Tags/Topics, Featured-Image, OAuth (nur PAT), mehrere Blogs pro Buch.
 
-## Status-Modell (UI)
+## HTML ([lib/hubspot-html.js](../lib/hubspot-html.js))
 
-Drei Zustände pro Page (`computeStatus` in [hubspot-sync-card.js](../public/js/cards/hubspot-sync-card.js)):
+Eine Allowlist, zwei Richtungen:
 
-| Status | Bedingung | UI |
-|---|---|---|
-| `new` | Kein `hubspot_page_links`-Eintrag | Push-Button aktiv, Erst-Push ohne Confirm |
-| `pushed-dirty` | Link existiert + `max(page.updated_at, headline_updated_at) > COALESCE(last_pushed_at, hubspot_created_at)` — ein Titel-Werkstatt-Edit zählt mit (`/links` liefert `headline_updated_at` per Join) | Push-Button aktiv, öffnet `appConfirm`-Warn-Dialog vor Re-Push |
-| `pushed` | Link existiert + lokal unverändert seit Sync-Punkt | Indikator + externer Link, Push-Button ausgeblendet |
+- `hubspotToAppHtml(raw)` (Import, „HubSpot übernehmen"): Jinja-Marker (`{{…}}`, `{%…%}`, `{#…#}`) raus, CMS-Wrapper (`.hs-cta-*`, `.hs-form`, `.hs-embed-wrapper`), Skripte, Medien und Bilder raus.
+- `appToHubspotHtml(html, { images })` (Push): dieselbe Allowlist; `images: true` erst nach dem Media-Pass (nur `https://`-Quellen, `alt`, `<figure>` + `<figcaption>`).
 
-Re-Push ruft den Warn-Dialog (Keys `hubspot.repush.warning`/`hubspot.repush.confirm`) via `confirmPush`-Hook in [sync-core.js](../public/js/cards/sync/sync-core.js) auf. Bestätigt der User, sendet das Backend `PATCH …/draft` an HubSpot. Bricht der User ab, ändert sich nichts. Sync-Baseline ist `last_pushed_at || hubspot_created_at`. Der Initial-Import setzt `last_pushed_at` auf den Anlage-Zeitpunkt der frisch erzeugten Page (`created.updated_at`), damit sie direkt nach dem Import als `pushed` (synchron) gilt — sonst würde die Seitenanlage selbst (`updated_at` = jetzt > `hubspot_created_at`) als lokaler Edit zählen und der Status fälschlich `pushed-dirty` sein. Erst ein echter User-Edit schiebt `updated_at` über die Baseline → `pushed-dirty`.
+| App/HubSpot | Ergebnis |
+|---|---|
+| `strong`/`b`, `em`/`i`, `u`, `br` | `strong`, `em`, `u`, `br` (fette `font-weight` ≥ 600 → `strong`) |
+| `a[href^=http(s)]` | Link; sonst nur der Text |
+| `h1`, `h2` · `h3` · `h4`–`h6` | `h2` · `h3` · `h4` |
+| `p`, `ul`/`ol`/`li`, `blockquote` (mit Absätzen), `pre`, `hr` | gleich |
+| `table` | `table` mit `caption`, `thead` (`th scope="col"`), `tbody`; Ausrichtung App `data-align` ↔ HubSpot `style="text-align"` |
+| unbekanntes Element | entpackt; lose Inline-Läufe auf Block-Ebene werden eigene `<p>` |
 
-## Schema (Migration 147 + 149 + 150)
+**Invariante:** Text vor der ersten Überschrift oder eine Tabelle am Anfang darf den Rest des Posts nie zu einem Absatz zusammenziehen — jeder Block bleibt Block (gegated in [hubspot-html.test.mjs](../tests/unit/hubspot-html.test.mjs)).
 
-Zwei Tabellen. FKs auf `books.book_id` + `pages.page_id` mit `ON DELETE CASCADE`.
+## Was der Adapter anders macht
+
+| Punkt | HubSpot |
+|---|---|
+| Vorab-Prüfung + Konflikt-Diff | lesen den **Draft** (`GET …/draft`), weil der Push genau ihn überschreibt; Stempel `updated` gegen `hubspot_updated_at`. Links ohne Stempel (vor Migration 330) haben keine Prüfung; der nächste Push setzt ihn. |
+| Abgleich | liest den **Post** (`GET /cms/v3/blogs/posts/{id}`): 404 oder archiviert → Link weg; sonst `hubspot_state` + `hubspot_url` nachziehen (in HubSpot publiziert → „Ansehen" zeigt den Live-Post). |
+| Titel | `name` **und** `htmlTitle` = Titel nach [lib/blog-title.js](../lib/blog-title.js); beim Import zählt `name` (der Post-Titel), `htmlTitle` (SEO-/Tab-Titel, oft mit « \| Blogname») nur als Rückfall. |
+| Lead · Teaser · Dachzeile | Lead als erster Absatz vor dem Body · Teaser → `postSummary` (escapet) · Dachzeile geht nicht mit (stünde unter dem Titel). |
+| Autor | `blogAuthorId` + `authorName` (einmal pro Job aus `listAuthors()` aufgelöst — HubSpot v3 setzt den Autor bei manchen Portalen nur mit Namen). |
+| „HubSpot übernehmen" | Draft-Body durch `hubspotToAppHtml` (Bilder, Module, CTAs entfallen — der Button sagt das), Titel nach `planPulledTitle`; danach `last_pulled_at` = Sync-Punkt. |
+| Re-Push-Dialog | Frontend fragt vor jedem Re-Push (`hubspot.repush.warning`): ein **importierter** Post kann Module/CTAs/Bilder tragen, die der Import nicht übernommen hat; die ersetzt der App-Body im Buffer. Ein Edit am Draft in HubSpot fällt dagegen in der Vorab-Prüfung als Konflikt auf. |
+| „Ansehen" | `DRAFT` → Editor-URL `https://app.hubspot.com/blog/<portalId>/editor/<postId>/content` (ohne HubSpot-Login wäre der Draft nicht erreichbar); sonst `hubspot_url`. |
+
+## Schema
 
 ```sql
 CREATE TABLE hubspot_connections (
   id                     INTEGER PRIMARY KEY AUTOINCREMENT,
   book_id                INTEGER NOT NULL UNIQUE REFERENCES books(book_id) ON DELETE CASCADE,
-  token_enc              BLOB NOT NULL,                     -- AES via lib/crypto.js
-  blog_id                TEXT NOT NULL,                     -- HubSpot contentGroupId
-  author_id              TEXT NOT NULL,                     -- HubSpot blogAuthorId
-  portal_id              TEXT,                              -- HubSpot HubID (me().portalId) für Editor-URL
-  initial_import_done_at TEXT,                              -- NULL = noch nie importiert
+  token_enc              BLOB NOT NULL,          -- AES via lib/crypto.js
+  blog_id                TEXT NOT NULL,          -- contentGroupId
+  author_id              TEXT NOT NULL,          -- blogAuthorId
+  portal_id              TEXT,                   -- HubID für die Editor-URL
+  initial_import_done_at TEXT,                   -- NULL = noch nie importiert
   last_import_at         TEXT,
   last_push_at           TEXT,
-  created_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  updated_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  created_at, updated_at TEXT …
 );
-CREATE INDEX idx_hubspot_conn_book ON hubspot_connections(book_id);
 
 CREATE TABLE hubspot_page_links (
   page_id            INTEGER PRIMARY KEY REFERENCES pages(page_id) ON DELETE CASCADE,
   hub_id             INTEGER NOT NULL REFERENCES hubspot_connections(id) ON DELETE CASCADE,
   hubspot_post_id    TEXT NOT NULL,
-  hubspot_state      TEXT,                                  -- 'DRAFT' | 'PUBLISHED' | …
+  hubspot_state      TEXT,                       -- DRAFT | PUBLISHED | …
   hubspot_created_at TEXT,
-  last_pushed_at     TEXT,
-  hubspot_url        TEXT,                                  -- absolute Post-URL aus createPost-Response
+  hubspot_updated_at TEXT,                       -- zuletzt gesehener Draft-`updated` (Vorab-Prüfung)
+  last_pushed_at     TEXT,                       -- Sync-Punkt (Push; Import = Anlage der Seite)
+  last_pulled_at     TEXT,                       -- Sync-Punkt nach „HubSpot übernehmen"
+  hubspot_url        TEXT,
+  conflict_state     TEXT CHECK(conflict_state IS NULL OR conflict_state IN ('detected','resolved-app','resolved-remote')),
   UNIQUE(hub_id, hubspot_post_id)
 );
-CREATE INDEX idx_hubspot_links_hub ON hubspot_page_links(hub_id);
 ```
 
-Idempotenz des Initial-Imports kommt aus `UNIQUE(hub_id, hubspot_post_id)` — Re-Run nach Crash überspringt bereits importierte Posts.
+**Zielwechsel:** anderer Blog oder anderes Portal (per `me()` beim Connect ermittelt) verwirft Links und Import-Stand ([db/hubspot.js](../db/hubspot.js)#`upsertConnection`, Antwort `targetChanged`). Ein anderer Autor ist kein Zielwechsel.
 
 ## Server-Module
 
 | File | Inhalt |
 |---|---|
-| [lib/hubspot-client.js](../lib/hubspot-client.js) | REST-Wrapper. Bearer-Auth, Token-Bucket-Rate-Limit (100 req / 10 s, modulglobal), Retry mit Backoff bei 429/5xx (`Retry-After` honoriert). Methoden: `me()`, `listBlogs()`, `listAuthors()`, `iteratePosts({ authorId, blogId, state, limit })` (async-Generator, Cursor-Pagination via `paging.next.after`), `createPost(payload)`, `updatePostDraft(postId, payload)`, `getPost(postId)` (Reconcile + Push-Pre-Check). Fehler-Codes: 401→`HUBSPOT_AUTH_FAILED`, 403→`HUBSPOT_FORBIDDEN`, 404→`HUBSPOT_HTTP_404`, 429→`HUBSPOT_RATE_LIMIT`, 5xx→`HUBSPOT_UPSTREAM`, Netzwerk→`HUBSPOT_FETCH_FAILED`. |
-| [lib/hubspot-html.js](../lib/hubspot-html.js) | `hubspotToAppHtml(raw)` — Strip-Pipeline für Import: Jinja-Marker (`{{…}}`, `{%…%}`, `{#…#}`) raus, CMS-Wrapper (`.hs-cta-*`, `.hs-form`, `.hs-embed-wrapper`, `script`/`style`/`iframe`/`noscript`) entfernen, Medien (`img`/`figure`/`video`/`audio`/`svg`/`object`/`embed`/`canvas`) raus. Whitelist Inline (`strong/b → strong`, `em/i → em`, `u`, `a[href^=https]`, `br`) + Block (`p`, `h1→h2`, `h2→h2`, `h3-h6→h3`, `ul`, `ol`, `li`, `blockquote`, `pre`, `hr`). Fallback: nur Inline-Content → in `<p>` wrappen. `appToHubspotHtml(html)` läuft durch dieselbe Pipeline (defensiv gegen Drift / direkte DB-Manipulation). |
-| [db/hubspot.js](../db/hubspot.js) | CRUD für Connections + Links. `getConnection(bookId)` entschlüsselt das Token, `getConnectionPublic(bookId)` nie. `upsertConnection` re-encrypt'et bei jedem Save (kein dirty-Tracking nötig). `upsertLink` mit `ON CONFLICT(page_id) DO UPDATE` und `COALESCE` für nicht-überschreibbare Felder. |
-| [routes/hubspot.js](../routes/hubspot.js) | HTTP-Endpoints (siehe unten). `router.param('book_id', bookParamHandler)` für ALS-Log-Context. Buchtyp-Gate via `_requireBlogType` vor jedem mutierenden Call (400 `HUBSPOT_REQUIRES_BLOG_TYPE`). `aclParamGuard('viewer'\|'editor')` pro Route. |
-| [routes/jobs/hubspot-sync.js](../routes/jobs/hubspot-sync.js) | Job-Typen `hubspot-import`, `hubspot-push`, `hubspot-reconcile`. Dedup via `findActiveJobId(type, bookId, userEmail)`. `setContext({ book: book_id })` in jedem POST-Handler nach `toIntId`. |
+| [lib/hubspot-client.js](../lib/hubspot-client.js) | REST-Wrapper auf dem geteilten HTTP-Kern ([lib/sync/request.js](../lib/sync/request.js)): Bearer-Auth, Zeitdeckel pro Request (`fetchWithTimeout`, 30 s; Upload 120 s), Token-Bucket (100 req / 10 s, modulglobal). Methoden: `me()` (`/account-info/v3/details`), `listBlogs()` (`/cms/v3/blog-settings/settings`), `listAuthors()`, `iteratePosts({ authorId, blogId, state })` (Filter als Gleichheits-Parameter, Cursor `paging.next.after`), `getPost`, `getPostDraft`, `createPost` (kein Retry bei 5xx), `updatePostDraft`, `uploadFile`. 401 → `HUBSPOT_AUTH_FAILED`, 403 → `HUBSPOT_FORBIDDEN`. |
+| [lib/hubspot-html.js](../lib/hubspot-html.js) | siehe „HTML". |
+| [lib/sync/providers/hubspot.js](../lib/sync/providers/hubspot.js) | Adapter (siehe oben) + `createLinkedPageFromHubspotPost` (Import über `lib/blog-pull.js#createLinkedPage`: idempotent, race-fest). |
+| [db/hubspot.js](../db/hubspot.js) | Connections + Links. `getConnection` entschlüsselt das Token, `getConnectionPublic` nie. Link-Operationen wie bei WordPress: `upsertLink` (Push = Sync-Punkt, setzt `conflict_state` zurück), `setConflictState`, `markConflictResolvedApp`, `markLinkPulled`, `refreshLinkMeta`. |
+| [routes/hubspot.js](../routes/hubspot.js) | `POST /:book_id/test`, `POST /:book_id/blogs`, `POST /:book_id/authors`, `POST /:book_id/connect` — Token **immer im Body** (`__keep__` = gespeichertes), nie in der URL. Rest aus [routes/sync-router.js](../routes/sync-router.js). `/links` holt eine fehlende `portalId` (Verbindungen vor Migration 150) per `me()` nach — höchstens alle 10 Minuten pro Verbindung. |
+| [routes/jobs/hubspot-sync.js](../routes/jobs/hubspot-sync.js) | Import; Push und Abgleich über den geteilten Kern. Job-Typen `hubspot-import` (pro Buch exklusiv, `409 HUBSPOT_SYNC_RUNNING`), `hubspot-push`, `hubspot-reconcile`. |
+| [scripts/import-hubspot.js](../scripts/import-hubspot.js) | Ops-CLI: Import per Seitenname-Abgleich (mit `--update`, `--dry-run`). Nutzt Client, Titel-/Datumsregel und Jahres-Kapitel des Import-Jobs; legt keine Links an. |
 
-## HTTP-Endpoints
+## Import (`runHubspotImportJob`)
 
-Alle unter `/hubspot/:book_id/*`, `:book_id` via `bookParamHandler` validiert (setzt `req.bookId` + ALS-Context).
+Gated: `initial_import_done_at IS NULL`, sonst `HUBSPOT_ALREADY_IMPORTED`.
 
-| Methode | Pfad | ACL | Zweck |
-|---|---|---|---|
-| GET | `/status` | viewer | `{ isBlogType, connected, connection }` — Connection-Public-Meta (kein Token) |
-| POST | `/test` | editor | Token gegen `/integrations/v1/me` prüfen → `{ ok, hubId }` |
-| GET | `/blogs` | editor | Combobox-Source `contentGroups` (akzeptiert `?token=…` für Pre-Save-Probe) |
-| GET | `/authors` | editor | Combobox-Source Autoren (analog) |
-| POST | `/connect` | editor | Token + `blogId` + `authorId` speichern. Token-Sentinel `__keep__` lässt bestehendes Token unverändert (für Re-Save ohne Token-Eingabe). Vor Save `me()`-Roundtrip. |
-| GET | `/links` | viewer | `{ connected, blogId, portalId, links: [...] }` — Page-Link-Status für Buchorganizer-Badges; `portalId` füttert die Editor-URL bei Drafts. Pre-150-Connections: einmaliger `me()`-Self-Heal-Roundtrip persistiert `portalId` lazy beim ersten Aufruf. |
-| DELETE | `/` | editor | Verbindung löschen (CASCADE killt Links) |
-
-Push-Trigger läuft separat über die Job-Queue:
-
-| Methode | Pfad | Body | Zweck |
-|---|---|---|---|
-| POST | `/jobs/hubspot-import` | `{ book_id }` | Initial-Import enqueuen |
-| POST | `/jobs/hubspot-push` | `{ book_id, page_ids[] }` | Push-Job enqueuen (Multi-Page möglich) |
-| POST | `/jobs/hubspot-reconcile` | `{ book_id }` | Reconcile-Job: ruft `getPost` für jeden Link, dropt 404-Orphans |
-
-## Sync-Jobs
-
-### `runHubspotImportJob(jobId, bookId, userEmail)` — einmalig
-
-Gated: `initial_import_done_at IS NULL`. Zweiter Aufruf → Job-Fail mit `HUBSPOT_ALREADY_IMPORTED`.
-
-1. `_requireBlogBook` + `_resolveHubConn` (sonst `HUBSPOT_REQUIRES_BLOG_TYPE` / `HUBSPOT_NOT_CONNECTED`).
-2. `client.iteratePosts({ authorId, blogId, state: 'PUBLISHED' })` — Cursor-Pagination via `paging.next.after`.
-3. Pro Post:
-   - Skip, wenn `getLinkByPost(conn.id, post.id)` existiert (Idempotenz nach Re-Run).
-   - Skip, wenn `htmlTitle`/`name` leer ist (Counter `dropped++`).
-   - `hubspotToAppHtml(postBody)` (Fallback `<p></p>`).
-   - Jahres-Kapitel via `_resolveYearChapter(bookId, year, cache)` — Cache-Map vermeidet Duplikat-Reads. `year` = `publishDate.slice(0,4)` (oder `created`/`updated`), Fallback `'Undatiert'`.
-   - Page-Name: `YYYY-MM-DD: htmlTitle` wenn Datum vorhanden, sonst nur Titel.
-   - `contentStore.createPage(...)` + `upsertLink(...)`.
-   - `updateJob` mit Key `job.hubspot.import.progress`, Params `{ done }`.
-4. Am Ende `markInitialImportDone(conn.id)`.
-5. Wenn `imported > 0`: `lib/import-baseline.js#seedImportBaseline` — `syncBook(...)` + Vortags-Baseline-Snapshot in `book_stats_history` (derselbe Helfer wie bei allen anderen Importen — verhindert verfälschte „heute geschrieben"-Statistik).
-
-### `runHubspotPushJob(jobId, bookId, userEmail, pageIds[])`
-
-Multi-Select-Push. Sequentiell, da gemeinsame Rate-Limit-Quota.
-
-1. `_requireBlogBook` + `_resolveHubConn`.
-2. Pro `pageId`:
-   - `updateJob` mit Key `job.hubspot.push.upload`, Params `{ current, total }`.
-   - Page laden via `contentStore.loadPage(pageId)`; Mismatch `book_id` → `PAGE_WRONG_BOOK`-Error im Errors-Array.
-   - **Quellen:** `buildBibliography({ bookId, pageIds: [pageId], userEmail })` (Einheit ist die Seite — ein Post ist eine Seite, die Nummern des numerischen Stils folgen den Fundstellen dieses Posts ab 1), dann `resolveCitesInHtml` über das Seiten-HTML (der gespeicherte Chip-Text ist nur ein Cache). Bei `bibliography_enabled && bibliography_in_blog` kommt `bibliographySectionHtml(bib, { list: true })` dahinter.
-   - **Titel** nach [lib/blog-title.js](../lib/blog-title.js) (dieselbe Regel wie WordPress, [blog-sync.md](blog-sync.md) → „Titel"): Titel-Werkstatt-Titel, sonst Seitenname **ohne** Datums-Präfix `YYYY-MM-DD: `. Geht als `name` **und** `htmlTitle` raus — sonst bliebe einer der beiden auf dem Stand des Erst-Pushs bzw. leer.
-   - **Lead** (Titel-Werkstatt) als erster Absatz vor dem Body (`leadHtml`, die Allowlist behält das `<em>`); **Teaser** als `postSummary` (escapet). Keine Marker nötig — HubSpot liest nie zurück. Die **Dachzeile** geht nicht mit (sie stünde unter dem Titel).
-   - `appToHubspotHtml(lead + appHtml + bibSection)` (Fallback `<p></p>`).
-   - **Erst-Push (kein Link):** `client.createPost({ name, htmlTitle, postSummary?, postBody, contentGroupId, blogAuthorId, authorName, state: 'DRAFT' })` — kein `publishDate`, kein `slug`, kein `metaDescription`; User finalisiert drüben. `authorName` einmal pro Job aus `listAuthors()` resolved (HubSpot v3 ignoriert `blogAuthorId` allein bei manchen Portalen — Name muss mit).
-   - **Re-Push (Link existiert):** `client.updatePostDraft(hubspot_post_id, { name, htmlTitle, postSummary?, postBody })` → `PATCH /cms/v3/blogs/posts/{id}/draft` aktualisiert nur den Buffer; Live-Version drüben unverändert. UI hat User vorher via `appConfirm` über Verlust HubSpot-spezifischer Formatierungen aufgeklärt.
-   - **Auto-Revive bei 404 im Re-Push:** Schlägt `updatePostDraft` mit `HUBSPOT_HTTP_404` fehl (User hat Draft drüben gelöscht), wird der Link entfernt und derselbe Push als Create neu ausgeführt — Page bekommt einen frischen Draft-Post, kein Sackgassen-Status.
-   - `upsertLink({ pageId, hubId, hubspotPostId, hubspotState, hubspotCreatedAt, lastPushedAt: now })` — `lastPushedAt` immer aktualisiert, ist die Sync-Baseline für `pushed-dirty`-Erkennung.
-3. `touchPush(conn.id)`. Job-Result: `{ pushed, errors: [{ pageId, code }] }`.
-
-Abort-Signal: `jobAbortControllers.get(jobId)?.signal` wird in `createHubspotClient({ signal })` durchgereicht; jeder Loop-Iteration prüft `signal.aborted`.
-
-### `runHubspotReconcileJob(jobId, bookId, userEmail)` — on demand
-
-Drift-Check zwischen lokalen Links und HubSpot-Realität. Deckt Hard-Delete drüben (kein Trash-Stamp via API erreichbar).
-
-1. `_requireBlogBook` + `_resolveHubConn`.
-2. `hubspot.listLinksForConnection(conn.id)` → pro Link ein `client.getPost(hubspot_post_id)`.
-3. Bei `HUBSPOT_HTTP_404` → `hubspot.deleteLink(link.page_id)` (CASCADE-frei, betrifft nur den Marker — Page bleibt unverändert). Andere Fehler werden nur geloggt, Link bleibt.
-4. Job-Result: `{ checked, removed }`. Buchorganizer-Badge flippt nach `loadLinks` für betroffene Pages auf `new`; erneuter Push erstellt einen frischen Draft.
+1. Alle `PUBLISHED`-Posts von Autor + Blog puffern, aufsteigend nach `publishDate` (sonst `created`/`updated`) sortieren — HubSpot liefert newest-first, ungesteuert lägen Kapitel und Seiten rückwärts.
+2. Pro Post `createLinkedPageFromHubspotPost`: schon verlinkt → übersprungen (`skipped`); sonst Seite `YYYY-MM-DD: Titel` im Jahres-Kapitel + Link. `last_pushed_at` = Anlage-Zeitpunkt der Seite (sonst zählte die Anlage selbst als lokaler Edit), `hubspot_updated_at` = `post.updated`.
+3. Fortschritt `job.hubspot.import.progress` mit `{ done, total }`.
+4. `markInitialImportDone`; bei `imported > 0` die Vortags-Baseline (`seedImportBaseline`).
 
 ## Frontend
 
-### BookSettings-Section „HubSpot-Verbindung"
-
-Sichtbar nur bei `buchtyp === 'blog'`. Implementiert in [public/js/book/book-settings.js](../public/js/book/book-settings.js) (Methoden) + [public/js/cards/book-settings-card.js](../public/js/cards/book-settings-card.js) (State, `hubspotSectionOpen`-Toggle, Job-Finish-Listener) + [public/partials/book-settings.html](../public/partials/book-settings.html) (Markup).
-
-State im Karten-Init: `hubspotConnection`, `hubspotForm { token, blogId, authorId }`, `hubspotBusy`, `hubspotAction`, `hubspotMessage`, `hubspotError`, `hubspotBlogs`, `hubspotAuthors`, `hubspotImportJobId`.
-
-Form-Felder: PAT-Token (write-only; Read liefert keinen Token), Blog-Combobox (lazy, `/blogs?token=…`), Author-Combobox (lazy, `/authors?token=…`). Buttons: Test, Verbinden, Initial-Import, Trennen.
-
-Methoden:
-- `loadHubspotStatus` — `/status` lesen, `hubspotConnection` füllen.
-- `loadHubspotBlogs` / `loadHubspotAuthors` — Combobox-Source nachladen.
-- `testHubspotConnection` — `/test`-Call, `testOk` toasten.
-- `saveHubspotConnection` — `/connect`-Call mit Token (`__keep__` wenn unverändert).
-- `startHubspotImport` — `/jobs/hubspot-import` enqueuen, `job:enqueued`-Event.
-- `startHubspotReconcile` — `/jobs/hubspot-reconcile` enqueuen (mit Confirm-Dialog, da N HTTP-Calls pro Link).
-- `disconnectHubspot` — `DELETE /hubspot/:book_id` mit Confirm-Dialog.
-
-Status-Panel zeigt `initialImportDoneAt` + `lastPushAt` (via `tzOpts`-Format).
-
-### Buchorganizer-Badge + Push (sync-core-basiert)
-
-Headless Sub-Komponente [public/js/cards/hubspot-sync-card.js](../public/js/cards/hubspot-sync-card.js) ist ein dünner Wrapper über [public/js/cards/sync/sync-core.js](../public/js/cards/sync/sync-core.js) — Single Source of Truth für `loadLinks`/`statusFor`/`canPush`/`push`/Polling-Lifecycle. Provider-Spec liefert nur Endpoint-Prefix, Job-Typen, Status-Modell, Labels. Lebt als `<div x-data="hubspotSyncCard" class="display-contents">` in [public/index.html](../public/index.html); globaler Zugriff via `window.__hubspotCard` + Template-Magic `$hubspot`. Templates iterieren über `$syncProviders` (Alpine-Magic in [public/js/app.js](../public/js/app.js)) — gleicher Badge+Push-Button-Block deckt Blog und HubSpot ab, ohne pro Provider neu zu duplizieren. CSS-Accent über `.sync-provider--hubspot { --sync-accent: var(--card-accent-hubspot); }`, Status-Pills `.badge--sync-{new|pushed|…}`.
-
-Provider-Spec (in [hubspot-sync-card.js](../public/js/cards/hubspot-sync-card.js)):
-- `key: 'hubspot'`, `endpointBase: '/hubspot'`
-- `jobTypes: { push: 'hubspot-push', refresh: ['hubspot-import'], reconcile: 'hubspot-reconcile' }` — `reconcile` triggert nach Job-Done ein `loadLinks()` (entfernte Orphans verschwinden aus dem Buchorganizer).
-- `computeStatus(page, link)` → `'new' | 'pushed-dirty' | 'pushed'` (siehe Status-Modell oben)
-- `statusLabels: { new, pushed, 'pushed-dirty' }`
-- `canPushStatuses: ['new', 'pushed-dirty']`
-- `confirmPush(pageId)` → öffnet bei Status `pushed-dirty` einen `appConfirm`-Dialog (Keys `hubspot.repush.warning` + `hubspot.repush.confirm`). Rückgabe `false` (User bricht ab) verhindert den Backend-Call. `confirmPush`-Hook lebt in [sync-core.js](../public/js/cards/sync/sync-core.js) und ist generisch für andere Provider nachnutzbar.
-- `viewUrl(page, providerMeta, link)` → bei `hubspot_state === 'DRAFT'` Editor-URL `https://app.hubspot.com/blog/<portalId>/editor/<postId>/content`, sonst Live-Post-URL aus `hubspot_url`. Draft-Preview ohne HubSpot-Session wäre sonst nicht aufrufbar.
-- `pushErrorCode: 'HUBSPOT_PUSH_FAILED'`
-
-Re-Push wird auf der HubSpot-Seite als Draft-Buffer-Update modelliert — der publizierte Live-Post bleibt unverändert, bis der User den Buffer drüben publiziert. Damit ist die Trennung „App schreibt Text, HubSpot publiziert" auch beim Re-Push gewahrt.
+- **Buchorganizer:** [hubspot-sync-card.js](../public/js/cards/hubspot-sync-card.js) ist ein dünner Wrapper über `sync-core.js` (Spec: `endpointBase`, `jobTypes`, `viewUrl`, `confirmPush`). CSS-Accent `.sync-provider--hubspot`.
+- **Bucheinstellungen** ([book-settings/hubspot.js](../public/js/book/book-settings/hubspot.js), Partial [book-settings-sync.html](../public/partials/book-settings-sync.html)): Token (write-only), Blog- und Autor-Combobox (`POST /blogs|/authors`), Test, Verbinden, Initial-Import, Verbindung prüfen, Trennen. Gemeinsames mit WordPress in [sync-shared.js](../public/js/book/book-settings/sync-shared.js).
 
 ## i18n
 
-Keys in [public/js/i18n/de.json](../public/js/i18n/de.json) + [en.json](../public/js/i18n/en.json):
-
-```
-hubspot.connect.title|token|tokenReplace|blog|author|test|save|update|disconnect|disconnectConfirm|testOk|saved|disconnected
-hubspot.status.title|tokenSet|blog|author|imported|notImported|lastPush|new|pushed|pushedDirty
-hubspot.action.import|push|view|reconcile|reconcileHint|reconcileConfirm
-hubspot.repush.warning|confirm
-hubspot.error.HUBSPOT_TOKEN_REQUIRED|HUBSPOT_BLOG_REQUIRED|HUBSPOT_AUTHOR_REQUIRED|HUBSPOT_AUTH_FAILED|HUBSPOT_FORBIDDEN|HUBSPOT_RATE_LIMIT|HUBSPOT_UPSTREAM|HUBSPOT_REQUIRES_BLOG_TYPE|HUBSPOT_NOT_CONNECTED|HUBSPOT_ALREADY_IMPORTED|HUBSPOT_ALREADY_PUSHED|HUBSPOT_PUSH_FAILED|HUBSPOT_IMPORT_FAILED|HUBSPOT_SAVE_FAILED|HUBSPOT_DISCONNECT_FAILED|HUBSPOT_TEST_FAILED|HUBSPOT_RECONCILE_FAILED|HUBSPOT_PRECHECK_FAILED
-job.label.hubspotImport|hubspotPush|hubspotPushCount|hubspotReconcile
-job.hubspot.import.fetch|progress
-job.hubspot.push.upload
-job.hubspot.reconcile.check
-```
-
-Server-Fehler-Codes werden 1:1 als i18n-Keys gemappt (`hubspot.error.${code}`). Neuer Server-Error-Code → in beiden Locale-Files Eintrag ergänzen.
-
-## Sicherheit
-
-- **PAT-Speicherung:** Token via [lib/crypto.js](../lib/crypto.js) AES-verschlüsselt. Klartext nur in `getConnection()` (server-intern), nie an Client. `getConnectionPublic` liefert ausschliesslich Meta.
-- **HTTPS-only:** HubSpot-API ist hartcoded `https://api.hubapi.com`; keine User-konfigurierbare Base-URL.
-- **`__keep__`-Sentinel:** Re-Save ohne Token-Eingabe sendet `token: '__keep__'` → Server resolved aus DB.
-- **PAT-Scopes:** User braucht in HubSpot mindestens `content` (read+write). Test-Call `me()` prüft nur Auth, nicht Scope — fehlende Scopes liefern später 403 beim List/Create → `HUBSPOT_FORBIDDEN`.
-- **Rate-Limit:** clientseitiges Token-Bucket (100 req / 10 s, modulglobal — PAT == ein User-Account, parallele Clients teilen Quota). Bei 429 wird `Retry-After`-Header honoriert, bis zu `MAX_RETRIES` Versuche.
-- **Output-Sanitisierung:** `appToHubspotHtml` strippt defensiv `<script>`/`<iframe>`/`<img>` etc., auch wenn App-HTML konzeptionell sauber ist (`lib/html-clean.js` am Save-Chokepoint).
-- **Buchtyp-Gate serverseitig hart:** Connect/Import/Push prüfen `getBookSettings(bookId).buchtyp === 'blog'`, sonst 400 `HUBSPOT_REQUIRES_BLOG_TYPE`.
-- **Job-Dedup:** `findActiveJobId('hubspot-import'\|'hubspot-push', bookId, userEmail)` verhindert parallele Jobs pro Buch + User.
-- **ACL:** alle Routes via `aclParamGuard('viewer'\|'editor')` (Status/Links: viewer; Test/Blogs/Authors/Connect/Disconnect: editor).
-- **Logging-Context:** `router.param('book_id', bookParamHandler)` in `routes/hubspot.js`; `setContext({ book: book_id })` in Job-POST-Routes nach `toIntId`-Validierung.
+`hubspot.connect.*`, `hubspot.status.*` (Panel), `hubspot.action.*`, `hubspot.repush.*`, `hubspot.conflict.title|remote|takeRemote`, `hubspot.error.<Server-Code>` (1:1 der `error_code`), `job.label.hubspot*`, `job.hubspot.*`. Badges und Konflikt-Knöpfe: `sync.status.*`, `sync.conflict.*` (geteilt).
 
 ## Tests
 
-- **Unit** ([tests/unit/](../tests/unit/)):
-  - [hubspot-html.test.mjs](../tests/unit/hubspot-html.test.mjs) — `hubspotToAppHtml` / `appToHubspotHtml`: Whitelist, Image-Strip, Jinja-Strip, https-only Links, Heading-Normalize, leerer Input; **Quellen:** Chip → Klartext ohne `data-src`, angehängtes Verzeichnis überlebt als `<h2>` + `<ul>` (numerisch: Absätze mit `[n]`), Marker-`<div>` wird entpackt, Titel escapet.
-  - [hubspot-db.test.js](../tests/unit/hubspot-db.test.js) — Connection + Link CRUD, Token-Encrypt/Decrypt-Roundtrip, `UNIQUE(hub_id, hubspot_post_id)`-Constraint.
-- **Integration** ([tests/integration/](../tests/integration/)):
-  - [hubspot-sync.test.js](../tests/integration/hubspot-sync.test.js) — Initial-Import (Year-Chapter-Aggregation, Link-Eintrag) gegen [mock-hubspot.js](../tests/integration/_helpers/mock-hubspot.js); `HUBSPOT_ALREADY_IMPORTED` bei zweitem Run; Push-Job (Draft + Link) + Re-Push als `PATCH …/draft`; Titel ohne Datums-Präfix, Titel-Werkstatt-Vorrang, Lead + `postSummary`; `HUBSPOT_REQUIRES_BLOG_TYPE` bei falschem Buchtyp.
-- **Drift-Gates:** [erd-drift.test.mjs](../tests/unit/erd-drift.test.mjs) + [squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) decken `hubspot_connections` + `hubspot_page_links` ab.
-
-## Edge-Cases
-
-- **PAT abgelaufen:** Job-Status `error` mit `HUBSPOT_AUTH_FAILED`; User aktualisiert Token in den Bucheinstellungen.
-- **Page lokal nach Push verändert:** Push-UI blockiert, lokale Edits driften gegenüber HubSpot. Bewusster Trade-off — User hat Workflow-Wechsel zu HubSpot kommuniziert.
-- **HubSpot-Post/Blog drüben gelöscht:**
-  - **Push-Pfad:** Re-Push einer verlinkten Page entdeckt das 404 via `updatePostDraft`, löscht den Link automatisch und erstellt einen neuen Draft (`revived` im Logger). Single Push-Klick reicht.
-  - **Drift sichtbar machen:** „Verbindung prüfen"-Button (`runHubspotReconcileJob`) ruft `getPost` für jeden Link und entfernt Orphans. Pages flippen danach auf Badge `new`. Manuell wie der Blog-Reconcile — kein Auto-Check.
-- **Link auf Pre-149-Pushes:** `hubspot_url` wurde mit Migration 149 ergänzt; vorher gepushte Pages haben `NULL` → kein „In HubSpot öffnen"-Button für PUBLISHED-Posts. Workaround: Re-Push (Status `pushed-dirty`) füllt das Feld; alternativ Link in DB löschen → Push neu.
-- **Connection vor Migration 150:** `portal_id` fehlt → Editor-URL nicht baubar. `/links` self-healt einmalig via `me()`-Roundtrip beim ersten Aufruf nach dem Update und persistiert die `portalId`. Schlägt der Roundtrip fehl (Auth/Netz), bleibt der Draft-Button für diesen Request leer; nächster Aufruf retried.
-- **HubSpot-Rate-Limit (429):** Client honoriert `Retry-After`, retried bis `MAX_RETRIES`. Bei Final-Fail → `HUBSPOT_RATE_LIMIT` im Job-Errors-Array.
-- **Post ohne Titel:** Import dropt Post (Counter `dropped++`).
-- **Pagination-Cursor verloren bei Crash:** Initial-Import nicht resumeable; User triggert erneut, Idempotenz greift via `UNIQUE(hub_id, hubspot_post_id)`-Skip.
-- **Author wechselt in HubSpot:** Push hängt an `author_id` der Connection. User muss disconnecten + neu verbinden.
-- **CLI parallel:** [scripts/import-hubspot.js](../scripts/import-hubspot.js) bleibt für Ops/Power-User funktionsfähig und nutzt `lib/hubspot-html.js` als geteilte Strip-Pipeline.
-- **Beide Provider verbunden (WP + HubSpot)** auf demselben Buch: technisch möglich (separate Tabellen + separate Sub-Komponenten), nicht empfohlen.
-
-## Konvention
-
-- **Year-Chapter `YYYY`:** identisch zu Blog-Sync (geteilter Helfer `lib/blog-pull.js#resolveYearChapter`), geteilt nutzbar bei gleichem Jahr.
-- **Page-Name `YYYY-MM-DD: Titel`:** beim Import gesetzt, Datum aus `publishDate`/`created`/`updated`. Der Push schickt den Titel ohne diesen Präfix (siehe Push-Job).
-- **`publishDate`/`slug`/`meta_description`:** nicht gesetzt — HubSpot defaultet bzw. User füllt drüben.
+- **Unit:** [hubspot-html.test.mjs](../tests/unit/hubspot-html.test.mjs) (Allowlist, Jinja, Links, Überschriften, Tabellen beidseitig, Block-Läufe, Bilder nur im Push, Quellen als Klartext) · [hubspot-db.test.js](../tests/unit/hubspot-db.test.js) · [sync-target-change.test.js](../tests/unit/sync-target-change.test.js) (Zielwechsel, Konflikt-/Pull-Stempel) · [sync-image-resolver.test.mjs](../tests/unit/sync-image-resolver.test.mjs).
+- **Integration:** [hubspot-sync.test.js](../tests/integration/hubspot-sync.test.js) gegen [mock-hubspot.js](../tests/integration/_helpers/mock-hubspot.js): Import (Jahres-Kapitel, Reihenfolge, Titel aus `name`, Baseline), Push (Draft + Link, Re-Push als `PATCH …/draft`, Titel-Werkstatt, Lead/Teaser), **Konflikt** bei geändertem Draft (mutationsgeprüft: ohne Stempelvergleich rot), **gelöschter Post** → `HUBSPOT_REMOTE_GONE` ohne stillen Neuanlage-Post, Abgleich (Status/URL nachziehen, Löschung), Bilder in den File-Manager + Tabelle, **verworfenes Bild** (HEIC) → fehlt im Post, `toastWarnings` (mutationsgeprüft), **paralleler Import** ohne verwaiste Seite (mutationsgeprüft).

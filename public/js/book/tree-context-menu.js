@@ -465,7 +465,7 @@ export const treeContextMenuMethods = {
       });
       if (!created?.id) return;
       const newPage = this._insertCreatedPageIntoTree(item, created);
-      await this.selectPage(newPage);
+      await this.openNewSectionForWriting(newPage);
     } catch (e) {
       this.setStatus?.(this.t('bookOrganizer.saveFailed', { detail: e.message }));
     }

@@ -190,6 +190,15 @@
   color: var(--color-accent);
 }
 
+/* Welcome-Empty-State: Primaer-CTA (Buch anlegen) + Beispielbuch nebeneinander,
+   auf schmalen Viewports untereinander. */
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
 /* Welcome-Empty-State: dezenter Textlink unter dem Primaer-CTA. */
 .welcome-help-link {
   background: none;

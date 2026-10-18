@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 329, 182 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 333, 183 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -139,6 +139,8 @@ erDiagram
   books ||--o| hubspot_connections   : "hubspot-link"
   hubspot_connections ||--o{ hubspot_page_links : "has"
   pages ||--o| hubspot_page_links    : "hubspot-mirror"
+  blog_connections ||--o{ sync_media_cache : "media"
+  hubspot_connections ||--o{ sync_media_cache : "media"
 
   books ||--o{ share_links           : has
   pages ||--o{ share_links           : "shared as page"
@@ -338,6 +340,7 @@ erDiagram
     INTEGER dirty "Konflikterkennung Sync-Pull"
     TEXT    last_editor_email "Letzter Body-Autor; Quelle fuer Tree-/Toast-Hinweise"
     TEXT    last_editor_device_id FK "ON DELETE SET NULL; Geraet des letzten Body-Edits, geraete-bewusster /changes-Feed"
+    TEXT    last_save_id "Client-Kennung des Saves, der body_html schrieb; Eigen-Save-Erkennung bei verlorener Antwort, Body-Write ohne Kennung setzt NULL"
   }
   page_deletions {
     INTEGER id              PK "AUTOINCREMENT"
@@ -2331,6 +2334,7 @@ erDiagram
     TEXT    last_pulled_at
     TEXT    last_pushed_at
     TEXT    conflict_state "detected|resolved-app|resolved-wp"
+    TEXT    locked_blocks  "nicht uebernehmbare WP-Elemente, kommagetrennt; NULL = frei (Push-Sperre)"
   }
   hubspot_connections {
     INTEGER id                     PK
@@ -2353,6 +2357,18 @@ erDiagram
     TEXT    hubspot_created_at
     TEXT    last_pushed_at
     TEXT    hubspot_url        "absolute Post-URL aus createPost-Response"
+    TEXT    hubspot_updated_at "zuletzt gesehener Draft-updated (Push-Vorab-Pruefung)"
+    TEXT    last_pulled_at     "Sync-Punkt nach Konflikt-Aufloesung 'HubSpot uebernehmen'"
+    TEXT    conflict_state     "NULL|detected|resolved-app|resolved-remote (CHECK)"
+  }
+  sync_media_cache {
+    INTEGER id         PK
+    INTEGER blog_id    FK "FK blog_connections(id) ON DELETE CASCADE — XOR hub_id (CHECK)"
+    INTEGER hub_id     FK "FK hubspot_connections(id) ON DELETE CASCADE"
+    TEXT    src_key    "sha256:<bytes> | url:<adresse>; UNIQUE je Verbindung"
+    TEXT    remote_src "Adresse beim Ziel (Mediathek/File-Manager)"
+    TEXT    remote_id  "WP-Attachment- bzw. HubSpot-File-ID"
+    TEXT    created_at
   }
   share_links {
     TEXT    token              PK "22-Zeichen base64url"
@@ -2446,6 +2462,8 @@ erDiagram
   books            ||--o| hubspot_connections   : "hubspot-link"
   hubspot_connections ||--o{ hubspot_page_links : has
   pages            ||--o| hubspot_page_links    : "hubspot-mirror"
+  blog_connections ||--o{ sync_media_cache      : "media"
+  hubspot_connections ||--o{ sync_media_cache   : "media"
   books            ||--o{ share_links       : has
   pages            ||--o{ share_links       : "shared as page"
   chapters         ||--o{ share_links       : "shared as chapter"

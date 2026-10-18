@@ -18,14 +18,14 @@ test('hubspotToAppHtml strips images, scripts, iframes', () => {
   assert.doesNotMatch(out, /<iframe/);
 });
 
-test('hubspotToAppHtml maps h1/h4-h6 to h2/h3, keeps h2/h3', () => {
+test('hubspotToAppHtml maps h1 → h2, h5/h6 → h4, keeps h2–h4', () => {
   const out = hubspotToAppHtml('<h1>A</h1><h2>B</h2><h3>C</h3><h4>D</h4><h5>E</h5><h6>F</h6>');
   assert.match(out, /<h2>A<\/h2>/);
   assert.match(out, /<h2>B<\/h2>/);
   assert.match(out, /<h3>C<\/h3>/);
-  assert.match(out, /<h3>D<\/h3>/);
-  assert.match(out, /<h3>E<\/h3>/);
-  assert.match(out, /<h3>F<\/h3>/);
+  assert.match(out, /<h4>D<\/h4>/);
+  assert.match(out, /<h4>E<\/h4>/);
+  assert.match(out, /<h4>F<\/h4>/);
 });
 
 test('hubspotToAppHtml strips Jinja markers', () => {
@@ -192,4 +192,40 @@ test('bibliographySectionHtml: Titel ist escapet (User-Eingabe in HTML-Senke)', 
   const out = bibliographySectionHtml(evil);
   assert.match(out, /<h2>&lt;script&gt;x&lt;\/script&gt;<\/h2>/);
   assert.doesNotMatch(out, /<script>/);
+});
+
+// ── Tabellen, Block-Laeufe, Bilder ─────────────────────────────────────────
+
+test('appToHubspotHtml: Tabelle bleibt Tabelle (Caption, Kopfzeile, Ausrichtung)', () => {
+  const out = appToHubspotHtml('<p>Intro</p><table><caption>Preise</caption><thead><tr><th scope="col">A</th><th data-align="right">B</th></tr></thead><tbody><tr><td>1</td><td data-align="right">2</td></tr></tbody></table><p>Ende</p>');
+  assert.equal(out, '<p>Intro</p><table><caption>Preise</caption><thead><tr><th scope="col">A</th><th scope="col" style="text-align: right">B</th></tr></thead><tbody><tr><td>1</td><td style="text-align: right">2</td></tr></tbody></table><p>Ende</p>');
+});
+
+test('hubspotToAppHtml: Tabellen-Ausrichtung kommt als data-align zurueck', () => {
+  const out = hubspotToAppHtml('<table><thead><tr><th style="text-align:center">A</th></tr></thead><tbody><tr><td style="text-align: right">1</td></tr></tbody></table>');
+  assert.match(out, /<th scope="col" data-align="center">A<\/th>/);
+  assert.match(out, /<td data-align="right">1<\/td>/);
+});
+
+test('Tabelle am Anfang zieht den Rest nicht zu einem Absatz zusammen', () => {
+  const out = appToHubspotHtml('<table><tr><td>x</td><td>y</td></tr></table><h2>Titel</h2><p>Absatz</p>');
+  assert.match(out, /^<table>/);
+  assert.match(out, /<h2>Titel<\/h2><p>Absatz<\/p>$/);
+});
+
+test('loser Text auf Block-Ebene wird zu eigenen Absaetzen, Struktur bleibt', () => {
+  const out = hubspotToAppHtml('Vorlauf <b>fett</b><h2>T</h2>Nachlauf');
+  assert.equal(out, '<p>Vorlauf <strong>fett</strong></p><h2>T</h2><p>Nachlauf</p>');
+});
+
+test('appToHubspotHtml({ images: true }): Bilder mit https-src bleiben, Figure mit Beschriftung', () => {
+  const out = appToHubspotHtml('<figure><img src="https://x.hubspotusercontent-eu1.net/a.png" alt="A" class="wp-image-3"><figcaption>Cap</figcaption></figure><p>t<img src="data:image/png;base64,AA"></p>', { images: true });
+  assert.match(out, /<figure><img src="https:\/\/x\.hubspotusercontent-eu1\.net\/a\.png" alt="A"><figcaption>Cap<\/figcaption><\/figure>/);
+  assert.doesNotMatch(out, /data:image/);
+  assert.doesNotMatch(out, /wp-image/);
+});
+
+test('belegtes Blockzitat mit Absaetzen bleibt mehrteilig', () => {
+  const out = appToHubspotHtml('<blockquote data-src="4"><p>a</p><p>b</p></blockquote>');
+  assert.equal(out, '<blockquote><p>a</p><p>b</p></blockquote>');
 });

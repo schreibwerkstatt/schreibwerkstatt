@@ -536,7 +536,7 @@ export function registerKapitelReviewCard() {
         // Reassignment statt Index-Assign: der `tokTotals`-Memo haengt an der
         // Identitaet von `tokEsts` (app/app-root-getters.js).
         root.tokEsts = { ...root.tokEsts, [newPage.id]: { tok: 0, words: 0, chars: 0 } };
-        await root.selectPage(newPage);
+        await root.openNewSectionForWriting(newPage);
       } catch (e) {
         console.error('[createKapitelPage]', e);
         root.newPageError = e.message || root.t('common.unknownError');

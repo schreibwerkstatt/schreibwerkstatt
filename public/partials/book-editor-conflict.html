@@ -1,0 +1,69 @@
+<!-- Bucheditor: Konflikt-Auflösung beim Block-Level-Merge (cards/book-editor/
+     conflict.js). Gleicher Aufbau und dieselben Klassen wie das Modal des
+     Notebook-Editors (partials/conflict-resolution.html), eigener State
+     (`conflictResolution` der Bucheditor-Karte). Teleportiert in die Karten-
+     Wurzel, damit es im Native-Vollbild im Top-Layer bleibt. Previews via
+     x-text (escaped) — kein x-html-Sink. Abbrechen verwirft nichts: Block und
+     Banner bleiben, «Konflikt lösen …» öffnet das Modal neu. -->
+<template x-teleport=".card--bookeditor">
+  <div class="conflict-overlay" x-show="conflictResolution && $app.showBookEditorCard" x-cloak role="alert"
+       x-trap.inert.noscroll="conflictResolution && $app.showBookEditorCard"
+       aria-modal="true" @keydown.escape.window="conflictResolution && cancelBookConflict()">
+    <div class="conflict-modal">
+      <header class="conflict-modal__head">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#alert-triangle"/></svg>
+        <h2 class="conflict-modal__title" x-text="bookConflictText('resolveTitle')"></h2>
+      </header>
+      <p class="conflict-modal__hint" x-text="$app.t('edit.conflict.resolve.hint')"></p>
+
+      <div class="conflict-modal__bulk">
+        <button type="button" @click="resolveAllBookConflicts('local')"
+                x-text="$app.t('edit.conflict.bulk.takeAllLocal')"></button>
+        <button type="button" @click="resolveAllBookConflicts('remote')"
+                x-text="bookConflictText('resolveAllRemote')"></button>
+      </div>
+
+      <ul class="conflict-block-list">
+        <template x-for="c in (conflictResolution?.conflicts || [])" :key="c.bid">
+          <li class="conflict-block">
+            <p class="conflict-block__note" x-show="c.view.formatOnly"
+               x-text="$app.t('edit.conflict.block.formatOnly')"></p>
+            <div class="conflict-block__previews">
+              <template x-for="side in ['local', 'remote']" :key="side">
+                <button type="button" class="conflict-block__preview"
+                        :class="{ 'is-active': ['both', side].includes(bookConflictChoice(c.bid)) }"
+                        :aria-pressed="['both', side].includes(bookConflictChoice(c.bid)) ? 'true' : 'false'"
+                        @click="resolveBookConflictBlock(c.bid, side)">
+                  <span class="conflict-block__label"
+                        x-text="side === 'local' ? $app.t('edit.conflict.block.takeLocal') : bookConflictText('resolveRemote')"></span>
+                  <span class="conflict-block__text">
+                    <template x-if="c.view[side]">
+                      <span class="conflict-block__body"><template x-for="(part, pi) in c.view[side]" :key="pi"><span :class="'conflict-diff__' + part.t" x-text="part.v"></span></template></span>
+                    </template>
+                    <template x-if="!c.view[side]">
+                      <em class="conflict-block__deleted" x-text="side === 'local' ? $app.t('edit.conflict.block.deletedLocal') : bookConflictText('resolveDeletedRemote')"></em>
+                    </template>
+                  </span>
+                </button>
+              </template>
+            </div>
+            <div class="conflict-block__extra">
+              <button type="button" class="conflict-block__both"
+                      :class="{ 'is-active': bookConflictChoice(c.bid) === 'both' }"
+                      :aria-pressed="bookConflictChoice(c.bid) === 'both' ? 'true' : 'false'"
+                      @click="resolveBookConflictBlock(c.bid, bookConflictChoice(c.bid) === 'both' ? 'local' : 'both')"
+                      x-text="$app.t('edit.conflict.block.takeBoth')"></button>
+            </div>
+          </li>
+        </template>
+      </ul>
+
+      <footer class="conflict-modal__actions">
+        <button type="button" @click="cancelBookConflict()"
+                x-text="$app.t('edit.conflict.cancel')"></button>
+        <button type="button" class="primary" @click="submitBookConflict()"
+                x-text="$app.t('edit.conflict.apply')"></button>
+      </footer>
+    </div>
+  </div>
+</template>

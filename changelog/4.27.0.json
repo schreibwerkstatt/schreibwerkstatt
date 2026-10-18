@@ -1,0 +1,86 @@
+{
+  "version": "4.27.0",
+  "date": "2026-10-18",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Quellen-Karte, Knopf «Importieren»: Literaturlisten im BibTeX- oder RIS-Format lassen sich als Datei oder eingefügter Text übernehmen. Das Ergebnis zeigt, was neu, schon vorhanden oder nicht übernehmbar war.",
+      "en": "Sources card, “Import” button: reference lists in BibTeX or RIS format can be added as a file or pasted text. The result shows what was new, already there or could not be taken over."
+    },
+    {
+      "kind": "neu",
+      "de": "Bucheditor: hat ein anderes Gerät denselben Abschnitt geändert, werden Änderungen an verschiedenen Absätzen still zusammengeführt. Nur bei Überschneidungen öffnet ein Dialog, in dem sich je Stelle die eigene, die andere oder beide Fassungen wählen lassen.",
+      "en": "Book editor: if another device changed the same section, edits to different paragraphs are merged quietly. Only overlapping edits open a dialog where each spot can keep yours, theirs or both."
+    },
+    {
+      "kind": "neu",
+      "de": "HubSpot-Sync im Buchorganizer: wurde ein Entwurf in HubSpot seit dem letzten Push geändert, erscheint ein Konflikt mit «Konflikt lösen», statt die Änderung dort zu überschreiben.",
+      "en": "HubSpot sync in the book organizer: if a draft was changed in HubSpot since the last push, a conflict with “Resolve conflict” appears instead of overwriting that change."
+    },
+    {
+      "kind": "neu",
+      "de": "Erster Start: ein leeres Buch bietet «Erstes Kapitel anlegen» an, und der neue Abschnitt öffnet direkt zum Schreiben. Auf der Startseite legt «Mit Beispielbuch ausprobieren» ein kleines Übungsbuch an.",
+      "en": "First start: an empty book offers “Create first chapter”, and the new section opens ready for writing. On the start page, “Try with a sample book” creates a small practice book."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Neue Abschnitte öffnen gleich im Schreibmodus, egal ob im Abschnittsbaum, in der Kapitel-Übersicht oder im Tagebuch-Kalender angelegt. Ein leerer Abschnitt zeigt «Jetzt schreiben» statt einer leeren Seite.",
+      "en": "New sections open straight in writing mode, whether created in the section tree, the chapter overview or the diary calendar. An empty section shows “Start writing” instead of a blank page."
+    },
+    {
+      "kind": "verbessert",
+      "de": "WordPress-Sync: Beiträge mit Elementen, die die App nicht übernehmen kann, tragen im Buchorganizer das Zeichen «nur im Blog» und lassen sich nicht pushen. So gehen diese Elemente im Blog nicht verloren.",
+      "en": "WordPress sync: posts with elements the app cannot take over are marked “blog only” in the book organizer and cannot be pushed. That way those elements are not lost in the blog."
+    },
+    {
+      "kind": "verbessert",
+      "de": "WordPress- und HubSpot-Sync: Bilder werden nur noch einmal hochgeladen statt bei jedem Push erneut. Fehlt ein Bild im Beitrag, nennt die Meldung, welche Abschnitte betroffen sind.",
+      "en": "WordPress and HubSpot sync: images are uploaded once instead of on every push. If an image is missing from a post, the message names the affected sections."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Blog- und HubSpot-Einstellungen: Fehlermeldungen sagen jetzt verständlich, was nicht stimmt, etwa eine falsche Adresse, fehlende Rechte oder ein nicht erreichbarer Blog. Beim WordPress-Passwort steht, welches gemeint ist.",
+      "en": "Blog and HubSpot settings: error messages now say clearly what is wrong, such as a wrong address, missing rights or an unreachable blog. The WordPress password field explains which password is meant."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Ordner-Import und Manuskript-Import: das Protokoll ist übersetzt, nennt verständlich, warum etwas übersprungen wurde, und zeigt Hinweise wie verworfene Bilder schon in der Vorschau.",
+      "en": "Folder import and manuscript import: the log is translated, explains why something was skipped, and shows notes such as dropped images already in the preview."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Manuskript-Import: Kapitel und Abschnitte kommen in der Reihenfolge des Dokuments an, und lange Manuskripte werden nicht mehr vorzeitig abgeschnitten.",
+      "en": "Manuscript import: chapters and sections arrive in the document’s order, and long manuscripts are no longer cut off early."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buch-Import (.swbook): schlägt ein Teil fehl, zeigt die Import-Karte, welche Kapitel und Abschnitte fehlen. Ein Import ohne einen einzigen Abschnitt gilt als Fehler statt als leeres Buch.",
+      "en": "Book import (.swbook): if part of it fails, the import card shows which chapters and sections are missing. An import without a single section counts as an error instead of an empty book."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Administration, Logs: die Einträge sind in Seiten aufgeteilt, und neue Einträge erscheinen als Hinweis, statt die Liste beim Lesen zu verschieben.",
+      "en": "Administration, logs: entries are split into pages, and new entries appear as a notice instead of shifting the list while reading."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lehnt der KI-Anbieter den Zugang ab, sagt die Meldung jetzt, dass der Schlüssel fehlt oder ungültig ist, und wo er sich prüfen lässt.",
+      "en": "If the AI provider rejects access, the message now says the key is missing or invalid and where it can be checked."
+    },
+    {
+      "kind": "behoben",
+      "de": "Notebook-Editor und Bucheditor: ging nach dem Speichern die Antwort im Funkloch verloren, meldete der nächste Speichern einen Konflikt mit der eigenen Fassung. Das passiert nicht mehr.",
+      "en": "Notebook editor and book editor: if the save confirmation got lost on a bad connection, the next save reported a conflict with your own version. That no longer happens."
+    },
+    {
+      "kind": "behoben",
+      "de": "Ein abgebrochener Import oder eine abgebrochene Analyse stand danach als «abgeschlossen» da. Jetzt bleibt sie abgebrochen, und halb importierte Inhalte werden entfernt.",
+      "en": "A cancelled import or analysis afterwards showed as “completed”. It now stays cancelled, and half-imported content is removed."
+    },
+    {
+      "kind": "behoben",
+      "de": "Ordner-Import ins bestehende Buch: Monate und Jahre landen in der richtigen zeitlichen Reihenfolge und im passenden Monat.",
+      "en": "Folder import into an existing book: months and years end up in the right chronological order and in the matching month."
+    }
+  ]
+}

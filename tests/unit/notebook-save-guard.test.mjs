@@ -1,6 +1,6 @@
 // Unit-Tests für den Save-Querschnitt des Notebook-Editors:
 //
-//   B  Block-IDs im Live-Editor (editor/notebook/block-ids.js): doppelte nach
+//   B  Block-IDs im Live-Editor (editor/shared/block-ids.js): doppelte nach
 //      Enter, fehlende bei neuen Blöcken, Übernahme aus der Server-Fassung.
 //   A  `_canBackgroundSave`: kein Autosave/Retry unter offenem Konflikt-Modal,
 //      auf fremder Seite oder nach einem nicht wiederholbaren Fehler.
@@ -33,7 +33,7 @@ globalThis.localStorage = {
 };
 globalThis.sessionStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 
-const { syncLiveBlockIds, newBid } = await import('../../public/js/editor/notebook/block-ids.js');
+const { syncLiveBlockIds, newBid } = await import('../../public/js/editor/shared/block-ids.js');
 const { classifySaveError, isRetryableSaveError } = await import('../../public/js/editor/notebook/save-errors.js');
 const { notebookEditMethods } = await import('../../public/js/editor/notebook/edit.js');
 const { writeDraft, readDraft } = await import('../../public/js/editor/draft-storage.js');

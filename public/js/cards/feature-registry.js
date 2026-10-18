@@ -387,7 +387,8 @@ export function isFeatureAvailable(feature, ctx) {
 // Grund-Key für Disabled-Tooltip / Toast.
 export function unavailabilityReasonKey(feature, ctx) {
   if (!feature) return null;
-  if (feature.requiresBook && !ctx.selectedBookId) return 'palette.disabled.needBook';
+  // Ohne ein einziges Buch gibt es nichts zu wählen — dann heisst der Weg «anlegen».
+  if (feature.requiresBook && !ctx.selectedBookId) return ctx.hasBooks === false ? 'palette.disabled.needFirstBook' : 'palette.disabled.needBook';
   if (feature.requiresPages && !(ctx.pages && ctx.pages.length > 0)) return 'palette.disabled.needPages';
   if (!matchesRequiredBuchtyp(feature, ctx.buchtyp)) return 'palette.disabled.needBook';
   if (feature.requiresCloudModel && !ctx.cloudModelEffective) return 'palette.disabled.needCloudModel';

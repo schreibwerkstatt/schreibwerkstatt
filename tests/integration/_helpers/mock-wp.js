@@ -1,8 +1,10 @@
 'use strict';
 // Mock-WP fuer die Blog-Sync-Integrationstests: gestubbtes globalThis.fetch mit
 // der WP-REST-Oberflaeche, die lib/wp-client.js benutzt (users/me, posts list/
-// get/create/update). `edit(id, patch)` simuliert eine Aenderung in WordPress
-// (bumpt modified_gmt).
+// get/create/update, media). `edit(id, patch)` simuliert eine Aenderung in
+// WordPress (bumpt modified_gmt). `beforeWrite` (async, optional) laeuft in jedem
+// Post-Create/-Update, bevor WordPress antwortet — so laesst sich ein lokaler
+// Save WAEHREND des Pushs nachstellen. `media` zaehlt die Uploads.
 
 function makeWpStub({ posts = [], me = { id: 1, name: 'Editor', capabilities: { edit_posts: true } } } = {}) {
   const state = {
@@ -10,6 +12,8 @@ function makeWpStub({ posts = [], me = { id: 1, name: 'Editor', capabilities: { 
     me,
     nextId: posts.reduce((m, p) => Math.max(m, p.id), 100) + 1,
     calls: [],
+    media: [],
+    beforeWrite: null,
   };
 
   function respond(status, body, headers = {}) {
@@ -20,6 +24,11 @@ function makeWpStub({ posts = [], me = { id: 1, name: 'Editor', capabilities: { 
       headers: { get: k => hdr.get(k) ?? hdr.get(k.toLowerCase()) ?? null },
       json: async () => body,
       text: async () => JSON.stringify(body),
+      // Der Client liest JSON mit Byte-Deckel (lib/sync/request.js#readJson).
+      arrayBuffer: async () => {
+        const buf = Buffer.from(JSON.stringify(body));
+        return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length);
+      },
     };
   }
 
@@ -29,6 +38,13 @@ function makeWpStub({ posts = [], me = { id: 1, name: 'Editor', capabilities: { 
     state.calls.push({ url: rawUrl, method, body: init?.body });
 
     if (u.pathname === '/wp-json/wp/v2/users/me') return respond(200, state.me);
+
+    if (u.pathname === '/wp-json/wp/v2/media' && method === 'POST') {
+      const id = 5000 + state.media.length;
+      const item = { id, source_url: `https://wp.test/wp-content/uploads/img-${id}.png` };
+      state.media.push(item);
+      return respond(201, item);
+    }
 
     if (u.pathname === '/wp-json/wp/v2/posts' && method === 'GET') {
       const perPage = parseInt(u.searchParams.get('per_page') || '10', 10);
@@ -55,6 +71,7 @@ function makeWpStub({ posts = [], me = { id: 1, name: 'Editor', capabilities: { 
       const id = Number(updMatch[1]);
       const post = state.posts.find(p => p.id === id);
       if (!post) return respond(404, { code: 'rest_post_invalid_id' });
+      if (state.beforeWrite) await state.beforeWrite({ id, method });
       const payload = JSON.parse(init.body || '{}');
       if (payload.title) post.title = { rendered: payload.title, raw: payload.title };
       if (payload.content) post.content = { rendered: payload.content, raw: payload.content };
@@ -65,6 +82,7 @@ function makeWpStub({ posts = [], me = { id: 1, name: 'Editor', capabilities: { 
     }
 
     if (u.pathname === '/wp-json/wp/v2/posts' && method === 'POST') {
+      if (state.beforeWrite) await state.beforeWrite({ id: null, method });
       const payload = JSON.parse(init.body || '{}');
       const newPost = {
         id: state.nextId++,

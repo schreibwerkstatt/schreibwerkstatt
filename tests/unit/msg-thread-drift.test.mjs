@@ -32,7 +32,7 @@ test('Server-Cleaner: Verlauf ist ein struktureller div (nicht flachgeklopft)', 
 });
 
 test('Editor-Block-IDs spiegeln den Server-Selektor', () => {
-  assert.match(read('public/js/editor/notebook/block-ids.js'), new RegExp(`div\\.${MSG_THREAD_CLASS}`));
+  assert.match(read('public/js/editor/shared/block-ids.js'), new RegExp(`div\\.${MSG_THREAD_CLASS}`));
 });
 
 test('LanguageTool prüft den Verlauf, jede Zeile als eigener Absatz', async () => {

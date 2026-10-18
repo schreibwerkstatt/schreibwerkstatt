@@ -206,6 +206,34 @@ function objectKeys(sources, fnNames) {
   return found;
 }
 
+// Zugriffe `<ns>.fn` auf einen Namespace aus `const <ns> = await import(…)`,
+// begrenzt auf den umschliessenden Block der Bindung. Der Name ist frei (macOS:
+// `const m = await import(url)` in `_merge3`) — global nach `m.` zu suchen träfe
+// jedes Regex-Match-Objekt, darum nur bis zur schliessenden Klammer des Blocks.
+function namespaceMembers(sources) {
+  const found = new Map();
+  for (const { file, web } of sources) {
+    const text = web.map((l) => l.text).join('\n');
+    const lineAt = (i) => web[text.slice(0, i).split('\n').length - 1]?.n;
+    const bind = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+import\(/g;
+    let m;
+    while ((m = bind.exec(text)) !== null) {
+      let end = m.index;
+      for (let depth = 0; end < text.length; end++) {
+        if (text[end] === '{') depth++;
+        else if (text[end] === '}' && --depth < 0) break;
+      }
+      const use = new RegExp(`(?<![\\w$.])${m[1].replace(/\$/g, '\\$')}\\.([A-Za-z_]\\w*)`, 'g');
+      const scope = text.slice(m.index, end);
+      let u;
+      while ((u = use.exec(scope)) !== null) {
+        if (!found.has(u[1])) found.set(u[1], `${file}:${lineAt(m.index + u.index)}`);
+      }
+    }
+  }
+  return found;
+}
+
 // ── Bundle ───────────────────────────────────────────────────────────────────
 async function loadBundle() {
   const { files: jsFiles } = await buildClosure(ENTRY_MODULES);
@@ -233,8 +261,10 @@ function checkClient(sources, b) {
   add('Modul', collect(sources, /(?:import\(\s*|new URL\(\s*)['"](?:\.\/)?(js\/[^'"]+\.js)['"]/g, (m) => m[1]),
     (p) => b.jsFiles.includes(p), (p) => [p]);
 
-  // 2. Exporte, die er daraus benutzt (Destrukturierung + `<x>Mod.fn`/`mod.fn`).
+  // 2. Exporte, die er daraus benutzt (Destrukturierung, `<x>Mod.fn`/`mod.fn`
+  //    und `<ns>.fn` auf einem per `await import()` gebundenen Namespace).
   const exports = new Map([
+    ...namespaceMembers(sources),
     ...collect(sources, /\{([^}]+)\}\s*=\s*await\s+import\(/g,
       (m) => m[1].split(',').map((s) => s.trim().split(/\s*:\s*/)[0])),
     ...collect(sources, /\b(?:mod|[a-z]\w*Mod)\.([A-Za-z_]\w*)/g, (m) => m[1]),

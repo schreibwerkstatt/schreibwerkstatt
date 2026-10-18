@@ -63,7 +63,8 @@ Key: `${type}:${dedupId ?? bookId}:${userEmail}`.
 - Default-Dedup: ein Job pro (`type`, `bookId`, `userEmail`) gleichzeitig.
 - Pro-Entity: `dedupId` setzen für Sub-Targets (z.B. Lektorat pro `pageId`, Kapitel-Review pro `chapterId`).
 - `runningJobs` hält Einträge auch nach Abschluss bis `_scheduleJobCleanup` greift — `findActiveJobId` filtert auf `status in ('queued','running')`.
-- **Pro Buch statt pro User:** Jobs, die geteilte Buch-Ressourcen schreiben, dedupen zusätzlich buchweit. Blog-Import und -Pull ([blog-sync.js](../routes/jobs/blog-sync.js)#`_activeBookSyncJob`): läuft für das Buch schon ein Import/Pull (egal von wem), antwortet die Route `409 BLOG_SYNC_RUNNING` — die fremde Job-ID taugt nicht, weil `GET /jobs/:id` nur eigene Jobs zeigt.
+- **Pro Buch statt pro User:** Jobs, die geteilte Buch-Ressourcen schreiben, dedupen zusätzlich buchweit. Import und Pull der Blog-Syncs (WordPress `blog-import`/`blog-pull`, HubSpot `hubspot-import`; [routes/jobs/sync/routes.js](../routes/jobs/sync/routes.js)#`activeBookJob`): läuft für das Buch schon einer davon (egal von wem), antwortet die Route `409 BLOG_SYNC_RUNNING` bzw. `409 HUBSPOT_SYNC_RUNNING` — die fremde Job-ID taugt nicht, weil `GET /jobs/:id` nur eigene Jobs zeigt.
+- **Dedup pro Auswahl:** Push-Jobs der Blog-Syncs dedupen über `createJob(…, dedupId)` mit `<book>:<sortierte page_ids>` — ein Push für **andere** Abschnitte ist ein eigener Job, nicht der laufende.
 - **Job-Log-Puffer** ([lib/job-log-buffer.js](../lib/job-log-buffer.js)): `createJob` öffnet ihn, `completeJob`/`failJob`/`cancelJob` räumen ihn. Log-Zeilen mit der jobId eines beendeten Jobs (Fire-and-forget-Nachlauf mit geerbtem ALS-Context) werden verworfen; offene Puffer sind gedeckelt.
 
 ## Frontend-Integration

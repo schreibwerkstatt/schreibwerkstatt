@@ -1,12 +1,16 @@
 // Teil von bookSettingsMethods (siehe Facade book-settings.js).
-import { EVT, fetchJson } from './_shared.js';
+import { fetchJson } from './_shared.js';
+import {
+  syncErrorText, postSyncJson, rehydrateSyncJobs, startSyncJob, deleteSyncConnection,
+} from './sync-shared.js';
 
 export const hubspotMethods = {
 
   // ─── HubSpot-Sync ────────────────────────────────────────────────────────
   // Sichtbar nur bei buchtyp === 'blog'. State im Card-Init: hubspotConnection,
   // hubspotForm, hubspotBusy/Action/Message/Error, hubspotBlogs, hubspotAuthors,
-  // hubspotImportJobId. Job-Status-Polling via job-queue events.
+  // hubspotImportJobId, hubspotReconcileJobId. Was WordPress genauso macht,
+  // steht in ./sync-shared.js.
 
   async loadHubspotStatus() {
     const bookId = Alpine.store('nav').selectedBookId;
@@ -17,29 +21,15 @@ export const hubspotMethods = {
       if (this.hubspotConnection) {
         this.hubspotForm.blogId   = this.hubspotConnection.blogId || '';
         this.hubspotForm.authorId = this.hubspotConnection.authorId || '';
-        // Listen mit dem gespeicherten Token nachladen, damit Combos den
-        // aktuellen Wert anzeigen können (Label statt nur ID).
-        this.loadHubspotLists().catch(() => { /* still OK ohne Listen */ });
+        // Listen mit dem gespeicherten Token nachladen, damit die Comboboxen
+        // den aktuellen Wert als Label zeigen können.
+        this.loadHubspotLists();
       }
-      await this._reattachHubspotJobs(bookId);
+      [this.hubspotImportJobId, this.hubspotReconcileJobId] =
+        await rehydrateSyncJobs(bookId, ['hubspot-import', 'hubspot-reconcile']);
     } catch (e) {
       console.error('[hubspot] Status laden fehlgeschlagen:', e);
     }
-  },
-
-
-  async _reattachHubspotJobs(bookId) {
-    const probe = async (type) => {
-      try {
-        const list = await fetchJson(`/jobs/active?book_id=${encodeURIComponent(bookId)}&type=${encodeURIComponent(type)}`);
-        return Array.isArray(list) && list.length ? list[0].jobId : null;
-      } catch { return null; }
-    };
-    const [importId, reconcileId] = await Promise.all([
-      probe('hubspot-import'), probe('hubspot-reconcile'),
-    ]);
-    this.hubspotImportJobId = importId;
-    this.hubspotReconcileJobId = reconcileId;
   },
 
 
@@ -53,6 +43,14 @@ export const hubspotMethods = {
     this.hubspotBusy = !!action;
     this.hubspotAction = action || null;
     if (action) { this.hubspotMessage = ''; this.hubspotError = ''; }
+  },
+
+
+  // Token im Body: eingegebenes Token, sonst `__keep__` (= das gespeicherte).
+  // Nie in der URL — eine Query landet in Verlauf und Proxy-Logs.
+  _hubspotTokenBody() {
+    if (this.hubspotForm.token) return { token: this.hubspotForm.token };
+    return this.hubspotConnection ? { token: '__keep__' } : {};
   },
 
 
@@ -74,20 +72,11 @@ export const hubspotMethods = {
     if (!bookId) return;
     this._setHubspotBusy('test');
     try {
-      const body = {};
-      if (this.hubspotForm.token) body.token = this.hubspotForm.token;
-      else if (this.hubspotConnection) body.token = '__keep__';
-      const res = await fetch(`/hubspot/${bookId}/test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error_code || 'HUBSPOT_TEST_FAILED');
+      await postSyncJson(`/hubspot/${bookId}/test`, this._hubspotTokenBody(), 'HUBSPOT_TEST_FAILED');
       this.hubspotMessage = window.__app.t('hubspot.connect.testOk');
       await this.loadHubspotLists();
     } catch (e) {
-      this.hubspotError = window.__app.t('hubspot.error.' + e.message) || e.message;
+      this.hubspotError = syncErrorText('hubspot', e.message);
     } finally {
       this._setHubspotBusy(null);
     }
@@ -97,18 +86,16 @@ export const hubspotMethods = {
   async loadHubspotLists() {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) return;
-    const tokenQ = this.hubspotForm.token
-      ? `?token=${encodeURIComponent(this.hubspotForm.token)}`
-      : '';
+    const body = this._hubspotTokenBody();
     try {
       const [blogs, authors] = await Promise.all([
-        fetchJson(`/hubspot/${bookId}/blogs${tokenQ}`),
-        fetchJson(`/hubspot/${bookId}/authors${tokenQ}`),
+        postSyncJson(`/hubspot/${bookId}/blogs`, body, 'HUBSPOT_LISTS_FAILED'),
+        postSyncJson(`/hubspot/${bookId}/authors`, body, 'HUBSPOT_LISTS_FAILED'),
       ]);
       this.hubspotBlogs = blogs.blogs || [];
       this.hubspotAuthors = authors.authors || [];
     } catch (e) {
-      console.error('[hubspot] Blogs/Authors laden fehlgeschlagen:', e);
+      this.hubspotError = syncErrorText('hubspot', e.message);
     }
   },
 
@@ -118,24 +105,18 @@ export const hubspotMethods = {
     if (!bookId || !this.hubspotFormReady()) return;
     this._setHubspotBusy('save');
     try {
-      const body = {
+      const data = await postSyncJson(`/hubspot/${bookId}/connect`, {
         blogId: this.hubspotForm.blogId,
         authorId: this.hubspotForm.authorId,
-      };
-      if (this.hubspotForm.token) body.token = this.hubspotForm.token;
-      else if (this.hubspotConnection) body.token = '__keep__';
-      const res = await fetch(`/hubspot/${bookId}/connect`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error_code || 'HUBSPOT_SAVE_FAILED');
+        ...this._hubspotTokenBody(),
+      }, 'HUBSPOT_SAVE_FAILED');
       this.hubspotConnection = data.connection;
       this.hubspotForm.token = '';
-      this.hubspotMessage = window.__app.t('hubspot.connect.saved');
+      this.hubspotMessage = window.__app.t(data.targetChanged ? 'hubspot.connect.targetChanged' : 'hubspot.connect.saved');
+      // Links/Import-Stand verworfen → Badges im Buchorganizer neu laden.
+      if (data.targetChanged) window.__hubspotCard?.loadLinks?.();
     } catch (e) {
-      this.hubspotError = window.__app.t('hubspot.error.' + e.message) || e.message;
+      this.hubspotError = syncErrorText('hubspot', e.message);
     } finally {
       this._setHubspotBusy(null);
     }
@@ -148,56 +129,38 @@ export const hubspotMethods = {
     if (!confirm(window.__app.t('hubspot.connect.disconnectConfirm'))) return;
     this._setHubspotBusy('disconnect');
     try {
-      const res = await fetch(`/hubspot/${bookId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('HUBSPOT_DISCONNECT_FAILED');
+      await deleteSyncConnection('/hubspot', bookId, 'HUBSPOT_DISCONNECT_FAILED');
       this.hubspotConnection = null;
       this.hubspotForm = { token: '', blogId: '', authorId: '' };
       this.hubspotBlogs = [];
       this.hubspotAuthors = [];
       this.hubspotMessage = window.__app.t('hubspot.connect.disconnected');
     } catch (e) {
-      this.hubspotError = window.__app.t('hubspot.error.' + e.message) || e.message;
+      this.hubspotError = syncErrorText('hubspot', e.message);
     } finally {
       this._setHubspotBusy(null);
     }
   },
 
 
-  async startHubspotImport() {
+  async _startHubspotJob(type, failCode, jobProp) {
     const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId || this.hubspotImportJobId) return;
+    if (!bookId || this[jobProp]) return;
     try {
-      const res = await fetch('/jobs/hubspot-import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error_code || 'HUBSPOT_IMPORT_FAILED');
-      this.hubspotImportJobId = data.jobId;
-      window.dispatchEvent(new CustomEvent(EVT.JOB_ENQUEUED, { detail: { type: 'hubspot-import', jobId: data.jobId } }));
+      this[jobProp] = await startSyncJob(type, bookId, failCode);
     } catch (e) {
-      this.hubspotError = window.__app.t('hubspot.error.' + e.message) || e.message;
+      this.hubspotError = syncErrorText('hubspot', e.message);
     }
   },
 
 
-  async startHubspotReconcile() {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId || this.hubspotReconcileJobId) return;
+  startHubspotImport() {
+    return this._startHubspotJob('hubspot-import', 'HUBSPOT_IMPORT_FAILED', 'hubspotImportJobId');
+  },
+
+
+  startHubspotReconcile() {
     if (!confirm(window.__app.t('hubspot.action.reconcileConfirm'))) return;
-    try {
-      const res = await fetch('/jobs/hubspot-reconcile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error_code || 'HUBSPOT_RECONCILE_FAILED');
-      this.hubspotReconcileJobId = data.jobId;
-      window.dispatchEvent(new CustomEvent(EVT.JOB_ENQUEUED, { detail: { type: 'hubspot-reconcile', jobId: data.jobId } }));
-    } catch (e) {
-      this.hubspotError = window.__app.t('hubspot.error.' + e.message) || e.message;
-    }
+    return this._startHubspotJob('hubspot-reconcile', 'HUBSPOT_RECONCILE_FAILED', 'hubspotReconcileJobId');
   },
 };

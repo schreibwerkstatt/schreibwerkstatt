@@ -24,6 +24,11 @@ export const appKomplettMethods = {
   // Ja/Nein-Bestätigung — es beantwortet dieselbe Frage genauer.
   async alleAktualisieren() {
     if (!this.$store.nav.selectedBookId || this.$store.jobs.alleAktualisierenLoading) return;
+    // Leeres Buch: Hinweis statt Umfangs-Dialog mit «Lauf empfohlen».
+    if (this.bookHasNoText?.()) {
+      this.setStatus(this.t('header.updateAllEmptyBook'), false, 6000);
+      return;
+    }
     this.showKomplettStatus = false;
     this.komplettScopeForce = false;
     this.komplettScopeLoading = true;

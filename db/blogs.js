@@ -8,6 +8,7 @@ const { db } = require('./connection');
 require('./migrations');
 const { NOW_ISO_SQL } = require('./now');
 const { encrypt, decrypt } = require('../lib/crypto');
+const { clearCachedMedia } = require('./sync-media-cache');
 
 const ALLOWED_STATUS = new Set(['draft', 'publish', 'private']);
 
@@ -79,6 +80,20 @@ const _stmtUpdate = db.prepare(`
    WHERE id = ?
 `);
 
+// Zielwechsel (andere Blog-URL): die bisherigen Links tragen Post-IDs des alten
+// Blogs. Bleiben sie stehen, ueberschreibt der naechste Push auf dem NEUEN Blog
+// einen fremden Post, der zufaellig dieselbe ID hat. Darum fallen sie mit dem
+// Wechsel weg, und Import- und Pull-Stand beginnen neu. Ein anderer Benutzer auf
+// demselben Blog ist kein Zielwechsel.
+const _stmtResetTarget = db.prepare(`
+  UPDATE blog_connections
+     SET initial_import_done_at = NULL, last_pull_at = NULL, last_push_at = NULL
+   WHERE id = ?
+`);
+const _stmtDeleteLinksForBlog = db.prepare('DELETE FROM blog_page_links WHERE blog_id = ?');
+
+/** Speichert die Verbindung. Rueckgabe: Public-Meta plus `targetChanged`
+ *  (true = Links und Import-/Pull-Stand wurden verworfen). */
 function upsertConnection({ bookId, baseUrl, username, password, defaultStatus = 'draft' }) {
   const bid = parseInt(bookId, 10);
   if (!Number.isInteger(bid) || bid <= 0) throw new Error('blogs.upsert: invalid bookId');
@@ -88,13 +103,23 @@ function upsertConnection({ bookId, baseUrl, username, password, defaultStatus =
   if (!ALLOWED_STATUS.has(defaultStatus)) throw new Error('blogs.upsert: invalid defaultStatus');
 
   const encPw = encrypt(password);
-  const existing = _stmtGetByBook.get(bid);
-  if (existing) {
-    _stmtUpdate.run(baseUrl, username, encPw, defaultStatus, existing.id);
-    return getConnectionPublic(bid);
-  }
-  _stmtInsert.run(bid, baseUrl, username, encPw, defaultStatus);
-  return getConnectionPublic(bid);
+  let targetChanged = false;
+  db.transaction(() => {
+    const existing = _stmtGetByBook.get(bid);
+    if (existing) {
+      targetChanged = existing.base_url !== baseUrl;
+      _stmtUpdate.run(baseUrl, username, encPw, defaultStatus, existing.id);
+      if (targetChanged) {
+        _stmtDeleteLinksForBlog.run(existing.id);
+        _stmtResetTarget.run(existing.id);
+        // Mediathek-Adressen des alten Blogs gelten auf dem neuen nicht.
+        clearCachedMedia({ blogId: existing.id });
+      }
+    } else {
+      _stmtInsert.run(bid, baseUrl, username, encPw, defaultStatus);
+    }
+  })();
+  return { ...getConnectionPublic(bid), targetChanged };
 }
 
 const _stmtUpdateStatus = db.prepare(`
@@ -163,7 +188,7 @@ function getLinkByPost(blogId, wpPostId) {
 // `pages.updated_at` nicht — der Badge braucht beide Stamps.
 const _stmtListLinksForBlog = db.prepare(`
   SELECT l.page_id, l.blog_id, l.wp_post_id, l.wp_modified_at, l.wp_status, l.wp_slug,
-         l.last_pulled_at, l.last_pushed_at, l.conflict_state,
+         l.last_pulled_at, l.last_pushed_at, l.conflict_state, l.locked_blocks,
          h.updated_at AS headline_updated_at
     FROM blog_page_links l
     LEFT JOIN page_headline h ON h.page_id = l.page_id
@@ -210,11 +235,14 @@ function upsertLink({ pageId, blogId, wpPostId, wpModifiedAt, wpStatus = null, w
 const _stmtMarkPulled = db.prepare(`
   UPDATE blog_page_links
      SET wp_modified_at = ?, wp_status = ?, wp_slug = ?,
-         last_pulled_at = ${NOW_ISO_SQL}, conflict_state = NULL
+         last_pulled_at = COALESCE(?, ${NOW_ISO_SQL}), conflict_state = NULL
    WHERE page_id = ?
 `);
-function markLinkPulled(pageId, { wpModifiedAt, wpStatus = null, wpSlug = null }) {
-  _stmtMarkPulled.run(String(wpModifiedAt || ''), wpStatus, wpSlug, parseInt(pageId, 10));
+/** `pulledAt`: Stempel des eigenen Writes (Seite bzw. Titel-Werkstatt, der
+ *  juengere). Ohne ihn „jetzt" — dann gaelte ein Save, der zwischen dem
+ *  Schreiben der Seite und diesem Aufruf landet, als schon abgeglichen. */
+function markLinkPulled(pageId, { wpModifiedAt, wpStatus = null, wpSlug = null, pulledAt = null }) {
+  _stmtMarkPulled.run(String(wpModifiedAt || ''), wpStatus, wpSlug, pulledAt || null, parseInt(pageId, 10));
 }
 
 
@@ -239,6 +267,23 @@ function setConflictState(pageId, state) {
   _stmtSetConflict.run(state, parseInt(pageId, 10));
 }
 
+// Abgleich: WordPress-Status nachziehen (z.B. drueben publiziert).
+const _stmtRefreshMeta = db.prepare(`
+  UPDATE blog_page_links SET wp_status = COALESCE(?, wp_status), wp_slug = COALESCE(?, wp_slug) WHERE page_id = ?
+`);
+function refreshLinkMeta(pageId, { wpStatus = null, wpSlug = null } = {}) {
+  return _stmtRefreshMeta.run(wpStatus, wpSlug, parseInt(pageId, 10)).changes > 0;
+}
+
+// Push-Sperre merken (lib/wp-html.js#wpLossyBlocks): was der Beitrag in
+// WordPress enthaelt und der Import nicht uebernimmt. Leere Liste = frei.
+// Das Badge im Buchorganizer zeigt sie, bevor jemand in der App bearbeitet.
+const _stmtSetLocked = db.prepare('UPDATE blog_page_links SET locked_blocks = ? WHERE page_id = ?');
+function setLockedBlocks(pageId, blocks) {
+  const list = Array.isArray(blocks) ? blocks.filter(Boolean) : [];
+  _stmtSetLocked.run(list.length ? list.join(', ') : null, parseInt(pageId, 10));
+}
+
 const _stmtDeleteLink = db.prepare('DELETE FROM blog_page_links WHERE page_id = ?');
 function deleteLink(pageId) {
   return _stmtDeleteLink.run(parseInt(pageId, 10)).changes > 0;
@@ -261,7 +306,8 @@ module.exports = {
   upsertLink,
   markLinkPulled,
   markConflictResolvedApp,
-  
   setConflictState,
+  refreshLinkMeta,
+  setLockedBlocks,
   deleteLink,
 };

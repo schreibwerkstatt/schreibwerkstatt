@@ -395,20 +395,23 @@ export const treeLoadMethods = {
   // Sidebar-Empty-Book-CTA: fragt per appPrompt nach dem Namen und legt das
   // Kapitel an. createChapter() selbst liest newChapterTitle (vom Kapitel-Review-
   // Input gespeist) — ohne Input-Feld in der Sidebar wäre der Direktaufruf ein
-  // No-op, darum hier der Prompt-Pfad.
-  async createChapterPrompt() {
+  // No-op, darum hier der Prompt-Pfad. Im leeren Buch entsteht der erste
+  // Abschnitt gleich mit und öffnet sich zum Schreiben — Text steht nur in
+  // Abschnitten, ein leeres Kapitel allein wäre ein Zwischenschritt ohne Wert.
+  async createChapterPrompt({ firstInBook = false } = {}) {
     if (!this.canEdit()) return null;
     const name = await this.appPrompt?.({
-      message: this.t('bookOrganizer.promptChapterName'),
+      message: this.t(firstInBook ? 'sidebar.firstChapterPrompt' : 'bookOrganizer.promptChapterName'),
       placeholder: this.t('bookOrganizer.placeholderChapterName'),
+      defaultValue: firstInBook ? this.t('sidebar.firstChapterDefault') : '',
       confirmLabel: this.t('bookOrganizer.create'),
     });
     if (!name) return null;
     this.newChapterTitle = name;
-    return this.createChapter();
+    return this.createChapter({ withFirstSection: firstInBook || undefined });
   },
 
-  async createChapter({ afterChapterId } = {}) {
+  async createChapter({ afterChapterId, withFirstSection } = {}) {
     const bookId = this.$store.nav.selectedBookId;
     const title = (this.newChapterTitle || '').trim();
     if (!bookId || !title || this.newChapterCreating) return null;
@@ -423,7 +426,7 @@ export const treeLoadMethods = {
       // ab — Parent vom Anker, Reihenfolge in book_order (content-store#createChapter).
       if (afterItem) body.after_chapter_id = Number(afterItem.id);
       const parentId = afterItem?.parent_id ?? null;
-      const withFirstPage = this._bookUsesSingleSectionChapters(); // vor dem Einhaengen messen
+      const withFirstPage = withFirstSection ?? this._bookUsesSingleSectionChapters(); // vor dem Einhaengen messen
       const created = await contentRepo.createChapter(body);
       this.newChapterTitle = '';
       if (!created?.id) return null;

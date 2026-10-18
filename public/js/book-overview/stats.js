@@ -53,7 +53,11 @@ export const statsMethods = {
     const tree = Alpine.store('nav').tree || [];
     return this._memo('latest', [stats, tokEsts, pages, tree], () => {
       const histLast = stats.length ? stats[stats.length - 1] : null;
-      const live = this._liveTotals();
+      // Buch ohne Abschnitte (fertig geladen): der Live-Stand ist bekannt und
+      // null — kein Rückfall auf einen Snapshot, der älter als das Buch sein kann.
+      const live = (!pages.length && !app?.treeLoading)
+        ? { chars: 0, words: 0, tok: 0 }
+        : this._liveTotals();
       if (!live) return histLast ? { ...histLast, fromSnapshot: true } : null;
       const { chars, words, tok } = live;
       const page_count = pages.length;
@@ -65,6 +69,11 @@ export const statsMethods = {
         if (!p.chapter_id) continue;
         const root = anyRootOf(p.chapter_id);
         if (root) rootIds.add(Number(root.id));
+      }
+      // Auch Top-Level-Kapitel ohne Abschnitt zählen (frisch angelegt) — sie
+      // stehen im Baum, über die Abschnitte fände man sie nicht.
+      for (const it of tree) {
+        if (it.type === 'chapter' && !it.solo && it.parent_id == null) rootIds.add(Number(it.id));
       }
       const chapter_count = rootIds.size;
       return { ...(histLast || {}), chars, words, tok, page_count, chapter_count, fromSnapshot: false };

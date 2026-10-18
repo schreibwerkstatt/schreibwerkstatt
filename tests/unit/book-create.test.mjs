@@ -3,9 +3,11 @@
 //   - leerer Name → errorEmpty, kein createBook
 //   - fehlender Buchtyp → buchtypRequired, kein createBook
 //   - Kategorie-Pflicht nur bei nicht-leerem Pool
+//   - Vorbelegung: Buchtyp aus dem Profil, sonst Roman; Sprache/Region aus dem
+//     Profil, Region passend zur Sprache
 //   - Erfolg: contentRepo.createBook (POST /content/books), Buchtyp/Kategorie
-//     am Buch persistiert, loadBooks aufgerufen, selectedBookId gesetzt,
-//     toggleBookSettingsCard ausgeloest, Modal geschlossen
+//     am Buch persistiert, loadBooks aufgerufen, Hash aufs neue Buch (Übersicht,
+//     keine Settings-Karte), Modal geschlossen
 //   - Fehler (server detail): bookCreateError gesetzt mit Detail-Text
 //   - bookCreateBusy verhindert doppeltes submit/cancel
 //
@@ -47,7 +49,7 @@ function makeCtx(overrides = {}) {
     set tree(v) { nav.tree = v; },
     // Shell-State (App-Meta) lebt in Alpine.store('shell'): book-create.js liest
     // this.$store.shell.uiLocale (Region) + .promptConfig (Buchtyp-Liste).
-    $store: { nav, shell: { uiLocale: 'de', promptConfig: { buchtypen: { de: {} } } } },
+    $store: { nav, shell: { uiLocale: 'de', defaultBuchtyp: '', defaultBookLanguage: '', defaultRegion: '', promptConfig: { buchtypen: { de: {} } } } },
     bookCreateName: '',
     bookCreateBuchtyp: '',
     bookCreateCategoryId: '',
@@ -77,12 +79,16 @@ function makeCtx(overrides = {}) {
     cancelCreateBook: bookCreateMethods.cancelCreateBook,
     submitCreateBook: bookCreateMethods.submitCreateBook,
     _loadBookCreateCategories: bookCreateMethods._loadBookCreateCategories,
+    bookCreateBuchtypOptions: bookCreateMethods.bookCreateBuchtypOptions,
+    _defaultBuchtyp: bookCreateMethods._defaultBuchtyp,
+    _newBookLangRegion: bookCreateMethods._newBookLangRegion,
   };
   // submitCreateBook liest Root-Methoden (t/loadBooks/toggleBookSettingsCard/
   // showBookSettingsCard) ueber window.__app — in der Karte ist das der Root, im
   // Test faellt Root + Karte auf denselben ctx zusammen.
   globalThis.window = globalThis.window || {};
   globalThis.window.__app = ctx;
+  globalThis.window.location = { hash: '' };
   return ctx;
 }
 
@@ -124,6 +130,39 @@ test('openCreateBook setzt Defaults und oeffnet Modal', () => {
   assert.equal(ctx.bookCreateCategoryId, '');
   assert.equal(ctx.bookCreateError, '');
   assert.equal(ctx.bookCreateBusy, false);
+});
+
+const TYPEN = { roman: { label: 'Roman' }, krimi: { label: 'Krimi' }, sachbuch: { label: 'Sachbuch' } };
+
+test('openCreateBook belegt den Buchtyp vor: Profil-Standard, sonst Roman', () => {
+  mockFetch({ '/local/categories': async () => jsonResponse({ categories: [] }) });
+  const ctx = makeCtx();
+  ctx.$store.shell.promptConfig = { buchtypen: { de: TYPEN } };
+  ctx.openCreateBook();
+  assert.equal(ctx.bookCreateBuchtyp, 'roman');
+
+  const pref = makeCtx();
+  pref.$store.shell.promptConfig = { buchtypen: { de: TYPEN } };
+  pref.$store.shell.defaultBuchtyp = 'sachbuch';
+  pref.openCreateBook();
+  assert.equal(pref.bookCreateBuchtyp, 'sachbuch');
+
+  const unknown = makeCtx();
+  unknown.$store.shell.promptConfig = { buchtypen: { de: TYPEN } };
+  unknown.$store.shell.defaultBuchtyp = 'gibtsnicht';
+  unknown.openCreateBook();
+  assert.equal(unknown.bookCreateBuchtyp, 'roman', 'unbekannter Profil-Typ fällt auf Roman zurück');
+});
+
+test('_newBookLangRegion: Profil-Sprache + passende Region, sonst UI-Sprache', () => {
+  const ctx = makeCtx();
+  assert.deepEqual(ctx._newBookLangRegion(), { lang: 'de', region: 'CH' });
+  ctx.$store.shell.defaultRegion = 'DE';
+  assert.deepEqual(ctx._newBookLangRegion(), { lang: 'de', region: 'DE' });
+  ctx.$store.shell.defaultBookLanguage = 'en';
+  assert.deepEqual(ctx._newBookLangRegion(), { lang: 'en', region: 'US' }, 'DE passt nicht zu en');
+  ctx.$store.shell.defaultRegion = 'GB';
+  assert.deepEqual(ctx._newBookLangRegion(), { lang: 'en', region: 'GB' });
 });
 
 test('cancelCreateBook schliesst und setzt zurueck — nur wenn nicht busy', () => {
@@ -171,7 +210,7 @@ test('submitCreateBook bei nicht-leerem Pool ohne Kategorie → required, kein c
   assert.equal(calls.length, 0);
 });
 
-test('submitCreateBook erfolgreich → createBook, Persistenz, loadBooks, selectedBookId, toggleBookSettings, close', async () => {
+test('submitCreateBook erfolgreich → createBook, Persistenz, loadBooks, Hash aufs neue Buch, close', async () => {
   const ctx = makeCtx({ bookCreateName: 'Mein Roman', bookCreateBuchtyp: 'krimi' });
   ctx.$refs.bookCreateDialog.open = true;
   const calls = mockFetch({
@@ -183,27 +222,25 @@ test('submitCreateBook erfolgreich → createBook, Persistenz, loadBooks, select
   assert.ok(calls.some(c => c.url.includes('/content/books') && c.opts.method === 'POST'), 'createBook POST');
   assert.ok(calls.some(c => c.url.includes('/booksettings/42') && c.opts.method === 'PUT'), 'Buchtyp persistiert');
   assert.equal(ctx._loadBooksCalls, 1);
-  assert.equal(ctx.selectedBookId, '42');
-  assert.equal(ctx._toggleCalls, 1, 'Book-Settings-Karte oeffnen');
-  assert.equal(ctx.showBookSettingsCard, true);
+  assert.equal(globalThis.window.location.hash, '#book/42', 'ins neue Buch (Übersicht)');
+  assert.equal(ctx._toggleCalls, 0, 'keine Settings-Karte vor der ersten Zeile');
   assert.equal(ctx.$refs.bookCreateDialog.open, false);
   assert.equal(ctx.bookCreateError, '');
   assert.equal(ctx.bookCreateBusy, false);
 });
 
-test('submitCreateBook bei bereits geoeffneter BookSettings → kein Re-Toggle', async () => {
-  const ctx = makeCtx({
-    bookCreateName: 'X',
-    bookCreateBuchtyp: 'krimi',
-    showBookSettingsCard: true,
-  });
+test('submitCreateBook persistiert Sprache/Region aus dem Profil', async () => {
+  const ctx = makeCtx({ bookCreateName: 'X', bookCreateBuchtyp: 'krimi' });
+  ctx.$store.shell.defaultBookLanguage = 'en';
+  ctx.$store.shell.defaultRegion = 'GB';
   ctx.$refs.bookCreateDialog.open = true;
-  mockFetch({
+  const calls = mockFetch({
     '/content/books': async () => jsonResponse({ id: 7 }),
     '/booksettings/7': async () => jsonResponse({ ok: true }),
   });
   await ctx.submitCreateBook();
-  assert.equal(ctx._toggleCalls, 0, 'nicht erneut toggeln wenn schon offen');
+  const put = calls.find(c => c.url.includes('/booksettings/7'));
+  assert.deepEqual(JSON.parse(put.opts.body), { language: 'en', region: 'GB', buchtyp: 'krimi' });
 });
 
 test('submitCreateBook Server-Fehler → errorGeneric mit detail', async () => {

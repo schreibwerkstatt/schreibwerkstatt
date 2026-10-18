@@ -5,6 +5,7 @@
 // scheitern.
 import { EVT } from '../events.js';
 import { lsGetJSON, lsSetJSON, lsRemove, lsKeys } from '../safe-storage.js';
+import { ownSaveIds } from '../repo/save-ids.js';
 
 // Schlüssel: `editor_draft_u:<email>:<pageId>` — das Konto steht im
 // Schlüssel, weil localStorage pro Browser-Profil gilt, nicht pro Konto.
@@ -77,10 +78,15 @@ export function readDraft(pageId) {
 // QuotaExceededError bei vollem localStorage). Der Aufrufer MUSS das Ergebnis
 // prüfen und false sichtbar machen — ein still verworfener Offline-Entwurf ist
 // echter Datenverlust (kein Server-Fallback, wenn offline).
+//
+// `ownSaveIds`: Kennungen der Saves, die der Notebook-Editor dieses Tabs seit
+// der Draft-Basis geschickt hat, ohne Antwort (repo/save-ids.js). Der Draft ist
+// deren Nachfahre — die Outbox nennt sie beim Nachsenden, auch aus einem
+// anderen Tab, und der Server erkennt einen davon als Vorgänger-Stand.
 export function writeDraft(pageId, html, originalHtml, originalUpdatedAt) {
   const ok = lsSetJSON(DRAFT_KEY(pageId), {
     html, originalHtml, originalUpdatedAt: originalUpdatedAt || null, savedAt: Date.now(),
-    owner: _owner,
+    owner: _owner, ownSaveIds: ownSaveIds('notebook', pageId),
   });
   if (!ok) return false;
   // Ein liegengebliebener eigener Alt-Entwurf ist jetzt überholt.

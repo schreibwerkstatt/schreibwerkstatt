@@ -61,6 +61,14 @@ html, body {
   font-size: var(--font-size-md);
 }
 
+/* Links im Fliesstext der Pre-Auth-Seiten (z.B. «Passwort vergessen?») —
+   App-Akzent statt Browser-Blau, wie die Footer-Links unterstrichen. */
+.public-sub a {
+  color: var(--color-accent);
+  text-underline-offset: 2px;
+}
+.public-sub a:hover { color: var(--color-text); }
+
 .public-actions {
   display: flex;
   flex-direction: column;

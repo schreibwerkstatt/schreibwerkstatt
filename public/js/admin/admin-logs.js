@@ -5,6 +5,16 @@
 import { fetchJson } from '../utils.js';
 import { tFetchErrorRaw } from '../i18n.js';
 
+// Zeilen je Seite der Liste. Gerendert wird immer nur eine Seite — die Liste
+// selbst kann bis ADMIN_LOGS_MAX_ENTRIES Einträge halten.
+export const ADMIN_LOGS_PAGE_SIZE = 100;
+// Obergrenze der im Speicher gehaltenen Einträge (Live-Tail + nachgeladene).
+const ADMIN_LOGS_MAX_ENTRIES = 2000;
+// Live-Zeilen werden gesammelt und in diesem Takt eingespielt: lokal schreiben
+// laufende Tests mehrere Zeilen pro Sekunde ins selbe Log, eine Mutation je
+// SSE-Nachricht hielte den Renderer dauerbeschäftigt.
+const ADMIN_LOGS_FLUSH_MS = 500;
+
 export const adminLogsMethods = {
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   async adminLogsEnter() {
@@ -19,6 +29,31 @@ export const adminLogsMethods = {
     this._adminLogsStopStream();
   },
 
+  // Stabiler Zeilen-Key: neue Live-Zeilen landen vorne, ein Index-Key würde
+  // bei jeder Zeile alle gerenderten Zeilen neu aufbauen.
+  _adminLogsTag(entries) {
+    for (const e of entries) e._k = ++this._adminLogsSeq;
+    return entries;
+  },
+
+  // Kürzt die Liste auf ADMIN_LOGS_MAX_ENTRIES; der Nachlade-Cursor rückt auf
+  // den ältesten verbliebenen Eintrag, damit «Weiter» die Lücke wieder füllt.
+  _adminLogsCap() {
+    if (this.adminLogsEntries.length <= ADMIN_LOGS_MAX_ENTRIES) return;
+    this.adminLogsEntries.length = ADMIN_LOGS_MAX_ENTRIES;
+    this.adminLogsOldestTs = this.adminLogsEntries[ADMIN_LOGS_MAX_ENTRIES - 1].ts;
+    this.adminLogsHasMore = true;
+  },
+
+  _adminLogsResetList() {
+    this.adminLogsEntries = [];
+    this.adminLogsPending = [];
+    this.adminLogsPage = 0;
+    this.adminLogsExpanded = {};
+    this.adminLogsOldestTs = null;
+    this.adminLogsHasMore = true;
+  },
+
   // ── Filter ─────────────────────────────────────────────────────────────────
   adminLogsResetFilters() {
     this.adminLogsFilter = { level: '', scope: '', user: '', book: '', q: '' };
@@ -31,17 +66,13 @@ export const adminLogsMethods = {
 
   async adminLogsApplyFilter() {
     this._adminLogsStopStream();
-    this.adminLogsEntries = [];
-    this.adminLogsOldestTs = null;
-    this.adminLogsHasMore = true;
+    this._adminLogsResetList();
     await this._adminLogsSearch({ append: false });
   },
 
   async adminLogsClearAndLive() {
     this.adminLogsResetFilters();
-    this.adminLogsEntries = [];
-    this.adminLogsOldestTs = null;
-    this.adminLogsHasMore = true;
+    this._adminLogsResetList();
     await this._adminLogsLoadTail();
     if (this.adminLogsLiveTail) this._adminLogsStartStream();
   },
@@ -53,7 +84,7 @@ export const adminLogsMethods = {
     try {
       const data = await fetchJson('/admin/logs/tail?lines=500');
       // Server liefert chronologisch (alt → neu). UI zeigt neueste oben.
-      const entries = (data.entries || []).reverse();
+      const entries = this._adminLogsTag((data.entries || []).reverse());
       this.adminLogsEntries = entries;
       const oldest = entries[entries.length - 1];
       this.adminLogsOldestTs = oldest?.ts || null;
@@ -77,10 +108,14 @@ export const adminLogsMethods = {
       if (f.book)  qs.set('book',  f.book);
       if (f.q)     qs.set('q',     f.q);
       qs.set('limit', '200');
-      if (append && this.adminLogsOldestTs) qs.set('before', this.adminLogsOldestTs);
+      if (append && this.adminLogsOldestTs) {
+        const ts = this.adminLogsOldestTs;
+        qs.set('before', ts);
+        qs.set('skip', String(this.adminLogsEntries.filter(e => e.ts === ts).length));
+      }
       const data = await fetchJson('/admin/logs/search?' + qs.toString());
       // Server liefert neueste zuerst (matched.push war reverse-iter).
-      const next = data.entries || [];
+      const next = this._adminLogsTag(data.entries || []);
       this.adminLogsEntries = append ? this.adminLogsEntries.concat(next) : next;
       const oldest = next[next.length - 1];
       if (oldest) this.adminLogsOldestTs = oldest.ts;
@@ -92,14 +127,47 @@ export const adminLogsMethods = {
     }
   },
 
+  // Ohne Filter laedt search ohne Filter die aelteren Zeilen rueckwaerts nach.
   async adminLogsLoadMore() {
     if (!this.adminLogsHasMore || this.adminLogsLoading) return;
-    if (this.adminLogsHasFilter()) {
-      await this._adminLogsSearch({ append: true });
-    } else {
-      // Ohne Filter: tail + alle aelteren rueckwaerts via search ohne Filter.
-      await this._adminLogsSearch({ append: true });
+    await this._adminLogsSearch({ append: true });
+  },
+
+  // ── Pagination ─────────────────────────────────────────────────────────────
+  adminLogsPageEntries() {
+    const start = this.adminLogsPage * ADMIN_LOGS_PAGE_SIZE;
+    return this.adminLogsEntries.slice(start, start + ADMIN_LOGS_PAGE_SIZE);
+  },
+
+  adminLogsPageCount() {
+    return Math.max(1, Math.ceil(this.adminLogsEntries.length / ADMIN_LOGS_PAGE_SIZE));
+  },
+
+  adminLogsCanNext() {
+    return this.adminLogsPage + 1 < this.adminLogsPageCount() || this.adminLogsHasMore;
+  },
+
+  adminLogsPrevPage() {
+    if (this.adminLogsPage === 0) return;
+    this.adminLogsPage--;
+    if (this.adminLogsPage === 0) this._adminLogsFlushPending();
+  },
+
+  // Auf der letzten geladenen Seite holt «Weiter» die naechsten Eintraege vom
+  // Server und blaettert erst, wenn welche gekommen sind.
+  async adminLogsNextPage() {
+    if (this.adminLogsLoading) return;
+    if (this.adminLogsPage + 1 >= this.adminLogsPageCount()) {
+      if (!this.adminLogsHasMore) return;
+      await this.adminLogsLoadMore();
+      if (this.adminLogsPage + 1 >= this.adminLogsPageCount()) return;
     }
+    this.adminLogsPage++;
+  },
+
+  adminLogsFirstPage() {
+    this.adminLogsPage = 0;
+    this._adminLogsFlushPending();
   },
 
   // ── Files ──────────────────────────────────────────────────────────────────
@@ -124,13 +192,11 @@ export const adminLogsMethods = {
       this.adminLogsEventSource = es;
       es.onmessage = (ev) => {
         try {
-          const entry = JSON.parse(ev.data);
-          // Vorne anhaengen; Cap auf 5000 (FIFO).
-          this.adminLogsEntries.unshift(entry);
-          if (this.adminLogsEntries.length > 5000) {
-            this.adminLogsEntries.length = 5000;
-          }
-        } catch { /* noop */ }
+          this._adminLogsIncoming.push(JSON.parse(ev.data));
+        } catch { return; }
+        if (!this._adminLogsFlushTimer) {
+          this._adminLogsFlushTimer = setTimeout(() => this._adminLogsFlushIncoming(), ADMIN_LOGS_FLUSH_MS);
+        }
       };
       es.addEventListener('rotated', () => { this.adminLogsRotatedHint = true; });
       es.onerror = () => {
@@ -146,6 +212,29 @@ export const adminLogsMethods = {
   _adminLogsStopStream() {
     try { this.adminLogsEventSource?.close?.(); } catch {}
     this.adminLogsEventSource = null;
+    clearTimeout(this._adminLogsFlushTimer);
+    this._adminLogsFlushTimer = null;
+    this._adminLogsIncoming = [];
+  },
+
+  // Auf Seite 1 kommen neue Zeilen direkt oben dazu; beim Blaettern warten sie
+  // als «N neue Eintraege», sonst rutscht die gelesene Seite unter dem Leser weg.
+  _adminLogsFlushIncoming() {
+    this._adminLogsFlushTimer = null;
+    const batch = this._adminLogsIncoming;
+    this._adminLogsIncoming = [];
+    if (!batch.length) return;
+    // SSE liefert chronologisch, die Liste zeigt neueste oben.
+    const fresh = this._adminLogsTag(batch.slice(-ADMIN_LOGS_MAX_ENTRIES).reverse());
+    this.adminLogsPending = fresh.concat(this.adminLogsPending).slice(0, ADMIN_LOGS_MAX_ENTRIES);
+    if (this.adminLogsPage === 0) this._adminLogsFlushPending();
+  },
+
+  _adminLogsFlushPending() {
+    if (!this.adminLogsPending.length) return;
+    this.adminLogsEntries = this.adminLogsPending.concat(this.adminLogsEntries);
+    this.adminLogsPending = [];
+    this._adminLogsCap();
   },
 
   adminLogsToggleLiveTail() {
@@ -160,14 +249,10 @@ export const adminLogsMethods = {
   },
 
   // ── Row-State ──────────────────────────────────────────────────────────────
-  adminLogsToggleStack(idx) {
-    const k = String(idx);
+  adminLogsToggleStack(entry) {
+    const k = String(entry._k);
     if (this.adminLogsExpanded[k]) delete this.adminLogsExpanded[k];
     else this.adminLogsExpanded[k] = true;
-  },
-
-  adminLogsRowKey(entry, idx) {
-    return `${idx}:${entry.ts}`;
   },
 
   adminLogsFmtTs(ts) {

@@ -352,9 +352,9 @@ const cardsState = () => ({
   showAutorenprofilCard: false,
   showHelpCard: false,
   showOnboardingCard: false,
-  // First-Login-Willkommens-Banner (zeigt einmalig auf „Erste Schritte").
-  // Serverseitig gemerkt (welcomeDismissed); Loader _loadOnboardingWelcome.
+  // Willkommens-Banner (welcomeDismissed) + Beispielbuch-Import: app-onboarding.js.
   onboardingWelcome: false,
+  demoBookBusy: false,
   showAdminUsersCard: false,
   showAdminSettingsCard: false,
   showAdminUsageCard: false,

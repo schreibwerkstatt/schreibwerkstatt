@@ -394,7 +394,7 @@ export const diaryCalendarMethods = {
       // Identitaet von `tokEsts` (app/app-root-getters.js).
       this.tokEsts = { ...this.tokEsts, [created.id]: { tok: 0, words: 0, chars: 0 } };
       this.diaryCalendarYearMonth = { year, month: monthNum };
-      this.selectPage(created);
+      this.openNewSectionForWriting(created);
     } catch (e) {
       if (e instanceof DiaryBookSwitched) return;
       console.error('[_createDiaryEntry]', e);

@@ -280,6 +280,19 @@ test('overviewLatest.chapter_count: Sub-Kapitel zählen nicht eigenständig', ()
   assert.equal(latest.chapter_count, 2, 'zwei Roots — nicht fünf');
 });
 
+test('overviewLatest: Buch ohne Abschnitte zeigt Live-Null statt eines älteren Snapshots', () => {
+  // Frisch angelegt: ein leeres Kapitel, kein Abschnitt; der Cron-Snapshot ist
+  // von gestern und kennt das Kapitel noch nicht.
+  const tree = [{ type: 'chapter', id: 7, depth: 1, parent_id: null, solo: false, pages: [] }];
+  globalThis.window = { __app: { tree, tokEsts: {}, pages: [], treeLoading: false } };
+  const ctx = { _memos: {}, overviewStats: [{ recorded_at: '2026-10-17', chars: 0, chapter_count: 0 }], ...bookOverviewMethods };
+  const latest = ctx.overviewLatest();
+  assert.equal(latest.fromSnapshot, false, 'kein «Stand: gestern»');
+  assert.equal(latest.chars, 0);
+  assert.equal(latest.chapter_count, 1, 'leeres Top-Level-Kapitel zählt');
+  assert.equal(ctx.overviewSnapshotAsOf(), '');
+});
+
 // Ausgeschlossene Kapitel (`excluded`, kaskadiert auf Unterkapitel) fehlen in
 // allen Kapitel-Kacheln; die Hero-Gliederung zählt sie weiter.
 function distTokEsts() {

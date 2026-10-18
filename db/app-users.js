@@ -255,7 +255,7 @@ function _inheritedAiProfileId(inviterEmail) {
 // Einladen ist Opt-in: neue Konten duerfen nicht von sich aus weitere Leute
 // einladen, der Admin schaltet es pro User frei. Admins laden unabhaengig
 // davon immer ein (Gate in routes/usersettings.js#POST /invite).
-function createUser({ email, displayName = null, globalRole = 'user', status = 'active', language = 'de', canInviteUsers = 0, invitedBy = null, aiProfileId = undefined }) {
+function createUser({ email, displayName = null, globalRole = 'user', status = 'active', language = 'de', canInviteUsers = 0, invitedBy = null, aiProfileId = undefined, markChangelogSeen = true }) {
   const e = _normEmail(email);
   if (!e) throw new Error('createUser: email required');
   const inviter = invitedBy ? _normEmail(invitedBy) : null;
@@ -273,6 +273,15 @@ function createUser({ email, displayName = null, globalRole = 'user', status = '
     inviter ? nowIso : null,
     profileId,
   );
+  // Ein neues Konto hat keine „Neuigkeiten": alles bisher Erschienene ist für
+  // es der Ausgangsstand. Ohne Stempel stünde der Ungelesen-Punkt am Hilfe-Knopf,
+  // und die Hilfe öffnete auf dem Changelog statt auf dem Funktionsüberblick.
+  // `markChangelogSeen: false` nur für das lokale Dev-Konto: dort sollen die
+  // Neuigkeiten sichtbar sein (tests/e2e-app/changelog.spec.js baut darauf).
+  if (markChangelogSeen) {
+    const latest = require('../lib/changelog').getLatestVersion();
+    if (latest) setChangelogSeen(e, latest);
+  }
   return getUser(e);
 }
 

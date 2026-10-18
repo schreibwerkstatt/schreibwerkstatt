@@ -4,8 +4,8 @@
 // One-shot HubSpot-Blog-Import in ein bestehendes Buch.
 // - Holt PUBLISHED-Posts via /cms/v3/blogs/posts, gruppiert nach Publish-Jahr
 //   in Kapitel "YYYY", legt pro Post eine Page mit Name "YYYY-MM-DD: Titel" an.
-// - Konvertiert post.postBody zu reinem Text (alle HTML-Tags weg, je Block
-//   ein <p>…</p>).
+// - Konvertiert post.postBody ueber dieselbe Allowlist wie der Import-Job
+//   (lib/hubspot-html.js#hubspotToAppHtml).
 // - Idempotent: existierende Page-Names werden uebersprungen.
 // - Autor-Auswahl interaktiv, wenn --author-id fehlt.
 // - User-Attribution via --user-email Pflicht (page_revisions.source='import').
@@ -23,10 +23,16 @@ const contentStore = require('../lib/content-store');
 const pageRevisions = require('../db/page-revisions');
 const appUsers = require('../db/app-users');
 const { hubspotToAppHtml } = require('../lib/hubspot-html');
+const { createHubspotClient } = require('../lib/hubspot-client');
+const { postTitle, postDate } = require('../lib/sync/providers/hubspot');
+const { importedPageName } = require('../lib/blog-title');
+const { resolveYearChapter, yearOf } = require('../lib/blog-pull');
 const logger = require('../logger');
 
-const HUBSPOT_BASE = 'https://api.hubapi.com';
-const HUBSPOT_PAGE_SIZE = 100;
+// API-Zugriff, Titel-/Datumsregel und Jahres-Kapitel teilt das Skript mit dem
+// Import-Job (lib/hubspot-client.js, lib/sync/providers/hubspot.js,
+// lib/blog-pull.js). Eigen ist nur der Ablauf: Abgleich ueber den Seitennamen
+// statt ueber Links, `--update`, Probelauf.
 
 function parseArgs(argv) {
   const out = { dryRun: false, limit: Infinity, listAuthors: false, update: false };
@@ -47,33 +53,8 @@ function parseArgs(argv) {
   return out;
 }
 
-async function hubspotFetch(path, token, query = {}) {
-  const url = new URL(HUBSPOT_BASE + path);
-  for (const [k, v] of Object.entries(query)) {
-    if (v === undefined || v === null || v === '') continue;
-    url.searchParams.set(k, String(v));
-  }
-  const res = await fetch(url, {
-    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`HubSpot ${res.status} ${res.statusText}: ${text.slice(0, 300)}`);
-  }
-  return res.json();
-}
-
-async function listAuthors(token) {
-  const out = [];
-  let after;
-  while (true) {
-    const data = await hubspotFetch('/cms/v3/blogs/authors', token, { limit: 100, after });
-    const results = Array.isArray(data?.results) ? data.results : [];
-    out.push(...results);
-    after = data?.paging?.next?.after;
-    if (!after) break;
-  }
-  return out;
+function listAuthors(token) {
+  return createHubspotClient({ token }).listAuthors();
 }
 
 async function pickAuthorInteractive(token) {
@@ -100,56 +81,19 @@ async function pickAuthorInteractive(token) {
 }
 
 async function* iterateAuthorPosts(token, authorId, hardLimit) {
-  let after;
   let yielded = 0;
-  while (yielded < hardLimit) {
-    const data = await hubspotFetch('/cms/v3/blogs/posts', token, {
-      blogAuthorId: authorId,
-      state: 'PUBLISHED',
-      limit: HUBSPOT_PAGE_SIZE,
-      after,
-    });
-    const results = Array.isArray(data?.results) ? data.results : [];
-    for (const p of results) {
-      if (yielded >= hardLimit) return;
-      yield p;
-      yielded += 1;
-    }
-    after = data?.paging?.next?.after;
-    if (!after) return;
+  for await (const p of createHubspotClient({ token }).iteratePosts({ authorId, state: 'PUBLISHED' })) {
+    if (yielded >= hardLimit) return;
+    yield p;
+    yielded += 1;
   }
 }
-
-// HubSpot postBody → minimal-formatiertes App-HTML; Mapping liegt zentral in
-// lib/hubspot-html.js (gleicher Whitelist wie der GUI-Initial-Import).
-const postBodyToText = hubspotToAppHtml;
-
-function publishDateOf(post) {
-  const raw = post.publishDate || post.created || post.updated;
-  if (!raw) return null;
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return null;
-  return d;
-}
-
-function isoYmd(d) { return d.toISOString().slice(0, 10); }
 
 async function loadExistingPagesByName(bookId) {
   const pages = await contentStore.listPages(bookId);
   const map = new Map();
   for (const p of pages) map.set(p.name || '', p.id);
   return map;
-}
-
-async function loadOrCreateYearChapter(bookId, year, cache, ctx, dryRun) {
-  if (cache.has(year)) return cache.get(year);
-  const chapters = await contentStore.listChapters(bookId);
-  const existing = chapters.find(c => (c.name || '').trim() === year);
-  if (existing) { cache.set(year, existing.id); return existing.id; }
-  if (dryRun) { cache.set(year, `dry-${year}`); return `dry-${year}`; }
-  const created = await contentStore.createChapter({ book_id: bookId, name: year }, ctx);
-  cache.set(year, created.id);
-  return created.id;
 }
 
 async function main() {
@@ -187,14 +131,13 @@ async function main() {
 
   for await (const post of iterateAuthorPosts(token, authorId, args.limit)) {
     total += 1;
-    const title = (post.htmlTitle || post.name || '').trim();
-    const date = publishDateOf(post);
-    if (!title || !date) { dropped += 1; logger.warn(`[hubspot-import] post ohne Titel/Datum (id=${post.id})`); continue; }
-    const ymd = isoYmd(date);
-    const pageName = `${ymd}: ${title}`;
+    const title = postTitle(post);
+    const ymd = postDate(post).slice(0, 10);
+    if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) { dropped += 1; logger.warn(`[hubspot-import] post ohne Titel/Datum (id=${post.id})`); continue; }
+    const pageName = importedPageName(title, ymd, '');
     const existingId = existingByName.get(pageName);
 
-    const text = postBodyToText(post.postBody || '');
+    const text = hubspotToAppHtml(post.postBody || '');
     if (!text.trim()) { dropped += 1; logger.warn(`[hubspot-import] post ${post.id} leer nach text-extract`); continue; }
 
     if (existingId && !args.update) {
@@ -217,12 +160,11 @@ async function main() {
     }
 
     // Neu anlegen
-    const year = String(date.getUTCFullYear());
-    const chapterId = await loadOrCreateYearChapter(args.bookId, year, yearCache, ctx, args.dryRun);
-
+    const year = yearOf(ymd);
     if (args.dryRun) {
       console.log(`  +     ${pageName} → chapter ${year} (${text.length} chars)`);
     } else {
+      const chapterId = await resolveYearChapter(args.bookId, year, yearCache);
       const created = await contentStore.createPage(
         { book_id: args.bookId, chapter_id: chapterId, name: pageName, html: text },
         ctx,

@@ -21,6 +21,11 @@ function makeRes({ status = 200, headers = {}, body = '' } = {}) {
     headers: { get: (k) => hdr.get(k) ?? hdr.get(k.toLowerCase()) ?? null },
     json: async () => (typeof body === 'string' ? JSON.parse(body) : body),
     text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
+    // Der Client liest JSON mit Byte-Deckel (lib/sync/request.js#readJson).
+    arrayBuffer: async () => {
+      const buf = Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
+      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length);
+    },
   };
 }
 
@@ -147,7 +152,7 @@ test('401 → BLOG_AUTH_FAILED (no retry)', async () => {
   assert.equal(fetch.calls.length, 1);
 });
 
-test('429 → retries up to 2x then surfaces error', async () => {
+test('429 → retries up to 2x then BLOG_RATE_LIMIT', async () => {
   const fetch = makeFetch([
     { status: 429, body: '' },
     { status: 429, body: '' },
@@ -159,7 +164,7 @@ test('429 → retries up to 2x then surfaces error', async () => {
     password: 'p',
     fetch,
   });
-  await assert.rejects(() => wp.me(), /BLOG_HTTP_429/);
+  await assert.rejects(() => wp.me(), /BLOG_RATE_LIMIT/);
   assert.equal(fetch.calls.length, 3);
 });
 
@@ -222,4 +227,50 @@ test('updatePost: POST /posts/:id', async () => {
   assert.equal(r.id, 7);
   assert.equal(fetch.calls[0].init.method, 'POST');
   assert.match(fetch.calls[0].url, /\/wp-json\/wp\/v2\/posts\/7/);
+});
+
+test('createPost: kein Retry bei 5xx (sonst doppelter Post, wenn die Antwort verloren ging)', async () => {
+  const fetch = makeFetch([
+    { status: 502, body: '' },
+    { status: 201, body: '{"id":42}' },
+  ]);
+  const wp = createWpClient({ baseUrl: 'https://blog.example.com', username: 'u', password: 'p', fetch });
+  await assert.rejects(() => wp.createPost({ title: 't', content: 'c' }), /BLOG_UPSTREAM/);
+  assert.equal(fetch.calls.length, 1);
+});
+
+test('createPost: 429 wird wiederholt (nicht verarbeitet)', async () => {
+  const fetch = makeFetch([
+    { status: 429, body: '' },
+    { status: 201, body: '{"id":42}' },
+  ]);
+  const wp = createWpClient({ baseUrl: 'https://blog.example.com', username: 'u', password: 'p', fetch });
+  const post = await wp.createPost({ title: 't', content: 'c' });
+  assert.equal(post.id, 42);
+  assert.equal(fetch.calls.length, 2);
+});
+
+test('updatePost: Retry bei 5xx (Update ist idempotent)', async () => {
+  const fetch = makeFetch([
+    { status: 503, body: '' },
+    { status: 200, body: '{"id":7}' },
+  ]);
+  const wp = createWpClient({ baseUrl: 'https://blog.example.com', username: 'u', password: 'p', fetch });
+  const post = await wp.updatePost(7, { content: 'c' });
+  assert.equal(post.id, 7);
+  assert.equal(fetch.calls.length, 2);
+});
+
+test('listPosts(): stabile Seitenfolge nach ID, nicht nach Aenderungsdatum', async () => {
+  const fetch = makeFetch({ status: 200, body: '[]' });
+  const wp = createWpClient({ baseUrl: 'https://blog.example.com', username: 'u', password: 'p', fetch });
+  await wp.listPosts({ modifiedAfter: '2025-01-01T00:00:00' });
+  assert.match(fetch.calls[0].url, /orderby=id/);
+  assert.doesNotMatch(fetch.calls[0].url, /orderby=modified/);
+});
+
+test('403 → BLOG_FORBIDDEN (angemeldet, aber abgewiesen — nicht „Passwort falsch")', async () => {
+  const fetch = makeFetch({ status: 403, body: '{}' });
+  const wp = createWpClient({ baseUrl: 'https://blog.example.com', username: 'u', password: 'p', fetch });
+  await assert.rejects(() => wp.me(), /BLOG_FORBIDDEN/);
 });

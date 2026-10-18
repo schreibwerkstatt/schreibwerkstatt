@@ -47,6 +47,8 @@ export const userSettingsMethods = {
       window.__app.focusGranularity = this.userSettingsFocusGranularity || 'paragraph';
       const region = this.userSettingsDefaultRegion || (Alpine.store('shell').uiLocale === 'en' ? 'US' : 'CH');
       Alpine.store('shell').defaultRegion = region;
+      Alpine.store('shell').defaultBuchtyp = this.userSettingsDefaultBuchtyp || '';
+      Alpine.store('shell').defaultBookLanguage = this.userSettingsDefaultLanguage || '';
       configureLocaleRegion(region);
       document.documentElement.setAttribute('lang', localeTag(Alpine.store('shell').uiLocale));
       this.userSettingsSaved = true;

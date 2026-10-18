@@ -40,13 +40,14 @@
              «Lektorieren» darüber — nur am echten Kapitelkopf zeigen. -->
         <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
                 x-show="pageTreeMenuTarget.kind === 'chapter'"
-                :disabled="batchLoading"
+                :disabled="batchLoading || pageTreeMenuTarget.empty"
                 @click="pagetreeCtxLektorierenChapter()">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#spell-check"/></svg>
           <span x-text="t('pagetreeCtx.lektorierenChapter')"></span>
         </button>
         <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
                 x-show="_pagetreeCtxChapterId() != null"
+                :disabled="pageTreeMenuTarget.empty"
                 @click="pagetreeCtxReviewChapter()">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#scale"/></svg>
           <span x-text="t('pagetreeCtx.reviewChapter')"></span>
@@ -61,12 +62,16 @@
           </button>
         </template>
         <div class="context-menu-sep" role="separator"></div>
+        <!-- Leeres Kapitel (kein Abschnitt, kein Unterkapitel): Prüfen, Bewerten,
+             Teilen und Exportieren hätten keinen Text — ausgegraut statt Leerlauf. -->
         <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                :disabled="pageTreeMenuTarget.empty"
                 @click="pagetreeCtxShare()">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#share-2"/></svg>
           <span x-text="t('pagetreeCtx.share')"></span>
         </button>
         <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                :disabled="pageTreeMenuTarget.empty"
                 @click="pagetreeCtxExport()">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
           <span x-text="t('pagetreeCtx.export')"></span>

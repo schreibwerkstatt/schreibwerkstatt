@@ -50,6 +50,29 @@ export const treeStructureMethods = {
     return newPage;
   },
 
+  // Frisch angelegter, leerer Abschnitt: öffnen und gleich in den Edit-Modus
+  // des Notebook-Editors — wer einen Abschnitt anlegt, will darin schreiben.
+  // `startEdit` prüft selbst Rechte, Prüfmodus und geladenen Stand; greift
+  // einer der Guards, bleibt die Leseansicht mit ihrem «Jetzt schreiben».
+  // Konsumenten: _createFirstSection, Baum-Kontextmenü, Kapitel-Übersicht,
+  // Tagebuch-Kalender.
+  async openNewSectionForWriting(page) {
+    await this.selectPage(page);
+    if (String(this.currentPage?.id) !== String(page.id) || !this.currentPageEmpty) return;
+    this.startEdit?.();
+    // startEdit fokussiert per setTimeout 0 — direkt nach dem Seitenwechsel ist
+    // der Editor da noch per x-show verborgen, `focus()` verpufft, und der
+    // Fokus bliebe auf der Baumzeile, an die der Namensdialog ihn zurückgab.
+    for (let i = 0; i < 30 && this.editMode; i++) {
+      await new Promise(r => requestAnimationFrame(r));
+      const el = this._getEditEl?.();
+      if (el && el.offsetParent !== null) {
+        if (!el.contains(document.activeElement)) el.focus();
+        break;
+      }
+    }
+  },
+
   // Buch aus lauter Ein-Abschnitt-Kapiteln (tree/stats.js#
   // _bookUsesSingleSectionChapters): zum neuen Kapitel entsteht der erste
   // Abschnitt gleich mit — gleichnamig, also eine Sidebar-Zeile ohne Doppel-
@@ -61,7 +84,7 @@ export const treeStructureMethods = {
     try {
       const page = await contentRepo.createPage({ chapter_id: chapter.id, name: chapter.name, html: '<p></p>' });
       const item = this._findTreeChapter(chapter.id);
-      if (page?.id && item) await this.selectPage(this._insertCreatedPageIntoTree(item, page));
+      if (page?.id && item) await this.openNewSectionForWriting(this._insertCreatedPageIntoTree(item, page));
     } catch (e) {
       this.setStatus?.(this.t('bookOrganizer.saveFailed', { detail: e.message }));
     }

@@ -61,10 +61,10 @@ Browser → NGINX (HTTPS) → Express (Port 3737)
   /jobs/pdf-export → Render-Job (eigene pdfkit-Pipeline mit PDF/A-2B)
   /docx-export/*   → Custom-Word-Export-Profile (CRUD + Font-Whitelist)
   /jobs/docx-export → Render-Job (programmatische docx-Lib, Manuskript für Lektorat/Verlag)
-  /blog/*          → WordPress-Blog-Connection (Buchtyp 'blog'): Status, Connect, Links, Konflikt-Resolve
-  /hubspot/*       → HubSpot-Blog-Connection (Buchtyp 'blog'): Status, Connect, Blogs/Authors-Combo, Links
-  /jobs/blog-*     → Blog-Sync-Jobs (initial-import, pull, push)
-  /jobs/hubspot-*  → HubSpot-Sync-Jobs (initial-import, push-as-draft)
+  /blog/*          → WordPress-Blog-Connection (Buchtyp 'blog'): Test, Connect + geteilte Sync-Routen (routes/sync-router.js: Status, Links, Konflikt-Diff/-Resolve, Trennen)
+  /hubspot/*       → HubSpot-Blog-Connection (Buchtyp 'blog'): Test, Blogs/Authors-Combo, Connect + dieselben geteilten Sync-Routen
+  /jobs/blog-*     → Blog-Sync-Jobs (import, pull, push, reconcile; Push/Abgleich/Routen aus routes/jobs/sync/)
+  /jobs/hubspot-*  → HubSpot-Sync-Jobs (import, push in den Draft-Buffer, reconcile; Push/Abgleich/Routen aus routes/jobs/sync/)
   /usage/*         → Feature-Usage-Tracking (Recency für Palette/Quick-Pills)
   /telemetry/*     → Block-Level-Merge-Counter (POST /telemetry/merge → merge_telemetry, exponiert via /metrics)
   /admin/books, /admin/logs, /admin/registration-requests, /admin/settings, /admin/usage, /admin/users

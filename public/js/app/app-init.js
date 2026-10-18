@@ -202,6 +202,8 @@ export const appInitMethods = {
       const locale = supported.includes(preferred) ? preferred : 'de';
       const region = cfg.userSettings?.default_region || (locale === 'en' ? 'US' : 'CH');
       this.$store.shell.defaultRegion = region;
+      this.$store.shell.defaultBuchtyp = cfg.userSettings?.default_buchtyp || '';
+      this.$store.shell.defaultBookLanguage = cfg.userSettings?.default_language || '';
       configureLocaleRegion(region);
       if (locale !== this.$store.shell.uiLocale) {
         await configureI18n(locale);

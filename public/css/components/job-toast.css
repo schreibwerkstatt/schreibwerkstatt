@@ -25,6 +25,7 @@
 }
 .job-toast--ok  { border-left-color: var(--color-ok-border);  background: var(--color-ok-bg);  color: var(--color-ok-text); }
 .job-toast--err { border-left-color: var(--color-err-border); background: var(--color-err-bg); color: var(--color-err-text); }
+.job-toast--warn { border-left-color: var(--color-warn-text); background: var(--color-warn-bg); color: var(--color-warn-text); }
 
 /* min-width: 0 + overflow-wrap: anywhere: lange URLs/Pfade ohne Leerzeichen
    (typisch in Fehlermeldungen) brechen um, statt den Toast über max-width

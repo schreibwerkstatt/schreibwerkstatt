@@ -4,7 +4,7 @@
 // Block-IDs vor Merge/Save, der Draft nach einem Save, der über einen
 // Seitenwechsel lief, und die Fehlerklassen eines gescheiterten PUT.
 import { clearDraft, editorHost, isNoChange, localeTag, readDraft, tzOpts, writeDraft } from './_shared.js';
-import { syncLiveBlockIds } from '../block-ids.js';
+import { syncLiveBlockIds } from '../../shared/block-ids.js';
 import { classifySaveError, isRetryableSaveError } from '../save-errors.js';
 import { noteSaveOutage } from '../save-outage.js';
 

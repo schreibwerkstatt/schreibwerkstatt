@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "0b23402ec963493a";
+self.__SHELL_BUILD = "81d00c9fb85401ad";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -265,6 +265,7 @@ self.__SHELL_MANIFEST = [
   "/js/book/book-settings/merge.js",
   "/js/book/book-settings/research.js",
   "/js/book/book-settings/settings.js",
+  "/js/book/book-settings/sync-shared.js",
   "/js/book/bookstats-avg.js",
   "/js/book/bookstats.js",
   "/js/book/buchlandkarte.js",
@@ -388,6 +389,7 @@ self.__SHELL_MANIFEST = [
   "/js/cards/book-chat-card.js",
   "/js/cards/book-create-card.js",
   "/js/cards/book-editor-card.js",
+  "/js/cards/book-editor/conflict.js",
   "/js/cards/book-editor/find.js",
   "/js/cards/book-editor/head.js",
   "/js/cards/book-editor/history.js",
@@ -583,7 +585,6 @@ self.__SHELL_MANIFEST = [
   "/js/editor/lektorat-evidence.js",
   "/js/editor/lektorat.js",
   "/js/editor/live-edit.js",
-  "/js/editor/notebook/block-ids.js",
   "/js/editor/notebook/card.js",
   "/js/editor/notebook/conflict-report.js",
   "/js/editor/notebook/edit.js",
@@ -631,6 +632,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/shared/autosave.js",
   "/js/editor/shared/block-caret.js",
   "/js/editor/shared/block-edge.js",
+  "/js/editor/shared/block-ids.js",
   "/js/editor/shared/block-merge.js",
   "/js/editor/shared/conflict-diff.js",
   "/js/editor/shared/conflict-text.js",
@@ -770,6 +772,7 @@ self.__SHELL_MANIFEST = [
   "/js/redaktion/status.js",
   "/js/register.js",
   "/js/repo/content.js",
+  "/js/repo/save-ids.js",
   "/js/safe-storage.js",
   "/js/scroll-fade.js",
   "/js/setting-field.js",
@@ -894,6 +897,7 @@ self.__SHELL_MANIFEST = [
   "/partials/autorenprofil.html",
   "/partials/avatar-menu.html",
   "/partials/book-chat-msg-extras.html",
+  "/partials/book-editor-conflict.html",
   "/partials/book-editor-history.html",
   "/partials/book-editor.html",
   "/partials/book-settings-book.html",

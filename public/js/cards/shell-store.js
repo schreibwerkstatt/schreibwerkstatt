@@ -27,6 +27,8 @@
 //   unitTerm        — Gliederungseinheit des offenen Buchs ('section'|'post'|'entry',
 //                   aus dem Buchtyp, i18n-unit-term.js); t() re-rendert darauf.
 //   defaultRegion   — Default-Region (Geocoding/Locale-Defaults).
+//   defaultBuchtyp / defaultBookLanguage — Profil-Vorschläge für neue Bücher
+//                   (/config → userSettings, '' = keiner); Buch-anlegen-Dialog.
 //   appTimezone     — App-weite Zeitzone (/config → app_settings.app.timezone);
 //                   Basis für tzOpts() + alle Date-Display-Formatter.
 //   appName         — App-Name (/config → app_settings.app.name); <title>, Header,
@@ -51,6 +53,8 @@ export function registerShellStore() {
     uiLocale: '',
     unitTerm: 'section',
     defaultRegion: '',
+    defaultBuchtyp: '',
+    defaultBookLanguage: '',
     appTimezone: 'Europe/Zurich',
     appName: 'Schreibwerkstatt',
     appVersion: '',

@@ -112,6 +112,11 @@ export const pageMethods = {
     this._updatePageViewHeight();
     // Listing-Cache kann stale sein (Page-Save aktualisiert ihn nicht).
     if (pd.updated_at) p.updated_at = pd.updated_at;
+    // Wer zuletzt geschrieben hat — das Konflikt-Modal der Draft-Wiederaufnahme
+    // nennt damit den Urheber der anderen Version (page-conflict.js#remoteAuthorFrom).
+    p.last_editor_email = pd.last_editor_email || null;
+    p.last_editor = pd.last_editor || null;
+    p.updated_by_name = pd.updated_by_name || null;
     this.currentPageEmpty = !htmlToText(html).trim();
     this.pageLastEditor = this._resolvePageLastEditor(pd.last_editor);
     this._refreshPendingDraft(p.id, html);

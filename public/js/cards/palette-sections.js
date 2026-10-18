@@ -131,7 +131,7 @@ function matchAll(entries, q, ctx, t) {
 }
 
 // args: { query, ctx, devMode, recentFeatureKeys, recentPageIds, t, root, providers }
-// ctx: { selectedBookId, pages, bookRole, buchtyp, cloudModelEffective }
+// ctx: { selectedBookId, hasBooks, pages, bookRole, buchtyp, cloudModelEffective }
 export function buildPaletteSections(args) {
   const { query, ctx, devMode, recentFeatureKeys, recentPageIds, t, root, providers } = args;
   const parsed = parseQuery(query);
@@ -156,7 +156,9 @@ export function buildPaletteSections(args) {
 
   if (!q) {
     // „Zuletzt"-Blöcke + Karten gruppiert nach FEATURE_GROUPS, App-Aktionen separat.
-    const recent = recentFeatures(recentFeatureKeys, features);
+    // Ohne Buch hat noch niemand etwas benutzt — «Zuletzt» zeigte nur die
+    // Default-Liste, lauter Karten, die ein Buch brauchen.
+    const recent = ctx.hasBooks === false ? [] : recentFeatures(recentFeatureKeys, features);
     if (recent.length) {
       sections.push({ key: 'recent', labelKey: 'palette.recent', items: recent.map(f => featureItem(f, ctx)) });
     }

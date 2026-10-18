@@ -61,6 +61,8 @@
   <div x-show="adminLogsError" class="error-msg card-section" x-text="adminLogsError"></div>
   <div x-show="adminLogsRotatedHint" class="muted-msg card-section" x-text="$app.t('admin.logs.rotated')"></div>
   <div x-show="adminLogsStreamError" class="muted-msg card-section" x-text="$app.t('admin.logs.streamError')"></div>
+  <button type="button" class="admin-logs-pending" x-show="adminLogsPending.length" @click="adminLogsFirstPage()"
+          x-text="$app.t('admin.logs.pending', { n: adminLogsPending.length })"></button>
 
   <!-- Log-Liste -->
   <!-- Der Query-Container sitzt auf diesem Wrapper, NICHT auf der Karte:
@@ -70,7 +72,7 @@
        Popover auf. Gegated: tests/e2e-app/combobox-anchoring.spec.js -->
   <div class="log-list-wrap">
     <div class="log-list" x-show="adminLogsEntries.length">
-      <template x-for="(e, idx) in adminLogsEntries" :key="adminLogsRowKey(e, idx)">
+      <template x-for="e in adminLogsPageEntries()" :key="e._k">
         <div class="log-row" :class="'log-row--' + e.level">
           <span class="log-row-ts" x-text="adminLogsFmtTs(e.ts)"></span>
           <span class="log-badge" :class="'log-badge--' + e.level" x-text="e.level.toUpperCase()"></span>
@@ -80,12 +82,12 @@
           <span class="log-row-msg" x-text="e.msg"></span>
           <button type="button" class="log-row-toggle"
                   x-show="e.stack && e.stack.length"
-                  @click="adminLogsToggleStack(idx)"
-                  :aria-expanded="adminLogsExpanded[String(idx)] ? 'true' : 'false'"
+                  @click="adminLogsToggleStack(e)"
+                  :aria-expanded="adminLogsExpanded[String(e._k)] ? 'true' : 'false'"
                   :aria-label="$app.t('admin.logs.toggleStack')">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-down"></use></svg>
           </button>
-          <pre class="log-stack" x-show="e.stack && adminLogsExpanded[String(idx)]" x-text="(e.stack || []).join('\n')"></pre>
+          <pre class="log-stack" x-show="e.stack && adminLogsExpanded[String(e._k)]" x-text="(e.stack || []).join('\n')"></pre>
         </div>
       </template>
     </div>
@@ -93,12 +95,18 @@
 
   <div x-show="!adminLogsEntries.length && !adminLogsLoading" class="muted-msg" x-text="$app.t('admin.logs.empty')"></div>
 
-  <!-- Footer: Load-More + Downloads -->
+  <!-- Footer: Seiten + Downloads -->
   <div class="admin-logs-footer">
-    <button type="button" @click="adminLogsLoadMore()"
-            :disabled="adminLogsLoading || !adminLogsHasMore"
-            x-show="adminLogsHasMore"
-            x-text="$app.t('admin.logs.loadMore')"></button>
+    <div class="admin-logs-pager" x-show="adminLogsEntries.length">
+      <button type="button" class="icon-btn icon-btn--ghost" @click="adminLogsPrevPage()"
+              :disabled="adminLogsPage === 0"
+              :data-tip="$app.t('admin.logs.prevPage')" :aria-label="$app.t('admin.logs.prevPage')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-left"/></svg></button>
+      <span class="muted-msg muted-msg--sm"
+            x-text="$app.t(adminLogsHasMore ? 'admin.logs.pageOfMore' : 'admin.logs.pageOf', { page: adminLogsPage + 1, pages: adminLogsPageCount() })"></span>
+      <button type="button" class="icon-btn icon-btn--ghost" @click="adminLogsNextPage()"
+              :disabled="adminLogsLoading || !adminLogsCanNext()"
+              :data-tip="$app.t('admin.logs.nextPage')" :aria-label="$app.t('admin.logs.nextPage')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-right"/></svg></button>
+    </div>
     <div class="admin-logs-downloads" x-show="adminLogsFiles.length">
       <span class="muted-msg muted-msg--sm" x-text="$app.t('admin.logs.download')"></span>
       <template x-for="f in adminLogsFiles" :key="f.key">

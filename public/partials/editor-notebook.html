@@ -59,7 +59,7 @@
                 x-show="currentPage && prov.card.statusFor(currentPage)">
             <template x-if="prov.card.statusFor(currentPage)">
               <span class="badge" :class="'badge--sync-' + prov.card.statusFor(currentPage)"
-                    :data-tip="prov.card.statusLabel(prov.card.statusFor(currentPage))"
+                    :data-tip="prov.card.statusTip(currentPage)"
                     x-text="prov.card.statusLabel(prov.card.statusFor(currentPage))"></span>
             </template>
             <template x-if="prov.card.canPush(currentPage) || prov.card.pushBusy[currentPage?.id]">

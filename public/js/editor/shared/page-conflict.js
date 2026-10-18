@@ -13,6 +13,7 @@
 
 import { contentRepo } from '../../repo/content.js';
 import { editorHost } from './editor-host.js';
+import { isOwnServerSave } from '../../repo/save-ids.js';
 
 /**
  * Vor dem PUT die Seite frisch lesen und `updated_at` mit dem Editor-Snapshot
@@ -22,9 +23,13 @@ import { editorHost } from './editor-host.js';
  * bekommt `null`, also „weitermachen"): ein Modal auf unsicherer Datenlage wäre
  * irreführend, der ohnehin folgende PUT läuft in den OCC-Guard des Backends.
  *
- * @returns {Promise<null|{remoteUpdatedAt, remoteUserName, remoteIsSelf, remoteDevice, remoteDeviceId, remoteHtml}>}
+ * `writer` (repo/save-ids.js): stammt der abweichende Server-Stand von einem
+ * Save, den derselbe Schreiber geschickt hat (Antwort verloren), ist es kein
+ * Konflikt — der folgende PUT nennt die Kennung, der Server nimmt ihn an.
+ *
+ * @returns {Promise<null|{remoteUpdatedAt, remoteUserName, remoteIsSelf, remoteDevice, remoteDeviceId, remoteSaveId, remoteHtml}>}
  */
-export async function checkPageConflict(pageId, expectedUpdatedAt) {
+export async function checkPageConflict(pageId, expectedUpdatedAt, { writer = null } = {}) {
   if (!expectedUpdatedAt) return null;
   // Offline kann es keinen Cross-User-Konflikt geben — der ohnehin folgende
   // PUT wird ebenfalls scheitern und in den Offline-Banner-Pfad fallen. Modal
@@ -45,6 +50,7 @@ export async function checkPageConflict(pageId, expectedUpdatedAt) {
     return null;
   }
   if (remote.updated_at === expectedUpdatedAt) return null;
+  if (writer && isOwnServerSave(writer, pageId, remote.last_save_id)) return null;
   return {
     remoteUpdatedAt: remote.updated_at,
     ...remoteAuthorFrom(remote),
@@ -59,7 +65,7 @@ export async function checkPageConflict(pageId, expectedUpdatedAt) {
  * des Anfragers gefüllt. Feldsatz wie im Konflikt-Objekt (conflict-text.js).
  *
  * @param {object|null} page  Antwort von `contentRepo.loadPage`
- * @returns {{remoteUserName, remoteIsSelf, remoteDevice, remoteDeviceId}}
+ * @returns {{remoteUserName, remoteIsSelf, remoteDevice, remoteDeviceId, remoteSaveId}}
  */
 export function remoteAuthorFrom(page) {
   const selfEmail = editorHost()?.$store?.session?.currentUser?.email || null;
@@ -68,6 +74,8 @@ export function remoteAuthorFrom(page) {
     remoteIsSelf: !!selfEmail && page?.last_editor_email === selfEmail,
     remoteDevice: page?.last_editor?.device_name || null,
     remoteDeviceId: page?.last_editor?.device_id || null,
+    // Kennung des Saves, der diesen Stand schrieb (repo/save-ids.js).
+    remoteSaveId: page?.last_save_id || null,
   };
 }
 

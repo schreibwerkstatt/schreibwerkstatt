@@ -67,6 +67,7 @@ test('_checkPageConflict: abweichender Stand → Konfliktobjekt', async () => {
     remoteIsSelf: false,
     remoteDevice: null,
     remoteDeviceId: null,
+    remoteSaveId: null,
     remoteHtml: '<p>remote</p>',
   });
 });

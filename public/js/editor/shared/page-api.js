@@ -21,9 +21,11 @@ import { buildSavePayload } from './save-pipeline.js';
 // Führt den PUT durch. Wirft mit dem ursprünglichen Error-Objekt — Aufrufer
 // entscheidet, ob 409 als Konflikt-Modal oder als stilles Banner gerendert
 // wird (saveEdit vs. quickSave-Pfad).
-export async function savePage(pageId, { html, pageName, source, expectedUpdatedAt, reason }) {
+// `writer` (`notebook`/`book`/`outbox`) + `extraOwnSaveIds`: Save-Kennungen für
+// die Eigen-Save-Erkennung bei verlorener Antwort (repo/save-ids.js).
+export async function savePage(pageId, { html, pageName, source, expectedUpdatedAt, reason, writer = null, extraOwnSaveIds = [] }) {
   const payload = buildSavePayload({ html, pageName, source, expectedUpdatedAt, reason });
-  return contentRepo.savePage(pageId, payload);
+  return contentRepo.savePage(pageId, payload, { writer, extraOwnSaveIds });
 }
 
 // Liefert true, wenn der Error ein PAGE_CONFLICT ist (409 + code). Aufrufer

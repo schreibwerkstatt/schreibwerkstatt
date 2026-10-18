@@ -21,6 +21,7 @@ import { bookEditorFindMethods, clearHighlights } from './book-editor/find.js';
 import { bookEditorOutlineMethods, buildOutlineNodes } from './book-editor/outline.js';
 import { sameStructureTitle } from '../structure-title.js';
 import { bookEditorSaveMethods } from './book-editor/save.js';
+import { bookEditorConflictMethods } from './book-editor/conflict.js';
 import { bookEditorHistoryMethods } from './book-editor/history.js';
 import { bookEditorHeadMethods } from './book-editor/head.js';
 import { stripFocusArtefacts, fetchJson } from '../utils.js';
@@ -49,6 +50,7 @@ const sessionState = () => ({
   loadError: '',
   activePageId: null,
   saveQueue: [],
+  conflictResolution: null, // Auflösungs-Modal (book-editor/conflict.js)
   saveAllRunning: false,
   // Pages, die der laufende Save-All-Durchgang abarbeitet — Quelle für die
   // Fortschrittsanzeige (siehe saveAllTotal/saveAllDone).
@@ -309,6 +311,7 @@ export function registerBookEditorCard() {
 
     ...bookEditorCommentsMethods,
     ...bookEditorSaveMethods,
+    ...bookEditorConflictMethods,
     ...bookEditorFindMethods,
     ...bookEditorOutlineMethods,
     ...bookEditorHistoryMethods,

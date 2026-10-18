@@ -14,7 +14,7 @@ import { htmlToText } from '../../utils.js';
 import { tErrorRaw } from '../../i18n.js';
 import { contentRepo } from '../../repo/content.js';
 import { readConflictBody, savePage } from '../../editor/shared/page-api.js';
-import { checkPageConflict } from '../../editor/shared/page-conflict.js';
+import { checkPageConflict, remoteAuthorFrom } from '../../editor/shared/page-conflict.js';
 import { conflictText } from '../../editor/shared/conflict-text.js';
 import { stripLektoratMarks } from '../../editor/shared/html-clean.js';
 import { isNoChange } from '../../editor/shared/save-pipeline.js';
@@ -23,6 +23,10 @@ import { isNoChange } from '../../editor/shared/save-pipeline.js';
 // Danach wird `savedAt` aktiv genullt — ein `Date.now()`-Vergleich im Template
 // wäre nicht reaktiv und der Status bliebe bis zum nächsten Re-Render hängen.
 const SAVED_FLASH_MS = 4000;
+
+// Merge-Runden je Save: Pre-Check + zwei 409-Races. Schreibt ein anderes Gerät
+// schneller, als hier gemergt wird, übernimmt der nächste Autosave.
+const MAX_MERGE_ROUNDS = 3;
 
 // Konflikt-Wortlaut (Gerät vs. User): shared/conflict-text.js. Die drei
 // Auftritte hier (saveError-Hinweis, Statuszeile, Block-Banner) unterscheiden
@@ -83,64 +87,90 @@ export const bookEditorSaveMethods = {
     const app = window.__app;
     if (!app) return;
     this._autosave.clear(block.pageId);
+    // Offener Konflikt: gespeichert wird erst nach einer Auflösung (Modal bzw.
+    // Banner-Knöpfe) — ein Save daneben liefe in denselben Merge und setzte
+    // die Entscheidungen im Modal zurück.
+    if (block.conflict) return;
 
-    // Stand, mit dem dieser Save losläuft — Referenz für „hat der User während
-    // des laufenden PUT weitergetippt?" (siehe applySaveOutcome).
-    const snapshot = block.html;
+    // Block-IDs vor dem Vergleich eindeutig machen (book-editor/conflict.js).
+    this._syncBlockIds(block);
     // stripLektoratMarks ist der geteilte Save-Cleaner (Lektorat-/Chat-Marks,
     // LanguageTool-UI, leere Trailing-Blöcke). Der Bucheditor rendert selbst
     // keine Marks — defensiv gegen HTML aus History-/Chat-Apply.
-    const newHtml = stripLektoratMarks(snapshot);
-    if (isNoChange(newHtml, block.originalHtml)) {
+    if (isNoChange(stripLektoratMarks(block.html), block.originalHtml)) {
       block.dirty = false;
       return;
     }
     // Leer-Block-Schutz: ein versehentlich geleerter Block darf die Seite beim
     // Verlassen nicht überschreiben. Dirty bleibt stehen.
-    if (!htmlToText(newHtml).trim()) {
+    if (!htmlToText(stripLektoratMarks(block.html)).trim()) {
       block.saveError = app.t('bookEditor.emptyAbort');
       return;
     }
     block.saving = true;
     block.saveError = '';
     try {
-      const conflict = await checkPageConflict(block.pageId, block.originalUpdatedAt);
-      if (conflict) {
-        block.conflict = {
-          remoteUserName: conflict.remoteUserName,
-          remoteUpdatedAt: conflict.remoteUpdatedAt,
-          remoteIsSelf: conflict.remoteIsSelf,
-          remoteDevice: conflict.remoteDevice,
-          remoteHtml: conflict.remoteHtml,
-        };
-        block.saveError = this._conflictText(block.conflict, 'hint');
-        return;
+      // Pre-Check, dann PUT. Veralteter Stand (Pre-Check oder 409-Race) →
+      // Block-Merge gegen den Server-Stand: kollisionsfrei geht es mit dem
+      // gemergten Stand und dem Server-Stempel in die nächste Runde, sonst
+      // öffnet der Merge Modal bzw. Banner. Höchstens MAX_MERGE_ROUNDS, dann
+      // bleibt der Block dirty für den nächsten Autosave.
+      for (let round = 0; round < MAX_MERGE_ROUNDS; round++) {
+        if (round === 0) {
+          const conflict = await checkPageConflict(block.pageId, block.originalUpdatedAt, { writer: 'book' });
+          if (conflict && this._mergeStaleBlock(block, conflict) !== 'merged') return;
+        }
+        // Stand, mit dem dieser PUT losläuft — Referenz für „hat der User
+        // während des laufenden PUT weitergetippt?" (siehe applySaveOutcome).
+        const snapshot = block.html;
+        const newHtml = stripLektoratMarks(snapshot);
+        try {
+          const saved = await savePage(block.pageId, {
+            html: newHtml,
+            pageName: block.name,
+            source: 'book',
+            writer: 'book',
+            expectedUpdatedAt: block.originalUpdatedAt || null,
+          });
+          // Basis des nächsten Merges ist die Fassung, die der Server
+          // gespeichert hat (samt dort vergebener Block-IDs) — die lädt ein
+          // anderes Gerät jetzt.
+          const stillDirty = applySaveOutcome(block, {
+            snapshot,
+            savedHtml: typeof saved?.html === 'string' ? saved.html : newHtml,
+            savedUpdatedAt: saved?.updated_at,
+          });
+          if (stillDirty) this._autosave.schedule(block.pageId);
+          this._savedFlash.set(block.pageId, () => { block.savedAt = null; }, SAVED_FLASH_MS);
+          app._syncPageStatsAfterSave?.({ id: block.pageId, updated_at: block.originalUpdatedAt }, newHtml);
+          return;
+        } catch (e) {
+          if (!(e?.status === 409 && e?.code === 'PAGE_CONFLICT')) throw e;
+          // 409 = Race nach dem Pre-Check: frischen Stand holen und mergen.
+          const remote = await this._loadRemoteForMerge(block, e);
+          if (!remote || this._mergeStaleBlock(block, remote) !== 'merged') return;
+        }
       }
-      const saved = await savePage(block.pageId, {
-        html: newHtml,
-        pageName: block.name,
-        source: 'book',
-        expectedUpdatedAt: block.originalUpdatedAt || null,
-      });
-      const stillDirty = applySaveOutcome(block, {
-        snapshot,
-        savedHtml: newHtml,
-        savedUpdatedAt: saved?.updated_at,
-      });
-      if (stillDirty) this._autosave.schedule(block.pageId);
-      this._savedFlash.set(block.pageId, () => { block.savedAt = null; }, SAVED_FLASH_MS);
-      app._syncPageStatsAfterSave?.({ id: block.pageId, updated_at: block.originalUpdatedAt }, newHtml);
+      this._autosave.schedule(block.pageId);
     } catch (e) {
-      // 409 = Race nach dem Pre-Check; identische Banner-Branch.
-      if (e?.status === 409 && e?.code === 'PAGE_CONFLICT') {
-        block.conflict = { ...readConflictBody(e), remoteHtml: null };
-        block.saveError = this._conflictText(block.conflict, 'hint');
-      } else {
-        // Übersetzter Backend-Fehler statt der rohen `PUT … HTTP 4xx`-Message.
-        block.saveError = e?.body ? tErrorRaw(e.body) : app.t('bookEditor.saveFailed');
-      }
+      // Übersetzter Backend-Fehler statt der rohen `PUT … HTTP 4xx`-Message.
+      block.saveError = e?.body ? tErrorRaw(e.body) : app.t('bookEditor.saveFailed');
     } finally {
       block.saving = false;
+    }
+  },
+
+  // Server-Stand nach einem 409. Scheitert der Read, bleibt es beim Banner aus
+  // dem 409-Body (ohne Remote-HTML; «Server-Version übernehmen» liest frisch).
+  async _loadRemoteForMerge(block, err) {
+    const body = readConflictBody(err);
+    try {
+      const page = await contentRepo.loadPage(block.pageId, { fresh: true });
+      return { ...body, ...remoteAuthorFrom(page), remoteHtml: page?.html || '', remoteUpdatedAt: page?.updated_at || body.remoteUpdatedAt };
+    } catch {
+      block.conflict = { ...body, remoteHtml: null, mergeable: true };
+      block.saveError = this._conflictText(block.conflict, 'hint');
+      return null;
     }
   },
 
@@ -162,6 +192,9 @@ export const bookEditorSaveMethods = {
   },
 
   // ── Konflikt-Auflösung ──────────────────────────────────────────────────
+  // Merge + Modal: book-editor/conflict.js. Hier die beiden Banner-Wege, die
+  // ohne Merge auskommen: Überschreiben (nur ohne Block-IDs in der Basis
+  // angeboten, `conflict.mergeable === false`) und Server-Stand übernehmen.
   resolveConflictOverwrite(block) {
     if (!block.conflict) return;
     block.originalUpdatedAt = block.conflict.remoteUpdatedAt;
@@ -194,6 +227,7 @@ export const bookEditorSaveMethods = {
       if (block.conflict !== conflict) return;
     }
     this._autosave.clear(block.pageId);
+    if (this.conflictResolution?.pageId === block.pageId) this.conflictResolution = null;
     // Undo darf nicht in die gerade verworfene eigene Fassung zurückführen.
     this._historyDrop?.(block.pageId);
     block.html = remoteHtml;

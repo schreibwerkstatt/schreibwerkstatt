@@ -180,10 +180,9 @@
             <div x-show="block.conflict" x-cloak class="book-editor-conflict">
               <svg class="icon book-editor-conflict__icon" aria-hidden="true"><use href="/icons.svg#alert-triangle"/></svg>
               <span x-text="conflictBanner(block.conflict)"></span>
-              <button type="button" class="danger" @click="resolveConflictOverwrite(block)"
-                      x-text="$app.t('bookEditor.conflict.overwrite')"></button>
-              <button type="button" @click="resolveConflictTakeRemote(block)"
-                      x-text="$app.t('bookEditor.conflict.takeRemote')"></button>
+              <button type="button" class="primary" x-show="block.conflict?.mergeable" @click="reopenBookConflict(block)" x-text="$app.t('edit.conflict.resolveBtn')"></button>
+              <button type="button" class="danger" x-show="!block.conflict?.mergeable" @click="resolveConflictOverwrite(block)" x-text="$app.t('bookEditor.conflict.overwrite')"></button>
+              <button type="button" @click="resolveConflictTakeRemote(block)" x-text="$app.t('bookEditor.conflict.takeRemote')"></button>
             </div>
           </div>
         </template>
@@ -354,4 +353,5 @@
       </div>
     </div>
   </template>
+  <!-- @include book-editor-conflict -->
 </div>

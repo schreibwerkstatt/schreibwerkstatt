@@ -20,7 +20,9 @@
   <!-- --readonly macht nur die Todo-Checkboxen klick-inert: ohne Schreibrecht
        kann der Haken nicht persistiert werden, also soll er auch nicht wie ein
        Klickziel aussehen (Persistenz-Pfad: page-view.js#_handleViewTodoClick). -->
-  <div x-show="renderedPageHtml"
+  <!-- Leerer Abschnitt: kein leeres Papier, an seiner Stelle steht der
+       Empty-State darunter. -->
+  <div x-show="renderedPageHtml && !currentPageEmpty"
        class="page-content-view"
        :class="{ 'page-content-view--readonly': !canEdit() }"
        x-html="renderedPageHtml"
@@ -123,7 +125,12 @@
      x-cloak>
   <span class="page-empty-state__text" x-text="t('editor.emptyPageHint')"></span>
   <template x-if="canEdit()">
-    <button type="button" class="danger" @click="deleteCurrentPage()"
-            x-text="t('editor.btn.deleteEmptyPage')"></button>
+    <span class="page-empty-state__actions">
+      <button type="button" class="primary" @click="startEdit()"
+              :disabled="checkLoading || saveApplying != null || originalHtml === null"
+              x-text="t('editor.btn.startWriting')"></button>
+      <button type="button" class="danger" @click="deleteCurrentPage()"
+              x-text="t('editor.btn.deleteEmptyPage')"></button>
+    </span>
   </template>
 </div>

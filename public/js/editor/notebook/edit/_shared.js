@@ -22,13 +22,17 @@ import { captureBlockCaret, restoreBlockCaret } from '../../shared/block-caret.j
 import { findBlock } from '../../shared/dom-block.js';
 import { EVT } from '../../../events.js';
 import { recordSentSave, isOwnSentSave } from '../sent-saves.js';
+import { isOwnServerSave } from '../../../repo/save-ids.js';
 
 // Jeder Notebook-PUT läuft hier durch: der Stand wird VOR dem Request als
 // abgeschickt vermerkt — geht die Antwort verloren, erkennt der nächste Merge
 // den Server-Stand trotzdem als eigenen (../sent-saves.js).
+// Zusätzlich trägt jeder PUT die Save-Kennungen des Schreibers `notebook`
+// (repo/save-ids.js) — der Server erkennt damit den eigenen Save selbst.
+const NOTEBOOK_WRITER = 'notebook';
 async function savePage(pageId, body) {
   recordSentSave(pageId, body?.html);
-  return putPage(pageId, body);
+  return putPage(pageId, { ...body, writer: NOTEBOOK_WRITER });
 }
 
 // Auto-Save: idle-debounce + max-Cap. Regel und Werte liegen in
@@ -53,4 +57,4 @@ export const AUTOSAVE_KEY = 'page';
 // `window.__app` (Root). Aufruf von extern: über die Trampoline-Forwarder
 // in [trampoline.js] am Root-Spread (`app.startEdit()` → `__notebookCard.startEdit()`).
 
-export { EVT, FEATURE_BLOCK_MERGE, ZOOM_MAX, ZOOM_MIN, buildResolvedHtml, captureBlockCaret, checkPageConflict, clearDraft, clearNormalSnapshot, conflictBannerFrom, conflictText, contentRepo, editorHost, findBlock, findInHtml, getActiveEditorContainer, handleEditorCopy, handleEditorCut, handleEditorPaste, htmlToText, installEditCounter, isNoChange, isOwnSentSave, isPageConflict, localeTag, mergeBlocks, mergedToHtml, mountEditorHtml, readConflictBody, readDraft, readEditorPrefs, remoteAuthorFrom, restoreBlockCaret, runQuoteNormalize, savePage, sortByPosition, stripLektoratMarks, trackMerge, tzOpts, writeDraft, writeEditorPrefs, writeNormalSnapshot };
+export { EVT, FEATURE_BLOCK_MERGE, ZOOM_MAX, ZOOM_MIN, buildResolvedHtml, captureBlockCaret, checkPageConflict, clearDraft, clearNormalSnapshot, conflictBannerFrom, conflictText, contentRepo, editorHost, findBlock, findInHtml, getActiveEditorContainer, handleEditorCopy, handleEditorCut, handleEditorPaste, htmlToText, installEditCounter, isNoChange, isOwnSentSave, isOwnServerSave, isPageConflict, localeTag, mergeBlocks, mergedToHtml, mountEditorHtml, NOTEBOOK_WRITER, readConflictBody, readDraft, readEditorPrefs, remoteAuthorFrom, restoreBlockCaret, runQuoteNormalize, savePage, sortByPosition, stripLektoratMarks, trackMerge, tzOpts, writeDraft, writeEditorPrefs, writeNormalSnapshot };

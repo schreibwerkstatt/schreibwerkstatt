@@ -374,7 +374,7 @@
 }
 .page-load-error__text { font-size: var(--font-em-95); }
 
-/* Empty-State im View-Modus: leere Seite + Direkt-Löschen. Sitzt anstelle
+/* Empty-State im View-Modus: leere Seite + «Jetzt schreiben» + Löschen. Sitzt anstelle
    von `.page-content-view` (das per `x-show` verschwindet). Visuell ruhig,
    keine Papier-Textur — Hinweis, nicht Inhalt. */
 .page-empty-state {
@@ -391,6 +391,11 @@
   color: var(--color-muted);
 }
 .page-empty-state__text { font-size: var(--font-em-95); }
+.page-empty-state__actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
 
 /* Aha-Nudge (Erstkontakt): einmaliger, ausblendbarer Hinweis im Lese-Modus, der
    das KI-Lektorat sichtbar macht. Sitzt über `.page-content-view`, an dieselbe

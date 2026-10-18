@@ -8,16 +8,39 @@ const { bootApp, selectSeededBook } = require('./_helpers/app');
 
 const EDIT_SEL = '#editor-card .page-content-view--editing';
 
-async function openPageInEdit(page, pageIdx) {
+// Eigener, frisch angelegter Abschnitt je Test: die geseedeten Abschnitte
+// teilen sich alle Specs eines Shards, und eine Vorgänger-Spec hinterlässt dort
+// Diagramm oder Bild am Seitenende — caretToEnd landete dann in der Figur.
+async function openFreshPageInEdit(page) {
   await bootApp(page);
   await selectSeededBook(page);
-  await page.evaluate(async (i) => {
-    await window.__app.selectPage(window.Alpine.store('nav').pages[i]);
-  }, pageIdx);
+  await page.evaluate(async () => {
+    const chapterId = window.Alpine.store('nav').pages.find((p) => p.chapter_id)?.chapter_id;
+    const r = await fetch('/content/pages', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chapter_id: chapterId,
+        name: 'Verlorene Antwort ' + Math.random().toString(36).slice(2, 8),
+        html: '<p>Tom steht am Fenster und sieht hinaus.</p><p>Draussen regnet es seit dem Morgen.</p>',
+      }),
+    });
+    const created = await r.json();
+    window.__freshPageId = created.id;
+    await window.__app.loadPages();
+    const pg = window.Alpine.store('nav').pages.find((p) => p.id === created.id);
+    await window.__app.selectPage(pg);
+  });
   await page.waitForFunction(() => window.__app.showEditorCard === true, null, { timeout: 15000 });
   await page.evaluate(() => window.__app.startEdit());
   await page.waitForSelector(EDIT_SEL, { timeout: 15000 });
 }
+
+// Abschnitt wieder entfernen: die Shard-DB teilen alle folgenden Specs.
+test.afterEach(async ({ page }) => {
+  await page.evaluate(async () => {
+    if (window.__freshPageId) await fetch(`/content/pages/${window.__freshPageId}`, { method: 'DELETE' });
+  }).catch(() => {});
+});
 
 async function caretToEnd(page) {
   await page.locator(EDIT_SEL).click();
@@ -50,7 +73,7 @@ async function loseNextSaveResponse(page) {
 
 test('Verlorene Save-Antwort + neue Absätze: kein Konflikt-Modal beim nächsten Save', async ({ page, consoleGuard }) => {
   consoleGuard.ignore(/\[quickSave\] (TypeError: Failed to fetch|JSHandle@object)/);
-  await openPageInEdit(page, 2);
+  await openFreshPageInEdit(page);
   await caretToEnd(page);
   await page.keyboard.press('Enter');
   await page.keyboard.type('Verlorenkus zieht sich Tom zurueck.');
@@ -104,7 +127,7 @@ async function typeTwoNewParagraphs(page, tag) {
 }
 
 test('Save aus demselben Browser (nicht von diesem Tab) wird gemergt, nicht überschrieben', async ({ page }) => {
-  await openPageInEdit(page, 2);
+  await openFreshPageInEdit(page);
   await typeTwoNewParagraphs(page, 'Eigenstand');
   // Ersten Absatz ändern, wie es der Bucheditor in einem anderen Tab täte:
   // derselbe Browser, also dieselbe Geräte-ID, aber nicht über diesen Tab.
@@ -141,7 +164,7 @@ test('Save aus demselben Browser (nicht von diesem Tab) wird gemergt, nicht übe
 
 test('Gegenprobe: dieselbe Stelle von einem anderen Gerät geändert öffnet das Modal', async ({ page }) => {
   const OTHER_DEVICE = '0b5e8c1e-1111-4222-8333-444455556667';
-  await openPageInEdit(page, 3);
+  await openFreshPageInEdit(page);
   await typeTwoNewParagraphs(page, 'Fremdprobe');
   await page.evaluate(() => window.__app.quickSave());
   await page.waitForTimeout(300);

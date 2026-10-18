@@ -163,6 +163,11 @@ async function lektoratAnalyze({ jobId, tok, text, local, prompts, system, promp
   // Enum lässt die objektiven Typen weg, die der Objektiv-Pass liefert.
   const stilSchema = buildLektoratSchema({ buchtyp, textsorte, stilOnly: true });
   const stilPromise = aiCall(jobId, tok, stilPrompt, system, null, null, 5000, 0.2, null, undefined, stilSchema).then(tick);
+  // Scheitert ein Objektiv-Lauf, wirft das `await` unten, bevor `stilPromise`
+  // abgeholt wird — dessen Rejection (gleiche Ursache: Key, Abbruch, Overload)
+  // bliebe sonst unbehandelt. Das eigentliche `await stilPromise` sieht den
+  // Fehler weiterhin.
+  stilPromise.catch(() => {});
 
   // Objektiv-Läufe STAFFELN statt sofort alle parallel: den ersten Lauf voll
   // abschliessen, damit er den Prompt-Cache primet (voller Input = System +

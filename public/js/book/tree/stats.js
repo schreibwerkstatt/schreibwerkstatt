@@ -149,6 +149,18 @@ export const treeStatsMethods = {
   // die Blatt-Kapitel mit Text; ein Buch ohne solche hat noch keine Form und
   // zaehlt nicht. Konsument: tree/load.js#createChapter (erster Abschnitt
   // entsteht dann mit dem Kapitel).
+  bookHasNoText() {
+    // Buch ohne Text — keine Abschnitte, oder für jeden Abschnitt ist der Zähler
+    // bekannt und alle stehen auf 0. Eine Komplettanalyse hätte nichts zu lesen.
+    // Unbekannte Zähler (Stats laden noch) gelten nicht als leer, sonst flackerte
+    // der Knopf bei jedem Buchwechsel. Konsumenten: Header-Knopf, alleAktualisieren.
+    if (!this.$store.nav.selectedBookId || this.treeLoading) return false;
+    const pages = this.$store.nav.pages || [];
+    if (!pages.length) return true;
+    const ts = this.tokEsts || {};
+    return pages.every(p => ts[p.id]) && this.tokTotals.chars === 0;
+  },
+
   _bookUsesSingleSectionChapters() {
     const leaves = (this.$store.nav.tree || []).filter(i =>
       i.type === 'chapter' && !i.solo && !i.hasChildren && i.pages?.length > 0);

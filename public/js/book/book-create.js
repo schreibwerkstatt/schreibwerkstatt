@@ -1,8 +1,7 @@
 // Neues Buch direkt aus der App anlegen. Trigger: Combobox-Footer-Eintrag
 // "+ Neues Buch …" → Modal mit Name + Buchtyp (Pflicht) + Kategorie (Pflicht nur
 // wenn der globale Pool nicht leer ist) → contentRepo.createBook, danach Buchtyp/
-// Kategorie persistieren → Liste neu laden + neues Buch selektieren + Book-
-// Settings-Karte öffnen. Buchtyp ist Pflicht, weil alle KI-Jobs den Genre-Kontext
+// Kategorie persistieren → Liste neu laden + ins neue Buch (Übersicht). Buchtyp ist Pflicht, weil alle KI-Jobs den Genre-Kontext
 // über getBookPrompts ziehen; Kategorie analog zur Save-Pflicht in den Settings.
 //
 // Methods der Karte Alpine.data('bookCreateCard') (cards/book-create-card.js) auf
@@ -16,7 +15,9 @@ import { fetchJson } from '../utils.js';
 export const bookCreateMethods = {
   openCreateBook() {
     this.bookCreateName = '';
-    this.bookCreateBuchtyp = '';
+    // Vorschlag statt leerer Pflichtauswahl: Profil-Standard, sonst Roman —
+    // der häufigste Fall; ändern kann man ihn hier und später in den Settings.
+    this.bookCreateBuchtyp = this._defaultBuchtyp();
     this.bookCreateCategoryId = '';
     this.bookCreateError = '';
     this.bookCreateBusy = false;
@@ -36,6 +37,24 @@ export const bookCreateMethods = {
     } catch {
       this.bookCreateCategoryPool = [];
     }
+  },
+
+  _defaultBuchtyp() {
+    const pref = this.$store.shell.defaultBuchtyp || '';
+    const keys = this.bookCreateBuchtypOptions().map(o => o.value);
+    if (pref && keys.includes(pref)) return pref;
+    return keys.includes('roman') ? 'roman' : (keys[0] || '');
+  },
+
+  // Sprache/Region des neuen Buchs: Profil-Standard, sonst UI-Sprache. Die
+  // Region muss zur Sprache passen (de: CH/DE, en: US/GB) — eine Profil-Region
+  // der anderen Sprache fällt auf deren Default zurück.
+  _newBookLangRegion() {
+    const shell = this.$store.shell;
+    const lang = ['de', 'en'].includes(shell.defaultBookLanguage) ? shell.defaultBookLanguage : (shell.uiLocale === 'en' ? 'en' : 'de');
+    const allowed = lang === 'en' ? ['US', 'GB'] : ['CH', 'DE'];
+    const region = allowed.includes(shell.defaultRegion) ? shell.defaultRegion : allowed[0];
+    return { lang, region };
   },
 
   // Buchtyp-Labels in der UI-Sprache; Keys sind sprachübergreifend identisch.
@@ -83,8 +102,7 @@ export const bookCreateMethods = {
       // schlägt es fehl, existiert das Buch trotzdem und die Werte lassen sich in
       // den Settings nachpflegen (wohin wir gleich navigieren) — kein Doppelanlegen.
       try {
-        const lang = this.$store.shell.uiLocale || 'de';
-        const region = this.$store.shell.uiLocale === 'en' ? 'US' : 'CH';
+        const { lang, region } = this._newBookLangRegion();
         await fetch(`/booksettings/${created.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -106,10 +124,11 @@ export const bookCreateMethods = {
       this.bookCreateBuchtyp = '';
       this.bookCreateCategoryId = '';
       await app.loadBooks({ fresh: true });
-      this.$store.nav.selectedBookId = String(created.id);
-      if (app.toggleBookSettingsCard) {
-        if (!app.showBookSettingsCard) app.toggleBookSettingsCard();
-      }
+      // Ins neue Buch wie beim Beispielbuch über den Hash: `_applyHash` lädt den
+      // (leeren) Baum und öffnet die Übersicht; die Sidebar bietet dort «Erstes
+      // Kapitel anlegen». Buchtyp/Sprache sind schon gesetzt — die Settings
+      // wären ein Umweg vor der ersten Zeile.
+      window.location.hash = '#book/' + created.id;
     } catch (e) {
       const msg = e.detail || e.code || e.message || String(e);
       this.bookCreateError = app.t('book.create.errorGeneric', { msg });

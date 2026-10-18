@@ -43,7 +43,7 @@ test('hubspot-import: zwei PUBLISHED-Posts → Pages + Jahres-Kapitel + Link-Ein
   // Newest-first geliefert (HubSpot-Default) — Import muss aufsteigend sortieren.
   mock.state.posts = [
     {
-      id: '1002', htmlTitle: 'Zweiter Beitrag', name: 'Zweiter Beitrag',
+      id: '1002', htmlTitle: 'Zweiter Beitrag | Mein Blog', name: 'Zweiter Beitrag',
       publishDate: '2025-01-02T10:00:00.000Z', state: 'PUBLISHED',
       postBody: '<p>Mehr Text</p>',
     },
@@ -67,7 +67,8 @@ test('hubspot-import: zwei PUBLISHED-Posts → Pages + Jahres-Kapitel + Link-Ein
   assert.equal(pages.length, 2);
   const names = pages.map(p => p.page_name).sort();
   assert.match(names[0], /^2024-03-15:/);
-  assert.match(names[1], /^2025-01-02:/);
+  // Titel aus `name`, nicht aus dem SEO-Titel `htmlTitle` (« | Blogname»).
+  assert.equal(names[1], '2025-01-02: Zweiter Beitrag');
 
   const chapters = ctx.dbSchema.db.prepare('SELECT chapter_name FROM chapters WHERE book_id = ?').all(BOOK_ID);
   const chNames = chapters.map(c => c.chapter_name).sort();
@@ -90,7 +91,7 @@ test('hubspot-import: zwei PUBLISHED-Posts → Pages + Jahres-Kapitel + Link-Ein
   assert.equal(links.length, 2);
 
   // Import setzt last_pushed_at als Sync-Baseline auf den Anlage-Zeitpunkt der
-  // Page → Status direkt nach Import ist 'pushed', nicht 'pushed-dirty'.
+  // Page → Status direkt nach Import ist 'synced', nicht 'push-needed'.
   for (const link of links) {
     assert.ok(link.last_pushed_at, 'last_pushed_at muss nach Import gesetzt sein');
     const page = ctx.dbSchema.db.prepare('SELECT updated_at FROM pages WHERE page_id = ?').get(link.page_id);
@@ -126,7 +127,7 @@ test('hubspot-push: Erst-Push erstellt Draft + Link; Re-Push aktualisiert den Bu
   ctx.shared.enqueueJob(jobId, () => hubspotSync.runHubspotPushJob(jobId, BOOK_ID, 'tester@test.dev', [page.id]));
   const job = await waitForJob(ctx.shared, jobId, { timeoutMs: 4000 });
   assert.equal(job.status, 'done', `got ${job.status}: ${job.error || ''}`);
-  assert.equal(job.result.pushed, 1);
+  assert.equal(job.result.createdRemote, 1);
   assert.equal(mock.state.created.length, 1);
   assert.equal(mock.state.created[0].state, 'DRAFT');
   assert.equal(mock.state.created[0].contentGroupId, '555');
@@ -139,6 +140,7 @@ test('hubspot-push: Erst-Push erstellt Draft + Link; Re-Push aktualisiert den Bu
   const firstPostId = link.hubspot_post_id;
   const firstPushedAt = link.last_pushed_at;
   assert.ok(firstPushedAt);
+  assert.equal(link.hubspot_updated_at, mock.state.created[0].updated, 'Draft-Stempel fuer die Vorab-Pruefung');
 
   // Page lokal ändern → Re-Push aktualisiert den Buffer via PATCH …/draft.
   await new Promise(r => setTimeout(r, 30)); // sicherstellen, dass updated_at > last_pushed_at
@@ -203,4 +205,157 @@ test('hubspot-push: Titel ohne Datums-Praefix, Titel-Werkstatt gewinnt, Lead + T
   assert.equal(p2.htmlTitle, 'Die Schlagzeile');
   assert.equal(p2.postSummary, 'A &amp; B');
   assert.match(p2.postBody, /^<p><em>Der Lead\.<\/em><\/p>/);
+});
+
+// ── Gemeinsamer Sync-Kern: Vorab-Pruefung, Remote weg, Abgleich, Bilder ──────
+
+async function pushJob(bookId, pageIds) {
+  const jobId = ctx.shared.createJob('hubspot-push', bookId, 'tester@test.dev', 'job.label.hubspotPushCount', { count: pageIds.length });
+  ctx.shared.enqueueJob(jobId, () => hubspotSync.runHubspotPushJob(jobId, bookId, 'tester@test.dev', pageIds));
+  return waitForJob(ctx.shared, jobId, { timeoutMs: 4000 });
+}
+
+async function pushedPage(bookId, html = '<p>Inhalt</p>') {
+  seedBlogBook(bookId);
+  hubspot.upsertConnection({ bookId, token: 'pat-x', blogId: '555', authorId: '111' });
+  const contentStore = require('../../lib/content-store');
+  const page = await contentStore.createPage({ book_id: bookId, name: 'Eintrag', html }, null);
+  const first = await pushJob(bookId, [page.id]);
+  assert.equal(first.status, 'done', `got ${first.status}: ${first.error || ''}`);
+  return { page, postId: hubspot.getLinkByPage(page.id).hubspot_post_id, contentStore };
+}
+
+test('hubspot-push: Draft in HubSpot geaendert → Konflikt, Buffer bleibt unangetastet', async () => {
+  const BOOK_ID = 75;
+  const { page, postId, contentStore } = await pushedPage(BOOK_ID);
+  mock.editDraft(postId, { postBody: '<p>In HubSpot ergaenzt</p>' });
+  await contentStore.savePage(page.id, { html: '<p>Lokal geaendert</p>' }, null);
+
+  const job = await pushJob(BOOK_ID, [page.id]);
+  assert.equal(job.status, 'error');
+  assert.match(String(job.error || ''), /HUBSPOT_CONFLICT/);
+  assert.equal(mock.state.updated.length, 0, 'kein PATCH auf den geaenderten Draft');
+  assert.equal(hubspot.getLinkByPage(page.id).conflict_state, 'detected');
+
+  // Erneuter Push bleibt gesperrt, bis der Konflikt geloest ist.
+  const again = await pushJob(BOOK_ID, [page.id]);
+  assert.equal(again.status, 'error');
+  assert.equal(mock.state.updated.length, 0);
+
+  // „App behalten": der gesehene Draft-Stand gilt als bekannt → Push geht durch.
+  hubspot.markConflictResolvedApp(page.id, mock.state.drafts[postId].updated);
+  const resolved = await pushJob(BOOK_ID, [page.id]);
+  assert.equal(resolved.status, 'done', `got ${resolved.status}: ${resolved.error || ''}`);
+  assert.equal(mock.state.updated.length, 1);
+  assert.match(mock.state.updated[0].postBody, /Lokal geaendert/);
+  assert.equal(hubspot.getLinkByPage(page.id).conflict_state, null);
+});
+
+test('hubspot-push: Post drueben geloescht → Link weg, HUBSPOT_REMOTE_GONE, kein stiller Neuanlage-Post', async () => {
+  const BOOK_ID = 76;
+  const { page, postId, contentStore } = await pushedPage(BOOK_ID);
+  mock.deletePost(postId);
+  await contentStore.savePage(page.id, { html: '<p>Neu</p>' }, null);
+
+  const job = await pushJob(BOOK_ID, [page.id]);
+  assert.equal(job.status, 'error');
+  assert.match(String(job.error || ''), /HUBSPOT_REMOTE_GONE/);
+  assert.equal(hubspot.getLinkByPage(page.id), null);
+  assert.equal(mock.state.created.length, 1, 'kein zweiter Post ohne erneuten Push');
+
+  // Der naechste Push legt bewusst einen neuen Entwurf an.
+  const again = await pushJob(BOOK_ID, [page.id]);
+  assert.equal(again.status, 'done');
+  assert.equal(again.result.createdRemote, 1);
+  assert.equal(mock.state.created.length, 2);
+});
+
+test('hubspot-reconcile: zieht Status/URL nach, entfernt geloeschte Posts', async () => {
+  const BOOK_ID = 77;
+  const { page, postId, contentStore } = await pushedPage(BOOK_ID);
+  const other = await contentStore.createPage({ book_id: BOOK_ID, name: 'Zweiter', html: '<p>z</p>' }, null);
+  assert.equal((await pushJob(BOOK_ID, [other.id])).status, 'done');
+  const otherPost = hubspot.getLinkByPage(other.id).hubspot_post_id;
+
+  mock.publish(postId);
+  mock.deletePost(otherPost);
+
+  const jobId = ctx.shared.createJob('hubspot-reconcile', BOOK_ID, 'tester@test.dev', 'job.label.hubspotReconcile');
+  ctx.shared.enqueueJob(jobId, () => hubspotSync.runHubspotReconcileJob(jobId, BOOK_ID, 'tester@test.dev'));
+  const job = await waitForJob(ctx.shared, jobId, { timeoutMs: 4000 });
+  assert.equal(job.status, 'done', `got ${job.status}: ${job.error || ''}`);
+  assert.equal(job.result.removed, 1);
+
+  const link = hubspot.getLinkByPage(page.id);
+  assert.equal(link.hubspot_state, 'PUBLISHED');
+  assert.equal(link.hubspot_url, `https://blog.example.com/p/${postId}`);
+  assert.equal(hubspot.getLinkByPage(other.id), null);
+});
+
+test('hubspot-push: Bilder gehen in den File-Manager, Tabelle bleibt Tabelle', async () => {
+  const BOOK_ID = 78;
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64');
+  await pushedPage(BOOK_ID,
+    `<figure><img src="data:image/png;base64,${png}" alt="Bild"><figcaption>Cap</figcaption></figure>`
+    + '<table><thead><tr><th scope="col">A</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table>');
+  assert.equal(mock.state.files.length, 1);
+  assert.equal(mock.state.files[0].folderPath, '/schreibwerkstatt');
+  const body = mock.state.created[0].postBody;
+  assert.match(body, /<figure><img src="https:\/\/f\.hubspotusercontent-eu1\.net\/hubfs\/4242\/[^"]+" alt="Bild"><figcaption>Cap<\/figcaption><\/figure>/);
+  assert.match(body, /<table><thead><tr><th scope="col">A<\/th><\/tr><\/thead><tbody><tr><td>1<\/td><\/tr><\/tbody><\/table>/);
+});
+
+test('hubspot-push: nicht hochladbares Bild fehlt im Post und kommt als Toast-Warnung zurueck', async () => {
+  const BOOK_ID = 80;
+  seedBlogBook(BOOK_ID);
+  hubspot.upsertConnection({ bookId: BOOK_ID, token: 'pat-x', blogId: '555', authorId: '111' });
+  const contentStore = require('../../lib/content-store');
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64');
+  const page = await contentStore.createPage({
+    book_id: BOOK_ID, name: 'Mit Fotos',
+    html: `<p>Text</p><figure><img src="data:image/heic;base64,AAAA" alt="iPhone"></figure>`
+      + `<figure><img src="data:image/png;base64,${png}" alt="ok"></figure>`,
+  }, null);
+  const filesBefore = mock.state.files.length;
+  const job = await pushJob(BOOK_ID, [page.id]);
+  assert.equal(job.status, 'done', `got ${job.status}: ${job.error || ''}`);
+  assert.equal(mock.state.files.length - filesBefore, 1, 'nur das PNG geht in den File-Manager');
+  assert.equal(job.result.imagesUploaded, 1);
+  assert.equal(job.result.imagesDropped, 1);
+  assert.deepEqual(job.result.toastWarnings, [
+    { key: 'sync.push.imagesDropped', params: { count: 1, pages: 'Mit Fotos' } },
+  ]);
+  const body = mock.state.created.at(-1).postBody;
+  assert.doesNotMatch(body, /iPhone|heic/);
+  assert.match(body, /alt="ok"/);
+});
+
+test('hubspot-push: ohne verworfene Bilder keine Toast-Warnung', async () => {
+  const BOOK_ID = 81;
+  seedBlogBook(BOOK_ID);
+  hubspot.upsertConnection({ bookId: BOOK_ID, token: 'pat-x', blogId: '555', authorId: '111' });
+  const contentStore = require('../../lib/content-store');
+  const page = await contentStore.createPage({ book_id: BOOK_ID, name: 'Ohne Bild', html: '<p>Text</p>' }, null);
+  const job = await pushJob(BOOK_ID, [page.id]);
+  assert.equal(job.status, 'done');
+  assert.equal(job.result.imagesDropped, 0);
+  assert.deepEqual(job.result.toastWarnings, []);
+});
+
+test('hubspot-import: zwei parallele Laeufe legen jeden Post genau einmal an (keine verwaiste Seite)', async () => {
+  const BOOK_ID = 79;
+  seedBlogBook(BOOK_ID);
+  hubspot.upsertConnection({ bookId: BOOK_ID, token: 'pat-x', blogId: '555', authorId: '111' });
+  const conn = hubspot.getConnection(BOOK_ID);
+  const { createLinkedPageFromHubspotPost } = require('../../lib/sync/providers/hubspot');
+  const post = { id: '3001', name: 'Doppelt', publishDate: '2025-05-05T00:00:00Z', postBody: '<p>x</p>', state: 'PUBLISHED' };
+  const cache1 = new Map();
+  const cache2 = new Map();
+  const results = await Promise.all([
+    createLinkedPageFromHubspotPost({ conn, bookId: BOOK_ID, post, chapterCache: cache1, userEmail: 'tester@test.dev' }),
+    createLinkedPageFromHubspotPost({ conn, bookId: BOOK_ID, post, chapterCache: cache2, userEmail: 'tester@test.dev' }),
+  ]);
+  assert.equal(results.filter(Boolean).length, 1);
+  const pages = ctx.dbSchema.db.prepare('SELECT page_id FROM pages WHERE book_id = ?').all(BOOK_ID);
+  assert.equal(pages.length, 1, 'die Seite des Verlierers ist wieder weg');
 });

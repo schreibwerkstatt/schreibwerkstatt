@@ -579,8 +579,13 @@
       </li>
     </ol>
     <p class="welcome-philosophy" x-text="t('welcome.philosophy')"></p>
-    <button class="primary" @click="openCreateBook()" x-text="t('welcome.cta')"></button>
-    <button type="button" class="welcome-help-link internal-link" @click="toggleHelpCard()" x-text="t('welcome.helpLink')"></button>
+    <div class="welcome-actions">
+      <button class="primary" @click="openCreateBook()" x-text="t('welcome.cta')"></button>
+      <button type="button" class="secondary" @click="importDemoBookFromWelcome()" :disabled="demoBookBusy"
+              :data-tip="t('welcome.demoTip')"
+              x-text="demoBookBusy ? t('onboarding.demo.busy') : t('welcome.demoCta')"></button>
+    </div>
+    <button type="button" class="welcome-help-link internal-link" @click="openHelpFeatures()" x-text="t('welcome.helpLink')"></button>
   </div>
 </div>
 
@@ -614,8 +619,10 @@
   </div>
 </div>
 
-<div class="layout" :class="{ 'layout--no-sidebar': isAdminOnly }">
-<div class="layout-sidebar" x-show="$store.session.currentUser && !isAdminOnly" x-cloak>
+<!-- Ohne ein einziges Buch hat der Abschnittsbaum nichts zu zeigen (nur
+     ausgegraute Werkzeuge) — die Sidebar fällt dann weg wie beim Admin-Konto. -->
+<div class="layout" :class="{ 'layout--no-sidebar': isAdminOnly || (booksLoaded && $store.nav.books.length === 0) }">
+<div class="layout-sidebar" x-show="$store.session.currentUser && !isAdminOnly && !(booksLoaded && $store.nav.books.length === 0)" x-cloak>
   <div id="partial-sidebar"></div>
 </div><!-- end layout-sidebar -->
 <div class="layout-main" id="main-content" tabindex="-1">

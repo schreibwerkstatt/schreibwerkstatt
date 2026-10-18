@@ -66,7 +66,13 @@ export function registerOnboardingCard() {
     // Titel/Beschreibung/CTA-Label eines Schritts (i18n).
     stepTitle(key) { return window.__app?.t?.(`onboarding.step.${key}.title`) || key; },
     stepDesc(key) { return window.__app?.t?.(`onboarding.step.${key}.desc`) || ''; },
-    stepCta(key) { return window.__app?.t?.(`onboarding.step.${key}.cta`) || ''; },
+    // Ohne gewähltes Buch führt jeder CTA zu «Buch anlegen» (doStep) — dann
+    // trägt er auch dessen Beschriftung statt «Analyse starten» o. ä.
+    stepCta(key) {
+      const app = window.__app;
+      const target = (key !== 'book' && !window.Alpine?.store('nav')?.selectedBookId) ? 'book' : key;
+      return app?.t?.(`onboarding.step.${target}.cta`) || '';
+    },
 
     // CTA eines offenen Schritts: navigiert in die passende Funktion. Schritte
     // 2–4 brauchen ein gewaehltes Buch; ohne Buch faellt alles auf „Buch anlegen".
@@ -80,30 +86,16 @@ export function registerOnboardingCard() {
       if (key === 'share') { app.toggleShareLinksCard?.(); return; }
     },
 
-    // Beispielbuch anlegen + hineinnavigieren. Idempotent serverseitig.
+    // Beispielbuch anlegen + hineinnavigieren (Root-Pfad, geteilt mit der
+    // Welcome-Karte). Die Buch-Übersicht schliesst diese Karte via Exklusivität.
     async importDemo() {
       if (this.demoBusy) return;
       this.demoBusy = true;
       this.error = '';
       const app = window.__app;
-      try {
-        const res = await fetch('/me/onboarding/demo-book', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        });
-        if (!res.ok) throw new Error('demo failed');
-        const data = await res.json();
-        if (data?.bookId && app) {
-          await app.loadBooks?.({ fresh: true });
-          // Ueber den Hash navigieren → _applyHash laedt Seiten + oeffnet die
-          // Buch-Uebersicht (schliesst die Onboarding-Karte via Exklusivitaet).
-          window.location.hash = '#book/' + data.bookId;
-        }
-      } catch {
-        this.error = app?.t?.('onboarding.demoError') || '';
-      } finally {
-        this.demoBusy = false;
-      }
+      const ok = await app?.importDemoBook?.();
+      if (!ok) this.error = app?.t?.('onboarding.demoError') || '';
+      this.demoBusy = false;
     },
 
     // „Ausblenden": Onboarding als erledigt markieren + Karte schliessen.

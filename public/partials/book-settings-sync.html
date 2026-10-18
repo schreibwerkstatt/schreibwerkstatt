@@ -65,6 +65,7 @@
                autocomplete="current-password"
                :placeholder="blogConnection ? $app.t('blog.connect.passwordReplace') : ''"
                :disabled="blogBusy">
+        <p class="card-form-hint" x-text="$app.t('blog.connect.passwordHint')"></p>
       </div>
 
       <div class="card-form-row">

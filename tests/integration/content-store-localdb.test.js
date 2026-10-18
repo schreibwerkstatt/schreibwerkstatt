@@ -346,3 +346,53 @@ test('createChapter after_chapter_id: Geschwister direkt hinter dem Anker, auch 
   await assert.rejects(() => ctx.contentStore.createChapter({ book_id: other, name: 'X', after_chapter_id: a }));
   assert.equal((await ctx.contentStore.listChapters(other)).length, 0);
 });
+
+// Save-Kennung (Migration 331): Eigen-Save-Erkennung bei verlorener Antwort.
+const SID = (n) => `00000000-0000-4000-8000-00000000000${n}`;
+const _sleep = () => new Promise(r => setTimeout(r, 5));
+
+test('localdb: Save mit veraltetem Stempel läuft durch, wenn der Server-Stand ein eigener Vorgänger-Save ist', async () => {
+  const pageId = _seedPage(_seedBook(), null);
+  const v0 = await ctx.contentStore.loadPage(pageId);
+  await _sleep();
+  // Save A landet, die Antwort geht verloren → Client kennt nur v0.
+  const a = await ctx.contentStore.savePage(pageId, { html: '<p>A</p>', expected_updated_at: v0.updated_at, save_id: SID(1) });
+  assert.equal(a.last_save_id, SID(1));
+  await _sleep();
+  const b = await ctx.contentStore.savePage(pageId, {
+    html: '<p>A und weiter</p>', expected_updated_at: v0.updated_at, save_id: SID(2), own_save_ids: [SID(1)],
+  });
+  assert.equal(b.save_match, 'own');
+  assert.equal(noBid(b.html), '<p>A und weiter</p>');
+  assert.equal(b.last_save_id, SID(2));
+});
+
+test('localdb: fremder Write dazwischen → eigene Kennungen helfen nicht, PAGE_CONFLICT', async () => {
+  const pageId = _seedPage(_seedBook(), null);
+  const v0 = await ctx.contentStore.loadPage(pageId);
+  await _sleep();
+  const a = await ctx.contentStore.savePage(pageId, { html: '<p>A</p>', expected_updated_at: v0.updated_at, save_id: SID(3) });
+  await _sleep();
+  // Fremder Schreiber (Job, anderes Gerät ohne Kennung) setzt last_save_id auf NULL.
+  const f = await ctx.contentStore.savePage(pageId, { html: '<p>Fremd</p>', expected_updated_at: a.updated_at });
+  assert.equal(f.last_save_id, null);
+  await _sleep();
+  await assert.rejects(
+    () => ctx.contentStore.savePage(pageId, {
+      html: '<p>A und weiter</p>', expected_updated_at: v0.updated_at, save_id: SID(4), own_save_ids: [SID(3)],
+    }),
+    (err) => err.code === 'PAGE_CONFLICT',
+  );
+  assert.equal(noBid((await ctx.contentStore.loadPage(pageId)).html), '<p>Fremd</p>');
+});
+
+test('localdb: Wiederholung desselben Saves (gleiche save_id) schreibt nicht erneut', async () => {
+  const pageId = _seedPage(_seedBook(), null);
+  const v0 = await ctx.contentStore.loadPage(pageId);
+  await _sleep();
+  const a = await ctx.contentStore.savePage(pageId, { html: '<p>A</p>', expected_updated_at: v0.updated_at, save_id: SID(5) });
+  await _sleep();
+  const again = await ctx.contentStore.savePage(pageId, { html: '<p>A</p>', expected_updated_at: v0.updated_at, save_id: SID(5) });
+  assert.equal(again.save_match, 'replay');
+  assert.equal(again.updated_at, a.updated_at);
+});

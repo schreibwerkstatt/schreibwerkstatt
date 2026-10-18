@@ -21,6 +21,11 @@ export function registerAdminLogsCard() {
     adminLogsHasMore: true,
     adminLogsOldestTs: null,
     adminLogsExpanded: {},
+    adminLogsPage: 0,
+    adminLogsPending: [],
+    _adminLogsIncoming: [],
+    _adminLogsFlushTimer: null,
+    _adminLogsSeq: 0,
     adminLogsLevels: ADMIN_LOGS_LEVELS,
     _lifecycle: null,
 
@@ -35,9 +40,8 @@ export function registerAdminLogsCard() {
       this._lifecycle = setupCardLifecycle(this, {
         onViewReset: () => {
           this._adminLogsLeave();
-          this.adminLogsEntries = [];
+          this._adminLogsResetList();
           this.adminLogsError = '';
-          this.adminLogsExpanded = {};
           this.adminLogsInitialized = false;
         },
       });

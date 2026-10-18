@@ -159,6 +159,15 @@
     padding-top: var(--space-2xs);
     border-top: 1px solid var(--color-border);
   }
+  .admin-logs-pager {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2xs);
+  }
+  .admin-logs-pending {
+    align-self: flex-start;
+    margin-bottom: var(--space-2xs);
+  }
   .admin-logs-downloads {
     display: flex;
     flex-wrap: wrap;

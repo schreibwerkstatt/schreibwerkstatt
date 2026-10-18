@@ -63,6 +63,17 @@ test('Claude: HTTP-Fehler → job.error.aiHttpError mit status + detail', async 
   } finally { globalThis.fetch = realFetch; }
 });
 
+test('Claude: HTTP 401/403 → job.error.aiAuthFailed statt roher Provider-JSON', async () => {
+  for (const status of [401, 403]) {
+    globalThis.fetch = async () => new Response('{"type":"error","error":{"type":"authentication_error","message":"x-api-key header is required"}}', { status });
+    try {
+      await assert.rejects(_callClaude(PROMPT, 'sys', null, null, null), (e) =>
+        e.message === 'job.error.aiAuthFailed' && e.i18nParams.provider === 'Claude'
+        && e.i18nParams.status === status && /authentication_error/.test(e.detail));
+    } finally { globalThis.fetch = realFetch; }
+  }
+});
+
 test('Claude: Fehler-Event im Stream → job.error.aiStreamError', async () => {
   globalThis.fetch = async () => sseResponse([START, { type: 'error', error: { type: 'api_error', message: 'boom' } }]);
   try {

@@ -1,5 +1,5 @@
 // Teil von notebookEditMethods (siehe Facade edit.js).
-import { FEATURE_BLOCK_MERGE, buildResolvedHtml, captureBlockCaret, checkPageConflict, clearDraft, conflictBannerFrom, conflictText, contentRepo, editorHost, isOwnSentSave, isPageConflict, mergeBlocks, mergedToHtml, mountEditorHtml, isNoChange, readConflictBody, readDraft, remoteAuthorFrom, restoreBlockCaret, savePage, stripLektoratMarks, trackMerge, writeDraft } from './_shared.js';
+import { FEATURE_BLOCK_MERGE, buildResolvedHtml, captureBlockCaret, checkPageConflict, clearDraft, conflictBannerFrom, conflictText, contentRepo, editorHost, isOwnSentSave, isOwnServerSave, isPageConflict, mergeBlocks, mergedToHtml, mountEditorHtml, NOTEBOOK_WRITER, isNoChange, readConflictBody, readDraft, remoteAuthorFrom, restoreBlockCaret, savePage, stripLektoratMarks, trackMerge, writeDraft } from './_shared.js';
 import { classifySaveError } from '../save-errors.js';
 import { conflictDiffView } from '../../shared/conflict-diff.js';
 import { noteSaveOutage } from '../save-outage.js';
@@ -184,7 +184,7 @@ export const conflictMethods = {
   // Seite und liegt darum nicht mehr hier — der Bucheditor importiert dieselbe
   // Funktion direkt, statt über die Root-Trampoline in diese Karte zu greifen.
   _checkPageConflict(pageId, expectedUpdatedAt) {
-    return checkPageConflict(pageId, expectedUpdatedAt);
+    return checkPageConflict(pageId, expectedUpdatedAt, { writer: NOTEBOOK_WRITER });
   },
 
 
@@ -317,11 +317,10 @@ export const conflictMethods = {
       }
     }
     // Server-Stand ist ein eigener, verspätet angekommener Save dieses Tabs
-    // (../sent-saves.js): der lokale Stand ist sein Nachfahre, kein Merge.
-    // Nur der Fingerabdruck entscheidet, nie Konto + Geräte-ID: die Geräte-ID
-    // gilt für den ganzen Browser, Bucheditor, Outbox und andere Tabs schreiben
-    // mit derselben — ein «eigener» Stand von dort würde still überschrieben.
-    const ownFp = isOwnSentSave(pageId, remoteHtml);
+    // (../sent-saves.js, repo/save-ids.js): der lokale Stand ist sein Nachfahre.
+    // Nie über Konto + Geräte-ID: die gilt für den ganzen Browser, Bucheditor,
+    // Outbox und andere Tabs — ein «eigener» Stand von dort würde überschrieben.
+    const ownFp = isOwnSentSave(pageId, remoteHtml) || isOwnServerSave(NOTEBOOK_WRITER, pageId, author?.remoteSaveId);
     if (ownFp) {
       return { merged: true, own: true, saveHtml: localHtml, expectedAt: remoteUpdatedAt };
     }
@@ -384,10 +383,10 @@ export const conflictMethods = {
     const source = app.focusActive ? 'focus' : 'main';
     const fromPage = remoteAuthorFrom(remote);
     const author = {
+      ...fromPage,
       remoteUserName: change?.last_editor_name || fromPage.remoteUserName,
       remoteIsSelf: change ? !!change.is_self : fromPage.remoteIsSelf,
       remoteDevice: change?.device_label || fromPage.remoteDevice,
-      remoteDeviceId: fromPage.remoteDeviceId,
     };
     const merge = await this._attemptBlockMerge({
       localHtml, source, pageId, remoteHtml, remoteUpdatedAt: remote.updated_at, liveLocal: true, author, via: 'pull',
@@ -428,7 +427,7 @@ export const conflictMethods = {
     // Server-Stand ist ein Zwischenstand, den dieser Tab selbst geschickt hat
     // (Antwort verloren, danach neu geladen): der Draft ist sein Nachfahre.
     const author = remoteAuthorFrom(app.currentPage);
-    const ownFp = isOwnSentSave(app.currentPage.id, serverHtml);
+    const ownFp = isOwnSentSave(app.currentPage.id, serverHtml) || isOwnServerSave(NOTEBOOK_WRITER, app.currentPage.id, author.remoteSaveId, draft.ownSaveIds);
     if (ownFp) return { html: draft.html };
     let m;
     try { m = mergeBlocks(draft.originalHtml, draft.html, serverHtml); }

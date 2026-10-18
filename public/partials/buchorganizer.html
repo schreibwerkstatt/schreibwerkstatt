@@ -165,43 +165,46 @@
     </ul>
   </div>
 
-  <!-- Konflikt-Diff-Modal: zeigt App-Inhalt vs. WP-Inhalt, User wählt die Quelle. -->
-  <div class="blog-conflict-overlay" x-show="!!$blog.conflictOpen" x-cloak
-       @keydown.escape.window="$blog.closeConflict()">
+  <!-- Konflikt-Diff-Modal (pro Sync-Provider, Logik in cards/sync/sync-core.js):
+       App-Inhalt vs. Remote-Inhalt, User wählt die Quelle. -->
+  <template x-for="prov in $syncProviders" :key="'conflict-' + prov.key">
+  <div class="blog-conflict-overlay" x-show="!!prov.card.conflictOpen" x-cloak
+       @keydown.escape.window="prov.card.closeConflict()">
     <div class="blog-conflict-modal">
       <div class="blog-conflict-header">
-        <span class="card-title" x-text="$app.t('blog.conflict.title')"></span>
-        <button type="button" class="organizer-delete-btn" @click="$blog.closeConflict()" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+        <span class="card-title" x-text="$app.t(prov.key + '.conflict.title')"></span>
+        <button type="button" class="organizer-delete-btn" @click="prov.card.closeConflict()" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
       </div>
-      <template x-if="!$blog.conflictData">
+      <template x-if="!prov.card.conflictData">
         <div class="muted-msg" x-text="$app.t('common.loading')"></div>
       </template>
-      <template x-if="$blog.conflictData">
+      <template x-if="prov.card.conflictData">
         <div class="blog-conflict-body">
           <div class="blog-conflict-side">
             <div class="blog-conflict-side-header">
-              <h4 x-text="$app.t('blog.conflict.local', { appName: $store.shell.appName })"></h4>
-              <span class="muted" x-text="$blog.conflictData.local.name"></span>
+              <h4 x-text="$app.t('sync.conflict.local', { appName: $store.shell.appName })"></h4>
+              <span class="muted" x-text="prov.card.conflictData.local.name"></span>
             </div>
-            <div class="blog-conflict-content" x-html="$blog.conflictData.local.html"></div>
+            <div class="blog-conflict-content" x-html="prov.card.conflictData.local.html"></div>
           </div>
           <div class="blog-conflict-side">
             <div class="blog-conflict-side-header">
-              <h4 x-text="$app.t('blog.conflict.remote')"></h4>
-              <span class="muted" x-text="$blog.conflictData.remote.title"></span>
+              <h4 x-text="$app.t(prov.key + '.conflict.remote')"></h4>
+              <span class="muted" x-text="prov.card.conflictData.remote.title"></span>
             </div>
-            <div class="blog-conflict-content" x-html="$blog.conflictData.remote.html"></div>
+            <div class="blog-conflict-content" x-html="prov.card.conflictData.remote.html"></div>
           </div>
         </div>
       </template>
-      <div class="blog-conflict-actions" x-show="$blog.conflictData">
-        <button type="button" @click="$blog.resolveConflict('app')"
-                x-text="$app.t('blog.conflict.keepApp')"></button>
-        <button type="button" @click="$blog.resolveConflict('wp')"
-                x-text="$app.t('blog.conflict.takeWp')"></button>
-        <button type="button" class="btn-compact" @click="$blog.closeConflict()"
+      <div class="blog-conflict-actions" x-show="prov.card.conflictData">
+        <button type="button" @click="prov.card.resolveConflict('app')"
+                x-text="$app.t('sync.conflict.keepApp')"></button>
+        <button type="button" @click="prov.card.resolveConflict('remote')"
+                x-text="$app.t(prov.key + '.conflict.takeRemote')"></button>
+        <button type="button" class="btn-compact" @click="prov.card.closeConflict()"
                 x-text="$app.t('common.cancel')"></button>
       </div>
     </div>
   </div>
+  </template>
 </div>

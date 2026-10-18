@@ -16,6 +16,10 @@ const { jsonBody, NAME_MAX, _validDeviceId, _logToken, _logStamp, _deviceTokenLa
 const { htmlToPlainText } = require('../../lib/html-text');
 const logger = require('../../logger');
 
+// Deckel für `own_save_ids`: so viele unbestätigte Saves hat ein Schreiber
+// nach einem Funkloch höchstens offen (Autosave alle paar Sekunden).
+const OWN_SAVE_IDS_MAX = 16;
+
 function register(router) {
   // GET /content/pages/:page_id — Volltext + Metadaten.
   router.get('/pages/:page_id', async (req, res) => {
@@ -62,6 +66,18 @@ function register(router) {
         req.body.device_id = null;
       }
     }
+    // Save-Kennung + Kennungen früherer, unbestätigter Saves desselben
+    // Schreibers (verlorene Antwort) — nur UUIDs, kleingeschrieben verglichen
+    // (Swift `UUID().uuidString` liefert Grossbuchstaben), Liste auf die
+    // jüngsten OWN_SAVE_IDS_MAX gekürzt; alles andere fällt weg und der Save
+    // läuft wie ohne Kennung.
+    if (req.body) {
+      const norm = (s) => (_validDeviceId(s) ? s.toLowerCase() : null);
+      req.body.save_id = norm(req.body.save_id);
+      req.body.own_save_ids = Array.isArray(req.body.own_save_ids)
+        ? req.body.own_save_ids.map(norm).filter(Boolean).slice(-OWN_SAVE_IDS_MAX)
+        : [];
+    }
     try {
       const saved = await contentStore.savePage(pageId, req.body || {}, req);
       // Gegenstück zum PAGE_CONFLICT-Messpunkt: welcher Tab über welchen Weg
@@ -69,7 +85,7 @@ function register(router) {
       // Ohne diese Zeile ist ein Selbst-Konflikt (Antwort im Netz verloren)
       // nicht von einem fremden Schreiber desselben Geräts zu unterscheiden.
       if (typeof req.body?.html === 'string') {
-        logger.info(`PAGE_SAVE Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, neu ${saved?.updated_at || '-'}.`);
+        logger.info(`PAGE_SAVE Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, neu ${saved?.updated_at || '-'}${saved?.save_match ? ` (${saved.save_match === 'own' ? 'eigener Vorgaenger-Save' : 'Wiederholung'})` : ''}.`);
       }
       res.json(saved);
     }

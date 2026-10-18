@@ -210,7 +210,10 @@ export const appJobsCoreMethods = {
     // Errors immer toasten — auch für Job-Typen ohne explizites Label
     // (z.B. synonyme, lektorat-single). Sonst landet AI_UNREACHABLE nur im Log.
     if (!labelKey && !isError) return;
-    const severity = isError ? 'err' : 'ok';
+    // Gelungener Job mit Teilverlust (z.B. Blog-Push ohne nicht hochladbare
+    // Bilder): `result.toastWarnings: [{ key, params }]` macht den Toast gelb.
+    const warnings = !isError && Array.isArray(job.result?.toastWarnings) ? job.result.toastWarnings : [];
+    const severity = isError ? 'err' : (warnings.length ? 'warn' : 'ok');
     const suffixKey = isError ? 'toast.job.failed' : 'toast.job.done';
     const label = labelKey ? this.t(labelKey) : (detail.type || this.t('toast.job.fallback'));
     const suffix = this.t(suffixKey);
@@ -220,13 +223,14 @@ export const appJobsCoreMethods = {
       if (detailText && detailText !== job.error) message += `: ${detailText}`;
       else if (job.error) message += `: ${job.error}`;
     }
+    if (warnings.length) message += `: ${warnings.map(w => this.t(w.key, w.params || {})).join(' ')}`;
     this._showJobToast({ message, severity, jobType: detail.type, bookId: detail.bookId ?? null });
   },
 
   _showJobToast({ message, severity, jobType, bookId }) {
     if (this.$store.jobs._jobToastTimer) { clearTimeout(this.$store.jobs._jobToastTimer); this.$store.jobs._jobToastTimer = null; }
     this.$store.jobs.jobToast = { message, severity, jobType, bookId };
-    const ttl = severity === 'err' ? 9000 : 4500;
+    const ttl = severity === 'ok' ? 4500 : 9000;
     this.$store.jobs._jobToastTimer = setTimeout(() => {
       this.$store.jobs.jobToast = null;
       this.$store.jobs._jobToastTimer = null;

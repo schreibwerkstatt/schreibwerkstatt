@@ -71,12 +71,16 @@ router.get('/tail', async (req, res) => {
 });
 
 // ── GET /admin/logs/search ───────────────────────────────────────────────────
-// Cursor-Pagination rueckwaerts. `before` = ISO/Timestamp-String aus dem
-// vorigen Response. Liefert bis `limit` matches (default 200, max 500), liest
-// rueckwaerts durch current + rotated bis erschoepft.
+// Cursor-Pagination rueckwaerts. `before` = Timestamp des aeltesten schon
+// geladenen Eintrags, `skip` = wie viele passende Eintraege mit genau diesem
+// Timestamp der Client schon hat. Der Timestamp hat Sekunden-Aufloesung; ohne
+// `skip` fielen die restlichen Zeilen derselben Sekunde beim Nachladen weg.
+// Liefert bis `limit` matches (default 200, max 500), liest rueckwaerts durch
+// current + rotated bis erschoepft.
 router.get('/search', async (req, res) => {
   const limit  = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 200));
   const before = (req.query.before || '').trim();
+  let skip = Math.max(0, parseInt(req.query.skip, 10) || 0);
   const filter = _filterFromQuery(req.query);
   const files = listRotatedFiles(LOG_FILE, MAX_FILES);
   const matched = [];
@@ -90,8 +94,9 @@ router.get('/search', async (req, res) => {
     const entries = [...parseLines(chrono)];
     for (let i = entries.length - 1; i >= 0; i--) {
       const e = entries[i];
-      if (before && e.ts >= before) continue;
+      if (before && e.ts > before) continue;
       if (!_filterMatch(e, filter)) continue;
+      if (before && e.ts === before && skip > 0) { skip--; continue; }
       matched.push(e);
       if (matched.length >= limit) return true;
     }

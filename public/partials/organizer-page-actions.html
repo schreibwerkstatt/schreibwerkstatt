@@ -11,7 +11,7 @@
   <span class="sync-provider display-contents" :class="'sync-provider--' + prov.key">
     <template x-if="prov.card.statusFor(page)">
       <span class="badge" :class="'badge--sync-' + prov.card.statusFor(page)"
-            :data-tip="prov.card.statusLabel(prov.card.statusFor(page))"
+            :data-tip="prov.card.statusTip(page)"
             x-text="prov.card.statusLabel(prov.card.statusFor(page))"></span>
     </template>
     <template x-if="prov.card.canPush(page) || prov.card.pushBusy[page.id]">

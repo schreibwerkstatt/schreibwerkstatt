@@ -4,8 +4,8 @@
           class="update-all-btn"
           :class="{ 'update-all-btn--running': $store.jobs.alleAktualisierenLoading }"
           @click="alleAktualisieren()"
-          :disabled="$store.jobs.alleAktualisierenLoading || !$store.nav.selectedBookId"
-          :data-tip="t('header.updateAllTitle')">
+          :disabled="$store.jobs.alleAktualisierenLoading || !$store.nav.selectedBookId || bookHasNoText()"
+          :data-tip="bookHasNoText() ? t('header.updateAllEmptyBook') : t('header.updateAllTitle')">
     <span class="update-all-btn-ring"
           x-show="$store.jobs.alleAktualisierenLoading"
           :style="{ '--progress': ($store.jobs.alleAktualisierenProgress || 0) + '%' }"

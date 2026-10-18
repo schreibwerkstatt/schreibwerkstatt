@@ -1,4 +1,4 @@
-// Block-IDs (`data-bid`) im Live-Editor des Notebook-Editors pflegen.
+// Block-IDs (`data-bid`) in einem Live-Editor pflegen — Notebook-Editor und Bucheditor.
 //
 // Der Block-Merge (shared/block-merge.js) führt Blöcke über ihre ID zusammen
 // und hält pro ID genau einen Block. Zwei Wege bringen den Live-Editor davon ab:

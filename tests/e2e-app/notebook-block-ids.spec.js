@@ -176,9 +176,18 @@ test('Konflikt-Modal: kein Abbruch per Klick daneben, kein Hintergrund-Save, Abb
 
     // Entscheidung treffen, dann laufen Hintergrund-Saves an: kein PUT, das
     // Modal bleibt mit der getroffenen Entscheidung stehen.
-    await page.locator('.conflict-block__choices button').nth(1).click();
+    // Die Fassungs-Karte ist selbst die Wahl: Klick auf die andere Version.
+    const cards = page.locator('.conflict-block__preview');
+    await cards.nth(1).click();
     const bid = await page.evaluate(() => window.__app.conflictResolution.conflicts[0].bid);
     expect(await page.evaluate((b) => window.__app.conflictResolution.decisions[b], bid)).toBe('remote');
+    await expect(cards.nth(1)).toHaveAttribute('aria-pressed', 'true');
+    await expect(cards.nth(0)).toHaveAttribute('aria-pressed', 'false');
+    // «Beide behalten» markiert beide Karten — sichtbar und für Screenreader.
+    await page.locator('.conflict-block__both').click();
+    await expect(cards.nth(0)).toHaveAttribute('aria-pressed', 'true');
+    await expect(cards.nth(1)).toHaveAttribute('aria-pressed', 'true');
+    await cards.nth(1).click();
     await page.evaluate(async () => {
       await window.__app.quickSave();
       window.dispatchEvent(new Event('focus'));
