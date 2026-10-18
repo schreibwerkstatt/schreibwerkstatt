@@ -5654,6 +5654,7 @@
   "blog.error.BLOG_AUTH_FAILED": "Anmeldung beim Blog abgelehnt.",
   "blog.error.BLOG_INSUFFICIENT_CAPABILITY": "Der Benutzer darf keine Beiträge bearbeiten.",
   "blog.error.BLOG_TEST_FAILED": "Verbindungstest fehlgeschlagen.",
+  "blog.error.BLOG_UNSUPPORTED_BLOCKS": "Der Beitrag enthält in WordPress Elemente, die die App nicht übernehmen kann ({blocks}). Ein Push würde sie im Blog löschen – bitte diesen Beitrag in WordPress bearbeiten.",
   "blog.error.BLOG_REQUIRES_BLOG_TYPE": "Buch muss vom Typ «Blog» sein.",
   "blog.error.BLOG_NOT_CONNECTED": "Keine Blog-Verbindung gespeichert.",
   "blog.error.BLOG_ALREADY_IMPORTED": "Initial-Import wurde bereits ausgeführt.",

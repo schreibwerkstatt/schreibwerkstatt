@@ -61,6 +61,18 @@ async function run(type, fn, bookId) {
 }
 
 const push = (bookId, ids) => run('blog-push', id => blogSync.runBlogPushJob(id, bookId, null, ids), bookId);
+// Push, bei dem kein Abschnitt durchgeht: der Job endet als Fehler (nicht als
+// «abgeschlossen»), job.error ist der i18n-Key des ersten Grunds.
+async function pushFailing(bookId, ids) {
+  const jobId = `test-blog-push-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const { jobs, runningJobs } = ctx.shared;
+  jobs.set(jobId, { id: jobId, type: 'blog-push', bookId, userEmail: null, status: 'running', progress: 0, createdAt: Date.now() });
+  runningJobs.set(jobId, { type: 'blog-push', bookId });
+  await blogSync.runBlogPushJob(jobId, bookId, null, ids);
+  const job = jobs.get(jobId);
+  assert.equal(job.status, 'error');
+  return job;
+}
 const pull = bookId => run('blog-pull', id => blogSync.runBlogPullJob(id, bookId, null), bookId);
 const tick = () => new Promise(r => setTimeout(r, 15));
 
@@ -151,10 +163,8 @@ test('Push-Pre-Check: ungesehene Aenderung in WordPress → Konflikt, WP bleibt 
   const restore = installFetch(wp);
   try {
     wp.edit(41, { content: { raw: '<p>WP-Edit</p>', rendered: '<p>WP-Edit</p>' } });
-    const r = await push(bookId, [page.id]);
-    assert.equal(r.pushed, 0);
-    assert.equal(r.conflictSkipped, 1);
-    assert.deepEqual(r.errors, [{ pageId: page.id, code: 'BLOG_CONFLICT' }]);
+    const failed = await pushFailing(bookId, [page.id]);
+    assert.equal(failed.error, 'blog.error.BLOG_CONFLICT');
     assert.equal(blogs.getLinkByPage(page.id).conflict_state, 'detected');
     assert.equal(wp.posts[0].content.raw, '<p>WP-Edit</p>', 'WP-Edit nicht ueberschrieben');
     assert.equal(wp.calls.filter(c => c.method === 'POST').length, 0, 'kein Schreib-Call');
@@ -168,6 +178,37 @@ test('Push-Pre-Check: ungesehene Aenderung in WordPress → Konflikt, WP bleibt 
     const r2 = await push(bookId, [page.id]);
     assert.equal(r2.pushed, 1);
     assert.match(wp.posts[0].content.raw, /App-Stand/);
+  } finally { restore(); }
+});
+
+test('Push-Sperre: Post mit Embed/dynamischem Block wird nicht ueberschrieben', async () => {
+  const bookId = 9108;
+  const connId = seedBlogBook(bookId);
+  blogs.markInitialImportDone(connId);
+  const page = await contentStore.createPage({
+    book_id: bookId, chapter_id: null, name: 'Video-Beitrag', html: '<p>Tippfehler korrigiert</p>',
+  }, null);
+  const raw = '<!-- wp:paragraph --><p>Tipfehler</p><!-- /wp:paragraph -->'
+    + '<!-- wp:embed {"url":"https://youtu.be/x"} --><figure class="wp-block-embed"><div class="wp-block-embed__wrapper">https://youtu.be/x</div></figure><!-- /wp:embed -->'
+    + '<!-- wp:latest-posts /-->';
+  const wp = makeWpStub({
+    posts: [{
+      id: 51, title: { raw: 'Video-Beitrag', rendered: 'Video-Beitrag' },
+      content: { raw, rendered: raw }, status: 'publish', slug: 'v',
+      modified_gmt: '2026-01-01T10:00:00', date_gmt: '2026-01-01T10:00:00',
+    }],
+  });
+  blogs.upsertLink({
+    pageId: page.id, blogId: connId, wpPostId: 51, wpModifiedAt: '2026-01-01T10:00:00',
+    lastPulledAt: '2026-01-01T10:00:00.000Z',
+  });
+  const restore = installFetch(wp);
+  try {
+    const failed = await pushFailing(bookId, [page.id]);
+    assert.equal(failed.error, 'blog.error.BLOG_UNSUPPORTED_BLOCKS');
+    assert.equal(failed.errorParams.blocks, 'figure, wp:embed, wp:latest-posts');
+    assert.equal(wp.posts[0].content.raw, raw, 'WordPress-Inhalt unangetastet');
+    assert.equal(wp.calls.filter(c => c.method === 'POST').length, 0, 'kein Schreib-Call');
   } finally { restore(); }
 });
 

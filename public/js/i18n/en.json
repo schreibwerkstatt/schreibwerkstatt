@@ -5654,6 +5654,7 @@
   "blog.error.BLOG_AUTH_FAILED": "Blog rejected the credentials.",
   "blog.error.BLOG_INSUFFICIENT_CAPABILITY": "The user cannot edit posts.",
   "blog.error.BLOG_TEST_FAILED": "Connection test failed.",
+  "blog.error.BLOG_UNSUPPORTED_BLOCKS": "This post contains elements in WordPress that the app cannot import ({blocks}). Pushing would delete them from the blog – please edit this post in WordPress.",
   "blog.error.BLOG_REQUIRES_BLOG_TYPE": "Book must be of type \"blog\".",
   "blog.error.BLOG_NOT_CONNECTED": "No blog connection stored.",
   "blog.error.BLOG_ALREADY_IMPORTED": "Initial import has already been run.",

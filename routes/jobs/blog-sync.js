@@ -11,12 +11,12 @@ const express = require('express');
 const {
   createJob, updateJob, completeJob, failJob,
   enqueueJob, findActiveJobId, jobAbortControllers, jobs,
-  makeJobLogger, jsonBody,
+  makeJobLogger, jsonBody, i18nError,
 } = require('./shared');
 const blogs = require('../../db/blogs');
 const contentStore = require('../../lib/content-store');
 const { createWpClient } = require('../../lib/wp-client');
-const { appToWpHtmlWithMedia } = require('../../lib/wp-html');
+const { appToWpHtmlWithMedia, wpLossyBlocks } = require('../../lib/wp-html');
 const { buildBibliography, resolveCitesInHtml } = require('../../lib/bibliography');
 const { makeImageResolver } = require('../../lib/wp-media');
 const { classifyPull, newer } = require('../../lib/blog-merge');
@@ -264,6 +264,15 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
   }
 }
 
+// Fehlercodes des Push, die einen eigenen `blog.error.*`-Text haben. Alles
+// andere (BLOG_HTTP_<n>, SSRF_*, Timeouts) erscheint als BLOG_PUSH_FAILED.
+const _PUSH_ERROR_KEYS = new Set([
+  'BLOG_CONFLICT', 'BLOG_REMOTE_GONE', 'BLOG_AUTH_FAILED', 'BLOG_UNSUPPORTED_BLOCKS', 'BLOG_PUSH_FAILED',
+]);
+function _pushErrorKey(code) {
+  return `blog.error.${_PUSH_ERROR_KEYS.has(code) ? code : 'BLOG_PUSH_FAILED'}`;
+}
+
 async function runBlogPushJob(jobId, bookId, userEmail, pageIds) {
   const logger = makeJobLogger(jobId);
   try {
@@ -350,6 +359,16 @@ async function runBlogPushJob(jobId, bookId, userEmail, pageIds) {
           logger.info(`Blog-Push: Page ${pageId} "${pageRow.name}" — WP-Post ${link.wp_post_id} drueben geaendert (${currentModified} > ${link.wp_modified_at}), Konflikt gesetzt`);
           conflictSkipped++;
           errors.push({ pageId, code: 'BLOG_CONFLICT' });
+          continue;
+        }
+        // Push-Sperre: der Post enthaelt in WordPress etwas, das der Import nicht
+        // uebernimmt (Embed, Video, dynamischer Block …). Der Push ersetzt den
+        // ganzen `content` — er loeschte es im Live-Blog, ohne dass es in der App
+        // je sichtbar war. Solche Beitraege werden in WordPress bearbeitet.
+        const lossy = wpLossyBlocks(current?.content?.raw || '');
+        if (lossy.length) {
+          logger.info(`Blog-Push: Page ${pageId} "${pageRow.name}" — WP-Post ${link.wp_post_id} enthaelt nicht uebernehmbare Bloecke (${lossy.join(', ')}), gesperrt`);
+          errors.push({ pageId, code: 'BLOG_UNSUPPORTED_BLOCKS', blocks: lossy });
           continue;
         }
       }
@@ -452,6 +471,13 @@ async function runBlogPushJob(jobId, bookId, userEmail, pageIds) {
 
     blogs.touchPush(conn.id);
     logger.info(`Push: ${pushed} aktualisiert, ${createdRemote} neu in WP, ${conflictSkipped} Konflikt skipped, ${imagesUploaded} Bilder hochgeladen, ${errors.length} Fehler.`);
+    // Nichts gepusht, nur Fehler: der Job ist gescheitert, nicht «abgeschlossen».
+    // Sonst meldet der Toast Erfolg, waehrend der Abschnitt gesperrt oder im
+    // Konflikt ist. Der erste Grund wird gezeigt (der UI-Push schickt einen Abschnitt).
+    if (errors.length && pushed + createdRemote === 0) {
+      const first = errors[0];
+      throw i18nError(_pushErrorKey(first.code), first.blocks ? { blocks: first.blocks.join(', ') } : null);
+    }
     completeJob(jobId, { pushed, createdRemote, conflictSkipped, imagesUploaded, errors, renamed }, null,
       `${pushed + createdRemote} gepusht / ${errors.length} Fehler`);
   } catch (e) {

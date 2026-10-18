@@ -9,7 +9,7 @@ Spec für bidirektionale Synchronisation zwischen einem self-hosted WordPress-Bl
 - **Auth:** Basic-Auth über HTTPS. URL/User/Password pro Buch in den Bucheinstellungen.
 - **Trigger:** manuell. Einmaliger Initial-Import + ad-hoc Pull/Push + on-demand Reconcile (Link-Drift-Check). Kein Cron.
 - **Editor:** WordPress Block-Editor (Gutenberg) only. Classic-Editor-Posts werden importiert, beim Push wieder als Block-HTML rausgeschrieben.
-- **Inline-Bilder:** werden bei Import erhalten (`<figure>`/`<img>` bleiben, `wp-image-<n>`-Klasse trägt die Attachment-ID) und bei Push als `wp:image`-Block rausgeschrieben. Bereits blog-gehostete Bilder bleiben unangetastet; data-URIs und fremd-gehostete Bilder werden vor dem Push in die WP-Mediathek hochgeladen (`lib/wp-media.js`, SSRF-guarded). Nicht-Bild-Embeds (`video`/`audio`/`iframe`/`embed`/`object`) werden beidseitig verworfen.
+- **Inline-Bilder:** werden bei Import erhalten (`<figure>`/`<img>` bleiben, `wp-image-<n>`-Klasse trägt die Attachment-ID) und bei Push als `wp:image`-Block rausgeschrieben. Bereits blog-gehostete Bilder bleiben unangetastet; data-URIs und fremd-gehostete Bilder werden vor dem Push in die WP-Mediathek hochgeladen (`lib/wp-media.js`, SSRF-guarded). Nicht-Bild-Embeds (`video`/`audio`/`iframe`/`embed`/`object`) werden beidseitig verworfen — ein Post, der sie in WordPress trägt, ist darum für den Push gesperrt (siehe „Push-Sperre" unter `runBlogPushJob`).
 - **Categories/Tags/Featured-Image:** bewusst kein eigenes Mapping. Der Push sendet nur `content` (`updatePost` ist ein Partial-Update) → WP lässt Kategorien, Tags und Featured-Image unangetastet, sie bleiben also über einen Content-Push erhalten. In-App werden sie nicht gelesen/gesetzt.
 - **Out-of-Scope:** Categories/Tags in-App bearbeiten, Featured-Image setzen, Auto-Pull, Mehrere Blogs pro Buch.
 
@@ -187,7 +187,9 @@ Vor dem Upload läuft `appToWpHtmlWithMedia(html, { resolveImage, bibliography }
    - Link da → Push-Pre-Check (siehe „Konflikt-Strategie"), dann `updatePost(id, { content, title?, excerpt? })`, `wp_modified_at` aus Response übernehmen
    - `conflict_state='detected'` → skip, `BLOG_CONFLICT` im Job-Result
    - **WP-Post drüben gelöscht** (`BLOG_HTTP_404` von Pre-Check oder `updatePost`) → Link wird entfernt, Error-Code `BLOG_REMOTE_GONE` ins Result; Page-Badge flippt auf `new`. Erneuter Push erstellt einen frischen Post.
+   - **Push-Sperre** (im Pre-Check, nach der Konfliktprüfung): enthält der aktuelle WordPress-Stand etwas, das `wpToAppHtml` nicht übernimmt — `lib/wp-html.js#wpLossyBlocks`: `wp:embed`, selbstschliessende (dynamische/wiederverwendbare) Blöcke, `video`/`audio`/`iframe`/`embed`/`object`/`picture`, Figuren ohne Bild, Inline-Hintergrundbilder —, wird **nicht** gepusht: `BLOG_UNSUPPORTED_BLOCKS` mit `blocks` (Kennungen) ins Result. **Why:** der Push ersetzt den ganzen `content`; ein Tippfehler-Fix in der App löschte sonst das Video im Live-Blog, das in der App nie sichtbar war. Solche Beiträge werden in WordPress bearbeitet. Der eigene Push-Output gilt immer als sicher (gegated in `wp-html.test.mjs`), ein von der App geschriebener Post wird also nie gesperrt.
 2. `last_push_at = NOW_ISO_SQL`
+3. **Geht kein Abschnitt durch** (nur Fehler), endet der Job mit `failJob` statt `completeJob`; `job.error` = `blog.error.<Code>` des ersten Grunds (unbekannte Codes → `BLOG_PUSH_FAILED`), bei der Sperre mit `errorParams.blocks`. Der UI-Push schickt einen Abschnitt — so zeigt der Job-Toast den Grund statt «abgeschlossen». Teilerfolg bei Multi-Select bleibt `done` mit `errors[]`.
 
 ### `runBlogReconcileJob(bookId)` — on demand
 

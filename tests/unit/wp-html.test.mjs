@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-const { wpToAppHtml, appToWpHtml, appToWpHtmlWithMedia } = await import('../../lib/wp-html.js');
+const { wpToAppHtml, wpLossyBlocks, appToWpHtml, appToWpHtmlWithMedia } = await import('../../lib/wp-html.js');
 
 test('wpToAppHtml: strips wp:* comments', async () => {
   const wp = `
@@ -440,4 +440,24 @@ test('Pull: eine Figur OHNE Bild faellt weiterhin weg', async () => {
   // Die Entpackung darf die bestehende Regel nicht aushebeln.
   const app = await wpToAppHtml('<figure class="wp-block-embed"><div>nur Wrapper</div></figure>');
   assert.doesNotMatch(app, /<figure/);
+});
+
+test('wpLossyBlocks: erkennt, was der Import verwirft', () => {
+  const raw = '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->'
+    + '<!-- wp:embed {"url":"https://youtu.be/x"} --><figure class="wp-block-embed"><div>https://youtu.be/x</div></figure><!-- /wp:embed -->'
+    + '<!-- wp:latest-posts /--><!-- wp:block {"ref":12} /-->'
+    + '<div style="background-image:url(a.jpg)">c</div><video src="v.mp4"></video>';
+  assert.deepEqual(wpLossyBlocks(raw), ['background', 'figure', 'video', 'wp:block', 'wp:embed', 'wp:latest-posts']);
+  assert.deepEqual(wpLossyBlocks('<!-- wp:image {"id":3} --><figure class="wp-block-image"><img src="a.jpg"/></figure><!-- /wp:image -->'), []);
+  assert.deepEqual(wpLossyBlocks(''), []);
+});
+
+// Die Push-Sperre darf einen Beitrag, den die App selbst geschrieben hat, nie
+// sperren: alles, was appToWpHtml erzeugt, muss round-trip-sicher gelten.
+test('wpLossyBlocks: eigener Push-Output gilt immer als round-trip-sicher', async () => {
+  const app = '<p>Hallo <strong>Welt</strong></p><h2>T</h2><ul><li>a</li></ul><ol><li>b</li></ol>'
+    + '<blockquote><p>z</p></blockquote><figure><img src="/x.png" alt="a"><figcaption>c</figcaption></figure>'
+    + '<table><caption>k</caption><thead><tr><th scope="col">a</th></tr></thead><tbody><tr><td data-align="right">1</td></tr></tbody></table>'
+    + '<div class="msg-thread"><p class="msg-in">hi</p></div><hr><pre>code</pre>';
+  assert.deepEqual(wpLossyBlocks(await appToWpHtml(app, { lead: 'Ein Lead' })), []);
 });
