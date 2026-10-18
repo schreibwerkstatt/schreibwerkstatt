@@ -1,0 +1,65 @@
+<!-- Import-Panel der Quellen-Karte: BibTeX/RIS aus Datei oder eingefuegtem
+     Text → POST /sources/import. Fragment von partials/sources.html (via
+     `<!-- @include sources-import -->`), kein eigener x-data-Scope —
+     Methoden in public/js/sources/import-panel.js. -->
+  <template x-if="srcImportOpen">
+  <div class="sources-export sources-import">
+    <div class="sources-picker-head">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#upload"/></svg>
+      <span class="sources-picker-title" x-text="$app.t('sources.import.title')"></span>
+      <button type="button" class="icon-btn icon-btn--ghost" @click="closeSourceImport()"
+              :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+    </div>
+    <p class="card-hint" x-text="$app.t('sources.import.hint')"></p>
+
+    <div class="card-form-grid">
+      <div class="card-form-row">
+        <label class="card-form-label" x-text="$app.t('sources.import.file')"></label>
+        <div class="card-form-field sources-import-file">
+          <input type="file" hidden x-ref="srcImportInput"
+                 accept=".bib,.bibtex,.ris,.txt,text/plain,application/x-bibtex,application/x-research-info-systems"
+                 @change="readSourceImportFile($event)">
+          <button type="button" @click="pickSourceImportFile()" :disabled="srcImportBusy">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
+            <span x-text="$app.t('sources.import.pick')"></span>
+          </button>
+          <span class="muted-msg muted-msg--sm" x-show="srcImportFileName" x-text="srcImportFileName"></span>
+        </div>
+      </div>
+
+      <div class="card-form-row">
+        <label class="card-form-label" x-text="$app.t('sources.import.format')"></label>
+        <div class="card-form-field">
+          <div x-data="combobox({ placeholder: $app.t('sources.import.format'), compact: false })"
+               x-modelable="value" x-model="srcImportFormat"
+               x-effect="options = srcImportFormatOptions()"></div>
+        </div>
+      </div>
+
+      <div class="card-form-row card-form-row--top">
+        <label class="card-form-label" x-text="$app.t('sources.import.text')"></label>
+        <div class="card-form-field">
+          <textarea class="card-form-textarea sources-export-preview" rows="8" x-model="srcImportText"
+                    spellcheck="false" :aria-label="$app.t('sources.import.text')"
+                    :placeholder="$app.t('sources.import.textPlaceholder')"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <p class="card-form-error" x-show="srcImportError" x-cloak x-text="srcImportError"></p>
+
+    <div class="sources-export-actions">
+      <button type="button" class="primary" @click="runSourceImport()" :disabled="!canRunSourceImport()"
+              x-text="srcImportBusy ? $app.t('sources.import.running') : $app.t('sources.import.run')"></button>
+    </div>
+
+    <div x-show="srcImportResult" x-cloak>
+      <p class="card-status" x-text="srcImportSummary()"></p>
+      <ul class="sources-import-errors" x-show="(srcImportResult?.errors?.length || 0) > 0">
+        <template x-for="(err, idx) in (srcImportResult?.errors || [])" :key="idx">
+          <li x-text="srcImportErrorText(err)"></li>
+        </template>
+      </ul>
+    </div>
+  </div>
+  </template>

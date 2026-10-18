@@ -1,0 +1,56 @@
+<!-- Toolbar der Quellen-Karte: Anlegen, Bibliothek, Erkennung, PDF, Import,
+     Export + Filter. Fragment von partials/sources.html (via
+     `<!-- @include sources-toolbar -->`), kein eigener x-data-Scope. -->
+  <!-- Toolbar: Anlegen + aus der Bibliothek uebernehmen + Filter -->
+  <div class="card-toolbar">
+    <button type="button" class="btn-compact" @click="srcEditingId === 'new' ? cancelSourceEdit() : startCreateSource()" :disabled="sourcesBusy">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
+      <span x-text="$app.t('sources.new')"></span>
+    </button>
+    <button type="button" class="btn-compact" @click="toggleSourcePicker()" :disabled="sourcesBusy"
+            :aria-expanded="srcPickerOpen">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg>
+      <span x-text="$app.t('sources.fromLibrary')"></span>
+    </button>
+    <!-- Quellen-Erkennung: findet im Buchtext erwaehnte Werke und schlaegt sie
+         zur Aufnahme vor. Setzt nie einen Quellen-Marker — das bleibt der
+         Editor. Panel-Fragment: partials/sources-detect.html -->
+    <button type="button" class="btn-compact" @click="toggleSourceDetect()" :disabled="sourcesBusy"
+            :aria-expanded="srcDetectOpen">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#scan"/></svg>
+      <span x-text="$app.t('sources.detect.open')"></span>
+    </button>
+    <button type="button" class="btn-compact" @click="pickSourcePdf()" :disabled="sourcesBusy || srcPdfBusy">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
+      <span x-text="srcPdfBusy ? $app.t('sources.pdfDraft.running') : $app.t('sources.pdfDraft.open')"></span>
+    </button>
+    <!-- Literatur-Import (BibTeX/RIS): Panel-Fragment partials/sources-import.html -->
+    <button type="button" class="btn-compact" @click="toggleSourceImport()" :disabled="sourcesBusy"
+            :aria-expanded="srcImportOpen">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#upload"/></svg>
+      <span x-text="$app.t('sources.import.open')"></span>
+    </button>
+    <button type="button" class="btn-compact" @click="toggleSourceExport()" :aria-expanded="srcExportOpen">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+      <span x-text="$app.t('sources.export.open')"></span>
+    </button>
+    <div class="filter-bar filter-bar--inline">
+      <span class="filter-search-wrap">
+        <input type="text" class="filter-search-input filter-search-input--wide" x-model="srcFilterText"
+               :placeholder="$app.t('sources.filter.search')" :aria-label="$app.t('sources.filter.search')">
+        <button type="button" class="search-clear--icon" x-show="srcFilterText" @click="srcFilterText = ''"
+                :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+      </span>
+      <div x-data="combobox($app.t('sources.filter.type'), $app.t('sources.filter.allTypes'))"
+           x-modelable="value" x-model="srcFilterType"
+           x-effect="options = sourceTypeOptions()"></div>
+      <div x-data="combobox($app.t('sources.filter.tag'), $app.t('sources.filter.allTags'))"
+           x-modelable="value" x-model="srcFilterTag"
+           x-effect="options = srcTagOptions()"></div>
+      <label class="filter-toggle">
+        <input type="checkbox" x-model="srcShowArchived">
+        <span x-text="$app.t('sources.showArchived')"></span>
+      </label>
+      <span class="filter-count" x-text="sourceRows().length + ' / ' + sourcesVisibleTotal()"></span>
+    </div>
+  </div>

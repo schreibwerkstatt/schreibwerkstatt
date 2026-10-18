@@ -45,6 +45,7 @@ export const sourcesPdfDraftMethods = {
     this.closeSourcePicker();
     this.closeSourceDetect();
     this.closeSourceExport();
+    this.closeSourceImport();
     this.cancelSourceEdit();
     this.srcPdfBusy = true;
     this.srcPdfProgress = 0;

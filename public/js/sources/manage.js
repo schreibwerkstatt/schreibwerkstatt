@@ -218,6 +218,7 @@ export const sourcesMethods = {
     this.srcFormError = '';
     this.closeSourceCitations();
     this.closeSourceExport();
+    this.closeSourceImport();
   },
 
   startEditSource(s) {
@@ -228,6 +229,7 @@ export const sourcesMethods = {
     this.srcTagInput = '';
     this.srcFormError = '';
     this.closeSourceExport();
+    this.closeSourceImport();
   },
 
   cancelSourceEdit() {
@@ -335,6 +337,7 @@ export const sourcesMethods = {
     // offen wuerden sie den Blick auf die Tabelle verstellen.
     this.closeSourceDetect();
     this.closeSourceExport();
+    this.closeSourceImport();
     this.srcPickerOpen = true;
     await this.loadSourcePool();
   },

@@ -34,6 +34,7 @@ export const sourcesExportMethods = {
     this.closeSourceCitations();
     this.closeSourcePicker();
     this.closeSourceDetect();
+    this.closeSourceImport();
     const app = window.__app;
     const bookId = _bookId();
     this.srcExportBooks = bookId ? [String(bookId)] : [];

@@ -112,7 +112,7 @@ test('import bibtex: legt alle brauchbaren Eintraege an und meldet den unbrauchb
   assert.equal(json.imported, 6);
   assert.equal(json.skipped, 0);
   // Der @misc-Eintrag der Fixture hat weder Titel noch Person.
-  assert.deepEqual(json.errors, [{ index: 5, error_code: 'SOURCE_IDENTITY_REQ' }]);
+  assert.deepEqual(json.errors, [{ index: 5, label: 'ohnetitel', error_code: 'SOURCE_IDENTITY_REQ' }]);
 
   const rows = (await api('GET', `/sources?book_id=${BOOK}`)).json;
   assert.equal(rows.length, 6);

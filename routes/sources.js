@@ -180,13 +180,11 @@ router.get('/citations', (req, res) => {
 //
 // Steht VOR /:id, sonst faengt der Id-Handler 'import' ab.
 router.post('/import', importBody, (req, res) => {
-  const email = sessionEmail(req);
-  if (!email) return res.status(401).json({ error_code: 'NOT_LOGGED_IN' });
-
   const body = req.body || {};
   const bookId = toIntId(body.book_id);
   if (!bookId) return res.status(400).json({ error_code: 'INVALID_ID' });
-  if (!guardBook(req, res, bookId, 'editor')) return;
+  if (!guardBook(req, res, bookId, 'editor')) return;   // antwortet selbst mit 401/403
+  const email = sessionEmail(req);
 
   const format = String(body.format || '').toLowerCase();
   if (!BIB_FORMATS.includes(format)) {
@@ -209,9 +207,12 @@ router.post('/import', importBody, (req, res) => {
 
   let imported = 0, skipped = 0, linked = 0;
 
+  // `label` macht eine Fehlerzeile in der Datei auffindbar: der laufende Index
+  // zaehlt nur die lesbaren Eintraege (@comment/@string zaehlen nicht mit).
+  const labelOf = (e) => e?.citekey || e?.title || null;
   entries.forEach((entry, index) => {
     try {
-      if (!hasSourceIdentity(entry)) { errors.push({ index, error_code: 'SOURCE_IDENTITY_REQ' }); return; }
+      if (!hasSourceIdentity(entry)) { errors.push({ index, label: labelOf(entry), error_code: 'SOURCE_IDENTITY_REQ' }); return; }
       const existing = findImportDuplicate(email, entry);
       if (existing) {
         skipped++;
@@ -226,7 +227,7 @@ router.post('/import', importBody, (req, res) => {
       // ist die Wahrheit, die Vorab-Abfrage nur die Abkuerzung.
       if (/UNIQUE/i.test(e.message || '')) { skipped++; return; }
       logger.warn(`[quellen] import eintrag ${index} fehlgeschlagen: ${e.message}`);
-      errors.push({ index, error_code: 'IMPORT_ENTRY_FAILED' });
+      errors.push({ index, label: labelOf(entry), error_code: 'IMPORT_ENTRY_FAILED' });
     }
   });
 

@@ -18,6 +18,7 @@ import { sourcesDocMethods } from '../sources/doc.js';
 import { sourcesDetectMethods } from '../sources/detect.js';
 import { sourcesTagMethods } from '../sources/tags.js';
 import { sourcesExportMethods } from '../sources/export-panel.js';
+import { sourcesImportMethods } from '../sources/import-panel.js';
 import { sourcesPdfDraftMethods } from '../sources/pdf-draft.js';
 import { draftFromSource } from '../sources/fields.js';
 
@@ -122,6 +123,16 @@ export function registerSourcesCard() {
     srcExportError: '',
     _srcExportSeq: 0,
 
+    // Import-Panel (sources/import-panel.js): BibTeX/RIS-Text aus Datei oder
+    // eingefügt, Ergebnis des letzten Laufs ({ total, imported, skipped, linked, errors }).
+    srcImportOpen: false,
+    srcImportText: '',
+    srcImportFileName: '',
+    srcImportFormat: 'bibtex',
+    srcImportBusy: false,
+    srcImportResult: null,
+    srcImportError: '',
+
     // Quellen-Erkennung (Job `source-detect`): Panel, Lauf, Funde. `srcDetected`
     // lebt nur im Client — ein Fund wird erst zur Quelle, wenn er uebernommen
     // wird, und ein verworfener Lauf soll spurlos verschwinden.
@@ -195,6 +206,10 @@ export function registerSourcesCard() {
           srcExportOpen: false,
           srcExportRows: [],
           srcExportError: '',
+          srcImportOpen: false,
+          srcImportText: '',
+          srcImportResult: null,
+          srcImportError: '',
           // Buchwechsel verwirft die Funde: sie beziehen sich auf den Text des
           // alten Buchs und waeren im neuen sinnlos (und uebernehmbar!).
           srcDetectOpen: false,
@@ -237,6 +252,8 @@ export function registerSourcesCard() {
           srcPool: [],
           srcExportOpen: false,
           srcExportRows: [],
+          srcImportOpen: false,
+          srcImportResult: null,
           srcDetectError: '',
           srcPdfError: '',
         }),
@@ -259,6 +276,7 @@ export function registerSourcesCard() {
     ...sourcesDetectMethods,
     ...sourcesTagMethods,
     ...sourcesExportMethods,
+    ...sourcesImportMethods,
     ...sourcesPdfDraftMethods,
   }));
 }

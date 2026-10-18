@@ -140,6 +140,22 @@
   margin-top: var(--space-md);
 }
 
+/* Import-Panel (partials/sources-import.html): Datei-Knopf + gewählter Name
+   in einer Zeile, Fehler je Eintrag als knappe Liste. */
+.sources-import-file {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.sources-import-errors {
+  margin: var(--space-xs) 0 0;
+  padding-left: var(--space-lg);
+  font-size: var(--font-size-sm);
+  color: var(--color-warn-text);
+}
+
 /* Verzeichniseintrag-Vorschau: Klartext des Formatters, hängend eingerückt wie
    im gedruckten Literaturverzeichnis. */
 .sources-preview {
