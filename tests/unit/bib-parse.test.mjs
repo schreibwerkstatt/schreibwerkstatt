@@ -328,3 +328,28 @@ test('Entwurf traegt alle Spalten von sources und nur CSL-Personenformen', () =>
     }
   }
 });
+
+// Der Parser laeuft synchron im Request-Handler (POST /sources/import, Deckel
+// 2 Mio. Zeichen). Ein quadratischer Pfad dort haelt den ganzen Server an —
+// jede dieser Eingaben brauchte vorher Minuten.
+test('Laufzeit: pathologische Eingaben in voller Importgroesse bleiben linear', () => {
+  const N = 2_000_000;
+  const sp = ' '.repeat(N - 100);
+  const cases = [
+    ['bibtex', `@book{k, author={A${sp}B}, title={T}}`],
+    ['bibtex', `@book{k, author={A${' \t'.repeat(N / 2 - 100)}x and B}}`],
+    ['ris', `TY  - JOUR\nTI  - A${sp}x\nER  - \n`],
+    ['ris', `TY  - JOUR\nTI  - A\n${'x\n'.repeat(N / 2 - 100)}ER  - \n`],
+  ];
+  for (const [fmt, text] of cases) {
+    const t = Date.now();
+    parseBib(fmt, text);
+    const ms = Date.now() - t;
+    assert.ok(ms < 3000, `${fmt} ${text.slice(0, 30).replace(/\s+/g, ' ')}…: ${ms} ms`);
+  }
+});
+
+test('RIS: viele Fortsetzungszeilen werden mit Leerzeichen an den Wert gehaengt', () => {
+  const [r] = parseRis('TY  - JOUR\nTI  -  Ein\n  langer \n\nTitel\nAU  - Muster, Max\nER  - \n');
+  assert.equal(r.title, 'Ein langer Titel');
+});
