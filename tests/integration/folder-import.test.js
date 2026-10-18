@@ -700,3 +700,17 @@ test('folder-import (merge, zweiter Lauf): Monate ueber den Namen erkannt, Jahre
   assert.equal(pageIn['2020-11-20'], '2020 November');
   assert.equal(pageIn['2020-03-10'], '2020 März');
 });
+
+test('folder-import (new-book): Abbruch → «cancelled», angelegtes Buch zurueckgenommen', async () => {
+  const userEmail = 'tester@test.dev';
+  const session = { session: { user: { email: userEmail } } };
+  const before = (await contentStore.listBooks(session)).length;
+  const buffer = await buildArchive([['2024/01/2024-01-02.docx', await makeDocx('Eintrag.')]]);
+  const jobId = ctx.shared.createJob('folder-import', 0, userEmail, 'job.label.folderImport', { name: 'Abbruch' }, `new:abbruch:${Math.random()}`);
+  ctx.shared.jobs.get(jobId).status = 'running';
+  ctx.shared.cancelJob(jobId, userEmail);
+  folderImport.importBuffers.set(jobId, { buffer, userEmail, mode: 'new-book', bookName: 'Abbruch', bookId: null });
+  await folderImport.runFolderImportJob(jobId, { userEmail, mode: 'new-book', bookName: 'Abbruch', bookId: null });
+  assert.equal(ctx.shared.jobs.get(jobId).status, 'cancelled');
+  assert.equal((await contentStore.listBooks(session)).length, before);
+});

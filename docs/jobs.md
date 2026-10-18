@@ -18,6 +18,8 @@ queued → running → done | error | cancelled
   - Lokale Provider (Ollama-Mutex, openai-compat-Semaphor) serialisieren weiterhin pro **Call**: ein Chat in der Reserve wartet höchstens auf den gerade laufenden Call der Analyse, nicht auf den ganzen Job.
 - Cleanup: `_scheduleJobCleanup` löscht terminale Jobs nach 2 h aus `jobs`-Map und `runningJobs`-Map.
 - AbortController pro Job (`jobAbortControllers.get(id)`) — `cancelJob` triggert `.abort()`, KI-Calls hören via `signal`-Param.
+- **Abbruch ist terminal:** `cancelJob` auf einen laufenden Job setzt `job.cancelled` + `.abort()`. Erreicht der Job trotzdem `completeJob`, endet er als `cancelled` (über `failJob`), nicht als `done` — der User hat «Abbrechen» gesehen. Schleifen ohne eigenen `signal`-Weg (Importe) prüfen pro Element `throwIfCancelled(jobId)`. Ein Import, der im Modus `new-book` ein Buch angelegt hat, nimmt es bei Abbruch oder Fehler während der Anlage wieder zurück (`lib/book-create.js#discardImportedBook`); ist die Gliederung vollständig angelegt, nicht mehr.
+- **Import-Puffer** ([lib/import-buffers.js](../lib/import-buffers.js)): `isLive: isJobActive` — Puffer eines Jobs, der nicht mehr wartet oder läuft (z.B. in der Warteschlange abgebrochen, Worker startet nie), zählen bei `admissionError` nicht mehr und werden entfernt.
 
 ## Job-Schema
 

@@ -228,6 +228,13 @@ function setJobModel(id, provider, model) {
 function completeJob(id, result, tokensPerSec = null, detail = null) {
   const job = jobs.get(id);
   if (!job) return;
+  // Waehrend des Laufs abgebrochen (cancelJob setzt nur das Flag + Signal): der
+  // User hat «Abbrechen» gesehen, also endet der Job auch so — ein Job, dessen
+  // Schleife das Signal nicht prueft, kaeme sonst als «fertig» zurueck.
+  if (job.cancelled) {
+    failJob(id, new DOMException('Aborted', 'AbortError'));
+    return;
+  }
   Object.assign(job, { status: 'done', progress: 100, result, tokensPerSec, endedAt: new Date().toISOString() });
   try {
     endJobRun(id, 'done', job.tokensIn, job.tokensOut, job.cacheReadIn, job.cacheCreationIn, job.cacheCreation1hIn, tokensPerSec, null);
@@ -300,6 +307,19 @@ function failJob(id, err) {
         .catch(e => logger.warn(`notify budget: ${e.message}`, _jobLogCtx(job)));
     }
   }
+}
+
+/** In Schleifen ohne eigenes AbortSignal (Importe): wirft AbortError, sobald
+ *  der User den laufenden Job abgebrochen hat. failJob setzt dann `cancelled`. */
+function throwIfCancelled(id) {
+  if (jobs.get(id)?.cancelled) throw new DOMException('Aborted', 'AbortError');
+}
+
+/** Ist der Job noch in der Warteschlange oder laeuft er? (Import-Puffer
+ *  geben ihren Platz frei, sobald ihr Job terminal ist.) */
+function isJobActive(id) {
+  const status = jobs.get(id)?.status;
+  return status === 'queued' || status === 'running';
 }
 
 function cancelJob(id, userEmail) {
@@ -404,7 +424,7 @@ module.exports = {
   fmtTok, fmtDuration, _jobDurationFmt, _jobLogCtx, tps,
   i18nError, i18nErrText, contentHttpError, emptyScopeError,
   findActiveJobId,
-  createJob, updateJob, setJobModel, completeJob, failJob, cancelJob,
+  createJob, updateJob, setJobModel, completeJob, failJob, cancelJob, isJobActive, throwIfCancelled,
   EMBED_PROVIDER, EMBED_JOB_TYPES,
   JOB_TYPE_LABELS, STATS_EXCLUDED_TYPES,
 };

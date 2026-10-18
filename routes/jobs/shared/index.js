@@ -53,6 +53,8 @@ module.exports = {
   completeJob: jobsMod.completeJob,
   failJob: jobsMod.failJob,
   cancelJob: jobsMod.cancelJob,
+  isJobActive: jobsMod.isJobActive,
+  throwIfCancelled: jobsMod.throwIfCancelled,
   findActiveJobId: jobsMod.findActiveJobId,
   fmtTok: jobsMod.fmtTok,
   i18nError: jobsMod.i18nError,

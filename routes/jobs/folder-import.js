@@ -10,7 +10,7 @@
 const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
-  aiCall, getPrompts, jobs, createJob, enqueueJob, findActiveJobId,
+  aiCall, getPrompts, jobs, createJob, enqueueJob, findActiveJobId, isJobActive, throwIfCancelled,
 } = require('./shared');
 const contentStore = require('../../lib/content-store');
 const { detectDate, detectDateInText, firstLineFromHtml, extractTitle, scoreSample, parseMonthToken } = require('../../lib/import-parsers/date-detect');
@@ -21,7 +21,7 @@ const { resolveProvider } = require('../../lib/ai');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const { getBookLocale, getBookSettings, setBookBuchtyp } = require('../../db/schema');
 const { BUCHTYP_TAGEBUCH } = require('../../lib/buchtyp');
-const { createOwnedBook, bookNameError, BOOK_NAME_MAX } = require('../../lib/book-create');
+const { createOwnedBook, discardImportedBook, bookNameError, BOOK_NAME_MAX } = require('../../lib/book-create');
 const { openCappedZip, ZipLimitError } = require('../../lib/zip-limits');
 const { ImportBufferStore } = require('../../lib/import-buffers');
 const { seedImportBaseline } = require('../../lib/import-baseline');
@@ -65,6 +65,7 @@ const importBuffers = new ImportBufferStore({
   ttlMs: BUFFER_TTL_MS,
   maxPerUser: 1,
   maxTotalBytes: 2 * MAX_ZIP_BYTES,
+  isLive: isJobActive,
 });
 
 function _parsePath(p) {
@@ -106,6 +107,7 @@ async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, gr
     skipped.push({ path, reason });
     audit('warn', `skip ${path}: ${reason}`);
   };
+  let createdBookId = null;   // nur new-book: Rueckbau bei Abbruch/Fehler
   try {
     const entry = importBuffers.get(jobId);
     if (!entry) throw i18nError('job.error.importBufferMissing');
@@ -190,6 +192,7 @@ async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, gr
     const warningsCollected = [];
     let parseCount = 0;
     for (const f of files) {
+      throwIfCancelled(jobId);
       parseCount += 1;
       const month = _monthFromRaw(f.monthRaw);
       const ctx = { year: f.year, month };
@@ -348,6 +351,7 @@ async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, gr
       updateJob(jobId, { progress: 28, statusText: 'job.folder-import.creatingBook' });
       const created = await createOwnedBook({ name: bookName }, userEmail, { session: { user: { email: userEmail } } });
       effBookId = created.id;
+      createdBookId = created.id;
       audit('info', `Buch erstellt: «${bookName}» id=${effBookId}`);
     }
     if (!effBookId) throw i18nError('job.error.bookMissing');
@@ -397,6 +401,7 @@ async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, gr
     let pagesCreated = 0;
 
     for (const f of resolved) {
+      throwIfCancelled(jobId);
       current += 1;
       const progress = 30 + Math.round(65 * (current / total));
       updateJob(jobId, {
@@ -496,6 +501,7 @@ async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, gr
       try { contentStore.sortChapterSlots(effBookId, keyById); }
       catch (e) { audit('warn', `Kapitel-Sortierung fehlgeschlagen: ${e.message}`); }
     }
+    createdBookId = null;   // Buch steht vollstaendig — kein Rueckbau mehr
 
     audit('info', `Import abgeschlossen: ${pagesCreated} Seiten, ${chapterByYear.size} Jahres-Kapitel, ${chapterByYearMonth.size} Monats-Sub-Kapitel, ${skipped.length} skipped`);
 
@@ -516,6 +522,7 @@ async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, gr
     });
   } catch (e) {
     if (e?.name !== 'AbortError') log.error(`folder-import job ${jobId}: ${e.message}`, { stack: e.stack });
+    if (createdBookId) await discardImportedBook(createdBookId, userEmail);
     failJob(jobId, e);
   } finally {
     importBuffers.delete(jobId);

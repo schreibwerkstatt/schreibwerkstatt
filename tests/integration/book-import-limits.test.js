@@ -126,7 +126,9 @@ test('POST /content/books: Owner-Grant scheitert → 500 CREATE_FAILED, kein Buc
 });
 
 test('POST /jobs/book-import: zweiter offener Upload desselben Users → 429 IMPORT_PENDING', async () => {
-  bookImport.importBuffers.put('pending-job', { buffer: Buffer.alloc(10), userEmail: OWNER });
+  // Ein echter wartender Job: Puffer ohne aktiven Job raeumt admissionError weg.
+  const pendingId = shared.createJob('book-import', 0, OWNER, 'job.label.bookImport', {}, `pending:${Math.random()}`);
+  bookImport.importBuffers.put(pendingId, { buffer: Buffer.alloc(10), userEmail: OWNER });
   const res = await fetch(`${baseUrl}/jobs/book-import`, {
     method: 'POST', headers: { 'Content-Type': 'application/zip' }, body: await bundle({ name: 'Anderes' }),
   });

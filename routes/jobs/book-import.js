@@ -9,7 +9,7 @@
 const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
-  jobs, createJob, enqueueJob, findActiveJobId,
+  jobs, createJob, enqueueJob, findActiveJobId, isJobActive,
 } = require('./shared');
 const { validateManifest, validateBookJson, planFromNodes, normalizeIncludes } = require('../../lib/book-bundle');
 const { restoreExtras } = require('../../db/book-migration-data');
@@ -41,6 +41,7 @@ const importBuffers = new ImportBufferStore({
   ttlMs: BUFFER_TTL_MS,
   maxPerUser: 1,
   maxTotalBytes: 2 * MAX_ZIP_BYTES,
+  isLive: isJobActive,
 });
 
 async function _readJsonEntry(zip, name) {

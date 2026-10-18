@@ -18,7 +18,7 @@
 const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
-  createJob, enqueueJob, findActiveJobId,
+  createJob, enqueueJob, findActiveJobId, isJobActive, throwIfCancelled,
 } = require('./shared');
 const contentStore = require('../../lib/content-store');
 const { parseImportFile, extOf, SUPPORTED_EXTS } = require('../../lib/import-parsers/dispatch');
@@ -28,7 +28,7 @@ const {
 const { toIntId } = require('../../lib/validate');
 const { setContext } = require('../../lib/log-context');
 const { guardBook, sessionEmail } = require('../../lib/acl');
-const { createOwnedBook, bookNameError, BOOK_NAME_MAX } = require('../../lib/book-create');
+const { createOwnedBook, discardImportedBook, bookNameError, BOOK_NAME_MAX } = require('../../lib/book-create');
 const { ZipLimitError } = require('../../lib/zip-limits');
 const { ImportBufferStore } = require('../../lib/import-buffers');
 const { getBookLocale } = require('../../db/schema');
@@ -46,6 +46,7 @@ const manuscriptBuffers = new ImportBufferStore({
   ttlMs: BUFFER_TTL_MS,
   maxPerUser: 1,
   maxTotalBytes: 4 * MAX_DOC_BYTES,
+  isLive: isJobActive,
 });
 
 // Namen fuer Seiten/Kapitel ohne eigene Ueberschrift. Buch-Locale entscheidet,
@@ -110,6 +111,7 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
     auditLog.push({ level, msg, ts: new Date().toISOString() });
     if (level === 'warn') log.warn(msg); else log.info(msg);
   };
+  let createdBookId = null;   // nur new-book: Rueckbau bei Abbruch/Fehler
   try {
     const entry = manuscriptBuffers.get(jobId);
     if (!entry) throw i18nError('job.error.importBufferMissing');
@@ -131,6 +133,7 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
       updateJob(jobId, { progress: 25, statusText: 'job.manuscript-import.creatingBook' });
       const created = await createOwnedBook({ name: bookName }, userEmail, { session: { user: { email: userEmail } } });
       effBookId = created.id;
+      createdBookId = created.id;
       audit('info', `Buch erstellt: «${bookName}» id=${effBookId}`);
     }
     if (!effBookId) throw i18nError('job.error.bookMissing');
@@ -157,6 +160,7 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
     };
 
     const tick = (label) => {
+      throwIfCancelled(jobId);
       done += 1;
       updateJob(jobId, {
         progress: 30 + Math.round(62 * (done / totalNodes)),
@@ -213,6 +217,9 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
     }
     const createdTree = await walk(split.nodes, null, 1);
     contentStore.appendImportedTree(effBookId, createdTree);
+    // Ab hier steht das Buch vollstaendig — ein spaeterer Fehler (Baseline)
+    // nimmt es nicht mehr zurueck.
+    createdBookId = null;
 
     audit('info', `Import abgeschlossen: ${pagesCreated} Seiten, ${chaptersCreated} Kapitel, ${failures.length} Fehler`);
 
@@ -236,6 +243,7 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
     });
   } catch (e) {
     if (e?.name !== 'AbortError') log.error(`manuscript-import job ${jobId}: ${e.message}`, { stack: e.stack });
+    if (createdBookId) await discardImportedBook(createdBookId, userEmail);
     failJob(jobId, e);
   } finally {
     manuscriptBuffers.delete(jobId);
