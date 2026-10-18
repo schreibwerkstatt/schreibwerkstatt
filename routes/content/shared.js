@@ -19,6 +19,9 @@ function _validDeviceId(s) { return typeof s === 'string' && UUID_RE.test(s); }
 // nur [A-Za-z0-9_-], gedeckelt — sonst könnte der Body Zeilenumbrüche ins Log
 // schreiben.
 function _logToken(s) { return typeof s === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(s) ? s : '-'; }
+// Zeitstempel aus dem Request-Body (ISO-8601) fuer Log-Zeilen — alles andere
+// wird '-', damit ein Client keine Zeilenumbrueche ins Log schreiben kann.
+function _logStamp(s) { return typeof s === 'string' && /^[0-9T:.Z+-]{10,32}$/.test(s) ? s : '-'; }
 
 
 // Beschreibt den anfragenden Client fuer Logs. Bei Device-Token-Auth (nativer
@@ -78,7 +81,7 @@ function _sendSanitizeFailed(res, e) {
 }
 
 module.exports = {
-  jsonBody, NAME_MAX, UUID_RE, _validDeviceId, _logToken,
+  jsonBody, NAME_MAX, UUID_RE, _validDeviceId, _logToken, _logStamp,
   _clientLabel, _deviceTokenLabel,
   _guardPage, _guardChapter, _fail, _sendSanitizeFailed,
 };

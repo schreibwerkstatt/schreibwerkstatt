@@ -1,8 +1,9 @@
 // Teil von notebookEditMethods (siehe Facade edit.js).
-import { FEATURE_BLOCK_MERGE, buildResolvedHtml, captureBlockCaret, checkPageConflict, clearDraft, conflictBannerFrom, conflictText, contentRepo, editorHost, isOwnSentSave, isPageConflict, mergeBlocks, mergedToHtml, mountEditorHtml, isNoChange, readConflictBody, readDraft, restoreBlockCaret, savePage, stripLektoratMarks, trackMerge, writeDraft } from './_shared.js';
+import { FEATURE_BLOCK_MERGE, buildResolvedHtml, captureBlockCaret, checkPageConflict, clearDraft, conflictBannerFrom, conflictText, contentRepo, editorHost, isOwnSentSave, isPageConflict, mergeBlocks, mergedToHtml, mountEditorHtml, isNoChange, readConflictBody, readDraft, remoteAuthorFrom, restoreBlockCaret, savePage, stripLektoratMarks, trackMerge, writeDraft } from './_shared.js';
 import { classifySaveError } from '../save-errors.js';
 import { conflictDiffView } from '../../shared/conflict-diff.js';
 import { noteSaveOutage } from '../save-outage.js';
+import { reportConflictShown } from '../conflict-report.js';
 
 // Läuft die Abbrechen-Rückfrage schon? Esc (window-Listener im Partial) und
 // der Knopf dürfen keinen zweiten Dialog über den ersten legen.
@@ -19,6 +20,17 @@ export const conflictMethods = {
     if (!c) return '';
     const time = c.remoteUpdatedAt ? app.formatDate(c.remoteUpdatedAt) : '';
     return conflictText(app.t.bind(app), c, 'banner', { time });
+  },
+
+
+  // Texte des Auflösungs-Modals, die den Urheber der anderen Version nennen
+  // (Name bzw. eigenes Gerät) — `variant` aus CONFLICT_KEYS (`resolve*`).
+  conflictResolutionText(variant) {
+    const app = editorHost();
+    const cr = app?.conflictResolution;
+    if (!cr) return '';
+    const time = cr.remoteUpdatedAt ? app.formatDate(cr.remoteUpdatedAt) : '';
+    return conflictText(app.t.bind(app), cr.author, variant, { time });
   },
 
 
@@ -92,6 +104,7 @@ export const conflictMethods = {
     const merge = await this._attemptBlockMerge({
       localHtml, source, pageId, liveLocal: true,
       remoteHtml: conflict.remoteHtml, remoteUpdatedAt: conflict.remoteUpdatedAt,
+      author: conflict, via: 'precheck',
     });
     if (merge?.stale) return { proceed: false, stale: true };
     if (merge?.conflict) return { proceed: false }; // Auflösungs-Modal offen
@@ -148,7 +161,7 @@ export const conflictMethods = {
     // parallelen PUT absetzen. Öffnet der Merge das Auflösungs-Modal, kehren
     // alle Aufrufer sofort zurück und setzen das Flag im `finally` zurück —
     // ohne dazwischenliegendes `await`, das Modal ist bis dahin nicht klickbar.
-    const merge = await this._attemptBlockMerge({ localHtml, source, pageId, liveLocal });
+    const merge = await this._attemptBlockMerge({ localHtml, source, pageId, liveLocal, via: tag });
     if (merge?.stale) return { stale: true };
     if (merge?.conflict) return { conflict: true };
     if (!merge?.merged) return null;
@@ -239,7 +252,9 @@ export const conflictMethods = {
   //    derselben Seite, bleiben bereits getroffene Entscheidungen stehen.
   //  - `view` je Konflikt: Klartext + Wort-Diff für die Vorschau
   //    (shared/conflict-diff.js); übernommen wird das rohe Block-HTML.
-  _openConflictResolution({ merged, conflicts: rawConflicts, source, remoteUpdatedAt }) {
+  //  - `author` (Feldsatz von shared/page-conflict.js#remoteAuthorFrom): wer
+  //    die andere Version geschrieben hat — das Modal nennt ihn beim Namen.
+  _openConflictResolution({ merged, conflicts: rawConflicts, source, remoteUpdatedAt, author = null }) {
     const conflicts = rawConflicts.map(c => ({ ...c, view: conflictDiffView(c) }));
     const app = editorHost();
     const pageId = app.currentPage?.id;
@@ -254,6 +269,7 @@ export const conflictMethods = {
       merged,
       conflicts,
       remoteUpdatedAt,
+      author: author || {},
       decisions,
     };
     trackMerge('conflict_shown');
@@ -277,7 +293,7 @@ export const conflictMethods = {
   // das DOM. Ein Merge mit dem alten Schnappschuss löschte, was in dieser Zeit
   // getippt wurde. Aus bei submitConflictResolution: dort ist die lokale Seite
   // die getroffene Auflösung, nicht das DOM.
-  async _attemptBlockMerge({ localHtml, source, pageId, remoteHtml = null, remoteUpdatedAt = null, liveLocal = false }) {
+  async _attemptBlockMerge({ localHtml, source, pageId, remoteHtml = null, remoteUpdatedAt = null, liveLocal = false, author = null, via = null }) {
     const app = editorHost();
     if (!FEATURE_BLOCK_MERGE || !app.currentPage) return null;
     if (pageId == null) pageId = app.currentPage.id;
@@ -286,6 +302,7 @@ export const conflictMethods = {
         const remote = await contentRepo.loadPage(pageId, { fresh: true });
         remoteHtml = remote?.html || '';
         remoteUpdatedAt = remote?.updated_at || null;
+        author = remoteAuthorFrom(remote);
       } catch { return null; }
     }
     // Base (originalHtml), Live-DOM und Auflösungs-Banner gehören der offenen
@@ -301,7 +318,11 @@ export const conflictMethods = {
     }
     // Server-Stand ist ein eigener, verspätet angekommener Save dieses Tabs
     // (../sent-saves.js): der lokale Stand ist sein Nachfahre, kein Merge.
-    if (isOwnSentSave(pageId, remoteHtml)) {
+    // Nur der Fingerabdruck entscheidet, nie Konto + Geräte-ID: die Geräte-ID
+    // gilt für den ganzen Browser, Bucheditor, Outbox und andere Tabs schreiben
+    // mit derselben — ein «eigener» Stand von dort würde still überschrieben.
+    const ownFp = isOwnSentSave(pageId, remoteHtml);
+    if (ownFp) {
       return { merged: true, own: true, saveHtml: localHtml, expectedAt: remoteUpdatedAt };
     }
     const m = this._computeBlockMerge(localHtml, remoteHtml);
@@ -315,7 +336,11 @@ export const conflictMethods = {
     // Draft sichern, aber ohne Status-Zeile — das Auflösungs-Modal ist der
     // sichtbare Hinweis, ein zweiter Toast daneben wäre Rauschen.
     this._keepAsDraft({ pageId, html: localHtml, statusKey: null });
-    this._openConflictResolution({ merged: m.merged, conflicts: m.conflicts, source, remoteUpdatedAt });
+    reportConflictShown({
+      pageId, via, baseAt: app.currentPage?.updated_at, remoteAt: remoteUpdatedAt, author, ownFp,
+      baseHtml: app.originalHtml, localHtml, remoteHtml, conflicts: m.conflicts,
+    });
+    this._openConflictResolution({ merged: m.merged, conflicts: m.conflicts, source, remoteUpdatedAt, author });
     return { conflict: true };
   },
 
@@ -357,8 +382,15 @@ export const conflictMethods = {
       return;
     }
     const source = app.focusActive ? 'focus' : 'main';
+    const fromPage = remoteAuthorFrom(remote);
+    const author = {
+      remoteUserName: change?.last_editor_name || fromPage.remoteUserName,
+      remoteIsSelf: change ? !!change.is_self : fromPage.remoteIsSelf,
+      remoteDevice: change?.device_label || fromPage.remoteDevice,
+      remoteDeviceId: fromPage.remoteDeviceId,
+    };
     const merge = await this._attemptBlockMerge({
-      localHtml, source, pageId, remoteHtml, remoteUpdatedAt: remote.updated_at, liveLocal: true,
+      localHtml, source, pageId, remoteHtml, remoteUpdatedAt: remote.updated_at, liveLocal: true, author, via: 'pull',
     });
     if (merge?.stale || merge?.conflict) return;
     if (merge?.merged) {
@@ -371,12 +403,7 @@ export const conflictMethods = {
       if (!merge.own) app.setStatus(app.t('edit.conflict.merged.silent'), false, 5000);
       return;
     }
-    app.editConflict = this._conflictBannerFrom({
-      remoteUserName: change?.last_editor_name || remote.updated_by_name || null,
-      remoteUpdatedAt: remote.updated_at,
-      remoteIsSelf: !!change?.is_self,
-      remoteDevice: change?.device_label || remote.last_editor?.device_name || null,
-    });
+    app.editConflict = this._conflictBannerFrom({ ...author, remoteUpdatedAt: remote.updated_at });
   },
 
 
@@ -400,7 +427,9 @@ export const conflictMethods = {
     }
     // Server-Stand ist ein Zwischenstand, den dieser Tab selbst geschickt hat
     // (Antwort verloren, danach neu geladen): der Draft ist sein Nachfahre.
-    if (isOwnSentSave(app.currentPage.id, serverHtml)) return { html: draft.html };
+    const author = remoteAuthorFrom(app.currentPage);
+    const ownFp = isOwnSentSave(app.currentPage.id, serverHtml);
+    if (ownFp) return { html: draft.html };
     let m;
     try { m = mergeBlocks(draft.originalHtml, draft.html, serverHtml); }
     catch (e) {
@@ -411,7 +440,11 @@ export const conflictMethods = {
       trackMerge('silent_success');
       return { html: mergedToHtml(m.merged), merged: true };
     }
-    return { html: draft.html, conflict: { merged: m.merged, conflicts: m.conflicts, remoteUpdatedAt: serverAt } };
+    reportConflictShown({
+      pageId: app.currentPage.id, via: 'draft', baseAt: draft.originalUpdatedAt, remoteAt: serverAt, author, ownFp,
+      baseHtml: draft.originalHtml, localHtml: draft.html, remoteHtml: serverHtml, conflicts: m.conflicts,
+    });
+    return { html: draft.html, conflict: { merged: m.merged, conflicts: m.conflicts, remoteUpdatedAt: serverAt, author } };
   },
 
 

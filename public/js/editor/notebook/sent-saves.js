@@ -38,16 +38,49 @@ function hash53(str) {
 // Fingerabdruck über die Blockstruktur, nicht über das rohe HTML: der Server
 // bereinigt den PUT (lib/html-clean.js#cleanPageHtml — u.a. Rand-&nbsp; am
 // Blockende, leere Blöcke), der Editor-Output trägt das noch. Je Block der
-// obersten Ebene zählen Block-ID, die Folge der Inline-Tags und der Text mit
+// obersten Ebene zählen die Folge der Inline-Tags und der Text mit
 // zusammengefasstem Leerraum; leere Blöcke fallen heraus. Eine reine
 // Attribut-Änderung (Link-Ziel, Bildquelle) sieht der Abdruck nicht.
-const EMPTY_BLOCK_CONTENT = ':not(br)';
+// Die Block-ID zählt bewusst NICHT: der Server vergibt fehlende und doppelte
+// IDs neu (lib/html-clean.js#ensureBlockIds), und die Antwort, die sie dem
+// Editor mitteilen würde, ist genau die, die verloren ging. Ein Treffer heisst
+// damit «Text und Struktur gleich einem Stand, den dieser Tab geschickt hat» —
+// der lokale Stand überschreibt dann nichts, was nicht von hier kam.
+// `<a>` zählt nicht zur Tag-Folge: der Server macht aus nackten URLs Links
+// (linkifyBareUrls), der Linktext ist die URL selbst — der Text bleibt gleich,
+// die Tag-Folge nicht. Gegated gegen die echte Server-Pipeline in
+// tests/unit/notebook-edit-conflict.test.mjs.
+const EMPTY_BLOCK_CONTENT = ':not(br):not(a)';
+
+// Der Server kürzt Rand-Leerraum je innerem Block (lib/html-clean.js
+// #_EDGE_TRIM_BLOCKS: jede Verlaufszeile, jedes Listenelement, jeder Absatz im
+// Zitat), nicht nur am Rand des Blocks der obersten Ebene. Der Text wird darum
+// je innerem Block gekürzt und mit Trenner gebildet — sonst ergäbe «Marie »
+// über der nächsten Verlaufszeile vor dem Save einen anderen Text als danach.
+// Mehr Grenzen als der Server schaden nicht: beide Seiten laufen hier durch.
+const INNER_BLOCK_SEL = 'p,h1,h2,h3,h4,h5,h6,li,blockquote,pre,div,td,th,dd,dt,figcaption,ul,ol,table,thead,tbody,tr,figure';
+const squash = (s) => s.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+
+function blockText(el) {
+  const parts = [];
+  let run = '';
+  for (const n of el.childNodes) {
+    if (n.nodeType === 1 && n.matches(INNER_BLOCK_SEL)) {
+      parts.push(squash(run), blockText(n));
+      run = '';
+    } else {
+      run += n.textContent || '';
+    }
+  }
+  parts.push(squash(run));
+  return parts.filter(Boolean).join('\n');
+}
 
 function blockSignature(el) {
-  const text = (el.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  const text = blockText(el);
   const tags = [...el.querySelectorAll(EMPTY_BLOCK_CONTENT)].map((d) => d.tagName.toLowerCase()).join(',');
   if (!text && !tags) return null;
-  return `${el.getAttribute?.('data-bid') || ''}|${tags}|${text}`;
+  return `${tags}|${text}`;
 }
 
 export function saveFingerprint(html) {

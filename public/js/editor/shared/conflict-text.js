@@ -19,6 +19,11 @@ export const CONFLICT_KEYS = {
   banner: ['edit.conflict.bannerSelf', 'edit.conflict.banner'],
   hint: ['edit.conflict.unsavedHintSelf', 'edit.conflict.unsavedHint'],
   modal: ['edit.conflict.messageSelf', 'edit.conflict.message'],
+  // Auflösungs-Modal (Notebook + Focus, partials/conflict-resolution.html)
+  resolveTitle: ['edit.conflict.resolve.titleSelf', 'edit.conflict.resolve.title'],
+  resolveRemote: ['edit.conflict.resolve.remoteSelf', 'edit.conflict.resolve.remote'],
+  resolveAllRemote: ['edit.conflict.resolve.allRemoteSelf', 'edit.conflict.resolve.allRemote'],
+  resolveDeletedRemote: ['edit.conflict.resolve.deletedRemoteSelf', 'edit.conflict.resolve.deletedRemote'],
   // Bucheditor (pro Block statt pro Seite)
   bookHint: ['bookEditor.conflictHintSelf', 'bookEditor.conflictHint'],
   bookBanner: ['bookEditor.conflict.bannerSelf', 'bookEditor.conflict.banner'],

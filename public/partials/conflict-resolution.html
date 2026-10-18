@@ -19,47 +19,50 @@
     <header class="conflict-modal__head">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#alert-triangle"/></svg>
       <h2 class="conflict-modal__title"
-          x-text="t('edit.conflict.blocks.count', { count: conflictResolution?.conflicts?.length || 0 })"></h2>
+          x-text="conflictResolutionText('resolveTitle')"></h2>
     </header>
+    <p class="conflict-modal__hint" x-text="t('edit.conflict.resolve.hint')"></p>
 
     <div class="conflict-modal__bulk">
       <button type="button" @click="resolveAllConflicts('local')"
               x-text="t('edit.conflict.bulk.takeAllLocal')"></button>
       <button type="button" @click="resolveAllConflicts('remote')"
-              x-text="t('edit.conflict.bulk.takeAllRemote')"></button>
+              x-text="conflictResolutionText('resolveAllRemote')"></button>
     </div>
 
+    <!-- Je Stelle zwei Karten nebeneinander; die Karte IST die Wahl (aria-pressed).
+         Nur der Klartext-Span trägt `pre-wrap` — am Container rendert sonst der
+         Template-Whitespace als Einzug mit. -->
     <ul class="conflict-block-list">
       <template x-for="c in (conflictResolution?.conflicts || [])" :key="c.bid">
         <li class="conflict-block">
-          <div class="conflict-block__choices">
-            <button type="button" @click="resolveBlock(c.bid, 'local')"
-                    :class="{ 'is-active': (conflictResolution.decisions[c.bid] || 'local') === 'local' }"
-                    x-text="t('edit.conflict.block.takeLocal')"></button>
-            <button type="button" @click="resolveBlock(c.bid, 'remote')"
-                    :class="{ 'is-active': conflictResolution.decisions[c.bid] === 'remote' }"
-                    x-text="t('edit.conflict.block.takeRemote')"></button>
-            <button type="button" @click="resolveBlock(c.bid, 'both')"
-                    :class="{ 'is-active': conflictResolution.decisions[c.bid] === 'both' }"
-                    x-text="t('edit.conflict.block.takeBoth')"></button>
-          </div>
           <p class="conflict-block__note" x-show="c.view.formatOnly"
              x-text="t('edit.conflict.block.formatOnly')"></p>
           <div class="conflict-block__previews">
             <template x-for="side in ['local', 'remote']" :key="side">
-              <div class="conflict-block__preview">
+              <button type="button" class="conflict-block__preview"
+                      :class="{ 'is-active': ['both', side].includes(conflictResolution.decisions[c.bid] || 'local') }"
+                      :aria-pressed="['both', side].includes(conflictResolution.decisions[c.bid] || 'local') ? 'true' : 'false'"
+                      @click="resolveBlock(c.bid, side)">
                 <span class="conflict-block__label"
-                      x-text="t(side === 'local' ? 'edit.conflict.block.takeLocal' : 'edit.conflict.block.takeRemote')"></span>
-                <div class="conflict-block__text">
+                      x-text="side === 'local' ? t('edit.conflict.block.takeLocal') : conflictResolutionText('resolveRemote')"></span>
+                <span class="conflict-block__text">
                   <template x-if="c.view[side]">
-                    <span><template x-for="(part, pi) in c.view[side]" :key="pi"><span :class="'conflict-diff__' + part.t" x-text="part.v"></span></template></span>
+                    <span class="conflict-block__body"><template x-for="(part, pi) in c.view[side]" :key="pi"><span :class="'conflict-diff__' + part.t" x-text="part.v"></span></template></span>
                   </template>
                   <template x-if="!c.view[side]">
-                    <em class="conflict-block__deleted" x-text="t('edit.conflict.block.deleted')"></em>
+                    <em class="conflict-block__deleted" x-text="side === 'local' ? t('edit.conflict.block.deletedLocal') : conflictResolutionText('resolveDeletedRemote')"></em>
                   </template>
-                </div>
-              </div>
+                </span>
+              </button>
             </template>
+          </div>
+          <div class="conflict-block__extra">
+            <button type="button" class="conflict-block__both"
+                    :class="{ 'is-active': conflictResolution.decisions[c.bid] === 'both' }"
+                    :aria-pressed="conflictResolution.decisions[c.bid] === 'both' ? 'true' : 'false'"
+                    @click="resolveBlock(c.bid, conflictResolution.decisions[c.bid] === 'both' ? 'local' : 'both')"
+                    x-text="t('edit.conflict.block.takeBoth')"></button>
           </div>
         </li>
       </template>

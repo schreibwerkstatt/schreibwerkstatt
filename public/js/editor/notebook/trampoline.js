@@ -43,6 +43,7 @@ export const notebookTrampoline = {
   // Banner rendert im Root-Scope, bevor die Sub gemountet ist → '' statt undefined.
   editConflictBannerText() { return card()?.editConflictBannerText() ?? ''; },
   // Konflikt-Auflösungs-Modal (partials/conflict-resolution.html) — Root-Scope.
+  conflictResolutionText(variant) { return card()?.conflictResolutionText(variant) ?? ''; },
   resolveBlock(bid, choice) { card()?.resolveBlock(bid, choice); },
   resolveAllConflicts(choice) { card()?.resolveAllConflicts(choice); },
   submitConflictResolution() { return card()?.submitConflictResolution(); },

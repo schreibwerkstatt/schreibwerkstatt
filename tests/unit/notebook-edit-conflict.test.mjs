@@ -13,6 +13,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseHTML } from 'linkedom';
+import { createRequire } from 'node:module';
 
 const { window } = parseHTML('<!doctype html><html><body></body></html>');
 globalThis.window = window;
@@ -65,6 +66,7 @@ test('_checkPageConflict: abweichender Stand → Konfliktobjekt', async () => {
     // Ohne Session-Email im Test-Host kein Self-Match → Fremd-Formulierung.
     remoteIsSelf: false,
     remoteDevice: null,
+    remoteDeviceId: null,
     remoteHtml: '<p>remote</p>',
   });
 });
@@ -517,6 +519,47 @@ test('sent-saves: Server-Normalform (&#160;) trifft den gesendeten Editor-Stand'
   assert.equal(isOwnSentSave(77, '<p data-bid="a">Hallo Welt!</p>'), false);
   assert.equal(isOwnSentSave(78, '<p data-bid="a">Hallo&#160;Welt</p>'), false, 'pro Seite');
 });
+
+// Der Abdruck muss die echte Server-Bereinigung überstehen (cleanPageHtml +
+// ensureBlockIds am Write-Chokepoint): sonst erkennt der Merge einen eigenen
+// Save mit verlorener Antwort nicht und zeigt ein Konflikt-Modal gegen den
+// eigenen Stand. Die Block-ID gehört nicht zum Abdruck: der Server vergibt
+// fehlende und doppelte IDs neu, und genau diese Antwort ist verloren — darum
+// stehen hier auch Blöcke ohne ID und mit doppelter ID.
+const { cleanPageHtml, ensureBlockIds } = createRequire(import.meta.url)('../../lib/html-clean.js');
+const SERVER_CLEAN_CASES = {
+  bareUrl: '<p data-bid="a">siehe https://example.com/x, dort</p>',
+  edgeNbsp: '<p data-bid="a">Text&nbsp;</p>',
+  nbspBr: '<p data-bid="a">«Was?»&nbsp;<br>Ivan</p>',
+  divBlock: '<p data-bid="a">A</p><div data-bid="d">Zeile im div</div>',
+  msgThread: '<div class="msg-thread" data-bid="t"><p class="msg-in" data-bid="m1">Hi</p><p class="msg-out" data-bid="m2">Ho</p></div><p data-bid="a">x</p>',
+  nestedNoBid: '<div class="msg-thread" data-bid="t"><p class="msg-in">Hi</p><p class="msg-out">Ho</p></div>',
+  emptyBlocks: '<p data-bid="a">A</p><p data-bid="e"><br></p><p data-bid="e2"><br></p><p data-bid="b">B</p><p><br></p>',
+  // Rand-Leerraum je innerer Zeile: der Server kürzt jede Verlaufszeile,
+  // jedes Listenelement, jeden Zitat-Absatz einzeln — beim Tippen endet die
+  // Caret-Zeile oft auf einem Leerzeichen.
+  msgLineTrailingSpace: '<div class="msg-thread" data-bid="t"><p class="msg-name" data-bid="m0">Marie&nbsp;</p><p class="msg-in" data-bid="m1">Hallo</p></div>',
+  msgLineLeadingNbsp: '<div class="msg-thread" data-bid="t"><p class="msg-in" data-bid="m1">Hallo</p><p class="msg-in" data-bid="m2">&nbsp;du</p></div>',
+  msgLineItalicTrailing: '<div class="msg-thread" data-bid="t"><p class="msg-in" data-bid="m1"><i>Wirklich?&nbsp;</i></p><p class="msg-out" data-bid="m2">Ja</p></div>',
+  listItemTrailing: '<ul data-bid="l"><li>eins&nbsp;</li><li>zwei</li></ul>',
+  quoteParaTrailing: '<blockquote data-bid="q"><p>eins&nbsp;</p><p>zwei</p></blockquote>',
+  newBlockNoBid: '<p data-bid="a">A</p><p>Neu getippt</p>',
+  threadNoBid: '<div class="msg-thread"><p class="msg-in">Hi</p><p class="msg-out">Ho</p></div>',
+  dupBid: '<p data-bid="a">Eins</p><p data-bid="a">Zwei</p>',
+};
+test('sent-saves: anderer Text unter denselben Block-IDs ist kein eigener Stand', () => {
+  recordSentSave(79, '<p data-bid="a">Anfang</p><p data-bid="b">Mitte</p>');
+  assert.equal(isOwnSentSave(79, '<p data-bid="x">Anfang</p><p data-bid="y">Mitte</p>'), true, 'nur IDs anders');
+  assert.equal(isOwnSentSave(79, '<p data-bid="a">Anfang</p><p data-bid="b">Mitte, von woanders</p>'), false);
+});
+
+for (const [name, sent] of Object.entries(SERVER_CLEAN_CASES)) {
+  test(`sent-saves: übersteht die Server-Bereinigung (${name})`, () => {
+    const pageId = `clean-${name}`;
+    recordSentSave(pageId, sent);
+    assert.equal(isOwnSentSave(pageId, ensureBlockIds(cleanPageHtml(sent))), true, ensureBlockIds(cleanPageHtml(sent)));
+  });
+}
 
 test('quickSave: 409 gegen eigenen verspäteten Save → lokaler Stand auf Server-Stempel, kein Modal', async () => {
   const app = setSwitchApp();

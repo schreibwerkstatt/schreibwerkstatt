@@ -21,31 +21,33 @@
       <div class="conflict-modal">
         <header class="conflict-modal__head">
           <h2 class="conflict-modal__title" data-testid="conflict-title"
-              x-text="t('edit.conflict.blocks.count', { count: conflictResolution?.conflicts?.length || 0 })"></h2>
+              x-text="conflictResolutionText('resolveTitle')"></h2>
         </header>
         <div class="conflict-modal__bulk">
           <button type="button" data-testid="bulk-local" @click="resolveAllConflicts('local')"
                   x-text="t('edit.conflict.bulk.takeAllLocal')"></button>
           <button type="button" data-testid="bulk-remote" @click="resolveAllConflicts('remote')"
-                  x-text="t('edit.conflict.bulk.takeAllRemote')"></button>
+                  x-text="conflictResolutionText('resolveAllRemote')"></button>
         </div>
         <ul class="conflict-block-list">
           <template x-for="c in (conflictResolution?.conflicts || [])" :key="c.bid">
             <li class="conflict-block" :data-bid="c.bid">
-              <div class="conflict-block__choices">
-                <button type="button" class="choice-local" @click="resolveBlock(c.bid, 'local')"
-                        :class="{ 'is-active': (conflictResolution.decisions[c.bid] || 'local') === 'local' }"
-                        x-text="t('edit.conflict.block.takeLocal')"></button>
-                <button type="button" class="choice-remote" @click="resolveBlock(c.bid, 'remote')"
-                        :class="{ 'is-active': conflictResolution.decisions[c.bid] === 'remote' }"
-                        x-text="t('edit.conflict.block.takeRemote')"></button>
-                <button type="button" class="choice-both" @click="resolveBlock(c.bid, 'both')"
-                        :class="{ 'is-active': conflictResolution.decisions[c.bid] === 'both' }"
-                        x-text="t('edit.conflict.block.takeBoth')"></button>
-              </div>
               <div class="conflict-block__previews">
-                <pre class="conflict-block__code preview-local" x-text="c.local_html || '—'"></pre>
-                <pre class="conflict-block__code preview-remote" x-text="c.remote_html || '—'"></pre>
+                <template x-for="side in ['local', 'remote']" :key="side">
+                  <button type="button" class="conflict-block__preview"
+                          :class="'choice-' + side + ' preview-' + side + (['both', side].includes(conflictResolution.decisions[c.bid] || 'local') ? ' is-active' : '')"
+                          @click="resolveBlock(c.bid, side)">
+                    <span class="conflict-block__label"
+                          x-text="side === 'local' ? t('edit.conflict.block.takeLocal') : conflictResolutionText('resolveRemote')"></span>
+                    <span class="conflict-block__text" x-text="(side === 'local' ? c.local_html : c.remote_html) || '—'"></span>
+                  </button>
+                </template>
+              </div>
+              <div class="conflict-block__extra">
+                <button type="button" class="choice-both"
+                        :class="{ 'is-active': conflictResolution.decisions[c.bid] === 'both' }"
+                        @click="resolveBlock(c.bid, conflictResolution.decisions[c.bid] === 'both' ? 'local' : 'both')"
+                        x-text="t('edit.conflict.block.takeBoth')"></button>
               </div>
             </li>
           </template>
@@ -65,12 +67,9 @@
 
     // Minimal-i18n: nur die Konflikt-Keys, {count}/{params}-Interpolation.
     const STR = {
-      'edit.conflict.blocks.count': '{count} Block/Blöcke wurden in beiden Versionen geändert.',
       'edit.conflict.block.takeLocal': 'Meine Version',
-      'edit.conflict.block.takeRemote': 'Andere Version',
-      'edit.conflict.block.takeBoth': 'Beide übereinander',
-      'edit.conflict.bulk.takeAllLocal': 'Alle meine',
-      'edit.conflict.bulk.takeAllRemote': 'Alle anderen',
+      'edit.conflict.block.takeBoth': 'Beide behalten',
+      'edit.conflict.bulk.takeAllLocal': 'Überall meine',
       'edit.conflict.apply': 'Auflösung übernehmen',
       'edit.conflict.cancel': 'Abbrechen',
     };
@@ -92,6 +91,11 @@
         let s = STR[key] || key;
         for (const [k, v] of Object.entries(params)) s = s.replaceAll(`{${k}}`, String(v));
         return s;
+      },
+      // Urheber-Texte: im echten Modal via conflict-text.js; hier fest.
+      conflictResolutionText(variant) {
+        return { resolveTitle: 'Konflikt', resolveRemote: 'Version von Cora',
+          resolveAllRemote: 'Überall die von Cora', resolveDeletedRemote: 'Von Cora gelöscht' }[variant] || variant;
       },
       // Konflikt aus einem mergeBlocks-Resultat öffnen (Test ruft das via evaluate).
       openConflict(merged, conflicts) {

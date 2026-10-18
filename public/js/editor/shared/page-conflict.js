@@ -22,7 +22,7 @@ import { editorHost } from './editor-host.js';
  * bekommt `null`, also „weitermachen"): ein Modal auf unsicherer Datenlage wäre
  * irreführend, der ohnehin folgende PUT läuft in den OCC-Guard des Backends.
  *
- * @returns {Promise<null|{remoteUpdatedAt, remoteUserName, remoteIsSelf, remoteDevice, remoteHtml}>}
+ * @returns {Promise<null|{remoteUpdatedAt, remoteUserName, remoteIsSelf, remoteDevice, remoteDeviceId, remoteHtml}>}
  */
 export async function checkPageConflict(pageId, expectedUpdatedAt) {
   if (!expectedUpdatedAt) return null;
@@ -45,17 +45,29 @@ export async function checkPageConflict(pageId, expectedUpdatedAt) {
     return null;
   }
   if (remote.updated_at === expectedUpdatedAt) return null;
-  // Eigenes Zweit-Gerät (Mac-Client, zweiter Laptop, Android) vs. fremder
-  // ACL-User: `last_editor.device_name` ist serverseitig ohnehin nur für die
-  // eigenen Geräte des Anfragers gefüllt.
-  const selfEmail = editorHost()?.$store?.session?.currentUser?.email || null;
-  const remoteIsSelf = !!selfEmail && remote.last_editor_email === selfEmail;
   return {
     remoteUpdatedAt: remote.updated_at,
-    remoteUserName: remote.updated_by_name || null,
-    remoteIsSelf,
-    remoteDevice: remote.last_editor?.device_name || null,
+    ...remoteAuthorFrom(remote),
     remoteHtml: remote.html || '',
+  };
+}
+
+/**
+ * Wer hat den Server-Stand einer Seite zuletzt geschrieben? Eigenes Zweit-Gerät
+ * (Mac-Client, zweiter Laptop, Android) vs. fremder ACL-User:
+ * `last_editor.device_name` ist serverseitig ohnehin nur für die eigenen Geräte
+ * des Anfragers gefüllt. Feldsatz wie im Konflikt-Objekt (conflict-text.js).
+ *
+ * @param {object|null} page  Antwort von `contentRepo.loadPage`
+ * @returns {{remoteUserName, remoteIsSelf, remoteDevice, remoteDeviceId}}
+ */
+export function remoteAuthorFrom(page) {
+  const selfEmail = editorHost()?.$store?.session?.currentUser?.email || null;
+  return {
+    remoteUserName: page?.updated_by_name || null,
+    remoteIsSelf: !!selfEmail && page?.last_editor_email === selfEmail,
+    remoteDevice: page?.last_editor?.device_name || null,
+    remoteDeviceId: page?.last_editor?.device_id || null,
   };
 }
 

@@ -52,8 +52,16 @@ test('Beide ändern denselben Block → Banner mit Block-by-Block-Auflösung', a
 
   // Default-Auswahl = lokal (least surprise).
   await expect(page.locator('.choice-local')).toHaveClass(/is-active/);
+  await expect(page.locator('.choice-remote')).not.toHaveClass(/is-active/);
 
-  // Auf „Andere Version" wechseln → Auswahl flippt.
+  // „Beide behalten" markiert beide Karten, ein zweiter Klick nimmt es zurück.
+  await page.locator('.choice-both').click();
+  await expect(page.locator('.choice-local')).toHaveClass(/is-active/);
+  await expect(page.locator('.choice-remote')).toHaveClass(/is-active/);
+  await page.locator('.choice-both').click();
+  await expect(page.locator('.choice-remote')).not.toHaveClass(/is-active/);
+
+  // Andere Fassung anklicken → Auswahl flippt.
   await page.locator('.choice-remote').click();
   await expect(page.locator('.choice-remote')).toHaveClass(/is-active/);
   await expect(page.locator('.choice-local')).not.toHaveClass(/is-active/);
@@ -66,7 +74,7 @@ test('Beide ändern denselben Block → Banner mit Block-by-Block-Auflösung', a
   expect(resolved).not.toContain('meine Fassung');
 });
 
-test('Bulk „Alle anderen" setzt alle Konflikte auf remote', async ({ page }) => {
+test('Bulk „Überall die von …" setzt alle Konflikte auf remote', async ({ page }) => {
   // Zwei kollidierende Blöcke.
   const local  = '<p data-bid="aaaaaaaa">eins lokal</p><p data-bid="bbbbbbbb">zwei lokal</p>';
   const remote = '<p data-bid="aaaaaaaa">eins remote</p><p data-bid="bbbbbbbb">zwei remote</p>';

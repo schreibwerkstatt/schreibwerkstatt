@@ -17,7 +17,7 @@ const jsonBody = express.json();
 // 'save' = Save-Ausfall des Notebook-Editors, gemeldet beim ersten gelungenen
 // Save danach (public/js/editor/notebook/save-outage.js) — ein Ausfall, der den
 // Server nie erreicht, hinterlaesst sonst keine Spur.
-const JS_ERROR_KINDS = new Set(['error', 'unhandledrejection', 'resource', 'boot', 'save']);
+const JS_ERROR_KINDS = new Set(['error', 'unhandledrejection', 'resource', 'boot', 'save', 'conflict']);
 function _toInt(v) { const n = parseInt(v, 10); return Number.isInteger(n) ? n : null; }
 
 // Erlaubte Basis-Events. 'conflict_resolved' fuehrt zusaetzlich einen

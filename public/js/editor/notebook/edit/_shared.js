@@ -7,7 +7,7 @@ import { readDraft, writeDraft, clearDraft } from '../../draft-storage.js';
 import { stripLektoratMarks } from '../../shared/html-clean.js';
 import { isNoChange } from '../../shared/save-pipeline.js';
 import { savePage as putPage, isPageConflict, readConflictBody } from '../../shared/page-api.js';
-import { checkPageConflict, conflictBannerFrom } from '../../shared/page-conflict.js';
+import { checkPageConflict, conflictBannerFrom, remoteAuthorFrom } from '../../shared/page-conflict.js';
 import { conflictText } from '../../shared/conflict-text.js';
 import { mergeBlocks, mergedToHtml, buildResolvedHtml } from '../../shared/block-merge.js';
 import { trackMerge } from '../../shared/merge-telemetry.js';
@@ -53,4 +53,4 @@ export const AUTOSAVE_KEY = 'page';
 // `window.__app` (Root). Aufruf von extern: über die Trampoline-Forwarder
 // in [trampoline.js] am Root-Spread (`app.startEdit()` → `__notebookCard.startEdit()`).
 
-export { EVT, FEATURE_BLOCK_MERGE, ZOOM_MAX, ZOOM_MIN, buildResolvedHtml, captureBlockCaret, checkPageConflict, clearDraft, clearNormalSnapshot, conflictBannerFrom, conflictText, contentRepo, editorHost, findBlock, findInHtml, getActiveEditorContainer, handleEditorCopy, handleEditorCut, handleEditorPaste, htmlToText, installEditCounter, isNoChange, isOwnSentSave, isPageConflict, localeTag, mergeBlocks, mergedToHtml, mountEditorHtml, readConflictBody, readDraft, readEditorPrefs, restoreBlockCaret, runQuoteNormalize, savePage, sortByPosition, stripLektoratMarks, trackMerge, tzOpts, writeDraft, writeEditorPrefs, writeNormalSnapshot };
+export { EVT, FEATURE_BLOCK_MERGE, ZOOM_MAX, ZOOM_MIN, buildResolvedHtml, captureBlockCaret, checkPageConflict, clearDraft, clearNormalSnapshot, conflictBannerFrom, conflictText, contentRepo, editorHost, findBlock, findInHtml, getActiveEditorContainer, handleEditorCopy, handleEditorCut, handleEditorPaste, htmlToText, installEditCounter, isNoChange, isOwnSentSave, isPageConflict, localeTag, mergeBlocks, mergedToHtml, mountEditorHtml, readConflictBody, readDraft, readEditorPrefs, remoteAuthorFrom, restoreBlockCaret, runQuoteNormalize, savePage, sortByPosition, stripLektoratMarks, trackMerge, tzOpts, writeDraft, writeEditorPrefs, writeNormalSnapshot };

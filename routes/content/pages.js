@@ -12,7 +12,7 @@ const bookAccess = require('../../db/book-access');
 const { toIntId } = require('../../lib/validate');
 const { resolveChapterBookId } = require('../../lib/content-ownership');
 const { guardBook, sessionEmail } = require('../../lib/acl');
-const { jsonBody, NAME_MAX, _validDeviceId, _logToken, _deviceTokenLabel, _guardPage, _fail, _sendSanitizeFailed } = require('./shared');
+const { jsonBody, NAME_MAX, _validDeviceId, _logToken, _logStamp, _deviceTokenLabel, _guardPage, _fail, _sendSanitizeFailed } = require('./shared');
 const { htmlToPlainText } = require('../../lib/html-text');
 const logger = require('../../logger');
 
@@ -62,7 +62,17 @@ function register(router) {
         req.body.device_id = null;
       }
     }
-    try { res.json(await contentStore.savePage(pageId, req.body || {}, req)); }
+    try {
+      const saved = await contentStore.savePage(pageId, req.body || {}, req);
+      // Gegenstück zum PAGE_CONFLICT-Messpunkt: welcher Tab über welchen Weg
+      // den Stand geschrieben hat, gegen den ein späterer Save in 409 läuft.
+      // Ohne diese Zeile ist ein Selbst-Konflikt (Antwort im Netz verloren)
+      // nicht von einem fremden Schreiber desselben Geräts zu unterscheiden.
+      if (typeof req.body?.html === 'string') {
+        logger.info(`PAGE_SAVE Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, neu ${saved?.updated_at || '-'}.`);
+      }
+      res.json(saved);
+    }
     catch (e) {
       if (e.code === 'EMPTY_BODY') return res.status(400).json({ error_code: 'EMPTY_BODY' });
       if (e.code === 'PAGE_CONFLICT') {
@@ -70,7 +80,7 @@ function register(router) {
         // Stempel gegen welchen Server-Stand lief (sonst nirgends erfasst).
         // Tab + Weg trennen zwei Tabs desselben Browsers bzw. Autosave, Retry
         // und Outbox — die Device-ID allein ist in allen Tabs gleich.
-        logger.info(`PAGE_CONFLICT Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} Weg ${_logToken(req.body?.save_reason)} erwartete ${req.body?.expected_updated_at}, Server ${e.serverUpdatedAt} (Geraet ${e.serverEditorDevice || e.serverEditorEmail || '-'}).`);
+        logger.info(`PAGE_CONFLICT Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, Server ${e.serverUpdatedAt} (Geraet ${e.serverEditorDevice || e.serverEditorEmail || '-'}).`);
         return res.status(409).json({
           error_code: 'PAGE_CONFLICT',
           server_updated_at: e.serverUpdatedAt || null,
