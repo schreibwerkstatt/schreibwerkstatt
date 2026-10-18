@@ -116,13 +116,15 @@ test('Chip überlebt Speichern und Wieder-Öffnen, ohne Editor-Attribut zu persi
   await reboot(page);
   await selectSeededBook(page);
   await openPageInEdit(page, 0);
-  const chip = await page.evaluate(() => {
-    const el = document.querySelector('#editor-card .page-content-view--editing span.cite[data-src]');
+  // Über die eigene Quelle suchen: ein Retry findet sonst den Chip des
+  // gescheiterten Versuchs auf demselben Seed-Abschnitt.
+  const chip = await page.evaluate((id) => {
+    const el = document.querySelector(`#editor-card .page-content-view--editing span.cite[data-src="${id}"]`);
     return el ? {
       src: el.getAttribute('data-src'), loc: el.getAttribute('data-loc'),
       editable: el.getAttribute('contenteditable'), text: el.textContent,
     } : null;
-  });
+  }, srcId);
   expect(chip).not.toBeNull();
   expect(chip.src).toBe(String(srcId));
   expect(chip.loc).toBe('44');
@@ -240,7 +242,7 @@ test('Fund-Index folgt dem Save', async ({ page }) => {
   await openPageInEdit(page, 3);
 
   await appendAndSave(page,
-    `<p id="idx-probe">A <span class="cite" data-src="${srcId}">(K, 1915)</span> B `
+    `<p id="idx-probe-${srcId}">A <span class="cite" data-src="${srcId}">(K, 1915)</span> B `
     + `<span class="cite" data-src="${srcId}">(K, 1915)</span></p>`);
 
   const cites = await citationsOf(page, srcId);
@@ -249,11 +251,12 @@ test('Fund-Index folgt dem Save', async ({ page }) => {
 
   // Belege entfernen → Fundstellen verschwinden (Full-Replace pro Save).
   await openPageInEdit(page, 3);
-  await page.evaluate(() => {
-    const el = document.querySelector('#editor-card .page-content-view--editing #idx-probe');
+  // Probe-Id je Quelle: ein Retry trifft sonst den Absatz des ersten Versuchs.
+  await page.evaluate((id) => {
+    const el = document.querySelector(`#editor-card .page-content-view--editing #idx-probe-${id}`);
     el.innerHTML = 'A B ohne Belege';
     window.__app._markEditDirty();
-  });
+  }, srcId);
   await page.evaluate(async () => { await window.__app.saveEdit(); });
   await page.waitForFunction(() => window.__app.editMode === false, null, { timeout: 15000 });
 
