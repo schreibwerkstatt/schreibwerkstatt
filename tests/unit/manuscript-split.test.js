@@ -128,3 +128,18 @@ test('countHeadings zaehlt jede Ebene unabhaengig von der Zuordnung', () => {
     { h1: 1, h2: 2, h3: 0, h4: 0, h5: 0, h6: 0 },
   );
 });
+
+test('Knoten-Budget: Rest wird in den letzten Abschnitt geflacht, kein Text geht verloren', () => {
+  const { MAX_NODES } = require('../../lib/import-parsers/manuscript-split');
+  let html = '';
+  for (let i = 0; i < MAX_NODES + 50; i++) html += `<h1>K${i}</h1><p>T${i}</p>`;
+  html += '<h2>Schluss</h2><p>ENDE</p>';
+  const r = splitManuscript(html, {});
+  assert.ok(r.warnings.some(w => w.code === 'TOO_MANY_NODES'));
+  assert.ok(r.chapterCount + r.pageCount <= MAX_NODES + 2, 'Budget haelt (ein Ueberlauf-Abschnitt)');
+  const all = [];
+  (function walk(ns) { for (const n of ns) { if (n.html) all.push(n.html); if (n.children) walk(n.children); } })(r.nodes);
+  const text = all.join('\n');
+  for (let i = 0; i < MAX_NODES + 50; i++) assert.ok(text.includes(`<p>T${i}</p>`), `T${i} fehlt`);
+  assert.ok(text.includes('K5049') && text.includes('ENDE'));
+});

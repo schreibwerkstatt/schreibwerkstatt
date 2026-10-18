@@ -32,7 +32,7 @@ Regeln, die dabei aus der Praxis kommen und nicht aus dem Datenmodell:
 - **Ein Kapitel ohne Seiten-Überschrift** bekommt genau eine Seite, die den Kapitelnamen trägt — ein Kapitel ohne Seite hätte keinen Ort für seinen Text.
 - **Fehlende Elternebene** (`h2 = subchapter`, aber das Dokument beginnt mit `h2`) zieht die Tiefe hoch statt das Kapitel zu verwerfen; Warnung `DEPTH_CLAMPED`.
 - **Kein Text geht verloren:** eine Kapitel-Überschrift mit `keepHeadings` wartet als Prefix auf die nächste Seite des Kapitels; kommt keine, wird sie selbst zur Seite.
-- **`MAX_NODES = 5000`** als Reissleine gegen entartete Dokumente (jede Zeile eine Überschrift) — Warnung `TOO_MANY_NODES`.
+- **`MAX_NODES = 5000`** als Reissleine gegen entartete Dokumente (jede Zeile eine Überschrift) — Warnung `TOO_MANY_NODES`. Danach entsteht keine neue Struktur mehr, aber auch kein Abbruch: der zuletzt offene Abschnitt nimmt den Rest auf, Überschriften als Inhalt (höchstens ein Überlauf-Abschnitt kommt hinzu).
 
 `countHeadings(html)` zählt die Ebenen unabhängig von der Zuordnung. Das ist die Zeile «im Dokument gefunden: 2× Überschrift 1, 4× Überschrift 2» in der Vorschau — ohne sie rät der User, welche Ebenen sein Dokument überhaupt benutzt.
 
@@ -43,7 +43,7 @@ Die Zuordnung reist als Positions-String `chapter,page,content,content,content,c
 - **`POST /jobs/manuscript-import/preview`** — synchron, schreibt nichts. Liefert `chapterCount`, `pageCount`, `headingCounts`, die Gliederung (Namen + Zeichenzahl, **kein** HTML — der Body eines Romans soll nicht zweimal über die Leitung) und `outlineTruncated` ab `PREVIEW_NODE_CAP = 400` Knoten. **Kein KI-Call**, darum ausserhalb der Job-Queue (Muster wie `/sources/lookup`).
 - **`POST /jobs/manuscript-import`** — Job-Queue, legt an. Query: `filename` (Pflicht, bestimmt den Parser), `map`, `keep_headings=1`, `mode` (`new-book`/`merge`), `book_name` bzw. `book_id`.
 
-Body ist in beiden Fällen das rohe Dokument (`application/octet-stream`, Limit 50 MB). Der Buffer landet in `manuscriptBuffers` ([lib/import-buffers.js](../lib/import-buffers.js)#`ImportBufferStore`, TTL 30 min: ein offener Upload pro User, Summe über alle User gedeckelt) und wird vom Worker konsumiert — Muster wie der Folder-Import. Ein neues Buch entsteht über `createOwnedBook` ([lib/book-create.js](../lib/book-create.js)), Buch + Owner-Grant als Einheit.
+Body ist in beiden Fällen das rohe Dokument (`application/octet-stream`, Limit 50 MB). Der Buffer landet in `manuscriptBuffers` ([lib/import-buffers.js](../lib/import-buffers.js)#`ImportBufferStore`, TTL 30 min: ein offener Upload pro User, Summe über alle User gedeckelt) und wird vom Worker konsumiert — Muster wie der Folder-Import. Ein neues Buch entsteht über `createOwnedBook` ([lib/book-create.js](../lib/book-create.js)), Buch + Owner-Grant als Einheit. Die angelegte Gliederung schreibt der Worker am Ende **einmal** in `book_order` (`contentStore.appendImportedTree`, ans Buchende): `chapters.position` zählt pro Geschwisterliste, `pages.position` buchweit, und eine Rekonstruktion daraus stellt Kapitel vor gleich-positionierte Abschnitte — ein Vorwort landete hinter Kapitel 1.
 
 DOCX und ODT sind ZIPs: ihre Parser entpacken gedeckelt mit `DOC_ZIP_LIMITS` ([lib/zip-limits.js](../lib/zip-limits.js)), gezählt **während** des Inflatens. Reisst das Innenleben den Deckel, antwortet die Vorschau `413 DOCUMENT_TOO_LARGE`; im Job endet der Lauf mit `job.error.archiveTooLarge`.
 

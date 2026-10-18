@@ -165,9 +165,13 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
       });
     };
 
+    // Liefert die angelegten Knoten als book_order-Teilbaum. Scheitert ein
+    // Kapitel, haengen seine Kinder dort, wo sie auch in der DB landen: beim
+    // Elternteil.
     async function walk(nodes, parentChapterId, depth) {
       let position = 1;
       const seen = new Map();
+      const out = [];
       for (const node of nodes) {
         if (node.type === 'chapter') {
           tick(node.name);
@@ -187,14 +191,17 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
           // Kapitel unterhalb MAX_CHAPTER_DEPTH=3 kann der Splitter nicht
           // liefern; der Guard bleibt trotzdem, damit ein spaeterer Rollen-
           // Zusatz nicht still eine vierte Ebene anlegt.
-          await walk(node.children, chapterId ?? parentChapterId, depth + 1);
+          const children = await walk(node.children, chapterId ?? parentChapterId, depth + 1);
+          if (chapterId) out.push({ type: 'chapter', id: chapterId, children });
+          else out.push(...children);
         } else {
           tick(node.name);
           try {
-            await contentStore.createPage(
+            const pg = await contentStore.createPage(
               { book_id: effBookId, chapter_id: parentChapterId, name: uniqueName(seen, 'page', node.name), html: node.html },
               ctx,
             );
+            if (pg?.id) out.push({ type: 'page', id: pg.id });
             pagesCreated += 1;
           } catch (e) {
             audit('warn', `createPage fail «${node.name}»: ${e.message}`);
@@ -202,8 +209,10 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
           }
         }
       }
+      return out;
     }
-    await walk(split.nodes, null, 1);
+    const createdTree = await walk(split.nodes, null, 1);
+    contentStore.appendImportedTree(effBookId, createdTree);
 
     audit('info', `Import abgeschlossen: ${pagesCreated} Seiten, ${chaptersCreated} Kapitel, ${failures.length} Fehler`);
 
@@ -335,4 +344,4 @@ router.post('/manuscript-import', rawDocBody, async (req, res) => {
   res.status(202).json({ jobId });
 });
 
-module.exports = { manuscriptImportRouter: router, runManuscriptImportJob };
+module.exports = { manuscriptImportRouter: router, runManuscriptImportJob, manuscriptBuffers };
