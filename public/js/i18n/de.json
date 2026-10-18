@@ -5650,6 +5650,7 @@
   "blog.error.BLOG_BLOCKED_HOST": "Diese Host-Adresse ist nicht erlaubt (interne/private Adressen sind gesperrt).",
   "blog.error.BLOG_INVALID_URL": "URL ist ungültig.",
   "blog.error.BLOG_CREDENTIALS_REQUIRED": "Benutzername und Passwort sind nötig.",
+  "blog.error.BLOG_PASSWORD_REQUIRED_TARGET_CHANGED": "Blog-Adresse oder Benutzername geändert – bitte das App-Passwort neu eingeben.",
   "blog.error.BLOG_AUTH_FAILED": "Anmeldung beim Blog abgelehnt.",
   "blog.error.BLOG_INSUFFICIENT_CAPABILITY": "Der Benutzer darf keine Beiträge bearbeiten.",
   "blog.error.BLOG_TEST_FAILED": "Verbindungstest fehlgeschlagen.",

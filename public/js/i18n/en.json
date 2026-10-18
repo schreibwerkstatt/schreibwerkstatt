@@ -5650,6 +5650,7 @@
   "blog.error.BLOG_BLOCKED_HOST": "This host address is not allowed (internal/private addresses are blocked).",
   "blog.error.BLOG_INVALID_URL": "URL is invalid.",
   "blog.error.BLOG_CREDENTIALS_REQUIRED": "Username and password required.",
+  "blog.error.BLOG_PASSWORD_REQUIRED_TARGET_CHANGED": "Blog address or username changed – please re-enter the application password.",
   "blog.error.BLOG_AUTH_FAILED": "Blog rejected the credentials.",
   "blog.error.BLOG_INSUFFICIENT_CAPABILITY": "The user cannot edit posts.",
   "blog.error.BLOG_TEST_FAILED": "Connection test failed.",

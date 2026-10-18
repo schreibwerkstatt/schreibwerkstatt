@@ -80,13 +80,18 @@ router.post('/:book_id/connect', aclParamGuard('editor'), jsonBody, async (req, 
   if (!['draft', 'publish', 'private'].includes(defaultStatus)) {
     return res.status(400).json({ error_code: 'BLOG_INVALID_STATUS' });
   }
-  // Reuse stored password wenn Client `__keep__` schickt und Connection existiert.
-  // Schutz: PW darf nie an Client zurueck und der bestehende verschlüsselte
-  // Wert wird ueber db/blogs.js entschluesselt.
-  let effectivePw = password;
-  if ((!password || password === '__keep__')) {
+  // Reuse stored password wenn Client `__keep__` schickt und Connection existiert —
+  // aber nur gegen dasselbe Ziel (URL + User). Sonst koennte jeder Editor das
+  // gespeicherte Passwort per `wp.me()` an einen eigenen Host schicken.
+  let effectivePw = password === '__keep__' ? '' : password;
+  if (!effectivePw) {
     const existing = blogs.getConnection(bookId);
-    if (existing) effectivePw = existing.password;
+    if (existing) {
+      if (existing.baseUrl !== url || existing.username !== username) {
+        return res.status(400).json({ error_code: 'BLOG_PASSWORD_REQUIRED_TARGET_CHANGED' });
+      }
+      effectivePw = existing.password;
+    }
   }
   if (!effectivePw) return res.status(400).json({ error_code: 'BLOG_CREDENTIALS_REQUIRED' });
   try {

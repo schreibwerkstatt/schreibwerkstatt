@@ -90,6 +90,27 @@ test('safeFetch: Redirect-Deckel, relative Location, finale URL', async () => {
   assert.equal(out.buffer.toString(), 'hi');
 });
 
+test('safeFetch: Credentials bleiben auf derselben Origin, fallen bei fremder Origin weg', async () => {
+  const seen = [];
+  const hops = ['/same', 'http://pub.test/downgrade', 'https://other.test/x', null];
+  const fetchImpl = async (url, opts) => {
+    seen.push({ url, headers: opts.headers });
+    const next = hops[seen.length - 1];
+    return next ? redirect(next) : ok();
+  };
+  await safeFetch('https://pub.test/a', {
+    fetchImpl, maxRedirects: 5,
+    headers: { Authorization: 'Basic c2VjcmV0', Cookie: 'sid=1', Accept: 'application/json' },
+  });
+  assert.equal(seen[0].headers.Authorization, 'Basic c2VjcmV0');
+  assert.equal(seen[1].headers.Authorization, 'Basic c2VjcmV0', 'gleiche Origin behaelt Auth');
+  for (const hop of seen.slice(2)) {
+    assert.equal(hop.headers.Authorization, undefined, `kein Auth an ${hop.url}`);
+    assert.equal(hop.headers.Cookie, undefined);
+    assert.equal(hop.headers.Accept, 'application/json');
+  }
+});
+
 test('safeFetch: Timeout greift mit eigenem Code, nicht-OK wird zurueckgegeben', async () => {
   await assert.rejects(safeFetch('https://pub.test/', { fetchImpl: hangingFetch, timeoutMs: 20, timeoutCode: 'T' }),
     (e) => e.code === 'T');
