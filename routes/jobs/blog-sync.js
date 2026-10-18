@@ -10,7 +10,7 @@
 const express = require('express');
 const {
   createJob, updateJob, completeJob, failJob,
-  enqueueJob, findActiveJobId, jobAbortControllers, jobs,
+  enqueueJob, findActiveJobId, jobs,
   makeJobLogger, jsonBody, i18nError,
 } = require('./shared');
 const blogs = require('../../db/blogs');
@@ -25,32 +25,16 @@ const {
 } = require('../../lib/blog-pull');
 const { seedImportBaseline } = require('../../lib/import-baseline');
 const { splitDatePrefix, outgoingTitle } = require('../../lib/blog-title');
-const { assertBlogBook } = require('../../lib/buchtyp');
 const { getHeadline, headlineUpdatedAt } = require('../../db/headline');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const { toIntId } = require('../../lib/validate');
 const { setContext } = require('../../lib/log-context');
 const { localIsoDate } = require('../../lib/local-date');
 
+const { _abortSignal, _resolveBlogConn, _requireBlogBook } = require('./blog-sync/common');
+const { runBlogReconcileJob } = require('./blog-sync/reconcile');
+
 const blogSyncRouter = express.Router();
-
-function _abortSignal(jobId) {
-  return jobAbortControllers.get(jobId)?.signal || null;
-}
-
-function _resolveBlogConn(bookId) {
-  const conn = blogs.getConnection(bookId);
-  if (!conn) {
-    const err = new Error('BLOG_NOT_CONNECTED');
-    err.code = 'BLOG_NOT_CONNECTED';
-    throw err;
-  }
-  return conn;
-}
-
-function _requireBlogBook(bookId, userEmail) {
-  return assertBlogBook(bookId, userEmail, 'BLOG_REQUIRES_BLOG_TYPE');
-}
 
 // Job-Typen, die Seiten + Links eines Buchs anlegen: pro Buch exklusiv.
 const BOOK_EXCLUSIVE_TYPES = new Set(['blog-import', 'blog-pull']);
@@ -482,60 +466,6 @@ async function runBlogPushJob(jobId, bookId, userEmail, pageIds) {
       `${pushed + createdRemote} gepusht / ${errors.length} Fehler`);
   } catch (e) {
     if (e.name !== 'AbortError') makeJobLogger(jobId).error(`Blog-Push-Fehler: ${e.message}`);
-    failJob(jobId, e);
-  }
-}
-
-// Reconcile: pruft jeden Link via GET, dropt orphan Links (Remote-Post weg).
-// Deckt Hard-Delete in WP (kein Trash-Stamp). Nach Lauf kennt der Buchorganizer
-// die toten Links nicht mehr; Badges flippen auf 'new'.
-async function runBlogReconcileJob(jobId, bookId, userEmail) {
-  const logger = makeJobLogger(jobId);
-  try {
-    _requireBlogBook(bookId, userEmail);
-    const conn = _resolveBlogConn(bookId);
-    const wp = createWpClient({
-      baseUrl: conn.baseUrl,
-      username: conn.username,
-      password: conn.password,
-      signal: _abortSignal(jobId),
-    });
-
-    const links = blogs.listLinksForBlog(conn.id);
-    let checked = 0;
-    let removed = 0;
-    const total = links.length;
-    updateJob(jobId, {
-      statusText: 'job.blog.reconcile.check',
-      statusParams: { current: 0, total },
-      progress: 1,
-    });
-
-    for (const link of links) {
-      if (_abortSignal(jobId)?.aborted) throw new DOMException('Aborted', 'AbortError');
-      checked++;
-      try {
-        await wp.getPost(link.wp_post_id);
-      } catch (e) {
-        if (e.code === 'BLOG_HTTP_404' || e.status === 404) {
-          blogs.deleteLink(link.page_id);
-          removed++;
-          logger.info(`Blog-Reconcile: Page ${link.page_id} -> WP-Post ${link.wp_post_id} weg, Link entfernt`);
-        } else {
-          logger.warn(`Blog-Reconcile: Page ${link.page_id} -> WP-Post ${link.wp_post_id} Fehler ${e.code || e.message}`);
-        }
-      }
-      updateJob(jobId, {
-        statusText: 'job.blog.reconcile.check',
-        statusParams: { current: checked, total },
-        progress: Math.min(98, 2 + Math.round((checked / Math.max(1, total)) * 95)),
-      });
-    }
-
-    logger.info(`Blog-Reconcile: ${checked} geprüft, ${removed} orphan Links entfernt.`);
-    completeJob(jobId, { checked, removed }, null, `${removed} orphan Links entfernt`);
-  } catch (e) {
-    if (e.name !== 'AbortError') makeJobLogger(jobId).error(`Blog-Reconcile-Fehler: ${e.message}`);
     failJob(jobId, e);
   }
 }
