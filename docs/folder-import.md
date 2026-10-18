@@ -74,7 +74,7 @@ Beispiele:
 - `chapterByYear: Map<number, chapter_id>` — Year-Chapter (Top-Level)
 - `chapterByYearMonth: Map<"YYYY-MM", chapter_id>` — Month-Sub-Chapter
 
-Im Merge-Modus werden bestehende Year- und Month-Sub-Chapter aus dem Buch eingelesen und wiederverwendet (Match via Name+Position).
+Im Merge-Modus werden bestehende Year- und Month-Sub-Chapter aus dem Buch eingelesen und wiederverwendet: Jahr über den Namen (4-stellige Zahl), Monat über den Namen des Unterkapitels (`2020 März`, `2020 March`, auch nur `März`; ein führendes Jahr muss das des Eltern-Kapitels sein). **Nicht** über `chapters.position` — die materialisiert `book_order` buchweit depth-first, 1–12 ist dort kein Monat. Am Ende sortiert `contentStore.sortChapterSlots` die Jahres- und Monatskapitel chronologisch innerhalb ihrer bisherigen Plätze; andere Einträge des Users bleiben stehen. Ein Merge, der ein früheres Jahr oder einen früheren Monat nachliefert, landet so nicht am Ende.
 
 **Frontend-Hinweis:** [public/js/book/tree.js](../public/js/book/tree.js) und der Book-Organizer rendern Chapter aktuell flach (alle Chapter als Siblings). Die Hierarchie liegt korrekt in der DB; eine nested-Rendering-UI ist separate Arbeit.
 
@@ -83,7 +83,7 @@ Im Merge-Modus werden bestehende Year- und Month-Sub-Chapter aus dem Buch eingel
 - **Content-Store-Facade exklusiv** für Book/Chapter/Page-Create — HTML-Clean greift dort automatisch.
 - **Job-Result `bookId`** für Frontend-Nav (lädt Buch + setzt Hash).
 - **Kapitel-Cache by Year:** `chapterByYear`-Map verhindert Dubletten. Merge-Modus liest existierende Year-Chapters (Name = 4-stellige Zahl) und hängt an.
-- **Sortierung chronologisch** vor Page-Create (sonst Position-Skew).
+- **Sortierung chronologisch** vor Page-Create; Kapitel danach über `sortChapterSlots` (siehe oben).
 - **Duplikat-Daten** (echte Datums-Quellen `filename`/`first-line`/`ai`/`mtime`, gleicher Tag): Kollisions-Resolve in zwei Stufen.
   1. `extractTitle()` pro File: alle mit Thema → Page-Name = `YYYY-MM-DD <Thema>` (eigene Pages).
   2. Files ohne Thema werden in den ersten Eintrag des Tages **gemerged** (HTML konkateniert mit `<hr class="day-merge">`). Mixed-Fall: themaless-Files gehen ins erste themaful-Target. Garantiert: ein Tag = ein Eintrag pro „Thema", kein nackter `(2)`-Suffix mehr für reine Datums-Pages.

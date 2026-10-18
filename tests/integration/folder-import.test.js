@@ -660,3 +660,43 @@ test('folder-import (grouping=flat): keine Kapitel, Seiten direkt am Buch', asyn
   assert.equal(pages.length, 2);
   for (const p of pages) assert.ok(!p.chapter_id, `Page ${p.name} sollte kapitellos sein`);
 });
+
+test('folder-import (merge, zweiter Lauf): Monate ueber den Namen erkannt, Jahre/Monate chronologisch', async () => {
+  const userEmail = 'tester@test.dev';
+  const session = { session: { user: { email: userEmail } } };
+  const book = await contentStore.createBook({ name: 'Tagebuch 2', owner_email: userEmail }, session);
+  const { db } = require('../../db/connection');
+  db.prepare(`INSERT OR IGNORE INTO book_access (book_id, user_email, role, granted_at) VALUES (?, ?, 'owner', '2026-01-01T00:00:00.000Z')`).run(book.id, userEmail);
+  const run = async (entries, tag) => {
+    const buffer = await buildArchive(entries);
+    const jobId = ctx.shared.createJob('folder-import', book.id, userEmail, 'job.label.folderImport', { name: tag }, `merge:${book.id}:${tag}`);
+    folderImport.importBuffers.set(jobId, { buffer, mode: 'merge', bookName: '', bookId: book.id });
+    await folderImport.runFolderImportJob(jobId, { userEmail, mode: 'merge', bookName: '', bookId: book.id });
+    const job = ctx.shared.jobs.get(jobId);
+    assert.equal(job.status, 'done', job.error || '');
+  };
+
+  await run([
+    ['2020/03/2020-03-10.docx', await makeDocx('Maerz.')],
+    ['2020/11/2020-11-10.docx', await makeDocx('November.')],
+  ], 'a');
+  // Buch oeffnen: ensureTree materialisiert chapters.position buchweit neu
+  // (0, 1, 2 …) — genau die Werte, die frueher als Monat 1–12 galten.
+  await contentStore.bookTree(book.id, session);
+  await run([
+    ['2020/01/2020-01-05.docx', await makeDocx('Januar.')],
+    ['2020/02/2020-02-05.docx', await makeDocx('Februar.')],
+    ['2020/11/2020-11-20.docx', await makeDocx('November 2.')],
+    ['2019/12/2019-12-24.docx', await makeDocx('Weihnachten.')],
+  ], 'b');
+
+  const outline = await contentStore.bookOutline(book.id, session);
+  const chapters = outline.filter(n => n.type === 'chapter').map(n => n.name);
+  assert.deepEqual(chapters, ['2019', '2019 Dezember', '2020', '2020 Januar', '2020 Februar', '2020 März', '2020 November']);
+  const pageIn = {};
+  for (const n of outline) if (n.type === 'page') pageIn[n.name] = n.path[n.path.length - 1];
+  assert.equal(pageIn['2020-01-05'], '2020 Januar');
+  assert.equal(pageIn['2020-02-05'], '2020 Februar');
+  assert.equal(pageIn['2020-11-20'], '2020 November');
+  assert.equal(pageIn['2020-03-10'], '2020 März');
+});

@@ -13,7 +13,7 @@ const {
   aiCall, getPrompts, jobs, createJob, enqueueJob, findActiveJobId,
 } = require('./shared');
 const contentStore = require('../../lib/content-store');
-const { detectDate, detectDateInText, firstLineFromHtml, extractTitle, scoreSample } = require('../../lib/import-parsers/date-detect');
+const { detectDate, detectDateInText, firstLineFromHtml, extractTitle, scoreSample, parseMonthToken } = require('../../lib/import-parsers/date-detect');
 const { parseImportFile, extOf, SUPPORTED_EXTS } = require('../../lib/import-parsers/dispatch');
 const { toIntId } = require('../../lib/validate');
 const { setContext } = require('../../lib/log-context');
@@ -51,6 +51,15 @@ const GROUPINGS = new Set(['year-month', 'year', 'flat']);
 const MONTH_NAMES_DE = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 const MONTH_NAMES_EN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
+// Monat (1–12) aus dem Namen eines bestehenden Monats-Unterkapitels, sonst null.
+// Ein fuehrendes Jahr muss das des Eltern-Kapitels sein.
+function _monthFromChapterName(name, parentYear) {
+  const raw = String(name || '').trim();
+  const m = /^(\d{4})\s+(.+)$/.exec(raw);
+  if (m && Number(m[1]) !== parentYear) return null;
+  return parseMonthToken(m ? m[2] : raw);
+}
+
 // jobId -> { buffer, userEmail, mode, bookName, bookId }. Deckel: lib/import-buffers.js.
 const importBuffers = new ImportBufferStore({
   ttlMs: BUFFER_TTL_MS,
@@ -79,7 +88,6 @@ function _parsePath(p) {
 }
 
 function _monthFromRaw(monthRaw) {
-  const { parseMonthToken } = require('../../lib/import-parsers/date-detect');
   return parseMonthToken(monthRaw);
 }
 
@@ -370,13 +378,15 @@ async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, gr
       }
       for (const ch of existing) {
         if (!ch.parent_chapter_id) continue;
-        // Match Year via parent → Month via Position (1-12)
+        // Jahr ueber das Eltern-Kapitel, Monat ueber den NAMEN ("2020 März",
+        // "2020 March", auch nur "März"). Nicht ueber chapters.position: die
+        // materialisiert book_order buchweit depth-first, 1–12 ist dort kein Monat.
         const parentYear = [...chapterByYear.entries()].find(([, id]) => id === ch.parent_chapter_id)?.[0];
         if (!Number.isFinite(parentYear)) continue;
-        const monthNum = ch.position;
-        if (Number.isFinite(monthNum) && monthNum >= 1 && monthNum <= 12) {
-          chapterByYearMonth.set(`${parentYear}-${String(monthNum).padStart(2, '0')}`, ch.id);
-        }
+        const monthNum = _monthFromChapterName(ch.name, parentYear);
+        if (!monthNum) continue;
+        const key = `${parentYear}-${String(monthNum).padStart(2, '0')}`;
+        if (!chapterByYearMonth.has(key)) chapterByYearMonth.set(key, ch.id);
       }
     }
 
@@ -475,6 +485,16 @@ async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, gr
         audit('warn', `createPage fail ${f.relativePath}: ${e.message}`);
         skipped.push({ path: f.relativePath, reason: 'CREATE_FAILED' });
       }
+    }
+
+    // Jahres-/Monatskapitel chronologisch: ein Merge, der ein frueheres Jahr
+    // oder einen frueheren Monat nachliefert, haengte sie sonst ans Ende.
+    if (grouping !== 'flat') {
+      const keyById = new Map();
+      for (const [y, id] of chapterByYear) keyById.set(id, y);
+      for (const [ym, id] of chapterByYearMonth) keyById.set(id, parseInt(ym.slice(5, 7), 10));
+      try { contentStore.sortChapterSlots(effBookId, keyById); }
+      catch (e) { audit('warn', `Kapitel-Sortierung fehlgeschlagen: ${e.message}`); }
     }
 
     audit('info', `Import abgeschlossen: ${pagesCreated} Seiten, ${chapterByYear.size} Jahres-Kapitel, ${chapterByYearMonth.size} Monats-Sub-Kapitel, ${skipped.length} skipped`);
