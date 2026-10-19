@@ -1,0 +1,11 @@
+{
+  "version": "5.1.1",
+  "date": "2026-10-19",
+  "entries": [
+    {
+      "kind": "behoben",
+      "de": "Rechtschreibprüfung: Ein Klick auf einen Vorschlag im Popup tat manchmal nichts, und das Popup blieb offen. Ersetzen, Ignorieren und «Ins Buch-Wörterbuch» greifen jetzt auch, während du weiterschreibst.",
+      "en": "Spell check: clicking a suggestion in the popup sometimes did nothing and the popup stayed open. Replace, ignore and “Add to book dictionary” now work even while you keep typing."
+    }
+  ]
+}
