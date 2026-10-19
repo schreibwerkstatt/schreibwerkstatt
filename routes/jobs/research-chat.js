@@ -1,5 +1,5 @@
 'use strict';
-// Agentischer Recherche-Chat (Claude-only, mit Anthropic-Web-Suche). Lebt als
+// Agentischer Recherche-Chat mit Web-Suche. Lebt als
 // Panel in der Recherche-Karte. Rückwärtsgewandt: recherchiert + sammelt Material,
 // schreibt NIE in den Buchtext. Vorschläge (propose_research_item) werden NICHT
 // automatisch gespeichert — sie kommen in context_info.proposals zurück, der User
@@ -9,6 +9,10 @@
 // makeAgenticChatJob (routes/jobs/agentic-chat.js); hier nur die
 // Recherche-spezifischen Achsen (eigenes Tool-Set + Web-Suche, ohne
 // Seiten-Vorladen/Zitat-Validierung).
+//
+// Suchweg (lib/websearch#webSearchMode): 'anthropic' = Claude mit Anthropics
+// serverseitigem web_search; 'searxng' = jeder Provider mit Tool-Calling, Suche
+// und Seitenlesen als Function-Tools (./research-web-tools.js).
 
 const { db, getBookSettings } = require('../../db/schema');
 const { getPrompts, i18nError } = require('./shared');
@@ -22,6 +26,9 @@ const embed = require('../../lib/embed');
 const { makeAgenticChatJob, stripTrailingEmptyJson } = require('./agentic-chat');
 const appSettings = require('../../lib/app-settings');
 const { getSessionWithBookName } = require('../../db/chat-sessions');
+const { resolveProvider } = require('../../lib/ai');
+const { webSearchMode } = require('../../lib/websearch');
+const { extractUrls } = require('./research-web-tools');
 
 function _maxToolIter() {
   return parseInt(appSettings.get('jobs.research_chat.max_tool_iter'), 10) || 6;
@@ -29,15 +36,19 @@ function _maxToolIter() {
 function _maxWebSearches() {
   return parseInt(appSettings.get('jobs.research_chat.max_web_searches'), 10) || 10;
 }
+// Per-Tool-Result-Cap im SearXNG-Modus (wie Buch-/Plot-Chat): eine gelesene Seite
+// darf das Kontextfenster nicht allein füllen — entscheidend für lokale Modelle.
+function _webToolResultCapChars(maxIter, aiCfg) {
+  return Math.max(4000, Math.floor(aiCfg.inputBudgetChars / (maxIter * 6)));
+}
 
 const runResearchChatJob = makeAgenticChatJob({
   startLabel: 'Recherche-Chat',
   errLabel: 'Recherche-Chat',
-  // Recherche-Chat ist Claude-only (Web-Suche gibt es nur dort). Das Frontend
-  // blendet das Panel aus, wenn der effektive Provider != claude — der validate-
-  // Guard erzwingt es hier zur Sicherheit serverseitig.
-  callProvider: 'claude',
-  resolveProvider: () => 'claude',
+  // Effektiver Provider des Users (KI-Profil > global). Ob er suchen kann, prüft
+  // das Gate (validate); das Frontend blendet das Panel nach demselben Gate aus.
+  callProvider: undefined,
+  resolveProvider: (userEmail) => resolveProvider({ userEmail }),
   effortSettingKey: 'ai.claude.effort.researchchat',
   // Dieselbe Prüfung blockt schon POST /jobs/research-chat (vor dem Speichern der
   // Frage); hier nochmals, weil Setting/Provider zwischen POST und Queue-Start
@@ -49,7 +60,7 @@ const runResearchChatJob = makeAgenticChatJob({
 
   loadSession: (sessionId, userEmail) => getSessionWithBookName(parseInt(sessionId), userEmail, 'research'),
 
-  async prepare({ session, userEmail, aiCfg, logger, jobSignal, userMsgId }) {
+  async prepare({ session, userEmail, aiCfg, logger, jobSignal, userMsgId, message }) {
     const {
       buildResearchChatAgentSystemPrompt, buildResearchChatTools, buildResearchProposalMemoryBlock,
       getResearchPromptContext, RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION, buildResearchWritingContextBlock,
@@ -57,6 +68,8 @@ const runResearchChatJob = makeAgenticChatJob({
     const itemCount = db.prepare('SELECT COUNT(*) AS n FROM research_items WHERE book_id = ? AND archived = 0').get(session.book_id)?.n || 0;
     const maxToolIter = _maxToolIter();
     const maxWebSearches = _maxWebSearches();
+    const mode = webSearchMode(userEmail);
+    const searxng = mode === 'searxng';
     // Figuren + Schauplätze vorladen, damit das Modell den Welt-Kontext schon in
     // der ersten Web-Suche nutzen kann (ohne list_book_entities-Runde). Gleiche
     // Quelle wie das Tool → kein Drift.
@@ -95,28 +108,39 @@ const runResearchChatJob = makeAgenticChatJob({
     }
     const systemPrompt = buildResearchChatAgentSystemPrompt(
       session.book_name || '', itemCount, maxToolIter, figures, locations, researchProfile,
-      { maxWebSearches, bookContext, proposalMemory, writingContext },
+      { maxWebSearches, bookContext, proposalMemory, writingContext, webSearchMode: mode },
     );
 
     // Ohne Embedding-Endpunkt hat die Passagen-Suche keine Datenbasis — das
     // Werkzeug gar nicht erst anbieten, statt das Modell eine Runde an einen
     // garantierten Fehlschlag zu verlieren.
-    const allTools = buildResearchChatTools({ allowedDomains: researchProfile.domains });
+    const allTools = buildResearchChatTools({ allowedDomains: researchProfile.domains, webSearchMode: mode });
     const tools = embed.isEnabled()
       ? allTools
       : allTools.filter(t => t.name !== 'search_research_passages');
 
+    // SearXNG: gelesene Seiten sind gross → Deckel pro Ergebnis und pro Runde.
+    // Anthropic: kein Cap — die Recherche-Tool-Results sind klein und truncieren
+    // würde Fundstücke verstümmeln; die Seitenauswertung macht die API selbst.
+    const toolResultCap = searxng ? _webToolResultCapChars(maxToolIter, aiCfg) : null;
+    logger.info(`Recherche-Chat: Suchweg=${mode}, ${tools.length} Werkzeuge${toolResultCap ? `, Ergebnis-Deckel ${toolResultCap} Zeichen` : ''}.`);
+
     return {
       systemPrompt,
-      // Ein Deckel kleiner als der Rundenwert greift schon hier (max_uses = Deckel).
-      // Danach bleibt die Liste für den ganzen Lauf gleich (Prompt-Cache).
-      tools: toolsForRound(tools, 0, maxWebSearches),
+      // Anthropic: ein Deckel kleiner als der Rundenwert greift schon hier
+      // (max_uses = Deckel). SearXNG: das Function-Tool hat kein max_uses, den
+      // Deckel hält der Handler. Die Liste bleibt danach für den ganzen Lauf gleich
+      // (Prompt-Cache).
+      tools: searxng ? tools : toolsForRound(tools, 0, maxWebSearches),
       // Web-Such-Gesamtdeckel über alle Runden: erreicht → keine weitere Runde,
-      // Synthese aus den Treffern.
+      // Synthese aus den Treffern. webSearches zählt beide Wege (Loop + webStats).
       stopBeforeRound: ({ webSearches }) => (webSearches >= maxWebSearches ? 'web_cap' : null),
+      // Suchen des SearXNG-Handlers (ctx.web) für Deckel, context_info, Zusammenfassung.
+      webStats: (ctx) => (ctx.web ? { searches: ctx.web.searches, queries: ctx.web.queries, results: ctx.web.results } : null),
       maxToolIter,
       tokenBudget: aiCfg.inputBudgetTokens,
-      toolResultCap: null,   // kein Cap — Recherche-Tool-Results sind klein und truncieren würde Fundstücke verstümmeln
+      toolResultCap,
+      ...(searxng ? { roundResultCapChars: Math.max(toolResultCap * 2, Math.floor(aiCfg.inputBudgetChars * 0.25)) } : {}),
       forceFinalInstruction: RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION,
       ctx: {
         bookId: session.book_id, sessionId: session.id, userEmail,
@@ -125,6 +149,11 @@ const runResearchChatJob = makeAgenticChatJob({
         answerSourcesRaw: null, // final_answer.quellen (ungeprüft) → buildContextInfo validiert
         literatureHits: [],     // lookup_literature-Treffer (url/title) — zulässige Belege neben den Web-Treffern
         maxWebSearches,
+        // Nur vom SearXNG-Handler gelesen (research-web-tools.js):
+        allowedDomains: researchProfile.domains,
+        searchLanguage: bookSettings.language || '',
+        userMessageUrls: extractUrls(message),
+        ...(toolResultCap ? { resultCapChars: toolResultCap } : {}),
       },
     };
   },
@@ -169,7 +198,11 @@ const runResearchChatJob = makeAgenticChatJob({
     // Vom Modell benannte Belege (final_answer.quellen), gegen webResults geprüft.
     // Das Frontend bevorzugt sie vor den cite-Markern (robuster als Index-Zuordnung).
     ...(() => {
-      const answerSources = validateAnswerSources(ctx.answerSourcesRaw, webResults, { extra: ctx.literatureHits });
+      // Zulässige Belege neben den Treffern: Literatur-Register und gelesene Seiten
+      // (read_web_page, inkl. Redirect-Ziel).
+      const answerSources = validateAnswerSources(ctx.answerSourcesRaw, webResults, {
+        extra: [...ctx.literatureHits, ...(ctx.web?.pages || [])],
+      });
       return answerSources.length ? { answer_sources: answerSources } : {};
     })(),
     // Speicher-Vorschläge — Frontend rendert sie als „Als … speichern"-Buttons.

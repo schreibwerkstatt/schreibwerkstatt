@@ -38,10 +38,15 @@
 //       für Werkzeuge + System + Historie. Persistiert wird nur die Frage.
 //     cacheHistory (opt-in): Cache-Breakpoint auf das Ende der Historie, damit der
 //       nächste Turn Werkzeuge + System + Verlauf aus dem Cache liest (nur Claude).
+//     webStats(ctx) (opt-in) → { searches, queries, results } | null: Websuchen, die
+//       ein eigener Werkzeug-Handler gemacht hat (Recherche-Chat über SearXNG). Sie
+//       zählen in stopBeforeRound, context_info und Zusammenfassung mit, aber nicht
+//       in die Kosten: bezahlt sind nur Anthropics serverseitige Suchen (state.*).
 //   executeTool(name, input, ctx),
 //   consumeFinalAnswer({ finalUse, ctx, toolLog, iterNum, logger }) → finalText (JSON-String),
 //   parseFinal(finalText, logger) → antwort-String,
 //   buildContextInfo({ toolLog, iter, webSearches, webResults, webQueries, ctx, stopReason, costUsd }) → object,
+//     webSearches/webResults/webQueries: Server-Tool-Suchen + webStats zusammen.
 //     stopReason: 'final_answer' | 'prose' | 'max_iter' | 'input_cap' | 'context_budget'
 //       | 'empty_tool_turn' | 'refusal' | Wert aus stopBeforeRound
 //       (context_budget: Kontextfenster-Schutz — die Runde, die das Budget sprengen
@@ -115,6 +120,16 @@ function makeAgenticChatJob(config) {
       const maxToolsPerRound = Number(prep.maxToolsPerRound) > 0 ? Number(prep.maxToolsPerRound) : Infinity;
       const roundResultCap = Number(prep.roundResultCapChars) > 0 ? Number(prep.roundResultCapChars) : Infinity;
       const estimate = (msgs) => _estimateTokens(systemPrompt, tools, msgs, aiCfg.charsPerToken);
+      // Alle Websuchen dieses Laufs: Anthropics Server-Tool (state.*) plus die eines
+      // eigenen Handlers (prep.webStats). Ein Lauf nutzt einen der beiden Wege.
+      const allWeb = () => {
+        const ext = (prep.webStats && prep.webStats(ctx)) || null;
+        return {
+          searches: state.webSearches + (Number(ext?.searches) || 0),
+          results: ext?.results?.length ? [...state.webResults, ...ext.results] : state.webResults,
+          queries: ext?.queries?.length ? [...state.webQueries, ...ext.queries] : state.webQueries,
+        };
+      };
 
       // Historie: optional mit Cache-Breakpoint am Ende (lib/ai/claude.js wertet die
       // Markierung aus, die übrigen Provider ignorieren sie). Erst-Kontext o.ä. steht
@@ -272,7 +287,7 @@ function makeAgenticChatJob(config) {
         });
 
         if (iter > 0 && prep.stopBeforeRound) {
-          const hookStop = prep.stopBeforeRound({ iter, webSearches: state.webSearches });
+          const hookStop = prep.stopBeforeRound({ iter, webSearches: allWeb().searches });
           if (hookStop) {
             logger.info(`Recherche beendet vor Runde ${iter + 1} (${hookStop}) – erzwinge Synthese.`);
             stopReason = hookStop;
@@ -434,14 +449,17 @@ function makeAgenticChatJob(config) {
       const assistantNow = new Date().toISOString();
       const tpsVal = (state.genMs > 0 && state.totalTokOut > 0) ? state.totalTokOut / (state.genMs / 1000) : null;
       const model = state.lastModel || _defaultModelFor(provider);
+      // Kosten und die Spalte web_searches (Basis des Kosten-Ledgers) nur mit den
+      // bezahlten Server-Tool-Suchen; context_info zeigt alle.
       const answerUsd = costUsd({
         provider, model, tokensIn: state.totalTokIn, tokensOut: state.totalTokOut,
         cacheReadIn: state.totalCacheRead, cacheCreationIn: state.totalCacheCreation,
         cacheCreation1hIn: state.totalCacheCreation1h, webSearches: state.webSearches,
       });
+      const web = allWeb();
       const contextInfo = config.buildContextInfo({
-        toolLog, iter, webSearches: state.webSearches, webResults: state.webResults,
-        webQueries: state.webQueries, ctx, stopReason, costUsd: answerUsd,
+        toolLog, iter, webSearches: web.searches, webResults: web.results,
+        webQueries: web.queries, ctx, stopReason, costUsd: answerUsd,
       });
       const asstMsgResult = db.prepare(`
         INSERT INTO chat_messages (session_id, role, content, tokens_in, tokens_out, cache_read_in, cache_creation_in, cache_creation_1h_in, web_searches, provider, model, tps, context_info, created_at)
@@ -462,7 +480,7 @@ function makeAgenticChatJob(config) {
         ...(sessionTitle ? { sessionTitle } : {}),
       };
       const payload = config.buildCompletePayload ? config.buildCompletePayload({ base, ctx }) : base;
-      completeJob(jobId, payload, tpsVal, config.buildSummary({ session, sessionId, toolLog, iter, webSearches: state.webSearches, ctx }));
+      completeJob(jobId, payload, tpsVal, config.buildSummary({ session, sessionId, toolLog, iter, webSearches: web.searches, ctx }));
     } catch (e) {
       // Provider kann keine Werkzeuge: derselbe Job noch einmal auf dem Fallback-Pfad.
       // Sicher, weil AI_TOOLS_UNSUPPORTED nur aus callAIWithTools kommt und der
