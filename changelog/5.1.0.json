@@ -1,0 +1,31 @@
+{
+  "version": "5.1.0",
+  "date": "2026-10-19",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Recherche-Karte, Recherche-Chat: er sucht jetzt auch mit anderen KI-Anbietern als Claude im Web, sofern die Websuche dafür eingerichtet ist. Die Antwort verlinkt die Quellen, auf die sie sich stützt.",
+      "en": "Research card, research chat: it now searches the web with AI providers other than Claude too, as long as web search is set up for them. The answer links the sources it relies on."
+    },
+    {
+      "kind": "neu",
+      "de": "Kontinuität, Knopf «Welt-Fakten prüfen»: der Faktencheck läuft jetzt auch mit anderen KI-Anbietern als Claude. Als «falsch» markiert er eine Aussage nur, wenn er dazu eine Quelle gefunden hat.",
+      "en": "Continuity, “Fact-check world facts” button: the fact check now also runs with AI providers other than Claude. It only marks a statement as wrong when it found a source for it."
+    },
+    {
+      "kind": "neu",
+      "de": "App-Einstellungen, Reiter «Websuche»: hier legen Administratoren fest, worüber Recherche-Chat und Faktencheck suchen. Eine Probe-Suche zeigt sofort, ob der Suchdienst antwortet.",
+      "en": "App settings, “Web search” tab: administrators choose here how the research chat and the fact check search the web. A test search shows right away whether the search service responds."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Recherche-Chat und Faktencheck lesen jetzt auch PDF-Dokumente aus dem Web. Bei langen PDFs sucht der Recherche-Chat gezielt nach einem Begriff und liest ab der passenden Seite weiter.",
+      "en": "The research chat and the fact check now also read PDF documents from the web. In long PDFs the research chat searches for a term and reads on from the matching page."
+    },
+    {
+      "kind": "behoben",
+      "de": "Recherche-Chat und Faktencheck meldeten «nichts gefunden», wenn der Suchdienst vorübergehend gesperrt war. Jetzt sagen sie, dass die Suche nicht möglich war.",
+      "en": "The research chat and the fact check reported “nothing found” when the search service was temporarily blocked. Now they say that the search was not possible."
+    }
+  ]
+}
