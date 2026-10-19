@@ -1,11 +1,11 @@
 'use strict';
-// Werkzeuge für den agentischen Recherche-Chat (Claude-only, mit Web-Suche).
+// Werkzeuge für den agentischen Recherche-Chat (mit Web-Suche).
 // Rückwärtsgewandt: liest vorhandenes Material + Buch-Entitäten und SAMMELT
 // Vorschläge — schreibt NIE Buchtext und persistiert NICHTS automatisch.
 //
-// `web_search` ist Anthropics serverseitiges Tool und hat hier KEINEN Handler —
-// die API führt es selbst aus (siehe lib/ai.js: server_tool_use wird nicht an den
-// Caller durchgereicht). `propose_research_item` sammelt nur in ctx.proposals;
+// `web_search` ist beim Suchweg 'anthropic' Anthropics serverseitiges Tool ohne
+// Handler — die API führt es selbst aus. Beim Suchweg 'searxng' laufen
+// `web_search` und `read_web_page` als Function-Tools über ./research-web-tools.js. `propose_research_item` sammelt nur in ctx.proposals;
 // der User bestätigt jeden Vorschlag im Frontend (POST /research).
 //
 // ctx = { bookId, userEmail, jobSignal, logger, proposals: [] }
@@ -21,6 +21,7 @@ const {
 } = require('../../lib/research-validate');
 const { findDuplicateItem, attachRelations, itemIdsAtPlace } = require('../../db/research-items');
 const sourceLookup = require('../../lib/source-lookup');
+const { WEB_TOOLS } = require('./research-web-tools');
 
 // FTS-Vorfilter weit fassen (wie das Board), dann auf ITEM_LIST_MAX kappen.
 const FTS_LIMIT = 500;
@@ -388,6 +389,7 @@ const TOOLS = {
   lookup_literature:   tool_lookup_literature,
   list_book_entities:  tool_list_book_entities,
   propose_research_item: tool_propose_research_item,
+  ...WEB_TOOLS,
 };
 
 async function executeResearchTool(name, input, ctx) {

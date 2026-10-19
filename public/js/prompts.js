@@ -448,6 +448,7 @@ export {
   buildResearchCrosscheckPrompt,
   SCHEMA_RESEARCH_CROSSCHECK,
   RESEARCH_CHAT_TOOLS,
+  RESEARCH_WEB_FUNCTION_TOOLS,
   buildResearchChatTools,
   RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION,
 } from './prompts/recherche.js';

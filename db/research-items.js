@@ -379,8 +379,20 @@ function itemIdsAtPlace(bookId, { pageId = null, chapterId = null } = {}) {
   return [];
 }
 
+// Alle URLs der nicht archivierten Fundstuecke eines Buchs. Dient dem
+// Recherche-Chat als Herkunfts-Allowlist fuer `read_web_page`: was im Board
+// steht, hat der Autor selbst gesammelt und darf gelesen werden.
+function bookItemUrls(bookId) {
+  return db.prepare(
+    `SELECT u.url FROM research_item_urls u
+       JOIN research_items ri ON ri.id = u.item_id
+      WHERE ri.book_id = ? AND ri.archived = 0`
+  ).all(bookId).map(r => r.url);
+}
+
 module.exports = {
   LINK_TARGETS,
+  bookItemUrls,
   STATUS_SELECT_SQL,
   setItemsStatus,
   itemIdsAtPlace,

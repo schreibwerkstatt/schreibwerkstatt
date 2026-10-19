@@ -129,7 +129,9 @@ export function buildResearchWritingContextBlock(ctx) {
 }
 
 export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolIter = 6, figures = [], locations = [], profile = {}, extra = {}) {
-  // extra = { maxWebSearches, bookContext, proposalMemory, writingContext }
+  // extra = { maxWebSearches, bookContext, proposalMemory, writingContext, webSearchMode }
+  //   webSearchMode  — 'anthropic' (Default, Server-Tool) | 'searxng' (Function-Tools
+  //                    web_search + read_web_page, Belege als [nr]); lib/websearch.
   //   bookContext    — Sprachnorm + Buchtyp/Autoren-Angaben (prompts/core.js#getResearchPromptContext),
   //                    bewusst OHNE Buch-Chat-Persona: die erlaubt Stil-Feedback, das hier verboten ist.
   //   proposalMemory — Ergebnis von buildResearchProposalMemoryBlock (volatil, ans Ende).
@@ -137,6 +139,7 @@ export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolI
   const bookContext = String(extra?.bookContext || '').trim();
   const proposalMemory = String(extra?.proposalMemory || '').trim();
   const writingContext = String(extra?.writingContext || '').trim();
+  const searxng = extra?.webSearchMode === 'searxng';
   // Figuren + Schauplätze werden vorgeladen (kompakte Liste), damit das Modell
   // schon bei der ERSTEN Web-Suche den Welt-Kontext in den Suchbegriff
   // einarbeiten kann — ohne erst eine list_book_entities-Runde zu verbrauchen.
@@ -171,7 +174,12 @@ export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolI
     profileBlock,
     domainBlock,
     'Deine Werkzeuge:',
-    '- `web_search` — durchsucht das offene Web in Echtzeit. Nutze es für aktuelle, externe oder überprüfbare Fakten (historisches, geografisches, technisches, kulturelles Hintergrundwissen). Gib in der Antwort die Quelle/URL an, auf die du dich stützt.',
+    ...(searxng ? [
+      '- `web_search` — durchsucht das offene Web in Echtzeit über eine Metasuchmaschine. Liefert je Treffer `nr`, Titel, URL und ein kurzes Snippet. Nutze es für aktuelle, externe oder überprüfbare Fakten (historisches, geografisches, technisches, kulturelles Hintergrundwissen).',
+      '- `read_web_page` — liest den Text einer Seite. Snippets sind kurz und oft abgeschnitten: für Daten, Zahlen, Namen und Zitate lies die Seite, bevor du dich darauf stützt. Lesbar sind Treffer von `web_search`/`lookup_literature` dieses Durchgangs, Links aus dem Recherche-Board und Links, die der User nennt.',
+    ] : [
+      '- `web_search` — durchsucht das offene Web in Echtzeit. Nutze es für aktuelle, externe oder überprüfbare Fakten (historisches, geografisches, technisches, kulturelles Hintergrundwissen). Gib in der Antwort die Quelle/URL an, auf die du dich stützt.',
+    ]),
     '- `list_research_items` / `read_research_item` — durchsuche und lies das vorhandene Recherche-Material des Autors (inkl. PDF-Volltext). Prüfe es, bevor du etwas Neues recherchierst — vieles ist evtl. schon gesammelt.',
     '- `search_research_passages` — semantische Passagen-Suche über das Archiv: findet Stellen nach BEDEUTUNG, auch bei anderer Wortwahl. Mit `item_id` durchsuchst du EIN langes PDF gezielt (`read_research_item` liefert davon nur den Anfang) — genau der Weg zu Stellen weiter hinten im Dokument.',
     '- `lookup_literature` — Fachliteratur und Bücher aus bibliografischen Registern (Crossref, OpenLibrary) mit DOI/ISBN. Bevorzugt vor `web_search`, wenn zitierfähige Literatur gefragt ist; schlägst du einen Treffer vor, nimm die doi.org-URL in `urls` und Autoren/Jahr in `source`. Die gelieferten URLs darfst du in `final_answer.quellen` nennen.',
@@ -185,10 +193,15 @@ export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolI
     '- Bittet dich der User ausdrücklich, etwas als Recherche-Eintrag/Item anzulegen, zu speichern oder ins Board zu legen, MUSST du `propose_research_item` aufrufen (der User bestätigt danach) — antworte das nicht nur in Prosa.',
     '- Bündle unabhängige Werkzeug-Aufrufe in EINER Runde (mehrere Suchen / Lese-Calls parallel), statt seriell.',
     `- Maximal ${maxToolIter} Werkzeug-Iterationen pro Antwort (eine Iteration = eine Runde, nicht ein Call). Geh effizient damit um.`,
-    ...(maxWebSearches ? [`- Insgesamt höchstens ${maxWebSearches} Web-Suchen pro Antwort (über alle Runden; jede Suche kostet). Formuliere gezielte Suchbegriffe statt vieler ähnlicher.`] : []),
+    ...(maxWebSearches ? [`- Insgesamt höchstens ${maxWebSearches} Web-Suchen pro Antwort (über alle Runden; jede Suche ${searxng ? 'kostet Zeit' : 'kostet'}). Formuliere gezielte Suchbegriffe statt vieler ähnlicher.`] : []),
     '- WICHTIG — rückwärtsgewandt: Du schreibst NIEMALS Manuskripttext, formulierst keine Romanszenen und machst keine Stil-Vorschläge für den Fließtext. Du sammelst und ordnest Wissen. Wenn der User um Textgenerierung für das Buch bittet, biete stattdessen Recherche/Strukturierung an.',
     '- Wenn du Material vorschlägst, das es im Archiv schon gibt (via list_research_items geprüft), weise darauf hin statt zu duplizieren. `propose_research_item` meldet einen Treffer im Archiv als `already_in_archive` — schlage dann nur vor, wenn dein Vorschlag wirklich Neues ergänzt.',
-    '- Nenne in `final_answer` unter `quellen` die Web-Quellen (URL + Titel), auf die sich deine Antwort stützt — nur URLs, die dir `web_search` in diesem Durchgang tatsächlich geliefert hat.',
+    ...(searxng ? [
+      '- Belege Aussagen aus Web-Treffern im Antworttext mit der Trefferzahl in eckigen Klammern, z.B. «… 2016 eröffnet [3].» Die Zahl ist das `nr` des Treffers aus `web_search` — erfinde keine Nummern.',
+      '- Nenne in `final_answer` unter `quellen` die Web-Quellen (URL + Titel), auf die sich deine Antwort stützt — nur URLs, die dir `web_search` oder `read_web_page` in diesem Durchgang tatsächlich geliefert haben.',
+    ] : [
+      '- Nenne in `final_answer` unter `quellen` die Web-Quellen (URL + Titel), auf die sich deine Antwort stützt — nur URLs, die dir `web_search` in diesem Durchgang tatsächlich geliefert hat.',
+    ]),
     'Liefere die finale Antwort IMMER über `final_answer`. Sprache: passe dich der Userfrage an, nicht diesem Prompt.',
     ...(bookContext ? ['', bookContext] : []),
     ...(proposalMemory ? ['', proposalMemory] : []),
@@ -322,14 +335,51 @@ export const RESEARCH_CHAT_TOOLS = [
 ];
 
 /**
- * Werkzeugliste fuer EINEN Call. Einziger Unterschied zur Basisliste ist die
- * Domain-Eingrenzung am serverseitigen `web_search` — sie haengt am Buch und
- * kann deshalb keine Konstante sein.
- *
- * Leere Liste ⇒ `allowed_domains` wird gar nicht erst gesetzt: ein leeres Array
- * waere fuer die API eine Eingrenzung auf nichts.
+ * Websuche als Function-Tools (Suchweg 'searxng'): Handler in
+ * routes/jobs/research-web-tools.js. Kein `max_uses` — den Deckel hält der Handler,
+ * die Domain-Eingrenzung ebenfalls (sie steht darum nicht im Schema).
  */
-export function buildResearchChatTools({ allowedDomains = [] } = {}) {
+export const RESEARCH_WEB_FUNCTION_TOOLS = [
+  {
+    name: 'web_search',
+    description: 'Durchsucht das offene Web über eine Metasuchmaschine. Liefert je Treffer `nr` (fortlaufend über den ganzen Durchgang — damit belegst du im Antworttext: [nr]), Titel, URL, ein kurzes Snippet und ggf. ein Datum. Snippets sind oft abgeschnitten: für Details `read_web_page`. Eine Suche = ein Suchbegriff; mehrere Suchen parallel in einer Runde sind erlaubt.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Suchbegriff wie in einer Suchmaschine: wenige, präzise Wörter, Eigennamen, ggf. Jahreszahl. In der Sprache, in der die besten Quellen zu erwarten sind.' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'read_web_page',
+    description: 'Liest den Text EINER Web-Seite (Titel, Fliesstext; lange Seiten gekappt, `doc_truncated` sagt es). Nur URLs aus web_search/lookup_literature dieses Durchgangs, aus dem Recherche-Board oder aus der Nachricht des Users. Nutze es, bevor du dich auf Details stützt, die im Snippet nicht vollständig stehen.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'Die URL (http/https), exakt wie geliefert.' },
+      },
+      required: ['url'],
+    },
+  },
+];
+
+/**
+ * Werkzeugliste fuer EINEN Lauf, abhaengig vom Suchweg (lib/websearch#webSearchMode):
+ *   'anthropic' (Default) — Basisliste mit Anthropics serverseitigem `web_search`;
+ *     die Domain-Eingrenzung haengt als `allowed_domains` am Werkzeug. Leere Liste ⇒
+ *     `allowed_domains` wird gar nicht erst gesetzt: ein leeres Array waere fuer die
+ *     API eine Eingrenzung auf nichts.
+ *   'searxng' — das Server-Tool fällt weg, an seine Stelle treten die beiden
+ *     Function-Tools; die Eingrenzung erzwingt der Handler.
+ */
+export function buildResearchChatTools({ allowedDomains = [], webSearchMode = 'anthropic' } = {}) {
+  if (webSearchMode === 'searxng') {
+    return [
+      ...RESEARCH_WEB_FUNCTION_TOOLS,
+      ...RESEARCH_CHAT_TOOLS.filter(t => t.name !== 'web_search'),
+    ];
+  }
   const domains = (allowedDomains || []).filter(Boolean);
   if (!domains.length) return RESEARCH_CHAT_TOOLS;
   return RESEARCH_CHAT_TOOLS.map(t => (
