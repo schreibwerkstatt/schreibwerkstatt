@@ -175,9 +175,23 @@ test('search: Timeout → WEBSEARCH_UNAVAILABLE, Aufrufer-Abbruch → AbortError
   } finally { ctx.teardown(); }
 });
 
+test('webSearchStatus: SearXNG-Pfad gesperrt → Verhalten wie vor der Umstellung', () => {
+  const ctx = _bootstrap();
+  try {
+    const s = ctx.websearch.webSearchStatus;
+    ctx.appSettings.set('websearch.claude', 'searxng');
+    ctx.appSettings.set('websearch.provider', 'searxng');
+    ctx.appSettings.set('websearch.searxng.url', 'http://searx.test');
+    assert.deepEqual(s(null), { provider: 'claude', mode: 'anthropic', reason: null });
+    ctx.appSettings.set('ai.provider', 'openai-compat');
+    assert.deepEqual(s(null), { provider: 'openai-compat', mode: null, reason: 'claude_only' });
+  } finally { ctx.teardown(); }
+});
+
 test('webSearchStatus: Claude — Anthropic per Default, SearXNG nur mit URL', () => {
   const ctx = _bootstrap();
   try {
+    ctx.websearch._setSearxngToolsReady(true);
     const s = ctx.websearch.webSearchStatus;
     assert.deepEqual(s(null), { provider: 'claude', mode: 'anthropic', reason: null });
     ctx.appSettings.set('websearch.claude', 'searxng');
@@ -192,6 +206,7 @@ test('webSearchStatus: Claude — Anthropic per Default, SearXNG nur mit URL', (
 test('webSearchStatus: openai-compat — nur SearXNG, Tool-Calling Pflicht', () => {
   const ctx = _bootstrap();
   try {
+    ctx.websearch._setSearxngToolsReady(true);
     const s = ctx.websearch.webSearchStatus;
     ctx.appSettings.set('ai.provider', 'openai-compat');
     assert.deepEqual(s(null), { provider: 'openai-compat', mode: null, reason: 'off' });
@@ -207,6 +222,7 @@ test('webSearchStatus: openai-compat — nur SearXNG, Tool-Calling Pflicht', () 
 test('webSearchStatus: Ollama — kein Tool-Calling, kein Suchweg', () => {
   const ctx = _bootstrap();
   try {
+    ctx.websearch._setSearxngToolsReady(true);
     ctx.appSettings.set('ai.provider', 'ollama');
     ctx.appSettings.set('websearch.provider', 'searxng');
     ctx.appSettings.set('websearch.searxng.url', 'http://searx.test');

@@ -119,6 +119,44 @@ test('researchChatGate: Kill-Switch, Provider, API-Key', () => {
 
   appSettings.set('ai.claude.api_key', '');
   assert.equal(researchChatGate(USER).error_code, 'RESEARCH_CHAT_DISABLED');
+  appSettings.set('ai.claude.api_key', 'sk-test');
+});
+
+test('researchChatGate: mit SearXNG-Pfad — Gründe je Provider', () => {
+  const websearch = require('../../lib/websearch');
+  websearch._setSearxngToolsReady(true);
+  try {
+    appSettings.set('research_chat.enabled', true);
+    appSettings.set('ai.claude.api_key', 'sk-test');
+
+    // Ollama: kein Tool-Calling.
+    appSettings.set('ai.provider', 'ollama');
+    let b = researchChatGate(USER);
+    assert.deepEqual([b.status, b.error_code, b.i18nKey], [400, 'RESEARCH_CHAT_NO_TOOLS', 'job.error.researchChatNoTools']);
+
+    // openai-compat: Werkzeuge ja, Websuche aus.
+    appSettings.set('ai.provider', 'openai-compat');
+    appSettings.set('websearch.provider', 'off');
+    b = researchChatGate(USER);
+    assert.deepEqual([b.status, b.error_code, b.i18nKey], [400, 'RESEARCH_CHAT_NO_WEBSEARCH', 'job.error.researchChatNoWebsearch']);
+
+    // openai-compat + SearXNG: frei, auch ohne Claude-Key.
+    appSettings.set('websearch.provider', 'searxng');
+    appSettings.set('websearch.searxng.url', 'http://searx.test');
+    appSettings.set('ai.claude.api_key', '');
+    assert.equal(researchChatGate(USER), null);
+
+    // Kill-Switch schlägt alles.
+    appSettings.set('research_chat.enabled', false);
+    assert.equal(researchChatGate(USER).error_code, 'RESEARCH_CHAT_DISABLED');
+  } finally {
+    websearch._setSearxngToolsReady(false);
+    appSettings.set('research_chat.enabled', true);
+    appSettings.set('ai.provider', 'claude');
+    appSettings.set('ai.claude.api_key', 'sk-test');
+    appSettings.set('websearch.provider', 'off');
+    appSettings.set('websearch.searxng.url', '');
+  }
 });
 
 // ── Archiv-Abgleich + Session-Gedächtnis ────────────────────────────────────

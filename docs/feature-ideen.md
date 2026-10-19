@@ -68,7 +68,7 @@ Alle Stellen müssen angefasst werden, sonst bleibt ein Pfad am Provider-Namen h
 >
 > 6. **Gates umbauen**:
 >    - `researchChatGate(userEmail)`: Kill-Switch zuerst. Dann `webSearchMode(userEmail)`: `null` + Provider ohne Tool-Calling → neuer Code `RESEARCH_CHAT_NO_TOOLS`; `null` wegen `websearch.provider = off` → `RESEARCH_CHAT_NO_WEBSEARCH`. Der API-Key-Check gilt nur für Claude; bei anderen Providern prüft `aiApiKey` des jeweiligen Providers, falls vorhanden.
->    - `RESEARCH_CHAT_CLAUDE_ONLY` und `FACTCHECK_CLAUDE_ONLY` bleiben als Codes im Vertrag ([docs/clients.md](clients.md), [contract/](../contract/README.md)): Änderungen nur additiv, deshalb neue Codes daneben, alte nicht mehr ausgeben, aber nicht aus dem Vertrag entfernen. i18n-Keys für die neuen Fehler in de/en; [public/js/cards/world-facts-card.js](../public/js/cards/world-facts-card.js) und [public/js/book/kontinuitaet.js](../public/js/book/kontinuitaet.js) mappen die neuen Codes.
+>    - `RESEARCH_CHAT_CLAUDE_ONLY` und `FACTCHECK_CLAUDE_ONLY` bleiben bestehen (i18n `error.*` und Frontend-Mapping), werden nach der Freischaltung aber nicht mehr ausgegeben; die neuen Codes kommen daneben. Im Client-Vertrag ([contract/](../contract/README.md)) stehen diese Codes nicht, dort ist nichts zu ändern. i18n-Keys für die neuen Fehler in de/en; [public/js/cards/world-facts-card.js](../public/js/cards/world-facts-card.js) und [public/js/book/kontinuitaet.js](../public/js/book/kontinuitaet.js) mappen die neuen Codes.
 >    - Faktencheck-Gate analog als `factcheckGate(userEmail)` neben `researchChatGate`, genutzt von `routes/jobs/komplett/index.js`, `/config → komplett.factcheck` und dem Job selbst (Setting kann sich zwischen POST und Start ändern).
 >    - `/config` bleibt die einzige Quelle fürs Frontend; die UI-Gating-Logik nicht duplizieren.
 >
@@ -119,9 +119,9 @@ Jeder Schritt ist ein eigener Commit auf `main`, nach jedem Schritt `npm run tes
    - i18n de/en. `combobox` für die Modus-Auswahl, `numInput` für Timeout/Treffer.
 3. **Gate**
    - `researchChatGate` auf `webSearchMode` umbauen, neue Codes `RESEARCH_CHAT_NO_TOOLS` / `RESEARCH_CHAT_NO_WEBSEARCH` + i18n.
-   - Client-Vertrag additiv ergänzen ([contract/](../contract/README.md)), Kommentar in `providerSupportsTools` anpassen.
+   - Kommentar in `providerSupportsTools` anpassen.
    - Bestehender [research-chat-gate.test.js](../tests/integration/research-chat-gate.test.js) erweitern.
-   - Solange Schritt 4 fehlt, liefert `webSearchMode` für Nicht-Claude noch `null` (Feature-Flag im Code), damit kein halbfertiger Pfad erreichbar ist.
+   - Bis Schritt 6 sperrt ein Flag in [lib/websearch/index.js](../lib/websearch/index.js) (`_searxngToolsReady`) den SearXNG-Pfad: Claude sucht immer über Anthropic, andere Provider bekommen weiter `RESEARCH_CHAT_CLAUDE_ONLY`. Das Verhalten bleibt damit bis zur Freischaltung exakt wie vorher.
 4. **Tools + Handler**
    - `buildResearchChatTools({ allowedDomains, webSearchMode })` in [public/js/prompts/recherche.js](../public/js/prompts/recherche.js) inkl. aller Locale-/Provider-Instanzen; Prompt-Texte je Modus.
    - Handler `web_search` / `read_web_page` in [routes/jobs/research-chat-tools.js](../routes/jobs/research-chat-tools.js): Deckel, Zählung in `ctx`, URL-Herkunftsprüfung.

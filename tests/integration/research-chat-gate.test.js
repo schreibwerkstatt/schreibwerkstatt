@@ -1,5 +1,5 @@
 'use strict';
-// Integration: POST /jobs/research-chat prüft Kill-Switch + Claude-only VOR dem
+// Integration: POST /jobs/research-chat prüft Kill-Switch + Suchweg VOR dem
 // Speichern der User-Nachricht (preflight in _handleChatPost). Vorher wurde die
 // Frage gespeichert und erst der Job scheiterte — die Session trug danach eine
 // Frage ohne Antwort. Der Erfolgsfall wird hier bewusst NICHT gefahren (er
@@ -65,4 +65,21 @@ test('Provider nicht Claude → 400 RESEARCH_CHAT_CLAUDE_ONLY, keine verwaiste N
   assert.equal(r.json.error_code, 'RESEARCH_CHAT_CLAUDE_ONLY');
   assert.equal(msgCount(), 0);
   appSettings.set('ai.provider', 'claude');
+});
+
+test('SearXNG-Pfad freigeschaltet, Websuche aus → 400 RESEARCH_CHAT_NO_WEBSEARCH, keine verwaiste Nachricht', async () => {
+  const websearch = require('../../lib/websearch');
+  websearch._setSearxngToolsReady(true);
+  try {
+    appSettings.set('research_chat.enabled', true);
+    appSettings.set('ai.provider', 'openai-compat');
+    appSettings.set('websearch.provider', 'off');
+    const r = await post({ session_id: sessionId, message: 'Frage' });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.error_code, 'RESEARCH_CHAT_NO_WEBSEARCH');
+    assert.equal(msgCount(), 0);
+  } finally {
+    websearch._setSearxngToolsReady(false);
+    appSettings.set('ai.provider', 'claude');
+  }
 });
