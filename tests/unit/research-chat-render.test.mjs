@@ -200,3 +200,40 @@ test('effectiveAnswerText: leer/Abbruch + Vorschläge → proposalsOnly-Marker',
   const html = renderResearchAnswer({ text: '', sources: [], proposalCount: 1, renderChatMarkdown: MK, escHtml: ID, t: T });
   assert.equal(html, '[i18n]recherche.chat.proposalsOnly');
 });
+
+// ── Suchweg SearXNG: [n]-Belege ──────────────────────────────────────────────
+
+const WEB = [{ url: 'https://a.ch/', title: 'A' }, { url: 'https://b.ch/', title: 'B' }, { url: 'https://c.ch/', title: 'C' }];
+
+test('[n]-Belege: werden zu Links auf den n-ten Treffer, Listen [1, 3] zu zwei Markern', () => {
+  const html = render('Eröffnet 2016 [2]. Länge 57 km [1, 3].', WEB);
+  assert.match(html, /2016<sup class="chat-cite"><a href="https:\/\/b\.ch\/"[^>]*>2<\/a><\/sup>\./);
+  assert.match(html, /km<sup class="chat-cite"><a href="https:\/\/a\.ch\/"[^>]*>1<\/a><\/sup><sup class="chat-cite"><a href="https:\/\/c\.ch\/"[^>]*>3<\/a><\/sup>\./);
+  assert.ok(!html.includes('[2]'));
+});
+
+test('[n]-Belege: unbekannte Nummer, Markdown-Link und Antwort ohne Treffer bleiben Text', () => {
+  assert.ok(render('Siehe [7].', WEB).includes('[7]'));
+  assert.ok(render('[3](https://x.ch/)', WEB).includes('[3](https://x.ch/)'));
+  assert.equal(render('Liste [1].', []), 'Liste [1].');
+});
+
+test('[n]-Belege: Antwort mit cite-Markern rendert unverändert (Anthropic-Weg)', () => {
+  const html = render('<cite index="1-1">Satz</cite> und [2].', WEB);
+  assert.ok(html.includes('[2]'), '[2] bleibt Text, wenn cite-Marker im Spiel sind');
+  assert.match(html, /Satz<sup class="chat-cite"><a href="https:\/\/a\.ch\/"/);
+});
+
+test('[n]-Belege: mit answer_sources trägt der Marker die Nummer der Belegliste', () => {
+  const html = renderResearchAnswer({
+    text: 'Fakt [3].', sources: WEB,
+    answerSources: [{ url: 'https://c.ch/', title: 'C', doc_nums: [3] }],
+    renderChatMarkdown: MK, escHtml: ID, t: T,
+  });
+  assert.match(html, /<a href="https:\/\/c\.ch\/"[^>]*>1<\/a>/);
+});
+
+test('displaySources/citedSources: Fallback-Liste aus [n]-Belegen', () => {
+  assert.deepEqual(citedSources('A [3], B [1] und [3].', WEB).map(s => s.n), [1, 3]);
+  assert.deepEqual(displaySources('A [2].', WEB, []).map(s => s.url), ['https://b.ch/']);
+});

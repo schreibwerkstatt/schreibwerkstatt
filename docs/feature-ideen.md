@@ -107,7 +107,7 @@ Alle Stellen müssen angefasst werden, sonst bleibt ein Pfad am Provider-Namen h
 
 Jeder Schritt ist ein eigener Commit auf `main`, nach jedem Schritt `npm run test:unit` grün. Bis Schritt 6 ändert sich für Claude-User nichts Sichtbares.
 
-**Etappe 1 — Recherche-Chat**
+**Etappe 1 — Recherche-Chat** (umgesetzt, Schritte 1–6 auf `main`; offen: Deploy, Prod-Settings, manuelle Abnahme)
 
 1. **Settings + Client**
    - Keys in [lib/app-settings/keys/app.js](../lib/app-settings/keys/app.js): `websearch.provider` (`off`), `websearch.claude` (`anthropic`), `websearch.searxng.url`, `websearch.searxng.timeout_ms`, `websearch.max_results`.

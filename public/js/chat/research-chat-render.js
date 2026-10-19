@@ -20,6 +20,22 @@ const CITE_CLOSE = String.fromCharCode(0xE011);
 // jedes Komma-Teils ist der Dokument-Index, die zweite ein Satz-Index (ignoriert).
 const CITE_TAG_RE = /<cite\b[^>]*\bindex="([^"]*)"[^>]*>([\s\S]*?)<\/cite>/gi;
 const CITE_INDEX_ONLY_RE = /<cite\b[^>]*\bindex="([^"]*)"[^>]*>/gi;
+// `[3]` / `[1, 4]` — Belegformat des Suchwegs SearXNG (routes/jobs/research-web-tools.js):
+// die Zahl ist das `nr` des Treffers, also derselbe 1-basierte Index wie bei den
+// cite-Markern. Kein `(` dahinter: `[3](url)` ist ein Markdown-Link, kein Beleg.
+// Das Leerzeichen davor gehört dazu: der Marker hängt wie bei cite direkt am Wort.
+const BRACKET_CITE_RE = /[ \t]*\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\](?!\()/g;
+
+// Gilt das [n]-Format für diesen Text? Nur ohne cite-Marker — die Anthropic-
+// Antwort bleibt unverändert, auch wenn sie zufällig «[2]» enthält.
+function _usesBracketCites(text, sources) {
+  return sources.length > 0 && !/<cite\b/i.test(text);
+}
+
+// Treffer-Nummern aus `[n]`-Belegen, nur gültige (1..Anzahl Treffer), distinkt.
+function _bracketDocNums(inner, sources) {
+  return parseCiteDocNums(inner).filter(n => n >= 1 && n <= sources.length);
+}
 
 // Dokument-Indizes aus einem `index="4-4,4-5"`-String: erste Zahl pro Komma-Teil
 // (= Dokument), Satz-Index dahinter ignoriert. Distinkt, Reihenfolge erhalten.
@@ -48,6 +64,12 @@ export function citedSources(text, sources) {
   CITE_INDEX_ONLY_RE.lastIndex = 0;
   while ((m = CITE_INDEX_ONLY_RE.exec(text))) {
     for (const n of parseCiteDocNums(m[1])) if (!nums.includes(n)) nums.push(n);
+  }
+  if (_usesBracketCites(text, sources)) {
+    BRACKET_CITE_RE.lastIndex = 0;
+    while ((m = BRACKET_CITE_RE.exec(text))) {
+      for (const n of _bracketDocNums(m[1], sources)) if (!nums.includes(n)) nums.push(n);
+    }
   }
   nums.sort((a, b) => a - b);
   const seen = new Set();
@@ -92,7 +114,8 @@ export function effectiveAnswerText(text, proposalCount) {
 /**
  * Rendert eine Assistant-Antwort in HTML. Ersetzt `<cite index="N-…">TEXT</cite>`
  * durch TEXT + klickbaren Superscript-Marker [N] (verlinkt auf das N-te Treffer-
- * dokument). Ohne Quellen werden die Tags still entwrapt. Sentinels umgehen den
+ * dokument); ohne cite-Marker ebenso die `[N]`-Belege des Suchwegs SearXNG.
+ * Ohne Quellen werden die Tags still entwrapt. Sentinels umgehen den
  * XSS-Escape von renderChatMarkdown; das injizierte HTML escaped url/title selbst.
  *
  * @param {object} opts
@@ -121,6 +144,14 @@ export function renderResearchAnswer({ text, sources, answerSources, proposalCou
   });
   // Defensiv: etwaige Rest-cite-Tags (ohne index / Fragmente) entwrappen.
   transformed = transformed.replace(/<\/?cite\b[^>]*>/gi, '');
+  // Suchweg SearXNG: `[n]`-Belege auf denselben Marker-Pfad. Unbekannte Nummern
+  // bleiben als Text stehen (nichts, worauf man verlinken könnte).
+  if (_usesBracketCites(txt, srcs)) {
+    transformed = transformed.replace(BRACKET_CITE_RE, (full, inner) => {
+      const nums = _bracketDocNums(inner, srcs);
+      return nums.length ? nums.map(n => `${CITE_OPEN}${n}${CITE_CLOSE}`).join('') : full;
+    });
+  }
 
   let html = renderChatMarkdown(transformed);
   html = html.replace(new RegExp(`${CITE_OPEN}(\\d+)${CITE_CLOSE}`, 'g'), (_s, nStr) => {

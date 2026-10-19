@@ -57,19 +57,17 @@ test('Kill-Switch aus → 403 RESEARCH_CHAT_DISABLED, keine verwaiste Nachricht'
   assert.equal(msgCount(), 0);
 });
 
-test('Provider nicht Claude → 400 RESEARCH_CHAT_CLAUDE_ONLY, keine verwaiste Nachricht', async () => {
+test('Provider ohne Tool-Calling → 400 RESEARCH_CHAT_NO_TOOLS, keine verwaiste Nachricht', async () => {
   appSettings.set('research_chat.enabled', true);
   appSettings.set('ai.provider', 'ollama');
   const r = await post({ session_id: sessionId, message: 'Frage' });
   assert.equal(r.status, 400);
-  assert.equal(r.json.error_code, 'RESEARCH_CHAT_CLAUDE_ONLY');
+  assert.equal(r.json.error_code, 'RESEARCH_CHAT_NO_TOOLS');
   assert.equal(msgCount(), 0);
   appSettings.set('ai.provider', 'claude');
 });
 
-test('SearXNG-Pfad freigeschaltet, Websuche aus → 400 RESEARCH_CHAT_NO_WEBSEARCH, keine verwaiste Nachricht', async () => {
-  const websearch = require('../../lib/websearch');
-  websearch._setSearxngToolsReady(true);
+test('openai-compat, Websuche aus → 400 RESEARCH_CHAT_NO_WEBSEARCH, keine verwaiste Nachricht', async () => {
   try {
     appSettings.set('research_chat.enabled', true);
     appSettings.set('ai.provider', 'openai-compat');
@@ -79,7 +77,6 @@ test('SearXNG-Pfad freigeschaltet, Websuche aus → 400 RESEARCH_CHAT_NO_WEBSEAR
     assert.equal(r.json.error_code, 'RESEARCH_CHAT_NO_WEBSEARCH');
     assert.equal(msgCount(), 0);
   } finally {
-    websearch._setSearxngToolsReady(false);
     appSettings.set('ai.provider', 'claude');
   }
 });

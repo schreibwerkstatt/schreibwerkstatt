@@ -15,7 +15,7 @@ const USER = 'autor@test.dev';
 const BOOK = 9431;
 const NOW = '2026-01-01T00:00:00.000Z';
 
-let ctx; let db; let appSettings; let ai; let websearch; let searxng; let urlScrape;
+let ctx; let db; let appSettings; let ai; let searxng; let urlScrape;
 let runResearchChatJob; let createJob; let jobs;
 let realCall; let realSearch; let realScrape;
 
@@ -24,7 +24,6 @@ test.before(() => {
   db = require('../../db/schema').db;
   appSettings = require('../../lib/app-settings');
   ai = require('../../lib/ai');
-  websearch = require('../../lib/websearch');
   searxng = require('../../lib/websearch/searxng');
   urlScrape = require('../../lib/url-scrape');
   ({ runResearchChatJob } = require('../../routes/jobs/research-chat'));
@@ -36,7 +35,6 @@ test.before(() => {
 });
 test.after(() => {
   ai.callAIWithTools = realCall; searxng.search = realSearch; urlScrape.scrapeUrl = realScrape;
-  websearch._setSearxngToolsReady(false);
   ctx.cleanup();
 });
 
@@ -79,7 +77,6 @@ async function run(question, seq) {
 }
 
 test('openai-compat + SearXNG: Suche, Seite lesen, belegte Antwort, keine Suchkosten', async () => {
-  websearch._setSearxngToolsReady(true);
   appSettings.set('ai.provider', 'openai-compat');
   appSettings.set('websearch.provider', 'searxng');
   appSettings.set('websearch.searxng.url', 'http://searx.test');
@@ -146,7 +143,6 @@ test('openai-compat + SearXNG: Suche, Seite lesen, belegte Antwort, keine Suchko
 });
 
 test('Suchdeckel: Handler lehnt ab, Loop beendet die Recherche mit web_cap', async () => {
-  websearch._setSearxngToolsReady(true);
   appSettings.set('ai.provider', 'openai-compat');
   appSettings.set('jobs.research_chat.max_web_searches', 2);
   let n = 0;
@@ -168,8 +164,7 @@ test('Suchdeckel: Handler lehnt ab, Loop beendet die Recherche mit web_cap', asy
   }
 });
 
-test('Gegenprobe Claude/Anthropic: Server-Tool, keine Function-Tools, Provider erzwungen wie bisher nicht nötig', async () => {
-  websearch._setSearxngToolsReady(true);
+test('Gegenprobe Claude/Anthropic: Server-Tool, keine Function-Tools, Suche bezahlt gezählt', async () => {
   appSettings.set('ai.provider', 'claude');
   appSettings.set('ai.claude.api_key', 'sk-test');
   appSettings.set('websearch.claude', 'anthropic');
@@ -189,4 +184,37 @@ test('Gegenprobe Claude/Anthropic: Server-Tool, keine Function-Tools, Provider e
   assert.equal(web.type, 'web_search_20250305');
   assert.ok(!calls[0].tools.find(t => t.name === 'read_web_page'));
   assert.equal(msg.web_searches, 1, 'Anthropic-Suche bleibt bezahlt gezählt');
+});
+
+test('Seitendeckel: read_web_page bekommt mehr Platz als der Ergebnis-Deckel der übrigen Werkzeuge', async () => {
+  // Lokales Modell mit 96K-Fenster: der allgemeine Ergebnis-Deckel liegt bei ~5K
+  // Zeichen. Eine Tabellenzeile bei Zeichen 6000 muss trotzdem beim Modell ankommen.
+  appSettings.set('ai.provider', 'openai-compat');
+  appSettings.set('websearch.provider', 'searxng');
+  appSettings.set('websearch.searxng.url', 'http://searx.test');
+  appSettings.set('research_chat.enabled', true);
+  const prevWindow = appSettings.get('ai.openai-compat.context_window');
+  appSettings.set('ai.openai-compat.context_window', 96000);
+  searxng.search = async () => ({ results: [{ title: 'Tabelle', url: 'https://ex.com/tabelle', snippet: '', engines: [], published: null }], unresponsive: [] });
+  const page = 'x'.repeat(6000) + ' MARKE-1845 ' + 'y'.repeat(20000);
+  urlScrape.scrapeUrl = async (u) => ({ title: 'Tabelle', text: page, finalUrl: u });
+  try {
+    const { calls, ci } = await run('Frage', [
+      toolTurn(tu('a', 'web_search', { query: 'q' })),
+      toolTurn(tu('b', 'read_web_page', { url: 'https://ex.com/tabelle' })),
+      toolTurn(tu('c', 'final_answer', { antwort: 'ok' })),
+    ]);
+    const sent = calls[2].messages.at(-1).content.find(r => r.tool_use_id === 'b').content;
+    console.log('DBG', sent.length, sent.indexOf('MARKE'), sent.indexOf('yyy'));
+    assert.match(sent, /MARKE-1845/, 'Seitentext hinter dem allgemeinen Deckel erreicht das Modell');
+    const parsed = JSON.parse(sent);
+    assert.equal(parsed.doc_truncated, true, 'Kappung bleibt ausgewiesen');
+    assert.ok(parsed.text.length <= 12000, 'PAGE_TEXT_MAX gilt weiter');
+    const read = ci.tool_calls.find(t => t.name === 'read_web_page');
+    assert.equal(read.truncated, false, 'Loop schneidet das Werkzeug-Ergebnis nicht hart');
+    const search = calls[1].messages.at(-1).content.find(r => r.tool_use_id === 'a').content;
+    assert.ok(search.length < 6000);
+  } finally {
+    appSettings.set('ai.openai-compat.context_window', prevWindow);
+  }
 });

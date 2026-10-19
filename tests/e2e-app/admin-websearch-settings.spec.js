@@ -12,11 +12,13 @@ test('Websuche-Tab: Felder, Optionen, Probe-Suche ohne URL', async ({ page }) =>
   await expect(card).toBeVisible();
 
   await card.locator('.admin-settings-tab', { hasText: /^(Websuche|Web search)$/ }).click();
-  const section = card.locator('section.admin-settings-section:visible');
-  await expect(section).toHaveCount(1);
+  // Direkt adressiert statt `:visible`: im Moment des Tab-Wechsels ist sonst noch
+  // der vorherige Abschnitt sichtbar.
+  const section = card.locator(`section[x-show="adminSettingsTab === 'websearch'"]`);
+  await expect(section).toBeVisible();
+  await expect(section.locator('.setting-field')).toHaveCount(5);
 
   const labels = await section.locator('.setting-field').allInnerTexts();
-  expect(labels.length).toBe(5);
   for (const txt of labels) expect(txt).not.toMatch(/admin\.settings\./);
 
   const values = await page.evaluate(() => {

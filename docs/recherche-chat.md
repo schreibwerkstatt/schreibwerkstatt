@@ -4,9 +4,21 @@ Agentischer Chat als **Panel in der Recherche-Karte** (Markup [public/partials/r
 
 **Platzierung:** Ab 1280px steht das Panel als eigene, sticky Spalte **rechts neben dem Board** (`.recherche-split` in [public/css/entities/recherche/chat.css](../public/css/entities/recherche/chat.css); Muster des Abschnitts-Chats neben dem Editor, aber breiter — `clamp(420px, 32vw, 620px)` statt 420px, weil Web-Such-Antworten, Quellenlisten und Fundstück-Vorschläge mehr Zeilenbreite brauchen). Darunter klappt es per `order: -1` **über** das Board, damit es nicht unter einer langen Schnipsel-Liste verschwindet. Die Schnipsel-Karte des Boards liegt als eigenes Fragment in [public/partials/recherche-item.html](../public/partials/recherche-item.html).
 
-## Claude-only — warum
+## Suchwege und Verfügbarkeit
 
-Die einzige Echtzeit-Websuche läuft über Anthropics serverseitiges `web_search`-Tool (kein eigener Google-Key, Anthropic führt die Suche selbst aus). Ollama/OpenAI-compat können das nicht. Darum ist der Chat Claude-only. Die Bedingung (`resolveProvider({userEmail}) === 'claude'` + `ai.claude.api_key` gesetzt + Kill-Switch `research_chat.enabled` ≠ false) steht **einmal** in [lib/research-chat-gate.js](../lib/research-chat-gate.js) und greift an drei Stellen: `/config` → `researchChat.enabled` (Panel sichtbar, [routes/proxies.js](../routes/proxies.js)), `POST /jobs/research-chat` (`preflight` von `_handleChatPost`, **vor** dem Speichern der User-Nachricht — sonst bliebe bei abgeschaltetem Chat eine Frage ohne Antwort in der Session; `403 RESEARCH_CHAT_DISABLED` bzw. `400 RESEARCH_CHAT_CLAUDE_ONLY`) und der Job selbst (`validate`, weil Setting/Provider zwischen POST und Queue-Start wechseln können). Der Job erzwingt zusätzlich `provider='claude'`.
+Der Chat braucht eine Echtzeit-Websuche. Welcher Weg gilt, entscheidet **eine** Funktion, [lib/websearch/index.js](../lib/websearch/index.js)#`webSearchStatus(userEmail)`, aus dem effektiven Provider des Users und zwei Admin-Settings (Tab «Websuche»):
+
+| Provider | Setting | Suchweg |
+|---|---|---|
+| Claude | `websearch.claude = anthropic` (Default) | `anthropic`: Anthropics serverseitiges `web_search` — die API sucht und wertet Seiten selbst aus, je Suche bezahlt |
+| Claude | `websearch.claude = searxng` + `websearch.searxng.url` | `searxng` (ohne URL zurück auf `anthropic`) |
+| openai-compat mit Tool-Calling | `websearch.provider = searxng` + URL | `searxng` |
+| openai-compat mit Tool-Calling | `websearch.provider = off` (Default) oder ohne URL | keiner → `RESEARCH_CHAT_NO_WEBSEARCH` |
+| Ollama, openai-compat mit `ai.openai-compat.tools = false` | — | keiner → `RESEARCH_CHAT_NO_TOOLS` |
+
+`searxng` heisst: eine selbst gehostete SearXNG-Instanz (Client [lib/websearch/searxng.js](../lib/websearch/searxng.js), admin-konfigurierter Host → Timeout + Byte-Deckel, kein SSRF-Guard), angebunden als **Function-Tools** `web_search` und `read_web_page` (siehe „Tools"). Kostenlos, aber ohne Anthropics Seitenauswertung — darum das zweite Werkzeug.
+
+Das Gate ([lib/research-chat-gate.js](../lib/research-chat-gate.js)) prüft Kill-Switch `research_chat.enabled`, dann den Suchweg, und nur für Claude den API-Key. Es greift an drei Stellen: `/config` → `researchChat.enabled` (Panel sichtbar, [routes/proxies.js](../routes/proxies.js)), `POST /jobs/research-chat` (`preflight` von `_handleChatPost`, **vor** dem Speichern der User-Nachricht — sonst bliebe eine Frage ohne Antwort in der Session; `403 RESEARCH_CHAT_DISABLED`, `400 RESEARCH_CHAT_NO_TOOLS`, `400 RESEARCH_CHAT_NO_WEBSEARCH`) und der Job selbst (`validate`, weil Setting/Provider zwischen POST und Queue-Start wechseln können). Der Job läuft mit dem effektiven Provider des Users, wie Plot- und Ideen-Chat. `RESEARCH_CHAT_CLAUDE_ONLY` gibt der Server nicht mehr aus; Text und Mapping bleiben für Antworten älterer Server-Stände.
 
 ## Datenmodell
 
@@ -16,7 +28,9 @@ Keine neue Tabelle — die Sessions leben in `chat_sessions` mit **`kind='resear
 
 | Tool | Handler? | Zweck |
 |------|----------|-------|
-| `web_search` | nein (Anthropic-Server-Tool, Typ `web_search_20250305`) | Echtzeit-Websuche; Ergebnis + Citations kommen in derselben Runde zurück. Trägt `allowed_domains`, wenn das Buch eine Eingrenzung gesetzt hat (siehe „Recherche-Profil“) |
+| `web_search` (Suchweg `anthropic`) | nein (Anthropic-Server-Tool, Typ `web_search_20250305`) | Echtzeit-Websuche; Ergebnis + Citations kommen in derselben Runde zurück. Trägt `allowed_domains`, wenn das Buch eine Eingrenzung gesetzt hat (siehe „Recherche-Profil“) |
+| `web_search` (Suchweg `searxng`) | ja ([research-web-tools.js](../routes/jobs/research-web-tools.js)) | `{ query }` → SearXNG-Treffer mit `nr`, Titel, URL, Snippet. `nr` läuft über den ganzen Lauf durch und ist die Position in `context_info.sources` — darüber belegt das Modell im Text mit `[nr]`. Den Suchdeckel hält der Handler (ein Function-Tool kennt kein `max_uses`): über dem Deckel Fehler-Result ohne Suche. Domain-Eingrenzung als `site:`-Operator **und** Host-Nachfilter. Suchsprache = Buchsprache. Ausfall → Fehler-Result „Suche fiel aus“, keine Fehlanzeige |
+| `read_web_page` (nur `searxng`) | ja ([research-web-tools.js](../routes/jobs/research-web-tools.js)) | `{ url }` → Seitentext über [lib/url-scrape.js](../lib/url-scrape.js) (`safeFetch`, SSRF-Guard — die URL kommt vom Modell). Liest **nur URLs bekannter Herkunft**: Treffer und gelesene Seiten dieses Laufs, `lookup_literature`-Treffer, Board-URLs des Buchs (`bookItemUrls`), Links aus der aktuellen User-Nachricht. **Why:** interne Ziele fängt der SSRF-Guard; die Herkunftsprüfung verhindert Abfluss per Prompt-Injection (eine gelesene Seite weist das Modell an, eine fremde URL mit Buchinhalt im Query-String aufzurufen). Gekappt auf den Ergebnis-Deckel des Laufs, ausgewiesen als `doc_chars`/`doc_truncated`. Höchstens 6 Seiten pro Antwort; Redirect-Ziel zählt als gelesene Seite |
 | `list_research_items` | ja | vorhandenes Board durchsuchen (FTS bei `q`; Filter `kind`/`status`/`chapter_id`/`page_id`; liefert Status + `stellen`/`bezug`). Derselbe Handler bedient den Buch-Chat ([buchchat-tools.md](buchchat-tools.md)) |
 | `read_research_item` | ja | Volltext eines Eintrags inkl. PDF-`doc_text` (auf 8 000 Zeichen gekappt — die Kappung wird als `doc_chars`/`doc_truncated` **ausgewiesen**, sonst hält das Modell den Anfang für das ganze Dokument) |
 | `search_research_passages` | ja | semantische Passagen-Suche; mit `item_id` **innerhalb** eines langen PDFs. Nur angeboten bei `embed.isEnabled()` |
@@ -27,7 +41,7 @@ Keine neue Tabelle — die Sessions leben in `chat_sessions` mit **`kind='resear
 
 **Zwei Zugriffsarten aufs Archiv, bewusst getrennt:** `list_research_items` ist die **Wortsuche** (FTS5) und beantwortet „welche Einträge gibt es"; `search_research_passages` ist die **Bedeutungssuche** (Embeddings, [docs/semantic-search.md](semantic-search.md)) und beantwortet „welche Stelle passt zu dieser Frage". Der Fall, für den das zweite Werkzeug existiert, ist das lange PDF: ein 40-Seiten-Dokument ist über `read_research_item` nur mit seinem Anfang lesbar, über `search_research_passages` mit `item_id` dagegen an jeder Stelle. Ohne Embedding-Endpunkt wird das Werkzeug gar nicht erst angeboten (Filter in [research-chat.js](../routes/jobs/research-chat.js)) — das Modell bleibt dann bei der Wortsuche.
 
-`web_search` wird vom Loop **nicht** ausgeführt: in [lib/ai.js](../lib/ai.js) landen `server_tool_use`-Blöcke nicht in `result.toolUses` (nur `tool_use`), bleiben aber samt `web_search_tool_result` verbatim in `rawContentBlocks` (Re-Send-Pflicht, falls daneben ein Custom-Tool lief).
+Auf dem Suchweg `anthropic` wird `web_search` vom Loop **nicht** ausgeführt: in [lib/ai.js](../lib/ai.js) landen `server_tool_use`-Blöcke nicht in `result.toolUses` (nur `tool_use`), bleiben aber samt `web_search_tool_result` verbatim in `rawContentBlocks` (Re-Send-Pflicht, falls daneben ein Custom-Tool lief).
 
 ## Speicher-Vorschläge (Bestätigungs-Modell)
 
@@ -57,11 +71,11 @@ Zwei Spalten an `book_settings` (Migration 289) steuern, **wie** und **wo** der 
 | Spalte | Wirkung |
 |---|---|
 | `research_profile` | Freitext (max. 1500 Zeichen) → Block **„VORRANGIGE ANGABEN DER AUTORIN / DES AUTORS ZUR RECHERCHE“** im System-Prompt, mit Vorrang vor den allgemeinen Arbeitsregeln — dieselbe Konvention wie `buch_kontext` im Buch-Prompt. |
-| `research_domains` | Eine Domain pro Zeile (max. 20) → `allowed_domains` am serverseitigen `web_search`-Werkzeug (`buildResearchChatTools`). Leer = offenes Web. |
+| `research_domains` | Eine Domain pro Zeile (max. 20) → `allowed_domains` am serverseitigen `web_search`-Werkzeug (`buildResearchChatTools`, Suchweg `anthropic`) bzw. `site:`-Operatoren plus Host-Nachfilter im SearXNG-Client (Suchweg `searxng`). Leer = offenes Web. |
 
 **Am Buch, nicht am User:** „ich suche medizinische Fachliteratur“ ist eine Aussage über *diese Arbeit* — dieselbe Autorin recherchiert im nächsten Projekt Bauernkriege. Damit sitzt das Profil auf der Achse von `buch_kontext` und `stilprofil`.
 
-**Pflicht: die Eingrenzung steht doppelt im Call.** `allowed_domains` grenzt wirklich ein, der Prompt-Block sagt dem Modell, **dass** es eingegrenzt ist — samt der Anweisung, eine erfolglose Suche als eingegrenzt zu kennzeichnen statt als Nichtexistenz. Ohne die zweite Hälfte liest das Modell die leere Trefferliste als „dazu gibt es nichts“ und gibt eine Fehlanzeige weiter, die keine ist (gleiches Muster wie `scanned: false` beim Motiv-Index und `anchorMap === null` im Plot-Check).
+**Pflicht: die Eingrenzung steht doppelt im Call.** `allowed_domains` bzw. der Host-Nachfilter grenzt wirklich ein, der Prompt-Block sagt dem Modell, **dass** es eingegrenzt ist — samt der Anweisung, eine erfolglose Suche als eingegrenzt zu kennzeichnen statt als Nichtexistenz. Ohne die zweite Hälfte liest das Modell die leere Trefferliste als „dazu gibt es nichts“ und gibt eine Fehlanzeige weiter, die keine ist (gleiches Muster wie `scanned: false` beim Motiv-Index und `anchorMap === null` im Plot-Check).
 
 **Normalisierung ausschliesslich serverseitig** ([lib/research-profile.js](../lib/research-profile.js), gegated in [tests/unit/research-profile.test.mjs](../tests/unit/research-profile.test.mjs)): eine eingefügte ganze URL wird zum Host, `www.` fällt weg, IDN wird zu Punycode, eine nackte IP und eine Zeile ohne Punkt fallen heraus. Die Antwort des Endpunkts trägt den **gespeicherten** Stand und setzt das Eingabefeld darauf — der User soll sofort sehen, was wirklich gilt. Kein zweiter Normalisierer im Browser; die Presets in [research.js](../public/js/book/book-settings/research.js) sind reine Eingabehilfe (anhängen, nicht ersetzen) und entscheiden nichts.
 
@@ -73,9 +87,11 @@ Geteilter agentischer Loop ([agentic-chat/](../routes/jobs/agentic-chat/)), aber
 
 **System-Prompt:** eigener Recherche-Prompt + Buch-Kontext aus `getResearchPromptContext` ([prompts/core.js](../public/js/prompts/core.js)): nur Sprachnorm der Locale (`baseRules` **ohne** die Lektorat-`commonRules`) + Buchtyp/Autoren-Angaben/Hauptland. **Nicht** der Buch-Chat-Prompt — dessen Persona („kritischer Lektor, Feedback zu Stil") überstimmte das Verbot von Stil-Vorschlägen. Kein Stilprofil (der Chat erzeugt keinen Manuskripttext).
 
-**Kosten-Deckel Web-Suche:** `jobs.research_chat.max_web_searches` (Default 10, Admin → Jobs) deckelt die Anthropic-Web-Suchen **über alle Runden** einer Antwort. Ist er erreicht, beendet der Loop-Hook `stopBeforeRound` die Recherche vor der nächsten Runde (`stop_reason: web_cap`) und erzwingt die Synthese. Die Werkzeugliste bleibt über den ganzen Lauf gleich ([research-chat-helpers.js](../routes/jobs/research-chat-helpers.js)#`toolsForRound` läuft nur beim Start, für einen Deckel unter dem Rundenwert 6): Werkzeuge stehen vorn im Prompt-Cache (Render-Reihenfolge tools → system → messages), und ein Wechsel schriebe den ganzen Präfix neu. Preis dafür: eine Runde kann den Deckel um höchstens den Rundenwert überschreiten — billiger als ein Cache-Neuaufbau. Der Prompt nennt den Deckel ebenfalls.
+**Deckel Web-Suche:** `jobs.research_chat.max_web_searches` (Default 10, Admin → Jobs) deckelt die Web-Suchen **über alle Runden** einer Antwort — auf dem Suchweg `searxng` Laufzeit statt Kosten. Die Suchen des SearXNG-Handlers meldet der Job über den Loop-Hook `webStats(ctx)`; sie zählen für Deckel, `context_info` und Zusammenfassung, aber **nicht** für Kosten und `chat_messages.web_searches` (Basis des Kosten-Ledgers) — bezahlt sind nur Anthropics Suchen. Ist er erreicht, beendet der Loop-Hook `stopBeforeRound` die Recherche vor der nächsten Runde (`stop_reason: web_cap`) und erzwingt die Synthese. Die Werkzeugliste bleibt über den ganzen Lauf gleich ([research-chat-helpers.js](../routes/jobs/research-chat-helpers.js)#`toolsForRound` läuft nur beim Start, für einen Deckel unter dem Rundenwert 6; auf dem Suchweg `searxng` hält der Handler den Deckel): Werkzeuge stehen vorn im Prompt-Cache (Render-Reihenfolge tools → system → messages), und ein Wechsel schriebe den ganzen Präfix neu. Preis dafür: eine Runde kann den Deckel um höchstens den Rundenwert überschreiten — billiger als ein Cache-Neuaufbau. Der Prompt nennt den Deckel ebenfalls.
 
-**Am Fuss jeder Antwort:** Zahl der Web-Suchen, die gelaufenen Suchbegriffe (`context_info.web_queries`, aus `server_tool_use.input.query`), die benutzten Werkzeuge mit i18n-Label (`recherche.chat.tool.<name>`) und die Kosten der Antwort (`context_info.cost_usd`, Tokens + Suchen nach [lib/pricing.js](../lib/pricing.js)).
+**Deckel für gelesene Seiten (nur `searxng`):** Ergebnis pro Werkzeug-Aufruf `max(4000, inputBudgetChars / (maxToolIter · 6))` Zeichen und pro Runde `max(2 · Deckel, inputBudgetChars / 4)` — wie im Buch-/Plot-Chat. `read_web_page` kappt selbst auf diesen Deckel, damit der Loop nicht still schneidet und die Kappung sichtbar bleibt. Auf dem Suchweg `anthropic` bleibt es ohne Deckel (die Tool-Results sind klein).
+
+**Am Fuss jeder Antwort:** Zahl der Web-Suchen, die gelaufenen Suchbegriffe (`context_info.web_queries`, aus `server_tool_use.input.query` bzw. dem SearXNG-Handler), die benutzten Werkzeuge mit i18n-Label (`recherche.chat.tool.<name>`) und die Kosten der Antwort (`context_info.cost_usd`, Tokens + Suchen nach [lib/pricing.js](../lib/pricing.js)).
 
 ## Frontend
 
@@ -87,6 +103,8 @@ Kein eigenes Card — Sub-State + Methoden sind in `rechercheCard` gespreadet ([
 
 **Fallback: cite-Marker.**
 Bei aktiver `web_search` schreibt das Modell `<cite index="N-…">…</cite>`-Marker als Klartext in die `final_answer`-Antwort (claude.ai-Zitatformat; die strukturierten API-Citations hängen an Text-Blöcken, die finale Antwort ist aber ein Tool-Argument). Der geteilte Loop ([routes/jobs/agentic-chat.js](../routes/jobs/agentic-chat.js)) sammelt die `web_search_result`-Trefferdokumente (`url`+`title`) aus den `web_search_tool_result`-Blöcken **in Auftrittsreihenfolge, ohne Dedup** (das Modell referenziert per Position) und persistiert sie als `context_info.sources` (nur Recherche-Chat — Buch-Chat hat keine Web-Suche). Das Frontend ([research-chat.js](../public/js/chat/research-chat.js) `_renderResearchAnswer`) entfernt die `<cite>`-Tags, ersetzt sie durch klickbare Superscript-Marker `[N]` (1-basiert → N-tes Dokument, einzige Stelle der Basis-Annahme in `resolveSource` ([research-chat-render.js](../public/js/chat/research-chat-render.js))) und rendert unter der Antwort eine Quellenliste (`researchCitedSources`). Sentinels (``/``) umgehen den XSS-Escape von `renderChatMarkdown`; url/title werden beim Inject escaped.
+
+**Suchweg `searxng`: `[n]`-Belege.** Ohne Server-Tool gibt es keine cite-Marker. Der Prompt verlangt stattdessen `[nr]` im Text, `nr` aus `web_search` — derselbe 1-basierte Index in `context_info.sources`. Der Renderer setzt `[n]` und `[n, m]` auf denselben Marker-Pfad (inkl. Abbildung über `doc_nums` auf die Belegliste), aber **nur**, wenn die Antwort keine cite-Marker enthält (eine Anthropic-Antwort mit zufälligem «[2]» bleibt unverändert). Unbekannte Nummern bleiben Text, `[3](url)` ist ein Markdown-Link und kein Beleg. Gelesene Seiten (`read_web_page`, inkl. Redirect-Ziel) sind neben den Treffern zulässige Belege in `final_answer.quellen`.
 
 ## Routen
 
@@ -111,7 +129,9 @@ Wirkung: Recherche-Karte öffnen (Registry-Toggle `toggleRechercheCard`, nur wen
 - Nie generativ in den Buchtext (nur Recherche/Weltaufbau). Der System-Prompt verbietet Manuskript-Generierung explizit.
 - `propose_research_item` persistiert nie selbst — Speichern ist immer User-bestätigt.
 - Gespeichert-Status lebt am Vorschlag in der DB (`saved_item_id`), nie nur im Karten-State.
-- Kill-Switch/Claude-only wird **vor** dem Speichern der User-Nachricht geprüft (`preflight`), nicht erst im Job.
-- Belege in `answer_sources` stammen ausschliesslich aus den Web-Treffern oder `lookup_literature`-Treffern desselben Laufs (letztere ohne `doc_nums`).
-- Claude-only: Sichtbarkeit gegated + Job erzwingt `provider='claude'`.
+- Kill-Switch und Suchweg werden **vor** dem Speichern der User-Nachricht geprüft (`preflight`), nicht erst im Job.
+- Belege in `answer_sources` stammen ausschliesslich aus den Web-Treffern, gelesenen Seiten oder `lookup_literature`-Treffern desselben Laufs (die beiden letzten ohne `doc_nums`).
+- Suchweg nur über `webSearchStatus` — kein Provider-Namens-Check daneben, weder im Gate noch im Job oder Frontend.
+- `read_web_page` liest nur URLs bekannter Herkunft; eine neue Quelle lesbarer URLs gehört in `_allowedPage` ([research-web-tools.js](../routes/jobs/research-web-tools.js)), nicht in den Prompt.
+- SearXNG-Suchen gehen nie in die Kosten oder in `chat_messages.web_searches`.
 - Eine gesetzte Domain-Eingrenzung steht **immer** auch im System-Prompt — `allowed_domains` allein macht aus „dort nichts gefunden“ ein „gibt es nicht“.

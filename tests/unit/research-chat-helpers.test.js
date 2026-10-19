@@ -4,7 +4,7 @@
 //  - validateAnswerSources: final_answer.quellen nur gegen echte Web-Treffer
 //  - proposalsOnlyFallback: leere Antwort + Vorschläge ≠ „Iterationen erschöpft"
 //  - sessionProposalMemory: frühere Vorschläge samt Gespeichert-Status
-//  - researchChatGate: Kill-Switch / Claude-only / API-Key (vor dem Speichern der Frage)
+//  - researchChatGate: Kill-Switch / Suchweg / Claude-API-Key (vor dem Speichern der Frage)
 //  - findDuplicateItem: URL-/Titel-Abgleich mit dem Archiv
 
 const test = require('node:test');
@@ -111,20 +111,13 @@ test('researchChatGate: Kill-Switch, Provider, API-Key', () => {
   assert.equal(researchChatGate(USER).status, 403);
   appSettings.set('research_chat.enabled', true);
 
-  appSettings.set('ai.provider', 'ollama');
-  const b = researchChatGate(USER);
-  assert.equal(b.error_code, 'RESEARCH_CHAT_CLAUDE_ONLY');
-  assert.equal(b.i18nKey, 'job.error.researchChatClaudeOnly');
-  appSettings.set('ai.provider', 'claude');
 
   appSettings.set('ai.claude.api_key', '');
   assert.equal(researchChatGate(USER).error_code, 'RESEARCH_CHAT_DISABLED');
   appSettings.set('ai.claude.api_key', 'sk-test');
 });
 
-test('researchChatGate: mit SearXNG-Pfad — Gründe je Provider', () => {
-  const websearch = require('../../lib/websearch');
-  websearch._setSearxngToolsReady(true);
+test('researchChatGate: Suchweg — Gründe je Provider', () => {
   try {
     appSettings.set('research_chat.enabled', true);
     appSettings.set('ai.claude.api_key', 'sk-test');
@@ -150,7 +143,6 @@ test('researchChatGate: mit SearXNG-Pfad — Gründe je Provider', () => {
     appSettings.set('research_chat.enabled', false);
     assert.equal(researchChatGate(USER).error_code, 'RESEARCH_CHAT_DISABLED');
   } finally {
-    websearch._setSearxngToolsReady(false);
     appSettings.set('research_chat.enabled', true);
     appSettings.set('ai.provider', 'claude');
     appSettings.set('ai.claude.api_key', 'sk-test');
