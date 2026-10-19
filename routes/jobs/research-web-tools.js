@@ -125,7 +125,7 @@ async function tool_read_web_page(input, ctx) {
 
   let page;
   try {
-    page = await urlScrape.scrapeUrl(url);
+    page = await urlScrape.scrapeUrl(url, { allowPdf: true });
   } catch (e) {
     ctx.logger?.info?.(`[research-chat] Seite nicht lesbar (${e.code || e.message}): ${url}`);
     return { url, error: `Seite nicht lesbar (${e.code || 'Fehler'}). Stütze dich auf das Snippet oder eine andere Quelle.`, errorKey: 'chat.toolError.serviceUnavailable' };

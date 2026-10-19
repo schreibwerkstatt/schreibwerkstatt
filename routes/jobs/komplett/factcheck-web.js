@@ -4,7 +4,7 @@
 //
 //   web_search    { query } → SearXNG-Treffer (Titel, URL, Snippet), höchstens
 //                             MAX_SEARCHES je Fakt.
-//   read_web_page { url }   → Seitentext über lib/url-scrape (safeFetch, SSRF-Guard —
+//   read_web_page { url }   → Seiten- oder PDF-Text über lib/url-scrape (safeFetch, SSRF-Guard —
 //                             die URL kommt vom Modell), höchstens MAX_PAGE_READS je Fakt,
 //                             nur URLs aus den Treffern dieses Fakts.
 //
@@ -74,7 +74,7 @@ async function _readWebPage(input, st, opts) {
   st.reads++;
   let page;
   try {
-    page = await urlScrape.scrapeUrl(url);
+    page = await urlScrape.scrapeUrl(url, { allowPdf: true });
   } catch (e) {
     return { url, error: `Seite nicht lesbar (${e.code || 'Fehler'}). Stütze dich auf das Snippet.` };
   }

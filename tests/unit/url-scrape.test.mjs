@@ -179,3 +179,74 @@ test('fetchDocument: latin1-Seite wird nicht zu Fragezeichen', async () => {
     assert.ok(html.includes('Grüezi'), html);
   } finally { restore(); }
 });
+
+// ── scrapeUrl({ allowPdf }): PDFs für read_web_page ─────────────────────────
+
+const { scrapeUrl, MAX_PDF_BYTES } = require('../../lib/url-scrape.js');
+
+function makePdf(text, title) {
+  const PDFDocument = require('pdfkit');
+  return new Promise((resolve) => {
+    const doc = new PDFDocument({ info: { Title: title } });
+    const chunks = [];
+    doc.on('data', (c) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.text(text);
+    doc.addPage().text('Zweite Seite.');
+    doc.end();
+  });
+}
+
+function binResponse(buf, contentType) {
+  const h = new Map([['content-type', contentType]]);
+  return { ok: true, status: 200, headers: { get: (k) => h.get(k.toLowerCase()) ?? null }, arrayBuffer: async () => buf };
+}
+
+test('scrapeUrl allowPdf: Text, Seitenzahl und Titel aus dem PDF', async () => {
+  const pdf = await makePdf('Der Gotthard-Basistunnel wurde 2016 eröffnet.', 'NEAT-Bericht');
+  const restore = stubFetch(async () => binResponse(pdf, 'application/pdf'));
+  try {
+    const r = await scrapeUrl('https://x.example.org/bericht.pdf', { allowPdf: true });
+    assert.match(r.text, /Gotthard-Basistunnel wurde 2016/);
+    assert.equal(r.title, 'NEAT-Bericht');
+    assert.deepEqual(r.pdf, { pages: 2, truncated: false });
+    assert.equal(r.finalUrl, 'https://x.example.org/bericht.pdf');
+  } finally { restore(); }
+});
+
+test('scrapeUrl allowPdf: PDF mit falschem text/plain-Typ wird an den Magic-Bytes erkannt', async () => {
+  const pdf = await makePdf('Magic-Bytes-Test.', '');
+  const restore = stubFetch(async () => binResponse(pdf, 'text/plain'));
+  try {
+    const r = await scrapeUrl('https://x.example.org/a', { allowPdf: true });
+    assert.match(r.text, /Magic-Bytes-Test/);
+    assert.ok(r.pdf);
+  } finally { restore(); }
+});
+
+test('scrapeUrl allowPdf: kaputtes PDF → SCRAPE_PDF_UNREADABLE', async () => {
+  const restore = stubFetch(async () => binResponse(Buffer.from('%PDF-1.7 kaputt'), 'application/pdf'));
+  try {
+    await assert.rejects(scrapeUrl('https://x.example.org/a.pdf', { allowPdf: true }),
+      (e) => e.code === 'SCRAPE_PDF_UNREADABLE');
+  } finally { restore(); }
+});
+
+test('scrapeUrl ohne allowPdf: PDF bleibt abgelehnt («Link scrapen» unverändert)', async () => {
+  const pdf = await makePdf('x', '');
+  const restore = stubFetch(async () => binResponse(pdf, 'application/pdf'));
+  try {
+    await assert.rejects(scrapeUrl('https://x.example.org/a.pdf'), (e) => e.code === 'SCRAPE_NOT_HTML');
+  } finally { restore(); }
+});
+
+test('scrapeUrl allowPdf: höherer Byte-Deckel nur für diesen Weg', async () => {
+  assert.ok(MAX_PDF_BYTES > MAX_BYTES);
+  const restore = stubFetch(async () => ({
+    ...binResponse(Buffer.from('%PDF-'), 'application/pdf'),
+    headers: { get: (k) => ({ 'content-type': 'application/pdf', 'content-length': String(MAX_PDF_BYTES + 1) })[k.toLowerCase()] ?? null },
+  }));
+  try {
+    await assert.rejects(scrapeUrl('https://x.example.org/riesig.pdf', { allowPdf: true }), (e) => e.code === 'SCRAPE_TOO_LARGE');
+  } finally { restore(); }
+});
