@@ -143,3 +143,30 @@ test('notebook: replacement-klick ersetzt text', async ({ page }) => {
   // Walld -> Wald (erstes Replacement).
   await expect.poll(() => page.locator('#editor').textContent()).not.toContain('Walld');
 });
+
+test('notebook: replacement greift auch, wenn ein Check bei offenem Popover die Treffer neu aufbaut', async ({ page }) => {
+  await page.goto(HARNESS, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__harnessReady === true);
+  await waitForSquiggles(page);
+  await clickFirstSquiggle(page);
+  await page.waitForSelector('.lt-popover');
+  // Text VOR dem Treffer einfuegen (wie Tippen kurz vor dem Klick): der
+  // naechste Check liefert «Walld» mit neuem Offset und damit neuer Match-ID.
+  const before = await page.evaluate(() => {
+    const h = CSS.highlights.get('lt-typo');
+    window.__oldRange = h.values().next().value;
+    const p = document.querySelector('#editor p');
+    p.firstChild.insertData(0, 'Heute ');
+    return true;
+  });
+  expect(before).toBe(true);
+  // Warten, bis der Check zurueck ist und das Register neu gebaut hat.
+  await page.waitForFunction(() => {
+    const h = CSS.highlights.get('lt-typo');
+    return h && h.size > 0 && h.values().next().value !== window.__oldRange;
+  }, null, { timeout: 6000 });
+  await expect(page.locator('.lt-popover')).toHaveCount(1);
+  await page.locator('.lt-popover__replacement').first().click();
+  await expect.poll(() => page.locator('#editor').textContent()).toContain('Heute Der Jungen ging in den Wald.');
+  await expect(page.locator('.lt-popover')).toHaveCount(0);
+});

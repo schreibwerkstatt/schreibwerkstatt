@@ -294,21 +294,48 @@ export function createSpellcheckController({
     ev.stopPropagation();
   }
 
+  function _sameRange(a, b) {
+    try {
+      return a.compareBoundaryPoints(Range.START_TO_START, b) === 0
+        && a.compareBoundaryPoints(Range.END_TO_END, b) === 0;
+    } catch { return false; }
+  }
+
+  // Aktuelle ID des Befunds, den der Popover beim Oeffnen festhaelt. Kommt
+  // waehrend offenem Popover ein Check zurueck, baut _renderMatches das
+  // Register neu auf; hat sich davor Text verschoben, traegt derselbe Befund
+  // eine neue ID (der Offset ist Teil davon). Darum ueber die DOM-Position der
+  // lebenden Range suchen, nicht ueber die ID vom Oeffnen.
+  function _currentId(entry) {
+    for (const [sid, e] of squiggles) if (e === entry) return sid;
+    const ruleId = entry.match?.rule?.id;
+    for (const [sid, e] of squiggles) {
+      if (e.match?.rule?.id === ruleId && _sameRange(e.range, entry.range)) return sid;
+    }
+    return null;
+  }
+
+  function _dropEntry(entry) {
+    const sid = _currentId(entry);
+    if (sid) _dropSquiggle(sid);
+  }
+
   function _openPopover(id) {
     popover.close();
     _purgeStrayUi();
     const entry = squiggles.get(id);
     if (!entry) return;
+    // Alle Aktionen arbeiten auf `entry`, nicht auf `id` — siehe _currentId.
     popover.open(entry, {
-      onApply: (text) => _applyReplacement(id, text),
-      onIgnore: () => { ignored.add(ignoreKey(entry.match)); _dropSquiggle(id); _updateCount(); },
+      onApply: (text) => _applyReplacement(entry, text),
+      onIgnore: () => { ignored.add(ignoreKey(entry.match)); _dropEntry(entry); _updateCount(); },
       onIgnoreAll: () => {
         ignored.add(ignoreAllKey(entry.match));
         _dropWhere((m) => isIgnored(ignored, m));
       },
       // Text unveraendert, Woerterbuch/Regeln aber geaendert -> force: der
       // Server filtert neu, Treffer an anderen Stellen fallen mit weg.
-      onDictAdded: () => { _dropSquiggle(id); _updateCount(); _scheduleCheck({ force: true }); },
+      onDictAdded: () => { _dropEntry(entry); _updateCount(); _scheduleCheck({ force: true }); },
       onRuleDisabled: (ruleId) => {
         _dropWhere((m) => m.rule?.id === ruleId);
         _scheduleCheck({ force: true });
@@ -321,23 +348,23 @@ export function createSpellcheckController({
     _updateCount();
   }
 
-  function _applyReplacement(id, text) {
-    const entry = squiggles.get(id);
-    if (!entry) return;
+  function _applyReplacement(entry, text) {
     popover.close();
     // Text unter dem Squiggle hat sich seit dem Check geaendert (oder die Range
     // ist kollabiert) -> nicht ersetzen, neu pruefen.
     if (entry.range.collapsed || entry.range.toString() !== entry.text) {
-      _dropSquiggle(id);
+      _dropEntry(entry);
       _updateCount();
       _scheduleCheck({ force: true });
       return;
     }
+    // Vor dem Ersetzen aufloesen: danach liegt die Range anders.
+    const sid = _currentId(entry);
     if (typeof onApplyReplacement === 'function') {
       try { onApplyReplacement(entry.range, text); }
       catch { /* host-side errors swallowed; next check rebuilds */ }
     }
-    _dropSquiggle(id);
+    if (sid) _dropSquiggle(sid);
     _updateCount();
     _scheduleCheck();
   }
