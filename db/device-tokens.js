@@ -131,7 +131,7 @@ function listDeviceTokens(userEmail) {
            last_used_at, last_used_ip, expires_at, revoked_at, created_at
     FROM device_tokens
     WHERE user_email = ?
-    ORDER BY (revoked_at IS NULL) DESC, created_at DESC
+    ORDER BY (revoked_at IS NULL) DESC, created_at DESC, id DESC
   `).all(userEmail);
 }
 
@@ -144,7 +144,7 @@ function listAllDeviceTokens() {
            dt.last_used_at, dt.last_used_ip, dt.expires_at, dt.revoked_at, dt.created_at
     FROM device_tokens dt
     LEFT JOIN app_users u ON u.email = dt.user_email
-    ORDER BY (dt.revoked_at IS NULL) DESC, dt.last_used_at DESC NULLS LAST, dt.created_at DESC
+    ORDER BY (dt.revoked_at IS NULL) DESC, dt.last_used_at DESC NULLS LAST, dt.created_at DESC, dt.id DESC
   `).all();
 }
 
