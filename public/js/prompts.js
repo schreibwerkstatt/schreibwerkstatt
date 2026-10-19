@@ -303,6 +303,7 @@ export {
   buildEntityMatchJudgePrompt,
   buildWeltfaktRealityJudgePrompt,
   SYSTEM_FAKTENCHECK,
+  FACTCHECK_WEB_TOOLS,
   buildErzaehlprofilSinglePassPrompt,
   buildErzaehlprofilChapterPrompt,
   buildAutorenBefundPrompt,

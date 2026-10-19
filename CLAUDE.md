@@ -92,7 +92,7 @@ Lies das Doc, **bevor** du im jeweiligen Bereich etwas änderst — nicht danach
 
 **Werkstätten:** [figur-werkstatt.md](docs/figur-werkstatt.md) inkl. Bogen im Buch · [figur-alter.md](docs/figur-alter.md) · [figur-lebenslauf.md](docs/figur-lebenslauf.md) · [plot.md](docs/plot.md) Beat-Board · [motiv-werkstatt.md](docs/motiv-werkstatt.md) · [buchorganizer.md](docs/buchorganizer.md) · [buecherregal.md](docs/buecherregal.md) · [autorenprofil.md](docs/autorenprofil.md) · [recherche-board.md](docs/recherche-board.md) · [ideen-board.md](docs/ideen-board.md) Pendenzen: Stufen-Achse, Board, beidseitige Verknüpfungen
 
-**Chats:** [chats.md](docs/chats.md) Vergleich der fünf · [buchchat-tools.md](docs/buchchat-tools.md) Tool-Inventar · [recherche-chat.md](docs/recherche-chat.md) Claude-only, Web-Suche · [plot-chat.md](docs/plot-chat.md) Board-Vorschläge, einzeln übernehmen · [ideen-chat.md](docs/ideen-chat.md) Erledigt-Check mit Beleg, Orte für Buch-Ideen
+**Chats:** [chats.md](docs/chats.md) Vergleich der fünf · [buchchat-tools.md](docs/buchchat-tools.md) Tool-Inventar · [recherche-chat.md](docs/recherche-chat.md) Web-Suche: Suchwege Anthropic + SearXNG · [plot-chat.md](docs/plot-chat.md) Board-Vorschläge, einzeln übernehmen · [ideen-chat.md](docs/ideen-chat.md) Erledigt-Check mit Beleg, Orte für Buch-Ideen
 
 **Buchtypen:** [journalismus.md](docs/journalismus.md) Textsorte, Titel-Werkstatt, Struktur-Check, O-Töne · [blog-sync.md](docs/blog-sync.md) WordPress · [hubspot-sync.md](docs/hubspot-sync.md)
 

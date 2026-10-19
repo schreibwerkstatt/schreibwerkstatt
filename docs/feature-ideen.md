@@ -139,7 +139,7 @@ Jeder Schritt ist ein eigener Commit auf `main`, nach jedem Schritt `npm run tes
    - `npm test` komplett, dann Deploy. Auf Prod `websearch.provider = searxng` + URL im Admin-UI setzen (Prod-Writes macht der User).
    - Manuelle Abnahme: eine Recherchefrage mit openai-compat-Profil (Treffer, gelesene Seite, verlinkte Belege, Kostenfuss ohne Suchanteil) und eine mit Claude (unverändert).
 
-**Etappe 2 — Faktencheck**
+**Etappe 2 — Faktencheck** (umgesetzt, Schritte 7–9 auf `main`; offen: Deploy, manuelle Abnahme)
 
 7. **Gate:** `factcheckGate(userEmail)` neben `researchChatGate`; genutzt von [routes/jobs/komplett/index.js](../routes/jobs/komplett/index.js), `/config` in [routes/proxies.js](../routes/proxies.js) und im Job. Neue Codes `FACTCHECK_NO_TOOLS` / `FACTCHECK_NO_WEBSEARCH` + Mapping in [world-facts-card.js](../public/js/cards/world-facts-card.js) und [kontinuitaet.js](../public/js/book/kontinuitaet.js).
 8. **Judge-Loop:** zweiter Pfad in `_judgeOneFact` mit Function-Tools (wiederverwendete Handler aus Schritt 4, eigener Deckel 3 Suchen + 1 Seite je Fakt), echter Provider in `recordCallCost`/`_factcheckModelName`, Beleg-Härtung für `falsch`. Prompt-Varianten in [kontinuitaet.js](../public/js/prompts/komplett/kontinuitaet.js). [faktencheck.test.js](../tests/integration/faktencheck.test.js) erweitern (injiziertes `callTools`).

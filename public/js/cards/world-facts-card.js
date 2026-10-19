@@ -42,6 +42,8 @@ const WF_FILTER_SCOPES = [
 const FC_START_ERROR_KEYS = {
   FACTCHECK_NOT_ENABLED_FOR_BOOK: 'weltfakten.factcheck.notEnabled',
   FACTCHECK_CLAUDE_ONLY: 'kontinuitaet.faktencheck.claudeOnly',
+  FACTCHECK_NO_TOOLS: 'kontinuitaet.faktencheck.noTools',
+  FACTCHECK_NO_WEBSEARCH: 'kontinuitaet.faktencheck.noWebsearch',
   FACTCHECK_DISABLED: 'kontinuitaet.faktencheck.disabled',
 };
 

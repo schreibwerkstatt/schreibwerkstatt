@@ -1,13 +1,14 @@
 'use strict';
 // Weltfakten-Realitätscheck (eigenständiger Job): prüft die extrahierten Welt-Fakten
-// eines Buchs gegen die REALE Faktenlage — mit Anthropics serverseitigem `web_search`
-// als Grundlage (nicht Modellgedächtnis). Anders als der Anachronismus-Check (nur
+// eines Buchs gegen die REALE Faktenlage — mit einer Websuche als Grundlage (nicht
+// Modellgedächtnis): Anthropics serverseitiges `web_search` oder SearXNG über
+// Function-Tools (./factcheck-web.js), je nach lib/websearch#webSearchMode. Anders als der Anachronismus-Check (nur
 // Zeitpunkt) urteilt er über die inhaltliche Korrektheit einer Tatsachenbehauptung.
 //
 // Bewusst getrennt vom Kontinuitäts-Job: (a) teuer (eine Web-Suche je Kandidat) → opt-in
 // pro Klick statt in jeder Komplettanalyse; (b) gated auf book_settings.weltfakten_real_pruefen
 // (bei bewusst fiktiven Welten sinnlos) UND ai.komplett.factcheck (Instanz-Kill-Switch);
-// (c) Claude-only (web_search ist ein Anthropic-Server-Tool).
+// (c) braucht einen Suchweg (lib/factcheck-gate.js: Kill-Switch + webSearchStatus).
 //
 // Rein rückwärtsgewandt: liest world_facts/chapters/figures, schreibt NIE Buchtext.
 // Befunde landen als typ='faktenfehler' in continuity_issues (mit Beleg-URL in `quelle`)
@@ -23,7 +24,13 @@ const {
   jobAbortControllers, settledAll, tps,
   recordCallCost, summarizeCostByPhase, formatCostByPhase,
 } = require('../shared');
-const { callAIWithTools, parseJSON, getContextConfigFor, resolveProvider } = require('../../../lib/ai');
+const { callAIWithTools, parseJSON, getContextConfigFor, resolveProvider, maxParallelCalls } = require('../../../lib/ai');
+// Spät gebunden für den Lauf (ai.callAIWithTools statt der destrukturierten Kopie):
+// der Integrationstest ersetzt den Provider-Call am Modul-Export.
+const ai = require('../../../lib/ai');
+const { factcheckGate } = require('../../../lib/factcheck-gate');
+const { webSearchMode } = require('../../../lib/websearch');
+const { judgeWithSearxng, makeEvidence } = require('./factcheck-web');
 const appSettings = require('../../../lib/app-settings');
 const { setContext } = require('../../../lib/log-context');
 const { makePhaseTimer } = require('./utils');
@@ -121,31 +128,48 @@ function _validVerdict(v) {
   return v;
 }
 
-// Ein Judge-Call mit Web-Suche. Server-Tool-Turns können pausieren (`pause_turn`) → begrenzt
-// fortsetzen. Gibt den finalen Text zurück (JSON, ggf. mit Zitat-Prosa davor → parseJSON-Fallback).
-// Ein am max_tokens-Deckel abgeschnittenes Urteil wirft, BEVOR geparst wird: parseJSON
-// repariert tolerant und machte aus dem Rumpf sonst ein scheinbar vollständiges Urteil.
-// Server-Tools (web_search) gibt es nur über callAIWithTools, nicht über aiCall — darum
-// bucht dieser Tool-Loop jede Runde selbst: Token-Summe, Cache-Zähler, Generierungszeit und
-// Kosten-Bucket (`tier.label` → tok.byPhase → job.result.costByPhase), wie aiCall es tut.
+// Eine Runde verbuchen: Token-Summe, Cache-Zähler, Generierungszeit und Kosten-Bucket
+// (`tier.label` → tok.byPhase → job.result.costByPhase), wie aiCall es tut. Werkzeug-Calls
+// laufen nur über callAIWithTools, nicht über aiCall — darum bucht der Judge selbst. Vor
+// jedem truncated-Guard: auch ein abgeschnittener Call wird berechnet.
+function _bookRound(tok, tier, provider, r) {
+  tok.in += r.tokensIn || 0;
+  tok.out += r.tokensOut || 0;
+  tok.cacheRead = (tok.cacheRead || 0) + (r.cacheReadIn || 0);
+  tok.cacheCreate = (tok.cacheCreate || 0) + (r.cacheCreationIn || 0);
+  if (r.genDurationMs != null) tok.ms = (tok.ms || 0) + r.genDurationMs;
+  recordCallCost(tok, tier, provider, {
+    tokensIn: r.tokensIn || 0, tokensOut: r.tokensOut || 0,
+    cacheReadIn: r.cacheReadIn || 0, cacheCreationIn: r.cacheCreationIn || 0,
+    cacheCreation1hIn: r.cacheCreation1hIn || 0, genDurationMs: r.genDurationMs,
+  });
+}
+
+// Ein Judge-Call mit Web-Suche. Gibt den finalen Text zurück (JSON, ggf. mit Zitat-Prosa
+// davor → parseJSON-Fallback). Ein am max_tokens-Deckel abgeschnittenes Urteil wirft,
+// BEVOR geparst wird: parseJSON repariert tolerant und machte aus dem Rumpf sonst ein
+// scheinbar vollständiges Urteil.
+//   Suchweg 'anthropic' (Default): Server-Tool web_search; Server-Tool-Turns können
+//     pausieren (`pause_turn`) → begrenzt fortsetzen.
+//   Suchweg 'searxng' (`web` = { mode, provider, tools, evidence, language }): Function-
+//     Tools über ./factcheck-web.js mit dem effektiven Provider.
 async function _judgeOneFact(tok, userPrompt, systemPrompt, signal, callTools = callAIWithTools,
-  tier = costTier(COST_LABEL.factcheck)) {
+  tier = costTier(COST_LABEL.factcheck), web = null) {
+  if (web?.mode === 'searxng') {
+    return judgeWithSearxng({
+      messages0: [{ role: 'user', content: userPrompt }],
+      system: systemPrompt, tools: web.tools, provider: web.provider, callTools,
+      onCall: (r) => _bookRound(tok, tier, web.provider, r),
+      evidence: web.evidence, language: web.language, signal,
+      maxTokensOut: getContextConfigFor(web.provider).maxTokensOut,
+    });
+  }
   let messages = [{ role: 'user', content: userPrompt }];
   let text = '';
   for (let turn = 0; turn < _MAX_JUDGE_TURNS; turn++) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     const r = await callTools(messages, systemPrompt, [WEB_SEARCH_TOOL], null, null, signal, 'claude');
-    tok.in += r.tokensIn || 0;
-    tok.out += r.tokensOut || 0;
-    tok.cacheRead = (tok.cacheRead || 0) + (r.cacheReadIn || 0);
-    tok.cacheCreate = (tok.cacheCreate || 0) + (r.cacheCreationIn || 0);
-    if (r.genDurationMs != null) tok.ms = (tok.ms || 0) + r.genDurationMs;
-    // Vor dem truncated-Guard: auch ein abgeschnittener Call wird berechnet.
-    recordCallCost(tok, tier, 'claude', {
-      tokensIn: r.tokensIn || 0, tokensOut: r.tokensOut || 0,
-      cacheReadIn: r.cacheReadIn || 0, cacheCreationIn: r.cacheCreationIn || 0,
-      cacheCreation1hIn: r.cacheCreation1hIn || 0, genDurationMs: r.genDurationMs,
-    });
+    _bookRound(tok, tier, 'claude', r);
     if (r.truncated || r.stopReason === 'max_tokens') {
       const tokIn = r.tokensIn || 0;
       const tokOut = r.tokensOut || 0;
@@ -223,6 +247,12 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
   if (overrides) setContext(overrides);
 
   try {
+    // Dieselbe Prüfung blockt schon POST /jobs/faktencheck; hier nochmals, weil
+    // Setting/Provider zwischen POST und Queue-Start wechseln können.
+    const block = factcheckGate(userEmail);
+    if (block) throw i18nError(block.i18nKey);
+    const mode = webSearchMode(userEmail);
+    const searxng = mode === 'searxng';
     const prompts = await getPrompts(userEmail);
     // Judge nutzt einen schlanken statischen System-Prompt (der Fakt steht vollständig
     // im User-Prompt) — bewusst NICHT der teure SYSTEM_KONTINUITAET_BLOCKS mit
@@ -248,18 +278,27 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
     let researchUsed = 0;
     const tok = { in: 0, out: 0, ms: 0, inflight: new Map() };
     // Concurrency-Cap + Warmup wie die Verify-Stufe: Web-Such-Calls sind teuer und einzeln
-    // langsam; ein paar parallel, aber kein TPM-Burst über Dutzende Fakten.
-    const concurrency = Math.min(_FACTCHECK_MAX_CONCURRENCY,
-      Math.max(1, parseInt(appSettings.get('ai.claude.phase1_concurrency'), 10) || 4));
+    // langsam; ein paar parallel, aber kein TPM-Burst über Dutzende Fakten. Ein anderer
+    // Provider zusätzlich unter seinem eigenen Parallel-Deckel (sonst täuscht der
+    // Fortschritt vier laufende Calls vor, die in der Semaphore warten).
+    const concurrency = effectiveProvider === 'claude'
+      ? Math.min(_FACTCHECK_MAX_CONCURRENCY, Math.max(1, parseInt(appSettings.get('ai.claude.phase1_concurrency'), 10) || 4))
+      : Math.min(_FACTCHECK_MAX_CONCURRENCY, maxParallelCalls(effectiveProvider, { userEmail }));
+    const searchLanguage = searxng ? (getBookSettings(bookIdInt, email)?.language || '') : '';
+    log.info(`Faktencheck: Suchweg=${mode}, Provider=${effectiveProvider}, ${concurrency} parallel.`);
     const spanne = candidates.length ? _narrativeYearSpan(bookIdInt, email) : null;
     updateJob(jobId, { statusText: 'job.phase.factcheckJudge', progress: 10 });
     let done = 0;
     const settled = await settledAll(candidates.map((cand) => async () => {
       const recherche = researchOn ? await _researchEvidence(bookIdInt, cand, signal) : [];
       if (recherche.length) researchUsed++;
+      // SearXNG: gesehene URLs dieses Fakts (Treffer, gelesene Seite, Recherche-Belege).
+      const evidence = searxng ? makeEvidence() : null;
+      if (evidence) for (const r of recherche) if (r.url) evidence.add(r.url);
       const text = await _judgeOneFact(tok,
-        prompts.buildWeltfaktRealityJudgePrompt(bookName, cand, { spanne, recherche }),
-        systemPrompt, signal);
+        prompts.buildWeltfaktRealityJudgePrompt(bookName, cand, { spanne, recherche, webSearchMode: mode }),
+        systemPrompt, signal, ai.callAIWithTools, undefined,
+        searxng ? { mode, provider: effectiveProvider, tools: prompts.FACTCHECK_WEB_TOOLS, evidence, language: searchLanguage } : null);
       done++;
       updateJob(jobId, { progress: Math.min(92, 10 + Math.round((done / candidates.length) * 80)) });
       let v;
@@ -271,6 +310,12 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
       let urteil = v.urteil;
       if (urteil === 'falsch' && !/^https?:\/\//i.test(quelle)) {
         log.info(`Faktencheck: «falsch» ohne belastbare Quelle → unklar (Fakt #${cand.id}).`);
+        urteil = 'unklar';
+      }
+      // SearXNG: die Quelle muss eine URL sein, die das Modell zu diesem Fakt gesehen hat.
+      // Eine aus dem Gedächtnis ergänzte URL belegt nichts.
+      if (urteil === 'falsch' && evidence && !evidence.has(quelle)) {
+        log.info(`Faktencheck: «falsch» mit ungesehener Quelle → unklar (Fakt #${cand.id}).`);
         urteil = 'unklar';
       }
       return {

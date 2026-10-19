@@ -10,6 +10,7 @@ const { getPromptConfig } = require('../lib/prompts-loader');
 const { toIntId } = require('../lib/validate');
 const appSettings = require('../lib/app-settings');
 const { researchChatGate } = require('../lib/research-chat-gate');
+const { factcheckGate } = require('../lib/factcheck-gate');
 const { getVersion, getShellBuild, getShellProtocol } = require('../lib/version');
 const { getLatestVersion: getLatestChangelogVersion } = require('../lib/changelog');
 const { MAX_INPUT_BYTES: PDF_MAX_BYTES } = require('../lib/pdf-attachment');
@@ -74,7 +75,7 @@ router.get('/config', (req, res) => {
     : (appSettings.get('ai.provider') || 'claude');
   // Klasse des effektiven Providers ('cloud' | 'local'). Gate fuer alles, was ein
   // faehiges Modell braucht, aber keine Anthropic-API-Faehigkeit — im Gegensatz zu
-  // `effectiveProvider === 'claude'`, das fuer Web-Suche & Co zustaendig bleibt.
+  // `effectiveProvider === 'claude'`, das fuer Anthropic-API-Faehigkeiten zustaendig bleibt.
   const effectiveClass = providerClass(effectiveProvider, sessionUser ? { userEmail: sessionUser.email } : { userEmail: null });
   // Modellnamen fuer die Anzeige (Avatar-Menue): ueber das Profil-Overlay, sonst
   // zeigte die App jedem User das global eingestellte Modell — auch dem, der per
@@ -196,10 +197,10 @@ router.get('/config', (req, res) => {
     komplett: {
       continuity:      effectiveClass === 'cloud',
       narrativeProfile: effectiveClass === 'cloud',
-      // Weltfakten-Realitätscheck: Claude-only (web_search-Server-Tool) UND per Instanz
-      // freigeschaltet (Web-Suche kostet). Das Buch-Opt-in weltfakten_real_pruefen gated
+      // Weltfakten-Realitätscheck: Kill-Switch + Suchweg (lib/factcheck-gate.js, dieselbe
+      // Prüfung wie Route und Job). Das Buch-Opt-in weltfakten_real_pruefen gated
       // zusätzlich pro Buch (Frontend prüft es am Buch, nicht hier).
-      factcheck:       effectiveProvider === 'claude' && appSettings.get('ai.komplett.factcheck') === true,
+      factcheck:       !factcheckGate(sessionUser ? sessionUser.email : null),
     },
   });
 });

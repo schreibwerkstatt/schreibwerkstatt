@@ -13,8 +13,8 @@ const { getNarrativeReport, getAutorenBefund } = require('../../../db/narrative-
 const { getContinuityIssueScope } = require('../../../db/continuity');
 const { getBookSettings } = require('../../../db/schema');
 const { toIntId } = require('../../../lib/validate');
-const { resolveProvider, effectiveProviderClass } = require('../../../lib/ai');
-const appSettings = require('../../../lib/app-settings');
+const { effectiveProviderClass } = require('../../../lib/ai');
+const { factcheckGate } = require('../../../lib/factcheck-gate');
 const { guardBook, aclParamGuard, sessionEmail, resolveBookRole } = require('../../../lib/acl');
 const { jsonBody, createJob, enqueueJob, findActiveJobId } = require('../shared');
 const { runKomplettAnalyseJob, runKontinuitaetJob, runErzaehlprofilJob, runFaktencheckJob, runKomplettAnalyseAll } = require('./job');
@@ -153,17 +153,16 @@ komplettRouter.post('/kontinuitaet/issue/:issue_id/dismissed', jsonBody, (req, r
 });
 
 // Weltfakten-Realitätscheck eigenständig starten — editor+. Prüft die extrahierten
-// Welt-Fakten mit Web-Suche gegen die reale Faktenlage. Claude-only (web_search ist
-// Server-Tool), Instanz-Kill-Switch ai.komplett.factcheck, Buch-Opt-in weltfakten_real_pruefen.
+// Welt-Fakten mit Web-Suche gegen die reale Faktenlage. Kill-Switch ai.komplett.factcheck
+// + Suchweg über lib/factcheck-gate.js, Buch-Opt-in weltfakten_real_pruefen hier.
 komplettRouter.post('/faktencheck', jsonBody, (req, res) => {
   const { book_name } = req.body;
   const book_id = toIntId(req.body?.book_id);
   if (!book_id) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
   if (!guardBook(req, res, book_id, 'editor')) return;
   const userEmail = sessionEmail(req);
-  if (resolveProvider({ userEmail }) !== 'claude') return res.status(400).json({ error_code: 'FACTCHECK_CLAUDE_ONLY' });
-  // Default aus (lib/app-settings/keys/ai.js) — dieselbe Lesart wie /config komplett.factcheck.
-  if (appSettings.get('ai.komplett.factcheck') !== true) return res.status(400).json({ error_code: 'FACTCHECK_DISABLED' });
+  const block = factcheckGate(userEmail);
+  if (block) return res.status(block.status).json({ error_code: block.error_code });
   if (!getBookSettings(book_id, userEmail)?.weltfakten_real_pruefen) return res.status(400).json({ error_code: 'FACTCHECK_NOT_ENABLED_FOR_BOOK' });
   // Der Faktencheck ist kein Schritt der Komplettanalyse, liest aber deren Fakten-Index und
   // hängt an deren Kontinuitäts-Check: während eines Laufs nicht starten.

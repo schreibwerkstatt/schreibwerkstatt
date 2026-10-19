@@ -14,6 +14,8 @@ const START_ERROR_KEYS = {
   CONTINUITY_PROVIDER_UNSUPPORTED: 'kontinuitaet.error.providerUnsupported',
   FACTCHECK_NOT_ENABLED_FOR_BOOK: 'kontinuitaet.faktencheck.hint',
   FACTCHECK_CLAUDE_ONLY: 'kontinuitaet.faktencheck.claudeOnly',
+  FACTCHECK_NO_TOOLS: 'kontinuitaet.faktencheck.noTools',
+  FACTCHECK_NO_WEBSEARCH: 'kontinuitaet.faktencheck.noWebsearch',
   FACTCHECK_DISABLED: 'kontinuitaet.faktencheck.disabled',
   KOMPLETT_ANALYSIS_RUNNING: 'error.KOMPLETT_ANALYSIS_RUNNING',
 };

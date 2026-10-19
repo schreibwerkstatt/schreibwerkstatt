@@ -58,6 +58,7 @@ export {
   buildAttributeContradictionJudgePrompt,
   buildWeltfaktRealityJudgePrompt,
   SYSTEM_FAKTENCHECK,
+  FACTCHECK_WEB_TOOLS,
 } from './komplett/kontinuitaet.js';
 
 export {
