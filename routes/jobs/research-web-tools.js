@@ -71,6 +71,11 @@ async function tool_web_search(input, ctx) {
     ctx.logger?.warn?.(`[research-chat] Websuche fehlgeschlagen: ${e.message}`);
     return { error: 'Websuche nicht erreichbar. Antworte mit dem, was du hast, und sag, dass die Suche ausfiel.', errorKey: 'chat.toolError.serviceUnavailable' };
   }
+  // Keine Treffer, weil die Engines gesperrt sind (Rate-Limit, Captcha), ist ein
+  // Ausfall, keine Fehlanzeige — sonst liest das Modell es als «dazu gibt es nichts».
+  if (!out.results.length && out.unresponsive.length) {
+    return { error: 'Suchdienst gerade gesperrt (keine Suchmaschine hat geantwortet). Sag das in der Antwort, statt «nichts gefunden».', errorKey: 'chat.toolError.serviceUnavailable' };
+  }
 
   const treffer = out.results.map((r) => {
     web.results.push({ url: r.url, title: r.title });

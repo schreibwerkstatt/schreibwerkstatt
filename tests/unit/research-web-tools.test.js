@@ -140,3 +140,12 @@ test('extractUrls: Satzzeichen am Ende ab, nur http(s)', () => {
   assert.deepEqual(extractUrls('Siehe https://a.ch/x. Und (http://b.de/y), ftp://c'), ['https://a.ch/x', 'http://b.de/y']);
   assert.deepEqual(extractUrls(''), []);
 });
+
+test('web_search: gesperrte Engines → Ausfall-Fehler statt leerer Trefferliste', async () => {
+  searxng.search = async () => ({ results: [], unresponsive: ['brave: too many requests', 'duckduckgo: CAPTCHA'] });
+  const ctx = mkCtx();
+  const r = await executeResearchTool('web_search', { query: 'q' }, ctx);
+  assert.equal(r.errorKey, 'chat.toolError.serviceUnavailable');
+  assert.match(r.error, /gesperrt/);
+  assert.equal(ctx.web.searches, 1, 'zählt als gelaufene Suche');
+});
