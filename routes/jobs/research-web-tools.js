@@ -24,7 +24,7 @@
 // ctx.web wird hier angelegt: { searches, queries, results, pages }.
 
 const searxng = require('../../lib/websearch/searxng');
-const urlScrape = require('../../lib/url-scrape');
+const { cachedScrape, searchPdf, pdfReadText, withPdfPaging } = require('./research-pdf-paging');
 const { normalizeUrl } = require('../../lib/url-normalize');
 const { bookItemUrls } = require('../../db/research-items');
 const { resultCapFor } = require('./book-chat-tools/shared');
@@ -130,7 +130,7 @@ async function tool_read_web_page(input, ctx) {
 
   let page;
   try {
-    page = await urlScrape.scrapeUrl(url, { allowPdf: true });
+    page = await cachedScrape(url, web);
   } catch (e) {
     ctx.logger?.info?.(`[research-chat] Seite nicht lesbar (${e.code || e.message}): ${url}`);
     return { url, error: `Seite nicht lesbar (${e.code || 'Fehler'}). Stütze dich auf das Snippet oder eine andere Quelle.`, errorKey: 'chat.toolError.serviceUnavailable' };
@@ -139,12 +139,26 @@ async function tool_read_web_page(input, ctx) {
   web.pages.push({ url, title: page.title || url });
   if (normalizeUrl(finalUrl) !== normalizeUrl(url)) web.pages.push({ url: finalUrl, title: page.title || finalUrl });
 
+  // PDF: Fundstellen statt Text (`suche`) bzw. Text ab einer Seite (`seite`) —
+  // ./research-pdf-paging.js. Für HTML-Seiten ohne Wirkung.
+  const suche = String(input.suche || '').trim();
+  if (page.pdf && suche) {
+    const { treffer, gesamt } = searchPdf(page.pdf.pageTexts || [], suche);
+    return {
+      url, titel: page.title || '', seiten: page.pdf.pages, suche, treffer, gesamt,
+      hinweis: gesamt
+        ? `Lies eine Fundstelle mit read_web_page und seite=<Seite>.${gesamt > treffer.length ? ` ${gesamt} Seiten mit Treffern, die ersten ${treffer.length} gezeigt.` : ''}`
+        : 'Begriff im PDF nicht gefunden (andere Schreibweise? Gescanntes PDF ohne Textebene?).',
+    };
+  }
+  const pdfView = pdfReadText(page, input.seite);
+
   // Deckel: höchstens PAGE_TEXT_MAX, und nie mehr, als der Loop pro Tool-Result
   // durchlässt — sonst schnitte der Loop still und die Kappung wäre unsichtbar.
   const max = Math.max(1000, Math.min(PAGE_TEXT_MAX, resultCapFor(ctx) - PAGE_OVERHEAD));
-  const text = String(page.text || '');
+  const text = pdfView ? pdfView.text : String(page.text || '');
   const truncated = text.length > max;
-  return {
+  return withPdfPaging(pdfView, {
     url,
     ...(finalUrl !== url ? { final_url: finalUrl } : {}),
     titel: page.title || '',
@@ -154,7 +168,7 @@ async function tool_read_web_page(input, ctx) {
     doc_truncated: truncated,
     ...(truncated ? { hinweis: `Nur die ersten ${max} von ${text.length} Zeichen.` } : {}),
     ...(!text.trim() ? { hinweis: 'Kein lesbarer Text (evtl. per Skript geladen oder nur Bilder).' } : {}),
-  };
+  });
 }
 
 const WEB_TOOLS = {

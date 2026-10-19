@@ -90,6 +90,12 @@ export const RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION =
   + 'Rufe kein anderes Werkzeug mehr auf, auch keine Web-Suche. '
   + 'Wenn etwas offen blieb, weise kurz darauf hin. Sprache der Antwort: die der Userfrage.';
 
+// Suchweg SearXNG: die Schlussrunde ist genau die, in der ein Modell seine Belege
+// neu durchnummeriert (eigene Quellenliste 1..k) — der Text verlinkt dann auf
+// fremde Treffer. Darum hier die [nr]-Regel noch einmal.
+const _NR_CITE_RULE = 'Belege im Antworttext sind die Trefferzahlen `nr` aus `web_search` in eckigen Klammern, z.B. [7] — nummeriere NICHT neu und schreib keine eigene nummerierte Quellenliste in die Antwort; die Quellenliste zeigt die App aus `quellen` unter der Antwort.';
+export const RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION_SEARXNG = `${RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION} ${_NR_CITE_RULE}`;
+
 /**
  * Kompakter Block der früheren Speicher-Vorschläge dieser Session (Titel, Typ,
  * gespeichert ja/nein). Steht am ENDE des System-Prompts, damit der stabile Teil
@@ -176,7 +182,7 @@ export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolI
     'Deine Werkzeuge:',
     ...(searxng ? [
       '- `web_search` — durchsucht das offene Web in Echtzeit über eine Metasuchmaschine. Liefert je Treffer `nr`, Titel, URL und ein kurzes Snippet. Nutze es für aktuelle, externe oder überprüfbare Fakten (historisches, geografisches, technisches, kulturelles Hintergrundwissen).',
-      '- `read_web_page` — liest den Text einer Seite. Snippets sind kurz und oft abgeschnitten: für Daten, Zahlen, Namen und Zitate lies die Seite, bevor du dich darauf stützt. Lesbar sind Treffer von `web_search`/`lookup_literature` dieses Durchgangs, Links aus dem Recherche-Board und Links, die der User nennt.',
+      '- `read_web_page` — liest den Text einer Seite oder eines PDFs. Snippets sind kurz und oft abgeschnitten: für Daten, Zahlen, Namen und Zitate lies die Seite, bevor du dich darauf stützt. Lesbar sind Treffer von `web_search`/`lookup_literature` dieses Durchgangs, Links aus dem Recherche-Board und Links, die der User nennt. Ein langes PDF durchsuchst du mit `suche` und liest dann mit `seite` an der Fundstelle — nicht Seite für Seite von vorn.',
     ] : [
       '- `web_search` — durchsucht das offene Web in Echtzeit. Nutze es für aktuelle, externe oder überprüfbare Fakten (historisches, geografisches, technisches, kulturelles Hintergrundwissen). Gib in der Antwort die Quelle/URL an, auf die du dich stützt.',
     ]),
@@ -197,7 +203,7 @@ export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolI
     '- WICHTIG — rückwärtsgewandt: Du schreibst NIEMALS Manuskripttext, formulierst keine Romanszenen und machst keine Stil-Vorschläge für den Fließtext. Du sammelst und ordnest Wissen. Wenn der User um Textgenerierung für das Buch bittet, biete stattdessen Recherche/Strukturierung an.',
     '- Wenn du Material vorschlägst, das es im Archiv schon gibt (via list_research_items geprüft), weise darauf hin statt zu duplizieren. `propose_research_item` meldet einen Treffer im Archiv als `already_in_archive` — schlage dann nur vor, wenn dein Vorschlag wirklich Neues ergänzt.',
     ...(searxng ? [
-      '- Belege Aussagen aus Web-Treffern im Antworttext mit der Trefferzahl in eckigen Klammern, z.B. «… 2016 eröffnet [3].» Die Zahl ist das `nr` des Treffers aus `web_search` — erfinde keine Nummern.',
+      '- Belege Aussagen aus Web-Treffern im Antworttext mit der Trefferzahl in eckigen Klammern, z.B. «… 2016 eröffnet [3].» Die Zahl ist das `nr` des Treffers aus `web_search` — erfinde keine Nummern und nummeriere nicht neu. Schreib keine eigene nummerierte Quellenliste in die Antwort: die App zeigt die Quellen aus `quellen` darunter.',
       '- Nenne in `final_answer` unter `quellen` die Web-Quellen (URL + Titel), auf die sich deine Antwort stützt — nur URLs, die dir `web_search` oder `read_web_page` in diesem Durchgang tatsächlich geliefert haben.',
     ] : [
       '- Nenne in `final_answer` unter `quellen` die Web-Quellen (URL + Titel), auf die sich deine Antwort stützt — nur URLs, die dir `web_search` in diesem Durchgang tatsächlich geliefert hat.',
@@ -353,16 +359,45 @@ export const RESEARCH_WEB_FUNCTION_TOOLS = [
   },
   {
     name: 'read_web_page',
-    description: 'Liest den Text EINER Web-Seite (Titel, Fliesstext; lange Seiten gekappt, `doc_truncated` sagt es). Nur URLs aus web_search/lookup_literature dieses Durchgangs, aus dem Recherche-Board oder aus der Nachricht des Users. Nutze es, bevor du dich auf Details stützt, die im Snippet nicht vollständig stehen.',
+    description: 'Liest den Text EINER Web-Seite oder eines PDFs (Titel, Fliesstext; lange Texte gekappt, `doc_truncated` sagt es). Nur URLs aus web_search/lookup_literature dieses Durchgangs, aus dem Recherche-Board oder aus der Nachricht des Users. Nutze es, bevor du dich auf Details stützt, die im Snippet nicht vollständig stehen. Bei PDFs: `seiten` nennt die Seitenzahl, der Text trägt Marken «[Seite N]»; mit `suche` findest du die Seiten zu einem Begriff, mit `seite` liest du ab einer Seite weiter.',
     input_schema: {
       type: 'object',
       properties: {
         url: { type: 'string', description: 'Die URL (http/https), exakt wie geliefert.' },
+        seite: { type: 'integer', description: 'Nur PDFs: ab dieser Seite lesen (1-basiert). Weglassen = ab Seite 1.' },
+        suche: { type: 'string', description: 'Nur PDFs: statt Text die Seiten liefern, auf denen dieser Begriff steht (mit Auszug). Danach mit `seite` gezielt lesen.' },
       },
       required: ['url'],
     },
   },
 ];
+
+// final_answer auf dem Suchweg SearXNG: Belege im Text sind Trefferzahlen [nr], die
+// `quellen`-Liste nummeriert die App selbst. Die Basisfassung («Reihenfolge =
+// Nummerierung», «Quellen in der Antwort nennen») las ein Modell als Auftrag, eine
+// eigene Liste 1..k zu schreiben und danach zu belegen.
+const _FINAL_ANSWER_BASE = RESEARCH_CHAT_TOOLS.find(t => t.name === 'final_answer');
+const FINAL_ANSWER_SEARXNG = {
+  ..._FINAL_ANSWER_BASE,
+  description: 'Liefert die finale Antwort an den User. ALLERLETZTER Aufruf einer Runde — Pflicht-Endpunkt. Freitext ohne final_answer wird nicht akzeptiert. Markdown erlaubt. ' + _NR_CITE_RULE + ' Wenn du Einträge via propose_research_item vorgeschlagen hast, weise kurz darauf hin, dass sie unten zum Speichern bereitstehen — aber wiederhole sie nicht im Volltext. Sprache: die der Userfrage.',
+  input_schema: {
+    ..._FINAL_ANSWER_BASE.input_schema,
+    properties: {
+      ..._FINAL_ANSWER_BASE.input_schema.properties,
+      quellen: {
+        ..._FINAL_ANSWER_BASE.input_schema.properties.quellen,
+        description: 'Die Web-Quellen, auf die sich die Antwort stützt (nur URLs aus web_search oder read_web_page dieses Durchgangs; andere werden verworfen). Die App zeigt sie als Liste unter der Antwort und ordnet deine [nr]-Belege darüber zu.',
+        items: {
+          ..._FINAL_ANSWER_BASE.input_schema.properties.quellen.items,
+          properties: {
+            url: { type: 'string', description: 'URL eines Treffers aus web_search oder einer mit read_web_page gelesenen Seite.' },
+            titel: { type: 'string', description: 'Kurzer Titel der Quelle.' },
+          },
+        },
+      },
+    },
+  },
+};
 
 /**
  * Werkzeugliste fuer EINEN Lauf, abhaengig vom Suchweg (lib/websearch#webSearchMode):
@@ -377,7 +412,9 @@ export function buildResearchChatTools({ allowedDomains = [], webSearchMode = 'a
   if (webSearchMode === 'searxng') {
     return [
       ...RESEARCH_WEB_FUNCTION_TOOLS,
-      ...RESEARCH_CHAT_TOOLS.filter(t => t.name !== 'web_search'),
+      ...RESEARCH_CHAT_TOOLS
+        .filter(t => t.name !== 'web_search')
+        .map(t => (t.name === 'final_answer' ? FINAL_ANSWER_SEARXNG : t)),
     ];
   }
   const domains = (allowedDomains || []).filter(Boolean);

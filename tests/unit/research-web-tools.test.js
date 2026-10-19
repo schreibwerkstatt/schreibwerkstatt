@@ -149,3 +149,71 @@ test('web_search: gesperrte Engines → Ausfall-Fehler statt leerer Trefferliste
   assert.match(r.error, /gesperrt/);
   assert.equal(ctx.web.searches, 1, 'zählt als gelaufene Suche');
 });
+
+// ── PDFs: suche / seite / Weiterlesen ───────────────────────────────────────
+
+function pdfPage(pageTexts, title = 'Tagungsband') {
+  return { title, text: pageTexts.join('\n\n'), finalUrl: 'https://ex.com/1', pdf: { pages: pageTexts.length, truncated: false, pageTexts } };
+}
+
+async function ctxWithHit() {
+  stubSearch([[hit(1)]]);
+  const ctx = mkCtx();
+  await executeResearchTool('web_search', { query: 'q' }, ctx);
+  return ctx;
+}
+
+test('read_web_page PDF: suche liefert Fundseiten statt Text', async () => {
+  const pages = ['Einleitung.', 'Nichts.', 'Der Getreidehandel Lübecks um 1835.', 'Mehr zum getreidehandel.'];
+  urlScrape.scrapeUrl = async () => pdfPage(pages);
+  const ctx = await ctxWithHit();
+  const r = await executeResearchTool('read_web_page', { url: 'https://ex.com/1', suche: 'Getreidehandel' }, ctx);
+  assert.equal(r.text, undefined, 'keine Volltextseiten');
+  assert.equal(r.seiten, 4);
+  assert.deepEqual(r.treffer.map(t => t.seite), [3, 4]);
+  assert.match(r.treffer[0].auszug, /Getreidehandel Lübecks/);
+  assert.match(r.hinweis, /seite=/);
+});
+
+test('read_web_page PDF: seite liest ab der Seite, mit Marken', async () => {
+  urlScrape.scrapeUrl = async () => pdfPage(['A', 'B', 'C']);
+  const ctx = await ctxWithHit();
+  const r = await executeResearchTool('read_web_page', { url: 'https://ex.com/1', seite: 2 }, ctx);
+  assert.equal(r.text, '[Seite 2]\nB\n\n[Seite 3]\nC');
+  assert.equal(r.ab_seite, 2);
+  assert.equal(r.seiten, 3);
+  assert.equal(r.weiter_ab_seite, undefined, 'vollständig gezeigt');
+});
+
+test('read_web_page PDF: gekappt → weiter_ab_seite zeigt auf die letzte angefangene Seite', async () => {
+  const pages = Array.from({ length: 50 }, (_, i) => `Inhalt ${i + 1} `.repeat(40));
+  urlScrape.scrapeUrl = async () => pdfPage(pages);
+  const ctx = await ctxWithHit();
+  ctx.resultCapChars = 3000;
+  const r = await executeResearchTool('read_web_page', { url: 'https://ex.com/1' }, ctx);
+  assert.equal(r.doc_truncated, true);
+  assert.ok(r.weiter_ab_seite > 1 && r.weiter_ab_seite < 50, String(r.weiter_ab_seite));
+  assert.ok(r.text.includes(`[Seite ${r.weiter_ab_seite}]`));
+  assert.match(r.hinweis, new RegExp(`seite=${r.weiter_ab_seite}`));
+  const next = await executeResearchTool('read_web_page', { url: 'https://ex.com/1', seite: r.weiter_ab_seite }, ctx);
+  assert.ok(next.text.startsWith(`[Seite ${r.weiter_ab_seite}]`));
+});
+
+test('read_web_page: Dokument wird je Lauf nur einmal geholt; ungültige seite klemmt', async () => {
+  let fetched = 0;
+  urlScrape.scrapeUrl = async () => { fetched++; return pdfPage(['A', 'B']); };
+  const ctx = await ctxWithHit();
+  await executeResearchTool('read_web_page', { url: 'https://ex.com/1', suche: 'B' }, ctx);
+  const r = await executeResearchTool('read_web_page', { url: 'https://ex.com/1', seite: 99 }, ctx);
+  assert.equal(fetched, 1);
+  assert.equal(r.ab_seite, 2);
+});
+
+test('read_web_page HTML: seite/suche ohne Wirkung, keine PDF-Felder', async () => {
+  urlScrape.scrapeUrl = async (u) => ({ title: 'Seite', text: 'Fliesstext.', finalUrl: u });
+  const ctx = await ctxWithHit();
+  const r = await executeResearchTool('read_web_page', { url: 'https://ex.com/1', seite: 3, suche: 'x' }, ctx);
+  assert.equal(r.text, 'Fliesstext.');
+  assert.equal(r.seiten, undefined);
+  assert.equal(r.treffer, undefined);
+});

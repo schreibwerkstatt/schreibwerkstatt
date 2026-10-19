@@ -209,7 +209,10 @@ test('scrapeUrl allowPdf: Text, Seitenzahl und Titel aus dem PDF', async () => {
     const r = await scrapeUrl('https://x.example.org/bericht.pdf', { allowPdf: true });
     assert.match(r.text, /Gotthard-Basistunnel wurde 2016/);
     assert.equal(r.title, 'NEAT-Bericht');
-    assert.deepEqual(r.pdf, { pages: 2, truncated: false });
+    assert.equal(r.pdf.pages, 2);
+    assert.equal(r.pdf.truncated, false);
+    assert.deepEqual(r.pdf.pageTexts.length, 2);
+    assert.match(r.pdf.pageTexts[1], /Zweite Seite/);
     assert.equal(r.finalUrl, 'https://x.example.org/bericht.pdf');
   } finally { restore(); }
 });
