@@ -129,6 +129,18 @@ test('judgeWithSearxng: Suchdeckel je Fakt, Werkzeuge bis zur letzten Runde → 
   assert.equal(n, MAX_SEARCHES, 'mehr Suchen als der Deckel laufen nicht');
 });
 
+test('judgeWithSearxng: gesperrte Engines → Fehler-Result «Ausfall», nicht leere Trefferliste', async () => {
+  searxng.search = async () => ({ results: [], unresponsive: ['brave: too many requests', 'duckduckgo: CAPTCHA'] });
+  const { calls, args } = judgeArgs([
+    toolTurn({ id: 'a', name: 'web_search', input: { query: 'q' } }),
+    res({ text: '{"urteil":"unklar"}' }),
+  ]);
+  await judgeWithSearxng(args);
+  const r = calls[1].messages.at(-1).content[0];
+  assert.equal(r.is_error, true);
+  assert.match(r.content, /gesperrt/);
+});
+
 test('judgeWithSearxng: abgeschnittene Runde wirft vor dem Parsen', async () => {
   const { args } = judgeArgs([res({ text: '{"urteil":"fal', truncated: true, stopReason: 'max_tokens', tokensOut: 1000 })]);
   await assert.rejects(() => judgeWithSearxng(args), (e) => e.message === 'job.error.aiTruncated');

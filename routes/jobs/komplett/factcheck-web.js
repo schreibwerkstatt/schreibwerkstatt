@@ -51,6 +51,11 @@ async function _webSearch(input, st, opts) {
     return { error: 'Websuche nicht erreichbar. Ohne Beleg ist das Urteil «unklar».' };
   }
   for (const r of out.results) opts.evidence.add(r.url);
+  // Keine Treffer, weil die Engines gesperrt sind (Rate-Limit, Captcha), ist ein
+  // Ausfall, keine Fehlanzeige — sonst liest das Modell es als «dazu gibt es nichts».
+  if (!out.results.length && out.unresponsive.length) {
+    return { error: 'Suchdienst gerade gesperrt (keine Engine hat geantwortet). Ohne Beleg ist das Urteil «unklar».' };
+  }
   return {
     query,
     treffer: out.results.map(r => ({
