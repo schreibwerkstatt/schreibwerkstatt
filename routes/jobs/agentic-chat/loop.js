@@ -28,6 +28,9 @@
 //     inputTokenCap: Kosten-Deckel — kumulierte Input-Tokens pro Antwort. Erreicht,
 //       läuft statt weiterer Runden der erzwungene Synthese-Turn (mit
 //       inputCapInstruction ?? forceFinalInstruction). 0/undefined = aus.
+//     toolResultCaps (opt-in): { werkzeugName: Zeichen } — eigener Ergebnis-Deckel für
+//       einzelne Werkzeuge statt toolResultCap (Recherche-Chat: read_web_page, dessen
+//       Aufrufe der Handler selbst zählt und der darum mehr Platz pro Ergebnis verträgt).
 //     maxToolsPerRound / roundResultCapChars (opt-in): Deckel pro Runde — Zahl der
 //       ausgeführten Werkzeug-Aufrufe bzw. Summe der Ergebnis-Zeichen. Überzählige
 //       Aufrufe bekommen ein Fehler-tool_result (Paarung tool_use↔tool_result bleibt
@@ -116,6 +119,8 @@ function makeAgenticChatJob(config) {
       const prep = await config.prepare({ session, userEmail, aiCfg, logger, jobSignal, message, userMsgId, history: historyWithoutLast });
       const { systemPrompt, tools, maxToolIter, tokenBudget, forceFinalInstruction, ctx } = prep;
       const toolResultCap = prep.toolResultCap ?? Infinity;
+      const toolResultCaps = prep.toolResultCaps || {};
+      const capFor = (name) => (Number(toolResultCaps[name]) > 0 ? Number(toolResultCaps[name]) : toolResultCap);
       const inputTokenCap = Number(prep.inputTokenCap) > 0 ? Number(prep.inputTokenCap) : Infinity;
       const maxToolsPerRound = Number(prep.maxToolsPerRound) > 0 ? Number(prep.maxToolsPerRound) : Infinity;
       const roundResultCap = Number(prep.roundResultCapChars) > 0 ? Number(prep.roundResultCapChars) : Infinity;
@@ -255,7 +260,7 @@ function makeAgenticChatJob(config) {
           }
           const content = JSON.stringify(out);
           const resultBytes = content.length;
-          const cap = Math.min(toolResultCap, remaining);
+          const cap = Math.min(capFor(tu.name), remaining);
           const truncated = resultBytes > cap || !!(out && typeof out === 'object' && out.truncated);
           if (out && typeof out === 'object' && out.error && ok) errMsg = String(out.error);
           const sent = resultBytes > cap ? content.slice(0, cap) + '…' : content;

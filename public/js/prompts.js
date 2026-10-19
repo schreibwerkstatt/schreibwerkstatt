@@ -452,6 +452,7 @@ export {
   RESEARCH_WEB_FUNCTION_TOOLS,
   buildResearchChatTools,
   RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION,
+  RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION_SEARXNG,
 } from './prompts/recherche.js';
 
 export {

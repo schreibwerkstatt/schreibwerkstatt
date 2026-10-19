@@ -37,6 +37,27 @@ function _bracketDocNums(inner, sources) {
   return parseCiteDocNums(inner).filter(n => n >= 1 && n <= sources.length);
 }
 
+// Hat das Modell seine Belege nach der eigenen Quellenliste durchnummeriert (1..k)
+// statt nach den Trefferzahlen? Dann zeigte [2] auf den zweiten Suchtreffer, nicht
+// auf die zweite genannte Quelle — ein Link auf eine fremde Seite. Erkennbar daran,
+// dass die Nummern bei 1 beginnen, nicht über die Belegliste hinausreichen und
+// mehrheitlich auf Treffer zeigen, die das Modell gar nicht als Beleg benannt hat.
+// Die Reihenfolge der Belegliste taugt nicht zur Rückübersetzung (das Modell hält
+// sie nicht zwingend ein) — die Marker fallen dann weg, die Liste bleibt.
+export function listLocalNumbering(text, answerSources) {
+  const ans = Array.isArray(answerSources) ? answerSources.filter(a => a && a.url) : [];
+  if (!ans.length) return false;
+  const nums = [];
+  BRACKET_CITE_RE.lastIndex = 0;
+  let m;
+  while ((m = BRACKET_CITE_RE.exec(String(text || '')))) {
+    for (const n of parseCiteDocNums(m[1])) if (n >= 1 && !nums.includes(n)) nums.push(n);
+  }
+  if (nums.length < 2 || !nums.includes(1) || Math.max(...nums) > ans.length) return false;
+  const loose = nums.filter(n => !ans.some(a => Array.isArray(a.doc_nums) && a.doc_nums.includes(n)));
+  return loose.length * 2 > nums.length;
+}
+
 // Dokument-Indizes aus einem `index="4-4,4-5"`-String: erste Zahl pro Komma-Teil
 // (= Dokument), Satz-Index dahinter ignoriert. Distinkt, Reihenfolge erhalten.
 export function parseCiteDocNums(idxStr) {
@@ -146,7 +167,9 @@ export function renderResearchAnswer({ text, sources, answerSources, proposalCou
   transformed = transformed.replace(/<\/?cite\b[^>]*>/gi, '');
   // Suchweg SearXNG: `[n]`-Belege auf denselben Marker-Pfad. Unbekannte Nummern
   // bleiben als Text stehen (nichts, worauf man verlinken könnte).
-  if (_usesBracketCites(txt, srcs)) {
+  if (_usesBracketCites(txt, srcs) && listLocalNumbering(txt, ans)) {
+    transformed = transformed.replace(BRACKET_CITE_RE, '');
+  } else if (_usesBracketCites(txt, srcs)) {
     transformed = transformed.replace(BRACKET_CITE_RE, (full, inner) => {
       const nums = _bracketDocNums(inner, srcs);
       return nums.length ? nums.map(n => `${CITE_OPEN}${n}${CITE_CLOSE}`).join('') : full;

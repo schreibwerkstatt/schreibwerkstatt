@@ -98,9 +98,14 @@ test('Werkzeugsatz SearXNG: Function-Tools statt Server-Tool, Rest unverändert'
   assert.ok(web[0].input_schema.required.includes('query'));
   assert.ok(tools.find(t => t.name === 'read_web_page'));
   assert.equal(tools.length, prompts.RESEARCH_CHAT_TOOLS.length + 1);
-  for (const t of prompts.RESEARCH_CHAT_TOOLS.filter(x => x.name !== 'web_search')) {
+  for (const t of prompts.RESEARCH_CHAT_TOOLS.filter(x => x.name !== 'web_search' && x.name !== 'final_answer')) {
     assert.ok(tools.includes(t), `${t.name} bleibt dasselbe Objekt`);
   }
+  // final_answer: [nr]-Belege statt eigener Nummerierung nach der Quellenliste.
+  const fin = tools.find(t => t.name === 'final_answer');
+  assert.ok(fin.description.includes('`nr`'));
+  assert.ok(!/Reihenfolge = Nummerierung/.test(fin.input_schema.properties.quellen.description));
+  assert.deepEqual(fin.input_schema.required, ['antwort']);
   // Der Default bleibt der Anthropic-Satz.
   assert.equal(prompts.buildResearchChatTools({ webSearchMode: 'anthropic' }), prompts.RESEARCH_CHAT_TOOLS);
 });
@@ -114,4 +119,10 @@ test('Prompt SearXNG: read_web_page + [nr]-Belege, Anthropic-Prompt ohne beides'
   assert.ok(!an.includes('read_web_page'));
   assert.ok(!an.includes('[3]'));
   assert.ok(!an.includes('kostet Zeit'));
+});
+
+test('Schlussrunde SearXNG: Anweisung wiederholt die [nr]-Regel, Anthropic-Fassung nicht', () => {
+  assert.ok(prompts.RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION_SEARXNG.startsWith(prompts.RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION));
+  assert.ok(prompts.RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION_SEARXNG.includes('`nr`'));
+  assert.ok(!prompts.RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION.includes('`nr`'));
 });

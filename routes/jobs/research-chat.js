@@ -28,7 +28,7 @@ const appSettings = require('../../lib/app-settings');
 const { getSessionWithBookName } = require('../../db/chat-sessions');
 const { resolveProvider } = require('../../lib/ai');
 const { webSearchMode } = require('../../lib/websearch');
-const { extractUrls } = require('./research-web-tools');
+const { extractUrls, MAX_PAGE_READS, PAGE_TEXT_MAX, PAGE_OVERHEAD } = require('./research-web-tools');
 
 function _maxToolIter() {
   return parseInt(appSettings.get('jobs.research_chat.max_tool_iter'), 10) || 6;
@@ -40,6 +40,16 @@ function _maxWebSearches() {
 // darf das Kontextfenster nicht allein füllen — entscheidend für lokale Modelle.
 function _webToolResultCapChars(maxIter, aiCfg) {
   return Math.max(4000, Math.floor(aiCfg.inputBudgetChars / (maxIter * 6)));
+}
+// Eigener Deckel für read_web_page: der allgemeine rechnet, als könne jeder Aufruf
+// jeder Runde voll ausfallen, und schnitt Seiten bei ~4K ab — eine Tabellenzeile
+// weiter unten erreichte das Modell nie. Seitenaufrufe zählt der Handler selbst
+// (MAX_PAGE_READS); alle zusammen bekommen höchstens 40 % des Input-Budgets, der
+// Rest bleibt System-Prompt, Verlauf und Suchtreffern. Nie unter dem allgemeinen
+// Deckel, nie über PAGE_TEXT_MAX samt Hülle.
+function _pageResultCapChars(generalCap, aiCfg) {
+  const share = Math.floor((aiCfg.inputBudgetChars * 0.4) / MAX_PAGE_READS);
+  return Math.max(generalCap, Math.min(PAGE_TEXT_MAX + PAGE_OVERHEAD, share));
 }
 
 const runResearchChatJob = makeAgenticChatJob({
@@ -63,7 +73,7 @@ const runResearchChatJob = makeAgenticChatJob({
   async prepare({ session, userEmail, aiCfg, logger, jobSignal, userMsgId, message }) {
     const {
       buildResearchChatAgentSystemPrompt, buildResearchChatTools, buildResearchProposalMemoryBlock,
-      getResearchPromptContext, RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION, buildResearchWritingContextBlock,
+      getResearchPromptContext, RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION, RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION_SEARXNG, buildResearchWritingContextBlock,
     } = await getPrompts(userEmail);
     const itemCount = db.prepare('SELECT COUNT(*) AS n FROM research_items WHERE book_id = ? AND archived = 0').get(session.book_id)?.n || 0;
     const maxToolIter = _maxToolIter();
@@ -123,7 +133,8 @@ const runResearchChatJob = makeAgenticChatJob({
     // Anthropic: kein Cap — die Recherche-Tool-Results sind klein und truncieren
     // würde Fundstücke verstümmeln; die Seitenauswertung macht die API selbst.
     const toolResultCap = searxng ? _webToolResultCapChars(maxToolIter, aiCfg) : null;
-    logger.info(`Recherche-Chat: Suchweg=${mode}, ${tools.length} Werkzeuge${toolResultCap ? `, Ergebnis-Deckel ${toolResultCap} Zeichen` : ''}.`);
+    const pageResultCap = searxng ? _pageResultCapChars(toolResultCap, aiCfg) : null;
+    logger.info(`Recherche-Chat: Suchweg=${mode}, ${tools.length} Werkzeuge${toolResultCap ? `, Ergebnis-Deckel ${toolResultCap} Zeichen (Seiten ${pageResultCap})` : ''}.`);
 
     return {
       systemPrompt,
@@ -140,8 +151,9 @@ const runResearchChatJob = makeAgenticChatJob({
       maxToolIter,
       tokenBudget: aiCfg.inputBudgetTokens,
       toolResultCap,
+      ...(searxng ? { toolResultCaps: { read_web_page: pageResultCap } } : {}),
       ...(searxng ? { roundResultCapChars: Math.max(toolResultCap * 2, Math.floor(aiCfg.inputBudgetChars * 0.25)) } : {}),
-      forceFinalInstruction: RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION,
+      forceFinalInstruction: searxng ? RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION_SEARXNG : RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION,
       ctx: {
         bookId: session.book_id, sessionId: session.id, userEmail,
         jobSignal, logger,
@@ -153,7 +165,7 @@ const runResearchChatJob = makeAgenticChatJob({
         allowedDomains: researchProfile.domains,
         searchLanguage: bookSettings.language || '',
         userMessageUrls: extractUrls(message),
-        ...(toolResultCap ? { resultCapChars: toolResultCap } : {}),
+        ...(toolResultCap ? { resultCapChars: toolResultCap, pageResultCapChars: pageResultCap } : {}),
       },
     };
   },

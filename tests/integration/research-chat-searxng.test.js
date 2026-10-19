@@ -196,7 +196,8 @@ test('Seitendeckel: read_web_page bekommt mehr Platz als der Ergebnis-Deckel der
   const prevWindow = appSettings.get('ai.openai-compat.context_window');
   appSettings.set('ai.openai-compat.context_window', 96000);
   searxng.search = async () => ({ results: [{ title: 'Tabelle', url: 'https://ex.com/tabelle', snippet: '', engines: [], published: null }], unresponsive: [] });
-  const page = 'x'.repeat(6000) + ' MARKE-1845 ' + 'y'.repeat(20000);
+  // Zeilenumbrüche wie in einer Tabelle: im JSON zählt jeder doppelt.
+  const page = 'x\n'.repeat(3000) + ' MARKE-1845 ' + 'y\n'.repeat(10000);
   urlScrape.scrapeUrl = async (u) => ({ title: 'Tabelle', text: page, finalUrl: u });
   try {
     const { calls, ci } = await run('Frage', [
@@ -205,7 +206,6 @@ test('Seitendeckel: read_web_page bekommt mehr Platz als der Ergebnis-Deckel der
       toolTurn(tu('c', 'final_answer', { antwort: 'ok' })),
     ]);
     const sent = calls[2].messages.at(-1).content.find(r => r.tool_use_id === 'b').content;
-    console.log('DBG', sent.length, sent.indexOf('MARKE'), sent.indexOf('yyy'));
     assert.match(sent, /MARKE-1845/, 'Seitentext hinter dem allgemeinen Deckel erreicht das Modell');
     const parsed = JSON.parse(sent);
     assert.equal(parsed.doc_truncated, true, 'Kappung bleibt ausgewiesen');

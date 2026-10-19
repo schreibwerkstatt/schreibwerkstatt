@@ -20,7 +20,7 @@
 // Buchinhalt im Query-String aufzurufen).
 //
 // ctx (vom Job gesetzt): bookId, jobSignal, logger, maxWebSearches, allowedDomains,
-// searchLanguage, userMessageUrls, resultCapChars, literatureHits.
+// searchLanguage, userMessageUrls, resultCapChars, pageResultCapChars, literatureHits.
 // ctx.web wird hier angelegt: { searches, queries, results, pages }.
 
 const searxng = require('../../lib/websearch/searxng');
@@ -113,6 +113,22 @@ function _allowedPage(url, ctx) {
   return bookItemUrls(ctx.bookId).some(u => normalizeUrl(u) === n);
 }
 
+// Anfang von `text`, dessen JSON-Form höchstens `max` Zeichen lang ist. Gemessen
+// wird im JSON, weil die Deckel dahinter (truncateToolResult, Loop) das serialisierte
+// Ergebnis zählen: eine Tabelle besteht zur Hälfte aus Zeilenumbrüchen, jeder wird
+// zu `\n` — nach Zeichen gekappt läge sie über dem Deckel und die nächste Stufe
+// schnitte sie grob zurück.
+function _sliceForJson(text, max) {
+  const fits = (n) => JSON.stringify(text.slice(0, n)).length - 2 <= max;
+  let lo = 0, hi = Math.min(text.length, max);
+  if (fits(hi)) return text.slice(0, hi);
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (fits(mid)) lo = mid; else hi = mid - 1;
+  }
+  return text.slice(0, lo);
+}
+
 async function tool_read_web_page(input, ctx) {
   const url = String(input.url || '').trim();
   if (!url) return { error: 'url fehlt.', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'url' } };
@@ -155,18 +171,22 @@ async function tool_read_web_page(input, ctx) {
 
   // Deckel: höchstens PAGE_TEXT_MAX, und nie mehr, als der Loop pro Tool-Result
   // durchlässt — sonst schnitte der Loop still und die Kappung wäre unsichtbar.
-  const max = Math.max(1000, Math.min(PAGE_TEXT_MAX, resultCapFor(ctx) - PAGE_OVERHEAD));
+  // Der Job setzt für Seiten einen eigenen, grösseren Loop-Deckel (pageResultCapChars,
+  // research-chat.js#_pageResultCapChars); ohne ihn gilt der allgemeine.
+  const loopCap = Number(ctx.pageResultCapChars) > 0 ? Number(ctx.pageResultCapChars) : resultCapFor(ctx);
+  const max = Math.max(1000, Math.min(PAGE_TEXT_MAX, loopCap - PAGE_OVERHEAD));
   const text = pdfView ? pdfView.text : String(page.text || '');
-  const truncated = text.length > max;
+  const shown = _sliceForJson(text, max);
+  const truncated = shown.length < text.length;
   return withPdfPaging(pdfView, {
     url,
     ...(finalUrl !== url ? { final_url: finalUrl } : {}),
     titel: page.title || '',
     ...(page.published ? { datum: page.published } : {}),
-    text: text.slice(0, max),
+    text: shown,
     doc_chars: text.length,
     doc_truncated: truncated,
-    ...(truncated ? { hinweis: `Nur die ersten ${max} von ${text.length} Zeichen.` } : {}),
+    ...(truncated ? { hinweis: `Nur die ersten ${shown.length} von ${text.length} Zeichen.` } : {}),
     ...(!text.trim() ? { hinweis: 'Kein lesbarer Text (evtl. per Skript geladen oder nur Bilder).' } : {}),
   });
 }
@@ -176,4 +196,4 @@ const WEB_TOOLS = {
   read_web_page: tool_read_web_page,
 };
 
-module.exports = { WEB_TOOLS, extractUrls, MAX_PAGE_READS };
+module.exports = { WEB_TOOLS, extractUrls, MAX_PAGE_READS, PAGE_TEXT_MAX, PAGE_OVERHEAD };

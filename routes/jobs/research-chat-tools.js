@@ -11,7 +11,7 @@
 // ctx = { bookId, userEmail, jobSignal, logger, proposals: [] }
 
 const { db } = require('../../db/schema');
-const { _truncateResult } = require('./book-chat-tools/shared');
+const { _truncateResult, resultCapFor } = require('./book-chat-tools/shared');
 const searchIndex = require('../../lib/search');
 const embed = require('../../lib/embed');
 const semanticRetrieval = require('../../lib/semantic-retrieval');
@@ -396,7 +396,10 @@ async function executeResearchTool(name, input, ctx) {
   const fn = TOOLS[name];
   if (!fn) throw new Error(`Unbekanntes Werkzeug: ${name}`);
   const result = await fn(input || {}, ctx);
-  return _truncateResult(result);
+  // Derselbe Deckel, den der Loop pro Werkzeug anlegt — sonst kürzte diese Stufe
+  // eine Seite, die der Job ausdrücklich grösser zulässt (pageResultCapChars).
+  const pageCap = Number(ctx?.pageResultCapChars) || 0;
+  return _truncateResult(result, name === 'read_web_page' && pageCap > 0 ? pageCap : resultCapFor(ctx));
 }
 
 module.exports = { executeResearchTool, TOOLS, entityList: _entityList };

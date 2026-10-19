@@ -11,6 +11,7 @@ import {
   resolveSource,
   displaySources,
   effectiveAnswerText,
+  listLocalNumbering,
 } from '../../public/js/chat/research-chat-render.js';
 
 const ID = (s) => s;          // escHtml mock: passthrough
@@ -236,4 +237,37 @@ test('[n]-Belege: mit answer_sources trägt der Marker die Nummer der Belegliste
 test('displaySources/citedSources: Fallback-Liste aus [n]-Belegen', () => {
   assert.deepEqual(citedSources('A [3], B [1] und [3].', WEB).map(s => s.n), [1, 3]);
   assert.deepEqual(displaySources('A [2].', WEB, []).map(s => s.url), ['https://b.ch/']);
+});
+
+// Modell nummeriert nach der eigenen Quellenliste statt nach den Trefferzahlen
+// (echter Lauf, qwen3.8): [2]/[3] meinen die 2./3. genannte Quelle, zeigten aber
+// auf den 2./3. Suchtreffer — fremde Seiten.
+const WEB8 = Array.from({ length: 8 }, (_, i) => ({ url: `https://t${i + 1}.ch/`, title: `T${i + 1}` }));
+const ANS_LOCAL = [
+  { url: 'https://t1.ch/', title: 'Einwohner', doc_nums: [1] },
+  { url: 'https://t6.ch/', title: 'Hansen', doc_nums: [6] },
+  { url: 'https://t7.ch/', title: 'Ostseehandel', doc_nums: [7] },
+];
+
+test('[n]-Belege: Nummerierung nach eigener Quellenliste → keine Links auf fremde Treffer', () => {
+  const text = 'Rund 25.600 [1]. Roggen vor Weizen [2]. Hansen 1912 [3].';
+  assert.equal(listLocalNumbering(text, ANS_LOCAL), true);
+  const html = renderResearchAnswer({ text, sources: WEB8, answerSources: ANS_LOCAL, renderChatMarkdown: MK, escHtml: ID, t: T });
+  assert.ok(!html.includes('t2.ch') && !html.includes('t3.ch'), 'kein Link auf nicht belegte Treffer');
+  assert.ok(!/\[\d\]/.test(html), 'Marker entfernt');
+  assert.match(html, /Hansen 1912\./);
+});
+
+test('[n]-Belege: korrekte Trefferzahlen bleiben verlinkt (Gegenprobe)', () => {
+  const text = 'Rund 25.600 [1]. Hansen 1912 [6]. Ostseehandel [7].';
+  assert.equal(listLocalNumbering(text, ANS_LOCAL), false);
+  const html = renderResearchAnswer({ text, sources: WEB8, answerSources: ANS_LOCAL, renderChatMarkdown: MK, escHtml: ID, t: T });
+  assert.match(html, /<a href="https:\/\/t6\.ch\/"[^>]*>2<\/a>/);
+  assert.match(html, /<a href="https:\/\/t7\.ch\/"[^>]*>3<\/a>/);
+});
+
+test('listLocalNumbering: einzelner Beleg oder Nummer über der Belegliste → nicht als lokal gewertet', () => {
+  assert.equal(listLocalNumbering('Fakt [2].', ANS_LOCAL), false);
+  assert.equal(listLocalNumbering('A [1]. B [2]. C [5].', ANS_LOCAL), false);
+  assert.equal(listLocalNumbering('A [1]. B [2].', []), false);
 });
