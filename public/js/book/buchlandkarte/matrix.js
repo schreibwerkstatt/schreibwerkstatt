@@ -244,6 +244,9 @@ export const matrixMethods = {
     const canvas = document.getElementById('bookNoveltyCanvas');
     if (!canvas || !mx?.novelty?.some(v => v != null)) { _novelty.destroy(); return; }
     try { await loadChart(); } catch { return; }
+    // Nach dem await: ein paralleler Render (Theme-Wechsel, Tab-Klick) kann den
+    // Canvas inzwischen belegt haben — Chart.js wirft sonst «Canvas is already in use».
+    _novelty.destroy();
     _novelty.ensureThemeRedraw(() => {
       if (!window.__app?.showBuchlandkarteCard || window.__app.buchlandkarteTab !== 'matrix') return;
       this.renderBookMatrix();

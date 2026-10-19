@@ -12,11 +12,11 @@
 // die vollstaendige Liste, sonst waere «Stand davor» eines gefilterten Eintrags
 // der Stand eines anderen Users.
 
-import { fetchJson, numberFormat } from '../utils.js';
+import { fetchJson, numberFormat, dateTimeFormat, localIsoDate, localDayDiff } from '../utils.js';
 import { contentRepo } from '../repo/content.js';
 import { EVT } from '../events.js';
 import { memoMethods } from './card-memo.js';
-import { groupRevisions, summaryInfo } from '../page-revisions-groups.js';
+import { groupRevisions, groupByDay, summaryInfo } from '../page-revisions-groups.js';
 import { viewerState, viewerMethods } from './page-revisions/viewer.js';
 
 export function registerPageRevisionsCard() {
@@ -202,27 +202,34 @@ export function registerPageRevisionsCard() {
 
     isFiltered() { return !!(this.filterSource || this.filterUser); },
 
-    // Flache Zeilen fuer das Template: Kopfzeile jeder Sitzung, bei aufgeklappter
-    // Sitzung die weiteren Saves dahinter. `size` > 1 nur an der Kopfzeile.
-    listRows() {
-      return this._memo('rows', [this._visibleRevisions(), this.expanded], () => {
-        const rows = [];
-        for (const g of groupRevisions(this._visibleRevisions())) {
-          const open = !!this.expanded[g.key];
-          rows.push({ k: `r${g.items[0].id}`, rev: g.items[0], size: g.items.length, group: g.key, open, child: false });
-          if (open) {
-            for (const rev of g.items.slice(1)) {
-              rows.push({ k: `r${rev.id}`, rev, size: 0, group: g.key, open, child: true });
+    // Tage fuer das Template, je Tag flache Zeilen: Kopfzeile jeder Sitzung,
+    // bei aufgeklappter Sitzung die weiteren Saves dahinter. `size` > 1 nur an
+    // der Kopfzeile, `oldest` = aeltester Save der Sitzung (Zeitspanne, Delta).
+    listDays() {
+      return this._memo('days', [this._visibleRevisions(), this.expanded], () => {
+        const groups = groupRevisions(this._visibleRevisions());
+        return groupByDay(groups, iso => (iso ? localIsoDate(new Date(iso)) : '')).map(day => {
+          const rows = [];
+          for (const g of day.groups) {
+            const open = !!this.expanded[g.key];
+            const oldest = g.items[g.items.length - 1];
+            rows.push({ k: `r${g.items[0].id}`, rev: g.items[0], oldest, size: g.items.length, group: g.key, open, child: false });
+            if (open) {
+              for (const rev of g.items.slice(1)) {
+                rows.push({ k: `r${rev.id}`, rev, oldest: rev, size: 0, group: g.key, open, child: true });
+              }
             }
           }
-        }
-        return rows;
+          const first = day.groups[0].items[0];
+          const lastGroup = day.groups[day.groups.length - 1];
+          return { key: day.key, newest: first, oldest: lastGroup.items[lastGroup.items.length - 1], rows };
+        });
       });
     },
 
     pinnedRows() {
       return this._memo('pinnedRows', [this.pinnedRevs], () =>
-        this.pinnedRevs.map(rev => ({ k: `p${rev.id}`, rev, size: 0, group: null, open: false, child: false })));
+        this.pinnedRevs.map(rev => ({ k: `p${rev.id}`, rev, oldest: rev, size: 0, group: null, open: false, child: false })));
     },
 
     toggleGroup(key) {
@@ -235,6 +242,13 @@ export function registerPageRevisionsCard() {
     },
     hasUserChoice() {
       return new Set(this.revisions.map(r => r.user_email || '')).size > 1;
+    },
+
+    // Geraet nur zeigen, wenn die geladene Liste mehr als eines kennt — sonst
+    // steht auf jeder Zeile dieselbe Angabe.
+    hasClientChoice() {
+      return this._memo('clients', [this.revisions], () =>
+        new Set(this.revisions.map(r => r.client).filter(Boolean)).size > 1);
     },
 
     isOwnRevision(rev) {
@@ -319,6 +333,59 @@ export function registerPageRevisionsCard() {
       const prev = this._prevRevFor(rev);
       if (!rev || !prev) return null;
       return Number(rev.chars || 0) - Number(prev.chars || 0);
+    },
+
+    // Zeichen-Veraenderung ueber eine Spanne: juengster Stand gegen die
+    // Vorgaengerin des aeltesten. Zugeklappte Sitzung = ganze Sitzung, sonst
+    // der einzelne Save; ein Tag = alle Saves dieses Tages.
+    spanDelta(newest, oldest) {
+      const prev = this._prevRevFor(oldest);
+      if (!newest || !prev) return null;
+      return Number(newest.chars || 0) - Number(prev.chars || 0);
+    },
+    rowDelta(row) {
+      return row.size > 1 && !row.open ? this.spanDelta(row.rev, row.oldest) : this.charsDelta(row.rev);
+    },
+    rowDeltaTip(row) {
+      return window.__app.t(row.size > 1 && !row.open ? 'editor.revisions.deltaSessionTitle' : 'editor.revisions.deltaTitle');
+    },
+    deltaClass(d) {
+      return d > 0 ? 'revision-delta--pos' : (d < 0 ? 'revision-delta--neg' : 'revision-delta--zero');
+    },
+
+    // Uhrzeit der Zeile; zugeklappte Sitzung als Spanne «10:42–10:53».
+    formatTime(iso) {
+      if (!iso) return '';
+      return dateTimeFormat(Alpine.store('shell').uiLocale, { hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+    },
+    rowTime(row) {
+      const end = this.formatTime(row.rev.created_at);
+      if (!(row.size > 1 && !row.open)) return end;
+      const start = this.formatTime(row.oldest.created_at);
+      return start === end ? end : `${start}–${end}`;
+    },
+
+    // Tageskopf: «Heute»/«Gestern», sonst Wochentag + Datum (Jahr nur, wenn
+    // nicht das laufende). Datum als Zweitzeile auch bei Heute/Gestern.
+    dayLabel(day) {
+      const app = window.__app;
+      const d = new Date(day.newest.created_at);
+      const diff = localDayDiff(d);
+      if (diff === 0) return app.t('editor.revisions.day.today');
+      if (diff === 1) return app.t('editor.revisions.day.yesterday');
+      return this.dayDate(day, true);
+    },
+    dayDate(day, withWeekday = false) {
+      const d = new Date(day.newest.created_at);
+      const sameYear = localIsoDate(d).slice(0, 4) === localIsoDate().slice(0, 4);
+      return dateTimeFormat(Alpine.store('shell').uiLocale, {
+        ...(withWeekday ? { weekday: 'long' } : {}),
+        day: 'numeric', month: 'long', ...(sameYear ? {} : { year: 'numeric' }),
+      }).format(d);
+    },
+    dayHasRelative(day) {
+      const diff = localDayDiff(new Date(day.newest.created_at));
+      return diff === 0 || diff === 1;
     },
 
     formatDelta(d) {

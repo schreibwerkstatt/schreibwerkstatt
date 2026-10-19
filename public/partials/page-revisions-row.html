@@ -1,15 +1,26 @@
 <!-- Fragment: eine Zeile der Revisionsliste. Eingebunden per Include-Marker
-     in page-revisions.html, innerhalb eines `x-for="row in …"`. `row`: { rev, size, group, open, child }
-     (pageRevisionsCard#listRows / #pinnedRows). Kopfzeile einer Sitzung trägt
-     `size` > 1 und klappt die weiteren Saves auf. -->
-<div class="history-item history-item--clickable"
-     :class="{ 'page-revisions-row--child': row.child, 'page-revisions-row--pinned': row.rev.pinned }"
+     in page-revisions.html, innerhalb eines `x-for="row in …"`. `row`:
+     { rev, oldest, size, group, open, child } (pageRevisionsCard#listDays /
+     #pinnedRows). Kopfzeile einer Sitzung trägt `size` > 1, zeigt zugeklappt
+     die Zeitspanne und das Delta der ganzen Sitzung und klappt die weiteren
+     Saves auf. Das Gerät steht nur, wenn die Liste mehr als eines kennt. Unterzeilen
+     lassen Quelle, Gerät und Person weg — sie sind in
+     einer Sitzung per Definition dieselben wie an der Kopfzeile. -->
+<div class="history-item history-item--clickable page-revisions-row"
+     :class="{ 'page-revisions-row--child': row.child, 'page-revisions-row--pinned': row.rev.pinned, 'page-revisions-row--session': row.size > 1 }"
      role="button"
      tabindex="0"
      @click="openViewer(row.rev)"
      @keydown.enter.prevent="openViewer(row.rev)"
      @keydown.space.prevent="openViewer(row.rev)"
      :data-tip="$app.t('editor.revisions.viewer.openTitle')">
+  <span class="history-date page-revisions-row__time"
+        x-text="row.group === null ? $app.formatDate(row.rev.created_at) : rowTime(row)"></span>
+  <span class="page-revisions-label" x-show="row.rev.pinned && row.rev.label" x-text="row.rev.label"></span>
+  <span class="page-revisions-row__source" x-show="!row.child" x-text="sourceLabel(row.rev.source)"></span>
+  <span class="page-revisions-row__client" x-show="row.rev.client && !row.child && hasClientChoice()"
+        :data-tip="$app.t('editor.revisions.clientTitle')"
+        x-text="row.rev.client"></span>
   <template x-if="row.size > 1">
     <button type="button" class="page-revisions-group-toggle"
             @click.stop="toggleGroup(row.group)"
@@ -20,9 +31,6 @@
       <span x-text="$app.t('editor.revisions.group.count', { n: row.size })"></span>
     </button>
   </template>
-  <span class="history-date" x-text="$app.formatDate(row.rev.created_at)"></span>
-  <span class="page-revisions-label" x-show="row.rev.pinned && row.rev.label" x-text="row.rev.label"></span>
-  <span class="badge badge-ok" x-text="sourceLabel(row.rev.source)"></span>
   <span class="tag page-revisions-summary" x-show="summaryLabel(row.rev)" x-text="summaryLabel(row.rev)"></span>
   <template x-if="splitLink(row.rev)">
     <span class="revision-split" @keydown.enter.stop @keydown.space.stop>
@@ -30,11 +38,8 @@
       <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: splitLink(row.rev).pageId }"></button>
     </span>
   </template>
-  <span class="tag" x-show="row.rev.client"
-        :data-tip="$app.t('editor.revisions.clientTitle')"
-        x-text="row.rev.client"></span>
   <span class="user-chip"
-        x-show="row.rev.user_email && $app.bookSharedFlags?.[$store.nav.selectedBookId]"
+        x-show="!row.child && row.rev.user_email && $app.bookSharedFlags?.[$store.nav.selectedBookId]"
         :class="{ 'user-chip--self': isOwnRevision(row.rev) }"
         :data-tip="row.rev.user_email">
     <span class="user-chip__avatar"
@@ -43,39 +48,43 @@
     <span class="user-chip__name"
           x-text="isOwnRevision(row.rev) ? $app.t('editor.revisions.byYou') : $app.userDisplayName(row.rev.user_email)"></span>
   </span>
-  <span class="tag" x-text="formatChars(row.rev.chars) + ' ' + $app.t('editor.revisions.chars')"></span>
-  <template x-if="charsDelta(row.rev) !== null">
-    <span class="tag revision-delta"
-          :class="charsDelta(row.rev) > 0 ? 'revision-delta--pos' : (charsDelta(row.rev) < 0 ? 'revision-delta--neg' : 'revision-delta--zero')"
-          :data-tip="$app.t('editor.revisions.deltaTitle')"
-          x-text="formatDelta(charsDelta(row.rev))"></span>
-  </template>
-  <button type="button"
-          class="icon-btn icon-btn--ghost page-revisions-pin"
-          x-show="canWrite() || row.rev.pinned"
-          :class="{ 'is-active': row.rev.pinned }"
-          @click.stop="canWrite() && togglePin(row.rev)"
-          @keydown.enter.stop @keydown.space.stop
-          :disabled="!canWrite() || pinningId === row.rev.id"
-          :aria-pressed="!!row.rev.pinned"
-          :aria-label="$app.t(row.rev.pinned ? 'editor.revisions.unpin' : 'editor.revisions.pin')"
-          :data-tip="$app.t(row.rev.pinned ? 'editor.revisions.unpinTitle' : 'editor.revisions.pinTitle')">
-    <svg class="icon" aria-hidden="true"><use href="/icons.svg#pin"/></svg>
-  </button>
-  <button type="button"
-          class="btn-toggle-saved btn-toggle-saved--off"
-          x-show="canWrite()"
-          @click.stop="restore(row.rev)"
-          @keydown.enter.stop @keydown.space.stop
-          :disabled="!canRestore() || restoringId === row.rev.id"
-          :data-tip="restoreTip($app.t('editor.revisions.restoreTitle'))"
-          x-text="restoringId === row.rev.id ? $app.t('editor.revisions.restoring') : $app.t('editor.revisions.restore')"></button>
-  <button type="button"
-          class="btn-toggle-saved btn-toggle-saved--off"
-          x-show="canWrite() && hasPrevRevFor(row.rev)"
-          @click.stop="restorePrevious(row.rev)"
-          @keydown.enter.stop @keydown.space.stop
-          :disabled="!canRestore() || restoringId !== null"
-          :data-tip="restorePrevTip(row.rev)"
-          x-text="$app.t('editor.revisions.restorePrev')"></button>
+  <span class="page-revisions-row__nums">
+    <span class="page-revisions-row__chars" x-text="formatChars(row.rev.chars) + ' ' + $app.t('editor.revisions.chars')"></span>
+    <template x-if="rowDelta(row) !== null">
+      <span class="tag revision-delta"
+            :class="deltaClass(rowDelta(row))"
+            :data-tip="rowDeltaTip(row)"
+            x-text="formatDelta(rowDelta(row))"></span>
+    </template>
+  </span>
+  <span class="page-revisions-row__actions">
+    <button type="button"
+            class="icon-btn icon-btn--ghost page-revisions-pin"
+            x-show="canWrite() || row.rev.pinned"
+            :class="{ 'is-active': row.rev.pinned }"
+            @click.stop="canWrite() && togglePin(row.rev)"
+            @keydown.enter.stop @keydown.space.stop
+            :disabled="!canWrite() || pinningId === row.rev.id"
+            :aria-pressed="!!row.rev.pinned"
+            :aria-label="$app.t(row.rev.pinned ? 'editor.revisions.unpin' : 'editor.revisions.pin')"
+            :data-tip="$app.t(row.rev.pinned ? 'editor.revisions.unpinTitle' : 'editor.revisions.pinTitle')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#pin"/></svg>
+    </button>
+    <button type="button"
+            class="btn-toggle-saved btn-toggle-saved--off"
+            x-show="canWrite()"
+            @click.stop="restore(row.rev)"
+            @keydown.enter.stop @keydown.space.stop
+            :disabled="!canRestore() || restoringId === row.rev.id"
+            :data-tip="restoreTip($app.t('editor.revisions.restoreTitle'))"
+            x-text="restoringId === row.rev.id ? $app.t('editor.revisions.restoring') : $app.t('editor.revisions.restore')"></button>
+    <button type="button"
+            class="btn-toggle-saved btn-toggle-saved--off"
+            x-show="canWrite() && hasPrevRevFor(row.rev)"
+            @click.stop="restorePrevious(row.rev)"
+            @keydown.enter.stop @keydown.space.stop
+            :disabled="!canRestore() || restoringId !== null"
+            :data-tip="restorePrevTip(row.rev)"
+            x-text="$app.t('editor.revisions.restorePrev')"></button>
+  </span>
 </div>

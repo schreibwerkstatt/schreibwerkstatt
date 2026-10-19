@@ -2,7 +2,7 @@
      Container in editor.html hat display:contents, damit dieser Wrapper
      direkt Geschwister im Editor-Layout bleibt. Collapsible via
      `collapsible` (DESIGN.md), Zustand an `listOpen` der Karte gekoppelt.
-     Angeheftete Revisionen oben, darunter die Geschichte in Sitzungen.
+     Angeheftete Revisionen oben, darunter die Geschichte nach Tag, je Tag in Sitzungen.
      Zeile: page-revisions-row.html, Viewer: page-revisions-viewer.html. -->
 <div x-data="pageRevisionsCard"
      x-show="$app.currentPage && (revisions.length > 0 || pinnedRevs.length > 0)"
@@ -45,8 +45,24 @@
         </div>
       </template>
 
-      <template x-for="row in listRows()" :key="row.k">
-        <!-- @include page-revisions-row -->
+      <!-- Geschichte nach Kalendertag (App-Zeitzone); Tageskopf mit dem
+           Zeichen-Delta des ganzen Tages, Zeilen zeigen nur die Uhrzeit. -->
+      <template x-for="day in listDays()" :key="day.key">
+        <section class="page-revisions-day">
+          <div class="page-revisions-day__head">
+            <span class="page-revisions-day__label" x-text="dayLabel(day)"></span>
+            <span class="page-revisions-day__date" x-show="dayHasRelative(day)" x-text="dayDate(day)"></span>
+            <template x-if="spanDelta(day.newest, day.oldest) !== null">
+              <span class="tag revision-delta"
+                    :class="deltaClass(spanDelta(day.newest, day.oldest))"
+                    :data-tip="$app.t('editor.revisions.deltaDayTitle')"
+                    x-text="formatDelta(spanDelta(day.newest, day.oldest))"></span>
+            </template>
+          </div>
+          <template x-for="row in day.rows" :key="row.k">
+            <!-- @include page-revisions-row -->
+          </template>
+        </section>
       </template>
 
       <!-- Nachladen. Die Liste ist ein Fenster (Default 100 juengste), nicht die

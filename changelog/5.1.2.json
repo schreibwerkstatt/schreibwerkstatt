@@ -1,0 +1,16 @@
+{
+  "version": "5.1.2",
+  "date": "2026-10-19",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Versionen eines Abschnitts: Die Liste ist jetzt nach Tagen gegliedert, mit «Heute», «Gestern» und der Zeichen-Veränderung des ganzen Tages. Eine zugeklappte Sitzung zeigt ihre Zeitspanne und wie viel sich in ihr insgesamt geändert hat.",
+      "en": "Section versions: the list is now grouped by day, with “Today”, “Yesterday” and the change in characters for the whole day. A collapsed session shows its time span and how much changed across it."
+    },
+    {
+      "kind": "behoben",
+      "de": "Buchlandkarte, Reiter «Verlauf»: Das Diagramm blieb nach einem Wechsel des Farbschemas oder schnellem Reiterwechsel manchmal leer.",
+      "en": "Book map, “Course” tab: the chart sometimes stayed empty after switching the colour theme or switching tabs quickly."
+    }
+  ]
+}

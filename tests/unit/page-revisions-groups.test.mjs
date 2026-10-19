@@ -2,7 +2,7 @@
 // (public/js/page-revisions-groups.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { groupRevisions, summaryInfo, SESSION_GAP_MS } from '../../public/js/page-revisions-groups.js';
+import { groupRevisions, groupByDay, summaryInfo, SESSION_GAP_MS } from '../../public/js/page-revisions-groups.js';
 
 const T0 = Date.parse('2026-06-01T12:00:00.000Z');
 let nextId = 1;
@@ -45,4 +45,13 @@ test('summaryInfo: Server-Formate', () => {
   assert.deepEqual(summaryInfo('restored from #42'), { kind: 'restore', revId: 42 });
   assert.equal(summaryInfo('split → #7'), null);
   assert.equal(summaryInfo(null), null);
+});
+
+test('groupByDay: Sitzungen nach Tag des juengsten Saves, Reihenfolge bleibt', () => {
+  const dayOf = (iso) => String(iso || '').slice(0, 10);
+  const mk = (iso) => ({ key: iso, items: [{ created_at: iso }] });
+  const groups = [mk('2026-06-02T08:00:00Z'), mk('2026-06-02T07:00:00Z'), mk('2026-06-01T23:00:00Z')];
+  const days = groupByDay(groups, dayOf);
+  assert.deepEqual(days.map(d => [d.key, d.groups.length]), [['2026-06-02', 2], ['2026-06-01', 1]]);
+  assert.deepEqual(groupByDay([], dayOf), []);
 });

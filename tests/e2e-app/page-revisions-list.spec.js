@@ -67,7 +67,7 @@ test('Revisionsliste: Sitzung, Vergleich, Anheften, Sperre im Edit-Modus', async
     const groupToggle = page.locator('.page-revisions-group-toggle').first();
     await expect(groupToggle).toBeVisible();
     await expect(groupToggle).toContainText(await t(page, 'editor.revisions.group.count', { n: 2 }));
-    const rows = page.locator('.page-revisions-list > .history-item--clickable');
+    const rows = page.locator('.page-revisions-day > .history-item--clickable');
     const before = await rows.count();
     await groupToggle.click();
     await expect(rows).toHaveCount(before + 1);
@@ -102,7 +102,7 @@ test('Revisionsliste: Sitzung, Vergleich, Anheften, Sperre im Edit-Modus', async
 
     // Edit-Modus sperrt Wiederherstellen (Puffer kennt den Restore nicht).
     await page.evaluate(() => { window.__app.editMode = true; });
-    const restoreBtn = page.locator('.page-revisions-list > .history-item--clickable').first().locator('.btn-toggle-saved').first();
+    const restoreBtn = page.locator('.page-revisions-day > .history-item--clickable').first().locator('.btn-toggle-saved').first();
     await expect(restoreBtn).toBeDisabled();
     await page.evaluate(() => { window.__app.editMode = false; });
     await expect(restoreBtn).toBeEnabled();

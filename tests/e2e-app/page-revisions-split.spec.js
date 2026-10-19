@@ -40,7 +40,7 @@ test('Split-Revision: Badge + Verweis auf die andere Hälfte, Klick springt dort
   const rows = page.locator('.page-revisions-list .history-item--clickable');
   await expect(rows).toHaveCount(3);
   const splitLabel = await page.evaluate(() => window.__app.t('editor.revisions.source.split'));
-  await expect(rows.nth(0).locator('.badge')).toHaveText(splitLabel);
+  await expect(rows.nth(0).locator('.page-revisions-row__source')).toHaveText(splitLabel);
   await expect(rows.nth(2).locator('.revision-split')).toHaveCount(0);
 
   // Gelöschte Hälfte: Verweis da, aber nicht auflösbar.

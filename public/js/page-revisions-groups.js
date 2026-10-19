@@ -42,6 +42,21 @@ export function groupRevisions(revs, { gapMs = SESSION_GAP_MS } = {}) {
   return out;
 }
 
+/** Gruppen (DESC, aus groupRevisions) → Tage `{ key, groups }`, ebenfalls DESC.
+ *  `dayOf(iso)` liefert den Kalendertag (YYYY-MM-DD, App-Zeitzone) — injiziert,
+ *  damit der Helfer ohne Zeitzonen-Setting testbar bleibt. Eine Sitzung ueber
+ *  Mitternacht zaehlt zum Tag ihres juengsten Saves (Kopfzeile). */
+export function groupByDay(groups, dayOf) {
+  const out = [];
+  for (const g of Array.isArray(groups) ? groups : []) {
+    const key = dayOf(g.items[0]?.created_at) || '';
+    const cur = out[out.length - 1];
+    if (cur && cur.key === key) cur.groups.push(g);
+    else out.push({ key, groups: [g] });
+  }
+  return out;
+}
+
 /** Summary einer Revision → `{ kind, revId }` oder null.
  *  Formate schreibt der Server (lib/content-store#savePage/#splitPage,
  *  routes/content/pages.js Restore). `split → #…`/`split from #…` deutet die
