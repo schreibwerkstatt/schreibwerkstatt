@@ -105,6 +105,7 @@ export const adminSettingsMethods = {
                : kind === 'rerank'       ? '/admin/settings/test-rerank'
                : kind === 'geocode'      ? '/admin/settings/test-geocode'
                : kind === 'tiles'        ? '/admin/settings/test-tiles'
+               : kind === 'websearch'    ? '/admin/settings/test-websearch'
                : null;
     if (!path) return;
     this.adminSettingsTestResult = { kind, running: true };

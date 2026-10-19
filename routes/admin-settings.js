@@ -19,6 +19,7 @@ const express = require('express');
 const appSettings = require('../lib/app-settings');
 const { requireAdmin } = require('../lib/admin-mw');
 const modelList = require('../lib/model-list');
+const searxng = require('../lib/websearch/searxng');
 const logger = require('../logger');
 const { sessionEmail } = require('../lib/acl');
 
@@ -279,6 +280,22 @@ router.post('/test-geocode', async (req, res) => {
     return res.json({ ok: count > 0, status: r.status, provider, result_count: count, latency_ms: Date.now() - t0 });
   } catch (e) {
     return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : e.message, provider, latency_ms: Date.now() - t0 });
+  }
+});
+
+// POST /admin/settings/test-websearch — Probe-Suche gegen die konfigurierte
+// SearXNG-Instanz über denselben Client wie die Werkzeuge (Timeout, Dedup).
+// ok wenn >=1 Treffer; meldet zusätzlich Engines ohne Antwort (Rate-Limit,
+// Captcha), damit der Admin eine halb taube Instanz erkennt.
+router.post('/test-websearch', async (req, res) => {
+  if (!searxng.isConfigured()) return res.json({ ok: false, error: 'NO_URL' });
+  const t0 = Date.now();
+  try {
+    const { results, unresponsive } = await searxng.search('Matterhorn', { maxResults: 20 });
+    return res.json({ ok: results.length > 0, result_count: results.length, unresponsive, latency_ms: Date.now() - t0 });
+  } catch (e) {
+    const timeout = e.cause?.code === 'WEBSEARCH_TIMEOUT';
+    return res.json({ ok: false, error: timeout ? 'TIMEOUT' : e.message, latency_ms: Date.now() - t0 });
   }
 });
 

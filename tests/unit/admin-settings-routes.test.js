@@ -187,3 +187,43 @@ test('GET /admin/settings/:key (encrypted) → maskiert', async () => {
   assert.equal(r.body.setting.value, '__masked__');
   assert.match(r.body.setting.masked, /\*\*\*/);
 });
+
+test('POST /admin/settings/test-websearch als User → 403', async () => {
+  const r = await _req('POST', '/admin/settings/test-websearch', { user: 'bob@example.com' });
+  assert.equal(r.status, 403);
+});
+
+test('POST /admin/settings/test-websearch ohne URL → ok:false NO_URL', async () => {
+  appSettings.set('websearch.searxng.url', '');
+  const r = await _req('POST', '/admin/settings/test-websearch', { user: 'alice@example.com', role: 'admin' });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body, { ok: false, error: 'NO_URL' });
+});
+
+test('POST /admin/settings/test-websearch gegen Fake-SearXNG → Treffer + taube Engines', async () => {
+  let lastUrl = null;
+  const fake = http.createServer((req, res) => {
+    lastUrl = req.url;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      results: [
+        { title: 'Matterhorn', url: 'https://de.wikipedia.org/wiki/Matterhorn', content: 'Berg', engines: ['google'] },
+        { title: 'Zermatt', url: 'https://zermatt.ch/matterhorn', content: '', engines: ['duckduckgo'] },
+      ],
+      unresponsive_engines: [['brave', 'too many requests']],
+    }));
+  });
+  await new Promise(r => fake.listen(0, '127.0.0.1', r));
+  try {
+    appSettings.set('websearch.searxng.url', `http://127.0.0.1:${fake.address().port}`);
+    const r = await _req('POST', '/admin/settings/test-websearch', { user: 'alice@example.com', role: 'admin' });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.ok, true);
+    assert.equal(r.body.result_count, 2);
+    assert.deepEqual(r.body.unresponsive, ['brave: too many requests']);
+    assert.match(lastUrl, /^\/search\?q=Matterhorn&format=json/);
+  } finally {
+    fake.close();
+    appSettings.set('websearch.searxng.url', '');
+  }
+});
