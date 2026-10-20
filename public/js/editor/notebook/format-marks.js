@@ -14,6 +14,16 @@
 // da der Notebook-Editor im Fokus per x-show ausgeblendet wird). Reiner
 // Font-Size-Zoom (--editor-zoom) ändert die Editor-Box nicht → die
 // pageEditorZoom*-Methoden rufen _scheduleFormatMarks explizit.
+//
+// NUR SICHTBARES VERMESSEN (Band-Filter): Das Overlay liegt über dem Editor und
+// clippt (overflow:hidden) alles ausserhalb von dessen Fenster. Was ausserhalb
+// liegt, ist unsichtbar — es trotzdem zu vermessen ist reine Rechenzeit. Ohne
+// den Filter läuft bei JEDEM Tastendruck eine Vollvermessung des Abschnitts
+// (Range-Messung je <br> + je Absatz mit Umbruch, plus eine Marke je Treffer):
+// bei einem Abschnitt mit vielen Soft-Breaks (Dialog, Gedicht) ~4 ms JS +
+// ~1 ms Layout pro Taste — gemessen 30 fps statt 60 und 48–56 ms
+// Tastendruck→Bild. Der Filter misst nur Blöcke, deren Rect das
+// Sichtfenster schneidet, und lässt den Rest unangetastet.
 
 import { editorHost } from '../shared/editor-host.js';
 import { NORMAL_SELECTOR } from '../shared/active-editor.js';
@@ -38,6 +48,32 @@ const PRESERVING_WS = /^(pre|pre-wrap|pre-line|break-spaces)$/;
 // Vorfilter für den Textknoten-Walk: ohne ihn liefe getComputedStyle pro
 // Textknoten der ganzen Seite — bei jedem Tastendruck.
 const PRESERVING_BLOCK_SEL = 'div.poem, pre';
+
+// Toleranz um das Sichtfenster: eine Marke, die genau am Rand liegt, soll nicht
+// erst beim nächsten Scroll-Ereignis auftauchen.
+const BAND_MARGIN_PX = 24;
+
+// Container-Tags, in denen ein Soft-Break stehen kann. Als Tag-Menge und nicht
+// als CSS-Selektor: auf dem heissen Pfad (jeder <br> sucht seinen Container)
+// ist ein Set-Lookup um Grössenordnungen billiger als `matches()`/`closest()`
+// mit langer Selektorliste.
+const BLOCK_TAGS = new Set([
+  'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'PRE',
+  'TD', 'TH', 'FIGCAPTION', 'BLOCKQUOTE', 'DIV',
+]);
+
+// Nächster Block-Container eines Knotens, bis `root`. Für ein <br> ist das der
+// Absatz, in dem es steht; ohne Treffer (z.B. ein <br> direkt im Editor) der
+// Editor selbst. Nur für den Sichtbarkeits-Filter — die Marken selbst werden
+// weiterhin am <br> bzw. am Absatz gemessen.
+function blockOf(el, root) {
+  let n = el;
+  while (n && n !== root) {
+    if (BLOCK_TAGS.has(n.tagName)) return n;
+    n = n.parentElement;
+  }
+  return root;
+}
 
 // Auto-Slot-<br> als einziges Kind eines leeren Text-Blocks ist strukturell
 // (Caret-Slot, vgl. ensureTrailingParagraph) — kein echter Zeilenumbruch, keine
@@ -86,6 +122,43 @@ export const formatMarksMethods = {
 
     const range = document.createRange();
     const frag = document.createDocumentFragment();
+
+    // ── Sichtbarkeits-Filter ──────────────────────────────────────────────
+    // Der Layer clippt (overflow:hidden) auf das Editor-Fenster. Was ausserhalb
+    // liegt, ist unsichtbar — es zu vermessen ist reine Rechenzeit.
+    //
+    // Zwei Fälle, weil die Marken unterschiedlich mit dem Inhalt wandern:
+    //  - Scrollt der Editor selbst (Normalfall), ist sein eigenes Fenster das
+    //    Sichtfenster: der Layer wandert NICHT mit dem Text, der Editor-Scroll
+    //    loest ohnehin ein Neuzeichnen aus. Der Rest des Inhalts ist vom Layer
+    //    geclippt und bleibt es.
+    //  - Scrollt der Editor nicht selbst (Vollbild: die Karte scrollt, der
+    //    Editor waechst ueber den Viewport hinaus), wandert der Layer MIT dem
+    //    Text. Sichtbar ist dann nur, was im Viewport liegt — und weil der
+    //    Layer mitwandert, muss beim Scrollen des Containers neu vermessen
+    //    werden (Scroll-Listener in _installFormatMarks).
+    const scrolls = editEl.scrollHeight > editEl.clientHeight + 1;
+    const winTop = scrolls ? editRect.top : Math.max(editRect.top, 0);
+    const winBottom = scrolls ? editRect.bottom : Math.min(editRect.bottom, window.innerHeight);
+    // Filter nur, wenn ein Teil des Inhalts ausserhalb des Fensters liegt.
+    const filter = scrolls || winTop > editRect.top + 1 || winBottom < editRect.bottom - 1;
+    // Toleranz um das Fenster: eine Marke am Rand soll nicht erst beim
+    // naechsten Scroll auftauchen.
+    const bandTop = winTop - BAND_MARGIN_PX;
+    const bandBottom = winBottom + BAND_MARGIN_PX;
+    // Rect je Block einmal — viele <br> teilen sich den Container.
+    const rects = new Map();
+    const visible = (el) => {
+      if (!filter) return true;
+      const block = blockOf(el, editEl);
+      let r = rects.get(block);
+      if (!r) {
+        r = block.getBoundingClientRect();
+        rects.set(block, r);
+      }
+      return r.bottom >= bandTop && r.top <= bandBottom;
+    };
+
     // Marke an einer gemessenen Position platzieren. height = Zeilenhöhe, damit
     // die CSS-Mittelzentrierung (.format-mark) das Glyph vertikal auf Textmitte
     // legt statt an den oberen Rand der Zeile.
@@ -105,6 +178,7 @@ export const formatMarksMethods = {
 
     // 1) Echte <br>-Elemente (Soft-Break via Shift+Enter).
     editEl.querySelectorAll('br').forEach((br) => {
+      if (!visible(br)) return;
       if (isCaretFiller(br) || isTrailingBr(br)) return;
       range.selectNode(br);
       place(range.getBoundingClientRect());
@@ -116,6 +190,7 @@ export const formatMarksMethods = {
     //    durchlaufen (statt aller Textknoten des Editors), und getComputedStyle
     //    läuft einmal pro Block statt einmal pro Textknoten.
     editEl.querySelectorAll(PRESERVING_BLOCK_SEL).forEach((blk) => {
+      if (!visible(blk)) return;
       if (!PRESERVING_WS.test(getComputedStyle(blk).whiteSpace)) return;
       const walker = document.createTreeWalker(blk, NodeFilter.SHOW_TEXT);
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -136,6 +211,7 @@ export const formatMarksMethods = {
     //    Caret-Slot-Block (<p><br></p>) → ¶ auf der Slot-Zeile am Block-Anfang;
     //    Soft-Break-Absatz (<p>…<br>…</p>) → ¶ am Ende der letzten Zeile.
     editEl.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, pre').forEach((b) => {
+      if (!visible(b)) return;
       let hasDirectBr = false;
       for (const c of b.children) { if (c.tagName === 'BR') { hasDirectBr = true; break; } }
       if (!hasDirectBr) return; // Rest macht CSS ::after
@@ -177,6 +253,21 @@ export const formatMarksMethods = {
     const onChange = () => this._scheduleFormatMarks();
     editEl.addEventListener('input', onChange, { signal: abort.signal });
     editEl.addEventListener('scroll', onChange, { signal: abort.signal, passive: true });
+    // Container-Scroll: scrollt der Editor nicht selbst (Vollbild: die Karte
+    // scrollt, der Editor waechst ueber den Viewport hinaus), wandert der Layer
+    // MIT dem Inhalt — die Marken bleiben am Text, aber das Sichtfenster des
+    // Overlays verschiebt sich. Dann muss neu vermessen werden, sonst fehlen
+    // die Marken des neu sichtbaren Bereichs. Capture-Phase: der Scroll-Event
+    // eines beliebigen Vorfahren erreicht window so (bubbled nicht).
+    // Scrollt der Editor selbst, deckt der Listener oben das ab — und der
+    // Layer wandert dort nicht mit, die Marken blieben sonst am Text kleben.
+    const onContainerScroll = () => {
+      const el = document.querySelector(NOTEBOOK_EDIT_SEL);
+      if (!el) return;
+      if (el.scrollHeight > el.clientHeight + 1) return; // Editor scrollt selbst
+      this._scheduleFormatMarks();
+    };
+    window.addEventListener('scroll', onContainerScroll, { capture: true, passive: true, signal: abort.signal });
     try {
       this._formatMarksRO = new ResizeObserver(() => this._scheduleFormatMarks());
       this._formatMarksRO.observe(editEl);

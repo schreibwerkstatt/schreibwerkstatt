@@ -356,6 +356,24 @@ Invarianten der Leseansicht-Variante:
 - `/` in leerem Block → Slash-Menü öffnen.
 - Slash-Menü offen: `↑/↓` Navigation, `Enter` Apply, `Esc` Schliessen, druckbare Zeichen filtern die Liste (`slashQuery`), Backspace kürzt den Filter bzw. schliesst bei leerem Filter.
 
+## Steuerzeichen-Overlay (¶/↵)
+
+Toggle `pageEditorShowMarks` (Seiten-Toolbar, Pilcrow-Icon; persistiert in `notebook.editorPrefs`, Default **aus**) blendet Soft-Break-Pfeile (↵) und Absatzmarken (¶) ein. Nur der Notebook-Editor hat das Overlay — der Focus-Editor bleibt unberührt.
+
+Zwei Wege, weil ein `<br>` sich nicht per CSS/Pseudo-Element dekorieren lässt (kein Box-Modell):
+- **Absatzmarken (¶)** macht CSS allein: `:not(:has(> br))::after` auf `p, h1…h6, li, pre` ([page-view.css](../public/css/page/page-view.css)). Blöcke **mit** direktem `<br>` sind ausgenommen — das `::after` rutscht hinter dem `<br>` auf eine Phantom-Zweitzeile, verdoppelt die Blockhöhe und entkoppelt die Marke vom Caret-Slot.
+- **Diese Blöcke + alle Soft-Breaks** zeichnet das JS-Overlay ([notebook/format-marks.js](../public/js/editor/notebook/format-marks.js)) in eine read-only Schicht (`.page-editor-marks-layer`) über dem Editor: Positionen gemessen, eine Marke je Treffer. Die Schicht ist `pointer-events:none` und clippt (`overflow:hidden`).
+
+**Sichtbarkeits-Filter (Pflicht, Performance).** Der Layer clippt alles ausserhalb des Editor-Fensters — was ausserhalb liegt, ist unsichtbar. Ohne Filter lief bei JEDEM Tastendruck eine Vollvermessung des Abschnitts (Range-Messung je `<br>`, Marke je Treffer): bei einem Abschnitt mit vielen Soft-Breaks (Dialog, Gedicht) ~4 ms JS + ~1 ms Layout pro Taste — gemessen 30 fps statt 60 und 48–56 ms Tastendruck→Bild. Vermessen wird deshalb nur, was im Sichtfenster liegt; der Rest bleibt unangetastet.
+
+Das Sichtfenster hängt davon ab, **ob der Editor selbst scrollt**:
+- **Editor scrollt selbst** (Normalfall): sein eigenes Fenster ist das Sichtfenster, der Layer wandert **nicht** mit dem Text — der Editor-Scroll löst ohnehin ein Neuzeichnen aus.
+- **Editor scrollt nicht selbst** (Vollbild: die Karte scrollt, der Editor wächst über den Viewport hinaus): der Layer wandert **mit** dem Text, sichtbar ist nur, was im Viewport liegt — und weil der Layer mitwandert, muss beim Scrollen des Containers neu vermessen werden (`window`-Scroll-Listener in Capture-Phase, `_installFormatMarks`).
+
+**Why:** Der Filter ist die einzige Stelle, an der die Tipp-Latenz skaliert. Wer sie entfernt, baut den Lag wieder ein; wer das Band auf den Viewport schneidet, ohne den Container-Scroll mitzunehmen, lässt Marken beim Scrollen fehlen.
+
+Gegated: [tests/e2e-app/notebook-marks-visible-band.spec.js](../tests/e2e-app/notebook-marks-visible-band.spec.js) (nur sichtbarer Bereich wird vermessen; Scrollen zeigt den neuen Bereich), [tests/e2e-app/notebook-marks-empty-paragraph.spec.js](../tests/e2e-app/notebook-marks-empty-paragraph.spec.js) (leerer Absatz im Gedicht: eine Zeile, ¶ auf der Slot-Zeile).
+
 ## Void-/Caret-lose Block-Elemente: Klick-Selektion + Löschen
 
 Manche Block-Elemente nehmen keinen Caret an (`<hr>` ist void; künftig denkbar: Bild-Block, Embed, Divider-Varianten). Im `contenteditable` lassen sie sich daher nicht selektieren und es gibt keinen natürlichen Lösch-Pfad. Muster, um ein solches Element editierbar (löschbar) zu machen — am Beispiel `<hr>`:
@@ -491,6 +509,8 @@ Neuer Toolbar-Button / Slash-Item / Shortcut:
 
 | Datei | Deckt ab |
 |---|---|
+| [tests/e2e-app/notebook-marks-visible-band.spec.js](../tests/e2e-app/notebook-marks-visible-band.spec.js) | Steuerzeichen-Overlay: nur der sichtbare Bereich wird vermessen (Markenzahl << Abschnittsumfang, nichts weit ausserhalb des Fensters), der erste Pfeil sitzt auf dem ersten `<br>`, nach dem Scrollen im Editor zeigt der Layer den neuen Bereich. Braucht die echte App — die Band-Geometrie haengt an Scrollcontainer, `max-height` und Viewport |
+| [tests/e2e-app/notebook-marks-empty-paragraph.spec.js](../tests/e2e-app/notebook-marks-empty-paragraph.spec.js) | Leerer Absatz im Gedicht bleibt einzeilig, ¶ auf der Slot-Zeile, Klick/Backspace verhalten sich wie erwartet |
 | [tests/unit/html-clean.test.js](../tests/unit/html-clean.test.js) | `stripLektoratMarks`, `normalizeEditorBlocks`, `normalizeForCompare` |
 | [tests/unit/notebook-autosave.test.mjs](../tests/unit/notebook-autosave.test.mjs) | Autosave-Timing (Idle/Max/Reset via mock.timers), `_fireAutosave`-Gating, Online-Retry-Gating, `_flushDraftSaveNow` |
 | [tests/unit/notebook-toolbar.test.mjs](../tests/unit/notebook-toolbar.test.mjs) | Slash-Transforms (`_applySlashItem` pro Blocktyp), `slashItems`-Filter, `_normalizeLinkUrl`, `_brLeftOfCaret`-Dedup |

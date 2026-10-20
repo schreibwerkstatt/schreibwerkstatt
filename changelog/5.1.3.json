@@ -1,0 +1,11 @@
+{
+  "version": "5.1.3",
+  "date": "2026-10-20",
+  "entries": [
+    {
+      "kind": "behoben",
+      "de": "Editor, Knopf «Steuerzeichen anzeigen»: Mit eingeblendeten Steuerzeichen (¶ und ↵) hinkte die Eingabe hinterher. In langen Abschnitten tippst du jetzt flüssig weiter.",
+      "en": "Editor, “Show formatting marks” button: with the formatting marks (¶ and ↵) shown, typing lagged. In long sections you can now keep writing smoothly."
+    }
+  ]
+}
