@@ -74,8 +74,11 @@ test(`Feature-Text: Beschreibung ${DESC_MIN}–${DESC_MAX} Zeichen`, () => {
 test('Feature-Text: Landing-Page rendert genau die vorhandenen Nummern', () => {
   // Kein Vorrat: ein Key, den die Landing nicht zeigt, sieht niemand — und
   // veraltet dann unbemerkt. Reihenfolge = Nummer.
+  // Geprüft wird der KACHEL-TITEL (das <h3>) — der Titel erscheint zusätzlich
+  // im Alt-Text des Produktbildes (tests/unit/landing-screenshots.test.mjs),
+  // das wäre sonst eine zweite, nicht gerenderte Nummer.
   const html = fs.readFileSync(path.join(ROOT, 'public', 'landing.html'), 'utf8');
-  const rendered = [...html.matchAll(/\{\{feat(\d+)Title\}\}/g)].map(m => Number(m[1]));
+  const rendered = [...html.matchAll(/<h3>\{\{feat(\d+)Title\}\}<\/h3>/g)].map(m => Number(m[1]));
   assert.ok(rendered.length > 0, 'landing.html rendert keinen Feature-Block');
   assert.deepEqual(rendered, numbers,
     'landing.html muss jede landing.feat<N> genau einmal in Reihenfolge rendern');

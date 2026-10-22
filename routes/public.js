@@ -105,6 +105,8 @@ function _renderLanding(req, res) {
     title:         appName,
     appName,
     subtitle:      t('landing.subtitle'),
+    principleTitle: t('landing.principleTitle'),
+    principleText: t('landing.principleText'),
     loginLabel:    t('landing.loginLabel'),
     registerLabel: t('landing.registerLabel'),
     registerQuery: source ? `?src=${encodeURIComponent(source)}` : '',

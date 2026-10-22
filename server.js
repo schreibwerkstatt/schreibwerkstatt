@@ -332,7 +332,13 @@ const PUBLIC_ASSETS = new Set([
 // Das entbindet den Reader NICHT von seiner Import-Disziplin — er darf weiterhin
 // nur aus /js/share-reader/ importieren (Kopplung + Bundle-Groesse), gegated
 // durch block-sel-consolidation/cite-guard-drift/mermaid-drift.
-const PUBLIC_ASSET_PREFIXES = ['/css/', '/fonts/', '/js/'];
+// /img/ steht offen, weil die oeffentliche Landing-Page (routes/public.js)
+// Produkt-Screenshots zeigt — und sie wird ohne Session ausgeliefert. Ohne
+// die Freigabe liefe der Request in den Auth-Guard und kaeme als HTML
+// (`/login?returnTo=…`) zurueck; der Browser verweigert dann das Bild wegen
+// falschem MIME-Type. In public/img/ liegen ausschliesslich die Landing-
+// Screenshots (public/img/landing/) — keine Buchinhalte, keine Nutzerdaten.
+const PUBLIC_ASSET_PREFIXES = ['/css/', '/fonts/', '/js/', '/img/'];
 // Statische Assets: `no-cache` für alles ausser Bildern. ETag bleibt aktiv —
 // Browser revalidiert bei jedem Reload mit If-None-Match (304 wenn unverändert,
 // nur Header-Roundtrip, keine Bytes). Bilder/Icons halten 7 Tage, weil sie sich

@@ -13,6 +13,7 @@ Token-Referenz (Farben, Radien, Spacing, Schriftgrössen): [public/css/tokens.cs
 - [Alpine-Plugins](#alpine-plugins-inventar) — was geladen ist (`x-anchor`/`x-trap`/`x-collapse`/`x-resize`), was mit Absicht nicht
 - [Mikro-Typografie](#mikro-typografie-memory-regeln) — Doppelpunkt, Zahlen, Icons, Konsistenz
 - [Feature-Text (Landing)](#feature-text-landing) — Titel- und Längenrahmen für `landing.feat<N>Title/Desc`
+- [Feature-Screenshot (Landing)](#feature-screenshot-landing) — Produktbild je Feature-Kachel (3:2, Ausschnitt aus der echten App)
 - [Hilfetext (Hilfe-Katalog)](#hilfetext-hilfe-katalog) — `help.feat.<key>` / `help.extra.<key>` im Reiter „Funktionen"
 - [Mobile-Breakpoints + Darkmode](#mobile-breakpoints--darkmode) — 480/600/768/1024 + Token-Pflicht für Farben
 - [Container-Queries vs. Media-Queries](#container-queries-vs-media-queries)
@@ -1599,6 +1600,24 @@ Kein neuer Marker ohne Eintrag hier.
 
 ---
 
+## Feature-Screenshot (Landing)
+
+**Use:** Das Produktbild in einer Feature-Kachel der öffentlichen Landing-Page — eine Aufnahme je Kachel, je ein Ausschnitt aus der echten App mit dem Beispielbuch.
+
+**Markup:** `<img class="public-feature-shot" src="/img/landing/<name>.webp" alt="{{feat<N>Title}}" width="920" height="614" loading="lazy" decoding="async">` vor dem Textblock der Kachel. Der Alt-Text ist der Feature-Titel — kein Dateiname.
+
+**Regeln:**
+- **Ein Screenshot je Kachel, in Reihenfolge der Nummern.** Der Pfad ist im HTML hart kodiert (Assets, keine Inhalte) — es gibt keinen i18n-Key dafür.
+- **3:2, 920 px breit (2× gerendert).** Auf der Landing-Page erscheint das Bild in Originalgrösse, die Oberflächenschrift bleibt lesbar. Ein heruntergerechnetes Bild der ganzen Karte wäre Schrift in 5 px.
+- **Ausschnitt statt Vollkarte.** Der Screenshot zeigt den Ausschnitt, auf dem die Funktion erkennbar ist (die Befundliste, die Vorschläge, das Beat-Board) — nie die halbe App in Miniatur.
+- **Kein Satz mitten im Wort abschneiden.** Der Aufnahme-Modus begrenzt die Inhaltsspalten der Karten auf Kachelbreite (scripts/landing-shots/shots.js, `CAPTURE_CSS`), sonst laufen die Zeilen über den Ausschnitt hinaus.
+- **Herkunft:** echte Oberfläche, echtes Beispielbuch („Beispiel: Die Verwandlung", [lib/demo-book.js](lib/demo-book.js)). Die KI-Antworten kommen aus einem Stub — ohne API-Key gäbe es keine Befunde, keine Bewertung und keinen Chat.
+- **Neu erzeugen:** `npm run shots:landing` ([scripts/landing-shots.js](scripts/landing-shots.js)). Der Lauf bootet die echte App auf einer Wegwerf-DB, seedet das Beispielbuch samt Figuren, Beats, Recherche und geteilten Abschnitten, fährt die KI-Jobs gegen den Stub und legt die Bilder unter [public/img/landing/](public/img/landing/) ab.
+
+**Gate:** [tests/unit/landing-screenshots.test.mjs](tests/unit/landing-screenshots.test.mjs) — je Kachel genau ein Screenshot, jede referenzierte Datei existiert, Alt-Text = Feature-Titel, Verhältnis 3:2.
+
+---
+
 ## Hilfetext (Hilfe-Katalog)
 
 **Use:** Der Eintrag einer Funktion im Reiter „Funktionen" der Hilfe-Karte. Katalog: [help-catalog.js](public/js/cards/help-catalog.js)#`buildHelpSections` — jede Karte aus `FEATURES` (Titel = `labelKey`, Text = `help.feat.<key>`), die Aktionen aus `HELP_ACTION_KEYS` und die Funktionen ohne eigene Karte aus `HELP_EXTRAS` (`help.extra.<key>.title`/`.desc`), gruppiert nach `HELP_GROUPS`. Bei offenem Buch gefiltert nach Buchtyp und Rolle wie die Palette; Voraussetzungen (Buchtyp, Komplettanalyse, Cloud-Modell, Semantik-Index, Admin-Dienst, Claude) stehen als `badge-neutral`-Plaketten am Kachelfuss.
@@ -2965,7 +2984,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [components/chat-history-search.css](public/css/components/chat-history-search.css) | Suche im Verlauf von Abschnitts-/Buch-Chat (Suchzeile, Treffer, angesprungene Nachricht). |
 | [search.css](public/css/search.css) | Volltext-Suche, Buchwahl. |
 | [tokens-est.css](public/css/tokens-est.css) | Token-Schätzung Inline-Badges + Tooltip. Nur das — der Figuren-Bestand, den die Datei entgegen ihrem Namen lange mittrug, liegt in `entities/figuren*.css`. |
-| [landing.css](public/css/landing.css) | Landing-/Register-/Login-Seiten (kein SPA-Bundle). |
+| [landing.css](public/css/landing.css) | Landing-/Register-/Login-Seiten (kein SPA-Bundle). Landing: `.public-principle` (Prinzip-Kasten „Die KI schreibt nicht für dich"), `.public-feature-grid` (2 Spalten — die Kachel ist so breit wie der Screenshot), `.public-feature-shot` (Produktbild, 3:2), `.public-feature--wide` (neunte Kachel: Bild links, Text rechts). |
 | [share.css](public/css/share.css) | Facade des Share-Reader-Stylesheets (kein SPA-Bundle; nur via `share.html`/`share.gone.html`/E2E-Harness verlinkt). `@import` der `share/`-Module in Quell-Reihenfolge (= Kaskade). |
 
 ### share/ (Reader-View, contiguous Module der `share.css`-Facade)
