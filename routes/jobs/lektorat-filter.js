@@ -141,10 +141,12 @@ function validateLektoratFehler(fehler, locale, validTypen) {
     .filter(f => f.typ !== 'stil' || !!f.korrektur?.trim())
     // Einträge deren Erklärung verrät, dass es kein echter Fehler ist
     .filter(f => !NON_ERROR_RE.test(f.erklaerung || ''))
-    // de-CH: Einträge filtern, deren einziger Unterschied ss↔ß ist
+    // de-CH: Einträge filtern, die nach der ß→ss-Bereinigung unten nichts mehr
+    // ändern («Strasse» → «Straße»). Die Gegenrichtung («Straße» → «Strasse»)
+    // ist in einem Schweizer Buch eine echte Korrektur und bleibt.
     .filter(f => {
       if (!isCH || !f.original || !f.korrektur) return true;
-      return f.original.replace(/ß/g, 'ss') !== f.korrektur.replace(/ß/g, 'ss');
+      return f.korrektur.replace(/ß/g, 'ss') !== f.original;
     })
     // de-CH: verbleibende Korrekturen bereinigen – ß→ss
     .map(f => {

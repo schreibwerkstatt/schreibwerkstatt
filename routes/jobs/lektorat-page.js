@@ -23,6 +23,7 @@ const userDictionary = require('../../db/user-dictionary');
 const { MAX_PROMPT_WORDS, dictionaryWordsOnPage, dropDictionaryFindings } = require('./lektorat-dictionary');
 const { lektoratProgress } = require('../../lib/lektorat-progress');
 const { hasMsgThread } = require('../../lib/html-text');
+const { textMatch } = require('../../lib/esm-bridge');
 
 function _sigHash(obj) {
   return crypto.createHash('sha1').update(JSON.stringify(obj ?? null)).digest('hex').slice(0, 12);
@@ -39,7 +40,7 @@ function _pageHasCitations(pageId) {
 
 // Letzter History-Eintrag dieser Seite (für History-Insert-Dedup).
 const _lastPageCheckStmt = db.prepare(`
-  SELECT id, errors_json FROM page_checks
+  SELECT id, errors_json, szenen_json, stilanalyse, fazit, applied_errors_json FROM page_checks
    WHERE page_id = ? AND user_email IS ?
    ORDER BY checked_at DESC, id DESC
    LIMIT 1
@@ -82,6 +83,7 @@ async function prepareLektoratRun(bookId, userEmail, logger) {
     langCode: (locale || 'de-CH').split('-')[0],
     cacheVersion: `${model}:${prompts.PROMPTS_VERSION || ''}${cacheSuffix}`,
     system: book.SYSTEM_LEKTORAT_BLOCKS,
+    systemSig: _sigHash(book.SYSTEM_LEKTORAT_BLOCKS),
     stopwords: book.STOPWORDS,
     erklaerungRule: book.ERKLAERUNG_RULE,
     korrekturRegeln: book.KORREKTUR_REGELN,
@@ -136,6 +138,20 @@ function makeNeighbourLoader() {
   };
   load.remember = (pageId, text) => cache.set(pageId, { first: firstParagraph(text), last: lastParagraph(text) });
   return load;
+}
+
+// Befunde, deren `original` im geprüften Text mehrfach vorkommt, tragen
+// `mehrdeutig: true`: «Übernehmen» ersetzt das erste Vorkommen, das nicht das
+// gemeinte sein muss. Das Frontend wählt sie darum nicht vor und zeigt ein Tag.
+// Gezählt wird in der Normalform der Fundstellen-Suche (`countInText`), damit
+// Server und Ersetzungs-Kern dieselben Stellen für „gleich" halten. Läuft auch
+// auf dem Cache-Pfad; ein veraltetes Flag wird entfernt.
+function markAmbiguous(fehler, text, countInText) {
+  if (!Array.isArray(fehler)) return fehler;
+  return fehler.map(f => {
+    const { mehrdeutig, ...rest } = f;
+    return f.original && countInText(text, f.original) > 1 ? { ...rest, mehrdeutig: true } : rest;
+  });
 }
 
 // Erlaubte Fehlertypen. SSoT ist das Buchtyp-Profil in
@@ -233,6 +249,11 @@ async function checkOnePage(run, {
     sw: run.stopwords, er: run.erklaerungRule, kr: run.korrekturRegeln,
     stp: bookSettings?.stilprofil || '',
     pe: previousExcerpt, ne: nextExcerpt, cn: chapterName, pn: pd.name, cv: run.cacheVersion, lc: langCode,
+    // System-Prompt als Ganzes: trägt Buch-Kontext («Vorrangige Angaben»),
+    // Hauptland, reale Zeitlinie, «Werk abgeschlossen», Stilprofil und die
+    // Regeln der vollen Locale (de-CH ≠ de-DE) — nichts davon steht sonst
+    // vollständig in der Signatur.
+    sys: run.systemSig,
     // Nur gesetzt, wenn zutreffend: Seiten mitten im Kapitel behalten ihren Cache.
     ...(previousChapter != null ? { pc: previousChapter } : {}),
     ...(nextChapter != null ? { nc: nextChapter } : {}),
@@ -247,7 +268,9 @@ async function checkOnePage(run, {
   }) : null;
   // Nachbearbeitung für frische und gecachte Ergebnisse, plus Wörterbuch-Backstop
   // (greift auch für Wörter jenseits von MAX_PROMPT_WORDS, die der Prompt nicht sah).
-  const finalize = (fehler) => dropDictionaryFindings(finalizeFehler(fehler, locale, validTypen, neighbour), woerterbuch);
+  const { countInText } = await textMatch();
+  const finalize = (fehler) => markAmbiguous(
+    dropDictionaryFindings(finalizeFehler(fehler, locale, validTypen, neighbour), woerterbuch), text, countInText);
   const cached = ctxSig ? loadLektoratCache(bookId, userEmail, pageId, ctxSig, run.effectiveProvider) : null;
 
   let result;
@@ -285,16 +308,25 @@ async function checkOnePage(run, {
   const szenen = Array.isArray(result?.szenen) ? result.szenen : [];
   const errorsJson = JSON.stringify(fehler);
 
-  // History-Insert-Dedup: gleicher errors_json wie jüngster Eintrag → kein neuer Row.
-  // Verhindert wiederholte "Prüfen"-Klicks ohne Page-Edit, die identische Findings
-  // produzieren (typisch bei Cache-HIT).
+  // History-Insert-Dedup: identisches Ergebnis wie der jüngste Eintrag → kein
+  // neuer Row. Verhindert wiederholte "Prüfen"-Klicks ohne Page-Edit (typisch bei
+  // Cache-HIT). Nicht, wenn aus dem jüngsten Eintrag schon übernommen wurde: dann
+  // ist ein erneut gemeldetes `original` ein weiteres Vorkommen und muss offen
+  // zählen (lib/lektorat-findings.js) — am alten Eintrag verrechnete es die
+  // Heatmap gegen die Annahme.
+  const szenenJson = szenen.length > 0 ? JSON.stringify(szenen) : null;
   const lastCheck = _lastPageCheckStmt.get(parseInt(pageId, 10), userEmail || null);
-  const historyDedup = !!(lastCheck && lastCheck.errors_json === errorsJson);
+  const historyDedup = !!(lastCheck
+    && lastCheck.applied_errors_json == null
+    && lastCheck.errors_json === errorsJson
+    && lastCheck.szenen_json === szenenJson
+    && (lastCheck.stilanalyse || null) === (result.stilanalyse || null)
+    && (lastCheck.fazit || null) === (result.fazit || null));
   const checkId = historyDedup
     ? lastCheck.id
     : _insertPageCheckStmt.run(parseInt(pageId, 10), parseInt(bookId, 10) || null, pd.chapter_id || null,
       new Date().toISOString(), fehler.length, errorsJson,
-      szenen.length > 0 ? JSON.stringify(szenen) : null,
+      szenenJson,
       result.stilanalyse || null, result.fazit || null, run.model, userEmail || null).lastInsertRowid;
 
   return {
@@ -308,11 +340,14 @@ async function checkOnePage(run, {
 
 // Fortschritt gegenüber dem Vorlauf der Seite (lib/lektorat-progress.js); null
 // ohne Vorlauf. Nur das Abschnitts-Lektorat zeigt ihn, darum nicht in checkOnePage.
-function progressSincePrevious(pageId, userEmail, r) {
+// Abgleich in der Normalform der Fundstellen-Suche (Anführungszeichen gefaltet):
+// was das Frontend als dieselbe Stelle findet, gilt hier nicht als „behoben".
+async function progressSincePrevious(pageId, userEmail, r) {
   const id = Number(r.checkId);
   if (!id) return null;
   const prev = _prevPageCheckStmt.get(parseInt(pageId, 10), userEmail || null, id, id);
-  return lektoratProgress(prev, r.fehler, r.text);
+  const { normalizeMatchText } = await textMatch();
+  return lektoratProgress(prev, r.fehler, r.text, normalizeMatchText);
 }
 
-module.exports = { prepareLektoratRun, makeNeighbourLoader, loadLektoratPageList, checkOnePage, progressSincePrevious };
+module.exports = { prepareLektoratRun, makeNeighbourLoader, loadLektoratPageList, checkOnePage, progressSincePrevious, markAmbiguous };

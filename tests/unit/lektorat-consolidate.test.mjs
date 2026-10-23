@@ -89,6 +89,26 @@ test('mergePasses: nicht-überlappende Funde bleiben beide erhalten', () => {
   assert.equal(out.length, 2);
 });
 
+// Kette A–B–C: A überlappt B, B überlappt C, A und C liegen auseinander. Die
+// Kette ist kein Fund — A und C sind zwei, und B gehört zu dem, den es überlappt.
+test('mergePasses: transitive Kette verschluckt das ferne Kettenende nicht', () => {
+  const objektiv = [f('rechtschreibung', 'gieng', 'ging'), f('grammatik', 'nach Hause. Sie', 'nach Hause, sie')];
+  const stil = [f('stil', 'gieng wegen dem Regen nach Hause', 'ging im Regen heim')];
+  const out = mergePasses([objektiv, stil], TEXT);
+  assert.deepEqual(out.map(x => x.original), ['gieng', 'nach Hause. Sie']);
+});
+
+test('Konsens: ein Lauf, der nur das andere Kettenende meldet, bestätigt nicht', () => {
+  const runs = [
+    [f('rechtschreibung', 'gieng', 'ging'), f('stil', 'gieng wegen dem Regen nach Hause', 'ging im Regen heim')],
+    [f('grammatik', 'nach Hause. Sie', 'nach Hause, sie')],
+  ];
+  // gieng (Lauf 0) + Stil-Span (Lauf 0) überlappen; „nach Hause. Sie" (Lauf 1)
+  // berührt nur den Stil-Span. Ohne Zerlegung zählte die Kette zwei Läufe.
+  const out = consensusFindings(runs, TEXT, { threshold: 2 });
+  assert.equal(out.length, 0);
+});
+
 test('Typ-Priorität: dialogformat < rechtschreibung < grammatik < stil (spezifisch zuerst)', () => {
   assert.ok(_prio('dialogformat') < _prio('rechtschreibung'));
   assert.ok(_prio('rechtschreibung') < _prio('grammatik'));

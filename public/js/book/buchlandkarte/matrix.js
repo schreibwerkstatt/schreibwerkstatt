@@ -241,9 +241,13 @@ export const matrixMethods = {
 
   async _renderBookNovelty() {
     const mx = this.bookMapResult?.matrix;
-    const canvas = document.getElementById('bookNoveltyCanvas');
-    if (!canvas || !mx?.novelty?.some(v => v != null)) { _novelty.destroy(); return; }
+    if (!document.getElementById('bookNoveltyCanvas') || !mx?.novelty?.some(v => v != null)) { _novelty.destroy(); return; }
     try { await loadChart(); } catch { return; }
+    // Canvas erst nach dem await greifen: waehrend Chart.js laedt, kann der Tab
+    // gewechselt oder die Karte geschlossen worden sein — der vorher gelesene
+    // Knoten haengt dann nicht mehr im DOM.
+    const canvas = document.getElementById('bookNoveltyCanvas');
+    if (!canvas?.isConnected) { _novelty.destroy(); return; }
     // Nach dem await: ein paralleler Render (Theme-Wechsel, Tab-Klick) kann den
     // Canvas inzwischen belegt haben — Chart.js wirft sonst «Canvas is already in use».
     _novelty.destroy();

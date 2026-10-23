@@ -1593,6 +1593,7 @@ Kein neuer Marker ohne Eintrag hier.
 - **Nicht hineinschreiben:** Tabellen-/Spalten-/Routen-/Job-Namen, Dateipfade, Konfigurations-Keys, Begründungen im **Why:**-Stil, Aufzählungen mit mehr als vier Gliedern, Zukunftsversprechen.
 - **Beide Locales im selben Commit**, in derselben Länge — `de` ist nicht die Langfassung von `en`.
 - **Reihenfolge = Erscheinungsreihenfolge**: `<N>` hängt hinten an, das neueste Feature steht unten. Bestehende Nummern nie umnummerieren (der Landing-Block trägt sie hartcodiert).
+- **Das Prinzip steht über dem Raster.** Der Kasten «Die KI schreibt nicht für dich» (`landing.principleTitle` / `landing.principleText`) ist die Kernaussage der Seite: die KI prüft, sie schreibt nicht. Kein Feature-Text beschreibt die KI als Autorin.
 
 **Gate:** [tests/unit/landing-feature-text.test.mjs](tests/unit/landing-feature-text.test.mjs) — Titel-/Beschreibungslänge in beiden Locales, Lückenlosigkeit der Nummern, Landing rendert genau diese Nummern.
 
@@ -1604,17 +1605,18 @@ Kein neuer Marker ohne Eintrag hier.
 
 **Use:** Das Produktbild in einer Feature-Kachel der öffentlichen Landing-Page — eine Aufnahme je Kachel, je ein Ausschnitt aus der echten App mit dem Beispielbuch.
 
-**Markup:** `<img class="public-feature-shot" src="/img/landing/<name>.webp" alt="{{feat<N>Title}}" width="920" height="614" loading="lazy" decoding="async">` vor dem Textblock der Kachel. Der Alt-Text ist der Feature-Titel — kein Dateiname.
+**Markup:** `<img class="public-feature-shot" src="/img/landing/<name>.webp" alt="" width="920" height="614" loading="lazy" decoding="async">` vor dem Textblock der Kachel. `alt=""`, weil das Bild illustrativ neben dem Kacheltitel (`<h3>`) steht — ein Alt-Text mit dem Titel liesse den Screenreader jeden Titel zweimal vorlesen.
 
 **Regeln:**
-- **Ein Screenshot je Kachel, in Reihenfolge der Nummern.** Der Pfad ist im HTML hart kodiert (Assets, keine Inhalte) — es gibt keinen i18n-Key dafür.
-- **3:2, 920 px breit (2× gerendert).** Auf der Landing-Page erscheint das Bild in Originalgrösse, die Oberflächenschrift bleibt lesbar. Ein heruntergerechnetes Bild der ganzen Karte wäre Schrift in 5 px.
+- **Ein Screenshot je Kachel, in Reihenfolge der Nummern, kein Feature ohne Bild.** Der Pfad ist im HTML hart kodiert (Assets, keine Inhalte) — es gibt keinen i18n-Key dafür. Kein Bild von Hand nachbauen.
+- **Exakt 920 × 614 Pixel (460 × 307 CSS px, 2× gerendert, 3:2).** Auf der Landing-Page erscheint das Bild in Originalgrösse, die Oberflächenschrift bleibt lesbar. Ein heruntergerechnetes Bild der ganzen Karte wäre Schrift in 5 px. Das Raster hat darum zwei Spalten: die Kachel muss so breit sein wie das Bild. Ist das Ziel-Element schmaler als der Ausschnitt, nimmt das Skript den nächsten Vorfahren auf, der den Ausschnitt ganz enthält; enthält keiner ihn, bricht der Lauf ab statt ein schmaleres Bild zu schreiben.
+- **Pre-auth nur `/img/landing/`.** Die Landing wird ohne Session ausgeliefert; [server.js](server.js) gibt dafür genau diesen Unterordner frei (`PUBLIC_ASSET_PREFIXES`), nicht ganz `/img/`.
 - **Ausschnitt statt Vollkarte.** Der Screenshot zeigt den Ausschnitt, auf dem die Funktion erkennbar ist (die Befundliste, die Vorschläge, das Beat-Board) — nie die halbe App in Miniatur.
 - **Kein Satz mitten im Wort abschneiden.** Der Aufnahme-Modus begrenzt die Inhaltsspalten der Karten auf Kachelbreite (scripts/landing-shots/shots.js, `CAPTURE_CSS`), sonst laufen die Zeilen über den Ausschnitt hinaus.
 - **Herkunft:** echte Oberfläche, echtes Beispielbuch („Beispiel: Die Verwandlung", [lib/demo-book.js](lib/demo-book.js)). Die KI-Antworten kommen aus einem Stub — ohne API-Key gäbe es keine Befunde, keine Bewertung und keinen Chat.
-- **Neu erzeugen:** `npm run shots:landing` ([scripts/landing-shots.js](scripts/landing-shots.js)). Der Lauf bootet die echte App auf einer Wegwerf-DB, seedet das Beispielbuch samt Figuren, Beats, Recherche und geteilten Abschnitten, fährt die KI-Jobs gegen den Stub und legt die Bilder unter [public/img/landing/](public/img/landing/) ab.
+- **Neu erzeugen:** `npm run shots:landing` ([scripts/landing-shots.js](scripts/landing-shots.js)). Der Lauf bootet die echte App auf einer Wegwerf-DB, seedet das Beispielbuch samt Figuren, Beats, Recherche und geteilten Abschnitten, fährt die KI-Jobs gegen den Stub und legt die Bilder unter [public/img/landing/](public/img/landing/) ab. Er scheitert bei einem Browser-Fehler (`pageerror`/`console.error`) und wenn der Seed keinen geteilten Abschnitt für die Testleser-Aufnahme liefert.
 
-**Gate:** [tests/unit/landing-screenshots.test.mjs](tests/unit/landing-screenshots.test.mjs) — je Kachel genau ein Screenshot, jede referenzierte Datei existiert, Alt-Text = Feature-Titel, Verhältnis 3:2.
+**Gate:** [tests/unit/landing-screenshots.test.mjs](tests/unit/landing-screenshots.test.mjs) — je Kachel genau ein Screenshot, jede referenzierte Datei existiert, `alt=""`, Markup-Verhältnis 3:2, und die Datei selbst misst 920 × 614 (gelesen mit `sharp`). Pre-Auth-Freigabe und Pfad-Traversal: [tests/integration/public-assets-pre-auth.test.js](tests/integration/public-assets-pre-auth.test.js).
 
 ---
 

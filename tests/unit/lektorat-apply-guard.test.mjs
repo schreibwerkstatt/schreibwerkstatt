@@ -48,7 +48,7 @@ function applyCorrections(html, fehler) {
 function skipOrder(skipped) {
   const counts = {};
   for (const s of skipped) counts[s.reason] = (counts[s.reason] || 0) + 1;
-  return ['notFound', 'spansLink', 'spansMarker', 'boundary'].filter(k => counts[k] > 0);
+  return ['notFound', 'noCorrection', 'unchanged', 'spansLink', 'spansMarker', 'boundary'].filter(k => counts[k] > 0);
 }
 
 // ── skipReason: die vier Gründe ──────────────────────────────────────────────

@@ -9,21 +9,23 @@
 // den Umbruch auf eine Phantom-Zweitzeile → gemessene Platzierung nötig.
 //
 // Aktiv nur wenn editMode && !focusActive && pageEditorShowMarks. Recompute via
-// rAF-Coalesce bei: Tippen (input), internem Scroll und Grössenänderung
+// rAF-Coalesce bei: Tippen (input), internem Scroll, Container-Scroll und
+// Fenster-Resize (Vollbild, Band = Viewport) sowie Grössenänderung des Editors
 // (ResizeObserver deckt Resize/Fit-Width/Vollbild und Fokus-Ein-/Austritt ab,
 // da der Notebook-Editor im Fokus per x-show ausgeblendet wird). Reiner
 // Font-Size-Zoom (--editor-zoom) ändert die Editor-Box nicht → die
 // pageEditorZoom*-Methoden rufen _scheduleFormatMarks explizit.
 //
 // NUR SICHTBARES VERMESSEN (Band-Filter): Das Overlay liegt über dem Editor und
-// clippt (overflow:hidden) alles ausserhalb von dessen Fenster. Was ausserhalb
-// liegt, ist unsichtbar — es trotzdem zu vermessen ist reine Rechenzeit. Ohne
-// den Filter läuft bei JEDEM Tastendruck eine Vollvermessung des Abschnitts
-// (Range-Messung je <br> + je Absatz mit Umbruch, plus eine Marke je Treffer):
-// bei einem Abschnitt mit vielen Soft-Breaks (Dialog, Gedicht) ~4 ms JS +
-// ~1 ms Layout pro Taste — gemessen 30 fps statt 60 und 48–56 ms
-// Tastendruck→Bild. Der Filter misst nur Blöcke, deren Rect das
-// Sichtfenster schneidet, und lässt den Rest unangetastet.
+// clippt (overflow:hidden) alles ausserhalb von dessen Fenster. Vermessen wird
+// deshalb nur, was das Sichtfenster (plus BAND_MARGIN_PX) schneidet. Why: die
+// Vermessung läuft bei jedem Tastendruck; ohne Filter skaliert sie mit dem
+// ganzen Abschnitt statt mit dem sichtbaren Ausschnitt. Granularität ist der
+// Block: Blöcke ausserhalb des Bandes werden gar nicht angefasst. Ein einzelner
+// Block, der das Band schneidet, wird dagegen ganz vermessen (jedes seiner
+// <br>) — Marken ausserhalb des Bandes werden nach der Messung nur verworfen.
+// Der Gewinn gilt also für viele Blöcke, nicht für einen Block mit sehr vielen
+// Umbrüchen.
 
 import { editorHost } from '../shared/editor-host.js';
 import { NORMAL_SELECTOR } from '../shared/active-editor.js';
@@ -135,8 +137,8 @@ export const formatMarksMethods = {
     //  - Scrollt der Editor nicht selbst (Vollbild: die Karte scrollt, der
     //    Editor waechst ueber den Viewport hinaus), wandert der Layer MIT dem
     //    Text. Sichtbar ist dann nur, was im Viewport liegt — und weil der
-    //    Layer mitwandert, muss beim Scrollen des Containers neu vermessen
-    //    werden (Scroll-Listener in _installFormatMarks).
+    //    Layer mitwandert, muss beim Scrollen des Containers und bei
+    //    Fenster-Resize neu vermessen werden (Listener in _installFormatMarks).
     const scrolls = editEl.scrollHeight > editEl.clientHeight + 1;
     const winTop = scrolls ? editRect.top : Math.max(editRect.top, 0);
     const winBottom = scrolls ? editRect.bottom : Math.min(editRect.bottom, window.innerHeight);
@@ -171,8 +173,12 @@ export const formatMarksMethods = {
       m.style.height = height + 'px';
       frag.appendChild(m);
     };
+    // Innerhalb eines Blocks, der das Band nur schneidet, liegen einzelne
+    // Marken ausserhalb — die Messung ist gelaufen, die Marke wäre geclippt.
+    const inBand = (r) => !filter || (r.bottom >= bandTop && r.top <= bandBottom);
     const place = (r) => {
       if (!r || !r.height) return; // degenerierte Messung überspringen
+      if (!inBand(r)) return;
       mark('format-mark--br', '↵', r.left, r.top, r.height);
     };
 
@@ -227,7 +233,7 @@ export const formatMarksMethods = {
         const rects = range.getClientRects();
         r = rects[rects.length - 1];
       }
-      if (!r || !r.height) return;
+      if (!r || !r.height || !inBand(r)) return;
       // Kleiner Abstand wie das CSS-`margin-inline-start: 0.15em` am Zeilenende;
       // am leeren Slot direkt auf die Caret-Position (kein Versatz).
       mark('format-mark--pilcrow', '¶', (atEnd ? r.right + 2 : r.left), r.top, r.height);
@@ -268,6 +274,12 @@ export const formatMarksMethods = {
       this._scheduleFormatMarks();
     };
     window.addEventListener('scroll', onContainerScroll, { capture: true, passive: true, signal: abort.signal });
+    // Fenster-Höhe: scrollt der Editor nicht selbst, ist das Band der Viewport
+    // (window.innerHeight) — ändert er sich, ohne dass sich die Editor-Box
+    // ändert (Fenster höher ziehen, Mobile-Tastatur), sieht der ResizeObserver
+    // nichts und die Marken des neu sichtbaren Bereichs fehlten.
+    window.addEventListener('resize', onChange, { passive: true, signal: abort.signal });
+    window.visualViewport?.addEventListener('resize', onChange, { passive: true, signal: abort.signal });
     try {
       this._formatMarksRO = new ResizeObserver(() => this._scheduleFormatMarks());
       this._formatMarksRO.observe(editEl);

@@ -46,17 +46,18 @@
       </template>
 
       <!-- Geschichte nach Kalendertag (App-Zeitzone); Tageskopf mit dem
-           Zeichen-Delta des ganzen Tages, Zeilen zeigen nur die Uhrzeit. -->
+           Zeichen-Delta des Tages (gefiltert: der angezeigten Sitzungen),
+           Zeilen zeigen nur die Uhrzeit. -->
       <template x-for="day in listDays()" :key="day.key">
         <section class="page-revisions-day">
           <div class="page-revisions-day__head">
             <span class="page-revisions-day__label" x-text="dayLabel(day)"></span>
             <span class="page-revisions-day__date" x-show="dayHasRelative(day)" x-text="dayDate(day)"></span>
-            <template x-if="spanDelta(day.newest, day.oldest) !== null">
+            <template x-if="day.delta !== null">
               <span class="tag revision-delta"
-                    :class="deltaClass(spanDelta(day.newest, day.oldest))"
-                    :data-tip="$app.t('editor.revisions.deltaDayTitle')"
-                    x-text="formatDelta(spanDelta(day.newest, day.oldest))"></span>
+                    :class="deltaClass(day.delta)"
+                    :data-tip="dayDeltaTip()"
+                    x-text="formatDelta(day.delta)"></span>
             </template>
           </div>
           <template x-for="row in day.rows" :key="row.k">

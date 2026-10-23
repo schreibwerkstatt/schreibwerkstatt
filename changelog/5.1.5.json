@@ -1,0 +1,36 @@
+{
+  "version": "5.1.5",
+  "date": "2026-10-23",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Admin-Einstellungen, eigener KI-Server: Für den Thinking-Modus gibt es jetzt eine eigene Temperatur und eine Denk-Reserve. So laufen denkende Modelle nicht in Schleifen und brechen kurze Antworten nicht mehr mittendrin ab.",
+      "en": "Admin settings, own AI server: thinking mode now has its own temperature and a thinking reserve. Thinking models no longer get stuck in loops or cut short answers off halfway."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lektorat: Kommt eine beanstandete Stelle im Abschnitt mehrfach vor, trägt der Befund die Marke «mehrdeutig» und ist nicht vorausgewählt. «Alle» wählt nur noch Befunde mit Vorschlag, die du nicht schon übernommen hast.",
+      "en": "Proofreading: if a flagged passage appears more than once in the section, the finding is marked \"ambiguous\" and not preselected. \"All\" now only selects findings with a suggestion that you have not applied yet."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Recherche-Chat: Er liest jetzt auch PDFs, die eine Website nicht als PDF kennzeichnet, und findet Suchbegriffe, die im PDF am Zeilenende getrennt sind. Fällt die Websuche aus, sagt er das, statt «nichts gefunden» zu melden.",
+      "en": "Research chat: it now also reads PDFs a website does not label as PDF, and finds search terms hyphenated across a line break in the PDF. If web search is down, it says so instead of reporting \"nothing found\"."
+    },
+    {
+      "kind": "behoben",
+      "de": "Lektorat: Übernommene Korrekturen zählen auch dann als erledigt, wenn du während des Speicherns den Abschnitt wechselst. In Schweizer Büchern bleiben Korrekturen von «ß» zu «ss» erhalten, statt still zu verschwinden.",
+      "en": "Proofreading: applied corrections now count as done even if you switch sections while saving. In Swiss books, corrections from \"ß\" to \"ss\" are kept instead of silently disappearing."
+    },
+    {
+      "kind": "behoben",
+      "de": "Abschnitt → Revisionen: Eine Sitzung mischt keine Einträge aus verschiedenen Quellen mehr, und die Zeichen-Veränderung pro Tag stimmt auch, wenn du nach Quelle oder Person filterst.",
+      "en": "Section → Revisions: a session no longer mixes entries from different sources, and the character change per day is correct even when you filter by source or person."
+    },
+    {
+      "kind": "behoben",
+      "de": "Editor, Steuerzeichen: Im Vollbild erscheinen Absatz- und Umbruchzeichen jetzt auch im Bereich, den du durch Scrollen oder ein grösseres Fenster neu siehst.",
+      "en": "Editor, formatting marks: in full screen, paragraph and line-break marks now also appear in the area you newly see after scrolling or enlarging the window."
+    }
+  ]
+}

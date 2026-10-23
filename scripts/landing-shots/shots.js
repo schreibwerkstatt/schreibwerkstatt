@@ -26,8 +26,9 @@ const DPR = 2;
 // der Text der App also in Originalgrösse. Ein heruntergerechnetes Bild der
 // ganzen Karte wäre auf der Landing unlesbar (5-px-Schrift).
 const CROP_W = 460;
-const CROP_H = 307;   // 3:2
+const CROP_H = 307;   // 3:2 (gerundet: 920 × 614 Pixel)
 const OUT_WIDTH = CROP_W * DPR;
+const OUT_HEIGHT = CROP_H * DPR;
 
 // Aufnahme-Modus: Inhaltsspalten auf Kachelbreite begrenzen.
 const CAPTURE_CSS = `
@@ -42,32 +43,65 @@ const CAPTURE_CSS = `
 `;
 
 /**
- * Element-Screenshot → WebP, auf einen Ausschnitt beschnitten.
+ * Ausschnitt → WebP, immer exakt CROP_W × CROP_H CSS px (OUT_WIDTH × OUT_HEIGHT
+ * Pixel, 3:2).
  *
- * `rect` = {x, y} in CSS px, relativ zur Element-Oberkante. Breite und Höhe
- * des Ausschnitts sind fest (CROP_W × CROP_H).
+ * `rect` = {x, y} in CSS px, relativ zur Oberkante des Ziel-Elements: dort
+ * beginnt der Ausschnitt. Ist das Ziel kleiner als der Ausschnitt (ein
+ * schmaler Vorschlags-Block, die Kommentar-Leiste), wird nicht das Ziel,
+ * sondern sein nächster Vorfahre aufgenommen, der den ganzen Ausschnitt
+ * enthält — das Bild zeigt dann die Umgebung des Ziels mit. Enthält kein
+ * Vorfahre den Ausschnitt, bricht der Lauf ab: ein schmaleres Bild als
+ * angekündigt wäre ein stiller Layout-Fehler auf der Landing.
  */
-async function _shot(page, outDir, name, target, { rect = null } = {}) {
+async function _shot(page, outDir, name, target, { rect = { x: 0, y: 0 } } = {}) {
   const tmp = path.join(outDir, `.${name}.png`);
-  const el = typeof target === 'string' ? await page.locator(target).first() : target;
-  if (!el) throw new Error(`Shot ${name}: Ziel ${target} nicht gefunden`);
-  await el.screenshot({ path: tmp, type: 'png' });
-  const meta = await sharp(tmp).metadata();
-  const file = path.join(outDir, `${name}.webp`);
-  let img = sharp(tmp);
-  if (rect) {
-    const left = Math.round(rect.x * DPR);
-    const top = Math.round(rect.y * DPR);
-    const width = Math.min(CROP_W * DPR, meta.width - left);
-    const height = Math.min(CROP_H * DPR, meta.height - top);
-    if (width <= 0 || height <= 0) throw new Error(`Shot ${name}: Ausschnitt liegt ausserhalb des Bildes`);
-    img = img.extract({ left, top, width, height });
+  const el = page.locator(target).first();
+  if (!(await el.count())) throw new Error(`Shot ${name}: Ziel ${target} nicht gefunden`);
+  await el.scrollIntoViewIfNeeded();
+  // Rahmen-Element suchen und den Ausschnitt relativ zu ihm ausdrücken. Relativ
+  // statt absolut: das Scrollen beim Aufnehmen verschiebt beide gleich.
+  const frame = await el.evaluate((node, { rx, ry, w, h }) => {
+    const r = node.getBoundingClientRect();
+    const x0 = r.left + rx;
+    const y0 = r.top + ry;
+    for (let n = node; n; n = n.parentElement) {
+      const b = n.getBoundingClientRect();
+      if (b.left <= x0 + 0.5 && b.top <= y0 + 0.5 && b.right >= x0 + w - 0.5 && b.bottom >= y0 + h - 0.5) {
+        document.querySelectorAll('[data-landing-shot-frame]').forEach(e => e.removeAttribute('data-landing-shot-frame'));
+        n.setAttribute('data-landing-shot-frame', '');
+        return { dx: x0 - b.left, dy: y0 - b.top };
+      }
+    }
+    const chain = [];
+    for (let n = node; n && chain.length < 12; n = n.parentElement) {
+      const b = n.getBoundingClientRect();
+      chain.push(`${n.tagName.toLowerCase()}.${[...n.classList].join('.')} ${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}×${Math.round(b.height)}`);
+    }
+    return { chain, x0, y0 };
+  }, { rx: rect.x, ry: rect.y, w: CROP_W, h: CROP_H });
+  if (frame.chain) {
+    throw new Error(`Shot ${name}: kein Element um ${target} enthält den Ausschnitt ${CROP_W}×${CROP_H} ab (${Math.round(frame.x0)}, ${Math.round(frame.y0)}):\n  ${frame.chain.join('\n  ')}`);
   }
-  await img
-    .resize({ width: OUT_WIDTH, withoutEnlargement: true })
+  await page.locator('[data-landing-shot-frame]').screenshot({ path: tmp, type: 'png' });
+  const meta = await sharp(tmp).metadata();
+  const left = Math.round(frame.dx * DPR);
+  const top = Math.round(frame.dy * DPR);
+  if (left + OUT_WIDTH > meta.width || top + OUT_HEIGHT > meta.height) {
+    fs.unlinkSync(tmp);
+    throw new Error(`Shot ${name}: Aufnahme ${meta.width}×${meta.height} zu klein für den Ausschnitt ab (${left}, ${top})`);
+  }
+  const file = path.join(outDir, `${name}.webp`);
+  await sharp(tmp)
+    .extract({ left, top, width: OUT_WIDTH, height: OUT_HEIGHT })
     .webp({ quality: 88 })
     .toFile(file);
   fs.unlinkSync(tmp);
+  await page.evaluate(() => document.querySelectorAll('[data-landing-shot-frame]').forEach(e => e.removeAttribute('data-landing-shot-frame')));
+  const out = await sharp(file).metadata();
+  if (out.width !== OUT_WIDTH || out.height !== OUT_HEIGHT) {
+    throw new Error(`Shot ${name}: ${out.width}×${out.height} statt ${OUT_WIDTH}×${OUT_HEIGHT}`);
+  }
   return { name, file };
 }
 
@@ -81,9 +115,14 @@ async function captureAll({ base, seed, outDir }) {
   const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 2 });
   const page = await context.newPage();
+  // Browser-Fehler lassen den Lauf scheitern: ein Bild, das neben einem
+  // Laufzeitfehler entstand, zeigt womöglich eine halb gerenderte Karte.
   const errors = [];
-  page.on('pageerror', e => errors.push(String(e.message || e)));
-  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  const watch = (p, label) => {
+    p.on('pageerror', e => errors.push(`${label} pageerror: ${e.message || e}`));
+    p.on('console', m => { if (m.type() === 'error') errors.push(`${label} console: ${m.text()}`); });
+  };
+  watch(page, 'app');
 
   const shots = [];
 
@@ -142,7 +181,12 @@ async function captureAll({ base, seed, outDir }) {
   // sind damit die Textersetzungs-Vorschläge mit «Übernehmen» / «Verwerfen» —
   // das Versprechen der Kachel. Aufgenommen wird der Vorschlags-Block selbst,
   // nicht die Karte: die Pixelzahl ändert sich sonst mit jedem Text.
-  shots.push(await _shot(page, outDir, 'chat', '.chat-vorschlaege', { rect: { x: 0, y: 32 } }));
+  // Die Chat-Spalte ist neben dem Editor 420 px breit — schmaler als der
+  // Ausschnitt. Für diese Aufnahme auf 500 px verbreitern, damit der
+  // Ausschnitt ganz in der Karte liegt (kein Streifen Editor am Rand).
+  await page.addStyleTag({ content: '.editor-chat-split { grid-template-columns: minmax(0, 1fr) 500px; }' });
+  await page.waitForTimeout(600);
+  shots.push(await _shot(page, outDir, 'chat', '.chat-vorschlaege', { rect: { x: -12, y: 32 } }));
 
   // ── 4. Buchanalyse: Figuren ───────────────────────────────────────────────
   await page.evaluate(async () => {
@@ -202,7 +246,8 @@ async function captureAll({ base, seed, outDir }) {
 
   // ── 9. Testleser: geteilter Abschnitt (ohne Session) ───────────────────────
   const shareToken = seed.shareTokens?.page;
-  if (shareToken) {
+  if (!shareToken) throw new Error('Shot testleser: seed.shareTokens.page fehlt — der Seed hat keinen geteilten Abschnitt angelegt');
+  {
     // Eigener Context: der Leser ist ein anonymer Besucher ohne Konto. Seine
     // Identität setzen wir vorher, sonst öffnet beim ersten Laden das
     // Namens-Modal und verdeckt genau den Teil, den der Screenshot zeigen soll.
@@ -217,11 +262,15 @@ async function captureAll({ base, seed, outDir }) {
       } catch { /* privat/blockiert */ }
     });
     const reader = await readerCtx.newPage();
+    watch(reader, 'share');
     await reader.goto(`${base}/share/${shareToken}`, { waitUntil: 'domcontentloaded' });
     await reader.waitForTimeout(3000);
     // Die Kommentar-Leiste rechts: verankerte Anmerkung mit Zitat + Antwort des
     // Autors. Aufgenommen wird die Leiste selbst — ihre Position hängt am
     // Anker der ersten Anmerkung, nicht an festen Pixeln.
+    // Die Leiste ist höchstens 440 px breit, schmaler als der Ausschnitt: der
+    // Rahmen ist dann der Seitenrand rechts daneben (leer), die Karte bleibt
+    // links bündig und ganz im Bild.
     shots.push(await _shot(reader, outDir, 'testleser', '.share-comments', { rect: { x: 0, y: 186 } }));
     await reader.close();
     await readerCtx.close();
@@ -229,7 +278,7 @@ async function captureAll({ base, seed, outDir }) {
 
   await browser.close();
   if (errors.length) {
-    console.error('[landing-shots] Browser-Fehler:\n' + errors.slice(0, 20).join('\n'));
+    throw new Error('Browser-Fehler während der Aufnahmen:\n' + errors.slice(0, 20).join('\n'));
   }
   return shots;
 }

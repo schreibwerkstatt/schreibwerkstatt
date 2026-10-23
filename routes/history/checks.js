@@ -25,6 +25,13 @@ function register(router) {
     const user_email = sessionEmail(req);
     const id = toIntId(req.params.id);
     if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
+    // Beide Listen sind Befund-Arrays; alles andere landete sonst als JSON-Text
+    // in der Spalte und kippte die Zählregel (lib/lektorat-findings.js).
+    for (const k of ['applied_errors_json', 'selected_errors_json']) {
+      if (req.body?.[k] !== undefined && !Array.isArray(req.body[k])) {
+        return res.status(400).json({ error_code: 'INVALID_FINDINGS' });
+      }
+    }
 
     // Erst Ownership prüfen (user_email-Scope), dann updaten. Verhindert ID-Raten
     // über Buch-/User-Grenzen und liefert verifizierte book_id für das Log.
@@ -39,11 +46,12 @@ function register(router) {
     if (saved) {
       const appliedErrors = req.body?.applied_errors_json;
       if (Array.isArray(appliedErrors)) {
-        const counts = { rechtschreibung: 0, grammatik: 0, wiederholung: 0, stil: 0 };
-        for (const f of appliedErrors) if (f.typ && counts[f.typ] !== undefined) counts[f.typ]++;
-        const total = appliedErrors.length;
+        // Je Fehlertyp zählen, den es gibt — das Typ-Set hängt am Buchtyp-Profil.
+        const counts = {};
+        for (const f of appliedErrors) if (f?.typ) counts[f.typ] = (counts[f.typ] || 0) + 1;
+        const byType = Object.entries(counts).map(([t, n]) => `${t}=${n}`).join(' ') || '-';
         logger.info(
-          `Lektorat gespeichert: «${row.page_name}» (user=${user_email || '-'}, book=${row.book_id || '-'}, chap=${row.chapter_id || '-'}, page=${row.page_id}, ${total} Korrekturen: R=${counts.rechtschreibung} G=${counts.grammatik} W=${counts.wiederholung} S=${counts.stil})`
+          `Lektorat gespeichert: «${row.page_name}» (user=${user_email || '-'}, book=${row.book_id || '-'}, chap=${row.chapter_id || '-'}, page=${row.page_id}, ${appliedErrors.length} Korrekturen: ${byType})`
         );
       }
     }
@@ -85,11 +93,15 @@ function register(router) {
     });
   });
 
-  // Lektorat-Prüfung löschen
+  // Lektorat-Prüfung löschen. Wie beim Speichern: eigener Lauf UND Zugriff aufs
+  // Buch — ein entzogener Zugang löscht keine Läufe mehr.
   router.delete('/check/:id', (req, res) => {
     const user_email = sessionEmail(req);
     const id = toIntId(req.params.id);
     if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
+    const row = getOwnedCheck(id, user_email);
+    if (!row) return res.status(404).json({ error_code: 'NOT_FOUND' });
+    if (row.book_id && !guardBook(req, res, row.book_id, 'lektor')) return;
     db.prepare('DELETE FROM page_checks WHERE id = ? AND user_email = ?')
       .run(id, user_email);
     res.json({ ok: true });

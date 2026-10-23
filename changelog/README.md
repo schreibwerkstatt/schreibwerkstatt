@@ -51,8 +51,10 @@ findet** und **was er davon hat**. Sechs Regeln, jede einzeln pruefbar:
 5. **Ein Gedanke pro Satz.** Hoechstens ein Gedankenstrich oder Doppelpunkt pro
    Eintrag, keine Kette aus drei Nebensaetzen. Wer drei Dinge nennen will, hat
    drei Eintraege — oder einen Oberbegriff.
-6. **Ansprache einheitlich pro Datei**: entweder durchgehend „Sie" oder
-   durchgehend unpersoenlich, kein Wechsel zwischen zwei Eintraegen. Die
+6. **Ansprache „du"** — wie die Oberflaeche selbst (`de.json` duzt), in jedem
+   Eintrag gleich; wo der Satz keine Anrede braucht, unpersoenlich. Kein „Sie".
+   Aeltere Dateien, die noch siezen, bleiben unveraendert (veroeffentlichte
+   Notizen werden nicht nachtraeglich umgeschrieben, siehe „Regeln"). Die
    englische Fassung ist gleich kurz, keine ausfuehrlichere Variante.
 
 Beispiel derselben Aenderung, dreimal:
@@ -65,7 +67,7 @@ Beispiel derselben Aenderung, dreimal:
     verstaendlich „Figuren-Karte, Reiter „Alter": zu jeder Figur steht jetzt
                    nebeneinander, was das Manuskript ueber ihr Alter sagt und was
                    sich aus dem Geburtsjahr rechnen laesst. Weichen die beiden ab,
-                   sehen Sie es sofort."
+                   siehst du es sofort."
 
 **Gegenlesen vor dem Speichern:** jeden Eintrag einmal als jemand lesen, der die
 App benutzt und nie einen Commit gesehen hat. Weisst du, wo du hinklickst und was

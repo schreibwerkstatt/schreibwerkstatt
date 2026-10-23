@@ -7,10 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { createServer } from 'node:http';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { fakeEndpoint, sse, bootstrap as _bootstrap } from './_helpers/openai-compat-fake.mjs';
 
 const require_ = createRequire(import.meta.url);
 
@@ -23,46 +20,6 @@ const TOOLS = [
 // geschätzte Output 4× den geschätzten Input übersteigt — bei Mini-Prompts löst das
 // im Test aus und hätte nichts mit dem Testgegenstand zu tun.
 const SYSTEM = 'Systemanweisung. '.repeat(60);
-
-/** Fake-Endpunkt. `handler(body, res)` bestimmt die Antwort. Liefert { url, last, close }. */
-async function fakeEndpoint(handler) {
-  const state = { last: null };
-  const srv = createServer((req, res) => {
-    let buf = '';
-    req.on('data', c => { buf += c; });
-    req.on('end', () => {
-      state.last = JSON.parse(buf || '{}');
-      handler(state.last, res);
-    });
-  });
-  await new Promise(r => srv.listen(0, '127.0.0.1', r));
-  return { url: `http://127.0.0.1:${srv.address().port}`, state, close: () => srv.close() };
-}
-
-function sse(res, events) {
-  res.writeHead(200, { 'Content-Type': 'text/event-stream' });
-  for (const e of events) res.write(`data: ${JSON.stringify(e)}\n\n`);
-  res.write('data: [DONE]\n\n');
-  res.end();
-}
-
-function _bootstrap(host) {
-  const dir = mkdtempSync(join(tmpdir(), 'oai-tools-'));
-  process.env.DB_PATH = join(dir, 'test.db');
-  process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test';
-  for (const key of Object.keys(require_.cache)) {
-    if (key.includes('/db/') || key.includes('/lib/')) delete require_.cache[key];
-  }
-  require_('../../db/connection');
-  require_('../../db/migrations').runMigrations();
-  const appSettings = require_('../../lib/app-settings');
-  appSettings.set('ai.openai-compat.host', host, 'test@example.com');
-  appSettings.set('ai.openai-compat.retry_max', 1, 'test@example.com');
-  return {
-    ai: require_('../../lib/ai'),
-    teardown: () => { try { rmSync(dir, { recursive: true, force: true }); } catch {} },
-  };
-}
 
 test('Tool-Modus: Request trägt tools + tool_choice und KEIN response_format', async () => {
   const ep = await fakeEndpoint((body, res) => sse(res, [

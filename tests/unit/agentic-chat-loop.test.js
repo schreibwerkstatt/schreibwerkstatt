@@ -481,3 +481,21 @@ test('_handleChatPost: laufender Job derselben Session → 409, Nachricht wird n
   const after = db.prepare(`SELECT COUNT(*) AS n FROM chat_messages WHERE session_id = ?`).get(sid).n;
   assert.equal(after, before);
 });
+
+test('toolResultCaps: reicht das Rundenbudget nicht mehr für den eigenen Deckel → nicht ausgeführt statt hart geschnitten', async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup', {}, 'l1'), tu('lookup', {}, 'l2'), tu('lookup', {}, 'l3')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'ok' })] }),
+  ]);
+  const job = makeJob({
+    prep: { toolResultCap: 1000, toolResultCaps: { lookup: 3000 }, roundResultCapChars: 7000 },
+    toolResult: () => ({ meta: 'vorn', text: 'x'.repeat(2900) }),
+  });
+  const out = await runJob(job, newSession());
+  assert.equal(out.content, 'ok');
+  assert.deepEqual(job.executed, ['lookup', 'lookup'], 'der dritte Aufruf passt nicht mehr ins Budget');
+  const results = calls[1].messages.at(-1).content;
+  assert.equal(results.length, 3, 'Paarung tool_use ↔ tool_result bleibt vollständig');
+  for (const r of results.slice(0, 2)) assert.ok(!r.content.endsWith('…'), 'ausgeführte Ergebnisse ungeschnitten');
+  assert.match(results[2].content, /Ergebnis-Budget dieser Runde/);
+});

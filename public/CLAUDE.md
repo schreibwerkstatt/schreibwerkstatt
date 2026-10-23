@@ -4,10 +4,6 @@ Gilt zusaetzlich zur Root-[CLAUDE.md](../CLAUDE.md); tiefer liegen [css/CLAUDE.m
 
 ## Pflicht-Komponenten statt Eigenbau
 
-- **Landing: je Feature-Kachel ein Produktbild** — [landing.html](landing.html) zeigt pro Kachel einen Ausschnitt aus der echten App mit dem Beispielbuch (`/img/landing/*.webp`, 3:2, 920 px). Der Verweis ist hart kodiert; erzeugt werden die Bilder mit `npm run shots:landing` ([scripts/landing-shots.js](../scripts/landing-shots.js)). **Kein Bild von Hand nachbauen** und **kein Feature ohne Bild** — das Gate ([tests/unit/landing-screenshots.test.mjs](../tests/unit/landing-screenshots.test.mjs)) prüft beides. Das Raster hat zwei Spalten, weil die Kachel so breit wie das Bild sein muss; sonst wäre die Oberflächenschrift unlesbar.
-
-- **Landing: das Prinzip steht über dem Raster** — der Kasten «Die KI schreibt nicht für dich» (`landing.principleTitle` / `landing.principleText`) ist die Kernaussage der Seite: die KI prüft, sie schreibt nicht. Wer an den Feature-Texten arbeitet, darf diese Aussage nicht schwächen — kein Feature-Text, der die KI als Autorin beschreibt.
-
 - **`sortableTable` Pflicht für Tabellen** — jede `<table>` mit >3 Datenzeilen nutzt `Alpine.data('sortableTable')` aus [public/js/sortable-table.js](../public/js/sortable-table.js). Kein nacktes `<table>` für Listen-/Admin-/Verwaltungs-Views. Pflicht-Pattern: `x-data="sortableTable({ rows: () => …, defaultKey, types, persistKey })"` am `<table>`; jede sortierbare `<th>` bekommt `class="sortable-th"` + `:class="sortClass('key')"` + `:aria-sort="ariaSort('key')"` + `@click="sortBy('key')"`; `<tbody>` rendert `sorted` (nicht die Quell-Liste). `rows` ist eine **Funktion** (Getter) — reagiert auf Quelländerungen. `types: { col: 'number'|'date'|'string' }` pro Spalte mit nicht-eindeutiger Auto-Detection. `persistKey` für localStorage-Persist. Ausnahmen ausschliesslich: Server-Pagination/-Sort, Presence-Matrizen, Heatmap-Tabellen — siehe DESIGN.md „Sortierbare Tabelle" → „Wann nicht". Bei Berührung einer bestehenden Tabelle: mitziehen, nicht „später".
 
 - **Combobox statt `<select>`** — alle Auswahlfelder nutzen `Alpine.data('combobox')` aus [public/js/app.js](../public/js/app.js). Kein natives `<select>` für neue Features, ausser bei zwingendem Grund (z.B. native Mobile-Picker erwünscht — dann begründen). `init()` rendert Trigger + Dropdown + Search + Liste komplett selbst und überschreibt `innerHTML` des Wrapper-Divs. Wrapper-Div **leer lassen**, nur Attribute setzen. Pflicht-Pattern (3 Attribute):
@@ -54,6 +50,10 @@ Gilt zusaetzlich zur Root-[CLAUDE.md](../CLAUDE.md); tiefer liegen [css/CLAUDE.m
   - **Lebt es global** (Tooltip-Layer, Command-Palette) und kann kein statisches Ziel haben, wird es zur **Anzeigezeit** umgehängt: `mountInTopLayer(el, target?)` aus [public/js/fullscreen.js](../public/js/fullscreen.js) (SSoT der Ebenen-Wahl `topLayerHost`: offenes `dialog` › `document.fullscreenElement` › `body`). Konsumenten: [tooltip.js](../public/js/tooltip.js)#`reparentLayer` (pro Hover), [palette-card.js](../public/js/cards/palette-card.js)#`_remountPaletteOverlay` (bei Öffnen **und** Schliessen — sonst bleibt das Overlay in einer Karte hängen, die später auf `display:none` geht). **Nicht** stattdessen das Vollbild beenden: die Palette wird oft mit Esc verworfen, und dafür aus dem Vollbild zu fallen kostet den Kontext ohne Gegenwert.
   - Gleiche Ursache, dritter Ort: der SortableJS-Fallback-Ghost wird in [plot/dnd.js](../public/js/book/plot/dnd.js)#`relocateGhostForFullscreen` nachgezogen.
   - Gegated: [tests/e2e-app/fullscreen-popover-anchoring.spec.js](../tests/e2e-app/fullscreen-popover-anchoring.spec.js) — Karten-Liste dort erweitern, wenn eine weitere Vollbild-Karte ein Popover teleportiert. Der Tooltip-Fall prüft **Pixel** (`.tip-layer` hat `pointer-events: none`, ein Hit-Test taugt nicht), nicht bloss den Parent-Knoten.
+
+## Öffentliche Landing
+
+Wer an [landing.html](landing.html) arbeitet (Feature-Kachel, Kachelbild, Kacheltext), liest vorher DESIGN.md „Feature-Text (Landing)" und „Feature-Screenshot (Landing)" — dort stehen Prinzip-Kasten, Bildformat, Erzeugung per `npm run shots:landing` und die Gates.
 
 ## Lazy-Loaded Libs
 

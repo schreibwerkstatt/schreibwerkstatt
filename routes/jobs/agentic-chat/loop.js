@@ -31,6 +31,8 @@
 //     toolResultCaps (opt-in): { werkzeugName: Zeichen } — eigener Ergebnis-Deckel für
 //       einzelne Werkzeuge statt toolResultCap (Recherche-Chat: read_web_page, dessen
 //       Aufrufe der Handler selbst zählt und der darum mehr Platz pro Ergebnis verträgt).
+//       Reicht der Rest des Rundenbudgets nicht mehr für diesen Deckel, wird der Aufruf
+//       nicht ausgeführt (Fehler-Result wie beim Rundendeckel) statt hart geschnitten.
 //     maxToolsPerRound / roundResultCapChars (opt-in): Deckel pro Runde — Zahl der
 //       ausgeführten Werkzeug-Aufrufe bzw. Summe der Ergebnis-Zeichen. Überzählige
 //       Aufrufe bekommen ein Fehler-tool_result (Paarung tool_use↔tool_result bleibt
@@ -239,7 +241,10 @@ function makeAgenticChatJob(config) {
             out = _skipped(`Werkzeug-Argumente waren kein gültiges JSON (${String(tu.parseError).slice(0, 120)}) – Aufruf NICHT ausgeführt. Wiederhole ihn mit gültigen Argumenten.`, 'chat.toolError.invalidArgs');
           } else if (executed >= maxToolsPerRound) {
             out = _skipped(`Nicht ausgeführt: höchstens ${maxToolsPerRound} Werkzeug-Aufrufe pro Runde. Fordere ihn in der nächsten Runde erneut an, falls er noch nötig ist.`, 'chat.toolError.roundLimit', { max: maxToolsPerRound });
-          } else if (remaining < 500) {
+          } else if (remaining < 500 || (Number(toolResultCaps[tu.name]) > 0 && remaining < capFor(tu.name))) {
+            // Ein Werkzeug mit eigenem Deckel (Recherche-Chat: read_web_page) misst sein
+            // Ergebnis auf genau diesen Deckel; passt der nicht mehr ins Rundenbudget,
+            // läuft es in der nächsten Runde, statt hier hart geschnitten zu werden.
             out = _skipped('Nicht ausgeführt: das Ergebnis-Budget dieser Runde ist ausgeschöpft. Fordere den Aufruf in der nächsten Runde erneut an, falls er noch nötig ist.', 'chat.toolError.roundBudget');
           } else {
             executed++;

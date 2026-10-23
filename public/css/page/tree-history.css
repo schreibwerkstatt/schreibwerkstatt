@@ -370,14 +370,30 @@
 .page-revisions-row--child .page-revisions-row__time { color: var(--color-muted); }
 /* Quelle + Geraet als eine ruhige Zeile «Editor · Chrome · macOS». */
 .page-revisions-row__source { font-size: var(--font-size-xs); font-weight: var(--fw-semibold); color: var(--color-muted); }
-.page-revisions-row { flex-wrap: nowrap; }
+/* Einzeilig auch in schmaler Spalte (Editor neben Chat): Uhrzeit, Zahlen und
+   Aktionen behalten ihre Breite, die Mitte (Name, Quelle, Geraet, Summary,
+   Person) gibt nach und kuerzt mit Ellipse. Reicht selbst das nicht, scrollt
+   die Zeile wie mobil, statt ueber den Container zu ragen. */
+.page-revisions-row { flex-wrap: nowrap; min-width: 0; overflow-x: auto; }
 .page-revisions-row > * { flex-shrink: 0; }
-.page-revisions-row > .page-revisions-row__client {
+.page-revisions-row > .page-revisions-label,
+.page-revisions-row > .page-revisions-row__source,
+.page-revisions-row > .page-revisions-row__client,
+.page-revisions-row > .page-revisions-summary {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.page-revisions-row > .user-chip { flex: 0 1 auto; min-width: 0; }
+.page-revisions-row > .user-chip .user-chip__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-revisions-row > .page-revisions-row__client {
   font-size: var(--font-size-xs);
   color: var(--color-muted);
 }

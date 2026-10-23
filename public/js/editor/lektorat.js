@@ -34,12 +34,22 @@ export const lektoratMethods = {
     return _inMsgThread(this.originalHtml, f?.original);
   },
 
+  // Mehrdeutige Fundstelle (`mehrdeutig`, Server: lektorat-page.js#markAmbiguous):
+  // «Übernehmen» ersetzt das erste Vorkommen — nicht vorauswählen, der Autor
+  // hakt bewusst an.
   findingPreselected(f) {
-    return isHardFinding(f.typ) && !this.findingInMsgThread(f);
+    return isHardFinding(f.typ) && !f.mehrdeutig && !this.findingInMsgThread(f) && this.findingSelectable(f);
+  },
+
+  // Auswählbar ist ein Befund, der etwas ändern würde und noch nicht übernommen
+  // ist. Übernommene stehen oft weiter im Text („sagte er" → „sagte er,"): ein
+  // zweites Anwenden schriebe „sagte er,,".
+  findingSelectable(f) {
+    return !!f?.korrektur && f.korrektur !== f.original && !this.appliedOriginals.includes(f.original);
   },
 
   // `outSkipped` (optional): sammelt Korrekturen, die replaceInHtml unangetastet
-  // liess (No-Op), als `{ f, reason }`. Vier Gründe, die der User auseinander
+  // liess (No-Op), als `{ f, reason }`. Fünf Gründe (`skipReason`), die der User auseinander
   // halten MUSS — „Stelle existiert nicht mehr" (Seite wurde zwischenzeitlich
   // umgeschrieben, typisch nach einem Write von einem Zweitgerät) verlangt keine
   // manuelle Nachkontrolle, „Link/Quellenangabe/Absatzgrenze betroffen" schon.
@@ -62,7 +72,7 @@ export const lektoratMethods = {
       }
       const next = replaceInHtml(result, f.original, f.korrektur);
       if (next === result) {
-        if (outSkipped) outSkipped.push({ f, reason: skipReason(result, f.original) });
+        if (outSkipped) outSkipped.push({ f, reason: skipReason(result, f.original, f.korrektur) });
         continue;
       }
       result = next;
@@ -77,7 +87,7 @@ export const lektoratMethods = {
   _skipSummary(skipped) {
     const counts = {};
     for (const s of skipped) counts[s.reason] = (counts[s.reason] || 0) + 1;
-    return ['notFound', 'spansLink', 'spansMarker', 'boundary']
+    return ['notFound', 'noCorrection', 'unchanged', 'spansLink', 'spansMarker', 'boundary']
       .filter(k => counts[k] > 0)
       .map(k => this.t('lektorat.skip.' + k, { count: counts[k] }))
       .join(', ');
@@ -150,12 +160,14 @@ export const lektoratMethods = {
   },
 
   toggleFinding(i) {
-    this.selectedFindings[i] = !this.selectedFindings[i];
+    const next = !this.selectedFindings[i];
+    if (next && !this.findingSelectable(this.lektoratFindings[i])) return;
+    this.selectedFindings[i] = next;
     this._recomputeCorrectedHtml();
   },
 
   selectAllFindings(val) {
-    this.selectedFindings = this.selectedFindings.map(() => val);
+    this.selectedFindings = this.lektoratFindings.map(f => val && this.findingSelectable(f));
     this._recomputeCorrectedHtml();
   },
 
@@ -357,69 +369,89 @@ export const lektoratMethods = {
   },
 
   async saveCorrections() {
-    if (!this.currentPage) return;
+    if (!this.currentPage || this.saveApplying != null) return;
     const selected = this.lektoratFindings.filter((_, i) => this.selectedFindings[i]);
     if (selected.length === 0) return;
+    // Ziel des History-PATCH beim Start pinnen: die Korrekturen gehören zu DIESEM
+    // Lauf, auch wenn während der Awaits ein anderer Eintrag oder eine andere
+    // Seite geöffnet wird.
+    const checkId = this.lastCheckId;
+    const historyEntry = this.activeHistoryEntryId
+      ? this.pageHistory.find(e => e.id === this.activeHistoryEntryId) || null
+      : null;
+    // Ohne anwendbaren Vorschlag (Feld geleert, gleich dem Original) ändert ein
+    // Befund nichts — er ist übersprungen, nicht übernommen. `_applyCorrections`
+    // lässt ihn still aus, weil der Abschnitts-Chat denselben Kern nutzt.
+    const noCorrection = selected
+      .filter(f => !f.korrektur || f.korrektur === f.original)
+      .map(f => ({ f, reason: 'noCorrection' }));
 
     try {
-      const { finalHtml, skipped, stale } = await this._loadApplyAndSave(selected, (pct, text) => {
+      const { finalHtml, skipped: applySkipped, pageId, stale } = await this._loadApplyAndSave(selected, (pct, text) => {
         this.saveApplying = pct;
         if (text) this.setStatus(text, true);
       });
-      // Seite während des Speicherns gewechselt: gespeichert ist die richtige
-      // Seite, aber Findings-/History-/View-State gehören jetzt der neuen.
-      if (stale) {
-        this.saveApplying = null;
-        this.setStatus(this.t('lektorat.correctionsSaved'), false, 5000);
-        return;
-      }
+      const skipped = [...noCorrection, ...applySkipped];
 
-      if (this.lastCheckId) {
+      // Der Text ist gespeichert — den Lauf darum immer als übernommen
+      // verbuchen, auch nach einem Seitenwechsel. Sonst bliebe er offen und die
+      // Fehler-Heatmap zählte die eingearbeiteten Korrekturen weiter.
+      let historyFailed = false;
+      if (checkId) {
         try {
           this.saveApplying = 95;
           // Angenommen ist nur, was tatsächlich im Text gelandet ist. Ein
-          // übersprungener Befund (Text nicht gefunden, Schutzmechanismus) bleibt
-          // offen — sonst zählte ihn die Fehler-Heatmap als erledigt.
+          // übersprungener Befund (Text nicht gefunden, Schutzmechanismus, kein
+          // Vorschlag) bleibt offen — sonst zählte ihn die Fehler-Heatmap als erledigt.
           const skippedSet = new Set(skipped.map(s => s.f));
           let applied = selected.filter(f => !skippedSet.has(f));
           let selectedAll = selected;
           // Bei History-Einträgen: mit bereits angewendeten Korrekturen mergen
-          if (this.activeHistoryEntryId) {
-            const entry = this.pageHistory.find(e => e.id === this.activeHistoryEntryId);
-            if (entry) {
-              const merge = (existing, items) => {
-                const set = new Set((existing || []).map(e => e.original));
-                return [...(existing || []), ...items.filter(e => !set.has(e.original))];
-              };
-              applied = merge(entry.applied_errors_json, applied);
-              selectedAll = merge(entry.selected_errors_json, selected);
-            }
+          if (historyEntry && historyEntry.id === checkId) {
+            const merge = (existing, items) => {
+              const set = new Set((existing || []).map(e => e.original));
+              return [...(existing || []), ...items.filter(e => !set.has(e.original))];
+            };
+            applied = merge(historyEntry.applied_errors_json, applied);
+            selectedAll = merge(historyEntry.selected_errors_json, selected);
           }
           const body = { applied_errors_json: applied, selected_errors_json: selectedAll };
-          const r = await fetch('/history/check/' + this.lastCheckId + '/saved', {
+          const r = await fetch('/history/check/' + checkId + '/saved', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
           });
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          await this.loadPageHistory(this.currentPage.id);
           this.refreshPageAges();
-        } catch (e) { console.error('[history saved]', e); }
+          if (!stale && this.currentPage?.id === pageId) await this.loadPageHistory(pageId);
+        } catch (e) {
+          console.error('[history saved]', e);
+          historyFailed = true;
+        }
       }
       this.saveApplying = null;
-      this.setStatus(
-        skipped.length > 0
-          ? this.t('lektorat.correctionsSavedWithSkips', {
-            details: this._skipSummary(skipped),
-            // Nachkontrolle nur, wo ein Schutzmechanismus gegriffen hat. Ein
-            // reiner `notFound` ist ein veralteter Textbezug — dort gibt es
-            // nichts zu prüfen.
-            hint: skipped.some(s => s.reason !== 'notFound') ? ' ' + this.t('lektorat.skipCheckHint') : '',
-          })
-          : this.t('lektorat.correctionsSaved'),
-        false,
-        skipped.length > 0 ? 8000 : 5000,
-      );
+
+      // Seite während des Speicherns gewechselt: gespeichert ist die richtige
+      // Seite, aber Findings-/History-/View-State gehören jetzt der neuen.
+      if (stale || this.currentPage?.id !== pageId) {
+        this.setStatus(this.t(historyFailed ? 'lektorat.historySaveFailed' : 'lektorat.correctionsSaved'), false, historyFailed ? 8000 : 5000);
+        return;
+      }
+
+      // Nachkontrolle nur, wo ein Schutzmechanismus gegriffen hat. Veralteter
+      // Textbezug, fehlender oder wirkungsloser Vorschlag: nichts zu prüfen.
+      const NO_CHECK = new Set(['notFound', 'noCorrection', 'unchanged']);
+      const skipParams = skipped.length > 0 ? {
+        details: this._skipSummary(skipped),
+        hint: skipped.some(s => !NO_CHECK.has(s.reason)) ? ' ' + this.t('lektorat.skipCheckHint') : '',
+      } : null;
+      let msg;
+      if (historyFailed) {
+        msg = this.t('lektorat.historySaveFailed') + (skipParams ? ' ' + this.t('lektorat.skippedList', skipParams) : '');
+      } else {
+        msg = skipParams ? this.t('lektorat.correctionsSavedWithSkips', skipParams) : this.t('lektorat.correctionsSaved');
+      }
+      this.setStatus(msg, false, skipped.length > 0 || historyFailed ? 8000 : 5000);
       this.correctedHtml = null;
       this.hasErrors = false;
       this.lektoratFindings = [];
@@ -494,7 +526,7 @@ export const lektoratMethods = {
       },
       onNotFound: () => {
         this.batchLoading = false;
-        this.batchStatus = this.t('job.interrupted');
+        this.batchStatus = escHtml(this.t('job.interrupted'));
       },
       onError: (job) => {
         this.batchLoading = false;
@@ -505,9 +537,9 @@ export const lektoratMethods = {
         this.batchLoading = false;
         setTimeout(() => { this.batchProgress = 0; }, 400);
         if (job.result?.empty) {
-          this.batchStatus = job.result.skippedFinal > 0
+          this.batchStatus = escHtml(job.result.skippedFinal > 0
             ? this.t('lektorat.batchAllFinal', { n: job.result.skippedFinal })
-            : this.t(job.result.chapterId != null ? 'lektorat.batchNoPagesChapter' : 'lektorat.batchNoPages');
+            : this.t(job.result.chapterId != null ? 'lektorat.batchNoPagesChapter' : 'lektorat.batchNoPages'));
           return;
         }
         const r = job.result;

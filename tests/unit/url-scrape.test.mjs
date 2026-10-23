@@ -253,3 +253,39 @@ test('scrapeUrl allowPdf: höherer Byte-Deckel nur für diesen Weg', async () =>
     await assert.rejects(scrapeUrl('https://x.example.org/riesig.pdf', { allowPdf: true }), (e) => e.code === 'SCRAPE_TOO_LARGE');
   } finally { restore(); }
 });
+
+test('scrapeUrl allowPdf: HTML bleibt beim HTML-Deckel, nur PDFs bekommen den grossen', async () => {
+  const restore = stubFetch(async () => htmlResponse('<p>x</p>', { 'content-length': String(MAX_BYTES + 1) }));
+  try {
+    await assert.rejects(scrapeUrl('https://x.example.org/gross', { allowPdf: true }), (e) => e.code === 'SCRAPE_TOO_LARGE');
+  } finally { restore(); }
+  // Ohne angekündigte Länge greift der Deckel beim Lesen.
+  const restore2 = stubFetch(async () => htmlResponse(`<p>${'a'.repeat(MAX_BYTES)}</p>`));
+  try {
+    await assert.rejects(scrapeUrl('https://x.example.org/gross2', { allowPdf: true }), (e) => e.code === 'SCRAPE_TOO_LARGE');
+  } finally { restore2(); }
+});
+
+test('scrapeUrl allowPdf: application/octet-stream mit PDF-Kopf wird gelesen, ohne abgelehnt', async () => {
+  const pdf = await makePdf('Oktett-Strom-Test.', '');
+  const restore = stubFetch(async () => binResponse(pdf, 'application/octet-stream'));
+  try {
+    const r = await scrapeUrl('https://x.example.org/download?id=1', { allowPdf: true });
+    assert.match(r.text, /Oktett-Strom-Test/);
+    assert.ok(r.pdf);
+  } finally { restore(); }
+  const restore2 = stubFetch(async () => binResponse(Buffer.from('PK\x03\x04zip'), 'application/octet-stream'));
+  try {
+    await assert.rejects(scrapeUrl('https://x.example.org/a.zip', { allowPdf: true }), (e) => e.code === 'SCRAPE_NOT_HTML');
+  } finally { restore2(); }
+  const restore3 = stubFetch(async () => binResponse(pdf, 'application/octet-stream'));
+  try {
+    await assert.rejects(scrapeUrl('https://x.example.org/a'), (e) => e.code === 'SCRAPE_NOT_HTML', 'ohne allowPdf unverändert');
+  } finally { restore3(); }
+});
+
+test('lib/pdf-extract.js ist Text: kein literales NUL-Byte (git sähe die Datei sonst als binär)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const buf = readFileSync(new URL('../../lib/pdf-extract.js', import.meta.url));
+  assert.equal(buf.indexOf(0), -1);
+});

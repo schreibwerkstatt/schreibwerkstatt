@@ -33,7 +33,10 @@ test('Befundliste: harter Befund im Nachrichtenverlauf ist gekennzeichnet und ni
 
   const rows = page.locator('.lektorat-split-findings label.finding');
   await expect(rows).toHaveCount(2);
-  const tag = (i) => rows.nth(i).locator('> .tag[data-tip]');
+  // Über den Text, nicht nur die Klasse: die Zeile trägt weitere Tags mit
+  // Tooltip (z.B. „mehrdeutig").
+  const label = await page.evaluate(() => window.__app.t('editor.findings.inMsgThread'));
+  const tag = (i) => rows.nth(i).locator('> .tag[data-tip]').filter({ hasText: label });
   await expect(tag(1)).toBeVisible();
   await expect(tag(1)).toHaveText(/\S/);
   await expect(tag(0)).toBeHidden();

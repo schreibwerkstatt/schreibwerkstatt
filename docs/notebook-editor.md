@@ -364,15 +364,17 @@ Zwei Wege, weil ein `<br>` sich nicht per CSS/Pseudo-Element dekorieren lässt (
 - **Absatzmarken (¶)** macht CSS allein: `:not(:has(> br))::after` auf `p, h1…h6, li, pre` ([page-view.css](../public/css/page/page-view.css)). Blöcke **mit** direktem `<br>` sind ausgenommen — das `::after` rutscht hinter dem `<br>` auf eine Phantom-Zweitzeile, verdoppelt die Blockhöhe und entkoppelt die Marke vom Caret-Slot.
 - **Diese Blöcke + alle Soft-Breaks** zeichnet das JS-Overlay ([notebook/format-marks.js](../public/js/editor/notebook/format-marks.js)) in eine read-only Schicht (`.page-editor-marks-layer`) über dem Editor: Positionen gemessen, eine Marke je Treffer. Die Schicht ist `pointer-events:none` und clippt (`overflow:hidden`).
 
-**Sichtbarkeits-Filter (Pflicht, Performance).** Der Layer clippt alles ausserhalb des Editor-Fensters — was ausserhalb liegt, ist unsichtbar. Ohne Filter lief bei JEDEM Tastendruck eine Vollvermessung des Abschnitts (Range-Messung je `<br>`, Marke je Treffer): bei einem Abschnitt mit vielen Soft-Breaks (Dialog, Gedicht) ~4 ms JS + ~1 ms Layout pro Taste — gemessen 30 fps statt 60 und 48–56 ms Tastendruck→Bild. Vermessen wird deshalb nur, was im Sichtfenster liegt; der Rest bleibt unangetastet.
+**Sichtbarkeits-Filter (Pflicht, Performance).** Vermessen wird nur, was das Sichtfenster des Layers schneidet (plus 24 px Rand); der Layer clippt alles andere ohnehin. Granularität ist der **Block**: Blöcke ausserhalb des Fensters werden nicht angefasst. Ein Block, der das Fenster schneidet, wird ganz vermessen (jedes seiner `<br>`); Marken ausserhalb des Fensters werden danach nur verworfen. Der Gewinn gilt damit für einen Abschnitt aus vielen Blöcken, nicht für einen einzelnen Block mit sehr vielen Umbrüchen.
 
 Das Sichtfenster hängt davon ab, **ob der Editor selbst scrollt**:
-- **Editor scrollt selbst** (Normalfall): sein eigenes Fenster ist das Sichtfenster, der Layer wandert **nicht** mit dem Text — der Editor-Scroll löst ohnehin ein Neuzeichnen aus.
-- **Editor scrollt nicht selbst** (Vollbild: die Karte scrollt, der Editor wächst über den Viewport hinaus): der Layer wandert **mit** dem Text, sichtbar ist nur, was im Viewport liegt — und weil der Layer mitwandert, muss beim Scrollen des Containers neu vermessen werden (`window`-Scroll-Listener in Capture-Phase, `_installFormatMarks`).
+- **Editor scrollt selbst** (Normalfall): sein eigenes Fenster ist das Sichtfenster, der Layer wandert **nicht** mit dem Text — der `scroll`-Listener am Editor zeichnet neu.
+- **Editor scrollt nicht selbst** (Vollbild: die Karte scrollt, der Editor wächst über den Viewport hinaus): das Fenster ist der Viewport-Ausschnitt (`window.innerHeight`), der Layer wandert **mit** dem Text. Neu gezeichnet wird beim Scrollen des Containers (`window`-Scroll-Listener in Capture-Phase) und bei Grössenänderung des Fensters (`resize` auf `window` und `visualViewport`) — die Editor-Box ändert sich dabei nicht, der ResizeObserver sieht es nicht.
 
-**Why:** Der Filter ist die einzige Stelle, an der die Tipp-Latenz skaliert. Wer sie entfernt, baut den Lag wieder ein; wer das Band auf den Viewport schneidet, ohne den Container-Scroll mitzunehmen, lässt Marken beim Scrollen fehlen.
+Alle Listener hängen am selben `AbortController` und laufen über `_scheduleFormatMarks` (rAF-gedrosselt).
 
-Gegated: [tests/e2e-app/notebook-marks-visible-band.spec.js](../tests/e2e-app/notebook-marks-visible-band.spec.js) (nur sichtbarer Bereich wird vermessen; Scrollen zeigt den neuen Bereich), [tests/e2e-app/notebook-marks-empty-paragraph.spec.js](../tests/e2e-app/notebook-marks-empty-paragraph.spec.js) (leerer Absatz im Gedicht: eine Zeile, ¶ auf der Slot-Zeile).
+**Why:** Die Vermessung läuft bei jedem Tastendruck; ohne Filter skaliert sie mit dem ganzen Abschnitt statt mit dem sichtbaren Ausschnitt. Wer das Band auf den Viewport schneidet, ohne Container-Scroll und Fenster-Resize mitzunehmen, lässt Marken im neu sichtbaren Bereich fehlen.
+
+Gegated: [tests/e2e-app/notebook-marks-visible-band.spec.js](../tests/e2e-app/notebook-marks-visible-band.spec.js) (nur sichtbarer Bereich wird vermessen; Editor-Scroll, Karten-Scroll im Vollbild und Fenster-Resize zeichnen ohne manuellen Aufruf neu — jeder der drei Listener ist mutationsgeprüft), [tests/e2e-app/notebook-marks-empty-paragraph.spec.js](../tests/e2e-app/notebook-marks-empty-paragraph.spec.js) (leerer Absatz im Gedicht: eine Zeile, ¶ auf der Slot-Zeile).
 
 ## Void-/Caret-lose Block-Elemente: Klick-Selektion + Löschen
 
@@ -509,7 +511,7 @@ Neuer Toolbar-Button / Slash-Item / Shortcut:
 
 | Datei | Deckt ab |
 |---|---|
-| [tests/e2e-app/notebook-marks-visible-band.spec.js](../tests/e2e-app/notebook-marks-visible-band.spec.js) | Steuerzeichen-Overlay: nur der sichtbare Bereich wird vermessen (Markenzahl << Abschnittsumfang, nichts weit ausserhalb des Fensters), der erste Pfeil sitzt auf dem ersten `<br>`, nach dem Scrollen im Editor zeigt der Layer den neuen Bereich. Braucht die echte App — die Band-Geometrie haengt an Scrollcontainer, `max-height` und Viewport |
+| [tests/e2e-app/notebook-marks-visible-band.spec.js](../tests/e2e-app/notebook-marks-visible-band.spec.js) | Steuerzeichen-Overlay: nur der sichtbare Bereich wird vermessen (Markenzahl << Abschnittsumfang, nichts weit ausserhalb des Fensters), der erste Pfeil sitzt auf dem ersten `<br>`; Editor-Scroll, Karten-Scroll im Vollbild und Fenster-Resize zeichnen über die Listener neu. Braucht die echte App — die Band-Geometrie haengt an Scrollcontainer, `max-height` und Viewport |
 | [tests/e2e-app/notebook-marks-empty-paragraph.spec.js](../tests/e2e-app/notebook-marks-empty-paragraph.spec.js) | Leerer Absatz im Gedicht bleibt einzeilig, ¶ auf der Slot-Zeile, Klick/Backspace verhalten sich wie erwartet |
 | [tests/unit/html-clean.test.js](../tests/unit/html-clean.test.js) | `stripLektoratMarks`, `normalizeEditorBlocks`, `normalizeForCompare` |
 | [tests/unit/notebook-autosave.test.mjs](../tests/unit/notebook-autosave.test.mjs) | Autosave-Timing (Idle/Max/Reset via mock.timers), `_fireAutosave`-Gating, Online-Retry-Gating, `_flushDraftSaveNow` |

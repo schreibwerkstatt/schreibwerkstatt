@@ -217,3 +217,119 @@ test('read_web_page HTML: seite/suche ohne Wirkung, keine PDF-Felder', async () 
   assert.equal(r.seiten, undefined);
   assert.equal(r.treffer, undefined);
 });
+
+// ── Review-Befunde: Hülle, Fortsetzung, Suche, Lesedeckel, Sperre ───────────
+
+test('read_web_page PDF: lange Hülle (Titel, URL) → Ergebnis passt in den Deckel, weiter_ab_seite passt zum Text', async () => {
+  const longUrl = `https://ex.com/files/article-${'x'.repeat(400)}.pdf`;
+  const pages = Array.from({ length: 40 }, (_, i) => `Seite ${i} Wort `.repeat(150));
+  urlScrape.scrapeUrl = async () => ({
+    title: `Hansische Geschichtsblätter ${'Band '.repeat(200)}`, text: '', finalUrl: `${longUrl}?token=abc`,
+    pdf: { pages: 40, truncated: false, pageTexts: pages },
+  });
+  stubSearch([[{ ...hit(1), url: longUrl }]]);
+  const ctx = mkCtx({ resultCapChars: 5000, pageResultCapChars: 12600 });
+  await executeResearchTool('web_search', { query: 'q' }, ctx);
+  const r = await executeResearchTool('read_web_page', { url: longUrl }, ctx);
+  assert.ok(JSON.stringify(r).length <= 12600, String(JSON.stringify(r).length));
+  assert.equal(r.truncated, undefined, 'keine nachgelagerte Kürzung');
+  assert.ok(r.titel.length <= 300);
+  const marks = [...r.text.matchAll(/\[Seite (\d+)\]/g)].map(m => Number(m[1]));
+  assert.equal(r.weiter_ab_seite, marks.at(-1), 'Fortsetzung = letzte angefangene Seite im gelieferten Text');
+  // Meta-Felder stehen vor dem Text (eine harte Kappung verliert sie nicht).
+  const keys = Object.keys(r);
+  assert.equal(keys.at(-1), 'text');
+  assert.ok(keys.indexOf('weiter_ab_seite') < keys.indexOf('text'));
+});
+
+test('read_web_page HTML: Hinweis nennt die tatsächlich gelieferte Länge', async () => {
+  urlScrape.scrapeUrl = async () => ({ title: 'T'.repeat(5000), text: 'a'.repeat(30000), finalUrl: 'https://ex.com/1' });
+  const ctx = await ctxWithHit();
+  ctx.pageResultCapChars = 6000;
+  const r = await executeResearchTool('read_web_page', { url: 'https://ex.com/1' }, ctx);
+  assert.ok(JSON.stringify(r).length <= 6000);
+  assert.equal(r.hinweis, `Nur die ersten ${r.text.length} von 30000 Zeichen.`);
+});
+
+test('read_web_page PDF: Einzelseite länger als der Deckel → Fortsetzung auf der nächsten Seite, nie auf der Stelle', async () => {
+  urlScrape.scrapeUrl = async () => pdfPage(['kurz', 'A'.repeat(5000), 'drei', 'ende']);
+  const ctx = await ctxWithHit();
+  ctx.resultCapChars = 4000;
+  ctx.pageResultCapChars = 4000;
+  const r = await executeResearchTool('read_web_page', { url: 'https://ex.com/1', seite: 2 }, ctx);
+  assert.equal(r.ab_seite, 2);
+  assert.equal(r.weiter_ab_seite, 3);
+  assert.match(r.hinweis, /Seite 2 ist zu lang/);
+  const last = await executeResearchTool('read_web_page', { url: 'https://ex.com/1', seite: 4 }, ctx);
+  assert.equal(last.weiter_ab_seite, undefined);
+  // Letzte Seite überlang: keine Fortsetzung, aber Hinweis.
+  urlScrape.scrapeUrl = async () => pdfPage(['A'.repeat(5000)]);
+  const ctx2 = await ctxWithHit();
+  ctx2.pageResultCapChars = 4000;
+  const one = await executeResearchTool('read_web_page', { url: 'https://ex.com/1' }, ctx2);
+  assert.equal(one.weiter_ab_seite, undefined);
+  assert.equal(one.doc_truncated, true);
+});
+
+test('read_web_page PDF: seite hinter dem Ende → Hinweis', async () => {
+  urlScrape.scrapeUrl = async () => pdfPage(['A', 'B']);
+  const ctx = await ctxWithHit();
+  const r = await executeResearchTool('read_web_page', { url: 'https://ex.com/1', seite: 9 }, ctx);
+  assert.equal(r.ab_seite, 2);
+  assert.match(r.hinweis, /Seite 9 gibt es nicht, das PDF hat 2 Seiten/);
+});
+
+test('read_web_page PDF: suche findet Begriffe über Zeilenumbruch und Silbentrennung', async () => {
+  const pages = ['Der Hansische\nGeschichtsverein tagte.', 'Der Geschichts-\nverein zu Lübeck.', 'Nord-\nSüd-Achse.'];
+  urlScrape.scrapeUrl = async () => pdfPage(pages);
+  const ctx = await ctxWithHit();
+  const a = await executeResearchTool('read_web_page', { url: 'https://ex.com/1', suche: 'Hansische  Geschichtsverein' }, ctx);
+  assert.deepEqual(a.treffer.map(t => t.seite), [1]);
+  assert.match(a.treffer[0].auszug, /Der Hansische Geschichtsverein tagte/);
+  const b = await executeResearchTool('read_web_page', { url: 'https://ex.com/1', suche: 'geschichtsverein zu' }, ctx);
+  assert.deepEqual(b.treffer.map(t => t.seite), [2]);
+  assert.match(b.treffer[0].auszug, /Geschichtsverein zu Lübeck/);
+  const c = await executeResearchTool('read_web_page', { url: 'https://ex.com/1', suche: 'Nord-Süd' }, ctx);
+  assert.deepEqual(c.treffer.map(t => t.seite), [3]);
+});
+
+test('read_web_page: Lesedeckel zählt Abrufe — Redirect nicht doppelt, Folgeaufrufe aufs gecachte PDF gar nicht', async () => {
+  let fetched = 0;
+  urlScrape.scrapeUrl = async (u) => {
+    fetched++;
+    if (u.includes('/1')) return { ...pdfPage(['A', 'B']), finalUrl: 'https://ex.com/1-neu' };
+    return { title: 'S', text: 'x', finalUrl: u };
+  };
+  stubSearch([Array.from({ length: 8 }, (_, i) => hit(i + 1))]);
+  const ctx = mkCtx();
+  await executeResearchTool('web_search', { query: 'q' }, ctx);
+  await executeResearchTool('read_web_page', { url: 'https://ex.com/1' }, ctx);
+  for (let i = 0; i < 4; i++) await executeResearchTool('read_web_page', { url: 'https://ex.com/1', seite: 2 }, ctx);
+  await executeResearchTool('read_web_page', { url: 'https://ex.com/1', suche: 'B' }, ctx);
+  // Das Redirect-Ziel liegt schon im Cache: lesbar, ohne neuen Abruf.
+  const viaFinal = await executeResearchTool('read_web_page', { url: 'https://ex.com/1-neu' }, ctx);
+  assert.ok(!viaFinal.error, viaFinal.error);
+  assert.equal(fetched, 1);
+  assert.equal(ctx.web.fetches, 1);
+  assert.deepEqual(ctx.web.pages.map(p => p.url), ['https://ex.com/1', 'https://ex.com/1-neu'], 'Belege: URL + Redirect-Ziel, je einmal');
+  for (const n of [2, 3, 4, 5, 6]) {
+    const r = await executeResearchTool('read_web_page', { url: `https://ex.com/${n}` }, ctx);
+    assert.ok(!r.error, `${n}: ${r.error}`);
+  }
+  const over = await executeResearchTool('read_web_page', { url: 'https://ex.com/7' }, ctx);
+  assert.equal(over.errorKey, 'chat.toolError.pageReadCap');
+  assert.match(over.error, /Dokumente/);
+  const again = await executeResearchTool('read_web_page', { url: 'https://ex.com/1', seite: 1 }, ctx);
+  assert.ok(!again.error, 'Weiterlesen im gecachten PDF geht über dem Deckel weiter');
+});
+
+test('web_search: eine gesperrte Engine neben Rohtreffern ist kein Ausfall — Eingrenzungs-Hinweis bleibt', async () => {
+  searxng.search = async () => ({ results: [], unresponsive: ['brave: too many requests'], rawCount: 5 });
+  const ctx = mkCtx({ allowedDomains: ['zeit.de'] });
+  const r = await executeResearchTool('web_search', { query: 'q' }, ctx);
+  assert.equal(r.error, undefined);
+  assert.match(r.hinweis, /eingegrenzt/);
+  assert.equal(searxng.searchBlocked({ results: [], unresponsive: ['x'], rawCount: 0 }), true);
+  assert.equal(searxng.searchBlocked({ results: [], unresponsive: [], rawCount: 0 }), false);
+  assert.equal(searxng.searchBlocked({ results: [hit(1)], unresponsive: ['x'], rawCount: 1 }), false);
+});

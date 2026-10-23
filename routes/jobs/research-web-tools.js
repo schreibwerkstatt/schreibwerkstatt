@@ -24,20 +24,33 @@
 // ctx.web wird hier angelegt: { searches, queries, results, pages }.
 
 const searxng = require('../../lib/websearch/searxng');
-const { cachedScrape, searchPdf, pdfReadText, withPdfPaging } = require('./research-pdf-paging');
+const { cachedScrape, isCached, searchPdf, pdfReadText, pdfPaging } = require('./research-pdf-paging');
 const { normalizeUrl } = require('../../lib/url-normalize');
 const { bookItemUrls } = require('../../db/research-items');
 const { resultCapFor } = require('./book-chat-tools/shared');
 
 const MAX_PAGE_READS = 6;
 const PAGE_TEXT_MAX = 12000;
-// Platz im Tool-Result neben dem Seitentext (Titel, URLs, Hinweise, JSON-Hülle).
+// Platz im Tool-Result neben dem Seitentext (Titel, URLs, Hinweise, JSON-Hülle) —
+// Richtwert für den Seitendeckel des Jobs; der Handler misst die Hülle selbst.
 const PAGE_OVERHEAD = 600;
+// Hüllenfelder aus fremder Hand (PDF-Info-Titel, og:title, URL) gekappt, damit
+// die Hülle den Platz für den Text nicht auffrisst.
+const TITLE_MAX = 300;
+const URL_MAX = 1000;
 const URL_RE = /https?:\/\/[^\s<>"'()\]]+/gi;
 
+// pages: gelesene Seiten samt Redirect-Ziel (zulässige Belege, lesbare URLs);
+// fetches: tatsächliche Abrufe — daran hängt der Lesedeckel MAX_PAGE_READS.
 function webState(ctx) {
-  if (!ctx.web) ctx.web = { searches: 0, queries: [], results: [], pages: [] };
+  if (!ctx.web) ctx.web = { searches: 0, queries: [], results: [], pages: [], fetches: 0 };
+  if (ctx.web.fetches == null) ctx.web.fetches = 0;
   return ctx.web;
+}
+
+function _clip(s, max) {
+  const t = String(s || '');
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 
 /** http(s)-URLs aus einem Freitext (User-Nachricht), Satzzeichen am Ende abgeschnitten. */
@@ -73,8 +86,10 @@ async function tool_web_search(input, ctx) {
   }
   // Keine Treffer, weil die Engines gesperrt sind (Rate-Limit, Captcha), ist ein
   // Ausfall, keine Fehlanzeige — sonst liest das Modell es als «dazu gibt es nichts».
-  if (!out.results.length && out.unresponsive.length) {
-    return { error: 'Suchdienst gerade gesperrt (keine Suchmaschine hat geantwortet). Sag das in der Antwort, statt «nichts gefunden».', errorKey: 'chat.toolError.serviceUnavailable' };
+  // Hatte SearXNG Rohtreffer, die erst die Domain-Eingrenzung verwarf, hat eine
+  // Engine geantwortet: dann gilt der Eingrenzungs-Hinweis unten.
+  if (searxng.searchBlocked(out)) {
+    return { error: `Keine Treffer, und Suchmaschinen sind gerade gesperrt (${out.unresponsive.slice(0, 3).join('; ')}) — ein Ausfall, keine Fehlanzeige. Sag das in der Antwort, statt «nichts gefunden».`, errorKey: 'chat.toolError.serviceUnavailable' };
   }
 
   const treffer = out.results.map((r) => {
@@ -140,8 +155,14 @@ async function tool_read_web_page(input, ctx) {
     };
   }
   const web = webState(ctx);
-  if (web.pages.length >= MAX_PAGE_READS) {
-    return { error: `Höchstens ${MAX_PAGE_READS} Seiten pro Antwort.`, errorKey: 'chat.toolError.pageReadCap', errorParams: { max: MAX_PAGE_READS } };
+  // Gezählt werden Abrufe: Suchen und Weiterlesen in einem schon geholten
+  // Dokument (seite/suche) holen nichts neu und zählen nicht.
+  const cached = isCached(url, web);
+  if (!cached && web.fetches >= MAX_PAGE_READS) {
+    return {
+      error: `Höchstens ${MAX_PAGE_READS} Dokumente (Webseiten oder PDFs) pro Antwort abrufbar. Weiterlesen oder Suchen in einem schon gelesenen PDF geht weiterhin.`,
+      errorKey: 'chat.toolError.pageReadCap', errorParams: { max: MAX_PAGE_READS },
+    };
   }
 
   let page;
@@ -151,9 +172,18 @@ async function tool_read_web_page(input, ctx) {
     ctx.logger?.info?.(`[research-chat] Seite nicht lesbar (${e.code || e.message}): ${url}`);
     return { url, error: `Seite nicht lesbar (${e.code || 'Fehler'}). Stütze dich auf das Snippet oder eine andere Quelle.`, errorKey: 'chat.toolError.serviceUnavailable' };
   }
+  if (!cached) web.fetches++;
   const finalUrl = page.finalUrl || url;
-  web.pages.push({ url, title: page.title || url });
-  if (normalizeUrl(finalUrl) !== normalizeUrl(url)) web.pages.push({ url: finalUrl, title: page.title || finalUrl });
+  const known = new Set(web.pages.map(p => normalizeUrl(p.url)));
+  if (!known.has(normalizeUrl(url))) web.pages.push({ url, title: page.title || url });
+  if (normalizeUrl(finalUrl) !== normalizeUrl(url) && !known.has(normalizeUrl(finalUrl))) {
+    web.pages.push({ url: finalUrl, title: page.title || finalUrl });
+  }
+  const head = {
+    url: _clip(url, URL_MAX),
+    ...(finalUrl !== url ? { final_url: _clip(finalUrl, URL_MAX) } : {}),
+    titel: _clip(page.title, TITLE_MAX),
+  };
 
   // PDF: Fundstellen statt Text (`suche`) bzw. Text ab einer Seite (`seite`) —
   // ./research-pdf-paging.js. Für HTML-Seiten ohne Wirkung.
@@ -161,7 +191,7 @@ async function tool_read_web_page(input, ctx) {
   if (page.pdf && suche) {
     const { treffer, gesamt } = searchPdf(page.pdf.pageTexts || [], suche);
     return {
-      url, titel: page.title || '', seiten: page.pdf.pages, suche, treffer, gesamt,
+      ...head, seiten: page.pdf.pages, suche, treffer, gesamt,
       hinweis: gesamt
         ? `Lies eine Fundstelle mit read_web_page und seite=<Seite>.${gesamt > treffer.length ? ` ${gesamt} Seiten mit Treffern, die ersten ${treffer.length} gezeigt.` : ''}`
         : 'Begriff im PDF nicht gefunden (andere Schreibweise? Gescanntes PDF ohne Textebene?).',
@@ -169,26 +199,44 @@ async function tool_read_web_page(input, ctx) {
   }
   const pdfView = pdfReadText(page, input.seite);
 
-  // Deckel: höchstens PAGE_TEXT_MAX, und nie mehr, als der Loop pro Tool-Result
-  // durchlässt — sonst schnitte der Loop still und die Kappung wäre unsichtbar.
+  // Deckel: höchstens PAGE_TEXT_MAX, und das ganze Ergebnis nie grösser, als der
+  // Loop pro Tool-Result durchlässt — sonst kürzte eine spätere Stufe still, und
+  // Kappung, Hinweis und weiter_ab_seite passten nicht mehr zum gelieferten Text.
   // Der Job setzt für Seiten einen eigenen, grösseren Loop-Deckel (pageResultCapChars,
   // research-chat.js#_pageResultCapChars); ohne ihn gilt der allgemeine.
   const loopCap = Number(ctx.pageResultCapChars) > 0 ? Number(ctx.pageResultCapChars) : resultCapFor(ctx);
-  const max = Math.max(1000, Math.min(PAGE_TEXT_MAX, loopCap - PAGE_OVERHEAD));
   const text = pdfView ? pdfView.text : String(page.text || '');
-  const shown = _sliceForJson(text, max);
-  const truncated = shown.length < text.length;
-  return withPdfPaging(pdfView, {
-    url,
-    ...(finalUrl !== url ? { final_url: finalUrl } : {}),
-    titel: page.title || '',
-    ...(page.published ? { datum: page.published } : {}),
-    text: shown,
-    doc_chars: text.length,
-    doc_truncated: truncated,
-    ...(truncated ? { hinweis: `Nur die ersten ${shown.length} von ${text.length} Zeichen.` } : {}),
-    ...(!text.trim() ? { hinweis: 'Kein lesbarer Text (evtl. per Skript geladen oder nur Bilder).' } : {}),
-  });
+  // Meta-Felder vor `text`: schneidet doch eine Stufe hart (Rundenbudget), bleiben
+  // Seitenzahl, Fortsetzung und Hinweis erhalten.
+  const build = (shown) => {
+    const truncated = shown.length < text.length;
+    const paging = pdfPaging(pdfView, shown.length);
+    const hinweis = !text.trim() ? 'Kein lesbarer Text (evtl. per Skript geladen oder nur Bilder).'
+      : paging ? paging.hinweis
+      : (truncated ? `Nur die ersten ${shown.length} von ${text.length} Zeichen.` : null);
+    const pagingMeta = { ...(paging || {}) };
+    delete pagingMeta.hinweis;
+    return {
+      ...head,
+      ...(page.published ? { datum: page.published } : {}),
+      ...pagingMeta,
+      doc_chars: text.length,
+      doc_truncated: truncated,
+      ...(hinweis ? { hinweis } : {}),
+      text: shown,
+    };
+  };
+  // Textlänge aus der tatsächlichen Hülle: messen, um den Überschuss kürzen,
+  // erneut messen (die Zahlen im Hinweis ändern sich mit der Länge).
+  let max = Math.min(PAGE_TEXT_MAX, loopCap - PAGE_OVERHEAD);
+  let out = build(_sliceForJson(text, Math.max(0, max)));
+  for (let i = 0; i < 4; i++) {
+    const over = JSON.stringify(out).length - loopCap;
+    if (over <= 0) break;
+    max = Math.max(0, JSON.stringify(out.text).length - 2 - over);
+    out = build(_sliceForJson(text, max));
+  }
+  return out;
 }
 
 const WEB_TOOLS = {

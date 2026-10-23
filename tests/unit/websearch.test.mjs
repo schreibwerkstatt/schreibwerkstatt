@@ -143,7 +143,7 @@ test('search: leere Query → kein Request', async () => {
   try {
     ctx.appSettings.set('websearch.searxng.url', 'http://searx.test');
     const { impl, calls } = stubFetch({ results: [] });
-    assert.deepEqual(await ctx.searxng.search('   ', { fetchImpl: impl }), { results: [], unresponsive: [] });
+    assert.deepEqual(await ctx.searxng.search('   ', { fetchImpl: impl }), { results: [], unresponsive: [], rawCount: 0 });
     assert.equal(calls.length, 0);
   } finally { ctx.teardown(); }
 });
@@ -212,4 +212,14 @@ test('webSearchStatus: Ollama — kein Tool-Calling, kein Suchweg', () => {
     ctx.appSettings.set('websearch.searxng.url', 'http://searx.test');
     assert.deepEqual(ctx.websearch.webSearchStatus(null), { provider: 'ollama', mode: null, reason: 'no_tools' });
   } finally { ctx.teardown(); }
+});
+
+test('parseSearxngResponse: rawCount zählt Rohtreffer vor dem Host-Nachfilter', () => {
+  const out = parseSearxngResponse({
+    results: [{ title: 'fremd', url: 'https://spiegel.de/c' }],
+    unresponsive_engines: [['brave', 'too many requests']],
+  }, { domains: ['zeit.de'] });
+  assert.equal(out.results.length, 0);
+  assert.equal(out.rawCount, 1);
+  assert.deepEqual(out.unresponsive, ['brave: too many requests']);
 });

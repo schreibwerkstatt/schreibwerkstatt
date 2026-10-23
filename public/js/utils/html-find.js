@@ -576,6 +576,8 @@ export function matchSpansMarker(html, needle) {
  *   'notFound'    — `needle` steht nicht (mehr) im HTML. Kein Schutzmechanismus,
  *                   sondern ein veralteter Textbezug: die Stelle wurde inzwischen
  *                   umgeschrieben oder gelöscht. Braucht keine Nachkontrolle.
+ *   'unchanged'   — nur mit `replacement`: Nadel und Ersatz in der Normalform
+ *                   gleich (Whitespace, Anführungszeichen). Keine Nachkontrolle.
  *   'spansLink'   — der Match umschliesst ein vollständiges `<a>…</a>`; ersetzen
  *                   würde das `href` verwerfen.
  *   'spansMarker' — der Match umschliesst eine vollständige Quellenangabe oder
@@ -589,8 +591,9 @@ export function matchSpansMarker(html, needle) {
  * aufgerufen liefert es 'boundary' (der Aufrufer fragt dort nicht).
  * Reihenfolge = Entscheidungsbaum von chat.js#applyChatVorschlag.
  */
-export function skipReason(html, needle) {
+export function skipReason(html, needle, replacement) {
   if (!findInHtml(html, needle)) return 'notFound';
+  if (replacement != null && normalizeMatchText(replacement) === normalizeMatchText(needle)) return 'unchanged';
   if (matchSpansLink(html, needle)) return 'spansLink';
   if (matchSpansMarker(html, needle)) return 'spansMarker';
   return 'boundary';

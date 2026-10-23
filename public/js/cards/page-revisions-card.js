@@ -10,13 +10,16 @@
 // und nach Quelle/Person filterbar. Filter und Gruppen wirken nur auf die
 // Anzeige — Vorgaengerin, Zeichen-Delta und ‹/› im Viewer rechnen immer gegen
 // die vollstaendige Liste, sonst waere «Stand davor» eines gefilterten Eintrags
-// der Stand eines anderen Users.
+// der Stand eines anderen Users. Darum bilden sich auch die Sitzungen auf der
+// vollstaendigen Liste und der Filter blendet danach ganze Sitzungen aus: so
+// ist das Sitzungs-Delta auch gefiltert nur die eigene Sitzung. Das Tages-Delta
+// ist die Summe der angezeigten Sitzungen (ohne Filter = der ganze Tag).
 
 import { fetchJson, numberFormat, dateTimeFormat, localIsoDate, localDayDiff } from '../utils.js';
 import { contentRepo } from '../repo/content.js';
 import { EVT } from '../events.js';
 import { memoMethods } from './card-memo.js';
-import { groupRevisions, groupByDay, summaryInfo } from '../page-revisions-groups.js';
+import { groupRevisions, groupByDay, filterGroups, revisionDeltas, summaryInfo } from '../page-revisions-groups.js';
 import { viewerState, viewerMethods } from './page-revisions/viewer.js';
 
 export function registerPageRevisionsCard() {
@@ -193,43 +196,57 @@ export function registerPageRevisionsCard() {
     },
 
     // ── Anzeige: Filter, Sitzungen, Zeilen ─────────────────────────────────
+    _matchesFilter(r) {
+      return (!this.filterSource || r.source === this.filterSource)
+        && (!this.filterUser || (r.user_email || '') === this.filterUser);
+    },
     _visibleRevisions() {
       return this._memo('visible', [this.revisions, this.filterSource, this.filterUser], () =>
-        this.revisions.filter(r =>
-          (!this.filterSource || r.source === this.filterSource)
-          && (!this.filterUser || (r.user_email || '') === this.filterUser)));
+        this.revisions.filter(r => this._matchesFilter(r)));
+    },
+
+    // Delta-Rechner gegen die vollstaendige Liste (page-revisions-groups.js).
+    _deltas() {
+      return this._memo('deltas', [this.revisions, this.older, this.hasMore], () =>
+        revisionDeltas(this.revisions, { older: this.older, hasMore: this.hasMore }));
     },
 
     isFiltered() { return !!(this.filterSource || this.filterUser); },
 
     // Tage fuer das Template, je Tag flache Zeilen: Kopfzeile jeder Sitzung,
     // bei aufgeklappter Sitzung die weiteren Saves dahinter. `size` > 1 nur an
-    // der Kopfzeile, `oldest` = aeltester Save der Sitzung (Zeitspanne, Delta).
+    // der Kopfzeile, `oldest` = aeltester Save der Sitzung (Zeitspanne).
+    // `delta`: zugeklappte Sitzung = ganze Sitzung, sonst der einzelne Save;
+    // am Tag die Summe seiner angezeigten Sitzungen.
     listDays() {
-      return this._memo('days', [this._visibleRevisions(), this.expanded], () => {
-        const groups = groupRevisions(this._visibleRevisions());
+      return this._memo('days', [this.revisions, this.older, this.hasMore, this.filterSource, this.filterUser, this.expanded], () => {
+        const d = this._deltas();
+        const groups = filterGroups(groupRevisions(this.revisions), r => this._matchesFilter(r));
         return groupByDay(groups, iso => (iso ? localIsoDate(new Date(iso)) : '')).map(day => {
           const rows = [];
           for (const g of day.groups) {
             const open = !!this.expanded[g.key];
+            const head = g.items[0];
             const oldest = g.items[g.items.length - 1];
-            rows.push({ k: `r${g.items[0].id}`, rev: g.items[0], oldest, size: g.items.length, group: g.key, open, child: false });
+            const span = g.items.length > 1 && !open;
+            rows.push({ k: `r${head.id}`, rev: head, oldest, size: g.items.length, group: g.key, open, child: false,
+              delta: span ? d.span(head, oldest) : d.span(head, head) });
             if (open) {
               for (const rev of g.items.slice(1)) {
-                rows.push({ k: `r${rev.id}`, rev, oldest: rev, size: 0, group: g.key, open, child: true });
+                rows.push({ k: `r${rev.id}`, rev, oldest: rev, size: 0, group: g.key, open, child: true, delta: d.span(rev, rev) });
               }
             }
           }
-          const first = day.groups[0].items[0];
-          const lastGroup = day.groups[day.groups.length - 1];
-          return { key: day.key, newest: first, oldest: lastGroup.items[lastGroup.items.length - 1], rows };
+          return { key: day.key, newest: day.groups[0].items[0], delta: d.sum(day.groups), rows };
         });
       });
     },
 
     pinnedRows() {
-      return this._memo('pinnedRows', [this.pinnedRevs], () =>
-        this.pinnedRevs.map(rev => ({ k: `p${rev.id}`, rev, oldest: rev, size: 0, group: null, open: false, child: false })));
+      return this._memo('pinnedRows', [this.pinnedRevs, this.revisions, this.older, this.hasMore], () => {
+        const d = this._deltas();
+        return this.pinnedRevs.map(rev => ({ k: `p${rev.id}`, rev, oldest: rev, size: 0, group: null, open: false, child: false, delta: d.span(rev, rev) }));
+      });
     },
 
     toggleGroup(key) {
@@ -329,25 +346,15 @@ export function registerPageRevisionsCard() {
     },
     hasPrevRevFor(rev) { return !!this._prevRevFor(rev); },
 
-    charsDelta(rev) {
-      const prev = this._prevRevFor(rev);
-      if (!rev || !prev) return null;
-      return Number(rev.chars || 0) - Number(prev.chars || 0);
-    },
-
-    // Zeichen-Veraenderung ueber eine Spanne: juengster Stand gegen die
-    // Vorgaengerin des aeltesten. Zugeklappte Sitzung = ganze Sitzung, sonst
-    // der einzelne Save; ein Tag = alle Saves dieses Tages.
-    spanDelta(newest, oldest) {
-      const prev = this._prevRevFor(oldest);
-      if (!newest || !prev) return null;
-      return Number(newest.chars || 0) - Number(prev.chars || 0);
-    },
-    rowDelta(row) {
-      return row.size > 1 && !row.open ? this.spanDelta(row.rev, row.oldest) : this.charsDelta(row.rev);
-    },
+    // Zeichen-Delta der Zeile/des Tages, in listDays/pinnedRows gerechnet.
+    // Die allererste Revision rechnet gegen den leeren Stand, eine noch nicht
+    // nachgeladene Vorgaengerin ergibt kein Delta (revisionDeltas).
+    rowDelta(row) { return row?.delta ?? null; },
     rowDeltaTip(row) {
       return window.__app.t(row.size > 1 && !row.open ? 'editor.revisions.deltaSessionTitle' : 'editor.revisions.deltaTitle');
+    },
+    dayDeltaTip() {
+      return window.__app.t(this.isFiltered() ? 'editor.revisions.deltaDayFilteredTitle' : 'editor.revisions.deltaDayTitle');
     },
     deltaClass(d) {
       return d > 0 ? 'revision-delta--pos' : (d < 0 ? 'revision-delta--neg' : 'revision-delta--zero');

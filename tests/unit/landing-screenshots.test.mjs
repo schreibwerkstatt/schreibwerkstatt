@@ -8,13 +8,15 @@
 // prüft stattdessen, dass jede Referenz eine Datei trifft.
 //
 // Erzeugt werden die Bilder mit `npm run shots:landing`
-// (scripts/landing-shots.js).
+// (scripts/landing-shots.js). Der Test liest ausserdem die echten Bildmasse:
+// das Skript muss exakt 920 × 614 liefern, wie das Markup behauptet.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const HTML = fs.readFileSync(path.join(ROOT, 'public', 'landing.html'), 'utf8');
@@ -46,12 +48,12 @@ test('Landing-Screenshots: jede Datei existiert und liegt unter /img/landing/', 
   assert.deepEqual(missing, [], `Fehlende Landing-Screenshots:\n${missing.join('\n')}`);
 });
 
-test('Landing-Screenshots: der Alt-Text ist der Feature-Name', () => {
-  // Der Alt-Text ist das Feature, nicht der Dateiname — sonst screenreadt die
-  // Kachel «schreiben.webp».
+test('Landing-Screenshots: die Bilder sind dekorativ (alt="")', () => {
+  // Das Bild steht neben dem Kacheltitel (h3), der schon sagt, was es zeigt.
+  // Ein Alt-Text mit demselben Titel liesse den Screenreader jeden Titel
+  // zweimal vorlesen; ein Dateiname («schreiben.webp») waere schlimmer.
   for (let i = 0; i < shots.length; i++) {
-    assert.equal(shots[i].alt, `{{feat${featNumbers[i]}Title}}`,
-      `Screenshot ${i + 1}: Alt-Text muss der Feature-Titel sein`);
+    assert.equal(shots[i].alt, '', `Screenshot ${i + 1} (${shots[i].src}): alt muss leer sein`);
   }
 });
 
@@ -84,4 +86,21 @@ test('Landing: das Prinzip «Die KI schreibt nicht für dich» steht in beiden L
   // Der Titel steht in der Seite — sonst ist der Text eine tote i18n-Zeile.
   assert.ok(HTML.includes('{{principleTitle}}'), 'landing.html rendert {{principleTitle}} nicht');
   assert.ok(HTML.includes('{{principleText}}'), 'landing.html rendert {{principleText}} nicht');
+});
+
+test('Landing-Screenshots: jede Datei ist tatsächlich 920 × 614 (wie im Markup)', async () => {
+  // Das Markup kündigt width/height an; eine schmalere Datei als angekündigt
+  // skaliert der Browser still hoch (unscharf) oder lässt sie im Rahmen
+  // schwimmen. Darum die Masse der Datei selbst lesen, nicht nur das Markup.
+  const wrong = [];
+  for (const s of shots) {
+    const tag = new RegExp(`<img class="public-feature-shot"[^>]*src="${s.src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*>`).exec(HTML)?.[0] || '';
+    const m = /width="(\d+)" height="(\d+)"/.exec(tag);
+    const file = path.join(ROOT, 'public', s.src.replace(/^\//, ''));
+    if (!m || !fs.existsSync(file)) continue; // decken die Tests oben ab
+    const { width, height } = await sharp(file).metadata();
+    if (width !== 920 || height !== 614) wrong.push(`${s.src}: Datei ${width}×${height} statt 920×614`);
+    else if (width !== Number(m[1]) || height !== Number(m[2])) wrong.push(`${s.src}: Markup ${m[1]}×${m[2]}, Datei ${width}×${height}`);
+  }
+  assert.deepEqual(wrong, [], `Landing-Screenshots mit falschen Massen (npm run shots:landing):\n${wrong.join('\n')}`);
 });

@@ -271,3 +271,32 @@ test('listLocalNumbering: einzelner Beleg oder Nummer über der Belegliste → n
   assert.equal(listLocalNumbering('A [1]. B [2]. C [5].', ANS_LOCAL), false);
   assert.equal(listLocalNumbering('A [1]. B [2].', []), false);
 });
+
+test('listLocalNumbering: Belege ohne doc_nums (Literatur, gelesene Seite) sind kein Beweis für lokale Nummern', () => {
+  const ans = [
+    { url: 'https://doi.org/10.1/x', title: 'Lit', doc_nums: [] },
+    { url: 'https://pub.org/final.pdf', title: 'PDF' },
+    { url: 'https://t1.ch/', title: 'T1', doc_nums: [1] },
+  ];
+  const text = 'A [1]. B [2]. C [3].';
+  assert.equal(listLocalNumbering(text, ans), false);
+  const html = renderResearchAnswer({ text, sources: WEB8, answerSources: ans, renderChatMarkdown: MK, escHtml: ID, t: T });
+  assert.match(html, /t2\.ch/, 'Trefferzahl [2] bleibt verlinkt');
+});
+
+test('listLocalNumbering: echter, nicht benannter Treffer zwischen benannten → keine Fehlwertung', () => {
+  // [1] und [3] sind benannte Treffer, [2] ein echter Treffer ohne Eintrag in quellen.
+  const ans = [
+    { url: 'https://t1.ch/', title: 'T1', doc_nums: [1] },
+    { url: 'https://t3.ch/', title: 'T3', doc_nums: [3] },
+    { url: 'https://t9.ch/', title: 'T9', doc_nums: [9] },
+  ];
+  assert.equal(listLocalNumbering('A [1]. B [2]. C [3].', ans), false);
+  // Gegenprobe: an den Listenpositionen stehen andere Treffer, die Nummern selbst
+  // sind keine benannten Treffer → lokale Nummerierung.
+  const local = [
+    { url: 'https://t5.ch/', title: 'T5', doc_nums: [5] },
+    { url: 'https://t6.ch/', title: 'T6', doc_nums: [6] },
+  ];
+  assert.equal(listLocalNumbering('A [1]. B [2].', local), true);
+});

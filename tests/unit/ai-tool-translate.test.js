@@ -63,12 +63,13 @@ test('messagesToOpenAI: assistant ohne tool_use trägt kein tool_calls-Feld', ()
   assert.deepEqual(out, [{ role: 'assistant', content: 'Nur Prosa.' }]);
 });
 
-test('messagesToOpenAI: Anthropic-Eigenheiten (thinking/server_tool_use) fallen weg', () => {
+test('messagesToOpenAI: thinking wird reasoning_content, server_tool_use fällt weg', () => {
   const out = messagesToOpenAI([{ role: 'assistant', content: [
-    { type: 'thinking', thinking: 'geheim', signature: 'sig' },
+    { type: 'thinking', thinking: 'überlegt' },
+    { type: 'server_tool_use', id: 'srv', name: 'web_search', input: { query: 'x' } },
     { type: 'text', text: 'sichtbar' },
   ] }]);
-  assert.deepEqual(out, [{ role: 'assistant', content: 'sichtbar' }]);
+  assert.deepEqual(out, [{ role: 'assistant', content: 'sichtbar', reasoning_content: 'überlegt' }]);
 });
 
 test('toolCallsToCanonical: Argument-JSON wird geparst, Text bleibt eigener Block', () => {

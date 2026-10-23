@@ -104,6 +104,84 @@ test('Lektorat-Cache: updated_at-Wechsel invalidiert Cache', async () => {
   assert.equal(ctx.mockAi.log.length, 2, 'updated_at-Wechsel → MISS, 2 Calls insgesamt');
 });
 
+async function runCheck(bookId, pageId) {
+  const jobId = ctx.shared.createJob('check', bookId, 'tester@test.dev', 'job.label.checkPage', null, pageId);
+  ctx.shared.enqueueJob(jobId, () => ctx.lektorat.runCheckJob(jobId, pageId, bookId, 'tester@test.dev'));
+  const job = await waitForJob(ctx.shared, jobId);
+  assert.equal(job.status, 'done', `expected done, got ${job.status}: ${job.error || ''}`);
+  return job;
+}
+
+// Die Buch-Angaben stehen im System-Prompt, nicht im User-Prompt. Ohne
+// System-Hash in der Signatur lieferte der Cache nach einer Änderung der
+// «Vorrangigen Angaben» das Ergebnis des alten Kontexts.
+test('Lektorat-Cache: geänderte Buch-Angaben (buch_kontext) invalidieren den Cache', async () => {
+  const BOOK_ID = 203;
+  const PAGE_ID = 2041;
+  ctx.dbSeed.setBook({
+    chapters: [{ id: 2040, book_id: BOOK_ID, name: 'Kap D' }],
+    pages: [{ id: PAGE_ID, book_id: BOOK_ID, chapter_id: 2040, name: 'S 1', updated_at: '2026-05-01T10:00:00Z' }],
+    pageBodies: { [PAGE_ID]: '<p>Anna ging in den wald.</p>' },
+  });
+  ctx.mockAi.on((e) => e.schemaKeys.includes('fehler') && e.schemaKeys.includes('szenen'), lektoratResponse(1));
+
+  ctx.dbSchema.saveBookSettings(BOOK_ID, 'de', 'CH', null, 'Mundart ist gewollt.');
+  await runCheck(BOOK_ID, PAGE_ID);
+  await runCheck(BOOK_ID, PAGE_ID);
+  assert.equal(ctx.mockAi.log.length, 1, 'gleiche Angaben → HIT');
+
+  ctx.dbSchema.saveBookSettings(BOOK_ID, 'de', 'CH', null, 'Hochdeutsch, keine Mundart.');
+  await runCheck(BOOK_ID, PAGE_ID);
+  assert.equal(ctx.mockAi.log.length, 2, 'andere Angaben → MISS');
+
+  ctx.dbSchema.saveBookSettings(BOOK_ID, 'de', 'DE', null, 'Hochdeutsch, keine Mundart.');
+  await runCheck(BOOK_ID, PAGE_ID);
+  assert.equal(ctx.mockAi.log.length, 3, 'andere Region (de-CH → de-DE) → MISS');
+});
+
+// History-Dedup: ein identischer Lauf legt keinen neuen Eintrag an — ausser aus
+// dem jüngsten wurde schon übernommen. Dann ist ein erneut gemeldetes `original`
+// ein weiteres Vorkommen und gehört an einen eigenen Eintrag (Heatmap-Zählregel).
+test('History-Dedup: nur ohne Übernahmen am jüngsten Eintrag', async () => {
+  const BOOK_ID = 204;
+  const PAGE_ID = 2051;
+  ctx.dbSeed.setBook({
+    chapters: [{ id: 2050, book_id: BOOK_ID, name: 'Kap E' }],
+    pages: [{ id: PAGE_ID, book_id: BOOK_ID, chapter_id: 2050, name: 'S 1', updated_at: '2026-05-01T10:00:00Z' }],
+    pageBodies: { [PAGE_ID]: '<p>Ein fehler hier und ein fehler dort.</p>' },
+  });
+  ctx.mockAi.on((e) => e.schemaKeys.includes('fehler') && e.schemaKeys.includes('szenen'), lektoratResponse(1));
+  const count = () => ctx.dbSchema.db.prepare('SELECT COUNT(*) AS n FROM page_checks WHERE page_id = ?').get(PAGE_ID).n;
+
+  const j1 = await runCheck(BOOK_ID, PAGE_ID);
+  const j2 = await runCheck(BOOK_ID, PAGE_ID);
+  assert.equal(count(), 1, 'identischer Lauf → kein neuer Eintrag');
+  assert.equal(j2.result.checkId, j1.result.checkId);
+
+  ctx.dbSchema.db.prepare('UPDATE page_checks SET saved = 1, saved_at = ?, applied_errors_json = ? WHERE id = ?')
+    .run(new Date().toISOString(), JSON.stringify([{ typ: 'rechtschreibung', original: 'fehler', korrektur: 'Fehler' }]), j1.result.checkId);
+  const j3 = await runCheck(BOOK_ID, PAGE_ID);
+  assert.equal(count(), 2, 'nach Übernahme → eigener Eintrag');
+  assert.notEqual(j3.result.checkId, j1.result.checkId);
+});
+
+// Ein mehrfach vorkommendes `original` ist beim Übernehmen nicht eindeutig.
+test('Lektorat: mehrdeutige Fundstelle trägt mehrdeutig=true, auch aus dem Cache', async () => {
+  const BOOK_ID = 205;
+  const PAGE_ID = 2061;
+  ctx.dbSeed.setBook({
+    chapters: [{ id: 2060, book_id: BOOK_ID, name: 'Kap F' }],
+    pages: [{ id: PAGE_ID, book_id: BOOK_ID, chapter_id: 2060, name: 'S 1', updated_at: '2026-05-01T10:00:00Z' }],
+    pageBodies: { [PAGE_ID]: '<p>Ein fehler hier und ein fehler dort.</p>' },
+  });
+  ctx.mockAi.on((e) => e.schemaKeys.includes('fehler') && e.schemaKeys.includes('szenen'), lektoratResponse(1));
+  const j1 = await runCheck(BOOK_ID, PAGE_ID);
+  assert.equal(j1.result.fehler[0].mehrdeutig, true);
+  const j2 = await runCheck(BOOK_ID, PAGE_ID);
+  assert.equal(ctx.mockAi.log.length, 1);
+  assert.equal(j2.result.fehler[0].mehrdeutig, true);
+});
+
 // ── Lektorat Batch ───────────────────────────────────────────────────────────
 
 test('Batch-Lektorat-Cache: zweiter Lauf nur für geänderte Seite', async () => {

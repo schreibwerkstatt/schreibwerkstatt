@@ -39,11 +39,14 @@ function _bracketDocNums(inner, sources) {
 
 // Hat das Modell seine Belege nach der eigenen Quellenliste durchnummeriert (1..k)
 // statt nach den Trefferzahlen? Dann zeigte [2] auf den zweiten Suchtreffer, nicht
-// auf die zweite genannte Quelle — ein Link auf eine fremde Seite. Erkennbar daran,
-// dass die Nummern bei 1 beginnen, nicht über die Belegliste hinausreichen und
-// mehrheitlich auf Treffer zeigen, die das Modell gar nicht als Beleg benannt hat.
-// Die Reihenfolge der Belegliste taugt nicht zur Rückübersetzung (das Modell hält
-// sie nicht zwingend ein) — die Marker fallen dann weg, die Liste bleibt.
+// auf die zweite genannte Quelle — ein Link auf eine fremde Seite. Gewertet wird
+// nur, was sich belegen lässt: die Nummern beginnen bei 1, reichen nicht über die
+// Belegliste hinaus, und mehrheitlich steht an der Listenposition n ein Web-Treffer
+// mit einer ANDEREN Trefferzahl, während n selbst kein benannter Treffer ist.
+// Einträge ohne doc_nums (Literatur, gelesene Seite) sagen über die Nummerierung
+// nichts aus und zählen nicht als Gegenbeweis. Die Reihenfolge der Belegliste
+// taugt nicht zur Rückübersetzung (das Modell hält sie nicht zwingend ein) — die
+// Marker fallen dann weg, die Liste bleibt.
 export function listLocalNumbering(text, answerSources) {
   const ans = Array.isArray(answerSources) ? answerSources.filter(a => a && a.url) : [];
   if (!ans.length) return false;
@@ -54,8 +57,13 @@ export function listLocalNumbering(text, answerSources) {
     for (const n of parseCiteDocNums(m[1])) if (n >= 1 && !nums.includes(n)) nums.push(n);
   }
   if (nums.length < 2 || !nums.includes(1) || Math.max(...nums) > ans.length) return false;
-  const loose = nums.filter(n => !ans.some(a => Array.isArray(a.doc_nums) && a.doc_nums.includes(n)));
-  return loose.length * 2 > nums.length;
+  const docNums = (a) => (Array.isArray(a?.doc_nums) ? a.doc_nums : []);
+  const named = (n) => ans.some(a => docNums(a).includes(n));
+  const mismatched = nums.filter((n) => {
+    const atPos = docNums(ans[n - 1]);
+    return atPos.length > 0 && !atPos.includes(n) && !named(n);
+  });
+  return mismatched.length * 2 > nums.length;
 }
 
 // Dokument-Indizes aus einem `index="4-4,4-5"`-String: erste Zahl pro Komma-Teil

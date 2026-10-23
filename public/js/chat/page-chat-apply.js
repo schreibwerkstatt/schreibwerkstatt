@@ -27,6 +27,7 @@ const REASON_KEYS = {
   spansLink: 'chat.spansLink',
   spansMarker: 'chat.spansMarker',
   boundary: 'chat.crossesBlockBoundary',
+  unchanged: 'chat.replacementUnchanged',
   focus: 'chat.applyFocusBlocked',
   notEditing: 'chat.pageNotLoaded',
   busy: 'chat.applyBusy',
@@ -53,7 +54,7 @@ export function replacementBlocker(html, from, to) {
   const n = countInHtml(html, from);
   if (n === 0) return 'notFound';
   if (n > 1) return 'ambiguous';
-  if (replaceInHtml(html, from, to) === html) return skipReason(html, from);
+  if (replaceInHtml(html, from, to) === html) return skipReason(html, from, to);
   return null;
 }
 

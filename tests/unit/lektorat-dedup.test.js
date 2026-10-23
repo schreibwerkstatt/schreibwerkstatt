@@ -273,3 +273,11 @@ test('_runSig: Stil-Obergrenze und Split-Konfiguration aendern die Signatur', ()
   assert.deepEqual(_runSig(false, 8000), { sc: 5, sp: 0 });
   assert.deepEqual(_runSig(false, 40000), { sc: 20, sp: 0 });
 });
+
+test('validateLektoratFehler de-CH: ss→ß fällt weg, ß→ss bleibt als echte Korrektur', () => {
+  const out = validateLektoratFehler([
+    { typ: 'rechtschreibung', original: 'Strasse', korrektur: 'Straße', erklaerung: 'x' },
+    { typ: 'rechtschreibung', original: 'Straße', korrektur: 'Strasse', erklaerung: 'x' },
+  ], 'de-CH', NARRATIV);
+  assert.deepEqual(out.map(f => [f.original, f.korrektur]), [['Straße', 'Strasse']]);
+});

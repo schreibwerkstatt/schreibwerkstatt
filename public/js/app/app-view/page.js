@@ -64,10 +64,16 @@ export const pageMethods = {
     // (pageLoadError) — inkl. einmaligem stillem Auto-Retry mit Cache-Bypass.
     this.analysisOut = '';
     await this._loadCurrentPageContent(p);
+    // Während der Awaits eine andere Seite geöffnet: der Rest gehört deren
+    // eigenem selectPage. Ein hier gestarteter Lektorat-Poll läse seine Seite aus
+    // `currentPage` und hinge die Befunde von `p` an die neue.
+    const stillHere = () => this.currentPage?.id === p.id;
+    if (!stillHere()) return;
 
     // Prüfen ob ein Lektorat-Check-Job für diese Seite läuft (Server-seitig oder aus früherer Session)
     try {
       const { jobId: activeJobId } = await fetchJson(`/jobs/active?type=check&page_id=${p.id}`);
+      if (!stillHere()) return;
       if (activeJobId) {
         lsSet('lektorat_check_job_' + p.id, activeJobId);
         this.checkLoading = true;
@@ -81,6 +87,7 @@ export const pageMethods = {
       }
     } catch (e) { console.error('[selectPage active-job check]', e); }
 
+    if (!stillHere()) return;
     // Figurenkontext für dieses Kapitel laden (parallel zur History)
     this.loadChapterFigures();
     await this.loadPageHistory(p.id);

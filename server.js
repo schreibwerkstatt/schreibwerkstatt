@@ -332,13 +332,17 @@ const PUBLIC_ASSETS = new Set([
 // Das entbindet den Reader NICHT von seiner Import-Disziplin — er darf weiterhin
 // nur aus /js/share-reader/ importieren (Kopplung + Bundle-Groesse), gegated
 // durch block-sel-consolidation/cite-guard-drift/mermaid-drift.
-// /img/ steht offen, weil die oeffentliche Landing-Page (routes/public.js)
-// Produkt-Screenshots zeigt — und sie wird ohne Session ausgeliefert. Ohne
-// die Freigabe liefe der Request in den Auth-Guard und kaeme als HTML
-// (`/login?returnTo=…`) zurueck; der Browser verweigert dann das Bild wegen
-// falschem MIME-Type. In public/img/ liegen ausschliesslich die Landing-
-// Screenshots (public/img/landing/) — keine Buchinhalte, keine Nutzerdaten.
-const PUBLIC_ASSET_PREFIXES = ['/css/', '/fonts/', '/js/', '/img/'];
+// /img/landing/ steht offen, weil die oeffentliche Landing-Page
+// (routes/public.js) dort ihre Produkt-Screenshots holt — und sie wird ohne
+// Session ausgeliefert. Ohne die Freigabe liefe der Request in den Auth-Guard
+// und kaeme als HTML (`/login?returnTo=…`) zurueck; der Browser verweigert dann
+// das Bild wegen falschem MIME-Type. Nur dieser Unterordner, nicht /img/: was
+// spaeter sonst unter public/img/ landet, bleibt hinter dem Auth-Guard.
+//
+// Geprueft wird der kanonische Pfad (lib/public-asset-path.js), nicht der rohe:
+// `/img/landing/../../index.html` oder `/css/%2e%2e/…` faellt nicht unter ein
+// Praefix, sondern in den Auth-Guard.
+const PUBLIC_ASSET_PREFIXES = ['/css/', '/fonts/', '/js/', '/img/landing/'];
 // Statische Assets: `no-cache` für alles ausser Bildern. ETag bleibt aktiv —
 // Browser revalidiert bei jedem Reload mit If-None-Match (304 wenn unverändert,
 // nur Header-Roundtrip, keine Bytes). Bilder/Icons halten 7 Tage, weil sie sich
@@ -371,15 +375,11 @@ const staticServe = express.static(path.join(__dirname, 'public'), {
     }
   },
 });
-app.use((req, res, next) => {
-  if (req.method === 'GET' && (
-    PUBLIC_ASSETS.has(req.path) ||
-    PUBLIC_ASSET_PREFIXES.some(p => req.path.startsWith(p))
-  )) {
-    return staticServe(req, res, next);
-  }
-  next();
-});
+app.use(require('./lib/public-asset-path').makePublicAssetGate({
+  exact: PUBLIC_ASSETS,
+  prefixes: PUBLIC_ASSET_PREFIXES,
+  serve: staticServe,
+}));
 
 // ── Prometheus-Endpoint (vor Auth-Guard) ─────────────────────────────────────
 // /metrics + /metrics.json nutzen Bearer-Token-Auth (lib/bearer-auth, Scope

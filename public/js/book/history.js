@@ -9,31 +9,41 @@ import { renderLektoratAnalysisHtml } from '../editor/lektorat-analysis.js';
 export const historyMethods = {
   async loadPageHistory(pageId) {
     try {
-      this.pageHistory = await fetchJson('/history/page/' + pageId);
+      const rows = await fetchJson('/history/page/' + pageId);
+      // Späte Antwort einer inzwischen verlassenen Seite: nicht in deren Verlauf schreiben.
+      if (this.currentPage && String(this.currentPage.id) !== String(pageId)) return;
+      this.pageHistory = rows;
     } catch (e) {
       console.error('[loadPageHistory]', e);
     }
   },
 
+  // Während «Korrekturen speichern» läuft, gehört der Lauf dem Speichervorgang:
+  // kein Umschalten, Löschen oder Laden eines anderen Eintrags dazwischen.
   async toggleHistoryEntrySaved(entry) {
+    if (this.saveApplying != null) return;
     const newSaved = !entry.saved;
     try {
-      await fetch('/history/check/' + entry.id + '/saved', {
+      const r = await fetch('/history/check/' + entry.id + '/saved', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ saved: newSaved }),
       });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       entry.saved = newSaved;
       entry.saved_at = newSaved ? new Date().toISOString() : null;
       this.refreshPageAges();
     } catch (e) {
       console.error('[toggleHistoryEntrySaved]', e);
+      this.setStatus(this.t('editor.history.updateFailed'), false, 6000);
     }
   },
 
   async deletePageCheck(id) {
+    if (this.saveApplying != null) return;
     try {
-      await fetch('/history/check/' + id, { method: 'DELETE' });
+      const r = await fetch('/history/check/' + id, { method: 'DELETE' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       this.pageHistory = this.pageHistory.filter(e => e.id !== id);
       this.refreshPageAges();
       // Aktiven Eintrag gelöscht → Vorschau zurücksetzen
@@ -53,6 +63,7 @@ export const historyMethods = {
       }
     } catch (e) {
       console.error('[deletePageCheck]', e);
+      this.setStatus(this.t('editor.history.deleteFailed'), false, 6000);
     }
   },
 
@@ -67,6 +78,7 @@ export const historyMethods = {
 
   /** History-Eintrag in die Vorschau laden (Toggle: erneuter Klick setzt zurück) */
   async loadHistoryEntry(entry) {
+    if (this.saveApplying != null) return;
     // Toggle: Klick auf aktiven Eintrag → Vorschau zurücksetzen
     if (this.activeHistoryEntryId === entry.id) {
       this.activeHistoryEntryId = null;
@@ -85,11 +97,17 @@ export const historyMethods = {
     }
 
     if (!this.currentPage) return;
+    // Seite pinnen: wechselt der User während der Awaits, gehört der Eintrag
+    // nicht zur dann offenen Seite — Befunde, Check-ID und Analyse blieben sonst
+    // an der falschen Seite hängen (und ein Speichern schriebe dorthin).
+    const pageId = this.currentPage.id;
+    const samePage = () => this.currentPage?.id === pageId;
 
     // Aktuelles Seiten-HTML laden falls nötig
     if (!this.originalHtml) {
       try {
-        const pd = await contentRepo.loadPage(this.currentPage.id);
+        const pd = await contentRepo.loadPage(pageId);
+        if (!samePage()) return;
         this.originalHtml = pd.html || '';
       } catch (e) {
         this.setStatus(this.t('chat.pageLoadFailed'));
@@ -108,17 +126,21 @@ export const historyMethods = {
         entry.szenen_json = details.szenen_json || null;
       } catch (e) {
         console.error('[loadHistoryEntry details]', e);
-        this.setStatus(this.t('chat.pageLoadFailed'));
+        if (samePage()) this.setStatus(this.t('chat.pageLoadFailed'));
         return;
       }
     }
+    if (!samePage()) return;
 
     const findings = sortByPosition(this.originalHtml, entry.errors_json || []);
     this.lektoratFindings = findings;
 
-    // Vereinigung aller übernommenen Originals (Fehler + Stil) für Per-Vorschlag-Status
+    // Übernommen ist, was im Text gelandet ist (`applied_errors_json`). Die
+    // Auswahl (`selected_errors_json`) enthält auch Übersprungenes — als
+    // „übernommen" gesperrt liesse es sich nicht erneut versuchen. Nur alte
+    // Einträge ohne Annahmen-Liste fallen auf die Auswahl zurück.
     const appliedEntries = entry.saved
-      ? [...(entry.applied_errors_json || []), ...(entry.selected_errors_json || [])]
+      ? (entry.applied_errors_json || entry.selected_errors_json || [])
       : [];
     const appliedUnion = appliedEntries.map(e => e.original);
     this.appliedOriginals = [...new Set(appliedUnion)];

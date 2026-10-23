@@ -53,8 +53,9 @@ async function _webSearch(input, st, opts) {
   for (const r of out.results) opts.evidence.add(r.url);
   // Keine Treffer, weil die Engines gesperrt sind (Rate-Limit, Captcha), ist ein
   // Ausfall, keine Fehlanzeige — sonst liest das Modell es als «dazu gibt es nichts».
-  if (!out.results.length && out.unresponsive.length) {
-    return { error: 'Suchdienst gerade gesperrt (keine Engine hat geantwortet). Ohne Beleg ist das Urteil «unklar».' };
+  // Kriterium: lib/websearch/searxng#searchBlocked.
+  if (searxng.searchBlocked(out)) {
+    return { error: 'Keine Treffer, und Suchmaschinen sind gerade gesperrt — ein Ausfall, keine Fehlanzeige. Ohne Beleg ist das Urteil «unklar».' };
   }
   return {
     query,

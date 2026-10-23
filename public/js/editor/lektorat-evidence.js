@@ -163,6 +163,15 @@ export const lektoratEvidenceMethods = {
     if (this.evidenceOpenIdx !== idx || !claim || f.original !== claim
         || !this.evidenceHits.some(h => h.source_id === hit.source_id)) return;
 
+    // Seite pinnen wie `_loadApplyAndSave`: Ziel und Name des PUT stehen beim
+    // Start fest, und nach einem Seitenwechsel fasst der Rückweg den View-State
+    // der neuen Seite nicht an (sonst landete das HTML dieser Seite in deren
+    // Leseansicht und ihre Textstatistik auf der fremden Seite).
+    const pageId = app.currentPage?.id;
+    const pageName = app.currentPage?.name;
+    if (pageId == null) return;
+    const samePage = () => app.currentPage?.id === pageId;
+
     this.evidenceBusyId = hit.source_id;
     this.evidenceError = '';
     try {
@@ -173,7 +182,7 @@ export const lektoratEvidenceMethods = {
         window.dispatchEvent(new CustomEvent(EVT.SOURCES_CHANGED, { detail: { bookId } }));
       }
 
-      const page = await contentRepo.loadPage(app.currentPage.id, { fresh: true });
+      const page = await contentRepo.loadPage(pageId, { fresh: true });
       const baseHtml = stripFocusArtefacts(page.html || '');
 
       // Mehrdeutigkeit ist ein Abbruch, keine Wahl: `insertAfterInHtml` greift
@@ -204,14 +213,17 @@ export const lektoratEvidenceMethods = {
       const nextHtml = insertAfterInHtml(baseHtml, claim, NBSP + chip);
       if (nextHtml === baseHtml) { this.evidenceError = app.t('evidence.claimGone'); return; }
 
-      const saved = await savePage(app.currentPage.id, {
+      const saved = await savePage(pageId, {
         html: nextHtml,
-        pageName: app.currentPage.name,
+        pageName,
         // Der Beleg ist eine direkte Folge des Lektorats — dieselbe Revisions-
         // Quelle wie der Korrektur-Apply, kein neuer Wert im Whitelist-Spiegel.
         source: 'lektorat-apply',
         expectedUpdatedAt: page.updated_at || null,
       });
+      app.markPageChecked?.(pageId);
+      app._syncPageStatsAfterSave?.({ id: pageId, updated_at: saved?.updated_at || null }, nextHtml);
+      if (!samePage()) { app.setStatus?.(app.t('evidence.inserted'), false, 5000); return; }
       if (saved?.updated_at) app.currentPage.updated_at = saved.updated_at;
 
       // Panel-Zustand nachziehen: Vorschau aus dem neuen Stand, Befund als
@@ -221,8 +233,6 @@ export const lektoratEvidenceMethods = {
       app.originalHtml = nextHtml;
       if (app.selectedFindings) app.selectedFindings[idx] = false;
       app._recomputeCorrectedHtml?.();
-      app.markPageChecked?.(app.currentPage.id);
-      app._syncPageStatsAfterSave?.(app.currentPage, nextHtml);
       this.evidenceApplied = [...this.evidenceApplied, claim];
       // Panel inzwischen auf einen anderen Befund gewechselt → dessen Panel
       // offen lassen.

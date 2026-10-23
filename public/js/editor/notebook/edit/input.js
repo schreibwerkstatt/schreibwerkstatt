@@ -27,7 +27,7 @@ export const inputMethods = {
     if (n === 0) return { ok: false, reason: 'notFound' };
     if (n > 1) return { ok: false, reason: 'ambiguous' };
     const next = replaceInHtml(html, original, replacement);
-    if (next === html) return { ok: false, reason: skipReason(html, original) };
+    if (next === html) return { ok: false, reason: skipReason(html, original, replacement) };
     // Vorher-Stand als eigenen Undo-Schritt einfrieren (offene Tipp-Serie
     // inklusive), sonst fasste der Debounce Tippen + Übernahme zusammen.
     this._historyPushNow?.();

@@ -60,7 +60,7 @@ async function runCheckJob(jobId, pageId, bookId, userEmail) {
     if (r.historyDedup) logger.info(`History-Dedup: identische Findings wie page_check #${r.checkId}, kein neuer Eintrag.`);
     // Vergleich mit dem Vorlauf ist Zugabe: scheitert er, bleibt das Ergebnis gültig.
     let progress = null;
-    try { progress = progressSincePrevious(pageId, userEmail, r); }
+    try { progress = await progressSincePrevious(pageId, userEmail, r); }
     catch (e) { logger.warn(`Fortschritts-Vergleich fehlgeschlagen (page=${pageId}): ${e.message}`); }
 
     completeJob(jobId, {

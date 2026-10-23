@@ -61,7 +61,9 @@ Alle KI-Konfig liegt in der `app_settings`-Tabelle. Admin-PUT via `/admin/settin
 | `ai.openai-compat.temperature` | 0.7 | `OPENAI_COMPAT_TEMPERATURE` | Default `0.1` für Lock-Logik |
 | `ai.openai-compat.context_window` | 32 000 | – | |
 | `ai.openai-compat.max_tokens_out` | 16 000 | – | |
-| `ai.openai-compat.think` | `false` | – | Reasoning an/aus; aus sendet `chat_template_kwargs.enable_thinking=false`, an sendet nichts (Modell-Default; nötig für echtes OpenAI) |
+| `ai.openai-compat.think` | `false` | – | Reasoning an/aus; aus sendet `chat_template_kwargs.enable_thinking=false`, an sendet nichts (Modell-Default; nötig für echtes OpenAI) und schaltet aufs Thinking-Sampling (siehe „Reasoning/Thinking") |
+| `ai.openai-compat.think_temperature` | 0.6 | – | Temperatur bei `think=true`; ersetzt dann `temperature` und `ai.chat_temperature` |
+| `ai.openai-compat.think_budget` | 8192 | – | Denk-Reserve: bei `think=true` auf jeden Call mit eigenem Output-Deckel addiert (gedeckelt durch `max_tokens_out`) |
 | `ai.openai-compat.cloud` | `false` | – | Provider-Klasse (siehe unten): `true` = gehostetes Frontier-Modell (z.B. Kimi/Moonshot, OpenAI) → volle Cloud-Prompts, Lektorat-Split, parallele Calls. Pro Profil überschreibbar |
 | `ai.openai-compat.tools` | `true` | – | Function-Calling verfügbar? `false` = agentischer Buch-Chat läuft für diesen Endpunkt klassisch (siehe „Tool-Use") |
 | `ai.openai-compat.max_parallel` | 1 | – | Max. gleichzeitige Calls je Endpunkt; eigener Bucket pro KI-Profil |
@@ -119,10 +121,19 @@ Ollama läuft über einen globalen **Mutex** (`withOllamaLock`) — VRAM-Schutz,
 
 ### Reasoning/„Thinking" (nur lokale Provider)
 
-Viele lokale Modelle (Qwen3, DeepSeek-R1-Distill, Magistral …) denken per Default und verbrennen Output-Token für eine `<think>`-Spur, die der App nichts bringt (wir parsen nur `message.content` bzw. `delta.content`, die Spur landet in `thinking`/`reasoning_content` und wird verworfen). `ai.ollama.think` / `ai.openai-compat.think` (Default `false`) schalten das pro Provider ab; per-Call gelesen → Admin-Änderung greift ohne Server-Restart.
+Viele lokale Modelle (Qwen3, DeepSeek-R1-Distill, Magistral …) denken per Default. Geparst wird nur `message.content` bzw. `delta.content`; die Spur kommt getrennt als `thinking`/`reasoning_content` und gelangt nie in den JSON-Parser. `ai.ollama.think` / `ai.openai-compat.think` (Default `false`) schalten das Denken pro Provider ab; per-Call gelesen → Admin-Änderung greift ohne Server-Restart. Ein Profil kann `think` überschreiben — bei LiteLLM-Aliassen mit eigenem Denk-Modell (z.B. `qwen3.8-27b-think`) gehört auch das Modell dazu, sonst schaltet `enable_thinking=false` das Denken des Alias stumm ab.
 
 - **Ollama:** top-level `think: <bool>` im `/api/chat`-Body (nicht in `options` — dort wird es ignoriert).
 - **OpenAI-kompatibel:** bei `false` reicht der Body `chat_template_kwargs: { enable_thinking: false }` an die Jinja-Chat-Vorlage durch (vLLM/SGLang/llama.cpp; Server ohne dieses Kwarg ignorieren es folgenlos). Bei `true` wird das Feld **nicht** gesendet, damit echtes OpenAI (lehnt unbekannte Felder ab) nutzbar bleibt.
+
+Mit `ai.openai-compat.think = true` stellt [lib/ai/openai-compat.js](../lib/ai/openai-compat.js) vier Dinge um (SSoT der Werte: `openaiCompatSampling` / `openaiCompatThinkBudget` in [lib/ai/config.js](../lib/ai/config.js)):
+
+- **Sampling:** `think_temperature` (0.6) + `top_p` 0.95, **kein** `repeat_penalty`. Denkende Modelle laufen bei niedriger Temperatur in Endlosschleifen der Denkspur — und der Sicherheitsabbruch zählt Reasoning bewusst nicht mit, eine solche Schleife liefe also bis `max_tokens`. Die Repeat-Penalty bestraft ausserdem wörtliche Wiederholung, die Lektorat-Befunde brauchen (`korrektur` wiederholt `original` fast ganz). Ohne Thinking bleiben Temperatur und Penalty wie konfiguriert, weil die Penalty dort die Schleifen der grammar-constrained Extraktion bricht. Nur OpenAI-Standardfelder: `top_k` lehnte echtes OpenAI mit 400 ab.
+- **Denk-Reserve:** Reasoning zählt in `max_tokens`. Jobs mit eigenem kleinem Deckel (Chat-Titel 120, Quellen-PDF 1000, Synonyme 2000, Verify/Judge 4000 …) verlören die Antwort sonst an die Denkspur und endeten als `truncated`. Darum `min(Deckel + think_budget, max_tokens_out)`; ungedeckelte Calls bleiben beim Provider-Cap.
+- **Fortschritt:** das erste Reasoning-Delta meldet `onProgress({ thinking: true })` — derselbe Weg wie Claudes Thinking-Block, `aiCall` rückt den Balken in der Denkphase zeitbasiert vor. Im Werkzeug-Modus geht zum Ende der Denkphase die letzte Zeile als `note` an den agentischen Loop (Statuszeile `job.phase.agentNote`).
+- **Denkspur im Werkzeug-Loop:** sie wird kanonischer `thinking`-Block in `rawContentBlocks`, und [lib/ai/tool-translate.js](../lib/ai/tool-translate.js) gibt sie in der Folgerunde als `reasoning_content` am assistant-Turn zurück. Die Qwen3-Vorlage rendert sie innerhalb des laufenden Turns; das Modell baut über die Werkzeug-Schritte auf seiner Überlegung auf, statt sie nach jedem Ergebnis neu herzuleiten.
+
+Gegated: [tests/unit/ai-openai-compat-think.test.mjs](../tests/unit/ai-openai-compat-think.test.mjs).
 
 ## Token-Budgets
 

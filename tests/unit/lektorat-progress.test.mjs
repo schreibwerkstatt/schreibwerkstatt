@@ -62,3 +62,14 @@ test('Befunde ohne original: aktuell neu, im Vorlauf übergangen; korrupte Zeile
   assert.equal(q.prevCount, 0);
   assert.equal(q.added, 1);
 });
+
+test('Normalform der Fundstellen-Suche: andere Anführungszeichen sind nicht „behoben"', async () => {
+  const { normalizeMatchText } = await import('../../public/js/utils/text-match.js');
+  // Modell zitiert mit geraden Anführungszeichen, im Text stehen «».
+  const prev = prevRow([F('stil', '"Ja", sagte er')]);
+  const text = '«Ja», sagte er leise.';
+  assert.equal(lektoratProgress(prev, [], text).fixed, 1, 'ohne Faltung: fälschlich behoben');
+  const p = lektoratProgress(prev, [], text, normalizeMatchText);
+  assert.equal(p.fixed, 0);
+  assert.equal(p.notReported, 1);
+});
