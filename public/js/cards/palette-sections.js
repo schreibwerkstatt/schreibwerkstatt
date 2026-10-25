@@ -11,7 +11,7 @@ import {
   FEATURES, ACTIONS, FEATURE_GROUPS, GROUP_LABEL_KEY,
   DEFAULT_RECENT_KEYS,
   featureByKey, isFeatureAvailable, unavailabilityReasonKey,
-  featuresVisibleFor, actionsVisibleFor,
+  featuresVisibleFor, actionsVisibleFor, configSatisfied,
   hiddenForBuchtyp, matchesRequiredBuchtyp,
 } from './feature-registry.js';
 import { fuzzyMatch, hasWordPrefix } from './palette-fuzzy.js';
@@ -30,18 +30,19 @@ const SECONDARY_PENALTY = 4;
 // Karten, die im aktuellen Kontext überhaupt erscheinen. Mit Buch-Rolle filtert
 // `featuresVisibleFor` auch nach Rolle; ohne Buch (Home-Screen) bleiben Karten
 // mit `requiresBook` stehen und werden als deaktiviert gezeigt.
+// Karten mit `requiresConfig` fallen ohne den Dienst ganz weg, wie Aktionen.
 export function visiblePaletteFeatures(ctx) {
-  if (ctx.bookRole) {
-    return featuresVisibleFor(FEATURES, ctx.bookRole, ctx.buchtyp, ctx.cloudModelEffective);
-  }
-  return FEATURES.filter(f => matchesRequiredBuchtyp(f, ctx.buchtyp)
-    && !hiddenForBuchtyp(f, ctx.buchtyp)
-    && (!f.requiresCloudModel || ctx.cloudModelEffective));
+  const features = ctx.bookRole
+    ? featuresVisibleFor(FEATURES, ctx.bookRole, ctx.buchtyp, ctx.cloudModelEffective)
+    : FEATURES.filter(f => matchesRequiredBuchtyp(f, ctx.buchtyp)
+      && !hiddenForBuchtyp(f, ctx.buchtyp)
+      && (!f.requiresCloudModel || ctx.cloudModelEffective));
+  return features.filter(f => configSatisfied(f, ctx.config));
 }
 
 export function visiblePaletteActions(ctx, devMode) {
   const actions = actionsVisibleFor(ACTIONS, ctx.bookRole, ctx.buchtyp, ctx.cloudModelEffective)
-    .filter(a => !a.requiresConfig || ctx.config?.[a.requiresConfig]);
+    .filter(a => configSatisfied(a, ctx.config));
   return devMode ? actions.filter(a => a.key !== 'action.logout') : actions;
 }
 

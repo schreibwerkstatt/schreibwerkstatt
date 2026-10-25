@@ -46,9 +46,12 @@ function _findDraftByNameOrId(input, ctx) {
   if (typeof input?.figur_name === 'string' && input.figur_name.trim()) {
     const needle = input.figur_name.trim().toLowerCase();
     const all = listDraftFigures(ctx.bookId, userEmail);
-    return all.find(d => (d.name || '').toLowerCase() === needle)
-        || all.find(d => (d.name || '').toLowerCase().includes(needle))
-        || null;
+    const exact = all.find(d => (d.name || '').toLowerCase() === needle);
+    if (exact) return exact;
+    // Teilstring nur, wenn er eindeutig ist — „Ann" fände sonst still „Hannah".
+    const partial = all.filter(d => (d.name || '').toLowerCase().includes(needle));
+    if (partial.length > 1) return { ambiguous: partial };
+    return partial[0] || null;
   }
   return null;
 }
@@ -95,6 +98,13 @@ function _draftDetail(input, ctx) {
   const locale = _userLocale(userEmail);
 
   const draft = _findDraftByNameOrId(input, ctx);
+  if (draft?.ambiguous) {
+    return {
+      error: 'Werkstatt-Draft-Name mehrdeutig', errorKey: 'chat.toolError.ambiguousName',
+      candidates: draft.ambiguous.map(d => ({ draft_id: d.id, name: d.name })),
+      hint: 'Per draft_id aus den Kandidaten erneut aufrufen.',
+    };
+  }
   if (!draft) {
     return {
       error: 'Werkstatt-Draft nicht gefunden', errorKey: 'chat.toolError.notFound',

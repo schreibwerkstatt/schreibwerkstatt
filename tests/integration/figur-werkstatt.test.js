@@ -115,6 +115,29 @@ test('Brainstorm: KI ohne vorschlaege-Array → failJob', async () => {
   assert.equal(job.error, 'job.error.werkstatt.vorschlaegeMissing');
 });
 
+test('Brainstorm: kein brauchbarer Vorschlag → failJob, kein leerer Lauf in der Historie', async () => {
+  const BOOK_ID = 6112;
+  const userEmail = 'autor@test.dev';
+  ctx.dbSeed.setBook({ chapters: [], pages: [], pageBodies: {} });
+  ctx.dbSchema.upsertBookByName(BOOK_ID, 'B');
+
+  const draft = draftFigDb.createDraftFigure(BOOK_ID, userEmail, {
+    name: 'Anna', mindmap: sampleMindmap(),
+  });
+
+  ctx.mockAi.on(() => true, { vorschlaege: [{ label: '   ', begruendung: 'leer' }] });
+
+  const jobId = ctx.shared.createJob('werkstatt-brainstorm', BOOK_ID, userEmail, 'l');
+  ctx.shared.enqueueJob(jobId, () =>
+    werkstatt.runBrainstormJob(jobId, draft.id, 'aussehen', userEmail),
+  );
+
+  const job = await waitForJob(ctx.shared, jobId);
+  assert.equal(job.status, 'error');
+  assert.equal(job.error, 'job.error.werkstatt.vorschlaegeMissing');
+  assert.equal(draftFigDb.listWerkstattRuns(draft.id, userEmail).length, 0);
+});
+
 test('Brainstorm: unbekannter Knoten → failJob mit knotenMissing', async () => {
   const BOOK_ID = 6103;
   const userEmail = 'autor@test.dev';

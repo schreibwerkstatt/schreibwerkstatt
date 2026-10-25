@@ -314,20 +314,39 @@ export function uniqueProfileName(base, profiles) {
 
 export function profileTransferSlice(cfg) {
   return {
-    _showRename: false,
+    // Unter der Profil-Leiste ist höchstens eine Eingabezeile offen
+    // ('create' | 'template' | 'rename'); derselbe Knopf schliesst sie wieder.
+    _profileRow: null,
     renameValue: '',
     importing: false,
 
+    // Formular (`x-if="_formMounted && activeProfile"`) aushängen, Teardown
+    // abwarten, dann mutieren — die x-if-Kinder (combobox x-data, x-model)
+    // sehen so nie ein null-activeProfile. Gewartet wird auf Alpines
+    // Effekt-Flush (Microtask), nicht auf `$nextTick`: das löst erst per
+    // setTimeout auf, der Browser zeichnete dazwischen einen Frame ohne
+    // Formular, die Karte fiel zusammen und der Scroll sprang nach oben.
+    async _unmountFormThen(mutate) {
+      this._formMounted = false;
+      await new Promise(queueMicrotask);
+      mutate();
+    },
+
+    toggleProfileRow(row) {
+      this._profileRow = this._profileRow === row ? null : row;
+    },
+
     beginRename() {
       if (!this.activeProfile) return;
+      if (this._profileRow === 'rename') { this._profileRow = null; return; }
       this.renameValue = this.activeProfile.name;
-      this._showRename = true;
+      this._profileRow = 'rename';
     },
 
     async renameProfile() {
       const name = String(this.renameValue || '').trim().slice(0, 80);
       if (!this.activeProfile || !name) return;
-      if (name === this.activeProfile.name) { this._showRename = false; return; }
+      if (name === this.activeProfile.name) { this._profileRow = null; return; }
       try {
         const r = await fetch(`${cfg.basePath}/profiles/${this.activeProfile.id}`, {
           method: 'PUT',
@@ -345,7 +364,7 @@ export function profileTransferSlice(cfg) {
         this.activeProfile.name = updated.name;
         const idx = this.profiles.findIndex(p => p.id === updated.id);
         if (idx >= 0) this.profiles[idx].name = updated.name;
-        this._showRename = false;
+        this._profileRow = null;
       } catch {
         this.exportError = window.__app.t(`${cfg.i18nPrefix}.error.saveFailed`);
       }

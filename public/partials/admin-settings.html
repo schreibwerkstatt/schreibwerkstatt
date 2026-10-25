@@ -5,7 +5,8 @@
   bei $store.session.currentUser.role === 'admin'; Frontend-Guard zusaetzlich zum
   Server-side requireAdmin (lib/admin-mw.js).
 -->
-<div class="card card--admin-settings" x-data="adminSettingsCard" x-show="$app.showAdminSettingsCard" x-cloak>
+<div class="card card--admin-settings" x-data="adminSettingsCard" x-show="$app.showAdminSettingsCard" x-cloak
+     @keydown="$editKeys($event, { save: () => !(adminSettingsLoading || adminSettingsSaving) && adminSettingsSave() })">
   <div class="card-header">
     <span class="card-title" x-text="$app.t('admin.settings.title')"></span>
     <div class="card-actions">

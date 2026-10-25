@@ -24,12 +24,7 @@
   font-size: var(--font-em-85);
 }
 
-.diary-anniversary-empty {
-  margin: 0;
-  color: var(--color-muted);
-  font-size: var(--font-em-85);
-  font-style: italic;
-}
+.diary-anniversary-empty { margin: 0; }
 
 .diary-anniversary-list {
   list-style: none;

@@ -28,7 +28,7 @@ test.afterAll(async ({ browser }) => {
   }
 });
 
-test('ideen-karte: Verknuepfungs-Picker oeffnet am Menue-Eintrag, nicht im Kartenkopf', async ({ page }) => {
+test('ideen-karte: Verknuepfungs-Picker oeffnet am Menue-Knopf, nicht im Kartenkopf', async ({ page }) => {
   await bootApp(page);
   const bookId = await selectSeededBook(page);
 
@@ -56,10 +56,13 @@ test('ideen-karte: Verknuepfungs-Picker oeffnet am Menue-Eintrag, nicht im Karte
   await expect(item).toBeVisible();
 
   // Der Weg zum Picker fuehrt hier ueber das Meatball-Menue der Idee.
-  await item.locator('.idee-menu button').click();
+  // Das Menue verschwindet beim Oeffnen — verankert wird darum am ⋯-Knopf,
+  // der stehen bleibt (openLinkPicker(actionMenuAnchor(), …) in ideen.html).
+  const trigger = item.locator('.idee-menu button');
+  await trigger.click();
   const menuItem = page.getByRole('menuitem', { name: 'Verknüpfen' });
   await expect(menuItem).toBeVisible();
-  const mb = await menuItem.boundingBox();
+  const mb = await trigger.boundingBox();
   await menuItem.click();
 
   const popover = page.locator('.idee-link-popover');

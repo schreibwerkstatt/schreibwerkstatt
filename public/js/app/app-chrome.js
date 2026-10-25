@@ -184,10 +184,11 @@ export const appChromeMethods = {
   },
 
   // Prompt-Variante: zeigt Textfeld im Modal, liefert getrimmten String oder
-  // null (Cancel/leer). Nutzung:
+  // null (Cancel/leer). Mit `allowEmpty: true` liefert leer bestätigt '' —
+  // für optionale Eingaben, bei denen Abbrechen etwas anderes heisst. Nutzung:
   //   const name = await this.appPrompt({ message, placeholder?, defaultValue? });
   //   if (!name) return;
-  appPrompt({ message, placeholder, defaultValue, confirmLabel, cancelLabel } = {}) {
+  appPrompt({ message, placeholder, defaultValue, confirmLabel, cancelLabel, allowEmpty = false } = {}) {
     if (this._confirmDialogResolve) {
       try { this._confirmDialogResolve(null); } catch {}
     }
@@ -198,6 +199,7 @@ export const appChromeMethods = {
     this.confirmDialogConfirmLabel = confirmLabel || this.t('common.confirm');
     this.confirmDialogCancelLabel = cancelLabel || this.t('common.cancel');
     this.confirmDialogDanger = false;
+    this.confirmDialogAllowEmpty = !!allowEmpty;
     return this._openConfirmDialog(true);
   },
 
@@ -221,14 +223,16 @@ export const appChromeMethods = {
     const r = this._confirmDialogResolve;
     const wasInput = this.confirmDialogInput;
     const inputVal = (this.confirmDialogInputValue || '').trim();
+    const allowEmpty = this.confirmDialogAllowEmpty;
     this._confirmDialogResolve = null;
+    this.confirmDialogAllowEmpty = false;
     const dlg = this.$refs?.confirmDialog;
     if (dlg && dlg.open) dlg.close();
     this.confirmDialogInput = false;
     this.confirmDialogInputValue = '';
     this.confirmDialogInputPlaceholder = '';
     if (!r) return;
-    if (wasInput) r(value ? (inputVal || null) : null);
+    if (wasInput) r(value ? (inputVal || (allowEmpty ? '' : null)) : null);
     else r(value);
   },
 

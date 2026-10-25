@@ -1,75 +1,31 @@
 // Rechtsklick-/Long-Press-Menü auf Mindmap-Knoten: Brainstorm/Rename/AddChild/AddSibling/Delete.
+// Die Aktionen lesen das Ziel vor dem Schliessen (closeActionMenu leert es).
 
 import { _newNodeId } from './mindmap.js';
 
 export const contextMenuMethods = {
+  // Rechtsklick auf einen Knoten (Long-Press loest via `x-long-press` am
+  // Container ebenfalls `contextmenu` aus). Mechanik aus action-menu.js,
+  // Ziel = Knoten-ID.
   _onMindmapContextMenu(ev) {
-    this._cancelLongPress?.();
     const target = ev.target.closest?.('jmnode');
-    if (!target) { this._hideContextMenu(); return; }
-    if (!target.getAttribute('nodeid')) return;
-    ev.preventDefault();
-    this._openNodeMenu(target, ev.clientX, ev.clientY);
-  },
-
-  // Gemeinsamer Einstieg fuer Rechtsklick und Long-Press (mindmap.js).
-  _openNodeMenu(target, x, y) {
-    const nodeId = target.getAttribute('nodeid');
-    if (!nodeId) return;
+    const nodeId = target?.getAttribute('nodeid');
+    if (!nodeId) { this.closeActionMenu(); return; }
     this._selectNodeQuiet(nodeId);
     this.selectedKnotenId = nodeId;
-    this.contextMenuNodeId = nodeId;
-    this.contextMenuPos = this._clampMenuPos(x, y);
-    this.contextMenuOpen = true;
-    if (!this._ctxOutsideHandler) {
-      this._ctxOutsideHandler = (e) => {
-        const menu = this.$el?.querySelector('.werkstatt-context-menu');
-        if (menu && !menu.contains(e.target)) this._hideContextMenu();
-      };
-      document.addEventListener('mousedown', this._ctxOutsideHandler, true);
-      document.addEventListener('keydown', this._ctxEscHandler = (e) => {
-        if (e.key === 'Escape') this._hideContextMenu();
-      });
-    }
-  },
-
-  // Cursor-verankert, viewport-bezogen: das Menü ist `position: fixed`, und
-  // weder `.card` (cardFadeIn läuft mit `backwards`, kein Transform bleibt
-  // stehen — public/CLAUDE.md) noch das Vollbild-Element `.werkstatt-detail`
-  // etabliert einen Containing-Block. clientX/Y gelten darum unverändert.
-  // Geklemmt auf beide Viewport-Ränder: unten/rechts, damit das Menü nicht
-  // hinausragt, oben/links, damit es auf schmalen Viewports nicht negativ wird.
-  _clampMenuPos(x, y) {
-    const W = 240, H = 240, M = 8;
-    return {
-      left: Math.max(M, Math.min(window.innerWidth - W - M, x)),
-      top: Math.max(M, Math.min(window.innerHeight - H - M, y)),
-    };
-  },
-
-  _hideContextMenu() {
-    this.contextMenuOpen = false;
-    this.contextMenuNodeId = null;
-    if (this._ctxOutsideHandler) {
-      document.removeEventListener('mousedown', this._ctxOutsideHandler, true);
-      this._ctxOutsideHandler = null;
-    }
-    if (this._ctxEscHandler) {
-      document.removeEventListener('keydown', this._ctxEscHandler);
-      this._ctxEscHandler = null;
-    }
+    this.openActionMenu(ev, `mindmap:${nodeId}`, nodeId);
   },
 
   ctxRename() {
-    const id = this.contextMenuNodeId;
-    this._hideContextMenu();
+    const id = this.actionMenuTarget;
+    this.closeActionMenu();
     if (!id || !this._jm) return;
     try { this._jm.begin_edit(id); } catch {}
   },
 
   ctxAddChild() {
-    const id = this.contextMenuNodeId;
-    this._hideContextMenu();
+    const id = this.actionMenuTarget;
+    this.closeActionMenu();
     if (!id) return;
     const newId = _newNodeId();
     const label = window.__app.t('werkstatt.tree.newNode');
@@ -81,8 +37,8 @@ export const contextMenuMethods = {
   },
 
   ctxAddSibling() {
-    const id = this.contextMenuNodeId;
-    this._hideContextMenu();
+    const id = this.actionMenuTarget;
+    this.closeActionMenu();
     if (!id) return;
     const newId = _newNodeId();
     const label = window.__app.t('werkstatt.tree.newNode');
@@ -93,15 +49,16 @@ export const contextMenuMethods = {
     });
   },
 
+  // Gleicher Weg wie die Entf-Taste: Kerne gesperrt, Teilbaum mit Rückfrage
+  // (history.js#_requestDeleteNode).
   ctxDelete() {
-    const id = this.contextMenuNodeId;
-    this._hideContextMenu();
-    if (!id || id === 'root') return;
-    this._mutateMindmap(jm => jm.remove_node(id));
+    const id = this.actionMenuTarget;
+    this.closeActionMenu();
+    this._requestDeleteNode(id);
   },
 
   ctxBrainstorm() {
-    this._hideContextMenu();
+    this.closeActionMenu();
     if (this.brainstormLoading) return;
     this.runBrainstorm();
   },

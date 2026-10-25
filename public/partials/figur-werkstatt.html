@@ -75,7 +75,7 @@
       </div>
     </div>
 
-    <div class="werkstatt-detail fullscreen-shell" x-show="selectedDraft()" x-cloak>
+    <div class="werkstatt-detail" x-show="selectedDraft()" x-cloak>
       <div class="werkstatt-detail-header">
         <div class="werkstatt-detail-titlebar">
           <h2 class="werkstatt-detail-name" x-text="editName || $app.t('werkstatt.field.name')"></h2>
@@ -107,24 +107,23 @@
                   :data-tip="$app.t('werkstatt.action.save')" :aria-label="$app.t('werkstatt.action.save')">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#check"/></svg>
           </button>
-          <span class="action-overflow" @click.outside="werkstattMenuOpen = false" @keydown.escape.window="werkstattMenuOpen = false">
-            <button type="button" class="icon-btn icon-btn--ghost"
-                    :class="{ 'is-active': werkstattMenuOpen }"
-                    @click="werkstattMenuOpen = !werkstattMenuOpen"
-                    aria-haspopup="menu" :aria-expanded="werkstattMenuOpen"
+          <span class="action-overflow" x-data="menu()">
+            <button type="button" class="icon-btn icon-btn--ghost" x-bind="trigger"
+                    :class="{ 'is-active': open }"
+                    aria-haspopup="menu"
                     :data-tip="$app.t('editor.btn.moreActions')" :aria-label="$app.t('editor.btn.moreActions')">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
             </button>
-            <div class="context-menu context-menu--dropdown" x-show="werkstattMenuOpen" x-cloak role="menu">
+            <div class="context-menu context-menu--dropdown" x-bind="panel" x-cloak>
               <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
                       :disabled="busy || brainstormLoading || !selectedKnotenId"
-                      @click="runBrainstorm(); werkstattMenuOpen = false">
+                      @click="runBrainstorm()">
                 <svg class="icon" aria-hidden="true"><use href="/icons.svg#lightbulb"/></svg>
                 <span x-text="$app.t('werkstatt.action.brainstorm')"></span>
               </button>
               <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
                       :disabled="busy || consistencyLoading"
-                      @click="runConsistency(); werkstattMenuOpen = false">
+                      @click="runConsistency()">
                 <svg class="icon" aria-hidden="true"><use href="/icons.svg#spell-check"/></svg>
                 <span x-text="$app.t('werkstatt.action.consistency')"></span>
               </button>
@@ -135,19 +134,19 @@
                    beiden Zeilen zu toeten. -->
               <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
                       x-show="!selectedDraft()?.source_figure_id"
-                      :disabled="busy" @click="startLinkFigure(); werkstattMenuOpen = false">
+                      :disabled="busy" @click.stop="startLinkFigure($el.closest('.action-overflow').querySelector('button')); close()">
                 <svg class="icon" aria-hidden="true"><use href="/icons.svg#users"/></svg>
                 <span x-text="$app.t('werkstatt.action.linkFigure')"></span>
               </button>
               <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
                       x-show="selectedDraft()?.source_figure_id"
-                      :disabled="busy" @click="runLinkFigure(null); werkstattMenuOpen = false">
+                      :disabled="busy" @click="runLinkFigure(null)">
                 <svg class="icon" aria-hidden="true"><use href="/icons.svg#unlink"/></svg>
                 <span x-text="$app.t('werkstatt.action.unlinkFigure')"></span>
               </button>
               <div class="context-menu-sep" role="separator"></div>
               <button type="button" class="context-menu-item context-menu-item--icon context-menu-item--danger" role="menuitem"
-                      :disabled="busy" @click="requestDelete(); werkstattMenuOpen = false">
+                      :disabled="busy" @click="requestDelete()">
                 <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
                 <span x-text="$app.t('werkstatt.action.delete')"></span>
               </button>
@@ -156,11 +155,7 @@
         </div>
       </div>
 
-      <!-- Verknuepfen-Panel (Katalog-Figur als Quelle setzen). Eigenes Fragment
-           wie der Import-Picker — HTML-Partial-LOC-Limit. -->
-      <div x-show="linking" x-cloak class="werkstatt-create-inline">
-        <!-- @include werkstatt-link-fields -->
-      </div>
+      <!-- @include werkstatt-link-picker -->
 
       <!-- Form: Name + Archetyp + Notizen -->
       <div class="card-form-grid">
@@ -208,7 +203,7 @@
       <!-- Mindmap-Canvas (jsMind, lazy-loaded). Editierbar: F2/Doppelklick zum Umbenennen,
            Tab fügt Sub-Knoten, Enter fügt Geschwister, Delete entfernt, Pfeiltasten navigieren,
            Rechtsklick öffnet Kontext-Menü. -->
-      <section class="werkstatt-mindmap-section">
+      <section class="werkstatt-mindmap-section fullscreen-shell">
         <div class="card-section-head card-section-head--baseline">
           <h3 class="section-heading" x-text="$app.t('werkstatt.mindmap.title')"></h3>
           <span class="save-indicator"
@@ -220,9 +215,13 @@
                Mindmap-Divs bei Figur-Wechsel und beim Refresh mit Verwerfen. jsMind hängt sich an frische DOM, kein State-Lecken
                zwischen Drafts. _mountMindmap kriegt $el direkt — keine $el-Magic-Race. -->
           <template x-for="dId in selectedDraftId ? [selectedDraftId + ':' + _mindmapMountKey] : []" :key="dId">
-            <div class="werkstatt-mindmap" x-init="_mountMindmap($el)"></div>
+            <div class="werkstatt-mindmap" x-init="_mountMindmap($el)" x-long-press></div>
           </template>
           <div class="werkstatt-mindmap-controls werkstatt-mindmap-controls--overlay">
+            <button type="button" class="icon-btn" :disabled="!canUndoMindmap()" @click="undoMindmap()"
+                    :data-tip="$app.t('werkstatt.mindmap.undo')" :aria-label="$app.t('werkstatt.mindmap.undo')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#undo"/></svg></button>
+            <button type="button" class="icon-btn" :disabled="!canRedoMindmap()" @click="redoMindmap()"
+                    :data-tip="$app.t('werkstatt.mindmap.redo')" :aria-label="$app.t('werkstatt.mindmap.redo')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#redo"/></svg></button>
             <button type="button"
                     class="icon-btn"
                     :data-tip="$app.t('graph.zoomIn')"
@@ -247,13 +246,8 @@
           </div>
         </div>
 
-        <!-- Rechtsklick-Menü, position:fixed via inline-style -->
-        <div class="context-menu werkstatt-context-menu"
-             role="menu"
-             x-show="contextMenuOpen"
-             x-cloak
-             :style="{ left: contextMenuPos.left + 'px', top: contextMenuPos.top + 'px' }"
-             @click.stop>
+        <!-- Knoten-Menü (Rechtsklick / Long-Press), Mechanik aus action-menu.js -->
+        <div class="context-menu werkstatt-context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
           <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon" @click="ctxBrainstorm()" :disabled="busy || brainstormLoading">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#lightbulb"/></svg>
             <span x-text="$app.t('werkstatt.action.brainstorm')"></span>
@@ -272,7 +266,7 @@
             <span x-text="$app.t('werkstatt.context.addSibling')"></span>
           </button>
           <div class="context-menu-sep" role="separator"></div>
-          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger" @click="ctxDelete()" :disabled="contextMenuNodeId === 'root'">
+          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger" @click="ctxDelete()" :disabled="!canDeleteNode(actionMenuTarget)">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
             <span x-text="$app.t('werkstatt.context.delete')"></span>
           </button>

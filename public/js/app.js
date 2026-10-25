@@ -4,6 +4,7 @@ import { hasUnreadChangelog } from './cards/help-card.js';
 import { historyMethods } from './book/history.js';
 import { treeMethods } from './book/tree.js';
 import { treeContextMenuMethods } from './book/tree-context-menu.js';
+import { actionMenuMethods } from './action-menu.js';
 import { diaryCalendarMethods } from './book/diary-calendar.js';
 import { lektoratMethods } from './editor/lektorat.js';
 // readNormalSnapshot/clearNormalSnapshot werden in editor-notebook-card.js via
@@ -128,29 +129,37 @@ document.addEventListener('alpine:init', () => {
         : safe;
     },
 
-    // Zielseiten/-kapitel für Ideen-Verschieben-Combobox.
-    // Scope 'page': Seiten gleichen Kapitels, aktuelle Seite ausgeschlossen.
-    // Scope 'chapter': andere Kapitel des Buches, aktuelles Kapitel ausgeschlossen.
+    // Ziele der Ideen-Verschieben-Combobox: jedes Kapitel und jeder Abschnitt
+    // des Buches, der aktuelle Anker ausgenommen. Werte 'chapter:<id>' bzw.
+    // 'page:<id>' — die Idee darf die Ankerart wechseln. Je Kapitel eine Gruppe
+    // (Kopf = Kapitelpfad, damit gleichnamige Unterkapitel unterscheidbar
+    // bleiben), darin zuerst das Kapitel selbst, dann seine Abschnitte.
     // Liegt am Root, weil x-effect der Combobox-Sub-x-data nur $app/Magics,
     // nicht Karten-Methoden sieht.
     ideenMovePickerOptions() {
       const tree = this.$store.nav.tree || [];
-      if (this.ideenScope === 'chapter') {
-        const curCid = this.ideenChapterId;
-        return tree
-          .filter(it => it.type === 'chapter' && !it.solo && it.id !== curCid)
-          .map(it => ({ value: it.id, label: it.name }));
+      const curPageId = this.ideenScope === 'page' ? this.currentPage?.id : null;
+      const curChapterId = this.ideenScope === 'chapter' ? this.ideenChapterId : null;
+      const pageOpt = (p, group) => ({ value: 'page:' + p.id, label: p.name, group });
+      const byId = new Map(tree.filter(it => !it.solo).map(it => [it.id, it]));
+      const pathOf = (ch) => {
+        const names = [];
+        for (let c = ch; c; c = c.parent_id ? byId.get(c.parent_id) : null) names.unshift(c.name);
+        return names.join(' › ');
+      };
+      const noChapter = this.t('ideen.moveNoChapter');
+      const out = tree
+        .filter(it => it.solo && it.pages[0] && it.pages[0].id !== curPageId)
+        .map(it => pageOpt(it.pages[0], noChapter));
+      for (const ch of tree) {
+        if (ch.solo) continue;
+        const group = pathOf(ch);
+        if (ch.id !== curChapterId) {
+          out.push({ value: 'chapter:' + ch.id, label: ch.name, sublabel: this.t('ideen.moveWholeChapter'), group });
+        }
+        for (const p of ch.pages || []) if (p.id !== curPageId) out.push(pageOpt(p, group));
       }
-      const cur = this.currentPage;
-      if (!cur?.id) return [];
-      const pages = cur.chapter_id
-        ? (tree.find(it => it.type === 'chapter' && !it.solo && it.id === cur.chapter_id)?.pages || [])
-            .filter(p => p.id !== cur.id)
-        : tree
-            .filter(it => it.type === 'chapter' && it.solo && it.pages[0]?.id !== cur.id)
-            .map(it => it.pages[0])
-            .filter(Boolean);
-      return pages.map(p => ({ value: p.id, label: p.name }));
+      return out;
     },
 
     get selectedBookName() {
@@ -260,6 +269,7 @@ document.addEventListener('alpine:init', () => {
     ...appInitMethods,
     ...historyMethods,
     ...treeMethods,
+    ...actionMenuMethods,
     ...treeContextMenuMethods,
     ...diaryCalendarMethods,
     ...lektoratMethods,

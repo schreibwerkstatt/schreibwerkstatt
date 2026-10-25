@@ -101,7 +101,22 @@ test('mapArchetype matcht Whitelist-Synonyme', () => {
   assert.equal(mapArchetype('Mentor'), 'mentor');
   assert.equal(mapArchetype('Nemesis'), 'nemesis');
   assert.equal(mapArchetype('Nebenfigur'), 'nebenfigur');
+  // Katalog-Keys (public/js/book/figur-typen.js) — der Normalfall heute.
+  assert.equal(mapArchetype('hauptfigur'), 'protagonist');
+  assert.equal(mapArchetype('randfigur'), 'nebenfigur');
+  assert.equal(mapArchetype('andere'), null);
   assert.equal(mapArchetype('Erzähler'), null);
   assert.equal(mapArchetype(''), null);
   assert.equal(mapArchetype(null), null);
+});
+
+test('Stammdaten-Labels folgen der Import-Sprache', () => {
+  const en = buildMindmapFromFigure({ name: 'Annie', kurzname: 'Annie', beruf: 'Pilotin', stimme: 'rau' }, 'en');
+  const de = buildMindmapFromFigure({ name: 'Annie', kurzname: 'Annie', beruf: 'Pilotin', stimme: 'rau' });
+  const topics = (m) => JSON.stringify(m.data);
+  assert.ok(topics(en).includes('Short name: Annie'));
+  assert.ok(topics(en).includes('Occupation: Pilotin'));
+  assert.ok(topics(en).includes('Voice: rau'));
+  assert.ok(topics(de).includes('Kurzname: Annie'));
+  assert.ok(!topics(en).includes('werkstatt.import.label'), 'kein unaufgeloester Key');
 });

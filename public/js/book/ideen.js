@@ -8,12 +8,9 @@
 // `in_arbeit` — `verworfen` zaehlt NICHT als offen und setzt darum auch keine
 // Sidebar-Plakette.
 
-import { fetchJson } from '../utils.js';
+import { fetchJson, autosizeTextarea, mountAutosizeTextarea } from '../utils.js';
 import { createIdee, patchIdee, deleteIdee as removeIdee, overlayPendingIdeen } from '../repo/ideen-queue.js';
-import { EVT } from '../events.js';
 import { IDEE_STATUSES, ideeStatus, isOpenIdee, normalizeIdeeStages, compareIdeeManual, IDEE_MAX_LEN } from './ideen-shared.js';
-import { computePopoverPos, refinePopoverPos } from '../popover-anchor.js';
-import { attachDismiss, detachDismiss } from '../cards/dismiss.js';
 import { isTempId as isTempPageId, resolveTempId } from '../repo/structure-queue.js';
 
 // Aktive Scope-IDs aus Root lesen. Liefert { kind, id } oder null.
@@ -86,48 +83,24 @@ export const ideenMethods = {
     this.moveTargetId = '';
     this.linkPickerIdeeId = null;
     this.linkPickerTargetId = '';
-    this.menuOpenId = null;
-    this._detachMenuListeners?.();
+    this._releasePickerPopover?.();
+    this.closeActionMenu();
     this.errorMessage = '';
     this.busy = false;
   },
 
-  // ── Meatball-Menu (Popover) ───────────────────────────────────────────────
+  // ── Aktionsmenü (⋯-Knopf, Rechtsklick/Long-Press auf die Zeile) ──────────
+  // Mechanik aus action-menu.js; Ziel = Ideen-ID. Picker, die aus dem Menü
+  // öffnen (Verknüpfen, Verschieben), verankern an `actionMenuAnchor()` — dem
+  // Knopf bzw. der Zeile, die stehen bleibt, wenn das Menü verschwindet.
   openMenu(ev, idee) {
-    if (this.menuOpenId === idee.id) { this.closeMenu(); return; }
-    // Hover-Tooltip des Triggers wegblenden — er hinge sonst über dem Menü.
-    window.dispatchEvent(new CustomEvent(EVT.TOOLTIP_HIDE));
-    this._triggerRect = ev.currentTarget.getBoundingClientRect();
-    // Schätzung vor dem Render; danach mit der echten Popover-Grösse nachjustieren.
-    // Das Menü ist je nach Stufe unterschiedlich lang (die aktuelle Stufe steht
-    // nicht als Ziel drin) — eine feste Höhe würde es beim Hochklappen zu weit
-    // über den Button schieben.
-    this.menuPos = computePopoverPos(this._triggerRect, 220, 200);
-    this.menuOpenId = idee.id;
-    this._attachMenuListeners();
-    this.$nextTick(() => {
-      const pos = refinePopoverPos(this.$refs.ideenMenu, this._triggerRect);
-      if (pos) this.menuPos = pos;
-    });
-  },
-
-  closeMenu() {
-    this.menuOpenId = null;
-    this._detachMenuListeners();
+    this.openActionMenu(ev, `idee:${idee.id}`, idee.id);
   },
 
   // Plain Methode statt Getter — siehe Hinweis bei offeneIdeen().
   menuOpenIdee() {
-    if (this.menuOpenId == null) return null;
-    return (this.ideen || []).find(i => i.id === this.menuOpenId) || null;
-  },
-
-  _attachMenuListeners() {
-    this._menuCloseHandler ??= attachDismiss(() => this.closeMenu());
-  },
-
-  _detachMenuListeners() {
-    detachDismiss(this, '_menuCloseHandler');
+    if (this.actionMenuTarget == null) return null;
+    return (this.ideen || []).find(i => i.id === this.actionMenuTarget) || null;
   },
 
   // ── CRUD ─────────────────────────────────────────────────────────────────
@@ -163,9 +136,20 @@ export const ideenMethods = {
     this.editingDraft = idee.content || '';
   },
 
+  mountIdeeEditInput: mountAutosizeTextarea,
+  autosizeIdeeEditInput: autosizeTextarea,
+
   cancelEditIdee() {
     this.editingId = null;
     this.editingDraft = '';
+  },
+
+  // Speichern und schliessen — Enter, Cmd/Ctrl+S (`$editKeys`) und Klick ausserhalb.
+  // Leerer Text wird verworfen; ein laufender Request wird nicht doppelt ausgelöst.
+  commitEditIdee(idee) {
+    if (this.busy || this.editingId !== idee.id) return;
+    if (!(this.editingDraft || '').trim()) { this.cancelEditIdee(); return; }
+    return this.saveEditIdee(idee);
   },
 
   async saveEditIdee(idee) {
@@ -218,7 +202,10 @@ export const ideenMethods = {
   isOpenIdee(idee) { return isOpenIdee(idee); },
 
   // ── Move ─────────────────────────────────────────────────────────────────
-  startMoveIdee(idee) {
+  // Popover am Trigger (Picker-Popover: public/js/picker-popover.js).
+  startMoveIdee(anchor, idee) {
+    if (!idee) return;
+    this._openPickerPopover(anchor, 'ideenMovePopover', () => this.cancelMoveIdee());
     this.movingId = idee.id;
     this.moveTargetId = '';
   },
@@ -226,33 +213,36 @@ export const ideenMethods = {
   cancelMoveIdee() {
     this.movingId = null;
     this.moveTargetId = '';
+    this._releasePickerPopover();
   },
+
+  movingIdee() { return this._findIdee(this.movingId); },
 
   // Aus zentralem Picker — Idee wird aus this.movingId geholt.
   async confirmMoveCurrentIdee() {
-    const idee = (this.ideen || []).find(i => i.id === this.movingId);
+    const idee = this.movingIdee();
     if (!idee) return;
     return this.confirmMoveIdee(idee);
   },
 
+  // Ziel aus dem Picker: 'page:<id>' oder 'chapter:<id>' — der Umzug darf die
+  // Ankerart wechseln (Kapitel → Abschnitt und umgekehrt), der Server leert
+  // den alten Anker.
   async confirmMoveIdee(idee) {
     const app = window.__app;
-    const targetId = parseInt(this.moveTargetId, 10);
-    if (!targetId) return;
+    const [kind, rawId] = String(this.moveTargetId || '').split(':');
+    const targetId = Number(rawId);
+    if (!targetId || (kind !== 'page' && kind !== 'chapter')) return;
 
     this.busy = true;
     try {
-      // Body je nach Idee-Scope (within-kind move): Page-Idee → page_id,
-      // Chapter-Idee → chapter_id. Backend lehnt Cross-Kind ab.
-      const body = idee.page_id != null ? { page_id: targetId } : { chapter_id: targetId };
-      await patchIdee(idee, body);
+      await patchIdee(idee, kind === 'page' ? { page_id: targetId } : { chapter_id: targetId });
       this.ideen = this.ideen.filter(i => i.id !== idee.id);
-      this.movingId = null;
-      this.moveTargetId = '';
+      this.cancelMoveIdee();
       this.errorMessage = '';
       this._publishIdeenCount();
       // Ziel-Counts bumpen (Backend lehnt Move bei abgeschlossener Idee ab → +1 sicher).
-      this._bumpTreeCountForTarget(idee, targetId);
+      this._bumpTreeCountForTarget(kind, targetId);
     } catch (e) {
       this.errorMessage = app.t('ideen.error.move');
     } finally {
@@ -311,11 +301,10 @@ export const ideenMethods = {
     }
   },
 
-  _bumpTreeCountForTarget(idee, targetId) {
+  _bumpTreeCountForTarget(kind, targetId) {
     const badges = Alpine.store('badges');
     if (!badges) return;
-    const isPage = idee.page_id != null;
-    const mapKey = isPage ? 'ideenCounts' : 'chapterIdeenCounts';
+    const mapKey = kind === 'page' ? 'ideenCounts' : 'chapterIdeenCounts';
     const prev = (badges[mapKey] && badges[mapKey][targetId]) || 0;
     const next = { ...(badges[mapKey] || {}) };
     next[targetId] = prev + 1;

@@ -58,7 +58,7 @@
                 <template x-if="editingActId === act.id">
                   <input type="text" class="plot-column-title-input" x-model="actDraft"
                          data-spellcheck="spelling"
-                         @keydown.enter="saveEditAct(act)" @keydown.escape="cancelEditAct()"
+                         @keydown.enter="saveEditAct(act)" @keydown="$editKeys($event, { save: () => saveEditAct(act), cancel: () => cancelEditAct() })"
                          @blur="onActBlur(act, $event)">
                 </template>
                 <div class="plot-column-actions">
@@ -127,7 +127,7 @@
 
               <!-- Strang-Lane: Ansicht -->
               <template x-if="row.lane.thread && editingThreadId !== row.lane.id">
-                <div class="plot-swim-lane-view">
+                <div class="plot-swim-lane-view" @contextmenu="openThreadMenu($event, row.lane.id)" x-long-press>
                   <div class="color-picker">
                     <button type="button" class="color-picker__swatch"
                             @click.stop="toggleThreadColorPicker(row.lane.id)"
@@ -156,9 +156,9 @@
                     <span class="plot-swim-lane-ownacts" x-show="threadHasOwnActs(row.lane.id)" x-text="$app.t('plot.thread.ownActs')"></span><div x-data="{ ideaOwnerId: row.lane.thread.id, ideaSource: 'threadIdeaBacklinks' }"><!-- @include ideen-backlinks --></div>
                   </div>
                   <button type="button" class="icon-btn icon-btn--ghost plot-icon-btn"
-                          :class="{ 'is-active': threadActionsOpenId === row.lane.id }"
-                          @click.stop="_rememberMenuTrigger($event); openThreadMenu($event, row.lane.id)"
-                          aria-haspopup="menu" :aria-expanded="threadActionsOpenId === row.lane.id"
+                          :class="{ 'is-active': isActionMenuOpen('thread:' + row.lane.id) }"
+                          @click="openThreadMenu($event, row.lane.id)"
+                          aria-haspopup="menu" :aria-expanded="isActionMenuOpen('thread:' + row.lane.id)"
                           :data-tip="$app.t('plot.thread.actions')" :aria-label="$app.t('plot.thread.actions')">
                     <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
                   </button>
@@ -167,10 +167,10 @@
 
               <!-- Strang-Lane: Bearbeiten (Name + Figuren-/Kapitel-Bindung) -->
               <template x-if="row.lane.thread && editingThreadId === row.lane.id">
-                <div class="plot-swim-lane-edit">
+                <div class="plot-swim-lane-edit" @click.outside="commitEditThread(row.lane.thread)" @keydown="$editKeys($event, { save: () => commitEditThread(row.lane.thread), cancel: () => cancelEditThread() })">
                   <input type="text" class="plot-thread-name-input" x-model="threadDraft.name"
                          data-spellcheck="spelling" :placeholder="$app.t('plot.thread.namePlaceholder')"
-                         @keydown.enter.prevent="saveEditThread(row.lane.thread)" @keydown.escape="cancelEditThread()">
+                         @keydown.enter.prevent="commitEditThread(row.lane.thread)">
                   <label class="plot-edit-label" x-show="$store.catalog.figuren.length" x-text="$app.t('plot.thread.bindFigure')"></label>
                   <div x-show="$store.catalog.figuren.length"
                        x-data="entityPicker({ entity: 'figur', placeholder: $app.t('plot.thread.bindFigurePlaceholder'), emptyLabel: $app.t('plot.thread.noFigure') })"
@@ -224,7 +224,7 @@
                   <div class="plot-add-beat" :data-add-beat-cell="act.id + ':' + (row.lane.id === null ? 'null' : row.lane.id)">
                     <textarea class="plot-add-beat-input" x-model="newBeatTitel" rows="1"
                               data-spellcheck="spelling" :placeholder="$app.t('plot.beat.titelPlaceholder')"
-                              @keydown.enter.prevent="saveNewBeatCell(act.id, row.lane.id)" @keydown.escape="cancelAddBeatCell()"
+                              @keydown.enter.prevent="saveNewBeatCell(act.id, row.lane.id)" @keydown="$editKeys($event, { save: () => saveNewBeatCell(act.id, row.lane.id), cancel: () => cancelAddBeatCell() })"
                               @blur="onAddBeatCellBlur(act.id, row.lane.id, $event)"></textarea>
                     <div class="plot-add-beat-actions">
                       <button type="button" class="btn-compact" @click="saveNewBeatCell(act.id, row.lane.id)" :disabled="busy" x-text="$app.t('plot.beat.add')"></button>

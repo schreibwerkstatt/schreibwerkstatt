@@ -120,17 +120,17 @@
   </div>
 </template>
 
-<div class="page-empty-state"
+<div class="card-empty page-empty-state"
      x-show="!editMode && currentPage && currentPageEmpty && !pageLoadError && originalHtml !== null"
      x-cloak>
-  <span class="page-empty-state__text" x-text="t('editor.emptyPageHint')"></span>
+  <p class="card-empty-text" x-text="t('editor.emptyPageHint')"></p>
   <template x-if="canEdit()">
-    <span class="page-empty-state__actions">
+    <div class="card-empty-actions">
       <button type="button" class="primary" @click="startEdit()"
               :disabled="checkLoading || saveApplying != null || originalHtml === null"
               x-text="t('editor.btn.startWriting')"></button>
       <button type="button" class="danger" @click="deleteCurrentPage()"
               x-text="t('editor.btn.deleteEmptyPage')"></button>
-    </span>
+    </div>
   </template>
 </div>

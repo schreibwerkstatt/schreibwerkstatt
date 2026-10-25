@@ -1,0 +1,83 @@
+/* Picker-Popover: am Trigger verankertes Popover, in dem an EINEM Element
+   etwas gewaehlt wird (verknuepfen, verschieben, zuordnen). Der Kopf nennt
+   das Element, damit sichtbar bleibt, woran gerade gewaehlt wird, sobald das
+   Popover ueber einer langen Liste schwebt. Darunter die Eingabefelder
+   (Combobox o.ae.), unten die Aktionen.
+
+   Nach <body> bzw. in die Karten-Wurzel teleportiert und per JS positioniert
+   (public/js/picker-popover.js setzt top/left), also `fixed` in der
+   Popover-Ebene. Die Breite ist `--picker-popover-w`; der Schaetzwert
+   PICKER_POPOVER_W in picker-popover.js muss dazu passen, sonst springt das
+   Popover beim Nachmessen sichtbar. Wer die Breite ueberschreibt, gibt dem
+   Oeffnen dieselbe Breite als Schaetzung mit.
+
+   Markup:
+     <div class="picker-popover" x-ref="…" role="dialog" :style="…">
+       <div class="picker-popover__head">
+         <span class="picker-popover__title">   (was gewaehlt wird)
+         <span class="picker-popover__subject"> (woran — zwei Zeilen, dann …)
+       </div>
+       …Eingabefelder…
+       <p class="picker-popover__hint">          (optional: Folge der Wahl)
+       <div class="picker-popover__actions">     (Abbrechen / Uebernehmen)
+     </div> */
+
+@layer components {
+
+  .picker-popover {
+    --picker-popover-w: 320px;
+    position: fixed;
+    z-index: var(--z-popover);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    width: min(var(--picker-popover-w), calc(100vw - var(--space-md)));
+    padding: var(--space-sm);
+    background: var(--color-surface);
+    border: var(--border-thin) solid var(--color-border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
+    transition: opacity var(--transition-base);
+  }
+  @starting-style {
+    .picker-popover { opacity: 0; }
+  }
+
+  .picker-popover__head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .picker-popover__title {
+    font-size: var(--font-size-xs);
+    color: var(--color-subtle);
+  }
+
+  /* Das Element selbst als Beleg — zwei Zeilen, danach abgeschnitten: der
+     Kopf soll das Popover nicht laenger machen als seine Eingabefelder. */
+  .picker-popover__subject {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    font-size: var(--font-size-micro);
+    color: var(--color-text);
+  }
+
+  /* Was die Wahl nach sich zieht (Ladezustand, Leer-Hinweis, Warnung vor
+     einem nicht umkehrbaren Schritt) — steht dort, wo gewaehlt wird, statt in
+     einer zweiten Rueckfrage danach. */
+  .picker-popover__hint {
+    margin: 0;
+    font-size: var(--font-size-xs);
+    color: var(--color-subtle);
+  }
+
+  .picker-popover__actions {
+    display: flex;
+    gap: var(--space-xs);
+    justify-content: flex-end;
+  }
+}

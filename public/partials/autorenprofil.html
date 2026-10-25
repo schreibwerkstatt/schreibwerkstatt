@@ -76,7 +76,7 @@
     </template>
 
     <template x-if="apEditing">
-      <div class="ap-profile-edit">
+      <div class="ap-profile-edit" @keydown="$editKeys($event, { save: () => saveApText(), cancel: () => cancelApEdit() })">
         <textarea class="ap-profile-textarea" x-model="apEditText" rows="10"
                   data-spellcheck="spelling"
                   :aria-label="$app.t('autorenprofil.profile.title')"></textarea>

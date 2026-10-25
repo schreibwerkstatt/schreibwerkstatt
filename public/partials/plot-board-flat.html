@@ -38,7 +38,8 @@
         <template x-if="editingActId === act.id">
           <input type="text" class="plot-column-title-input" x-model="actDraft"
                  data-spellcheck="spelling"
-                 @keydown.enter="saveEditAct(act)" @keydown.escape="cancelEditAct()"
+                 @keydown.enter="saveEditAct(act)"
+                 @keydown="$editKeys($event, { save: () => saveEditAct(act), cancel: () => cancelEditAct() })"
                  @blur="onActBlur(act, $event)">
         </template>
         <span class="board-col-count" x-text="filteredBeatsForAct(act.id).length"></span>
@@ -114,7 +115,8 @@
           <div class="plot-add-beat" :data-add-beat-act="act.id">
             <textarea class="plot-add-beat-input" x-model="newBeatTitel" rows="1"
                       data-spellcheck="spelling" :placeholder="$app.t('plot.beat.titelPlaceholder')"
-                      @keydown.enter.prevent="saveNewBeat(act.id)" @keydown.escape="cancelAddBeat()"
+                      @keydown.enter.prevent="saveNewBeat(act.id)"
+                      @keydown="$editKeys($event, { save: () => saveNewBeat(act.id), cancel: () => cancelAddBeat() })"
                       @blur="onAddBeatBlur(act.id, $event)"></textarea>
             <div class="plot-add-beat-actions">
               <button type="button" class="btn-compact" @click="saveNewBeat(act.id)" :disabled="busy" x-text="$app.t('plot.beat.add')"></button>

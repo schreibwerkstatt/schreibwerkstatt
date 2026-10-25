@@ -70,7 +70,6 @@
   color: var(--color-err-light);
   font-size: var(--font-size-xs);
 }
-.job-stats-empty,
 .job-stats-loading {
   color: var(--color-muted);
   font-size: var(--font-size-mini);
@@ -104,11 +103,6 @@
   vertical-align: top;
 }
 .job-runs-loading,
-.job-runs-empty {
-  color: var(--color-muted);
-  font-size: var(--font-size-xs);
-  padding: var(--space-xs) 0;
-}
 .job-run-status {
   display: inline-block;
   padding: var(--space-1) var(--space-6);
@@ -521,9 +515,7 @@
   align-items: center;
   gap: var(--space-xs);
 }
-/* padding-top des Labels gehoert zur Grid-Zeile; in der zentrierten Flex-Zeile
-   kippte es den Text unter die Mittellinie der Knoepfe. */
-.series-carry-head > .card-form-label { margin-right: auto; padding-top: 0; }
+.series-carry-head > .card-form-label { margin-right: auto; }
 .series-carry-list {
   display: flex;
   flex-direction: column;

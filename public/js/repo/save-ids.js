@@ -26,6 +26,8 @@
 // Neuladen überleben muss; ein Draft nimmt die Kennungen seines Schreibers mit
 // (editor/draft-storage.js), damit die Outbox sie beim Nachsenden nennen kann.
 
+import { uuid } from '../utils/uuid.js';
+
 const KEY = (writer, pageId) => `own_save_ids:${writer}:${pageId}`;
 // Gleicher Deckel wie der Server (routes/content/pages.js#OWN_SAVE_IDS_MAX).
 const MAX_IDS = 16;
@@ -47,15 +49,6 @@ function write(writer, pageId, list) {
     if (list.length) sessionStorage.setItem(KEY(writer, pageId), JSON.stringify(list.slice(-MAX_IDS)));
     else sessionStorage.removeItem(KEY(writer, pageId));
   } catch { /* voll/gesperrt: Erkennung fällt aus, Konfliktpfad wie ohne Kennung */ }
-}
-
-function uuid() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-  const b = crypto.getRandomValues(new Uint8Array(16));
-  b[6] = (b[6] & 0x0f) | 0x40;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
 // Kennungen aus `entries`, deren Basis in `bases` liegt.

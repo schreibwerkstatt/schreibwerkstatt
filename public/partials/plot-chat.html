@@ -18,7 +18,7 @@
   <div x-show="plotChatStatus" class="card-status" x-html="plotChatStatus"></div>
 
   <div id="plot-chat-messages" class="chat-messages plot-chat-messages">
-    <div x-show="plotChatMessages.length === 0 && !plotChatLoading" class="chat-empty" x-text="$app.t('plot.chat.empty')"></div>
+    <div x-show="plotChatMessages.length === 0 && !plotChatLoading" class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('plot.chat.empty')"></div>
 
     <template x-for="(msg, msgIdx) in plotChatMessages" :key="msgIdx">
       <div :class="'chat-msg chat-msg--' + msg.role">

@@ -79,6 +79,7 @@ export function registerPdfExportCard() {
     // Sonst feuern x-model/x-effect-Closures (combobox-x-data) noch ein Mal mit
     // null-activeProfile und werfen "Cannot read properties of null (reading 'config')".
     _formMounted: false,
+    _selectSeq: 0,
     activeTab: 'layout',
 
     fontList: [],
@@ -87,13 +88,11 @@ export function registerPdfExportCard() {
     creating: false,
     newProfileName: '',
     cloneFromId: null,
-    _showCreate: false,
 
     // Gestaltungs-Vorlage (pdf-export-templates.js). Sie legt immer ein NEUES
     // Profil an statt das aktive zu überschreiben — eine Vorlage anzusehen darf
     // die eigene Einrichtung nicht kosten.
     templateSel: '',
-    _showTemplate: false,
 
     saving: false,
     savedAt: null,
@@ -222,28 +221,26 @@ export function registerPdfExportCard() {
       }
     },
 
-    // Unmount form, await DOM teardown, then run mutator. Ensures x-if-children
-    // (combobox x-data, x-model) won't see a null activeProfile.
-    async _unmountFormThen(mutate) {
-      this._formMounted = false;
-      await this.$nextTick();
-      mutate();
-    },
-
+    // Erst laden, dann Form unmounten, State wechseln und neu mounten. Der
+    // Wechsel läuft so ohne Netzwerk-Runde dazwischen in Microtasks — kein
+    // Frame ohne Formular, die Karte fällt nicht zusammen und der Scroll bleibt.
     async selectProfile(id) {
-      // Form unmounten, dann State wechseln, dann neu mounten.
-      await this._unmountFormThen(() => { this.activeProfileId = id; });
+      const seq = ++this._selectSeq;
+      let profile = null;
       try {
         const r = await fetch(`/pdf-export/profiles/${id}`);
-        if (!r.ok) { this.activeProfile = null; this._savedSnapshot = ''; return; }
-        this.activeProfile = await r.json();
-        this.coverPreviewVersion++;
-        this._formMounted = true;
-        // Vergleichsbasis erst nach dem Mount: Felder, die beim Einhängen ihren
-        // Wert normalisieren, sollen nicht als „ungespeichert" zählen.
-        await this.$nextTick();
-        this._takeSnapshot();
+        if (r.ok) profile = await r.json();
       } catch {}
+      if (seq !== this._selectSeq) return; // ein späterer Wechsel hat übernommen
+      await this._unmountFormThen(() => { this.activeProfileId = id; });
+      if (!profile) { this.activeProfile = null; this._savedSnapshot = ''; return; }
+      this.activeProfile = profile;
+      this.coverPreviewVersion++;
+      this._formMounted = true;
+      // Vergleichsbasis erst nach dem Mount: Felder, die beim Einhängen ihren
+      // Wert normalisieren, sollen nicht als „ungespeichert" zählen.
+      await this.$nextTick();
+      this._takeSnapshot();
     },
 
     // Profil anlegen (optional als Klon). Profile sind user-scoped — kein
@@ -273,7 +270,7 @@ export function registerPdfExportCard() {
         this.profiles.push(profile);
         this.newProfileName = '';
         this.cloneFromId = null;
-        this._showCreate = false;
+        this._profileRow = null;
         await this.selectProfile(profile.id);
       } finally {
         this.creating = false;
@@ -301,7 +298,7 @@ export function registerPdfExportCard() {
       const name = uniqueProfileName(base, this.profiles);
       await this._createProfileNamed(name, null, cfg);
       if (this.exportError) return;
-      this._showTemplate = false;
+      this._profileRow = null;
       this.templateSel = '';
     },
 
@@ -319,10 +316,7 @@ export function registerPdfExportCard() {
       if (wasDefault && this.profiles.length && !this.profiles.some(p => p.is_default)) {
         await this.setDefault(this.profiles[0].id);
       }
-      if (this.activeProfileId === id) {
-        await this._unmountFormThen(() => { this.activeProfileId = null; this.activeProfile = null; this._savedSnapshot = ''; });
-        await this.selectProfile(this.profiles[0].id);
-      }
+      if (this.activeProfileId === id) await this.selectProfile(this.profiles[0].id);
     },
 
     async setDefault(id) {

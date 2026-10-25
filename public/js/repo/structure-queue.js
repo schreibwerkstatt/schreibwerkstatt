@@ -39,6 +39,7 @@ import { lsGetJSON, lsSetJSON, lsRemove } from '../safe-storage.js';
 import { EVT } from '../events.js';
 import { openIdbStore } from '../shared/idb-store.js';
 import { isNetworkError } from '../utils/net.js';
+import { uuid } from '../utils/uuid.js';
 
 // ── Ablage ──────────────────────────────────────────────────────────────────
 // IndexedDB, eine Operation je Datensatz (`qid`), dazu ein synchroner Spiegel
@@ -207,8 +208,7 @@ const _qid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slic
 
 // Idempotenz-Schlüssel eines Anlege-Requests (Header `Idempotency-Key`).
 export function newOpKey() {
-  const r = globalThis.crypto?.randomUUID?.();
-  return r ? `op-${r}` : `op-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  return `op-${uuid()}`;
 }
 
 // ── Zuordnung temporär → echt ───────────────────────────────────────────────

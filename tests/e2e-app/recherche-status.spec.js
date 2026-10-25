@@ -12,9 +12,31 @@ const { bootApp, selectSeededBook } = require('./_helpers/app');
 
 const COLUMNS = ['offen', 'in_arbeit', 'eingearbeitet', 'verworfen'];
 
+// Die Suite teilt EIN Seed-Buch, und der erste Test zaehlt Spalten exakt.
+// Darum: vorher leerraeumen (ein Fund, den ein frueherer Spec liegen liess,
+// stuende sonst mit in der Zaehlung), nachher immer aufraeumen — auch wenn der
+// Test mittendrin scheitert, sonst traefe der Rest den Retry.
+let created = [];
+test.afterEach(async ({ page }) => {
+  const ids = created;
+  created = [];
+  if (!ids.length) return;
+  await page.evaluate(async (list) => {
+    for (const id of list) await fetch(`/research/${id}`, { method: 'DELETE' });
+  }, ids).catch(() => {});
+});
+
+async function clearResearch(page, bookId) {
+  await page.evaluate(async (id) => {
+    const list = await fetch(`/research?book_id=${id}&archived=1`).then(r => r.json());
+    for (const it of (list.items || list || [])) await fetch(`/research/${it.id}`, { method: 'DELETE' });
+  }, bookId);
+}
+
 test('recherche: Status-Board sortiert in Spalten, das Aktionsmenue verschiebt, die Liste zeigt dieselbe Stufe', async ({ page }) => {
   await bootApp(page);
   const bookId = await selectSeededBook(page);
+  await clearResearch(page, bookId);
 
   // Zwei Fundstuecke: eines mit Kapitel-Verknuepfung (hat eine Stelle im Buch),
   // eines ohne (daran haengt der „eingearbeitet ohne Stelle"-Befund).
@@ -35,6 +57,7 @@ test('recherche: Status-Board sortiert in Spalten, das Aktionsmenue verschiebt, 
 
     return { withPlace: withPlace.id, noPlace: noPlace.id, chapterId, status: withPlace.status, links: linked?.links?.length ?? 0 };
   }, bookId);
+  created.push(made.withPlace, made.noPlace);
 
   // Frisch angelegt heisst unbearbeitet — der Default kommt vom Server.
   expect(made.status).toBe('offen');
@@ -81,7 +104,7 @@ test('recherche: Status-Board sortiert in Spalten, das Aktionsmenue verschiebt, 
   // ── Aktionsmenue der Board-Karte verschiebt die Karte ─────────────────────
   const card = () => cell('offen').locator(`[data-research-card-id="${made.withPlace}"]`);
   await card().locator('.research-status-card-actions .icon-btn').first().click();
-  const menu = page.locator('.research-status-card-actions .context-menu:visible');
+  const menu = page.locator('.research-item-menu:visible');
   await expect(menu).toBeVisible();
   await expect(menu.locator('[role="menuitemradio"]')).toHaveCount(COLUMNS.length);
   // Der aktuelle Stand ist markiert, nicht bloss vorhanden.
@@ -101,7 +124,7 @@ test('recherche: Status-Board sortiert in Spalten, das Aktionsmenue verschiebt, 
   // ── „eingearbeitet ohne Stelle im Buch" ist ein Befund auf der Karte ──────
   const bare = () => cell('offen').locator(`[data-research-card-id="${made.noPlace}"]`);
   await bare().locator('.research-status-card-actions .icon-btn').first().click();
-  await page.locator('.research-status-card-actions .context-menu:visible [role="menuitemradio"]', { hasText: 'Eingearbeitet' }).click();
+  await page.locator('.research-item-menu:visible [role="menuitemradio"]', { hasText: 'Eingearbeitet' }).click();
   const bareMoved = cell('eingearbeitet').locator(`[data-research-card-id="${made.noPlace}"]`);
   await expect(bareMoved).toBeVisible();
   await expect(bareMoved.locator('.research-status-noplace')).toBeVisible();
@@ -121,16 +144,11 @@ test('recherche: Status-Board sortiert in Spalten, das Aktionsmenue verschiebt, 
   await expect(badge).toBeVisible();
   await expect(badge).toHaveClass(/research-status-badge--eingearbeitet/);
 
-  // Aufraeumen: die Suite teilt einen Seed-Stand.
-  await page.evaluate(async (ids) => {
-    for (const id of ids) await fetch(`/research/${id}`, { method: 'DELETE' });
-  }, [made.withPlace, made.noPlace]);
 });
 
-// Die Board-Karte traegt das Aktionsmenue, aber weder Link-Picker noch
-// KI-Vorschlaege (beides in recherche-item-relations). „Verknuepfen" muss darum
-// die Detailansicht oeffnen, sonst setzt der Klick nur unsichtbaren State.
-test('recherche: „Verknuepfen" im Menue einer Board-Karte oeffnet den Picker in der Detailansicht', async ({ page }) => {
+// „Verknuepfen" im Menue einer Board-Karte oeffnet nur den Picker auf
+// Kartenebene, am ⋯-Knopf verankert — nicht die Detailansicht.
+test('recherche: „Verknuepfen" im Menue einer Board-Karte oeffnet den Picker ohne Detailansicht', async ({ page }) => {
   await bootApp(page);
   const bookId = await selectSeededBook(page);
   const itemId = await page.evaluate(async (id) => {
@@ -140,16 +158,24 @@ test('recherche: „Verknuepfen" im Menue einer Board-Karte oeffnet den Picker i
     }).then(res => res.json());
     return r.id;
   }, bookId);
+  created.push(itemId);
 
   await page.evaluate((id) => { location.hash = `#book/${id}/recherche`; }, bookId);
   await expect(page.locator('#recherche-card')).toBeVisible();
   await page.locator('.entity-view-toggle .tabs-btn', { hasText: 'Status' }).click();
 
   const card = page.locator(`.research-status-board [data-research-card-id="${itemId}"]`);
-  await card.locator('.research-status-card-actions .icon-btn').first().click();
-  await page.locator('.research-status-card-actions .context-menu:visible [role="menuitem"]', { hasText: 'Verknüpfen' }).click();
+  const trigger = card.locator('.research-status-card-actions .icon-btn').first();
+  await trigger.click();
+  await page.locator('.research-item-menu:visible [role="menuitem"]', { hasText: 'Verknüpfen' }).click();
 
-  await expect(page.locator('dialog[open] .recherche-linkpicker')).toBeVisible();
+  const picker = page.locator('.recherche-link-picker');
+  await expect(picker).toBeVisible();
+  await expect(page.locator('dialog.research-dialog[open]')).toHaveCount(0);
+  const [pb, ab] = await Promise.all([picker.boundingBox(), trigger.boundingBox()]);
+  expect(Math.min(Math.abs(pb.y - (ab.y + ab.height)), Math.abs(pb.y + pb.height - ab.y))).toBeLessThan(12);
+  await picker.locator('button').last().focus();
+  await page.keyboard.press('Escape');
+  await expect(picker).toBeHidden();
 
-  await page.evaluate(async (id) => { await fetch(`/research/${id}`, { method: 'DELETE' }); }, itemId);
 });

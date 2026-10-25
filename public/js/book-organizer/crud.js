@@ -364,10 +364,38 @@ export const crudMethods = {
     window.__app._removePageFromTree(id);
   },
 
-  // Seite in ein anderes Buch verschieben. Bestaetigung mit Warnung (Buchwelt-
-  // Analyse der Seite wird gekappt), dann Server-Move + lokale Entfernung aus
-  // diesem Buch. Die Seite landet im Zielbuch top-level — Einsortierung in ein
-  // Kapitel erfolgt dort im Organizer. Nicht via History rueckgaengig.
+  // „In anderes Buch" als Picker-Popover (public/js/picker-popover.js, Markup
+  // organizer-book-move.html): Zielbuch waehlen und im selben Popover
+  // bestaetigen. Die Warnung (Buchwelt-Analyse des Abschnitts wird gekappt)
+  // steht dort, wo gewaehlt wird — keine zweite Rueckfrage danach.
+  openBookMove(ev, page) {
+    this.bookMovePageId = page.id;
+    this.bookMoveTarget = '';
+    this._openPickerPopover(ev, 'bookMovePopover', () => this.cancelBookMove());
+  },
+
+  cancelBookMove() {
+    this.bookMovePageId = null;
+    this.bookMoveTarget = '';
+    this._releasePickerPopover();
+  },
+
+  bookMovePage() {
+    return this.bookMovePageId == null ? null : this._findPage(this.bookMovePageId);
+  },
+
+  async applyBookMove() {
+    const pageId = this.bookMovePageId;
+    const target = this.bookMoveTarget;
+    if (pageId == null || !target || this.organizerSaving) return;
+    this.cancelBookMove();
+    await this.movePageToBook(pageId, target);
+  },
+
+  // Seite in ein anderes Buch verschieben (bestaetigt im Picker, siehe oben):
+  // Server-Move + lokale Entfernung aus diesem Buch. Die Seite landet im
+  // Zielbuch top-level — Einsortierung in ein Kapitel erfolgt dort im
+  // Organizer. Nicht via History rueckgaengig.
   async movePageToBook(pageId, targetBookIdRaw) {
     const root = window.__app;
     const nav = Alpine.store('nav');
@@ -378,13 +406,6 @@ export const crudMethods = {
     if (!page) return;
     const book = (nav.books || []).find(b => String(b.id) === String(targetBookId));
     const bookName = book?.name || ('#' + targetBookId);
-    const ok = await root.appConfirm({
-      message: root.t('bookOrganizer.moveToBookConfirm', { page: page.name, book: bookName }),
-      confirmLabel: root.t('bookOrganizer.moveToBookConfirmLabel'),
-      cancelLabel: root.t('common.cancel'),
-      danger: true,
-    });
-    if (!ok) return;
     const sourceBookId = parseInt(nav.selectedBookId, 10);
     const pageName = page.name;
     const done = await this._runMutation(async () => {

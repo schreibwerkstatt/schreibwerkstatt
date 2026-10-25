@@ -51,12 +51,19 @@ test('ideen-stages: zwei Stufen → zwei Spalten, Zuschalten ueber „Spalten", 
     expect(await gridColumnCount(board)).toBe(3);
     const probe = card.locator(`[data-idee-card-id="${idee.id}"]`);
     await expect(probe.locator('.idee-board-step:visible')).toHaveText(['Erledigt']);
-    await expect(card.locator('.filter-toggle', { hasText: 'Verworfene anzeigen' })).toBeHidden();
 
-    // Zuschalten ueber die Oberflaeche.
-    await card.locator('.ideen-board-stages-toggle').click();
-    const stagesPanel = card.locator('.ideen-board-stages');
-    await stagesPanel.locator('.filter-toggle', { hasText: 'In Arbeit' }).locator('input').check();
+    // Zuschalten ueber das Stufen-Menue der Filterleiste. Ohne die Stufe
+    // `verworfen` bietet es auch das Einblenden der Verworfenen nicht an.
+    const toggle = card.locator('.ideen-board-stages-toggle');
+    const stagesMenu = card.locator('.ideen-board-stages-menu');
+    const stageItem = (label) => stagesMenu.locator('[role="menuitemcheckbox"]', { hasText: label });
+    await toggle.click();
+    await expect(stagesMenu).toBeVisible();
+    await expect(stageItem('Verworfene anzeigen')).toBeHidden();
+    await stageItem('In Arbeit').click();
+    await expect(stageItem('In Arbeit')).toHaveAttribute('aria-checked', 'true');
+    // Schalter halten das Menue offen — der naechste Schalter ist einen Klick entfernt.
+    await expect(stagesMenu).toBeVisible();
     await expect(card.locator('.ideen-board-head-col')).toHaveCount(3);
     expect(await gridColumnCount(board)).toBe(4);
     await expect(probe.locator('.idee-board-step:visible')).toHaveText(['In Arbeit', 'Erledigt']);
@@ -65,7 +72,11 @@ test('ideen-stages: zwei Stufen → zwei Spalten, Zuschalten ueber „Spalten", 
     // markiert, und bietet sich nicht mehr als Ziel an.
     await probe.locator('.idee-board-step', { hasText: 'In Arbeit' }).click();
     await expect(card.locator(`[data-idee-status-cell="in_arbeit"] [data-idee-card-id="${idee.id}"]`)).toHaveCount(1);
-    await stagesPanel.locator('.filter-toggle', { hasText: 'In Arbeit' }).locator('input').uncheck();
+    if (!(await stagesMenu.isVisible())) await toggle.click();
+    await stageItem('In Arbeit').click();
+    await expect(stageItem('In Arbeit')).toHaveAttribute('aria-checked', 'false');
+    await page.keyboard.press('Escape');
+    await expect(stagesMenu).toBeHidden();
     await expect(card.locator('.ideen-board-head-col--inactive')).toHaveCount(1);
     await expect(card.locator('.ideen-board-head-col')).toHaveCount(3);
     await expect(probe.locator('.idee-board-step:visible')).toHaveText(['Offen', 'Erledigt']);

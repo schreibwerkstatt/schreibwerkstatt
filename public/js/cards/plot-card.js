@@ -14,6 +14,7 @@ import { ideenBacklinkMethods } from '../book/ideen-backlinks.js';
 import { plotChatMethods, plotChatState } from '../chat/plot-chat.js';
 import { plotBoardUiState } from '../book/plot/board-ui.js';
 import { konfliktActionState } from '../book/plot/konflikt-actions.js';
+import { actionMenuState, actionMenuMethods } from '../action-menu.js';
 
 const HIDE_IM_BUCH_PREF_KEY = 'plotHideImBuch';
 const SHOW_ARCHIVED_PREF_KEY = 'plotShowArchived';
@@ -122,15 +123,8 @@ export function registerPlotCard() {
     addingThread: false,
     newThreadName: '',
     threadColorPickerId: null,
-    // ID der Lane, deren Aktions-Dropdown (Kebab) offen ist (Single-Select wie die
-    // Color-Picker-IDs). Das Menü ist ein einzelnes, nach .card--plot teleportiertes
-    // .context-menu (JS-positioniert) — die Lane lebt in einem overflow/transform-
-    // Scrollcontainer, in dem ein verankertes Popover geclippt würde.
-    threadActionsOpenId: null,
-    threadMenuPos: { top: 0, left: 0 },
-    // Dismiss-Controller (cards/dismiss.js) des offenen Lane-Menüs: schliesst bei
-    // Scroll/Resize; null = Menü zu.
-    _threadMenuCloseHandler: null,
+    // Lane-Aktionsmenü (action-menu.js), Ziel = Lane-ID.
+    ...actionMenuState(),
 
     // ID des Beats, dessen Anchor-Fundstellen-Popover offen ist (Single-Select).
     // Das Popover ist ein einzelnes, nach .card--plot teleportiertes .context-menu
@@ -138,7 +132,7 @@ export function registerPlotCard() {
     // Scrollcontainer, in dem ein verankertes Popover geclippt würde.
     beatOccPopoverBeatId: null,
     beatOccPopoverPos: { top: 0, left: 0 },
-    // Dismiss-Controller des offenen Fundstellen-Popovers (wie _threadMenuCloseHandler).
+    // Dismiss-Controller (cards/dismiss.js) des offenen Fundstellen-Popovers.
     _occPopoverCloseHandler: null,
 
     // Eingeklappte „verworfen"-Beats pro Akt ({ [actId]: true }).
@@ -344,15 +338,16 @@ export function registerPlotCard() {
     },
 
     destroy() {
+      this.closeActionMenu();
       this._clearJobs();
       this.resetPlotChat();
       this._destroySortables();
       this._detachOccPopoverListeners?.();
-      this._detachThreadMenuListeners?.();
       this._lifecycle?.destroy();
     },
 
     ...plotMethods,
+    ...actionMenuMethods,
     ...ideenBacklinkMethods,
     ...plotChatMethods,
   }));

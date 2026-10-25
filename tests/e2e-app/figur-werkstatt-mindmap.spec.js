@@ -139,21 +139,56 @@ test('Long-Press auf einen Knoten oeffnet das Knoten-Menue', async ({ browser })
       await expect(menu).toBeVisible();
       // Lage: das Menü sitzt am Finger (viewport-verankert, auf den Viewport
       // geklemmt) — nicht um den Karten-Offset verschoben.
+      // Geklemmt wird mit der gemessenen Groesse (action-menu.js, nach dem Render).
       const vp = page.viewportSize();
-      const mbox = await menu.boundingBox();
-      const expLeft = Math.max(8, Math.min(vp.width - 240 - 8, x));
-      const expTop = Math.max(8, Math.min(vp.height - 240 - 8, y));
-      expect(Math.abs(mbox.x - expLeft)).toBeLessThan(2);
-      expect(Math.abs(mbox.y - expTop)).toBeLessThan(2);
+      await expect.poll(async () => {
+        const mbox = await menu.boundingBox();
+        const expLeft = Math.max(8, Math.min(vp.width - mbox.width - 8, x));
+        const expTop = Math.max(8, Math.min(vp.height - mbox.height - 8, y));
+        return Math.abs(mbox.x - expLeft) < 2 && Math.abs(mbox.y - expTop) < 2;
+      }).toBe(true);
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
       // Das nachgereichte Maus-Event darf das Menue nicht wieder schliessen.
       await page.waitForTimeout(200);
       await expect(menu).toBeVisible();
-      expect(await page.evaluate(() => window.Alpine.$data(document.querySelector('.card--werkstatt')).contextMenuNodeId)).toBe('root');
+      expect(await page.evaluate(() => window.Alpine.$data(document.querySelector('.card--werkstatt')).actionMenuTarget)).toBe('root');
     } finally {
       await deleteDraft(page, draft.id);
     }
   } finally {
     await ctx.close();
+  }
+});
+
+test('Vollbild zeigt nur die Mindmap, Knoten-Menue bleibt sichtbar', async ({ page }) => {
+  await bootApp(page);
+  const draft = await openWerkstattWithDraft(page, `Vollbild-Probe ${RUN}`);
+  try {
+    await page.locator(`${CARD} .werkstatt-mindmap-controls button[aria-pressed]`).click();
+    await page.waitForFunction(() => document.fullscreenElement?.classList.contains('werkstatt-mindmap-section'));
+    await expect(page.locator(`${CARD} .werkstatt-mindmap-controls button[aria-pressed]`)).toHaveAttribute('aria-pressed', 'true');
+    const geo = await page.evaluate(() => {
+      const fs = document.fullscreenElement;
+      const mm = fs.querySelector('.werkstatt-mindmap').getBoundingClientRect();
+      return {
+        detailHeadInFs: !!fs.querySelector('.werkstatt-detail-name'),
+        mmBottomGap: window.innerHeight - mm.bottom,
+        mmShare: mm.height / window.innerHeight,
+      };
+    });
+    expect(geo.detailHeadInFs, 'Detail-Kopf gehoert nicht ins Vollbild').toBe(false);
+    expect(geo.mmShare, 'Mindmap fuellt den Viewport').toBeGreaterThan(0.75);
+    expect(geo.mmBottomGap).toBeGreaterThanOrEqual(0);
+
+    await page.locator(`${CARD} jmnode.root`).click({ button: 'right' });
+    const menu = page.locator(`${CARD} .werkstatt-context-menu`);
+    await expect(menu).toBeVisible();
+    expect(await menu.evaluate((m) => document.fullscreenElement.contains(m))).toBe(true);
+    await page.keyboard.press('Escape');
+
+    await page.evaluate(() => document.exitFullscreen());
+    await expect(page.locator(`${CARD} .werkstatt-mindmap-controls button[aria-pressed]`)).toHaveAttribute('aria-pressed', 'false');
+  } finally {
+    await deleteDraft(page, draft.id);
   }
 });

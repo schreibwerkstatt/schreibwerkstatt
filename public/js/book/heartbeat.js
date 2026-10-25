@@ -18,6 +18,8 @@
 //    dieselbe Wall-Clock doppelt. Das Lease lässt pro Tracker nur einen Tab
 //    zählen; die anderen laufen weiter, senden aber nicht.
 
+import { uuid } from '../utils/uuid.js';
+
 // Heartbeat-Intervall aller drei Tracker. Der Tick-Clamp leitet sich daraus ab,
 // darum steht die Zahl hier und wird von heartbeat-tracker.js importiert statt
 // dort ein zweites Mal gepflegt.
@@ -33,10 +35,7 @@ const LEASE_PREFIX = 'sw:hb-lease:';
 // Pro Tab (nicht pro Gerät) — zwei Tabs desselben Browsers müssen sich
 // unterscheiden. Bewusst nicht `getDeviceId()`: das ist persistent pro Gerät und
 // in allen Tabs identisch, damit wäre das Lease wirkungslos.
-const TAB_ID = (() => {
-  try { return globalThis.crypto.randomUUID(); } catch { /* kein WebCrypto */ }
-  return 'tab-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-})();
+const TAB_ID = uuid();
 
 /**
  * Deckelt einen Tick-Delta auf `max` Sekunden. Nicht-endliche, negative und

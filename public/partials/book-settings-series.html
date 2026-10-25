@@ -101,7 +101,7 @@
             <template x-for="k in seriesCarryKinds" :key="k">
               <div class="series-carry-kind">
                 <div class="series-carry-head">
-                  <span class="card-form-label" x-text="$app.t('series.carry.kind.' + k) + ' (' + (carrySel[k] || []).length + '/' + (carryLists[k] || []).length + ')'"></span>
+                  <span class="card-form-label card-form-label--inline" x-text="$app.t('series.carry.kind.' + k) + ' (' + (carrySel[k] || []).length + '/' + (carryLists[k] || []).length + ')'"></span>
                   <button type="button" @click="carrySelectAll(k, true)" x-text="$app.t('series.carry.pickCurated')"></button>
                   <button type="button" @click="carrySelectAll(k, false)" x-text="$app.t('series.carry.pickAll')"></button>
                   <button type="button" @click="carrySelectNone(k)" x-text="$app.t('series.carry.pickNone')"></button>

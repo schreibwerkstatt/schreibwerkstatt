@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 342, 187 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 343, 187 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -1130,7 +1130,7 @@ erDiagram
     TEXT    archetype        "z.B. protagonist, antagonist, frei"
     TEXT    mindmap_json     "jsMind-Baum: { meta, format, data:{ id, topic, children } }"
     TEXT    notes
-    INTEGER source_figure_id FK "ON DELETE SET NULL — Referenz auf figures(id), wenn Draft via Import erzeugt wurde"
+    INTEGER source_figure_id FK "ON DELETE SET NULL — Referenz auf figures(id), wenn Draft via Import erzeugt oder nachträglich verknüpft wurde; UNIQUE je (user_email, source_figure_id)"
     TEXT    created_at
     TEXT    updated_at
   }

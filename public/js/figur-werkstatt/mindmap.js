@@ -7,6 +7,7 @@
 import { loadJsMind } from '../lazy-libs.js';
 import { toggleWrapFullscreen } from '../fullscreen.js';
 import { observeThemeChange } from '../graph-kit/theme.js';
+import { uuid } from '../utils/uuid.js';
 
 const I18N_MARKER = /^__i18n:([a-zA-Z0-9_.-]+)__$/;
 
@@ -16,15 +17,19 @@ export function resolveTopic(topic) {
 }
 
 // Klont Mindmap-Tree mit resolved Topics für Display und befüllt markers
-// (id → Original-Marker-String) als Seitenkanal. _exportMindmap nutzt die Map,
-// um Default-Topics nach dem Save in Marker zurückzuverwandeln.
+// (id → { marker, shown }) als Seitenkanal. _exportMindmap nutzt die Map, um
+// Default-Topics nach dem Save in Marker zurückzuverwandeln. `shown` ist der
+// Text, der beim Mount angezeigt wurde: ein Locale-Wechsel bei offener Mindmap
+// ändert t(), nicht aber den Knoten — der Vergleich gegen die neue Übersetzung
+// liesse den Marker sonst fallen und speicherte die alte Sprache als Klartext.
 export function resolveMindmapForDisplay(mindmap, markers) {
   if (!mindmap?.data) return mindmap;
   const clone = (n) => {
-    if (markers && I18N_MARKER.test(n.topic || '')) markers[n.id] = n.topic;
+    const shown = resolveTopic(n.topic);
+    if (markers && I18N_MARKER.test(n.topic || '')) markers[n.id] = { marker: n.topic, shown };
     return {
       ...n,
-      topic: resolveTopic(n.topic),
+      topic: shown,
       children: (n.children || []).map(clone),
     };
   };
@@ -38,13 +43,8 @@ function _lineColor() {
   return cs.getPropertyValue('--color-border').trim() || '#888';
 }
 
-// iOS feuert bei langem Druck kein `contextmenu` — ohne Long-Press waeren
-// Umbenennen/Anlegen/Loeschen auf einem Tablet ohne Tastatur unerreichbar.
-const LONG_PRESS_MS = 500;
-const LONG_PRESS_SLOP_PX = 10;
-
 export function _newNodeId() {
-  return 'n' + crypto.randomUUID();
+  return 'n' + uuid();
 }
 
 export const mindmapMethods = {
@@ -79,10 +79,6 @@ export const mindmapMethods = {
     this._attachJmListeners();
     this._themeObs = observeThemeChange(() => this._applyLineColor());
     container.addEventListener('contextmenu', (ev) => this._onMindmapContextMenu(ev));
-    this._attachLongPress(container);
-    container.addEventListener('mousedown', (ev) => {
-      if (ev.button !== 2 && this.contextMenuOpen) this._hideContextMenu();
-    });
     this._topicMarkers = {};
     const display = resolveMindmapForDisplay(sel.mindmap, this._topicMarkers);
     // Wurzel = Figurname (Server-Invariante); ungespeicherte Umbenennung im
@@ -91,6 +87,7 @@ export const mindmapMethods = {
     if (display?.data && name) display.data.topic = name;
     this._jm.show(display);
     this._jmDraftId = sel.id;
+    this._resetMindmapHistory();
     this.selectedKnotenId = sel.mindmap?.data?.id || 'root';
     if (this._pendingKnotenId) {
       const kid = this._pendingKnotenId;
@@ -107,12 +104,15 @@ export const mindmapMethods = {
         panel.focus({ preventScroll: true });
         // Esc blurt Mindmap-Panel: Tab=9 ist als addchild gemappt, sonst
         // kein Tab-Forward möglich. Esc gibt Tab-Reihenfolge frei.
+        // Cmd/Ctrl+Z bzw. +Umschalt (oder +Y): Rückgängig/Wiederholen der
+        // Mindmap (history.js) — nicht, solange ein Knoten-Topic editiert wird.
         panel.addEventListener('keydown', (e) => {
-          if (e.key === 'Escape' && this._jm) {
-            const editing = container.querySelector('jmnode input');
-            if (editing) return;
-            panel.blur();
-          }
+          if (!this._jm || container.querySelector('jmnode input')) return;
+          if (e.key === 'Escape') { panel.blur(); return; }
+          if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+          const k = e.key.toLowerCase();
+          if (k === 'z' && !e.shiftKey) { e.preventDefault(); this.undoMindmap(); }
+          else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); this.redoMindmap(); }
         });
       }
     });
@@ -138,13 +138,22 @@ export const mindmapMethods = {
       layout: { hspace: 30, vspace: 18, pspace: 14 },
       // Mac kein Insert; Tab als Mindmap-Standard. Esc-Handler im Mount blurt
       // Panel, sonst Tab-Trap (a11y).
+      // Entf läuft NICHT über jsMinds eingebautes `delnode` (löscht ohne
+      // Rückfrage, auch die Kern-Container), sondern über denselben Weg wie
+      // das Kontextmenü: _requestDeleteNode. Der eingebaute Name lässt sich
+      // nicht überschreiben (jsMind setzt seine Handler nach den eigenen), darum
+      // eigener Name + leeres Mapping für `delnode`.
       shortcut: {
         enable: true,
+        handles: {
+          safedel: (jm) => { this._requestDeleteNode(jm.get_selected_node()?.id); },
+        },
         mapping: {
           addchild: [9, 45, 4109],
           addbrother: 13,
           editnode: 113,
-          delnode: 46,
+          delnode: [],
+          safedel: 46,
           toggle: 32,
           left: 37, up: 38, right: 39, down: 40,
         },
@@ -157,6 +166,9 @@ export const mindmapMethods = {
     this._jm.add_event_listener((type, data) => {
       if (type === 4) {
         const id = data?.node || null;
+        // jsMind stellt Events per Timeout zu: ein sofort danach gelöschter
+        // Knoten (Auswahl + Entf) ist beim Eintreffen schon weg.
+        if (id && !this._jm.mind?.nodes?.[id]) return;
         this.selectedKnotenId = id;
         if (id && !this._suppressCenter) this._centerNodeInView(id);
       } else if (type === 3) {
@@ -188,39 +200,6 @@ export const mindmapMethods = {
     if (!view?.opts) return;
     view.opts.line_color = _lineColor();
     try { view.show_lines(); } catch {}
-  },
-
-  // Long-Press oeffnet dasselbe Knoten-Menue wie der Rechtsklick. Loest der
-  // Browser nativ `contextmenu` aus (Android), raeumt dessen Handler den Timer
-  // ab. Nach dem Ausloesen verhindert touchend die emulierten Maus-Events —
-  // sonst schlosse der nachgereichte mousedown das Menue sofort wieder.
-  _attachLongPress(container) {
-    let timer = null, startX = 0, startY = 0, fired = false;
-    const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
-    this._cancelLongPress = cancel;
-    container.addEventListener('touchstart', (ev) => {
-      fired = false;
-      cancel();
-      if (ev.touches.length !== 1) return;
-      const t = ev.touches[0];
-      const node = t.target?.closest?.('jmnode');
-      if (!node) return;
-      startX = t.clientX; startY = t.clientY;
-      timer = setTimeout(() => {
-        timer = null;
-        fired = true;
-        this._openNodeMenu(node, startX, startY);
-      }, LONG_PRESS_MS);
-    }, { passive: true });
-    container.addEventListener('touchmove', (ev) => {
-      const t = ev.touches[0];
-      if (t && Math.hypot(t.clientX - startX, t.clientY - startY) > LONG_PRESS_SLOP_PX) cancel();
-    }, { passive: true });
-    container.addEventListener('touchend', (ev) => {
-      cancel();
-      if (fired) { ev.preventDefault(); fired = false; }
-    });
-    container.addEventListener('touchcancel', cancel);
   },
 
   _selectNodeQuiet(id) {
@@ -265,16 +244,15 @@ export const mindmapMethods = {
     }
     this._themeObs?.disconnect();
     this._themeObs = null;
-    this._cancelLongPress?.();
-    this._cancelLongPress = null;
+    this.closeActionMenu();
     this._jm = null;
     this._jmDraftId = null;
     this._mindmapEl = null;
     this._topicMarkers = null;
-    if (document.fullscreenElement?.classList?.contains?.('werkstatt-detail')) {
+    this._clearMindmapHistory();
+    if (document.fullscreenElement?.classList?.contains?.('werkstatt-mindmap-section')) {
       try { document.exitFullscreen?.(); } catch {}
     }
-    this._hideContextMenu?.();
   },
 
   // Zentriert nur, wenn Knoten ausserhalb Viewport — Pfeil-Nav sonst jankig.
@@ -315,9 +293,9 @@ export const mindmapMethods = {
       if (!exported?.data) return null;
       const markers = this._topicMarkers || {};
       const restore = (n) => {
-        const marker = markers[n.id];
-        if (marker && n.topic === resolveTopic(marker)) {
-          n.topic = marker;
+        const m = markers[n.id];
+        if (m && n.topic === m.shown) {
+          n.topic = m.marker;
         }
         (n.children || []).forEach(restore);
       };
@@ -329,11 +307,10 @@ export const mindmapMethods = {
   },
 
   async toggleMindmapFullscreen() {
-    // Fullscreen umfasst das ganze Detail-Pane (Header + Form + Mindmap + Runs),
-    // nicht nur die Mindmap-Section: Save/Brainstorm/Konsistenz und Notes
-    // bleiben im Vollbild erreichbar. `$el` würde im @click-Kontext das Button-
-    // Element liefern (kein Descendant von .werkstatt-detail) — globale Suche.
-    const wrap = document.querySelector('.werkstatt-detail');
+    // Fullscreen umfasst nur die Mindmap-Section (Titel + Canvas + Knoten-Menü),
+    // nicht das Detail-Pane drumherum. Das Knoten-Menü liegt in der Section und
+    // bleibt so im Vollbild-Teilbaum sichtbar.
+    const wrap = document.querySelector('.card--werkstatt .werkstatt-mindmap-section');
     if (!wrap) return;
     // State-Sync via `fullscreenchange`-Listener in figur-werkstatt-card.js —
     // mindmapFullscreen wird dort gesetzt, jsMind resize ebenfalls.

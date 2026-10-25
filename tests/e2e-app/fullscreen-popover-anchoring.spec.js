@@ -20,7 +20,7 @@ const CARDS = [
     card: '.card--plot',
     popovers: [
       '.plot-occ-popover',                      // Anchor-Fundstellen (plot-anchor-popover.html)
-      '.context-menu[x-ref="threadMenu"]',      // Strang-Aktionen (plot-thread-menu.html)
+      '.context-menu[x-ref="actionMenu"]',      // Strang-Aktionen (plot-thread-menu.html)
     ],
   },
   {
@@ -28,7 +28,7 @@ const CARDS = [
     toggle: 'toggleMotivCard',
     card: '.card--motiv',
     popovers: [
-      '.context-menu[x-ref="graphMenu"]',       // Graph-Kontextmenue (motiv-graph-menu.html)
+      '.context-menu[x-ref="actionMenu"]',       // Graph-Kontextmenue (motiv-graph-menu.html)
     ],
   },
 ];

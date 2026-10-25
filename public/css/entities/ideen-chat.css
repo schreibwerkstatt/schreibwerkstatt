@@ -50,14 +50,6 @@
 .card--ideenboard:fullscreen .ideen-chat-messages { max-height: 52vh; }
 
 /* Schnellstart-Aufträge im leeren Gespräch. */
-.ideen-chat-starters {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-xs);
-  margin-top: var(--space-sm);
-}
-
 /* Vorschläge: volle Bubble-Breite statt der 88% des Abschnitts-Chats. */
 .chat-msg .ideen-chat-proposals {
   max-width: none;

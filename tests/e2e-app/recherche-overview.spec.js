@@ -97,8 +97,9 @@ test('recherche: Liste zeigt Anriss, Detailansicht zeigt Volltext und bleibt ver
   // vorher weg, weil Anzeige- und Formular-Zweig sich ausgeschlossen haben.
   await expect(dialog.locator('.research-dialog__foot button').first()).toBeVisible();
   await dialog.locator('.research-dialog__foot button').first().click();
-  await expect(dialog.locator('.recherche-linkpicker')).toBeVisible();
-  await dialog.locator('.recherche-linkpicker .btn-compact').last().click(); // Abbrechen
+  await expect(dialog.locator('.recherche-link-picker')).toBeVisible();
+  await dialog.locator('.recherche-link-picker .btn-compact').last().click(); // Abbrechen
+  await expect(dialog.locator('.recherche-link-picker')).toBeHidden();
   await dialog.getByRole('button', { name: 'Abbrechen' }).click();          // Edit verlassen
   await expect(detailText).toBeVisible();
 

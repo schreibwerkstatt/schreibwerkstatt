@@ -9,7 +9,8 @@
      Spellcheck-Dispatcher greift Felder über einen statischen Attribut-Selektor
      (Muster sources-form.html). -->
 <template x-if="figurEditId === f.id">
-  <section class="figur-group figur-edit">
+  <section class="figur-group figur-edit"
+           @keydown="$editKeys($event, { save: () => saveFigurEdit(f), cancel: () => cancelFigurEdit() })">
     <h4 class="figur-group-title" x-text="$app.t('figuren.edit.title')"></h4>
     <p class="card-hint" x-text="$app.t('figuren.edit.hint')"></p>
     <div class="card-form-grid">

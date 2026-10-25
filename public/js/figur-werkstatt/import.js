@@ -35,14 +35,20 @@ export const importMethods = {
   // Der Weg fuer alle, die erst geplant und dann geschrieben haben: die
   // Komplettanalyse legt die Figur ein zweites Mal an. Ohne den Zeiger bleiben
   // es zwei Figuren, und jede Bruecke im Haus fuehrt zwei Spalten.
-  async startLinkFigure() {
+  // `anchor` = Trigger des Overflow-Menues: der Menue-Eintrag verschwindet mit
+  // dem Menue, der Picker (werkstatt-link-picker.html) haengt am Knopf. Er geht
+  // sofort auf und zeigt den Ladezustand; nach dem Laden wird neu gemessen,
+  // weil Combobox bzw. Leer-Hinweis die Hoehe aendern.
+  async startLinkFigure(anchor) {
     const app = window.__app;
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId || !this.selectedDraftId) return;
     this.linking = true;
     this.linkCandidatesLoading = true;
     this.selectedLinkFigureId = '';
+    this.linkCandidates = [];
     this.errorMessage = '';
+    this._openPickerPopover(anchor, 'werkstattLinkPopover', () => this.cancelLinkFigure());
     try {
       const rows = await fetchJson(`/draft-figures/${bookId}/link-candidates`);
       this.linkCandidates = Array.isArray(rows) ? rows : [];
@@ -56,6 +62,7 @@ export const importMethods = {
       this.errorMessage = app.t('werkstatt.error.linkLoad');
     } finally {
       this.linkCandidatesLoading = false;
+      this._refinePickerPopover('werkstattLinkPopover');
     }
   },
 
@@ -63,6 +70,7 @@ export const importMethods = {
     this.linking = false;
     this.selectedLinkFigureId = '';
     this.linkCandidates = [];
+    this._releasePickerPopover();
   },
 
   // figureId === null loest die Verknuepfung wieder (der Draft lebt weiter —

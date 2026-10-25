@@ -150,7 +150,7 @@ export async function patchIdee(idee, fields) {
     try {
       await _locked(async () => {
         const prev = (await _load()).find((o) => o.op === 'patch' && o.id === Number(idee.id));
-        const op = prev ? { ...prev, fields: { ...prev.fields, ...fields } } : _newOp({ op: 'patch', id: Number(idee.id), bookId: idee.book_id ?? null, fields: { ...fields } });
+        const op = prev ? { ...prev, fields: _withFields(prev.fields, fields) } : _newOp({ op: 'patch', id: Number(idee.id), bookId: idee.book_id ?? null, fields: { ...fields } });
         await _store.put(op);
       });
     } catch { throw e; }
@@ -205,8 +205,19 @@ async function _dropSuperseded(id, keys) {
   } catch { /* nur Aufräumen */ }
 }
 
+// Ein Anker verdrängt den anderen (Umzug Abschnitt ↔ Kapitel): sonst trügen
+// zusammengeführte Felder beide, und der Server lehnte mit INVALID_SCOPE ab.
+function _withFields(base, fields) {
+  const out = { ...base, ...fields };
+  if ('page_id' in fields && !('chapter_id' in fields)) delete out.chapter_id;
+  if ('chapter_id' in fields && !('page_id' in fields)) delete out.page_id;
+  return out;
+}
+
 function _assumePatched(idee, fields) {
   const row = { ...idee, ...fields, pending: true };
+  if ('page_id' in fields && !('chapter_id' in fields)) row.chapter_id = null;
+  if ('chapter_id' in fields && !('page_id' in fields)) row.page_id = null;
   if (fields.status && fields.status !== idee.status) row.status_at = _nowIso();
   return row;
 }
@@ -216,7 +227,7 @@ async function _patchPendingCreate(idee, fields) {
   await _locked(async () => {
     const op = (await _load()).find((o) => o.op === 'create' && o.tempId === Number(idee.id));
     if (!op) return;
-    op.body = { ...op.body, ...fields };
+    op.body = _withFields(op.body, fields);
     await _store.put(op);
     row = _syntheticRow(op);
   });

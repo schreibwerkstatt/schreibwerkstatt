@@ -139,13 +139,11 @@ async function _proposeUpdate(input, ctx, state, ideeId) {
   const anchor = _resolveAnchor(input, state);
   if (anchor.error) return anchor;
   if (anchor.page_id || anchor.chapter_id) {
-    const isBookIdee = idee.page_id == null && idee.chapter_id == null;
     // = routes/ideen.js: eine abgeschlossene Idee wandert nicht mehr.
     if (!isOpenIdeeStatus(idee.status)) return _err(`Idee #${ideeId} ist ${idee.status} — eine abgeschlossene Idee bekommt keinen neuen Ort.`);
-    if (!isBookIdee && anchor.page_id && idee.page_id == null) return _err(`Idee #${ideeId} hängt an einem Kapitel; sie kann nur in ein anderes Kapitel umziehen (chapter_id).`);
-    if (!isBookIdee && anchor.chapter_id && idee.chapter_id == null) return _err(`Idee #${ideeId} hängt an einem Abschnitt; sie kann nur in einen anderen Abschnitt umziehen (page_id).`);
     const same = anchor.page_id ? anchor.page_id === idee.page_id : anchor.chapter_id === idee.chapter_id;
     if (!same) {
+      // Der neue Anker leert den alten — auch beim Wechsel Kapitel ↔ Abschnitt.
       Object.assign(fields, anchor);
       before.page_id = idee.page_id ?? null;
       before.chapter_id = idee.chapter_id ?? null;

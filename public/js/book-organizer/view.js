@@ -199,7 +199,7 @@ export const viewMethods = {
     return this._chapterOptions();
   },
 
-  // Options-Array fuer die „In anderes Buch"-Combobox: Buecher, in die der User
+  // Options-Array fuer den „In anderes Buch"-Picker: Buecher, in die der User
   // schreiben darf (`role` aus /content/books), ohne das aktuelle und ohne
   // archivierte. Der Server erzwingt die ACL ohnehin (editor auf beiden) — hier
   // geht es darum, kein Ziel anzubieten, das erst NACH der Rueckfrage mit 403
@@ -216,9 +216,10 @@ export const viewMethods = {
     });
   },
 
-  // Zeilen-Comboboxen („Verschieben nach", „In anderes Buch", Redaktions-Stufe)
-  // montieren erst beim Klick auf ihren Platzhalter-Trigger und bauen sich beim
-  // Schliessen wieder ab (organizer-page-actions.html). Pro Zeile drei echte
+  // Zeilen-Comboboxen („Verschieben nach", Redaktions-Stufe) montieren erst
+  // beim Klick auf ihren Platzhalter-Trigger und bauen sich beim Schliessen
+  // wieder ab (organizer-page-actions.html); „In anderes Buch" ist ein
+  // Picker-Popover ausserhalb der Zeilen (crud.js#openBookMove). Pro Zeile echte
   // Comboboxen waeren bei hunderten Seiten tausend Alpine-Komponenten mit je
   // zwei globalen Listenern, und jede Kapitel-Umbenennung liesse alle
   // Options-Effekte neu laufen. Es ist hoechstens EINE offen: `activeRowCombo`.

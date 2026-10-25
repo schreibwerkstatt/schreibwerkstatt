@@ -70,7 +70,7 @@ export const rechercheItemMethods = {
   async createItem() {
     const app = window.__app;
     const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId) return;
+    if (!bookId || this.busy) return;
     const d = this.draft;
     const file = this.$refs?.createFile?.files?.[0] || null;
     const hasText = !!((d.title || '').trim() || (d.body || '').trim() || (d.urls || []).some(u => (u.url || '').trim()));
@@ -133,7 +133,7 @@ export const rechercheItemMethods = {
     if (!item) return;
     this.detailItemId = item.id;
     this.detailEditing = false;
-    this.menuOpenId = null;
+    this.closeActionMenu();
     // Anlegen-Dialog wirklich schliessen (nicht bloss das Flag): er liegt sonst
     // als zweites Panel im Top-Layer.
     this.closeCreate();
@@ -157,11 +157,9 @@ export const rechercheItemMethods = {
   _onDetailClosed() {
     this.detailItemId = null;
     this.detailEditing = false;
-    this.linkPickerItemId = null;
-    // menuOpenId-Aufräum-Pflicht beim Schliessen: trägt noch den Kontext-Bezeichner
-    // ('detail:<id>'), sonst reopening wäre das Menü sofort offen. Liste vs. Detail
-    // sind über den menuCtx-Präfix im Markup getrennt, der Reset gilt beiden.
-    this.menuOpenId = null;
+    this.cancelLinkPicker();
+    // Ein im Dialog geöffnetes Aktionsmenü schliesst mit ihm.
+    this.closeActionMenu();
     if (window.Alpine) window.Alpine.store('nav').rechercheItemId = null;
   },
 
@@ -194,7 +192,7 @@ export const rechercheItemMethods = {
   // und sonst durchblubbern würden), die ihre eigene Aktion behalten.
   onItemBodyClick(item, ev) {
     if (this.busy) return;
-    if (ev.target.closest('a, button, input, label, .research-tag, .entity-ref, .recherche-linkpicker, .combobox-wrap')) return;
+    if (ev.target.closest('a, button, input, label, .research-tag, .entity-ref, .combobox-wrap')) return;
     // Im Auswahl-Modus markiert ein Klick, statt den Dialog zu oeffnen.
     if (this.bulkMode) { this.toggleBulkSelect(item); return; }
     // Textselektion nicht abwürgen: hat der User Text markiert (Drag löst am
@@ -206,6 +204,7 @@ export const rechercheItemMethods = {
 
   async saveEdit(item) {
     const app = window.__app;
+    if (this.busy) return;
     this.busy = true;
     try {
       this._replaceItem(await this._patchItem(item.id, this._draftBody(this.draft)));
@@ -248,7 +247,7 @@ export const rechercheItemMethods = {
       this._replaceItem(await this._patchItem(item.id, { pinned: !item.pinned }));
       this.items = this._sortItems(this.items);
     } catch { this.errorMessage = window.__app.t('recherche.error.save'); }
-    this.menuOpenId = null;
+    this.closeActionMenu();
   },
 
   async toggleArchive(item) {
@@ -265,7 +264,7 @@ export const rechercheItemMethods = {
       if ((item.links || []).some(l => l.target_kind === 'page')) this._refreshRechercheCounts('page');
       if ((item.links || []).some(l => l.target_kind === 'chapter')) this._refreshRechercheCounts('chapter');
     } catch { this.errorMessage = window.__app.t('recherche.error.save'); }
-    this.menuOpenId = null;
+    this.closeActionMenu();
   },
 
   async deleteItem(item) {
@@ -282,7 +281,7 @@ export const rechercheItemMethods = {
       if ((item.links || []).some(l => l.target_kind === 'page')) this._refreshRechercheCounts('page');
       if ((item.links || []).some(l => l.target_kind === 'chapter')) this._refreshRechercheCounts('chapter');
     } catch { this.errorMessage = app.t('recherche.error.delete'); }
-    this.menuOpenId = null;
+    this.closeActionMenu();
   },
 
 };

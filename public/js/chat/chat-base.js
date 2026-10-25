@@ -7,16 +7,9 @@ import { escHtml, fmtTok, renderChatMarkdown, loadChatMarkdown, chatMarkdownRead
 import { startPoll, runningJobStatus } from '../cards/job-helpers.js';
 import { tFetchError } from '../i18n.js';
 import { toolLogEntries, toolLogHeading } from './tool-log.js';
+import { uuid } from '../utils/uuid.js';
 
 const _toolLogCache = new WeakMap();
-
-function _newClientMsgId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  // Fallback für sehr alte Browser ohne crypto.randomUUID.
-  return 'cm-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
-}
 
 export function makeChatMethods(cfg) {
   const p = cfg.props;
@@ -321,7 +314,7 @@ export function makeChatMethods(cfg) {
     // Server (chat.js _handleChatPost) Doppel-Inserts dedupen kann.
     const lastMsg = this[p.messages][this[p.messages].length - 1];
     const isRetry = !!(lastMsg && lastMsg.role === 'user' && lastMsg.sendError && lastMsg.content === msg && lastMsg.clientMsgId);
-    const clientMsgId = isRetry ? lastMsg.clientMsgId : _newClientMsgId();
+    const clientMsgId = isRetry ? lastMsg.clientMsgId : uuid();
 
     this[p.input] = '';
     this[p.loading] = true;

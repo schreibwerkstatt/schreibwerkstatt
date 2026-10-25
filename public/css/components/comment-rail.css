@@ -146,10 +146,7 @@
   margin-bottom: var(--space-sm, var(--space-sm));
 }
 .comment-rail__filter-reviewer { flex: 1 1 140px; min-width: 120px; }
-.comment-rail__filter-empty {
-  font-size: var(--size-compact-font-size, 12px);
-  padding: var(--space-sm, var(--space-sm)) 0;
-}
+.comment-rail__filter-empty { padding: var(--space-sm) 0; }
 
 .comment-rail__foot {
   display: flex;

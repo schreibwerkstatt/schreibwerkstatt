@@ -11,7 +11,8 @@
   Standard-Buttons, .card-form-row, .collapsible-toggle + .history-chevron,
   .card-form-saved / .card-form-error.
 -->
-<div class="card card--pdfexport pdf-export-card" x-data="pdfExportCard" x-show="$app.showPdfExportCard" x-cloak>
+<div class="card card--pdfexport pdf-export-card" x-data="pdfExportCard" x-show="$app.showPdfExportCard" x-cloak
+     @keydown="$editKeys($event, { save: () => !saving && saveActiveProfile() })">
   <div class="card-header">
     <span class="card-title" x-text="$app.t('pdfExport.title')"></span>
     <div class="card-actions">
@@ -74,18 +75,18 @@
 
   <!-- Profil-Leiste (einzeilig): Auswahl-Combobox + Aktionen (neu/standard/löschen) -->
   <div class="export-profile-bar">
-    <label class="card-form-label" x-text="$app.t('pdfExport.profile')"></label>
+    <label class="card-form-label card-form-label--inline" x-text="$app.t('pdfExport.profile')"></label>
     <div class="export-profile-pick"
          x-data="combobox({ placeholder: $app.t('pdfExport.profile'), compact: false })"
          x-modelable="value" x-model="activeProfileId"
          x-effect="options = profiles.map(p => ({ value: p.id, label: p.name + (p.is_default ? ' ★' : '') }))"
          @combobox-change="onProfilePick($event.detail)"></div>
     <button type="button" class="export-profile-btn" :data-tip="$app.t('pdfExport.newProfile')" :aria-label="$app.t('pdfExport.newProfile')"
-            @click="_showCreate = !_showCreate">
+            @click="toggleProfileRow('create')">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
     </button>
     <button type="button" class="export-profile-btn" :data-tip="$app.t('pdfExport.templateProfile')" :aria-label="$app.t('pdfExport.templateProfile')"
-            @click="_showTemplate = !_showTemplate">
+            @click="toggleProfileRow('template')">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg>
     </button>
     <button type="button" class="export-profile-btn" x-show="activeProfile"
@@ -117,7 +118,7 @@
   </div>
 
   <!-- Profil umbenennen (eingeklappt) -->
-  <div class="export-create-row export-rename-row" x-show="_showRename" x-cloak>
+  <div class="export-create-row export-rename-row" x-show="_profileRow === 'rename'" x-cloak>
     <input type="text" class="card-form-input" x-model="renameValue"
            :placeholder="$app.t('pdfExport.renamePlaceholder')" maxlength="80"
            @keydown.enter="renameProfile()" data-spellcheck="spelling">
@@ -128,10 +129,10 @@
 
   <!-- Gestaltungs-Vorlage übernehmen (eingeklappt). Legt ein NEUES Profil an;
        das aktive bleibt unberührt. -->
-  <div class="export-template-row" x-show="_showTemplate" x-cloak>
+  <div class="export-template-row" x-show="_profileRow === 'template'" x-cloak>
     <div class="export-create-row">
       <div class="export-template-pick"
-           x-data="combobox($app.t('pdfExport.templatePlaceholder'))"
+           x-data="combobox({ placeholder: $app.t('pdfExport.templatePlaceholder'), compact: false })"
            x-modelable="value" x-model="templateSel"
            x-effect="options = templateOptions()"></div>
       <button type="button" class="primary" data-label-ok
@@ -144,13 +145,13 @@
   </div>
 
   <!-- Neues Profil anlegen (eingeklappt) -->
-  <div class="export-create-row" x-show="_showCreate" x-cloak>
+  <div class="export-create-row" x-show="_profileRow === 'create'" x-cloak>
     <input type="text" class="card-form-input" x-model="newProfileName"
            :placeholder="$app.t('pdfExport.newPlaceholder')" maxlength="80"
            @keydown.enter="createProfile()" data-spellcheck="spelling">
     <label class="export-create-clone">
       <span class="export-create-clone-label" x-text="$app.t('pdfExport.cloneLabel')"></span>
-      <div x-data="combobox($app.t('pdfExport.cloneNone'))"
+      <div x-data="combobox({ placeholder: $app.t('pdfExport.cloneNone'), compact: false })"
            x-modelable="value" x-model="cloneFromId"
            x-effect="options = [{ value: '', label: $app.t('pdfExport.cloneNone') }, ...profiles.map(p => ({ value: p.id, label: p.name }))]"
 ></div>
@@ -166,7 +167,7 @@
          x-modelable="value" x-model="activeTab">
       <!-- Einfach/Experte (DESIGN.md .seg-toggle) + Ungespeichert-Marke -->
       <div class="pdfx-mode-bar">
-        <span class="card-form-label" x-text="$app.t('pdfExport.mode.label')"></span>
+        <span class="card-form-label card-form-label--inline" x-text="$app.t('pdfExport.mode.label')"></span>
         <div class="seg-toggle" role="group" :aria-label="$app.t('pdfExport.mode.label')">
           <button type="button" :class="{ 'seg-toggle--active': uiMode === 'simple' }" :aria-pressed="uiMode === 'simple'"
                   @click="setUiMode('simple')" x-text="$app.t('pdfExport.mode.simple')"></button>

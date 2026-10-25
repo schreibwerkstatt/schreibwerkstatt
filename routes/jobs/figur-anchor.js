@@ -201,7 +201,13 @@ async function runFigurAnchorJob(jobId, bookId, userEmail) {
 // Nacht-Cron: hält den Ist-Index aller Bücher/User frisch (nach dem embed-
 // Reindex, wie motif-scan und beat-anchor). Ein Anchor pro (Buch, User) mit
 // Drafts; Dedup gegen laufende Jobs.
+//
+// Dieselbe Mindestrolle wie der Knopf (`editor`, POST unten): Drafts darf auch
+// ein Viewer anlegen, und ein entzogener Zugang laesst seine Drafts stehen. Ohne
+// die Pruefung verursachte der Cron Kosten auf dem Buch fuer Nicht-Editoren und
+// legte Textausschnitte fuer jemanden ab, der das Buch nicht mehr lesen darf.
 const { db } = require('../../db/schema');
+const { getBookRole, hasMinRole } = require('../../db/book-access');
 async function anchorAllDraftFigures() {
   if (!embed.isEnabled()) {
     logger.info('Figur-Anchor (Cron): uebersprungen (kein Embedding-Backend).');
@@ -210,6 +216,7 @@ async function anchorAllDraftFigures() {
   const scopes = db.prepare('SELECT DISTINCT book_id, user_email FROM draft_figures').all();
   let enqueued = 0, skipped = 0;
   for (const { book_id, user_email } of scopes) {
+    if (!hasMinRole(getBookRole(book_id, user_email), 'editor')) { skipped++; continue; }
     // Ohne fertigen Index würde der Lauf nur mit anchorNoIndex scheitern.
     if (!retrieval.indexReady(book_id)) { skipped++; continue; }
     if (findActiveJobId('figur-anchor', book_id, user_email)) { skipped++; continue; }
@@ -217,7 +224,7 @@ async function anchorAllDraftFigures() {
     enqueueJob(jobId, () => runFigurAnchorJob(jobId, book_id, user_email));
     enqueued++;
   }
-  logger.info(`Figur-Anchor (Cron): ${enqueued} Scope(s) eingereiht, ${skipped} uebersprungen (laeuft bereits).`);
+  logger.info(`Figur-Anchor (Cron): ${enqueued} Scope(s) eingereiht, ${skipped} uebersprungen (laeuft bereits, kein Index oder keine Editor-Rolle).`);
   return { enqueued, skipped };
 }
 

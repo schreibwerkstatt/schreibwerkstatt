@@ -126,19 +126,36 @@ textarea:disabled,
   padding-top: var(--space-6);
   color: var(--color-text);
 }
+/* Das padding-top setzt die Beschriftung im Raster (`align-items: start`) auf die
+   erste Feldzeile. In einer einzeiligen, zentrierten Leiste neben Knöpfen oder
+   Combobox kippte es den Text unter deren Mittellinie. */
+.card-form-label--inline { padding-top: 0; }
 .card-form-field {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
   min-width: 0;
 }
+/* Gruppen-Titel innerhalb eines Formulars (Linie oben + Überschrift, Schrift
+   wie .card-section-title). `--note` trägt statt eines Titels einen
+   erklärenden Satz zur folgenden Gruppe. DESIGN.md „Section-Trenner". */
 .card-form-section-divider {
-  font-size: var(--font-size-mini);
+  font-size: var(--font-size-xs);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: var(--color-muted);
-  line-height: 1.4;
+  line-height: var(--lh-tight);
   margin: 22px 0 var(--space-14);
   padding-top: var(--space-14);
   border-top: var(--border-thin) solid var(--color-border);
+}
+.card-form-section-divider--note {
+  font-size: var(--font-size-mini);
+  font-weight: var(--fw-regular);
+  text-transform: none;
+  letter-spacing: normal;
+  line-height: 1.4;
 }
 /* Inline-Zahlenfeld mit Einheit (z.B. Tagesziel Minuten/Tag im Profil). */
 .card-form-goal-edit {
@@ -214,9 +231,11 @@ textarea:disabled,
   color: var(--color-warn-text);
 }
 
-/* Empty-State mit CTA — Karte hat keine Daten und bietet einen Knopf, um
-   welche zu erstellen. Verwendet von Figuren-Werkstatt; weitere Karten
-   folgen, sobald sie das Pattern brauchen. Dokumentiert in DESIGN.md. */
+/* Leerzustand einer Karte/eines Panels — DESIGN.md „Leerzustand". Hauptsatz
+   (`-text`), optionale Erklaerung (`-hint`), optionaler Knopf (`-cta`) bzw.
+   mehrere Knoepfe in `-actions`. Leere Liste/Spalte/Popover INNERHALB einer
+   Karte ist dagegen `.muted-msg` (card-blocks.css). Gegated:
+   tests/unit/empty-state-single-place.test.mjs. */
 .card-empty {
   display: flex;
   flex-direction: column;
@@ -242,8 +261,22 @@ textarea:disabled,
   align-items: center;
   gap: var(--space-6);
 }
+/* Mehrere Knoepfe nebeneinander (z. B. „Schreiben" + „Leeren Abschnitt
+   loeschen"). */
+.card-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-sm);
+}
 @media (max-width: 600px) {
   .card-empty { padding: var(--space-xl) var(--space-md); }
+}
+/* Schmale Flaechen (Sidebar, Seitenpanel): weniger Luft. Steht NACH der
+   Mobile-Regel, damit sie dort nicht ueberschrieben wird. */
+.card-empty--compact {
+  gap: var(--space-sm);
+  padding: var(--space-lg) var(--space-sm);
 }
 .card-form-textarea {
   width: 100%;

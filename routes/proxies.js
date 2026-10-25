@@ -159,6 +159,9 @@ router.get('/config', (req, res) => {
     researchChat: {
       enabled: !researchChatGate(sessionUser ? sessionUser.email : null),
     },
+    // Eigener KI-Zugang im Profil: Admin-Freigabe. Der Profil-Abschnitt selbst
+    // liest /me/ai-access; das Flag hier gated nur den Palette-Eintrag.
+    userAiAccess: { enabled: appSettings.get('ai.user_api.enabled') === true },
     // PDF-Anhang (Quelle + Recherche-Fundstueck): Upload-Limit als SSoT vom
     // Server. Ohne das steht dieselbe Zahl im Browser, im express.raw-Body und
     // im Extraktor — und der Browser laedt 30 MB hoch, um dann ein 413 zu sehen.

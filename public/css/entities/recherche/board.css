@@ -204,18 +204,8 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   gap: var(--space-2xs);
 }
 
-/* Aktionsmenü nutzt das App-Standard-Pattern (.context-menu--dropdown), aber
-   fixed statt absolut: top/left setzt board.js#toggleItemMenu aus dem Trigger-
-   Rect (popover-anchor.js). So klippt weder der Overflow des Detail-Dialogs
-   noch der eines Listen-Containers das lange Menü. max-height + interner
-   Scroll für Viewports, die kürzer sind als das Menü.
-   Nur der native File-Input des Upload-Eintrags wird versteckt. */
-.context-menu--dropdown.research-item-menu {
-  position: fixed;
-  right: auto;
-  max-height: calc(100dvh - 2 * var(--space-xs));
-  overflow-y: auto;
-}
+/* Aktionsmenü: teleportiertes .context-menu (action-menu.js). Hier nur der
+   versteckte native File-Input der Upload-Einträge. */
 .research-menu-upload input[type="file"] { display: none; }
 
 /* Vorschaubild: Button (öffnet die Detailansicht) als blosse Hülle ums <img>.
@@ -360,7 +350,6 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   font-weight: var(--fw-semibold);
   color: var(--color-muted);
 }
-.research-suggestions-empty { font-size: var(--font-size-sm); color: var(--color-muted); }
 .research-suggestion {
   display: flex;
   align-items: center;
@@ -379,21 +368,6 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   cursor: pointer;
   text-decoration: underline;
 }
-
-/* ── Link-Picker ────────────────────────────────────────────────────────── */
-.recherche-linkpicker {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs);
-  margin-top: var(--space-md);
-  padding: var(--space-sm);
-  border: 1px solid var(--card-accent);
-  border-radius: var(--radius-md);
-  background: var(--color-bg);
-}
-.recherche-linkpicker-label { font-weight: var(--fw-semibold); }
-.recherche-linkpicker-target { min-width: 14rem; }
 
 /* ── Vollbild: ganze Karte nimmt den Viewport; die Liste bleibt einspaltig,
      aber zentriert mit lesbarer Maximalbreite (distraktionsfreier Lesemodus,

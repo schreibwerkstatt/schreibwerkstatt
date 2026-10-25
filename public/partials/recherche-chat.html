@@ -19,7 +19,7 @@
   <div x-show="researchChatStatus" class="card-status" x-html="researchChatStatus"></div>
 
   <div id="research-chat-messages" class="chat-messages research-chat-messages">
-    <div x-show="researchChatMessages.length === 0 && !researchChatLoading" class="chat-empty" x-text="$app.t('recherche.chat.empty')"></div>
+    <div x-show="researchChatMessages.length === 0 && !researchChatLoading" class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('recherche.chat.empty')"></div>
 
     <template x-for="(msg, msgIdx) in researchChatMessages" :key="msgIdx">
       <div :class="'chat-msg chat-msg--' + msg.role">

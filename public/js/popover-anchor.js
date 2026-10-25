@@ -1,9 +1,9 @@
 // Geometrie der am Trigger verankerten, nach <body> teleportierten Popover.
 //
-// Konsumenten: das Ideen-Meatball-Menue (book/ideen.js#openMenu), das Plot-Lane-
-// Menue (book/plot/threads.js#openThreadMenu), das Plot-Fundstellen-Popover
-// (book/plot/ai.js#openBeatOccPopover) und der Verknuepfungs-Picker der Ideen
-// (book/ideen-links.js#openLinkPicker), dazu die Hover-Vorschau der Entitaets-
+// Konsumenten: die teleportierten Aktionsmenues (action-menu.js — Ideen, Plot-
+// Strang, Recherche, …), das Plot-Fundstellen-Popover
+// (book/plot/ai.js#openBeatOccPopover) und die Picker-Popover
+// (picker-popover.js#_openPickerPopover), dazu die Hover-Vorschau der Entitaets-
 // Referenz (entity-ref-popover.js, `align: 'start'`, ohne Schaetz-Pass: sie misst
 // synchron nach dem Befuellen). Die Menues teleportieren aus ihrem Container
 // heraus (nach <body>, die beiden Plot-Popover in die Karten-Wurzel `.card--plot`

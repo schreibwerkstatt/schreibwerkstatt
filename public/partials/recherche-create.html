@@ -11,7 +11,8 @@
      Top-Layer"). -->
 <dialog class="research-dialog research-dialog--create" x-ref="createDialog"
         @close="_onCreateClosed()"
-        @cancel.prevent="closeCreate()">
+        @cancel.prevent="closeCreate()"
+        @keydown="$editKeys($event, { save: () => createItem() })">
   <div class="research-dialog__inner">
 
     <header class="research-dialog__head">

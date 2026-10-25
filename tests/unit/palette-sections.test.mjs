@@ -10,7 +10,9 @@ import {
 } from '../../public/js/cards/palette-sections.js';
 import { hasWordPrefix } from '../../public/js/cards/palette-fuzzy.js';
 import { firstPageInChapter } from '../../public/js/cards/palette-providers.js';
-import { DEFAULT_RECENT_KEYS, KOMPLETT_HIDDEN_BUCHTYPEN } from '../../public/js/cards/feature-registry.js';
+import {
+  DEFAULT_RECENT_KEYS, KOMPLETT_HIDDEN_BUCHTYPEN, REQUIRED_CONFIG_FLAGS, FEATURES, isFeatureAvailable, unavailabilityReasonKey,
+} from '../../public/js/cards/feature-registry.js';
 
 const de = JSON.parse(fs.readFileSync(new URL('../../public/js/i18n/de.json', import.meta.url), 'utf8'));
 const t = (k) => de[k] || '';
@@ -47,6 +49,31 @@ test('Aktionen ohne minRole stehen auch Lesern offen', () => {
 test('hiddenForBuchtyp versteckt auch Aktionen', () => {
   for (const typ of KOMPLETT_HIDDEN_BUCHTYPEN) {
     assert.ok(!actionKeys(ctxFor({ buchtyp: typ })).includes('action.komplett'), typ);
+  }
+});
+
+test('requiresConfig: Karten und Aktionen fehlen ohne den Dienst', () => {
+  const off = ctxFor({ config: {} });
+  const on = ctxFor({ config: Object.fromEntries(REQUIRED_CONFIG_FLAGS.map(k => [k, true])) });
+  const cards = (ctx) => visiblePaletteFeatures(ctx).map(f => f.key);
+  assert.ok(!cards(off).includes('buchlandkarte'));
+  assert.ok(cards(on).includes('buchlandkarte'));
+  assert.ok(!actionKeys(off).includes('action.userSettings.aiAccess'));
+  assert.ok(actionKeys(on).includes('action.userSettings.aiAccess'));
+  // Ohne Buch-Rolle (Home-Screen) greift das Gate genauso.
+  assert.ok(!cards({ ...off, bookRole: null }).includes('buchlandkarte'));
+});
+
+test('requiresConfig: Hilfe zeigt die Karte als nicht eingerichtet', () => {
+  const feat = FEATURES.find(f => f.key === 'buchlandkarte');
+  assert.equal(isFeatureAvailable(feat, ctxFor({ config: {} })), false);
+  assert.equal(unavailabilityReasonKey(feat, ctxFor({ config: {} })), 'palette.disabled.needService');
+  assert.equal(isFeatureAvailable(feat, ctxFor({ config: { semanticSearchEnabled: true } })), true);
+});
+
+test('REQUIRED_CONFIG_FLAGS sammelt jedes requiresConfig der Registry', () => {
+  for (const k of ['semanticSearchEnabled', 'userAiAccessEnabled', 'languagetoolEnabled']) {
+    assert.ok(REQUIRED_CONFIG_FLAGS.includes(k), k);
   }
 });
 

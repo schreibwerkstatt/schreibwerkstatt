@@ -1,46 +1,39 @@
-<!-- Strang-Aktions-Dropdown: ein einzelnes, aus der Lane heraus teleportiertes
-     .context-menu (JS-positioniert in openThreadMenu). Die Lane sitzt in einem
-     overflow-x/will-change-Scrollcontainer, in dem ein am Trigger verankertes
-     Popover geclippt bzw. eingesperrt würde. Die offene Lane via threadMenuLane().
-     Ziel ist die Karten-Wurzel, NICHT <body> — sonst läge das Menü im Native-
-     Vollbild hinter dem ::backdrop (Begründung in plot-anchor-popover.html).
-     Tastatur (book/plot/board-ui.js): beim Öffnen Fokus auf den ersten Eintrag,
-     Pfeiltasten/Home/End wandern, Esc schliesst und gibt den Fokus an den
-     Kebab-Trigger zurück. Fragment-Include aus plot-board-grid.html. -->
+<!-- Strang-Aktionsmenü (⋯-Knopf, Rechtsklick/Long-Press auf den Lane-Kopf): ein
+     einzelnes, aus der Lane heraus teleportiertes .context-menu, Mechanik aus
+     action-menu.js. Die Lane sitzt in einem overflow-x/will-change-Scrollcontainer,
+     in dem ein am Trigger verankertes Popover geclippt bzw. eingesperrt würde.
+     Die offene Lane via threadMenuLane(). Ziel ist die Karten-Wurzel, NICHT
+     <body> — sonst läge das Menü im Native-Vollbild hinter dem ::backdrop
+     (Begründung in plot-anchor-popover.html). Fragment-Include aus plot-board-grid.html. -->
 <template x-teleport=".card--plot">
-  <div class="context-menu" x-ref="threadMenu" x-show="threadActionsOpenId !== null && !!threadMenuLane()" x-cloak
-       :style="`top:${threadMenuPos.top}px;left:${threadMenuPos.left}px`"
-       @click.outside="closeThreadMenu()" role="menu"
-       @keydown.escape.window="if (threadActionsOpenId !== null) { closeThreadMenu(); plotMenuRestoreFocus(); }"
-       @keydown="plotMenuKeydown($event, $el)"
-       x-effect="threadActionsOpenId !== null && plotMenuFocusFirst($el)">
+  <div class="context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
     <template x-if="threadMenuLane()">
       <div>
         <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-                @click.stop="moveThread(threadMenuLane().thread, -1); closeThreadMenu()">
+                @click="moveThread(threadMenuLane().thread, -1)">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-up"/></svg>
           <span x-text="$app.t('plot.thread.moveUp')"></span>
         </button>
         <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-                @click.stop="moveThread(threadMenuLane().thread, 1); closeThreadMenu()">
+                @click="moveThread(threadMenuLane().thread, 1)">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-down"/></svg>
           <span x-text="$app.t('plot.thread.moveDown')"></span>
         </button>
         <div class="context-menu-sep" role="separator"></div>
         <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
                 :class="{ 'context-menu-item--on': threadHasOwnActs(threadMenuLane().id) }"
-                @click.stop="threadHasOwnActs(threadMenuLane().id) ? unforkThreadActs(threadMenuLane().thread) : forkThreadActs(threadMenuLane().thread); closeThreadMenu()">
+                @click="threadHasOwnActs(threadMenuLane().id) ? unforkThreadActs(threadMenuLane().thread) : forkThreadActs(threadMenuLane().thread)">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#git-fork"/></svg>
           <span x-text="threadHasOwnActs(threadMenuLane().id) ? $app.t('plot.thread.sharedActs') : $app.t('plot.thread.ownActs')"></span>
         </button>
         <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-                @click.stop="startEditThread(threadMenuLane().thread); closeThreadMenu()">
+                @click="startEditThread(threadMenuLane().thread)">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
           <span x-text="$app.t('plot.thread.rename')"></span>
         </button>
         <div class="context-menu-sep" role="separator"></div>
         <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
-                @click.stop="deleteThread(threadMenuLane().thread); closeThreadMenu()">
+                @click="deleteThread(threadMenuLane().thread)">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
           <span x-text="$app.t('plot.thread.delete')"></span>
         </button>

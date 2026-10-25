@@ -4,8 +4,10 @@
   string-seitiger Fragment-Include (Marker @include organizer-page-row).
   Vertrag: `page` kommt aus dem umschliessenden x-for-Scope.
 -->
-<li class="organizer-page" :data-page-id="page.id">
-  <span class="organizer-drag-handle" :data-tip="$app.t('bookOrganizer.dragHint')" aria-hidden="true">⋮⋮</span>
+<li class="organizer-page drag-grip-host" :data-page-id="page.id">
+  <span class="drag-grip organizer-drag-handle" role="img" :data-tip="$app.t('bookOrganizer.dragHint')" :aria-label="$app.t('bookOrganizer.dragHint')">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
+  </span>
   <input type="text" class="organizer-name" :value="page.name"
          @blur="onRenamePage(page.id, $event)"
          @keydown.enter.prevent="$event.target.blur()"

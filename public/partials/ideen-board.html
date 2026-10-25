@@ -17,9 +17,6 @@
       <span class="card-title" x-text="$app.t('ideenBoard.title')"></span>
       <div class="card-subline" x-text="$app.t('ideenBoard.subline')"></div>
     </div>
-    <button type="button" class="btn-compact ideen-board-stages-toggle" @click="stagesOpen = !stagesOpen"
-            :aria-expanded="stagesOpen" :class="{ 'is-active': stagesOpen }"
-            :data-tip="$app.t('ideenBoard.stages.tip')" x-text="$app.t('ideenBoard.stages.toggle')"></button>
     <!-- Ideen-Chat-Panel (chat/ideen-chat.js): Vorschläge an die Ideen, einzeln übernehmen -->
     <button type="button" class="icon-btn icon-btn--ghost" :class="{ 'is-active': ideenChatOpen }" :aria-pressed="ideenChatOpen" @click="toggleIdeenChat()" :aria-label="$app.t('ideenBoard.chat.toggle')" :data-tip="$app.t('ideenBoard.chat.toggle')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#message-square"/></svg></button>
     <button type="button" class="icon-btn icon-btn--ghost" :class="{ 'is-active': ideenBoardFullscreen }" :aria-pressed="ideenBoardFullscreen" @click="toggleIdeenBoardFullscreen()" :aria-label="ideenBoardFullscreen ? $app.t('ideenBoard.fullscreenExit.tip') : $app.t('ideenBoard.fullscreen.tip')" :data-tip="ideenBoardFullscreen ? $app.t('ideenBoard.fullscreenExit.tip') : $app.t('ideenBoard.fullscreen.tip')"><svg class="icon" aria-hidden="true"><use :href="ideenBoardFullscreen ? '/icons.svg#minimize-2' : '/icons.svg#maximize-2'"/></svg></button>
@@ -31,8 +28,6 @@
        Chat per `order` über dem Board). Reine Layout-Klammer. -->
   <div class="ideen-split" :class="{ 'ideen-split--chat': ideenChatOpen }">
   <div class="ideen-main">
-
-  <!-- @include ideen-board-stages -->
 
   <!-- @include ideen-board-toolbar -->
 

@@ -20,7 +20,7 @@
 // mit — ohne das bliebe der Punkt bis zum naechsten Reload stehen.
 
 import { formatIsoDay } from '../utils.js';
-import { featureByKey } from './feature-registry.js';
+import { featureByKey, REQUIRED_CONFIG_FLAGS, configFlags } from './feature-registry.js';
 import { buildHelpSections } from './help-catalog.js';
 import { memoMethods } from './card-memo.js';
 
@@ -99,6 +99,7 @@ export function registerHelpCard() {
         bookRole: root.currentBookRole || null,
         buchtyp: (typeof root.currentBuchtyp === 'function' ? root.currentBuchtyp() : null) || null,
         cloudModelEffective: (window.Alpine.store('config')?.effectiveProviderClass || 'cloud') === 'cloud',
+        config: configFlags(),
       };
     },
 
@@ -113,6 +114,7 @@ export function registerHelpCard() {
       const q = this.helpQuery.trim().toLowerCase();
       return this._memo('sections', [
         ctx.selectedBookId, (ctx.pages || []).length, ctx.bookRole, ctx.buchtyp, ctx.cloudModelEffective, locale, q,
+        ...REQUIRED_CONFIG_FLAGS.map(k => ctx.config[k]),
       ], () => {
         const sections = buildHelpSections(ctx);
         if (!q) return sections;

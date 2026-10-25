@@ -5,6 +5,8 @@
 
 import { ideenMethods } from '../book/ideen.js';
 import { ideenLinkMethods } from '../book/ideen-links.js';
+import { pickerPopoverState, pickerPopoverMethods } from '../picker-popover.js';
+import { actionMenuState, actionMenuMethods } from '../action-menu.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { IDEE_STATUSES } from '../book/ideen-shared.js';
 import { EVT } from '../events.js';
@@ -29,14 +31,11 @@ export function registerIdeenCard() {
     linkPickerIdeeId: null,
     linkPickerKind: 'research',
     linkPickerTargetId: '',
-    // Popover-Geometrie des Pickers (nach <body> teleportiert, am Trigger
-    // verankert — public/js/popover-anchor.js).
-    linkPickerPos: { top: 0, left: 0 },
-    _linkTriggerRect: null,
-    _linkPickerCloseHandler: null,
-    menuOpenId: null,
-    menuPos: { top: 0, left: 0 },
-    _menuCloseHandler: null,
+    // Geometrie der Ideen-Popover (Verknuepfen, Verschieben/Zuordnen —
+    // picker-popover.js).
+    ...pickerPopoverState(),
+    // Aktionsmenü einer Idee (action-menu.js), Ziel = Ideen-ID.
+    ...actionMenuState(),
     loading: false,
     busy: false,
     errorMessage: '',
@@ -98,20 +97,6 @@ export function registerIdeenCard() {
         if (window.__app.showIdeenCard) await this.loadIdeen();
       });
       this.$nextTick(() => this._relocate(window.__app.ideenScope));
-
-      // Move-Picker neben aktive Idee verschieben (DOM-Move, weil Combobox
-      // in x-for nicht sauber initialisiert — daher Single-Panel ausserhalb).
-      this.$watch('movingId', (id) => {
-        const panel = this.$el.querySelector('.idee-move-panel');
-        if (!panel) return;
-        if (id === null) {
-          const list = this.$el.querySelector('.ideen-list');
-          if (list && panel.nextSibling !== list) this.$el.insertBefore(panel, list);
-          return;
-        }
-        const item = this.$el.querySelector(`[data-idee-id="${id}"]`);
-        if (item && item.parentNode) item.parentNode.insertBefore(panel, item.nextSibling);
-      });
     },
 
     _relocate(scope) {
@@ -122,11 +107,13 @@ export function registerIdeenCard() {
 
     destroy() {
       this._lifecycle?.destroy();
-      this._detachMenuListeners?.();
-      this._detachLinkPickerListeners?.();
+      this.closeActionMenu();
+      this._releasePickerPopover();
     },
 
     ...ideenMethods,
     ...ideenLinkMethods,
+    ...pickerPopoverMethods,
+    ...actionMenuMethods,
   }));
 }

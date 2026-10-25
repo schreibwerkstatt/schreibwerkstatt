@@ -40,7 +40,7 @@ test('pagetree: Job-Queue-Leiste liegt über der Sidebar, Kontextmenü bleibt be
   const menu = page.locator('.pagetree-context-menu');
   await expect(menu).toBeVisible();
   // Der erste Frame steht auf der Höhen-Schätzung; erst das Nachmessen nach dem
-  // Render (tree-context-menu.js#_remeasurePagetreeMenu) klemmt ans Fenster.
+  // Render (action-menu.js#_remeasureActionMenu) klemmt ans Fenster.
   await expect.poll(() => menu.evaluate(el => el.getBoundingClientRect().bottom <= window.innerHeight)).toBe(true);
   const res = await menu.evaluate((el) => {
     const items = [...el.querySelectorAll('.context-menu-item')].filter(i => i.offsetParent !== null);

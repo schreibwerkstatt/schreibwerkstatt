@@ -8,7 +8,7 @@ import {
   patchSortableOnce, revertSortable, markDragIgnore, unmarkDragIgnore, BASE_SORTABLE_OPTS,
 } from '../../sortable-dnd.js';
 import {
-  IDEE_STATUSES, IDEE_OPTIONAL_STATUSES, IDEE_OPEN_STATUSES, ideeStatus, ideeLaneKey, isOpenIdee, isBookIdee, LANE_BOOK,
+  IDEE_STATUSES, IDEE_OPTIONAL_STATUSES, ideeStatus, ideeLaneKey, isOpenIdee, LANE_BOOK,
   normalizeIdeeStages, IDEE_MAX_LEN,
 } from '../ideen-shared.js';
 import {
@@ -17,6 +17,7 @@ import {
 } from './model.js';
 import { memoMethods } from '../../cards/card-memo.js';
 import { ideenBoardTreeDrop } from './tree-drop.js';
+import { ideenBoardMove } from './move.js';
 import { EVT } from '../../events.js';
 
 // Key in einer Klapp-Liste umschalten — immer als neue Liste (siehe
@@ -178,6 +179,7 @@ export const ideenBoardActions = {
 
   // Drop einer Buch-Idee aufs Inhaltsverzeichnis (tree-drop.js).
   ...ideenBoardTreeDrop,
+  ...ideenBoardMove,
 
   // Memo-Helper (cards/card-memo.js); `this._memos` wird in loadBoard/resetBoard geleert.
   ...memoMethods,
@@ -222,6 +224,7 @@ export const ideenBoardActions = {
     this.linkPickerIdeeId = null;
     this.linkPickerKind = 'research';
     this.linkPickerTargetId = '';
+    this._releasePickerPopover();
     this.selectedIds = [];
     // Filterfelder bleiben unangetastet: sie gehoeren dem Filter-Scope
     // (filter-persist.js) und werden im Lifecycle VOR dem Nachladen restauriert.
@@ -279,16 +282,6 @@ export const ideenBoardActions = {
     if (!row) return;
     this.ideen = this.ideen.map(i => (i.id === row.id ? row : i));
     this._memos = {};
-  },
-
-  startEdit(idee) { this.editingId = idee.id; this.editingDraft = idee.content || ''; },
-  cancelEdit() { this.editingId = null; this.editingDraft = ''; },
-  async saveEdit(idee) {
-    const content = (this.editingDraft || '').trim();
-    if (!content) { this.errorMessage = window.__app.t('ideen.error.contentRequired'); return; }
-    if (content.length > IDEE_MAX_LEN) { this.errorMessage = window.__app.t('ideen.error.contentTooLong'); return; }
-    if (content === idee.content) { this.cancelEdit(); return; }
-    if (await this._patchIdee(idee, { content })) this.cancelEdit();
   },
 
   // Neue Pendenz direkt am Board: die Bahn waehlt den Anker. Vorgewaehlt ist
@@ -354,52 +347,6 @@ export const ideenBoardActions = {
     }
   },
 
-  // ── Zuordnen (Buch-Idee → Kapitel/Seite) ─────────────────────────────────
-  // Nur fuer Ideen ohne Anker und nur solange offen (der Server lehnt den Move
-  // einer abgeschlossenen Idee ab, IDEE_CLOSED). Danach steht die Idee in der
-  // Bahn ihres neuen Ankers; weiter verschoben wird sie auf der Ideen-Karte.
-  // Drei Wege, ein Schreibpfad (`_assignIdee`): der Picker hier, der Drag in
-  // eine Kapitel-/Abschnitts-Bahn des Boards und der Drop auf einen Eintrag im
-  // Inhaltsverzeichnis der Sidebar (dort stehen auch die Anker, die noch keine
-  // Bahn haben, weil an ihnen keine Idee haengt).
-  canAssign(idee) { return isBookIdee(idee) && isOpenIdee(idee); },
-  dragTip(idee) {
-    return window.__app.t(this.canAssign(idee) ? 'ideenBoard.dragBook' : 'ideenBoard.drag');
-  },
-  startAssign(idee) { this.assigningId = idee.id; this.assignLaneKey = ''; },
-  cancelAssign() { this.assigningId = null; this.assignLaneKey = ''; },
-  assigningIdee() { return (this.ideen || []).find(i => i.id === this.assigningId) || null; },
-  async confirmAssign() {
-    const idee = this.assigningIdee();
-    if (!idee) return;
-    if (await this._assignIdee(idee, this.assignLaneKey)) this.cancelAssign();
-  },
-
-  // Buch-Idee an den Anker hinter `laneKey` (`chapter:<id>` / `page:<id>`)
-  // haengen, optional zugleich die Stufe setzen (Drop in eine andere Spalte) —
-  // ein PATCH, damit die Idee nie halb umgezogen dasteht.
-  async _assignIdee(idee, laneKey, status = null) {
-    const [kind, rawId] = String(laneKey || '').split(':');
-    const anchorId = parseInt(rawId, 10);
-    if (!this.canAssign(idee) || !anchorId || (kind !== 'chapter' && kind !== 'page')) return null;
-    const body = { [kind === 'chapter' ? 'chapter_id' : 'page_id']: anchorId };
-    if (status && status !== ideeStatus(idee) && this.isStageActive(status)) body.status = status;
-    const row = await this._patchIdee(idee, body);
-    if (row) await this._ensureBoardSortables();
-    return row;
-  },
-
-  // Darf die gezogene Karte aus `fromLane` in die Zelle `toLane` × `toStatus`?
-  // Quer zur Bahn nur die Buch-Idee, nur in eine Kapitel-/Abschnitts-Bahn und
-  // nur in eine offene Stufe — eine Idee, die beim Zuordnen gleich
-  // abgeschlossen wuerde, haette an ihrem Anker nie offen gestanden.
-  _canDropAssign(fromLane, toLane, toStatus, dragEl) {
-    if (fromLane !== LANE_BOOK || !/^(chapter|page):\d+$/.test(toLane || '')) return false;
-    if (!IDEE_OPEN_STATUSES.includes(toStatus)) return false;
-    const id = parseInt(dragEl?.dataset?.ideeCardId, 10);
-    return this.canAssign((this.ideen || []).find(i => i.id === id));
-  },
-
   async deleteIdee(idee) {
     const app = window.__app;
     if (!await app.appConfirm({
@@ -426,13 +373,10 @@ export const ideenBoardActions = {
   // Board sind sie nicht stabil (Bahnen kommen und gehen mit dem Filter), darum
   // wird nach jedem Board-Wechsel neu angebunden.
   //
-  // Ein Drag einer verankerten Idee traegt genau EINE Aussage: den neuen
-  // Status. Ihre Bahn bleibt, wie sie ist — sie IST der Anker im Buch, und den
-  // verschiebt man nicht per Kanban-Zug quer durchs Manuskript (dafuer gibt es
-  // „Verschieben" auf der Ideen-Karte, das within-kind bleibt). Darum `put` nur
-  // aus derselben Bahn. Einzige Ausnahme ist die offene Buch-Idee: sie hat noch
-  // keinen Anker, und ihn zu bekommen ist ihr Zweck (`_canDropAssign`, dazu der
-  // Drop aufs Inhaltsverzeichnis, `_trackTreeDrop`).
+  // Ein Zug in eine andere Spalte setzt den Status, ein Zug in eine andere
+  // Bahn den Anker (beides in einem PATCH). Quer zur Bahn zieht nur eine
+  // offene Idee (`_canDropMove`); dazu der Drop aufs Inhaltsverzeichnis
+  // (`_trackTreeDrop`) fuer Anker, die im Board noch keine Bahn haben.
   async _ensureBoardSortables() {
     if (!window.__app?.showIdeenBoardCard) { this._destroyBoardSortables(); return; }
     try { await loadSortable(); } catch { return; }
@@ -461,12 +405,15 @@ export const ideenBoardActions = {
         // Bereich des Kerns liesse die obere von zwei Karten nicht unter die
         // untere ziehen — bei zwei Karten der einzige moegliche Zug.
         invertSwap: false,
-        emptyInsertThreshold: 24,
+        // Eine leere Zelle faengt nur, wenn der Zeiger IN ihr steht: seit
+        // offene Ideen quer zur Bahn ziehen, griffe ein Saum die leere Zelle
+        // der Bahn darueber, sobald man am oberen Zellrand umsortiert.
+        emptyInsertThreshold: 0,
         scroll: true,
         draggable: '.idee-board-card',
         handle: '.idee-board-grip',
         sort: this.isColumnManual(el.dataset.ideeStatusCell || ''),
-        // Gruppenname pro Bahn: eine Karte bleibt in ihrer Zeile. Eine
+        // Gruppenname pro Bahn; quer dazu entscheidet `put` je Drag. Eine
         // abgeschaltete Stufe nimmt nichts auf — gelesen wird beim Drag, weil
         // das Umschalten die Zellen nicht neu anbindet.
         group: {
@@ -476,7 +423,7 @@ export const ideenBoardActions = {
             const toStatus = to?.el?.dataset?.ideeStatusCell || '';
             if (!this.isStageActive(toStatus)) return false;
             const fromLane = from?.el?.dataset?.ideeLane || '';
-            return fromLane === laneKey || this._canDropAssign(fromLane, laneKey, toStatus, dragEl);
+            return fromLane === laneKey || this._canDropMove(fromLane, laneKey, toStatus, dragEl);
           },
         },
         chosenClass: 'idee-board-card--chosen',
@@ -487,7 +434,7 @@ export const ideenBoardActions = {
         onStart: (evt) => {
           document.body.classList.add('ideen-dnd-active');
           const dragged = (this.ideen || []).find(i => i.id === parseInt(evt.item?.dataset?.ideeCardId, 10));
-          if (this.canAssign(dragged)) this._trackTreeDrop();
+          if (this.canMove(dragged)) this._trackTreeDrop();
           const fsEl = document.fullscreenElement;
           const ghost = Sortable.ghost;
           if (fsEl && ghost && !fsEl.contains(ghost)) fsEl.appendChild(ghost);
@@ -517,8 +464,8 @@ export const ideenBoardActions = {
   // aus dem DOM nur abgelesen, wohin die Karte fiel. Ein Zug in eine andere
   // Spalte setzt den Status; steht die ZIELSPALTE in ihrer urspruenglichen
   // Position, wird danach die Zielzelle neu durchnummeriert (scheitert der Status, bleibt die Reihenfolge
-  // unangetastet). Ein Zug einer Buch-Idee in eine andere Bahn — oder auf
-  // einen Eintrag im Inhaltsverzeichnis (`treeLane`) — ordnet sie zu.
+  // unangetastet). Ein Zug einer offenen Idee in eine andere Bahn — oder auf
+  // einen Eintrag im Inhaltsverzeichnis (`treeLane`) — haengt sie dort an.
   async onBoardSortEnd(evt, treeLane = '') {
     const ideeId = parseInt(evt.item?.dataset?.ideeCardId, 10);
     const target = evt.to?.dataset?.ideeStatusCell || '';
@@ -532,10 +479,10 @@ export const ideenBoardActions = {
     if (this.busy || !Number.isFinite(ideeId)) return;
     const idee = (this.ideen || []).find(i => i.id === ideeId);
     if (!idee) return;
-    if (sameCell && treeLane) { await this._assignIdee(idee, treeLane); return; }
+    if (sameCell && treeLane) { await this._reanchorIdee(idee, treeLane); return; }
     if (fromLane !== toLane) {
-      if (!this._canDropAssign(fromLane, toLane, target, evt.item)) return;
-      const row = await this._assignIdee(idee, toLane, target);
+      if (!this._canDropMove(fromLane, toLane, target, evt.item)) return;
+      const row = await this._reanchorIdee(idee, toLane, target);
       if (row && manual) await this._saveCellOrder(ideeId, domIds);
       return;
     }

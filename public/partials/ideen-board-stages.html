@@ -1,23 +1,54 @@
-<!-- Stufen pro Buch (Fragment, string-seitiger @include aus ideen-board.html;
-     Scope = ideenBoardCard). Gespeichert in book_settings.ideen_stages, gilt
-     buchweit: `offen` und `erledigt` sind fest, die uebrigen schaltet das Buch
-     zu. Abschalten heisst „nicht mehr anbieten" — Ideen, die schon dort stehen,
-     behalten ihre Spalte, bis sie leer ist. -->
-<div class="card-section ideen-board-stages" x-show="stagesOpen" x-cloak>
-  <span class="ideen-board-stages-label" x-text="$app.t('ideenBoard.stages.label')"></span>
-  <label class="filter-toggle">
-    <input type="checkbox" checked disabled>
-    <span x-text="statusLabel('offen')"></span>
-  </label>
-  <template x-for="st in optionalStages()" :key="st">
-    <label class="filter-toggle">
-      <input type="checkbox" :checked="isStageActive(st)" :disabled="busy" @change="toggleStage(st)">
-      <span x-text="statusLabel(st)"></span>
-    </label>
-  </template>
-  <label class="filter-toggle">
-    <input type="checkbox" checked disabled>
-    <span x-text="statusLabel('erledigt')"></span>
-  </label>
-  <p class="card-form-hint" x-text="$app.t('ideenBoard.stages.hint')"></p>
-</div>
+<!-- Stufen-Menue der Filterleiste (Fragment, string-seitiger @include aus
+     ideen-board-toolbar.html; Scope = ideenBoardCard). Ein Ort fuer die Frage
+     „welche Spalten": oben, was ICH sehe (Erledigte/Verworfene einblenden,
+     localStorage), unten, welche Stufen das BUCH verwendet
+     (book_settings.ideen_stages, gilt fuer alle). `offen` und `erledigt` sind
+     fest, die uebrigen schaltet das Buch zu. Abschalten heisst „nicht mehr
+     anbieten" — Ideen, die schon dort stehen, behalten ihre Spalte, bis sie
+     leer ist. Schalter halten den Klick an (`.stop`): das Menue bleibt fuer
+     den naechsten Schalter offen. -->
+<span x-data="menu()" class="ideen-board-stages">
+  <button type="button" class="btn-compact ideen-board-stages-toggle" x-bind="trigger" aria-haspopup="menu"
+          :class="{ 'is-active': open }" :data-tip="$app.t('ideenBoard.stages.tip')">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#list-filter"/></svg>
+    <span x-text="$app.t('ideenBoard.stages.toggle')"></span>
+  </button>
+  <div class="context-menu context-menu--dropdown ideen-board-stages-menu" x-bind="panel" x-cloak>
+    <div class="context-menu-header" x-text="$app.t('ideenBoard.stages.show')"></div>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
+            :class="{ 'context-menu-item--on': showErledigt }" :aria-checked="showErledigt"
+            @click.stop="showErledigt = !showErledigt">
+      <svg class="icon" aria-hidden="true"><use :href="showErledigt ? '/icons.svg#check' : '/icons.svg#square'"/></svg>
+      <span x-text="$app.t('ideenBoard.showErledigt')"></span>
+    </button>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
+            x-show="statuses().includes('verworfen')"
+            :class="{ 'context-menu-item--on': showVerworfen }" :aria-checked="showVerworfen"
+            @click.stop="showVerworfen = !showVerworfen">
+      <svg class="icon" aria-hidden="true"><use :href="showVerworfen ? '/icons.svg#check' : '/icons.svg#square'"/></svg>
+      <span x-text="$app.t('ideenBoard.showVerworfen')"></span>
+    </button>
+
+    <div class="context-menu-sep" role="separator"></div>
+    <div class="context-menu-header context-menu-header--inline" x-text="$app.t('ideenBoard.stages.label')"></div>
+    <button type="button" class="context-menu-item context-menu-item--icon context-menu-item--on" role="menuitemcheckbox"
+            aria-checked="true" disabled>
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#check"/></svg>
+      <span x-text="statusLabel('offen')"></span>
+    </button>
+    <template x-for="st in optionalStages()" :key="st">
+      <button type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
+              :class="{ 'context-menu-item--on': isStageActive(st) }" :aria-checked="isStageActive(st)"
+              :disabled="busy" @click.stop="toggleStage(st)">
+        <svg class="icon" aria-hidden="true"><use :href="isStageActive(st) ? '/icons.svg#check' : '/icons.svg#square'"/></svg>
+        <span x-text="statusLabel(st)"></span>
+      </button>
+    </template>
+    <button type="button" class="context-menu-item context-menu-item--icon context-menu-item--on" role="menuitemcheckbox"
+            aria-checked="true" disabled>
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#check"/></svg>
+      <span x-text="statusLabel('erledigt')"></span>
+    </button>
+    <p class="ideen-board-stages-hint" x-text="$app.t('ideenBoard.stages.hint')"></p>
+  </div>
+</span>

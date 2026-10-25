@@ -117,6 +117,12 @@
      dnd.js) bekommt jede Spalte einen grosszügigen Drop-Floor, damit auch
      kurze/leere Spalten treffbar bleiben (Pendant zur Swimlane-Zelle). */
   .plot-column-body .plot-beats { flex: 1 1 auto; }
+  /* Leerer Akt (nur der <template>-Anker): Drop-Zone + Gap kollabieren, sonst
+     klafft ein Leerrechteck über «+ Beat». Drop-Ziel bleibt via
+     emptyInsertThreshold (dnd.js) und dem Drag-Floor unten, der spezifischer ist.
+     Pendant zur leeren .plot-swim-cell (swimlane.css). */
+  .plot-column-body:not(:has(.plot-beat)) { gap: var(--space-2xs); }
+  .plot-column-body .plot-beats:not(:has(.plot-beat)) { min-height: 0; }
   body.plot-dnd-active .plot-column-body .plot-beats {
     min-height: max(120px, calc(var(--plot-drag-h, 72px) * 2));
   }
@@ -157,24 +163,9 @@
     .plot-beat-actions { position: static; justify-content: flex-end; box-shadow: none; }
   }
 
-  /* ── Drag-Griff (einzige Greiffläche; SortableJS handle) ────────────────────
-     Dezent, bis die Karte gehovert wird; dann deutlich greifbar. `grab`-Cursor
-     nur hier — die restliche Karte bleibt klick-fokussiert. touch-action:none
-     lässt den Fallback-Drag (forceFallback) auch auf Touch sauber starten. */
-  .plot-beat-grip {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    margin: -2px var(--space-3) 0 calc(-1 * var(--space-3));
-    color: var(--color-border);
-    cursor: grab;
-    touch-action: none;
-    transition: color var(--transition-fast);
-  }
-  .plot-beat:hover .plot-beat-grip { color: var(--color-muted); }
-  .plot-beat-grip:hover { color: var(--color-text); }
-  .plot-beat-grip:active { cursor: grabbing; }
-  .plot-beat-grip .icon { width: 16px; height: 16px; }
+  /* Drag-Griff: Optik + Position aus components/drag-grip.css. Abweichung nur
+     die Zeilenhöhe — der Titel daneben steht in --font-size-sm. */
+  .plot-beat-grip { font-size: var(--font-size-sm); }
   .plot-beat--geplant   { border-left-color: var(--color-muted); }
   /* „Im Buch" = erledigt → tritt zurück (gedämpft, nicht weg). Bei Hover/Edit
      volle Deckkraft, damit der Inhalt lesbar bleibt, wenn man hinschaut. */
@@ -222,7 +213,8 @@
   .plot-beat-head {
     display: flex;
     align-items: flex-start;
-    gap: var(--space-xs);
+    --drag-grip-host-gap: var(--space-xs);
+    gap: var(--drag-grip-host-gap);
   }
   /* Titel = <button> (Bearbeiten-Einstieg): globale Button-Optik zurücknehmen,
      Fokus-Ring bleibt der Browser-Default. */
@@ -569,10 +561,8 @@
     .plot-column--add { min-width: 0; }
     .plot-column-header { position: static; }
   }
-  /* Touch (kein Hover): Icon-Buttons nicht unter 32px, und der Drag-Griff ist
-     dauerhaft sichtbar — „erst beim Hover deutlich" gibt es dort nicht. */
+  /* Touch (kein Hover): Icon-Buttons nicht unter 32px. */
   @media (hover: none) {
     .plot-icon-btn { min-width: 32px; min-height: 32px; }
-    .plot-beat-grip { color: var(--color-muted); }
   }
 }

@@ -3,14 +3,7 @@
 
 import { fetchJson } from '../../utils.js';
 import { toggleWrapFullscreen } from '../../fullscreen.js';
-import { computePopoverPos, refinePopoverPos } from '../../popover-anchor.js';
-import { attachDismiss, detachDismiss } from '../../cards/dismiss.js';
 import { KINDS, LINK_KINDS, emptyDraft as _emptyDraft } from './shared.js';
-
-// Fenster, in dem ein wiederholter Klick auf denselben Trigger NICHT als
-// Schliessen gilt (toggleItemMenu). Kurz genug, dass die Zwei-Klick-Bedienung
-// fluessig bleibt, lang genug, um einen Doppelklick zu schlucken.
-const MENU_TOGGLE_GRACE_MS = 300;
 
 export const rechercheBoardMethods = {
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -114,8 +107,8 @@ export const rechercheBoardMethods = {
     // beim Buchwechsel aus dem localStorage restauriert — vor dem Nachladen.
     // Ein Reset hier gewänne gegen den restaurierten Stand. Den ausdrücklichen
     // Weg „alles zurücksetzen" gibt es weiter über `clearFilters()`.
-    this.closeItemMenu();
-    this.linkPickerItemId = null;
+    this.closeActionMenu();
+    this.cancelLinkPicker();
     this.suggestions = {};
     this.errorMessage = '';
     this.busy = false;
@@ -134,63 +127,19 @@ export const rechercheBoardMethods = {
   },
 
   // ── Aktionsmenü (recherche-item-menu.html) ───────────────────────────────
-  // Ein Menü für Liste, Detail-Dialog und Board-Karte; `key` = `${menuCtx}:${id}`.
-  // Fixed am Trigger verankert statt absolut im Container: der Detail-Dialog und
-  // die Listen-Container klippen per Overflow, ein kurzer Inhalt schnitt das
-  // lange Menü sonst ab. Das Menü ist das Geschwister des Triggers — ein x-ref
-  // taugt im x-for nicht (letzte Instanz gewinnt).
-  toggleItemMenu(ev, key) {
-    // Derselbe Klick binnen der Oeffnungs-Frist ist ein durchgerutschter
-    // Doppelklick (schnelle Maus, unempfindliches Touch, ein Test-Runner, der
-    // eine Aktion wiederholt), kein Schliessen: im Toggle-Fall waere das
-    // gerade geoeffnete Menue im selben Frame wieder zu und die
-    // Zwei-Klick-Bedienung unmoeglich. Danach schaltet derselbe Trigger
-    // weiterhin normal.
-    if (this.menuOpenId === key) {
-      if (Date.now() - this._menuOpenedAt < MENU_TOGGLE_GRACE_MS) return;
-      this.closeItemMenu();
-      return;
-    }
-    const trigger = ev.currentTarget;
-    const rect = trigger.getBoundingClientRect();
-    this.menuPos = computePopoverPos(rect, 220, 400);
-    this._menuAnchorEl = trigger;
-    this._menuAnchorRect = { top: rect.top, left: rect.left };
-    this._menuOpenedAt = Date.now();
-    this.menuOpenId = key;
-    if (!this._itemMenuDismiss) {
-      // Scroll schliesst — ausser im Menü selbst (max-height + interner Scroll)
-      // und ausser, wenn der Anker stehen bleibt: das Menü hängt an den
-      // Viewport-Koordinaten des Triggers, ein daneben scrollender Bereich
-      // (andere Liste, ein Job-Hinweis, der die Seite um ein paar Pixel
-      // verschiebt) liesse es verankert und riss es sonst grundlos zu.
-      const ctrl = attachDismiss(() => this.closeItemMenu(), { scroll: false });
-      window.addEventListener('scroll', (e) => {
-        if (e.target?.closest?.('.research-item-menu')) return;
-        if (this._menuAnchorMoved()) this.closeItemMenu();
-      }, { capture: true, passive: true, signal: ctrl.signal });
-      this._itemMenuDismiss = ctrl;
-    }
-    this.$nextTick(() => {
-      const pos = refinePopoverPos(trigger.nextElementSibling, rect);
-      if (pos) this.menuPos = pos;
-    });
+  // EIN Menü für Liste, Detail-Dialog und Board-Karte (action-menu.js);
+  // Schlüssel `${ctx}:${id}`, Ziel { ctx, id }. Geöffnet per ⋯-Knopf und per
+  // Rechtsklick/Long-Press auf Listenzeile bzw. Board-Karte.
+  openItemMenu(ev, ctx, item) {
+    this.openActionMenu(ev, `${ctx}:${item.id}`, { ctx, id: item.id });
   },
-  closeItemMenu() {
-    this.menuOpenId = null;
-    this._menuAnchorEl = null;
-    this._menuAnchorRect = null;
-    this._menuOpenedAt = 0;
-    detachDismiss(this, '_itemMenuDismiss');
-  },
-  // Hat sich der Trigger seit dem Oeffnen bewegt? 1px Toleranz, damit
-  // Rundung und Subpixel-Rauschen den Menue-Schluss nicht ausloesen.
-  _menuAnchorMoved() {
-    const el = this._menuAnchorEl;
-    const open = this._menuAnchorRect;
-    if (!el || !open || !this.menuOpenId) return false;
-    const now = el.getBoundingClientRect();
-    return Math.abs(now.top - open.top) > 1 || Math.abs(now.left - open.left) > 1;
+  // Das Fundstück des offenen Menüs als 0/1-Liste (x-for im Menü, Schlüssel =
+  // actionMenuKey: ein anderes Fundstück rendert den Inhalt neu).
+  itemMenuItems() {
+    const id = this.actionMenuTarget?.id;
+    if (id == null) return [];
+    const it = (this.items || []).find(i => i.id === id) || (this.detailItems || []).find(i => i.id === id);
+    return it ? [it] : [];
   },
 
   // ── Filter ───────────────────────────────────────────────────────────────

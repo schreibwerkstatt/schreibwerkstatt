@@ -1,11 +1,12 @@
 'use strict';
-// search_chat_history — frühere Gespräche des Users zu diesem Buch (Buch- und
-// Abschnitts-Chats) nach Wortlaut + Bedeutung, über dieselbe Pipeline wie die
+// search_chat_history — frühere Gespräche des Users zu diesem Buch (alle fünf
+// Chats, db/chat-search.js#SEARCHABLE_KINDS) nach Wortlaut + Bedeutung, über dieselbe Pipeline wie die
 // Verlaufssuche der Chat-Karten (lib/chat-search.js). Scope: ctx.bookId +
 // ctx.userEmail; das laufende Gespräch (ctx.sessionId) ist ausgenommen — es steht
 // ohnehin im Kontext. Ohne Embedding-Endpunkt bleibt die Wortlaut-Suche.
 
 const { searchChatHistory } = require('../../../lib/chat-search');
+const { SEARCHABLE_KINDS } = require('../../../db/chat-search');
 
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 20;
@@ -15,12 +16,12 @@ async function tool_search_chat_history(input, ctx) {
   const query = String(input.query || '').trim();
   if (!query) return { error: 'query fehlt', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'query' } };
   if (!ctx.userEmail) return { query, count: 0, results: [] };
-  const scope = input.scope === 'book' || input.scope === 'page' ? input.scope : 'all';
+  const scope = SEARCHABLE_KINDS.includes(input.scope) ? input.scope : 'all';
   const limit = Math.min(Math.max(1, Number.isInteger(input.limit) ? input.limit : DEFAULT_LIMIT), MAX_LIMIT);
 
   const r = await searchChatHistory({
     bookId: ctx.bookId, userEmail: ctx.userEmail, query,
-    kinds: scope === 'all' ? ['book', 'page'] : [scope],
+    kinds: scope === 'all' ? SEARCHABLE_KINDS : [scope],
     excludeSessionId: ctx.sessionId || null, limit, signal: ctx.jobSignal,
   });
   const results = r.hits.map(h => ({

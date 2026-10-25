@@ -96,6 +96,25 @@ test('offline ändern: Felder fallen zusammen, Löschen verwirft die Änderungen
   assert.equal(after[0].op, 'delete');
 });
 
+test('offline umziehen Abschnitt ↔ Kapitel: der neue Anker verdrängt den alten', async () => {
+  const store = setup();
+  const idee = { id: 9, book_id: 5, page_id: 7, chapter_id: null, status: 'offen' };
+  const r1 = await Q.patchIdee(idee, { page_id: 8 });
+  const r2 = await Q.patchIdee(r1, { chapter_id: 3 });
+  assert.equal(r2.chapter_id, 3);
+  assert.equal(r2.page_id, null, 'angenommene Zeile trägt nur noch den neuen Anker');
+  const ops = [...store.db.values()];
+  assert.equal(ops.length, 1);
+  assert.deepEqual(ops[0].fields, { chapter_id: 3 }, 'nie beide Anker in einem PATCH');
+
+  const created = await Q.createIdee({ book_id: 5, page_id: 7, content: 'x' });
+  const moved = await Q.patchIdee(created, { chapter_id: 3 });
+  assert.equal(moved.page_id, null);
+  assert.equal(moved.chapter_id, 3);
+  const createOp = [...store.db.values()].find((o) => o.op === 'create');
+  assert.equal('page_id' in createOp.body, false);
+});
+
 test('Abspielen in Reihenfolge; Netz weg bricht ab und lässt den Rest liegen', async () => {
   const store = setup();
   await Q.createIdee({ book_id: 5, content: 'eins' });

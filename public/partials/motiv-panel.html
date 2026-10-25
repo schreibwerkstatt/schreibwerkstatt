@@ -14,7 +14,7 @@
         <div class="motiv-theme-rows" x-init="_initThemeSortable($el)">
           <template x-for="t in themes" :key="t.id">
             <div class="motiv-theme-row hover-reveal-host" :data-theme-id="t.id">
-              <span class="motiv-drag-grip" aria-hidden="true" :data-tip="$app.t('motiv.theme.dragHint')">
+              <span class="drag-grip motiv-drag-grip" role="img" :data-tip="$app.t('motiv.theme.dragHint')" :aria-label="$app.t('motiv.theme.dragHint')">
                 <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
               </span>
               <!-- Thema-Farbe: Swatch öffnet ein Palette-Popover (theme-aware --palette-*). -->

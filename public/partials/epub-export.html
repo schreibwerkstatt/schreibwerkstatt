@@ -6,7 +6,7 @@
   Pattern-Konformität (DESIGN.md): Combobox statt <select>, .card-form-row,
   .card-header > .card-actions, .card-status / .card-form-saved / .card-form-error.
 -->
-<div class="card card--epubexport epub-export-card" x-data="epubExportCard" x-show="$app.showEpubExportCard" x-cloak>
+<div class="card card--epubexport epub-export-card" x-data="epubExportCard" x-show="$app.showEpubExportCard" x-cloak @keydown="$editKeys($event, { save: () => !saving && savePublication() })">
   <div class="card-header">
     <span class="card-title" x-text="$app.t('epubExport.title')"></span>
     <div class="card-actions">

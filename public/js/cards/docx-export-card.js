@@ -36,8 +36,8 @@ export function registerDocxExportCard() {
     activeProfileId: null,
     activeProfile: null,   // { id, name, config }
     _formMounted: false,
+    _selectSeq: 0,
 
-    showCreate: false,
     newProfileName: '',
     cloneFromId: null,
     creating: false,
@@ -115,20 +115,19 @@ export function registerDocxExportCard() {
       }
     },
 
-    async _unmountFormThen(mutate) {
-      this._formMounted = false;
-      await this.$nextTick();
-      mutate();
-    },
-
+    // Erst laden, dann umhängen — kein Frame ohne Formular (wie PDF-Karte).
     async selectProfile(id) {
-      await this._unmountFormThen(() => { this.activeProfileId = id; });
+      const seq = ++this._selectSeq;
+      let profile = null;
       try {
         const r = await fetch(`/docx-export/profiles/${id}`);
-        if (!r.ok) { this.activeProfile = null; return; }
-        this.activeProfile = await r.json();
-        this._formMounted = true;
+        if (r.ok) profile = await r.json();
       } catch {}
+      if (seq !== this._selectSeq) return;
+      await this._unmountFormThen(() => { this.activeProfileId = id; });
+      if (!profile) { this.activeProfile = null; return; }
+      this.activeProfile = profile;
+      this._formMounted = true;
     },
 
     async _createProfileNamed(name, cloneFromId) {
@@ -149,7 +148,7 @@ export function registerDocxExportCard() {
         this.profiles.push(profile);
         this.newProfileName = '';
         this.cloneFromId = null;
-        this.showCreate = false;
+        this._profileRow = null;
         await this.selectProfile(profile.id);
       } finally {
         this.creating = false;
@@ -162,12 +161,11 @@ export function registerDocxExportCard() {
 
     async deleteProfile(id) {
       if (this.profiles.length <= 1) return; // letztes Profil nicht löschen
-      if (!confirm(window.__app.t('docxExport.confirmDelete'))) return;
+      if (!await window.__app.appConfirm({ message: window.__app.t('docxExport.confirmDelete'), danger: true })) return;
       const r = await fetch(`/docx-export/profiles/${id}`, { method: 'DELETE' });
       if (!r.ok) return;
       this.profiles = this.profiles.filter(p => p.id !== id);
       if (this.activeProfileId === id) {
-        await this._unmountFormThen(() => { this.activeProfileId = null; this.activeProfile = null; });
         await this.selectProfile(this.profiles[0].id);
       }
     },

@@ -1,8 +1,8 @@
 @layer components {
-/* Generic Context-Menu (Rechtsklick-Popover).
-   Konsumenten: .pagetree-context-menu (Sidebar). State + Position vom
-   Konsumenten via Inline-Style (left/top). z-index muss über card-Layer liegen.
-   Pattern-Doku: DESIGN.md → „Context-Menu". */
+/* Kontext-/Aktionsmenue. Teleportierte Menues (⋯-Knopf, Rechtsklick,
+   Long-Press) positioniert action-menu.js ueber `top`/`left`; die am Knopf
+   verankerte Variante ist `--dropdown` (menu.js). z-index muss ueber dem
+   card-Layer liegen. Pattern-Doku: DESIGN.md → „Context-Menu". */
 
 .context-menu {
   position: fixed;
@@ -16,6 +16,9 @@
   display: flex;
   flex-direction: column;
   padding: var(--space-xs) 0;
+  /* Lange Menues scrollen intern statt aus dem Viewport zu ragen. */
+  max-height: calc(100dvh - 2 * var(--space-xs));
+  overflow-y: auto;
   transition: opacity var(--transition-base);
 }
 /* Sanfter CSS-only-Eintritt beim Aufklappen (display:none → flex):

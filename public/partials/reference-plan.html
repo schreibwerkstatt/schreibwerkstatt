@@ -6,9 +6,9 @@
   springt dorthin.
 -->
 <div x-show="referenceTab === 'plan'" class="reference-panel">
-  <div x-show="referencePlanLoading" class="reference-empty" x-text="$app.t('reference.loading')"></div>
+  <div x-show="referencePlanLoading" class="card-status" x-text="$app.t('reference.loading')"></div>
   <template x-if="!referencePlanLoading && referencePlanBeats().length === 0">
-    <div class="reference-empty" x-text="$app.t('reference.empty.plan')"></div>
+    <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.plan')"></div>
   </template>
   <template x-for="beat in referencePlanBeats()" :key="'rp-' + beat.id">
     <div class="reference-row reference-row--clickable internal-link" @click="openReferenceBeat(beat)"

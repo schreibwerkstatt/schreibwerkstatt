@@ -7,22 +7,27 @@ import { startPoll } from '../../cards/job-helpers.js';
 
 export const rechercheLinkMethods = {
   // ── Verknüpfungen ──────────────────────────────────────────────────────────
-  async openLinkPicker(item) {
+  // Picker-Popover (DESIGN.md „Picker-Popover"), verankert an `anchor`
+  // (Menue-Anker in Liste/Board-Karte, Verknuepfen-Knopf im Detail-Dialog).
+  async openLinkPicker(item, anchor = null) {
     await this.ensureLinkTargets();
     this.linkPickerItemId = item.id;
     this.linkPickerKind = 'page';
     this.linkPickerTargetId = '';
-    // Bei langem Fundstueck-Text steht der Picker (eingebettet vor dem Fuss)
-    // oft ausserhalb des sichtbaren Dialog-Abschnitts. Sanft in Sicht scrollen,
-    // damit der User nicht manuell suchen muss — nur im Detail-Dialog, in der
-    // Liste bleibt es beim automatischen Verhalten der Karten-Scroll-Logik.
     this.$nextTick(() => {
-      const dlg = this.$refs?.detailDialog;
-      const picker = dlg?.querySelector?.('.recherche-linkpicker');
-      if (picker) picker.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (this.linkPickerItemId !== item.id) return;
+      this._openPickerPopover(anchor, 'rechercheLinkPopover', () => this.cancelLinkPicker());
     });
   },
-  cancelLinkPicker() { this.linkPickerItemId = null; this.linkPickerTargetId = ''; },
+  cancelLinkPicker() {
+    this.linkPickerItemId = null;
+    this.linkPickerTargetId = '';
+    this._releasePickerPopover();
+  },
+  linkPickerItem() {
+    if (this.linkPickerItemId == null) return null;
+    return (this.items || []).find(i => i.id === this.linkPickerItemId) || null;
+  },
 
   // Ziel-Optionen des Link-Pickers baut die generische entityPicker-Komponente
   // (entity 'target') aus `linkTargets[linkPickerKind]`.
@@ -36,8 +41,7 @@ export const rechercheLinkMethods = {
         body: JSON.stringify({ target_kind: targetKind, target_id: parseInt(targetId, 10) }),
       });
       this._replaceItem(row);
-      this.linkPickerItemId = null;
-      this.linkPickerTargetId = '';
+      this.cancelLinkPicker();
       if (targetKind === 'page') this._refreshRechercheCounts('page');
       if (targetKind === 'chapter') this._refreshRechercheCounts('chapter');
     } catch { this.errorMessage = app.t('recherche.error.link'); }
@@ -83,7 +87,7 @@ export const rechercheLinkMethods = {
     this.suggestItemId = item.id;
     this.suggestStatus = app.t('recherche.suggest.running');
     this.suggestions = { ...this.suggestions, [item.id]: null };
-    this.menuOpenId = null;
+    this.closeActionMenu();
     try {
       const { jobId } = await fetchJson('/jobs/research-link', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },

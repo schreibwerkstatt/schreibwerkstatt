@@ -20,9 +20,9 @@
 
   <div id="ideen-chat-messages" class="chat-messages ideen-chat-messages">
     <!-- Leeres Gespräch: Erklärung + drei Schnellstart-Aufträge (die Kernaufgaben). -->
-    <div x-show="ideenChatMessages.length === 0 && !ideenChatLoading" class="chat-empty">
-      <div x-text="$app.t('ideenBoard.chat.empty')"></div>
-      <div class="ideen-chat-starters">
+    <div x-show="ideenChatMessages.length === 0 && !ideenChatLoading" class="card-empty card-empty--compact">
+      <p class="card-empty-hint" x-text="$app.t('ideenBoard.chat.empty')"></p>
+      <div class="card-empty-actions">
         <button type="button" class="btn-compact" @click="askIdeenChat('ideenBoard.chat.starter.erledigt')" x-text="$app.t('ideenBoard.chat.starter.erledigtLabel')"></button>
         <button type="button" class="btn-compact" @click="askIdeenChat('ideenBoard.chat.starter.orte')" x-text="$app.t('ideenBoard.chat.starter.orteLabel')"></button>
         <button type="button" class="btn-compact" @click="askIdeenChat('ideenBoard.chat.starter.dubletten')" x-text="$app.t('ideenBoard.chat.starter.dublettenLabel')"></button>

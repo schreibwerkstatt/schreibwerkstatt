@@ -34,7 +34,7 @@ export const adminCategoriesMethods = {
   },
 
   async renameCategory(cat) {
-    const next = window.prompt(window.__app.t('admin.cat.renamePrompt'), cat.name);
+    const next = await window.__app.appPrompt({ message: window.__app.t('admin.cat.renamePrompt'), defaultValue: cat.name });
     if (!next || next.trim() === cat.name) return;
     try {
       await sendJson(`/local/categories/${cat.id}`, 'PUT', { name: next.trim() });

@@ -335,11 +335,7 @@
   border-radius: var(--radius-sm);
 }
 
-.edit-slash-empty {
-  padding: var(--space-5) var(--space-10);
-  font-size: var(--font-size-xs);
-  color: var(--color-muted);
-}
+.edit-slash-empty { padding: var(--space-5) var(--space-10); }
 
 /* Tabu im Fokus-Mode: strukturell kaltgestellt, unabhängig vom x-show.
    Scope auf `.focus-host` am Editor-Card (gesetzt in focus/card.js#enterFocusMode). */

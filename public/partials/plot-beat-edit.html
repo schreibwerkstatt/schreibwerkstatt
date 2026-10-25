@@ -12,7 +12,7 @@
        beide im DOM, eine beat.id allein waere doppelt vergeben). -->
   <div class="plot-beat-edit"
        x-id="['pbe-int', 'pbe-chap', 'pbe-zeit', 'pbe-fig', 'pbe-motif', 'pbe-ort', 'pbe-rel', 'pbe-move']"
-       @keydown="onBeatEditKeydown($event, beat)"
+       @keydown="$editKeys($event, { save: () => commitEditBeat(beat), cancel: () => cancelEditBeat() })"
        @click.outside="editingBeatId === beat.id && commitEditBeat(beat)">
     <input type="text" class="plot-beat-edit-titel" x-model="beatDraft.titel"
            data-spellcheck="spelling" :placeholder="$app.t('plot.beat.titelPlaceholder')"

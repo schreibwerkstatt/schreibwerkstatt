@@ -56,8 +56,9 @@ const MAX_TOPIC_LEN = 2000;
 function _validateMindmap(obj) {
   if (!obj || typeof obj !== 'object') return false;
   if (!obj.data || typeof obj.data !== 'object') return false;
-  const json = JSON.stringify(obj);
-  if (json.length > MAX_MINDMAP_BYTES) return false;
+  // Bytes, nicht UTF-16-Einheiten: Umlaute und Emoji zaehlen so, wie sie in
+  // der Spalte landen.
+  if (Buffer.byteLength(JSON.stringify(obj), 'utf8') > MAX_MINDMAP_BYTES) return false;
   // Iterativ statt rekursiv: die Pruefung selbst darf an der Tiefe nicht werfen.
   const seen = new Set();
   const stack = [{ node: obj.data, depth: 1 }];
@@ -320,12 +321,13 @@ router.post('/:book_id/import', jsonBody, (req, res) => {
     return res.status(409).json({ error_code: 'ALREADY_IMPORTED', existingDraftId: twin?.id ?? null });
   }
 
-  const mindmap = buildMindmapFromFigure(fig);
+  // Notiz und Stammdaten-Beschriftungen in der Sprache des Users zum Import-
+  // Zeitpunkt, KEIN __i18n:-Marker: beides ist danach Freitext des Autors, ein
+  // Marker stuende dort roh im Textarea bzw. im Knoten.
+  const locale = getUser(userEmail)?.language || 'de';
+  const mindmap = buildMindmapFromFigure(fig, locale);
   if (!_validateMindmap(mindmap)) return res.status(500).json({ error_code: 'MINDMAP_INVALID' });
   const archetype = mapArchetype(fig.typ);
-  // Notiz in der Sprache des Users zum Import-Zeitpunkt, KEIN __i18n:-Marker:
-  // das Notizfeld ist Freitext, ein Marker stuende dort roh im Textarea.
-  const locale = getUser(userEmail)?.language || 'de';
   const notes = tServerParams('werkstatt.importNote', { name: fig.name, date: localIsoDate() }, locale);
 
   const created = createDraftFigure(bookId, userEmail, {
@@ -356,8 +358,13 @@ router.get('/:book_id/link-candidates', (req, res) => {
 router.post('/by-id/:id/link-figure', jsonBody, (req, res) => {
   const draft = scopedDraft(req, res, req.params.id);
   if (!draft) return;
-  const raw = req.body?.figureId;
-  if (raw == null) {
+  // Loesen nur bei ausdruecklichem `figureId: null` — ein Body ohne das Feld
+  // (Tippfehler im Feldnamen) loeste sonst still die Verknuepfung.
+  if (!req.body || !Object.prototype.hasOwnProperty.call(req.body, 'figureId')) {
+    return res.status(400).json({ error_code: 'FIGURE_ID_REQ' });
+  }
+  const raw = req.body.figureId;
+  if (raw === null) {
     logger.info(`[werkstatt] unlink draft=${draft.id} von figure=${draft.source_figure_id}`);
     return res.json(setDraftSourceFigure(draft.id, null));
   }
@@ -377,6 +384,14 @@ router.post('/by-id/:id/link-figure', jsonBody, (req, res) => {
   const existing = getDraftFigureBySource(draft.book_id, draft.user_email, figureId);
   if (existing && existing.id !== draft.id) {
     return res.status(409).json({ error_code: 'ALREADY_IMPORTED', existingDraftId: existing.id });
+  }
+  // Gleichnamige Katalog-Zeile (Merge-Kollision `__2`) einer schon an einem
+  // ANDEREN Draft haengenden Figur: dieselbe Figur — gleiche Regel wie der Import.
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const twin = listDraftFigures(draft.book_id, draft.user_email)
+    .find(d => d.id !== draft.id && d.source_figure_id && norm(d.source_figure_name) === norm(fig.name));
+  if (twin) {
+    return res.status(409).json({ error_code: 'ALREADY_IMPORTED', existingDraftId: twin.id });
   }
 
   logger.info(`[werkstatt] link draft=${draft.id} → figure=${figureId} ("${fig.name}")`);

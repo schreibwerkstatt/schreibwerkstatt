@@ -74,7 +74,7 @@
       <template x-for="page in filteredSoloPages()" :key="page.id">
         <!-- @include organizer-page-row -->
       </template>
-      <li class="organizer-empty" x-show="filteredSoloPages().length === 0 && !organizerSearch" x-text="$app.t('bookOrganizer.noSoloPages')"></li>
+      <li class="muted-msg muted-msg--sm organizer-empty" x-show="filteredSoloPages().length === 0 && !organizerSearch" x-text="$app.t('bookOrganizer.noSoloPages')"></li>
     </ul>
   </div>
 
@@ -209,4 +209,6 @@
     </div>
   </div>
   </template>
+
+  <!-- @include organizer-book-move -->
 </div>

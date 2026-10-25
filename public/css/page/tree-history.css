@@ -454,11 +454,12 @@
 }
 .page-revisions-pin.is-active { color: var(--color-accent); }
 
+/* Leeres Buch / leerer Filter in der Sidebar: `.card-empty--compact`,
+   linksbuendig an der Baumkante statt zentriert. */
 .sidebar-empty-book {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
   align-items: flex-start;
+  text-align: left;
+  padding: 0;
   margin-top: var(--space-md);
 }
 

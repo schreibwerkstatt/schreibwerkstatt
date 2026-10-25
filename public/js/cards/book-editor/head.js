@@ -14,7 +14,7 @@
 // allen anderen nimmt ein leerer Kopf keinen Platz weg. Der Teaser fehlt mit
 // Absicht — er gehört in Übersichten (channels.js#HEADLINE_HEAD_FIELDS).
 
-import { fetchJson } from '../../utils.js';
+import { fetchJson, autosizeTextarea } from '../../utils.js';
 import { sendJson } from '../../utils/net.js';
 import { HEADLINE_HEAD_FIELDS, HEADLINE_LONG_FIELDS } from '../../headline/channels.js';
 import { isJournalisticBuchtyp } from '../feature-registry.js';
@@ -59,11 +59,7 @@ export const bookEditorHeadMethods = {
 
   /** Höhe nach Inhalt, wo `field-sizing: content` fehlt (Firefox, ältere
    *  WebKit) — sonst schnitte die einzeilige Textarea einen mehrzeiligen Lead ab. */
-  headAutosize(el) {
-    if (!el || globalThis.CSS?.supports?.('field-sizing', 'content')) return;
-    el.style.height = 'auto';
-    el.style.height = el.scrollHeight + 'px';
-  },
+  headAutosize(el) { autosizeTextarea(el); },
 
   /** Enter beendet Dachzeile und Titel (einzeilig); im Lead bleibt er Umbruch. */
   headKeydown(feld, ev) {

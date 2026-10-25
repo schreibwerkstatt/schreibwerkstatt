@@ -6,7 +6,10 @@ import { figurWerkstattMethods } from '../figur-werkstatt.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { attachFullscreenSync } from '../fullscreen.js';
 import { befundSeverityMethods } from '../utils/befund-severity.js';
+import { isSaveShortcut } from '../utils/keys.js';
 import { ideenBacklinkMethods } from '../book/ideen-backlinks.js';
+import { pickerPopoverState, pickerPopoverMethods } from '../picker-popover.js';
+import { actionMenuState, actionMenuMethods } from '../action-menu.js';
 
 export function registerFigurWerkstattCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -22,8 +25,6 @@ export function registerFigurWerkstattCard() {
     loading: false,
     busy: false,
     errorMessage: '',
-    // Overflow-"⋯"-Menü der Detail-Header-Leiste (Brainstorm + Konsistenz).
-    werkstattMenuOpen: false,
     brainstormLoading: false,
     brainstormProgress: 0,
     brainstormStatus: '',
@@ -33,15 +34,16 @@ export function registerFigurWerkstattCard() {
     consistencyStatus: '',
     consistencyResult: null,
     mindmapFullscreen: false,
-    contextMenuOpen: false,
-    contextMenuNodeId: null,
-    contextMenuPos: { left: 0, top: 0 },
+    // Knoten-Menü der Mindmap (action-menu.js), Ziel = Knoten-ID.
+    ...actionMenuState(),
     importing: false,
     importables: [],
     importablesLoading: false,
     selectedImportFigureId: '',
     // Nachtraegliche Verknuepfung Draft → Katalog-Figur (source_figure_id):
     // der Weg fuer alle, die erst geplant und dann geschrieben haben.
+    // Als Picker-Popover am Menue-Knopf (werkstatt-link-picker.html).
+    ...pickerPopoverState(),
     linking: false,
     linkCandidates: [],
     linkCandidatesLoading: false,
@@ -77,6 +79,18 @@ export function registerFigurWerkstattCard() {
     // Mindmap-Dirty als Generationszähler (crud.js#_markMindmapDirty).
     _mindmapGen: 0,
     _mindmapSavedGen: 0,
+    // Laufender PUT (crud.js#saveDraft): ein Save zur Zeit.
+    _savePromise: null,
+    // Rückgängig/Wiederholen der Mindmap (history.js): Snapshot-Stapel,
+    // zuletzt gemerkter Stand, Sperre während eines Restores.
+    _mmUndo: [],
+    _mmRedo: [],
+    _mmLast: null,
+    _mmRestoring: false,
+    // Mount-Retry bis das Canvas sichtbar ist + Auto-Center-Sperre bei
+    // programmatischer Auswahl (mindmap.js).
+    _mountTries: 0,
+    _suppressCenter: false,
     // Schlüssel der x-for-Hülle um das Canvas: hochzählen erzwingt einen
     // Remount bei gleicher Draft-ID (Refresh mit Verwerfen).
     _mindmapMountKey: 0,
@@ -85,7 +99,6 @@ export function registerFigurWerkstattCard() {
     _mindmapEl: null,
     _topicMarkers: null,
     _themeObs: null,
-    _cancelLongPress: null,
     _brainstormJobId: null,
     _brainstormJobDraftId: null,
     _consistencyJobId: null,
@@ -173,8 +186,7 @@ export function registerFigurWerkstattCard() {
         extraListeners: [{
           type: 'keydown',
           handler: (e) => {
-            if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
-            if ((e.key || '').toLowerCase() !== 's') return;
+            if (!isSaveShortcut(e)) return;
             if (!window.__app?.showFigurWerkstattCard) return;
             if (!this.selectedDraftId) return;
             e.preventDefault();
@@ -200,7 +212,7 @@ export function registerFigurWerkstattCard() {
 
       // Native Fullscreen-API: State spiegeln, jsMind resize bei Enter/Exit.
       attachFullscreenSync({
-        resolveWrap: () => document.querySelector('.werkstatt-detail'),
+        resolveWrap: () => document.querySelector('.card--werkstatt .werkstatt-mindmap-section'),
         signal: this._lifecycle.signal,
         onChange: (active) => {
           this.mindmapFullscreen = active;
@@ -216,6 +228,8 @@ export function registerFigurWerkstattCard() {
       this._lifecycle?.destroy();
     },
 
+    ...pickerPopoverMethods,
+    ...actionMenuMethods,
     ...figurWerkstattMethods,
     // Schwere-Plakette der Konflikte + Bogen-Befunde (Befund-Skala, nicht Szenen-Stärke).
     ...befundSeverityMethods,

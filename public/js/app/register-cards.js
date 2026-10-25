@@ -103,12 +103,18 @@ import { registerTabs } from '../tabs.js';
 import { registerToggleSwitch } from '../toggle-switch.js';
 import { registerSettingField } from '../setting-field.js';
 import { registerMenu } from '../menu.js';
+import { registerLongPress } from '../action-menu.js';
 import { registerModal } from '../modal.js';
 import { registerEntityRef } from '../entity-ref.js';
+import { handleEditPanelKeydown } from '../utils/keys.js';
 
 // Magics, die Sub-Komponenten/Partials den Zugriff auf Root + Sync-Provider geben.
 export function registerAppMagics() {
   const Alpine = window.Alpine;
+  // Magic `$editKeys($event, { save, cancel })` — die eine Tastaturbelegung der
+  // Edit-Formulare (public/CLAUDE.md «Edit-Formulare»): am Container
+  // `@keydown="$editKeys($event, { save: () => …, cancel: () => … })"`.
+  Alpine.magic('editKeys', () => handleEditPanelKeydown);
   // Magic `$app` — verweist auf die `lektorat`-Root-Komponente am body. In
   // Alpine ist `$root` das nächste x-data-Element (bei Sub-Komponenten also die
   // Sub selbst), nicht die Top-Level-Komponente. Sub-Komponenten und Partials
@@ -239,6 +245,7 @@ export function registerAllCards() {
   registerToggleSwitch();
   registerSettingField();
   registerMenu();
+  registerLongPress();
   registerModal();
   registerEntityRef();
 }

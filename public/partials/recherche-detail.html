@@ -27,7 +27,7 @@
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
             <span x-text="$app.t('recherche.edit')"></span>
           </button>
-          <!-- @include recherche-item-menu -->
+          <!-- @include recherche-item-menu-trigger -->
           <button type="button" class="icon-btn icon-btn--ghost" @click="closeDetail()"
                   :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
         </div>
@@ -76,7 +76,8 @@
         <!-- Bearbeiten: nur die Textfelder tauschen. Die Felder selbst kommen aus
              demselben Fragment wie der Anlegen-Dialog (recherche-form-fields) und
              binden dasselbe `draft` — nur die Aktionszeile ist hier eine andere. -->
-        <div class="recherche-form" x-show="detailEditing" x-cloak>
+        <div class="recherche-form" x-show="detailEditing" x-cloak
+             @keydown="$editKeys($event, { save: () => saveEdit(item) })">
           <!-- @include recherche-form-fields -->
           <div class="recherche-form-actions">
             <button type="button" class="btn-compact recherche-primary" @click="saveEdit(item)" :disabled="busy" x-text="$app.t('recherche.save')"></button>
@@ -97,7 +98,7 @@
         <!-- @include recherche-item-relations -->
 
         <div class="research-dialog__foot">
-          <button type="button" class="btn-compact" x-show="linkPickerItemId !== item.id" @click="openLinkPicker(item)">
+          <button type="button" class="btn-compact research-link-add" @click="openLinkPicker(item, $el)">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"/></svg>
             <span x-text="$app.t('recherche.link.add')"></span>
           </button>

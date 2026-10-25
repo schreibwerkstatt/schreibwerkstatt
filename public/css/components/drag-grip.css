@@ -1,0 +1,41 @@
+@layer components {
+/* === Drag-Griff: einzige Greiffläche einer sortierbaren Karte/Zeile ======
+   SSoT für jeden SortableJS-Griff (Plot-Beat, Recherche-Status, Ideen-Board,
+   Motiv-Themen, Buchorganizer). Markup:
+     <span class="drag-grip <feature>-grip" role="img" :data-tip="…" :aria-label="…">
+       <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
+     </span>
+   Die Feature-Klasse bleibt nur als `handle`-Anker für SortableJS.
+   - Position: erstes Kind der Zeile, bündig an deren Inhaltskante (keine
+     negative Marge in den Kartenrand). Abstand zum nächsten Element immer
+     --space-6: der Wirt legt seinen Spaltenabstand in --drag-grip-host-gap
+     ab und verwendet ihn als `gap`, der Griff gleicht die Differenz aus.
+   - Höhe = eine Zeile (1lh): in einer `align-items: flex-start`-Zeile steht
+     das Icon so mittig auf der ERSTEN Textzeile. Hat der erste Text eine
+     andere Schriftgrösse als die Zeile, setzt der Wirt sie am Griff
+     (`font-size`), sonst stimmt 1lh nicht.
+   - Ruhe fast unsichtbar, Zuwendung zur Karte (`.hover-reveal-host` bzw.
+     `.drag-grip-host`) grau, Griff selbst Textfarbe. Touch kennt kein Hover:
+     dort steht er grau da. */
+.drag-grip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1lh;
+  margin-inline-end: calc(var(--space-6) - var(--drag-grip-host-gap, var(--space-6)));
+  color: var(--color-border);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  transition: color var(--transition-fast);
+}
+.drag-grip .icon { width: 14px; height: 14px; }
+.hover-reveal-host:hover .drag-grip,
+.drag-grip-host:hover .drag-grip { color: var(--color-muted); }
+.drag-grip:hover { color: var(--color-text); }
+.drag-grip:active { cursor: grabbing; }
+@media (hover: none) {
+  .drag-grip { color: var(--color-muted); }
+}
+}

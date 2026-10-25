@@ -25,7 +25,7 @@ test('Abschnitt offline anlegen, beschreiben, umbenennen — beim Wiederverbinde
   // Anlegen über das Baum-Kontextmenü (Namensdialog gestubbt).
   await page.evaluate(async (id) => {
     window.__app.appPrompt = async () => 'Zugabschnitt';
-    window.__app.pageTreeMenuTarget = { kind: 'chapter', id };
+    window.__app.actionMenuTarget = { kind: 'chapter', id };
     await window.__app.pagetreeCtxNewPage();
   }, chapterId);
   await page.waitForFunction(() => window.__app.currentPage?.id < 0, null, { timeout: 15000 });
@@ -74,7 +74,7 @@ test('offline angelegter Abschnitt liegt in IndexedDB und übersteht ein Neulade
   await context.setOffline(true);
   await page.evaluate(async (id) => {
     window.__app.appPrompt = async () => 'Nach Neuladen';
-    window.__app.pageTreeMenuTarget = { kind: 'chapter', id };
+    window.__app.actionMenuTarget = { kind: 'chapter', id };
     await window.__app.pagetreeCtxNewPage();
   }, chapterId);
   await page.waitForFunction(() => window.__app.currentPage?.id < 0, null, { timeout: 15000 });

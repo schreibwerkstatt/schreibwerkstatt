@@ -95,6 +95,10 @@
     const { registerFileDrop } = await import('/public/js/file-drop.js');
     registerFileDrop();
 
+    // `$editKeys` (Cmd+S am Edit-Formular) — in der App registriert in register-cards.js.
+    const { handleEditPanelKeydown } = await import('/public/js/utils/keys.js');
+    window.Alpine.magic('editKeys', () => handleEditPanelKeydown);
+
     const { registerPdfExportCard } = await import('/public/js/cards/pdf-export-card.js');
     registerPdfExportCard();
 

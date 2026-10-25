@@ -2,10 +2,23 @@
 // muss ganz sichtbar und bedienbar sein, auch wenn sein Container kuerzer ist
 // als das Menue — ein kurzer Fund im Detail-Dialog (der per Overflow klippt)
 // und eine Liste mit einem einzigen Eintrag. Dazu seine Schliessregeln (Scroll,
-// Doppelklick), die beide in board.js#toggleItemMenu liegen. Geometrie-Aussage
+// Doppelklick), die beide in action-menu.js#openActionMenu liegen. Geometrie-Aussage
 // gegen das echte Shell-CSS, darum hier und nicht im Fixture-Harness.
 const { test, expect } = require('../e2e/_helpers/fixtures');
 const { bootApp, selectSeededBook } = require('./_helpers/app');
+
+// Angelegte Fundstuecke wieder abraeumen: alle Specs teilen das Seed-Buch, und
+// ein liegengebliebener Fund (etwa der „eingearbeitet"-Fund des Board-Tests)
+// verfaelscht die Spalten-Zaehlung in recherche-status.spec.js.
+let created = [];
+test.afterEach(async ({ page }) => {
+  const ids = created;
+  created = [];
+  if (!ids.length) return;
+  await page.evaluate(async (list) => {
+    for (const id of list) await fetch(`/research/${id}`, { method: 'DELETE' });
+  }, ids).catch(() => {});
+});
 
 // Letzter Menueeintrag (Loeschen) per Hit-Test: getroffen wird er nur, wenn
 // das Menue weder geklippt noch verdeckt ist.
@@ -30,7 +43,7 @@ async function expectMenuFullyUsable(page, menu) {
 // (Recherche-Wortliste, Scraper) neu, und ein Klick mitten darin erreicht den
 // Trigger-Handler nicht. Wichtig ist das Warten zwischen den Versuchen:
 // `isVisible()` ohne Wartezeit sieht das Menue noch nicht, ein zweiter Klick
-// toggle.zt es im selben Frame wieder zu (board.js#toggleItemMenu). Die
+// toggle.zt es im selben Frame wieder zu (action-menu.js, TOGGLE_GRACE_MS). Die
 // Geometrie wird danach weiterhin streng geprueft — ein Menue, das gar nicht
 // aufgeht, faellt durch.
 async function openAndCheckMenu(page, trigger, menu) {
@@ -56,6 +69,7 @@ test('recherche: Aktionsmenue bei kurzem Inhalt nicht geklippt (Detail-Dialog + 
     }).then(r => r.json());
     return made.id;
   }, bookId);
+  created.push(itemId);
 
   // ── Liste mit einem einzigen Eintrag ──────────────────────────────────────
   await page.evaluate((id) => { location.hash = `#book/${id}/recherche`; }, bookId);
@@ -64,9 +78,9 @@ test('recherche: Aktionsmenue bei kurzem Inhalt nicht geklippt (Detail-Dialog + 
   await expect(row).toBeVisible();
   await openAndCheckMenu(page,
     row.locator('.research-item-actions > .icon-btn[aria-haspopup="menu"]'),
-    row.locator('.research-item-menu'));
+    page.locator('.research-item-menu'));
   await page.keyboard.press('Escape');
-  await expect(row.locator('.research-item-menu')).toBeHidden();
+  await expect(page.locator('.research-item-menu')).toBeHidden();
 
   // ── Detail-Dialog eines kurzen Funds (Permalink) ──────────────────────────
   await page.evaluate(([b, i]) => { location.hash = `#book/${b}/recherche/${i}`; }, [bookId, itemId]);
@@ -78,7 +92,7 @@ test('recherche: Aktionsmenue bei kurzem Inhalt nicht geklippt (Detail-Dialog + 
 });
 
 // Scroll-Fall: das Menue haengt an den Viewport-Koordinaten des Triggers
-// (menuPos aus dessen Rect), also schliesst es nur, was den Trigger auch bewegt.
+// (actionMenuPos aus dessen Rect), also schliesst es nur, was den Trigger auch bewegt.
 // Ein Scroll daneben — eine andere Liste, ein Job-Hinweis, der die Seite um ein
 // paar Pixel verschiebt — laesst es verankert; vorher riss es das Menue da
 // grundlos zu, mitten im Oeffnungsklick des Users.
@@ -96,6 +110,7 @@ test('recherche: Aktionsmenue schliesst nur beim Scroll, der den Trigger bewegt'
     }).then(r => r.json());
     return made.id;
   }, bookId);
+  created.push(itemId);
 
   await page.evaluate((id) => { location.hash = `#book/${id}/recherche`; }, bookId);
   const row = page.locator(`[data-research-id="${itemId}"]`);
@@ -103,7 +118,7 @@ test('recherche: Aktionsmenue schliesst nur beim Scroll, der den Trigger bewegt'
   // Scrollposition mit Spiel nach oben UND unten, damit beide Bewegungen
   // wirklich stattfinden (am Seitenende waere scrollBy ein No-op).
   await page.evaluate(() => window.scrollTo(0, 140));
-  const menu = row.locator('.research-item-menu');
+  const menu = page.locator('.research-item-menu');
   await openAndCheckMenu(page,
     row.locator('.research-item-actions > .icon-btn[aria-haspopup="menu"]'), menu);
 
@@ -120,8 +135,8 @@ test('recherche: Aktionsmenue schliesst nur beim Scroll, der den Trigger bewegt'
 // Doppelklick: zwei Klicks kurz nacheinander sind ein verklickter Doppelklick
 // (schnelle Maus, Touch, ein Test-Runner, der eine Aktion wiederholt) und
 // KEIN Schliessen — im reinen Toggle faelle das Menue im selben Frame wieder zu.
-// Nach der Frist schaltet derselbe Trigger weiterhin normal (board.js#
-// toggleItemMenu, MENU_TOGGLE_GRACE_MS).
+// Nach der Frist schaltet derselbe Trigger weiterhin normal (action-menu.js,
+// TOGGLE_GRACE_MS).
 test('recherche: Aktionsmenue ueberlebt einen Doppelklick und schaltet danach', async ({ page }) => {
   await bootApp(page);
   const bookId = await selectSeededBook(page);
@@ -132,12 +147,13 @@ test('recherche: Aktionsmenue ueberlebt einen Doppelklick und schaltet danach', 
     }).then(r => r.json());
     return made.id;
   }, bookId);
+  created.push(itemId);
 
   await page.evaluate((id) => { location.hash = `#book/${id}/recherche`; }, bookId);
   const row = page.locator(`[data-research-id="${itemId}"]`);
   await expect(row).toBeVisible();
   const trigger = row.locator('.research-item-actions > .icon-btn[aria-haspopup="menu"]');
-  const menu = row.locator('.research-item-menu');
+  const menu = page.locator('.research-item-menu');
   await trigger.click();
   await expect(menu).toBeVisible();
 
@@ -177,6 +193,7 @@ test('recherche: Aktionsmenue im Status-Board laesst das Board nicht ueberlaufen
     });
     return made.id;
   }, bookId);
+  created.push(itemId);
   await page.evaluate((id) => { location.hash = `#book/${id}/recherche`; }, bookId);
   await page.locator('#recherche-card .entity-view-toggle [role=tab]').nth(1).click();
   const btn = page.locator(`.research-status-card[data-research-card-id="${itemId}"] .research-item-actions > .icon-btn[aria-haspopup="menu"]`);

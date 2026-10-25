@@ -137,7 +137,7 @@ export const userSettingsMethods = {
   },
 
   async deviceTokensRevoke(id) {
-    if (!confirm(window.__app.t('profile.devices.confirmRevoke'))) return;
+    if (!await window.__app.appConfirm({ message: window.__app.t('profile.devices.confirmRevoke'), danger: true })) return;
     try {
       await sendJson(`/me/device-tokens/${id}/revoke`, 'POST');
       await this.loadDeviceTokens();
@@ -145,7 +145,7 @@ export const userSettingsMethods = {
   },
 
   async deviceTokensDelete(id) {
-    if (!confirm(window.__app.t('profile.devices.confirmDelete'))) return;
+    if (!await window.__app.appConfirm({ message: window.__app.t('profile.devices.confirmDelete'), danger: true })) return;
     try {
       await sendJson(`/me/device-tokens/${id}`, 'DELETE');
       await this.loadDeviceTokens();

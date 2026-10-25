@@ -116,12 +116,12 @@ export const ANALYSIS_TOOLS = [
   },
   {
     name: 'search_chat_history',
-    description: 'Durchsucht FRÜHERE Gespräche des Autors zu diesem Buch (Buch- und Abschnitts-Chats, nicht das laufende) nach Wortlaut und Bedeutung — wenn er sich auf Besprochenes bezieht («wie hatten wir das entschieden?», «was hast du letzte Woche zu Kapitel 3 gesagt?»). Treffer {session_id, kind (book|page), page_name, title, created_at, snippet}. Ein `hint` meldet eine ausgefallene Bedeutungssuche oder fehlende Runden — die Liste ist dann unvollständig. Frühere Antworten können veraltet sein: gegen den aktuellen Text prüfen und als Stand des früheren Gesprächs kennzeichnen.',
+    description: 'Durchsucht FRÜHERE Gespräche des Autors zu diesem Buch (nicht das laufende) nach Wortlaut und Bedeutung — wenn er sich auf Besprochenes bezieht («wie hatten wir das entschieden?»). Treffer {session_id, kind, page_name, title, created_at, snippet}; kind: book/page = Buch-/Abschnitts-Chat, research = Web-Recherche (Aussenwissen, kein Buchtext), plot/ideen = Planungsgespräche (Vorschläge, nicht Stand des Buchs). Ein `hint` meldet eine ausgefallene Bedeutungssuche oder fehlende Runden — die Liste ist dann unvollständig. Frühere Antworten können veraltet sein: gegen den aktuellen Text prüfen und als Stand des früheren Gesprächs kennzeichnen.',
     input_schema: {
       type: 'object',
       properties: {
         query: { type: 'string',  description: 'Wonach gesucht wird — Stichwort, Name oder Umschreibung des Themas.' },
-        scope: { type: 'string',  enum: ['all', 'book', 'page'], description: 'Optional: nur Buch-Chats (book), nur Abschnitts-Chats (page) oder beide (all, Default).' },
+        scope: { type: 'string',  enum: ['all', 'book', 'page', 'research', 'plot', 'ideen'], description: 'Optional: nur eine Chat-Art oder alle (all, Default).' },
         limit: { type: 'integer', description: 'Maximale Trefferzahl (default 8, max 20).' },
       },
       required: ['query'],

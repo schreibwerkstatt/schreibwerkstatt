@@ -1,7 +1,6 @@
 import { EVT } from '../events.js';
 import { contentRepo } from '../repo/content.js';
 import { localIsoDate } from '../utils.js';
-import { attachDismiss, detachDismiss } from '../cards/dismiss.js';
 import { MAX_CHAPTER_DEPTH } from '../book-organizer/constants.js';
 // Pagetree-Rechtsklick-Menü. Aktionen pro Node-Typ:
 //   page    → Öffnen, Editieren (Notebook), Teilen, Exportieren, Neues Kapitel,
@@ -24,146 +23,22 @@ import { MAX_CHAPTER_DEPTH } from '../book-organizer/constants.js';
 // viewer/lektor Eintraege, die serverseitig mit 403 enden. Lesende Eintraege
 // (Oeffnen, Teilen, Exportieren) bleiben ungegated — sie brauchen nur `viewer`.
 //
-// State lebt im Root (`pageTreeMenuOpen`/`Pos`/`Target`, deklariert in
-// app-state.js#navigationState). Render-HTML in public/partials/sidebar.html.
+// State + Mechanik aus action-menu.js (`actionMenuState`/`actionMenuMethods`,
+// in den Root gespreadet); Ziel steht als `actionMenuTarget` im Menue. Render-
+// HTML in public/partials/sidebar-pagetree-menu.html.
 // Methoden hier werden über `treeContextMenuMethods` in den Root gespreadet —
 // `this` ist die Alpine-Root-Komponente.
 
-// Erst-Schaetzung fuer die Position, bevor das Menue gerendert ist. Die
-// tatsaechliche Groesse haengt am Node-Typ (Seite vs. Kapitel) und am Edit-Recht
-// und wird nach dem Render gemessen (`_remeasurePagetreeMenu`) — geraten wird
-// hier nur der erste Frame.
-const MENU_W_EST = 240;
-const MENU_H_EST = 340;
-const MENU_GAP = 8;
-
-const MENU_ITEM_SEL = '.context-menu-item:not([hidden])';
+const MENU_CLOSE_EVENTS = [EVT.BOOK_CHANGED, EVT.PAGES_LOADED, EVT.VIEW_RESET];
 
 export const treeContextMenuMethods = {
+  // Rechtsklick bzw. Long-Press auf eine Baum-Zeile. Mechanik (Position,
+  // Tastatur, Schliessen, Fokus zurueck) aus action-menu.js. Ein Buchwechsel
+  // oder Tree-Reload macht das Ziel ungueltig: die ID zeigte danach auf eine
+  // Seite, die es in diesem Buch nicht gibt.
   _openPagetreeContextMenu(ev, target) {
     if (!target || !target.kind || target.id == null) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    this.pageTreeMenuTarget = target;
-    // Roh-Koordinaten merken: das Nachmessen klemmt gegen dieselbe Cursor-
-    // Position, nicht gegen die bereits geklemmte Schaetzung (sonst wandert das
-    // Menue bei jeder Messung ein Stueck weiter nach oben/links).
-    // Per Tastatur (Kontextmenue-Taste, Shift+F10) liegt die gemeldete Position
-    // nicht im Eintrag (je nach Browser 0/0) — dann am Eintrag selbst verankern.
-    let x = ev.clientX, y = ev.clientY;
-    const r = ev.currentTarget?.getBoundingClientRect?.();
-    if (r && (x < r.left || x > r.right || y < r.top || y > r.bottom)) {
-      x = r.left + MENU_GAP * 2;
-      y = r.bottom;
-    }
-    this._pageTreeMenuAnchor = { x, y };
-    this._pageTreeMenuReturnFocus = document.activeElement;
-    this.pageTreeMenuPos = this._clampPagetreeMenuPos(x, y, MENU_W_EST, MENU_H_EST);
-    this.pageTreeMenuOpen = true;
-    // Erst nach dem Render steht die echte Groesse fest (Seiten-Menue hat andere
-    // Eintraege als das Kapitel-Menue, `canEdit` blendet weitere aus). Ohne das
-    // Nachmessen schiebt die zu grosse Schaetzung das Menue unnoetig weit vom
-    // Cursor weg. rAF statt reinem $nextTick: die x-if-Bloecke im Partial haben
-    // eigene Effects, die in einem einzelnen Tick noch nicht gerendert sind.
-    this.$nextTick(() => requestAnimationFrame(() => {
-      this._remeasurePagetreeMenu();
-      this._focusFirstPagetreeMenuItem();
-    }));
-    if (!this._pageTreeMenuOutsideHandler) {
-      this._pageTreeMenuOutsideHandler = (e) => {
-        const menu = document.querySelector('.pagetree-context-menu');
-        if (menu && !menu.contains(e.target)) this._hidePagetreeContextMenu();
-      };
-      document.addEventListener('mousedown', this._pageTreeMenuOutsideHandler, true);
-    }
-    if (!this._pageTreeMenuKeyHandler) {
-      this._pageTreeMenuKeyHandler = (e) => this._onPagetreeMenuKeydown(e);
-      document.addEventListener('keydown', this._pageTreeMenuKeyHandler);
-    }
-    // Das Menue ist position:fixed und cursor-verankert — es scrollt nicht mit
-    // seinem Ziel mit. Beim Scrollen (im Tree oder in der Seite) stuende es
-    // sonst ueber einem fremden Eintrag und wuerde dessen Aktionen suggerieren.
-    // Gleiches Argument fuer Resize.
-    // Ein Buchwechsel oder Tree-Reload macht `pageTreeMenuTarget` ungueltig:
-    // die ID zeigt danach auf eine Seite, die es in diesem Buch nicht gibt.
-    this._pageTreeMenuDismissHandler ??= attachDismiss(() => this._hidePagetreeContextMenu(), {
-      events: [EVT.BOOK_CHANGED, EVT.PAGES_LOADED, EVT.VIEW_RESET],
-    });
-  },
-
-  _clampPagetreeMenuPos(x, y, w, h) {
-    return {
-      left: Math.max(MENU_GAP, Math.min(window.innerWidth - w - MENU_GAP, x)),
-      top: Math.max(MENU_GAP, Math.min(window.innerHeight - h - MENU_GAP, y)),
-    };
-  },
-
-  // Reale Groesse des gerenderten Menues messen und neu klemmen.
-  _remeasurePagetreeMenu() {
-    if (!this.pageTreeMenuOpen) return;
-    const menu = document.querySelector('.pagetree-context-menu');
-    const anchor = this._pageTreeMenuAnchor;
-    if (!menu || !anchor) return;
-    const r = menu.getBoundingClientRect();
-    if (!r.height) return;
-    this.pageTreeMenuPos = this._clampPagetreeMenuPos(anchor.x, anchor.y, r.width, r.height);
-  },
-
-  _pagetreeMenuItems() {
-    const menu = document.querySelector('.pagetree-context-menu');
-    if (!menu) return [];
-    return [...menu.querySelectorAll(MENU_ITEM_SEL)].filter(el => el.offsetParent !== null);
-  },
-
-  // Fokus in das `role="menu"` ziehen. Ohne das bleibt er im Baum stehen: ein
-  // Screenreader kuendigt das Menue an, findet aber keinen Eintrag darin.
-  _focusFirstPagetreeMenuItem() {
-    // preventScroll: das Menue ist position:fixed und liegt bereits im Bild —
-    // ein Fokus-Scroll wuerde nur den Baum darunter verschieben.
-    this._pagetreeMenuItems()[0]?.focus({ preventScroll: true });
-  },
-
-  // Roving-Fokus im offenen Menue (Pfeile/Home/End) + Escape.
-  _onPagetreeMenuKeydown(e) {
-    if (!this.pageTreeMenuOpen) return;
-    if (e.key === 'Escape') { this._hidePagetreeContextMenu(); return; }
-    const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End'];
-    if (!keys.includes(e.key)) return;
-    const items = this._pagetreeMenuItems();
-    if (!items.length) return;
-    e.preventDefault();
-    const cur = items.indexOf(document.activeElement);
-    let next;
-    if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = items.length - 1;
-    else if (e.key === 'ArrowDown') next = cur < 0 ? 0 : (cur + 1) % items.length;
-    else next = cur < 0 ? items.length - 1 : (cur - 1 + items.length) % items.length;
-    items[next].focus({ preventScroll: true });
-  },
-
-  _hidePagetreeContextMenu() {
-    const wasOpen = this.pageTreeMenuOpen;
-    this.pageTreeMenuOpen = false;
-    this.pageTreeMenuTarget = null;
-    this._pageTreeMenuAnchor = null;
-    if (this._pageTreeMenuOutsideHandler) {
-      document.removeEventListener('mousedown', this._pageTreeMenuOutsideHandler, true);
-      this._pageTreeMenuOutsideHandler = null;
-    }
-    if (this._pageTreeMenuKeyHandler) {
-      document.removeEventListener('keydown', this._pageTreeMenuKeyHandler);
-      this._pageTreeMenuKeyHandler = null;
-    }
-    detachDismiss(this, '_pageTreeMenuDismissHandler');
-    // Fokus zurueck auf den Baum-Eintrag, von dem aus geoeffnet wurde — aber nur,
-    // wenn er noch im Dokument haengt (nach „Loeschen" ist er weg) und der Fokus
-    // noch im Menue steht (eine Folgeaktion wie selectPage darf ihn behalten).
-    const back = this._pageTreeMenuReturnFocus;
-    this._pageTreeMenuReturnFocus = null;
-    if (!wasOpen || !back?.isConnected) return;
-    const active = document.activeElement;
-    if (active && active !== document.body && !active.closest?.('.pagetree-context-menu')) return;
-    back.focus?.({ preventScroll: true });
+    this.openActionMenu(ev, `pagetree:${target.kind}:${target.id}`, target, { closeOn: MENU_CLOSE_EVENTS });
   },
 
   // Sucht das Chapter-Item im Tree. `nav.tree` ist FLACH + depth-annotiert
@@ -180,7 +55,7 @@ export const treeContextMenuMethods = {
 
   // Kapitel, auf das ein Menue-Ziel wirkt: der Kapitelkopf selbst oder das
   // Kapitel hinter einer Ein-Abschnitt-Zeile. Sonst null (normaler Abschnitt).
-  _pagetreeCtxChapterId(target = this.pageTreeMenuTarget) {
+  _pagetreeCtxChapterId(target = this.actionMenuTarget) {
     if (!target) return null;
     if (target.kind === 'chapter') return target.id;
     return target.single ? target.chapterId : null;
@@ -189,7 +64,7 @@ export const treeContextMenuMethods = {
   // Plaketten der Zeile als Menue-Eintraege (Tastatur-Zugang: die Plaketten
   // selbst liegen ausserhalb der Tab-Folge). Abschnitt: seine Zaehler; Kapitel-
   // kopf: die des Kapitels; Ein-Abschnitt-Zeile: Abschnitt, sonst Kapitel.
-  _pagetreeCtxBadges(target = this.pageTreeMenuTarget) {
+  _pagetreeCtxBadges(target = this.actionMenuTarget) {
     if (!target) return [];
     const b = this.$store.badges;
     const chapterId = this._pagetreeCtxChapterId(target);
@@ -213,7 +88,7 @@ export const treeContextMenuMethods = {
   },
 
   pagetreeCtxOpenBadge(badge) {
-    this._hidePagetreeContextMenu();
+    this.closeActionMenu();
     if (!badge) return;
     if (badge.kind === 'ideen') {
       if (badge.scope === 'page') this.openIdeenForPage(badge.id);
@@ -224,13 +99,13 @@ export const treeContextMenuMethods = {
 
   pagetreeCtxReviewChapter() {
     const chapterId = this._pagetreeCtxChapterId();
-    this._hidePagetreeContextMenu();
+    this.closeActionMenu();
     if (chapterId != null) this.openKapitelReviewForChapter(chapterId);
   },
 
   pagetreeCtxOpen() {
-    const target = this.pageTreeMenuTarget;
-    this._hidePagetreeContextMenu();
+    const target = this.actionMenuTarget;
+    this.closeActionMenu();
     if (!target) return;
     if (target.kind === 'page') {
       const page = this._findTreePage(target.id);
@@ -242,8 +117,8 @@ export const treeContextMenuMethods = {
   },
 
   async pagetreeCtxEdit() {
-    const target = this.pageTreeMenuTarget;
-    this._hidePagetreeContextMenu();
+    const target = this.actionMenuTarget;
+    this.closeActionMenu();
     if (!target || target.kind !== 'page') return;
     const page = this._findTreePage(target.id);
     if (!page) return;
@@ -257,8 +132,8 @@ export const treeContextMenuMethods = {
   },
 
   async pagetreeCtxLektorieren() {
-    const target = this.pageTreeMenuTarget;
-    this._hidePagetreeContextMenu();
+    const target = this.actionMenuTarget;
+    this.closeActionMenu();
     if (!target || target.kind !== 'page') return;
     const page = this._findTreePage(target.id);
     if (!page) return;
@@ -269,15 +144,15 @@ export const treeContextMenuMethods = {
 
   // Alle Abschnitte des Kapitels (inkl. Unterkapitel) als Serien-Lektorat.
   pagetreeCtxLektorierenChapter() {
-    const target = this.pageTreeMenuTarget;
-    this._hidePagetreeContextMenu();
+    const target = this.actionMenuTarget;
+    this.closeActionMenu();
     if (!target || target.kind !== 'chapter') return;
     this.batchCheck?.(target.id);
   },
 
   // Markierte Stufe im Bearbeitungsstand-Block: am Abschnitt seine eigene, am
   // Kapitelkopf die schwaechste darunter (tree/edit-status.js).
-  _pagetreeCtxStatus(target = this.pageTreeMenuTarget) {
+  _pagetreeCtxStatus(target = this.actionMenuTarget) {
     if (!target) return null;
     if (target.kind === 'page') return this.pageEditStatus(target.id)?.status || null;
     return this.chapterEditStatus(this._findTreeChapter(target.id))?.status || null;
@@ -286,9 +161,9 @@ export const treeContextMenuMethods = {
   // Abschnitt: Klick auf die aktive Stufe nimmt sie zurueck. Kapitel: setzt
   // alle Abschnitte darunter (Rueckfrage bei abweichenden Einzelstaenden).
   async pagetreeCtxSetStatus(status) {
-    const target = this.pageTreeMenuTarget;
+    const target = this.actionMenuTarget;
     const current = this._pagetreeCtxStatus(target);
-    this._hidePagetreeContextMenu();
+    this.closeActionMenu();
     if (!target) return;
     if (target.kind === 'page') {
       await this.setPageEditStatus(target.id, current === status ? null : status);
@@ -299,8 +174,8 @@ export const treeContextMenuMethods = {
 
   // Seite oder Kapitel umbenennen (Titel per appPrompt, vorbelegt).
   async pagetreeCtxRename() {
-    const target = this.pageTreeMenuTarget;
-    this._hidePagetreeContextMenu();
+    const target = this.actionMenuTarget;
+    this.closeActionMenu();
     if (!target || !this.canEdit()) return;
     const chapterId = this._pagetreeCtxChapterId(target);
     const current = chapterId == null
@@ -343,8 +218,8 @@ export const treeContextMenuMethods = {
   },
 
   pagetreeCtxShare() {
-    const target = this.pageTreeMenuTarget;
-    this._hidePagetreeContextMenu();
+    const target = this.actionMenuTarget;
+    this.closeActionMenu();
     if (!target) return;
     const chapterId = this._pagetreeCtxChapterId(target);
     if (chapterId == null) this.openShareLinksForPage(target.id);
@@ -371,8 +246,8 @@ export const treeContextMenuMethods = {
   },
 
   pagetreeCtxToggleExclude() {
-    const target = this.pageTreeMenuTarget;
-    this._hidePagetreeContextMenu();
+    const target = this.actionMenuTarget;
+    this.closeActionMenu();
     const chapterId = this._pagetreeCtxChapterId(target);
     if (chapterId == null || !this.canEdit()) return;
     // Ueber einen Vorfahren ausgeschlossen: das eigene Flag zu setzen aenderte
@@ -383,8 +258,8 @@ export const treeContextMenuMethods = {
 
   // Seite aus dem Kontextmenü löschen (danger, bestätigungspflichtig).
   async pagetreeCtxDeletePage() {
-    const target = this.pageTreeMenuTarget;
-    this._hidePagetreeContextMenu();
+    const target = this.actionMenuTarget;
+    this.closeActionMenu();
     if (!target || target.kind !== 'page' || !this.canEdit()) return;
     const page = this._findTreePage(target.id);
     if (!page) return;
@@ -405,8 +280,8 @@ export const treeContextMenuMethods = {
   // das dann leere Kapitel wird entfernt. Scheitert der zweite Schritt, bleibt
   // ein leeres Kapitel stehen — derselbe Zustand wie nach „Abschnitt loeschen".
   async pagetreeCtxDeleteChapter() {
-    const target = this.pageTreeMenuTarget;
-    this._hidePagetreeContextMenu();
+    const target = this.actionMenuTarget;
+    this.closeActionMenu();
     const chapterId = this._pagetreeCtxChapterId(target);
     if (chapterId == null || !this.canEdit()) return;
     const item = this._findTreeChapter(chapterId);
@@ -438,8 +313,8 @@ export const treeContextMenuMethods = {
   // Neue Seite direkt im angeklickten Kapitel anlegen: Titel per appPrompt,
   // dann Baum + Flat-Liste lokal einhängen und zur neuen Seite springen.
   async pagetreeCtxNewPage() {
-    const target = this.pageTreeMenuTarget;
-    this._hidePagetreeContextMenu();
+    const target = this.actionMenuTarget;
+    this.closeActionMenu();
     const chapterId = this._pagetreeCtxChapterId(target);
     if (chapterId == null || !this.canEdit()) return;
     const item = this._findTreeChapter(chapterId);
@@ -470,8 +345,8 @@ export const treeContextMenuMethods = {
   // angeklickten Kapitel bzw. hinter dem Kapitel der angeklickten Seite, auf
   // derselben Ebene (kein Match → ans Ende). createChapter liest `newChapterTitle`.
   async pagetreeCtxNewChapter() {
-    const target = this.pageTreeMenuTarget;
-    this._hidePagetreeContextMenu();
+    const target = this.actionMenuTarget;
+    this.closeActionMenu();
     if (!target || !this.canEdit()) return;
     let afterChapterId = null;
     if (target.kind === 'chapter') {
@@ -494,7 +369,7 @@ export const treeContextMenuMethods = {
   // Unterkapitel im angeklickten Kapitel (bzw. dem Kapitel hinter einer
   // Ein-Abschnitt-Zeile) anlegen — als letztes Kind, nur bis zur dritten Ebene
   // (MAX_CHAPTER_DEPTH, Server antwortet sonst CHAPTER_MAX_DEPTH).
-  _pagetreeCtxCanAddSubchapter(target = this.pageTreeMenuTarget) {
+  _pagetreeCtxCanAddSubchapter(target = this.actionMenuTarget) {
     const chapterId = this._pagetreeCtxChapterId(target);
     if (chapterId == null) return false;
     const item = this._findTreeChapter(chapterId);
@@ -502,10 +377,10 @@ export const treeContextMenuMethods = {
   },
 
   async pagetreeCtxNewSubchapter() {
-    const target = this.pageTreeMenuTarget;
+    const target = this.actionMenuTarget;
     const ok = this._pagetreeCtxCanAddSubchapter(target);
     const parentId = this._pagetreeCtxChapterId(target);
-    this._hidePagetreeContextMenu();
+    this.closeActionMenu();
     if (!ok || !this.canEdit()) return;
     const name = await this.appPrompt({
       message: this.t('pagetreeCtx.newSubchapterPrompt'),
@@ -518,8 +393,8 @@ export const treeContextMenuMethods = {
   },
 
   async pagetreeCtxExport() {
-    const target = this.pageTreeMenuTarget;
-    this._hidePagetreeContextMenu();
+    const target = this.actionMenuTarget;
+    this.closeActionMenu();
     const chapterId = this._pagetreeCtxChapterId(target);
     if (chapterId != null) {
       await this.openExportFor('chapter', chapterId);

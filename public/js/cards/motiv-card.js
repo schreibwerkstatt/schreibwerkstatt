@@ -7,6 +7,7 @@ import { setupCardLifecycle } from './card-lifecycle.js';
 import { attachFullscreenSync } from '../fullscreen.js';
 import { observeThemeChange } from '../graph-kit.js';
 import { ideenBacklinkMethods } from '../book/ideen-backlinks.js';
+import { actionMenuState, actionMenuMethods } from '../action-menu.js';
 
 export function registerMotivCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -90,10 +91,8 @@ export function registerMotivCard() {
     layerFigures: false,
     layerBeats: false,
     layerChapters: false,
-    // Graph-Kontextmenü (Rechtsklick)
-    graphMenuOpen: false,
-    graphMenuNodeId: null,
-    graphMenuPos: { top: 0, left: 0 },
+    // Graph-Kontextmenü (Rechtsklick): Ziel = Knoten-ID, null = leere Fläche
+    ...actionMenuState(),
     // Offener Thema-Farbwähler (Themen-Liste im Panel), null = keiner
     themeColorPickerId: null,
     // Eingabe-Drafts
@@ -148,7 +147,6 @@ export function registerMotivCard() {
     _layoutSaveTimer: null,
     // Persistiertes Knoten-Layout (node_id → {x,y}); aus loadBoard, beim Ziehen gespeichert.
     _savedPositions: null,
-    _graphMenuCloseHandler: null,
     // SortableJS-Instanz der Themen-Liste (Reihenfolge per Drag)
     _themeSortable: null,
     _lifecycle: null,
@@ -222,11 +220,13 @@ export function registerMotivCard() {
       this._destroyThemeSortable();
       this._themeObserver?.disconnect();
       this._themeObserver = null;
+      this.closeActionMenu();
       this._destroyGraph();
       this._lifecycle?.destroy();
     },
 
     ...motivMethods,
     ...ideenBacklinkMethods,
+    ...actionMenuMethods,
   }));
 }

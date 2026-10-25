@@ -102,7 +102,7 @@ export const adminUsersMethods = {
   },
 
   async adminUsersPasswordRemove(u) {
-    if (!window.confirm(window.__app.t('admin.users.password.removeConfirm', { email: u.email }))) return;
+    if (!await window.__app.appConfirm({ message: window.__app.t('admin.users.password.removeConfirm', { email: u.email }), danger: true })) return;
     await this._adminUsersPasswordCall(u.email, '/password', 'DELETE');
   },
 
@@ -149,7 +149,7 @@ export const adminUsersMethods = {
     if (!inv || this.adminUsersInvitesBusy) return;
     const confirmMsg = window.__app?.t?.('admin.users.invites.confirmRevoke', { email: inv.email })
       || `Einladung an ${inv.email} widerrufen?`;
-    if (!confirm(confirmMsg)) return;
+    if (!await window.__app.appConfirm({ message: confirmMsg, danger: true })) return;
     this.adminUsersInvitesBusy = inv.id;
     this.adminUsersError = '';
     try {
@@ -176,7 +176,7 @@ export const adminUsersMethods = {
   async adminUsersDelete(user) {
     const me = Alpine.store('session').currentUser?.email;
     if (user.email === me) { this.adminUsersError = 'CANNOT_DELETE_SELF'; return; }
-    if (!confirm(window.__app?.t?.('admin.users.confirmDelete', { email: user.email }) || `Soft-Delete ${user.email}?`)) return;
+    if (!await window.__app.appConfirm({ message: window.__app.t('admin.users.confirmDelete', { email: user.email }), danger: true })) return;
     this.adminUsersError = '';
     try {
       await sendJson(`/admin/users/${encodeURIComponent(user.email)}`, 'DELETE');
@@ -238,9 +238,10 @@ export const adminUsersMethods = {
 
   async adminUsersDenyRequest(req) {
     if (!req || this.adminUsersRequestsBusy) return;
-    const reason = window.prompt(
-      window.__app?.t?.('admin.users.requests.denyReasonPrompt') || 'Begründung (optional):'
-    );
+    const reason = await window.__app.appPrompt({
+      message: window.__app.t('admin.users.requests.denyReasonPrompt'),
+      allowEmpty: true,
+    });
     // null = Cancel → abbrechen; '' = bestaetigt ohne Reason → erlauben.
     if (reason === null) return;
     this.adminUsersRequestsBusy = req.id;

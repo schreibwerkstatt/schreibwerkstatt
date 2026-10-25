@@ -2,7 +2,7 @@
      in orte.html (Neuanlage) und orte-list.html (Bearbeiten im Detail einer
      Zeile) — lebt im Scope von `orteCard`, State `ortEdit` (book/orte-edit.js).
      Korrigierte Felder überschreibt die nächste Komplettanalyse nicht. -->
-<div class="ort-edit" @keydown.escape.stop="cancelOrtEdit()">
+<div class="ort-edit" @keydown="$editKeys($event, { save: () => saveOrtEdit(), cancel: () => cancelOrtEdit() })">
   <div class="card-section-head">
     <span class="card-section-title"
           x-text="ortEdit.mode === 'new' ? $app.t('orte.edit.newTitle') : $app.t('orte.edit.editTitle')"></span>

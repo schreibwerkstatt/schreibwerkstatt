@@ -33,6 +33,7 @@ import { createAutosaveTimers } from '../editor/shared/autosave.js';
 import { createTimerBag } from '../editor/shared/timers.js';
 import { EVT } from '../events.js';
 import { tErrorRaw } from '../i18n.js';
+import { isSaveShortcut } from '../utils.js';
 import { registerBusySource } from '../app/boot/update-policy.js';
 import { memoMethods } from './card-memo.js';
 
@@ -396,8 +397,7 @@ export function registerBookEditorCard() {
     // Cmd/Ctrl+F läuft global über editor-find-card → book-editor:open-find.
     // Hier nur Cmd/Ctrl+S für Save-All.
     onCardKeydown(event) {
-      const mod = event.metaKey || event.ctrlKey;
-      if (mod && !event.shiftKey && !event.altKey && (event.key === 's' || event.key === 'S')) {
+      if (isSaveShortcut(event)) {
         event.preventDefault();
         this.saveAllDirty();
       }

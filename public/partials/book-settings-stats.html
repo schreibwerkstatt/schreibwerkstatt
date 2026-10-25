@@ -3,7 +3,7 @@
     <section class="book-settings-section">
       <h3 class="card-section-title" x-text="$app.t('jobStats.title')"></h3>
       <div x-show="bookJobStatsLoading && !bookJobStats" class="job-stats-loading" x-text="$app.t('jobStats.loading')"></div>
-      <div x-show="bookJobStats && bookJobStats.length === 0" class="job-stats-empty" x-text="$app.t('jobStats.empty')"></div>
+      <div x-show="bookJobStats && bookJobStats.length === 0" class="muted-msg muted-msg--sm" x-text="$app.t('jobStats.empty')"></div>
       <div x-show="bookJobStats && bookJobStats.length > 0" class="job-stats-scroll">
       <table class="job-stats-table"
              x-data="sortableTable({
@@ -53,7 +53,7 @@
               <tr x-show="expandedJobType === row.type" class="job-stats-runs-row">
                 <td colspan="5">
                   <div x-show="bookJobRunsLoading && !bookJobRuns[row.type]" class="job-runs-loading" x-text="$app.t('jobStats.loading')"></div>
-                  <div x-show="bookJobRuns[row.type] && bookJobRuns[row.type].length === 0" class="job-runs-empty" x-text="$app.t('jobStats.runs.empty')"></div>
+                  <div x-show="bookJobRuns[row.type] && bookJobRuns[row.type].length === 0" class="muted-msg muted-msg--sm" x-text="$app.t('jobStats.runs.empty')"></div>
                   <div class="table-scroll" x-show="bookJobRuns[row.type] && bookJobRuns[row.type].length > 0">
                   <table class="job-runs-table">
                     <thead>

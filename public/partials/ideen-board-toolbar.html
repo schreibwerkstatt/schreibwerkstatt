@@ -26,15 +26,7 @@
     </button>
   </span>
 
-  <label class="filter-toggle">
-    <input type="checkbox" x-model="showErledigt">
-    <span x-text="$app.t('ideenBoard.showErledigt')"></span>
-  </label>
-
-  <label class="filter-toggle" x-show="statuses().includes('verworfen')">
-    <input type="checkbox" x-model="showVerworfen">
-    <span x-text="$app.t('ideenBoard.showVerworfen')"></span>
-  </label>
+  <!-- @include ideen-board-stages -->
 
   <!-- Der Zaehler nennt das AUSGEBLENDETE mit: eine versteckte Pendenz ist
        sonst von einer verlorenen nicht zu unterscheiden. -->

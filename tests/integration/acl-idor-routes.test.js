@@ -322,9 +322,35 @@ test('POST /ideen ohne Anker → Buch-Idee; Zuordnen nur auf Stellen DIESES Buch
   assert.equal(assigned.status, 200);
   assert.equal(assigned.json.chapter_id, MY_CHAPTER);
 
-  // Danach gilt within-kind: eine Kapitel-Idee wandert nicht auf eine Seite.
-  const cross = await api('PATCH', `/ideen/${id}`, { page_id: MY_PAGE });
-  assert.equal(cross.json.error_code, 'KIND_MISMATCH');
+  // Kapitel → Abschnitt: der neue Anker leert den alten.
+  const toPage = await api('PATCH', `/ideen/${id}`, { page_id: MY_PAGE });
+  assert.equal(toPage.status, 200);
+  assert.equal(toPage.json.page_id, MY_PAGE);
+  assert.equal(toPage.json.chapter_id, null);
+
+  // Und zurück: Abschnitt → Kapitel.
+  const toChapter = await api('PATCH', `/ideen/${id}`, { chapter_id: MY_CHAPTER });
+  assert.equal(toChapter.status, 200);
+  assert.equal(toChapter.json.chapter_id, MY_CHAPTER);
+  assert.equal(toChapter.json.page_id, null);
+
+  // Fremdes Ziel bleibt BOOK_MISMATCH, der Anker unverändert.
+  const foreignPage = await api('PATCH', `/ideen/${id}`, { page_id: FOREIGN_PAGE });
+  assert.equal(foreignPage.json.error_code, 'BOOK_MISMATCH');
+
+  // Zurück ins Buch: beide Felder, beide null. Eine halbe Angabe bleibt Scope-Fehler.
+  const half = await api('PATCH', `/ideen/${id}`, { page_id: MY_PAGE, chapter_id: null });
+  assert.equal(half.json.error_code, 'INVALID_SCOPE');
+  const toBook = await api('PATCH', `/ideen/${id}`, { page_id: null, chapter_id: null });
+  assert.equal(toBook.status, 200);
+  assert.equal(toBook.json.page_id, null);
+  assert.equal(toBook.json.chapter_id, null);
+
+  // Eine abgeschlossene Idee wandert auch nicht ins Buch zurück.
+  await api('PATCH', `/ideen/${id}`, { chapter_id: MY_CHAPTER });
+  await api('PATCH', `/ideen/${id}`, { status: 'erledigt' });
+  const closed = await api('PATCH', `/ideen/${id}`, { page_id: null, chapter_id: null });
+  assert.equal(closed.json.error_code, 'IDEE_CLOSED');
 });
 
 test('PUT /ideen/order: fremdes Buch → 403, fremde Idee kippt die ganze Reihenfolge', async () => {

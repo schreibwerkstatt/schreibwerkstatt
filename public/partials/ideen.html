@@ -38,24 +38,37 @@
       x-text="$app.t('ideen.add')"></button>
   </div>
 
-  <!-- Move-Picker (Single-Instance, ausserhalb x-for damit Combobox sauber initialisiert) -->
-  <div x-show="movingId !== null" class="idee-move-panel" x-cloak>
-    <span class="ideen-move-label"
-          x-text="$app.ideenScope === 'chapter' ? $app.t('ideen.moveToChapter') : $app.t('ideen.moveTo')"></span>
-    <div x-data="combobox(() => $app.ideenScope === 'chapter' ? $app.t('ideen.moveSelectPlaceholderChapter') : $app.t('ideen.moveSelectPlaceholder'), null)"
-         x-modelable="value" x-model="moveTargetId"
-         x-effect="options = $app.ideenMovePickerOptions()"
-         class="idee-move-combo"></div>
-    <button type="button" class="btn-compact" @click="confirmMoveCurrentIdee()" :disabled="busy || !moveTargetId" x-text="$app.t('ideen.moveConfirm')"></button>
-    <button type="button" class="btn-compact" @click="cancelMoveIdee()" :disabled="busy" x-text="$app.t('ideen.cancel')"></button>
-  </div>
+  <!-- Verschieben: am Menue-Eintrag verankertes Popover, dasselbe Muster wie
+       das Verknuepfen (public/js/picker-popover.js). -->
+  <template x-teleport="body">
+    <div class="picker-popover idee-move-popover"
+         x-ref="ideenMovePopover"
+         x-show="movingId !== null && !!movingIdee()" x-cloak
+         :style="{ top: pickerPopoverPos.top + 'px', left: pickerPopoverPos.left + 'px' }"
+         @keydown.escape.window="cancelMoveIdee()"
+         role="dialog" :aria-label="$app.t('ideen.move')">
+      <div class="picker-popover__head">
+        <span class="picker-popover__title" x-text="$app.t('ideen.moveTo')"></span>
+        <span class="picker-popover__subject" x-text="movingIdee()?.content || ''"></span>
+      </div>
+
+      <div x-data="combobox(() => $app.t('ideen.moveSelectPlaceholder'), null)"
+           x-modelable="value" x-model="moveTargetId"
+           x-effect="options = $app.ideenMovePickerOptions()"></div>
+
+      <div class="picker-popover__actions">
+        <button type="button" class="btn-compact" @click="confirmMoveCurrentIdee()" :disabled="busy || !moveTargetId" x-text="$app.t('ideen.moveConfirm')"></button>
+        <button type="button" class="btn-compact" @click="cancelMoveIdee()" :disabled="busy" x-text="$app.t('ideen.cancel')"></button>
+      </div>
+    </div>
+  </template>
 
   <!-- @include ideen-link-picker -->
 
   <div class="ideen-list">
     <div x-show="loading" class="ideen-loading" x-text="$app.t('common.loading')"></div>
 
-    <div x-show="!loading && ideen.length === 0" class="ideen-empty"
+    <div x-show="!loading && ideen.length === 0" class="muted-msg muted-msg--sm muted-msg--block"
          x-text="$app.ideenScope === 'chapter' ? $app.t('ideen.emptyChapter') : $app.t('ideen.empty')"></div>
 
     <!-- Offene Ideen -->
@@ -63,17 +76,18 @@
       <div class="ideen-section">
         <div class="card-section-title" x-text="$app.t('ideen.sectionOpen')"></div>
         <template x-for="idee in offeneIdeen()" :key="idee.id">
-          <div class="idee-item" :class="{'idee-item--moving': movingId === idee.id}" :data-idee-id="idee.id">
+          <div class="idee-item" :class="{'idee-item--moving': movingId === idee.id}" :data-idee-id="idee.id"
+               @contextmenu="if (!busy && editingId !== idee.id && movingId !== idee.id) openMenu($event, idee)" x-long-press>
             <div class="idee-status-badge" :class="'idee-status-badge--' + ideeStatus(idee)"
                  x-text="statusLabel(ideeStatus(idee))"></div>
             <div class="idee-menu" x-show="editingId !== idee.id && movingId !== idee.id">
               <button type="button"
                 class="icon-btn icon-btn--ghost"
-                @click.stop="openMenu($event, idee)"
+                @click="openMenu($event, idee)"
                 :disabled="busy"
                 :data-tip="$app.t('ideen.actions')"
                 :aria-label="$app.t('ideen.actions')"
-                :aria-expanded="menuOpenId === idee.id"
+                :aria-expanded="isActionMenuOpen('idee:' + idee.id)"
                 aria-haspopup="menu"><svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg></button>
             </div>
             <template x-if="editingId !== idee.id">
@@ -81,14 +95,18 @@
             </template>
             <!-- @include ideen-link-chips -->
             <template x-if="editingId === idee.id">
-              <div class="idee-edit">
-                <textarea class="ideen-input" x-model="editingDraft" rows="3" :disabled="busy"
-                  data-spellcheck="spelling"
-                  @keydown.enter="if(!$event.isComposing && $event.keyCode !== 229 && !$event.shiftKey && !$event.ctrlKey && !$event.metaKey) { $event.preventDefault(); saveEditIdee(idee); }"
-                  @keydown.escape="cancelEditIdee()"></textarea>
-                <div class="idee-edit-actions">
-                  <button type="button" @click="saveEditIdee(idee)" :disabled="busy" x-text="$app.t('ideen.save')"></button>
-                  <button type="button" @click="cancelEditIdee()" :disabled="busy" x-text="$app.t('ideen.cancel')"></button>
+              <div class="idee-edit"
+                   @keydown="$editKeys($event, { save: () => commitEditIdee(idee), cancel: () => cancelEditIdee() })"
+                   @click.outside="commitEditIdee(idee)">
+                <textarea class="ideen-input idee-edit-input" x-model="editingDraft" rows="2" :disabled="busy"
+                  data-spellcheck="spelling" :aria-label="$app.t('ideen.edit')"
+                  x-init="$nextTick(() => mountIdeeEditInput($el))" @input="autosizeIdeeEditInput($el)"
+                  @keydown.enter="if(!$event.isComposing && $event.keyCode !== 229 && !$event.shiftKey && !$event.ctrlKey && !$event.metaKey) { $event.preventDefault(); commitEditIdee(idee); }"></textarea>
+                <div class="idee-edit-foot">
+                  <div class="idee-edit-actions">
+                    <button type="button" class="btn-compact btn-compact--ghost" @click="cancelEditIdee()" :disabled="busy" x-text="$app.t('ideen.cancel')"></button>
+                    <button type="button" class="btn-compact primary" @click="saveEditIdee(idee)" :disabled="busy" x-text="$app.t('ideen.save')"></button>
+                  </div>
                 </div>
               </div>
             </template>
@@ -97,18 +115,12 @@
       </div>
     </template>
 
-    <!-- Single-Instance Popover für Meatball-Menü.
-         Via x-teleport zu <body>, weil .ideen-list im Split-View einen
-         Scroll-Container darstellt (max-height + overflow-y) und ein
-         lokales position:absolute-Popover dort abgeschnitten würde. -->
+    <!-- Aktionsmenü einer Idee (⋯-Knopf, Rechtsklick/Long-Press auf die Zeile),
+         Mechanik aus action-menu.js. Via x-teleport zu <body>, weil .ideen-list im
+         Split-View einen Scroll-Container darstellt (max-height + overflow-y) und
+         ein lokales position:absolute-Popover dort abgeschnitten würde. -->
     <template x-teleport="body">
-      <div class="context-menu"
-           x-ref="ideenMenu"
-           x-show="menuOpenId !== null && !!menuOpenIdee()" x-cloak
-           :style="`top:${menuPos.top}px;left:${menuPos.left}px`"
-           @click.outside="closeMenu()"
-           @keydown.escape.window="closeMenu()"
-           role="menu">
+      <div class="context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
         <template x-if="menuOpenIdee()">
           <div>
             <!-- Stufen-Leiter: jede Stufe ausser der aktuellen als Ziel. Der
@@ -117,7 +129,7 @@
             <template x-for="target in statuses()" :key="target">
               <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
                       x-show="ideeStatus(menuOpenIdee()) !== target"
-                      @click.stop="setIdeeStatus(menuOpenIdee(), target); closeMenu()"
+                      @click="setIdeeStatus(menuOpenIdee(), target)"
                       :disabled="busy">
                 <svg class="icon" aria-hidden="true"><use :href="'/icons.svg#' + (target === 'offen' ? 'undo' : target === 'erledigt' ? 'check' : target === 'verworfen' ? 'minus' : 'play')"/></svg>
                 <span x-text="$app.t('ideen.setStatus', { status: statusLabel(target) })"></span>
@@ -125,13 +137,13 @@
             </template>
             <div class="context-menu-sep" role="separator"></div>
             <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-                    @click.stop="openLinkPicker($event, menuOpenIdee()); closeMenu()"
+                    @click="openLinkPicker(actionMenuAnchor(), menuOpenIdee())"
                     :disabled="busy">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"/></svg>
               <span x-text="$app.t('ideen.link.add')"></span>
             </button>
             <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-                    @click.stop="startEditIdee(menuOpenIdee()); closeMenu()"
+                    @click="startEditIdee(menuOpenIdee())"
                     :disabled="busy">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
               <span x-text="$app.t('ideen.edit')"></span>
@@ -141,14 +153,14 @@
                  Server lehnt den Move ab, IDEE_CLOSED). -->
             <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
                     x-show="isOpenIdee(menuOpenIdee())"
-                    @click.stop="startMoveIdee(menuOpenIdee()); closeMenu()"
+                    @click="startMoveIdee(actionMenuAnchor(), menuOpenIdee())"
                     :disabled="busy">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#move-horizontal"/></svg>
               <span x-text="$app.t('ideen.move')"></span>
             </button>
             <div class="context-menu-sep" role="separator"></div>
             <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
-                    @click.stop="deleteIdee(menuOpenIdee()); closeMenu()"
+                    @click="deleteIdee(menuOpenIdee())"
                     :disabled="busy">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
               <span x-text="$app.t('ideen.delete')"></span>
@@ -166,17 +178,18 @@
       <div class="ideen-section">
         <div class="card-section-title" x-text="$app.t('ideen.sectionDone')"></div>
         <template x-for="idee in abgeschlosseneIdeen()" :key="idee.id">
-          <div class="idee-item idee-item--erledigt" :data-idee-id="idee.id">
+          <div class="idee-item idee-item--erledigt" :data-idee-id="idee.id"
+               @contextmenu="if (!busy) openMenu($event, idee)" x-long-press>
             <div class="idee-status-badge" :class="'idee-status-badge--' + ideeStatus(idee)"
                  x-text="statusLabel(ideeStatus(idee))"></div>
             <div class="idee-menu">
               <button type="button"
                 class="icon-btn icon-btn--ghost"
-                @click.stop="openMenu($event, idee)"
+                @click="openMenu($event, idee)"
                 :disabled="busy"
                 :data-tip="$app.t('ideen.actions')"
                 :aria-label="$app.t('ideen.actions')"
-                :aria-expanded="menuOpenId === idee.id"
+                :aria-expanded="isActionMenuOpen('idee:' + idee.id)"
                 aria-haspopup="menu"><svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg></button>
             </div>
             <div class="idee-content" x-text="idee.content"></div>

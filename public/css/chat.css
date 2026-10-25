@@ -373,13 +373,6 @@
 }
 
 /* Leerer Zustand */
-.chat-empty {
-  text-align: center;
-  color: var(--color-subtle);
-  font-size: var(--font-size-sm);
-  padding: var(--space-xl) 0 var(--space-md);
-}
-
 /* Session-History */
 .chat-history-title {
   font-size: var(--font-size-xs);

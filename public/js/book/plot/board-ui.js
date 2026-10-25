@@ -46,6 +46,15 @@ export const boardUiMethods = {
     setUserPref(Alpine.store('session').currentUser?.email, DENSITY_PREF_KEY, this.plotDensity);
   },
 
+  // Wie viele Schalter des Ansichts-Menues (plot-view-menu.html) von der
+  // Grundansicht abweichen — die Zahl am Knopf. Gezaehlt wird nur, was gerade
+  // angeboten wird: ein Archiv-Haken ohne archivierte Akte wirkt nicht.
+  plotViewChanges() {
+    return (this.plotShowArchived && this.archivedActCount() > 0 ? 1 : 0)
+      + (this.plotHideImBuch ? 1 : 0)
+      + (this.plotDensity === 'compact' ? 1 : 0);
+  },
+
   // ── Akte einklappen ──────────────────────────────────────────────────────
   _collapsedKey() {
     const bookId = Alpine.store('nav').selectedBookId;

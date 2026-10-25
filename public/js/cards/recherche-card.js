@@ -14,6 +14,8 @@ import { EVT } from '../events.js';
 import { emptyDraft as _emptyDraft } from '../book/recherche/shared.js';
 import { rechercheInterviewMethods, rechercheInterviewState } from '../book/recherche/interview.js';
 import { lsGet, lsSet } from '../safe-storage.js';
+import { pickerPopoverState, pickerPopoverMethods } from '../picker-popover.js';
+import { actionMenuState, actionMenuMethods } from '../action-menu.js';
 
 // Filterleiste + Sortierung pro Buch im localStorage (siehe
 // public/js/filter-persist.js). `filterLinked` ist der aus Kategorie + Ziel
@@ -86,14 +88,8 @@ export function registerRechercheCard() {
     sortBy: 'updated',
     showArchived: false,
 
-    menuOpenId: null,
-    menuPos: { top: 0, left: 0 },
-// Anker des Aktionsmenues: Trigger-Element + dessen Rect beim Oeffnen.
-    // Traeger von „Scroll schliesst nur, wenn der Trigger mitwandert"
-    // (board.js#_menuAnchorMoved) — transient, wird beim Schliessen genullt.
-    _menuAnchorEl: null,
-    _menuAnchorRect: null,
-    _menuOpenedAt: 0,
+    // Aktionsmenü eines Fundstücks (action-menu.js), Ziel = { ctx, id }.
+    ...actionMenuState(),
 
     // Native-Fullscreen-Status (gespiegelt vom fullscreenchange-Listener) —
     // mehr Platz fürs Karten-Board. Toggle in rechercheMethods.toggleRechercheFullscreen.
@@ -102,6 +98,8 @@ export function registerRechercheCard() {
     linkPickerItemId: null,
     linkPickerKind: 'figure',
     linkPickerTargetId: '',
+    // Verknuepfen-Picker als Picker-Popover (public/js/picker-popover.js).
+    ...pickerPopoverState(),
 
     // Laufende „Link → Quelle"-Uebernahmen, Schluessel `${item.id}:${url_id}`
     // (rechercheToSourceMethods). Reassign statt In-Place-Mutate, damit Alpine
@@ -187,7 +185,7 @@ export function registerRechercheCard() {
         name: 'recherche',
         showFlag: 'showRechercheCard',
         timerKeys: ['_suggestTimer', '_researchChatPollTimer', '_ivPollTimer', '_linkCheckTimer', '_crosscheckTimer'],
-        resetState: { detailEditing: false, menuOpenId: null, linkPickerItemId: null, busy: false, linkCheckRunning: false, linkCheckStatus: '', crosscheckRunning: false, crosscheckItemId: null, crosscheckStatus: '', ...rechercheBulkState() },
+        resetState: { detailEditing: false, linkPickerItemId: null, busy: false, linkCheckRunning: false, linkCheckStatus: '', crosscheckRunning: false, crosscheckItemId: null, crosscheckStatus: '', ...rechercheBulkState() },
         filterScopes: RECHERCHE_FILTER_SCOPES,
         load: async () => { await this.loadRecherche(); await this._ensureStatusBoard(); },
         extraListeners: [
@@ -254,7 +252,7 @@ export function registerRechercheCard() {
 
     destroy() {
       this._destroyStatusSortables();
-      this.closeItemMenu();
+      this.closeActionMenu();
       this._lifecycle?.destroy();
     },
 
@@ -296,5 +294,7 @@ export function registerRechercheCard() {
     ...rechercheScrapeMethods,
     ...researchChatMethods,
     ...ideenBacklinkMethods,
+    ...pickerPopoverMethods,
+    ...actionMenuMethods,
   }));
 }

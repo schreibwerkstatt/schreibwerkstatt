@@ -108,10 +108,10 @@
 
   <!-- Filter-Leiste (Volltext / Kapitel / Figur) — filtert die Beats pro Akt-Spalte/Zelle.
        Such-Feld ist Filter (kein Spellcheck — User sucht ggf. nach Tippfehlern).
-       Traegt ausserdem die beiden Arbeitsmodus-Schalter (Archiv / „im Buch") in
-       EINER Zeile. Der Archiv-Schalter haengt nicht an den Beats — ein archivierter
-       Akt ohne Beats muss erreichbar bleiben —, darum steht die Beat-Bedingung an
-       den Beat-Filtern statt an der Leiste. -->
+       Traegt ausserdem das Ansichts-Menue (plot-view-menu.html). Dessen Archiv-
+       Schalter haengt nicht an den Beats — ein archivierter Akt ohne Beats muss
+       erreichbar bleiben —, darum steht die Beat-Bedingung an den Beat-Filtern
+       statt an der Leiste. -->
   <div class="filter-bar" x-show="beats.length > 0 || archivedActCount() > 0" x-cloak>
     <span class="filter-search-wrap" x-show="beats.length > 0">
       <input type="text" class="filter-search-input" x-model.debounce.200ms="plotFilters.text"
@@ -140,27 +140,8 @@
          x-modelable="value" x-model="plotFilters.status" :data-tip="$app.t('plot.help.status')"
          x-effect="options = [...statusList().filter(s => !(plotHideImBuch && s === 'im_buch')), 'verworfen'].map(s => ({value: s, label: $app.t('plot.status.' + s)}))">
     </div>
-    <!-- Archiv-Schalter: abgeschlossene Akte (Beats eingearbeitet) sind aus den
-         Board-Spalten raus — hier holt man sie zum Nachlesen/Wiederaufnehmen
-         zurueck. Sagt etwas ueber die SPALTEN, nicht ueber die Beats, steht aber
-         auf derselben Ebene wie der „im Buch"-Schalter: beides sind Schalter des
-         Arbeitsmodus, und zwei getrennte Zeilen liessen sie unverwandt aussehen. -->
-    <label class="filter-toggle" x-show="archivedActCount() > 0" :data-tip="$app.t('plot.help.archive')">
-      <input type="checkbox" x-model="plotShowArchived">
-      <span x-text="$app.t('plot.archive.show', { n: archivedActCount() })"></span>
-    </label>
-    <!-- Arbeitsmodus „nur was noch offen ist". Persistiert per User (localStorage),
-         darum ausserhalb von plotFilters — siehe plot-card.js. -->
-    <label class="filter-toggle" x-show="beats.length > 0">
-      <input type="checkbox" x-model="plotHideImBuch">
-      <span x-text="$app.t('plot.filter.hideImBuch')"></span>
-    </label>
-    <!-- Dichte: nur die Kopfzeile der Beat-Karten (per User persistiert wie
-         „im Buch ausblenden", book/plot/board-ui.js). -->
-    <label class="filter-toggle" x-show="beats.length > 0" :data-tip="$app.t('plot.density.tip')">
-      <input type="checkbox" :checked="plotDensity === 'compact'" @change="setPlotDensity($event.target.checked)">
-      <span x-text="$app.t('plot.density.compact')"></span>
-    </label>
+    <!-- Ansichts-Schalter (Archiv / „im Buch" / Dichte) als Menue -->
+    <!-- @include plot-view-menu -->
     <span class="filter-count" x-show="beats.length > 0" x-text="filteredBeatCount() + ' / ' + beats.length"></span>
   </div>
 

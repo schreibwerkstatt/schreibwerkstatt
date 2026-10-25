@@ -205,6 +205,10 @@ const _TB_TAG = /<\/?[^>]+>/g;
 // (der mit dem Figurennamen), dazu ein Gesamtdeckel. 240 Zeichen waren meist nur
 // ein Halbsatz — zu wenig, um eine Mindmap-Behauptung zu stützen oder zu kippen.
 const TB_TOP_K = 8;
+// So viele Belege sieht die KI (prompts/figur-werkstatt.js#_textbelegeSeg) —
+// und genau die werden gespeichert und als „geprüft gegen" angezeigt. TB_TOP_K
+// liegt darüber, weil die Seiten-Dedupe Treffer schluckt.
+const TB_MAX_BELEGE = 6;
 const TB_SNIPPET_MAX = 600;
 const TB_TOTAL_MAX = 4000;
 // Live-Passage um den Treffer (Chunk ~1500 Zeichen), aus der _tbSnippet den
@@ -239,6 +243,7 @@ async function _loadFigurTextbelege(draft, userEmail, logger, signal) {
     for (const h of hits) {
       if (h.kind !== 'page') continue;
       const pageId = h.entity_id;
+      if (out.length >= TB_MAX_BELEGE) break;
       if (pageId == null || seenPages.has(pageId)) continue; // ein Ort einmal (Dichte, nicht Wiederholung)
       const page = await contentStore.loadPage(pageId).catch(() => null);
       if (!page || Number(page.book_id) !== bookId) continue;
@@ -304,6 +309,8 @@ async function runBrainstormJob(jobId, draftId, knotenId, userEmail) {
         label: v.label.trim(),
         begruendung: typeof v.begruendung === 'string' ? v.begruendung.trim() : '',
       }));
+    // Kein brauchbarer Vorschlag: Fehler statt eines leeren Laufs in der Historie.
+    if (!vorschlaege.length) throw i18nError('job.error.werkstatt.vorschlaegeMissing');
 
     // Wurde die Figur waehrend des Laufs geloescht, scheiterte der Insert am
     // FK mit einer rohen SQLite-Meldung — stattdessen dieselbe Meldung wie beim Start.

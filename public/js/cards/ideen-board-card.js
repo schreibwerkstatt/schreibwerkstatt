@@ -15,6 +15,7 @@ import { setupCardLifecycle } from './card-lifecycle.js';
 import { EVT } from '../events.js';
 import { attachFullscreenSync, toggleWrapFullscreen } from '../fullscreen.js';
 import { ideenBoardMethods } from '../book/ideen-board.js';
+import { pickerPopoverState } from '../picker-popover.js';
 import { buildLaneOrder } from '../book/ideen-board/model.js';
 import { LANE_BOOK, IDEE_STATUSES, ideeLaneKey } from '../book/ideen-shared.js';
 import { ideenChatMethods, ideenChatState } from '../chat/ideen-chat.js';
@@ -46,8 +47,6 @@ export function registerIdeenBoardCard() {
     // Aktive Stufen des Buches (book_settings.ideen_stages, kommt mit
     // /ideen/board). Default alle — so sieht ein Buch ohne Einstellung aus.
     stages: [...IDEE_STATUSES],
-    // Schalter-Leiste „Spalten" unter dem Kopf.
-    stagesOpen: false,
     // Native-Fullscreen-Status (gespiegelt vom fullscreenchange-Listener) —
     // mehr Platz fuers Raster; die Spalten wachsen ueber den Container mit.
     ideenBoardFullscreen: false,
@@ -88,11 +87,9 @@ export function registerIdeenBoardCard() {
     linkPickerIdeeId: null,
     linkPickerKind: 'research',
     linkPickerTargetId: '',
-    // Popover-Geometrie des Pickers (nach <body> teleportiert, am Trigger
-    // verankert — public/js/popover-anchor.js).
-    linkPickerPos: { top: 0, left: 0 },
-    _linkTriggerRect: null,
-    _linkPickerCloseHandler: null,
+    // Geometrie der Ideen-Popover (Verknuepfen, Verschieben/Zuordnen —
+    // picker-popover.js).
+    ...pickerPopoverState(),
 
     loading: false,
     busy: false,
@@ -113,7 +110,7 @@ export function registerIdeenBoardCard() {
         name: 'ideenBoard',
         showFlag: 'showIdeenBoardCard',
         filterScopes: IDEEN_BOARD_FILTER_SCOPES,
-        resetState: { editingId: null, linkPickerIdeeId: null, assigningId: null, stagesOpen: false, busy: false, selectedIds: [] },
+        resetState: { editingId: null, linkPickerIdeeId: null, assigningId: null, busy: false, selectedIds: [] },
         load: async () => { await this.loadBoard(); },
         onBookChanged: () => { this.resetBoard(); this.resetIdeenChat(); this.ideenChatOpen = false; },
         onViewReset: () => { this.resetBoard(); this.resetIdeenChat(); this.ideenChatOpen = false; },
@@ -185,7 +182,7 @@ export function registerIdeenBoardCard() {
       this.resetIdeenChat();
       this._lifecycle?.destroy();
       this._destroyBoardSortables();
-      this._detachLinkPickerListeners?.();
+      this._releasePickerPopover();
     },
 
     // Ganze Karte ins Native-Vollbild. Was sonst nach <body> haengt (Drag-

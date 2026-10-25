@@ -93,14 +93,14 @@
           <template x-for="st in statuses()" :key="st">
             <!-- SortableJS-Container: haelt ausser dem x-for-Anker nur die Karten.
                  `data-idee-status-cell` traegt die Ziel-Stufe, `data-idee-lane`
-                 bindet die Drop-Gruppe an DIESE Bahn — eine verankerte Karte
-                 wechselt die Spalte, nie die Zeile (die Zeile ist ihr Anker im
-                 Buch). Nur eine offene Buch-Idee darf in eine Kapitel-/
-                 Abschnitts-Bahn: das ordnet sie zu. -->
+                 bindet die Drop-Gruppe an DIESE Bahn. Quer zur Bahn zieht nur
+                 eine offene Idee: das verschiebt ihren Anker (Buch-Bahn =
+                 Anker loesen). -->
             <div class="ideen-board-cell" :class="'ideen-board-cell--' + st"
                  :data-idee-status-cell="st" :data-idee-lane="lane.lane.key">
               <template x-for="idee in (lane.collapsed ? [] : lane.columns[st])" :key="idee.id">
-                <div class="idee-board-card hover-reveal-host" :class="'idee-board-card--' + st"
+                <div class="idee-board-card hover-reveal-host"
+                     :class="'idee-board-card--' + st + (editingId === idee.id ? ' idee-board-card--editing' : '')"
                      :data-idee-card-id="idee.id">
                   <!-- Kartenaktionen schweben oben rechts und erscheinen erst auf
                        Zuwendung: in der Zeile der Stufen-Knoepfe nehmen sie so viel
@@ -111,9 +111,9 @@
                             :data-tip="$app.t('ideen.edit')" :aria-label="$app.t('ideen.edit')">
                       <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
                     </button>
-                    <button type="button" class="icon-btn icon-btn--ghost" x-show="canAssign(idee)"
-                            @click.stop="startAssign(idee)" :disabled="busy"
-                            :data-tip="$app.t('ideenBoard.assign')" :aria-label="$app.t('ideenBoard.assign')">
+                    <button type="button" class="icon-btn icon-btn--ghost" x-show="canMove(idee)"
+                            @click.stop="startAssign($event, idee)" :disabled="busy"
+                            :data-tip="moveTip(idee)" :aria-label="moveTip(idee)">
                       <svg class="icon" aria-hidden="true"><use href="/icons.svg#move-horizontal"/></svg>
                     </button>
                     <button type="button" class="icon-btn icon-btn--ghost"
@@ -133,7 +133,7 @@
                        die einzige Greifflaeche (SortableJS handle), damit Text,
                        Chips und Knoepfe voll klickbar bleiben. -->
                   <div class="idee-board-card-body">
-                    <span class="idee-board-grip" :data-tip="dragTip(idee)" :aria-label="dragTip(idee)">
+                    <span class="drag-grip idee-board-grip" role="img" :data-tip="dragTip(idee)" :aria-label="dragTip(idee)">
                       <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
                     </span>
                     <div class="idee-board-card-main">
@@ -147,14 +147,18 @@
                            :data-tip="isStaleIdee(idee) ? staleTip() : null"
                            x-text="ideeAgeLabel(idee)"></div>
                       <template x-if="editingId === idee.id">
-                        <div class="idee-board-edit">
-                          <textarea class="ideen-input" x-model="editingDraft" rows="3" :disabled="busy"
-                                    data-spellcheck="spelling"
-                                    @keydown.enter="if(!$event.isComposing && $event.keyCode !== 229 && !$event.shiftKey && !$event.ctrlKey && !$event.metaKey) { $event.preventDefault(); saveEdit(idee); }"
-                                    @keydown.escape="cancelEdit()"></textarea>
-                          <div class="idee-edit-actions">
-                            <button type="button" class="btn-compact" @click="saveEdit(idee)" :disabled="busy" x-text="$app.t('ideen.save')"></button>
-                            <button type="button" class="btn-compact" @click="cancelEdit()" :disabled="busy" x-text="$app.t('ideen.cancel')"></button>
+                        <div class="idee-board-edit"
+                             @keydown="$editKeys($event, { save: () => commitEdit(idee), cancel: () => cancelEdit() })"
+                             @click.outside="commitEdit(idee)">
+                          <textarea class="ideen-input idee-edit-input idee-board-edit-input" x-model="editingDraft" rows="2" :disabled="busy"
+                                    data-spellcheck="spelling" :aria-label="$app.t('ideen.edit')"
+                                    x-init="$nextTick(() => mountEditInput($el))" @input="autosizeEditInput($el)"
+                                    @keydown.enter="if(!$event.isComposing && $event.keyCode !== 229 && !$event.shiftKey && !$event.ctrlKey && !$event.metaKey) { $event.preventDefault(); commitEdit(idee); }"></textarea>
+                          <div class="idee-edit-foot">
+                            <div class="idee-edit-actions">
+                              <button type="button" class="btn-compact btn-compact--ghost" @click="cancelEdit()" :disabled="busy" x-text="$app.t('ideen.cancel')"></button>
+                              <button type="button" class="btn-compact primary" @click="saveEdit(idee)" :disabled="busy" x-text="$app.t('ideen.save')"></button>
+                            </div>
                           </div>
                         </div>
                       </template>

@@ -106,7 +106,7 @@ export const aiAccessMethods = {
   },
 
   async aiAccessRemove() {
-    if (!confirm(window.__app.t('profile.aiAccess.confirmRemove'))) return;
+    if (!await window.__app.appConfirm({ message: window.__app.t('profile.aiAccess.confirmRemove'), danger: true })) return;
     this.aiAccessBusy = true;
     this.aiAccessError = '';
     this.aiAccessSaved = false;

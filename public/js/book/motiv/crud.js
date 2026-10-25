@@ -2,7 +2,7 @@
 // plus Auswahl + Fundstellen-Laden. Nach jeder Mutation lokalen State + Graph
 // aktualisieren (loadBoard) statt Teil-Patches — die Boards sind klein.
 
-import { fetchJson, sendJson } from '../../utils.js';
+import { fetchJson, sendJson, isSaveShortcut } from '../../utils.js';
 import { THEME_COLOR_KEYS, defaultThemeColorKey } from './graph.js';
 import { MOTIF_REL_TYPES } from './constants.js';
 
@@ -15,15 +15,14 @@ export const crudMethods = {
   // Combobox/EntityPicker konsumieren Escape selbst, solange ihr Dropdown offen ist
   // (stopPropagation dort), und offene Popover/Menüs regeln ihr Escape ebenfalls selbst.
   onPanelKeydown(event) {
-    const mod = event.metaKey || event.ctrlKey;
-    if (mod && !event.shiftKey && !event.altKey && (event.key === 's' || event.key === 'S')) {
+    if (isSaveShortcut(event)) {
       event.preventDefault();
       if (this.selectedMotif()) this.saveMotifEdit();
       else if (this.selectedTheme()) this.saveThemeEdit();
       return;
     }
     if (event.key === 'Escape') {
-      if (this.graphMenuOpen || this.themeColorPickerId != null) return;
+      if (this.actionMenuKey != null || this.themeColorPickerId != null) return;
       if (this.selectedMotif()) { event.preventDefault(); this.escMotifEdit(); }
       else if (this.selectedTheme()) { event.preventDefault(); this.escThemeEdit(); }
     }
@@ -62,7 +61,7 @@ export const crudMethods = {
     finally { this.busy = false; }
   },
   async deleteTheme(theme) {
-    if (!window.confirm(window.__app.t('motiv.theme.confirmDelete', { name: theme.name }))) return;
+    if (!await window.__app.appConfirm({ message: window.__app.t('motiv.theme.confirmDelete', { name: theme.name }), danger: true })) return;
     try {
       await sendJson(`/motifs/themes/${theme.id}`, 'DELETE');
       if (this.selectedThemeId === theme.id) { this.selectedThemeId = null; this._loadThemeBuffer(null); }
@@ -193,7 +192,7 @@ export const crudMethods = {
   // einem Thema zugeordnet, danach im Panel selektiert + Namensfeld fokussiert zum
   // sofortigen Umbenennen.
   async createMotifAt(themeId) {
-    this.closeGraphMenu();
+    this.closeActionMenu();
     this.busy = true;
     try {
       const body = { book_id: this._bookId(), name: window.__app.t('motiv.motif.newName') };
@@ -208,7 +207,7 @@ export const crudMethods = {
   // Thema direkt anlegen (aus dem Graph-Kontextmenü) — mit Default-Namen; danach im
   // Panel-Editor selektiert + Namensfeld fokussiert zum sofortigen Umbenennen.
   async createThemeQuick() {
-    this.closeGraphMenu();
+    this.closeActionMenu();
     this.busy = true;
     try {
       const theme = await sendJson('/motifs/themes', 'POST', { book_id: this._bookId(), name: window.__app.t('motiv.theme.newName') });
@@ -289,7 +288,7 @@ export const crudMethods = {
     finally { this.busy = false; }
   },
   async deleteMotif(motif) {
-    if (!window.confirm(window.__app.t('motiv.motif.confirmDelete', { name: motif.name }))) return;
+    if (!await window.__app.appConfirm({ message: window.__app.t('motiv.motif.confirmDelete', { name: motif.name }), danger: true })) return;
     try {
       await sendJson(`/motifs/${motif.id}`, 'DELETE');
       if (this.selectedMotifId === motif.id) { this.selectedMotifId = null; this.occurrences = []; }

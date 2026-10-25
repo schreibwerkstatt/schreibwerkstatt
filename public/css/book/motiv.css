@@ -199,7 +199,7 @@
 }
 .motiv-theme-list { display: flex; flex-direction: column; gap: var(--space-2xs); }
 .motiv-theme-rows { display: flex; flex-direction: column; gap: var(--space-2xs); }
-.motiv-theme-row { display: flex; align-items: center; gap: var(--space-2xs); }
+.motiv-theme-row { display: flex; align-items: center; --drag-grip-host-gap: var(--space-2xs); gap: var(--drag-grip-host-gap); }
 .motiv-theme-row--ghost { opacity: 0.5; }
 /* Thema-Name: klickbares Label (öffnet den Themen-Editor im Panel). */
 .motiv-theme-name {
@@ -219,16 +219,6 @@
   white-space: nowrap;
 }
 .motiv-theme-name:hover { border-color: var(--color-border); background: var(--color-bg); }
-/* Drag-Griff: einzige Greiffläche, damit Input/Buttons klickbar bleiben. */
-.motiv-drag-grip {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  color: var(--color-muted);
-  cursor: grab;
-}
-.motiv-drag-grip .icon { width: 14px; height: 14px; }
-.motiv-drag-grip:active { cursor: grabbing; }
 
 /* Thema-Farbe: Swatch + Palette-Popover via .color-picker*
    (components/color-picker.css), geteilt mit der Plot-Werkstatt. */

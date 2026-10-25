@@ -178,7 +178,7 @@ export const adminSettingsMethods = {
   },
 
   async adminApiTokensRevoke(id) {
-    if (!confirm(window.__app.t('admin.settings.api.confirmRevoke'))) return;
+    if (!await window.__app.appConfirm({ message: window.__app.t('admin.settings.api.confirmRevoke'), danger: true })) return;
     try {
       await sendJson(`/admin/api-tokens/${id}/revoke`, 'POST');
       await this.adminApiTokensLoad();
@@ -188,7 +188,7 @@ export const adminSettingsMethods = {
   },
 
   async adminApiTokensDelete(id) {
-    if (!confirm(window.__app.t('admin.settings.api.confirmDelete'))) return;
+    if (!await window.__app.appConfirm({ message: window.__app.t('admin.settings.api.confirmDelete'), danger: true })) return;
     try {
       await sendJson(`/admin/api-tokens/${id}`, 'DELETE');
       await this.adminApiTokensLoad();

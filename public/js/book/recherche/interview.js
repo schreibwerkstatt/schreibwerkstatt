@@ -193,7 +193,7 @@ export const rechercheInterviewMethods = {
 
   /** Aufnahme verwerfen, Wortlaut behalten — der Audio-BLOB ist der grosse Teil. */
   async ivDropAudio(itemId) {
-    if (!window.confirm(window.__app.t('interview.dropAudioConfirm'))) return;
+    if (!await window.__app.appConfirm({ message: window.__app.t('interview.dropAudioConfirm'), danger: true })) return;
     try {
       const r = await sendJson(`/research/${itemId}/audio`, 'DELETE');
       this.ivTranscript = r.transcript || null;

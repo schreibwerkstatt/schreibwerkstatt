@@ -195,3 +195,27 @@ test('Werkzeug search_chat_history: laufendes Gespräch ausgenommen, Scope-Filte
   const missing = await executeTool('search_chat_history', {}, ctx);
   assert.equal(missing.errorKey, 'chat.toolError.missingParam');
 });
+
+test('Recherche-, Plot- und Ideen-Chats: durchsuchbar, vektorisiert, im Werkzeug per scope wählbar', async () => {
+  const { executeTool } = require('../../routes/jobs/chat-tools');
+  const sRes = session('research');
+  msg(sRes, 'user', 'Gibt es Studien zur Triade?');
+  const aRes = msg(sRes, 'assistant', 'Ja, die Macdonald-Triade wurde 1963 beschrieben.');
+  const sPlot = session('plot');
+  msg(sPlot, 'user', 'Passt die Triade als Wendepunkt?');
+  msg(sPlot, 'assistant', 'Die Triade trägt den Wendepunkt in Akt 2.');
+  const sIdeen = session('ideen');
+  msg(sIdeen, 'user', 'Wo baue ich die Triade ein?');
+  msg(sIdeen, 'assistant', 'Die Triade passt in Kapitel 5.');
+
+  const ctx = { bookId: BOOK, userEmail: A, sessionId: sPlot };
+  const all = await executeTool('search_chat_history', { query: 'Triade' }, ctx);
+  assert.deepEqual(new Set(all.results.map(r => r.kind)), new Set(['research', 'ideen']), 'laufender Plot-Chat fehlt');
+  const res = await executeTool('search_chat_history', { query: 'Triade', scope: 'research' }, ctx);
+  assert.deepEqual(res.results.map(r => r.session_id), [sRes]);
+  const unknown = await executeTool('search_chat_history', { query: 'Triade', scope: 'bogus' }, { ...ctx, sessionId: null });
+  assert.equal(unknown.results.length, 3, 'unbekannter scope = alle');
+
+  await withEmbed(() => runIndex(BOOK));
+  assert.ok(db.prepare('SELECT COUNT(*) AS n FROM chat_semantic_chunks WHERE message_id = ?').get(aRes).n > 0, 'Recherche-Antwort vektorisiert');
+});

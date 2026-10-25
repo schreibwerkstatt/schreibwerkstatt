@@ -486,8 +486,8 @@
 }
 
 /* ── Quellen-Dokument (Form-Anhang) ──────────────────────────────────────── */
-.sources-doc-empty { display: flex; flex-direction: column; gap: var(--space-2xs); }
-.sources-doc-empty input[type="file"] { font-size: var(--font-size-sm); }
+.sources-doc-upload { display: flex; flex-direction: column; gap: var(--space-2xs); }
+.sources-doc-upload input[type="file"] { font-size: var(--font-size-sm); }
 .sources-doc-attached {
   display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
 }

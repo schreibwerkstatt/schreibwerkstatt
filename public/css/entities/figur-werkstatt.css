@@ -315,15 +315,18 @@
   overflow-wrap: anywhere;
 }
 
-/* Vollbild-Modus: ganzes Detail-Pane (Header+Form+Mindmap+Runs) nimmt Viewport.
-   So bleibt Toolbar (Speichern/Brainstorm/Konsistenz) und Notes erreichbar.
-   Detail wird scrollbar; Mindmap streckt sich auf min. 60vh. */
-.werkstatt-detail:fullscreen .werkstatt-mindmap {
-  height: clamp(420px, 70vh, 1000px);
+/* Vollbild-Modus: nur die Mindmap-Section nimmt den Viewport; die Canvas
+   füllt die Höhe unter dem Section-Titel. */
+.werkstatt-mindmap-section:fullscreen .werkstatt-mindmap-canvas {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.werkstatt-mindmap-section:fullscreen .werkstatt-mindmap {
+  height: 100%;
 }
 
 /* Rechtsklick-Menü auf Mindmap-Knoten nutzt das geteilte .context-menu-Vokabular
-   (components/context-menu.css), position:fixed via Inline-Style (contextMenuPos). */
+   (components/context-menu.css), Mechanik aus action-menu.js. */
 
 /* Mindmap-Container fokus-sichtbar (Tastatur-Nav-Indikator) */
 .werkstatt-mindmap:focus-within {

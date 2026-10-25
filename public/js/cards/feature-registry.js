@@ -26,6 +26,10 @@
 //                     (featuresVisibleFor), in isFeatureAvailable UND im
 //                     generischen Toggle (_toggleCardGeneric), damit auch ein
 //                     Deep-Link (#plot) die Karte nicht oeffnet.
+//   `requiresConfig` – Name eines `$store.config`-Flags (Karten wie Aktionen):
+//                     ohne es fehlt der Eintrag in der Palette, die Hilfe zeigt
+//                     ihn als nicht verfügbar. Für Funktionen, deren Dienst die
+//                     Instanz erst einrichten muss (Embedding-Backend, LanguageTool …).
 //   `dependsOnKomplett` – true: Karte konsumiert Komplettanalyse-Output
 //                     (Figuren/Orte/Szenen/Ereignisse/Fakten/Soziogramm/Kontinuität).
 //                     Palette zeigt dafür ein Hinweis-Badge.
@@ -41,7 +45,7 @@
 // Aktionen (`kind: 'action'`): einmalige Befehle (Theme wechseln, Logout …).
 //   `run(root)` – wird mit Root als Argument aufgerufen.
 //   `searchOnly` – erscheint nur mit Query (bzw. im `>`-Modus), nicht in der leeren Palette.
-//   `requiresConfig` – Name eines `$store.config`-Flags; ohne es fehlt die Aktion.
+//   `requiresConfig` – wie bei Karten.
 //
 // `aliases` (optional): zusätzliche Suchbegriffe (Synonyme, EN-Übersetzungen).
 
@@ -82,7 +86,7 @@ export const FEATURES = [
     aliases: ['errors','heatmap','findings','lektorat','typo','tippfehler'] },
   { key: 'kontinuitaet',   kind: 'toggle', group: 'review', labelKey: 'tile.kontinuitaet',   descKey: 'tile.kontinuitaet.desc',   flag: 'showKontinuitaetCard',   toggle: 'toggleKontinuitaetCard',   requiresBook: true, minRole: 'editor', dependsOnKomplett: true, requiresCloudModel: true, hiddenForBuchtyp: ['journalismus'],
     aliases: ['continuity','widerspruch','plot-hole','contradiction','consistency'] },
-  { key: 'buchlandkarte',  kind: 'toggle', group: 'review', labelKey: 'tile.buchlandkarte',  descKey: 'tile.buchlandkarte.desc',  flag: 'showBuchlandkarteCard',  toggle: 'toggleBuchlandkarteCard',  requiresBook: true, minRole: 'lektor',
+  { key: 'buchlandkarte',  kind: 'toggle', group: 'review', labelKey: 'tile.buchlandkarte',  descKey: 'tile.buchlandkarte.desc',  flag: 'showBuchlandkarteCard',  toggle: 'toggleBuchlandkarteCard',  requiresBook: true, minRole: 'lektor', requiresConfig: 'semanticSearchEnabled',
     aliases: ['buchlandkarte','landkarte','karte','map','bookmap','projektion','projection','pca','cluster','wolke','scatter','streuung','kohäsion','kohaesion','cohesion','ausreisser','outlier','themenkarte','semantik',
               'redundanz','redundancy','doppelung','doppelungen','duplicate','duplikate','wiederholung','wiederholungen','repetition','dupe','similar'] },
   { key: 'wortschatz',     kind: 'toggle', group: 'analysis', labelKey: 'tile.wortschatz',     descKey: 'tile.wortschatz.desc',     flag: 'showWortschatzCard',     toggle: 'toggleWortschatzCard',     requiresBook: true, minRole: 'editor',
@@ -269,7 +273,7 @@ export const ACTIONS = [
   // Scroll entfällt, sonst liefen zwei Animationen gegeneinander.
   // `requiresConfig`: nur, wenn der Dienst dahinter läuft.
   ...[
-    ['aiAccess', ['ki','ai','api','api-key','schlüssel','key','claude','openai','zugang']],
+    ['aiAccess', ['ki','ai','api','api-key','schlüssel','key','claude','openai','zugang'], { requiresConfig: 'userAiAccessEnabled' }],
     ['devices',  ['geräte','devices','token','mac','client']],
     ['clients',  ['app','apps','macos','android','erweiterung','extension','chrome','download']],
     ['dict',     ['wörterbuch','dictionary','rechtschreibung','spellcheck','languagetool'], { requiresConfig: 'languagetoolEnabled' }],
@@ -454,8 +458,23 @@ export function matchesRequiredBuchtyp(feature, buchtyp) {
   return Array.isArray(req) ? req.includes(buchtyp) : req === buchtyp;
 }
 
+// `$store.config`-Flags, an denen Einträge hängen — die Palette liest genau
+// diese in ihren Kontext, ein neues `requiresConfig` braucht keine zweite Stelle.
+export const REQUIRED_CONFIG_FLAGS = [...new Set(ALL.map(f => f.requiresConfig).filter(Boolean))];
+
+/** Die `requiresConfig`-Flags aus `$store.config` — Kontext für Palette und Hilfe. */
+export function configFlags() {
+  const store = (typeof window !== 'undefined' && window.Alpine?.store('config')) || {};
+  return Object.fromEntries(REQUIRED_CONFIG_FLAGS.map(k => [k, !!store[k]]));
+}
+
+export function configSatisfied(feature, config) {
+  return !feature?.requiresConfig || !!config?.[feature.requiresConfig];
+}
+
 export function isFeatureAvailable(feature, ctx) {
   if (!feature) return false;
+  if (!configSatisfied(feature, ctx.config)) return false;
   if (feature.requiresBook && !ctx.selectedBookId) return false;
   if (feature.requiresPages && !(ctx.pages && ctx.pages.length > 0)) return false;
   if (!matchesRequiredBuchtyp(feature, ctx.buchtyp)) return false;
@@ -468,6 +487,7 @@ export function isFeatureAvailable(feature, ctx) {
 export function unavailabilityReasonKey(feature, ctx) {
   if (!feature) return null;
   // Ohne ein einziges Buch gibt es nichts zu wählen — dann heisst der Weg «anlegen».
+  if (!configSatisfied(feature, ctx.config)) return 'palette.disabled.needService';
   if (feature.requiresBook && !ctx.selectedBookId) return ctx.hasBooks === false ? 'palette.disabled.needFirstBook' : 'palette.disabled.needBook';
   if (feature.requiresPages && !(ctx.pages && ctx.pages.length > 0)) return 'palette.disabled.needPages';
   if (!matchesRequiredBuchtyp(feature, ctx.buchtyp)) return 'palette.disabled.needBook';

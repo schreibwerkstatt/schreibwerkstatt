@@ -26,7 +26,7 @@
   <div x-show="chatStatus" class="card-status" x-html="chatStatus"></div>
 
   <div id="chat-messages" class="chat-messages" @pointerenter="onChatPointerEnter()">
-    <div x-show="chatMessages.length === 0" class="chat-empty" x-text="$app.t('chat.emptyPage', { name: $app.currentPage?.name || '' })"></div>
+    <div x-show="chatMessages.length === 0" class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('chat.emptyPage', { name: $app.currentPage?.name || '' })"></div>
 
     <template x-for="(msg, msgIdx) in chatMessages" :key="msgIdx">
       <div :class="'chat-msg chat-msg--' + msg.role + (msg.id != null && msg.id === _hitMsgId ? ' chat-msg--hit' : '')" :data-msg-id="msg.id">
@@ -113,7 +113,7 @@
   <div x-show="bookChatStatus" class="card-status" x-html="bookChatStatus"></div>
 
   <div id="book-chat-messages" class="chat-messages">
-    <div x-show="bookChatMessages.length === 0" class="chat-empty" x-text="$app.t('chat.emptyBook', { name: $app.selectedBookName || '' })"></div>
+    <div x-show="bookChatMessages.length === 0" class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('chat.emptyBook', { name: $app.selectedBookName || '' })"></div>
 
     <template x-for="(msg, msgIdx) in bookChatMessages" :key="msgIdx">
       <div :class="'chat-msg chat-msg--' + msg.role + (msg.id != null && msg.id === _hitMsgId ? ' chat-msg--hit' : '')" :data-msg-id="msg.id">

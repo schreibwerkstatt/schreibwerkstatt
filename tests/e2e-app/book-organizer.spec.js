@@ -454,3 +454,24 @@ test('Sprung aus der Laengenverteilung laesst DnD auf der ganzen Karte intakt', 
   expect(res.bound, 'jede Liste der Karte hat eine Sortable-Instanz').toBe(res.lists);
   guard.assertClean('lengthdist jump keeps dnd');
 });
+
+// Die Stufen-Auswahl einer Zeile ist transient: der Platzhalter-Trigger tauscht
+// beim Klick gegen die echte Combobox. Deren Wert null darf nicht auf die
+// Option «kein Status» (`value: ''`) passen — sonst wechselt die Beschriftung
+// und die Zeile springt in der Breite.
+test('Bearbeitungsstand-Auswahl behält beim Öffnen Beschriftung und Breite', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  await selectSeededBook(page);
+  await page.waitForFunction(() => window.Alpine.store('badges').editStatusChain.length > 0);
+  await openOrganizer(page);
+  const combo = page.locator('.card--organizer .organizer-page .organizer-redaktion-combo').first();
+  const before = await combo.boundingBox();
+  const label = await combo.locator('.combobox-value').textContent();
+  await combo.locator('.combobox-trigger').click();
+  await expect(combo.locator('.combobox-dropdown')).toBeVisible();
+  await expect(combo.locator('.combobox-value')).toHaveText(label);
+  expect((await combo.boundingBox()).width).toBe(before.width);
+  await expect(combo.locator('.combobox-option--selected')).toHaveCount(0);
+  guard.assertClean('redaktion combo stable');
+});

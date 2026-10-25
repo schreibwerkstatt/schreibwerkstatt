@@ -7,7 +7,6 @@
 import { sendJson, escHtml } from '../../utils.js';
 import { toggleWrapFullscreen } from '../../fullscreen.js';
 import { ensureVis, graphPlaceholder, createGraphTooltip, graphTheme, paletteColors } from '../../graph-kit.js';
-import { attachDismiss, detachDismiss } from '../../cards/dismiss.js';
 
 // Themen-Palette: primär die vom Autor gewählte Farbe (themes.farbe = Palette-
 // Schlüssel, theme-aware --palette-*-Tokens wie in der Plot-Werkstatt); ohne Wahl
@@ -277,7 +276,7 @@ export const graphMethods = {
 
     this._motivNetwork.on('click', (params) => {
       const ref = parseNode(params.nodes?.[0]);
-      this.closeGraphMenu();
+      this.closeActionMenu();
       if (ref?.kind === 'motif') this.selectMotif(ref.id);
       else if (ref?.kind === 'theme') this.selectTheme(ref.id);
     });
@@ -437,52 +436,23 @@ export const graphMethods = {
   },
 
   // ── Graph-Kontextmenü (Rechtsklick auf Knoten / leere Fläche) ────────────
-  // Cursor-verankert: an der Klickposition öffnen, nur an den Viewport-Rand
-  // clampen (kein Flip nötig, siehe Harte Regel „Flip-up-Popover").
+  // Mechanik aus action-menu.js (an der Maus verankert); Ziel = Knoten-ID.
   openGraphMenu(ev, nodeId) {
-    this.graphMenuNodeId = nodeId || null;
-    this.graphMenuPos = this._computeGraphMenuPos(ev.clientX, ev.clientY, 220, 180);
-    this.graphMenuOpen = true;
-    this._attachGraphMenuListeners();
-    this.$nextTick(() => {
-      const el = this.$refs.graphMenu;
-      if (!el) return;
-      this.graphMenuPos = this._computeGraphMenuPos(ev.clientX, ev.clientY, el.offsetWidth, el.offsetHeight);
-    });
-  },
-
-  _computeGraphMenuPos(x, y, pw, ph) {
-    const left = Math.max(8, Math.min(window.innerWidth - pw - 8, x));
-    const top = Math.max(8, Math.min(window.innerHeight - ph - 8, y));
-    return { top, left };
-  },
-
-  closeGraphMenu() {
-    this.graphMenuOpen = false;
-    this.graphMenuNodeId = null;
-    this._detachGraphMenuListeners();
-  },
-
-  _attachGraphMenuListeners() {
-    this._graphMenuCloseHandler ??= attachDismiss(() => this.closeGraphMenu());
-  },
-
-  _detachGraphMenuListeners() {
-    detachDismiss(this, '_graphMenuCloseHandler');
+    this.openActionMenu(ev, `motivgraph:${nodeId || 'canvas'}`, nodeId || null);
   },
 
   // Knoten-Typ für den offenen Menü-Kontext: 'theme' | 'motif' | 'canvas' | 'other'.
   graphMenuKind() {
-    if (!this.graphMenuNodeId) return 'canvas';
-    const kind = parseNode(this.graphMenuNodeId)?.kind;
+    if (!this.actionMenuTarget) return 'canvas';
+    const kind = parseNode(this.actionMenuTarget)?.kind;
     return (kind === 'theme' || kind === 'motif') ? kind : 'other';
   },
   graphMenuTheme() {
-    const ref = parseNode(this.graphMenuNodeId);
+    const ref = parseNode(this.actionMenuTarget);
     return ref?.kind === 'theme' ? (this.themes.find(t => t.id === ref.id) || null) : null;
   },
   graphMenuMotif() {
-    const ref = parseNode(this.graphMenuNodeId);
+    const ref = parseNode(this.actionMenuTarget);
     return ref?.kind === 'motif' ? this.motifById(ref.id) : null;
   },
 };

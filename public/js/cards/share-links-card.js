@@ -301,6 +301,7 @@ export function registerShareLinksCard() {
     },
 
     async saveEdit(token) {
+      if (this.savingEdit) return;
       this.savingEdit = true;
       try {
         const res = await fetch(`/share/api/links/${encodeURIComponent(token)}`, {

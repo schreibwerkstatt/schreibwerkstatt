@@ -20,8 +20,8 @@ const { db } = require('./connection');
 const { NOW_ISO_SQL } = require('./now');
 const { vectorToBlob, blobToVector, cosineSim } = require('../lib/embed-chunk');
 
-// Session-Arten, deren Verlauf durchsuchbar ist (Abschnitts- und Buch-Chat).
-const SEARCHABLE_KINDS = ['page', 'book'];
+// Session-Arten, deren Verlauf durchsuchbar ist — alle fünf Chats (docs/chats.md).
+const SEARCHABLE_KINDS = ['page', 'book', 'research', 'plot', 'ideen'];
 
 // Leere Antworten und solche, die nur ein i18n-Fallback-Marker sind (`__i18n:…__`),
 // tragen keinen Gesprächsinhalt — sie werden nicht vektorisiert. Gleiche Bedingung

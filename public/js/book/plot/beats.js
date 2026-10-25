@@ -170,22 +170,8 @@ export const beatsMethods = {
       + (d.location_ids || []).length + (d.motif_ids || []).length;
   },
 
-  // Panel-weite Tastaturkürzel im Beat-Editor (am .plot-beat-edit-Container, damit sie
-  // auch bei Fokus in Beschreibung/Combobox greifen, nicht nur im Titelfeld): Cmd/Ctrl+S
-  // committet den Beat (speichern + schliessen, wie Enter), Escape verwirft. Combobox/
-  // EntityPicker konsumieren Escape selbst, solange ihr Dropdown offen ist (stopPropagation).
-  onBeatEditKeydown(event, beat) {
-    const mod = event.metaKey || event.ctrlKey;
-    if (mod && !event.shiftKey && !event.altKey && (event.key === 's' || event.key === 'S')) {
-      event.preventDefault();
-      this.commitEditBeat(beat);
-      return;
-    }
-    if (event.key === 'Escape') { event.preventDefault(); this.cancelEditBeat(); }
-  },
-
-  // Klick ausserhalb des Edit-Panels: Änderungen committen (wie Save) und dann
-  // schliessen. Leerer Titel → nichts Sinnvolles zu speichern, einfach verwerfen
+  // Klick ausserhalb des Edit-Panels und Cmd/Ctrl+S (`$editKeys` im Template):
+  // Änderungen committen (wie Save) und dann schliessen. Leerer Titel → nichts Sinnvolles zu speichern, einfach verwerfen
   // (saveEditBeat würde sonst mit Fehler offen bleiben).
   // true = gespeichert/verworfen (Panel zu), false = Speichern gescheitert.
   async commitEditBeat(beat) {

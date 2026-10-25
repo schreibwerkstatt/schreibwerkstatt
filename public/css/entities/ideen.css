@@ -29,12 +29,6 @@
 }
 .ideen-add-btn { flex-shrink: 0; align-self: stretch; }
 .ideen-loading,
-.ideen-empty {
-  text-align: center;
-  color: var(--color-subtle);
-  font-size: var(--font-size-sm);
-  padding: var(--space-lg) 0;
-}
 .ideen-section { margin-top: var(--space-md); }
 .idee-item {
   position: relative;
@@ -75,6 +69,32 @@
   font-size: var(--font-size-xs);
   padding: var(--space-3) var(--space-sm);
 }
+/* Edit-Feld einer Idee (Ideen-Karte und Ideen-Board): sieht aus wie der Text,
+   den es ersetzt — gleiche Schrift (`--idee-edit-font`, je Oberfläche gesetzt),
+   Höhe nach Inhalt (`field-sizing`, Fallback per JS in utils/textarea.js). Eine
+   lange Idee bleibt so beim Wechsel in den Edit-Modus lesbar statt auf drei
+   Zeilen zusammenzuschnurren; gedeckelt, damit sie nicht über den Bildschirm
+   hinaus wächst (danach scrollt das Feld). */
+.ideen-input.idee-edit-input {
+  --idee-edit-font: var(--font-size-sm);
+  font-size: var(--idee-edit-font);
+  line-height: 1.5;
+  field-sizing: content;
+  min-height: calc(var(--idee-edit-font) * 1.5 * 3);
+  max-height: 60vh;
+  overflow-y: auto;
+  resize: none;
+}
+/* Fuss unter dem Feld: Abbrechen/Speichern rechts. Die Tasten stehen im
+   Tastenkürzel-Dialog, nicht im Formular. */
+.idee-edit-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+.idee-edit-foot > .idee-edit-actions { margin-left: auto; }
 /* Trigger-Position in der Ideen-Karte; das Meatball-Menü selbst nutzt das
    geteilte .context-menu-Vokabular (nach <body> teleportiert, JS-positioniert). */
 .idee-menu {
@@ -82,22 +102,6 @@
   top: 6px;
   right: 6px;
 }
-.ideen-move-label {
-  font-size: var(--font-size-xs);
-  color: var(--color-subtle);
-}
-.idee-move-panel {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-6) var(--space-sm);
-  margin: var(--space-6) 0;
-  border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-}
-.idee-move-combo { flex: 1 1 180px; min-width: 0; }
 .idee-content--moving { opacity: var(--opacity-muted); }
 .idee-item--moving {
   border-color: var(--color-accent);

@@ -62,7 +62,8 @@
         </div>
 
         <!-- Formular: Anlegen + Bearbeiten -->
-        <fieldset class="admin-profiles-form" x-show="adminProfilesEditing">
+        <fieldset class="admin-profiles-form" x-show="adminProfilesEditing"
+                  @keydown="$editKeys($event, { save: () => !adminProfilesSaving && adminProfilesForm.name && adminProfilesSave(), cancel: () => adminProfilesCancel() })">
           <legend x-text="adminProfilesForm.id ? $app.t('admin.profiles.editTitle') : $app.t('admin.profiles.createTitle')"></legend>
 
           <label class="card-form-row">

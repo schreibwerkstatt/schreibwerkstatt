@@ -7,8 +7,8 @@
 // Scope-Modell: eine Idee haengt an hoechstens EINEM Anker — einer Seite, einem
 // Kapitel oder (beide NULL) nur am Buch (CHECK im Schema). Eine Buch-Idee ist ein
 // Einfall ohne Ort im Text; der Autor ordnet sie spaeter selbst einer Seite oder
-// einem Kapitel zu. Danach ist der Move within-kind: Page-Idee bleibt Page-Idee,
-// Chapter-Idee bleibt Chapter-Idee.
+// einem Kapitel zu. Danach darf sie frei umziehen — Seite ↔ Seite, Kapitel ↔
+// Kapitel und quer zwischen Seite und Kapitel; der alte Anker wird dabei geleert.
 //
 // Stufen-Modell: `status` (offen → in_arbeit → erledigt, daneben verworfen) ist
 // die einzige Wahrheit ueber den Bearbeitungsstand; SSoT der Stufen ist
@@ -214,9 +214,9 @@ router.post('/', jsonBody, async (req, res) => {
 });
 
 // Content + Status + Move aktualisieren (Felder optional einzeln).
-// Move bleibt within-kind: Page-Idee kann nur auf andere Seite, Chapter-Idee
-// nur auf anderes Kapitel. Eine Buch-Idee (kein Anker) darf auf beides — das ist
-// genau ihr Zweck: erst festhalten, spaeter einordnen.
+// Move: `page_id` ODER `chapter_id` setzt den neuen Anker und leert den anderen —
+// eine Kapitel-Idee darf so in einen Abschnitt ziehen und umgekehrt. Beide Felder
+// zugleich und beide `null` loesen den Anker: die Idee wird wieder Buch-Idee.
 router.patch('/:id', jsonBody, (req, res) => {
   const existing = _ownedIdee(req, res);
   if (!existing) return;
@@ -240,14 +240,15 @@ router.patch('/:id', jsonBody, (req, res) => {
     fields.status = req.body.status;
   }
 
-  let movedFrom = null, movedTo = null, movedKind = null;
+  let movedFrom = null, movedTo = null;
   const hasPageMove    = typeof req.body?.page_id    !== 'undefined';
   const hasChapterMove = typeof req.body?.chapter_id !== 'undefined';
-  if (hasPageMove && hasChapterMove) return res.status(400).json({ error_code: 'INVALID_SCOPE' });
+  const toBook = hasPageMove && hasChapterMove && req.body.page_id === null && req.body.chapter_id === null;
+  if (hasPageMove && hasChapterMove && !toBook) return res.status(400).json({ error_code: 'INVALID_SCOPE' });
   if (hasPageMove || hasChapterMove) {
-    const isPage = hasPageMove;
-    const newId = toIntId(isPage ? req.body.page_id : req.body.chapter_id);
-    if (!newId) return res.status(400).json({ error_code: isPage ? 'INVALID_PAGE_ID' : 'INVALID_CHAPTER_ID' });
+    const isPage = hasPageMove && !toBook;
+    const newId = toBook ? null : toIntId(isPage ? req.body.page_id : req.body.chapter_id);
+    if (!toBook && !newId) return res.status(400).json({ error_code: isPage ? 'INVALID_PAGE_ID' : 'INVALID_CHAPTER_ID' });
     // Eine abgeschlossene Idee (erledigt/verworfen) wandert nicht mehr: sie ist
     // die Spur einer Entscheidung an DIESER Stelle, und anderswo hingehaengt
     // wuerde sie zur Aussage ueber eine Stelle, an der sie nie stand.
@@ -258,15 +259,15 @@ router.patch('/:id', jsonBody, (req, res) => {
     if (!IDEE_OPEN_STATUSES.includes(existing.status) || !IDEE_OPEN_STATUSES.includes(finalStatus)) {
       return res.status(400).json({ error_code: 'IDEE_CLOSED' });
     }
-    const isBookIdee = existing.page_id === null && existing.chapter_id === null;
-    if (!isBookIdee && isPage && existing.page_id === null)     return res.status(400).json({ error_code: 'KIND_MISMATCH' });
-    if (!isBookIdee && !isPage && existing.chapter_id === null) return res.status(400).json({ error_code: 'KIND_MISMATCH' });
-    const targetBook = isPage ? resolvePageBookId(newId) : resolveChapterBookId(newId);
-    if (targetBook !== existing.book_id) return res.status(400).json({ error_code: 'BOOK_MISMATCH' });
-    movedFrom = isBookIdee ? 'book' : (isPage ? existing.page_id : existing.chapter_id);
-    movedTo = newId;
-    movedKind = isPage ? 'page' : 'chapter';
-    fields[isPage ? 'page_id' : 'chapter_id'] = newId;
+    if (!toBook) {
+      const targetBook = isPage ? resolvePageBookId(newId) : resolveChapterBookId(newId);
+      if (targetBook !== existing.book_id) return res.status(400).json({ error_code: 'BOOK_MISMATCH' });
+    }
+    movedFrom = existing.page_id !== null ? 'page=' + existing.page_id
+      : existing.chapter_id !== null ? 'chapter=' + existing.chapter_id : 'book';
+    movedTo = toBook ? 'book' : `${isPage ? 'page' : 'chapter'}=${newId}`;
+    fields.page_id = isPage ? newId : null;
+    fields.chapter_id = isPage || toBook ? null : newId;
   }
 
   if (!ideenDb.updateIdee(id, userEmail, fields)) {
@@ -274,7 +275,7 @@ router.patch('/:id', jsonBody, (req, res) => {
   }
   const row = ideenDb.getIdee(id);
   searchIndex.upsertIdea(id);
-  if (movedTo) logger.info(`[ideen] move id=${id} kind=${movedKind} from=${movedFrom} to=${movedTo}`);
+  if (movedTo) logger.info(`[ideen] move id=${id} from=${movedFrom} to=${movedTo}`);
   res.json(row);
 });
 

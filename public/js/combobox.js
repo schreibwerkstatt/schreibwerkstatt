@@ -150,6 +150,9 @@ export function comboboxData(cfg = {}) {
           const arr = Array.isArray(this.value) ? this.value : [];
           return arr.some(v => String(v) === String(val));
         }
+        // Transient (Aktions-Auswahl, Wert springt nach der Wahl auf null):
+        // null trifft keine Option — auch nicht eine mit `value: ''`.
+        if (this._transient && this.value == null) return false;
         return String(this.value ?? '') === String(val);
       },
       get selectedLabel() {
@@ -159,6 +162,8 @@ export function comboboxData(cfg = {}) {
           const app = window.__app;
           return app?.t ? app.t('common.multiSelected', { n: arr.length }) : `${arr.length}`;
         }
+        // Transient zeigt im Ruhezustand immer den Platzhalter (siehe _isSelected).
+        if (this._transient && this.value == null) return '';
         const v = this.value ?? '';
         const opt = this._allOptions.find(o => String(o.value) === String(v));
         if (opt) return opt.label;

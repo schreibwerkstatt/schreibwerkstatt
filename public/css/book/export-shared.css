@@ -28,12 +28,6 @@
   margin: var(--space-sm) 0;
   flex-wrap: wrap;
 }
-/* `.card-form-label` traegt ein `padding-top`, damit die fette Beschriftung im
-   zweispaltigen `.card-form-row`-Raster (`align-items: start`) optisch auf der
-   ersten Feldzeile sitzt. Hier ist die Leiste einzeilig und zentriert — das
-   Padding wuerde die Beschriftung gegenueber Combobox und Buttons nach unten
-   kippen. */
-.export-profile-bar > .card-form-label { padding-top: 0; }
 .export-profile-pick { min-width: 200px; }
 .export-profile-btn {
   display: inline-flex;
@@ -75,7 +69,9 @@
   margin-bottom: var(--space-sm);
 }
 .export-template-row > .export-create-row { margin-bottom: 0; }
-.export-template-pick { min-width: 240px; }
+/* Wächst wie das Namensfeld der Nachbarzeilen, damit der Knopf in allen drei
+   Zeilen an derselben rechten Kante sitzt. */
+.export-template-pick { flex: 1 1 240px; }
 
 /* === Tabs ===
    .tabs rendert nur die Button-Reihe (kein Panel-Container) — die Panels
@@ -146,8 +142,10 @@
   .epub-export-card .card-actions { flex-wrap: wrap; }
   .export-scope-picker { width: 100%; }
   .export-scope-picker > .combobox-wrap { min-width: 0; flex: 1; }
-  .export-profile-pick { min-width: 0; flex: 1; }
-  .export-template-pick { min-width: 0; flex: 1; }
+  /* Basis = Zeile minus Beschriftung: Beschriftung + Auswahl füllen die erste
+     Zeile, die Icon-Knöpfe brechen darunter um, statt die Auswahl auf den
+     Pfeil zusammenzudrücken. */
+  .export-profile-pick { min-width: 0; flex: 1 1 calc(100% - 4.5rem); }
   .export-create-clone,
   .export-create-clone > .combobox-wrap { width: 100%; min-width: 0; }
 }

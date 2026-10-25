@@ -24,6 +24,9 @@
 //             nutzen eigene Defaults und ignorieren den Wert.
 //   researchChatEnabled — Recherche-Chat-Umschalter (/config `researchChat.enabled`,
 //             true wenn effektiver Provider Claude + API-Key + Kill-Switch an).
+//   userAiAccessEnabled — Admin-Freigabe für den eigenen KI-Zugang im Profil
+//             (/config `userAiAccess.enabled`, App-Setting `ai.user_api.enabled`).
+//             Gated den Palette-Sprung zum Profil-Abschnitt.
 //   semanticSearchEnabled — Semantik-Suche/„ähnliche Stellen"/Chat-Tool
 //             `search_similar` (/config `semanticSearch.enabled`, true wenn
 //             Embedding-Backend konfiguriert). Provider-unabhängig.
@@ -55,6 +58,7 @@ export function registerConfigStore() {
     languagetoolEnabled: false,
     languagetoolDebounceMs: 1500,
     researchChatEnabled: false,
+    userAiAccessEnabled: false,
     semanticSearchEnabled: false,
     semanticHybrid: false,
     semanticRerank: false,

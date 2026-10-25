@@ -3,7 +3,8 @@
   Alpine.data-Sub-Komponente — siehe public/js/cards/book-settings-card.js.
   `showBookSettingsCard` bleibt im Root, fachlicher State in dieser Komponente.
 -->
-<div class="card card--settings" x-data="bookSettingsCard" x-show="$app.showBookSettingsCard" x-cloak>
+<div class="card card--settings" x-data="bookSettingsCard" x-show="$app.showBookSettingsCard" x-cloak
+     @keydown="$editKeys($event, { save: () => !headerDisabled() && saveActiveTab() })">
   <div class="card-header">
     <div class="card-header-titlebar">
       <span class="card-eyebrow" x-text="$app.selectedBookName"></span>

@@ -1,0 +1,36 @@
+<!-- Verknuepfen-Picker eines Recherche-Fundstuecks — Picker-Popover (DESIGN.md
+     „Picker-Popover", Mechanik public/js/picker-popover.js). EINE Instanz auf
+     Kartenebene fuer Liste UND Detail-Dialog: openLinkPicker haengt sie zur
+     Anzeigezeit unter den sichtbaren Host (offener Dialog › Vollbild › body).
+
+     Esc auf dem Popover bleibt dort (`.stop.prevent`): im Detail-Dialog
+     schloesse es sonst den ganzen Dialog statt nur den Picker. -->
+<template x-teleport="body">
+  <div class="picker-popover recherche-link-picker"
+       x-ref="rechercheLinkPopover"
+       x-show="linkPickerItemId !== null && !!linkPickerItem()" x-cloak
+       :style="{ top: pickerPopoverPos.top + 'px', left: pickerPopoverPos.left + 'px' }"
+       @keydown.escape.stop.prevent="cancelLinkPicker()"
+       @keydown.escape.window="linkPickerItemId !== null && cancelLinkPicker()"
+       role="dialog" :aria-label="$app.t('recherche.link.add')">
+    <div class="picker-popover__head">
+      <span class="picker-popover__title" x-text="$app.t('recherche.link.pickerLabel')"></span>
+      <span class="picker-popover__subject" x-text="linkPickerItem() ? (linkPickerItem().title || kindLabel(linkPickerItem().kind)) : ''"></span>
+    </div>
+
+    <div x-data="combobox($app.t('recherche.link.pickKind'))"
+         x-modelable="value" x-model="linkPickerKind"
+         x-effect="options = linkPickerKinds()"
+         @combobox-change="linkPickerTargetId = ''"></div>
+
+    <div x-data="entityPicker({ entity: 'target', placeholder: $app.t('recherche.link.pickTarget'), items: () => linkTargets, kind: () => linkPickerKind })"
+         x-modelable="value" x-model="linkPickerTargetId"></div>
+
+    <div class="picker-popover__actions">
+      <button type="button" class="btn-compact recherche-primary" @click="confirmLinkPicker()"
+              :disabled="!linkPickerTargetId" x-text="$app.t('recherche.link.confirm')"></button>
+      <button type="button" class="btn-compact" @click="cancelLinkPicker()"
+              x-text="$app.t('recherche.cancel')"></button>
+    </div>
+  </div>
+</template>

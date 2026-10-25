@@ -45,9 +45,13 @@ export const runsMethods = {
   async openRun(runId, kind) {
     const app = window.__app;
     if (!runId) return;
-    // Live-Job darf nicht überschrieben werden: onDone würde sonst nach
-    // openRun nochmal drüber rendern → User sieht Result-Flicker.
-    if (this.brainstormLoading || this.consistencyLoading) return;
+    // Ein laufender Job DERSELBEN Art darf nicht überschrieben werden: sein
+    // onDone renderte sonst über den geöffneten Lauf. Der andere Slot ist frei.
+    // Sagen, warum nichts passiert, statt den Klick zu schlucken.
+    if (kind === 'brainstorm' ? this.brainstormLoading : this.consistencyLoading) {
+      this.errorMessage = app.t('werkstatt.run.busy');
+      return;
+    }
     if (this.selectedRunId === runId) {
       this.selectedRunId = null;
       if (kind === 'brainstorm') this.brainstormResult = null;

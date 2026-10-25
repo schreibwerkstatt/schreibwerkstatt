@@ -252,3 +252,20 @@ test('executeTool dispatch: list_werkstatt_drafts liefert Liste und, mit draft_i
   );
   assert.equal(getRes.name, 'Anna');
 });
+
+test('list_werkstatt_drafts mit Auswahl: mehrdeutiger Teilstring → Kandidaten statt Zufallstreffer', () => {
+  const BOOK_ID = 7215;
+  const userEmail = 'autor@werk.dev';
+  ctx.dbSchema.upsertBookByName(BOOK_ID, 'B');
+  const ann = draftFigDb.createDraftFigure(BOOK_ID, userEmail, { name: 'Ann', mindmap: sampleMindmap('Ann') });
+  draftFigDb.createDraftFigure(BOOK_ID, userEmail, { name: 'Hannah', mindmap: sampleMindmap('Hannah') });
+  draftFigDb.createDraftFigure(BOOK_ID, userEmail, { name: 'Annika', mindmap: sampleMindmap('Annika') });
+
+  // Exakter Name gewinnt.
+  const exact = bookChatTools.TOOLS.list_werkstatt_drafts({ figur_name: 'ann' }, { bookId: BOOK_ID, userEmail });
+  assert.equal(exact.draft_id, ann.id);
+
+  const amb = bookChatTools.TOOLS.list_werkstatt_drafts({ figur_name: 'nn' }, { bookId: BOOK_ID, userEmail });
+  assert.equal(amb.errorKey, 'chat.toolError.ambiguousName');
+  assert.equal(amb.candidates.length, 3);
+});

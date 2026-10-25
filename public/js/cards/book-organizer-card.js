@@ -25,6 +25,7 @@ import { bookOrganizerMethods } from '../book-organizer.js';
 import { MAX_CHAPTER_DEPTH } from '../book-organizer/constants.js';
 import { EVT } from '../events.js';
 import { bindBoardHistoryKeys } from './board-history-keys.js';
+import { pickerPopoverState, pickerPopoverMethods } from '../picker-popover.js';
 
 // Buch-skopierter State — SSoT fuer Initial-Wert, `book:changed` und
 // `view:reset`. Factory (keine Konstante): Object.assign wuerde sonst dieselben
@@ -36,6 +37,9 @@ const freshState = () => ({
   organizerSearch: '',
   jumpToChapterId: '',
   activeRowCombo: null, // '<pageId>:<kind>' der gerade montierten Zeilen-Combobox
+  // „In anderes Buch"-Picker (crud.js#openBookMove): Abschnitt + gewaehltes Zielbuch.
+  bookMovePageId: null,
+  bookMoveTarget: '',
   organizerStatus: '',
   organizerSaving: false,
   // Bearbeitungsstand (Slice book-organizer/redaktion.js). Die Stufen selbst
@@ -59,6 +63,7 @@ export function registerBookOrganizerCard() {
     _lifecycle: null,
     _onHistoryKeydown: null,
     _cardEl: null,     // Karten-Wurzel fuer DOM-Abfragen (dnd.js#_cardRoot)
+    ...pickerPopoverState(),
 
     init() {
       this._cardEl = this.$el;
@@ -80,6 +85,7 @@ export function registerBookOrganizerCard() {
         // book:changed feuert VOR loadPages — Sortable cleanen + State leeren,
         // der pages:loaded-Listener unten greift, sobald loadPages fertig ist.
         onBookChanged: (e, ctx) => {
+          ctx.cancelBookMove();
           ctx._destroySortables();
           Object.assign(ctx, freshState());
         },
@@ -91,6 +97,7 @@ export function registerBookOrganizerCard() {
           ctx.loadRedaktion();
         },
         onViewReset: (e, ctx) => {
+          ctx.cancelBookMove();
           ctx._destroySortables();
           Object.assign(ctx, freshState());
         },
@@ -165,6 +172,7 @@ export function registerBookOrganizerCard() {
       this._lifecycle?.destroy();
     },
 
+    ...pickerPopoverMethods,
     ...bookOrganizerMethods,
   }));
 }

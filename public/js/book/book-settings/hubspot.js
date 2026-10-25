@@ -126,7 +126,7 @@ export const hubspotMethods = {
   async disconnectHubspot() {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) return;
-    if (!confirm(window.__app.t('hubspot.connect.disconnectConfirm'))) return;
+    if (!await window.__app.appConfirm({ message: window.__app.t('hubspot.connect.disconnectConfirm'), danger: true })) return;
     this._setHubspotBusy('disconnect');
     try {
       await deleteSyncConnection('/hubspot', bookId, 'HUBSPOT_DISCONNECT_FAILED');
@@ -159,8 +159,8 @@ export const hubspotMethods = {
   },
 
 
-  startHubspotReconcile() {
-    if (!confirm(window.__app.t('hubspot.action.reconcileConfirm'))) return;
+  async startHubspotReconcile() {
+    if (!await window.__app.appConfirm({ message: window.__app.t('hubspot.action.reconcileConfirm') })) return;
     return this._startHubspotJob('hubspot-reconcile', 'HUBSPOT_RECONCILE_FAILED', 'hubspotReconcileJobId');
   },
 };

@@ -60,8 +60,8 @@ test('Eigener KI-Zugang: Schalter, Host-Guard, Speichern ohne Key-Echo, Entferne
   expect(got.access.has_api_key).toBe(true);
   expect(JSON.stringify(got)).not.toContain('sk-ant-e2e-secret');
 
-  page.once('dialog', d => d.accept());
   await section.locator('.ai-access-actions button.danger').click();
+  await page.locator('#app-confirm-dialog .confirm-dialog-btn--danger').click();
   await expect(section.locator('.ai-access-actions button.danger')).toBeHidden();
   const after = await (await page.request.get('/me/ai-access')).json();
   expect(after.access).toBeNull();

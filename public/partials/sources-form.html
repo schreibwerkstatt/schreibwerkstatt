@@ -3,7 +3,8 @@
      Partial — es lebt im Scope von `sourcesCard`.
      Welche Felder erscheinen, entscheidet der Quellentyp:
      public/js/sources/fields.js#fieldsForType. -->
-<div class="sources-form" x-show="srcEditingId !== null" x-cloak>
+<div class="sources-form" x-show="srcEditingId !== null" x-cloak
+     @keydown="$editKeys($event, { save: () => saveSource(), cancel: () => cancelSourceEdit() })">
   <div class="card-section-head">
     <span class="sources-form-title"
           x-text="srcEditingId === 'new' ? $app.t('sources.form.newTitle') : $app.t('sources.form.editTitle')"></span>
@@ -94,7 +95,7 @@
       </div>
     </template>
 
-    <p class="card-form-section-divider" x-text="$app.t('sources.form.adminSection')"></p>
+    <p class="card-form-section-divider card-form-section-divider--note" x-text="$app.t('sources.form.adminSection')"></p>
 
     <!-- Schlagworte: gehoeren dem Bibliothekseintrag (gelten in allen Arbeiten
          der Quelle). Enter/Komma uebernimmt, Vorschlaege aus der eigenen
@@ -185,7 +186,7 @@
         <label class="card-form-label" x-text="$app.t('sources.doc.section')"></label>
         <div class="card-form-field">
           <template x-if="!srcDraft.has_doc">
-            <div class="sources-doc-empty">
+            <div class="sources-doc-upload">
               <input type="file" accept="application/pdf"
                      :aria-label="$app.t('sources.doc.pick')" x-ref="docInput"
                      @change="uploadSourceDoc($event)">

@@ -166,12 +166,6 @@
 .palette-item--active:hover { background: var(--color-hover); }
 /* Active-Selection-Highlight (border-left + bg) übernimmt Fokus-Rolle. */
 .palette-item:focus-visible { outline: none; }
-.palette-empty {
-  padding: var(--space-18) var(--space-lg);
-  font-size: var(--font-size-sm);
-  color: var(--color-muted);
-  text-align: center;
-}
 .palette-mark {
   background: transparent;
   color: var(--color-accent);

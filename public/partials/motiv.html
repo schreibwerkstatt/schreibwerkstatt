@@ -142,7 +142,7 @@
 
   <div class="motiv-layout" x-show="motivView === 'graph'">
     <!-- Konstellations-Graph -->
-    <div id="motiv-graph" class="motiv-graph-container" role="img" :aria-label="$app.t('motiv.graph.ariaLabel')"></div>
+    <div id="motiv-graph" class="motiv-graph-container" role="img" :aria-label="$app.t('motiv.graph.ariaLabel')" x-long-press></div>
     <!-- Minimale Steuerelemente am Graphen (wie in der Figuren-Karte): Zoom und
          Einpassen. Als Auflage in der Ecke der Zeichenflaeche statt als eigene
          Zeile — `.motiv-layout` ist ein Zwei-Spalten-Grid, ein drittes Kind

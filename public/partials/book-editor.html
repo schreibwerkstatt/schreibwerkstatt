@@ -215,7 +215,7 @@
              @combobox-change="_railSetFilter({})"></div>
       </div>
 
-      <div class="comment-rail__filter-empty muted-msg" x-show="!commentThreads.length && !commentGeneralThreads.length"
+      <div class="comment-rail__filter-empty muted-msg muted-msg--sm" x-show="!commentThreads.length && !commentGeneralThreads.length"
            x-text="$app.t('share.comments.filterEmpty')"></div>
 
       <!-- Verankerte Threads schweben vertikal auf Höhe ihrer Textstelle
@@ -286,7 +286,7 @@
       </div>
     </section>
 
-  <div x-show="!loading && blocks.length === 0 && !loadError" class="card-status"
+  <div x-show="!loading && blocks.length === 0 && !loadError" class="muted-msg muted-msg--block"
        x-text="$app.t('bookEditor.empty')"></div>
 
   <!-- Find / Replace Bar — teleportiert in die Karten-Wurzel (nicht <body>),

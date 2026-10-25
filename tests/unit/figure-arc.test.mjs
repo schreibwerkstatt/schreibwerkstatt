@@ -128,3 +128,24 @@ test('jeder Befundcode traegt quelle=messung und eine Figur', () => {
     assert.ok(PSYCHE_KERNE.includes(f.kern));
   }
 });
+
+test('Kopf- und Schlussdrittel sind gleich breit (kein Uebergewicht hinten)', () => {
+  // 7 Kapitel: Kopf = Pos. 0–1, Schluss = Pos. 5–6. Pos. 4 ist Mitte. Mit
+  // floor(n·2/3) begaenne der Schluss bei Pos. 4 und die Mitte zaehlte als
+  // „Wandel bleibt aus".
+  const seven = Array.from({ length: 7 }, (_, i) => i + 1);
+  const mitte = draft({
+    geplant: alleKerne(['lie']),
+    counts: { lie: 6 },
+    occ: { lie: [{ chapterId: 1, n: 3 }, { chapterId: 5, n: 3 }] },
+  });
+  assert.deepEqual(computeArcFindings({ drafts: [mitte], chapterOrder: seven, scanned: true }), []);
+
+  const schluss = draft({
+    geplant: alleKerne(['lie']),
+    counts: { lie: 6 },
+    occ: { lie: [{ chapterId: 1, n: 3 }, { chapterId: 6, n: 3 }] },
+  });
+  assert.deepEqual(codes(computeArcFindings({ drafts: [schluss], chapterOrder: seven, scanned: true })),
+    ['wandelOhneEinloesung']);
+});

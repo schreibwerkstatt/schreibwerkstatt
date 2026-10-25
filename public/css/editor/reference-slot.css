@@ -72,13 +72,6 @@
   line-height: 1.45;
 }
 
-.reference-empty {
-  padding: var(--space-lg) 0;
-  font-size: var(--font-size-sm);
-  color: var(--color-muted);
-  text-align: center;
-}
-
 /* Verwandt-Tab (Semantik): Basis-Umschalter + Such-Button + klickbare Treffer. */
 .verwandt-controls {
   display: flex;

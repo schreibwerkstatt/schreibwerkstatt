@@ -72,7 +72,7 @@
     </button>
     <div x-show="diaryAnniversaryOpen" x-cloak>
       <template x-if="diaryAnniversaryEntries().length === 0">
-        <p class="diary-anniversary-empty" x-text="t('diary.anniversary.empty')"></p>
+        <p class="muted-msg muted-msg--sm diary-anniversary-empty" x-text="t('diary.anniversary.empty')"></p>
       </template>
       <ul class="diary-anniversary-list">
         <template x-for="entry in diaryAnniversaryEntries()" :key="entry.key">
@@ -112,7 +112,7 @@
       </label>
     </div>
     <template x-if="diaryRangeFrom && diaryRangeTo && diaryRangeEntries().length === 0">
-      <p class="diary-anniversary-empty" x-text="t('diary.range.empty')"></p>
+      <p class="muted-msg muted-msg--sm diary-anniversary-empty" x-text="t('diary.range.empty')"></p>
     </template>
     <ul class="diary-anniversary-list" x-show="diaryRangeEntries().length > 0">
       <template x-for="entry in diaryRangeEntries()" :key="entry.key">

@@ -124,8 +124,7 @@ export const lifecycleMethods = {
     this.addingThread = false;
     this.newThreadName = '';
     this.threadColorPickerId = null;
-    this.threadActionsOpenId = null;
-    this._detachThreadMenuListeners?.();
+    this.closeActionMenu();
     this.beatOccPopoverBeatId = null;
     this._detachOccPopoverListeners?.();
     this._dragBeatId = null;

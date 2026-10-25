@@ -3,7 +3,7 @@
      Combobox listet Buch-Figuren ohne aktiven Draft; Auswahl + Übernehmen
      erzeugt Draft mit Mindmap aus figures-Feldern und source_figure_id-Referenz. -->
 <div x-show="importablesLoading" class="card-status" x-text="$app.t('werkstatt.import.loading')"></div>
-<div x-show="!importablesLoading && importables.length === 0" class="card-status" x-text="$app.t('werkstatt.import.empty')"></div>
+<div x-show="!importablesLoading && importables.length === 0" class="muted-msg muted-msg--sm" x-text="$app.t('werkstatt.import.empty')"></div>
 <div x-show="!importablesLoading && importables.length > 0" class="form-stack">
   <div x-data="entityPicker({ entity: 'custom', placeholder: $app.t('werkstatt.import.placeholder'), items: () => importables.map(f => ({ value: String(f.id), label: f.name + (f.typ ? ' [' + f.typ + ']' : ''), sublabel: importFigureContext(f) })) })"
        x-modelable="value" x-model="selectedImportFigureId"></div>

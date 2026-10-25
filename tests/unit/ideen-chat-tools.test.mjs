@@ -133,15 +133,18 @@ test('Stufe: abgeschaltete Stufe und No-Op werden abgelehnt', async () => {
   }
 });
 
-test('Anker: Buch-Idee zuordnen ja; Art-Wechsel, abgeschlossene Idee, fremde Idee nein', async () => {
+test('Anker: Buch-Idee zuordnen und Art-Wechsel ja; abgeschlossene Idee, fremde Idee nein', async () => {
   const ctx = mkCtx();
   const ok = await executeIdeenChatTool('propose_idee', { idee_id: iBook, page_id: P2, begruendung: 'Bahnhof' }, ctx);
   assert.equal(ok.ok, true);
   assert.deepEqual(ctx.proposals[0].fields, { page_id: P2 });
   assert.equal(ctx.proposals[0].labels.anchor, 'Am Bahnhof');
   assert.equal(ctx.proposals[0].labels.anchor_before, null);
-  // Kapitel-Idee → Abschnitt: Art-Wechsel (KIND_MISMATCH in der Route).
-  assert.match((await executeIdeenChatTool('propose_idee', { idee_id: iChapter, page_id: P1, begruendung: 'b' }, ctx)).error, /Kapitel/);
+  // Kapitel-Idee → Abschnitt: Art-Wechsel erlaubt, `before` hält den alten Anker.
+  assert.equal((await executeIdeenChatTool('propose_idee', { idee_id: iChapter, page_id: P1, begruendung: 'b' }, ctx)).ok, true);
+  assert.deepEqual(ctx.proposals[1].fields, { page_id: P1 });
+  assert.equal(ctx.proposals[1].before.page_id, null);
+  assert.ok(ctx.proposals[1].before.chapter_id);
   assert.match((await executeIdeenChatTool('propose_idee', { idee_id: iDone, page_id: P1, begruendung: 'b' }, ctx)).error, /abgeschlossen/);
   assert.match((await executeIdeenChatTool('propose_idee', { idee_id: iForeign, content: 'gekapert', begruendung: 'b' }, ctx)).error, /gibt es nicht/);
 });

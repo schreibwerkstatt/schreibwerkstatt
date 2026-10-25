@@ -40,7 +40,7 @@ export const rechercheMediaMethods = {
       this._replaceItem(row);
     } catch { this.errorMessage = app.t('recherche.error.imageRemove'); }
     finally { this.busy = false; }
-    this.menuOpenId = null;
+    this.closeActionMenu();
   },
 
   // ── Dokument-Upload (PDF) ──────────────────────────────────────────────────
@@ -75,6 +75,6 @@ export const rechercheMediaMethods = {
       const row = await fetchJson(`/research/${item.id}/doc`, { method: 'DELETE' });
       this._replaceItem(row);
     } catch { this.errorMessage = app.t('recherche.error.docRemove'); }
-    this.menuOpenId = null;
+    this.closeActionMenu();
   },
 };

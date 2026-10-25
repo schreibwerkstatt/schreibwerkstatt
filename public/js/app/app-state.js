@@ -1,3 +1,4 @@
+import { actionMenuState } from '../action-menu.js';
 import { normalizeKomplettScope } from '../komplett-scope.js';
 
 // Feature-Flag für den Block-Level-Merge bei Stale-Write-Konflikten (Notebook +
@@ -120,21 +121,9 @@ const navigationState = () => ({
   diaryAnniversaryOpen: true,
   diaryRangeFrom: '',
   diaryRangeTo: '',
-  // Pagetree-Rechtsklick-Menü. SSoT für Open/Pos/Target; Render in sidebar.html.
-  // Target-Form: { kind: 'page'|'chapter', id, name }. Position viewport-fixed
-  // (sidebar liegt ausserhalb einer transform-Card, daher kein Containing-Block-
-  // Offset nötig).
-  pageTreeMenuOpen: false,
-  pageTreeMenuPos: { left: 0, top: 0 },
-  pageTreeMenuTarget: null,
-  _pageTreeMenuOutsideHandler: null,
-  // Tastatur (Escape + Roving-Fokus), Schliess-Anlaesse (Scroll/Resize/
-  // Buchwechsel/Tree-Reload), Cursor-Anker fuers Nachmessen der Menuegroesse
-  // und das Fokus-Ziel nach dem Schliessen.
-  _pageTreeMenuKeyHandler: null,
-  _pageTreeMenuDismissHandler: null,
-  _pageTreeMenuAnchor: null,
-  _pageTreeMenuReturnFocus: null,
+  // Pagetree-Kontextmenü: Zustand aus action-menu.js (`actionMenuKey`/
+  // `actionMenuTarget`/`actionMenuPos`); Ziel-Form { kind: 'page'|'chapter', id, name, … }.
+  ...actionMenuState(),
 });
 
 // Page-Slice: Inhalt der aktuell geöffneten Seite. Mode-agnostisch — Notebook,
@@ -390,8 +379,6 @@ const cardsState = () => ({
   komplettDelta: null,
   komplettDeltaState: 'idle', // idle | loading | ready | error
   showAvatarMenu: false,
-  // Overflow-Menü ("⋯") der Seiten-Action-Leiste (Notebook-Seitenansicht).
-  pageActionsMenuOpen: false,
   // Tastenkürzel-Overlay (natives <dialog> via Alpine.data('modal'), an dieses
   // Flag gekoppelt). Toggle via toggleShortcutsOverlay() / `?`-Hotkey.
   shortcutsOpen: false,
@@ -419,6 +406,8 @@ const confirmDialogState = () => ({
   confirmDialogInput: false,
   confirmDialogInputValue: '',
   confirmDialogInputPlaceholder: '',
+  // appPrompt({ allowEmpty: true }): leer bestätigt liefert '' statt null.
+  confirmDialogAllowEmpty: false,
   _confirmDialogResolve: null,
 });
 

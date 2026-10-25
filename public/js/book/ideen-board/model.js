@@ -27,7 +27,8 @@ export const LANE_UNKNOWN = 'unknown:0';
  * eine Kapitel-Bahn dafuer waere eine Bahn fuer ein Kapitel, das es nicht gibt.
  *
  * Ganz oben steht die Buch-Bahn: Ideen ohne Anker, die noch auf ihre Zuordnung
- * warten. Sie erscheint wie eine Seiten-Bahn nur, wenn sie belegt ist.
+ * warten. Sie erscheint wie eine Seiten-Bahn nur, wenn sie belegt ist; den
+ * Anker loest ohne sie der Picker («Ganzes Buch»).
  */
 export function buildLaneOrder(tree) {
   const lanes = [{ key: LANE_BOOK, kind: 'book', id: 0, label: '', chapterId: null, chapterLabel: '', depth: 1 }];

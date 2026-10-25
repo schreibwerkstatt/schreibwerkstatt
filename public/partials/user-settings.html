@@ -4,7 +4,8 @@
   `showUserSettingsCard` + `toggleUserSettingsCard` im Root, fachlicher State
   (Profil, Default-Präferenzen, Reset-Zone) in dieser Komponente.
 -->
-<div class="card card--settings" x-data="userSettingsCard" x-show="$app.showUserSettingsCard" x-cloak>
+<div class="card card--settings" x-data="userSettingsCard" x-show="$app.showUserSettingsCard" x-cloak
+     @keydown="$editKeys($event, { save: () => !(userSettingsSaving || userSettingsLoading) && saveUserSettings() })">
   <div class="card-header">
     <span class="card-title" x-text="$app.t('profile.title')"></span>
     <div class="card-actions">
@@ -37,7 +38,7 @@
       </div>
     </div>
 
-    <p class="card-form-section-divider" x-text="$app.t('profile.newBooksHint')"></p>
+    <p class="card-form-section-divider card-form-section-divider--note" x-text="$app.t('profile.newBooksHint')"></p>
 
     <div class="card-form-row">
       <label class="card-form-label" x-text="$app.t('profile.defaultLanguage')"></label>

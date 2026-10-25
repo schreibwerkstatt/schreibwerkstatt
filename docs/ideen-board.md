@@ -10,7 +10,8 @@ Seite **oder** einem Kapitel; ohne Anker gehört die Idee nur dem Buch
 ausschliesslich im Board (die Ideen-Karte ist an Seite bzw. Kapitel gebunden),
 stehen dort in der Buch-Bahn ganz oben und werden vom Autor später einer Seite
 oder einem Kapitel übergeben — per „Zuordnen" auf der Karte oder per Drag
-(siehe „Ein Drag" in § 2). Kein `kind`-Diskriminator
+(siehe „Ein Drag trägt Stufe und Ort" in § 2) — und, solange sie offen
+ist, dort auch wieder ins Buch zurückgelegt. Kein `kind`-Diskriminator
 daneben: die zwei nullbaren FKs beschreiben den Anker vollständig. Ein
 Seiten-Umzug in ein anderes Buch ([localdb.js](../lib/content-store/backends/localdb.js)#`movePage`)
 macht die Ideen der Seite zu Buch-Ideen des Quellbuchs, statt sie mitzunehmen.
@@ -40,8 +41,14 @@ Zwei Oberflächen, dieselben Zeilen:
 
 Geteilt: die Stufen-SSoT ([ideen-shared.js](../public/js/book/ideen-shared.js) /
 [lib/ideen-status.js](../lib/ideen-status.js)), die Verknüpfungs-Methoden
-([ideen-links.js](../public/js/book/ideen-links.js)) und das Chip-Markup
-([ideen-link-chips.html](../public/partials/ideen-link-chips.html)).
+([ideen-links.js](../public/js/book/ideen-links.js)), das Chip-Markup
+([ideen-link-chips.html](../public/partials/ideen-link-chips.html)) und das
+**Picker-Popover** (Komponente, [DESIGN.md](../DESIGN.md#picker-popover-picker-popover)):
+jeder Picker, der an einer einzelnen Idee etwas wählt —
+Verknüpfen (beide Karten), Verschieben (beide Karten), Zuordnen (Board) —, geht
+als am Trigger verankertes Popover auf, mit der Idee im Kopf. Kein Inline-Panel
+über der Liste: bei einer Idee weit unten stünde es ausserhalb des Sichtfelds.
+Offen ist höchstens ein Picker; Esc, Klick daneben und Resize schliessen.
 
 **User-privat.** `ideen.user_email` ist Sichtbarkeits-Scope, nicht Attribution —
 auf einem geteilten Buch sieht jeder sein eigenes Brett. Das ist der Unterschied
@@ -96,10 +103,21 @@ abgeschlossene Idee ist die Spur einer Entscheidung an **dieser** Stelle;
 anderswo hingehängt wäre sie eine Aussage über eine Stelle, an der sie nie stand.
 Geprüft werden alte **und** im selben PATCH gesetzte Stufe — zuordnen und zugleich
 abschliessen lehnt der Server ab, nicht erst das Board.
-Der Move bleibt ausserdem **within-kind** (Seiten-Idee nur auf eine Seite);
-einzige Ausnahme ist die Buch-Idee, die auf Seite **oder** Kapitel darf — das ist
-ihr Zweck. Zurück ins Buch geht keine Idee: wer sie vom Ort lösen will, legt sie
-neu an.
+Die **Ankerart ist frei**: eine offene Idee zieht von Abschnitt zu Abschnitt, von
+Kapitel zu Kapitel und quer — eine Kapitel-Pendenz in den Abschnitt, in dem sie
+sich einlöst, und umgekehrt. Der PATCH trägt `page_id` **oder** `chapter_id`; die
+Route leert den anderen Anker im selben UPDATE (`updateIdee` nimmt `null`), damit
+der CHECK nie zwei Anker sieht. Die Offline-Queue hält dieselbe Regel: ein
+zusammengeführter Umzug trägt nur den letzten Anker (`_withFields` in
+[ideen-queue.js](../public/js/repo/ideen-queue.js)). Der Picker auf der
+Ideen-Karte (`ideenMovePickerOptions` in [app.js](../public/js/app.js)) bietet
+darum alle Kapitel und Abschnitte des Buches an, je Kapitel eine Gruppe mit dem
+Kapitelpfad als Kopf — erst das Kapitel selbst («ganzes Kapitel»), dann seine
+Abschnitte. **Zurück ins Buch** geht nur im Board (Picker-Eintrag «Ganzes Buch»
+oder Drag in die Buch-Bahn, sofern sie belegt ist): der PATCH trägt dann `page_id` **und** `chapter_id`,
+beide `null` — jede andere Kombination beider Felder bleibt `400 INVALID_SCOPE`.
+Die Ideen-Karte bietet das Ziel nicht an, weil sie an genau den Anker gebunden ist,
+den die Idee dabei verliesse.
 
 ### Stufen pro Buch
 
@@ -115,7 +133,7 @@ Normalisiert wird an **einer** Stelle, `normalizeIdeeStages` in
 
 **Buchweit, nicht user-privat.** Die Ideen gehören dem User, die Stufen dem Buch:
 schaltet ein Editor `verworfen` ab, gilt das auch für das Brett seiner
-Mitarbeiter. Darum sagt es der Hinweis neben dem Schalter.
+Mitarbeiter. Darum sagt es der Hinweis unter den Schaltern.
 
 **Abschalten heisst „nicht mehr anbieten", nicht „ausblenden".** Eine Idee, die
 schon in einer abgeschalteten Stufe steht, behält ihren Status — die Einstellung
@@ -131,8 +149,12 @@ schreibt keine einzige Idee um. Daraus folgt:
   (`400 IDEE_STATUS_INACTIVE`); derselbe Status noch einmal ist kein Wechsel,
   damit ein PATCH, der ihn mitschickt, nicht scheitert.
 
-Eingestellt wird im Board selbst (Schalter „Spalten" im Kopf), weil man dort
-sieht, was die Einstellung bewirkt. Die Einstellung reist im Bundle mit
+Eingestellt wird im Board selbst, im Menü **Stufen** am Ende der Filterleiste
+([ideen-board-stages.html](../public/partials/ideen-board-stages.html)), weil man
+dort sieht, was die Einstellung bewirkt. Dasselbe Menü trägt oben die beiden
+Ansichts-Haken (Erledigte/Verworfene anzeigen, nur für mich) und darunter die
+Stufen des Buchs (für alle) — ein Ort für die Frage „welche Spalten", die zwei
+Geltungsbereiche getrennt beschriftet. Die Einstellung reist im Bundle mit
 (`SETTINGS_KEYS` in [lib/book-bundle.js](../lib/book-bundle.js)) — `.swbook` und
 Fassungs-Restore.
 
@@ -162,7 +184,10 @@ ist. Der Baum kann sich unter dem
 offenen Board ändern — darum zieht ein `$watch` die Bahnen nach.
 
 **Nur belegte Bahnen erscheinen.** Ein Board mit einer leeren Zeile je Seite des
-Buches wäre unlesbar. **Ausnahme ist die Kapitel-Bahn:** sie bleibt auch ohne
+Buches wäre unlesbar. Das gilt auch für die Buch-Bahn: leer steht sie nicht als
+Drag-Ziel bereit — oben eingeblendet schöbe sie beim Drag-Start das Board unter dem
+Zeiger weg, unten läge sie bei langen Boards ausser Sicht. Den Anker löst dann der
+Picker («Ganzes Buch»). **Ausnahme ist die Kapitel-Bahn:** sie bleibt auch ohne
 eigene Ideen stehen, sobald ihr **Teilbaum** welche trägt (eigene Abschnitte,
 Unterkapitel, deren Abschnitte) — sie ist die Gruppen-Überschrift und der Griff,
 an dem das Kapitel zuklappt. Ohne sie wäre
@@ -227,22 +252,23 @@ nicht**: Bahnen, Spalten und Zähler rendern dieselbe Liste desselben Requests
 **Die Kapitel-Optionen des Filters hängen nicht am Status-Filter** — sonst
 verschwände die eigene Auswahl unter der Hand, sobald man `verworfen` ausblendet.
 
-**Ein Drag einer verankerten Idee trägt genau eine Aussage: den neuen Status.**
-Ihre Bahn bleibt, wie sie ist — sie IST der Anker im Buch, und den verschiebt man
-nicht per Kanban-Zug quer durchs Manuskript (dafür gibt es „Verschieben" auf der
-Ideen-Karte). Technisch: SortableJS-Gruppe **pro Bahn** (`idee-lane-<key>`). Der
-DOM-Move wird immer zurückgenommen (`revertSortable`) — Alpine besitzt den DOM;
-aus ihm wird vorher nur abgelesen, wohin die Karte fiel.
+**Ein Drag trägt Stufe und Ort.** Ein Zug in eine andere Spalte setzt den Status,
+ein Zug in eine andere Bahn den Anker — beides zusammen in einem PATCH
+(`_reanchorIdee` in [move.js](../public/js/book/ideen-board/move.js),
+derselbe Schreibpfad wie der Picker «Zuordnen»/«Verschieben»). Technisch:
+SortableJS-Gruppe **pro Bahn** (`idee-lane-<key>`), quer dazu entscheidet `put`
+je Drag (`_canDropMove`). Der DOM-Move wird immer zurückgenommen
+(`revertSortable`) — Alpine besitzt den DOM; aus ihm wird vorher nur abgelesen,
+wohin die Karte fiel.
 
-**Ausnahme: die offene Buch-Idee wird per Drag zugeordnet.** Sie hat noch keinen
-Anker, und ihn zu bekommen ist ihr Zweck. Zwei Ziele, ein Schreibpfad mit dem
-Picker (`_assignIdee` in [actions.js](../public/js/book/ideen-board/actions.js),
-ein PATCH):
+Quer zur Bahn zieht nur eine **offene** Idee (`offen`/`in_arbeit`), und nur in eine
+offene Stufe: eine abgeschlossene wandert nicht mehr (§ 1), und eine Idee, die beim
+Umzug gleich abgeschlossen würde, hätte an ihrem neuen Ort nie offen gestanden.
+Zwei Ziele:
 
-* **eine Kapitel-/Abschnitts-Bahn des Boards** — setzt den Anker und, wenn es
-  eine andere ist, die Stufe der Zielspalte. Angenommen werden nur `offen` und
-  `in_arbeit` (`_canDropAssign`): eine Idee, die beim Zuordnen gleich
-  abgeschlossen würde, hätte an ihrem Anker nie offen gestanden.
+* **eine andere Bahn des Boards** — Kapitel, Abschnitt oder die Buch-Bahn (Anker
+  lösen, nur wenn sie belegt ist); setzt den Anker und, wenn es eine andere Spalte ist, die Stufe. Die
+  Sammelbahn `LANE_UNKNOWN` nimmt nichts auf.
 * **ein Eintrag im Inhaltsverzeichnis der Sidebar** — das Board zeigt nur
   belegte Bahnen, ein Kapitel oder Abschnitt ohne Ideen ist dort kein Ziel; die
   Sidebar führt jeden Anker. Sortable kennt den Baum nicht (der Drop dort ist ein
@@ -326,8 +352,8 @@ Werkzeug.
 Recherche). Das Raster braucht dafür keine eigene Regel — die Spaltenbreite hängt
 am Container `.ideen-board-wrap`, nicht am Viewport. Was sonst unter `<body>`
 hängt, läge im Vollbild hinter dem `::backdrop` und wird darum zur Anzeigezeit
-umgehängt: der Drag-Ghost (`onStart`) und der Verknüpfungs-Picker
-(`mountInTopLayer` in `openLinkPicker`). Der Drop aufs Inhaltsverzeichnis entfällt
+umgehängt: der Drag-Ghost (`onStart`) und die Picker-Popover
+(`mountInTopLayer` in `_openPickerPopover`). Der Drop aufs Inhaltsverzeichnis entfällt
 im Vollbild — der Baum ist dann nicht zu sehen; „Zuordnen" auf der Karte bleibt.
 
 ---
@@ -488,7 +514,7 @@ Gegated durch [tests/unit/ideen-queue.test.mjs](../tests/unit/ideen-queue.test.m
 Alle ab Rolle `editor` auf dem Buch, alle Ideen-Routen zusätzlich auf den
 eigenen `user_email`-Bestand beschränkt (`/stages` nicht — die Stufen gehören dem
 Buch). Fehlerformen: `INVALID_SCOPE`, `BOOK_MISMATCH`,
-`KIND_MISMATCH`, `IDEE_CLOSED`, `INVALID_STATUS`, `IDEE_STATUS_INACTIVE`, `INVALID_LINK_KIND`,
+`IDEE_CLOSED`, `INVALID_STATUS`, `IDEE_STATUS_INACTIVE`, `INVALID_LINK_KIND`,
 `LINK_TARGET_NOT_FOUND`, `ORDER_REQ`, `ORDER_MISMATCH`, `CONTENT_REQUIRED` / `CONTENT_TOO_LONG` (4000 Zeichen).
 
 ---
@@ -509,7 +535,7 @@ Buch). Fehlerformen: `INVALID_SCOPE`, `BOOK_MISMATCH`,
 9. **Ein Drag setzt den Status, nie die Bahn** — einzige Ausnahme ist die offene
    Buch-Idee, deren Drag in eine Kapitel-/Abschnitts-Bahn oder aufs
    Inhaltsverzeichnis sie zuordnet. Eine verankerte Idee wechselt nie per Drag
-   die Zeile.
+   die Zeile — sie zieht nur über „Verschieben" um.
 10. **Klappen ist Ansicht, kein Filter** — es bewegt weder `visible` noch
     `hiddenByFilter`, und ein zugeklapptes Kapitel behält seine Zeile (sonst wäre
     der Griff zum Aufklappen mit weg).

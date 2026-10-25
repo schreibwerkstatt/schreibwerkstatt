@@ -102,6 +102,25 @@ function renderWarningsFromMeta(meta = {}) {
   };
 }
 
+// Lueckenmessung am Event-Loop: ein 10-ms-Timer, dessen Abstand zum letzten
+// Tick zeigt, wie lange der Loop am Stueck belegt war. Bewusst kein
+// `monitorEventLoopDelay` — das Histogramm verpasst die Blockade direkt nach
+// dem Start (Schriften registrieren), die hier mitzaehlt.
+const STALL_MS = 50;
+function watchLoopStalls() {
+  const res = { maxMs: 0, stalls: 0, stalledMs: 0, stop: () => clearInterval(timer) };
+  let last = performance.now();
+  const timer = setInterval(() => {
+    const now = performance.now();
+    const gap = Math.round(now - last);
+    last = now;
+    if (gap > res.maxMs) res.maxMs = gap;
+    if (gap > STALL_MS) { res.stalls++; res.stalledMs += gap; }
+  }, 10);
+  timer.unref();
+  return res;
+}
+
 async function runPdfExportJob(jobId, { scope, entityId, profileId, includeSubchapters, target = 'interior', snapshotId = null, sample = false, userEmail }) {
   const log = makeJobLogger(jobId);
   const ctrl = jobAbortControllers.get(jobId);
@@ -235,12 +254,23 @@ async function runPdfExportJob(jobId, { scope, entityId, profileId, includeSubch
 
       updateJob(jobId, { progress: 40, statusText: 'job.phase.renderPdf' });
       const meta = {};
-      buffer = await renderPdfBuffer({
-        book, groups, profile,
-        coverBuf, authorImageBuf, lang: bookLang, region: bookRegion,
-        scope, chapter, page, meta, bibliography,
-        signal, sample,
-      });
+      // pdfkit setzt synchron im Server-Prozess: solange der Satz rechnet,
+      // beantwortet die App keinen Request. Die Blockaden waehrend des Renderns
+      // zeigen im Log, wie stark ein Export die App gebremst hat (Grundlage fuer
+      // die Frage, ob der Satz in einen Worker-Thread muss).
+      const loop = watchLoopStalls();
+      const renderStart = performance.now();
+      try {
+        buffer = await renderPdfBuffer({
+          book, groups, profile,
+          coverBuf, authorImageBuf, lang: bookLang, region: bookRegion,
+          scope, chapter, page, meta, bibliography,
+          signal, sample,
+        });
+      } finally {
+        loop.stop();
+      }
+      log.info(`PDF-Satz ${((performance.now() - renderStart) / 1000).toFixed(1)} s, ${meta.totalPages ?? '?'} Seiten — Event-Loop blockiert max ${loop.maxMs} ms, ${loop.stalls} mal ueber ${STALL_MS} ms (zusammen ${loop.stalledMs} ms)`);
       renderWarnings = renderWarningsFromMeta(meta);
       lowResImages = Array.isArray(meta.dpiWarnings) ? meta.dpiWarnings.length : 0;
       interiorPages = Number.isInteger(meta.totalPages) ? meta.totalPages : null;

@@ -1,77 +1,83 @@
-<!-- Aktionsmenue eines Recherche-Fundstuecks (Kebab + Dropdown). Fragment
-     (string-seitiger @include), weil der Block sowohl im x-for der Liste als
-     auch im Detail-Dialog steht — ein DOM-Placeholder greift im Template-
-     Content nicht. Beide Kontexte nennen das Fundstueck `item`, das Markup ist
-     darum wortgleich teilbar; `menuOpenId` ist die geteilte Karten-SSoT.
-     Das Dropdown ist `position: fixed` (.research-item-menu) und wird von
-     board.js#toggleItemMenu am Trigger verankert: absolut positioniert klippt
-     es der Overflow des Detail-Dialogs bzw. der Liste, sobald der Inhalt
-     kuerzer ist als das Menue (ein kurzer Fund, ein Buch mit einem Eintrag).
-     Die Board-Karte (menuCtx 'status') traegt weder Link-Picker noch
-     KI-Vorschlaege (recherche-item-relations) — dort oeffnen beide Eintraege
-     zuerst die Detailansicht, in der beides sitzt. -->
-<button type="button" class="icon-btn" @click.stop="toggleItemMenu($event, menuCtx + ':' + item.id)" :aria-expanded="menuOpenId === menuCtx + ':' + item.id" :disabled="busy" :aria-label="$app.t('recherche.actions')" aria-haspopup="menu"><svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg></button>
-<div class="context-menu context-menu--dropdown research-item-menu" :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }" x-show="menuOpenId === menuCtx + ':' + item.id" x-cloak @click.outside="closeItemMenu()" @keydown.escape.window="closeItemMenu()" role="menu">
-  <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="menuOpenId = null; if (menuCtx === 'status') openDetail(item); openLinkPicker(item)">
-    <svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"/></svg>
-    <span x-text="$app.t('recherche.link.add')"></span>
-  </button>
-  <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="if (menuCtx === 'status') openDetail(item); suggestLinks(item)" :disabled="busy || suggestItemId === item.id">
-    <svg class="icon" aria-hidden="true"><use href="/icons.svg#zap"/></svg>
-    <span x-text="$app.t('recherche.suggest.btn')"></span>
-  </button>
-  <!-- Einarbeitungs-Status: der tastaturerreichbare Weg auf die Achse, die im
-       Status-Board per Drag bedient wird. Steht hier und nicht in einem eigenen
-       Widget, weil das Menue in ALLEN drei Oberflaechen dasselbe ist (Liste,
-       Detailansicht, Board-Karte) — ein zweiter Schalter daneben waere eine
-       Kopie zum Auseinanderlaufen. Der aktive Eintrag ist markiert (--on), er
-       bleibt klickbar und setzt nichts (setItemStatus ist bei Gleichstand ein
-       No-op, schliesst aber das Menue). -->
-  <div class="context-menu-sep" role="separator"></div>
-  <div class="context-menu-header context-menu-header--inline" x-text="$app.t('recherche.status.label')"></div>
-  <template x-for="st in statuses()" :key="st">
-    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitemradio"
-            :class="{ 'context-menu-item--on': itemStatus(item) === st }"
-            :aria-checked="itemStatus(item) === st"
-            @click="setItemStatus(item, st)" :disabled="busy">
-      <svg class="icon" aria-hidden="true"><use :href="itemStatus(item) === st ? '/icons.svg#check' : '/icons.svg#circle'"/></svg>
-      <span x-text="statusLabel(st)"></span>
-    </button>
-  </template>
+<!-- Aktionsmenue eines Recherche-Fundstuecks: EINE teleportierte Instanz fuer
+     Liste, Board-Karte und Detail-Dialog (Mechanik aus action-menu.js). Geoeffnet
+     per ⋯-Knopf (recherche-item-menu-trigger.html) und per Rechtsklick/Long-Press
+     auf Listenzeile bzw. Board-Karte. Ziel = { ctx, id }; `item` und `menuCtx`
+     stehen darunter wie in den drei Kontexten, darum ist das Markup wortgleich.
+     Teleport nach <body>: Liste und Detail-Dialog klippen per Overflow; im
+     Dialog bzw. Vollbild haengt action-menu.js das Menue zur Anzeigezeit in den
+     sichtbaren Host. „Verknuepfen" oeffnet in allen drei Kontexten den Picker auf
+     Kartenebene (recherche-link-picker.html) am Menue-Anker. Die KI-Vorschlaege
+     zeigt nur recherche-item-relations — auf der Board-Karte (menuCtx 'status')
+     oeffnet der Eintrag darum zuerst die Detailansicht. Die Upload-Eintraege halten
+     den Klick an (`@click.stop`): das Menue muss offen bleiben, bis die Dateiwahl
+     zurueckkommt — sonst waere das Input mit dem Menue schon aus dem DOM. -->
+<template x-teleport="body">
+  <div class="context-menu research-item-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
+    <template x-for="item in itemMenuItems()" :key="actionMenuKey">
+      <div x-data="{ menuCtx: actionMenuTarget.ctx }">
+        <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="openLinkPicker(item, actionMenuAnchor())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"/></svg>
+          <span x-text="$app.t('recherche.link.add')"></span>
+        </button>
+        <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="if (menuCtx === 'status') openDetail(item); suggestLinks(item)" :disabled="busy || suggestItemId === item.id">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#zap"/></svg>
+          <span x-text="$app.t('recherche.suggest.btn')"></span>
+        </button>
+        <!-- Einarbeitungs-Status: der tastaturerreichbare Weg auf die Achse, die im
+             Status-Board per Drag bedient wird. Steht hier und nicht in einem eigenen
+             Widget, weil das Menue in ALLEN drei Oberflaechen dasselbe ist (Liste,
+             Detailansicht, Board-Karte) — ein zweiter Schalter daneben waere eine
+             Kopie zum Auseinanderlaufen. Der aktive Eintrag ist markiert (--on), er
+             bleibt klickbar und setzt nichts (setItemStatus ist bei Gleichstand ein
+             No-op, schliesst aber das Menue). -->
+        <div class="context-menu-sep" role="separator"></div>
+        <div class="context-menu-header context-menu-header--inline" x-text="$app.t('recherche.status.label')"></div>
+        <template x-for="st in statuses()" :key="st">
+          <button type="button" class="context-menu-item context-menu-item--icon" role="menuitemradio"
+                  :class="{ 'context-menu-item--on': itemStatus(item) === st }"
+                  :aria-checked="itemStatus(item) === st"
+                  @click="setItemStatus(item, st)" :disabled="busy">
+            <svg class="icon" aria-hidden="true"><use :href="itemStatus(item) === st ? '/icons.svg#check' : '/icons.svg#circle'"/></svg>
+            <span x-text="statusLabel(st)"></span>
+          </button>
+        </template>
 
-  <div class="context-menu-sep" role="separator"></div>
-  <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="togglePin(item)">
-    <svg class="icon" aria-hidden="true"><use href="/icons.svg#pin"/></svg>
-    <span x-text="item.pinned ? $app.t('recherche.unpin') : $app.t('recherche.pin')"></span>
-  </button>
-  <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="toggleArchive(item)">
-    <svg class="icon" aria-hidden="true"><use href="/icons.svg#archive"/></svg>
-    <span x-text="item.archived ? $app.t('recherche.unarchive') : $app.t('recherche.archive')"></span>
-  </button>
-  <div class="context-menu-sep" role="separator"></div>
-  <label class="context-menu-item context-menu-item--icon research-menu-upload" role="menuitem">
-    <svg class="icon" aria-hidden="true"><use href="/icons.svg#image"/></svg>
-    <span x-text="$app.t('recherche.image.upload')"></span>
-    <input type="file" accept="image/*" @change="onImagePick(item, $event); menuOpenId = null">
-  </label>
-  <label class="context-menu-item context-menu-item--icon research-menu-upload" role="menuitem">
-    <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
-    <span x-text="$app.t('recherche.doc.upload')"></span>
-    <input type="file" accept="application/pdf" @change="onDocPick(item, $event); menuOpenId = null">
-  </label>
-  <!-- Bild und PDF haengen unabhaengig voneinander am Fundstueck und werden
-       darum einzeln entfernt (das Fundstueck selbst bleibt). -->
-  <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" x-show="item.has_image" @click="removeImage(item)">
-    <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
-    <span x-text="$app.t('recherche.image.remove')"></span>
-  </button>
-  <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" x-show="item.has_doc" @click="removeDoc(item)">
-    <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
-    <span x-text="$app.t('recherche.doc.remove')"></span>
-  </button>
-  <div class="context-menu-sep" role="separator"></div>
-  <button type="button" class="context-menu-item context-menu-item--icon context-menu-item--danger" role="menuitem" @click="deleteItem(item)">
-    <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
-    <span x-text="$app.t('recherche.delete')"></span>
-  </button>
-</div>
+        <div class="context-menu-sep" role="separator"></div>
+        <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="togglePin(item)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#pin"/></svg>
+          <span x-text="item.pinned ? $app.t('recherche.unpin') : $app.t('recherche.pin')"></span>
+        </button>
+        <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="toggleArchive(item)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#archive"/></svg>
+          <span x-text="item.archived ? $app.t('recherche.unarchive') : $app.t('recherche.archive')"></span>
+        </button>
+        <div class="context-menu-sep" role="separator"></div>
+        <label class="context-menu-item context-menu-item--icon research-menu-upload" role="menuitem" @click.stop>
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#image"/></svg>
+          <span x-text="$app.t('recherche.image.upload')"></span>
+          <input type="file" accept="image/*" @change="onImagePick(item, $event); closeActionMenu()">
+        </label>
+        <label class="context-menu-item context-menu-item--icon research-menu-upload" role="menuitem" @click.stop>
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
+          <span x-text="$app.t('recherche.doc.upload')"></span>
+          <input type="file" accept="application/pdf" @change="onDocPick(item, $event); closeActionMenu()">
+        </label>
+        <!-- Bild und PDF haengen unabhaengig voneinander am Fundstueck und werden
+             darum einzeln entfernt (das Fundstueck selbst bleibt). -->
+        <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" x-show="item.has_image" @click="removeImage(item)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+          <span x-text="$app.t('recherche.image.remove')"></span>
+        </button>
+        <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" x-show="item.has_doc" @click="removeDoc(item)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+          <span x-text="$app.t('recherche.doc.remove')"></span>
+        </button>
+        <div class="context-menu-sep" role="separator"></div>
+        <button type="button" class="context-menu-item context-menu-item--icon context-menu-item--danger" role="menuitem" @click="deleteItem(item)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+          <span x-text="$app.t('recherche.delete')"></span>
+        </button>
+      </div>
+    </template>
+  </div>
+</template>

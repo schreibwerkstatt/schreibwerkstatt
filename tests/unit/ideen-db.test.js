@@ -261,6 +261,10 @@ test('Buch-Idee: zuordnen auf Seite oder Kapitel setzt genau einen Anker', () =>
   assert.equal(ideenDb.getIdee(b).page_id, null);
   // Beide Anker zugleich laesst der CHECK nicht zu.
   assert.throws(() => ideenDb.updateIdee(a, A, { chapter_id: 5 }), /CHECK constraint failed/);
+  // Umzug Abschnitt → Kapitel: neuer Anker + alter geleert in einem UPDATE.
+  ideenDb.updateIdee(a, A, { page_id: null, chapter_id: 5 });
+  assert.equal(ideenDb.getIdee(a).chapter_id, 5);
+  assert.equal(ideenDb.getIdee(a).page_id, null);
 });
 
 test('Manuelle Reihenfolge: neu = 0, reorderIdeen schreibt 1..n', () => {

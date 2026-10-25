@@ -3,9 +3,6 @@
 
 import { fetchJson } from '../../utils.js';
 import { ACT_PALETTE } from './constants.js';
-import { EVT } from '../../events.js';
-import { computePopoverPos, refinePopoverPos } from '../../popover-anchor.js';
-import { attachDismiss, detachDismiss } from '../../cards/dismiss.js';
 
 export const threadsMethods = {
   async addThread() {
@@ -46,6 +43,15 @@ export const threadsMethods = {
     this.$nextTick(() => { this.$root?.querySelector('.plot-thread-name-input')?.focus(); });
   },
   cancelEditThread() { this.editingThreadId = null; },
+
+  // Enter, Cmd/Ctrl+S (`$editKeys`) und Klick ausserhalb: speichern und schliessen.
+  // Guard: der Klick, der einen anderen Strang öffnet, darf diesen nicht mehr
+  // speichern; leerer Name → verwerfen statt mit Fehler offen bleiben.
+  commitEditThread(thread) {
+    if (this.editingThreadId !== thread.id || this.busy) return;
+    if (!(this.threadDraft.name || '').trim()) { this.cancelEditThread(); return; }
+    return this.saveEditThread(thread);
+  },
 
   async saveEditThread(thread) {
     const app = window.__app;
@@ -93,45 +99,20 @@ export const threadsMethods = {
     this.threadColorPickerId = this.threadColorPickerId === threadId ? null : threadId;
   },
 
-  // Lane-Aktions-Dropdown (Kebab). Einzelnes, nach .card--plot teleportiertes
-  // .context-menu — die Lane sitzt in einem overflow-x/will-change-Scrollcontainer,
-  // in dem ein am Trigger verankertes Popover geclippt bzw. eingesperrt würde.
-  // JS-positioniert aus dem Trigger-Rect (Pattern wie das Ideen-Meatball-Menü).
+  // Lane-Aktionsmenü (⋯-Knopf, Rechtsklick/Long-Press auf den Lane-Kopf):
+  // einzelnes, nach .card--plot teleportiertes .context-menu, Mechanik aus
+  // action-menu.js — die Lane sitzt in einem overflow-x/will-change-Scroll-
+  // container, in dem ein am Trigger verankertes Popover geclippt würde.
   openThreadMenu(ev, laneId) {
-    if (this.threadActionsOpenId === laneId) { this.closeThreadMenu(); return; }
-    // Hover-Tooltip des Triggers wegblenden — er hinge sonst über dem Menü.
-    window.dispatchEvent(new CustomEvent(EVT.TOOLTIP_HIDE));
-    this._threadTriggerRect = ev.currentTarget.getBoundingClientRect();
-    // Schätzung vor dem Render; danach mit der echten Popover-Grösse nachjustieren,
-    // damit das Menü beim Hochklappen nicht mit einer festen Höhe über den Button
-    // geschoben wird (Pattern wie das Ideen-Meatball-Menü).
-    this.threadMenuPos = computePopoverPos(this._threadTriggerRect, 220, 240);
-    this.threadActionsOpenId = laneId;
-    this._attachThreadMenuListeners();
-    this.$nextTick(() => {
-      const pos = refinePopoverPos(this.$refs.threadMenu, this._threadTriggerRect);
-      if (pos) this.threadMenuPos = pos;
-    });
-  },
-
-  closeThreadMenu() {
-    this.threadActionsOpenId = null;
-    this._detachThreadMenuListeners();
+    this.openActionMenu(ev, `thread:${laneId}`, laneId);
   },
 
   // Die offene Lane (für das teleportierte Menü außerhalb der gridRows-Schleife).
   threadMenuLane() {
-    if (this.threadActionsOpenId == null) return null;
-    return (this.threadLanes() || []).find(l => l.id === this.threadActionsOpenId) || null;
+    if (this.actionMenuTarget == null) return null;
+    return (this.threadLanes() || []).find(l => l.id === this.actionMenuTarget) || null;
   },
 
-  _attachThreadMenuListeners() {
-    this._threadMenuCloseHandler ??= attachDismiss(() => this.closeThreadMenu());
-  },
-
-  _detachThreadMenuListeners() {
-    detachDismiss(this, '_threadMenuCloseHandler');
-  },
 
   async setThreadColor(thread, key) {
     const app = window.__app;
@@ -174,7 +155,7 @@ export const threadsMethods = {
       // Löschen ist nicht reversibel (siehe plot/history.js) → Historie leeren.
       this._clearHistory();
       if (this.editingThreadId === thread.id) this.editingThreadId = null;
-      if (this.threadActionsOpenId === thread.id) this.closeThreadMenu();
+      if (this.actionMenuTarget === thread.id) this.closeActionMenu();
       if (hadOwnActs) {
         await this.loadBoard();
       } else {

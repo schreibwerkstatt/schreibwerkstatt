@@ -11,8 +11,10 @@
   liefern nur `data-organizer-depth` + `data-parent-chapter-id` fuer die
   Sortable-Drop-Validierung.
 -->
-<div class="organizer-chapter-header">
-  <span class="organizer-drag-handle organizer-drag-handle--chapter" :data-tip="$app.t('bookOrganizer.dragHint')" aria-hidden="true">⋮⋮</span>
+<div class="organizer-chapter-header drag-grip-host">
+  <span class="drag-grip organizer-drag-handle organizer-drag-handle--chapter" role="img" :data-tip="$app.t('bookOrganizer.dragHint')" :aria-label="$app.t('bookOrganizer.dragHint')">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
+  </span>
   <button type="button" class="organizer-chapter-toggle"
           @click.stop="toggleChapter(ch.id)"
           :aria-expanded="!!chapterOpen[ch.id]"
@@ -57,6 +59,6 @@
   <template x-for="page in ch.pages" :key="page.id">
     <!-- @include organizer-page-row -->
   </template>
-  <li class="organizer-empty" x-show="ch.pages.length === 0 && !(ch.subchapters?.length)" x-text="$app.t('bookOrganizer.noPagesInChapter')"></li>
+  <li class="muted-msg muted-msg--sm organizer-empty" x-show="ch.pages.length === 0 && !(ch.subchapters?.length)" x-text="$app.t('bookOrganizer.noPagesInChapter')"></li>
 </ul>
 </template>

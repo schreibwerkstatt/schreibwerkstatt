@@ -16,13 +16,27 @@
           x-text="$app.t('ideen.add')"></button>
 </div>
 
-<!-- Zuordnen einer Buch-Idee (Single-Instance ausserhalb x-for, damit der
-     Picker sauber initialisiert — gleiches Muster wie der Move der Ideen-Karte). -->
-<div class="card-section ideen-board-add" x-show="assigningId !== null" x-cloak>
-  <span class="ideen-move-label" x-text="$app.t('ideenBoard.assignTo')"></span>
-  <div class="ideen-board-add-lane"
-       x-data="entityPicker({ entity: 'custom', placeholder: $app.t('ideenBoard.addLane'), items: () => anchorLaneOptions() })"
-       x-modelable="value" x-model="assignLaneKey"></div>
-  <button type="button" class="btn-compact" @click="confirmAssign()" :disabled="busy || !assignLaneKey" x-text="$app.t('ideenBoard.assignConfirm')"></button>
-  <button type="button" class="btn-compact" @click="cancelAssign()" :disabled="busy" x-text="$app.t('ideen.cancel')"></button>
-</div>
+<!-- Zuordnen einer Buch-Idee bzw. Verschieben einer verankerten: am Knopf der
+     Karte verankertes Popover, dasselbe Muster wie das Verknuepfen
+     (public/js/picker-popover.js). -->
+<template x-teleport="body">
+  <div class="picker-popover idee-assign-popover"
+       x-ref="ideenAssignPopover"
+       x-show="assigningId !== null && !!assigningIdee()" x-cloak
+       :style="{ top: pickerPopoverPos.top + 'px', left: pickerPopoverPos.left + 'px' }"
+       @keydown.escape.window="cancelAssign()"
+       role="dialog" :aria-label="moveTip(assigningIdee())">
+    <div class="picker-popover__head">
+      <span class="picker-popover__title" x-text="$app.t(assigningBookIdee() ? 'ideenBoard.assignTo' : 'ideen.moveTo')"></span>
+      <span class="picker-popover__subject" x-text="assigningIdee()?.content || ''"></span>
+    </div>
+
+    <div x-data="entityPicker({ entity: 'custom', placeholder: $app.t('ideenBoard.addLane'), items: () => assignTargetOptions() })"
+         x-modelable="value" x-model="assignLaneKey"></div>
+
+    <div class="picker-popover__actions">
+      <button type="button" class="btn-compact" @click="confirmAssign()" :disabled="busy || !assignLaneKey" x-text="$app.t(assigningBookIdee() ? 'ideenBoard.assignConfirm' : 'ideen.moveConfirm')"></button>
+      <button type="button" class="btn-compact" @click="cancelAssign()" :disabled="busy" x-text="$app.t('ideen.cancel')"></button>
+    </div>
+  </div>
+</template>

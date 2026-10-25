@@ -237,3 +237,90 @@ test('Anchor-Stand: erfolgreicher Lauf ohne Treffer zählt als verankert', () =>
   assert.equal(occDb.draftAnchorStale(B3, OWNER), false);
   assert.equal(occDb.draftChangedSinceAnchor(d, st.lastRunMs), false);
 });
+
+test('Anchor-Stand: massgeblich ist der Laufstart, nicht die letzte Fundstelle', () => {
+  const B4 = 9634;
+  const NOW = new Date().toISOString();
+  db.prepare("INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, 'Laufbuch', ?, ?)").run(B4, NOW, NOW);
+  db.prepare('INSERT INTO chapters (chapter_id, book_id, chapter_name, slug, position, updated_at) VALUES (?,?,?,?,?,?)')
+    .run(96340, B4, 'K', 'k', 0, NOW);
+  db.prepare('INSERT INTO pages (page_id, book_id, chapter_id, page_name, slug, position, updated_at) VALUES (?,?,?,?,?,?,?)')
+    .run(963400, B4, 96340, 'S', 's', 0, NOW);
+  const d = draftDb.createDraftFigure(B4, OWNER, { name: 'Lauf', mindmap: mm('Lauf') });
+  // Lauf startete vor einer Minute, schrieb seine Fundstellen danach (jetzt).
+  const started = new Date(Date.now() - 60_000).toISOString();
+  db.prepare(`
+    INSERT INTO job_runs (job_id, type, book_id, user_email, label, status, queued_at, started_at)
+    VALUES (?, 'figur-anchor', ?, ?, 'job.label.figurAnchor', 'done', ?, ?)
+  `).run('anchor-test-start', B4, OWNER, started, started);
+  occDb.replaceKernOccurrences(d.id, B4, 'want', [
+    { kind: 'page', pageId: 963400, score: 0.9, snippet: 's', source: 'semantic' },
+  ]);
+  const st = occDb.figurAnchorState(B4, OWNER);
+  assert.equal(st.lastRunMs, Date.parse(started));
+  // Eine Änderung zwischen Laufstart und letzter Fundstelle gilt als ungesucht.
+  const midRun = { ...d, updated_at: new Date(Date.now() - 30_000).toISOString() };
+  assert.equal(occDb.draftChangedSinceAnchor(midRun, st.lastRunMs), true);
+});
+
+test('Verknüpfen: ohne figureId 400, Namens-Schwester 409, Zeiger bewegt updated_at nicht', async () => {
+  const B5 = 9635;
+  const NOW = new Date().toISOString();
+  db.prepare("INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, 'Linkbuch', ?, ?)").run(B5, NOW, NOW);
+  access.grantAccess(B5, OWNER, 'editor', OWNER);
+  const fig = (name, figId) => db.prepare(`
+    INSERT INTO figures (book_id, fig_id, name, typ, beschreibung, sort_order, user_email, updated_at)
+    VALUES (?, ?, ?, 'nebenfigur', '', 0, ?, ?)
+  `).run(B5, figId, name, OWNER, NOW).lastInsertRowid;
+  const tom = fig('Tom', 'fig_tom');
+  const tomTwin = fig('Tom', 'fig_tom__2');
+  const a = draftDb.createDraftFigure(B5, OWNER, { name: 'Tom', mindmap: mm('Tom') });
+  const b = draftDb.createDraftFigure(B5, OWNER, { name: 'Tom (Plan)', mindmap: mm('Tom (Plan)') });
+
+  // Body ohne das Feld löst NICHT still.
+  const missing = await call('POST', `/draft-figures/by-id/${a.id}/link-figure`, { figure_id: tom });
+  assert.equal(missing.status, 400);
+  assert.equal(missing.body.error_code, 'FIGURE_ID_REQ');
+
+  const linked = await call('POST', `/draft-figures/by-id/${a.id}/link-figure`, { figureId: tom });
+  assert.equal(linked.status, 200);
+  assert.equal(linked.body.source_figure_id, tom);
+  assert.equal(linked.body.updated_at, a.updated_at);
+
+  // Die Schwester wird nicht mehr angeboten und lässt sich nicht an B hängen.
+  const cands = (await call('GET', `/draft-figures/${B5}/link-candidates`)).body;
+  assert.equal(cands.filter(f => f.name === 'Tom').length, 0);
+  const twin = await call('POST', `/draft-figures/by-id/${b.id}/link-figure`, { figureId: tomTwin });
+  assert.equal(twin.status, 409);
+  assert.equal(twin.body.existingDraftId, a.id);
+
+  // Ausdrückliches null löst.
+  const unlinked = await call('POST', `/draft-figures/by-id/${a.id}/link-figure`, { figureId: null });
+  assert.equal(unlinked.status, 200);
+  assert.equal(unlinked.body.source_figure_id, null);
+});
+
+test('Schema: eine Katalog-Figur hängt an höchstens einem Draft je User', () => {
+  const B6 = 9636;
+  const NOW = new Date().toISOString();
+  db.prepare("INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, 'Uniquebuch', ?, ?)").run(B6, NOW, NOW);
+  const figId = db.prepare(`
+    INSERT INTO figures (book_id, fig_id, name, typ, beschreibung, sort_order, user_email, updated_at)
+    VALUES (?, 'fig_u', 'Uli', 'nebenfigur', '', 0, ?, ?)
+  `).run(B6, OWNER, NOW).lastInsertRowid;
+  draftDb.createDraftFigure(B6, OWNER, { name: 'Uli', mindmap: mm('Uli'), sourceFigureId: figId });
+  assert.throws(
+    () => draftDb.createDraftFigure(B6, OWNER, { name: 'Uli 2', mindmap: mm('Uli 2'), sourceFigureId: figId }),
+    /UNIQUE/,
+  );
+});
+
+test('Mindmap-Grenze zählt UTF-8-Bytes, nicht Zeichen', async () => {
+  const d = draftDb.createDraftFigure(BOOK, OWNER, { name: 'Bytes', mindmap: mm('Bytes') });
+  // ~140 000 Zeichen, aber über 256 KB in UTF-8 (2 Bytes je „ä").
+  const kids = [];
+  for (let i = 0; i < 70; i++) kids.push({ id: `b${i}`, topic: 'ä'.repeat(2000) });
+  const r = await call('PUT', `/draft-figures/${d.id}`, { mindmap: mm('Bytes', kids) });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error_code, 'MINDMAP_INVALID');
+});

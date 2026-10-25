@@ -103,7 +103,7 @@ export const blogMethods = {
   async disconnectBlog() {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) return;
-    if (!confirm(window.__app.t('blog.connect.disconnectConfirm'))) return;
+    if (!await window.__app.appConfirm({ message: window.__app.t('blog.connect.disconnectConfirm'), danger: true })) return;
     this._setBlogBusy('disconnect');
     try {
       await deleteSyncConnection('/blog', bookId, 'BLOG_DISCONNECT_FAILED');
@@ -139,8 +139,8 @@ export const blogMethods = {
   },
 
 
-  startBlogReconcile() {
-    if (!confirm(window.__app.t('blog.action.reconcileConfirm'))) return;
+  async startBlogReconcile() {
+    if (!await window.__app.appConfirm({ message: window.__app.t('blog.action.reconcileConfirm') })) return;
     return this._startBlogJob('blog-reconcile', 'BLOG_RECONCILE_FAILED', 'blogReconcileJobId');
   },
 };

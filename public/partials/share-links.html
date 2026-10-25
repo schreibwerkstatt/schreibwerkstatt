@@ -173,7 +173,7 @@
 
         <!-- Edit-Form -->
         <template x-if="editingToken === link.token">
-          <div class="share-row__edit">
+          <div class="share-row__edit" @keydown="$editKeys($event, { save: () => saveEdit(link.token), cancel: () => cancelEdit() })">
             <label class="share-create__label" x-text="$app.t('share.intro.label')"></label>
             <textarea x-model="editIntro" rows="3" maxlength="2000" data-spellcheck="spelling" class="share-create__textarea"></textarea>
             <label class="share-create__label" x-text="$app.t('share.expires.label')"></label>

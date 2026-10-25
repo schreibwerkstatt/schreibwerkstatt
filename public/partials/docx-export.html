@@ -6,7 +6,8 @@
   Pattern-Konformität (DESIGN.md): Combobox/numInput statt <select>/<input number>,
   .card-form-row, Tabs, .card-status / .card-form-saved / .card-form-error.
 -->
-<div class="card card--docxexport docx-export-card" x-data="docxExportCard" x-show="$app.showDocxExportCard" x-cloak>
+<div class="card card--docxexport docx-export-card" x-data="docxExportCard" x-show="$app.showDocxExportCard" x-cloak
+     @keydown="$editKeys($event, { save: () => !saving && saveProfile() })">
   <div class="card-header">
     <span class="card-title" x-text="$app.t('docxExport.title')"></span>
     <div class="card-actions">
@@ -50,14 +51,14 @@
 
   <!-- Profil-Leiste -->
   <div class="export-profile-bar">
-    <label class="card-form-label" x-text="$app.t('docxExport.profile')"></label>
+    <label class="card-form-label card-form-label--inline" x-text="$app.t('docxExport.profile')"></label>
     <div class="export-profile-pick"
          x-data="combobox({ placeholder: $app.t('docxExport.profile'), compact: false })"
          x-modelable="value" x-model="activeProfileId"
          x-effect="options = profiles.map(p => ({ value: p.id, label: p.name + (p.is_default ? ' (' + $app.t('docxExport.defaultMark') + ')' : '') }))"
          @combobox-change="selectProfile($event.detail)"></div>
     <button type="button" class="export-profile-btn" :data-tip="$app.t('docxExport.newProfile')" :aria-label="$app.t('docxExport.newProfile')"
-            @click="showCreate = !showCreate">
+            @click="toggleProfileRow('create')">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
     </button>
     <button type="button" class="export-profile-btn" x-show="activeProfile"
@@ -89,7 +90,7 @@
   </div>
 
   <!-- Profil umbenennen (eingeklappt) -->
-  <div class="export-create-row export-rename-row" x-show="_showRename" x-cloak>
+  <div class="export-create-row export-rename-row" x-show="_profileRow === 'rename'" x-cloak>
     <input type="text" class="card-form-input" x-model="renameValue"
            :placeholder="$app.t('docxExport.renamePlaceholder')" maxlength="80"
            @keydown.enter="renameProfile()" data-spellcheck="spelling">
@@ -98,13 +99,13 @@
             x-text="$app.t('common.save')"></button>
   </div>
 
-  <div class="export-create-row" x-show="showCreate" x-cloak>
+  <div class="export-create-row" x-show="_profileRow === 'create'" x-cloak>
     <input type="text" class="card-form-input" x-model="newProfileName"
            :placeholder="$app.t('docxExport.newProfileName')" maxlength="80"
            @keydown.enter="createProfile()" data-spellcheck="spelling">
     <label class="export-create-clone">
       <span class="export-create-clone-label" x-text="$app.t('docxExport.cloneLabel')"></span>
-      <div x-data="combobox($app.t('docxExport.cloneNone'))"
+      <div x-data="combobox({ placeholder: $app.t('docxExport.cloneNone'), compact: false })"
            x-modelable="value" x-model="cloneFromId"
            x-effect="options = [{ value: '', label: $app.t('docxExport.cloneNone') }, ...profiles.map(p => ({ value: p.id, label: p.name }))]"
 ></div>

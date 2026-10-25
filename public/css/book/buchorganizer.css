@@ -48,7 +48,8 @@
 .organizer-chapter-header {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  --drag-grip-host-gap: var(--space-sm);
+  gap: var(--drag-grip-host-gap);
   padding: var(--space-sm) var(--space-10);
   background: var(--color-hover-light);
   border-bottom: 1px solid var(--color-border);
@@ -75,21 +76,6 @@
   gap: var(--space-6);
 }
 
-.organizer-drag-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 22px;
-  color: var(--color-subtle);
-  cursor: grab;
-  user-select: none;
-  font-size: var(--font-size-base);
-  letter-spacing: -2px;
-  flex-shrink: 0;
-}
-.organizer-drag-handle:active { cursor: grabbing; }
-.organizer-drag-handle--chapter { color: var(--card-accent); }
 
 .organizer-name {
   flex: 1;
@@ -130,7 +116,8 @@
 .organizer-page {
   display: flex;
   align-items: center;
-  gap: var(--space-6);
+  --drag-grip-host-gap: var(--space-6);
+  gap: var(--drag-grip-host-gap);
   padding: var(--space-xs) var(--space-6);
   border-radius: var(--radius-sm);
   background: transparent;
@@ -162,12 +149,7 @@
 }
 .organizer-delete-btn--chapter { margin-left: var(--space-xs); }
 
-.organizer-empty {
-  padding: var(--space-6) var(--space-sm);
-  font-size: var(--font-size-mini);
-  color: var(--color-subtle);
-  font-style: italic;
-}
+.organizer-empty { padding: var(--space-6) var(--space-sm); }
 
 /* `nowrap` ist die Abweichung (Suchfeld + Aktionen bleiben eine Zeile), der
    vertikale Abstand ist der Karten-Rhythmus — siehe `.card-toolbar`. */

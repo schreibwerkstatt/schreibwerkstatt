@@ -175,13 +175,18 @@ function _tsMs(s) {
 // Zeitpunkt (ms) des juengsten erfolgreichen Anchor-Laufs; `lastJobRun` trennt
 // den Job-Zeitpunkt vom Fundstellen-Fallback (der Aufrufer braucht ihn, um
 // „Lauf ohne Treffer" zu erkennen).
+//
+// Massgeblich ist der START des Laufs, die Fundstellen-Zeit nur Fallback ohne
+// Job-Spur: Fundstellen entstehen WAEHREND des Laufs, ein Maximum aus beiden
+// hiesse „letzter Schreibzeitpunkt". Ein Kern, den der Autor nach dem Scan
+// seiner Figur, aber vor dem Laufende ergaenzt hat, galte sonst als gesucht —
+// und meldete `kernOhneText` fuer etwas, das nie gesucht wurde.
 function figurAnchorState(bookId, userEmail) {
   const bid = parseInt(bookId);
   const runMs = _tsMs(_stmtLastRun.get(bid, userEmail)?.t);
   const occMs = _tsMs(_stmtOccMax.get(bid, userEmail)?.t);
-  const lastMs = Math.max(runMs ?? -Infinity, occMs ?? -Infinity);
   return {
-    lastRunMs: Number.isFinite(lastMs) ? lastMs : null,
+    lastRunMs: runMs ?? occMs ?? null,
     lastJobRunMs: runMs,
     hasOccurrences: occMs != null,
   };

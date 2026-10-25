@@ -97,7 +97,7 @@ export const rechercheStatusMethods = {
   // Drag im Board laufen beide hier durch.
   async setItemStatus(item, status) {
     const app = window.__app;
-    this.menuOpenId = null;
+    this.closeActionMenu();
     if (!item || !STATUSES.includes(status)) return;
     if (this.itemStatus(item) === status) return;
     this.busy = true;

@@ -437,7 +437,7 @@ export function registerPageRevisionsCard() {
       const pageId = this._pageId;
       if (!pageId || app?.currentPage?.id !== pageId) return;
       const when = app.formatDate ? app.formatDate(rev.created_at) : rev.created_at;
-      if (!confirm(app.t('editor.revisions.restoreConfirm', { when }))) return;
+      if (!await app.appConfirm({ message: app.t('editor.revisions.restoreConfirm', { when }) })) return;
       this.restoringId = rev.id;
       try {
         // Ueber contentRepo statt per rohem fetch: der Restore ist ein Body-Write

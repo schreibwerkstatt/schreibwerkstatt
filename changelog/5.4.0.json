@@ -1,0 +1,46 @@
+{
+  "version": "5.4.0",
+  "date": "2026-10-25",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Figuren-Werkstatt: Die Mindmap hat jetzt Rückgängig und Wiederholen, per Knopf oder Cmd/Ctrl+Z. Die Kernknoten wie Bogen oder Konflikt lassen sich nicht mehr versehentlich löschen.",
+      "en": "Character workshop: the mind map now has undo and redo, by button or Cmd/Ctrl+Z. Core nodes such as arc or conflict can no longer be deleted by accident."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figuren-Werkstatt: Hast du dieselbe Figur in einem zweiten Tab geändert, fragt die Karte beim Speichern, welcher Stand gilt. Deine Änderungen gehen dabei nicht mehr verloren.",
+      "en": "Character workshop: if the same character was changed in another tab, the card asks which version to keep when you save. Your edits are no longer lost."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Ideen-Karte und Ideen-Board: Eine Idee verschiebst du frei zwischen Kapiteln und Abschnitten, im Board auch zurück zu «Ganzes Buch». Das Menü «Stufen» bündelt Anzeige und Stufen des Buchs.",
+      "en": "Ideas card and ideas board: move an idea freely between chapters and sections, and on the board back to \"Whole book\". The \"Stages\" menu combines display options and the book's stages."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Auswahlfenster zum Verknüpfen und Verschieben öffnen sich jetzt direkt am Knopf, auch bei Einträgen weit unten in einer Liste. Das gilt etwa für Ideen, Recherche, Figuren-Werkstatt und Buchorganizer.",
+      "en": "Pickers for linking and moving now open right at the button, even for entries far down a list. This applies to ideas, research, the character workshop and the book organizer, among others."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Plot-Werkstatt: Archiv, «im Buch» und Kartendichte stehen jetzt gemeinsam im Menü «Ansicht».",
+      "en": "Plot workshop: archive, \"in the book\" and card density now sit together in the \"View\" menu."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Cmd/Ctrl+S speichert jetzt in jedem Bearbeiten-Formular, Esc verwirft. Ein Klick daneben speichert Inline-Bearbeitungen ebenfalls.",
+      "en": "Cmd/Ctrl+S now saves in every edit form, Esc discards. Clicking outside also saves inline edits."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Abschnitts- und Buch-Chat: Die Suche in früheren Gesprächen findet jetzt auch, was du im Recherche-, Plot- und Ideen-Chat besprochen hast.",
+      "en": "Section and book chat: searching earlier conversations now also finds what you discussed in the research, plot and ideas chats."
+    },
+    {
+      "kind": "verbessert",
+      "de": "PDF-Export: Grosse Bücher sind deutlich schneller fertig.",
+      "en": "PDF export: large books finish considerably faster."
+    }
+  ]
+}

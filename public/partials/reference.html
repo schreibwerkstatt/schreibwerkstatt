@@ -70,7 +70,7 @@
     <!-- Figuren -->
     <div x-show="referenceTab === 'figuren'" class="reference-panel">
       <template x-if="referenceFiguren().length === 0">
-        <div class="reference-empty" x-text="$app.t('reference.empty.figuren')"></div>
+        <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.figuren')"></div>
       </template>
       <template x-for="fig in referenceFiguren()" :key="'rf-' + (fig.id ?? fig.name)">
         <div class="reference-row">
@@ -90,7 +90,7 @@
     <!-- Orte -->
     <div x-show="referenceTab === 'orte'" class="reference-panel">
       <template x-if="referenceOrte().length === 0">
-        <div class="reference-empty" x-text="$app.t('reference.empty.orte')"></div>
+        <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.orte')"></div>
       </template>
       <template x-for="ort in referenceOrte()" :key="'ro-' + (ort.id ?? ort.name)">
         <div class="reference-row">
@@ -106,7 +106,7 @@
     <!-- Szenen -->
     <div x-show="referenceTab === 'szenen'" class="reference-panel">
       <template x-if="referenceSzenen().length === 0">
-        <div class="reference-empty" x-text="$app.t('reference.empty.szenen')"></div>
+        <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.szenen')"></div>
       </template>
       <template x-for="s in referenceSzenen()" :key="'rs-' + s.id">
         <div class="reference-row">
@@ -124,7 +124,7 @@
     <!-- Ereignisse (konsolidierte Chronologie) -->
     <div x-show="referenceTab === 'ereignisse'" class="reference-panel">
       <template x-if="referenceEreignisse().length === 0">
-        <div class="reference-empty" x-text="$app.t('reference.empty.ereignisse')"></div>
+        <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.ereignisse')"></div>
       </template>
       <template x-for="(ev, ei) in referenceEreignisse()" :key="'re-' + ei">
         <div class="reference-row">
@@ -141,9 +141,9 @@
 
     <!-- Recherche -->
     <div x-show="referenceTab === 'recherche'" class="reference-panel">
-      <div x-show="referenceRechercheLoading" class="reference-empty" x-text="$app.t('reference.loading')"></div>
+      <div x-show="referenceRechercheLoading" class="card-status" x-text="$app.t('reference.loading')"></div>
       <template x-if="!referenceRechercheLoading && referenceRechercheItems().length === 0">
-        <div class="reference-empty" x-text="$app.t('reference.empty.recherche')"></div>
+        <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.recherche')"></div>
       </template>
       <template x-for="item in referenceRechercheItems()" :key="'rr-' + item.id">
         <div class="reference-row-group">
@@ -171,11 +171,11 @@
          gepflegt wird die Quelle im Quellenverzeichnis — dorthin verlinkt jede
          Zeile. Read-only. -->
     <div x-show="referenceTab === 'quellen'" class="reference-panel">
-      <div x-show="referenceSourcesLoading" class="reference-empty" x-text="$app.t('reference.loading')"></div>
+      <div x-show="referenceSourcesLoading" class="card-status" x-text="$app.t('reference.loading')"></div>
       <div class="search-status search-status--error" x-show="referenceSourcesError && !referenceSourcesLoading"
            x-text="referenceSourcesError"></div>
       <template x-if="!referenceSourcesLoading && !referenceSourcesError && referenceQuellen().length === 0">
-        <div class="reference-empty" x-text="$app.t('reference.empty.quellen')"></div>
+        <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.quellen')"></div>
       </template>
       <template x-for="row in referenceQuellen()" :key="'rq-' + row.source.id">
         <div class="reference-row reference-row--clickable internal-link" @click="openReferenceSource(row)"
@@ -194,7 +194,7 @@
          zur ganzen Seite oder zum markierten Absatz. Read-only, rückwärtsgewandt. -->
     <div x-show="referenceTab === 'verwandt'" class="reference-panel">
       <template x-if="!referenceHasContext()">
-        <div class="reference-empty" x-text="$app.t('reference.verwandt.noPage')"></div>
+        <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.verwandt.noPage')"></div>
       </template>
       <template x-if="referenceHasContext()">
         <div class="display-contents">
@@ -218,14 +218,14 @@
           </div>
 
           <div class="search-status search-status--error" x-show="verwandtError && !verwandtLoading" x-text="verwandtError"></div>
-          <div class="reference-empty" x-show="verwandtNotIndexed && !verwandtLoading" x-text="$app.t('reference.verwandt.notIndexed')"></div>
+          <div class="muted-msg muted-msg--sm muted-msg--block" x-show="verwandtNotIndexed && !verwandtLoading" x-text="$app.t('reference.verwandt.notIndexed')"></div>
           <div class="card-hint card-hint--sm" x-show="verwandtStale() && !verwandtLoading" x-text="$app.t('reference.verwandt.stale')"></div>
 
           <template x-if="!verwandtSearched && !verwandtLoading">
-            <div class="reference-empty" x-text="$app.t('reference.verwandt.prompt')"></div>
+            <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.verwandt.prompt')"></div>
           </template>
           <template x-if="verwandtSearched && !verwandtLoading && !verwandtError && !verwandtNotIndexed && !verwandtStale() && verwandtResults().length === 0">
-            <div class="reference-empty" x-text="$app.t('reference.verwandt.empty')"></div>
+            <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.verwandt.empty')"></div>
           </template>
 
           <template x-for="hit in verwandtResults()" :key="'vw-' + hit.entity_id">

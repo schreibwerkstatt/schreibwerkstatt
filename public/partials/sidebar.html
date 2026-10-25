@@ -86,7 +86,8 @@
            @keydown.enter.prevent="_onChapterHeaderActivate(item)"
            @keydown.space.prevent="_onChapterHeaderActivate(item)"
            @click="_onChapterHeaderActivate(item)"
-           @contextmenu="_openPagetreeContextMenu($event, { kind: 'chapter', id: item.id, name: item.name, excluded: item.excluded, excludedByParent: _chapterExcludedByAncestor(item), empty: item.pages.length === 0 && !item.hasChildren })">
+           @contextmenu="_openPagetreeContextMenu($event, { kind: 'chapter', id: item.id, name: item.name, excluded: item.excluded, excludedByParent: _chapterExcludedByAncestor(item), empty: item.pages.length === 0 && !item.hasChildren })"
+           x-long-press>
         <span class="history-chevron" :class="{ open: item.open }" x-show="item.pages.length > 0 || item.hasChildren"
               @click.stop="if (!_treeIsFiltered() && (item.pages.length > 0 || item.hasChildren)) toggleChapterOpen(item)"></span>
         <span class="tree-chapter-name"><span x-text="item.name"></span><span class="edit-status-meter"
@@ -141,7 +142,8 @@
                @keydown.space.self.prevent="$el.click()"
                @contextmenu="_openPagetreeContextMenu($event, _isSingleSectionChapter(item)
                  ? { kind: 'page', id: page.id, name: item.name, single: true, chapterId: item.id, excluded: item.excluded, excludedByParent: _chapterExcludedByAncestor(item) }
-                 : { kind: 'page', id: page.id, name: page.name })">
+                 : { kind: 'page', id: page.id, name: page.name })"
+           x-long-press>
             <span class="page-name">
               <span class="page-status-dot" :class="'page-status-' + pageStatus(page)"
                 @mouseenter.stop="_showStatusTip($el, page)"
@@ -211,16 +213,16 @@
     <div class="muted-msg muted-msg--sm" x-text="t('sidebar.noPagesFound')"></div>
   </template>
   <template x-if="filteredTree.length === 0 && !pageSearch && _editFilterActive() && $store.nav.tree.length > 0">
-    <div class="sidebar-empty-book">
-      <div class="muted-msg muted-msg--sm" x-text="t('editStatus.filterAllDone')"></div>
+    <div class="card-empty card-empty--compact sidebar-empty-book">
+      <p class="card-empty-text" x-text="t('editStatus.filterAllDone')"></p>
       <button type="button" @click="treeEditFilter = false" x-text="t('editStatus.filterOff')"></button>
     </div>
   </template>
   <template x-if="!pageSearch && $store.nav.selectedBookId && $store.nav.tree.length === 0 && !treeLoading">
-    <div class="sidebar-empty-book">
-      <div class="muted-msg muted-msg--sm" x-text="t('sidebar.emptyBook')"></div>
-      <button type="button" class="primary" x-show="canEdit()" @click="createChapterPrompt({ firstInBook: true })" x-text="t('sidebar.emptyBookCta')"></button>
-      <div class="card-hint" x-show="canEdit()" x-text="t('sidebar.emptyBookCtaHint')"></div>
+    <div class="card-empty card-empty--compact sidebar-empty-book">
+      <p class="card-empty-text" x-text="t('sidebar.emptyBook')"></p>
+      <button type="button" class="primary card-empty-cta" x-show="canEdit()" @click="createChapterPrompt({ firstInBook: true })" x-text="t('sidebar.emptyBookCta')"></button>
+      <p class="card-empty-hint" x-show="canEdit()" x-text="t('sidebar.emptyBookCtaHint')"></p>
     </div>
   </template>
   </div><!-- /sidebarMode !== 'calendar' -->

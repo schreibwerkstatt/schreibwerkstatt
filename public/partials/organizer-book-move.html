@@ -1,0 +1,35 @@
+<!-- „In anderes Buch" einer Organizer-Abschnittszeile — Picker-Popover
+     (DESIGN.md „Picker-Popover", Mechanik public/js/picker-popover.js,
+     Methoden book-organizer/crud.js#openBookMove). EINE Instanz ausserhalb der
+     Zeilen: die liegen in SortableJS-Listen, und eine Combobox je Zeile
+     skaliert bei hunderten Abschnitten nicht.
+
+     Waehlen und Bestaetigen in einem Popover: der Verschiebe-Schritt ist nicht
+     umkehrbar, die Warnung steht darum dort, wo das Ziel gewaehlt wird. -->
+<template x-teleport="body">
+  <div class="picker-popover organizer-book-move"
+       x-ref="bookMovePopover"
+       x-show="bookMovePageId !== null && !!bookMovePage()" x-cloak
+       :style="{ top: pickerPopoverPos.top + 'px', left: pickerPopoverPos.left + 'px' }"
+       @keydown.escape.window="bookMovePageId !== null && cancelBookMove()"
+       role="dialog" :aria-label="$app.t('bookOrganizer.moveToBookTitle')">
+    <div class="picker-popover__head">
+      <span class="picker-popover__title" x-text="$app.t('bookOrganizer.moveToBookTitle')"></span>
+      <span class="picker-popover__subject" x-text="bookMovePage()?.name || ''"></span>
+    </div>
+
+    <div x-data="combobox({ placeholder: $app.t('bookOrganizer.moveToBookPick') })"
+         x-modelable="value" x-model="bookMoveTarget"
+         x-effect="options = bookMoveOptions()"></div>
+
+    <p class="picker-popover__hint" x-text="$app.t('bookOrganizer.moveToBookHint')"></p>
+
+    <div class="picker-popover__actions">
+      <button type="button" class="btn-compact danger" @click="applyBookMove()"
+              :disabled="!bookMoveTarget || organizerSaving"
+              x-text="$app.t('bookOrganizer.moveToBookConfirmLabel')"></button>
+      <button type="button" class="btn-compact" @click="cancelBookMove()"
+              x-text="$app.t('common.cancel')"></button>
+    </div>
+  </div>
+</template>

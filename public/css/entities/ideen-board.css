@@ -320,7 +320,8 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
 .idee-board-card-body {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-3);
+  --drag-grip-host-gap: var(--space-3);
+  gap: var(--drag-grip-host-gap);
 }
 /* Text- bzw. Edit-Spalte rechts vom Griff. Die Verknuepfungs-Chips stehen
    NICHT hier, sondern als Geschwister darunter — buendig mit der Kartenkante. */
@@ -332,24 +333,9 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
   gap: var(--space-6);
 }
 
-/* Griff = einzige Greifflaeche (SortableJS handle), damit Text, Chips und
-   Aktionen voll klickbar bleiben. Dezent bis zur Zuwendung, gleiche Abstufung
-   wie am Recherche-Status-Board; `touch-action: none` laesst den Fallback-Drag
-   auf Touch sauber starten. */
-.idee-board-grip {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  height: calc(var(--font-size-xs) * 1.5);
-  color: var(--color-border);
-  cursor: grab;
-  touch-action: none;
-  transition: color var(--transition-fast);
-}
-.idee-board-card:hover .idee-board-grip { color: var(--color-muted); }
-.idee-board-grip:hover { color: var(--color-text); }
-.idee-board-grip:active { cursor: grabbing; }
-.idee-board-grip .icon { width: 14px; height: 14px; }
+/* Drag-Griff: Optik + Position aus components/drag-grip.css. Abweichung nur
+   die Zeilenhoehe — der Notiztext daneben steht in --font-size-xs. */
+.idee-board-grip { font-size: var(--font-size-xs); }
 
 .idee-board-text {
   font-size: var(--font-size-xs);
@@ -359,6 +345,24 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
 }
 
 .idee-board-edit { display: flex; flex-direction: column; gap: var(--space-xs); }
+
+/* Edit-Feld: Grundform aus entities/ideen.css (.idee-edit-input), hier nur die
+   Board-Schrift — das Feld muss aussehen wie der Kartentext, den es ersetzt. */
+.idee-board-card .idee-board-edit .idee-board-edit-input {
+  --idee-edit-font: var(--font-size-xs);
+  padding: var(--space-xs) var(--space-3);
+}
+/* Während des Bearbeitens zählt nur das Feld: Aktionen, Stufen-Knöpfe und
+   Alter weichen. Die schwebenden Aktionen lägen sonst über der ersten
+   Textzeile, die Stufen-Knöpfe stünden als zweite Knopfreihe unter Speichern. */
+.idee-board-card--editing {
+  border-color: var(--color-border-focus);
+  border-left-color: var(--ideen-status-accent, var(--color-border-focus));
+  box-shadow: var(--shadow-sm);
+}
+.idee-board-card--editing .idee-board-card-actions,
+.idee-board-card--editing .idee-board-steps,
+.idee-board-card--editing .idee-board-age { display: none; }
 
 /* Aktionen schweben in der oberen rechten Ecke und erscheinen erst auf
    Zuwendung (`.hover-reveal`, components/hover-reveal.css) — eine Kanban-Notiz
@@ -435,52 +439,6 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
 }
 
 /* ── Verknuepfungs-Chips ────────────────────────────────────────────────── */
-/* Verknuepfungs-Picker (partials/ideen-link-picker.html) — ebenfalls geteiltes
-   Markup, darum hier neben den Chips. Nach <body> teleportiert und am Trigger
-   verankert (public/js/popover-anchor.js setzt top/left), also `fixed` und in
-   der Popover-Ebene. Die Breite ist der Schaetzwert LINK_POPOVER_W in
-   book/ideen-links.js — beide zusammen halten, sonst springt das Popover beim
-   Nachmessen sichtbar. */
-.idee-link-popover {
-  position: fixed;
-  z-index: var(--z-popover);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  width: min(320px, calc(100vw - var(--space-md)));
-  padding: var(--space-sm);
-  background: var(--color-surface);
-  border: var(--border-thin) solid var(--color-border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-md);
-}
-.idee-link-popover-head {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.idee-link-popover-title {
-  font-size: var(--font-size-xs);
-  color: var(--color-subtle);
-}
-/* Die Idee selbst als Beleg, woran verknuepft wird — zwei Zeilen, danach
-   abgeschnitten: der Kopf soll das Popover nicht laenger machen als seine
-   Eingabefelder. */
-.idee-link-popover-idee {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  font-size: var(--font-size-micro);
-  color: var(--color-text);
-}
-.idee-link-popover-actions {
-  display: flex;
-  gap: var(--space-xs);
-  justify-content: flex-end;
-}
-
 /* ── Ideen-Referenzen auf den Gegenseiten ───────────────────────────────── */
 /* Read-only Referenzen an Recherche-Fundstueck, Plot-Beat und Motiv
    (partials/ideen-backlinks.html). Der Ideen-Text ist Freitext beliebiger
@@ -503,20 +461,16 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
 }
 
 /* ── Stufen pro Buch ────────────────────────────────────────────────────── */
-.ideen-board-stages-toggle { margin-left: auto; }
-.ideen-board-stages {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs) var(--space-sm);
-}
-.ideen-board-stages-label {
-  font-size: var(--font-size-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+/* Hinweis am Ende des Stufen-Menues (ideen-board-stages.html): Fliesstext
+   unter den Schaltern, linksbuendig in Menue-Breite. */
+.ideen-board-stages-hint {
+  margin: var(--space-xs) 0 0;
+  padding: var(--space-xs) var(--space-md) var(--space-2xs);
+  border-top: var(--border-thin) solid var(--color-border);
+  font-size: var(--font-size-xs);
+  line-height: 1.45;
   color: var(--color-muted);
 }
-.ideen-board-stages .card-form-hint { flex-basis: 100%; margin: 0; }
 
 @layer components {
 /* ── Alter einer offenen Pendenz ─────────────────────────────────────────── */

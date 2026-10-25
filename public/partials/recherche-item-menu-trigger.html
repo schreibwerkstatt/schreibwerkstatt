@@ -1,0 +1,4 @@
+<!-- ⋯-Knopf des Recherche-Aktionsmenues (Fragment in Liste, Board-Karte und
+     Detail-Dialog; `menuCtx` aus dem umgebenden x-data). Das Menue selbst ist
+     eine einzige Instanz: recherche-item-menu.html. -->
+<button type="button" class="icon-btn" @click="openItemMenu($event, menuCtx, item)" :aria-expanded="isActionMenuOpen(menuCtx + ':' + item.id)" :disabled="busy" :aria-label="$app.t('recherche.actions')" aria-haspopup="menu"><svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg></button>

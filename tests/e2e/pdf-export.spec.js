@@ -24,7 +24,7 @@ test.describe('pdf-export-card', () => {
   });
 
   // Profil-Anlage: "+"-Icon öffnet die Create-Zeile (Name + Anlegen).
-  // createProfile() schliesst sie wieder (_showCreate = false) und selektiert
+  // createProfile() schliesst sie wieder (_profileRow = null) und selektiert
   // das neue Profil → Editor (export-tabs) mountet.
   async function createProfile(page, name) {
     await page.locator('.export-profile-bar button:has(use[href$="#plus"])').click();

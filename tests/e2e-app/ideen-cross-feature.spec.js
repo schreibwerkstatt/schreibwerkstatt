@@ -37,19 +37,33 @@ test('Ideen erscheinen in Buchübersicht, Strang-Kopf und Werkstatt-Figur', asyn
   await postJson(page, `/ideen/${i1.id}/links`, { target_kind: 'thread', target_id: thread.id });
   await postJson(page, `/ideen/${i2.id}/links`, { target_kind: 'draft', target_id: draft.id });
 
-  // 1. Buchübersicht
-  await page.evaluate(async () => { await window.__app.toggleBookOverviewCard(); });
-  const tile = page.locator('.overview-tile', { has: page.locator('.overview-tile-label', { hasText: /^Ideen$/ }) });
-  await expect(tile).toBeVisible({ timeout: 15000 });
-  await expect(tile.locator('.overview-fig-count')).not.toHaveText('0');
+  // Die App-Suite teilt EIN Seed-Buch: ein liegengebliebener Strang schaltet die
+  // Plot-Werkstatt auf das Grid um, und spaetere Specs (plot-beat-actions) suchen
+  // ihren Beat im dann ausgeblendeten flachen Board.
+  try {
+    // 1. Buchübersicht
+    await page.evaluate(async () => { await window.__app.toggleBookOverviewCard(); });
+    const tile = page.locator('.overview-tile', { has: page.locator('.overview-tile-label', { hasText: /^Ideen$/ }) });
+    await expect(tile).toBeVisible({ timeout: 15000 });
+    await expect(tile.locator('.overview-fig-count')).not.toHaveText('0');
 
-  // 2. Plot-Grid: Strang-Kopf
-  await page.evaluate(async () => { await window.__app.togglePlotCard(); });
-  const laneIdea = page.locator('.plot-swim-lane-text .idee-backlinks .entity-ref', { hasText: 'Wendepunkt fehlt' });
-  await expect(laneIdea).toBeVisible({ timeout: 15000 });
+    // 2. Plot-Grid: Strang-Kopf
+    await page.evaluate(async () => { await window.__app.togglePlotCard(); });
+    const laneIdea = page.locator('.plot-swim-lane-text .idee-backlinks .entity-ref', { hasText: 'Wendepunkt fehlt' });
+    await expect(laneIdea).toBeVisible({ timeout: 15000 });
 
-  // 3. Figuren-Werkstatt: Titelzeile
-  await page.evaluate(async (id) => { await window.__app.openWerkstattDraftById(id); }, draft.id);
-  const draftIdea = page.locator('.werkstatt-detail-titlebar .idee-backlinks .entity-ref', { hasText: 'Bogen klären' });
-  await expect(draftIdea).toBeVisible({ timeout: 15000 });
+    // 3. Figuren-Werkstatt: Titelzeile
+    await page.evaluate(async (id) => { await window.__app.openWerkstattDraftById(id); }, draft.id);
+    const draftIdea = page.locator('.werkstatt-detail-titlebar .idee-backlinks .entity-ref', { hasText: 'Bogen klären' });
+    await expect(draftIdea).toBeVisible({ timeout: 15000 });
+  } finally {
+    await page.evaluate(async (ids) => {
+      const del = (u) => fetch(u, { method: 'DELETE' }).catch(() => {});
+      await del(`/ideen/${ids.i1}`);
+      await del(`/ideen/${ids.i2}`);
+      await del(`/plot/acts/${ids.act}`);
+      await del(`/plot/threads/${ids.thread}`);
+      await del(`/draft-figures/${ids.draft}`);
+    }, { i1: i1.id, i2: i2.id, act: act.id, thread: thread.id, draft: draft.id });
+  }
 });

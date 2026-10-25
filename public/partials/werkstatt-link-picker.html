@@ -1,0 +1,41 @@
+<!-- Nachtraegliche Verknuepfung Werkstatt-Figur → Katalog-Figur
+     (`draft_figures.source_figure_id`) — Picker-Popover (DESIGN.md
+     „Picker-Popover", Mechanik public/js/picker-popover.js), am Knopf des
+     Overflow-Menues verankert (figur-werkstatt/import.js#startLinkFigure).
+     Im Native-Vollbild der Detailansicht haengt _openPickerPopover das Popover
+     zur Anzeigezeit unter das Vollbild-Element.
+
+     Why: wer erst plant und dann schreibt, hat die Figur danach zweimal — in
+     der Werkstatt (vorwaerts entwickelt) und im Katalog (rueckwaerts aus dem
+     Text extrahiert). Ohne den Zeiger bleiben es zwei Figuren, und jede
+     Bruecke im Haus fuehrt zwei Spalten. Bestaetigt wird von Hand: ein
+     automatisch gesetzter Zeiger waere eine Behauptung ueber zwei Figuren,
+     die nur der Autor treffen kann (Namensgleichheit ist bloss vorausgewaehlt). -->
+<template x-teleport="body">
+  <div class="picker-popover werkstatt-link-picker"
+       x-ref="werkstattLinkPopover"
+       x-show="linking" x-cloak
+       :style="{ top: pickerPopoverPos.top + 'px', left: pickerPopoverPos.left + 'px' }"
+       @keydown.escape.window="linking && cancelLinkFigure()"
+       role="dialog" :aria-label="$app.t('werkstatt.action.linkFigure')">
+    <div class="picker-popover__head">
+      <span class="picker-popover__title" x-text="$app.t('werkstatt.action.linkFigure')"></span>
+      <span class="picker-popover__subject" x-text="editName || selectedDraft()?.name || ''"></span>
+    </div>
+
+    <p class="picker-popover__hint" x-show="linkCandidatesLoading" x-text="$app.t('common.loading')"></p>
+    <p class="picker-popover__hint" x-show="!linkCandidatesLoading && linkCandidates.length === 0"
+       x-text="$app.t('werkstatt.link.none')"></p>
+    <div x-show="!linkCandidatesLoading && linkCandidates.length > 0"
+         x-data="entityPicker({ entity: 'custom', placeholder: $app.t('werkstatt.link.pick'), items: () => linkCandidates.map(f => ({ value: String(f.id), label: f.name + (f.typ ? ' [' + f.typ + ']' : ''), sublabel: f.kurzname && f.kurzname !== f.name ? f.kurzname : '' })) })"
+         x-modelable="value" x-model="selectedLinkFigureId"></div>
+    <p class="picker-popover__hint" x-text="$app.t('werkstatt.link.hint')"></p>
+
+    <div class="picker-popover__actions">
+      <button type="button" class="btn-compact" :disabled="busy || !selectedLinkFigureId"
+              @click="runLinkFigure()" x-text="$app.t('werkstatt.link.confirm')"></button>
+      <button type="button" class="btn-compact" :disabled="busy" @click="cancelLinkFigure()"
+              x-text="$app.t('common.cancel')"></button>
+    </div>
+  </div>
+</template>

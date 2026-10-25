@@ -54,7 +54,7 @@ test('Ideen-Chat: Ort, Stufe mit Beleg und neue Idee einzeln übernehmen', async
   // Verlauf — erst danach die Nachricht einspielen.
   await page.locator(`${CARD} .card-header button[aria-pressed]`).first().click();
   await expect(page.locator(`${CARD} .ideen-chat`)).toBeVisible();
-  await expect(page.locator(`${CARD} .ideen-chat-starters button`)).toHaveCount(3);
+  await expect(page.locator(`${CARD} .card-empty-actions button`)).toHaveCount(3);
   await page.waitForFunction(() => window.Alpine.$data(document.querySelector('.card--ideenboard')).ideenChatSessionId != null);
 
   await boardData(page, `

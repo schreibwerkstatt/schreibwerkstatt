@@ -305,8 +305,10 @@ function updateIdee(id, userEmail, fields) {
     sets.push('sort_order = CASE WHEN status = ? THEN sort_order ELSE 0 END');
     vals.push(fields.status);
   }
-  if (typeof fields.page_id === 'number')    { sets.push('page_id = ?');    vals.push(fields.page_id); }
-  if (typeof fields.chapter_id === 'number') { sets.push('chapter_id = ?'); vals.push(fields.chapter_id); }
+  // Anker: Zahl setzt, null leert — ein Wechsel Seite ↔ Kapitel setzt beide in
+  // einem UPDATE, damit der CHECK (hoechstens ein Anker) nie dazwischen greift.
+  if (typeof fields.page_id === 'number' || fields.page_id === null)       { sets.push('page_id = ?');    vals.push(fields.page_id); }
+  if (typeof fields.chapter_id === 'number' || fields.chapter_id === null) { sets.push('chapter_id = ?'); vals.push(fields.chapter_id); }
   if (!sets.length) return 0;
   sets.push(`updated_at = ${NOW_ISO_SQL}`);
   vals.push(id, userEmail);

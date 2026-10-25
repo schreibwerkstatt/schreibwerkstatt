@@ -98,7 +98,7 @@ export const adminAiProfilesMethods = {
     const msg = profile.user_count
       ? t?.('admin.profiles.confirmDeleteUsers', { name: profile.name, n: profile.user_count })
       : t?.('admin.profiles.confirmDelete', { name: profile.name });
-    if (!confirm(msg || `${profile.name} löschen?`)) return;
+    if (!await window.__app.appConfirm({ message: msg, danger: true })) return;
     this.adminProfilesError = '';
     try {
       await sendJson(`/admin/ai-profiles/${profile.id}`, 'DELETE');

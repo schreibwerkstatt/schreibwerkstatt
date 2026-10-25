@@ -54,7 +54,7 @@ test('flip-up popovers measure their real height (no guessed PH constant)', () =
     0,
     'Flip-up-Popover mit geratener Hoehe — Menue loest sich beim Hochklappen vom Trigger.\n' +
       'Fix: nach $nextTick die echte Groesse messen (el.offsetHeight / getBoundingClientRect().height)\n' +
-      'und damit neu positionieren. Referenz: public/js/book/ideen.js#openMenu.\n  ' +
+      'und damit neu positionieren. Referenz: public/js/action-menu.js#_remeasureActionMenu.\n  ' +
       violations.join('\n  '),
   );
 });

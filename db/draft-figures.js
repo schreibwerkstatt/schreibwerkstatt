@@ -109,22 +109,27 @@ function updateDraftFigure(id, { name, archetype = null, mindmap, notes = null }
 // Zeile beim naechsten Lauf ueberschreiben. Hier wird nur ein Zeiger gesetzt —
 // dieselbe Haltung wie `entity-merge` beim Zusammenfuehren zweier Katalog-Zeilen:
 // Referenzen umhaengen, nichts erfinden.
+//
+// `updated_at` bleibt stehen: der Zeiger ist kein Inhalt. Ein Bump liesse den
+// naechsten Save eines zweiten Tabs mit 409 DRAFT_CONFLICT scheitern und
+// markierte die Figur im Bogen als „seit der Verankerung geaendert".
 const _stmtSetSource = db.prepare(
-  'UPDATE draft_figures SET source_figure_id = ?, updated_at = ? WHERE id = ?'
+  'UPDATE draft_figures SET source_figure_id = ? WHERE id = ?'
 );
 function setDraftSourceFigure(id, figureId) {
   _stmtSetSource.run(
     figureId != null ? parseInt(figureId) : null,
-    new Date().toISOString(),
     parseInt(id),
   );
   return getDraftFigure(id);
 }
 
 // Katalog-Figuren, die als Quelle fuer DIESEN Draft in Frage kommen: eigene
-// Figuren des Buchs, die noch an keinem Draft haengen. Der Namensvergleich
-// passiert im Handler (er entscheidet nur die Vorauswahl) — die Liste selbst ist
-// bewusst vollstaendig, damit eine umbenannte Figur trotzdem waehlbar bleibt.
+// Figuren des Buchs, die noch an keinem Draft haengen — auch nicht ueber eine
+// gleichnamige Schwester (Merge-Kollision `__2`, gleiche Regel wie
+// listImportableFigures). Die Vorauswahl per Namensgleichheit passiert im
+// Frontend; die Liste ist sonst bewusst vollstaendig, damit eine umbenannte
+// Figur trotzdem waehlbar bleibt.
 const _stmtLinkCandidates = db.prepare(`
   SELECT f.id, f.name, f.kurzname, f.typ, f.beschreibung, f.sort_order
     FROM figures f
@@ -134,7 +139,9 @@ const _stmtLinkCandidates = db.prepare(`
    ORDER BY f.sort_order, f.id
 `);
 function listLinkCandidates(bookId, userEmail) {
+  const linked = importedSourceNames(bookId, userEmail);
   return _stmtLinkCandidates.all(userEmail, parseInt(bookId), userEmail)
+    .filter(r => !linked.has(_normName(r.name)))
     .map(({ sort_order, ...rest }) => rest);
 }
 

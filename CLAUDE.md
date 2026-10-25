@@ -60,6 +60,12 @@ Diese Regeln setzt ein Hook ([.claude/settings.json](.claude/settings.json), [sc
 | Chat-Werkzeug: eine Definition + ein Handler + eine Zugriffszeile, Querverweise nur bedingt, Budget-Ratsche | [chat-tools-contract.test.mjs](tests/unit/chat-tools-contract.test.mjs) | [routes/jobs/chat-tools/CLAUDE.md](routes/jobs/chat-tools/CLAUDE.md) |
 | Kapitel/Abschnitte in Filtern + KI-Namensauflösung nur per ID (`kapitelId`/`seiteId`, `chapterNameMap`) | [chapter-filter-ids.test.mjs](tests/unit/chapter-filter-ids.test.mjs) | [docs/chapter-hierarchy.md](docs/chapter-hierarchy.md#kapitel-und-abschnitte-per-id-nie-per-name) |
 | Buchthema an genau einem Ort (`OWNERS`-Liste) — nie zusätzlich in `books`, einem Export-Profil oder einer zweiten Tabelle | [book-meta-single-place.test.js](tests/unit/book-meta-single-place.test.js) | oben, „Immer gültig" |
+| SortableJS-Griff nur als `.drag-grip` (Icon, Beschriftung, Optik an einem Ort) | [drag-grip-single-place.test.mjs](tests/unit/drag-grip-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
+| Auswahl an einem Element nur als `.picker-popover` (Rahmen, Mechanik, Optik an einem Ort) | [picker-popover-single-place.test.mjs](tests/unit/picker-popover-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
+| Aktionsmenü nur über `menu()` oder `actionMenu`; Rechtsklick immer mit Long-Press | [action-menu-single-place.test.mjs](tests/unit/action-menu-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
+| Rückfrage nur über `appConfirm`/`appAlert`/`appPrompt`, nie natives `confirm()` | [app-confirm-single-place.test.mjs](tests/unit/app-confirm-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
+| Leerzustand nur als `.card-empty` oder `.muted-msg` | [empty-state-single-place.test.mjs](tests/unit/empty-state-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
+| Gruppen-Titel im Formular nur als `.card-form-section-divider` (Erklärsatz: `--note`) | [section-divider-single-place.test.mjs](tests/unit/section-divider-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
 | Klapp-Panel (`x-bind="panel"`) ohne eigenes Box-Styling — Abstand/Layout ans Kind | [collapsible-panel-style.test.mjs](tests/unit/collapsible-panel-style.test.mjs) | [DESIGN.md](DESIGN.md#klappbarer-section-toggle-accordion) |
 | Editor-/Chat-/Kommentar-Mehrdeutigkeit im Prompt | `prompt-disambiguation.js` (injiziert Hinweis) | oben, „Bevor du anfängst" |
 | Nur auf `main` — kein Branch, kein Worktree, kein Subagent mit `isolation: "worktree"` | `main-only-guard.js` **blockt** | unten, „Arbeitsweise" |
@@ -72,7 +78,7 @@ Verschachtelte Kontextdateien laden mit dem Verzeichnis, in dem gearbeitet wird.
 
 | Datei | Inhalt |
 |---|---|
-| [public/CLAUDE.md](public/CLAUDE.md) | Pflicht-Komponenten (`sortableTable`, `combobox`, `numInput`, `collapsible`), LanguageTool-Felder, Popover-/Top-Layer-Geometrie, A11y, Lazy-Libs |
+| [public/CLAUDE.md](public/CLAUDE.md) | Pflicht-Komponenten (`sortableTable`, `combobox`, `numInput`, `collapsible`, `.drag-grip`, `.picker-popover`, Aktionsmenü, `appConfirm`, Leerzustand), Edit-Formular-Tastatur (Cmd+S/Esc/Klick daneben), LanguageTool-Felder, Popover-/Top-Layer-Geometrie, A11y, Lazy-Libs |
 | [public/css/CLAUDE.md](public/css/CLAUDE.md) | CSS-Ort + Layer, Karten-Innenraum-Vokabular, Token-Skala, Fokus-Ring, Mobile-Strategie, Selektor-Eindeutigkeit |
 | [public/js/cards/CLAUDE.md](public/js/cards/CLAUDE.md) | Neue Karte anlegen, Feature-Registry, Root-Zugriff `$app`, Store, Events, Job-Polling, Exklusivität, Scroll-to, Memo-Pattern, Command-Palette |
 | [public/js/editor/CLAUDE.md](public/js/editor/CLAUDE.md) | Focus-Editor-Stabilisierung, Block-IDs, Block-Markup-SSoT (Todo/Zitat/Querverweis/Diagramm/Tabelle), Löschen an Blockgrenzen |

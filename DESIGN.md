@@ -27,6 +27,7 @@ Token-Referenz (Farben, Radien, Spacing, Schriftgrössen): [public/css/tokens.cs
 - [Icon-System](#icon-system-lucide-sprite) — `<svg class="icon"><use href="/icons.svg#name"/></svg>` (Lucide-Sprite)
 - [Icon-Button](#icon-button-icon-btn) — generischer Icon-only Button (`.icon-btn` outlined + `--ghost`), SSoT für Canvas-/Header-/Board-Cluster
 - [Hover-Reveal](#hover-reveal-item-aktionen-auf-zuwendung) — Item-Aktionen (Board-Karte, Kommentar-Thread) erst auf Hover/Fokus, auf Touch immer
+- [Drag-Griff](#drag-griff-sortierbare-kartezeile) — einzige Greiffläche sortierbarer Karten/Zeilen, einheitlich positioniert (`.drag-grip`)
 - [Toolbar-Action-Group](#toolbar-action-group-segmentierter-icon-cluster-neben-form-feldern) — segmentierte Icon-Reihe bündig mit Search/Combobox
 - [Icon-Button-Count-Badge](#icon-button-count-badge-icon-btn-badge) — Counter oben rechts auf Icon-Button
 - [Badges & Tags](#badges--tags) — eckig, Severity, Hue-Palette
@@ -79,7 +80,7 @@ Token-Referenz (Farben, Radien, Spacing, Schriftgrössen): [public/css/tokens.cs
 - [Graph-Tooltip (vis-network)](#graph-tooltip-vis-network)
 - [Keyboard-Shortcut (`<kbd>`)](#keyboard-shortcut-anzeige-kbd)
 - [Loading-Overlay](#loading-overlay) — Status: kein generisches Pattern
-- [Empty-State mit CTA](#empty-state-mit-cta) — `.card-empty` + CTA-Button
+- [Leerzustand](#leerzustand) — `.card-empty` (Einstieg mit Knopf/Erklärung) oder `.muted-msg` (reiner Text)
 - [Inline-Action-Group](#inline-action-group) — Status: kein Standard
 - [Drawer / Side-Panel](#drawer--side-panel) — noch kein generisches Pattern
 - [Toast/Snackbar](#toastsnackbar) — noch kein generisches Pattern
@@ -613,7 +614,8 @@ Betrifft jeden Knopf mit eigenem `transform`. Wer den Druck-Effekt gar nicht wil
 - [Icon-Button-Count-Badge](#icon-button-count-badge-icon-btn-badge) — Zähler oben rechts (`.icon-btn-badge`); Achtungs-Punkt ohne Zahl via `.icon-btn--attention`.
 - [Hover-Reveal](#hover-reveal-item-aktionen-auf-zuwendung) — Item-Aktionen erst auf Zuwendung (`.hover-reveal-host` / `.hover-reveal`).
 - [Toolbar-Action-Group](#toolbar-action-group-segmentierter-icon-cluster-neben-form-feldern) — segmentierte Icon-Reihe.
-- [Context-Menu → Dropdown-Variante](#context-menu-rechtsklick-popover) — `⋯`-Overflow (`.context-menu--dropdown`) für sekundäre Aktionen, Einträge mit `.context-menu-item--icon`.
+- [Context-Menu](#context-menu-aktionsmenü) — `⋯`-Menü am Knopf (`menu()`) oder teleportiert mit Rechtsklick + Long-Press (`actionMenu`), Einträge mit `.context-menu-item--icon`.
+- [Picker-Popover](#picker-popover-picker-popover) — am Knopf verankerte Auswahl an einem Element (verknüpfen, verschieben, zuordnen), Kopf nennt das Element.
 - [Sofort-Tooltip](#sofort-tooltip-data-tip--default-variante) — `data-tip` (Pflicht bei Icon-only) + `aria-label`.
 
 **Regeln (verbindlich):**
@@ -820,6 +822,35 @@ Neue Aktionen erweitern diese Tabelle und das Sprite (siehe [Icon-System](#icon-
 
 ---
 
+## Drag-Griff (sortierbare Karte/Zeile)
+
+**Use:** die einzige Greiffläche jeder per SortableJS sortierbaren Karte oder Zeile. Der Rest der Karte bleibt voll klickbar (Titel → Bearbeiten, Chips → Sprung), ohne Drag/Klick-Konflikt.
+
+**Markup:**
+```html
+<div class="<feature>-card hover-reveal-host">          <!-- oder .drag-grip-host, wenn die Zeile kein Hover-Reveal hat -->
+  <div class="<feature>-card-head">                     <!-- Flex-Zeile, Griff = erstes Kind -->
+    <span class="drag-grip <feature>-grip" role="img" :data-tip="$app.t('…dragHint')" :aria-label="$app.t('…dragHint')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
+    </span>
+    …
+```
+
+**Klassen** [components/drag-grip.css](public/css/components/drag-grip.css): `.drag-grip` am Griff, `.drag-grip-host` an der Zeile, die ihn beim Überfahren hervorhebt (eine `.hover-reveal-host` tut das bereits). Die Feature-Klasse daneben ist nur der `handle`-Anker für SortableJS und trägt keine Optik.
+
+**Regeln:**
+- **Immer `grip-vertical`, 14px** — kein Textzeichen (`⋮⋮`), keine zweite Grösse, keine Akzentfarbe.
+- **Position:** erstes Kind der Zeile, bündig an deren Inhaltskante (keine negative Marge in den Kartenrand). Abstand zum nächsten Element immer `--space-6`: die Wirtszeile legt ihren Spaltenabstand als `--drag-grip-host-gap` ab und benutzt ihn als `gap` (`--drag-grip-host-gap: var(--space-xs); gap: var(--drag-grip-host-gap);`), der Griff gleicht die Differenz über `margin-inline-end` aus.
+- **Vertikal auf der ersten Textzeile:** der Griff ist `1lh` hoch. In einer `align-items: flex-start`-Zeile mit mehrzeiligem Text steht er so auf der ersten Zeile; weicht die Schriftgrösse des Textes von der Zeile ab, setzt die Feature-Klasse nur `font-size` am Griff (`.idee-board-grip { font-size: var(--font-size-xs); }`).
+- **Drei Farbstufen:** Ruhe `--color-border`, Wirt überfahren `--color-muted`, Griff überfahren `--color-text`; ohne Hover-Gerät (`hover: none`) dauerhaft `--color-muted`.
+- **Beschriftet, nicht versteckt:** `role="img"` + `aria-label` + `data-tip` mit dem Hinweis (inkl. Tastatur-Alternative, wo es eine gibt) — nie `aria-hidden`.
+
+**Gegated:** [drag-grip-single-place.test.mjs](tests/unit/drag-grip-single-place.test.mjs) — jede `handle:`-Klasse aus `public/js` muss im Markup `drag-grip` + Icon + `aria-label` tragen, Feature-CSS darf sie nur mit `font-size` stylen.
+
+**Konsumenten:** Plot-Beat ([plot-beat-cell.html](public/partials/plot-beat-cell.html)), Recherche-Status-Board ([recherche-status-board.html](public/partials/recherche-status-board.html)), Ideen-Board ([ideen-board-grid.html](public/partials/ideen-board-grid.html)), Motiv-Themen ([motiv-panel.html](public/partials/motiv-panel.html)), Buchorganizer ([organizer-page-row.html](public/partials/organizer-page-row.html), [organizer-chapter-body.html](public/partials/organizer-chapter-body.html)).
+
+---
+
 ## Toolbar-Action-Group (segmentierter Icon-Cluster neben Form-Feldern)
 
 **Use:** Reihe von 2–5 Icon-Aktionen, **vertikal exakt mit Suchfeld + Combobox in derselben Toolbar bündig**. Eingesetzt im Buchorganizer (Undo/Redo/Expand-all/Collapse-all neben Such-Input + Sprung-Combobox) und in der Sidebar (Expand-all/Collapse-all neben Page-Search). Unterscheidet sich vom Canvas-Pattern oben dadurch, dass die Buttons **als Segment** zusammenstehen (geteilte Border, gerundete Aussenseiten) und an die Höhe ihrer Toolbar-Nachbarn gekoppelt sind.
@@ -948,7 +979,7 @@ Neue Aktionen erweitern diese Tabelle und das Sprite (siehe [Icon-System](#icon-
 
 ### Section-Trenner innerhalb des Forms
 
-`.card-form-section-divider` — `<p>`-Tag mit Border-Top + erklärendem Text, trennt logische Form-Sektionen (Beispiel: AI-Augmentierung in finetune-export).
+`.card-form-section-divider` — `<p>`-Tag mit Border-Top + Gruppen-Titel (Schrift wie `.card-section-title`), trennt logische Form-Sektionen (Beispiel: Gruppen in den Export-Tabs, „Editor"/„Schreiben" im Profil). Steht statt eines Titels ein erklärender Satz zur folgenden Gruppe, zusätzlich `.card-form-section-divider--note` (kleiner, normale Schrift; Beispiel: AI-Augmentierung in finetune-export). Gegated: [tests/unit/section-divider-single-place.test.mjs](tests/unit/section-divider-single-place.test.mjs).
 
 ### Radio-Gruppe (`radioGroup`)
 
@@ -1341,7 +1372,7 @@ CSS: [public/css/entities/entity-list.css](public/css/entities/entity-list.css).
 <div class="research-status-cell" :data-research-status-cell="st">…</div>
 ```
 
-**Klassen** [entities/recherche/status-board.css](public/css/entities/recherche/status-board.css): `.research-status-board` (Flex-Spalten, horizontal scrollend, `.is-refreshing` wie die Liste) · `.research-status-column--<stufe>` (setzt `--status-accent` aus den semantischen Tokens) · `.research-status-column-head` (sticky, Titel + Zähler) · `.research-status-cell` (SortableJS-Container, wächst über die Karten hinaus) · `.research-status-card` + `.research-status-grip` · `.research-status-badge` (die Stufe in Liste + Detailansicht).
+**Klassen** [entities/recherche/status-board.css](public/css/entities/recherche/status-board.css): `.research-status-board` (Flex-Spalten, horizontal scrollend, `.is-refreshing` wie die Liste) · `.research-status-column--<stufe>` (setzt `--status-accent` aus den semantischen Tokens) · `.research-status-column-head` (sticky, Titel + Zähler) · `.research-status-cell` (SortableJS-Container, wächst über die Karten hinaus) · `.research-status-card` + `.research-status-grip` (Griff-Optik: [Drag-Griff](#drag-griff-sortierbare-kartezeile)) · `.research-status-badge` (die Stufe in Liste + Detailansicht).
 
 **Regeln:**
 - **Umschalter, nicht zweite Karte.** Der Toggle ist die `.tabs.entity-view-toggle`-Reihe über der Toolbar (Muster der Orte-Karte); die Wahl liegt global im `localStorage`, nicht pro Buch — es ist eine Arbeitsweise, keine Eigenschaft des Buchs.
@@ -1568,10 +1599,11 @@ Die Zelle selbst bekommt **kein** `display`. Braucht sie nur Ausrichtung und kei
 | Zustand        | Klasse               | Inhalt |
 |----------------|----------------------|--------|
 | Loading        | `.card-status`       | i18n-Status + optional `.progress-bar-wrap` darüber |
-| Empty          | `.card-status`       | `$app.t('common.noDataYet')` |
+| Vorgang fertig / nichts gefunden nach einem Lauf | `.card-status` | z. B. „alle Vorschläge übernommen", „keine Konflikte" |
+| Leer           | `.card-empty` / `.muted-msg` | siehe [Leerzustand](#leerzustand) |
 | Error          | `.card-status--error`| Fehlermeldung als i18n-Key |
 
-Niemals reine `<div>`s mit Inline-Text dafür — immer durch `.card-status*`-Klassen.
+`.card-status` berichtet einen **Vorgang** (lädt, fertig, Fehler); eine leere Liste ist kein Vorgang und läuft über den Leerzustand. Niemals reine `<div>`s mit Inline-Text dafür.
 
 ---
 
@@ -1755,22 +1787,24 @@ CSS: [public/css/layout/utilities.css](public/css/layout/utilities.css). Auf Mob
 
 ## Confirm-Dialog (Modal)
 
-**Use:** Destruktive Aktionen bestätigen (Löschen, Reset, Logout) **und** „Verwerfen ungespeicherter Änderungen" (Editor-Cancel, Reload einer Card mit dirty State, Page-Wechsel mit ausstehenden Edits).
+**Use:** Destruktive Aktionen bestätigen (Löschen, Reset, Trennen, Widerrufen) **und** „Verwerfen ungespeicherter Änderungen" (Editor-Cancel, Reload einer Card mit dirty State, Page-Wechsel mit ausstehenden Edits); dazu Hinweis mit nur OK und Texteingabe im Modal.
 
-**Markup:**
-```html
-<div class="confirm-overlay" x-show="confirmOpen" @click.self="confirmOpen = false">
-  <div class="confirm-dialog">
-    <div class="confirm-dialog-message" x-text="$app.t('…')"></div>
-    <div class="confirm-dialog-actions">
-      <button class="confirm-dialog-btn" @click="confirmOpen = false">…</button>
-      <button class="confirm-dialog-btn confirm-dialog-btn--danger" @click="…">…</button>
-    </div>
-  </div>
-</div>
+**Eine Instanz für die ganze App** — das `<dialog id="app-confirm-dialog">` in [index.html](public/index.html), gesteuert über drei Root-Methoden aus [app-chrome.js](public/js/app/app-chrome.js). Kein eigenes Bestätigungs-Markup pro Karte.
+
+```js
+if (!await $app.appConfirm({ message: t('x.confirmDelete', { name }), danger: true })) return;
+await $app.appAlert({ message: t('x.done') });                         // nur OK
+const name = await $app.appPrompt({ message, defaultValue, placeholder }); // null = Abbruch oder leer
+const reason = await $app.appPrompt({ message, allowEmpty: true });        // '' = leer bestätigt, null = Abbruch
 ```
 
-CSS: [public/css/components/confirm-dialog.css](public/css/components/confirm-dialog.css). Varianten `--primary` und `--danger`. Niemals native `confirm()` verwenden.
+- `danger: true` bei allem, was Daten entfernt oder eine Verbindung trennt (roter Bestätigen-Knopf); ohne bei umkehrbaren Aktionen (Wiederherstellen, Abgleich starten).
+- `confirmLabel`/`cancelLabel` optional (Default `common.confirm`/`common.cancel`); `message` immer als i18n-Key, **ohne** hart codierten Ersatztext dahinter.
+- Aufrufende Methode ist `async`; aus Karten-Modulen `window.__app.appConfirm(…)` bzw. `$app.appConfirm(…)` im Template.
+
+CSS: [public/css/components/confirm-dialog.css](public/css/components/confirm-dialog.css). Varianten `--primary` und `--danger`.
+
+**Nie natives `confirm()`/`alert()`/`prompt()`:** es reisst Chrome auf macOS aus dem Vollbild-Space, blockiert den Event-Loop und sieht anders aus als jede andere Rückfrage. Einzige Ausnahme ist der Share-Reader (eigene SSR-Seite ohne Alpine und ohne diesen Dialog). Gegated: [tests/unit/app-confirm-single-place.test.mjs](tests/unit/app-confirm-single-place.test.mjs).
 
 **Unsaved-Changes-Pattern (Reuse, nicht parallel erfinden):** der einheitliche Discard-Dialog läuft über `appConfirm({ message, confirmLabel: t('edit.discardEdit'), danger: true })`. Beispiele: [editor/edit.js#cancelEdit](public/js/editor/edit.js), [figur-werkstatt-card.js#onCardRefresh](public/js/cards/figur-werkstatt-card.js). Pro Feature einen i18n-Key für die Frage (z. B. `edit.cancelConfirm`, `app.switchPageConfirm`, `werkstatt.confirmReload`); der Confirm-Button-Text bleibt der gemeinsame `edit.discardEdit` („Verwerfen" / „Discard").
 
@@ -1950,7 +1984,7 @@ geteilt mit der Sidebar-Page-Suche) — nur sichtbar (`x-show`), wenn das Suchfe
 
 **Höhen-Invariante (Pflicht):** Alle Controls in einer `.filter-bar` — Suchfeld (`.filter-search-input`), Compact-Combobox (`.combobox-wrap--compact`) und Tabs (`.tabs` / `.tabs-btn`) — rendern auf **identischer Höhe** (~26.8px). Sie teilen font-size 12px (`--font-size-mini` / `--size-compact-font-size`), vertikales Padding 4px (`--space-xs` / `--size-compact-padding`), 0.5px-Border **und** `line-height: 1.4`. Die Angleichung lebt in [public/css/entities/entity-list.css](public/css/entities/entity-list.css) und greift automatisch für alle Filter-Bars. **Spezifitäts-Falle:** Das Suchfeld ist ein `<input type="text">` und wird daher von der generischen Form-Regel `input[type=text]` (card-form.css, Spezifität 0,1,1) getroffen — eine nackte `.filter-search-input`-Klasse (0,1,0) verliert dagegen und das Feld käme in Default-Grösse (14px/8px → höher als die Combobox). Darum ist die Compact-Regel als `.filter-bar .filter-search-input` (0,2,0) gescoped. Combobox-Trigger und Tabs-Button sind `<button>`, von der Input-Regel nicht betroffen, brauchen aber explizites `line-height: 1.4` (sonst geerbtes `normal` ~1.2 → niedriger). **Neuer Control-Typ in einer Filter-Bar** → dieselben 4 Werte (Font/Padding/Border/line-height) treffen und auf genügend Spezifität achten, sonst sitzt er höher/tiefer als die Nachbarn.
 
-**Mittellinien-Invariante (Pflicht, gilt für jede zentrierte Zeile):** Ein Control in einer Zeile mit `align-items: center` darf **keine einseitige vertikale Margin** tragen. Flex zentriert die **Aussen**box; eine Margin nur unten (oder nur oben) kippt die sichtbare Box um die halbe Margin gegen die Mittellinie der Nachbarn — bei 6px also 3px, genug um als „nicht zentriert" aufzufallen, und ohne Messen nicht als Margin erkennbar. Betrifft vor allem `<label>`: die globale `label`-Regel ([card-form/form-elements.css](public/css/components/card-form/form-elements.css)) trägt deshalb **bewusst kein `margin-bottom`** — vertikale Abstände zwischen Label und Feld kommen ausschliesslich aus dem `gap` des Containers (`.form-stack`, `.card-form-row`, `.form-inline`, `.setting-field`, `.admin-logs-filter`). Braucht ein Label als Block-Überschrift Abstand nach unten (Container ohne `gap`), setzt das seine eigene Klasse lokal — Muster: `.book-export-migration > .book-export-scope-label`. Gegated: [tests/unit/label-margin-drift.test.mjs](tests/unit/label-margin-drift.test.mjs). Dieselbe Falle bei `padding`: `.card-form-label` trägt `padding-top` für das zweispaltige `.card-form-row`-Raster (`align-items: start`); wird dieselbe Klasse in einer zentrierten Zeile wiederverwendet, muss sie dort auf `0` (Muster: `.export-profile-bar > .card-form-label`).
+**Mittellinien-Invariante (Pflicht, gilt für jede zentrierte Zeile):** Ein Control in einer Zeile mit `align-items: center` darf **keine einseitige vertikale Margin** tragen. Flex zentriert die **Aussen**box; eine Margin nur unten (oder nur oben) kippt die sichtbare Box um die halbe Margin gegen die Mittellinie der Nachbarn — bei 6px also 3px, genug um als „nicht zentriert" aufzufallen, und ohne Messen nicht als Margin erkennbar. Betrifft vor allem `<label>`: die globale `label`-Regel ([card-form/form-elements.css](public/css/components/card-form/form-elements.css)) trägt deshalb **bewusst kein `margin-bottom`** — vertikale Abstände zwischen Label und Feld kommen ausschliesslich aus dem `gap` des Containers (`.form-stack`, `.card-form-row`, `.form-inline`, `.setting-field`, `.admin-logs-filter`). Braucht ein Label als Block-Überschrift Abstand nach unten (Container ohne `gap`), setzt das seine eigene Klasse lokal — Muster: `.book-export-migration > .book-export-scope-label`. Gegated: [tests/unit/label-margin-drift.test.mjs](tests/unit/label-margin-drift.test.mjs). Dieselbe Falle bei `padding`: `.card-form-label` trägt `padding-top` für das zweispaltige `.card-form-row`-Raster (`align-items: start`); wird dieselbe Klasse in einer zentrierten Zeile wiederverwendet, bekommt das Label den Modifier `.card-form-label--inline` (setzt `padding-top: 0`) — keine eigene Feature-Regel dafür.
 
 ---
 
@@ -2056,135 +2090,144 @@ Nur in Sidebar-Tree verwendet. Bei neuer hierarchischer Liste: erst prüfen, ob 
 
 ---
 
-## Context-Menu (Rechtsklick-Popover)
+## Context-Menu (Aktionsmenü)
 
-**Use:** Sekundäre Aktionen pro Element via Rechtsklick (Desktop) bzw. Long-Press (Touch — noch nicht verdrahtet). Erste Konsumentin: Pagetree (`.pagetree-context-menu` für Pages + Chapters).
+**Use:** sekundäre Aktionen eines Elements bzw. einer Ansicht — ein Klick auf einen Eintrag löst aus. **Ein** Markup-Vokabular ([context-menu.css](public/css/components/context-menu.css)), **zwei** Mechaniken, sonst keine:
 
-**CSS** [public/css/components/context-menu.css](public/css/components/context-menu.css):
-- `.context-menu` — `position: fixed`, `z-index: var(--z-popover)`, Border + Shadow.
-- `.context-menu-header` — Target-Name oben, gemuted + ellipsed. Modifier `--inline` für einen Gruppen-Kopf **mitten** im Menü (nach einem `.context-menu-sep`, z.B. „Status" im Recherche-Item-Menü): nimmt den negativen Anschluss an den Menü-Rand zurück, der sonst in den Trenner darüber zieht.
-- `.context-menu-item` — Volle Breite, Hover/Focus = `--color-hover`.
-- `.context-menu-item--danger` — Rot getönt, Hover = `--color-err-bg`.
-- `.context-menu-sep` — 1 px Trenner zwischen Gruppen.
-
-**Markup:**
-```html
-<div class="context-menu pagetree-context-menu"
-     role="menu"
-     x-show="pageTreeMenuOpen"
-     x-cloak
-     :style="{ left: pageTreeMenuPos.left + 'px', top: pageTreeMenuPos.top + 'px' }"
-     @click.stop
-     @contextmenu.prevent>
-  <div class="context-menu-header" x-text="target.name"></div>
-  <button role="menuitem" class="context-menu-item" @click="action()">…</button>
-  <div class="context-menu-sep" role="separator"></div>
-  <button role="menuitem" class="context-menu-item context-menu-item--danger" @click="del()">…</button>
-</div>
-```
-
-**Pflicht-Verhalten** (Konsumenten-Modul):
-- `@contextmenu`-Handler nutzt `ev.preventDefault()` + setzt State (Open/Pos/Target).
-- Position viewport-fixed via `clientX/Y`. Wenn das Menü in einem `transform`-Card-Ancestor lebt: Card-Rect-Offset abziehen (Containing-Block-Falle). Sidebar liegt ausserhalb transform — kein Offset nötig.
-- Outside-Click via `document.addEventListener('mousedown', …, true)` (Capture-Phase) + Escape-Keylistener. Beide bei Hide entfernen.
-- Viewport-Clamp: `Math.min(window.innerWidth - menuW - 8, x)`.
-- `role="menu"`/`menuitem`-Attribute setzen, sonst kein A11y-Signal für Screen-Reader.
-- Container hat `@contextmenu.prevent`, damit Rechtsklick im Menü kein verschachteltes Native-Menü öffnet.
-
-**State-Form** (Beispiel Pagetree):
-- `pageTreeMenuOpen: boolean`
-- `pageTreeMenuPos: { left, top }`
-- `pageTreeMenuTarget: { kind: 'page'|'chapter', id, name }`
-
-**Wann nicht:** für selten genutzte Aktionen ohne klares Trigger-Element — Command-Palette ist dann passender (kein räumlicher Kontext nötig). Auch nicht für Bulk-Operationen — dafür gibt es Selection + Toolbar.
-
-### Dropdown-/Aktions-Menü (Meatball, `⋯`) — verbindliche Harmonisierung
-
-**Use:** Klick-gebundenes Menü an einem Trigger-Button, das sekundäre Aktionen eines Elements bündelt. **Alle** Meatball-/Overflow-Menüs der App nutzen ausschliesslich das `.context-menu`-Vokabular — kein per-Feature nachgebautes Popover-CSS (`*-menu-popover`, `*-context-menu` o.ä.). Konsumenten: Seiten-Action-Leiste ([editor-notebook.html](public/partials/editor-notebook.html), `pageActionsMenuOpen`), Notebook-Edit-Toolbar (sekundäre Controls, `.page-editor-toolbar` via `menu()`), Kapitel-Review-Header, Figur-Werkstatt-Header, Recherche-Item-Aktionen, Ideen-Karte, Plot-Strang-Lane, Figur-Werkstatt-Mindmap-Rechtsklick.
-
-**Pflicht (für jedes Aktions-Menü):**
-- **Trigger** ist ein Icon-Button `more-horizontal` (`.icon-btn icon-btn--ghost`), nie ein `⋯`/`≡`/`▾`-Glyph. `aria-haspopup="menu"` + `:aria-expanded` + `data-tip`/`aria-label` Pflicht.
-- **Jeder Eintrag** ist `.context-menu-item.context-menu-item--icon` mit **führendem** `<svg class="icon"><use…></svg>` + `<span>`-Label (Reihenfolge: Icon, Label, optional `.btn-count` rechts). Kein nackter Text-Eintrag.
-- **Aktions-Kategorien** werden durch `<div class="context-menu-sep" role="separator">` getrennt (z.B. Inhalt ↔ Status ↔ Dateien ↔ Löschen; „Teilen" ist eine eigene Kategorie). Ein `x-show` am Trenner muss dieselbe Bedingung tragen wie der Eintrag, den er einleitet.
-- **Destruktiv** = zusätzlich `.context-menu-item--danger` (Icon `trash`). **Aktiv** (zugehörige Karte offen) = `.context-menu-item--on`.
-- ARIA: `role="menu"` am Popover, `role="menuitem"` je Eintrag.
-- Gegated durch [tests/unit/context-menu-icons.test.mjs](tests/unit/context-menu-icons.test.mjs) (jeder Eintrag hat Icon, jeder Trigger ist Icon-Button) — neues icon-loses Menü ⇒ CI rot.
-
-**Zwei Positionierungs-Strategien** (orthogonal zum Inhalt — der ist immer identisch):
-
-| Strategie | Klasse | Wann | Schliessen |
+| Mechanik | Wann | Geöffnet per | Code |
 |---|---|---|---|
-| **Am Trigger verankert** (Default) | `.context-menu--dropdown` (`position: absolute; right: 0`) | Trigger lebt **nicht** in einem `overflow`-/`transform`-Container | `@click.outside` + `@keydown.escape.window` am `position: relative`-Wrapper (z.B. `.action-overflow`) |
-| **Teleportiert + JS-positioniert** | Basis-`.context-menu` (`position: fixed`) in `<template x-teleport="body">`, `:style` aus `getBoundingClientRect()` | Trigger sitzt in einem Scroll-/Clip-/`will-change`-Container, wo ein verankertes Popover geclippt bzw. eingesperrt würde (Containing-Block-Falle), **oder** Rechtsklick-Kontextmenü | `@click.outside` + `@keydown.escape.window`; zusätzlich `scroll`(capture)/`resize`-Listener, die schliessen (in `init`/Reset wieder abhängen) |
+| **Am Knopf verankert** — `Alpine.data('menu')` | Kopfbereich einer Karte/Ansicht, **nicht** in einem klippenden Container; es gibt kein Element, auf das man rechtsklicken würde (Seiten-Aktionen, Kapitelbewertung, Figur-Werkstatt-Kopf, Notebook-Toolbar) | ⋯-Knopf | [menu.js](public/js/menu.js) |
+| **Teleportiert** — `actionMenuState()`/`actionMenuMethods` | Aktionen **eines Listen-/Board-/Graph-Elements** (Idee, Fundstück, Plot-Strang, Baum-Eintrag, Mindmap- und Motiv-Knoten) — die Liste scrollt/klippt, und dasselbe Element soll per Rechtsklick und Long-Press dasselbe Menü zeigen | ⋯-Knopf **und** Rechtsklick **und** Long-Press | [action-menu.js](public/js/action-menu.js) |
 
-Verankerte Variante (`pageActionsMenuOpen`):
-```html
-<span class="action-overflow" @click.outside="pageActionsMenuOpen = false"
-      @keydown.escape.window="pageActionsMenuOpen = false">
-  <button type="button" class="icon-btn icon-btn--ghost" :class="{ 'is-active': pageActionsMenuOpen }"
-          @click="pageActionsMenuOpen = !pageActionsMenuOpen"
-          aria-haspopup="menu" :aria-expanded="pageActionsMenuOpen"
-          :data-tip="t('editor.btn.moreActions')" :aria-label="t('editor.btn.moreActions')">
-    <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
-  </button>
-  <div class="context-menu context-menu--dropdown" x-show="pageActionsMenuOpen" x-cloak role="menu">
-    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
-            @click="toggleIdeenCard(); pageActionsMenuOpen = false">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#lightbulb"/></svg>
-      <span x-text="t('ideen.title')"></span>
-      <span class="btn-count" x-show="count > 0" x-text="count"></span>
-    </button>
-    <div class="context-menu-sep" role="separator"></div>
-    <button type="button" class="context-menu-item context-menu-item--icon context-menu-item--danger"
-            role="menuitem" @click="del(); pageActionsMenuOpen = false">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
-      <span x-text="t('common.delete')"></span>
-    </button>
-  </div>
-</span>
-```
+### Markup-Vokabular (Pflicht für jedes Menü)
+- **Trigger** ist ein Icon-Button `more-horizontal` (`.icon-btn icon-btn--ghost`), nie ein `⋯`/`≡`/`▾`-Glyph. `aria-haspopup="menu"` + `aria-expanded` + `data-tip`/`aria-label` Pflicht.
+- **Jeder Eintrag** ist `.context-menu-item.context-menu-item--icon` mit **führendem** `<svg class="icon"><use…></svg>` + `<span>`-Label (Reihenfolge: Icon, Label, optional `.btn-count` rechts), `role="menuitem"` (Stufen-Auswahl: `menuitemradio` + `aria-checked`). Kein nackter Text-Eintrag.
+- **Kategorien** trennt `<div class="context-menu-sep" role="separator">` (z. B. Inhalt ↔ Status ↔ Dateien ↔ Löschen; „Teilen" ist eine eigene Kategorie). Ein `x-show` am Trenner trägt dieselbe Bedingung wie der Eintrag, den er einleitet. Ein Gruppen-Kopf mitten im Menü ist `.context-menu-header--inline`; der Ziel-Name oben `.context-menu-header`.
+- **Destruktiv** = zusätzlich `.context-menu-item--danger` (Icon `trash`). **Aktiv** (zugehörige Karte offen, aktuelle Stufe) = `.context-menu-item--on`.
+- Lange Menüs scrollen intern (`max-height` an `.context-menu`) statt aus dem Viewport zu ragen.
+- Konsumenten-Marker-Klasse neben `.context-menu` erlaubt (`.pagetree-context-menu`, `.research-item-menu`) — **ohne** eigenes Styling.
+- Gegated: [context-menu-icons.test.mjs](tests/unit/context-menu-icons.test.mjs) (Icon je Eintrag, Icon-Button als Trigger).
 
-**Verhalten via `Alpine.data('menu')`** (Pflicht für die verankerte Variante) — [public/js/menu.js](public/js/menu.js): das Primitiv besitzt den Open-State und kapselt Toggle, Outside-Click-Close, Escape-Close und **Auto-Close beim Klick auf einen Eintrag**. **Kein handverdrahtetes `menuOpen`-Boolean + `@click.outside`/`@keydown.escape.window` + `; menuOpen = false` pro Eintrag** mehr. Es ersetzt nur das Verhalten, **nicht** das Markup-Vokabular (Icon-Button-Trigger, `.context-menu-item--icon`, `.context-menu-sep` bleiben wie oben — weiter durch context-menu-icons.test.mjs gegated). Pattern:
+### Dropdown-/Aktions-Menü am Knopf (`menu()`)
+
+Das Primitiv besitzt den Open-State und kapselt Toggle, Klick daneben, Esc und das Schliessen nach einem Eintrag. Kein handverdrahtetes `menuOpen`-Boolean, kein `@click.outside`/`@keydown.escape.window`, kein `; menuOpen = false` je Eintrag.
 
 ```html
 <span class="action-overflow" x-data="menu()">
-  <button class="icon-btn icon-btn--ghost" x-bind="trigger" :class="{ 'is-active': open }"
+  <button type="button" class="icon-btn icon-btn--ghost" x-bind="trigger" :class="{ 'is-active': open }"
           aria-haspopup="menu" :data-tip="t('…')" :aria-label="t('…')">
     <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
   </button>
   <div class="context-menu context-menu--dropdown" x-bind="panel" x-cloak>
-    <button class="context-menu-item context-menu-item--icon" role="menuitem" @click="action()">…</button>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="action()">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+      <span x-text="t('…')"></span>
+    </button>
   </div>
 </span>
 ```
+- `x-bind="trigger"` am Knopf, `x-bind="panel"` am Popover (`x-cloak` selbst setzen). `init()` setzt `.menu-anchor` (`position: relative`); `.action-overflow` darf bleiben.
+- Ein Eintrag, der einen Picker am Knopf öffnet, hält den Klick an und schliesst selbst: `@click.stop="startX($el.closest('.action-overflow').querySelector('button')); close()"` — sonst schlösse derselbe Klick den frischen Picker per `click.outside`.
+- Schalter-Einträge (`role="menuitemcheckbox"` + `aria-checked`, Icon `check`/`square`) halten den Klick an (`@click.stop`): das Menü bleibt für den nächsten Schalter offen. Referenz: [ideen-board-stages.html](public/partials/ideen-board-stages.html).
+- Voraussetzung: kein `transform`/`contain`/`will-change`/`overflow` bis zur Karte (sonst Containing-Block-/Clip-Falle → teleportierte Mechanik).
+- Referenz: [kapitelreview.html](public/partials/kapitelreview.html), [editor-page-actions.html](public/partials/editor-page-actions.html).
 
-- `x-bind="trigger"` (@click-Toggle + `:aria-expanded`) am Trigger-Button, `x-bind="panel"` (`x-show` + `role="menu"`) am Popover (`x-cloak` selbst setzen). Wrapper braucht nur `x-data="menu()"` — `init()` setzt die `.menu-anchor`-Klasse (position: relative); `.action-overflow` ist deckungsgleich und darf bleiben.
-- Active-Zustand des Triggers via `:class="{ 'is-active': open }"` (`open` liegt im selben Scope).
-- Einträge brauchen **kein** `; menuOpen = false` — ein Klick auf `.context-menu-item`/`[role=menuitem]` schliesst automatisch (nach dem Item-Handler). `@click.stop` in einem Eintrag unterdrückt das bewusst.
-- Nur die **teleportierte** Variante (unten) bleibt hand-verdrahtet (case-spezifische JS-Positionierung). Beispiel-Migration: [kapitelreview.html](public/partials/kapitelreview.html).
+### Aktionsmenü teleportiert (⋯, Rechtsklick, Long-Press)
 
-Teleportierte Variante (ein **einzelnes** Menü ausserhalb der Liste, offene Zeile per ID; Code-Referenz Ideen [public/js/book/ideen.js](public/js/book/ideen.js) `openMenu`/`closeMenu` + Plot [public/js/book/plot/threads.js](public/js/book/plot/threads.js) `openThreadMenu`):
+**Eine Instanz je Karte** ausserhalb der Liste. Der Knopf toggelt (mit Doppelklick-Frist), Rechtsklick und Long-Press öffnen an Maus bzw. Finger; Tastatur (Kontextmenü-Taste, Umschalt+F10) verankert am Element. Geschätzt im ersten Frame, danach gemessen (Flip nach oben am Knopf, Klemmen am Viewport an der Maus). Schliesst bei Klick daneben, Esc (Fokus zurück; ein nativer `<dialog>` darunter bleibt offen), Tab, Resize, einem Scroll, der den Anker bewegt, nach einem Eintrag und bei `closeOn`-Events. Im Native-Vollbild bzw. offenen `<dialog>` hängt es sich zur Anzeigezeit in den sichtbaren Host — und von dort zurück, wenn es das nächste Mal ausserhalb aufgeht.
+
+```js
+// Karte
+...actionMenuState(),            // actionMenuKey, actionMenuTarget, actionMenuPos
+...actionMenuMethods,            // openActionMenu, closeActionMenu, isActionMenuOpen, actionMenuAnchor, actionMenuPanel
+destroy() { this.closeActionMenu(); … }
+// Feature-Wrapper (Ziel = ID, nicht das Objekt — das Menü löst es live auf)
+openMenu(ev, idee) { this.openActionMenu(ev, `idee:${idee.id}`, idee.id); },
+menuOpenIdee() { return this.ideen.find(i => i.id === this.actionMenuTarget) || null; },
+```
 ```html
-<template x-teleport="body">
-  <div class="context-menu" x-show="menuOpenId !== null && !!menuOpenIdee()" x-cloak
-       :style="`top:${menuPos.top}px;left:${menuPos.left}px`"
-       @click.outside="closeMenu()" @keydown.escape.window="closeMenu()" role="menu">
+<div class="idee-item" @contextmenu="openMenu($event, idee)" x-long-press>
+  <button type="button" class="icon-btn icon-btn--ghost" @click="openMenu($event, idee)"
+          aria-haspopup="menu" :aria-expanded="isActionMenuOpen('idee:' + idee.id)" …>…more-horizontal…</button>
+</div>
+<template x-teleport="body">   <!-- Vollbild-Karte: x-teleport=".card--plot" usw. -->
+  <div class="context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
     <template x-if="menuOpenIdee()"><div>
       <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-              @click.stop="startEditIdee(menuOpenIdee()); closeMenu()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
-        <span x-text="t('ideen.edit')"></span>
-      </button>
+              @click="startEditIdee(menuOpenIdee())">…</button>
     </div></template>
   </div>
 </template>
 ```
+- **Ein Weg, drei Auslöser:** jedes Element mit `@contextmenu` trägt `x-long-press` daneben. Die Direktive löst nach dem Halten am Element unter dem Finger ein `contextmenu`-Event aus — derselbe Handler bedient Maus und Touch (auch per `addEventListener` gebundene wie Mindmap und vis-network). Hat das Element zusätzlich einen ⋯-Knopf, öffnet der dasselbe Menü mit demselben Schlüssel.
+- **Einträge brauchen weder `.stop` noch ein eigenes Schliessen** — `actionMenuPanel()` schliesst nach dem Eintrag und hält den Klick am Menü an (ein Eintrag, der ein Inline-Formular oder einen Picker mit `@click.outside` öffnet, bliebe sonst nicht offen). Ausnahme: ein Eintrag, der das Menü bis nach einer asynchronen Rückkehr offen halten muss (Datei-Upload per `<label>` + `<input type="file">`), hält den Klick mit `@click.stop` an und schliesst im `@change`.
+- **Picker aus dem Menü** verankern an `actionMenuAnchor()` (Knopf bzw. Zeile) — der Eintrag verschwindet mit dem Menü.
+- **Ziel als ID bzw. `{ ctx, id }`**, aufgelöst über eine Methode (`menuOpenIdee()`, `threadMenuLane()`, `itemMenuItems()`); ein Menü für mehrere Kontexte derselben Karte (Recherche: Liste, Board-Karte, Detail-Dialog) unterscheidet über den Schlüssel `ctx:id`.
+- Das Element mit `@contextmenu` filtert selbst, wann kein Menü kommt (`if (!busy && editingId !== idee.id) …`) — im Bearbeiten-Modus bleibt der native Rechtsklick des Textfelds.
+- Konsumenten: Seitenbaum ([tree-context-menu.js](public/js/book/tree-context-menu.js), im Root), Ideen-Karte, Recherche ([recherche-item-menu.html](public/partials/recherche-item-menu.html)), Plot-Strang, Motiv-Graph, Figur-Mindmap.
+
+### Regeln
+- Neues **Aktions**-Menü erfindet kein eigenes Popover-CSS, keine eigene Item-/Sep-Klasse und keine eigene Öffnen/Schliessen-Mechanik. Fehlt ein Icon im Sprite, erst [public/icons.svg](public/icons.svg) ergänzen (Lucide).
+- **Kein Rechtsklick ohne Long-Press** — Touch-Geräte haben keinen Rechtsklick. Ausnahme: der Rechtsklick im Notebook-/Focus-Editor (`_onEditContextMenu`), der Rechtschreib-/Synonym-Vorschläge zum markierten Text zeigt, kein Element-Menü.
+- **Wann nicht:** selten genutzte Aktionen ohne räumlichen Kontext → Command-Palette; Bulk-Operationen → Auswahl + Toolbar; **Wählen statt Auslösen** → [Picker-Popover](#picker-popover-picker-popover).
+- **Content-Popover-Ausnahme:** ein Popover, das reichen Inhalt statt Aktionen listet (mehrzeilige Zeilen mit Titel + Metadaten/Snippet), darf die `.context-menu`-Hülle mit eigener Zeilenklasse und eigener Positionierung nutzen. Einziger Konsument: Plot-Fundstellen-Popover ([plot-anchor-popover.html](public/partials/plot-anchor-popover.html), `openBeatOccPopover` in [plot/ai.js](public/js/book/plot/ai.js)).
+- Gegated: [action-menu-single-place.test.mjs](tests/unit/action-menu-single-place.test.mjs) — jedes `.context-menu` bindet `menu()` oder `actionMenuPanel()`, jeder ⋯-Knopf hängt an einem der beiden, jedes `@contextmenu` hat `x-long-press`, keine eigene Outside-Click-Mechanik daneben. Verhalten in der echten App: [tests/e2e-app/action-menu.spec.js](tests/e2e-app/action-menu.spec.js).
+
+---
+
+## Picker-Popover (`.picker-popover`)
+
+**Use:** An **einem** Element etwas wählen — verknüpfen, verschieben, zuordnen —, ausgelöst von einem Knopf an diesem Element, oft weit unten in einer langen Liste oder einem Board. Das Popover geht direkt am Knopf auf und nennt im Kopf das Element, damit sichtbar bleibt, woran gerade gewählt wird.
+
+**Abgrenzung:**
+- [Context-Menu](#context-menu-aktionsmenü) — Aktionen, ein Klick löst aus. Picker-Popover — Eingabefelder + Übernehmen/Abbrechen.
+- Content-Popover (Fundstellen) — listet Inhalt zum Anspringen, wählt nichts.
+- [Lookup-Popover](#lookup-popover-figur-lookup) / Entitäts-Hover-Vorschau — reine Anzeige.
+- Kein Inline-Panel über der Liste und kein Block im Kartenkopf für dieselbe Aufgabe: bei einem Element weit unten stünde er ausserhalb des Sichtfelds, der Klick sähe wirkungslos aus.
+
+**Markup** (eine Instanz **ausserhalb** der Liste, nicht je `x-for`-Zeile — eine Combobox je Zeile initialisiert nicht sauber, in einer SortableJS-Liste läge sie im Drag-Container):
+```html
+<template x-teleport="body"> <!-- Vollbild-Karte: die Karten-Wurzel, siehe public/CLAUDE.md -->
+  <div class="picker-popover xyz-picker"
+       x-ref="xyzPopover"
+       x-show="xyzId !== null" x-cloak
+       :style="{ top: pickerPopoverPos.top + 'px', left: pickerPopoverPos.left + 'px' }"
+       @keydown.escape.window="cancelXyz()"
+       role="dialog" :aria-label="$app.t('…')">
+    <div class="picker-popover__head">
+      <span class="picker-popover__title" x-text="$app.t('…')"></span>    <!-- was gewählt wird -->
+      <span class="picker-popover__subject" x-text="xyzItem()?.name"></span> <!-- woran -->
+    </div>
+    <div x-data="combobox(…)" x-modelable="value" x-model="xyzTarget" x-effect="…"></div>
+    <div class="picker-popover__actions">
+      <button type="button" class="btn-compact" @click="applyXyz()">…</button>
+      <button type="button" class="btn-compact" @click="cancelXyz()">…</button>
+    </div>
+  </div>
+</template>
+```
+
+**JS** [public/js/picker-popover.js](public/js/picker-popover.js) — `pickerPopoverState()` in den State, `pickerPopoverMethods` in die Methoden spreaden:
+```js
+openXyz(ev, item) { this.xyzId = item.id; this._openPickerPopover(ev, 'xyzPopover', () => this.cancelXyz()); }
+cancelXyz()       { this.xyzId = null; this._releasePickerPopover(); }
+```
+`_openPickerPopover` blendet den Trigger-Tooltip aus, hängt das Popover im Native-Vollbild in den Top-Layer (`mountInTopLayer`), positioniert in zwei Pässen über [popover-anchor.js](public/js/popover-anchor.js) (Schätzung, dann `$nextTick`-Messung) und schliesst bei Resize und bei Klick daneben. Mehrere Picker einer Karte teilen sich die Mechanik: offen ist höchstens einer, das Öffnen des nächsten bricht den vorigen ab.
 
 **Regeln:**
-- Verankerte Variante: Wrapper braucht `position: relative` + **kein** `transform`/`contain`/`will-change` auf Ancestors bis zur Karte (sonst Containing-Block-/Clip-Falle → teleportierte Variante nehmen).
-- Konsumenten-Marker-Klasse für JS-Hooks (Outside-Click-Query) zusätzlich zu `.context-menu` erlaubt (Muster `.pagetree-context-menu`, `.werkstatt-context-menu`) — sie trägt **kein** eigenes Styling.
-- Neues **Aktions**-Menü erfindet **kein** eigenes Popover-CSS und keine eigene Item-/Sep-Klasse. Fehlt ein Icon im Sprite, erst [public/icons.svg](public/icons.svg) ergänzen (Lucide), dann verwenden.
-- **Content-Popover-Ausnahme:** Ein Popover, das keine Aktions-Einträge, sondern **reichen Inhalt** listet (mehrzeilige Zeilen mit Titel + Metadaten/Snippet), darf die `.context-menu`-Hülle + die teleportierte JS-Positionierung (`_compute*Pos`, Flip-Messung, scroll/resize-Close) wiederverwenden **und** eine eigene Zeilenklasse definieren — die Aktions-Item-Klasse (`.context-menu-item--icon`, einzeilig) passt nicht. Konsument: Plot-Anchor-Fundstellen-Popover ([plot.html](public/partials/plot.html), `.plot-occ-*` in [board.css](public/css/book/plot/board.css), `openBeatOccPopover` in [plot/ai.js](public/js/book/plot/ai.js)) — Seitenname + Score + Snippet zweizeilig, Klick springt an die Textstelle. Content-Popover ist **nicht** durch context-menu-icons.test.mjs gegated (keine Icon-Einträge).
+- **Kein `@click.outside` im Markup** — Klick daneben schliesst die Mechanik über `mousedown` am Dokument. Alpines Outside-Check verwirft Klicks auf Elemente, die der Klick selbst aus dem DOM nimmt (ein per `x-if` getauschter Platzhalter-Trigger), und der Picker bliebe offen.
+- **Kein Scroll-Close** — bewusst nur Resize: ein Capture-Scroll-Listener feuert auch beim Rollen in der Options-Liste der Combobox und schlösse den Picker mitten in der Auswahl.
+- **`:style` in Objekt-Form** (`{ top: …+'px', left: …+'px' }`), nie als String: die String-Form ersetzt das ganze `style`-Attribut samt dem `display:none` von `x-show` — mehrere Picker einer Karte teilen sich `pickerPopoverPos`, und die geschlossenen Geschwister würden beim Positionieren sichtbar.
+- **Esc im Dialog:** liegt der Picker in einem nativen `<dialog>`, trägt er zusätzlich `@keydown.escape.stop.prevent` — sonst schliesst Esc den Dialog statt nur den Picker.
+- **Kopf ist Pflicht**, `__subject` zweizeilig abgeschnitten — der Kopf soll das Popover nicht länger machen als seine Felder.
+- **Folge der Wahl als `__hint`** (Ladezustand, Leer-Hinweis, Warnung vor einem nicht umkehrbaren Schritt) im Popover, nicht als zweiter Bestätigungs-Dialog danach.
+- **Inhalt ändert sich nach dem Öffnen** (Optionen nachgeladen) → `_refinePickerPopover(refName)` aufrufen; sonst löst sich ein hochgeklapptes Popover vom Trigger.
+- **Breite** über `--picker-popover-w` (Default 320px) an der Konsumenten-Klasse; wer sie ändert, gibt `_openPickerPopover(…, { w })` dieselbe Schätzung mit, sonst springt das Popover beim Nachmessen.
+- Konsumenten-Klasse (`.xyz-picker`) nur als Test-/JS-Haken und für die Breite (`--picker-popover-w`), kein eigenes Box-Styling; Felder im Picker stylt ihre eigene Klasse.
+
+**CSS:** [components/picker-popover.css](public/css/components/picker-popover.css). Gegated: [picker-popover-single-place.test.mjs](tests/unit/picker-popover-single-place.test.mjs) — Markup-Rahmen, Ref-Paarung `_openPickerPopover` ↔ `x-ref`, Mechanik nur aus `picker-popover.js`, Optik nur aus `picker-popover.css`.
+
+**Konsumenten:** Recherche — Verknüpfen eines Fundstücks ([recherche-link-picker.html](public/partials/recherche-link-picker.html), aus Liste, Board-Karte und Detail-Dialog). Ideen — Verknüpfen ([ideen-link-picker.html](public/partials/ideen-link-picker.html), Ideen-Karte + Ideen-Board), Verschieben ([ideen.html](public/partials/ideen.html)), Zuordnen ([ideen-board-add.html](public/partials/ideen-board-add.html)); die drei teilen sich `pickerPopoverPos`. Buchorganizer — Abschnitt in anderes Buch ([organizer-book-move.html](public/partials/organizer-book-move.html), Warnung als `__hint` statt Rückfrage-Dialog). Figur-Werkstatt — mit Katalogfigur verknüpfen ([werkstatt-link-picker.html](public/partials/werkstatt-link-picker.html), lädt nach dem Öffnen und misst über `_refinePickerPopover` neu).
 
 ---
 
@@ -3037,6 +3080,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [components/combobox.css](public/css/components/combobox.css) | `.combobox-*` — Searchable-Select-Komponente (Trigger, Dropdown, Optionen, Gruppen-Header, Compact-Variante, Footer-Button). |
 | [components/buttons-badges.css](public/css/components/buttons-badges.css) | `<button>` Hierarchie, `.badge-*`, `.avatar-*`, `.btn-group`, `.btn-compact`. |
 | [components/hover-reveal.css](public/css/components/hover-reveal.css) | `.hover-reveal-host` + `.hover-reveal` — Item-Aktionen erst auf Hover/Fokus/offenes Menü, auf Touch immer (Boards, Listen, Verläufe, Chat-Sitzungen, Kommentar-Threads). |
+| [components/drag-grip.css](public/css/components/drag-grip.css) | `.drag-grip` (+ `.drag-grip-host`) — einziger Drag-Griff-Stil für SortableJS-Karten/-Zeilen: `grip-vertical` 14px, Position über `--drag-grip-host-gap`, `1lh` hoch, drei Farbstufen (Plot-Beat, Recherche-Status, Ideen-Board, Motiv-Themen, Buchorganizer). |
 | [components/icon-btn.css](public/css/components/icon-btn.css) | `.icon-btn` (outlined) + `.icon-btn--ghost` — SSoT für alle Icon-only Buttons (Graph/Map/Mindmap-Toolbars, Header-Cluster, Plot-Board, Action-Groups). Feature-Marker setzen nur Deltas darauf. |
 | [components/tabs.css](public/css/components/tabs.css) | `.tabs` / `.tabs-btn` + `--active`/`--scrollable`/`--fullwidth`. Basis scrollt horizontal (Scrollbalken versteckt, Rand-Schatten als Signal). |
 | [components/device-tokens.css](public/css/components/device-tokens.css) | `.device-tokens-*` — Token-Verwaltung in User-Settings (Reveal-Block für Klartext-Token einmalig nach Create, Row-List statt Table). |
@@ -3073,6 +3117,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [components/status-msg.css](public/css/components/status-msg.css) | `.success-msg` / `.error-msg` (+ `--banner`-Variante mit Fläche) — app-weite Status-Meldungen aus den Status-Tokens. **Eindeutiger Besitzer für zwei generische Klassennamen**, die vorher in `admin/admin-settings.css`, `chat.css` und `page/page-list.css` verteilt lagen; die Darstellung hing dadurch an der Ladereihenfolge unbeteiligter Dateien. Konsumenten: Admin-Einstellungen, API-/Geräte-Token, Chat- und Lektorat-Statusstrings. |
 | [components/floating-dock.css](public/css/components/floating-dock.css) | `.dock` / `.dock-btn` (+ `--sub`) / `.dock-status` — schwebender Werkzeug-Dock am Rand der Lesefläche (runde Icon-Taste + Status-Pille mit Punkt-Indikator). Geteilte SSoT für **drei** Konsumenten: `.stt-dock` (Diktat, sticky rechts), `.tts-dock` im Notebook (Vorlesen, sticky links) und `.tts-dock` im Share-Reader (fixed links). Neutrale `--dock-*`-Variablen mit Fallback auf die SPA-Tokens → die zwei SPA-Docks brauchen kein Mapping, der Reader mappt sie in `share/tts.css` auf `--share-*`. Verankerung, Zustandsfarben und Puls-Animationen bleiben beim Konsumenten. |
 | [components/color-picker.css](public/css/components/color-picker.css) | `.color-picker` / `__swatch` / `__popover` / `__opt` (+ `--on`, `--none`) — Farbwähler-Popover für Ordnungsfarben. Geteilt zwischen Motiv-Werkstatt (Themen) und Plot-Werkstatt (Akte, Handlungsstränge). Die Farbe liefert der Konsument per `--col-accent`; das Modul kennt keine Palette, nur die Form. |
+| [components/picker-popover.css](public/css/components/picker-popover.css) | `.picker-popover` / `__head` / `__title` / `__subject` / `__actions` — am Trigger verankertes Auswahl-Popover an einem Element (Kopf nennt das Element, darunter Felder, unten Aktionen). Mechanik in [picker-popover.js](public/js/picker-popover.js), Breite über `--picker-popover-w`. Siehe „Picker-Popover". |
 | [components/editor-dialog.css](public/css/components/editor-dialog.css) | `.editor-dialog` / `__inner` / `__head` / `__title` / `__actions` / `__spacer` — Schale der modalen Notebook-Editor-Dialoge (natives `<dialog>`, Focus-Trap + ESC vom Browser). Geteilt von Diagramm- und Tabellen-Dialog; Breite pro Dialog über `--dlg-width`/`--dlg-max-width`. Der Rumpf (das eigentliche Werkzeug) bleibt beim Konsumenten. |
 | [components/snapshots.css](public/css/components/snapshots.css) | Fassungen-Karte (`snapshotsCard`): Capture-Leiste + Drift-Hinweis (`.snapshots-drift` „lohnt sich eine neue Fassung?", operational-status-Achse, `--worth`-Modifier amber-getönt + `.snapshots-drift__head`/`__tags`) + Fassungs-Liste + Buch-Level-Diff zweier Fassungen. Tabelle reuse `.entity-grid-table`; Diff-Zellen reuse `revision-diff-*` aus `page/page-revision-viewer.css` — hier nur snapshot-spezifische Zell-Tweaks. |
 
@@ -3266,32 +3311,42 @@ Position: absolute innerhalb `.card`, `background: var(--color-surface) / 0.7` m
 
 ---
 
-## Empty-State mit CTA
+## Leerzustand
 
-**Status:** Aktiv. Klassen leben in [card-form/form-elements.css](public/css/components/card-form/form-elements.css). Verwenden, wann immer eine Karte „Keine Daten — hier der Button um welche zu erzeugen" rendert. Ersetzt den nackten `.card-status`-Leertext. Konsumenten: Figuren-Werkstatt (Inline-Input-Variante) **und** alle Komplettanalyse-Katalogkarten (Figuren, Orte, Szenen, Ereignisse, Weltfakten, Kontinuität, Songs) mit „Buch analysieren"-CTA.
+**Use:** überall, wo an Stelle von Inhalt „hier ist (noch) nichts" steht. Zwei Bausteine, sonst keiner — die Wahl hängt daran, ob der Leerzustand einen Einstieg anbietet:
 
-**Markup (Standard-CTA mit Icon — Komplettanalyse-Katalogkarten):**
+| Fall | Baustein | Beispiel |
+|---|---|---|
+| Karte/Panel/Abschnitt ist leer **und** bietet einen Knopf oder erklärt, wie Inhalt entsteht | `.card-empty` | Katalogkarte vor der ersten Analyse, leerer Abschnitt in der Leseansicht, leeres Buch in der Sidebar, Ideen-Chat mit Schnellstart |
+| reiner Text an der Stelle einer leeren Liste, Spalte, Tabelle, eines leeren Popovers oder Chat-Verlaufs | `.muted-msg` + `--sm` (+ `--block` für zentriert mit Luft) | leeres Kapitel im Buchorganizer, leere Status-Spalte, leerer Referenz-Reiter, Chat ohne Nachrichten |
+
+**`.card-empty`** ([card-form/form-elements.css](public/css/components/card-form/form-elements.css)):
 ```html
 <div x-show="…leer & nicht-loading…" class="card-empty">
   <p class="card-empty-text" x-text="$app.t('common.noAnalysisYet')"></p>
-  <button type="button" class="primary card-empty-cta"
-          @click="$app.alleAktualisieren()"
-          :disabled="$app.alleAktualisierenLoading || !$app.selectedBookId">
+  <p class="card-empty-hint" x-text="$app.t('…')"></p>            <!-- optional -->
+  <button type="button" class="primary card-empty-cta" @click="…" :disabled="…">
     <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
     <span x-text="$app.t('header.updateAll')"></span>
   </button>
 </div>
 ```
-- `.card-empty` — flex-column, zentriert, Padding `--space-2xl --space-lg` (Mobile: `--space-xl --space-md`)
-- `.card-empty-text` — semantischer Hauptsatz, `--font-size-md`, `--fw-medium`, Text-Farbe
-- `.card-empty-hint` — 12 px muted Erklärung, `max-width: 32em` (optional, nur wenn der Hauptsatz Kontext braucht)
-- `.card-empty-cta` — `inline-flex` + Gap, damit Lucide-Icon + Label im `.primary`-Button bündig sitzen. Basis bleibt `.primary`.
+- `.card-empty` — flex-column, zentriert, Padding `--space-2xl --space-lg` (Mobile: `--space-xl --space-md`).
+- `.card-empty--compact` — schmale Flächen (Sidebar, Seitenpanel, Chat): weniger Luft.
+- `.card-empty-text` — Hauptsatz, `--font-size-md`, `--fw-medium`. Entfällt nur, wenn der Leerzustand bloss erklärt (dann allein `-hint`, z. B. Ideen-Chat).
+- `.card-empty-hint` — Erklärung, Erscheinung aus der `.card-hint`-Gruppe, `max-width: 32em`.
+- `.card-empty-cta` — ein Knopf (`.primary`-Basis), Icon + Label bündig. Mehrere Knöpfe → `.card-empty-actions` (Zeile, umbrechend).
+- CTA muss zur **tatsächlichen** Datenquelle der Karte passen: Komplettanalyse-Outputs → `$app.alleAktualisieren()`; Lektorat-getriebene Karten (Fehler-/Stil-Heatmap) bekommen diesen CTA nicht. CTA `:disabled`, solange die Analyse läuft oder kein Buch gewählt ist.
+- Braucht der Einstieg ein Eingabefeld (Figuren-Werkstatt: „Neue Figur — Name eingeben"), Input + Knopfzeile mit `.row` im `.card-empty`.
+
+**`.muted-msg`** ([card-form/card-blocks.css](public/css/components/card-form/card-blocks.css)): `<p class="muted-msg muted-msg--sm" x-show="!items.length" x-text="$app.t('….empty')"></p>`. `--block` zentriert mit Polster für eine ganze leere Fläche (Chat-Verlauf, Referenz-Reiter, Palette).
 
 **Regeln:**
-- CTA muss zur **tatsächlichen** Datenquelle der Karte passen. Komplettanalyse-Outputs → `$app.alleAktualisieren()`. Lektorat-getriebene Karten (Fehler-/Stil-Heatmap) NICHT mit diesem CTA versehen — sie entstehen über den Prüf-Flow, nicht über die Komplettanalyse.
-- CTA `:disabled`, solange die Analyse läuft oder kein Buch gewählt ist.
+- **Keine Leer-Optik in Feature-CSS.** Eine Feature-Klasse daneben (`organizer-empty`, `page-empty-state`, `sidebar-empty-book`) trägt nur die Abweichung — Abstand, Ausrichtung, Rahmen, Position —, nie `color`/`font-size`/`font-style`/`font-weight`. Ohne Abweichung keine Feature-Klasse.
+- **Kein `.card-status` für leere Listen** — `.card-status` meldet einen Vorgang (siehe [Card-Status](#card-status--loading--empty--error)).
+- Ausnahmen, die ihre Leerzeile selbst stylen: das Innenleben der `combobox`, das Spellcheck-Popover (OTA-Editor-Bundle ohne `card-blocks.css`) und der Share-Reader (eigenes Theme).
 
-Wenn die Karte zusätzlich Inline-Inputs braucht (z.B. „Neue Figur — Name eingeben"), `.card-empty` als Container für Input + Button-Row mit `.row` weiternutzen — siehe [public/partials/figur-werkstatt.html](public/partials/figur-werkstatt.html).
+Gegated: [tests/unit/empty-state-single-place.test.mjs](tests/unit/empty-state-single-place.test.mjs) — jede `…-empty`-Klasse im Markup steht neben `card-empty` oder `muted-msg`, Feature-CSS darauf trägt keine Schrift-/Farb-Optik, `card-empty-*`-Teile nur mit Container.
 
 ---
 
@@ -3356,7 +3411,7 @@ Wenn die Karte zusätzlich Inline-Inputs braucht (z.B. „Neue Figur — Name ei
       <div class="plot-beats" data-plot-cell :data-act-id="act.id">
         <div class="plot-beat plot-beat--im_buch" :data-beat-id="beat.id">
           <div class="plot-beat-head">
-            <span class="plot-beat-grip">…grip-vertical-Icon…</span>  <!-- einzige Drag-Greiffläche (handle), nur Ansichtsmodus -->
+            <span class="drag-grip plot-beat-grip">…grip-vertical-Icon…</span>  <!-- einzige Drag-Greiffläche (handle), nur Ansichtsmodus -->
             <span class="plot-beat-title">…</span>                    <!-- Klick = Edit-Modus -->
             <span class="plot-beat-intensity">…Pips 1–5…</span>
           </div>

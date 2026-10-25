@@ -9,6 +9,8 @@
 //   html.js      — HTML-Bereinigung (Paste-Sanitizing, Style-/Leerblock-Cleanup)
 //   html-find.js — tolerantes Suchen/Ersetzen in HTML
 //   markdown.js  — Chat-Markdown → HTML + Mention/Channel-Dekoration
+//   textarea.js  — Textarea-Höhe nach Inhalt (field-sizing-Fallback), Inline-Edit-Mount
+//   keys.js      — Tastatur-Prädikate (Cmd/Ctrl+S)
 //
 // `export *` re-exportiert Live-Bindings (z.B. das mutable `CHARS_PER_TOKEN`/
 // `appTimezone`), sodass configureTokenEstimate/configureAppTimezone weiterhin
@@ -21,3 +23,5 @@ export * from './utils/net.js';
 export * from './utils/html.js';
 export * from './utils/html-find.js';
 export * from './utils/markdown.js';
+export * from './utils/textarea.js';
+export * from './utils/keys.js';

@@ -39,7 +39,10 @@ export const crudMethods = {
   // ein Save markiert nur die Generation als gespeichert, die er exportiert hat.
   // Eine Änderung, die während des laufenden PUT entsteht, bleibt so dirty —
   // ein Boolean würde sie mit dem Save-Ende als gespeichert ausgeben.
-  _markMindmapDirty() { this._mindmapGen++; },
+  _markMindmapDirty() {
+    this._mindmapGen++;
+    this._recordMindmapStep?.();   // Undo-Schritt (history.js)
+  },
   _markMindmapClean(gen = this._mindmapGen) { this._mindmapSavedGen = gen; },
 
   archetypeLabel(a) {
@@ -124,7 +127,7 @@ export const crudMethods = {
   resetDrafts() {
     this._destroyMindmap();
     this._clearJobs();
-    this._hideContextMenu?.();
+    this.closeActionMenu();
     if (document.fullscreenElement) {
       try { document.exitFullscreen(); } catch {}
     }
@@ -141,7 +144,6 @@ export const crudMethods = {
     this.brainstormResult = null;
     this.consistencyResult = null;
     this.mindmapFullscreen = false;
-    this.contextMenuOpen = false;
     this.importing = false;
     this.importables = [];
     this.selectedImportFigureId = '';
@@ -149,6 +151,7 @@ export const crudMethods = {
     this.linkCandidates = [];
     this.linkCandidatesLoading = false;
     this.selectedLinkFigureId = '';
+    this._releasePickerPopover();
     this.runs = { brainstorm: [], consistency: [] };
     this.runsLoadedDraftId = null;
     this.plotUsage = null;
@@ -157,8 +160,6 @@ export const crudMethods = {
     this.selectedKonfliktIdx = null;
     this.runsLoading = false;
     this.importablesLoading = false;
-    this.werkstattMenuOpen = false;
-    this.contextMenuNodeId = null;
     this.loading = false;
     this._markMindmapClean();
     this._runsLoadDraftId = null;
@@ -318,6 +319,8 @@ export const crudMethods = {
 
   async createDraft() {
     const app = window.__app;
+    // Enter im Namensfeld feuert auch, während der POST noch läuft.
+    if (this.busy) return;
     const name = (this.newName || '').trim();
     if (!name) { this.errorMessage = app.t('werkstatt.error.nameRequired'); return; }
     const bookId = Alpine.store('nav').selectedBookId;
@@ -341,7 +344,24 @@ export const crudMethods = {
     }
   },
 
+  // Ein Save zur Zeit. Cmd+S, der Knopf und die Auto-Saves vor Figurwechsel,
+  // Brainstorm, Konsistenz-Check und Verankerung können sich überholen; ein
+  // zweiter PUT schickte den Zeitstempel, den der erste gerade überholt hat,
+  // und bekäme 409 DRAFT_CONFLICT gegen sich selbst. Wer währenddessen kommt,
+  // wartet und speichert danach nur, was noch offen ist.
   async saveDraft() {
+    let waited = false;
+    while (this._savePromise) {
+      waited = true;
+      if (!(await this._savePromise)) return false;
+    }
+    if (waited && !this.isDirty()) return true;
+    const p = this._saveDraftNow();
+    this._savePromise = p;
+    try { return await p; } finally { if (this._savePromise === p) this._savePromise = null; }
+  },
+
+  async _saveDraftNow() {
     const app = window.__app;
     const sel = this.selectedDraft();
     if (!sel) return false;
@@ -350,6 +370,7 @@ export const crudMethods = {
     // Generation VOR dem Export festhalten: nur sie gilt nach dem Save als
     // gespeichert (siehe _markMindmapDirty).
     const gen = this._mindmapGen;
+    const mindmapChanged = gen !== this._mindmapSavedGen;
     // Mindmap nur exportieren, wenn Editor zu diesem Draft gehört (_jmDraftId
     // wird in _mountMindmap nach show() gesetzt). Sonst Server-State behalten.
     const exported = this._jmDraftId === sel.id ? this._exportMindmap() : null;
@@ -373,13 +394,54 @@ export const crudMethods = {
       this.drafts = this.drafts.map(d => d.id === updated.id ? updated : d);
       this.errorMessage = '';
       this._markMindmapClean(gen);
+      // Bogen-Band nachziehen: ein neu ausgearbeiteter Kern bekommt seine Zeile,
+      // und die Figur gilt als „seit der Verankerung geändert".
+      if (mindmapChanged) this.loadArc?.();
       return true;
     } catch (e) {
+      if (e?.code === 'DRAFT_CONFLICT' && e.body?.current) {
+        this.busy = false;
+        return this._resolveSaveConflict(sel.id, e.body.current);
+      }
       this.errorMessage = werkstattErrorText(e, 'werkstatt.error.save');
       return false;
     } finally {
       this.busy = false;
     }
+  },
+
+  // 409 DRAFT_CONFLICT: der Server-Stand ist neuer (zweiter Tab, Zweitgerät).
+  // Zwei Rückfragen nacheinander, keine mit Esc-Verlust: erst „meine Version
+  // speichern" (überschreibt den neueren Stand), dann „Server-Version laden"
+  // (verwirft meine). Wer beide ablehnt, behält seinen Stand ungespeichert.
+  async _resolveSaveConflict(draftId, current) {
+    const app = window.__app;
+    const keepMine = await app.appConfirm({
+      message: app.t('werkstatt.conflict.keepMine'),
+      confirmLabel: app.t('werkstatt.conflict.keepMineBtn'),
+      danger: true,
+    });
+    if (this.selectedDraftId !== draftId) return false;
+    if (keepMine) {
+      // Auf dem Server-Stand aufsetzen: nur der Zeitstempel wandert, Formular
+      // und Canvas bleiben der eigene Stand.
+      this.drafts = this.drafts.map(d => d.id === draftId ? { ...d, updated_at: current.updated_at } : d);
+      return this._saveDraftNow();
+    }
+    const loadServer = await app.appConfirm({
+      message: app.t('werkstatt.conflict.loadServer'),
+      confirmLabel: app.t('werkstatt.conflict.loadServerBtn'),
+      danger: true,
+    });
+    if (this.selectedDraftId !== draftId) return false;
+    if (loadServer) {
+      this.drafts = this.drafts.map(d => d.id === draftId ? current : d);
+      this._reloadSelectedDraft();
+      this.errorMessage = '';
+      return true;
+    }
+    this.errorMessage = app.t('werkstatt.error.conflict');
+    return false;
   },
 
   async requestDelete() {

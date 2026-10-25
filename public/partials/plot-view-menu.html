@@ -1,0 +1,45 @@
+<!-- Ansichts-Menue der Plot-Filterleiste (Fragment, string-seitiger @include
+     aus plot.html; Scope = plotCard). Drei Schalter des Arbeitsmodus, alle per
+     User persistiert (plot-card.js, book/plot/board-ui.js):
+     - Archiv: abgeschlossene Akte (Beats eingearbeitet) sind aus den Board-
+       Spalten raus — hier holt man sie zum Nachlesen/Wiederaufnehmen zurueck.
+       Haengt nicht an den Beats: ein archivierter Akt ohne Beats muss
+       erreichbar bleiben.
+     - „im Buch" ausblenden: nur was noch offen ist.
+     - Dichte: nur die Kopfzeile der Beat-Karten.
+     Die Zahl am Knopf sagt, wie viele Schalter von der Grundansicht abweichen —
+     ein ausgeblendetes „im Buch" waere sonst im geschlossenen Menue unsichtbar.
+     Schalter halten den Klick an (`.stop`): das Menue bleibt fuer den naechsten
+     offen. -->
+<span x-data="menu()" class="plot-view-menu">
+  <button type="button" class="btn-compact plot-view-toggle" x-bind="trigger" aria-haspopup="menu"
+          :class="{ 'is-active': open }" :data-tip="$app.t('plot.view.tip')">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#list-filter"/></svg>
+    <span x-text="$app.t('plot.view.toggle')"></span>
+    <span class="btn-count" x-show="plotViewChanges() > 0" x-text="plotViewChanges()"></span>
+  </button>
+  <div class="context-menu context-menu--dropdown plot-view-menu-panel" x-bind="panel" x-cloak>
+    <div class="context-menu-header" x-text="$app.t('plot.view.toggle')"></div>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
+            x-show="archivedActCount() > 0"
+            :class="{ 'context-menu-item--on': plotShowArchived }" :aria-checked="plotShowArchived"
+            @click.stop="plotShowArchived = !plotShowArchived">
+      <svg class="icon" aria-hidden="true"><use :href="plotShowArchived ? '/icons.svg#check' : '/icons.svg#square'"/></svg>
+      <span x-text="$app.t('plot.archive.show', { n: archivedActCount() })"></span>
+    </button>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
+            x-show="beats.length > 0"
+            :class="{ 'context-menu-item--on': plotHideImBuch }" :aria-checked="plotHideImBuch"
+            @click.stop="plotHideImBuch = !plotHideImBuch">
+      <svg class="icon" aria-hidden="true"><use :href="plotHideImBuch ? '/icons.svg#check' : '/icons.svg#square'"/></svg>
+      <span x-text="$app.t('plot.filter.hideImBuch')"></span>
+    </button>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
+            x-show="beats.length > 0"
+            :class="{ 'context-menu-item--on': plotDensity === 'compact' }" :aria-checked="plotDensity === 'compact'"
+            @click.stop="setPlotDensity(plotDensity !== 'compact')">
+      <svg class="icon" aria-hidden="true"><use :href="plotDensity === 'compact' ? '/icons.svg#check' : '/icons.svg#square'"/></svg>
+      <span x-text="$app.t('plot.density.compact')"></span>
+    </button>
+  </div>
+</span>

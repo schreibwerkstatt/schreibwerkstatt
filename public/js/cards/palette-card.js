@@ -12,7 +12,7 @@
 //  - Klick auf Item oder Enter mit aktiver Idx → activateItem(item)
 //  - Schliesst Palette und ruft passende Aktion (Toggle/Action/Provider-Run).
 
-import { EXCLUSIVE_CARDS } from './feature-registry.js';
+import { EXCLUSIVE_CARDS, REQUIRED_CONFIG_FLAGS, configFlags } from './feature-registry.js';
 import { highlight } from './palette-fuzzy.js';
 import { PROVIDERS, parseQuery } from './palette-providers.js';
 import { buildPaletteSections } from './palette-sections.js';
@@ -167,7 +167,7 @@ export function registerPaletteCard() {
         bookRole: root.currentBookRole || null,
         buchtyp: (typeof root.currentBuchtyp === 'function' ? root.currentBuchtyp() : null) || null,
         cloudModelEffective: (Alpine.store('config')?.effectiveProviderClass || 'cloud') === 'cloud',
-        config: { languagetoolEnabled: !!Alpine.store('config')?.languagetoolEnabled },
+        config: configFlags(),
       };
     },
 
@@ -187,7 +187,7 @@ export function registerPaletteCard() {
       const deps = [
         this.paletteQuery,
         ctx.selectedBookId, ctx.bookRole, ctx.buchtyp, ctx.cloudModelEffective,
-        ctx.config.languagetoolEnabled,
+        ...REQUIRED_CONFIG_FLAGS.map(k => ctx.config[k]),
         nav.pages, (nav.pages || []).length,
         nav.tree, (nav.tree || []).length, root._chapterLabelMap,
         nav.werkstattDrafts,

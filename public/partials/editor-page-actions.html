@@ -73,40 +73,39 @@
               </button>
               <span class="icon-btn-badge" x-text="pageCommentCount" :data-tip="t('share.openCommentsTitle', { n: pageCommentCount })"></span>
             </span>
-            <span class="action-overflow" @click.outside="pageActionsMenuOpen = false" @keydown.escape.window="pageActionsMenuOpen = false">
+            <span class="action-overflow" x-data="menu()">
               <span class="icon-btn-badge-wrap">
-                <button type="button" class="icon-btn icon-btn--ghost"
-                        :class="{ 'is-active': pageActionsMenuOpen }"
-                        @click="pageActionsMenuOpen = !pageActionsMenuOpen"
-                        aria-haspopup="menu" :aria-expanded="pageActionsMenuOpen"
+                <button type="button" class="icon-btn icon-btn--ghost" x-bind="trigger"
+                        :class="{ 'is-active': open }"
+                        aria-haspopup="menu"
                         :data-tip="t('editor.btn.moreActions')" :aria-label="t('editor.btn.moreActions')">
                   <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
                 </button>
                 <span class="icon-btn-badge" x-show="currentPageIdeenOpenCount > 0" x-text="currentPageIdeenOpenCount" :data-tip="t('ideen.openCountTitle', { n: currentPageIdeenOpenCount })"></span>
               </span>
-              <div class="context-menu context-menu--dropdown" x-show="pageActionsMenuOpen" x-cloak role="menu">
-                <button type="button" class="context-menu-item context-menu-item--icon" :class="{ 'context-menu-item--on': showIdeenCard }" role="menuitem" @click="toggleIdeenCard(); pageActionsMenuOpen = false">
+              <div class="context-menu context-menu--dropdown" x-bind="panel" x-cloak>
+                <button type="button" class="context-menu-item context-menu-item--icon" :class="{ 'context-menu-item--on': showIdeenCard }" role="menuitem" @click="toggleIdeenCard()">
                   <svg class="icon" aria-hidden="true"><use href="/icons.svg#lightbulb"/></svg>
                   <span x-text="t('ideen.title')"></span>
                   <span class="btn-count" x-show="currentPageIdeenOpenCount > 0" x-text="currentPageIdeenOpenCount"></span>
                 </button>
-                <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" x-show="currentPageRechercheCount > 0" @click="openRechercheForPage(currentPage?.id); pageActionsMenuOpen = false">
+                <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" x-show="currentPageRechercheCount > 0" @click="openRechercheForPage(currentPage?.id)">
                   <svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg>
                   <span x-text="t('recherche.title')"></span>
                   <span class="btn-count" x-text="currentPageRechercheCount"></span>
                 </button>
-                <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" x-show="currentPagePlotBeatCount > 0" @click="openPlotBoard(); pageActionsMenuOpen = false">
+                <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" x-show="currentPagePlotBeatCount > 0" @click="openPlotBoard()">
                   <svg class="icon" aria-hidden="true"><use href="/icons.svg#list-tree"/></svg>
                   <span x-text="t('plot.title')"></span>
                   <span class="btn-count" x-text="currentPagePlotBeatCount" :data-tip="t('plot.pageBeatsCountTitle', { n: currentPagePlotBeatCount })"></span>
                 </button>
                 <div class="context-menu-sep" role="separator" x-show="canEdit() && currentPage"></div>
-                <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" x-show="canEdit() && currentPage" :disabled="currentPageEmpty" @click="openShareLinksForPage(currentPage.id); pageActionsMenuOpen = false">
+                <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" x-show="canEdit() && currentPage" :disabled="currentPageEmpty" @click="openShareLinksForPage(currentPage.id)">
                   <svg class="icon" aria-hidden="true"><use href="/icons.svg#share-2"/></svg>
                   <span x-text="t('share.btn.sharePage')"></span>
                   <span class="btn-count" x-show="currentPageShareLinkCount > 0" x-text="currentPageShareLinkCount" :data-tip="t('share.pageLinkCountTitle', { n: currentPageShareLinkCount })"></span>
                 </button>
-                <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" x-show="currentPage" @click="openExportFor('page', currentPage.id); pageActionsMenuOpen = false">
+                <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" x-show="currentPage" @click="openExportFor('page', currentPage.id)">
                   <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
                   <span x-text="t('pagetreeCtx.export')"></span>
                 </button>

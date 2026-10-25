@@ -1,4 +1,4 @@
-// Drop einer Buch-Idee aus dem Ideen-Board auf einen Eintrag im
+// Drop einer offenen Idee aus dem Ideen-Board auf einen Eintrag im
 // Inhaltsverzeichnis der Sidebar. Gespreadet in ideenBoardActions
 // (actions.js); `this` = die ideenBoardCard-Instanz.
 //
