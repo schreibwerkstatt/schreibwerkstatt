@@ -9,24 +9,24 @@ const SONGS = [
   {
     id: 'song_1', titel: 'Heroes', interpret: 'David Bowie', genre: 'Rock',
     kontext_typ: 'hört', stimmung: 'melancholisch', beschreibung: 'Im Auto',
-    kapitel: [{ name: 'Kapitel 1', haeufigkeit: 2 }],
+    kapitel: [{ chapter_id: 1, name: 'Kapitel 1', haeufigkeit: 2 }],
     figuren: ['fig_1', { fig_id: 'fig_2', kontext_typ: 'spielt' }],
   },
   {
     id: 'song_2', titel: 'Mondscheinsonate', interpret: 'Beethoven', genre: 'Klassik',
     kontext_typ: 'spielt', stimmung: 'ruhig', beschreibung: '',
-    kapitel: [{ name: 'Kapitel 2', haeufigkeit: 1 }],
+    kapitel: [{ chapter_id: 2, name: 'Kapitel 2', haeufigkeit: 1 }],
     figuren: ['fig_3'],
   },
   {
     id: 'song_3', titel: 'Imagine', interpret: 'John Lennon', genre: 'Pop',
     kontext_typ: 'leitmotiv', stimmung: '', beschreibung: 'Wiederkehrendes Motiv',
-    kapitel: [{ name: 'Kapitel 1', haeufigkeit: 3 }, { name: 'Kapitel 3', haeufigkeit: 1 }],
+    kapitel: [{ chapter_id: 1, name: 'Kapitel 1', haeufigkeit: 3 }, { chapter_id: 3, name: 'Kapitel 3', haeufigkeit: 1 }],
     figuren: [],
   },
 ];
 
-const EMPTY = { suche: '', figurId: '', kapitel: '', genre: '', kontextTyp: '' };
+const EMPTY = { suche: '', figurId: '', kapitelId: '', genre: '', kontextTyp: '' };
 
 test('applySongsFilters: kein Filter → alle Songs', () => {
   const out = applySongsFilters(SONGS, EMPTY);
@@ -69,12 +69,12 @@ test('applySongsFilters: figurId matcht Object-Form (s.figuren = [{fig_id, konte
 });
 
 test('applySongsFilters: Kapitel-Filter matcht Kapitelname', () => {
-  const out = applySongsFilters(SONGS, { ...EMPTY, kapitel: 'Kapitel 1' });
+  const out = applySongsFilters(SONGS, { ...EMPTY, kapitelId: 1 });
   assert.deepEqual(out.map(s => s.id).sort(), ['song_1', 'song_3']);
 });
 
 test('applySongsFilters: kombinierter Filter (Kapitel + Genre)', () => {
-  const out = applySongsFilters(SONGS, { ...EMPTY, kapitel: 'Kapitel 1', genre: 'Rock' });
+  const out = applySongsFilters(SONGS, { ...EMPTY, kapitelId: '1', genre: 'Rock' });
   assert.deepEqual(out.map(s => s.id), ['song_1']);
 });
 

@@ -27,7 +27,7 @@ function installAlpine({ tree = [], pages = [], filters = {} } = {}) {
     nav: { tree, pages, selectedBookId: 1 },
     catalog: { figuren: [] },
     catalogUi: {
-      kontinuitaetFilters: { figurId: '', kapitel: '', schwere: '', ...filters },
+      kontinuitaetFilters: { figurId: '', kapitelId: '', schwere: '', ...filters },
     },
     shell: { uiLocale: 'de' },
   };
@@ -38,6 +38,7 @@ function installAlpine({ tree = [], pages = [], filters = {} } = {}) {
     $store: stores,
     t: (k) => k,
     _sortByChapterOrder: (names) => [...names].sort(),
+    _kapitelOptionen: (ids) => [...new Set(ids.map(String))].map(id => ({ value: Number(id), label: String(id) })),
   };
   return stores;
 }
@@ -181,7 +182,7 @@ test('kontinuitaetIssuesFiltered: Filterwechsel bricht den Cache', () => {
     { id: 2, schwere: 'mittel', kapitel: ['Zwei'] },
   ]);
   assert.equal(ctx.kontinuitaetIssuesFiltered().length, 2);
-  stores.catalogUi.kontinuitaetFilters.kapitel = 'Zwei';
+  stores.catalogUi.kontinuitaetFilters.kapitelId = 2;
   assert.deepEqual(ctx.kontinuitaetIssuesFiltered().map(i => i.id), [2]);
 });
 

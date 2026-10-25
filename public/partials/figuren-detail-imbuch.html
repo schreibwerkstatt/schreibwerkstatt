@@ -15,7 +15,7 @@
     <div class="entity-refs figur-tags-row">
       <template x-for="(k, ki) in (f.kapitel || [])" :key="ki">
         <button type="button" class="entity-ref"
-                x-entity-ref="{ type: 'kapitel', id: k.chapter_id, name: k.name, count: k.haeufigkeit, onOpen: () => { $store.catalogUi.figurenFilters.kapitel = k.name; $store.catalogUi.figurenFilters.seite = '' } }"></button>
+                x-entity-ref="{ type: 'kapitel', id: k.chapter_id, name: k.name, count: k.haeufigkeit, onOpen: () => { $store.catalogUi.figurenFilters.kapitelId = k.chapter_id; $store.catalogUi.figurenFilters.seiteId = '' } }"></button>
       </template>
     </div>
   </div>

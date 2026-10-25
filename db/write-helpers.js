@@ -35,7 +35,28 @@ function toRefString(v) {
   return null;
 }
 
+// Kapitelname → chapter_id für die Auflösung von KI-Namen. Ein Name, den zwei
+// Kapitel tragen, fehlt in der Map: ein Eintrag ohne Kapitel ist sichtbar
+// unzugeordnet, ein geratenes Kapitel dagegen still falsch (Filter, Präsenz,
+// Kapitelbewertung). `rows` = [{ chapter_id, chapter_name }].
+function chapterNameMap(rows) {
+  const map = {};
+  const ambiguous = new Set();
+  for (const r of rows || []) {
+    const name = r?.chapter_name;
+    if (!name || ambiguous.has(name)) continue;
+    if (Object.prototype.hasOwnProperty.call(map, name) && map[name] !== r.chapter_id) {
+      delete map[name];
+      ambiguous.add(name);
+      continue;
+    }
+    map[name] = r.chapter_id;
+  }
+  return map;
+}
+
 module.exports = {
   requireUserEmail,
   toRefString,
+  chapterNameMap,
 };

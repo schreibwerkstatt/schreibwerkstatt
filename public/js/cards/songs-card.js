@@ -9,6 +9,7 @@
 //   - `loadSongs` (Root-Spread)
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { applySongsFilters } from '../app/app-ui.js';
+import { activeFilterId } from '../chapter-filter.js';
 import { formatLastRun } from '../utils/date.js';
 
 export function registerSongsCard() {
@@ -22,9 +23,11 @@ export function registerSongsCard() {
     // Order-Map), darum via window.__app gelesen.
     get songsFiltered() {
       const root = window.__app;
-      return applySongsFilters(root.$store.catalog.songs, Alpine.store('catalogUi').songsFilters).sort((a, b) => {
-        const aK = Math.min(...(a.kapitel || []).map(k => root._chapterIdx(k.name)), 9999);
-        const bK = Math.min(...(b.kapitel || []).map(k => root._chapterIdx(k.name)), 9999);
+      const f = Alpine.store('catalogUi').songsFilters;
+      const kapitelId = activeFilterId(f.kapitelId, root.songsKapitelOptionen());
+      return applySongsFilters(root.$store.catalog.songs, { ...f, kapitelId }).sort((a, b) => {
+        const aK = Math.min(...(a.kapitel || []).map(k => root._chapterIdIdx(k.chapter_id)), 9999);
+        const bK = Math.min(...(b.kapitel || []).map(k => root._chapterIdIdx(k.chapter_id)), 9999);
         if (aK !== bK) return aK - bK;
         return (a.titel || '').localeCompare(b.titel || '', 'de');
       });

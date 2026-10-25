@@ -26,7 +26,7 @@
           <tr>
             <th class="heatmap-rowhead" x-text="$app.t('figuren.presence.figur')"></th>
             <template x-for="(c, ci) in figurenPresenceData().chapters" :key="ci">
-              <th class="figur-presence-colhead internal-link" @click="figurenPresenceJumpToChapter(c)" :data-tip="c"><span x-text="ci + 1"></span></th>
+              <th class="figur-presence-colhead internal-link" @click="figurenPresenceJumpToChapter(ci)" :data-tip="c"><span x-text="ci + 1"></span></th>
             </template>
             <th class="heatmap-numcol figur-presence-totalhead" x-text="$app.t('figuren.presence.total')"></th>
           </tr>

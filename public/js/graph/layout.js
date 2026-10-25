@@ -29,22 +29,25 @@ const tierOf = f => (TIER_ORDER.includes(f.typ) ? f.typ : 'andere');
 
 // Pro Figur: gewichteter Kapitel-Index (X), Ersterscheinung, Tier, Wichtigkeit.
 // Figuren ohne verortbares Kapitel landen in der Mitte der Achse.
+// `chapterOrder` = Kapitel-Optionen [{ value: chapter_id, label }] (Spalten nach ID).
 export function figureInfo(figuren, chapterOrder) {
   const N = chapterOrder.length;
-  const chapIdx = {};
-  chapterOrder.forEach((c, i) => { chapIdx[c] = i; });
+  const chapIdx = new Map();
+  chapterOrder.forEach((c, i) => { chapIdx.set(String(c.value), i); });
+  const idxOf = (k) => (k.chapter_id != null ? chapIdx.get(String(k.chapter_id)) : undefined);
 
   const info = {};
   for (const f of figuren) {
-    const kaps = (f.kapitel || []).filter(k => chapIdx[k.name] !== undefined);
+    const kaps = (f.kapitel || []).filter(k => idxOf(k) !== undefined);
     let xIdx = N > 1 ? (N - 1) / 2 : 0;
     let firstCh = Number.POSITIVE_INFINITY;
     if (kaps.length) {
       const total = kaps.reduce((s, k) => s + weight(k), 0);
       let sum = 0;
       for (const k of kaps) {
-        sum += chapIdx[k.name] * (weight(k) / total);
-        if (chapIdx[k.name] < firstCh) firstCh = chapIdx[k.name];
+        const i = idxOf(k);
+        sum += i * (weight(k) / total);
+        if (i < firstCh) firstCh = i;
       }
       xIdx = sum;
     }

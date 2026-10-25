@@ -8,9 +8,9 @@
               :style="figurenPresenceCellVars(figurenPresenceRow(f.id).haeByCol[ci], figurenPresenceData().maxCell)"
               :data-tip="c"
               role="button" tabindex="0" :aria-label="c"
-              @click="figurenPresenceJumpToChapter(c)"
-              @keydown.enter.prevent="figurenPresenceJumpToChapter(c)"
-              @keydown.space.prevent="figurenPresenceJumpToChapter(c)"></span>
+              @click="figurenPresenceJumpToChapter(ci)"
+              @keydown.enter.prevent="figurenPresenceJumpToChapter(ci)"
+              @keydown.space.prevent="figurenPresenceJumpToChapter(ci)"></span>
       </template>
     </div>
   </div>

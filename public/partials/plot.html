@@ -129,8 +129,8 @@
          x-effect="options = draftFiguren.filter(d => beats.some(b => (b.draft_fig_ids||[]).includes(d.id))).map(d => ({value: d.id, label: d.name}))">
     </div>
     <div x-data="catalogFilter('chapter')" x-show="beats.length > 0"
-         x-modelable="value" x-model="plotFilters.kapitel"
-         x-effect="options = plotKapitelListe().map(k => ({value: k, label: k}))">
+         x-modelable="value" x-model="plotFilters.kapitelId"
+         x-effect="options = plotKapitelOptionen()">
     </div>
     <!-- „im Buch" fällt aus den Status-Optionen, solange der Ausblend-Schalter
          steht — die Kombination beider wäre eine garantiert leere Auswahl.

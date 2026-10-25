@@ -75,7 +75,7 @@
         selectedBookId: 1, selectedBookName: 'Testbuch', showEreignisseCard: true,
         figuren: [], globalZeitstrahl: MOCK,
         t: (k, params) => params ? `${k} ${JSON.stringify(params)}` : k,
-        _deriveKapitel: () => [], _deriveSeiten: () => [], _reloadZeitstrahl: () => {},
+        _kapitelOptionen: () => [], _seitenOptionen: () => [], _reloadZeitstrahl: () => {},
         gotoStelle: () => {}, openFigurById: () => {}, gotoPageById: () => {},
       });
       window.Alpine.magic('app', () => window.__app);

@@ -8,7 +8,9 @@ import {
 } from '../../public/js/graph/layout.js';
 
 const fig = (id, typ, kapitel = [], name = id) => ({ id, name, typ, kapitel });
-const kap = (name, haeufigkeit = 1) => ({ name, haeufigkeit });
+// Kapitel-ID = Name (die Achse vergleicht IDs als String, chapter-filter.js).
+const kap = (name, haeufigkeit = 1) => ({ chapter_id: name, name, haeufigkeit });
+const axis = (names) => names.map(n => ({ value: n, label: n }));
 
 describe('columnWidth', () => {
   test('klemmt nach unten (viele Kapitel → keine Riesen-Canvas)', () => {
@@ -24,7 +26,7 @@ describe('columnWidth', () => {
 });
 
 describe('figureInfo (X-Achse = gewichteter Kapitel-Schwerpunkt)', () => {
-  const order = ['K1', 'K2', 'K3'];
+  const order = axis(['K1', 'K2', 'K3']);
 
   test('eine Figur in genau einem Kapitel sitzt auf dessen Index', () => {
     const info = figureInfo([fig('a', 'hauptfigur', [kap('K3')])], order);
@@ -61,8 +63,14 @@ describe('figureInfo (X-Achse = gewichteter Kapitel-Schwerpunkt)', () => {
   });
 });
 
+test('figureInfo: gleichnamige Kapitel sind getrennte Spalten', () => {
+  const dup = [{ value: 1, label: 'Einleitung' }, { value: 2, label: 'Einleitung' }];
+  const info = figureInfo([fig('a', 'hauptfigur', [{ chapter_id: 2, name: 'Einleitung', haeufigkeit: 1 }])], dup);
+  assert.strictEqual(info.a.xIdx, 1);
+});
+
 describe('computeSwimlaneLayout', () => {
-  const order = ['K1', 'K2', 'K3', 'K4'];
+  const order = axis(['K1', 'K2', 'K3', 'K4']);
 
   test('nur belegte Tiers werden gerendert, in fester Reihenfolge', () => {
     const figuren = [

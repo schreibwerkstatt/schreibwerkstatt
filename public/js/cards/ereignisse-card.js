@@ -19,6 +19,7 @@ import {
 } from './ereignisse/band.js';
 import { normalizeEvent, normalizeEvents, compareEvents, sortEvents } from './ereignisse/model.js';
 import { memoMethods } from './card-memo.js';
+import { activeFilterId, hasId, sameId } from '../chapter-filter.js';
 
 export { hasEventYear, formatEventDateParts };
 export { subtypIcon, bandMarkerColor, eventSpanYears, POINT_SUBTYPES };
@@ -29,7 +30,9 @@ export { normalizeEvent, normalizeEvents, compareEvents, sortEvents };
 // Alpine-Root testbar ist (siehe tests/unit/ereignisse-card-filter.test.mjs).
 // Setzt die Kanonform aus `ereignisse/model.js` voraus: Kapitel/Seiten sind
 // Arrays, weil beide Produzenten durch `normalizeEvent` laufen.
-export function applyEreignisseFilters(events, { suche = '', figurId = '', subtyp = '', kapitel = '', seite = '' } = {}) {
+// `kapitelId`/`seiteId` sind die bereits wirksamen Werte (activeFilterId gegen die
+// Optionen); Kapitel und Abschnitte per ID (chapter-filter.js).
+export function applyEreignisseFilters(events, { suche = '', figurId = '', subtyp = '', kapitelId = '', seiteId = '' } = {}) {
   let result = events || [];
   if (suche) {
     const q = suche.toLowerCase();
@@ -37,11 +40,10 @@ export function applyEreignisseFilters(events, { suche = '', figurId = '', subty
   }
   if (figurId) result = result.filter(ev => (ev.figuren || []).some(f => f.id === figurId));
   if (subtyp) result = result.filter(ev => (ev.subtyp || 'sonstiges') === subtyp);
-  if (kapitel) result = result.filter(ev => (ev.kapitel || []).includes(kapitel));
-  // Die Seiten-Achse ist an ein gewaehltes Kapitel gebunden (gleiche Seitennamen
-  // koennen in mehreren Kapiteln vorkommen); die Combobox ist ohne Kapitel
-  // deaktiviert.
-  if (seite && kapitel) result = result.filter(ev => (ev.seiten || []).includes(seite));
+  if (kapitelId) result = result.filter(ev => hasId(ev.chapter_ids, kapitelId));
+  // Die Abschnitts-Achse ist an ein gewaehltes Kapitel gebunden; die Combobox ist
+  // ohne Kapitel deaktiviert.
+  if (seiteId && kapitelId) result = result.filter(ev => hasId(ev.page_ids, seiteId));
   return result;
 }
 
@@ -128,17 +130,26 @@ export function registerEreignisseCard() {
     ...memoMethods,
 
     // UI-Helper. Lesen $root-Filter + -Daten.
-    ereignisseKapitelListe() {
-      return window.__app._deriveKapitel(Alpine.store('catalog').globalZeitstrahl, ev => ev.kapitel);
+    ereignisseKapitelOptionen() {
+      const events = Alpine.store('catalog').globalZeitstrahl;
+      const root = window.__app;
+      return this._memo('kapOpt', [events, root._chapterLabelMap, root._chapterIdOrderMap],
+        () => root._kapitelOptionen((events || []).flatMap(ev => ev.chapter_ids || [])));
     },
 
-    ereignisseSeitenListe() {
-      return window.__app._deriveSeiten(
-        Alpine.store('catalog').globalZeitstrahl,
-        Alpine.store('catalogUi').ereignisseFilters.kapitel,
-        ev => ev.kapitel,
-        ev => ev.seiten,
-      );
+    // Abschnitte des gewählten Kapitels, in denen ein Ereignis verankert ist.
+    ereignisseSeitenOptionen() {
+      const events = Alpine.store('catalog').globalZeitstrahl;
+      const root = window.__app;
+      const kapitelId = activeFilterId(Alpine.store('catalogUi').ereignisseFilters.kapitelId, this.ereignisseKapitelOptionen());
+      return this._memo('seiteOpt', [events, kapitelId, root._pageIdOrderMap, root.$store.nav.pages], () => {
+        if (!kapitelId) return [];
+        const pages = root.$store.nav.pages || [];
+        const inChapter = new Set(pages.filter(p => sameId(p.chapter_id, kapitelId)).map(p => String(p.id)));
+        const ids = (events || []).filter(ev => hasId(ev.chapter_ids, kapitelId))
+          .flatMap(ev => ev.page_ids || []).filter(id => inChapter.has(String(id)));
+        return root._seitenOptionen(ids);
+      });
     },
 
     // Liste sichtbarer Subtypen im aktuellen Buch — Filter zeigt nur was vorkommt.
@@ -167,10 +178,11 @@ export function registerEreignisseCard() {
     filteredEreignisse() {
       const events = Alpine.store('catalog').globalZeitstrahl;
       const f = Alpine.store('catalogUi').ereignisseFilters;
-      const suche = f.suche ?? '', figurId = f.figurId ?? '', kapitel = f.kapitel ?? '',
-        seite = f.seite ?? '', subtyp = f.subtyp ?? '';
-      return this._memo('filtered', [events, suche, figurId, kapitel, seite, subtyp],
-        () => applyEreignisseFilters(events, { suche, figurId, kapitel, seite, subtyp }));
+      const suche = f.suche ?? '', figurId = f.figurId ?? '', subtyp = f.subtyp ?? '';
+      const kapitelId = activeFilterId(f.kapitelId, this.ereignisseKapitelOptionen());
+      const seiteId = kapitelId ? activeFilterId(f.seiteId, this.ereignisseSeitenOptionen()) : '';
+      return this._memo('filtered', [events, suche, figurId, kapitelId, seiteId, subtyp],
+        () => applyEreignisseFilters(events, { suche, figurId, kapitelId, seiteId, subtyp }));
     },
 
     // Ausgewaehltes Ereignis (Store-ID) → Listen-Index fuer die Achsen-Markierung.

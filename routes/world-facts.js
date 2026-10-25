@@ -15,7 +15,7 @@ router.get('/:book_id', (req, res) => {
   const bookId = req.bookId;
   const userEmail = sessionEmail(req);
 
-  const fakten = listWorldFacts(bookId, userEmail, { withRefuted: true });
+  const fakten = listWorldFacts(bookId, userEmail, { withRefuted: true, withChapterIds: true });
   const { scanned } = worldFactsScanState(bookId, userEmail);
   const updated_at = fakten.reduce((max, f) => (f.updated_at > max ? f.updated_at : max), '');
   const settings = getBookSettings(bookId, userEmail) || {};

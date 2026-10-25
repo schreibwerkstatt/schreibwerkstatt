@@ -1,15 +1,12 @@
 import { fetchText, tzOpts, formatRelativeShort, charBadgeLabel, localeTag } from '../utils.js';
 import { avatarHue } from '../avatar.js';
 import { isRetryableSaveError } from '../editor/notebook/save-errors.js';
+import { idOptions, sameId } from '../chapter-filter.js';
 
-// Pure Filter-Logik für die Szenen-Liste. Getrennt von Alpine-Getter, damit
-// Unit-Tests den Kapitel-Filter direkt gegen Fixtures prüfen können.
-// Kapitel-Filter matcht per Name (die Kapitelnamen in den Szenen stammen aus
-// dem Komplett-Job und sind dort bereits auf die echten Kapitelnamen
-// normalisiert).
 // Pure Filter-Logik für die Musik-Liste. Songs[].figuren kann String (fig_id)
 // oder Object ({ fig_id }) enthalten — je nachdem ob der Server das per-Figur-
-// Kontext-Override mitliefert. Filter normalisiert beide Formen.
+// Kontext-Override mitliefert. Filter normalisiert beide Formen. `kapitelId` ist
+// der bereits wirksame Wert (activeFilterId), Kapitel per ID (chapter-filter.js).
 export function applySongsFilters(songs, filters) {
   const q = filters.suche ? filters.suche.toLowerCase() : '';
   return (songs || []).filter(s => {
@@ -18,7 +15,7 @@ export function applySongsFilters(songs, filters) {
       if (!hay.includes(q)) return false;
     }
     if (filters.figurId && !(s.figuren || []).some(x => (x.fig_id || x) === filters.figurId)) return false;
-    if (filters.kapitel && !(s.kapitel || []).some(k => k.name === filters.kapitel)) return false;
+    if (filters.kapitelId && !(s.kapitel || []).some(k => sameId(k.chapter_id, filters.kapitelId))) return false;
     if (filters.genre && s.genre !== filters.genre) return false;
     if (filters.kontextTyp && s.kontext_typ !== filters.kontextTyp) return false;
     return true;
@@ -60,47 +57,27 @@ export const appUiMethods = {
     return [...names].sort((a, b) => this._pageIdx(a) - this._pageIdx(b));
   },
 
-  // ── Filter-Listen: Kapitel/Seiten-Optionen für Combobox-Filter ──────────
-  // Generische Extraktion aus heterogenen Quellen:
-  //   extract(item) liefert entweder einen String, ein Array von Strings
-  //   oder ein Array von {name}-Objekten. Unbekannte Shapes werden ignoriert.
-  _deriveKapitel(items, extract) {
-    const names = new Set();
-    for (const it of (items || [])) {
-      const v = extract(it);
-      if (!v) continue;
-      if (Array.isArray(v)) {
-        for (const x of v) {
-          const n = typeof x === 'string' ? x : x?.name;
-          if (n) names.add(n);
-        }
-      } else {
-        names.add(v);
-      }
-    }
-    return this._sortByChapterOrder([...names]);
+  // ── Filter-Optionen: Kapitel/Abschnitte als { value: id, label } ─────────
+  // Wert ist immer die ID, das Label der Kapitelname (bei Namensgleichheit mit
+  // Elternkapitel, chapter-filter.js#buildKapitelLabels) bzw. der Abschnittsname.
+  // Reihenfolge = Buchreihenfolge. IDs, die der Baum nicht (mehr) kennt, fallen weg.
+  _kapitelOptionen(ids) {
+    const labels = this._chapterLabelMap;
+    return idOptions(ids, id => labels?.get(Number(id)), id => this._chapterIdIdx(Number(id)));
   },
-  // Wie _deriveKapitel, aber für Seiten. Wird nur aktiv, wenn ein Kapitel
-  // gefiltert ist — ohne Kapitelfilter keine Seiten.
-  // kapExtract liefert pro Item das Kapitel (String oder Array), seiteExtract
-  // die Seite(n) (String oder Array).
-  _deriveSeiten(items, filterKapitel, kapExtract, seiteExtract) {
-    if (!filterKapitel) return [];
-    const names = new Set();
-    for (const it of (items || [])) {
-      const k = kapExtract(it);
-      const kapMatches = Array.isArray(k) ? k.includes(filterKapitel) : k === filterKapitel;
-      if (!kapMatches) continue;
-      const s = seiteExtract(it);
-      if (!s) continue;
-      if (Array.isArray(s)) { for (const x of s) if (x) names.add(x); }
-      else names.add(s);
-    }
-    return this._sortByPageOrder([...names]);
+  _seitenOptionen(ids) {
+    const pages = this.$store.nav.pages || [];
+    return idOptions(ids, id => {
+      const i = this._pageIdOrderMap?.get(Number(id));
+      return i != null ? pages[i]?.name : null;
+    }, id => this._pageIdIdx(Number(id)));
+  },
+  _kapitelLabel(id) {
+    return this._chapterLabelMap?.get(Number(id)) || '';
   },
 
-  orteKapitelListe() {
-    return this._deriveKapitel(this.$store.catalog.orte, o => o.kapitel);
+  orteKapitelOptionen() {
+    return this._kapitelOptionen((this.$store.catalog.orte || []).flatMap(o => (o.kapitel || []).map(k => k.chapter_id)));
   },
 
   // ── Email-Display-Lookup ────────────────────────────────────────────────

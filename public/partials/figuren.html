@@ -64,10 +64,10 @@
     <div class="figuren-graph-wrap" x-show="figurenIsGraphModus()" :class="{ 'is-fullscreen': figurenGraphFullscreen }" @keydown.escape.window="figurenGraphFullscreen && toggleFigurenGraphFullscreen()">
       <div class="figuren-graph-toolbar">
         <!-- Kapitel-Filter (alle Graph-Modi) -->
-        <div x-show="figurenKapitelListe().length > 0" class="figuren-graph-filter">
+        <div x-show="figurenKapitelOptionen().length > 0" class="figuren-graph-filter">
           <div x-data="catalogFilter('chapter')"
-               x-modelable="value" x-model="figurenGraphKapitel"
-               x-effect="options = figurenKapitelListe().map(k => ({value: k, label: k}))"
+               x-modelable="value" x-model="figurenGraphKapitelId"
+               x-effect="options = figurenKapitelOptionen()"
                @combobox-change="_figurenGraphSetKapitel($event.detail || null)"
 ></div>
         </div>
@@ -102,20 +102,20 @@
     <p class="card-form-saved" x-show="figurPflegeMessage" x-cloak x-text="figurPflegeMessage"></p>
 
      <!-- Filter -->
-    <div x-show="$store.catalog.figuren.length > 0 && figurenKapitelListe().length > 0" class="filter-bar">
+    <div x-show="$store.catalog.figuren.length > 0 && figurenKapitelOptionen().length > 0" class="filter-bar">
       <span class="filter-search-wrap">
         <input type="text" x-model="$store.catalogUi.figurenFilters.suche" :placeholder="$app.t('common.search')" :aria-label="$app.t('common.search')" class="filter-search-input">
         <button type="button" class="search-clear--icon" x-show="$store.catalogUi.figurenFilters.suche" @click="$store.catalogUi.figurenFilters.suche=''" :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
       </span>
       <div x-data="catalogFilter('chapter')"
-          x-modelable="value" x-model="$store.catalogUi.figurenFilters.kapitel"
-          x-effect="options = figurenKapitelListe().map(k => ({value: k, label: k}))"
-          @combobox-change="$store.catalogUi.figurenFilters.seite = ''; $store.catalogUi.selectedFigurId = null"
+          x-modelable="value" x-model="$store.catalogUi.figurenFilters.kapitelId"
+          x-effect="options = figurenKapitelOptionen()"
+          @combobox-change="$store.catalogUi.figurenFilters.seiteId = ''; $store.catalogUi.selectedFigurId = null"
           >
       </div>
       <div x-data="catalogFilter('page')"
-          x-modelable="value" x-model="$store.catalogUi.figurenFilters.seite"
-          x-effect="_disabled = !$store.catalogUi.figurenFilters.kapitel || figurenSeitenListe().length === 0; options = figurenSeitenListe().map(s => ({value: s, label: s}))"
+          x-modelable="value" x-model="$store.catalogUi.figurenFilters.seiteId"
+          x-effect="_disabled = figurenSeitenOptionen().length === 0; options = figurenSeitenOptionen()"
           @combobox-change="$store.catalogUi.selectedFigurId = null"
           :class="{'combobox-wrap--disabled': _disabled}"
           >

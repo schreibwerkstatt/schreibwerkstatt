@@ -2812,7 +2812,6 @@
   "weltfakten.title": "World facts",
   "weltfakten.empty": "No world facts yet. Run the full analysis.",
   "weltfakten.emptyScanned": "The full analysis has run but found no world facts.",
-  "weltfakten.filterKapitel": "Chapter",
   "weltfakten.widerlegt": "Refuted in reality",
   "weltfakten.widerlegtTip": "The fact check found a source showing this statement is false in reality. It may still stand in the book – creative freedom is legitimate.",
   "weltfakten.factcheck.title": "Fact check",

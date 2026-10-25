@@ -1,4 +1,5 @@
 import { escHtml } from '../utils.js';
+import { sameId, activeFilterId } from '../chapter-filter.js';
 import { createGraphTooltip, adaptNodeColor, graphTheme } from '../graph-kit.js';
 import {
   DEFAULT_FONT,
@@ -56,13 +57,15 @@ export const sharedMethods = {
   },
 
   _figurenGraphSetKapitel(ch) {
-    this.figurenGraphKapitel = ch;
+    // Nur ein Kapitel, das die Achse anbietet — ein veralteter Wert dimmte sonst alle Knoten.
+    ch = activeFilterId(ch, this.figurenKapitelOptionen()) || null;
+    this.figurenGraphKapitelId = ch;
     if (!this._figurenNodes || !this._figurenEdges) return;
 
     const figuren = this._graphFiguren();
     const existingIds = new Set(this._figurenNodes.getIds());
     const activeIds = new Set(
-      ch ? figuren.filter(f => (f.kapitel || []).some(k => k.name === ch)).map(f => f.id)
+      ch ? figuren.filter(f => (f.kapitel || []).some(k => sameId(k.chapter_id, ch))).map(f => f.id)
          : figuren.map(f => f.id)
     );
     const soziogrammModus = this.figurenGraphModus === 'soziogramm';

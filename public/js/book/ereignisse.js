@@ -43,6 +43,8 @@ export const ereignisseMethods = {
           sort_order: 0,
           kapitel: ev.kapitel || '',
           seite:   ev.seite || '',
+          chapter_id: ev.chapter_id ?? null,
+          page_id:    ev.page_id ?? null,
           figur:   { id: f.id, name: f.kurzname || f.name, typ: f.typ },
         });
       }
@@ -63,15 +65,18 @@ export const ereignisseMethods = {
       if (!group) {
         group = { ...ev, kapitel: [], chapter_ids: [], seiten: [], page_ids: [], figuren: [] };
         // Die Skalar-Anker des Einzel-Events gehen in die Listen der Gruppe.
-        if (ev.kapitel) group.kapitel.push(ev.kapitel);
-        if (ev.seite) group.seiten.push(ev.seite);
         delete group.figur;
         delete group.seite;
+        delete group.chapter_id;
+        delete group.page_id;
         byKey.set(key, group);
       }
       group.figuren.push(ev.figur);
       if (ev.kapitel && !group.kapitel.includes(ev.kapitel)) group.kapitel.push(ev.kapitel);
       if (ev.seite   && !group.seiten.includes(ev.seite))   group.seiten.push(ev.seite);
+      // Kapitel-/Abschnittsfilter arbeiten auf den IDs (chapter-filter.js).
+      if (ev.chapter_id != null && !group.chapter_ids.includes(ev.chapter_id)) group.chapter_ids.push(ev.chapter_id);
+      if (ev.page_id    != null && !group.page_ids.includes(ev.page_id))       group.page_ids.push(ev.page_id);
     }
 
     this.$store.catalog.globalZeitstrahl = sortEvents(normalizeEvents([...byKey.values()]));

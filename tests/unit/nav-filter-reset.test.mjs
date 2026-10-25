@@ -20,7 +20,7 @@ function makeCtx() {
     $store: {
       catalogUi: {
         selectedFigurId: null,
-        figurenFilters: { kapitel: 'Kapitel 1', seite: 'S. 3', suche: 'fabio' },
+        figurenFilters: { kapitelId: 1, seiteId: 3, suche: 'fabio' },
       },
     },
     $nextTick: async () => {},
@@ -33,15 +33,15 @@ test('openFigurById raeumt alle drei Figuren-Filter weg', async () => {
   const ctx = makeCtx();
   await appNavigationMethods.openFigurById.call(ctx, '7');
   assert.equal(ctx.$store.catalogUi.figurenFilters.suche, '');
-  assert.equal(ctx.$store.catalogUi.figurenFilters.kapitel, '');
-  assert.equal(ctx.$store.catalogUi.figurenFilters.seite, '');
+  assert.equal(ctx.$store.catalogUi.figurenFilters.kapitelId, '');
+  assert.equal(ctx.$store.catalogUi.figurenFilters.seiteId, '');
   assert.equal(ctx.$store.catalogUi.selectedFigurId, 7, 'ID auf Number normalisiert');
 });
 
 test('openFigurMitKapitel raeumt die Suche weg, setzt aber das Kapitel', async () => {
   const ctx = makeCtx();
-  await appNavigationMethods.openFigurMitKapitel.call(ctx, 7, 'Kapitel 9');
+  await appNavigationMethods.openFigurMitKapitel.call(ctx, 7, 9);
   assert.equal(ctx.$store.catalogUi.figurenFilters.suche, '');
-  assert.equal(ctx.$store.catalogUi.figurenFilters.kapitel, 'Kapitel 9');
-  assert.equal(ctx.$store.catalogUi.figurenFilters.seite, '');
+  assert.equal(ctx.$store.catalogUi.figurenFilters.kapitelId, 9, 'Kapitel per ID, nicht per Name');
+  assert.equal(ctx.$store.catalogUi.figurenFilters.seiteId, '');
 });

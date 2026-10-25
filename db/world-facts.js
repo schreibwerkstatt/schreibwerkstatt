@@ -8,7 +8,7 @@ const { db } = require('./connection');
 // Migrationen muessen vor dem Anlegen gelaufen sein.
 require('./migrations');
 const { NOW_ISO_SQL } = require('./now');
-const { toRefString: _toRefString } = require('./write-helpers');
+const { toRefString: _toRefString, chapterNameMap } = require('./write-helpers');
 
 // Whitelist für Welt-Fakten-Kategorien (harte Gruppierung analog EVENT_SUBTYP_WL).
 // KI liefert die Kategorie im Komplettanalyse-Output; unbekannte/leere Werte
@@ -56,7 +56,7 @@ function _emailCond(userEmail) {
 function saveFaktenToDb(bookId, chapterFakten, userEmail, chNameToId = null, { keepChapterIds = null } = {}) {
   if (chNameToId == null) {
     const rows = db.prepare('SELECT chapter_id, chapter_name FROM chapters WHERE book_id = ?').all(bookId);
-    chNameToId = Object.fromEntries(rows.map(r => [r.chapter_name, r.chapter_id]));
+    chNameToId = chapterNameMap(rows);
   }
   // Analysierte Kapitel: nur deren Abschnitte taugen als Seiten-Fallback — ein
   // gleichnamiger Abschnitt eines ausgeschlossenen Kapitels machte den Namen sonst ambig.
@@ -149,13 +149,15 @@ function markWorldFactsScanned(bookId, userEmail) {
  *  - `subjekt` filtert auf Teilstring im Subjekt, gross-/kleinschreibungsunabhängig
  *    auch für Umlaute (in JS, nicht SQLite-LIKE, das nur ASCII faltet).
  *  - `withRefuted` setzt je Fakt `widerlegt: true|false` (Faktencheck, refutedFactKeys).
+ *  - `withChapterIds` setzt je Fakt `chapter_ids` parallel zu `kapitel` (Kapitel-Filter
+ *    der Karte arbeitet auf IDs; KI-Kontexte bleiben ohne, ihr Prompt-Block unverändert).
  *
  *  Gemeinsamer Lesepfad fuer alle Konsumenten: der Namens-JOIN gehoert nach `db/`
  *  (Content-Store-Facade-Regel), nicht in einen Route- oder Job-Handler.
  *
- *  @returns {Array<{id,kategorie,subjekt,fakt,seite,kapitel:string[],updated_at,widerlegt?}>}
+ *  @returns {Array<{id,kategorie,subjekt,fakt,seite,kapitel:string[],chapter_ids?:number[],updated_at,widerlegt?}>}
  */
-function listWorldFacts(bookId, userEmail, { kategorien = null, subjekt = null, withRefuted = false } = {}) {
+function listWorldFacts(bookId, userEmail, { kategorien = null, subjekt = null, withRefuted = false, withChapterIds = false } = {}) {
   const bookIdInt = parseInt(bookId);
   if (!bookIdInt) return [];
   const email = userEmail || null;
@@ -167,7 +169,7 @@ function listWorldFacts(bookId, userEmail, { kategorien = null, subjekt = null, 
   const katCond = kats ? ` AND wf.kategorie IN (${kats.map(() => '?').join(',')})` : '';
   const rows = db.prepare(`
     SELECT wf.id, wf.kategorie, wf.subjekt, wf.fakt, wf.seite_label, wf.updated_at,
-           c.chapter_name
+           c.chapter_id, c.chapter_name
       FROM world_facts wf
       LEFT JOIN world_fact_chapters wfc ON wfc.fact_id = wf.id
       LEFT JOIN chapters c ON c.chapter_id = wfc.chapter_id
@@ -193,9 +195,11 @@ function listWorldFacts(bookId, userEmail, { kategorien = null, subjekt = null, 
         updated_at: r.updated_at || null,
       };
       if (refuted) e.widerlegt = refuted.has(factKey(r.subjekt, r.fakt));
+      if (withChapterIds) e.chapter_ids = [];
       byId.set(r.id, e);
     }
     if (r.chapter_name && !e.kapitel.includes(r.chapter_name)) e.kapitel.push(r.chapter_name);
+    if (withChapterIds && r.chapter_id != null && !e.chapter_ids.includes(r.chapter_id)) e.chapter_ids.push(r.chapter_id);
   }
   return [...byId.values()];
 }

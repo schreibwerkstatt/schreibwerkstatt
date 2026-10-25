@@ -1,7 +1,7 @@
 // Alpine.data('figurenCard') — Sub-Komponente der Figurenübersicht.
 //
 // Eigener State:
-//   - Graph-Modus (figurenGraphModus, figurenGraphKapitel, figurenGraphFullscreen)
+//   - Graph-Modus (figurenGraphModus, figurenGraphKapitelId, figurenGraphFullscreen)
 //   - Alterstabelle (figurenAlterData/-Filters/-Loading/-Progress/-Status,
 //     figurenAlterOpenId) — der Index wird erst beim Oeffnen des Reiters geholt
 //   - Lebenslauf (figurenLebenslaufIds/-Filters) — reine Anzeige-Wahl; die Daten
@@ -32,19 +32,22 @@ import { formatEventDateParts } from './ereignisse/date.js';
 import { subtypIcon } from './ereignisse/subtyp.js';
 import { typRank, compareNames } from '../book/figur-typen.js';
 import { memoMethods } from './card-memo.js';
+import { activeFilterId, sameId } from '../chapter-filter.js';
 import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 import { figurPflegeMethods } from '../book/figuren-pflege.js';
 
 // Pure Filter+Sort der Figurenliste. Aus dem memoized Wrapper extrahiert, damit
-// sie ohne Alpine-Root testbar bleibt. `chapterMap` = Kapitel-Name → Reihenfolge-
-// Index (root._chapterOrderMap).
-export function computeFilteredFiguren(figuren, chapterMap, { suche = '', kapitel = '', seite = '' } = {}) {
+// sie ohne Alpine-Root testbar bleibt. `chapterIdx(id)` = Lese-Reihenfolge einer
+// Kapitel-ID (root._chapterIdIdx). `kapitelId`/`seiteId` sind die bereits
+// wirksamen Filterwerte (activeFilterId); Kapitel und Abschnitte per ID
+// (chapter-filter.js), Abschnitte aus den Szenen der Figur (f.seiten).
+export function computeFilteredFiguren(figuren, chapterIdx, { suche = '', kapitelId = '', seiteId = '' } = {}) {
   let result = figuren ?? [];
   const q = (suche || '').toLowerCase();
   if (q) result = result.filter(f => (f.name ?? '').toLowerCase().includes(q));
-  if (kapitel) result = result.filter(f => (f.kapitel ?? []).some(k => k.name === kapitel));
-  if (seite) result = result.filter(f =>
-    (f.seiten ?? []).some(s => s.kapitel === kapitel && s.seite === seite));
+  if (kapitelId) result = result.filter(f => (f.kapitel ?? []).some(k => sameId(k.chapter_id, kapitelId)));
+  if (kapitelId && seiteId) result = result.filter(f =>
+    (f.seiten ?? []).some(s => sameId(s.chapter_id, kapitelId) && sameId(s.page_id, seiteId)));
 
   // minChapterIdx pro Figur einmal vorab berechnen (kein Math.min(...spread) im Comparator).
   const minIdx = new Map();
@@ -53,8 +56,8 @@ export function computeFilteredFiguren(figuren, chapterMap, { suche = '', kapite
     if (m !== undefined) return m;
     m = 9999;
     const ks = f.kapitel;
-    if (ks) for (let i = 0; i < ks.length; i++) {
-      const v = chapterMap?.get(ks[i].name) ?? 9999;
+    if (ks && chapterIdx) for (let i = 0; i < ks.length; i++) {
+      const v = chapterIdx(ks[i].chapter_id) ?? 9999;
       if (v < m) m = v;
     }
     minIdx.set(f, m);
@@ -71,15 +74,15 @@ export function computeFilteredFiguren(figuren, chapterMap, { suche = '', kapite
   });
 }
 
-// Pure: sichtbare Seiten-Namen eines Kapitels über alle Figuren (Filter-Combobox).
-export function computeFigurenSeiten(figuren, kapitel) {
-  const names = new Set();
+// Pure: Abschnitts-IDs eines Kapitels über alle Figuren (Filter-Combobox).
+export function computeFigurenSeiten(figuren, kapitelId) {
+  const ids = new Set();
   for (const f of (figuren || [])) {
     for (const s of (f.seiten || [])) {
-      if (s.kapitel === kapitel && s.seite) names.add(s.seite);
+      if (sameId(s.chapter_id, kapitelId) && s.page_id != null) ids.add(s.page_id);
     }
   }
-  return names;
+  return ids;
 }
 
 export function registerFigurenCard() {
@@ -93,7 +96,7 @@ export function registerFigurenCard() {
     },
     subtypIcon,
     figurenGraphModus: 'figur',
-    figurenGraphKapitel: null,
+    figurenGraphKapitelId: null,
     figurenGraphFullscreen: false,
     // Alterstabelle (5. Reiter). `figurenAlterData` = { figuren, scan } aus
     // GET /figures/:id/alter; null heisst „noch nicht geladen", nicht „leer".
@@ -131,8 +134,8 @@ export function registerFigurenCard() {
     // gesetzt; Overlays + Kapitel-Filter lesen daraus, statt selbst zu messen.
     _graphTheme: null,
     _themeObserver: null,
-    // Ein Memo-Helper pro Modul (CLAUDE.md): filteredFiguren()/figurenKapitelListe()/
-    // figurenSeitenListe() werden im Template (inkl. Combobox-x-effect) mehrfach pro
+    // Ein Memo-Helper pro Modul (CLAUDE.md): filteredFiguren()/figurenKapitelOptionen()/
+    // figurenSeitenOptionen() werden im Template (inkl. Combobox-x-effect) mehrfach pro
     // Render gelesen → Cache mit shallow-Array-Deps. Reset via this._memos = {} im load-Pfad.
     _memos: {},
     _lifecycle: null,
@@ -168,7 +171,7 @@ export function registerFigurenCard() {
         onBookChanged: async (e, ctx, root) => {
           destroyNet();
           ctx._memos = {};
-          ctx.figurenGraphKapitel = null;
+          ctx.figurenGraphKapitelId = null;
           ctx._resetFigurenAlter();
           ctx._resetFigurPflege();
           if (!root.showFiguresCard) return;
@@ -194,7 +197,7 @@ export function registerFigurenCard() {
           ctx._resetFigurenAlter();
           ctx._resetFigurPflege();
           ctx.figurenGraphModus = 'figur';
-          ctx.figurenGraphKapitel = null;
+          ctx.figurenGraphKapitelId = null;
           ctx.figurenGraphFullscreen = false;
         },
       });
@@ -279,26 +282,28 @@ export function registerFigurenCard() {
     ...memoMethods,
 
     // UI-Helper: aus Comboboxen via x-effect mehrfach pro Render gerufen
-    // (für _disabled + options). Memo auf Identität der Quell-Daten.
-    // Dep auch die Reihenfolge-Map: das Ergebnis sortiert nach
-    // root._chapterOrderMap (tree/build.js setzt sie bei jedem Build neu). Ohne
-    // sie bliebe nach Umsortieren — oder wenn die Figuren vor dem Tree ankommen —
-    // die alte Kapitelfolge in Heatmap, Graph-Achse und Filter stehen.
-    figurenKapitelListe() {
+    // (für _disabled + options), ausserdem Spaltenachse von Präsenz-Heatmap und
+    // Graph-Swimlane. Memo auf Identität der Quell-Daten + Label-/Reihenfolge-Map
+    // (tree/build.js setzt beide bei jedem Build neu) — ohne sie bliebe nach
+    // Umsortieren oder Umbenennen die alte Kapitelfolge stehen.
+    figurenKapitelOptionen() {
       const root = window.__app;
       const figuren = Alpine.store('catalog').figuren;
-      return this._memo('kapitel', [figuren, root._chapterOrderMap],
-        () => root._deriveKapitel(figuren, f => f.kapitel));
+      return this._memo('kapitel', [figuren, root._chapterLabelMap, root._chapterIdOrderMap],
+        () => root._kapitelOptionen((figuren || []).flatMap(f => (f.kapitel || []).map(k => k.chapter_id))));
     },
 
-    figurenSeitenListe() {
-      // seiten = Array {kapitel, seite} — eigener Iterator (keine 1:1-Relation).
+    _figurenKapitelFilter() {
+      return activeFilterId(Alpine.store('catalogUi').figurenFilters.kapitelId, this.figurenKapitelOptionen());
+    },
+
+    figurenSeitenOptionen() {
       const root = window.__app;
       const figuren = Alpine.store('catalog').figuren;
-      const kapitel = Alpine.store('catalogUi').figurenFilters.kapitel;
-      return this._memo('seiten', [figuren, kapitel, root._pageOrderMap], () => {
-        if (!kapitel) return [];
-        return window.__app._sortByPageOrder([...computeFigurenSeiten(figuren, kapitel)]);
+      const kapitelId = this._figurenKapitelFilter();
+      return this._memo('seiten', [figuren, kapitelId, root._pageIdOrderMap, root.$store.nav.pages], () => {
+        if (!kapitelId) return [];
+        return root._seitenOptionen([...computeFigurenSeiten(figuren, kapitelId)]);
       });
     },
 
@@ -306,10 +311,12 @@ export function registerFigurenCard() {
       const root = window.__app;
       const f = Alpine.store('catalogUi').figurenFilters;
       const figuren = root.$store.catalog.figuren;
-      const chapterMap = root._chapterOrderMap;
-      const suche = f.suche ?? '', kapitel = f.kapitel ?? '', seite = f.seite ?? '';
-      return this._memo('filtered', [figuren, chapterMap, suche, kapitel, seite],
-        () => computeFilteredFiguren(figuren, chapterMap, { suche, kapitel, seite }));
+      const orderMap = root._chapterIdOrderMap;
+      const suche = f.suche ?? '';
+      const kapitelId = this._figurenKapitelFilter();
+      const seiteId = kapitelId ? activeFilterId(f.seiteId, this.figurenSeitenOptionen()) : '';
+      return this._memo('filtered', [figuren, orderMap, suche, kapitelId, seiteId],
+        () => computeFilteredFiguren(figuren, id => orderMap?.get(id), { suche, kapitelId, seiteId }));
     },
 
     // i18n aus einer Sub-Methode: `t` haengt am Root, die Karte greift ueber

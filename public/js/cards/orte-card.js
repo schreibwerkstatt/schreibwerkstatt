@@ -12,6 +12,7 @@
 //     `createOrt`/`updateOrt`/`mergeOrt`/`deleteOrt` (book/orte.js)
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { memoMethods } from './card-memo.js';
+import { activeFilterId, sameId } from '../chapter-filter.js';
 import { orteMapMethods } from '../book/orte-map.js';
 import { orteEditMethods, closedOrtEdit } from '../book/orte-edit.js';
 import { orteInsightMethods } from '../book/orte-insights.js';
@@ -104,7 +105,7 @@ export function registerOrteCard() {
     get orteFiltered() {
       const root = window.__app;
       const f = Alpine.store('catalogUi').orteFilters;
-      const sig = [root.$store.catalog.orte, root.$store.catalog.szenen, f.suche || '', f.figurId || '', f.kapitel || '', f.szeneId || ''];
+      const sig = [root.$store.catalog.orte, root.$store.catalog.szenen, f.suche || '', f.figurId || '', f.kapitelId || '', f.szeneId || '', root._chapterLabelMap, root._chapterIdOrderMap];
       const c = this._orteFilteredCache;
       if (c && c.sig.length === sig.length && c.sig.every((v, i) => v === sig[i])) return c.val;
       const { val, depth } = this._nestByParent(this._computeOrteFiltered());
@@ -192,16 +193,17 @@ export function registerOrteCard() {
       const root = window.__app;
       const f = Alpine.store('catalogUi').orteFilters;
       const q = f.suche ? f.suche.toLowerCase() : '';
+      const kapitelId = activeFilterId(f.kapitelId, root.orteKapitelOptionen());
       const matchText = (o) => !q || [o.name, o.typ, o.stimmung, o.beschreibung, o.land]
         .some(v => v && String(v).toLowerCase().includes(q));
       return root.$store.catalog.orte.filter(o =>
         matchText(o) &&
         (!f.figurId || (o.figuren || []).includes(f.figurId)) &&
-        (!f.kapitel || (o.kapitel || []).some(k => k.name === f.kapitel || String(k.chapter_id) === String(f.kapitel))) &&
+        (!kapitelId || (o.kapitel || []).some(k => sameId(k.chapter_id, kapitelId))) &&
         (!f.szeneId || root.$store.catalog.szenen.some(s => String(s.id) === String(f.szeneId) && (s.ort_ids || []).includes(o.id)))
       ).sort((a, b) => {
-        const aK = Math.min(...(a.kapitel || []).map(k => root._chapterIdx(k.name)), 9999);
-        const bK = Math.min(...(b.kapitel || []).map(k => root._chapterIdx(k.name)), 9999);
+        const aK = Math.min(...(a.kapitel || []).map(k => root._chapterIdIdx(k.chapter_id)), 9999);
+        const bK = Math.min(...(b.kapitel || []).map(k => root._chapterIdIdx(k.chapter_id)), 9999);
         if (aK !== bK) return aK - bK;
         const aP = root._pageIdIdx(a.erste_erwaehnung_page_id);
         const bP = root._pageIdIdx(b.erste_erwaehnung_page_id);

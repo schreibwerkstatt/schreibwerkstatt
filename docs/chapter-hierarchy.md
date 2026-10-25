@@ -159,6 +159,25 @@ Alle referenzieren das **direkt** enclosing Kapitel (`pages.chapter_id`). Sub-Ka
 
 Falls eine Aggregation auf **Top-Level-Kapitel rollupen** soll (z.B. „Häufigkeit pro Hauptteil"), via `getDescendantChapterIds` + SUM. Aktuell nicht im UI exponiert.
 
+## Kapitel und Abschnitte per ID, nie per Name
+
+Kapitelnamen sind **nicht eindeutig**: gleichnamige Unterkapitel («Einleitung» in Teil I und Teil II) sind zwei Kapitel, gleichnamige Abschnitte zwei Abschnitte, und ein Abschnitt darf wie ein Kapitel heissen («Der Vater» als Abschnitt im Kapitel «Der Unauffällige»). Wer über den Namen filtert, gruppiert oder zurückübersetzt, legt Verschiedenes zusammen oder rät. Darum gilt überall: **der Bezug ist die ID, der Name nur das Label.** **Why:** die Kontinuitäts-Karte bot als Kapitel-Filter nur ein Kapitel an, dessen Name zufällig einem Abschnitt glich — die Befunde der übrigen Kapitel waren nicht filterbar, und die zwei angebotenen gehörten in Wahrheit in ein anderes Kapitel.
+
+**Frontend — Katalog-Filter** (Figuren inkl. Graph und Präsenz, Schauplätze, Szenen, Ereignisse, Musik, Weltfakten, Kontinuität, Plot):
+
+- Filterfelder heissen `kapitelId` / `seiteId` (bzw. `…KapitelId`) und halten die ID. Optionen sind `{ value: id, label }` aus `$app._kapitelOptionen(ids)` / `$app._seitenOptionen(ids)` ([app-ui.js](../public/js/app/app-ui.js)) — Buchreihenfolge über `_chapterIdOrderMap`, Label über `_chapterLabelMap` (beide in [tree/build.js](../public/js/book/tree/build.js)#`_rebuildTreeOrderMaps`). Gleichnamige Kapitel bekommen das Elternkapitel davor («Teil II › Einleitung», [chapter-filter.js](../public/js/chapter-filter.js)#`buildKapitelLabels`).
+- Jeder Eintrag trägt seine IDs: `kapitel[].chapter_id` (Figuren, Orte, Songs), `chapter_ids`/`page_ids` (Ereignisse, Weltfakten via `listWorldFacts({ withChapterIds })`, Kontinuität), `seiten[].chapter_id/page_id` (Figuren), `chapter_id`/`page_id` (Szenen, Beats; Beats erben die des Strangs). Fehlt eine ID, fehlt sie im Server-Payload — nachliefern, nicht über den Namen auflösen.
+- **Wirksam ist nur ein angebotener Wert:** jeder Filter läuft durch `activeFilterId(value, options)`. Ein gespeicherter Wert, den die Optionen nicht (mehr) anbieten — Kapitel gelöscht, Katalog neu analysiert, altes Namensformat aus dem localStorage —, filtert nicht. Ohne diese Regel zeigt die Combobox «Alle Kapitel», während die Liste leer bleibt.
+- Einsprünge setzen IDs: `openFigurMitKapitel(figId, chapterId)`, `openOrtMitKapitel`, `openEreignisseMitKapitel`, Kapitel-Referenz im Figur-Detail, Präsenz-Zellen (`openChapterById`).
+- **Kontinuität:** das Kapitel eines Befunds kommt aus seinen verankerten Abschnitten (`page_a_id`/`page_b_id` → Kapitel des Abschnitts). Sind alle vorhandenen Stellen verankert, zählen nur die Anker; sonst kommen `chapter_ids` bzw. ein **eindeutiger** KI-Kapitelname dazu. Server ([db/continuity.js](../db/continuity.js)#`_resolveRefs`) und Karte ([kontinuitaet.js](../public/js/book/kontinuitaet.js)#`_kontinuitaetChapterResolver`) folgen derselben Regel.
+
+**Server — KI-Namen auflösen:**
+
+- Name → `chapter_id` nur über [write-helpers.js](../db/write-helpers.js)#`chapterNameMap` (bzw. `chapterIdsByName`): ein Name, den zwei Kapitel tragen, **fehlt** in der Map. Ein Eintrag ohne Kapitel ist sichtbar unzugeordnet, ein geratenes Kapitel still falsch.
+- Der Komplett-Loader ([loader.js](../routes/jobs/shared/loader.js)#`loadOrderedBookContents`) zeigt der KI Kapitelpfade («Teil › Kapitel»), die buchweit eindeutig sind: gleichnamige Geschwister bekommen ab dem zweiten eine Ordnungszahl («Einleitung (2)»). `chNameToId` löst jeden Pfad auf, den Rohnamen nur, wenn er eindeutig ist. Bücher ohne Namensdoppel sehen unveränderte Pfade (Prompt-Cache bleibt).
+
+Gegated durch [tests/unit/chapter-filter-ids.test.mjs](../tests/unit/chapter-filter-ids.test.mjs) (jede `catalogFilter('chapter'|'page')`-Combobox bindet ein `…Id`-Feld, kein Filter-Scope führt `kapitel`/`seite`, keine eigene Name→ID-Map über `chapter_name`), dazu [chapter-name-map.test.js](../tests/unit/chapter-name-map.test.js) und je Karte ein Fall mit gleichnamigen Kapiteln.
+
 ## Folder-Import nutzt Hierarchie
 
 [routes/jobs/folder-import.js](../routes/jobs/folder-import.js) erzeugt Jahr-Kapitel (top-level) + Monat-Sub-Kapitel (`parent_chapter_id = Jahr-ID`). Siehe [docs/folder-import.md](folder-import.md).

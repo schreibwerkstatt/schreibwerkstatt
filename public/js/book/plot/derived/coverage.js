@@ -3,6 +3,7 @@
 // Volltext-/Kapitel-/Figur-Filter.
 
 import { normTitle } from '../constants.js';
+import { activeFilterId, sameId } from '../../../chapter-filter.js';
 
 // Schwere-Rangfolge (höher = gravierender) für die Badge-Farbwahl am Beat.
 const SEV_RANK = { kritisch: 5, stark: 4, mittel: 3, schwach: 2, niedrig: 1 };
@@ -144,13 +145,21 @@ export const coverageMethods = {
   // plotHideImBuch die Arbeitsgewohnheit ÜBER ALLE BÜCHER (sw:userpref:).
   // Kapitel-Optionen aus den Beats ableiten (buchgeordnet via Root-Helper),
   // damit nur Kapitel angeboten werden, die im Board überhaupt vorkommen.
-  plotKapitelListe() {
-    return window.__app._deriveKapitel(this.beats, b => this.effectiveChapterNameForBeat(b));
+  plotKapitelOptionen() {
+    return this._memo('kapOpt', [this.beats, this.threads, window.__app._chapterLabelMap],
+      () => window.__app._kapitelOptionen((this.beats || []).map(b => this.effectiveChapterIdForBeat(b))));
+  },
+
+  // Wirksamer Kapitel-Filter: nur ein Wert, den die Optionen anbieten (gespeicherter
+  // Stand eines gelöschten Kapitels filtert nicht still alles weg).
+  _plotKapitelFilter() {
+    const v = this.plotFilters.kapitelId;
+    return v ? activeFilterId(v, this.plotKapitelOptionen()) : '';
   },
 
   plotFilterActive() {
     const f = this.plotFilters;
-    return !!(f.kapitel || f.figurId || f.draftFigurId || f.status || this.plotHideImBuch || (f.text || '').trim());
+    return !!(this._plotKapitelFilter() || f.figurId || f.draftFigurId || f.status || this.plotHideImBuch || (f.text || '').trim());
   },
 
   // Beteiligt ein Beat die Katalog-Figur figId — explizit verlinkt ODER implizit
@@ -170,11 +179,12 @@ export const coverageMethods = {
 
   _beatMatchesFilter(b) {
     const f = this.plotFilters;
+    const kapitelId = this._plotKapitelFilter();
     const txt = (f.text || '').trim().toLowerCase();
     // Figur-Filter beziehen die Strang-Vererbung ein (Beat erbt die Hauptfigur des
     // Strangs), damit der Filter dieselbe Beat-Menge trifft wie das Plot-Badge.
     return (!txt || (b.titel || '').toLowerCase().includes(txt) || (b.beschreibung || '').toLowerCase().includes(txt)) &&
-           (!f.kapitel || this.effectiveChapterNameForBeat(b) === f.kapitel) &&
+           (!kapitelId || sameId(this.effectiveChapterIdForBeat(b), kapitelId)) &&
            (!this.plotHideImBuch || b.status !== 'im_buch') &&
            // „verworfen" ist kein Status-Wert, sondern die Flag-Achse — als
            // Filter-Option zeigt sie nur die verworfenen Beats.
@@ -189,7 +199,7 @@ export const coverageMethods = {
   // plotFilters überlebt loadBoard (nur resetPlot leert sie).
   applyDraftFigureFilter(draftId) {
     if (draftId == null) return;
-    this.plotFilters = { kapitel: '', figurId: '', draftFigurId: draftId, status: '', text: '' };
+    this.plotFilters = { kapitelId: '', figurId: '', draftFigurId: draftId, status: '', text: '' };
   },
 
   // Gefilterte Beats pro Akt — nur fürs Rendering. Ohne aktiven Filter wird der
@@ -198,13 +208,13 @@ export const coverageMethods = {
     const f = this.plotFilters;
     const base = this.beatsForAct(actId);
     if (!this.plotFilterActive()) return base;
-    return this._memo(`fbeats:${actId}`, [base, this.threads, f.kapitel, f.figurId, f.draftFigurId, f.status, f.text, this.plotHideImBuch], () =>
+    return this._memo(`fbeats:${actId}`, [base, this.threads, f.kapitelId, f.figurId, f.draftFigurId, f.status, f.text, this.plotHideImBuch], () =>
       base.filter(b => this._beatMatchesFilter(b)));
   },
 
   filteredBeatCount() {
     const f = this.plotFilters;
-    return this._memo('fcount', [this.beats, this.threads, f.kapitel, f.figurId, f.draftFigurId, f.status, f.text, this.plotHideImBuch], () =>
+    return this._memo('fcount', [this.beats, this.threads, f.kapitelId, f.figurId, f.draftFigurId, f.status, f.text, this.plotHideImBuch], () =>
       (this.beats || []).filter(b => this._beatMatchesFilter(b)).length);
   },
 
@@ -216,7 +226,7 @@ export const coverageMethods = {
     const base = this.beatsForCell(actId, threadId);
     if (!this.plotFilterActive()) return base;
     const tid = threadId == null ? null : threadId;
-    return this._memo(`fcell:${actId}:${tid}`, [base, this.threads, f.kapitel, f.figurId, f.draftFigurId, f.status, f.text, this.plotHideImBuch], () =>
+    return this._memo(`fcell:${actId}:${tid}`, [base, this.threads, f.kapitelId, f.figurId, f.draftFigurId, f.status, f.text, this.plotHideImBuch], () =>
       base.filter(b => this._beatMatchesFilter(b)));
   },
 };

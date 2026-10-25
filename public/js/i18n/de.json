@@ -2812,7 +2812,6 @@
   "weltfakten.title": "Welt-Fakten",
   "weltfakten.empty": "Noch keine Welt-Fakten. Komplettanalyse ausführen.",
   "weltfakten.emptyScanned": "Die Komplettanalyse ist gelaufen, hat aber keine Welt-Fakten gefunden.",
-  "weltfakten.filterKapitel": "Kapitel",
   "weltfakten.widerlegt": "Real widerlegt",
   "weltfakten.widerlegtTip": "Der Faktencheck hat diese Aussage per Quelle als real falsch belegt. Im Buch darf sie trotzdem stehen – kreative Freiheit ist legitim.",
   "weltfakten.factcheck.title": "Faktencheck",

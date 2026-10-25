@@ -4,7 +4,7 @@
   Fachdaten (globalZeitstrahl) leben in Alpine.store('catalog') und werden
   direkt als $store.catalog.globalZeitstrahl gelesen (kein Root-Proxy). ereignisseFilters
   bleibt am Root (app-navigation schreibt darauf). Meta-State + UI-Helper
-  (filteredEreignisse, ereignisseKapitelListe, ereignisseSeitenListe,
+  (filteredEreignisse, ereignisseKapitelOptionen, ereignisseSeitenOptionen,
   ereignisseSubtypListe, formatEventDate, eventSpanYears) leben hier in der
   Sub-Komponente.
 
@@ -89,14 +89,14 @@
          >
     </div>
     <div x-data="catalogFilter('chapter')"
-         x-modelable="value" x-model="$store.catalogUi.ereignisseFilters.kapitel"
-         x-effect="options = ereignisseKapitelListe().map(k => ({value: k, label: k}))"
-         @combobox-change="$store.catalogUi.ereignisseFilters.seite = ''"
+         x-modelable="value" x-model="$store.catalogUi.ereignisseFilters.kapitelId"
+         x-effect="options = ereignisseKapitelOptionen()"
+         @combobox-change="$store.catalogUi.ereignisseFilters.seiteId = ''"
          >
     </div>
     <div x-data="catalogFilter('page')"
-         x-modelable="value" x-model="$store.catalogUi.ereignisseFilters.seite"
-         x-effect="_disabled = !$store.catalogUi.ereignisseFilters.kapitel || ereignisseSeitenListe().length === 0; options = ereignisseSeitenListe().map(s => ({value: s, label: s}))"
+         x-modelable="value" x-model="$store.catalogUi.ereignisseFilters.seiteId"
+         x-effect="_disabled = ereignisseSeitenOptionen().length === 0; options = ereignisseSeitenOptionen()"
          :class="{'combobox-wrap--disabled': _disabled}"
          >
     </div>

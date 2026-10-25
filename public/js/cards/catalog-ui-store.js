@@ -20,11 +20,11 @@ export function registerCatalogUiStore() {
     figurenProgress: 0,
     figurenStatus: '',
     selectedFigurId: null,
-    figurenFilters: { kapitel: '', seite: '', suche: '' },
+    figurenFilters: { kapitelId: '', seiteId: '', suche: '' },
 
     // Ereignisse: Filter + Selektion (app-navigation schreibt beides).
     selectedEreignisId: null,
-    ereignisseFilters: { figurId: '', kapitel: '', seite: '', subtyp: '', suche: '' },
+    ereignisseFilters: { figurId: '', kapitelId: '', seiteId: '', subtyp: '', suche: '' },
 
     szenenUpdatedAt: null,
     selectedSzeneId: null,
@@ -32,12 +32,12 @@ export function registerCatalogUiStore() {
 
     orteUpdatedAt: null,
     selectedOrtId: null,
-    orteFilters: { figurId: '', kapitel: '', szeneId: '', suche: '' },
+    orteFilters: { figurId: '', kapitelId: '', szeneId: '', suche: '' },
 
     songsUpdatedAt: null,
     selectedSongId: null,
-    songsFilters: { figurId: '', kapitel: '', genre: '', kontextTyp: '', suche: '' },
+    songsFilters: { figurId: '', kapitelId: '', genre: '', kontextTyp: '', suche: '' },
 
-    kontinuitaetFilters: { figurId: '', kapitel: '', schwere: '', status: '' },
+    kontinuitaetFilters: { figurId: '', kapitelId: '', schwere: '', status: '' },
   });
 }

@@ -32,33 +32,27 @@ function detectEpisodic(rows, n) {
   return singleChapter / cohort.length >= 0.6;
 }
 
-// Kern-Aggregation. `figuren` = Katalog-Array, `chapterOrder` = Kapitelnamen in
-// Lese-Reihenfolge (Spaltenachse). Liefert Matrix + Zeilen-Kennzahlen + Befunde.
+// Kern-Aggregation. `figuren` = Katalog-Array, `chapterOrder` = Kapitel-Optionen
+// [{ value: chapter_id, label }] in Lese-Reihenfolge (Spaltenachse). Spalten nach
+// ID: gleichnamige Kapitel bleiben getrennt. Liefert Matrix + Zeilen-Kennzahlen +
+// Befunde; `chapters` = Spalten-Labels, `chapterIds` = Spalten-IDs (Sprünge).
 export function computePresence(figuren, chapterOrder) {
-  const chapters = chapterOrder || [];
+  const order = chapterOrder || [];
+  const chapters = order.map(c => c.label);
+  const chapterIds = order.map(c => c.value);
   const n = chapters.length;
-  const colIdx = new Map();
-  chapters.forEach((name, i) => colIdx.set(name, i));
+  const idToCol = new Map();
+  chapterIds.forEach((id, i) => idToCol.set(String(id), i));
+  const colOf = (id) => (id != null ? idToCol.get(String(id)) : undefined);
 
   const src = (figuren || []).filter(f => !f.stale);
-
-  // Kapitelname → chapter_id (für Header-Sprünge) + chapter_id → Spaltenindex
-  // (Wendepunkt-Events sind per chapter_id verankert, nicht per Name).
-  const nameToId = new Map();
-  for (const f of src) {
-    for (const k of (f.kapitel || [])) {
-      if (k.name && k.chapter_id != null && !nameToId.has(k.name)) nameToId.set(k.name, k.chapter_id);
-    }
-  }
-  const idToCol = new Map();
-  for (const [name, id] of nameToId) { const c = colIdx.get(name); if (c != null) idToCol.set(id, c); }
 
   let grandTotal = 0, maxCell = 0;
   const rows = [];
   for (const f of src) {
     const haeByCol = new Array(n).fill(0);
     for (const k of (f.kapitel || [])) {
-      const c = colIdx.get(k.name);
+      const c = colOf(k.chapter_id);
       if (c != null) haeByCol[c] += (k.haeufigkeit || 1);
     }
     let total = 0, firstIdx = -1, lastIdx = -1;
@@ -80,7 +74,7 @@ export function computePresence(figuren, chapterOrder) {
     const wpCols = new Set();
     for (const e of (f.lebensereignisse || [])) {
       if (e.subtyp !== 'wendepunkt' || e.chapter_id == null) continue;
-      const c = idToCol.get(e.chapter_id);
+      const c = colOf(e.chapter_id);
       if (c != null) wpCols.add(c);
     }
     const declaredWendepunkte = Array.isArray(f.arc?.wendepunkte) ? f.arc.wendepunkte.length : 0;
@@ -98,7 +92,7 @@ export function computePresence(figuren, chapterOrder) {
   for (const r of rows) r.share = grandTotal > 0 ? r.total / grandTotal : 0;
 
   return {
-    chapters, chapterNameToId: nameToId, rows, maxCell, grandTotal,
+    chapters, chapterIds, rows, maxCell, grandTotal,
     episodic: detectEpisodic(rows, n),
     findings: computeFindings(rows, chapters),
   };
@@ -165,7 +159,7 @@ export const presenceMethods = {
   // achse — beide stabil, solange sich die Figuren nicht ändern.
   figurenPresenceData() {
     const figuren = Alpine.store('catalog').figuren;
-    const chapterOrder = this.figurenKapitelListe();
+    const chapterOrder = this.figurenKapitelOptionen();
     return this._memo('presence', [figuren, chapterOrder], () => computePresence(figuren, chapterOrder));
   },
 
@@ -185,7 +179,11 @@ export const presenceMethods = {
 
   figurenPresenceSharePct(share) { return Math.round((share || 0) * 100); },
 
-  figurenPresenceJumpToChapter(name) { if (name) window.__app.openKapitelByName(name); },
+  // Spaltenindex → Kapitel-ID (gleichnamige Kapitel springen ins richtige).
+  figurenPresenceJumpToChapter(ci) {
+    const id = this.figurenPresenceData().chapterIds[ci];
+    if (id != null) window.__app.openChapterById(id);
+  },
 
   // Befund-Zeile als lokalisierter Klartext (x-text-sicher, kein x-html).
   figurenPresenceFindingText(fd) {

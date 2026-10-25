@@ -21,7 +21,7 @@ const SHOW_ARCHIVED_PREF_KEY = 'plotShowArchived';
 // Filterleiste pro Buch im localStorage (siehe public/js/filter-persist.js).
 // `resetPlot` (book/plot/lifecycle.js) fasst `plotFilters` deshalb nicht an.
 const PLOT_FILTER_SCOPES = [
-  { scope: 'plotFilters', key: 'plotFilters', defaults: { kapitel: '', figurId: '', draftFigurId: '', status: '', text: '' } },
+  { scope: 'plotFilters', key: 'plotFilters', defaults: { kapitelId: '', figurId: '', draftFigurId: '', status: '', text: '' } },
 ];
 
 export function registerPlotCard() {
@@ -77,7 +77,7 @@ export function registerPlotCard() {
     // Filter (Kapitel / Figur / Werkstatt-Figur) — wie szenen/ereignisse; filtert
     // die Beats pro Akt-Spalte rein fürs Rendering (beatsForAct bleibt ungefiltert
     // für Drag&Drop + Order-Persistenz).
-    plotFilters: { kapitel: '', figurId: '', draftFigurId: '', status: '', text: '' },
+    plotFilters: { kapitelId: '', figurId: '', draftFigurId: '', status: '', text: '' },
 
     // Umgesetzte Beats („im Buch") ausblenden — Arbeitsmodus „zeig mir nur, was
     // noch offen ist". Bewusst NEBEN plotFilters und NICHT in PLOT_FILTER_SCOPES:

@@ -22,7 +22,7 @@ Den vis-network-Unterbau teilt er sich mit der **Motiv-Konstellation** ([docs/mo
 
 ```js
 figurenGraphModus       // 'figur' | 'familie' | 'soziogramm'
-figurenGraphKapitel     // String | null — gewähltes Kapitel-Filter
+figurenGraphKapitelId   // chapter_id | null — gewähltes Kapitel-Filter (per ID, chapter-hierarchy.md)
 figurenGraphFullscreen  // Boolean
 _figurenNetwork         // vis.Network — wird im destroy()/onBookChanged geräumt
 _figurenHash            // String — Cache-Key (kapSig + Modus + Locale)
@@ -105,7 +105,7 @@ Figurengraph-Modus: Style aus `BZ`-Tabelle (Farbe, Highlight, Arrows, Dashes).
 
 ## Kapitel-Filter (`_figurenGraphSetKapitel`)
 
-Greift nach dem initialen Render. Mutiert nur Node-Color/Font + Edge-Color via `DataSet.update` — kein Re-Layout, keine Stabilisierung. Figuren, deren `kapitel`-Liste das gewählte Kapitel **nicht** enthält, werden gedimmt (`theme.dim`, aus der Oberflächenfarbe abgeleitet statt fest hellgrau). Edges werden gedimmt, wenn weder `from` noch `to` aktiv sind.
+Greift nach dem initialen Render. Mutiert nur Node-Color/Font + Edge-Color via `DataSet.update` — kein Re-Layout, keine Stabilisierung. Figuren, deren `kapitel`-Liste die gewählte `chapter_id` **nicht** enthält, werden gedimmt; ein Wert, den die Kapitelachse nicht anbietet, setzt den Filter zurück statt alles zu dimmen (`theme.dim`, aus der Oberflächenfarbe abgeleitet statt fest hellgrau). Edges werden gedimmt, wenn weder `from` noch `to` aktiv sind.
 
 Modus-aware: im Soziogramm-Modus bleibt die Schichtfarbe (`SCHICHT_COLOR`), sonst Typ-Farbe (`_figTypColor`). Edge-Farben kommen aus `BZ_SOZIO_COLOR` (Soziogramm) bzw. `BZ` (Figurengraph).
 

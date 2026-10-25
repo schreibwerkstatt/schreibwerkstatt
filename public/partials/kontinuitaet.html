@@ -125,8 +125,8 @@
          >
     </div>
     <div x-data="catalogFilter('chapter')"
-         x-modelable="value" x-model="$store.catalogUi.kontinuitaetFilters.kapitel"
-         x-effect="options = kontinuitaetKapitelListe().map(k => ({value: k, label: k}))"
+         x-modelable="value" x-model="$store.catalogUi.kontinuitaetFilters.kapitelId"
+         x-effect="options = kontinuitaetKapitelOptionen()"
          >
     </div>
     <span class="filter-count" x-text="kontinuitaetResult ? kontinuitaetIssuesSorted().length + ' / ' + kontinuitaetSeverityCounts().all : ''"></span>

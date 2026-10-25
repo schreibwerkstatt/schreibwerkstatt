@@ -27,6 +27,7 @@ require('./migrations');
 const { NOW_ISO_SQL } = require('./now');
 const { toRefString: _toRefString } = require('./write-helpers');
 const { carryOverStatus } = require('../lib/continuity-carryover');
+const { pageChapters } = require('./content-names');
 
 const _insContinuityCheck = db.prepare(
   `INSERT INTO continuity_checks (book_id, user_email, checked_at, summary, model)
@@ -48,7 +49,11 @@ const _insContinuityIssueCh = db.prepare(
 
 // Figuren-/Kapitelnamen eines KI-Befunds auflösen (dedupliziert, Reihenfolge bleibt).
 // figIdToRowId: TEXT-fig_id → INTEGER figures.id.
-function _resolveRefs(it, figNameToId, figIdToRowId, chNameToId) {
+// anchorChapters: page_id → { chapter_id, chapter_name } der verankerten Abschnitte.
+// Verankerte Abschnitte geben ihr Kapitel vor; sind ALLE Stellen verankert, gilt
+// nur das, nicht der KI-Name — das Modell lässt `kapitel` oft leer oder hält einen
+// Abschnitt für das gleichnamige Kapitel.
+function _resolveRefs(it, figNameToId, figIdToRowId, chNameToId, anchorChapters = null) {
   const figs = [];
   const seenFig = new Set();
   for (const name of (Array.isArray(it.figuren) ? it.figuren.map(_toRefString).filter(Boolean) : [])) {
@@ -60,7 +65,18 @@ function _resolveRefs(it, figNameToId, figIdToRowId, chNameToId) {
   }
   const chs = [];
   const seenCh = new Set();
-  for (const name of (Array.isArray(it.kapitel) ? it.kapitel.map(_toRefString).filter(Boolean) : [])) {
+  for (const pid of [it.page_a_id, it.page_b_id]) {
+    const pc = pid != null ? anchorChapters?.get(pid) : null;
+    if (!pc || seenCh.has(pc.chapter_id + '|')) continue;
+    seenCh.add(pc.chapter_id + '|');
+    chs.push({ name: pc.chapter_name, cid: pc.chapter_id });
+  }
+  // KI-Namen nur, solange eine vorhandene Stelle unverankert ist — deren Kapitel
+  // kennt sonst niemand. Sind alle Stellen verankert, entscheiden nur die Anker.
+  const allAnchored = chs.length > 0 && [[it.stelle_a, it.page_a_id], [it.stelle_b, it.page_b_id]]
+    .every(([st, pid]) => !_toRefString(st) || anchorChapters?.has(pid));
+  const kiNames = allAnchored ? [] : (Array.isArray(it.kapitel) ? it.kapitel.map(_toRefString).filter(Boolean) : []);
+  for (const name of kiNames) {
     const cid = chNameToId?.[name] ?? null;
     const key = (cid ?? '') + '|' + name;
     if (seenCh.has(key)) continue;
@@ -165,9 +181,17 @@ function _priorIssues(bookIdInt, email) {
 }
 
 // Issues auflösen, Triage übernehmen, speichern. Läuft innerhalb der Aufrufer-Transaktion.
+// Kapitel der verankerten Abschnitte aller Befunde in einem Lookup.
+function _anchorChapters(issuesArr) {
+  const ids = new Set();
+  for (const it of issuesArr) for (const pid of [it?.page_a_id, it?.page_b_id]) if (Number.isInteger(pid)) ids.add(pid);
+  return pageChapters([...ids]);
+}
+
 function _persistIssues(cid, bookIdInt, email, issuesArr, sortStart, figNameToId, chNameToId) {
   const figIdToRowId = _figIdToRowIdMap(bookIdInt, email);
-  const refsList = issuesArr.map(it => _resolveRefs(it || {}, figNameToId, figIdToRowId, chNameToId));
+  const anchors = _anchorChapters(issuesArr);
+  const refsList = issuesArr.map(it => _resolveRefs(it || {}, figNameToId, figIdToRowId, chNameToId, anchors));
   const statuses = carryOverStatus(
     issuesArr.map((it, i) => ({ ...(it || {}), ...refsList[i] })),
     _priorIssues(bookIdInt, email),
@@ -202,9 +226,10 @@ function saveContinuityCheck(bookId, userEmail, summary, model, issues, figNameT
     const discArr = (Array.isArray(discarded) ? discarded : []).filter(d => d && typeof d === 'object');
     if (discArr.length) {
       const figIdToRowId = _figIdToRowIdMap(bookIdInt, email);
+      const anchors = _anchorChapters(discArr);
       discardedIssues = discArr.map((it, i) => _persistOneContinuityIssue(
         cid, bookIdInt, email, it,
-        _resolveRefs(it, figNameToId, figIdToRowId, chNameToId),
+        _resolveRefs(it, figNameToId, figIdToRowId, chNameToId, anchors),
         null, issuesArr.length + i, it.discard || { reason: 'verify' },
       )).map(({ id, ...rest }) => rest);
     }

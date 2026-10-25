@@ -7,7 +7,7 @@ const { db } = require('./connection');
 // Migrationen muessen vor dem Anlegen gelaufen sein.
 require('./migrations');
 const { NOW_ISO_SQL } = require('./now');
-const { toRefString: _toRefString } = require('./write-helpers');
+const { toRefString: _toRefString, chapterNameMap } = require('./write-helpers');
 const { inClause: _inClause } = require('../lib/validate');
 const { listSongChaptersWithNames } = require('./content-names');
 
@@ -34,7 +34,7 @@ function songKey(s) {
 function saveSongsToDb(bookId, songs, userEmail, chNameToId = null, pageNameToIdByChapter = null) {
   if (chNameToId == null) {
     const rows = db.prepare('SELECT chapter_id, chapter_name FROM chapters WHERE book_id = ?').all(bookId);
-    chNameToId = Object.fromEntries(rows.map(r => [r.chapter_name, r.chapter_id]));
+    chNameToId = chapterNameMap(rows);
   }
   if (pageNameToIdByChapter == null) {
     const rows = db.prepare('SELECT page_id, page_name, chapter_id FROM pages WHERE book_id = ?').all(bookId);

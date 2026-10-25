@@ -56,8 +56,8 @@ export const appNavigationMethods = {
       // wird nie gerendert und der Sprung endet sichtbar im Nichts — die Karte
       // ist offen, aber die geklickte Figur fehlt.
       this.$store.catalogUi.figurenFilters.suche = '';
-      this.$store.catalogUi.figurenFilters.kapitel = '';
-      this.$store.catalogUi.figurenFilters.seite = '';
+      this.$store.catalogUi.figurenFilters.kapitelId = '';
+      this.$store.catalogUi.figurenFilters.seiteId = '';
       if (!this.showFiguresCard) {
         await this.toggleFiguresCard({ skipCardScroll: true });
       }
@@ -69,13 +69,14 @@ export const appNavigationMethods = {
     }
   },
 
-  async openFigurMitKapitel(figId, kapitelName) {
+  // Kapitel per ID (chapter-filter.js): gleichnamige Kapitel sind zwei Kapitel.
+  async openFigurMitKapitel(figId, chapterId) {
     this._beginNavigation();
     try {
       const fid = _coerceId(figId);
       this.$store.catalogUi.figurenFilters.suche = '';
-      this.$store.catalogUi.figurenFilters.kapitel = kapitelName || '';
-      this.$store.catalogUi.figurenFilters.seite = '';
+      this.$store.catalogUi.figurenFilters.kapitelId = chapterId ?? '';
+      this.$store.catalogUi.figurenFilters.seiteId = '';
       if (!this.showFiguresCard) {
         await this.toggleFiguresCard({ skipCardScroll: true });
       }
@@ -93,7 +94,7 @@ export const appNavigationMethods = {
       const oid = _coerceId(ortId);
       this.$store.catalogUi.orteFilters.suche = '';
       this.$store.catalogUi.orteFilters.figurId = '';
-      this.$store.catalogUi.orteFilters.kapitel = '';
+      this.$store.catalogUi.orteFilters.kapitelId = '';
       this.$store.catalogUi.orteFilters.szeneId = '';
       if (!this.showOrteCard) {
         await this.toggleOrteCard({ skipCardScroll: true });
@@ -106,13 +107,13 @@ export const appNavigationMethods = {
     }
   },
 
-  async openOrtMitKapitel(ortId, kapitelName) {
+  async openOrtMitKapitel(ortId, chapterId) {
     this._beginNavigation();
     try {
       const oid = _coerceId(ortId);
       this.$store.catalogUi.orteFilters.suche = '';
       this.$store.catalogUi.orteFilters.figurId = '';
-      this.$store.catalogUi.orteFilters.kapitel = kapitelName || '';
+      this.$store.catalogUi.orteFilters.kapitelId = chapterId ?? '';
       this.$store.catalogUi.orteFilters.szeneId = '';
       if (!this.showOrteCard) {
         await this.toggleOrteCard({ skipCardScroll: true });
@@ -207,7 +208,7 @@ export const appNavigationMethods = {
   // Einstiege hatten drei verschiedene Teilmengen genullt.
   _setEreignisseFilter(patch = {}) {
     const f = this.$store.catalogUi.ereignisseFilters;
-    f.figurId = ''; f.kapitel = ''; f.seite = ''; f.subtyp = ''; f.suche = '';
+    f.figurId = ''; f.kapitelId = ''; f.seiteId = ''; f.subtyp = ''; f.suche = '';
     Object.assign(f, patch);
   },
 
@@ -228,13 +229,13 @@ export const appNavigationMethods = {
     }
   },
 
-  async openEreignisseMitKapitel(kapitel) {
+  async openEreignisseMitKapitel(chapterId) {
     this._beginNavigation();
     try {
       if (!this.showEreignisseCard) {
         await this.toggleEreignisseCard();
       }
-      this._setEreignisseFilter({ kapitel });
+      this._setEreignisseFilter({ kapitelId: chapterId ?? '' });
     } finally {
       this._endNavigation();
     }

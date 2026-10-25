@@ -800,7 +800,7 @@ function makeCtx({ beats = [], acts = [], threads = [], verworfenOpen = {}, plot
   return Object.assign(
     {
       _memos: {}, beats, acts, threads, verworfenOpen, plotHideImBuch, plotShowArchived,
-      plotFilters: plotFilters || { kapitel: '', figurId: '', draftFigurId: '', status: '', text: '' },
+      plotFilters: plotFilters || { kapitelId: '', figurId: '', draftFigurId: '', status: '', text: '' },
     },
     plotMethods,
   );
@@ -935,14 +935,47 @@ test('plotMethods.effectiveChapterNameForBeat: eigenes Kapitel hat Vorrang, sons
   assert.equal(ctx2.effectiveChapterNameForBeat({ thread_id: 8, chapter_name: null }), '');
 });
 
-test('plotMethods._beatMatchesFilter: Kapitel-Filter trifft auch geerbte Kapitel', () => {
-  const threads = [{ id: 7, chapter_name: 'Kap 5' }];
-  const beats = [{ id: 1, act_id: 1, thread_id: 7, chapter_name: null, fig_ids: [], draft_fig_ids: [] }];
-  const ctx = makeCtx({ beats, threads, plotFilters: { kapitel: 'Kap 5', figurId: '', draftFigurId: '', status: '', text: '' } });
+// Kapitel-Filter per ID (chapter-filter.js); Optionen aus dem Root wie in der App.
+function withChapterRoot(fn) {
+  const prev = globalThis.window;
+  const labels = new Map([[5, 'Kap 5'], [6, 'Kap 6'], [7, 'Kap 5']]);
+  globalThis.window = { __app: {
+    _chapterLabelMap: labels,
+    _kapitelOptionen: (ids) => [...new Set(ids.filter(id => id != null).map(Number))]
+      .filter(id => labels.has(id)).map(id => ({ value: id, label: labels.get(id) })),
+  } };
+  try { fn(); } finally { globalThis.window = prev; }
+}
+
+test('plotMethods._beatMatchesFilter: Kapitel-Filter trifft auch geerbte Kapitel', () => withChapterRoot(() => {
+  const threads = [{ id: 7, chapter_id: 5, chapter_name: 'Kap 5' }];
+  const beats = [
+    { id: 1, act_id: 1, thread_id: 7, chapter_name: null, fig_ids: [], draft_fig_ids: [] },
+    { id: 2, act_id: 1, thread_id: null, chapter_id: 6, chapter_name: 'Kap 6', fig_ids: [], draft_fig_ids: [] },
+  ];
+  const ctx = makeCtx({ beats, threads, plotFilters: { kapitelId: 5, figurId: '', draftFigurId: '', status: '', text: '' } });
   assert.equal(ctx._beatMatchesFilter(beats[0]), true);
-  ctx.plotFilters.kapitel = 'Kap 6';
+  ctx.plotFilters.kapitelId = 6;
+  ctx._memos = {};
   assert.equal(ctx._beatMatchesFilter(beats[0]), false);
-});
+}));
+
+test('plotMethods._beatMatchesFilter: gleichnamige Kapitel bleiben getrennt', () => withChapterRoot(() => {
+  // Kapitel 5 und 7 heissen beide «Kap 5».
+  const beats = [
+    { id: 1, act_id: 1, chapter_id: 5, chapter_name: 'Kap 5', fig_ids: [], draft_fig_ids: [] },
+    { id: 2, act_id: 1, chapter_id: 7, chapter_name: 'Kap 5', fig_ids: [], draft_fig_ids: [] },
+  ];
+  const ctx = makeCtx({ beats, plotFilters: { kapitelId: 7, figurId: '', draftFigurId: '', status: '', text: '' } });
+  assert.deepEqual(beats.filter(b => ctx._beatMatchesFilter(b)).map(b => b.id), [2]);
+}));
+
+test('plotMethods: veralteter Kapitelfilter wirkt nicht', () => withChapterRoot(() => {
+  const beats = [{ id: 1, act_id: 1, chapter_id: 5, fig_ids: [], draft_fig_ids: [] }];
+  const ctx = makeCtx({ beats, plotFilters: { kapitelId: 'Kap 5', figurId: '', draftFigurId: '', status: '', text: '' } });
+  assert.equal(ctx.plotFilterActive(), false);
+  assert.equal(ctx._beatMatchesFilter(beats[0]), true);
+}));
 
 // Ausblend-Schalter „im Buch" (plotHideImBuch) — eigene Achse neben plotFilters.
 test('plotMethods: plotHideImBuch blendet umgesetzte Beats aus', () => {
@@ -989,7 +1022,7 @@ test('plotMethods: Umlegen von plotHideImBuch invalidiert die Memos', () => {
     { id: 1, act_id: 1, position: 0, titel: 'Beat eins', status: 'geplant', fig_ids: [], draft_fig_ids: [] },
     { id: 2, act_id: 1, position: 1, titel: 'Beat zwei', status: 'im_buch', fig_ids: [], draft_fig_ids: [] },
   ];
-  const filters = { kapitel: '', figurId: '', draftFigurId: '', status: '', text: 'beat' };
+  const filters = { kapitelId: '', figurId: '', draftFigurId: '', status: '', text: 'beat' };
   const ctx = makeCtx({ beats, plotFilters: filters, plotHideImBuch: true });
   assert.deepEqual(ctx.filteredBeatsForAct(1).map(b => b.id), [1]);
   assert.deepEqual(ctx.filteredBeatsForCell(1, null).map(b => b.id), [1]);

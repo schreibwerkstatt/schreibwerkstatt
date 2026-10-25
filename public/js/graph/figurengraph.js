@@ -1,6 +1,7 @@
 import { DEFAULT_FONT, TIER_COLOR } from './constants.js';
 import { computeSwimlaneLayout, importanceBorderWidth, ROW_H } from './layout.js';
 import { parseColor } from '../graph-kit.js';
+import { sameId } from '../chapter-filter.js';
 
 // Figurengraph: Kapitel-Swimlane (deterministisch).
 // Layout-Idee (Berechnung in [layout.js](layout.js), hier nur das Zeichnen):
@@ -14,7 +15,7 @@ import { parseColor } from '../graph-kit.js';
 export const figurengraphMethods = {
   _renderFigurengraph(container) {
     const figuren = this._graphFiguren();
-    const chapterOrder = this.figurenKapitelListe();
+    const chapterOrder = this.figurenKapitelOptionen();
     const N = chapterOrder.length;
     const theme = this._theme();
 
@@ -100,7 +101,7 @@ export const figurengraphMethods = {
           if (i % step !== 0 && i !== N - 1) continue;
           const dom = network.canvasToDOM({ x: i * COL_W, y: Y_TOP });
           if (dom.x < -120 || dom.x > cWidthCss + 120) continue;
-          const raw = `${i + 1}. ${chapterOrder[i]}`;
+          const raw = `${i + 1}. ${chapterOrder[i].label}`;
           const lbl = raw.length > lblMaxChars ? raw.slice(0, lblMaxChars - 2) + '…' : raw;
           ctx.fillText(lbl, dom.x * dpr, 8 * dpr);
         }
@@ -140,18 +141,18 @@ export const figurengraphMethods = {
       const minBarW = Math.min(220, Math.max(70, N * 3));
       // Konstante Presence-Daten je Figur einmal vorberechnen — afterDrawing feuert
       // bei jedem Pan/Zoom/Redraw; nur die Bounding-Box ist pro Frame variabel (Drag),
-      // kapsByName + RGB-Parse sind es nicht.
+      // kapsById + RGB-Parse sind es nicht.
       const presenceData = figuren.map(f => {
-        const kapsByName = {};
-        for (const k of (f.kapitel || [])) kapsByName[k.name] = k.haeufigkeit || 1;
+        const kapsById = {};
+        for (const k of (f.kapitel || [])) if (k.chapter_id != null) kapsById[k.chapter_id] = k.haeufigkeit || 1;
         // Tier-Farbe für den aktuellen Grund lesbar gemacht, dann als RGB-Tripel —
         // die Segment-Alpha wird pro Kapitel darübergelegt.
         const rgb = parseColor(theme.ink(TIER_COLOR[info[f.id].tier])) || [45, 106, 159];
-        return { id: f.id, kapsByName, rgb };
+        return { id: f.id, kapsById, rgb };
       });
       network.on('afterDrawing', ctx => {
         ctx.save();
-        for (const { id, kapsByName, rgb: [r, g, b] } of presenceData) {
+        for (const { id, kapsById, rgb: [r, g, b] } of presenceData) {
           const bb = network.getBoundingBox(id);
           if (!bb) continue;
           const barW    = Math.max(bb.right - bb.left, minBarW);
@@ -164,7 +165,7 @@ export const figurengraphMethods = {
           ctx.fillRect(barLeft, barY, barW, barH);
           // Gefüllte Segmente pro Kapitel mit Auftritt
           for (let i = 0; i < N; i++) {
-            const h = kapsByName[chapterOrder[i]];
+            const h = kapsById[chapterOrder[i].value];
             if (!h) continue;
             const alpha = Math.min(1, 0.35 + h / 5);
             ctx.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(2)})`;
@@ -182,8 +183,8 @@ export const figurengraphMethods = {
       if (pointer.canvas.y > Y_TOP + 60) return;
       const idx = Math.round(pointer.canvas.x / COL_W);
       if (idx < 0 || idx >= N) return;
-      const ch = chapterOrder[idx];
-      this._figurenGraphSetKapitel(this.figurenGraphKapitel === ch ? null : ch);
+      const ch = chapterOrder[idx].value;
+      this._figurenGraphSetKapitel(sameId(this.figurenGraphKapitelId, ch) ? null : ch);
       event?.preventDefault?.();
     });
 

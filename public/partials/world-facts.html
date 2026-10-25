@@ -41,10 +41,10 @@
       <input type="text" x-model="wfFilters.suche" :placeholder="$app.t('common.search')" :aria-label="$app.t('common.search')" class="filter-search-input">
       <button type="button" class="search-clear--icon" x-show="wfFilters.suche" @click="wfFilters.suche=''" :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
     </span>
-    <div x-show="wfSeiteListe.length > 0"
-         x-data="combobox($app.t('weltfakten.filterKapitel'), $app.t('common.all'))"
-         x-modelable="value" x-model="wfFilters.seite"
-         x-effect="options = wfSeiteListe.map(s => ({ value: s, label: s }))"></div>
+    <div x-show="wfKapitelOptionen.length > 0"
+         x-data="catalogFilter('chapter')"
+         x-modelable="value" x-model="wfFilters.kapitelId"
+         x-effect="options = wfKapitelOptionen"></div>
     <div class="tabs tabs--scrollable" role="group" :aria-label="$app.t('weltfakten.title')">
       <button type="button" class="tabs-btn"
               :class="{ 'tabs-btn--active': wfFilters.kategorie === '' }"

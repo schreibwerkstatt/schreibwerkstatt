@@ -16,12 +16,15 @@ import assert from 'node:assert/strict';
 const { computeFilteredFiguren, computeFigurenSeiten } =
   await import('../../public/js/cards/figuren-card.js');
 
-// Kapitel-Name → Lese-Reihenfolge (root._chapterOrderMap).
-const KAPITEL = new Map([['Erstes Kapitel', 0], ['Zweites Kapitel', 1], ['Drittes Kapitel', 2]]);
+// Kapitel-ID → Lese-Reihenfolge (root._chapterIdOrderMap); Filter und Sortierung
+// arbeiten auf der ID (chapter-filter.js), der Name ist nur Label.
+const CID = { 'Erstes Kapitel': 1, 'Zweites Kapitel': 2, 'Drittes Kapitel': 3 };
+const ORDER = new Map([[1, 0], [2, 1], [3, 2]]);
+const KAPITEL = (id) => ORDER.get(id);
 
 const fig = (id, name, typ, kapitel = [], seiten = []) => ({
   id, name, typ,
-  kapitel: kapitel.map(k => (typeof k === 'string' ? { name: k, haeufigkeit: 1 } : k)),
+  kapitel: kapitel.map(k => (typeof k === 'string' ? { chapter_id: CID[k], name: k, haeufigkeit: 1 } : k)),
   seiten,
 });
 
@@ -59,20 +62,20 @@ test('Suche trifft den Namen ohne Ruecksicht auf Gross-/Kleinschreibung', () => 
 });
 
 test('Kapitelfilter behaelt nur Figuren mit Auftritt in diesem Kapitel', () => {
-  const out = computeFilteredFiguren(BESETZUNG, KAPITEL, { kapitel: 'Drittes Kapitel' });
+  const out = computeFilteredFiguren(BESETZUNG, KAPITEL, { kapitelId: 3 });
   assert.deepEqual(out.map(f => f.name), ['Bruno']);
 });
 
 test('Seitenfilter greift nur innerhalb des gewaehlten Kapitels', () => {
   const mitSeiten = [
     fig('a', 'Aaron', 'hauptfigur', ['Erstes Kapitel'],
-      [{ kapitel: 'Erstes Kapitel', seite: 'Szene 1' }]),
+      [{ kapitel: 'Erstes Kapitel', seite: 'Szene 1', chapter_id: 1, page_id: 11 }]),
     // gleicher Seitenname, aber anderes Kapitel → darf nicht durchrutschen
     fig('b', 'Berta', 'hauptfigur', ['Zweites Kapitel'],
-      [{ kapitel: 'Zweites Kapitel', seite: 'Szene 1' }]),
+      [{ kapitel: 'Zweites Kapitel', seite: 'Szene 1', chapter_id: 2, page_id: 21 }]),
   ];
   const out = computeFilteredFiguren(mitSeiten, KAPITEL,
-    { kapitel: 'Erstes Kapitel', seite: 'Szene 1' });
+    { kapitelId: 1, seiteId: 11 });
   assert.deepEqual(out.map(f => f.name), ['Aaron']);
 });
 
@@ -91,17 +94,25 @@ test('vertraegt leere und fehlende Eingaben', () => {
     ['Achill', 'Anna', 'Bruno', 'Zora', 'Namenlos']);
 });
 
-test('computeFigurenSeiten sammelt die Seiten EINES Kapitels, dedupliziert', () => {
+test('computeFigurenSeiten sammelt die Abschnitts-IDs EINES Kapitels, dedupliziert', () => {
   const figuren = [
     fig('a', 'A', 'hauptfigur', [], [
-      { kapitel: 'K1', seite: 'S1' }, { kapitel: 'K2', seite: 'S9' }]),
+      { chapter_id: 1, page_id: 11 }, { chapter_id: 2, page_id: 29 }]),
     fig('b', 'B', 'hauptfigur', [], [
-      { kapitel: 'K1', seite: 'S1' }, { kapitel: 'K1', seite: 'S2' },
-      { kapitel: 'K1', seite: '' }]),   // leerer Seitenname zaehlt nicht
+      { chapter_id: 1, page_id: 11 }, { chapter_id: 1, page_id: 12 },
+      { chapter_id: 1, page_id: null }]),   // Szene ohne Abschnitt zaehlt nicht
   ];
-  const out = computeFigurenSeiten(figuren, 'K1');
+  const out = computeFigurenSeiten(figuren, 1);
   assert.ok(out instanceof Set);
-  assert.deepEqual([...out].sort(), ['S1', 'S2']);
-  assert.deepEqual([...computeFigurenSeiten(figuren, 'K3')], []);
-  assert.deepEqual([...computeFigurenSeiten(null, 'K1')], []);
+  assert.deepEqual([...out].sort(), [11, 12]);
+  assert.deepEqual([...computeFigurenSeiten(figuren, 3)], []);
+  assert.deepEqual([...computeFigurenSeiten(null, 1)], []);
+});
+
+test('Kapitelfilter trennt gleichnamige Kapitel', () => {
+  const dup = [
+    fig('a', 'A', 'hauptfigur', [{ chapter_id: 7, name: 'Einleitung' }]),
+    fig('b', 'B', 'hauptfigur', [{ chapter_id: 8, name: 'Einleitung' }]),
+  ];
+  assert.deepEqual(computeFilteredFiguren(dup, null, { kapitelId: 8 }).map(f => f.id), ['b']);
 });

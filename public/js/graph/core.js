@@ -105,8 +105,8 @@ export const coreMethods = {
     else if (this.figurenGraphModus === 'familie')    this._renderFamiliengraph(container);
     else                                              this._renderFigurengraph(container);
 
-    if (this.figurenGraphKapitel && this._figurenNodes && this._figurenEdges) {
-      requestAnimationFrame(() => this._figurenGraphSetKapitel(this.figurenGraphKapitel));
+    if (this.figurenGraphKapitelId && this._figurenNodes && this._figurenEdges) {
+      requestAnimationFrame(() => this._figurenGraphSetKapitel(this.figurenGraphKapitelId));
     }
   },
 };

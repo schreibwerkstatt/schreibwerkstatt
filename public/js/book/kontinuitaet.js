@@ -7,6 +7,7 @@ import { i18nMarkerKey } from '../i18n.js';
 import { startPoll, runningJobStatus } from '../cards/job-helpers.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { memoMethods } from '../cards/card-memo.js';
+import { activeFilterId } from '../chapter-filter.js';
 import { nameGuardMethods } from './kontinuitaet-nameguard.js';
 
 // Server-Fehlercodes der Start-Routen → Hinweis in der Karte (Rest: generisch).
@@ -194,7 +195,7 @@ export const kontinuitaetMethods = {
 
   // Alle Filter auf ihre Defaults (Zustand „Alle weggefiltert").
   kontinuitaetResetFilters() {
-    Object.assign(Alpine.store('catalogUi').kontinuitaetFilters, { figurId: '', kapitel: '', schwere: '', status: '' });
+    Object.assign(Alpine.store('catalogUi').kontinuitaetFilters, { figurId: '', kapitelId: '', schwere: '', status: '' });
   },
 
   // Zeile auf-/zuklappen (Klick + Enter/Space).
@@ -240,21 +241,17 @@ export const kontinuitaetMethods = {
     const issues = kontinuitaetSource(this.kontinuitaetResult, filters.status || '');
     const chapters = this._kontinuitaetChapters();
     const figuren = window.__app.$store.catalog.figuren || [];
+    const pages = Alpine.store('nav').pages || [];
+    const kapitelId = filters.kapitelId ? activeFilterId(filters.kapitelId, this.kontinuitaetKapitelOptionen()) : '';
     return this._memo(
       'filtered',
-      [issues, chapters, figuren, filters.figurId, filters.kapitel, filters.schwere, filters.status],
-      () => this._computeKontinuitaetIssuesFiltered(issues, chapters, figuren, filters),
+      [issues, chapters, pages, figuren, filters.figurId, kapitelId, filters.schwere, filters.status],
+      () => this._computeKontinuitaetIssuesFiltered(issues, chapters, figuren, { ...filters, kapitelId }),
     );
   },
 
   _computeKontinuitaetIssuesFiltered(issues, chapters, figuren, filters) {
-    const chapterNames = new Set(chapters.list.map(t => t.name));
-    const fromStelle = (s) => {
-      if (!s) return null;
-      const ci = s.indexOf(':');
-      const c = ci > 0 ? s.substring(0, ci).trim() : s.trim();
-      return chapterNames.has(c) ? c : null;
-    };
+    const chapterOf = this._kontinuitaetChapterResolver(chapters);
     return issues.filter(issue => {
       if (!_matchesStatus(issue, filters.status || '')) return false;
       if (filters.figurId) {
@@ -265,14 +262,7 @@ export const kontinuitaetMethods = {
           if (selectedName && !(issue.figuren || []).includes(selectedName)) return false;
         }
       }
-      if (filters.kapitel) {
-        const f = filters.kapitel;
-        const selectedId = chapters.list.find(t => t.name === f)?.id;
-        const idMatch    = selectedId !== undefined && issue.chapter_ids?.includes(selectedId);
-        const nameMatch  = (issue.kapitel || []).includes(f);
-        const stelleMatch = fromStelle(issue.stelle_a) === f || fromStelle(issue.stelle_b) === f;
-        if (!idMatch && !nameMatch && !stelleMatch) return false;
-      }
+      if (filters.kapitelId && !chapterOf(issue).has(String(filters.kapitelId))) return false;
       if (filters.schwere && kontinuitaetSeverity(issue) !== filters.schwere) return false;
       return true;
     });
@@ -441,28 +431,52 @@ export const kontinuitaetMethods = {
     return t === 'kontinuitaet.typ.' + (typ || '') ? (typ || '') : t;
   },
 
-  kontinuitaetKapitelListe() {
+  kontinuitaetKapitelOptionen() {
     const root = window.__app;
+    const issues = this.kontinuitaetAllIssues();
     const chapters = this._kontinuitaetChapters();
-    const chapterNames = new Set(chapters.list.map(t => t.name));
+    return this._memo('kapOpt', [this.kontinuitaetResult, chapters, Alpine.store('nav').pages, root._chapterLabelMap, root._chapterIdOrderMap], () => {
+      const chapterOf = this._kontinuitaetChapterResolver(chapters);
+      return root._kapitelOptionen(issues.flatMap(issue => [...chapterOf(issue)])
+        .map(key => chapters.byId.get(Number(key))?.id ?? key));
+    });
+  },
+
+  // Kapitel-IDs (als String) eines Befunds, geteilt von Filter und Filter-Auswahl.
+  // Die verankerten Abschnitte (page_a_id/page_b_id) sind massgeblich: ihr Kapitel
+  // stammt aus dem Baum, nicht aus dem KI-Text. Das `kapitel`-Feld des Modells
+  // fehlt oft und kann einen gleichnamigen Abschnitt für ein Kapitel halten; die
+  // Stelle beginnt meist mit dem Abschnitts-, nicht dem Kapitelnamen. Ist eine
+  // vorhandene Stelle unverankert, kommen chapter_ids hinzu, ersatzweise ein
+  // EINDEUTIGER Kapitelname aus `kapitel` oder vor dem Doppelpunkt der Stelle (ein
+  // Name, den zwei Kapitel tragen, löst nicht auf).
+  _kontinuitaetChapterResolver(chapters) {
+    const pageChapter = new Map();
+    for (const p of Alpine.store('nav').pages || []) if (p.chapter_id != null) pageChapter.set(p.id, p.chapter_id);
+    const nameIds = new Map();
+    for (const c of chapters.list) if (!c.solo) nameIds.set(c.name, nameIds.has(c.name) ? null : c.id);
+    const idOfName = (n) => (n ? nameIds.get(String(n).trim()) ?? null : null);
     const fromStelle = (s) => {
       if (!s) return null;
       const ci = s.indexOf(':');
-      const c = ci > 0 ? s.substring(0, ci).trim() : s.trim();
-      return chapterNames.has(c) ? c : null;
+      return idOfName(ci > 0 ? s.substring(0, ci) : s);
     };
-    const names = new Set();
-    for (const issue of this.kontinuitaetAllIssues()) {
-      if (issue.chapter_ids?.length) {
-        for (const id of issue.chapter_ids) { const n = chapters.byId.get(id)?.name; if (n) names.add(n); }
+    return (issue) => {
+      const ids = new Set();
+      let allAnchored = true;
+      for (const [st, pid] of [[issue.stelle_a, issue.page_a_id], [issue.stelle_b, issue.page_b_id]]) {
+        const cid = pid != null ? pageChapter.get(pid) : null;
+        if (cid != null && chapters.byId.has(cid)) ids.add(String(cid));
+        else if (st) allAnchored = false;
       }
-      if (issue.kapitel?.length) {
-        for (const k of issue.kapitel) if (k && chapterNames.has(k)) names.add(k);
-      }
-      const a = fromStelle(issue.stelle_a); if (a) names.add(a);
-      const b = fromStelle(issue.stelle_b); if (b) names.add(b);
-    }
-    return root._sortByChapterOrder([...names]);
+      if (ids.size && allAnchored) return ids;
+      const anchored = ids.size;
+      for (const id of issue.chapter_ids || []) if (chapters.byId.has(id)) ids.add(String(id));
+      if (ids.size > anchored) return ids;
+      for (const k of issue.kapitel || []) { const id = idOfName(k); if (id != null) ids.add(String(id)); }
+      for (const st of [issue.stelle_a, issue.stelle_b]) { const id = fromStelle(st); if (id != null) ids.add(String(id)); }
+      return ids;
+    };
   },
 
   // Löst "stelle_a/stelle_b" zu einem Page-Objekt auf. `stelle` ist ein

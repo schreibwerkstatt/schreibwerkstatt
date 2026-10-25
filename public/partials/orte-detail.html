@@ -50,11 +50,11 @@
         <span class="ort-presence-cell heatmap-cell"
               :class="{ 'heatmap-cell--primary': ortPresence(o).haeByCol[ci] > 0 }"
               :style="ortPresenceCellVars(ortPresence(o).haeByCol[ci], ortPresence(o).maxCell)"
-              :data-tip="ortPresence(o).haeByCol[ci] > 0 ? $app.t('orte.presence.cellTip', { chapter: c, n: ortPresence(o).haeByCol[ci] }) : c"
-              role="button" tabindex="0" :aria-label="c"
-              @click="$app.openKapitelByName(c)"
-              @keydown.enter.prevent="$app.openKapitelByName(c)"
-              @keydown.space.prevent="$app.openKapitelByName(c)"></span>
+              :data-tip="ortPresence(o).haeByCol[ci] > 0 ? $app.t('orte.presence.cellTip', { chapter: c.label, n: ortPresence(o).haeByCol[ci] }) : c.label"
+              role="button" tabindex="0" :aria-label="c.label"
+              @click="$app.openChapterById(c.value)"
+              @keydown.enter.prevent="$app.openChapterById(c.value)"
+              @keydown.space.prevent="$app.openChapterById(c.value)"></span>
       </template>
     </div>
     <p class="card-hint card-hint--sm" x-show="ortPresence(o).abandoned"

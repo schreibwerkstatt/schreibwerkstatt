@@ -84,8 +84,8 @@
          >
     </div>
     <div x-data="catalogFilter('chapter')"
-         x-modelable="value" x-model="$store.catalogUi.orteFilters.kapitel"
-         x-effect="options = $app.orteKapitelListe().map(k => ({value: k, label: k}))"
+         x-modelable="value" x-model="$store.catalogUi.orteFilters.kapitelId"
+         x-effect="options = $app.orteKapitelOptionen()"
          >
     </div>
     <div x-show="$store.catalog.szenen.length > 0"

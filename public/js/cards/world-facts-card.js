@@ -6,6 +6,7 @@
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { fetchJson } from '../utils.js';
 import { memoMethods } from './card-memo.js';
+import { activeFilterId, hasId } from '../chapter-filter.js';
 import { startPoll } from './job-helpers.js';
 import { isSelectedBook } from './book-guard.js';
 
@@ -35,7 +36,7 @@ const KAT_ICON = {
 // `defaults` ist zugleich die SSoT der Feldliste — `wfFilters` gehört damit dem
 // Persistenz-Layer und wird in `resetState` nicht mehr mitgesetzt.
 const WF_FILTER_SCOPES = [
-  { scope: 'wfFilters', key: 'wfFilters', defaults: { suche: '', kategorie: '', seite: '', widerlegt: false } },
+  { scope: 'wfFilters', key: 'wfFilters', defaults: { suche: '', kategorie: '', kapitelId: '', widerlegt: false } },
 ];
 
 // Ablehnungs-Codes der Start-Route → vorhandene Hinweistexte der Faktencheck-Sektion.
@@ -61,7 +62,7 @@ export function registerWorldFactsCard() {
     // Lief die Komplettanalyse schon? Trennt „nie analysiert" von „analysiert,
     // nichts gefunden" — sonst fordert der Leer-Zustand einen Lauf, der lief.
     wfScanned: false,
-    wfFilters: { suche: '', kategorie: '', seite: '', widerlegt: false },
+    wfFilters: { suche: '', kategorie: '', kapitelId: '', widerlegt: false },
     wfOpenGroups: {},
     // Faktencheck-Sektion: Buch-Opt-in (vom Server) + Laufzustand + Ergebnis des letzten Laufs.
     wfFactcheck: { bookOptIn: false },
@@ -155,14 +156,19 @@ export function registerWorldFactsCard() {
     // Suche/Kapitel-Filter (Treffer müssen sichtbar sein) und bei aktivem
     // Kategorie-Tab (Gruppen-Kopf ist dort ausgeblendet, Liste zeigt direkt).
     wfGroupOpen(key) {
-      if (this.wfFilters.kategorie || this.wfFilters.seite || this.wfFilters.widerlegt || this.wfFilters.suche.trim()) return true;
+      if (this.wfFilters.kategorie || this._wfKapitelFilter() || this.wfFilters.widerlegt || this.wfFilters.suche.trim()) return true;
       return !!this.wfOpenGroups[key];
     },
 
-    // Kapitel der Fakten in Buchreihenfolge: die Fakten kommen in Extraktions- und
-    // damit Buchreihenfolge vom Server, die erste Fundstelle ordnet das Kapitel ein.
-    get wfSeiteListe() {
-      return this._memo('seiten', [this.fakten], () => [...new Set(this.fakten.flatMap(f => f.kapitel || []))]);
+    // Kapitel der Fakten als Filter-Optionen (ID + Label, Buchreihenfolge).
+    get wfKapitelOptionen() {
+      const root = window.__app;
+      return this._memo('kapOpt', [this.fakten, root._chapterLabelMap, root._chapterIdOrderMap],
+        () => root._kapitelOptionen(this.fakten.flatMap(f => f.chapter_ids || [])));
+    },
+    // Wirksamer Kapitel-Filter (nur ein angebotener Wert, chapter-filter.js#activeFilterId).
+    _wfKapitelFilter() {
+      return activeFilterId(this.wfFilters.kapitelId, this.wfKapitelOptionen);
     },
 
     // Als real widerlegt belegte Fakten (Faktencheck mit Quelle, nicht vom Autor verworfen).
@@ -171,14 +177,15 @@ export function registerWorldFactsCard() {
     },
 
     get wfFiltered() {
-      const { suche, kategorie, seite, widerlegt } = this.wfFilters;
+      const { suche, kategorie, widerlegt } = this.wfFilters;
+      const kapitelId = this._wfKapitelFilter();
       const locale = Alpine.store('shell').uiLocale;
-      return this._memo('filtered', [this.fakten, suche, kategorie, seite, widerlegt, locale], () => {
+      return this._memo('filtered', [this.fakten, suche, kategorie, kapitelId, widerlegt, locale], () => {
         const q = suche.trim().toLowerCase();
         return this.fakten.filter(f => {
           if (widerlegt && !f.widerlegt) return false;
           if (kategorie && _normKat(f.kategorie) !== kategorie) return false;
-          if (seite && !(f.kapitel || []).includes(seite)) return false;
+          if (kapitelId && !hasId(f.chapter_ids, kapitelId)) return false;
           if (!q) return true;
           return (f.fakt || '').toLowerCase().includes(q)
             || (f.subjekt || '').toLowerCase().includes(q)

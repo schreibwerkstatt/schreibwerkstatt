@@ -13,14 +13,15 @@ const MIN_CHAPTERS_FOR_SPAN = 6;
 const FIRST_FRACTION = 1 / 3;
 const LAST_FRACTION = 1 / 2;
 
-// Präsenz eines Orts auf der Kapitelachse `chapterOrder` (Namen in Lesereihenfolge).
+// Präsenz eines Orts auf der Kapitelachse `chapterOrder` ([{ value: chapter_id, label }]
+// in Lesereihenfolge). Spalten nach ID: gleichnamige Kapitel bleiben getrennte Zellen.
 export function computeOrtPresence(ort, chapterOrder) {
   const chapters = chapterOrder || [];
   const n = chapters.length;
-  const col = new Map(chapters.map((name, i) => [name, i]));
+  const col = new Map(chapters.map((c, i) => [String(c.value), i]));
   const haeByCol = new Array(n).fill(0);
   for (const k of (ort?.kapitel || [])) {
-    const c = col.get(k.name);
+    const c = k.chapter_id != null ? col.get(String(k.chapter_id)) : null;
     if (c != null) haeByCol[c] += (k.haeufigkeit || 1);
   }
   let firstIdx = -1, lastIdx = -1, maxCell = 0, count = 0;
@@ -37,7 +38,7 @@ export function computeOrtPresence(ort, chapterOrder) {
     && firstIdx < Math.ceil(n * FIRST_FRACTION) && lastIdx < Math.ceil(n * LAST_FRACTION);
   return {
     chapters, haeByCol, firstIdx, lastIdx, maxCell, count,
-    abandoned, lastChapter: chapters[lastIdx],
+    abandoned, lastChapter: chapters[lastIdx]?.label || '',
   };
 }
 
@@ -70,7 +71,7 @@ export function computeOrtEncounters(ortId, szenen) {
 
 export const orteInsightMethods = {
   ortPresence(o) {
-    const order = window.__app.orteKapitelListe();
+    const order = window.__app.orteKapitelOptionen();
     return this._memo('ortPresence:' + o.id, [o, order], () => computeOrtPresence(o, order));
   },
 

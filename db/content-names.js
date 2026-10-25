@@ -13,6 +13,7 @@ const { listWorldFacts } = require('./world-facts');
 // «Aktive Figur» (stale = 0) — SSoT für jeden Lesepfad, der Figuren-Daten in einen
 // KI-Kontext reicht: Ereignisse einer ausgemusterten Figur fallen mit ihr.
 const { activeFigureSql } = require('./figures/active');
+const { chapterNameMap } = require('./write-helpers');
 
 function _inClause(ids) {
   return { sql: `(${ids.map(() => '?').join(',')})`, values: ids };
@@ -32,9 +33,10 @@ function listChaptersForBook(bookId) {
   return _stmtChaptersForBook.all(bookId);
 }
 
-/** Kapitelname → chapter_id eines Buchs (für Namens-Auflösung von KI-Befunden). */
+/** Kapitelname → chapter_id eines Buchs (für Namens-Auflösung von KI-Befunden).
+ *  Mehrdeutige Namen fehlen (write-helpers.js#chapterNameMap). */
 function chapterIdsByName(bookId) {
-  return Object.fromEntries(listChaptersForBook(bookId).map(r => [r.chapter_name, r.chapter_id]));
+  return chapterNameMap(listChaptersForBook(bookId));
 }
 
 // ── Seiten ──────────────────────────────────────────────────────────────────

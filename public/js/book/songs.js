@@ -13,14 +13,8 @@ export const songsMethods = {
     }
   },
 
-  songsKapitelListe() {
-    const seen = new Set();
-    for (const s of this.$store.catalog.songs) {
-      for (const k of (s.kapitel || [])) {
-        if (k.name) seen.add(k.name);
-      }
-    }
-    return [...seen].sort((a, b) => this._chapterIdx(a) - this._chapterIdx(b));
+  songsKapitelOptionen() {
+    return this._kapitelOptionen((this.$store.catalog.songs || []).flatMap(s => (s.kapitel || []).map(k => k.chapter_id)));
   },
 
   songsGenreListe() {

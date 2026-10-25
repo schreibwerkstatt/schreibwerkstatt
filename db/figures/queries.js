@@ -257,7 +257,7 @@ function listFigurenWithDetails(bookId, userEmail) {
     WHERE r.book_id = ? AND r.user_email IS ?
   `).all(bookId, em);
   const sceneFigRows = db.prepare(`
-    SELECT c.chapter_name AS kapitel, p.page_name AS seite, f.fig_id
+    SELECT c.chapter_name AS kapitel, p.page_name AS seite, fs.chapter_id, fs.page_id, f.fig_id
     FROM figure_scenes fs
     JOIN scene_figures sf ON sf.scene_id = fs.id
     JOIN figures f ON f.id = sf.figure_id
@@ -322,9 +322,13 @@ function listFigurenWithDetails(bookId, userEmail) {
   const seitenMap = {};
   for (const sc of sceneFigRows) {
     if (!seitenMap[sc.fig_id]) seitenMap[sc.fig_id] = [];
-    const key = sc.kapitel + '::' + (sc.seite || '');
-    if (!seitenMap[sc.fig_id].some(x => x.kapitel + '::' + x.seite === key)) {
-      seitenMap[sc.fig_id].push({ kapitel: sc.kapitel, seite: sc.seite || '' });
+    // Schlüssel über die IDs: gleichnamige Kapitel/Abschnitte sind verschiedene Orte.
+    const key = (sc.chapter_id ?? sc.kapitel) + '::' + (sc.page_id ?? sc.seite ?? '');
+    if (!seitenMap[sc.fig_id].some(x => (x.chapter_id ?? x.kapitel) + '::' + (x.page_id ?? x.seite ?? '') === key)) {
+      seitenMap[sc.fig_id].push({
+        kapitel: sc.kapitel, seite: sc.seite || '',
+        chapter_id: sc.chapter_id ?? null, page_id: sc.page_id ?? null,
+      });
     }
   }
 

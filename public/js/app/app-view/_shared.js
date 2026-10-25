@@ -18,12 +18,12 @@ import { EVT } from '../../events.js';
 // Titel-Werkstatt) liegen im Karten-State und laufen ueber `filterScopes` in
 // `setupCardLifecycle` — gleiche Mechanik, anderer Host.
 export const FILTER_SCOPES = [
-  { scope: 'figurenFilters',      key: 'figurenFilters',      defaults: { kapitel: '', seite: '', suche: '' } },
-  { scope: 'ereignisseFilters',   key: 'ereignisseFilters',   defaults: { figurId: '', kapitel: '', seite: '', subtyp: '', suche: '' } },
+  { scope: 'figurenFilters',      key: 'figurenFilters',      defaults: { kapitelId: '', seiteId: '', suche: '' } },
+  { scope: 'ereignisseFilters',   key: 'ereignisseFilters',   defaults: { figurId: '', kapitelId: '', seiteId: '', subtyp: '', suche: '' } },
   { scope: 'szenenFilters',       key: 'szenenFilters',       defaults: { wertung: '', figurId: '', kapitelId: '', seiteId: '', ortId: '', suche: '' } },
-  { scope: 'orteFilters',         key: 'orteFilters',         defaults: { figurId: '', kapitel: '', szeneId: '', suche: '' } },
-  { scope: 'songsFilters',        key: 'songsFilters',        defaults: { figurId: '', kapitel: '', genre: '', kontextTyp: '', suche: '' } },
-  { scope: 'kontinuitaetFilters', key: 'kontinuitaetFilters', defaults: { figurId: '', kapitel: '', schwere: '', status: '' } },
+  { scope: 'orteFilters',         key: 'orteFilters',         defaults: { figurId: '', kapitelId: '', szeneId: '', suche: '' } },
+  { scope: 'songsFilters',        key: 'songsFilters',        defaults: { figurId: '', kapitelId: '', genre: '', kontextTyp: '', suche: '' } },
+  { scope: 'kontinuitaetFilters', key: 'kontinuitaetFilters', defaults: { figurId: '', kapitelId: '', schwere: '', status: '' } },
 ];
 
 // Kartenwechsel als sanfter Cross-Fade (View Transitions API). Progressive

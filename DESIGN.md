@@ -361,7 +361,7 @@ Dieselbe Mechanik gilt fuer Bausteine, die kein `.card-section` sind, aber aufei
 
 ### Catalog-Filter-Spezialisierung
 
-Filter-Comboboxen in Katalog-Karten (Figuren/Orte/Szenen/Ereignisse/Songs/Kontinuität) nutzen den dünnen Wrapper `catalogFilter(kind)` aus [public/js/catalog-filter.js](public/js/catalog-filter.js). Erbt die volle Combobox-Mechanik via `comboboxData`-Factory und reicht nur Placeholder + Empty-Label per Filter-Typ rein. Spart pro Aufruf vier i18n-Lookups und zentralisiert die Label-Konvention.
+Filter-Comboboxen in Katalog-Karten (Figuren/Orte/Szenen/Ereignisse/Songs/Weltfakten/Kontinuität/Plot) nutzen den dünnen Wrapper `catalogFilter(kind)` aus [public/js/catalog-filter.js](public/js/catalog-filter.js). Erbt die volle Combobox-Mechanik via `comboboxData`-Factory und reicht nur Placeholder + Empty-Label per Filter-Typ rein. Spart pro Aufruf vier i18n-Lookups und zentralisiert die Label-Konvention.
 
 `kind`-Werte: `figur`, `chapter`, `page`, `ort`, `szene`. Erweiterung (z. B. `tag`, `datum`): `FILTER_KINDS` in `catalog-filter.js` ergänzen + i18n-Keys `filter.<kind>` / `filter.all<Kind>s` in beiden Locales anlegen.
 
@@ -374,6 +374,8 @@ Pflicht-Pattern (gleiche 3 Attribute wie `combobox`, nur `x-data` schrumpft):
 ```
 
 `@combobox-change`, `:class="{'combobox-wrap--disabled': _disabled}"` und alle weiteren Combobox-APIs funktionieren unverändert.
+
+**Kapitel-/Abschnitts-Filter (`chapter`/`page`) arbeiten auf IDs:** Feld `kapitelId`/`seiteId`, Optionen aus `$app._kapitelOptionen(ids)`/`_seitenOptionen(ids)`, wirksam nur über `activeFilterId` — nie `{ value: name, label: name }`. Regel und Begründung: [docs/chapter-hierarchy.md](docs/chapter-hierarchy.md#kapitel-und-abschnitte-per-id-nie-per-name).
 
 ### Entity-Picker-Spezialisierung
 
@@ -433,7 +435,7 @@ Checkliste bei neuer Combobox-Platzierung:
 - Clone-From-Combobox leer (`cloneOptions()` liest `this.profiles`)
 - Statische Listen (Seitengröße, Spalten, Kapitelumbruch) funktionieren — keine reaktive Datenquelle.
 
-**Etablierter Workaround in der Codebase:** [`figurenKapitelListe`](public/js/cards/figuren-card.js#L116), [`ereignisseKapitelListe`](public/js/cards/ereignisse-card.js), [`kontinuitaetKapitelListe`](public/js/kontinuitaet.js) — Datenzugriff explizit über `window.__app.xxx`, nie über `this.xxx`.
+**Etablierter Workaround in der Codebase:** [`figurenKapitelOptionen`](public/js/cards/figuren-card.js), [`ereignisseKapitelOptionen`](public/js/cards/ereignisse-card.js), [`kontinuitaetKapitelOptionen`](public/js/book/kontinuitaet.js) — Datenzugriff explizit über `window.__app.xxx`, nie über `this.xxx`.
 
 **Fix-Optionen für neuen Combobox mit reaktiver Karten-Datenquelle:**
 

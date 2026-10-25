@@ -100,13 +100,13 @@ const PRESENCE_KINDS = {
     compute: 'overviewFigurePresence',
     tipKey: 'overview.figPresenceOpen',
     tipVar: 'figur',
-    open: (app, cell, row) => app.openFigurMitKapitel(cell.id, row.name),
+    open: (app, cell, row) => app.openFigurMitKapitel(cell.id, row.id),
   },
   orte: {
     compute: 'overviewOrtPresence',
     tipKey: 'overview.ortPresenceOpen',
     tipVar: 'ort',
-    open: (app, cell, row) => app.openOrtMitKapitel(cell.id, row.name),
+    open: (app, cell, row) => app.openOrtMitKapitel(cell.id, row.id),
   },
   motive: {
     compute: 'overviewMotifPresence',

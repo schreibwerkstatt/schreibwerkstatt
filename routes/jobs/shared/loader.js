@@ -66,8 +66,8 @@ function resolveExtractSinglePassLimit(singlePassLimit, extractCapChars) {
 }
 
 // Lädt Buch-Tree (book_order-Overlay angewandt) und liefert chMap mit
-// hierarchischem Pfad ("Teil 1 › Kapitel 1"), chNameToId-Lookup (sowohl raw
-// chapter_name als auch Pfad → id) und pages[] in echter Buchorganizer-
+// hierarchischem, buchweit eindeutigem Pfad ("Teil 1 › Kapitel 1"), chNameToId-
+// Lookup (raw chapter_name, sofern eindeutig, und Pfad → id) und pages[] in echter Buchorganizer-
 // Reihenfolge (depth-first). Ersetzt parallele listChapters+listPages-Pfade,
 // die bucket-lokale pages.position interpretieren (Cross-Chapter-Order kaputt)
 // und Sub-Kapitel als Geschwister flachen.
@@ -77,6 +77,19 @@ async function loadOrderedBookContents(bookId, { includeExcluded = false } = {})
   const chNameToId = {};   // raw chapter_name UND voller Pfad → id (AI-Output toleranter Lookup)
   const chaptersFlat = []; // [{ id, name, parent_id, path }] depth-first
   const pages = [];
+  const pathCount = new Map();
+  // Ein Name, den zwei Kapitel tragen, löst nicht auf (write-helpers.js#chapterNameMap):
+  // der Pfad bleibt eindeutig, der rohe Name fällt aus der Map.
+  const ambiguous = new Set();
+  const addName = (name, id) => {
+    if (ambiguous.has(name)) return;
+    if (Object.prototype.hasOwnProperty.call(chNameToId, name) && chNameToId[name] !== id) {
+      delete chNameToId[name];
+      ambiguous.add(name);
+      return;
+    }
+    chNameToId[name] = id;
+  };
   function walk(chapters, prefix, parentId) {
     for (const c of chapters) {
       // Ausgeschlossene Kapitel (chapters.excluded) komplett ueberspringen — inkl.
@@ -88,10 +101,17 @@ async function loadOrderedBookContents(bookId, { includeExcluded = false } = {})
       // (oder ein Vorfahre) ausgeschlossen ist — der Aufrufer filtert danach
       // auf die explizit angeforderten chapter_ids.
       if (c.excluded && !includeExcluded) continue;
-      const path = prefix ? `${prefix} › ${c.name}` : c.name;
+      // Gleichnamige Geschwister (zwei «Einleitung» unter demselben Teil) bekämen
+      // denselben Pfad — die KI könnte sie im Prompt nicht unterscheiden, die
+      // Rückauflösung ihrer Antwort nicht zuordnen. Ab dem zweiten Vorkommen
+      // trägt der Pfad darum eine Ordnungszahl: «Einleitung (2)».
+      const basePath = prefix ? `${prefix} › ${c.name}` : c.name;
+      const seen = (pathCount.get(basePath) || 0) + 1;
+      pathCount.set(basePath, seen);
+      const path = seen > 1 ? `${basePath} (${seen})` : basePath;
       chMap[c.id] = path;
-      chNameToId[c.name] = c.id;
-      chNameToId[path] = c.id;
+      addName(c.name, c.id);
+      addName(path, c.id);
       chaptersFlat.push({ id: c.id, name: c.name, parent_id: parentId, path });
       for (const p of (c.pages || [])) pages.push({ ...p, chapter_id: c.id });
       walk(c.subchapters || [], path, c.id);

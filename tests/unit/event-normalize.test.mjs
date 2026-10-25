@@ -51,11 +51,12 @@ test('Filter greifen auf der Kanonform beider Produzenten gleich', () => {
   // links Server-Form, rechts Fallback-Form — nach der Normalisierung
   // unterscheidbar nur noch durch ihre Werte.
   const events = normalizeEvents([
-    { id: 1, ereignis: 'Server', kapitel: ['Kap 1'], seiten: ['Seite A'] },
-    { id: 2, ereignis: 'Fallback', kapitel: 'Kap 1', seite: 'Seite A' },
-    { id: 3, ereignis: 'Anderes Kapitel', kapitel: 'Kap 2', seite: 'Seite B' },
+    { id: 1, ereignis: 'Server', kapitel: ['Kap 1'], chapter_ids: [1], seiten: ['Seite A'], page_ids: [10] },
+    { id: 2, ereignis: 'Fallback', kapitel: 'Kap 1', chapter_id: 1, seite: 'Seite A', page_id: 10 },
+    { id: 3, ereignis: 'Anderes Kapitel', kapitel: 'Kap 2', chapter_id: 2, seite: 'Seite B', page_id: 20 },
   ]);
-  assert.equal(applyEreignisseFilters(events, { kapitel: 'Kap 1' }).length, 2);
-  assert.equal(applyEreignisseFilters(events, { kapitel: 'Kap 1', seite: 'Seite A' }).length, 2);
-  assert.equal(applyEreignisseFilters(events, { kapitel: 'Kap 2' }).length, 1);
+  assert.equal(applyEreignisseFilters(events, { kapitelId: 1 }).length, 2);
+  assert.equal(applyEreignisseFilters(events, { kapitelId: 1, seiteId: 10 }).length, 2);
+  assert.equal(applyEreignisseFilters(events, { kapitelId: 2 }).length, 1);
+  assert.equal('chapter_id' in events[1], false, 'Skalar-ID nur noch in der Liste');
 });

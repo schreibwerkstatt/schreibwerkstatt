@@ -17,7 +17,8 @@ function _list(v) {
 
 /**
  * Kanonform eines Events. Mehrwertige Anker (Kapitel/Seiten/Figuren) sind IMMER
- * Arrays, Typ und Subtyp immer gesetzt. Die Skalar-Felder `kapitel`/`seite` des
+ * Arrays, Typ und Subtyp immer gesetzt. Die Skalar-Felder `kapitel`/`seite`/
+ * `chapter_id`/`page_id` des
  * Fallback-Pfads werden dabei in ihre Listen ueberfuehrt und nicht doppelt
  * gefuehrt — zwei Traeger derselben Aussage waeren die naechste Drift.
  */
@@ -29,12 +30,14 @@ export function normalizeEvent(ev) {
     typ: ev.typ || 'persoenlich',
     subtyp: ev.subtyp || 'sonstiges',
     kapitel,
-    chapter_ids: _list(ev.chapter_ids),
+    chapter_ids: _list(ev.chapter_ids !== undefined ? ev.chapter_ids : ev.chapter_id),
     seiten,
-    page_ids: _list(ev.page_ids),
+    page_ids: _list(ev.page_ids !== undefined ? ev.page_ids : ev.page_id),
     figuren: Array.isArray(ev.figuren) ? ev.figuren : [],
   };
   delete out.seite;
+  delete out.chapter_id;
+  delete out.page_id;
   return out;
 }
 

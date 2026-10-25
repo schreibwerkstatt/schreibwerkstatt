@@ -57,6 +57,7 @@ Diese Regeln setzt ein Hook ([.claude/settings.json](.claude/settings.json), [sc
 | Client-Fläche (REST + Bundle) nur über den Vertrag ändern — additiv, Server vor Clients, `api`/`editorApi` + CHANGELOG | [client-contract.test.js](tests/integration/client-contract.test.js) + [editor-surface.test.js](tests/unit/editor-surface.test.js) + CI-Schritt «Client-Kompatibilität»; `drift-reminders.js` | [contract/README.md](contract/README.md) |
 | Unit-Tests vor dem Commit | `stop-run-unit-tests.js` (Turn-Ende) | unten, „Tests" |
 | Chat-Werkzeug: eine Definition + ein Handler + eine Zugriffszeile, Querverweise nur bedingt, Budget-Ratsche | [chat-tools-contract.test.mjs](tests/unit/chat-tools-contract.test.mjs) | [routes/jobs/chat-tools/CLAUDE.md](routes/jobs/chat-tools/CLAUDE.md) |
+| Kapitel/Abschnitte in Filtern + KI-Namensauflösung nur per ID (`kapitelId`/`seiteId`, `chapterNameMap`) | [chapter-filter-ids.test.mjs](tests/unit/chapter-filter-ids.test.mjs) | [docs/chapter-hierarchy.md](docs/chapter-hierarchy.md#kapitel-und-abschnitte-per-id-nie-per-name) |
 | Editor-/Chat-/Kommentar-Mehrdeutigkeit im Prompt | `prompt-disambiguation.js` (injiziert Hinweis) | oben, „Bevor du anfängst" |
 | Nur auf `main` — kein Branch, kein Worktree, kein Subagent mit `isolation: "worktree"` | `main-only-guard.js` **blockt** | unten, „Arbeitsweise" |
 

@@ -1,7 +1,8 @@
 // Unit-Tests für den Filter der Ereignisse-Karte
 // (`applyEreignisseFilters` aus public/js/cards/ereignisse-card.js).
 //
-// Filter kombinieren `suche`, `figurId`, `subtyp`, `kapitel`, `seite`. Seiten-
+// Filter kombinieren `suche`, `figurId`, `subtyp`, `kapitelId`, `seiteId` (IDs, nicht
+// Namen — chapter-filter.js). Seiten-
 // Filter greift nur in Kombination mit Kapitel (sonst „alle Seiten dieses Buchs"
 // → unsinnig). Subtyp-Default ist 'sonstiges' (Events ohne `subtyp`-Feld matchen
 // also nur, wenn als 'sonstiges' gefiltert wird). Mapping Subtyp → Lucide-Icon
@@ -24,22 +25,22 @@ const EVENTS = normalizeEvents([
   {
     id: 1, ereignis: 'Hochzeit auf dem Hügel', subtyp: 'hochzeit',
     figuren: [{ id: 'fA' }, { id: 'fB' }],
-    kapitel: ['Kapitel 1'], seiten: ['1', '2'],
+    kapitel: ['Kapitel 1'], seiten: ['1', '2'], chapter_ids: [1], page_ids: [101, 102],
   },
   {
     id: 2, ereignis: 'Tod des Vaters', subtyp: 'tod',
     figuren: [{ id: 'fA' }],
-    kapitel: 'Kapitel 1', seite: '3',
+    kapitel: 'Kapitel 1', seite: '3', chapter_id: 1, page_id: 103,
   },
   {
     id: 3, ereignis: 'Reise nach Norden', subtyp: 'reise',
     figuren: [{ id: 'fB' }, { id: 'fC' }],
-    kapitel: ['Kapitel 2'], seiten: ['10'],
+    kapitel: ['Kapitel 2'], seiten: ['10'], chapter_ids: [2], page_ids: [110],
   },
   {
     id: 4, ereignis: 'Anonymer Vorfall', /* kein subtyp */
     figuren: [],
-    kapitel: ['Kapitel 2'], seiten: ['11'],
+    kapitel: ['Kapitel 2'], seiten: ['11'], chapter_ids: [2], page_ids: [111],
   },
 ]);
 
@@ -104,29 +105,37 @@ test('Subtyp-Filter ohne Match → leer', () => {
 // ── Kapitel-Filter (Multi-Kapitel Array + Legacy-String) ───────────────────
 
 test('Kapitel-Filter matcht Array-Form', () => {
-  const out = applyEreignisseFilters(EVENTS, { kapitel: 'Kapitel 2' });
+  const out = applyEreignisseFilters(EVENTS, { kapitelId: 2 });
   assert.deepEqual(out.map(e => e.id).sort(), [3, 4]);
 });
 
 test('Kapitel-Filter matcht auch die Skalar-Form des Fallback-Pfads', () => {
-  const out = applyEreignisseFilters(EVENTS, { kapitel: 'Kapitel 1' });
+  const out = applyEreignisseFilters(EVENTS, { kapitelId: '1' });
   assert.deepEqual(out.map(e => e.id).sort(), [1, 2]);
 });
 
 // ── Seiten-Filter (nur gemeinsam mit Kapitel) ──────────────────────────────
 
 test('Seiten-Filter greift nur in Kombination mit Kapitel', () => {
-  const ohneKapitel = applyEreignisseFilters(EVENTS, { seite: '1' });
+  const ohneKapitel = applyEreignisseFilters(EVENTS, { seiteId: 101 });
   assert.equal(ohneKapitel.length, 4, 'ohne kapitel: seite ignoriert');
-  const mitKapitel = applyEreignisseFilters(EVENTS, { kapitel: 'Kapitel 1', seite: '1' });
+  const mitKapitel = applyEreignisseFilters(EVENTS, { kapitelId: 1, seiteId: 101 });
   assert.deepEqual(mitKapitel.map(e => e.id), [1]);
 });
 
 test('Seiten-Filter: Listen- und Skalar-Herkunft sind nach der Normalisierung gleich', () => {
-  const ausListe = applyEreignisseFilters(EVENTS, { kapitel: 'Kapitel 1', seite: '2' });
+  const ausListe = applyEreignisseFilters(EVENTS, { kapitelId: 1, seiteId: 102 });
   assert.deepEqual(ausListe.map(e => e.id), [1]);   // kam als seiten: ['1','2']
-  const ausSkalar = applyEreignisseFilters(EVENTS, { kapitel: 'Kapitel 1', seite: '3' });
+  const ausSkalar = applyEreignisseFilters(EVENTS, { kapitelId: 1, seiteId: 103 });
   assert.deepEqual(ausSkalar.map(e => e.id), [2]);  // kam als seite: '3'
+});
+
+test('Kapitel-Filter trennt gleichnamige Kapitel über die ID', () => {
+  const dup = normalizeEvents([
+    { id: 1, ereignis: 'a', kapitel: ['Einleitung'], chapter_ids: [7] },
+    { id: 2, ereignis: 'b', kapitel: ['Einleitung'], chapter_ids: [8] },
+  ]);
+  assert.deepEqual(applyEreignisseFilters(dup, { kapitelId: 8 }).map(e => e.id), [2]);
 });
 
 // ── Kombination ─────────────────────────────────────────────────────────────
@@ -139,7 +148,7 @@ test('Kombi: Subtyp + Figur', () => {
 test('Kombi: Subtyp + Kapitel + Such-Filter', () => {
   const out = applyEreignisseFilters(EVENTS, {
     subtyp: 'reise',
-    kapitel: 'Kapitel 2',
+    kapitelId: 2,
     suche: 'norden',
   });
   assert.deepEqual(out.map(e => e.id), [3]);

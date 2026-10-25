@@ -27,7 +27,7 @@ export function activeSzenen(szenen) {
   return (szenen || []).filter(s => !s.stale);
 }
 
-const sameId = (a, b) => a != null && b != null && a !== '' && b !== '' && String(a) === String(b);
+import { sameId } from '../chapter-filter.js';
 
 // Kapitel-Schlüssel: ID, sonst Name (Szene ohne auflösbares Kapitel).
 function kapitelKey(s) {
@@ -160,18 +160,5 @@ export function szenenSeitenOptionen(szenen, kapitelId, order) {
   return [...seen.values()].sort((a, b) => a.idx - b.idx).map(({ value, label }) => ({ value, label }));
 }
 
-// Anzeigename je Kapitel-ID: der Kapitelname, bei gleichnamigen Kapiteln mit dem
-// Elternkapitel davor („Teil II › Kapitel 1"). Ohne Eltern bleibt der Name
-// gleich — dann trennt die Buchreihenfolge die Einträge.
-export function buildKapitelLabels(tree) {
-  const chapters = (tree || []).filter(i => i.type === 'chapter' && !i.solo);
-  const byId = new Map(chapters.map(c => [c.id, c]));
-  const nameCount = new Map();
-  for (const c of chapters) nameCount.set(c.name, (nameCount.get(c.name) || 0) + 1);
-  const labels = new Map();
-  for (const c of chapters) {
-    const parent = c.parent_id != null ? byId.get(c.parent_id) : null;
-    labels.set(c.id, nameCount.get(c.name) > 1 && parent ? `${parent.name} › ${c.name}` : c.name);
-  }
-  return labels;
-}
+// buildKapitelLabels: geteilt mit allen Katalog-Filtern (chapter-filter.js).
+export { buildKapitelLabels } from '../chapter-filter.js';

@@ -270,3 +270,21 @@ test('F4/Anachronismus: Ereignisse ausgemusterter Figuren zählen nicht (db/figu
   assert.equal(data.minYear, 1970, 'Xavers 1790/1800 spannen keine Erzählzeit');
   assert.equal(data.maxYear, 1970);
 });
+
+test('Kapitel eines Befunds: verankerte Abschnitte schlagen den KI-Kapitelnamen', () => {
+  const bookId = newBook();
+  const cVater = addChapter(bookId, 'Der Vater', 1);
+  const cUnauff = addChapter(bookId, 'Der Unauffällige', 2);
+  // Abschnitt «Der Vater» liegt im Kapitel «Der Unauffällige».
+  const pVater = addPage(bookId, cUnauff, 'Der Vater');
+  const chMap = { 'Der Vater': cVater, 'Der Unauffällige': cUnauff };
+  const { normalizedIssues } = continuity.saveContinuityCheck(bookId, USER, 's', 'm', [
+    // beide Stellen verankert → nur das Anker-Kapitel, der falsche KI-Name fällt weg
+    issue('Der Vater: «a»', 'Der Vater: «b»', { page_a_id: pVater, page_b_id: pVater, kapitel: ['Der Vater'] }),
+    // nur Stelle A verankert → Anker + KI-Kapitel der unverankerten Stelle
+    issue('Der Vater: «a»', 'Der Vater: «b»', { page_a_id: pVater, kapitel: ['Der Vater'], typ: 'objekt' }),
+  ], {}, chMap);
+  assert.deepEqual(normalizedIssues[0].chapter_ids, [cUnauff]);
+  assert.deepEqual(normalizedIssues[0].kapitel, ['Der Unauffällige']);
+  assert.deepEqual(normalizedIssues[1].chapter_ids.sort(), [cVater, cUnauff].sort());
+});

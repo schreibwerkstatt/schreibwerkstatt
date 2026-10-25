@@ -40,7 +40,7 @@ async function seedChapters(page) {
   const chapters = await page.evaluate(() =>
     window.Alpine.store('nav').tree
       .filter(i => i.type === 'chapter' && !i.solo && (i.pages || []).length)
-      .map(i => ({ id: i.id, name: i.name, pageNames: i.pages.map(p => p.name) })));
+      .map(i => ({ id: i.id, name: i.name, pageNames: i.pages.map(p => p.name), pageIds: i.pages.map(p => p.id) })));
   expect(chapters.length, 'Seed-Buch braucht >= 2 Kapitel mit Abschnitten').toBeGreaterThanOrEqual(2);
   return chapters;
 }
@@ -117,6 +117,44 @@ test('Kontinuität: Zusammenfassung, Zähler, Filter, Detail, Quelle', async ({ 
   await expect(card.locator('.entity-detail').nth(1).locator('.kontinuitaet-quelle a')).toHaveAttribute('href', 'https://example.org/beleg');
 
   guard.assertClean('Kontinuitäts-Karte');
+});
+
+// Kapitel-Filter per ID aus den verankerten Abschnitten (docs/chapter-hierarchy.md):
+// Befunde tragen nur page_a_id/page_b_id, die Stelle beginnt mit dem Abschnittsnamen,
+// und das KI-Feld `kapitel` nennt das falsche Kapitel. Die Combobox muss trotzdem
+// jedes betroffene Kapitel anbieten und nach dem Anker filtern.
+test('Kontinuität: Kapitel-Filter folgt den verankerten Abschnitten', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const [ch1, ch2] = await seedChapters(page);
+  await page.route(`**/jobs/kontinuitaet/${bookId}`, json({
+    checked_at: '2026-10-01T10:00:00Z', model: 'mock', summary: '',
+    issues: [
+      { id: 11, typ: 'figur', schwere: 'mittel', stelle_a: `${ch1.pageNames[0]}: «a»`, page_a_id: ch1.pageIds[0],
+        kapitel: [], chapter_ids: [], resolved: false, dismissed: false },
+      { id: 12, typ: 'figur', schwere: 'mittel', stelle_a: `${ch2.pageNames[0]}: «b»`, page_a_id: ch2.pageIds[0],
+        kapitel: [ch1.name], chapter_ids: [ch1.id], resolved: false, dismissed: false },
+    ],
+  }));
+  const card = await openCard(page);
+  const rows = card.locator('.entity-list .entity-row');
+  await expect(rows).toHaveCount(2, { timeout: 20000 });
+
+  const chBox = card.locator('.filter-bar .combobox-wrap').filter({ hasText: await tr(page, 'filter.allChapters') });
+  await chBox.locator('.combobox-trigger').click();
+  const options = card.locator('.combobox-option');
+  await expect(options.filter({ hasText: ch1.name })).toHaveCount(1);
+  await expect(options.filter({ hasText: ch2.name })).toHaveCount(1);
+  await options.filter({ hasText: ch2.name }).click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText(ch2.pageNames[0]);
+
+  // Ein veralteter Wert (altes Namensformat aus dem localStorage) filtert nicht.
+  await page.evaluate(() => { window.Alpine.store('catalogUi').kontinuitaetFilters.kapitelId = 'Kapitel ohne ID'; });
+  await expect(rows).toHaveCount(2);
+
+  guard.assertClean('Kontinuitäts-Kapitel-Filter');
 });
 
 test('Kontinuität: fehlgeschlagener Triage-Call rollt sichtbar zurück', async ({ page }) => {

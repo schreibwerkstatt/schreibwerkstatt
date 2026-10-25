@@ -250,6 +250,14 @@ export const boardMethods = {
     return beat.chapter_name || this.inheritedChapterForBeat(beat) || '';
   },
 
+  // Effektive Kapitel-ID nach derselben Regel — der Kapitel-Filter arbeitet auf
+  // der ID (gleichnamige Kapitel sind zwei Kapitel, chapter-filter.js).
+  effectiveChapterIdForBeat(beat) {
+    if (beat.chapter_id != null) return beat.chapter_id;
+    const t = this._threadOf(beat);
+    return t && t.chapter_id != null ? t.chapter_id : null;
+  },
+
   // ── Akt-Farben (Derived) ───────────────────────────────────────────────────
   actPalette() { return ACT_PALETTE; },
 

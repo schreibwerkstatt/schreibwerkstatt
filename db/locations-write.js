@@ -16,7 +16,7 @@ require('./migrations');
 // (db/figures/refs.js), nicht als eigene Kopie hier.
 const { figIdMaps } = require('./figures/refs');
 const { NOW_ISO_SQL } = require('./now');
-const { toRefString: _toRefString } = require('./write-helpers');
+const { toRefString: _toRefString, chapterNameMap } = require('./write-helpers');
 const logger = require('../logger');
 const { matchLocations } = require('../lib/entity-match');
 
@@ -39,7 +39,7 @@ function planOrteMatch(bookId, orte, userEmail, chNameToId = null, hint = null) 
   const emailVal = userEmail ? [userEmail] : [];
   if (chNameToId == null) {
     const rows = db.prepare('SELECT chapter_id, chapter_name FROM chapters WHERE book_id = ?').all(bookId);
-    chNameToId = Object.fromEntries(rows.map(r => [r.chapter_name, r.chapter_id]));
+    chNameToId = chapterNameMap(rows);
   }
   // Gematcht wird gegen den Namen, den die Analyse zuletzt geliefert hat (`ki_name`):
   // hat der Autor einen Ort umbenannt, liefert der naechste Lauf weiter den Textnamen,
@@ -100,7 +100,7 @@ function planOrteMatch(bookId, orte, userEmail, chNameToId = null, hint = null) 
 function saveOrteToDb(bookId, orte, userEmail, chNameToId = null, pageNameToIdByChapter = null, opts = {}) {
   if (chNameToId == null) {
     const rows = db.prepare('SELECT chapter_id, chapter_name FROM chapters WHERE book_id = ?').all(bookId);
-    chNameToId = Object.fromEntries(rows.map(r => [r.chapter_name, r.chapter_id]));
+    chNameToId = chapterNameMap(rows);
   }
   if (pageNameToIdByChapter == null) {
     const rows = db.prepare('SELECT page_id, page_name, chapter_id FROM pages WHERE book_id = ?').all(bookId);

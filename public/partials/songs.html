@@ -47,8 +47,8 @@
          x-effect="options = $store.catalog.figuren.filter(f => $store.catalog.songs.some(s => (s.figuren || []).some(x => (x.fig_id || x) === f.id))).map(f => ({value: f.id, label: f.kurzname || f.name}))">
     </div>
     <div x-data="catalogFilter('chapter')"
-         x-modelable="value" x-model="$store.catalogUi.songsFilters.kapitel"
-         x-effect="options = $app.songsKapitelListe().map(k => ({value: k, label: k}))">
+         x-modelable="value" x-model="$store.catalogUi.songsFilters.kapitelId"
+         x-effect="options = $app.songsKapitelOptionen()">
     </div>
     <div x-data="combobox($app.t('songs.filter.genre'), $app.t('songs.filter.allGenres'))"
          x-modelable="value" x-model="$store.catalogUi.songsFilters.genre"
