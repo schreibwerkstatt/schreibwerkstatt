@@ -120,7 +120,24 @@ test('recherche: Long-Press oeffnet das Menue; nach dem Detail-Dialog geht es in
     await expect(page.locator('.research-dialog[open]')).toHaveCount(0);
 
     // Zurueck in der Liste: das Menue darf nicht im geschlossenen Dialog stecken.
-    await row.locator('.research-item-actions > .icon-btn[aria-haspopup="menu"]').click({ force: true });
+    // `force` klickt blind auf die Koordinate: vorher abwarten, dass der Knopf
+    // aktiv ist, ruhig steht (der Deep-Link scrollt die Zeile weich ins Bild —
+    // ein Scroll nach dem Oeffnen schliesst das Menue zu Recht) und am Klickpunkt
+    // obenauf liegt. Sonst nennt die Meldung, was darueber liegt.
+    const listBtn = row.locator('.research-item-actions > .icon-btn[aria-haspopup="menu"]');
+    const probe = () => listBtn.evaluate((b) => {
+      const r = b.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { disabled: b.disabled, x: r.left, y: r.top, onTop: !!hit && b.contains(hit),
+        hit: hit ? hit.outerHTML.slice(0, 160) : null };
+    });
+    await expect.poll(async () => {
+      const a = await probe();
+      await page.waitForTimeout(150);
+      const b = await probe();
+      return { ...b, still: a.x === b.x && a.y === b.y };
+    }).toMatchObject({ disabled: false, onTop: true, still: true });
+    await listBtn.click({ force: true });
     await expect(menu).toBeVisible();
     expect(await menu.evaluate((el) => !el.closest('dialog'))).toBe(true);
   } finally {
