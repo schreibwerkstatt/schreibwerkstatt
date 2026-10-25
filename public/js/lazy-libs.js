@@ -17,6 +17,7 @@ let _diffPromise = null;
 let _leafletPromise = null;
 let _cloudPromise = null;
 let _mermaidPromise = null;
+let _markdownItPromise = null;
 
 function _loadScript(src) {
   return new Promise((resolve, reject) => {
@@ -175,4 +176,19 @@ export function loadLeaflet() {
       .catch(err => { _leafletPromise = null; throw err; });
   }
   return _leafletPromise;
+}
+
+// markdown-it als eigenständiger ESM-Build (keine Abhängigkeiten, kein Global):
+// per dynamic import statt Script-Tag, damit derselbe Pfad auch in den
+// Node-Unit-Tests lädt. Konsument ist nur utils/markdown.js#loadChatMarkdown.
+export function loadMarkdownIt() {
+  if (!_markdownItPromise) {
+    _markdownItPromise = import('../vendor/markdown-it-15.0.3.esm.min.js')
+      .then(m => {
+        if (typeof m.default !== 'function') throw new Error('markdown-it geladen, aber Default-Export fehlt');
+        return m.default;
+      })
+      .catch(err => { _markdownItPromise = null; throw err; });
+  }
+  return _markdownItPromise;
 }

@@ -22,8 +22,8 @@ const { fuseCandidates } = require('../../lib/semantic-fusion');
 const semanticRetrieval = require('../../lib/semantic-retrieval');
 const contentStore = require('../../lib/content-store');
 const { selectPassagesSemantic } = require('../../routes/jobs/chat/book-chat-retrieval');
-const { pageWindow } = require('../../routes/jobs/book-chat-tools/tools-text');
-const { executeTool } = require('../../routes/jobs/book-chat-tools');
+const { pageWindow } = require('../../routes/jobs/chat-tools/tools-text');
+const { executeTool } = require('../../routes/jobs/chat-tools');
 
 const MODEL = 'test-embed';
 const DIM = 3;

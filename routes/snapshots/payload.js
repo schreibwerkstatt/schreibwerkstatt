@@ -3,8 +3,9 @@
 // Selbsttragende Momentaufnahme des aktuellen Buchstands bauen — gemeinsame Basis
 // fuer „Fassung speichern", die Auto-Sicherung vor einem Restore, die Auto-Fassung
 // beim Fertig-Markieren (captureSnapshot) und den Drift-Check (light).
-//   content_json = buildBookJson({ book, settings, nodes })   (Seiten-HTML inline)
-//   extras_json  = collectExtras(bookId, { analysis, lektorat })
+//   content_json   = buildBookJson({ book, settings, nodes })   (Seiten-HTML inline)
+//   extras_json    = collectExtras(bookId, { analysis, lektorat })
+//   extras_summary = extrasSummary(extras) — Zaehl-Uebersicht fuer den Reader
 
 const logger = require('../../logger');
 const contentStore = require('../../lib/content-store');
@@ -13,6 +14,7 @@ const { treeToNodes, buildBookJson } = require('../../lib/book-bundle');
 const { collectExtras } = require('../../db/book-migration-data');
 const { htmlToPlainText } = require('../../lib/html-text');
 const { sessionEmail } = require('../../lib/acl');
+const { imageHash } = require('../../lib/snapshot-export');
 const bookOrder = require('../../db/book-order');
 const snapshots = require('../../db/book-snapshots');
 
@@ -45,11 +47,14 @@ function _countChapters(nodes) {
 // Kompakte Zaehl-Uebersicht des eingefrorenen Analyse-/Lektorat-Stands
 // (extras_json). Publikations-Nachweis „so sah der Weltaufbau/das Lektorat zum
 // Zeitpunkt der Fassung aus" — ohne die MB-grossen Rohdaten auszuliefern. Nur
-// Bloecke mit >0 Zeilen erscheinen. Defekt/leer → null.
-function extrasSummary(extrasJson) {
-  if (!extrasJson) return null;
-  let parsed;
-  try { parsed = JSON.parse(extrasJson); } catch { return null; }
+// Bloecke mit >0 Zeilen erscheinen. Nimmt das Extras-Objekt oder seinen
+// JSON-String. Defekt/leer → null.
+function extrasSummary(extras) {
+  if (!extras) return null;
+  let parsed = extras;
+  if (typeof extras === 'string') {
+    try { parsed = JSON.parse(extras); } catch { return null; }
+  }
   const a = parsed?.analysis || {};
   const len = (x) => (Array.isArray(x) ? x.length : 0);
   const out = {
@@ -147,8 +152,15 @@ async function buildSnapshotPayload(bookId, req, { light = false } = {}) {
   if (light) {
     let publicationMeta = null;
     try {
-      const meta = require('../../db/book-publication').getMeta(bookId);
-      publicationMeta = meta && meta.created_at ? meta : null;
+      const bp = require('../../db/book-publication');
+      const meta = bp.getMeta(bookId);
+      // Bild-Hashes wie snapshotPublication sie fuer die Fassung liefert → der
+      // Drift erkennt ein ausgetauschtes Cover/Autorfoto.
+      publicationMeta = meta && meta.created_at ? {
+        ...meta,
+        cover_hash: meta.has_cover ? imageHash(bp.getCover(bookId)?.image) : null,
+        author_image_hash: meta.has_author_image ? imageHash(bp.getAuthorImage(bookId)?.image) : null,
+      } : null;
     } catch (e) { logger.warn(`Drift-Publikation fehlgeschlagen (book=${bookId}): ${e.message}`); }
     return { content, publicationMeta, ...stats };
   }
@@ -158,10 +170,15 @@ async function buildSnapshotPayload(bookId, req, { light = false } = {}) {
   // (offen/angenommen/alle je Typ) ableiten → Basis für den Fehlerdichte-Trend
   // über die Fassungen, ohne den extras_json-Blob ausliefern zu müssen.
   let extrasJson = null;
+  let extrasSummaryJson = null;
   let lektoratMetrics = null;
   try {
     const extras = collectExtras(bookId, { analysis: true, lektorat: true }, sessionEmail(req)); // 3. Arg = Analyse-Scope, siehe _pickScope
-    if (extras && (extras.analysis || extras.lektorat)) extrasJson = JSON.stringify(extras);
+    if (extras && (extras.analysis || extras.lektorat)) {
+      extrasJson = JSON.stringify(extras);
+      const summary = extrasSummary(extras);
+      if (summary) extrasSummaryJson = JSON.stringify(summary);
+    }
     const checks = extras?.lektorat?.pageChecks;
     if (Array.isArray(checks) && checks.length) {
       const { computeLektoratMetrics } = require('../../lib/lektorat-metrics');
@@ -175,37 +192,44 @@ async function buildSnapshotPayload(bookId, req, { light = false } = {}) {
   try { publicationJson = _freezePublication(bookId).json; }
   catch (e) { logger.warn(`Snapshot-Publikation fehlgeschlagen (book=${bookId}): ${e.message}`); }
 
-  return { content, extrasJson, publicationJson, lektoratMetrics, ...stats };
+  return { content, extrasJson, extrasSummaryJson, publicationJson, lektoratMetrics, ...stats };
 }
 
 // Payload als neue Fassung ablegen. Liefert { id, seq }.
-function insertPayload(bookId, payload, { label = null, description = null, userEmail = null } = {}) {
+function insertPayload(bookId, payload, { kind = 'manual', label = null, description = null, userEmail = null } = {}) {
   return snapshots.createSnapshot({
-    bookId, label, description,
+    bookId, kind, label, description,
     contentJson: JSON.stringify(payload.content), extrasJson: payload.extrasJson,
+    extrasSummary: payload.extrasSummaryJson || null,
     publicationJson: payload.publicationJson, lektoratMetrics: payload.lektoratMetrics,
     chars: payload.chars, words: payload.words, pages: payload.pages, chapters: payload.chapters,
     userEmail,
   });
 }
 
-// Haelt die juengste Fassung bereits genau diesen Manuskript-Stand fest?
-// Vergleicht den node-Tree (Text, Struktur, Namen) — nicht bloss Zaehler, die
-// eine gleich lange Umformulierung nicht bemerken. Settings bleiben aussen vor:
-// das Fertig-Markieren, das die Auto-Fassung ausloest, aendert sie selbst.
-function _sameTreeAsLatest(bookId, content) {
-  const latest = snapshots.getLatestSnapshot(bookId);
-  if (!latest) return false;
-  try { return JSON.stringify(JSON.parse(latest.content_json).tree) === JSON.stringify(content.tree); }
-  catch { return false; }
+// Haelt die Baseline-Fassung (der Stand, den das Buch zuletzt hatte) bereits
+// genau diesen Stand fest? `scope: 'tree'` vergleicht nur den node-Tree (Text,
+// Struktur, Namen) — fuer die Auto-Fassung beim Fertig-Markieren, das die
+// Settings selbst aendert. `scope: 'state'` vergleicht alles, was ein Restore
+// ueberschreibt (Tree, Buch-Kopf samt Settings, Publikation) — fuer die
+// Auto-Sicherung: sie ist nur dann ueberfluessig, wenn nichts davon verloren ginge.
+function sameAsBaseline(bookId, payload, { scope = 'tree' } = {}) {
+  const base = snapshots.getBaselineSnapshot(bookId);
+  if (!base) return false;
+  try {
+    const stored = JSON.parse(base.content_json);
+    if (scope === 'tree') return JSON.stringify(stored.tree) === JSON.stringify(payload.content.tree);
+    return JSON.stringify(stored) === JSON.stringify(payload.content)
+      && (base.publication_json || null) === (payload.publicationJson || null);
+  } catch { return false; }
 }
 
 // Wiederverwendbarer Capture-Einstieg fuer Auto-Sicherungen aus anderen Routen
-// (z.B. „Buch als fertig markiert" in routes/booksettings.js). dedup=true →
-// ueberspringt, wenn die juengste Fassung denselben Manuskript-Stand haelt.
-// Wirft NICHT — liefert null bei leerem Buch, Dedup-Treffer oder Fehler
-// (Aufrufer sind best-effort).
-async function captureSnapshot(bookId, req, { label = null, description = null, dedup = false, userEmail = null } = {}) {
+// (z.B. „Buch als fertig markiert" in routes/booksettings.js). dedup → ueberspringt,
+// wenn die Baseline-Fassung denselben Stand haelt (true = 'tree', sonst die
+// sameAsBaseline-Scope). Wirft NICHT — liefert null bei leerem Buch,
+// Dedup-Treffer oder Fehler (Aufrufer sind best-effort).
+async function captureSnapshot(bookId, req, { kind = 'manual', label = null, description = null, dedup = false, userEmail = null } = {}) {
   let payload;
   try {
     payload = await buildSnapshotPayload(bookId, req);
@@ -213,13 +237,13 @@ async function captureSnapshot(bookId, req, { label = null, description = null, 
     if (e.code !== 'BOOK_EMPTY') logger.warn(`Auto-Capture fehlgeschlagen (book=${bookId}): ${e.message}`);
     return null;
   }
-  if (dedup && _sameTreeAsLatest(bookId, payload.content)) return null;
+  if (dedup && sameAsBaseline(bookId, payload, { scope: dedup === true ? 'tree' : dedup })) return null;
   try {
-    return insertPayload(bookId, payload, { label, description, userEmail });
+    return insertPayload(bookId, payload, { kind, label, description, userEmail });
   } catch (e) {
     logger.warn(`Auto-Capture-Insert fehlgeschlagen (book=${bookId}): ${e.message}`);
     return null;
   }
 }
 
-module.exports = { buildSnapshotPayload, insertPayload, captureSnapshot, extrasSummary };
+module.exports = { buildSnapshotPayload, insertPayload, captureSnapshot, sameAsBaseline, extrasSummary };

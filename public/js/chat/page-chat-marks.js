@@ -27,7 +27,9 @@ export function pageChatHtml(root) {
 
 /** Offene Vorschläge der letzten Assistant-Nachricht als Inline-Marken.
  *  Nur die letzte: sonst mischen sich frische Vorschläge mit denen aus der
- *  Historie; ältere bleiben in den Chat-Bubbles sichtbar. */
+ *  Historie; ältere bleiben in den Chat-Bubbles sichtbar. Mehrdeutige fehlen:
+ *  die Marke sässe an der ersten Fundstelle, die nicht die gemeinte sein muss,
+ *  und Übernehmen bricht dort ohnehin ab. */
 export function computeChatMarks(messages) {
   const msgs = Array.isArray(messages) ? messages : [];
   let last = -1;
@@ -37,7 +39,7 @@ export function computeChatMarks(messages) {
   if (last === -1 || !Array.isArray(msgs[last].vorschlaege)) return [];
   const out = [];
   msgs[last].vorschlaege.forEach((v, vIdx) => {
-    if (v._applied || v._discarded || v._stale || v._notFound || !v.original || !v.ersatz) return;
+    if (v._applied || v._discarded || v._stale || v._notFound || v._ambiguous || !v.original || !v.ersatz) return;
     out.push({ msgIdx: last, vIdx, original: v.original, ersatz: v.ersatz });
   });
   return out;
@@ -73,6 +75,19 @@ export function locateInContainer(container, needle) {
   return { startNode: a.node, startOffset: a.i, endNode: b.node, endOffset: b.i + 1 };
 }
 
+// Zählungen je Needle, gültig für genau ein HTML. `_refreshVorschlagStates`
+// läuft im Edit-Modus bei jedem Pointer-Eintritt in die Karte und prüft jeden
+// Vorschlag aller Nachrichten bis zu dreimal — jeder `countInHtml`-Aufruf
+// normalisiert das ganze HTML. Bei unverändertem Stand rechnet das nichts neu.
+let _countHtml = null;
+const _counts = new Map();
+function _count(html, needle) {
+  if (html !== _countHtml) { _countHtml = html; _counts.clear(); }
+  let n = _counts.get(needle);
+  if (n === undefined) { n = countInHtml(html, needle); _counts.set(needle, n); }
+  return n;
+}
+
 // Steckt das Original im Ersatz („Haus" → „das Haus"), sagt ein wieder
 // auffindbares Original nichts über ein Zurücknehmen — es kann Rest einer
 // späteren Bearbeitung sein. Dann bleibt „übernommen" stehen.
@@ -103,7 +118,7 @@ export const pageChatMarksMethods = {
       if (!Array.isArray(m.vorschlaege)) continue;
       m.vorschlaege.forEach((v, vIdx) => {
         if (html && v.applied && !v._applying && !_ersatzContainsOriginal(v)
-            && countInHtml(html, v.ersatz) === 0 && countInHtml(html, v.original) === 1) {
+            && _count(html, v.ersatz) === 0 && _count(html, v.original) === 1) {
           delete v.applied;
           delete v.applied_at;
           if (m.id) this._patchChatVorschlag?.(m.id, vIdx, 'applied', { applied: false });
@@ -111,11 +126,11 @@ export const pageChatMarksMethods = {
         v._applied = !!v.applied;
         v._discarded = !v._applied && v.status === 'discarded';
         const open = !!html && !v._applied && !v._discarded;
-        const n = open ? countInHtml(html, v.original) : -1;
+        const n = open ? _count(html, v.original) : -1;
         v._notFound = n === 0 && v.match === 'not_found';
         v._stale = n === 0 && !v._notFound;
         v._ambiguous = n > 1;
-        v._undoable = !!html && v._applied && countInHtml(html, v.ersatz) === 1;
+        v._undoable = !!html && v._applied && _count(html, v.ersatz) === 1;
         if (v._diff === undefined) v._diff = diffParts(v.original, v.ersatz);
       });
     }

@@ -7,6 +7,7 @@
 
 import { _obj, _str } from './schema-utils.js';
 import { _jsonOnly } from './state.js';
+import { toolMentions } from './chat-tools/mentions.js';
 
 export function buildSystemResearchLink() {
   return `Du bist ein Verknüpfungs-Assistent für ein Recherche-Archiv eines Buchprojekts. Du bekommst einen Recherche-Schnipsel (Notiz, Zitat, Fakt oder Link) und Listen bereits existierender Buch-Entitäten: Figuren, Schauplätze, Szenen und Plot-Abschnitte. Jede Entität hat eine id.
@@ -102,15 +103,16 @@ export const RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION_SEARXNG = `${RESEARCH_CHAT_FO
  * davor cachebar bleibt. Leere Liste → ''.
  * @param {Array<{title,kind,saved_item_id?,exists_item_id?}>} list
  */
-export function buildResearchProposalMemoryBlock(list = []) {
+export function buildResearchProposalMemoryBlock(list = [], { toolNames } = {}) {
   if (!Array.isArray(list) || !list.length) return '';
+  const readable = toolMentions(toolNames).list(['list_research_items', 'read_research_item'], '/');
   const lines = list.map(p => {
     const state = p.saved_item_id
       ? `gespeichert als Eintrag id=${p.saved_item_id}`
       : (p.exists_item_id ? `nicht gespeichert (lag schon im Archiv als id=${p.exists_item_id})` : 'nicht gespeichert');
     return `- «${p.title}» (${p.kind}) — ${state}`;
   });
-  return 'BISHERIGE SPEICHER-VORSCHLÄGE IN DIESEM GESPRÄCH (Stand jetzt; schlage dasselbe nicht erneut vor — gespeicherte Einträge liegen im Archiv und sind über list_research_items/read_research_item lesbar):\n'
+  return `BISHERIGE SPEICHER-VORSCHLÄGE IN DIESEM GESPRÄCH (Stand jetzt; schlage dasselbe nicht erneut vor — gespeicherte Einträge liegen im Archiv${readable ? ` und sind über ${readable} lesbar` : ''}):\n`
     + lines.join('\n');
 }
 
@@ -118,8 +120,9 @@ export function buildResearchProposalMemoryBlock(list = []) {
 // recherchieren"): wo im Buch der Autor gerade steht, ein Textauszug und das
 // dort schon verknüpfte Material. Volatil (je Frage) → ans Prompt-Ende.
 // ctx = { kind: 'page'|'chapter', name, excerpt, items: [{id, kind, title, status}] }
-export function buildResearchWritingContextBlock(ctx) {
+export function buildResearchWritingContextBlock(ctx, { toolNames } = {}) {
   if (!ctx) return '';
+  const m = toolMentions(toolNames);
   const where = ctx.kind === 'chapter' ? `Kapitel «${ctx.name}»` : `Abschnitt «${ctx.name}»`;
   const lines = [
     `SCHREIBKONTEXT DIESER FRAGE: Der Autor recherchiert für ${where}. Richte Suche und Vorschläge auf das aus, was diese Stelle braucht (Zeit, Ort, Sachverhalte, Figuren darin). Gespeicherte Vorschläge werden mit dieser Stelle verknüpft.`,
@@ -128,14 +131,15 @@ export function buildResearchWritingContextBlock(ctx) {
     lines.push('', `Textauszug (nur zur Orientierung — NICHT umschreiben, NICHT fortsetzen, keine Stil-Hinweise):`, ', ctx.excerpt, ');
   }
   if (Array.isArray(ctx.items) && ctx.items.length) {
-    lines.push('', 'Schon mit dieser Stelle verknüpftes Material (nicht erneut vorschlagen; Details via read_research_item):');
+    lines.push('', `Schon mit dieser Stelle verknüpftes Material (nicht erneut vorschlagen${m.has('read_research_item') ? '; Details via read_research_item' : ''}):`);
     for (const it of ctx.items) lines.push(`- id=${it.id} [${it.kind}, ${it.status}] ${it.title || '(ohne Titel)'}`);
   }
   return lines.join('\n');
 }
 
 export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolIter = 6, figures = [], locations = [], profile = {}, extra = {}) {
-  // extra = { maxWebSearches, bookContext, proposalMemory, writingContext, webSearchMode }
+  // extra = { maxWebSearches, bookContext, proposalMemory, writingContext, webSearchMode, toolNames }
+  //   toolNames      — die angebotenen Werkzeuge; der Prompt nennt nur diese.
   //   webSearchMode  — 'anthropic' (Default, Server-Tool) | 'searxng' (Function-Tools
   //                    web_search + read_web_page, Belege als [nr]); lib/websearch.
   //   bookContext    — Sprachnorm + Buchtyp/Autoren-Angaben (prompts/core.js#getResearchPromptContext),
@@ -146,10 +150,11 @@ export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolI
   const proposalMemory = String(extra?.proposalMemory || '').trim();
   const writingContext = String(extra?.writingContext || '').trim();
   const searxng = extra?.webSearchMode === 'searxng';
+  const m = toolMentions(extra?.toolNames);
   // Figuren + Schauplätze werden vorgeladen (kompakte Liste), damit das Modell
   // schon bei der ERSTEN Web-Suche den Welt-Kontext in den Suchbegriff
-  // einarbeiten kann — ohne erst eine list_book_entities-Runde zu verbrauchen.
-  // Szenen/Beats/Stränge bleiben on-demand über list_book_entities.
+  // einarbeiten kann — ohne erst eine Werkzeug-Runde zu verbrauchen.
+  // Szenen/Beats/Stränge bleiben on-demand über die Welt-Übersicht.
   const entityBlock = (label, arr) => arr.length
     ? `\n${label}:\n` + arr.map(e => `- ${e.name}${e.kontext ? ` — ${e.kontext}` : ''}`).join('\n') + '\n'
     : '';
@@ -167,7 +172,7 @@ export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolI
   // Werkzeug: sonst liest das Modell eine leere Trefferliste als „dazu gibt es
   // nichts" statt als „dort gibt es nichts" und gibt eine Fehlanzeige weiter,
   // die keine ist. Gleiches Muster wie `scanned: false` beim Motiv-Index.
-  const domainBlock = domains.length
+  const domainBlock = domains.length && m.has('web_search')
     ? `\nEINGRENZUNG DER WEB-SUCHE: \`web_search\` erreicht ausschliesslich diese Domains — ${domains.join(', ')}. `
       + 'Das ist eine Vorgabe des Autors, kein Fehler. Formuliere deine Suchbegriffe so, dass sie DORT treffen. '
       + 'Findest du etwas nicht, sage ausdrücklich, dass die Suche eingegrenzt war — behaupte nie, es gebe die Information nicht.\n'
@@ -180,29 +185,29 @@ export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolI
     profileBlock,
     domainBlock,
     'Deine Werkzeuge:',
-    ...(searxng ? [
+    ...(m.has('web_search') ? (searxng ? [
       '- `web_search` — durchsucht das offene Web in Echtzeit über eine Metasuchmaschine. Liefert je Treffer `nr`, Titel, URL und ein kurzes Snippet. Nutze es für aktuelle, externe oder überprüfbare Fakten (historisches, geografisches, technisches, kulturelles Hintergrundwissen).',
-      '- `read_web_page` — liest den Text einer Seite oder eines PDFs. Snippets sind kurz und oft abgeschnitten: für Daten, Zahlen, Namen und Zitate lies die Seite, bevor du dich darauf stützt. Lesbar sind Treffer von `web_search`/`lookup_literature` dieses Durchgangs, Links aus dem Recherche-Board und Links, die der User nennt. Ein langes PDF durchsuchst du mit `suche` und liest dann mit `seite` an der Fundstelle — nicht Seite für Seite von vorn.',
+      `- \`read_web_page\` — liest den Text einer Seite oder eines PDFs. Snippets sind kurz und oft abgeschnitten: für Daten, Zahlen, Namen und Zitate lies die Seite, bevor du dich darauf stützt. Lesbar sind Treffer von ${m.list(['web_search', 'lookup_literature'], '/')} dieses Durchgangs, Links aus dem Recherche-Archiv und Links, die der User nennt. Ein langes PDF durchsuchst du mit \`suche\` und liest dann mit \`seite\` an der Fundstelle — nicht Seite für Seite von vorn.`,
     ] : [
       '- `web_search` — durchsucht das offene Web in Echtzeit. Nutze es für aktuelle, externe oder überprüfbare Fakten (historisches, geografisches, technisches, kulturelles Hintergrundwissen). Gib in der Antwort die Quelle/URL an, auf die du dich stützt.',
-    ]),
-    '- `list_research_items` / `read_research_item` — durchsuche und lies das vorhandene Recherche-Material des Autors (inkl. PDF-Volltext). Prüfe es, bevor du etwas Neues recherchierst — vieles ist evtl. schon gesammelt.',
-    '- `search_research_passages` — semantische Passagen-Suche über das Archiv: findet Stellen nach BEDEUTUNG, auch bei anderer Wortwahl. Mit `item_id` durchsuchst du EIN langes PDF gezielt (`read_research_item` liefert davon nur den Anfang) — genau der Weg zu Stellen weiter hinten im Dokument.',
-    '- `lookup_literature` — Fachliteratur und Bücher aus bibliografischen Registern (Crossref, OpenLibrary) mit DOI/ISBN. Bevorzugt vor `web_search`, wenn zitierfähige Literatur gefragt ist; schlägst du einen Treffer vor, nimm die doi.org-URL in `urls` und Autoren/Jahr in `source`. Die gelieferten URLs darfst du in `final_answer.quellen` nennen.',
-    '- `list_book_entities` — Szenen, Plot-Abschnitte und Handlungsstränge des Buchs (sowie die oben gelisteten Figuren und Schauplätze in voller Tiefe), damit du gezielt FÜR die Geschichte recherchieren kannst.',
-    '- `propose_research_item` — schlage ein konkretes Fundstück als neuen Recherche-Eintrag vor (Notiz/Link/Zitat/Fakt). Es wird NICHT automatisch gespeichert — der User bestätigt jeden Vorschlag selbst. Nutze dies großzügig, wenn du Brauchbares findest: knackiger Titel, präziser Inhalt, bei Web-Quellen die URL als Quelle.',
+    ]) : []),
+    ...m.route('Vorhandenes Recherche-Material des Autors durchsuchen und lesen (inkl. PDF-Volltext) — prüfe es, bevor du etwas Neues recherchierst', ['list_research_items', 'read_research_item']),
+    ...m.route('Passagen im Archiv nach BEDEUTUNG, auch bei anderer Wortwahl; mit `item_id` gezielt in EINEM langen PDF, von dem der Volltext nur den Anfang liefert', ['search_research_passages']),
+    ...m.route('Fachliteratur und Bücher aus bibliografischen Registern (Crossref, OpenLibrary) mit DOI/ISBN — bevorzugt, wenn zitierfähige Literatur gefragt ist; schlägst du einen Treffer vor, nimm die doi.org-URL in `urls` und Autoren/Jahr in `source`. Die gelieferten URLs darfst du in `final_answer.quellen` nennen', ['lookup_literature']),
+    ...m.route('Szenen, Plot-Beats und Handlungsstränge des Buchs (sowie die oben gelisteten Figuren und Schauplätze in voller Tiefe), um gezielt FÜR die Geschichte zu recherchieren', ['list_book_entities']),
+    '- `propose_research_item` — schlage ein konkretes Fundstück als neuen Recherche-Eintrag vor (Notiz/Link/Zitat/Fakt). Es wird NICHT automatisch gespeichert — der User bestätigt jeden Vorschlag selbst. Nutze dies grosszügig, wenn du Brauchbares findest: knackiger Titel, präziser Inhalt, bei Web-Quellen die URL als Quelle.',
     '- `final_answer` — Pflicht-Endpunkt: jede Antwort an den User MUSS hierüber laufen.',
     '',
     'Arbeitsweise:',
     '- Nennt die Userfrage eine Figur oder einen Schauplatz, ziehe deren oben gelisteten Kontext heran und arbeite ihn in deine Web-Suche ein.',
-    '- Recherchiere, bevor du behauptest. Bei Faktenfragen lieber kurz `web_search`, statt aus dem Gedächtnis zu antworten — und nenne die Quelle.',
+    ...m.ifAll(['web_search'], '- Recherchiere, bevor du behauptest. Bei Faktenfragen lieber kurz `web_search`, statt aus dem Gedächtnis zu antworten — und nenne die Quelle.'),
     '- Bittet dich der User ausdrücklich, etwas als Recherche-Eintrag/Item anzulegen, zu speichern oder ins Board zu legen, MUSST du `propose_research_item` aufrufen (der User bestätigt danach) — antworte das nicht nur in Prosa.',
     '- Bündle unabhängige Werkzeug-Aufrufe in EINER Runde (mehrere Suchen / Lese-Calls parallel), statt seriell.',
     `- Maximal ${maxToolIter} Werkzeug-Iterationen pro Antwort (eine Iteration = eine Runde, nicht ein Call). Geh effizient damit um.`,
     ...(maxWebSearches ? [`- Insgesamt höchstens ${maxWebSearches} Web-Suchen pro Antwort (über alle Runden; jede Suche ${searxng ? 'kostet Zeit' : 'kostet'}). Formuliere gezielte Suchbegriffe statt vieler ähnlicher.`] : []),
     '- WICHTIG — rückwärtsgewandt: Du schreibst NIEMALS Manuskripttext, formulierst keine Romanszenen und machst keine Stil-Vorschläge für den Fließtext. Du sammelst und ordnest Wissen. Wenn der User um Textgenerierung für das Buch bittet, biete stattdessen Recherche/Strukturierung an.',
-    '- Wenn du Material vorschlägst, das es im Archiv schon gibt (via list_research_items geprüft), weise darauf hin statt zu duplizieren. `propose_research_item` meldet einen Treffer im Archiv als `already_in_archive` — schlage dann nur vor, wenn dein Vorschlag wirklich Neues ergänzt.',
-    ...(searxng ? [
+    '- Wenn du Material vorschlägst, das es im Archiv schon gibt, weise darauf hin statt zu duplizieren. `propose_research_item` meldet einen Treffer im Archiv als `already_in_archive` — schlage dann nur vor, wenn dein Vorschlag wirklich Neues ergänzt.',
+    ...(!m.has('web_search') ? [] : searxng ? [
       '- Belege Aussagen aus Web-Treffern im Antworttext mit der Trefferzahl in eckigen Klammern, z.B. «… 2016 eröffnet [3].» Die Zahl ist das `nr` des Treffers aus `web_search` — erfinde keine Nummern und nummeriere nicht neu. Schreib keine eigene nummerierte Quellenliste in die Antwort: die App zeigt die Quellen aus `quellen` darunter.',
       '- Nenne in `final_answer` unter `quellen` die Web-Quellen (URL + Titel), auf die sich deine Antwort stützt — nur URLs, die dir `web_search` oder `read_web_page` in diesem Durchgang tatsächlich geliefert haben.',
     ] : [
@@ -216,85 +221,24 @@ export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolI
 }
 
 /**
- * Werkzeug-Definitionen für den agentischen Recherche-Chat (Anthropic-Tool-Format).
- * `web_search` ist Anthropics serverseitiges Tool (kein eigener Handler — die API
- * führt die Suche selbst aus). Alle anderen Tools laufen über
- * routes/jobs/research-chat-tools.js#executeResearchTool.
+ * Ausgabe- und Web-Werkzeuge des agentischen Recherche-Chats (Anthropic-Tool-Format).
+ * Die Lese-Werkzeuge (Archiv, Literatur-Register, Welt-Übersicht) kommen aus dem
+ * gemeinsamen Katalog (./chat-tools/, Spalte `research` in access.js).
+ * `web_search` ist hier Anthropics serverseitiges Tool (kein eigener Handler — die
+ * API führt die Suche selbst aus); propose_research_item läuft über
+ * routes/jobs/research-chat-tools.js.
  */
 export const RESEARCH_CHAT_TOOLS = [
   { type: 'web_search_20250305', name: 'web_search', max_uses: 6 },
   {
-    name: 'list_research_items',
-    description: 'Listet die vorhandenen Recherche-Einträge des Buchs (id, kind, status, Titel, Kurztext, Tags, `stellen` = verknüpfte Kapitel/Abschnitte, `bezug` = Figuren/Orte/Szenen, ob ein PDF/Dokument angehängt ist). Optional nach kind/status/Kapitel/Abschnitt filtern oder mit q volltextsuchen. Nutze dies zuerst, um zu sehen, was schon gesammelt wurde.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        kind: { type: 'string', enum: ['note', 'link', 'quote', 'fact', 'image', 'document', 'transcript'], description: 'Optionaler Typfilter.' },
-        q: { type: 'string', description: 'Optionale Volltextsuche über die Einträge.' },
-        status: { type: 'string', enum: ['offen', 'in_arbeit', 'eingearbeitet', 'verworfen'], description: 'Optional: nur Einträge dieser Einarbeitungs-Stufe.' },
-        chapter_id: { type: 'integer', description: 'Optional: nur Einträge an diesem Kapitel oder einem seiner Abschnitte.' },
-        page_id: { type: 'integer', description: 'Optional: nur Einträge an diesem Abschnitt.' },
-      },
-      required: [],
-    },
-  },
-  {
-    name: 'read_research_item',
-    description: 'Liefert den vollständigen Inhalt EINES Recherche-Eintrags: Titel, Volltext (body), URL, Quelle, Tags und — bei angehängtem PDF — den extrahierten Dokument-Volltext (doc_text). Nutze dies, um vorhandenes Material wirklich zu lesen, bevor du extern suchst.',
-    input_schema: {
-      type: 'object',
-      properties: { id: { type: 'integer', description: 'id des Recherche-Eintrags (aus list_research_items).' } },
-      required: ['id'],
-    },
-  },
-  {
-    name: 'lookup_literature',
-    description: 'Sucht in bibliografischen Registern statt im offenen Web: Crossref (Fachaufsätze, Berichte, alles mit DOI) und OpenLibrary (Bücher). Liefert zitierfähige Kerndaten je Treffer — Titel, Autoren, Jahr, Zeitschrift/Verlag, DOI bzw. ISBN und eine stabile URL (doi.org). Nutze es, wenn der User Fachliteratur, Studien oder Bücher zu einem Thema will, oder um eine bekannte DOI/ISBN aufzulösen. Kein Volltext und keine Studiendetails (Design, Fallzahl) — die stehen nur im Werk selbst (ggf. danach `web_search` auf die DOI-Seite).',
-    input_schema: {
-      type: 'object',
-      properties: {
-        q: { type: 'string', description: 'Thema oder Titel-/Autorenstichworte (bei Fachdatenbanken englische Begriffe bevorzugen).' },
-        doi: { type: 'string', description: 'Alternativ: eine bekannte DOI exakt auflösen.' },
-        isbn: { type: 'string', description: 'Alternativ: eine bekannte ISBN exakt auflösen.' },
-        register: { type: 'string', enum: ['artikel', 'buch', 'beide'], description: 'artikel = nur Crossref, buch = nur OpenLibrary, beide (Default).' },
-        anzahl: { type: 'integer', description: 'Treffer je Register (1–10, Default 5).' },
-      },
-      required: [],
-    },
-  },
-  {
-    name: 'search_research_passages',
-    description: 'Semantische Passagen-Suche über das Recherche-Archiv (Embeddings): findet Stellen, die einer Frage BEDEUTUNGSMÄSSIG nahestehen — auch bei anderer Wortwahl als in `list_research_items` (Wortsuche). Ohne item_id: die beste Passage je Eintrag über das ganze Board. MIT item_id: mehrere passende Passagen INNERHALB eines Eintrags — der Weg in ein langes PDF, von dem `read_research_item` nur den Anfang liefert. Liefert {item_id,title,passage,score}. Rein rückwärtsgewandt.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        q: { type: 'string', description: 'Suchtext / Frage in natürlicher Sprache.' },
-        item_id: { type: 'integer', description: 'Optional: nur in diesem Eintrag suchen (id aus list_research_items). Für gezieltes Lesen in einem langen PDF.' },
-        top_k: { type: 'integer', description: 'Anzahl Passagen (1–15, Default 6).' },
-      },
-      required: ['q'],
-    },
-  },
-  {
-    name: 'list_book_entities',
-    description: 'Liefert die Welt-Entitäten des Buchs als Recherche-Kontext: Figuren, Schauplätze, Szenen, Plot-Abschnitte und Handlungsstränge (je id, Name, Kurzbeschreibung). Nutze dies, um gezielt für die Geschichte zu recherchieren (z.B. Hintergrund zum Beruf einer Figur, zum Schauplatz-Land).',
-    input_schema: {
-      type: 'object',
-      properties: {
-        art: { type: 'string', enum: ['figur', 'ort', 'szene', 'beat', 'strang', 'alle'], description: "Welche Kategorie. Default 'alle'." },
-      },
-      required: [],
-    },
-  },
-  {
     name: 'propose_research_item',
-    description: 'Schlägt dem User EINEN neuen Recherche-Eintrag zum Speichern vor. Wird NICHT automatisch gespeichert — der User bestätigt jeden Vorschlag mit einem Klick. Nutze es für konkrete Fundstücke (eine oder mehrere Web-Quellen, ein Fakt, ein Zitat). Hänge alle belegenden Web-Quellen als urls an. Mehrere Vorschläge = mehrere Aufrufe.',
+    description: 'Schlägt dem User EINEN neuen Recherche-Eintrag zum Speichern vor. Wird NICHT automatisch gespeichert — der User bestätigt jeden Vorschlag mit einem Klick. Für konkrete Fundstücke (eine oder mehrere Web-Quellen, ein Fakt, ein Zitat); alle belegenden Web-Quellen als urls anhängen. Mehrere Vorschläge = mehrere Aufrufe.',
     input_schema: {
       type: 'object',
       properties: {
         kind: { type: 'string', enum: ['note', 'link', 'quote', 'fact'], description: 'Eintragstyp: note=Notiz, link=Web-Link, quote=Zitat, fact=Faktensplitter.' },
         title: { type: 'string', description: 'Kurzer, prägnanter Titel.' },
-        body: { type: 'string', description: 'Inhalt / Notiztext / Zitatwortlaut (Pflicht außer bei reinem link mit urls).' },
+        body: { type: 'string', description: 'Inhalt / Notiztext / Zitatwortlaut (Pflicht ausser bei reinem link mit urls).' },
         urls: {
           type: 'array',
           description: 'Eine oder mehrere belegende Web-Quellen. Bei kind=link mindestens eine. Nur http(s).',
@@ -359,7 +303,10 @@ export const RESEARCH_WEB_FUNCTION_TOOLS = [
   },
   {
     name: 'read_web_page',
-    description: 'Liest den Text EINER Web-Seite oder eines PDFs (Titel, Fliesstext; lange Texte gekappt, `doc_truncated` sagt es). Nur URLs aus web_search/lookup_literature dieses Durchgangs, aus dem Recherche-Board oder aus der Nachricht des Users. Nutze es, bevor du dich auf Details stützt, die im Snippet nicht vollständig stehen. Bei PDFs: `seiten` nennt die Seitenzahl, der Text trägt Marken «[Seite N]»; mit `suche` findest du die Seiten zu einem Begriff, mit `seite` liest du ab einer Seite weiter.',
+    description: 'Liest den Text EINER Web-Seite oder eines PDFs (Titel, Fliesstext; lange Texte gekappt, `doc_truncated` sagt es). Nur URLs aus web_search dieses Durchgangs, aus dem Recherche-Archiv oder aus der Nachricht des Users. Nutze es, bevor du dich auf Details stützt, die im Snippet nicht vollständig stehen. Bei PDFs: `seiten` nennt die Seitenzahl, der Text trägt Marken «[Seite N]»; mit `suche` findest du die Seiten zu einem Begriff, mit `seite` liest du ab einer Seite weiter.',
+    see: {
+      lookup_literature: 'Lesbar sind auch die Treffer-URLs aus `lookup_literature`.',
+    },
     input_schema: {
       type: 'object',
       properties: {
@@ -400,13 +347,15 @@ const FINAL_ANSWER_SEARXNG = {
 };
 
 /**
- * Werkzeugliste fuer EINEN Lauf, abhaengig vom Suchweg (lib/websearch#webSearchMode):
- *   'anthropic' (Default) — Basisliste mit Anthropics serverseitigem `web_search`;
- *     die Domain-Eingrenzung haengt als `allowed_domains` am Werkzeug. Leere Liste ⇒
- *     `allowed_domains` wird gar nicht erst gesetzt: ein leeres Array waere fuer die
+ * Ausgabe- und Web-Werkzeuge für EINEN Lauf, abhängig vom Suchweg
+ * (lib/websearch#webSearchMode); die Lese-Werkzeuge hängt der Job über
+ * buildChatToolset('research', { outputTools }) davor.
+ *   'anthropic' (Default) — Anthropics serverseitiges `web_search`; die Domain-
+ *     Eingrenzung hängt als `allowed_domains` am Werkzeug. Leere Liste ⇒
+ *     `allowed_domains` wird gar nicht erst gesetzt: ein leeres Array wäre für die
  *     API eine Eingrenzung auf nichts.
- *   'searxng' — das Server-Tool fällt weg, an seine Stelle treten die beiden
- *     Function-Tools; die Eingrenzung erzwingt der Handler.
+ *   'searxng' — an die Stelle des Server-Tools treten die beiden Function-Tools;
+ *     die Eingrenzung erzwingt der Handler.
  */
 export function buildResearchChatTools({ allowedDomains = [], webSearchMode = 'anthropic' } = {}) {
   if (webSearchMode === 'searxng') {

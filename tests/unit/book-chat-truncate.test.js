@@ -1,12 +1,12 @@
 'use strict';
-// Strukturerhaltendes Kürzen der Werkzeug-Ergebnisse (routes/jobs/book-chat-tools/truncate.js).
+// Strukturerhaltendes Kürzen der Werkzeug-Ergebnisse (routes/jobs/chat-tools/truncate.js).
 // Regression: die frühere Fassung rekursierte endlos, wenn `results` 6–10 Einträge
 // hatte und trotzdem zu gross war; Ergebnisse ohne `results` wurden hart als String
 // geschnitten und verloren dabei Summen/hint am Ende.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { truncateToolResult } = require('../../routes/jobs/book-chat-tools/truncate');
+const { truncateToolResult } = require('../../routes/jobs/chat-tools/truncate');
 
 const big = (n) => 'x'.repeat(n);
 

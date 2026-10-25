@@ -3,9 +3,11 @@
 // (Review-Renderer, Chat-Markdown, Status-Strings). CLAUDE.md fordert ein
 // Escape-First-Modell ohne Runtime-Sanitizer; jede neue Sink muss durch
 // escHtml. Dieser Test prüft die Escape-Invariante.
-import test from 'node:test';
+import test, { before } from 'node:test';
 import assert from 'node:assert/strict';
-import { escHtml, renderChatMarkdown } from '../../public/js/utils.js';
+import { escHtml, renderChatMarkdown, loadChatMarkdown } from '../../public/js/utils.js';
+
+before(() => loadChatMarkdown());
 
 const PAYLOADS = [
   '<script>alert(1)</script>',
@@ -49,10 +51,10 @@ test('escHtml: null/undefined → leerer String, kein Crash; 0 bleibt sichtbar',
   assert.equal(escHtml(0), '0'); // 0 ist ein Wert (Zähler, Seitenzahl) — nur null/undefined werden leer
 });
 
-test('renderChatMarkdown: escapt Input zuerst – <script> wird unausführbar', () => {
+test('renderChatMarkdown: Roh-HTML wird escaped – <script> wird unausführbar', () => {
   const out = renderChatMarkdown('Hier: <script>alert(1)</script>');
   assert.ok(!out.includes('<script>'),
-    'renderChatMarkdown muss vor Markdown-Processing escapen');
+    'renderChatMarkdown darf Roh-HTML nie durchreichen (markdown-it html:false)');
   assert.match(out, /&lt;script&gt;/);
 });
 
@@ -87,9 +89,6 @@ test('renderChatMarkdown: leerer Input → leerer Output', () => {
 });
 
 test('renderChatMarkdown: Tabelle escapt Zelleninhalt', () => {
-  // Dreifaches Zeilenende: Tabellen-Regex captured \|[^\n]+\n, also muss
-  // jede Zeile auf \n enden (auch die letzte) damit der Markdown-Parser
-  // sie als Block erkennt.
   const md = '| Name | Wert |\n|---|---|\n| <script>x</script> | y |\n';
   const out = renderChatMarkdown(md);
   assert.match(out, /<table/);
@@ -99,7 +98,10 @@ test('renderChatMarkdown: Tabelle escapt Zelleninhalt', () => {
 
 test('renderChatMarkdown: [Text](url) → Link bei http(s)/mailto', () => {
   const out = renderChatMarkdown('Siehe [Anthropic](https://anthropic.com).');
-  assert.match(out, /<a href="https:\/\/anthropic\.com" target="_blank" rel="noopener noreferrer" class="chat-link">Anthropic<\/a>/);
+  assert.match(out, /<a href="https:\/\/anthropic\.com"[^>]*>Anthropic<\/a>/);
+  assert.match(out, /class="chat-link"/);
+  assert.match(out, /target="_blank"/);
+  assert.match(out, /rel="noopener noreferrer"/);
 });
 
 test('renderChatMarkdown: gefährliches Link-Protokoll bleibt Klartext', () => {
@@ -111,7 +113,8 @@ test('renderChatMarkdown: gefährliches Link-Protokoll bleibt Klartext', () => {
 
 test('renderChatMarkdown: verschachtelte Liste → genestete <ul>/<ol>', () => {
   const out = renderChatMarkdown('- A\n  - A1\n- B');
-  assert.match(out, /<ul class="chat-list"><li>A<ul class="chat-list"><li>A1<\/li><\/ul><\/li><li>B<\/li><\/ul>/);
+  const flat = out.replace(/\n/g, '');
+  assert.match(flat, /<ul class="chat-list"><li>A<ul class="chat-list"><li>A1<\/li><\/ul><\/li><li>B<\/li><\/ul>/);
 });
 
 test('renderChatMarkdown: Fenced Code-Block bleibt unzerstückelt + escaped', () => {

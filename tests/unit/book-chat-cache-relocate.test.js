@@ -11,7 +11,7 @@ process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret';
 require('../../db/migrations');
 
 const { _withMessageCacheBreakpoints } = require('../../lib/ai/claude');
-const { _relocate } = require('../../routes/jobs/book-chat-tools/citations');
+const { _relocate } = require('../../routes/jobs/chat-tools/citations');
 
 const hasCc = (m) => Array.isArray(m.content) && m.content.some(b => b.cache_control);
 

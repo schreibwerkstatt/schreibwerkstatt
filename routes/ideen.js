@@ -19,7 +19,7 @@ const express = require('express');
 const { toIntId } = require('../lib/validate');
 const { guardBook, sessionEmail } = require('../lib/acl');
 const { resolvePageBookId, resolveChapterBookId } = require('../lib/content-ownership');
-const { IDEE_STATUSES, isIdeeStatus, isIdeaLinkKind } = require('../lib/ideen-status');
+const { IDEE_STATUSES, IDEE_OPEN_STATUSES, isIdeeStatus, isIdeaLinkKind } = require('../lib/ideen-status');
 const { getBookIdeenStages, setBookIdeenStages } = require('../db/book-settings');
 const { setContext } = require('../lib/log-context');
 const ideenDb = require('../db/ideen');
@@ -50,6 +50,7 @@ function _ownedIdee(req, res) {
   if (!id) { res.status(400).json({ error_code: 'INVALID_ID' }); return null; }
   const row = ideenDb.getIdeeOwned(id, userEmail);
   if (!row) { res.status(404).json({ error_code: 'IDEE_NOT_FOUND' }); return null; }
+  setContext({ book: row.book_id });
   if (!guardBook(req, res, row.book_id, 'editor')) return null;
   return { ...row, userEmail };
 }
@@ -61,6 +62,7 @@ router.get('/counts', (req, res) => {
   const bookId = toIntId(req.query.book_id);
   const kind = req.query.kind === 'chapter' ? 'chapter' : 'page';
   if (!bookId)    return res.status(400).json({ error_code: 'INVALID_ID' });
+  setContext({ book: bookId });
   if (!guardBook(req, res, bookId, 'editor')) return;
   res.json(ideenDb.openIdeenCounts(bookId, userEmail, kind));
 });
@@ -76,6 +78,7 @@ router.get('/board', (req, res) => {
   const userEmail = sessionEmail(req);
   const bookId = toIntId(req.query.book_id);
   if (!bookId)    return res.status(400).json({ error_code: 'INVALID_ID' });
+  setContext({ book: bookId });
   if (!guardBook(req, res, bookId, 'editor')) return;
   res.json({
     statuses: IDEE_STATUSES,
@@ -132,6 +135,7 @@ router.get('/link-targets', (req, res) => {
   const userEmail = sessionEmail(req);
   const bookId = toIntId(req.query.book_id);
   if (!bookId)    return res.status(400).json({ error_code: 'INVALID_ID' });
+  setContext({ book: bookId });
   if (!guardBook(req, res, bookId, 'editor')) return;
   res.json(ideenDb.listIdeaLinkTargets(bookId, userEmail));
 });
@@ -151,6 +155,7 @@ router.get('/links', (req, res) => {
   const targetKind = req.query.target_kind;
   if (!bookId)    return res.status(400).json({ error_code: 'INVALID_ID' });
   if (!isIdeaLinkKind(targetKind)) return res.status(400).json({ error_code: 'INVALID_LINK_KIND' });
+  setContext({ book: bookId });
   if (!guardBook(req, res, bookId, 'editor')) return;
   const map = ideenDb.ideaLinksByTarget(targetKind, bookId, userEmail);
   res.json({ target_kind: targetKind, links: Object.fromEntries(map) });
@@ -172,6 +177,7 @@ router.get('/', (req, res) => {
   if (!bookId) {
     return res.status(404).json({ error_code: pageId ? 'PAGE_NOT_FOUND' : 'CHAPTER_NOT_FOUND' });
   }
+  setContext({ book: bookId });
   if (!guardBook(req, res, bookId, 'editor')) return;
   res.json(ideenDb.listIdeenForScope(kind, scopeId, userEmail));
 });
@@ -187,6 +193,7 @@ router.post('/', jsonBody, async (req, res) => {
   if (pageId && chapterId) return res.status(400).json({ error_code: 'INVALID_SCOPE' });
   if (!content)                 return res.status(400).json({ error_code: 'CONTENT_REQ' });
   if (content.length > MAX_LEN) return res.status(400).json({ error_code: 'CONTENT_TOO_LONG' });
+  setContext({ book: bookId });
   if (!guardBook(req, res, bookId, 'editor')) return;
 
   // Cross-Check: page/chapter muss zum Buch gehoeren.
@@ -244,7 +251,11 @@ router.patch('/:id', jsonBody, (req, res) => {
     // Eine abgeschlossene Idee (erledigt/verworfen) wandert nicht mehr: sie ist
     // die Spur einer Entscheidung an DIESER Stelle, und anderswo hingehaengt
     // wuerde sie zur Aussage ueber eine Stelle, an der sie nie stand.
-    if (existing.status !== 'offen' && existing.status !== 'in_arbeit') {
+    // Gilt auch fuer die Stufe, die derselbe Request setzt: zuordnen und
+    // zugleich abschliessen hiesse, die Idee haette an ihrem Anker nie offen
+    // gestanden.
+    const finalStatus = fields.status ?? existing.status;
+    if (!IDEE_OPEN_STATUSES.includes(existing.status) || !IDEE_OPEN_STATUSES.includes(finalStatus)) {
       return res.status(400).json({ error_code: 'IDEE_CLOSED' });
     }
     const isBookIdee = existing.page_id === null && existing.chapter_id === null;
@@ -279,7 +290,7 @@ router.post('/:id/links', jsonBody, (req, res) => {
   if (!isIdeaLinkKind(targetKind)) return res.status(400).json({ error_code: 'INVALID_LINK_KIND' });
   if (!targetId)                   return res.status(400).json({ error_code: 'INVALID_TARGET_ID' });
 
-  const result = ideenDb.addIdeaLink(existing.id, existing.book_id, targetKind, targetId);
+  const result = ideenDb.addIdeaLink(existing.id, existing.book_id, targetKind, targetId, existing.userEmail);
   if (result.error_code) return res.status(400).json(result);
   res.json(ideenDb.getIdee(existing.id));
 });

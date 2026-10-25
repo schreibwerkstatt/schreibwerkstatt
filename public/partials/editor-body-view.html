@@ -7,7 +7,7 @@
        (Source of Truth) — Template re-mountet pro Seite und liest neu, zeigt nach
        einmaligem Ausblenden nie wieder. Self-contained, kein Root-State. -->
   <template x-if="renderedPageHtml && canReview() && !currentPageEmpty && !checkLoading && !checkDone">
-    <div x-data="{ dismissed: localStorage.getItem('sw:ahaLektorat') === '1', _dismiss(){ this.dismissed = true; try { localStorage.setItem('sw:ahaLektorat', '1'); } catch (e) {} } }"
+    <div x-data="{ dismissed: (() => { try { return localStorage.getItem('sw:ahaLektorat') === '1'; } catch (e) { return false; } })(), _dismiss(){ this.dismissed = true; try { localStorage.setItem('sw:ahaLektorat', '1'); } catch (e) {} } }"
          x-show="!dismissed" x-cloak class="page-aha" role="note">
       <span class="page-aha__text" x-text="t('page.aha.text')"></span>
       <button type="button" class="page-aha__action" @click="runCheck(); _dismiss()" x-text="t('page.aha.action')"></button>

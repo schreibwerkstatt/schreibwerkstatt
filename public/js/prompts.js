@@ -318,8 +318,6 @@ export {
   buildBookChatAgentSystemPrompt,
   buildBookChatPreContext,
   buildChatTitlePrompt,
-  BOOK_CHAT_TOOLS,
-  BOOK_CHAT_SLIM_TOOL_NAMES,
   BOOK_CHAT_FORCE_FINAL_INSTRUCTION,
   BOOK_CHAT_BUDGET_FINAL_INSTRUCTION,
   SCHEMA_BOOK_CHAT,
@@ -330,7 +328,14 @@ export { SCHEMA_CHAT, formatHistoryVorschlaege, formatHistoryIdeen, historyTrimN
 
 // Buch-Chat-only: Gliederungs-Block (klassisch) + Aussenwelt-Regel.
 export { buildGliederungBlock } from './prompts/book-outline.js';
-export { BOOK_CHAT_OUTSIDE_WORLD_RULE } from './prompts/book-chat-tools.js';
+export { BOOK_CHAT_OUTPUT_TOOLS, buildBookChatOutsideWorldRule } from './prompts/book-chat-output.js';
+
+// Gemeinsamer Werkzeug-Katalog der agentischen Chats (Buch, Plot, Ideen, Recherche).
+export {
+  CHAT_TOOLS, RETIRED_CHAT_TOOL_NAMES, CHAT_TOOL_ACCESS, CHAT_KINDS,
+  chatToolNames, buildChatToolset, renderChatTools, toolMentions,
+} from './prompts/chat-tools/index.js';
+export { buildErzaehlweiseLine } from './prompts/chat-pre-context.js';
 
 export {
   buildSynonymPrompt,
@@ -385,8 +390,6 @@ export {
   buildPlotChatSystemPrompt,
   buildPlotProposalMemoryBlock,
   PLOT_CHAT_PROPOSE_TOOLS,
-  PLOT_CHAT_READ_TOOL_NAMES,
-  PLOT_CHAT_SLIM_READ_TOOL_NAMES,
   PLOT_CHAT_FORCE_FINAL_INSTRUCTION,
   SCHEMA_PLOT_CHAT_CLASSIC,
 } from './prompts/plot-chat.js';
@@ -395,8 +398,6 @@ export {
   buildIdeenChatSystemPrompt,
   buildIdeenProposalMemoryBlock,
   IDEEN_CHAT_PROPOSE_TOOLS,
-  IDEEN_CHAT_READ_TOOL_NAMES,
-  IDEEN_CHAT_SLIM_READ_TOOL_NAMES,
   IDEEN_CHAT_FORCE_FINAL_INSTRUCTION,
   SCHEMA_IDEEN_CHAT_CLASSIC,
 } from './prompts/ideen-chat.js';

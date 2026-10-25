@@ -62,7 +62,7 @@ function seed() {
 
 test.before(() => {
   ctx = bootstrap();
-  TOOLS = require('../../routes/jobs/book-chat-tools').TOOLS;
+  TOOLS = require('../../routes/jobs/chat-tools').TOOLS;
   db = require('../../db/connection').db;
   seed();
 });
@@ -76,10 +76,10 @@ test('get_pages: Seite eines fremden Buchs → missing, kein Inhalt', async () =
 
 test('übrige Seiten-/Kapitel-Werkzeuge weisen fremde IDs ab', async () => {
   assert.match((await call('quote_passage', { page_id: 930201, offset: 0, length: 5 })).error, /nicht im aktuellen Buch/);
-  assert.match((await call('quote_match', { page_id: 930201, pattern: 'GEHEIM' })).error, /nicht im aktuellen Buch/);
+  assert.match((await call('quote_passage', { page_id: 930201, pattern: 'GEHEIM' })).error, /nicht im aktuellen Buch/);
   assert.match((await call('get_chapter_text', { chapter_id: 93021 })).error, /nicht im aktuellen Buch/);
   assert.match(call('list_revisions', { page_id: 930201 }).error, /nicht im aktuellen Buch/);
-  assert.match(call('diff_page_revisions', { page_id: 930201 }).error, /nicht im aktuellen Buch/);
+  assert.match(call('list_revisions', { page_id: 930201, diff: true }).error, /nicht im aktuellen Buch/);
   const dlg = call('get_dialogue', { page_id: 930201 });
   assert.deepEqual(dlg.results, []);
   const rep = call('find_repetitions', { scope: 'page', page_id: 930201 });
@@ -87,7 +87,7 @@ test('übrige Seiten-/Kapitel-Werkzeuge weisen fremde IDs ab', async () => {
 });
 
 test('resolveEntityTitle: mit userEmail fallen Szenen/Figuren anderer User weg', () => {
-  const { resolveEntityTitle } = require('../../routes/jobs/book-chat-tools/shared');
+  const { resolveEntityTitle } = require('../../routes/jobs/chat-tools/shared');
   assert.equal(resolveEntityTitle('scene', ids.sceneU, { userEmail: U }), 'Eigene Szene');
   assert.equal(resolveEntityTitle('scene', ids.sceneV, { userEmail: U }), null);
   assert.equal(resolveEntityTitle('figure', ids.fremd, { userEmail: U }), null);
@@ -125,7 +125,7 @@ test('get_figure_age: Geburtsjahr aus dem Geburts-Ereignis → Spanne, ohne Gebu
 });
 
 test('ageAt: Spanne ohne Monat, exakt mit Monat, vor der Geburt markiert', () => {
-  const { ageAt } = require('../../routes/jobs/book-chat-tools/tools-timeline');
+  const { ageAt } = require('../../routes/jobs/chat-tools/tools-timeline');
   assert.deepEqual(ageAt({ y: 1960 }, { y: 1990 }), { alter_von: 29, alter_bis: 30, exakt: false });
   assert.deepEqual(ageAt({ y: 1960, m: 5 }, { y: 1990, m: 6 }), { alter: 30, exakt: true });
   assert.deepEqual(ageAt({ y: 1960, m: 5, d: 20 }, { y: 1990, m: 5, d: 19 }), { alter: 29, exakt: true });

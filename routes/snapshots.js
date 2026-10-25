@@ -8,8 +8,11 @@
 //   snapshots/restore.js  Restore (ganzes Buch, einzelne Seite/Kapitel)
 // extras_json wird gespeichert, aber nie roh an den Client geliefert.
 
+const crypto = require('crypto');
 const express = require('express');
 const logger = require('../logger');
+const { bookParamHandler } = require('../lib/log-context');
+const { snapshotDiff } = require('../lib/esm-bridge');
 const { validateBookJson } = require('../lib/book-bundle');
 const { snapshotToBundle, snapshotPublication } = require('../lib/snapshot-export');
 const { FORMATS } = require('../lib/export-builders');
@@ -22,6 +25,7 @@ const { buildSnapshotPayload, insertPayload, captureSnapshot, extrasSummary } = 
 const { registerRestoreRoutes } = require('./snapshots/restore');
 
 const router = express.Router();
+router.param('bookId', bookParamHandler);
 
 const LABEL_MAX = 120;
 const DESC_MAX = 1000;
@@ -48,17 +52,40 @@ router.get('/:bookId', (req, res) => {
 });
 
 // ── Drift (lohnt sich eine neue Fassung?) ───────────────────────────────────────
-// Vergleicht den aktuellen Buchstand mit der juengsten Fassung, OHNE eine anzulegen:
-//   text  — Anteil des editierten Wort-Volumens (0% unveraendert, ~100% Umschrieb)
+// Vergleicht den aktuellen Buchstand mit der Baseline-Fassung (dem Stand, den das
+// Buch zuletzt hatte — nach einem Restore die wiederhergestellte, nicht die
+// Auto-Sicherung), OHNE eine anzulegen:
+//   text      — Anteil des editierten Wort-Volumens (0% unveraendert, ~100% Umschrieb)
+//   structure — umbenannte/verschobene/umsortierte Abschnitte, Kapitel-Aenderungen
 //   book/publication/settings — geaenderte Titel-/Titelei-/Einstellungs-Felder
 // Baut den aktuellen Stand als light-Payload (ohne Bilder/Cover/Extras).
+// Struktur- und Publikations-Diff kommen aus dem geteilten Browser-Modul
+// (book-snapshot-diff.js), damit Vergleich und Drift dieselben Regeln haben.
 // Muss vor /:bookId/:id stehen, sonst schluckt :id das Literal `drift`.
+//
+// Ergebnis-Cache: der Wort-Diff ist teuer, das Laden des aktuellen Stands nicht.
+// Schluessel = Baseline (id + restored_at) + Hash des aktuellen Stands → jeder
+// Edit, jede neue Fassung, jeder Restore ergibt einen neuen Schluessel.
+const DRIFT_CACHE_MAX = 50;
+const _driftCache = new Map();
+
+function _driftCacheGet(key) {
+  const hit = _driftCache.get(key);
+  if (hit) { _driftCache.delete(key); _driftCache.set(key, hit); }
+  return hit || null;
+}
+
+function _driftCacheSet(key, value) {
+  _driftCache.set(key, value);
+  if (_driftCache.size > DRIFT_CACHE_MAX) _driftCache.delete(_driftCache.keys().next().value);
+}
+
 router.get('/:bookId/drift', async (req, res) => {
   const bookId = toIntId(req.params.bookId);
   if (!bookId) return res.status(400).json({ error_code: 'ID_REQUIRED' });
   if (!guardBook(req, res, bookId, 'viewer')) return;
 
-  const baseline = snapshots.getLatestSnapshot(bookId);
+  const baseline = snapshots.getBaselineSnapshot(bookId);
   if (!baseline) return res.json({ hasBaseline: false });
 
   let baselineContent;
@@ -75,51 +102,73 @@ router.get('/:bookId/drift', async (req, res) => {
     return res.status(502).json({ error_code: 'DRIFT_FAILED' });
   }
 
-  const { computeDrift } = require('../lib/snapshot-drift');
-  const drift = computeDrift({
-    baselineContent, currentContent: payload.content,
-    baselinePubMeta: basePub ? basePub.meta : null, currentPubMeta: payload.publicationMeta,
-    baselineSettings: baselineContent?.book?.settings || null,
-    currentSettings: payload.content?.book?.settings || null,
-  });
+  const baselineInfo = {
+    id: baseline.id, seq: baseline.seq, kind: baseline.kind, label: baseline.label,
+    created_at: baseline.created_at, restored_at: baseline.restored_at || null,
+  };
+  const cacheKey = `${baseline.id}:${baseline.restored_at || ''}:` + crypto.createHash('sha1')
+    .update(JSON.stringify(payload.content)).update(JSON.stringify(payload.publicationMeta || null))
+    .digest('hex');
+  const cached = _driftCacheGet(cacheKey);
+  if (cached) return res.json({ hasBaseline: true, baseline: baselineInfo, drift: cached });
 
-  return res.json({
-    hasBaseline: true,
-    baseline: {
-      id: baseline.id, seq: baseline.seq, label: baseline.label,
-      created_at: baseline.created_at,
-    },
-    drift,
-  });
+  let drift;
+  try {
+    const { diffSnapshots, diffPublication } = await snapshotDiff();
+    const { computeDrift } = require('../lib/snapshot-drift');
+    drift = computeDrift({
+      baselineContent, currentContent: payload.content,
+      structureSummary: diffSnapshots(baselineContent, payload.content).summary,
+      publicationFields: diffPublication(basePub ? basePub.meta : null, payload.publicationMeta).map((d) => d.key),
+      baselineSettings: baselineContent?.book?.settings || null,
+      currentSettings: payload.content?.book?.settings || null,
+    });
+  } catch (e) {
+    logger.error(`Drift-Berechnung fehlgeschlagen (book=${bookId}): ${e.message}`);
+    return res.status(502).json({ error_code: 'DRIFT_FAILED' });
+  }
+  _driftCacheSet(cacheKey, drift);
+  return res.json({ hasBaseline: true, baseline: baselineInfo, drift });
 });
 
-// ── Get (content only, fuer Diff) ──────────────────────────────────────────────
+// ── Get (Inhalt fuer Reader + Vergleich) ───────────────────────────────────────
 router.get('/:bookId/:id', (req, res) => {
   const bookId = toIntId(req.params.bookId);
   const id = toIntId(req.params.id);
   if (!bookId || !id) return res.status(400).json({ error_code: 'ID_REQUIRED' });
   if (!guardBook(req, res, bookId, 'viewer')) return;
 
-  const row = snapshots.getSnapshot(bookId, id);
+  const row = snapshots.getSnapshotView(bookId, id);
   if (!row) return res.status(404).json({ error_code: 'NOT_FOUND' });
 
   let content;
   try { content = JSON.parse(row.content_json); }
-  catch { return res.status(500).json({ error_code: 'CORRUPT_SNAPSHOT' }); }
+  catch { return res.status(422).json({ error_code: 'CORRUPT_SNAPSHOT' }); }
 
-  // extras_json (MB-gross) nicht roh mitliefern — nur eine kompakte Zaehl-
-  // Uebersicht (Publikations-Nachweis: Weltaufbau-/Lektorat-Stand zum Capture-
-  // Zeitpunkt). Publikations-Metadaten als TEXT-Meta (ohne Cover/Foto-BLOBs) fuer
-  // den Metadaten-Diff im Vergleich.
+  // extras_json (MB-gross) nicht mitliefern — nur die beim Capture
+  // vorberechnete Zaehl-Uebersicht (Publikations-Nachweis: Weltaufbau-/
+  // Lektorat-Stand zum Capture-Zeitpunkt). Fassungen von vor Migration 335
+  // bekommen sie hier einmalig nachgerechnet und gespeichert.
+  let summary = null;
+  if (row.extras_summary) {
+    try { summary = JSON.parse(row.extras_summary); } catch { summary = null; }
+  } else if (row.has_extras) {
+    summary = extrasSummary(snapshots.getExtrasJson(bookId, id));
+    try { snapshots.setExtrasSummary(bookId, id, JSON.stringify(summary)); }
+    catch (e) { logger.warn(`Extras-Uebersicht nicht gespeichert (book=${bookId}, id=${id}): ${e.message}`); }
+  }
+  // Publikations-Metadaten als TEXT-Meta (ohne Cover/Foto-BLOBs, mit Bild-Hash)
+  // fuer den Metadaten-Diff im Vergleich.
   const publication = snapshotPublication(row.publication_json);
   return res.json({
     snapshot: {
-      id: row.id, seq: row.seq, label: row.label, description: row.description,
+      id: row.id, seq: row.seq, kind: row.kind, label: row.label, description: row.description,
       chars: row.chars, words: row.words, pages: row.pages, chapters: row.chapters,
-      user_email: row.user_email, created_at: row.created_at, published_at: row.published_at || null,
+      user_email: row.user_email, created_at: row.created_at,
+      published_at: row.published_at || null, restored_at: row.restored_at || null,
       has_publication: row.publication_json ? 1 : 0,
       publication: publication ? publication.meta : null,
-      extras_summary: extrasSummary(row.extras_json),
+      extras_summary: summary,
       content,
     },
   });
@@ -212,7 +261,7 @@ router.post('/:bookId', express.json({ limit: '1mb' }), async (req, res) => {
   const userEmail = sessionEmail(req);
   let created;
   try {
-    created = insertPayload(bookId, payload, { label, description, userEmail });
+    created = insertPayload(bookId, payload, { kind: 'manual', label, description, userEmail });
   } catch (e) {
     logger.error(`Snapshot-Insert fehlgeschlagen (book=${bookId}): ${e.message}`);
     return res.status(500).json({ error_code: 'CAPTURE_FAILED' });
@@ -221,10 +270,10 @@ router.post('/:bookId', express.json({ limit: '1mb' }), async (req, res) => {
   logger.info(`Snapshot «Fassung ${created.seq}» angelegt (book=${bookId}, pages=${payload.pages}, chars=${payload.chars}).`);
   return res.json({
     snapshot: {
-      id: created.id, seq: created.seq, label, description,
+      id: created.id, seq: created.seq, kind: 'manual', label, description,
       chars: payload.chars, words: payload.words, pages: payload.pages, chapters: payload.chapters,
       user_email: userEmail,
-      created_at: new Date().toISOString(), published_at: null,
+      created_at: new Date().toISOString(), published_at: null, restored_at: null,
       has_extras: payload.extrasJson ? 1 : 0,
       has_publication: payload.publicationJson ? 1 : 0,
     },
@@ -246,7 +295,7 @@ router.post('/:bookId/:id/publish', express.json({ limit: '4kb' }), (req, res) =
   try {
     const ok = snapshots.setPublished(bookId, id, published);
     if (!ok) return res.status(404).json({ error_code: 'NOT_FOUND' });
-    const row = snapshots.getSnapshot(bookId, id);
+    const row = snapshots.getSnapshotMeta(bookId, id);
     logger.info(`Fassung ${row?.seq} ${published ? 'als veroeffentlicht markiert' : 'Markierung entfernt'} (book=${bookId}).`);
     return res.json({ ok: true, published_at: row?.published_at || null });
   } catch (e) {
@@ -267,7 +316,7 @@ router.delete('/:bookId/:id', (req, res) => {
   if (!guardBook(req, res, bookId, 'editor')) return;
 
   const force = req.query.force === '1' || req.query.force === 'true';
-  const row = snapshots.getSnapshot(bookId, id);
+  const row = snapshots.getSnapshotMeta(bookId, id);
   if (!row) return res.status(404).json({ error_code: 'NOT_FOUND' });
   if (row.published_at) {
     if (!force) return res.status(409).json({ error_code: 'SNAPSHOT_PUBLISHED' });

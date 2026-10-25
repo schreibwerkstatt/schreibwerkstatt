@@ -1,6 +1,6 @@
 {
   "name": "schreibwerkstatt",
-  "version": "5.1.5",
+  "version": "5.2.0",
   "description": "Schreibwerkstatt — Schreiben, Lektorat und Buchanalyse mit KI",
   "license": "AGPL-3.0-or-later",
   "main": "server.js",
@@ -35,6 +35,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
     "altcha-lib": "^2.2.0",
     "better-sqlite3": "^12.11.1",
     "better-sqlite3-session-store": "^0.1.0",

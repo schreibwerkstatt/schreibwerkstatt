@@ -55,6 +55,7 @@ export const redundanzMethods = {
 
   _redundanzApplyResult(result) {
     this.redundanzResult = result || null;
+    this.redundanzChangedSinceRun = false;
     this.redundanzOpen = {};
     if (result?.threshold != null) this.redundanzThreshold = this._redundanzBandFor(result.threshold);
     if (typeof result?.skipAdjacent === 'boolean') this.redundanzSkipAdjacent = result.skipAdjacent;
@@ -93,7 +94,10 @@ export const redundanzMethods = {
       const j = await fetchJson('/redundancy/' + encodeURIComponent(bookId));
       if (Alpine.store('nav').selectedBookId !== bookId) return;
       this.redundanzDismissedCount = j.dismissedCount || 0;
-      if (!this.redundanzLoading && !this.redundanzResult && j.result) this._redundanzApplyResult(j.result);
+      if (!this.redundanzLoading && !this.redundanzResult && j.result) {
+        this._redundanzApplyResult(j.result);
+        this.redundanzChangedSinceRun = !!j.changedSinceRun;
+      }
     } catch (e) {
       console.error('[redundanz] letztes Ergebnis:', e);
     }
@@ -274,11 +278,11 @@ export const redundanzMethods = {
     return tRaw('redundanz.meta.run', { threshold: Number(r.threshold).toFixed(2), date });
   },
 
-  // Index ist neuer als das Ergebnis → das Ergebnis rechnete auf altem Stand.
+  // Text oder Figuren haben sich seit dem gespeicherten Lauf geändert → neu prüfen.
+  // Der Server vergleicht den Inhalt, nicht den Index-Stempel (den setzt der
+  // Nacht-Reindex auch ohne Änderung neu).
   redundanzResultOutdated() {
-    const r = this.redundanzResult;
-    const last = this.redundanzIndexInfo?.lastIndexedAt;
-    return !!(r?.indexedAt && last && last > r.indexedAt);
+    return !!(this.redundanzResult && this.redundanzChangedSinceRun);
   },
 
   // Einträge, die seit dem letzten Index-Lauf geändert wurden.

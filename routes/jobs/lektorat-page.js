@@ -24,6 +24,7 @@ const { MAX_PROMPT_WORDS, dictionaryWordsOnPage, dropDictionaryFindings } = requ
 const { lektoratProgress } = require('../../lib/lektorat-progress');
 const { hasMsgThread } = require('../../lib/html-text');
 const { textMatch } = require('../../lib/esm-bridge');
+const { checkDialogformat, mergeRegelBefunde, ohneRegelBefunde } = require('../../lib/dialogformat-rules');
 
 function _sigHash(obj) {
   return crypto.createHash('sha1').update(JSON.stringify(obj ?? null)).digest('hex').slice(0, 12);
@@ -234,6 +235,14 @@ async function checkOnePage(run, {
   // journalistischen Profils bleibt sie null und aendert nichts.
   const textsorte = effectiveTextsorte(pageId, bookSettings);
   const validTypen = _validTypen(run, textsorte);
+  // Regelbefunde zur direkten Rede: am Profil OHNE lokale Reduktion gemessen —
+  // gerade lokale Modelle prüfen `dialogformat` nicht, die Regeln schon. Deterministisch
+  // aus dem Text, darum ausserhalb des Caches und nicht in der Signatur.
+  const buchtyp = bookSettings?.buchtyp || null;
+  const profil = run.prompts.lektoratProfil(buchtyp);
+  const regelBefunde = run.prompts.lektoratTypen(buchtyp, { textsorte }).includes('dialogformat')
+    ? checkDialogformat(text, langCode, { locale, sachtext: profil !== 'narrativ' })
+    : [];
 
   // Cache nur mit bookId (FK auf books). Die Signatur deckt alle Inputs ab, die
   // den Output formen: Seitentext, Kapitelkontext, Erzähl-/Buchtyp-Labels (der
@@ -270,7 +279,10 @@ async function checkOnePage(run, {
   // (greift auch für Wörter jenseits von MAX_PROMPT_WORDS, die der Prompt nicht sah).
   const { countInText } = await textMatch();
   const finalize = (fehler) => markAmbiguous(
-    dropDictionaryFindings(finalizeFehler(fehler, locale, validTypen, neighbour), woerterbuch), text, countInText);
+    mergeRegelBefunde(
+      dropDictionaryFindings(finalizeFehler(ohneRegelBefunde(fehler), locale, validTypen, neighbour), woerterbuch),
+      regelBefunde, text),
+    text, countInText);
   const cached = ctxSig ? loadLektoratCache(bookId, userEmail, pageId, ctxSig, run.effectiveProvider) : null;
 
   let result;
@@ -297,7 +309,7 @@ async function checkOnePage(run, {
         ...narrativeLabels(bookSettings),
         textsorte,
         previousExcerpt, nextExcerpt, previousChapter, nextChapter, schreibfront,
-        langCode,
+        langCode, locale,
       },
     });
     result.fehler = finalize(result.fehler);

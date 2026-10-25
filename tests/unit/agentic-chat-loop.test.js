@@ -499,3 +499,56 @@ test('toolResultCaps: reicht das Rundenbudget nicht mehr für den eigenen Deckel
   for (const r of results.slice(0, 2)) assert.ok(!r.content.endsWith('…'), 'ausgeführte Ergebnisse ungeschnitten');
   assert.match(results[2].content, /Ergebnis-Budget dieser Runde/);
 });
+
+test('Werkzeug-Verlauf: jeder Aufruf trägt eine Sicht, Anthropic-Websuchen stehen als Zeile mit Trefferzahl', async () => {
+  const search = [
+    { type: 'server_tool_use', id: 'ws1', name: 'web_search', input: { query: 'Mauerfall Datum' } },
+    { type: 'web_search_tool_result', tool_use_id: 'ws1', content: [
+      { type: 'web_search_result', url: 'https://a.example', title: 'A' },
+      { type: 'web_search_result', url: 'https://b.example', title: 'B' },
+    ] },
+    { type: 'server_tool_use', id: 'ws2', name: 'web_search', input: { query: 'Kaputt' } },
+    { type: 'web_search_tool_result', tool_use_id: 'ws2', content: { type: 'web_search_tool_result_error', error_code: 'max_uses_exceeded' } },
+  ];
+  mockCalls([
+    res({ stopReason: 'tool_use', rawContentBlocks: search, text: 'Ich suche zuerst im Web.', toolUses: [tu('lookup', { pattern: 'Mauer', limit: 5 })] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'fertig' })] }),
+  ]);
+  const job = makeJob({ toolResult: () => ({ results: [1, 2, 3] }), prep: { maxToolsPerRound: 1 } });
+  const out = await runJob(job, newSession());
+  const log = job.ctx().toolLog;
+  const [ws1, ws2] = log.filter(e => e.name === 'web_search');
+  assert.equal(ws1.server, true);
+  assert.deepEqual(ws1.view.subject, [{ t: 'q', v: 'Mauerfall Datum' }]);
+  assert.deepEqual(ws1.view.result, { key: 'chat.toolResult.hits', params: { n: 2 } });
+  assert.equal(ws2.ok, false);
+  assert.equal(ws2.errorKey, 'chat.toolError.webSearchFailed');
+  assert.deepEqual(ws2.errorParams, { code: 'max_uses_exceeded' });
+  const lookup = log.find(e => e.name === 'lookup');
+  assert.deepEqual(lookup.view.subject, [{ t: 'q', v: 'Mauer' }], 'technische Argumente (limit) fallen weg');
+  assert.deepEqual(lookup.view.result, { key: 'chat.toolResult.entries', params: { n: 3 } });
+  assert.equal(lookup.skipped, undefined);
+});
+
+test('Werkzeug-Verlauf: Rundenprotokoll in context_info, übersprungene Aufrufe markiert, Live-Stand im Job', async () => {
+  mockCalls([
+    res({ stopReason: 'tool_use', text: 'Ich schaue zwei Stellen nach.', tokensIn: 500, tokensOut: 20,
+      toolUses: [tu('lookup', { pattern: 'A' }), tu('lookup', { pattern: 'B' })] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'fertig' })] }),
+  ]);
+  const job = makeJob({ prep: { maxToolsPerRound: 1 } });
+  const jobId = createJob('book-chat', BOOK, USER, 'x');
+  jobs.get(jobId).status = 'running'; // sonst ignoriert updateJob den Live-Stand (ohne Queue gestartet)
+  await job.run(jobId, newSession(), 1, 'Frage?', USER);
+  const j = jobs.get(jobId);
+  assert.equal(j.status, 'done', j.error);
+  const ci = JSON.parse(db.prepare('SELECT context_info FROM chat_messages WHERE id = ?').get(j.result.assistant_message_id).context_info);
+  assert.deepEqual(ci.tool_rounds.map(r => r.iter), [1, 2], 'Rundenprotokoll landet für jeden Chat im context_info');
+  const log = job.ctx().toolLog;
+  assert.equal(log[1].skipped, true, 'über dem Rundendeckel: übersprungen, nicht Fehler');
+  assert.equal(log[1].errorKey, 'chat.toolError.roundLimit');
+  assert.equal(j.liveTools.length, 2, 'Live-Kopie des Logs am Job');
+  assert.equal(j.liveTools[0].input, undefined, 'Live-Kopie ohne Rohargumente');
+  assert.deepEqual(j.liveRounds[0], { iter: 1, tokIn: 500, tokOut: 20, note: 'Ich schaue zwei Stellen nach.' });
+  assert.equal(j.liveRounds[1].note, undefined, 'Antwort-Runde: Text ist Antwort, keine Notiz');
+});

@@ -8,6 +8,7 @@ Buchweite Doppelungs-Suche über dem Semantik-Index ([semantic-search.md](semant
 | Job `redundancy` | [routes/jobs/redundancy.js](../routes/jobs/redundancy.js) |
 | Letzter Lauf + ignorierte Paare (Routen) | [routes/redundancy.js](../routes/redundancy.js), [db/redundancy.js](../db/redundancy.js) |
 | Tab „Doppelungen" der Buchlandkarte | [public/js/cards/redundanz-card.js](../public/js/cards/redundanz-card.js), [public/js/book/redundanz.js](../public/js/book/redundanz.js), [public/partials/buchlandkarte-redundanz.html](../public/partials/buchlandkarte-redundanz.html) (Hülle [buchlandkarte.html](../public/partials/buchlandkarte.html)) |
+| Buch-Chat-Werkzeug `list_redundancies` (liest den letzten Lauf) | [routes/jobs/chat-tools/tools-redundancy.js](../routes/jobs/chat-tools/tools-redundancy.js), [chat-tools.md](chat-tools.md) |
 | Schwellen | App-Settings `redundancy.threshold_{strict,medium,loose}` (Admin → Semantik) |
 
 ## Ablauf
@@ -20,7 +21,15 @@ Buchweite Doppelungs-Suche über dem Semantik-Index ([semantic-search.md](semant
    - **Nachbarseiten** (Default an, Schalter in der Karte): direkt aufeinanderfolgende Seiten im selben Kapitel — eine Szene über zwei Seiten rankt naturgemäss hoch und verdrängte sonst echte Doppelungen aus der Top-60-Liste.
    - **Ignorierte Paare** des Users (`redundancy_dismissals`).
 5. **Figuren-Dubletten.** Ein gemittelter Vektor je Figur des Users (stale ausgenommen), fester Floor `FIGURE_DUPE_THRESHOLD` = 0.88 unabhängig vom Seiten-Band. Fusion mit dem lexikalischen Namensabstand ([lib/name-normalize.js](../lib/name-normalize.js)): Namen teilen ein Token → `duplicate`, sonst `alias` (der nicht-triviale Fund, zuerst gelistet). Fehler hier verwerfen nie das Seiten-Ergebnis.
-6. **Speichern.** Das Ergebnis geht an den Poller und zusätzlich nach `redundancy_runs` (eine Zeile pro Buch und User). Es trägt IDs, Passagentext (≤ 1500 Zeichen), Schwelle, Nachbar-Schalter und `indexedAt` (Index-Stand des Laufs) — keine Seiten- oder Figurennamen.
+6. **Speichern.** Das Ergebnis geht an den Poller und zusätzlich nach `redundancy_runs` (eine Zeile pro Buch und User). Es trägt IDs, Passagentext (≤ 1500 Zeichen), Schwelle, Nachbar-Schalter, `indexedAt` (Index-Stand des Laufs) und `contentSig` (siehe Nacht-Lauf) — keine Seiten- oder Figurennamen.
+
+## Nacht-Lauf
+
+`scanAllBooks` ([routes/jobs/redundancy.js](../routes/jobs/redundancy.js)) hängt im 23-Uhr-Cron ([lib/cron.js](../lib/cron.js)) hinter dem Embedding-Reindex, als eigener Zweig neben Motiv-Scan und Verankerungen. Er hält den gespeicherten Lauf aktuell, damit Karte und Chats (`list_redundancies`, [chat-tools.md](chat-tools.md)) nicht auf einem alten Stand sitzen.
+
+- **Scopes** (`listNightlyScopes` in [db/redundancy.js](../db/redundancy.js)): jeder bestehende Lauf, mit dessen Schwelle und Nachbar-Schalter, plus der Besitzer jedes Buchs — der bekommt ohne bisherigen Lauf einen Erstlauf mit `redundancy.threshold_medium` und ausgeblendeten Nachbarseiten.
+- **Nur bei Änderung:** `contentSig` ([lib/redundancy-staleness.js](../lib/redundancy-staleness.js), dieselbe Prüfung wie der Karten-Hinweis und `list_redundancies`) ist ein Hash über die Abschnitte des Buchs (ID + Änderungsstempel) und die Figuren-IDs des Users. Gleiche Signatur und gleiches Modell → kein Lauf. **Why:** `indexedAt` taugt nicht als Signal, der Reindex stempelt jeden Lauf neu, auch ohne Änderung.
+- Bücher ohne vollständigen Index und laufende Jobs werden übersprungen. Kein KI- und kein Embedding-Call, nur CPU (blockweise mit Yield).
 
 ## Schwellen
 
@@ -33,7 +42,7 @@ Ein Lauf pro Buch und User (Dedup an der `book_id`). Läuft schon einer mit ande
 Das Radar ist kein eigener Menüpunkt, sondern der Tab „Doppelungen" der Buchlandkarte ([semantic-search.md](semantic-search.md)). Der Tab steht im Root (`buchlandkarteTab`), damit `#…/redundanz` und der Sprung aus der Job-Anzeige ihn direkt öffnen; `#…/landkarte` öffnet den Tab „Landkarte", `#…/buchverlauf` den Tab „Verlauf". Alle Panels laden beim Öffnen der Karte, unabhängig vom aktiven Tab.
 
 - **Öffnen der Karte** lädt parallel den Index-Stand (`/search/semantic/status`), den letzten Lauf (`GET /redundancy/:book_id`) und hängt sich an einen laufenden `redundancy`- bzw. `embed-index`-Job wieder an (`/jobs/active`). Die Job-Anzeige in der Fusszeile führt für beide Typen in diesen Tab.
-- **Index fehlt / veraltet:** die Karte baut ihn selbst (`/jobs/embed-index`). `staleCount` > 0 → Hinweis „seit dem letzten Index-Lauf geändert"; ist der Index neuer als `indexedAt` des Ergebnisses → Hinweis „neu prüfen".
+- **Index fehlt / veraltet:** die Karte baut ihn selbst (`/jobs/embed-index`). `staleCount` > 0 → Hinweis „seit dem letzten Index-Lauf geändert"; haben sich Text, Figuren oder Modell seit dem Lauf geändert (`changedSinceRun` aus `GET /redundancy/:book_id`, [lib/redundancy-staleness.js](../lib/redundancy-staleness.js)) → Hinweis „neu prüfen". Nicht am Index-Stempel gemessen: den setzt der Nacht-Reindex auch ohne Änderung neu.
 - **Gespeichertes Ergebnis:** Paare mit einer Seite, die nicht mehr in der Navigationsliste des Buchs steht, blendet die Karte aus. Namen kommen zur Lesezeit aus Nav-Store bzw. Figuren-Katalog.
 - **Passagen** stehen eingeklappt auf fünf Zeilen, „Ganze Passage" klappt auf.
 - **Zusammenführen** (nur Figuren-Paare) klappt eine Richtungswahl auf («welche Figur bleibt?»); nach Bestätigung läuft der Figuren-Merge (`POST /figures/:book_id/merge` mit `source_id`/`target_id`, editor-ACL, Merge-Kern [db/entity-merge.js](../db/entity-merge.js), Client-Weg [book/figur-merge.js](../public/js/book/figur-merge.js)). Gemergt wird über die Zeilen-IDs des Laufs, nicht über die `fig_id` — die vergibt jede Komplettanalyse neu. Name und Kurzname der Quelle werden dauerhafte Aliasse des Ziels ([komplett.md](komplett.md) „Manuelles Zusammenführen"); alle Paare mit der Quelle verschwinden sofort aus der Liste.

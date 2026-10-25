@@ -139,3 +139,41 @@ test('Paar mit Seite aus fremdem Buch → 400; Viewer → 403', async () => {
   const viewer = await call('GET', `/redundancy/${BOOK}`, null, VIEWER);
   assert.equal(viewer.status, 403);
 });
+
+test('Nacht-Lauf: unverändert → kein Lauf; Änderung → Lauf mit der Schwelle des letzten; ohne Lauf → Erstlauf für den Besitzer', async () => {
+  await runScan({ skipAdjacent: true });
+  const first = await job.scanAllBooks();
+  assert.equal(first.enqueued, 0, 'nichts geändert seit dem letzten Lauf');
+  assert.ok(first.unchanged >= 1);
+  assert.ok(first.skipped >= 1, 'anderes Buch ohne vollständigen Index');
+
+  const waitNightly = async () => {
+    const id = ctx.shared.findActiveJobId('redundancy', BOOK, ME);
+    assert.ok(id, 'Nacht-Lauf eingereiht');
+    const done = await waitForJob(ctx.shared, id, { timeoutMs: 10000 });
+    assert.equal(done.status, 'done', done.error || '');
+    return require('../../db/redundancy').getLastRun(BOOK, ME);
+  };
+
+  db.prepare('UPDATE pages SET updated_at = ? WHERE page_id = ?').run('2026-06-01T00:00:00.000Z', P.p3);
+  assert.equal((await job.scanAllBooks()).enqueued, 1);
+  const rerun = await waitNightly();
+  assert.equal(rerun.threshold, 0.9, 'Schwelle des letzten Laufs bleibt');
+  assert.equal(rerun.skipAdjacent, true);
+
+  db.prepare('DELETE FROM redundancy_runs WHERE book_id = ?').run(BOOK);
+  assert.equal((await job.scanAllBooks()).enqueued, 1);
+  const initial = await waitNightly();
+  assert.equal(initial.threshold, 0.82, 'Erstlauf mit der mittleren Schwelle');
+});
+
+test('GET meldet changedSinceRun nur bei geändertem Inhalt, nicht bei neu gestempeltem Index', async () => {
+  await runScan({ skipAdjacent: true });
+  require('../../db/semantic-chunks').markIndexed(BOOK, MODEL, '2099-01-01T00:00:00.000Z');
+  const fresh = await call('GET', `/redundancy/${BOOK}`);
+  assert.equal(fresh.json.changedSinceRun, false, 'neuer Index-Stempel allein ist keine Änderung');
+
+  db.prepare('UPDATE pages SET updated_at = ? WHERE page_id = ?').run('2026-09-01T00:00:00.000Z', P.p2);
+  const changed = await call('GET', `/redundancy/${BOOK}`);
+  assert.equal(changed.json.changedSinceRun, true);
+});

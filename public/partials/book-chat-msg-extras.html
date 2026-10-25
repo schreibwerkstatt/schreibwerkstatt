@@ -59,28 +59,7 @@
       <div class="muted-msg book-chat-stop-note" x-text="_bookChatStopNote(msg)"></div>
     </template>
 
-    <!-- Werkzeug-Verlauf: Parameter, Runde, Dauer, gekürzt/Fehler -->
-    <template x-if="_bookChatToolRows(msg).length">
-      <div x-data="collapsible()" class="book-chat-tools">
-        <button type="button" class="collapsible-toggle" x-bind="trigger">
-          <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
-          <span x-text="$app.t('chat.toolsToggle') + ' (' + _bookChatToolRows(msg).length + ')'"></span>
-        </button>
-        <div x-bind="panel" x-cloak class="book-chat-tools-panel">
-          <ul class="book-chat-tool-list">
-            <template x-for="(row, ri) in _bookChatToolRows(msg)" :key="ri">
-              <li class="book-chat-tool-row" :class="{ 'book-chat-tool-row--failed': row.failed }">
-                <span class="book-chat-tool-name" x-text="row.name"></span>
-                <span class="book-chat-tool-meta" x-show="row.iter != null" x-text="$app.t('chat.toolIter', { n: row.iter })"></span>
-                <span class="book-chat-tool-meta" x-show="row.durationMs != null" x-text="$app.t('chat.toolDuration', { ms: row.durationMs })"></span>
-                <span class="chat-context-badge" x-show="row.truncated" x-text="$app.t('chat.toolTruncated')"></span>
-                <span class="chat-context-badge chat-context-badge--error" x-show="row.failed" :data-tip="row.error" x-text="$app.t('chat.toolFailed')"></span>
-                <code class="book-chat-tool-args" x-show="row.args" x-text="row.args"></code>
-              </li>
-            </template>
-          </ul>
-        </div>
-      </div>
-    </template>
+    <!-- Werkzeug-Verlauf -->
+    <!-- @include chat-tool-log -->
   </div>
 </template>

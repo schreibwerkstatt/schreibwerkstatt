@@ -44,7 +44,7 @@ const chapterNames = new Map([[CHAPTER_ID, 'Teil 1 › Kapitel 1']]);
 const beatCount = () => db.prepare('SELECT COUNT(*) AS n FROM plot_beats WHERE book_id = ?').get(BOOK).n;
 const mkCtx = () => ({
   bookId: BOOK, userEmail: USER, proposals: [], chapterNames,
-  readToolNames: new Set(['get_plot_board']), logger: { info() {}, warn() {} },
+  offeredTools: new Set(['get_plot_board']), logger: { info() {}, warn() {} },
 });
 
 test('propose_beat: neuer Beat wird gesammelt, nicht geschrieben', async () => {

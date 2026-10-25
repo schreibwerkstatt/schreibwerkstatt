@@ -1,0 +1,66 @@
+{
+  "version": "5.2.0",
+  "date": "2026-10-25",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Buch-, Recherche-, Plot- und Ideen-Chat: Unter jeder Antwort zeigt der Werkzeug-Verlauf lesbar, was die KI nachgeschlagen hat – mit Suchbegriff, Trefferzahl und ob ihre Zitate im Text stehen. Während sie arbeitet, siehst du das schon live.",
+      "en": "Book, research, plot and ideas chat: below each answer, the tool history shows in plain words what the AI looked up – with search term, number of hits and whether its quotes are in the text. You can watch it live while it works."
+    },
+    {
+      "kind": "neu",
+      "de": "Ideen-Board: Neben dem Raster gibt es jetzt eine Liste, sortierbar nach Ort, Stufe und Datum. Mehrere Ideen kannst du auswählen und gemeinsam verschieben, verwerfen oder löschen.",
+      "en": "Ideas board: next to the grid there is now a list, sortable by place, stage and date. You can select several ideas and move, discard or delete them together."
+    },
+    {
+      "kind": "neu",
+      "de": "Lektorat: Bei direkter Rede prüft es jetzt verlässlich Komma und Begleitsatz nach den gültigen Regeln – auf Deutsch und auf Englisch, britisch oder amerikanisch je nach Buchsprache.",
+      "en": "Proofreading: for direct speech it now reliably checks commas and dialogue tags against the rules – in German and in English, British or American depending on the book language."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Plot-, Ideen- und Recherche-Chat können jetzt im Buch dasselbe nachschlagen wie der Buch-Chat, etwa Figuren, Szenen, Ideen und Lektorats-Befunde. Alle vier lesen auch die Doppelungen aus dem Redundanz-Radar.",
+      "en": "Plot, ideas and research chat can now look up the same things in the book as the book chat, such as characters, scenes, ideas and proofreading findings. All four can also read the duplicates from the redundancy radar."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Redundanz-Radar: Die Prüfung läuft nachts von selbst, wenn sich Text oder Figuren geändert haben. Der Hinweis «neu prüfen» erscheint nur noch, wenn sich wirklich etwas geändert hat.",
+      "en": "Redundancy radar: the check runs by itself at night when text or characters have changed. The \"check again\" hint only appears when something has actually changed."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fassungen: Der Vergleich zeigt jetzt auch umsortierte Abschnitte und geänderte Kapitel. Beim Zurücksetzen bleiben Ziele, Deadline und Fertig-Status, wie sie sind, und es entstehen keine doppelten Sicherungen mehr.",
+      "en": "Versions: the comparison now also shows reordered sections and changed chapters. Restoring keeps goals, deadline and finished status as they are, and no longer creates duplicate backups."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Ideen-Board: Die Suche findet jetzt auch Abschnitts- und Kapitelnamen sowie Verknüpfungen. Löschst du einen Abschnitt, bleiben seine Ideen als Buch-Ideen erhalten.",
+      "en": "Ideas board: search now also finds section and chapter names and links. If you delete a section, its ideas are kept as book ideas."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Bucheditor: Verlässt du einen Abschnitt, wird er sofort gespeichert. «Alle speichern» meldet, wenn Abschnitte nicht gespeichert werden konnten, und grosse Bücher mit Diagrammen öffnen schneller.",
+      "en": "Book editor: when you leave a section, it is saved right away. \"Save all\" tells you if sections could not be saved, and large books with diagrams open faster."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Chats: Listen, Code und Links in den Antworten werden sauberer dargestellt.",
+      "en": "Chats: lists, code and links in answers are displayed more cleanly."
+    },
+    {
+      "kind": "behoben",
+      "de": "Leseansicht eines Abschnitts: Hakst du mehrere Todos schnell nacheinander ab, werden alle gespeichert, statt mit einem Konflikt zu scheitern.",
+      "en": "Section reading view: if you tick off several to-dos in quick succession, all of them are saved instead of failing with a conflict."
+    },
+    {
+      "kind": "behoben",
+      "de": "Bucheditor: Die Suche springt nicht mehr zu unsichtbaren Treffern in Diagrammen. Ein Abschnitt, der nur ein Bild enthält, lässt sich speichern, und nach «Rückgängig» bleibt keine falsche Fehlermarke stehen.",
+      "en": "Book editor: search no longer jumps to invisible hits inside diagrams. A section containing only an image can be saved, and no false error mark remains after \"Undo\"."
+    },
+    {
+      "kind": "behoben",
+      "de": "Abschnitts-Chat: Ist der Abschnitt zu lang, erscheint jetzt sofort eine klare Meldung, und deine Nachricht bleibt im Eingabefeld stehen.",
+      "en": "Section chat: if the section is too long, you now get a clear message right away, and your message stays in the input field."
+    }
+  ]
+}

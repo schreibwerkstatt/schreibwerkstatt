@@ -1,5 +1,5 @@
 'use strict';
-// Integration test: Book-Chat Tools list_werkstatt_drafts + get_werkstatt_draft.
+// Integration test: Chat-Werkzeug list_werkstatt_drafts (Liste und, mit draft_id/figur_name, Detail).
 // Read-only access to draft_figures + werkstatt_runs from the agentic book chat.
 
 const test = require('node:test');
@@ -13,7 +13,7 @@ let draftFigDb;
 
 test.before(() => {
   ctx = bootstrap();
-  bookChatTools = require('../../routes/jobs/book-chat-tools');
+  bookChatTools = require('../../routes/jobs/chat-tools');
   draftFigDb = require('../../db/draft-figures');
 });
 test.after(() => { ctx.cleanup(); });
@@ -96,7 +96,7 @@ test('list_werkstatt_drafts: liefert run-counts + last_run', () => {
   assert.equal(item.last_run.kind, 'consistency');
 });
 
-test('get_werkstatt_draft: per draft_id → mindmap_text + runs', () => {
+test('list_werkstatt_drafts mit Auswahl: per draft_id → mindmap_text + runs', () => {
   const BOOK_ID = 7204;
   const userEmail = 'autor@werk.dev';
   ctx.dbSchema.upsertBookByName(BOOK_ID, 'B');
@@ -124,7 +124,7 @@ test('get_werkstatt_draft: per draft_id → mindmap_text + runs', () => {
     model: 'mock-model',
   });
 
-  const result = bookChatTools.TOOLS.get_werkstatt_draft(
+  const result = bookChatTools.TOOLS.list_werkstatt_drafts(
     { draft_id: draft.id },
     { bookId: BOOK_ID, userEmail },
   );
@@ -154,7 +154,7 @@ test('get_werkstatt_draft: per draft_id → mindmap_text + runs', () => {
   assert.equal(consistencyRun.konflikte[0].feld, 'Beruf');
 });
 
-test('get_werkstatt_draft: per figur_name (substring, case-insensitive)', () => {
+test('list_werkstatt_drafts mit Auswahl: per figur_name (substring, case-insensitive)', () => {
   const BOOK_ID = 7205;
   const userEmail = 'autor@werk.dev';
   ctx.dbSchema.upsertBookByName(BOOK_ID, 'B');
@@ -163,14 +163,14 @@ test('get_werkstatt_draft: per figur_name (substring, case-insensitive)', () => 
     name: 'Anna Schmidt', mindmap: sampleMindmap('Anna Schmidt'),
   });
 
-  const result = bookChatTools.TOOLS.get_werkstatt_draft(
+  const result = bookChatTools.TOOLS.list_werkstatt_drafts(
     { figur_name: 'anna' },
     { bookId: BOOK_ID, userEmail },
   );
   assert.equal(result.name, 'Anna Schmidt');
 });
 
-test('get_werkstatt_draft: include_runs=false → keine runs', () => {
+test('list_werkstatt_drafts mit Auswahl: include_runs=false → keine runs', () => {
   const BOOK_ID = 7206;
   const userEmail = 'autor@werk.dev';
   ctx.dbSchema.upsertBookByName(BOOK_ID, 'B');
@@ -184,7 +184,7 @@ test('get_werkstatt_draft: include_runs=false → keine runs', () => {
     result: { vorschlaege: [{ label: 'X', begruendung: 'y' }] },
   });
 
-  const result = bookChatTools.TOOLS.get_werkstatt_draft(
+  const result = bookChatTools.TOOLS.list_werkstatt_drafts(
     { draft_id: draft.id, include_runs: false },
     { bookId: BOOK_ID, userEmail },
   );
@@ -192,7 +192,7 @@ test('get_werkstatt_draft: include_runs=false → keine runs', () => {
   assert.equal(result.runs_hint, undefined);
 });
 
-test('get_werkstatt_draft: cross-user + cross-book Isolation', () => {
+test('list_werkstatt_drafts mit Auswahl: cross-user + cross-book Isolation', () => {
   const BOOK_A = 7207;
   const BOOK_B = 7208;
   const me = 'me@werk.dev';
@@ -208,32 +208,32 @@ test('get_werkstatt_draft: cross-user + cross-book Isolation', () => {
   });
 
   // foreign user → not found
-  const r1 = bookChatTools.TOOLS.get_werkstatt_draft(
+  const r1 = bookChatTools.TOOLS.list_werkstatt_drafts(
     { draft_id: foreignDraft.id },
     { bookId: BOOK_A, userEmail: me },
   );
   assert.equal(r1.error, 'Werkstatt-Draft nicht gefunden');
 
   // wrong book → not found (draft id exists, but belongs to BOOK_B)
-  const r2 = bookChatTools.TOOLS.get_werkstatt_draft(
+  const r2 = bookChatTools.TOOLS.list_werkstatt_drafts(
     { draft_id: otherBookDraft.id },
     { bookId: BOOK_A, userEmail: me },
   );
   assert.equal(r2.error, 'Werkstatt-Draft nicht gefunden');
 });
 
-test('get_werkstatt_draft: ohne draft_id/figur_name → error', () => {
+test('list_werkstatt_drafts: unbekannte draft_id → error statt Liste', () => {
   const BOOK_ID = 7209;
   const userEmail = 'autor@werk.dev';
   ctx.dbSchema.upsertBookByName(BOOK_ID, 'B');
 
-  const result = bookChatTools.TOOLS.get_werkstatt_draft({}, {
+  const result = bookChatTools.TOOLS.list_werkstatt_drafts({ draft_id: 999999 }, {
     bookId: BOOK_ID, userEmail,
   });
   assert.equal(result.error, 'Werkstatt-Draft nicht gefunden');
 });
 
-test('executeTool dispatch: list_werkstatt_drafts + get_werkstatt_draft registriert', async () => {
+test('executeTool dispatch: list_werkstatt_drafts liefert Liste und, mit draft_id, das Detail', async () => {
   const BOOK_ID = 7210;
   const userEmail = 'autor@werk.dev';
   ctx.dbSchema.upsertBookByName(BOOK_ID, 'B');
@@ -246,7 +246,7 @@ test('executeTool dispatch: list_werkstatt_drafts + get_werkstatt_draft registri
   });
   assert.equal(listRes.total, 1);
 
-  const getRes = await bookChatTools.executeTool('get_werkstatt_draft',
+  const getRes = await bookChatTools.executeTool('list_werkstatt_drafts',
     { draft_id: draft.id },
     { bookId: BOOK_ID, userEmail },
   );

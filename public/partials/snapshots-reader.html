@@ -63,6 +63,8 @@
     </div>
 
     <p class="snapshot-reader__hint" x-text="$app.t('snapshots.reader.hint')"></p>
+    <p class="snapshot-reader__current-failed muted-msg muted-msg--error" x-show="readerCurrentFailed" x-cloak
+       x-text="$app.t('snapshots.reader.currentFailed')"></p>
 
     <!-- Body: Bucheditor-Look (read-only), pro Seite Inline-Diff gegen den
          aktuellen Buchstand (gelöscht durchgestrichen, neu unterstrichen). -->

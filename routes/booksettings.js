@@ -130,7 +130,7 @@ router.put('/:book_id', aclParamGuard('editor'), jsonBody, (req, res) => {
   // fire-and-forget — blockiert das Settings-Speichern nicht und darf nie werfen.
   if (finished && !wasFinished) {
     captureSnapshot(bookId, req, {
-      label: AUTO_FINISH_LABEL, dedup: true, userEmail: sessionEmail(req),
+      kind: 'auto_finish', label: AUTO_FINISH_LABEL, dedup: true, userEmail: sessionEmail(req),
     }).catch((e) => logger.warn(`Auto-Fassung beim Fertig-Markieren fehlgeschlagen (book=${bookId}): ${e.message}`));
   }
 
@@ -175,7 +175,7 @@ router.put('/:book_id/finished', aclParamGuard('editor'), jsonBody, (req, res) =
   setBookIsFinished(bookId, finished);
   if (finished && !wasFinished) {
     captureSnapshot(bookId, req, {
-      label: AUTO_FINISH_LABEL, dedup: true, userEmail: sessionEmail(req),
+      kind: 'auto_finish', label: AUTO_FINISH_LABEL, dedup: true, userEmail: sessionEmail(req),
     }).catch((e) => logger.warn(`Auto-Fassung beim Fertig-Markieren fehlgeschlagen (book=${bookId}): ${e.message}`));
   }
   res.json({ ok: true, is_finished: finished });

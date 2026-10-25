@@ -1,6 +1,6 @@
 'use strict';
 // Abfragen der Buch-Chat-Tools `list_continuity_issues` und `get_timeline`
-// (routes/jobs/book-chat-tools/tools-timeline.js): jüngster Kontinuitätscheck,
+// (routes/jobs/chat-tools/tools-timeline.js): jüngster Kontinuitätscheck,
 // Issues, Zeitstrahl-Events und die Figuren-/Kapitel-/Seiten-Bridges. Das Tool
 // führt selbst kein SQL aus; Kapitel-/Seitennamen kommen per JOIN von hier
 // (CLAUDE.md „Content-Store-Facade als einziger Eintrittspunkt"). IN-Listen

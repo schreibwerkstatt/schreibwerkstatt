@@ -4,6 +4,15 @@
      sagt, wie viel gerade versteckt ist — ohne ihn waere eine ausgeblendete
      Pendenz von einer verlorenen nicht zu unterscheiden. -->
 <div class="filter-bar ideen-board-toolbar" x-show="!loading && totalCount() > 0">
+  <!-- Ansicht: Raster (Bahn × Stufe) oder Liste (flach, mit Alter und
+       Mehrfachauswahl). Filter und Zaehler gelten fuer beide. -->
+  <span class="seg-toggle" role="group" :aria-label="$app.t('ideenBoard.view.label')">
+    <button type="button" :class="{ 'seg-toggle--active': !isListView() }" :aria-pressed="!isListView()"
+            @click="setView('board')" x-text="$app.t('ideenBoard.view.board')"></button>
+    <button type="button" :class="{ 'seg-toggle--active': isListView() }" :aria-pressed="isListView()"
+            @click="setView('list')" x-text="$app.t('ideenBoard.view.list')"></button>
+  </span>
+
   <div x-data="combobox($app.t('ideenBoard.filterChapter'), $app.t('ideenBoard.filterChapterAll'))"
        x-modelable="value" x-model="filterChapterId"
        x-effect="options = chapterOptions()"></div>

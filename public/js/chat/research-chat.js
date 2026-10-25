@@ -50,6 +50,7 @@ export const researchChatMethods = {
   // Assistant-Antwort rendern. Delegiert an die pure Funktion (Unit-testbar);
   // die Alpine-Methode bleibt Bindung-Ziel der Templates (Live-Export erhalten).
   _renderResearchAnswer(msg) {
+    this._chatMarkdownDep();
     const app = window.__app;
     return _renderResearchAnswerText({
       text: msg?.content || '',
@@ -69,16 +70,12 @@ export const researchChatMethods = {
   },
 
   // Gelaufene Suchbegriffe (server_tool_use.input.query), sichtbar am Fuss.
+  // Nur für ältere Antworten: seit die Suchen als Zeilen im Werkzeug-Verlauf stehen
+  // (web_search, auch Anthropics serverseitige), wäre der Block eine Doppelung.
   researchWebQueries(msg) {
+    const calls = msg?.context_info?.tool_calls;
+    if (Array.isArray(calls) && calls.some(tc => tc?.name === 'web_search')) return [];
     return (msg?.context_info?.web_queries || []).filter(q => typeof q === 'string' && q.trim());
-  },
-
-  // Werkzeugname → i18n-Label (Fallback: roher Name, z.B. für künftige Werkzeuge).
-  researchToolLabel(name) {
-    const app = window.__app;
-    const key = `recherche.chat.tool.${name}`;
-    const label = app?.t?.(key);
-    return label && label !== key ? label : name;
   },
 
   // Kosten dieser Antwort (Tokens + Web-Suchen) aus context_info.cost_usd.

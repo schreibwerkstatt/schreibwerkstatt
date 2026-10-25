@@ -1,7 +1,7 @@
 'use strict';
-// Integration test: 6 neue Book-Chat-Tools
-// get_book_settings / find_repetitions / get_dialogue / diff_page_revisions /
-// find_first_last_mention / quote_passage (DB-only Pfade).
+// Integration test: Chat-Werkzeuge
+// get_book_settings / find_repetitions / get_dialogue / list_revisions (Liste + diff) /
+// get_figure_mentions ohne Index / quote_passage (DB-only Pfade).
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -14,7 +14,7 @@ let pageRevisions;
 
 test.before(() => {
   ctx = bootstrap();
-  bookChatTools = require('../../routes/jobs/book-chat-tools');
+  bookChatTools = require('../../routes/jobs/chat-tools');
   pageRevisions = require('../../db/page-revisions');
 });
 test.after(() => { ctx.cleanup(); });
@@ -113,9 +113,9 @@ test('get_dialogue: extrahiert Anführungszeichen-Dialoge', () => {
   }
 });
 
-// ── diff_page_revisions ─────────────────────────────────────────────────────
+// ── list_revisions (Liste + diff) ───────────────────────────────────────────
 
-test('diff_page_revisions: vergleicht zwei jüngste Revisionen', () => {
+test('list_revisions diff: vergleicht zwei jüngste Revisionen, ohne diff die Liste', () => {
   const BOOK_ID = 8030;
   const PAGE_ID = 80301;
   ctx.dbSeed.setBook({
@@ -136,8 +136,14 @@ test('diff_page_revisions: vergleicht zwei jüngste Revisionen', () => {
     source: 'main', userEmail: 'alice@example.com',
   });
 
-  const result = bookChatTools.TOOLS.diff_page_revisions(
+  const list = bookChatTools.TOOLS.list_revisions(
     { page_id: PAGE_ID },
+    { bookId: BOOK_ID, userEmail: 'alice@example.com' }
+  );
+  assert.equal(list.total_revisions, 2);
+  assert.equal(list.results.length, 2);
+  const result = bookChatTools.TOOLS.list_revisions(
+    { page_id: PAGE_ID, diff: true },
     { bookId: BOOK_ID, userEmail: 'alice@example.com' }
   );
   assert.equal(result.page_id, PAGE_ID);
@@ -148,7 +154,7 @@ test('diff_page_revisions: vergleicht zwei jüngste Revisionen', () => {
   assert.ok(changes.length > 0);
 });
 
-test('diff_page_revisions: < 2 Revisionen → Fehler', () => {
+test('list_revisions diff: < 2 Revisionen → Fehler', () => {
   const BOOK_ID = 8031;
   const PAGE_ID = 80311;
   ctx.dbSeed.setBook({
@@ -163,24 +169,24 @@ test('diff_page_revisions: < 2 Revisionen → Fehler', () => {
     source: 'main', userEmail: 'alice@example.com',
   });
 
-  const result = bookChatTools.TOOLS.diff_page_revisions(
-    { page_id: PAGE_ID },
+  const result = bookChatTools.TOOLS.list_revisions(
+    { page_id: PAGE_ID, diff: true },
     { bookId: BOOK_ID, userEmail: 'alice@example.com' }
   );
   assert.match(result.error, /< 2|Weniger/);
 });
 
-// ── find_first_last_mention ─────────────────────────────────────────────────
+// ── get_figure_mentions ohne Index ──────────────────────────────────────────
 
-test('find_first_last_mention: liefert Fehler ohne Argument', async () => {
-  const result = await bookChatTools.TOOLS.find_first_last_mention(
+test('get_figure_mentions: ohne Figur → Fehler', async () => {
+  const result = await bookChatTools.TOOLS.get_figure_mentions(
     {},
     { bookId: 8001, userEmail: 'alice@example.com' }
   );
-  assert.match(result.error, /figur|loc_id/i);
+  assert.match(result.error, /Figur nicht gefunden/);
 });
 
-test('find_first_last_mention: figur ohne Index → freundlicher Fehler', async () => {
+test('get_figure_mentions: Figur ohne Index → 0 Erwähnungen + Hinweis', async () => {
   const BOOK_ID = 8040;
   ctx.dbSeed.setBook({
     books: [{ id: BOOK_ID, name: 'FL' }],
@@ -193,12 +199,13 @@ test('find_first_last_mention: figur ohne Index → freundlicher Fehler', async 
     VALUES (?, ?, 'fig_1', 'Anna', 'Anna', ?)
   `).run(BOOK_ID, 'alice@example.com', new Date().toISOString());
 
-  const result = await bookChatTools.TOOLS.find_first_last_mention(
+  const result = await bookChatTools.TOOLS.get_figure_mentions(
     { figur_id: 'fig_1' },
     { bookId: BOOK_ID, userEmail: 'alice@example.com' }
   );
   assert.equal(result.fig_id, 'fig_1');
-  assert.match(result.error, /Index|Erwähnung/);
+  assert.equal(result.total_mentions, 0);
+  assert.match(result.note, /Index|Erwähnung/);
 });
 
 // ── list_songs ──────────────────────────────────────────────────────────────

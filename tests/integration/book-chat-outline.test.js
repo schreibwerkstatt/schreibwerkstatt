@@ -100,7 +100,7 @@ function seed() {
 
 test.before(() => {
   ctx = bootstrap();
-  TOOLS = require('../../routes/jobs/book-chat-tools').TOOLS;
+  TOOLS = require('../../routes/jobs/chat-tools').TOOLS;
   db = require('../../db/connection').db;
   contentStore = require('../../lib/content-store');
   seed();
@@ -177,7 +177,4 @@ test('Figuren-Erwähnungen: erste/letzte Stelle nach Gliederung, nicht nach posi
   const m = await call('get_figure_mentions', { figur_id: 'fig_mara' });
   assert.equal(m.first_appearance.page_name, 'Prolog');
   assert.equal(m.last_appearance.page_name, 'Epilog');
-  const f = await call('find_first_last_mention', { figur_id: 'fig_mara' });
-  assert.equal(f.first_appearance.page_name, 'Prolog');
-  assert.equal(f.last_appearance.page_name, 'Epilog');
 });

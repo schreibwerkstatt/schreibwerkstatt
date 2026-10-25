@@ -17,21 +17,35 @@ import { defaultChapterLabels, anchorNumbers } from './xref-number.js';
 // Ziele je Buch nur einmal holen. Sie aendern sich beim Umbauen des Buchs oder
 // beim Einfuegen einer Abbildung; beides dispatcht `xrefs:changed`.
 const _targetCache = new Map();
+// Laufende Anfragen je Buch: gleichzeitige Aufrufer (Leseansicht rendert,
+// Picker oeffnet) teilen sich einen Fetch. Eine Invalidierung waehrend des
+// Fetches verwirft ihn als Cache-Kandidaten — seine Antwort koennte den Stand
+// vor der Aenderung tragen.
+const _inflight = new Map();
 
 export function invalidateXrefTargetCache(bookId = null) {
-  if (bookId == null) _targetCache.clear();
-  else _targetCache.delete(String(bookId));
+  if (bookId == null) { _targetCache.clear(); _inflight.clear(); }
+  else { _targetCache.delete(String(bookId)); _inflight.delete(String(bookId)); }
 }
 
 export async function loadXrefTargets(bookId) {
   const key = String(bookId);
   if (_targetCache.has(key)) return _targetCache.get(key);
+  if (_inflight.has(key)) return _inflight.get(key);
+  const p = _fetchXrefTargets(key)
+    .then((out) => { if (_inflight.get(key) === p) _targetCache.set(key, out); return out; })
+    .finally(() => { if (_inflight.get(key) === p) _inflight.delete(key); });
+  _inflight.set(key, p);
+  return p;
+}
+
+async function _fetchXrefTargets(key) {
   const res = await fetch(`/xrefs/targets?book_id=${encodeURIComponent(key)}`, {
     headers: { Accept: 'application/json' },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
-  const out = {
+  return {
     chapters: Array.isArray(data?.chapters) ? data.chapters : [],
     figures: Array.isArray(data?.figures) ? data.figures : [],
     tables: Array.isArray(data?.tables) ? data.tables : [],
@@ -42,8 +56,6 @@ export async function loadXrefTargets(bookId) {
     tableNumbering: !!data?.tableNumbering,
     lang: data?.lang === 'en' ? 'en' : 'de',
   };
-  _targetCache.set(key, out);
-  return out;
 }
 
 /** Vorschau-Nummern ueber beide Achsen — dieselbe pure Logik, die auch der

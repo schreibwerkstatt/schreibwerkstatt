@@ -40,6 +40,7 @@ Trigger: Karten-Toggle aus Palette/Quick-Pills (`showBookEditorCard`, Feature-Ke
 | [book-editor/history.js](../public/js/cards/book-editor/history.js) | Undo/Redo pro Seite über den geteilten Kern [editor/shared/edit-history.js](../public/js/editor/shared/edit-history.js); Buttons in [book-editor-history.html](../public/partials/book-editor-history.html) |
 | [book-editor/blocks.js](../public/js/cards/book-editor/blocks.js) | `buildBlocksFromPages` (Blockliste), `fetchBookContents` (Server-Aggregation, ohne Netz Rückfall auf den Content-Cache), pure `pageMetasFromTree`/`isOfflineError` |
 | [book-editor/drafts.js](../public/js/cards/book-editor/drafts.js) | Lokale Entwürfe je Block, Live-Markierung gehaltener Blöcke, Online-Retry (siehe «Entwürfe und Offline») |
+| [book-editor/activation.js](../public/js/cards/book-editor/activation.js) | Render-Sync der Block-Container (`_mountBlockEl`/`_maybeRehydrate`, Diagramme + Beschriftungsnummern) und Klick-aktiviert-Block (Aktivieren, Verlassen, Caret, Eingabe, Clipboard) |
 | [book-editor/head.js](../public/js/cards/book-editor/head.js) | Titel-Kopf je Beitrag (Dachzeile · Titel · Lead, nur publizistische Bücher): ein `GET /headline/:book_id` beim Laden, Speichern feldweise beim Verlassen über `PUT /headline/page/:id`; CSS [book-editor-head.css](../public/css/editor/book/book-editor-head.css) |
 | [editor/book-editor-comments.js](../public/js/editor/book-editor-comments.js) | Kommentar-Leiste (Kern in `comment-rail-core/-layout`) |
 
@@ -58,7 +59,10 @@ Geteilt mit dem Notebook-Editor: [shared/text-find.js](../public/js/editor/share
 | `dirtyCount` / `savingCount` | **Getter** über `blocks` (nicht handgepflegt) — Header-Badge und `beforeunload`-Schutz |
 | `_autosave` / `_savedFlash` | `createAutosaveTimers` (Idle 60 s / Max 120 s pro pageId) bzw. `createTimerBag` (nullt `savedAt` nach 4 s) |
 | `_loadToken` | Re-Entry-Guard: verwirft Responses überholter `_load`-Läufe |
-| `_memos` | Memo-Cache (`_memo(key, deps, fn)`) für `outlineNodes` + Block-Index |
+| `_switching` | Buch-/Ansichtswechsel sichert gerade (`_resetSession`) — `_canEdit()` ist dann `false`, kein Block aktivierbar, kein Replace |
+| `_diagramObserver` | `IntersectionObserver`, der Diagramme inaktiver Blöcke erst nahe dem Sichtbereich rendert |
+| `_findAnchor` | Caret beim Öffnen der Suche — Startpunkt für den ersten Treffer |
+| `_memos` | Memo-Cache (`_memo(key, deps, fn)` aus [card-memo.js](../public/js/cards/card-memo.js)) für `outlineNodes` + Block-Index |
 | `findOpen/Term/Replace/CaseSensitive/WholeWord/Matches/Index` | Find/Replace-State |
 | `visiblePageId` / `collapsedChapters` / `outlineOpen` | Outline / TOC (Sticky-Sidebar) |
 | `_outlineObserver` | `IntersectionObserver` für Active-Outline-Item |
@@ -74,10 +78,11 @@ init ──setupCardLifecycle──▶ idle
        └─ showBookEditorCard=true ──load(bookId)──▶ aktiv
                                                        │
                                                        ├─ activateBlock(p)  ── prev.dirty? → _enqueueSave(prev)
+                                                       ├─ Fokus verlässt Block / Karte zu ── dirty? → _enqueueSave
                                                        ├─ _onBlockInput     ── block.html = el.innerHTML; _markBlockDirty
                                                        ├─ Autosave Idle 60 s / Max 120 s ── _enqueueSave
                                                        ├─ Cmd/Ctrl+S        ── saveAllDirty
-                                                       └─ Find/Replace       ── recompute → _doReplaceAt → dirty+queue
+                                                       └─ Find/Replace       ── recompute → _doReplaceAt → _commitReplaced → dirty+queue
        book:changed / view:reset ──▶ reset → idle
        destroy ──▶ Timer/IO/Highlight-Cleanup
 ```
@@ -95,12 +100,15 @@ init ──setupCardLifecycle──▶ idle
 - **Caret-Fallback ist Pflicht:** trifft der Klick kein Textnode (Padding, Zeilenabstand, Rand) oder fehlt die API, setzt `_placeCaret` den Caret an den Anfang des ersten Kindblocks. Ohne ihn ist der Block fokussiert, aber jede Tastatureingabe verpufft — fehlerfrei und unsichtbar.
 - Element-Lookups laufen über **`this.$root`**, nicht `this.$el`: in einer aus `@click` gerufenen Methode zeigt `$el` auf das auslösende Element (den Block-Body), nicht auf die Karten-Wurzel.
 - Vorheriger aktiver Block wird vor dem Wechsel `_enqueueSave`'d, wenn dirty.
+- **Verlassen speichert sofort**, nicht erst nach dem Autosave-Fenster: `onBlockFocusout` (Fokus geht aus dem aktiven Block — Gliederung, Leiste, Suchleiste, anderes Fenster; ein Wechsel auf ein Kind-Element zählt nicht) löst den Undo-Debounce ein und reiht den Block ein, er bleibt dabei aktiv. Schliessen der Karte (`showBookEditorCard` → `false`) reiht alle dirty Blöcke ein (`_saveDirtyNow`).
+- **Während eines Buch-/Ansichtswechsels** (`_resetSession`) ist nichts bearbeitbar: der aktive Block wird zuerst verlassen (`_deactivateBlock`), `_switching` sperrt `_canEdit()` bis die alten Blöcke gesichert sind — der Stream zeigt dann noch das alte Buch, und was dort getippt würde, fehlte in der Bilanz (`unsavedOnSwitch`/`keptAsDraft`).
 - **Nur mit Schreibrecht:** `activateBlock` und Replace greifen nur bei `app.canEdit()` (editor/owner, unbekannte Rolle = Legacy-Fallback). Lektor und Viewer lesen, suchen und kommentieren im Stream; die Ersetzen-Zeile der Find-Leiste ist ausgeblendet. Reine UX — der PUT prüft serverseitig `editor`.
 
 ### Render-Sync (`_mountBlockEl` / `_maybeRehydrate`)
 - **`_mountBlockEl`** (x-init am Block-Container): einmaliger Initial-Write von `block.html` + `data-rev`.
 - **`_maybeRehydrate`** (x-effect): schreibt `block.html` **nur dann** in den DOM, wenn `activePageId !== block.pageId` und sich `_rev` geändert hat. Schützt das Caret im aktiven Block vor externen Mutations-Rewrites (Find/Replace, Reload).
-- Alle anderen `block.html`-Mutationen kommen aus `_onBlockInput` oder `_doReplaceAt`; sie inkrementieren `_rev` nicht (DOM ist bereits Quelle).
+- Alle anderen `block.html`-Mutationen kommen aus `_onBlockInput` oder `_commitReplaced` (Find/Replace); sie inkrementieren `_rev` nicht (DOM ist bereits Quelle).
+- **Diagramme rendern verzögert:** `_syncBlockDiagrams` rendert das Mermaid-Bild eines inaktiven Blocks erst, wenn der Block auf `1500px` an den Sichtbereich kommt (`_diagramObserver`). Beim Laden eines grossen Buchs liefen sonst alle Renderings auf einmal. Der aktive Block zeigt immer den Quelltext (Bild entfernt, Beobachtung beendet).
 
 ### Save-Queue (`_enqueueSave` → `_processQueue` → `_saveBlock`)
 
@@ -111,8 +119,8 @@ Code: [book-editor/save.js](../public/js/cards/book-editor/save.js).
   1. Pending Autosave-Timer der Page clearen. **Offener Konflikt (`block.conflict`) → kein Save**: gespeichert wird erst nach einer Auflösung; ein Save daneben liefe in denselben Merge und setzte die Entscheidungen im Modal zurück.
   2. `_syncBlockIds(block)` — Block-IDs eindeutig und vollständig ([editor/shared/block-ids.js](../public/js/editor/shared/block-ids.js), dieselbe Regel wie im Notebook): Chromium klont `data-bid` beim Enter, zwei Absätze mit derselben ID verlöre der Merge still. Aktiver Block im Live-DOM (nur Attribute), inaktiver über einen losgelösten Container aus `block.html` (sein DOM trägt Diagramm-SVG und Badges).
   3. `stripLektoratMarks(html)` — der **geteilte** Save-Cleaner (Lektorat-/Chat-Marks, LanguageTool-UI, leere Trailing-Blöcke), identisch zum Notebook-/Focus-Pfad. Der Bucheditor rendert selbst keine Marks; der Cleaner ist defensiv gegen HTML aus History-/Chat-Apply.
-  4. No-Change-Short-Circuit via `isNoChange(newHtml, originalHtml)` (Vergleichs-Normalform, nicht roher String-Vergleich) — dirty-Flag zurück, kein PUT.
-  5. **Leer-Block-Schutz**: `htmlToText(newHtml).trim() === '' → bookEditor.emptyAbort`. Verhindert versehentliches Leerspeichern beim Verlassen.
+  4. No-Change-Short-Circuit via `isNoChange(newHtml, originalHtml)` (Vergleichs-Normalform, nicht roher String-Vergleich) — dirty-Flag zurück, kein PUT. Ein Hinweis aus einem früheren Versuch (`saveError` wie `emptyAbort`, `offline`) ist damit erledigt und wird geräumt, der Entwurf ebenso — sonst stünde der Block nach einem Undo auf den Server-Stand dauerhaft auf «Fehler».
+  5. **Leer-Block-Schutz**: `isEmptyManuscript(newHtml)` → `bookEditor.emptyAbort`. Leer heisst: kein Text **und** kein Bild/Tabelle/Trenner/Diagramm (`NON_TEXT_CONTENT_SEL`) — ein Abschnitt nur mit Bild ist kein versehentlich geleerter Block. Verhindert versehentliches Leerspeichern beim Verlassen.
   6. Pre-Conflict-Check: `checkPageConflict(pageId, originalUpdatedAt, { writer: 'book' })` aus [editor/shared/page-conflict.js](../public/js/editor/shared/page-conflict.js). Veralteter Stand → **Block-Merge** (unten).
   7. `savePage(pageId, { html, pageName, source: 'book', writer: 'book', expectedUpdatedAt })` aus [shared/page-api.js](../public/js/editor/shared/page-api.js); `snapshot = block.html` unmittelbar davor. Erfolg → `applySaveOutcome(block, { snapshot, savedHtml, savedUpdatedAt })`, `savedHtml` = Antwort des Servers (mit den dort vergebenen Block-IDs — der gemeinsame Vorfahr des nächsten Merges ist die Fassung, die ein anderes Gerät jetzt lädt).
   8. 409 PAGE_CONFLICT (Race nach Pre-Check) → Seite frisch lesen (`_loadRemoteForMerge`), **Block-Merge**, bei kollisionsfreiem Merge neuer PUT. Höchstens `MAX_MERGE_ROUNDS` Runden je Save, danach bleibt der Block dirty für den nächsten Autosave.
@@ -141,6 +149,7 @@ Ein ungespeicherter Block liegt wie im Notebook-Editor als Entwurf im geteilten 
 ### Save-All (Cmd/Ctrl+S)
 - Sammelt alle dirty Pages → in Queue → `await _processQueue()` (kein Polling).
 - Fortschrittsanzeige: `saveAllDone / saveAllTotal`, beide abgeleitet aus `saveAllIds` + den Dirty-Flags.
+- **Bilanz:** bleiben nach dem Durchlauf Abschnitte auf `conflict`/`error`/`offline` hängen, meldet eine Fehlermeldung `bookEditor.saveAllIncomplete` (Anzahl von Gesamt); welche, zeigen die Punkte im Inhaltsverzeichnis. Ein Block, der nur dirty ist, weil während des Laufs weitergetippt wurde, zählt nicht — den speichert der Autosave.
 - **Im Bucheditor löst Cmd/Ctrl+S keinen Einzel-Save aus** — Save-Trigger ist Block-Wechsel oder Autosave, Cmd/Ctrl+S ist explizit Save-All.
 
 ## Find/Replace (innerhalb der Karte)
@@ -148,10 +157,13 @@ Ein ungespeicherter Block liegt wie im Notebook-Editor als Entwurf im geteilten 
 - Trigger: Cmd/Ctrl+F → globales `editor-find-card` dispatcht `book-editor:open-find` → `openFind()`.
 - Match-Pipeline:
   1. `_allBlockEls()` → alle `[data-book-editor-page]` (Lookup über `$root`, siehe „Klick-aktiviert-Block").
-  2. Pro Block: `collectMatches(el, term, { caseSensitive, wholeWord })` aus [shared/text-find.js](../public/js/editor/shared/text-find.js) — `TreeWalker(SHOW_TEXT)` baut Node-Liste + concat-String, `indexOf`-Schleife sammelt Offsets, das Rückmapping liefert `{ startNode, startOffset, endNode, endOffset }`. Wortgrenze = `isWordChar` (Buchstaben/Ziffern inkl. `-`/`'`) plus `_`, **eine** Regel für Notebook- und Bucheditor.
+  2. Pro Block: `collectMatches(el, term, { caseSensitive, wholeWord })` aus [shared/text-find.js](../public/js/editor/shared/text-find.js) — `TreeWalker` baut Node-Liste + concat-String, `indexOf`-Schleife sammelt Offsets, das Rückmapping liefert `{ startNode, startOffset, endNode, endOffset }`. Wortgrenze = `isWordChar` (Buchstaben/Ziffern inkl. `-`/`'`) plus `_`, **eine** Regel für Notebook- und Bucheditor. **Absatzgrenzen** (jedes nicht-inline Element, auch `<br>`) stehen als `\n` im concat-String: ein Treffer läuft nie über eine Grenze (Ersetzen verschmölze sonst Absätze, und ein Treffer am Absatzanfang begänne am Ende des vorigen Absatzes), und das Absatzende ist für die Ganzwort-Regel ein Wortende. Gilt für beide Konsumenten des Kerns (Notebook-Finder `editor/find.js` und Bucheditor).
+  2a. `filterArtefactMatch` verwirft Treffer in Anzeige-Artefakten inaktiver Blöcke: Mermaid-Bild, Beschriftungsnummer **und** der Diagramm-Quelltext, solange sein Bild steht (`RENDERED_DIAGRAM_SEL` aus `mermaid-view.js` — der Quelltext ist dann ausgeblendet, ein Treffer wäre unsichtbar). Im aktiven Block steht der Quelltext offen und wird gefunden.
   3. `findMatches` aggregiert über alle Blöcke und merkt sich pro Treffer `pageId` + `container`.
 - Highlight: **CSS Custom Highlight API** über `createHighlightPair('book-editor-find-match', 'book-editor-find-current')`, kein DOM-Wrap. Browser ohne API → keine Highlights, Navigation bleibt funktional.
-- Replace: `Range.deleteContents` + `createTextNode(replace)` + `range.insertNode`. Danach `block.html = cleanBlockHtml(container)`, dirty + autosave-schedule. Jeder Replace ist ein Undo-Schritt der betroffenen Seite (aktiv: Snapshot davor + danach; inaktiv: `_historyRecordInactive` aus `block.html`).
+- Erster Treffer: ab der Stelle, an der der User steht (`_nearestMatchIndex`) — Caret im aktiven Block (beim Öffnen der Suche als `_findAnchor` gemerkt, bevor das Suchfeld den Fokus nimmt), sonst der aktive bzw. sichtbare Abschnitt; dahinter nichts mehr → von vorn.
+- Replace: `_doReplaceAt` ersetzt nur im DOM (`Range.deleteContents` + `createTextNode(replace)` + `range.insertNode`). Danach `_commitReplaced` **einmal je Abschnitt**: `block.html = cleanBlockHtml(container)`, dirty + Autosave, Undo-Schritt, Bild und Nummern nachziehen. Ein Ersetzen — auch «Alle ersetzen» — ist **ein** Undo-Schritt je betroffenem Abschnitt (aktiv: Snapshot davor + danach; inaktiv: `_historyRecordInactive` aus `block.html`), nicht einer je Treffer: sonst bräuchte das Zurücknehmen so viele Strg+Z wie Treffer, und ein grosses Ersetzen verdrängte den Verlauf (Deckel 100 im Kern).
+- Neuladen (`_load`) verwirft die Treffer (sie zeigen auf alte Knoten) und sucht bei offener Leiste nach dem Rendern neu.
 - Replace-All läuft rückwärts über die Match-Liste (sonst verschieben sich nachfolgende Offsets).
 - Einzel-Replace prüft vorher `_matchStillValid` (Nodes noch im DOM, Range-Text = Suchbegriff). Hat der User seit der Suche im aktiven Block getippt, zeigen die gespeicherten Offsets auf anderen Text — dann wird neu gesucht und nicht ersetzt.
 
@@ -186,7 +198,7 @@ Eigener Verlauf pro Seite, das native Browser-Undo wird **nie** bedient: `onBloc
 4. **`_rev` nur bei externen Mutationen inkrementieren** (Conflict-Take-Remote, künftige Reload-Patches). Eigene Input-Events updaten `block.html`, aber **nicht** `_rev` — sonst Re-Hydrate-Schleife gegen den eigenen Tipp-Stream.
 5. **`stripLektoratMarks` Pflicht vor jedem PUT** — der geteilte Save-Cleaner aus [shared/html-clean.js](../public/js/editor/shared/html-clean.js), keine editor-eigene Variante. Lektorat-/Chat-Marks und LanguageTool-UI haben im gespeicherten HTML nichts zu suchen; im Bucheditor ist der Cleaner defensiv (normalerweise no-op), aber eine schwächere Kopie driftet garantiert gegen den Notebook-Pfad.
 6. **Pre-Conflict-Check mit `checkPageConflict` aus [editor/shared/page-conflict.js](../public/js/editor/shared/page-conflict.js)** — keine eigene Conflict-Logik. Stale-Write-Schutz ist app-weit eine Quelle. Die Pruefung liegt unter `shared/`, weil „hat jemand anderes seit meinem Snapshot geschrieben?" eine Eigenschaft der SEITE ist, nicht eines Editors; sie **nicht** wieder ueber die Root-Trampoline aus der Notebook-Karte holen — dann haenge der Stale-Schutz des Bucheditors daran, dass eine fremde Karte gemountet ist. Denselben Weg geht der Konflikt-Wortlaut (Geraet vs. User): [editor/shared/conflict-text.js](../public/js/editor/shared/conflict-text.js), Varianten `bookHint`/`bookBanner`/`bookStatus`. Ebenso der Merge: Engine, Block-IDs, Caret-Erhalt und Diff-Ansicht kommen aus `editor/shared/` (block-merge, block-ids, block-caret, conflict-diff); nur die Glue (welcher Block, welches Modal) liegt in [book-editor/conflict.js](../public/js/cards/book-editor/conflict.js).
-7. **`htmlToText(...).trim() === ''` blockt den Save.** Leer-Block beim Verlassen darf die Seite nicht löschen; User sieht `bookEditor.emptyAbort`, Dirty-Flag bleibt.
+7. **`isEmptyManuscript(...)` blockt den Save** (kein Text und kein Bild/Tabelle/Trenner). Leer-Block beim Verlassen darf die Seite nicht löschen; User sieht `bookEditor.emptyAbort`, Dirty-Flag bleibt.
 8. **Save-Queue ist sequenziell.** Concurrency > 1 würde gegen das Stale-Schutz-Modell (`checkPageConflict` pro Save) laufen — der zweite Save weiss nicht, dass der erste das `updated_at` schon bewegt hat.
 9. **Dirty-Flag überlebt den laufenden Save.** `applySaveOutcome` setzt `dirty` nur zurück, wenn `block.html` noch dem Snapshot vom Save-Start entspricht. Wer während des PUT weitertippt, würde sonst sein Dirty-Flag verlieren: der nachlaufende Autosave prallt an `_enqueueSave`s `!block.dirty` ab, der Block-Wechsel speichert ebenfalls nicht — die Zeichen sind still weg.
 10. **`dirtyCount`/`savingCount` sind abgeleitete Getter**, keine handgepflegten Zähler. Inkrement/Dekrement über sechs Pfade driftet; `Math.max(0, …)`-Pflaster sind das Symptom, nicht die Lösung.
@@ -219,7 +231,9 @@ Neue Aktion / neuer Block-Typ / neuer Find-Modus:
 | [tests/unit/book-editor-blocks.test.mjs](../tests/unit/book-editor-blocks.test.mjs) | `buildBlocksFromPages`: Chapter-Boundary-Marker, Solo-Pages vor erstem Kapitel, `originalHtml`/`originalUpdatedAt`-Initialisierung. Dazu `applySaveOutcome`: Dirty-Ausgang inkl. „während des Saves weitergetippt". `resolveConflictTakeRemote`: Frisch-Read im 409-Pfad, Deaktivierung des aktiven Blocks |
 | [tests/unit/book-editor-merge.test.mjs](../tests/unit/book-editor-merge.test.mjs) | `planBlockMerge` (clean/collision/fallback) und die Block-Übergänge: still gemergt → Basis + Stempel = Server, Kollision → Modal-State, Auflösung „Beide“ → Save, ein zweites Modal ersetzt kein offenes |
 | [tests/e2e-app/book-editor-merge.spec.js](../tests/e2e-app/book-editor-merge.spec.js) | **Gegen die echte App**: anderer Absatz remote → still gemergt, aktiver Block zeigt den Remote-Absatz; derselbe Absatz → Modal, „Beide behalten“; Abbrechen verwirft nichts, «Konflikt lösen …» öffnet neu |
-| [tests/unit/text-find.test.mjs](../tests/unit/text-find.test.mjs) | Geteilter Find-Kern: Offset-Rückmapping über Node-Grenzen, Ganzwort-Regel, Case-Sensitivität, Grenz-Semantik am Node-Übergang |
+| [tests/unit/text-find.test.mjs](../tests/unit/text-find.test.mjs) | Geteilter Find-Kern: Offset-Rückmapping über Node-Grenzen, Ganzwort-Regel, Case-Sensitivität, Grenz-Semantik am Node-Übergang, Absatzgrenze als Wort- und Treffergrenze |
+| [tests/unit/book-editor-find-artefacts.test.mjs](../tests/unit/book-editor-find-artefacts.test.mjs) | Treffer in Anzeige-Artefakten (Bild, ausgeblendeter Diagramm-Quelltext, Nummern-Badge) fallen; `cleanBlockHtml` |
+| [tests/unit/book-editor-save.test.mjs](../tests/unit/book-editor-save.test.mjs) | Leer-Schutz (`isEmptyManuscript`: Bild-/Tabellen-Abschnitt ist nicht leer), No-Change räumt `saveError`/`offline`/Entwurf, Bilanz nach «Alle speichern» |
 | [tests/e2e-app/book-editor.spec.js](../tests/e2e-app/book-editor.spec.js) | **Verhalten gegen die echte App**: Klick aktiviert + fokussiert Block, Tippen → dirty, Save-All → persistiert (Reload-Probe), Caret-Fallback ohne `caretRangeFromPoint`, Find/Replace über den Stream, Outline-Collapse |
 | [tests/e2e-app/book-editor-undo.spec.js](../tests/e2e-app/book-editor-undo.spec.js) | Undo/Redo pro Seite: Tippen + Strg+Z/Strg+Shift+Z, überzähliges Strg+Z nach Seitenwechsel lässt die verlassene Seite unberührt (kein Render-Artefakt in `block.html`), Replace als eigener Schritt |
 | [tests/e2e-app/smoke.spec.js](../tests/e2e-app/smoke.spec.js) | Karte + alle drei Editoren öffnen ohne Konsolenfehler |

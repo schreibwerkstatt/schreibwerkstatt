@@ -26,7 +26,7 @@ import { istMeinungsform } from './textsorten.js';
 
 // Erzählende Werke: Roman, Krimi, Fantasy, Autobiografie, Tagebuch, Lyrik, Satire …
 export const NARRATIV_TYPEN = [
-  'rechtschreibung', 'grammatik',
+  'rechtschreibung', 'grammatik', 'konjunktiv',
   'stil', 'satzbau', 'wiederholung', 'schwaches_verb', 'fuellwort', 'filterwort',
   'klischee', 'pleonasmus', 'ki_geruch', 'show_vs_tell', 'passiv',
   'perspektivbruch', 'tempuswechsel',
@@ -34,12 +34,14 @@ export const NARRATIV_TYPEN = [
 ];
 
 // Sachbuch / Essay / Blog: argumentierender Text ohne Figuren und ohne Szene.
-// Erzähl-Handwerk (show_vs_tell, filterwort, perspektivbruch, dialogformat,
+// Erzähl-Handwerk (show_vs_tell, filterwort, perspektivbruch,
 // Figuren-/Schauplatz-Konsistenz) entfällt; Absicherungsfloskeln und wechselnde
-// Terminologie kommen dazu. Starke Verben, aktive Formulierung und frische Bilder
+// Terminologie kommen dazu. Zitate und referierte Positionen gibt es auch hier:
+// `konjunktiv` und `dialogformat` laufen in eigenen Sach-Fassungen (Anführungs-
+// zeichen und Begleitsatz statt Dialog). Starke Verben, aktive Formulierung und frische Bilder
 // bleiben Ziel — anders als in der wissenschaftlichen Arbeit.
 export const SACHLICH_TYPEN = [
-  'rechtschreibung', 'grammatik',
+  'rechtschreibung', 'grammatik', 'konjunktiv', 'dialogformat',
   'stil', 'satzbau', 'wiederholung', 'schwaches_verb', 'fuellwort',
   'klischee', 'pleonasmus', 'ki_geruch', 'passiv', 'hedging',
   'tempuswechsel', 'begriffsinkonsistenz',
@@ -57,10 +59,10 @@ export const WISSENSCHAFT_TYPEN = [
 ];
 
 // Journalistischer Text (Nachricht, Bericht, Reportage, Porträt, Kommentar):
-// argumentierend wie der Sachtext, aber mit vier eigenen Pflichten, die weder
-// das narrative noch das wissenschaftliche Profil kennt — indirekte Rede im
-// Konjunktiv I, Zuschreibung jeder fremden Aussage, Trennung von Nachricht und
-// Meinung, Übersetzung von Amts- und PR-Sprache. `unbelegt` fehlt bewusst: der
+// argumentierend wie der Sachtext, aber mit eigenen Pflichten — indirekte Rede
+// im Konjunktiv I (strenger als die Erzähl-Fassung im narrativen Profil),
+// Zuschreibung jeder fremden Aussage, Trennung von Nachricht und Meinung,
+// Übersetzung von Amts- und PR-Sprache. `unbelegt` fehlt bewusst: der
 // Beleg ist hier die genannte Person oder Stelle im Satz, nicht der Kurzbeleg —
 // das deckt `zuschreibung` ab. `hedging` ebenfalls nicht: die Absicherung im
 // Verdachtsfall («soll», «mutmasslich») ist presserechtlich geboten, nicht
@@ -144,8 +146,9 @@ export function lektoratEinheit(buchtyp) {
 // Objektive/mechanische Typen: werden im Claude-Split im fokussierten Objektiv-Pass
 // geprüft und sind im Stil-Pass verboten. Reihenfolge = Enum-Reihenfolge dort.
 // `konjunktiv` gehört hierher, weil der Modus der indirekten Rede eine
-// Formfrage ist wie Kasus oder Kongruenz — nicht Geschmack. Er steht nur im
-// journalistischen Profil und fällt in allen anderen über den `aktiv`-Filter
+// Formfrage ist wie Kasus oder Kongruenz — nicht Geschmack. Er steht im
+// journalistischen, narrativen und sachlichen Profil (je mit eigener Regel-
+// Fassung) und fällt in der wissenschaftlichen Arbeit über den `aktiv`-Filter
 // von lektoratObjektivTypen() heraus.
 export const OBJEKTIV_TYPEN = [
   'rechtschreibung', 'grammatik', 'konjunktiv', 'dialogformat',
@@ -279,8 +282,7 @@ const SPAN_KIND = {
   wiederholung: 'satz', fuellwort: 'satz', passiv: 'satz', tempuswechsel: 'satz',
   schwaches_verb: 'satz', unbelegt: 'satz',
   filterwort: 'satz', show_vs_tell: 'satz', perspektivbruch: 'satz',
-  // Journalistisch: der Modus und die Zuschreibung hängen am ganzen Satz der
-  // referierten Rede; Wertung und Amtsdeutsch können Satz oder Phrase sein.
+  // Modus und Zuschreibung hängen am ganzen Satz der referierten Rede; Wertung und Amtsdeutsch können Satz oder Phrase sein.
   konjunktiv: 'satz', zuschreibung: 'satz',
   wertung: 'satz_oder_phrase', amtsdeutsch: 'satz_oder_phrase',
   stil: 'satz_oder_phrase', satzbau: 'satz_oder_phrase',

@@ -1,11 +1,14 @@
-// Gemeinsame Chat-Logik für Seiten-Chat und Buch-Chat Cards.
+// Gemeinsame Chat-Logik aller fünf Chat-Karten (docs/chats.md).
 // makeChatMethods liefert ein Methoden-Objekt, das in eine Card gespreadet wird.
 // `this` ist die Card; Root-Zugriffe laufen über window.__app. Der Root setzt
 // die showXxxCard-Flag, die Card reagiert per $watch und ruft onVisible().
 
-import { escHtml, fmtTok, renderChatMarkdown, fetchJson } from '../utils.js';
+import { escHtml, fmtTok, renderChatMarkdown, loadChatMarkdown, chatMarkdownReady, fetchJson } from '../utils.js';
 import { startPoll, runningJobStatus } from '../cards/job-helpers.js';
 import { tFetchError } from '../i18n.js';
+import { toolLogEntries, toolLogHeading } from './tool-log.js';
+
+const _toolLogCache = new WeakMap();
 
 function _newClientMsgId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -15,25 +18,9 @@ function _newClientMsgId() {
   return 'cm-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 }
 
-// Tool-Calls eines agentischen Turns nach Name gruppiert: [{ name, count, errors }].
-// `skip`: Tool-Namen, die nicht in die Zusammenfassung gehören (Recherche-Chat:
-// `final_answer` ist die Antwort selbst, kein Werkzeug).
-export function toolSummary(toolCalls, { skip = [] } = {}) {
-  if (!Array.isArray(toolCalls) || !toolCalls.length) return [];
-  const byName = new Map();
-  for (const tc of toolCalls) {
-    if (skip.includes(tc.name)) continue;
-    const e = byName.get(tc.name) || { name: tc.name, count: 0, errors: 0 };
-    e.count++;
-    if (tc.ok === false) e.errors++;
-    byName.set(tc.name, e);
-  }
-  return Array.from(byName.values());
-}
-
 export function makeChatMethods(cfg) {
   const p = cfg.props;
-  const L = cfg.label; // 'Chat', 'BookChat' oder 'ResearchChat'
+  const L = cfg.label; // 'Chat', 'BookChat', 'ResearchChat', 'PlotChat' oder 'IdeenChat'
   // Generationszähler: `reset${L}` zählt hoch, jeder async Pfad merkt sich den
   // Stand vor dem ersten `await` und verwirft seine Antwort, wenn inzwischen ein
   // Reset (Buch-/Seitenwechsel, Karte zu) lief — sonst schreibt eine späte
@@ -153,6 +140,10 @@ export function makeChatMethods(cfg) {
         // Den Fortschritt traegt in diesem Fall die Zeile in der Historie.
         if (!viewing()) { setElsewhereStatus.call(this); return; }
         this[p.status] = this._runningJobStatus(job.statusText, job.tokensIn, job.tokensOut, job.maxTokensOut, job.progress, job.tokensPerSec, job.statusParams, job.cacheReadIn);
+        // Werkzeug-Verlauf des laufenden Turns (agentische Chats, GET /jobs/:id → liveTools).
+        this._liveToolLog = Array.isArray(job.liveTools) && job.liveTools.length
+          ? { tool_calls: job.liveTools, tool_rounds: job.liveRounds || [] }
+          : null;
       },
       onNotFound: async () => {
         if (stale()) return;
@@ -168,6 +159,20 @@ export function makeChatMethods(cfg) {
         if (this[p.pollTimer]) { clearInterval(this[p.pollTimer]); this[p.pollTimer] = null; }
         finish();
         if (p.pendingRefresh) this[p.pendingRefresh] = false;
+        // Abgebrochen ist kein Fehler: der User hat es selbst ausgelöst — neutraler
+        // Hinweis statt rotem „Fehler: Abgebrochen". Die Frage steht danach ohne
+        // Antwort im Verlauf (Server-Stand, wie beim Fehler).
+        if (job.status === 'cancelled') {
+          if (viewing()) {
+            try { await loadSession.call(this, sessionId); }
+            catch (e) { console.error(`[${L} onCancel reload]`, e); }
+            if (stale()) return;
+            this[p.status] = `<span class="muted-msg">${escHtml(root.t('job.cancelled'))}</span>`;
+          } else {
+            await loadSessions.call(this);
+          }
+          return;
+        }
         const errLabel = job.error ? root.t(job.error, job.errorParams) : root.t('common.unknownError');
         if (!viewing()) {
           // Fehler nicht verschlucken, aber auch nicht dem sichtbaren Gespräch
@@ -194,7 +199,7 @@ export function makeChatMethods(cfg) {
         if (viewing()) await loadSession.call(this, sessionId);
         // Die Historie dagegen IMMER: der abgeschlossene Lauf gehört mit
         // frischem Titel und Zeitstempel an die Spitze der Liste, egal wo der
-        // User gerade steht. Darum hier und nicht in den drei Chat-Configs.
+        // User gerade steht. Darum hier und nicht in den einzelnen Chat-Configs.
         await loadSessions.call(this);
         if (cfg.onPollDone) await cfg.onPollDone.call(this);
         // KI-Titel wird nur auf der ersten Runde generiert und kommt im Job-Result
@@ -212,6 +217,7 @@ export function makeChatMethods(cfg) {
   // Lauf-State der Karte räumen: Job-Ende, Fehler, Löschen der laufenden Session.
   function finishRun() {
     this[p.loading] = false;
+    this._liveToolLog = null;
     if (p.progress) this[p.progress] = 0;
     this[p.runningSessionId] = null;
     this[p.status] = '';
@@ -382,7 +388,7 @@ export function makeChatMethods(cfg) {
   m[`is${L}SessionRunning`] = function (id) {
     return !!this[p.loading] && id != null && this[p.runningSessionId] === id;
   };
-  // Feedback (Daumen hoch/runter) an einer Assistant-Antwort — alle drei Chats.
+  // Feedback (Daumen hoch/runter) an einer Assistant-Antwort — alle Chats.
   // Erneuter Klick auf denselben Daumen nimmt es zurück. Optimistisch gesetzt,
   // bei Fehler zurückgerollt; Auswertung im Admin-Usage (db/chat-quality.js).
   m._chatFeedback = async function (msg, value) {
@@ -407,13 +413,49 @@ export function makeChatMethods(cfg) {
     }
   };
 
+  // Werkzeug-Verlauf eines agentischen Turns (Buch-, Recherche-, Plot-, Ideen-Chat;
+  // Partial chat-tool-log). Pro tool_calls-Array + Locale gemerkt (WeakMap, nicht am
+  // reaktiven msg — ein Schreiben im Render-Getter löste neue Effekte aus): das
+  // Template fragt den Verlauf mehrfach ab, ein Locale-Wechsel muss neu übersetzen.
+  m._toolLog = function (msg) {
+    const ci = msg?.context_info;
+    const calls = ci?.tool_calls;
+    const hasCalls = Array.isArray(calls) && calls.some(tc => tc?.name && tc.name !== 'final_answer');
+    // Auch ohne Werkzeug-Runde, wenn vorab Kontext geladen wurde: dann zeigt der
+    // Verlauf, dass die Antwort allein daraus entstand.
+    if (!hasCalls && !(ci?.pre_context?.count > 0)) return null;
+    const app = window.__app;
+    const loc = app?.$store?.shell?.uiLocale || '';
+    const key = Array.isArray(calls) ? calls : ci;
+    const hit = _toolLogCache.get(key);
+    if (hit && hit.loc === loc) return hit.log;
+    const t = (k, prm) => app.t(k, prm);
+    const entries = toolLogEntries(ci, t, { fmtTok });
+    const log = { ...entries, heading: toolLogHeading(entries.rows, t) };
+    _toolLogCache.set(key, { loc, log });
+    return log;
+  };
+  // Live-Stand als Pseudo-Nachricht, damit dasselbe Fragment ihn rendert.
+  m._liveToolMsg = function () {
+    return this._liveToolLog ? { role: 'assistant', _live: true, context_info: this._liveToolLog } : null;
+  };
+
   // Server-persistierte Fallback-Nachrichten werden als `__i18n:key__` gespeichert
   // und beim Rendern in die aktuelle Locale aufgelöst (siehe CLAUDE.md, i18n-Regel).
-  // Tool-Call-Zusammenfassung eines agentischen Turns (Buch-/Recherche-Chat).
-  m._toolSummary = function (toolCalls, opts) { return toolSummary(toolCalls, opts); };
   m._renderChatMarkdown    = function (text) {
+    this._chatMarkdownDep();
     const match = /^__i18n:([a-zA-Z0-9_.-]+)__$/.exec(text || '');
     return renderChatMarkdown(match ? window.__app.t(match[1]) : text);
+  };
+
+  // markdown-it lädt beim ersten Rendern nach; bis dahin liefert
+  // renderChatMarkdown escapten Klartext. Das Lesen von `_chatMdReady` bindet
+  // jedes x-html daran, das Setzen nach dem Laden rendert die Antworten neu.
+  m._chatMdReady = false;
+  m._chatMarkdownDep = function () {
+    if (this._chatMdReady) return;
+    if (chatMarkdownReady()) { queueMicrotask(() => { this._chatMdReady = true; }); return; }
+    loadChatMarkdown().then(() => { this._chatMdReady = true; }).catch(() => {});
   };
 
   // `tokens_in` ist cache-INKLUSIV (input + cache_read + cache_creation, siehe
@@ -450,7 +492,7 @@ export function makeChatMethods(cfg) {
     ].join(' · ');
   };
 
-  // Status-HTML für laufende Jobs — Fortschrittszeile aller drei Chats
+  // Status-HTML für laufende Jobs — Fortschrittszeile aller Chats
   // (startPollLocal#onProgress).
   // cacheReadIn (optional): Cache-Anteil der bisher gezählten Input-Tokens; im
   // agentischen Tool-Loop wächst tokensIn pro Iteration um den ganzen Präfix.

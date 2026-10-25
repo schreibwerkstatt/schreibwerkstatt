@@ -19,7 +19,8 @@ const { toIntId } = require('../../lib/validate');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const snapshots = require('../../db/book-snapshots');
 const pagePresence = require('../../db/page-presence');
-const { buildSnapshotPayload, insertPayload } = require('./payload');
+const { SETTINGS_FIELDS } = require('../../lib/snapshot-drift');
+const { buildSnapshotPayload, insertPayload, sameAsBaseline } = require('./payload');
 
 // Label der automatischen Sicherung, die ein Restore anlegt. Persistiert als
 // __i18n:-Marker, damit der spaetere Betrachter die Bezeichnung in seiner
@@ -49,6 +50,30 @@ function _otherEditors(bookId, userEmail) {
     logger.warn(`Restore-Presence-Check fehlgeschlagen (book=${bookId}): ${e.message}`);
     return [];
   }
+}
+
+// Auto-Sicherung des aktuellen Stands → Restore bleibt umkehrbar. Uebersprungen,
+// wenn die Baseline-Fassung genau diesen Stand schon haelt (sonst legte jeder
+// Restore eine weitere identische Sicherung ab). BOOK_EMPTY ist ok (nichts zu
+// sichern); jeder andere Fehler wirft.
+async function _backup(bookId, req, userEmail) {
+  let cur;
+  try { cur = await buildSnapshotPayload(bookId, req); }
+  catch (e) { if (e.code === 'BOOK_EMPTY') return; throw e; }
+  if (sameAsBaseline(bookId, cur, { scope: 'state' })) return;
+  insertPayload(bookId, cur, { kind: 'auto_backup', label: AUTO_BACKUP_LABEL, userEmail });
+}
+
+// 409 BOOK_BUSY senden, wenn ein ANDERER User gerade am Buch editiert (ohne
+// ?force=1). Liefert true, wenn die Antwort raus ist.
+function _rejectIfBusy(req, res, bookId, userEmail) {
+  const force = req.query.force === '1' || req.query.force === 'true';
+  if (force) return false;
+  const editors = _otherEditors(bookId, userEmail);
+  if (!editors.length) return false;
+  logger.info(`Restore blockiert: Buch ${bookId} wird von ${editors.length} anderen editiert.`);
+  res.status(409).json({ error_code: 'BOOK_BUSY', editors });
+  return true;
 }
 
 function _summary(r) {
@@ -133,27 +158,15 @@ function registerRestoreRoutes(router) {
     }
 
     const userEmail = sessionEmail(req);
-    const force = req.query.force === '1' || req.query.force === 'true';
-    if (!force) {
-      const editors = _otherEditors(bookId, userEmail);
-      if (editors.length) {
-        logger.info(`Restore blockiert: Buch ${bookId} wird von ${editors.length} anderen editiert.`);
-        return res.status(409).json({ error_code: 'BOOK_BUSY', editors });
-      }
-    }
+    if (_rejectIfBusy(req, res, bookId, userEmail)) return;
     if (_running.has(bookId)) return res.status(409).json({ error_code: 'RESTORE_RUNNING' });
     _running.add(bookId);
     try {
-      // Auto-Sicherung → Restore bleibt umkehrbar. BOOK_EMPTY ist ok (nichts zu
-      // sichern); jeder andere Fehler bricht ab, bevor etwas angefasst wird.
-      try {
-        const cur = await buildSnapshotPayload(bookId, req);
-        insertPayload(bookId, cur, { label: AUTO_BACKUP_LABEL, userEmail });
-      } catch (e) {
-        if (e.code !== 'BOOK_EMPTY') {
-          logger.error(`Restore-Sicherung fehlgeschlagen (book=${bookId}): ${e.message}`);
-          return res.status(500).json({ error_code: 'BACKUP_FAILED' });
-        }
+      // Jeder Fehler der Sicherung bricht ab, bevor etwas angefasst wird.
+      try { await _backup(bookId, req, userEmail); }
+      catch (e) {
+        logger.error(`Restore-Sicherung fehlgeschlagen (book=${bookId}): ${e.message}`);
+        return res.status(500).json({ error_code: 'BACKUP_FAILED' });
       }
 
       let result;
@@ -164,10 +177,18 @@ function registerRestoreRoutes(router) {
         return res.status(500).json({ error_code: 'RESTORE_FAILED' });
       }
 
-      try { applyBundleSettings(bookId, content.book?.settings); }
+      // Nur Einstellungen, die Text oder Ausgabe betreffen (dieselbe Liste wie
+      // der Drift-Check). Arbeits-/Status-Felder — fertig, Tages-/Zielvorgaben,
+      // Deadline, Statistik-Ausschluss, Stilprofil, Recherche-Profil, Ideen-
+      // Stufen — bleiben auf dem aktuellen Stand: wer Text von vor drei Monaten
+      // zurueckholt, will nicht auch seine Deadline von damals.
+      try { applyBundleSettings(bookId, content.book?.settings, { only: SETTINGS_FIELDS }); }
       catch (e) { logger.warn(`Restore-Settings fehlgeschlagen (book=${bookId}): ${e.message}`); }
       await _restoreBookMeta(bookId, content.book, req);
       _restorePublication(bookId, row.publication_json);
+      // Ab jetzt hat das Buch den Stand dieser Fassung → Drift-Baseline.
+      try { snapshots.markRestored(bookId, id); }
+      catch (e) { logger.warn(`Restore-Markierung fehlgeschlagen (book=${bookId}): ${e.message}`); }
       await _syncStats(bookId, req);
 
       const summary = _summary(result);
@@ -183,6 +204,8 @@ function registerRestoreRoutes(router) {
   // etwas zu loeschen. Existiert die Seite noch, wird ihr Inhalt ersetzt — der
   // vorherige Stand bleibt in der Seiten-Historie. Fehlt sie, entsteht sie neu
   // im urspruenglichen Kapitel (bzw. auf Buch-Ebene, wenn auch das fehlt).
+  // Ein Kapitel-Restore legt vorher eine Auto-Sicherung an: Kapitelname und
+  // Export-Ausschluss haben keine eigene Historie.
   router.post('/:bookId/:id/restore-node', express.json({ limit: '4kb' }), async (req, res) => {
     const bookId = toIntId(req.params.bookId);
     const id = toIntId(req.params.id);
@@ -199,9 +222,18 @@ function registerRestoreRoutes(router) {
     catch { return res.status(422).json({ error_code: 'CORRUPT_SNAPSHOT' }); }
     if (!hit) return res.status(404).json({ error_code: 'NODE_NOT_FOUND' });
 
+    const userEmail = sessionEmail(req);
+    if (_rejectIfBusy(req, res, bookId, userEmail)) return;
     if (_running.has(bookId)) return res.status(409).json({ error_code: 'RESTORE_RUNNING' });
     _running.add(bookId);
     try {
+      if (kind === 'chapter') {
+        try { await _backup(bookId, req, userEmail); }
+        catch (e) {
+          logger.error(`Knoten-Restore-Sicherung fehlgeschlagen (book=${bookId}): ${e.message}`);
+          return res.status(500).json({ error_code: 'BACKUP_FAILED' });
+        }
+      }
       let rootParentChapterId = null;
       if (hit.parentSrcId != null) {
         const chapters = await contentStore.listChapters(bookId, req);

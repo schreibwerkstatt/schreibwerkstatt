@@ -1,6 +1,6 @@
 'use strict';
 // Werkzeug-Executor des Ideen-Chats. Zwei Arten:
-//   - Lese-Werkzeuge: dieselben Handler wie der Buch-Chat (book-chat-tools) —
+//   - Lese-Werkzeuge: die Handler des gemeinsamen Katalogs (chat-tools) —
 //     eine Quelle, kein zweiter Text-/Plot-/Figuren-Leser.
 //   - Vorschlags-Werkzeuge (propose_*): validieren gegen den Ideen-Stand und
 //     sammeln EINEN normalisierten Vorschlag in ctx.proposals. Sie schreiben
@@ -24,7 +24,7 @@
 // steht, kommt als Fehler ans Modell zurück, nie beim User an. Persistierter Status (PATCH /ideen/chat-proposal):
 // applied_at + applied_id bzw. status='discarded'.
 
-const { executeTool: executeBookChatTool } = require('./book-chat-tools');
+const { executeTool: executeCatalogTool } = require('./chat-tools');
 const { loadIdeenState } = require('./ideen-chat-context');
 const { isIdeeStatus, isOpenIdeeStatus, isIdeaLinkKind } = require('../../lib/ideen-status');
 const contentStore = require('../../lib/content-store');
@@ -166,7 +166,7 @@ async function _proposeUpdate(input, ctx, state, ideeId) {
     if (!bp) return _err('Zum beleg gehört beleg_page_id — der Abschnitt, in dem das Zitat steht.');
     if (!state.pageById.has(bp)) return _err(`beleg_page_id #${bp} gehört nicht zu diesem Buch.`);
     if (!quoteFoundIn(belegText, await _pageHaystack(ctx, bp))) {
-      return _err(`Das Zitat steht so nicht in Abschnitt #${bp}. Lies den Abschnitt (get_pages) und zitiere wörtlich — oder lass den Vorschlag weg.`);
+      return _err(`Das Zitat steht so nicht in Abschnitt #${bp}. Lies den Abschnitt und zitiere wörtlich — oder lass den Vorschlag weg.`);
     }
     beleg = { text: belegText, page_id: bp };
     labels.beleg_page = state.pageById.get(bp)?.name || null;
@@ -225,8 +225,8 @@ async function executeIdeenChatTool(name, input, ctx) {
     }
     return PROPOSE_HANDLERS[name](input || {}, ctx);
   }
-  if (!ctx.readToolNames?.has(name)) throw new Error(`Unbekanntes Werkzeug: ${name}`);
-  return executeBookChatTool(name, input, ctx);
+  if (!ctx.offeredTools?.has(name)) throw new Error(`Unbekanntes Werkzeug: ${name}`);
+  return executeCatalogTool(name, input, ctx);
 }
 
 module.exports = { executeIdeenChatTool, MAX_PROPOSALS, PROPOSE_TOOLS };

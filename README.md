@@ -27,7 +27,7 @@ Das übrige README beschreibt das **Selbst-Hosting** und die Architektur — fü
 - **Abschnitts-Lektorat** – Rechtschreib-, Grammatik- und Stilprüfung mit selektiver Korrekturübernahme.
 - **Synonym-Finder** – Wort markieren → Rechtsklick → Vorschläge aus [OpenThesaurus](https://www.openthesaurus.de/) + KI mit Satzkontext.
 - **Abschnitts-Chat** – KI-Dialog zu einer Seite. Änderungsvorschläge übernehmbar. [docs/chats.md](docs/chats.md).
-- **Buch-Chat** – Agentischer KI-Dialog über das ganze Buch mit Werkzeugen auf vorberechnetem Index; optional Bild-Generierung (`generate_image`). [docs/buchchat-tools.md](docs/buchchat-tools.md), [docs/image.md](docs/image.md).
+- **Buch-Chat** – Agentischer KI-Dialog über das ganze Buch mit Werkzeugen auf vorberechnetem Index; optional Bild-Generierung (`generate_image`). [docs/chat-tools.md](docs/chat-tools.md), [docs/image.md](docs/image.md).
 - **Buchbewertung / Kapitelbewertung** – Stärken, Schwächen, Empfehlungen.
 
 ### Analyse & Übersichten

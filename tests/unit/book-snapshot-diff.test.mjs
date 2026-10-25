@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { flattenSnapshot, diffSnapshots, diffPublication } from '../../public/js/book-snapshot-diff.js';
+import { flattenSnapshot, diffSnapshots, diffChapters, diffPublication } from '../../public/js/book-snapshot-diff.js';
 
 function page(srcId, name, html) { return { type: 'page', srcId, name, html }; }
 function chapter(name, children) { return { type: 'chapter', name, children }; }
+function chap(srcId, name, children, excluded) { return { type: 'chapter', srcId, name, children, excluded }; }
 
 test('flattenSnapshot: liest Tree-Format und Node-Array, mit Kapitelpfad', () => {
   const tree = [
@@ -92,4 +93,48 @@ test('diffPublication: null-Meta → gegen leer verglichen, kein Crash', () => {
   const diff = diffPublication(null, { isbn: '999', has_cover: true });
   assert.equal(diff.find(d => d.key === 'isbn').to, '999');
   assert.equal(diff.find(d => d.key === 'has_cover').to, true);
+});
+
+test('diffSnapshots: Kapitel umbenannt (gleiche srcId) → Abschnitte NICHT verschoben', () => {
+  const from = [chap(10, 'Alt', [page(1, 'S', '<p>x</p>'), page(2, 'T', '<p>y</p>')])];
+  const to   = [chap(10, 'Neu', [page(1, 'S', '<p>x</p>'), page(2, 'T', '<p>y</p>')])];
+  const { summary, chapters } = diffSnapshots(from, to);
+  assert.equal(summary.moved, 0);
+  assert.equal(summary.chaptersChanged, 1);
+  assert.equal(chapters[0].renamed, true);
+  assert.equal(chapters[0].oldName, 'Alt');
+});
+
+test('diffSnapshots: Abschnitt in anderes Kapitel → verschoben', () => {
+  const from = [chap(10, 'A', [page(1, 'S', '<p>x</p>')]), chap(11, 'B', [])];
+  const to   = [chap(10, 'A', []), chap(11, 'B', [page(1, 'S', '<p>x</p>')])];
+  const e = diffSnapshots(from, to).entries.find(x => x.srcId === 1);
+  assert.equal(e.moved, true);
+  assert.deepEqual(e.oldChapterPath, ['A']);
+});
+
+test('diffSnapshots: Umsortieren markiert nur den bewegten Abschnitt', () => {
+  const from = [chap(10, 'A', [page(1, 'a', '<p>1</p>'), page(2, 'b', '<p>2</p>'), page(3, 'c', '<p>3</p>'), page(4, 'd', '<p>4</p>')])];
+  const to   = [chap(10, 'A', [page(2, 'b', '<p>2</p>'), page(3, 'c', '<p>3</p>'), page(4, 'd', '<p>4</p>'), page(1, 'a', '<p>1</p>')])];
+  const { summary, entries } = diffSnapshots(from, to);
+  assert.equal(summary.reordered, 1);
+  assert.equal(entries.find(x => x.srcId === 1).reordered, true);
+});
+
+test('diffChapters: neu, entfernt, Export-Ausschluss umgeschaltet', () => {
+  const from = [chap(10, 'A', []), chap(11, 'B', [])];
+  const to   = [chap(10, 'A', [], true), chap(12, 'C', [])];
+  const out = diffChapters(from, to);
+  const by = Object.fromEntries(out.map(c => [c.srcId, c]));
+  assert.equal(by[10].status, 'changed');
+  assert.equal(by[10].excludedChanged, true);
+  assert.equal(by[10].excluded, true);
+  assert.equal(by[12].status, 'added');
+  assert.equal(by[11].status, 'removed');
+});
+
+test('diffPublication: ausgetauschtes Cover (gleiches Vorhandensein, anderer Hash)', () => {
+  const diff = diffPublication({ has_cover: true, cover_hash: 'aaa' }, { has_cover: true, cover_hash: 'bbb' });
+  assert.deepEqual(diff, [{ key: 'has_cover', kind: 'replaced', from: true, to: true }]);
+  assert.deepEqual(diffPublication({ has_cover: true, cover_hash: 'aaa' }, { has_cover: true }), [], 'fehlender Hash ist kein Austausch');
 });

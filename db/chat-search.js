@@ -51,6 +51,17 @@ const _ROUND_ID_SQL = `CASE WHEN m.role = 'assistant' THEN m.id ELSE (
 const SNIP_OPEN = '\u0001';
 const SNIP_CLOSE = '\u0002';
 
+/** Gibt es im Scope überhaupt eine Antwort mit Inhalt? (Verfügbarkeit von search_chat_history.) */
+function hasSearchableHistory(scope) {
+  const sc = _scopeSql(scope);
+  if (!sc) return false;
+  return !!db.prepare(`
+    SELECT 1 FROM chat_messages a JOIN chat_sessions s ON s.id = a.session_id
+     WHERE ${sc.where} AND a.role = 'assistant' AND ${_INDEXABLE}
+     LIMIT 1
+  `).get(...sc.args);
+}
+
 /**
  * Volltext-Treffer (bm25-Reihenfolge) im Scope. `match` ist ein fertiger
  * FTS5-Ausdruck (lib/search.js#buildMatchQuery). Rückgabe:
@@ -213,7 +224,7 @@ function clearForeignModels(bookId, model) {
 
 module.exports = {
   SEARCHABLE_KINDS, SNIP_OPEN, SNIP_CLOSE,
-  ftsSearch, semanticSearch, messageMeta,
+  hasSearchableHistory, ftsSearch, semanticSearch, messageMeta,
   listUnindexedRounds, countUnindexedRounds, booksWithUnindexedRounds,
   replaceRoundChunks, clearForeignModels,
 };

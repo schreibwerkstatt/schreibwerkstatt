@@ -163,8 +163,8 @@
                     <template x-if="s.korrektur">
                       <span class="heatmap-detail-korrektur" x-text="s.korrektur"></span>
                     </template>
-                    <template x-if="s.erklaerung">
-                      <div class="heatmap-detail-erklaerung" x-text="s.erklaerung"></div>
+                    <template x-if="s.erklaerung || s.erklaerung_key">
+                      <div class="heatmap-detail-erklaerung" x-text="$app.findingErklaerung(s)"></div>
                     </template>
                   </div>
                 </template>

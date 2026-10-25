@@ -121,25 +121,12 @@ test('salvageTextToolCalls: echte Antworten bleiben Antworten', () => {
 
 test('Round-Trip: eine Tool-Runde übersteht Kanonisch → OpenAI → Kanonisch', () => {
   const { rawContentBlocks } = toolCallsToCanonical('', [
-    { id: 'aaaaaaaaa', name: 'quote_match', arguments: '{"page_id":5,"pattern":"Anna"}' },
+    { id: 'aaaaaaaaa', name: 'quote_passage', arguments: '{"page_id":5,"pattern":"Anna"}' },
   ]);
   const openai = messagesToOpenAI([{ role: 'assistant', content: rawContentBlocks }]);
   const back = toolCallsToCanonical('', openai[0].tool_calls.map(tc => ({
     id: tc.id, name: tc.function.name, arguments: tc.function.arguments,
   })));
-  assert.deepEqual(back.toolUses, [{ id: 'aaaaaaaaa', name: 'quote_match', input: { page_id: 5, pattern: 'Anna' } }]);
+  assert.deepEqual(back.toolUses, [{ id: 'aaaaaaaaa', name: 'quote_passage', input: { page_id: 5, pattern: 'Anna' } }]);
 });
 
-test('Slim-Werkzeugsatz: alle Namen existieren, final_answer ist dabei, Satz bleibt klein', async () => {
-  const { BOOK_CHAT_TOOLS, BOOK_CHAT_SLIM_TOOL_NAMES } = await import('../../public/js/prompts/book-chat-tools.js');
-  const all = new Set(BOOK_CHAT_TOOLS.map(t => t.name));
-  for (const n of BOOK_CHAT_SLIM_TOOL_NAMES) {
-    assert.ok(all.has(n), `Slim-Name «${n}» hat keine Definition in BOOK_CHAT_TOOLS`);
-  }
-  // Pflicht-Endpunkt: ohne final_answer kann der Loop nicht terminieren.
-  assert.ok(BOOK_CHAT_SLIM_TOOL_NAMES.includes('final_answer'));
-  // Sinn des Satzes ist die Ersparnis — wird er so gross wie der volle Katalog,
-  // ist er keine Slim-Variante mehr.
-  assert.ok(BOOK_CHAT_SLIM_TOOL_NAMES.length < BOOK_CHAT_TOOLS.length / 2,
-    `Slim-Satz zu gross (${BOOK_CHAT_SLIM_TOOL_NAMES.length}/${BOOK_CHAT_TOOLS.length})`);
-});

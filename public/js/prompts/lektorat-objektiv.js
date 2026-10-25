@@ -1,14 +1,15 @@
 // Objektiv-Pass des Lektorats: fokussierter Prompt AUSSCHLIESSLICH für objektive/
-// mechanische Fehler (Rechtschreibung, Grammatik/Zeichensetzung, Dialogformat,
+// mechanische Fehler (Rechtschreibung, Grammatik/Zeichensetzung, Modus der indirekten Rede, Dialogformat,
 // Figurenkonsistenz) plus das dazugehörige Schema. Ausgelagert aus prompts/lektorat.js.
 //
 // Welche dieser Typen ein Buch überhaupt kennt, entscheidet das Buchtyp-Profil in
-// prompts/lektorat-typen.js: in den Fach-Profilen (sachlich/wissenschaft) bleiben
-// nur rechtschreibung + grammatik übrig.
+// prompts/lektorat-typen.js: in der wissenschaftlichen Arbeit bleiben nur
+// rechtschreibung + grammatik übrig, das Sachprofil behält Konjunktiv und
+// Anführungszeichen.
 
 import { _obj, _str } from './schema-utils.js';
 import {
-  lektoratObjektivTypen, lektoratStilTypen, typPrioritaetString,
+  lektoratObjektivTypen, lektoratStilTypen, typPrioritaetString, lektoratProfil,
 } from './lektorat-typen.js';
 import {
   _buildRechtschreibungBlock,
@@ -19,6 +20,7 @@ import {
   _buildWoerterbuchBlock,
   _buildNachrichtenBlock,
 } from './blocks.js';
+import { _buildKonjunktivBlock } from './blocks-fach.js';
 
 export function buildObjektivLektoratPrompt(text, {
   figuren = [],
@@ -30,6 +32,7 @@ export function buildObjektivLektoratPrompt(text, {
   hatNachrichten = false,
   woerterbuch = [],
   langCode = 'de',
+  locale = null,
   buchtyp = null,
   textsorte = null,
   // Werk nicht abgeschlossen, hinter dem Abschnitt folgt kein Text (siehe
@@ -37,12 +40,15 @@ export function buildObjektivLektoratPrompt(text, {
   schreibfront = false,
 } = {}) {
   const en = langCode === 'en';
-  // Objektiv-Enum aus dem Buchtyp-Profil: in den Fach-Profilen bleiben nur
-  // rechtschreibung + grammatik (kein Dialogformat, keine Figurenkonsistenz);
-  // im journalistischen Profil kommt der Modus der indirekten Rede dazu.
+  // Sach-Fassungen von Konjunktiv und Anführungszeichen ausserhalb des narrativen Profils.
+  const profil = lektoratProfil(buchtyp);
+  const erzaehlend = profil === 'narrativ';
+  // Objektiv-Enum aus dem Buchtyp-Profil: Figurenkonsistenz nur narrativ, in der
+  // wissenschaftlichen Arbeit bleibt reine Mechanik.
   const objektivTypen = lektoratObjektivTypen(buchtyp, { hasFiguren: figuren.length > 0, textsorte });
   const hasFiguren = objektivTypen.includes('namenskonsistenz');
   const hatDialogformat = objektivTypen.includes('dialogformat');
+  const hatKonjunktiv = objektivTypen.includes('konjunktiv');
 
   const metaParts = [];
   if (chapterName) metaParts.push(en ? `Chapter: «${chapterName}»` : `Kapitel: «${chapterName}»`);
@@ -58,12 +64,14 @@ export function buildObjektivLektoratPrompt(text, {
   const verboten = lektoratStilTypen(buchtyp, { textsorte }).join(', ');
   const scopeDe = [
     'Rechtschreibung, Grammatik, Zeichensetzung/Interpunktion',
-    hatDialogformat ? 'Dialogformat-Typografie' : null,
+    hatKonjunktiv ? 'Modus der indirekten Rede' : null,
+    hatDialogformat ? (erzaehlend ? 'Dialogformat-Typografie' : 'Anführungszeichen-Typografie') : null,
     hasFiguren ? 'Konsistenz von Figuren-Namen/-Merkmalen gegen den Figuren-Block' : null,
   ].filter(Boolean).join(', ');
   const scopeEn = [
     'spelling, grammar, punctuation/commas',
-    hatDialogformat ? 'dialogue-format typography' : null,
+    hatKonjunktiv ? 'tense consistency in reported speech' : null,
+    hatDialogformat ? (erzaehlend ? 'dialogue-format typography' : 'quotation-mark typography') : null,
     hasFiguren ? 'consistency of figure names/attributes against the figure block' : null,
   ].filter(Boolean).join(', ');
 
@@ -80,12 +88,12 @@ VOLLSTÄNDIGKEIT (wichtigste Regel): Arbeite den Text von der ersten bis zur let
 CORRECTION PURITY & CHARACTER-EXACTNESS (mandatory for every entry):
 - «korrektur» contains ONLY the replacement text that should replace «original» verbatim – nothing else. No meta-prefixes, no surrounding quotes/guillemets, no reasoning appended by dash, no variant lists. Reasons belong in «erklaerung».
 - «original» MUST be copied character-for-character from the text below (quotes, dashes, spaces, apostrophes, ellipses, case 1:1). A string-find with «original» must hit the spot exactly once.
-- «original» and «korrektur» must have the SAME span type (word↔word, phrase↔phrase); all objective types here are word- or phrase-level, never a whole rewritten sentence.`
+- «original» and «korrektur» must have the SAME span type (word↔word, phrase↔phrase); all objective types here are word- or phrase-level, never a whole rewritten sentence${hatKonjunktiv ? ' – except «konjunktiv», which carries the full sentence of reported speech' : ''}.`
     : `
 KORREKTUR-PURITÄT & ZEICHENGENAUIGKEIT (zwingend für jeden Eintrag):
 - «korrektur» enthält AUSSCHLIESSLICH den Ersatztext, der «original» wortwörtlich ersetzt – sonst nichts. Keine Meta-Präfixe («Ersetzen durch:», «Besser:»), keine umschliessenden Anführungszeichen/Guillemets, keine per Gedankenstrich angehängten Begründungen, keine Variantenlisten. Begründungen gehören in «erklaerung».
 - «original» MUSS zeichengenau – Zeichen für Zeichen – aus dem untenstehenden Text kopiert sein (Anführungszeichen, Gedanken-/Bindestriche, Leerzeichen, Apostrophe, Auslassungspunkte, Gross-/Kleinschreibung 1:1). Ein String-Find mit «original» muss die Stelle genau einmal finden.
-- «original» und «korrektur» haben denselben Span-Typ (Wort↔Wort, Phrase↔Phrase); alle objektiven Typen hier sind Wort- oder Phrasen-Ebene, nie ein ganzer umformulierter Satz.`;
+- «original» und «korrektur» haben denselben Span-Typ (Wort↔Wort, Phrase↔Phrase); alle objektiven Typen hier sind Wort- oder Phrasen-Ebene, nie ein ganzer umformulierter Satz${hatKonjunktiv ? ' – ausser «konjunktiv», der den vollständigen Satz der indirekten Rede trägt' : ''}.`;
 
   const dedupBlock = en
     ? `
@@ -161,7 +169,8 @@ ${schemaBlock}
 </output_format>
 ${_buildRechtschreibungBlock(langCode)}
 ${_buildGrammatikBlock(langCode)}
-${hatDialogformat ? _buildDialogformatBlock(langCode) : ''}
+${hatKonjunktiv ? _buildKonjunktivBlock(profil, langCode) : ''}
+${hatDialogformat ? _buildDialogformatBlock(langCode, { schlank: !erzaehlend, locale }) : ''}
 ${figurenkonsistenzBlock}${figurenBlock}${beziehungenBlock}${orteBlock}${belegBlock}${woerterbuchBlock}${nachrichtenBlock}
 ${selbstkontroll}
 <originaltext label="${en ? 'Original text' : 'Originaltext'}">

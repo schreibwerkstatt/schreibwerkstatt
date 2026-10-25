@@ -33,7 +33,7 @@ const CATEGORIES = [
     generic: [/\bchat\b/i, /\bchats\b/i],
     specifiers: [/abschnitts?[-\s]?chat/i, /section[-\s]?chat/i, /seiten[-\s]?chat/i, /page[-\s]?chat/i, /buch[-\s]?chat/i, /book[-\s]?chat/i, /recherche[-\s]?chat/i, /research[-\s]?chat/i, /plot[-\s]?chat/i, /ideen[-\s]?chat/i, /ideas?[-\s]?chat/i],
     hint: 'Chat mehrdeutig → die App hat FUENF unabhaengige Chats: Abschnitts-Chat (Code: Seiten-Chat, kind="page", '
-      + 'Textersetzungs-Vorschlaege), Buch-Chat (kind="book", agentisch read-only, BOOK_CHAT_TOOLS), '
+      + 'Textersetzungs-Vorschlaege), Buch-Chat (kind="book", agentisch read-only, gemeinsamer Werkzeug-Katalog), '
       + 'Recherche-Chat (kind="research", Claude-only mit Web-Suche) und Plot-Chat (kind="plot", '
       + 'Panel der Plot-Werkstatt, Board-Vorschlaege einzeln uebernehmen) und Ideen-Chat (kind="ideen", '
       + 'Panel im Ideen-Board, Erledigt-Check mit Textbeleg, Ideen-Vorschlaege einzeln uebernehmen). '

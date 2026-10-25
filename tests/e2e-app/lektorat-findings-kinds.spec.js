@@ -44,3 +44,34 @@ test('Befundliste: hart, weich und redaktionell sind unterscheidbar', async ({ p
   await expect(badges.nth(2)).toHaveAttribute('data-tip', /.+/);
   await expect(badges.nth(0)).not.toHaveAttribute('data-tip', /.*/);
 });
+
+// Regelbefunde (lib/dialogformat-rules.js) tragen `erklaerung_key`: die Erklärung
+// folgt der UI-Sprache, nicht dem gespeicherten Text in Buchsprache.
+test('Befundliste: Regelbefund zeigt die Erklärung in der UI-Sprache', async ({ page }) => {
+  await bootApp(page);
+  await selectSeededBook(page);
+  await page.evaluate(async () => {
+    await window.__app.selectPage(window.Alpine.store('nav').pages[0]);
+  });
+  await page.evaluate(() => {
+    const app = window.__app;
+    app.lektoratFindings = [
+      { typ: 'dialogformat', original: 'her“ sagte', korrektur: 'her“, sagte', erklaerung: 'Buchsprache-Text', erklaerung_key: 'lektorat.regel.kommaFehlt', regel: true },
+      { typ: 'rechtschreibung', original: 'Fhler', korrektur: 'Fehler', erklaerung: 'Tippfehler.' },
+    ];
+    app.selectedFindings = [true, true];
+    app.checkDone = true;
+  });
+  const expl = page.locator('.lektorat-split-findings label.finding .finding-explanation');
+  const want = await page.evaluate(() => window.__app.t('lektorat.regel.kommaFehlt'));
+  await expect(expl.nth(0)).toHaveText(want);
+  await expect(expl.nth(0)).not.toHaveText('Buchsprache-Text');
+  await expect(expl.nth(1)).toHaveText('Tippfehler.');
+  await page.evaluate(() => window.__app.changeLocale('en'));
+  try {
+    await expect(expl.nth(0)).toHaveText(/dialogue tag/);
+  } finally {
+    // changeLocale persistiert serverseitig — Folgetests sollen auf Deutsch starten.
+    await page.evaluate(() => window.__app.changeLocale('de'));
+  }
+});

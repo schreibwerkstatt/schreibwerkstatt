@@ -368,12 +368,20 @@ Schauplatzkonsistenz-Regeln (typ: «schauplatzmerkmal»):
 }
 
 // Locale-scharf: liefert NUR die Normen der Buch-Sprache (DE oder EN).
-// langCode = 'de' (default) | 'en'.
-export function _buildDialogformatBlock(langCode = 'de') {
+// langCode = 'de' (default) | 'en'. `schlank` für das Sachprofil: dort gibt es
+// Zitate und referierte Rede, aber keinen Dialog — geprüft werden nur die
+// Anführungszeichen und der Anschluss des Begleitsatzes, nicht Sprecherwechsel.
+// `locale` trennt im Englischen die Normen: britische Belletristik setzt meist
+// einfache Anführungszeichen, britische Sachtexte setzen Satzzeichen nur dann
+// ins Zitat, wenn sie dazugehören (logical punctuation).
+export function _buildDialogformatBlock(langCode = 'de', { schlank = false, locale = null } = {}) {
+  const britisch = langCode === 'en' && locale === 'en-GB';
+  if (schlank) return _buildZitatformatBlock(langCode, britisch);
+  if (britisch) return _buildDialogformatBlockGb();
   if (langCode === 'en') {
     return `
 Dialogue-format rules (typ: «dialogformat»):
-- Typographic correctness of direct speech, English convention. Within a book the choice must be consistent – the variant established by the book is the norm, deviations from it are findings.
+- Typographic correctness of direct speech, American convention. Within a book the choice must be consistent – the variant established by the book is the norm, deviations from it are findings.
 - Quotation marks: "…" (typographic double quotes). Nested quote: '…' (single).
 - Punctuation ALWAYS inside the quotes: «"Come here," she said.» – comma sits before the closing «"», tag verb lowercase.
 - Tag after !/?: «"Come here!" she shouted.» – the «,» is replaced by «!» / «?», tag verb still lowercase.
@@ -393,15 +401,63 @@ Dialogformat-Regeln (typ: «dialogformat»):
 - Anführungszeichen: «„…"» (U+201E unten, U+201C oben) ODER «…» (Guillemets, Spitzen nach aussen). Konsistent innerhalb des Buchs. Gerade ASCII-Quotes ("…", '…') sind in deutscher Romanprosa falsch.
 - Zitat im Zitat: ‚…' (halbe Gänsefüsschen).
 - Inquit-Komma nach Schlusszeichen: «„Komm her", sagte sie.» – Komma steht nach dem schliessenden Anführungszeichen; Inquit-Verb kleingeschrieben.
-- Inquit nach !/?: «„Komm her!" rief sie.» – Satzzeichen bleibt drin, KEIN zusätzliches Komma, Inquit-Verb klein.
+- Inquit nach !/?/…: «„Komm her!", rief sie.» – Satzzeichen bleibt in der Rede, das Komma nach dem schliessenden Anführungszeichen steht TROTZDEM (amtliche Regel), Inquit-Verb klein. «„Komm her!" rief sie.» ist ein Befund.
+- Kein Punkt vor dem Inquit: «„Komm her.", sagte sie.» → «„Komm her", sagte sie.» – der Punkt der Rede entfällt, wenn der Begleitsatz folgt.
+- Vorangestellter Begleitsatz: Doppelpunkt, nicht Komma: «Sie sagte: „Komm her."» – «Sie sagte, „Komm her."» ist ein Befund. Ausnahme: das eingeschobene Inquit (siehe unten) setzt nach dem Begleitsatz ein Komma.
 - Eigenständiger Folgesatz statt Inquit: «„Komm her." Sie lächelte.» – Punkt am Ende der Rede, Grossbuchstabe folgt.
 - Eingeschobenes Inquit: «„Komm her", sagte sie, „aber leise."» – Fortsetzung der Rede klein.
 - Sprecherwechsel: neuer Absatz. Mehrere Sätze desselben Sprechers bleiben im selben Absatz.
 - «original»: Phrase zeichengenau aus dem Text – exakt der typografisch falsche Bereich (Schlussklammer + Inquit-Übergang, einzelnes falsches Anführungszeichen, falsche Komma-Position, falsch grossgeschriebenes Tag-Verb).
 - «korrektur»: dieselbe Phrase typografisch korrekt; gleicher Span-Typ.
-- «erklaerung»: EIN Satz, benennt die verletzte Regel («Komma gehört nach das schliessende Anführungszeichen», «Inquit-Verb nach Komma kleinschreiben», «gerade ASCII-Quotes statt typografischer Gänsefüsschen», …).
+- «erklaerung»: EIN Satz, benennt die verletzte Regel («Komma gehört nach das schliessende Anführungszeichen», «Inquit-Verb nach Komma kleinschreiben», «gerade ASCII-Quotes statt typografischer Gänsefüsschen», «vorangestellter Begleitsatz verlangt einen Doppelpunkt», …).
 - NICHT melden: Anführungszeichen-Stil, der im Buch durchgehend konsistent gewählt ist (das ist die Norm des Buchs, nicht ein Fehler). Brief-/SMS-/Tagebuch-Einschübe mit eigener Konvention. Einzelne hervorgehobene Wörter in Quotes (keine echte Rede).
 - Selbsttest: Würde ein Lektor diese Stelle als typografisch falsch oder uneinheitlich anstreichen? Wenn die Wahl bewusst und konsequent durchgehalten ist → weglassen.`;
+}
+
+function _buildDialogformatBlockGb() {
+  return `
+Dialogue-format rules (typ: «dialogformat»):
+- Typographic correctness of direct speech, British convention. Within a book the choice must be consistent – the variant established by the book is the norm, deviations from it are findings.
+- Quotation marks: single typographic quotes ‘…’ are the usual primary marks in British fiction, with “…” for a quote within a quote. Double primary marks (“…”, nested ‘…’) are equally correct when the book uses them throughout. Do NOT report the choice itself – only a mix within the book or straight ASCII quotes (' / ").
+- The closing single quote and the apostrophe are the same character (’): an apostrophe is never a stray quote.
+- Dialogue punctuation inside the quotes: «‘Come here,’ she said.» – comma before the closing quote, tag verb lowercase.
+- Tag after !/?: «‘Come here!’ she shouted.» – no extra comma, tag verb lowercase.
+- Independent following sentence instead of tag: «‘Come here.’ She smiled.» – full stop INSIDE the quotes, capital letter follows.
+- Interrupted speech: «‘Wait –’» (spaced en dash or em dash, as the book does it). Trailing off: «‘I don’t…’».
+- Speaker change → new paragraph. Multiple sentences by the same speaker stay in one paragraph.
+- «original»: phrase copied character-exact from the text – precisely the typographically wrong span.
+- «korrektur»: same phrase typographically correct; same span type.
+- «erklaerung»: ONE sentence naming the rule that was broken («comma belongs inside the closing quote», «tag verb after comma should be lowercase», «straight ASCII quote instead of typographic ‘…’», …).
+- DO NOT report: single vs double primary quotes when consistent; letter/SMS/diary inserts with their own convention; single highlighted words in quotes (not actual speech).
+- Self-test: would a British editor flag this spot as typographically wrong or inconsistent? If the choice is deliberate and consistently maintained → leave it out.`;
+}
+
+function _buildZitatformatBlock(langCode, britisch = false) {
+  if (britisch) {
+    return `
+Quotation-mark rules (typ: «dialogformat»):
+- Applies to quotations and reported statements in non-fiction: typographic consistency of the quotation marks, British convention.
+- Quotation marks: ‘…’ with “…” nested, or “…” with ‘…’ nested – either, consistently throughout the book. Straight ASCII quotes are a finding when the book otherwise uses typographic ones. The apostrophe (’) is never a stray quote.
+- Logical punctuation: a full stop or comma goes inside the quotes only if it belongs to the quoted material («She called the plan ‘unworkable’.» – full stop outside; «‘We will pay,’ she said.» – the quoted sentence carries its own comma).
+- DO NOT report: the wording inside the quotation (it is the speaker's), punctuation placement the book applies consistently, single terms in quotes used consistently, titles of works.
+- «original»: the typographically wrong span, copied character-exact. «korrektur»: the same span corrected. «erklaerung»: ONE sentence naming the rule.`;
+  }
+  if (langCode === 'en') {
+    return `
+Quotation-mark rules (typ: «dialogformat»):
+- Applies to quotations and reported statements in non-fiction: typographic consistency of the quotation marks, American convention.
+- Quotation marks: "…" (typographic double quotes), nested '…'. Straight ASCII quotes are a finding when the book otherwise uses typographic ones.
+- Attribution after the quote: punctuation inside the quotes («"We will pay," she said.»).
+- DO NOT report: the wording inside the quotation (it is the speaker's), single terms in quotes used consistently, titles of works.
+- «original»: the typographically wrong span, copied character-exact. «korrektur»: the same span corrected. «erklaerung»: ONE sentence naming the rule.`;
+  }
+  return `
+Anführungszeichen-Regeln (typ: «dialogformat»):
+- Gilt für Zitate und wiedergegebene Aussagen im Sachtext: typografische Einheitlichkeit der Anführungszeichen, deutsche Norm.
+- Anführungszeichen: «„…"» ODER «…» bzw. »…«, im ganzen Buch einheitlich. Gerade ASCII-Quotes ("…") sind ein Befund. Zitat im Zitat: ‚…' bzw. ‹…›.
+- Begleitsatz nach dem Zitat: Komma nach dem schliessenden Anführungszeichen, auch nach ?/! («„Wer zahlt?", fragte sie.»). Vorangestellter Begleitsatz: Doppelpunkt («Sie sagte: „Wir zahlen."»).
+- NICHT melden: den Wortlaut im Zitat (er gehört dem Zitierten), einzelne Begriffe in Anführungszeichen, sofern einheitlich, Werktitel.
+- «original»: der typografisch falsche Bereich, zeichengenau. «korrektur»: derselbe Bereich korrigiert. «erklaerung»: EIN Satz, benennt die Regel.`;
 }
 
 export function _buildPassivBlock() {

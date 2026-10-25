@@ -11,6 +11,8 @@ import { readDraft } from '../draft-storage.js';
 import { isNoChange } from '../shared/save-pipeline.js';
 import { DIAGRAMS_REDRAWN, renderDiagramsIn } from '../../diagram/mermaid-view.js';
 import { stampCaptionNumbers } from '../../xrefs/caption-preview.js';
+import { READ_VIEW_SEL, notebookReadView } from './read-view.js';
+import { hideLektoratTip } from '../../book/lektorat-tip.js';
 
 // Restore nur, wenn für die Seite ein lokaler Draft (ungespeicherter Inhalt)
 // existiert. Ohne Draft hat der User keinen nennenswerten Edit-State —
@@ -70,7 +72,7 @@ export const notebookCardMethods = {
     const draw = () => this.$nextTick(() => {
       const app = window.__app;
       if (!app || app.editMode || app.focusActive) return;
-      const view = document.querySelector('.page-content-view:not(.page-content-view--editing)');
+      const view = notebookReadView();
       if (!view) return;
       // Fehler bleiben lokal: ein ungültiges Diagramm zeigt seinen Quelltext.
       renderDiagramsIn(view, { errorLabel: app.t?.('editor.diagram.invalid') })
@@ -115,13 +117,20 @@ export const notebookCardMethods = {
     const onImage = (e) => {
       const t = e.target;
       if (t?.tagName !== 'IMG') return;
-      if (!t.closest('.page-content-view:not(.page-content-view--editing)') || t.closest('.revision-viewer__content')) return;
+      if (!t.closest(READ_VIEW_SEL)) return;
       remeasure();
     };
     const signal = this._notebookAbort?.signal;
     document.addEventListener('load', onImage, { capture: true, signal });
     document.addEventListener('error', onImage, { capture: true, signal });
     signal?.addEventListener('abort', () => { if (raf) cancelAnimationFrame(raf); });
+  },
+
+  // Lektorat-Tooltip schliessen, sobald die Leseansicht neu gerendert wird —
+  // seine Marke ist dann nicht mehr im DOM (book/lektorat-tip.js).
+  _setupNotebookTipReset() {
+    this.$watch(() => window.__app?.renderedPageHtml, hideLektoratTip);
+    this.$watch(() => window.__app?.editMode, hideLektoratTip);
   },
 
   // Nummern in Abbildungslegenden und Tabellenbeschriftungen der Leseansicht
@@ -142,7 +151,7 @@ export const notebookCardMethods = {
     const stamp = () => this.$nextTick(() => {
       const app = window.__app;
       if (!app || app.editMode || app.focusActive) return;
-      const view = document.querySelector('.page-content-view:not(.page-content-view--editing)');
+      const view = notebookReadView();
       if (!view) return;
       const bookId = window.Alpine?.store('nav')?.selectedBookId;
       // Fehler bleiben lokal: ohne Nummern ist die Leseansicht vollständig,

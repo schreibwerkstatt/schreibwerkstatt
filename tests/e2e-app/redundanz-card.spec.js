@@ -41,6 +41,7 @@ test('redundanz: gespeichertes Ergebnis rendert, Ignorieren + Aufklappen', async
     status: 200, contentType: 'application/json',
     body: JSON.stringify({
       dismissedCount: 0,
+      changedSinceRun: true,
       result: {
         threshold: 0.88, skipAdjacent: true, comparedChunks: 12, comparedPairs: 50,
         totalFound: 3, truncated: false, truncatedChunks: 0,
@@ -68,9 +69,9 @@ test('redundanz: gespeichertes Ergebnis rendert, Ignorieren + Aufklappen', async
   await expect(items).toHaveCount(2);
   // Band folgt der Schwelle des Ergebnisses (0.88 = streng).
   await expect(card.locator('.redundanz-threshold .tabs-btn--active')).toHaveText(/Streng|Strict/);
-  // Index neuer als das Ergebnis + geänderte Einträge → beide Hinweise.
+  // Geänderte Einträge seit dem Index + Text/Figuren seit dem Lauf → beide Hinweise.
   await expect(card.locator('.redundanz-stale')).toBeVisible();
-  await expect(card.locator('.redundanz-meta .card-hint--warn').filter({ hasText: /neu aufgebaut|rebuilt/ })).toBeVisible();
+  await expect(card.locator('.redundanz-meta .card-hint--warn').filter({ hasText: /seit dieser Prüfung geändert|changed since this scan/ })).toBeVisible();
 
   // Lange Passage klappt auf.
   const first = items.first();

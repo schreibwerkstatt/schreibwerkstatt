@@ -63,10 +63,12 @@ export const snapshotsCompareMethods = {
     return window.__app.t('snapshots.pub.' + key);
   },
 
-  // Anzeigewert einer Diff-Zelle: Bool → Vorhanden/—, Text → Wert oder „—".
+  // Anzeigewert einer Diff-Zelle: Bool → Vorhanden/—, ausgetauschtes Bild →
+  // Vorhanden/Ersetzt, Text → Wert oder „—".
   pubValueDisplay(entry, side) {
     const app = window.__app;
     const v = side === 'from' ? entry.from : entry.to;
+    if (entry.kind === 'replaced') return app.t(side === 'from' ? 'snapshots.pub.present' : 'snapshots.pub.replaced');
     if (entry.kind === 'bool') return v ? app.t('snapshots.pub.present') : app.t('snapshots.pub.absent');
     const s = (v == null ? '' : String(v)).trim();
     return s || '—';
@@ -76,7 +78,23 @@ export const snapshotsCompareMethods = {
   visibleEntries() {
     if (!this.diff) return [];
     if (this.showUnchanged) return this.diff.entries;
-    return this.diff.entries.filter(e => e.status !== 'unchanged' || e.renamed || e.moved);
+    return this.diff.entries.filter(e => e.status !== 'unchanged' || e.renamed || e.moved || e.reordered);
+  },
+
+  // Kapitel-Aenderungen (neu/entfernt/umbenannt/verschoben/umsortiert/Export-
+  // Ausschluss) — eigene Liste ueber den Abschnitten.
+  chapterEntries() {
+    return this.diff?.chapters || [];
+  },
+
+  chapterTags(c) {
+    const app = window.__app;
+    const out = [];
+    if (c.renamed) out.push(app.t('snapshots.renamedTag', { old: c.oldName }));
+    if (c.moved) out.push(app.t('snapshots.movedTag', { from: this.chapterPathLabel(c.oldPath) }));
+    if (c.reordered) out.push(app.t('snapshots.reorderedTag'));
+    if (c.excludedChanged) out.push(app.t(c.excluded ? 'snapshots.chapters.excludedOn' : 'snapshots.chapters.excludedOff'));
+    return out;
   },
 
   entryKey(entry, idx) {

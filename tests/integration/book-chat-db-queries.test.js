@@ -113,7 +113,7 @@ function seed() {
 
 test.before(() => {
   ctx = bootstrap();
-  TOOLS = require('../../routes/jobs/book-chat-tools').TOOLS;
+  TOOLS = require('../../routes/jobs/chat-tools').TOOLS;
   db = require('../../db/connection').db;
   seed();
   seedOther();
@@ -186,23 +186,22 @@ test('list_world_facts: Kapitelnamen je Fakt in Leserichtung', () => {
 
 // ── Figuren ─────────────────────────────────────────────────────────────────
 
-test('count_pronouns per_chapter: Seiten ohne Kapitel unter „(ohne Kapitel)"', () => {
-  const r = call('count_pronouns', { per_chapter: true, pronouns: ['ich', 'wir'] });
+test('get_stil_metrics pronouns (scope=chapter): Seiten ohne Kapitel unter „(ohne Kapitel)"', () => {
+  const r = call('get_stil_metrics', { scope: 'chapter', pronouns: ['ich', 'wir'] }).pronouns;
   const byName = Object.fromEntries(r.chapters.map(c => [c.chapter_name, c.counts]));
   assert.deepEqual(byName.Zwei.ich, { narr: 1, dlg: 2 });
   assert.deepEqual(byName.Eins.ich, { narr: 4, dlg: 0 });
   assert.deepEqual(byName['(ohne Kapitel)'].wir, { narr: 1, dlg: 0 });
 });
 
-test('get_figure_mentions + find_first_last_mention: erste/letzte Seite in Leserichtung', async () => {
+test('get_figure_mentions: erste/letzte Seite in Leserichtung samt Offset', async () => {
   const m = await call('get_figure_mentions', { figur_id: 'fig_anna' });
   assert.equal(m.total_mentions, 4);
   // Gliederungs-Reihenfolge: P-ohne (vor den Kapiteln), dann Eins vor Zwei
   assert.equal(m.first_appearance.page_name, 'P-ohne');
   assert.equal(m.last_appearance.page_name, 'P-Zwei');
-  const f = await call('find_first_last_mention', { figur_id: 'fig_anna' });
-  assert.equal(f.first_appearance.first_offset, 14);
-  assert.equal(f.last_appearance.chapter_name, 'Zwei');
+  assert.equal(m.first_appearance.first_offset, 14);
+  assert.equal(m.last_appearance.chapter_name, 'Zwei');
 });
 
 test('get_figure_profile: Kapitel, Ereignisse, Szenen mit Namen', () => {
@@ -225,14 +224,18 @@ test('get_reviews: jüngste Kapitelbewertung, stale gegen pages.updated_at, fehl
   assert.equal(book.stale, true);
 });
 
-test('get_lektorat_hotspots / findings: nur jüngster Check je Seite, Filter', () => {
-  const h = call('get_lektorat_hotspots');
+test('get_lektorat hotspots / findings: nur jüngster Check je Seite, Filter, view-Wahl', () => {
+  const h = call('get_lektorat');
+  assert.equal(h.view, 'hotspots');
   assert.equal(h.total_errors, 6);
   assert.deepEqual(h.top_pages.map(p => p.page_name), ['P-Eins-b', 'P-Eins-a', 'P-Zwei']);
-  assert.equal(call('get_lektorat_hotspots', { chapter_id: 91011 }).pages_checked, 1);
-  const f = call('get_lektorat_findings', { chapter_id: 91012 });
+  assert.equal(call('get_lektorat', { chapter_id: 91011 }).pages_checked, 1);
+  const f = call('get_lektorat', { view: 'findings', chapter_id: 91012 });
   assert.deepEqual([...new Set(f.findings.map(x => x.page_name))], ['P-Eins-a', 'P-Eins-b']);
-  assert.equal(call('get_lektorat_findings', { page_id: 910101 }).total_findings, 1);
+  // page_id gibt es nur bei den Einzelbefunden — ohne view landet die Frage dort.
+  const one = call('get_lektorat', { page_id: 910101 });
+  assert.equal(one.view, 'findings');
+  assert.equal(one.total_findings, 1);
 });
 
 test('get_stil_metrics: Kapitel-Aggregat in Leserichtung, Seiten-Ranking, Top-Figuren', () => {
@@ -256,10 +259,10 @@ test('get_chapter_text: Seiten eines Kapitels in Leserichtung, fremdes Kapitel a
   assert.match((await call('get_chapter_text', { chapter_id: 91021 })).error, /nicht im aktuellen Buch/);
 });
 
-test('get_pages / quote_match: Kapitelname nur aus demselben Buch', async () => {
+test('get_pages / quote_passage (pattern): Kapitelname nur aus demselben Buch', async () => {
   const pages = await call('get_pages', { ids: [910101, 910105] });
   assert.deepEqual(pages.pages.map(p => [p.page_name, p.chapter_name]), [['P-Zwei', 'Zwei'], ['P-fremdkap', null]]);
-  const q = await call('quote_match', { page_id: 910102, pattern: 'tür', occurrence: 2 });
+  const q = await call('quote_passage', { page_id: 910102, pattern: 'tür', occurrence: 2 });
   assert.equal(q.chapter_name, 'Eins');
   assert.equal(q.total_matches, 2);
 });
@@ -390,11 +393,11 @@ test('list_scenes / list_songs: Figuren- und Orts-Bridges, loc_id-Filter im Buch
   assert.deepEqual(g.songs[0].figuren, [{ fig_id: 'fig_nord', name: 'Anna Nord', kontext_typ: 'singt' }]);
 });
 
-test('find_first_last_mention (Ort): loc_id getrimmt, Buch- und User-Scope', async () => {
-  const r = await callO('find_first_last_mention', { loc_id: ' loc_hafen ' });
+test('get_location_profile: loc_id getrimmt, Buch- und User-Scope', async () => {
+  const r = await callO('get_location_profile', { loc_id: ' loc_hafen ' });
   assert.equal(r.name, 'Hafen');
-  assert.equal((await call('find_first_last_mention', { loc_id: 'loc_hafen' })).name, 'Hafen im Nachbarbuch');
-  assert.match((await callO('find_first_last_mention', { loc_id: 'loc_hafen' }, V)).error, /^Ort nicht gefunden/);
+  assert.equal((await call('get_location_profile', { loc_id: 'loc_hafen' })).name, 'Hafen im Nachbarbuch');
+  assert.match((await callO('get_location_profile', { loc_id: 'loc_hafen' }, V)).error, /^Ort nicht gefunden/);
 });
 
 test('list_continuity_issues: nur jüngster Check des Users, Figuren mit Freitext-Fallback', () => {
@@ -425,13 +428,13 @@ test('list_world_facts: sort_order, kategorie exakt, subjekt als Teilstring, Use
   assert.deepEqual(callO('list_world_facts', {}, V).fakten.map(f => f.fakt), ['bob']);
 });
 
-test('get_stil_metrics (Buch) / count_pronouns (Buch): Summen nur über das eigene Buch', () => {
+test('get_stil_metrics (Buch, mit pronouns): Summen nur über das eigene Buch', () => {
   const s = call('get_stil_metrics', { scope: 'book' });
   assert.equal(s.pages, 4);
   assert.equal(s.passive_count, 6);
   assert.equal(s.words, 28);
   assert.ok(callO('get_stil_metrics', { scope: 'book' }).hint);
-  const p = call('count_pronouns', { pronouns: ['ich'] });
+  const p = call('get_stil_metrics', { scope: 'book', pronouns: ['ich'] }).pronouns;
   assert.equal(p.pages_indexed, 3);
   assert.deepEqual(p.counts.ich, { narr: 5, dlg: 2 });
 });
@@ -444,7 +447,7 @@ test('get_pages: latest_check ist der jüngste Check des Users', async () => {
 });
 
 test('resolveEntityTitle: Szene/Figur per id, gelöscht → null', () => {
-  const { resolveEntityTitle } = require('../../routes/jobs/book-chat-tools/shared');
+  const { resolveEntityTitle } = require('../../routes/jobs/chat-tools/shared');
   assert.equal(resolveEntityTitle('scene', o.scene), 'Hafen-Szene');
   assert.equal(resolveEntityTitle('figure', o.zoe), 'Zoe');
   assert.equal(resolveEntityTitle('figure', 99999999), null);

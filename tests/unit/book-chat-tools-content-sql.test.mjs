@@ -1,4 +1,4 @@
-// Tripwire: die Tool-Module unter routes/jobs/book-chat-tools/ führen kein SQL
+// Tripwire: die Tool-Module unter routes/jobs/chat-tools/ führen kein SQL
 // aus. Jede Abfrage — auf `pages`/`chapters`/`books` (CLAUDE.md
 // „Content-Store-Facade als einziger Eintrittspunkt für Buchinhalte") ebenso wie
 // auf figures, locations, page_stats, continuity_*, zeitstrahl_* usw. — liegt in
@@ -17,7 +17,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const REPO_ROOT = new URL('../../', import.meta.url).pathname;
-const TOOLS_DIR = join(REPO_ROOT, 'routes', 'jobs', 'book-chat-tools');
+const TOOLS_DIR = join(REPO_ROOT, 'routes', 'jobs', 'chat-tools');
 const CONTENT_SQL = /\b(FROM|JOIN|UPDATE|INTO)\s+(pages|chapters|books)\b/gi;
 // SQL-Ausführung, DB-Handle-Import und SQL-Literale. Schlüsselwörter nur gross
 // geschrieben, damit deutscher/englischer Fliesstext („Update from …") nicht trifft.
@@ -43,19 +43,19 @@ function scan(patterns) {
     for (const re of patterns) {
       for (const m of text.matchAll(re)) {
         const line = text.slice(0, m.index).split('\n').length;
-        hits.push(`routes/jobs/book-chat-tools/${f}:${line}: ${m[0].replace(/\s+/g, ' ').slice(0, 80)}`);
+        hits.push(`routes/jobs/chat-tools/${f}:${line}: ${m[0].replace(/\s+/g, ' ').slice(0, 80)}`);
       }
     }
   }
   return hits;
 }
 
-test('routes/jobs/book-chat-tools/*.js enthält kein SQL auf pages/chapters/books', () => {
+test('routes/jobs/chat-tools/*.js enthält kein SQL auf pages/chapters/books', () => {
   const hits = scan([CONTENT_SQL]);
   assert.deepEqual(hits, [], `Abfrage nach db/book-chat/<bereich>.js verschieben:\n${hits.join('\n')}`);
 });
 
-test('routes/jobs/book-chat-tools/*.js führt überhaupt kein SQL aus', () => {
+test('routes/jobs/chat-tools/*.js führt überhaupt kein SQL aus', () => {
   const hits = scan(DB_ACCESS);
   assert.deepEqual(hits, [], `Abfrage nach db/book-chat/<bereich>.js verschieben, im Tool nur die Funktion aufrufen:\n${hits.join('\n')}`);
 });

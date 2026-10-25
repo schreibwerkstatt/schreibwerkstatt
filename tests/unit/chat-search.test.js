@@ -164,7 +164,7 @@ test('Dimensions-Mismatch des Endpunkts: semanticError statt stiller Wortlaut-Su
     embed.embedQuery = async () => new Float32Array(DIM + 1);
     const r = await searchChatHistory({ bookId: BOOK, userEmail: A, query: 'Lebewohl', kinds: ['page'] });
     assert.equal(r.semanticError, true);
-    const { executeTool } = require('../../routes/jobs/book-chat-tools');
+    const { executeTool } = require('../../routes/jobs/chat-tools');
     const tool = await executeTool('search_chat_history', { query: 'Lebewohl' }, { bookId: BOOK, userEmail: A, sessionId: null });
     assert.equal(tool.semantic_unavailable, true);
     assert.match(tool.hint, /Bedeutungssuche ausgefallen/);
@@ -185,7 +185,7 @@ test('Session gelöscht → FTS-Einträge und Vektoren per Trigger/CASCADE weg',
 });
 
 test('Werkzeug search_chat_history: laufendes Gespräch ausgenommen, Scope-Filter', async () => {
-  const { executeTool } = require('../../routes/jobs/book-chat-tools');
+  const { executeTool } = require('../../routes/jobs/chat-tools');
   const ctx = { bookId: BOOK, userEmail: A, sessionId: sBook };
   const all = await executeTool('search_chat_history', { query: 'Lena' }, ctx);
   assert.deepEqual(new Set(all.results.map(r => r.session_id)), new Set([sP1, sP2]), 'laufender Buch-Chat fehlt');

@@ -31,6 +31,14 @@ import { mermaidThemeConfig } from './mermaid-theme.js';
 const RENDER_CLASS = 'mermaid-render';
 const RENDER_KEY_ATTR = 'data-mermaid-key';
 const ERROR_CLASS = 'mermaid-render--error';
+// Am Quelltext-`<pre>`, solange sein Bild daneben steht — das CSS blendet den
+// Quelltext dann aus (manuscript-content.css).
+const RENDERED_SOURCE_CLASS = 'mermaid--rendered';
+
+/** Alles, was ein gerendertes Diagramm im DOM zeigt oder dabei versteckt: das
+ *  Bild und der ausgeblendete Quelltext. Für Konsumenten, die sichtbaren Text
+ *  durchsuchen (Find im Bucheditor). */
+export const RENDERED_DIAGRAM_SEL = `.${RENDER_CLASS}, .${RENDERED_SOURCE_CLASS}`;
 
 /** Schluessel des Render-Knotens. Das THEME gehoert hinein: ein Wechsel
  *  hell/dunkel muss dieselben Diagramme neu zeichnen lassen, weil die Farben im
@@ -244,7 +252,7 @@ async function _draw(pending, theme, opts = {}) {
         // Degradation, fuer die `<pre>` als Traeger gewaehlt wurde.
         const stale = el.nextElementSibling;
         if (stale?.classList?.contains(RENDER_CLASS)) stale.remove();
-        el.classList.remove('mermaid--rendered');
+        el.classList.remove(RENDERED_SOURCE_CLASS);
         failed++;
         continue;
       }
@@ -264,14 +272,14 @@ async function _draw(pending, theme, opts = {}) {
     host.setAttribute(RENDER_KEY_ATTR, _renderKey(code, theme));
     if (result?.svg) {
       host.innerHTML = result.svg;
-      el.classList.add('mermaid--rendered');
+      el.classList.add(RENDERED_SOURCE_CLASS);
       rendered++;
     } else {
       host.classList.add(ERROR_CLASS);
       // Kein x-html-Sink und kein innerHTML mit Fremdtext: die Meldung von
       // mermaid enthaelt Teile des Quelltexts.
       host.textContent = opts.errorLabel || _errorLabel || 'Diagram error';
-      el.classList.remove('mermaid--rendered');
+      el.classList.remove(RENDERED_SOURCE_CLASS);
       failed++;
     }
     el.insertAdjacentElement('afterend', host);
@@ -286,5 +294,5 @@ async function _draw(pending, theme, opts = {}) {
 export function clearRenderedDiagrams(root) {
   if (!root?.querySelectorAll) return;
   for (const host of root.querySelectorAll('.' + RENDER_CLASS)) host.remove();
-  for (const el of root.querySelectorAll('.mermaid--rendered')) el.classList.remove('mermaid--rendered');
+  for (const el of root.querySelectorAll('.' + RENDERED_SOURCE_CLASS)) el.classList.remove(RENDERED_SOURCE_CLASS);
 }

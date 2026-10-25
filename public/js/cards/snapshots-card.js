@@ -18,11 +18,13 @@ import { setupCardLifecycle } from './card-lifecycle.js';
 
 // Modul-Cache fuer Fassungs-Vollzeilen. Das `content_json` einer Fassung kann
 // MB gross sein; es ist aber unveraenderlich pro id (kein retroaktives Update,
-// siehe docs/fassungen.md) → global cachebar, damit weder der Combobox-Wechsel
-// im Vergleich noch das erneute Oeffnen im Reader die Zeile neu ziehen muss.
+// siehe docs/fassungen.md) → cachebar, damit weder der Combobox-Wechsel im
+// Vergleich noch das erneute Oeffnen im Reader die Zeile neu ziehen muss.
 // Snapshot-id ist ein globaler PK, deshalb kein book-Scoping noetig. Der
 // (mutierbare) `published_at`-Badge kommt fuer die Anzeige aus der Liste, nicht
-// aus dieser gecachten Zeile.
+// aus dieser gecachten Zeile. LRU mit kleiner Obergrenze: ein Vergleich braucht
+// zwei Zeilen, der Reader eine — mehr haelt den Tab nur mit MB-Bloecken voll.
+const SNAPSHOT_CACHE_MAX = 4;
 const _snapshotCache = new Map(); // snapshotId(String) -> snapshot object
 
 export function registerSnapshotsCard() {
@@ -70,6 +72,7 @@ export function registerSnapshotsCard() {
     readerSections: [],    // [{ kind:'chapter'|'page', name, depth, html, id, status, renderHtml, key }]
     readerLoading: false,
     readerAddedSince: 0,   // Seiten, die seit der Fassung neu dazugekommen sind
+    readerCurrentFailed: false, // aktueller Buchstand nicht ladbar → Fassung ohne Vergleich
     readerExtras: null,    // { figures, locations, … } — eingefrorener Weltaufbau-/Lektorat-Stand
     readerPublication: null, // eingefrorene Publikations-Metadaten (Titelei/ISBN/Cover-Flags) zum Fassungs-Zeitpunkt
     pdfProfiles: [],
@@ -209,10 +212,18 @@ export function registerSnapshotsCard() {
     // (runCompare) und Reader (openSnapshot).
     async _fetchSnapshot(bookId, id) {
       const key = String(id);
-      if (_snapshotCache.has(key)) return _snapshotCache.get(key);
+      if (_snapshotCache.has(key)) {
+        const hit = _snapshotCache.get(key);
+        _snapshotCache.delete(key);
+        _snapshotCache.set(key, hit);
+        return hit;
+      }
       const data = await fetchJson(`/snapshots/${bookId}/${id}`);
       const snap = data?.snapshot || null;
-      if (snap) _snapshotCache.set(key, snap);
+      if (snap) {
+        _snapshotCache.set(key, snap);
+        while (_snapshotCache.size > SNAPSHOT_CACHE_MAX) _snapshotCache.delete(_snapshotCache.keys().next().value);
+      }
       return snap;
     },
 
@@ -303,6 +314,7 @@ export function registerSnapshotsCard() {
       this.readerLoading = true;
       this.readerSections = [];
       this.readerAddedSince = 0;
+      this.readerCurrentFailed = false;
       this.readerExtras = null;
       this.readerPublication = null;
       this._resetPdfExport();
@@ -313,21 +325,29 @@ export function registerSnapshotsCard() {
         // Vergleichsbasis fuer den Inline-Diff (Match via srcId == page_id).
         // Fassungs-Zeile aus dem Cache (unveraenderlich); der aktuelle Buchstand
         // muss frisch sein (mutierbar) → immer Fetch.
+        // Scheitert der aktuelle Stand, zeigt der Reader die Fassung ohne
+        // Vergleich — sonst sahen alle Abschnitte „im aktuellen Buch geloescht"
+        // aus und boten „übernehmen" an.
         const [snapshot, curData] = await Promise.all([
           this._fetchSnapshot(bookId, snap.id),
-          fetchJson(`/book-editor/${bookId}/contents`).catch(() => ({ pages: [] })),
+          fetchJson(`/book-editor/${bookId}/contents`).catch((e) => {
+            console.error('[snapshots:open:current]', e);
+            return null;
+          }),
         ]);
+        this.readerCurrentFailed = !curData;
         this.readerExtras = snapshot?.extras_summary || null;
         this.readerPublication = snapshot?.publication || null;
         const sections = this._buildReaderSections(snapshot?.content);
         const currentById = new Map();
         for (const p of (curData?.pages || [])) currentById.set(p.pageId, p.html || '');
 
-        const diffLib = await loadDiff().catch(() => null);
+        const diffLib = curData ? await loadDiff().catch(() => null) : null;
         const snapIds = new Set();
         for (const s of sections) {
           if (s.kind !== 'page') continue;
           if (s.id != null) snapIds.add(s.id);
+          if (!curData) { s.status = ''; s.renderHtml = s.html; continue; }
           const curHtml = s.id != null ? currentById.get(s.id) : undefined;
           if (curHtml === undefined) {
             // In der Fassung vorhanden, im aktuellen Buch geloescht.
@@ -347,7 +367,7 @@ export function registerSnapshotsCard() {
         }
         // Seiten, die seit der Fassung neu dazugekommen sind.
         let added = 0;
-        for (const pid of currentById.keys()) if (!snapIds.has(pid)) added += 1;
+        if (curData) for (const pid of currentById.keys()) if (!snapIds.has(pid)) added += 1;
         this.readerAddedSince = added;
         this.readerSections = sections;
       } catch (e) {
@@ -364,6 +384,7 @@ export function registerSnapshotsCard() {
       this.readerSnap = null;
       this.readerSections = [];
       this.readerAddedSince = 0;
+      this.readerCurrentFailed = false;
       this.readerExtras = null;
       this.readerPublication = null;
       this._resetPdfExport();

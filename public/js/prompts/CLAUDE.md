@@ -22,7 +22,9 @@ Gilt zusaetzlich zur Root-[CLAUDE.md](../../../CLAUDE.md).
   - `review-typen.js` — Bewertungsprofile pro Buchtyp: Achsen, Notenanker, Empfehlungs-Kategorien (SSoT, siehe unten)
   - `review.js` + `review/` — Buch-/Kapitel-Bewertung: Facade über `review/{format,context,builders,schemas}.js` (Prompts + Schema-Builder aus dem Profil)
   - `komplett.js` — Komplettanalyse-Pipeline (Extraktion, Soziogramm, Orte, Kontinuität, Zeitstrahl) + alle dynamischen Schemas
-  - `chat.js` — Abschnitts-Chat + Buch-Chat (klassisch + Agentic) + `BOOK_CHAT_TOOLS`
+  - `chat.js` — Abschnitts-Chat + Buch-Chat (klassisch + Agentic)
+  - `chat-tools/` — gemeinsamer Werkzeug-Katalog der agentischen Chats (Definitionen, Zugriffstabelle, Mentions); Regeln in [routes/jobs/chat-tools/CLAUDE.md](../../../routes/jobs/chat-tools/CLAUDE.md)
+  - `book-chat-output.js` — `final_answer` + Aussenwelt-Regel des Buch-Chats
   - `chat-pre-context.js` — Erst-Kontext-/Textpassagen-Bausteine (Passagen-Kopfzeile, Index-Status-Hinweis), geteilt von Buch-, Plot- und Ideen-Chat
   - `book-outline.js` — Gliederungs-Block des klassischen Buch-Chats (Kapitel/Unterkapitel/Abschnitte in Lesereihenfolge)
   - `synonym.js` — Synonym-Suche

@@ -116,3 +116,21 @@ test('Ersetzen im aktiven Block ist ein eigener Undo-Schritt', async ({ page }) 
   await expect(body).not.toContainText('ERSETZMICH');
   guard.assertClean('Bucheditor: Replace + Undo');
 });
+
+test('«Alle ersetzen» mit mehreren Treffern ist EIN Undo-Schritt', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await openBookEditor(page);
+  const body = await activate(page, 0);
+  await page.keyboard.type('VIELFACH VIELFACH VIELFACH ');
+
+  await data(page, (d) => { d.openFind(); d.findTerm = 'VIELFACH'; d.findReplace = 'EINMAL'; d.recomputeFindMatches(); });
+  await expect.poll(() => data(page, (d) => d.findMatches.length), { timeout: 5000 }).toBe(3);
+  await data(page, (d) => d.replaceAll());
+  await expect(body).not.toContainText('VIELFACH');
+
+  // Ein Strg+Z nimmt das ganze Ersetzen zurück, nicht nur den letzten Treffer.
+  await data(page, (d) => d.bookEditorUndo());
+  await expect(body).not.toContainText('EINMAL');
+  expect((await body.textContent()).match(/VIELFACH/g)?.length).toBe(3);
+  guard.assertClean('Bucheditor: Alle ersetzen = ein Undo-Schritt');
+});

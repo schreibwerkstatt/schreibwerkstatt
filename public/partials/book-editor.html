@@ -69,7 +69,7 @@
 
   <div class="book-editor-layout"
        :class="{ 'book-editor-layout--no-outline': !outlineOpen,
-                 'book-editor-layout--comments': commentRailVisible && commentThreads.length }"
+                 'book-editor-layout--comments': commentRailShown() }"
        x-show="!loading && blocks.length > 0">
 
     <!-- Outline / Inhaltsverzeichnis -->
@@ -156,7 +156,7 @@
             <div class="book-editor-head" x-show="headShown(block)" x-cloak><template x-for="feld in headFieldList()" :key="feld">
               <textarea rows="1" class="book-editor-head__field" :class="'book-editor-head__field--' + feld" x-show="headFieldShown(block, feld)" data-spellcheck="spelling"
                         :value="headValue(block.pageId, feld)" :placeholder="$app.t('headline.field.' + feld)" :aria-label="$app.t('headline.field.' + feld)"
-                        :readonly="!$app.canEdit()" x-init="$nextTick(() => headAutosize($el))" @input="headAutosize($el)" @keydown="headKeydown(feld, $event)" @blur="headSave(block, feld, $event.target)"></textarea>
+                        :readonly="!_canEdit()" x-init="$nextTick(() => headAutosize($el))" @input="headAutosize($el)" @keydown="headKeydown(feld, $event)" @blur="headSave(block, feld, $event.target)"></textarea>
             </template></div>
 
             <!-- Body wird imperativ via _mountBlockEl gefüllt; _maybeRehydrate
@@ -173,6 +173,7 @@
                  @keydown="onBlockKeydown(block, $event)"
                  @beforeinput="onBlockBeforeInput($event)"
                  @input="_onBlockInput(block, $event)"
+                 @focusout="onBlockFocusout(block, $event)"
                  @paste="onBlockClipboard(block, $event, 'paste')"
                  @copy="onBlockClipboard(block, $event, 'copy')"
                  @cut="onBlockClipboard(block, $event, 'cut')"></div>
@@ -194,7 +195,7 @@
     <!-- Kommentar-Leiste: verankerte Leser-Kommentare des ganzen Buchs (reuse
          .comment-rail*-Optik). Methoden in editor/book-editor-comments.js. -->
     <aside class="comment-rail book-editor-comments"
-           x-show="commentRailVisible && (commentThreads.length || commentFilterStatus !== 'all' || commentFilterReviewer)" x-cloak
+           x-show="commentRailShown()" x-cloak
            :aria-label="$app.t('share.rail.title')">
 
       <!-- Triage-Filter (#5): Status-Segment + optionaler Reviewer-Filter. -->
@@ -335,7 +336,7 @@
                 :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
       </div>
-      <div class="book-editor-find-row" x-show="$app.canEdit()">
+      <div class="book-editor-find-row" x-show="_canEdit()">
         <input type="text"
                class="book-editor-find-input book-editor-find-input--replace"
                x-model="findReplace"

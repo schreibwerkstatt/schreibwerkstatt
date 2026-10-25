@@ -68,7 +68,10 @@ test('Plot-Chat: Vorschläge einzeln übernehmen, Undo, Akt-Bezug blockiert bis 
   await plotData(page, `
     d.plotChatMessages = [{
       id: 987654, role: 'assistant', content: 'Drei Vorschläge.',
-      context_info: { mode: 'plot', proposals: [
+      context_info: { mode: 'plot', tool_calls: [
+        { name: 'get_plot_board', ok: true, iter: 1, input: { act_id: a }, view: { subject: [{ t: 'ref', k: 'act', id: String(a), v: 'Akt Test' }], result: null } },
+        { name: 'final_answer', ok: true, iter: 2 },
+      ], proposals: [
         { type: 'beat_create', ref: 1, act_id: a, thread_id: null, fields: { titel: 'Chat-Beat Eins' }, labels: { act: 'x' }, begruendung: 'Auftakt' },
         { type: 'beat_create', ref: 2, act_ref: 3, thread_id: null, fields: { titel: 'Chat-Beat im neuen Akt' }, labels: { act: 'Neuer Akt' } },
         { type: 'act_create', ref: 3, name: 'Chat-Akt Neu', thread_id: null, labels: {} },
@@ -77,6 +80,12 @@ test('Plot-Chat: Vorschläge einzeln übernehmen, Undo, Akt-Bezug blockiert bis 
 
   const cards = page.locator('.card--plot .plot-chat .chat-vorschlag');
   await expect(cards).toHaveCount(3);
+
+  // Werkzeug-Verlauf: dasselbe Fragment wie im Buch-Chat (chat-tool-log).
+  const log = page.locator('.card--plot .plot-chat .chat-tool-log');
+  await expect(log.locator('.collapsible-toggle')).toHaveText('Werkzeug-Verlauf (1)');
+  await log.locator('.collapsible-toggle').click();
+  await expect(log.locator('.chat-tool-log-row')).toHaveText(/Plot-Board gelesen\s*Akt Akt Test/);
   const applyBtn = (i) => cards.nth(i).locator('.chat-vorschlag-btn').first();
 
   // ── Neuer Beat: übernehmen → im Board, Karte „Übernommen" ────────────────

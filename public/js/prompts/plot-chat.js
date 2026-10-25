@@ -11,55 +11,7 @@
 
 import { _isLocal, _jsonOnly } from './state.js';
 import { buildPassageBlockLines } from './chat-pre-context.js';
-
-// Lese-Werkzeuge aus BOOK_CHAT_TOOLS, die der Plot-Chat anbietet. Handler +
-// Schemas teilt er mit dem Buch-Chat (routes/jobs/book-chat-tools) — eine
-// Quelle, kein Drift. Bewusst ohne Stil-/Lektorat-/Revisions-/Bild-Werkzeuge:
-// die beantworten keine Plotfrage und kosten pro Runde Input-Tokens.
-export const PLOT_CHAT_READ_TOOL_NAMES = [
-  'get_plot_board',
-  'list_chapters',
-  'list_figures',
-  'get_figure_profile',
-  'get_figure_relations',
-  'get_figure_mentions',
-  'list_scenes',
-  'list_locations',
-  'get_location_profile',
-  'get_timeline',
-  'get_figure_age',
-  'list_world_facts',
-  'list_werkstatt_drafts',
-  'get_werkstatt_draft',
-  'get_motifs',
-  'search_similar',
-  'search_passages',
-  'get_chapter_text',
-  'get_pages',
-  'get_book_settings',
-  'list_ideen',
-  'list_continuity_issues',
-  'get_reviews',
-  // Bearbeitungsstand: welche Kapitel sind fertig, wo landet ein neuer Beat in
-  // einer Rohfassung statt in einem abgeschlossenen Kapitel.
-  'get_edit_status',
-];
-
-// Teilmenge für lokale Provider (kein Prompt-Caching, kleineres Modell): der
-// volle Katalog kostet jede Runde den ganzen Werkzeug-Block, und ein kleines
-// Modell wählt aus wenigen Werkzeugen zuverlässiger.
-export const PLOT_CHAT_SLIM_READ_TOOL_NAMES = [
-  'get_plot_board',
-  'list_chapters',
-  'list_figures',
-  'get_figure_profile',
-  'list_scenes',
-  'list_world_facts',
-  'get_werkstatt_draft',
-  'search_similar',
-  'search_passages',
-  'get_chapter_text',
-];
+import { toolMentions } from './chat-tools/mentions.js';
 
 export const PLOT_CHAT_FORCE_FINAL_INSTRUCTION =
   'Du hast die maximale Zahl an Werkzeug-Iterationen erreicht — keine weiteren Lese-Aufrufe mehr. '
@@ -76,7 +28,7 @@ const _FIGUREN = {
 
 /**
  * Vorschlags-Werkzeuge + final_answer. Die Lese-Werkzeuge kommen aus
- * BOOK_CHAT_TOOLS (Filter über PLOT_CHAT_READ_TOOL_NAMES im Job).
+ * gemeinsamen Katalog (./chat-tools/, Spalte `plot` in access.js).
  */
 export const PLOT_CHAT_PROPOSE_TOOLS = [
   {
@@ -96,7 +48,7 @@ export const PLOT_CHAT_PROPOSE_TOOLS = [
         beschreibung: { type: 'string', description: 'Stichpunkte zum Inhalt (Konflikt, Wendung, Ziel). Keine Prosa.' },
         intensitaet: { type: 'integer', description: 'Spannung 1–5 für den Spannungsbogen.' },
         zeit: { type: 'string', description: 'Freitext-Zeitangabe innerhalb der Handlung, z.B. „Sommer 1987".' },
-        chapter_id: { type: 'integer', description: 'Zielkapitel (chapter_id aus list_chapters/Board).' },
+        chapter_id: { type: 'integer', description: 'Zielkapitel (chapter_id aus Board oder Gliederung).' },
         figuren: _FIGUREN,
         verworfen: { type: 'boolean', description: 'Nur bei ÄNDERUNG: true = Beat ausmustern (bleibt erhalten, zählt nicht mehr), false = wieder aufnehmen.' },
         begruendung: _BEGRUENDUNG,
@@ -239,15 +191,15 @@ export function buildPlotProposalMemoryBlock(list = []) {
 export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
   const classic = ctx.mode === 'classic';
   const maxToolIter = Number(ctx.maxToolIter) || 8;
-  const offered = Array.isArray(ctx.toolNames) ? new Set(ctx.toolNames) : null;
-  const has = (n) => !offered || offered.has(n);
-  const ifAny = (names, line) => (names.some(has) ? [line] : []);
+  const m = toolMentions(ctx.toolNames);
   const bookContext = String(ctx.bookContext || '').trim();
+  const erzaehlweise = String(ctx.erzaehlweise || '').trim();
 
   const stable = [
     'Du bist Dramaturgin / Dramaturg und Plot-Coach für ein Buchprojekt. Du entwickelst mit dem Autor / der Autorin im Gespräch die Handlung auf dem Beat-Board der Plot-Werkstatt: Akte (Spalten), Beats (Handlungspunkte) und Handlungsstränge (Swimlanes, oft je Hauptfigur).',
     '',
     `Buch: «${bookName}»`,
+    ...(erzaehlweise ? [erzaehlweise] : []),
     '',
     'Was du tust:',
     '- Du denkst mit: Struktur, Wendepunkte, Spannungsbogen, Setup/Payoff, Kausalität, Figurenbögen (Want/Need/Wound/Lie aus der Figuren-Werkstatt), Strang-Verflechtung.',
@@ -285,16 +237,16 @@ export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
   }
   stable.push(
     'Lese-Werkzeuge:',
-    '- Das aktuelle Board steht unten vollständig im Prompt (`get_plot_board` brauchst du nur nach eigenen Rückfragen, z.B. für Strang-Erbschaften).',
-    ...ifAny(['search_similar'], '- Die TEXTPASSAGEN unten sind schon die semantisch nächsten Stellen zur aktuellen Frage — prüfe sie zuerst, bevor du liest.'),
-    ...ifAny(['list_figures', 'get_figure_profile', 'get_figure_relations'], '- Figuren, Beziehungen → list_figures, get_figure_profile, get_figure_relations'),
-    ...ifAny(['list_werkstatt_drafts', 'get_werkstatt_draft'], '- Geplante Figuren mit psychologischem Kern (Want/Need/Wound/Lie, Bogen) → list_werkstatt_drafts, get_werkstatt_draft'),
-    ...ifAny(['list_scenes', 'get_timeline'], '- Was schon geschrieben ist (Szenen, Ereignisse in Reihenfolge) → list_scenes, get_timeline'),
-    ...ifAny(['search_similar', 'search_passages'], `- Stellen im Text → ${has('search_similar') ? 'search_similar (nach Sinn), ' : ''}search_passages (Wortlaut)`),
-    ...ifAny(['get_chapter_text', 'get_pages'], '- Ganze Kapitel lesen (teuer, nur wenn der Zusammenhang nötig ist) → get_chapter_text'),
-    ...ifAny(['list_world_facts'], '- Weltregeln, gegen die ein Beat nicht verstossen darf → list_world_facts'),
-    ...ifAny(['get_motifs'], '- Themen & Motive → get_motifs'),
-    ...ifAny(['get_edit_status'], '- Wie weit welche Kapitel sind (vom Autor gesetzter Bearbeitungsstand) → get_edit_status — ein neuer Beat in einem als fertig markierten Kapitel heisst Umbau: sag das dazu'),
+    `- Das aktuelle Board steht unten vollständig im Prompt${m.has('get_plot_board') ? ' (`get_plot_board` brauchst du nur nach eigenen Rückfragen, z.B. für Strang-Erbschaften)' : ''}.`,
+    ...(m.has('search_similar') ? ['- Die TEXTPASSAGEN unten sind schon die semantisch nächsten Stellen zur aktuellen Frage — prüfe sie zuerst, bevor du liest.'] : []),
+    ...m.route('Figuren, Beziehungen', ['list_figures', 'get_figure_profile', 'get_figure_relations']),
+    ...m.route('Geplante Figuren mit psychologischem Kern (Want/Need/Wound/Lie, Bogen)', ['list_werkstatt_drafts']),
+    ...m.route('Was schon geschrieben ist (Szenen, Ereignisse in Reihenfolge)', ['list_scenes', 'get_timeline']),
+    ...m.route('Stellen im Text (nach Sinn bzw. Wortlaut)', ['search_similar', 'search_passages']),
+    ...m.route('Ganze Kapitel lesen (teuer, nur wenn der Zusammenhang nötig ist)', ['get_chapter_text']),
+    ...m.route('Weltregeln, gegen die ein Beat nicht verstossen darf', ['list_world_facts']),
+    ...m.route('Themen & Motive', ['get_motifs']),
+    ...m.route('Wie weit welche Kapitel sind (vom Autor gesetzter Bearbeitungsstand)', ['get_edit_status'], ' — ein neuer Beat in einem als fertig markierten Kapitel heisst Umbau: sag das dazu'),
     '',
     `Maximal ${maxToolIter} Werkzeug-Iterationen pro Antwort (eine Iteration = eine Runde, nicht ein Aufruf). Bündle unabhängige Aufrufe in EINER Runde. Vorschlags-Aufrufe zählen mit — gib alle Vorschläge möglichst in einer Runde ab.`,
     'Liefere die Antwort IMMER über `final_answer`. Sprache: passe dich der Userfrage an, nicht diesem Prompt.',
@@ -331,8 +283,8 @@ function _finish(stable, ctx, { classic }) {
   // Bytes — darum hier im ungecachten Block am Ende, nie im gecachten Block 1.
   if (classic || Array.isArray(ctx.passages)) {
     volatile.push('', ...buildPassageBlockLines(ctx.passages, {
-      classic, status: ctx.passageStatus,
-      intro: '(Automatisch vorab geholt; Ausschnitte können unvollständig sein. Reichen sie, brauchst du kein Lese-Werkzeug — sonst weiter mit search_similar/get_chapter_text.)',
+      classic, status: ctx.passageStatus, toolNames: ctx.toolNames,
+      intro: '(Automatisch vorab geholt; Ausschnitte können unvollständig sein. Reichen sie, brauchst du kein Lese-Werkzeug.)',
       emptyClassic: '(keine — Embedding-Index fehlt oder kein Treffer; urteile über Board und Figuren)',
     }));
   }

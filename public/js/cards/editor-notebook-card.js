@@ -41,6 +41,7 @@ export function registerEditorNotebookCard() {
       this._setupNotebookDiagrams();
       this._setupNotebookCaptionNumbers();
       this._setupNotebookPageHeight();
+      this._setupNotebookTipReset();
     },
 
     destroy() {

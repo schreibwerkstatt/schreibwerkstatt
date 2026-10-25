@@ -69,6 +69,23 @@ test('extractFromHtml: leere Layout-Huelle verliert gegen den echten Artikel', (
   assert.ok(text.startsWith('Der eigentliche Artikeltext'), text.slice(0, 80));
 });
 
+test('extractFromHtml: Teaser-<article> verliert gegen den Fliesstext ohne <article>', () => {
+  // Zeitungsseiten setzen den Artikel oft in ein <div>, die Teaser daneben in
+  // <article>. Die Selektor-Liste allein naehme den Teaser; Readability bewertet
+  // nach Textdichte und findet die Geschichte.
+  const story = Array.from({ length: 8 }, (_, i) =>
+    `<p>Absatz ${i + 1} der Reportage, mit Kommas, Namen und genug Text, damit er als Fliesstext zaehlt, wie in einem echten Artikel.</p>`).join('');
+  const html = `<html><body>
+    <article class="teaser"><a href="/b"><h2>Ganz andere Geschichte</h2>
+      <p>${'Kurzer Anreisser fuer einen anderen Beitrag. '.repeat(6)}</p></a></article>
+    <div class="story"><h1>Die Reportage</h1>${story}</div>
+  </body></html>`;
+  const { text } = extractFromHtml(html);
+  assert.match(text, /Absatz 1 der Reportage/);
+  assert.match(text, /Absatz 8 der Reportage/);
+  assert.ok(!text.includes('Anreisser'), text.slice(0, 120));
+});
+
 test('extractFromHtml: ohne Kandidat greift der Body', () => {
   const html = '<html><body><p>Nur ein Absatz ohne article oder main.</p></body></html>';
   assert.equal(extractFromHtml(html).text, 'Nur ein Absatz ohne article oder main.');

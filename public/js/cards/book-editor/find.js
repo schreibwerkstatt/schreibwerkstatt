@@ -8,7 +8,7 @@
 // Range-Mutation (statt execCommand) und die Anbindung an die Save-Queue.
 
 import { collectMatches, collectTextNodes, createHighlightPair, rangeOf } from '../../editor/shared/text-find.js';
-import { clearRenderedDiagrams } from '../../diagram/mermaid-view.js';
+import { clearRenderedDiagrams, RENDERED_DIAGRAM_SEL } from '../../diagram/mermaid-view.js';
 import { clearCaptionNumbers, XREF_NUM_SEL } from '../../xrefs/caption-preview.js';
 
 const highlights = createHighlightPair('book-editor-find-match', 'book-editor-find-current');
@@ -17,9 +17,12 @@ export const clearHighlights = highlights.clear;
 // Inaktive Blöcke tragen Anzeige-Artefakte im DOM: das gerenderte Mermaid-SVG
 // und die Nummern-Badges der Beschriftungen. Beides ist nicht Manuskript —
 // Treffer darin sind keine Treffer, und nichts davon darf über Replace in
-// `block.html` landen. Bucheditor-lokal: der Notebook-Finder sucht nur im
-// Edit-Modus, dort gibt es diese Artefakte nicht.
-const ARTEFACT_SEL = `.mermaid-render, ${XREF_NUM_SEL}`;
+// `block.html` landen. Dazu der Diagramm-Quelltext, solange sein Bild steht:
+// er ist dann ausgeblendet, ein Treffer darin zählte mit, wäre aber weder zu
+// sehen noch anzuspringen. Im aktiven Block steht der Quelltext offen und wird
+// gefunden. Bucheditor-lokal: der Notebook-Finder sucht nur im Edit-Modus,
+// dort gibt es diese Artefakte nicht.
+const ARTEFACT_SEL = `${RENDERED_DIAGRAM_SEL}, ${XREF_NUM_SEL}`;
 
 export function isInRenderArtefact(node) {
   const el = node?.nodeType === 1 ? node : node?.parentElement;
@@ -61,11 +64,18 @@ export function cleanBlockHtml(container) {
 export const bookEditorFindMethods = {
     // ── Find / Replace ────────────────────────────────────────────────────
     openFind() {
+      // Caret merken, bevor das Suchfeld den Fokus nimmt: die Suche beginnt
+      // dort, nicht am Buchanfang.
+      this._captureFindAnchor();
       this.findOpen = true;
       this.$nextTick(() => {
         const inp = this.$root.querySelector('.book-editor-find-input');
         if (inp) { inp.focus(); inp.select(); }
         this.recomputeFindMatches();
+        if (this.findMatches.length > 0) {
+          this.findIndex = this._nearestMatchIndex();
+          this._refreshFindHighlights();
+        }
       });
     },
 
@@ -82,8 +92,41 @@ export const bookEditorFindMethods = {
       this._findRecomputeTimer = setTimeout(() => {
         this._findRecomputeTimer = null;
         this.recomputeFindMatches();
-        if (this.findMatches.length > 0) this._selectMatch(0);
+        if (this.findMatches.length > 0) this._selectMatch(this._nearestMatchIndex());
       }, 120);
+    },
+
+    _captureFindAnchor() {
+      this._findAnchor = null;
+      const el = this.activePageId != null ? this._blockEl(this.activePageId) : null;
+      const sel = window.getSelection?.();
+      if (el && sel?.rangeCount && el.contains(sel.anchorNode)) {
+        this._findAnchor = { pageId: this.activePageId, range: sel.getRangeAt(0).cloneRange() };
+      }
+    },
+
+    // Erster Treffer ab der Stelle, an der der User steht: Caret im aktiven
+    // Block (beim Öffnen gemerkt), sonst der aktive bzw. sichtbare Abschnitt.
+    // Dahinter nichts mehr → von vorn (wie findNext am Ende).
+    _nearestMatchIndex() {
+      const ms = this.findMatches;
+      if (!ms.length) return -1;
+      const order = new Map();
+      let i = 0;
+      for (const b of this.blocks) if (b.kind === 'page') order.set(b.pageId, i++);
+      const a = this._findAnchor?.range?.startContainer?.isConnected ? this._findAnchor : null;
+      const pageId = a ? a.pageId : (this.activePageId ?? this.visiblePageId);
+      if (pageId == null) return 0;
+      const at = order.get(pageId) ?? 0;
+      for (let k = 0; k < ms.length; k++) {
+        const o = order.get(ms[k].pageId) ?? 0;
+        if (o < at) continue;
+        if (o > at || !a) return k;
+        try {
+          if (rangeOf(ms[k]).compareBoundaryPoints(Range.START_TO_START, a.range) >= 0) return k;
+        } catch { return k; }
+      }
+      return 0;
     },
 
     _allBlockEls() {
@@ -153,9 +196,11 @@ export const bookEditorFindMethods = {
         if (this.findMatches.length > 0) this._selectMatch(Math.min(at, this.findMatches.length - 1));
         return;
       }
-      const touched = new Set();
-      this._doReplaceAt(m, touched);
-      this._resyncReplacedBlocks(touched);
+      // Eigener Undo-Schritt: im aktiven Block den Stand davor sichern, der
+      // Stand danach kommt aus _commitReplaced.
+      if (m.pageId === this.activePageId) this._historyPushNow(m.pageId);
+      const container = this._doReplaceAt(m);
+      if (container) this._commitReplaced(new Set([container]));
       this.$nextTick(() => {
         this.recomputeFindMatches();
         if (this.findMatches.length > 0) {
@@ -183,52 +228,53 @@ export const bookEditorFindMethods = {
       // Von hinten nach vorne: Ersetzungen weiter hinten lassen die Ranges der
       // früheren Treffer intakt (sonst verschieben sich deren Offsets).
       const matches = this.findMatches.slice().reverse();
+      // EIN Undo-Schritt je Abschnitt, nicht je Treffer: sonst bräuchte das
+      // Zurücknehmen so viele Strg+Z wie Treffer, und ein grosses Ersetzen
+      // verdrängte den ganzen Verlauf (Deckel im Kern).
+      if (matches.some(m => m.pageId === this.activePageId)) this._historyPushNow(this.activePageId);
       let count = 0;
       const touched = new Set();
       for (const m of matches) {
-        if (this._doReplaceAt(m, touched)) count++;
+        const container = this._doReplaceAt(m);
+        if (container) { touched.add(container); count++; }
       }
-      this._resyncReplacedBlocks(touched);
+      this._commitReplaced(touched);
       const app = window.__app;
       app?.setStatus?.(app.t('bookEditor.find.replacedAll', { n: count }), false, 3000);
       this.$nextTick(() => this.recomputeFindMatches());
     },
 
-    _doReplaceAt(m, touched) {
-      if (!m.startNode || !m.endNode) return false;
+    // Nur die DOM-Ersetzung; liefert den Block-Container oder null. Was daraus
+    // folgt (block.html, dirty, Undo, Anzeige), erledigt _commitReplaced —
+    // einmal je Abschnitt nach ALLEN Ersetzungen.
+    _doReplaceAt(m) {
+      if (!m.startNode || !m.endNode) return null;
       const container = m.container || m.startNode.parentElement?.closest('[data-book-editor-page]');
-      if (!container) return false;
+      if (!container) return null;
       try {
-        const block = this._blockById(parseInt(container.dataset.bookEditorPage, 10));
-        const active = block && this.activePageId === block.pageId;
-        // Replace ist ein eigener Undo-Schritt (cards/book-editor/history.js):
-        // im aktiven Block Stand davor + danach, im inaktiven nur danach — sein
-        // Stand davor ist die Spitze seines Verlaufs.
-        if (active) this._historyPushNow(block.pageId);
         const range = rangeOf(m);
         range.deleteContents();
         range.insertNode(document.createTextNode(this.findReplace));
-        if (block) {
-          block.html = cleanBlockHtml(container);
-          this._markBlockDirty(block);
-          touched?.add(container);
-          if (active) this._historyPushNow(block.pageId);
-          else this._historyRecordInactive(block);
-        }
-        return true;
+        return container;
       } catch {
-        return false;
+        return null;
       }
     },
 
-    // Nach dem Replace Bild und Nummern der betroffenen Blöcke nachziehen —
-    // der Quelltext eines Diagramms oder eine Beschriftung kann sich geändert
-    // haben. Erst nach ALLEN Ersetzungen: das Neu-Stempeln entfernt Badges und
-    // würde die Ranges der übrigen Treffer im selben Block verschieben.
-    _resyncReplacedBlocks(touched) {
+    // Je betroffenem Abschnitt: `block.html` aus dem DOM (ohne Artefakte),
+    // dirty + Autosave, ein Undo-Schritt (aktiv: Stand danach; inaktiv: aus
+    // `block.html`, sein Stand davor ist die Spitze seines Verlaufs), dann Bild
+    // und Nummern nachziehen — der Quelltext eines Diagramms oder eine
+    // Beschriftung kann sich geändert haben. Erst nach allen Ersetzungen: das
+    // Neu-Stempeln entfernt Badges und verschöbe die Ranges der übrigen Treffer.
+    _commitReplaced(touched) {
       for (const el of touched) {
         const block = this._blockById(parseInt(el.dataset.bookEditorPage, 10));
         if (!block) continue;
+        block.html = cleanBlockHtml(el);
+        this._markBlockDirty(block);
+        if (this.activePageId === block.pageId) this._historyPushNow(block.pageId);
+        else this._historyRecordInactive(block);
         this._syncBlockDiagrams(el, block);
         this._syncBlockCaptionNumbers(el, block);
       }

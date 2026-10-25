@@ -22,7 +22,7 @@ const { setBookIdeenStages } = require('../../db/book-settings');
 const { db } = require('../../db/connection');
 const { loadOrderedBookContents } = require('../../routes/jobs/shared');
 const { executeIdeenChatTool, MAX_PROPOSALS } = require('../../routes/jobs/ideen-chat-tools');
-const { collectClassicProposals } = require('../../routes/jobs/ideen-chat-classic');
+const { collectClassicProposals } = require('../../routes/jobs/ideen-chat');
 const {
   loadIdeenState, ideenOutline, gliederungOutline, targetsOutline, sessionIdeenProposalMemory,
 } = require('../../routes/jobs/ideen-chat-context');
@@ -63,7 +63,7 @@ const tree = await loadOrderedBookContents(BOOK, { includeExcluded: true });
 const ideenCount = () => db.prepare('SELECT COUNT(*) AS n FROM ideen WHERE book_id = ?').get(BOOK).n;
 const mkCtx = () => ({
   bookId: BOOK, userEmail: USER, tree, proposals: [],
-  readToolNames: new Set(['get_pages']), logger: { info() {}, warn() {} },
+  offeredTools: new Set(['get_pages']), logger: { info() {}, warn() {} },
 });
 
 test('Kontext: nur eigene Ideen, gruppiert nach Ort, mit ids', () => {
@@ -158,7 +158,7 @@ test('propose_idee_link: gegen Zielliste, idee_ref auf neue Idee, Dublette abgel
   assert.equal(ctx.proposals[2].idee_ref, 2);
   assert.ok((await executeIdeenChatTool('propose_idee_link', { idee_ref: 1, target_kind: 'beat', target_id: beat.id, begruendung: 'b' }, ctx)).error);
 
-  ideenDb.addIdeaLink(iChapter, BOOK, 'beat', beat.id);
+  ideenDb.addIdeaLink(iChapter, BOOK, 'beat', beat.id, USER);
   const ctx2 = mkCtx();
   assert.match((await executeIdeenChatTool('propose_idee_link', { idee_id: iChapter, target_kind: 'beat', target_id: beat.id, begruendung: 'b' }, ctx2)).error, /schon verknüpft/);
 });

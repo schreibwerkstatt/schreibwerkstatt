@@ -120,26 +120,11 @@
         <div class="chat-msg-bubble">
           <div x-show="msg.role === 'user'" class="chat-msg-text" x-text="msg.content"></div>
           <div x-show="msg.role === 'assistant'" class="chat-msg-text" x-html="_renderChatMarkdown(msg.content)"></div>
-          <!-- Kontext-Info (nur Buch-Chat) -->
-          <template x-if="msg.role === 'assistant' && msg.context_info">
+          <!-- Kontext-Info (Buch-Chat, klassischer Modus; agentisch: Werkzeug-Verlauf) -->
+          <template x-if="msg.role === 'assistant' && msg.context_info && msg.context_info.mode !== 'agent'">
             <div x-data="{ expanded: false }"
                  class="chat-context-info">
               <span class="chat-context-label" x-text="$app.t('chat.contextLabel')"></span>
-
-              <!-- Agent-Modus: aufgerufene Werkzeuge -->
-              <template x-if="msg.context_info.mode === 'agent'">
-                <span>
-                  <template x-if="msg.context_info.pre_context">
-                    <span class="chat-context-badge"
-                          x-text="$app.t('chat.ctxPreContext', { n: msg.context_info.pre_context.count })"></span>
-                  </template>
-                  <template x-for="(entry, ei) in _toolSummary(msg.context_info.tool_calls)" :key="ei">
-                    <span class="chat-context-badge"
-                          :class="{ 'chat-context-badge--error': entry.errors > 0 }"
-                          x-text="entry.name + (entry.count > 1 ? ' ×' + entry.count : '')"></span>
-                  </template>
-                </span>
-              </template>
 
               <!-- Klassischer Modus: vorausgewählte Seiten -->
               <template x-if="msg.context_info.mode !== 'agent' && Array.isArray(msg.context_info.pages)">
@@ -182,6 +167,12 @@
     <div x-show="isBookChatSessionRunning(bookChatSessionId)" class="chat-skeleton-wrapper">
       <div class="chat-skeleton-line chat-skeleton-line--wide"></div>
       <div class="chat-skeleton-line chat-skeleton-line--narrow"></div>
+      <!-- Werkzeug-Verlauf des laufenden Turns (wächst mit, offen) -->
+      <template x-for="msg in (_liveToolMsg() ? [_liveToolMsg()] : [])" :key="'live'">
+        <div class="chat-tool-log-live">
+          <!-- @include chat-tool-log -->
+        </div>
+      </template>
     </div>
   </div>
 

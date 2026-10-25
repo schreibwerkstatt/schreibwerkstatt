@@ -14,6 +14,13 @@ oder einem Kapitel übergeben — per „Zuordnen" auf der Karte oder per Drag
 daneben: die zwei nullbaren FKs beschreiben den Anker vollständig. Ein
 Seiten-Umzug in ein anderes Buch ([localdb.js](../lib/content-store/backends/localdb.js)#`movePage`)
 macht die Ideen der Seite zu Buch-Ideen des Quellbuchs, statt sie mitzunehmen.
+Dasselbe gilt beim **Löschen**: `deletePage` ([localdb-delete.js](../lib/content-store/backends/localdb-delete.js))
+und `deleteChapter` lösen den Anker, bevor die Zeile fällt — die Idee wird
+Buch-Idee und behält ihre Stufe. Der FK-`CASCADE` bleibt nur Rückfallnetz für
+Roh-Löschungen. **Why:** die Ideen sind user-privat; wer einen Abschnitt löscht,
+sieht die Pendenzen seiner Mitarbeiter gar nicht und könnte sie nicht retten,
+und der Papierkorb stellt nur den Abschnitt wieder her. Das offene Board lädt
+neu, sobald der Baum einen Anker verliert, an dem eine geladene Idee hing.
 
 Abschnitts- und Buch-Chat können eine Idee an einem Abschnitt oder Kapitel **vorschlagen**
 (bemerkter Widerspruch, Fehler, offener Punkt); angelegt wird sie erst, wenn der
@@ -87,6 +94,8 @@ im Recherche-Board.
 ein anderes Kapitel) ist nur offen/in Arbeit erlaubt (`400 IDEE_CLOSED`): eine
 abgeschlossene Idee ist die Spur einer Entscheidung an **dieser** Stelle;
 anderswo hingehängt wäre sie eine Aussage über eine Stelle, an der sie nie stand.
+Geprüft werden alte **und** im selben PATCH gesetzte Stufe — zuordnen und zugleich
+abschliessen lehnt der Server ab, nicht erst das Board.
 Der Move bleibt ausserdem **within-kind** (Seiten-Idee nur auf eine Seite);
 einzige Ausnahme ist die Buch-Idee, die auf Seite **oder** Kapitel darf — das ist
 ihr Zweck. Zurück ins Buch geht keine Idee: wer sie vom Ort lösen will, legt sie
@@ -195,6 +204,11 @@ hängen — also die wenigsten. Der Filter erfasst den **Teilbaum** (Unterkapite
 über die `parentId`-Kette), und wählbar ist jedes Kapitel, dessen Teilbaum Ideen
 trägt.
 
+**Die Suche findet auch den Ort.** Durchsucht werden Ideentext, Abschnitts- und
+Kapitelname und die Labels der Verknüpfungen (`matchesQuery` in
+[model.js](../public/js/book/ideen-board/model.js)) — wer „Bahnhof" sucht, meint die
+Ideen im Abschnitt „Am Bahnhof" ebenso wie die mit dem Wort im Text.
+
 **Zwei Haken für die zwei Schlussstufen.** `erledigt` und `verworfen` sind
 getrennt ausblendbar, beide per Default aus: das Board ist eine Pendenzenliste,
 und beide Stufen sollen beim Öffnen nicht mitarbeiten. Getrennt, weil sie
@@ -238,7 +252,8 @@ ein PATCH):
 
 **Die Reihenfolge der Karten wählt jede Spalte für sich**
 ([model.js](../public/js/book/ideen-board/model.js)#`columnSortOf`/`nextColumnSort`).
-Im Spaltenkopf steht ein Segment-Umschalter **Datum** / **A–Z** (dem Text, Ideen
+Im Spaltenkopf steht — erst beim Überfahren sichtbar (`hover-reveal`), bei einer
+sortierten Spalte dauerhaft — ein Segment-Umschalter **Datum** / **A–Z** (dem Text, Ideen
 haben keinen eigenen Titel); ein zweiter Klick aufs aktive Kriterium kehrt die
 Richtung um, Gleichstand fällt auf die `id`. Daneben holt der Reset-Knopf die
 **ursprüngliche Position** der Spalte zurück. Gehalten wird das als Map
@@ -265,11 +280,39 @@ Bestand, auch was der Textfilter gerade ausblendet — die gezogene Idee wird nu
 vor ihren sichtbaren Nachfolger gesetzt (`cellOrderAfterDrop`), eine
 ausgeblendete verliert so nie ihren Platz. `0` heisst „nie einsortiert": eine
 neue Idee steht oben in ihrer Zelle, unter mehreren davon die neueste zuerst.
+Ein **Stufenwechsel** setzt `sort_order` auf `0` (db/ideen.js#`updateIdee`): der
+Rang der alten Zelle gilt in der neuen nicht, die Idee steht dort oben, und ein
+Drag nummeriert danach die Zielzelle. Dieselbe Ordnung zeigt die Ideen-Karte
+neben dem Editor innerhalb jeder Stufe (`compareIdeeManual` in
+[ideen-shared.js](../public/js/book/ideen-shared.js)).
 Die ursprüngliche Position hat keine Richtung; der Reset-Knopf erscheint nur,
 solange die Spalte sortiert ist.
 Der tastaturerreichbare Weg sind die Stufen-Knöpfe auf der Karte — **derselbe
 Schreibpfad** (`setIdeeStatus`), drei Oberflächen (Board-Drag, Board-Knöpfe,
 Menü der Ideen-Karte).
+
+**Zwei Ansichten, ein Filter.** Umschalter „Raster" / „Liste" in der
+Filterleiste (`view` im Filter-Scope `ideenBoard`). Die Liste
+([ideen-board-list.html](../public/partials/ideen-board-list.html),
+[ideen-board/list.js](../public/js/book/ideen-board/list.js)) zeigt denselben
+Bestand nach **demselben** Prädikat (`makeIdeeFilter`) flach als `sortableTable`:
+Ort (Buch-Reihenfolge), Idee, Stufe, „notiert" (Alter) und „Stufe seit". Sie
+beantwortet, was das Raster bei vielen Pendenzen nicht mehr kann: was ist
+insgesamt offen, und was liegt am längsten. Das Raster bleibt per `x-show`
+gerendert — seine Sortable-Instanzen hängen an den Zellen.
+
+**Alter.** Offene Karten tragen „notiert vor *n* Tagen" (Tag-genau in der
+App-Zeitzone, `localDayDiff`); ab `IDEE_STALE_DAYS` (60) ist die Angabe warm
+hervorgehoben. Nur an offenen Pendenzen — an einer erledigten ist das Alter
+Geschichte, kein Versäumnis.
+
+**Mehrfachauswahl nur in der Liste.** Haken je Zeile, „alle sichtbaren" im Kopf;
+Sammelaktionen setzen die Stufe (nur aktive) oder löschen. Jede Idee läuft
+einzeln über denselben Schreibpfad wie Knopf und Drag (`_patchIdee` /
+`repo/ideen-queue.js`), damit Offline-Warteschlange und Stufen-Prüfung je Idee
+greifen; Gescheitertes bleibt ausgewählt. Die Auswahl folgt dem Filter — eine
+Sammelaktion trifft nie, was gerade ausgeblendet ist. Im Raster gibt es keinen
+Haken: er konkurrierte mit dem Drag-Griff um dieselbe Geste.
 
 **Layout:** ein CSS-Grid, kein Flex-Spalten-Board wie bei der Recherche. Karten
 derselben Bahn müssen über alle Spalten hinweg auf einer Linie liegen, sonst ist
@@ -315,7 +358,13 @@ Text" hat mit Seite/Kapitel schon ihren Ort.
 **Ein Ziel bleibt im Buch.** Der FK allein liesse eine Idee aus Buch A auf ein
 Motiv aus Buch B zeigen; die Buch-Prüfung liegt in
 [db/ideen.js](../db/ideen.js)#`addIdeaLink` (sie muss die Ziel-Tabelle kennen und
-gehört darum nicht in den Handler).
+gehört darum nicht in den Handler). Dort liegt auch die **Besitz-Prüfung**: Beat,
+Strang, Motiv und Werkstatt-Figur gehören dem User, der sie angelegt hat
+(`private` in `LINK_TARGETS`), nur das Recherche-Fundstück ist buchweit geteilt.
+Ein fremdes privates Ziel antwortet wie ein fehlendes (`LINK_TARGET_NOT_FOUND`) —
+sonst liesse sich per geratener ID der Titel eines fremden Beats aus der Antwort
+lesen. Der Picker holt die Ziele bei **jedem** Öffnen neu: ein Motiv, das
+inzwischen in einer anderen Werkstatt entstand, ist sofort wählbar.
 
 **Labels kommen per JOIN zur Lesezeit**, nie als Snapshot-Spalte: ein umbenanntes
 Motiv heisst sofort überall neu.
@@ -450,9 +499,11 @@ Buch). Fehlerformen: `INVALID_SCOPE`, `BOOK_MISMATCH`,
 2. **`verworfen` ist nie „offen".** Weder Plakette noch Zähler noch Chat-Kontext.
 3. **Verworfen wird nicht gelöscht.** Ausblenden ja, wegräumen nein.
 4. **Jede Lesung trägt `user_email`** — besonders die Rückwärts-Lesung.
-5. **Ein Ziel bleibt im Buch** (`addIdeaLink` prüft, der FK reicht nicht).
-6. **Keine Idee verschwindet still** aus dem Board (Sammelbahn, ausgewiesene
-   Ausblend-Zahl, `+n` je eingeklappter Zelle).
+5. **Ein Ziel bleibt im Buch und beim Besitzer** (`addIdeaLink` prüft Buch und, bei
+   privaten Katalogen, `user_email` — der FK reicht nicht).
+6. **Keine Idee verschwindet still** — aus dem Board (Sammelbahn, ausgewiesene
+   Ausblend-Zahl, `+n` je eingeklappter Zelle) und aus der DB (Löschen eines
+   Abschnitts/Kapitels macht ihre Ideen zu Buch-Ideen).
 7. **Die Bahnen-Reihenfolge kommt aus dem Baum**, nie aus einer zweiten Sortierung.
 8. **Spalten-Zähler messen den Gesamtbestand**, nicht die gefilterte Sicht.
 9. **Ein Drag setzt den Status, nie die Bahn** — einzige Ausnahme ist die offene

@@ -1,6 +1,6 @@
 'use strict';
 // Abfragen der figurenfokussierten Buch-Chat-Tools
-// (routes/jobs/book-chat-tools/tools-figures.js) plus der geteilten
+// (routes/jobs/chat-tools/tools-figures.js) plus der geteilten
 // Figuren-Lookups (`_findFigure`, `resolveEntityTitle` in shared.js, Namens-Map
 // von get_plot_board). Die Tool-Module führen selbst kein SQL aus; Seiten-/
 // Kapitel-JOINs liegen ebenfalls hier (CLAUDE.md „Content-Store-Facade als
@@ -155,10 +155,10 @@ function getFigureNameForUser(figureId, userEmail) {
 }
 
 const _stmtFigureNamesForUser = db.prepare(
-    'SELECT fig_id, name, kurzname FROM figures WHERE book_id = ? AND user_email = ?'
+    'SELECT id, fig_id, name, kurzname FROM figures WHERE book_id = ? AND user_email = ?'
   );
 
-/** fig_id/name/kurzname aller Figuren von (Buch, User) — `user_email = ?`,
+/** id/fig_id/name/kurzname aller Figuren von (Buch, User) — `user_email = ?`,
  *  ein leerer/NULL-User matcht also keine NULL-Zeilen. */
 function listFigureNamesForUser(bookId, userEmail) {
   return _stmtFigureNamesForUser.all(bookId, userEmail);

@@ -7,43 +7,8 @@ import { chatIdeeProposalMethods } from './chat-idee-proposals.js';
 // Keine Textvorschläge – freie Konversation über das gesamte Buch (Agent-Flow);
 // einzig Ideen-Vorschläge an einem Abschnitt (chat-idee-proposals.js).
 
-// Werkzeug-Argumente als kurze Zeile für den ausklappbaren Werkzeug-Verlauf.
-// Reiner Text — das Template bindet ihn per x-text (kein x-html).
-export function formatToolInput(input, max = 160) {
-  if (input == null) return '';
-  let s;
-  try { s = JSON.stringify(input); } catch { s = String(input); }
-  if (s === '{}') return '';
-  return s.length > max ? s.slice(0, max) + '…' : s;
-}
-
-// Zeilen des Werkzeug-Verlaufs: alle Tool-Calls ausser final_answer (das ist die
-// Antwort selbst), mit Runde, Dauer, gekürzt/Fehler. `error` ist der Text fürs
-// Modell (deutsch); hat das Werkzeug einen `errorKey` mitgeliefert, übersetzt `t`
-// ihn für die Anzeige. Ohne Key bleibt der Rohtext (unerwartete Ausnahme).
-export function toolRows(toolCalls, t = null) {
-  if (!Array.isArray(toolCalls)) return [];
-  return toolCalls
-    .filter(tc => tc && tc.name !== 'final_answer')
-    .map(tc => ({
-      name: String(tc.name || ''),
-      args: formatToolInput(tc.input),
-      iter: tc.iter ?? null,
-      durationMs: Number.isFinite(tc.durationMs) ? tc.durationMs : null,
-      truncated: !!tc.truncated,
-      failed: tc.ok === false,
-      error: (tc.errorKey && t)
-        ? t(tc.errorKey, tc.errorParams || {})
-        : (tc.error ? String(tc.error).slice(0, 200) : ''),
-    }));
-}
-
 export const bookChatMethods = {
   ...chatIdeeProposalMethods,
-
-  _bookChatToolRows(msg) {
-    return toolRows(msg?.context_info?.tool_calls, (k, p) => window.__app.t(k, p));
-  },
 
   // Validierte Zitate aus final_answer (context_info.citations) als Fussnoten.
   bookChatCitations(msg) {

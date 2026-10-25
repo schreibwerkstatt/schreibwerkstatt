@@ -131,6 +131,8 @@
   align-items: center;
   gap: var(--space-2xs);
 }
+/* Eine sortierte Spalte zeigt ihre Sortierung immer (Delta zu hover-reveal). */
+.ideen-board-col-sort.ideen-board-col-sort--active { opacity: 1; }
 .ideen-board-col-sort .seg-toggle button {
   display: inline-flex;
   align-items: center;
@@ -515,3 +517,41 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
   color: var(--color-muted);
 }
 .ideen-board-stages .card-form-hint { flex-basis: 100%; margin: 0; }
+
+@layer components {
+/* ── Alter einer offenen Pendenz ─────────────────────────────────────────── */
+.idee-board-age {
+  margin-top: var(--space-2xs);
+  font-size: var(--font-size-micro);
+  color: var(--color-muted);
+}
+/* Liegengeblieben (IDEE_STALE_DAYS): warm statt alarmrot — eine Erinnerung,
+   kein Fehler. */
+.idee-board-age--stale { color: var(--color-warn-text); font-weight: 600; }
+
+/* ── Listenansicht ───────────────────────────────────────────────────────── */
+.ideen-list-wrap { overflow-x: auto; }
+.ideen-list-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  padding: var(--space-sm) 0;
+}
+.ideen-list-bulk-count { font-size: var(--font-size-xs); color: var(--color-muted); }
+.ideen-list-bulk .idee-board-step { flex: 0 0 auto; }
+.ideen-list .ideen-list-check { width: 2rem; }
+.ideen-list .ideen-list-place { white-space: nowrap; }
+.ideen-list .ideen-list-text { min-width: 16rem; overflow-wrap: anywhere; }
+/* pre-wrap nur am Text selbst: an der Zelle rendert es die Einrueckung des
+   Templates als Leerzeilen mit. */
+.ideen-list-text-body { white-space: pre-wrap; font-size: var(--font-size-xs); }
+.ideen-list-book { font-size: var(--font-size-xs); color: var(--color-muted); }
+.ideen-list .ideen-list-age { white-space: nowrap; font-size: var(--font-size-xs); color: var(--color-muted); }
+.ideen-list .ideen-list-age.idee-board-age--stale { color: var(--color-warn-text); }
+.ideen-list tr.is-selected { background: var(--color-hover-strong); }
+/* Stufe als Text mit demselben Akzent wie die Spalte im Raster. */
+.ideen-list-status { font-size: var(--font-size-xs); }
+.ideen-list-status--in_arbeit { color: var(--color-warn-text); }
+.ideen-list-status--verworfen { color: var(--color-muted); text-decoration: line-through; }
+}

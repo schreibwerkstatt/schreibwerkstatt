@@ -13,7 +13,7 @@ Gliederung und Ideenliste im Prompt tragen den Bearbeitungsstand je Abschnitt; o
 
 ## Provider — zwei Pfade
 
-Gleiche Aufteilung wie im Plot-Chat ([plot-chat.md](plot-chat.md#provider--zwei-pfade)): `runIdeenChatJobDispatch` ([routes/jobs/ideen-chat.js](../routes/jobs/ideen-chat.js)) wählt am effektiven Provider. **Agentisch** mit Lese-Werkzeugen + `propose_*`, lokale Provider mit dem kleineren Satz `IDEEN_CHAT_SLIM_READ_TOOL_NAMES` und dem lokalen Iterationsdeckel des Buch-Chats. **Klassisch** ([ideen-chat-classic.js](../routes/jobs/ideen-chat-classic.js), auch als `fallbackJob` bei `AI_TOOLS_UNSUPPORTED`): ein JSON-Call `{ antwort, vorschlaege: [{ werkzeug, …Felder }] }` (`SCHEMA_IDEEN_CHAT_CLASSIC`), jeder Eintrag läuft durch dieselben Handler; Abgelehntes fällt still heraus und zählt in `context_info.rejected`. Ohne Werkzeuge sieht das Modell nur die semantisch nächsten Passagen zur Frage — der Prompt erlaubt «erledigt» dort nur, wenn die einlösende Stelle in diesen Passagen steht.
+Gleiche Aufteilung wie im Plot-Chat ([plot-chat.md](plot-chat.md#provider--zwei-pfade)): `runIdeenChatJobDispatch` ([routes/jobs/ideen-chat.js](../routes/jobs/ideen-chat.js)) wählt am effektiven Provider. **Agentisch** mit Lese-Werkzeugen + `propose_*`, lokale Provider mit dem kleineren Satz (Spalte `ideen` = `slim` in [prompts/chat-tools/access.js](../public/js/prompts/chat-tools/access.js)) und dem lokalen Iterationsdeckel des Buch-Chats. **Klassisch** (`runClassic` aus dem gemeinsamen Gerüst [proposal-chat.js](../routes/jobs/proposal-chat.js), auch als `fallbackJob` bei `AI_TOOLS_UNSUPPORTED`): ein JSON-Call `{ antwort, vorschlaege: [{ werkzeug, …Felder }] }` (`SCHEMA_IDEEN_CHAT_CLASSIC`), jeder Eintrag läuft durch dieselben Handler; Abgelehntes fällt still heraus und zählt in `context_info.rejected`. Ohne Werkzeuge sieht das Modell nur die semantisch nächsten Passagen zur Frage — der Prompt erlaubt «erledigt» dort nur, wenn die einlösende Stelle in diesen Passagen steht.
 
 ## Datenmodell
 
@@ -29,7 +29,7 @@ Geteilter Loop [agentic-chat/](../routes/jobs/agentic-chat/) (`makeAgenticChatJo
 
 **Warum die Ideen im Prompt stehen:** jeder Vorschlag braucht eine Ideen-id; eine Pflicht-Runde `list_ideen` wäre reine Verschwendung. `list_ideen` wird darum gar nicht angeboten.
 
-**Lese-Werkzeuge:** Teilmenge von `BOOK_CHAT_TOOLS` (`IDEEN_CHAT_READ_TOOL_NAMES`) mit den Handlern des Buch-Chats — Schwerpunkt Text (`get_pages`, `get_chapter_text`, `search_similar`, `search_passages`, `find_first_last_mention`), dazu die planenden Kataloge, an denen eine Idee hängen kann (Plot-Board, Motive, Werkstatt, Recherche) und Figuren/Szenen/Zeitstrahl/Weltregeln. Ein Name ausserhalb der Liste wirft.
+**Lese-Werkzeuge:** aus dem gemeinsamen Katalog ([chat-tools.md](chat-tools.md), Spalte `ideen` in [prompts/chat-tools/access.js](../public/js/prompts/chat-tools/access.js)) — Schwerpunkt Text (`get_pages`, `get_chapter_text`, `search_similar`, `search_passages`, `quote_passage` zum Absichern eines Belegs, `get_figure_mentions`/`list_locations` für erste und letzte Erwähnung), dazu die planenden Kataloge, an denen eine Idee hängen kann (Plot-Board, Motive, Werkstatt, Recherche-Archiv inkl. Passagen-Suche) und Figuren/Szenen/Zeitstrahl/Weltregeln, dazu die schon erhobenen Befunde (Kontinuität, Bewertung, Doppelungen aus `list_redundancies`). Was im Buch keine Daten hat, wird nicht angeboten; ein Name ausserhalb der angebotenen Liste wirft.
 
 ## Vorschlags-Werkzeuge ([routes/jobs/ideen-chat-tools.js](../routes/jobs/ideen-chat-tools.js))
 
@@ -67,6 +67,6 @@ Leere Antwort trotz Vorschlägen ist kein Abbruch: `__i18n:ideenBoard.chat.propo
 - **Kein «erledigt» ohne verifizierten Beleg.**
 - **Nur eigene Ideen** — jede Lesung trägt die E-Mail des Users.
 - **Nie Prosa**, **kein „alle übernehmen"**.
-- **Lese-Werkzeuge nur aus `BOOK_CHAT_TOOLS`**; Gliederung nur über die Content-Store-Facade; Ideen nur über [db/ideen.js](../db/ideen.js).
+- **Lese-Werkzeuge nur aus dem gemeinsamen Katalog** ([routes/jobs/chat-tools/CLAUDE.md](../routes/jobs/chat-tools/CLAUDE.md)); Gliederung nur über die Content-Store-Facade; Ideen nur über [db/ideen.js](../db/ideen.js).
 
 Tests: [tests/unit/ideen-chat-tools.test.mjs](../tests/unit/ideen-chat-tools.test.mjs) (Handler, Kontext, klassischer Pfad), [tests/unit/ideen-chat-job.test.js](../tests/unit/ideen-chat-job.test.js) (Job beider Pfade mit gemocktem Provider), [tests/unit/ideen-chat-proposals.test.mjs](../tests/unit/ideen-chat-proposals.test.mjs) (Frontend-Zustand, Prompt), [tests/integration/ideen-chat-routes.test.js](../tests/integration/ideen-chat-routes.test.js) (Session, ACL, Status-Route).

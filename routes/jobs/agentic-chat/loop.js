@@ -92,6 +92,7 @@ const {
 const {
   _defaultModelFor, _estimateTokens, _fitMessagesToBudget, _synthesisError, _skipped, applyChatEffort,
 } = require('./helpers');
+const { makeToolViewer, roundNote, liveTools, serverSearchEntry, applyServerSearchResult, LIVE_MAX_ROUNDS } = require('./tool-view');
 
 function makeAgenticChatJob(config) {
   return async function runAgenticChatJob(jobId, sessionId, userMsgId, message, userEmail) {
@@ -169,8 +170,15 @@ function makeAgenticChatJob(config) {
         for (const b of result.rawContentBlocks || []) {
           if (b.type === 'server_tool_use' && b.name === 'web_search') {
             state.webSearches++;
-            state.webQueries.push(String(b.input?.query || ''));
+            const query = String(b.input?.query || '');
+            state.webQueries.push(query);
+            // Serverseitige Suche (Anthropic) als Zeile im Werkzeug-Verlauf, wie die
+            // eigenen Werkzeuge; die Trefferzahl trägt der Result-Block nach.
+            const entry = serverSearchEntry(query, state.rounds);
+            toolLog.push(entry);
+            if (b.id) serverSearches.set(b.id, entry);
           }
+          if (b.type === 'web_search_tool_result') applyServerSearchResult(serverSearches.get(b.tool_use_id), b);
           // Fehler-Results haben content als Objekt (nicht Array) → Array-Guard.
           if (b.type === 'web_search_tool_result' && Array.isArray(b.content)) {
             for (const r of b.content) {
@@ -194,6 +202,7 @@ function makeAgenticChatJob(config) {
         if (tokIn > 0)  updates.tokensIn  = state.totalTokIn + tokIn;
         if (chars > 0)  updates.tokensOut = state.totalTokOut + Math.floor(chars / aiCfg.charsPerToken);
         if (note && !inSynthesis) {
+          pendingNote = note;
           updates.statusText = 'job.phase.agentNote';
           updates.statusParams = { current: iter + 1, total: maxToolIter, note };
         }
@@ -205,11 +214,36 @@ function makeAgenticChatJob(config) {
         fallbackAllowed = false;
         state.rounds++;
         accumulate(result);
+        // Runden-Protokoll für den Werkzeug-Verlauf: was das Modell vorhatte (Text neben
+        // den Werkzeug-Aufrufen, sonst der letzte Thinking-Zwischenstand) und was die
+        // Runde gekostet hat. Text einer Antwort-Runde ist die Antwort, keine Notiz.
+        const narrates = result.stopReason === 'tool_use' || result.stopReason === 'pause_turn';
+        const note = roundNote(narrates ? result.text : '') || roundNote(pendingNote);
+        pendingNote = null;
+        rounds.push({
+          iter: state.rounds, tokIn: result.tokensIn || 0, tokOut: result.tokensOut || 0,
+          ...(note ? { note } : {}),
+        });
+        publishLive();
         if (result.truncated) throw i18nError('job.error.aiTruncated', { max: aiCfg.maxTokensOut, tokIn: state.totalTokIn, tokOut: state.totalTokOut, total: state.totalTokIn + state.totalTokOut });
         return result;
       };
 
       const toolLog = [];
+      const rounds = [];
+      let pendingNote = null;
+      // Live-Stand für den Werkzeug-Verlauf während des Laufs (GET /jobs/:id → liveTools).
+      const publishLive = () => updateJob(jobId, { liveTools: liveTools(toolLog), liveRounds: rounds.slice(-LIVE_MAX_ROUNDS) });
+      // server_tool_use-id → Verlaufszeile der Anthropic-Websuche (Trefferzahl nachtragen).
+      const serverSearches = new Map();
+      // Lesbare Sicht pro Aufruf (Werkzeug-Verlauf im UI); darf den Lauf nie stören.
+      const describeTool = makeToolViewer(ctx);
+      const toolView = (name, input, out, ok) => {
+        try { return describeTool(name, input, out, ok); } catch (e) {
+          logger.warn(`Werkzeug-Sicht für ${name} fehlgeschlagen: ${e.message}`);
+          return null;
+        }
+      };
       let finalText = null;
       let stopReason = null;
       let iter = 0;
@@ -235,16 +269,19 @@ function makeAgenticChatJob(config) {
         for (const tu of toolUses) {
           if (jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
           const t0 = Date.now();
-          let out, ok = true, errMsg = null;
+          let out, ok = true, errMsg = null, skipped = false;
           const remaining = roundResultCap - roundChars;
           if (tu.parseError) {
+            skipped = true;
             out = _skipped(`Werkzeug-Argumente waren kein gültiges JSON (${String(tu.parseError).slice(0, 120)}) – Aufruf NICHT ausgeführt. Wiederhole ihn mit gültigen Argumenten.`, 'chat.toolError.invalidArgs');
           } else if (executed >= maxToolsPerRound) {
+            skipped = true;
             out = _skipped(`Nicht ausgeführt: höchstens ${maxToolsPerRound} Werkzeug-Aufrufe pro Runde. Fordere ihn in der nächsten Runde erneut an, falls er noch nötig ist.`, 'chat.toolError.roundLimit', { max: maxToolsPerRound });
           } else if (remaining < 500 || (Number(toolResultCaps[tu.name]) > 0 && remaining < capFor(tu.name))) {
             // Ein Werkzeug mit eigenem Deckel (Recherche-Chat: read_web_page) misst sein
             // Ergebnis auf genau diesen Deckel; passt der nicht mehr ins Rundenbudget,
             // läuft es in der nächsten Runde, statt hier hart geschnitten zu werden.
+            skipped = true;
             out = _skipped('Nicht ausgeführt: das Ergebnis-Budget dieser Runde ist ausgeschöpft. Fordere den Aufruf in der nächsten Runde erneut an, falls er noch nötig ist.', 'chat.toolError.roundBudget');
           } else {
             executed++;
@@ -270,8 +307,12 @@ function makeAgenticChatJob(config) {
           if (out && typeof out === 'object' && out.error && ok) errMsg = String(out.error);
           const sent = resultBytes > cap ? content.slice(0, cap) + '…' : content;
           roundChars += sent.length;
+          const callOk = ok && !(out && out.error);
+          const view = toolView(tu.name, tu.input, out, callOk);
           toolLog.push({
-            name: tu.name, input: tu.input, ok: ok && !(out && out.error), durationMs, resultBytes, truncated, iter: iterNum,
+            name: tu.name, input: tu.input, ok: callOk, durationMs, resultBytes, truncated, iter: iterNum,
+            ...(view ? { view } : {}),
+            ...(skipped ? { skipped: true } : {}),
             ...(errMsg ? { error: errMsg } : {}),
             ...(errorKey ? { errorKey } : {}),
             ...(errorKey && errorParams ? { errorParams } : {}),
@@ -285,6 +326,7 @@ function makeAgenticChatJob(config) {
             ...(out && out.error ? { is_error: true } : {}),
           });
         }
+        publishLive();
         return toolResults;
       };
 
@@ -426,7 +468,7 @@ function makeAgenticChatJob(config) {
           messages.push({ role: 'assistant', content: result.rawContentBlocks });
           messages.push({ role: 'user', content: [
             ...others.map((tu) => {
-              toolLog.push({ name: tu.name, input: tu.input, ok: false, durationMs: 0, resultBytes: 0, truncated: false, iter: state.rounds, error: 'synthesis', errorKey: 'chat.toolError.synthesisOnly' });
+              toolLog.push({ name: tu.name, input: tu.input, ok: false, skipped: true, durationMs: 0, resultBytes: 0, truncated: false, iter: state.rounds, error: 'synthesis', errorKey: 'chat.toolError.synthesisOnly' });
               return { type: 'tool_result', tool_use_id: tu.id, is_error: true, content: JSON.stringify({ error: 'Nicht ausgeführt: die Recherche ist beendet. Antworte jetzt mit final_answer aus dem bisher Gesammelten.' }) };
             }),
             { type: 'text', text: instruction },
@@ -471,6 +513,8 @@ function makeAgenticChatJob(config) {
         toolLog, iter, webSearches: web.searches, webResults: web.results,
         webQueries: web.queries, ctx, stopReason, costUsd: answerUsd,
       });
+      // Runden-Protokoll für alle agentischen Chats gleich (Werkzeug-Verlauf im UI).
+      if (rounds.length) contextInfo.tool_rounds = rounds;
       const asstMsgResult = db.prepare(`
         INSERT INTO chat_messages (session_id, role, content, tokens_in, tokens_out, cache_read_in, cache_creation_in, cache_creation_1h_in, web_searches, provider, model, tps, context_info, created_at)
         VALUES (?, 'assistant', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

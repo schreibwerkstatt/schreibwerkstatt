@@ -1,0 +1,30 @@
+<!--
+  Eine Zeile des Werkzeug-Verlaufs (chat-tool-log.html), per String-Include für
+  Einzelaufrufe und für die aufgeklappten Aufrufe einer Gruppe; Scope: `row`
+  (chat/tool-log.js#_row).
+-->
+<div class="chat-tool-log-row" :class="{ 'chat-tool-log-row--failed': row.failed, 'chat-tool-log-row--skipped': row.skipped }">
+  <span class="chat-tool-log-label" :data-tip="row.raw || null" x-text="row.label"></span>
+  <span class="entity-refs entity-refs--wrap chat-tool-log-subject" x-show="row.parts.length">
+    <template x-for="(part, pi) in row.parts" :key="pi">
+      <span class="chat-tool-log-part">
+        <template x-if="part.kind === 'entity'">
+          <button type="button" class="entity-ref" x-entity-ref="part.entity"></button>
+        </template>
+        <template x-if="part.kind === 'url' && part.href">
+          <a class="chat-tool-log-url" :href="part.href" target="_blank" rel="noopener noreferrer" x-text="part.text"></a>
+        </template>
+        <template x-if="part.kind !== 'entity' && !(part.kind === 'url' && part.href)">
+          <span :class="'chat-tool-log-' + part.kind" x-text="part.text"></span>
+        </template>
+      </span>
+    </template>
+  </span>
+  <span class="chat-tool-log-result" :class="{ 'chat-tool-log-result--empty': row.empty }" x-show="row.result" x-text="row.result"></span>
+  <span class="chat-tool-log-meta" x-show="row.duration" x-text="row.duration"></span>
+  <span class="chat-context-badge" x-show="row.truncated" :data-tip="$app.t('chat.toolTruncatedTip')" x-text="row.truncated"></span>
+  <span class="chat-context-badge" x-show="row.repeat" :data-tip="$app.t('chat.toolRepeatTip')" x-text="$app.t('chat.toolRepeat')"></span>
+  <span class="chat-context-badge" x-show="row.skipped" x-text="$app.t('chat.toolSkipped')"></span>
+  <span class="chat-context-badge chat-context-badge--error" x-show="row.failed" x-text="$app.t('chat.toolFailed')"></span>
+  <span class="chat-tool-log-error" x-show="row.error" x-text="row.error"></span>
+</div>

@@ -597,3 +597,51 @@ test('ideen-board: Buch-Idee per Drag einem Abschnitt bzw. Kapitel zuordnen', as
   await page.evaluate((ids) => Promise.all(ids.map(id => fetch(`/ideen/${id}`, { method: 'DELETE' }))),
     [made.anchored, made.toLane, made.toTree]);
 });
+
+// Listenansicht: derselbe Bestand flach, mit Ort als Verweis und Sammelaktion.
+// Die Sammelaktion laeuft ueber denselben PATCH wie der Stufen-Knopf — geprueft
+// wird darum der Server-Stand, nicht nur die Anzeige. Die Ansicht wird am Ende
+// zurueckgestellt (Filter-Scope im localStorage), sonst oeffneten spaetere
+// Specs das Board als Liste.
+test('ideen-board: Liste zeigt Ort und Alter, Sammelaktion setzt die Stufe', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const ids = await page.evaluate(async (id) => {
+    const tree = await fetch(`/content/books/${id}/tree`).then(r => r.json());
+    const pageId = (tree.chapters[0].pages || [])[0]?.id || tree.pages?.[0]?.id;
+    const mk = (content) => fetch('/ideen', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ book_id: id, page_id: pageId, content }),
+    }).then(r => r.json()).then(r => r.id);
+    return [await mk('Listen-Pendenz Eins'), await mk('Listen-Pendenz Zwei')];
+  }, bookId);
+
+  await page.evaluate((id) => { location.hash = `#book/${id}/ideen`; }, bookId);
+  const card = page.locator('#ideen-board-card');
+  await expect(card).toBeVisible();
+  await card.getByRole('button', { name: 'Liste', exact: true }).click();
+
+  const table = card.locator('table.ideen-list');
+  await expect(table).toBeVisible();
+  await expect(card.locator('.ideen-board')).toBeHidden();
+  const rows = table.locator('tbody tr', { hasText: 'Listen-Pendenz' });
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first().locator('.ideen-list-place .entity-ref')).toHaveCount(1);
+  await expect(rows.first().locator('.ideen-list-age').first()).toHaveText(/notiert/);
+
+  for (const r of await rows.all()) await r.locator('input[type=checkbox]').check();
+  await expect(card.locator('.ideen-list-bulk-count')).toHaveText('2 ausgewählt');
+  await card.locator('.ideen-list-bulk').getByRole('button', { name: 'Erledigt', exact: true }).click();
+
+  await expect.poll(() => page.evaluate(async ({ id, ids }) => {
+    const data = await fetch(`/ideen/board?book_id=${id}`).then(r => r.json());
+    return data.ideen.filter(i => ids.includes(i.id)).map(i => i.status);
+  }, { id: bookId, ids })).toEqual(['erledigt', 'erledigt']);
+  // Erledigt ist per Default ausgeblendet — die Zeilen gehen, die Auswahl mit.
+  await expect(rows).toHaveCount(0);
+  await expect(card.locator('.ideen-list-bulk')).toBeHidden();
+
+  await card.getByRole('button', { name: 'Raster', exact: true }).click();
+  await expect(table).toBeHidden();
+  await page.evaluate((ids) => Promise.all(ids.map(i => fetch(`/ideen/${i}`, { method: 'DELETE' }))), ids);
+});

@@ -40,12 +40,12 @@ export function _destroyFehlerTrendChart() { _trend.destroy(); }
 // bleiben die Fach-Spalten leer, bei einer wissenschaftlichen Arbeit die Erzähl-Spalten.
 // Vollständigkeit gegated durch tests/unit/lektorat-typen-drift.test.mjs.
 const FEHLER_CLUSTERS = [
-  { key: 'sprache',    typen: ['rechtschreibung', 'grammatik', 'dialogformat'] },
+  { key: 'sprache',    typen: ['rechtschreibung', 'grammatik', 'konjunktiv', 'dialogformat'] },
   { key: 'wort',       typen: ['wiederholung', 'schwaches_verb', 'fuellwort', 'filterwort'] },
   { key: 'stil',       typen: ['stil', 'satzbau', 'pleonasmus', 'klischee', 'ki_geruch', 'passiv'] },
   { key: 'erzaehlung', typen: ['show_vs_tell', 'perspektivbruch', 'tempuswechsel'] },
   { key: 'fach',       typen: ['unbelegt', 'begriffsinkonsistenz', 'autorenform', 'hedging'] },
-  { key: 'journal',    typen: ['konjunktiv', 'zuschreibung', 'wertung', 'amtsdeutsch'] },
+  { key: 'journal',    typen: ['zuschreibung', 'wertung', 'amtsdeutsch'] },
   { key: 'welt',       typen: ['namenskonsistenz', 'figurenmerkmal', 'schauplatzmerkmal', 'anrede'] },
 ];
 const FEHLER_TYPEN = FEHLER_CLUSTERS.flatMap(c => c.typen);

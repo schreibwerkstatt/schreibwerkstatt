@@ -7,9 +7,33 @@ import { computeChatMarks } from '../../public/js/chat/page-chat-marks.js';
 
 const join = (parts, types) => parts.filter(p => types.includes(p.t)).map(p => p.v).join('');
 
-test('tokenize: Wörter, Whitespace und Satzzeichen getrennt; Bindestrich bleibt im Wort', () => {
-  assert.deepEqual(tokenize('Haus-Tür, offen.'), ['Haus-Tür', ',', ' ', 'offen', '.']);
+test('tokenize: Wörter, Whitespace und Satzzeichen getrennt; Bindestrich eigenes Token, Apostroph im Wort', () => {
+  assert.deepEqual(tokenize('Haus-Tür, offen.'), ['Haus', '-', 'Tür', ',', ' ', 'offen', '.']);
+  assert.deepEqual(tokenize("geht's"), ["geht's"]);
   assert.deepEqual(tokenize(''), []);
+});
+
+test('wordDiff: im Kompositum wird nur der geänderte Teil markiert', () => {
+  assert.deepEqual(wordDiff('Das E-Mail-Postfach', 'Das Mail-Postfach'),
+    [{ t: 'eq', v: 'Das ' }, { t: 'del', v: 'E-' }, { t: 'eq', v: 'Mail-Postfach' }]);
+  assert.deepEqual(wordDiff('der Fenster-Rahmen', 'der Tür-Rahmen'),
+    [{ t: 'eq', v: 'der ' }, { t: 'del', v: 'Fenster' }, { t: 'add', v: 'Tür' }, { t: 'eq', v: '-Rahmen' }]);
+});
+
+test('wordDiff: komplett ersetztes Kompositum bleibt eine Marke', () => {
+  assert.deepEqual(wordDiff('die Ost-West Achse', 'die Nord-Süd Achse'),
+    [{ t: 'eq', v: 'die ' }, { t: 'del', v: 'Ost-West' }, { t: 'add', v: 'Nord-Süd' }, { t: 'eq', v: ' Achse' }]);
+  // Gedankenstrich-Bindestrich zwischen Wörtern bleibt Gleichtext.
+  const d = wordDiff('alt - neu', 'kalt - teuer');
+  assert.ok(d.some(p => p.t === 'eq' && p.v.includes('-')), JSON.stringify(d));
+});
+
+test('wordDiff: Kompositum-Fälle rekonstruieren beide Seiten exakt', () => {
+  for (const [a, b] of [['Ost-West-Achse', 'Nord-Süd-Achse'], ['A-B', 'C-D-E'], ['Haus-Tür', 'Haustür'], ['x-y z', 'p-q r']]) {
+    const d = wordDiff(a, b);
+    assert.equal(join(d, ['eq', 'del']), a);
+    assert.equal(join(d, ['eq', 'add']), b);
+  }
 });
 
 test('wordDiff: rekonstruiert beide Seiten exakt', () => {
@@ -45,6 +69,8 @@ test('computeChatMarks: nur offene Vorschläge der letzten Assistant-Nachricht',
       { original: 'e', ersatz: 'f', _discarded: true },
       { original: 'g', ersatz: 'h', _stale: true },
       { original: 'i', ersatz: 'j' },
+      // Mehrdeutig: die Marke sässe an der ersten Fundstelle, nicht zwingend der gemeinten.
+      { original: 'k', ersatz: 'l', _ambiguous: true },
     ] },
   ];
   assert.deepEqual(computeChatMarks(msgs), [

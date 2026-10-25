@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { ideenProposalStatus, refAppliedIdeeId, ideeUpdateRows } from '../../public/js/chat/ideen-chat-proposals.js';
 import {
   buildIdeenChatSystemPrompt, IDEEN_CHAT_PROPOSE_TOOLS, SCHEMA_IDEEN_CHAT_CLASSIC,
-  IDEEN_CHAT_READ_TOOL_NAMES, IDEEN_CHAT_SLIM_READ_TOOL_NAMES, BOOK_CHAT_TOOLS,
+  chatToolNames, CHAT_TOOLS,
 } from '../../public/js/prompts.js';
 
 const ideen = [
@@ -67,8 +67,8 @@ test('Diff-Zeilen: Stufe, Ort, Text (Wort-Diff)', () => {
 });
 
 test('Prompt: Lese-Werkzeuge existieren im Buch-Chat, Schema deckt die Vorschlags-Werkzeuge', () => {
-  const known = new Set(BOOK_CHAT_TOOLS.map(t => t.name));
-  for (const n of [...IDEEN_CHAT_READ_TOOL_NAMES, ...IDEEN_CHAT_SLIM_READ_TOOL_NAMES]) assert.ok(known.has(n), n);
+  const known = new Set(CHAT_TOOLS.map(t => t.name));
+  for (const n of chatToolNames('ideen')) assert.ok(known.has(n), n);
   const names = IDEEN_CHAT_PROPOSE_TOOLS.map(t => t.name);
   assert.deepEqual(names, ['propose_idee', 'propose_idee_link', 'final_answer']);
   assert.deepEqual(SCHEMA_IDEEN_CHAT_CLASSIC.properties.vorschlaege.items.properties.werkzeug.enum, ['propose_idee', 'propose_idee_link']);

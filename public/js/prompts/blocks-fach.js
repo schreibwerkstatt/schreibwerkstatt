@@ -104,7 +104,17 @@ Hedging-Regeln (typ: «hedging»):
 // Indirekte Rede im Konjunktiv I. Der haeufigste Formfehler im
 // deutschsprachigen Journalismus und zugleich ein presserechtlicher: der
 // Indikativ macht die fremde Aussage zur eigenen Behauptung des Blattes.
-export function _buildKonjunktivBlock() {
+// Das narrative Profil bekommt eine eigene, engere Fassung: in Erzählprosa sind
+// Indikativ nach «dass», Konjunktiv II und «würde» üblich, und in Figurenrede
+// und erlebter Rede ist der Indikativ das Stilmittel — gemeldet wird dort nur,
+// was eindeutig falsch ist. Englisch kennt keinen Redewiedergabe-Konjunktiv;
+// der Typ prüft dort die Zeitenfolge (backshift) innerhalb einer Äusserung.
+// Das Sachprofil liegt dazwischen: referierte Positionen gehören in den
+// Konjunktiv I, aber ohne die presserechtliche Strenge der Redaktion.
+export function _buildKonjunktivBlock(profil = 'journalistisch', langCode = 'de') {
+  if (langCode === 'en') return _buildReportedSpeechBlockEn();
+  if (profil === 'narrativ') return _buildErzaehlKonjunktivBlock();
+  if (profil === 'sachlich') return _buildSachKonjunktivBlock();
   return `
 Konjunktiv-Regeln (typ: «konjunktiv»):
 - Referierte (indirekte) Rede steht im KONJUNKTIV I. Der Indikativ macht die fremde Aussage zur Behauptung der Redaktion — das ist kein Stil-, sondern ein Haftungsproblem.
@@ -118,6 +128,54 @@ Konjunktiv-Regeln (typ: «konjunktiv»):
 - «korrektur»: derselbe Satz mit korrektem Modus — sonst NICHTS ändern.
 - «erklaerung»: EIN Satz, benennt die Form («indirekte Rede nach «sagte» verlangt Konjunktiv I: «sei»»).
 - Selbsttest: Steht ein Verb des Sagens im Satz oder davor? Nur dann melden.`;
+}
+
+function _buildErzaehlKonjunktivBlock() {
+  return `
+Konjunktiv-Regeln (typ: «konjunktiv»):
+- Gilt NUR für indirekte Rede im ERZÄHLTEXT: der Erzähler gibt wieder, was eine Figur sagte, fragte, dachte oder behauptete.
+- Melde:
+  · Indikativ in UNEINGELEITETER indirekter Rede (ohne «dass», «ob» oder Fragewort): «Sie sagte, sie ist müde.» → «Sie sagte, sie sei müde.»
+  · Modus-Wechsel innerhalb DERSELBEN wiedergegebenen Äusserung: erster Teil im Konjunktiv, Fortsetzung im Indikativ (oder umgekehrt), ohne dass der Erzähler die Aussage erkennbar übernimmt.
+- NICHT melden:
+  · Direkte Rede, Dialog, innerer Monolog, erlebte Rede — dort spricht oder denkt die Figur selbst, der Indikativ ist richtig.
+  · Indikativ in EINGELEITETER indirekter Rede («Sie sagte, dass sie müde ist.»): in Erzählprosa zulässig, besonders in der Ich-Erzählung und im umgangssprachlichen Erzählton.
+  · Konjunktiv II oder «würde»-Umschreibung statt Konjunktiv I («Sie sagte, sie wäre müde.», «Er meinte, sie würden kommen.»): in Erzählprosa üblich, kein Fehler.
+  · Ein Text, der den Indikativ in der Redewiedergabe durchgehend hält: das ist die Erzählstimme, nicht ein Einzelfehler.
+- «original»: der vollständige Satz der indirekten Rede, zeichengenau aus dem Text.
+- «korrektur»: derselbe Satz mit Konjunktiv I — Konjunktiv II nur, wo Konjunktiv I mit dem Indikativ zusammenfällt («sie haben» → «sie hätten») —, sonst NICHTS ändern.
+- «erklaerung»: EIN Satz, benennt die Form («uneingeleitete indirekte Rede verlangt den Konjunktiv: «sei»», «Modus springt mitten in der Redewiedergabe»).
+- Selbsttest: Gibt hier der ERZÄHLER eine Äusserung wieder (nicht die Figur selbst), und ist der Modus eindeutig falsch oder springt er? Nur dann melden; im Zweifel weglassen.`;
+}
+
+function _buildSachKonjunktivBlock() {
+  return `
+Konjunktiv-Regeln (typ: «konjunktiv»):
+- Referierte Aussagen und Positionen anderer (Personen, Studien, Institutionen) stehen im KONJUNKTIV I. Der Indikativ macht die fremde Aussage zur Behauptung des Autors.
+- Melde:
+  · Indikativ in referierter Rede nach Verben des Sagens, Meinens, Behauptens, Forderns, auch nach «laut», «nach Angaben von», «wie X schreibt»: «Müller behauptet, der Effekt ist gering» → «sei gering».
+  · Modus-Wechsel innerhalb derselben referierten Aussage.
+- NICHT melden:
+  · Wörtliche Zitate in Anführungszeichen (dort gilt der Wortlaut).
+  · Konjunktiv II, wo Konjunktiv I mit dem Indikativ zusammenfällt («sie hätten»).
+  · Indikativ nach «dass», wenn der Autor die Aussage erkennbar teilt oder sie unstrittig ist («Darwin zeigte, dass Arten sich wandeln»).
+  · Indikativ nach Verben des Belegens («zeigt», «weist nach», «belegt»): dort übernimmt der Autor die Aussage.
+- «original»: der vollständige Satz der referierten Aussage, zeichengenau aus dem Text.
+- «korrektur»: derselbe Satz mit korrektem Modus — sonst NICHTS ändern.
+- «erklaerung»: EIN Satz, benennt die Form («referierte Behauptung verlangt Konjunktiv I: «sei»»).
+- Selbsttest: Gibt der Autor hier eine fremde Aussage wieder, die er NICHT selbst vertritt? Nur dann melden; im Zweifel weglassen.`;
+}
+
+function _buildReportedSpeechBlockEn() {
+  return `
+Reported-speech rules (typ: «konjunktiv»):
+- English has no reported-speech subjunctive. This type covers ONLY inconsistent backshift in reported speech in the narration: the narrator reports what a character said, asked or thought.
+- Report: a tense break within the SAME reported utterance: «She said she was tired and is going home.» → «She said she was tired and was going home.»
+- DO NOT report: direct speech, dialogue, interior monologue, free indirect discourse; omitted backshift for a statement that is still true or general («He said the earth is round»); a text that consistently reports without backshift.
+- «original»: the full sentence of reported speech, copied character-exact.
+- «korrektur»: the same sentence with consistent tenses — change NOTHING else.
+- «erklaerung»: ONE sentence naming the break («tense shifts mid-report: "is" after "was"»).
+- Self-test: is the narrator reporting an utterance, and does the tense clearly break within it? Only then report; when in doubt, leave it out.`;
 }
 
 // Zuschreibung. Das journalistische Gegenstueck zu «unbelegt»: der Beleg ist

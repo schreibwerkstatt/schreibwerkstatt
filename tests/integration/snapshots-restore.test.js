@@ -4,7 +4,9 @@
 // Fährt den echten Router unter Express hoch (Fake-Session liefert den User).
 // Schwerpunkt sind die Invarianten aus docs/fassungen.md „Restore-Pipeline":
 //   - bestehende Seiten/Kapitel behalten ihre ID → FK-Daten (Ideen, Share-Links) überleben
-//   - Einstellungen ausserhalb der Fassung + ACL-Freigabe bleiben unangetastet
+//   - Einstellungen ausserhalb der Fassung, Arbeits-/Status-Felder und die
+//     ACL-Freigabe bleiben unangetastet
+//   - die wiederhergestellte Fassung ist danach die Drift-Baseline, nicht die Auto-Sicherung
 //   - neu angelegte Kapitel: Querverweise darauf werden umgeschrieben
 //   - Interleaving, excluded-Flag und Buchname kommen zurück
 //   - seit der Fassung hinzugekommene Seiten landen im Papierkorb
@@ -145,14 +147,17 @@ test('Restore schreibt an Ort und Stelle: IDs, FK-Daten, Settings, ACL bleiben',
   const del = db.prepare('SELECT body_html FROM page_deletions WHERE page_id = ?').get(neu.id);
   assert.ok(del && /neu/.test(del.body_html || ''), 'gelöschte Seite liegt im Papierkorb');
 
-  // Settings der Fassung zurück, ACL-Freigabe unverändert (war nach der Fassung 1).
+  // Inhalts-Settings der Fassung zurück; Arbeits-/Status-Felder (Ziel,
+  // Stilprofil, Statistik-Ausschluss) und ACL-Freigabe bleiben auf dem aktuellen Stand.
   const st = bs.getBookSettings(s.bookId);
   assert.equal(st.buchtyp, 'roman');
-  assert.equal(st.stilprofil, 'Stil alt');
-  assert.equal(st.goal_target_chars, 50000);
   assert.equal(st.zeitlinie_real, 0);
-  assert.equal(st.allow_lektor_book_chat, 1);
+  assert.equal(st.weltfakten_real_pruefen, 0);
   assert.equal(st.citation_style, 'apa7');
+  assert.equal(st.stilprofil, 'Stil neu');
+  assert.equal(st.goal_target_chars, 99);
+  assert.equal(st.exclude_from_stats, 1);
+  assert.equal(st.allow_lektor_book_chat, 1);
 
   // Buchname, excluded-Flag und Interleaving zurück.
   assert.equal((await cs.loadBook(s.bookId, c)).name, 'Original');
@@ -161,9 +166,48 @@ test('Restore schreibt an Ort und Stelle: IDs, FK-Daten, Settings, ACL bleiben',
     `page:${s.vorwort.id}`, `chapter:${s.chA.id}`, `chapter:${s.chB.id}`, `page:${s.nachwort.id}`,
   ]);
 
-  // Auto-Sicherung angelegt, Drift gegen sie: der Stand vor dem Restore.
+  // Auto-Sicherung angelegt (kind), Ziel-Fassung als wiederhergestellt markiert.
   const list = (await api('GET', `/snapshots/${s.bookId}`)).json.snapshots;
   assert.equal(list.length, 2);
+  assert.equal(list.find(x => x.id !== snap.id).kind, 'auto_backup');
+  assert.ok(list.find(x => x.id === snap.id).restored_at);
+});
+
+test('Drift-Baseline nach Restore ist die wiederhergestellte Fassung, nicht die Sicherung', async () => {
+  const s = await seedBook();
+  const snap = await capture(s.bookId);
+  await cs.savePage(s.a1.id, { html: '<p>ganz anderer Text ohne Bezug</p>' }, reqCtx());
+  await capture(s.bookId); // juengere Fassung mit dem geaenderten Stand
+  const r = await api('POST', `/snapshots/${s.bookId}/${snap.id}/restore`);
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  const dr = (await api('GET', `/snapshots/${s.bookId}/drift`)).json;
+  assert.equal(dr.baseline.id, snap.id);
+  assert.equal(dr.drift.text.changePct, 0);
+  assert.equal(dr.drift.worthwhile, false);
+});
+
+test('Restore legt keine Sicherung an, wenn der Stand schon als Fassung existiert', async () => {
+  const s = await seedBook();
+  const snap1 = await capture(s.bookId);
+  await cs.savePage(s.a1.id, { html: '<p>Zweiter Stand</p>' }, reqCtx());
+  const snap2 = await capture(s.bookId);
+  // Aktueller Stand == Fassung 2 → keine Sicherung; danach == Fassung 1 → wieder keine.
+  assert.equal((await api('POST', `/snapshots/${s.bookId}/${snap1.id}/restore`)).status, 200);
+  assert.equal((await api('POST', `/snapshots/${s.bookId}/${snap2.id}/restore`)).status, 200);
+  assert.equal((await api('POST', `/snapshots/${s.bookId}/${snap1.id}/restore`)).status, 200);
+  const list = (await api('GET', `/snapshots/${s.bookId}`)).json.snapshots;
+  assert.equal(list.length, 2, JSON.stringify(list.map(x => x.kind)));
+});
+
+test('Kapitel-Restore legt vorher eine Sicherung an', async () => {
+  const s = await seedBook();
+  const snap = await capture(s.bookId);
+  await cs.updateChapter(s.chA.id, { name: 'Umbenannt' }, reqCtx());
+  const r = await api('POST', `/snapshots/${s.bookId}/${snap.id}/restore-node`, { kind: 'chapter', srcId: s.chA.id });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal((await cs.loadChapter(s.chA.id, reqCtx())).name, 'Kapitel A');
+  const list = (await api('GET', `/snapshots/${s.bookId}`)).json.snapshots;
+  assert.deepEqual(list.map(x => x.kind).sort(), ['auto_backup', 'manual']);
 });
 
 test('Drift direkt nach einem Restore matcht weiter über srcId', async () => {
@@ -226,7 +270,12 @@ test('restore-node holt eine einzelne Seite zurück, ohne Rest anzufassen', asyn
 test('Veröffentlichte Fassung: Löschen braucht force UND Owner', async () => {
   const s = await seedBook();
   const snap = await capture(s.bookId);
-  assert.equal((await api('POST', `/snapshots/${s.bookId}/${snap.id}/publish`, { published: true })).status, 200);
+  const first = await api('POST', `/snapshots/${s.bookId}/${snap.id}/publish`, { published: true });
+  assert.equal(first.status, 200);
+  // Erneutes Markieren behaelt das Auflagen-Datum.
+  db.prepare('UPDATE book_snapshots SET published_at = ? WHERE id = ?').run(NOW, snap.id);
+  const again = await api('POST', `/snapshots/${s.bookId}/${snap.id}/publish`, { published: true });
+  assert.equal(again.json.published_at, NOW);
 
   sessionUser = EDITOR;
   assert.equal((await api('DELETE', `/snapshots/${s.bookId}/${snap.id}`)).status, 409);
@@ -244,4 +293,15 @@ test('Auto-Capture-Dedup vergleicht den Inhalt, nicht nur Zähler', async () => 
   // Gleich lange Umformulierung: Zähler identisch, Inhalt nicht.
   await cs.savePage(s.vorwort.id, { html: '<p>Vorwort Tax1</p>' }, c);
   assert.ok(await captureSnapshot(s.bookId, c, { dedup: true }));
+});
+
+test('GET Fassung: defektes JSON → 422, Extras-Übersicht ohne Rohblob', async () => {
+  const s = await seedBook();
+  const snap = await capture(s.bookId);
+  const r = await api('GET', `/snapshots/${s.bookId}/${snap.id}`);
+  assert.equal(r.status, 200);
+  assert.equal(r.json.snapshot.kind, 'manual');
+  assert.equal(r.json.snapshot.extras_json, undefined);
+  db.prepare("UPDATE book_snapshots SET content_json = '{kaputt' WHERE id = ?").run(snap.id);
+  assert.equal((await api('GET', `/snapshots/${s.bookId}/${snap.id}`)).status, 422);
 });

@@ -39,6 +39,14 @@
               x-text="$app.t('snapshots.summary.renamed', { n: diff.summary.renamed })"></span>
         <span class="badge" x-show="diff.summary.moved"
               x-text="$app.t('snapshots.summary.moved', { n: diff.summary.moved })"></span>
+        <span class="badge" x-show="diff.summary.reordered"
+              x-text="$app.t('snapshots.summary.reordered', { n: diff.summary.reordered })"></span>
+        <span class="badge badge-ok" x-show="diff.summary.chaptersAdded"
+              x-text="$app.t('snapshots.summary.chaptersAdded', { n: diff.summary.chaptersAdded })"></span>
+        <span class="badge badge-err" x-show="diff.summary.chaptersRemoved"
+              x-text="$app.t('snapshots.summary.chaptersRemoved', { n: diff.summary.chaptersRemoved })"></span>
+        <span class="badge" x-show="diff.summary.chaptersChanged"
+              x-text="$app.t('snapshots.summary.chaptersChanged', { n: diff.summary.chaptersChanged })"></span>
         <span class="tag snapshots-summary__chars"
               x-text="$app.t('snapshots.charsDelta', { d: formatDelta(diff.summary.charsTo - diff.summary.charsFrom) })"></span>
       </div>
@@ -69,6 +77,29 @@
         </div>
       </div>
 
+      <!-- Kapitel-Aenderungen (Gliederung) — Match ueber die Kapitel-srcId. -->
+      <div class="snapshots-chapters" x-show="chapterEntries().length" x-cloak>
+        <h4 class="snapshots-pubdiff__title" x-text="$app.t('snapshots.chapters.title')"></h4>
+        <ul class="snapshots-entries">
+          <template x-for="c in chapterEntries()" :key="'c' + c.srcId">
+            <li class="snapshots-entry" :class="'snapshots-entry--' + c.status">
+              <div class="snapshots-entry__head">
+                <span class="badge" :class="{
+                        'badge-ok': c.status === 'added',
+                        'badge-err': c.status === 'removed',
+                        'badge-warn': c.status === 'changed',
+                      }" x-text="statusLabel(c)"></span>
+                <span class="snapshots-entry__name" x-text="c.name || $app.t('snapshots.untitled')"></span>
+                <span class="snapshots-entry__path" x-text="chapterPathLabel(c.path)"></span>
+                <template x-for="tag in chapterTags(c)" :key="tag">
+                  <span class="tag" x-text="tag"></span>
+                </template>
+              </div>
+            </li>
+          </template>
+        </ul>
+      </div>
+
       <label class="form-check snapshots-showall">
         <input type="checkbox" x-model="showUnchanged">
         <span x-text="$app.t('snapshots.showUnchanged')"></span>
@@ -92,6 +123,7 @@
                     x-text="$app.t('snapshots.renamedTag', { old: entry.oldName })"></span>
               <span class="tag" x-show="entry.moved"
                     x-text="$app.t('snapshots.movedTag', { from: chapterPathLabel(entry.oldChapterPath) })"></span>
+              <span class="tag" x-show="entry.reordered" x-text="$app.t('snapshots.reorderedTag')"></span>
               <span class="history-chevron" :class="{ open: !!expanded[entryKey(entry, idx)] }" aria-hidden="true"></span>
             </div>
             <div x-show="expandLoading[entryKey(entry, idx)]" x-cloak class="muted-msg muted-msg--sm"

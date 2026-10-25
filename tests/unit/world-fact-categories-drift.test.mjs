@@ -19,7 +19,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const { FAKT_KATEGORIE_WL } = require('../../db/world-facts');
 const { FAKTEN_SCHEMA } = await import('../../public/js/prompts/komplett/schema-strings.js');
-const { BOOK_CHAT_TOOLS } = await import('../../public/js/prompts/book-chat-tools.js');
+const { CHAT_TOOLS } = await import('../../public/js/prompts/chat-tools/index.js');
 
 const WL = [...FAKT_KATEGORIE_WL];
 const sorted = (a) => [...a].sort();
@@ -40,7 +40,7 @@ test('FAKTEN_SCHEMA-Enum = Whitelist', () => {
 });
 
 test('list_world_facts-Werkzeug nennt genau die Whitelist', () => {
-  const tool = BOOK_CHAT_TOOLS.find(t => t.name === 'list_world_facts');
+  const tool = CHAT_TOOLS.find(t => t.name === 'list_world_facts');
   const desc = tool.input_schema.properties.kategorie.description;
   const m = desc.match(/Gültige Werte:\s*([^.]+)\./);
   assert.ok(m, 'Werteliste in der kategorie-Beschreibung nicht gefunden');

@@ -4,41 +4,19 @@
 // context_info.proposals und werden NICHT geschrieben — der User übernimmt jeden
 // einzeln (Frontend: public/js/chat/plot-chat-proposals.js).
 //
-// Jeder Provider: mit Werkzeug-Protokoll agentisch (dieses Modul, Lese-Werkzeuge
-// des Buch-Chats + propose_*), sonst klassisch in einem JSON-Call
-// (plot-chat-classic.js). `runPlotChatJobDispatch` wählt; lehnt ein Endpunkt
-// Function-Calling erst zur Laufzeit ab, übernimmt der klassische Pfad denselben
-// Job (fallbackJob). Loop/Persistenz: makeAgenticChatJob (agentic-chat.js).
+// Jeder Provider: mit Werkzeug-Protokoll agentisch (Lese-Werkzeuge des Buch-Chats
+// + propose_*), sonst klassisch in einem JSON-Call. Beide Pfade, die Weiche und
+// der Laufzeit-Rückfall kommen aus makeProposalChatJob (proposal-chat.js); hier
+// stehen nur Board-Kontext und Prompt-Bausteine.
 // Deep-Doc: docs/plot-chat.md
 
 const { getBookSettings } = require('../../db/schema');
-const { resolveProvider, providerClass, providerSupportsTools } = require('../../lib/ai');
 const { getPrompts, loadOrderedBookContents } = require('./shared');
-const { makeAgenticChatJob, stripTrailingEmptyJson } = require('./agentic-chat');
-const { executePlotChatTool } = require('./plot-chat-tools');
+const { makeProposalChatJob } = require('./proposal-chat');
+const { executePlotChatTool, PROPOSE_TOOLS } = require('./plot-chat-tools');
 const {
   loadBoardState, boardOutline, figurenOutline, sessionPlotProposalMemory,
 } = require('./plot-chat-context');
-const { runPlotChatJobClassic } = require('./plot-chat-classic');
-const embed = require('../../lib/embed');
-const appSettings = require('../../lib/app-settings');
-const { getSessionWithBookName } = require('../../db/chat-sessions');
-const { agentPreContext, preContextStatus, retrievalQuery } = require('./chat/book-chat-retrieval');
-
-function _maxToolIter(provider, userEmail) {
-  const base = parseInt(appSettings.get('jobs.plot_chat.max_tool_iter'), 10) || 8;
-  // Lokale Provider zahlen jede Runde den vollen Prompt erneut (kein Caching) —
-  // derselbe lokale Deckel wie im Buch-Chat, damit beide Chats gleich teuer bleiben.
-  if (providerClass(provider, { userEmail }) !== 'local') return base;
-  const local = parseInt(appSettings.get('jobs.book_chat.max_tool_iter_local'), 10) || 0;
-  return local > 0 ? Math.min(base, local) : base;
-}
-
-// Per-Tool-Result-Cap wie im Buch-Chat: eine einzelne Antwort (get_chapter_text)
-// darf das Kontextfenster nicht allein füllen.
-function _toolResultCapChars(maxIter, aiCfg) {
-  return Math.max(4000, Math.floor(aiCfg.inputBudgetChars / (maxIter * 6)));
-}
 
 /**
  * Kontext beider Pfade: Board-Stand, Prompt-Bausteine (Board-Gliederung,
@@ -64,133 +42,44 @@ async function plotChatContext(session, userEmail) {
     proposalMemory: buildPlotProposalMemoryBlock(sessionPlotProposalMemory(session.id)),
     toolCtx: {
       bookId: session.book_id, sessionId: session.id, userEmail,
-      chapterNames, _board: state, readToolNames: new Set(),
+      chapterNames, _board: state,
     },
   };
 }
 
-const EMPTY_MARKERS = new Set(['__i18n:chat.errors.maxIterReached__', '__i18n:chat.errors.emptyAnswer__']);
-// Nur Vorschläge, kein Text → eigener Hinweis statt „Iterationen erschöpft".
-function _proposalsOnlyFallback(antwort, n) {
-  const a = String(antwort || '').trim();
-  return n > 0 && (!a || EMPTY_MARKERS.has(a)) ? '__i18n:plot.chat.proposalsOnly__' : a;
-}
-
-const runPlotChatJob = makeAgenticChatJob({
-  startLabel: 'Plot-Chat',
-  errLabel: 'Plot-Chat',
-  callProvider: undefined,
-  resolveProvider: (userEmail) => resolveProvider({ userEmail }),
+const plotChat = makeProposalChatJob({
+  kind: 'plot',
+  label: 'Plot-Chat',
+  maxIterSettingKey: 'jobs.plot_chat.max_tool_iter',
   effortSettingKey: 'ai.claude.effort.plotchat',
-
-  loadSession: (sessionId, userEmail) => getSessionWithBookName(parseInt(sessionId), userEmail, 'plot'),
-
-  async prepare({ session, userEmail, aiCfg, logger, jobSignal, message, history }) {
-    const {
-      buildPlotChatSystemPrompt, BOOK_CHAT_TOOLS,
-      PLOT_CHAT_PROPOSE_TOOLS, PLOT_CHAT_READ_TOOL_NAMES, PLOT_CHAT_SLIM_READ_TOOL_NAMES,
-      PLOT_CHAT_FORCE_FINAL_INSTRUCTION,
-    } = await getPrompts(userEmail);
-    const provider = resolveProvider({ userEmail });
-    const maxToolIter = _maxToolIter(provider, userEmail);
-    const slim = providerClass(provider, { userEmail }) === 'local';
-    const wanted = new Set(slim ? PLOT_CHAT_SLIM_READ_TOOL_NAMES : PLOT_CHAT_READ_TOOL_NAMES);
-    const embOn = embed.isEnabled();
-    const readTools = BOOK_CHAT_TOOLS.filter(t => wanted.has(t.name) && (t.name !== 'search_similar' || embOn));
-    const tools = [...readTools, ...PLOT_CHAT_PROPOSE_TOOLS];
-
-    const base = await plotChatContext(session, userEmail);
-    // Erst-Kontext wie im agentischen Buch-Chat: die semantisch nächsten Passagen zur
-    // Frage (+ letzte Runde) stehen schon in Iteration 1 im Prompt — eine Frage wie
-    // „passt der Beat zu dem, was in Kapitel 3 steht?" braucht dann oft keine
-    // Lese-Runde. Pro Frage andere Bytes → im ungecachten Block 2 am Ende (siehe
-    // buildPlotChatSystemPrompt). Non-fatal; ohne Embedding-Endpunkt kein Block.
-    const preContext = embOn
-      ? await agentPreContext(session.book_id, retrievalQuery(message, history), { signal: jobSignal, logger, userEmail })
-      : null;
-    const systemPrompt = buildPlotChatSystemPrompt(session.book_name || '', {
-      mode: 'agent',
-      passages: embOn ? (preContext?.hits || []) : null,
-      passageStatus: preContextStatus(preContext, { enabled: embOn }),
-      maxToolIter,
-      toolNames: tools.map(t => t.name),
-      bookContext: base.bookContext,
-      boardOutline: base.boardOutline,
-      figurenOutline: base.figurenOutline,
-      proposalMemory: base.proposalMemory,
-    });
-    const toolResultCap = _toolResultCapChars(maxToolIter, aiCfg);
-    logger.info(`Plot-Chat: ${tools.length} Werkzeuge (${slim ? 'slim' : 'voll'}), max ${maxToolIter} Iterationen, `
-      + `Board ${base.state.acts.length} Akte/${base.state.beats.length} Beats/${base.state.threads.length} Stränge, Provider=${provider}.`);
-    return {
-      systemPrompt,
-      tools,
-      maxToolIter,
-      tokenBudget: aiCfg.inputBudgetTokens,
-      toolResultCap,
-      forceFinalInstruction: PLOT_CHAT_FORCE_FINAL_INSTRUCTION,
-      ctx: {
-        ...base.toolCtx,
-        jobSignal, logger,
-        resultCapChars: toolResultCap,
-        inputBudgetChars: aiCfg.inputBudgetChars,
-        readToolNames: new Set(readTools.map(t => t.name)),
-        proposals: [],
-        preContext: preContext ? { count: preContext.hits.length, chars: preContext.chars } : null,
-      },
-    };
-  },
-
-  executeTool: (name, input, ctx) => executePlotChatTool(name, input, ctx),
-
-  consumeFinalAnswer: ({ finalUse, ctx, toolLog, iterNum, logger }) => {
-    const raw = typeof finalUse.input?.antwort === 'string' ? finalUse.input.antwort : '';
-    const antwort = _proposalsOnlyFallback(raw, ctx?.proposals?.length || 0);
-    toolLog.push({ name: 'final_answer', input: { antwort_chars: antwort.length }, ok: true, durationMs: 0, resultBytes: antwort.length, truncated: false, iter: iterNum });
-    logger.info(`tool=final_answer antwort_chars=${antwort.length} iter=${iterNum} (terminal)`);
-    return JSON.stringify({ antwort });
-  },
-
-  parseFinal: (finalText, logger) => {
-    let antwort = '';
-    try { antwort = JSON.parse(finalText)?.antwort || ''; }
-    catch {
-      logger.warn('Plot-Chat-Antwort kein valides JSON – Rohtext (gesäubert) wird gespeichert.');
-      antwort = stripTrailingEmptyJson(finalText) || finalText;
-    }
-    return antwort || '__i18n:chat.errors.maxIterReached__';
-  },
-
-  buildContextInfo: ({ toolLog, iter, ctx, stopReason, costUsd }) => ({
-    mode: 'plot',
-    tool_calls: toolLog,
-    iterations: iter + 1,
-    ...(stopReason ? { stop_reason: stopReason } : {}),
-    ...(costUsd > 0 ? { cost_usd: Math.round(costUsd * 10000) / 10000 } : {}),
-    ...(ctx.proposals.length ? { proposals: ctx.proposals } : {}),
-    ...(ctx.preContext ? { pre_context: ctx.preContext } : {}),
+  proposalsOnlyMarker: '__i18n:plot.chat.proposalsOnly__',
+  prompts: (p) => ({
+    buildSystemPrompt: p.buildPlotChatSystemPrompt,
+    schemaClassic: p.SCHEMA_PLOT_CHAT_CLASSIC,
+    proposeTools: p.PLOT_CHAT_PROPOSE_TOOLS,
+    forceFinalInstruction: p.PLOT_CHAT_FORCE_FINAL_INSTRUCTION,
   }),
-
-  buildCompletePayload: ({ base, ctx }) => ({ ...base, proposals: ctx.proposals.length }),
-
-  buildSummary: ({ sessionId, toolLog, iter, ctx }) =>
-    `Plot-Chat session=${sessionId}, ${toolLog.length} Tool-Calls, ${iter + 1} Iter, ${ctx.proposals.length} Vorschläge`,
-
-  // Endpunkt lehnt Function-Calling erst zur Laufzeit ab → dieselbe Frage klassisch.
-  fallbackJob: runPlotChatJobClassic,
+  loadContext: plotChatContext,
+  promptParts: (base) => ({
+    bookContext: base.bookContext,
+    boardOutline: base.boardOutline,
+    figurenOutline: base.figurenOutline,
+    proposalMemory: base.proposalMemory,
+  }),
+  stateSummary: (s) => `Board ${s.acts.length} Akte/${s.beats.length} Beats/${s.threads.length} Stränge`,
+  executeTool: executePlotChatTool,
+  proposeToolNames: PROPOSE_TOOLS,
+  // Leere Figurenliste heisst «Figuren vom Beat lösen», nicht «weglassen».
+  keepEmptyArrays: ['figuren'],
+  classicFallbackNote: 'nur Board/Figuren',
 });
 
-/** Pfadwahl am EFFEKTIVEN Provider (KI-Profil vor globalem `ai.provider`). */
-function plotChatUsesTools(userEmail) {
-  return providerSupportsTools(resolveProvider({ userEmail }));
-}
-
-function runPlotChatJobDispatch(jobId, sessionId, userMsgId, message, userEmail) {
-  return plotChatUsesTools(userEmail)
-    ? runPlotChatJob(jobId, sessionId, userMsgId, message, userEmail)
-    : runPlotChatJobClassic(jobId, sessionId, userMsgId, message, userEmail);
-}
-
 module.exports = {
-  runPlotChatJob, runPlotChatJobDispatch, plotChatUsesTools, plotChatContext, _proposalsOnlyFallback,
+  runPlotChatJob: plotChat.runAgent,
+  runPlotChatJobClassic: plotChat.runClassic,
+  runPlotChatJobDispatch: plotChat.runDispatch,
+  plotChatUsesTools: plotChat.usesTools,
+  collectClassicProposals: plotChat.collectClassicProposals,
+  _proposalsOnlyFallback: plotChat.proposalsOnlyFallback,
+  plotChatContext,
 };

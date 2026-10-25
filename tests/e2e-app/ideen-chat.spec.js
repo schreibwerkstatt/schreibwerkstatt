@@ -60,7 +60,10 @@ test('Ideen-Chat: Ort, Stufe mit Beleg und neue Idee einzeln übernehmen', async
   await boardData(page, `
     d.ideenChatMessages = [{
       id: 987655, role: 'assistant', content: 'Drei Vorschläge.',
-      context_info: { mode: 'ideen', proposals: [
+      context_info: { mode: 'ideen', tool_calls: [
+        { name: 'list_ideen', ok: true, iter: 1, input: { offen_only: true, limit: 30 },
+          view: { subject: [{ t: 'f', k: 'offen_only', v: true }], result: { key: 'chat.toolResult.entries', params: { n: 4 } } } },
+      ], proposals: [
         { type: 'idee_update', ref: 1, idee_id: a.bookIdee, fields: { page_id: a.pageId },
           before: { page_id: null, chapter_id: null }, labels: { idee: 'Idee ohne Ort', anchor: 'Seite', anchor_before: null } },
         { type: 'idee_update', ref: 2, idee_id: a.pageIdee, fields: { status: 'erledigt' }, before: { status: 'offen' },
@@ -72,6 +75,11 @@ test('Ideen-Chat: Ort, Stufe mit Beleg und neue Idee einzeln übernehmen', async
 
   const cards = page.locator(`${CARD} .ideen-chat .chat-vorschlag`);
   await expect(cards).toHaveCount(4);
+
+  // Werkzeug-Verlauf: dasselbe Fragment wie im Buch-Chat (chat-tool-log).
+  const log = page.locator(`${CARD} .ideen-chat .chat-tool-log`);
+  await log.locator('.collapsible-toggle').click();
+  await expect(log.locator('.chat-tool-log-row')).toHaveText(/Ideen gelesen\s*nur offene\s*4 Einträge/);
   const applyBtn = (i) => cards.nth(i).locator('.chat-vorschlag-btn').first();
   const idee = (id) => boardData(page, 'const i = d.ideen.find(x => x.id === a); return i && { status: i.status, page_id: i.page_id };', id);
 

@@ -3,6 +3,9 @@
 // Geteilt von Buch-Chat (agentisch, buildBookChatPreContext), Plot-Chat und
 // Ideen-Chat (Textpassagen-Block) — gleiche Passagen-Kopfzeile, gleicher Status-
 // Hinweis. Steht nie im gecachten System-Block: er trägt pro Frage andere Bytes.
+// Werkzeugnamen nur über toolMentions (`toolNames` = angebotene Werkzeuge).
+
+import { toolMentions } from './chat-tools/mentions.js';
 
 /**
  * Kopfzeile einer Passage: Art, Titel, Sprungziel (`entity_id`, bei Abschnitten =
@@ -31,12 +34,13 @@ export const PASSAGE_RELEVANCE_NOTE =
  *   indexIncomplete — Index deckt nur einen Teil des Buchs ab; `stalePages` > 0 =
  *                     so viele Abschnitte seit dem letzten Indexlauf neu/geändert
  * `tools`: der Chat hat Lese-Werkzeuge (Hinweis nennt den Ausweg) — der klassische
- * Pfad hat keine. '' = nichts zu sagen (vollständiger Index).
+ * Pfad hat keine; `toolNames` = die angebotenen. '' = nichts zu sagen (vollständiger Index).
  */
-export function passageStatusNote(status, { tools = true } = {}) {
+export function passageStatusNote(status, { tools = true, toolNames } = {}) {
   const st = status || {};
-  const fallback = tools
-    ? ' Prüfe mit search_passages (Wortlaut) oder get_chapter_text.'
+  const ways = tools ? toolMentions(toolNames).list(['search_passages', 'get_chapter_text'], ' oder ') : '';
+  const fallback = ways
+    ? ` Prüfe mit ${ways}.`
     : ' Urteile nur über das, was dir vorliegt, und sage dazu, dass der Text nicht vollständig durchsucht wurde.';
   if (st.disabled) return `(Keine Bedeutungssuche konfiguriert — es gibt keine vorab geholten Stellen.${tools ? ' Arbeite über die Lese-Werkzeuge.' : ''})`;
   if (st.error) return `(Die Bedeutungssuche ist für diese Frage ausgefallen — über den Buchtext sagt das NICHTS aus.${fallback})`;
@@ -62,18 +66,23 @@ export function passageStatusNote(status, { tools = true } = {}) {
  * Aussagen; ohne Block deutete das Modell das Fehlen als «kein Index» und
  * überspränge gleich auf die Volltext-Werkzeuge.
  */
-export function buildBookChatPreContext(passages, status = null) {
+export function buildBookChatPreContext(passages, status = null, { toolNames } = {}) {
   const list = Array.isArray(passages) ? passages : [];
+  const m = toolMentions(toolNames);
   const head = ['=== ERST-KONTEXT: SEMANTISCH NÄCHSTE STELLEN ZUR AKTUELLEN FRAGE ==='];
-  const note = passageStatusNote(status);
+  const note = passageStatusNote(status, { toolNames });
   if (!list.length) {
     head.push(note || '(Keine Treffer bei vollständigem Index — die Frage ist vermutlich nicht textbezogen, oder das Buch sagt es mit anderen Worten. Weiter auf Stufe 2 der Kosten-Leiter.)');
     return head.join('\n');
   }
+  const into = m.list(['get_pages', 'quote_passage'], '/');
   head.push(
-    '(Automatisch vorab geholt, dieselbe Pipeline wie `search_similar`; nach Relevanz sortiert, Ausschnitte können unvollständig sein.',
+    '(Automatisch vorab geholt über die Bedeutungssuche; nach Relevanz sortiert, Ausschnitte können unvollständig sein.',
     'Beantworten diese Stellen die Frage, antworte direkt via `final_answer` — kein weiteres Werkzeug. Sonst arbeite von hier aus weiter:',
-    '`entity_id` eines Abschnitts (kind page) geht als page_id in `get_pages`/`quote_match`. Wörtliche Zitate IMMER über quote_match/quote_passage verifizieren, nie aus diesem Ausschnitt abschreiben.',
+    ...(into ? [`\`entity_id\` eines Abschnitts (kind page) geht als page_id in ${into}.`] : []),
+    m.has('quote_passage')
+      ? 'Wörtliche Zitate IMMER über quote_passage verifizieren, nie aus diesem Ausschnitt abschreiben.'
+      : 'Wörtliche Zitate nie aus diesem Ausschnitt abschreiben.',
     `${PASSAGE_RELEVANCE_NOTE})`,
   );
   if (note) head.push(note);
@@ -87,13 +96,13 @@ export function buildBookChatPreContext(passages, status = null) {
  * «für einen Erledigt-Check lies den Abschnitt selbst»).
  * @returns {string[]} Zeilen für den ungecachten Block
  */
-export function buildPassageBlockLines(passages, { classic, status = null, intro = '', emptyClassic = '' } = {}) {
+export function buildPassageBlockLines(passages, { classic, status = null, intro = '', emptyClassic = '', toolNames } = {}) {
   const list = Array.isArray(passages) ? passages : [];
   const lines = ['=== TEXTPASSAGEN (semantisch nächste Stellen zur Frage) ==='];
-  const note = passageStatusNote(status, { tools: !classic });
+  const note = passageStatusNote(status, { tools: !classic, toolNames });
   if (list.length) {
     if (!classic && intro) lines.push(intro);
-    lines.push(classic
+    lines.push(classic || !toolMentions(toolNames).has('get_pages')
       ? `(${PASSAGE_RELEVANCE_NOTE})`
       : `(\`entity_id\` eines Abschnitts (kind page) = page_id für \`get_pages\`. ${PASSAGE_RELEVANCE_NOTE})`);
     if (note) lines.push(note);
@@ -102,4 +111,18 @@ export function buildPassageBlockLines(passages, { classic, status = null, intro
     lines.push(note || (classic ? emptyClassic : '(keine Treffer zur Frage — nutze bei Bedarf die Lese-Werkzeuge)'));
   }
   return lines;
+}
+
+/**
+ * Erzählweise des Buchs (Perspektive, Tempus) als eine Zeile für den stabilen
+ * System-Block der agentischen Chats — buch-stabil, darum gecacht. Steht im Prompt,
+ * damit keine Stil- oder Formulierungsfrage eine Werkzeug-Runde für die
+ * Einstellungen kostet. '' wenn nichts gesetzt ist.
+ * @param {{ erzaehlperspektive?: string|null, erzaehlzeit?: string|null }} labels  routes/jobs/narrative-labels.js
+ */
+export function buildErzaehlweiseLine(labels) {
+  const parts = [];
+  if (labels?.erzaehlperspektive) parts.push(`Perspektive ${labels.erzaehlperspektive}`);
+  if (labels?.erzaehlzeit) parts.push(`Erzählzeit ${labels.erzaehlzeit}`);
+  return parts.length ? `Erzählweise: ${parts.join(', ')}.` : '';
 }

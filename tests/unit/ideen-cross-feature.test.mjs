@@ -20,7 +20,7 @@ const plot = require('../../db/plot');
 const ideenDb = require('../../db/ideen');
 const draftFigures = require('../../db/draft-figures');
 const { db } = require('../../db/connection');
-const { tool_list_ideen } = require('../../routes/jobs/book-chat-tools/tools-catalog');
+const { tool_list_ideen } = require('../../routes/jobs/chat-tools/tools-catalog');
 const { ideaNotesByTarget } = require('../../lib/idea-context');
 const { loadChapterIdeenContext } = require('../../routes/jobs/review-context');
 const { loadBoardState, boardOutline } = require('../../routes/jobs/plot-chat-context');
@@ -54,9 +54,9 @@ test('idea_links: draft und thread als Ziele, Buch-Prüfung, Picker-Kataloge', (
   const tFremd = plot.createThread(other, USER, { name: 'Anderes Buch' });
   const i = idee(B, 'Bogen klären');
 
-  assert.deepEqual(ideenDb.addIdeaLink(i, B, 'draft', d.id), { ok: true });
-  assert.deepEqual(ideenDb.addIdeaLink(i, B, 'thread', t.id), { ok: true });
-  assert.equal(ideenDb.addIdeaLink(i, B, 'thread', tFremd.id).error_code, 'BOOK_MISMATCH');
+  assert.deepEqual(ideenDb.addIdeaLink(i, B, 'draft', d.id, USER), { ok: true });
+  assert.deepEqual(ideenDb.addIdeaLink(i, B, 'thread', t.id, USER), { ok: true });
+  assert.equal(ideenDb.addIdeaLink(i, B, 'thread', tFremd.id, USER).error_code, 'BOOK_MISMATCH');
   const row = ideenDb.getIdee(i);
   assert.deepEqual(row.links.map(l => [l.target_kind, l.label]).sort(), [['draft', 'Anna'], ['thread', 'B-Story']]);
 
@@ -76,7 +76,7 @@ test('list_ideen: verknuepft nur bei vorhandenen Kanten', () => {
   const beat = plot.createBeat(B, a.id, USER, { titel: 'Showdown' });
   const mit = idee(B, 'Motivation unklar');
   idee(B, 'ohne Kante');
-  ideenDb.addIdeaLink(mit, B, 'beat', beat.id);
+  ideenDb.addIdeaLink(mit, B, 'beat', beat.id, USER);
   const res = tool_list_ideen({}, { bookId: B, userEmail: USER });
   const byContent = Object.fromEntries(res.ideen.map(x => [x.content, x]));
   assert.deepEqual(byContent['Motivation unklar'].verknuepft, [{ art: 'beat', id: beat.id, label: 'Showdown' }]);
@@ -90,7 +90,7 @@ test('ideaNotesByTarget: offen + verworfen, erledigt raus, offene zuerst, user-p
   const v = idee(B, 'Zwillingsbruder');      setStatus(v, 'verworfen');
   const e = idee(B, 'schon umgesetzt');      setStatus(e, 'erledigt');
   const o = idee(B, 'Motivation schärfen');
-  for (const id of [v, e, o]) ideenDb.addIdeaLink(id, B, 'beat', beat.id);
+  for (const id of [v, e, o]) ideenDb.addIdeaLink(id, B, 'beat', beat.id, USER);
 
   const notes = ideaNotesByTarget('beat', B, USER).get(beat.id);
   assert.deepEqual(notes.map(n => [n.content, n.status]), [['Motivation schärfen', 'offen'], ['Zwillingsbruder', 'verworfen']]);
@@ -119,8 +119,8 @@ test('Plot-Chat-Outline: Pendenzen an Beat und Strang über die Facade-Form', ()
   const beat = plot.createBeat(B, a.id, USER, { titel: 'Showdown' });
   const i1 = idee(B, 'Motivation schärfen');
   const i2 = idee(B, 'Wendepunkt fehlt');
-  ideenDb.addIdeaLink(i1, B, 'beat', beat.id);
-  ideenDb.addIdeaLink(i2, B, 'thread', t.id);
+  ideenDb.addIdeaLink(i1, B, 'beat', beat.id, USER);
+  ideenDb.addIdeaLink(i2, B, 'thread', t.id, USER);
   const state = loadBoardState(B, USER);
   const text = boardOutline(state, { ideenMarker: plotPrompts.ideenMarker });
   assert.ok(text.includes('«Motivation schärfen»'));

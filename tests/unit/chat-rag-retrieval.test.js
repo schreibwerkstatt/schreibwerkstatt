@@ -1,6 +1,6 @@
 'use strict';
 // RAG-Bausteine der Chats (routes/jobs/chat/book-chat-retrieval.js +
-// routes/jobs/book-chat-tools/tools-similar.js): Suchtext aus Frage + letzter
+// routes/jobs/chat-tools/tools-similar.js): Suchtext aus Frage + letzter
 // Runde, Erst-Kontext mit Nachbar-Chunks unter Zeichendeckel und Seiten-Ausschluss,
 // „kein Index" vs. „keine Treffer" im klassischen Pfad, Snippet-Zentrierung und
 // Offset-Rückrechnung von search_similar. semanticQuery/withNeighbors/indexReady
@@ -21,8 +21,8 @@ const contentStore = require('../../lib/content-store');
 const {
   retrievalQuery, preContextPassages, selectPassagesSemantic,
 } = require('../../routes/jobs/chat/book-chat-retrieval');
-const { centeredSnippet, locateInPageText } = require('../../routes/jobs/book-chat-tools/tools-similar');
-const { indexIncompleteFields } = require('../../routes/jobs/book-chat-tools/shared');
+const { centeredSnippet, locateInPageText } = require('../../routes/jobs/chat-tools/tools-similar');
+const { indexIncompleteFields } = require('../../routes/jobs/chat-tools/shared');
 const { FALLBACK_PLACEHOLDER } = require('../../routes/jobs/agentic-chat/history');
 
 const BOOK = 92001;

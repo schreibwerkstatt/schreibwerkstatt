@@ -2984,6 +2984,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [card-accents.css](public/css/card-accents.css) | `.card--<key> { --card-accent: var(--card-accent-<key>); }` — SSoT für Karten-Akzentfarben (alle Karten). |
 | [chat.css](public/css/chat.css) | Abschnitts-/Buch-Chat. |
 | [components/chat-history-search.css](public/css/components/chat-history-search.css) | Suche im Verlauf von Abschnitts-/Buch-Chat (Suchzeile, Treffer, angesprungene Nachricht). |
+| [components/chat-tool-log.css](public/css/components/chat-tool-log.css) | Werkzeug-Verlauf der vier agentischen Chats (Buch-, Recherche-, Plot-, Ideen-Chat; Fragmente `chat-tool-log` + `chat-tool-log-row`): Rundenköpfe mit Modell-Notiz, Zeilen (Tätigkeit · Gegenstand · Ergebnis), Sammelzeile gleicher Aufrufe als Klapp-Knopf ohne Versalien, Live-Variante unter dem Antwort-Skelett. |
 | [search.css](public/css/search.css) | Volltext-Suche, Buchwahl. |
 | [tokens-est.css](public/css/tokens-est.css) | Token-Schätzung Inline-Badges + Tooltip. Nur das — der Figuren-Bestand, den die Datei entgegen ihrem Namen lange mittrug, liegt in `entities/figuren*.css`. |
 | [landing.css](public/css/landing.css) | Landing-/Register-/Login-Seiten (kein SPA-Bundle). Landing: `.public-principle` (Prinzip-Kasten „Die KI schreibt nicht für dich"), `.public-feature-grid` (2 Spalten — die Kachel ist so breit wie der Screenshot), `.public-feature-shot` (Produktbild, 3:2), `.public-feature--wide` (neunte Kachel: Bild links, Text rechts). |

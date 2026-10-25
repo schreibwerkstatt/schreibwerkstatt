@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 334, 183 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 335, 183 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -542,10 +542,12 @@ erDiagram
     INTEGER id            PK
     INTEGER book_id       FK "ON DELETE CASCADE"
     INTEGER seq           "fortlaufende Fassungsnummer pro Buch"
+    TEXT    kind          "manual | auto_backup (vor Restore) | auto_finish (Fertig-Markieren)"
     TEXT    label
     TEXT    description
     TEXT    content_json  "buildBookJson-Output ({book, tree:[node…]}) mit Seiten-HTML inline"
-    TEXT    extras_json   "collectExtras (Analyse + Lektorat) für Restore"
+    TEXT    extras_json   "collectExtras (Analyse + Lektorat) — eingefrorener Stand, nicht restauriert"
+    TEXT    extras_summary "Zähl-Übersicht aus extras_json für den Reader (beim Capture berechnet)"
     TEXT    publication_json "eingefrorene book_publication (Titelei/epub_*/Cover+Foto base64) für Fassungs-Export + Restore"
     TEXT    lektorat_metrics "verdichtete Lektorat-Kennzahl beim Capture (JSON {open,applied,all}×{total,byTyp}) für den Fehlerdichte-Trend in der Heatmap-Karte"
     INTEGER chars
@@ -555,6 +557,7 @@ erDiagram
     TEXT    user_email
     TEXT    created_at
     TEXT    published_at "NULL = nicht veröffentlicht; sonst Zeitpunkt der Auflage-Markierung (Publikations-Anker + Lösch-Schutz)"
+    TEXT    restored_at  "letzter Restore des Buchs auf diese Fassung — Drift-Baseline"
   }
   name_guard_ignores {
     INTEGER id            PK

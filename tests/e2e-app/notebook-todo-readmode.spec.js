@@ -7,11 +7,12 @@
 // Ein Fixture-Harness kann gruen bleiben, waehrend der Haken visuell umklappt
 // und nie gespeichert wird — genau der Bug, den dieser Test einklemmt.
 //
-// Geprueft (public/js/book/page-view.js#_handleViewTodoClick/_saveViewTodo):
+// Geprueft (public/js/book/page-view.js#_handleViewTodoClick/_flushViewTodos):
 //   1. Klick in der Leseansicht persistiert das `checked`-Attribut (Reload-fest)
 //   2. Erneuter Klick nimmt den Haken wieder weg (auch persistent)
 //   3. Der Klick trifft genau den angeklickten Kasten, nicht seine Nachbarn
 //   4. `updated_at` wird mitgezogen, sodass der Folgeklick keinen 409 baut
+//   5. Klicks waehrend eines laufenden Saves gehen nicht verloren
 
 const { test, expect } = require('../e2e/_helpers/fixtures');
 const { bootApp, selectSeededBook } = require('./_helpers/app');
@@ -101,4 +102,27 @@ test('Leseansicht: Klick trifft nur den angeklickten Kasten', async ({ page }) =
   await page.waitForSelector(BOX_SEL, { timeout: 30000 });
   expect(await savedFlags(page)).toEqual([false, true, false]);
   expect(await domFlags(page)).toEqual([false, true, false]);
+});
+
+test('Leseansicht: schnelle Klicks waehrend eines Saves gehen nicht verloren', async ({ page }) => {
+  await seedTodoList(page, ['Aufgabe eins', 'Aufgabe zwei', 'Aufgabe drei'], 3);
+
+  // PUT kuenstlich verzoegern, damit Klick zwei und drei sicher in den
+  // laufenden Save fallen — genau dort wurden sie frueher zurueckgedreht.
+  await page.route('**/content/pages/*', async (route) => {
+    if (route.request().method() === 'PUT') await new Promise(r => setTimeout(r, 400));
+    await route.continue();
+  });
+  await page.locator(BOX_SEL).nth(0).click();
+  await page.locator(BOX_SEL).nth(2).click();
+  await page.locator(BOX_SEL).nth(1).click();
+  await page.locator(BOX_SEL).nth(1).click();
+  expect(await domFlags(page)).toEqual([true, false, true]);
+  await expect.poll(() => savedFlags(page), { timeout: 15000 }).toEqual([true, false, true]);
+  await page.unroute('**/content/pages/*');
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector(BOX_SEL, { timeout: 30000 });
+  expect(await savedFlags(page)).toEqual([true, false, true]);
+  expect(await domFlags(page)).toEqual([true, false, true]);
 });

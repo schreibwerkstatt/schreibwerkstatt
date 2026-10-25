@@ -1,6 +1,8 @@
-// Chat-Markdown → HTML + Mention/Channel-Dekoration. `renderChatMarkdown`
-// escaped als Allererstes (XSS-Invariante, siehe CLAUDE.md).
+// Chat-Markdown → HTML + Mention/Channel-Dekoration. `renderChatMarkdown` rendert
+// über markdown-it mit `html: false`: Roh-HTML im Text wird escaped statt
+// durchgereicht, Links nur mit http(s)/mailto (XSS-Invariante, siehe CLAUDE.md).
 import { escHtml } from './escape.js';
+import { loadMarkdownIt } from '../lazy-libs.js';
 
 /**
  * Display-Pass: Markiert Slack-Style `@mentions` (User-Handles) und `#channels`
@@ -65,143 +67,79 @@ function _mentionAncestorSkip(node) {
   return false;
 }
 
-// Erkennt eine Listenzeile (geordnet «1. » oder ungeordnet «- »/«* ») inkl.
-// führender Einrückung (Spaces/Tabs). Gruppe 1 = Indent, 2 = Marker, 3 = Text.
-const _CHAT_LIST_RE = /^([ \t]*)([-*]|\d+\.)[ ]+(.*)$/;
+// Klassen des Chat-Vokabulars (public/css/chat.css) je Token-Typ.
+const _CHAT_CLASS = {
+  paragraph_open: 'chat-p',
+  bullet_list_open: 'chat-list',
+  ordered_list_open: 'chat-list chat-list--ol',
+  blockquote_open: 'chat-quote',
+  hr: 'chat-hr',
+  code_inline: 'chat-code',
+  table_open: 'chat-table',
+  link_open: 'chat-link',
+};
 
-// Baut aus aufeinanderfolgenden Listenzeilen verschachtelte <ul>/<ol> anhand
-// der Einrückungstiefe. Tabs zählen als 4 Spaces. Pure Funktion (kein DOM).
-function _buildNestedList(blockLines) {
-  const items = [];
-  for (const l of blockLines) {
-    const m = l.match(_CHAT_LIST_RE);
-    if (!m) continue;
-    items.push({
-      indent: m[1].replace(/\t/g, '    ').length,
-      ordered: /\d/.test(m[2]),
-      text: m[3],
-    });
-  }
-  const open = (ord) => ord ? '<ol class="chat-list chat-list--ol">' : '<ul class="chat-list">';
-  const close = (ord) => ord ? '</ol>' : '</ul>';
-  const stack = [];
-  let out = '';
-  for (const it of items) {
-    const top = stack[stack.length - 1];
-    if (!top || it.indent > top.indent) {
-      stack.push(it);
-      out += open(it.ordered) + '<li>' + it.text;
-    } else if (it.indent === top.indent) {
-      out += '</li><li>' + it.text;
-    } else {
-      while (stack.length > 1 && it.indent < stack[stack.length - 1].indent) {
-        out += '</li>' + close(stack.pop().ordered);
-      }
-      out += '</li><li>' + it.text;
+function _decorateTokens(tokens) {
+  for (const tok of tokens) {
+    const cls = _CHAT_CLASS[tok.type];
+    if (cls) tok.attrJoin('class', cls);
+    if (tok.type === 'heading_open' || tok.type === 'heading_close') {
+      // `#` ist im Chat eine Zwischenüberschrift, kein Seitentitel: eine Ebene tiefer.
+      const level = Number(tok.tag.slice(1));
+      tok.tag = 'h' + Math.min(level + 1, 6);
+      if (tok.type === 'heading_open') tok.attrJoin('class', `chat-heading chat-heading--${Math.min(level, 3)}`);
     }
+    if (tok.type === 'link_open') {
+      tok.attrSet('target', '_blank');
+      tok.attrSet('rel', 'noopener noreferrer');
+    }
+    if (tok.children) _decorateTokens(tok.children);
   }
-  while (stack.length) out += '</li>' + close(stack.pop().ordered);
-  return out;
 }
 
-// Ersetzt zusammenhängende Listenblöcke im Text durch ihr verschachteltes
-// HTML; alle übrigen Zeilen bleiben unangetastet. Eine einzelne Leerzeile
-// zwischen Items hält die Liste zusammen.
-function _renderChatLists(html) {
-  const lines = html.split('\n');
-  const out = [];
-  let i = 0;
-  while (i < lines.length) {
-    if (!_CHAT_LIST_RE.test(lines[i])) { out.push(lines[i]); i++; continue; }
-    const block = [];
-    while (i < lines.length) {
-      if (_CHAT_LIST_RE.test(lines[i])) { block.push(lines[i]); i++; continue; }
-      if (lines[i].trim() === '' && _CHAT_LIST_RE.test(lines[i + 1] || '')) { i++; continue; }
-      break;
-    }
-    out.push(_buildNestedList(block));
+function _buildChatMarkdown(markdownit) {
+  const md = markdownit({ html: false, breaks: true, linkify: true, typographer: false });
+  // Bilder nie laden: eine Modell-Antwort soll keinen Fremd-Request auslösen.
+  md.disable('image');
+  // Nur http(s)/mailto werden zum Link, alles andere bleibt Klartext.
+  md.validateLink = (url) => /^(https?:|mailto:)/i.test(String(url).trim());
+  md.core.ruler.push('chat_classes', (state) => { _decorateTokens(state.tokens); });
+  const esc = md.utils.escapeHtml;
+  const code = (content) => '<pre class="chat-pre"><code>' + esc(content.replace(/\n+$/, '')) + '</code></pre>\n';
+  md.renderer.rules.fence = (tokens, idx) => code(tokens[idx].content);
+  md.renderer.rules.code_block = (tokens, idx) => code(tokens[idx].content);
+  md.renderer.rules.table_open = (tokens, idx, opts, _env, self) =>
+    '<div class="table-scroll">' + self.renderToken(tokens, idx, opts);
+  md.renderer.rules.table_close = (tokens, idx, opts, _env, self) =>
+    self.renderToken(tokens, idx, opts) + '</div>';
+  return md;
+}
+
+let _md = null;
+let _mdPromise = null;
+
+/** Lädt markdown-it einmalig; danach rendert `renderChatMarkdown` Markdown. */
+export function loadChatMarkdown() {
+  if (_md) return Promise.resolve(_md);
+  if (!_mdPromise) {
+    _mdPromise = loadMarkdownIt()
+      .then(markdownit => (_md = _buildChatMarkdown(markdownit)))
+      .catch(err => { _mdPromise = null; throw err; });
   }
-  return out.join('\n');
+  return _mdPromise;
+}
+
+export function chatMarkdownReady() {
+  return _md !== null;
 }
 
 /**
- * Einfaches Markdown → HTML für Chat-Antworten.
- * Unterstützt: # Überschriften, **fett**, *kursiv*, `code`, ```Code-Blöcke```,
- * [Links](url), Blockquotes (>), Tabellen, Zeilenumbrüche, verschachtelte Listen (- und 1.).
+ * Markdown → HTML für Chat-Antworten (CommonMark + GFM-Tabellen, Linkify,
+ * einfache Zeilenumbrüche als <br>). Bis markdown-it geladen ist, kommt der
+ * escapte Klartext mit <br> zurück — die Chat-Basis rendert nach dem Laden neu.
  */
 export function renderChatMarkdown(text) {
   if (!text) return '';
-  let html = escHtml(text);
-
-  // Fenced Code-Blöcke ```…``` vorab extrahieren und durch Platzhalter ersetzen,
-  // damit weder Listen-/Inline-Regex noch \n→<br> ihren Inhalt anfassen. Inhalt
-  // ist durch escHtml bereits sicher; \n bleiben für die <pre>-Anzeige erhalten.
-  // Platzhalter-Delimiter ist U+E000 (Private-Use-Area): kommt in echtem
-  // Chat-/Markdown-Text nicht vor (kollisionsfrei) und ist — anders als das
-  // früher genutzte NUL — druckbares UTF-8, sodass die Datei text-/grep-bar
-  // bleibt. Restore weiter unten muss denselben Delimiter matchen.
-  const codeBlocks = [];
-  html = html.replace(/```[^\n]*\n([\s\S]*?)```/g, (_m, body) => {
-    codeBlocks.push('<pre class="chat-pre"><code>' + body.replace(/\n+$/, '') + '</code></pre>');
-    return 'CB' + (codeBlocks.length - 1) + '';
-  });
-
-  // Überschriften: ### ## #
-  html = html.replace(/^### (.+)$/gm, '<h4 class="chat-heading chat-heading--3">$1</h4>');
-  html = html.replace(/^## (.+)$/gm,  '<h3 class="chat-heading chat-heading--2">$1</h3>');
-  html = html.replace(/^# (.+)$/gm,   '<h2 class="chat-heading chat-heading--1">$1</h2>');
-
-  // Horizontale Linie
-  html = html.replace(/^---$/gm, '<hr class="chat-hr">');
-
-  // Markdown-Tabellen: Block aus Zeilen die mit | beginnen
-  html = html.replace(/((?:\|[^\n]+\n)+)/g, (block) => {
-    const lines = block.trimEnd().split('\n');
-    if (lines.length < 3) return block;
-    if (!/^\|[\s\-:|]+\|$/.test(lines[1])) return block;
-    const headers = lines[0].split('|').slice(1, -1).map(h => h.trim());
-    const rows = lines.slice(2).map(row => row.split('|').slice(1, -1).map(c => c.trim()));
-    const thead = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
-    const tbody = rows.map(row => `<tr>${row.map(c => `<td>${c}</td>`).join('')}</tr>`).join('');
-    return `<div class="table-scroll"><table class="chat-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table></div>`;
-  });
-
-  // Listen (geordnet + ungeordnet, mit Verschachtelung via Einrückung)
-  html = _renderChatLists(html);
-
-  // Blockquote: Zeilen mit «> » (nach escHtml «&gt; ») → temporäres <bq>-Tag,
-  // aufeinanderfolgende Zeilen werden zu einem <blockquote> gruppiert.
-  html = html.replace(/^&gt; ?(.*)$/gm, '<bq>$1</bq>');
-  html = html.replace(/(?:<bq>[\s\S]*?<\/bq>\n?)+/g, m =>
-    '<blockquote class="chat-quote">' +
-    m.replace(/<bq>/g, '').replace(/<\/bq>\n?/g, '\n').trimEnd() +
-    '</blockquote>');
-
-  // Inline: [Text](url) — nur http(s)/mailto, sonst Klartext belassen (XSS-Schutz).
-  // url ist durch escHtml bereits attribut-sicher (" → &quot; etc.).
-  html = html.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (m, label, url) =>
-    /^(https?:|mailto:)/i.test(url)
-      ? `<a href="${url}" target="_blank" rel="noopener noreferrer" class="chat-link">${label}</a>`
-      : m);
-
-  // Inline: **fett**
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  // Inline: *kursiv*
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  // Inline: `code`
-  html = html.replace(/`([^`]+)`/g, '<code class="chat-code">$1</code>');
-
-  // Leerzeile → <br><br> (direkt, ohne weitere \n die nochmals zu <br> werden)
-  html = html.replace(/\n\n+/g, '<br><br>');
-  // Einfacher Zeilenumbruch → <br>
-  html = html.replace(/\n/g, '<br>');
-
-  // Fenced Code-Blöcke zurückspielen (Inhalt war über Platzhalter geschützt)
-  html = html.replace(/CB(\d+)/g, (_m, i) => codeBlocks[Number(i)] || '');
-
-  // Überschüssige <br> direkt vor/nach Block-Elementen entfernen
-  html = html.replace(/(<br>\s*)+(<(?:ol|ul|h[2-4]|hr|blockquote|pre)\b)/gi, '$2');
-  html = html.replace(/(\/(?:ol|ul|h[2-4]|blockquote|pre)>|<hr[^>]*>)(\s*<br>)+/gi, '$1');
-
-  return html;
+  if (!_md) return escHtml(text).replace(/\n/g, '<br>');
+  return _md.render(String(text)).trim();
 }

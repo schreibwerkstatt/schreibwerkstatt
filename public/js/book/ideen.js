@@ -11,7 +11,7 @@
 import { fetchJson } from '../utils.js';
 import { createIdee, patchIdee, deleteIdee as removeIdee, overlayPendingIdeen } from '../repo/ideen-queue.js';
 import { EVT } from '../events.js';
-import { IDEE_STATUSES, ideeStatus, isOpenIdee, normalizeIdeeStages } from './ideen-shared.js';
+import { IDEE_STATUSES, ideeStatus, isOpenIdee, normalizeIdeeStages, compareIdeeManual, IDEE_MAX_LEN } from './ideen-shared.js';
 import { computePopoverPos, refinePopoverPos } from '../popover-anchor.js';
 import { attachDismiss, detachDismiss } from '../cards/dismiss.js';
 import { isTempId as isTempPageId, resolveTempId } from '../repo/structure-queue.js';
@@ -135,7 +135,7 @@ export const ideenMethods = {
     const app = window.__app;
     const content = (this.newContent || '').trim();
     if (!content) { this.errorMessage = app.t('ideen.error.contentRequired'); return; }
-    if (content.length > 4000) { this.errorMessage = app.t('ideen.error.contentTooLong'); return; }
+    if (content.length > IDEE_MAX_LEN) { this.errorMessage = app.t('ideen.error.contentTooLong'); return; }
     const scope = _activeScope(app);
     const bookId = Alpine.store('nav').selectedBookId;
     if (!scope || !bookId) return;
@@ -172,7 +172,7 @@ export const ideenMethods = {
     const app = window.__app;
     const content = (this.editingDraft || '').trim();
     if (!content) { this.errorMessage = app.t('ideen.error.contentRequired'); return; }
-    if (content.length > 4000) { this.errorMessage = app.t('ideen.error.contentTooLong'); return; }
+    if (content.length > IDEE_MAX_LEN) { this.errorMessage = app.t('ideen.error.contentTooLong'); return; }
     if (content === idee.content) { this.cancelEditIdee(); return; }
 
     this.busy = true;
@@ -326,13 +326,19 @@ export const ideenMethods = {
     this.ideen = this.ideen.map(i => (i.id === row.id ? row : i));
   },
 
+  // Offen zuerst, dann nach Stufe; innerhalb einer Stufe die Reihenfolge, die
+  // der Autor im Ideen-Board von Hand gesetzt hat (`sort_order`, neue oben) —
+  // sonst ordnete die Karte neben dem Editor dieselben Pendenzen anders als das
+  // Board.
   _sortIdeen(arr) {
     return [...arr].sort((a, b) => {
       const ao = isOpenIdee(a) ? 0 : 1;
       const bo = isOpenIdee(b) ? 0 : 1;
       if (ao !== bo) return ao - bo;
-      // created_at DESC
-      return (b.created_at || '').localeCompare(a.created_at || '');
+      const as = IDEE_STATUSES.indexOf(ideeStatus(a));
+      const bs = IDEE_STATUSES.indexOf(ideeStatus(b));
+      if (as !== bs) return as - bs;
+      return compareIdeeManual(a, b);
     });
   },
 

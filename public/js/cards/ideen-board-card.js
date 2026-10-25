@@ -16,7 +16,7 @@ import { EVT } from '../events.js';
 import { attachFullscreenSync, toggleWrapFullscreen } from '../fullscreen.js';
 import { ideenBoardMethods } from '../book/ideen-board.js';
 import { buildLaneOrder } from '../book/ideen-board/model.js';
-import { LANE_BOOK, IDEE_STATUSES } from '../book/ideen-shared.js';
+import { LANE_BOOK, IDEE_STATUSES, ideeLaneKey } from '../book/ideen-shared.js';
 import { ideenChatMethods, ideenChatState } from '../chat/ideen-chat.js';
 
 // Filterleiste pro Buch im localStorage. `showVerworfen` steht bewusst per
@@ -34,7 +34,7 @@ import { ideenChatMethods, ideenChatState } from '../chat/ideen-chat.js';
 const IDEEN_BOARD_FILTER_SCOPES = [
   {
     scope: 'ideenBoard',
-    defaults: { filterChapterId: '', showErledigt: false, showVerworfen: false, query: '', collapsedLanes: [], collapsedChapters: [], columnSort: {} },
+    defaults: { filterChapterId: '', showErledigt: false, showVerworfen: false, query: '', collapsedLanes: [], collapsedChapters: [], columnSort: {}, view: 'board' },
   },
 ];
 
@@ -67,6 +67,12 @@ export function registerIdeenBoardCard() {
     // und der Board-Memo vergleicht seine Deps per Identitaet.
     collapsedLanes: [],
     collapsedChapters: [],
+    // Ansicht: 'board' (Raster Bahn × Stufe) oder 'list' (flache Tabelle mit
+    // Ort, Alter, Mehrfachauswahl — ideen-board/list.js). Im Filter-Scope, weil
+    // sie wie der Filter zur Frage „wie sieht dieses Board fuer mich aus" gehoert.
+    view: 'board',
+    // Mehrfachauswahl der Liste (Idee-IDs); nicht persistiert.
+    selectedIds: [],
 
     newContent: '',
     newLaneKey: LANE_BOOK,
@@ -107,7 +113,7 @@ export function registerIdeenBoardCard() {
         name: 'ideenBoard',
         showFlag: 'showIdeenBoardCard',
         filterScopes: IDEEN_BOARD_FILTER_SCOPES,
-        resetState: { editingId: null, linkPickerIdeeId: null, assigningId: null, stagesOpen: false, busy: false },
+        resetState: { editingId: null, linkPickerIdeeId: null, assigningId: null, stagesOpen: false, busy: false, selectedIds: [] },
         load: async () => { await this.loadBoard(); },
         onBookChanged: () => { this.resetBoard(); this.resetIdeenChat(); this.ideenChatOpen = false; },
         onViewReset: () => { this.resetBoard(); this.resetIdeenChat(); this.ideenChatOpen = false; },
@@ -129,11 +135,31 @@ export function registerIdeenBoardCard() {
       // asynchron geladen und kann sich unter dem offenen Board aendern (neue
       // Seite, Umsortieren, Collab-Nachzug) — ohne diesen Watcher stuenden die
       // betroffenen Ideen in der Sammelbahn, bis jemand die Karte neu oeffnet.
+      //
+      // Verschwindet dabei der Anker einer Idee (Abschnitt/Kapitel geloescht),
+      // hat der Server sie zur Buch-Idee gemacht (Content-Store deletePage/
+      // deleteChapter) — die geladene Zeile zeigte noch den alten Anker, und
+      // jede Bearbeitung in der Sammelbahn liefe gegen einen veralteten Stand.
+      // Dann wird neu geladen statt nur umgeordnet.
       this.$watch(() => this.$store.nav.tree, (tree) => {
         if (!window.__app?.showIdeenBoardCard) return;
+        const before = new Set((this.laneOrder || []).map(l => l.key));
         this.laneOrder = buildLaneOrder(tree);
         this._memos = {};
+        const after = new Set(this.laneOrder.map(l => l.key));
+        const lost = (this.ideen || []).some(i => {
+          const k = ideeLaneKey(i);
+          return k !== LANE_BOOK && before.has(k) && !after.has(k);
+        });
+        if (lost) this.loadBoard();
       });
+
+      // Die Auswahl der Liste folgt dem Filter: eine Sammelaktion trifft nur,
+      // was gerade zu sehen ist.
+      this.$watch(
+        () => [this.filterChapterId, this.showErledigt, this.showVerworfen, this.query].join('|'),
+        () => this._pruneSelection(),
+      );
 
       // Bahnen kommen und gehen mit dem Filter; die Drop-Zonen haengen an den
       // gerenderten Zellen und muessen darum neu angebunden werden, sobald eine

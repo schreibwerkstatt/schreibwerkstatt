@@ -27,18 +27,17 @@
           <div x-show="msg.role === 'user'" class="chat-msg-text" x-text="msg.content"></div>
           <div x-show="msg.role === 'assistant'" class="chat-msg-text" x-html="_renderResearchAnswer(msg)"></div>
 
-          <!-- Web-Such-/Tool-Hinweis: Suchen (mit Begriffen), Werkzeuge (i18n), Kosten -->
+          <!-- Web-Suchen + Kosten; die einzelnen Aufrufe stehen im Werkzeug-Verlauf -->
           <template x-if="msg.role === 'assistant' && msg.context_info">
             <div class="chat-context-info">
               <template x-if="msg.context_info.web_searches > 0">
                 <span class="chat-context-tool" x-text="$app.t('recherche.chat.webSearches', { n: msg.context_info.web_searches })"></span>
               </template>
-              <template x-for="(entry, ei) in _toolSummary(msg.context_info.tool_calls, { skip: ['final_answer'] })" :key="ei">
-                <span class="chat-context-tool" x-text="researchToolLabel(entry.name) + (entry.count > 1 ? ' ×' + entry.count : '')"></span>
-              </template>
               <span class="chat-context-tool" x-show="researchCostLabel(msg)" x-text="researchCostLabel(msg)"></span>
             </div>
           </template>
+          <!-- @include chat-tool-log -->
+          <!-- Suchbegriffe älterer Antworten, deren Anthropic-Suchen noch nicht im Verlauf stehen -->
           <template x-if="msg.role === 'assistant' && researchWebQueries(msg).length">
             <div class="research-chat-queries">
               <span class="research-chat-queries-head" x-text="$app.t('recherche.chat.queriesHead')"></span>
@@ -140,6 +139,12 @@
 
     <div x-show="isResearchChatSessionRunning(researchChatSessionId)" class="chat-skeleton-wrapper">
       <div class="chat-skeleton"></div>
+      <!-- Werkzeug-Verlauf des laufenden Turns (wächst mit, offen) -->
+      <template x-for="msg in (_liveToolMsg() ? [_liveToolMsg()] : [])" :key="'live'">
+        <div class="chat-tool-log-live">
+          <!-- @include chat-tool-log -->
+        </div>
+      </template>
     </div>
   </div>
 

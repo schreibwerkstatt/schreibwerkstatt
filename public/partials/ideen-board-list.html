@@ -1,0 +1,81 @@
+<!-- Listenansicht des Ideen-Boards (Fragment, string-seitiger @include aus
+     ideen-board.html; Scope = ideenBoardCard, Logik ideen-board/list.js).
+     Derselbe Bestand nach demselben Filter wie das Raster, flach als Tabelle:
+     Ort in Buch-Reihenfolge, Stufe, Alter. Sammelaktionen wirken nur auf die
+     ausgewaehlten SICHTBAREN Zeilen. -->
+<div class="ideen-list-wrap" x-show="!loading && isListView() && listRows().length > 0" x-cloak>
+  <div class="ideen-list-bulk" x-show="selectedIds.length > 0" x-cloak role="group" :aria-label="$app.t('ideenBoard.bulk.label')">
+    <span class="ideen-list-bulk-count" x-text="$app.t('ideenBoard.bulk.selected', { n: selectedIds.length })"></span>
+    <template x-for="st in statuses()" :key="st">
+      <button type="button" class="idee-board-step" :class="'idee-board-step--' + st"
+              x-show="isStageActive(st)" @click="bulkSetStatus(st)" :disabled="busy"
+              :data-tip="$app.t('ideenBoard.moveTo', { status: statusLabel(st) })"
+              x-text="statusLabel(st)"></button>
+    </template>
+    <button type="button" class="btn-compact danger" @click="bulkDelete()" :disabled="busy" x-text="$app.t('common.delete')"></button>
+    <button type="button" class="btn-compact" @click="clearSelection()" :disabled="busy" x-text="$app.t('ideenBoard.bulk.clear')"></button>
+  </div>
+
+  <table class="data-table ideen-list"
+         x-data="sortableTable({
+           rows: () => listRows(),
+           defaultKey: 'laneIndex',
+           persistKey: 'ideenBoard.list',
+           types: { laneIndex: 'number', statusRank: 'number', created: 'date', statusAt: 'date', text: 'string' },
+         })">
+    <thead>
+      <tr>
+        <th class="ideen-list-check">
+          <input type="checkbox" :checked="allVisibleSelected()" @change="toggleSelectAllVisible()"
+                 :aria-label="$app.t('ideenBoard.bulk.selectAll')">
+        </th>
+        <th class="sortable-th" :class="sortClass('laneIndex')" :aria-sort="ariaSort('laneIndex')"
+            @click="sortBy('laneIndex')" x-text="$app.t('ideenBoard.list.place')"></th>
+        <th class="sortable-th" :class="sortClass('text')" :aria-sort="ariaSort('text')"
+            @click="sortBy('text')" x-text="$app.t('ideenBoard.list.text')"></th>
+        <th class="sortable-th" :class="sortClass('statusRank')" :aria-sort="ariaSort('statusRank')"
+            @click="sortBy('statusRank')" x-text="$app.t('ideenBoard.list.status')"></th>
+        <th class="sortable-th" :class="sortClass('created')" :aria-sort="ariaSort('created')"
+            @click="sortBy('created')" x-text="$app.t('ideenBoard.list.created')"></th>
+        <th class="sortable-th" :class="sortClass('statusAt')" :aria-sort="ariaSort('statusAt')"
+            @click="sortBy('statusAt')" x-text="$app.t('ideenBoard.list.statusAt')"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="r in sorted" :key="r.id">
+        <tr :class="{ 'is-selected': isSelected(r.id) }">
+          <td class="ideen-list-check">
+            <input type="checkbox" :checked="isSelected(r.id)" @change="toggleSelect(r.id)"
+                   :aria-label="$app.t('ideenBoard.bulk.select')">
+          </td>
+          <td class="ideen-list-place">
+            <template x-if="r.idee.page_id != null">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: r.idee.page_id }"></button>
+            </template>
+            <template x-if="r.idee.page_id == null && r.idee.chapter_id != null">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: r.idee.chapter_id }"></button>
+            </template>
+            <span class="ideen-list-book" x-show="r.idee.page_id == null && r.idee.chapter_id == null" x-text="r.place"></span>
+          </td>
+          <!-- Einelementiges x-for, damit das geteilte Chip-Fragment seine Idee
+               wie in Karte und Raster als `idee` findet. -->
+          <td class="ideen-list-text">
+            <template x-for="idee in [r.idee]" :key="r.id">
+              <div>
+                <span class="ideen-list-text-body" x-text="idee.content"></span>
+                <!-- @include ideen-link-chips -->
+              </div>
+            </template>
+          </td>
+          <td>
+            <span class="ideen-list-status" :class="'ideen-list-status--' + r.status" x-text="statusLabel(r.status)"></span>
+          </td>
+          <td class="ideen-list-age" :class="{ 'idee-board-age--stale': isStaleIdee(r.idee) }"
+              :data-tip="isStaleIdee(r.idee) ? staleTip() : null"
+              x-text="ideeAgeLabel(r.idee)"></td>
+          <td class="ideen-list-age" x-text="statusSinceLabel(r.idee)"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+</div>

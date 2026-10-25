@@ -142,6 +142,15 @@ function getSessionWithBookName(id, userEmail, kind = null) {
   return _stmtWithBookName.get(id, userEmail, kind, kind) || null;
 }
 
+// Ausgangsstand des Seiten-Chats auf den Text setzen, den das Modell in der
+// ersten Runde sieht: der Diff späterer Runden misst dann die Änderungen seit
+// dieser Antwort, nicht die seit dem Öffnen der Karte.
+const _stmtSetOpening = db.prepare('UPDATE chat_sessions SET opening_page_text = ? WHERE id = ?');
+
+function setOpeningPageText(id, text) {
+  _stmtSetOpening.run(text, id);
+}
+
 module.exports = {
   ORPHAN_GRACE_MS,
   deleteEmptyPageSessions,
@@ -154,4 +163,5 @@ module.exports = {
   getSessionForJob,
   getSessionRow,
   getSessionWithBookName,
+  setOpeningPageText,
 };

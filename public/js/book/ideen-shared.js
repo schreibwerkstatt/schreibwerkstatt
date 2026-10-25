@@ -9,6 +9,10 @@
 
 export const IDEE_STATUSES = ['offen', 'in_arbeit', 'erledigt', 'verworfen'];
 
+// Hoechstlaenge des Ideentexts — Spiegel von MAX_LEN in routes/ideen.js. Vorab
+// geprueft, damit die Karte „zu lang" sagt statt eines allgemeinen Speicherfehlers.
+export const IDEE_MAX_LEN = 4000;
+
 // Die Stufen, die eine Pendenz noch OFFEN halten. Sie entscheiden ueber die
 // Sidebar-Plakette und die Zaehler — `verworfen` gehoert nicht dazu.
 export const IDEE_OPEN_STATUSES = ['offen', 'in_arbeit'];
@@ -58,4 +62,20 @@ export function ideeLaneKey(idee) {
 
 export function isBookIdee(idee) {
   return !!idee && idee.page_id == null && idee.chapter_id == null;
+}
+
+/**
+ * Manuelle Reihenfolge: `sort_order` aufsteigend, bei Gleichstand die neueste
+ * oben. 0 heisst „nie einsortiert" — eine neue Idee steht damit oben in ihrer
+ * Zelle; ein Drag im Board schreibt die Zelle als 1..n
+ * (db/ideen.js#reorderIdeen). Geteilt, weil die Ideen-Karte neben dem Editor
+ * dieselbe Ordnung zeigt wie das Board.
+ */
+export function compareIdeeManual(a, b) {
+  const so = (a.sort_order || 0) - (b.sort_order || 0);
+  if (so) return so;
+  const ca = a.created_at || '';
+  const cb = b.created_at || '';
+  if (ca !== cb) return ca < cb ? 1 : -1;
+  return (b.id || 0) - (a.id || 0);
 }

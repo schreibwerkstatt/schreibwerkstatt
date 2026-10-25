@@ -239,7 +239,7 @@ function getFiguren(bookId, userEmail, chapterId = null) {
 function buildChatMessageHistory(sessionId, { annotate = null } = {}) {
   const rows = db.prepare(`
     SELECT role, content, vorschlaege, context_info FROM chat_messages
-    WHERE session_id = ? ORDER BY created_at ASC
+    WHERE session_id = ? ORDER BY created_at ASC, id ASC
   `).all(sessionId);
   const out = [];
   for (const r of rows) {

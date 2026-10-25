@@ -197,12 +197,12 @@ Server-Status-Keys: `job.werkstatt.brainstorm.aiReply`, `job.werkstatt.consisten
 
 ## Buch-Chat-Tools (read-only)
 
-Der Agentic Buch-Chat kann die Werkstatt-Drafts des aktuellen Users lesen. Implementiert in [routes/jobs/book-chat-tools.js](../routes/jobs/book-chat-tools.js), Schemas in [public/js/prompts/chat.js](../public/js/prompts/chat.js#BOOK_CHAT_TOOLS).
+Der Agentic Buch-Chat kann die Werkstatt-Drafts des aktuellen Users lesen. Handler in [routes/jobs/chat-tools/tools-werkstatt.js](../routes/jobs/chat-tools/tools-werkstatt.js), Definition im gemeinsamen Katalog ([chat-tools.md](chat-tools.md)); auch Plot- und Ideen-Chat bieten es an.
 
 | Tool | Eingabe | Output |
 |------|---------|--------|
 | `list_werkstatt_drafts` | — | `drafts[{draft_id,name,archetype,source_figure_name,notes,updated_at,runs:{brainstorm,consistency},last_run}]` |
-| `get_werkstatt_draft` | `draft_id` ODER `figur_name` (+ optional `include_runs`, `run_limit`) | Volle Draft-Metadaten + `mindmap_text` (eingerückte Bullet-Liste in User-Locale) + `runs` (gekürzt) |
+| `list_werkstatt_drafts` | `draft_id` ODER `figur_name` (+ optional `include_runs`, `run_limit`) | Volle Draft-Metadaten + `mindmap_text` (eingerückte Bullet-Liste in User-Locale) + `runs` (gekürzt) |
 
 User-Scope wie überall in der Werkstatt: `WHERE book_id=? AND user_email=?`. Cross-User-/Cross-Book-Zugriff liefert `error: 'Werkstatt-Draft nicht gefunden'`. `mindmap_json`-i18n-Marker werden via `resolveI18nTree(locale)` aus [lib/i18n-server.js](../lib/i18n-server.js) aufgelöst. Run-Snippets sind hart geclampt (Begründung 160, Problem 240, Fazit 400 Zeichen).
 

@@ -4,7 +4,9 @@
 // Ohne Alpine, ohne fetch, ohne `this` — damit die Gruppierung testbar ist
 // (tests/unit/ideen-board.test.mjs) und die Karte nur noch State haelt.
 
-import { IDEE_STATUSES, ideeStatus, ideeLaneKey, LANE_BOOK } from '../ideen-shared.js';
+import { IDEE_STATUSES, ideeStatus, ideeLaneKey, LANE_BOOK, compareIdeeManual } from '../ideen-shared.js';
+
+export { compareIdeeManual };
 
 export const LANE_UNKNOWN = 'unknown:0';
 
@@ -85,19 +87,6 @@ export function nextColumnSort(columnSort, status, by) {
   return next;
 }
 
-/**
- * Manuelle Reihenfolge: `sort_order` aufsteigend, bei Gleichstand die neueste
- * oben. 0 heisst „nie einsortiert" — eine neue Idee steht damit oben in ihrer
- * Zelle; ein Drag schreibt die Zelle als 1..n (db/ideen.js#reorderIdeen).
- */
-export function compareIdeeManual(a, b) {
-  const so = (a.sort_order || 0) - (b.sort_order || 0);
-  if (so) return so;
-  const ca = a.created_at || '';
-  const cb = b.created_at || '';
-  if (ca !== cb) return ca < cb ? 1 : -1;
-  return (b.id || 0) - (a.id || 0);
-}
 
 /**
  * Neue manuelle Reihenfolge einer Zelle nach einem Drop.
@@ -156,10 +145,71 @@ function chapterChain(chapterId, chapterLanes) {
   return out;
 }
 
+// Die Suche findet eine Pendenz auch ueber ihren ORT und ihre Verknuepfungen:
+// wer „Bahnhof" sucht, meint ebenso die Ideen im Abschnitt „Am Bahnhof" wie die
+// mit dem Wort im Text. Gelesen werden die Namen aus der Zeile (Server-JOIN),
+// nicht aus dem Baum — die Zeile ist, was die Karte auch anzeigt.
 function matchesQuery(idee, q) {
   if (!q) return true;
-  return (idee.content || '').toLowerCase().includes(q);
+  const hay = [
+    idee.content, idee.page_name, idee.chapter_name, idee.lane_chapter_name,
+    ...(idee.links || []).map(l => l.label),
+  ];
+  return hay.some(v => (v || '').toLowerCase().includes(q));
 }
+
+/**
+ * Der Filter des Boards als EIN Praedikat — Raster und Liste blenden dieselben
+ * Ideen aus, sonst behauptete der Zaehler in der einen Ansicht etwas anderes
+ * als in der anderen.
+ */
+export function makeIdeeFilter({ laneOrder, filterChapterId = '', showErledigt = true, showVerworfen = true, query = '' }) {
+  const q = (query || '').trim().toLowerCase();
+  const chapterFilter = filterChapterId === '' || filterChapterId == null ? null : Number(filterChapterId);
+  const chapterLanes = new Map((laneOrder || []).filter(l => l.kind === 'chapter').map(l => [l.id, l]));
+  // Der Kapitel-Filter erfasst den TEILBAUM: „Kapitel 3" zeigt auch die Ideen
+  // seiner Unterkapitel und deren Abschnitte.
+  const inFilter = (cid) => cid != null && chapterChain(cid, chapterLanes).some(l => l.id === chapterFilter);
+  return (idee) => {
+    const status = ideeStatus(idee);
+    // Kapitel-Filter misst die Bahn, nicht den Anker: eine Seiten-Idee gehoert
+    // zum Kapitel IHRER Seite (`lane_chapter_id` vom Server), sonst faende der
+    // Filter „Kapitel 3" nur die Ideen, die direkt am Kapitel haengen.
+    const laneChapterId = idee.lane_chapter_id ?? idee.chapter_id ?? null;
+    if (chapterFilter != null && laneChapterId !== chapterFilter && !inFilter(laneChapterId)) return false;
+    if (!showErledigt && status === 'erledigt') return false;
+    if (!showVerworfen && status === 'verworfen') return false;
+    return matchesQuery(idee, q);
+  };
+}
+
+/**
+ * Listenansicht: dieselben Ideen wie das Raster nach demselben Filter, flach —
+ * jede mit ihrer Bahn (fuer Ort-Spalte und Buch-Reihenfolge). `laneIndex` ist
+ * die Position der Bahn im Baum; eine unbekannte Bahn steht hinten, wie die
+ * Sammelbahn im Raster. Sortiert wird die Liste von der Tabelle, nicht hier.
+ */
+export function buildIdeenList({ ideen, laneOrder, ...filter }) {
+  const keep = makeIdeeFilter({ laneOrder, ...filter });
+  const idx = new Map((laneOrder || []).map((l, i) => [l.key, i]));
+  const byKey = new Map((laneOrder || []).map(l => [l.key, l]));
+  const rows = [];
+  for (const idee of (ideen || [])) {
+    if (!keep(idee)) continue;
+    const key = ideeLaneKey(idee);
+    rows.push({
+      idee,
+      lane: byKey.get(key) || null,
+      laneIndex: idx.has(key) ? idx.get(key) : Number.MAX_SAFE_INTEGER,
+    });
+  }
+  return rows;
+}
+
+// Ab wie vielen Tagen eine offene Pendenz als liegengeblieben markiert wird.
+// Auf Prod lag die Zeit bis «erledigt» im Mittel bei rund drei Wochen — das
+// Doppelte davon ist kein Arbeitsrhythmus mehr, sondern Vergessen.
+export const IDEE_STALE_DAYS = 60;
 
 /**
  * Das ganze Board in einem Pass.
@@ -186,14 +236,9 @@ export function buildBoard({
   ideen, laneOrder, filterChapterId = '', showErledigt = true, showVerworfen = true, query = '',
   collapsedLanes = [], collapsedChapters = [], columnSort = {},
 }) {
-  const q = (query || '').trim().toLowerCase();
-  const chapterFilter = filterChapterId === '' || filterChapterId == null ? null : Number(filterChapterId);
-
+  const keep = makeIdeeFilter({ laneOrder, filterChapterId, showErledigt, showVerworfen, query });
   const laneByKey = new Map((laneOrder || []).map(l => [l.key, l]));
   const chapterLanes = new Map((laneOrder || []).filter(l => l.kind === 'chapter').map(l => [l.id, l]));
-  // Der Kapitel-Filter erfasst den TEILBAUM: „Kapitel 3" zeigt auch die Ideen
-  // seiner Unterkapitel und deren Abschnitte.
-  const inFilter = (cid) => cid != null && chapterChain(cid, chapterLanes).some(l => l.id === chapterFilter);
   const buckets = new Map();   // laneKey → { lane, columns }
   let total = 0;
   let hiddenByFilter = 0;
@@ -209,15 +254,9 @@ export function buildBoard({
 
   for (const idee of (ideen || [])) {
     total++;
+    if (!keep(idee)) { hiddenByFilter++; continue; }
     const status = ideeStatus(idee);
-    // Kapitel-Filter misst die Bahn, nicht den Anker: eine Seiten-Idee gehoert
-    // zum Kapitel IHRER Seite (`lane_chapter_id` vom Server), sonst faende der
-    // Filter „Kapitel 3" nur die Ideen, die direkt am Kapitel haengen.
     const laneChapterId = idee.lane_chapter_id ?? idee.chapter_id ?? null;
-    if (chapterFilter != null && laneChapterId !== chapterFilter && !inFilter(laneChapterId)) { hiddenByFilter++; continue; }
-    if (!showErledigt && status === 'erledigt') { hiddenByFilter++; continue; }
-    if (!showVerworfen && status === 'verworfen') { hiddenByFilter++; continue; }
-    if (!matchesQuery(idee, q)) { hiddenByFilter++; continue; }
 
     const key = ideeLaneKey(idee);
     const lane = laneByKey.get(key) || {

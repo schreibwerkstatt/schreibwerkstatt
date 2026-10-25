@@ -78,11 +78,12 @@ test('wissenschaft: die Fach-Typen sind da und narrativ nicht', () => {
 });
 
 test('sachlich: kein Erzähl-Handwerk, aber Hedging + Begriffsdisziplin', () => {
-  for (const t of ['show_vs_tell', 'filterwort', 'perspektivbruch', 'dialogformat',
+  for (const t of ['show_vs_tell', 'filterwort', 'perspektivbruch',
     'namenskonsistenz', 'schauplatzmerkmal']) {
     assert.ok(!SACHLICH_TYPEN.includes(t), `sachlich darf «${t}» nicht führen`);
   }
-  for (const t of ['hedging', 'begriffsinkonsistenz', 'schwaches_verb', 'passiv']) {
+  // Zitate und referierte Positionen gibt es auch im Sachtext (eigene Sach-Fassungen).
+  for (const t of ['hedging', 'begriffsinkonsistenz', 'schwaches_verb', 'passiv', 'konjunktiv', 'dialogformat']) {
     assert.ok(SACHLICH_TYPEN.includes(t), `sachlich fehlt «${t}»`);
   }
   // `unbelegt` bleibt der wissenschaftlichen Arbeit vorbehalten – ein Essay muss
@@ -102,14 +103,14 @@ test('lokaler Provider schneidet das Profil, statt es zu ersetzen', () => {
 
 test('Stil-Pass lässt die objektiven Typen weg, Objektiv-Pass nur sie', () => {
   const stilRoman = lektoratTypen('roman', { stilOnly: true });
-  for (const t of ['rechtschreibung', 'grammatik', 'dialogformat', 'namenskonsistenz',
+  for (const t of ['rechtschreibung', 'grammatik', 'konjunktiv', 'dialogformat', 'namenskonsistenz',
     'figurenmerkmal', 'anrede']) {
     assert.ok(!stilRoman.includes(t), `Stil-Pass darf «${t}» nicht führen`);
   }
   assert.deepEqual(lektoratObjektivTypen('roman', { hasFiguren: true }),
-    ['rechtschreibung', 'grammatik', 'dialogformat', 'namenskonsistenz', 'figurenmerkmal', 'anrede']);
+    ['rechtschreibung', 'grammatik', 'konjunktiv', 'dialogformat', 'namenskonsistenz', 'figurenmerkmal', 'anrede']);
   assert.deepEqual(lektoratObjektivTypen('roman', { hasFiguren: false }),
-    ['rechtschreibung', 'grammatik', 'dialogformat']);
+    ['rechtschreibung', 'grammatik', 'konjunktiv', 'dialogformat']);
   // Fach-Profile: der Objektiv-Pass schrumpft auf reine Mechanik.
   assert.deepEqual(lektoratObjektivTypen('wissenschaft', { hasFiguren: true }),
     ['rechtschreibung', 'grammatik']);

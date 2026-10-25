@@ -125,9 +125,9 @@ test('Board: liefert nur die Ideen des anfragenden Users', () => {
 test('Verknuepfung: alle drei Ziel-Arten, Label per JOIN', () => {
   seed();
   const id = mkIdee({ pageId: 10 });
-  assert.deepEqual(ideenDb.addIdeaLink(id, 1, 'research', 100), { ok: true });
-  assert.deepEqual(ideenDb.addIdeaLink(id, 1, 'beat', 300), { ok: true });
-  assert.deepEqual(ideenDb.addIdeaLink(id, 1, 'motif', 400), { ok: true });
+  assert.deepEqual(ideenDb.addIdeaLink(id, 1, 'research', 100, A), { ok: true });
+  assert.deepEqual(ideenDb.addIdeaLink(id, 1, 'beat', 300, A), { ok: true });
+  assert.deepEqual(ideenDb.addIdeaLink(id, 1, 'motif', 400, A), { ok: true });
 
   const links = ideenDb.getIdee(id).links;
   assert.deepEqual(links.map(l => l.target_kind).sort(), ['beat', 'motif', 'research']);
@@ -141,17 +141,17 @@ test('Verknuepfung: alle drei Ziel-Arten, Label per JOIN', () => {
 test('Verknuepfung: ein Ziel aus einem anderen Buch wird abgelehnt', () => {
   seed();
   const id = mkIdee({ pageId: 10 });
-  assert.deepEqual(ideenDb.addIdeaLink(id, 1, 'research', 101), { error_code: 'BOOK_MISMATCH' });
-  assert.deepEqual(ideenDb.addIdeaLink(id, 1, 'research', 999), { error_code: 'LINK_TARGET_NOT_FOUND' });
-  assert.deepEqual(ideenDb.addIdeaLink(id, 1, 'unsinn', 100), { error_code: 'INVALID_LINK_KIND' });
+  assert.deepEqual(ideenDb.addIdeaLink(id, 1, 'research', 101, A), { error_code: 'BOOK_MISMATCH' });
+  assert.deepEqual(ideenDb.addIdeaLink(id, 1, 'research', 999, A), { error_code: 'LINK_TARGET_NOT_FOUND' });
+  assert.deepEqual(ideenDb.addIdeaLink(id, 1, 'unsinn', 100, A), { error_code: 'INVALID_LINK_KIND' });
   assert.deepEqual(ideenDb.getIdee(id).links, []);
 });
 
 test('Verknuepfung: dieselbe Kante nur einmal', () => {
   seed();
   const id = mkIdee({ pageId: 10 });
-  ideenDb.addIdeaLink(id, 1, 'beat', 300);
-  ideenDb.addIdeaLink(id, 1, 'beat', 300);
+  ideenDb.addIdeaLink(id, 1, 'beat', 300, A);
+  ideenDb.addIdeaLink(id, 1, 'beat', 300, A);
   assert.equal(ideenDb.getIdee(id).links.length, 1);
 });
 
@@ -159,7 +159,7 @@ test('Verknuepfung: eine fremde link_id trifft nichts', () => {
   seed();
   const mine = mkIdee({ pageId: 10 });
   const other = mkIdee({ pageId: 10 });
-  ideenDb.addIdeaLink(mine, 1, 'beat', 300);
+  ideenDb.addIdeaLink(mine, 1, 'beat', 300, A);
   const linkId = ideenDb.getIdee(mine).links[0].link_id;
   assert.equal(ideenDb.removeIdeaLink(other, linkId), 0);
   assert.equal(ideenDb.getIdee(mine).links.length, 1);
@@ -170,8 +170,8 @@ test('Rueckwaerts-Lesung: NUR die eigenen Ideen — das geteilte Fundstueck leck
   seed();
   const mine = mkIdee({ pageId: 10 });
   const foreign = ideenDb.createIdee({ bookId: 1, pageId: 10, chapterId: null, userEmail: B, content: 'Fremde Pendenz' });
-  ideenDb.addIdeaLink(mine, 1, 'research', 100);
-  ideenDb.addIdeaLink(foreign, 1, 'research', 100);
+  ideenDb.addIdeaLink(mine, 1, 'research', 100, A);
+  ideenDb.addIdeaLink(foreign, 1, 'research', 100, B);
 
   const forA = ideenDb.ideaLinksByTarget('research', 1, A).get(100);
   assert.equal(forA.length, 1);
@@ -186,7 +186,7 @@ test('Rueckwaerts-Lesung: NUR die eigenen Ideen — das geteilte Fundstueck leck
 test('Rueckwaerts-Lesung: attachIdeasTo setzt auf jeder Zeile ein Array, auch leer', () => {
   seed();
   const id = mkIdee({ pageId: 10 });
-  ideenDb.addIdeaLink(id, 1, 'beat', 300);
+  ideenDb.addIdeaLink(id, 1, 'beat', 300, A);
   const rows = [{ id: 300 }, { id: 301 }];
   ideenDb.attachIdeasTo(rows, 'beat', 1, A);
   assert.equal(rows[0].ideas.length, 1);
@@ -213,7 +213,7 @@ test('Link-Ziele: Beats und Motive sind user-skopiert, Fundstuecke buchweit gete
 test('Loeschen: die Idee nimmt ihre Kanten mit (CASCADE)', () => {
   seed();
   const id = mkIdee({ pageId: 10 });
-  ideenDb.addIdeaLink(id, 1, 'beat', 300);
+  ideenDb.addIdeaLink(id, 1, 'beat', 300, A);
   ideenDb.deleteIdee(id, A);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM idea_links').get().n, 0);
 });
@@ -221,13 +221,13 @@ test('Loeschen: die Idee nimmt ihre Kanten mit (CASCADE)', () => {
 test('Loeschen: das Ziel nimmt die Kante mit, die Idee bleibt', () => {
   seed();
   const id = mkIdee({ pageId: 10 });
-  ideenDb.addIdeaLink(id, 1, 'motif', 400);
+  ideenDb.addIdeaLink(id, 1, 'motif', 400, A);
   db.prepare('DELETE FROM motifs WHERE id = 400').run();
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM idea_links').get().n, 0);
   assert.ok(ideenDb.getIdee(id), 'die Pendenz selbst darf nicht mit dem Motiv verschwinden');
 });
 
-test('Loeschen: die Seite nimmt ihre Ideen mit (CASCADE, kein CHECK-Bruch)', () => {
+test('Roh-DELETE ohne Content-Store: CASCADE als Rueckfallnetz, kein CHECK-Bruch', () => {
   seed();
   mkIdee({ pageId: 10 });
   db.prepare('DELETE FROM pages WHERE page_id = 10').run();
@@ -283,4 +283,54 @@ test('Manuelle Reihenfolge: fremde oder buchfremde ID kippt alles', () => {
   assert.equal(ideenDb.getIdee(fremd).sort_order, 0);
   assert.equal(ideenDb.reorderIdeen(2, A, [a]), false);
   assert.equal(ideenDb.getIdee(a).sort_order, 0);
+});
+
+test('Verknuepfung: ein privates Ziel eines anderen Users antwortet wie ein fehlendes', () => {
+  seed();
+  // Beat 300 und Motiv 400 gehoeren A; das Fundstueck ist buchweit geteilt.
+  const fremd = mkIdee({ pageId: 10, userEmail: B });
+  assert.deepEqual(ideenDb.addIdeaLink(fremd, 1, 'beat', 300, B), { error_code: 'LINK_TARGET_NOT_FOUND' });
+  assert.deepEqual(ideenDb.addIdeaLink(fremd, 1, 'motif', 400, B), { error_code: 'LINK_TARGET_NOT_FOUND' });
+  assert.deepEqual(ideenDb.addIdeaLink(fremd, 1, 'research', 100, B), { ok: true });
+  assert.deepEqual(ideenDb.getIdee(fremd).links.map(l => l.target_kind), ['research']);
+});
+
+test('Ausgabeform: jede Lesung traegt lane_chapter_id (Kapitel-Filter nach dem Schreiben)', () => {
+  seed();
+  const id = mkIdee({ pageId: 10 });
+  ideenDb.updateIdee(id, A, { status: 'in_arbeit' });
+  const row = ideenDb.getIdee(id);
+  assert.equal(row.lane_chapter_id, 5);
+  assert.equal(row.lane_chapter_name, 'Kapitel 1');
+  assert.equal(ideenDb.getIdee(mkIdee({ chapterId: 5 })).lane_chapter_id, 5);
+});
+
+test('Manuelle Reihenfolge: ein Stufenwechsel setzt den Rang zurueck, derselbe Status nicht', () => {
+  seed();
+  const a = mkIdee({ pageId: 10 });
+  const b = mkIdee({ pageId: 10 });
+  ideenDb.reorderIdeen(1, A, [a, b]);
+  ideenDb.updateIdee(b, A, { status: 'offen' });
+  assert.equal(ideenDb.getIdee(b).sort_order, 2);
+  ideenDb.updateIdee(b, A, { status: 'erledigt' });
+  assert.equal(ideenDb.getIdee(b).sort_order, 0);
+});
+
+test('Abschnitt/Kapitel loeschen (Content-Store): Ideen werden Buch-Ideen, Status bleibt', async () => {
+  seed();
+  const { deletePage } = require('../../lib/content-store/backends/localdb-delete');
+  const localdb = require('../../lib/content-store/backends/localdb');
+  const p = mkIdee({ pageId: 10 });
+  ideenDb.updateIdee(p, A, { status: 'verworfen' });
+  const c = mkIdee({ chapterId: 5 });
+  const fremd = mkIdee({ pageId: 10, userEmail: B });
+  await deletePage(10, { deletedBy: A });
+  await localdb.deleteChapter(5);
+  for (const id of [p, c, fremd]) {
+    const row = ideenDb.getIdee(id);
+    assert.ok(row, 'die Pendenz darf nicht mit ihrem Anker verschwinden');
+    assert.equal(row.page_id, null);
+    assert.equal(row.chapter_id, null);
+  }
+  assert.equal(ideenDb.getIdee(p).status, 'verworfen');
 });

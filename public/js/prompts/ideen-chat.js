@@ -12,45 +12,7 @@
 
 import { _isLocal, _jsonOnly } from './state.js';
 import { buildPassageBlockLines } from './chat-pre-context.js';
-
-// Lese-Werkzeuge aus BOOK_CHAT_TOOLS, die der Ideen-Chat anbietet. Handler +
-// Schemas teilt er mit dem Buch-Chat (routes/jobs/book-chat-tools). Schwerpunkt
-// ist der Text (Erledigt-Check, Ortssuche); dazu die planenden Kataloge, an
-// denen eine Idee hängen kann. `list_ideen` fehlt bewusst: die Ideen stehen
-// vollständig im Prompt.
-export const IDEEN_CHAT_READ_TOOL_NAMES = [
-  'list_chapters',
-  'get_pages',
-  'get_chapter_text',
-  'search_similar',
-  'search_passages',
-  'find_first_last_mention',
-  'get_plot_board',
-  'list_figures',
-  'get_figure_profile',
-  'list_scenes',
-  'get_timeline',
-  'list_world_facts',
-  'list_werkstatt_drafts',
-  'get_werkstatt_draft',
-  'get_motifs',
-  'list_research_items',
-  'read_research_item',
-  'list_continuity_issues',
-  'get_reviews',
-  'get_book_settings',
-];
-
-// Teilmenge für lokale Provider (kein Prompt-Caching, kleineres Modell).
-export const IDEEN_CHAT_SLIM_READ_TOOL_NAMES = [
-  'list_chapters',
-  'get_pages',
-  'get_chapter_text',
-  'search_similar',
-  'search_passages',
-  'get_plot_board',
-  'list_figures',
-];
+import { toolMentions } from './chat-tools/mentions.js';
 
 export const IDEEN_CHAT_FORCE_FINAL_INSTRUCTION =
   'Du hast die maximale Zahl an Werkzeug-Iterationen erreicht — keine weiteren Lese-Aufrufe mehr. '
@@ -63,7 +25,7 @@ const _BEGRUENDUNG = { type: 'string', description: 'Ein bis zwei Sätze: warum 
 
 /**
  * Vorschlags-Werkzeuge + final_answer. Die Lese-Werkzeuge kommen aus
- * BOOK_CHAT_TOOLS (Filter über IDEEN_CHAT_READ_TOOL_NAMES im Job).
+ * gemeinsamen Katalog (./chat-tools/, Spalte `ideen` in access.js).
  */
 export const IDEEN_CHAT_PROPOSE_TOOLS = [
   {
@@ -180,15 +142,15 @@ export function buildIdeenProposalMemoryBlock(list = []) {
 export function buildIdeenChatSystemPrompt(bookName, ctx = {}) {
   const classic = ctx.mode === 'classic';
   const maxToolIter = Number(ctx.maxToolIter) || 8;
-  const offered = Array.isArray(ctx.toolNames) ? new Set(ctx.toolNames) : null;
-  const has = (n) => !offered || offered.has(n);
-  const ifAny = (names, line) => (names.some(has) ? [line] : []);
+  const m = toolMentions(ctx.toolNames);
   const bookContext = String(ctx.bookContext || '').trim();
+  const erzaehlweise = String(ctx.erzaehlweise || '').trim();
 
   const stable = [
     'Du bist Lektorin / Lektor und Projektbegleitung für ein Buchprojekt. Du arbeitest mit dem Autor / der Autorin die IDEEN des Buches durch: Einfälle für mögliche Fortsetzungen und Pendenzen an Stellen im Text („Beleg nachtragen", „hier fehlt noch die Szene mit …").',
     '',
     `Buch: «${bookName}»`,
+    ...(erzaehlweise ? [erzaehlweise] : []),
     '',
     'Eine Idee hängt an höchstens einem Ort: an einem Abschnitt, an einem Kapitel oder — ohne Ort — nur am Buch. Ihre Stufe ist «offen», «in_arbeit», «erledigt» oder «verworfen» (verworfen = bewusst fallengelassen, nicht gelöscht).',
     '',
@@ -232,12 +194,15 @@ export function buildIdeenChatSystemPrompt(bookName, ctx = {}) {
   stable.push(
     'Lese-Werkzeuge:',
     '- Alle Ideen, die Gliederung und die verknüpfbaren Ziele stehen unten vollständig im Prompt.',
-    ...ifAny(['search_similar'], '- Die TEXTPASSAGEN unten sind schon die semantisch nächsten Stellen zur aktuellen Frage — prüfe sie zuerst, bevor du liest.'),
-    ...ifAny(['get_pages', 'get_chapter_text'], '- Pendenz an einem Abschnitt prüfen → get_pages mit dessen page_id (mehrere Abschnitte in EINEM Aufruf); Pendenz an einem Kapitel → get_chapter_text'),
-    ...ifAny(['search_similar', 'search_passages'], `- Ort für eine Buch-Idee oder Einlösung irgendwo im Buch → ${has('search_similar') ? 'search_similar (nach Sinn), ' : ''}search_passages (Wortlaut)`),
-    ...ifAny(['find_first_last_mention'], '- Wo etwas zum ersten / letzten Mal vorkommt → find_first_last_mention'),
-    ...ifAny(['get_plot_board', 'get_motifs', 'list_werkstatt_drafts', 'list_research_items'], '- Inhalt der Verknüpfungsziele → get_plot_board, get_motifs, list_werkstatt_drafts, list_research_items'),
-    ...ifAny(['list_figures', 'list_scenes', 'get_timeline', 'list_world_facts'], '- Figuren, Szenen, Zeitstrahl, Weltregeln → list_figures, list_scenes, get_timeline, list_world_facts'),
+    ...(m.has('search_similar') ? ['- Die TEXTPASSAGEN unten sind schon die semantisch nächsten Stellen zur aktuellen Frage — prüfe sie zuerst, bevor du liest.'] : []),
+    ...m.route('Pendenz an einem Abschnitt prüfen (page_id, mehrere Abschnitte in EINEM Aufruf)', ['get_pages']),
+    ...m.route('Pendenz an einem Kapitel prüfen', ['get_chapter_text']),
+    ...m.route('Beleg für ein «erledigt» wörtlich absichern', ['quote_passage']),
+    ...m.route('Ort für eine Buch-Idee oder Einlösung irgendwo im Buch (nach Sinn bzw. Wortlaut)', ['search_similar', 'search_passages']),
+    ...m.route('Wo eine Figur zum ersten / letzten Mal vorkommt', ['get_figure_mentions']),
+    ...m.route('Wo ein Ort vorkommt (erste Erwähnung, letztes Kapitel)', ['list_locations']),
+    ...m.route('Inhalt der Verknüpfungsziele', ['get_plot_board', 'get_motifs', 'list_werkstatt_drafts', 'list_research_items', 'read_research_item']),
+    ...m.route('Figuren, Szenen, Zeitstrahl, Weltregeln', ['list_figures', 'list_scenes', 'get_timeline', 'list_world_facts']),
     '',
     `Maximal ${maxToolIter} Werkzeug-Iterationen pro Antwort (eine Iteration = eine Runde, nicht ein Aufruf). Bündle unabhängige Aufrufe in EINER Runde. Vorschlags-Aufrufe zählen mit — gib alle Vorschläge möglichst in einer Runde ab.`,
     'Liefere die Antwort IMMER über `final_answer`. Sprache: passe dich der Userfrage an, nicht diesem Prompt.',
@@ -278,7 +243,7 @@ function _finish(stable, ctx, { classic }) {
   // Erst-Kontext nur mit Embedding-Endpunkt (ctx.passages = Array).
   if (classic || Array.isArray(ctx.passages)) {
     volatile.push('', ...buildPassageBlockLines(ctx.passages, {
-      classic, status: ctx.passageStatus,
+      classic, status: ctx.passageStatus, toolNames: ctx.toolNames,
       intro: '(Automatisch vorab geholt; Ausschnitte können unvollständig sein. Für einen Erledigt-Check lies den Abschnitt der Pendenz selbst.)',
       emptyClassic: '(keine — Embedding-Index fehlt oder kein Treffer; ohne Textstelle kein «erledigt»)',
     }));

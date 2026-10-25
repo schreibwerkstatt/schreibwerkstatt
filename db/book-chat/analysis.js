@@ -1,6 +1,6 @@
 'use strict';
 // Lese-Abfragen der Analyse-Tools des Buch-Chats
-// (routes/jobs/book-chat-tools/tools-analysis.js): Reviews, Lektorat-Hotspots
+// (routes/jobs/chat-tools/tools-analysis.js): Reviews, Lektorat-Hotspots
 // und -Findings, Stil-Metriken, Seitentexte für die N-Gram-Suche. Handler fassen
 // `pages`/`chapters`/`books` nie selbst an (CLAUDE.md „Content-Store-Facade als
 // einziger Eintrittspunkt"); optionale Filter werden hier ans SQL gehängt.

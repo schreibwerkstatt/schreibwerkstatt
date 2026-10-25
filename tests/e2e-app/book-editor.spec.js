@@ -168,3 +168,73 @@ test('Nachrichtenverlauf: Blasen ohne Stream-Absatzrand', async ({ page }) => {
   }
   expect(m.outRight).toBe(true);
 });
+
+// Verlassen speichert: geht der Fokus aus dem aktiven Block (hier: Klick auf den
+// Kartentitel), läuft der Save sofort — nicht erst nach dem Autosave-Fenster
+// (60 s). Der Block bleibt dabei aktiv.
+test('Fokus verlässt den aktiven Block → gespeichert ohne Autosave-Wartezeit', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await openBookEditor(page);
+  const body = card(page).locator('.book-editor-page-body').first();
+  await body.click();
+  await expect.poll(
+    () => page.evaluate(() => document.activeElement?.classList?.contains('book-editor-page-body') === true),
+    { timeout: 5000 },
+  ).toBe(true);
+  await page.keyboard.type('FOKUSRAUS ');
+  expect((await state(page)).dirty).toBe(1);
+
+  await card(page).locator('.card-title').click();
+  await expect.poll(async () => (await state(page)).dirty, { timeout: 10000 }).toBe(0);
+  await expect(body).toHaveAttribute('contenteditable', 'true');
+  guard.assertClean('Bucheditor: Verlassen speichert');
+});
+
+// Die Suche beginnt an der Stelle, an der der User steht — nicht am Buchanfang.
+test('Suche startet im aktiven Abschnitt, nicht beim ersten Treffer im Buch', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await openBookEditor(page);
+  const bodies = card(page).locator('.book-editor-page-body');
+  const term = 'und';
+  const has = await page.evaluate((t) => [...document.querySelectorAll('.card--bookeditor .book-editor-page-body')]
+    .slice(0, 2).map(el => el.textContent.toLowerCase().includes(t)), term);
+  test.skip(has.length < 2 || !has[0] || !has[1], 'Testbuch braucht den Begriff in den ersten beiden Abschnitten');
+
+  // Caret an den Anfang des zweiten Abschnitts.
+  await bodies.nth(1).click({ position: { x: 4, y: 4 } });
+  await expect(bodies.nth(1)).toHaveAttribute('contenteditable', 'true');
+  const second = await page.evaluate(() => window.Alpine.$data(document.querySelector('.card--bookeditor')).activePageId);
+
+  await page.evaluate(() => window.Alpine.$data(document.querySelector('.card--bookeditor')).openFind());
+  await card(page).locator('.book-editor-find-input').first().fill(term);
+  await expect.poll(
+    () => page.evaluate(() => {
+      const d = window.Alpine.$data(document.querySelector('.card--bookeditor'));
+      return d.findIndex >= 0 ? d.findMatches[d.findIndex].pageId : null;
+    }),
+    { timeout: 5000 },
+  ).toBe(second);
+  guard.assertClean('Bucheditor: Suche ab Caret');
+});
+
+// Ein Filter ohne Treffer zeigt die Leiste weiter (Filterknöpfe, Leer-Hinweis).
+// Sie braucht dann auch ihre Rasterspalte — sonst rutscht sie in eine neue
+// Rasterzeile unter das ganze Manuskript.
+test('Kommentar-Leiste mit leerem Filter bleibt neben dem Stream', async ({ page }) => {
+  await openBookEditor(page);
+  await page.evaluate(() => {
+    const d = window.Alpine.$data(document.querySelector('.card--bookeditor'));
+    d.commentRailVisible = true;
+    d.commentThreads = [];
+    d.commentFilterStatus = 'resolved';
+  });
+  const rail = card(page).locator('.book-editor-comments');
+  await expect(rail).toBeVisible();
+  await expect(card(page).locator('.book-editor-layout')).toHaveClass(/book-editor-layout--comments/);
+  const pos = await page.evaluate(() => ({
+    rail: document.querySelector('.card--bookeditor .book-editor-comments').getBoundingClientRect(),
+    stream: document.querySelector('.card--bookeditor .book-editor-stream').getBoundingClientRect(),
+  }));
+  expect(pos.rail.left, 'Leiste rechts neben dem Stream').toBeGreaterThanOrEqual(pos.stream.right - 1);
+  expect(pos.rail.top, 'nicht unter dem Manuskript').toBeLessThan(pos.stream.bottom);
+});

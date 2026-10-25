@@ -25,9 +25,25 @@ import { isOfflineError } from './blocks.js';
 // wäre nicht reaktiv und der Status bliebe bis zum nächsten Re-Render hängen.
 const SAVED_FLASH_MS = 4000;
 
+// Block-Zustände, die nach «Alle speichern» eine Meldung wert sind.
+const SAVE_ALL_STUCK = new Set(['conflict', 'error', 'offline']);
+
 // Merge-Runden je Save: Pre-Check + zwei 409-Races. Schreibt ein anderes Gerät
 // schneller, als hier gemergt wird, übernimmt der nächste Autosave.
 const MAX_MERGE_ROUNDS = 3;
+
+// Elemente, die einen Abschnitt ohne Text trotzdem füllen: ein Abschnitt nur
+// mit Bild, Tabelle oder Trennlinie ist kein versehentlich geleerter Block.
+const NON_TEXT_CONTENT_SEL = 'img, table, hr, pre, figure, svg, video, audio, iframe, object, embed';
+
+// Leer-Block-Schutz (Invariante 7): weder Text noch Bild/Tabelle/Trenner. Pure
+// (DOMParser, kein Live-DOM) und darum unit-testbar.
+export function isEmptyManuscript(html) {
+  if (htmlToText(html).trim()) return false;
+  if (typeof DOMParser === 'undefined') return true;
+  const doc = new DOMParser().parseFromString(html || '', 'text/html');
+  return !doc.body?.querySelector(NON_TEXT_CONTENT_SEL);
+}
 
 // Konflikt-Wortlaut (Gerät vs. User): shared/conflict-text.js. Die drei
 // Auftritte hier (saveError-Hinweis, Statuszeile, Block-Banner) unterscheiden
@@ -102,12 +118,17 @@ export const bookEditorSaveMethods = {
     // LanguageTool-UI, leere Trailing-Blöcke). Der Bucheditor rendert selbst
     // keine Marks — defensiv gegen HTML aus History-/Chat-Apply.
     if (isNoChange(stripLektoratMarks(block.html), block.originalHtml)) {
+      // Zurück auf dem Server-Stand (z.B. per Undo): auch ein Hinweis aus einem
+      // früheren Versuch (Leer-Schutz, offline) ist erledigt, der Entwurf ebenso.
       block.dirty = false;
+      block.saveError = '';
+      block.offline = false;
+      this._writeBlockDraft(block);
       return;
     }
     // Leer-Block-Schutz: ein versehentlich geleerter Block darf die Seite beim
     // Verlassen nicht überschreiben. Dirty bleibt stehen.
-    if (!htmlToText(stripLektoratMarks(block.html)).trim()) {
+    if (isEmptyManuscript(stripLektoratMarks(block.html))) {
       block.saveError = app.t('bookEditor.emptyAbort');
       return;
     }
@@ -214,11 +235,20 @@ export const bookEditorSaveMethods = {
     for (const b of dirty) {
       if (!this.saveQueue.includes(b.pageId)) this.saveQueue.push(b.pageId);
     }
+    let stuck = [];
     try {
       await this._processQueue();
+      // Bilanz: was nach dem Durchlauf noch hängt (weitergetippt zählt nicht —
+      // das speichert der Autosave).
+      stuck = this.saveAllIds.filter((id) => SAVE_ALL_STUCK.has(this.blockStatus(this._blockById(id))));
     } finally {
       this.saveAllRunning = false;
+      const total = this.saveAllIds.length;
       this.saveAllIds = [];
+      if (stuck.length) {
+        const app = window.__app;
+        app?.setStatus?.(app.t('bookEditor.saveAllIncomplete', { n: stuck.length, total }), true, 8000);
+      }
     }
   },
 

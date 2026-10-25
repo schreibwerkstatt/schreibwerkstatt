@@ -77,6 +77,9 @@ test('Erledigt-Vorschlag mit Beleg landet in context_info.proposals, Idee unver√
   assert.ok(calls[0].tools.includes('propose_idee_link'));
   assert.ok(!calls[0].tools.includes('list_ideen'), 'Ideen stehen im Prompt, kein Werkzeug daf√ºr');
   assert.ok(!calls[0].tools.includes('generate_image'));
+  // Doppelungen sind eine Pendenz-Quelle des Ideen-Chats, aber nur mit Redundanz-Lauf:
+  // ohne Daten im Buch wird das Werkzeug nicht angeboten (chat-tools AVAILABILITY).
+  assert.ok(!calls[0].tools.includes('list_redundancies'), 'ohne Redundanz-Lauf nicht angeboten');
 
   const msg = db.prepare('SELECT content, context_info FROM chat_messages WHERE id = ?').get(j.result.assistant_message_id);
   const ci = JSON.parse(msg.context_info);

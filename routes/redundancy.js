@@ -2,6 +2,8 @@
 const express = require('express');
 const { aclParamGuard, sessionEmail } = require('../lib/acl');
 const redundancyDb = require('../db/redundancy');
+const embed = require('../lib/embed');
+const { isRunStale } = require('../lib/redundancy-staleness');
 
 // Redundanz-Radar (docs/redundanz.md): letztes Ergebnis lesen + Paare
 // ignorieren. Gerechnet wird ausschliesslich im Job (routes/jobs/redundancy.js);
@@ -10,10 +12,15 @@ const router = express.Router();
 router.param('book_id', aclParamGuard('lektor'));
 
 // Letzter Lauf (oder null) + Zahl der ignorierten Paare.
-router.get('/:book_id', (req, res) => {
+// `changedSinceRun`: Text, Figuren oder Modell haben sich seit dem Lauf geändert
+// → die Karte bittet um eine neue Prüfung (lib/redundancy-staleness.js).
+router.get('/:book_id', async (req, res) => {
   const email = sessionEmail(req);
+  const result = redundancyDb.getLastRun(req.bookId, email);
+  const model = embed.isEnabled() ? embed.getConfig().model : null;
   res.json({
-    result: redundancyDb.getLastRun(req.bookId, email),
+    result,
+    changedSinceRun: await isRunStale(req.bookId, email, result, model),
     dismissedCount: redundancyDb.countDismissals(req.bookId, email),
   });
 });

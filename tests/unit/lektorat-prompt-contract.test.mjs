@@ -177,6 +177,55 @@ test('Objektiv-Pass schrumpft im Fach-Profil auf reine Mechanik', () => {
   assert.ok(!/VERBOTEN[^\n]*show_vs_tell/.test(wiss), 'Wissenschaft: show_vs_tell hat im Verbot nichts zu suchen');
 });
 
+test('Konjunktiv: Objektiv-Pass traegt die Regeln je Profil, Fach-Profile nicht', () => {
+  prompts.configurePrompts(cfg, 'claude');
+  const roman = prompts.buildObjektivLektoratPrompt(SAMPLE, { buchtyp: 'roman' });
+  const journal = prompts.buildObjektivLektoratPrompt(SAMPLE, { buchtyp: 'journalismus' });
+  const sach = prompts.buildObjektivLektoratPrompt(SAMPLE, { buchtyp: 'sachbuch' });
+  const romanEn = prompts.buildObjektivLektoratPrompt(SAMPLE, { buchtyp: 'roman', langCode: 'en' });
+  // Ohne Regelblock stand der Typ nur im Enum — das Modell meldete ihn nach Gefühl.
+  assert.ok(roman.includes('Konjunktiv-Regeln'), 'Roman: Konjunktiv-Block fehlt im Objektiv-Pass');
+  assert.ok(roman.includes('erlebte Rede'), 'Roman: Erzähl-Fassung (erlebte Rede ausgenommen) fehlt');
+  assert.ok(!roman.includes('Haftungsproblem'), 'Roman: bekommt nicht die journalistische Fassung');
+  assert.ok(journal.includes('Haftungsproblem'), 'Journalismus: journalistische Fassung fehlt');
+  const wiss = prompts.buildObjektivLektoratPrompt(SAMPLE, { buchtyp: 'wissenschaft' });
+  assert.ok(sach.includes('Konjunktiv-Regeln') && sach.includes('Verben des Belegens'), 'Sachbuch: Sach-Fassung fehlt');
+  assert.ok(!sach.includes('Haftungsproblem') && !sach.includes('erlebte Rede'), 'Sachbuch: falsche Fassung');
+  assert.ok(sach.includes('Anführungszeichen-Regeln') && !sach.includes('Dialogformat-Regeln'),
+    'Sachbuch: schlanke Anführungszeichen-Fassung statt Dialog-Regeln');
+  assert.ok(!wiss.includes('Konjunktiv-Regeln'), 'Wissenschaft: kein Konjunktiv-Typ');
+  assert.ok(romanEn.includes('Reported-speech rules'), 'EN: Backshift-Fassung fehlt');
+  assert.ok(roman.includes('ausser «konjunktiv»'), 'Roman: Satz-Span-Ausnahme in der Purität fehlt');
+});
+
+test('Konjunktiv: Kombi-Prompt waehlt die Fassung nach Profil', () => {
+  prompts.configurePrompts(cfg, 'claude');
+  const roman = prompts.buildLektoratPrompt(SAMPLE, { langCode: 'de', buchtyp: 'roman' });
+  const journal = prompts.buildLektoratPrompt(SAMPLE, { langCode: 'de', buchtyp: 'journalismus' });
+  assert.ok(roman.includes('Konjunktiv-Regeln') && roman.includes('erlebte Rede'));
+  assert.ok(journal.includes('Haftungsproblem'));
+});
+
+test('Dialogformat Englisch: en-GB bekommt die britische Norm, en-US die amerikanische', () => {
+  prompts.configurePrompts(cfg, 'claude');
+  const gb = prompts.buildObjektivLektoratPrompt(SAMPLE, { buchtyp: 'roman', langCode: 'en', locale: 'en-GB' });
+  const us = prompts.buildObjektivLektoratPrompt(SAMPLE, { buchtyp: 'roman', langCode: 'en', locale: 'en-US' });
+  const gbSach = prompts.buildObjektivLektoratPrompt(SAMPLE, { buchtyp: 'sachbuch', langCode: 'en', locale: 'en-GB' });
+  const gbKombi = prompts.buildLektoratPrompt(SAMPLE, { buchtyp: 'roman', langCode: 'en', locale: 'en-GB' });
+  assert.ok(gb.includes('British convention') && !gb.includes('American convention'), 'en-GB: britische Fassung fehlt');
+  assert.ok(us.includes('American convention'), 'en-US: amerikanische Fassung fehlt');
+  assert.ok(gbSach.includes('Logical punctuation'), 'en-GB Sachtext: logische Zeichensetzung fehlt');
+  assert.ok(gbKombi.includes('British convention'), 'Kombi-Prompt reicht die Locale nicht durch');
+});
+
+test('Dialogformat: Komma nach ?/! und Doppelpunkt vor der Rede (amtliche Regel)', () => {
+  prompts.configurePrompts(cfg, 'claude');
+  const roman = prompts.buildObjektivLektoratPrompt(SAMPLE, { buchtyp: 'roman' });
+  assert.ok(roman.includes('steht TROTZDEM'), 'Komma nach ?/!-Rede fehlt');
+  assert.ok(!roman.includes('KEIN zusätzliches Komma'), 'alte, falsche ?/!-Regel ist zurück');
+  assert.ok(roman.includes('Doppelpunkt, nicht Komma'), 'Doppelpunkt-Regel fehlt');
+});
+
 test('Schema-Enum und Prompt-Enum tragen dasselbe Typ-Set', () => {
   prompts.configurePrompts(cfg, 'claude');
   for (const buchtyp of ['roman', 'sachbuch', 'wissenschaft']) {

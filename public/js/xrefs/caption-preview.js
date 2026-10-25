@@ -49,8 +49,8 @@ export function clearCaptionNumbers(root) {
 
 /** Nummern-Badges unter `root` setzen.
  *
- *  Idempotent: raeumt zuerst auf, danach steht vor jeder Beschriftung genau ein
- *  Badge. Fehlschlaege (kein Buch, Netz weg, Buch ohne Nummerierung) enden
+ *  Idempotent, auch bei ueberlappenden Laeufen: raeumt vor und nach dem Laden
+ *  auf, danach steht vor jeder Beschriftung genau ein Badge. Fehlschlaege (kein Buch, Netz weg, Buch ohne Nummerierung) enden
  *  still mit einer Leseansicht ohne Nummern — das ist der Stand von vorher und
  *  keine Stoerung, die eine Meldung verdient.
  *
@@ -68,6 +68,12 @@ export async function stampCaptionNumbers(root, bookId) {
   } catch {
     return 0;
   }
+  // Nach dem `await` NOCHMAL aufraeumen: zwei Laeufe auf demselben Container
+  // (Rueckkehr aus dem Edit-Modus aendert HTML und Modus im selben Tick, beide
+  // Watcher stossen einen Lauf an) haben beide vor dem `await` geraeumt und
+  // setzten danach beide ein — zwei Badges vor einer Legende. Ab hier laeuft
+  // alles synchron, der letzte Lauf hinterlaesst also genau ein Badge.
+  clearCaptionNumbers(root);
   if (!data.figureNumbering && !data.tableNumbering) return 0;
 
   const { figNums, tblNums } = previewNumbers(data);

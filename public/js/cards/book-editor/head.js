@@ -50,7 +50,7 @@ export const bookEditorHeadMethods = {
   headFieldShown(block, feld) {
     if (!this.headAvailable()) return false;
     if (this.headValue(block.pageId, feld)) return true;
-    return this.activePageId === block.pageId && !!window.__app?.canEdit?.();
+    return this.activePageId === block.pageId && this._canEdit();
   },
 
   headShown(block) {
@@ -76,7 +76,7 @@ export const bookEditorHeadMethods = {
   async headSave(block, feld, el) {
     const pid = String(block.pageId);
     const val = String(el?.value ?? '');
-    if (!window.__app?.canEdit?.() || val === this.headValue(pid, feld)) return;
+    if (!this._canEdit() || val === this.headValue(pid, feld)) return;
     try {
       const r = await sendJson(`/headline/page/${pid}`, 'PUT', { [feld]: val });
       // Der Server normalisiert (trimmt, faltet Umbrüche) — der bestätigte
@@ -87,7 +87,7 @@ export const bookEditorHeadMethods = {
     } catch {
       if (el) el.value = this.headValue(pid, feld);
       const app = window.__app;
-      app?.setStatus?.(app.t('headline.saveError'), false, 5000);
+      app?.setStatus?.(app.t('headline.saveError'), true, 5000);
     }
   },
 };

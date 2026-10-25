@@ -1,6 +1,6 @@
 // Erst-Kontext des agentischen Buch-Chats: Block-Form + Cache-Lage.
 //
-// Gegenstand ist die Kosten-Invariante aus docs/buchchat-tools.md: der System-Prompt
+// Gegenstand ist die Kosten-Invariante aus docs/chat-tools.md: der System-Prompt
 // ist EIN stabiler 1h-Block; der Erst-Kontext wechselt pro Frage und steht darum NICHT
 // im System, sondern vor der Frage in deren User-Nachricht. Fiele er zurück ins
 // System, wären Werkzeuge + System + Verlauf über die Turns kein stabiler Präfix mehr.
@@ -47,7 +47,7 @@ test('Erst-Kontext-Block: Passagen mit entity_id als Sprungziel', () => {
   assert.match(text, /Stefan war damals achtundzwanzig\./);
   assert.match(text, /final_answer/);
   // Zitat-Invariante: aus dem Ausschnitt darf nicht wortwoertlich zitiert werden.
-  assert.match(text, /quote_match/);
+  assert.match(text, /quote_passage/);
 });
 
 test('Erst-Kontext-Block: ohne Treffer bleibt der Block mit Begruendung stehen', () => {

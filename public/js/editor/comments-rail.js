@@ -21,14 +21,7 @@
 
 import { createCommentRail } from './comment-rail-core.js';
 import { EVT } from '../events.js';
-
-// Read-Modus-Seitenansicht. Scope auf `.page-view-wrap`, weil der Edit-Modus
-// ein zweites, früher im DOM stehendes `.page-content-view--editing` (leerer
-// contenteditable) führt — ein nacktes querySelector('.page-content-view')
-// träfe das und fände nie die data-bid-Blöcke der gerenderten Leseansicht.
-function readView() {
-  return document.querySelector('.page-view-wrap .page-content-view');
-}
+import { notebookReadView as readView } from './notebook/read-view.js';
 
 const rail = createCommentRail({
   scopeEl: readView,

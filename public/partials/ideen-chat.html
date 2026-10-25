@@ -35,14 +35,12 @@
           <div x-show="msg.role === 'user'" class="chat-msg-text" x-text="msg.content"></div>
           <div x-show="msg.role === 'assistant'" class="chat-msg-text" x-html="_renderChatMarkdown(msg.content)"></div>
 
-          <template x-if="msg.role === 'assistant' && msg.context_info">
+          <template x-if="msg.role === 'assistant' && ideenChatCostLabel(msg)">
             <div class="chat-context-info">
-              <template x-for="(entry, ei) in _toolSummary(msg.context_info.tool_calls, { skip: ['final_answer'] })" :key="ei">
-                <span class="chat-context-badge" x-text="entry.name + (entry.count > 1 ? ' ×' + entry.count : '')"></span>
-              </template>
-              <span class="chat-context-badge" x-show="ideenChatCostLabel(msg)" x-text="ideenChatCostLabel(msg)"></span>
+              <span class="chat-context-badge" x-text="ideenChatCostLabel(msg)"></span>
             </div>
           </template>
+          <!-- @include chat-tool-log -->
 
           <!-- Vorschläge an die Ideen: jeder einzeln übernehmen/verwerfen -->
           <template x-if="msg.role === 'assistant' && ideenProposals(msg).length">
@@ -130,6 +128,12 @@
 
     <div x-show="isIdeenChatSessionRunning(ideenChatSessionId)" class="chat-skeleton-wrapper">
       <div class="chat-skeleton"></div>
+      <!-- Werkzeug-Verlauf des laufenden Turns (wächst mit, offen) -->
+      <template x-for="msg in (_liveToolMsg() ? [_liveToolMsg()] : [])" :key="'live'">
+        <div class="chat-tool-log-live">
+          <!-- @include chat-tool-log -->
+        </div>
+      </template>
     </div>
   </div>
 

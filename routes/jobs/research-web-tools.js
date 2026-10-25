@@ -27,7 +27,7 @@ const searxng = require('../../lib/websearch/searxng');
 const { cachedScrape, isCached, searchPdf, pdfReadText, pdfPaging } = require('./research-pdf-paging');
 const { normalizeUrl } = require('../../lib/url-normalize');
 const { bookItemUrls } = require('../../db/research-items');
-const { resultCapFor } = require('./book-chat-tools/shared');
+const { resultCapFor, offeredList } = require('./chat-tools/shared');
 
 const MAX_PAGE_READS = 6;
 const PAGE_TEXT_MAX = 12000;
@@ -150,7 +150,7 @@ async function tool_read_web_page(input, ctx) {
   if (!normalizeUrl(url)) return { error: 'Nur http(s)-URLs.', errorKey: 'chat.toolError.invalidParam', errorParams: { param: 'url' } };
   if (!_allowedPage(url, ctx)) {
     return {
-      error: 'URL stammt nicht aus einer bekannten Quelle. Lesbar sind nur Treffer von web_search/lookup_literature dieses Durchgangs, Links im Recherche-Board und Links aus der Nachricht des Users.',
+      error: `URL stammt nicht aus einer bekannten Quelle. Lesbar sind nur Treffer von ${offeredList(ctx, ['web_search', 'lookup_literature'], '/')} dieses Durchgangs, Links im Recherche-Archiv und Links aus der Nachricht des Users.`,
       errorKey: 'chat.toolError.urlNotKnown',
     };
   }
@@ -193,7 +193,7 @@ async function tool_read_web_page(input, ctx) {
     return {
       ...head, seiten: page.pdf.pages, suche, treffer, gesamt,
       hinweis: gesamt
-        ? `Lies eine Fundstelle mit read_web_page und seite=<Seite>.${gesamt > treffer.length ? ` ${gesamt} Seiten mit Treffern, die ersten ${treffer.length} gezeigt.` : ''}`
+        ? `Lies eine Fundstelle mit derselben URL und seite=<Seite>.${gesamt > treffer.length ? ` ${gesamt} Seiten mit Treffern, die ersten ${treffer.length} gezeigt.` : ''}`
         : 'Begriff im PDF nicht gefunden (andere Schreibweise? Gescanntes PDF ohne Textebene?).',
     };
   }

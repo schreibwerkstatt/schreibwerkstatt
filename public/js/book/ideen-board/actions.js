@@ -9,7 +9,7 @@ import {
 } from '../../sortable-dnd.js';
 import {
   IDEE_STATUSES, IDEE_OPTIONAL_STATUSES, IDEE_OPEN_STATUSES, ideeStatus, ideeLaneKey, isOpenIdee, isBookIdee, LANE_BOOK,
-  normalizeIdeeStages,
+  normalizeIdeeStages, IDEE_MAX_LEN,
 } from '../ideen-shared.js';
 import {
   buildLaneOrder, buildBoard, chapterFilterOptions, statusTotals, boardColumns, IDEE_SORT_MANUAL,
@@ -197,6 +197,8 @@ export const ideenBoardActions = {
       this.laneOrder = buildLaneOrder(Alpine.store('nav').tree);
       this.errorMessage = '';
       this._publishCounts();
+      this._memos = {};
+      this._pruneSelection();
     } catch {
       this.errorMessage = app.t('ideenBoard.error.load');
       this.ideen = [];
@@ -220,6 +222,7 @@ export const ideenBoardActions = {
     this.linkPickerIdeeId = null;
     this.linkPickerKind = 'research';
     this.linkPickerTargetId = '';
+    this.selectedIds = [];
     // Filterfelder bleiben unangetastet: sie gehoeren dem Filter-Scope
     // (filter-persist.js) und werden im Lifecycle VOR dem Nachladen restauriert.
     // Wuerde der Reset sie mitnehmen, holte der Buchwechsel das ungefilterte
@@ -283,6 +286,7 @@ export const ideenBoardActions = {
   async saveEdit(idee) {
     const content = (this.editingDraft || '').trim();
     if (!content) { this.errorMessage = window.__app.t('ideen.error.contentRequired'); return; }
+    if (content.length > IDEE_MAX_LEN) { this.errorMessage = window.__app.t('ideen.error.contentTooLong'); return; }
     if (content === idee.content) { this.cancelEdit(); return; }
     if (await this._patchIdee(idee, { content })) this.cancelEdit();
   },
@@ -325,6 +329,7 @@ export const ideenBoardActions = {
     const content = (this.newContent || '').trim();
     const bookId = Alpine.store('nav').selectedBookId;
     if (!content) { this.errorMessage = app.t('ideen.error.contentRequired'); return; }
+    if (content.length > IDEE_MAX_LEN) { this.errorMessage = app.t('ideen.error.contentTooLong'); return; }
     if (!this.newLaneKey) { this.errorMessage = app.t('ideenBoard.error.laneRequired'); return; }
     if (!bookId) return;
     const [kind, rawId] = String(this.newLaneKey).split(':');

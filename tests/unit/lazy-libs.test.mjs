@@ -120,6 +120,13 @@ test('jeder Loader geht ueber _loadGlobal — kein blankes _loadScript daneben',
   const loaders = [...src.matchAll(/export function (load\w+)\s*\(/g)].map(m => m[1]);
   assert.ok(loaders.length >= 8, `erwartet mindestens 8 Loader, gefunden: ${loaders.length}`);
 
+  // Ausnahme ESM-Builds per dynamic import(): sie haben kein Global, das
+  // `_loadGlobal` pruefen koennte — sie pruefen ihren Default-Export selbst.
+  const esmImports = [...src.matchAll(/\bimport\(\s*['"]/g)].length;
+  const esmChecks = [...src.matchAll(/typeof m\.default !== 'function'\) throw/g)].length;
+  assert.equal(esmChecks, esmImports, `${esmImports} ESM-Loader, aber ${esmChecks} Default-Export-Pruefungen`);
+
   const calls = [...src.matchAll(/(?<!function\s)_loadGlobal\(/g)].length;
-  assert.equal(calls, loaders.length, `${loaders.length} Loader, aber ${calls} _loadGlobal-Aufrufe`);
+  assert.equal(calls, loaders.length - esmImports,
+    `${loaders.length} Loader (${esmImports} davon ESM), aber ${calls} _loadGlobal-Aufrufe`);
 });

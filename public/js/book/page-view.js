@@ -4,14 +4,16 @@
 import { escHtml, fetchJson, findInHtml, decorateMentions } from '../utils.js';
 import { handleEditorCopy } from '../editor/shared/paste.js';
 import { isPageConflict, savePage } from '../editor/shared/page-api.js';
-import { setTodoCheckedAt, todoBoxIndex } from '../editor/shared/todo-html.js';
+import { setTodoCheckedAt, todoBoxIndex, TODO_BOX_SEL } from '../editor/shared/todo-html.js';
 import { closestCiteEl } from '../sources/cite-html.js';
 import { DIAGRAM_SEL } from '../diagram/mermaid-html.js';
 import { MSG_THREAD_SEL } from '../messages/msg-html.js';
 import { contentRepo } from '../repo/content.js';
-import { tRaw } from '../i18n.js';
+import { tRaw, findingErklaerungRaw } from '../i18n.js';
 import { _sanitizeFigur } from './figuren.js';
 import { isSelectedBook } from '../cards/book-guard.js';
+import { READ_VIEW_SEL, notebookReadView } from '../editor/notebook/read-view.js';
+import { placeLektoratTip, hideLektoratTip, activeLektoratMark, setActiveLektoratMark, lektoratTipContains } from './lektorat-tip.js';
 
 // Pauschale Diagrammhöhe, solange nichts zu messen ist (mermaid rendert
 // asynchron nach dem ersten Höhen-Update). Grob ein mittleres Flowchart —
@@ -74,7 +76,11 @@ export function sortByPosition(html, fehler) {
 // geschlossen — Folge: nur der erste Absatz erhält die Markierung, das <ins>
 // landet weit unten am Ende des letzten Absatzes. Darum den Match an Block-
 // Grenzen splitten und pro Text-Segment ein eigenes <mark> emittieren.
-const _BLOCK_BOUNDARY_RE = /(<\/(?:p|div|li|blockquote|h[1-6]|ol|ul|tr|td|th|pre)>\s*<(?:p|div|li|blockquote|h[1-6]|ol|ul|tr|td|th|pre)\b[^>]*>)/gi;
+// Grenze = ein LAUF von Block-Tags, offen wie geschlossen: am Listenende stehen
+// zwei Schliess-Tags vor dem nächsten Öffner (`</li></ul><p>`), am Rand eines
+// Matches nur ein einzelnes Tag.
+const _BLOCK_TAG = '<\\/?(?:p|div|li|blockquote|h[1-6]|ol|ul|table|thead|tbody|tr|td|th|pre)\\b[^>]*>';
+const _BLOCK_BOUNDARY_RE = new RegExp(`((?:\\s*${_BLOCK_TAG})+\\s*)`, 'i');
 function _wrapMatchedRange(matched, markOpen) {
   const parts = matched.split(_BLOCK_BOUNDARY_RE);
   if (parts.length === 1) return markOpen + matched + '</mark>';
@@ -148,63 +154,19 @@ export function buildHighlightedHtml(html, errors, selected, chatProposals = [])
   return result;
 }
 
-// ── Singleton-Tooltip ──────────────────────────────────────────────────────
-
-let tipEl = null;
-let activeMark = null;
-
-function ensureTipEl() {
-  if (tipEl) return tipEl;
-  tipEl = document.createElement('div');
-  tipEl.className = 'lektorat-tip';
-  document.body.appendChild(tipEl);
-  // Tooltip bleibt offen wenn die Maus drauf wandert
-  tipEl.addEventListener('mouseleave', () => hideTip());
-  return tipEl;
-}
+// ── Singleton-Tooltip (Element + Positionierung: book/lektorat-tip.js) ──────
 
 function showTip(mark, errors) {
   const idx = parseInt(mark.dataset.errorIdx);
   if (isNaN(idx)) return;
-  const allErrors = errors;
-  if (!allErrors[idx]) return;
-  const f = allErrors[idx];
-
-  activeMark = mark;
-  const tip = ensureTipEl();
-
+  const f = errors[idx];
+  if (!f) return;
   const typLabel = tRaw('finding.' + f.typ);
   const badgeCls = findingBadgeClass(f.typ);
-  tip.innerHTML =
+  const erkl = findingErklaerungRaw(f);
+  placeLektoratTip(mark,
     `<span class="badge ${badgeCls}">${escHtml(typLabel)}</span>`
-    + (f.erklaerung ? `<span class="lektorat-tip-erkl">${escHtml(f.erklaerung)}</span>` : '');
-
-  // Positionierung: erst messen, dann platzieren
-  tip.style.left = '-9999px';
-  tip.style.top = '0';
-  tip.classList.add('lektorat-tip--visible');
-
-  const tipRect = tip.getBoundingClientRect();
-  const markRect = mark.getBoundingClientRect();
-  const GAP = 6;
-
-  let left = markRect.left + markRect.width / 2 - tipRect.width / 2;
-  left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
-
-  let top;
-  if (markRect.top - tipRect.height - GAP >= 4) {
-    top = markRect.top - tipRect.height - GAP;
-  } else {
-    top = markRect.bottom + GAP;
-  }
-
-  tip.style.left = left + 'px';
-  tip.style.top = top + 'px';
-}
-
-function hideTip() {
-  if (tipEl) tipEl.classList.remove('lektorat-tip--visible');
-  activeMark = null;
+    + (erkl ? `<span class="lektorat-tip-erkl">${escHtml(erkl)}</span>` : ''));
 }
 
 // ── Split-Modus: Hover-Sync ───────────────────────────────────────────────
@@ -251,7 +213,7 @@ export const pageViewMethods = {
    *  deckelt fest auf `70vh` und wächst bis dahin mit seinem Inhalt, auch beim
    *  Tippen und mit frisch eingefügten Bildern. */
   _measuredPageViewPx(diagramCount, imageCount, threadCount) {
-    const view = document.querySelector('.page-content-view:not(.page-content-view--editing):not(.revision-viewer__content)');
+    const view = notebookReadView();
     if (!view) return 0;
     const imgs = [...view.querySelectorAll('img')];
     if (view.querySelectorAll(DIAGRAM_SEL).length !== diagramCount) return 0;
@@ -374,68 +336,125 @@ export const pageViewMethods = {
   _handleViewTodoClick(e) {
     const box = e.target;
     if (!box || box.tagName !== 'INPUT' || box.type !== 'checkbox') return false;
-    const view = box.closest('.page-content-view');
-    if (!view || view.classList.contains('page-content-view--editing')) return false;
+    const view = box.closest(READ_VIEW_SEL);
+    if (!view) return false;
     // Ohne Schreibrecht (viewer/lektor) nichts persistieren und den nativen
     // Toggle zurückdrehen — sonst zeigt die Ansicht einen Haken, den der Server
     // nie bekommt. CSS macht die Box für diese Rollen zusätzlich klick-inert
     // (.page-content-view--readonly in page-view.css); das hier ist die Defense
-    // dahinter. `_todoSaving` ist ein kurzlebiger Re-Entry-Guard: zwei Haken in
-    // schneller Folge würden sonst mit demselben `expectedUpdatedAt` speichern
-    // und der zweite PUT liefe garantiert in einen 409 gegen den ersten.
-    if (!this.canEdit?.() || this._todoSaving) {
+    // dahinter.
+    const page = this.currentPage;
+    const idx = this.canEdit?.() && page && this.originalHtml ? todoBoxIndex(view, box) : -1;
+    if (idx < 0) {
       box.checked = !box.checked;
       return true;
     }
-    this._saveViewTodo(view, box, box.checked);
+    // Klicks sammeln statt verwerfen: läuft schon ein Save, wartet der Haken in
+    // `_todoPending` und reist mit dem nächsten PUT. Zwei PUTs parallel liefen
+    // mit demselben `expectedUpdatedAt` garantiert in einen 409 gegen den
+    // eigenen Write. Die Warteschlange gehört genau einer Seite — ein Rest der
+    // Vorgängerseite hätte auf dieser Seite einen fremden Index.
+    if (this._todoPending?.pageId !== page.id) this._todoPending = { pageId: page.id, boxes: new Map() };
+    this._todoPending.boxes.set(idx, { box, checked: box.checked });
+    if (!this._todoSaving) this._flushViewTodos();
     return true;
   },
 
 
-  /** Persistiert den Haken des angeklickten Todo-Kastens. Fehlerpfade drehen den
-   *  visuellen Toggle zurück, damit Ansicht und Persistenz nie auseinanderlaufen. */
-  async _saveViewTodo(view, box, checked) {
+  /** Persistiert die gesammelten Haken der aktuellen Seite, bis die
+   *  Warteschlange leer ist. Fehlerpfade drehen die visuellen Toggles zurück,
+   *  damit Ansicht und Persistenz nie auseinanderlaufen.
+   *
+   *  Wechselt die Seite, während ein PUT läuft, gehört dessen Antwort nicht mehr
+   *  zur Ansicht: `originalHtml` ist dann schon das HTML der neuen Seite und darf
+   *  nicht mit dem der alten überschrieben werden (der nächste Edit-Start ginge
+   *  sonst von fremdem Inhalt aus). `page.updated_at` wird trotzdem nachgezogen —
+   *  das Objekt gehört der alten Seite. */
+  async _flushViewTodos() {
     const page = this.currentPage;
-    const idx = page && this.originalHtml ? todoBoxIndex(view, box) : -1;
-    const html = idx < 0 ? null : setTodoCheckedAt(this.originalHtml, idx, checked);
-    if (html == null) { box.checked = !checked; return; }
+    if (!page) return;
+    const stillCurrent = () => this.currentPage?.id === page.id;
     this._todoSaving = true;
+    let dirty = false;
     try {
-      const saved = await savePage(page.id, {
-        html,
-        pageName: page.name,
-        source: 'main',
-        expectedUpdatedAt: page.updated_at || null,
-      });
-      if (saved?.updated_at) page.updated_at = saved.updated_at;
-      this.originalHtml = html;
-      this._syncPageStatsAfterSave?.(page, html);
-      // Sidebar-Lektorat-Status hängt an `updated_at` (Server-Map) — nachladen.
-      this.refreshPageAges?.();
-      this.updatePageView();
-    } catch (err) {
-      box.checked = !checked;
-      if (isPageConflict(err)) {
-        // Fremder Schreibvorgang dazwischen: kein Merge-Aufwand für ein Bit —
-        // frischen Stand holen, User setzt den Haken erneut.
+      while (stillCurrent() && this._todoPending?.pageId === page.id && this._todoPending.boxes.size) {
+        const batch = this._todoPending.boxes;
+        this._todoPending.boxes = new Map();
+        let html = this.originalHtml;
+        for (const [idx, { checked }] of batch) html = html == null ? null : setTodoCheckedAt(html, idx, checked);
+        if (html == null) { this._revertViewTodos(batch); continue; }
         try {
-          const remote = await contentRepo.loadPage(page.id, { fresh: true });
-          if (remote?.html != null) {
-            this.originalHtml = remote.html;
-            if (remote.updated_at) page.updated_at = remote.updated_at;
-            this.updatePageView();
-          }
-        } catch (reloadErr) {
-          console.error('[viewTodoConflictReload]', reloadErr);
+          const saved = await savePage(page.id, {
+            html,
+            pageName: page.name,
+            source: 'main',
+            expectedUpdatedAt: page.updated_at || null,
+          });
+          if (saved?.updated_at) page.updated_at = saved.updated_at;
+          if (!stillCurrent()) return;
+          this.originalHtml = html;
+          this._syncPageStatsAfterSave?.(page, html);
+          dirty = true;
+        } catch (err) {
+          // Was während des gescheiterten PUTs dazukam, baut auf ihm auf und
+          // fällt mit: bei 409 ohnehin gegen einen veralteten Stand.
+          const queued = this._todoPending?.pageId === page.id ? this._todoPending.boxes : new Map();
+          this._todoPending = null;
+          if (!stillCurrent()) return;
+          this._revertViewTodos(batch);
+          this._revertViewTodos(queued);
+          await this._handleViewTodoError(page, err);
+          return;
         }
-        this.setStatus(this.t('page.todo.conflict'), false, 6000);
-        return;
       }
-      console.error('[viewTodoToggle]', err);
-      this.setStatus(this.t('page.todo.saveFailed', { msg: err.message }), false, 6000);
     } finally {
       this._todoSaving = false;
+      // Seite verlassen: offene Haken der alten Seite verfallen. Blieben sie
+      // liegen, reisten sie bei der Rückkehr mit dem nächsten Klick mit.
+      if (!stillCurrent() && this._todoPending?.pageId === page.id) this._todoPending = null;
+      if (dirty && stillCurrent()) {
+        // Sidebar-Lektorat-Status hängt an `updated_at` (Server-Map) — nachladen.
+        this.refreshPageAges?.();
+        this.updatePageView();
+      }
+      // Während eines Saves der Vorgängerseite gesammelte Haken der jetzt
+      // offenen Seite: deren eigener Flush ist am laufenden Save abgeprallt.
+      if (this._todoPending?.pageId === this.currentPage?.id && this._todoPending?.boxes.size) {
+        this._flushViewTodos();
+      }
     }
+  },
+
+  /** Live-Kästen auf den gespeicherten Stand (`originalHtml`) zurückstellen.
+   *  Aus dem HTML gelesen statt `!checked`: ein zweimal geklickter Kasten stünde
+   *  sonst auf dem falschen Zustand. Ein Re-Render über `updatePageView` hilft
+   *  hier nicht — ist `renderedPageHtml` unverändert, rendert x-html nicht neu. */
+  _revertViewTodos(entries) {
+    if (!entries.size) return;
+    const doc = new DOMParser().parseFromString(this.originalHtml || '', 'text/html');
+    const saved = doc.body.querySelectorAll(TODO_BOX_SEL);
+    for (const [idx, { box }] of entries) box.checked = !!saved[idx]?.hasAttribute('checked');
+  },
+
+  async _handleViewTodoError(page, err) {
+    if (isPageConflict(err)) {
+      // Fremder Schreibvorgang dazwischen: kein Merge-Aufwand für ein Bit —
+      // frischen Stand holen, User setzt den Haken erneut.
+      try {
+        const remote = await contentRepo.loadPage(page.id, { fresh: true });
+        if (remote?.html != null && this.currentPage?.id === page.id) {
+          this.originalHtml = remote.html;
+          if (remote.updated_at) page.updated_at = remote.updated_at;
+          this.updatePageView();
+        }
+      } catch (reloadErr) {
+        console.error('[viewTodoConflictReload]', reloadErr);
+      }
+      this.setStatus(this.t('page.todo.conflict'), false, 6000);
+      return;
+    }
+    console.error('[viewTodoToggle]', err);
+    this.setStatus(this.t('page.todo.saveFailed', { msg: err.message }), false, 6000);
   },
 
 
@@ -466,12 +485,12 @@ export const pageViewMethods = {
   handleMarkPointer(e) {
     if (e.pointerType !== 'mouse') return;
     const mark = e.target.closest('.lektorat-mark');
-    if (mark === activeMark) return;
-    if (!mark) { hideTip(); return; }
+    if (mark === activeLektoratMark()) return;
+    if (!mark) { hideLektoratTip(); return; }
 
     if (splitMQ.matches && this.checkDone) {
       // Split-Modus: Finding-Panel mitscrollen
-      activeMark = mark;
+      setActiveLektoratMark(mark);
       const idx = parseInt(mark.dataset.errorIdx);
       if (isNaN(idx)) return;
       const finding = document.querySelector(`.lektorat-split-findings [data-finding-idx="${idx}"]`);
@@ -488,8 +507,8 @@ export const pageViewMethods = {
   handleMarkPointerLeave(e) {
     if (splitMQ.matches && this.checkDone) return;
     const related = e.relatedTarget;
-    if (related && tipEl?.contains(related)) return;
-    hideTip();
+    if (related && lektoratTipContains(related)) return;
+    hideLektoratTip();
   },
 
   // Copy aus Page-View: nur text/plain ins Clipboard (gemeinsam mit allen

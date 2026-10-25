@@ -13,10 +13,12 @@
 
 const MAX_CELLS = 250000;
 
-// Wörter (inkl. Bindestrich/Apostroph im Wort), Whitespace-Läufe und einzelne
-// Satzzeichen als eigene Token: so bleibt „Haus," → „Haus." eine Ein-Zeichen-
-// Änderung statt eines ganzen Wortwechsels.
-const TOKEN_RE = /[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*|\s+|[^\s\p{L}\p{N}]/gu;
+// Wörter (inkl. Apostroph im Wort), Whitespace-Läufe und einzelne Satzzeichen
+// als eigene Token: so bleibt „Haus," → „Haus." eine Ein-Zeichen-Änderung statt
+// eines ganzen Wortwechsels. Der Bindestrich ist ebenfalls ein eigenes Token,
+// damit „E-Mail-Postfach" → „Mail-Postfach" nur „E-" markiert;
+// _joinCompounds hält ein komplett ersetztes Kompositum wieder zusammen.
+const TOKEN_RE = /[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*|\s+|[^\s\p{L}\p{N}]/gu;
 
 export function tokenize(s) {
   return String(s ?? '').match(TOKEN_RE) || [];
@@ -60,7 +62,7 @@ export function wordDiff(a, b) {
   }
   while (i < n) push('del', x[i++]);
   while (j < m) push('add', y[j++]);
-  return _attachWhitespace(out);
+  return _joinCompounds(_attachWhitespace(out));
 }
 
 // Reiner Whitespace als eigene Änderung („ " gelöscht, „ " eingefügt) liest sich
@@ -81,4 +83,36 @@ function _attachWhitespace(parts) {
     else merged.push(p);
   }
   return merged;
+}
+
+// Ein Bindestrich als Gleichtext zwischen zwei Änderungen im selben Wort
+// („Ost-West" → „Nord-Süd") zerlegte das Kompositum in zwei Marken. Steht er auf
+// beiden Seiten mitten im Wort, wandert er in die Änderung, und das Wort wird
+// als Ganzes markiert.
+const _WORD_END = /[\p{L}\p{N}]$/u;
+const _WORD_START = /^[\p{L}\p{N}]/u;
+
+function _joinCompounds(parts) {
+  const out = [];
+  for (let k = 0; k < parts.length; k++) {
+    const p = parts[k];
+    if (p.t === 'eq' && p.v === '-') {
+      let b = out.length;
+      while (b > 0 && out[b - 1].t !== 'eq') b--;
+      let e = k + 1;
+      while (e < parts.length && parts[e].t !== 'eq') e++;
+      const before = out.slice(b);
+      const after = parts.slice(k + 1, e);
+      const side = (run, t) => run.filter(x => x.t === t).map(x => x.v).join('');
+      const [dB, aB, dA, aA] = [side(before, 'del'), side(before, 'add'), side(after, 'del'), side(after, 'add')];
+      if (_WORD_END.test(dB) && _WORD_END.test(aB) && _WORD_START.test(dA) && _WORD_START.test(aA)) {
+        out.length = b;
+        out.push({ t: 'del', v: `${dB}-${dA}` }, { t: 'add', v: `${aB}-${aA}` });
+        k = e - 1;
+        continue;
+      }
+    }
+    out.push(p);
+  }
+  return out;
 }

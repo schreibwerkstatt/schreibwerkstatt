@@ -165,7 +165,10 @@ function _seedIdee(bookId, { pageId = null, chapterId = null } = {}) {
 const _ideeExists = (id) =>
   !!ctx.connection.db.prepare('SELECT 1 FROM ideen WHERE id = ?').get(id);
 
-test('localdb: deletePage mit angehaengter Seiten-Idee loescht die Idee mit (XOR-CHECK vs. FK-Aktion)', async () => {
+const _ideeAnchor = (id) =>
+  ctx.connection.db.prepare('SELECT page_id, chapter_id FROM ideen WHERE id = ?').get(id);
+
+test('localdb: deletePage macht die angehaengte Seiten-Idee zur Buch-Idee', async () => {
   const bookId = _seedBook();
   const pageId = _seedPage(bookId, null, { name: 'Seite mit Idee' });
   const ideeId = _seedIdee(bookId, { pageId });
@@ -173,17 +176,19 @@ test('localdb: deletePage mit angehaengter Seiten-Idee loescht die Idee mit (XOR
   await ctx.contentStore.deletePage(pageId, null, { deletedBy: 'alice@example.com' });
 
   await assert.rejects(() => ctx.contentStore.loadPage(pageId), { code: 'NOT_FOUND' });
-  assert.equal(_ideeExists(ideeId), false, 'Idee muss mit ihrer Seite fallen');
+  assert.equal(_ideeExists(ideeId), true, 'Idee bleibt als Buch-Idee erhalten');
+  assert.deepEqual({ ..._ideeAnchor(ideeId) }, { page_id: null, chapter_id: null });
 });
 
-test('localdb: deleteChapter mit angehaengter Kapitel-Idee loescht die Idee mit', async () => {
+test('localdb: deleteChapter macht die angehaengte Kapitel-Idee zur Buch-Idee', async () => {
   const bookId = _seedBook();
   const chapterId = _seedChapter(bookId);
   const ideeId = _seedIdee(bookId, { chapterId });
 
   await ctx.contentStore.deleteChapter(chapterId, null);
 
-  assert.equal(_ideeExists(ideeId), false, 'Idee muss mit ihrem Kapitel fallen');
+  assert.equal(_ideeExists(ideeId), true, 'Idee bleibt als Buch-Idee erhalten');
+  assert.deepEqual({ ..._ideeAnchor(ideeId) }, { page_id: null, chapter_id: null });
 });
 
 test('localdb: deleteBook raeumt Seiten- UND Kapitel-Ideen des Buchs', async () => {

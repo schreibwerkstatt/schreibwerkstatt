@@ -236,7 +236,9 @@ router.delete('/session/:id', (req, res) => {
 });
 
 // Gemeinsamer Vorspann der Vorschlags-PATCH-Routen: Nachricht des Users laden,
-// Index prüfen, Buch in den Log-Context. Antwortet selbst und liefert dann null.
+// Buch in den Log-Context, Buchzugriff prüfen (Rolle wie der Abschnitts-Chat:
+// lektor — wem das Buch entzogen wurde, ändert auch seine Vorschläge nicht
+// mehr), Index prüfen. Antwortet selbst und liefert dann null.
 function loadVorschlagForPatch(req, res) {
   const userEmail = sessionEmail(req);
   const msgId = toIntId(req.params.id);
@@ -250,7 +252,8 @@ function loadVorschlagForPatch(req, res) {
     WHERE cm.id = ? AND cs.user_email = ?
   `).get(msgId, userEmail);
   if (!row) { res.status(404).json({ error_code: 'MESSAGE_NOT_FOUND' }); return null; }
-  if (row.book_id) setContext({ book: row.book_id });
+  setContext({ book: row.book_id });
+  if (!guardBook(req, res, row.book_id, 'lektor')) return null;
 
   const vorschlaege = row.vorschlaege ? JSON.parse(row.vorschlaege) : [];
   if (!vorschlaege[idx]) { res.status(400).json({ error_code: 'VORSCHLAG_INDEX_INVALID' }); return null; }

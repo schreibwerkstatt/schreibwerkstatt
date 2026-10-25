@@ -114,7 +114,7 @@ Antwort trägt `stale` und den Anker, die der Client nicht selbst bilden kann.
   Ohne bekannte Kette (gescheiterter `/redaktion`-Fetch) wirkt er nicht
   (`_editFilterActive`); beim Buchwechsel wird er zurückgesetzt. Steht alles
   auf der letzten Stufe, zeigt der Baum einen Hinweis mit «Filter aufheben».
-- **Buch-Chat**: Werkzeug `get_edit_status` ([buchchat-tools.md](buchchat-tools.md)),
+- **Buch-Chat**: Werkzeug `get_edit_status` ([chat-tools.md](chat-tools.md)),
   nur lesend, dazu eine Routing-Zeile im System-Prompt. Den Stand setzt der
   Autor, nicht die KI. **Plot-Chat**: dasselbe Werkzeug (ein Beat in einem
   fertigen Kapitel heisst Umbau).

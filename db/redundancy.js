@@ -46,6 +46,14 @@ const _delFigure = db.prepare(
   "DELETE FROM redundancy_dismissals WHERE book_id = ? AND user_email = ? AND kind = 'figure' AND figure_a_id = ? AND figure_b_id = ?"
 );
 const _delAll = db.prepare('DELETE FROM redundancy_dismissals WHERE book_id = ? AND user_email = ?');
+// Scopes des Nacht-Laufs: jeder bestehende Lauf + der Besitzer jedes Buchs
+// (Erstlauf). Reiner Lesezugriff im eigenen db/-Modul (Content-Store-Regel).
+const _selNightlyScopes = db.prepare(`
+  SELECT book_id, user_email FROM redundancy_runs
+  UNION
+  SELECT b.book_id, b.owner_email AS user_email FROM books b
+    JOIN app_users u ON u.email = b.owner_email
+`);
 // Anker-Prüfung: beide Seiten im Buch bzw. beide Figuren im Buch UND dem User
 // gehörend. Reiner Lesezugriff im eigenen db/-Modul (Content-Store-Regel).
 const _cntPages = db.prepare('SELECT COUNT(*) AS n FROM pages WHERE page_id IN (?, ?) AND book_id = ?');
@@ -111,6 +119,12 @@ function clearDismissals(bookId, userEmail) {
   return _delAll.run(bookId, userEmail).changes;
 }
 
+/** [{ book_id, user_email }] — wen der Nacht-Lauf prüft (routes/jobs/redundancy.js#scanAllBooks). */
+function listNightlyScopes() {
+  return _selNightlyScopes.all();
+}
+
 module.exports = {
   getLastRun, saveRun, dismissalSets, countDismissals, addDismissal, removeDismissal, clearDismissals,
+  listNightlyScopes,
 };

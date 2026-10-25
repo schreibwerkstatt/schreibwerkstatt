@@ -3,7 +3,7 @@
 // Envelope mit `vorschlaege` (zeichengenaue Textersetzung) + updatedAt-Staleness.
 
 const { db } = require('../../../db/schema');
-const { getSessionRow } = require('../../../db/chat-sessions');
+const { getSessionRow, setOpeningPageText } = require('../../../db/chat-sessions');
 const { callAIChat, chatTemperature, getContextConfigFor, resolveProvider } = require('../../../lib/ai');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
@@ -53,6 +53,21 @@ async function _pageChatBookContext(session, query, budget, signal, userEmail, l
   }
 }
 
+// Vorprüfung im POST-Handler (chat.js → _handleChatPost `preflight`), VOR dem
+// Speichern der Frage: ist der Abschnitt schon für sich zu lang, scheitert jeder
+// Job daran — die Frage bliebe unbeantwortet in der Session, und jeder neue
+// Versuch legte eine weitere dazu. Liefert null (weiter) oder die Fehlerantwort.
+// Ladefehler sind kein Vorab-Befund: dann entscheidet der Job (pageChatLoadFailed).
+// Der Job prüft den Deckel trotzdem selbst — die Seite kann bis zum Lauf wachsen.
+async function pageChatPreflight(session, userEmail) {
+  let pd;
+  try { pd = await contentStore.loadPage(session.page_id); } catch { return null; }
+  const chars = htmlToTextForPrompt(pd.html || '').length;
+  const { pageMax } = pageChatBudget(getContextConfigFor(resolveProvider({ userEmail })));
+  if (chars <= pageMax) return null;
+  return { status: 422, error_code: 'PAGE_CHAT_PAGE_TOO_LARGE', params: { chars, max: pageMax } };
+}
+
 async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
   const logger = makeJobLogger(jobId);
   const {
@@ -64,7 +79,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
   try {
     updateJob(jobId, { statusText: 'job.phase.preparing', progress: 5 });
 
-    const session = getSessionRow(parseInt(sessionId), userEmail);
+    const session = getSessionRow(sessionId, userEmail);
     if (!session) throw i18nError('job.error.sessionNotFound');
 
     // Seiteninhalt frisch laden (via content-store). Name und Kapitel kommen aus
@@ -107,20 +122,6 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const ideen    = getOpenIdeen(session.page_id, userEmail);
     const lektorat = getLatestPageCheck(session.page_id, userEmail);
     const { SYSTEM_CHAT: chatSysPrompt } = await getBookPrompts(session.book_id, userEmail);
-    // opening_page_text: Snapshot beim Chat-Öffnen. Hat der Autor seither
-    // editiert, geht nur ein kompakter Wort-Diff an die KI — nie eine zweite
-    // Vollfassung neben dem aktuellen Stand.
-    const pageChange = computePageChangeHunks(session.opening_page_text, pageText, { maxChars: budget.changeNoteMax });
-    const pageChangeNote = pageChange ? formatPageChange(pageChange) : null;
-    // Figuren sind hier kapitel-gefiltert, aber ebenfalls Volldossiers → gebudgetet
-    // (gleicher Deckel wie im Buch-Chat, siehe figurenBlockChars).
-    // Bearbeitungsstand des Abschnitts (docs/bearbeitungsstand.md): steuert die
-    // Art des Feedbacks (Rohfassung → Aufbau, final → Feinschliff).
-    const stand = session.page_id ? getPageStatus(session.page_id) : null;
-    const chain = stand ? statusChain(isJournalisticBook(getBookSettings(session.book_id, userEmail))) : [];
-    const editStatus = stand && chain.includes(stand.status) ? { status: stand.status, stale: stand.stale, chain } : null;
-    const systemPrompt = buildChatSystemPrompt(session.page_name || '–', promptText, figuren, review,
-      chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg), editStatus, hatNachrichten: hasMsgThread(pd.html) });
 
     const annotate = (r) => {
       if (r.role !== 'assistant') return '';
@@ -134,6 +135,29 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       return parts.filter(Boolean).join('\n\n');
     };
     const fullHistory = buildChatMessageHistory(session.id, { annotate }).slice(0, -1);
+
+    // opening_page_text: der Stand, den das Modell in der ersten Runde sah. Hat
+    // der Autor seither editiert, geht nur ein kompakter Wort-Diff an die KI —
+    // nie eine zweite Vollfassung neben dem aktuellen Stand. In der ersten Runde
+    // gibt es keine frühere Antwort, auf die sich ein Diff beziehen könnte
+    // (Edits zwischen Öffnen der Karte und erster Frage sind für das Modell
+    // schlicht der Text): dort kein Diff, sondern den Ausgangsstand setzen.
+    let pageChangeNote = null;
+    if (fullHistory.length === 0) {
+      setOpeningPageText(session.id, pageText);
+    } else {
+      const pageChange = computePageChangeHunks(session.opening_page_text, pageText, { maxChars: budget.changeNoteMax });
+      pageChangeNote = pageChange ? formatPageChange(pageChange) : null;
+    }
+    // Figuren sind hier kapitel-gefiltert, aber ebenfalls Volldossiers → gebudgetet
+    // (gleicher Deckel wie im Buch-Chat, siehe figurenBlockChars).
+    // Bearbeitungsstand des Abschnitts (docs/bearbeitungsstand.md): steuert die
+    // Art des Feedbacks (Rohfassung → Aufbau, final → Feinschliff).
+    const stand = getPageStatus(session.page_id);
+    const chain = stand ? statusChain(isJournalisticBook(getBookSettings(session.book_id, userEmail))) : [];
+    const editStatus = stand && chain.includes(stand.status) ? { status: stand.status, stale: stand.stale, chain } : null;
+    const systemPrompt = buildChatSystemPrompt(session.page_name || '–', promptText, figuren, review,
+      chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg), editStatus, hatNachrichten: hasMsgThread(pd.html) });
 
     // Buch-Kontext: pro Frage andere Bytes → NICHT im System-Prompt (er bräche den
     // Präfix hinter Block 2, der ganze Verlauf würde jede Runde neu bezahlt), sondern
@@ -246,4 +270,4 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
   }
 }
 
-module.exports = { runChatJob };
+module.exports = { runChatJob, pageChatPreflight };

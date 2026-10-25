@@ -8,10 +8,13 @@
 
 const { listWorldFacts, worldFactsScanState } = require('../../../db/schema');
 const { resolveProvider, providerClass } = require('../../../lib/ai');
+const { getBookSettings } = require('../../../db/book-settings');
+const { narrativeLabels } = require('../narrative-labels');
 const { getPrompts, getBookPrompts, getFiguren, getLatestReview } = require('../shared');
-const { executeTool, validateFinalAnswerCitations } = require('../book-chat-tools');
+const { executeTool, validateFinalAnswerCitations } = require('../chat-tools');
 const { makeAgenticChatJob } = require('../agentic-chat');
-const { imageGenEnabled } = require('../../../lib/image-gen');
+const { prepareChatTools } = require('../chat-tools/select');
+const { maxToolIterFor, agentLimits } = require('../agentic-chat/limits');
 const embed = require('../../../lib/embed');
 const { agentPreContext, preContextStatus, retrievalQuery } = require('./book-chat-retrieval');
 const appSettings = require('../../../lib/app-settings');
@@ -22,61 +25,17 @@ const { runBookChatJob, _applyBookChatAiOverrides } = require('./book-chat');
 const { normalizeChatIdeeProposals } = require('../../../lib/chat-idee-proposals');
 
 // ── Agentic Buch-Chat (Tool-Use) ───────────────────────────────────────────────
-// Ersetzt runBookChatJob bei API_PROVIDER=claude (und BOOK_CHAT_MODE != 'classic').
-// Der Agent ruft Tools aus routes/jobs/book-chat-tools.js auf, um Fragen
-// über den gesamten Buchindex zu beantworten, statt alle Seiten vorab zu laden.
-// Iterations-Deckel. Lokale Provider bekommen einen eigenen, niedrigeren Wert:
-// ohne Prompt-Caching kostet jede Runde den vollen Prompt erneut (Werkzeugkatalog +
-// Historie + alle bisherigen Tool-Results), und eine Runde dauert dort Sekunden bis
-// Minuten. `..._local = 0` schaltet den eigenen Deckel ab.
-function _bookChatMaxToolIter(provider, userEmail) {
-  const base = parseInt(appSettings.get('jobs.book_chat.max_tool_iter'), 10) || 6;
-  if (providerClass(provider, { userEmail }) !== 'local') return base;
-  const local = parseInt(appSettings.get('jobs.book_chat.max_tool_iter_local'), 10) || 0;
-  return local > 0 ? Math.min(base, local) : base;
-}
+// Ersetzt runBookChatJob, wenn der effektive Provider Werkzeuge kann (und
+// jobs.book_chat.mode != 'classic'). Der Agent ruft Werkzeuge des gemeinsamen
+// Katalogs (../chat-tools/) auf, statt alle Seiten vorab zu laden. Werkzeugsatz und
+// Deckel kommen aus den gemeinsamen Modulen aller agentischen Chats
+// (../chat-tools/select.js, ../agentic-chat/limits.js).
 
-// Werkzeugsatz: 'full' (alle) oder 'slim' (kuratierte Teilmenge, SSoT
-// BOOK_CHAT_SLIM_TOOL_NAMES in public/js/prompts/book-chat-tools.js). 'auto' folgt der
-// Provider-KLASSE — der volle Katalog kostet ~10k Input-Tokens pro Iteration, die ein
-// lokaler Endpunkt ohne Caching jede Runde neu bezahlt, und ein kleineres Modell
-// wählt aus der kleinen Teilmenge zuverlässiger als aus dem vollen Katalog.
-function _bookChatToolSet(provider, userEmail) {
-  const mode = String(appSettings.get('jobs.book_chat.tool_set') || 'auto').toLowerCase();
-  if (mode === 'slim' || mode === 'full') return mode;
-  return providerClass(provider, { userEmail }) === 'local' ? 'slim' : 'full';
-}
 // Per-Iteration-Limit für Input-Tokens (Context-Window-Schutz, nicht kumulativ).
 // Default = `ai.<provider>.context_window` − `ai.<provider>.max_tokens_out` − Puffer.
 // Prompt-Caching macht wiederholte Tokens ohnehin billig, deshalb kein Summen-Budget.
 function _bookChatTokenBudget(aiCfg) {
   return parseInt(appSettings.get('jobs.book_chat.token_budget'), 10) || aiCfg.inputBudgetTokens;
-}
-// Kosten-Deckel pro Antwort: kumulierte Input-Tokens über alle Iterationen (inkl.
-// Cache-Lesen — der Wert, den auch die Token-Anzeige zeigt). Prompt-Caching macht
-// eine Runde billig, aber nicht gratis: zwölf Runden mit Kapitel-Volltexten summieren
-// sich auf Millionen Tokens. Erreicht → erzwungene Synthese-Runde (Antwort via final_answer),
-// kein Hart-Abbruch. 0 = aus.
-function _bookChatInputTokenCap() {
-  const v = parseInt(appSettings.get('jobs.book_chat.max_input_tokens_per_answer'), 10);
-  return Number.isFinite(v) && v > 0 ? v : 0;
-}
-
-// Per-Tool-Result-Cap: damit eine einzelne Tool-Antwort nicht allein das Budget sprengt.
-// Annahme: bis zu 6 Iterationen × ~3 Tool-Calls × Sicherheitsfaktor 2 ⇒ /36.
-// Min 4000 Zeichen, damit Tool-Results bei kleinen Kontextfenstern noch brauchbar sind.
-function _toolResultCapChars(maxIter, aiCfg) {
-  return Math.max(4000, Math.floor(aiCfg.inputBudgetChars / (maxIter * 6)));
-}
-
-// Deckel pro Werkzeug-Runde. Der Prompt fordert gebündelte Aufrufe (mehrere
-// get_chapter_text in einer Runde) — ungedeckelt hängt eine einzige Runde mit vielen
-// Volltexten aber mehr an, als das Fenster trägt, und erst der NÄCHSTE Call merkt
-// es. Zahl: genug für breites Bündeln, nicht für einen Rundumschlag. Summe: ein
-// Viertel des Input-Budgets, mindestens zwei volle Einzelergebnisse.
-const AGENT_MAX_TOOLS_PER_ROUND = 8;
-function _roundResultCapChars(aiCfg, toolResultCap) {
-  return Math.max(toolResultCap * 2, Math.floor((aiCfg.inputBudgetChars || 0) * 0.25));
 }
 
 // final_answer-Tool-Use auswerten: Zitate validieren (Beweisspur, nicht blockierend),
@@ -151,7 +110,7 @@ function _buildCitations(zitate, validation) {
 }
 
 // Recherche-Hinweis aus final_answer (Fragen zur Aussenwelt, siehe
-// BOOK_CHAT_OUTSIDE_WORLD_RULE). Die vorgeschlagene Frage geht unverändert als
+// buildBookChatOutsideWorldRule). Die vorgeschlagene Frage geht unverändert als
 // Text an den Recherche-Chat — gedeckelt, aber nicht umformuliert.
 function _rechercheHint(input) {
   if (input?.recherche_hinweis !== true) return null;
@@ -180,7 +139,7 @@ function _agentWeltContext(bookId, userEmail, logger) {
 const AGENT_FIGUREN_MAX_CHARS    = 48000;
 const AGENT_WELTFAKTEN_MAX_CHARS = 24000;
 
-// Agentischer Buch-Chat: ruft Tools aus routes/jobs/book-chat-tools.js auf, um
+// Agentischer Buch-Chat: ruft Tools aus dem gemeinsamen Katalog (../chat-tools/) auf, um
 // Fragen über den gesamten Buchindex zu beantworten, statt alle Seiten vorab zu
 // laden. Loop/Persistenz kommen aus makeAgenticChatJob (siehe agentic-chat.js);
 // hier nur die Buch-Chat-spezifischen Achsen (Provider-Override, Tool-Set inkl.
@@ -198,38 +157,35 @@ const runBookChatJobAgent = makeAgenticChatJob({
   loadSession: (sessionId, userEmail) => getSessionWithBookName(parseInt(sessionId), userEmail),
 
   async prepare({ session, userEmail, aiCfg, logger, jobSignal, message, history }) {
+    const prompts = await getPrompts(userEmail);
     const {
-      buildBookChatAgentSystemPrompt, buildBookChatPreContext, BOOK_CHAT_TOOLS, BOOK_CHAT_SLIM_TOOL_NAMES,
-      BOOK_CHAT_FORCE_FINAL_INSTRUCTION, BOOK_CHAT_OUTSIDE_WORLD_RULE, BOOK_CHAT_BUDGET_FINAL_INSTRUCTION,
-    } = await getPrompts(userEmail);
+      buildBookChatAgentSystemPrompt, buildBookChatPreContext, BOOK_CHAT_OUTPUT_TOOLS, buildErzaehlweiseLine,
+      BOOK_CHAT_FORCE_FINAL_INSTRUCTION, buildBookChatOutsideWorldRule, BOOK_CHAT_BUDGET_FINAL_INSTRUCTION,
+    } = prompts;
     const figuren = getFiguren(session.book_id, userEmail);
     const review  = getLatestReview(session.book_id, userEmail);
     const { SYSTEM_BOOK_CHAT: bookChatSys } = await getBookPrompts(session.book_id, userEmail);
     const provider = resolveProvider({ userEmail });
-    const maxToolIter = _bookChatMaxToolIter(provider, userEmail);
+    const maxToolIter = maxToolIterFor('jobs.book_chat.max_tool_iter', 6, provider, userEmail);
+    const limits = agentLimits(maxToolIter, aiCfg);
     // Erst-Kontext: die semantisch nächsten Passagen zur Frage, bevor der Loop startet.
     // Die häufigste Frageform ist eine schmale Faktenfrage; ohne diesen Block beginnt der
     // Agent bei null und lädt im Zweifel ganze Kapitel — der Block kostet ein paar Tausend
-    // Tokens, eine get_chapter_text-Runde ein Vielfaches. Nicht-fatal: fällt der Embedding-
+    // Tokens, eine Volltext-Runde ein Vielfaches. Nicht-fatal: fällt der Embedding-
     // Endpunkt aus, läuft der Agent wie vorher rein über seine Werkzeuge.
     const preContext = await agentPreContext(session.book_id, retrievalQuery(message, history), { signal: jobSignal, logger, userEmail });
     const embOn = embed.isEnabled();
-    // generate_image / search_similar nur anbieten, wenn der jeweilige Endpunkt
-    // (Bild bzw. Embeddings) konfiguriert ist — sonst spart das Input-Tokens und
-    // das Modell ruft kein totes Werkzeug. Im Slim-Satz (lokale Provider) faellt
-    // zusaetzlich alles weg, was nicht auf der kuratierten Liste steht.
-    const imgOn = imageGenEnabled();
-    const toolSet = _bookChatToolSet(provider, userEmail);
-    const slim = toolSet === 'slim' ? new Set(BOOK_CHAT_SLIM_TOOL_NAMES) : null;
-    const tools = BOOK_CHAT_TOOLS.filter(t =>
-      (!slim || slim.has(t.name))
-      && (t.name !== 'generate_image' || imgOn) && (t.name !== 'search_similar' || embOn));
-    // Der Prompt darf nur empfehlen, was tatsaechlich angeboten wird — sonst
-    // verbrennt das Modell Runden an Werkzeugen, die es nicht hat.
+    // Werkzeugsatz: Slim/voll nach Provider-Klasse, ohne Werkzeuge ohne Endpunkt oder
+    // ohne Daten im Buch; Prompt, Beschreibungen und Handler-Hinweise nennen nur, was
+    // angeboten wird (ctx.offeredTools).
+    const toolCtx = { bookId: session.book_id, sessionId: session.id, userEmail, logger };
+    const { tools, toolNames, toolSet, offeredTools, unavailable } = prepareChatTools({
+      chat: 'book', prompts, provider, userEmail, ctx: toolCtx, outputTools: BOOK_CHAT_OUTPUT_TOOLS,
+    });
     // Figuren- und Welt-Fakten-Block: absolut gedeckelt, nicht nur relativ zum
     // Kontextfenster. Auf einem 1M-Fenster griffen die relativen Deckel nie, und
     // ein ausanalysiertes Buch trug so über 200k Zeichen Dossier in JEDE Iteration.
-    // Der Agent hat für beides Detail-Werkzeuge (get_figure_profile, list_world_facts).
+    // Der Agent hat für beides Detail-Werkzeuge (Figurenprofil, Welt-Fakten).
     const figurenMaxChars = Math.min(figurenBlockChars(aiCfg), AGENT_FIGUREN_MAX_CHARS);
     // Welt-Fakten: kurze, schon verdichtete Buchaussagen — Stufe 1 der Kosten-Leiter.
     // Buch-stabil, darum im gecachten Block 1 und nicht im Erst-Kontext.
@@ -238,23 +194,21 @@ const runBookChatJobAgent = makeAgenticChatJob({
     const systemPrompt = buildBookChatAgentSystemPrompt(
       session.book_name || '', figuren, review, bookChatSys, maxToolIter,
       {
-        semantic: embOn, toolNames: tools.map(t => t.name),
+        semantic: embOn, toolNames,
         figurenMaxChars, welt, weltfaktenMaxChars,
+        erzaehlweise: buildErzaehlweiseLine(narrativeLabels(getBookSettings(session.book_id, userEmail))),
       },
     );
     // Erst-Kontext: pro Frage andere Bytes — darum NICHT im System-Prompt, sondern als
     // Textblock vor der Frage in deren User-Nachricht (userPreamble). So bleiben
     // Werkzeuge + System + Historie ein stabiler Cache-Präfix über die Turns.
-    const userPreamble = `${buildBookChatPreContext(preContext?.hits || [], preContextStatus(preContext, { enabled: embOn }))}\n\n=== FRAGE ===`;
-    // Aussenwelt-Regel an den stabilen Block 1 (gecacht, buch-unabhängig): der
-    // Buch-Chat hat keine Web-Suche und verweist auf den Recherche-Chat.
-    if (BOOK_CHAT_OUTSIDE_WORLD_RULE && systemPrompt[0]?.text) {
-      systemPrompt[0] = { ...systemPrompt[0], text: `${systemPrompt[0].text}\n\n${BOOK_CHAT_OUTSIDE_WORLD_RULE}` };
+    const userPreamble = `${buildBookChatPreContext(preContext?.hits || [], preContextStatus(preContext, { enabled: embOn }), { toolNames })}\n\n=== FRAGE ===`;
+    // Aussenwelt-Regel an den stabilen Block 1 (gecacht): der Buch-Chat hat keine
+    // Web-Suche und verweist auf den Recherche-Chat.
+    if (systemPrompt[0]?.text) {
+      systemPrompt[0] = { ...systemPrompt[0], text: `${systemPrompt[0].text}\n\n${buildBookChatOutsideWorldRule(toolNames)}` };
     }
-    const toolResultCap = _toolResultCapChars(maxToolIter, aiCfg);
-    const roundResultCapChars = _roundResultCapChars(aiCfg, toolResultCap);
-    const inputTokenCap = _bookChatInputTokenCap();
-    logger.info(`Werkzeugsatz: ${toolSet} (${tools.length} Werkzeuge), max ${maxToolIter} Iterationen, Provider=${provider}/${providerClass(provider, { userEmail })}.`);
+    logger.info(`Werkzeugsatz: ${toolSet} (${tools.length} Werkzeuge${unavailable.length ? `, ohne Daten/Endpunkt: ${unavailable.join(', ')}` : ''}), max ${maxToolIter} Iterationen, Provider=${provider}/${providerClass(provider, { userEmail })}.`);
     logger.info(`System-Prompt: ${systemPrompt.reduce((n, b) => n + (b.text?.length || 0), 0)} Zeichen `
       + `(Figuren: ${figuren.length}, Block-Deckel ${figurenMaxChars} Zeichen; `
       + `Welt-Fakten: ${welt ? `${welt.fakten.length}${welt.scanned ? '' : ' (Index nicht erhoben)'}` : 'aus'}, `
@@ -264,20 +218,21 @@ const runBookChatJobAgent = makeAgenticChatJob({
       tools,
       maxToolIter,
       tokenBudget: _bookChatTokenBudget(aiCfg),
-      toolResultCap,
-      inputTokenCap,
-      maxToolsPerRound: AGENT_MAX_TOOLS_PER_ROUND,
-      roundResultCapChars,
+      toolResultCap: limits.toolResultCap,
+      inputTokenCap: limits.inputTokenCap,
+      maxToolsPerRound: limits.maxToolsPerRound,
+      roundResultCapChars: limits.roundResultCapChars,
       userPreamble,
       cacheHistory: true,
       forceFinalInstruction: BOOK_CHAT_FORCE_FINAL_INSTRUCTION,
       inputCapInstruction: BOOK_CHAT_BUDGET_FINAL_INSTRUCTION,
       ctx: {
-        bookId: session.book_id, sessionId: session.id, userEmail,
-        jobSignal, logger,
+        ...toolCtx,
+        jobSignal,
+        offeredTools,
         // Strukturierte Kürzung in executeTool auf denselben Deckel wie der harte
         // Schnitt im Loop — sonst schneidet der Loop mitten in ein JSON-Ergebnis.
-        resultCapChars: toolResultCap,
+        resultCapChars: limits.toolResultCap,
         // final_answer: validierte Zitate (Fussnoten), Recherche-Hinweis, Ideen-Vorschläge.
         citations: null,
         recherche: null,
@@ -289,7 +244,7 @@ const runBookChatJobAgent = makeAgenticChatJob({
         // in context_info.images persistiert (Frontend-Anzeige im Verlauf).
         images: [],
         // Input-Budget des effektiven Providers — list_chapters leitet daraus ab,
-        // ob das ganze Buch in den Kontext passt (Voll-Lektüre statt search-Raten).
+        // ob das ganze Buch in den Kontext passt (Voll-Lektüre statt Stichwort-Raten).
         inputBudgetChars: aiCfg.inputBudgetChars,
         // Erst-Kontext-Kennzahlen für context_info (Frontend-Plakette + Kosten-Diagnose).
         preContext: preContext

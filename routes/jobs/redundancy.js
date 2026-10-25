@@ -17,14 +17,16 @@
 const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, jsonBody, jobAbortControllers,
-  startBookJob,
+  startBookJob, createJob, enqueueJob, findActiveJobId,
 } = require('./shared');
+const logger = require('../../logger');
 const embed = require('../../lib/embed');
 const retrieval = require('../../lib/semantic-retrieval');
 const appSettings = require('../../lib/app-settings');
 const contentStore = require('../../lib/content-store');
 const semanticChunks = require('../../db/semantic-chunks');
 const redundancyDb = require('../../db/redundancy');
+const { contentSig: _contentSig, isRunStale } = require('../../lib/redundancy-staleness');
 const {
   FIGURE_DUPE_THRESHOLD, prepare, scanBlock, pairsBefore, nextBlockEnd, finalizePairs, findFigureDuplicates,
 } = require('../../lib/redundancy');
@@ -72,6 +74,7 @@ async function runRedundancyJob(jobId, bookId, opts, userEmail) {
     const { model } = embed.getConfig();
 
     updateJob(jobId, { statusText: 'job.phase.redundancyLoad', progress: 5 });
+    const contentSig = await _contentSig(bookId, userEmail);
     const order = await _pageOrder(bookId, userEmail);
     const chunks = semanticChunks.loadChunksForPairing(bookId, model, KINDS)
       .filter(c => order.has(Number(c.entity_id)))
@@ -144,6 +147,7 @@ async function runRedundancyJob(jobId, bookId, opts, userEmail) {
       // Index-Stand, gegen den gerechnet wurde: die Karte vergleicht ihn mit
       // dem aktuellen und weist auf ein veraltetes Ergebnis hin.
       indexedAt: semanticChunks.lastIndexedAt(bookId, model),
+      contentSig,
       createdAt: new Date().toISOString(),
     };
     // Letztes Ergebnis behalten, damit die Karte beim nächsten Öffnen nicht leer
@@ -169,6 +173,33 @@ function _clampThreshold(raw) {
   return Math.min(MAX_THRESHOLD, Math.max(MIN_THRESHOLD, v));
 }
 
+// Nacht-Lauf (lib/cron.js, hinter dem Embedding-Reindex): hält den gespeicherten
+// Lauf aktuell, damit Karte und Buch-/Ideen-Chat (list_redundancies) nicht auf
+// einem alten Stand sitzen. Scopes: jeder bestehende Lauf (mit dessen Schwelle und
+// Nachbar-Schalter) + der Besitzer jedes Buchs (Erstlauf mit der mittleren
+// Schwelle). Übersprungen wird, was sich seit dem letzten Lauf nicht geändert hat
+// (lib/redundancy-staleness.js) oder keinen vollständigen Index hat — der Job bräche
+// dann ohnehin ab. Kein KI- und kein Embedding-Call, nur CPU.
+async function scanAllBooks() {
+  if (!embed.isEnabled()) return { enqueued: 0, skipped: 0, disabled: true };
+  const { model } = embed.getConfig();
+  let enqueued = 0, unchanged = 0, skipped = 0;
+  for (const { book_id: bookId, user_email: userEmail } of redundancyDb.listNightlyScopes()) {
+    if (!retrieval.indexReady(bookId) || findActiveJobId('redundancy', bookId, userEmail)) { skipped++; continue; }
+    const last = redundancyDb.getLastRun(bookId, userEmail);
+    if (last?.contentSig && !await isRunStale(bookId, userEmail, last, model)) { unchanged++; continue; }
+    const opts = {
+      threshold: _clampThreshold(last?.threshold),
+      skipAdjacent: last ? last.skipAdjacent !== false : true,
+    };
+    const jobId = createJob('redundancy', bookId, userEmail, 'job.label.redundancy', null, bookId);
+    enqueueJob(jobId, () => runRedundancyJob(jobId, bookId, opts, userEmail));
+    enqueued++;
+  }
+  logger.info(`Redundanz-Radar (Cron): ${enqueued} Lauf/Läufe eingereiht, ${unchanged} unverändert, ${skipped} übersprungen (kein Index / läuft bereits).`);
+  return { enqueued, unchanged, skipped };
+}
+
 redundancyRouter.post('/redundancy', jsonBody, (req, res) => startBookJob(req, res, {
   type: 'redundancy', minRole: 'lektor', label: 'job.label.redundancy',
   precheck: () => (embed.isEnabled() ? null : 'EMBED_DISABLED'),
@@ -178,4 +209,4 @@ redundancyRouter.post('/redundancy', jsonBody, (req, res) => startBookJob(req, r
   }, userEmail),
 }));
 
-module.exports = { redundancyRouter, runRedundancyJob, MIN_THRESHOLD, MAX_THRESHOLD };
+module.exports = { redundancyRouter, runRedundancyJob, scanAllBooks, MIN_THRESHOLD, MAX_THRESHOLD };

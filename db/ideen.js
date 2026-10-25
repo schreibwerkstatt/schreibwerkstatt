@@ -28,21 +28,34 @@ const { IDEA_LINK_KINDS, openStatusSql, normalizeIdeeStatus } = require('../lib/
 // Display-JOIN. `bookCol` traegt die Buch-Pruefung: der FK allein liesse eine
 // Idee aus Buch A auf ein Motiv aus Buch B zeigen (gleiche Absicherung wie
 // db/motifs/links.js#resolve*).
+// `private`: der Katalog gehoert dem User, der ihn angelegt hat (`user_email`) —
+// nur `research_items` ist buchweit geteilt. Dieselbe Achse wie im Picker
+// (listIdeaLinkTargets); addIdeaLink prueft sie, sonst liesse sich per
+// geratener ID der private Beat eines Mitarbeiters verknuepfen und sein Titel
+// aus der Antwort lesen.
 const LINK_TARGETS = {
-  research: { col: 'research_id', table: 'research_items', pk: 'id', nameCol: 'title', bookCol: 'book_id' },
-  beat:     { col: 'beat_id',     table: 'plot_beats',     pk: 'id', nameCol: 'titel', bookCol: 'book_id' },
-  motif:    { col: 'motif_id',    table: 'motifs',         pk: 'id', nameCol: 'name',  bookCol: 'book_id' },
-  draft:    { col: 'draft_figure_id', table: 'draft_figures', pk: 'id', nameCol: 'name', bookCol: 'book_id' },
-  thread:   { col: 'thread_id',   table: 'plot_threads',   pk: 'id', nameCol: 'name',  bookCol: 'book_id' },
+  research: { col: 'research_id', table: 'research_items', pk: 'id', nameCol: 'title', bookCol: 'book_id', private: false },
+  beat:     { col: 'beat_id',     table: 'plot_beats',     pk: 'id', nameCol: 'titel', bookCol: 'book_id', private: true },
+  motif:    { col: 'motif_id',    table: 'motifs',         pk: 'id', nameCol: 'name',  bookCol: 'book_id', private: true },
+  draft:    { col: 'draft_figure_id', table: 'draft_figures', pk: 'id', nameCol: 'name', bookCol: 'book_id', private: true },
+  thread:   { col: 'thread_id',   table: 'plot_threads',   pk: 'id', nameCol: 'name',  bookCol: 'book_id', private: true },
 };
 
+// Eine Ausgabeform fuer ALLE Lesepfade, inkl. `lane_chapter_id`: fuer eine
+// Kapitel-Idee das Kapitel selbst, fuer eine Seiten-Idee das Kapitel IHRER
+// SEITE. Daran haengt der Kapitel-Filter des Boards — und das Board tauscht
+// nach jedem Schreiben die Zeile aus der Antwort ein. Fehlte die Spalte dort,
+// fiele eine eben bearbeitete Abschnitts-Idee aus dem Kapitel-Filter.
 const SELECT_ROW = `
   SELECT i.id, i.book_id, i.page_id, p.page_name,
          i.chapter_id, c.chapter_name,
+         COALESCE(i.chapter_id, p.chapter_id) AS lane_chapter_id,
+         COALESCE(c.chapter_name, pc.chapter_name) AS lane_chapter_name,
          i.content, i.status, i.status_at, i.sort_order, i.created_at, i.updated_at
     FROM ideen i
-    LEFT JOIN pages    p ON p.page_id    = i.page_id
-    LEFT JOIN chapters c ON c.chapter_id = i.chapter_id
+    LEFT JOIN pages    p  ON p.page_id     = i.page_id
+    LEFT JOIN chapters c  ON c.chapter_id  = i.chapter_id
+    LEFT JOIN chapters pc ON pc.chapter_id = p.chapter_id
 `;
 
 // ── Verknuepfungen ──────────────────────────────────────────────────────────
@@ -94,13 +107,15 @@ function getIdeeOwned(id, userEmail) {
  * ob das Ziel ueberhaupt zum selben Buch gehoert, liegt hier und nicht im
  * Handler, weil sie die Ziel-Tabelle kennen muss.
  */
-function addIdeaLink(ideaId, bookId, targetKind, targetId) {
+function addIdeaLink(ideaId, bookId, targetKind, targetId, userEmail) {
   const t = LINK_TARGETS[targetKind];
   if (!t) return { error_code: 'INVALID_LINK_KIND' };
   const target = db.prepare(
-    `SELECT ${t.bookCol} AS book_id FROM ${t.table} WHERE ${t.pk} = ?`
+    `SELECT ${t.bookCol} AS book_id${t.private ? ', user_email' : ''} FROM ${t.table} WHERE ${t.pk} = ?`
   ).get(targetId);
-  if (!target) return { error_code: 'LINK_TARGET_NOT_FOUND' };
+  // Ein fremdes privates Ziel antwortet wie ein fehlendes — sonst verriete der
+  // Unterschied, dass es die ID gibt.
+  if (!target || (t.private && target.user_email !== userEmail)) return { error_code: 'LINK_TARGET_NOT_FOUND' };
   if (target.book_id !== bookId) return { error_code: 'BOOK_MISMATCH' };
   db.prepare(
     `INSERT OR IGNORE INTO idea_links (idea_id, target_kind, ${t.col}) VALUES (?, ?, ?)`
@@ -245,24 +260,15 @@ function openIdeenCounts(bookId, userEmail, kind) {
 /**
  * Alle Ideen eines Buches fuer das Board — eine Abfrage, ein Lesepfad.
  *
- * Mitgeliefert wird `lane_chapter_id`: fuer eine Kapitel-Idee das Kapitel
- * selbst, fuer eine Seiten-Idee das Kapitel IHRER SEITE. Daran haengt der
- * Kapitel-Filter des Boards — ohne diese Spalte muesste das Frontend die
- * Seite→Kapitel-Zuordnung aus dem Baum nachschlagen und haette bei einer Seite,
- * die der Baum (noch) nicht kennt, eine stumme Luecke. Die REIHENFOLGE der
- * Bahnen kommt weiterhin aus dem Baum (SSoT `book_order`), nicht von hier.
+ * `lane_chapter_id` (SELECT_ROW) traegt den Kapitel-Filter — ohne die Spalte
+ * muesste das Frontend die Seite→Kapitel-Zuordnung aus dem Baum nachschlagen
+ * und haette bei einer Seite, die der Baum (noch) nicht kennt, eine stumme
+ * Luecke. Die REIHENFOLGE der Bahnen kommt weiterhin aus dem Baum (SSoT
+ * `book_order`), nicht von hier.
  */
 function listBoardIdeen(bookId, userEmail) {
   const rows = db.prepare(`
-    SELECT i.id, i.book_id, i.page_id, p.page_name,
-           i.chapter_id, c.chapter_name,
-           COALESCE(i.chapter_id, p.chapter_id) AS lane_chapter_id,
-           COALESCE(c.chapter_name, pc.chapter_name) AS lane_chapter_name,
-           i.content, i.status, i.status_at, i.sort_order, i.created_at, i.updated_at
-      FROM ideen i
-      LEFT JOIN pages    p  ON p.page_id     = i.page_id
-      LEFT JOIN chapters c  ON c.chapter_id  = i.chapter_id
-      LEFT JOIN chapters pc ON pc.chapter_id = p.chapter_id
+    ${SELECT_ROW}
      WHERE i.book_id = ? AND i.user_email = ?
      ORDER BY i.created_at DESC, i.id DESC
   `).all(bookId, userEmail);
@@ -292,6 +298,12 @@ function updateIdee(id, userEmail, fields) {
   if (typeof fields.status === 'string') {
     sets.push('status = ?');    vals.push(fields.status);
     sets.push(`status_at = ${NOW_ISO_SQL}`);
+    // Ein Stufenwechsel ist ein Zellwechsel: der Rang der alten Zelle gilt in
+    // der neuen nicht. 0 = „nie einsortiert", die Idee steht oben in der
+    // Zielzelle; ein Drag nummeriert danach die Zelle neu (reorderIdeen).
+    // Gleicher Status ist kein Wechsel und behaelt den Platz.
+    sets.push('sort_order = CASE WHEN status = ? THEN sort_order ELSE 0 END');
+    vals.push(fields.status);
   }
   if (typeof fields.page_id === 'number')    { sets.push('page_id = ?');    vals.push(fields.page_id); }
   if (typeof fields.chapter_id === 'number') { sets.push('chapter_id = ?'); vals.push(fields.chapter_id); }

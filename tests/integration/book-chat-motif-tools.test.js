@@ -1,5 +1,5 @@
 'use strict';
-// Integration test: Book-Chat Tools get_motifs + get_motif_occurrences.
+// Integration test: Chat-Werkzeug get_motifs (Übersicht und, mit motif_id/motif_name, Fundstellen).
 // Read-only Soll/Ist-Zugriff auf die Motiv-Werkstatt (themes/motifs/Brücken/
 // motif_occurrences) aus dem agentischen Buch-Chat. Pro Buch + User skopiert.
 
@@ -14,7 +14,7 @@ let motifDb;
 
 test.before(() => {
   ctx = bootstrap();
-  bookChatTools = require('../../routes/jobs/book-chat-tools');
+  bookChatTools = require('../../routes/jobs/chat-tools');
   motifDb = require('../../db/motifs');
 });
 test.after(() => { ctx.cleanup(); });
@@ -88,7 +88,7 @@ test('get_motifs: Motiv mit Fundstellen → ist_count gesetzt, kein Geist; Bezie
   assert.deepEqual(result.relations[0], { von: 'Wasser', zu: 'Spiegel', typ: 'spiegelt' });
 });
 
-test('get_motif_occurrences: per motif_name → Fundstellen mit page/chapter + source', () => {
+test('get_motifs mit Motiv (Fundstellen): per motif_name → Fundstellen mit page/chapter + source', () => {
   const BOOK_ID = 7304;
   const userEmail = 'autor@werk.dev';
   ctx.dbSeed.setBook({
@@ -103,7 +103,7 @@ test('get_motif_occurrences: per motif_name → Fundstellen mit page/chapter + s
     { kind: 'page', pageId: 73041, score: null, snippet: 'Regen.', source: 'trigger' },
   ]);
 
-  const result = bookChatTools.TOOLS.get_motif_occurrences(
+  const result = bookChatTools.TOOLS.get_motifs(
     { motif_name: 'wasser' },
     { bookId: BOOK_ID, userEmail },
   );
@@ -121,13 +121,13 @@ test('get_motif_occurrences: per motif_name → Fundstellen mit page/chapter + s
   assert.match(top.snippet, /Wasser strömte/);
 });
 
-test('get_motif_occurrences: Geist-Motiv (0 Fundstellen) → occurrences:[] + hint', () => {
+test('get_motifs mit Motiv (Fundstellen): Geist-Motiv (0 Fundstellen) → occurrences:[] + hint', () => {
   const BOOK_ID = 7305;
   const userEmail = 'autor@werk.dev';
   ctx.dbSchema.upsertBookByName(BOOK_ID, 'B');
   const motif = motifDb.createMotif(BOOK_ID, userEmail, { name: 'Leeres Motiv' });
 
-  const result = bookChatTools.TOOLS.get_motif_occurrences(
+  const result = bookChatTools.TOOLS.get_motifs(
     { motif_id: motif.id },
     { bookId: BOOK_ID, userEmail },
   );
@@ -136,17 +136,17 @@ test('get_motif_occurrences: Geist-Motiv (0 Fundstellen) → occurrences:[] + hi
   assert.match(result.hint, /Geist|Scan/);
 });
 
-test('get_motif_occurrences: unbekanntes Motiv → error', () => {
+test('get_motifs mit Motiv (Fundstellen): unbekanntes Motiv → error', () => {
   const BOOK_ID = 7306;
   ctx.dbSchema.upsertBookByName(BOOK_ID, 'B');
-  const result = bookChatTools.TOOLS.get_motif_occurrences(
+  const result = bookChatTools.TOOLS.get_motifs(
     { motif_name: 'existiert nicht' },
     { bookId: BOOK_ID, userEmail: 'autor@werk.dev' },
   );
   assert.equal(result.error, 'Motiv nicht gefunden');
 });
 
-test('get_motifs / get_motif_occurrences: cross-user + cross-book Isolation', () => {
+test('get_motifs (Übersicht + Fundstellen): cross-user + cross-book Isolation', () => {
   const BOOK_A = 7307;
   const BOOK_B = 7308;
   const me = 'me@werk.dev';
@@ -162,14 +162,14 @@ test('get_motifs / get_motif_occurrences: cross-user + cross-book Isolation', ()
   assert.equal(r1.total_motifs, 0);
 
   // Motiv aus Buch B ist in Buch A nicht auffindbar.
-  const r2 = bookChatTools.TOOLS.get_motif_occurrences(
+  const r2 = bookChatTools.TOOLS.get_motifs(
     { motif_id: mine.id },
     { bookId: BOOK_A, userEmail: me },
   );
   assert.equal(r2.error, 'Motiv nicht gefunden');
 });
 
-test('executeTool dispatch: get_motifs + get_motif_occurrences registriert', async () => {
+test('executeTool dispatch: get_motifs liefert Übersicht und, mit Motiv, Fundstellen', async () => {
   const BOOK_ID = 7310;
   const userEmail = 'autor@werk.dev';
   ctx.dbSchema.upsertBookByName(BOOK_ID, 'B');
@@ -178,7 +178,7 @@ test('executeTool dispatch: get_motifs + get_motif_occurrences registriert', asy
   const listRes = await bookChatTools.executeTool('get_motifs', {}, { bookId: BOOK_ID, userEmail });
   assert.equal(listRes.total_motifs, 1);
 
-  const occRes = await bookChatTools.executeTool('get_motif_occurrences',
+  const occRes = await bookChatTools.executeTool('get_motifs',
     { motif_id: motif.id },
     { bookId: BOOK_ID, userEmail },
   );

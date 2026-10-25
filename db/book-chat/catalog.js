@@ -1,6 +1,6 @@
 'use strict';
 // Abfragen der Listing-/Lookup-Tools des Buch-Chats
-// (routes/jobs/book-chat-tools/tools-catalog.js): Kapitel- und Seiteninventar,
+// (routes/jobs/chat-tools/tools-catalog.js): Kapitel- und Seiteninventar,
 // Ideen, Orte, Songs, Szenen samt ihren Figuren-/Orts-/Szenen-Bridges,
 // Figuren-Erwähnungen, Revisions-Kopf, Welt-Fakten. Das Tool führt selbst kein
 // SQL aus; Seiten-/Kapitelnamen kommen per JOIN von hier (CLAUDE.md

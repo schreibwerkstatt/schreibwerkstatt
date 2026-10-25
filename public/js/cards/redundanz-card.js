@@ -20,6 +20,8 @@ export function registerRedundanzCard() {
     redundanzSkipAdjacent: true, // direkt aufeinanderfolgende Seiten im selben Kapitel nicht als Befund
     redundanzOpen: {},           // aufgeklappte Passagen, key = Paar + Seite
     redundanzDismissedCount: 0,
+    // Text/Figuren seit dem gespeicherten Lauf geändert (Server: lib/redundancy-staleness.js).
+    redundanzChangedSinceRun: false,
     redundanzBusyKey: null,
     redundanzMergeKey: null,     // Figuren-Paar mit offener Richtungswahl (Zusammenführen)
     redundanzIndexing: false,
@@ -48,6 +50,7 @@ export function registerRedundanzCard() {
         ctx.redundanzIndexInfo = null;
         ctx.redundanzOpen = {};
         ctx.redundanzDismissedCount = 0;
+        ctx.redundanzChangedSinceRun = false;
         ctx.redundanzBusyKey = null;
         ctx.redundanzMergeKey = null;
         ctx.redundanzIndexing = false;

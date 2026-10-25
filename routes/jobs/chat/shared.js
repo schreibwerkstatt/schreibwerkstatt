@@ -176,11 +176,15 @@ function invalidateBookPageCache(bookId) {
 // ── Gemeinsamer Route-Handler ────────────────────────────────────────────────
 // `kind` bindet den Job-Typ an die Session-Art: eine Session läuft nur unter
 // dem Chat, für den sie angelegt wurde.
-// `preflight(req, res, { session, userEmail })` (optional) läuft nach der ACL und
-// VOR dem Speichern der User-Nachricht: liefert es false, ist die Antwort schon
-// raus und es bleibt keine verwaiste Nachricht ohne Job in der Session liegen
-// (Recherche-Chat: Kill-Switch + Claude-only, lib/research-chat-gate.js).
-function _handleChatPost(req, res, { jobType, kind, labelFn, runFn, preflight, contextFn }) {
+// `preflight(req, res, { session, userEmail })` (optional, darf async sein) läuft
+// nach der ACL und VOR dem Speichern der User-Nachricht: liefert es false, ist die
+// Antwort schon raus und es bleibt keine verwaiste Nachricht ohne Job in der
+// Session liegen (Recherche-Chat: Kill-Switch + Claude-only,
+// lib/research-chat-gate.js; Abschnitts-Chat: Abschnitt über dem Deckel).
+// Nach dem await laufen Idempotenz- und Lauf-Sperre erneut: ein zweiter POST
+// derselben Session kann in der Zwischenzeit durchgekommen sein. Ab der zweiten
+// Prüfung bis zum Insert läuft alles synchron.
+async function _handleChatPost(req, res, { jobType, kind, labelFn, runFn, preflight, contextFn }) {
   // Typprüfung vor `.trim()`: eine Zahl/ein Objekt als `message` wäre sonst ein
   // TypeError → 500 statt der 400, die der Client-Vertrag für fehlende Felder hat.
   const message = typeof req.body?.message === 'string' ? req.body.message : null;
@@ -196,21 +200,24 @@ function _handleChatPost(req, res, { jobType, kind, labelFn, runFn, preflight, c
 
   // Idempotency: gleicher client_msg_id in selber Session → bestehende jobId zurück,
   // KEIN zweiter Insert. Schützt vor Doppel-Send bei Connection-Loss-Retry.
-  if (clientMsgId) {
-    const dup = db.prepare(
-      `SELECT job_id FROM chat_messages WHERE session_id = ? AND client_msg_id = ?`
-    ).get(session_id, clientMsgId);
-    if (dup) return res.json({ jobId: dup.job_id || null, existing: true });
-  }
-
   // Läuft für diese Session schon ein Job (zweiter Tab, zweites Gerät), wird die neue
   // Nachricht NICHT gespeichert — ein 200 mit der fremden jobId liesse sie im Client
   // optimistisch stehen, obwohl sie nie beantwortet wird. 409 + jobId: der Client
   // nimmt die Nachricht zurück, behält den Text im Eingabefeld und kann den
-  // laufenden Job verfolgen. (Wiederholung DERSELBEN Nachricht fängt oben die
-  // client_msg_id-Idempotenz ab.)
-  const existing = findActiveJobId(jobType, session_id, userEmail);
-  if (existing) return res.status(409).json({ error_code: 'CHAT_JOB_RUNNING', jobId: existing });
+  // laufenden Job verfolgen. (Wiederholung DERSELBEN Nachricht fängt die
+  // client_msg_id-Idempotenz ab.) true = Antwort ist raus.
+  const answeredByDedup = () => {
+    if (clientMsgId) {
+      const dup = db.prepare(
+        `SELECT job_id FROM chat_messages WHERE session_id = ? AND client_msg_id = ?`
+      ).get(session_id, clientMsgId);
+      if (dup) { res.json({ jobId: dup.job_id || null, existing: true }); return true; }
+    }
+    const existing = findActiveJobId(jobType, session_id, userEmail);
+    if (existing) { res.status(409).json({ error_code: 'CHAT_JOB_RUNNING', jobId: existing }); return true; }
+    return false;
+  };
+  if (answeredByDedup()) return;
 
   const session = getSessionForJob(session_id, userEmail);
   if (!session || session.kind !== kind) return res.status(404).json({ error_code: 'SESSION_NOT_FOUND' });
@@ -234,7 +241,10 @@ function _handleChatPost(req, res, { jobType, kind, labelFn, runFn, preflight, c
     minRole = 'editor';
   }
   if (!guardBook(req, res, session.book_id, minRole)) return;
-  if (preflight && !preflight(req, res, { session, userEmail })) return;
+  if (preflight) {
+    if (!(await preflight(req, res, { session, userEmail }))) return;
+    if (answeredByDedup()) return;
+  }
   // Optionaler Kontext der Frage (Recherche-Chat: Seite/Kapitel des Kontext-Chips).
   // `contextFn` prueft ihn gegen das Buch der Session und liefert das, was an der
   // User-Nachricht als context_info steht — der Job liest es von dort, statt die

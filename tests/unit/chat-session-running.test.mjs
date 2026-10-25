@@ -199,6 +199,26 @@ test('Job-Ende im selben Gespräch lädt den Server-Stand nach', async () => {
   assert.equal(c.isChatSessionRunning(100), false);
 });
 
+test('Abgebrochener Lauf: neutraler Hinweis statt Fehlerzeile, Eingabe frei', async () => {
+  reset();
+  const c = makeCard();
+  c.chatSessionId = 100;
+  c.chatInput = 'Frage';
+  routes.set('/jobs/chat', { jobId: 'job-1' });
+  routes.set(SESSIONS_URL, [{ id: 100, preview: 'Frage', last_message_at: 'b' }]);
+  await c.sendChatMessage();
+
+  routes.set('/jobs/job-1', { id: 'job-1', status: 'cancelled', error: 'job.cancelled' });
+  routes.set('/chat/session/100', { id: 100, messages: [{ role: 'user', content: 'Frage' }] });
+  await pollTick();
+
+  assert.match(c.chatStatus, /muted-msg/);
+  assert.match(c.chatStatus, /job\.cancelled/);
+  assert.doesNotMatch(c.chatStatus, /error-msg|common\.errorColon/);
+  assert.equal(c.chatLoading, false);
+  assert.equal(c.isChatSessionRunning(100), false);
+});
+
 // ── Löschen ──────────────────────────────────────────────────────────────────
 
 async function startRun(c) {

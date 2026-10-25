@@ -6,6 +6,7 @@ import { buildEditStatusBlock } from './edit-status-block.js';
 import { _obj, _str } from './schema-utils.js';
 import { SYSTEM_CHAT, SYSTEM_BOOK_CHAT } from './core.js';
 import { PAGE_CHAT_IDEEN_RULES, PAGE_CHAT_NACHRICHTEN_HINWEIS } from './page-chat.js';
+import { CHAT_TOOLS, toolMentions } from './chat-tools/index.js';
 
 /**
  * Figuren-Block der Chat-Prompts — gebudgetet.
@@ -58,7 +59,8 @@ export function buildFigurenBlock(figuren, opts = {}) {
   const list = Array.isArray(figuren) ? figuren.filter(Boolean) : [];
   if (!list.length) return null;
   const maxChars = Number(opts.maxChars) > 0 ? Number(opts.maxChars) : FIGUREN_BLOCK_DEFAULT_MAX_CHARS;
-  const withTools = opts.detailTools === true;
+  const m = toolMentions(opts.toolNames);
+  const withTools = opts.detailTools === true && m.has('get_figure_profile');
 
   // Mit Detail-Werkzeugen (agentischer Buch-Chat) nie die Volldossiers: Szenen,
   // Schauplätze, Beziehungen und Lebensereignisse aller Figuren stünden sonst in
@@ -71,7 +73,7 @@ export function buildFigurenBlock(figuren, opts = {}) {
   }
 
   const hint = withTools
-    ? 'Details je Figur (Beziehungen, Szenen, Schauplätze, Lebensereignisse) über `get_figure_profile` / `get_figure_relations` nachladen.'
+    ? `Details je Figur (Beziehungen, Szenen, Schauplätze, Lebensereignisse) über ${m.list(['get_figure_profile', 'get_figure_relations'], ' / ')} nachladen.`
     : 'Die Detaillisten je Figur sind hier nicht enthalten — schliesse aus ihrem Fehlen nichts.';
   const lead = [
     FIGUREN_HEAD,
@@ -186,7 +188,9 @@ export function buildWeltfaktenBlock(welt, opts = {}) {
     const parts = [...lead];
     if (rest > 0) {
       parts.push(`(NUR ${shown.length} von ${rows.length} Fakten aufgeführt — ${rest} weitere fehlen hier. `
-        + 'Die Liste ist NICHT der vollständige Kanon; fehlt ein Fakt, frage `list_world_facts` mit kategorie/subjekt.)');
+        + (toolMentions(opts.toolNames).has('list_world_facts')
+          ? 'Die Liste ist NICHT der vollständige Kanon; fehlt ein Fakt, frage `list_world_facts` mit kategorie/subjekt.)'
+          : 'Die Liste ist NICHT der vollständige Kanon — schliesse aus dem Fehlen eines Fakts nichts.)'));
     }
     return [...parts, ...shown].join('\n');
   };
@@ -374,53 +378,55 @@ export function buildBookChatAgentSystemPrompt(bookName, figuren, review, system
   // darf der Prompt es auch nicht empfehlen, sonst verbrennt das Modell eine Runde an
   // einem Werkzeug, das es nicht hat.
   const semantic = opts.semantic !== false;
-  // opts.toolNames: die TATSÄCHLICH angebotenen Werkzeuge (Slim-Satz bei lokalen
-  // Providern). Dieselbe Regel wie bei `semantic`, nur für alle übrigen: was nicht
-  // angeboten wird, darf der Prompt nicht empfehlen. Ohne Angabe: alles erlaubt.
-  const offered = opts.toolNames ? new Set(opts.toolNames) : null;
-  const has = (name) => !offered || offered.has(name);
-  // Zeile nur aufnehmen, wenn mindestens eines der genannten Werkzeuge angeboten wird.
-  const ifAny = (names, line) => (names.some(has) ? [line] : []);
+  // opts.toolNames: die TATSÄCHLICH angebotenen Werkzeuge (Slim-Satz, fehlender
+  // Endpunkt, keine Daten im Buch). Was nicht angeboten wird, darf der Prompt nicht
+  // nennen — jede Werkzeug-Erwähnung geht durch toolMentions. Ohne Angabe: alles.
+  const m = toolMentions(semantic
+    ? opts.toolNames
+    : (opts.toolNames || CHAT_TOOLS.map(t => t.name)).filter(n => n !== 'search_similar'));
+  const stage2 = m.list(['search_similar', 'search_passages', 'get_figure_profile', 'get_figure_mentions', 'get_timeline', 'quote_passage']);
+  const stage3 = m.list(['get_pages', 'get_chapter_text']);
   const parts = [
     systemOverride ?? SYSTEM_BOOK_CHAT,
     '',
     `Buch: «${bookName}»`,
+    ...(opts.erzaehlweise ? [opts.erzaehlweise] : []),
     '',
     'Du hast Zugriff auf Werkzeuge, die Fragen über das gesamte Buch aus einem vorberechneten Index beantworten. Nutze sie, bevor du antwortest, wann immer die Frage gemessen oder aus konkreten Textstellen belegt werden kann:',
-    ...ifAny(['count_pronouns', 'get_stil_metrics'], '- Häufigkeit, Verteilung, Erzählperspektive → count_pronouns, get_stil_metrics'),
-    ...ifAny(['list_chapters'], '- Aufbau, Reihenfolge, was steht vor/nach X, in welchem Teil/Unterkapitel → list_chapters (Gliederung in Lesereihenfolge)'),
-    ...ifAny(['get_figure_mentions'], '- Figurenverteilung, erstes Auftreten → get_figure_mentions, list_chapters'),
-    ...ifAny(['search_passages', 'quote_match'], `- Konkrete Textstellen oder Zitate → search_passages, quote_match${has('quote_passage') ? ', quote_passage' : ''}`),
-    ...(semantic && has('search_similar') ? ['- Stellen nach SINN oder Eigenschaft (Stilmittel, Stimmung, Motiv, Umschreibung) → search_similar'] : []),
-    ...ifAny(['get_chapter_text'], '- Ganze Kapitel lesen → get_chapter_text (statt list_chapters→get_pages)'),
-    ...ifAny(['get_figure_profile', 'get_figure_relations'], '- Wer ist X, wer kennt wen → get_figure_profile, get_figure_relations'),
-    ...ifAny(['get_lektorat_hotspots', 'get_lektorat_findings'], '- Lektorat: Übersicht → get_lektorat_hotspots, konkrete Findings → get_lektorat_findings'),
-    ...ifAny(['get_reviews'], '- Kapitel-Qualität, Stärken/Schwächen → get_reviews'),
-    ...ifAny(['get_edit_status'], '- Wie weit ist das Buch/Kapitel, was ist noch Rohfassung, was wurde seit «fertig» wieder angefasst, woran als Nächstes arbeiten → get_edit_status (Selbsteinschätzung des Autors, kein Qualitätsurteil)'),
-    ...ifAny(['get_plot_board'], '- Geplante Handlung / Beat-Board / was noch nicht geschrieben ist → get_plot_board'),
-    ...ifAny(['get_motifs', 'get_motif_occurrences'], '- Geplante Themen & Motive, Soll/Ist-Abgleich (welche Motive fehlen im Text) → get_motifs, get_motif_occurrences'),
-    ...ifAny(['list_research_items', 'read_research_item'], '- Recherche-Material des Autors (gesammelte Fakten, Zitate, Quellen; was zu einem Kapitel gehört, was noch nicht eingearbeitet ist; stimmt der Text mit dem Gesammelten überein?) → list_research_items, read_research_item'),
+    ...m.route('Häufigkeit, Verteilung, Erzählperspektive', ['get_stil_metrics']),
+    ...m.route('Aufbau, Reihenfolge, was steht vor/nach X, in welchem Teil/Unterkapitel (Gliederung in Lesereihenfolge)', ['list_chapters']),
+    ...m.route('Figurenverteilung, erstes und letztes Auftreten', ['get_figure_mentions']),
+    ...m.route('Konkrete Textstellen oder Zitate', ['search_passages', 'quote_passage']),
+    ...m.route('Stellen nach SINN oder Eigenschaft (Stilmittel, Stimmung, Motiv, Umschreibung)', ['search_similar']),
+    ...m.route('Ganze Kapitel lesen', ['get_chapter_text']),
+    ...m.route('Wer ist X, wer kennt wen', ['get_figure_profile', 'get_figure_relations']),
+    ...m.route('Lektorat: Übersicht (view=hotspots), dann Einzelbefunde (view=findings)', ['get_lektorat']),
+    ...m.route('Kapitel-Qualität, Stärken/Schwächen', ['get_reviews']),
+    ...m.route('Wie weit ist das Buch/Kapitel, was ist noch Rohfassung, was wurde seit «fertig» wieder angefasst, woran als Nächstes arbeiten', ['get_edit_status'], ' (Selbsteinschätzung des Autors, kein Qualitätsurteil)'),
+    ...m.route('Geplante Handlung / Beat-Board / was noch nicht geschrieben ist', ['get_plot_board']),
+    ...m.route('Geplante Themen & Motive, Soll/Ist-Abgleich (welche Motive fehlen im Text), Fundstellen eines Motivs', ['get_motifs']),
+    ...m.route('Recherche-Material des Autors (gesammelte Fakten, Zitate, Quellen; was zu einem Kapitel gehört, was noch nicht eingearbeitet ist; stimmt der Text mit dem Gesammelten überein?)', ['list_research_items', 'read_research_item', 'search_research_passages']),
     '',
     'Rufe Werkzeuge an, bevor du vermutest.',
     'KOSTEN-LEITER — nimm die billigste Quelle, die die Frage beantwortet, und HÖRE DANN AUF:',
     '  Stufe 1 (gratis, schon da): der ERST-KONTEXT direkt vor der aktuellen Frage (in derselben Nachricht; semantisch nächste Passagen zu ihr) plus die Blöcke FIGUREN, WELT-FAKTEN und BUCHBEWERTUNG. Beantwortet das die Frage, rufst du SOFORT `final_answer` — ohne ein einziges Recherche-Werkzeug.',
-    `  Stufe 2 (billig, gezielt): ${semantic && has('search_similar') ? '`search_similar` (Sinn), ' : ''}\`search_passages\` (Wortlaut), \`get_figure_profile\`, \`get_figure_mentions\`, \`get_timeline\`, \`quote_match\`. Diese liefern Passagen, keine Volltexte.`,
-    '  Stufe 3 (teuer, Volltext): `get_pages`, `get_chapter_text`. Nur wenn die Frage den ZUSAMMENHANG längerer Passagen braucht — Zusammenfassen, Aufbau/Dramaturgie eines Kapitels, Auswahl über den ganzen Text.',
+    ...(stage2 ? [`  Stufe 2 (billig, gezielt): ${stage2}. Diese liefern Passagen, keine Volltexte.`] : []),
+    ...(stage3 ? [`  Stufe 3 (teuer, Volltext): ${stage3}. Nur wenn die Frage den ZUSAMMENHANG längerer Passagen braucht — Zusammenfassen, Aufbau/Dramaturgie eines Kapitels, Auswahl über den ganzen Text.`] : []),
     'Schmale Faktenfragen — Alter, Datum, Beruf, Wohnort, Verwandtschaft, «wann hat X …», «wie heisst Y» — werden auf Stufe 1 oder 2 beantwortet. Lade dafür NIE ein ganzes Kapitel und nie das ganze Buch: ein einzelner Fakt steht in einer Passage, nicht in einem Kapitel.',
-    'STRATEGIE — Suche vs. Lektüre: `search_passages` ist Stichwort-Suche („wo kommt das bekannte Wort/der Name X vor?"). Stellen nach einer EIGENSCHAFT oder Bedeutung haben KEINE Stichwort-Signatur — rate dann NICHT mit search_passages nach Wörtern.'
-      + (semantic && has('search_similar')
+    ...m.ifAll(['search_passages'], 'STRATEGIE — Suche vs. Lektüre: `search_passages` ist Stichwort-Suche („wo kommt das bekannte Wort/der Name X vor?"). Stellen nach einer EIGENSCHAFT oder Bedeutung haben KEINE Stichwort-Signatur — rate dann NICHT mit search_passages nach Wörtern.'
+      + (m.has('search_similar')
         ? ' Beispiele für ein Stilmittel, eine Stimmung, ein Motiv, „Stellen über X" in eigenen Worten → ZUERST `search_similar` mit grossem `snippet_chars` (1200–1500); die Ausschnitte sind meist schon die Belege.'
-        : '')
-      + ' Musst du über den GANZEN Text auswählen oder vollständig sein (lustigste/schönste/spannendste Stelle, ALLE Stellen zu X, Zusammenfassung, Ton des Buchs), lies den Text selbst: lade ganze Kapitel via `get_chapter_text` (mehrere gebündelt in einer Runde) und wähle aus eigener Lektüre aus. Bei kleinen/mittleren Büchern, die in den Kontext passen (siehe `hint` aus list_chapters), lade gleich das ganze Buch statt es in vielen Runden zu durchforsten. Das gilt NUR für Aufgaben, die den ganzen Text sichten müssen. Dass ein Buch in den Kontext passt, ist kein Grund, es für eine einzelne Faktenfrage zu laden.',
-    'Wörtliche Zitate: IMMER über quote_match (Pattern → Stelle) oder quote_passage (offset+length) holen, NIE aus Erinnerung paraphrasieren. Beim final_answer-Call jedes wörtliche Zitat in `zitate` mitliefern — Server validiert.',
-    `Maximal ${maxToolIter} Werkzeug-Iterationen pro Antwort (eine Iteration = eine Runde, NICHT ein Tool-Call). Halte Werkzeug-Argumente präzise und kurz. Die Iterationen sind knapp — verschwende sie nicht mit seriellem Stichwort-Raten, wenn ein paar gebündelte get_chapter_text-Calls den ganzen relevanten Text in einer Runde liefern.`,
-    'WICHTIG — bündle Werkzeuge: Rufe in EINER Runde alle Werkzeuge parallel auf, die nicht voneinander abhängen, statt eines nach dem anderen. Bei breiten Aufgaben (z.B. „Zitate/Stellen aus vielen Kapiteln") gleich mehrere search_passages/get_chapter_text gleichzeitig absetzen. Erst danach in der nächsten Runde zitieren/auswerten. So reichen die Iterationen auch für umfangreiche Recherchen.',
+        : '')),
+    ...m.ifAll(['get_chapter_text', 'list_chapters'], 'Musst du über den GANZEN Text auswählen oder vollständig sein (lustigste/schönste/spannendste Stelle, ALLE Stellen zu X, Zusammenfassung, Ton des Buchs), lies den Text selbst: lade ganze Kapitel via `get_chapter_text` (mehrere gebündelt in einer Runde) und wähle aus eigener Lektüre aus. Bei kleinen/mittleren Büchern, die in den Kontext passen (siehe `hint` aus list_chapters), lade gleich das ganze Buch statt es in vielen Runden zu durchforsten. Das gilt NUR für Aufgaben, die den ganzen Text sichten müssen. Dass ein Buch in den Kontext passt, ist kein Grund, es für eine einzelne Faktenfrage zu laden.'),
+    ...m.ifAll(['quote_passage'], 'Wörtliche Zitate: IMMER über quote_passage holen (pattern → Stelle, oder offset+length aus einem Treffer), NIE aus Erinnerung paraphrasieren. Beim final_answer-Call jedes wörtliche Zitat in `zitate` mitliefern — Server validiert.'),
+    `Maximal ${maxToolIter} Werkzeug-Iterationen pro Antwort (eine Iteration = eine Runde, NICHT ein Tool-Call). Halte Werkzeug-Argumente präzise und kurz. Die Iterationen sind knapp — verschwende sie nicht mit seriellem Stichwort-Raten, wenn wenige gebündelte Volltext-Aufrufe den ganzen relevanten Text in einer Runde liefern.`,
+    'WICHTIG — bündle Werkzeuge: Rufe in EINER Runde alle Werkzeuge parallel auf, die nicht voneinander abhängen, statt eines nach dem anderen. Bei breiten Aufgaben (z.B. „Zitate/Stellen aus vielen Kapiteln") gleich mehrere Such- oder Lese-Aufrufe gleichzeitig absetzen. Erst danach in der nächsten Runde zitieren/auswerten. So reichen die Iterationen auch für umfangreiche Recherchen.',
     '',
   ];
 
   // Werkzeuge sind hier der Ausweg aus dem Budget: was der Block nicht trägt, holt
   // das Modell bei Bedarf gezielt via get_figure_profile / get_figure_relations.
-  const figBlock = buildFigurenBlock(figuren, { maxChars: opts.figurenMaxChars, detailTools: true });
+  const figBlock = buildFigurenBlock(figuren, { maxChars: opts.figurenMaxChars, detailTools: true, toolNames: opts.toolNames });
   if (figBlock) {
     parts.push(figBlock.text);
     parts.push('');
@@ -428,7 +434,7 @@ export function buildBookChatAgentSystemPrompt(bookName, figuren, review, system
 
   // Welt-Fakten: buch-stabil, darum hier im gecachten Block 1 und NICHT im
   // Erst-Kontext (der wechselt pro Frage und wird jede Iteration neu bezahlt).
-  const weltBlock = buildWeltfaktenBlock(opts.welt, { maxChars: opts.weltfaktenMaxChars });
+  const weltBlock = buildWeltfaktenBlock(opts.welt, { maxChars: opts.weltfaktenMaxChars, toolNames: opts.toolNames });
   if (weltBlock) {
     parts.push(weltBlock.text);
     parts.push('');
@@ -470,8 +476,8 @@ export function buildBookChatAgentSystemPrompt(bookName, figuren, review, system
 // Erst-Kontext-Block (vor der Frage in deren User-Nachricht): ./chat-pre-context.js.
 export { buildBookChatPreContext } from './chat-pre-context.js';
 
-// Werkzeug-Definitionen für den Agentic Buch-Chat: docs/buchchat-tools.md.
-export { BOOK_CHAT_TOOLS, BOOK_CHAT_SLIM_TOOL_NAMES } from './book-chat-tools.js';
+// Werkzeuge des agentischen Buch-Chats: Lese-Werkzeuge aus dem gemeinsamen
+// Katalog (./chat-tools/), Ausgabe in ./book-chat-output.js. Übersicht: docs/chat-tools.md.
 
 
 // Rückgabe: Array von System-Cache-Blöcken (für callAIChat → Claude separate

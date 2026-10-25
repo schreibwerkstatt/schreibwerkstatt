@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { computeDrift } = require('../../lib/snapshot-drift.js');
+const { diffSnapshots } = await import('../../public/js/book-snapshot-diff.js');
 
 // buildBookJson-Format: { book:{settings}, tree:[{type:'page',srcId,html}…] }
 function content(pages, settings = null) {
@@ -53,11 +54,8 @@ test('neue + entfernte Seiten werden gezaehlt und fliessen in die Drift', () => 
 
 test('Publikations-Aenderung macht empfehlenswert (auch ohne Textdrift)', () => {
   const c = content([{ id: 1, html: '<p>unveraendert</p>' }]);
-  const d = computeDrift({
-    baselineContent: c, currentContent: c,
-    baselinePubMeta: { isbn: '111', author_name: 'A' },
-    currentPubMeta: { isbn: '222', author_name: 'A' },
-  });
+  // Keys kommen vom Aufrufer (book-snapshot-diff.js#diffPublication).
+  const d = computeDrift({ baselineContent: c, currentContent: c, publicationFields: ['isbn'] });
   assert.equal(d.text.changePct, 0);
   assert.equal(d.publicationChanged, true);
   assert.deepEqual(d.publicationFields, ['isbn']);
@@ -105,4 +103,38 @@ test('0/null/"" in Einstellungen zaehlen nicht als Aenderung', () => {
     currentSettings: { daily_goal_chars: '0', schauplatz_land: '' },
   });
   assert.equal(d.settingsChanged, false);
+});
+
+test('Gliederungs-Aenderung ohne Textdrift macht empfehlenswert', () => {
+  const base = { book: {}, tree: [
+    { type: 'chapter', srcId: 10, name: 'A', children: [
+      { type: 'page', srcId: 1, name: 'a', html: '<p>eins</p>' },
+      { type: 'page', srcId: 2, name: 'b', html: '<p>zwei</p>' },
+    ] },
+  ] };
+  const cur = { book: {}, tree: [
+    { type: 'chapter', srcId: 10, name: 'A', children: [
+      { type: 'page', srcId: 2, name: 'b', html: '<p>zwei</p>' },
+      { type: 'page', srcId: 1, name: 'a', html: '<p>eins</p>' },
+    ] },
+  ] };
+  const d = computeDrift({
+    baselineContent: base, currentContent: cur,
+    structureSummary: diffSnapshots(base, cur).summary,
+  });
+  assert.equal(d.text.changePct, 0);
+  assert.equal(d.structure.reorderedPages, 1);
+  assert.equal(d.structure.changed, true);
+  assert.equal(d.worthwhile, true);
+});
+
+test('Grosser Abschnitt: satzweiser Diff statt Wort-Diff, gleiche Groessenordnung', () => {
+  const sentences = Array.from({ length: 50 }, (_, i) => `Satz nummer ${i} hat fuenf Woerter.`);
+  const base = content([{ id: 1, html: `<p>${sentences.join(' ')}</p>` }]);
+  const changed = sentences.slice(); changed[10] = 'Ein ganz anderer Satz steht hier.';
+  const cur = content([{ id: 1, html: `<p>${changed.join(' ')}</p>` }]);
+  const exact = computeDrift({ baselineContent: base, currentContent: cur });
+  const coarse = computeDrift({ baselineContent: base, currentContent: cur, maxWordDiff: 10 });
+  assert.ok(coarse.text.changedWords >= exact.text.changedWords, 'satzweise zaehlt mindestens so viel');
+  assert.ok(coarse.text.changedWords <= 14, `nur der geaenderte Satz: ${coarse.text.changedWords}`);
 });

@@ -46,6 +46,25 @@ test('recherche-chat: Toggle schaltet das Panel, Eingabefeld + Close arbeiten na
   await textarea.fill('Recherche-Testeingabe');
   await expect(textarea).toHaveValue('Recherche-Testeingabe');
 
+  // Werkzeug-Verlauf: dasselbe Fragment wie im Buch-Chat (chat-tool-log); die
+  // serverseitige Anthropic-Suche steht als eigene Zeile, der alte
+  // Suchbegriffe-Block entfällt dann.
+  await page.waitForFunction(() => window.Alpine.$data(document.querySelector('#recherche-card')).researchChatSessionId != null);
+  await page.evaluate(() => {
+    window.Alpine.$data(document.querySelector('#recherche-card')).researchChatMessages = [{
+      id: 987656, role: 'assistant', content: 'Antwort.',
+      context_info: { web_searches: 1, web_queries: ['Zuger Attentat'], tool_calls: [
+        { name: 'web_search', server: true, ok: true, iter: 1, input: { query: 'Zuger Attentat' },
+          view: { subject: [{ t: 'q', v: 'Zuger Attentat' }], result: { key: 'chat.toolResult.hits', params: { n: 8 } } } },
+        { name: 'final_answer', ok: true, iter: 2 },
+      ] },
+    }];
+  });
+  const log = page.locator('#recherche-card .research-chat .chat-tool-log');
+  await log.locator('.collapsible-toggle').click();
+  await expect(log.locator('.chat-tool-log-row')).toHaveText(/Im Web gesucht\s*«Zuger Attentat»\s*8 Treffer/);
+  await expect(page.locator('#recherche-card .research-chat-queries')).toHaveCount(0);
+
   // Close-Icon im Panel-Head legt researchChatOpen=false → Panel zu.
   // Anker ist die generische `.card-section-head` (card-blocks.css) INNERHALB
   // des Panels — die feature-eigene `.research-chat-head` gibt es nicht mehr.

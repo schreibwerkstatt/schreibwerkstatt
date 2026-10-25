@@ -1,0 +1,56 @@
+<!--
+  Werkzeug-Verlauf unter einer Assistant-Antwort der agentischen Chats. Per
+  String-Include in die Nachrichten-Schleifen von book-chat-msg-extras.html
+  (Buch-Chat), recherche-chat.html (Recherche-Chat), plot-chat.html (Plot-Chat)
+  und ideen-chat.html (Ideen-Chat) sowie unter das Antwort-Skelett eines laufenden
+  Turns (`msg._live`, offen); Scope: `msg`. Einträge aus `_toolLog(msg)`
+  (chat-base.js → chat/tool-log.js): Vorab-Kontext, Rundenköpfe mit Notiz des
+  Modells, Aufrufe (ab drei gleichen pro Runde gebündelt), Abschluss.
+-->
+<template x-if="msg.role === 'assistant' && _toolLog(msg)">
+  <div x-data="collapsible(!!msg._live)" class="chat-tool-log" :class="{ 'chat-tool-log--live': msg._live }">
+    <button type="button" class="collapsible-toggle" x-bind="trigger">
+      <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+      <span x-text="msg._live ? $app.t('chat.toolsLive', { n: _toolLog(msg).rows.length }) : _toolLog(msg).heading"></span>
+    </button>
+    <div x-bind="panel" x-cloak class="chat-tool-log-panel">
+      <p class="chat-tool-log-summary" x-show="_toolLog(msg).summary" x-text="_toolLog(msg).summary"></p>
+      <ol class="chat-tool-log-list">
+        <template x-for="(item, ii) in _toolLog(msg).items" :key="ii">
+          <li :class="'chat-tool-log-item chat-tool-log-item--' + item.kind">
+            <template x-if="item.kind === 'pre' || item.kind === 'final'">
+              <span :class="item.bad ? 'chat-tool-log-final--bad' : null" x-text="item.text"></span>
+            </template>
+            <template x-if="item.kind === 'round'">
+              <div class="chat-tool-log-round">
+                <span class="chat-tool-log-round-title" x-text="item.text"></span>
+                <span class="chat-tool-log-round-tokens" x-show="item.tokens" x-text="item.tokens"></span>
+                <span class="chat-tool-log-note" x-show="item.note" x-text="item.note"></span>
+              </div>
+            </template>
+            <template x-for="row in (item.kind === 'row' ? [item] : [])" :key="ii">
+              <!-- @include chat-tool-log-row -->
+            </template>
+            <template x-if="item.kind === 'group'">
+              <div x-data="collapsible()" class="chat-tool-log-group" :class="{ 'chat-tool-log-group--failed': item.failed }">
+                <button type="button" class="collapsible-toggle chat-tool-log-group-toggle" x-bind="trigger">
+                  <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+                  <span class="chat-tool-log-label" x-text="item.label"></span>
+                  <span class="chat-tool-log-quote" x-show="item.preview" x-text="item.preview"></span>
+                  <span class="chat-tool-log-result" x-show="item.result" x-text="item.result"></span>
+                </button>
+                <ol x-bind="panel" x-cloak class="chat-tool-log-list chat-tool-log-children">
+                  <template x-for="(row, ci) in item.children" :key="ci">
+                    <li class="chat-tool-log-item chat-tool-log-item--row">
+                      <!-- @include chat-tool-log-row -->
+                    </li>
+                  </template>
+                </ol>
+              </div>
+            </template>
+          </li>
+        </template>
+      </ol>
+    </div>
+  </div>
+</template>

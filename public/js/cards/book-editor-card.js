@@ -10,6 +10,7 @@
 //   head.js    — Titel-Kopf je Beitrag (publizistische Bücher)
 //   blocks.js  — Blockliste, ohne Netz aus dem Content-Cache
 //   drafts.js  — lokale Entwürfe, Live-Markierung, Online-Retry
+//   activation.js — Render-Sync der Blöcke, Klick-aktiviert-Block
 // Kommentar-Leiste: editor/book-editor-comments.js.
 //
 // Click-aktiviert-Block: Default contenteditable=false; Klick setzt aktive
@@ -25,22 +26,19 @@ import { bookEditorConflictMethods } from './book-editor/conflict.js';
 import { bookEditorHistoryMethods } from './book-editor/history.js';
 import { bookEditorHeadMethods } from './book-editor/head.js';
 import { bookEditorDraftMethods } from './book-editor/drafts.js';
+import { bookEditorActivationMethods } from './book-editor/activation.js';
 import { buildBlocksFromPages, fetchBookContents } from './book-editor/blocks.js';
 import { draftsLoaded } from '../editor/draft-storage.js';
-import { handleEditorPaste, handleEditorCopy, handleEditorCut } from '../editor/shared/paste.js';
 import { createAutosaveTimers } from '../editor/shared/autosave.js';
 import { createTimerBag } from '../editor/shared/timers.js';
-import { renderDiagramsIn, clearRenderedDiagrams } from '../diagram/mermaid-view.js';
-import { stampCaptionNumbers, clearCaptionNumbers } from '../xrefs/caption-preview.js';
 import { EVT } from '../events.js';
 import { tErrorRaw } from '../i18n.js';
 import { registerBusySource } from '../app/boot/update-policy.js';
+import { memoMethods } from './card-memo.js';
 
 // Re-Export für Tests/Konsumenten: die Facade ist der Einstieg.
 export { applySaveOutcome } from './book-editor/save.js';
 export { buildBlocksFromPages };
-
-const CLIPBOARD_HANDLERS = { paste: handleEditorPaste, cut: handleEditorCut };
 
 // Zustand, der an ein Buch bzw. eine Ansicht gebunden ist. EINE Deklaration für
 // Initial-State und `resetState` des Lifecycles — zwei Listen driften sonst
@@ -112,7 +110,10 @@ export function registerBookEditorCard() {
     _loadToken: 0,            // Re-Entry-Guard gegen überholende _load-Responses
     _pendingMousedown: null,
     _findRecomputeTimer: null,
+    _findAnchor: null,        // Caret beim Öffnen der Suche (book-editor/find.js)
+    _switching: false,        // Buch-/Ansichtswechsel läuft (_resetSession) — kein Bearbeiten
     _outlineObserver: null,
+    _diagramObserver: null,   // Diagramme erst nahe dem Sichtbereich rendern (activation.js)
     _commentLoadingBookId: null,
     _commentRecomputeRaf: null,
     _commentLayoutRaf: null,
@@ -158,6 +159,12 @@ export function registerBookEditorCard() {
       const unregisterBusy = registerBusySource(() => this.dirtyCount > 0 || this.savingCount > 0);
       this._lifecycle.signal.addEventListener('abort', unregisterBusy, { once: true });
 
+      // Karte zu: Ungespeichertes jetzt speichern, nicht erst nach dem Autosave-
+      // Fenster — der User hat den Bucheditor verlassen.
+      this.$watch(() => window.__app?.showBookEditorCard, (shown) => {
+        if (!shown) this._saveDirtyNow();
+      });
+
       // Cmd/Ctrl+F-Routing via editor-find-card: dispatcht hierher, wenn die
       // Karte sichtbar ist.
       window.addEventListener(EVT.BOOK_EDITOR_OPEN_FIND, () => {
@@ -190,6 +197,7 @@ export function registerBookEditorCard() {
       this._savedFlash?.clearAll();
       if (this._findRecomputeTimer) { clearTimeout(this._findRecomputeTimer); this._findRecomputeTimer = null; }
       this._teardownOutlineObserver();
+      this._teardownDiagramObserver();
       this._railCancelSchedule();
       this._teardownCommentLayout();
       this._clearCommentHL();
@@ -208,7 +216,16 @@ export function registerBookEditorCard() {
     // ersetzt haben.
     async _resetSession({ reload }) {
       const token = ++this._loadToken;   // überholt ein laufendes _load
-      const lost = await this._settleBlocks();
+      // Während des Sicherns nicht weiter bearbeiten: der Stream zeigt noch das
+      // alte Buch, und was jetzt getippt würde, fehlte in der Bilanz unten.
+      this._switching = true;
+      this._deactivateBlock();
+      let lost;
+      try {
+        lost = await this._settleBlocks();
+      } finally {
+        if (token === this._loadToken) this._switching = false;
+      }
       // Ungespeichert, aber als Entwurf gesichert: die Outbox sendet nach.
       const unsafe = lost.filter(b => b.draftFailed).length;
       if (lost.length > 0) {
@@ -221,6 +238,7 @@ export function registerBookEditorCard() {
       this._savedFlash.clearAll();
       if (this._findRecomputeTimer) { clearTimeout(this._findRecomputeTimer); this._findRecomputeTimer = null; }
       this._teardownOutlineObserver();
+      this._teardownDiagramObserver();
       clearHighlights();
       this._clearCommentHL();
       this._railCancelSchedule();
@@ -270,7 +288,13 @@ export function registerBookEditorCard() {
       this.blocks = [];
       this.activePageId = null;
       this._historyDropAll();
+      this._teardownDiagramObserver();
       this._memos = {};
+      // Treffer zeigen auf die alten Block-Knoten — nach dem Neuaufbau neu suchen.
+      this.findMatches = [];
+      this.findIndex = -1;
+      this._findAnchor = null;
+      clearHighlights();
       try {
         const data = await fetchBookContents(bookId);
         if (token !== this._loadToken) return;
@@ -289,6 +313,7 @@ export function registerBookEditorCard() {
         this.$nextTick(() => {
           this._initOutlineObserver();
           window.__app?._bindScrollFade?.(this.$root.querySelector('.book-editor-outline'));
+          if (this.findOpen) this.recomputeFindMatches();
         });
         // Verankerte Leser-Kommentare des Buchs laden + über den Stream auflösen.
         this._loadBookComments();
@@ -308,19 +333,9 @@ export function registerBookEditorCard() {
     ...bookEditorHistoryMethods,
     ...bookEditorHeadMethods,
     ...bookEditorDraftMethods,
-
-    // Cache hit nur, wenn ALLE Source-Refs (deps) identisch zur letzten Compute
-    // sind. Reset über this._memos = {} im Lade-Pfad.
-    _memo(key, deps, compute) {
-      const memos = (this._memos ||= {});
-      const hit = memos[key];
-      if (hit && hit.deps.length === deps.length && hit.deps.every((d, i) => d === deps[i])) {
-        return hit.value;
-      }
-      const value = compute();
-      memos[key] = { deps: [...deps], value };
-      return value;
-    },
+    ...bookEditorActivationMethods,
+    // `_memo(key, deps, fn)`; Reset über this._memos = {} im Lade-Pfad.
+    ...memoMethods,
 
     // pageId → Page-Block. Index statt blocks.find() an fünf Stellen: bei einem
     // Buch mit hunderten Blöcken läuft der Linearscan sonst auch pro Save-
@@ -355,195 +370,6 @@ export function registerBookEditorCard() {
       let n = 0;
       for (const id of this.saveAllIds) if (!this._blockById(id)?.dirty) n++;
       return n;
-    },
-
-    // ── Rendering-Sync ────────────────────────────────────────────────────
-    // Initialer Mount-Hook (x-init). Setzt rev-Marker + Initial-Body imperativ.
-    _mountBlockEl(el, block) {
-      if (!el) return;
-      el.innerHTML = block.html;
-      el.dataset.rev = String(block._rev || 0);
-      this._syncBlockDiagrams(el, block);
-      this._syncBlockCaptionNumbers(el, block);
-    },
-
-    // Diagramme im Stream: inaktive Blöcke zeigen das Bild, der aktive den
-    // Quelltext.
-    //
-    // Warum der aktive Block das SVG NICHT behalten darf: `_onBlockInput` liest
-    // `el.innerHTML` in `block.html` — ein gerenderter Fremdknoten im aktiven
-    // Block landete beim ersten Tastendruck im Manuskript. Der Quelltext ist die
-    // Wahrheit, das Bild ein Artefakt (siehe public/js/diagram/mermaid-html.js).
-    //
-    // Bearbeitet wird der Code hier nur als Text — die geführte Eingabe mit
-    // Vorschau ist notebook-only (harte Regel „Editor-Spezifikation").
-    _syncBlockDiagrams(el, block) {
-      if (!el) return;
-      if (this.activePageId === block.pageId) {
-        clearRenderedDiagrams(el);
-        return;
-      }
-      renderDiagramsIn(el, { errorLabel: window.__app?.t?.('editor.diagram.invalid') })
-        .catch(() => {});
-    },
-
-    // Nummern in Abbildungslegenden und Tabellenbeschriftungen („Abb. 3.2: ").
-    // Dieselbe Mechanik wie beim Diagramm und aus demselben Grund: das Badge ist
-    // ein Fremdknoten im Block-DOM, und sobald der Block aktiv wird, gehört
-    // dieses DOM dem User und läuft durch den Save-Pfad. Der aktive Block
-    // bekommt deshalb seinen nackten Legendentext zurück, alle übrigen zeigen
-    // die Nummer.
-    //
-    // Dass ein Badge auch bei einem Fehlgriff nicht in `pages.content` landen
-    // kann, sichern zwei Bereinigungsschichten (editor/shared/html-clean.js für
-    // den Dirty-Vergleich, lib/html-clean.js am Schreib-Chokepoint) — hier geht
-    // es darum, dass der User im aktiven Block keinen Text vor sich hat, den er
-    // nicht geschrieben hat.
-    _syncBlockCaptionNumbers(el, block) {
-      if (!el) return;
-      if (this.activePageId === block.pageId) {
-        clearCaptionNumbers(el);
-        return;
-      }
-      stampCaptionNumbers(el, window.Alpine?.store('nav')?.selectedBookId).catch(() => {});
-    },
-
-    // Schreibt block.html in DOM-Container; läuft NICHT auf dem aktiven Block
-    // (DOM gehört dort dem User). Per-Block-_rev triggert Re-Hydrate bei
-    // externen Mutationen (Find/Replace, Reload).
-    _maybeRehydrate(el, block) {
-      if (!el) return;
-      if (this.activePageId === block.pageId) return;
-      const seen = parseInt(el.dataset.rev || '-1', 10);
-      if (seen === block._rev) return;
-      // Trusted Source: HTML kommt vom Content-Store (server-cleant).
-      el.innerHTML = block.html;
-      el.dataset.rev = String(block._rev);
-      this._syncBlockDiagrams(el, block);
-      this._syncBlockCaptionNumbers(el, block);
-    },
-
-    // ── Klick-aktiviert-Block ─────────────────────────────────────────────
-    // Alle Block-Handler hängen im Template unter x-if="block.kind === 'page'"
-    // — kein kind-Guard nötig (Invariante 2 in docs/book-editor.md).
-    _onBlockMousedown(block, event) {
-      if (this.activePageId === block.pageId) return;
-      this._pendingMousedown = { x: event.clientX, y: event.clientY, pageId: block.pageId };
-    },
-
-    // Schreibrecht am Buch (editor/owner; unbekannte Rolle = Legacy-Fallback
-    // erlaubt). Lektor und Viewer lesen und suchen im Stream, aktivieren aber
-    // keinen Block — sonst tippen sie in einen Block, dessen Save der Server mit
-    // 403 abweist. Nur UX: der PUT-Pfad prüft selbst.
-    _canEdit() {
-      return window.__app?.canEdit?.() !== false;
-    },
-
-    async activateBlock(block) {
-      if (this.activePageId === block.pageId) return;
-      if (!this._canEdit()) return;
-      const prevId = this.activePageId;
-      if (prevId != null) {
-        this._historyOnDeactivate(prevId);
-        const prev = this._blockById(prevId);
-        if (prev?.dirty) this._enqueueSave(prevId);
-      }
-      this.activePageId = block.pageId;
-      this.$nextTick(() => {
-        // Verlassener Block bekommt sein Bild zurück, der neue seinen Quelltext.
-        // Reihenfolge: erst räumen, dann Caret setzen — das Entfernen des SVG
-        // verschiebt die Höhe.
-        if (prevId != null) {
-          const prevEl = this.$root.querySelector(`[data-book-editor-page="${prevId}"]`);
-          const prevBlock = this._blockById(prevId);
-          if (prevEl && prevBlock) {
-            this._syncBlockDiagrams(prevEl, prevBlock);
-            this._syncBlockCaptionNumbers(prevEl, prevBlock);
-          }
-        }
-        // $root, nicht $el: in einer aus @click gerufenen Methode zeigt $el auf
-        // das auslösende Element (den Block-Body), $root auf die Karten-Wurzel.
-        const el = this.$root.querySelector(`[data-book-editor-page="${block.pageId}"]`);
-        if (!el) return;
-        clearRenderedDiagrams(el);
-        clearCaptionNumbers(el);
-        this._historyOnActivate(block.pageId, el);
-        el.focus({ preventScroll: true });
-        const md = this._pendingMousedown?.pageId === block.pageId ? this._pendingMousedown : null;
-        this._pendingMousedown = null;
-        this._placeCaret(el, md);
-      });
-    },
-
-    // Caret nach der Aktivierung setzen. Beim Mousedown war der Block noch
-    // nicht editierbar — der Browser platziert also weder Fokus noch Caret
-    // selbst, beides muss hier nachgeholt werden.
-    //
-    // Fallback ist Pflicht, nicht Kür: ohne Caret ist der Block zwar fokussiert,
-    // aber Tastatureingaben laufen ins Leere (der User klickt, tippt, nichts
-    // passiert). Das trifft jeden Klick, der kein Textnode erwischt — Padding,
-    // Zeilenabstand, Rand — und Browser ohne caretRangeFromPoint.
-    _placeCaret(el, md) {
-      const sel = window.getSelection();
-      if (!sel) return;
-      try {
-        const range = md && document.caretRangeFromPoint
-          ? document.caretRangeFromPoint(md.x, md.y)
-          : null;
-        if (range && el.contains(range.startContainer)) {
-          sel.removeAllRanges();
-          sel.addRange(range);
-          return;
-        }
-      } catch { /* fällt unten auf den Blockanfang zurück */ }
-      // Kein Treffer → Caret an den Anfang des ersten Kindblocks.
-      try {
-        const fallback = document.createRange();
-        fallback.selectNodeContents(el.firstElementChild || el);
-        fallback.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(fallback);
-      } catch { /* noop */ }
-    },
-
-    // Nur der aktive Block: sein DOM gehört dem User. Ein inaktiver trägt
-    // Anzeige-Artefakte (Mermaid-SVG, Nummern-Badges) — ein `input` dort (z.B.
-    // natives Undo, das Chromium/WebKit auf eine verlassene Seite anwenden)
-    // trüge sie sonst ins Manuskript.
-    _onBlockInput(block, event) {
-      if (this.activePageId !== block.pageId) return;
-      block.html = event.currentTarget.innerHTML;
-      this._markBlockDirty(block);
-      // Restore-`input` des Verlaufs pusht nicht (Kern-Flag `applying`).
-      this._historyPushSoon(block.pageId);
-    },
-
-    // Copy/Cut/Paste über einen Pfad — die drei unterscheiden sich nur im
-    // Handler und darin, ob sie den Block-Inhalt verändern.
-    onBlockClipboard(block, e, kind) {
-      if (kind === 'copy') { handleEditorCopy(e); return; }
-      if (this.activePageId !== block.pageId) return;
-      // Eigener Undo-Schritt: Stand vor dem Einfügen/Ausschneiden sichern.
-      this._historyPushNow(block.pageId);
-      // execCommand triggert kein input-Event in allen Browsern → manuell.
-      if (!CLIPBOARD_HANDLERS[kind](e)) return;
-      block.html = e.currentTarget.innerHTML;
-      this._markBlockDirty(block);
-      this._historyPushNow(block.pageId);
-    },
-
-    // Shift+Enter = weicher Zeilenumbruch (<br>). Safari/WebKit splittet sonst
-    // den Absatz in zwei <p>. execCommand('insertLineBreak') setzt cross-browser
-    // konsistent ein <br> — gleicher Pfad wie Notebook-Editor.
-    onBlockKeydown(block, event) {
-      if (this._historyKeydown(event)) return;
-      if (event.key === 'Enter' && event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) {
-        event.preventDefault();
-        document.execCommand('insertLineBreak');
-        // Wie beim Clipboard: nicht jeder Browser feuert danach `input`.
-        block.html = event.currentTarget.innerHTML;
-        this._markBlockDirty(block);
-      }
     },
 
     // ── Save-Queue ────────────────────────────────────────────────────────

@@ -9,7 +9,7 @@ import { parseHTML } from 'linkedom';
 const { document, window } = parseHTML('<body></body>');
 globalThis.document = document;
 globalThis.window = globalThis.window || window;
-globalThis.NodeFilter = { SHOW_TEXT: 4 };
+globalThis.NodeFilter = { SHOW_ELEMENT: 1, SHOW_TEXT: 4 };
 
 const { filterArtefactMatch, cleanBlockHtml } = await import('../../public/js/cards/book-editor/find.js');
 const { collectMatches } = await import('../../public/js/editor/shared/text-find.js');
@@ -24,17 +24,24 @@ const HTML = '<pre class="mermaid mermaid--rendered">graph TD; Knoten </pre>'
   + '<div class="mermaid-render"><svg><text> Knoten </text></svg></div>'
   + '<figure><figcaption><span class="xref-num">Abb. 1: </span>Knoten zeigt</figcaption></figure>';
 
-test('Treffer im SVG und im Nummern-Badge gelten als Artefakt', () => {
+test('Treffer im SVG, im ausgeblendeten Quelltext und im Nummern-Badge gelten als Artefakt', () => {
   const el = block(HTML);
   const matches = collectMatches(el, 'Knoten', {});
   const kept = matches.map(m => filterArtefactMatch(m, el)).filter(Boolean);
-  // Quelltext + Legendentext bleiben, der Treffer im SVG fällt.
+  // Nur der Legendentext bleibt: das SVG ist Bild, der Quelltext daneben ist
+  // ausgeblendet, solange das Bild steht (Treffer wäre unsichtbar).
   assert.equal(matches.length, 3);
-  assert.equal(kept.length, 2);
-  assert.ok(kept.every(m => !m.startNode.parentElement.closest('.mermaid-render, .xref-num')));
+  assert.equal(kept.length, 1);
+  assert.ok(kept.every(m => !m.startNode.parentElement.closest('.mermaid-render, .mermaid--rendered, .xref-num')));
   // Treffer direkt hinter dem Badge beginnt im Legenden-Node, nicht im Badge.
-  assert.equal(kept[1].startNode.nodeValue, 'Knoten zeigt');
-  assert.equal(kept[1].startOffset, 0);
+  assert.equal(kept[0].startNode.nodeValue, 'Knoten zeigt');
+  assert.equal(kept[0].startOffset, 0);
+});
+
+test('Quelltext ohne Bild (aktiver Block) wird gefunden', () => {
+  const el = block('<pre class="mermaid">graph TD; Knoten</pre>');
+  const kept = collectMatches(el, 'Knoten', {}).map(m => filterArtefactMatch(m, el)).filter(Boolean);
+  assert.equal(kept.length, 1);
 });
 
 test('Badge-Text "Abb." wird nicht gefunden', () => {

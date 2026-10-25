@@ -27,7 +27,8 @@ export function collectTextNodes(root) {
 }
 
 // Match-Positionen im konkatenierten Text auf (Text-Node, Offset)-Tupel
-// zurückmappen. Ein Match darf über mehrere Text-Nodes hinweg laufen.
+// zurückmappen. Ein Match darf über mehrere Text-Nodes desselben Absatzes laufen;
+// `starts` hat Lücken an den Absatzgrenzen (siehe textRuns).
 function mapOffset(nodes, starts, globalStart, length) {
   const globalEnd = globalStart + length;
   let startNode = null, startOffset = 0, endNode = null, endOffset = 0;
@@ -47,23 +48,63 @@ function mapOffset(nodes, starts, globalStart, length) {
   return { startNode, startOffset, endNode, endOffset };
 }
 
+// Elemente, die einen Text NICHT unterbrechen. Alles andere (Absatz, Überschrift,
+// Listenpunkt, Zelle, Gedichtzeile, `<br>`, Bild …) ist eine Grenze. Bewusst
+// eine Inline-Liste statt einer Blockliste: ein unbekanntes Element trennt —
+// lieber einen Treffer über eine exotische Grenze verpassen, als beim Ersetzen
+// zwei Absätze zu verschmelzen.
+const INLINE_TAGS = new Set([
+  'A', 'ABBR', 'B', 'BDI', 'BDO', 'CITE', 'CODE', 'DEL', 'DFN', 'EM', 'FONT', 'I', 'INS',
+  'KBD', 'MARK', 'Q', 'S', 'SAMP', 'SMALL', 'SPAN', 'STRIKE', 'STRONG', 'SUB', 'SUP',
+  'TIME', 'U', 'VAR',
+]);
+
+const isInlineEl = (el) => INLINE_TAGS.has(el.tagName?.toUpperCase());
+
+// Nächster nicht-inline Vorfahr innerhalb von `root` (bzw. `root` selbst).
+function boundaryOf(node, root) {
+  let cur = node.parentNode;
+  while (cur && cur !== root && isInlineEl(cur)) cur = cur.parentNode;
+  return cur || root;
+}
+
+// Text-Nodes samt konkateniertem Text. Zwischen zwei Nodes, die eine Grenze
+// trennt, steht ein `\n` im Gesamttext (ohne Node dahinter): ein Treffer läuft
+// so nie über eine Absatzgrenze, und für die Ganzwort-Regel ist das Absatzende
+// ein Wortende. Ohne Trenner wäre «…das Haus</h2><p>Der…» der Text «HausDer».
+function textRuns(root) {
+  const nodes = [];
+  const starts = [];
+  let full = '';
+  let pendingBreak = false;
+  let prevBoundary = null;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null);
+  let n;
+  while ((n = walker.nextNode())) {
+    if (n.nodeType === 1) {
+      if (!isInlineEl(n)) pendingBreak = true;
+      continue;
+    }
+    const boundary = boundaryOf(n, root);
+    if (nodes.length && (pendingBreak || boundary !== prevBoundary)) full += '\n';
+    pendingBreak = false;
+    prevBoundary = boundary;
+    nodes.push(n);
+    starts.push(full.length);
+    full += n.nodeValue;
+  }
+  return { nodes, starts, full };
+}
+
 // Alle Treffer von `term` unterhalb von `root`, in Dokumentreihenfolge.
 // Liefert `[{ startNode, startOffset, endNode, endOffset }]` — leeres Array
-// bei leerem Term oder fehlendem Root.
+// bei leerem Term oder fehlendem Root. Treffer bleiben innerhalb eines Absatzes
+// (siehe textRuns).
 export function collectMatches(root, term, { caseSensitive = false, wholeWord = false } = {}) {
   if (!root || !term) return [];
-  const nodes = collectTextNodes(root);
-  const full = nodes.map(n => n.nodeValue).join('');
+  const { nodes, starts, full } = textRuns(root);
   const hay = caseSensitive ? full : full.toLowerCase();
   const needle = caseSensitive ? term : term.toLowerCase();
-
-  // Offsets jedes Nodes im konkatenierten String – für das Rückmapping.
-  const starts = new Array(nodes.length);
-  let acc = 0;
-  for (let i = 0; i < nodes.length; i++) {
-    starts[i] = acc;
-    acc += nodes[i].nodeValue.length;
-  }
 
   const matches = [];
   let from = 0;

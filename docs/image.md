@@ -4,7 +4,7 @@ Erzeugt Bilder (Figurenporträt, Schauplatz, Szene, Stimmung) aus dem **agentisc
 
 **App-Philosophie (KI rückwärtsgewandt):** das Bild ist reine Weltaufbau-/Chat-Visualisierung. Es landet **nie** im Manuskript-Text, sondern nur im Chat-Verlauf — dort ansehbar und herunterladbar.
 
-**Bewusste Ausnahme zum Buch-Chat-Tool-Vertrag** (sonst „Read-Only, deterministisch, kein KI-Call", siehe [buchchat-tools.md](buchchat-tools.md)): `generate_image` hat einen Seiteneffekt + externen Call. Es gibt **kein Bild** in den Tool-Loop zurück (Binärdaten passen nicht in den JSON-Loop), sondern nur Metadaten; das Bild lebt in `chat_images` und wird separat gestreamt.
+**Bewusste Ausnahme zum Buch-Chat-Tool-Vertrag** (sonst „Read-Only, deterministisch, kein KI-Call", siehe [chat-tools.md](chat-tools.md)): `generate_image` hat einen Seiteneffekt + externen Call. Es gibt **kein Bild** in den Tool-Loop zurück (Binärdaten passen nicht in den JSON-Loop), sondern nur Metadaten; das Bild lebt in `chat_images` und wird separat gestreamt.
 
 ## Datenfluss
 
@@ -21,8 +21,8 @@ Buch-Chat (agentisch, nur ai.provider=claude) → Modell ruft Tool generate_imag
 ## Backend
 
 - **[lib/image-gen.js](../lib/image-gen.js)** — `generateImage({ prompt, size, signal })`. Eigener Binär-Call-Pfad neben `lib/ai.js#callAI` (das nur JSON liefert). Host/Model/Key aus App-Settings, `/v1`-Suffix wird gestrippt. Decodet `b64_json`, sonst `url`-Fallback (lädt das Bild nach, mime aus `Content-Type`). Timeout aus `image.timeout_ms` + Job-`signal` verknüpft. Fehler als `ImageGenError` mit `code` (`image_disabled`/`image_no_prompt`/`image_upstream`/`image_timeout`/`image_empty`).
-- **[routes/jobs/book-chat-tools/tools-image.js](../routes/jobs/book-chat-tools/tools-image.js)** — Tool `generate_image`. Persistiert via `db/chat-images.js`, pusht `{image_id,prompt,mime}` in `ctx.images`, gibt JSON-Metadaten + Hinweis zurück (kein Bild, keine URL).
-- **[routes/jobs/chat.js](../routes/jobs/chat.js)** `runBookChatJobAgent` — `ctx.sessionId`/`ctx.images` gesetzt; `generate_image` wird aus `BOOK_CHAT_TOOLS` **gefiltert**, solange `image.enabled`+`image.host` fehlen (spart Input-Tokens, totes Werkzeug vermieden); `context_info.images` persistiert.
+- **[routes/jobs/chat-tools/tools-image.js](../routes/jobs/chat-tools/tools-image.js)** — Tool `generate_image`. Persistiert via `db/chat-images.js`, pusht `{image_id,prompt,mime}` in `ctx.images`, gibt JSON-Metadaten + Hinweis zurück (kein Bild, keine URL).
+- **[routes/jobs/chat.js](../routes/jobs/chat.js)** `runBookChatJobAgent` — `ctx.sessionId`/`ctx.images` gesetzt; `generate_image` wird **nicht angeboten** (`AVAILABILITY` in [chat-tools/index.js](../routes/jobs/chat-tools/index.js)), solange `image.enabled`+`image.host` fehlen (spart Input-Tokens, totes Werkzeug vermieden); `context_info.images` persistiert.
 - **[routes/chat.js](../routes/chat.js)** — `GET /chat/image/:id` streamt das BLOB (Owner-Check via Session-Join), `?download=1` erzwingt den Speichern-Dialog. CSP: same-origin, `img-src 'self'` deckt es (kein CSP-Eintrag nötig).
 - **[routes/admin-settings.js](../routes/admin-settings.js)** — `POST /admin/settings/test-image` (Health-Probe `GET /v1/models`).
 - **[lib/app-settings.js](../lib/app-settings.js)** — Keys: `image.enabled`, `image.host`, `image.model`, `image.size`, `image.timeout_ms` (5000–600000), `image.api_key` (`ENCRYPTED_KEYS`). **Kein** `/config`-Eintrag (Secret-Leck-Schutz; das Tool läuft rein serverseitig).
@@ -106,10 +106,10 @@ Danach im Buch-Chat (Provider Claude): „Zeichne mir ein Porträt von <Figur>".
 - **Nur agentischer Buch-Chat** (`ai.provider=claude`, `jobs.book_chat.mode != classic`). Andere Provider haben keinen Tool-Loop → kein Bild.
 - **Kein Bild im Tool-Result** — nur Metadaten (`image_id`/`mime`/`size`). Das BLOB lebt in `chat_images`, Auslieferung nur über `GET /chat/image/:id` mit Owner-Check.
 - **Host/API-Key bleiben server-seitig** — `/config` liefert sie nie.
-- **Abschaltbar** über `image.enabled=false` (Default) → Tool aus `BOOK_CHAT_TOOLS` gefiltert, Stream-Route bleibt (alte Bilder weiter abrufbar), Endpunkt nie gerufen.
+- **Abschaltbar** über `image.enabled=false` (Default) → Werkzeug nicht angeboten, Stream-Route bleibt (alte Bilder weiter abrufbar), Endpunkt nie gerufen.
 - **Nur OpenAI-Image-Protokoll** (`/v1/images/generations`, `b64_json`/`url`). Native A1111-/ComfyUI-APIs brauchen einen Adapter.
 
 ## Tests
 
 - Integration: [tests/integration/image-gen.test.js](../tests/integration/image-gen.test.js) (disabled→Wurf, kein Prompt→Wurf, b64_json→Buffer + Bearer/size/model-Forward, url-Fallback, Upstream-Fehler→`image_upstream`, leere Antwort→`image_empty`).
-- Drift: `chat_images` in [erd.md](erd.md) + Squash gegated; Tool in [buchchat-tools.md](buchchat-tools.md).
+- Drift: `chat_images` in [erd.md](erd.md) + Squash gegated; Tool in [chat-tools.md](chat-tools.md).

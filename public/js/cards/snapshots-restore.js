@@ -14,6 +14,18 @@ function _restoreErrorMsg(app, code) {
 }
 
 export const snapshotsRestoreMethods = {
+  // 409 BOOK_BUSY: staerkere Bestaetigung mit den Namen der aktiven Mitautoren.
+  _confirmBusy(body) {
+    const app = window.__app;
+    const who = Array.isArray(body?.editors) && body.editors.length
+      ? body.editors.join(', ') : app.t('snapshots.busyOthers');
+    return app.appConfirm({
+      message: app.t('snapshots.busyConfirm', { who }),
+      confirmLabel: app.t('snapshots.restore'),
+      danger: true,
+    });
+  },
+
   // ── Ganzes Buch ──────────────────────────────────────────────────────────────
   async restoreSnapshot(snap, force = false) {
     const app = window.__app;
@@ -36,14 +48,7 @@ export const snapshotsRestoreMethods = {
         // Buch wird gerade von anderen editiert → staerkere Bestaetigung mit den
         // aktiven Namen, dann mit force erneut (deren ungespeicherte Writes kollidieren).
         this.restoringId = null;
-        const who = Array.isArray(body.editors) && body.editors.length
-          ? body.editors.join(', ') : app.t('snapshots.busyOthers');
-        const ok = await app.appConfirm({
-          message: app.t('snapshots.busyConfirm', { who }),
-          confirmLabel: app.t('snapshots.restore'),
-          danger: true,
-        });
-        if (ok) return this.restoreSnapshot(snap, true);
+        if (await this._confirmBusy(body)) return this.restoreSnapshot(snap, true);
         return;
       }
       if (!r.ok) throw new Error(body?.error_code || `HTTP ${r.status}`);
@@ -76,27 +81,36 @@ export const snapshotsRestoreMethods = {
     return app.t(s.kind === 'page' ? 'snapshots.restorePage' : 'snapshots.restoreChapter');
   },
 
-  async restoreNode(s) {
+  async restoreNode(s, force = false) {
     const app = window.__app;
     const bookId = Alpine.store('nav').selectedBookId;
     const snap = this.readerSnap;
     if (!snap?.id || !bookId || !this.canRestoreNode(s) || this.restoringNodeKey) return;
     const name = s.name || app.t('snapshots.untitled');
-    const ok = await app.appConfirm({
-      message: app.t(s.kind === 'page' ? 'snapshots.restorePageConfirm' : 'snapshots.restoreChapterConfirm',
-        { name, n: snap.seq }),
-      confirmLabel: app.t('snapshots.restore'),
-      danger: true,
-    });
-    if (!ok) return;
+    if (!force) {
+      const ok = await app.appConfirm({
+        message: app.t(s.kind === 'page' ? 'snapshots.restorePageConfirm' : 'snapshots.restoreChapterConfirm',
+          { name, n: snap.seq }),
+        confirmLabel: app.t('snapshots.restore'),
+        danger: true,
+      });
+      if (!ok) return;
+    }
     this.restoringNodeKey = s.key;
     try {
-      const r = await fetch(`/snapshots/${bookId}/${snap.id}/restore-node`, {
+      const url = `/snapshots/${bookId}/${snap.id}/restore-node${force ? '?force=1' : ''}`;
+      const r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ kind: s.kind, srcId: s.kind === 'page' ? s.id : s.chapterId }),
       });
       const body = await r.json().catch(() => ({}));
+      if (r.status === 409 && body?.error_code === 'BOOK_BUSY') {
+        // Wie beim ganzen Buch: andere editieren gerade → staerkere Bestaetigung.
+        this.restoringNodeKey = null;
+        if (await this._confirmBusy(body)) return this.restoreNode(s, true);
+        return;
+      }
       if (!r.ok) throw new Error(body?.error_code || `HTTP ${r.status}`);
       await app.loadPages?.();
       if (body.failed) {

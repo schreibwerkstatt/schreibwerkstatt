@@ -201,6 +201,9 @@ test('runChatJob: Verlauf trägt frühere Vorschläge, Titelvarianten landen in 
 
 test('runChatJob: geänderte Seite → Diff-Abschnitt statt zweiter Vollfassung', async () => {
   const sid = newSession({ opening: 'Der Hund bellt sehr laut. Die Katze schläft.' });
+  // Der Diff bezieht sich auf eine frühere Antwort — ab der zweiten Runde.
+  addMsg(sid, 'user', 'Erste Frage');
+  addMsg(sid, 'assistant', 'Erste Antwort');
   nextReply = () => JSON.stringify({ antwort: 'ok', vorschlaege: [], titel_varianten: [] });
   aiCalls.length = 0;
   const job = await runJob(sid, 'Was hat sich geändert?');
@@ -308,4 +311,95 @@ test('formatHistoryVorschlaege: nicht gefundener offener Vorschlag wird markiert
   const out = formatHistoryVorschlaege([{ original: 'a', ersatz: 'b', match: 'not_found' }, { original: 'c', ersatz: 'd' }]);
   assert.match(out, /\[offen, Stelle nicht im Text gefunden\] «a»/);
   assert.match(out, /\[offen\] «c»/);
+});
+
+// ── Ausgangsstand erst bei der ersten Frage ─────────────────────────────────
+
+test('runChatJob: erste Runde → kein Diff, Ausgangsstand = Text, den das Modell sieht', async () => {
+  // Snapshot beim Öffnen der Karte, danach weitergeschrieben: das ist für die
+  // erste Antwort schlicht der Text, keine „Änderung seit Chat-Start".
+  const sid = newSession({ opening: 'Der Hund bellt sehr laut. Die Katze schläft.' });
+  nextReply = () => JSON.stringify({ antwort: 'ok', vorschlaege: [], titel_varianten: [] });
+  aiCalls.length = 0;
+  const job = await runJob(sid, 'Erste Frage');
+  assert.equal(job.status, 'done', job.error);
+  assert.doesNotMatch(sysText(aiCalls[0].system), /ÄNDERUNGEN DES AUTORS SEIT CHAT-START/);
+  const { opening_page_text } = db.prepare('SELECT opening_page_text FROM chat_sessions WHERE id = ?').get(sid);
+  assert.equal(opening_page_text, 'Der Hund bellt laut. Die Katze schläft.');
+
+  // Zweite Runde ohne Edit dazwischen: weiterhin kein Diff.
+  aiCalls.length = 0;
+  const job2 = await runJob(sid, 'Zweite Frage');
+  assert.equal(job2.status, 'done', job2.error);
+  assert.doesNotMatch(sysText(aiCalls[0].system), /ÄNDERUNGEN DES AUTORS SEIT CHAT-START/);
+});
+
+// ── Vorprüfung im POST-Handler ───────────────────────────────────────────────
+
+const OWNED_BOOK = 82002;
+const OWNED_PAGE = 82021;
+const OWNED_BIG = 82022;
+db.prepare(`INSERT INTO books (book_id, name, created_at, updated_at, owner_email) VALUES (?, 'PC2', datetime('now'), datetime('now'), ?)`)
+  .run(OWNED_BOOK, USER);
+require('../../db/book-access').grantAccess(OWNED_BOOK, USER, 'owner', USER);
+db.prepare(`INSERT INTO pages (page_id, book_id, page_name, body_html, updated_at) VALUES (?, ?, 'Klein', ?, datetime('now'))`)
+  .run(OWNED_PAGE, OWNED_BOOK, '<p>Kurz.</p>');
+
+function ownedSession(pageId) {
+  return db.prepare(`INSERT INTO chat_sessions (book_id, page_id, kind, user_email, title, created_at, last_message_at)
+                     VALUES (?, ?, 'page', ?, 'T', datetime('now'), datetime('now'))`).run(OWNED_BOOK, pageId, USER).lastInsertRowid;
+}
+function post(sid, cfg, body = {}) {
+  const { _handleChatPost } = require('../../routes/jobs/chat/shared');
+  const out = { status: 200, body: null };
+  const res = { status(c) { out.status = c; return this; }, json(b) { out.body = b; return this; } };
+  const p = _handleChatPost({ body: { session_id: sid, message: 'Frage', ...body }, session: { user: { email: USER } } }, res, {
+    jobType: 'chat', kind: 'page', labelFn: () => ({ key: 'x', params: null }), runFn: async () => {}, ...cfg,
+  });
+  return p.then(() => out);
+}
+const msgCount = (sid) => db.prepare('SELECT COUNT(*) AS n FROM chat_messages WHERE session_id = ?').get(sid).n;
+
+test('pageChatPreflight: Abschnitt über dem Deckel → 422 mit chars/max, sonst null', async () => {
+  const { pageChatPreflight } = require('../../routes/jobs/chat/page-chat');
+  const { getContextConfigFor, resolveProvider } = require('../../lib/ai');
+  const { pageMax } = pageChatBudget(getContextConfigFor(resolveProvider({ userEmail: USER })));
+  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, body_html, updated_at) VALUES (?, ?, 'Gross', ?, datetime('now'))`)
+    .run(OWNED_BIG, OWNED_BOOK, '<p>' + 'Wort '.repeat(Math.ceil(pageMax / 5) + 100) + '</p>');
+  assert.equal(await pageChatPreflight({ page_id: OWNED_PAGE }, USER), null);
+  const block = await pageChatPreflight({ page_id: OWNED_BIG }, USER);
+  assert.equal(block.status, 422);
+  assert.equal(block.error_code, 'PAGE_CHAT_PAGE_TOO_LARGE');
+  assert.equal(block.params.max, pageMax);
+  assert.ok(block.params.chars > pageMax);
+  // Nicht ladbar ist kein Vorab-Befund — der Job meldet pageChatLoadFailed.
+  assert.equal(await pageChatPreflight({ page_id: 999999 }, USER), null);
+});
+
+test('_handleChatPost: Preflight lehnt ab → Antwort raus, keine Frage in der Session', async () => {
+  const sid = ownedSession(OWNED_PAGE);
+  const out = await post(sid, {
+    preflight: async (req, res) => { res.status(422).json({ error_code: 'PAGE_CHAT_PAGE_TOO_LARGE' }); return false; },
+  });
+  assert.equal(out.status, 422);
+  assert.equal(msgCount(sid), 0);
+});
+
+test('_handleChatPost: Doppel-Send während des async Preflights → kein zweiter Insert', async () => {
+  const sid = ownedSession(OWNED_PAGE);
+  const cmid = 'race-1';
+  let firstDone = null;
+  const out = await post(sid, {
+    // Während dieser Preflight wartet, läuft derselbe Send noch einmal durch
+    // (Connection-Loss-Retry) und speichert die Frage.
+    preflight: async () => {
+      firstDone = await post(sid, {}, { client_msg_id: cmid });
+      return true;
+    },
+  }, { client_msg_id: cmid });
+  assert.equal(firstDone.status, 200);
+  assert.ok(firstDone.body.jobId);
+  assert.equal(out.body.existing, true, 'zweiter Durchlauf erkennt den ersten');
+  assert.equal(out.body.jobId, firstDone.body.jobId);
+  assert.equal(msgCount(sid), 1);
 });

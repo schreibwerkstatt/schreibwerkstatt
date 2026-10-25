@@ -144,6 +144,8 @@ function _buildLektoratPromptBody(text, textLabel, {
   hatNachrichten = false,
   woerterbuch = [],
   langCode = 'de',
+  // Volle Locale der Buchsprache (z.B. 'en-GB'): wählt die Anführungszeichen-Norm.
+  locale = null,
   mode = 'full',
 } = {}) {
   // Stil-Modus (Claude-Split): objektive/mechanische Typen werden in einem
@@ -409,7 +411,7 @@ ${journal
       aktiv('klischee')             && _buildKlischeeBlock(),
       aktiv('pleonasmus')           && _buildPleonasmusBlock(),
       aktiv('show_vs_tell')         && _buildShowVsTellBlock(einheit),
-      aktiv('dialogformat')         && _buildDialogformatBlock(langCode),
+      aktiv('dialogformat')         && _buildDialogformatBlock(langCode, { schlank: fach, locale }),
       aktiv('passiv')               && _buildPassivBlock(),
       aktiv('perspektivbruch')      && _buildPerspektivbruchBlock(),
       aktiv('tempuswechsel')        && (journal ? _buildJournalTempusBlock()
@@ -419,7 +421,7 @@ ${journal
       aktiv('unbelegt')             && _buildUnbelegtBlock(),
       aktiv('begriffsinkonsistenz') && _buildBegriffsinkonsistenzBlock(),
       aktiv('autorenform')          && _buildAutorenformBlock(),
-      aktiv('konjunktiv')           && _buildKonjunktivBlock(),
+      aktiv('konjunktiv')           && _buildKonjunktivBlock(profil, langCode),
       aktiv('zuschreibung')         && _buildZuschreibungBlock(),
       aktiv('wertung')              && _buildWertungBlock(textsorteLabel(textsorte)),
       aktiv('amtsdeutsch')          && _buildAmtsdeutschBlock(),

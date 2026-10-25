@@ -1,6 +1,6 @@
 'use strict';
 // Werkzeug-Executor des Plot-Chats. Zwei Arten:
-//   - Lese-Werkzeuge: dieselben Handler wie der Buch-Chat (book-chat-tools) —
+//   - Lese-Werkzeuge: die Handler des gemeinsamen Katalogs (chat-tools) —
 //     eine Quelle, kein zweiter Board-/Figuren-/Text-Leser.
 //   - Vorschlags-Werkzeuge (propose_*): validieren gegen den Board-Stand und
 //     sammeln EINEN normalisierten Vorschlag in ctx.proposals. Sie schreiben
@@ -24,7 +24,7 @@
 // Persistierter Status (vom User gesetzt, PATCH /plot/chat-proposal):
 // applied_at + applied_id bzw. status='discarded'.
 
-const { executeTool: executeBookChatTool } = require('./book-chat-tools');
+const { executeTool: executeCatalogTool } = require('./chat-tools');
 const { loadBoardState } = require('./plot-chat-context');
 
 const MAX_PROPOSALS = 30;
@@ -122,7 +122,7 @@ function _resolveFiguren(list, state) {
 function _validChapter(raw, state) {
   const id = _int(raw);
   if (!id) return { id: null };
-  if (!state.chapterNames.has(id)) return _err(`Kapitel #${id} gehört nicht zu diesem Buch. Nutze eine chapter_id aus list_chapters.`);
+  if (!state.chapterNames.has(id)) return _err(`Kapitel #${id} gehört nicht zu diesem Buch. Nutze eine chapter_id aus Board oder Gliederung.`);
   return { id, label: state.chapterNames.get(id) };
 }
 
@@ -391,8 +391,8 @@ async function executePlotChatTool(name, input, ctx) {
     }
     return PROPOSE_HANDLERS[name](input || {}, ctx);
   }
-  if (!ctx.readToolNames?.has(name)) throw new Error(`Unbekanntes Werkzeug: ${name}`);
-  return executeBookChatTool(name, input, ctx);
+  if (!ctx.offeredTools?.has(name)) throw new Error(`Unbekanntes Werkzeug: ${name}`);
+  return executeCatalogTool(name, input, ctx);
 }
 
 module.exports = { executePlotChatTool, MAX_PROPOSALS, PROPOSE_TOOLS };

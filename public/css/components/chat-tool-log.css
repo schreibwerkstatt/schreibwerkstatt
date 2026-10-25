@@ -1,0 +1,121 @@
+/* Werkzeug-Verlauf der agentischen Chats (Buch-, Recherche-, Plot-, Ideen-Chat):
+   partials/chat-tool-log.html + chat-tool-log-row.html, Einträge aus chat/tool-log.js. */
+@layer components {
+  .chat-tool-log {
+    margin-top: var(--space-xs);
+    font-size: var(--font-size-xs);
+    color: var(--color-subtle);
+  }
+  .chat-tool-log-summary {
+    margin: var(--space-xs) 0 0;
+    color: var(--color-muted);
+  }
+  .chat-tool-log-list {
+    margin: var(--space-xs) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .chat-tool-log-children {
+    margin: 0 0 var(--space-xs) var(--space-md);
+  }
+  .chat-tool-log-item--pre,
+  .chat-tool-log-item--final {
+    padding: var(--space-2xs) 0;
+    color: var(--color-muted);
+  }
+  .chat-tool-log-item--final {
+    color: var(--color-ok-text);
+  }
+  .chat-tool-log-final--bad {
+    color: var(--color-err-text);
+  }
+
+  /* Rundenkopf: Nummer + Tokens, darunter die Notiz des Modells */
+  .chat-tool-log-round {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2xs) var(--space-6);
+    margin-top: var(--space-xs);
+  }
+  .chat-tool-log-round-title {
+    font-size: var(--font-size-micro);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  .chat-tool-log-round-tokens {
+    font-size: var(--font-size-micro);
+    color: var(--color-muted);
+  }
+  .chat-tool-log-note {
+    flex-basis: 100%;
+    font-style: italic;
+    color: var(--color-subtle);
+  }
+
+  /* Zeile: Tätigkeit · Gegenstand · Ergebnis · Meta */
+  .chat-tool-log-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2xs) var(--space-6);
+    padding: var(--space-2xs) 0;
+  }
+  .chat-tool-log-label {
+    font-weight: var(--fw-medium);
+    color: var(--color-text);
+  }
+  .chat-tool-log-row--failed .chat-tool-log-label,
+  .chat-tool-log-group--failed .chat-tool-log-label {
+    color: var(--color-err-text);
+  }
+  .chat-tool-log-row--skipped .chat-tool-log-label {
+    color: var(--color-muted);
+  }
+  .chat-tool-log-part {
+    display: inline-flex;
+    min-width: 0;
+  }
+  .chat-tool-log-quote {
+    font-style: italic;
+  }
+  .chat-tool-log-muted,
+  .chat-tool-log-meta {
+    color: var(--color-muted);
+  }
+  .chat-tool-log-url {
+    word-break: break-all;
+  }
+  .chat-tool-log-result {
+    color: var(--color-ok-text);
+  }
+  .chat-tool-log-result::before {
+    content: '→ ';
+  }
+  .chat-tool-log-result--empty {
+    color: var(--color-muted);
+  }
+  .chat-tool-log-error {
+    flex-basis: 100%;
+    color: var(--color-err-text);
+  }
+  .chat-tool-log-row--skipped .chat-tool-log-error {
+    color: var(--color-muted);
+  }
+
+  /* Gruppe gleicher Aufrufe: Sammelzeile als Klapp-Knopf, ohne die Versalien des
+     Abschnitts-Toggles — sie liest sich wie eine Zeile. */
+  .chat-tool-log-group-toggle {
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2xs) var(--space-6);
+    padding: var(--space-2xs) 0;
+    font-size: inherit;
+    font-weight: var(--fw-regular);
+    text-transform: none;
+    letter-spacing: normal;
+    color: inherit;
+    text-align: left;
+  }
+}

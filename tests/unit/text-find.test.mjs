@@ -13,7 +13,7 @@ import { parseHTML } from 'linkedom';
 
 const { document } = parseHTML('<body></body>');
 globalThis.document = document;
-globalThis.NodeFilter = { SHOW_TEXT: 4 };
+globalThis.NodeFilter = { SHOW_ELEMENT: 1, SHOW_TEXT: 4 };
 
 const { collectMatches, collectTextNodes } = await import('../../public/js/editor/shared/text-find.js');
 
@@ -105,4 +105,34 @@ test('collectMatches: Treffer am Textende terminiert die Schleife', () => {
   const m = collectMatches(el, 'Ende');
   assert.equal(m.length, 1);
   assert.equal(m[0].endOffset, 4);
+});
+
+test('collectMatches: Absatzgrenze ist Wortgrenze (Ganzwort am Absatzende)', () => {
+  // Ohne Trenner läse der Kern «Das HausDer Morgen» — «Haus» wäre kein Ganzwort.
+  const el = root('<h2>Das Haus</h2><p>Der Morgen</p>');
+  const [m] = collectMatches(el, 'Haus', { wholeWord: true });
+  assert.ok(m, 'Ganzwort-Treffer am Ende der Überschrift');
+  assert.equal(textOf(m), 'Haus');
+  assert.equal(collectMatches(root('<ul><li>Haus</li><li>tür</li></ul>'), 'Haus', { wholeWord: true }).length, 1);
+  assert.equal(collectMatches(root('<p>Haus<br>tür</p>'), 'Haus', { wholeWord: true }).length, 1);
+});
+
+test('collectMatches: kein Treffer über eine Absatzgrenze hinweg', () => {
+  // Ersetzen über eine Grenze verschmölze die beiden Absätze.
+  assert.equal(collectMatches(root('<p>Haus</p><p>tür</p>'), 'Haustür').length, 0);
+  assert.equal(collectMatches(root('<div><p>Haus</p>tür</div>'), 'Haustür').length, 0);
+  assert.equal(collectMatches(root('<table><tr><td>Haus</td><td>tür</td></tr></table>'), 'Haustür').length, 0);
+});
+
+test('collectMatches: Treffer am Absatzanfang beginnt im eigenen Absatz', () => {
+  // Ohne Trenner fiele der Start auf das ENDE des vorigen Absatzes (Grenz-
+  // Semantik oben: der frühere Node gewinnt) — Ersetzen hängte das neue Wort
+  // dann an den vorigen Absatz und löschte nur im aktuellen.
+  const el = root('<p>Ein Haus</p><p>Haus und <em>noch</em> ein Haus</p>');
+  const ms = collectMatches(el, 'Haus');
+  assert.equal(ms.length, 3);
+  assert.equal(ms[1].startNode.nodeValue, 'Haus und ');
+  assert.equal(ms[1].startOffset, 0);
+  assert.equal(ms[2].startNode.nodeValue, ' ein Haus');
+  assert.equal(ms[2].startOffset, 5);
 });

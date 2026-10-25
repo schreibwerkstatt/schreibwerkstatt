@@ -29,19 +29,23 @@ export const ideenLinkMethods = {
     return IDEA_LINK_KINDS.map(k => ({ value: k, label: this.linkKindLabel(k) }));
   },
 
-  // Ziel-Kataloge einmal pro Buch holen (Picker-Quelle fuer entityPicker
-  // `entity: 'target'`). Der Guard auf `_linkTargetsBookId` haelt einen
-  // Buchwechsel auseinander — ohne ihn boete der Picker die Beats des zuvor
+  // Ziel-Kataloge holen (Picker-Quelle fuer entityPicker `entity: 'target'`) —
+  // bei JEDEM Oeffnen des Pickers: ein Motiv oder Beat, das inzwischen in einer
+  // anderen Werkstatt entstand, muss sofort waehlbar sein. Der Stand desselben
+  // Buches bleibt bis zur Antwort stehen (und bei einem Fehler); ein anderes
+  // Buch wird erst geleert — sonst boete der Picker die Beats des zuvor
   // geoeffneten Buches an.
   async ensureIdeaLinkTargets() {
     const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId || this._linkTargetsBookId === bookId) return;
+    if (!bookId) return;
+    if (this._linkTargetsBookId !== bookId) { this.linkTargets = {}; this._linkTargetsBookId = null; }
     try {
-      this.linkTargets = await fetchJson(`/ideen/link-targets?book_id=${bookId}`);
+      const data = await fetchJson(`/ideen/link-targets?book_id=${bookId}`);
+      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      this.linkTargets = data;
       this._linkTargetsBookId = bookId;
     } catch {
-      this.linkTargets = {};
-      this._linkTargetsBookId = null;
+      if (this._linkTargetsBookId !== bookId) this.linkTargets = {};
     }
   },
 

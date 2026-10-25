@@ -131,6 +131,8 @@
 }
 
 /* Markdown in Antworten */
+.chat-p { margin: 0 0 var(--space-sm); }
+.chat-p:last-child { margin-bottom: 0; }
 .chat-heading {
   margin: var(--space-sm) 0 var(--space-xs);
   font-weight: var(--fw-bold);
@@ -526,32 +528,4 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-6);
-}
-.book-chat-tool-list {
-  margin: var(--space-xs) 0 0;
-  padding: 0;
-  list-style: none;
-}
-.book-chat-tool-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-xs) var(--space-6);
-  padding: var(--space-2xs) 0;
-  border-top: 0.5px solid var(--color-border);
-}
-.book-chat-tool-row--failed .book-chat-tool-name {
-  color: var(--color-err-text);
-}
-.book-chat-tool-name {
-  font-weight: var(--fw-bold);
-}
-.book-chat-tool-meta {
-  opacity: 0.8;
-}
-.book-chat-tool-args {
-  flex-basis: 100%;
-  font-family: monospace;
-  font-size: var(--font-size-micro);
-  word-break: break-all;
 }

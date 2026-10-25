@@ -286,7 +286,7 @@ CREATE INDEX IF NOT EXISTS idx_drama_speeches_fig  ON drama_speeches(figure_id);
 - `lib/export-builders/{docx,md,substack,html,epub}.js` — je ein `case` bzw. CSS-Regel
 - [public/js/cards/feature-registry.js](../../public/js/cards/feature-registry.js) — beide Registries
 - [routes/usage.js](../../routes/usage.js), `db/migrations.js`, `db/squashed-schema.js`, `docs/erd.md`, `public/js/i18n/{de,en}.json`, `public/index.html`, `public/sw-manifest.js`, `CLAUDE.md`
-- Kleinkram, leicht übersehen: `NON_PROSE_BUCHTYPEN` ([lib/share-helpers.js](../../lib/share-helpers.js) Z. 36), `BUCHTYP_LABELS_DE` ([tools-catalog.js](../../routes/jobs/book-chat-tools/tools-catalog.js) Z. 521), `VALID_BUCHTYPEN` ([routes/usersettings.js](../../routes/usersettings.js) Z. 62 — führt **bestehende Drift**: nur 10 der 18 Typen sind als User-Default wählbar)
+- Kleinkram, leicht übersehen: `NON_PROSE_BUCHTYPEN` ([lib/share-helpers.js](../../lib/share-helpers.js) Z. 36), `BUCHTYP_LABELS_DE` ([tools-catalog.js](../../routes/jobs/chat-tools/tools-catalog.js) Z. 521), `VALID_BUCHTYPEN` ([routes/usersettings.js](../../routes/usersettings.js) Z. 62 — führt **bestehende Drift**: nur 10 der 18 Typen sind als User-Default wählbar)
 
 **Create**
 - `public/js/drama/drama-html.js` — Markup-SSoT

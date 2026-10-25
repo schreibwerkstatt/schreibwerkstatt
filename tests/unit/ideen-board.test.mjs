@@ -455,3 +455,38 @@ test('Hierarchie: der Kapitel-Filter erfasst Unterkapitel samt Abschnitten', () 
     ['5', '6', '7'],
   );
 });
+
+const { buildIdeenList, makeIdeeFilter } =
+  await import(path.join(ROOT, 'public', 'js', 'book', 'ideen-board', 'model.js'));
+
+test('Suche: findet eine Idee auch ueber Abschnitts-/Kapitelname und Verknuepfungs-Label', () => {
+  const laneOrder = buildLaneOrder(TREE);
+  const ideen = [
+    { id: 1, page_id: 10, page_name: 'Am Bahnhof', lane_chapter_id: 1, lane_chapter_name: 'Kapitel 1', content: 'Zeit pruefen', status: 'offen' },
+    { id: 2, chapter_id: 2, chapter_name: 'Kapitel 2', lane_chapter_id: 2, content: 'Brief', status: 'offen', links: [{ label: 'Wassermotiv' }] },
+    { id: 3, page_id: 20, page_name: 'Seite C', lane_chapter_id: 2, lane_chapter_name: 'Kapitel 2', content: 'nichts davon', status: 'offen' },
+  ];
+  const ids = (query) => ideen.filter(makeIdeeFilter({ laneOrder, query })).map(i => i.id);
+  assert.deepEqual(ids('bahnhof'), [1]);
+  assert.deepEqual(ids('wasser'), [2]);
+  assert.deepEqual(ids('kapitel 2'), [2, 3]);
+});
+
+test('Liste: derselbe Filter wie das Raster, Bahn-Position fuer die Buch-Reihenfolge', () => {
+  const laneOrder = buildLaneOrder(TREE);
+  const ideen = [
+    { id: 1, page_id: 20, lane_chapter_id: 2, content: 'c', status: 'offen' },
+    { id: 2, page_id: 10, lane_chapter_id: 1, content: 'a', status: 'erledigt' },
+    { id: 3, content: 'buch', status: 'offen' },
+    { id: 4, page_id: 999, lane_chapter_id: null, content: 'unbekannt', status: 'offen' },
+  ];
+  const filter = { filterChapterId: '', showErledigt: false, showVerworfen: false, query: '' };
+  const rows = buildIdeenList({ ideen, laneOrder, ...filter });
+  const board = buildBoard({ ideen, laneOrder, ...filter });
+  assert.equal(rows.length, board.visible, 'Liste und Raster zeigen gleich viele');
+  assert.deepEqual(rows.map(r => r.idee.id).sort(), [1, 3, 4]);
+  const byId = new Map(rows.map(r => [r.idee.id, r]));
+  assert.ok(byId.get(3).laneIndex < byId.get(1).laneIndex, 'Buch-Bahn vor Kapitel 2');
+  assert.equal(byId.get(4).lane, null);
+  assert.equal(byId.get(4).laneIndex, Number.MAX_SAFE_INTEGER, 'unbekannte Bahn steht hinten');
+});

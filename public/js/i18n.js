@@ -87,6 +87,13 @@ export function i18nMarkerKey(text) {
   return m ? m[1] : null;
 }
 
+/** Erklärung eines Lektorat-Befunds. Regelbefunde (lib/dialogformat-rules.js)
+ *  tragen einen festen Satz als `erklaerung_key` und erscheinen in der UI-Sprache;
+ *  KI-Befunde haben nur `erklaerung` (Buchsprache, vom Modell formuliert). */
+export function findingErklaerungRaw(f) {
+  return f?.erklaerung_key ? tRaw(f.erklaerung_key) : (f?.erklaerung || '');
+}
+
 /** Übersetzt eine Backend-Fehlerantwort. Akzeptiert:
  *  - { error_code: 'CODE', params: {...} } → t('error.CODE', params)
  *  - { error: 'freier Text' }              → Text direkt (Legacy-Fallback)
@@ -132,6 +139,12 @@ export const i18nMethods = {
     void this?.$store?.shell?.uiLocale;
     void this?.$store?.shell?.unitTerm;
     return tRaw(key, params);
+  },
+
+  /** Erklärung eines Lektorat-Befunds. Siehe findingErklaerungRaw. */
+  findingErklaerung(f) {
+    void this?.$store?.shell?.uiLocale;
+    return findingErklaerungRaw(f);
   },
 
   /** Backend-Fehler übersetzen. Siehe tErrorRaw für Schema. */

@@ -86,6 +86,15 @@ export const bookEditorCommentsMethods = {
   toggleCommentResolve(comment) { return this._railResolve(comment); },
   deleteBookComment(comment) { return this._railDelete(comment); },
 
+  // Steht die Leiste? EINE Bedingung für die Leiste selbst und die dritte
+  // Rasterspalte: ein Filter ohne Treffer zeigt die Leiste weiter (Filterknöpfe,
+  // Leer-Hinweis) — ohne eigene Spalte rutschte sie in eine neue Rasterzeile
+  // unter das ganze Manuskript.
+  commentRailShown() {
+    return this.commentRailVisible
+      && !!(this.commentThreads.length || this.commentFilterStatus !== 'all' || this.commentFilterReviewer);
+  },
+
   toggleCommentRail() {
     this.commentRailVisible = !this.commentRailVisible;
     // Highlights folgen der Sichtbarkeit: einblenden = neu lokalisieren+markieren,
