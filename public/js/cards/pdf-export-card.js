@@ -19,6 +19,8 @@ import { exportScopeSlice, exportJobSlice, unnumberedChipsSlice, exportSnapshotS
 import * as presets from './pdf-export-presets.js';
 import * as templates from './pdf-export-templates.js';
 import { pdfExportUiSlice } from './pdf-export-ui.js';
+import { CARD_REQUEST } from './card-request.js';
+import { openBookSettingsTab } from '../book/book-settings/open-tab.js';
 
 export function registerPdfExportCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -116,6 +118,7 @@ export function registerPdfExportCard() {
     _onBookChanged: null,
     _onViewReset: null,
     _onBeforeUnload: null,
+    _onCardRequest: null,
 
     init() {
       this._initUiMode();
@@ -166,6 +169,12 @@ export function registerPdfExportCard() {
         e.returnValue = '';
       };
       window.addEventListener('beforeunload', this._onBeforeUnload);
+
+      this._onCardRequest = (e) => {
+        if (e.detail?.key === CARD_REQUEST.PDF_EXPORT_TAB) this._applyPendingTab();
+      };
+      window.addEventListener(EVT.CARD_REQUEST, this._onCardRequest);
+      this._applyPendingTab();
     },
 
     destroy() {
@@ -174,6 +183,7 @@ export function registerPdfExportCard() {
       if (this._exportStatusTimer) { clearTimeout(this._exportStatusTimer); this._exportStatusTimer = null; }
       if (this._onBookChanged)  window.removeEventListener(EVT.BOOK_CHANGED, this._onBookChanged);
       if (this._onViewReset)    window.removeEventListener(EVT.VIEW_RESET,   this._onViewReset);
+      if (this._onCardRequest)  window.removeEventListener(EVT.CARD_REQUEST, this._onCardRequest);
       if (this._onBeforeUnload) window.removeEventListener('beforeunload',   this._onBeforeUnload);
       this._unbindPreset();
     },
@@ -431,6 +441,8 @@ export function registerPdfExportCard() {
       const cs = this.activeProfile?.config?.coverSpec;
       return !!(cs && cs.pageCount > 0 && cs.paperBulkMmPer1000 > 0);
     },
+    // Klappentext der Rückseite ist der buch-weite (Publikation-Reiter).
+    openPublicationSettings() { openBookSettingsTab('publication'); },
 
     // ── Cover-Tab: Papier-Presets (Trim/KDP: pdf-export-ui.js) ─────────────
     paperPresetOptions() { return presets.paperPresetOptions(window.__app.t); },

@@ -211,7 +211,33 @@ function listZeitstrahlEventRefs(eventIds) {
   return { chRows, pgRows, fgRows };
 }
 
+/** Datierte Zeitstrahl-Events der gegebenen Abschnitte (Buch + User) → Map
+ *  page_id → Events in erzählter Reihenfolge. Speist den Zeitvorschlag der
+ *  Plot-Werkstatt (lib/plot-zeit-vorschlag.js); Events ohne Jahr und ohne
+ *  Story-Tag fallen schon hier raus. */
+function listDatedEventsForPages(bookId, userEmail, pageIds) {
+  const out = new Map();
+  if (!pageIds.length) return out;
+  const { sql: idSql, values: idVals } = inClause(pageIds);
+  const rows = db.prepare(`
+    SELECT zep.page_id, ze.datum, ze.datum_label, ze.datum_year, ze.datum_month, ze.datum_day,
+           ze.datum_ende_year, ze.datum_ende_month, ze.datum_ende_day, ze.story_tag,
+           ze.datum_unsicher, ze.ereignis, ze.typ, ze.subtyp, ze.sort_order
+    FROM zeitstrahl_event_pages zep
+    JOIN zeitstrahl_events ze ON ze.id = zep.event_id
+    WHERE ze.book_id = ? AND ze.user_email = ? AND zep.page_id IN ${idSql}
+      AND (ze.datum_year IS NOT NULL OR ze.story_tag IS NOT NULL)
+    ORDER BY zep.page_id, ze.sort_order, ze.id
+  `).all(bookId, userEmail || '', ...idVals);
+  for (const r of rows) {
+    if (!out.has(r.page_id)) out.set(r.page_id, []);
+    out.get(r.page_id).push(r);
+  }
+  return out;
+}
+
 module.exports = {
+  listDatedEventsForPages,
   saveZeitstrahlEvents,
   listFigureEventsForTimeline,
   listZeitstrahlEvents,

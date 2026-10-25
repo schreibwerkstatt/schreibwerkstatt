@@ -119,6 +119,14 @@ export function registerBookOrganizerCard() {
             if (!window.__app.showBookOrganizerCard) return;
             await this._rerender();
           } },
+          // Abschnitt ausserhalb angelegt (Sidebar-Kontextmenü, erster Abschnitt
+          // eines neuen Kapitels, Offline-Overlay) bzw. offline angelegter hat
+          // seine echte ID — in-place eingehängt, kein pages:loaded. Ohne
+          // Nachzug fehlte er im nächsten Order-PUT (Server: MISSING_PAGE).
+          { type: EVT.PAGE_ADDED, handler: async () => {
+            if (!window.__app.showBookOrganizerCard) return;
+            await this._rerender();
+          } },
           // Kapitel ausserhalb geloescht (Sidebar-Kontextmenue) — ebenso in-place
           // aus nav.tree genommen; der naechste Order-PUT darf es nicht mehr nennen.
           { type: EVT.CHAPTER_REMOVED, handler: async () => {

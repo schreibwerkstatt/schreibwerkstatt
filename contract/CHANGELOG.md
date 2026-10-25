@@ -2,6 +2,17 @@
 
 Neueste oben. Je Abschnitt: was sich geändert hat, und was ein Client tun **muss** (Bruch, Frist) bzw. tun **darf** (neues Feld, neuer Weg). Regeln: [README.md](README.md).
 
+## api 4 · editorApi 1
+
+Gliederung, nur additiv:
+
+- **`GET /content/books/{book_id}/tree` → `order_updated_at`:** Version der Gliederung. Sie ändert sich bei jedem Anlegen, Umbenennen, Löschen oder Umsortieren von Kapiteln und Abschnitten.
+- **Lesereihenfolge festgeschrieben:** Abschnitte ohne Kapitel (`topPages`) stehen vor allen Kapiteln, die eigenen Abschnitte eines Kapitels (`pages`) vor seinen Unterkapiteln (`subchapters`). Die Form der Antwort bleibt gleich.
+- **`POST /content/chapters`:** ein `parent_chapter_id` auf Ebene 3 wird mit `400 CHAPTER_MAX_DEPTH` abgelehnt (bisher entstand eine vierte Ebene, die das Umsortieren des Buchs blockierte).
+- **`PUT /content/pages/{page_id}`:** `chapter_id` und `position` im Body werden ignoriert. Beide standen nie im Vertrag; die Gliederung ändert sich nur über die Reihenfolge des Buchs.
+
+**Clients dürfen:** `order_updated_at` merken und den Baum neu laden, wenn er sich ändert, statt die Gliederung bei jedem Sync komplett zu ziehen. Feature-Check `clientContract.api >= 4`.
+
 ## api 3 · editorApi 1
 
 - **`POST /content/pages` liest den optionalen Header `Idempotency-Key`.** Derselbe Schlüssel desselben Kontos liefert 24 h lang die erste Antwort noch einmal (mit Header `Idempotent-Replayed: true`), statt einen zweiten Abschnitt anzulegen. Läuft der erste Request noch, wartet der zweite auf dessen Ausgang. Ohne Header bleibt alles wie bisher. Die Web-App schickt den Schlüssel beim ersten Versuch mit, damit ein Anlegen, dessen Antwort im Funkloch verloren ging, beim Nachspielen nicht doppelt entsteht.

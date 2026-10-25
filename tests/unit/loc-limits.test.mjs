@@ -99,7 +99,6 @@ const CATEGORIES = [
     allow: {
       'lib/export-builders/docx.js': 898,
       'lib/page-index.js': 685,
-      'lib/content-store/backends/localdb.js': 635,
       'routes/jobs/komplett/phases/extraktion.js': 657,
     },
   },

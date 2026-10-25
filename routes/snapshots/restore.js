@@ -18,6 +18,7 @@ const { snapshotPublication } = require('../../lib/snapshot-export');
 const { toIntId } = require('../../lib/validate');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const snapshots = require('../../db/book-snapshots');
+const { MAX_CHAPTER_DEPTH } = require('../../db/book-order');
 const pagePresence = require('../../db/page-presence');
 const { SETTINGS_FIELDS } = require('../../lib/snapshot-drift');
 const { buildSnapshotPayload, insertPayload, sameAsBaseline } = require('./payload');
@@ -134,6 +135,36 @@ function _findNode(nodes, kind, srcId, parentSrcId = null) {
   return null;
 }
 
+// Kapitel-Ebenen eines Fassungs-Knotens (Abschnitt 0, Kapitel ohne
+// Unterkapitel 1, …).
+function _chapterHeight(node) {
+  if (!node || node.type !== 'chapter') return 0;
+  return 1 + Math.max(0, ...(node.children || []).map(_chapterHeight));
+}
+
+// Elternkapitel fuer einen wiederhergestellten Teilbaum der Hoehe `height`: das
+// urspruengliche, solange die Tiefe MAX_CHAPTER_DEPTH haelt — sonst der naechste
+// Vorfahre, unter dem der Teilbaum passt (null = oberste Ebene). Das Elternkapitel
+// kann seit der Fassung tiefer gewandert sein.
+function _fittingParent(chapters, parentId, height) {
+  const byId = new Map(chapters.map((c) => [c.id, c]));
+  const depthOf = (id) => {
+    let d = 0;
+    const seen = new Set();
+    for (let cur = byId.get(id); cur && !seen.has(cur.id); cur = byId.get(cur.parent_chapter_id)) {
+      seen.add(cur.id);
+      d++;
+    }
+    return d;
+  };
+  const visited = new Set();
+  for (let cur = byId.get(parentId); cur && !visited.has(cur.id); cur = byId.get(cur.parent_chapter_id)) {
+    visited.add(cur.id);
+    if (depthOf(cur.id) + height <= MAX_CHAPTER_DEPTH) return cur.id;
+  }
+  return null;
+}
+
 function registerRestoreRoutes(router) {
   // ── Ganzes Buch ──────────────────────────────────────────────────────────────
   // Destruktiv fuer alles, was seit der Fassung hinzukam (Seiten → Papierkorb).
@@ -237,7 +268,9 @@ function registerRestoreRoutes(router) {
       let rootParentChapterId = null;
       if (hit.parentSrcId != null) {
         const chapters = await contentStore.listChapters(bookId, req);
-        if (chapters.some((c) => c.id === hit.parentSrcId)) rootParentChapterId = hit.parentSrcId;
+        if (chapters.some((c) => c.id === hit.parentSrcId)) {
+          rootParentChapterId = _fittingParent(chapters, hit.parentSrcId, _chapterHeight(hit.node));
+        }
       }
       const { ops } = planFromNodes([hit.node]);
       const result = await materializeOps(bookId, ops, req, { replace: false, rootParentChapterId });

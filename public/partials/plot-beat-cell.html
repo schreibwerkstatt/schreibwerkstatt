@@ -66,6 +66,11 @@
       <span class="plot-beat-anchor plot-beat-anchor--drift" role="img"
             x-show="beatAnchorState(beat) === 'drift'"
             :data-tip="beatAnchorTip(beat)" :aria-label="beatAnchorTip(beat)"><span aria-hidden="true">!</span></span>
+      <!-- Zeit-Messung an der Karte: Befunde dieses Beats (Liste bleibt im Panel
+           unter dem Board), Ton = schwerster Befund. -->
+      <span class="plot-beat-anchor plot-beat-timecheck" role="img" :class="beatTimeCheckClass(beat)"
+            x-show="beatTimeChecks(beat).length"
+            :data-tip="beatTimeCheckTip(beat)" :aria-label="beatTimeCheckTip(beat)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#calendar"/></svg></span>
     </div>
     <p class="plot-beat-desc" x-show="beat.beschreibung" x-text="beat.beschreibung"></p>
     <div class="plot-beat-meta" x-show="beat.chapter_name || beat.zeit || (beat.fig_ids && beat.fig_ids.length) || (beat.draft_fig_ids && beat.draft_fig_ids.length) || (beat.motifs && beat.motifs.length) || (beat.locations && beat.locations.length) || inheritedChapterForBeat(beat) || inheritedFigureForBeat(beat)">
@@ -86,8 +91,13 @@
            sondern ist eine Angabe ueber die Welt — die Pruefung dagegen laeuft
            in der Zeit-Messung (lib/plot-time-consistency.js). -->
       <span class="tag tag--zeit" x-show="beat.zeit"
-            :data-tip="$app.t('plot.beat.zeitTip')"
+            :class="{ 'tag--zeit-unklar': zeitVerstanden(beat)?.ok === false }"
+            :data-tip="beatZeitTip(beat)"
             x-text="beat.zeit"></span>
+      <!-- Alter der Strang-Figur zur Beat-Zeit (Steckbrief-Geburtsjahr) — eine
+           Angabe, kein Befund. -->
+      <span class="tag tag--alter" x-show="beatAlter(beat)" :data-tip="beatAlter(beat)?.tip"
+            x-text="beatAlter(beat)?.text"></span>
       <template x-for="lo in (beat.locations || [])" :key="'l' + lo.id">
         <button type="button" class="entity-ref" x-entity-ref="{ type: 'ort', id: lo.id, label: lo.name }"></button>
       </template>

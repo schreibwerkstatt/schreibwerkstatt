@@ -202,6 +202,7 @@
                 <!-- Eingeklappter Akt: nur die Beat-Zahl der Zelle (Rest per CSS aus). -->
                 <span class="plot-swim-cell-count" x-show="isActCollapsed(act.id)"
                       x-text="filteredBeatsForCell(act.id, row.lane.id).length || ''"></span>
+                <span class="plot-swim-cell-zeit" x-show="!isActCollapsed(act.id) && aktFenster(act.id, row.lane.id)" :data-tip="aktFenster(act.id, row.lane.id)?.tip" x-text="aktFenster(act.id, row.lane.id)?.text"></span>
 
                 <!-- SortableJS-Container der Zelle: nur x-for-Anker + Beat-Karten.
                      thread_id leer = „ohne Strang"-Lane (dnd.js parst → NULL). -->

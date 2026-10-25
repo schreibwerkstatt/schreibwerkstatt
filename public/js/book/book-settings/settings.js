@@ -166,16 +166,16 @@ export const settingsMethods = {
   async saveActiveTab() {
     const taxErr = this._taxonomyError();
     if (taxErr) { this.bookSettingsError = window.__app.t(taxErr); return; }
-    await Promise.all([this.saveBookSettings(), this.savePublication(), this.saveCitationSettings(), this.saveXrefSettings(), this.saveResearchSettings()]);
+    await Promise.all([this.saveBookSettings(), this.savePublication(), this.saveCitationSettings(), this.saveXrefSettings(), this.saveResearchSettings(), this.saveExpose()]);
   },
 
-  headerSaving()   { return this.bookSettingsSaving || this.pubSaving || this.citationSaving || this.researchSaving; },
+  headerSaving()   { return this.bookSettingsSaving || this.pubSaving || this.citationSaving || this.researchSaving || this.exposeSaving; },
 
   headerError()    { return this.bookSettingsError || this.pubError || this.citationError || this.researchError; },
 
-  headerSaved()    { return (this.bookSettingsSaved || this.pubSaved || this.citationSaved) && !this.headerError(); },
+  headerSaved()    { return (this.bookSettingsSaved || this.pubSaved || this.citationSaved || this.exposeSaved) && !this.headerError(); },
 
-  headerDisabled() { return this.bookSettingsSaving || this.pubSaving || this.citationSaving || this.researchSaving || this.bookSettingsLoading; },
+  headerDisabled() { return this.bookSettingsSaving || this.pubSaving || this.citationSaving || this.researchSaving || this.exposeSaving || this.bookSettingsLoading; },
 
 
   async saveBookSettings() {

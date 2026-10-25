@@ -12,6 +12,7 @@ import { fetchJson, localeTag, tzOpts } from '../utils.js';
 import { copyText } from '../copy-button.js';
 import { EVT } from '../events.js';
 import { isSelectedBook } from './book-guard.js';
+import { shareChapterOptions, sharePageOptions } from './share-target-options.js';
 
 export function registerShareLinksCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -212,35 +213,14 @@ export function registerShareLinksCard() {
       return link.chapter_name || app.t('share.target.chapterFallback', { id: link.chapter_id });
     },
 
+    // Flacher Sidebar-Baum (depth + parent_id) → Pfad-Labels, Einrückung und
+    // Kapitel-Labels wie in den Filtern (share-target-options.js).
     pageOptions() {
-      const tree = Alpine.store('nav').tree || [];
-      const out = [];
-      const walk = (items, prefix) => {
-        for (const it of items) {
-          if (it.type !== 'chapter') continue;
-          const label = prefix ? `${prefix} › ${it.name}` : it.name;
-          for (const p of (it.pages || [])) {
-            out.push({ value: String(p.id), label: `${label} / ${p.name}` });
-          }
-          if (it.subchapters?.length) walk(it.subchapters, label);
-        }
-      };
-      walk(tree, '');
-      return out;
+      return sharePageOptions(Alpine.store('nav').tree || []);
     },
 
     chapterOptions() {
-      const tree = Alpine.store('nav').tree || [];
-      const out = [];
-      const walk = (items, depth) => {
-        for (const it of items) {
-          if (it.type !== 'chapter' || it.solo) continue;
-          out.push({ value: String(it.id), label: '— '.repeat(depth) + it.name });
-          if (it.subchapters?.length) walk(it.subchapters, depth + 1);
-        }
-      };
-      walk(tree, 0);
-      return out;
+      return shareChapterOptions(Alpine.store('nav').tree || [], window.__app?._chapterLabelMap);
     },
 
     async createLink() {

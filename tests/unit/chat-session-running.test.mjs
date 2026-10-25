@@ -303,3 +303,22 @@ test('Reset während des Sende-POST: kein Poller, keine Lauf-Anzeige', async () 
   assert.equal(c.chatLoading, false);
   assert.equal(c.chatRunningSessionId, null);
 });
+
+test('Neu auf einem leeren offenen Gespräch legt kein zweites an', async () => {
+  reset();
+  const c = makeCard();
+  routes.set('POST /chat/session', { id: 300 });
+  routes.set(SESSIONS_URL, []);
+  // Karte öffnen und gleich „Neu" klicken: beide teilen sich EIN Anlegen.
+  await Promise.all([c._onVisibleChat(), c.startNewChatSession()]);
+  assert.equal(calls.filter((x) => x.method === 'POST' && x.url === '/chat/session').length, 1);
+  assert.equal(c.chatSessionId, 300);
+  // Noch einmal „Neu", solange das Gespräch leer ist: es bleibt dasselbe.
+  await c.startNewChatSession();
+  assert.equal(calls.filter((x) => x.method === 'POST' && x.url === '/chat/session').length, 1);
+  // Mit Nachrichten legt „Neu" wieder ein frisches an.
+  c.chatMessages = [{ role: 'user', content: 'x' }];
+  routes.set('POST /chat/session', { id: 301 });
+  await c.startNewChatSession();
+  assert.equal(c.chatSessionId, 301);
+});

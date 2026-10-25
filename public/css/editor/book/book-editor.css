@@ -176,6 +176,9 @@
     gap: var(--space-2xs);
   }
   .book-editor-outline-group { display: contents; }
+  /* Unterkapitel eingerückt (depth 0 = Top-Kapitel, aus buildOutlineNodes). */
+  .book-editor-outline-group--d1 > * { margin-inline-start: var(--space-md); }
+  .book-editor-outline-group--d2 > * { margin-inline-start: var(--space-lg); }
 
   .book-editor-outline-chapter {
     display: flex;
@@ -317,6 +320,9 @@
     margin-block: var(--space-lg) 0;
   }
   .book-editor-chapter-header:first-child { margin-block-start: 0; }
+  /* Unterkapitel abgestuft (depth aus manuscript-stream.js#fromPages, 0 = Top). */
+  .book-editor-chapter-header--d1 .book-editor-chapter-name { font-size: var(--font-size-lg); }
+  .book-editor-chapter-header--d2 .book-editor-chapter-name { font-size: var(--font-size-md); }
   .book-editor-chapter-name {
     display: block;
     font-family: var(--font-serif);

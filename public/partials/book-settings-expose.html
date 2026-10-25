@@ -1,0 +1,161 @@
+    <!-- Exposé: Methods public/js/book/book-settings/expose.js, Job
+         routes/jobs/expose.js, Doku docs/expose.md. Gespeichert werden nur die
+         KI-Texte + Autorfassung; Eckdaten kommen live aus dem Formular dieser
+         Karte, der Klappentext IST bookPublication.description. -->
+    <div class="card-form-grid" x-bind="panel('expose')" x-cloak>
+
+      <section class="book-settings-section">
+        <h3 class="card-section-title" x-text="$app.t('expose.title')"></h3>
+        <p class="card-hint" x-text="exposeProfilActive() === 'sachlich' ? $app.t('expose.introSachbuch') : $app.t('expose.introRoman')"></p>
+        <div class="expose-actions">
+          <button type="button" @click="generateExpose()" :disabled="exposeGenerating || !exposeProfilActive()"
+                  x-text="exposeGenerating ? $app.t('expose.generating') : (exposeRun ? $app.t('expose.regenerate') : $app.t('expose.generate'))"></button>
+          <span class="muted-msg" x-show="exposeUnchanged && !exposeGenerating" x-text="$app.t('expose.unchanged')"></span>
+        </div>
+        <p class="card-form-error" x-show="exposeError" x-text="exposeError"></p>
+      </section>
+
+      <section class="book-settings-section">
+        <h3 class="card-section-title" x-text="$app.t('expose.facts.title')"></h3>
+        <p class="card-hint">
+          <span x-text="$app.t('expose.facts.hint')"></span>
+          <span class="internal-link" @click="bookSettingsTab = 'publication'" x-text="$app.t('book.settings.tab.publication')"></span>
+          ·
+          <span class="internal-link" @click="bookSettingsTab = 'book'" x-text="$app.t('book.settings.tab.book')"></span>
+        </p>
+        <dl class="expose-facts">
+          <dt x-text="$app.t('expose.facts.titel')"></dt>
+          <dd x-text="bookSettingsName || '–'"></dd>
+          <dt x-text="$app.t('publication.subtitle')"></dt>
+          <dd x-text="bookPublication.subtitle || '–'"></dd>
+          <dt x-text="$app.t('expose.facts.autor')"></dt>
+          <dd x-text="[bookPublication.author_name, ...(bookPublication.co_authors || []).map(c => c.name)].filter(Boolean).join(', ') || '–'"></dd>
+          <dt x-text="$app.t('expose.facts.genre')"></dt>
+          <dd x-text="exposeGenreLabel() || '–'"></dd>
+          <template x-if="exposeProfilActive() === 'narrativ'">
+            <dt x-text="$app.t('book.settings.pov')"></dt>
+          </template>
+          <template x-if="exposeProfilActive() === 'narrativ'">
+            <dd x-text="exposePovLabel() || '–'"></dd>
+          </template>
+          <dt x-text="$app.t('expose.facts.umfang')"></dt>
+          <dd x-text="exposeNormseiten ? $app.t('expose.facts.normseiten', { n: exposeNormseiten.toLocaleString() }) : '–'"></dd>
+          <dt x-text="$app.t('publication.zielgruppe')"></dt>
+          <dd x-text="bookPublication.zielgruppe || '–'"></dd>
+          <dt x-text="$app.t('publication.vergleichstitel')"></dt>
+          <dd class="expose-pre" x-text="bookPublication.vergleichstitel || '–'"></dd>
+        </dl>
+      </section>
+
+      <template x-if="exposeDraft">
+        <div class="expose-result">
+          <section class="book-settings-section">
+            <ul class="expose-warnings" x-show="(exposeRun?.warnungen || []).length">
+              <template x-for="w in (exposeRun?.warnungen || [])" :key="w.key">
+                <li x-text="exposeWarnText(w)"></li>
+              </template>
+            </ul>
+            <div class="expose-actions">
+              <span class="expose-meta">
+                <span class="expose-meta-item" x-text="$app.t('expose.createdAt', { when: exposeWhen(exposeRun?.created_at) })"></span>
+                <span class="expose-meta-item expose-meta-tip" tabindex="0" x-show="exposeRun?.basis === 'multi'"
+                      :data-tip="$app.t('expose.basis.multiTip')" x-text="$app.t('expose.basis.multi')"></span>
+                <span class="expose-meta-item" x-show="exposeRun?.edited" x-text="$app.t('expose.editedNote')"></span>
+              </span>
+              <button type="button" class="btn-compact" x-show="exposeRun?.edited" @click="resetExposeToKi()" x-text="$app.t('expose.resetToKi')"></button>
+              <a class="btn-compact" :href="exposeDocxUrl()" download x-show="!exposeDirty" x-text="$app.t('expose.docx')"></a>
+              <span class="muted-msg" x-show="exposeDirty" x-text="$app.t('expose.docxSaveFirst')"></span>
+            </div>
+
+            <div class="card-form-row">
+              <label class="card-form-label" for="expose-logline" x-text="$app.t('expose.field.logline')"></label>
+              <textarea id="expose-logline" class="card-form-textarea" rows="2" x-model="exposeDraft.logline" @input="markExposeDirty()" data-spellcheck="spelling"></textarea>
+            </div>
+
+            <template x-if="exposeRun?.profil !== 'sachlich'">
+              <div>
+                <div class="card-form-row">
+                  <label class="card-form-label" for="expose-kurzinhalt" x-text="$app.t('expose.field.kurzinhalt')"></label>
+                  <textarea id="expose-kurzinhalt" class="card-form-textarea" rows="4" x-model="exposeDraft.kurzinhalt" @input="markExposeDirty()" data-spellcheck="spelling"></textarea>
+                </div>
+                <div class="card-form-row">
+                  <label class="card-form-label" for="expose-synopse" x-text="$app.t('expose.field.synopse')"></label>
+                  <textarea id="expose-synopse" class="card-form-textarea expose-long" rows="14" x-model="exposeDraft.synopse" @input="markExposeDirty()" data-spellcheck="spelling"></textarea>
+                </div>
+                <div class="card-form-row">
+                  <span class="card-form-label" x-text="$app.t('expose.field.figuren')"></span>
+                  <div class="expose-list">
+                    <template x-for="f in exposeDraft.figuren" :key="f.fig_id">
+                      <div class="expose-list-item">
+                        <button type="button" class="entity-ref" x-entity-ref="{ type: 'figure', id: f.fig_id }"></button>
+                        <textarea class="card-form-textarea" rows="2" x-model="f.text" @input="markExposeDirty()" data-spellcheck="spelling"></textarea>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <template x-if="exposeRun?.profil === 'sachlich'">
+              <div>
+                <div class="card-form-row">
+                  <label class="card-form-label" for="expose-kurzbeschreibung" x-text="$app.t('expose.field.kurzbeschreibung')"></label>
+                  <textarea id="expose-kurzbeschreibung" class="card-form-textarea" rows="4" x-model="exposeDraft.kurzbeschreibung" @input="markExposeDirty()" data-spellcheck="spelling"></textarea>
+                </div>
+                <div class="card-form-row">
+                  <label class="card-form-label" for="expose-alleinstellung" x-text="$app.t('expose.field.alleinstellung')"></label>
+                  <textarea id="expose-alleinstellung" class="card-form-textarea" rows="3" x-model="exposeDraft.alleinstellung" @input="markExposeDirty()" data-spellcheck="spelling"></textarea>
+                </div>
+                <div class="card-form-row">
+                  <span class="card-form-label" x-text="$app.t('expose.field.gliederung')"></span>
+                  <div class="expose-list">
+                    <template x-for="g in exposeDraft.gliederung" :key="g.chapter_id">
+                      <div class="expose-list-item">
+                        <button type="button" class="entity-ref" x-entity-ref="{ type: 'chapter', id: g.chapter_id }"></button>
+                        <textarea class="card-form-textarea" rows="2" x-model="g.text" @input="markExposeDirty()" data-spellcheck="spelling"></textarea>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </section>
+
+          <section class="book-settings-section">
+            <h3 class="card-section-title" x-text="$app.t('expose.klappentext.title')"></h3>
+            <div class="card-form-row">
+              <label class="card-form-label" for="expose-klappentext-vorschlag" x-text="$app.t('expose.klappentext.vorschlag')"></label>
+              <textarea id="expose-klappentext-vorschlag" class="card-form-textarea" rows="6" x-model="exposeDraft.klappentext" @input="markExposeDirty()" data-spellcheck="spelling"></textarea>
+            </div>
+            <div class="expose-actions">
+              <button type="button" class="btn-compact" @click="adoptExposeKlappentext()" :disabled="exposeKlappentextIsAdopted()"
+                      x-text="exposeKlappentextIsAdopted() ? $app.t('expose.klappentext.isAdopted') : $app.t('expose.klappentext.adopt')"></button>
+              <span class="muted-msg" x-show="exposeAdopted && exposeKlappentextIsAdopted()" x-text="$app.t('expose.klappentext.saveHint')"></span>
+            </div>
+            <div class="card-form-row">
+              <label class="card-form-label" for="expose-klappentext-buch" x-text="$app.t('expose.klappentext.buch')"></label>
+              <textarea id="expose-klappentext-buch" class="card-form-textarea" rows="6" x-model="bookPublication.description" maxlength="4000" data-spellcheck="spelling"></textarea>
+            </div>
+          </section>
+
+          <section class="book-settings-section">
+            <h3 class="card-section-title" x-text="$app.t('publication.authorBio')"></h3>
+            <p class="expose-pre" x-show="bookPublication.author_bio" x-text="bookPublication.author_bio"></p>
+            <p class="card-hint" x-show="!bookPublication.author_bio" x-text="$app.t('expose.noBio')"></p>
+            <p class="card-hint"><span class="internal-link" @click="bookSettingsTab = 'publication'" x-text="$app.t('expose.editInPublication')"></span></p>
+          </section>
+        </div>
+      </template>
+
+      <section class="book-settings-section" x-show="exposeHistory.length > 1">
+        <h3 class="card-section-title" x-text="$app.t('expose.history.title')"></h3>
+        <ul class="expose-history">
+          <template x-for="h in exposeHistory" :key="h.id">
+            <li :class="{ 'expose-history-item--active': exposeRun?.id === h.id }">
+              <span class="internal-link" @click="openExposeRun(h.id)" x-text="exposeRunLabel(h)"></span>
+              <button type="button" class="btn-compact" @click="deleteExposeRun(h.id)" x-text="$app.t('expose.history.delete')"></button>
+            </li>
+          </template>
+        </ul>
+      </section>
+    </div>

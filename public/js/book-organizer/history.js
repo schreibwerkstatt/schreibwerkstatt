@@ -286,7 +286,7 @@ export const historyMethods = {
         name: res.page.name ?? rec.name,
         chapter_id: target ? rec.chapterId : 0,
       });
-      await contentRepo.saveOrder(bookId, this._buildTreeFromWorkstate());
+      await this._saveOrder(bookId, this._buildTreeFromWorkstate());
       await this._applyMirror('reload');
     }, 'bookOrganizer.restoreFailed');
     if (newId != null) this._remapPageId(rec.pageId, newId, rec);

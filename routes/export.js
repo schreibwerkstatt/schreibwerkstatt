@@ -33,7 +33,10 @@ router.get('/:scope/:id/:fmt', async (req, res) => {
 
   let bundle;
   try {
-    bundle = await loadContents({ scope, id }, req);
+    // Schnell-Export eines Kapitels = ganzer Teilbaum (ein «Teil» ohne eigenen
+    // Abschnitt ist sonst leer, ein gemischtes Kapitel verloere still seine
+    // Unterkapitel).
+    bundle = await loadContents({ scope, id, includeSubchapters: true }, req);
   } catch (e) {
     if (e.code === 'BOOK_EMPTY')      return res.status(400).json({ error_code: 'BOOK_EMPTY' });
     if (e.code === 'CHAPTER_EMPTY')   return res.status(400).json({ error_code: 'CHAPTER_EMPTY' });

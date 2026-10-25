@@ -14,6 +14,8 @@ export const timeCheckMethods = {
   async loadTimeChecks() {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) { this.timeChecks = []; return; }
+    // Zeitvorschläge hängen an denselben Auslösern (Zeit, Verworfen, Board-Load).
+    this.loadZeitVorschlaege?.();
     try {
       const data = await fetchJson(`/plot/time-check?book_id=${bookId}`);
       if (Alpine.store('nav').selectedBookId !== bookId) return;

@@ -7,6 +7,8 @@
 import { userSettingsMethods } from '../user-settings.js';
 import { aiAccessState, aiAccessMethods } from '../user-settings-ai-access.js';
 import { EVT } from '../events.js';
+import { takeCardRequest, CARD_REQUEST } from './card-request.js';
+import { scrollToWhenReady } from '../app/app-navigation.js';
 
 export function registerUserSettingsCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -64,18 +66,19 @@ export function registerUserSettingsCard() {
     },
 
     _onViewReset: null,
+    _onCardRequest: null,
+    _loadingAll: false,
 
     init() {
       this.$watch(() => window.__app.showUserSettingsCard, async (visible) => {
         if (!visible) return;
-        await this.loadUserSettings();
-        await this.loadDictEntries();
-        await this.loadLtRules();
-        await this.loadAiAccess();
-        await this.loadDeviceTokens();
-        await this.loadMacRelease();
-        await this.loadAndroidRelease();
-        await this.loadExtensionRelease();
+        this._loadingAll = true;
+        try {
+          await this._loadAll();
+        } finally {
+          this._loadingAll = false;
+        }
+        this._applySectionRequest();
       });
 
       this._onViewReset = () => {
@@ -83,6 +86,44 @@ export function registerUserSettingsCard() {
         this.userSettingsError = '';
       };
       window.addEventListener(EVT.VIEW_RESET, this._onViewReset);
+
+      // Sprung auf einen Abschnitt (Command-Palette). Öffnet der Sprung die
+      // Karte erst, holt der Lade-Watcher oben den Wunsch nach dem Laden ab —
+      // vorher steht das Formular hinter `userSettingsLoading` und ist unsichtbar.
+      this._onCardRequest = async (e) => {
+        if (e.detail?.key !== CARD_REQUEST.USER_SETTINGS_SECTION) return;
+        await this.$nextTick();
+        if (!this._loadingAll) this._applySectionRequest();
+      };
+      window.addEventListener(EVT.CARD_REQUEST, this._onCardRequest);
+    },
+
+    async _loadAll() {
+      await this.loadUserSettings();
+      await this.loadDictEntries();
+      await this.loadLtRules();
+      await this.loadAiAccess();
+      await this.loadDeviceTokens();
+      await this.loadMacRelease();
+      await this.loadAndroidRelease();
+      await this.loadExtensionRelease();
+    },
+
+    // Abschnitte tragen `data-settings-section`; bei mehreren Zeilen (Apps)
+    // zählt die erste sichtbare. Der Abschnitt klappt auf, gescrollt wird auf
+    // seine Kopfzeile — das Panel darunter kann höher als das Fenster sein.
+    async _applySectionRequest() {
+      const section = takeCardRequest(CARD_REQUEST.USER_SETTINGS_SECTION);
+      if (!section) return;
+      await this.$nextTick();
+      const row = [...this.$el.querySelectorAll(`[data-settings-section="${section}"]`)]
+        .find(el => el.offsetParent !== null);
+      // Abschnitt gibt es hier nicht (z.B. KI-Zugang vom Admin zu): dann
+      // wenigstens den Karten-Anfang zeigen, den der Toggle übersprungen hat.
+      if (!row) { window.__app?._scrollToCardByKey?.('userSettings'); return; }
+      const panel = window.Alpine.$data(row);
+      if (panel && 'open' in panel) panel.open = true;
+      scrollToWhenReady(() => row.querySelector('.collapsible-toggle') || row);
     },
 
     async loadDictEntries() {
@@ -134,6 +175,7 @@ export function registerUserSettingsCard() {
     destroy() {
       if (this._savedAtTimer) { clearTimeout(this._savedAtTimer); this._savedAtTimer = null; }
       if (this._onViewReset) window.removeEventListener(EVT.VIEW_RESET, this._onViewReset);
+      if (this._onCardRequest) window.removeEventListener(EVT.CARD_REQUEST, this._onCardRequest);
     },
 
     ...userSettingsMethods,

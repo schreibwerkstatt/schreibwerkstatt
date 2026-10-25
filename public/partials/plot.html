@@ -171,25 +171,30 @@
       <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
       <span x-text="$app.t('plot.figcoverage.title')"></span>
     </button>
-    <div class="plot-coverage-body" x-bind="panel" x-cloak>
-      <div class="plot-coverage-group" x-show="figureCoverage().developedNoPlot.length">
-        <span class="entity-meta-label" x-text="$app.t('plot.figcoverage.developedNoPlot', { n: figureCoverage().developedNoPlot.length })"></span>
-        <div class="entity-refs">
-          <template x-for="d in figureCoverage().developedNoPlot" :key="d.id">
-            <button type="button" class="entity-ref" x-entity-ref="{ type: 'werkstatt', id: d.id, label: d.name }"></button>
-          </template>
+    <div x-bind="panel" x-cloak>
+      <div class="plot-coverage-body">
+        <div class="plot-coverage-group" x-show="figureCoverage().developedNoPlot.length">
+          <span class="entity-meta-label" x-text="$app.t('plot.figcoverage.developedNoPlot', { n: figureCoverage().developedNoPlot.length })"></span>
+          <div class="entity-refs">
+            <template x-for="d in figureCoverage().developedNoPlot" :key="d.id">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'werkstatt', id: d.id, label: d.name }"></button>
+            </template>
+          </div>
         </div>
-      </div>
-      <div class="plot-coverage-group" x-show="figureCoverage().inPlotNoArc.length">
-        <span class="entity-meta-label" x-text="$app.t('plot.figcoverage.inPlotNoArc', { n: figureCoverage().inPlotNoArc.length })"></span>
-        <div class="entity-refs">
-          <template x-for="d in figureCoverage().inPlotNoArc" :key="d.id">
-            <button type="button" class="entity-ref" x-entity-ref="{ type: 'werkstatt', id: d.id, label: d.name }"></button>
-          </template>
+        <div class="plot-coverage-group" x-show="figureCoverage().inPlotNoArc.length">
+          <span class="entity-meta-label" x-text="$app.t('plot.figcoverage.inPlotNoArc', { n: figureCoverage().inPlotNoArc.length })"></span>
+          <div class="entity-refs">
+            <template x-for="d in figureCoverage().inPlotNoArc" :key="d.id">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'werkstatt', id: d.id, label: d.name }"></button>
+            </template>
+          </div>
         </div>
       </div>
     </div>
   </div>
+
+  <!-- Zeitvorschläge aus dem Text: Durchsicht mit Belegen (ausgelagert; File-Limit). -->
+  <div id="partial-plot-zeit-review"></div>
 
   <!-- Spannungsbogen: Intensitäts-Kurve der Beats (ausgelagert; File-Limit). -->
   <div id="partial-plot-tension"></div>

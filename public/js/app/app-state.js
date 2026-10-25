@@ -60,19 +60,15 @@ const navigationState = () => ({
   // Erst nach dem ersten loadBooks() true. Gate fuer den Welcome-Empty-State
   // (books.length === 0), damit der nicht waehrend des initialen Ladens blitzt.
   booksLoaded: false,
-  // Kategorie-Pool (global, beim Login einmal geladen). Liefert die Gruppen-Namen
-  // fuer die Buchwahl-Combobox (Bücher gruppiert nach Kategorie, siehe
-  // tree.js#bookComboOptions). Wird nur befuellt, wenn Bücher Kategorien haben.
+  // Kategorie-Pool (global, beim Login einmal geladen): Gruppen-Namen der Buchwahl-
+  // Combobox (tree.js#bookComboOptions). Nur befuellt, wenn Bücher Kategorien haben.
   bookFilterCategoryPool: [],
-  // Per-Buch ACL-Rolle aus /books/:id/access. `currentBookRole` ist die Rolle
-  // fuer selectedBookId (Snapshot fuer $watch + Getter `canEdit`/`canReview`).
-  // null = nicht ermittelbar (kein Zugriff oder Endpoint-Fehler) → Frontend
-  // faellt auf Legacy-Verhalten zurueck (canEdit=true), bis serverseitige
-  // Schreibpfade enforced sind. `bookRoles` cached pro Buch.
+  // Per-Buch ACL-Rolle aus /books/:id/access; `currentBookRole` = Rolle fuer
+  // selectedBookId (Getter `canEdit`/`canReview`). null = nicht ermittelbar →
+  // Legacy-Verhalten (canEdit=true). `bookRoles` cached pro Buch.
   bookRoles: {},
   currentBookRole: null,
-  // Per-Buch: true wenn mind. 2 ACL-Eintraege (Owner + N) → Collab-Poller + Presence-Pings
-  // erst dann starten. Single-User-Bücher pollen nicht. Befüllt in `_loadBookRole`.
+  // Per-Buch: true ab 2 ACL-Eintraegen → erst dann Collab-Poll + Presence (`_loadBookRole`).
   bookSharedFlags: {},
   // `treeLoading`: irgendein Voll-Load des Baums laeuft (auch Wake/Job/manuell).
   // `treeSwitching`: davon der Buchwechsel — nur dann wird der alte Baum via CSS
@@ -484,10 +480,14 @@ const lektoratState = () => ({
   _statsObserver: null,
   _statsObserverMutation: null,
   _statsObserverState: null,
-  // Leiser Nachzug des Seitenbaums (book/tree/catchup.js): Entprell-Timer +
-  // Re-Entry-Guard. Refs hier, damit destroy() den Timer abraeumen kann.
+  // Leiser Nachzug des Seitenbaums (book/tree/catchup.js): Entprell-Timer, Re-Entry-
+  // Guard, Strukturstand des Baums (undefined = unbekannt), eigener Struktur-Write
+  // seither, zuletzt nachgezogener Stand (Schleifenschutz).
   _treeCatchUpTimer: null,
   _treeCatchUpInflight: false,
+  _treeStructureAt: undefined,
+  _structureOwnWrite: false,
+  _structureCatchUpFor: null,
 });
 
 // bookReviewHistory wird von tree.js/loadPages geschrieben und von

@@ -51,8 +51,8 @@ test('Default-Klassen + Tags (Buch-Share): chapter h2, page h3, neutrale ms-* Kl
   assert.match(html, /<div class="ms-page__body"><p data-bid="abc123">Text<\/p><\/div>/);
 });
 
-test('omitChapterHeaders (Kapitel-Share): kein Kapitel-Heading, Seiten h2 + Level 1', () => {
-  const { html, toc } = renderStreamHtml(BOOK, { pageTag: 'h2', omitChapterHeaders: true });
+test('omitChapterId (Kapitel-Share): kein Heading fuer das Wurzel-Kapitel, Seiten h2 + Level 1', () => {
+  const { html, toc } = renderStreamHtml(BOOK, { pageTag: 'h2', omitChapterId: 10 });
   assert.ok(!html.includes('ms-chapter'), 'kein Kapitel-Heading');
   assert.match(html, /<h2 id="sec1" class="ms-page__title">Seite A<\/h2>/);
   assert.deepEqual(toc.map(t => t.level), [1, 1]);
@@ -100,7 +100,7 @@ test('Kapitel-Share: gleichnamiger erster Abschnitt verdoppelt den h1-Kopf nicht
   const { html, toc } = renderStreamHtml([
     { kind: 'chapter', name: 'Kap', depth: 0, key: 'c0', chapterId: 7 },
     { kind: 'page', name: 'Kap', html: '<p>x</p>', depth: 0, key: 'p1', id: 1, chapterId: 7 },
-  ], { pageTag: 'h2', omitChapterHeaders: true });
+  ], { pageTag: 'h2', omitChapterId: 7 });
   assert.ok(!html.includes('ms-page__title'));
   assert.equal(toc.length, 0);
 });
@@ -113,4 +113,24 @@ test('Abweichender Name und Beitrag mit Schlagzeile behalten ihre Ueberschrift',
     { kind: 'page', name: 'Szene', html: '<p>y</p>', depth: 0, key: 'p2', id: 2, chapterId: 8 },
   ]);
   assert.equal((html.match(/<h3 /g) || []).length, 2);
+});
+
+test('Unterkapitel: Tiefen-Klasse + Verzeichnis-Ebene aus depth', () => {
+  const { html, toc } = renderStreamHtml(fromGroups([
+    { chapterId: 1, chapter: { id: 1, name: 'Teil I', parent_chapter_id: null }, pages: [] },
+    { chapterId: 2, chapter: { id: 2, name: 'Kapitel 1', parent_chapter_id: 1 }, pages: [{ pd: { id: 9, name: 'Szene', html: '<p>x</p>' } }] },
+  ]));
+  assert.match(html, /<h2 id="sec1" class="ms-chapter">Teil I<\/h2>/);
+  assert.match(html, /<h2 id="sec2" class="ms-chapter ms-chapter--d1">Kapitel 1<\/h2>/);
+  assert.deepEqual(toc.map(t => t.level), [1, 2, 3]);
+});
+
+test('Kapitel-Share mit Unterkapiteln: nur das Wurzel-Kapitel entfaellt, Unterkapitel bleiben', () => {
+  const { html, toc } = renderStreamHtml(fromGroups([
+    { chapterId: 1, chapter: { id: 1, name: 'Teil I', parent_chapter_id: null }, pages: [{ pd: { id: 8, name: 'Vorwort', html: '<p>v</p>' } }] },
+    { chapterId: 2, chapter: { id: 2, name: 'Kapitel 1', parent_chapter_id: 1 }, pages: [{ pd: { id: 9, name: 'Szene', html: '<p>x</p>' } }] },
+  ]), { pageTag: 'h2', omitChapterId: 1 });
+  assert.ok(!html.includes('>Teil I<'));
+  assert.match(html, />Kapitel 1<\/h2>/);
+  assert.deepEqual(toc.map(t => [t.label, t.level]), [['Vorwort', 1], ['Kapitel 1', 1], ['Szene', 2]]);
 });

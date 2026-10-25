@@ -4,6 +4,8 @@
 // Richtungen):
 //   { kind: 'beat-place',    before: [{id,act_id,thread_id,sort_order}], after: [...] }
 //   { kind: 'beat-fields',   id, before: {...}, after: {...} }   — Beat-PATCH-Felder
+//   { kind: 'beat-fields-batch', items: [{ id, before, after }] } — EIN Schritt für
+//                                  eine Sammel-Änderung (Zeitvorschläge übernehmen)
 //   { kind: 'act-fields',    id, before: {...}, after: {...} }   — name / farbe / archiviert
 //   { kind: 'act-order',     before: [actIds], after: [actIds] } — PRO Scope
 //   { kind: 'thread-fields', id, before: {...}, after: {...} }
@@ -72,6 +74,10 @@ export const historyMethods = {
 
   _recordBeatFields(id, before, after) {
     this._pushUndo({ kind: 'beat-fields', id, before, after });
+  },
+
+  _recordBeatFieldsBatch(items) {
+    if (items && items.length) this._pushUndo({ kind: 'beat-fields-batch', items });
   },
 
   _recordActFields(id, before, after) {
@@ -198,6 +204,7 @@ export const historyMethods = {
   async _applyInverse(rec) {
     if (rec.kind === 'beat-place')     return this._hApplyPlacements(rec.before);
     if (rec.kind === 'beat-fields')    return this._hPatchBeat(rec.id, rec.before);
+    if (rec.kind === 'beat-fields-batch') return (await this._hPatchBeats(rec.items.map(i => ({ id: i.id, fields: i.before })))).length === rec.items.length;
     if (rec.kind === 'act-fields')     return this._hPatchAct(rec.id, rec.before);
     if (rec.kind === 'thread-fields')  return this._hPatchThread(rec.id, rec.before);
     if (rec.kind === 'act-order')      return this._hApplyActOrder(rec.before);
@@ -214,6 +221,7 @@ export const historyMethods = {
   async _applyForward(rec) {
     if (rec.kind === 'beat-place')    return this._hApplyPlacements(rec.after);
     if (rec.kind === 'beat-fields')   return this._hPatchBeat(rec.id, rec.after);
+    if (rec.kind === 'beat-fields-batch') return (await this._hPatchBeats(rec.items.map(i => ({ id: i.id, fields: i.after })))).length === rec.items.length;
     if (rec.kind === 'act-fields')    return this._hPatchAct(rec.id, rec.after);
     if (rec.kind === 'thread-fields') return this._hPatchThread(rec.id, rec.after);
     if (rec.kind === 'act-order')     return this._hApplyActOrder(rec.after);
@@ -272,6 +280,30 @@ export const historyMethods = {
       this.errorMessage = app.t('plot.error.save');
       return false;
     }
+  },
+
+  // Mehrere Beat-PATCHes nacheinander, lokal EINMAL gespiegelt (ein Board-
+  // Update, eine Zeit-Messung statt N). Liefert die IDs der erfolgreichen
+  // PATCHes — ein Teil-Erfolg bleibt sichtbar im Board, der Aufrufer entscheidet.
+  async _hPatchBeats(list) {
+    const app = window.__app;
+    const rows = [];
+    let ok = true;
+    for (const { id, fields } of (list || [])) {
+      try {
+        rows.push(await fetchJson(`/plot/beats/${id}`, {
+          method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(fields),
+        }));
+      } catch (e) { ok = false; }
+    }
+    if (rows.length) {
+      const byId = new Map(rows.map(r => [r.id, this._mergeBeatRow(r)]));
+      this.beats = this.beats.map(b => byId.get(b.id) || b);
+      this._memos = {};
+      this.loadTimeChecks();
+    }
+    this.errorMessage = ok ? '' : app.t('plot.error.save');
+    return rows.map(r => r.id);
   },
 
   async _hPatchAct(id, fields) {

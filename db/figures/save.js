@@ -196,7 +196,9 @@ function _collectRelations(f, idMaps, out) {
  *   - **Reconcile identity** (`{ reconcile: true }`; Komplettanalyse): matcht per
  *     Name/Indizien, weil die `fig_id` pro Analyse-Lauf frisch vergeben und NICHT
  *     identitätsstabil ist. Matched → `stale=0` (re-detektiert). Verschwundene →
- *     `stale=1` statt Löschen (`onMissing: 'stale'`). Vom Autor gepflegte Figuren
+ *     `stale=1` statt Löschen (`onMissing: 'stale'`) — ausser die Analyse hat die Figur
+ *     in diesem Buch nie gefunden (`ki_name` leer: im Katalog angelegt, aus dem Vorband
+ *     übernommen); die bleibt aktiv. Vom Autor gepflegte Figuren
  *     (`manually_edited=1`) behalten ihre kuratierten Felder (CURATED_FIELDS) und
  *     Eigenschaften; Beziehungen mit `origin='manual'` bleiben stehen.
  *   - **Reconcile figId** (`{ reconcile: true, matchBy: 'figId', onMissing: 'delete' }`;
@@ -321,7 +323,11 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
       // Markieren + fig_id aus dem 'fig_N'-Namespace ziehen (kollisionsfrei mit
       // den frisch vergebenen Lauf-IDs). 'orphan_<id>' ist stabil & eindeutig.
       const markStale = db.prepare("UPDATE figures SET stale = 1, fig_id = 'orphan_' || id WHERE id = ?");
-      for (const ex of missing) markStale.run(ex.id);
+      // Nie von der Analyse gefunden (ki_name leer: im Katalog angelegt oder aus dem
+      // Vorband übernommen) — «nicht mehr im Text» wäre falsch. Sie bleiben aktiv und
+      // räumen nur den Namespace (Muster locations.manually_created).
+      const parkManual = db.prepare("UPDATE figures SET fig_id = 'man_' || id WHERE id = ?");
+      for (const ex of missing) (prevById.get(ex.id)?.ki_name == null ? parkManual : markStale).run(ex.id);
     } else {
       const delFig = db.prepare('DELETE FROM figures WHERE id = ?');
       for (const ex of missing) delFig.run(ex.id);

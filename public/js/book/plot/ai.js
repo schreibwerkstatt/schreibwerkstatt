@@ -276,7 +276,20 @@ export const aiMethods = {
       const key = normTitle(k.beat);
       beat = (this.beats || []).find(b => normTitle(b.titel) === key);
     }
-    if (beat) this.scrollToBeat(beat.id);
+    if (beat) this._revealBeat(beat);
+  },
+
+  // Ein Sprungziel, das Filter oder ein eingeklappter Akt verbirgt, hat keine
+  // Karte im DOM — der Klick liefe still ins Leere. Darum erst sichtbar machen:
+  // Filter ab (auch «im Buch ausblenden», der Befund gilt oft gerade einem
+  // eingearbeiteten Beat), Akt auf, dann scrollen.
+  _revealBeat(beat) {
+    if (this.plotFilterActive() && !this._beatMatchesFilter(beat)) {
+      this.plotFilters = { kapitelId: '', figurId: '', draftFigurId: '', status: '', text: '' };
+      this.plotHideImBuch = false;
+    }
+    if (beat.act_id != null && this.isActCollapsed(beat.act_id)) this.toggleActCollapsed(beat.act_id);
+    this.$nextTick(() => this.scrollToBeat(beat.id));
   },
 
   // Vom Warn-Badge eines Beats zum Befund: ersten zugehörigen Konflikt aufklappen

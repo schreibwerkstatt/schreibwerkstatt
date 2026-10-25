@@ -162,17 +162,27 @@ export const treeEditStatusMethods = {
   // und Baum plus Baum-Revision: der Sidebar-Render fragt jedes Kapitel bei
   // jedem Durchlauf, und ein neuer oder geloeschter Abschnitt aendert den Stand,
   // ohne die Baum-Identitaet zu wechseln.
+  //
+  // Gerechnet wird IMMER am echten Baum-Item und seinem ganzen Unterbaum, nie
+  // am uebergebenen Objekt: bei Suche oder Stand-Filter reicht die Sidebar
+  // Kopien mit gefilterten (oft leeren) `pages` herein. Daran gemessen stimmte
+  // der Stand nicht — und das Memo je Kapitel-ID hielte den falschen Wert fest,
+  // auch nachdem der Filter wieder weg ist.
   chapterEditStatus(item) {
     if (!item || item.type !== 'chapter') return null;
     const map = this.$store.badges.editStatus;
     const tree = this.$store.nav.tree;
     const rev = this._treeRev;
     if (!_chapterMemo || _chapterMemo.map !== map || _chapterMemo.tree !== tree || _chapterMemo.rev !== rev) {
-      _chapterMemo = { map, tree, rev, byId: new Map(), children: _childMap(tree || []) };
+      const items = new Map();
+      for (const it of tree || []) if (it.type === 'chapter') items.set(it.id, it);
+      _chapterMemo = { map, tree, rev, byId: new Map(), items, children: _childMap(tree || []) };
     }
     const byId = _chapterMemo.byId;
     if (!byId.has(item.id)) {
-      const ids = this._chapterSubtreePageIds(item, _chapterMemo.children);
+      const real = _chapterMemo.items.get(item.id);
+      if (!real) return null;
+      const ids = this._chapterSubtreePageIds(real, _chapterMemo.children);
       byId.set(item.id, weakestStatus(ids.map(id => map[String(id)] || null)));
     }
     return byId.get(item.id);

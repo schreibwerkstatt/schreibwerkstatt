@@ -21,8 +21,6 @@ function _scope(bookId) {
 }
 
 const _SELECT_COLS = `id, book_id, kind, user_email, name, config_json, is_default,
-       (cover_image IS NOT NULL) AS has_cover, cover_mime,
-       (author_image IS NOT NULL) AS has_author_image, author_image_mime,
        (back_cover_image IS NOT NULL) AS has_back_cover, back_cover_image_mime,
        (spine_image IS NOT NULL) AS has_spine, spine_image_mime,
        created_at, updated_at`;
@@ -98,10 +96,6 @@ function _row(r) {
     name: r.name,
     config: _parseConfig(r),
     is_default: !!r.is_default,
-    has_cover: !!r.has_cover,
-    cover_mime: r.cover_mime || null,
-    has_author_image: !!r.has_author_image,
-    author_image_mime: r.author_image_mime || null,
     has_back_cover: !!r.has_back_cover,
     back_cover_mime: r.back_cover_image_mime || null,
     has_spine: !!r.has_spine,

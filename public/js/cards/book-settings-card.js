@@ -6,6 +6,8 @@ import { bookSettingsMethods } from '../book/book-settings.js';
 import { CITATION_DEFAULTS, XREF_DEFAULTS } from '../book/book-settings/citation.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { EVT } from '../events.js';
+import { takePendingBookSettingsTab } from '../book/book-settings/open-tab.js';
+import { CARD_REQUEST } from './card-request.js';
 
 // Vollständiges Default-Meta (alle book_publication-Felder). Der /publication-PUT
 // ist Full-Replace — ein unvollständiges Objekt setzt fehlende Felder serverseitig
@@ -15,7 +17,7 @@ const _EMPTY_PUB_META = () => ({
   author_name: '', author_file_as: '', co_authors: [], extra_sections: [],
   isbn: '', subtitle: '', year: '', dedication: '', imprint: '',
   copyright: '', frontmatter: '', author_bio: '', epub_css_style: 'serif', epub_toc_title: '',
-  description: '', publisher: '', series: '', series_index: '', keywords: '',
+  description: '', zielgruppe: '', vergleichstitel: '', publisher: '', series: '', series_index: '', keywords: '',
   epub_font_size: 'normal', epub_line_height: 'normal', epub_paragraph_style: 'indent',
   epub_indent_size: 'medium', epub_scene_separator: 'line', epub_titlepage_mode: 'generated',
   epub_chapter_numbering: 'none', epub_chapter_numbering_mode: 'nested', epub_unnumbered_chapter_ids: [],
@@ -114,6 +116,44 @@ export function registerBookSettingsCard() {
     mergeLists: { figur: [], szene: [], ort: [] },
     mergeSel: { figur: { source: '', target: '' }, szene: { source: '', target: '' }, ort: { source: '', target: '' } },
     _mergeMsgTimer: null,
+    // Exposé (Tab «Exposé») — siehe book/book-settings/expose.js. Gespeichert
+    // werden nur die KI-Texte + Autorfassung; die Eckdaten kommen live aus
+    // diesem Formular, der Klappentext ist bookPublication.description.
+    exposeLoaded: false,
+    exposeRun: null,
+    exposeDraft: null,
+    exposeHistory: [],
+    exposeNormseiten: 0,
+    exposeDirty: false,
+    exposeGenerating: false,
+    exposeJobId: null,
+    exposeError: '',
+    exposeSaving: false,
+    exposeSaved: false,
+    exposeUnchanged: false,
+    exposeAdopted: false,
+    _onExposeJobFinished: null,
+    _exposeSavedTimer: null,
+    // Buchreihe (Tab «Reihe») — siehe book/book-settings/series.js. `seriesBookId`:
+    // Buch, zu dem der geladene Reihen-State gehört (null = nichts geladen).
+    seriesBookId: null,
+    seriesLoading: false,
+    seriesBusy: false,
+    seriesData: null,
+    seriesJoinable: [],
+    seriesPrequels: [],
+    seriesNewName: '',
+    seriesNameDraft: '',
+    seriesJoinId: '',
+    seriesMessage: '',
+    seriesError: '',
+    carrySourceId: '',
+    carryLists: null,
+    carrySel: { figuren: [], orte: [], fakten: [] },
+    carryLoading: false,
+    carryBusy: false,
+    carryMessage: '',
+    carryError: '',
     // Blog-Sync (WordPress).
     blogSectionOpen: false,
     blogConnection: null,
@@ -165,8 +205,8 @@ export function registerBookSettingsCard() {
     init() {
       this._lifecycle = setupCardLifecycle(this, {
         showFlag: 'showBookSettingsCard',
-        onShow: () => Promise.all([this.loadBookSettings(), this.loadBookJobStats(), this.loadBookAccess(), this.loadBookCategory(), this.loadBlogStatus(), this.loadHubspotStatus(), this.loadPublication()]),
-        load: () => Promise.all([this.loadBookSettings(), this.loadBookJobStats(), this.loadBookAccess(), this.loadBookCategory(), this.loadBlogStatus(), this.loadHubspotStatus(), this.loadPublication()]),
+        onShow: () => Promise.all([this.loadBookSettings(), this.loadBookJobStats(), this.loadBookAccess(), this.loadBookCategory(), this.loadBlogStatus(), this.loadHubspotStatus(), this.loadPublication(), this.loadExpose()]),
+        load: () => Promise.all([this.loadBookSettings(), this.loadBookJobStats(), this.loadBookAccess(), this.loadBookCategory(), this.loadBlogStatus(), this.loadHubspotStatus(), this.loadPublication(), this.loadExpose()]),
         // Factory, nicht Objekt-Literal: der Reset enthält Objekte, die danach
         // per x-model in-place mutiert werden (blogForm, hubspotForm,
         // bookPublication, bookCitation). Ein einmalig gebautes Literal würde
@@ -193,6 +233,25 @@ export function registerBookSettingsCard() {
           mergeError: '',
           mergeLists: { figur: [], szene: [], ort: [] },
           mergeSel: { figur: { source: '', target: '' }, szene: { source: '', target: '' }, ort: { source: '', target: '' } },
+          // Buchreihe: gehört zum alten Buch → verwerfen (Factory-Reset, frische Literale).
+          seriesBookId: null,
+          seriesLoading: false,
+          seriesBusy: false,
+          seriesData: null,
+          seriesJoinable: [],
+          seriesPrequels: [],
+          seriesNewName: '',
+          seriesNameDraft: '',
+          seriesJoinId: '',
+          seriesMessage: '',
+          seriesError: '',
+          carrySourceId: '',
+          carryLists: null,
+          carrySel: { figuren: [], orte: [], fakten: [] },
+          carryLoading: false,
+          carryBusy: false,
+          carryMessage: '',
+          carryError: '',
           bookAccessList: [],
           bookAccessError: '',
           shareEmail: '',
@@ -221,6 +280,17 @@ export function registerBookSettingsCard() {
           hubspotReconcileJobId: null,
           bookPublication: _EMPTY_PUB_META(),
           bookPublicationLoaded: false,
+          exposeLoaded: false,
+          exposeRun: null,
+          exposeDraft: null,
+          exposeHistory: [],
+          exposeNormseiten: 0,
+          exposeDirty: false,
+          exposeGenerating: false,
+          exposeJobId: null,
+          exposeError: '',
+          exposeUnchanged: false,
+          exposeAdopted: false,
           pubError: '',
           pubCoverError: '',
           pubAuthorError: '',
@@ -247,6 +317,10 @@ export function registerBookSettingsCard() {
           staleCleanupError: '',
           mergeMessage: '',
           mergeError: '',
+          seriesMessage: '',
+          seriesError: '',
+          carryMessage: '',
+          carryError: '',
           bookAccessError: '',
           shareInviteMessage: '',
           blogMessage: '',
@@ -256,7 +330,14 @@ export function registerBookSettingsCard() {
           hubspotError: '',
           citationError: '',
         },
+        // Verweis aus einer anderen Karte auf einen bestimmten Reiter
+        // (book/book-settings/open-tab.js). Ist die Karte erst durch den
+        // Verweis gemountet worden, liegt der Wunsch schon bereit (unten).
+        extraListeners: [{ type: EVT.CARD_REQUEST, handler: (e) => {
+          if (e.detail?.key === CARD_REQUEST.BOOK_SETTINGS_TAB) this._applyPendingTab();
+        } }],
       });
+      this._applyPendingTab();
 
       // Blog-Sync: bei Job-Ende Status nachladen, lokale Job-IDs nullen.
       // Filter lose: jeder blog-* Job-Done räumt beide Spinner-Flags und
@@ -308,6 +389,12 @@ export function registerBookSettingsCard() {
         }
       };
       window.addEventListener(EVT.JOB_FINISHED, this._onStilprofilJobFinished);
+
+      this._onExposeJobFinished = (ev) => {
+        if (ev?.detail?.type !== 'expose') return;
+        this.onExposeJobFinished(ev.detail.job);
+      };
+      window.addEventListener(EVT.JOB_FINISHED, this._onExposeJobFinished);
     },
 
     destroy() {
@@ -318,6 +405,7 @@ export function registerBookSettingsCard() {
       if (this._shareInviteMsgTimer) { clearTimeout(this._shareInviteMsgTimer); this._shareInviteMsgTimer = null; }
       if (this._pubSavedTimer) { clearTimeout(this._pubSavedTimer); this._pubSavedTimer = null; }
       if (this._citationSavedTimer) { clearTimeout(this._citationSavedTimer); this._citationSavedTimer = null; }
+      if (this._exposeSavedTimer) { clearTimeout(this._exposeSavedTimer); this._exposeSavedTimer = null; }
       if (this._onBlogJobFinished) {
         window.removeEventListener(EVT.JOB_FINISHED, this._onBlogJobFinished);
         this._onBlogJobFinished = null;
@@ -330,7 +418,16 @@ export function registerBookSettingsCard() {
         window.removeEventListener(EVT.JOB_FINISHED, this._onStilprofilJobFinished);
         this._onStilprofilJobFinished = null;
       }
+      if (this._onExposeJobFinished) {
+        window.removeEventListener(EVT.JOB_FINISHED, this._onExposeJobFinished);
+        this._onExposeJobFinished = null;
+      }
       this._lifecycle?.destroy();
+    },
+
+    _applyPendingTab() {
+      const tab = takePendingBookSettingsTab();
+      if (tab) this.bookSettingsTab = tab;
     },
 
     ...bookSettingsMethods,

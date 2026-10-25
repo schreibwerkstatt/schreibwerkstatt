@@ -27,22 +27,24 @@
         <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
         <span x-text="$app.t('folderImport.manuscript.moreLevels')"></span>
       </button>
-      <div class="folder-import-map-grid" x-bind="panel" x-cloak>
-        <template x-for="lvl in [4, 5, 6]" :key="'h' + lvl">
-          <div class="folder-import-map-row">
-            <span class="folder-import-map-level" x-text="$app.t('folderImport.manuscript.level', { n: lvl })"></span>
-            <div x-data="combobox($app.t('folderImport.manuscript.role.content'))"
-                 x-modelable="value" x-model="headingMap['h' + lvl]"
-                 x-effect="options = [
-                   { value: 'chapter',       label: $app.t('folderImport.manuscript.role.chapter') },
-                   { value: 'subchapter',    label: $app.t('folderImport.manuscript.role.subchapter') },
-                   { value: 'subsubchapter', label: $app.t('folderImport.manuscript.role.subsubchapter') },
-                   { value: 'page',          label: $app.t('folderImport.manuscript.role.page') },
-                   { value: 'content',       label: $app.t('folderImport.manuscript.role.content') }
-                 ]"
-                 @combobox-change="preview = null"></div>
-          </div>
-        </template>
+      <div x-bind="panel" x-cloak>
+        <div class="folder-import-map-grid">
+          <template x-for="lvl in [4, 5, 6]" :key="'h' + lvl">
+            <div class="folder-import-map-row">
+              <span class="folder-import-map-level" x-text="$app.t('folderImport.manuscript.level', { n: lvl })"></span>
+              <div x-data="combobox($app.t('folderImport.manuscript.role.content'))"
+                   x-modelable="value" x-model="headingMap['h' + lvl]"
+                   x-effect="options = [
+                     { value: 'chapter',       label: $app.t('folderImport.manuscript.role.chapter') },
+                     { value: 'subchapter',    label: $app.t('folderImport.manuscript.role.subchapter') },
+                     { value: 'subsubchapter', label: $app.t('folderImport.manuscript.role.subsubchapter') },
+                     { value: 'page',          label: $app.t('folderImport.manuscript.role.page') },
+                     { value: 'content',       label: $app.t('folderImport.manuscript.role.content') }
+                   ]"
+                   @combobox-change="preview = null"></div>
+            </div>
+          </template>
+        </div>
       </div>
     </div>
 

@@ -2,17 +2,20 @@
 // CRUD fuer book_publication (1:1 zu books). Buch-weite Publikations-Metadaten
 // (Cover/Autorfoto als BLOB + Titelei-Texte + EPUB-Reflow-Toggles). Von PDF-
 // und EPUB-Export sowie der Publikation-Karte konsumiert. Sprache bleibt SSoT
-// in book_settings.language (hier NICHT gefuehrt).
+// in book_settings.language (hier NICHT gefuehrt). Reihe + Bandnummer ebenfalls
+// nicht: sie kommen aus book_series (db/book-series.js) und werden in getMeta als
+// `series`/`series_index` darübergelegt, damit EPUB, Fassung und Versand sie sehen.
 
 const { db } = require('./connection');
 const { NOW_ISO_SQL } = require('./now');
 const { defaultMeta, validateMeta } = require('../lib/publication-meta');
+const { seriesMetaForBook } = require('./book-series');
 
 const _META_COLS = [
   'author_name', 'author_file_as', 'co_authors', 'extra_sections',
   'isbn', 'subtitle', 'year', 'dedication', 'imprint', 'copyright',
   'frontmatter', 'author_bio', 'epub_css_style', 'epub_justify', 'epub_toc_title',
-  'description', 'publisher', 'series', 'series_index', 'keywords',
+  'description', 'zielgruppe', 'vergleichstitel', 'publisher', 'keywords',
   'epub_font_size', 'epub_line_height', 'epub_paragraph_style', 'epub_indent_size',
   'epub_hyphenation', 'epub_chapter_pagebreak', 'epub_drop_caps', 'epub_nest_pages_in_toc',
   'epub_scene_separator', 'epub_titlepage_mode',
@@ -79,12 +82,14 @@ const _stmtClearAuthorImage = db.prepare(`UPDATE book_publication SET author_ima
 function getMeta(bookId) {
   const id = parseInt(bookId);
   const row = _stmtGet.get(id);
+  const series = seriesMetaForBook(id) || { series: '', series_index: '' };
   if (!row) {
-    return { book_id: id, ...defaultMeta(), has_cover: false, has_author_image: false, cover_mime: null, author_image_mime: null };
+    return { book_id: id, ...defaultMeta(), ...series, has_cover: false, has_author_image: false, cover_mime: null, author_image_mime: null };
   }
   return {
     book_id: id,
     ...validateMeta(row),
+    ...series,
     has_cover: !!row.has_cover,
     cover_mime: row.cover_mime || null,
     has_author_image: !!row.has_author_image,

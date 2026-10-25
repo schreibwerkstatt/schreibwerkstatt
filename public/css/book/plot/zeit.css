@@ -1,0 +1,107 @@
+/* Plot-Werkstatt — erzählte Zeit am Beat: Befund-Plakette der Zeit-Messung
+   (Variante von .plot-beat-anchor aus board.css), „verstanden als"-Hinweis und
+   Zeitvorschlag im Beat-Edit, Durchsicht der Zeitvorschläge, Akt-Fenster je Zelle. Lädt NACH
+   board.css (erbt dessen Plaketten-Grundform). */
+
+@layer components {
+
+  /* Befund-Plakette: Ton aus der geteilten Befund-Zuordnung
+     (utils/befund-severity.js → kritisch | mittel | niedrig). */
+  .plot-beat-timecheck { cursor: default; }
+  .plot-beat-timecheck .icon { width: 11px; height: 11px; }
+  .plot-beat-timecheck--kritisch {
+    color: var(--color-schwach);
+    border-color: color-mix(in oklch, var(--color-schwach) 45%, transparent);
+    background: color-mix(in oklch, var(--color-schwach) 14%, transparent);
+  }
+  .plot-beat-timecheck--mittel {
+    color: var(--color-mittel);
+    border-color: color-mix(in oklch, var(--color-mittel) 45%, transparent);
+    background: color-mix(in oklch, var(--color-mittel) 14%, transparent);
+  }
+  .plot-beat-timecheck--niedrig {
+    color: var(--color-muted);
+    border-color: var(--color-border);
+    background: var(--color-tag-bg);
+  }
+
+  /* Freitext, den der Parser nicht versteht: gestrichelt statt Warnfarbe — eine
+     unverstandene Angabe ist ungeprüft, kein Fehler. */
+  .plot-beat-meta .tag--zeit-unklar {
+    border: 1px dashed var(--color-border);
+    background: none;
+  }
+
+  /* Alter der Strang-Figur: Angabe wie die Zeit, nicht Befund-Farbe. */
+  .plot-beat-meta .tag--alter { font-variant-numeric: tabular-nums; color: var(--color-muted); }
+
+  /* „verstanden als" und das Akt-Fenster im offenen Beat: dieselbe Hinweis-Zeile. */
+  .plot-zeit-hint,
+  .plot-zeit-akt {
+    margin: var(--space-2xs) 0 0;
+    font-size: var(--font-size-micro);
+    color: var(--color-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .plot-zeit-hint--warn { color: var(--color-mittel); }
+
+  .plot-zeit-vorschlag {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-top: var(--space-2xs);
+    font-size: var(--font-size-xs);
+    color: var(--color-muted);
+  }
+
+  /* Belege eines Zeitvorschlags (Beat-Edit + Durchsicht): Datum — Ereignis. */
+  .plot-zeit-belege {
+    flex-basis: 100%;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: var(--font-size-xs);
+    color: var(--color-muted);
+  }
+  .plot-zeit-belege li { overflow-wrap: anywhere; }
+
+  /* Zeitfenster des Akts für den Strang, einmal je Zelle: Angabe, kein Befund. */
+  .plot-swim-cell-zeit {
+    display: block;
+    margin-bottom: var(--space-2xs);
+    font-size: var(--font-size-micro);
+    color: var(--color-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Durchsicht der Zeitvorschläge (plot-zeit-review.html). Das collapsible-Panel
+     bleibt ungestylt; Layout sitzt am Kind .plot-zeit-review-body. */
+  .plot-zeit-review { margin-bottom: var(--space-sm); }
+  .plot-zeit-review-body { padding-top: var(--space-xs); }
+  .plot-zeit-review-body .card-hint { margin: 0 0 var(--space-xs); }
+  .plot-zeit-review-list { list-style: none; margin: 0; padding: 0; }
+  .plot-zeit-review-row {
+    display: grid;
+    grid-template-columns: minmax(7rem, max-content) 1fr;
+    gap: var(--space-sm);
+    padding: var(--space-xs) 0;
+    border-top: 1px solid var(--color-border);
+  }
+  .plot-zeit-review-check {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-xs);
+    font-size: var(--font-size-sm);
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
+  .plot-zeit-review-main .plot-zeit-belege { margin-top: var(--space-2xs); }
+  .plot-zeit-review-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    padding-top: var(--space-xs);
+    border-top: 1px solid var(--color-border);
+  }
+}

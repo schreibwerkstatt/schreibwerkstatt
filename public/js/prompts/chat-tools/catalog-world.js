@@ -92,7 +92,7 @@ export const WORLD_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        chapter_id: { type: 'integer', description: 'Nur Szenen dieses Kapitels.' },
+        chapter_id: { type: 'integer', description: 'Nur Szenen dieses Kapitels (inkl. Unterkapitel).' },
         page_id:    { type: 'integer', description: 'Nur Szenen dieses Abschnitts.' },
         figur_id:   { type: 'string',  description: 'Nur Szenen mit dieser Figur (fig_id).' },
         figur_name: FIGUR_NAME,
@@ -111,7 +111,7 @@ export const WORLD_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        chapter_id: { type: 'integer', description: 'Nur Orte, die in diesem Kapitel vorkommen.' },
+        chapter_id: { type: 'integer', description: 'Nur Orte, die in diesem Kapitel vorkommen (inkl. Unterkapitel).' },
       },
       required: [],
     },
@@ -146,7 +146,7 @@ export const WORLD_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        chapter_id: { type: 'integer', description: 'Nur Songs, die in diesem Kapitel verknüpft sind.' },
+        chapter_id: { type: 'integer', description: 'Nur Songs, die in diesem Kapitel verknüpft sind (inkl. Unterkapitel).' },
         figur_id:   { type: 'string',  description: 'Nur Songs zu dieser Figur (fig_id).' },
         figur_name: FIGUR_NAME,
         limit:      { type: 'integer', description: 'Maximale Anzahl (default 50, max 200).' },
@@ -162,7 +162,7 @@ export const WORLD_TOOLS = [
       properties: {
         schwere:    { type: 'string', description: 'Optionaler Filter (z.B. "hoch", "mittel", "niedrig"), Gross-/Kleinschreibung egal.' },
         typ:        { type: 'string', description: 'Optionaler Typ-Filter (z.B. "zeit", "ort", "fakt"), Gross-/Kleinschreibung egal.' },
-        chapter_id: { type: 'integer', description: 'Nur Befunde, die dieses Kapitel betreffen.' },
+        chapter_id: { type: 'integer', description: 'Nur Befunde, die dieses Kapitel betreffen (inkl. Unterkapitel).' },
         limit:      { type: 'integer', description: 'Maximale Anzahl (default 30, max 100).' },
       },
       required: [],

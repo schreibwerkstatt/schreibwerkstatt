@@ -8,6 +8,7 @@
 // IN-Listen werden hier ans SQL gehängt (leere Liste → `(NULL)`, matcht nichts).
 
 const { db } = require('../connection');
+const { globalPageOrderSql, chapterSubtreeFilter } = require('../book-order');
 require('../migrations');
 const { inClause } = require('../../lib/validate');
 const { openStatusSql } = require('../../lib/ideen-status');
@@ -38,8 +39,9 @@ const _stmtPagesWithStats = db.prepare(`
            COALESCE(ps.words, 0) AS words, COALESCE(ps.chars, 0) AS chars
     FROM pages p
     LEFT JOIN page_stats ps ON ps.page_id = p.page_id
+    LEFT JOIN chapters c ON c.chapter_id = p.chapter_id
     WHERE p.book_id = ?
-    ORDER BY p.position, p.page_id
+    ORDER BY ${globalPageOrderSql()}
   `);
 
 /** Alle Seiten eines Buchs (auch ohne Kapitel) mit Wort-/Zeichenzahl. */
@@ -113,9 +115,9 @@ function listLocationsWithFirstPage(bookId, userEmail, chapterId) {
       FROM locations l
       LEFT JOIN pages p ON p.page_id = l.erste_erwaehnung_page_id
       JOIN location_chapters lc ON lc.location_id = l.id
-      WHERE l.book_id = ? AND l.user_email IS ? AND lc.chapter_id = ?
+      WHERE l.book_id = ? AND l.user_email IS ? AND ${chapterSubtreeFilter('lc.chapter_id', chapterId).sql}
     `;
-    params.push(chapterId);
+    params.push(...chapterSubtreeFilter('lc.chapter_id', chapterId).params);
   }
   sql += ' ORDER BY l.sort_order, l.id';
   return db.prepare(sql).all(...params);
@@ -225,8 +227,9 @@ function listSongsWithFirstPage(bookId, userEmail, { chapterId = null, figureId 
   `;
   const params = [bookId, userEmail];
   if (chapterId !== null) {
-    sql += ' AND s.id IN (SELECT song_id FROM song_chapters WHERE chapter_id = ?)';
-    params.push(chapterId);
+    const f = chapterSubtreeFilter('chapter_id', chapterId);
+    sql += ` AND s.id IN (SELECT song_id FROM song_chapters WHERE ${f.sql})`;
+    params.push(...f.params);
   }
   if (figureId !== null) {
     sql += ' AND s.id IN (SELECT song_id FROM song_figures WHERE figure_id = ?)';
@@ -275,7 +278,10 @@ function listScenesWithPlaces(bookId, userEmail, { chapterId = null, pageId = nu
     WHERE fs.book_id = ? AND fs.user_email IS ?
   `;
   const params = [bookId, userEmail];
-  if (chapterId !== null) { sql += ' AND fs.chapter_id = ?'; params.push(chapterId); }
+  if (chapterId !== null) {
+    const f = chapterSubtreeFilter('fs.chapter_id', chapterId);
+    sql += ` AND ${f.sql}`; params.push(...f.params);
+  }
   if (pageId    !== null) { sql += ' AND fs.page_id = ?';    params.push(pageId); }
   if (figureId  !== null) {
     sql += ' AND fs.id IN (SELECT scene_id FROM scene_figures WHERE figure_id = ?)';

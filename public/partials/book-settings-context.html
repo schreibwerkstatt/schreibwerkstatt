@@ -6,16 +6,17 @@
       <div class="card-form-row card-form-row--top">
         <label class="card-form-label" for="bs-buchkontext" x-text="$app.t('book.settings.context')"></label>
         <div class="book-settings-kontext-wrap">
+          <p class="card-form-hint" x-text="$app.t('book.settings.context.hint')"></p>
           <textarea
             id="bs-buchkontext"
             class="card-form-textarea"
             x-model="bookSettingsBuchKontext"
             :placeholder="$app.t('book.settings.contextPlaceholder')"
             rows="4"
-            maxlength="1000"
+            maxlength="2000"
             data-spellcheck="spelling"
           ></textarea>
-          <p class="card-form-hint" x-text="(bookSettingsBuchKontext || '').length + ' / 1000'"></p>
+          <p class="card-form-hint" x-text="(bookSettingsBuchKontext || '').length + ' / 2000'"></p>
         </div>
       </div>
 

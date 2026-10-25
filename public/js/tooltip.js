@@ -57,6 +57,17 @@ import { mountInTopLayer } from './fullscreen.js';
     layer.setAttribute('aria-hidden', 'true');
   }
 
+  // Ein Ziel mit `display: contents` (z.B. Grid-Zeilen, deren Zellen im
+  // Eltern-Raster liegen) hat keine eigene Box — getBoundingClientRect() ist
+  // 0/0/0/0 und der Tooltip landete oben links. Dann die Fläche des Inhalts nehmen.
+  function anchorRect(target) {
+    const rect = target.getBoundingClientRect();
+    if (rect.width || rect.height || !target.firstChild) return rect;
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    return range.getBoundingClientRect();
+  }
+
   function position(target) {
     if (!layer) return;
     // Vor dem Messen die Inline-Position neutralisieren: ein fixed/auto-width
@@ -65,7 +76,7 @@ import { mountInTopLayer } from './fullscreen.js';
     // engt den Platz ein → langer Text bricht um → offsetWidth misst falsch.
     layer.style.left = '0px';
     layer.style.top = '0px';
-    const rect = target.getBoundingClientRect();
+    const rect = anchorRect(target);
     const lw = layer.offsetWidth;
     const lh = layer.offsetHeight;
     const margin = 8;

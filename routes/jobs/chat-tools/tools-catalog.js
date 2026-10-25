@@ -6,7 +6,7 @@
 const { getBookSettings, getBookName, worldFactsScanState } = require('../../../db/schema');
 const { listWorldFacts, FAKT_KATEGORIE_WL } = require('../../../db/world-facts');
 const { narrativeLabels } = require('../narrative-labels');
-const { getPromptConfig } = require('../../../lib/prompts-loader');
+const { buchtypLabel } = require('../../../lib/buchtyp');
 const { _truncateResult, _findFigure, resultCapFor, toolHint, offeredList } = require('./shared');
 const { isIdeeStatus, isOpenIdeeStatus, normalizeIdeeStatus } = require('../../../lib/ideen-status');
 const { listLocationChaptersWithNames } = require('../../../db/book-chat/text');
@@ -421,14 +421,6 @@ function tool_list_scenes(input, ctx) {
 
 // ── get_book_settings ─────────────────────────────────────────────────────────
 
-// Label aus prompt-config.json (`buchtypen.<sprache>.<key>.label`, SSoT der
-// Buchtypen) in der Buchsprache; Deutsch als Fallback, dann der rohe Key.
-function _buchtypLabel(buchtyp, language) {
-  if (!buchtyp) return null;
-  const typen = getPromptConfig().buchtypen || {};
-  return typen[language]?.[buchtyp]?.label || typen.de?.[buchtyp]?.label || buchtyp;
-}
-
 function tool_get_book_settings(_input, ctx) {
   const userEmail = ctx.userEmail || null;
   const settings = getBookSettings(ctx.bookId, userEmail);
@@ -440,7 +432,7 @@ function tool_get_book_settings(_input, ctx) {
     region:                   settings.region,
     locale:                   `${settings.language}-${settings.region}`,
     buchtyp:                  settings.buchtyp || null,
-    buchtyp_label:            _buchtypLabel(settings.buchtyp, settings.language),
+    buchtyp_label:            buchtypLabel(settings.buchtyp, settings.language),
     erzaehlperspektive:       settings.erzaehlperspektive || null,
     erzaehlperspektive_label: labels.erzaehlperspektive,
     erzaehlzeit:              settings.erzaehlzeit || null,

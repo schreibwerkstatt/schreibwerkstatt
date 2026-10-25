@@ -6,6 +6,7 @@
 // Seitennamen kommen hier per JOIN dazu (Handler lesen `pages` nicht selbst).
 
 const { db } = require('./connection');
+const { globalPageOrderSql } = require('./book-order');
 const { NOW_ISO_SQL } = require('./now');
 
 const FINDING_TYPES = new Set(['widerspruch', 'zitat']);
@@ -34,8 +35,9 @@ function findingsByItem(itemIds) {
     `SELECT f.id, f.item_id, f.page_id, p.page_name, f.typ, f.stelle, f.erklaerung, f.created_at
        FROM research_item_findings f
        JOIN pages p ON p.page_id = f.page_id
+       LEFT JOIN chapters c ON c.chapter_id = p.chapter_id
       WHERE f.item_id IN (${itemIds.map(() => '?').join(',')})
-      ORDER BY f.item_id, p.position, f.id`
+      ORDER BY f.item_id, ${globalPageOrderSql()}, f.id`
   ).all(...itemIds);
   for (const r of rows) {
     if (!map.has(r.item_id)) map.set(r.item_id, []);

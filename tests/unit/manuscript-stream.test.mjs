@@ -13,7 +13,7 @@ test('fromPages: leeres/null Input → leeres Array', () => {
   assert.deepEqual(fromPages(null), []);
 });
 
-test('fromPages: Chapter-Header pro Kapitelwechsel, id===pageId, depth 0', () => {
+test('fromPages: Chapter-Header pro Kapitelwechsel, id===pageId, Kapitel depth 0, Seite depth 1', () => {
   const entries = fromPages([
     { pageId: 1, pageName: 'A', chapterId: 10, chapterName: 'K1', html: '<p>a</p>' },
     { pageId: 2, pageName: 'B', chapterId: 10, chapterName: 'K1', html: '<p>b</p>' },
@@ -27,7 +27,7 @@ test('fromPages: Chapter-Header pro Kapitelwechsel, id===pageId, depth 0', () =>
   assert.equal(entries[1].html, '<p>a</p>');
   assert.equal(entries[3].chapterId, 20);
   assert.equal(entries[4].id, 3);
-  for (const e of entries) assert.equal(e.depth, 0);
+  for (const e of entries) assert.equal(e.depth, e.kind === 'chapter' ? 0 : 1);
 });
 
 test('fromPages: Solo-Pages (chapterId null) → kein Header davor', () => {
@@ -109,7 +109,7 @@ test('fromGroups: Header pro Gruppe mit chapter, pd.id→id', () => {
   assert.equal(entries[1].chapterId, 10);
   assert.equal(entries[3].id, 3);          // Solo-Page
   assert.equal(entries[3].chapterId, null);
-  for (const e of entries) assert.equal(e.depth, 0);
+  assert.deepEqual(entries.map(e => e.depth), [0, 1, 1, 0]);
 });
 
 test('fromGroups: leeres/null Input + fehlende pd → robust', () => {
@@ -118,4 +118,53 @@ test('fromGroups: leeres/null Input + fehlende pd → robust', () => {
   const entries = fromGroups([{ chapter: null, pages: [{ pd: null }, { pd: { id: 7, name: 'P' } }] }]);
   assert.equal(entries.length, 1);
   assert.equal(entries[0].id, 7);
+});
+
+// ── Kapitel ohne eigene Abschnitte (Teilbaum) ────────────────────────────────
+test('fromPages: Teil ohne eigene Abschnitte bekommt Header, Unterkapitel echte Tiefe', () => {
+  const chapters = [
+    { id: 1, name: 'Teil I', parentId: null },
+    { id: 2, name: 'Kapitel 1', parentId: 1 },
+    { id: 3, name: 'Szene 1.1', parentId: 2 },
+    { id: 4, name: 'Kapitel 2', parentId: 1 },
+    { id: 5, name: 'Teil II', parentId: null },
+  ];
+  const entries = fromPages([
+    { pageId: 1, pageName: 'Vorrede', chapterId: null },
+    { pageId: 2, pageName: 'A', chapterId: 2, chapterName: 'Kapitel 1' },
+    { pageId: 3, pageName: 'B', chapterId: 3, chapterName: 'Szene 1.1' },
+    { pageId: 4, pageName: 'C', chapterId: 4, chapterName: 'Kapitel 2' },
+    { pageId: 5, pageName: 'D', chapterId: 5, chapterName: 'Teil II' },
+  ], { chapters });
+  assert.deepEqual(entries.map(e => [e.kind, e.name, e.depth]), [
+    ['page', 'Vorrede', 0],
+    ['chapter', 'Teil I', 0],
+    ['chapter', 'Kapitel 1', 1],
+    ['page', 'A', 2],
+    ['chapter', 'Szene 1.1', 2],
+    ['page', 'B', 3],
+    ['chapter', 'Kapitel 2', 1],
+    ['page', 'C', 2],
+    ['chapter', 'Teil II', 0],
+    ['page', 'D', 1],
+  ]);
+});
+
+test('fromPages: Rueckkehr ins Elternkapitel nach Unterkapitel → kein zweiter Header', () => {
+  const entries = fromPages([
+    { pageId: 1, chapterId: 1, chapterName: 'K' },
+    { pageId: 2, chapterId: 2, chapterName: 'K.1' },
+    { pageId: 3, chapterId: 1, chapterName: 'K' },
+  ], { chapters: [{ id: 1, name: 'K', parentId: null }, { id: 2, name: 'K.1', parentId: 1 }] });
+  assert.equal(entries.filter(e => e.kind === 'chapter' && e.chapterId === 1).length, 1);
+});
+
+test('fromGroups: Ueberschriften-Gruppe (pages: []) + Elternkette → Header mit Tiefe', () => {
+  const entries = fromGroups([
+    { chapterId: 1, chapter: { id: 1, name: 'Teil I', parent_chapter_id: null }, pages: [] },
+    { chapterId: 2, chapter: { id: 2, name: 'Kapitel 1', parent_chapter_id: 1 }, pages: [{ pd: { id: 9, name: 'S', html: '' } }] },
+  ]);
+  assert.deepEqual(entries.map(e => [e.kind, e.name, e.depth]), [
+    ['chapter', 'Teil I', 0], ['chapter', 'Kapitel 1', 1], ['page', 'S', 2],
+  ]);
 });

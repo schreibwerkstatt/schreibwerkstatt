@@ -59,16 +59,20 @@ const pdfResults = createResultStore();
 //  - scope 'book': erstes Top-Level-Kapitel, das Seiten traegt, samt seinen
 //    Unterkapiteln (Gruppen sind depth-first sortiert). Kapitellose Seiten am
 //    Buchanfang fallen weg, ausser das Buch hat gar keine Kapitel.
-//  - scope 'chapter': die erste Gruppe (Kapitel selbst bzw. erstes Unterkapitel).
+//  - scope 'chapter': bis einschliesslich der ersten Gruppe mit Seiten (davor
+//    stehen nur die Ueberschriften-Gruppen ihrer Vorfahren).
 //  - scope 'page': unveraendert.
 // Wurzel-Schluessel: Kette ueber parent_chapter_id, soweit die Eltern in den
-// Gruppen vorkommen; ein Elternkapitel ohne eigene Seiten taucht nicht als
-// Gruppe auf und ist dann selbst der Schluessel.
+// Gruppen vorkommen (Vorfahren ohne eigene Seiten tragen eine reine
+// Ueberschriften-Gruppe, lib/load-contents.js#_groupByChapter).
 function sampleGroups(groups, scope) {
   if (!Array.isArray(groups) || !groups.length || scope === 'page') return groups;
   const chaptered = groups.filter(g => g.chapter);
   if (!chaptered.length) return groups.slice(0, 1);
-  if (scope === 'chapter') return [chaptered[0]];
+  if (scope === 'chapter') {
+    const first = chaptered.findIndex(g => g.pages?.length);
+    return first < 0 ? [chaptered[0]] : chaptered.slice(0, first + 1);
+  }
   const byId = new Map(chaptered.map(g => [g.chapter.id, g.chapter]));
   const rootKey = (ch) => {
     let cur = ch;

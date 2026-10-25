@@ -27,7 +27,7 @@ test('CRUD-Cycle für pdf_export_profile', () => {
   const p1 = schema.createPdfExportProfile(42, userA, 'A4 Print', { layout: { pageSize: 'A4' } });
   assert.ok(p1.id);
   assert.equal(p1.is_default, false);
-  assert.equal(p1.has_cover, false);
+  assert.equal(p1.has_back_cover, false);
 
   const p2 = schema.createPdfExportProfile(42, userA, 'A5 Pocket', { layout: { pageSize: 'A5' } });
   const list = schema.listPdfExportProfiles(42, userA);

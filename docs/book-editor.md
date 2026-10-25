@@ -89,8 +89,8 @@ init ──setupCardLifecycle──▶ idle
 
 ### Laden (`_load`)
 0. `_loadToken` hochzählen. Buchwechsel und `showFlag`-Watch können beide laden; ohne Token gewinnt die langsamere Response und schreibt das Vorgänger-Buch in die Karte. Nach dem `await` (Erfolg **und** Fehlerpfad) gegen den Token prüfen und ggf. verwerfen.
-1. `fetchBookContents(bookId)` → `GET /book-editor/:book_id/contents` — Server liefert alle Pages in Lesereihenfolge (Depth-First durch Kapitel-Hierarchie). Die Response trägt bewusst nur `pageId`/`pageName`/`pagePriority`/`chapterId`/`chapterName`/`html`/`updated_at` — jedes weitere Feld geht mal Seitenzahl über die Leitung.
-2. `buildBlocksFromPages(pages)` produziert die Block-Liste mit Chapter-Markern an Kapitel-Grenzen. Die Struktur (Kapitel-Header + Seiten-Sequenz) kommt aus dem geteilten Stream-Modell [public/js/manuscript-stream.js](../public/js/manuscript-stream.js) (`fromPages`, geteilt mit Fassungen-Reader und Share-SSR); `buildBlocksFromPages` wrappt nur jeden Page-Entry mit dem Editor-State (dirty/saving/_rev/originalHtml). `stripFocusArtefacts` bleibt im Wrapper (browser-only).
+1. `fetchBookContents(bookId)` → `GET /book-editor/:book_id/contents` — Server liefert alle Pages in Lesereihenfolge (Depth-First durch Kapitel-Hierarchie). Die Seiten tragen bewusst nur `pageId`/`pageName`/`pagePriority`/`chapterId`/`chapterName`/`html`/`updated_at` — jedes weitere Feld geht mal Seitenzahl über die Leitung. Die Elternkette steht darum **einmal je Kapitel** im Top-Level-Feld `chapters: [{ id, name, parentId }]` (depth-first; offline baut `loadContentsFromCache` dasselbe aus dem Baum).
+2. `buildBlocksFromPages(pages, chapters)` produziert die Block-Liste mit Chapter-Markern: je Vorfahr, der an dieser Stelle beginnt, ein Header mit `depth` (0 = Top-Kapitel) — so steht auch ein Kapitel ohne eigenen Abschnitt («Teil I» nur mit Unterkapiteln) einmal vor seinem ersten Unterkapitel, und Unterkapitel-Header sind abgestuft (`.book-editor-chapter-header--d1/--d2`). Die Struktur (Kapitel-Header + Seiten-Sequenz) kommt aus dem geteilten Stream-Modell [public/js/manuscript-stream.js](../public/js/manuscript-stream.js) (`fromPages`, geteilt mit Fassungen-Reader und Share-SSR); `buildBlocksFromPages` wrappt nur jeden Page-Entry mit dem Editor-State (dirty/saving/_rev/originalHtml). `stripFocusArtefacts` bleibt im Wrapper (browser-only).
 3. `missing > 0` → Status-Toast (`bookEditor.missingPages`); Bucheditor bleibt lauffähig. Kam der Stream aus dem Cache, sagt der Toast das (`bookEditor.offlineCopy`).
 3a. `_restoreBlockDrafts()` — liegengebliebene Entwürfe in ihre Blöcke (siehe «Entwürfe und Offline»).
 4. `$nextTick(_initOutlineObserver)` — IO an alle `.book-editor-page-card`-Targets.
@@ -181,13 +181,13 @@ Eigener Verlauf pro Seite, das native Browser-Undo wird **nie** bedient: `onBloc
 
 ## Outline (Sticky-TOC)
 
-- `outlineNodes` (memoized getter, deps `[blocks]`) gruppiert Pages nach Kapitel — Pages vor dem ersten Kapitel kommen in einen `solos`-Bucket. **Beide Knoten-Typen tragen dieselbe `pages`-Liste**, damit das Template einen einzigen Listen-Zweig hat (Solos haben `chapterId: null` und sind nie eingeklappt).
+- `outlineNodes` (memoized getter, deps `[blocks]`) gruppiert Pages nach Kapitel — Pages vor dem ersten Kapitel kommen in einen `solos`-Bucket. Kapitel-Knoten tragen `depth` (Einrückung `.book-editor-outline-group--d1/--d2`), `ancestors` (ein eingeklappter Vorfahr blendet Unterkapitel mit aus) und `count` (Abschnitte des ganzen Teilbaums). **Beide Knoten-Typen tragen dieselbe `pages`-Liste**, damit das Template einen einzigen Listen-Zweig hat (Solos haben `chapterId: null` und sind nie eingeklappt).
 - `IntersectionObserver` mit `rootMargin: '-100px 0px -60% 0px'` + Threshold `[0]` markiert die Topmost-Page als `visiblePageId`. rAF-Throttle bündelt mehrere IO-Entries pro Scroll-Tick zu einem Update.
 - `outlinePageStatus(block)` → `'saving' | 'error' | 'dirty' | 'saved' | ''`: leitet aus `blockStatus(block)` ab (faltet `conflict → error` und `offline → dirty`), keine zweite Zustandsmaschine.
 - Klapp-Marker ist das App-Pattern `.history-chevron` (Mask-Icon + `.open`-Rotation, siehe DESIGN.md), kein eigener Glyph/Pseudo-Chevron.
 - `scrollToBlock(pageId)` — smooth-scroll aus Outline-Klick; setzt `visiblePageId` sofort optimistisch.
 - `toggleChapterCollapse(chapterId)` — Map `collapsedChapters` togglet Sichtbarkeit der Pages unter einem Kapitel im Outline (Stream bleibt vollständig).
-- `buildOutlineNodes(blocks)` ([book-editor/outline.js](../public/js/cards/book-editor/outline.js)) — Kapitel aus genau einem Abschnitt (`node.single`) erscheinen als **eine** Zeile (Kapitelname, Seiten-Optik mit Status-Punkt, Klick springt zum Abschnitt), ohne Kapitelzeile, Zähler und Collapse.
+- `buildOutlineNodes(blocks)` ([book-editor/outline.js](../public/js/cards/book-editor/outline.js)) — Kapitel aus genau einem Abschnitt ohne Unterkapitel (`node.single`) erscheinen als **eine** Zeile (Kapitelname, Seiten-Optik mit Status-Punkt, Klick springt zum Abschnitt), ohne Kapitelzeile, Zähler und Collapse.
 - Stream: heisst der erste Abschnitt eines Kapitels wie das Kapitel (`block.dupTitle`, `sameStructureTitle` aus [structure-title.js](../public/js/structure-title.js)), bleibt der Name in der Abschnitts-Caption leer — Status und Plaketten bleiben stehen.
 
 ## Pflicht-Invarianten

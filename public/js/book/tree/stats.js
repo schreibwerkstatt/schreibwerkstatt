@@ -20,6 +20,28 @@ function _fmtDateShort(d, locale) {
   return d.toLocaleDateString(localeTag(locale), tzOpts({ day: '2-digit', month: '2-digit' }));
 }
 
+// Treffer je Kapitel inkl. Unterkapitel in einer gefilterten Baum-Kopie
+// (Suche/Stand-Filter, flach + depth-first mit parent_id). Gecacht auf die
+// Identitaet der Kopie — beide Filter-Zweige memoisieren sie, und die Sidebar
+// fragt pro Kapitelzeile mehrfach. Modul-WeakMap statt Komponenten-Feld: ein
+// Schreibzugriff auf reaktiven State mitten im Render weckte alle Zeilen.
+const hitCountCache = new WeakMap();
+export function subtreeHitCounts(filtered) {
+  let counts = hitCountCache.get(filtered);
+  if (counts) return counts;
+  counts = new Map();
+  const byId = new Map();
+  for (const it of filtered) if (it.type === 'chapter' && !it.solo) byId.set(it.id, it);
+  for (const it of byId.values()) {
+    const n = it.pages?.length || 0;
+    for (let cur = it, guard = 0; cur && guard < 64; cur = byId.get(cur.parent_id), guard++) {
+      counts.set(cur.id, (counts.get(cur.id) || 0) + n);
+    }
+  }
+  hitCountCache.set(filtered, counts);
+  return counts;
+}
+
 export const treeStatsMethods = {
   pageStatus(page) {
     const rec = this.pageLastChecked?.[page.id];
@@ -135,12 +157,13 @@ export const treeStatsMethods = {
     }).catch(() => {});
   },
 
-  // Seitenzahl fuer das Kapitelkopf-Tag. Bei aktiver Suche oder Stand-Filter
-  // die Trefferzahl (die Kopien tragen gefilterte `pages`), sonst der ganze Subtree.
+  // Seitenzahl fuer das Kapitelkopf-Tag — immer ueber den ganzen Unterbaum.
+  // Bei aktiver Suche oder Stand-Filter die Treffer im Unterbaum (die Kopien in
+  // `filteredTree` tragen gefilterte `pages`), sonst der ganze Bestand.
   _chapterPageCount(item) {
     if (!item) return 0;
-    if (this._treeIsFiltered()) return item.pages.length;
-    return item.pageTotal ?? item.pages.length;
+    if (!this._treeIsFiltered()) return item.pageTotal ?? item.pages.length;
+    return subtreeHitCounts(this.filteredTree || []).get(item.id) ?? item.pages.length;
   },
 
   // Template-Zugang zur Namensregel (Sidebar: Untertitel nur bei abweichendem

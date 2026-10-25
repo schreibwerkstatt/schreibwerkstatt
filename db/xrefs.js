@@ -17,6 +17,7 @@
 //         unabhaengig davon, ob der Index gerade frisch ist.
 
 const { db } = require('./schema');
+const { globalPageOrderSql } = require('./book-order');
 
 // ── xref_anchors ─────────────────────────────────────────────────────────────
 
@@ -59,8 +60,9 @@ const _stmtAnchorsForBook = db.prepare(`
   SELECT a.bid, a.kind, a.caption, a.ord, a.page_id, p.chapter_id, p.page_name
     FROM xref_anchors a
     JOIN pages p ON p.page_id = a.page_id
+    LEFT JOIN chapters c ON c.chapter_id = p.chapter_id
    WHERE p.book_id = ?
-   ORDER BY p.position, a.ord
+   ORDER BY ${globalPageOrderSql()}, a.ord
 `);
 
 /** Alle Anker eines Buchs in Buch-Leserichtung (Seitenposition, dann Position
@@ -168,16 +170,18 @@ const _stmtBacklinksChapter = db.prepare(`
   SELECT l.page_id, l.count, l.first_offset, p.page_name, p.chapter_id
     FROM xref_links l
     JOIN pages p ON p.page_id = l.page_id
+    LEFT JOIN chapters c ON c.chapter_id = p.chapter_id
    WHERE l.kind = 'chapter' AND l.chapter_id = ?
-   ORDER BY p.position, l.first_offset
+   ORDER BY ${globalPageOrderSql()}, l.first_offset
 `);
 
 const _stmtBacklinksAnchor = db.prepare(`
   SELECT l.page_id, l.count, l.first_offset, p.page_name, p.chapter_id
     FROM xref_links l
     JOIN pages p ON p.page_id = l.page_id
+    LEFT JOIN chapters c ON c.chapter_id = p.chapter_id
    WHERE l.kind = ? AND l.anchor_bid = ?
-   ORDER BY p.position, l.first_offset
+   ORDER BY ${globalPageOrderSql()}, l.first_offset
 `);
 
 /** Wer verweist auf dieses Ziel (Rueckwaertsrichtung). Grundlage der Warnung

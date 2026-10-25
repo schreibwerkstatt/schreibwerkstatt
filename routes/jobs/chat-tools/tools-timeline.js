@@ -19,6 +19,7 @@ const {
 const { getFigureRow } = require('../../../db/book-chat/figures');
 const { listFigureAges } = require('../../../db/figure-ages');
 const { getBookSettings } = require('../../../db/book-settings');
+const { getDescendantChapterIds } = require('../../../db/book-order');
 const { birthCandidates, resolveBirth } = require('../../../lib/figure-birth');
 const { _truncateResult, _findFigure, offeredList, toolHint } = require('./shared');
 
@@ -80,7 +81,9 @@ function tool_list_continuity_issues(input, ctx) {
   }));
 
   if (chapterFilter != null) {
-    enriched = enriched.filter(i => i.kapitel.some(c => c.chapter_id === chapterFilter));
+    // Kapitel = Teilbaum: ein Befund im Unterkapitel gehoert auch zum Teil.
+    const scope = new Set(getDescendantChapterIds(chapterFilter, { includeSelf: true }));
+    enriched = enriched.filter(i => i.kapitel.some(c => scope.has(c.chapter_id)));
   }
 
   const total = enriched.length;

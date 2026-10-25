@@ -8,23 +8,35 @@
 // hat. `single`: Kapitel aus genau einem Abschnitt — die Outline zeigt es als
 // EINE Zeile (Kapitelname, Klick springt zum Abschnitt) statt Kapitelzeile +
 // gleichlautender Abschnittszeile darunter.
+// Unterkapitel tragen `depth` (0 = Top) und `ancestors` (Kapitel-IDs darüber):
+// ein eingeklappter Vorfahr blendet sie mit aus, `count` zählt die Abschnitte
+// des ganzen Teilbaums (ein «Teil» ohne eigenen Abschnitt zeigt sonst 0).
 export function buildOutlineNodes(blocks) {
   const out = [];
   let currentChapter = null;
   let solos = [];
+  const stack = [];   // offene Kapitel-Knoten, Index = depth
   for (const b of blocks) {
     if (b.kind === 'chapter') {
-      if (solos.length) { out.push({ kind: 'solos', chapterId: null, pages: solos }); solos = []; }
-      currentChapter = { kind: 'chapter', chapterId: b.chapterId, name: b.name, pages: [] };
+      if (solos.length) { out.push({ kind: 'solos', chapterId: null, pages: solos, depth: 0, ancestors: [], count: solos.length }); solos = []; }
+      const depth = b.depth || 0;
+      stack.length = depth;
+      currentChapter = {
+        kind: 'chapter', chapterId: b.chapterId, name: b.name, pages: [], depth,
+        ancestors: stack.filter(Boolean).map(n => n.chapterId), count: 0,
+      };
+      stack[depth] = currentChapter;
       out.push(currentChapter);
     } else {
       const item = { kind: 'page', pageId: b.pageId, name: b.name, block: b };
-      if (currentChapter) currentChapter.pages.push(item);
-      else solos.push(item);
+      if (currentChapter) {
+        currentChapter.pages.push(item);
+        for (const n of stack) if (n) n.count++;
+      } else solos.push(item);
     }
   }
-  if (solos.length) out.push({ kind: 'solos', chapterId: null, pages: solos });
-  for (const n of out) n.single = n.kind === 'chapter' && n.pages.length === 1;
+  if (solos.length) out.push({ kind: 'solos', chapterId: null, pages: solos, depth: 0, ancestors: [], count: solos.length });
+  for (const n of out) n.single = n.kind === 'chapter' && n.pages.length === 1 && n.count === 1;
   return out;
 }
 

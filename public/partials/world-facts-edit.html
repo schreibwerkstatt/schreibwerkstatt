@@ -1,0 +1,42 @@
+<!-- Pflegeformular eines Welt-Fakts (anlegen + bearbeiten). Fragment-Include in
+     world-facts.html — lebt im Scope von `worldFactsCard`, State `wfEdit`.
+     Gespeicherte Fakten sind «gepflegt»: die nächste Komplettanalyse lässt sie stehen. -->
+<div class="weltfakten-edit-panel" @keydown.escape.stop="wfCancelEdit()">
+  <div class="card-section-head">
+    <span class="card-section-title"
+          x-text="$app.t(wfEdit.mode === 'new' ? 'weltfakten.edit.newTitle' : 'weltfakten.edit.editTitle')"></span>
+  </div>
+  <div class="card-form-grid">
+    <div class="card-form-row">
+      <label class="card-form-label" x-text="$app.t('weltfakten.edit.kategorie')"></label>
+      <div class="card-form-field">
+        <div x-data="combobox({ placeholder: $app.t('weltfakten.edit.kategorie'), compact: false })"
+             x-modelable="value" x-model="wfEdit.draft.kategorie"
+             x-effect="options = wfKatOptions()"></div>
+      </div>
+    </div>
+    <div class="card-form-row">
+      <label class="card-form-label" x-text="$app.t('weltfakten.edit.subjekt')"></label>
+      <div class="card-form-field">
+        <input type="text" x-model="wfEdit.draft.subjekt" maxlength="200"
+               data-spellcheck="spelling" :aria-label="$app.t('weltfakten.edit.subjekt')">
+      </div>
+    </div>
+    <div class="card-form-row card-form-row--top">
+      <label class="card-form-label" x-text="$app.t('weltfakten.edit.fakt')"></label>
+      <div class="card-form-field">
+        <textarea class="card-form-textarea" rows="3" x-model="wfEdit.draft.fakt" maxlength="2000"
+                  data-spellcheck="spelling" :aria-label="$app.t('weltfakten.edit.fakt')"></textarea>
+      </div>
+    </div>
+  </div>
+  <p class="card-form-hint" x-text="$app.t('weltfakten.edit.protectHint')"></p>
+  <p class="card-form-error" x-show="wfEdit.error" x-cloak x-text="wfEdit.error"></p>
+  <div class="weltfakten-edit-actions">
+    <button type="button" class="primary" @click="wfSaveEdit()" :disabled="wfEdit.busy || !wfEdit.draft.fakt.trim()">
+      <span x-show="wfEdit.busy" class="spinner"></span>
+      <span x-text="wfEdit.busy ? $app.t('common.saving') : $app.t('common.save')"></span>
+    </button>
+    <button type="button" @click="wfCancelEdit()" x-text="$app.t('common.cancel')"></button>
+  </div>
+</div>

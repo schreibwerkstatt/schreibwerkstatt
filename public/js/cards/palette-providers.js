@@ -95,6 +95,12 @@ function _ensureLoaded(providerKey, getList, runner) {
   Promise.resolve(p).catch(() => {}).finally(done);
 }
 
+// Anzeigename eines Kapitels (disambiguiert, tree/build.js#_chapterLabelMap).
+export function chapterLabel(root, chapterId) {
+  if (chapterId == null || chapterId === '') return '';
+  return root?._chapterLabelMap?.get?.(Number(chapterId)) || '';
+}
+
 function rank(items) {
   return items
     .filter(Boolean)
@@ -121,7 +127,7 @@ export const PROVIDERS = [
           key: 'page:' + p.id,
           providerKey: 'pages',
           label: p.name || '',
-          sub: p.chapterName || '',
+          sub: chapterLabel(root, p.chapter_id) || p.chapterName || '',
           score: m.score,
           indices: m.indices,
           available: true,
@@ -143,13 +149,18 @@ export const PROVIDERS = [
       if (!chapters.length) return [];
       const out = [];
       for (const c of chapters) {
-        const m = fuzzyMatch(q, c.name || '');
+        // Label wie in allen Kapitel-Filtern: gleichnamige Kapitel mit dem
+        // Elternkapitel davor (tree/build.js#_chapterLabelMap). Gesucht wird im
+        // Label, damit die Treffer-Indizes zur angezeigten Zeichenkette passen.
+        const label = chapterLabel(root, c.id) || c.name || '';
+        const m = fuzzyMatch(q, label);
         if (!m) continue;
-        const pageCount = c.pages?.length || 0;
+        // Abschnitte im ganzen Unterbaum — wie das Kapitel-Tag der Sidebar.
+        const pageCount = c.pageTotal ?? (c.pages?.length || 0);
         out.push({
           key: 'chapter:' + c.id,
           providerKey: 'chapters',
-          label: c.name || '',
+          label,
           sub: t(pageCount === 1 ? 'palette.chapter.pageCountOne' : 'palette.chapter.pageCountOther', { n: pageCount }),
           score: m.score,
           indices: m.indices,

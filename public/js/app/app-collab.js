@@ -219,6 +219,8 @@ export const appCollabMethods = {
     // Server-„now"-Stempel als Baseline fuer den naechsten Tick. Server-Uhr,
     // nicht Client-Uhr — Clock-Skew vermeiden.
     if (data.now) this.$store.collab._collabSince = data.now;
+    // Umbau der Struktur in einem anderen Tab/Geraet (book/tree/catchup.js).
+    if (this._structureDrifted?.(data.structure_at)) this._scheduleTreeCatchUp('structure');
 
     const changes = Array.isArray(data.changes) ? data.changes : [];
     if (changes.length === 0) return;

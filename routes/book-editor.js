@@ -59,8 +59,21 @@ router.get('/:book_id/contents', async (req, res) => {
       })
       .filter(Boolean);
 
+    // Elternkette fuer die Kapitel-Header (public/js/manuscript-stream.js#fromPages):
+    // EINMAL je Kapitel statt je Seite — so bekommt auch ein Kapitel ohne
+    // eigenen Abschnitt («Teil I» nur mit Unterkapiteln) seinen Header, und
+    // Unterkapitel tragen ihre echte Tiefe.
+    const chapters = [];
+    (function walk(list, parentId) {
+      for (const c of (list || [])) {
+        chapters.push({ id: c.id, name: c.name, parentId });
+        walk(c.subchapters, c.id);
+      }
+    })(tree.chapters, null);
+
     res.json({
       bookId,
+      chapters,
       pages: ordered,
       missing: flatMetas.length - ordered.length,
     });

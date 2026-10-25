@@ -89,12 +89,27 @@ export function makeChatMethods(cfg) {
     this[p.status] = `<span class="muted-msg">${escHtml(root.t('chat.runningElsewhere'))}</span>`;
   }
 
+  // Ein offenes, noch leeres Gespräch IST schon ein neues: es wird weiterbenutzt
+  // statt ein zweites leeres anzulegen. Ein Anlegen, das noch läuft, wird geteilt
+  // (Karte öffnen + Klick auf „Neu" kurz nacheinander) — sonst bleiben leere
+  // Sessions im Verlauf liegen.
   async function startNewSession() {
     if (!cfg.canOpen(this)) return;
+    const inFlight = `_new${L}SessionInFlight`;
+    if (this[inFlight]) return this[inFlight];
+    this[inFlight] = createSession.call(this).finally(() => { this[inFlight] = null; });
+    return this[inFlight];
+  }
+
+  async function createSession() {
     const g = gen(this);
     try {
       if (cfg.onBeforeNewSession) await cfg.onBeforeNewSession.call(this);
       if (gen(this) !== g) return;
+      if (this[p.sessionId] && !(this[p.messages] || []).length && !this[p.loading]) {
+        this[p.status] = '';
+        return;
+      }
       const { id } = await fetchJson(cfg.newSessionUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

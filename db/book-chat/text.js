@@ -9,6 +9,7 @@
 
 const { db } = require('../connection');
 require('../migrations');
+const { chapterSubtreeFilter } = require('../book-order');
 
 /** Seiten mit body_html für search_passages. Filter optional: `chapterId`,
  *  `pageId`, `pageIds` (FTS-Kandidaten); null = kein Filter. Ohne ORDER BY —
@@ -17,8 +18,9 @@ function listPagesForPassageSearch(bookId, { chapterId = null, pageId = null, pa
   const scopeFilters = ['book_id = ?'];
   const scopeParams  = [bookId];
   if (chapterId !== null) {
-    scopeFilters.push('chapter_id = ?');
-    scopeParams.push(chapterId);
+    const f = chapterSubtreeFilter('chapter_id', chapterId);
+    scopeFilters.push(f.sql);
+    scopeParams.push(...f.params);
   }
   if (pageId !== null) {
     scopeFilters.push('page_id = ?');
@@ -64,7 +66,10 @@ function listPagesForDialogue(bookId, { chapterId = null, pageId = null } = {}) 
     LEFT JOIN chapters c ON c.chapter_id = p.chapter_id AND c.book_id = p.book_id
     WHERE p.book_id = ? AND p.body_html IS NOT NULL`;
   const params = [bookId];
-  if (chapterId !== null) { sql += ' AND p.chapter_id = ?'; params.push(chapterId); }
+  if (chapterId !== null) {
+    const f = chapterSubtreeFilter('p.chapter_id', chapterId);
+    sql += ` AND ${f.sql}`; params.push(...f.params);
+  }
   if (pageId !== null)    { sql += ' AND p.page_id    = ?'; params.push(pageId); }
   sql += ' ORDER BY c.position, p.position, p.page_id';
   return db.prepare(sql).all(...params);

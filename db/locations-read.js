@@ -92,4 +92,18 @@ function getLocationName(locationId, opts = {}) {
   return _stmtLocName.get(locationId)?.t;
 }
 
-module.exports = { listLocationsForBook, getLocationName };
+// Orts-Hierarchie als schlanke Map loc_id → parent_loc_id (nur Orte mit Elternort).
+// Für Rechnungen, die „liegt A in B" brauchen (Zeit-Messung der Plot-Werkstatt),
+// ohne die Figuren-/Kapitel-Joins von listLocationsForBook. Buchweit, ohne
+// user_email-Filter — wie die Beat-Orts-Brücke (db/plot/beats.js
+// #resolveLocationIds), die ihre Orte ebenfalls nur übers Buch auflöst.
+const _stmtLocParents = db.prepare(`
+  SELECT l.loc_id, p.loc_id AS parent_loc_id
+    FROM locations l JOIN locations p ON p.id = l.parent_id
+   WHERE l.book_id = ?
+`);
+function locationParentMap(bookId) {
+  return new Map(_stmtLocParents.all(bookId).map(r => [r.loc_id, r.parent_loc_id]));
+}
+
+module.exports = { listLocationsForBook, getLocationName, locationParentMap };

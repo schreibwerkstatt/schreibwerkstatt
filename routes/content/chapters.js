@@ -5,6 +5,7 @@ const contentStore = require('../../lib/content-store');
 const { toIntId } = require('../../lib/validate');
 const { guardBook } = require('../../lib/acl');
 const { resolveChapterBookId } = require('../../lib/content-ownership');
+const bookOrder = require('../../db/book-order');
 const { jsonBody, _guardChapter, _fail } = require('./shared');
 
 function register(router) {
@@ -31,6 +32,11 @@ function register(router) {
     if (parentChapterId != null && resolveChapterBookId(parentChapterId) !== bookId) {
       return res.status(400).json({ error_code: 'CHAPTER_NOT_IN_BOOK' });
     }
+    // Tiefe 3 ist die Grenze (db/book-order.js#MAX_CHAPTER_DEPTH).
+    if (parentChapterId != null && !Number.isFinite(req.body?.after_chapter_id)
+        && bookOrder.chapterDepth(parentChapterId) >= bookOrder.MAX_CHAPTER_DEPTH) {
+      return res.status(400).json({ error_code: 'CHAPTER_MAX_DEPTH' });
+    }
     const afterChapterId = Number.isFinite(req.body?.after_chapter_id) ? req.body.after_chapter_id : null;
     if (afterChapterId != null && resolveChapterBookId(afterChapterId) !== bookId) {
       return res.status(400).json({ error_code: 'CHAPTER_NOT_IN_BOOK' });
@@ -47,14 +53,14 @@ function register(router) {
     } catch (e) { _fail(res, e, 'POST /content/chapters'); }
   });
 
-  // PUT /content/chapters/:chapter_id — Kapitel-Update (rename / reorder / exclude).
+  // PUT /content/chapters/:chapter_id — Kapitel-Update (rename / exclude).
+  // Reihenfolge und Elternkapitel nur ueber PUT /content/books/:id/order.
   router.put('/chapters/:chapter_id', jsonBody, async (req, res) => {
     const chapterId = toIntId(req.params.chapter_id);
     if (!chapterId) return res.status(400).json({ error_code: 'INVALID_CHAPTER_ID' });
     const hasName = typeof req.body?.name === 'string';
-    const hasPos = Number.isFinite(req.body?.position);
     const hasExcluded = typeof req.body?.excluded === 'boolean';
-    if (!hasName && !hasPos && !hasExcluded) {
+    if (!hasName && !hasExcluded) {
       return res.status(400).json({ error_code: 'EMPTY_BODY' });
     }
     if (_guardChapter(req, res, chapterId, 'editor') == null) return;
@@ -63,9 +69,10 @@ function register(router) {
   });
 
   // DELETE /content/chapters/:chapter_id — loescht das Kapitel hart (kein
-  // Papierkorb). Seine Seiten und Sub-Kapitel bleiben erhalten und verlieren nur
-  // die Zuordnung (FK `ON DELETE SET NULL` auf pages.chapter_id bzw.
-  // chapters.parent_chapter_id). Der Buchorganizer loescht nur leere Kapitel.
+  // Papierkorb). Sein Inhalt bleibt an Ort und Stelle: Unterkapitel ruecken in
+  // seine Luecke, Abschnitte zum Elternkapitel bzw. zu den Abschnitten ohne
+  // Kapitel (lib/content-store#deleteChapter). Seitenleiste und Buchorganizer
+  // bieten Loeschen nur fuer leere Kapitel an.
   router.delete('/chapters/:chapter_id', async (req, res) => {
     const chapterId = toIntId(req.params.chapter_id);
     if (!chapterId) return res.status(400).json({ error_code: 'INVALID_CHAPTER_ID' });

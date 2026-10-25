@@ -1,0 +1,137 @@
+    <!-- Buchreihe: Methods public/js/book/book-settings/series.js, Server
+         routes/book-series.js, Doku docs/buchreihen.md. Aktionen speichern sofort. -->
+    <div class="card-form-grid" x-bind="panel('series')" x-cloak
+         x-effect="onSeriesTabVisible(bookSettingsTab)">
+
+      <div x-show="seriesLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+
+      <section class="book-settings-section" x-show="!seriesLoading">
+        <h3 class="card-section-title" x-text="$app.t('series.title')"></h3>
+        <p class="card-hint" x-text="$app.t('series.intro')"></p>
+
+        <template x-if="!seriesData">
+          <div>
+            <div class="card-form-row">
+              <label class="card-form-label" for="series-new-name" x-text="$app.t('series.newName')"></label>
+              <div class="series-inline">
+                <input type="text" id="series-new-name" class="card-form-input" maxlength="200"
+                       data-spellcheck="spelling"
+                       x-model="seriesNewName" @keydown.enter.prevent="createSeries()">
+                <button type="button" @click="createSeries()" :disabled="seriesBusy || !seriesNewName.trim()"
+                        x-text="$app.t('series.create')"></button>
+              </div>
+            </div>
+            <div class="card-form-row" x-show="seriesJoinable.length">
+              <label class="card-form-label" x-text="$app.t('series.join')"></label>
+              <div class="series-inline">
+                <div x-data="combobox($app.t('series.joinPlaceholder'))"
+                     x-modelable="value" x-model="seriesJoinId"
+                     x-effect="options = seriesJoinable.map(s => ({ value: String(s.id), label: s.name + ' (' + s.members.map(m => m.name).join(', ') + ')' }))"></div>
+                <button type="button" @click="joinSeries()" :disabled="seriesBusy || !seriesJoinId"
+                        x-text="$app.t('series.joinButton')"></button>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <template x-if="seriesData">
+          <div>
+            <div class="card-form-row">
+              <label class="card-form-label" for="series-name" x-text="$app.t('series.name')"></label>
+              <div class="series-inline">
+                <input type="text" id="series-name" class="card-form-input" maxlength="200"
+                       data-spellcheck="spelling"
+                       x-model="seriesNameDraft" @keydown.enter.prevent="renameSeries()">
+                <button type="button" @click="renameSeries()"
+                        :disabled="seriesBusy || !seriesNameDraft.trim() || seriesNameDraft.trim() === seriesData.name"
+                        x-text="$app.t('series.rename')"></button>
+              </div>
+            </div>
+            <div class="card-form-row">
+              <label class="card-form-label" x-text="$app.t('series.volumes')"></label>
+              <ol class="series-members">
+                <template x-for="(m, i) in seriesData.members" :key="m.book_id">
+                  <li class="series-member" :class="{ 'series-member--current': m.position === seriesData.position }">
+                    <span class="series-member-pos" x-text="m.position"></span>
+                    <span class="series-member-name" x-text="m.name"></span>
+                    <button type="button" class="icon-btn" @click="moveSeriesMember(i, -1)"
+                            :disabled="seriesBusy || i === 0"
+                            :aria-label="$app.t('series.moveUp')" :data-tip="$app.t('series.moveUp')">
+                      <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-up"/></svg>
+                    </button>
+                    <button type="button" class="icon-btn" @click="moveSeriesMember(i, 1)"
+                            :disabled="seriesBusy || i === seriesData.members.length - 1"
+                            :aria-label="$app.t('series.moveDown')" :data-tip="$app.t('series.moveDown')">
+                      <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-down"/></svg>
+                    </button>
+                  </li>
+                </template>
+              </ol>
+            </div>
+            <p class="card-hint" x-text="$app.t('series.epubHint')"></p>
+            <div class="book-settings-danger-actions">
+              <button type="button" @click="leaveSeries()" :disabled="seriesBusy" x-text="$app.t('series.leave')"></button>
+            </div>
+          </div>
+        </template>
+
+        <p class="card-form-saved" x-show="seriesMessage" x-cloak x-transition.opacity.duration.250ms x-text="seriesMessage"></p>
+        <p class="card-form-error" x-show="seriesError" x-text="seriesError"></p>
+      </section>
+
+      <section class="book-settings-section" x-show="!seriesLoading && seriesPrequels.length" x-cloak>
+        <h3 class="card-section-title" x-text="$app.t('series.carry.title')"></h3>
+        <p class="card-hint" x-text="$app.t('series.carry.intro')"></p>
+        <div class="card-form-row">
+          <label class="card-form-label" x-text="$app.t('series.carry.source')"></label>
+          <div class="series-inline">
+            <div x-data="combobox($app.t('series.carry.sourcePlaceholder'))"
+                 x-modelable="value" x-model="carrySourceId"
+                 @combobox-change="carryLists = null"
+                 x-effect="options = seriesPrequels.map(p => ({ value: String(p.book_id), label: $app.t('series.volumeLabel', { n: p.position, name: p.name }) }))"></div>
+            <button type="button" @click="loadCarryCandidates()" :disabled="carryLoading || !carrySourceId"
+                    x-text="$app.t('series.carry.load')"></button>
+          </div>
+        </div>
+
+        <div x-show="carryLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+
+        <template x-if="carryLists && !carryLoading">
+          <div>
+            <template x-for="k in seriesCarryKinds" :key="k">
+              <div class="series-carry-kind">
+                <div class="series-carry-head">
+                  <span class="card-form-label" x-text="$app.t('series.carry.kind.' + k) + ' (' + (carrySel[k] || []).length + '/' + (carryLists[k] || []).length + ')'"></span>
+                  <button type="button" @click="carrySelectAll(k, true)" x-text="$app.t('series.carry.pickCurated')"></button>
+                  <button type="button" @click="carrySelectAll(k, false)" x-text="$app.t('series.carry.pickAll')"></button>
+                  <button type="button" @click="carrySelectNone(k)" x-text="$app.t('series.carry.pickNone')"></button>
+                </div>
+                <p class="card-hint" x-show="!(carryLists[k] || []).length" x-text="$app.t('series.carry.empty')"></p>
+                <div class="series-carry-list">
+                  <template x-for="e in carryLists[k]" :key="e.id">
+                    <label class="form-check">
+                      <input type="checkbox" :value="e.id" x-model.number="carrySel[k]" :disabled="e.vorhanden">
+                      <span>
+                        <span class="form-check-title" x-text="carryLabel(k, e)"></span>
+                        <span class="form-check-desc" x-show="e.vorhanden || e.gepflegt"
+                              x-text="e.vorhanden ? $app.t('series.carry.present') : $app.t('series.carry.curated')"></span>
+                      </span>
+                    </label>
+                  </template>
+                </div>
+              </div>
+            </template>
+            <p class="card-hint" x-text="$app.t('series.carry.hint')"></p>
+            <div class="book-settings-danger-actions">
+              <button type="button" @click="runCarryover()" :disabled="carryBusy || !carryCount()">
+                <span x-show="carryBusy" class="spinner"></span>
+                <span x-text="$app.t('series.carry.run', { n: carryCount() })"></span>
+              </button>
+            </div>
+          </div>
+        </template>
+
+        <p class="card-form-saved" x-show="carryMessage" x-cloak x-transition.opacity.duration.250ms x-text="carryMessage"></p>
+        <p class="card-form-error" x-show="carryError" x-text="carryError"></p>
+      </section>
+    </div>

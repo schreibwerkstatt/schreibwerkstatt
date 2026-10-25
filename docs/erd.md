@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 335, 183 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 342, 187 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -32,6 +32,8 @@ erDiagram
   books ||--o{ continuity_issues     : has
   books ||--o{ chapter_narrative_profile : has
   books ||--o{ book_reviews          : has
+  books ||--o{ book_exposes          : has
+  books ||--o{ expose_synopsis_cache : has
   books ||--o{ chapter_reviews       : has
   books ||--o{ book_stats_history    : has
   books ||--o{ page_stats            : has
@@ -61,6 +63,8 @@ erDiagram
   books ||--o{ pdf_export_profile    : has
   books ||--o{ docx_export_profile   : has
   books ||--|| book_publication      : has
+  book_series ||--o{ book_series_members : "Bände"
+  books ||--o| book_series_members   : "Band in Reihe"
   books ||--o{ user_page_usage       : has
   books ||--o{ book_access           : has
   books ||--o{ book_shelf            : "shelved by"
@@ -264,6 +268,8 @@ erDiagram
   locations ||--o{ location_figures      : has
   locations ||--o{ location_chapters     : at
   locations ||--o{ locations             : parent
+  figures ||--o{ figures                 : "übernommen aus Vorband"
+  locations ||--o{ locations             : "übernommen aus Vorband"
 
   songs ||--o{ song_figures              : has
   songs ||--o{ song_chapters             : at
@@ -299,7 +305,6 @@ erDiagram
     TEXT    created_at
     TEXT    updated_at
     TEXT    last_seen_at
-    TEXT    description
     TEXT    owner_email "Erst-Backfiller / book_access-Bridge"
     INTEGER category_id FK "ON DELETE SET NULL"
   }
@@ -869,6 +874,7 @@ erDiagram
     TEXT    ki_name      "Name aus der letzten Komplettanalyse; Cross-Run-Match laeuft ueber COALESCE(ki_name, name)"
     TEXT    ki_geschlecht "Geschlecht aus der letzten Komplettanalyse; Indizien-Vergleich bei manually_edited=1"
     TEXT    ki_geburtstag "Geburtsdatum aus der letzten Komplettanalyse; Indizien-Vergleich bei manually_edited=1"
+    INTEGER origin_figure_id FK "SET NULL — Figur im Vorband, aus der diese per «Aus Vorband übernehmen» kopiert wurde"
   }
   figure_aliases {
     INTEGER id         PK
@@ -1012,6 +1018,7 @@ erDiagram
     INTEGER manually_edited  "1 = Stammdaten vom Autor korrigiert → Analyse überschreibt sie nicht"
     INTEGER manually_created "1 = vom Autor angelegt → Analyse markiert nie stale"
     TEXT    ki_name      "zuletzt von der Analyse gelieferter Name (Match-Schlüssel nach Umbenennung)"
+    INTEGER origin_location_id FK "SET NULL — Ort im Vorband, aus dem dieser per «Aus Vorband übernehmen» kopiert wurde"
     TEXT    updated_at
   }
   location_figures {
@@ -1059,6 +1066,7 @@ erDiagram
     INTEGER sort_order
     TEXT    user_email
     TEXT    updated_at
+    INTEGER manually_edited "0|1, vom Autor angelegt/bearbeitet → Full-Replace der Analyse lässt die Zeile stehen, baut nur ihre Kapitel-Brücke neu"
   }
   world_fact_chapters {
     INTEGER fact_id    PK,FK "ON DELETE CASCADE"
@@ -1098,6 +1106,8 @@ erDiagram
   locations ||--o{ location_figures   : has
   locations ||--o{ location_chapters  : at
   locations ||--o{ locations          : parent
+  figures   ||--o{ figures            : "origin (Vorband)"
+  locations ||--o{ locations          : "origin (Vorband)"
   songs     ||--o{ song_figures       : has
   songs     ||--o{ song_chapters      : at
   chapters  ||--o{ song_chapters      : has
@@ -1632,6 +1642,28 @@ erDiagram
     TEXT    review_json
     TEXT    model
   }
+  book_exposes {
+    INTEGER id             PK
+    INTEGER book_id        FK "ON DELETE CASCADE"
+    TEXT    user_email     FK "ON DELETE CASCADE"
+    TEXT    profil         "narrativ|sachlich"
+    TEXT    basis          "single|multi"
+    TEXT    sig            "Eingabe-Signatur: gleich → kein zweiter Lauf"
+    TEXT    result_json    "KI-Fassung: Logline, Kurzinhalt/Synopse bzw. Kurzbeschreibung/Gliederung, Liste [{fig_id|chapter_id, text}], Klappentext-Vorschlag"
+    TEXT    edited_json    "Autorfassung (NULL = KI-Fassung)"
+    TEXT    warnungen_json
+    TEXT    model
+    TEXT    created_at
+    TEXT    updated_at
+  }
+  expose_synopsis_cache {
+    INTEGER book_id     PK "FK ON DELETE CASCADE"
+    TEXT    user_email  PK "FK ON DELETE CASCADE"
+    TEXT    provider    PK
+    TEXT    sig         PK "Signatur des gesendeten Prompts (traegt den Kapiteltext)"
+    TEXT    inhalt_json "interne Inhaltsangabe je Kapitel(-Teil)"
+    TEXT    created_at
+  }
   chapter_reviews {
     INTEGER id          PK
     INTEGER book_id     FK
@@ -2120,10 +2152,6 @@ erDiagram
     TEXT    user_email
     TEXT    name
     TEXT    config_json
-    BLOB    cover_image
-    TEXT    cover_mime
-    BLOB    author_image
-    TEXT    author_image_mime
     BLOB    back_cover_image
     TEXT    back_cover_image_mime
     BLOB    spine_image
@@ -2143,6 +2171,17 @@ erDiagram
     INTEGER is_default
     TEXT    created_at
     TEXT    updated_at
+  }
+  book_series {
+    INTEGER id         PK
+    TEXT    name       "Reihentitel (EPUB belongs-to-collection, einziger Ort — book_publication führt keine Reihe); kein Besitzer-Konto — Rechte aus den Bänden"
+    TEXT    created_at
+    TEXT    updated_at
+  }
+  book_series_members {
+    INTEGER series_id  PK,FK "CASCADE"
+    INTEGER book_id    PK,FK "CASCADE, UNIQUE — ein Buch in höchstens einer Reihe"
+    INTEGER position   "Band-Nummer ≥ 1 (EPUB group-position)"
   }
   book_publication {
     INTEGER book_id           PK,FK "1:1 books"
@@ -2165,10 +2204,10 @@ erDiagram
     TEXT    epub_css_style "Schriftfamilie serif|sans|georgia|…"
     INTEGER epub_justify   "0|1"
     TEXT    epub_toc_title
-    TEXT    description "EPUB-OPF Klappentext"
+    TEXT    description "Klappentext — einziger Ort (EPUB, PDF-Umschlag, Exposé, Content-Store-Buchform)"
+    TEXT    zielgruppe       "Freitext (Exposé, Buchhandel)"
+    TEXT    vergleichstitel  "Freitext, eine pro Zeile (Exposé)"
     TEXT    publisher
-    TEXT    series
-    TEXT    series_index
     TEXT    keywords "dc:subject, kommagetrennt"
     TEXT    epub_font_size "small|normal|large"
     TEXT    epub_line_height "tight|normal|relaxed"

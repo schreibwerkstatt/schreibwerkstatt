@@ -15,7 +15,7 @@ import {
   hiddenForBuchtyp, matchesRequiredBuchtyp,
 } from './feature-registry.js';
 import { fuzzyMatch, hasWordPrefix } from './palette-fuzzy.js';
-import { parseQuery } from './palette-providers.js';
+import { parseQuery, chapterLabel } from './palette-providers.js';
 
 // Score-Budget pro Query-Char für Provider-Treffer im Mix-Modus.
 // Höhere Query-Länge = grössere absolute fuzzyMatch-Scores (Gap-Penalty
@@ -40,7 +40,8 @@ export function visiblePaletteFeatures(ctx) {
 }
 
 export function visiblePaletteActions(ctx, devMode) {
-  const actions = actionsVisibleFor(ACTIONS, ctx.bookRole, ctx.buchtyp, ctx.cloudModelEffective);
+  const actions = actionsVisibleFor(ACTIONS, ctx.bookRole, ctx.buchtyp, ctx.cloudModelEffective)
+    .filter(a => !a.requiresConfig || ctx.config?.[a.requiresConfig]);
   return devMode ? actions.filter(a => a.key !== 'action.logout') : actions;
 }
 
@@ -96,7 +97,7 @@ export function recentFeatures(trackedKeys, visibleFeatures) {
   return out;
 }
 
-function recentPageItems(recentPageIds, pages) {
+function recentPageItems(recentPageIds, pages, root) {
   const pageById = new Map((pages || []).map(p => [p.id, p]));
   return (recentPageIds || [])
     .map(id => pageById.get(id))
@@ -107,7 +108,7 @@ function recentPageItems(recentPageIds, pages) {
       providerKey: 'pages',
       kind: 'page',
       label: p.name || '',
-      sub: p.chapterName || '',
+      sub: chapterLabel(root, p.chapter_id) || p.chapterName || '',
       score: 0,
       indices: [],
       available: true,
@@ -131,7 +132,7 @@ function matchAll(entries, q, ctx, t) {
 }
 
 // args: { query, ctx, devMode, recentFeatureKeys, recentPageIds, t, root, providers }
-// ctx: { selectedBookId, hasBooks, pages, bookRole, buchtyp, cloudModelEffective }
+// ctx: { selectedBookId, hasBooks, pages, bookRole, buchtyp, cloudModelEffective, config }
 export function buildPaletteSections(args) {
   const { query, ctx, devMode, recentFeatureKeys, recentPageIds, t, root, providers } = args;
   const parsed = parseQuery(query);
@@ -162,7 +163,7 @@ export function buildPaletteSections(args) {
     if (recent.length) {
       sections.push({ key: 'recent', labelKey: 'palette.recent', items: recent.map(f => featureItem(f, ctx)) });
     }
-    const pages = recentPageItems(recentPageIds, ctx.pages);
+    const pages = recentPageItems(recentPageIds, ctx.pages, root);
     if (pages.length) {
       sections.push({ key: 'recentPages', labelKey: 'palette.section.recentPages', items: pages });
     }
@@ -171,7 +172,7 @@ export function buildPaletteSections(args) {
       const items = matchAll(features.filter(f => f.group === groupKey), '', ctx, t);
       if (items.length) sections.push({ key: groupKey, labelKey: GROUP_LABEL_KEY[groupKey], items });
     }
-    const actionItems = matchAll(actions, '', ctx, t);
+    const actionItems = matchAll(actions.filter(a => !a.searchOnly), '', ctx, t);
     if (actionItems.length) sections.push({ key: 'app', labelKey: GROUP_LABEL_KEY.app, items: actionItems });
     return sections;
   }

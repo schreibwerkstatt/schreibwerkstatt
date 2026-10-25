@@ -29,6 +29,8 @@ export const EVT = {
   VIEW_RESET: 'view:reset',                     // kein detail
   CARD_REFRESH: 'card:refresh',                 // detail: { name }
   BOOK_SETTINGS_UPDATED: 'book:settings:updated', // detail: { bookId }
+  // Wunsch an eine Karte (Reiter, Session; cards/card-request.js).
+  CARD_REQUEST: 'card:request',                 // detail: { key } (Wert liegt im Modul)
   PAGES_LOADED: 'pages:loaded',                 // kein detail
   // Eine Seite wurde lokal aus nav.tree/nav.pages entfernt, OHNE vollen Reload
   // (Remote-Delete aus dem Collab-Feed, tree/build.js#_removePageFromTree).
@@ -44,6 +46,17 @@ export const EVT = {
   // lokal aus nav.tree entfernt (Sidebar-Kontextmenue,
   // tree/structure.js#deleteChapterById).
   CHAPTER_REMOVED: 'chapter:removed',           // detail: { chapterId }
+  // Ein Abschnitt wurde ausserhalb des Buchorganizers lokal in nav.tree/nav.pages
+  // eingehängt oder hat seine echte ID bekommen, OHNE Reload (Sidebar-Kontextmenü,
+  // erster Abschnitt eines neuen Kapitels, Offline-Overlay/-Abspielen;
+  // tree/structure.js#_insertCreatedPageIntoTree, app-outbox.js). Der Organizer
+  // zieht seinen Workstate nach — sonst fehlte die Seite im nächsten Order-PUT
+  // (Server: MISSING_PAGE).
+  PAGE_ADDED: 'page:added',                     // detail: { pageId? }
+  // Ein Struktur-Write dieses Tabs ist beim Server angekommen (Kapitel/Abschnitt
+  // anlegen, löschen, verschieben, umbenennen, Order-PUT; repo/content.js). Der
+  // Strukturstand des Baums (book/tree/catchup.js) ist danach nicht mehr bekannt.
+  STRUCTURE_WRITTEN: 'structure:written',       // detail: { bookId }
   // Seite oder Kapitel wurde ausserhalb des Buchorganizers umbenannt und in
   // nav.tree/nav.pages gespiegelt (Editor-Kopf, Sidebar-Kontextmenü,
   // app-view/page.js#renamePageById, tree-context-menu.js#renameChapterById).

@@ -30,17 +30,11 @@
 //   2) Reduced-Motion braucht hier KEINEN Sonderfall: der globale Override in
 //      css/tokens/motion.css setzt `transition-duration: 0s !important`, und
 //      Alpines Transition-Helper liest die berechnete Dauer → klappt instant.
-//   3) Die Direktive animiert ausschliesslich `height`. Vertikales **Padding am
-//      Panel** bleibt darum stehen und wird zum Boden der Animation: die Hoehe
-//      laeuft nur bis zur Padding-Hoehe, haelt dort bis zum Ende der
-//      Transition-Dauer und springt dann per `display: none` weg — sichtbares
-//      Rucken an beiden Enden. Wer einen Innenabstand braucht, legt ihn an die
-//      Kinder des Panels und gibt dem Panel `display: flow-root`, damit die
-//      Kind-Margins permanent in seiner Hoehe liegen (ohne eigenen
-//      Formatierungskontext klappen sie im Ruhezustand heraus, der Messwert des
-//      Plugins faellt zu klein aus, und der Sprung wandert nur vom Ende an den
-//      Anfang). Muster: `.plot-tension-body` in css/book/plot/widgets.css,
-//      gegatet durch tests/e2e-app/plot-tension-collapse.spec.js.
+//   3) Die Direktive animiert ausschliesslich `height` — darum traegt das
+//      Panel selbst kein Box-Styling (Padding/Margin/Border/Flex/Grid), das
+//      gehoert an ein Kind; der Spread setzt `.collapse-panel` (flow-root).
+//      Regel, Ausnahme `.collapsible-section` und Gates: DESIGN.md
+//      „Klappbarer Section-Toggle".
 
 export function registerCollapsible() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -69,7 +63,11 @@ export function registerCollapsible() {
     // soll — dann hier nicht global drehen, sondern beim Konsumenten das Panel
     // von Hand verdrahten.
     get panel() {
-      return { ['x-show']: () => this.open, ['x-collapse']: () => '' };
+      return {
+        ['x-show']: () => this.open,
+        ['x-collapse']: () => '',
+        [':class']: () => 'collapse-panel',
+      };
     },
   }));
 }

@@ -16,6 +16,7 @@
 //   - history.js   — Undo/Redo (max 10 Schritte) über alle reversiblen Mutationen
 //   - ai.js        — KI-Jobs (Brainstorm/Consistency), Lauf-Historie, Fullscreen
 //   - time-check.js — Zeit-Messung (deterministisch, GET /plot/time-check)
+//   - zeit.js      — erzählte Zeit am Beat: verstanden als, Befund-Marker, Vorschläge aus dem Text
 //   - beat-move.js — Beat verschieben ohne Drag (Akt/Strang/oben-unten → _dropBeat)
 //   - board-ui.js  — Dichte-Modus, Akte einklappen, Menü-Tastatur, Leer-Zustand
 //   - konflikt-actions.js — Befund-Typen, Typ-Filter, Ein-Klick-Aktionen
@@ -30,6 +31,7 @@ import { dndMethods } from './plot/dnd.js';
 import { historyMethods } from './plot/history.js';
 import { aiMethods } from './plot/ai.js';
 import { timeCheckMethods } from './plot/time-check.js';
+import { zeitMethods } from './plot/zeit.js';
 import { beatMoveMethods } from './plot/beat-move.js';
 import { boardUiMethods } from './plot/board-ui.js';
 import { konfliktActionMethods } from './plot/konflikt-actions.js';
@@ -45,6 +47,7 @@ export const plotMethods = {
   ...historyMethods,
   ...aiMethods,
   ...timeCheckMethods,
+  ...zeitMethods,
   ...beatMoveMethods,
   ...boardUiMethods,
   ...konfliktActionMethods,

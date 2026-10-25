@@ -28,8 +28,9 @@ const DEFAULTS = {
   pageBodyClass: 'ms-page__body',
   anchorPrefix: 'sec',
   // Bei Kapitel-Shares hängt der Kapitel-Titel schon im Seiten-Header (h1) —
-  // dann KEIN Kapitel-Heading im Body (sonst doppelt), Seiten bleiben Top-Level.
-  omitChapterHeaders: false,
+  // dann KEIN Heading für genau dieses Kapitel im Body (sonst doppelt); seine
+  // Abschnitte und Unterkapitel rücken eine Verzeichnis-Ebene hoch.
+  omitChapterId: null,
 };
 
 // entries: StreamEntry[] (siehe manuscript-stream.js).
@@ -47,13 +48,24 @@ export function renderStreamHtml(entries, opts = {}) {
   // (structure-title.js). Bei Kapitel-Shares steht der Kapitelname im h1-Kopf
   // der Leseansicht und zaehlt genauso.
   let pendingChapter = null;
+  // Verzeichnis-Ebene = Tiefe + 1 (Kapitel: depth 0 = oberstes Kapitel; Seite:
+  // depth = Zahl der umschliessenden Kapitel), beim ausgelassenen Wurzel-
+  // Kapitel eines Kapitel-Shares eine Ebene höher.
+  const omitted = o.omitChapterId != null
+    && (entries || []).some(e => e.kind === 'chapter' && e.chapterId === o.omitChapterId);
+  const shift = omitted ? 1 : 0;
+  const lvl = (d) => Math.max(1, (d || 0) + 1 - shift);
   for (const e of (entries || [])) {
     if (e.kind === 'chapter') {
       pendingChapter = e;
-      if (o.omitChapterHeaders) continue;
+      if (omitted && e.chapterId === o.omitChapterId) continue;
       const a = o.anchorPrefix + (++n);
-      toc.push({ level: 1, label: e.name || '', anchor: a, chapterId: e.chapterId ?? null, pageId: null });
-      sections.push(`<${o.chapterTag} id="${a}" class="${o.chapterClass}">${escHtml(e.name || '')}</${o.chapterTag}>`);
+      const level = lvl(e.depth);
+      toc.push({ level, label: e.name || '', anchor: a, chapterId: e.chapterId ?? null, pageId: null });
+      // Tiefen-Klasse ab Unterkapitel: der Look stuft die Grösse ab
+      // (manuscript-stream.css), das Tag bleibt — Seiten sitzen auf pageTag.
+      const cls = level > 1 ? `${o.chapterClass} ${o.chapterClass}--d${Math.min(level, 3) - 1}` : o.chapterClass;
+      sections.push(`<${o.chapterTag} id="${a}" class="${cls}">${escHtml(e.name || '')}</${o.chapterTag}>`);
     } else if (e.kind === 'page') {
       const dupOfChapter = !!pendingChapter && !e.article
         && (pendingChapter.chapterId ?? null) === (e.chapterId ?? null)
@@ -69,7 +81,9 @@ export function renderStreamHtml(entries, opts = {}) {
         continue;
       }
       const a = o.anchorPrefix + (++n);
-      const level = (e.chapterId && !o.omitChapterHeaders) ? 2 : 1;
+      // Seite im Kapitel ohne Tiefenangabe (handgebaute Entries) liegt eine
+      // Ebene unter ihrem Kapitel.
+      const level = lvl(e.depth || (e.chapterId ? 1 : 0));
       toc.push({ level, label: e.name || '', anchor: a, chapterId: e.chapterId ?? null, pageId: e.id ?? null });
       // headBefore/headAfter (Dachzeile bzw. Lead) sind FERTIGES Markup aus
       // lib/headline-render.js und werden — wie e.html — verbatim eingefügt.

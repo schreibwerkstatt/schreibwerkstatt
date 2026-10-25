@@ -92,6 +92,11 @@ function register(router) {
         if (p.month != null) r.datum_month = p.month;
         if (p.day   != null) r.datum_day   = p.day;
         if (p.story_tag != null) r.story_tag = p.story_tag;
+        if (p.ende_year != null) {
+          r.datum_ende_year = p.ende_year;
+          if (p.ende_month != null) r.datum_ende_month = p.ende_month;
+          if (p.ende_day != null) r.datum_ende_day = p.ende_day;
+        }
       }
     }
 

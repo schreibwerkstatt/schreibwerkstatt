@@ -66,13 +66,13 @@
           <legend x-text="adminProfilesForm.id ? $app.t('admin.profiles.editTitle') : $app.t('admin.profiles.createTitle')"></legend>
 
           <label class="card-form-row">
-            <span x-text="$app.t('admin.profiles.field.name')"></span>
+            <span class="card-form-label" x-text="$app.t('admin.profiles.field.name')"></span>
             <input type="text" x-model="adminProfilesForm.name" data-spellcheck="spelling"
                    :placeholder="$app.t('admin.profiles.field.namePlaceholder')">
           </label>
 
           <label class="card-form-row">
-            <span x-text="$app.t('admin.profiles.field.provider')"></span>
+            <span class="card-form-label" x-text="$app.t('admin.profiles.field.provider')"></span>
             <div x-data="combobox($app.t('admin.profiles.field.provider'))"
                  x-modelable="value" x-model="adminProfilesForm.provider"
                  x-effect="options = [
@@ -83,28 +83,28 @@
           </label>
 
           <label class="card-form-row">
-            <span x-text="$app.t('admin.profiles.field.model')"></span>
+            <span class="card-form-label" x-text="$app.t('admin.profiles.field.model')"></span>
             <input type="text" x-model="adminProfilesForm.model"
                    :placeholder="$app.t('admin.profiles.inheritPlaceholder')">
-            <small class="muted-msg muted-msg--sm" x-text="adminProfilesGlobalHint('model')"></small>
+            <span class="card-form-hint" x-text="adminProfilesGlobalHint('model')"></span>
           </label>
 
           <label class="card-form-row" x-show="adminProfilesForm.provider !== 'claude'">
-            <span x-text="$app.t('admin.settings.label.host')"></span>
+            <span class="card-form-label" x-text="$app.t('admin.settings.label.host')"></span>
             <input type="url" x-model="adminProfilesForm.host"
                    :placeholder="$app.t('admin.profiles.inheritPlaceholder')">
-            <small class="muted-msg muted-msg--sm" x-text="adminProfilesGlobalHint('host')"></small>
+            <span class="card-form-hint" x-text="adminProfilesGlobalHint('host')"></span>
           </label>
 
           <label class="card-form-row">
-            <span x-text="$app.t('admin.settings.label.apiKey')"></span>
+            <span class="card-form-label" x-text="$app.t('admin.settings.label.apiKey')"></span>
             <input type="password" x-model="adminProfilesForm.api_key" autocomplete="off"
                    :placeholder="adminProfilesForm.id ? $app.t('admin.profiles.keyUnchanged') : $app.t('admin.profiles.inheritPlaceholder')">
-            <small class="muted-msg muted-msg--sm" x-text="$app.t('admin.profiles.keyHelp')"></small>
+            <span class="card-form-hint" x-text="$app.t('admin.profiles.keyHelp')"></span>
           </label>
 
           <label class="card-form-row" x-show="adminProfilesForm.provider === 'openai-compat'">
-            <span x-text="$app.t('admin.settings.label.cloudModel')"></span>
+            <span class="card-form-label" x-text="$app.t('admin.settings.label.cloudModel')"></span>
             <div x-data="combobox($app.t('admin.settings.label.cloudModel'))"
                  x-modelable="value" x-model="adminProfilesForm.cloud"
                  x-effect="options = [
@@ -112,49 +112,49 @@
                    { value: 'true',  label: $app.t('admin.profiles.cloudOn') },
                    { value: 'false', label: $app.t('admin.profiles.cloudOff') },
                  ]"></div>
-            <small class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.help.cloudOpenaiCompat')"></small>
+            <span class="card-form-hint" x-text="$app.t('admin.settings.help.cloudOpenaiCompat')"></span>
           </label>
 
           <label class="card-form-row">
-            <span x-text="$app.t('admin.settings.label.contextWindow')"></span>
+            <span class="card-form-label" x-text="$app.t('admin.settings.label.contextWindow')"></span>
             <input type="text" x-data="numInput({ integer: true, min: 2048, max: 2000000 })"
                    x-modelable="value" x-model="adminProfilesForm.context_window"
                    :placeholder="$app.t('admin.profiles.inheritPlaceholder')">
-            <small class="muted-msg muted-msg--sm" x-text="adminProfilesGlobalHint('context_window')"></small>
+            <span class="card-form-hint" x-text="adminProfilesGlobalHint('context_window')"></span>
           </label>
 
           <label class="card-form-row">
-            <span x-text="$app.t('admin.settings.label.maxTokensOut')"></span>
+            <span class="card-form-label" x-text="$app.t('admin.settings.label.maxTokensOut')"></span>
             <input type="text" x-data="numInput({ integer: true, min: 512, max: 200000 })"
                    x-modelable="value" x-model="adminProfilesForm.max_tokens_out"
                    :placeholder="$app.t('admin.profiles.inheritPlaceholder')">
-            <small class="muted-msg muted-msg--sm" x-text="adminProfilesGlobalHint('max_tokens_out')"></small>
+            <span class="card-form-hint" x-text="adminProfilesGlobalHint('max_tokens_out')"></span>
           </label>
 
           <label class="card-form-row" x-show="adminProfilesForm.provider !== 'claude'">
-            <span x-text="$app.t('admin.settings.label.temperature')"></span>
+            <span class="card-form-label" x-text="$app.t('admin.settings.label.temperature')"></span>
             <input type="text" x-data="numInput({ step: 0.01, decimals: 2, min: 0, max: 2 })"
                    x-modelable="value" x-model="adminProfilesForm.temperature"
                    :placeholder="$app.t('admin.profiles.inheritPlaceholder')">
           </label>
 
           <label class="card-form-row" x-show="adminProfilesForm.provider !== 'claude'">
-            <span x-text="$app.t('admin.settings.label.repeatPenalty')"></span>
+            <span class="card-form-label" x-text="$app.t('admin.settings.label.repeatPenalty')"></span>
             <input type="text" x-data="numInput({ step: 0.05, decimals: 2, min: 1, max: 2 })"
                    x-modelable="value" x-model="adminProfilesForm.repeat_penalty"
                    :placeholder="$app.t('admin.profiles.inheritPlaceholder')">
           </label>
 
           <label class="card-form-row" x-show="adminProfilesForm.provider === 'openai-compat'">
-            <span x-text="$app.t('admin.settings.label.maxParallel')"></span>
+            <span class="card-form-label" x-text="$app.t('admin.settings.label.maxParallel')"></span>
             <input type="text" x-data="numInput({ integer: true, min: 1, max: 16 })"
                    x-modelable="value" x-model="adminProfilesForm.max_parallel"
                    :placeholder="$app.t('admin.profiles.inheritPlaceholder')">
-            <small class="muted-msg muted-msg--sm" x-text="$app.t('admin.profiles.maxParallelHelp')"></small>
+            <span class="card-form-hint" x-text="$app.t('admin.profiles.maxParallelHelp')"></span>
           </label>
 
           <label class="card-form-row" x-show="adminProfilesForm.provider !== 'claude'">
-            <span x-text="$app.t('admin.settings.label.aiThink')"></span>
+            <span class="card-form-label" x-text="$app.t('admin.settings.label.aiThink')"></span>
             <div x-data="combobox($app.t('admin.settings.label.aiThink'))"
                  x-modelable="value" x-model="adminProfilesForm.think"
                  x-effect="options = [
@@ -165,7 +165,7 @@
           </label>
 
           <label class="card-form-row">
-            <span x-text="$app.t('admin.profiles.field.notes')"></span>
+            <span class="card-form-label" x-text="$app.t('admin.profiles.field.notes')"></span>
             <textarea class="card-form-textarea" x-model="adminProfilesForm.notes" rows="2" data-spellcheck="spelling"
                       :placeholder="$app.t('admin.profiles.field.notesPlaceholder')"></textarea>
           </label>

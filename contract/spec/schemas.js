@@ -46,7 +46,8 @@ module.exports = {
   }, ['id', 'name', 'pages']),
   Tree: obj({
     chapters: arr(ref('TreeChapter')),
-    topPages: arr(ref('TreePage'), 'Abschnitte ohne Kapitel.'),
+    topPages: arr(ref('TreePage'), 'Abschnitte ohne Kapitel; in Lesereihenfolge vor allen Kapiteln.'),
+    order_updated_at: nul(ts('Version der Gliederung. Ändert sich bei jedem Anlegen, Umbenennen, Löschen oder Umsortieren von Kapiteln und Abschnitten.')),
   }, ['chapters', 'topPages']),
 
   SyncPage: obj({

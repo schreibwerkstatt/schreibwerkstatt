@@ -33,8 +33,8 @@ function _bootstrap() {
 function _seedBookAndPage(ctx) {
   const now = new Date().toISOString();
   const bookId = ctx.db.prepare(`
-    INSERT INTO books (name, slug, description, owner_email, created_at, updated_at)
-    VALUES ('Test', 'test', '', 'a@b', ?, ?)
+    INSERT INTO books (name, slug, owner_email, created_at, updated_at)
+    VALUES ('Test', 'test', 'a@b', ?, ?)
   `).run(now, now).lastInsertRowid;
   const pageId = ctx.db.prepare(`
     INSERT INTO pages (book_id, page_name, body_html, updated_at, local_updated_at)

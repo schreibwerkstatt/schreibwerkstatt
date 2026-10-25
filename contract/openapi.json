@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Schreibwerkstatt — Client-Vertrag (macOS, Android)",
-    "version": "api 3 · editorApi 1",
+    "version": "api 4 · editorApi 1",
     "description": "Die REST-Fläche, die die nativen Clients nutzen. Regeln, Versionen und Ablauf: contract/README.md. Antworten dürfen Felder tragen, die hier nicht stehen — ein Client ignoriert sie.",
-    "x-api": 3,
+    "x-api": 4,
     "x-editor-api": 1
   },
   "components": {
@@ -255,7 +255,15 @@
             "items": {
               "$ref": "#/components/schemas/TreePage"
             },
-            "description": "Abschnitte ohne Kapitel."
+            "description": "Abschnitte ohne Kapitel; in Lesereihenfolge vor allen Kapiteln."
+          },
+          "order_updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Version der Gliederung. Ändert sich bei jedem Anlegen, Umbenennen, Löschen oder Umsortieren von Kapiteln und Abschnitten.",
+            "format": "date-time"
           }
         },
         "required": [

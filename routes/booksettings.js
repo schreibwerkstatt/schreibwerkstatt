@@ -23,7 +23,7 @@ const VALID_REGIONS   = ['CH', 'DE', 'US', 'GB'];
 const VALID_BUCHTYPEN = ['roman', 'kurzgeschichten', 'gesellschaft', 'krimi', 'historisch', 'fantasy_scifi', 'erotik', 'jugend', 'autobiografie', 'tagebuch', 'sachbuch', 'wissenschaft', 'lyrik', 'essay', 'blog', 'satire', 'journalismus', 'andere'];
 const VALID_POV     = ['ich', 'er_sie_personal', 'er_sie_auktorial', 'du', 'wir', 'gemischt'];
 const VALID_TEMPUS  = ['praeteritum', 'praesens', 'gemischt'];
-const BUCH_KONTEXT_MAX = 1000;
+const BUCH_KONTEXT_MAX = 2000;
 // Stilprofil: KI-destilliert ~1-2k Zeichen; 6000 als grosszuegige Obergrenze
 // gegen versehentliches Einfuegen ganzer Kapitel.
 const STILPROFIL_MAX = 6000;

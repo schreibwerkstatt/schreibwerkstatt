@@ -1,7 +1,9 @@
-// Alpine.data('worldFactsCard') — Welt-Fakten/Weltregeln-Karte (read-only).
+// Alpine.data('worldFactsCard') — Welt-Fakten/Weltregeln-Karte.
 //
 // Selbstständige Karte: hält eigenen State + fetcht /world-facts/:bookId. Daten
-// stammen ausschliesslich aus der Komplettanalyse (kein Edit-Pfad im Frontend).
+// stammen aus der Komplettanalyse; der Autor kann Fakten anlegen, ändern und
+// löschen (POST/PATCH/DELETE /world-facts/:bookId). Angelegte/geänderte Fakten
+// sind «gepflegt» (manually_edited) — die nächste Analyse lässt sie stehen.
 // Gruppierung nach Kategorie; Filter über Suche + Kategorie-Combobox.
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { fetchJson } from '../utils.js';
@@ -48,6 +50,8 @@ const FC_START_ERROR_KEYS = {
   FACTCHECK_DISABLED: 'kontinuitaet.faktencheck.disabled',
 };
 
+const _emptyEdit = () => ({ mode: null, id: null, draft: { kategorie: 'sonstiges', subjekt: '', fakt: '' }, busy: false, error: '' });
+
 const _katRank = new Map(KAT_ORDER.map((k, i) => [k, i]));
 function _normKat(k) {
   return _katRank.has(k) ? k : 'sonstiges';
@@ -73,6 +77,8 @@ export function registerWorldFactsCard() {
     wfFcResult: null,
     wfFcError: '',
     _wfFcPollTimer: null,
+    // Pflegeformular: mode null | 'new' | 'edit' (id = world_facts.id).
+    wfEdit: _emptyEdit(),
     _lifecycle: null,
     // _memos: nicht-reaktiver Memo-Cache (lazy via _memo, Reset in loadWorldFacts) —
     // bewusst nicht im reaktiven Initial-State, analog book-overview/load.js.
@@ -86,6 +92,7 @@ export function registerWorldFactsCard() {
           fakten: [], wfUpdatedAt: null, wfLoading: false, wfScanned: false, wfOpenGroups: {},
           wfFactcheck: { bookOptIn: false }, wfFcRunning: false, wfFcProgress: 0,
           wfFcStatusKey: '', wfFcStatusParams: null, wfFcResult: null, wfFcError: '',
+          wfEdit: _emptyEdit(),
         },
         filterScopes: WF_FILTER_SCOPES,
         load: () => this.loadWorldFacts(),
@@ -264,6 +271,62 @@ export function registerWorldFactsCard() {
       const key = code ? (isKey ? code : (FC_START_ERROR_KEYS[code] || 'error.' + code)) : '';
       const msg = key ? t(key, params) : key;
       return key && msg !== key ? msg : t('weltfakten.factcheck.failed');
+    },
+
+    // ── Pflege ──────────────────────────────────────────────────────────────
+    wfKatOptions() {
+      return KAT_ORDER.map(k => ({ value: k, label: this.wfKatLabel(k) }));
+    },
+
+    wfStartCreate() {
+      this.wfEdit = { ..._emptyEdit(), mode: 'new' };
+    },
+
+    wfStartEdit(f) {
+      this.wfEdit = {
+        ..._emptyEdit(), mode: 'edit', id: f.id,
+        draft: { kategorie: _normKat(f.kategorie), subjekt: f.subjekt || '', fakt: f.fakt || '' },
+      };
+    },
+
+    wfCancelEdit() {
+      this.wfEdit = _emptyEdit();
+    },
+
+    async wfSaveEdit() {
+      const bookId = Alpine.store('nav').selectedBookId;
+      const e = this.wfEdit;
+      if (!bookId || !e.mode || e.busy || !e.draft.fakt.trim()) return;
+      e.busy = true;
+      e.error = '';
+      try {
+        const url = e.mode === 'new' ? `/world-facts/${bookId}` : `/world-facts/${bookId}/${e.id}`;
+        const r = await fetch(url, {
+          method: e.mode === 'new' ? 'POST' : 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(e.draft),
+        });
+        const data = await r.json().catch(() => null);
+        if (!isSelectedBook(bookId)) return;
+        if (!r.ok) throw new Error(window.__app.tError(data));
+        this.wfEdit = _emptyEdit();
+        await this.loadWorldFacts();
+      } catch (err) {
+        if (isSelectedBook(bookId)) { this.wfEdit.error = err.message; this.wfEdit.busy = false; }
+      }
+    },
+
+    async wfDelete(f) {
+      const bookId = Alpine.store('nav').selectedBookId;
+      if (!bookId) return;
+      if (!await window.__app.appConfirm({
+        message: window.__app.t(f.manuell ? 'weltfakten.edit.deleteConfirm' : 'weltfakten.edit.deleteConfirmKi'),
+        confirmLabel: window.__app.t('common.delete'),
+        danger: true,
+      })) return;
+      const r = await fetch(`/world-facts/${bookId}/${f.id}`, { method: 'DELETE' });
+      if (!isSelectedBook(bookId)) return;
+      if (r.ok) await this.loadWorldFacts();
     },
 
     // Gefilterte Fakten nach Kategorie gruppiert, in kanonischer Reihenfolge:

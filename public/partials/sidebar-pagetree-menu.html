@@ -103,6 +103,12 @@
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
               <span x-text="t('pagetreeCtx.newPage')"></span>
             </button>
+            <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                    x-show="_pagetreeCtxCanAddSubchapter()"
+                    @click="pagetreeCtxNewSubchapter()">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#folder-plus"/></svg>
+              <span x-text="t('pagetreeCtx.newSubchapter')"></span>
+            </button>
             <!-- Ueber einen Vorfahren ausgeschlossen: das eigene Flag zu kippen
                  aenderte nichts (der Ausschluss kaskadiert serverseitig). -->
             <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"

@@ -405,6 +405,7 @@ const JOB_TYPE_LABELS = {
   'research-link-check':   'job.label.researchLinkCheck',
   'research-crosscheck':   'job.label.researchCrosscheck',
   'rueckblick':            'job.label.rueckblickType',
+  'expose':                'job.label.exposeType',
   'source-detect':         'job.label.sourceDetect',
   'source-pdf-draft':      'job.label.sourcePdfDraft',
   'source-embed-index':    'job.label.sourceEmbedIndex',

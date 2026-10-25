@@ -25,13 +25,18 @@ function structuredDatum(ev) {
   // null werden, BEVOR `??` entscheidet, ob der parseDatum-Fallback greift —
   // sonst gewinnt die 0 gegen ein aus dem Label geparstes echtes Datum.
   const ai = normalizeDatumFields(ev);
+  // Spannen-Ende aus dem Label nur, wenn die KI keins geliefert hat UND das
+  // Label-Jahr der Start ist, mit dem gespeichert wird — sonst hinge ein Ende an
+  // einem fremden Start.
+  const labelEnd = ai.datum_ende_year == null && p.ende_year != null
+    && (ai.datum_year == null || ai.datum_year === p.year);
   const d = normalizeDatumFields({
     datum_year:       ai.datum_year       ?? p.year      ?? null,
     datum_month:      ai.datum_month      ?? p.month     ?? null,
     datum_day:        ai.datum_day        ?? p.day       ?? null,
-    datum_ende_year:  ai.datum_ende_year,
-    datum_ende_month: ai.datum_ende_month,
-    datum_ende_day:   ai.datum_ende_day,
+    datum_ende_year:  labelEnd ? p.ende_year         : ai.datum_ende_year,
+    datum_ende_month: labelEnd ? p.ende_month ?? null : ai.datum_ende_month,
+    datum_ende_day:   labelEnd ? p.ende_day ?? null   : ai.datum_ende_day,
     story_tag:        ai.story_tag        ?? p.story_tag ?? null,
   });
   return {

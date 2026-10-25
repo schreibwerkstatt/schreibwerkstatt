@@ -162,8 +162,11 @@ export const treeCatchUpMethods = {
       const r = await fetch(`/content/books/${bookId}/changes?${params}`);
       if (!r.ok) return;
       const data = await r.json();
-      if (!Array.isArray(data?.changes) || data.changes.length === 0) return;
       if (String(bookId) !== String(this.$store.nav.selectedBookId)) return;
+      // Strukturstand zuerst: ein Umbau (Kapitel angelegt/verschoben, Order-PUT
+      // eines anderen Tabs) aendert keine Seite und stuende darum nie in `changes`.
+      if (this._structureDrifted(data?.structure_at)) this._scheduleTreeCatchUp('structure');
+      if (!Array.isArray(data?.changes) || data.changes.length === 0) return;
       this._scheduleTreeCatchUp('drift');
       // Ausnahme vom „nur Baum": die OFFENE Seite. Der erste Save eines Geraets,
       // das das Buch vorher nicht offen hatte, erreicht sonst nie den Editor —
@@ -176,6 +179,57 @@ export const treeCatchUpMethods = {
         : null;
       if (hit) this._onCurrentPageRemoteEdit(hit);
     } catch { /* offline / Netzfehler: der naechste Tick fragt erneut */ }
+  },
+
+  // ── Strukturstand (Version der Kapitel-/Abschnitts-Ordnung) ────────────────
+  //
+  // Der Server zaehlt einen Strukturstand weiter, sobald sich Ordnung oder
+  // Bestand aendert (Kapitel anlegen/umbenennen/loeschen/ausschliessen, Order-PUT,
+  // Abschnitt anlegen/loeschen/verschieben). Der Baum kennt den Stand, auf dem er
+  // beruht (`order_updated_at` der Tree-Antwort, tree/build.js); `/changes`
+  // meldet den aktuellen (`structure_at`). Weichen sie ab, wird der Baum leise
+  // nachgezogen — so sieht ein zweiter Tab den Umbau des ersten. Der Organizer
+  // schickt den Stand als `expected_updated_at` mit seinem Order-PUT
+  // (book-organizer/persist.js) und ueberschreibt so keinen fremden Umbau.
+  //
+  // `undefined` = unbekannt (Server ohne Feld): dann wird weder verglichen noch
+  // geprueft. Eigene Writes: der Order-PUT liefert den neuen Stand selbst
+  // (`_noteStructureVersion`); alle anderen Struktur-Writes melden nur, DASS der
+  // Stand veraltet ist (EVT.STRUCTURE_WRITTEN aus repo/content.js) — die naechste
+  // Probe zieht den Baum dann einmal nach, ein Order-PUT davor holt den Stand.
+  _noteStructureVersion(at) {
+    if (at !== undefined) this._treeStructureAt = at;
+    this._structureOwnWrite = false;
+  },
+
+  _onStructureWritten(detail) {
+    const bookId = detail?.bookId;
+    if (bookId != null && String(bookId) !== String(this.$store.nav.selectedBookId)) return;
+    this._structureOwnWrite = true;
+  },
+
+  // Meldet `structure_at` einen anderen Stand als den des Baums? Je gemeldetem
+  // Wert hoechstens einmal true — ein Nachzug, der ihn nicht einholt (Cache,
+  // abweichendes Format), darf keine Schleife treiben.
+  _structureDrifted(at) {
+    if (at === undefined || this._treeStructureAt === undefined) return false;
+    if (at === this._treeStructureAt || at === this._structureCatchUpFor) return false;
+    this._structureCatchUpFor = at;
+    return true;
+  },
+
+  // Stand fuer `expected_updated_at` eines Order-PUT. Nach einem eigenen
+  // Struktur-Write (der Baum enthaelt ihn schon, der Stand nicht) einmal frisch
+  // beim Server erfragen. `undefined` → PUT ohne Pruefung.
+  async _structureVersionForWrite(bookId) {
+    if (String(bookId) !== String(this._treeBookId ?? this.$store.nav.selectedBookId)) return undefined;
+    if (this._structureOwnWrite) {
+      try {
+        const order = await contentRepo.loadOrder(bookId, { fresh: true });
+        this._noteStructureVersion(order?.updated_at);
+      } catch { return undefined; }
+    }
+    return this._treeStructureAt;
   },
 
   // EVT.CONTENT_UPDATED aus boot/content-updated.js.

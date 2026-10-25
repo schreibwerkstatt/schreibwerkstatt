@@ -26,8 +26,8 @@ test.after(() => { ctx.cleanup(); });
 function seedBook(name = 'BO-Test') {
   const now = new Date().toISOString();
   return db.prepare(`
-    INSERT INTO books (name, description, created_at, updated_at, owner_email)
-    VALUES (?, '', ?, ?, NULL)
+    INSERT INTO books (name, created_at, updated_at, owner_email)
+    VALUES (?, ?, ?, NULL)
   `).run(name, now, now).lastInsertRowid;
 }
 function seedChapter(bookId, name, position = 0) {
@@ -499,7 +499,7 @@ test('content-store bookTree: Sub-Kapitel als subchapters[] verschachtelt', asyn
   assert.equal(tree.chapters[0].subchapters[0].pages[0].id, pS1);
 });
 
-test('content-store flattenTree: depth-first Seiten + chapterName Mapping', async () => {
+test('content-store flattenTree: Lesereihenfolge (kapitellose zuerst) + chapterName Mapping', async () => {
   const bookId = seedBook('flatten');
   const cTop = seedChapter(bookId, 'Top', 0);
   const cSub = seedChapter(bookId, 'Sub', 1);
@@ -516,9 +516,9 @@ test('content-store flattenTree: depth-first Seiten + chapterName Mapping', asyn
 
   const tree = await contentStore.bookTree(bookId);
   const flat = contentStore.flattenTree(tree);
-  assert.deepEqual(flat.map(r => r.page.id), [pT1, pS1, pTop]);
-  assert.deepEqual(flat.map(r => r.chapterName), ['Top', 'Sub', null]);
-  assert.deepEqual(flat.map(r => r.depth), [1, 2, 0]);
+  assert.deepEqual(flat.map(r => r.page.id), [pTop, pT1, pS1]);
+  assert.deepEqual(flat.map(r => r.chapterName), [null, 'Top', 'Sub']);
+  assert.deepEqual(flat.map(r => r.depth), [0, 1, 2]);
 });
 
 test('getDescendantChapterIds: rekursive CTE liefert alle Nachfahren', () => {
@@ -543,4 +543,179 @@ test('getDescendantChapterIds: rekursive CTE liefert alle Nachfahren', () => {
   assert.deepEqual(inclSelf, [cTop, cSub, cSubSub].sort());
 
   assert.deepEqual(bookOrder.getDescendantChapterIds(cOther), []);
+});
+
+// ── Kanonische Reihenfolge, Tiefe, Loeschen, Strukturversion ──────────────────
+
+function seedSub(bookId, name, parentId) {
+  const now = new Date().toISOString();
+  return db.prepare(`
+    INSERT INTO chapters (book_id, chapter_name, position, parent_chapter_id, updated_at)
+    VALUES (?, ?, 0, ?, ?)
+  `).run(bookId, name, parentId, now).lastInsertRowid;
+}
+
+test('putOrder kanonisiert: Abschnitte vor Unterkapiteln, kapitellose zuerst', () => {
+  const bookId = seedBook('canon');
+  const c1 = seedChapter(bookId, 'Teil');
+  const c2 = seedSub(bookId, 'Kap', c1);
+  const pIntro = seedPage(bookId, c1, 'Einleitung');
+  const pIn = seedPage(bookId, c2, 'Innen');
+  const pTop = seedPage(bookId, null, 'Nachwort');
+  const saved = bookOrder.putOrder(bookId, [
+    { type: 'chapter', id: c1, children: [
+      { type: 'chapter', id: c2, children: [{ type: 'page', id: pIn }] },
+      { type: 'page', id: pIntro },
+    ]},
+    { type: 'page', id: pTop },
+  ], 'test');
+  assert.deepEqual(saved.tree, [
+    { type: 'page', id: pTop },
+    { type: 'chapter', id: c1, children: [
+      { type: 'page', id: pIntro },
+      { type: 'chapter', id: c2, children: [{ type: 'page', id: pIn }] },
+    ]},
+  ]);
+  // SQL-Lesereihenfolge folgt dem Tree.
+  const rows = db.prepare(`
+    SELECT p.page_id FROM pages p LEFT JOIN chapters c ON c.chapter_id = p.chapter_id
+     WHERE p.book_id = ? ORDER BY ${bookOrder.globalPageOrderSql()}
+  `).all(bookId).map(r => r.page_id);
+  assert.deepEqual(rows, [pTop, pIntro, pIn]);
+});
+
+test('ensureTree normalisiert einen alten, verschraenkten order_json', () => {
+  const bookId = seedBook('canon-legacy');
+  const c1 = seedChapter(bookId, 'Teil');
+  const c2 = seedSub(bookId, 'Kap', c1);
+  const p1 = seedPage(bookId, c1, 'Einleitung');
+  db.prepare(`INSERT INTO book_order (book_id, order_json, updated_at) VALUES (?, ?, ?)`).run(bookId, JSON.stringify([
+    { type: 'chapter', id: c1, children: [{ type: 'chapter', id: c2, children: [] }, { type: 'page', id: p1 }] },
+  ]), '2020-01-01T00:00:00.000Z');
+  const t = bookOrder.ensureTree(bookId);
+  assert.deepEqual(t.tree[0].children.map(n => n.type), ['page', 'chapter']);
+  assert.notEqual(t.updated_at, '2020-01-01T00:00:00.000Z', 'Strukturversion rueckt vor');
+});
+
+test('reconcile haengt kein Kapitel unter ein Kapitel der Tiefe 3 (MAX_DEPTH)', () => {
+  const bookId = seedBook('reconcile-depth');
+  const c1 = seedChapter(bookId, 'L1');
+  const c2 = seedSub(bookId, 'L2', c1);
+  const c3 = seedSub(bookId, 'L3', c2);
+  bookOrder.ensureTree(bookId);
+  const c4 = seedSub(bookId, 'L4', c3);
+  const t = bookOrder.ensureTree(bookId);
+  assert.ok(t.tree.some(n => n.type === 'chapter' && n.id === c4), 'zu tiefes Kapitel landet top-level');
+  assert.doesNotThrow(() => bookOrder.putOrder(bookId, t.tree, 'test'), 'Umsortieren bleibt moeglich');
+});
+
+test('reconcile: fehlendes Eltern- und Kind-Kapitel werden verschachtelt eingesetzt', () => {
+  const bookId = seedBook('reconcile-nested-missing');
+  const top = seedChapter(bookId, 'Top');
+  bookOrder.ensureTree(bookId);
+  const sub = seedSub(bookId, 'Sub', top);
+  const subsub = seedSub(bookId, 'SubSub', sub);
+  const t = bookOrder.ensureTree(bookId);
+  assert.deepEqual(t.tree, [
+    { type: 'chapter', id: top, children: [
+      { type: 'chapter', id: sub, children: [{ type: 'chapter', id: subsub, children: [] }] },
+    ]},
+  ]);
+});
+
+test('createChapter: Elternkapitel auf Tiefe 3 → CHAPTER_MAX_DEPTH', async () => {
+  const bookId = seedBook('create-depth');
+  const c1 = seedChapter(bookId, 'L1');
+  const c2 = seedSub(bookId, 'L2', c1);
+  const c3 = seedSub(bookId, 'L3', c2);
+  await assert.rejects(
+    contentStore.createChapter({ book_id: bookId, name: 'L4', parent_chapter_id: c3 }, null),
+    (e) => e.code === 'CHAPTER_MAX_DEPTH',
+  );
+  const ok = await contentStore.createChapter({ book_id: bookId, name: 'L3b', parent_chapter_id: c2 }, null);
+  assert.equal(ok.parent_chapter_id, c2);
+});
+
+test('deleteChapter: Inhalt bleibt an Ort und Stelle', async () => {
+  const bookId = seedBook('delete-splice');
+  const a = seedChapter(bookId, 'A');
+  const teil = seedChapter(bookId, 'Teil');
+  const sub = seedSub(bookId, 'Sub', teil);
+  const z = seedChapter(bookId, 'Z');
+  const pA = seedPage(bookId, a, 'pA');
+  const pTeil = seedPage(bookId, teil, 'pTeil');
+  const pSub = seedPage(bookId, sub, 'pSub');
+  const pZ = seedPage(bookId, z, 'pZ');
+  bookOrder.putOrder(bookId, [
+    { type: 'chapter', id: a, children: [{ type: 'page', id: pA }] },
+    { type: 'chapter', id: teil, children: [
+      { type: 'page', id: pTeil },
+      { type: 'chapter', id: sub, children: [{ type: 'page', id: pSub }] },
+    ]},
+    { type: 'chapter', id: z, children: [{ type: 'page', id: pZ }] },
+  ], 'test');
+  await contentStore.deleteChapter(teil, null);
+  const t = bookOrder.ensureTree(bookId).tree;
+  assert.deepEqual(t, [
+    { type: 'page', id: pTeil },
+    { type: 'chapter', id: a, children: [{ type: 'page', id: pA }] },
+    { type: 'chapter', id: sub, children: [{ type: 'page', id: pSub }] },
+    { type: 'chapter', id: z, children: [{ type: 'page', id: pZ }] },
+  ]);
+  const subRow = db.prepare('SELECT parent_chapter_id FROM chapters WHERE chapter_id = ?').get(sub);
+  assert.equal(subRow.parent_chapter_id, null);
+});
+
+test('deleteChapter: Abschnitte eines Unterkapitels gehen ans Elternkapitel', async () => {
+  const bookId = seedBook('delete-splice-sub');
+  const teil = seedChapter(bookId, 'Teil');
+  const sub = seedSub(bookId, 'Sub', teil);
+  const pTeil = seedPage(bookId, teil, 'pTeil');
+  const pSub = seedPage(bookId, sub, 'pSub');
+  bookOrder.putOrder(bookId, [
+    { type: 'chapter', id: teil, children: [
+      { type: 'page', id: pTeil },
+      { type: 'chapter', id: sub, children: [{ type: 'page', id: pSub }] },
+    ]},
+  ], 'test');
+  await contentStore.deleteChapter(sub, null);
+  assert.deepEqual(bookOrder.ensureTree(bookId).tree, [
+    { type: 'chapter', id: teil, children: [{ type: 'page', id: pTeil }, { type: 'page', id: pSub }] },
+  ]);
+  assert.equal(db.prepare('SELECT chapter_id FROM pages WHERE page_id = ?').get(pSub).chapter_id, teil);
+});
+
+test('savePage verstellt chapter_id/position nicht am Tree vorbei', async () => {
+  const bookId = seedBook('save-structure');
+  const c1 = seedChapter(bookId, 'C1');
+  const c2 = seedChapter(bookId, 'C2');
+  const p1 = seedPage(bookId, c1, 'P1');
+  bookOrder.ensureTree(bookId);
+  await contentStore.savePage(p1, { name: 'P1b', chapter_id: c2, position: 9 }, null);
+  const row = db.prepare('SELECT chapter_id, position, page_name FROM pages WHERE page_id = ?').get(p1);
+  assert.equal(row.chapter_id, c1);
+  assert.equal(row.position, 0);
+  assert.equal(row.page_name, 'P1b');
+});
+
+test('putOrder mit veraltetem expectedUpdatedAt → OrderConflictError', () => {
+  const bookId = seedBook('order-conflict');
+  const c1 = seedChapter(bookId, 'C1');
+  const c2 = seedChapter(bookId, 'C2');
+  const base = bookOrder.ensureTree(bookId);
+  db.prepare('UPDATE book_order SET updated_at = ? WHERE book_id = ?').run('2099-01-01T00:00:00.000Z', bookId);
+  const tree = [{ type: 'chapter', id: c2, children: [] }, { type: 'chapter', id: c1, children: [] }];
+  assert.throws(() => bookOrder.putOrder(bookId, tree, 'test', { expectedUpdatedAt: base.updated_at }),
+    (e) => e instanceof bookOrder.OrderConflictError && e.updatedAt === '2099-01-01T00:00:00.000Z');
+  const saved = bookOrder.putOrder(bookId, tree, 'test', { expectedUpdatedAt: '2099-01-01T00:00:00.000Z' });
+  assert.equal(saved.tree[0].id, c2);
+});
+
+test('Kapitel umbenennen rueckt die Strukturversion vor', async () => {
+  const bookId = seedBook('touch-order');
+  const c1 = seedChapter(bookId, 'C1');
+  bookOrder.ensureTree(bookId);
+  db.prepare('UPDATE book_order SET updated_at = ? WHERE book_id = ?').run('2000-01-01T00:00:00.000Z', bookId);
+  await contentStore.updateChapter(c1, { name: 'C1 neu' }, null);
+  assert.notEqual(bookOrder.getOrder(bookId).updated_at, '2000-01-01T00:00:00.000Z');
 });

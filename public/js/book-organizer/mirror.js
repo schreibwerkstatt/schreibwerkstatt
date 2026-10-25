@@ -57,19 +57,40 @@ export const mirrorMethods = {
       });
     };
     walk(this.workTree);
+    const reparented = [];
     for (const it of nav.tree) {
       if (it.type !== 'chapter' || it.solo) continue;
       const m = meta.get(it.id);
       if (!m) continue;
+      if ((it.parent_id ?? null) !== m.parent_id) reparented.push(m.parent_id);
       it.priority = m.priority;
       it.depth = m.depth;
       it.parent_id = m.parent_id;
       it.hasChildren = m.hasChildren;
     }
+    // Neu eingehaengt (Demote, Drop in ein Kapitel): die neue Eltern-Kette in der
+    // Sidebar aufklappen — unter einem zugeklappten Parent verschwaende das
+    // Kapitel sonst aus der Sidebar, als waere es geloescht.
+    this._expandSidebarChain(reparented);
     this._reorderNavTree();
     this._resortRootPages();
     this._rebuildOrderMaps();
     this._refreshChapterStats();
+  },
+
+  // Sidebar-Kapitel `ids` samt Vorfahren aufklappen und den Aufklapp-Zustand
+  // sichern (tree/open-state.js).
+  _expandSidebarChain(ids) {
+    const nav = Alpine.store('nav');
+    const byId = new Map();
+    for (const it of nav.tree) if (it.type === 'chapter' && !it.solo) byId.set(it.id, it);
+    let changed = false;
+    for (const id of ids) {
+      for (let cur = byId.get(id), guard = 0; cur && guard < 64; cur = byId.get(cur.parent_id), guard++) {
+        if (!cur.open) { cur.open = true; changed = true; }
+      }
+    }
+    if (changed) window.__app?._persistTreeOpenState?.();
   },
 
   // Seiten-Zugehoerigkeit + -Reihenfolge spiegeln. `affectedChapterIds` grenzt
@@ -101,7 +122,8 @@ export const mirrorMethods = {
     for (const p of nav.pages) {
       const u = updates.get(p.id);
       if (!u) continue;
-      p.chapter_id = u.chapter_id || 0;
+      // Kapitellos = null, wie im Server-Shape (tree/build.js) — nicht 0.
+      p.chapter_id = u.chapter_id || null;
       p.priority = u.priority;
       p.chapterName = u.chapter_id ? (chapterName.get(u.chapter_id) || p.chapterName) : null;
     }

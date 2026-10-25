@@ -175,3 +175,16 @@ test('Jahres-Band: 0-Ende macht aus einem Punkt keine Spanne', () => {
   assert.equal(item.type, 'point');
   assert.equal(item.end, undefined);
 });
+
+test('structuredDatum: Spannen-Ende aus dem Label nur ohne KI-Ende und bei passendem Start', () => {
+  const ausLabel = structuredDatum({ datum: '1987–1989', ereignis: 'x' });
+  assert.deepEqual([ausLabel.datum_year, ausLabel.datum_ende_year], [1987, 1989]);
+  // KI-Ende gewinnt.
+  const ki = structuredDatum({ datum: '1987–1989', datum_year: 1987, datum_ende_year: 1990, ereignis: 'x' });
+  assert.equal(ki.datum_ende_year, 1990);
+  // Fremder KI-Start: das Label-Ende hängt nicht daran.
+  const fremd = structuredDatum({ datum: '1987–1989', datum_year: 1950, ereignis: 'x' });
+  assert.equal(fremd.datum_ende_year, null);
+  const monat = structuredDatum({ datum: 'März–Mai 1987', ereignis: 'x' });
+  assert.deepEqual([monat.datum_month, monat.datum_ende_year, monat.datum_ende_month], [3, 1987, 5]);
+});

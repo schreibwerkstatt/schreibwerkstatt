@@ -6,6 +6,7 @@
 // Seiten-Write komplett ersetzt und NIE inkrementell fortgeschrieben.
 
 const { db } = require('../connection');
+const { globalPageOrderSql } = require('../book-order');
 const { OTON_AUTH_BLOCKING } = require('./shared');
 
 // ── Fund-Index source_citations ──────────────────────────────────────────────
@@ -58,8 +59,9 @@ const _stmtCitesForBook = db.prepare(`
   SELECT sc.source_id, sc.page_id, sc.count, sc.first_offset
     FROM source_citations sc
     JOIN pages p ON p.page_id = sc.page_id
+    LEFT JOIN chapters c ON c.chapter_id = p.chapter_id
    WHERE p.book_id = ?
-   ORDER BY p.position, sc.first_offset
+   ORDER BY ${globalPageOrderSql()}, sc.first_offset
 `);
 
 /** Alle Fundstellen eines Buchs in Buch-Leserichtung (Seitenposition, dann
@@ -111,11 +113,12 @@ const _stmtBlockingOtonCites = db.prepare(`
     FROM source_citations sc
     JOIN pages p   ON p.page_id = sc.page_id
     JOIN sources s ON s.id = sc.source_id
+    LEFT JOIN chapters c ON c.chapter_id = p.chapter_id
    WHERE p.book_id = @book
      AND (@page IS NULL OR sc.page_id = @page)
      AND s.csl_type = 'interview'
      AND s.oton_auth IN (SELECT value FROM json_each(@blocking))
-   ORDER BY p.position, sc.first_offset
+   ORDER BY ${globalPageOrderSql()}, sc.first_offset
 `);
 
 function listBlockingOtonCitations(bookId, pageId = null) {

@@ -89,6 +89,8 @@ export const appInitMethods = {
     // sonst wird der Seitenbaum erst beim ZWEITEN Reload aktuell (book/tree/catchup.js).
     installContentUpdatedBridge(signal);
     window.addEventListener(EVT.CONTENT_UPDATED, (e) => this._onContentUpdated(e.detail), { signal });
+    // Eigener Struktur-Write → Strukturstand des Baums veraltet (book/tree/catchup.js).
+    window.addEventListener(EVT.STRUCTURE_WRITTEN, (e) => this._onStructureWritten(e.detail), { signal });
     this._initSttDictation?.(signal);
     this._initTtsProof?.(signal);
     // Sleep/Wake-Recovery: bei längerer Hide-Phase (>30 s) Daten neu laden,

@@ -15,6 +15,8 @@
 
 import { chatMethods } from '../chat/chat.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { takeCardRequest, CARD_REQUEST } from './card-request.js';
+import { EVT } from '../events.js';
 
 export function registerChatCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -37,6 +39,9 @@ export function registerChatCard() {
     // Flush vor dem Senden gescheitert → der Chat sieht den gespeicherten Stand
     // (Hinweis über dem Eingabefeld, chat.js#onBeforeSend).
     chatFlushFailed: false,
+    // onShow ist durchgelaufen: ab dann holt der CARD_REQUEST-Listener einen
+    // Session-Wunsch ab, vorher onShow selbst (sonst laden beide parallel).
+    _chatShown: false,
     _lifecycle: null,
 
     init() {
@@ -53,7 +58,10 @@ export function registerChatCard() {
             root._checkDoneBeforeChat = root.checkDone;
             root.checkDone = false;
           }
-          await this._onVisibleChat();
+          const requested = takeCardRequest(CARD_REQUEST.PAGE_CHAT_SESSION);
+          this._chatShown = true;
+          if (requested) await this._openRequestedChatSession(requested);
+          else await this._onVisibleChat();
           this.$nextTick(() => {
             const ta = this.$el?.querySelector('.chat-input');
             if (ta) ta.focus();
@@ -62,12 +70,20 @@ export function registerChatCard() {
         // book:changed + view:reset reuse resetChat (kein einfaches resetState).
         onBookChanged: () => this.resetChat(),
         onViewReset: () => this.resetChat(),
-        extraListeners: [{ type: 'chat:reset', handler: () => this.resetChat() }],
+        extraListeners: [
+          { type: 'chat:reset', handler: () => this.resetChat() },
+          { type: EVT.CARD_REQUEST, handler: (e) => {
+            if (e.detail?.key !== CARD_REQUEST.PAGE_CHAT_SESSION || !this._chatShown) return;
+            const id = takeCardRequest(CARD_REQUEST.PAGE_CHAT_SESSION);
+            if (id) this._openRequestedChatSession(id);
+          } },
+        ],
       });
       // Karte zu → Inline-Marken + Stellen-Hervorhebung weg (page-view.js
       // zeigt Vorschläge nur bei offenem Seiten-Chat).
       this.$watch(() => window.__app?.showChatCard, (open) => {
         if (open) return;
+        this._chatShown = false;
         this.unlocateChatVorschlag();
         window.__app?.updatePageView?.();
       });
@@ -80,6 +96,11 @@ export function registerChatCard() {
     },
 
     destroy() { this._lifecycle?.destroy(); },
+
+    async _openRequestedChatSession(sessionId) {
+      await this.loadChatSessions();
+      await this.loadChatSession(sessionId);
+    },
 
     // Im Edit-Modus ändert jeder Tastendruck den Stand, ohne dass ein Signal am
     // Root ankommt (Strg+Z inklusive) — geprüft wird, sobald der User zum Chat

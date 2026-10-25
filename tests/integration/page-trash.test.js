@@ -29,7 +29,7 @@ const db = () => ctx.connection.db;
 function _seedBook(name = 'Papierkorb-Buch') {
   const now = new Date().toISOString();
   return db().prepare(`
-    INSERT INTO books (name, description, created_at, updated_at, owner_email) VALUES (?, '', ?, ?, NULL)
+    INSERT INTO books (name, created_at, updated_at, owner_email) VALUES (?, ?, ?, NULL)
   `).run(name, now, now).lastInsertRowid;
 }
 

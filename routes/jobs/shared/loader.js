@@ -117,8 +117,10 @@ async function loadOrderedBookContents(bookId, { includeExcluded = false } = {})
       walk(c.subchapters || [], path, c.id);
     }
   }
-  walk(tree.chapters || [], '', null);
+  // Lesereihenfolge wie Seitenleiste und Export: Abschnitte ohne Kapitel
+  // (Vorwort, Prolog) stehen am Buchanfang (kanonischer Tree, db/book-order.js).
   for (const p of (tree.topPages || [])) pages.push({ ...p, chapter_id: null });
+  walk(tree.chapters || [], '', null);
   return { chMap, chNameToId, chaptersFlat, pages };
 }
 

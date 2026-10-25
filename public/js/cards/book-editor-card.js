@@ -298,7 +298,7 @@ export function registerBookEditorCard() {
       try {
         const data = await fetchBookContents(bookId);
         if (token !== this._loadToken) return;
-        this.blocks = buildBlocksFromPages(data.pages || []);
+        this.blocks = buildBlocksFromPages(data.pages || [], data.chapters || null);
         this.offlineSource = !!data.offline;
         this.loading = false;
         this._restoreBlockDrafts();   // wartet nicht: Entwürfe stehen seit dem Start im Spiegel …

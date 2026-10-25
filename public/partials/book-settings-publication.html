@@ -67,7 +67,6 @@
         </div>
         <div class="card-form-row">
           <label class="card-form-label" x-text="$app.t('publication.coAuthors')"></label>
-          <p class="card-form-hint" x-text="$app.t('publication.coAuthorsHint')"></p>
           <div class="pub-repeater">
             <template x-for="(c, i) in (bookPublication.co_authors || [])" :key="i">
               <div class="pub-repeater-row">
@@ -78,6 +77,7 @@
             </template>
             <button type="button" class="btn-compact" @click="addCoAuthor()" x-text="$app.t('publication.coAuthorAdd')"></button>
           </div>
+          <p class="card-form-hint" x-text="$app.t('publication.coAuthorsHint')"></p>
         </div>
         <div class="card-form-row">
           <label class="card-form-label" for="pub-subtitle" x-text="$app.t('publication.subtitle')"></label>
@@ -115,7 +115,7 @@
 
       <section class="book-settings-section">
         <h3 class="card-section-title" x-text="$app.t('publication.section.matter')"></h3>
-        <p class="card-form-hint" x-text="$app.t('publication.matterHint')"></p>
+        <p class="card-hint" x-text="$app.t('publication.matterHint')"></p>
         <div class="pub-repeater">
           <template x-for="(s, i) in (bookPublication.extra_sections || [])" :key="i">
             <div class="pub-matter-card">
@@ -146,23 +146,30 @@
 
       <section class="book-settings-section">
         <h3 class="card-section-title" x-text="$app.t('publication.section.trade')"></h3>
-        <p class="card-form-hint" x-text="$app.t('publication.tradeHint')"></p>
+        <p class="card-hint" x-text="$app.t('publication.tradeHint')"></p>
         <div class="card-form-row">
           <label class="card-form-label" for="pub-description" x-text="$app.t('publication.description')"></label>
           <textarea id="pub-description" class="card-form-textarea" rows="4" x-model="bookPublication.description" maxlength="4000" data-spellcheck="spelling"></textarea>
         </div>
         <div class="card-form-row">
+          <label class="card-form-label" for="pub-zielgruppe" x-text="$app.t('publication.zielgruppe')"></label>
+          <textarea id="pub-zielgruppe" class="card-form-textarea" rows="2" x-model="bookPublication.zielgruppe" maxlength="1000" :placeholder="$app.t('publication.zielgruppePlaceholder')" data-spellcheck="spelling"></textarea>
+        </div>
+        <div class="card-form-row">
+          <label class="card-form-label" for="pub-vergleichstitel" x-text="$app.t('publication.vergleichstitel')"></label>
+          <textarea id="pub-vergleichstitel" class="card-form-textarea" rows="3" x-model="bookPublication.vergleichstitel" maxlength="2000" :placeholder="$app.t('publication.vergleichstitelPlaceholder')" data-spellcheck="spelling"></textarea>
+        </div>
+        <div class="card-form-row">
           <label class="card-form-label" for="pub-publisher" x-text="$app.t('publication.publisher')"></label>
           <input type="text" id="pub-publisher" class="card-form-input" x-model="bookPublication.publisher" maxlength="200">
         </div>
+        <!-- Reihe + Bandnummer pflegt nur der Tab «Reihe» (book_series); hier Anzeige. -->
         <div class="card-form-row">
-          <label class="card-form-label" for="pub-series" x-text="$app.t('publication.series')"></label>
-          <input type="text" id="pub-series" class="card-form-input" x-model="bookPublication.series" maxlength="200">
-        </div>
-        <div class="card-form-row">
-          <label class="card-form-label" x-text="$app.t('publication.seriesIndex')"></label>
-          <input type="text" x-data="numInput({ min: 0, step: 0.5 })"
-                 x-modelable="value" x-model="bookPublication.series_index" class="card-form-input">
+          <label class="card-form-label" x-text="$app.t('publication.series')"></label>
+          <span class="pub-static-value">
+            <span x-text="bookPublication.series ? $app.t('publication.seriesValue', { n: bookPublication.series_index, name: bookPublication.series }) : $app.t('publication.seriesNone')"></span>
+            <span class="internal-link" @click="bookSettingsTab = 'series'" x-text="$app.t('publication.seriesEdit')"></span>
+          </span>
         </div>
         <div class="card-form-row">
           <label class="card-form-label" for="pub-keywords" x-text="$app.t('publication.keywords')"></label>
@@ -173,7 +180,7 @@
 
       <section class="book-settings-section">
         <h3 class="card-section-title" x-text="$app.t('publication.section.export')"></h3>
-        <p class="card-form-hint" x-text="$app.t('publication.exportToolsHint')"></p>
+        <p class="card-hint" x-text="$app.t('publication.exportToolsHint')"></p>
         <div class="card-actions">
           <button type="button" class="primary" data-label-ok :disabled="!$store.nav.selectedBookId"
                   @click="$app.togglePdfExportCard()" x-text="$app.t('book.export.pdfCustom')"></button>

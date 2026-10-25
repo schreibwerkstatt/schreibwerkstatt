@@ -178,8 +178,8 @@
                 <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
                 <span x-text="$app.t('erzaehlprofil.locationsOneOffToggle', { n: (erzaehlprofilBefund().locations.oneOff || []).length })"></span>
               </button>
-              <div x-bind="panel" class="collapsible-section erzaehlprofil-oneoff-scroll" x-cloak>
-                <div class="entity-refs">
+              <div x-bind="panel" class="collapsible-section" x-cloak>
+                <div class="entity-refs erzaehlprofil-oneoff-scroll">
                   <template x-for="(l, i) in erzaehlprofilBefund().locations.oneOff" :key="'oo:' + i">
                     <button type="button" class="entity-ref" x-entity-ref="{ type: 'ort', id: l.id, name: l.name }"></button>
                   </template>

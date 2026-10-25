@@ -31,7 +31,7 @@ export const TEXT_TOOLS = [
       properties: {
         pattern:     { type: 'string',  description: 'Ein Wort, ein Name oder eine feste Phrase (Literal); mit regex=true ein Muster, z.B. «lustig|komisch|witzig».' },
         regex:       { type: 'boolean', description: 'true = pattern als JavaScript-Regex, ohne FTS5-Vorfilter. Default: false.' },
-        chapter_id:  { type: 'integer', description: 'Optional: nur in diesem Kapitel suchen.' },
+        chapter_id:  { type: 'integer', description: 'Optional: nur in diesem Kapitel suchen (inkl. Unterkapitel).' },
         page_id:     { type: 'integer', description: 'Optional: nur in diesem Abschnitt suchen (hat Vorrang vor chapter_id).' },
         max_results: { type: 'integer', description: 'Maximale Anzahl Treffer (default 10, max 30).' },
       },
@@ -117,7 +117,7 @@ export const TEXT_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        chapter_id: { type: 'integer', description: 'Nur Dialoge dieses Kapitels.' },
+        chapter_id: { type: 'integer', description: 'Nur Dialoge dieses Kapitels (inkl. Unterkapitel).' },
         page_id:    { type: 'integer', description: 'Nur Dialoge dieses Abschnitts.' },
         figur_id:   { type: 'string',  description: 'Nur Dialoge im Umfeld dieser Figur (fig_id).' },
         figur_name: { type: 'string',  description: 'Alternative: Name/Kurzname der Figur.' },
@@ -139,7 +139,7 @@ export const TEXT_TOOLS = [
       properties: {
         n:                { type: 'integer', description: 'Wortzahl der N-Gramme (2-5). Default: 3.' },
         scope:            { type: 'string', enum: ['book', 'chapter', 'page'], description: 'Default: book.' },
-        chapter_id:       { type: 'integer', description: 'Pflicht für scope=chapter.' },
+        chapter_id:       { type: 'integer', description: 'Pflicht für scope=chapter (inkl. Unterkapitel).' },
         page_id:          { type: 'integer', description: 'Pflicht für scope=page.' },
         min_count:        { type: 'integer', description: 'Mindesthäufigkeit. Default: 5 (book) bzw. 2.' },
         limit:            { type: 'integer', description: 'Max. Treffer (default 30, max 100).' },

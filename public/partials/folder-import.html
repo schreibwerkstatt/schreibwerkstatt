@@ -136,43 +136,49 @@
         <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
         <span x-text="$app.t('folderImport.manuscript.outlineDetails')"></span>
       </button>
-      <ul class="folder-import-outline" x-bind="panel" x-cloak>
-        <template x-for="(node, idx) in resultOutlineFlat" :key="idx">
-          <li :class="'folder-import-outline-item is-' + node.type" :style="{ '--outline-depth': node.depth }">
-            <span class="folder-import-outline-name" x-text="node.name"></span>
-            <span class="folder-import-outline-meta" x-show="node.type === 'page'"
-                  x-text="$app.t('folderImport.manuscript.pageChars', { n: node.chars || 0 })"></span>
-          </li>
-        </template>
-      </ul>
+      <div x-bind="panel" x-cloak>
+        <ul class="folder-import-outline">
+          <template x-for="(node, idx) in resultOutlineFlat" :key="idx">
+            <li :class="'folder-import-outline-item is-' + node.type" :style="{ '--outline-depth': node.depth }">
+              <span class="folder-import-outline-name" x-text="node.name"></span>
+              <span class="folder-import-outline-meta" x-show="node.type === 'page'"
+                    x-text="$app.t('folderImport.manuscript.pageChars', { n: node.chars || 0 })"></span>
+            </li>
+          </template>
+        </ul>
+      </div>
     </div>
     <div x-data="collapsible()" x-show="(result?.skipped?.length || 0) > 0" class="folder-import-skipped-block">
       <button type="button" class="collapsible-toggle" x-bind="trigger">
         <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
         <span x-text="$app.t('folderImport.result.skippedDetails')"></span>
       </button>
-      <ul class="folder-import-skipped" x-bind="panel" x-cloak>
-        <template x-for="(s, idx) in (result?.skipped || [])" :key="idx">
-          <li>
-            <code x-text="s.path || s.name || ''"></code>
-            <span x-text="' — ' + skipReasonText(s.reason)"></span>
-          </li>
-        </template>
-      </ul>
+      <div x-bind="panel" x-cloak>
+        <ul class="folder-import-skipped">
+          <template x-for="(s, idx) in (result?.skipped || [])" :key="idx">
+            <li>
+              <code x-text="s.path || s.name || ''"></code>
+              <span x-text="' — ' + skipReasonText(s.reason)"></span>
+            </li>
+          </template>
+        </ul>
+      </div>
     </div>
     <div x-data="collapsible()" x-show="(result?.auditLog?.length || 0) > 0" class="folder-import-log-block">
       <button type="button" class="collapsible-toggle" x-bind="trigger">
         <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
         <span x-text="$app.t('folderImport.result.logDetails', { n: result?.auditLog?.length || 0 })"></span>
       </button>
-      <ul class="folder-import-log" x-bind="panel" x-cloak>
-        <template x-for="(entry, idx) in (result?.auditLog || [])" :key="idx">
-          <li :class="'folder-import-log-line is-' + entry.level">
-            <time x-text="fmtLogTime(entry.ts)"></time>
-            <span x-text="logLineText(entry)"></span>
-          </li>
-        </template>
-      </ul>
+      <div x-bind="panel" x-cloak>
+        <ul class="folder-import-log">
+          <template x-for="(entry, idx) in (result?.auditLog || [])" :key="idx">
+            <li :class="'folder-import-log-line is-' + entry.level">
+              <time x-text="fmtLogTime(entry.ts)"></time>
+              <span x-text="logLineText(entry)"></span>
+            </li>
+          </template>
+        </ul>
+      </div>
     </div>
     <div class="folder-import-actions">
       <button type="button" class="btn-compact" @click="reset()" x-text="$app.t('folderImport.again')"></button>

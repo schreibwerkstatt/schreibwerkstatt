@@ -112,60 +112,64 @@
     <p class="card-form-error" x-show="userSettingsError" x-text="userSettingsError"></p>
 
     <template x-if="$store.config.languagetoolEnabled">
-      <div class="card-form-row card-form-row--dict" x-data="collapsible()">
+      <div class="card-form-row card-form-row--dict" data-settings-section="dict" x-data="collapsible()">
         <button type="button" class="collapsible-toggle" x-bind="trigger">
           <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
           <span x-text="$app.t('spellcheck.dict.title')"></span>
           <span class="lt-dict-count" x-text="dictEntries.length"></span>
         </button>
-        <div class="lt-dict-body" x-bind="panel" x-cloak>
-          <template x-if="!dictEntries.length">
-            <p class="muted-msg muted-msg--sm" x-text="$app.t('spellcheck.dict.empty')"></p>
-          </template>
-          <template x-if="dictEntries.length">
-            <div class="lt-dict-search">
-              <input type="search"
-                     x-model="dictFilter"
-                     :placeholder="$app.t('spellcheck.dict.searchPlaceholder')">
-            </div>
-          </template>
-          <div class="lt-dict-list" x-show="dictEntries.length">
-            <template x-for="e in dictEntriesFiltered" :key="e.word + '|' + e.book_id + '|' + e.lang">
-              <div class="lt-dict-row">
-                <span class="lt-dict-word" x-text="e.word"></span>
-                <span class="lt-dict-scope muted-msg muted-msg--sm">
-                  <span x-text="ltScopeLabel(e.book_id)"></span>
-                  <span>: </span>
-                  <span x-text="e.lang === '*' ? $app.t('spellcheck.dict.scope_lang_any') : e.lang"></span>
-                </span>
-                <button type="button" class="lt-dict-remove" @click="removeDictEntry(e)" x-text="$app.t('spellcheck.dict.remove')"></button>
+        <div x-bind="panel" x-cloak>
+          <div class="lt-dict-body">
+            <template x-if="!dictEntries.length">
+              <p class="muted-msg muted-msg--sm" x-text="$app.t('spellcheck.dict.empty')"></p>
+            </template>
+            <template x-if="dictEntries.length">
+              <div class="lt-dict-search">
+                <input type="search"
+                       x-model="dictFilter"
+                       :placeholder="$app.t('spellcheck.dict.searchPlaceholder')">
               </div>
             </template>
-            <template x-if="dictEntries.length && !dictEntriesFiltered.length">
-              <p class="muted-msg muted-msg--sm" x-text="$app.t('spellcheck.dict.noMatch')"></p>
-            </template>
+            <div class="lt-dict-list" x-show="dictEntries.length">
+              <template x-for="e in dictEntriesFiltered" :key="e.word + '|' + e.book_id + '|' + e.lang">
+                <div class="lt-dict-row">
+                  <span class="lt-dict-word" x-text="e.word"></span>
+                  <span class="lt-dict-scope muted-msg muted-msg--sm">
+                    <span x-text="ltScopeLabel(e.book_id)"></span>
+                    <span>: </span>
+                    <span x-text="e.lang === '*' ? $app.t('spellcheck.dict.scope_lang_any') : e.lang"></span>
+                  </span>
+                  <button type="button" class="lt-dict-remove" @click="removeDictEntry(e)" x-text="$app.t('spellcheck.dict.remove')"></button>
+                </div>
+              </template>
+              <template x-if="dictEntries.length && !dictEntriesFiltered.length">
+                <p class="muted-msg muted-msg--sm" x-text="$app.t('spellcheck.dict.noMatch')"></p>
+              </template>
+            </div>
           </div>
         </div>
       </div>
     </template>
 
     <template x-if="$store.config.languagetoolEnabled">
-      <div class="card-form-row card-form-row--dict" x-data="collapsible()">
+      <div class="card-form-row card-form-row--dict" data-settings-section="ltRules" x-data="collapsible()">
         <button type="button" class="collapsible-toggle" x-bind="trigger">
           <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
           <span x-text="$app.t('spellcheck.rules.title')"></span>
           <span class="lt-dict-count" x-text="ltRuleEntries.length"></span>
         </button>
-        <div class="lt-dict-body" x-bind="panel" x-cloak>
-          <p class="muted-msg muted-msg--sm" x-show="!ltRuleEntries.length" x-text="$app.t('spellcheck.rules.empty')"></p>
-          <div class="lt-dict-list" x-show="ltRuleEntries.length">
-            <template x-for="e in ltRuleEntries" :key="e.rule_id + '|' + e.book_id">
-              <div class="lt-dict-row">
-                <span class="lt-dict-word" x-text="e.rule_label || e.rule_id" :data-tip="e.rule_id"></span>
-                <span class="lt-dict-scope muted-msg muted-msg--sm" x-text="ltScopeLabel(e.book_id)"></span>
-                <button type="button" class="lt-dict-remove" @click="removeLtRule(e)" x-text="$app.t('spellcheck.rules.enable')"></button>
-              </div>
-            </template>
+        <div x-bind="panel" x-cloak>
+          <div class="lt-dict-body">
+            <p class="muted-msg muted-msg--sm" x-show="!ltRuleEntries.length" x-text="$app.t('spellcheck.rules.empty')"></p>
+            <div class="lt-dict-list" x-show="ltRuleEntries.length">
+              <template x-for="e in ltRuleEntries" :key="e.rule_id + '|' + e.book_id">
+                <div class="lt-dict-row">
+                  <span class="lt-dict-word" x-text="e.rule_label || e.rule_id" :data-tip="e.rule_id"></span>
+                  <span class="lt-dict-scope muted-msg muted-msg--sm" x-text="ltScopeLabel(e.book_id)"></span>
+                  <button type="button" class="lt-dict-remove" @click="removeLtRule(e)" x-text="$app.t('spellcheck.rules.enable')"></button>
+                </div>
+              </template>
+            </div>
           </div>
         </div>
       </div>

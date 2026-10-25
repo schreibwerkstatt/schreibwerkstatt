@@ -205,6 +205,12 @@ export function registerPlotCard() {
     // Eintrag lädt sein Result in das bestehende Consistency-Panel (selectedRunId).
     // Zeit-Messung (GET /plot/time-check) — deterministisch, mit jedem Board-Load.
     timeChecks: [],
+    // Zeitvorschläge aus dem Text (GET /plot/zeit-vorschlaege) — mit der Zeit-Messung nachgeladen.
+    zeitVorschlaege: [],
+    // Steckbrief-Geburtsjahre (fig_id → Jahr) aus GET /plot — Alters-Chip an der Karte.
+    geburtsjahre: {},
+    geburtsjahrAusText: [],
+    zeitVorschlagSel: {},   // beat_id → übernehmen? (Durchsicht, plot-zeit-review.html)
     consistencyRuns: [],
     selectedRunId: null,
 

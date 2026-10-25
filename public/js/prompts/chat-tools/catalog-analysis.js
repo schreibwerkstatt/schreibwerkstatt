@@ -29,7 +29,7 @@ export const ANALYSIS_TOOLS = [
       type: 'object',
       properties: {
         view:       { type: 'string', enum: ['hotspots', 'findings'], description: 'hotspots = Überblick (Default), findings = Einzelbefunde.' },
-        chapter_id: { type: 'integer', description: 'Nur dieses Kapitel.' },
+        chapter_id: { type: 'integer', description: 'Nur dieses Kapitel (inkl. Unterkapitel).' },
         page_id:    { type: 'integer', description: 'Nur view=findings: nur dieser Abschnitt (hat Vorrang vor chapter_id).' },
         typ:        { type: 'string',  description: 'Nur view=findings: Fehlertyp, z.B. "stil", "grammatik", "rechtschreibung", "interpunktion", "fluss", "wortwahl".' },
         min_errors: { type: 'integer', description: 'Nur view=hotspots: Mindest-Fehleranzahl pro Abschnitt (default 0).' },

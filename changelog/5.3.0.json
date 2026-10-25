@@ -1,0 +1,66 @@
+{
+  "version": "5.3.0",
+  "date": "2026-10-25",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Bucheinstellungen, Reiter «Exposé»: Aus deinem Manuskript entstehen Logline, Kurzinhalt, Synopse und Figurenliste für Agenturen und Verlage. Den Klappentext-Vorschlag übernimmst du mit einem Klick.",
+      "en": "Book settings, \"Exposé\" tab: your manuscript becomes a logline, short summary, synopsis and character list for agents and publishers. Take over the blurb suggestion with one click."
+    },
+    {
+      "kind": "neu",
+      "de": "Bucheinstellungen, Reiter «Reihe»: Fasse Bücher zu einer Reihe mit Bandnummern zusammen. Figuren und Schauplätze übernimmst du aus einem Vorband in den neuen Band.",
+      "en": "Book settings, \"Series\" tab: group books into a series with volume numbers. Carry characters and locations over from an earlier volume into the new one."
+    },
+    {
+      "kind": "neu",
+      "de": "Welt-Karte: Du kannst Welt-Fakten jetzt selbst anlegen, ändern und löschen. Deine gepflegten Einträge bleiben bei der nächsten Analyse erhalten.",
+      "en": "World card: you can now add, edit and delete world facts yourself. Facts you maintain survive the next analysis."
+    },
+    {
+      "kind": "neu",
+      "de": "Plot-Werkstatt: Zu Beats ohne Zeitangabe schlägt die Werkstatt vor, wann sie laut Text spielen. An der Karte steht das Alter der Strang-Figur, und die Zeitprüfung erkennt Figuren an zwei Orten am selben Tag.",
+      "en": "Plot workshop: for beats without a time, the workshop suggests when they happen according to the text. The card shows the age of the strand's character, and the time check spots characters in two places on the same day."
+    },
+    {
+      "kind": "neu",
+      "de": "Bucheinstellungen, Reiter «Publikation»: neue Felder für Zielgruppe und Vergleichstitel. Exposé und Exporte lesen sie von dort.",
+      "en": "Book settings, \"Publication\" tab: new fields for target audience and comparable titles. The exposé and exports read them from there."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Seitenleiste: Im Kontextmenü eines Kapitels legst du direkt ein Unterkapitel an. Die Suche findet jetzt auch Kapitelnamen und zeigt das ganze Kapitel.",
+      "en": "Sidebar: create a subchapter straight from a chapter's context menu. Search now also matches chapter names and shows the whole chapter."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Ein Kapitel, das nur aus Unterkapiteln besteht («Teil I»), erscheint jetzt mit eigener Überschrift im Bucheditor, im PDF, in EPUB und Word. Die Gliederung im Bucheditor rückt Unterkapitel ein.",
+      "en": "A chapter made only of subchapters (\"Part I\") now gets its own heading in the book editor, PDF, EPUB and Word. The book editor outline indents subchapters."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buchorganizer: Hat jemand die Gliederung in einem anderen Tab oder auf einem anderen Gerät geändert, überschreibst du sie nicht mehr. Du bekommst einen Hinweis und den aktuellen Stand.",
+      "en": "Book organizer: if the outline was changed in another tab or on another device, you no longer overwrite it. You get a notice and the current state."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Befehlspalette und Job-Leiste springen jetzt direkt auf den richtigen Reiter, zum Beispiel Exposé in den Bucheinstellungen oder Alter in der Figuren-Karte.",
+      "en": "The command palette and the job bar now jump straight to the right tab, for example Exposé in book settings or Age in the characters card."
+    },
+    {
+      "kind": "verbessert",
+      "de": "PDF-Export: Unterkapitel beginnen standardmässig auf einer neuen Seite.",
+      "en": "PDF export: subchapters start on a new page by default."
+    },
+    {
+      "kind": "behoben",
+      "de": "Figuren-Karte: Ein Geburts-Ereignis gab manchmal auch Eltern oder Grosseltern dasselbe Geburtsjahr. Es zählt jetzt nur noch für die Figur, die geboren wird.",
+      "en": "Characters card: a birth event sometimes gave parents or grandparents the same birth year. It now only counts for the character being born."
+    },
+    {
+      "kind": "behoben",
+      "de": "Klappbare Abschnitte, etwa die Kontinuitäts-Zusammenfassung oder die PDF-Export-Optionen, ruckelten beim Zuklappen. Sie schliessen jetzt gleichmässig.",
+      "en": "Collapsible sections, such as the continuity summary or the PDF export options, jerked when closing. They now close smoothly."
+    }
+  ]
+}

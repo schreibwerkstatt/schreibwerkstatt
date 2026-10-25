@@ -93,7 +93,9 @@ textarea:disabled,
   display: grid;
   grid-template-columns: 170px 1fr;
   align-items: start;
-  gap: var(--space-lg);
+  /* Zeilenabstand greift nur bei der Notiz unter dem Feld (3. Kind): sie gehoert
+     zum Feld, nicht zur naechsten Zeile. */
+  gap: var(--space-xs) var(--space-lg);
   margin-bottom: var(--space-14);
 }
 .card-form-row--top {
@@ -271,10 +273,12 @@ select[aria-invalid="true"],
   border-color: var(--color-err-border);
   outline-color: var(--color-err-border);
 }
-.card-form-row > .card-form-hint {
+/* Notiz unter dem Feld (Hinweis, Fehler, Zustand) steht in der Wertspalte —
+   als drittes Kind liefe sie sonst in die Label-Spalte. */
+.card-form-row > :is(.card-form-hint, .card-form-error, .muted-msg) {
   grid-column: 2;
-  text-align: left;
 }
+.card-form-row > .card-form-hint { text-align: left; }
 
 .form-lead {
   margin: var(--space-xs) 0 var(--space-14);
@@ -414,7 +418,7 @@ select[aria-invalid="true"],
   }
   .card-form-label { padding-top: 0; }
   .card-form-field { gap: var(--space-sm); }
-  .card-form-row > .card-form-hint { grid-column: 1; }
+  .card-form-row > :is(.card-form-hint, .card-form-error, .muted-msg) { grid-column: 1; }
   .form-inline { gap: var(--space-10) var(--space-lg); }
   .form-inline-field {
     flex: 1 1 calc(50% - 16px);

@@ -252,11 +252,33 @@
   padding: var(--space-xs) 0 var(--space-md);
   margin-bottom: var(--space-sm);
 }
+/* Jedes `collapsible()`-Panel (Klasse setzt der `panel`-Spread): eigener
+   Formatierungskontext, damit Kind-Margins in der von `x-collapse` gemessenen
+   Höhe liegen. Abstände/Rahmen gehören an die Kinder, nie ans Panel
+   (public/js/collapsible.js, Punkt 3). */
+.collapse-panel { display: flow-root; }
+
+/* Das Panel animiert per `x-collapse` nur `height` (public/js/collapsible.js).
+   Vertikales Padding, Margin oder ein Border am Panel blieben als Boden der
+   Animation stehen und sprängen am Ende per `display: none` weg — darum liegt
+   jeder vertikale Abstand in der animierten Höhe: Abstand oben/unten als
+   Spacer-Pseudoelemente, die Linie links als Hintergrund, der die Spacer-
+   Anteile des äusseren Abstands ausspart. `flow-root` hält Kind-Margins in der
+   Höhe (über `.collapse-panel`). Folge für Konsumenten: das Panel selbst nicht
+   `display: flex/grid` machen (die Spacer würden Flex-Items) — Layout an ein
+   Kind legen. */
 .collapsible-section {
-  padding: var(--space-6) var(--space-md) var(--space-10);
-  border-left: 3px solid var(--color-border);
-  margin: var(--space-sm) 0;
+  --collapsible-rule: 3px;
+  padding: 0 var(--space-md) 0 calc(var(--collapsible-rule) + var(--space-md));
+  background-image: linear-gradient(var(--color-border), var(--color-border));
+  background-repeat: no-repeat;
+  background-position: left 0 top var(--space-sm);
+  background-size: var(--collapsible-rule) calc(100% - 2 * var(--space-sm));
 }
+.collapsible-section::before,
+.collapsible-section::after { content: ''; display: block; }
+.collapsible-section::before { height: calc(var(--space-sm) + var(--space-6)); }
+.collapsible-section::after { height: calc(var(--space-10) + var(--space-sm)); }
 
 /* === Schauplätze (Orte) — Liste + Detail-Komponenten ===
    Layout via .entity-list. Akzent --card-accent-orte in card-accents.css. */

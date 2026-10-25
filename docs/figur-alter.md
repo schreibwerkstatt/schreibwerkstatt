@@ -161,6 +161,11 @@ wurde, müsste sonst aktiv gelöscht werden — und genau das vergisst man.
   Steckbrief-Geburtsjahr rechnet, heisst schon vor der Analyse „aus Geburtsjahr" (Ton
   mittel), nur eines aus dem Zeitstrahl-Geburtsereignis „aus Zeitstrahl" — sonst
   wechselte dieselbe Zahl mit dem ersten Lauf Plakette und Ton.
+- **Ein Geburts-Event gehört nicht jeder verknüpften Figur.** «Geburt von Manuel»
+  verknüpft auch Eltern und Grosseltern. Zugeordnet wird es nur der einen Figur ohne
+  früheres datiertes Ereignis, bei Gleichstand der im Ereignistext genannten; sonst
+  niemandem ([lib/figure-years.js](../lib/figure-years.js)#`birthYearsFromEvents`).
+  Ein falsches Geburtsjahr macht die Mutter in Katalog und Plot-Zeitmessung zum Kind.
 - **„Alter sinkt im Buchverlauf" ist ein Hinweis, kein Fehler.** Rückblenden sind
   legitim. Das Badge heisst darum `prüfen`, nicht „falsch".
 - **Nur die Zeitlinien-Achse ist gegated.** Der gerechnete Wert setzt

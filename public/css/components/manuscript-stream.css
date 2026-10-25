@@ -23,6 +23,9 @@
     color: var(--ms-text, inherit);
   }
   .ms-chapter:first-child { margin-top: 0; }
+  /* Unterkapitel abgestuft (Tiefen-Klasse aus manuscript-render.js). */
+  .ms-chapter--d1 { font-size: var(--ms-subchapter-size, 24px); }
+  .ms-chapter--d2 { font-size: var(--ms-subsubchapter-size, 20px); }
 
   .ms-page { margin-block: var(--ms-space-md, 18px) 0; }
 

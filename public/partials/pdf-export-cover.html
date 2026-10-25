@@ -83,10 +83,11 @@
                 </div>
               </div>
               <div class="card-form-row card-form-row--top">
-                <label class="card-form-label" x-text="$app.t('pdfExport.cover.blurb')"></label>
-                <div class="card-form-field">
-                  <textarea x-model="activeProfile.config.coverSpec.blurb" class="card-form-textarea" rows="5" data-spellcheck="spelling"></textarea>
-                </div>
+                <span class="card-form-label" x-text="$app.t('pdfExport.cover.blurb')"></span>
+                <p class="card-form-field-note">
+                  <span x-text="$app.t('pdfExport.cover.blurbSource')"></span>
+                  <span class="internal-link" @click="openPublicationSettings()" x-text="$app.t('pdfExport.cover.blurbLink')"></span>
+                </p>
               </div>
             </div>
 

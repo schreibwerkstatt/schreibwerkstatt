@@ -370,11 +370,11 @@ function restoreAnalysis(bookId, data, ctx) {
 
   // 6) world_facts
   const insWf = db.prepare(`INSERT INTO world_facts
-    (book_id,kategorie,subjekt,fakt,seite_label,sort_order,user_email,updated_at) VALUES (?,?,?,?,?,?,?,?)`);
+    (book_id,kategorie,subjekt,fakt,seite_label,sort_order,user_email,updated_at,manually_edited) VALUES (?,?,?,?,?,?,?,?,?)`);
   for (const r of arr('worldFacts')) {
     // Kategorie über die Whitelist — ein roher Fremd-Wert fiele aus jedem Kategorien-Filter.
     const res = insWf.run(bookId, normFaktKategorie(r.kategorie), r.subjekt ?? null, r.fakt, r.seite_label ?? null,
-      r.sort_order ?? 0, email, r.updated_at || _now());
+      r.sort_order ?? 0, email, r.updated_at || _now(), r.manually_edited ? 1 : 0);
     factMap.set(r.id, res.lastInsertRowid);
   }
   const insWfc = db.prepare('INSERT OR IGNORE INTO world_fact_chapters (fact_id,chapter_id) VALUES (?,?)');

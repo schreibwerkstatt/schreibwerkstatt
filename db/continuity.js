@@ -71,6 +71,16 @@ function _resolveRefs(it, figNameToId, figIdToRowId, chNameToId, anchorChapters 
     seenCh.add(pc.chapter_id + '|');
     chs.push({ name: pc.chapter_name, cid: pc.chapter_id });
   }
+  // Server-seitig erzeugte Befunde (Faktencheck) bringen ihre Kapitel schon als
+  // IDs mit — die gelten wie Anker; ein Name-Rueckweg verloere gleichnamige Kapitel.
+  if (Array.isArray(it.chapter_refs)) {
+    for (const r of it.chapter_refs) {
+      if (!Number.isInteger(r?.chapter_id) || seenCh.has(r.chapter_id + '|')) continue;
+      seenCh.add(r.chapter_id + '|');
+      chs.push({ name: r.chapter_name || '', cid: r.chapter_id });
+    }
+    return _refsOut(figs, chs);
+  }
   // KI-Namen nur, solange eine vorhandene Stelle unverankert ist — deren Kapitel
   // kennt sonst niemand. Sind alle Stellen verankert, entscheiden nur die Anker.
   const allAnchored = chs.length > 0 && [[it.stelle_a, it.page_a_id], [it.stelle_b, it.page_b_id]]
@@ -83,6 +93,10 @@ function _resolveRefs(it, figNameToId, figIdToRowId, chNameToId, anchorChapters 
     seenCh.add(key);
     chs.push({ name, cid });
   }
+  return _refsOut(figs, chs);
+}
+
+function _refsOut(figs, chs) {
   return {
     figs, chs,
     figuren: figs.map(f => f.name),

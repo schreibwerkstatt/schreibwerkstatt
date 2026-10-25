@@ -31,6 +31,8 @@ export const lifecycleMethods = {
       this.threads = Array.isArray(data.threads) ? data.threads : [];
       this.beats = Array.isArray(data.beats) ? data.beats : [];
       this.relations = Array.isArray(data.relations) ? data.relations : [];
+      this.geburtsjahre = data.geburtsjahre && typeof data.geburtsjahre === 'object' ? data.geburtsjahre : {};
+      this.geburtsjahrAusText = Array.isArray(data.geburtsjahrAusText) ? data.geburtsjahrAusText : [];
       // Ist-Index-Staleness (Beats seit letztem Anchor-Lauf geändert) → Header
       // bietet „Verankerung aktualisieren" an. Der ganze Block speist ausserdem
       // beatAnchorKnown (ohne je gelaufenen Anchor kein rotes 'drift').
@@ -44,7 +46,7 @@ export const lifecycleMethods = {
     } catch (e) {
       if (stale()) return;
       this.errorMessage = app.t('plot.error.load');
-      this.acts = []; this.threads = []; this.beats = []; this.relations = [];
+      this.acts = []; this.threads = []; this.beats = []; this.relations = []; this.geburtsjahre = {}; this.geburtsjahrAusText = [];
       this.beatAnchorInfo = null;
     } finally {
       if (seq === this._boardLoadSeq) this.loading = false;
@@ -101,6 +103,8 @@ export const lifecycleMethods = {
     this.threads = [];
     this.beats = [];
     this.relations = [];
+    this.geburtsjahre = {};
+    this.geburtsjahrAusText = [];
     this.relDraftTyp = '';
     this.relDraftTarget = '';
     this.draftFiguren = [];
@@ -131,6 +135,8 @@ export const lifecycleMethods = {
     this.consistencyResult = null;
     this.selectedKonfliktIdx = null;
     this.timeChecks = [];
+    this.zeitVorschlaege = [];
+    this.zeitVorschlagSel = {};
     this.consistencyRuns = [];
     this.selectedRunId = null;
     this.brainstormRuns = [];

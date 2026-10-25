@@ -86,7 +86,44 @@
   line-height: var(--lh-base);
 }
 
-/* Faktencheck-Markierung: Badge unter der Aussage, nicht über die Zeilenbreite gezogen. */
+/* Aussage + Marken + Pflege-Knöpfe in einer Zeile; die Knöpfe rechtsbündig. */
+.weltfakten-row-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+.weltfakten-row-line > .weltfakten-fakt { flex: 1 1 16em; }
+.weltfakten-row-actions {
+  display: inline-flex;
+  gap: var(--space-2xs);
+  margin-left: auto;
+}
+
+/* «Gepflegt»: vom Autor angelegt/geändert, die Analyse lässt den Fakt stehen. */
+.weltfakten-manual-tag {
+  background: color-mix(in srgb, var(--card-accent) 14%, var(--color-surface));
+  color: var(--color-text);
+}
+
+/* Pflegeformular: Neuanlage über der Liste, Bearbeiten unter der Zeile. */
+.weltfakten-edit-panel {
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--card-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-card-bg);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.weltfakten-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+/* Faktencheck-Markierung: Badge neben der Aussage, nicht über die Zeilenbreite gezogen. */
 .weltfakten-widerlegt { align-self: flex-start; }
 
 /* Faktencheck-Sektion am Kartenende. */

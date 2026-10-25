@@ -478,11 +478,13 @@ export const lektoratMethods = {
     if (!this.$store.nav.pages.length) return;
     const chapter = chapterId != null ? this._findTreeChapter(chapterId) : null;
     if (chapterId != null && !chapter) return;
-    const all = chapter ? this._chapterPageCount(chapter) : this.$store.nav.pages.length;
+    // Ganzer Unterbaum aus dem echten Baum — wie der Server (routes/jobs/lektorat.js),
+    // unabhaengig von einer laufenden Sidebar-Suche.
+    const ids = chapter ? this._chapterSubtreePageIds(chapter) : this.$store.nav.pages.map(p => p.id);
+    const all = ids.length;
     if (!all) return;
     // Final markierte, seither unveraenderte Abschnitte prueft der Server nicht
     // (skip_final, docs/bearbeitungsstand.md) — die Rueckfrage nennt beide Zahlen.
-    const ids = chapter ? this._chapterSubtreePageIds(chapter) : this.$store.nav.pages.map(p => p.id);
     const skipped = this.doneUnchangedCount(ids);
     const n = all - skipped;
     if (n === 0) { this.batchStatus = escHtml(this.t('lektorat.batchAllFinal', { n: skipped })); return; }

@@ -201,4 +201,23 @@ function listFigureAges(bookId, userEmail) {
   }));
 }
 
-module.exports = { replaceFigureAges, getFigureAgeScan, listFigureAges };
+/** Geburtsjahre aus der Alters-Analyse, die als Ersatz für einen leeren Steckbrief
+ *  taugen: aus Text oder damaligem Steckbrief, nicht aus dem Zeitstrahl-
+ *  Geburtsereignis (das hängt oft an der falschen Figur), und mit mindestens
+ *  mittlerer Konfidenz (Stufen wie figuren-alter.js#konfidenzStufe).
+ *  Map<figures.id, geburtsjahr>. */
+const AGE_BIRTH_MIN_KONFIDENZ = 0.6;
+function listAnalysedBirthYears(bookId, userEmail) {
+  const rows = db.prepare(`
+    SELECT fa.figure_id, fa.geburtsjahr
+    FROM figure_ages fa
+    JOIN figures f ON f.id = fa.figure_id
+    WHERE fa.book_id = ? AND f.user_email IS ?
+      AND fa.geburtsjahr IS NOT NULL
+      AND fa.geburtsjahr_quelle IN ('text', 'kuratiert')
+      AND fa.konfidenz >= ?
+  `).all(bookId, userEmail || null, AGE_BIRTH_MIN_KONFIDENZ);
+  return new Map(rows.map(r => [r.figure_id, r.geburtsjahr]));
+}
+
+module.exports = { replaceFigureAges, getFigureAgeScan, listFigureAges, listAnalysedBirthYears };

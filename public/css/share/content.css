@@ -176,6 +176,8 @@
 .share-toc__item--l1 { font-weight: 600; margin-top: 6px; }
 .share-toc__item--l1:first-child { margin-top: 0; }
 .share-toc__item--l2 { padding-left: 18px; font-weight: 400; }
+.share-toc__item--l3 { padding-left: 36px; font-weight: 400; }
+.share-toc__item--l4 { padding-left: 54px; font-weight: 400; }
 /* Ruhefarbe neutral (Navigationsliste, kein Fliesstext-Link). Hover = dezenter
    Hintergrund-Tint statt Underline — analog zur Bucheditor-Outline-Zeile. */
 .share-toc__link {

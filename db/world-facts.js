@@ -50,6 +50,9 @@ function _emailCond(userEmail) {
 // - **Teil-Ersatz (`keepChapterIds`):** Kapitel, deren Extraktion in diesem Lauf
 //   ausfiel, behalten ihre bisherigen Fakten. Ein abgeschnittener Chunk hiesse sonst:
 //   die Fakten dieses Kapitels sind weg, bis ein späterer Lauf sie wieder findet.
+// - **Gepflegte Fakten (`manually_edited = 1`)** überleben den Full-Replace; eine
+//   gleichlautende Analyse-Aussage (gleicher factKey) legt keine zweite Zeile an,
+//   sondern liefert nur die Kapitel-Brücke der gepflegten.
 // - setzt den Scan-Marker (`world_facts_scan`).
 //
 // chapterFakten: [{ kapitel, fakten: [{ kategorie, subjekt, fakt, seite }] }]
@@ -115,16 +118,29 @@ function saveFaktenToDb(bookId, chapterFakten, userEmail, chNameToId = null, { k
       for (const f of (cf?.fakten || [])) add(f, chapId);
     }
 
-    // Full-Replace: alte Fakten weg (CASCADE räumt world_fact_chapters).
-    db.prepare(`DELETE FROM world_facts WHERE book_id = ? AND ${emailCond}`).run(bookId, ...emailVal);
+    // Vom Autor gepflegte Fakten bleiben stehen; ihre Kapitel-Brücke ist abgeleitet
+    // und wird aus den Fundstellen dieses Laufs (plus behaltenen Kapiteln) neu gebaut.
+    const manualRows = db.prepare(`
+      SELECT id, subjekt, fakt, sort_order FROM world_facts
+       WHERE book_id = ? AND ${emailCond} AND manually_edited = 1`).all(bookId, ...emailVal);
+    const manualByKey = new Map(manualRows.map(r => [factKey(r.subjekt, r.fakt), r.id]));
+    const delWfc = db.prepare('DELETE FROM world_fact_chapters WHERE fact_id = ?');
+    for (const r of manualRows) delWfc.run(r.id);
+
+    // Full-Replace der Analyse-Fakten (CASCADE räumt world_fact_chapters).
+    db.prepare(`DELETE FROM world_facts WHERE book_id = ? AND ${emailCond} AND manually_edited = 0`).run(bookId, ...emailVal);
     const ins = db.prepare(`
       INSERT INTO world_facts (book_id, kategorie, subjekt, fakt, seite_label, sort_order, user_email, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})`);
     const insWfc = db.prepare('INSERT OR IGNORE INTO world_fact_chapters (fact_id, chapter_id) VALUES (?, ?)');
-    let order = 0;
-    for (const e of byKey.values()) {
-      const { lastInsertRowid } = ins.run(bookId, e.kategorie, e.subjekt, e.fakt, e.seite, order++, userEmail || null);
-      for (const c of e.chapters) insWfc.run(lastInsertRowid, c);
+    // Analyse-Fakten hinter den gepflegten einreihen.
+    let order = manualRows.reduce((m, r) => Math.max(m, (r.sort_order ?? 0) + 1), 0);
+    for (const [key, e] of byKey) {
+      // Dieselbe Aussage wie ein gepflegter Fakt: der Autor-Text gewinnt, die
+      // Fundstellen wandern an seine Zeile.
+      const factId = manualByKey.get(key)
+        ?? ins.run(bookId, e.kategorie, e.subjekt, e.fakt, e.seite, order++, userEmail || null).lastInsertRowid;
+      for (const c of e.chapters) insWfc.run(factId, c);
     }
     markWorldFactsScanned(bookId, userEmail);
   })();
@@ -150,14 +166,17 @@ function markWorldFactsScanned(bookId, userEmail) {
  *    auch für Umlaute (in JS, nicht SQLite-LIKE, das nur ASCII faltet).
  *  - `withRefuted` setzt je Fakt `widerlegt: true|false` (Faktencheck, refutedFactKeys).
  *  - `withChapterIds` setzt je Fakt `chapter_ids` parallel zu `kapitel` (Kapitel-Filter
- *    der Karte arbeitet auf IDs; KI-Kontexte bleiben ohne, ihr Prompt-Block unverändert).
+ *    der Karte arbeitet auf IDs; KI-Kontexte bleiben ohne, ihr Prompt-Block unverändert)
+ *    und `chapter_refs` ({chapter_id, chapter_name} je Kapitel, Faktencheck-Befunde).
+ *  - `withManual` setzt je Fakt `manuell` (vom Autor gepflegt; Welt-Karte). KI-Kontexte
+ *    bleiben ohne.
  *
  *  Gemeinsamer Lesepfad fuer alle Konsumenten: der Namens-JOIN gehoert nach `db/`
  *  (Content-Store-Facade-Regel), nicht in einen Route- oder Job-Handler.
  *
- *  @returns {Array<{id,kategorie,subjekt,fakt,seite,kapitel:string[],chapter_ids?:number[],updated_at,widerlegt?}>}
+ *  @returns {Array<{id,kategorie,subjekt,fakt,seite,kapitel:string[],chapter_ids?:number[],chapter_refs?:Array<{chapter_id:number,chapter_name:string}>,updated_at,widerlegt?}>}
  */
-function listWorldFacts(bookId, userEmail, { kategorien = null, subjekt = null, withRefuted = false, withChapterIds = false } = {}) {
+function listWorldFacts(bookId, userEmail, { kategorien = null, subjekt = null, withRefuted = false, withChapterIds = false, withManual = false } = {}) {
   const bookIdInt = parseInt(bookId);
   if (!bookIdInt) return [];
   const email = userEmail || null;
@@ -168,7 +187,7 @@ function listWorldFacts(bookId, userEmail, { kategorien = null, subjekt = null, 
   if (kats && !kats.length) return [];
   const katCond = kats ? ` AND wf.kategorie IN (${kats.map(() => '?').join(',')})` : '';
   const rows = db.prepare(`
-    SELECT wf.id, wf.kategorie, wf.subjekt, wf.fakt, wf.seite_label, wf.updated_at,
+    SELECT wf.id, wf.kategorie, wf.subjekt, wf.fakt, wf.seite_label, wf.updated_at, wf.manually_edited,
            c.chapter_id, c.chapter_name
       FROM world_facts wf
       LEFT JOIN world_fact_chapters wfc ON wfc.fact_id = wf.id
@@ -195,11 +214,15 @@ function listWorldFacts(bookId, userEmail, { kategorien = null, subjekt = null, 
         updated_at: r.updated_at || null,
       };
       if (refuted) e.widerlegt = refuted.has(factKey(r.subjekt, r.fakt));
-      if (withChapterIds) e.chapter_ids = [];
+      if (withChapterIds) { e.chapter_ids = []; e.chapter_refs = []; }
+      if (withManual) e.manuell = !!r.manually_edited;
       byId.set(r.id, e);
     }
     if (r.chapter_name && !e.kapitel.includes(r.chapter_name)) e.kapitel.push(r.chapter_name);
-    if (withChapterIds && r.chapter_id != null && !e.chapter_ids.includes(r.chapter_id)) e.chapter_ids.push(r.chapter_id);
+    if (withChapterIds && r.chapter_id != null && !e.chapter_ids.includes(r.chapter_id)) {
+      e.chapter_ids.push(r.chapter_id);
+      e.chapter_refs.push({ chapter_id: r.chapter_id, chapter_name: r.chapter_name || '' });
+    }
   }
   return [...byId.values()];
 }
@@ -295,7 +318,7 @@ function faktenfehlerIssues(bookId, userEmail) {
   if (!verdicts.size) return [];
   const out = [];
   const seen = new Set();
-  for (const f of listWorldFacts(bookId, userEmail)) {
+  for (const f of listWorldFacts(bookId, userEmail, { withChapterIds: true })) {
     const key = factKey(f.subjekt, f.fakt);
     const v = verdicts.get(key);
     if (seen.has(key) || v?.urteil !== 'falsch' || !/^https?:\/\//i.test(String(v.quelle || '').trim())) continue;
@@ -312,6 +335,8 @@ function faktenfehlerIssues(bookId, userEmail) {
       quelle: v.quelle,
       figuren: [],
       kapitel: f.kapitel || [],
+      // IDs statt Namen-Rueckweg: gleichnamige Kapitel bleiben zugeordnet.
+      chapter_refs: f.chapter_refs || [],
     });
   }
   return out;

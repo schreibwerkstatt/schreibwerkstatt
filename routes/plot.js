@@ -13,12 +13,19 @@ const { toIntId } = require('../lib/validate');
 const { guardBook, sessionEmail } = require('../lib/acl');
 const appSettings = require('../lib/app-settings');
 const { computeTimeFindings } = require('../lib/plot-time-consistency');
-const { yearFromString, bookYearSpan, computeFigureYears } = require('../lib/figure-years');
+const { bookYearSpan } = require('../lib/figure-years');
+const { timeKeyOf } = require('../lib/time-key');
+const { locationParentMap } = require('../db/locations-read');
+const { computeZeitVorschlaege } = require('../lib/plot-zeit-vorschlag');
+const { parseActAgeRange } = require('../lib/plot-act-age');
+const { listDatedEventsForPages } = require('../db/zeitstrahl');
+const { getBookSettings } = require('../db/book-settings');
 const { beatsInReadingOrder } = require('../lib/plot-reading-order');
 const logger = require('../logger');
 const {
   _loadOwned, _requireBook, _validChapterId, _parseIntensitaet, _parseFlag,
   _anchorOpts, _withAnchor, _resolveThreadFigure, _resolveThreadDraftFigure,
+  _figureTimeMap, _actAgeMap, _threadFigMap,
 } = require('./plot-helpers');
 
 const router = express.Router();
@@ -34,8 +41,9 @@ const STATUSES = ['geplant', 'im_buch'];
 const MAX_TITEL = 200;
 const MAX_BESCHREIBUNG = 4000;
 // `zeit` ist Freitext wie `figure_events.datum` — ein Plan traegt „Sommer 1987"
-// so oft wie ein Datum. Die Jahreszahl zieht derselbe Parser heraus wie ueberall
-// sonst (lib/figure-years.js#yearFromString); validiert wird hier nur die Laenge.
+// so oft wie ein Datum. Das Zeitfenster zieht derselbe Parser heraus wie fuer
+// Zeitstrahl-Ereignisse (lib/datum-parse.js → lib/time-key.js); validiert wird
+// hier nur die Laenge.
 const MAX_ZEIT = 120;
 const MAX_ACT_NAME = 120;
 const MAX_THREAD_NAME = 120;
@@ -60,8 +68,23 @@ router.get('/', (req, res) => {
   // Beat fälschlich zum „Verankerung aktualisieren"-Angebot führen).
   const promoteOn = (Number(appSettings.get('plot.anchor.promote_min_score')) || 0) > 0;
   const staleStatuses = promoteOn ? ['im_buch', 'geplant'] : ['im_buch'];
+  // Geburtsjahre (fig_id → Jahr) für den Alters-Chip an der Karte; dieselbe
+  // Quelle wie die Alters-Befunde der Zeit-Messung. `geburtsjahrAusText` nennt
+  // die fig_ids, deren Jahr aus der Alters-Analyse statt dem Steckbrief kommt.
+  const geburtsjahre = {};
+  const geburtsjahrAusText = [];
+  for (const [figId, f] of _figureTimeMap(bookId, userEmail, { stand: false })) {
+    if (f.geburtsjahr == null) continue;
+    geburtsjahre[figId] = f.geburtsjahr;
+    if (f.geburtsjahr_quelle === 'text') geburtsjahrAusText.push(figId);
+  }
   res.json({
-    acts: plotDb.listActs(bookId, userEmail),
+    geburtsjahre,
+    geburtsjahrAusText,
+    // `alter` = Altersspanne aus dem Aktnamen (lib/plot-act-age.js) — zusammen
+    // mit dem Geburtsjahr der Strang-Figur zeigt das Board daraus das Zeitfenster
+    // einer Zelle an (zeit.js#aktFenster). Abgeleitet, nie gespeichert.
+    acts: plotDb.listActs(bookId, userEmail).map(a => ({ ...a, alter: parseActAgeRange(a.name) })),
     threads: plotDb.listThreads(bookId, userEmail),
     beats,
     relations: plotDb.listBeatRelations(bookId, userEmail),
@@ -79,35 +102,56 @@ router.get('/', (req, res) => {
 // Reihenfolge PRO LANE (lib/plot-reading-order.js): die Chronologie wird nur
 // innerhalb eines Strangs gemessen, parallele Stränge sind kein Rückschritt.
 // Die Katalog-Hauptfigur des Strangs gilt in jedem Beat der Lane als beteiligt
-// (Live-Vererbung). Geburtsjahr aus der SSoT lib/figure-years.js; ohne echte
-// Zeitlinie ist es null, dann entsteht nur der Chronologie-/Spannen-Teil.
-// `scanned` = mindestens ein Beat trägt eine Jahreszahl — undatiert ist
-// ungeprüft, nicht in Ordnung.
+// (Live-Vererbung). Geburtsjahr aus Steckbrief bzw. Alters-Analyse (_figureTimeMap), Stand im Manuskript aus
+// lib/figure-years.js (routes/plot-helpers.js#_figureTimeMap); die Altersspanne
+// des Akts aus seinem Namen (lib/plot-act-age.js).
+// `scanned` = mindestens ein Beat trägt eine verstandene Zeitangabe — undatiert
+// ist ungeprüft, nicht in Ordnung.
 router.get('/time-check', (req, res) => {
   const ctx = _requireBook(req, res);
   if (!ctx) return;
   const { userEmail, bookId } = ctx;
   const threads = plotDb.listThreads(bookId, userEmail);
-  const threadFig = new Map(threads.filter(t => t.fig_id).map(t => [t.id, t.fig_id]));
-  const beats = beatsInReadingOrder({
-    acts: plotDb.listActs(bookId, userEmail), threads, beats: plotDb.listBeats(bookId, userEmail),
-  }).map(b => {
-    const inherited = b.thread_id != null ? threadFig.get(b.thread_id) : null;
-    const figIds = inherited && !(b.fig_ids || []).includes(inherited) ? [...(b.fig_ids || []), inherited] : (b.fig_ids || []);
-    return { ...b, fig_ids: figIds, jahr: yearFromString(b.zeit) };
+  const acts = plotDb.listActs(bookId, userEmail);
+  const threadFig = _threadFigMap(threads);
+  const actAges = _actAgeMap(acts);
+  const beats = beatsInReadingOrder({ acts, threads, beats: plotDb.listBeats(bookId, userEmail) }).map(b => {
+    const strandFig = b.thread_id != null ? threadFig.get(b.thread_id) || null : null;
+    const figIds = strandFig && !(b.fig_ids || []).includes(strandFig) ? [...(b.fig_ids || []), strandFig] : (b.fig_ids || []);
+    return { ...b, fig_ids: figIds, strandFig, actAge: actAges.get(b.act_id) || null, key: timeKeyOf(b.zeit) };
   });
-  const figures = new Map();
-  const years = computeFigureYears(bookId, userEmail);
-  if (years && years.size) {
-    for (const f of plotDb.listFigureIdentities(bookId, userEmail)) {
-      const fy = years.get(f.id);
-      if (fy && fy.geburtsjahr != null) figures.set(f.fig_id, { name: f.name, geburtsjahr: fy.geburtsjahr });
-    }
-  }
   res.json({
-    befunde: computeTimeFindings({ beats, figures, bookSpan: bookYearSpan(bookId, userEmail) }),
-    scanned: beats.some(b => Number.isFinite(b.jahr)),
+    befunde: computeTimeFindings({
+      beats, figures: _figureTimeMap(bookId, userEmail),
+      bookSpan: bookYearSpan(bookId, userEmail), locParents: locationParentMap(bookId),
+    }),
+    scanned: beats.some(b => b.key),
   });
+});
+
+// ── Zeitvorschlag aus dem Text ──────────────────────────────────────────────
+// Für Beats IM BUCH ohne Zeitangabe: die datierten Zeitstrahl-Ereignisse ihrer
+// besten Fundstelle (derselbe Lese-Filter wie das Drift-Badge). Pure Rechnung in
+// lib/plot-zeit-vorschlag.js, kein Job, kein callAI, kein Schreibzugriff — der
+// Autor übernimmt einzeln oder über die Durchsicht (PATCH /beats/:id).
+router.get('/zeit-vorschlaege', (req, res) => {
+  const ctx = _requireBook(req, res);
+  if (!ctx) return;
+  const { userEmail, bookId } = ctx;
+  const beats = plotDb.listBeats(bookId, userEmail)
+    .filter(b => b.status === 'im_buch' && !b.verworfen && !(b.zeit || '').trim());
+  const occMap = plotDb.beatOccurrenceMap(bookId, userEmail, _anchorOpts());
+  const topPage = new Map();
+  for (const b of beats) {
+    const top = (occMap.get(b.id)?.top || []).find(o => o.page_id);
+    if (top) topPage.set(b.id, { page_id: top.page_id, page_name: top.page_name });
+  }
+  const pageIds = [...new Set([...topPage.values()].map(t => t.page_id))];
+  res.json({ vorschlaege: computeZeitVorschlaege({
+    beats, topPage,
+    eventsByPage: listDatedEventsForPages(bookId, userEmail, pageIds),
+    lang: getBookSettings(bookId, userEmail)?.language || 'de',
+  }) });
 });
 
 // Map page_id → Anzahl nicht-verworfener Beats im Kapitel der Seite. Speist den

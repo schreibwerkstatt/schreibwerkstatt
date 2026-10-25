@@ -460,13 +460,20 @@ test('buildEpub: description-Fallback book→meta, publisher/series in OPF', asy
   assert.ok(opf.includes('<dc:subject>Krimi</dc:subject>'), 'keyword fehlt');
 });
 
-test('buildEpub: ohne meta.description faellt auf book.description', async () => {
+// Der Klappentext hat EINEN Ort (book_publication.description = meta.description);
+// eine abweichende Bundle-Beschreibung (alte Fassung/.swbook) zieht nicht mehr.
+test('buildEpub: dc:description nur aus meta.description, kein Rueckfall auf book.description', async () => {
   const bundle = { scope: 'book', book: { id: 1, name: 'B', description: 'NurBuchDesc' }, groups: _oneGroup() };
-  const buf = await buildEpub(bundle, { lang: 'de', author: 'A', meta: {} });
-  const zip = await _unzip(buf);
-  const opf = await zip.file('OEBPS/content.opf').async('string');
-  assert.ok(opf.includes('<dc:description>NurBuchDesc</dc:description>'));
+  const leer = await zipOpf(await buildEpub(bundle, { lang: 'de', author: 'A', meta: {} }));
+  assert.ok(!leer.includes('NurBuchDesc'), 'book.description darf nicht ins OPF');
+  const gesetzt = await zipOpf(await buildEpub(bundle, { lang: 'de', author: 'A', meta: { description: 'Klappentext' } }));
+  assert.ok(gesetzt.includes('<dc:description>Klappentext</dc:description>'));
 });
+
+async function zipOpf(buf) {
+  const zip = await _unzip(buf);
+  return zip.file('OEBPS/content.opf').async('string');
+}
 
 test('buildEpub: nav.xhtml enthält Landmarks, OPF enthält Accessibility-Meta', async () => {
   const bundle = { scope: 'book', book: { id: 1, name: 'B' }, groups: _oneGroup() };

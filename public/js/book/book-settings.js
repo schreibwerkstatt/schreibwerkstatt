@@ -10,6 +10,8 @@ import { accessMethods } from './book-settings/access.js';
 import { blogMethods } from './book-settings/blog.js';
 import { hubspotMethods } from './book-settings/hubspot.js';
 import { mergeMethods } from './book-settings/merge.js';
+import { seriesMethods } from './book-settings/series.js';
+import { exposeMethods } from './book-settings/expose.js';
 
 export const bookSettingsMethods = {
   ...settingsMethods,
@@ -20,4 +22,6 @@ export const bookSettingsMethods = {
   ...blogMethods,
   ...hubspotMethods,
   ...mergeMethods,
+  ...seriesMethods,
+  ...exposeMethods,
 };

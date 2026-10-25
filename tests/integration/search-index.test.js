@@ -26,12 +26,12 @@ function _bootstrap() {
   };
 }
 
-function _seedBook(db, name, descr = '') {
+function _seedBook(db, name) {
   const now = new Date().toISOString();
   return db.prepare(`
-    INSERT INTO books (name, slug, description, owner_email, created_at, updated_at)
-    VALUES (?, ?, ?, 'a@b', ?, ?)
-  `).run(name, name.toLowerCase().replace(/\s+/g, '-'), descr, now, now).lastInsertRowid;
+    INSERT INTO books (name, slug, owner_email, created_at, updated_at)
+    VALUES (?, ?, 'a@b', ?, ?)
+  `).run(name, name.toLowerCase().replace(/\s+/g, '-'), now, now).lastInsertRowid;
 }
 
 function _seedPage(db, bookId, name, html) {
@@ -62,6 +62,21 @@ test('upsertPage + query: einfacher Treffer', () => {
     assert.equal(result.hits[0].kind, 'page');
     assert.equal(result.hits[0].entity_id, pageId);
     assert.match(result.hits[0].snippet || '', /Hallo/);
+  } finally { teardown(); }
+});
+
+test('upsertBookMeta: Klappentext aus book_publication ist auffindbar', () => {
+  const { db, search, teardown } = _bootstrap();
+  try {
+    const bookId = _seedBook(db, 'Testbuch');
+    const now = new Date().toISOString();
+    db.prepare(`INSERT INTO book_publication (book_id, description, created_at, updated_at) VALUES (?, ?, ?, ?)`)
+      .run(bookId, '<p>Ein Leuchtturmwärter verschwindet.</p>', now, now);
+    search.upsertBookMeta(bookId);
+
+    const result = search.query('leuchtturmwärter', { allowedBookIds: [bookId] });
+    assert.equal(result.hits.length, 1);
+    assert.equal(result.hits[0].kind, 'book');
   } finally { teardown(); }
 });
 

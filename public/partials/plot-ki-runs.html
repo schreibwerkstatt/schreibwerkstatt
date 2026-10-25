@@ -100,11 +100,13 @@
       <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
       <span x-text="$app.t('plot.konflikt.erledigt', { n: konfliktErledigt().length })"></span>
     </button>
-    <ul class="plot-konflikt-erledigt-list" x-bind="panel" x-cloak>
-      <template x-for="(e, i) in konfliktErledigt()" :key="i">
-        <li x-text="e"></li>
-      </template>
-    </ul>
+    <div x-bind="panel" x-cloak>
+      <ul class="plot-konflikt-erledigt-list">
+        <template x-for="(e, i) in konfliktErledigt()" :key="i">
+          <li x-text="e"></li>
+        </template>
+      </ul>
+    </div>
   </div>
 </div>
 

@@ -37,6 +37,10 @@
    Abschnitte der Bucheinstellungen sind durch Trennlinien getrennte Bloecke,
    ihr Titel bekommt darum den Abschnitts- statt des engen Abstands. */
 .book-settings-section > .card-section-title { margin-bottom: var(--card-gap-section); }
+/* Hinweise im Abschnittsfluss bringen keinen Abstand mit (DESIGN.md, Regel 1):
+   den setzt der Nachbar — nach dem Titel traegt der schon seinen eigenen. */
+.book-settings-section .card-hint + *,
+.book-settings-section :not(.card-section-title, .card-form-row) + .card-hint { margin-top: var(--card-gap-tight); }
 .job-stats-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -398,6 +402,11 @@
   align-items: center;
 }
 .pub-repeater-row .card-form-input { flex: 1 1 0; min-width: 0; }
+/* Nur-Anzeige-Wert in der Wertspalte (Reihe): Schrift und Oberkante wie das Label. */
+.pub-static-value {
+  padding-top: var(--space-6);
+  font-size: var(--font-size-sm);
+}
 .pub-matter-card {
   display: flex;
   flex-direction: column;
@@ -466,6 +475,62 @@
   margin-top: var(--space-md);
   padding-top: var(--space-md);
   border-top: 1px solid var(--color-err-border);
+}
+
+/* Reihe (Tab «Reihe»): Eingabe/Auswahl + Knopf in einer Zeile. */
+.series-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.series-inline > .card-form-input,
+.series-inline > .combobox-wrap { flex: 1 1 12em; }
+
+/* Bände der Reihe: Bandnummer, Titel, Umordnen. Der aktuelle Band ist betont. */
+.series-members {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.series-member {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.series-member--current .series-member-name { font-weight: var(--fw-semibold); }
+.series-member-pos {
+  min-width: 2em;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+.series-member-name { flex: 1; }
+
+/* Aus Vorband übernehmen: pro Gattung Kopf (Label + Auswahl-Knöpfe) und Liste. */
+.series-carry-kind + .series-carry-kind {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+.series-carry-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+/* padding-top des Labels gehoert zur Grid-Zeile; in der zentrierten Flex-Zeile
+   kippte es den Text unter die Mittellinie der Knoepfe. */
+.series-carry-head > .card-form-label { margin-right: auto; padding-top: 0; }
+.series-carry-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  max-height: 18em;
+  overflow-y: auto;
+  margin-top: var(--space-xs);
 }
 
 @media (max-width: 600px) {

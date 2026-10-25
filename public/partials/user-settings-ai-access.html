@@ -4,113 +4,115 @@
      das Feature offen hat (`ai.user_api.enabled`) oder noch ein Zugang liegt, den
      der User entfernen koennen soll. Server: routes/me-ai-access.js. -->
     <template x-if="aiAccessEnabled || aiAccessStored">
-      <div class="card-form-row card-form-row--ai-access" x-data="collapsible()">
+      <div class="card-form-row card-form-row--ai-access" data-settings-section="aiAccess" x-data="collapsible()">
         <button type="button" class="collapsible-toggle" x-bind="trigger">
           <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
           <span x-text="$app.t('profile.aiAccess.title')"></span>
           <span class="lt-dict-count" x-show="aiAccess" x-cloak
                 x-text="aiAccess ? $app.t('profile.aiAccess.provider.' + aiAccess.provider) : ''"></span>
         </button>
-        <div class="ai-access-body" x-bind="panel" x-cloak>
-
-          <!-- Feature zugedreht, aber noch ein Key gespeichert -->
-          <template x-if="!aiAccessEnabled">
-            <div class="ai-access-disabled">
-              <p class="muted-msg muted-msg--sm" x-text="$app.t('profile.aiAccess.disabledStored')"></p>
-              <button type="button" class="danger" @click="aiAccessRemove()" :disabled="aiAccessBusy"
-                      x-text="$app.t('profile.aiAccess.remove')"></button>
-            </div>
-          </template>
-
-          <template x-if="aiAccessEnabled">
-            <div class="card-form-grid">
-              <p class="muted-msg muted-msg--sm" x-text="$app.t('profile.aiAccess.intro')"></p>
-              <p class="muted-msg muted-msg--sm" x-show="aiAccess" x-cloak
-                 x-text="aiAccess ? $app.t('profile.aiAccess.activeHint', { provider: $app.t('profile.aiAccess.provider.' + aiAccess.provider), model: aiAccess.model || $app.t('profile.aiAccess.instanceModel') }) : ''"></p>
-
-              <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('profile.aiAccess.providerLabel')"></label>
-                <div x-data="radioGroup()" x-modelable="value" x-model="aiAccessForm.provider"
-                     x-effect="options = [
-                       { value: 'claude',        label: $app.t('profile.aiAccess.provider.claude') },
-                       { value: 'openai-compat', label: $app.t('profile.aiAccess.provider.openai-compat') },
-                     ]"></div>
+        <div x-bind="panel" x-cloak>
+          <div class="ai-access-body">
+  
+            <!-- Feature zugedreht, aber noch ein Key gespeichert -->
+            <template x-if="!aiAccessEnabled">
+              <div class="ai-access-disabled">
+                <p class="muted-msg muted-msg--sm" x-text="$app.t('profile.aiAccess.disabledStored')"></p>
+                <button type="button" class="danger" @click="aiAccessRemove()" :disabled="aiAccessBusy"
+                        x-text="$app.t('profile.aiAccess.remove')"></button>
               </div>
-
-              <div class="card-form-row" x-show="aiAccessForm.provider === 'openai-compat'">
-                <label class="card-form-label" x-text="$app.t('profile.aiAccess.host')"></label>
-                <div class="card-form-field">
-                  <input type="url" class="card-form-input" x-model="aiAccessForm.host"
-                         placeholder="https://api.openai.com" autocomplete="off">
-                  <p class="card-form-field-note" x-text="$app.t('profile.aiAccess.hostHint')"></p>
+            </template>
+  
+            <template x-if="aiAccessEnabled">
+              <div class="card-form-grid">
+                <p class="muted-msg muted-msg--sm" x-text="$app.t('profile.aiAccess.intro')"></p>
+                <p class="muted-msg muted-msg--sm" x-show="aiAccess" x-cloak
+                   x-text="aiAccess ? $app.t('profile.aiAccess.activeHint', { provider: $app.t('profile.aiAccess.provider.' + aiAccess.provider), model: aiAccess.model || $app.t('profile.aiAccess.instanceModel') }) : ''"></p>
+  
+                <div class="card-form-row">
+                  <label class="card-form-label" x-text="$app.t('profile.aiAccess.providerLabel')"></label>
+                  <div x-data="radioGroup()" x-modelable="value" x-model="aiAccessForm.provider"
+                       x-effect="options = [
+                         { value: 'claude',        label: $app.t('profile.aiAccess.provider.claude') },
+                         { value: 'openai-compat', label: $app.t('profile.aiAccess.provider.openai-compat') },
+                       ]"></div>
+                </div>
+  
+                <div class="card-form-row" x-show="aiAccessForm.provider === 'openai-compat'">
+                  <label class="card-form-label" x-text="$app.t('profile.aiAccess.host')"></label>
+                  <div class="card-form-field">
+                    <input type="url" class="card-form-input" x-model="aiAccessForm.host"
+                           placeholder="https://api.openai.com" autocomplete="off">
+                    <p class="card-form-field-note" x-text="$app.t('profile.aiAccess.hostHint')"></p>
+                  </div>
+                </div>
+  
+                <div class="card-form-row">
+                  <label class="card-form-label" x-text="$app.t('profile.aiAccess.model')"></label>
+                  <div class="card-form-field">
+                    <input type="text" class="card-form-input" x-model="aiAccessForm.model" autocomplete="off"
+                           :placeholder="aiAccessForm.provider === 'claude' ? $app.t('profile.aiAccess.instanceModel') : 'gpt-4.1'">
+                    <p class="card-form-field-note"
+                       x-text="aiAccessForm.provider === 'claude' ? $app.t('profile.aiAccess.modelHintClaude') : $app.t('profile.aiAccess.modelHintOpenai')"></p>
+                  </div>
+                </div>
+  
+                <div class="card-form-row">
+                  <label class="card-form-label" x-text="$app.t('profile.aiAccess.apiKey')"></label>
+                  <div class="card-form-field">
+                    <input type="password" class="card-form-input" x-model="aiAccessForm.api_key" autocomplete="off"
+                           :placeholder="aiAccessKeyStored() ? $app.t('profile.aiAccess.keyStored') : ''">
+                    <p class="card-form-field-note" x-text="$app.t('profile.aiAccess.keyHint')"></p>
+                  </div>
+                </div>
+  
+                <div class="card-form-row" x-show="aiAccessForm.provider === 'openai-compat'">
+                  <span class="card-form-label"></span>
+                  <div class="card-form-field">
+                    <label class="book-settings-option">
+                      <input type="checkbox" x-model="aiAccessForm.cloud">
+                      <span x-text="$app.t('profile.aiAccess.cloud')"></span>
+                    </label>
+                    <p class="card-form-field-note" x-text="$app.t('profile.aiAccess.cloudHint')"></p>
+                  </div>
+                </div>
+  
+                <div class="card-form-row">
+                  <label class="card-form-label" x-text="$app.t('profile.aiAccess.contextWindow')"></label>
+                  <div class="card-form-field">
+                    <input type="text" class="card-form-input" x-data="numInput({ integer: true, min: 2048, max: 2000000 })"
+                           x-modelable="value" x-model="aiAccessForm.context_window"
+                           :placeholder="$app.t('profile.aiAccess.automatic')">
+                  </div>
+                </div>
+  
+                <div class="card-form-row">
+                  <label class="card-form-label" x-text="$app.t('profile.aiAccess.maxTokensOut')"></label>
+                  <div class="card-form-field">
+                    <input type="text" class="card-form-input" x-data="numInput({ integer: true, min: 512, max: 200000 })"
+                           x-modelable="value" x-model="aiAccessForm.max_tokens_out"
+                           :placeholder="$app.t('profile.aiAccess.automatic')">
+                    <p class="card-form-field-note" x-text="$app.t('profile.aiAccess.windowHint')"></p>
+                  </div>
+                </div>
+  
+                <p class="card-form-error" x-show="aiAccessError" x-text="aiAccessError"></p>
+                <p class="card-form-saved" x-show="aiAccessSaved" x-cloak x-text="$app.t('profile.aiAccess.saved')"></p>
+  
+                <div class="card-form-row">
+                  <span class="card-form-label"></span>
+                  <div class="ai-access-actions">
+                    <button type="button" data-label-ok @click="aiAccessSave()" :disabled="aiAccessBusy">
+                      <span x-show="aiAccessBusy" class="spinner"></span>
+                      <span x-text="aiAccess ? $app.t('profile.aiAccess.update') : $app.t('profile.aiAccess.activate')"></span>
+                    </button>
+                    <button type="button" class="danger" x-show="aiAccess" @click="aiAccessRemove()" :disabled="aiAccessBusy"
+                            x-text="$app.t('profile.aiAccess.remove')"></button>
+                  </div>
                 </div>
               </div>
-
-              <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('profile.aiAccess.model')"></label>
-                <div class="card-form-field">
-                  <input type="text" class="card-form-input" x-model="aiAccessForm.model" autocomplete="off"
-                         :placeholder="aiAccessForm.provider === 'claude' ? $app.t('profile.aiAccess.instanceModel') : 'gpt-4.1'">
-                  <p class="card-form-field-note"
-                     x-text="aiAccessForm.provider === 'claude' ? $app.t('profile.aiAccess.modelHintClaude') : $app.t('profile.aiAccess.modelHintOpenai')"></p>
-                </div>
-              </div>
-
-              <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('profile.aiAccess.apiKey')"></label>
-                <div class="card-form-field">
-                  <input type="password" class="card-form-input" x-model="aiAccessForm.api_key" autocomplete="off"
-                         :placeholder="aiAccessKeyStored() ? $app.t('profile.aiAccess.keyStored') : ''">
-                  <p class="card-form-field-note" x-text="$app.t('profile.aiAccess.keyHint')"></p>
-                </div>
-              </div>
-
-              <div class="card-form-row" x-show="aiAccessForm.provider === 'openai-compat'">
-                <span class="card-form-label"></span>
-                <div class="card-form-field">
-                  <label class="book-settings-option">
-                    <input type="checkbox" x-model="aiAccessForm.cloud">
-                    <span x-text="$app.t('profile.aiAccess.cloud')"></span>
-                  </label>
-                  <p class="card-form-field-note" x-text="$app.t('profile.aiAccess.cloudHint')"></p>
-                </div>
-              </div>
-
-              <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('profile.aiAccess.contextWindow')"></label>
-                <div class="card-form-field">
-                  <input type="text" class="card-form-input" x-data="numInput({ integer: true, min: 2048, max: 2000000 })"
-                         x-modelable="value" x-model="aiAccessForm.context_window"
-                         :placeholder="$app.t('profile.aiAccess.automatic')">
-                </div>
-              </div>
-
-              <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('profile.aiAccess.maxTokensOut')"></label>
-                <div class="card-form-field">
-                  <input type="text" class="card-form-input" x-data="numInput({ integer: true, min: 512, max: 200000 })"
-                         x-modelable="value" x-model="aiAccessForm.max_tokens_out"
-                         :placeholder="$app.t('profile.aiAccess.automatic')">
-                  <p class="card-form-field-note" x-text="$app.t('profile.aiAccess.windowHint')"></p>
-                </div>
-              </div>
-
-              <p class="card-form-error" x-show="aiAccessError" x-text="aiAccessError"></p>
-              <p class="card-form-saved" x-show="aiAccessSaved" x-cloak x-text="$app.t('profile.aiAccess.saved')"></p>
-
-              <div class="card-form-row">
-                <span class="card-form-label"></span>
-                <div class="ai-access-actions">
-                  <button type="button" data-label-ok @click="aiAccessSave()" :disabled="aiAccessBusy">
-                    <span x-show="aiAccessBusy" class="spinner"></span>
-                    <span x-text="aiAccess ? $app.t('profile.aiAccess.update') : $app.t('profile.aiAccess.activate')"></span>
-                  </button>
-                  <button type="button" class="danger" x-show="aiAccess" @click="aiAccessRemove()" :disabled="aiAccessBusy"
-                          x-text="$app.t('profile.aiAccess.remove')"></button>
-                </div>
-              </div>
-            </div>
-          </template>
+            </template>
+          </div>
         </div>
       </div>
     </template>

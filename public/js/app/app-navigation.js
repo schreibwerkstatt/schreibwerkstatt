@@ -23,10 +23,12 @@ function _coerceId(id) {
 // nicht relativ zum Fenster: der Wert ändert sich dann nur durch Layout, nicht
 // durch einen laufenden Scroll. Bleibt das Layout bis zum Ende des Budgets in
 // Bewegung, wird trotzdem gescrollt — lieber ungenau als gar nicht.
-function _scrollToWhenReady(selector, tries = 60) {
+// `target`: CSS-Selektor oder Funktion, die das Element liefert (oder null).
+export function scrollToWhenReady(target, tries = 60) {
   let lastOffset = null;
+  const find = typeof target === 'function' ? target : () => document.querySelector(target);
   const step = (left) => {
-    const el = document.querySelector(selector);
+    const el = find();
     if (!el) {
       if (left > 0) requestAnimationFrame(() => step(left - 1));
       return;
@@ -63,7 +65,7 @@ export const appNavigationMethods = {
       }
       this.$store.catalogUi.selectedFigurId = fid;
       await this.$nextTick();
-      _scrollToWhenReady(`.figur-item[data-figid="${fid}"]`);
+      scrollToWhenReady(`.figur-item[data-figid="${fid}"]`);
     } finally {
       this._endNavigation();
     }
@@ -82,7 +84,7 @@ export const appNavigationMethods = {
       }
       this.$store.catalogUi.selectedFigurId = fid;
       await this.$nextTick();
-      _scrollToWhenReady(`.figur-item[data-figid="${fid}"]`);
+      scrollToWhenReady(`.figur-item[data-figid="${fid}"]`);
     } finally {
       this._endNavigation();
     }
@@ -101,7 +103,7 @@ export const appNavigationMethods = {
       }
       this.$store.catalogUi.selectedOrtId = oid;
       await this.$nextTick();
-      _scrollToWhenReady(`[data-ortid="${oid}"]`);
+      scrollToWhenReady(`[data-ortid="${oid}"]`);
     } finally {
       this._endNavigation();
     }
@@ -120,7 +122,7 @@ export const appNavigationMethods = {
       }
       this.$store.catalogUi.selectedOrtId = oid;
       await this.$nextTick();
-      _scrollToWhenReady(`[data-ortid="${oid}"]`);
+      scrollToWhenReady(`[data-ortid="${oid}"]`);
     } finally {
       this._endNavigation();
     }
@@ -193,7 +195,7 @@ export const appNavigationMethods = {
       }
       this.$store.catalogUi.selectedSzeneId = sid;
       await this.$nextTick();
-      _scrollToWhenReady(`[data-szeneid="${sid}"]`);
+      scrollToWhenReady(`[data-szeneid="${sid}"]`);
     } finally {
       this._endNavigation();
     }
@@ -223,7 +225,7 @@ export const appNavigationMethods = {
       }
       this.$store.catalogUi.selectedEreignisId = eid;
       await this.$nextTick();
-      _scrollToWhenReady(`[data-event-id="${eid}"]`);
+      scrollToWhenReady(`[data-event-id="${eid}"]`);
     } finally {
       this._endNavigation();
     }

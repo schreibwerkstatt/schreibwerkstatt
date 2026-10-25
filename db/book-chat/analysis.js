@@ -7,6 +7,7 @@
 
 const { db } = require('../connection');
 require('../migrations');
+const { chapterSubtreeFilter } = require('../book-order');
 
 // ── Reviews ──────────────────────────────────────────────────────────────────
 
@@ -72,7 +73,10 @@ function listLektoratHotspotRows(bookId, userEmail, chapterId) {
     JOIN pages    p ON p.page_id    = pc.page_id
     LEFT JOIN chapters c ON c.chapter_id = p.chapter_id AND c.book_id = p.book_id` + _LATEST_CHECK_WHERE;
   const params = [bookId, userEmail, userEmail];
-  if (chapterId !== null) { sql += ' AND p.chapter_id = ?'; params.push(chapterId); }
+  if (chapterId !== null) {
+    const f = chapterSubtreeFilter('p.chapter_id', chapterId);
+    sql += ` AND ${f.sql}`; params.push(...f.params);
+  }
   sql += ' ORDER BY pc.error_count DESC, pc.checked_at DESC';
   return db.prepare(sql).all(...params);
 }
@@ -88,7 +92,10 @@ function listLektoratFindingRows(bookId, userEmail, { pageId = null, chapterId =
     LEFT JOIN chapters c ON c.chapter_id = p.chapter_id AND c.book_id = p.book_id` + _LATEST_CHECK_WHERE;
   const params = [bookId, userEmail, userEmail];
   if (pageId !== null)         { sql += ' AND pc.page_id = ?';   params.push(pageId); }
-  else if (chapterId !== null) { sql += ' AND p.chapter_id = ?'; params.push(chapterId); }
+  else if (chapterId !== null) {
+    const f = chapterSubtreeFilter('p.chapter_id', chapterId);
+    sql += ` AND ${f.sql}`; params.push(...f.params);
+  }
   sql += ' ORDER BY c.position, p.position, p.page_id';
   return db.prepare(sql).all(...params);
 }
@@ -118,7 +125,8 @@ function getBookStilTotals(bookId) {
   return _stmtBookStilTotals.get(bookId);
 }
 
-/** Stil-Aggregat je Kapitel in Leserichtung, optional auf ein Kapitel begrenzt. */
+/** Stil-Aggregat je Kapitel (eigene Abschnitte) in Leserichtung, optional auf
+ *  ein Kapitel samt Unterkapiteln begrenzt (eine Zeile je Kapitel des Teilbaums). */
 function listChapterStilMetrics(bookId, chapterId) {
   let sql = `
       SELECT p.chapter_id, c.chapter_name,
@@ -137,7 +145,10 @@ function listChapterStilMetrics(bookId, chapterId) {
       WHERE ps.book_id = ? AND ps.sentences IS NOT NULL
     `;
   const params = [bookId];
-  if (chapterId !== null) { sql += ' AND p.chapter_id = ?'; params.push(chapterId); }
+  if (chapterId !== null) {
+    const f = chapterSubtreeFilter('p.chapter_id', chapterId);
+    sql += ` AND ${f.sql}`; params.push(...f.params);
+  }
   sql += ' GROUP BY p.chapter_id, c.chapter_name, c.position ORDER BY c.position';
   return db.prepare(sql).all(...params);
 }
@@ -153,7 +164,8 @@ const _stmtTopFiguresInChapter = db.prepare(`
       LIMIT 5
     `);
 
-/** Die fünf meisterwähnten Figuren eines Kapitels (Index-Erwähnungen). */
+/** Die fünf meisterwähnten Figuren in den eigenen Abschnitten eines Kapitels
+ *  (Index-Erwähnungen) — passend zur Stil-Zeile je Kapitel. */
 function listTopFiguresInChapter(chapterId, bookId, userEmail) {
   return _stmtTopFiguresInChapter.all(chapterId, bookId, userEmail);
 }
@@ -183,8 +195,9 @@ function listPagesWithBody(bookId, { chapterId = null, pageId = null } = {}) {
   let sql = 'SELECT page_id, page_name, chapter_id, body_html FROM pages WHERE book_id = ? AND body_html IS NOT NULL';
   const params = [bookId];
   if (chapterId !== null) {
-    sql += ' AND chapter_id = ?';
-    params.push(chapterId);
+    const f = chapterSubtreeFilter('chapter_id', chapterId);
+    sql += ` AND ${f.sql}`;
+    params.push(...f.params);
   } else if (pageId !== null) {
     sql += ' AND page_id = ?';
     params.push(pageId);

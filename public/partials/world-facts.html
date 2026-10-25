@@ -1,7 +1,7 @@
-<!-- Welt-Fakten / Weltregeln (read-only) -->
+<!-- Welt-Fakten / Weltregeln -->
 <!--
   Alpine.data-Sub-Komponente — siehe public/js/cards/world-facts-card.js.
-  Daten stammen aus der Komplettanalyse; kein Edit-Pfad. Gruppiert nach Kategorie.
+  Daten aus der Komplettanalyse plus vom Autor gepflegte Fakten. Gruppiert nach Kategorie.
 -->
 <div class="card card--weltfakten" x-data="worldFactsCard" x-show="$app.showWorldFactsCard" x-cloak>
   <div class="card-header card-header--subline">
@@ -12,9 +12,22 @@
         <span class="card-timestamp" x-text="$app.t('common.asOf', { date: $app.formatLastRun(wfUpdatedAt) })"></span>
       </div>
     </div>
+    <div class="card-actions">
+      <button type="button" class="btn-compact"
+              x-show="$store.nav.selectedBookId"
+              :disabled="wfEdit.mode !== null"
+              @click="wfStartCreate()">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
+        <span x-text="$app.t('weltfakten.edit.new')"></span>
+      </button>
+    </div>
   </div>
 
-  <div x-show="fakten.length === 0 && !wfLoading" class="card-empty">
+  <template x-if="wfEdit.mode === 'new'">
+    <!-- @include world-facts-edit -->
+  </template>
+
+  <div x-show="fakten.length === 0 && !wfLoading && wfEdit.mode !== 'new'" class="card-empty">
     <p class="card-empty-text" x-text="$app.t(wfScanned ? 'weltfakten.emptyScanned' : 'weltfakten.empty')"></p>
     <button type="button" class="primary card-empty-cta"
             @click="$app.alleAktualisieren()"
@@ -97,9 +110,26 @@
             <div class="weltfakten-row" :class="{ 'weltfakten-row--nosubj': !f.subjekt }">
               <span x-show="f.subjekt" class="weltfakten-subjekt" x-text="f.subjekt"></span>
               <div class="weltfakten-row-body">
-                <span class="weltfakten-fakt" x-text="f.fakt"></span>
-                <span x-show="f.widerlegt" class="badge badge-warn weltfakten-widerlegt"
-                      :data-tip="$app.t('weltfakten.widerlegtTip')" x-text="$app.t('weltfakten.widerlegt')"></span>
+                <div class="weltfakten-row-line">
+                  <span class="weltfakten-fakt" x-text="f.fakt"></span>
+                  <span x-show="f.manuell" class="tag weltfakten-manual-tag"
+                        :data-tip="$app.t('weltfakten.manualHint')" x-text="$app.t('weltfakten.manual')"></span>
+                  <span x-show="f.widerlegt" class="badge badge-warn weltfakten-widerlegt"
+                        :data-tip="$app.t('weltfakten.widerlegtTip')" x-text="$app.t('weltfakten.widerlegt')"></span>
+                  <span class="weltfakten-row-actions">
+                    <button type="button" class="icon-btn" @click="wfStartEdit(f)" :disabled="wfEdit.mode !== null"
+                            :aria-label="$app.t('weltfakten.edit.editTitle')" :data-tip="$app.t('weltfakten.edit.editTitle')">
+                      <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+                    </button>
+                    <button type="button" class="icon-btn danger" @click="wfDelete(f)" :disabled="wfEdit.mode !== null"
+                            :aria-label="$app.t('common.delete')" :data-tip="$app.t('common.delete')">
+                      <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+                    </button>
+                  </span>
+                </div>
+                <template x-if="wfEdit.mode === 'edit' && wfEdit.id === f.id">
+                  <!-- @include world-facts-edit -->
+                </template>
                 <div class="entity-refs weltfakten-row-meta" x-show="f.kapitel?.length || f.seite">
                   <template x-for="k in (f.kapitel || [])" :key="k">
                     <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', name: k }"></button>

@@ -174,7 +174,107 @@ test('GET /time-check: Chronologie pro Lane + geerbte Strang-Hauptfigur', async 
   assert.ok(codes.includes('chronologieBruch:A2'), codes.join(','));
   assert.ok(!codes.some(c => c.endsWith(':B1') && c.startsWith('chronologieBruch')), codes.join(','));
   assert.ok(codes.includes('beatVorGeburt:A2'), codes.join(','));
-  assert.ok(codes.includes('figurKindImBeat:A1'), codes.join(','));
+  // Ein Kind im Beat ist kein Befund mehr (Alter steht an der Karte).
+  assert.ok(!codes.some(c => c.startsWith('figurKindImBeat')), codes.join(','));
+});
+
+test('Zeitfenster im Payload + figurAnZweiOrten über die Route (Orts-Hierarchie buchweit)', async () => {
+  const B = 9523;
+  db.prepare("INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, 'Ortsbuch', ?, ?)").run(B, NOW, NOW);
+  require('../../db/book-access').grantAccess(B, OWNER, 'editor', OWNER);
+  db.prepare(`INSERT INTO figures (book_id, user_email, fig_id, name, kurzname, updated_at) VALUES (?, ?, 'fig_jo', 'Jo', 'Jo', ?)`).run(B, OWNER, NOW);
+  const zh = db.prepare(`INSERT INTO locations (book_id, loc_id, name, user_email, updated_at) VALUES (?, 'zh', 'Zürich', ?, ?)`).run(B, OWNER, NOW).lastInsertRowid;
+  db.prepare(`INSERT INTO locations (book_id, loc_id, name, user_email, updated_at, parent_id) VALUES (?, 'alt', 'Altstadt', ?, ?, ?)`).run(B, OWNER, NOW, zh);
+  db.prepare(`INSERT INTO locations (book_id, loc_id, name, user_email, updated_at) VALUES (?, 'be', 'Berlin', ?, ?)`).run(B, OWNER, NOW);
+  const act = (await call('POST', '/plot/acts', { book_id: B, name: 'Akt O' })).body;
+  const mk = (titel, zeit, loc) => call('POST', '/plot/beats', {
+    book_id: B, act_id: act.id, titel, zeit, figure_ids: ['fig_jo'], location_ids: [loc],
+  });
+  const first = (await mk('Zürich', '12.03.1987', 'zh')).body;
+  assert.equal(first.zeit_key.precision, 'day');
+  assert.equal(first.zeit_key.mode, 'abs');
+  await mk('Altstadt', '12. März 1987', 'alt');   // liegt in Zürich → verträglich
+  let r = await call('GET', `/plot/time-check?book_id=${B}`);
+  assert.deepEqual(r.body.befunde.filter(f => f.code === 'figurAnZweiOrten'), []);
+  await mk('Berlin', '12.03.1987', 'be');
+  r = await call('GET', `/plot/time-check?book_id=${B}`);
+  const orte = r.body.befunde.filter(f => f.code === 'figurAnZweiOrten').map(f => f.beat);
+  assert.deepEqual(orte, ['Berlin', 'Berlin'], 'Berlin kollidiert mit Zürich und mit der Altstadt');
+  const board = (await call('GET', `/plot/?book_id=${B}`)).body;
+  assert.ok(board.beats.every(b => b.zeit_key && b.zeit_key.precision === 'day'));
+});
+
+test('GET /zeit-vorschlaege: aus dem Text der besten Fundstelle, nur Beats im Buch; Akt-Spanne im Board', async () => {
+  const B = 9524;
+  db.prepare("INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, 'Vorschlagsbuch', ?, ?)").run(B, NOW, NOW);
+  require('../../db/book-access').grantAccess(B, OWNER, 'editor', OWNER);
+  db.prepare(`INSERT INTO figures (book_id, user_email, fig_id, name, kurzname, geburtstag, updated_at) VALUES (?, ?, 'fig_st', 'Stefan Meier', 'Stefan', '12. März 1968', ?)`).run(B, OWNER, NOW);
+  db.prepare("INSERT INTO pages (page_id, book_id, page_name, updated_at) VALUES (952401, ?, 'Das nächste Drama', ?)").run(B, NOW);
+  db.prepare("INSERT INTO pages (page_id, book_id, page_name, updated_at) VALUES (952402, ?, 'Der erste Kuss', ?)").run(B, NOW);
+  const ev = (page, year, ereignis, extra = {}) => {
+    const id = db.prepare(`INSERT INTO zeitstrahl_events (book_id, user_email, datum, datum_year, ereignis, typ, subtyp, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(B, OWNER, String(year), year, ereignis, extra.typ || 'persoenlich', extra.subtyp || 'sonstiges', extra.so || 0).lastInsertRowid;
+    db.prepare('INSERT INTO zeitstrahl_event_pages (event_id, page_id, sort_order) VALUES (?, ?, 0)').run(id, page);
+  };
+  ev(952401, 1999, 'Renate ist schwanger', { so: 1 });
+  ev(952401, 1968, 'Geburt von Stefan', { subtyp: 'geburt' });
+  ev(952402, 1983, 'Der erste Kuss');
+  const krise = (await call('POST', '/plot/acts', { book_id: B, name: 'Erwachsen (24-28)' })).body;
+  const tSt = (await call('POST', '/plot/threads', { book_id: B, name: 'Stefan', figure_id: 'fig_st' })).body;
+  const mk = (titel, extra = {}) => call('POST', '/plot/beats', { book_id: B, act_id: krise.id, thread_id: tSt.id, titel, status: 'im_buch', ...extra }).then(r => r.body);
+  const ziel = await mk('Schwangerschaft');
+  const geplant = await mk('Geplant', { status: 'geplant' });
+  await mk('Mit Zeit', { zeit: '2001' });
+  // Beste Fundstelle zählt (höchster Score), nicht die schwächere.
+  plotDb.replaceBeatOccurrences(ziel.id, B, [
+    { kind: 'page', pageId: 952402, score: 0.5, snippet: 'k', source: 'semantic' },
+    { kind: 'page', pageId: 952401, score: 0.9, snippet: 'd', source: 'semantic' },
+  ]);
+  plotDb.replaceBeatOccurrences(geplant.id, B, [{ kind: 'page', pageId: 952401, score: 0.9, snippet: 'd', source: 'semantic' }]);
+
+  const r = await call('GET', `/plot/zeit-vorschlaege?book_id=${B}`);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.vorschlaege, [{
+    beat_id: ziel.id, zeit: '1999', page_id: 952401, page_name: 'Das nächste Drama', n: 1, spread: 0, eindeutig: true,
+    belege: [{ datum: '1999', ereignis: 'Renate ist schwanger' }],
+  }]);
+  const board = (await call('GET', `/plot/?book_id=${B}`)).body;
+  assert.deepEqual(board.geburtsjahre, { fig_st: 1968 });
+  assert.deepEqual(board.acts.find(a => a.id === krise.id).alter, { von: 24, bis: 28 });
+
+  // Übernommen meldet die Zeit-Messung den Widerspruch zum Akt: 1999 ist Stefan 31.
+  await call('PATCH', `/plot/beats/${ziel.id}`, { zeit: '1999' });
+  const tc = await call('GET', `/plot/time-check?book_id=${B}`);
+  assert.deepEqual(tc.body.befunde.filter(f => f.code === 'alterAusserhalbAkt' && f.beat_id === ziel.id).map(f => f.params.alter), ['31']);
+
+  const fremd = await call('GET', `/plot/zeit-vorschlaege?book_id=${B}`, null, OTHER);
+  assert.equal(fremd.status, 403);
+});
+
+test('Geburtsjahr: Steckbrief, sonst Alters-Analyse — aber nie aus dem Zeitstrahl oder bei niedriger Konfidenz', async () => {
+  const B = 9525;
+  db.prepare("INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, 'Altersbuch', ?, ?)").run(B, NOW, NOW);
+  require('../../db/book-access').grantAccess(B, OWNER, 'editor', OWNER);
+  const fig = (fid, name, geb) => db.prepare(`INSERT INTO figures (book_id, user_email, fig_id, name, kurzname, geburtstag, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .run(B, OWNER, fid, name, name, geb, NOW).lastInsertRowid;
+  const age = (id, geb, quelle, konf) => db.prepare(`INSERT INTO figure_ages (figure_id, book_id, geburtsjahr, geburtsjahr_quelle, konfidenz) VALUES (?, ?, ?, ?, ?)`)
+    .run(id, B, geb, quelle, konf);
+  age(fig('fig_st', 'Stefan', '1968'), 1960, 'text', 0.9);   // Steckbrief gewinnt
+  age(fig('fig_re', 'Renate', null), 1970, 'kuratiert', 0.7); // Steckbrief leer → Analyse
+  age(fig('fig_ma', 'Manuel', null), 1988, 'text', 0.75);
+  age(fig('fig_gi', 'Gisela', null), 1988, 'zeitstrahl', 0.75); // Zeitstrahl zählt nicht
+  age(fig('fig_si', 'Silvia', null), 1975, 'text', 0.1);       // zu unsicher
+
+  const board = (await call('GET', `/plot/?book_id=${B}`)).body;
+  assert.deepEqual(board.geburtsjahre, { fig_st: 1968, fig_re: 1970, fig_ma: 1988 });
+  assert.deepEqual([...board.geburtsjahrAusText].sort(), ['fig_ma', 'fig_re']);
+
+  // Die Zeit-Messung rechnet mit demselben Jahr: Renate 1999 ist 29, kein Befund.
+  const tRe = (await call('POST', '/plot/threads', { book_id: B, name: 'Renate', figure_id: 'fig_re' })).body;
+  const akt = (await call('POST', '/plot/acts', { book_id: B, name: 'Akt' })).body;
+  await call('POST', '/plot/beats', { book_id: B, act_id: akt.id, thread_id: tRe.id, titel: 'Vor Geburt', zeit: '1965' });
+  const tc = await call('GET', `/plot/time-check?book_id=${B}`);
+  assert.deepEqual(tc.body.befunde.filter(f => f.code === 'beatVorGeburt').map(f => f.params.geburtsjahr), [1970]);
 });
 
 test('GET /links: Gegenrichtung je Achse, unbekannte Achse 400, Reader 403', async () => {

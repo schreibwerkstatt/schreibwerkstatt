@@ -130,15 +130,17 @@
           <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
           <span x-text="$app.t('erzaehlprofil.narratorsTitle')"></span>
         </button>
-        <div x-bind="panel" class="collapsible-section erzaehlprofil-themen-dist" x-cloak>
-          <template x-for="(f, i) in erzaehlprofilFigurenVerteilung()" :key="'f:' + i">
-            <div class="erzaehlprofil-themen-dist-row">
-              <button type="button" class="entity-ref"
-                      x-entity-ref="{ type: 'figur', id: f.fig_id, name: f.name }"></button>
-              <span class="erzaehlprofil-thema-count"
-                    x-text="$app.t('erzaehlprofil.narratorChapters', { n: f.count })"></span>
-            </div>
-          </template>
+        <div x-bind="panel" class="collapsible-section" x-cloak>
+          <div class="erzaehlprofil-themen-dist">
+            <template x-for="(f, i) in erzaehlprofilFigurenVerteilung()" :key="'f:' + i">
+              <div class="erzaehlprofil-themen-dist-row">
+                <button type="button" class="entity-ref"
+                        x-entity-ref="{ type: 'figur', id: f.fig_id, name: f.name }"></button>
+                <span class="erzaehlprofil-thema-count"
+                      x-text="$app.t('erzaehlprofil.narratorChapters', { n: f.count })"></span>
+              </div>
+            </template>
+          </div>
         </div>
       </div>
 
@@ -149,15 +151,17 @@
           <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
           <span x-text="$app.t('erzaehlprofil.themenTitle')"></span>
         </button>
-        <div x-bind="panel" class="collapsible-section erzaehlprofil-themen-dist erzaehlprofil-themen-dist--cloud" x-cloak>
-          <template x-for="(t, i) in erzaehlprofilThemenAggregiert()" :key="'d:' + i">
-            <div class="erzaehlprofil-themen-dist-row">
-              <span class="erzaehlprofil-thema-chip" :data-typ="t.typ || 'thema'" x-text="t.thema"></span>
-              <span class="erzaehlprofil-thema-typ" x-text="erzaehlprofilThemaTypLabel(t.typ)"></span>
-              <span class="erzaehlprofil-thema-count"
-                    x-text="$app.t('erzaehlprofil.themenCount', { n: t.count })"></span>
-            </div>
-          </template>
+        <div x-bind="panel" class="collapsible-section" x-cloak>
+          <div class="erzaehlprofil-themen-dist erzaehlprofil-themen-dist--cloud">
+            <template x-for="(t, i) in erzaehlprofilThemenAggregiert()" :key="'d:' + i">
+              <div class="erzaehlprofil-themen-dist-row">
+                <span class="erzaehlprofil-thema-chip" :data-typ="t.typ || 'thema'" x-text="t.thema"></span>
+                <span class="erzaehlprofil-thema-typ" x-text="erzaehlprofilThemaTypLabel(t.typ)"></span>
+                <span class="erzaehlprofil-thema-count"
+                      x-text="$app.t('erzaehlprofil.themenCount', { n: t.count })"></span>
+              </div>
+            </template>
+          </div>
         </div>
       </div>
 

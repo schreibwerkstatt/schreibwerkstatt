@@ -38,12 +38,9 @@ export const crudMethods = {
       await contentRepo.updateChapter(id, { name: newName }, { bookId: Alpine.store('nav').selectedBookId });
       const ch = this._findChapter(id)?.node;
       if (ch) ch.name = newName;
-      // In-place mirror: Kapitel-Eintrag in nav.tree (enthaelt alle Tiefen)
-      // + _chapterOrderMap (keyt auf den Namen).
-      for (const it of Alpine.store('nav').tree) {
-        if (it.type === 'chapter' && !it.solo && it.id === id) it.name = newName;
-      }
-      this._rebuildOrderMaps();
+      // In-place mirror ueber den Root-Helper (tree/structure.js), denselben
+      // wie die Sidebar: Baum-Item, `chapterName` der Abschnitte, Indexe.
+      root._mirrorChapterRename(id, newName);
       this._signalXrefsChanged();
       return true;
     } catch (e) {

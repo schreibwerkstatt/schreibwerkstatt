@@ -168,6 +168,16 @@ function _currentBookId() {
   try { return globalThis.Alpine?.store('nav')?.selectedBookId ?? null; } catch { return null; }
 }
 
+// Ein Struktur-Write (Kapitel/Abschnitt anlegen, löschen, verschieben, Kapitel
+// umbenennen/ausschliessen, Order-PUT) ist angekommen: der Server hat den
+// Strukturstand des Buchs weitergezählt. Der Baum (book/tree/catchup.js) merkt
+// sich darauf, dass sein Stand nicht mehr der aktuelle ist — sonst liefe der
+// nächste Order-PUT des Organizers mit dem alten Stand in ORDER_CONFLICT.
+function _noteStructureWrite(bookId = null) {
+  if (typeof window === 'undefined' || typeof CustomEvent === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(EVT.STRUCTURE_WRITTEN, { detail: { bookId: bookId ?? _currentBookId() } }));
+}
+
 export const contentRepo = {
   // GET /content/books → [{id, name, slug, description, updated_at, created_at}]
   listBooks(opts)               { return _getNav('books', opts); },
@@ -182,9 +192,16 @@ export const contentRepo = {
   // GET → { tree, updated_at, updated_by }; PUT { order_json } setzt den
   // vollstaendigen Baum atomar (Validierung + Materialisierung in Tx).
   loadOrder(id, opts)           { return _get('books/' + id + '/order', opts); },
-  saveOrder(id, tree) {
-    return _write('PUT', 'books/' + id + '/order', { order_json: tree },
+  // `expectedUpdatedAt`: Strukturstand, auf dem der Baum beruht (Tree-Load bzw.
+  // letzter PUT). Weicht er serverseitig ab → 409 ORDER_CONFLICT statt eines
+  // Überschreibens fremder Umbauten. `undefined` = unbekannt → ohne Prüfung.
+  async saveOrder(id, tree, { expectedUpdatedAt } = {}) {
+    const body = { order_json: tree };
+    if (expectedUpdatedAt !== undefined) body.expected_updated_at = expectedUpdatedAt;
+    const out = await _write('PUT', 'books/' + id + '/order', body,
       ['books/' + id + '/order', 'books/' + id + '/tree']);
+    _noteStructureWrite(id);
+    return out;
   },
 
   // GET /content/chapters/:id → einzelnes Kapitel.
@@ -286,6 +303,7 @@ export const contentRepo = {
     try {
       const out = await _write('PUT', 'pages/' + id, body, inv);
       if (typeof body?.name === 'string') dropQueuedRename('page', id);
+      if (body && ('chapter_id' in body || 'position' in body)) _noteStructureWrite(body.book_id);
       return out;
     } catch (e) {
       // Offline umbenannt → vorgemerkt (repo/structure-queue.js).
@@ -301,7 +319,11 @@ export const contentRepo = {
     // Schlüssel schon beim ersten Versuch: kam er trotz Netzfehler an, liefert
     // das Nachspielen denselben Abschnitt (lib/idempotency.js).
     const opKey = newOpKey();
-    try { return await _write('POST', 'pages', body, inv, { 'Idempotency-Key': opKey }); }
+    try {
+      const out = await _write('POST', 'pages', body, inv, { 'Idempotency-Key': opKey });
+      _noteStructureWrite(body?.book_id);
+      return out;
+    }
     catch (e) {
       // Offline angelegt → temporäre ID, Abspielen beim Wiederverbinden.
       const pending = isUndelivered(e) ? queueCreatePage(body, { bookId: _currentBookId(), opKey }) : null;
@@ -316,10 +338,12 @@ export const contentRepo = {
       const inv = ['pages'];
       const bookId = op.body.book_id ?? op.bookId;
       if (bookId != null) inv.push('books/' + bookId + '/tree');
-      return _write('POST', 'pages', op.body, inv, op.opKey ? { 'Idempotency-Key': op.opKey } : null);
+      return _write('POST', 'pages', op.body, inv, op.opKey ? { 'Idempotency-Key': op.opKey } : null)
+        .then((out) => { _noteStructureWrite(bookId); return out; });
     }
     if (op.kind === 'page') return _write('PUT', 'pages/' + op.id, { name: op.name }, ['pages/' + op.id, ...(op.bookId != null ? ['books/' + op.bookId + '/tree'] : [])]);
-    return _write('PUT', 'chapters/' + op.id, { name: op.name }, ['chapters/' + op.id, ...(op.bookId != null ? ['books/' + op.bookId + '/tree'] : [])]);
+    return _write('PUT', 'chapters/' + op.id, { name: op.name }, ['chapters/' + op.id, ...(op.bookId != null ? ['books/' + op.bookId + '/tree'] : [])])
+      .then((out) => { _noteStructureWrite(op.bookId); return out; });
   },
 
   // DELETE /content/pages/:id. Liefert null. `bookId` invalidiert zusaetzlich
@@ -335,7 +359,9 @@ export const contentRepo = {
     const path = 'pages/' + id + (deviceId ? '?device_id=' + encodeURIComponent(deviceId) : '');
     const inv = ['pages/' + id];
     if (bookId != null) inv.push('books/' + bookId + '/tree');
-    return _write('DELETE', path, undefined, inv);
+    const out = await _write('DELETE', path, undefined, inv);
+    _noteStructureWrite(bookId);
+    return out;
   },
 
   // GET /content/books/:id/trash — Papierkorb (geloeschte, wiederherstellbare
@@ -346,9 +372,11 @@ export const contentRepo = {
 
   // POST /content/books/:id/trash/:deletion_id/restore — legt die Seite neu an
   // (neue page_id) → Tree-Cache busten wie bei createPage.
-  restoreFromTrash(bookId, deletionId) {
-    return _write('POST', 'books/' + bookId + '/trash/' + deletionId + '/restore', {},
+  async restoreFromTrash(bookId, deletionId) {
+    const out = await _write('POST', 'books/' + bookId + '/trash/' + deletionId + '/restore', {},
       ['pages', 'books/' + bookId + '/tree']);
+    _noteStructureWrite(bookId);
+    return out;
   },
 
   // POST /content/pages/:id/revisions/:rev_id/restore — schreibt den Body der
@@ -385,7 +413,9 @@ export const contentRepo = {
     const inv = ['pages/' + id];
     if (sourceBookId) inv.push('books/' + sourceBookId + '/tree');
     if (body?.target_book_id) inv.push('books/' + body.target_book_id + '/tree');
-    return _write('POST', 'pages/' + id + '/move', body, inv);
+    const out = await _write('POST', 'pages/' + id + '/move', body, inv);
+    _noteStructureWrite(sourceBookId);
+    return out;
   },
 
   // POST /content/pages/:id/split — Abschnitt teilen (Notebook-Editor). body:
@@ -396,6 +426,7 @@ export const contentRepo = {
     const inv = ['pages', 'pages/' + id, 'pages/' + id + '/revisions'];
     if (bookId != null) inv.push('books/' + bookId + '/tree');
     const out = await _write('POST', 'pages/' + id + '/split', { ...body, device_id: getDeviceId() }, inv);
+    _noteStructureWrite(bookId);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(EVT.PAGE_REVISIONS_CHANGED, { detail: { pageId: id } }));
     }
@@ -406,7 +437,9 @@ export const contentRepo = {
   async createChapter(body) {
     const inv = ['chapters'];
     if (body?.book_id) inv.push('books/' + body.book_id + '/tree');
-    return _write('POST', 'chapters', body, inv);
+    const out = await _write('POST', 'chapters', body, inv);
+    _noteStructureWrite(body?.book_id);
+    return out;
   },
 
   // `bookId` (oder `body.book_id`) zieht den Baum-Cache des Buchs mit — sonst
@@ -418,6 +451,7 @@ export const contentRepo = {
     try {
       const out = await _write('PUT', 'chapters/' + id, body, inv);
       if (typeof body?.name === 'string') dropQueuedRename('chapter', id);
+      _noteStructureWrite(treeBook);
       return out;
     } catch (e) {
       if (isUndelivered(e) && _onlyName(body) && queueRename('chapter', id, body.name, { bookId: treeBook ?? null })) return { id, ...body, pending: true };
@@ -428,7 +462,9 @@ export const contentRepo = {
   async deleteChapter(id, { bookId } = {}) {
     const inv = ['chapters/' + id];
     if (bookId != null) inv.push('books/' + bookId + '/tree');
-    return _write('DELETE', 'chapters/' + id, undefined, inv);
+    const out = await _write('DELETE', 'chapters/' + id, undefined, inv);
+    _noteStructureWrite(bookId);
+    return out;
   },
 
   // POST /content/books mit `{ name, description? }`. Server upserted lokale books-Row.

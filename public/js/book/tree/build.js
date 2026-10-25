@@ -90,6 +90,11 @@ export const treeBuildMethods = {
       })),
     ];
 
+    // Strukturstand, auf dem dieser Baum beruht (book/tree/catchup.js). Fehlt das
+    // Feld (aelterer Server), bleibt er unbekannt — dann wird nicht verglichen.
+    this._treeStructureAt = tree.order_updated_at;
+    this._structureOwnWrite = false;
+
     this._rebuildTreeOrderMaps();
     this._refreshChapterStats();
   },

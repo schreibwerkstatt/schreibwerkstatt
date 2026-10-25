@@ -13,6 +13,7 @@ const logger = require('../../logger');
 const H = require('../../lib/share-helpers');
 
 const { jsonBody, INTRO_MAX, ANCHOR_BID_RE, resolveBidsToPages, backfillScopeBlockIds } = H;
+const { chapterScopeIds } = require('../../lib/load-contents');
 
 // ── Auth-Mw ──────────────────────────────────────────────────────────────────
 function requireSession(req, res, next) {
@@ -119,7 +120,8 @@ function register(router) {
   // Pro-Seite-Zähler aktiver Share-Links, die diese Seite enthalten. Speist den
   // `.btn-count`-Badge am „Teilen"-Eintrag des Page-Action-Menüs. Eine Seite ist
   // enthalten in: einem Page-Share auf sie selbst, einem Chapter-Share auf ihr
-  // Kapitel (Direkt-Children, analog Reader-Render) und jedem Buch-Share des Buchs.
+  // Kapitel oder einen Vorfahren (Teilbaum, analog Reader-Render) und jedem
+  // Buch-Share des Buchs.
   router.get('/api/page-link-counts', requireSession, async (req, res) => {
     const ownerEmail = sessionEmail(req);
     const bookId = parseInt(req.query.book_id, 10);
@@ -137,9 +139,17 @@ function register(router) {
       }
       const counts = {};
       const pages = await contentStore.listPages(bookId);
+      // Kapitel → Zahl der Kapitel-Shares, deren Teilbaum es enthaelt.
+      const inChapterShares = {};
+      if (Object.keys(chapterCount).length) {
+        const chapters = await contentStore.listChapters(bookId);
+        for (const [cid, n] of Object.entries(chapterCount)) {
+          for (const id of chapterScopeIds(Number(cid), chapters)) inChapterShares[id] = (inChapterShares[id] || 0) + n;
+        }
+      }
       for (const p of pages) {
         const n = bookCount
-          + (p.chapter_id != null ? (chapterCount[p.chapter_id] || 0) : 0)
+          + (p.chapter_id != null ? (inChapterShares[p.chapter_id] || 0) : 0)
           + (pageCount[p.id] || 0);
         if (n > 0) counts[p.id] = n;
       }

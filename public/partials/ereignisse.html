@@ -38,14 +38,16 @@
       <span class="gz-chronology-total-value"
             x-text="$store.catalog.zeitstrahlChronology ? ($store.catalog.zeitstrahlChronology.minYear === $store.catalog.zeitstrahlChronology.maxYear ? String($store.catalog.zeitstrahlChronology.minYear) : $app.t('events.span', { start: $store.catalog.zeitstrahlChronology.minYear, ende: $store.catalog.zeitstrahlChronology.maxYear })) : ''"></span>
     </button>
-    <ul class="gz-chronology-list" x-bind="panel" x-cloak>
-      <template x-for="c in ($store.catalog.zeitstrahlChronology?.chapters || [])" :key="c.chapter_id">
-        <li class="gz-chronology-row">
-          <span class="gz-chronology-kap" x-text="c.name"></span>
-          <span class="gz-chronology-year" x-text="c.minYear === c.maxYear ? String(c.minYear) : $app.t('events.span', { start: c.minYear, ende: c.maxYear })"></span>
-        </li>
-      </template>
-    </ul>
+    <div x-bind="panel" x-cloak>
+      <ul class="gz-chronology-list">
+        <template x-for="c in ($store.catalog.zeitstrahlChronology?.chapters || [])" :key="c.chapter_id">
+          <li class="gz-chronology-row">
+            <span class="gz-chronology-kap" x-text="c.name"></span>
+            <span class="gz-chronology-year" x-text="c.minYear === c.maxYear ? String(c.minYear) : $app.t('events.span', { start: c.minYear, ende: c.maxYear })"></span>
+          </li>
+        </template>
+      </ul>
+    </div>
   </div>
 
   <!-- Fortschritt Ermittlung -->

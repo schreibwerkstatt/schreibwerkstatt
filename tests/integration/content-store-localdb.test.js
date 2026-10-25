@@ -23,12 +23,18 @@ test.before(() => {
 });
 test.after(() => { ctx.cleanup(); });
 
+// Die Buchbeschreibung (= Klappentext) lebt in book_publication.description.
 function _seedBook({ name = 'Test-Buch', description = 'Beschreibung' } = {}) {
   const now = new Date().toISOString();
   const r = ctx.connection.db.prepare(`
-    INSERT INTO books (name, description, created_at, updated_at, owner_email)
-    VALUES (?, ?, ?, ?, NULL)
-  `).run(name, description, now, now);
+    INSERT INTO books (name, created_at, updated_at, owner_email)
+    VALUES (?, ?, ?, NULL)
+  `).run(name, now, now);
+  if (description) {
+    ctx.connection.db.prepare(`
+      INSERT INTO book_publication (book_id, description, created_at, updated_at) VALUES (?, ?, ?, ?)
+    `).run(r.lastInsertRowid, description, now, now);
+  }
   return r.lastInsertRowid;
 }
 
@@ -62,6 +68,26 @@ test('localdb: listBooks + loadBook (Domain-Shape)', async () => {
   const book = await ctx.contentStore.loadBook(bookId);
   assert.equal(book.id, bookId);
   assert.equal(book.name, 'Lib-Test-Buch');
+});
+
+test('localdb: description ist ein Durchgriff auf book_publication (createBook/updateBook)', async () => {
+  const db = ctx.connection.db;
+  const created = await ctx.contentStore.createBook({ name: 'Klappentext-Buch', description: 'Erster' });
+  assert.equal(created.description, 'Erster');
+  const pub = () => db.prepare('SELECT description FROM book_publication WHERE book_id = ?').get(created.id)?.description;
+  assert.equal(pub(), 'Erster');
+
+  const upd = await ctx.contentStore.updateBook(created.id, { description: 'Zweiter' });
+  assert.equal(upd.description, 'Zweiter');
+  assert.equal(upd.name, 'Klappentext-Buch');
+  assert.equal(pub(), 'Zweiter');
+
+  // Rename lässt den Klappentext stehen; ohne Publikationszeile ist er ''.
+  const ren = await ctx.contentStore.updateBook(created.id, { name: 'Neu' });
+  assert.equal(ren.description, 'Zweiter');
+  const bare = await ctx.contentStore.createBook({ name: 'Ohne' });
+  assert.equal(bare.description, '');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM book_publication WHERE book_id = ?').get(bare.id).n, 0);
 });
 
 test('localdb: loadPage liefert html + chapter_id + position', async () => {

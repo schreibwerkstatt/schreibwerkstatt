@@ -1,0 +1,44 @@
+<!-- Plot-Werkstatt: Durchsicht der Zeitvorschläge aus dem Text für Beats im
+     Buch (GET /plot/zeit-vorschlaege, Logik lib/plot-zeit-vorschlag.js).
+     Ausgelagert aus plot.html (File-Limit), via Partial-Kaskade in den
+     plotCard-Scope injiziert. Jeder Vorschlag mit Belegen und Abschnitt;
+     vorausgewählt nur die eindeutigen, breite tragen den Hinweis «breit».
+     Die Auswahl läuft als EIN Undo-Schritt (zeit.js#applyZeitReviewSelection). -->
+<div class="plot-zeit-review" x-show="zeitReviewList().length > 0" x-cloak x-data="collapsible(false)">
+  <button type="button" class="collapsible-toggle" x-bind="trigger">
+    <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+    <span x-text="$app.t('plot.zeitVorschlag.reviewTitle', { n: zeitReviewList().length })"></span>
+  </button>
+  <div x-bind="panel" x-cloak>
+    <div class="plot-zeit-review-body">
+      <p class="card-hint" x-text="$app.t('plot.zeitVorschlag.reviewHint')"></p>
+      <ul class="plot-zeit-review-list">
+        <template x-for="v in zeitReviewList()" :key="v.beat_id">
+          <li class="plot-zeit-review-row">
+            <label class="plot-zeit-review-check">
+              <input type="checkbox" x-model="zeitVorschlagSel[v.beat_id]">
+              <span class="plot-zeit-review-zeit" x-text="v.zeit"></span>
+              <span class="badge badge-neutral" x-show="!v.eindeutig" :data-tip="$app.t('plot.zeitVorschlag.breitTip')"
+                    x-text="$app.t('plot.zeitVorschlag.breit')"></span>
+            </label>
+            <div class="plot-zeit-review-main">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'beat', id: v.beat_id, label: zeitReviewBeatTitel(v) }"></button>
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'page', id: v.page_id, label: v.page_name }"></button>
+              <ul class="plot-zeit-belege">
+                <template x-for="(b, i) in zeitVorschlagBelege(v)" :key="i">
+                  <li x-text="b"></li>
+                </template>
+              </ul>
+            </div>
+          </li>
+        </template>
+      </ul>
+      <div class="plot-zeit-review-actions">
+        <button type="button" class="btn-compact" :disabled="busy || !zeitReviewSelected().length" @click="applyZeitReviewSelection()"
+                x-text="$app.t('plot.zeitVorschlag.reviewApply', { n: zeitReviewSelected().length })"></button>
+        <button type="button" class="btn-compact btn-compact--ghost" @click="setZeitReviewAll(true)" x-text="$app.t('plot.zeitVorschlag.selectAll')"></button>
+        <button type="button" class="btn-compact btn-compact--ghost" @click="setZeitReviewAll(false)" x-text="$app.t('plot.zeitVorschlag.selectNone')"></button>
+      </div>
+    </div>
+  </div>
+</div>

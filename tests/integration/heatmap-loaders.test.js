@@ -27,8 +27,8 @@ const NOW = '2026-05-01T10:00:00.000Z';
 const USER = 'heatmap@test.local';
 
 function seedBook(name) {
-  return db.prepare(`INSERT INTO books (name, description, created_at, updated_at, owner_email)
-    VALUES (?, '', ?, ?, NULL)`).run(name, NOW, NOW).lastInsertRowid;
+  return db.prepare(`INSERT INTO books (name, created_at, updated_at, owner_email)
+    VALUES (?, ?, ?, NULL)`).run(name, NOW, NOW).lastInsertRowid;
 }
 function seedChapter(bookId, name, position) {
   return db.prepare(`INSERT INTO chapters (book_id, chapter_name, position, updated_at)

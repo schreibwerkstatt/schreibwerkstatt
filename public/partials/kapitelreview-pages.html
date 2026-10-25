@@ -29,33 +29,35 @@
             <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
             <span x-text="$app.t('kapitelReview.subchaptersHeading', { n: kapitelReviewSubchapterTree($app.kapitelReviewChapterId).length })"></span>
           </button>
-          <div class="kapitel-subchapters-body" x-bind="panel" x-cloak>
-            <template x-for="sub in kapitelReviewSubchapterTree($app.kapitelReviewChapterId)" :key="sub.id">
-              <div class="kapitel-subchapter" :style="{ '--sub-depth': sub.depthOffset }">
-                <div class="kapitel-subchapter-header">
-                  <button type="button"
-                          class="kapitel-subchapter-chevron"
-                          @click="toggleSubchapterOpen(sub.id)"
-                          :aria-expanded="isSubchapterOpen(sub.id)"
-                          :aria-label="$app.t(isSubchapterOpen(sub.id) ? 'sidebar.collapseAll' : 'sidebar.expandAll')">
-                    <span class="history-chevron" :class="{ open: isSubchapterOpen(sub.id) }" aria-hidden="true"></span>
-                  </button>
-                  <span class="kapitel-subchapter-name internal-link"
-                        role="button" tabindex="0"
-                        @click="$app.kapitelReviewChapterId = String(sub.id)"
-                        :data-tip="$app.t('kapitelReview.openSubchapterTip', { name: sub.name })"
-                        x-text="sub.name"></span>
-                  <span class="tag" x-text="$app.t('sidebar.pagesCountShort', { n: sub.pages.length })"
-                        :data-tip="sub.pages.length === 1 ? $app.t('sidebar.pagesCountOne') : $app.t('sidebar.pagesCount', { n: sub.pages.length })"
-                        :aria-label="sub.pages.length === 1 ? $app.t('sidebar.pagesCountOne') : $app.t('sidebar.pagesCount', { n: sub.pages.length })"></span>
+          <div x-bind="panel" x-cloak>
+            <div class="kapitel-subchapters-body">
+              <template x-for="sub in kapitelReviewSubchapterTree($app.kapitelReviewChapterId)" :key="sub.id">
+                <div class="kapitel-subchapter" :style="{ '--sub-depth': sub.depthOffset }">
+                  <div class="kapitel-subchapter-header">
+                    <button type="button"
+                            class="kapitel-subchapter-chevron"
+                            @click="toggleSubchapterOpen(sub.id)"
+                            :aria-expanded="isSubchapterOpen(sub.id)"
+                            :aria-label="$app.t(isSubchapterOpen(sub.id) ? 'sidebar.collapseAll' : 'sidebar.expandAll')">
+                      <span class="history-chevron" :class="{ open: isSubchapterOpen(sub.id) }" aria-hidden="true"></span>
+                    </button>
+                    <span class="kapitel-subchapter-name internal-link"
+                          role="button" tabindex="0"
+                          @click="$app.kapitelReviewChapterId = String(sub.id)"
+                          :data-tip="$app.t('kapitelReview.openSubchapterTip', { name: sub.name })"
+                          x-text="sub.name"></span>
+                    <span class="tag" x-text="$app.t('sidebar.pagesCountShort', { n: sub.pages.length })"
+                          :data-tip="sub.pages.length === 1 ? $app.t('sidebar.pagesCountOne') : $app.t('sidebar.pagesCount', { n: sub.pages.length })"
+                          :aria-label="sub.pages.length === 1 ? $app.t('sidebar.pagesCountOne') : $app.t('sidebar.pagesCount', { n: sub.pages.length })"></span>
+                  </div>
+                  <div class="kapitel-pages-list" x-show="isSubchapterOpen(sub.id) && sub.pages.length > 0" x-cloak>
+                    <template x-for="page in sub.pages" :key="page.id">
+                      <!-- @include kapitel-page-row -->
+                    </template>
+                  </div>
                 </div>
-                <div class="kapitel-pages-list" x-show="isSubchapterOpen(sub.id) && sub.pages.length > 0" x-cloak>
-                  <template x-for="page in sub.pages" :key="page.id">
-                    <!-- @include kapitel-page-row -->
-                  </template>
-                </div>
-              </div>
-            </template>
+              </template>
+            </div>
           </div>
         </div>
       </template>

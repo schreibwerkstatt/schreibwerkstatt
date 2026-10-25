@@ -167,6 +167,7 @@ Custom-Events am `window`. Vollständige Liste:
 | `job:finished` `{ type, jobId, job, dedupId, bookId }` | `_detectFinishedJobs()` (Diff aus `/jobs/queue`) | Root + Subs | Sidebar/History idempotent updaten, auch wenn kein per-Card-Poller mehr läuft (Reload-Lücke). Konsumenten müssen idempotent sein — fired auch parallel zu per-Card-onDone. |
 | `chat:reset` / `book-chat:reset` | Seitenwechsel / User-Settings-Reset | chat-card, book-chat-card | Session leeren |
 | `kapitel-review:select` `{ chapterId }` | Sidebar / Hash-Router | kapitel-review-card | Chapter-ID setzen |
+| `card:request` `{ key }` | [card-request.js](../public/js/cards/card-request.js)#`openCardWith` (Palette, Querverweise, Job-Queue-Sprung) | book-settings-card, figuren-card, chat-card | Wunsch (Reiter/Session) per `takeCardRequest(key)` abholen — Wert liegt im Modul, damit eine erst durch den Sprung gemountete Karte ihn in `init()`/`onShow` findet |
 | `book-stats:select` | Hash-Router | book-stats-card | Statistik-Tab wählen |
 | `palette:open` | global | palette-card | Command-Palette öffnen |
 | `app:update-available` | Service-Worker-Listener | Root-Banner | Update-Hinweis |

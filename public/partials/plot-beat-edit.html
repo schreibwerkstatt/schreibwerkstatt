@@ -65,6 +65,31 @@
         <input type="text" class="plot-edit-input" :id="$id('pbe-zeit')" x-model="beatDraft.zeit"
                data-spellcheck="spelling"
                :placeholder="$app.t('plot.beat.zeitPlaceholder')">
+        <!-- Wie die gespeicherte Angabe verstanden wurde (zeit_key vom Server) —
+             bzw. dass sie nicht verstanden und darum nicht geprüft wird. -->
+        <p class="plot-zeit-hint" x-show="beatDraftZeitHint()"
+           :class="{ 'plot-zeit-hint--warn': beatDraftZeitHint()?.ok === false }"
+           x-text="beatDraftZeitHint()?.text"></p>
+        <!-- Zeitfenster des Akts für den Strang (Altersspanne im Aktnamen +
+             Geburtsjahr der Strang-Figur) — nur Anzeige, wird nie gespeichert. -->
+        <p class="plot-zeit-akt" x-show="editAktFenster()" :data-tip="editAktFenster()?.tip"
+           x-text="editAktFenster()?.text"></p>
+        <!-- Vorschlag aus dem Text (Beat im Buch: Ereignisse der besten
+             Fundstelle), nur bei leerem Feld; füllt den Entwurf, gespeichert
+             wird mit dem Beat. -->
+        <template x-if="editZeitVorschlag()">
+          <div class="plot-zeit-vorschlag">
+            <span x-text="$app.t('plot.zeitVorschlag.label', { zeit: editZeitVorschlag().zeit })"></span>
+            <button type="button" class="entity-ref" x-entity-ref="{ type: 'page', id: editZeitVorschlag().page_id, label: editZeitVorschlag().page_name }"></button>
+            <button type="button" class="btn-compact" @click="applyZeitVorschlagToDraft()"
+                    x-text="$app.t('plot.zeitVorschlag.apply')"></button>
+            <ul class="plot-zeit-belege">
+              <template x-for="(b, i) in zeitVorschlagBelege(editZeitVorschlag())" :key="i">
+                <li x-text="b"></li>
+              </template>
+            </ul>
+          </div>
+        </template>
         <!-- Figuren: eine Combobox, zwei Quellen als opt-Gruppen (Katalog =
              Komplettanalyse, Werkstatt = Plotwerkstatt-Drafts) — spart Platz wie in
              der Motiv-Werkstatt. Wert trägt Präfix fig:/draft:, addBeatFigureLink

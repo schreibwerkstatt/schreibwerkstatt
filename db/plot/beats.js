@@ -156,7 +156,9 @@ function resolveFigureIds(bookId, userEmail, figIds) {
 // Schlanke Figuren-Identitäten (figures.id ↔ TEXT-fig_id + Name) des (Buch,
 // User)-Katalogs — für die Zeit-Messung, die nur Name + Geburtsjahr braucht
 // (Geburtsjahr liefert lib/figure-years.js#computeFigureYears, keyed by figures.id).
-const _stmtFigureIdentities = db.prepare('SELECT id, fig_id, name FROM figures WHERE book_id = ? AND user_email = ?');
+// `geburtstag` = Steckbrief-Feld: die Alters-Rechnungen der Plot-Zeit nutzen nur
+// das vom Autor gepflegte Geburtsjahr, kein aus Ereignissen abgeleitetes.
+const _stmtFigureIdentities = db.prepare('SELECT id, fig_id, name, kurzname, geburtstag FROM figures WHERE book_id = ? AND user_email = ?');
 function listFigureIdentities(bookId, userEmail) {
   return _stmtFigureIdentities.all(parseInt(bookId), userEmail);
 }

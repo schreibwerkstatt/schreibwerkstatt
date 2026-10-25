@@ -33,54 +33,56 @@
             x-text="$app.t('editor.revisions.filter.hint', { shown: _visibleRevisions().length, loaded: revisions.length })"></span>
     </div>
 
-    <div x-bind="panel" x-cloak class="page-revisions-list">
-
-      <!-- Angeheftet: unabhaengig vom geladenen Fenster, ohne Filter. -->
-      <template x-if="pinnedRevs.length > 0">
-        <div class="page-revisions-section">
-          <div class="page-revisions-section__head" x-text="$app.t('editor.revisions.pinnedHead')"></div>
-          <template x-for="row in pinnedRows()" :key="row.k">
-            <!-- @include page-revisions-row -->
-          </template>
-        </div>
-      </template>
-
-      <!-- Geschichte nach Kalendertag (App-Zeitzone); Tageskopf mit dem
-           Zeichen-Delta des Tages (gefiltert: der angezeigten Sitzungen),
-           Zeilen zeigen nur die Uhrzeit. -->
-      <template x-for="day in listDays()" :key="day.key">
-        <section class="page-revisions-day">
-          <div class="page-revisions-day__head">
-            <span class="page-revisions-day__label" x-text="dayLabel(day)"></span>
-            <span class="page-revisions-day__date" x-show="dayHasRelative(day)" x-text="dayDate(day)"></span>
-            <template x-if="day.delta !== null">
-              <span class="tag revision-delta"
-                    :class="deltaClass(day.delta)"
-                    :data-tip="dayDeltaTip()"
-                    x-text="formatDelta(day.delta)"></span>
+    <div x-bind="panel" x-cloak>
+      <div class="page-revisions-list">
+  
+        <!-- Angeheftet: unabhaengig vom geladenen Fenster, ohne Filter. -->
+        <template x-if="pinnedRevs.length > 0">
+          <div class="page-revisions-section">
+            <div class="page-revisions-section__head" x-text="$app.t('editor.revisions.pinnedHead')"></div>
+            <template x-for="row in pinnedRows()" :key="row.k">
+              <!-- @include page-revisions-row -->
             </template>
           </div>
-          <template x-for="row in day.rows" :key="row.k">
-            <!-- @include page-revisions-row -->
-          </template>
-        </section>
-      </template>
-
-      <!-- Nachladen. Die Liste ist ein Fenster (Default 100 juengste), nicht die
-           ganze Historie: das `raw`-Bucket der Retention haelt jeden Autosave der
-           letzten 24 h, ein Schreibtag fuellt das Fenster also allein. Ohne diesen
-           Knopf bleibt die getierte Historie (Tage/Wochen/Monate/Jahre) dahinter
-           unerreichbar. Reihenfolge Hinweis-vor-Knopf ist Absicht: .btn-toggle-saved
-           traegt in dieser Liste `margin-left: auto`. -->
-      <div class="history-item" x-show="hasMore" x-cloak>
-        <span class="tag"
-              x-text="$app.t('editor.revisions.windowHint', { shown: revisions.length, total: total })"></span>
-        <button type="button"
-                class="btn-toggle-saved btn-toggle-saved--off"
-                @click="loadMore()"
-                :disabled="loadingMore"
-                :data-tip="$app.t('editor.revisions.loadMoreTitle')"
-                x-text="loadingMore ? $app.t('editor.revisions.loadingMore') : $app.t('editor.revisions.loadMore')"></button>
+        </template>
+  
+        <!-- Geschichte nach Kalendertag (App-Zeitzone); Tageskopf mit dem
+             Zeichen-Delta des Tages (gefiltert: der angezeigten Sitzungen),
+             Zeilen zeigen nur die Uhrzeit. -->
+        <template x-for="day in listDays()" :key="day.key">
+          <section class="page-revisions-day">
+            <div class="page-revisions-day__head">
+              <span class="page-revisions-day__label" x-text="dayLabel(day)"></span>
+              <span class="page-revisions-day__date" x-show="dayHasRelative(day)" x-text="dayDate(day)"></span>
+              <template x-if="day.delta !== null">
+                <span class="tag revision-delta"
+                      :class="deltaClass(day.delta)"
+                      :data-tip="dayDeltaTip()"
+                      x-text="formatDelta(day.delta)"></span>
+              </template>
+            </div>
+            <template x-for="row in day.rows" :key="row.k">
+              <!-- @include page-revisions-row -->
+            </template>
+          </section>
+        </template>
+  
+        <!-- Nachladen. Die Liste ist ein Fenster (Default 100 juengste), nicht die
+             ganze Historie: das `raw`-Bucket der Retention haelt jeden Autosave der
+             letzten 24 h, ein Schreibtag fuellt das Fenster also allein. Ohne diesen
+             Knopf bleibt die getierte Historie (Tage/Wochen/Monate/Jahre) dahinter
+             unerreichbar. Reihenfolge Hinweis-vor-Knopf ist Absicht: .btn-toggle-saved
+             traegt in dieser Liste `margin-left: auto`. -->
+        <div class="history-item" x-show="hasMore" x-cloak>
+          <span class="tag"
+                x-text="$app.t('editor.revisions.windowHint', { shown: revisions.length, total: total })"></span>
+          <button type="button"
+                  class="btn-toggle-saved btn-toggle-saved--off"
+                  @click="loadMore()"
+                  :disabled="loadingMore"
+                  :data-tip="$app.t('editor.revisions.loadMoreTitle')"
+                  x-text="loadingMore ? $app.t('editor.revisions.loadingMore') : $app.t('editor.revisions.loadMore')"></button>
+        </div>
       </div>
     </div>
   </div>

@@ -210,3 +210,26 @@ test('buildOutlineNodes: Ein-Abschnitt-Kapitel ist single, Mehr-Abschnitt-Kapite
   ]));
   assert.deepEqual(nodes.map(n => [n.chapterId, n.single]), [[10, true], [20, false]]);
 });
+
+test('buildBlocksFromPages + Outline: Teil ohne eigenen Abschnitt bekommt Header, Unterkapitel echte Tiefe', async () => {
+  const { buildOutlineNodes } = await import('../../public/js/cards/book-editor/outline.js');
+  const chapters = [
+    { id: 1, name: 'Teil I', parentId: null },
+    { id: 2, name: 'Kapitel 1', parentId: 1 },
+    { id: 3, name: 'Kapitel 2', parentId: 1 },
+  ];
+  const blocks = buildBlocksFromPages([
+    { pageId: 1, pageName: 'A', chapterId: 2, chapterName: 'Kapitel 1', html: '' },
+    { pageId: 2, pageName: 'B', chapterId: 3, chapterName: 'Kapitel 2', html: '' },
+  ], chapters);
+  assert.deepEqual(blocks.map(b => [b.kind, b.name, b.depth]), [
+    ['chapter', 'Teil I', 0], ['chapter', 'Kapitel 1', 1], ['page', 'A', undefined],
+    ['chapter', 'Kapitel 2', 1], ['page', 'B', undefined],
+  ]);
+  const nodes = buildOutlineNodes(blocks);
+  assert.deepEqual(nodes.map(n => [n.name, n.depth, n.ancestors, n.count, n.single]), [
+    ['Teil I', 0, [], 2, false],
+    ['Kapitel 1', 1, [1], 1, true],
+    ['Kapitel 2', 1, [1], 1, true],
+  ]);
+});

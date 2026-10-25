@@ -187,19 +187,102 @@ test('_rebuildSoloEntries + _reorderNavTree halten Solo-Items vor den Kapiteln',
   assert.deepEqual(treeIds(), ['solo-900', 'solo-920', 1, 11, 2]);
 });
 
-test('_buildTreeFromWorkstate serialisiert Solo-Seiten zuerst, dann nested', () => {
+test('_buildTreeFromWorkstate: Solo-Seiten zuerst, im Kapitel Abschnitte vor Unterkapiteln', () => {
   seedNav();
   const card = makeCard();
   card._snapshotFromNav();
+  // Kanonische Reihenfolge des Servers (db/book-order.js) = Anzeige in Sidebar
+  // und Organizer: eigene Abschnitte eines Kapitels VOR seinen Unterkapiteln.
   assert.deepEqual(card._buildTreeFromWorkstate(), [
     { type: 'page', id: 900 },
     { type: 'chapter', id: 1, children: [
-      { type: 'chapter', id: 11, children: [{ type: 'page', id: 911 }] },
       { type: 'page', id: 901 },
       { type: 'page', id: 902 },
+      { type: 'chapter', id: 11, children: [{ type: 'page', id: 911 }] },
     ] },
     { type: 'chapter', id: 2, children: [{ type: 'page', id: 920 }] },
   ]);
+});
+
+test('_buildTreeFromWorkstate laesst offline angelegte Abschnitte (temporaere ID) weg', () => {
+  seedNav();
+  const card = makeCard();
+  card._snapshotFromNav();
+  card.soloPages.push({ id: -5, name: 'Offline', chapter_id: 0 });
+  card.workTree[0].pages.push({ id: -6, name: 'Offline2', chapter_id: 1 });
+  const ids = JSON.stringify(card._buildTreeFromWorkstate());
+  assert.ok(!ids.includes('-5') && !ids.includes('-6'));
+});
+
+test('_saveOrder schickt den Strukturstand mit und uebernimmt den neuen', async () => {
+  const orig = contentRepo.saveOrder;
+  const calls = [];
+  contentRepo.saveOrder = async (bookId, tree, opts) => { calls.push(opts); return { updated_at: 'V2' }; };
+  let noted = null;
+  rootStub._structureVersionForWrite = async () => 'V1';
+  rootStub._noteStructureVersion = (v) => { noted = v; };
+  try {
+    await makeCard()._saveOrder(7, []);
+    assert.deepEqual(calls, [{ expectedUpdatedAt: 'V1' }]);
+    assert.equal(noted, 'V2');
+  } finally {
+    contentRepo.saveOrder = orig;
+    delete rootStub._structureVersionForWrite;
+    delete rootStub._noteStructureVersion;
+  }
+});
+
+test('ORDER_CONFLICT: Hinweis, History leer, frischer Reload statt Ueberschreiben', async () => {
+  seedNav();
+  const card = makeCard();
+  card._snapshotFromNav();
+  card._undoStack.push({ kind: 'rename-page', id: 901, oldName: 'a', newName: 'b' });
+  const orig = contentRepo.saveOrder;
+  contentRepo.saveOrder = async () => { const e = new Error('409'); e.status = 409; e.code = 'ORDER_CONFLICT'; throw e; };
+  const status = [];
+  const loads = [];
+  rootStub.setStatus = (m) => status.push(m);
+  rootStub.loadPages = async (opts) => { loads.push(opts); };
+  try {
+    const ok = await card._persistOrder({ mirror: 'chapters' });
+    assert.equal(ok, false);
+    assert.deepEqual(status, ['bookOrganizer.orderConflict']);
+    assert.deepEqual(loads, [{ fresh: true }]);
+    assert.equal(card._undoStack.length, 0);
+  } finally {
+    contentRepo.saveOrder = orig;
+    rootStub.setStatus = () => {};
+    delete rootStub.loadPages;
+  }
+});
+
+test('Mirror: kapitellose Abschnitte tragen chapter_id null, Umhaengen klappt die Eltern-Kette auf', () => {
+  seedNav();
+  const card = makeCard();
+  card._snapshotFromNav();
+  card._mirrorPageMembershipInRoot(null);
+  assert.equal(navStore.pages.find(p => p.id === 900).chapter_id, null);
+  // Kapitel 2 unter das zugeklappte Kapitel 1 demoten.
+  navStore.tree.find(it => it.id === 1).open = false;
+  let persisted = 0;
+  rootStub._persistTreeOpenState = () => { persisted++; };
+  try {
+    const two = card.workTree.splice(1, 1)[0];
+    two.parent_id = 1;
+    card._setSubtreeDepth(two, 2);
+    card.workTree[0].subchapters.push(two);
+    card._mirrorChapterOrderInRoot();
+    assert.equal(navStore.tree.find(it => it.id === 1).open, true);
+    assert.equal(persisted, 1);
+  } finally { delete rootStub._persistTreeOpenState; }
+});
+
+test('chapterPageTotal zaehlt den ganzen Unterbaum (wie das Sidebar-Tag)', () => {
+  seedNav();
+  const card = makeCard();
+  card._snapshotFromNav();
+  assert.equal(card.chapterPageTotal(card.workTree[0]), 3);
+  assert.equal(card.chapterPageTotal(card.workTree[1]), 1);
 });
 
 test('_findChapter liefert Geschwister-Liste + Index auf jeder Tiefe', () => {

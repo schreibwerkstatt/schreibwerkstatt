@@ -167,6 +167,7 @@ export function registerPaletteCard() {
         bookRole: root.currentBookRole || null,
         buchtyp: (typeof root.currentBuchtyp === 'function' ? root.currentBuchtyp() : null) || null,
         cloudModelEffective: (Alpine.store('config')?.effectiveProviderClass || 'cloud') === 'cloud',
+        config: { languagetoolEnabled: !!Alpine.store('config')?.languagetoolEnabled },
       };
     },
 
@@ -186,8 +187,9 @@ export function registerPaletteCard() {
       const deps = [
         this.paletteQuery,
         ctx.selectedBookId, ctx.bookRole, ctx.buchtyp, ctx.cloudModelEffective,
+        ctx.config.languagetoolEnabled,
         nav.pages, (nav.pages || []).length,
-        nav.tree, (nav.tree || []).length,
+        nav.tree, (nav.tree || []).length, root._chapterLabelMap,
         nav.werkstattDrafts,
         catalog.figuren, catalog.orte, catalog.szenen, catalog.globalZeitstrahl,
         root.recentFeatureKeys, root.recentPageIds,

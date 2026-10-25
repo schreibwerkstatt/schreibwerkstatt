@@ -9,6 +9,7 @@ import * as geometry from './pdf-export-geometry.js';
 import { buildRenderWarnings } from './pdf-export-warnings.js';
 import { HYPHEN_BROKEN_FAMILIES } from './pdf-export-templates.js';
 import * as presets from './pdf-export-presets.js';
+import { takeCardRequest, CARD_REQUEST } from './card-request.js';
 
 const UI_MODE_PREF = 'pdfExport.uiMode';
 // Tabs, die nur der Experten-Modus zeigt: Fussnotenapparat/Tabellensatz und
@@ -46,6 +47,14 @@ export function pdfExportUiSlice() {
     },
     tabVisible(tab) {
       return this.uiMode === 'expert' || !EXPERT_ONLY_TABS.includes(tab);
+    },
+    // Sprung auf einen Reiter (Command-Palette). Ein Experten-Reiter schaltet
+    // nur für diese Sitzung in den Experten-Modus; die gemerkte Wahl bleibt.
+    _applyPendingTab() {
+      const tab = takeCardRequest(CARD_REQUEST.PDF_EXPORT_TAB);
+      if (!tab) return;
+      if (EXPERT_ONLY_TABS.includes(tab)) this.uiMode = 'expert';
+      this.activeTab = tab;
     },
 
     // ── Ungespeicherte Änderungen ─────────────────────────────────────────

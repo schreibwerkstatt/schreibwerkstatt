@@ -125,6 +125,15 @@ export const viewMethods = {
   },
 
   // Maximale Tiefe im Subtree (1 = nur dieses Kapitel, keine Subs).
+  // Abschnitte im ganzen Unterbaum — dieselbe Zaehlung wie das Kapitel-Tag der
+  // Sidebar (tree/stats.js#_chapterPageCount). Bei aktiver Suche ist `ch` die
+  // gefilterte Kopie: dann die Treffer im Unterbaum, wie dort.
+  chapterPageTotal(ch) {
+    let n = ch?.pages?.length || 0;
+    for (const sub of ch?.subchapters || []) n += this.chapterPageTotal(sub);
+    return n;
+  },
+
   _subtreeDepth(ch) {
     if (!ch.subchapters?.length) return 1;
     return 1 + Math.max(...ch.subchapters.map(s => this._subtreeDepth(s)));

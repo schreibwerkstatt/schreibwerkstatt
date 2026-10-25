@@ -129,3 +129,22 @@ test('Share-Reader: Alt-Bestand mit aktivem Markup wird beim Ausliefern entschae
   assert.doesNotMatch(r.body, /onclick/, 'kein Event-Handler-Attribut in der Antwort');
   assert.doesNotMatch(r.body, /javascript:/, 'keine Script-URL in der Antwort');
 });
+
+// ── Kapitel-Share = ganzer Teilbaum ──────────────────────────────────────────
+// Ein «Teil» ohne eigenen Abschnitt, dessen Text in Unterkapiteln steht, ist
+// kein leeres Kapitel: der Share zeigt die Unterkapitel mit Ueberschrift.
+test('Kapitel-Share: Teil ohne eigenen Abschnitt zeigt Unterkapitel samt Text', async () => {
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO chapters (chapter_id, book_id, chapter_name, position, updated_at)
+              VALUES (7102, ?, 'Teil Zwei', 1, ?)`).run(BOOK_ID, now);
+  db.prepare(`INSERT INTO chapters (chapter_id, book_id, chapter_name, position, parent_chapter_id, updated_at)
+              VALUES (7103, ?, 'Unterkapitel Drei', 2, 7102, ?)`).run(BOOK_ID, now);
+  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, chapter_id, position, updated_at, body_html)
+              VALUES (7204, ?, 'Tiefe Seite', 7103, 0, ?, '<p>TEXT_IM_UNTERKAPITEL</p>')`).run(BOOK_ID, now);
+  const link = sl.createShareLink({ kind: 'chapter', chapterId: 7102, bookId: BOOK_ID, ownerEmail: OWNER, showToc: true });
+  const res = await get(`/share/${link.token}`);
+  assert.equal(res.status, 200);
+  assert.match(res.body, /TEXT_IM_UNTERKAPITEL/, 'Text des Unterkapitels gehoert zum Kapitel-Share');
+  assert.match(res.body, /class="ms-chapter">Unterkapitel Drei</, 'Unterkapitel traegt seine Ueberschrift (oberste Ebene des Shares)');
+  assert.doesNotMatch(res.body, /URSPRUNG_ALPHA|EDITIERT_ALPHA/, 'fremdes Kapitel bleibt draussen');
+});

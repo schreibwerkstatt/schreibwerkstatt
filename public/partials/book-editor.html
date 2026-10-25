@@ -81,7 +81,7 @@
              Solos haben chapterId null und sind damit nie eingeklappt; ein
              Ein-Abschnitt-Kapitel (node.single) erscheint als EINE Zeile. -->
         <template x-for="node in outlineNodes" :key="node.kind === 'chapter' ? ('c-' + node.chapterId) : ('s-' + (node.pages?.[0]?.pageId || 0))">
-          <div class="book-editor-outline-group">
+          <div class="book-editor-outline-group" :class="'book-editor-outline-group--d' + (node.depth || 0)" x-show="!(node.ancestors || []).some(id => collapsedChapters[id])">
 
             <template x-if="node.kind === 'chapter' && !node.single">
               <button type="button"
@@ -90,7 +90,7 @@
                       @click="toggleChapterCollapse(node.chapterId)">
                 <span class="history-chevron" :class="{ open: !collapsedChapters[node.chapterId] }" aria-hidden="true"></span>
                 <span class="book-editor-outline-chapter-name" x-text="node.name"></span>
-                <span class="book-editor-outline-count" x-text="node.pages.length"></span>
+                <span class="book-editor-outline-count" x-text="node.count"></span>
               </button>
             </template>
 
@@ -124,7 +124,7 @@
       <div class="book-editor-row">
 
         <template x-if="block.kind === 'chapter'">
-          <div class="book-editor-chapter-header">
+          <div class="book-editor-chapter-header" :class="'book-editor-chapter-header--d' + (block.depth || 0)">
             <span class="book-editor-chapter-name edit-status-meter" :class="$app.editStatusClass($app.chapterEditStatus(($store.nav.tree || []).find(i => i.type === 'chapter' && i.id === block.chapterId)))" x-text="block.name"></span>
             <span x-show="$store.badges.chapterIdeenCounts[block.chapterId] > 0" class="ideen-count-badge internal-link"
                   @click.stop="$app.openIdeenForChapter(block.chapterId)" x-text="$store.badges.chapterIdeenCounts[block.chapterId]"

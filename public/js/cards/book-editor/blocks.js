@@ -12,14 +12,16 @@ import { contentRepo } from '../../repo/content.js';
 // wrappt jeden Page-Entry mit dem Editor-State (dirty/saving/_rev/originalHtml).
 // stripFocusArtefacts bleibt hier (browser-only) statt im pure Modell.
 // originalUpdatedAt kommt aus der Quell-Page (das Modell trägt kein updated_at).
-export function buildBlocksFromPages(pages) {
+// `chapters` = Top-Level-Feld `chapters` der Antwort ([{ id, name, parentId }]):
+// Elternkette für Header von Kapiteln ohne eigenen Abschnitt + echte Tiefe.
+export function buildBlocksFromPages(pages, chapters = null) {
   const byId = new Map();
   for (const p of (pages || [])) byId.set(p.pageId, p);
   // `dupTitle`: erster Abschnitt, der wie sein Kapitel heisst — der Kopf zeigt
   // dann keinen zweiten Namen (Regel wie Share-Reader/PDF, structure-title.js).
   let pendingChapter = null;
-  return fromPages(pages).map((e) => {
-    if (e.kind === 'chapter') { pendingChapter = e; return { kind: 'chapter', chapterId: e.chapterId, name: e.name }; }
+  return fromPages(pages, { chapters }).map((e) => {
+    if (e.kind === 'chapter') { pendingChapter = e; return { kind: 'chapter', chapterId: e.chapterId, name: e.name, depth: e.depth }; }
     const src = byId.get(e.id) || {};
     const html = stripFocusArtefacts(e.html || '');
     const dupTitle = !!pendingChapter && pendingChapter.chapterId === e.chapterId && sameStructureTitle(e.name, pendingChapter.name);
@@ -65,6 +67,18 @@ export function pageMetasFromTree(tree) {
   return [...solos, ...inChapters];
 }
 
+// Kapitel-Liste wie das `chapters`-Feld der Server-Antwort ([{ id, name, parentId }]).
+export function chaptersFromTree(tree) {
+  const out = [];
+  (function walk(chapters, parentId) {
+    for (const c of (chapters || [])) {
+      out.push({ id: c.id, name: c.name, parentId });
+      walk(c.subchapters, c.id);
+    }
+  })(tree?.chapters, null);
+  return out;
+}
+
 // Kein Netz (Netzfehler, Timeout, SW-503 `offline`) — Regel in utils/net.js.
 // Jede andere Ausnahme ist ein echter Fehler und wird angezeigt, nicht als
 // „offline · lokal gesichert" endlos wiederholt.
@@ -94,7 +108,8 @@ function _newerPage(a, b) {
 // Abschnitt gewinnt der jüngere, und was nur dort liegt, füllt Lücken.
 export async function loadContentsFromCache(bookId, extra = null) {
   const extraById = new Map((extra?.pages || []).map((p) => [Number(p.pageId), p]));
-  const metas = pageMetasFromTree(await contentRepo.bookTree(bookId));
+  const tree = await contentRepo.bookTree(bookId);
+  const metas = pageMetasFromTree(tree);
   const pages = new Array(metas.length).fill(null);
   let next = 0;
   async function worker() {
@@ -112,7 +127,7 @@ export async function loadContentsFromCache(bookId, extra = null) {
   }
   await Promise.all(Array.from({ length: Math.min(CACHE_READ_CONCURRENCY, metas.length) }, worker));
   const ok = pages.filter(Boolean);
-  return { bookId, pages: ok, missing: metas.length - ok.length };
+  return { bookId, chapters: chaptersFromTree(tree), pages: ok, missing: metas.length - ok.length };
 }
 
 async function _fetchContents(bookId) {

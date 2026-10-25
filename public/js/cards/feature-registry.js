@@ -40,6 +40,8 @@
 //
 // Aktionen (`kind: 'action'`): einmalige Befehle (Theme wechseln, Logout …).
 //   `run(root)` – wird mit Root als Argument aufgerufen.
+//   `searchOnly` – erscheint nur mit Query (bzw. im `>`-Modus), nicht in der leeren Palette.
+//   `requiresConfig` – Name eines `$store.config`-Flags; ohne es fehlt die Aktion.
 //
 // `aliases` (optional): zusätzliche Suchbegriffe (Synonyme, EN-Übersetzungen).
 
@@ -178,6 +180,15 @@ export const FEATURES = [
     aliases: ['onboarding','erste-schritte','einstieg','start','getting-started','tour','checkliste','beispielbuch','demo','einfuehrung','walkthrough'] },
 ];
 
+// Karte öffnen und ihr einen Wunsch mitgeben (Reiter, Abschnitt) — Mechanik
+// in card-request.js, dynamisch geladen, damit die Registry importfrei bleibt.
+async function _openCardWith(requestKey, value, flag, toggle, toggleOpts) {
+  const app = window.__app;
+  if (!app) return;
+  const { openCardWith, CARD_REQUEST } = await import('./card-request.js');
+  await openCardWith(CARD_REQUEST[requestKey], value, () => (app[flag] ? null : app[toggle]?.(toggleOpts)));
+}
+
 // Globale Aktionen (kind:'action'). Eigene Sektion in der Palette.
 // `run(root)` wird mit dem Root-Alpine-Proxy als Argument aufgerufen.
 export const ACTIONS = [
@@ -207,6 +218,75 @@ export const ACTIONS = [
   { key: 'action.autorenprofil',  kind: 'action', group: 'app', labelKey: 'autorenprofil.title',      descKey: 'autorenprofil.desc',
     aliases: ['autorenprofil','autor','stil','stilentwicklung','entwicklung','schreibstil','stimme','voice','style','author'],
     run: (root) => { root.toggleAutorenprofilCard(); } },
+  { key: 'action.expose',         kind: 'action', group: 'app', labelKey: 'palette.action.expose',    descKey: 'palette.action.expose.desc',
+    // Liste = EXPOSE_HIDDEN_BUCHTYPEN (prompts/expose.js); die Registry bleibt
+    // importfrei, Gleichheit gegated durch tests/unit/expose-prompt.test.mjs.
+    requiresBook: true, minRole: 'editor', hiddenForBuchtyp: ['lyrik', 'tagebuch', 'journalismus'],
+    aliases: ['exposé','expose','synopse','synopsis','klappentext','blurb','logline','pitch','agentur','verlag','bewerbung'],
+    run: async () => { (await import('../book/book-settings/open-tab.js')).openBookSettingsTab('expose'); } },
+  // Direktsprung auf einen Reiter der Bucheinstellungen. Der Exposé-Reiter hat
+  // mit `action.expose` schon seinen Eintrag; `sync` gibt es nur bei Blogs
+  // (bookSettingsIsBlog im Partial). `searchOnly`: erscheinen erst mit Query,
+  // die leere Palette listet sie nicht.
+  ...[
+    ['book',        ['buch','titel','title','sprache','language','buchtyp']],
+    ['context',     ['kontext','stil','style','ziele','goals','zitierstil']],
+    ['sources',     ['quellen','literatur','bibliography','zitieren']],
+    ['share',       ['teilen','share','link','freigabe','leser','reader']],
+    ['publication', ['publikation','veröffentlichung','publish','klappentext','blurb','isbn','verlag','publisher','cover','vita','autorname']],
+    ['series',      ['reihe','serie','band','volume']],
+    ['sync',        ['wordpress','hubspot','blog','sync'], { requiresBuchtyp: 'blog' }],
+    ['stats',       ['statistik','stats','zeichen','wörter','words']],
+    ['danger',      ['gefahrenzone','löschen','loeschen','delete','danger']],
+  ].map(([tab, aliases, extra]) => ({
+    key: 'action.bookSettings.' + tab, kind: 'action', group: 'app',
+    labelKey: 'palette.action.bookSettingsTab.' + tab, descKey: 'palette.action.bookSettingsTab.desc',
+    requiresBook: true, minRole: 'editor', searchOnly: true, ...extra,
+    aliases: ['bucheinstellungen','einstellungen','settings', ...aliases],
+    run: async () => { (await import('../book/book-settings/open-tab.js')).openBookSettingsTab(tab); },
+  })),
+  // Direktsprung auf einen Reiter des PDF-Exports. `apparat`/`cover` sind
+  // Experten-Reiter; der Sprung schaltet dafür in den Experten-Modus
+  // (pdf-export-ui.js#_applyPendingTab).
+  ...[
+    ['layout',      ['format','papier','paper','satzspiegel','ränder','margins','trim','beschnitt']],
+    ['font',        ['schrift','font','typografie','typography','schriftgrösse','zeilenabstand']],
+    ['chapter',     ['kapitel','chapter','überschrift','heading','initiale']],
+    ['pagination',  ['seitenzahl','seitenzahlen','page numbers','kopfzeile','header','kolumnentitel','paginierung']],
+    ['frontmatter', ['titelei','inhaltsverzeichnis','toc','contents','impressum','widmung']],
+    ['apparat',     ['fussnoten','footnotes','endnoten','apparat','tabellen','notes']],
+    ['cover',       ['cover','umschlag','buchrücken','spine','rückseite']],
+    ['print',       ['druck','print','pdf/x','pdfa','beschnittzugabe','bleed','auflösung']],
+  ].map(([tab, aliases]) => ({
+    key: 'action.pdfExport.' + tab, kind: 'action', group: 'app',
+    labelKey: 'palette.action.pdfExportTab.' + tab, descKey: 'palette.action.pdfExportTab.desc',
+    requiresBook: true, minRole: 'viewer', hiddenForBuchtyp: ['journalismus'], searchOnly: true,
+    aliases: ['pdf','export', ...aliases],
+    run: () => _openCardWith('PDF_EXPORT_TAB', tab, 'showPdfExportCard', 'togglePdfExportCard'),
+  })),
+  // Direktsprung auf einen Abschnitt der Benutzereinstellungen: klappt ihn auf
+  // und scrollt hin (user-settings-card.js#_applySectionRequest). Der Karten-
+  // Scroll entfällt, sonst liefen zwei Animationen gegeneinander.
+  // `requiresConfig`: nur, wenn der Dienst dahinter läuft.
+  ...[
+    ['aiAccess', ['ki','ai','api','api-key','schlüssel','key','claude','openai','zugang']],
+    ['devices',  ['geräte','devices','token','mac','client']],
+    ['clients',  ['app','apps','macos','android','erweiterung','extension','chrome','download']],
+    ['dict',     ['wörterbuch','dictionary','rechtschreibung','spellcheck','languagetool'], { requiresConfig: 'languagetoolEnabled' }],
+    ['ltRules',  ['regeln','rules','rechtschreibung','spellcheck','languagetool','ausgeschaltet'], { requiresConfig: 'languagetoolEnabled' }],
+  ].map(([section, aliases, extra]) => ({
+    key: 'action.userSettings.' + section, kind: 'action', group: 'app',
+    labelKey: 'palette.action.userSettingsSection.' + section, descKey: 'palette.action.userSettingsSection.desc',
+    searchOnly: true, ...extra,
+    aliases: ['profil','profile','einstellungen','settings', ...aliases],
+    run: () => _openCardWith('USER_SETTINGS_SECTION', section, 'showUserSettingsCard', 'toggleUserSettingsCard', { skipCardScroll: true }),
+  })),
+  { key: 'action.changelog',      kind: 'action', group: 'app', labelKey: 'palette.action.changelog', descKey: 'palette.action.changelog.desc',
+    aliases: ['changelog','neu','neuigkeiten','news','what\'s new','version','release','updates'],
+    run: (root) => {
+      root.$store.shell.helpTabRequest = 'changelog';
+      if (!root.showHelpCard) root.toggleHelpCard();
+    } },
   { key: 'action.closeAll',       kind: 'action', group: 'app', labelKey: 'palette.action.closeAll',  descKey: 'palette.action.closeAll.desc',
     aliases: ['esc','dismiss','reset','schliessen'],
     run: (root) => { root._closeOtherMainCards(null); root._maybeOpenBookOverview({ restoreLastPage: false }); } },

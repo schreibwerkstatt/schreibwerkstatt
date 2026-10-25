@@ -20,6 +20,7 @@ const { guardBook, aclParamGuard, sessionEmail } = require('../../lib/acl');
 const { localIsoDaysAgo } = require('../../lib/local-date');
 const { createOwnedBook, bookNameError, BOOK_NAME_MAX } = require('../../lib/book-create');
 const { listBookListMeta } = require('../../db/book-list-meta');
+const { emitBookChange } = require('../../lib/book-events');
 const logger = require('../../logger');
 const { jsonBody, _validDeviceId, _fail, REVALIDATE_CACHE_CONTROL } = require('./shared');
 
@@ -86,7 +87,10 @@ function register(router) {
   router.get('/books/:book_id/tree', aclParamGuard('viewer'), async (req, res) => {
     try {
       res.set('Cache-Control', REVALIDATE_CACHE_CONTROL); // siehe shared.js#REVALIDATE_CACHE_CONTROL
-      res.json(await contentStore.bookTree(req.bookId, req));
+      const tree = await contentStore.bookTree(req.bookId, req);
+      // Strukturversion (book_order.updated_at): Basis fuer `expected_updated_at`
+      // beim Umsortieren und Vergleichswert zu `structure_at` in /changes.
+      res.json({ ...tree, order_updated_at: bookOrder.getOrder(req.bookId)?.updated_at ?? null });
     } catch (e) { _fail(res, e, 'GET /content/books/:id/tree'); }
   });
 
@@ -115,6 +119,9 @@ function register(router) {
 
     res.json({
       now: nowIso,
+      // Strukturversion: weicht sie vom `order_updated_at` des geladenen Baums
+      // ab, hat jemand Kapitel angelegt/umbenannt/geloescht oder umsortiert.
+      structure_at: bookOrder.getOrder(req.bookId)?.updated_at ?? null,
       changes: merged.map(r => ({
         kind: r.kind,
         page_id: r.page_id,
@@ -200,7 +207,8 @@ function register(router) {
   });
 
   // PUT /content/books/:book_id/order — Vollstaendigen Tree speichern. Body:
-  // `{ order_json: [...] }`. Server validiert (Schema + Vollstaendigkeit +
+  // `{ order_json: [...], expected_updated_at?, device_id? }` — mit Stempel und
+  // fremder Aenderung seitdem → 409 ORDER_CONFLICT (kein stilles Ueberschreiben). Server validiert (Schema + Vollstaendigkeit +
   // Doppel-IDs) und materialisiert chapters.position/pages.position/
   // pages.chapter_id in einer Transaction.
   router.put('/books/:book_id/order', aclParamGuard('editor'), jsonBody, (req, res) => {
@@ -208,10 +216,15 @@ function register(router) {
     if (!Array.isArray(tree)) {
       return res.status(400).json({ error_code: 'INVALID_BODY', detail: 'order_json must be array' });
     }
+    const expected = typeof req.body?.expected_updated_at === 'string' ? req.body.expected_updated_at : null;
     try {
-      const saved = bookOrder.putOrder(req.bookId, tree, sessionEmail(req));
+      const saved = bookOrder.putOrder(req.bookId, tree, sessionEmail(req), { expectedUpdatedAt: expected });
+      emitBookChange(req.bookId, sessionEmail(req), _validDeviceId(req.body?.device_id) ? req.body.device_id : null);
       res.json(saved);
     } catch (e) {
+      if (e instanceof bookOrder.OrderConflictError) {
+        return res.status(409).json({ error_code: 'ORDER_CONFLICT', updated_at: e.updatedAt });
+      }
       if (e instanceof bookOrder.TreeValidationError) {
         return res.status(400).json({ error_code: 'INVALID_TREE', reason: e.code, detail: e.detail });
       }

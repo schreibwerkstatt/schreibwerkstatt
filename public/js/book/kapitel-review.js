@@ -1,6 +1,9 @@
 // Root-seitige Einstiegspunkte für die Kapitel-Bewertung (Sidebar + Hash-Router).
 // Job-Flow, Render, State + History leben in Alpine.data('kapitelReviewCard').
 
+// Stabiler Leerwert fuer den Memo-Schluessel (ein frisches `{}` je Aufruf brach ihn).
+const NO_STATS = Object.freeze({});
+
 export const kapitelReviewMethods = {
   async toggleKapitelReviewCard() {
     if (this.showKapitelReviewCard) {
@@ -68,17 +71,26 @@ export const kapitelReviewMethods = {
   // invalidiert. Deps sind bewusst nur O(1)-Groessen (sonst kostet der
   // Cache-Schluessel genau den Durchlauf, den er spart): Baum-Referenz +
   // Kapitelzahl decken Anlegen/Loeschen/Neuladen ab, die Referenz der flachen
-  // Seitenliste plus ihre Laenge das Anlegen/Loeschen/Verschieben von Seiten
-  // (der Buchorganizer weist `nav.pages` beim Spiegeln neu zu).
+  // Seitenliste plus ihre Laenge das Anlegen/Loeschen/Verschieben von Seiten,
+  // die Baum-Revision (tree/build.js#_bumpTreeRev) die In-Place-Umbauten
+  // (hasChildren, Verschachtelung), `tokEsts` den Text.
+  //
+  // Massgeblich ist ein Abschnitt MIT Text in irgendeinem Kapitel (Unterkapitel
+  // sind selbst Kapitel-Items im flachen Baum) — ein Teil, dessen ganzer
+  // Unterbaum leer ist, hat nichts zu bewerten. Unbekannter Umfang (Stats laden
+  // noch) zaehlt als Text, sonst flackerte der Zugang bei jedem Buchwechsel.
   _bookQualifiesForChapterReview() {
     const tree = this.$store.nav.tree || [];
     const pages = this.$store.nav.pages || [];
+    const ts = this.tokEsts || NO_STATS;
+    const rev = this._treeRev;
     const memo = this._chapterReviewEligibleMemo;
-    if (memo && memo.tree === tree && memo.treeLen === tree.length
-        && memo.pages === pages && memo.pagesLen === pages.length) return memo.val;
-    const val = tree.some(i => i.type === 'chapter' && !i.solo && (i.pages.length > 0 || i.hasChildren));
+    if (memo && memo.tree === tree && memo.treeLen === tree.length && memo.rev === rev
+        && memo.pages === pages && memo.pagesLen === pages.length && memo.ts === ts) return memo.val;
+    const hasText = (p) => { const e = ts[p.id]; return !e || e.chars > 0; };
+    const val = tree.some(i => i.type === 'chapter' && !i.solo && (i.pages || []).some(hasText));
     this._chapterReviewEligibleMemo = {
-      tree, treeLen: tree.length, pages, pagesLen: pages.length, val,
+      tree, treeLen: tree.length, rev, pages, pagesLen: pages.length, ts, val,
     };
     return val;
   },

@@ -21,7 +21,7 @@ const {
   READER_NAME_MAX, READER_EMAIL_MAX, BODY_MAX, ANCHOR_QUOTE_MAX,
   ANCHOR_BID_RE, READER_TOKEN_RE, READER_EMAIL_RE, TOKEN_RE,
   serializeCommentForReader, escHtml, detectLang, isExpired,
-  fillTemplate, paragraphifyIntro, backfillScopeBlockIds, loadContentForLink,
+  fillTemplate, paragraphifyIntro, backfillScopeBlockIds, loadContentForLink, chapterShareIds,
   buildTocBlock, renderGone, htmlToPlainLength, renderContentDiagrams, editStatusText,
 } = H;
 
@@ -33,8 +33,8 @@ function register(router) {
   // ── Public: Manuskript-Bild eines geteilten Inhalts ────────────────────────
   // Token-gebundener Bild-Stream (der Reader laeuft ohne Session; /content/* ist
   // auth-geschuetzt). Scope-Check: das Bild muss zu einer Seite im Link-Scope
-  // gehoeren (page → gleiche Seite, chapter → gleiches Kapitel, book → gleiches Buch).
-  router.get('/:token/page-image/:id', (req, res) => {
+  // gehoeren (page → gleiche Seite, chapter → Kapitel-Teilbaum, book → gleiches Buch).
+  router.get('/:token/page-image/:id', async (req, res) => {
     const token = String(req.params.token || '');
     if (!TOKEN_RE.test(token)) return res.status(404).type('html').send('Not found');
     const id = parseInt(req.params.id, 10);
@@ -50,7 +50,7 @@ function register(router) {
     // Scope: Bild nur ausliefern, wenn seine Seite im geteilten Bereich liegt.
     const inScope =
       link.kind === 'page'    ? row.page_id === link.page_id
-      : link.kind === 'chapter' ? (row.book_id === link.book_id && row.chapter_id === link.chapter_id)
+      : link.kind === 'chapter' ? (row.book_id === link.book_id && (await chapterShareIds(link.book_id, link.chapter_id)).has(row.chapter_id))
       : link.kind === 'book'    ? row.book_id === link.book_id
       : false;
     if (!inScope) return res.status(404).type('html').send('Not found');
@@ -113,9 +113,9 @@ function register(router) {
     // Lesetiefe-Zuordnung fuer den Reader: pro Kapitel der Anker seiner Ueberschrift
     // (Buch-Shares). read-depth.js nutzt aufeinanderfolgende Kapitel-Anker als
     // Grenzen → Ø-Lesetiefe pro Kapitel (chapter_id = echter FK). Kapitel-Shares
-    // haben keine Kapitel-Ueberschrift (omitChapterHeaders) → nur Gesamt-Tiefe.
+    // zeigen ihre eigene Ueberschrift nicht (omitChapterId) → nur Gesamt-Tiefe.
     const readDepthChapters = (content.toc || [])
-      .filter(e => e.level === 1 && e.chapterId)
+      .filter(e => link.kind === 'book' && e.level === 1 && e.chapterId)
       .map(e => ({ id: e.chapterId, anchor: e.anchor }));
 
     // SSR zeigt die allgemeinen Threads (inkl. Antworten) im selben Karten-Markup

@@ -417,21 +417,25 @@ export const treeLoadMethods = {
     return this.createChapter({ withFirstSection: firstInBook || undefined });
   },
 
-  async createChapter({ afterChapterId, withFirstSection } = {}) {
+  // `parentChapterId`: als letztes Unterkapitel dieses Kapitels anlegen
+  // (Server haengt es ebenfalls ans Ende der Geschwister).
+  async createChapter({ afterChapterId, parentChapterId, withFirstSection } = {}) {
     const bookId = this.$store.nav.selectedBookId;
     const title = (this.newChapterTitle || '').trim();
     if (!bookId || !title || this.newChapterCreating) return null;
     this.newChapterCreating = true;
     this.newChapterError = '';
     try {
-      const afterItem = afterChapterId
-        ? this.$store.nav.tree.find(i => i.type === 'chapter' && !i.solo && String(i.id) === String(afterChapterId))
-        : null;
+      const findCh = (id) => this.$store.nav.tree.find(i => i.type === 'chapter' && !i.solo && String(i.id) === String(id));
+      const parentItem = parentChapterId != null ? findCh(parentChapterId) : null;
+      if (parentChapterId != null && !parentItem) return null;
+      const afterItem = !parentItem && afterChapterId ? findCh(afterChapterId) : null;
       const body = { book_id: parseInt(bookId), name: title };
       // Mit Anker legt der Server das Kapitel als Geschwister direkt dahinter
       // ab — Parent vom Anker, Reihenfolge in book_order (content-store#createChapter).
       if (afterItem) body.after_chapter_id = Number(afterItem.id);
-      const parentId = afterItem?.parent_id ?? null;
+      if (parentItem) body.parent_chapter_id = Number(parentItem.id);
+      const parentId = parentItem ? parentItem.id : (afterItem?.parent_id ?? null);
       const withFirstPage = withFirstSection ?? this._bookUsesSingleSectionChapters(); // vor dem Einhaengen messen
       const created = await contentRepo.createChapter(body);
       this.newChapterTitle = '';
@@ -442,16 +446,22 @@ export const treeLoadMethods = {
         id: created.id,
         name: created.name,
         priority: localPriority,
-        depth: afterItem?.depth || 1,
+        depth: parentItem ? (parentItem.depth || 1) + 1 : (afterItem?.depth || 1),
         parent_id: parentId,
         hasChildren: false,
         open: true,
         solo: false,
         pages: [],
       };
+      // Unterkapitel: hinter den ganzen Unterbaum des Parents = letztes Kind.
       this.$store.nav.tree = insertChapterItem(this.$store.nav.tree, chapterItem, {
-        afterChapterId: afterItem?.id ?? null,
+        afterChapterId: parentItem?.id ?? afterItem?.id ?? null,
       });
+      // Parent-Kette aufklappen, sonst laege das neue Kapitel unsichtbar darunter.
+      for (let cur = parentItem; cur; cur = cur.parent_id != null ? findCh(cur.parent_id) : null) {
+        cur.open = true;
+        if (cur === parentItem) cur.hasChildren = true;
+      }
       this._rebuildTreeOrderMaps();
       this._persistTreeOpenState();
       window.dispatchEvent(new CustomEvent(EVT.CHAPTER_ADDED, { detail: { chapterId: created.id } }));
@@ -460,6 +470,8 @@ export const treeLoadMethods = {
     } catch (e) {
       console.error('[createChapter]', e);
       this.newChapterError = e.message || this.t('common.unknownError');
+      if (e?.code === 'CHAPTER_MAX_DEPTH') this.setStatus?.(this.t('bookOrganizer.maxDepthReached'), false, 6000);
+      else if (parentChapterId != null) this.setStatus?.(this.t('bookOrganizer.createFailed', { detail: e.message }), false, 6000);
       return null;
     } finally {
       this.newChapterCreating = false;

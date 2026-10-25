@@ -374,14 +374,16 @@
                   <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
                   <span x-text="$app.t('werkstatt.consistency.belege', { count: consistencyResult && consistencyResult.textbelege ? consistencyResult.textbelege.length : 0 })"></span>
                 </button>
-                <div class="werkstatt-belege-body" x-bind="panel" x-cloak>
-                  <p class="entity-meta-label" x-text="$app.t('werkstatt.consistency.belegHint')"></p>
-                  <template x-for="(b, bi) in (consistencyResult ? consistencyResult.textbelege : [])" :key="bi">
-                    <div class="werkstatt-beleg">
-                      <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: b.page_id }"></button>
-                      <span class="werkstatt-beleg-snippet" x-text="b.snippet"></span>
-                    </div>
-                  </template>
+                <div x-bind="panel" x-cloak>
+                  <div class="werkstatt-belege-body">
+                    <p class="entity-meta-label" x-text="$app.t('werkstatt.consistency.belegHint')"></p>
+                    <template x-for="(b, bi) in (consistencyResult ? consistencyResult.textbelege : [])" :key="bi">
+                      <div class="werkstatt-beleg">
+                        <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: b.page_id }"></button>
+                        <span class="werkstatt-beleg-snippet" x-text="b.snippet"></span>
+                      </div>
+                    </template>
+                  </div>
                 </div>
               </div>
             </div>

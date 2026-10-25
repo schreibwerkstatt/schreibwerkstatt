@@ -465,3 +465,14 @@ export {
   SCHEMA_FT_FACT_QA,
   SCHEMA_FT_REASONING,
 } from './prompts/finetune.js';
+
+export {
+  exposeProfil,
+  EXPOSE_HIDDEN_BUCHTYPEN,
+  buildExposeSystem,
+  buildExposeSynopsisPrompt,
+  SCHEMA_EXPOSE_SYNOPSIS,
+  buildExposePrompt,
+  buildExposeSchema,
+  EXPOSE_FIELDS,
+} from './prompts/expose.js';

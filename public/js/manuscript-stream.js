@@ -39,18 +39,48 @@ function _pushPage(out, { name, html, id, depth, chapterId, headBefore, headAfte
   });
 }
 
+// Kapitelpfad (Wurzel → Kapitel) aus einer id → { id, name, parentId }-Map.
+// Unbekannter Vorfahr beendet die Kette; Zyklen brechen ab.
+function _chapterPath(chapterId, name, byId) {
+  if (chapterId == null || chapterId === 0) return [];
+  const path = [];
+  const seen = new Set();
+  let cur = byId.get(chapterId) || { id: chapterId, name, parentId: null };
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    path.unshift(cur);
+    cur = cur.parentId != null ? byId.get(cur.parentId) : null;
+  }
+  return path;
+}
+
+// Kapitel-Header fuer jeden Vorfahren, der ab hier beginnt: gemeinsamer Praefix
+// mit dem zuletzt offenen Pfad bleibt, der Rest bekommt je einen Header in
+// seiner echten Tiefe (0 = Top-Kapitel, wie fromSnapshotTree). So erscheint
+// auch ein Kapitel ohne eigenen Abschnitt («Teil I» nur mit Unterkapiteln)
+// genau einmal vor seinem ersten Unterkapitel.
+function _openPath(out, open, path) {
+  let k = 0;
+  while (k < open.length && k < path.length && open[k].id === path[k].id) k++;
+  for (let i = k; i < path.length; i++) _pushChapter(out, path[i].name, i, path[i].id);
+  return path;
+}
+
 // Bucheditor-Quelle: server-vorsortierte Page-Liste aus /book-editor/:id/contents.
-// Flach (depth 0); Chapter-Header bei jedem chapterId-Wechsel, Solo-Pages
-// (chapterId null/0) erzeugen keinen Header.
-export function fromPages(pages) {
+// `opts.chapters` = [{ id, name, parentId }] (Top-Level-Feld der Antwort) liefert
+// die Elternkette; fehlt es, ist jedes Kapitel Top-Level (Pfad nur aus
+// chapterId/chapterName). Solo-Pages (chapterId null/0) erzeugen keinen Header.
+// Page-depth = Zahl der umschliessenden Kapitel.
+export function fromPages(pages, opts = {}) {
+  const byId = new Map();
+  for (const c of (opts.chapters || [])) {
+    if (c && c.id != null) byId.set(c.id, { id: c.id, name: c.name || '', parentId: c.parentId ?? null });
+  }
   const out = [];
-  let lastChapterId = undefined;
+  let open = [];
   for (const p of pages || []) {
-    if (p.chapterId !== lastChapterId) {
-      lastChapterId = p.chapterId;
-      if (p.chapterId) _pushChapter(out, p.chapterName, 0, p.chapterId);
-    }
-    _pushPage(out, { name: p.pageName, html: p.html, id: p.pageId, depth: 0, chapterId: p.chapterId });
+    open = _openPath(out, open, _chapterPath(p.chapterId, p.chapterName, byId));
+    _pushPage(out, { name: p.pageName, html: p.html, id: p.pageId, depth: open.length, chapterId: p.chapterId });
   }
   return out;
 }
@@ -82,8 +112,10 @@ export function fromSnapshotTree(tree) {
 }
 
 // Share-/Export-Quelle: loadContents().groups = [{ chapterId, chapter, pages:[{ p, pd }] }].
-// Bereits kapitel-gruppiert + flach (keine Sub-Kapitel-Tiefe) → depth 0,
-// Chapter-Header nur bei gesetztem chapter. pd.id → id.
+// Die Elternkette steckt in `chapter.parent_chapter_id`; Vorfahren ohne eigene
+// Abschnitte liefert loadContents als Gruppe mit `pages: []`. Kapitel-Header
+// wie bei fromPages je Vorfahr, der ab hier beginnt, mit echter Tiefe
+// (0 = oberstes Kapitel der Gruppen). pd.id → id.
 //
 // `opts.pageHead(p, pd)` darf je Seite `{ name, before, after }` liefern und
 // damit den Titel-Kopf beisteuern (Aufrufer: lib/share-helpers.js mit
@@ -92,15 +124,32 @@ export function fromSnapshotTree(tree) {
 // Modul kennt die Titel-Werkstatt nicht.
 export function fromGroups(groups, opts = {}) {
   const head = typeof opts.pageHead === 'function' ? opts.pageHead : null;
-  const out = [];
+  const byId = new Map();
   for (const g of (groups || [])) {
-    if (g && g.chapter) _pushChapter(out, g.chapter.name || g.chapter.chapter_name, 0, g.chapterId ?? g.chapter.id ?? null);
+    const c = g && g.chapter;
+    const id = c ? (g.chapterId ?? c.id ?? null) : null;
+    if (id != null && !byId.has(id)) {
+      byId.set(id, { id, name: c.name || c.chapter_name || '', parentId: c.parent_chapter_id ?? null });
+    }
+  }
+  const out = [];
+  let open = [];
+  for (const g of (groups || [])) {
+    if (g && g.chapter) {
+      const id = g.chapterId ?? g.chapter.id ?? null;
+      const path = _chapterPath(id, g.chapter.name || g.chapter.chapter_name, byId);
+      // Eine neue Gruppe desselben Kapitels oeffnet es erneut (Header wie bisher).
+      if (open.length && open[open.length - 1].id === id) open = open.slice(0, -1);
+      open = _openPath(out, open, path);
+    } else {
+      open = [];
+    }
     for (const { p, pd } of (g && g.pages ? g.pages : [])) {
       if (!pd) continue;
       const h = head ? (head(p || pd, pd) || null) : null;
       _pushPage(out, {
         name: (h && h.name) || pd.name,
-        html: pd.html, id: pd.id, depth: 0, chapterId: g.chapterId ?? null,
+        html: pd.html, id: pd.id, depth: open.length, chapterId: g.chapterId ?? null,
         headBefore: h && h.before, headAfter: h && h.after,
         article: h ? (h.article ?? true) : false,
       });

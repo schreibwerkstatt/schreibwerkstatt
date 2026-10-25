@@ -249,7 +249,7 @@ test('Lektorat-Cache: provider trennt Eintraege', () => {
     const db = require_('../../db/connection').db;
     ctx.appUsers.createUser({ email: 'a@b' });
     const now = new Date().toISOString();
-    const bookId = db.prepare(`INSERT INTO books (name, slug, description, owner_email, created_at, updated_at) VALUES ('B','b','','a@b',?,?)`).run(now, now).lastInsertRowid;
+    const bookId = db.prepare(`INSERT INTO books (name, slug, owner_email, created_at, updated_at) VALUES ('B','b','a@b',?,?)`).run(now, now).lastInsertRowid;
     const pageId = db.prepare(`INSERT INTO pages (book_id, page_name, body_html, updated_at, local_updated_at) VALUES (?, 'P', '<p>x</p>', ?, ?)`).run(bookId, now, now).lastInsertRowid;
     schema.saveLektoratCache(bookId, 'a@b', pageId, 'ctx1', { fehler: ['A'] }, 'claude');
     schema.saveLektoratCache(bookId, 'a@b', pageId, 'ctx1', { fehler: ['B'] }, 'ollama');

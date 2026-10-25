@@ -9,12 +9,21 @@
   pointer-events: none;
 }
 
-.tree-chapter { margin-bottom: var(--space-lg); }
+/* Einrueckung je Kapitelebene ueber `--depth` (1..3, sidebar.html am
+   .tree-chapter gebunden). Eine Stufe = genau die Einrueckung der Abschnitte
+   eines Kapitels (.tree-chapter-pages: margin-left + padding-left). Ein
+   Unterkapitel steht damit auf der Hoehe der Abschnitte seines Elternkapitels —
+   die stehen kanonisch VOR ihm — und nie links davon; seine eigenen Abschnitte
+   und die dritte Ebene folgen je eine Stufe tiefer. Ein-Abschnitt-Kapitel
+   (eine Zeile ohne Kopf) erben dieselbe Stufe. */
+.page-tree { --tree-indent-step: calc(var(--space-md) + var(--space-10)); }
+.tree-chapter {
+  margin-bottom: var(--space-lg);
+  padding-inline-start: calc((var(--depth, 1) - 1) * var(--tree-indent-step));
+}
 
-/* Sub-Kapitel: visuell unter Eltern-Kapitel eingerueckt via --depth (1..3).
-   Padding-Inline-Start skaliert pro Tiefe; depth=1 = 0 Indent. */
-.tree-chapter--depth-2 { padding-inline-start: var(--space-md); margin-bottom: var(--space-sm); }
-.tree-chapter--depth-3 { padding-inline-start: calc(var(--space-md) * 2); margin-bottom: var(--space-sm); }
+.tree-chapter--depth-2,
+.tree-chapter--depth-3 { margin-bottom: var(--space-sm); }
 /* Parent direkt vor Sub-Kapitel: Abstand reduzieren, sonst optisch zu weit. */
 .tree-chapter:has(+ .tree-chapter--depth-2),
 .tree-chapter--depth-2:has(+ .tree-chapter--depth-3) {
@@ -64,6 +73,7 @@
 /* Guide-Linie für die Seiten eines Kapitels */
 .tree-chapter-pages {
   position: relative;
+  /* Summe = --tree-indent-step (siehe .tree-chapter oben). */
   margin-left: var(--space-md);
   padding-left: var(--space-10);
   padding-top: var(--space-2xs);

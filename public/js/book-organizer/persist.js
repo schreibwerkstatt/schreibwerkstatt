@@ -1,6 +1,7 @@
 // Persist-Slice: Snapshot-Aufbau, _runMutation, _persistOrder, Workstate-Clone.
 import { contentRepo } from '../repo/content.js';
 import { EVT } from '../events.js';
+import { isTempId } from '../repo/structure-queue.js';
 
 export const persistMethods = {
   async _rerender() {
@@ -71,6 +72,16 @@ export const persistMethods = {
       await fn();
       ok = true;
     } catch (e) {
+      if (e?.code === 'ORDER_CONFLICT') {
+        // Die Struktur wurde anderswo umgebaut (anderer Tab/Geraet), seit dieser
+        // Workstate entstand. Nicht ueberschreiben: frisch laden, die Karte
+        // zeigt danach den fremden Stand. Die History beruht auf dem alten
+        // Bestand — ein Undo schriebe den fremden Umbau zurueck.
+        root.setStatus(root.t('bookOrganizer.orderConflict'), false, 8000);
+        this._clearHistory?.();
+        await root.loadPages({ fresh: true });
+        return false;
+      }
       root.setStatus(root.t(errKey, { detail: e.message }));
       // Bei Fehler einmal voll resynchronisieren — Server-Zustand könnte
       // partiell mutiert sein. loadPages feuert `pages:loaded`, der Card-
@@ -100,18 +111,36 @@ export const persistMethods = {
   // der vollstaendige Tree atomar an /content/books/:id/order geschickt.
   // Server validiert + materialisiert chapters.position/parent_chapter_id/
   // pages.position/pages.chapter_id in einer Transaction.
+  //
+  // Kanonische Reihenfolge (Server erzwingt sie, db/book-order.js): innerhalb
+  // eines Kapitels seine eigenen Abschnitte VOR den Unterkapiteln — so zeigen
+  // es Sidebar und Organizer. Offline angelegte Abschnitte (temporaere ID,
+  // repo/structure-queue.js) kennt der Server noch nicht; sie bleiben draussen.
   _buildTreeFromWorkstate() {
+    const pageNode = (p) => (isTempId(p.id) ? null : { type: 'page', id: p.id });
     function buildChapter(c) {
       const children = [];
+      for (const p of (c.pages || [])) { const n = pageNode(p); if (n) children.push(n); }
       for (const sub of (c.subchapters || [])) children.push(buildChapter(sub));
-      for (const p of (c.pages || [])) children.push({ type: 'page', id: p.id });
       return { type: 'chapter', id: c.id, children };
     }
     // Seiten ohne Kapitel zuerst (UI-Invariante), dann Kapitel in workTree-Order.
     const tree = [];
-    for (const p of this.soloPages) tree.push({ type: 'page', id: p.id });
+    for (const p of this.soloPages) { const n = pageNode(p); if (n) tree.push(n); }
     for (const c of this.workTree) tree.push(buildChapter(c));
     return tree;
+  },
+
+  // Order-PUT mit Strukturstand (`expected_updated_at`, book/tree/catchup.js).
+  // Der neue Stand aus der Antwort wird der Basis des naechsten PUT — sonst
+  // liefe schon der zweite eigene Umbau in ORDER_CONFLICT. Einziger Weg zum
+  // Order-PUT im Organizer (Persist + Papierkorb-Restore in history.js).
+  async _saveOrder(bookId, tree) {
+    const root = window.__app;
+    const expectedUpdatedAt = await root?._structureVersionForWrite?.(bookId);
+    const res = await contentRepo.saveOrder(bookId, tree, { expectedUpdatedAt });
+    root?._noteStructureVersion?.(res?.updated_at);
+    return res;
   },
 
   // `mirror` waehlt, wie der Sidebar-Store nachgezogen wird:
@@ -129,7 +158,7 @@ export const persistMethods = {
     const tree = this._buildTreeFromWorkstate();
     return await this._runMutation(async () => {
       this.organizerStatus = root.t('bookOrganizer.savingOrder');
-      await contentRepo.saveOrder(bookId, tree);
+      await this._saveOrder(bookId, tree);
       await this._applyMirror(mirror, affectedChapters);
     });
   },

@@ -2,12 +2,13 @@ import { EVT } from '../events.js';
 import { contentRepo } from '../repo/content.js';
 import { localIsoDate } from '../utils.js';
 import { attachDismiss, detachDismiss } from '../cards/dismiss.js';
+import { MAX_CHAPTER_DEPTH } from '../book-organizer/constants.js';
 // Pagetree-Rechtsklick-Menü. Aktionen pro Node-Typ:
 //   page    → Öffnen, Editieren (Notebook), Teilen, Exportieren, Neues Kapitel,
 //             Löschen (danger)
 //   chapter → Öffnen (Header-Activate = Toggle + ggf. Kapitel-Review), Kapitel
 //             lektorieren, Kapitel bewerten, Teilen, Exportieren, Neues Kapitel, Neue Seite,
-//             Aus-/Einschliessen
+//             Neues Unterkapitel (bis Tiefe 3), Aus-/Einschliessen
 //   beide   → Bearbeitungsstand (Abschnitt: eigene Stufe; Kapitel: alle darunter)
 //   page mit `single` (Ein-Abschnitt-Kapitel, eine Sidebar-Zeile) → die
 //             Seiten-Eintraege PLUS die Kapitel-Eintraege; Umbenennen, Teilen
@@ -332,13 +333,7 @@ export const treeContextMenuMethods = {
       this.setStatus?.(this.t('bookOrganizer.saveFailed', { detail: e.message }));
       return false;
     }
-    const item = this._findTreeChapter(chapterId);
-    if (item) item.name = name;
-    for (const p of this.$store.nav.pages) {
-      if (String(p.chapter_id) === String(chapterId)) p.chapterName = name;
-    }
-    this._bumpTreeRev();
-    this._rebuildTreeOrderMaps();
+    const item = this._mirrorChapterRename(chapterId, name); // tree/structure.js
     window.dispatchEvent(new CustomEvent(EVT.TREE_RENAMED, { detail: { kind: 'chapter', id: chapterId } }));
     const twin = item && item.pages?.length === 1 && !item.hasChildren ? item.pages[0] : null;
     if (twin && this.sameStructureTitle(twin.name, oldName) && !this.sameStructureTitle(twin.name, name)) {
@@ -494,6 +489,32 @@ export const treeContextMenuMethods = {
     // createChapter hängt das Kapitel (open:true) lokal in den Tree — es
     // erscheint sofort in der Sidebar; keine Karte aufreissen.
     await this.createChapter({ afterChapterId });
+  },
+
+  // Unterkapitel im angeklickten Kapitel (bzw. dem Kapitel hinter einer
+  // Ein-Abschnitt-Zeile) anlegen — als letztes Kind, nur bis zur dritten Ebene
+  // (MAX_CHAPTER_DEPTH, Server antwortet sonst CHAPTER_MAX_DEPTH).
+  _pagetreeCtxCanAddSubchapter(target = this.pageTreeMenuTarget) {
+    const chapterId = this._pagetreeCtxChapterId(target);
+    if (chapterId == null) return false;
+    const item = this._findTreeChapter(chapterId);
+    return !!item && !item.solo && (item.depth || 1) < MAX_CHAPTER_DEPTH;
+  },
+
+  async pagetreeCtxNewSubchapter() {
+    const target = this.pageTreeMenuTarget;
+    const ok = this._pagetreeCtxCanAddSubchapter(target);
+    const parentId = this._pagetreeCtxChapterId(target);
+    this._hidePagetreeContextMenu();
+    if (!ok || !this.canEdit()) return;
+    const name = await this.appPrompt({
+      message: this.t('pagetreeCtx.newSubchapterPrompt'),
+      placeholder: this.t('bookOrganizer.placeholderChapterName'),
+      confirmLabel: this.t('bookOrganizer.create'),
+    });
+    if (!name) return;
+    this.newChapterTitle = name;
+    await this.createChapter({ parentChapterId: parentId });
   },
 
   async pagetreeCtxExport() {

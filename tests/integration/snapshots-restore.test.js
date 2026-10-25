@@ -73,8 +73,8 @@ async function seedBook() {
   const bookId = ++BOOK;
   const { grantAccess } = require('../../db/book-access');
   for (const e of [OWNER, EDITOR]) db.prepare('INSERT OR IGNORE INTO app_users (email) VALUES (?)').run(e);
-  db.prepare('INSERT INTO books (book_id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-    .run(bookId, 'Original', 'Beschreibung', NOW, NOW);
+  db.prepare('INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)')
+    .run(bookId, 'Original', NOW, NOW);
   grantAccess(bookId, OWNER, 'owner', OWNER);
   grantAccess(bookId, EDITOR, 'editor', OWNER);
 
@@ -159,11 +159,12 @@ test('Restore schreibt an Ort und Stelle: IDs, FK-Daten, Settings, ACL bleiben',
   assert.equal(st.exclude_from_stats, 1);
   assert.equal(st.allow_lektor_book_chat, 1);
 
-  // Buchname, excluded-Flag und Interleaving zurück.
+  // Buchname, excluded-Flag und Reihenfolge zurück (kanonisch: kapitellose
+  // Abschnitte vor den Kapiteln, in ihrer Reihenfolge untereinander).
   assert.equal((await cs.loadBook(s.bookId, c)).name, 'Original');
   assert.equal((await cs.loadChapter(s.chB.id, c)).excluded, true);
   assert.deepEqual(orderOf(s.bookId).map(e => `${e.type}:${e.id}`), [
-    `page:${s.vorwort.id}`, `chapter:${s.chA.id}`, `chapter:${s.chB.id}`, `page:${s.nachwort.id}`,
+    `page:${s.vorwort.id}`, `page:${s.nachwort.id}`, `chapter:${s.chA.id}`, `chapter:${s.chB.id}`,
   ]);
 
   // Auto-Sicherung angelegt (kind), Ziel-Fassung als wiederhergestellt markiert.

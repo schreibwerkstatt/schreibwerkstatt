@@ -59,8 +59,8 @@ test('changes-Delete-Query: mit device_id (Self-Filter) laeuft ohne ambigen Spal
     VALUES ('dev-1', 'alice@example.com', 'Mac')
   `).run();
   BOOK_ID = db.prepare(`
-    INSERT INTO books (name, description, created_at, updated_at, owner_email)
-    VALUES ('B', 'd', ?, ?, NULL)
+    INSERT INTO books (name, created_at, updated_at, owner_email)
+    VALUES ('B', ?, ?, NULL)
   `).run(now, now).lastInsertRowid;
   const pageId = db.prepare(`
     INSERT INTO pages (book_id, page_name, body_html, position, updated_at, local_updated_at)

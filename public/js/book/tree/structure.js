@@ -47,6 +47,8 @@ export const treeStructureMethods = {
     // Ebenfalls Reassignment: der `tokTotals`-Memo haengt an der Identitaet
     // von `tokEsts` (app/app-root-getters.js).
     this.tokEsts = { ...this.tokEsts, [newPage.id]: { tok: 0, words: 0, chars: 0 } };
+    // Organizer mit eigenem Workstate zieht nach (sonst MISSING_PAGE beim naechsten Order-PUT).
+    window.dispatchEvent(new CustomEvent(EVT.PAGE_ADDED, { detail: { pageId: newPage.id } }));
     return newPage;
   },
 
@@ -88,6 +90,23 @@ export const treeStructureMethods = {
     } catch (e) {
       this.setStatus?.(this.t('bookOrganizer.saveFailed', { detail: e.message }));
     }
+  },
+
+  // Umbenanntes Kapitel in den Store spiegeln: Name am Baum-Item, die
+  // `chapterName`-Aliase seiner Abschnitte (Palette, Editorkopf, Filter) und die
+  // namens-keyenden Sortier-Indexe. SSoT fuer beide Umbenenn-Wege — Sidebar
+  // (tree-context-menu.js#renameChapterById) und Buchorganizer
+  // (book-organizer/crud.js#_doRenameChapter). Kein Event: das setzt der Aufrufer
+  // (der Organizer darf sich nicht selbst neu rendern, das kostete den Fokus).
+  _mirrorChapterRename(chapterId, name) {
+    const item = this._findTreeChapter(chapterId);
+    if (item) item.name = name;
+    for (const p of this.$store.nav.pages) {
+      if (String(p.chapter_id) === String(chapterId)) p.chapterName = name;
+    }
+    this._bumpTreeRev();
+    this._rebuildTreeOrderMaps();
+    return item;
   },
 
   // Leeres Kapitel serverseitig loeschen und lokal aus nav.tree nehmen. Der

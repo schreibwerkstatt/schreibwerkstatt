@@ -7,6 +7,7 @@ const express = require('express');
 const { aclParamGuard } = require('../lib/acl');
 const { prepareCover, MAX_INPUT_BYTES } = require('../lib/cover-prepare');
 const bp = require('../db/book-publication');
+const searchIndex = require('../lib/search');
 
 const router = express.Router();
 const jsonBody = express.json();
@@ -17,7 +18,10 @@ router.get('/:book_id', aclParamGuard('viewer'), (req, res) => {
 });
 
 router.put('/:book_id', aclParamGuard('editor'), jsonBody, (req, res) => {
-  res.json(bp.upsertMeta(req.bookId, req.body || {}));
+  const meta = bp.upsertMeta(req.bookId, req.body || {});
+  // Der Klappentext (description) ist Teil des Buch-Suchtreffers.
+  searchIndex.upsertBookMeta(req.bookId);
+  res.json(meta);
 });
 
 // ── Cover ──────────────────────────────────────────────────────────────────

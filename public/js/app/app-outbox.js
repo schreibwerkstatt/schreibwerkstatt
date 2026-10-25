@@ -305,6 +305,8 @@ export const appOutboxMethods = {
     nav.pages = [...nav.pages];
     this._bumpTreeRev?.();
     this._rebuildTreeOrderMaps?.();
+    // Organizer-Workstate traegt noch die temporaere ID (EVT.PAGE_ADDED).
+    window.dispatchEvent(new CustomEvent(EVT.PAGE_ADDED, { detail: {} }));
     for (const { tempId, page: real, lateHtml, lateName } of remaps) {
       // Entwurf der temporären ID (Edit seit dem letzten lokalen Save) bzw. ein
       // lokaler Save, der während des Anlegens noch in die Operation lief, auf
@@ -379,6 +381,7 @@ export const appOutboxMethods = {
     let lastTop = -1;
     for (let i = 0; i < nav.pages.length; i++) if (!nav.pages[i].chapter_id) lastTop = i;
     nav.pages.splice(lastTop + 1, 0, p);
+    window.dispatchEvent(new CustomEvent(EVT.PAGE_ADDED, { detail: { pageId: p.id } }));
   },
 
   _scheduleOutboxRetry() {

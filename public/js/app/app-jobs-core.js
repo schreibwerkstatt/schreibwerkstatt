@@ -4,6 +4,7 @@ import { EXCLUSIVE_CARDS } from '../cards/feature-registry.js';
 import { EVT } from '../events.js';
 import { startEventStream, jobStreamOpen, onJobQueueStream } from '../event-stream.js';
 import { lsGet, lsRemove } from '../safe-storage.js';
+import { openCardWith, CARD_REQUEST } from '../cards/card-request.js';
 
 // Bei offenem Job-Stream kommt die Queue-Liste per Push; der 5-s-Poll läuft
 // dann nur noch jeden n-ten Tick als Sicherheitsnetz (alle 30 s).
@@ -11,9 +12,9 @@ const QUEUE_STREAM_SAFETY_TICKS = 6;
 
 // Job-Typ → EXCLUSIVE_CARDS-Key: Klick auf die Job-Pill im Footer springt zur
 // Karte, die den Output des Jobs anzeigt. Nur Typen mit sinnvollem Karten-Ziel.
-// Page-scopte (check) und id-tragende Typen (chapter-review, werkstatt-*,
+// Page-scopte (check, chat) und id-tragende Typen (chapter-review, werkstatt-*,
 // batch-check) laufen über Sonderfälle in navigateToJob. Bewusst NICHT gelistet
-// (kein UI-Ziel): book-import, synonym, blog-*/hubspot-* (Sync).
+// (kein UI-Ziel): book-import, synonym, blog-*/hubspot-* (Sync), chat-embed-index.
 const JOB_NAV_CARD = {
   'review':            'bookReview',
   'komplett-analyse':  'figures',
@@ -43,12 +44,35 @@ const JOB_NAV_CARD = {
   'epub-export':       'epubExport',
   'docx-export':       'docxExport',
   'folder-import':     'folderImport',
+  'manuscript-import': 'folderImport',
+  'beat-anchor':       'plot',
+  'book-map':          'buchlandkarte',
+  'book-map-label':    'buchlandkarte',
+  'figur-alter':       'figures',
+  'figur-anchor':      'figurWerkstatt',
+  'headline-variants': 'titelwerkstatt',
+  'interview-transcribe': 'recherche',
+  'lexicon-scan':      'wortschatz',
+  'motif-consistency': 'motiv',
+  'source-pdf-draft':  'sources',
+  'source-embed-index': 'sources',
+  'struktur-check':    'struktur',
+  'expose':            'bookSettings',
 };
 
 // Job-Typen, deren Zielkarte Tabs hat: Root-Feld → Tab, vor dem Sprung gesetzt.
 const JOB_NAV_TAB = {
   'redundancy':  ['buchlandkarteTab', 'redundanz'],
   'embed-index': ['buchlandkarteTab', 'redundanz'],
+  'book-map':       ['buchlandkarteTab', 'map'],
+  'book-map-label': ['buchlandkarteTab', 'map'],
+};
+
+// Job-Typen, deren Zielkarte den Reiter selbst hält (Karten-State statt Root-
+// Feld): Wunsch über cards/card-request.js, die Karte holt ihn beim Öffnen ab.
+const JOB_NAV_CARD_REQUEST = {
+  'expose':      [CARD_REQUEST.BOOK_SETTINGS_TAB, 'expose'],
+  'figur-alter': [CARD_REQUEST.FIGUREN_TAB, 'alter'],
 };
 
 // Auto-Open für Reconnect-Pfade: nur wenn keine Hauptkarte/Editor offen ist.
@@ -371,6 +395,22 @@ export const appJobsCoreMethods = {
       }));
       return;
     }
+    // Abschnitts-Chat: der Job trägt nur die Session (dedupId) — deren Abschnitt
+    // öffnen, dann den Chat daneben mit genau dieser Session.
+    if (job.type === 'chat') {
+      if (job.dedupId == null) return;
+      let session;
+      try { session = await fetchJson('/chat/session/' + job.dedupId); }
+      catch (e) { console.error('[navigateToJob] chat session', e); return; }
+      if (!session?.page_id) return;
+      if (String(this.currentPage?.id) !== String(session.page_id)) {
+        await this.gotoPageById(session.page_id);
+        if (String(this.currentPage?.id) !== String(session.page_id)) return; // Wechsel abgelehnt
+      }
+      await openCardWith(CARD_REQUEST.PAGE_CHAT_SESSION, session.id,
+        () => (this.showChatCard ? null : this.toggleChatCard()));
+      return;
+    }
     // Generisch: zur Karte springen, die den Job-Output anzeigt. Nur öffnen
     // (bereits offen → nur hinscrollen), nicht toggeln — ein Sprung darf die
     // Zielkarte nie zuklappen. cardKey referenziert EXCLUSIVE_CARDS (SSoT für
@@ -382,8 +422,13 @@ export const appJobsCoreMethods = {
     if (!entry) return;
     const tab = JOB_NAV_TAB[job.type];
     if (tab) this[tab[0]] = tab[1];
-    if (this[entry.flag]) this._scrollToCardByKey?.(cardKey);
-    else if (this[entry.toggle]) await this[entry.toggle]();
+    const open = async () => {
+      if (this[entry.flag]) this._scrollToCardByKey?.(cardKey);
+      else if (this[entry.toggle]) await this[entry.toggle]();
+    };
+    const req = JOB_NAV_CARD_REQUEST[job.type];
+    if (req) await openCardWith(req[0], req[1], open);
+    else await open();
   },
 
   // Prüft ob ein gespeicherter Job noch läuft und reconnected ggf.

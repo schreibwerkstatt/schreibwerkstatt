@@ -35,7 +35,8 @@ test('renderCoverBuffer: MediaBox = Bleed + 2×Trim + Spine, ein Bogen', async (
   cfg.print.cropMarks = true;
   cfg.coverSpec.pageCount = 200;
   cfg.coverSpec.paperBulkMmPer1000 = 80;
-  cfg.coverSpec.blurb = 'Klappentext über das Buch.';
+  // Klappentext kommt buch-weit (book_publication → extras.description).
+  cfg.extras.description = 'Klappentext über das Buch.';
   cfg.coverSpec.spineText = 'Test';
 
   const buf = await renderCoverBuffer({ book, profile: { config: cfg }, frontImageBuf: null, backImageBuf: null, lang: 'de' });

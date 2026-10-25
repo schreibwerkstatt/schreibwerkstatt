@@ -30,13 +30,13 @@ const SKIP_FEATURES = new Set(['help']);
 /** Aktionen, die eine Karte oeffnen oder eine Funktion starten, die man in der
  *  Hilfe finden will. Theme/Sprache/Logout/Cache sind Bedienung, keine Funktion. */
 export const HELP_ACTION_KEYS = [
-  'action.komplett', 'action.myStats', 'action.myBooks', 'action.autorenprofil', 'action.shortcuts',
+  'action.komplett', 'action.myStats', 'action.myBooks', 'action.autorenprofil', 'action.shortcuts', 'action.expose',
 ];
 
 /** Aktionen tragen in der Registry alle `group: 'app'` (Palette-Sektion). In
  *  der Hilfe gehoert die Komplettanalyse fachlich zu Welt & Plot: sie fuellt
- *  genau deren Karten. */
-const ACTION_HELP_GROUP = { 'action.komplett': 'world' };
+ *  genau deren Karten; das Exposé gehört zu Publikation & Export. */
+const ACTION_HELP_GROUP = { 'action.komplett': 'world', 'action.expose': 'export' };
 
 /** Voraussetzungen, die die Registry nicht kennt. `semantic` = Semantik-Index
  *  (vom Admin eingerichteter Embedding-Dienst). */
@@ -76,6 +76,7 @@ export const HELP_EXTRAS = [
   { key: 'imageGen',      group: 'tools', needs: ['claude', 'service'] },
   { key: 'comments',      group: 'tools' },
   { key: 'collab',        group: 'tools' },
+  { key: 'series',        group: 'tools' },
   { key: 'blogSync',      group: 'export', buchtyp: ['blog'] },
   { key: 'userSettings',  group: 'app', open: 'toggleUserSettingsCard' },
   { key: 'palette',       group: 'app' },
