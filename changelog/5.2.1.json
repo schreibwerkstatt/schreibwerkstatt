@@ -1,0 +1,21 @@
+{
+  "version": "5.2.1",
+  "date": "2026-10-25",
+  "entries": [
+    {
+      "kind": "behoben",
+      "de": "Kontinuität: Der Kapitel-Filter bot oft nur ein einziges Kapitel an, Befunde aus anderen Kapiteln liessen sich nicht filtern. Jetzt erscheint jedes Kapitel, in dem eine Stelle liegt, und der Befund steht im richtigen Kapitel.",
+      "en": "Continuity: the chapter filter often offered just one chapter, so findings from other chapters could not be filtered. Now every chapter containing a passage appears, and each finding sits in the right chapter."
+    },
+    {
+      "kind": "behoben",
+      "de": "Kapitel-Filter in Figuren, Schauplätzen, Musik, Ereignissen, Weltfakten und Plot: Gleichnamige Unterkapitel fielen zu einem zusammen. Sie stehen jetzt getrennt da, mit dem Oberkapitel davor.",
+      "en": "Chapter filter in characters, locations, music, events, world facts and plot: subchapters with the same name merged into one. They now appear separately, with the parent chapter in front."
+    },
+    {
+      "kind": "behoben",
+      "de": "Ein gespeicherter Kapitel-Filter, dessen Kapitel es nicht mehr gibt, zeigte «Alle Kapitel» über einer leeren Liste. Er wird jetzt einfach ignoriert.",
+      "en": "A saved chapter filter whose chapter no longer exists showed \"All chapters\" above an empty list. It is now simply ignored."
+    }
+  ]
+}
