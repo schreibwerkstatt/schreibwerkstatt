@@ -240,9 +240,11 @@ export function buildWeltfaktenBlock(welt, opts = {}) {
 //     sich weder über die Turns derselben Seite noch beim Seitenwechsel innerhalb
 //     des Buchs. Der grosse SYSTEM_CHAT + die Figuren-JSON werden so über alle
 //     Seiten-Chats eines Buchs aus dem Cache gelesen.
-//   Block 2 (5min): seiten-spezifischer Anteil (Seitenname/-inhalt + Ideen +
+//   Block 2 (ttl '1h'): seiten-spezifischer Anteil (Seitenname/-inhalt + Ideen +
 //     Lektorat + JSON-Format-Trailer) — stabil über die Turns einer Seiten-Session,
-//     invalidiert beim Seitenwechsel oder wenn der Autor die Seite editiert.
+//     invalidiert beim Seitenwechsel oder wenn der Autor die Seite editiert. 1h statt
+//     5 min, weil zwischen zwei Fragen oft mehr als fünf Minuten liegen (Lesen,
+//     Überarbeiten); mit 5 min wurde Block 2 samt Verlauf fast jede Runde neu geschrieben.
 export function buildChatSystemPrompt(pageName, pageText, figuren, review, systemOverride = null, pageChangeNote = null, ideen = null, lektorat = null, opts = {}) {
   const stable = [systemOverride ?? SYSTEM_CHAT];
 
@@ -333,7 +335,7 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
 
   return [
     { text: stable.join('\n'), ttl: '1h' },
-    { text: page.join('\n') },
+    { text: page.join('\n'), ttl: '1h' },
   ];
 }
 

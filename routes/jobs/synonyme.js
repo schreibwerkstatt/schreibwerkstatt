@@ -6,7 +6,7 @@ const {
   loadSynonymCache, saveSynonymCache,
 } = require('../../db/schema');
 const {
-  makeJobLogger, updateJob, completeJob, failJob, i18nError,
+  makeJobLogger, updateJob, setJobModel, completeJob, failJob, i18nError,
   aiCall, getPrompts, getBookPrompts,
   _modelName, tps,
   jobs, runningJobs, createJob, enqueueJob, jobKey, findActiveJobId,
@@ -66,6 +66,9 @@ async function runSynonymJob(jobId, wort, satz, bookId, userEmail, pageId) {
   const bookSettings = bookId ? getBookSettings(bookId, userEmail) : null;
   const effectiveProvider = resolveProvider({ userEmail });
   const { model, cacheSuffix } = applySynonymAiOverrides(effectiveProvider, logger);
+  // createJob trägt das globale Modell ein; das Kosten-Ledger entsteht in endJobRun
+  // aus job_runs, also das tatsächlich laufende Modell vor dem Laufende nachziehen.
+  setJobModel(jobId, effectiveProvider, model);
   const cacheVersion = `${model}${cacheSuffix}:${PROMPTS_VERSION || ''}`;
   const keyHash = _synonymKeyHash(wort, satz, bookSettings, cacheVersion);
   try {

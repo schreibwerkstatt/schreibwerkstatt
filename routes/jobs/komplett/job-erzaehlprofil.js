@@ -83,8 +83,6 @@ async function runErzaehlprofilJob(jobId, bookId, bookName, userEmail, provider 
       jobId, bookIdInt, bookName, email, call, tok, log, effectiveProvider,
       singlePassLimit, totalChars, fullBookText, pageContents, groups, groupOrder,
       idMaps: { chNameToId }, prompts, sys, warnings,
-      // Einziger Leser des Buchblocks → 5-min-Write statt 1h (../call.js#withTtl).
-      bookBlockTtl: '5m',
     };
     const saved = await runErzaehlprofil(ctx, { figNameToId, fromPct: 55, toPct: 98 });
     pt.mark('Erzählprofil');

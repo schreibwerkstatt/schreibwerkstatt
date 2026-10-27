@@ -26,8 +26,8 @@ async function runPhase3b(ctx, figuren) {
   updateJob(jobId, { progress: 56, statusText: 'job.phase.crossChapterRelations' });
 
   // Passt das ganze Buch ins Fenster (Cloud; Extraktion nur per extract_single_pass_cap
-  // in Chunks gezwungen), geht es als derselbe 1h-Buchblock wie in P8 mit — P3b schreibt
-  // ihn, P8 liest ihn (gleiches Tier, kein Schema: ../call.js). Billiger als ein
+  // in Chunks gezwungen), geht es als derselbe 1h-Buchblock mit wie in den Prüf-Jobs — P3b
+  // schreibt ihn, Erzählprofil und Kontinuität lesen ihn (gleiches Tier, kein Schema). Billiger als ein
   // ungecachter Auszug und vollständiger.
   if (providerClass(effectiveProvider) === 'cloud' && fullBookText && fullBookText.length <= singlePassLimit) {
     const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, fullBookText), ttl: '1h', sharedPrefix: true };

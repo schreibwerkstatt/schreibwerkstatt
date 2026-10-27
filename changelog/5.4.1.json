@@ -1,0 +1,21 @@
+{
+  "version": "5.4.1",
+  "date": "2026-10-27",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Abschnitts-Chat: Stellst du nach einer längeren Pause eine Folgefrage, antwortet der Chat schneller und günstiger. Er muss den Abschnitt nicht jedes Mal neu einlesen.",
+      "en": "Section chat: when you ask a follow-up question after a longer pause, the chat answers faster and at lower cost. It no longer has to re-read the section every time."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Komplettanalyse: Nach der Analyse läuft zuerst das Erzählprofil, danach die Kontinuitätsprüfung. Bis dahin steht sie in der Warteschlange als «wartend» und kostet so deutlich weniger.",
+      "en": "Full analysis: after the analysis, the narrative profile runs first, then the continuity check. Until then the check shows as \"waiting\" in the queue, which makes it noticeably cheaper."
+    },
+    {
+      "kind": "behoben",
+      "de": "Synonymsuche: Ihre KI-Kosten werden jetzt mit dem Modell berechnet, das sie tatsächlich nutzt. Die Kostenangaben stimmen damit.",
+      "en": "Synonym search: its AI costs are now calculated with the model it actually uses, so the cost figures are correct."
+    }
+  ]
+}

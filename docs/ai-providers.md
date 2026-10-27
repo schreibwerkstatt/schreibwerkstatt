@@ -183,9 +183,9 @@ const { text, truncated, tokensIn, tokensOut, cacheReadIn, cacheCreationIn } = a
 // Lokal:  zu einem String geflattet
 ```
 
-Die TTLs müssen von vorne nach hinten **nicht steigen**: die API lehnt einen längeren TTL hinter einem kürzeren ab. Wer einen Block auf 5 min setzt, setzt darum alle dahinter mit (Muster [routes/jobs/komplett/call.js](../routes/jobs/komplett/call.js)#`withTtl`).
+Die TTLs müssen von vorne nach hinten **nicht steigen**: die API lehnt einen längeren TTL hinter einem kürzeren ab. Wer einen Block auf 5 min setzt, setzt darum alle dahinter mit.
 
-**TTL nach Leserzahl wählen.** Ein 1h-Write kostet 2× den Input-Preis, ein 5-min-Write 1.25×, ein Read 0.1×. Der 1h-Block lohnt sich nur, wenn mehrere Calls ihn lesen (Komplettanalyse: viele Pässe über denselben Buchblock); ein Job mit einem einzigen Leser schickt den Block mit 5-min-TTL (Standalone-Kontinuität und -Erzählprofil, [docs/komplett.md](komplett.md#caching--resume)).
+**TTL nach Leserzahl wählen.** Ein 1h-Write kostet 2× den Input-Preis, ein 5-min-Write 1.25×, ein Read 0.1×. Der 1h-Block lohnt sich nur, wenn mehrere Calls ihn lesen (Komplettanalyse: viele Pässe über denselben Buchblock, danach Erzählprofil und Kontinuität, [docs/komplett.md](komplett.md#caching--resume)). Zählt auch, **wer** liest: ein Block, der denselben Text trägt, aber als 5-min-Block ohne `sharedPrefix` mit Schema geht, ist für den Cache ein anderer Präfix und schreibt das Ganze neu. Im Abschnitts-Chat liegen zwischen zwei Fragen oft mehr als fünf Minuten — Abschnittsblock und Verlauf gehen darum mit 1h (`cacheLastMessage: '1h'`).
 
 **`callAIChat(messages, ...)`** — Multi-Turn-Variante mit Messages-Array.
 

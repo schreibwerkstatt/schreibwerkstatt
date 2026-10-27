@@ -16,7 +16,6 @@ const { updateJob, toSystemBlocks, retryOnTransientAi, settledAll, i18nError, i1
 const { buildBookSystemBlockText } = require('../utils');
 const { komplettMaxTokens } = require('./tokens');
 const { COST_LABEL, costTier } = require('../cost-labels');
-const { withTtl } = require('../call');
 const { providerClass } = require('../../../../lib/ai');
 
 /** @returns {number} Anzahl gespeicherter Kapitel-Profile (0 wenn nichts erzeugt). */
@@ -41,13 +40,12 @@ async function runErzaehlprofil(ctx, opts = {}) {
   let profiles = [];
   if (singlePass) {
     // Ein Call über das ganze Buch → Array pro Kapitel. Buchtext im gecachten
-    // System-Block (identisch zu P8/P1 → 1h-Cache-Read statt Neuübertragung).
-    // Standalone-Job: ctx.bookBlockTtl = '5m' (einziger Leser, siehe ../call.js#withTtl).
-    const ttl = ctx.bookBlockTtl || '1h';
+    // System-Block, byte-identisch zu P1/P3b der Komplettanalyse und zur Kontinuität
+    // (geteilter 1h-Präfix, kein Schema) → Cache-Read statt Neuübertragung.
     const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, fullBookText), ttl: '1h', sharedPrefix: true };
     const res = await retryOnTransientAi(() => call(jobId, tok,
       prompts.buildErzaehlprofilSinglePassPrompt(bookName, null),
-      withTtl([bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KOMPLETT_EXTRAKTION_BLOCKS, '1h')], ttl),
+      [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KOMPLETT_EXTRAKTION_BLOCKS, '1h')],
       fromPct, toPct, cap, 0.2, null, prompts.SCHEMA_ERZAEHLPROFIL, costTier(COST_LABEL.erzaehlprofil),
     ), { log, label: 'Erzählprofil Single-Pass' });
     if (!Array.isArray(res?.kapitel)) throw i18nError('job.error.narrativeProfileMissing');

@@ -49,7 +49,7 @@ test('ohne geteilten Präfix: Schema geht als Structured Output mit', async () =
   // #_toCacheBlocks) — Lektorat/Review behalten trotzdem ihr Schema.
   const bodyCore = await captureBody([{ text: 'Lektorat-Kern', ttl: '1h' }, { text: 'Autorenkontext' }]);
   assert.equal(bodyCore.output_config?.format?.type, 'json_schema');
-  // Standalone-Job (5-min-TTL, einziger Leser) behält sein Schema.
+  // sharedPrefix ohne 1h-TTL ist kein geteilter Präfix — das Schema bleibt.
   const body5m = await captureBody([{ text: 'Buchtext …', sharedPrefix: true }, { text: 'Regeln' }]);
   assert.equal(body5m.output_config?.format?.type, 'json_schema');
   const bodyStr = await captureBody('System als String');

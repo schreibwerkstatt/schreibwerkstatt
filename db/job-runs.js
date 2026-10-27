@@ -39,7 +39,8 @@ function startJobRun(jobId) {
   _stmtStartJobRun.run(jobId);
 }
 // Provider/Modell nachtragen, wenn der Job-Lauf die echte Konfiguration gelesen hat
-// (Embedding-Jobs: `embed.model` statt des globalen Chat-Modells). Das Ledger wird in
+// (Embedding-Jobs: `embed.model` statt des globalen Chat-Modells; Synonymsuche:
+// `ai.claude.model.synonym`). Das Ledger wird in
 // endJobRun aus dieser Zeile geschrieben, der Write muss also vor dem Laufende liegen.
 function updateJobRunModel(jobId, provider, model) {
   db.prepare('UPDATE job_runs SET provider = ?, model = ? WHERE job_id = ?').run(provider || null, model || null, jobId);

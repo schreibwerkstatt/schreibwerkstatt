@@ -205,7 +205,8 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // cacheLastMessage: der System-Prompt ist über die Turns einer Session stabil
     // (Block 1 buch-stabil, Block 2 seiten-stabil) — der Buch-Kontext steht in der
     // Frage —, also greift das Multi-Turn-Caching der Konversationshistorie immer.
-    const aiRes = await callAIChat(aiMessages, systemPrompt, onProgress, null, signal, undefined, SCHEMA_CHAT, chatTemperature(), true);
+    // 1h wie die System-Blöcke: zwischen zwei Fragen liegen oft mehr als fünf Minuten.
+    const aiRes = await callAIChat(aiMessages, systemPrompt, onProgress, null, signal, undefined, SCHEMA_CHAT, chatTemperature(), '1h');
     const { text, truncated, tokensIn, tokensOut, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0, provider, model, genDurationMs } = aiRes;
     // Job-State auf echte Provider-Werte setzen, damit Status-Anzeige und
     // gespeicherte Chat-Nachricht dieselben Tokens zeigen (statt eines

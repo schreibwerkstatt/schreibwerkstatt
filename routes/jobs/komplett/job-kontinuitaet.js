@@ -19,7 +19,7 @@ const {
   chunkLimitsFor, BATCH_SIZE, jobAbortControllers,
   tps, retryOnTransientAi, summarizeCostByPhase,
 } = require('../shared');
-const { makeKomplettCall, withTtl } = require('./call');
+const { makeKomplettCall } = require('./call');
 const appSettings = require('../../../lib/app-settings');
 const { providerClass, resolveProvider } = require('../../../lib/ai');
 const { setContext } = require('../../../lib/log-context');
@@ -122,13 +122,15 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
 
     if (totalChars <= singlePassLimit) {
       updateJob(jobId, { progress: 60, statusText: 'job.phase.checkContinuity' });
-      // Buchtext als gecachter System-Block, Auftrag im User-Prompt — wie P8. Hier der
-      // einzige Leser (Verify/F4 haben eigene Systeme) → 5-min-Write statt 1h (../call.js).
+      // Buchtext als gecachter System-Block, Auftrag im User-Prompt. Byte-identisch zu
+      // P1/P3b der Komplettanalyse und zum Erzählprofil (geteilter 1h-Präfix, kein Schema):
+      // nach einer Komplettanalyse liest dieser Call das Buch aus dem Cache, statt es neu
+      // zu schreiben (pruef-jobs.js reiht ihn darum hinter das Erzählprofil).
       const bookText = buildSinglePassBookText(groups, groupOrder);
-      const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, bookText) };
+      const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, bookText), ttl: '1h', sharedPrefix: true };
       result = await retryOnTransientAi(() => call(jobId, tok,
         prompts.buildKontinuitaetSinglePassPrompt(bookName, null, figurenKompakt, orteKompakt, narrativeLabels(getBookSettings(bookIdInt, email)), anachronismus),
-        withTtl([bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KONTINUITAET_BLOCKS)], '5m'), 60, 95, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_PROBLEME,
+        [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KONTINUITAET_BLOCKS)], 60, 95, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_PROBLEME,
         costTier(COST_LABEL.kontinuitaet),
       ), { log, label: 'Kontinuität Single-Pass' });
       pt.mark('Single-Pass Check');
