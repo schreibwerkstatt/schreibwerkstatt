@@ -130,8 +130,9 @@ an, aus der Bez tritt man **nach der 2. Klasse** in die Maturitätsschule
 (Obergymnasium, 4 Jahre) über — beide Wege enden nach 12 Schuljahren mit der Matur.
 Vor 1998/99 war das Langzeitgymnasium ein 7-Jahre-Block ab der 5. Primar; gerechnet
 ergibt das dieselben Jahre. Wege: Bez allein, Bez → Obergym (nach 2. bzw. 3. Bez),
-Bez/Sek/Oberschule → Lehre, Kanti (Unter- → Obergym), Untergym → Lehre; Standardweg
-`bez_lehre`. Quellen im Kommentar von `SCHUL_VORLAGEN`.
+Bez/Sek/Oberschule → Lehre, Kanti (Unter- → Obergym), Untergym → Lehre, dazu die
+schultyp-neutrale Stufe «Oberstufe» (allein bzw. → Lehre) für Figuren, deren Schule
+der Text offenlässt; Standardweg `oberstufe_lehre`. Quellen im Kommentar von `SCHUL_VORLAGEN`.
 
 **KI-Vorschlag** (Job `schulweg-vorschlag`, `POST /jobs/schulweg-vorschlag`, ab
 `editor`, Knopf im Lebenslauf-Reiter;

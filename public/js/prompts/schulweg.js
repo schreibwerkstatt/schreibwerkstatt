@@ -46,7 +46,7 @@ ${figurBloecke}
 
 Regeln:
 - "figur" ist der Name genau so, wie er oben in der Liste steht.
-- "weg" ist einer der Schluessel oben. Waehle den Weg, den die Stellen belegen (z.B. "Bez" / "Bezirksschule" → ein Weg mit Bezirksschule; "Kanti" / "Gymnasium" / "Matura" → ein Weg mit Gymnasium; "Lehre" / "Stift" → ein Weg mit Lehre). Belegen die Stellen keinen Weg, gib fuer diese Figur nichts aus.
+- "weg" ist einer der Schluessel oben. Waehle den Weg, den die Stellen belegen (z.B. "Bez" / "Bezirksschule" → ein Weg mit Bezirksschule; "Kanti" / "Gymnasium" / "Matura" → ein Weg mit Gymnasium; "Lehre" / "Stift" → ein Weg mit Lehre; "Oberstufe" ohne Schultyp → ein Weg mit Oberstufe). Belegen die Stellen keinen Weg, gib fuer diese Figur nichts aus.
 - "einschulung_jahr" nur, wenn die Stelle das Jahr der Einschulung ausdruecklich als Jahreszahl nennt. Sonst null — nicht ausrechnen.
 - "repetition_stufe" und "repetition_klasse" nur, wenn die Stelle ausdruecklich sagt, dass die Figur eine Klasse wiederholt hat (repetiert, sitzengeblieben, Ehrenrunde): Stufen-Schluessel und Nummer der wiederholten Klasse. Sonst null.
 - "stelle" ist die Nummer der Stelle, aus der das Zitat stammt (z.B. "1.2").

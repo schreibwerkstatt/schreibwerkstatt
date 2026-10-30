@@ -42,6 +42,8 @@ export const SCHUL_VORLAGEN = Object.freeze({
   // Quellen: Solothurner Zeitung, «Das Untergymnasium ermöglichte eine besondere
   // Art der Begabtenförderung» und «Als die Bezirksschule noch die einzige
   // Alternative zur Oberschule war»; Wikipedia «Kantonsschule Solothurn».
+  // `oberstufe` laesst den Schultyp (Bez / Sek / Oberschule) offen — fuer
+  // Figuren, deren Schule der Text nicht nennt; daher auch der Standardweg.
   ch_so_1990: {
     einschulungsalter: 6,
     stichtag: { monat: 4, tag: 30 },
@@ -51,6 +53,7 @@ export const SCHUL_VORLAGEN = Object.freeze({
       { key: 'bez',      jahre: 3 },
       { key: 'sek',      jahre: 3 },
       { key: 'ober',     jahre: 3 },
+      { key: 'oberstufe', jahre: 3 },
       { key: 'untergym', jahre: 3 },
       { key: 'obergym',  jahre: 4 },
       { key: 'lehre',    jahre: 3 },
@@ -64,10 +67,12 @@ export const SCHUL_VORLAGEN = Object.freeze({
       { key: 'sek_lehre',   stufen: ['primar', 'sek', 'lehre'] },
       { key: 'ober',        stufen: ['primar', 'ober'] },
       { key: 'ober_lehre',  stufen: ['primar', 'ober', 'lehre'] },
+      { key: 'oberstufe',       stufen: ['primar', 'oberstufe'] },
+      { key: 'oberstufe_lehre', stufen: ['primar', 'oberstufe', 'lehre'] },
       { key: 'kanti',       stufen: ['primar', 'untergym', 'obergym'], bis: { primar: 5 } },
       { key: 'kanti_lehre', stufen: ['primar', 'untergym', 'lehre'], bis: { primar: 5 } },
     ],
-    standardWeg: 'bez_lehre',
+    standardWeg: 'oberstufe_lehre',
   },
   // HarmoS: elf Schuljahre ab vier (2 Kindergarten + 6 Primar + 3 Sek I),
   // Stichtag 31. Juli. Gymnasium hier vereinfacht nach der Sek I.

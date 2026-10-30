@@ -28,7 +28,7 @@ test('Normalisierung: unbekannt → null, Zahlen geklemmt, fremder Standardweg f
   assert.equal(n.jahre.obergym, 1);
   assert.equal(n.jahre.bez, 4);
   assert.ok(!('fremd' in n.jahre));
-  assert.equal(n.standard_weg, 'bez_lehre');
+  assert.equal(n.standard_weg, 'oberstufe_lehre');
   assert.deepEqual(n.stichtag, { monat: 2, tag: 28 });
   assert.deepEqual(normalizeSchulsystem(JSON.stringify(SO)), SO);
   assert.equal(SO.jahre.obergym, 4, 'Obergym-Default 4 Jahre');
@@ -118,7 +118,7 @@ test('Einschulungs-Override null/leer zaehlt nicht als Jahr 0', () => {
 
 test('Ohne Weg gilt der Standardweg; ohne System/Geburt null', () => {
   const r = schoolStageAt({ geburt: { y: 1986, m: 2, d: 1 }, system: SO, figur: { weg: 'gibtsnicht' }, jahr: 1998, monat: 10 });
-  assert.equal(r.weg, 'bez_lehre');
+  assert.equal(r.weg, 'oberstufe_lehre');
   assert.equal(schoolStageAt({ geburt: { y: 1986 }, system: null, jahr: 1998 }), null);
   assert.equal(schoolStageAt({ geburt: null, system: SO, jahr: 1998 }), null);
 });
@@ -146,7 +146,7 @@ test('SO: Bez nach der 2. Klasse und Untergym ab der 5. Primar erreichen das Obe
   assert.deepEqual(at('bez3_gym', 1999), ['bez', 3]);
   assert.deepEqual(at('bez3_gym', 2000), ['obergym', 1]);
   assert.deepEqual(at('kanti_lehre', 1999), ['lehre', 1]);
-  assert.equal(SCHUL_VORLAGEN.ch_so_1990.standardWeg, 'bez_lehre');
+  assert.equal(SCHUL_VORLAGEN.ch_so_1990.standardWeg, 'oberstufe_lehre');
 });
 
 test('Nur Schweizer Vorlagen', () => {
