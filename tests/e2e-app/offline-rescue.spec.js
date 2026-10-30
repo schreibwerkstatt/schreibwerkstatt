@@ -95,7 +95,9 @@ test('Banner + Dialog: drei Arten, kopieren, verwerfen, erneut versuchen', async
   // Erneut versuchen: jetzt nimmt der Server an — Abschnitt und Idee sind dort.
   await dlg.locator('.confirm-dialog-btn--primary').click();
   await expect(page.locator('.session-banner--rescue')).toBeHidden({ timeout: 15000 });
-  const onServer = await page.evaluate(async () => {
+  // Der Banner geht, sobald nichts mehr abgewiesen ist — gesendet ist da noch
+  // nicht zwingend alles. Darum auf den Serverstand warten.
+  const onServer = () => page.evaluate(async () => {
     const bookId = window.Alpine.store('nav').selectedBookId;
     const tree = await (await fetch(`/content/books/${bookId}/tree?__fresh=1`)).json();
     const all = [...(tree.topPages || []), ...(tree.chapters || []).flatMap(function walk(c) { return [...(c.pages || []), ...(c.subchapters || []).flatMap(walk)]; })];
@@ -105,8 +107,8 @@ test('Banner + Dialog: drei Arten, kopieren, verwerfen, erneut versuchen', async
       ideas: (board.ideen || board.items || board || []).filter?.((i) => /Schlüssel/.test(i.content)).length ?? null,
     };
   });
-  expect(onServer.pages).toBe(1);
-  if (onServer.ideas != null) expect(onServer.ideas).toBe(1);
+  await expect.poll(async () => (await onServer()).pages, { timeout: 15000 }).toBe(1);
+  await expect.poll(async () => (await onServer()).ideas ?? 1, { timeout: 15000 }).toBe(1);
 });
 
 test('Dialog auf schmalem Bildschirm: kein horizontales Scrollen, Knöpfe erreichbar', async ({ page, context }) => {

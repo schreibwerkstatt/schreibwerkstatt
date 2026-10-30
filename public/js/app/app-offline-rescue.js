@@ -115,6 +115,10 @@ export const appOfflineRescueMethods = {
     await retryStuckIdeenOps().catch(() => false);
     this._outboxStuckReported = 0;
     this._outboxIdeenStuckReported = 0;
+    // Läuft schon ein Abspielen, kehrte _flushOutbox sofort zurück — hat es die
+    // Ideen bereits hinter sich, warteten die eben zurückgesetzten bis zum
+    // nächsten Auslöser. Darum erst dessen Ende abwarten, dann selbst abspielen.
+    while (this._outboxFlushing) await new Promise((r) => setTimeout(r, 50));
     await this._flushOutbox?.();
     await this._refreshRescueCount();
     await this._loadRescueItems();
