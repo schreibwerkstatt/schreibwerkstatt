@@ -181,3 +181,30 @@ test('Manual-Edit (matchBy figId): id-stabil, behaltene Figur behält Referenz, 
   assert.equal(_dbId('fig_2'), undefined, 'im Katalog entfernte Figur wird gelöscht (nicht stale)');
   assert.equal(_dbId('fig_1'), paulId, 'Paul weiterhin id-stabil');
 });
+
+test('Reconcile: leere Steckbrief-Felder eines Laufs leeren den Bestand nicht', () => {
+  const voll = {
+    geburtstag: '1970', beruf: 'Förster', wohnadresse: 'Waldhaus', kurzname: 'Otto',
+    aeusseres: 'gross', beschreibung: 'Ein Förster.', motivation: 'Ruhe',
+    arc: { typ: 'flach', anfang: 'allein', wendepunkte: [], ende: 'allein' },
+  };
+  const run = (felder) => _komplettLauf([
+    { id: 'fig_1', name: 'Otto Berg', typ: 'nebenfigur', geschlecht: 'm', ...felder,
+      kapitel: [{ name: 'Kapitel 1', haeufigkeit: 2 }], beziehungen: [] },
+  ]);
+  const row = () => db.prepare("SELECT * FROM figures WHERE book_id = ? AND name = 'Otto Berg'").get(BOOK);
+
+  run(voll);
+  assert.equal(row().manually_edited, 0, 'Analyse-Figur, nicht autor-gepflegt');
+  run({});
+  const r = row();
+  for (const k of ['geburtstag', 'beruf', 'wohnadresse', 'kurzname', 'aeusseres', 'beschreibung', 'motivation']) {
+    assert.equal(r[k], voll[k], `${k} bleibt bei leerem Analysewert`);
+  }
+  assert.equal(JSON.parse(r.arc).anfang, 'allein', 'Entwicklungsbogen bleibt');
+  assert.equal(r.geschlecht, 'm');
+
+  run({ ...voll, geburtstag: '1971', beruf: 'Jäger' });
+  assert.equal(row().geburtstag, '1971', 'ein anderer Analysewert ersetzt den Bestand');
+  assert.equal(row().beruf, 'Jäger');
+});

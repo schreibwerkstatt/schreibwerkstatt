@@ -385,6 +385,14 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
           // Autor-Stammdaten gewinnen gegen die Analyse.
           for (const k of CURATED_FIELDS) cols[k] = prev[k];
           writeTags = false;
+        } else {
+          // Leer heisst «diesmal nicht gefunden» (übersprungenes Kapitel, degradierte
+          // Konsolidierung, Recall-Schwankung), kein Beleg gegen den bekannten Wert.
+          // Ein anderer Wert der Analyse ersetzt ihn weiter.
+          for (const k of CURATED_FIELDS) {
+            const empty = k === 'arc' ? _normArc(cols.arc) == null : _txt(cols[k]) == null;
+            if (empty && prev[k] != null && prev[k] !== '') cols[k] = prev[k];
+          }
         }
         updFig.run({
           ...cols, manually_edited: edited, ki_name: manual ? null : f.name, id: existingId,
