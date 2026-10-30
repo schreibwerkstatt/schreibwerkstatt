@@ -50,6 +50,16 @@ chatRouter.post('/book-chat', jsonBody, (req, res) => _handleChatPost(req, res, 
     ? { key: 'job.label.bookChatBook', params: { name: s.book_name } }
     : { key: 'job.label.bookChat', params: null },
   runFn: runBookChatJobDispatch,
+  // Optionales `mode: 'full'` («Nochmals mit ganzem Buch»): steht als
+  // context_info.book_chat_mode an der Frage, der Job liest es von dort. Jeder
+  // andere Wert ist ein 400 — vor dem Speichern der Nachricht.
+  preflight: (req2, res2) => {
+    const mode = req2.body?.mode;
+    if (mode == null || mode === 'full') return true;
+    res2.status(400).json({ error_code: 'BOOK_CHAT_MODE_INVALID' });
+    return false;
+  },
+  contextFn: (req2) => (req2.body?.mode === 'full' ? { book_chat_mode: 'full' } : null),
 }));
 
 chatRouter.post('/research-chat', jsonBody, (req, res) => _handleChatPost(req, res, {

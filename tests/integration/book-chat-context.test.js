@@ -117,3 +117,21 @@ test('DELETE /chat/session/:id bricht den laufenden Job der Session ab', async (
   assert.equal(jobs.get(jobId).status, 'cancelled');
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM chat_sessions WHERE id = ?').get(sid).n, 0);
 });
+
+test('Ganzes Buch: minTextChars verdrängt Verlauf und Gliederung, fullBookPossible misst gegen das Höchstbudget', async () => {
+  const { _fitClassicBudget, fullBookPossible } = require('../../routes/jobs/chat/book-chat');
+  const history = [{ role: 'user', content: 'a'.repeat(3000) }, { role: 'assistant', content: 'b'.repeat(3000) }];
+  const r = _fitClassicBudget({
+    inputBudgetChars: 20000, fixedChars: 6000, history,
+    buildOutline: () => 'G'.repeat(1500), minTextChars: 12000,
+  });
+  assert.equal(r.historyTrimmed, 2);
+  assert.equal(r.outlineDropped, false, 'Gliederung bleibt, wenn das Verlauf-Kürzen schon reicht');
+  assert.ok(r.textBudget >= 12000 * 0.98);
+  const all = _fitClassicBudget({ inputBudgetChars: 20000, fixedChars: 6000, history, buildOutline: () => 'G'.repeat(1500), minTextChars: 14000 });
+  assert.equal(all.outlineDropped, true, 'reicht der Verlauf nicht, weicht auch die Gliederung');
+
+  // Kontextfenster gross genug → möglich; winzig → nicht.
+  assert.equal(await fullBookPossible({ bookId: BOOK, userEmail: OWNER, aiCfg: { inputBudgetChars: 400000 }, messageLen: 10 }), true);
+  assert.equal(await fullBookPossible({ bookId: BOOK, userEmail: OWNER, aiCfg: { inputBudgetChars: 9000 }, messageLen: 10 }), false);
+});

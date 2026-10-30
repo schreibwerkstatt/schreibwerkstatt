@@ -162,3 +162,40 @@ test('Endpunkt lehnt Werkzeuge zur Laufzeit ab → derselbe Job klassisch', asyn
   const msg = db.prepare('SELECT content FROM chat_messages WHERE id = ?').get(j.result.assistant_message_id);
   assert.equal(msg.content, 'Klassisch beantwortet.');
 });
+
+test('Gekürzte Ideenliste → list_ideen nur in diesem Lauf angeboten, Vorspann nennt es', async () => {
+  const BOOK2 = 81202;
+  db.prepare(`INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, 'Volles Ideenbuch', ?, ?)`).run(BOOK2, NOW, NOW);
+  // Mehr Ideen-Text, als der Deckel (15 % des Input-Budgets) fasst.
+  const { getContextConfigFor } = require('../../lib/ai');
+  const budget = Math.max(6000, Math.floor(getContextConfigFor('claude').inputBudgetChars * 0.15));
+  const n = Math.ceil(budget / 380) + 5;
+  for (let i = 0; i < n; i++) ideenDb.createIdee({ bookId: BOOK2, userEmail: USER, content: `Idee ${i} ` + 'x'.repeat(390) });
+  const sid = db.prepare(`INSERT INTO chat_sessions (book_id, kind, user_email, title, created_at, last_message_at)
+                          VALUES (?, 'ideen', ?, 'T', ?, ?)`).run(BOOK2, USER, NOW, NOW).lastInsertRowid;
+  db.prepare(`INSERT INTO chat_messages (session_id, role, content, created_at) VALUES (?, 'user', 'Was ist offen?', ?)`).run(sid, NOW);
+  const calls = [];
+  ai.callAIWithTools = async (messages, system, tools) => {
+    calls.push({ messages: [...messages], tools: tools.map(t => t.name) });
+    if (calls.length === 1) {
+      return res({
+        stopReason: 'tool_use',
+        toolUses: [{ id: 'l1', name: 'list_ideen', input: { limit: 5 } }],
+        rawContentBlocks: [{ type: 'tool_use', id: 'l1', name: 'list_ideen', input: {} }],
+      });
+    }
+    return res({ stopReason: 'tool_use', toolUses: [{ id: 'f', name: 'final_answer', input: { antwort: 'Gelesen.' } }] });
+  };
+  const jobId = createJob('ideen-chat', BOOK2, USER, 'x');
+  await runIdeenChatJob(jobId, sid, 1, 'Was ist offen?', USER);
+  const j = jobs.get(jobId);
+  assert.equal(j.status, 'done', `Job nicht done: ${j.error}`);
+  const tools = calls[0].tools;
+  assert.ok(tools.includes('list_ideen'), 'list_ideen angeboten');
+  assert.ok(tools.indexOf('list_ideen') < tools.indexOf('propose_idee'), 'vor den Ausgabe-Werkzeugen');
+  const pre = calls[0].messages.at(-1).content.map(b => b.text).join('');
+  assert.match(pre, /Ideenliste ist für den Prompt gekürzt.*`list_ideen`/);
+  const ci = JSON.parse(db.prepare('SELECT context_info FROM chat_messages WHERE id = ?').get(j.result.assistant_message_id).context_info);
+  const call = ci.tool_calls.find(t => t.name === 'list_ideen');
+  assert.ok(call?.ok, 'list_ideen lief');
+});

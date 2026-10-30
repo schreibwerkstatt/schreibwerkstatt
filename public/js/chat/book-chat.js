@@ -46,6 +46,7 @@ export const bookChatMethods = {
     const reason = ci.fullOverflow ? 'reasonFullOverflow' : ({
       disabled: 'reasonDisabled', no_index: 'reasonNoIndex', no_hits: 'reasonNoHits', error: 'reasonError',
     })[ci.retrievalFallback];
+    if (mode !== 'full' && ci.fullRequested) parts.push(t('chat.retrieval.fullRequested'));
     if (mode !== 'full' && reason) parts.push(t(`chat.retrieval.${reason}`));
     if (ci.freshPages > 0) parts.push(t('chat.retrieval.freshPages', { n: ci.freshPages }));
     if (ci.historyTrimmed > 0) parts.push(t('chat.retrieval.historyTrimmed'));
@@ -71,17 +72,29 @@ export const bookChatMethods = {
   },
 
   // Antwort brach an einem Deckel ab (input_cap/max_iter): dieselbe Frage als neuen
-  // Lauf stellen. Einen «ganzes Buch»-Modus pro Frage gibt es serverseitig nicht —
-  // der Lauf startet nur neu (gleiche Deckel, frischer Werkzeug-Verlauf).
+  // Lauf stellen (gleiche Deckel, frischer Werkzeug-Verlauf).
   _bookChatCanRetry(msg) {
     const r = msg?.context_info?.stop_reason;
     return r === 'input_cap' || r === 'max_iter';
   },
-  retryBookChatQuestion(msgIdx) {
+  // «Nochmals mit ganzem Buch» (POST `mode: 'full'` → klassischer Volltext-Lauf):
+  // nur, wenn der Job gemessen hat, dass der Buchtext in den Kontext passt
+  // (context_info.fullPossible), und die Antwort ihn nicht schon hatte — agentisch
+  // nach einem Deckel-Abbruch, klassisch bei Auszügen statt Volltext.
+  _bookChatCanRetryFull(msg) {
+    const ci = msg?.context_info;
+    if (!ci || ci.fullPossible !== true) return false;
+    if (ci.mode === 'agent') return this._bookChatCanRetry(msg);
+    return !!ci.retrievalMode && ci.retrievalMode !== 'full';
+  },
+  // `full`: dieselbe Frage mit `mode: 'full'` (sendExtra unten liest `_bookChatSendMode`).
+  async retryBookChatQuestion(msgIdx, { full = false } = {}) {
     const q = this._bookChatQuestionFor(msgIdx);
     if (!q || this.bookChatLoading || this.isBookChatSessionActive(this.bookChatSessionId)) return;
     this.bookChatInput = q;
-    return this.sendBookChatMessage();
+    this._bookChatSendMode = full ? 'full' : null;
+    try { await this.sendBookChatMessage(); }
+    finally { this._bookChatSendMode = null; }
   },
 
   // Frage an den Recherche-Chat übergeben. Schnittstelle: Window-Event
@@ -133,6 +146,7 @@ export const bookChatMethods = {
     newSessionUrl: '/chat/session/book',
     newSessionBody: () => ({ book_id: parseInt(Alpine.store('nav').selectedBookId) }),
     sendUrl: '/jobs/book-chat',
+    sendExtra: (ctx) => (ctx._bookChatSendMode === 'full' ? { mode: 'full' } : {}),
     onBeforeNewSession: async function () {
       await fetch('/jobs/book-chat-cache?book_id=' + Alpine.store('nav').selectedBookId, { method: 'DELETE' });
     },

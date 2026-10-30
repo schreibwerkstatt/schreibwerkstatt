@@ -256,35 +256,43 @@ test('Parität klassisch ↔ agentisch: gleiche Eingabe, gleicher Vorschlag', as
   assert.deepEqual(ctxA.proposals[0].fields, { zeit: null });
 });
 
-test('Neuer Strang + eigener Akt in einer Antwort (thread_ref) → fork; Beat darauf nur im neuen Strang', async () => {
-  const ctx = mkCtx();
-  const t = await executePlotChatTool('propose_thread', { name: 'Neue Linie', begruendung: 'b' }, ctx);
-  const a = await executePlotChatTool('propose_act', { name: 'Eigener Auftakt', thread_ref: t.ref, begruendung: 'b' }, ctx);
-  assert.equal(a.ok, true, a.error);
-  const pa = ctx.proposals[1];
-  assert.equal(pa.thread_ref, t.ref);
-  assert.equal(pa.fork, true);
-  assert.equal(pa.thread_id, undefined);
-  assert.equal(pa.labels.thread, 'Neue Linie');
-  const b = await executePlotChatTool('propose_beat', { act_ref: a.ref, thread_ref: t.ref, titel: 'Start', begruendung: 'b' }, ctx);
-  assert.equal(b.ok, true, b.error);
-  // Ohne Strang bzw. mit anderem Strang passt der strang-eigene Akt nicht.
-  assert.ok((await executePlotChatTool('propose_beat', { act_ref: a.ref, titel: 'X', begruendung: 'b' }, ctx)).error);
-  assert.ok((await executePlotChatTool('propose_beat', { act_ref: a.ref, thread_id: thread.id, titel: 'X', begruendung: 'b' }, ctx)).error);
-  // Kein after_act_id bei fork (die Klone haben noch keine ids).
-  assert.match((await executePlotChatTool('propose_act', { name: 'Y', thread_ref: t.ref, after_act_id: act1.id, begruendung: 'b' }, ctx)).error, /after_act_id/);
-});
-
-test('Akt für bestehenden Strang: ohne eigene Aktstruktur → fork, mit → ohne', async () => {
+test('Strang-eigener Akt nur für Strang mit eigener Aktstruktur — sonst Fehler (kein Fork per Vorschlag)', async () => {
   const plain = plot.createThread(BOOK, USER, { name: 'Ohne eigene Akte' });
   const ctx = mkCtx();
-  assert.equal((await executePlotChatTool('propose_act', { name: 'Neu A', thread_id: plain.id, begruendung: 'b' }, ctx)).ok, true);
-  assert.equal(ctx.proposals[0].fork, true);
+  // Neuer Strang dieser Antwort hat nie eigene Akte.
+  const t = await executePlotChatTool('propose_thread', { name: 'Neue Linie', begruendung: 'b' }, ctx);
+  const viaRef = await executePlotChatTool('propose_act', { name: 'Eigener Auftakt', thread_ref: t.ref, begruendung: 'b' }, ctx);
+  assert.equal(viaRef.errorKey, 'chat.toolError.plotActNotForked');
+  assert.match(viaRef.error, /geteilten Akt/);
+  // Bestehender Strang ohne eigene Akte: derselbe Fehler.
+  const viaId = await executePlotChatTool('propose_act', { name: 'Neu A', thread_id: plain.id, begruendung: 'b' }, ctx);
+  assert.equal(viaId.errorKey, 'chat.toolError.plotActNotForked');
+  assert.equal(ctx.proposals.length, 1, 'nur der Strang gesammelt');
+  // Strang mit eigener Aktstruktur: erlaubt, ohne fork-Flag.
   assert.equal((await executePlotChatTool('propose_act', { name: 'Neu B', thread_id: thread.id, after_act_id: ownAct.id, begruendung: 'b' }, ctx)).ok, true);
-  assert.equal(ctx.proposals[1].fork, undefined);
+  const pa = ctx.proposals[1];
+  assert.equal(pa.thread_id, thread.id);
+  assert.equal(pa.fork, undefined);
+  // Neuer Strang + geteilter Akt + Beat darauf im neuen Strang passt (Strang ohne eigene Akte → geteilt).
+  const shared = await executePlotChatTool('propose_act', { name: 'Geteilt neu', begruendung: 'b' }, ctx);
+  assert.equal((await executePlotChatTool('propose_beat', { act_ref: shared.ref, thread_ref: t.ref, titel: 'Start', begruendung: 'b' }, ctx)).ok, true);
+  // Beat auf dem strang-eigenen Akt nur in genau diesem Strang.
+  assert.ok((await executePlotChatTool('propose_beat', { act_ref: pa.ref, titel: 'X', begruendung: 'b' }, ctx)).error);
+  assert.equal((await executePlotChatTool('propose_beat', { act_ref: pa.ref, thread_id: thread.id, titel: 'X', begruendung: 'b' }, ctx)).ok, true);
   // Hybrid-Regel: Strang mit eigener Aktstruktur nicht auf einem geteilten Akt.
   assert.ok((await executePlotChatTool('propose_beat', { act_id: act1.id, thread_id: thread.id, titel: 'X', begruendung: 'b' }, ctx)).error);
   assert.equal((await executePlotChatTool('propose_beat', { act_id: act1.id, thread_id: plain.id, titel: 'X', begruendung: 'b' }, ctx)).ok, true);
+});
+
+test('klassischer Pfad: strang-eigener Akt ohne eigene Aktstruktur fällt heraus', async () => {
+  const { collectClassicProposals } = require('../../routes/jobs/plot-chat');
+  const plain2 = plot.createThread(BOOK, USER, { name: 'Noch ohne Akte' });
+  const ctx = mkCtx();
+  const { proposals, rejected } = await collectClassicProposals([
+    { werkzeug: 'propose_act', name: 'Nur für ihn', thread_id: plain2.id, begruendung: 'b' },
+  ], ctx, null);
+  assert.equal(proposals.length, 0);
+  assert.equal(rejected, 1);
 });
 
 test('boardOutline: Blöcke der Lesereihenfolge, Beats je Akt nach Lane-Rang', () => {

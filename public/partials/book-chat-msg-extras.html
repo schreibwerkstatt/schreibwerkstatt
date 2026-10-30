@@ -3,6 +3,14 @@
   Nachrichten-Schleife von chat.html, Scope: `msg`, `msgIdx`). Methoden aus
   public/js/chat/book-chat.js. Alle KI-/User-Felder per x-text — kein x-html.
 -->
+<!-- Klassische Antwort aus Auszügen: dieselbe Frage mit dem ganzen Buch -->
+<template x-if="msg.role === 'assistant' && msg.context_info && msg.context_info.mode !== 'agent' && _bookChatCanRetryFull(msg)">
+  <div class="book-chat-research-hint">
+    <button type="button" class="btn-compact" @click="retryBookChatQuestion(msgIdx, { full: true })"
+            :disabled="bookChatLoading || isBookChatSessionActive(bookChatSessionId)"
+            :data-tip="$app.t('chat.retryWholeBookTip')" x-text="$app.t('chat.retryWholeBook')"></button>
+  </div>
+</template>
 <template x-if="msg.role === 'assistant' && msg.context_info && msg.context_info.mode === 'agent'">
   <div class="book-chat-extras">
     <!-- Fussnoten: validierte Zitate aus final_answer -->
@@ -62,6 +70,11 @@
           <button type="button" class="btn-compact" @click="retryBookChatQuestion(msgIdx)"
                   :disabled="bookChatLoading || isBookChatSessionActive(bookChatSessionId)"
                   :data-tip="$app.t('chat.retryQuestionTip')" x-text="$app.t('chat.retryQuestion')"></button>
+        </template>
+        <template x-if="_bookChatCanRetryFull(msg)">
+          <button type="button" class="btn-compact" @click="retryBookChatQuestion(msgIdx, { full: true })"
+                  :disabled="bookChatLoading || isBookChatSessionActive(bookChatSessionId)"
+                  :data-tip="$app.t('chat.retryWholeBookTip')" x-text="$app.t('chat.retryWholeBook')"></button>
         </template>
       </div>
     </template>

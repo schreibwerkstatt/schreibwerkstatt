@@ -105,10 +105,14 @@ function _applyBookChatAiOverrides(effectiveProvider, logger) {
 // einen Mindestanteil Buchtext, wird zuerst der Verlauf von vorn gekürzt (älteste
 // Runden zuerst), dann die Gliederung weggelassen. Ein fester Boden darüber hinaus
 // liesse den Prompt auf kleinen Kontextfenstern überlaufen.
+// `minTextChars` (optional) ersetzt den Mindestanteil — «Nochmals mit ganzem Buch»
+// verlangt so viel Platz, wie der Buchtext braucht, und opfert dafür Verlauf und
+// Gliederung.
 const MIN_TEXT_CHARS = 20000;
 const MIN_TEXT_SHARE = 0.3;
-function _fitClassicBudget({ inputBudgetChars, fixedChars, history, buildOutline }) {
-  const want = Math.min(MIN_TEXT_CHARS, Math.floor(inputBudgetChars * MIN_TEXT_SHARE));
+const SYSTEM_OVERHEAD_CHARS = 8000;   // ~2k Tokens für System-Prompt-Overhead
+function _fitClassicBudget({ inputBudgetChars, fixedChars, history, buildOutline, minTextChars = null }) {
+  const want = minTextChars != null ? minTextChars : Math.min(MIN_TEXT_CHARS, Math.floor(inputBudgetChars * MIN_TEXT_SHARE));
   const len = (h) => h.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : 0), 0);
   let hist = history.slice();
   let gliederung = buildOutline(Math.max(2000, Math.floor(inputBudgetChars * 0.08)));
@@ -127,6 +131,35 @@ function _fitClassicBudget({ inputBudgetChars, fixedChars, history, buildOutline
     outlineDropped,
     textBudget: Math.max(0, Math.floor(avail() * 0.98)),
   };
+}
+
+// Höchstes Textbudget des klassischen Pfads: ohne Verlauf und ohne Gliederung,
+// nur System-Overhead, Figuren-Deckel und Frage reserviert.
+function _fullTextCapacity(aiCfg, messageLen) {
+  return Math.max(0, Math.floor((aiCfg.inputBudgetChars - SYSTEM_OVERHEAD_CHARS - figurenBlockChars(aiCfg) - messageLen) * 0.98));
+}
+
+/**
+ * Kann «Nochmals mit ganzem Buch» hier überhaupt etwas bewirken — passt der
+ * Buchtext in das höchste Textbudget des klassischen Pfads? Beide Pfade legen das
+ * Ergebnis als context_info.fullPossible ab; die Karte zeigt den Knopf nur dann.
+ * Nicht-fatal: im Zweifel false.
+ */
+async function fullBookPossible({ bookId, userEmail, aiCfg, messageLen }) {
+  try {
+    const chars = await _bookTextChars(bookId, `${bookId}:${userEmail}`);
+    return chars > 0 && chars <= _fullTextCapacity(aiCfg, messageLen);
+  } catch { return false; }
+}
+
+// Pro Frage gewählter Modus: steht als context_info.book_chat_mode an der User-
+// Nachricht (POST /jobs/book-chat `mode`, routes/jobs/chat.js). 'full' = ganzes Buch.
+function _requestedMode(userMsgId) {
+  try {
+    const row = db.prepare('SELECT context_info FROM chat_messages WHERE id = ?').get(userMsgId);
+    const ci = row?.context_info ? JSON.parse(row.context_info) : null;
+    return ci?.book_chat_mode === 'full' ? 'full' : null;
+  } catch { return null; }
 }
 
 // Zeichenzahl des Buchtexts für die Volltext-Entscheidung. Quelle der Reihe nach:
@@ -225,7 +258,6 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // pro effektivem Provider. Davon Platz für System-Prompt, Figuren-Block, Frage,
     // Verlauf und Gliederung reservieren (_fitClassicBudget kürzt Verlauf/Gliederung,
     // wenn sonst kaum Buchtext Platz hätte).
-    const SYSTEM_OVERHEAD_CHARS = 8000;   // ~2k Tokens für System-Prompt-Overhead
     // Der Figuren-Block wird RESERVIERT, nicht geschätzt: er steht im selben Prompt
     // und war die Grösse, die den Call vor jedem Buchtext am Kontextfenster scheitern
     // liess. Reserviert wird sein Deckel (nicht die tatsächliche Länge) — der Block
@@ -236,11 +268,19 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // Auszüge im Buch ein. Gedeckelt auf einen Anteil des Budgets; ihre tatsächliche
     // Länge geht vom Textbudget ab (der Block steht schon fest).
     const outline = await contentStore.bookOutline(session.book_id);
+    // «Nochmals mit ganzem Buch»: der Buchtext bekommt so viel Platz, wie er braucht —
+    // Verlauf und Gliederung weichen. Passt er auch dann nicht, läuft das Retrieval
+    // wie sonst und context_info.fullOverflow sagt es.
+    const forceFull = _requestedMode(userMsgId) === 'full';
+    const bookChars = await _bookTextChars(session.book_id, cacheKey);
+    const fullCapacity = _fullTextCapacity(aiCfg, message.length);
+    const fullPossible = bookChars > 0 && bookChars <= fullCapacity;
     const fit = _fitClassicBudget({
       inputBudgetChars: aiCfg.inputBudgetChars,
       fixedChars: SYSTEM_OVERHEAD_CHARS + FIGUREN_MAX_CHARS + message.length,
       history: buildAgenticHistory(session.id).slice(0, -1),
       buildOutline: (maxChars) => buildGliederungBlock(outline, { maxChars }),
+      minTextChars: forceFull && fullPossible ? Math.ceil(bookChars / 0.98) : null,
     });
     const { history: historyWithoutLast, historyChars, gliederung, textBudget: TEXT_CHAR_BUDGET } = fit;
     if (fit.historyTrimmed || fit.outlineDropped) {
@@ -263,14 +303,13 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // Suchtext = Frage + letzte Runde (Folgefragen) — für Semantik UND Keyword-Scoring.
     const query = retrievalQuery(message, historyWithoutLast);
     const scoreText = (q, text) => _scorePageRelevance(q, text, bookChatStopwords);
-    const bookChars = await _bookTextChars(session.book_id, cacheKey);
     let selectedPages = [];
     let usedChars = 0;
     let totalPages = 0;
     let freshPages = 0;
     let pageContents = null;
-    let fullOverflow = false;
     let retrievalMode = bookChars > 0 && bookChars <= TEXT_CHAR_BUDGET ? 'full' : 'keyword';
+    let fullOverflow = forceFull && retrievalMode !== 'full';
     if (retrievalMode === 'full') {
       pageContents = await _loadAllPageTexts(session.book_id, cacheKey, jobId, jobSignal);
       const liveChars = pageContents.reduce((n, p) => n + p.text.length, 0);
@@ -358,6 +397,8 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       retrievalMode,
       ...(retrievalFallback ? { retrievalFallback } : {}),
       ...(fullOverflow ? { fullOverflow: true } : {}),
+      ...(forceFull ? { fullRequested: true } : {}),
+      fullPossible,
       ...(freshPages ? { freshPages } : {}),
       ...(fit.historyTrimmed ? { historyTrimmed: fit.historyTrimmed } : {}),
       figuren:    figuren.length > 0,
@@ -449,8 +490,12 @@ function _bookChatUseAgent(userEmail) {
 }
 
 // Dispatcher: wählt zwischen Agent-Pfad und klassischem Pfad.
+//
+// «Nochmals mit ganzem Buch» (book_chat_mode 'full') läuft immer klassisch: das ist
+// der Pfad, der den ganzen Buchtext in einen Prompt legt. Der agentische Loop hat
+// kein Gegenstück — er liest kapitelweise über Werkzeuge und deckelt pro Antwort.
 function runBookChatJobDispatch(jobId, sessionId, userMsgId, message, userEmail) {
-  if (_bookChatUseAgent(userEmail)) {
+  if (_requestedMode(userMsgId) !== 'full' && _bookChatUseAgent(userEmail)) {
     return _agent().runBookChatJobAgent(jobId, sessionId, userMsgId, message, userEmail);
   }
   return runBookChatJob(jobId, sessionId, userMsgId, message, userEmail);
@@ -458,5 +503,6 @@ function runBookChatJobDispatch(jobId, sessionId, userMsgId, message, userEmail)
 
 module.exports = {
   runBookChatJob, runBookChatJobDispatch, _applyBookChatAiOverrides, _fitClassicBudget, _bookTextChars,
+  fullBookPossible, _requestedMode,
   get runBookChatJobAgent() { return _agent().runBookChatJobAgent; },
 };

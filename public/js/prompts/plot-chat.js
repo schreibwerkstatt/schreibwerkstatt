@@ -85,14 +85,13 @@ export const PLOT_CHAT_PROPOSE_TOOLS = [
   },
   {
     name: 'propose_act',
-    description: 'Schlägt einen NEUEN Akt (Spalte) vor oder — mit act_id — eine Umbenennung. Wird NICHT gespeichert, der User übernimmt einzeln. Das Ergebnis trägt `ref` für act_ref. Strang ohne eigene Aktstruktur: sie entsteht beim Übernehmen als Kopie der geteilten Akte.',
+    description: 'Schlägt einen NEUEN Akt (Spalte) vor oder — mit act_id — eine Umbenennung. Wird NICHT gespeichert, der User übernimmt einzeln. Das Ergebnis trägt `ref` für act_ref. Ein Akt nur eines Strangs geht nur, wenn der Strang schon eigene Akte hat.',
     input_schema: {
       type: 'object',
       properties: {
         act_id: { type: 'integer', description: 'Nur bei Umbenennung: id des bestehenden Akts.' },
         name: { type: 'string', description: 'Name des Akts (max. 120 Zeichen). Pflicht.' },
         thread_id: { type: 'integer', description: 'Nur bei neuem Akt, optional: Akt gehört nur diesem Strang (eigene Aktstruktur). Ohne = geteilter Akt für alle Stränge.' },
-        thread_ref: { type: 'integer', description: 'Statt thread_id: `ref` eines neuen Strangs dieser Antwort.' },
         after_act_id: { type: 'integer', description: 'Nur bei neuem Akt, optional: hinter diesem Akt (desselben Bereichs) einreihen. Ohne = ans Ende.' },
         at_start: { type: 'boolean', description: 'Nur bei neuem Akt, optional: als ersten Akt einreihen.' },
         begruendung: _BEGRUENDUNG,

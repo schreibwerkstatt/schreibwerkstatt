@@ -16,7 +16,7 @@
 //   beat_update   { beat_id, fields, before }                 — nur geänderte Felder;
 //                 geleerte (`leeren`) stehen als ''/null/[] in fields
 //   beat_move     { beat_id, act_id|act_ref, thread_id|thread_ref|null, after_beat_id?, at_start?, before }
-//   act_create    { name, thread_id|thread_ref|null, fork?, after_act_id?, at_start? }
+//   act_create    { name, thread_id|null, after_act_id?, at_start? }
 //   act_update    { act_id, name, before }
 //   thread_create { name, figure_id?|draft_figure_id? }
 //   thread_update { thread_id, fields, before }
@@ -80,12 +80,11 @@ function _resolveThread(input, ctx, state) {
 // Hybrid-Akt-Regel (db/plot#actFitsThread): ein Strang MIT eigenen Akten liegt nur
 // auf seinen eigenen Akten, ein Strang ohne eigene Akte und «ohne Strang» nur auf
 // geteilten. Für Referenzen auf neue Akte gilt dasselbe gegen deren
-// vorgeschlagenen Strang (thread_id bzw. thread_ref) — ein neuer strang-eigener
-// Akt legt die eigene Aktstruktur an (fork), danach gilt sie.
+// vorgeschlagenen thread_id (strang-eigene Akte nur für Stränge, die schon eigene
+// Akte haben — _proposeAct).
 function _actFits(actRes, threadRes, ctx, state) {
   if (actRes.act_ref) {
     const p = ctx.proposals[actRes.act_ref - 1];
-    if (p?.thread_ref) return !!threadRes && threadRes.thread_ref === p.thread_ref;
     if (p?.thread_id != null) return !!threadRes && threadRes.thread_id === p.thread_id;
     return !threadRes || threadRes.thread_ref != null || !threadHasOwnActs(state, threadRes.thread_id);
   }
@@ -330,10 +329,11 @@ function _proposeBeatMove(input, ctx) {
 }
 
 // Neuer Akt (geteilt oder strang-eigen) bzw. Umbenennung. Ein strang-eigener Akt
-// für einen Strang OHNE eigene Aktstruktur — auch für einen in dieser Antwort neu
-// vorgeschlagenen (thread_ref) — trägt `fork: true`: beim Übernehmen legt das
-// Frontend zuerst die eigene Aktstruktur an (POST /plot/threads/:id/fork-acts,
-// Kopie der geteilten Akte), dann den Akt. Ohne geteilte Akte gibt es keinen Fork.
+// nur für einen Strang, der SCHON eigene Akte hat (= POST /plot/acts, sonst
+// THREAD_NOT_FORKED): eine eigene Aktstruktur entsteht ausschliesslich über den
+// Fork im Strang-Menü, nie durch einen Chat-Vorschlag. Ein neuer Strang dieser
+// Antwort (thread_ref) hat nie eigene Akte → derselbe Fehler.
+const ACT_NOT_FORKED = 'Ein Akt nur für diesen Strang lässt sich nicht vorschlagen: der Strang hat keine eigene Aktstruktur (die legt nur der User im Strang-Menü an). Schlage stattdessen einen geteilten Akt (ohne thread_id) oder eine Änderung am Strang vor.';
 function _proposeAct(input, ctx) {
   const state = _state(ctx);
   const name = _str(input.name, MAX_NAME);
@@ -347,15 +347,13 @@ function _proposeAct(input, ctx) {
   }
   const t = _resolveThread(input, ctx, state);
   if (t?.error) return t;
-  const threadId = t?.thread_id ?? null;
-  const fork = !!t && (t.thread_ref != null || !threadHasOwnActs(state, threadId));
-  if (fork && !state.acts.some(a => a.thread_id == null)) {
-    return _err('Eine eigene Aktstruktur entsteht als Kopie der geteilten Akte — das Board hat keine. Schlage zuerst einen geteilten Akt vor.');
+  if (t && (t.thread_ref != null || !threadHasOwnActs(state, t.thread_id))) {
+    return { error: ACT_NOT_FORKED, errorKey: 'chat.toolError.plotActNotForked' };
   }
+  const threadId = t?.thread_id ?? null;
   const after = _int(input.after_act_id);
   let afterLabel = null;
   if (after) {
-    if (fork) return _err('Für einen Strang ohne eigene Aktstruktur kein after_act_id — der Akt kommt ans Ende (oder at_start).');
     const a = state.actById.get(after);
     if (!a) return _err(`Akt #${after} gibt es nicht.`);
     if ((a.thread_id ?? null) !== threadId) return _err('after_act_id muss im selben Bereich liegen (geteilte Akte bzw. Akte desselben Strangs).');
@@ -363,8 +361,7 @@ function _proposeAct(input, ctx) {
   }
   return _push(ctx, {
     type: 'act_create', name,
-    ...(t?.thread_ref ? { thread_ref: t.thread_ref } : { thread_id: threadId }),
-    ...(fork ? { fork: true } : {}),
+    thread_id: threadId,
     ...(after ? { after_act_id: after } : {}),
     ...(!after && input.at_start === true ? { at_start: true } : {}),
     labels: { ...(t ? { thread: t.label } : {}), ...(afterLabel ? { after: afterLabel } : {}) },

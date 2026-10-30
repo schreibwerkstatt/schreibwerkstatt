@@ -26,6 +26,9 @@
 //   loadContext(session, userEmail, { outlineBudgetChars }) → { state, toolCtx, … }  // beide Pfade
 //   promptParts(base) → Objekt   // chat-eigene Felder für buildSystemPrompt
 //   stateSummary(state) → String // Log-Zeile des agentischen Starts
+//   extraReadTools?(base) → string[]  // Katalog-Lese-Werkzeuge, die NUR in diesem Lauf
+//                                     // zusätzlich angeboten werden (Ideen-Chat: list_ideen,
+//                                     // wenn die Ideenliste gekürzt ist)
 //   executeTool(name, input, ctx), proposeToolNames (Set),
 //   classicFallbackNote          // Log, wenn die Passagen-Suche ausfällt
 // }
@@ -78,6 +81,28 @@ function splitPromptBlocks(blocks) {
 
 const _chars = (blocks) => blocks.reduce((n, b) => n + (b.text?.length || 0), 0);
 const _msgChars = (msgs) => msgs.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : 0), 0);
+
+/**
+ * Lese-Werkzeuge aus dem Katalog, die nur in DIESEM Lauf zusätzlich angeboten
+ * werden (die Zugriffstabelle kennt keine Bedingung). Gleich gerendert wie der
+ * Satz (Querverweise nur auf Angebotenes), vor den Ausgabe-Werkzeugen eingereiht;
+ * Namen, die schon angeboten sind oder im Katalog fehlen, fallen weg.
+ * → { tools, toolNames, offeredTools }
+ */
+function withExtraReadTools({ tools, toolNames, offeredTools }, names, prompts, outputTools = []) {
+  const defs = names
+    .filter(n => !offeredTools.has(n))
+    .map(n => (prompts.CHAT_TOOLS || []).find(t => t.name === n))
+    .filter(Boolean);
+  if (!defs.length) return { tools, toolNames, offeredTools };
+  const rendered = prompts.renderChatTools([...defs, ...tools]).slice(0, defs.length);
+  const outNames = new Set(outputTools.map(t => t.name));
+  const read = tools.filter(t => !outNames.has(t.name));
+  const out = tools.filter(t => outNames.has(t.name));
+  const next = [...read, ...rendered, ...out];
+  const nextNames = next.map(t => t.name);
+  return { tools: next, toolNames: nextNames, offeredTools: new Set(nextNames) };
+}
 
 function makeProposalChatJob(cfg) {
   const { kind, label } = cfg;
@@ -245,10 +270,12 @@ function makeProposalChatJob(cfg) {
       const base = await cfg.loadContext(session, userEmail, { outlineBudgetChars: outlineBudgetChars(aiCfg) });
       // Werkzeugsatz wie in allen agentischen Chats (chat-tools/select.js): Slim/voll,
       // ohne Werkzeuge ohne Endpunkt oder Daten; Handler-Hinweise folgen ctx.offeredTools.
-      const { tools, toolNames, toolSet, offeredTools, unavailable } = prepareChatTools({
+      const prepared = prepareChatTools({
         chat: kind, prompts: p, provider, userEmail,
         ctx: { ...base.toolCtx, logger }, outputTools: proposeTools,
       });
+      const { toolSet, unavailable } = prepared;
+      const { tools, toolNames, offeredTools } = withExtraReadTools(prepared, cfg.extraReadTools?.(base) || [], p, proposeTools);
       // Erst-Kontext wie im agentischen Buch-Chat: die semantisch nächsten Passagen zur
       // Frage (+ letzte Runde) stehen schon in Iteration 1 im Vorspann der Frage — eine
       // Frage, die den Text betrifft, braucht dann oft keine Lese-Runde. Non-fatal;
@@ -351,4 +378,4 @@ function makeProposalChatJob(cfg) {
   return { runAgent, runClassic, runDispatch, usesTools, collectClassicProposals, proposalsOnlyFallback };
 }
 
-module.exports = { makeProposalChatJob, splitPromptBlocks, outlineBudgetChars };
+module.exports = { makeProposalChatJob, splitPromptBlocks, outlineBudgetChars, withExtraReadTools };

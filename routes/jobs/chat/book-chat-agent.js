@@ -23,7 +23,7 @@ const { getSessionWithBookName } = require('../../../db/chat-sessions');
 const { getPageWithChapter } = require('../../../db/book-chat/text');
 const { resolvePageBookId } = require('../../../lib/content-ownership');
 const { figurenBlockChars, weltfaktenBlockChars, _parseChatResponse } = require('./shared');
-const { runBookChatJob, _applyBookChatAiOverrides } = require('./book-chat');
+const { runBookChatJob, _applyBookChatAiOverrides, fullBookPossible } = require('./book-chat');
 const { normalizeChatIdeeProposals } = require('../../../lib/chat-idee-proposals');
 
 // ── Agentic Buch-Chat (Tool-Use) ───────────────────────────────────────────────
@@ -182,6 +182,9 @@ const runBookChatJobAgent = makeAgenticChatJob({
     // Endpunkt aus, läuft der Agent wie vorher rein über seine Werkzeuge.
     const preContext = await agentPreContext(session.book_id, retrievalQuery(message, history), { signal: jobSignal, logger, userEmail });
     const embOn = embed.isEnabled();
+    // Ob «Nochmals mit ganzem Buch» (klassischer Volltext-Lauf) hier etwas bewirken
+    // kann — die Karte bietet den Knopf nur dann an (context_info.fullPossible).
+    const fullPossible = await fullBookPossible({ bookId: session.book_id, userEmail, aiCfg, messageLen: message.length });
     // Werkzeugsatz: Slim/voll nach Provider-Klasse, ohne Werkzeuge ohne Endpunkt oder
     // ohne Daten im Buch; Prompt, Beschreibungen und Handler-Hinweise nennen nur, was
     // angeboten wird (ctx.offeredTools).
@@ -257,6 +260,7 @@ const runBookChatJobAgent = makeAgenticChatJob({
         preContext: preContext
           ? { count: preContext.hits.length, chars: preContext.chars }
           : null,
+        fullPossible,
       },
     };
   },
@@ -284,6 +288,7 @@ const runBookChatJobAgent = makeAgenticChatJob({
     ...(ctx.ideenProposals?.length ? { proposals: ctx.ideenProposals } : {}),
     ...(ctx.toolSet ? { tool_set: ctx.toolSet, tools_offered: ctx.toolsOffered } : {}),
     ...(ctx.preContext ? { pre_context: ctx.preContext } : {}),
+    fullPossible: !!ctx.fullPossible,
     // Im Chat generierte Bilder — Frontend rendert sie unter der Antwort.
     ...(ctx.images.length ? { images: ctx.images } : {}),
   }),

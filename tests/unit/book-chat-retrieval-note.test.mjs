@@ -42,3 +42,26 @@ test('Erneut fragen: nur nach input_cap/max_iter, sendet die Frage der Runde', a
   await card.retryBookChatQuestion(1);
   assert.equal(sent, null, 'kein zweiter Lauf, wenn die Session schon läuft');
 });
+
+test('Nochmals mit ganzem Buch: nur wenn der Job es für möglich hielt und die Antwort es nicht schon hatte', async () => {
+  const can = (ci) => m._bookChatCanRetryFull.call(m, { context_info: ci });
+  assert.equal(can({ retrievalMode: 'keyword', fullPossible: true }), true);
+  assert.equal(can({ retrievalMode: 'full', fullPossible: true }), false);
+  assert.equal(can({ retrievalMode: 'semantic', fullPossible: false }), false);
+  assert.equal(can({ mode: 'agent', stop_reason: 'max_iter', fullPossible: true }), true);
+  assert.equal(can({ mode: 'agent', fullPossible: true }), false, 'agentisch nur nach Deckel-Abbruch');
+  assert.equal(can({ mode: 'agent', stop_reason: 'input_cap' }), false);
+  assert.match(note({ retrievalMode: 'keyword', fullRequested: true, fullOverflow: true }), /fullRequested – chat\.retrieval\.reasonFullOverflow/);
+
+  let sentMode = 'unset';
+  const card = {
+    ...m,
+    bookChatMessages: [{ role: 'user', content: 'Frage' }, { role: 'assistant', content: 'x', context_info: { retrievalMode: 'keyword', fullPossible: true } }],
+    bookChatLoading: false, bookChatSessionId: 5, bookChatInput: '',
+    isBookChatSessionActive: () => false,
+    sendBookChatMessage() { sentMode = this._bookChatSendMode; },
+  };
+  await card.retryBookChatQuestion(1, { full: true });
+  assert.equal(sentMode, 'full');
+  assert.equal(card._bookChatSendMode, null, 'Modus gilt nur für diesen einen Send');
+});
