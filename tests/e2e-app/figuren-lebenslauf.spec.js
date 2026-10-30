@@ -142,3 +142,66 @@ test('lebenslauf: Phasen-Matrix richtet nach Alter aus, Spalten sind waehlbar', 
     });
   }, { id: bookId, before: await page.evaluate(() => window.__cvSpecBefore) });
 });
+
+// Schullaufbahn (docs/figur-lebenslauf.md «Schullaufbahn»): mit Schulsystem des
+// Buchs traegt jede datierte Zelle die Klassenstufe — gerechnet in
+// book/school-path.js. Das Schulsystem kommt hier aus einer abgefangenen
+// GET /figures/:id/schulwege-Antwort (Einschulung 1991 als Override), damit das
+// geteilte Wegwerf-Buch keine Bucheinstellung behaelt.
+test('lebenslauf: Klassenstufe in den Zellen, wenn das Buch ein Schulsystem hat', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const seeded = await seedFiguren(page, bookId);
+  await page.route(`**/figures/${bookId}`, async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const res = await route.fetch();
+    const body = await res.json();
+    for (const f of (body.figuren || [])) {
+      if (f.id === seeded.aId) f.lebensereignisse = EVENTS_A;
+      if (f.id === seeded.bId) f.lebensereignisse = EVENTS_B;
+    }
+    await route.fulfill({ response: res, body: JSON.stringify(body) });
+  });
+  await page.route('**/figures/*/alter', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ figuren: [], scan: null }),
+  }));
+  await page.route('**/figures/*/schulwege', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({
+      schulsystem: { vorlage: 'ch_so_1990' },
+      wege: { [seeded.aId]: { fig_id: seeded.aId, weg: 'bez_gym', einschulung_jahr: 1991, repetitionen: [], source: 'autor', vorschlag: null } },
+    }),
+  }));
+
+  await page.evaluate(() => window.__app.toggleFiguresCard());
+  const card = page.locator(CARD);
+  await expect(card).toBeVisible();
+  await card.locator('.tabs-btn', { hasText: 'Lebenslauf' }).click();
+  const table = card.locator('.figur-cv-table');
+  await expect(table).toBeVisible();
+  const jugend = table.locator('tbody tr.figur-cv-row').nth(3);
+  // Dora: eingeschult 1991, Primar bis Sommer 1997 → 1997 ohne Monat: Fruehjahr
+  // 6. Primar, Herbst 1. Bez.
+  await expect(jugend.locator('td').nth(0).locator('.figur-cv-marke')).toHaveText('1997 · 12 J. · 6. Primar → 1. Bez');
+  // Emil ohne eigenen Weg und nur mit Geburtsjahr: Standardweg, Einschulung
+  // unbestimmt → beide Varianten.
+  await expect(jugend.locator('td').nth(1).locator('.figur-cv-marke')).toContainText('1999 · 13 J. ·');
+  // Knopf fuer den KI-Vorschlag erscheint nur mit Schulsystem.
+  await expect(card.locator('button', { hasText: 'Schulwege vorschlagen' })).toBeVisible();
+
+  // Steckbrief: Schullaufbahn der Figur mit eigenem Weg und Einschulungs-Override.
+  await table.locator('thead th').nth(1).locator('.internal-link').click();
+  const schule = card.locator('.figur-schule');
+  await expect(schule).toBeVisible();
+  await expect(schule).toContainText('Bezirksschule bis zur 2. Bez, dann Obergymnasium');
+  await expect(schule).toContainText('1991');
+
+  await page.unroute(`**/figures/${bookId}`);
+  await page.evaluate(async ({ id, before }) => {
+    await fetch(`/figures/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ figuren: before }),
+    });
+  }, { id: bookId, before: await page.evaluate(() => window.__cvSpecBefore) });
+});

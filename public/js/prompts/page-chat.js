@@ -37,6 +37,46 @@ export const PAGE_CHAT_IDEEN_RULES = [
   '- Keine Idee für etwas, das ein Eintrag in vorschlaege schon behebt, und keine, die inhaltlich schon bei den offenen Ideen des Autors steht. Höchstens 3. Sonst ein leeres Array.',
 ];
 
+// Abschnittstitel des Buchs in Lesereihenfolge (Block 1, buch-stabil): das
+// Modell leitet bei Titelfragen das Muster der übrigen Titel ab (Satzanfang,
+// Form, Länge, Ton) und meidet Doppelungen. Über dem Deckel fallen zuerst die
+// Kapitelpfade weg, danach wird ausgewiesen gekürzt.
+const TITLES_MAX_CHARS = 6000;
+
+/**
+ * @param {Array<{id:number, name:string, chapter?:string}>} titles  Lesereihenfolge
+ * @param {number|null} currentPageId
+ * @returns {string} Block oder '' (weniger als zwei Abschnitte)
+ */
+export function buildBookTitlesBlock(titles, currentPageId, { maxChars = TITLES_MAX_CHARS } = {}) {
+  const list = (Array.isArray(titles) ? titles : []).filter(t => t && String(t.name || '').trim());
+  if (list.length < 2) return '';
+  const line = (t, withChapter) => {
+    const mark = t.id === currentPageId ? ' ← dieser Abschnitt' : '';
+    const ch = withChapter && t.chapter ? `[${_clip(t.chapter, 60)}] ` : '';
+    return `- ${ch}${_clip(t.name, 120)}${mark}`;
+  };
+  let lines = list.map(t => line(t, true));
+  if (lines.join('\n').length > maxChars) lines = list.map(t => line(t, false));
+  let omitted = 0;
+  while (lines.length > 1 && lines.join('\n').length > maxChars) { lines.pop(); omitted++; }
+  return [
+    '=== ABSCHNITTSTITEL DES BUCHS (Lesereihenfolge) ===',
+    ...lines,
+    ...(omitted ? [`(… ${omitted} weitere Abschnitte nicht aufgeführt)`] : []),
+    '',
+    'Hinweis Titel: Fragt der Autor nach einem Titel, einer Überschrift oder Headline, erkenne zuerst das Muster der bestehenden Titel (gemeinsamer Satzanfang oder Satzbau, Länge, Ton, Sprache) und halte dich daran, sofern der Autor nichts anderes verlangt. Jede Variante zeigt konkret, worum es in DIESEM Abschnitt geht, statt allgemein zu bleiben, und verrät die Pointe nicht. Schlage keinen Titel vor, der einem anderen Abschnittstitel gleicht oder ihm sehr ähnelt; weise auf solche Doppelungen unter den bestehenden Titeln hin, wenn sie den aktuellen Abschnitt betreffen.',
+  ].join('\n');
+}
+
+/** Normalform für den Titel-Vergleich: Kleinschrift, ohne Satzzeichen/Anführungszeichen. */
+export function normalizeTitle(s) {
+  return String(s ?? '').toLowerCase()
+    .replace(/[\p{P}\p{S}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function _clip(s, n = CLIP) {
   const t = String(s ?? '').replace(/\s+/g, ' ').trim();
   return t.length > n ? t.slice(0, n - 1) + '…' : t;

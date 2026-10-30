@@ -299,13 +299,20 @@ function getLatestContinuityCheck(bookId, userEmail) {
     ORDER BY checked_at DESC, id DESC LIMIT 1
   `).get(bookIdInt, email);
   if (!row) return null;
+  // `changed`: eine der beiden Stellen wurde nach dem Prüflauf gespeichert — Anlass,
+  // den Befund nachzuprüfen (Job kontinuitaet-recheck). Reiner Zeitvergleich, kein KI-Call.
   const issueRows = db.prepare(`
-    SELECT id, schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung, quelle,
-           resolved, dismissed, page_a_id, page_b_id, discard_reason, discard_detail
-    FROM continuity_issues
-    WHERE check_id = ?
-    ORDER BY sort_order, id
-  `).all(row.id);
+    SELECT ci.id, ci.schwere, ci.typ, ci.beschreibung, ci.stelle_a, ci.stelle_b, ci.empfehlung, ci.quelle,
+           ci.resolved, ci.dismissed, ci.page_a_id, ci.page_b_id, ci.discard_reason, ci.discard_detail,
+           ci.recheck_verdict, ci.recheck_reason, ci.recheck_beleg, ci.recheck_at,
+           (COALESCE(pa.local_updated_at, pa.updated_at) > COALESCE(ci.recheck_at, ?)
+             OR COALESCE(pb.local_updated_at, pb.updated_at) > COALESCE(ci.recheck_at, ?)) AS changed
+    FROM continuity_issues ci
+    LEFT JOIN pages pa ON pa.page_id = ci.page_a_id
+    LEFT JOIN pages pb ON pb.page_id = ci.page_b_id
+    WHERE ci.check_id = ?
+    ORDER BY ci.sort_order, ci.id
+  `).all(row.checked_at, row.checked_at, row.id);
   const figRows = db.prepare(`
     SELECT cif.issue_id, f.fig_id, cif.figur_name
     FROM continuity_issue_figures cif
@@ -342,6 +349,10 @@ function getLatestContinuityCheck(bookId, userEmail) {
     stelle_a: r.stelle_a, stelle_b: r.stelle_b, empfehlung: r.empfehlung,
     quelle: r.quelle || null,
     page_a_id: r.page_a_id ?? null, page_b_id: r.page_b_id ?? null,
+    changed: !!r.changed,
+    recheck: r.recheck_verdict
+      ? { verdict: r.recheck_verdict, reason: r.recheck_reason || '', beleg: r.recheck_beleg || '', at: r.recheck_at }
+      : null,
     figuren: figByIssue.get(r.id)?.figuren || [],
     fig_ids: figByIssue.get(r.id)?.fig_ids || [],
     kapitel: chByIssue.get(r.id)?.kapitel || [],
@@ -400,7 +411,47 @@ function setContinuityIssueDismissed(issueId, dismissed) {
   return info.changes > 0;
 }
 
+/** Alles, was der Nachprüf-Job über ein Issue braucht: Befund, Stellen, Zeitpunkt
+ *  des Prüflaufs (ab dann gelten Abschnitte als «seither geändert») und die
+ *  beteiligten Figuren (figures.id + Steckbrief-Geburtstag für die Altersrechnung).
+ *  null wenn unbekannt. */
+function getContinuityIssueForRecheck(issueId) {
+  const id = parseInt(issueId);
+  if (!id) return null;
+  const issue = db.prepare(`
+    SELECT ci.id, ci.book_id, ci.user_email, ci.typ, ci.beschreibung, ci.stelle_a, ci.stelle_b,
+           ci.empfehlung, ci.page_a_id, ci.page_b_id, ci.resolved, ci.dismissed, ci.discard_reason,
+           ci.recheck_at, cc.checked_at
+      FROM continuity_issues ci
+      JOIN continuity_checks cc ON cc.id = ci.check_id
+     WHERE ci.id = ?`).get(id);
+  if (!issue) return null;
+  issue.figuren = db.prepare(`
+    SELECT f.id, f.name, f.geburtstag
+      FROM continuity_issue_figures cif
+      JOIN figures f ON f.id = cif.figure_id
+     WHERE cif.issue_id = ?
+     ORDER BY cif.sort_order`).all(id);
+  return issue;
+}
+
+/** Urteil des Nachprüf-Jobs am Issue ablegen. `resolve` = mit Beleg behoben → das
+ *  Issue gilt als erledigt (wie der Knopf; zurücknehmbar). */
+function saveContinuityIssueRecheck(issueId, { verdict, reason, beleg, resolve }) {
+  const id = parseInt(issueId);
+  if (!id) return false;
+  const info = db.prepare(`
+    UPDATE continuity_issues
+       SET recheck_verdict = ?, recheck_reason = ?, recheck_beleg = ?, recheck_at = ${NOW_ISO_SQL},
+           resolved = CASE WHEN ? THEN 1 ELSE resolved END,
+           resolved_at = CASE WHEN ? THEN ${NOW_ISO_SQL} ELSE resolved_at END
+     WHERE id = ?`).run(verdict, reason || null, beleg || null, resolve ? 1 : 0, resolve ? 1 : 0, id);
+  return info.changes > 0;
+}
+
 module.exports = {
+  getContinuityIssueForRecheck,
+  saveContinuityIssueRecheck,
   saveContinuityCheck,
   saveFaktencheckIssues,
   getLatestContinuityCheck,

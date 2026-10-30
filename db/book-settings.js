@@ -313,6 +313,35 @@ function getBookIdeenStages(bookId) {
   return normalizeIdeeStages(row ? row.ideen_stages : null);
 }
 
+// Schulsystem des Buchs (Migration 345, docs/figur-lebenslauf.md «Schullaufbahn»).
+// Eigener Schreibpfad wie /research. Gespeichert wird die bereits normalisierte
+// Form (public/js/book/school-path.js#normalizeSchulsystem, im Route-Handler über
+// die ESM-Bridge) — dieses Modul kennt die Vorlagen nicht und validiert nicht
+// ein zweites Mal.
+const _getBookSchulsystem = db.prepare('SELECT schulsystem_json FROM book_settings WHERE book_id = ?');
+const _updateBookSchulsystem = db.prepare(`
+  INSERT INTO book_settings (book_id, schulsystem_json, updated_at)
+  VALUES (?, ?, ?)
+  ON CONFLICT(book_id) DO UPDATE SET
+    schulsystem_json=excluded.schulsystem_json,
+    updated_at=excluded.updated_at
+`);
+
+/** Gespeichertes Schulsystem (Objekt) oder null. Rohform — Konsumenten rechnen
+ *  über school-path.js#resolveSchulsystem, das ohnehin normalisiert. */
+function getBookSchulsystem(bookId) {
+  const row = _getBookSchulsystem.get(parseInt(bookId));
+  if (!row?.schulsystem_json) return null;
+  try { return JSON.parse(row.schulsystem_json); } catch { return null; }
+}
+
+/** Schulsystem setzen (normalisierte Form) oder mit null entfernen. */
+function setBookSchulsystem(bookId, schulsystem) {
+  _updateBookSchulsystem.run(
+    parseInt(bookId), schulsystem ? JSON.stringify(schulsystem) : null, new Date().toISOString(),
+  );
+}
+
 /** Querverweis-Einstellungen pro Buch. Eigener Schreibpfad — beruehrt keine
  *  anderen Settings. */
 function setBookXrefSettings(bookId, { figure_numbering, table_numbering } = {}) {
@@ -377,6 +406,8 @@ module.exports = {
   setBookXrefSettings,
   setBookIdeenStages,
   getBookIdeenStages,
+  getBookSchulsystem,
+  setBookSchulsystem,
   VALID_CITATION_STYLES,
   VALID_CITATION_NOTES,
   VALID_BIBLIOGRAPHY_SCOPES,

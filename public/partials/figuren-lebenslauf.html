@@ -13,7 +13,14 @@
 <div x-show="figurenGraphModus === 'lebenslauf'" class="figur-cv" x-cloak>
   <div class="card-section-head card-section-head--baseline">
     <p class="figur-cv-intro" x-text="$app.t('figuren.lebenslauf.intro')"></p>
+    <!-- Schullaufbahn: KI schlaegt je Figur einen Schulweg mit Beleg vor; der Autor
+         uebernimmt ihn im Steckbrief (book/figuren-schulweg.js). Nur mit Schulsystem. -->
+    <button type="button" class="btn-compact" x-show="figurSchulSystem()" x-cloak
+            :disabled="figurSchulJobLoading" @click="runFigurSchulVorschlag()"
+            :data-tip="$app.t('figuren.schule.jobHint')"
+            x-text="figurSchulJobLoading ? $app.t('figuren.schule.jobRunning') : $app.t('figuren.schule.jobRun')"></button>
   </div>
+  <p class="card-status" x-show="figurSchulJobStatus" x-cloak x-text="figurSchulJobStatus"></p>
 
   <!-- Figurenwahl -->
   <div class="filter-bar">
@@ -101,7 +108,7 @@
                         @click="figurenLebenslaufGoto(evt)"
                         @keydown.enter.prevent="figurenLebenslaufGoto(evt)"
                         @keydown.space.prevent="figurenLebenslaufGoto(evt)">
-                      <span class="figur-cv-marke" x-text="figurenLebenslaufMarke(evt)"></span>
+                      <span class="figur-cv-marke" x-text="figurenLebenslaufMarke(evt, figurenLebenslaufMatrix().spalten[zi])"></span>
                       <span class="figur-cv-text" x-text="evt.ereignis"></span>
                       <span class="tag figur-cv-subtyp" x-show="evt.subtyp && evt.subtyp !== 'sonstiges'"
                             x-text="figurenLebenslaufSubtypLabel(evt)"></span>

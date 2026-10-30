@@ -31,6 +31,9 @@
         </span>
       </template>
     </span>
+    <span x-show="issue.changed && !issue.resolved && !issue.dismissed && !issue.discarded" class="kontinuitaet-changed-badge"
+          :data-tip="$app.t('kontinuitaet.changedTip')"
+          x-text="$app.t('kontinuitaet.changedBadge')"></span>
     <span x-show="issue.resolved || issue.dismissed || issue.discarded" class="kontinuitaet-resolved-badge"
           x-text="$app.t(issue.discarded ? 'kontinuitaet.discarded' : (issue.dismissed ? 'kontinuitaet.dismissed' : 'kontinuitaet.resolved'))"></span>
     <span class="history-chevron" :class="{ open: selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i) }" aria-hidden="true"></span>
@@ -58,6 +61,20 @@
       <span class="entity-meta-label" x-text="$app.t('kontinuitaet.discard.detailLabel')"></span>
       <span class="entity-meta-value" x-text="issue.discard_detail"></span>
     </div>
+    <template x-if="issue.recheck">
+      <div class="entity-meta-row kontinuitaet-recheck">
+        <span class="entity-meta-label" x-text="$app.t('kontinuitaet.recheckLabel')"></span>
+        <span class="entity-meta-value">
+          <span class="kontinuitaet-recheck-verdict" :class="'kontinuitaet-recheck-verdict--' + issue.recheck.verdict"
+                x-text="kontinuitaetRecheckVerdictText(issue)"></span>
+          <span x-show="issue.recheck.reason" x-text="' – ' + issue.recheck.reason"></span>
+        </span>
+      </div>
+    </template>
+    <div x-show="issue.recheck?.beleg" class="entity-meta-row kontinuitaet-recheck">
+      <span class="entity-meta-label" x-text="$app.t('kontinuitaet.recheckBeleg')"></span>
+      <q class="entity-meta-value" x-text="issue.recheck?.beleg"></q>
+    </div>
     <div class="kontinuitaet-detail-actions" x-show="issue.discarded">
       <button type="button" class="kontinuitaet-resolve-btn"
               :data-tip="$app.t('kontinuitaet.restoreTip')"
@@ -75,6 +92,12 @@
               :data-tip="$app.t('kontinuitaet.dismissTip')"
               @click.stop="kontinuitaetToggleDismissed(issue)"
               x-text="issue.dismissed ? $app.t('kontinuitaet.undismiss') : $app.t('kontinuitaet.dismiss')"></button>
+      <button type="button" class="kontinuitaet-resolve-btn"
+              x-show="!issue.resolved && !issue.dismissed"
+              :disabled="kontinuitaetRecheckIds.length > 0 || kontinuitaetLoading"
+              :data-tip="$app.t('kontinuitaet.recheckTip')"
+              @click.stop="kontinuitaetRecheck(issue)"
+              x-text="kontinuitaetIsRechecking(issue) ? $app.t('kontinuitaet.recheckRunning') : $app.t('kontinuitaet.recheck')"></button>
     </div>
   </div>
 </div>

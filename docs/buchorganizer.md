@@ -21,7 +21,7 @@ Spread-Reihenfolge in der Facade: dnd → persist → mirror → crud → histor
 
 ## Markup-Layout
 
-[buchorganizer.html](../public/partials/buchorganizer.html) enthält nur noch Toolbar, Solo-Liste, die drei Level-Wrapper und die Längenverteilungs-Tile. Der Zeileninhalt ist SSoT in zwei string-seitigen Fragment-Includes (`<!-- @include … -->`, [app-ui.js](../public/js/app/app-ui.js)#`_resolveIncludes`):
+[buchorganizer.html](../public/partials/buchorganizer.html) enthält nur noch Toolbar, Solo-Liste, die drei Level-Wrapper und die Längenverteilungs-Tile. Darüber, ab acht Abschnitten, ein [Feature-Tipp](../DESIGN.md#feature-tipp) («Reihenfolge im Buch-Chat besprechen»), der eine vorformulierte Frage ins Eingabefeld des Buch-Chats legt (`openBookChatDraft`). Der Zeileninhalt ist SSoT in zwei string-seitigen Fragment-Includes (`<!-- @include … -->`, [app-ui.js](../public/js/app/app-ui.js)#`_resolveIncludes`):
 
 - [organizer-chapter-body.html](../public/partials/organizer-chapter-body.html) — Kapitel-Kopfzeile + Seitenliste, 3× geklont (eine pro Tiefe).
 - [organizer-page-row.html](../public/partials/organizer-page-row.html) — eine Seitenzeile, 4× geklont (Solo-Liste + 3 Tiefen); enthält selbst `organizer-page-actions`.

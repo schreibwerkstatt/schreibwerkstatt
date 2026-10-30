@@ -57,6 +57,8 @@ Seiten laufen in einem Worker-Pool; `ai.lektorat_batch_concurrency` deckelt die 
 
 Code: [public/js/editor/lektorat.js](../public/js/editor/lektorat.js) (Workflow), [public/js/cards/lektorat-findings-card.js](../public/js/cards/lektorat-findings-card.js) + [public/partials/editor-findings.html](../public/partials/editor-findings.html) (Befundliste), [public/js/book/page-view.js](../public/js/book/page-view.js) (Markierung, Befund-Klassen), [public/js/book/history.js](../public/js/book/history.js) (History-Eintrag laden).
 
+**Im Chat besprechen:** unter jedem Szenen-Kommentar, der Stilanalyse und dem Fazit (Renderer [lektorat-analysis.js](../public/js/editor/lektorat-analysis.js), Text als escaptes `data-text`, Klick am `x-html`-Container delegiert → Root `onLektoratAnalysisClick`) öffnet ein Knopf den Abschnitts-Chat mit einer vorformulierten Frage im Eingabefeld ([chats.md](chats.md#abschnitts-chat)). Einzelbefunde haben ihn nicht — sie haben ihre Korrektur.
+
 ### Befund-Klassen
 
 `findingKind(typ)` in `page-view.js` ist die einzige Quelle für die Farbe und, mit einer Ausnahme, für die Vorauswahl:

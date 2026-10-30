@@ -36,6 +36,7 @@ const OWNERS = [
   { thema: 'Sprache/Region',  tables: ['book_settings'], columns: ['language', 'region'], aliases: [] },
   { thema: 'Buchtyp',         tables: ['book_settings'], columns: ['buchtyp', 'textsorte'], aliases: [] },
   { thema: 'Erzählweise',     tables: ['book_settings'], columns: ['erzaehlperspektive', 'erzaehlzeit', 'stilprofil'], aliases: [] },
+  { thema: 'Schulsystem',     tables: ['book_settings'], columns: ['schulsystem_json'], aliases: ['schulsystem', 'school_system'] },
 ];
 
 // Gleicher Spaltenname, anderer Gegenstand — jeweils mit Begruendung.

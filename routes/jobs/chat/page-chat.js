@@ -17,7 +17,7 @@ const { generateSessionTitle } = require('../chat-title');
 const { recordChatLedgerForMessage } = require('../../../db/cost-ledger');
 const { _parseChatResponse, figurenBlockChars } = require('./shared');
 const { pageChatBudget, computePageChangeHunks, fitHistory } = require('./page-chat-context');
-const { annotateVorschlagMatches } = require('./page-chat-verify');
+const { annotateVorschlagMatches, titelCollisions } = require('./page-chat-verify');
 const { preContextPassages, retrievalQuery } = require('./book-chat-retrieval');
 const embed = require('../../../lib/embed');
 const appSettings = require('../../../lib/app-settings');
@@ -68,11 +68,25 @@ async function pageChatPreflight(session, userEmail) {
   return { status: 422, error_code: 'PAGE_CHAT_PAGE_TOO_LARGE', params: { chars, max: pageMax } };
 }
 
+// Abschnittstitel des Buchs in Lesereihenfolge (non-fatal): Kontext für
+// Titelfragen und Grundlage der Doppelungs-Markierung.
+async function _loadBookTitles(bookId, logger) {
+  try {
+    const outline = await contentStore.bookOutline(bookId);
+    return outline.filter(n => n.type === 'page').map(n => ({
+      id: n.id, name: n.name, chapter: contentStore.formatChapterPath(n.path),
+    }));
+  } catch (e) {
+    logger.warn(`Abschnittstitel nicht geladen (${e.message}) – Seiten-Chat ohne Titelliste.`);
+    return [];
+  }
+}
+
 async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
   const logger = makeJobLogger(jobId);
   const {
     buildChatSystemPrompt, SCHEMA_CHAT, formatHistoryVorschlaege, formatHistoryIdeen, historyTrimNote, formatPageChange,
-    buildPageChatBookContext,
+    buildPageChatBookContext, normalizeTitle,
   } = await getPrompts(userEmail);
   const effectiveProvider = resolveProvider({ userEmail });
   const aiCfg = getContextConfigFor(effectiveProvider);
@@ -122,6 +136,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const ideen    = getOpenIdeen(session.page_id, userEmail);
     const lektorat = getLatestPageCheck(session.page_id, userEmail);
     const { SYSTEM_CHAT: chatSysPrompt } = await getBookPrompts(session.book_id, userEmail);
+    const bookTitles = await _loadBookTitles(session.book_id, logger);
 
     const annotate = (r) => {
       if (r.role !== 'assistant') return '';
@@ -157,7 +172,8 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const chain = stand ? statusChain(isJournalisticBook(getBookSettings(session.book_id, userEmail))) : [];
     const editStatus = stand && chain.includes(stand.status) ? { status: stand.status, stale: stand.stale, chain } : null;
     const systemPrompt = buildChatSystemPrompt(session.page_name || '–', promptText, figuren, review,
-      chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg), editStatus, hatNachrichten: hasMsgThread(pd.html) });
+      chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg), editStatus, hatNachrichten: hasMsgThread(pd.html),
+        bookTitles, currentPageId: session.page_id });
 
     // Buch-Kontext: pro Frage andere Bytes → NICHT im System-Prompt (er bräche den
     // Präfix hinter Block 2, der ganze Verlauf würde jede Runde neu bezahlt), sondern
@@ -222,6 +238,9 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // Fundstellen-Prüfung gegen den Text, den das Modell gesehen hat: „Stelle nie
     // gefunden" ist eine andere Aussage als „inzwischen veraltet" (UI).
     await annotateVorschlagMatches(vorschlaege, pageText);
+    // Titelvarianten, die einem ANDEREN Abschnittstitel des Buchs gleichen: die
+    // Karte markiert sie («gibt es schon»), statt sie wortlos anzubieten.
+    const titelDoppelt = titelCollisions(titelVarianten, bookTitles, session.page_id, normalizeTitle);
     const unmatched = vorschlaege.filter(v => v.match).length;
     if (unmatched) logger.info(`${unmatched} von ${vorschlaege.length} Vorschlägen ohne eindeutige Fundstelle.`);
     if (fallback) {
@@ -234,6 +253,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       ...(fallback ? { parse_fallback: true } : {}),
       ...(lostVorschlaege ? { lost_vorschlaege: true } : {}),
       ...(titelVarianten.length ? { titel_varianten: titelVarianten } : {}),
+      ...(titelDoppelt.length ? { titel_doppelt: titelDoppelt } : {}),
       ...(ideenProposals.length ? { proposals: ideenProposals } : {}),
       ...(dropped > 0 ? { history_trimmed: dropped } : {}),
       ...(bookCtxText ? { book_context: { count: bookCtx.hits.length, chars: bookCtx.chars } } : {}),

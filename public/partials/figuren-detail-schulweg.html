@@ -1,0 +1,95 @@
+<!-- Figur-Detail: Schullaufbahn (docs/figur-lebenslauf.md «Schullaufbahn»)
+     Fragment der Figurenübersicht — eingebunden via `<!-- @include figuren-detail-schulweg -->`
+     in figuren-detail.html (string-seitiger Include, weil der Block INNERHALB des
+     `x-for` über die Figuren steht). Scope: `figurenCard` + Schleifenvariable `f`.
+     Methods: public/js/book/figuren-schulweg.js. Erscheint nur, wenn das Buch ein
+     Schulsystem hat (Bucheinstellungen › Kontext › Schulsystem). -->
+<template x-if="figurSchulSystem()">
+  <section class="figur-group figur-schule">
+    <h4 class="figur-group-title" x-text="$app.t('figuren.schule.title')"></h4>
+
+    <template x-if="figurSchulEditId !== f.id">
+      <div>
+        <dl class="figur-steckbrief-grid">
+          <div class="figur-fact"><dt x-text="$app.t('figuren.schule.weg')"></dt><dd x-text="figurSchulWegLabel(f)"></dd></div>
+          <div class="figur-fact"><dt x-text="$app.t('figuren.schule.einschulung')"></dt><dd x-text="figurSchulEinschulung(f)"></dd></div>
+          <template x-if="figurSchulRepetitionen(f)">
+            <div class="figur-fact"><dt x-text="$app.t('figuren.schule.repetitionen')"></dt><dd x-text="figurSchulRepetitionen(f)"></dd></div>
+          </template>
+        </dl>
+        <div class="figur-detail-actions">
+          <button type="button" class="btn-compact" @click.stop="startFigurSchulEdit(f)">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+            <span x-text="$app.t('figuren.schule.edit')"></span>
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <template x-if="figurSchulEditId === f.id">
+      <div class="figur-edit"
+           @keydown="$editKeys($event, { save: () => saveFigurSchulEdit(f), cancel: () => cancelFigurSchulEdit() })">
+        <div class="card-form-grid">
+          <div class="card-form-row">
+            <label class="card-form-label" x-text="$app.t('figuren.schule.weg')"></label>
+            <div class="card-form-field">
+              <div x-data="combobox({ placeholder: $app.t('figuren.schule.weg'), emptyLabel: $app.t('figuren.schule.wegStandard'), compact: false })"
+                   x-modelable="value" x-model="figurSchulDraft.weg"
+                   x-effect="options = figurSchulWegOptionen()"></div>
+            </div>
+          </div>
+          <div class="card-form-row">
+            <label class="card-form-label" x-text="$app.t('figuren.schule.einschulung')"></label>
+            <div class="card-form-field">
+              <input type="text" class="form-num"
+                     x-data="numInput({ integer: true, min: 1000, max: 2999, grouping: false })"
+                     x-modelable="value" x-model="figurSchulDraft.einschulung_jahr">
+              <p class="card-form-field-note" x-text="$app.t('figuren.schule.einschulungHint')"></p>
+            </div>
+          </div>
+          <div class="card-form-row">
+            <label class="card-form-label" x-text="$app.t('figuren.schule.repetition.label')"></label>
+            <div class="card-form-field">
+              <div x-data="combobox({ placeholder: $app.t('figuren.schule.repetition.stufe'), emptyLabel: $app.t('figuren.schule.repetition.keine'), compact: false })"
+                   x-modelable="value" x-model="figurSchulDraft.rep_stufe"
+                   x-effect="options = figurSchulStufenOptionen()"></div>
+              <input type="text" class="form-num" x-show="figurSchulDraft.rep_stufe"
+                     :aria-label="$app.t('figuren.schule.repetition.klasse')"
+                     x-data="numInput({ integer: true, min: 1, max: 13 })"
+                     x-modelable="value" x-model="figurSchulDraft.rep_klasse">
+              <p class="card-form-field-note" x-text="$app.t('figuren.schule.repetition.hint')"></p>
+            </div>
+          </div>
+        </div>
+        <div class="figur-edit-actions">
+          <button type="button" class="primary" :disabled="figurSchulBusy" @click="saveFigurSchulEdit(f)">
+            <span x-show="figurSchulBusy" class="spinner"></span>
+            <span x-text="$app.t('common.save')"></span>
+          </button>
+          <button type="button" :disabled="figurSchulBusy" @click="cancelFigurSchulEdit()" x-text="$app.t('common.cancel')"></button>
+        </div>
+      </div>
+    </template>
+
+    <!-- Offener KI-Vorschlag: nur mit wörtlichem, geprüftem Beleg; übernimmt erst der Autor. -->
+    <template x-if="figurSchulweg(f)?.vorschlag">
+      <div class="figur-schule-vorschlag">
+        <p class="card-form-section-divider" x-text="$app.t('figuren.schule.vorschlagTitel')"></p>
+        <p class="figur-detail-row" x-text="figurSchulVorschlagWeg(f)"></p>
+        <p class="card-hint card-hint--sm" x-show="figurSchulVorschlagDetails(f)" x-text="figurSchulVorschlagDetails(f)"></p>
+        <blockquote class="figur-schule-beleg">
+          <span x-text="'«' + figurSchulweg(f).vorschlag.zitat + '»'"></span>
+          <template x-if="figurSchulweg(f).vorschlag.page_id">
+            <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: figurSchulweg(f).vorschlag.page_id }"></button>
+          </template>
+        </blockquote>
+        <p class="card-hint card-hint--sm" x-show="figurSchulweg(f).vorschlag.begruendung" x-text="figurSchulweg(f).vorschlag.begruendung"></p>
+        <div class="figur-edit-actions">
+          <button type="button" class="primary" :disabled="figurSchulBusy" @click="acceptFigurSchulVorschlag(f)" x-text="$app.t('figuren.schule.uebernehmen')"></button>
+          <button type="button" :disabled="figurSchulBusy" @click="rejectFigurSchulVorschlag(f)" x-text="$app.t('figuren.schule.verwerfen')"></button>
+        </div>
+      </div>
+    </template>
+    <p class="card-form-error" x-show="figurSchulError" x-text="figurSchulError"></p>
+  </section>
+</template>

@@ -47,6 +47,17 @@ export function isOpenIdee(idee) {
   return IDEE_OPEN_STATUSES.includes(ideeStatus(idee));
 }
 
+// Ab so vielen offenen Ideen mit Ort (Abschnitt oder Kapitel) lohnt der
+// Erledigt-Check des Ideen-Chats — Schwelle für den Feature-Tipp im Board und
+// den Vorschlag in der Übersicht («Nächste Schritte»).
+export const IDEEN_CHECK_MIN = 5;
+
+export function openAnchoredIdeenCount(ideen) {
+  let n = 0;
+  for (const i of ideen || []) if (isOpenIdee(i) && (i.page_id != null || i.chapter_id != null)) n++;
+  return n;
+}
+
 // Bahn der Ideen ohne Anker: sie gehoeren nur dem Buch, bis der Autor sie
 // einer Seite oder einem Kapitel zuordnet.
 export const LANE_BOOK = 'book:0';

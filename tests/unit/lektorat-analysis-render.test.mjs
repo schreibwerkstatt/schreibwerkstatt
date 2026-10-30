@@ -34,3 +34,15 @@ test('leere Eingabe → leerer String', () => {
   assert.equal(renderLektoratAnalysisHtml(t, {}), '');
   assert.equal(renderLektoratAnalysisHtml(t, { szenen: null }), '');
 });
+
+test('«Im Chat besprechen»: Knopf an Szene (mit Kommentar), Stilanalyse und Fazit — Text als escaptes data-Attribut', () => {
+  const html = renderLektoratAnalysisHtml(t, {
+    szenen: [{ wertung: 'mittel', titel: 'Am "Rhein"', kommentar: 'Ende <verpufft> & "flach"' }, { wertung: 'stark', titel: 'Ohne' }],
+    stilanalyse: 'Stil', fazit: 'Fazit',
+  });
+  const btns = html.match(/data-chat-discuss="(szene|stil|fazit)"/g) || [];
+  assert.deepEqual(btns.map(b => b.split('"')[1]), ['szene', 'stil', 'fazit'], 'Szene ohne Kommentar bekommt keinen Knopf');
+  assert.ok(html.includes('data-text="Ende &lt;verpufft&gt; &amp; &quot;flach&quot;"'));
+  assert.ok(html.includes('data-titel="Am &quot;Rhein&quot;"'));
+  assert.ok(html.includes(`>${en['lektorat.discussInChat']}</button>`));
+});

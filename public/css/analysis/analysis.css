@@ -52,6 +52,13 @@
   font-size: var(--font-size-sm);
   color: var(--color-muted);
 }
+/* «Im Chat besprechen» unter Szenen-Kommentar, Stilanalyse und Fazit
+   (editor/lektorat-analysis.js). Eigene Zeile, kein Kursiv aus `.fazit`. */
+.lektorat-discuss {
+  display: block;
+  margin-top: var(--space-6);
+  font-style: normal;
+}
 
 /* === Buchbewertung === */
 .bewertung-stars {

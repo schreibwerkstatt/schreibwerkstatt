@@ -5,7 +5,7 @@ import { _isLocal, JSON_ONLY } from './state.js';
 import { buildEditStatusBlock } from './edit-status-block.js';
 import { _obj, _str } from './schema-utils.js';
 import { SYSTEM_CHAT, SYSTEM_BOOK_CHAT } from './core.js';
-import { PAGE_CHAT_IDEEN_RULES, PAGE_CHAT_NACHRICHTEN_HINWEIS } from './page-chat.js';
+import { PAGE_CHAT_IDEEN_RULES, PAGE_CHAT_NACHRICHTEN_HINWEIS, buildBookTitlesBlock } from './page-chat.js';
 import { CHAT_TOOLS, toolMentions } from './chat-tools/index.js';
 
 /**
@@ -229,10 +229,12 @@ export function buildWeltfaktenBlock(welt, opts = {}) {
  *                                      aufgreifen/diskutieren, aber nicht
  *                                      eigenmächtig in Vorschläge umwandeln.
  * @param {Object|null} lektorat        Letztes Lektorat dieser Seite aus page_checks
- *                                      ({ checked_at, fehler, stilanalyse, fazit }).
+ *                                      ({ checked_at, fehler, szenen, stilanalyse, fazit }).
  *                                      Kann gegenüber pageText veraltet sein.
  * @param {Object}      opts            { figurenMaxChars } — Zeichenbudget des
- *                                      Figuren-Blocks (siehe buildFigurenBlock).
+ *                                      Figuren-Blocks (siehe buildFigurenBlock);
+ *                                      { bookTitles, currentPageId } — Abschnittstitel
+ *                                      des Buchs für Titelfragen (buildBookTitlesBlock).
  */
 // Rückgabe: Array von System-Cache-Blöcken (für callAIChat → Claude separate
 // cache_control-Blöcke; lokale Provider flatten sie auf einen String).
@@ -262,6 +264,9 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
       schwaechen:  review.schwaechen,
     }, null, 2));
   }
+
+  const titlesBlock = buildBookTitlesBlock(opts.bookTitles, opts.currentPageId ?? null);
+  if (titlesBlock) stable.push('', titlesBlock);
 
   const page = [
     `Aktueller Abschnitt: «${pageName}»`,
@@ -293,11 +298,13 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     page.push('');
   }
 
-  if (lektorat && ((Array.isArray(lektorat.fehler) && lektorat.fehler.length > 0) || lektorat.stilanalyse || lektorat.fazit)) {
+  const lekSzenen = Array.isArray(lektorat?.szenen) ? lektorat.szenen : [];
+  if (lektorat && ((Array.isArray(lektorat.fehler) && lektorat.fehler.length > 0) || lekSzenen.length > 0 || lektorat.stilanalyse || lektorat.fazit)) {
     const datum = lektorat.checked_at ? lektorat.checked_at.slice(0, 16).replace('T', ' ') : null;
     page.push(`=== LETZTES LEKTORAT DIESES ABSCHNITTS${datum ? ` (Stand ${datum})` : ''} ===`);
     page.push(JSON.stringify({
       ...(Array.isArray(lektorat.fehler) && lektorat.fehler.length > 0 ? { fehler: lektorat.fehler } : {}),
+      ...(lekSzenen.length > 0 ? { szenen: lekSzenen } : {}),
       ...(lektorat.stilanalyse ? { stilanalyse: lektorat.stilanalyse } : {}),
       ...(lektorat.fazit ? { fazit: lektorat.fazit } : {}),
     }, null, 2));

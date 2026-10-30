@@ -47,7 +47,6 @@ function secretsMatch(expected, given) {
 function establishSession(req, res, { email, name, picture = null, role }) {
   req.session.user = { email, name, picture, role };
   req.session.loginAt = Date.now();
-  req.session.lastSeen = Date.now();
   setSessionFingerprintCookie(req, res);
 }
 

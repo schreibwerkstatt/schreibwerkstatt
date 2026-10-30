@@ -42,6 +42,12 @@
         sw = navigator.serviceWorker.controller ? 'controlled' : 'uncontrolled';
       }
     } catch (_) {}
+    // `pref` = localStorage-Override aus app/boot/sw-register.js ('0' schaltet
+    // den SW in diesem Browser ab, '1' erzwingt ihn). Ein dauerhaft
+    // `uncontrolled` gemeldeter Browser ist sonst nicht von einem
+    // abgeschalteten zu unterscheiden.
+    var pref = '-';
+    try { pref = localStorage.getItem('sw') || '-'; } catch (_) { pref = 'x'; }
     var res = '?';
     try {
       res = performance.getEntriesByType('resource').filter(function (r) {
@@ -50,6 +56,7 @@
     } catch (_) {}
     return 'online=' + (navigator.onLine !== false)
       + ' sw=' + sw
+      + ' pref=' + pref
       + ' ready=' + document.readyState
       + ' js=' + res
       + ' t=' + Math.round(performance.now()) + 'ms'

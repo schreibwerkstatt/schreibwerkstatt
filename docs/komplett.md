@@ -13,6 +13,7 @@ Kern-Pipeline, die ein ganzes Buch in einem Hintergrund-Job in den strukturierte
 | `/jobs/kontinuitaet/:book_id` | GET | viewer | Letztes gespeichertes Check-Ergebnis |
 | `/jobs/kontinuitaet/issue/:issue_id/resolved` | POST | editor | Issue als erledigt/offen markieren |
 | `/jobs/kontinuitaet/issue/:issue_id/dismissed` | POST | editor | Issue als „kein Fehler" (Fehlalarm) markieren bzw. aufheben |
+| `/jobs/kontinuitaet/recheck` | POST | editor | Befunde einzeln am aktuellen Text nachprüfen (`{ book_id, issue_ids }`, höchstens 30), Job `kontinuitaet-recheck`, siehe «Befund nachprüfen» |
 | `/jobs/chapter-cache/:book_id` | DELETE | editor | Delta-Cache des Buchs leeren (Force-Reanalyse) |
 
 Dedup pro POST über `findActiveJobId(type, bookId, userEmail)` — ein bereits laufender Job wird mit `{ existing: true }` zurückgegeben statt doppelt eingereiht. **Prüf-Jobs gegen eine laufende Komplettanalyse** ([index.js](../routes/jobs/komplett/index.js)#`_komplettDedup`): läuft für Buch + User eine Komplettanalyse, antworten `POST /jobs/kontinuitaet` und `POST /jobs/erzaehlprofil` mit `409 KOMPLETT_ANALYSIS_RUNNING` — die Analyse schreibt den Katalog gerade neu. Ist der Schritt in ihrem Umfang, reiht sie die Prüfung nach dem Katalog selbst ein. **Gegenrichtung** ([scope.js](../routes/jobs/komplett/scope.js)#`activeStepJob`): läuft für Buch + User eine Kontinuitätsprüfung, ein Erzählprofil oder ein Faktencheck, antwortet `POST /jobs/komplett-analyse` mit `409 KOMPLETT_STEP_JOB_RUNNING` (`{ jobId, step }`, vor dem Speichern des Umfangs) — unabhängig vom Umfang, weil jeder dieser Jobs den Katalog liest; der Nacht-Cron überspringt das Buch für diesen User.
@@ -203,6 +204,17 @@ Läuft im Job `kontinuitaet` ([job-kontinuitaet.js](../routes/jobs/komplett/job-
 ### Zeitlücken (Feature der Kontinuitätsprüfung)
 
 Zusätzlich zu `zeitlinie` (widersprüchliche Zeitangaben) und `anachronismus` meldet die Kontinuitätsprüfung **unmarkierte Zeitsprünge** als `typ: 'zeitluecke'`: erhebliche Sprünge der Erzählzeit zwischen aufeinanderfolgenden Kapiteln/Szenen, die der Text weder durch Überleitung noch Zeitangabe kenntlich macht (Orientierungsverlust). Prompt-seitig (`_ZEITLUECKE_RULE` in [kontinuitaet.js](../public/js/prompts/komplett/kontinuitaet.js), an Single- **und** Multi-Pass-Check angehängt, ohne Zeitlinie-Gating — relative Sprünge zählen auch ohne Kalender); Systemrolle und `PROBLEME_RULES` nennen Zeitlücken ausdrücklich als meldepflichtigen Befund neben Widersprüchen, die Belegstellen-Ausnahme (zwei rahmende Zitate statt zweier widersprechender) steht vor der Zitat-Pflicht. Bewusst signalisierte Ellipsen sind kein Befund; Schwere meist niedrig/mittel. Im Multi-Pass prüft die Verify-Stufe eine Zeitlücke nur mit lokalisierten Ausschnitten auf **beiden** Seiten, sonst bleibt sie stehen (siehe oben). `continuity_issues.typ` ist Freitext; Frontend-Label via `kontinuitaet.typ.*`.
+
+### Befund nachprüfen
+
+Der Autor korrigiert einen Befund und will wissen, ob er behoben ist — ohne ganzen Prüflauf. Knopf «Nachprüfen» im Befund-Detail und «Geänderte nachprüfen (n)» in der Werkzeugleiste der Karte ([kontinuitaet-recheck.js](../public/js/book/kontinuitaet-recheck.js)) starten den Job `kontinuitaet-recheck` ([job-recheck.js](../routes/jobs/komplett/job-recheck.js)): ein Call je Befund auf dem **aktuellen** Text von Stelle A, Stelle B und bis zu vier Abschnitten, die seit dem Prüflauf gespeichert wurden (neueste zuerst, gedeckelt) — die Korrektur steht oft an dritter Stelle. Beteiligte Figuren gehen mit ihrer Geburt nach derselben Vorrangregel wie `get_figure_age` ein ([lib/figure-birth.js](../lib/figure-birth.js)). Prompt `buildKontinuitaetRecheckPrompt` ([prompts/kontinuitaet-recheck.js](../public/js/prompts/kontinuitaet-recheck.js)), Rolle `SYSTEM_KONTINUITAET`.
+
+- **«behoben» nur mit Beleg.** Das Modell liefert `urteil` (`behoben|teilweise|weiterhin`), Begründung und ein wörtliches Zitat; `judgeRecheck` prüft es mit [lib/quote-verify.js](../lib/quote-verify.js) gegen den mitgegebenen Text. Behoben **mit** gefundenem Beleg setzt `resolved` (wie der Knopf, zurücknehmbar); ohne gefundenen Beleg wird daraus `unbelegt` und der Befund bleibt offen. Ein erfundener Beleg bei den anderen Urteilen fällt weg.
+- **Urteil am Issue:** `continuity_issues.recheck_verdict|recheck_reason|recheck_beleg|recheck_at` (letztes Urteil). Wie «erledigt» gilt es nur für diesen Prüflauf.
+- **`changed`** (in `getLatestContinuityCheck`): Stelle A oder B wurde nach `COALESCE(recheck_at, checked_at)` gespeichert — reiner Zeitvergleich, Badge «Stelle geändert» und Kandidatenliste für «Geänderte nachprüfen». Nach einer Nachprüfung erlischt er bis zur nächsten Bearbeitung.
+- **Nicht parallel zu einem Prüflauf:** `409 CONTINUITY_RUNNING` bzw. `KOMPLETT_ANALYSIS_RUNNING` — beide schreiben die Issue-Zeilen neu. Jede `issue_id` muss zum Check des anfragenden Users im angegebenen Buch gehören, sonst `404 ISSUE_NOT_FOUND`.
+
+Gegated: [kontinuitaet-recheck-judge.test.js](../tests/unit/kontinuitaet-recheck-judge.test.js), [komplett-routes.test.js](../tests/integration/komplett-routes.test.js).
 
 ## Weltfakten-Faktencheck (Standalone-Job)
 

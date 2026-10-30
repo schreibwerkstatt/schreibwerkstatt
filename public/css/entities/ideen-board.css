@@ -508,4 +508,7 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
 .ideen-list-status { font-size: var(--font-size-xs); }
 .ideen-list-status--in_arbeit { color: var(--color-warn-text); }
 .ideen-list-status--verworfen { color: var(--color-muted); text-decoration: line-through; }
+
+/* Feature-Tipp über der Toolbar (Erledigt-Check): nur der Abstand zum Fluss. */
+.ideen-board-tip { margin-bottom: var(--card-gap-section); }
 }

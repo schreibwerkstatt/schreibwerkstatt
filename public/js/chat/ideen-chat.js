@@ -1,5 +1,6 @@
 import { makeChatMethods } from './chat-base.js';
 import { ideenProposalMethods } from './ideen-chat-proposals.js';
+import { IDEEN_CHECK_MIN, openAnchoredIdeenCount } from '../book/ideen-shared.js';
 
 // Ideen-Chat-Methoden (gespreadet in die ideenBoardCard). Agentischer Chat NEBEN
 // dem Ideen-Board: prüft Pendenzen gegen den Text, sucht Buch-Ideen einen Ort,
@@ -38,6 +39,19 @@ export const ideenChatMethods = {
     if (this.ideenChatLoading) return;
     this.ideenChatInput = window.__app.t(key);
     await this.sendIdeenChatMessage();
+  },
+
+  // Feature-Tipp «Was ist schon erledigt?» (ideen-board.html): Panel öffnen und
+  // den Erledigt-Check in einem neuen Gespräch starten.
+  async startIdeenErledigtCheck() {
+    if (!this.ideenChatOpen) await this.toggleIdeenChat();
+    await this.startNewIdeenChatSession();
+    await this.askIdeenChat('ideenBoard.chat.starter.erledigt');
+  },
+
+  // Tipp nur, wenn genug offene Ideen an Abschnitten/Kapiteln hängen.
+  ideenCheckTipDue() {
+    return !this.ideenChatOpen && openAnchoredIdeenCount(this.ideen) >= IDEEN_CHECK_MIN;
   },
 
   // Kosten dieser Antwort (context_info.cost_usd, nur Cloud-Provider).

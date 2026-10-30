@@ -8,10 +8,10 @@
        einmaligem Ausblenden nie wieder. Self-contained, kein Root-State. -->
   <template x-if="renderedPageHtml && canReview() && !currentPageEmpty && !checkLoading && !checkDone">
     <div x-data="{ dismissed: (() => { try { return localStorage.getItem('sw:ahaLektorat') === '1'; } catch (e) { return false; } })(), _dismiss(){ this.dismissed = true; try { localStorage.setItem('sw:ahaLektorat', '1'); } catch (e) {} } }"
-         x-show="!dismissed" x-cloak class="page-aha" role="note">
-      <span class="page-aha__text" x-text="t('page.aha.text')"></span>
-      <button type="button" class="page-aha__action" @click="runCheck(); _dismiss()" x-text="t('page.aha.action')"></button>
-      <button type="button" class="icon-btn icon-btn--ghost page-aha__close" @click="_dismiss()" :data-tip="t('page.aha.dismiss')" :aria-label="t('page.aha.dismiss')">
+         x-show="!dismissed" x-cloak class="feature-tip page-aha" role="note">
+      <span class="feature-tip__text" x-text="t('page.aha.text')"></span>
+      <button type="button" class="feature-tip__action" @click="runCheck(); _dismiss()" x-text="t('page.aha.action')"></button>
+      <button type="button" class="icon-btn icon-btn--ghost feature-tip__close" @click="_dismiss()" :data-tip="t('page.aha.dismiss')" :aria-label="t('page.aha.dismiss')">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
       </button>
     </div>

@@ -179,6 +179,6 @@
     </div>
   </template>
 
-  <!-- Stilanalyse & Fazit -->
-  <div x-html="$app.analysisOut"></div>
+  <!-- Szenen, Stilanalyse & Fazit; «Im Chat besprechen» per Delegation -->
+  <div x-html="$app.analysisOut" @click="$app.onLektoratAnalysisClick($event)"></div>
 </div>

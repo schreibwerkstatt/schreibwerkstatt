@@ -96,8 +96,8 @@ test('resolveEntityTitle: mit userEmail fallen Szenen/Figuren anderer User weg',
   assert.equal(resolveEntityTitle('scene', ids.sceneV), 'Fremde Szene');
 });
 
-test('get_figure_age: exakt mit Monat/Tag aus dem Steckbrief, zu Jahr und Ereignis', () => {
-  const r = call('get_figure_age', { figur_name: 'Anna', ereignis: 'Mauerfall', jahr: 2000 });
+test('get_figure_age: exakt mit Monat/Tag aus dem Steckbrief, zu Jahr und Ereignis', async () => {
+  const r = await call('get_figure_age', { figur_name: 'Anna', ereignis: 'Mauerfall', jahr: 2000 });
   assert.deepEqual(r.geburt, { jahr: 1961, monat: 3, tag: 12, quelle: 'steckbrief' });
   assert.equal(r.zeitlinie_real, true);
   assert.equal(r.zum_jahr.jahr, 2000);
@@ -105,23 +105,46 @@ test('get_figure_age: exakt mit Monat/Tag aus dem Steckbrief, zu Jahr und Ereign
   assert.equal(r.zu_ereignissen.length, 1);
   assert.equal(r.zu_ereignissen[0].alter, 28);   // 9.11.1989, Geburtstag im März vorbei
   assert.equal(r.zu_ereignissen[0].exakt, true);
-  const r2 = call('get_figure_age', { figur_name: 'Anna', ereignis: 'zieht um' });
+  const r2 = await call('get_figure_age', { figur_name: 'Anna', ereignis: 'zieht um' });
   assert.equal(r2.zu_ereignissen[0].alter, 27);  // 1.2.1989, Geburtstag noch nicht
 });
 
-test('get_figure_age: Geburtsjahr aus dem Geburts-Ereignis → Spanne, ohne Geburtsjahr → Hinweis', () => {
-  const r = call('get_figure_age', { figur_id: 'fig_bert', jahr: 1989 });
+test('get_figure_age: Geburtsjahr aus dem Geburts-Ereignis → Spanne, ohne Geburtsjahr → Hinweis', async () => {
+  const r = await call('get_figure_age', { figur_id: 'fig_bert', jahr: 1989 });
   assert.equal(r.geburt.quelle, 'geburts_ereignis');
   assert.deepEqual([r.zum_jahr.alter_von, r.zum_jahr.alter_bis], [18, 19]);
-  const c = call('get_figure_age', { figur_name: 'Cleo', jahr: 1989 });
+  const c = await call('get_figure_age', { figur_name: 'Cleo', jahr: 1989 });
   assert.equal(c.geburt, null);
   assert.match(c.zum_jahr.hinweis, /Kein Geburtsjahr/);
   assert.match(c.hinweis, /Kein Geburtsjahr/);
   // Figur eines anderen Users ist für U nicht sichtbar.
-  assert.match(call('get_figure_age', { figur_id: 'fig_fremd' }).error, /nicht gefunden/);
-  const none = call('get_figure_age', { figur_name: 'Anna', ereignis: 'Mondlandung' });
+  assert.match((await call('get_figure_age', { figur_id: 'fig_fremd' })).error, /nicht gefunden/);
+  const none = await call('get_figure_age', { figur_name: 'Anna', ereignis: 'Mondlandung' });
   assert.deepEqual(none.zu_ereignissen, []);
   assert.match(none.ereignis_hinweis, /Kein datiertes Ereignis/);
+  // Ohne Alters-Lauf nennt der Hinweis den Weg dorthin.
+  assert.match(c.hinweis, /Alters-Analyse/);
+});
+
+test('get_figure_age: Schulstufe aus dem Buch-Schulsystem (im Code gerechnet)', async () => {
+  const { setBookSchulsystem } = require('../../db/book-settings');
+  const { setSchoolPath } = require('../../db/figure-school-paths');
+  const { schoolPath } = require('../../lib/esm-bridge');
+  const sp = await schoolPath();
+  // Ohne Schulsystem kein Feld.
+  assert.equal((await call('get_figure_age', { figur_name: 'Anna', jahr: 1975 })).zum_jahr.schulstufe, undefined);
+  setBookSchulsystem(BOOK, sp.schulsystemAusVorlage('ch_so_1990'));
+  // Anna: 12.3.1961 → eingeschult August 1967; Weg Bez → Obergym → Herbst 1973 = 1. Bez.
+  setSchoolPath(ids.anna, { weg: 'bez_gym' }, 'autor');
+  const r = await call('get_figure_age', { figur_name: 'Anna', jahr: 1973 });
+  assert.equal(r.zum_jahr.schulstufe.herbst.klasse, '1. Bez');
+  assert.equal(r.zum_jahr.schulstufe.herbst.schuljahr, '1973/1974');
+  assert.equal(r.zum_jahr.schulstufe.fruehjahr.klasse, '6. Primar');
+  assert.equal(r.schulweg.quelle, 'autor');
+  // Übertritt nach der 2. Bez: Herbst 1975 = 1. Obergym.
+  const g = await call('get_figure_age', { figur_name: 'Anna', jahr: 1975 });
+  assert.equal(g.zum_jahr.schulstufe.herbst.klasse, '1. Obergym');
+  setBookSchulsystem(BOOK, null);
 });
 
 test('ageAt: Spanne ohne Monat, exakt mit Monat, vor der Geburt markiert', () => {
@@ -193,7 +216,7 @@ test('_retrievalQuery: Folgefrage trägt die letzte Runde mit', () => {
   assert.equal(_retrievalQuery('nur Frage', []), 'nur Frage');
 });
 
-test('getFiguren: Geburtsjahr nach derselben Vorrangregel wie get_figure_age, Widerspruch ausgewiesen', () => {
+test('getFiguren: Geburtsjahr nach derselben Vorrangregel wie get_figure_age, Widerspruch ausgewiesen', async () => {
   const { getFiguren } = require('../../routes/jobs/shared/queries');
   // Alters-Index: Bert widerspricht seinem Geburts-Ereignis (1970), Dora hat nur den Index.
   const T2 = '2026-01-02T10:00:00.000Z';
@@ -216,5 +239,5 @@ test('getFiguren: Geburtsjahr nach derselben Vorrangregel wie get_figure_age, Wi
   assert.equal(byId.fig_cleo.geburtsjahr, undefined);
   assert.equal(byId.fig_fremd, undefined);
   // Werkzeug und Block sagen dasselbe.
-  assert.deepEqual(call('get_figure_age', { figur_id: 'fig_bert' }).geburtsjahr_widerspruch, byId.fig_bert.geburtsjahr_widerspruch);
+  assert.deepEqual((await call('get_figure_age', { figur_id: 'fig_bert' })).geburtsjahr_widerspruch, byId.fig_bert.geburtsjahr_widerspruch);
 });

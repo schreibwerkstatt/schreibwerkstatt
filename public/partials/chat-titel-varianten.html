@@ -2,7 +2,8 @@
   Fragment (via @include in chat.html, innerhalb des x-for über chatMessages):
   Titelvarianten einer Seiten-Chat-Antwort (context_info.titel_varianten).
   „Übernehmen" setzt den Seitentitel über renameCurrentPage, „Kopieren" legt ihn
-  in die Zwischenablage. Methoden: chat/page-chat-apply.js.
+  in die Zwischenablage. Eine Variante, die einem anderen Abschnittstitel gleicht
+  (context_info.titel_doppelt), trägt den Verweis auf diesen Abschnitt. Methoden: chat/page-chat-apply.js.
 -->
 <template x-if="msg.role === 'assistant' && chatTitelVarianten(msg).length > 0">
   <div class="chat-titel-varianten">
@@ -10,7 +11,15 @@
     <ul class="chat-titel-list">
       <template x-for="(titel, ti) in chatTitelVarianten(msg)" :key="ti">
         <li class="chat-titel-item">
-          <span class="chat-titel-text" x-text="titel"></span>
+          <span class="chat-titel-text">
+            <span x-text="titel"></span>
+            <template x-if="chatTitelDoppelt(msg, ti)">
+              <span class="chat-titel-doppelt">
+                <span x-text="$app.t('chat.titleExists')"></span>
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: chatTitelDoppelt(msg, ti).page_id, label: chatTitelDoppelt(msg, ti).name }"></button>
+              </span>
+            </template>
+          </span>
           <span class="chat-vorschlag-actions">
             <button type="button" class="chat-vorschlag-btn" x-show="$app.canEdit()"
               @click="applyChatTitel(titel)" :disabled="$app.currentPage?.name === titel"

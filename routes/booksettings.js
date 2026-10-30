@@ -10,6 +10,8 @@ const { journalisticBookSettings } = require('../lib/page-guard');
 const { aclParamGuard, sessionEmail } = require('../lib/acl');
 const logger = require('../logger');
 const { captureSnapshot } = require('./snapshots');
+const { getBookSchulsystem, setBookSchulsystem } = require('../db/book-settings');
+const { schoolPath } = require('../lib/esm-bridge');
 
 const router = express.Router();
 const jsonBody = express.json();
@@ -43,7 +45,7 @@ const BIBLIOGRAPHY_TITLE_MAX = 200;
 router.get('/:book_id', aclParamGuard('viewer'), (req, res) => {
   const bookId = req.bookId;
   const settings = getBookSettings(bookId, sessionEmail(req));
-  res.json(settings);
+  res.json({ ...settings, schulsystem: getBookSchulsystem(bookId) });
 });
 
 /** Speichert Sprache, Region, Buchtyp und Buchkontext für ein Buch. */
@@ -292,6 +294,24 @@ router.put('/:book_id/research', aclParamGuard('editor'), jsonBody, (req, res) =
 
   logger.info(`[recherche-profil] book=${bookId} profilZeichen=${(saved.research_profile || '').length} domains=${saved.research_domains.length}`);
   res.json({ ok: true, ...saved });
+});
+
+/** Schulsystem des Buchs (Schullaufbahn der Figuren, docs/figur-lebenslauf.md).
+ *  Eigener Endpunkt wie /research. `schulsystem: null` entfernt es. Normalisiert
+ *  wird ausschliesslich über die Rechenschicht (school-path.js, ESM-Bridge) — die
+ *  Antwort trägt den gespeicherten Stand, damit die Oberfläche geklemmte Werte
+ *  sofort sieht. Eine unbekannte Vorlage ist ein 400, kein stilles null. */
+router.put('/:book_id/schulsystem', aclParamGuard('editor'), jsonBody, async (req, res) => {
+  const bookId = req.bookId;
+  const raw = req.body?.schulsystem ?? null;
+  const { normalizeSchulsystem, SCHUL_VORLAGE_KEYS } = await schoolPath();
+  const value = raw == null ? null : normalizeSchulsystem(raw);
+  if (raw != null && !value) {
+    return res.status(400).json({ error_code: 'INVALID_VALUE', params: { field: 'schulsystem', allowed: SCHUL_VORLAGE_KEYS.join(', ') } });
+  }
+  setBookSchulsystem(bookId, value);
+  logger.info(`[schulsystem] book=${bookId} vorlage=${value?.vorlage || '–'} standardWeg=${value?.standard_weg || '–'}`);
+  res.json({ ok: true, schulsystem: value });
 });
 
 module.exports = router;

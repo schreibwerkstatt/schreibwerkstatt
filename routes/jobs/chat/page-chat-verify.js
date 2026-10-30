@@ -27,4 +27,24 @@ async function annotateVorschlagMatches(vorschlaege, pageText) {
   return vorschlaege;
 }
 
-module.exports = { annotateVorschlagMatches };
+// Titelvarianten gegen die übrigen Abschnittstitel des Buchs (Normalform ohne
+// Satzzeichen, `normalizeTitle` aus der Prompt-Facade). Liefert
+// [{ i, page_id, name }] — i ist der Index in titel_varianten. Der eigene
+// Abschnitt zählt nicht: seinen Titel zu behalten ist keine Doppelung.
+function titelCollisions(varianten, titles, currentPageId, normalizeTitle) {
+  if (!Array.isArray(varianten) || !varianten.length || !Array.isArray(titles)) return [];
+  const byNorm = new Map();
+  for (const t of titles) {
+    if (t.id === currentPageId) continue;
+    const k = normalizeTitle(t.name);
+    if (k && !byNorm.has(k)) byNorm.set(k, t);
+  }
+  const out = [];
+  varianten.forEach((v, i) => {
+    const hit = byNorm.get(normalizeTitle(v));
+    if (hit) out.push({ i, page_id: hit.id, name: hit.name });
+  });
+  return out;
+}
+
+module.exports = { annotateVorschlagMatches, titelCollisions };

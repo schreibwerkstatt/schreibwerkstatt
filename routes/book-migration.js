@@ -9,6 +9,7 @@ const JSZip = require('jszip');
 const logger = require('../logger');
 const contentStore = require('../lib/content-store');
 const { getBookSettings } = require('../db/schema');
+const { getBookSchulsystem } = require('../db/book-settings');
 const { buildManifest, treeToNodes, buildBookJson, normalizeIncludes } = require('../lib/book-bundle');
 const { collectExtras } = require('../db/book-migration-data');
 const { slugify } = require('../lib/slug');
@@ -80,7 +81,11 @@ router.get('/:bookId', async (req, res) => {
   // Order-Tree: nur er kennt das Interleaving (Seite zwischen zwei Kapiteln).
   const orderTree = (() => { try { return require('../db/book-order').getOrder(bookId)?.tree || null; } catch { return null; } })();
   const nodes = treeToNodes(tree, htmlById, imagesByPage, orderTree);
-  const settings = (() => { try { return getBookSettings(bookId); } catch { return null; } })();
+  // Schulsystem liegt als eigene Spalte neben den übrigen Einstellungen
+  // (book_settings.schulsystem_json), getBookSettings liefert es nicht mit.
+  const settings = (() => {
+    try { return { ...getBookSettings(bookId), schulsystem: getBookSchulsystem(bookId) }; } catch { return null; }
+  })();
 
   // Optionale Extra-Bloecke einsammeln (synchroner DB-Read, kein KI-Call).
   let extras = {};

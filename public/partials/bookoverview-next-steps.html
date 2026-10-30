@@ -1,0 +1,18 @@
+<!-- «Nächste Schritte»: bis zu drei Vorschläge aus den Buchdaten
+     (book-overview/next-steps.js#computeNextSteps), jeder mit einer Aktion und
+     dauerhaft wegklickbar (Alpine.store('hints'), Key je Buch). Ohne offene
+     Vorschläge kein Tile. -->
+<template x-if="$app.canEdit() && overviewNextSteps().length > 0">
+  <div class="overview-tile overview-tile--medium">
+    <div class="overview-tile-label" x-text="$app.t('overview.next.title')"></div>
+    <ul class="overview-next-list">
+      <template x-for="s in overviewNextSteps()" :key="s.key">
+        <li class="feature-tip">
+          <span class="feature-tip__text" x-text="overviewNextStepText(s)"></span>
+          <button type="button" class="feature-tip__action" @click="runOverviewNextStep(s)" x-text="overviewNextStepAction(s)"></button>
+          <button type="button" class="icon-btn icon-btn--ghost feature-tip__close" @click="$store.hints.dismiss(s.key)" :data-tip="$app.t('hint.dismiss')" :aria-label="$app.t('hint.dismiss')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+        </li>
+      </template>
+    </ul>
+  </div>
+</template>

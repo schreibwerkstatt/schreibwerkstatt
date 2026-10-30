@@ -362,6 +362,7 @@ const JOB_TYPE_LABELS = {
   'check':                 'job.label.check',
   'batch-check':           'job.label.batchCheck',
   'komplett-analyse':      'job.label.komplett',
+  'kontinuitaet-recheck':  'job.label.kontinuitaetRecheckType',
   'review':                'job.label.review',
   'chapter-review':        'job.label.chapterReview',
   'book-chat':             'job.label.bookChat',
@@ -416,6 +417,7 @@ const JOB_TYPE_LABELS = {
   'headline-variants':     'job.label.headlineVariants',
   'interview-transcribe':  'job.label.interviewTranscribe',
   'figur-alter':           'job.label.figurAlter',
+  'schulweg-vorschlag':    'job.label.schulwegVorschlag',
 };
 
 // Job-Typen, die vom Superjob (komplett-analyse) abgedeckt werden und nicht in der Statistik erscheinen sollen

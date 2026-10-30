@@ -28,6 +28,7 @@
   <script type="module">
     const { registerBookOrganizerCard } = await import('/public/js/cards/book-organizer-card.js');
     const { registerCollapsible } = await import('/public/js/collapsible.js');
+    const { registerHintsStore } = await import('/public/js/cards/hints-store.js');
 
     // ── Mock-Daten: 3 Kapitel-Tiefen + eine kapitellose Seite ──────────────
     // Shape wie tree/load.js#loadPages: nav.tree flach + depth-first, jedes
@@ -87,6 +88,7 @@
       // ersetzt ihr innerHTML selbst — fuer die Baum-Struktur irrelevant.
       Alpine.data('combobox', () => ({ value: '', options: [], init() {} }));
       registerCollapsible();
+      registerHintsStore();
       registerBookOrganizerCard();
     });
 

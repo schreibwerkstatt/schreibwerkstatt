@@ -48,6 +48,12 @@
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
       <span x-text="$app.t(kontinuitaetResult ? 'kontinuitaet.run.start' : 'kontinuitaet.run.startFirst')"></span>
     </button>
+    <button type="button" class="btn-compact" x-show="kontinuitaetChangedIssues().length"
+            @click="kontinuitaetRecheckChanged()" :disabled="kontinuitaetRecheckIds.length > 0"
+            :data-tip="$app.t('kontinuitaet.recheckChangedTip')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#check"/></svg>
+      <span x-text="$app.t('kontinuitaet.recheckChanged', { n: kontinuitaetChangedIssues().length })"></span>
+    </button>
     <span class="card-hint" x-show="kontinuitaetResult" x-text="$app.t('kontinuitaet.openCount', { n: kontinuitaetOpenCount() })"></span>
   </div>
 

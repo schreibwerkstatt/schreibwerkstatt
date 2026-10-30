@@ -16,6 +16,7 @@ import { registerConfigStore } from '../cards/config-store.js';
 import { registerCollabStore } from '../cards/collab-store.js';
 import { registerJobsStore } from '../cards/jobs-store.js';
 import { registerBadgesStore } from '../cards/badges-store.js';
+import { registerHintsStore } from '../cards/hints-store.js';
 import { registerProgressStore } from '../cards/progress-store.js';
 import { registerPageChatStore } from '../cards/page-chat-store.js';
 import { registerEreignisseCard } from '../cards/ereignisse-card.js';
@@ -154,6 +155,7 @@ export function registerAllCards() {
   registerCollabStore();
   registerJobsStore();
   registerBadgesStore();
+  registerHintsStore();
   registerProgressStore();
   registerPageChatStore();
   registerStilCard();

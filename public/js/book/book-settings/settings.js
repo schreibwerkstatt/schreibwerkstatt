@@ -33,6 +33,9 @@ export const settingsMethods = {
       // Recherche-Profil: gleicher Response, eigener Schreibpfad
       // (/booksettings/:id/research) — siehe book-settings/research.js.
       this._applyResearchSettings(data);
+      // Schulsystem: gleicher Response, eigener Schreibpfad (/schulsystem) —
+      // siehe book-settings/school.js.
+      this._applySchoolSettings(data);
     } catch (e) {
       console.error('[book-settings] Laden fehlgeschlagen:', e);
     } finally {
@@ -166,16 +169,16 @@ export const settingsMethods = {
   async saveActiveTab() {
     const taxErr = this._taxonomyError();
     if (taxErr) { this.bookSettingsError = window.__app.t(taxErr); return; }
-    await Promise.all([this.saveBookSettings(), this.savePublication(), this.saveCitationSettings(), this.saveXrefSettings(), this.saveResearchSettings(), this.saveExpose()]);
+    await Promise.all([this.saveBookSettings(), this.savePublication(), this.saveCitationSettings(), this.saveXrefSettings(), this.saveResearchSettings(), this.saveSchulsystem(), this.saveExpose()]);
   },
 
-  headerSaving()   { return this.bookSettingsSaving || this.pubSaving || this.citationSaving || this.researchSaving || this.exposeSaving; },
+  headerSaving()   { return this.bookSettingsSaving || this.pubSaving || this.citationSaving || this.researchSaving || this.schulSaving || this.exposeSaving; },
 
-  headerError()    { return this.bookSettingsError || this.pubError || this.citationError || this.researchError; },
+  headerError()    { return this.bookSettingsError || this.pubError || this.citationError || this.researchError || this.schulError; },
 
   headerSaved()    { return (this.bookSettingsSaved || this.pubSaved || this.citationSaved || this.exposeSaved) && !this.headerError(); },
 
-  headerDisabled() { return this.bookSettingsSaving || this.pubSaving || this.citationSaving || this.researchSaving || this.exposeSaving || this.bookSettingsLoading; },
+  headerDisabled() { return this.bookSettingsSaving || this.pubSaving || this.citationSaving || this.researchSaving || this.schulSaving || this.exposeSaving || this.bookSettingsLoading; },
 
 
   async saveBookSettings() {

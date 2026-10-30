@@ -39,7 +39,7 @@ function getOpenIdeen(pageId, userEmail) {
 function getLatestPageCheck(pageId, userEmail) {
   if (!pageId || !userEmail) return null;
   const row = db.prepare(`
-    SELECT checked_at, error_count, errors_json, stilanalyse, fazit, model
+    SELECT checked_at, error_count, errors_json, szenen_json, stilanalyse, fazit, model
     FROM page_checks
     WHERE page_id = ? AND user_email = ?
     ORDER BY checked_at DESC LIMIT 1
@@ -47,10 +47,16 @@ function getLatestPageCheck(pageId, userEmail) {
   if (!row) return null;
   let fehler = [];
   try { fehler = JSON.parse(row.errors_json || '[]'); } catch { fehler = []; }
+  // Szenen-Bewertungen (titel/wertung/kommentar): die Kritik, über die der Autor
+  // im Abschnitts-Chat am häufigsten spricht.
+  let szenen = [];
+  try { szenen = JSON.parse(row.szenen_json || '[]'); } catch { szenen = []; }
+  if (!Array.isArray(szenen)) szenen = [];
   return {
     checked_at: row.checked_at,
     error_count: row.error_count,
     fehler,
+    szenen,
     stilanalyse: row.stilanalyse || null,
     fazit: row.fazit || null,
     model: row.model || null,

@@ -1,0 +1,12 @@
+<!--
+  Fragment (via @include in chat.html, nur Abschnitts-Chat): Schnellaufträge über
+  dem Eingabefeld. Ein Klick sendet die vorformulierte Frage sofort
+  (askChatQuick, chat/chat.js). «Überarbeitung prüfen» erst, wenn das Gespräch
+  eine Antwort hat — der Job gibt dann den Wort-Diff seit Gesprächsbeginn mit.
+-->
+<div class="chat-quick-actions" x-show="$app.canReview()">
+  <button type="button" class="btn-compact" :disabled="chatLoading" @click="askChatQuick('chat.quick.ending')" x-text="$app.t('chat.quick.endingLabel')"></button>
+  <button type="button" class="btn-compact" :disabled="chatLoading" @click="askChatQuick('chat.quick.opening')" x-text="$app.t('chat.quick.openingLabel')"></button>
+  <button type="button" class="btn-compact" :disabled="chatLoading" @click="askChatQuick('chat.quick.title')" x-text="$app.t('chat.quick.titleLabel')"></button>
+  <button type="button" class="btn-compact" :disabled="chatLoading" x-show="chatMessages.some(m => m.role === 'assistant')" @click="askChatQuick('chat.quick.recheck')" x-text="$app.t('chat.quick.recheckLabel')"></button>
+</div>

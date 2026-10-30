@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 343, 187 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 345, 188 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -261,6 +261,7 @@ erDiagram
   figures ||--o{ figure_relations        : to
   figures ||--o{ draft_figures           : "imported as"
   figures ||--o| figure_ages             : "age index"
+  figures ||--o| figure_school_paths     : "school path"
   figures ||--o{ figure_age_belege       : "age evidence"
   figures ||--o{ figure_aliases          : "alias"
 
@@ -541,6 +542,7 @@ erDiagram
     TEXT    research_profile         "Freitext-Steuerung des Recherche-Chats (Fachgebiet, Quellenarten, Zitierwünsche) — geht als VORRANGIGE ANGABEN in dessen System-Prompt"
     TEXT    research_domains         "Domain-Eingrenzung der Web-Suche, eine pro Zeile (NULL/leer = offenes Web) → `allowed_domains` am web_search-Werkzeug"
     TEXT    ideen_stages             "aktive Ideen-Stufen, Komma-Text in kanonischer Reihenfolge (offen + erledigt immer; in_arbeit/verworfen zuschaltbar; NULL = alle vier)"
+    TEXT    schulsystem_json         "Schulsystem des Buchs (Vorlage, Einschulungsalter, Stichtag, Schuljahresbeginn, Jahre je Stufe, Standardweg; NULL = keins) — normalisiert über public/js/book/school-path.js"
     TEXT    updated_at
   }
   book_snapshots {
@@ -920,6 +922,15 @@ erDiagram
     TEXT    begruendung
     TEXT    scanned_at
   }
+  figure_school_paths {
+    INTEGER figure_id          PK,FK "ON DELETE CASCADE — eine Zeile pro Figur"
+    TEXT    weg                "Weg-Key des Buch-Schulsystems (NULL = Standardweg)"
+    INTEGER einschulung_jahr   "Override; NULL = aus Geburt + Stichtag gerechnet"
+    TEXT    repetitionen_json  "JSON [{stufe,klasse}]"
+    TEXT    source             "CHECK IN ('autor','ki') oder NULL — wer die Felder gesetzt hat"
+    TEXT    vorschlag_json     "offener KI-Vorschlag mit Beleg (Job schulweg-vorschlag schreibt nur hier)"
+    TEXT    updated_at
+  }
   figure_age_belege {
     INTEGER id          PK
     INTEGER figure_id   FK "ON DELETE CASCADE"
@@ -1161,6 +1172,7 @@ erDiagram
   }
   figures ||--o{ figure_aliases : "alias (CASCADE)"
   figures ||--o| figure_ages : "age index (CASCADE)"
+  figures ||--o| figure_school_paths : "school path (CASCADE)"
   figures ||--o{ figure_age_belege : "age evidence (CASCADE)"
   books ||--o{ figure_age_scans : "scan head (CASCADE)"
   figures ||--o{ draft_figures : "imported as (SET NULL)"
@@ -1208,6 +1220,10 @@ erDiagram
     TEXT    discard_detail "Begruendung des Verwurfs (Verify-grund) oder NULL"
     INTEGER page_a_id FK "SET NULL — Seite von stelle_a (Zitat bzw. zitierter Fakt im Text gefunden)"
     INTEGER page_b_id FK "SET NULL — Seite von stelle_b"
+    TEXT    recheck_verdict "Urteil der Einzel-Nachprüfung: behoben|teilweise|weiterhin|unbelegt (NULL = nie nachgeprüft)"
+    TEXT    recheck_reason  "Begründung des Modells"
+    TEXT    recheck_beleg   "Beleg-Zitat des Modells"
+    TEXT    recheck_at      "Zeitpunkt des Urteils (ISO+Z)"
   }
   continuity_issue_figures {
     INTEGER id         PK

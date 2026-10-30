@@ -18,6 +18,7 @@ const { factcheckGate } = require('../../../lib/factcheck-gate');
 const { guardBook, aclParamGuard, sessionEmail, resolveBookRole } = require('../../../lib/acl');
 const { jsonBody, createJob, enqueueJob, findActiveJobId } = require('../shared');
 const { runKomplettAnalyseJob, runKontinuitaetJob, runErzaehlprofilJob, runFaktencheckJob, runKomplettAnalyseAll } = require('./job');
+const { runKontinuitaetRecheckJob } = require('./job-recheck');
 const { normalizeKomplettScope } = require('../../../lib/komplett-scope');
 const { activeStepJob } = require('./scope');
 const { computeKomplettDelta } = require('./delta');
@@ -150,6 +151,37 @@ komplettRouter.post('/kontinuitaet/issue/:issue_id/dismissed', jsonBody, (req, r
   const dismissed = !!req.body?.dismissed;
   setContinuityIssueDismissed(issueId, dismissed);
   res.json({ ok: true, dismissed });
+});
+
+// Befunde einzeln am aktuellen Text nachprüfen (editor+, eigener Check). Body
+// { book_id, issue_ids: [..] } — ein Job für einen Befund («Nachprüfen») oder alle
+// geänderten («Geänderte nachprüfen»). Jede ID muss zum letzten Check des Users in
+// diesem Buch gehören; fremde/unbekannte → 404 wie bei der Triage. Läuft parallel zu
+// einem Prüflauf nicht: der schreibt die Issue-Zeilen neu.
+const RECHECK_MAX_ISSUES = 30;
+komplettRouter.post('/kontinuitaet/recheck', jsonBody, (req, res) => {
+  const book_id = toIntId(req.body?.book_id);
+  if (!book_id) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
+  if (!guardBook(req, res, book_id, 'editor')) return;
+  const userEmail = sessionEmail(req);
+  const ids = [...new Set((Array.isArray(req.body?.issue_ids) ? req.body.issue_ids : []).map(toIntId).filter(Boolean))];
+  if (!ids.length || ids.length > RECHECK_MAX_ISSUES) {
+    return res.status(400).json({ error_code: 'INVALID_VALUE', params: { field: 'issue_ids' } });
+  }
+  for (const id of ids) {
+    const scope = getContinuityIssueScope(id);
+    if (!scope || scope.book_id !== book_id || (scope.user_email || null) !== (userEmail || null)) {
+      return res.status(404).json({ error_code: 'ISSUE_NOT_FOUND' });
+    }
+  }
+  if (_komplettDedup(res, book_id, userEmail)) return;
+  if (findActiveJobId('kontinuitaet', book_id, userEmail)) return res.status(409).json({ error_code: 'CONTINUITY_RUNNING' });
+  const existing = findActiveJobId('kontinuitaet-recheck', book_id, userEmail);
+  if (existing) return res.json({ jobId: existing, existing: true });
+  const bookName = String(req.body?.book_name || '');
+  const jobId = createJob('kontinuitaet-recheck', book_id, userEmail, 'job.label.kontinuitaetRecheck', { name: bookName });
+  enqueueJob(jobId, () => runKontinuitaetRecheckJob(jobId, book_id, bookName, userEmail, ids));
+  res.json({ jobId });
 });
 
 // Weltfakten-Realitätscheck eigenständig starten — editor+. Prüft die extrahierten

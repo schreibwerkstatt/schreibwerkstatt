@@ -282,6 +282,13 @@ export const pageChatApplyMethods = {
     return Array.isArray(list) ? list : [];
   },
 
+  // Variante gleicht einem anderen Abschnittstitel → { page_id, name }, sonst null
+  // (serverseitig markiert, routes/jobs/chat/page-chat-verify.js#titelCollisions).
+  chatTitelDoppelt(msg, ti) {
+    const list = msg?.context_info?.titel_doppelt;
+    return Array.isArray(list) ? (list.find(d => d.i === ti) || null) : null;
+  },
+
   // Setzt den Seitentitel über denselben Weg wie das Inline-Rename im Editor-
   // Kopf (app-view/page.js#renameCurrentPage → contentRepo.updatePage); der
   // spiegelt den Namen auch in Sidebar-Baum und Seitenliste.

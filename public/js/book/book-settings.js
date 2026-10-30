@@ -5,6 +5,7 @@
 import { settingsMethods } from './book-settings/settings.js';
 import { citationMethods } from './book-settings/citation.js';
 import { researchMethods } from './book-settings/research.js';
+import { schoolMethods } from './book-settings/school.js';
 import { adminMethods } from './book-settings/admin.js';
 import { accessMethods } from './book-settings/access.js';
 import { blogMethods } from './book-settings/blog.js';
@@ -17,6 +18,7 @@ export const bookSettingsMethods = {
   ...settingsMethods,
   ...citationMethods,
   ...researchMethods,
+  ...schoolMethods,
   ...adminMethods,
   ...accessMethods,
   ...blogMethods,

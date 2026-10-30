@@ -156,6 +156,9 @@ export function computeLebenslauf(figuren, ages, ids) {
       const alter = jahr != null ? jahr - sp.geburtsjahr : null;
       push(phaseFuerAlter(alter), si, {
         jahr,
+        // Monat nur aus dem strukturierten Datum: er entscheidet, in welchem
+        // Schuljahr ein Ereignis liegt (Klassenstufe, book/figuren-schulweg.js).
+        monat: Number.isInteger(e.datum_month) && e.datum_month >= 1 ? e.datum_month : null,
         alter,
         datum: e.datum || e.datum_label || '',
         ereignis: e.ereignis || '',
@@ -265,9 +268,13 @@ export const figurenLebenslaufMethods = {
 
   // Jahr UND Alter in der Zelle: das Jahr verankert im Buch, das Alter erklaert
   // die Zeile. Nur eines von beiden zwaenge den Leser zum Kopfrechnen.
-  figurenLebenslaufMarke(evt) {
+  // Mit Schulsystem des Buchs zusaetzlich die Klassenstufe („1999 · 13 J. ·
+  // 1. Bez") — gerechnet in book/school-path.js, nie geschaetzt.
+  figurenLebenslaufMarke(evt, spalte = null) {
     if (evt.jahr == null) return evt.datum || '';
     if (evt.alter == null) return String(evt.jahr);
+    const stufe = spalte ? this.figurSchulStufeFuerEreignis?.(spalte, evt) : '';
+    if (stufe) return this._t('figuren.lebenslauf.markeSchule', { jahr: evt.jahr, alter: evt.alter, stufe });
     return this._t('figuren.lebenslauf.marke', { jahr: evt.jahr, alter: evt.alter })
         || `${evt.jahr}`;
   },

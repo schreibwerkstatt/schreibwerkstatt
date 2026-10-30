@@ -14,6 +14,8 @@ export const appOnboardingMethods = {
       const data = await res.json();
       const st = data?.state || {};
       this.onboardingWelcome = !st.welcomeDismissed && !st.completed;
+      // Weggeklickte Feature-Tipps (cards/hints-store.js) kommen mit derselben Antwort.
+      this.$store.hints?.setDismissed(st.hints);
     } catch { /* non-fatal — kein Banner, kein Fehler */ }
   },
 

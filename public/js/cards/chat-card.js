@@ -59,8 +59,10 @@ export function registerChatCard() {
             root.checkDone = false;
           }
           const requested = takeCardRequest(CARD_REQUEST.PAGE_CHAT_SESSION);
+          const draft = takeCardRequest(CARD_REQUEST.PAGE_CHAT_DRAFT);
           this._chatShown = true;
           if (requested) await this._openRequestedChatSession(requested);
+          else if (draft) await this._openChatDraft(draft);
           else await this._onVisibleChat();
           this.$nextTick(() => {
             const ta = this.$el?.querySelector('.chat-input');
@@ -73,9 +75,14 @@ export function registerChatCard() {
         extraListeners: [
           { type: 'chat:reset', handler: () => this.resetChat() },
           { type: EVT.CARD_REQUEST, handler: (e) => {
-            if (e.detail?.key !== CARD_REQUEST.PAGE_CHAT_SESSION || !this._chatShown) return;
-            const id = takeCardRequest(CARD_REQUEST.PAGE_CHAT_SESSION);
-            if (id) this._openRequestedChatSession(id);
+            if (!this._chatShown) return;
+            if (e.detail?.key === CARD_REQUEST.PAGE_CHAT_SESSION) {
+              const id = takeCardRequest(CARD_REQUEST.PAGE_CHAT_SESSION);
+              if (id) this._openRequestedChatSession(id);
+            } else if (e.detail?.key === CARD_REQUEST.PAGE_CHAT_DRAFT) {
+              const text = takeCardRequest(CARD_REQUEST.PAGE_CHAT_DRAFT);
+              if (text) this._openChatDraft(text);
+            }
           } },
         ],
       });
@@ -100,6 +107,20 @@ export function registerChatCard() {
     async _openRequestedChatSession(sessionId) {
       await this.loadChatSessions();
       await this.loadChatSession(sessionId);
+    },
+
+    // Vorformulierte Frage (Lektorat → «Im Chat besprechen»): neues Gespräch,
+    // Text ins Eingabefeld, Cursor ans Ende — gesendet wird von Hand.
+    async _openChatDraft(text) {
+      await this.loadChatSessions();
+      await this.startNewChatSession();
+      this.chatInput = text;
+      this.$nextTick(() => {
+        const ta = this.$el?.querySelector('.chat-input');
+        if (!ta) return;
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+      });
     },
 
     // Im Edit-Modus ändert jeder Tastendruck den Stand, ohne dass ein Signal am

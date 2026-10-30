@@ -119,6 +119,12 @@ export const chatMethods = {
       console.error('[cancelChatRun]', e);
     }
   },
+  // Schnellauftrag (chat-quick-actions.html): vorformulierte Frage sofort senden.
+  async askChatQuick(key) {
+    if (this.chatLoading) return;
+    this.chatInput = window.__app.t(key);
+    await this.sendChatMessage();
+  },
   ...pageChatMarksMethods,
   ...pageChatApplyMethods,
   // Ideen-Vorschläge (Widerspruch/Fehler als Pendenz am Abschnitt festhalten).

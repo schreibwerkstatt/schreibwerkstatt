@@ -29,6 +29,15 @@
   <div class="ideen-split" :class="{ 'ideen-split--chat': ideenChatOpen }">
   <div class="ideen-main">
 
+  <!-- Feature-Tipp: offene Ideen an Abschnitten/Kapiteln → Erledigt-Check des Ideen-Chats -->
+  <template x-if="$store.hints.isOpen('ideenBoard.erledigtCheck') && ideenCheckTipDue()">
+    <div class="feature-tip ideen-board-tip" role="note">
+      <span class="feature-tip__text" x-text="$app.t('hint.ideenErledigt.text')"></span>
+      <button type="button" class="feature-tip__action" @click="$store.hints.dismiss('ideenBoard.erledigtCheck'); startIdeenErledigtCheck()" x-text="$app.t('hint.ideenErledigt.action')"></button>
+      <button type="button" class="icon-btn icon-btn--ghost feature-tip__close" @click="$store.hints.dismiss('ideenBoard.erledigtCheck')" :data-tip="$app.t('hint.dismiss')" :aria-label="$app.t('hint.dismiss')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+    </div>
+  </template>
+
   <!-- @include ideen-board-toolbar -->
 
   <!-- @include ideen-board-add -->

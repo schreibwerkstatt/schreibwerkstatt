@@ -37,6 +37,7 @@ import { memoMethods } from './card-memo.js';
 import { activeFilterId, sameId } from '../chapter-filter.js';
 import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 import { figurPflegeMethods } from '../book/figuren-pflege.js';
+import { figurenSchulwegMethods } from '../book/figuren-schulweg.js';
 
 // Pure Filter+Sort der Figurenliste. Aus dem memoized Wrapper extrahiert, damit
 // sie ohne Alpine-Root testbar bleibt. `chapterIdx(id)` = Lese-Reihenfolge einer
@@ -128,6 +129,18 @@ export function registerFigurenCard() {
     figurMergeBusy: false,
     figurMergeError: '',
     figurPflegeMessage: '',
+    // Schullaufbahn (book/figuren-schulweg.js): `figurSchulData` = { schulsystem,
+    // wege } aus GET /figures/:id/schulwege; null = nicht geladen. Bearbeiten wie
+    // die Katalog-Pflege (eine Figur zur Zeit), dazu der Vorschlags-Job.
+    figurSchulData: null,
+    figurSchulEditId: null,
+    figurSchulDraft: {},
+    figurSchulBusy: false,
+    figurSchulError: '',
+    figurSchulJobLoading: false,
+    figurSchulJobProgress: 0,
+    figurSchulJobStatus: '',
+    _figurSchulPollTimer: null,
     _figurenNetwork: null,
     _figurenHash: null,
     _figurenNodes: null,
@@ -159,6 +172,7 @@ export function registerFigurenCard() {
           this._memos = {};
           if (this.figurenGraphModus === 'alter') this.ensureFigurenAlter();
           this.loadPlotBacklinks('figure');
+          this.loadFigurenSchulwege();
           await root.loadFiguren(Alpine.store('nav').selectedBookId);
           await this.$nextTick();
           this.renderFigurGraph();
@@ -176,11 +190,13 @@ export function registerFigurenCard() {
           ctx.figurenGraphKapitelId = null;
           ctx._resetFigurenAlter();
           ctx._resetFigurPflege();
+          ctx._resetFigurSchulweg();
           if (!root.showFiguresCard) return;
           const bookId = Alpine.store('nav').selectedBookId;
           if (!bookId) return;
           ctx.plotBacklinks = {};
           ctx.loadPlotBacklinks('figure');
+          ctx.loadFigurenSchulwege();
           await root.loadFiguren(bookId);
           // Schneller Folge-Buchwechsel: Ergebnis verwerfen, der neue
           // book:changed-Handler rendert.
@@ -198,6 +214,7 @@ export function registerFigurenCard() {
           destroyNet();
           ctx._resetFigurenAlter();
           ctx._resetFigurPflege();
+          ctx._resetFigurSchulweg();
           ctx.figurenGraphModus = 'figur';
           ctx.figurenGraphKapitelId = null;
           ctx.figurenGraphFullscreen = false;
@@ -284,6 +301,7 @@ export function registerFigurenCard() {
       }
       this._lifecycle?.destroy();
       if (this._figurenAlterPollTimer) { clearInterval(this._figurenAlterPollTimer); this._figurenAlterPollTimer = null; }
+      if (this._figurSchulPollTimer) { clearInterval(this._figurSchulPollTimer); this._figurSchulPollTimer = null; }
       this._themeObserver?.disconnect();
       this._themeObserver = null;
       if (this._figurenNetwork) { this._figurenNetwork.destroy(); this._figurenNetwork = null; }
@@ -364,5 +382,6 @@ export function registerFigurenCard() {
     ...figurenLebenslaufMethods,
     ...plotBacklinkMethods,
     ...figurPflegeMethods,
+    ...figurenSchulwegMethods,
   }));
 }

@@ -17,10 +17,14 @@ const {
   findDatedEvents,
 } = require('../../../db/book-chat/timeline');
 const { getFigureRow } = require('../../../db/book-chat/figures');
-const { listFigureAges } = require('../../../db/figure-ages');
+const { listFigureAges, getFigureAgeScan } = require('../../../db/figure-ages');
 const { getBookSettings } = require('../../../db/book-settings');
 const { getDescendantChapterIds } = require('../../../db/book-order');
 const { birthCandidates, resolveBirth } = require('../../../lib/figure-birth');
+const { getBookSchulsystem } = require('../../../db/book-settings');
+const { getSchoolPath } = require('../../../db/figure-school-paths');
+const { schoolPath } = require('../../../lib/esm-bridge');
+const { schoolLabel } = require('../../../lib/school-labels');
 const { _truncateResult, _findFigure, offeredList, toolHint } = require('./shared');
 
 // ── list_continuity_issues ────────────────────────────────────────────────────
@@ -200,7 +204,50 @@ function ageAt(birth, at) {
   return out;
 }
 
-function tool_get_figure_age(input, ctx) {
+/** Schulstufe-Rechner für eine Figur — null ohne Schulsystem des Buchs oder ohne
+ *  Geburt (und ohne Einschulungs-Override). Gerechnet in der Rechenschicht
+ *  public/js/book/school-path.js (dieselbe wie Figuren-Karte und Lebenslauf). */
+async function _schoolStager(ctx, fig, birth, lang) {
+  const stored = getBookSchulsystem(ctx.bookId);
+  if (!stored) return null;
+  const sp = await schoolPath();
+  const system = sp.resolveSchulsystem(stored);
+  if (!system) return null;
+  const path = getSchoolPath(fig.id);
+  const figur = path ? { weg: path.weg, einschulung_jahr: path.einschulung_jahr, repetitionen: path.repetitionen } : null;
+  if (!birth && figur?.einschulung_jahr == null) return null;
+  const fmt = (r) => {
+    if (!r) return null;
+    const out = { status: r.status, schuljahr: r.schuljahr };
+    if (r.status === 'schule') {
+      out.stufe = schoolLabel(sp.stufeLabelKey(r.stufe), lang);
+      out.klasse = schoolLabel(sp.klasseLabelKey(r.stufe), lang, { n: r.klasse });
+      if (r.repetition) out.repetition = true;
+    } else if (r.status === 'abgeschlossen') {
+      out.letzte_stufe = r.letzte_stufe ? schoolLabel(sp.stufeLabelKey(r.letzte_stufe), lang) : null;
+      out.abschluss_jahr = r.abschluss_jahr;
+    } else {
+      out.einschulung = r.einschulung;
+    }
+    if (r.unsicher) out.unsicher_alternative = fmt({ ...r.alternative, schuljahr: r.schuljahr });
+    return out;
+  };
+  const args = { geburt: birth ? { y: birth.y, m: birth.m, d: birth.d } : null, system, figur };
+  return {
+    weg: schoolLabel(sp.wegLabelKey(sp.figurWeg(system, figur)), lang),
+    weg_quelle: figur?.weg ? (path.source || 'autor') : 'standard',
+    zumJahr(jahr) {
+      const r = sp.schoolStagesForYear({ ...args, jahr });
+      return r ? { herbst: fmt(r.herbst), ...(r.fruehjahr ? { fruehjahr: fmt(r.fruehjahr) } : {}) } : null;
+    },
+    zuDatum(jahr, monat) {
+      if (!monat) return this.zumJahr(jahr);
+      return fmt(sp.schoolStageAt({ ...args, jahr, monat }));
+    },
+  };
+}
+
+async function tool_get_figure_age(input, ctx) {
   const userEmail = ctx.userEmail || '';
   if (!input?.figur_id && !input?.figur_name) return { error: 'figur_id oder figur_name erforderlich.', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'figur_id/figur_name' } };
   const fig = _findFigure(input, ctx);
@@ -217,6 +264,8 @@ function tool_get_figure_age(input, ctx) {
     ...(widerspruch ? { geburtsjahr_widerspruch: widerspruch } : {}),
     zeitlinie_real: !!getBookSettings(ctx.bookId, userEmail)?.zeitlinie_real,
   };
+  const schule = await _schoolStager(ctx, fig, birth, getBookSettings(ctx.bookId, userEmail)?.language || 'de');
+  if (schule) out.schulweg = { weg: schule.weg, quelle: schule.weg_quelle };
 
   if (ageRow) {
     out.alters_index = {
@@ -231,6 +280,8 @@ function tool_get_figure_age(input, ctx) {
 
   if (Number.isInteger(input?.jahr)) {
     out.zum_jahr = { jahr: input.jahr, ...(birth ? ageAt(birth, { y: input.jahr }) : { hinweis: 'Kein Geburtsjahr bekannt — Alter nicht berechenbar.' }) };
+    const stufe = schule?.zumJahr(input.jahr);
+    if (stufe) out.zum_jahr.schulstufe = stufe;
   }
 
   const needle = typeof input?.ereignis === 'string' ? input.ereignis.trim() : '';
@@ -239,11 +290,13 @@ function tool_get_figure_age(input, ctx) {
     out.zu_ereignissen = events.map(e => {
       const at = { y: e.y, m: e.m, d: e.d };
       const age = birth ? ageAt(birth, at) : null;
+      const stufe = schule && e.y != null ? schule.zuDatum(e.y, e.m) : null;
       return {
         ereignis: e.ereignis, datum: e.datum, jahr: e.y,
         ...(e.ye != null && e.ye !== e.y ? { jahr_ende: e.ye } : {}),
         ...(e.unsicher ? { datum_unsicher: true } : {}),
         ...(age || {}),
+        ...(stufe ? { schulstufe: stufe } : {}),
       };
     });
     if (!events.length) {
@@ -252,7 +305,12 @@ function tool_get_figure_age(input, ctx) {
     }
   }
 
-  if (!birth) out.hinweis = `Kein Geburtsjahr bekannt (weder Steckbrief noch Geburts-Ereignis noch Alters-Index). Wörtliche Altersangaben stehen ggf. unter alters_index${toolHint(ctx, 'search_passages', '; sonst search_passages')}.`;
+  if (!birth) {
+    out.hinweis = `Kein Geburtsjahr bekannt (weder Steckbrief noch Geburts-Ereignis noch Alters-Index). Wörtliche Altersangaben stehen ggf. unter alters_index${toolHint(ctx, 'search_passages', '; sonst search_passages')}.`
+      + (getFigureAgeScan(ctx.bookId, userEmail)
+        ? ' Die Alters-Analyse (Figuren-Karte, Reiter «Alter») fand für diese Figur kein Geburtsjahr; nach Textänderungen kann der Autor sie dort neu starten.'
+        : ' Die Alters-Analyse lief für dieses Buch noch nie: der Autor kann sie in der Figuren-Karte, Reiter «Alter», mit «Alter analysieren» starten — sie liest Geburtsjahre und Altersangaben aus dem Text.');
+  }
   else if (!birth.m) out.rechnung = 'Nur das Geburtsjahr ist bekannt: Alter als Spanne (vor/nach dem Geburtstag).';
   return _truncateResult(out);
 }

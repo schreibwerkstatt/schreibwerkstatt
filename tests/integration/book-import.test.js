@@ -41,7 +41,8 @@ async function buildBundleBuffer(bookId, includes = null, opts = {}) {
   const nodes = bookBundle.treeToNodes(tree, htmlById);
   const norm = bookBundle.normalizeIncludes(includes);
   const manifest = bookBundle.buildManifest({ sourceBookId: bookId, exportedAt: '2026-05-30T00:00:00Z', includes: norm });
-  const bookJson = bookBundle.buildBookJson({ book, settings: { language: 'de', region: 'CH', buchtyp: 'roman' }, nodes });
+  const settings = { language: 'de', region: 'CH', buchtyp: 'roman', ...(opts.settings || {}) };
+  const bookJson = bookBundle.buildBookJson({ book, settings, nodes });
   const zip = new JSZip();
   zip.file('manifest.json', JSON.stringify(manifest));
   zip.file('book.json', JSON.stringify(bookJson));
@@ -452,4 +453,35 @@ test('Abbruch waehrend des Anlegens: «cancelled», Buch zurueckgenommen', async
   try { await bookImport.runBookImportJob(jobId, { userEmail: OWNER }); } finally { contentStore.createPage = orig; }
   assert.equal(shared.jobs.get(jobId).status, 'cancelled');
   assert.deepEqual(await _bookNames(), before);
+});
+
+test('Schullaufbahn-Round-Trip: Schulsystem des Buchs und Schulweg je Figur reisen mit', async () => {
+  ctxBoot.dbSeed.setBook({
+    books: [{ id: 960, name: 'SchulQuelle' }],
+    chapters: [{ id: 9601, book_id: 960, name: 'Kap', position: 0 }],
+    pages: [{ id: 96001, book_id: 960, name: 'Seite1', chapter_id: 9601, position: 0 }],
+    pageBodies: { 96001: '<p>Text</p>' },
+  });
+  const { db } = require('../../db/connection');
+  const iso = '2026-05-30T10:00:00.000Z';
+  const fig = db.prepare('INSERT INTO figures (book_id,fig_id,name,updated_at,user_email) VALUES (?,?,?,?,?)')
+    .run(960, 'fig-dennis', 'Dennis', iso, OWNER).lastInsertRowid;
+  db.prepare(`INSERT INTO figure_school_paths (figure_id,weg,einschulung_jahr,repetitionen_json,source,updated_at)
+              VALUES (?,?,?,?,?,?)`).run(fig, 'bez_gym', 1992, '[{"stufe":"primar","klasse":3}]', 'autor', iso);
+  const schulsystem = { vorlage: 'ch_so_1990', jahre: { obergym: 4 }, standard_weg: 'bez_lehre' };
+
+  const buffer = await buildBundleBuffer(960, { analysis: true }, { settings: { schulsystem } });
+  const job = await runImport(buffer);
+  assert.equal(job.status, 'done', job.error || '');
+  const newBookId = job.result.bookId;
+
+  const { getBookSchulsystem } = require('../../db/book-settings');
+  assert.deepEqual(getBookSchulsystem(newBookId), schulsystem);
+  const row = db.prepare(`SELECT fsp.* FROM figure_school_paths fsp JOIN figures f ON f.id = fsp.figure_id
+                           WHERE f.book_id = ?`).get(newBookId);
+  assert.ok(row && row.figure_id !== fig, 'an die neue Figuren-ID gehängt');
+  assert.equal(row.weg, 'bez_gym');
+  assert.equal(row.einschulung_jahr, 1992);
+  assert.equal(row.source, 'autor');
+  assert.equal(row.repetitionen_json, '[{"stufe":"primar","klasse":3}]');
 });

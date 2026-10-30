@@ -392,40 +392,9 @@
    Lesebreite ausgerichtet. Akzent-getönt und dezent (operational-status-Achse,
    nicht content-severity) — verschwindet dauerhaft nach erstem Ausblenden. */
 .page-aha {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-  padding: var(--space-sm) var(--space-md);
+  /* Optik aus .feature-tip (components/feature-tip.css); hier nur die Lesebreite. */
   margin: 0 auto var(--space-md);
   max-width: calc(64ch + 2 * clamp(18px, 4vw, 40px));
-  border: 1px solid var(--color-accent-soft);
-  border-left: 3px solid var(--color-accent);
-  border-radius: var(--radius-md);
-  background: var(--color-accent-soft);
-}
-.page-aha__text {
-  flex: 1 1 16ch;
-  font-size: var(--font-em-95);
-  color: var(--color-text);
-  line-height: var(--lh-base);
-}
-.page-aha__action {
-  flex: 0 0 auto;
-  padding: var(--space-6) var(--space-md);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-sm);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-size: var(--font-size-mini);
-  font-weight: var(--fw-medium);
-  cursor: pointer;
-}
-.page-aha__action:hover { filter: brightness(1.05); }
-.page-aha__close { flex: 0 0 auto; }
-
-@media (max-width: 600px) {
-  .page-aha__text { flex-basis: 100%; }
 }
 
 

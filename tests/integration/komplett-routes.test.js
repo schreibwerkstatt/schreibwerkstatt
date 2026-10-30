@@ -198,3 +198,59 @@ test('Kontinuität: laufende Komplettanalyse OHNE den Schritt → 409 KOMPLETT_A
   assert.equal(r.json.jobId, komplettId);
   assert.equal(shared.findActiveJobId('kontinuitaet', BOOK, ME), null);
 });
+
+test('Nachprüfen: fremdes Issue → 404, Viewer → 403, leere/zu viele IDs → 400', async () => {
+  const mine = issueFor(ME);
+  const foreign = issueFor(COLLEAGUE);
+  const f = await api('POST', '/jobs/kontinuitaet/recheck', { book_id: BOOK, issue_ids: [mine, foreign] });
+  assert.equal(f.status, 404);
+  assert.equal(f.json.error_code, 'ISSUE_NOT_FOUND');
+  const e = await api('POST', '/jobs/kontinuitaet/recheck', { book_id: BOOK, issue_ids: [] });
+  assert.equal(e.status, 400);
+  const many = Array.from({ length: 31 }, (_, i) => i + 1);
+  assert.equal((await api('POST', '/jobs/kontinuitaet/recheck', { book_id: BOOK, issue_ids: many })).status, 400);
+  require('../../db/book-access').grantAccess(BOOK, ME, 'viewer', COLLEAGUE);
+  const v = await api('POST', '/jobs/kontinuitaet/recheck', { book_id: BOOK, issue_ids: [mine] });
+  assert.equal(v.status, 403);
+  const shared = require('../../routes/jobs/shared');
+  assert.equal(shared.findActiveJobId('kontinuitaet-recheck', BOOK, ME), null);
+});
+
+test('Nachprüfen: laufende Kontinuitätsprüfung → 409; laufendes Nachprüfen → dessen Job-ID', async () => {
+  const shared = require('../../routes/jobs/shared');
+  const id = issueFor(ME);
+  shared.createJob('kontinuitaet', BOOK, ME, 'job.label.kontinuitaet');
+  const r = await api('POST', '/jobs/kontinuitaet/recheck', { book_id: BOOK, issue_ids: [id] });
+  assert.equal(r.status, 409);
+  assert.equal(r.json.error_code, 'CONTINUITY_RUNNING');
+  clearJobs();
+  const running = shared.createJob('kontinuitaet-recheck', BOOK, ME, 'job.label.kontinuitaetRecheck');
+  const r2 = await api('POST', '/jobs/kontinuitaet/recheck', { book_id: BOOK, issue_ids: [id] });
+  assert.equal(r2.status, 200);
+  assert.deepEqual(r2.json, { jobId: running, existing: true });
+});
+
+test('Nachprüf-Urteil: «behoben» erledigt, sonst bleibt offen; `changed` nach Bearbeitung', () => {
+  const { saveContinuityIssueRecheck, getLatestContinuityCheck } = require('../../db/continuity');
+  const pageId = 930101;
+  db.prepare('DELETE FROM pages WHERE page_id = ?').run(pageId);
+  db.prepare('INSERT INTO pages (page_id, book_id, page_name, updated_at) VALUES (?, ?, ?, ?)')
+    .run(pageId, BOOK, 'Der Vater', '2026-02-01T00:00:00.000Z');
+  const id = issueFor(ME);
+  db.prepare('UPDATE continuity_issues SET page_a_id = ? WHERE id = ?').run(pageId, id);
+  let issue = getLatestContinuityCheck(BOOK, ME).issues.find(i => i.id === id);
+  assert.equal(issue.changed, true, 'Abschnitt nach dem Prüflauf gespeichert');
+  assert.equal(issue.recheck, null);
+
+  saveContinuityIssueRecheck(id, { verdict: 'unbelegt', reason: 'r', beleg: 'x', resolve: false });
+  issue = getLatestContinuityCheck(BOOK, ME).issues.find(i => i.id === id);
+  assert.equal(issue.resolved, false);
+  assert.equal(issue.recheck.verdict, 'unbelegt');
+  assert.equal(issue.changed, false, 'Nachprüfung ist jünger als die Bearbeitung');
+
+  saveContinuityIssueRecheck(id, { verdict: 'behoben', reason: 'r', beleg: 'b', resolve: true });
+  issue = getLatestContinuityCheck(BOOK, ME).issues.find(i => i.id === id);
+  assert.equal(issue.resolved, true);
+  assert.equal(issue.recheck.beleg, 'b');
+  db.prepare('DELETE FROM pages WHERE page_id = ?').run(pageId);
+});

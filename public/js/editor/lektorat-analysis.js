@@ -15,6 +15,14 @@ const BADGE_CLASS = { stark: 'badge-ok', schwach: 'badge-err', mittel: 'badge-wa
  *           stilanalyse?: string, fazit?: string }} data
  * @returns {string} HTML
  */
+// «Im Chat besprechen»: der Knopf trägt Art und Text als data-Attribute
+// (escHtml maskiert auch Anführungszeichen); der Klick wird am Container
+// delegiert (editor-findings.html → $app.onLektoratAnalysisClick).
+function discussBtn(t, kind, text, titel = '') {
+  return `<button type="button" class="btn-compact lektorat-discuss" data-chat-discuss="${kind}"`
+    + ` data-text="${escHtml(text)}" data-titel="${escHtml(titel)}">${escHtml(t('lektorat.discussInChat'))}</button>`;
+}
+
 export function renderLektoratAnalysisHtml(t, { szenen, stilanalyse, fazit } = {}) {
   let out = '';
   const list = Array.isArray(szenen) ? szenen : [];
@@ -26,12 +34,12 @@ export function renderLektoratAnalysisHtml(t, { szenen, stilanalyse, fazit } = {
     const rows = list.map(s =>
       `<div class="szene-item">
           <div class="szene-header">${badge(s.wertung)} <span class="szene-titel">${escHtml(s.titel)}</span></div>
-          ${s.kommentar ? `<div class="szene-kommentar">${escHtml(s.kommentar)}</div>` : ''}
+          ${s.kommentar ? `<div class="szene-kommentar">${escHtml(s.kommentar)}</div>${discussBtn(t, 'szene', s.kommentar, s.titel || '')}` : ''}
         </div>`
     ).join('');
     out += `<div class="stilbox"><div class="bewertung-section-title">${escHtml(t('lektorat.section.szenen'))}</div>${rows}</div>`;
   }
-  if (stilanalyse) out += `<div class="stilbox"><div class="bewertung-section-title">${escHtml(t('lektorat.section.stilanalyse'))}</div>${escHtml(stilanalyse)}</div>`;
-  if (fazit) out += `<div class="fazit">${escHtml(fazit)}</div>`;
+  if (stilanalyse) out += `<div class="stilbox"><div class="bewertung-section-title">${escHtml(t('lektorat.section.stilanalyse'))}</div>${escHtml(stilanalyse)}${discussBtn(t, 'stil', stilanalyse)}</div>`;
+  if (fazit) out += `<div class="fazit">${escHtml(fazit)}${discussBtn(t, 'fazit', fazit)}</div>`;
   return out;
 }

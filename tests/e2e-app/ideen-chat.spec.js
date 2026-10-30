@@ -45,6 +45,9 @@ test('Ideen-Chat: Ort, Stufe mit Beleg und neue Idee einzeln übernehmen', async
       : (body.action === 'discarded' ? { status: 'discarded' } : {});
     await route.fulfill({ json: { proposal } });
   });
+  // Das Zitat steht nicht im Seed-Text; die Beleg-Prüfung beim Übernehmen meldet
+  // es hier als gefunden, sonst ginge die Rückfrage «Beleg fehlt» auf.
+  await page.route('**/ideen/chat-proposal/beleg-check', (route) => route.fulfill({ json: { checked: true, found: true } }));
 
   await page.evaluate(() => window.__app.toggleIdeenBoardCard());
   await expect(page.locator(CARD)).toBeVisible();

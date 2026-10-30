@@ -325,10 +325,22 @@
   padding: var(--space-xs) 0;
 }
 .chat-titel-item + .chat-titel-item { border-top: 0.5px solid var(--color-border); }
-.chat-titel-text { overflow-wrap: anywhere; }
+.chat-titel-text { overflow-wrap: anywhere; display: flex; flex-direction: column; gap: var(--space-2xs); }
+.chat-titel-doppelt {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-xs);
+  font-size: var(--font-size-xs); color: var(--color-warn-text);
+}
 /* Hover/Klick auf einen Vorschlag: Stelle im Text (CSS-Custom-Highlight, page-chat-marks.js). */
 ::highlight(chat-proposal-focus) {
   background-color: var(--color-mark-bg-hover);
+}
+
+/* Schnellaufträge über dem Eingabefeld (Abschnitts-Chat, chat-quick-actions.html) */
+.chat-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
 }
 
 /* Eingabebereich */

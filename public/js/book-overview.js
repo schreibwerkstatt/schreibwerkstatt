@@ -17,6 +17,7 @@
 //   /booksettings/:book_id             → Buchtyp, is_finished, Schreibziel/Deadline
 //   /plot?book_id, /motifs?book_id     → optionale Planungswerkzeuge (Tile aus, wenn leer)
 //   /lexicon/:book_id                  → Wortschatz-Tile (MTLD/MATTR + Peer-Median)
+//   /chat/sessions/book/:book_id       → «Nächste Schritte» (Buch-Chat schon genutzt?)
 //   $store.badges.editStatus           → Bearbeitungsstand (lädt der Seitenbaum, kein eigener Fetch)
 //
 // Reaktivität / Memoization:
@@ -58,6 +59,7 @@ import { ideenMethods } from './book-overview/ideen.js';
 import { motivMethods } from './book-overview/motiv.js';
 import { wortschatzMethods } from './book-overview/wortschatz.js';
 import { editStatusMethods } from './book-overview/edit-status.js';
+import { nextStepsMethods } from './book-overview/next-steps.js';
 
 export const bookOverviewMethods = {
   ...loadMethods,
@@ -79,4 +81,5 @@ export const bookOverviewMethods = {
   ...motivMethods,
   ...wortschatzMethods,
   ...editStatusMethods,
+  ...nextStepsMethods,
 };

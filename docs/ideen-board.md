@@ -453,6 +453,9 @@ seine Entscheidung. Darum lesen die planenden KI-Funktionen sie mit:
 - **Buchübersicht** — Kachel „Ideen" ([book-overview/ideen.js](../public/js/book-overview/ideen.js)):
   offene Pendenzen, Verteilung auf die Stufen, Buch-Ideen ohne Ort, offene mit
   Verknüpfung. Quelle `GET /ideen/board`; Viewer (403) sehen sie nicht.
+  Ab `IDEEN_CHECK_MIN` offenen Ideen mit Ort schlägt die Kachel „Nächste Schritte"
+  ([book-overview/next-steps.js](../public/js/book-overview/next-steps.js)) den
+  Erledigt-Check vor.
 - **Bucheditor** — Zähler der offenen Ideen an Kapitel- und Seitenkopf (aus dem
   Badges-Store, derselbe Sprung wie in der Sidebar).
 

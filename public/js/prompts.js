@@ -217,6 +217,12 @@ export {
 } from './prompts/headline.js';
 
 export {
+  buildKontinuitaetRecheckPrompt,
+  buildKontinuitaetRecheckSchema,
+  RECHECK_URTEILE,
+} from './prompts/kontinuitaet-recheck.js';
+
+export {
   buildBookReviewSinglePassPrompt,
   buildChapterAnalysisPrompt,
   buildChapterReviewPrompt,
@@ -324,7 +330,7 @@ export {
   SCHEMA_CHAT_TITLE,
 } from './prompts/chat.js';
 
-export { SCHEMA_CHAT, formatHistoryVorschlaege, formatHistoryIdeen, historyTrimNote, formatPageChange, buildPageChatBookContext } from './prompts/page-chat.js';
+export { SCHEMA_CHAT, formatHistoryVorschlaege, formatHistoryIdeen, historyTrimNote, formatPageChange, buildPageChatBookContext, normalizeTitle } from './prompts/page-chat.js';
 
 // Buch-Chat-only: Gliederungs-Block (klassisch) + Aussenwelt-Regel.
 export { buildGliederungBlock } from './prompts/book-outline.js';
@@ -417,6 +423,12 @@ export {
   SCHEMA_FIGUR_ALTER,
   FIGUR_ALTER_ARTEN,
 } from './prompts/figur-alter.js';
+
+export {
+  buildSchulwegSystemPrompt,
+  buildSchulwegPrompt,
+  buildSchulwegSchema,
+} from './prompts/schulweg.js';
 
 export {
   buildSourceDetectSystemPrompt,

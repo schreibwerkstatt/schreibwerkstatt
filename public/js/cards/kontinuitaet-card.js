@@ -2,6 +2,7 @@
 // Job-Polling implementiert die Karte selbst (manueller Flow, kein createCardJobFeature).
 
 import { kontinuitaetMethods } from '../book/kontinuitaet.js';
+import { kontinuitaetRecheckMethods } from '../book/kontinuitaet-recheck.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 
 export function registerKontinuitaetCard() {
@@ -23,6 +24,9 @@ export function registerKontinuitaetCard() {
     nameGuardLoading: false,
     selectedNameGuardKey: null,
     _kontinuitaetPollTimer: null,
+    // «Nachprüfen»: IDs der Befunde im laufenden Nachprüf-Job (leer = keiner läuft).
+    kontinuitaetRecheckIds: [],
+    _kontinuitaetRecheckTimer: null,
     // Memo-Speicher des Moduls (book/kontinuitaet.js#_memo): Kapitel-Index,
     // gefilterte + sortierte Befundliste. Wird bei jedem Daten-Reload geleert.
     _memos: {},
@@ -42,6 +46,7 @@ export function registerKontinuitaetCard() {
         ctx.kontinuitaetWarnings = [];
         ctx.kontinuitaetLoadError = false;
         ctx.selectedKontinuitaetIssueKey = null;
+        ctx.kontinuitaetRecheckIds = [];
         ctx.nameGuardResult = null;
         ctx.nameGuardLoading = false;
         ctx.selectedNameGuardKey = null;
@@ -50,7 +55,7 @@ export function registerKontinuitaetCard() {
       this._lifecycle = setupCardLifecycle(this, {
         name: 'kontinuitaet',
         showFlag: 'showKontinuitaetCard',
-        timerKeys: ['_kontinuitaetPollTimer'],
+        timerKeys: ['_kontinuitaetPollTimer', '_kontinuitaetRecheckTimer'],
         onShow: async (root) => {
           if (!root.$store.catalog.figuren?.length) await root.loadFiguren(Alpine.store('nav').selectedBookId);
           await this._loadKontinuitaetHistory();
@@ -69,5 +74,6 @@ export function registerKontinuitaetCard() {
     destroy() { this._lifecycle?.destroy(); },
 
     ...kontinuitaetMethods,
+    ...kontinuitaetRecheckMethods,
   }));
 }

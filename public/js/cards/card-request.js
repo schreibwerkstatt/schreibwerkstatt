@@ -13,6 +13,8 @@ export const CARD_REQUEST = Object.freeze({
   BOOK_SETTINGS_TAB: 'bookSettingsTab',   // cards/book-settings-card.js
   FIGUREN_TAB:       'figurenTab',        // cards/figuren-card.js (figurenGraphModus)
   PAGE_CHAT_SESSION: 'pageChatSession',   // cards/chat-card.js (Session-ID)
+  PAGE_CHAT_DRAFT:   'pageChatDraft',     // cards/chat-card.js (Frage fürs Eingabefeld, neues Gespräch)
+  BOOK_CHAT_DRAFT:   'bookChatDraft',     // cards/book-chat-card.js (Frage fürs Eingabefeld, neues Gespräch)
   PDF_EXPORT_TAB:    'pdfExportTab',      // cards/pdf-export-ui.js
   USER_SETTINGS_SECTION: 'userSettingsSection', // cards/user-settings-card.js (data-settings-section)
 });

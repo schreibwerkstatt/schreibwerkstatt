@@ -16,6 +16,15 @@
     </div>
   </div>
 
+  <!-- Feature-Tipp: Reihenfolge mit dem Buch-Chat besprechen (ab einigen Abschnitten) -->
+  <template x-if="$store.hints.isOpen('organizer.bookChatOrder') && $store.nav.pages.length >= 8">
+    <div class="feature-tip organizer-tip" role="note">
+      <span class="feature-tip__text" x-text="$app.t('hint.organizerOrder.text')"></span>
+      <button type="button" class="feature-tip__action" @click="$store.hints.dismiss('organizer.bookChatOrder'); $app.openBookChatDraft($app.t('hint.organizerOrder.question'))" x-text="$app.t('hint.organizerOrder.action')"></button>
+      <button type="button" class="icon-btn icon-btn--ghost feature-tip__close" @click="$store.hints.dismiss('organizer.bookChatOrder')" :data-tip="$app.t('hint.dismiss')" :aria-label="$app.t('hint.dismiss')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+    </div>
+  </template>
+
   <div class="organizer-toolbar">
     <span class="search-affix">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#search"/></svg>

@@ -4,9 +4,9 @@ Beantwortet **„wo stand die eine Figur, als die andere X erlebte"** — Lebens
 als Zeilen, die gewählten Figuren als Spalten, deren datierte Lebensereignisse in
 den Zellen.
 
-## Kein Job, kein Index, keine Route
+## Kein Job, kein Index, keine Route (für die Matrix)
 
-Der Reiter ist **reine Anzeige** auf Daten, die schon da sind: `lebensereignisse`
+Die Matrix ist **reine Anzeige** auf Daten, die schon da sind: `lebensereignisse`
 (mit `datum`, `subtyp`, `kapitel`, `page_id`) und das Geburtsjahr stehen im
 Figuren-Katalog, `GET /figures/:book_id`, befüllt von der Komplettanalyse. Ein
 eigener Extraktionslauf würde dieselbe Biografie ein zweites Mal erheben — und
@@ -73,6 +73,102 @@ lückenlos und überschneidungsfrei — gegated.
   Präsenz-Matrix und Heatmaps.
 - **`figures` wird nie geschrieben** — wie im Alters-Reiter. Der Lebenslauf ist
   eine Lesart, keine Quelle.
+
+## Schullaufbahn
+
+Beantwortet **„in welcher Klasse war Figur X im Jahr Y"** — im Code gerechnet,
+nie vom Modell. Ein Sprachmodell rechnet Stichtag, Schuljahreswechsel und
+Stufenübertritte zuverlässig falsch genug, dass die Antwort nicht mehr belegt ist.
+
+**Zwei Ebenen:**
+
+- **Buch:** `book_settings.schulsystem_json` (Bucheinstellungen › Kontext ›
+  Schulsystem, `PUT /booksettings/:book_id/schulsystem`, ab `editor`). Gewählt wird
+  eine Vorlage — «CH Solothurn (1990er)», «CH allgemein (HarmoS)» oder keins —,
+  editierbar sind Einschulungsalter, Stichtag,
+  Schuljahresbeginn, die Jahre je Stufe und der Standardweg. Stufen und benannte
+  Wege kommen aus der Vorlage (`SCHUL_VORLAGEN`); gespeichert werden nur die
+  editierbaren Werte, normalisiert. Unbekannte Vorlage → `400`.
+- **Figur:** `figure_school_paths` (eine Zeile pro `figures.id`): Weg-Key (leer =
+  Standardweg des Buchs), Einschulungsjahr-Override, Repetitionen (`[{stufe, klasse}]`;
+  eine Repetition verlängert die Stufe um ein Jahr). Gepflegt im Steckbrief
+  (Fragment [figuren-detail-schulweg.html](../public/partials/figuren-detail-schulweg.html)),
+  `PUT /figures/:book_id/schulwege/:fig_id` (ab `editor`), gelesen mit
+  `GET /figures/:book_id/schulwege` (ab `viewer`, nur eigene Figuren). Gespeichert
+  wird an `figures.id`, nach aussen geschlüsselt nach `fig_id` — die `fig_id` wird
+  bei jeder Komplettanalyse neu nummeriert, die Zeile bleibt (Reconcile matcht in
+  place). Figuren-Merge übernimmt den Schulweg der Quelle, wenn das Ziel keinen hat.
+
+**Die Rechnung hat genau einen Ort:**
+[public/js/book/school-path.js](../public/js/book/school-path.js) (Browser-ESM, auf
+dem Server über `lib/esm-bridge.js#schoolPath`). Konsumenten: Bucheinstellungen,
+Steckbrief, Lebenslauf-Zellen, Schreibpfade der Routen, Job und `get_figure_age`.
+
+- **Einschulung:** im Jahr, bis zu dessen Stichtag die Figur das Einschulungsalter
+  erreicht (Stichtag 30. April: am 30.4. geboren → selbes Jahr, am 1.5. → ein Jahr
+  später). Ohne Monat (bzw. ohne Tag im Stichtag-Monat) ist das nicht entscheidbar:
+  dann **zwei** Kandidaten, das Ergebnis trägt `unsicher` + `alternative` — nie eine
+  stillschweigend gewählte Variante. Ein Override ersetzt die Rechnung.
+- **Schuljahr:** ab dem Monat des Schuljahresbeginns zählt das neue. Ein Jahr
+  **ohne Monat** heisst Herbst (Schuljahr ab Sommer dieses Jahres);
+  `schoolStagesForYear` liefert zusätzlich das Frühjahr, wenn es in einer anderen
+  Klasse liegt — der Lebenslauf zeigt dann «6. Primar → 1. Bez».
+- **Klassennummer** zählt je Stufe ab 1 («1. Bez»); `klasseStart` an der Stufe
+  verschiebt den Anfang.
+- **Übertritt vor dem Stufenende:** `bis` am Weg verlässt eine Stufe nach dieser
+  Klasse (gedeckelt durch die eingestellten Jahre), z.B. `bez_gym` nach der 2. Bez.
+- **Ohne Geburtsjahr** (und ohne Override) gibt es keine Stufe — wie beim Alter.
+- **Vorlage-, Stufen- und Weg-Keys sind Persistenz-Konstanten** (stehen in
+  `schulsystem_json` und `figure_school_paths.weg`): ergänzen ja, umbenennen nein.
+  Labels sind i18n-Keys `schule.vorlage.*`, `schule.stufe.*`, `schule.klasse.*`
+  (mit `{n}`), `schule.weg.*` in beiden Locales; Server-Texte für das Modell lösen
+  sie über [lib/school-labels.js](../lib/school-labels.js) in der Buchsprache auf.
+
+**Solothurn-Vorlage** (Stand vor der Sek-I-Reform 2011/12): Primar 6, Bez/Sek/
+Oberschule je 3 Jahre; das Untergymnasium (3 Jahre) schliesst an die **5.** Primar
+an, aus der Bez tritt man **nach der 2. Klasse** in die Maturitätsschule
+(Obergymnasium, 4 Jahre) über — beide Wege enden nach 12 Schuljahren mit der Matur.
+Vor 1998/99 war das Langzeitgymnasium ein 7-Jahre-Block ab der 5. Primar; gerechnet
+ergibt das dieselben Jahre. Wege: Bez allein, Bez → Obergym (nach 2. bzw. 3. Bez),
+Bez/Sek/Oberschule → Lehre, Kanti (Unter- → Obergym), Untergym → Lehre; Standardweg
+`bez_lehre`. Quellen im Kommentar von `SCHUL_VORLAGEN`.
+
+**KI-Vorschlag** (Job `schulweg-vorschlag`, `POST /jobs/schulweg-vorschlag`, ab
+`editor`, Knopf im Lebenslauf-Reiter;
+[routes/jobs/schulweg-vorschlag.js](../routes/jobs/schulweg-vorschlag.js), Prompt
+[prompts/schulweg.js](../public/js/prompts/schulweg.js)):
+
+1. deterministisch: für Figuren **mit Geburtsjahr und ohne Autor-Schulweg** die
+   Sätze, in denen die Figur (oder im Satz davor) zusammen mit einem Schulbegriff
+   steht (`SCHOOL_RE`: Bez, Kanti, Gymnasium, Matura, Primar, Sek, Klasse,
+   eingeschult, Lehre …), gekappt auf 320 Zeichen, höchstens acht je Figur über das
+   Buch verteilt.
+2. Modell: wählt **nur** aus den Weg-Keys dieses Buchs (Schema-Enum pro Call), mit
+   wörtlichem Zitat; Einschulungsjahr und Repetition nur, wenn ausdrücklich genannt.
+3. deterministisch: Zitat muss in einer vorgelegten Stelle **dieser** Figur stehen
+   und einen Schulbegriff enthalten, sonst verworfen; ein Einschulungsjahr bleibt
+   nur, wenn die Jahreszahl im Zitat steht und plausibel ist (Geburt + 3…10); eine
+   Repetition nur mit Repetitionswort im Zitat und Stufe des vorgeschlagenen Wegs.
+   Verwerfungen stehen im Job-Ergebnis (`verworfen.weg/zitat/figur`).
+
+Der Job schreibt **ausschliesslich** `vorschlag_json` (Weg, Zitat, `page_id`,
+Begründung). Jede gefragte Figur bekommt den Stand ihres Laufs (neuer Vorschlag
+oder keiner). Der Steckbrief zeigt den Vorschlag mit Beleg; **Übernehmen**
+(`POST …/schulwege/:fig_id/uebernehmen`) prüft ihn erneut gegen das aktuelle
+Schulsystem und setzt `source = 'ki'`, **Verwerfen** (`DELETE …/vorschlag`) leert ihn.
+
+**Anzeige:** mit Schulsystem zeigt jede datierte Zelle des Lebenslaufs zusätzlich
+die Klassenstufe («1999 · 13 J. · 1. Bez»); der Monat kommt aus dem strukturierten
+Ereignisdatum (`datum_month`). Der Buch-Chat bekommt dieselbe Zahl über
+`get_figure_age` ([chat-tools.md](chat-tools.md)).
+
+Tests: [tests/unit/school-path.test.mjs](../tests/unit/school-path.test.mjs)
+(Stichtag-Grenzfälle, Schuljahreswechsel, Repetition, Bez → Obergym, Untergym →
+Obergym, Normalisierung),
+[tests/integration/schulweg-routes.test.js](../tests/integration/schulweg-routes.test.js)
+(ACL, Validierung, Übernehmen/Verwerfen, CASCADE),
+[tests/integration/schulweg-vorschlag.test.js](../tests/integration/schulweg-vorschlag.test.js)
+(Belegprüfung mit Mock-AI).
 
 ## Verhältnis zum Alters-Reiter
 

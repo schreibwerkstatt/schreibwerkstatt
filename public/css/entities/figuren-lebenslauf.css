@@ -143,3 +143,20 @@
   .table-scroll > .figur-cv-table { min-width: 34rem; }
   .figur-cv-phase-th, .figur-cv-phase { width: 6.5rem; }
 }
+
+/* ── Schullaufbahn im Steckbrief (partials/figuren-detail-schulweg.html) ──── */
+/* Hier statt in figuren.css (nahe am 600er-Cap): die Schullaufbahn ist die
+   Datenquelle der Klassenstufen in den Lebenslauf-Zellen. */
+.figur-schule-vorschlag { margin-top: var(--space-sm); }
+.figur-schule-beleg {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin: var(--space-xs) 0;
+  padding-left: var(--space-sm);
+  border-left: 2px solid var(--card-accent, var(--color-border));
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+.figur-schule-beleg > .entity-ref { flex: 0 0 auto; }

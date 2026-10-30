@@ -1,5 +1,6 @@
 // Teil von appViewMethods (siehe Facade app-view.js).
 import { EVT, EXCLUSIVE_CARDS, _toggleCardGeneric, _withCardTransition, fetchJson, generatedToggles, getLastPageId } from './_shared.js';
+import { openCardWith, CARD_REQUEST } from '../../cards/card-request.js';
 
 export const cardsMethods = {
 
@@ -271,6 +272,32 @@ export const cardsMethods = {
     await this._ensurePartial('chat');
     this.showChatCard = true;
     this.logAuditEvent?.('chatOpened', { book: this.$store.nav.selectedBookId, page: this.currentPage.id });
+  },
+
+  // Frage in ein neues Gespräch des Abschnitts-Chats legen (Eingabefeld, nicht
+  // gesendet): der Autor ergänzt meist eine eigene Idee. Öffnet die Karte, falls zu.
+  openPageChatDraft(text) {
+    if (!text || !this.currentPage) return;
+    return openCardWith(CARD_REQUEST.PAGE_CHAT_DRAFT, text,
+      () => (this.showChatCard ? null : this.toggleChatCard()));
+  },
+
+  // Dasselbe für den Buch-Chat (Übersicht → «Nächste Schritte»).
+  openBookChatDraft(text) {
+    if (!text || !this.$store.nav.selectedBookId) return;
+    return openCardWith(CARD_REQUEST.BOOK_CHAT_DRAFT, text,
+      () => (this.showBookChatCard ? null : this.toggleBookChatCard()));
+  },
+
+  // «Im Chat besprechen» an Szene, Stilanalyse oder Fazit des Lektorats
+  // (Knöpfe aus editor/lektorat-analysis.js, Klick am x-html-Container delegiert).
+  onLektoratAnalysisClick(e) {
+    const btn = e.target.closest?.('[data-chat-discuss]');
+    if (!btn) return;
+    const { chatDiscuss: kind, text, titel } = btn.dataset;
+    const key = { szene: 'chat.discuss.szene', stil: 'chat.discuss.stil', fazit: 'chat.discuss.fazit' }[kind];
+    if (!key || !text) return;
+    return this.openPageChatDraft(this.t(key, { titel: titel || '', text }));
   },
 
   // Referenz-Slot: read-only Begleitpanel (Figuren/Orte/Szenen/Ereignisse/

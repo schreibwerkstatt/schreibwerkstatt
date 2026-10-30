@@ -81,6 +81,21 @@
   border: 1px solid var(--color-ok-border);
   white-space: nowrap;
 }
+/* Stelle seit Prüflauf/Nachprüfung bearbeitet → Kandidat für «Nachprüfen». */
+.kontinuitaet-changed-badge {
+  flex-shrink: 0;
+  padding: var(--pad-badge);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--fw-semibold);
+  background: var(--color-warn-bg);
+  color: var(--color-warn-text);
+  white-space: nowrap;
+}
+.kontinuitaet-recheck-verdict { font-weight: var(--fw-semibold); }
+.kontinuitaet-recheck-verdict--behoben { color: var(--color-ok-text); }
+.kontinuitaet-recheck-verdict--teilweise,
+.kontinuitaet-recheck-verdict--unbelegt { color: var(--color-warn-text); }
 .kontinuitaet-detail-actions {
   margin-top: var(--space-10);
   display: flex;

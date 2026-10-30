@@ -92,7 +92,8 @@ test('buch-chat: Werkzeug-Verlauf, Belege, Recherche-Hinweis, Kosten', async ({ 
   await expect(rows.nth(0).locator('.chat-tool-log-result')).toHaveText('3 Treffer');
   await expect(rows.nth(0)).not.toContainText('42');
   await expect(rows.nth(1)).toHaveClass(/chat-tool-log-row--failed/);
-  await expect(rows.nth(1).locator('.chat-tool-log-error')).toHaveText('kaputt');
+  // Rohtext ohne errorKey: angezeigt wird der generische übersetzte Text.
+  await expect(rows.nth(1).locator('.chat-tool-log-error')).toHaveText('Werkzeug-Aufruf fehlgeschlagen');
   // Ältere Antwort ohne Sicht: Suchbegriff aus den Argumenten; Dauer ab 1 s.
   await expect(rows.nth(2).locator('.chat-tool-log-quote')).toHaveText('«Grenzöffnung»');
   await expect(rows.nth(2).locator('.chat-tool-log-meta')).toHaveText('2.3 s');

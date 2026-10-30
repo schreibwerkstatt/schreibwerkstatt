@@ -19,6 +19,7 @@ const appUsers = require('./db/app-users');
 const { tokenAwareSession } = require('./lib/token-session');
 const { deviceScopeGate } = require('./lib/device-scopes');
 const { ensureAdminFromEnv, touchUserLastSeen, addUserActivity } = appUsers;
+const { requestSignalsActivity, makeActivityCounter } = require('./lib/user-activity');
 const appSettings = require('./lib/app-settings');
 const { getVersion } = require('./lib/version');
 const { normalizeAnalyticsUrl, analyticsProps } = require('./lib/analytics-url');
@@ -82,6 +83,7 @@ const authRouter = require('./routes/auth');
 const historyRouter = require('./routes/history');
 const figuresRouter = require('./routes/figures');
 const figuresAlterRouter = require('./routes/figures-alter');
+const figuresSchulwegRouter = require('./routes/figures-schulweg');
 const locationsRouter = require('./routes/locations');
 const songsRouter = require('./routes/songs');
 const { router: jobsRouter } = require('./routes/jobs');
@@ -403,24 +405,20 @@ app.use(require('./lib/auth-guard').makeAuthGuard({ localDevMode: LOCAL_DEV_MODE
 app.use(deviceScopeGate);
 
 // ── Aktivitäts-Tracking ──────────────────────────────────────────────────────
-// Pro authentifiziertem Request wird die Differenz zum letzten Request als aktive
-// Zeit gezählt – aber nur, wenn die Lücke < 5 min ist (danach gilt der User als
-// weg gewesen). `app_users.last_seen_at` wird nur alle 60 s in die DB geschrieben,
-// um Write-Last niedrig zu halten.
-const ACTIVITY_GAP_MS      = 5 * 60 * 1000;
+// Aktive Zeit pro User und Tag (lib/user-activity.js: pro User statt pro
+// Session, nur bewusste Nutzung). `app_users.last_seen_at` wird nur alle 60 s in
+// die DB geschrieben, um Write-Last niedrig zu halten.
 const LAST_SEEN_THROTTLE_MS = 60 * 1000;
+const recordUserActivity = makeActivityCounter({ add: addUserActivity });
 app.use((req, res, next) => {
   const email = req.session?.user?.email;
   if (!email) return next();
   const now  = Date.now();
-  const last = req.session.lastSeen || 0;
-  const delta = now - last;
-  if (delta > 0 && delta < ACTIVITY_GAP_MS) {
-    try { addUserActivity(email, delta / 1000, new Date(now).toISOString()); }
+  if (requestSignalsActivity(req)) {
+    try { recordUserActivity(email, now); }
     catch (e) { logger.warn('addUserActivity: ' + e.message); }
   }
   if (!req.session.loginAt) req.session.loginAt = now; // Fallback für Sessions aus Zeit vor diesem Feature
-  req.session.lastSeen = now;
   // Rueckfall fuer den Sitzungs-Fingerprint (lib/session-fingerprint.js): die
   // Login-Antworten setzen ihn selbst, hier bekommt ihn jede Session, die es
   // schon vor diesem Cookie gab. Setzt nur bei Abweichung, also einmal.
@@ -437,6 +435,7 @@ app.use((req, res, next) => {
 app.use(proxiesRouter);
 app.use('/history', historyRouter);
 app.use('/figures', figuresAlterRouter);
+app.use('/figures', figuresSchulwegRouter);
 app.use('/figures', figuresRouter);
 app.use('/locations', locationsRouter);
 app.use('/world-facts', require('./routes/world-facts'));

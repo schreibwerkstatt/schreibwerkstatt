@@ -76,6 +76,14 @@ export function registerBookSettingsCard() {
     bookResearchLoaded: false,
     researchSaving: false,
     researchError: '',
+    // Kontext-Tab, Abschnitt „Schulsystem": normalisierte Form oder null (keins).
+    // Eigener Schreibpfad /booksettings/:id/schulsystem — siehe
+    // book/book-settings/school.js.
+    bookSchulsystem: null,
+    schulVorlage: '',
+    bookSchulsystemLoaded: false,
+    schulSaving: false,
+    schulError: '',
     // Sharing: Access-Liste + Invite-Form.
     bookAccessList: [],
     bookAccessLoading: false,
@@ -305,6 +313,11 @@ export function registerBookSettingsCard() {
           bookResearchDomains: '',
           bookResearchLoaded: false,
           researchError: '',
+          // Schulsystem: gleicher Grund wie beim Recherche-Profil.
+          bookSchulsystem: null,
+          schulVorlage: '',
+          bookSchulsystemLoaded: false,
+          schulError: '',
         }),
         resetStateView: {
           bookSettingsSaved: false,

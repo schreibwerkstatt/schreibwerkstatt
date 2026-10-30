@@ -1,0 +1,66 @@
+{
+  "version": "5.5.0",
+  "date": "2026-10-30",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Figuren: Die App rechnet die Schullaufbahn jeder Figur aus, also in welcher Klasse sie in welchem Jahr war. Das Schulsystem wählst du in den Bucheinstellungen, den Schulweg und Repetitionen im Steckbrief der Figur.",
+      "en": "Characters: the app works out each character's school career, i.e. which grade they were in each year. You pick the school system in the book settings, and the school path and repeated years in the character's profile."
+    },
+    {
+      "kind": "neu",
+      "de": "Figuren: «Schulwege vorschlagen» sucht im Text nach Stellen zu Schule und Ausbildung und schlägt je Figur einen Schulweg mit Beleg vor. Du übernimmst oder verwirfst ihn im Steckbrief.",
+      "en": "Characters: \"Suggest school paths\" looks for passages about school and training and suggests a school path with evidence for each character. You accept or discard it in the profile."
+    },
+    {
+      "kind": "neu",
+      "de": "Kontinuität: Mit «Nachprüfen» prüfst du einen einzelnen Befund am aktuellen Text, ohne die ganze Prüfung neu zu starten. Befunde, deren Stelle du seither geändert hast, sind markiert und lassen sich gesammelt nachprüfen.",
+      "en": "Continuity: \"Recheck\" checks a single finding against your current text without rerunning the whole check. Findings whose passage you've changed since are marked and can be rechecked together."
+    },
+    {
+      "kind": "neu",
+      "de": "Buchübersicht: «Nächste Schritte» schlägt vor, was als Nächstes ansteht, etwa ein leeres Kapitel mit dem Buch-Chat zu planen oder offene Ideen prüfen zu lassen.",
+      "en": "Book overview: \"Next steps\" suggests what to do next, such as planning an empty chapter with the book chat or having open ideas checked."
+    },
+    {
+      "kind": "neu",
+      "de": "Abschnitts-Chat: Schnellaufträge schärfen mit einem Klick das Ende oder den Anfang, finden Titel oder prüfen deine Überarbeitung. Kritik aus dem Lektorat holst du mit «Im Chat besprechen» direkt herein.",
+      "en": "Section chat: quick actions sharpen the ending or the opening in one click, find titles or check your revision. With \"Discuss in chat\" you bring editing feedback straight into the chat."
+    },
+    {
+      "kind": "neu",
+      "de": "Buch-Chat: Hat eine Antwort nur einen Teil des Buchs gesehen, fragst du mit «Nochmals mit ganzem Buch» erneut, sofern das Buch hineinpasst.",
+      "en": "Book chat: if an answer only saw part of the book, \"Ask again with the whole book\" repeats the question, as long as the book fits."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Abschnitts-Chat: Gleicht ein vorgeschlagener Titel einem anderen Abschnitt, steht der Hinweis «Gibt es schon» mit einem Link zu diesem Abschnitt daneben.",
+      "en": "Section chat: if a suggested title matches another section, an \"Already exists\" note with a link to that section appears next to it."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Ideen-Board und Buchorganizer zeigen einmalige Tipps, wie dir der Ideen-Chat bzw. der Buch-Chat dort weiterhilft. Weggeklickt bleiben sie auf allen Geräten weg.",
+      "en": "The ideas board and the book organizer show one-time tips on how the ideas chat or the book chat can help there. Once dismissed, they stay gone on all your devices."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Recherche-Chat: Vorgeschlagene Links, die der Chat nicht selbst geöffnet hat, sind markiert, und du kannst sie einzeln entfernen.",
+      "en": "Research chat: suggested links the chat didn't actually open are marked, and you can remove them one by one."
+    },
+    {
+      "kind": "behoben",
+      "de": "Plot- und Ideen-Chat: Ein Vorschlag lässt sich nicht mehr doppelt übernehmen, und Vorschläge bleiben erhalten, wenn du eine Antwort abbrichst.",
+      "en": "Plot and ideas chat: a suggestion can no longer be applied twice, and suggestions are kept when you cancel an answer."
+    },
+    {
+      "kind": "behoben",
+      "de": "Chats: Beim schnellen Wechsel zwischen Unterhaltungen landen Antworten nicht mehr in der falschen. Löschst du eine Unterhaltung, stoppt auch ihre laufende Antwort.",
+      "en": "Chats: when you switch quickly between conversations, answers no longer end up in the wrong one. Deleting a conversation also stops its running answer."
+    },
+    {
+      "kind": "behoben",
+      "de": "Meine Statistik: Die aktive Schreibzeit zählt nur noch, wenn du wirklich arbeitest. Mehrere offene Geräte oder ein vergessener Tab blähen sie nicht mehr auf.",
+      "en": "My statistics: active writing time now only counts while you're actually working. Several open devices or a forgotten tab no longer inflate it."
+    }
+  ]
+}

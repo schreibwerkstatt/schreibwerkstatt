@@ -151,14 +151,21 @@ router.patch('/settings', jsonBody, (req, res) => {
 });
 
 // ── Onboarding („Erste Schritte") ────────────────────────────────────────────
-// Persistierter Teil (welcomeDismissed/completed) in app_users.onboarding_state;
-// die Checklisten-Schritte werden aus echtem State abgeleitet (self-healing).
+// Persistierter Teil (welcomeDismissed/completed + weggeklickte Feature-Tipps
+// `hints`) in app_users.onboarding_state; die Checklisten-Schritte werden aus
+// echtem State abgeleitet (self-healing).
+
+// Tipp-Keys (Alpine.store('hints'), public/js/cards/hints-store.js): kurz,
+// ohne Leerzeichen, gedeckelt — der Blob wächst sonst mit jedem Buch-Tipp.
+const HINT_KEY_RE = /^[a-z][\w.:-]{0,79}$/i;
+const HINTS_MAX = 200;
 
 function parseOnboardingState(user) {
   let s = {};
   try { s = user?.onboarding_state ? JSON.parse(user.onboarding_state) : {}; }
   catch { s = {}; }
-  return { welcomeDismissed: !!s.welcomeDismissed, completed: !!s.completed };
+  const hints = Array.isArray(s.hints) ? s.hints.filter(k => typeof k === 'string' && HINT_KEY_RE.test(k)) : [];
+  return { welcomeDismissed: !!s.welcomeDismissed, completed: !!s.completed, hints };
 }
 
 // Abgeleiteter Fortschritt: Buch angelegt → Text geschrieben → KI-Analyse
@@ -190,7 +197,7 @@ router.get('/onboarding', (req, res) => {
 });
 
 /** Persistierten Onboarding-State teilweise aktualisieren
- *  (welcomeDismissed / completed). */
+ *  (welcomeDismissed / completed / dismissHint: ein Tipp-Key, weggeklickt). */
 router.patch('/onboarding', jsonBody, (req, res) => {
   const email = sessionEmail(req);
   const user = appUsers.getUser(email);
@@ -200,6 +207,13 @@ router.patch('/onboarding', jsonBody, (req, res) => {
   const next = { ...cur };
   if (typeof body.welcomeDismissed === 'boolean') next.welcomeDismissed = body.welcomeDismissed;
   if (typeof body.completed === 'boolean') next.completed = body.completed;
+  if (body.dismissHint !== undefined) {
+    if (typeof body.dismissHint !== 'string' || !HINT_KEY_RE.test(body.dismissHint)) {
+      return res.status(400).json({ error_code: 'INVALID_VALUE', params: { field: 'dismissHint' } });
+    }
+    // Ältester fällt raus, wenn der Deckel voll ist (Buch-Tipps veralten).
+    next.hints = [...cur.hints.filter(k => k !== body.dismissHint), body.dismissHint].slice(-HINTS_MAX);
+  }
   appUsers.setOnboardingState(email, next);
   res.json({ ok: true, state: next, steps: onboardingSteps(email) });
 });

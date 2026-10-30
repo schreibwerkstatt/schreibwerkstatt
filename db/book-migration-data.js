@@ -86,6 +86,7 @@ function collectAnalysis(bookId, scopeEmail = null) {
   return {
     figures:               q('SELECT * FROM figures WHERE book_id = ? AND user_email IS ?'),
     figureTags:            q('SELECT ft.* FROM figure_tags ft JOIN figures f ON f.id = ft.figure_id WHERE f.book_id = ? AND f.user_email IS ?'),
+    figureSchoolPaths:     q('SELECT fsp.* FROM figure_school_paths fsp JOIN figures f ON f.id = fsp.figure_id WHERE f.book_id = ? AND f.user_email IS ?'),
     figureRelations:       q('SELECT * FROM figure_relations WHERE book_id = ? AND user_email IS ?'),
     figureAppearances:     q('SELECT fa.* FROM figure_appearances fa JOIN figures f ON f.id = fa.figure_id WHERE f.book_id = ? AND f.user_email IS ?'),
     figureEvents:          q('SELECT fe.* FROM figure_events fe JOIN figures f ON f.id = fe.figure_id WHERE f.book_id = ? AND f.user_email IS ?'),
@@ -255,6 +256,18 @@ function restoreAnalysis(bookId, data, ctx) {
   for (const r of arr('figureTags')) {
     const fid = figMap.get(r.figure_id);
     if (fid) insTag.run(fid, r.tag);
+  }
+
+  // Schulweg je Figur (Autor-Angabe oder übernommener KI-Vorschlag). Ein offener
+  // Vorschlag reist mit — er trägt seinen Beleg selbst.
+  const insSchool = db.prepare(`INSERT OR IGNORE INTO figure_school_paths
+    (figure_id,weg,einschulung_jahr,repetitionen_json,source,vorschlag_json,updated_at) VALUES (?,?,?,?,?,?,?)`);
+  for (const r of arr('figureSchoolPaths')) {
+    const fid = figMap.get(r.figure_id);
+    if (!fid) continue;
+    const source = r.source === 'autor' || r.source === 'ki' ? r.source : null;
+    const ej = Number.isInteger(r.einschulung_jahr) ? r.einschulung_jahr : null;
+    insSchool.run(fid, r.weg ?? null, ej, r.repetitionen_json ?? null, source, r.vorschlag_json ?? null, r.updated_at || _now());
   }
 
   const insRel = db.prepare(`INSERT OR IGNORE INTO figure_relations

@@ -1,0 +1,41 @@
+@layer components {
+/* Feature-Tipp: einmaliger, wegklickbarer Hinweis auf eine Funktion, die zur
+   gerade sichtbaren Arbeit passt (DESIGN.md „Feature-Tipp"). Akzent-getönt mit
+   linker Kante, Text + eine Aktion + Schliessen. Weggeklickt wird über
+   Alpine.store('hints') (serverseitig pro User); `.page-aha` im Lese-Modus ist
+   dieselbe Optik an der Lesebreite (page/page-view.css). */
+.feature-tip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-accent-soft);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-soft);
+}
+.feature-tip__text {
+  flex: 1 1 16ch;
+  font-size: var(--font-em-95);
+  color: var(--color-text);
+  line-height: var(--lh-base);
+}
+.feature-tip__action {
+  flex: 0 0 auto;
+  padding: var(--space-6) var(--space-md);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: var(--font-size-mini);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+}
+.feature-tip__action:hover { filter: brightness(1.05); }
+.feature-tip__close { flex: 0 0 auto; }
+
+@media (max-width: 600px) {
+  .feature-tip__text { flex-basis: 100%; }
+}
+}

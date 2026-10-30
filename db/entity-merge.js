@@ -319,6 +319,11 @@ function mergeFigures(bookId, userEmail, sourceId, targetId) {
           .run(targetId, sourceId).changes;
       }
     }
+    // Schulweg (Autor-Daten, figure_school_paths): gleiche Regel — das Ziel hat
+    // Vorrang, fehlt ihm einer, übernimmt es den der Quelle.
+    if (!db.prepare('SELECT 1 FROM figure_school_paths WHERE figure_id = ?').get(targetId)) {
+      moved.schoolPath = db.prepare('UPDATE figure_school_paths SET figure_id = ? WHERE figure_id = ?').run(targetId, sourceId).changes;
+    }
     if (!db.prepare('SELECT 1 FROM figure_idiolect WHERE figure_id = ?').get(targetId)) {
       moved.idiolect = db.prepare('UPDATE figure_idiolect SET figure_id = ? WHERE figure_id = ?').run(targetId, sourceId).changes;
     }

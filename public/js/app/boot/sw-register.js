@@ -366,6 +366,17 @@ export function registerServiceWorker() {
           requestCoherentReload();
         }
       });
-    } catch {}
+    } catch (err) {
+      // Progressive Enhancement: der Boot läuft weiter. Gemeldet wird trotzdem —
+      // ein Browser, dessen Registrierung jedes Mal scheitert, lädt sonst jeden
+      // Start vom Netz und taucht im Log nur als `sw=uncontrolled` auf.
+      try {
+        window.__reportClientError?.({
+          kind: 'boot',
+          message: 'SW-Registrierung gescheitert: ' + (err?.name || '') + ' ' + (err?.message || String(err)),
+          stack: err?.stack || null, source: '/sw.js', line: null, col: null, pageUrl: location.href,
+        });
+      } catch {}
+    }
   });
 }

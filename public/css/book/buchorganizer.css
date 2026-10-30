@@ -464,4 +464,7 @@
   outline: 1px dashed var(--color-warn-text);
   outline-offset: 1px;
 }
+
+/* Feature-Tipp über der Toolbar (Reihenfolge im Buch-Chat): nur der Abstand. */
+.organizer-tip { margin-bottom: var(--card-gap-section); }
 }
