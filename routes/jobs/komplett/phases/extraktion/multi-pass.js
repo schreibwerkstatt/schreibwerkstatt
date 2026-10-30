@@ -86,6 +86,9 @@ function _concatExtractResults(a, b) {
 // sie würde als «Kapitel ohne Figuren/Orte/Szenen» gecacht. Wie eine Truncation ein
 // nicht-fataler Chunk-Ausfall (kein Cache, Teilfehler-Warnung).
 const CHUNK_REQUIRED = ['figuren', 'orte', 'szenen'];
+// Nicht-fatale Chunk-Ausfälle: abgeschnitten, Pflichtfeld fehlt, vom Modell abgelehnt, leer.
+// Sie bekommen den Halbierungs-Retry und fallen danach als Teilfehler, nicht als Job-Abbruch.
+const SOFT_CHUNK_ERRORS = new Set(['job.error.aiTruncated', 'job.error.extractFieldMissing', 'job.error.aiRefusal', 'job.error.aiEmpty']);
 function assertChunkFields(res, label) {
   const missing = CHUNK_REQUIRED.filter(k => !Array.isArray(res?.[k]));
   if (missing.length) throw i18nError('job.error.extractFieldMissing', { label: `${label} (${missing.join(', ')})` });
@@ -218,10 +221,12 @@ async function _extractCloudChunk(ctx, { chunk, chText, chunkLabel, claudeExtrac
   try {
     return await extractOnce(chunkLabel, chunk.pages, parts.system, parts.chText);
   } catch (e) {
-    if (e?.message !== 'job.error.aiTruncated') throw e;
+    // Halbieren auch bei Ablehnung/fehlendem Feld: der kürzere Text ist ein neuer Anlauf,
+    // und eine Ablehnung hängt oft an einer einzelnen Passage.
+    if (!SOFT_CHUNK_ERRORS.has(e?.message)) throw e;
     const halves = halveChunkPages(chunk.pages);
     if (!halves) throw e;
-    log.warn(`${chunkLabel} – Truncation, Retry in zwei Hälften (${halves[0].length}+${halves[1].length} Seiten${chunk.pages.length === 1 ? ', Abschnitt geteilt' : ''}).`);
+    log.warn(`${chunkLabel} – ${i18nErrText(e)}, Retry in zwei Hälften (${halves[0].length}+${halves[1].length} Seiten${chunk.pages.length === 1 ? ', Abschnitt geteilt' : ''}).`);
     const results = [];
     for (const [hi, pages] of halves.entries()) {
       const text = pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n');
@@ -386,8 +391,7 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
       .filter(({ r }) => r.status === 'rejected')
       .map(({ ct, r }) => ({ name: ct.chunk.name, message: r.reason?.message || 'unbekannt', logText: i18nErrText(r.reason) }));
     const details = failedInfo.map(f => `${f.name}: ${f.logText}`).join('; ');
-    const SOFT = new Set(['job.error.aiTruncated', 'job.error.extractFieldMissing', 'job.error.aiRefusal', 'job.error.aiEmpty']);
-    const onlyTruncation = failedInfo.every(f => SOFT.has(f.message));
+    const onlyTruncation = failedInfo.every(f => SOFT_CHUNK_ERRORS.has(f.message));
     const someSucceeded = (settled.length - failedChunks.length) > 0;
     // Truncation einzelner Chunks ist nicht-fatal, SOLANGE mindestens ein Chunk
     // Daten lieferte: das lokale Modell dreht bei dichten Kapiteln in Wiederholungs-
@@ -403,10 +407,11 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
       // lückenhaften Stand statt die nie gecachten Chunks erneut zu extrahieren.
       partialFailure = true;
       const skippedChapters = [...new Set(failedInfo.map(f => f.name))];
-      // Diese Kapitel behalten beim Speichern ihre bisherigen Welt-Fakten (saveFaktenToDb
-      // keepChapterIds) — ein ausgefallener Chunk ist keine Aussage „hier gibt es keine".
+      // Diese Kapitel behalten beim Speichern ihren Bestand — Welt-Fakten, Figuren, Orte und
+      // Szenen, die nur dort vorkommen (utils.js#skippedChapterIds) — ein ausgefallener Chunk
+      // ist keine Aussage „hier gibt es keine".
       ctx.faktenFailure = { all: false, kapitel: skippedChapters };
-      log.warn(`Phase 1 – ${failedChunks.length} Chunk(s) durch Truncation übersprungen (nicht-fatal): ${details}`);
+      log.warn(`Phase 1 – ${failedChunks.length} Chunk(s) ausgefallen (nicht-fatal, Bestand dieser Kapitel bleibt): ${details}`);
       ctx.warnings?.push({
         key: 'job.warn.chunksTruncated',
         params: { count: failedChunks.length, chapters: skippedChapters.join(', ') },

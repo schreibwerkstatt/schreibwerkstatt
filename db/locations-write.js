@@ -16,7 +16,7 @@ require('./migrations');
 // (db/figures/refs.js), nicht als eigene Kopie hier.
 const { figIdMaps } = require('./figures/refs');
 const { NOW_ISO_SQL } = require('./now');
-const { toRefString: _toRefString, chapterNameMap } = require('./write-helpers');
+const { toRefString: _toRefString, chapterNameMap, onlyInChapters } = require('./write-helpers');
 const logger = require('../logger');
 const { matchLocations } = require('../lib/entity-match');
 
@@ -208,7 +208,18 @@ function saveOrteToDb(bookId, orte, userEmail, chNameToId = null, pageNameToIdBy
       // waere fuer sie falsch. Sie bleiben aktiv und raeumen nur den Namespace.
       const markStale = db.prepare("UPDATE locations SET stale = 1, loc_id = 'orphan_' || id WHERE id = ?");
       const parkManual = db.prepare("UPDATE locations SET loc_id = 'man_' || id WHERE id = ?");
-      for (const ex of missing) (ex.manually_created ? parkManual : markStale).run(ex.id);
+      // Nur in Kapiteln belegt, deren Extraktion ausgefallen ist (`opts.keepChapterIds`):
+      // das Fehlen sagt nichts, der Ort bleibt aktiv (Muster figures/save.js).
+      const parkKept = db.prepare("UPDATE locations SET loc_id = 'kept_' || id WHERE id = ?");
+      const onlyInSkipped = onlyInChapters(opts.keepChapterIds?.size ? db.prepare(`
+        SELECT lc.location_id AS id, lc.chapter_id FROM location_chapters lc
+        JOIN locations l ON l.id = lc.location_id WHERE l.book_id = ? AND l.user_email IS ?`).all(bookId, userEmail || null) : [],
+        opts.keepChapterIds);
+      for (const ex of missing) {
+        if (ex.manually_created) parkManual.run(ex.id);
+        else if (onlyInSkipped(ex.id)) parkKept.run(ex.id);
+        else markStale.run(ex.id);
+      }
     } else {
       // CASCADE entfernt location_figures, location_chapters, scene_locations.
       const delLoc = db.prepare('DELETE FROM locations WHERE id = ?');

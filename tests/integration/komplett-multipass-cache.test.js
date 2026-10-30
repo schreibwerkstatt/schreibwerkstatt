@@ -127,6 +127,25 @@ test('Multi-Pass ohne Gap-Pass: Kapiteltext bleibt im User-Turn', async () => {
   }
 });
 
+test('Multi-Pass: Antwort ohne Pflichtfeld wird halbiert neu extrahiert', async () => {
+  const BOOK_ID = 74;
+  seedBook(BOOK_ID);
+  // Kapitel 2 am Stück → Antwort ohne `figuren` (z.B. abgebrochene Ablehnung); die Hälften gehen.
+  ctx.mockAi.on(
+    (e) => isP1(e) && chapterOf(e) === 'Kapitel 2' && e.prompt.includes('Seite 2a') && e.prompt.includes('Seite 2b'),
+    { orte: [], szenen: [] },
+  );
+  ctx.mockAi.on(isP1, (e) => extraktion(chapterOf(e) || 'Kapitel 1'));
+  registerConsolidation();
+
+  const job = await runJob(BOOK_ID);
+  assert.equal(job.status, 'done', `expected done, got ${job.status}: ${job.error || ''}`);
+  const ch2 = ctx.mockAi.log.filter(e => isP1(e) && chapterOf(e) === 'Kapitel 2');
+  assert.equal(ch2.length, 3, 'ein unvollständiger Ganz-Call + zwei Hälften');
+  assert.ok(!(job.result.warnings || []).some(w => w.key === 'job.warn.chunksTruncated'),
+    'kein Teilfehler: das Kapitel trägt bei');
+});
+
 test('Multi-Pass: truncierter Chunk wird halbiert extrahiert statt verworfen', async () => {
   const BOOK_ID = 73;
   seedBook(BOOK_ID);

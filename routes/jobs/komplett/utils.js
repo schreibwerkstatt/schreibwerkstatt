@@ -387,7 +387,16 @@ function buildConsolidationSig(chapters, cacheVersion, flags = {}) {
     .digest('hex');
 }
 
+/** Kapitel-IDs, deren Phase-1-Extraktion in diesem Lauf ausgefallen ist (`ctx.faktenFailure`,
+ *  gesetzt in extraktion/multi-pass.js). Was dort im Katalog steht, bleibt beim Speichern
+ *  stehen: ein ausgefallenes Kapitel ist keine Aussage «hier gibt es nichts». */
+function skippedChapterIds(ctx) {
+  const map = ctx?.idMaps?.chNameToId || {};
+  return new Set((ctx?.faktenFailure?.kapitel || []).map(n => map[n]).filter(id => id != null));
+}
+
 module.exports = {
+  skippedChapterIds,
   _refToString, _remapFigNames, extractField, consolidationFitsCap,
   buildBookSystemBlockText, buildChapterSystemBlockText, buildBookPagesSig, bookSettingsSigPart,
   _stelleQuote, STELLE_QUOTE_MIN_CHARS, STELLE_QUOTE_MIN_WORDS,

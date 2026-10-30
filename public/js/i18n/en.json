@@ -5524,7 +5524,7 @@
   "job.warn.factsChapterSkipped": "Facts for some chapters could not be extracted ({chapters}) – the continuity check ran on a reduced fact base.",
   "job.warn.narrativeProfileChaptersSkipped": "The narrative profile of some chapters could not be recalculated ({chapters}) – their previous profile remains.",
   "job.warn.autorenBefundFailed": "The author assessment could not be created. The previous assessment was removed because it no longer matches the new narrative profile.",
-  "job.warn.chunksTruncated": "{count} text part(s) could not be fully analysed by the model (repetition loop) and were skipped: {chapters}. The remaining parts were processed normally.",
+  "job.warn.chunksTruncated": "{count} text part(s) could not be analysed (response cut off, incomplete or declined by the model) and were skipped: {chapters}. What the catalogue already held for them is kept; the remaining parts were processed normally.",
   "job.error.extractFieldMissing": "The model’s response for “{label}” was incomplete (a required field is missing).",
   "job.warn.gapsFailed": "A follow-up pass for missed characters, locations or scenes failed. The run kept what had been found so far; the result is not cached, and the next run will try again.",
   "job.warn.orteKollaps": "Location matching skipped: the consolidation returned only {neu} locations while the catalog has {aktiv} active ones. The existing location catalog is left unchanged.",

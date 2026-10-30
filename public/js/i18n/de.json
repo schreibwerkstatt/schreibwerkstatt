@@ -5524,7 +5524,7 @@
   "job.warn.factsChapterSkipped": "Fakten einzelner Kapitel konnten nicht extrahiert werden ({chapters}). Die Kontinuitätsprüfung lief auf reduzierter Faktenbasis.",
   "job.warn.narrativeProfileChaptersSkipped": "Erzählprofil einzelner Kapitel konnte nicht neu berechnet werden ({chapters}) – dort steht weiterhin das bisherige Profil.",
   "job.warn.autorenBefundFailed": "Autoren-Befund konnte nicht erstellt werden. Der bisherige Befund wurde entfernt, weil er nicht mehr zum neuen Erzählprofil passt.",
-  "job.warn.chunksTruncated": "{count} Textteil(e) konnten vom Modell nicht vollständig analysiert werden (Wiederholungsschleife) und wurden übersprungen: {chapters}. Übrige Textteile wurden normal ausgewertet.",
+  "job.warn.chunksTruncated": "{count} Textteil(e) konnten nicht ausgewertet werden (Antwort abgeschnitten, unvollständig oder vom Modell abgelehnt) und wurden übersprungen: {chapters}. Was dort bereits im Katalog stand, bleibt erhalten; die übrigen Textteile wurden normal ausgewertet.",
   "job.error.extractFieldMissing": "Die Antwort des Modells auf «{label}» war unvollständig (Pflichtfeld fehlt).",
   "job.warn.gapsFailed": "Ein Nachzieh-Durchgang für übersehene Figuren, Orte oder Szenen ist gescheitert. Der Lauf hat das bis dahin Gefundene übernommen; das Ergebnis wird nicht zwischengespeichert, der nächste Lauf versucht es erneut.",
   "job.warn.orteKollaps": "Ortsabgleich übersprungen: die Konsolidierung lieferte nur {neu} Schauplätze, der Katalog hat {aktiv} aktive. Der bestehende Ortskatalog bleibt unverändert.",

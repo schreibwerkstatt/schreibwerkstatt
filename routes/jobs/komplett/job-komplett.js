@@ -31,7 +31,7 @@ const contentStore = require('../../../lib/content-store');
 const appSettings = require('../../../lib/app-settings');
 const { setContext } = require('../../../lib/log-context');
 const { runNonCritical, buildBookPagesSig, makePhaseTimer,
-  buildConsolidationSig } = require('./utils');
+  buildConsolidationSig, skippedChapterIds } = require('./utils');
 const { loadAndValidateCheckpoint, restorePhase1FromCheckpoint } = require('./checkpoint');
 const { remapSzenen, remapAssignments, saveSzenenAndEvents,
         planSzenenMatch, resolveSzenenForSave } = require('./remap');
@@ -410,7 +410,7 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
       }
       szenenResult = saveSzenenAndEvents(bookIdInt, email, szenen, assignments, locIdToDbId, idMaps, log, jobId,
         { resolved: szenenResolved, matchHint: szeneHint && szeneHint.size ? szeneHint : null,
-          writeSzenen, writeEvents });
+          writeSzenen, writeEvents, keepChapterIds: skippedChapterIds(ctx) });
       if (!writeSzenen) szenenResult.szenenCount = countSzenenInDb(bookIdInt, email);
       backfillLocationChaptersFromScenes(bookIdInt, email);
     } else {

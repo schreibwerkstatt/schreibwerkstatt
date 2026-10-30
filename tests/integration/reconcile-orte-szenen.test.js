@@ -117,6 +117,39 @@ test('Szene: Re-Analyse behaelt die DB-id (Match per Kapitel+Titel) und den Rech
   assert.equal(revived.stale, 0, 'wiederaufgetauchte Szene wird revived');
 });
 
+test('Ausgefallenes Kapitel: Ort und Szene, die nur dort stehen, bleiben aktiv', () => {
+  for (const t of ['figure_scenes', 'locations', 'chapters']) db.prepare(`DELETE FROM ${t} WHERE book_id = ?`).run(BOOK);
+  const chId = (n) => db.prepare(
+    `INSERT INTO chapters (book_id, chapter_name, updated_at) VALUES (?, ?, '2026-01-01T00:00:00.000Z')`
+  ).run(BOOK, n).lastInsertRowid;
+  const k1 = chId('Kapitel Eins'), k2 = chId('Kapitel Zwei');
+  const chMap = { 'Kapitel Eins': k1, 'Kapitel Zwei': k2 };
+  const idMaps = { chNameToId: chMap, pageNameToIdByChapter: {} };
+  const opts = { matchBy: 'name', onMissing: 'stale' };
+  const scene = (titel, kapitel) => ({ kapitel, seite: null, titel, wertung: null, kommentar: null, fig_ids: [], ort_ids: [], sort_order: 0 });
+
+  dbSchema.saveOrteToDb(BOOK, [
+    { id: 'ort_1', name: 'Burg', kapitel: ['Kapitel Eins'] },
+    { id: 'ort_2', name: 'Hafen', kapitel: ['Kapitel Zwei'] },
+  ], EMAIL, chMap, {}, opts);
+  saveSzenenAndEvents(BOOK, EMAIL, [scene('Ankunft', 'Kapitel Eins'), scene('Abfahrt', 'Kapitel Zwei')], [], {}, idMaps, log, null);
+
+  // Lauf, in dem Kapitel Zwei ausgefallen ist: weder Hafen noch Abfahrt geliefert.
+  const keepChapterIds = new Set([k2]);
+  dbSchema.saveOrteToDb(BOOK, [{ id: 'ort_1', name: 'Burg', kapitel: ['Kapitel Eins'] }], EMAIL, chMap, {}, { ...opts, keepChapterIds });
+  saveSzenenAndEvents(BOOK, EMAIL, [scene('Ankunft', 'Kapitel Eins')], [], {}, idMaps, log, null, { keepChapterIds });
+
+  const hafen = db.prepare("SELECT stale, loc_id FROM locations WHERE book_id = ? AND name = 'Hafen'").get(BOOK);
+  assert.equal(hafen.stale, 0, 'Ort nur im ausgefallenen Kapitel bleibt aktiv');
+  assert.match(hafen.loc_id, /^kept_/, 'räumt den ort_N-Namespace');
+  assert.equal(db.prepare("SELECT stale FROM figure_scenes WHERE book_id = ? AND titel = 'Abfahrt'").get(BOOK).stale, 0,
+    'Szene im ausgefallenen Kapitel bleibt aktiv');
+
+  // Ohne Ausfall gilt wieder: verschwunden → stale.
+  dbSchema.saveOrteToDb(BOOK, [{ id: 'ort_1', name: 'Burg', kapitel: ['Kapitel Eins'] }], EMAIL, chMap, {}, opts);
+  assert.equal(db.prepare("SELECT stale FROM locations WHERE book_id = ? AND name = 'Hafen'").get(BOOK).stale, 1);
+});
+
 // ── Robustheit des Schreibpfads ─────────────────────────────────────────────
 
 test('Ort: doppeltes Kapitel im kapitel-Array bricht die Transaktion nicht (hoehere Haeufigkeit gewinnt)', () => {

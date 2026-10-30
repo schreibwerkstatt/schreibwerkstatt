@@ -208,3 +208,24 @@ test('Reconcile: leere Steckbrief-Felder eines Laufs leeren den Bestand nicht', 
   assert.equal(row().geburtstag, '1971', 'ein anderer Analysewert ersetzt den Bestand');
   assert.equal(row().beruf, 'Jäger');
 });
+
+test('Reconcile: Figur nur im ausgefallenen Kapitel bleibt aktiv', () => {
+  db.prepare('INSERT INTO chapters (chapter_id, book_id, chapter_name, position, updated_at) VALUES (?, ?, ?, ?, ?)')
+    .run(9002, BOOK, 'Kapitel 2', 1, new Date().toISOString());
+  const maps = { chNameToId: { 'Kapitel 1': 9001, 'Kapitel 2': 9002 }, pageNameToIdByChapter: {} };
+  const lauf = (figuren, opts = {}) => {
+    saveFigurenToDb(BOOK, figuren, USER, maps, { reconcile: true, onMissing: 'stale', ...opts });
+    rebuildFigureAppearances(BOOK, USER, figuren, maps);
+  };
+  const otto = { id: 'fig_1', name: 'Otto Berg', typ: 'nebenfigur', kapitel: [{ name: 'Kapitel 1', haeufigkeit: 2 }], beziehungen: [] };
+  const vera = { id: 'fig_2', name: 'Vera Stein', typ: 'randfigur', kapitel: [{ name: 'Kapitel 2', haeufigkeit: 1 }], beziehungen: [] };
+  const row = () => db.prepare("SELECT stale, fig_id FROM figures WHERE book_id = ? AND name = 'Vera Stein'").get(BOOK);
+
+  lauf([otto, vera]);
+  lauf([otto], { keepChapterIds: new Set([9002]) });
+  assert.equal(row().stale, 0, 'Kapitel 2 ausgefallen: Vera bleibt aktiv');
+  assert.match(row().fig_id, /^kept_/, 'räumt den fig_N-Namespace');
+
+  lauf([otto]);
+  assert.equal(row().stale, 1, 'ohne Ausfall: verschwunden → stale');
+});

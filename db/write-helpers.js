@@ -55,7 +55,25 @@ function chapterNameMap(rows) {
   return map;
 }
 
+// Prädikat «Eintrag kommt nur in den Kapiteln `keepIds` vor», gebaut aus Bridge-Zeilen
+// `{ id, chapter_id }` (figure_appearances, location_chapters). Für den Reconcile der
+// Komplettanalyse: ein Eintrag, der nur in ausgefallenen Kapiteln steht, fehlt im Lauf
+// ohne Aussage. Ohne Kapitel-Bezug oder ohne ausgefallene Kapitel: false.
+function onlyInChapters(rows, keepIds) {
+  if (!keepIds?.size) return () => false;
+  const byId = new Map();
+  for (const r of rows) {
+    if (!byId.has(r.id)) byId.set(r.id, []);
+    byId.get(r.id).push(r.chapter_id);
+  }
+  return (id) => {
+    const chs = byId.get(id);
+    return !!chs?.length && chs.every(c => keepIds.has(c));
+  };
+}
+
 module.exports = {
+  onlyInChapters,
   requireUserEmail,
   toRefString,
   chapterNameMap,

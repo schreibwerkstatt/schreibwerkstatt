@@ -3,6 +3,7 @@ const { NOW_ISO_SQL } = require('../now');
 const { matchFiguren } = require('../../lib/entity-match');
 const { dedupRelations, relationKey, _cleanRefName, resolveErstePageId, enrichBelegWithIds, _arcToFlat } = require('./refs');
 const { listFigureAliasesByFigure } = require('./aliases');
+const { onlyInChapters } = require('../write-helpers');
 require('../migrations');
 
 // Cross-Run-Matching (Bestand ↔ neue Analyse-Figuren) liegt in
@@ -327,7 +328,18 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
       // Vorband übernommen) — «nicht mehr im Text» wäre falsch. Sie bleiben aktiv und
       // räumen nur den Namespace (Muster locations.manually_created).
       const parkManual = db.prepare("UPDATE figures SET fig_id = 'man_' || id WHERE id = ?");
-      for (const ex of missing) (prevById.get(ex.id)?.ki_name == null ? parkManual : markStale).run(ex.id);
+      // Kommt die Figur nur in Kapiteln vor, deren Extraktion ausgefallen ist, sagt ihr
+      // Fehlen nichts — sie bleibt aktiv und räumt nur den Namespace.
+      const parkKept = db.prepare("UPDATE figures SET fig_id = 'kept_' || id WHERE id = ?");
+      const onlyInSkipped = onlyInChapters(opts.keepChapterIds?.size ? db.prepare(`
+        SELECT fa.figure_id AS id, fa.chapter_id FROM figure_appearances fa
+        JOIN figures f ON f.id = fa.figure_id WHERE f.book_id = ? AND f.user_email IS ?`).all(bookId, em) : [],
+        opts.keepChapterIds);
+      for (const ex of missing) {
+        if (prevById.get(ex.id)?.ki_name == null) parkManual.run(ex.id);
+        else if (onlyInSkipped(ex.id)) parkKept.run(ex.id);
+        else markStale.run(ex.id);
+      }
     } else {
       const delFig = db.prepare('DELETE FROM figures WHERE id = ?');
       for (const ex of missing) delFig.run(ex.id);
@@ -467,4 +479,5 @@ function _writeRelations(bookId, em, manual, prevRels, figIdToRowId, allRelation
   }
 }
 
-module.exports = { planFigurenMatch, saveFigurenToDb };
+module.exports = {
+  planFigurenMatch, saveFigurenToDb };

@@ -5,7 +5,7 @@ const { planFigurenMatch, countActiveFigures, listFigureAliasesByFigure } = requ
 const { judgeEntityPairs } = require('../entity-reconcile');
 const { recomputeBookFigureMentions } = require('../../../../lib/page-index');
 const { i18nError, i18nErrText, updateJob } = require('../../shared');
-const { buildFigNameLookup, consolidationFitsCap } = require('../utils');
+const { buildFigNameLookup, consolidationFitsCap, skippedChapterIds } = require('../utils');
 const {
   preMergeChapterFiguren, applySozialschichtModeVote, mergeDuplicateFiguren,
   validateBeziehungenDescriptions, backfillFiguren, ensureUniqueFigIds, applyAliasClusters,
@@ -227,6 +227,7 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
   }
   const { rowIdByFigId } = saveFigurenToDb(bookIdInt, figuren, email, idMaps, {
     reconcile: true, onMissing: 'stale',
+    keepChapterIds: skippedChapterIds(ctx),
     matchHint: figHint && figHint.size ? figHint : null,
     // Teil-Lauf ohne «Beziehungen»: bestehende KI-Kanten (auch die kapitelübergreifenden
     // aus P3b) bleiben stehen, statt mit den Figuren neu aufgebaut zu werden.

@@ -207,9 +207,13 @@ function saveSzenenAndEvents(bookIdInt, email, szenen, assignments, locIdToDbId,
     const existing = sceneMatch.existing;
     const matchOf = sceneMatch.matchOf;                // resolvedIndex → existingId
     const usedExisting = new Set(matchOf.values());
-    // Verschwundene → stale=1 (Refs bleiben), statt Loeschen.
+    // Verschwundene → stale=1 (Refs bleiben), statt Loeschen. Ausnahme: Szenen in Kapiteln,
+    // deren Extraktion ausgefallen ist (`opts.keepChapterIds`) — dort sagt das Fehlen nichts.
+    const keep = opts.keepChapterIds;
     const markStale = db.prepare('UPDATE figure_scenes SET stale = 1 WHERE id = ?');
-    for (const ex of existing) if (!usedExisting.has(ex.id)) markStale.run(ex.id);
+    for (const ex of existing) {
+      if (!usedExisting.has(ex.id) && !(keep?.size && keep.has(ex.chapter_id))) markStale.run(ex.id);
+    }
 
     const ins = db.prepare(`INSERT INTO figure_scenes
       (book_id, user_email, titel, wertung, kommentar, chapter_id, page_id, sort_order, stale, updated_at)

@@ -5,7 +5,7 @@ const { saveOrteToDb, saveSongsToDb, planOrteMatch } = require('../../../../db/s
 const { songKey, listSongIdsForBook } = require('../../../../db/songs');
 const searchIndex = require('../../../../lib/search');
 const { updateJob, i18nErrText } = require('../../shared');
-const { _remapFigNames, consolidationFitsCap } = require('../utils');
+const { _remapFigNames, consolidationFitsCap, skippedChapterIds } = require('../utils');
 const { komplettMaxTokens } = require('./tokens');
 const { getContextConfigFor } = require('../../../../lib/ai');
 const { COST_LABEL, costTier } = require('../cost-labels');
@@ -252,6 +252,7 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
   }
   saveOrteToDb(bookIdInt, orte, email, idMaps.chNameToId, idMaps.pageNameToIdByChapter,
     { preserveExistingCoords: true, matchBy: 'name', onMissing: 'stale',
+      keepChapterIds: skippedChapterIds(ctx),
       matchHint: ortHint && ortHint.size ? ortHint : null });
   log.info(`${orte.length} Schauplätze gespeichert.`);
 
