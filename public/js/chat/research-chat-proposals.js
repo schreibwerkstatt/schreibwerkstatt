@@ -7,6 +7,11 @@
 // `exists_item_id` setzt schon das Tool (Abgleich URL/Titel mit dem Archiv) bzw.
 // eine 409-Antwort beim Speichern: dann „schon im Board" statt Speichern-Knopf.
 //
+// Jede URL trägt `verified` (vom Job: in diesem Lauf abgerufen/geliefert ja/nein).
+// Eine ungeprüfte URL zeigt einen Hinweis, ihr Vorschlag fällt aus «Alle
+// speichern» — einzeln speichern geht weiter. Einzelne Links lassen sich vor dem
+// Speichern weglassen (`edits.urls`, nur Teilmenge der eigenen URLs).
+//
 // Lokale Updates ersetzen die Nachricht im Array (neues Objekt), statt das
 // x-for-Item zu mutieren: Mutationen am Proxy nach einem await schlagen nicht
 // zuverlässig ins Template durch.
@@ -26,11 +31,41 @@ export const researchProposalMethods = {
     const p = this.researchProposals(msg)[pi];
     return (!p || p.saved_item_id) ? null : (p.exists_item_id || null);
   },
-  // Ungespeicherte Vorschläge, die ohne Rückfrage gespeichert werden können.
+  // Ungespeicherte Vorschläge, die ohne Rückfrage gespeichert werden können —
+  // ohne Dubletten und ohne (verbliebene) ungeprüfte Links.
   researchSavableProposals(msg) {
     return this.researchProposals(msg)
       .map((p, pi) => ({ p, pi }))
-      .filter(({ p }) => !p.saved_item_id && !p.exists_item_id);
+      .filter(({ p, pi }) => !p.saved_item_id && !p.exists_item_id && !this.proposalHasUnverified(msg, pi));
+  },
+
+  // ── Links eines Vorschlags ──────────────────────────────────────────────
+  // Hat das Modell eine URL genannt, die dieser Lauf nie abgerufen hat?
+  // (Ältere Vorschläge ohne Flag gelten als nicht markiert.)
+  isProposalUrlUnverified(u) { return u?.verified === false; },
+  // Echter Host neben einem Modell-Label — ein Label «Wikipedia» kann so keine
+  // fremde Domain verdecken. Ohne Label zeigt der Link ohnehin die URL.
+  proposalUrlHost(u) {
+    if (!u?.label) return '';
+    try { return new URL(u.url).hostname.replace(/^www\./, ''); } catch { return ''; }
+  },
+  isProposalUrlRemoved(msg, pi, u) {
+    return (this._proposalRemovedUrls[_key(msg, pi)] || []).includes(u?.url);
+  },
+  toggleProposalUrl(msg, pi, u) {
+    const k = _key(msg, pi);
+    const cur = this._proposalRemovedUrls[k] || [];
+    const nextList = cur.includes(u.url) ? cur.filter(x => x !== u.url) : [...cur, u.url];
+    const next = { ...this._proposalRemovedUrls };
+    if (nextList.length) next[k] = nextList; else delete next[k];
+    this._proposalRemovedUrls = next;
+  },
+  // Links, die beim Speichern mitgehen.
+  _proposalKeptUrls(msg, pi) {
+    return (this.researchProposals(msg)[pi]?.urls || []).filter(u => !this.isProposalUrlRemoved(msg, pi, u));
+  },
+  proposalHasUnverified(msg, pi) {
+    return this._proposalKeptUrls(msg, pi).some(u => this.isProposalUrlUnverified(u));
   },
 
   // ── Bearbeiten vor dem Speichern ────────────────────────────────────────
@@ -57,14 +92,19 @@ export const researchProposalMethods = {
     }
     this._proposalEdits = next;
   },
+  // Bearbeitungen + weggelassene Links; null, wenn der User nichts geändert hat.
   _proposalEditsPayload(msg, pi) {
     const d = this.proposalEdit(msg, pi);
-    if (!d) return null;
+    const removed = (this._proposalRemovedUrls[_key(msg, pi)] || []).length > 0;
+    if (!d && !removed) return null;
     return {
-      title: d.title,
-      body: d.body,
-      kind: d.kind,
-      tags: String(d.tagsText || '').split(',').map(t => t.trim()).filter(Boolean),
+      ...(d ? {
+        title: d.title,
+        body: d.body,
+        kind: d.kind,
+        tags: String(d.tagsText || '').split(',').map(t => t.trim()).filter(Boolean),
+      } : {}),
+      ...(removed ? { urls: this._proposalKeptUrls(msg, pi).map(u => u.url) } : {}),
     };
   },
 
@@ -88,16 +128,19 @@ export const researchProposalMethods = {
     this._proposalSaving = { ...this._proposalSaving, [k]: true };
     try {
       const ctx = this.researchChatUseContext ? this.researchChatContextTarget() : null;
+      const edits = this._proposalEditsPayload(msg, pi);
       const res = await sendJson('/research/chat-proposal', 'POST', {
         message_id: msg.id,
         index: pi,
-        ...(this.proposalEdit(msg, pi) ? { edits: this._proposalEditsPayload(msg, pi) } : {}),
+        ...(edits ? { edits } : {}),
         ...(ctx ? { link: { target_kind: ctx.kind, target_id: ctx.id } } : {}),
         ...(allowDuplicate ? { allow_duplicate: true } : {}),
       });
       const savedId = res?.item?.id || null;
       this._patchProposal(msg, pi, { saved_item_id: savedId });
       if (this._proposalEdits[k]) { const n = { ...this._proposalEdits }; delete n[k]; this._proposalEdits = n; }
+      // _proposalRemovedUrls bleibt stehen: der gespeicherte Vorschlag zeigt die
+      // weggelassenen Links weiter durchgestrichen (bis zum Reload).
       // Board aus Server-Wahrheit neu laden (Filter/Sortierung + Tag-Pool).
       if (reload) await this.loadRecherche();
       return savedId;
@@ -195,6 +238,8 @@ export function researchProposalState() {
   return {
     // Bearbeitungs-Entwürfe je Vorschlag, Schlüssel `${msg.id}:${index}`.
     _proposalEdits: {},
+    // Weggelassene Links je Vorschlag (gleicher Schlüssel) → URL-Strings.
+    _proposalRemovedUrls: {},
     // Kontext-Chip an: gespeicherte Vorschläge mit Seite/Kapitel verknüpfen.
     researchChatUseContext: false,
   };

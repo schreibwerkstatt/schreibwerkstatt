@@ -36,7 +36,8 @@ function listChaptersWithStats(bookId) {
 
 const _stmtPagesWithStats = db.prepare(`
     SELECT p.page_id, p.page_name, p.chapter_id,
-           COALESCE(ps.words, 0) AS words, COALESCE(ps.chars, 0) AS chars
+           COALESCE(ps.words, 0) AS words, COALESCE(ps.chars, 0) AS chars,
+           (ps.page_id IS NOT NULL) AS has_stats
     FROM pages p
     LEFT JOIN page_stats ps ON ps.page_id = p.page_id
     LEFT JOIN chapters c ON c.chapter_id = p.chapter_id
@@ -44,7 +45,9 @@ const _stmtPagesWithStats = db.prepare(`
     ORDER BY ${globalPageOrderSql()}
   `);
 
-/** Alle Seiten eines Buchs (auch ohne Kapitel) mit Wort-/Zeichenzahl. */
+/** Alle Seiten eines Buchs (auch ohne Kapitel) mit Wort-/Zeichenzahl. `has_stats`
+ *  = 0: für die Seite gibt es (noch) keine page_stats-Zeile — `words`/`chars` sind
+ *  dann 0 als «unbekannt», nicht als «leer». */
 function listPagesWithStats(bookId) {
   return _stmtPagesWithStats.all(bookId);
 }

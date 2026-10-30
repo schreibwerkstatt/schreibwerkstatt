@@ -131,10 +131,31 @@
   -webkit-box-orient: vertical;
 }
 .research-chat-proposal-url {
-  display: block;
   font-size: var(--font-size-sm);
   color: var(--card-accent);
   word-break: break-all;
+  min-width: 0;
+}
+/* Ein Link je Zeile: Label, echter Host, ggf. «nicht geprüft», Weglassen-Knopf. */
+.research-chat-proposal-url-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+.research-chat-proposal-url-host {
+  font-size: var(--font-size-sm);
+  color: var(--color-muted);
+}
+.research-chat-proposal-url-unverified {
+  font-size: var(--font-size-sm);
+  color: var(--color-warn-text);
+  font-style: italic;
+}
+.research-chat-proposal-url-row--removed .research-chat-proposal-url,
+.research-chat-proposal-url-row--removed .research-chat-proposal-url-host {
+  text-decoration: line-through;
+  opacity: 0.6;
 }
 .research-chat-proposal-saved {
   font-size: var(--font-size-sm);

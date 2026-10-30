@@ -85,12 +85,13 @@
                             <span class="chat-word-diff"><template x-for="(part, di) in row.diff" :key="di"><span :class="part.c" x-text="part.v"></span></template></span>
                           </template>
                           <template x-if="!row.diff">
-                            <span><span class="finding-original" x-text="row.status ? statusLabel(row.before) : (row.before || $app.t('ideenBoard.chat.meta.bookAnchorShort'))"></span> <span class="finding-korrektur" x-text="row.status ? statusLabel(row.after) : row.after"></span></span>
+                            <span><span class="finding-original" x-text="row.status ? statusLabel(row.before) : (row.before || $app.t('ideenBoard.chat.meta.bookAnchorShort'))"></span> <span class="finding-korrektur" x-text="row.status ? statusLabel(row.after) : (row.after || $app.t('ideenBoard.chat.meta.bookAnchorShort'))"></span></span>
                           </template>
                         </div>
                       </template>
+                      <!-- Beleg: beim Vorschlagen geprüft; fehlt er beim Übernehmen im aktuellen Text, steht das statt «geprüft» da -->
                       <div x-show="p.beleg?.text" class="ideen-chat-beleg">
-                        <span class="ideen-chat-proposal-field" x-text="$app.t('ideenBoard.chat.field.beleg')"></span>
+                        <span class="ideen-chat-proposal-field" x-text="p._belegMissing ? $app.t('ideenBoard.chat.belegMissing') : $app.t('ideenBoard.chat.field.beleg')"></span>
                         <span>
                           <q x-text="p.beleg?.text"></q>
                           <button type="button" class="entity-ref" x-show="p.beleg?.page_id"

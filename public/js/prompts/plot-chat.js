@@ -12,6 +12,8 @@
 import { _isLocal, _jsonOnly } from './state.js';
 import { buildPassageBlockLines } from './chat-pre-context.js';
 import { toolMentions } from './chat-tools/mentions.js';
+import { _reihenfolgeRegel } from './plot/board.js';
+import { buildProposalMemoryBlock } from './proposal-memory.js';
 
 export const PLOT_CHAT_FORCE_FINAL_INSTRUCTION =
   'Du hast die maximale Zahl an Werkzeug-Iterationen erreicht — keine weiteren Lese-Aufrufe mehr. '
@@ -23,7 +25,12 @@ const _BEGRUENDUNG = { type: 'string', description: 'Ein bis zwei Sätze: warum 
 const _FIGUREN = {
   type: 'array',
   items: { type: 'string' },
-  description: 'Beteiligte Figuren — Name oder fig_id aus der Figurenliste bzw. Name einer Werkstatt-Figur. Bei einer Änderung ersetzt die Liste die bisherige vollständig.',
+  description: 'Beteiligte Figuren — Kennung (fig_id bzw. draft#id) oder eindeutiger Name aus der Figurenliste. Bei Änderung ersetzt sie die bisherige Liste.',
+};
+const _LEEREN = {
+  type: 'array',
+  items: { type: 'string', enum: ['beschreibung', 'zeit', 'kapitel', 'intensitaet', 'figuren'] },
+  description: 'Nur bei ÄNDERUNG: Felder leeren («kapitel» = vom Kapitel lösen).',
 };
 
 /**
@@ -51,6 +58,7 @@ export const PLOT_CHAT_PROPOSE_TOOLS = [
         chapter_id: { type: 'integer', description: 'Zielkapitel (chapter_id aus Board oder Gliederung).' },
         figuren: _FIGUREN,
         verworfen: { type: 'boolean', description: 'Nur bei ÄNDERUNG: true = Beat ausmustern (bleibt erhalten, zählt nicht mehr), false = wieder aufnehmen.' },
+        leeren: _LEEREN,
         begruendung: _BEGRUENDUNG,
       },
       required: ['begruendung'],
@@ -77,13 +85,14 @@ export const PLOT_CHAT_PROPOSE_TOOLS = [
   },
   {
     name: 'propose_act',
-    description: 'Schlägt einen NEUEN Akt (Spalte) vor oder — mit act_id — eine Umbenennung. Wird NICHT gespeichert, der User übernimmt einzeln. Das Ergebnis trägt `ref`, auf das propose_beat/propose_beat_move derselben Antwort per act_ref verweisen können.',
+    description: 'Schlägt einen NEUEN Akt (Spalte) vor oder — mit act_id — eine Umbenennung. Wird NICHT gespeichert, der User übernimmt einzeln. Das Ergebnis trägt `ref` für act_ref. Strang ohne eigene Aktstruktur: sie entsteht beim Übernehmen als Kopie der geteilten Akte.',
     input_schema: {
       type: 'object',
       properties: {
         act_id: { type: 'integer', description: 'Nur bei Umbenennung: id des bestehenden Akts.' },
         name: { type: 'string', description: 'Name des Akts (max. 120 Zeichen). Pflicht.' },
         thread_id: { type: 'integer', description: 'Nur bei neuem Akt, optional: Akt gehört nur diesem Strang (eigene Aktstruktur). Ohne = geteilter Akt für alle Stränge.' },
+        thread_ref: { type: 'integer', description: 'Statt thread_id: `ref` eines neuen Strangs dieser Antwort.' },
         after_act_id: { type: 'integer', description: 'Nur bei neuem Akt, optional: hinter diesem Akt (desselben Bereichs) einreihen. Ohne = ans Ende.' },
         at_start: { type: 'boolean', description: 'Nur bei neuem Akt, optional: als ersten Akt einreihen.' },
         begruendung: _BEGRUENDUNG,
@@ -99,7 +108,7 @@ export const PLOT_CHAT_PROPOSE_TOOLS = [
       properties: {
         thread_id: { type: 'integer', description: 'Nur bei Änderung: id des bestehenden Strangs.' },
         name: { type: 'string', description: 'Name des Strangs (max. 120 Zeichen). Pflicht.' },
-        figur: { type: 'string', description: 'Optional: Hauptfigur des Strangs — Name oder fig_id einer Katalog-Figur oder Name einer Werkstatt-Figur.' },
+        figur: { type: 'string', description: 'Optional: Hauptfigur — Kennung (fig_id bzw. draft#id) oder eindeutiger Name aus der Figurenliste.' },
         begruendung: _BEGRUENDUNG,
       },
       required: ['name', 'begruendung'],
@@ -161,31 +170,31 @@ function _classicToolLines() {
 }
 
 /**
- * Block der früheren Vorschläge dieser Session (Art, Titel, übernommen/verworfen/
- * offen). Steht im volatilen Teil des System-Prompts.
+ * Block der früheren Vorschläge dieser Session (Art, Titel, übernommen/rückgängig/
+ * verworfen/offen). Steht im Vorspann der Frage.
  * @param {Array<{type,label,state}>} list
  */
 export function buildPlotProposalMemoryBlock(list = []) {
-  if (!Array.isArray(list) || !list.length) return '';
-  const STATE = { applied: 'übernommen', discarded: 'vom User verworfen', open: 'noch offen' };
-  const lines = list.map(p => `- ${p.type}: «${p.label}» — ${STATE[p.state] || STATE.open}`);
-  return 'BISHERIGE VORSCHLÄGE IN DIESEM GESPRÄCH (übernommene stehen schon im Board oben; verworfene nicht erneut vorschlagen, ausser der User bittet darum; offene nicht doppelt vorschlagen):\n'
-    + lines.join('\n');
+  return buildProposalMemoryBlock(list,
+    'BISHERIGE VORSCHLÄGE IN DIESEM GESPRÄCH (übernommene stehen schon im Board oben; verworfene nicht erneut vorschlagen, ausser der User bittet darum; offene nicht doppelt vorschlagen):',
+    (l) => `«${l}»`);
 }
 
 /**
- * System-Prompt als zwei Cache-Blöcke (wie der agentische Buch-Chat):
+ * Prompt als zwei Blöcke:
  *   Block 1 (ttl '1h'): Rolle, Regeln, Werkzeug-Strategie, Buch-Kontext — über die
- *     Session stabil.
- *   Block 2 (cache:false): Board-Outline, Figurenliste, frühere Vorschläge und die
- *     Textpassagen zur Frage — ändert sich mit jeder Übernahme bzw. Frage, darum
- *     ohne Breakpoint und am Ende.
+ *     Session stabil; der System-Prompt.
+ *   Block 2 (preamble: true): Board-Outline samt Reihenfolge-Regel, Figurenliste,
+ *     frühere Vorschläge und die Textpassagen zur Frage — ändert sich mit jeder
+ *     Übernahme bzw. Frage. proposal-chat.js stellt ihn als Vorspann VOR die Frage
+ *     in die User-Nachricht (wie den Erst-Kontext des Buch-Chats), damit Werkzeuge
+ *     + System + Verlauf ein stabiler Cache-Präfix bleiben.
  *
  * @param {string} bookName
  * @param {object} ctx { mode ('agent'|'classic'), maxToolIter, toolNames,
- *                       bookContext, boardOutline, figurenOutline,
- *                       proposalMemory, passages (classic immer; agent als
- *                       Erst-Kontext, null = ohne Embedding-Endpunkt),
+ *                       bookContext, boardOutline, boardTrimmed, boardActs,
+ *                       figurenOutline, proposalMemory, passages (classic immer;
+ *                       agent als Erst-Kontext, null = ohne Embedding-Endpunkt),
  *                       passageStatus (Index-/Suchstand, chat-pre-context.js) }
  */
 export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
@@ -210,7 +219,7 @@ export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
       'Vorschläge (nichts wird gespeichert — der User übernimmt jeden Vorschlag einzeln) gibst du im Feld `vorschlaege` deiner JSON-Antwort ab. Jeder Eintrag nennt sein `werkzeug` und dessen Felder:',
       ..._classicToolLines(),
       'Jeder Vorschlag bekommt in Reihenfolge eine Nummer `ref` (1, 2, 3 …). Baust du etwas Neues auf (z.B. neue Aktstruktur mit Beats darin), stelle zuerst die Akte/Stränge in die Liste und verweise in den Beats per act_ref/thread_ref auf deren Nummer.',
-      'ids nur aus dem Board unten — ein Vorschlag mit unbekannter id wird verworfen. Lass Felder weg, die du nicht setzen willst.',
+      'ids nur aus dem Board im Vorspann der Frage — ein Vorschlag mit unbekannter id wird verworfen. Lass Felder weg, die du nicht setzen willst; ein leerer Wert heisst «nicht ändern». Ein Feld leeren (z.B. das Kapitel eines Beats entfernen) nur über `leeren`.',
     ] : [
       'Vorschlags-Werkzeuge (nichts wird gespeichert — der User übernimmt jeden Vorschlag einzeln):',
       '- `propose_beat` — neuer Beat (mit act_id bzw. act_ref) oder Änderung eines bestehenden (beat_id, nur geänderte Felder).',
@@ -218,7 +227,8 @@ export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
       '- `propose_act` — neuer Akt oder Umbenennung.',
       '- `propose_thread` — neuer Strang (optional mit Hauptfigur) oder Änderung.',
       'Ein Vorschlag pro Aufruf; mehrere Vorschläge = mehrere Aufrufe, gebündelt in einer Runde. Baust du etwas Neues auf (z.B. neue Aktstruktur mit Beats darin), schlage zuerst die Akte/Stränge vor und verweise in den Beats per act_ref/thread_ref auf deren `ref`.',
-      'Meldet ein Vorschlags-Werkzeug einen Fehler (unbekannte id, falscher Akt), korrigiere den Aufruf — rate keine ids, sie stehen im Board unten.',
+      'Meldet ein Vorschlags-Werkzeug einen Fehler (unbekannte id, falscher Akt, mehrdeutige Figur), korrigiere den Aufruf — rate keine ids, sie stehen im Board im Vorspann der Frage.',
+      'Ein leerer Wert heisst «nicht ändern». Ein Feld leeren (z.B. das Kapitel eines Beats entfernen) nur über `leeren`.',
     ]),
     'Löschen kannst du nicht vorschlagen. Statt einen Beat zu löschen, schlage vor, ihn zu verwerfen (`propose_beat` mit beat_id und verworfen: true).',
     'Schlage nicht ungefragt das ganze Board um. Bei offenen Fragen („was meinst du?") antworte erst inhaltlich und biete Vorschläge an; bei klaren Aufträgen („mach mir drei Beats für …") schlage direkt vor.',
@@ -228,7 +238,7 @@ export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
   ];
   if (classic) {
     stable.push(
-      'Grundlage: das Board und die Figurenliste unten sowie die TEXTPASSAGEN (die semantisch nächsten Stellen des Manuskripts zur Frage, falls vorhanden). Was dort nicht steht, kennst du nicht — sage das, statt zu raten.',
+      'Grundlage: das Board und die Figurenliste im Vorspann der Frage sowie die TEXTPASSAGEN (die semantisch nächsten Stellen des Manuskripts zur Frage, falls vorhanden). Was dort nicht steht, kennst du nicht — sage das, statt zu raten.',
       '',
       'ANTWORTFORMAT: ein JSON-Objekt {"antwort": "…", "vorschlaege": [ … ]}. `antwort` ist deine Antwort an den User (Markdown erlaubt), `vorschlaege` die Liste der Board-Vorschläge (leer, wenn keine). Sprache: die der Userfrage.',
       ...(bookContext ? ['', bookContext] : []),
@@ -237,8 +247,8 @@ export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
   }
   stable.push(
     'Lese-Werkzeuge:',
-    `- Das aktuelle Board steht unten vollständig im Prompt${m.has('get_plot_board') ? ' (`get_plot_board` brauchst du nur nach eigenen Rückfragen, z.B. für Strang-Erbschaften)' : ''}.`,
-    ...(m.has('search_similar') ? ['- Die TEXTPASSAGEN unten sind schon die semantisch nächsten Stellen zur aktuellen Frage — prüfe sie zuerst, bevor du liest.'] : []),
+    `- Das aktuelle Board steht vor jeder Frage im Vorspann${m.has('get_plot_board') ? ' (`get_plot_board` brauchst du nur nach eigenen Rückfragen, z.B. für Strang-Erbschaften oder ein gekürztes Board)' : ''}.`,
+    ...(m.has('search_similar') ? ['- Die TEXTPASSAGEN im Vorspann der Frage sind schon die semantisch nächsten Stellen zur aktuellen Frage — prüfe sie zuerst, bevor du liest.'] : []),
     ...m.route('Figuren, Beziehungen', ['list_figures', 'get_figure_profile', 'get_figure_relations']),
     ...m.route('Geplante Figuren mit psychologischem Kern (Want/Need/Wound/Lie, Bogen)', ['list_werkstatt_drafts']),
     ...m.route('Was schon geschrieben ist (Szenen, Ereignisse in Reihenfolge)', ['list_scenes', 'get_timeline']),
@@ -267,20 +277,24 @@ export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
   return _finish(stable, ctx, { classic: false });
 }
 
-// Volatiler Block (Board, Figuren, Gedächtnis, Textpassagen zur Frage)
-// und JSON-Pflicht des klassischen Pfads — gemeinsam für beide Modi.
+// Vorspann-Block (Board, Reihenfolge-Regel, Figuren, Gedächtnis, Textpassagen zur
+// Frage) und JSON-Pflicht des klassischen Pfads — gemeinsam für beide Modi.
 function _finish(stable, ctx, { classic }) {
+  const m = toolMentions(classic ? [] : ctx.toolNames);
   const volatile = [
     '=== AKTUELLES BEAT-BOARD (Stand dieser Frage; [#id] = id für die Vorschläge) ===',
     String(ctx.boardOutline || '').trim() || '(Board ist leer — noch keine Akte angelegt.)',
   ];
+  if (Array.isArray(ctx.boardActs) && ctx.boardActs.length) volatile.push('', `REIHENFOLGE: ${_reihenfolgeRegel(ctx.boardActs)}`);
+  if (ctx.boardTrimmed) {
+    volatile.push('', `HINWEIS: Das Board ist für den Prompt gekürzt (Beschreibungen verkürzt, verworfene Beats nur gezählt).${m.has('get_plot_board') ? ' Vollständige Beats liefert `get_plot_board`.' : ' Frag den User, wenn dir ein Detail fehlt.'}`);
+  }
   const fig = String(ctx.figurenOutline || '').trim();
-  if (fig) volatile.push('', '=== FIGUREN (Name · fig_id bzw. Werkstatt) ===', fig);
+  if (fig) volatile.push('', '=== FIGUREN (Name · fig_id bzw. draft#id = Kennung für figuren/figur) ===', fig);
   const mem = String(ctx.proposalMemory || '').trim();
   if (mem) volatile.push('', mem);
   // Textpassagen: klassisch immer (einzige Text-Grundierung), agentisch als
-  // Erst-Kontext nur mit Embedding-Endpunkt (ctx.passages = Array). Pro Frage andere
-  // Bytes — darum hier im ungecachten Block am Ende, nie im gecachten Block 1.
+  // Erst-Kontext nur mit Embedding-Endpunkt (ctx.passages = Array).
   if (classic || Array.isArray(ctx.passages)) {
     volatile.push('', ...buildPassageBlockLines(ctx.passages, {
       classic, status: ctx.passageStatus, toolNames: ctx.toolNames,
@@ -290,6 +304,6 @@ function _finish(stable, ctx, { classic }) {
   }
   return [
     { text: stable.join('\n') + (classic ? _jsonOnly() : ''), ttl: '1h' },
-    { text: volatile.join('\n'), cache: false },
+    { text: volatile.join('\n'), preamble: true },
   ];
 }

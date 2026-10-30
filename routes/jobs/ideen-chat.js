@@ -17,7 +17,7 @@ const { getPrompts, loadOrderedBookContents } = require('./shared');
 const { makeProposalChatJob } = require('./proposal-chat');
 const { executeIdeenChatTool, PROPOSE_TOOLS } = require('./ideen-chat-tools');
 const {
-  loadIdeenState, ideenOutline, gliederungOutline, targetsOutline, sessionIdeenProposalMemory,
+  loadIdeenState, fitIdeenOutline, gliederungOutline, targetsOutline, sessionIdeenProposalMemory,
 } = require('./ideen-chat-context');
 
 /**
@@ -26,7 +26,7 @@ const {
  * Handler im ctx brauchen. Gliederung nur über die Content-Store-Facade, inkl.
  * ausgeschlossener Kapitel (eine Idee darf dort hängen).
  */
-async function ideenChatContext(session, userEmail) {
+async function ideenChatContext(session, userEmail, { outlineBudgetChars = Infinity } = {}) {
   const { buildIdeenProposalMemoryBlock, getResearchPromptContext } = await getPrompts(userEmail);
   const tree = await loadOrderedBookContents(session.book_id, { includeExcluded: true });
   const state = loadIdeenState(session.book_id, userEmail, tree);
@@ -38,11 +38,11 @@ async function ideenChatContext(session, userEmail) {
       buchKontext: settings.buch_kontext || null,
       hauptland: settings.schauplatz_land || null,
     }),
-    ideenOutline: ideenOutline(state),
+    ideen: fitIdeenOutline(state, { budgetChars: outlineBudgetChars }),
     gliederungOutline: gliederungOutline(state),
     targetsOutline: targetsOutline(state),
     stages: state.stages,
-    proposalMemory: buildIdeenProposalMemoryBlock(sessionIdeenProposalMemory(session.id)),
+    proposalMemory: buildIdeenProposalMemoryBlock(sessionIdeenProposalMemory(session.id, state)),
     toolCtx: {
       bookId: session.book_id, sessionId: session.id, userEmail,
       tree, _ideen: state,
@@ -56,6 +56,7 @@ const ideenChat = makeProposalChatJob({
   maxIterSettingKey: 'jobs.ideen_chat.max_tool_iter',
   effortSettingKey: 'ai.claude.effort.ideenchat',
   proposalsOnlyMarker: '__i18n:ideenBoard.chat.proposalsOnly__',
+  proposalsCutMarker: '__i18n:ideenBoard.chat.proposalsCut__',
   prompts: (p) => ({
     buildSystemPrompt: p.buildIdeenChatSystemPrompt,
     schemaClassic: p.SCHEMA_IDEEN_CHAT_CLASSIC,
@@ -65,7 +66,8 @@ const ideenChat = makeProposalChatJob({
   loadContext: ideenChatContext,
   promptParts: (base) => ({
     bookContext: base.bookContext,
-    ideenOutline: base.ideenOutline,
+    ideenOutline: base.ideen.text,
+    ideenTrimmed: base.ideen.trimmed,
     gliederungOutline: base.gliederungOutline,
     targetsOutline: base.targetsOutline,
     stages: base.stages,

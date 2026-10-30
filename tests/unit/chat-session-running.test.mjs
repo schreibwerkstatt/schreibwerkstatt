@@ -322,3 +322,81 @@ test('Neu auf einem leeren offenen Gespräch legt kein zweites an', async () => 
   await c.startNewChatSession();
   assert.equal(c.chatSessionId, 301);
 });
+
+test('Zwei schnelle Session-Klicks: die zuletzt angeforderte gewinnt, auch wenn sie zuerst antwortet', async () => {
+  reset();
+  const c = makeCard();
+  let release;
+  routes.set('/chat/session/1', { __wait: new Promise((r) => { release = r; }), __then: { id: 1, messages: [{ role: 'user', content: 'Eins' }] } });
+  routes.set('/chat/session/2', { id: 2, messages: [{ role: 'user', content: 'Zwei' }] });
+  const slow = c.loadChatSession(1);
+  await c.loadChatSession(2);
+  release();
+  await slow;
+  assert.equal(c.chatSessionId, 2);
+  assert.equal(c.chatMessages[0].content, 'Zwei');
+});
+
+test('Job-Ende während eines Session-Wechsels zieht nicht zurück', async () => {
+  reset();
+  const c = makeCard();
+  c.chatSessionId = 100;
+  c.chatInput = 'Frage';
+  routes.set('/jobs/chat', { jobId: 'job-1' });
+  routes.set(SESSIONS_URL, [{ id: 100, preview: 'Frage', last_message_at: 'b' }, { id: 55, preview: 'Alt', last_message_at: 'a' }]);
+  await c.sendChatMessage();
+  // Klick auf 55 — die Antwort steht noch aus, während der Job fertig wird.
+  let release;
+  routes.set('/chat/session/55', { __wait: new Promise((r) => { release = r; }), __then: { id: 55, messages: [{ role: 'user', content: 'Alt' }] } });
+  routes.set('/chat/session/100', { id: 100, messages: [{ role: 'user', content: 'Frage' }, { role: 'assistant', content: 'A' }] });
+  const switching = c.loadChatSession(55);
+  routes.set('/jobs/job-1', { id: 'job-1', status: 'done', result: {} });
+  calls = [];
+  await pollTick();
+  release();
+  await switching;
+  assert.equal(c.chatSessionId, 55, 'die angeklickte Session bleibt');
+  assert.ok(!calls.some((x) => x.url === '/chat/session/100'), 'kein Nachladen der fertigen Session');
+});
+
+test('Fehler-Reload nach Reset schreibt keinen Fehler in die geleerte Karte', async () => {
+  reset();
+  const c = makeCard();
+  c.chatSessionId = 100;
+  c.chatInput = 'Frage';
+  routes.set('/jobs/chat', { jobId: 'job-1' });
+  routes.set(SESSIONS_URL, [{ id: 100, preview: 'Frage', last_message_at: 'b' }]);
+  await c.sendChatMessage();
+  let release;
+  routes.set('/chat/session/100', { __wait: new Promise((r) => { release = r; }), __then: { id: 100, messages: [] } });
+  routes.set('/jobs/job-1', { id: 'job-1', status: 'error', error: 'job.error.x' });
+  const fn = tick;
+  const ticking = fn();
+  await new Promise((r) => setImmediate(r));
+  c.resetChat();
+  release();
+  await ticking;
+  await new Promise((r) => setImmediate(r));
+  assert.equal(c.chatStatus, '', 'kein Fehler nach dem Reset');
+});
+
+test('isChatSessionActive: Lauf aus dem Job-Snapshot (fremder Tab) zählt, Senden dort gesperrt', async () => {
+  reset();
+  const store = { jobs: { jobQueueItems: [{ id: 'j9', type: 'chat', dedupId: '77', status: 'running' }] } };
+  globalThis.Alpine = { store: (n) => store[n] };
+  try {
+    const c = makeCard();
+    assert.equal(c.isChatSessionActive(77), true);
+    assert.equal(c.isChatSessionActive(78), false);
+    assert.equal(c.isChatSessionRunning(77), false, 'Fortschritt gehört nur dem gepollten Lauf');
+    c.chatSessionId = 77;
+    c.chatInput = 'Noch eine Frage';
+    routes.set('/chat/session/77', { id: 77, messages: [] });
+    calls = [];
+    await c.sendChatMessage();
+    assert.ok(!calls.some((x) => x.url === '/jobs/chat'), 'kein zweiter Lauf');
+    assert.equal(c.chatInput, 'Noch eine Frage', 'Eingabe bleibt stehen');
+  } finally {
+    delete globalThis.Alpine;
+  }
+});

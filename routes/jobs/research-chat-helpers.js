@@ -5,23 +5,28 @@
 //   validateAnswerSources  — `final_answer.quellen` gegen die Web-Treffer des Jobs
 //   sessionProposalMemory  — frühere Vorschläge der Session (für den System-Prompt)
 //   proposalsOnlyFallback  — Antworttext, wenn nur Vorschläge, aber kein Text kamen
+//   markProposalUrls       — Vorschlags-URLs gegen das in diesem Lauf Abgerufene markieren
 
 const { db } = require('../../db/schema');
 const { normalizeUrl } = require('../../lib/url-normalize');
 const { cleanStr, TITLE_MAX } = require('../../lib/research-validate');
 const { resolvePageBookId, resolveChapterBookId } = require('../../lib/content-ownership');
 const contentStore = require('../../lib/content-store');
-const { itemIdsAtPlace } = require('../../db/research-items');
+const { itemIdsAtPlace, bookItemUrls } = require('../../db/research-items');
 const { htmlToTextForPrompt } = require('./shared');
 
 /**
  * Werkzeugliste unter dem Web-Such-Gesamtdeckel: `max_uses` des serverseitigen
  * `web_search` höchstens der Rest des Deckels, bei aufgebrauchtem Deckel fällt das
  * Werkzeug weg. Der Recherche-Chat ruft das einmal beim Start — die Liste bleibt
- * danach für den ganzen Lauf gleich, weil Werkzeuge vorn im Prompt-Cache stehen und
- * Thinking-Blöcke an den unveränderten Gesprächsanfang gebunden sind. Den Deckel
- * über die Runden hält der Loop-Hook `stopBeforeRound` (Synthese statt weiterer
- * Runde); eine Runde kann ihn darum um höchstens den Rundenwert überschreiten.
+ * danach für alle Recherche-Runden gleich, weil Werkzeuge vorn im Prompt-Cache
+ * stehen und Thinking-Blöcke an den unveränderten Gesprächsanfang gebunden sind.
+ * Einzige Ausnahme ist der Synthese-Call: der Loop lässt dort die serverseitigen
+ * Werkzeuge (web_search) weg und nimmt den einen Cache-Fehlschlag in Kauf; die
+ * eigenen Werkzeuge bleiben. Den Deckel über die Runden hält der Loop-Hook
+ * `stopBeforeRound`: ist er erreicht, folgt diese Synthese. Innerhalb einer
+ * Runde begrenzt nur `max_uses` (höchstens der Rest beim Start) — mehrere Suchen
+ * einer Runde können den Gesamtdeckel darum knapp überschreiten.
  *
  * @param {Array} tools  Basisliste (mit `web_search`, `max_uses` = Rundenwert)
  * @param {number} used  bisher gelaufene Web-Suchen
@@ -187,7 +192,33 @@ async function loadResearchContext(rc, bookId) {
   return { kind: rc.kind, name, excerpt, items };
 }
 
+/**
+ * Jede Vorschlags-URL bekommt `verified: true|false` — ob sie in DIESEM Lauf
+ * tatsächlich abgerufen bzw. geliefert wurde: Web-Treffer (Server-Tool wie
+ * SearXNG), gelesene Seiten samt Redirect-Ziel, Literatur-Treffer, Links aus der
+ * User-Nachricht, URLs der Archiv-Einträge des Buchs. Vergleich normalisiert
+ * (lib/url-normalize). Eine unbelegte URL bleibt stehen (der User entscheidet),
+ * das Frontend markiert sie und lässt sie bei «Alle speichern» aus.
+ * Mutiert und liefert `proposals`.
+ *
+ * @param {Array} proposals  ctx.proposals ({ urls: [{url,label}] })
+ * @param {object} seen      { webResults, pages, literatureHits, userMessageUrls, bookId }
+ */
+function markProposalUrls(proposals, { webResults = [], pages = [], literatureHits = [], userMessageUrls = [], bookId = null } = {}) {
+  if (!Array.isArray(proposals) || !proposals.some(p => p?.urls?.length)) return proposals || [];
+  const known = new Set();
+  const add = (u) => { const n = normalizeUrl(typeof u === 'string' ? u : u?.url); if (n) known.add(n); };
+  [webResults, pages, literatureHits, userMessageUrls].forEach(list => (Array.isArray(list) ? list : []).forEach(add));
+  if (bookId) bookItemUrls(bookId).forEach(add);
+  for (const p of proposals) {
+    if (!Array.isArray(p?.urls)) continue;
+    p.urls = p.urls.map(u => ({ ...u, verified: known.has(normalizeUrl(u.url)) }));
+  }
+  return proposals;
+}
+
 module.exports = {
+  markProposalUrls,
   toolsForRound, validateAnswerSources, sessionProposalMemory, proposalsOnlyFallback,
   researchMessageContext, readMessageContext, loadResearchContext,
 };

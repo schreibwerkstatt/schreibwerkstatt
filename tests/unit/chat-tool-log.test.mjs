@@ -110,3 +110,19 @@ test('Filter- und Ergebnis-Keys der Server-Sicht existieren in beiden Locales', 
     'chat.toolError.webSearchFailed'])];
   assert.deepEqual(keys.filter(k => !de[k] || !en[k]), []);
 });
+
+test('Fehler ohne Key: generischer übersetzter Text, Rohtext nur als errorDetail', () => {
+  const { rows } = toolLogEntries({ tool_calls: [
+    { name: 'list_chapters', ok: false, iter: 1, input: {}, error: 'Unbekanntes Werkzeug: <b>x</b>' },
+    { name: 'list_chapters', ok: false, iter: 1, input: { a: 1 }, error: 'SQLITE_BUSY', errorKey: 'chat.toolError.failedCode', errorParams: { code: 'SQLITE_BUSY' } },
+    { name: 'list_figures', ok: false, skipped: true, iter: 1, input: {}, errorKey: 'chat.toolError.notOffered' },
+  ] }, t);
+  assert.equal(rows[0].error, de['chat.toolError.failed']);
+  assert.equal(rows[0].errorDetail, 'Unbekanntes Werkzeug: <b>x</b>');
+  assert.equal(rows[1].error, 'Werkzeug-Aufruf fehlgeschlagen (SQLITE_BUSY)');
+  assert.equal(rows[2].error, de['chat.toolError.notOffered']);
+  assert.equal(rows[2].skipped, true);
+  for (const k of ['chat.toolError.failed', 'chat.toolError.failedCode', 'chat.toolError.notOffered']) {
+    assert.ok(de[k] && en[k], `${k} in beiden Locales`);
+  }
+});

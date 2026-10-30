@@ -88,6 +88,10 @@ test('preContextPassages: Nachbarn, aktuelle Seite ausgeschlossen, Deckel fällt
   semanticRetrieval.withNeighbors = (hits) => hits.map(h => ({
     ...h, text: h.entity_id === 92012 ? `${'n'.repeat(5000)}${h.text}` : `vor ${h.text} nach`,
   }));
+  // Live-Text: der Index-Stand ist hier aktuell (Seite enthält Nachbarschaft wörtlich).
+  contentStore.loadPagesBatch = async (metas) => metas.map(m => ({
+    id: m.id, html: m.id === 92012 ? `<p>${'n'.repeat(5000)} B${LONG}</p>` : `<p>vor C${LONG} nach</p>`,
+  }));
   const pre = await preContextPassages(BOOK, 'frage', { chars: 1000, excludePageIds: [92011], userEmail: 'a@x.ch' });
   assert.equal(askedTopK, 9, 'ausgeschlossene Seiten werden über topK nachgezogen');
   assert.equal(askedUser, 'a@x.ch', 'User-Scope geht an die Pipeline (vor topK)');
@@ -100,6 +104,30 @@ test('preContextPassages: Nachbarn, aktuelle Seite ausgeschlossen, Deckel fällt
   assert.equal(pre.hits[0].text, `B${LONG}`, 'zu grosse Nachbarschaft → Treffer-Chunk');
   assert.equal(pre.hits[1].text, `vor C${LONG} nach`);
   assert.ok(pre.chars <= 1000);
+});
+
+test('preContextPassages: Abschnitts-Treffer aus dem Live-Text, veraltete Index-Stelle fällt weg', async () => {
+  readyIndex();
+  semanticRetrieval.semanticQuery = async () => [
+    hit(92011, WORDS),
+    hit(92012, 'Ein völlig anderer Satz über Katzen, die im Garten schlafen und träumen.'),
+    { kind: 'fact', entity_id: 1, chunk_ix: 0, text: 'Fakt: Lena wohnt seit Jahren in Bern, nahe beim Bahnhof.', score: 0.02, semScore: 0.5 },
+  ];
+  semanticRetrieval.withNeighbors = (hits) => hits;
+  const live = {
+    92011: `<p>${WORDS.replace('lange', 'sehr lange')}</p>`,
+    92012: '<p>Die Stelle ist komplett umgeschrieben worden, nichts davon steht noch hier.</p>',
+  };
+  let loaded = null;
+  contentStore.loadPagesBatch = async (metas) => { loaded = metas.map(m => m.id); return metas.map(m => ({ id: m.id, html: live[m.id] })); };
+  // Der Fakt-Treffer hat keine Zeile (Analyse-Daten nicht geseedet) und fällt über
+  // resolveEntityTitle weg — geladen werden ohnehin nur Abschnitte.
+  const pre = await preContextPassages(BOOK, 'Bern', { topK: 5, chars: 5000 });
+  assert.deepEqual(loaded.sort(), [92011, 92012], 'nur Abschnitts-Treffer werden live geladen');
+  const page = pre.hits.find(h => h.entity_id === 92011);
+  assert.match(page.text, /sehr lange/, 'Live-Fassung statt Index-Chunk');
+  assert.equal(pre.hits.some(h => h.entity_id === 92012), false, 'umgeschriebene Stelle erscheint nicht');
+  assert.equal(pre.staleDropped, 1);
 });
 
 test('preContextPassages: top_k 0 schaltet ab', async () => {

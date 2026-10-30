@@ -129,3 +129,26 @@ test('PATCH /plot/chat-proposal: fremde Session, Recherche-Nachricht, Unsinn →
   assert.equal((await call('PATCH', '/plot/chat-proposal', { message_id: msgId, index: 0, action: 'kaputt' })).status, 400);
   assert.equal((await call('PATCH', '/plot/chat-proposal', { message_id: msgId, index: -1, action: 'applied' })).status, 400);
 });
+
+test('PATCH /plot/chat-proposal: zweites «applied» → 409; nach Undo des Angelegten erneut übernehmbar', async () => {
+  const plot = require('../../db/plot');
+  const act = plot.createAct(BOOK, OWNER, { name: 'Akt' });
+  const beat = plot.createBeat(BOOK, act.id, OWNER, { titel: 'Angelegt' });
+  const m = db.prepare(
+    "INSERT INTO chat_messages (session_id, role, content, context_info, created_at) VALUES (?, 'assistant', 'x', ?, ?)"
+  ).run(plotSessionId, JSON.stringify({ mode: 'plot', proposals: [
+    { type: 'beat_create', ref: 1, act_id: act.id, thread_id: null, fields: { titel: 'Angelegt' } },
+    { type: 'act_update', ref: 2, act_id: act.id, name: 'Neu', before: { name: 'Akt' } },
+  ] }), NOW).lastInsertRowid;
+  assert.equal((await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 0, action: 'applied', applied_id: beat.id })).status, 200);
+  const again = await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 0, action: 'applied', applied_id: beat.id + 1 });
+  assert.equal(again.status, 409);
+  assert.equal(again.json.error_code, 'PROPOSAL_ALREADY_APPLIED');
+  assert.equal(again.json.proposal.applied_id, beat.id);
+  plot.deleteBeat(beat.id);
+  const re = await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 0, action: 'applied', applied_id: 555 });
+  assert.equal(re.status, 200);
+  assert.equal(proposalsOf(m)[0].applied_id, 555);
+  assert.equal((await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 1, action: 'applied', applied_id: act.id })).status, 200);
+  assert.equal((await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 1, action: 'applied', applied_id: act.id })).status, 409);
+});

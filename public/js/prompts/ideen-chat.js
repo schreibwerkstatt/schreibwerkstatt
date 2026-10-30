@@ -13,6 +13,7 @@
 import { _isLocal, _jsonOnly } from './state.js';
 import { buildPassageBlockLines } from './chat-pre-context.js';
 import { toolMentions } from './chat-tools/mentions.js';
+import { buildProposalMemoryBlock } from './proposal-memory.js';
 
 export const IDEEN_CHAT_FORCE_FINAL_INSTRUCTION =
   'Du hast die maximale Zahl an Werkzeug-Iterationen erreicht — keine weiteren Lese-Aufrufe mehr. '
@@ -36,10 +37,11 @@ export const IDEEN_CHAT_PROPOSE_TOOLS = [
       properties: {
         idee_id: { type: 'integer', description: 'Nur bei ÄNDERUNG: id der bestehenden Idee ([#id] aus der Ideenliste).' },
         content: { type: 'string', description: 'Text der Idee (Pflicht bei neuer Idee, max. 4000 Zeichen). Bei Änderung: der neue, vollständige Text — z.B. beim Zusammenführen einer Dublette.' },
-        status: { type: 'string', description: 'Nur bei ÄNDERUNG: neue Stufe — eine der aktiven Stufen des Buches (siehe Liste unten).' },
-        page_id: { type: 'integer', description: 'Ort: Abschnitt (page#-id aus der Gliederung). Bei Änderung: neuer Ort der Idee — auch für eine Kapitel-Idee, die damit in einen Abschnitt umzieht.' },
-        chapter_id: { type: 'integer', description: 'Ort: Kapitel (chapter#-id aus der Gliederung). Statt page_id, nie beides. Bei Änderung: neuer Ort — auch für eine Abschnitts-Idee, die damit ans Kapitel umzieht.' },
-        beleg: { type: 'string', description: 'Nur bei Stufen-Änderung: wörtliches, kurzes Zitat (max. 500 Zeichen) der Textstelle, die die Pendenz einlöst bzw. überholt. Pflicht bei «erledigt». Wird gegen den Abschnitt geprüft — ein Zitat, das dort nicht wörtlich steht, wird abgelehnt.' },
+        status: { type: 'string', description: 'Nur bei ÄNDERUNG: neue Stufe — eine der aktiven Stufen des Buches (siehe Stufen-Liste im Vorspann der Frage).' },
+        page_id: { type: 'integer', description: 'Ort: Abschnitt (page#-id aus der Gliederung). Bei Änderung: neuer Ort, auch von Kapitel zu Abschnitt.' },
+        chapter_id: { type: 'integer', description: 'Ort: Kapitel (chapter#-id aus der Gliederung), nie zusammen mit page_id. Bei Änderung: neuer Ort, auch von Abschnitt zu Kapitel.' },
+        anker_loesen: { type: 'boolean', description: 'Nur bei ÄNDERUNG: true = Ort entfernen (nur noch am Buch).' },
+        beleg: { type: 'string', description: 'Nur bei Stufen-Änderung: wörtliches Zitat (max. 500 Zeichen) der Textstelle, die die Pendenz einlöst bzw. überholt. Pflicht bei «erledigt». Wird gegen den Abschnitt geprüft — ein Zitat, das dort nicht wörtlich steht, wird abgelehnt.' },
         beleg_page_id: { type: 'integer', description: 'Abschnitt (page_id), in dem das Zitat steht. Pflicht zu jedem beleg.' },
         begruendung: _BEGRUENDUNG,
       },
@@ -82,7 +84,7 @@ const _PROPOSE_FIELDS = (() => {
   for (const t of IDEEN_CHAT_PROPOSE_TOOLS) {
     if (t.name === 'final_answer') continue;
     for (const [k, v] of Object.entries(t.input_schema.properties)) {
-      if (!out[k]) out[k] = { type: v.type, ...(v.enum ? { enum: v.enum } : {}) };
+      if (!out[k]) out[k] = { type: v.type, ...(v.enum ? { enum: v.enum } : {}), ...(v.items ? { items: v.items } : {}) };
     }
   }
   return out;
@@ -114,28 +116,26 @@ function _classicToolLines() {
 }
 
 /**
- * Block der früheren Vorschläge dieser Session (Art, Inhalt, übernommen/verworfen/
- * offen). Steht im volatilen Teil des System-Prompts.
+ * Block der früheren Vorschläge dieser Session (Art, Inhalt, übernommen/rückgängig/
+ * verworfen/offen). Steht im Vorspann der Frage.
  * @param {Array<{type,label,state}>} list
  */
 export function buildIdeenProposalMemoryBlock(list = []) {
-  if (!Array.isArray(list) || !list.length) return '';
-  const STATE = { applied: 'übernommen', discarded: 'vom User verworfen', open: 'noch offen' };
-  const lines = list.map(p => `- ${p.type}: ${p.label} — ${STATE[p.state] || STATE.open}`);
-  return 'BISHERIGE VORSCHLÄGE IN DIESEM GESPRÄCH (übernommene stehen schon in der Ideenliste oben; verworfene nicht erneut vorschlagen, ausser der User bittet darum; offene nicht doppelt vorschlagen):\n'
-    + lines.join('\n');
+  return buildProposalMemoryBlock(list,
+    'BISHERIGE VORSCHLÄGE IN DIESEM GESPRÄCH (übernommene stehen schon in der Ideenliste oben; verworfene nicht erneut vorschlagen, ausser der User bittet darum; offene nicht doppelt vorschlagen):');
 }
 
 /**
- * System-Prompt als zwei Cache-Blöcke (wie der Plot-Chat):
- *   Block 1 (ttl '1h'): Rolle, Regeln, Werkzeug-Strategie, Buch-Kontext.
- *   Block 2 (cache:false): Ideenliste, Stufen, Gliederung, Link-Ziele, frühere
- *     Vorschläge und die Textpassagen zur Frage — ändert sich mit jeder
- *     Übernahme bzw. Frage, darum ohne Breakpoint und am Ende.
+ * Prompt als zwei Blöcke (wie der Plot-Chat):
+ *   Block 1 (ttl '1h'): Rolle, Regeln, Werkzeug-Strategie, Buch-Kontext — der
+ *     System-Prompt.
+ *   Block 2 (preamble: true): Ideenliste, Stufen, Gliederung, Link-Ziele, frühere
+ *     Vorschläge und die Textpassagen zur Frage — ändert sich mit jeder Übernahme
+ *     bzw. Frage; proposal-chat.js stellt ihn als Vorspann vor die Frage.
  *
  * @param {string} bookName
  * @param {object} ctx { mode ('agent'|'classic'), maxToolIter, toolNames,
- *                       bookContext, ideenOutline, gliederungOutline,
+ *                       bookContext, ideenOutline, ideenTrimmed, gliederungOutline,
  *                       targetsOutline, stages, proposalMemory, passages,
  *                       passageStatus (Index-/Suchstand, chat-pre-context.js) }
  */
@@ -159,7 +159,7 @@ export function buildIdeenChatSystemPrompt(bookName, ctx = {}) {
     '- ORTE FINDEN: Buch-Ideen ohne Ort bekommen einen Abschnitt oder ein Kapitel, an dem sie sich einlösen lassen. Suche die Stelle im Text, statt nach dem Titel zu raten.',
     '- AUFRÄUMEN: Erkenne Dubletten (zwei Ideen, ein Gedanke) — schlage vor, eine mit zusammengeführtem Text zu behalten und die andere zu verwerfen. Schlage Verknüpfungen zu Beats, Strängen, Motiven, Werkstatt-Figuren oder Recherche-Fundstücken vor, wenn eine Idee erkennbar dazu gehört.',
     '- NEUE IDEEN: Nur auf Wunsch oder wenn sich beim Lesen eine echte Lücke zeigt — als knappe Pendenz mit Ort.',
-    '- BEARBEITUNGSSTAND: Abschnitte tragen unten den Stand, den der Autor selbst gesetzt hat («— Stand: …», letzte Stufe = fertig). Eine offene Pendenz an einem Abschnitt auf der letzten Stufe ist ein Widerspruch — prüfe solche zuerst: entweder ist sie eingelöst (dann «erledigt» mit Beleg), oder der Abschnitt ist noch nicht fertig; sag das dem Autor ausdrücklich.',
+    '- BEARBEITUNGSSTAND: Abschnitte tragen in den Listen den Stand, den der Autor selbst gesetzt hat («— Stand: …», letzte Stufe = fertig). Eine offene Pendenz an einem Abschnitt auf der letzten Stufe ist ein Widerspruch — prüfe solche zuerst: entweder ist sie eingelöst (dann «erledigt» mit Beleg), oder der Abschnitt ist noch nicht fertig; sag das dem Autor ausdrücklich.',
     '',
     'Grundsätze:',
     '- Was geschrieben ist, gilt. Ein «erledigt» ohne Textstelle, die es trägt, ist eine Behauptung — die gibst du nicht ab. Zitiere nur, was du tatsächlich gelesen hast.',
@@ -171,20 +171,20 @@ export function buildIdeenChatSystemPrompt(bookName, ctx = {}) {
       'Vorschläge (nichts wird gespeichert — der User übernimmt jeden Vorschlag einzeln) gibst du im Feld `vorschlaege` deiner JSON-Antwort ab. Jeder Eintrag nennt sein `werkzeug` und dessen Felder:',
       ..._classicToolLines(),
       'Jeder Vorschlag bekommt in Reihenfolge eine Nummer `ref` (1, 2, 3 …); eine Verknüpfung zu einer neuen Idee derselben Antwort verweist per idee_ref auf deren Nummer.',
-      'ids nur aus den Listen unten — ein Vorschlag mit unbekannter id wird verworfen. Lass Felder weg, die du nicht setzen willst.',
+      'ids nur aus den Listen im Vorspann der Frage — ein Vorschlag mit unbekannter id wird verworfen. Lass Felder weg, die du nicht setzen willst; ein leerer Wert heisst «nicht ändern».',
     ] : [
       'Vorschlags-Werkzeuge (nichts wird gespeichert — der User übernimmt jeden Vorschlag einzeln):',
       '- `propose_idee` — neue Idee, oder Änderung einer bestehenden (idee_id): Stufe, Ort, Text.',
       '- `propose_idee_link` — Idee mit Beat/Strang/Motiv/Werkstatt-Figur/Fundstück verknüpfen.',
       'Ein Vorschlag pro Aufruf; mehrere Vorschläge = mehrere Aufrufe, gebündelt in einer Runde.',
-      'Meldet ein Vorschlags-Werkzeug einen Fehler (unbekannte id, abgeschaltete Stufe, fehlender Beleg), korrigiere den Aufruf — rate keine ids, sie stehen unten.',
+      'Meldet ein Vorschlags-Werkzeug einen Fehler (unbekannte id, abgeschaltete Stufe, fehlender Beleg), korrigiere den Aufruf — rate keine ids, sie stehen im Vorspann der Frage.',
     ]),
     'Bei offenen Fragen („was ist noch offen?") antworte erst inhaltlich; bei klaren Aufträgen („prüf die Pendenzen in Kapitel 3", „such den Buch-Ideen einen Ort") schlage direkt vor.',
     '',
   ];
   if (classic) {
     stable.push(
-      'Grundlage: die Ideenliste und die Gliederung unten sowie die TEXTPASSAGEN (die semantisch nächsten Stellen des Manuskripts zur Frage, falls vorhanden). Was dort nicht steht, kennst du nicht — ein «erledigt» schlägst du nur vor, wenn die einlösende Stelle in den TEXTPASSAGEN steht.',
+      'Grundlage: die Ideenliste und die Gliederung im Vorspann der Frage sowie die TEXTPASSAGEN (die semantisch nächsten Stellen des Manuskripts zur Frage, falls vorhanden). Was dort nicht steht, kennst du nicht — ein «erledigt» schlägst du nur vor, wenn die einlösende Stelle in den TEXTPASSAGEN steht.',
       '',
       'ANTWORTFORMAT: ein JSON-Objekt {"antwort": "…", "vorschlaege": [ … ]}. `antwort` ist deine Antwort an den User (Markdown erlaubt), `vorschlaege` die Liste der Vorschläge (leer, wenn keine). Sprache: die der Userfrage.',
       ...(bookContext ? ['', bookContext] : []),
@@ -193,8 +193,8 @@ export function buildIdeenChatSystemPrompt(bookName, ctx = {}) {
   }
   stable.push(
     'Lese-Werkzeuge:',
-    '- Alle Ideen, die Gliederung und die verknüpfbaren Ziele stehen unten vollständig im Prompt.',
-    ...(m.has('search_similar') ? ['- Die TEXTPASSAGEN unten sind schon die semantisch nächsten Stellen zur aktuellen Frage — prüfe sie zuerst, bevor du liest.'] : []),
+    '- Die Ideen, die Gliederung und die verknüpfbaren Ziele stehen vor jeder Frage im Vorspann.',
+    ...(m.has('search_similar') ? ['- Die TEXTPASSAGEN im Vorspann der Frage sind schon die semantisch nächsten Stellen zur aktuellen Frage — prüfe sie zuerst, bevor du liest.'] : []),
     ...m.route('Pendenz an einem Abschnitt prüfen (page_id, mehrere Abschnitte in EINEM Aufruf)', ['get_pages']),
     ...m.route('Pendenz an einem Kapitel prüfen', ['get_chapter_text']),
     ...m.route('Beleg für ein «erledigt» wörtlich absichern', ['quote_passage']),
@@ -215,7 +215,7 @@ export function buildIdeenChatSystemPrompt(bookName, ctx = {}) {
       'WERKZEUG-DISZIPLIN (verbindlich):',
       '- Rufe NUR Werkzeuge aus der bereitgestellten Liste; erfinde keine Namen oder Parameter.',
       '- Rufe Werkzeuge über den Werkzeug-Mechanismus, nie als Text oder JSON in der Antwort.',
-      '- ids nur aus den Listen unten bzw. aus Werkzeug-Ergebnissen übernehmen.',
+      '- ids nur aus den Listen im Vorspann bzw. aus Werkzeug-Ergebnissen übernehmen.',
       '- Höre auf zu lesen, sobald du antworten kannst, und rufe `final_answer`.',
     );
   }
@@ -223,9 +223,10 @@ export function buildIdeenChatSystemPrompt(bookName, ctx = {}) {
   return _finish(stable, ctx, { classic: false });
 }
 
-// Volatiler Block (Ideen, Stufen, Gliederung, Ziele, Gedächtnis, Textpassagen)
+// Vorspann-Block (Ideen, Stufen, Gliederung, Ziele, Gedächtnis, Textpassagen)
 // und JSON-Pflicht des klassischen Pfads — gemeinsam für beide Modi.
 function _finish(stable, ctx, { classic }) {
+  const m = toolMentions(classic ? [] : ctx.toolNames);
   const stages = Array.isArray(ctx.stages) && ctx.stages.length ? ctx.stages : ['offen', 'erledigt'];
   const volatile = [
     `=== AKTIVE STUFEN DIESES BUCHES (nur diese als status vorschlagen) === ${stages.join(', ')}`,
@@ -233,6 +234,10 @@ function _finish(stable, ctx, { classic }) {
     '=== IDEEN (Stand dieser Frage; [#id] = idee_id für die Vorschläge) ===',
     String(ctx.ideenOutline || '').trim() || '(noch keine Ideen angelegt)',
   ];
+  if (ctx.ideenTrimmed) {
+    const read = m.list(['list_ideen']);
+    volatile.push('', `HINWEIS: Die Ideenliste ist für den Prompt gekürzt (Texte verkürzt, abgeschlossene Ideen nur gezählt).${read ? ` Volltext und abgeschlossene Ideen liefert \`${read}\`.` : ' Frag den User, wenn dir ein Detail fehlt.'}`);
+  }
   const glied = String(ctx.gliederungOutline || '').trim();
   if (glied) volatile.push('', '=== GLIEDERUNG (chapter#id / page#id = chapter_id / page_id) ===', glied);
   const targets = String(ctx.targetsOutline || '').trim();
@@ -250,6 +255,6 @@ function _finish(stable, ctx, { classic }) {
   }
   return [
     { text: stable.join('\n') + (classic ? _jsonOnly() : ''), ttl: '1h' },
-    { text: volatile.join('\n'), cache: false },
+    { text: volatile.join('\n'), preamble: true },
   ];
 }

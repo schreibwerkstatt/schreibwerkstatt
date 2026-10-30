@@ -54,9 +54,16 @@
       </div>
     </template>
 
-    <!-- Abbruch-Grund (Deckel) -->
+    <!-- Abbruch-Grund (Deckel) + dieselbe Frage neu stellen -->
     <template x-if="_bookChatStopNote(msg)">
-      <div class="muted-msg book-chat-stop-note" x-text="_bookChatStopNote(msg)"></div>
+      <div class="book-chat-research-hint">
+        <span class="muted-msg book-chat-stop-note" x-text="_bookChatStopNote(msg)"></span>
+        <template x-if="_bookChatCanRetry(msg)">
+          <button type="button" class="btn-compact" @click="retryBookChatQuestion(msgIdx)"
+                  :disabled="bookChatLoading || isBookChatSessionActive(bookChatSessionId)"
+                  :data-tip="$app.t('chat.retryQuestionTip')" x-text="$app.t('chat.retryQuestion')"></button>
+        </template>
+      </div>
     </template>
 
     <!-- Werkzeug-Verlauf -->

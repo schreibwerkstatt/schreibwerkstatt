@@ -93,6 +93,34 @@ test('toolCallsToCanonical: fehlende ID bekommt eine 9-stellige Ersatz-ID (Mistr
   assert.match(toolUses[0].id, /^[A-Za-z0-9]+$/);
 });
 
+test('Ersatz-IDs: eindeutig über Position und Runde, immer 9 alphanumerische Zeichen', () => {
+  const calls = Array.from({ length: 12 }, () => ({ name: 'list_figures', arguments: '' }));
+  const r0 = toolCallsToCanonical('', calls).toolUses.map(t => t.id);
+  const r1 = toolCallsToCanonical('', calls, { round: 1 }).toolUses.map(t => t.id);
+  const all = [...r0, ...r1];
+  assert.equal(new Set(all).size, all.length, 'Aufruf 1 und 10 bzw. Runde 0 und 1 dürfen nicht kollidieren');
+  for (const id of all) assert.match(id, /^[A-Za-z0-9]{9}$/);
+  const salvaged = salvageTextToolCalls('[{"name":"a"},{"name":"a"}]', ['a'], { round: 3 });
+  assert.equal(new Set(salvaged.toolUses.map(t => t.id)).size, 2);
+  assert.ok(salvaged.toolUses.every(t => !r0.includes(t.id) && /^[A-Za-z0-9]{9}$/.test(t.id)));
+});
+
+test('messagesToOpenAI: Text neben tool_results folgt als eigene user-Nachricht NACH den tool-Nachrichten', () => {
+  const out = messagesToOpenAI([
+    { role: 'assistant', content: [{ type: 'tool_use', id: 'a1', name: 'x', input: {} }, { type: 'tool_use', id: 'a2', name: 'y', input: {} }] },
+    { role: 'user', content: [
+      { type: 'tool_result', tool_use_id: 'a1', content: '{"error":"nein"}' },
+      { type: 'tool_result', tool_use_id: 'a2', content: 'ok' },
+      { type: 'text', text: 'Antworte jetzt.' },
+    ] },
+  ]);
+  assert.deepEqual(out.map(m => m.role), ['assistant', 'tool', 'tool', 'user']);
+  assert.equal(out[3].content, 'Antworte jetzt.');
+  // Ohne Text keine leere Zusatznachricht.
+  const plain = messagesToOpenAI([{ role: 'user', content: [{ type: 'tool_result', tool_use_id: 'a1', content: 'ok' }] }]);
+  assert.deepEqual(plain.map(m => m.role), ['tool']);
+});
+
 test('salvageTextToolCalls: als Text geschriebener Aufruf wird gerettet', () => {
   const names = ['search_passages', 'final_answer'];
   const got = salvageTextToolCalls('[TOOL_CALLS] [{"name": "search_passages", "arguments": {"pattern": "Anna"}}]', names);

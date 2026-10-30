@@ -20,6 +20,28 @@ export function makeChatMethods(cfg) {
   // Response das alte Buch/die alte Seite in die frisch geleerte Karte.
   const GEN = p.gen || `_${L[0].toLowerCase()}${L.slice(1)}Gen`;
   const gen = (ctx) => ctx[GEN] || 0;
+  // Lade-Token: jeder loadSession-Aufruf zieht eine neue Nummer; nur die Antwort
+  // des JÜNGSTEN Aufrufs wird übernommen. Zwei schnelle Klicks im Verlauf liessen
+  // sonst die langsamere Antwort gewinnen. `LOAD_TARGET` ist die zuletzt
+  // angeforderte Session, solange ihr Laden läuft — `viewing()` des Pollers fragt
+  // danach, damit ein Job-Ende nicht in ein Gespräch zurückholt, das der User
+  // gerade verlässt.
+  const LOAD_SEQ = `_${L[0].toLowerCase()}${L.slice(1)}LoadSeq`;
+  const LOAD_TARGET = `_${L[0].toLowerCase()}${L.slice(1)}LoadTarget`;
+  const shownSession = (ctx) => (ctx[LOAD_TARGET] != null ? ctx[LOAD_TARGET] : ctx[p.sessionId]);
+  // Alle anderen Wege, die die sichtbare Session setzen (Neu, Reset), entwerten
+  // ein noch laufendes Laden.
+  const supersedeLoads = (ctx) => { ctx[LOAD_SEQ] = (ctx[LOAD_SEQ] || 0) + 1; ctx[LOAD_TARGET] = null; };
+
+  // Laeuft für Session `id` ein Job dieses Chats? Aus dem globalen Job-Snapshot
+  // (Alpine.store('jobs').jobQueueItems, Dedup-ID = Session-ID) — kennt auch Läufe
+  // aus einem anderen Tab/Gerät oder einem früheren Besuch, die diese Karte nicht pollt.
+  const runningInQueue = (id) => {
+    if (id == null) return false;
+    const items = (typeof Alpine !== 'undefined' && Alpine.store?.('jobs')?.jobQueueItems) || [];
+    return items.some(j => j.type === cfg.activeJobType && String(j.dedupId) === String(id)
+      && (j.status === 'queued' || j.status === 'running'));
+  };
 
   // ── Interne Helfer (Aufruf via .call(this)) ──────────────────────────────
 
@@ -43,6 +65,10 @@ export function makeChatMethods(cfg) {
   // Ende scrollt die Karte zu dieser Nachricht und hebt sie hervor (`_hitMsgId`).
   async function loadSession(sessionId, { jumpToMsgId = null } = {}) {
     const g = gen(this);
+    const token = (this[LOAD_SEQ] || 0) + 1;
+    this[LOAD_SEQ] = token;
+    this[LOAD_TARGET] = sessionId;
+    const superseded = () => gen(this) !== g || this[LOAD_SEQ] !== token;
     try {
       // Session-Payload und Active-Job-Check parallel — beide Reads idempotent,
       // sequentielle awaits verdoppelten sonst Latenz beim History-Klick.
@@ -54,7 +80,8 @@ export function makeChatMethods(cfg) {
               .catch((e) => { console.error(`[load${L}Session] active-job check:`, e); return null; })
           : Promise.resolve(null),
       ]);
-      if (gen(this) !== g) return;
+      if (superseded()) return;
+      this[LOAD_TARGET] = null;
       this[p.sessionId] = data.id;
       this[p.messages] = data.messages || [];
       this[p.status] = '';
@@ -72,6 +99,7 @@ export function makeChatMethods(cfg) {
         setElsewhereStatus.call(this);
       }
     } catch (e) {
+      if (!superseded()) this[LOAD_TARGET] = null;
       console.error(`[load${L}Session]`, e);
     }
   }
@@ -109,6 +137,7 @@ export function makeChatMethods(cfg) {
         body: JSON.stringify(cfg.newSessionBody(this)),
       });
       if (gen(this) !== g) return;
+      supersedeLoads(this);
       this[p.sessionId] = id;
       this[p.messages] = [];
       this[p.status] = '';
@@ -133,7 +162,7 @@ export function makeChatMethods(cfg) {
     const root = window.__app;
     const g = gen(this);
     this[p.runningSessionId] = sessionId;
-    const viewing = () => this[p.sessionId] === sessionId;
+    const viewing = () => shownSession(this) === sessionId;
     // Nach einem Reset gehört der Poller zu einer Karte, die es so nicht mehr
     // gibt: jeder Callback bricht dann ab (der Stream kann noch einen Tick
     // nachschieben, obwohl der Timer schon weg ist).
@@ -174,7 +203,7 @@ export function makeChatMethods(cfg) {
           if (viewing()) {
             try { await loadSession.call(this, sessionId); }
             catch (e) { console.error(`[${L} onCancel reload]`, e); }
-            if (stale()) return;
+            if (stale() || !viewing()) return;
             this[p.status] = `<span class="muted-msg">${escHtml(root.t('job.cancelled'))}</span>`;
           } else {
             await loadSessions.call(this);
@@ -197,6 +226,13 @@ export function makeChatMethods(cfg) {
         // Fehler-HTML deshalb DANACH setzen.
         try { await loadSession.call(this, sessionId); }
         catch (e) { console.error(`[${L} onError reload]`, e); }
+        // Reset während des Nachladens: die Karte gehört nicht mehr zu diesem Lauf.
+        // Anderes Gespräch inzwischen offen: Fehler als «anderswo» zeigen.
+        if (stale()) return;
+        if (!viewing()) {
+          this[p.status] = `<span class="error-msg">${escHtml(root.t('chat.errorElsewhere', { msg: errLabel }))}</span>`;
+          return;
+        }
         this[p.status] = errHtml;
       },
       onDone: async (job) => {
@@ -308,6 +344,14 @@ export function makeChatMethods(cfg) {
     if (this[p.loading] || !this[p.sessionId]) return;
     const msg = (this[p.input] || '').trim();
     if (!msg) return;
+    // In diesem Gespräch läuft schon ein Lauf (anderer Tab/Gerät, früherer Besuch):
+    // kein zweiter parallel — der Server lehnte ihn ohnehin mit 409 ab. Hinweis
+    // zeigen und den laufenden Job über den Active-Check sichtbar machen.
+    if (runningInQueue(this[p.sessionId])) {
+      this[p.status] = `<span class="muted-msg">${escHtml(root.t('error.CHAT_JOB_RUNNING'))}</span>`;
+      if (!this[p.pollTimer]) await loadSession.call(this, this[p.sessionId]);
+      return;
+    }
 
     // Idempotency-Key: UUID pro logischem Send. Bei Retry mit identischem Text
     // wird die UUID des fehlgeschlagenen Versuchs wiederverwendet, damit der
@@ -395,6 +439,13 @@ export function makeChatMethods(cfg) {
   // `loading` allein — das ist karten-global und sagt nur, DASS etwas läuft.
   m[`is${L}SessionRunning`] = function (id) {
     return !!this[p.loading] && id != null && this[p.runningSessionId] === id;
+  };
+  // Läuft für dieses Gespräch IRGENDEIN Job dieses Chats — auch einer, den die
+  // Karte nicht pollt (anderer Tab/Gerät, früherer Besuch)? Für Lauf-Punkte im
+  // Verlauf und die Sende-Sperre; Fortschritt/Skelett bleiben an
+  // is<L>SessionRunning (deren Zahlen gehören nur dem gepollten Lauf).
+  m[`is${L}SessionActive`] = function (id) {
+    return m[`is${L}SessionRunning`].call(this, id) || runningInQueue(id);
   };
   // Feedback (Daumen hoch/runter) an einer Assistant-Antwort — alle Chats.
   // Erneuter Klick auf denselben Daumen nimmt es zurück. Optimistisch gesetzt,
@@ -513,6 +564,7 @@ export function makeChatMethods(cfg) {
 
   m[`reset${L}`] = function () {
     this[GEN] = gen(this) + 1;
+    supersedeLoads(this);
     if (this[p.pollTimer]) { clearInterval(this[p.pollTimer]); this[p.pollTimer] = null; }
     this[p.sessions] = [];
     this[p.messages] = [];

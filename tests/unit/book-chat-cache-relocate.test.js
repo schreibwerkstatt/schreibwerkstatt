@@ -55,8 +55,29 @@ test('Zitat neu verankern: exakt an verzählter Position, nächste Fundstelle ge
 
 test('Zitat neu verankern: tolerant bei Anführungs-/Strichvarianten, sonst null', () => {
   const text = 'Er sagte: «Das geht nicht – nie.» Dann ging er.';
-  assert.deepEqual(_relocate(text, 'Das geht nicht - nie.', 5), { match: 'tolerant' });
+  const moved = _relocate(text, 'Das geht nicht - nie.', 5);
+  assert.equal(moved.match, 'tolerant');
+  // Echte Offsets im Seitentext, nicht die verzählten des Modells. Rand-Satzzeichen
+  // gehören nicht zum verglichenen Wortlaut (quoteParts) und damit nicht zur Spanne.
+  assert.equal(text.slice(moved.offset, moved.offset + moved.length), 'Das geht nicht – nie');
   assert.equal(_relocate(text, 'Das steht nirgends im Text.', 5), null);
   // Zu kurz, um als Beleg zu taugen: keine Neu-Verankerung.
   assert.equal(_relocate(text, 'Er', 5), null);
+});
+
+test('Zitat neu verankern: tolerant mit Whitespace-/Anführungsvarianten, nächste Fundstelle zum offset', () => {
+  const text = 'Anfang.  „Wir   bleiben  hier“, sagte sie. Mitte. „Wir bleiben hier“, sagte sie wieder.';
+  const q = '"Wir bleiben hier", sagte sie';
+  const near = _relocate(text, q, text.lastIndexOf('„'));
+  assert.equal(near.match, 'tolerant');
+  assert.equal(text.slice(near.offset, near.offset + near.length), 'Wir bleiben hier“, sagte sie');
+  const far = _relocate(text, q, 0);
+  assert.equal(text.slice(far.offset, far.offset + far.length), 'Wir   bleiben  hier“, sagte sie');
+});
+
+test('final_answer.zitate: höchstens MAX_FINAL_CITATIONS werden validiert', async () => {
+  const { validateFinalAnswerCitations, MAX_FINAL_CITATIONS } = require('../../routes/jobs/chat-tools/citations');
+  const zitate = Array.from({ length: MAX_FINAL_CITATIONS + 15 }, () => ({ page_id: 'x' }));
+  const out = await validateFinalAnswerCitations(zitate, { bookId: 1 });
+  assert.equal(out.length, MAX_FINAL_CITATIONS);
 });

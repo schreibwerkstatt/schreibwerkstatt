@@ -151,6 +151,9 @@
                   <template x-if="msg.context_info.review">
                     <span class="chat-context-badge" x-text="$app.t('chat.ctxReview')"></span>
                   </template>
+                  <template x-if="_bookChatRetrievalNote(msg)">
+                    <span class="chat-context-badge" x-text="_bookChatRetrievalNote(msg)"></span>
+                  </template>
                 </span>
               </template>
             </div>
@@ -186,7 +189,7 @@
       :disabled="bookChatLoading"
       @keydown.enter="if(!$event.isComposing && $event.keyCode !== 229 && !$event.shiftKey && !$event.ctrlKey && !$event.metaKey) { $event.preventDefault(); sendBookChatMessage(); }"
     ></textarea>
-    <button type="button" class="chat-send-btn" @click="sendBookChatMessage()" :disabled="bookChatLoading || !bookChatInput.trim()" :aria-label="$app.t('chat.send')">
+    <button type="button" class="chat-send-btn" @click="sendBookChatMessage()" :disabled="bookChatLoading || !bookChatInput.trim() || isBookChatSessionActive(bookChatSessionId)" :aria-label="$app.t('chat.send')">
       <span x-show="bookChatLoading" class="spinner"></span>
       <svg x-show="!bookChatLoading" class="icon" aria-hidden="true"><use href="/icons.svg#arrow-up"/></svg>
     </button>
@@ -202,7 +205,7 @@
         @click="loadBookChatSession(s.id)"
       >
         <div class="chat-session-preview" x-text="(s.title || s.preview || $app.t('chat.previewEmpty')).slice(0, 80)"></div>
-        <div class="chat-session-meta"><span x-show="isBookChatSessionRunning(s.id)" class="spinner chat-session-running" role="status" :aria-label="$app.t('chat.sessionRunning')" :data-tip="$app.t('chat.sessionRunning')"></span><span x-text="$app.formatDate(s.last_message_at)"></span></div>
+        <div class="chat-session-meta"><span x-show="isBookChatSessionActive(s.id)" class="spinner chat-session-running" role="status" :aria-label="$app.t('chat.sessionRunning')" :data-tip="$app.t('chat.sessionRunning')"></span><span x-text="$app.formatDate(s.last_message_at)"></span></div>
         <button type="button" class="chat-session-delete btn-card-close hover-reveal" :disabled="isBookChatSessionRunning(s.id)" @click.stop="deleteBookChatSession(s.id)" :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
       </div>
     </template></div>

@@ -77,8 +77,20 @@
                     <div class="research-chat-proposal-body" x-show="!proposalEdit(msg, pi)">
                       <span class="research-chat-proposal-title" x-show="prop.title" x-text="prop.title"></span>
                       <span class="research-chat-proposal-snippet" x-show="prop.body" x-text="prop.body"></span>
+                      <!-- Je Link: echter Host neben dem Label, Hinweis bei ungeprüfter URL,
+                           Weglassen vor dem Speichern (edits.urls). -->
                       <template x-for="(u, ui) in (prop.urls || [])" :key="ui">
-                        <a class="research-chat-proposal-url" :href="u.url" target="_blank" rel="noopener noreferrer" x-text="u.label || u.url"></a>
+                        <span class="research-chat-proposal-url-row" :class="{ 'research-chat-proposal-url-row--removed': isProposalUrlRemoved(msg, pi, u) }">
+                          <a class="research-chat-proposal-url" :href="u.url" target="_blank" rel="noopener noreferrer" x-text="u.label || u.url"></a>
+                          <span class="research-chat-proposal-url-host" x-show="proposalUrlHost(u)" x-text="proposalUrlHost(u)"></span>
+                          <span class="research-chat-proposal-url-unverified" x-show="isProposalUrlUnverified(u)"
+                                :data-tip="$app.t('recherche.chat.proposalUrlUnverifiedTip')"
+                                x-text="$app.t('recherche.chat.proposalUrlUnverified')"></span>
+                          <button type="button" class="icon-btn icon-btn--ghost" x-show="!isProposalSaved(msg, pi)"
+                                  @click="toggleProposalUrl(msg, pi, u)"
+                                  :data-tip="$app.t(isProposalUrlRemoved(msg, pi, u) ? 'recherche.chat.proposalUrlRestore' : 'recherche.chat.proposalUrlRemove')"
+                                  :aria-label="$app.t(isProposalUrlRemoved(msg, pi, u) ? 'recherche.chat.proposalUrlRestore' : 'recherche.chat.proposalUrlRemove')"><svg class="icon" aria-hidden="true"><use :href="isProposalUrlRemoved(msg, pi, u) ? '/icons.svg#undo' : '/icons.svg#x'"/></svg></button>
+                        </span>
                       </template>
                       <span class="research-chat-proposal-tags" x-show="(prop.tags || []).length" x-text="(prop.tags || []).join(' · ')"></span>
                       <span class="research-chat-proposal-exists" x-show="proposalExistsId(msg, pi)"

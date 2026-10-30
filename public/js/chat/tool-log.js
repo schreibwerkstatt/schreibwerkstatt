@@ -29,6 +29,7 @@ const LEGACY_ID_KEYS = { page_id: 'page', chapter_id: 'chapter', figur_id: 'figu
 const SKIP_ERROR_KEYS = new Set([
   'chat.toolError.invalidArgs', 'chat.toolError.roundLimit', 'chat.toolError.roundBudget',
   'chat.toolError.synthesisOnly', 'chat.toolError.webSearchCap', 'chat.toolError.pageReadCap',
+  'chat.toolError.notOffered',
 ]);
 
 // Dauer erst ab einer Sekunde: darunter ist sie Rauschen (Datenbank-Lookups).
@@ -126,9 +127,13 @@ function _row(tc, t, seen) {
     repeat,
     skipped,
     failed,
+    // Angezeigt wird immer ein übersetzter Text: ein Eintrag ohne Key (ältere Antworten,
+    // rohe Handler-Fehler) bekommt den generischen. Der Rohtext bleibt nur als
+    // Diagnose-Feld (`errorDetail`, für einen Tooltip über x-text/:title — escaped).
     error: tc.ok === false
-      ? ((tc.errorKey && t(tc.errorKey, tc.errorParams || {})) || (tc.error ? String(tc.error).slice(0, 200) : ''))
+      ? ((tc.errorKey && t(tc.errorKey, tc.errorParams || {})) || t('chat.toolError.failed'))
       : '',
+    errorDetail: tc.ok === false && tc.error ? String(tc.error).slice(0, 200) : '',
     iter: tc.iter ?? null,
     raw: _rawInput(tc.input),
   };

@@ -146,6 +146,7 @@ test('Zitat-Fussnoten: Seitenname nur im eigenen Buch, ungültige markiert', () 
       { page_id: 930201, valid: false, reason: 'page_not_in_book' },
       { page_id: 930101, valid: false, reason: 'quote_mismatch', expected: 'Otto', actual: 'Anna' },
     ],
+    BOOK,
   );
   assert.deepEqual(out[0], { n: 1, page_id: 930101, page_name: 'Eigene Seite', quote: 'Anna', valid: true });
   assert.equal(out[1].page_id, null);
@@ -153,6 +154,31 @@ test('Zitat-Fussnoten: Seitenname nur im eigenen Buch, ungültige markiert', () 
   assert.equal(out[1].reason, 'page_not_in_book');
   assert.equal(out[2].valid, false);
   assert.equal(out[2].reason, 'quote_mismatch');
+});
+
+test('Zitat-Fussnoten: fremde Seite ohne Link, auch wenn der Validator vor der Buchprüfung abbricht', () => {
+  const { _buildCitations } = require('../../routes/jobs/chat/book-chat-agent');
+  // bad_shape: offset fehlt → der Validator prüft das Buch gar nicht erst.
+  const shape = _buildCitations(
+    [{ page_id: 930201, quote: 'STRENG' }],
+    [{ page_id: 930201, valid: false, reason: 'bad_shape' }],
+    BOOK,
+  );
+  assert.equal(shape[0].page_id, null);
+  assert.equal(shape[0].page_name, null);
+  // Validator-Fehler: eine Sammelzeile ohne Buchprüfung.
+  const err = _buildCitations(
+    [{ page_id: 930201, offset: 0, length: 6, quote: 'STRENG' }, { page_id: 930101, offset: 0, length: 4, quote: 'Anna' }],
+    [{ valid: false, reason: 'validator_error: boom' }],
+    BOOK,
+  );
+  assert.equal(err[0].page_id, null);
+  assert.equal(err[0].page_name, null);
+  // Eigene Seite bleibt verlinkt, auch ohne Validator-Zeile.
+  assert.equal(err[1].page_id, 930101);
+  assert.equal(err[1].page_name, 'Eigene Seite');
+  // Ohne Buch-ID kein Link.
+  assert.equal(_buildCitations([{ page_id: 930101, quote: 'Anna' }], null, null)[0].page_id, null);
 });
 
 test('_retrievalQuery: Folgefrage trägt die letzte Runde mit', () => {

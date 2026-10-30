@@ -145,3 +145,70 @@ test('PATCH /ideen/chat-proposal: fremde Session, Plot-Nachricht, Unsinn → 404
   assert.equal((await call('PATCH', '/ideen/chat-proposal', { message_id: msgId, index: 9, action: 'applied' })).status, 404);
   assert.equal((await call('PATCH', '/ideen/chat-proposal', { message_id: msgId, index: 0, action: 'kaputt' })).status, 400);
 });
+
+function mkMsgWith(sid, proposals) {
+  return db.prepare(
+    "INSERT INTO chat_messages (session_id, role, content, context_info, created_at) VALUES (?, 'assistant', 'x', ?, ?)"
+  ).run(sid, JSON.stringify({ mode: 'ideen', proposals }), NOW).lastInsertRowid;
+}
+
+test('PATCH /ideen/chat-proposal: zweites «applied» → 409 mit gespeichertem Stand; nach Löschen erneut übernehmbar', async () => {
+  const ideenDb = require('../../db/ideen');
+  const id = ideenDb.createIdee({ bookId: BOOK, userEmail: OWNER, content: 'Angelegt' });
+  const m = mkMsgWith(ideenSessionId, [
+    { type: 'idee_create', ref: 1, fields: { content: 'Angelegt' } },
+    { type: 'idee_update', ref: 2, idee_id: id, fields: { status: 'in_arbeit' }, before: { status: 'offen' } },
+  ]);
+  assert.equal((await call('PATCH', '/ideen/chat-proposal', { message_id: m, index: 0, action: 'applied', applied_id: id })).status, 200);
+  const again = await call('PATCH', '/ideen/chat-proposal', { message_id: m, index: 0, action: 'applied', applied_id: id + 1000 });
+  assert.equal(again.status, 409);
+  assert.equal(again.json.error_code, 'PROPOSAL_ALREADY_APPLIED');
+  assert.equal(again.json.proposal.applied_id, id, 'Antwort trägt den gespeicherten Stand');
+  assert.equal(proposalsOf(m)[0].applied_id, id, 'applied_id nicht überschrieben');
+  // Undo/Löschen der angelegten Idee → erneutes Übernehmen erlaubt (neue id).
+  ideenDb.deleteIdee(id, OWNER);
+  const re = await call('PATCH', '/ideen/chat-proposal', { message_id: m, index: 0, action: 'applied', applied_id: 77 });
+  assert.equal(re.status, 200);
+  assert.equal(proposalsOf(m)[0].applied_id, 77);
+  // Änderungs-Vorschläge legen nichts an: zweites «applied» immer 409.
+  assert.equal((await call('PATCH', '/ideen/chat-proposal', { message_id: m, index: 1, action: 'applied', applied_id: id })).status, 200);
+  assert.equal((await call('PATCH', '/ideen/chat-proposal', { message_id: m, index: 1, action: 'applied', applied_id: id })).status, 409);
+});
+
+test('PATCH /ideen/chat-proposal: Abschnitts-/Buch-Chat-Idee, zweites «applied» bei bestehender Idee → 409', async () => {
+  const ideenDb = require('../../db/ideen');
+  const id = ideenDb.createIdee({ bookId: BOOK, userEmail: OWNER, content: 'Aus dem Buch-Chat' });
+  const bookSid = db.prepare("SELECT session_id FROM chat_messages WHERE id = ?").get(bookMsgId).session_id;
+  const m = mkMsgWith(bookSid, [{ type: 'idee_create', fields: { content: 'Aus dem Buch-Chat', chapter_id: 1 } }]);
+  assert.equal((await call('PATCH', '/ideen/chat-proposal', { message_id: m, index: 0, action: 'applied', applied_id: id })).status, 200);
+  assert.equal((await call('PATCH', '/ideen/chat-proposal', { message_id: m, index: 0, action: 'applied', applied_id: id })).status, 409);
+});
+
+test('POST /ideen/chat-proposal/beleg-check: Beleg gegen den aktuellen Abschnittstext', async () => {
+  const PAGE_B = 951202;
+  db.prepare("INSERT INTO pages (page_id, book_id, page_name, body_html, updated_at) VALUES (?, ?, 'Beleg', ?, ?)")
+    .run(PAGE_B, BOOK, '<p>Sie las <em>Der Prozess</em>, dann schlief sie.</p>', NOW);
+  const m = mkMsgWith(ideenSessionId, [
+    { type: 'idee_update', idee_id: 1, fields: { status: 'erledigt' }, beleg: { text: 'Der Prozess, dann schlief sie', page_id: PAGE_B } },
+    { type: 'idee_create', fields: { content: 'ohne Beleg' } },
+  ]);
+  const ok = await call('POST', '/ideen/chat-proposal/beleg-check', { message_id: m, index: 0 });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(ok.json, { checked: true, found: true });
+  db.prepare('UPDATE pages SET body_html = ? WHERE page_id = ?').run('<p>Ganz anderer Text.</p>', PAGE_B);
+  assert.deepEqual((await call('POST', '/ideen/chat-proposal/beleg-check', { message_id: m, index: 0 })).json, { checked: true, found: false });
+  assert.deepEqual((await call('POST', '/ideen/chat-proposal/beleg-check', { message_id: m, index: 1 })).json, { checked: false, found: null });
+  assert.equal((await call('POST', '/ideen/chat-proposal/beleg-check', { message_id: m, index: 0 }, OTHER)).status, 404);
+  assert.equal((await call('POST', '/ideen/chat-proposal/beleg-check', { message_id: plotMsgId, index: 0 })).status, 404);
+  assert.equal((await call('POST', '/ideen/chat-proposal/beleg-check', { message_id: m, index: 5 })).status, 404);
+  assert.equal((await call('POST', '/ideen/chat-proposal/beleg-check', { message_id: m })).status, 400);
+});
+
+test('PATCH /ideen/:id: Anker lösen (page_id = chapter_id = null) macht die Idee zur Buch-Idee', async () => {
+  const ideenDb = require('../../db/ideen');
+  const id = ideenDb.createIdee({ bookId: BOOK, pageId: 951201, userEmail: OWNER, content: 'Am Abschnitt' });
+  const r = await call('PATCH', `/ideen/${id}`, { page_id: null, chapter_id: null });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.page_id, null);
+  assert.equal(r.json.chapter_id, null);
+});

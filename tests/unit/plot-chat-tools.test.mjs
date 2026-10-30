@@ -211,3 +211,151 @@ test('sessionPlotProposalMemory: Status übernommen/verworfen/offen', () => {
   const mem = sessionPlotProposalMemory(sid);
   assert.deepEqual(mem.map(m => [m.label, m.state]), [['A', 'applied'], ['B', 'discarded'], ['C', 'open']]);
 });
+
+test('leeren: Kapitel vom Beat lösen und andere Felder leeren; leere Strings ändern nichts', async () => {
+  const beatK = plot.createBeat(BOOK, act2.id, USER, { titel: 'Mit Kapitel', beschreibung: 'Text', zeit: 'Sommer', intensitaet: 3 });
+  db.prepare('UPDATE plot_beats SET chapter_id = ? WHERE id = ?').run(null, beatK.id);
+  // Kapitel per DB setzen (Testbuch hat das Kapitel nur in der Namens-Map).
+  const ctx = mkCtx();
+  ctx._board = loadBoardState(BOOK, USER, chapterNames);
+  ctx._board.beatById.get(beatK.id).chapter_id = CHAPTER_ID;
+  const out = await executePlotChatTool('propose_beat', {
+    beat_id: beatK.id, leeren: ['kapitel', 'zeit', 'intensitaet', 'beschreibung'], begruendung: 'gehört nirgends hin',
+  }, ctx);
+  assert.equal(out.ok, true, out.error);
+  const p = ctx.proposals[0];
+  assert.deepEqual(p.fields, { chapter_id: null, zeit: null, intensitaet: null, beschreibung: '' });
+  assert.equal(p.before.chapter_id, CHAPTER_ID);
+  assert.equal(p.labels.chapter_before, 'Teil 1 › Kapitel 1');
+  // Leerer String = nicht angegeben (nicht «leeren»): No-Op.
+  assert.match((await executePlotChatTool('propose_beat', { beat_id: beatK.id, beschreibung: '', zeit: '', begruendung: 'b' }, ctx)).error, /ändert/);
+  // Leeren nur bei Änderungen, nur bekannte Felder, nicht zugleich setzen.
+  assert.ok((await executePlotChatTool('propose_beat', { act_id: act1.id, titel: 'X', leeren: ['zeit'], begruendung: 'b' }, ctx)).error);
+  assert.ok((await executePlotChatTool('propose_beat', { beat_id: beatK.id, leeren: ['titel'], begruendung: 'b' }, ctx)).error);
+  assert.ok((await executePlotChatTool('propose_beat', { beat_id: beatK.id, zeit: 'Winter', leeren: ['zeit'], begruendung: 'b' }, ctx)).error);
+  // Bereits leere Felder leeren = No-Op.
+  const beatEmpty = plot.createBeat(BOOK, act2.id, USER, { titel: 'Leer' });
+  const ctx2 = mkCtx();
+  assert.match((await executePlotChatTool('propose_beat', { beat_id: beatEmpty.id, leeren: ['kapitel', 'beschreibung'], begruendung: 'b' }, ctx2)).error, /ändert/);
+});
+
+test('Parität klassisch ↔ agentisch: gleiche Eingabe, gleicher Vorschlag', async () => {
+  const { collectClassicProposals } = require('../../routes/jobs/plot-chat');
+  const input = { beat_id: beatA.id, titel: '', beschreibung: '', intensitaet: 0, chapter_id: null, figuren: [], leeren: ['zeit'], zeit: '', begruendung: 'b' };
+  const beatZ = plot.createBeat(BOOK, act1.id, USER, { titel: 'Mit Zeit', zeit: 'Herbst' });
+  input.beat_id = beatZ.id;
+  const { makeProposalChatJob } = require('../../routes/jobs/proposal-chat');
+  assert.ok(makeProposalChatJob);
+  const ctxA = mkCtx();
+  const { cleanProposalInput } = require('../../routes/jobs/proposal-chat-shared');
+  await executePlotChatTool('propose_beat', cleanProposalInput(input), ctxA);
+  const ctxC = mkCtx();
+  await collectClassicProposals([{ werkzeug: 'propose_beat', ...input }], ctxC, null);
+  assert.equal(ctxA.proposals.length, 1);
+  assert.deepEqual(ctxC.proposals, ctxA.proposals);
+  assert.deepEqual(ctxA.proposals[0].fields, { zeit: null });
+});
+
+test('Neuer Strang + eigener Akt in einer Antwort (thread_ref) → fork; Beat darauf nur im neuen Strang', async () => {
+  const ctx = mkCtx();
+  const t = await executePlotChatTool('propose_thread', { name: 'Neue Linie', begruendung: 'b' }, ctx);
+  const a = await executePlotChatTool('propose_act', { name: 'Eigener Auftakt', thread_ref: t.ref, begruendung: 'b' }, ctx);
+  assert.equal(a.ok, true, a.error);
+  const pa = ctx.proposals[1];
+  assert.equal(pa.thread_ref, t.ref);
+  assert.equal(pa.fork, true);
+  assert.equal(pa.thread_id, undefined);
+  assert.equal(pa.labels.thread, 'Neue Linie');
+  const b = await executePlotChatTool('propose_beat', { act_ref: a.ref, thread_ref: t.ref, titel: 'Start', begruendung: 'b' }, ctx);
+  assert.equal(b.ok, true, b.error);
+  // Ohne Strang bzw. mit anderem Strang passt der strang-eigene Akt nicht.
+  assert.ok((await executePlotChatTool('propose_beat', { act_ref: a.ref, titel: 'X', begruendung: 'b' }, ctx)).error);
+  assert.ok((await executePlotChatTool('propose_beat', { act_ref: a.ref, thread_id: thread.id, titel: 'X', begruendung: 'b' }, ctx)).error);
+  // Kein after_act_id bei fork (die Klone haben noch keine ids).
+  assert.match((await executePlotChatTool('propose_act', { name: 'Y', thread_ref: t.ref, after_act_id: act1.id, begruendung: 'b' }, ctx)).error, /after_act_id/);
+});
+
+test('Akt für bestehenden Strang: ohne eigene Aktstruktur → fork, mit → ohne', async () => {
+  const plain = plot.createThread(BOOK, USER, { name: 'Ohne eigene Akte' });
+  const ctx = mkCtx();
+  assert.equal((await executePlotChatTool('propose_act', { name: 'Neu A', thread_id: plain.id, begruendung: 'b' }, ctx)).ok, true);
+  assert.equal(ctx.proposals[0].fork, true);
+  assert.equal((await executePlotChatTool('propose_act', { name: 'Neu B', thread_id: thread.id, after_act_id: ownAct.id, begruendung: 'b' }, ctx)).ok, true);
+  assert.equal(ctx.proposals[1].fork, undefined);
+  // Hybrid-Regel: Strang mit eigener Aktstruktur nicht auf einem geteilten Akt.
+  assert.ok((await executePlotChatTool('propose_beat', { act_id: act1.id, thread_id: thread.id, titel: 'X', begruendung: 'b' }, ctx)).error);
+  assert.equal((await executePlotChatTool('propose_beat', { act_id: act1.id, thread_id: plain.id, titel: 'X', begruendung: 'b' }, ctx)).ok, true);
+});
+
+test('boardOutline: Blöcke der Lesereihenfolge, Beats je Akt nach Lane-Rang', () => {
+  const lane2 = plot.createThread(BOOK, USER, { name: 'Zweite Lane' });
+  const actL = plot.createAct(BOOK, USER, { name: 'Lane-Akt' });
+  // Reihenfolge der Anlage: ohne Strang zuerst, dann Lane 2 — Lane-Rang dreht das.
+  const bNone = plot.createBeat(BOOK, actL.id, USER, { titel: 'Ohne Strang' });
+  const bLane = plot.createBeat(BOOK, actL.id, USER, { titel: 'In Lane 2', threadId: lane2.id });
+  const state = loadBoardState(BOOK, USER, chapterNames);
+  const text = boardOutline(state);
+  assert.match(text, /=== GETEILTE AKTE — gemeinsame Lesereihenfolge/);
+  assert.match(text, new RegExp(`=== STRANG «Annas Weg» \\[#${thread.id}\\] — EIGENE AKTSTRUKTUR`));
+  assert.ok(text.indexOf('=== GETEILTE AKTE') < text.indexOf('«Aufbruch»'));
+  assert.ok(text.indexOf('«Lane-Akt»') < text.indexOf('=== STRANG «Annas Weg»'), 'geteilte Akte im ersten Block');
+  assert.ok(text.indexOf(`[#${bLane.id}]`) < text.indexOf(`[#${bNone.id}]`), '«ohne Strang» als letzte Lane');
+});
+
+test('fitBoardOutline: knappes Budget kürzt Beschreibungen und zählt verworfene Beats', () => {
+  const { fitBoardOutline } = require('../../routes/jobs/plot-chat-context');
+  const long = plot.createBeat(BOOK, act2.id, USER, { titel: 'Lang', beschreibung: 'x'.repeat(280) });
+  const gone = plot.createBeat(BOOK, act2.id, USER, { titel: 'Ausgemustert' });
+  plot.updateBeat(gone.id, { verworfen: 1 });
+  const state = loadBoardState(BOOK, USER, chapterNames);
+  const full = fitBoardOutline(state);
+  assert.equal(full.trimmed, false);
+  assert.match(full.text, /«Ausgemustert»/);
+  const small = fitBoardOutline(state, { budgetChars: full.text.length - 1 });
+  assert.equal(small.trimmed, true);
+  assert.doesNotMatch(small.text, /«Ausgemustert»/);
+  assert.match(small.text, /verworfene[r]? Beat/);
+  assert.ok(!small.text.includes('x'.repeat(150)), 'Beschreibung gekürzt');
+  assert.ok(small.text.includes(`[#${long.id}]`));
+  const tiny = fitBoardOutline(state, { budgetChars: 200 });
+  assert.match(tiny.text, /Board gekürzt/);
+});
+
+test('Gedächtnis: übernommener, danach rückgängig gemachter Beat steht als «removed»', () => {
+  const now = new Date().toISOString();
+  const sid = db.prepare(
+    `INSERT INTO chat_sessions (book_id, kind, user_email, created_at, last_message_at) VALUES (?, 'plot', ?, ?, ?)`
+  ).run(BOOK, USER, now, now).lastInsertRowid;
+  db.prepare(
+    `INSERT INTO chat_messages (session_id, role, content, context_info, created_at) VALUES (?, 'assistant', 'x', ?, ?)`
+  ).run(sid, JSON.stringify({ proposals: [
+    { type: 'beat_create', fields: { titel: 'Da' }, applied_at: now, applied_id: beatA.id },
+    { type: 'beat_create', fields: { titel: 'Weg' }, applied_at: now, applied_id: 99999999 },
+    { type: 'act_update', name: 'Umbenannt', applied_at: now, applied_id: act1.id },
+  ] }), now);
+  const state = loadBoardState(BOOK, USER, chapterNames);
+  assert.deepEqual(sessionPlotProposalMemory(sid, state).map(m => m.state), ['applied', 'removed', 'applied']);
+});
+
+// Zuletzt: legt eine zweite Figur namens «Der Fremde» an (Katalog) — danach ist der Name mehrdeutig.
+test('Figuren: Kennungen fig_id/draft#id, mehrdeutiger Name → Fehler statt erster Treffer', async () => {
+  const ctx = mkCtx();
+  assert.equal((await executePlotChatTool('propose_beat', { act_id: act1.id, titel: 'Mit Kennung', figuren: [`draft#${draft.id}`, 'fig_anna'], begruendung: 'b' }, ctx)).ok, true);
+  assert.deepEqual(ctx.proposals[0].fields.draft_figure_ids, [draft.id]);
+  assert.deepEqual(ctx.proposals[0].fields.figure_ids, ['fig_anna']);
+  assert.match((await executePlotChatTool('propose_beat', { act_id: act1.id, titel: 'X', figuren: ['draft#99999'], begruendung: 'b' }, ctx)).error, /Unbekannte/);
+  const figs = figurenOutline(loadBoardState(BOOK, USER, chapterNames));
+  assert.match(figs, new RegExp(`Der Fremde · Werkstatt-Figur draft#${draft.id}`));
+
+  db.prepare(
+    `INSERT INTO figures (book_id, user_email, fig_id, name, kurzname, updated_at)
+     VALUES (?, ?, 'fig_fremd', 'Der Fremde', NULL, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
+  ).run(BOOK, USER);
+  const ctx2 = mkCtx();
+  const amb = await executePlotChatTool('propose_beat', { act_id: act1.id, titel: 'X', figuren: ['Der Fremde'], begruendung: 'b' }, ctx2);
+  assert.match(amb.error, /Mehrdeutig/);
+  assert.match(amb.error, /fig_id fig_fremd/);
+  assert.match(amb.error, new RegExp(`draft#${draft.id}`));
+  assert.match((await executePlotChatTool('propose_thread', { name: 'T', figur: 'der fremde', begruendung: 'b' }, ctx2)).error, /Mehrdeutig/);
+  assert.equal((await executePlotChatTool('propose_thread', { name: 'T', figur: 'fig_fremd', begruendung: 'b' }, ctx2)).ok, true);
+});

@@ -13,9 +13,10 @@
 //
 // Gespeichertes Format (context_info.proposals[i]), Felder je `type`:
 //   beat_create   { act_id|act_ref, thread_id|thread_ref|null, after_beat_id?, at_start?, fields }
-//   beat_update   { beat_id, fields, before }                 — nur geänderte Felder
+//   beat_update   { beat_id, fields, before }                 — nur geänderte Felder;
+//                 geleerte (`leeren`) stehen als ''/null/[] in fields
 //   beat_move     { beat_id, act_id|act_ref, thread_id|thread_ref|null, after_beat_id?, at_start?, before }
-//   act_create    { name, thread_id|null, after_act_id?, at_start? }
+//   act_create    { name, thread_id|thread_ref|null, fork?, after_act_id?, at_start? }
 //   act_update    { act_id, name, before }
 //   thread_create { name, figure_id?|draft_figure_id? }
 //   thread_update { thread_id, fields, before }
@@ -25,26 +26,19 @@
 // applied_at + applied_id bzw. status='discarded'.
 
 const { executeTool: executeCatalogTool } = require('./chat-tools');
-const { loadBoardState } = require('./plot-chat-context');
+const { loadBoardState, threadHasOwnActs } = require('./plot-chat-context');
+const { str: _str, posInt: _int } = require('../../lib/proposal-input');
+const { err: _err, pushProposal: _push } = require('./proposal-chat-shared');
 
 const MAX_PROPOSALS = 30;
 const MAX_TITEL = 200;
 const MAX_BESCHREIBUNG = 4000;
 const MAX_ZEIT = 120;
 const MAX_NAME = 120;
-const MAX_BEGRUENDUNG = 600;
 
 const PROPOSE_TOOLS = new Set(['propose_beat', 'propose_beat_move', 'propose_act', 'propose_thread']);
-
-function _str(v, max) {
-  if (typeof v !== 'string') return '';
-  return v.replace(/\r\n?/g, '\n').trim().slice(0, max);
-}
-function _int(v) {
-  const n = typeof v === 'string' && /^\d+$/.test(v.trim()) ? Number(v) : v;
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
-function _err(msg) { return { error: msg }; }
+// Felder, die ein Änderungs-Vorschlag ausdrücklich leeren darf (`leeren`).
+const CLEARABLE = new Set(['beschreibung', 'zeit', 'kapitel', 'intensitaet', 'figuren']);
 
 // Board-Stand pro Antwort einmal laden; Vorschläge ändern ihn nicht.
 function _state(ctx) {
@@ -53,13 +47,13 @@ function _state(ctx) {
 }
 
 // Akt aus act_id oder act_ref (Vorschlag dieser Antwort) auflösen.
-// → { act_id, act } | { act_ref, refThread } | { error }
+// → { act_id, act } | { act_ref, refThread, refThreadRef } | { error }
 function _resolveAct(input, ctx, state) {
   const ref = _int(input.act_ref);
   if (ref) {
     const p = ctx.proposals[ref - 1];
     if (!p || p.type !== 'act_create') return _err(`act_ref ${ref} ist kein in dieser Antwort vorgeschlagener neuer Akt.`);
-    return { act_ref: ref, refThread: p.thread_id ?? null, label: p.name };
+    return { act_ref: ref, refThread: p.thread_id ?? null, refThreadRef: p.thread_ref ?? null, label: p.name };
   }
   const id = _int(input.act_id);
   if (!id) return null;
@@ -83,40 +77,63 @@ function _resolveThread(input, ctx, state) {
   return { thread_id: id, label: t.name };
 }
 
-// Hybrid-Akt-Regel (routes/plot.js#_actFitsThread): ein Beat sitzt auf einem
-// GETEILTEN Akt oder einem Akt SEINES Strangs. Für Referenzen auf neue Akte gilt
-// dasselbe gegen deren vorgeschlagenen thread_id.
-function _actFits(actRes, threadRes) {
-  const actThread = actRes.act ? (actRes.act.thread_id ?? null) : (actRes.refThread ?? null);
-  if (actThread == null) return true;
-  return !!threadRes && threadRes.thread_id === actThread;
+// Hybrid-Akt-Regel (db/plot#actFitsThread): ein Strang MIT eigenen Akten liegt nur
+// auf seinen eigenen Akten, ein Strang ohne eigene Akte und «ohne Strang» nur auf
+// geteilten. Für Referenzen auf neue Akte gilt dasselbe gegen deren
+// vorgeschlagenen Strang (thread_id bzw. thread_ref) — ein neuer strang-eigener
+// Akt legt die eigene Aktstruktur an (fork), danach gilt sie.
+function _actFits(actRes, threadRes, ctx, state) {
+  if (actRes.act_ref) {
+    const p = ctx.proposals[actRes.act_ref - 1];
+    if (p?.thread_ref) return !!threadRes && threadRes.thread_ref === p.thread_ref;
+    if (p?.thread_id != null) return !!threadRes && threadRes.thread_id === p.thread_id;
+    return !threadRes || threadRes.thread_ref != null || !threadHasOwnActs(state, threadRes.thread_id);
+  }
+  const actThread = actRes.act ? (actRes.act.thread_id ?? null) : null;
+  if (actThread != null) return !!threadRes && threadRes.thread_id === actThread;
+  // Geteilter Akt: nicht für einen Strang mit eigener Aktstruktur.
+  if (threadRes?.thread_id != null && threadHasOwnActs(state, threadRes.thread_id)) return false;
+  return true;
 }
 
-// Figuren: fig_id, Name oder Kurzname (Katalog) bzw. Name (Werkstatt).
+// Figuren: fig_id (Katalog), `draft#<id>` (Werkstatt) oder ein Name/Kurzname.
+// Ein Name, der auf mehrere Figuren passt, wird nicht geraten → ambiguous.
 function _resolveFiguren(list, state) {
   const figure_ids = [];
   const draft_figure_ids = [];
   const names = [];
   const unknown = [];
+  const ambiguous = [];
   const norm = (s) => String(s || '').trim().toLowerCase();
+  const addCat = (f) => { if (!figure_ids.includes(f.fig_id)) { figure_ids.push(f.fig_id); names.push(f.name || f.kurzname || f.fig_id); } };
+  const addDraft = (d) => { if (!draft_figure_ids.includes(d.id)) { draft_figure_ids.push(d.id); names.push(d.name); } };
   for (const raw of list) {
     const q = String(raw ?? '').trim();
     if (!q) continue;
+    const dm = /^draft#(\d+)$/i.exec(q);
+    if (dm) {
+      const d = state.drafts.find(x => x.id === Number(dm[1]));
+      if (d) addDraft(d); else unknown.push(q);
+      continue;
+    }
+    const byId = state.figures.find(f => f.fig_id === q);
+    if (byId) { addCat(byId); continue; }
     const key = norm(q);
-    const cat = state.figures.find(f => f.fig_id === q)
-      || state.figures.find(f => norm(f.name) === key || norm(f.kurzname) === key);
-    if (cat) {
-      if (!figure_ids.includes(cat.fig_id)) { figure_ids.push(cat.fig_id); names.push(cat.name || cat.kurzname || cat.fig_id); }
-      continue;
-    }
-    const draft = state.drafts.find(d => norm(d.name) === key);
-    if (draft) {
-      if (!draft_figure_ids.includes(draft.id)) { draft_figure_ids.push(draft.id); names.push(draft.name); }
-      continue;
-    }
-    unknown.push(q);
+    const cats = state.figures.filter(f => norm(f.name) === key || norm(f.kurzname) === key);
+    const drs = state.drafts.filter(d => norm(d.name) === key);
+    if (cats.length + drs.length > 1) {
+      ambiguous.push(`«${q}» (${[...cats.map(c => `fig_id ${c.fig_id}`), ...drs.map(d => `draft#${d.id}`)].join(', ')})`);
+    } else if (cats.length) addCat(cats[0]);
+    else if (drs.length) addDraft(drs[0]);
+    else unknown.push(q);
   }
-  return { figure_ids, draft_figure_ids, names, unknown };
+  return { figure_ids, draft_figure_ids, names, unknown, ambiguous };
+}
+
+function _figurenError(r) {
+  if (r.ambiguous.length) return _err(`Mehrdeutige Figur(en): ${r.ambiguous.join('; ')}. Gib die Kennung (fig_id bzw. draft#id) aus der Figurenliste an.`);
+  if (r.unknown.length) return _err(`Unbekannte Figur(en): ${r.unknown.join(', ')}. Nutze fig_id, draft#id oder Namen aus der Figurenliste.`);
+  return null;
 }
 
 function _validChapter(raw, state) {
@@ -140,38 +157,57 @@ function _validAfter(input, cell, state, movingId = null) {
   return { after_beat_id: after, at_start: false, label: b.titel };
 }
 
+// Leere Strings heissen «nicht angegeben» (beide Pfade, proposal-chat-shared.js);
+// geleert wird nur über `leeren` (nur bei Änderungen).
 function _beatFieldsFromInput(input, state, { isUpdate }) {
   const fields = {};
   const labels = {};
-  if (typeof input.titel === 'string') {
-    const t = _str(input.titel, MAX_TITEL);
-    if (!t) return _err('titel darf nicht leer sein.');
-    fields.titel = t;
-  }
-  if (typeof input.beschreibung === 'string') fields.beschreibung = _str(input.beschreibung, MAX_BESCHREIBUNG);
+  const t = _str(input.titel, MAX_TITEL);
+  if (t) fields.titel = t;
+  const desc = _str(input.beschreibung, MAX_BESCHREIBUNG);
+  if (desc) fields.beschreibung = desc;
   if (input.intensitaet != null) {
     const n = Number(input.intensitaet);
     if (!Number.isInteger(n) || n < 1 || n > 5) return _err('intensitaet muss 1–5 sein.');
     fields.intensitaet = n;
   }
-  if (typeof input.zeit === 'string') fields.zeit = _str(input.zeit, MAX_ZEIT) || null;
+  const zeit = _str(input.zeit, MAX_ZEIT);
+  if (zeit) fields.zeit = zeit;
   if (input.chapter_id != null) {
     const ch = _validChapter(input.chapter_id, state);
     if (ch.error) return ch;
-    fields.chapter_id = ch.id;
-    if (ch.label) labels.chapter = ch.label;
-  }
-  if (Array.isArray(input.figuren)) {
-    const r = _resolveFiguren(input.figuren, state);
-    if (r.unknown.length) {
-      return _err(`Unbekannte Figur(en): ${r.unknown.join(', ')}. Nutze Namen oder fig_id aus der Figurenliste.`);
+    if (ch.id) {
+      fields.chapter_id = ch.id;
+      labels.chapter = ch.label;
     }
+  }
+  if (Array.isArray(input.figuren) && input.figuren.length) {
+    const r = _resolveFiguren(input.figuren, state);
+    const e = _figurenError(r);
+    if (e) return e;
     fields.figure_ids = r.figure_ids;
     fields.draft_figure_ids = r.draft_figure_ids;
     labels.figuren = r.names;
   }
   if (isUpdate && typeof input.verworfen === 'boolean') fields.verworfen = input.verworfen ? 1 : 0;
+
+  const clear = Array.isArray(input.leeren) ? [...new Set(input.leeren.map(x => String(x)))] : [];
+  if (clear.length && !isUpdate) return _err('leeren gibt es nur bei Änderungen bestehender Beats.');
+  for (const k of clear) {
+    if (!CLEARABLE.has(k)) return _err(`leeren kennt nur: ${[...CLEARABLE].join(', ')}.`);
+    const field = k === 'kapitel' ? 'chapter_id' : k === 'figuren' ? 'figure_ids' : k;
+    if (field in fields) return _err(`${k} kann nicht zugleich gesetzt und geleert werden.`);
+    if (k === 'beschreibung') fields.beschreibung = '';
+    else if (k === 'figuren') { fields.figure_ids = []; fields.draft_figure_ids = []; labels.figuren = []; }
+    else fields[field] = null;
+  }
   return { fields, labels };
+}
+
+// Gleicher Wert? Leere Texte ('' / null) sind gleich, Listen ohne Reihenfolge.
+function _same(a, b) {
+  const n = (v) => (Array.isArray(v) ? JSON.stringify([...v].sort()) : JSON.stringify(v === '' || v === undefined ? null : v));
+  return n(a) === n(b);
 }
 
 // Vorher-Werte der geänderten Felder (Diff-Anzeige + Stale-Erkennung im Frontend).
@@ -194,13 +230,6 @@ function _beatBefore(beat, fields, state) {
   return { before, labels };
 }
 
-function _push(ctx, proposal, input) {
-  const begruendung = _str(input.begruendung, MAX_BEGRUENDUNG);
-  const p = { ...proposal, ref: ctx.proposals.length + 1, ...(begruendung ? { begruendung } : {}) };
-  ctx.proposals.push(p);
-  return { ok: true, ref: p.ref, hinweis: 'Vorschlag gesammelt — der User übernimmt ihn selbst. Nicht wiederholen.' };
-}
-
 function _proposeBeat(input, ctx) {
   const state = _state(ctx);
   const beatId = _int(input.beat_id);
@@ -215,9 +244,7 @@ function _proposeBeat(input, ctx) {
     // No-Op-Felder fallen weg — ein Vorschlag, der nichts ändert, ist keiner.
     const { before, labels: beforeLabels } = _beatBefore(beat, r.fields, state);
     for (const k of Object.keys(r.fields)) {
-      if (JSON.stringify(r.fields[k] ?? null) === JSON.stringify(before[k] ?? null)) {
-        delete r.fields[k]; delete before[k];
-      }
+      if (_same(r.fields[k], before[k])) { delete r.fields[k]; delete before[k]; }
     }
     if (!Object.keys(r.fields).length) return _err(`Der Vorschlag ändert an Beat #${beatId} nichts.`);
     return _push(ctx, {
@@ -231,8 +258,8 @@ function _proposeBeat(input, ctx) {
   if (actRes.error) return actRes;
   const threadRes = _resolveThread(input, ctx, state);
   if (threadRes?.error) return threadRes;
-  if (!_actFits(actRes, threadRes)) {
-    return _err('Der Akt gehört einem Strang; ein Beat darin muss in genau diesem Strang liegen (thread_id angeben) oder in einen geteilten Akt.');
+  if (!_actFits(actRes, threadRes, ctx, state)) {
+    return _err('Akt und Strang passen nicht: ein Strang mit eigener Aktstruktur liegt nur auf seinen eigenen Akten, alle anderen Beats auf geteilten Akten. Wähle einen passenden Akt bzw. thread_id.');
   }
   if (typeof input.verworfen === 'boolean') return _err('verworfen gibt es nur bei Änderungen bestehender Beats.');
   const r = _beatFieldsFromInput(input, state, { isUpdate: false });
@@ -273,8 +300,8 @@ function _proposeBeatMove(input, ctx) {
         : null;
     }
   }
-  if (!_actFits(actRes, threadRes)) {
-    return _err('Der Ziel-Akt gehört einem anderen Strang; wähle einen geteilten Akt oder den Akt des Ziel-Strangs.');
+  if (!_actFits(actRes, threadRes, ctx, state)) {
+    return _err('Ziel-Akt und Ziel-Strang passen nicht: ein Strang mit eigener Aktstruktur liegt nur auf seinen eigenen Akten, alle anderen Beats auf geteilten Akten.');
   }
   const cell = { act_id: actRes.act_id ?? null, thread_id: threadRes?.thread_id ?? null };
   const pos = (actRes.act_ref || threadRes?.thread_ref)
@@ -302,6 +329,11 @@ function _proposeBeatMove(input, ctx) {
   }, input);
 }
 
+// Neuer Akt (geteilt oder strang-eigen) bzw. Umbenennung. Ein strang-eigener Akt
+// für einen Strang OHNE eigene Aktstruktur — auch für einen in dieser Antwort neu
+// vorgeschlagenen (thread_ref) — trägt `fork: true`: beim Übernehmen legt das
+// Frontend zuerst die eigene Aktstruktur an (POST /plot/threads/:id/fork-acts,
+// Kopie der geteilten Akte), dann den Akt. Ohne geteilte Akte gibt es keinen Fork.
 function _proposeAct(input, ctx) {
   const state = _state(ctx);
   const name = _str(input.name, MAX_NAME);
@@ -313,27 +345,29 @@ function _proposeAct(input, ctx) {
     if (act.name === name) return _err(`Akt #${actId} heisst schon so.`);
     return _push(ctx, { type: 'act_update', act_id: actId, name, before: { name: act.name }, labels: { act: act.name } }, input);
   }
-  let threadId = null;
-  let threadLabel = null;
-  if (input.thread_id != null) {
-    const t = _resolveThread({ thread_id: input.thread_id }, ctx, state);
-    if (t?.error) return t;
-    threadId = t?.thread_id ?? null;
-    threadLabel = t?.label ?? null;
+  const t = _resolveThread(input, ctx, state);
+  if (t?.error) return t;
+  const threadId = t?.thread_id ?? null;
+  const fork = !!t && (t.thread_ref != null || !threadHasOwnActs(state, threadId));
+  if (fork && !state.acts.some(a => a.thread_id == null)) {
+    return _err('Eine eigene Aktstruktur entsteht als Kopie der geteilten Akte — das Board hat keine. Schlage zuerst einen geteilten Akt vor.');
   }
   const after = _int(input.after_act_id);
   let afterLabel = null;
   if (after) {
+    if (fork) return _err('Für einen Strang ohne eigene Aktstruktur kein after_act_id — der Akt kommt ans Ende (oder at_start).');
     const a = state.actById.get(after);
     if (!a) return _err(`Akt #${after} gibt es nicht.`);
     if ((a.thread_id ?? null) !== threadId) return _err('after_act_id muss im selben Bereich liegen (geteilte Akte bzw. Akte desselben Strangs).');
     afterLabel = a.name;
   }
   return _push(ctx, {
-    type: 'act_create', name, thread_id: threadId,
+    type: 'act_create', name,
+    ...(t?.thread_ref ? { thread_ref: t.thread_ref } : { thread_id: threadId }),
+    ...(fork ? { fork: true } : {}),
     ...(after ? { after_act_id: after } : {}),
     ...(!after && input.at_start === true ? { at_start: true } : {}),
-    labels: { ...(threadLabel ? { thread: threadLabel } : {}), ...(afterLabel ? { after: afterLabel } : {}) },
+    labels: { ...(t ? { thread: t.label } : {}), ...(afterLabel ? { after: afterLabel } : {}) },
   }, input);
 }
 
@@ -342,9 +376,11 @@ function _proposeThread(input, ctx) {
   const name = _str(input.name, MAX_NAME);
   if (!name) return _err('name ist Pflicht.');
   let fig = null;
-  if (typeof input.figur === 'string' && input.figur.trim()) {
-    const r = _resolveFiguren([input.figur], state);
-    if (r.unknown.length) return _err(`Unbekannte Figur: ${input.figur}. Nutze Namen oder fig_id aus der Figurenliste.`);
+  const figQ = _str(input.figur, MAX_NAME);
+  if (figQ) {
+    const r = _resolveFiguren([figQ], state);
+    const e = _figurenError(r);
+    if (e) return e;
     fig = r.figure_ids.length
       ? { figure_id: r.figure_ids[0], draft_figure_id: null, label: r.names[0] }
       : { figure_id: null, draft_figure_id: r.draft_figure_ids[0], label: r.names[0] };

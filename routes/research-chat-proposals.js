@@ -9,7 +9,9 @@
 //      (`context_info.proposals[i].saved_item_id` der Assistant-Nachricht) —
 //      sonst zeigt die Session nach einem Reload wieder „Speichern" und ein
 //      zweiter Klick legt eine Dublette an.
-// Der User darf Titel/Typ/Tags/Inhalt vor dem Speichern ändern (`edits`).
+// Der User darf Titel/Typ/Tags/Inhalt vor dem Speichern ändern und einzelne Links
+// weglassen (`edits`) — Links nur entfernen, nie hinzufügen: die URLs eines
+// Vorschlags sind die, die der Job geprüft und markiert hat (`verified`).
 //
 // Deep-Doc: docs/recherche-chat.md („Speicher-Vorschläge").
 
@@ -24,6 +26,7 @@ const {
 const {
   PROPOSAL_KINDS, TITLE_MAX, BODY_MAX, SOURCE_MAX, cleanStr, normalizeUrls, normalizeTags,
 } = require('../lib/research-validate');
+const { normalizeUrl } = require('../lib/url-normalize');
 const logger = require('../logger');
 const { setContext } = require('../lib/log-context');
 
@@ -33,7 +36,17 @@ const jsonBody = express.json();
 // Nur diese beiden Kontexte bietet der Chip an; andere Ziele verknüpft der User im Board.
 const CONTEXT_KINDS = new Set(['page', 'chapter']);
 
-/** Vorschlag + Bearbeitungen → Felder für createItem. Pure (unit-getestet über die Route). */
+/** URLs des Vorschlags, die in `keep` stehen (Vergleich normalisiert); `keep` kein
+ *  Array → alle. Eine URL, die der Vorschlag nicht hat, fällt weg. */
+function _keptUrls(own, keep) {
+  if (!Array.isArray(keep)) return own;
+  const wanted = new Set(keep.map(k => normalizeUrl(typeof k === 'string' ? k : k?.url)).filter(Boolean));
+  return own.filter(u => wanted.has(normalizeUrl(u.url)));
+}
+
+/** Vorschlag + Bearbeitungen → Felder für createItem. Pure (unit-getestet über die Route).
+ *  `edits.urls`: Teilmenge der Vorschlags-URLs (Strings oder { url }) — neue URLs
+ *  werden ignoriert, die Labels bleiben die des Vorschlags. */
 function mergeProposal(p, edits = {}) {
   const e = edits && typeof edits === 'object' ? edits : {};
   const pick = (k) => (typeof e[k] === 'string' ? e[k] : p[k]);
@@ -42,13 +55,13 @@ function mergeProposal(p, edits = {}) {
     title: cleanStr(pick('title'), TITLE_MAX) || '',
     body: cleanStr(pick('body'), BODY_MAX) || '',
     source: cleanStr(p.source, SOURCE_MAX) || '',
-    urls: normalizeUrls(p.urls).urls,
+    urls: _keptUrls(normalizeUrls(p.urls).urls, e.urls),
     tags: normalizeTags(Array.isArray(e.tags) ? e.tags : p.tags),
   };
 }
 
 // POST /research/chat-proposal
-// Body: { message_id, index, edits?: { title, body, kind, tags[] },
+// Body: { message_id, index, edits?: { title, body, kind, tags[], urls[] },
 //         link?: { target_kind: 'page'|'chapter', target_id }, allow_duplicate? }
 // 200 { item, proposal } · 409 DUPLICATE_URL { existing_id } · 409 ALREADY_SAVED { item_id }
 router.post('/chat-proposal', jsonBody, (req, res) => {

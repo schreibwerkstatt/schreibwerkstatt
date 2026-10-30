@@ -8,11 +8,12 @@
 // Anker im Buch), danach hält PATCH /ideen/chat-proposal fest, DASS erfasst bzw.
 // verworfen wurde — sonst stünde der Vorschlag nach einem Reload wieder offen
 // da. Der Text lässt sich vor dem Erfassen bearbeiten (transient `_draft`).
-// Transient am Vorschlagsobjekt: _draft, _editing, _busy, _error, _createdId.
+// Transient am Vorschlagsobjekt: _draft, _editing, _busy, _error und
+// _written/_appliedId (Idee angelegt, Status noch nicht — proposal-status.js#applyProposalOnce).
 
 import { fetchJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
-import { persistProposalStatus } from './proposal-status.js';
+import { persistProposalStatus, applyProposalOnce } from './proposal-status.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -62,33 +63,30 @@ export const chatIdeeProposalMethods = {
     const bookId = parseInt(window.Alpine.store('nav').selectedBookId, 10);
     p._busy = true;
     p._error = '';
-    try {
-      // Ist die Idee schon angelegt und nur der Status-PATCH gescheitert, legt
-      // ein zweiter Klick keine Dublette an, sondern holt nur den Status nach.
-      if (!p._createdId) {
-        const row = await fetchJson('/ideen', {
-          method: 'POST',
-          headers: JSON_HEADERS,
-          // Anker: Abschnitt ODER Kapitel — genau eins steht in fields.
-          body: JSON.stringify({
-            book_id: bookId, content,
-            ...(p.fields.page_id != null ? { page_id: p.fields.page_id } : { chapter_id: p.fields.chapter_id }),
-          }),
-        });
-        p._createdId = row?.id || null;
-        _bumpIdeenCount(p.fields);
-        // Erfasster Text ersetzt den Vorschlag in der Anzeige (lokal; der Server
-        // hält nur den Status fest, die Idee selbst steht in `ideen`).
-        p.fields = { ...p.fields, content };
-        p._editing = false;
-      }
-      await persistProposalStatus('/ideen/chat-proposal', msg, idx, 'applied', p._createdId);
-    } catch (e) {
-      console.error('[captureChatIdee]', e);
-      p._error = tFetchError(e);
-    } finally {
-      p._busy = false;
+    // Ist die Idee schon angelegt und nur der Status-PATCH gescheitert, legt ein
+    // zweiter Klick keine Dublette an, sondern holt nur den Status nach.
+    const r = await applyProposalOnce('/ideen/chat-proposal', msg, idx, async () => {
+      const row = await fetchJson('/ideen', {
+        method: 'POST',
+        headers: JSON_HEADERS,
+        // Anker: Abschnitt ODER Kapitel — genau eins steht in fields.
+        body: JSON.stringify({
+          book_id: bookId, content,
+          ...(p.fields.page_id != null ? { page_id: p.fields.page_id } : { chapter_id: p.fields.chapter_id }),
+        }),
+      });
+      _bumpIdeenCount(p.fields);
+      // Erfasster Text ersetzt den Vorschlag in der Anzeige (lokal; der Server
+      // hält nur den Status fest, die Idee selbst steht in `ideen`).
+      p.fields = { ...p.fields, content };
+      p._editing = false;
+      return row?.id || null;
+    });
+    if (!r.ok) {
+      console.error('[captureChatIdee]', r.error);
+      p._error = tFetchError(r.error);
     }
+    p._busy = false;
   },
 
   async toggleDiscardChatIdee(msg, idx) {

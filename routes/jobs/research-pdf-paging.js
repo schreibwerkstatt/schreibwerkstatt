@@ -22,12 +22,13 @@ const HIT_CONTEXT = 120;
 const _cacheKey = (url) => normalizeUrl(url) || url;
 
 /** scrapeUrl mit Lauf-Cache (pro ctx.web, Schlüssel = normalisierte URL). Das
- *  Redirect-Ziel bekommt denselben Eintrag — wer es danach liest, holt nicht neu. */
-function cachedScrape(url, web) {
+ *  Redirect-Ziel bekommt denselben Eintrag — wer es danach liest, holt nicht neu.
+ *  `maxBytes` (Rest des Byte-Budgets) gilt nur für einen neuen Abruf. */
+function cachedScrape(url, web, { maxBytes = 0 } = {}) {
   if (!web.scrapeCache) web.scrapeCache = new Map();
   const key = _cacheKey(url);
   if (!web.scrapeCache.has(key)) {
-    const p = urlScrape.scrapeUrl(url, { allowPdf: true });
+    const p = urlScrape.scrapeUrl(url, { allowPdf: true, ...(maxBytes > 0 ? { maxBytes } : {}) });
     // Ein Fehler soll nicht im Cache kleben (vorübergehender Timeout).
     p.then((page) => {
       const fin = page?.finalUrl ? _cacheKey(page.finalUrl) : null;
@@ -100,7 +101,9 @@ function searchPdf(pageTexts, term) {
  * Lesetext eines PDFs ab `seite`, jede Seite mit Marke. Für Nicht-PDFs null.
  * `starts[i]` ist die Position der Marke von Seite abSeite+i im Text,
  * `requested` die verlangte Seite (für den Hinweis bei einer Seite hinter dem Ende).
- * @returns {null | { text: string, abSeite: number, total: number, starts: number[], requested: number|null }}
+ * `total` = Seiten mit Text (der Seitentext ist wie der Volltext gedeckelt,
+ * lib/pdf-extract.js#extractPdfPages), `docTotal` = echte Seitenzahl des PDFs.
+ * @returns {null | { text: string, abSeite: number, total: number, docTotal: number, starts: number[], requested: number|null }}
  */
 function pdfReadText(page, seite) {
   const pages = page?.pdf?.pageTexts;
@@ -115,7 +118,8 @@ function pdfReadText(page, seite) {
     text += `[Seite ${abSeite + i}]\n${t}`;
   });
   const req = parseInt(seite, 10);
-  return { text, abSeite, total, starts, requested: Number.isFinite(req) ? req : null };
+  const docTotal = Math.max(total, Number(page.pdf.pages) || 0);
+  return { text, abSeite, total, docTotal, starts, requested: Number.isFinite(req) ? req : null };
 }
 
 /**
@@ -130,9 +134,11 @@ function pdfReadText(page, seite) {
 function pdfPaging(view, shownLen) {
   if (!view) return null;
   const { abSeite, total, starts, requested } = view;
+  const docTotal = Math.max(total, Number(view.docTotal) || 0);
   const notes = [];
-  if (requested && requested > total) notes.push(`Seite ${requested} gibt es nicht, das PDF hat ${total} Seiten; gezeigt ab Seite ${abSeite}.`);
-  const meta = { seiten: total, ab_seite: abSeite };
+  if (requested && requested > docTotal) notes.push(`Seite ${requested} gibt es nicht, das PDF hat ${docTotal} Seiten; gezeigt ab Seite ${abSeite}.`);
+  else if (requested && requested > total) notes.push(`Der Text des PDFs ist nach Seite ${total} gekappt (Zeichendeckel); Seite ${requested} ist nicht lesbar. Gezeigt ab Seite ${abSeite}.`);
+  const meta = { seiten: docTotal, ab_seite: abSeite, ...(docTotal > total ? { text_bis_seite: total } : {}) };
   if (shownLen < view.text.length) {
     let idx = 0;
     while (idx + 1 < starts.length && starts[idx + 1] < shownLen) idx++;

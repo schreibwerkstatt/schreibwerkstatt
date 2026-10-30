@@ -33,17 +33,55 @@ export const bookChatMethods = {
     return '';
   },
 
+  // Woher der Buchtext einer klassischen Antwort kam (context_info.retrievalMode
+  // + Grund des Rückfalls), als eine Zeile: «Stichwortsuche – Index fehlt …».
+  // Agentische Antworten zeigen das über ihren Werkzeug-Verlauf.
+  _bookChatRetrievalNote(msg) {
+    const ci = msg?.context_info;
+    if (!ci || ci.mode === 'agent' || !ci.retrievalMode) return '';
+    const t = (k, prm) => window.__app.t(k, prm);
+    const mode = { full: 'full', semantic: 'semantic', keyword: 'keyword' }[ci.retrievalMode];
+    if (!mode) return '';
+    const parts = [t(`chat.retrieval.${mode}`)];
+    const reason = ci.fullOverflow ? 'reasonFullOverflow' : ({
+      disabled: 'reasonDisabled', no_index: 'reasonNoIndex', no_hits: 'reasonNoHits', error: 'reasonError',
+    })[ci.retrievalFallback];
+    if (mode !== 'full' && reason) parts.push(t(`chat.retrieval.${reason}`));
+    if (ci.freshPages > 0) parts.push(t('chat.retrieval.freshPages', { n: ci.freshPages }));
+    if (ci.historyTrimmed > 0) parts.push(t('chat.retrieval.historyTrimmed'));
+    return parts.join(' – ');
+  },
+
+  // User-Frage, auf die die Antwort an `msgIdx` reagiert.
+  _bookChatQuestionFor(msgIdx) {
+    for (let i = msgIdx - 1; i >= 0; i--) {
+      const m = this.bookChatMessages[i];
+      if (m?.role === 'user') return String(m.content || '').trim();
+    }
+    return '';
+  },
+
   // Frage, die an den Recherche-Chat geht: vom Modell vorgeschlagen, sonst die
   // User-Frage, auf die diese Antwort reagiert.
   _bookChatResearchQuestion(msgIdx) {
     const msg = this.bookChatMessages[msgIdx];
     const proposed = (msg?.context_info?.recherche_frage || '').trim();
     if (proposed) return proposed;
-    for (let i = msgIdx - 1; i >= 0; i--) {
-      const m = this.bookChatMessages[i];
-      if (m?.role === 'user') return String(m.content || '').trim();
-    }
-    return '';
+    return this._bookChatQuestionFor(msgIdx);
+  },
+
+  // Antwort brach an einem Deckel ab (input_cap/max_iter): dieselbe Frage als neuen
+  // Lauf stellen. Einen «ganzes Buch»-Modus pro Frage gibt es serverseitig nicht —
+  // der Lauf startet nur neu (gleiche Deckel, frischer Werkzeug-Verlauf).
+  _bookChatCanRetry(msg) {
+    const r = msg?.context_info?.stop_reason;
+    return r === 'input_cap' || r === 'max_iter';
+  },
+  retryBookChatQuestion(msgIdx) {
+    const q = this._bookChatQuestionFor(msgIdx);
+    if (!q || this.bookChatLoading || this.isBookChatSessionActive(this.bookChatSessionId)) return;
+    this.bookChatInput = q;
+    return this.sendBookChatMessage();
   },
 
   // Frage an den Recherche-Chat übergeben. Schnittstelle: Window-Event
@@ -93,10 +131,7 @@ export const bookChatMethods = {
     canOpen: (ctx) => !!Alpine.store('nav').selectedBookId,
     sessionsUrl: (ctx) => '/chat/sessions/book/' + Alpine.store('nav').selectedBookId,
     newSessionUrl: '/chat/session/book',
-    newSessionBody: (ctx) => ({
-      book_id:   parseInt(Alpine.store('nav').selectedBookId),
-      book_name: ctx.$app.selectedBookName,
-    }),
+    newSessionBody: () => ({ book_id: parseInt(Alpine.store('nav').selectedBookId) }),
     sendUrl: '/jobs/book-chat',
     onBeforeNewSession: async function () {
       await fetch('/jobs/book-chat-cache?book_id=' + Alpine.store('nav').selectedBookId, { method: 'DELETE' });

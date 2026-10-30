@@ -99,6 +99,103 @@ function _applyBookChatAiOverrides(effectiveProvider, logger) {
   return overrides;
 }
 
+// ── Budget des klassischen Pfads ─────────────────────────────────────────────
+// Der Buchtext bekommt, was nach System-Overhead, Figuren-Deckel, Frage, Verlauf und
+// Gliederung vom Input-Budget übrig bleibt — nie mehr. Reicht der Rest nicht für
+// einen Mindestanteil Buchtext, wird zuerst der Verlauf von vorn gekürzt (älteste
+// Runden zuerst), dann die Gliederung weggelassen. Ein fester Boden darüber hinaus
+// liesse den Prompt auf kleinen Kontextfenstern überlaufen.
+const MIN_TEXT_CHARS = 20000;
+const MIN_TEXT_SHARE = 0.3;
+function _fitClassicBudget({ inputBudgetChars, fixedChars, history, buildOutline }) {
+  const want = Math.min(MIN_TEXT_CHARS, Math.floor(inputBudgetChars * MIN_TEXT_SHARE));
+  const len = (h) => h.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : 0), 0);
+  let hist = history.slice();
+  let gliederung = buildOutline(Math.max(2000, Math.floor(inputBudgetChars * 0.08)));
+  const avail = () => inputBudgetChars - fixedChars - len(hist) - (gliederung?.length || 0);
+  while (avail() < want && hist.length) {
+    hist.shift();
+    while (hist.length && hist[0].role !== 'user') hist.shift();
+  }
+  let outlineDropped = false;
+  if (avail() < want && gliederung) { gliederung = null; outlineDropped = true; }
+  return {
+    history: hist,
+    historyChars: len(hist),
+    historyTrimmed: history.length - hist.length,
+    gliederung,
+    outlineDropped,
+    textBudget: Math.max(0, Math.floor(avail() * 0.98)),
+  };
+}
+
+// Zeichenzahl des Buchtexts für die Volltext-Entscheidung. Quelle der Reihe nach:
+// frischer Seiten-Cache (exakt), sonst page_stats — Seiten OHNE Stats-Zeile zählen
+// nicht als 0, ihr Text wird live nachgemessen (eine Ladung nur für diese Seiten).
+async function _bookTextChars(bookId, cacheKey) {
+  const cached = bookPageCache.get(cacheKey);
+  if (cached && Date.now() - cached.loadedAt < BOOK_PAGE_CACHE_TTL_MS) {
+    return cached.pages.reduce((n, p) => n + p.text.length, 0);
+  }
+  const rows = listPagesWithStats(bookId);
+  let chars = 0;
+  const unknown = [];
+  for (const r of rows) {
+    if (r.has_stats) chars += r.chars || 0;
+    else unknown.push({ id: r.page_id });
+  }
+  if (unknown.length) {
+    const loaded = await contentStore.loadPagesBatch(unknown, null, { onError: () => null });
+    for (const pd of loaded) chars += htmlToText(pd.html || '').trim().length;
+  }
+  return chars;
+}
+
+// Alle Abschnitte des Buchs als Klartext — aus dem Seiten-Cache oder frisch über
+// den Content-Store (Batches à 5, mit Fortschritt). Füllt den Cache.
+async function _loadAllPageTexts(bookId, cacheKey, jobId, jobSignal) {
+  const cached = bookPageCache.get(cacheKey);
+  if (cached && Date.now() - cached.loadedAt < BOOK_PAGE_CACHE_TTL_MS) {
+    updateJob(jobId, { statusText: 'job.phase.pagesFromCache', progress: 40 });
+    return cached.pages;
+  }
+  updateJob(jobId, { statusText: 'job.phase.pageListLoading', progress: 8 });
+  let pages;
+  try { pages = await contentStore.listPages(bookId); }
+  catch (e) {
+    if (e?.status) throw i18nError('job.error.contentStorePageList', { status: e.status });
+    throw e;
+  }
+  const BATCH = 5;
+  const pageContents = [];
+  for (let i = 0; i < pages.length; i += BATCH) {
+    if (jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    updateJob(jobId, {
+      statusText: 'job.phase.loadingPagesBatch',
+      statusParams: { loaded: Math.min(i + BATCH, pages.length), total: pages.length },
+      progress: 10 + Math.round((i / Math.max(pages.length, 1)) * 30),
+    });
+    const batch = pages.slice(i, i + BATCH);
+    const results = await Promise.allSettled(batch.map(async p => {
+      try {
+        const pd = await contentStore.loadPage(p.id);
+        const text = htmlToText(pd.html || '').trim();
+        return text ? { name: p.name, id: p.id, slug: p.slug, book_slug: p.book_slug, text } : null;
+      } catch { return null; }
+    }));
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value) pageContents.push(r.value);
+    }
+  }
+  // FIFO-Eviction: ältesten Eintrag entfernen wenn Cache voll
+  if (bookPageCache.size >= BOOK_PAGE_CACHE_MAX) {
+    const firstKey = bookPageCache.keys().next().value;
+    bookPageCache.delete(firstKey);
+  }
+  bookPageCache.set(cacheKey, { pages: pageContents, loadedAt: Date.now() });
+  return pageContents;
+}
+
 async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
   const logger = makeJobLogger(jobId);
   const { buildBookChatSystemPrompt, buildGliederungBlock, SCHEMA_BOOK_CHAT } = await getPrompts(userEmail);
@@ -123,12 +220,11 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const jobSignal = jobAbortControllers.get(jobId)?.signal;
 
     // ── Historien-Rolling-Window (Anker + letzte 10 Nachrichten) ────────────────
-    const historyWithoutLast = buildAgenticHistory(session.id).slice(0, -1);
-    const historyChars = historyWithoutLast.reduce((s, m) => s + (m.content?.length || 0), 0);
-
     // ── Dynamisches Text-Budget (seiten-unabhängig) ─────────────────────────────
     // aiCfg.inputBudgetChars = (context_window − max_tokens_out − Sicherheitspuffer) · chars_per_token
-    // pro effektivem Provider. Davon noch Platz für System-Prompt und History reservieren.
+    // pro effektivem Provider. Davon Platz für System-Prompt, Figuren-Block, Frage,
+    // Verlauf und Gliederung reservieren (_fitClassicBudget kürzt Verlauf/Gliederung,
+    // wenn sonst kaum Buchtext Platz hätte).
     const SYSTEM_OVERHEAD_CHARS = 8000;   // ~2k Tokens für System-Prompt-Overhead
     // Der Figuren-Block wird RESERVIERT, nicht geschätzt: er steht im selben Prompt
     // und war die Grösse, die den Call vor jedem Buchtext am Kontextfenster scheitern
@@ -140,31 +236,50 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // Auszüge im Buch ein. Gedeckelt auf einen Anteil des Budgets; ihre tatsächliche
     // Länge geht vom Textbudget ab (der Block steht schon fest).
     const outline = await contentStore.bookOutline(session.book_id);
-    const gliederung = buildGliederungBlock(outline, { maxChars: Math.max(2000, Math.floor(aiCfg.inputBudgetChars * 0.08)) });
-    const TEXT_CHAR_BUDGET = Math.max(
-      20000,
-      Math.floor((aiCfg.inputBudgetChars - historyChars - SYSTEM_OVERHEAD_CHARS - FIGUREN_MAX_CHARS - (gliederung?.length || 0)) * 0.98)
-    );
+    const fit = _fitClassicBudget({
+      inputBudgetChars: aiCfg.inputBudgetChars,
+      fixedChars: SYSTEM_OVERHEAD_CHARS + FIGUREN_MAX_CHARS + message.length,
+      history: buildAgenticHistory(session.id).slice(0, -1),
+      buildOutline: (maxChars) => buildGliederungBlock(outline, { maxChars }),
+    });
+    const { history: historyWithoutLast, historyChars, gliederung, textBudget: TEXT_CHAR_BUDGET } = fit;
+    if (fit.historyTrimmed || fit.outlineDropped) {
+      logger.info(`Budget knapp: ${fit.historyTrimmed} Verlaufs-Nachrichten gekürzt${fit.outlineDropped ? ', Gliederung weggelassen' : ''}.`);
+    }
 
     // ── Retrieval: Volltext, Mini-RAG oder Keyword-Fallback ─────────────────────
-    // Passt das ganze Buch ins Text-Budget (Summe page_stats.chars), braucht es kein
-    // Retrieval: alle Abschnitte gehen in den Prompt (retrievalMode 'full') — jede
-    // Auswahl wäre dort nur ein Verlust. Sonst zieht bei vollständigem Embedding-Index
-    // die semantische Pipeline die bedeutungs-relevantesten Auszüge (Treffer-Chunks +
-    // Nachbarn, auf den Live-Seitentext abgebildet; seit dem Indexlauf geänderte Seiten
-    // per Keyword dazu). Fällt auf das Keyword-Scoring über alle Seiten zurück, wenn
-    // der Index fehlt oder unvollständig ist (Treffer deckten nur einen Teil des Buchs
-    // ab), das Backend ausfällt oder die Anfrage keine semantischen Treffer liefert.
-    // Der Grund steht in context_info.retrievalFallback. Suchtext = Frage + letzte
-    // Runde (Folgefragen) — für Semantik UND Keyword-Scoring.
+    // Passt das ganze Buch ins Text-Budget, braucht es kein Retrieval: alle
+    // Abschnitte gehen in den Prompt (retrievalMode 'full') — jede Auswahl wäre dort
+    // nur ein Verlust. Die Grösse kommt aus page_stats, fehlende Stats werden live
+    // gemessen (_bookTextChars); stellt sich beim Laden heraus, dass der Text doch
+    // nicht passt (Stats veraltet), fällt der Lauf ins Retrieval und vermerkt das
+    // als context_info.fullOverflow — nie still gekappte Kapitel unter dem Etikett
+    // 'full'. Sonst zieht bei vollständigem Embedding-Index die semantische Pipeline
+    // die bedeutungs-relevantesten Auszüge (Treffer-Chunks + Nachbarn, auf den
+    // Live-Seitentext abgebildet; seit dem Indexlauf geänderte Seiten per Keyword
+    // dazu). Fällt auf das Keyword-Scoring über alle Seiten zurück, wenn der Index
+    // fehlt oder unvollständig ist, das Backend ausfällt oder die Anfrage keine
+    // semantischen Treffer liefert. Der Grund steht in context_info.retrievalFallback.
+    // Suchtext = Frage + letzte Runde (Folgefragen) — für Semantik UND Keyword-Scoring.
     const query = retrievalQuery(message, historyWithoutLast);
     const scoreText = (q, text) => _scorePageRelevance(q, text, bookChatStopwords);
-    const bookChars = listPagesWithStats(session.book_id).reduce((n, p) => n + (p.chars || 0), 0);
+    const bookChars = await _bookTextChars(session.book_id, cacheKey);
     let selectedPages = [];
     let usedChars = 0;
     let totalPages = 0;
     let freshPages = 0;
+    let pageContents = null;
+    let fullOverflow = false;
     let retrievalMode = bookChars > 0 && bookChars <= TEXT_CHAR_BUDGET ? 'full' : 'keyword';
+    if (retrievalMode === 'full') {
+      pageContents = await _loadAllPageTexts(session.book_id, cacheKey, jobId, jobSignal);
+      const liveChars = pageContents.reduce((n, p) => n + p.text.length, 0);
+      if (liveChars > TEXT_CHAR_BUDGET) {
+        retrievalMode = 'keyword';
+        fullOverflow = true;
+        logger.info(`Volltext passt nicht (${liveChars} > ${TEXT_CHAR_BUDGET} Zeichen, Stats ${bookChars}) – Retrieval.`);
+      }
+    }
     let retrievalFallback = retrievalMode === 'full' || embed.isEnabled() ? null : 'disabled';
 
     if (retrievalMode !== 'full' && embed.isEnabled()) {
@@ -188,51 +303,9 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     }
 
     if (retrievalMode !== 'semantic') {
-      // ── Alle Seiten aus Cache oder frisch via Content-Store laden ─────────────
-      let pageContents;
-      const cached = bookPageCache.get(cacheKey);
-      if (cached && Date.now() - cached.loadedAt < BOOK_PAGE_CACHE_TTL_MS) {
-        pageContents = cached.pages;
-        updateJob(jobId, { statusText: 'job.phase.pagesFromCache', progress: 40 });
-      } else {
-        updateJob(jobId, { statusText: 'job.phase.pageListLoading', progress: 8 });
-        let pages;
-        try { pages = await contentStore.listPages(session.book_id); }
-        catch (e) {
-          if (e?.status) throw i18nError('job.error.contentStorePageList', { status: e.status });
-          throw e;
-        }
+      if (!pageContents) pageContents = await _loadAllPageTexts(session.book_id, cacheKey, jobId, jobSignal);
 
-        const BATCH = 5;
-        pageContents = [];
-        for (let i = 0; i < pages.length; i += BATCH) {
-          if (jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
-          updateJob(jobId, {
-            statusText: 'job.phase.loadingPagesBatch',
-            statusParams: { loaded: Math.min(i + BATCH, pages.length), total: pages.length },
-            progress: 10 + Math.round((i / Math.max(pages.length, 1)) * 30),
-          });
-          const batch = pages.slice(i, i + BATCH);
-          const results = await Promise.allSettled(batch.map(async p => {
-            try {
-              const pd = await contentStore.loadPage(p.id);
-              const text = htmlToText(pd.html || '').trim();
-              return text ? { name: p.name, id: p.id, slug: p.slug, book_slug: p.book_slug, text } : null;
-            } catch { return null; }
-          }));
-          for (const r of results) {
-            if (r.status === 'fulfilled' && r.value) pageContents.push(r.value);
-          }
-        }
-        // FIFO-Eviction: ältesten Eintrag entfernen wenn Cache voll
-        if (bookPageCache.size >= BOOK_PAGE_CACHE_MAX) {
-          const firstKey = bookPageCache.keys().next().value;
-          bookPageCache.delete(firstKey);
-        }
-        bookPageCache.set(cacheKey, { pages: pageContents, loadedAt: Date.now() });
-      }
-
-      // ── Relevanz-Scoring + Seitenauswahl ──────────────────────────────────────
+      // ── Relevanz-Scoring + Seitenauswahl ────────────────────────────────────
       updateJob(jobId, { statusText: 'job.phase.selectingPages', progress: 42 });
       const scored = pageContents.map(p => ({ ...p, score: scoreText(query, p.text) }));
       const anyScore = scored.some(p => p.score > 0);
@@ -284,7 +357,9 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       totalPages,
       retrievalMode,
       ...(retrievalFallback ? { retrievalFallback } : {}),
+      ...(fullOverflow ? { fullOverflow: true } : {}),
       ...(freshPages ? { freshPages } : {}),
+      ...(fit.historyTrimmed ? { historyTrimmed: fit.historyTrimmed } : {}),
       figuren:    figuren.length > 0,
       review:     !!review,
     };
@@ -382,6 +457,6 @@ function runBookChatJobDispatch(jobId, sessionId, userMsgId, message, userEmail)
 }
 
 module.exports = {
-  runBookChatJob, runBookChatJobDispatch, _applyBookChatAiOverrides,
+  runBookChatJob, runBookChatJobDispatch, _applyBookChatAiOverrides, _fitClassicBudget, _bookTextChars,
   get runBookChatJobAgent() { return _agent().runBookChatJobAgent; },
 };

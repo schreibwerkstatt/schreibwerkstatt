@@ -394,7 +394,7 @@ test('Deckel pro Runde: überzählige Aufrufe bekommen ein tool_result statt aus
 
 test('Kontextfenster-Schutz vor dem Call: Synthese mit gekürzten Ergebnissen der letzten Runde', async () => {
   const calls = mockCalls([
-    res({ stopReason: 'tool_use', tokensIn: 100, toolUses: [tu('lookup')] }),
+    res({ stopReason: 'tool_use', tokensIn: 100, rawContentBlocks: [{ type: 'tool_use', id: 'cb1', name: 'lookup', input: {} }], toolUses: [tu('lookup', {}, 'cb1')] }),
     res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'gekürzt synthetisiert' })] }),
   ]);
   const job = makeJob({ prep: { tokenBudget: 2000, inputCapInstruction: 'BUDGET' }, toolResult: () => ({ text: 'x'.repeat(40000) }) });
@@ -551,4 +551,186 @@ test('Werkzeug-Verlauf: Rundenprotokoll in context_info, übersprungene Aufrufe 
   assert.equal(j.liveTools[0].input, undefined, 'Live-Kopie ohne Rohargumente');
   assert.deepEqual(j.liveRounds[0], { iter: 1, tokIn: 500, tokOut: 20, note: 'Ich schaue zwei Stellen nach.' });
   assert.equal(j.liveRounds[1].note, undefined, 'Antwort-Runde: Text ist Antwort, keine Notiz');
+});
+
+test('nicht angebotenes Werkzeug: nicht ausgeführt, eigenes tool_result mit notOffered, Lauf geht weiter', async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('get_secret', {}, 'n1'), tu('lookup', {}, 'n2')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'ok' })] }),
+  ]);
+  const job = makeJob();
+  const out = await runJob(job, newSession());
+  assert.equal(out.content, 'ok');
+  assert.deepEqual(job.executed, ['lookup'], 'nur der angebotene Aufruf erreicht den Executor');
+  const results = calls[1].messages.at(-1).content;
+  assert.equal(results[0].tool_use_id, 'n1');
+  assert.equal(results[0].is_error, true);
+  const entry = job.ctx().toolLog.find(e => e.name === 'get_secret');
+  assert.equal(entry.skipped, true);
+  assert.equal(entry.errorKey, 'chat.toolError.notOffered');
+});
+
+test('Handler wirft: stabiler errorKey (generisch, mit Code), Rohtext nur fürs Modell', async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup', {}, 'e1'), tu('side_effect', { v: 1 }, 'e2')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'ok' })] }),
+  ]);
+  const job = makeJob({ toolResult: (name) => {
+    if (name === 'lookup') throw new Error('SQLITE_BUSY: database is locked');
+    const e = new Error('kaputt'); e.code = 'E_X'; throw e;
+  } });
+  await runJob(job, newSession());
+  const [a, b] = job.ctx().toolLog;
+  assert.equal(a.errorKey, 'chat.toolError.failed');
+  assert.equal(a.errorParams, undefined);
+  assert.equal(b.errorKey, 'chat.toolError.failedCode');
+  assert.deepEqual(b.errorParams, { code: 'E_X' });
+  assert.match(calls[1].messages.at(-1).content[0].content, /SQLITE_BUSY/, 'Modell sieht den Rohtext');
+});
+
+test('abgeschnittene Werkzeug-Runde: Aufrufe verfallen, Synthese statt Job-Fehler', async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'max_tokens', truncated: true, toolUses: [tu('side_effect', { v: 9 })], rawContentBlocks: [{ type: 'text', text: 'hal' }] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'aus dem Gesammelten' })] }),
+  ]);
+  const job = makeJob();
+  const out = await runJob(job, newSession());
+  assert.equal(out.content, 'aus dem Gesammelten');
+  assert.equal(out.ci.stop, 'truncated_round');
+  assert.deepEqual(job.executed, ['lookup'], 'Aufrufe der abgeschnittenen Runde laufen nicht');
+  assert.equal(calls[2].messages.at(-1).content, 'FORCE');
+  assert.ok(!calls[2].messages.some(m => m.role === 'assistant' && JSON.stringify(m.content).includes('"hal"')), 'abgeschnittener Turn bleibt draussen');
+});
+
+test('Synthese ohne serverseitige Werkzeuge; Runden davor mit vollem Satz', async () => {
+  const server = { type: 'web_search_20250305', name: 'web_search', max_uses: 3 };
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'fertig' })] }),
+  ]);
+  await runJob(makeJob({ prep: { tools: [...TOOLS, server], maxToolIter: 1 } }), newSession());
+  assert.deepEqual(calls[0].tools, [...ALL, 'web_search']);
+  assert.deepEqual(calls[1].tools, ALL);
+});
+
+test('Synthese endet mit pause_turn: Zwischenstand ist keine Antwort, zweiter Versuch, sonst Hinweis', async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'pause_turn', text: 'Ich suche noch weiter …' }),
+    res({ stopReason: 'pause_turn', text: 'Immer noch …' }),
+  ]);
+  const out = await runJob(makeJob({ prep: { maxToolIter: 1 } }), newSession());
+  assert.equal(calls.length, 3);
+  assert.equal(calls[2].messages.at(-1).content[0].text, 'FORCE');
+  assert.equal(out.content, '__i18n:chat.errors.maxIterReached__');
+});
+
+test('tool_rounds trägt Cache-Anteile; Verlauf speichert lange Eingaben gekürzt', async () => {
+  mockCalls([
+    res({ stopReason: 'tool_use', cacheReadIn: 900, cacheCreationIn: 50, toolUses: [tu('lookup', { pattern: 'x'.repeat(5000), ids: Array.from({ length: 80 }, (_, i) => i) })] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'ok' })] }),
+  ]);
+  const job = makeJob();
+  const out = await runJob(job, newSession());
+  const ci = out.ci;
+  assert.equal(ci.tool_rounds[0].cacheReadIn, 900);
+  assert.equal(ci.tool_rounds[0].cacheCreationIn, 50);
+  assert.equal(ci.tool_rounds[1].cacheReadIn, undefined);
+  const logged = job.ctx().toolLog[0].input;
+  assert.ok(logged.pattern.length <= 501);
+  assert.equal(logged.ids.length, 51);
+});
+
+test('_fitMessagesToBudget: ältere Runden und Websuchen werden mitgekürzt, Paarung bleibt', () => {
+  const { _fitMessagesToBudget } = require('../../routes/jobs/agentic-chat/helpers');
+  const big = 'x'.repeat(20000);
+  const msgs = [
+    { role: 'user', content: 'Frage' },
+    { role: 'assistant', content: [{ type: 'tool_use', id: 'a', name: 'lookup', input: {} },
+      { type: 'server_tool_use', id: 's', name: 'web_search', input: { query: 'q' } },
+      { type: 'web_search_tool_result', tool_use_id: 's', content: [{ type: 'web_search_result', url: 'https://e.x', title: 'T', encrypted_content: big }] }] },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'a', content: big }] },
+    { role: 'assistant', content: [{ type: 'tool_use', id: 'b', name: 'lookup', input: {} }] },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'b', content: big }] },
+    { role: 'user', content: 'FORCE' },
+  ];
+  const estimate = (m) => Math.ceil(JSON.stringify(m).length / 4);
+  // Budget, das nur mit beiden Runden UND ohne Treffer der Websuche reicht.
+  const fit = _fitMessagesToBudget(msgs, estimate, 2500, 4);
+  assert.equal(fit.trimmed, true);
+  assert.equal(fit.rounds, 2);
+  assert.equal(fit.webDropped, 1);
+  assert.ok(estimate(fit.messages) <= 2500, `noch ${estimate(fit.messages)}`);
+  assert.equal(fit.messages[2].content[0].tool_use_id, 'a');
+  assert.equal(fit.messages[4].content[0].tool_use_id, 'b');
+  assert.equal(fit.messages[1].content[2].tool_use_id, 's');
+  assert.equal(fit.messages[1].content[2].content.type, 'web_search_tool_result_error');
+  assert.equal(msgs[4].content[0].content, big, 'Eingabe bleibt unverändert');
+  // Passt schon: nichts angefasst.
+  const ok = _fitMessagesToBudget(msgs, estimate, 1e9, 4);
+  assert.equal(ok.trimmed, false);
+  assert.equal(ok.messages, msgs);
+});
+
+test('Synthese mit geändertem Präfix (Server-Werkzeug weg): Denkblöcke nur aus dem Request entfernt', async () => {
+  const server = { type: 'web_search_20250305', name: 'web_search', max_uses: 3 };
+  const think = { type: 'thinking', thinking: 'ich überlege', signature: 'sig' };
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', rawContentBlocks: [think, { type: 'tool_use', id: 'k1', name: 'lookup', input: {} }], toolUses: [tu('lookup', {}, 'k1')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'fertig' })] }),
+  ]);
+  const out = await runJob(makeJob({ prep: { tools: [...TOOLS, server], maxToolIter: 1 } }), newSession());
+  assert.equal(out.content, 'fertig');
+  const sent = calls[1].messages;
+  assert.ok(!JSON.stringify(sent).includes('"thinking"'), 'kein Denkblock im Synthese-Request');
+  const asst = sent.find(m => m.role === 'assistant');
+  assert.deepEqual(asst.content.map(b => b.type), ['tool_use'], 'Turn bleibt mit seinem tool_use stehen');
+});
+
+test('Synthese ohne Präfix-Änderung: Denkblöcke bleiben im Request', async () => {
+  const think = { type: 'thinking', thinking: 'ich überlege', signature: 'sig' };
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', rawContentBlocks: [think, { type: 'tool_use', id: 'k2', name: 'lookup', input: {} }], toolUses: [tu('lookup', {}, 'k2')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'fertig' })] }),
+  ]);
+  await runJob(makeJob({ prep: { maxToolIter: 1 } }), newSession());
+  const asst = calls[1].messages.find(m => m.role === 'assistant');
+  assert.deepEqual(asst.content.map(b => b.type), ['thinking', 'tool_use']);
+});
+
+test('Synthese nach pause_turn + Web-Deckel: offener server_tool_use und leerer Turn fallen aus dem Request', async () => {
+  const server = { type: 'web_search_20250305', name: 'web_search', max_uses: 3 };
+  const calls = mockCalls([
+    res({ stopReason: 'pause_turn', rawContentBlocks: [
+      { type: 'thinking', thinking: 't', signature: 's' },
+      { type: 'server_tool_use', id: 'p1', name: 'web_search', input: { query: 'a' } },
+      { type: 'web_search_tool_result', tool_use_id: 'p1', content: [] },
+      { type: 'server_tool_use', id: 'p2', name: 'web_search', input: { query: 'b' } },
+    ] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'fertig' })] }),
+  ]);
+  const stopBeforeRound = () => 'web_cap';
+  await runJob(makeJob({ prep: { tools: [...TOOLS, server], stopBeforeRound } }), newSession());
+  const sent = calls[1].messages;
+  const asst = sent.filter(m => m.role === 'assistant');
+  assert.equal(asst.length, 1);
+  assert.deepEqual(asst[0].content.map(b => b.type), ['server_tool_use', 'web_search_tool_result'], 'gepaarte Suche bleibt, offene und Denkblock fallen weg');
+  assert.equal(asst[0].content[0].id, 'p1');
+});
+
+test('_synthesisRequestMessages: leerer Turn fällt weg, Rollen bleiben im Wechsel, Eingabe unverändert', () => {
+  const { _synthesisRequestMessages } = require('../../routes/jobs/agentic-chat/helpers');
+  const msgs = [
+    { role: 'user', content: 'Frage' },
+    { role: 'assistant', content: [{ type: 'thinking', thinking: 't' }, { type: 'server_tool_use', id: 'x', name: 'web_search', input: {} }] },
+    { role: 'user', content: 'FORCE' },
+  ];
+  const out = _synthesisRequestMessages(msgs);
+  assert.equal(out.removedOpen, 1);
+  assert.deepEqual(out.messages, [{ role: 'user', content: [{ type: 'text', text: 'Frage' }, { type: 'text', text: 'FORCE' }] }]);
+  assert.equal(msgs[1].content.length, 2, 'gespeicherte Historie unangetastet');
+  const same = _synthesisRequestMessages([{ role: 'user', content: 'a' }, { role: 'assistant', content: [{ type: 'thinking', thinking: 't' }, { type: 'text', text: 'b' }] }]);
+  assert.equal(same.stripped, false);
+  assert.equal(same.thinkingStripped, 0);
 });

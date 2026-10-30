@@ -11,7 +11,9 @@
 //     Handler (die API führt es selbst aus); beim Suchweg 'searxng' laufen
 //     `web_search` und `read_web_page` als Function-Tools über ./research-web-tools.js.
 //   `propose_research_item` — sammelt nur in ctx.proposals; der User bestätigt
-//     jeden Vorschlag im Frontend (POST /research).
+//     jeden Vorschlag im Frontend (POST /research/chat-proposal). Ob die URLs in
+//     diesem Lauf tatsächlich abgerufen wurden, markiert der Job danach
+//     (research-chat-helpers.js#markProposalUrls).
 //
 // ctx = { bookId, userEmail, jobSignal, logger, offeredTools, proposals: [] }
 
@@ -22,6 +24,7 @@ const {
   cleanStr, normalizeUrls, normalizeTags, normalizeTitleForMatch,
 } = require('../../lib/research-validate');
 const { findDuplicateItem } = require('../../db/research-items');
+const { normalizeUrl } = require('../../lib/url-normalize');
 const { WEB_TOOLS } = require('./research-web-tools');
 
 const MAX_PROPOSALS = 12;
@@ -43,17 +46,24 @@ function tool_propose_research_item(input, ctx) {
   const { urls, hadBadUrl } = normalizeUrls(input.urls);
 
   if (!title && !body && !urls.length) {
-    return { ok: false, error: 'Vorschlag braucht mindestens Titel, Inhalt oder eine URL.' };
+    return { ok: false, error: 'Vorschlag braucht mindestens Titel, Inhalt oder eine URL.', errorKey: 'chat.toolError.proposalEmpty' };
   }
-  if (hadBadUrl && !urls.length) return { ok: false, error: 'URLs müssen mit http:// oder https:// beginnen.' };
+  if (hadBadUrl && !urls.length) {
+    return { ok: false, error: 'URLs müssen mit http:// oder https:// beginnen.', errorKey: 'chat.toolError.invalidParam', errorParams: { param: 'urls' } };
+  }
 
   if ((ctx.proposals?.length || 0) >= MAX_PROPOSALS) {
-    return { ok: false, error: `Maximal ${MAX_PROPOSALS} Vorschläge pro Antwort.` };
+    return { ok: false, error: `Maximal ${MAX_PROPOSALS} Vorschläge pro Antwort.`, errorKey: 'chat.toolError.proposalCap', errorParams: { max: MAX_PROPOSALS } };
   }
-  // Wortgleicher Titel schon in DIESER Antwort vorgeschlagen → kein zweiter Knopf.
+  // Wortgleicher Titel oder dieselbe URL (normalisiert: Tracking-Parameter, www.,
+  // http/https) schon in DIESER Antwort vorgeschlagen → kein zweiter Knopf.
   const tNorm = normalizeTitleForMatch(title);
   if (tNorm && ctx.proposals.some(p => normalizeTitleForMatch(p.title) === tNorm)) {
-    return { ok: false, error: 'Ein Vorschlag mit diesem Titel steht in dieser Antwort schon.' };
+    return { ok: false, error: 'Ein Vorschlag mit diesem Titel steht in dieser Antwort schon.', errorKey: 'chat.toolError.proposalDuplicate' };
+  }
+  const urlNorms = new Set(urls.map(u => normalizeUrl(u.url)).filter(Boolean));
+  if (urlNorms.size && ctx.proposals.some(p => (p.urls || []).some(u => urlNorms.has(normalizeUrl(u.url))))) {
+    return { ok: false, error: 'Ein Vorschlag mit dieser URL steht in dieser Antwort schon — ergänze ihn nicht doppelt.', errorKey: 'chat.toolError.proposalDuplicate' };
   }
 
   const proposal = { kind, title, body, urls, source, tags };
@@ -84,6 +94,8 @@ const OWN_TOOLS = {
 async function executeResearchTool(name, input, ctx) {
   if (!OWN_TOOLS[name] && CATALOG_TOOLS[name]) return executeCatalogTool(name, input, ctx);
   const fn = OWN_TOOLS[name];
+  // Nicht angebotene Werkzeuge weist schon der Loop ab (chat.toolError.notOffered);
+  // das hier ist nur der Rückfall für einen Namen, den es gar nicht gibt.
   if (!fn) throw new Error(`Unbekanntes Werkzeug: ${name}`);
   const result = await fn(input || {}, ctx);
   // Derselbe Deckel, den der Loop pro Werkzeug anlegt — sonst kürzte diese Stufe

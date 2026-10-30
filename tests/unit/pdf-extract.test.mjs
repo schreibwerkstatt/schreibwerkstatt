@@ -42,3 +42,12 @@ test('extractPdfText weist Nicht-PDF / leere / Nicht-Buffer ab', async () => {
   await assert.rejects(() => extractPdfText(Buffer.alloc(0)), /empty/);
   await assert.rejects(() => extractPdfText('nope'), /not-buffer/);
 });
+
+test('capPageTexts: Seitentexte zusammen höchstens max Zeichen (mit Absatzfuge), Rest gekappt', () => {
+  const { capPageTexts } = require('../../lib/pdf-extract.js');
+  assert.deepEqual(capPageTexts(['aaa', 'bbb'], 100), { pages: ['aaa', 'bbb'], truncated: false });
+  const r = capPageTexts(['aaaa', 'bbbb', 'cccc'], 8);
+  assert.deepEqual(r, { pages: ['aaaa', 'bb'], truncated: true });
+  assert.ok(r.pages.join('\n\n').length <= 8);
+  assert.deepEqual(capPageTexts(['aaaa', 'bbbb'], 6), { pages: ['aaaa'], truncated: true });
+});

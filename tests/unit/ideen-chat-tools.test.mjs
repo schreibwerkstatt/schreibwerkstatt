@@ -198,3 +198,106 @@ test('Gedächtnis: frühere Vorschläge der Session mit Status', () => {
   assert.deepEqual(mem.map(m => m.state), ['applied', 'discarded']);
   assert.match(mem[1].label, /→ erledigt/);
 });
+
+// ── Beleg-Heuhaufen = der Text, den das Modell liest (htmlToText) ─────────────
+const P_MARKUP = 7702013;
+insPage.run(P_MARKUP, BOOK, ch1, 'Markup',
+  '<p>Sie las das Buch <em>Der Prozess</em>, ging dann zum <a href="https://example.org">Bahnhof</a>.</p>'
+  + '<table><thead><tr><th>Ort</th><th>Zeit</th></tr></thead><tbody><tr><td>Bern</td><td>Morgens</td></tr></tbody></table>'
+  + '<p>Danach kam die Nachricht.</p>'
+  + '<div class="msg-thread"><p class="msg-in">bin gleich da</p><p class="msg-out">ok, 5 min</p></div>', NOW);
+
+test('Beleg-Prüfung: Inline-Markup, Tabelle und SMS-Verlauf wie im Lese-Werkzeug', async () => {
+  const { pageQuoteHaystack, belegInPage } = require('../../routes/jobs/ideen-chat-tools');
+  const { htmlToText } = require('../../routes/jobs/shared');
+  const { normalizeForQuoteMatch } = require('../../lib/quote-verify');
+  const html = db.prepare('SELECT body_html FROM pages WHERE page_id = ?').get(P_MARKUP).body_html;
+  // Ein Weg: derselbe HTML→Text wie get_pages/get_chapter_text.
+  assert.equal(pageQuoteHaystack(html), normalizeForQuoteMatch(htmlToText(html)));
+  // Satzzeichen direkt hinter einem Inline-Tag (kein Leerzeichen davor).
+  assert.equal(await belegInPage(P_MARKUP, 'das Buch Der Prozess, ging dann zum Bahnhof'), true);
+  // Tabellen sieht das Modell als Kurzform mit Kopf — ein Zitat daraus trägt.
+  assert.equal(await belegInPage(P_MARKUP, 'Kopf: Ort | Zeit'), true);
+  // Nachrichten eines SMS-Verlaufs bleiben Wortlaut.
+  assert.equal(await belegInPage(P_MARKUP, 'ok, 5 min'), true);
+  assert.equal(await belegInPage(P_MARKUP, 'Vater ist krank'), false);
+  // Fremdes Buch bzw. unbekannter Abschnitt: nie ein Treffer.
+  assert.equal(await belegInPage(P_MARKUP, 'ok, 5 min', OTHER_BOOK), false);
+  assert.equal(await belegInPage(99999999, 'x'), false);
+
+  const ctx = { ...mkCtx(), tree: await loadOrderedBookContents(BOOK, { includeExcluded: true }) };
+  const out = await executeIdeenChatTool('propose_idee', {
+    idee_id: iPage, status: 'erledigt', beleg: 'Buch Der Prozess, ging', beleg_page_id: P_MARKUP, begruendung: 'b',
+  }, ctx);
+  assert.equal(out.ok, true, out.error);
+});
+
+test('anker_loesen: offene Idee zurück ans Buch; nicht für Buch-Ideen, abgeschlossene, neue', async () => {
+  const ctx = mkCtx();
+  const ok = await executeIdeenChatTool('propose_idee', { idee_id: iChapter, anker_loesen: true, begruendung: 'passt nirgends' }, ctx);
+  assert.equal(ok.ok, true, ok.error);
+  const p = ctx.proposals[0];
+  assert.deepEqual(p.fields, { page_id: null, chapter_id: null });
+  assert.equal(p.before.chapter_id, ch2);
+  assert.equal(p.labels.anchor_kind, 'book');
+  assert.equal(p.labels.anchor_before, 'Heimkehr');
+  assert.match((await executeIdeenChatTool('propose_idee', { idee_id: iBook, anker_loesen: true, begruendung: 'b' }, ctx)).error, /keinem Ort/);
+  assert.match((await executeIdeenChatTool('propose_idee', { idee_id: iDone, anker_loesen: true, begruendung: 'b' }, ctx)).error, /wandert/);
+  assert.match((await executeIdeenChatTool('propose_idee', { content: 'neu', anker_loesen: true, begruendung: 'b' }, ctx)).error, /nur bei Änderungen/);
+  assert.match((await executeIdeenChatTool('propose_idee', { idee_id: iPage, anker_loesen: true, page_id: P2, begruendung: 'b' }, ctx)).error, /schliessen sich aus/);
+});
+
+test('Dieselbe neue Idee zweimal in einer Antwort → einmal gesammelt', async () => {
+  const ctx = mkCtx();
+  const a = await executeIdeenChatTool('propose_idee', { content: 'Zug verspätet', page_id: P2, begruendung: 'b' }, ctx);
+  const b = await executeIdeenChatTool('propose_idee', { content: '  zug verspätet ', page_id: P2, begruendung: 'b' }, ctx);
+  assert.equal(b.ok, true);
+  assert.equal(b.ref, a.ref);
+  assert.equal(ctx.proposals.length, 1);
+  // Anderer Ort = andere Idee.
+  await executeIdeenChatTool('propose_idee', { content: 'Zug verspätet', page_id: P1, begruendung: 'b' }, ctx);
+  assert.equal(ctx.proposals.length, 2);
+});
+
+test('Leerer Text heisst «nicht ändern» — in beiden Pfaden gleich', async () => {
+  const ctx = mkCtx();
+  // agentisch (direkter Handler-Aufruf) und klassisch liefern dasselbe Ergebnis.
+  const direct = await executeIdeenChatTool('propose_idee', { idee_id: iChapter, content: '', status: 'in_arbeit', begruendung: 'b' }, ctx);
+  assert.equal(direct.ok, true);
+  assert.deepEqual(ctx.proposals[0].fields, { status: 'in_arbeit' });
+  const ctx2 = mkCtx();
+  const { proposals } = await collectClassicProposals([
+    { werkzeug: 'propose_idee', idee_id: iChapter, content: '', status: 'in_arbeit', begruendung: 'b' },
+  ], ctx2, null);
+  assert.deepEqual(proposals[0].fields, ctx.proposals[0].fields);
+});
+
+test('fitIdeenOutline: knappes Budget kürzt Texte und zählt abgeschlossene nur', () => {
+  const { fitIdeenOutline } = require('../../routes/jobs/ideen-chat-context');
+  const state = loadIdeenState(BOOK, USER, tree);
+  const full = fitIdeenOutline(state);
+  assert.equal(full.trimmed, false);
+  assert.match(full.text, /Erledigte Sache/);
+  const small = fitIdeenOutline(state, { budgetChars: full.text.length - 1 });
+  assert.equal(small.trimmed, true);
+  assert.doesNotMatch(small.text, /Erledigte Sache/);
+  assert.match(small.text, /\+ 1 abgeschlossen: erledigt 1/);
+  assert.match(small.text, new RegExp(`\\[#${iPage}\\]`), 'offene Ideen bleiben');
+  const tiny = fitIdeenOutline(state, { budgetChars: 80 });
+  assert.ok(tiny.text.length <= 80 + 80);
+  assert.match(tiny.text, /gekürzt/);
+});
+
+test('Gedächtnis: übernommene, danach gelöschte neue Idee steht als «removed»', () => {
+  const sid = db.prepare(`INSERT INTO chat_sessions (book_id, kind, user_email, created_at, last_message_at) VALUES (?, 'ideen', ?, ?, ?)`)
+    .run(BOOK, USER, NOW, NOW).lastInsertRowid;
+  const ci = { proposals: [
+    { type: 'idee_create', fields: { content: 'Noch da' }, applied_at: NOW, applied_id: iBook },
+    { type: 'idee_create', fields: { content: 'Wieder weg' }, applied_at: NOW, applied_id: 99999999 },
+  ] };
+  db.prepare(`INSERT INTO chat_messages (session_id, role, content, context_info, created_at) VALUES (?, 'assistant', 'a', ?, ?)`)
+    .run(sid, JSON.stringify(ci), NOW);
+  const state = loadIdeenState(BOOK, USER, tree);
+  assert.deepEqual(sessionIdeenProposalMemory(sid, state).map(m => m.state), ['applied', 'removed']);
+  assert.deepEqual(sessionIdeenProposalMemory(sid).map(m => m.state), ['applied', 'applied'], 'ohne Stand keine Aussage');
+});

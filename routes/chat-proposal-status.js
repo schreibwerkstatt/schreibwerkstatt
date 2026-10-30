@@ -13,9 +13,15 @@
 // PATCH <mount>/chat-proposal
 //   Body: { message_id, index, action: 'applied'|'discarded'|'reopen', applied_id? }
 //   applied   → applied_at + applied_id (id des Angelegten bzw. Geänderten),
-//               hebt ein „verworfen" auf. Erneutes Übernehmen (z.B. nach Undo
-//               des Angelegten) überschreibt applied_id.
+//               hebt ein „verworfen" auf. Schon übernommen → 409
+//               PROPOSAL_ALREADY_APPLIED (Body trägt den gespeicherten
+//               `proposal`, das Frontend übernimmt ihn als Stand) — ausser das
+//               damit Angelegte gibt es nicht mehr (Undo, gelöscht;
+//               `appliedExists` des Routers): dann ist erneutes Übernehmen
+//               erlaubt und überschreibt applied_id.
 //   discarded → status='discarded' (409, wenn schon übernommen)
+// Konsumenten: Plot-Chat (PATCH /plot/chat-proposal), Ideen-Chat und die
+// Ideen-Vorschläge aus Abschnitts- und Buch-Chat (PATCH /ideen/chat-proposal).
 //   reopen    → hebt „verworfen" auf
 // Besitz über die Session (pro User) und deren `kind` — ein Plot-Vorschlag
 // lässt sich nicht über die Ideen-Route setzen und umgekehrt.
@@ -29,8 +35,13 @@ const { setContext } = require('../lib/log-context');
 
 const ACTIONS = new Set(['applied', 'discarded', 'reopen']);
 
-/** Router mit `PATCH /chat-proposal` für Sessions der Arten `kinds` (Buch-ACL editor). */
-function makeChatProposalStatusRouter({ kinds }) {
+/**
+ * Router mit `PATCH /chat-proposal` für Sessions der Arten `kinds` (Buch-ACL editor).
+ * `appliedExists(proposal, { bookId, userEmail })` → false, wenn das von einem
+ * übernommenen Vorschlag Angelegte nicht mehr existiert (dann darf er erneut
+ * übernommen werden); true/undefined = existiert bzw. nichts angelegt.
+ */
+function makeChatProposalStatusRouter({ kinds, appliedExists = null }) {
   const allowed = new Set(kinds);
   const router = express.Router();
   const jsonBody = express.json();
@@ -64,12 +75,16 @@ function makeChatProposalStatusRouter({ kinds }) {
       if (!p) { status = 404; body = { error_code: 'PROPOSAL_NOT_FOUND' }; return; }
       const next = { ...p };
       if (action === 'applied') {
+        if (p.applied_at) {
+          const gone = appliedExists && appliedExists(p, { bookId: session.book_id, userEmail }) === false;
+          if (!gone) { status = 409; body = { error_code: 'PROPOSAL_ALREADY_APPLIED', proposal: p }; return; }
+        }
         next.applied_at = new Date().toISOString();
         const appliedId = toIntId(req.body?.applied_id);
         if (appliedId) next.applied_id = appliedId;
         delete next.status;
       } else if (action === 'discarded') {
-        if (p.applied_at) { status = 409; body = { error_code: 'PROPOSAL_ALREADY_APPLIED' }; return; }
+        if (p.applied_at) { status = 409; body = { error_code: 'PROPOSAL_ALREADY_APPLIED', proposal: p }; return; }
         next.status = 'discarded';
       } else {
         delete next.status;

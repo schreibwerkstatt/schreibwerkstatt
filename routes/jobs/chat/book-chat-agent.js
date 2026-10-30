@@ -12,6 +12,7 @@ const { getBookSettings } = require('../../../db/book-settings');
 const { narrativeLabels } = require('../narrative-labels');
 const { getPrompts, getBookPrompts, getFiguren, getLatestReview } = require('../shared');
 const { executeTool, validateFinalAnswerCitations } = require('../chat-tools');
+const { MAX_FINAL_CITATIONS } = require('../chat-tools/citations');
 const { makeAgenticChatJob } = require('../agentic-chat');
 const { prepareChatTools } = require('../chat-tools/select');
 const { maxToolIterFor, agentLimits } = require('../agentic-chat/limits');
@@ -20,6 +21,7 @@ const { agentPreContext, preContextStatus, retrievalQuery } = require('./book-ch
 const appSettings = require('../../../lib/app-settings');
 const { getSessionWithBookName } = require('../../../db/chat-sessions');
 const { getPageWithChapter } = require('../../../db/book-chat/text');
+const { resolvePageBookId } = require('../../../lib/content-ownership');
 const { figurenBlockChars, weltfaktenBlockChars, _parseChatResponse } = require('./shared');
 const { runBookChatJob, _applyBookChatAiOverrides } = require('./book-chat');
 const { normalizeChatIdeeProposals } = require('../../../lib/chat-idee-proposals');
@@ -43,7 +45,9 @@ function _bookChatTokenBudget(aiCfg) {
 // der regulären Loop-Terminierung und dem erzwungenen Synthese-Turn.
 async function _consumeFinalAnswer(finalUse, ctx, toolLog, iterNum, logger) {
   const antwort = typeof finalUse.input?.antwort === 'string' ? finalUse.input.antwort : '';
-  const zitate  = Array.isArray(finalUse.input?.zitate) ? finalUse.input.zitate : null;
+  // Validiert (und als Fussnote gezeigt) werden höchstens MAX_FINAL_CITATIONS —
+  // dieselbe Liste geht in Validator, toolLog-Zähler und Fussnoten.
+  const zitate  = Array.isArray(finalUse.input?.zitate) ? finalUse.input.zitate.slice(0, MAX_FINAL_CITATIONS) : null;
   let citationValidation = null;
   let invalidCount = 0;
   if (zitate && zitate.length) {
@@ -77,7 +81,7 @@ async function _consumeFinalAnswer(finalUse, ctx, toolLog, iterNum, logger) {
     } : {}),
   });
   logger.info(`tool=final_answer antwort_chars=${antwort.length} zitate=${zitate?.length || 0} invalid=${invalidCount} iter=${iterNum} (terminal)`);
-  if (zitate && zitate.length) ctx.citations = _buildCitations(zitate, citationValidation);
+  if (zitate && zitate.length) ctx.citations = _buildCitations(zitate, citationValidation, ctx.bookId);
   const hint = _rechercheHint(finalUse.input);
   if (hint) ctx.recherche = hint;
   // Ideen-Vorschläge: nur Abschnitte dieses Buchs, nichts wird angelegt — der
@@ -90,13 +94,16 @@ async function _consumeFinalAnswer(finalUse, ctx, toolLog, iterNum, logger) {
 // aus dem eigenen Buch bekommen einen Seitennamen (= Sprungziel); eine fremde oder
 // unbekannte Seite bleibt ohne Link. Text gedeckelt — die Fussnote ist ein Beleg,
 // keine Kopie der Seite.
+// Die Buchzugehörigkeit wird hier selbst geprüft und NICHT aus dem Validator-Ergebnis
+// abgeleitet: der meldet `bad_shape` (oder bei eigenem Fehler `validator_error`), bevor
+// er das Buch prüft — ein fehlendes `page_not_in_book` heisst darum nicht «eigenes Buch».
 const CITATION_QUOTE_MAX = 400;
-function _buildCitations(zitate, validation) {
-  return zitate.slice(0, 30).map((z, i) => {
+function _buildCitations(zitate, validation, bookId) {
+  return zitate.slice(0, MAX_FINAL_CITATIONS).map((z, i) => {
     const v = Array.isArray(validation) ? validation[i] : null;
     const pageId = Number.isInteger(z?.page_id) ? z.page_id : null;
-    const inBook = v ? v.reason !== 'page_not_in_book' : false;
-    const row = pageId != null && inBook ? getPageWithChapter(pageId) : null;
+    const inBook = pageId != null && bookId != null && resolvePageBookId(pageId) === bookId;
+    const row = inBook ? getPageWithChapter(pageId) : null;
     const quote = String(z?.quote ?? v?.actual ?? '').slice(0, CITATION_QUOTE_MAX);
     return {
       n: i + 1,

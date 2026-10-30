@@ -15,38 +15,33 @@
 // Gespeichertes Format (context_info.proposals[i]), Felder je `type`:
 //   idee_create { fields: { content, page_id?|chapter_id? } }
 //   idee_update { idee_id, fields: { content?, status?, page_id?|chapter_id? }, before, beleg? }
+//               — `anker_loesen` setzt page_id UND chapter_id auf null (zurück ans Buch)
 //   link_create { idee_id|idee_ref, target_kind, target_id }
 // Gemeinsam: { type, ref, begruendung, labels }. `ref` ist 1-basiert über alle
 // Vorschläge DIESER Antwort; `idee_ref` zeigt auf ein idee_create derselben Antwort.
 // `beleg` = { text, page_id } — Textstelle, die eine Stufen-Änderung trägt
 // (Erledigt-Check). Sie wird beim Vorschlagen gegen den Abschnittstext geprüft
-// (lib/quote-verify.js): ein «erledigt» mit einem Zitat, das im Text nicht
-// steht, kommt als Fehler ans Modell zurück, nie beim User an. Persistierter Status (PATCH /ideen/chat-proposal):
+// (lib/quote-verify.js, Heuhaufen = pageQuoteHaystack, derselbe Text, den das
+// Modell liest): ein «erledigt» mit einem Zitat, das im Text nicht steht, kommt
+// als Fehler ans Modell zurück, nie beim User an. Beim Übernehmen wird es gegen
+// den dann aktuellen Text erneut geprüft (routes/ideen-chat-proposals.js). Persistierter Status (PATCH /ideen/chat-proposal):
 // applied_at + applied_id bzw. status='discarded'.
 
 const { executeTool: executeCatalogTool } = require('./chat-tools');
 const { loadIdeenState } = require('./ideen-chat-context');
 const { isIdeeStatus, isOpenIdeeStatus, isIdeaLinkKind } = require('../../lib/ideen-status');
 const contentStore = require('../../lib/content-store');
-const { htmlToPlainText } = require('../../lib/html-text');
+const { htmlToText } = require('./shared');
 const { normalizeForQuoteMatch, quoteFoundIn } = require('../../lib/quote-verify');
+const { str: _str, posInt: _int } = require('../../lib/proposal-input');
+const { ideeProposalKey } = require('../../lib/chat-idee-proposals');
+const { err: _err, pushProposal: _push, oneLine } = require('./proposal-chat-shared');
 
 const MAX_PROPOSALS = 40;
 const MAX_CONTENT = 4000; // = routes/ideen.js MAX_LEN
 const MAX_BELEG = 500;
-const MAX_BEGRUENDUNG = 600;
 
 const PROPOSE_TOOLS = new Set(['propose_idee', 'propose_idee_link']);
-
-function _str(v, max) {
-  if (typeof v !== 'string') return '';
-  return v.replace(/\r\n?/g, '\n').trim().slice(0, max);
-}
-function _int(v) {
-  const n = typeof v === 'string' && /^\d+$/.test(v.trim()) ? Number(v) : v;
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
-function _err(msg) { return { error: msg }; }
 
 // Ideen-Stand pro Antwort einmal laden; Vorschläge ändern ihn nicht.
 function _state(ctx) {
@@ -54,10 +49,7 @@ function _state(ctx) {
   return ctx._ideen;
 }
 
-function _preview(s, n = 120) {
-  const t = String(s || '').replace(/\s+/g, ' ').trim();
-  return t.length > n ? t.slice(0, n) + '…' : t;
-}
+function _preview(s, n = 120) { return oneLine(s, n); }
 
 // Anzeige-Name eines Ankers (Abschnitt bzw. Kapitel) oder null = Buch.
 function _anchorLabel(state, { page_id, chapter_id }) {
@@ -82,19 +74,39 @@ function _resolveAnchor(input, state) {
   return {};
 }
 
-function _push(ctx, proposal, input) {
-  const begruendung = _str(input.begruendung, MAX_BEGRUENDUNG);
-  const p = { ...proposal, ref: ctx.proposals.length + 1, ...(begruendung ? { begruendung } : {}) };
-  ctx.proposals.push(p);
-  return { ok: true, ref: p.ref, hinweis: 'Vorschlag gesammelt — der User übernimmt ihn selbst. Nicht wiederholen.' };
+/**
+ * Vergleichsform eines Abschnittstexts für die Beleg-Prüfung — derselbe
+ * HTML→Text-Weg, über den das Modell Abschnitte liest (htmlToText: Satzzeichen
+ * an Inline-Tags, Tabellen-Zusammenfassung, Nachrichtenverläufe), damit ein
+ * wörtlich übernommenes Zitat auch gefunden wird. Geteilt mit der Prüfung beim
+ * Übernehmen (routes/ideen-chat-proposals.js).
+ */
+function pageQuoteHaystack(html) {
+  return normalizeForQuoteMatch(htmlToText(html || ''));
+}
+
+/** Steht `beleg` (Zitat) im aktuellen Text von `pageId`? Lädt frisch über die Facade. */
+async function belegInPage(pageId, beleg, bookId = null) {
+  let page = null;
+  try { page = await contentStore.loadPage(pageId); } catch (e) {
+    if (e.code === 'NOT_FOUND' || e.status === 404) return false;
+    throw e;
+  }
+  if (!page || (bookId != null && page.book_id != null && page.book_id !== bookId)) return false;
+  return quoteFoundIn(beleg, pageQuoteHaystack(page.html));
 }
 
 function _proposeCreate(input, ctx, state) {
   if (input.status != null) return _err('Eine neue Idee beginnt immer als «offen» — status nur bei Änderungen (mit idee_id).');
   const content = _str(input.content, MAX_CONTENT);
   if (!content) return _err('Neue Idee braucht content (Stichpunkt, keine Prosa).');
+  if (input.anker_loesen === true) return _err('anker_loesen nur bei Änderungen (mit idee_id) — eine neue Idee ohne Ort ist schon eine Buch-Idee.');
   const anchor = _resolveAnchor(input, state);
   if (anchor.error) return anchor;
+  // Dieselbe neue Idee zweimal in einer Antwort: nicht doppelt sammeln.
+  const key = ideeProposalKey({ content, ...anchor });
+  const dup = ctx.proposals.find(p => p.type === 'idee_create' && ideeProposalKey(p.fields) === key);
+  if (dup) return { ok: true, ref: dup.ref, hinweis: `Dieselbe Idee ist schon als Vorschlag ref ${dup.ref} gesammelt — nicht doppelt.` };
   const label = _anchorLabel(state, anchor);
   return _push(ctx, {
     type: 'idee_create',
@@ -108,7 +120,7 @@ async function _pageHaystack(ctx, pageId) {
   if (!ctx._pageText) ctx._pageText = new Map();
   if (!ctx._pageText.has(pageId)) {
     const page = await contentStore.loadPage(pageId);
-    ctx._pageText.set(pageId, normalizeForQuoteMatch(htmlToPlainText(page?.html || '')));
+    ctx._pageText.set(pageId, pageQuoteHaystack(page?.html));
   }
   return ctx._pageText.get(pageId);
 }
@@ -120,11 +132,9 @@ async function _proposeUpdate(input, ctx, state, ideeId) {
   const before = {};
   const labels = { idee: _preview(idee.content) };
 
-  if (typeof input.content === 'string') {
-    const c = _str(input.content, MAX_CONTENT);
-    if (!c) return _err('content darf nicht leer sein.');
-    if (c !== idee.content) { fields.content = c; before.content = idee.content; }
-  }
+  // Leerer Text heisst «nicht angegeben» (beide Pfade, proposal-chat-shared.js).
+  const c = _str(input.content, MAX_CONTENT);
+  if (c && c !== idee.content) { fields.content = c; before.content = idee.content; }
   if (input.status != null) {
     if (!isIdeeStatus(input.status)) return _err(`Unbekannte Stufe «${input.status}». Erlaubt: ${state.stages.join(', ')}.`);
     if (input.status !== idee.status) {
@@ -138,7 +148,19 @@ async function _proposeUpdate(input, ctx, state, ideeId) {
   }
   const anchor = _resolveAnchor(input, state);
   if (anchor.error) return anchor;
-  if (anchor.page_id || anchor.chapter_id) {
+  if (input.anker_loesen === true) {
+    // Zurück ans Buch: PATCH /ideen/:id mit page_id = chapter_id = null.
+    if (anchor.page_id || anchor.chapter_id) return _err('anker_loesen und ein neuer Ort schliessen sich aus.');
+    if (idee.page_id == null && idee.chapter_id == null) return _err(`Idee #${ideeId} hängt schon an keinem Ort.`);
+    if (!isOpenIdeeStatus(idee.status)) return _err(`Idee #${ideeId} ist ${idee.status} — eine abgeschlossene Idee wandert nicht mehr.`);
+    fields.page_id = null;
+    fields.chapter_id = null;
+    before.page_id = idee.page_id ?? null;
+    before.chapter_id = idee.chapter_id ?? null;
+    labels.anchor = null;
+    labels.anchor_kind = 'book';
+    labels.anchor_before = _anchorLabel(state, idee) || null;
+  } else if (anchor.page_id || anchor.chapter_id) {
     // = routes/ideen.js: eine abgeschlossene Idee wandert nicht mehr.
     if (!isOpenIdeeStatus(idee.status)) return _err(`Idee #${ideeId} ist ${idee.status} — eine abgeschlossene Idee bekommt keinen neuen Ort.`);
     const same = anchor.page_id ? anchor.page_id === idee.page_id : anchor.chapter_id === idee.chapter_id;
@@ -157,6 +179,9 @@ async function _proposeUpdate(input, ctx, state, ideeId) {
   let beleg = null;
   const belegText = _str(input.beleg, MAX_BELEG);
   const bp = _int(input.beleg_page_id);
+  if (fields.status && ('page_id' in fields || 'chapter_id' in fields) && !isOpenIdeeStatus(fields.status)) {
+    return _err('Ort ändern und zugleich abschliessen geht nicht — eine Idee wandert nur, solange sie offen ist.');
+  }
   if (fields.status === 'erledigt' && (!belegText || !bp)) {
     return _err('Wer «erledigt» vorschlägt, belegt es: gib in `beleg` die Textstelle (wörtlich, kurz) an, die die Pendenz einlöst, und in beleg_page_id ihren Abschnitt.');
   }
@@ -227,4 +252,4 @@ async function executeIdeenChatTool(name, input, ctx) {
   return executeCatalogTool(name, input, ctx);
 }
 
-module.exports = { executeIdeenChatTool, MAX_PROPOSALS, PROPOSE_TOOLS };
+module.exports = { executeIdeenChatTool, MAX_PROPOSALS, PROPOSE_TOOLS, pageQuoteHaystack, belegInPage };

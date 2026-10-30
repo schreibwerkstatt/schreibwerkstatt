@@ -19,9 +19,14 @@
 //     args enthält u.a. `message` (die aktuelle Userfrage) und `history` (bisheriger
 //     Verlauf ohne die aktuelle Frage) — der Buch-Chat zieht daraus seinen
 //     semantischen Erst-Kontext, bevor der Loop startet.
-//     Die Werkzeugliste bleibt über alle Runden UND den Synthese-Turn dieselbe: sie
-//       steht vorn im Prompt-Cache (ein Wechsel schreibt den ganzen Präfix neu), und
-//       Thinking-Blöcke sind an den unveränderten Gesprächsanfang gebunden.
+//     Die Werkzeugliste bleibt über alle Runden dieselbe: sie steht vorn im
+//       Prompt-Cache (ein Wechsel schreibt den ganzen Präfix neu), und Thinking-Blöcke
+//       sind an den unveränderten Gesprächsanfang gebunden. Einzige Ausnahme ist der
+//       Synthese-Turn: er bekommt keine serverseitigen Werkzeuge (Anthropic-
+//       `web_search`) — sonst sucht die API dort weiter, und der Web-Such-Deckel hielte
+//       nicht. Der Cache-Fehlschlag dieses einen Calls ist der Preis dafür.
+//     Was `tools` enthält, ist der angebotene Satz: ein tool_use mit einem anderen
+//       Namen wird nicht ausgeführt (./run-tools.js), in jedem Chat gleich.
 //     stopBeforeRound({ iter, webSearches }) → stopReason-String oder null (opt-in):
 //       vor jeder weiteren Runde gefragt; ein String beendet die Recherche und führt
 //       in den Synthese-Turn (Recherche-Chat: Web-Such-Gesamtdeckel → 'web_cap').
@@ -53,7 +58,10 @@
 //   buildContextInfo({ toolLog, iter, webSearches, webResults, webQueries, ctx, stopReason, costUsd }) → object,
 //     webSearches/webResults/webQueries: Server-Tool-Suchen + webStats zusammen.
 //     stopReason: 'final_answer' | 'prose' | 'max_iter' | 'input_cap' | 'context_budget'
-//       | 'empty_tool_turn' | 'refusal' | Wert aus stopBeforeRound
+//       | 'empty_tool_turn' | 'refusal' | 'truncated_round' | Wert aus stopBeforeRound
+//       (truncated_round: eine Werkzeug-Runde endete am Output-Deckel — ihre Aufrufe
+//       verfallen, die Antwort kommt aus der Synthese über das bisher Gesammelte.
+//       Eine abgeschnittene Synthese bleibt ein Job-Fehler.)
 //       (context_budget: Kontextfenster-Schutz — die Runde, die das Budget sprengen
 //       würde, wird nicht mehr ausgeführt; Antwort aus der erzwungenen Synthese.
 //       refusal: ein Sicherheits-Klassifikator lehnte ab — gespeichert wird der
@@ -90,8 +98,10 @@ const {
   buildAgenticHistory, REFUSAL_MARKER, _ensureNonEmptyFinal, _proseFinal,
 } = require('./history');
 const {
-  _defaultModelFor, _estimateTokens, _fitMessagesToBudget, _synthesisError, _skipped, applyChatEffort,
+  _defaultModelFor, _estimateTokens, _fitMessagesToBudget, _synthesisError, applyChatEffort, isServerTool,
+  _synthesisRequestMessages,
 } = require('./helpers');
+const { makeToolRunner, capLogInput } = require('./run-tools');
 const { makeToolViewer, roundNote, liveTools, serverSearchEntry, applyServerSearchResult, LIVE_MAX_ROUNDS } = require('./tool-view');
 
 function makeAgenticChatJob(config) {
@@ -209,28 +219,41 @@ function makeAgenticChatJob(config) {
         if (Object.keys(updates).length) updateJob(jobId, updates);
       };
 
-      const call = async (msgs) => {
-        const result = await ai.callAIWithTools(msgs, systemPrompt, tools, onProgress, undefined, jobSignal, config.callProvider);
+      // `synthesis`: abgeschnittene Antwort ist ein Fehler (es gibt keinen weiteren
+      // Turn). In einer Werkzeug-Runde entscheidet der Loop selbst (truncated_round).
+      const call = async (msgs, { synthesis = false } = {}) => {
+        const callTools = synthesis ? synthTools : tools;
+        const result = await ai.callAIWithTools(msgs, systemPrompt, callTools, onProgress, undefined, jobSignal, config.callProvider);
         fallbackAllowed = false;
         state.rounds++;
         accumulate(result);
+        providerStops.push(result.stopReason || '-');
         // Runden-Protokoll für den Werkzeug-Verlauf: was das Modell vorhatte (Text neben
         // den Werkzeug-Aufrufen, sonst der letzte Thinking-Zwischenstand) und was die
         // Runde gekostet hat. Text einer Antwort-Runde ist die Antwort, keine Notiz.
         const narrates = result.stopReason === 'tool_use' || result.stopReason === 'pause_turn';
         const note = roundNote(narrates ? result.text : '') || roundNote(pendingNote);
         pendingNote = null;
+        // Cache-Anteil je Runde (nur Claude meldet ihn): zeigt, welche Runde den
+        // Präfix neu geschrieben hat statt ihn zu lesen.
         rounds.push({
           iter: state.rounds, tokIn: result.tokensIn || 0, tokOut: result.tokensOut || 0,
+          ...(result.cacheReadIn > 0 ? { cacheReadIn: result.cacheReadIn } : {}),
+          ...(result.cacheCreationIn > 0 ? { cacheCreationIn: result.cacheCreationIn } : {}),
           ...(note ? { note } : {}),
         });
         publishLive();
-        if (result.truncated) throw i18nError('job.error.aiTruncated', { max: aiCfg.maxTokensOut, tokIn: state.totalTokIn, tokOut: state.totalTokOut, total: state.totalTokIn + state.totalTokOut });
+        if (result.truncated && synthesis) throw i18nError('job.error.aiTruncated', { max: aiCfg.maxTokensOut, tokIn: state.totalTokIn, tokOut: state.totalTokOut, total: state.totalTokIn + state.totalTokOut });
         return result;
       };
 
       const toolLog = [];
       const rounds = [];
+      const providerStops = [];
+      // Für die Abschluss-Logzeile: nicht ausgeführte / nicht angebotene / gescheiterte Aufrufe.
+      const counters = { skipped: 0, notOffered: 0, failed: 0 };
+      // Synthese ohne serverseitige Werkzeuge (siehe Kopfkommentar).
+      const synthTools = tools.filter(t => !isServerTool(t));
       let pendingNote = null;
       // Live-Stand für den Werkzeug-Verlauf während des Laufs (GET /jobs/:id → liveTools).
       const publishLive = () => updateJob(jobId, { liveTools: liveTools(toolLog), liveRounds: rounds.slice(-LIVE_MAX_ROUNDS) });
@@ -256,79 +279,15 @@ function makeAgenticChatJob(config) {
         return JSON.stringify({ antwort: REFUSAL_MARKER });
       };
 
-      // Werkzeuge einer Runde ausführen (Ergebnisse als tool_result-Blöcke). Auch in
-      // der final_answer-Runde: Seiteneffekte in ctx (propose_research_item,
-      // generate_image) dürfen nicht verloren gehen, nur weil das Modell in derselben
-      // Runde schon abschliesst. Jeder tool_use bekommt GENAU ein tool_result — auch
-      // die nicht ausgeführten (kaputte Argumente, Deckel pro Runde), sonst ist die
-      // Folgerunde ein 400.
-      const runTools = async (toolUses, iterNum) => {
-        const toolResults = [];
-        let roundChars = 0;
-        let executed = 0;
-        for (const tu of toolUses) {
-          if (jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
-          const t0 = Date.now();
-          let out, ok = true, errMsg = null, skipped = false;
-          const remaining = roundResultCap - roundChars;
-          if (tu.parseError) {
-            skipped = true;
-            out = _skipped(`Werkzeug-Argumente waren kein gültiges JSON (${String(tu.parseError).slice(0, 120)}) – Aufruf NICHT ausgeführt. Wiederhole ihn mit gültigen Argumenten.`, 'chat.toolError.invalidArgs');
-          } else if (executed >= maxToolsPerRound) {
-            skipped = true;
-            out = _skipped(`Nicht ausgeführt: höchstens ${maxToolsPerRound} Werkzeug-Aufrufe pro Runde. Fordere ihn in der nächsten Runde erneut an, falls er noch nötig ist.`, 'chat.toolError.roundLimit', { max: maxToolsPerRound });
-          } else if (remaining < 500 || (Number(toolResultCaps[tu.name]) > 0 && remaining < capFor(tu.name))) {
-            // Ein Werkzeug mit eigenem Deckel (Recherche-Chat: read_web_page) misst sein
-            // Ergebnis auf genau diesen Deckel; passt der nicht mehr ins Rundenbudget,
-            // läuft es in der nächsten Runde, statt hier hart geschnitten zu werden.
-            skipped = true;
-            out = _skipped('Nicht ausgeführt: das Ergebnis-Budget dieser Runde ist ausgeschöpft. Fordere den Aufruf in der nächsten Runde erneut an, falls er noch nötig ist.', 'chat.toolError.roundBudget');
-          } else {
-            executed++;
-            try {
-              out = await config.executeTool(tu.name, tu.input, ctx);
-            } catch (e) {
-              if (e.name === 'AbortError') throw e;
-              ok = false; errMsg = e.message; out = { error: e.message };
-            }
-          }
-          const durationMs = Date.now() - t0;
-          // errorKey/errorParams sind fürs UI (Werkzeug-Liste), nicht fürs Modell.
-          let errorKey = null, errorParams = null;
-          if (out && typeof out === 'object' && !Array.isArray(out) && ('errorKey' in out || 'errorParams' in out)) {
-            ({ errorKey = null, errorParams = null } = out);
-            const { errorKey: _k, errorParams: _p, ...rest } = out;
-            out = rest;
-          }
-          const content = JSON.stringify(out);
-          const resultBytes = content.length;
-          const cap = Math.min(capFor(tu.name), remaining);
-          const truncated = resultBytes > cap || !!(out && typeof out === 'object' && out.truncated);
-          if (out && typeof out === 'object' && out.error && ok) errMsg = String(out.error);
-          const sent = resultBytes > cap ? content.slice(0, cap) + '…' : content;
-          roundChars += sent.length;
-          const callOk = ok && !(out && out.error);
-          const view = toolView(tu.name, tu.input, out, callOk);
-          toolLog.push({
-            name: tu.name, input: tu.input, ok: callOk, durationMs, resultBytes, truncated, iter: iterNum,
-            ...(view ? { view } : {}),
-            ...(skipped ? { skipped: true } : {}),
-            ...(errMsg ? { error: errMsg } : {}),
-            ...(errorKey ? { errorKey } : {}),
-            ...(errorKey && errorParams ? { errorParams } : {}),
-          });
-          if (ok && !(out && out.error)) logger.info(`tool=${tu.name} dur=${durationMs}ms bytes=${resultBytes}${truncated ? ' truncated' : ''} iter=${iterNum}`);
-          else logger.warn(`tool=${tu.name} dur=${durationMs}ms bytes=${resultBytes} iter=${iterNum} FAILED: ${errMsg}`);
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: tu.id,
-            content: sent,
-            ...(out && out.error ? { is_error: true } : {}),
-          });
-        }
-        publishLive();
-        return toolResults;
-      };
+      // Werkzeuge einer Runde ausführen (./run-tools.js). Auch in der final_answer-
+      // Runde: Seiteneffekte in ctx (propose_research_item, generate_image) dürfen
+      // nicht verloren gehen, nur weil das Modell in derselben Runde schon abschliesst.
+      const runTools = makeToolRunner({
+        executeTool: config.executeTool, ctx,
+        offered: new Set(tools.map(t => t?.name).filter(Boolean)),
+        caps: { maxToolsPerRound, roundResultCap, toolResultCaps, capFor },
+        toolLog, toolView, logger, jobSignal, publishLive, counters,
+      });
 
       for (iter = 0; iter < maxToolIter; iter++) {
         if (jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -362,6 +321,15 @@ function makeAgenticChatJob(config) {
         if (result.stopReason === 'refusal') {
           finalText = refusalFinal(result);
           stopReason = 'refusal';
+          break;
+        }
+
+        // Am Output-Deckel abgeschnitten: Aufrufe und Text dieser Runde sind
+        // unvollständig und verfallen. Statt den Lauf zu verlieren, antwortet die
+        // Synthese aus dem bisher Gesammelten (die Runde ist bezahlt und gebucht).
+        if (result.truncated) {
+          logger.warn(`Runde ${state.rounds} am Output-Deckel abgeschnitten (${aiCfg.maxTokensOut} Tokens, ${(result.toolUses || []).length} Aufruf(e) verworfen) – erzwinge Synthese.`);
+          stopReason = 'truncated_round';
           break;
         }
 
@@ -449,30 +417,52 @@ function makeAgenticChatJob(config) {
         updateJob(jobId, { statusText: 'job.phase.agentSynthesize', progress: 92 });
         const budgetStop = stopReason === 'input_cap' || stopReason === 'context_budget';
         const instruction = budgetStop ? (prep.inputCapInstruction ?? forceFinalInstruction) : forceFinalInstruction;
-        const fit = _fitMessagesToBudget([...messages, { role: 'user', content: instruction }], estimate, tokenBudget, aiCfg.charsPerToken);
-        if (fit.trimmed) logger.warn('Synthese-Turn: Ergebnisse der letzten Werkzeug-Runde aufs Kontext-Budget gekürzt.');
-        messages = fit.messages;
+        // Präfix-Änderung gegenüber den Runden: Server-Werkzeuge weg oder Ergebnisse
+        // gekürzt → die Synthese schickt keine Denkblöcke mit (helpers.js).
+        let prefixEdited = synthTools.length !== tools.length;
+        const fitToBudget = (msgs) => {
+          const fit = _fitMessagesToBudget(msgs, estimate, tokenBudget, aiCfg.charsPerToken);
+          if (fit.trimmed) prefixEdited = true;
+          if (fit.trimmed) logger.warn(`Synthese-Turn: Werkzeug-Ergebnisse aufs Kontext-Budget gekürzt (${fit.rounds} Runde(n)${fit.webDropped ? `, ${fit.webDropped} Websuche(n) ohne Trefferliste` : ''}).`);
+          return fit.messages;
+        };
+        messages = fitToBudget([...messages, { role: 'user', content: instruction }]);
         const synthCall = async () => {
           try {
-            return await call(messages);
+            const req = _synthesisRequestMessages(messages, { edited: prefixEdited });
+            if (req.thinkingStripped || req.removedOpen) logger.info(`Synthese-Turn: ${req.thinkingStripped} Denkblock/-blöcke und ${req.removedOpen} offene Server-Suche(n) aus dem Request genommen (Präfix geändert).`);
+            return await call(req.messages, { synthesis: true });
           } catch (e) {
             if (e.name === 'AbortError') throw e;
             logger.warn(`Synthese-Turn fehlgeschlagen: ${e.message}`);
             throw _synthesisError(e);
           }
         };
+        // Keine Antwort: Werkzeug-Aufruf statt final_answer, oder ein pausierter Turn
+        // (pause_turn) — dessen Text ist Zwischenstand, nie die Antwort.
+        const noAnswer = (r) => r.stopReason !== 'refusal'
+          && !(r.toolUses || []).some(tu => tu.name === 'final_answer')
+          && (r.stopReason === 'pause_turn' || (r.toolUses || []).length > 0);
         let result = await synthCall();
         let others = (result.toolUses || []).filter(tu => tu.name !== 'final_answer');
-        if (result.stopReason !== 'refusal' && others.length && !result.toolUses.some(tu => tu.name === 'final_answer')) {
-          logger.warn(`Synthese-Turn: Werkzeug-Aufruf statt Antwort (${others.map(tu => tu.name).join(', ')}) – nicht ausgeführt, zweiter Versuch.`);
-          messages.push({ role: 'assistant', content: result.rawContentBlocks });
-          messages.push({ role: 'user', content: [
-            ...others.map((tu) => {
-              toolLog.push({ name: tu.name, input: tu.input, ok: false, skipped: true, durationMs: 0, resultBytes: 0, truncated: false, iter: state.rounds, error: 'synthesis', errorKey: 'chat.toolError.synthesisOnly' });
-              return { type: 'tool_result', tool_use_id: tu.id, is_error: true, content: JSON.stringify({ error: 'Nicht ausgeführt: die Recherche ist beendet. Antworte jetzt mit final_answer aus dem bisher Gesammelten.' }) };
-            }),
-            { type: 'text', text: instruction },
-          ] });
+        if (noAnswer(result)) {
+          logger.warn(`Synthese-Turn: keine Antwort (stop=${result.stopReason || '-'}${others.length ? `, Werkzeug-Aufruf ${others.map(tu => tu.name).join(', ')}` : ''}) – nicht ausgeführt, zweiter Versuch.`);
+          if (others.length) {
+            messages.push({ role: 'assistant', content: result.rawContentBlocks });
+            messages.push({ role: 'user', content: [
+              ...others.map((tu) => {
+                counters.skipped++;
+                toolLog.push({ name: tu.name, input: capLogInput(tu.input), ok: false, skipped: true, durationMs: 0, resultBytes: 0, truncated: false, iter: state.rounds, error: 'synthesis', errorKey: 'chat.toolError.synthesisOnly' });
+                return { type: 'tool_result', tool_use_id: tu.id, is_error: true, content: JSON.stringify({ error: 'Nicht ausgeführt: die Recherche ist beendet. Antworte jetzt mit final_answer aus dem bisher Gesammelten.' }) };
+              }),
+              { type: 'text', text: instruction },
+            ] });
+          } else {
+            // Pausierter Turn: nicht fortsetzen (das hiesse weitersuchen), sondern die
+            // Anweisung erneut stellen.
+            messages.push({ role: 'user', content: [{ type: 'text', text: instruction }] });
+          }
+          messages = fitToBudget(messages);
           result = await synthCall();
           others = (result.toolUses || []).filter(tu => tu.name !== 'final_answer');
         }
@@ -487,7 +477,7 @@ function makeAgenticChatJob(config) {
           if (finalUse) {
             if (others.length) await runTools(others, state.rounds);
             finalText = await config.consumeFinalAnswer({ finalUse, ctx, toolLog, iterNum: state.rounds, logger });
-          } else if (!others.length) {
+          } else if (!others.length && result.stopReason !== 'pause_turn') {
             // Modell antwortete in Prosa statt via final_answer — Prosa IST die Antwort.
             finalText = _proseFinal(result.text);
           }
@@ -495,6 +485,7 @@ function makeAgenticChatJob(config) {
         }
       }
 
+      logger.info(`Abschluss: stop=${stopReason || '-'}, Runden=${state.rounds} (Provider-Stops ${providerStops.join(',') || '-'}), Werkzeug-Aufrufe=${toolLog.length}, übersprungen=${counters.skipped}, nicht angeboten=${counters.notOffered}, fehlgeschlagen=${counters.failed}.`);
       finalText = _ensureNonEmptyFinal(finalText);
       const antwort = config.parseFinal(finalText, logger);
 

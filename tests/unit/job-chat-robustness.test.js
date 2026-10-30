@@ -123,3 +123,25 @@ test('generateSessionTitle: Call bekommt ein Signal und wird im Ledger gebucht',
   assert.equal(row.tokens_in, 300);
   assert.equal(row.source, 'chat');
 });
+
+test('generateSessionTitle: spätere Runde titelt aus der ERSTEN Frage der Session', async () => {
+  const { generateSessionTitle } = require('../../routes/jobs/chat-title');
+  db.prepare(`INSERT OR IGNORE INTO books (book_id, name, created_at, updated_at) VALUES (77, 'T', '2026-01-01', '2026-01-01')`).run();
+  const sid = db.prepare(`INSERT INTO chat_sessions (book_id, user_email, kind, created_at, last_message_at)
+    VALUES (77, 'u@x', 'book', '2026-01-01', '2026-01-01')`).run().lastInsertRowid;
+  const ins = db.prepare(`INSERT INTO chat_messages (session_id, role, content, created_at) VALUES (?, ?, ?, ?)`);
+  ins.run(sid, 'user', 'Wie alt ist Anna?', '2026-01-01T10:00:00.000Z');
+  ins.run(sid, 'assistant', 'Anna ist 34.', '2026-01-01T10:00:05.000Z');
+  ins.run(sid, 'user', 'Und ihr Bruder?', '2026-01-01T10:01:00.000Z');
+  ins.run(sid, 'assistant', 'Tom ist 30.', '2026-01-01T10:01:05.000Z');
+  let seenConvo = null;
+  mockCall = async (convo) => {
+    seenConvo = convo;
+    return { text: '{"titel":"Annas Alter"}', truncated: false, tokensIn: 10, tokensOut: 3, provider: 'claude', model: 'm' };
+  };
+  const session = { id: sid, title: null, user_email: 'u@x', kind: 'book', book_id: 77 };
+  await generateSessionTitle({ session, userMessage: 'Und ihr Bruder?', assistantAnswer: 'Tom ist 30.', provider: 'claude' });
+  assert.match(seenConvo, /Wie alt ist Anna\?/);
+  assert.match(seenConvo, /Anna ist 34/);
+  assert.doesNotMatch(seenConvo, /Bruder|Tom/);
+});

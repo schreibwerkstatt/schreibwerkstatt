@@ -6,14 +6,17 @@
 // übernommen; ein „alle übernehmen" gibt es bewusst nicht.
 //
 // Persistierter Status (PATCH /ideen/chat-proposal): applied_at + applied_id bzw.
-// status='discarded'. Transient am Vorschlagsobjekt: _applying, _error.
+// status='discarded'. Transient am Vorschlagsobjekt: _applying, _error,
+// _written/_appliedId (Board geschrieben, Status noch nicht —
+// proposal-status.js#applyProposalOnce) und _belegMissing (der Beleg eines
+// «erledigt» stand beim Übernehmen nicht mehr im Abschnitt).
 // Format der Vorschläge: routes/jobs/ideen-chat-tools.js (Kopfkommentar).
 // Deep-Doc: docs/ideen-chat.md
 
 import { fetchJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
 import { diffParts } from '../diff/diff-parts.js';
-import { persistProposalStatus } from './proposal-status.js';
+import { persistProposalStatus, applyProposalOnce } from './proposal-status.js';
 import { IDEE_OPEN_STATUSES } from '../book/ideen-shared.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -56,7 +59,8 @@ export function ideenProposalStatus(p, proposals, ideen, stages = null) {
       out.blocked = { key: 'ideenBoard.chat.block.stageInactive', params: { status: f.status } };
       return out;
     }
-    if ((f.page_id || f.chapter_id) && !IDEE_OPEN_STATUSES.includes(idee.status)) {
+    // Ortswechsel und Anker lösen (page_id = chapter_id = null) nur für offene Ideen.
+    if (('page_id' in f || 'chapter_id' in f) && !IDEE_OPEN_STATUSES.includes(idee.status)) {
       out.blocked = { key: 'ideenBoard.chat.block.closed' };
       return out;
     }
@@ -138,31 +142,54 @@ export const ideenProposalMethods = {
     const p = list[pi];
     if (!p || p._applying || this.busy) return;
     const st = ideenProposalStatus(p, list, this.ideen || [], this.stages);
-    if (st.state !== 'open' || st.blocked) return;
+    if (st.state !== 'open' || (st.blocked && !p._written)) return;
     p._applying = true;
     p._error = '';
-    this.busy = true;
-    let appliedId = null;
     try {
-      appliedId = await this._applyIdeenProposalByType(p, list);
-    } catch (e) {
-      p._error = e?.body ? tFetchError(e) : app.t('ideenBoard.chat.applyError');
-      p._applying = false;
+      // «erledigt» steht auf einem Beleg aus dem Text DES VORSCHLAGS-ZEITPUNKTS —
+      // vor dem Übernehmen gegen den aktuellen Abschnitt prüfen (Server, gleiche
+      // Normalisierung wie beim Vorschlagen). Fehlt er, nur nach Rückfrage.
+      if (!p._written && !(await this._confirmIdeenBeleg(msg, pi, p))) return;
+      this.busy = true;
+      const r = await applyProposalOnce('/ideen/chat-proposal', msg, pi, async () => {
+        const id = await this._applyIdeenProposalByType(p, list);
+        this.busy = false;
+        this.errorMessage = '';
+        this._memos = {};
+        this._publishCounts();
+        await this._ensureBoardSortables();
+        return id;
+      });
+      if (r.ok) return;
+      if (r.phase === 'write') p._error = r.error?.body ? tFetchError(r.error) : app.t('ideenBoard.chat.applyError');
+      // Das Board ist geändert, nur der Status fehlt — der nächste Klick holt nur
+      // den Status nach.
+      else p._error = app.t('ideenBoard.chat.statusError');
+    } finally {
       this.busy = false;
-      return;
+      p._applying = false;
     }
-    this.busy = false;
-    this.errorMessage = '';
-    this._memos = {};
-    this._publishCounts();
-    await this._ensureBoardSortables();
+  },
+
+  // → true = übernehmen. Prüft den Beleg eines «erledigt»-Vorschlags gegen den
+  // aktuellen Abschnittstext; fehlt er, markiert den Vorschlag (_belegMissing)
+  // und fragt nach. Ein Prüf-Fehler (offline, Server) bricht ab, statt
+  // ungeprüft zu übernehmen.
+  async _confirmIdeenBeleg(msg, pi, p) {
+    if (p.type !== 'idee_update' || p.fields?.status !== 'erledigt' || !p.beleg?.text) return true;
+    const app = window.__app;
+    let r;
     try {
-      await persistProposalStatus('/ideen/chat-proposal', msg, pi, 'applied', appliedId);
-    } catch {
-      // Das Board ist geändert, nur der Status fehlt — sichtbar machen statt
-      // verschlucken (ein Reload zeigte den Vorschlag sonst wieder offen).
-      p._error = app.t('ideenBoard.chat.statusError');
-    } finally { p._applying = false; }
+      r = await fetchJson('/ideen/chat-proposal/beleg-check', {
+        method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ message_id: msg.id, index: pi }),
+      });
+    } catch (e) {
+      p._error = tFetchError(e);
+      return false;
+    }
+    p._belegMissing = r?.checked === true && r.found === false;
+    if (!p._belegMissing) return true;
+    return !!(await app.appConfirm({ message: app.t('ideenBoard.chat.belegGoneConfirm') }));
   },
 
   async discardIdeenProposal(msg, pi, discard = true) {

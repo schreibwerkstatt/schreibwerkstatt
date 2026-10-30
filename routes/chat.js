@@ -7,7 +7,7 @@ const { aclParamGuard, guardBook, sessionEmail } = require('../lib/acl');
 const { pageBookGuard } = require('../lib/page-guard');
 const chatSessions = require('../db/chat-sessions');
 const chatQuality = require('../db/chat-quality');
-const { htmlToText } = require('./jobs/shared');
+const { htmlToText, findActiveJobId, cancelJob } = require('./jobs/shared');
 const { setContext } = require('../lib/log-context');
 const { searchChatHistory } = require('../lib/chat-search');
 const { enqueueChatEmbedIndexJob } = require('./jobs/chat-embed-index');
@@ -223,13 +223,26 @@ router.get('/image/:id', (req, res) => {
   res.end(row.image);
 });
 
-/** Session löschen */
+// Job-Typ je Session-Art (routes/jobs/chat.js): der Lauf trägt die Session-ID als Dedup-ID.
+const CHAT_JOB_TYPE_BY_KIND = {
+  page: 'chat', book: 'book-chat', research: 'research-chat', plot: 'plot-chat', ideen: 'ideen-chat',
+};
+
+/** Session löschen. Läuft für sie noch ein Chat-Job (alle fünf Chats), wird er
+ *  vorher abgebrochen — sonst arbeitet er weiter, bezahlt KI-Calls und schreibt
+ *  am Ende in eine Session, die es nicht mehr gibt. */
 router.delete('/session/:id', (req, res) => {
   const userEmail = sessionEmail(req);
   const id = toIntId(req.params.id);
   if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
   const owned = chatSessions.getOwnedSession(id, userEmail);
   if (owned?.book_id) setContext({ book: owned.book_id });
+  const jobType = owned ? CHAT_JOB_TYPE_BY_KIND[owned.kind] : null;
+  const activeJobId = jobType ? findActiveJobId(jobType, id, userEmail) : null;
+  if (activeJobId) {
+    cancelJob(activeJobId, userEmail);
+    logger.info(`[chat/session] Laufender ${jobType}-Job ${activeJobId} vor dem Löschen der Session ${id} abgebrochen.`);
+  }
   db.prepare('DELETE FROM chat_sessions WHERE id = ? AND user_email = ?')
     .run(id, userEmail);
   res.json({ ok: true });

@@ -306,3 +306,16 @@ test('lib/pdf-extract.js ist Text: kein literales NUL-Byte (git sähe die Datei 
   const buf = readFileSync(new URL('../../lib/pdf-extract.js', import.meta.url));
   assert.equal(buf.indexOf(0), -1);
 });
+
+test('scrapeUrl: bytes im Ergebnis, maxBytes deckelt unter dem Typ-Deckel', async () => {
+  const pdf = await makePdf('Byte-Budget.', 'B');
+  let restore = stubFetch(async () => binResponse(pdf, 'application/pdf'));
+  try {
+    const r = await scrapeUrl('https://x.example.org/b.pdf', { allowPdf: true });
+    assert.equal(r.bytes, pdf.length);
+  } finally { restore(); }
+  restore = stubFetch(async () => binResponse(pdf, 'application/pdf'));
+  try {
+    await assert.rejects(scrapeUrl('https://x.example.org/b.pdf', { allowPdf: true, maxBytes: 10 }), (e) => e.code === 'SCRAPE_TOO_LARGE');
+  } finally { restore(); }
+});

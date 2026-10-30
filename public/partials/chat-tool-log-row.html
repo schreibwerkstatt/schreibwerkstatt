@@ -25,6 +25,6 @@
   <span class="chat-context-badge" x-show="row.truncated" :data-tip="$app.t('chat.toolTruncatedTip')" x-text="row.truncated"></span>
   <span class="chat-context-badge" x-show="row.repeat" :data-tip="$app.t('chat.toolRepeatTip')" x-text="$app.t('chat.toolRepeat')"></span>
   <span class="chat-context-badge" x-show="row.skipped" x-text="$app.t('chat.toolSkipped')"></span>
-  <span class="chat-context-badge chat-context-badge--error" x-show="row.failed" x-text="$app.t('chat.toolFailed')"></span>
+  <span class="chat-context-badge chat-context-badge--error" x-show="row.failed" :title="row.errorDetail || null" x-text="$app.t('chat.toolFailed')"></span>
   <span class="chat-tool-log-error" x-show="row.error" x-text="row.error"></span>
 </div>

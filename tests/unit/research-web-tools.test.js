@@ -333,3 +333,81 @@ test('web_search: eine gesperrte Engine neben Rohtreffern ist kein Ausfall — E
   assert.equal(searxng.searchBlocked({ results: [], unresponsive: [], rawCount: 0 }), false);
   assert.equal(searxng.searchBlocked({ results: [hit(1)], unresponsive: ['x'], rawCount: 1 }), false);
 });
+
+// ── Abgerufen wird die gespeicherte URL, nie die Modell-Fassung ──────────────
+test('read_web_page: utm/fbclid-, www- und http-Varianten holen die gespeicherte Treffer-URL', async () => {
+  const fetchedUrls = [];
+  urlScrape.scrapeUrl = async (u) => { fetchedUrls.push(u); return { title: 'S', text: 'x', finalUrl: u }; };
+  searxng.search = async () => ({ results: [{ title: 'T', url: 'https://www.ex.com/artikel', snippet: '' }], unresponsive: [] });
+  const variants = [
+    'https://www.ex.com/artikel?utm_source=GEHEIMER-MANUSKRIPTTEXT',
+    'http://ex.com/artikel?fbclid=leak',
+    'https://ex.com/artikel/',
+  ];
+  for (const v of variants) {
+    const ctx = mkCtx();
+    await executeResearchTool('web_search', { query: 'q' }, ctx);
+    const r = await executeResearchTool('read_web_page', { url: v }, ctx);
+    assert.ok(!r.error, r.error);
+    assert.equal(r.url, 'https://www.ex.com/artikel', 'Ergebnis nennt die gespeicherte URL');
+    assert.deepEqual(ctx.web.pages.map(p => p.url), ['https://www.ex.com/artikel']);
+  }
+  assert.deepEqual(fetchedUrls, Array(3).fill('https://www.ex.com/artikel'), 'nie der Modell-String');
+  assert.ok(!fetchedUrls.some(u => /GEHEIM|leak/.test(u)));
+});
+
+test('read_web_page: User- und Board-URL — abgerufen wird der gespeicherte String', async () => {
+  const fetchedUrls = [];
+  urlScrape.scrapeUrl = async (u) => { fetchedUrls.push(u); return { title: 'S', text: 'x', finalUrl: u }; };
+  const id = createItem({ bookId: BOOK, userEmail: 'u@example.com', kind: 'link', title: 'Board', urls: [{ url: 'https://board.example.org/a', label: '' }] });
+  assert.ok(id);
+  const ctx = mkCtx({ userMessageUrls: ['https://user.example.org/x'] });
+  await executeResearchTool('read_web_page', { url: 'https://user.example.org/x?utm_campaign=x' }, ctx);
+  await executeResearchTool('read_web_page', { url: 'http://www.board.example.org/a?gclid=1' }, ctx);
+  assert.deepEqual(fetchedUrls, ['https://user.example.org/x', 'https://board.example.org/a']);
+});
+
+test('read_web_page: gescheiterte Abrufe zählen in den Lesedeckel', async () => {
+  let fetched = 0;
+  urlScrape.scrapeUrl = async () => { fetched++; const e = new Error('t'); e.code = 'SCRAPE_TIMEOUT'; throw e; };
+  stubSearch([Array.from({ length: 8 }, (_, i) => hit(i + 1))]);
+  const ctx = mkCtx();
+  await executeResearchTool('web_search', { query: 'q' }, ctx);
+  for (let n = 1; n <= 6; n++) {
+    const r = await executeResearchTool('read_web_page', { url: `https://ex.com/${n}` }, ctx);
+    assert.equal(r.errorKey, 'chat.toolError.serviceUnavailable');
+  }
+  assert.equal(ctx.web.fetches, 6);
+  const over = await executeResearchTool('read_web_page', { url: 'https://ex.com/7' }, ctx);
+  assert.equal(over.errorKey, 'chat.toolError.pageReadCap');
+  assert.equal(fetched, 6, 'der siebte Versuch geht nicht hinaus');
+});
+
+test('read_web_page: Byte-Budget je Antwort — Rest als Deckel, danach errorKey', async () => {
+  const { MAX_FETCH_BYTES } = require('../../routes/jobs/research-web-tools');
+  const opts = [];
+  urlScrape.scrapeUrl = async (u, o) => { opts.push(o); return { title: 'S', text: 'x', finalUrl: u, bytes: MAX_FETCH_BYTES - 1000 }; };
+  stubSearch([[hit(1), hit(2), hit(3)]]);
+  const ctx = mkCtx();
+  await executeResearchTool('web_search', { query: 'q' }, ctx);
+  await executeResearchTool('read_web_page', { url: 'https://ex.com/1' }, ctx);
+  assert.equal(opts[0].maxBytes, MAX_FETCH_BYTES);
+  urlScrape.scrapeUrl = async (u, o) => { opts.push(o); return { title: 'S', text: 'x', finalUrl: u, bytes: 1000 }; };
+  await executeResearchTool('read_web_page', { url: 'https://ex.com/2' }, ctx);
+  assert.equal(opts[1].maxBytes, 1000, 'zweiter Abruf bekommt nur den Rest');
+  const over = await executeResearchTool('read_web_page', { url: 'https://ex.com/3' }, ctx);
+  assert.equal(over.errorKey, 'chat.toolError.pageBytesCap');
+  assert.equal(opts.length, 2);
+  // Schon geholtes Dokument bleibt lesbar.
+  const again = await executeResearchTool('read_web_page', { url: 'https://ex.com/1' }, ctx);
+  assert.ok(!again.error, again.error);
+});
+
+test('read_web_page PDF: Text nach dem Zeichendeckel gekappt → seiten = echte Zahl, Hinweis bei Seite dahinter', async () => {
+  urlScrape.scrapeUrl = async () => ({ ...pdfPage(['A', 'B']), pdf: { pages: 50, truncated: true, pageTexts: ['A', 'B'] } });
+  const ctx = await ctxWithHit();
+  const r = await executeResearchTool('read_web_page', { url: 'https://ex.com/1', seite: 30 }, ctx);
+  assert.equal(r.seiten, 50);
+  assert.equal(r.text_bis_seite, 2);
+  assert.match(r.hinweis, /nach Seite 2 gekappt/);
+});

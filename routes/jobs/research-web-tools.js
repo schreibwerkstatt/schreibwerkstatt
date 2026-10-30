@@ -14,7 +14,8 @@
 // kein `max_uses`, und die Liste muss über den Lauf konstant bleiben (Prompt-Cache).
 //
 // read_web_page liest nur URLs bekannter Herkunft — Treffer dieses Laufs,
-// Literatur-Treffer, Board-URLs des Buchs, Links aus der aktuellen User-Nachricht.
+// Literatur-Treffer, Board-URLs des Buchs, Links aus der aktuellen User-Nachricht —
+// und ruft dabei die gespeicherte Fassung ab, nicht den String des Modells.
 // Interne Ziele fängt der SSRF-Guard; diese Beschränkung verhindert Abfluss per
 // Prompt-Injection (eine gelesene Seite weist das Modell an, eine fremde URL mit
 // Buchinhalt im Query-String aufzurufen).
@@ -30,6 +31,9 @@ const { bookItemUrls } = require('../../db/research-items');
 const { resultCapFor, offeredList } = require('./chat-tools/shared');
 
 const MAX_PAGE_READS = 6;
+// Byte-Budget je Antwort über alle Abrufe (Rohbytes, HTML wie PDF). Jeder Abruf
+// bekommt höchstens den Rest als Deckel (lib/url-scrape#scrapeUrl `maxBytes`).
+const MAX_FETCH_BYTES = 30 * 1024 * 1024;
 const PAGE_TEXT_MAX = 12000;
 // Platz im Tool-Result neben dem Seitentext (Titel, URLs, Hinweise, JSON-Hülle) —
 // Richtwert für den Seitendeckel des Jobs; der Handler misst die Hülle selbst.
@@ -41,10 +45,12 @@ const URL_MAX = 1000;
 const URL_RE = /https?:\/\/[^\s<>"'()\]]+/gi;
 
 // pages: gelesene Seiten samt Redirect-Ziel (zulässige Belege, lesbare URLs);
-// fetches: tatsächliche Abrufe — daran hängt der Lesedeckel MAX_PAGE_READS.
+// fetches: Abrufversuche — daran hängt der Lesedeckel MAX_PAGE_READS;
+// bytes: geladene Rohbytes — daran hängt MAX_FETCH_BYTES.
 function webState(ctx) {
-  if (!ctx.web) ctx.web = { searches: 0, queries: [], results: [], pages: [], fetches: 0 };
+  if (!ctx.web) ctx.web = { searches: 0, queries: [], results: [], pages: [], fetches: 0, bytes: 0 };
   if (ctx.web.fetches == null) ctx.web.fetches = 0;
+  if (ctx.web.bytes == null) ctx.web.bytes = 0;
   return ctx.web;
 }
 
@@ -114,9 +120,16 @@ async function tool_web_search(input, ctx) {
   };
 }
 
-function _allowedPage(url, ctx) {
+/**
+ * Die gespeicherte URL bekannter Herkunft, die der Modell-URL entspricht, oder
+ * null. Verglichen wird normalisiert (lib/url-normalize: Tracking-Parameter, www.,
+ * http/https, Trailing-Slash) — abgerufen wird aber der GESPEICHERTE String, nie
+ * die Modell-Fassung: sonst ginge `?utm_source=<Buchtext>` als Varianten-Treffer
+ * durch den Abgleich und mit dem Abruf hinaus.
+ */
+function _knownUrl(url, ctx) {
   const n = normalizeUrl(url);
-  if (!n) return false;
+  if (!n) return null;
   const web = webState(ctx);
   const known = [
     ...web.results.map(r => r.url),
@@ -124,8 +137,9 @@ function _allowedPage(url, ctx) {
     ...(ctx.literatureHits || []).map(r => r.url),
     ...(ctx.userMessageUrls || []),
   ];
-  if (known.some(u => normalizeUrl(u) === n)) return true;
-  return bookItemUrls(ctx.bookId).some(u => normalizeUrl(u) === n);
+  const hit = known.find(u => normalizeUrl(u) === n);
+  if (hit) return hit;
+  return bookItemUrls(ctx.bookId).find(u => normalizeUrl(u) === n) || null;
 }
 
 // Anfang von `text`, dessen JSON-Form höchstens `max` Zeichen lang ist. Gemessen
@@ -145,34 +159,46 @@ function _sliceForJson(text, max) {
 }
 
 async function tool_read_web_page(input, ctx) {
-  const url = String(input.url || '').trim();
-  if (!url) return { error: 'url fehlt.', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'url' } };
-  if (!normalizeUrl(url)) return { error: 'Nur http(s)-URLs.', errorKey: 'chat.toolError.invalidParam', errorParams: { param: 'url' } };
-  if (!_allowedPage(url, ctx)) {
+  const rawUrl = String(input.url || '').trim();
+  if (!rawUrl) return { error: 'url fehlt.', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'url' } };
+  if (!normalizeUrl(rawUrl)) return { error: 'Nur http(s)-URLs.', errorKey: 'chat.toolError.invalidParam', errorParams: { param: 'url' } };
+  const knownUrl = _knownUrl(rawUrl, ctx);
+  if (!knownUrl) {
     return {
       error: `URL stammt nicht aus einer bekannten Quelle. Lesbar sind nur Treffer von ${offeredList(ctx, ['web_search', 'lookup_literature'], '/')} dieses Durchgangs, Links im Recherche-Archiv und Links aus der Nachricht des Users.`,
       errorKey: 'chat.toolError.urlNotKnown',
     };
   }
   const web = webState(ctx);
-  // Gezählt werden Abrufe: Suchen und Weiterlesen in einem schon geholten
-  // Dokument (seite/suche) holen nichts neu und zählen nicht.
-  const cached = isCached(url, web);
+  // Gezählt werden Abrufversuche — auch gescheiterte (Timeout, HTTP-Fehler,
+  // unlesbar): jeder davon ging hinaus. Suchen und Weiterlesen in einem schon
+  // geholten Dokument (seite/suche) holen nichts neu und zählen nicht.
+  const cached = isCached(knownUrl, web);
   if (!cached && web.fetches >= MAX_PAGE_READS) {
     return {
       error: `Höchstens ${MAX_PAGE_READS} Dokumente (Webseiten oder PDFs) pro Antwort abrufbar. Weiterlesen oder Suchen in einem schon gelesenen PDF geht weiterhin.`,
       errorKey: 'chat.toolError.pageReadCap', errorParams: { max: MAX_PAGE_READS },
     };
   }
+  const bytesLeft = MAX_FETCH_BYTES - web.bytes;
+  if (!cached && bytesLeft <= 0) {
+    return {
+      error: `Download-Budget dieser Antwort aufgebraucht (${Math.round(MAX_FETCH_BYTES / 1048576)} MB). Weiterlesen oder Suchen in einem schon gelesenen Dokument geht weiterhin.`,
+      errorKey: 'chat.toolError.pageBytesCap', errorParams: { mb: Math.round(MAX_FETCH_BYTES / 1048576) },
+    };
+  }
+  if (!cached) web.fetches++;
 
   let page;
   try {
-    page = await cachedScrape(url, web);
+    page = await cachedScrape(knownUrl, web, cached ? {} : { maxBytes: bytesLeft });
+    if (!cached) web.bytes += Number(page?.bytes) || 0;
   } catch (e) {
-    ctx.logger?.info?.(`[research-chat] Seite nicht lesbar (${e.code || e.message}): ${url}`);
-    return { url, error: `Seite nicht lesbar (${e.code || 'Fehler'}). Stütze dich auf das Snippet oder eine andere Quelle.`, errorKey: 'chat.toolError.serviceUnavailable' };
+    ctx.logger?.info?.(`[research-chat] Seite nicht lesbar (${e.code || e.message}): ${knownUrl}`);
+    return { url: _clip(knownUrl, URL_MAX), error: `Seite nicht lesbar (${e.code || 'Fehler'}). Stütze dich auf das Snippet oder eine andere Quelle.`, errorKey: 'chat.toolError.serviceUnavailable' };
   }
-  if (!cached) web.fetches++;
+  // Ab hier zählt die gespeicherte Fassung — sie steht in web.pages und im Ergebnis.
+  const url = knownUrl;
   const finalUrl = page.finalUrl || url;
   const known = new Set(web.pages.map(p => normalizeUrl(p.url)));
   if (!known.has(normalizeUrl(url))) web.pages.push({ url, title: page.title || url });
@@ -244,4 +270,4 @@ const WEB_TOOLS = {
   read_web_page: tool_read_web_page,
 };
 
-module.exports = { WEB_TOOLS, extractUrls, MAX_PAGE_READS, PAGE_TEXT_MAX, PAGE_OVERHEAD };
+module.exports = { WEB_TOOLS, extractUrls, MAX_PAGE_READS, MAX_FETCH_BYTES, PAGE_TEXT_MAX, PAGE_OVERHEAD };

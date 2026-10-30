@@ -11,6 +11,7 @@ const { getSessionForJob } = require('../../../db/chat-sessions');
 const { recordRepeat } = require('../../../db/chat-quality');
 const logger = require('../../../logger');
 const { resolvePageBookId } = require('../../../lib/content-ownership');
+const { bus: bookEvents } = require('../../../lib/book-events');
 const { guardBook, sessionEmail } = require('../../../lib/acl');
 const {
   jobs, runningJobs, createJob, enqueueJob, jobKey, findActiveJobId,
@@ -160,8 +161,9 @@ const BOOK_PAGE_CACHE_TTL_MS = 10 * 60 * 1000;
 const BOOK_PAGE_CACHE_MAX = 20;
 
 /**
- * Verwirft alle Cache-Einträge eines Buchs (alle User). Wird nach Sync-Operationen
- * aufgerufen, damit Buch-Chat nicht 10 Min lang auf veraltetem Content antwortet.
+ * Verwirft alle Cache-Einträge eines Buchs (alle User). Läuft bei jeder Änderung
+ * über die Content-Store-Facade (Listener unten) und nach Sync-Operationen, damit
+ * der Buch-Chat nicht bis zu 10 Min lang auf veraltetem Content antwortet.
  * Cache-Key-Format: `${bookId}:${userEmail}` – Prefix-Match räumt alle User-
  * Varianten gleichzeitig ab (Permissions ändern sich selten und verlieren beim
  * Sync ohnehin ihre Aktualität).
@@ -172,6 +174,12 @@ function invalidateBookPageCache(bookId) {
     if (key.startsWith(prefix)) bookPageCache.delete(key);
   }
 }
+
+// Jeder Schreibweg der Content-Store-Facade (savePage/createPage/deletePage/
+// movePage/splitPage, Kapitel-Änderungen) feuert 'change' auf dem Buch-Bus
+// (lib/book-events.js) — darüber räumt der Cache sich selbst ab, statt dass die
+// Facade Job-Code kennen müsste. movePage feuert für Quell- UND Zielbuch.
+bookEvents.on('change', (bookId) => invalidateBookPageCache(bookId));
 
 // ── Gemeinsamer Route-Handler ────────────────────────────────────────────────
 // `kind` bindet den Job-Typ an die Session-Art: eine Session läuft nur unter

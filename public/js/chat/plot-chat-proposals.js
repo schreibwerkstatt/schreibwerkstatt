@@ -5,14 +5,16 @@
 // wird einzeln übernommen; ein „alle übernehmen" gibt es bewusst nicht.
 //
 // Persistierter Status (PATCH /plot/chat-proposal): applied_at + applied_id bzw.
-// status='discarded'. Transient am Vorschlagsobjekt: _applying, _error.
+// status='discarded'. Transient am Vorschlagsobjekt: _applying, _error und
+// _written/_appliedId (Board schon geschrieben, Status noch nicht — der nächste
+// Klick holt nur den Status nach, proposal-status.js#applyProposalOnce).
 // Format der Vorschläge: routes/jobs/plot-chat-tools.js (Kopfkommentar).
 // Deep-Doc: docs/plot-chat.md
 
 import { fetchJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
 import { diffParts } from '../diff/diff-parts.js';
-import { persistProposalStatus } from './proposal-status.js';
+import { persistProposalStatus, applyProposalOnce } from './proposal-status.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const CREATE_KIND = { beat_create: 'beat', act_create: 'act', thread_create: 'thread' };
@@ -213,30 +215,44 @@ export const plotProposalMethods = {
     const p = list[pi];
     if (!p || p._applying || this.busy || this._inHistoryFlight) return;
     const st = proposalStatus(p, list, this._plotBoardRef());
-    if (st.state !== 'open' || st.blocked) return;
+    if (st.state !== 'open' || (st.blocked && !p._written)) return;
+    // Ein neuer strang-eigener Akt für einen Strang ohne eigene Aktstruktur legt
+    // diese erst an (Kopie der geteilten Akte, nicht per Undo umkehrbar) — wie der
+    // Fork im Strang-Menü nur nach Rückfrage.
+    if (!p._written && this._plotProposalForks(p, list)) {
+      const ok = await app.appConfirm({ message: app.t('plot.chat.forkConfirm', { name: this._plotProposalThreadName(p, list) }) });
+      if (!ok) return;
+    }
     // Ein offenes Beat-Edit-Panel committet sonst per click.outside über die Übernahme.
     if (this.editingBeatId != null) this.cancelEditBeat();
     p._applying = true;
     p._error = '';
     this.busy = true;
-    let appliedId = null;
-    try {
-      appliedId = await this._applyPlotProposalByType(p, list);
-    } catch (e) {
-      p._error = e?.body ? tFetchError(e) : app.t('plot.chat.applyError');
-      p._applying = false;
+    const r = await applyProposalOnce('/plot/chat-proposal', msg, pi, async () => {
+      const id = await this._applyPlotProposalByType(p, list);
       this.busy = false;
-      return;
-    }
+      this.errorMessage = '';
+      return id;
+    });
     this.busy = false;
-    this.errorMessage = '';
-    try {
-      await persistProposalStatus('/plot/chat-proposal', msg, pi, 'applied', appliedId);
-    } catch (e) {
-      // Das Board ist geändert, nur der Status fehlt — sichtbar machen statt
-      // verschlucken (ein Reload zeigte den Vorschlag sonst wieder offen).
-      p._error = app.t('plot.chat.statusError');
-    } finally { p._applying = false; }
+    p._applying = false;
+    if (r.ok) return;
+    if (r.phase === 'write') p._error = r.error?.body ? tFetchError(r.error) : app.t('plot.chat.applyError');
+    // Das Board ist geändert, nur der Status fehlt — sichtbar machen statt
+    // verschlucken; der nächste Klick holt nur den Status nach.
+    else p._error = app.t('plot.chat.statusError');
+  },
+
+  // Legt die Übernahme eine eigene Aktstruktur an (act_create mit fork, Strang
+  // hat aktuell keine eigenen Akte)?
+  _plotProposalForks(p, list) {
+    if (p?.type !== 'act_create' || !p.fork) return false;
+    const tid = p.thread_ref ? refAppliedId(list, p.thread_ref, 'thread', this._plotBoardRef()) : p.thread_id;
+    return tid != null && !(this.acts || []).some(a => a.thread_id === tid);
+  },
+
+  _plotProposalThreadName(p, list) {
+    return p.labels?.thread || (p.thread_ref ? list[p.thread_ref - 1]?.name : '') || '';
   },
 
   async discardPlotProposal(msg, pi, discard = true) {
@@ -315,6 +331,12 @@ export const plotProposalMethods = {
     }
 
     if (p.type === 'act_create') {
+      // Eigene Aktstruktur zuerst (POST fork-acts, wie das Strang-Menü); der Fork
+      // hängt viele Beats um → Board neu laden (leert die Historie, wie dort).
+      if (this._plotProposalForks(p, list)) {
+        await fetchJson(`/plot/threads/${threadId}/fork-acts`, { method: 'POST' });
+        await this.loadBoard();
+      }
       const act = await fetchJson('/plot/acts', {
         method: 'POST', headers: JSON_HEADERS,
         body: JSON.stringify({ book_id: bookId, name: p.name, thread_id: threadId }),

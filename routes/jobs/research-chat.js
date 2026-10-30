@@ -2,8 +2,13 @@
 // Agentischer Recherche-Chat mit Web-Suche. Lebt als
 // Panel in der Recherche-Karte. Rückwärtsgewandt: recherchiert + sammelt Material,
 // schreibt NIE in den Buchtext. Vorschläge (propose_research_item) werden NICHT
-// automatisch gespeichert — sie kommen in context_info.proposals zurück, der User
-// bestätigt sie im Frontend (POST /research).
+// automatisch gespeichert — sie kommen in context_info.proposals zurück (jede URL
+// mit `verified`: in diesem Lauf abgerufen ja/nein), der User bestätigt sie im
+// Frontend (POST /research/chat-proposal, routes/research-chat-proposals.js).
+//
+// Prompt-Cache: der System-Prompt ist über die Turns stabil. Was je Frage wechselt
+// (Archiv-Stand, frühere Vorschläge, Schreibkontext), steht als `userPreamble` vor
+// der Frage, und `cacheHistory` setzt den Breakpoint ans Ende des Verlaufs.
 //
 // Loop/Persistenz teilt sich diese Datei mit den anderen agentischen Chats über
 // makeAgenticChatJob (routes/jobs/agentic-chat.js), Werkzeugsatz und Deckel über
@@ -20,7 +25,7 @@ const { getPrompts, i18nError } = require('./shared');
 const { researchChatGate } = require('../../lib/research-chat-gate');
 const {
   toolsForRound, validateAnswerSources, sessionProposalMemory, proposalsOnlyFallback,
-  readMessageContext, loadResearchContext,
+  readMessageContext, loadResearchContext, markProposalUrls,
 } = require('./research-chat-helpers');
 const { executeResearchTool } = require('./research-chat-tools');
 const { entityList } = require('./chat-tools/tools-research');
@@ -114,9 +119,9 @@ const runResearchChatJob = makeAgenticChatJob({
       ctx: { bookId: session.book_id, sessionId: session.id, userEmail, logger },
       outputTools: searxng ? outputTools : toolsForRound(outputTools, 0, maxWebSearches),
     });
-    // Frühere Vorschläge dieser Session (gespeichert ja/nein) — Folge-Turns sollen
-    // sie kennen, ohne dass sie in der Gesprächshistorie stehen.
-    const proposalMemory = buildResearchProposalMemoryBlock(sessionProposalMemory(session.id), { toolNames });
+    // Archiv-Stand + frühere Vorschläge dieser Session (gespeichert ja/nein) —
+    // Folge-Turns sollen sie kennen, ohne dass sie in der Gesprächshistorie stehen.
+    const proposalMemory = buildResearchProposalMemoryBlock(sessionProposalMemory(session.id), { toolNames, itemCount });
     // Schreibkontext DIESER Frage (Kontext-Chip): an der User-Nachricht abgelegt
     // (_handleChatPost → context_info.research_context). Ein Lesefehler kostet
     // nur den Block, nicht die Antwort.
@@ -127,10 +132,14 @@ const runResearchChatJob = makeAgenticChatJob({
     } catch (e) {
       logger.warn(`Schreibkontext nicht geladen: ${e.message}`);
     }
+    // System-Prompt ohne Volatiles (itemCount null → Zahl steht im Archiv-Stand).
     const systemPrompt = buildResearchChatAgentSystemPrompt(
-      session.book_name || '', itemCount, maxToolIter, figures, locations, researchProfile,
-      { maxWebSearches, bookContext, proposalMemory, writingContext, webSearchMode: mode, toolNames },
+      session.book_name || '', null, maxToolIter, figures, locations, researchProfile,
+      { maxWebSearches, bookContext, webSearchMode: mode, toolNames },
     );
+    // Pro Frage wechselnder Kontext vor die Frage, wie im Buch-Chat.
+    const turnBlocks = [proposalMemory, writingContext].map(b => String(b || '').trim()).filter(Boolean);
+    const userPreamble = turnBlocks.length ? `${turnBlocks.join('\n\n')}\n\n=== FRAGE ===` : null;
 
     // Deckel wie in allen agentischen Chats; gelesene Webseiten (SearXNG) bekommen
     // ihren eigenen, grösseren Deckel — die API wertet Seiten beim Suchweg
@@ -142,6 +151,8 @@ const runResearchChatJob = makeAgenticChatJob({
     return {
       systemPrompt,
       tools,
+      ...(userPreamble ? { userPreamble } : {}),
+      cacheHistory: true,
       // Web-Such-Gesamtdeckel über alle Runden: erreicht → keine weitere Runde,
       // Synthese aus den Treffern. webSearches zählt beide Wege (Loop + webStats).
       stopBeforeRound: ({ webSearches }) => (webSearches >= maxWebSearches ? 'web_cap' : null),
@@ -162,10 +173,12 @@ const runResearchChatJob = makeAgenticChatJob({
         answerSourcesRaw: null, // final_answer.quellen (ungeprüft) → buildContextInfo validiert
         literatureHits: [],     // lookup_literature-Treffer (url/title) — zulässige Belege neben den Web-Treffern
         maxWebSearches,
+        // Links der User-Nachricht: lesbare URLs (SearXNG) und belegte
+        // Vorschlags-URLs (markProposalUrls, beide Suchwege).
+        userMessageUrls: extractUrls(message),
         // Nur vom SearXNG-Handler gelesen (research-web-tools.js):
         allowedDomains: researchProfile.domains,
         searchLanguage: bookSettings.language || '',
-        userMessageUrls: extractUrls(message),
         resultCapChars: toolResultCap,
         ...(pageResultCap ? { pageResultCapChars: pageResultCap } : {}),
       },
@@ -220,7 +233,16 @@ const runResearchChatJob = makeAgenticChatJob({
       return answerSources.length ? { answer_sources: answerSources } : {};
     })(),
     // Speicher-Vorschläge — Frontend rendert sie als „Als … speichern"-Buttons.
-    ...(ctx.proposals.length ? { proposals: ctx.proposals } : {}),
+    // Jede URL trägt `verified`: in diesem Lauf abgerufen/geliefert ja/nein.
+    ...(ctx.proposals.length ? {
+      proposals: markProposalUrls(ctx.proposals, {
+        webResults,
+        pages: ctx.web?.pages || [],
+        literatureHits: ctx.literatureHits,
+        userMessageUrls: ctx.userMessageUrls,
+        bookId: ctx.bookId,
+      }),
+    } : {}),
   }),
 
   buildCompletePayload: ({ base, ctx }) => ({ ...base, proposals: ctx.proposals.length }),

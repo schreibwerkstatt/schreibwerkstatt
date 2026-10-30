@@ -9,7 +9,7 @@
 // Panel aufklappen, Eingabefeld mit `question` vorbelegen. Es wird NICHT
 // automatisch gesendet — der User prüft/ergänzt die Frage und schickt sie selbst
 // ab (Web-Suchen kosten). Ein `bookId` eines anderen als des offenen Buchs wird
-// ignoriert; ohne Claude-Provider (`researchChat.enabled` false) ebenso.
+// ignoriert; ohne nutzbaren Recherche-Chat (`researchChat.enabled` false, Gate) ebenso.
 //
 // Event-Name: EVT.RESEARCH_CHAT_ASK (public/js/events.js).
 // Die Karte ist lazy (Partial wird erst beim Öffnen geladen) — darum hält dieses

@@ -218,3 +218,52 @@ test('Seitendeckel: read_web_page bekommt mehr Platz als der Ergebnis-Deckel der
     appSettings.set('ai.openai-compat.context_window', prevWindow);
   }
 });
+
+test('Prompt-Cache: Archiv-Stand + frühere Vorschläge vor der Frage, System über Turns gleich; Vorschlags-URLs markiert', async () => {
+  appSettings.set('ai.provider', 'openai-compat');
+  appSettings.set('websearch.provider', 'searxng');
+  appSettings.set('websearch.searxng.url', 'http://searx.test');
+  appSettings.set('research_chat.enabled', true);
+  searxng.search = async () => ({ results: [{ title: 'NEAT', url: 'https://www.uvek.admin.ch/de/neat', snippet: '', engines: ['d'], published: null }], unresponsive: [] });
+  urlScrape.scrapeUrl = async (u) => ({ title: 'x', text: 'y', finalUrl: u });
+
+  const sessionId = db.prepare(
+    "INSERT INTO chat_sessions (book_id, kind, user_email, title, created_at, last_message_at) VALUES (?, 'research', ?, 'T', ?, ?)"
+  ).run(BOOK, USER, NOW, NOW).lastInsertRowid;
+  const systems = [];
+  const calls = [];
+  ai.callAIWithTools = async (messages, system, tools) => {
+    systems.push(JSON.stringify(system));
+    calls.push(structuredClone(messages));
+    return seq.shift();
+  };
+  let seq;
+  async function turn(question, answers) {
+    seq = answers;
+    const msgId = db.prepare("INSERT INTO chat_messages (session_id, role, content, created_at) VALUES (?, 'user', ?, ?)")
+      .run(sessionId, question, NOW).lastInsertRowid;
+    const jobId = createJob('research-chat', BOOK, USER, 'x');
+    await runResearchChatJob(jobId, sessionId, msgId, question, USER);
+    const j = jobs.get(jobId);
+    assert.equal(j.status, 'done', JSON.stringify(j.error));
+    return JSON.parse(db.prepare('SELECT context_info FROM chat_messages WHERE id = ?').get(j.result.assistant_message_id).context_info);
+  }
+
+  const ci = await turn('NEAT?', [
+    toolTurn(tu('a', 'web_search', { query: 'NEAT' })),
+    toolTurn(tu('b', 'propose_research_item', {
+      kind: 'link', title: 'NEAT-Übersicht',
+      urls: [{ url: 'https://uvek.admin.ch/de/neat?utm_source=x', label: 'UVEK' }, { url: 'https://erfunden.example/neat', label: 'Wikipedia' }],
+    })),
+    toolTurn(tu('c', 'final_answer', { antwort: 'Siehe Vorschlag.' })),
+  ]);
+  assert.deepEqual(ci.proposals[0].urls.map(u => u.verified), [true, false]);
+
+  await turn('Und der Ceneri?', [toolTurn(tu('d', 'final_answer', { antwort: 'Ok.' }))]);
+  assert.equal(systems[0], systems.at(-1), 'System-Prompt über die Turns byte-gleich');
+  assert.doesNotMatch(systems.at(-1), /BISHERIGE SPEICHER-VORSCHLÄGE|enthält aktuell/);
+  const lastUser = calls.at(-1).at(-1);
+  assert.ok(Array.isArray(lastUser.content), 'Frage mit vorangestelltem Turn-Block');
+  assert.match(lastUser.content[0].text, /STAND DES RECHERCHE-ARCHIVS[\s\S]*«NEAT-Übersicht»[\s\S]*=== FRAGE ===/);
+  assert.equal(lastUser.content[1].text, 'Und der Ceneri?');
+});

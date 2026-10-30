@@ -49,7 +49,7 @@ const statusOf = (id) => db.prepare('SELECT status FROM ideen WHERE id = ?').get
 test('Erledigt-Vorschlag mit Beleg landet in context_info.proposals, Idee unverändert', async () => {
   const calls = [];
   ai.callAIWithTools = async (messages, system, tools) => {
-    calls.push({ system, tools: tools.map(t => t.name) });
+    calls.push({ system, messages: [...messages], tools: tools.map(t => t.name) });
     if (calls.length === 1) {
       return res({
         stopReason: 'tool_use',
@@ -68,7 +68,14 @@ test('Erledigt-Vorschlag mit Beleg landet in context_info.proposals, Idee unver�
   assert.equal(j.status, 'done', `Job nicht done: ${j.error}`);
   assert.equal(j.result.proposals, 1);
 
-  const sysText = calls[0].system.map(b => b.text).join('\n');
+  // System-Prompt = nur der stabile Block; Board/Ideen stehen als Vorspann in der
+  // aktuellen User-Nachricht (Cache-Präfix: Werkzeuge + System + Verlauf).
+  const sysOnly = calls[0].system.map(b => b.text).join('\n');
+  const lastUser = calls[0].messages.at(-1);
+  const sysText = lastUser.content.map(b => b.text).join('');
+  assert.equal(calls[0].system.length, 1, 'nur der stabile Block im System-Prompt');
+  assert.doesNotMatch(sysOnly, /=== FRAGE ===/);
+  assert.match(sysText, /=== FRAGE ===/);
   assert.match(sysText, new RegExp(`\\[#${idee}\\] \\(offen\\) · «Tür abschliessen lassen»`));
   assert.match(sysText, new RegExp(`\\[#${bookIdee}\\]`));
   assert.match(sysText, new RegExp(`Abschnitt \\[page#${PAGE}\\] «Szene eins»`));

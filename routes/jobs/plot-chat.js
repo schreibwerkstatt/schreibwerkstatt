@@ -15,16 +15,16 @@ const { getPrompts, loadOrderedBookContents } = require('./shared');
 const { makeProposalChatJob } = require('./proposal-chat');
 const { executePlotChatTool, PROPOSE_TOOLS } = require('./plot-chat-tools');
 const {
-  loadBoardState, boardOutline, figurenOutline, sessionPlotProposalMemory,
+  loadBoardState, fitBoardOutline, figurenOutline, sessionPlotProposalMemory,
 } = require('./plot-chat-context');
 
 /**
- * Kontext beider Pfade: Board-Stand, Prompt-Bausteine (Board-Gliederung,
- * Figurenliste, Gedächtnis früherer Vorschläge, Buch-Kontext) und die Felder,
+ * Kontext beider Pfade: Board-Stand, Prompt-Bausteine (Board-Gliederung aufs
+ * Budget gekürzt, Figurenliste, Gedächtnis früherer Vorschläge, Buch-Kontext) und die Felder,
  * die die Vorschlags-Handler im ctx brauchen. Kapitel nur über die
  * Content-Store-Facade, inkl. ausgeschlossener (ein Beat darf darauf zeigen).
  */
-async function plotChatContext(session, userEmail) {
+async function plotChatContext(session, userEmail, { outlineBudgetChars = Infinity } = {}) {
   const { buildPlotProposalMemoryBlock, getResearchPromptContext, ideenMarker } = await getPrompts(userEmail);
   const { chaptersFlat } = await loadOrderedBookContents(session.book_id, { includeExcluded: true });
   const chapterNames = new Map((chaptersFlat || []).map(c => [c.id, c.path || c.name]));
@@ -37,9 +37,9 @@ async function plotChatContext(session, userEmail) {
       buchKontext: settings.buch_kontext || null,
       hauptland: settings.schauplatz_land || null,
     }),
-    boardOutline: boardOutline(state, { ideenMarker }),
+    board: fitBoardOutline(state, { ideenMarker, budgetChars: outlineBudgetChars }),
     figurenOutline: figurenOutline(state),
-    proposalMemory: buildPlotProposalMemoryBlock(sessionPlotProposalMemory(session.id)),
+    proposalMemory: buildPlotProposalMemoryBlock(sessionPlotProposalMemory(session.id, state)),
     toolCtx: {
       bookId: session.book_id, sessionId: session.id, userEmail,
       chapterNames, _board: state,
@@ -53,6 +53,7 @@ const plotChat = makeProposalChatJob({
   maxIterSettingKey: 'jobs.plot_chat.max_tool_iter',
   effortSettingKey: 'ai.claude.effort.plotchat',
   proposalsOnlyMarker: '__i18n:plot.chat.proposalsOnly__',
+  proposalsCutMarker: '__i18n:plot.chat.proposalsCut__',
   prompts: (p) => ({
     buildSystemPrompt: p.buildPlotChatSystemPrompt,
     schemaClassic: p.SCHEMA_PLOT_CHAT_CLASSIC,
@@ -62,15 +63,16 @@ const plotChat = makeProposalChatJob({
   loadContext: plotChatContext,
   promptParts: (base) => ({
     bookContext: base.bookContext,
-    boardOutline: base.boardOutline,
+    boardOutline: base.board.text,
+    boardTrimmed: base.board.trimmed,
+    // Akte (nur thread_id) für die Reihenfolge-Regel (prompts/plot/board.js#_reihenfolgeRegel).
+    boardActs: base.state.acts.map(a => ({ thread_id: a.thread_id ?? null })),
     figurenOutline: base.figurenOutline,
     proposalMemory: base.proposalMemory,
   }),
   stateSummary: (s) => `Board ${s.acts.length} Akte/${s.beats.length} Beats/${s.threads.length} Stränge`,
   executeTool: executePlotChatTool,
   proposeToolNames: PROPOSE_TOOLS,
-  // Leere Figurenliste heisst «Figuren vom Beat lösen», nicht «weglassen».
-  keepEmptyArrays: ['figuren'],
   classicFallbackNote: 'nur Board/Figuren',
 });
 

@@ -14,7 +14,9 @@ export { installResearchChatAskBridge, RESEARCH_CHAT_ASK_PENDING } from './resea
 
 // Recherche-Chat-Methoden (gespreadet in die rechercheCard). Agentischer Chat
 // NEBEN dem Wissensboard: recherchiert im Netz + im vorhandenen Material und
-// schlägt Fundstücke als neue Recherche-Items vor (User bestätigt). Claude-only.
+// schlägt Fundstücke als neue Recherche-Items vor (User bestätigt). Jeder Provider
+// mit Tool-Calling: Claude sucht über Anthropic oder SearXNG, die übrigen über
+// SearXNG (Gate: lib/research-chat-gate.js, Suchweg: lib/websearch#webSearchMode).
 
 export const researchChatMethods = {
   // Panel auf-/zuklappen. Beim ersten Öffnen Sessions laden (onVisible-Pfad).

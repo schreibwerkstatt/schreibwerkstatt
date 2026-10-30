@@ -193,3 +193,38 @@ test('lookup_literature: ohne q/doi/isbn → Fehler, kein Request', async () => 
     globalThis.fetch = orig;
   }
 });
+
+test('propose_research_item: Fehler tragen errorKey', async () => {
+  const ctx = mkCtx();
+  assert.equal((await executeResearchTool('propose_research_item', { kind: 'note' }, ctx)).errorKey, 'chat.toolError.proposalEmpty');
+  const bad = await executeResearchTool('propose_research_item', { kind: 'link', title: 'X', urls: [{ url: 'javascript:alert(1)' }] }, ctx);
+  assert.equal(bad.errorKey, 'chat.toolError.invalidParam');
+  assert.deepEqual(bad.errorParams, { param: 'urls' });
+  await executeResearchTool('propose_research_item', { kind: 'note', title: 'Hafen Genua' }, ctx);
+  assert.equal((await executeResearchTool('propose_research_item', { kind: 'note', title: 'hafen genua' }, ctx)).errorKey, 'chat.toolError.proposalDuplicate');
+  const full = mkCtx();
+  for (let i = 0; i < 12; i++) await executeResearchTool('propose_research_item', { kind: 'note', title: `Fund ${i}` }, full);
+  const cap = await executeResearchTool('propose_research_item', { kind: 'note', title: 'Fund 99' }, full);
+  assert.equal(cap.errorKey, 'chat.toolError.proposalCap');
+  assert.deepEqual(cap.errorParams, { max: 12 });
+});
+
+test('propose_research_item: dieselbe URL (normalisiert) in einer Antwort nur einmal', async () => {
+  const ctx = mkCtx();
+  const a = await executeResearchTool('propose_research_item', { kind: 'link', title: 'Eins', urls: [{ url: 'https://www.ex.org/artikel?utm_source=x' }] }, ctx);
+  assert.equal(a.ok, true);
+  const b = await executeResearchTool('propose_research_item', { kind: 'fact', title: 'Ganz anderer Titel', urls: [{ url: 'http://ex.org/artikel/' }] }, ctx);
+  assert.equal(b.ok, false);
+  assert.equal(b.errorKey, 'chat.toolError.proposalDuplicate');
+  assert.equal(ctx.proposals.length, 1);
+});
+
+test('mergeProposal: edits.urls nur als Teilmenge der eigenen URLs, nie neue', () => {
+  const { mergeProposal } = require('../../routes/research-chat-proposals');
+  const p = { kind: 'link', title: 'T', urls: [{ url: 'https://a.example/x', label: 'A', verified: true }, { url: 'https://b.example/y', label: 'B', verified: false }] };
+  assert.deepEqual(mergeProposal(p, {}).urls.map(u => u.url), ['https://a.example/x', 'https://b.example/y'], 'ohne edits.urls: alle');
+  assert.deepEqual(mergeProposal(p, { urls: ['https://a.example/x'] }).urls, [{ url: 'https://a.example/x', label: 'A' }], 'Label bleibt, verified fällt weg');
+  assert.deepEqual(mergeProposal(p, { urls: [{ url: 'http://www.b.example/y/' }] }).urls.map(u => u.url), ['https://b.example/y'], 'normalisiert verglichen, gespeicherter String');
+  assert.deepEqual(mergeProposal(p, { urls: ['https://evil.example/leak', 'https://a.example/x'] }).urls.map(u => u.url), ['https://a.example/x'], 'neue URL ignoriert');
+  assert.deepEqual(mergeProposal(p, { urls: [] }).urls, [], 'alle weggelassen');
+});

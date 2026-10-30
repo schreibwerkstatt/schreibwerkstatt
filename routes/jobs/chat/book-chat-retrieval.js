@@ -11,7 +11,8 @@
 //     um ihre Nachbarn erweitert, auf den LIVE-Seitentext abgebildet und pro Seite
 //     zu einem Auszug gebündelt; seit dem Indexlauf geänderte Seiten per Keyword).
 //   preContextPassages     — kleiner Erst-Kontext (wenige Treffer, harter
-//     Zeichendeckel): agentischer Buch- und Plot-Chat, klassischer Plot-Chat und
+//     Zeichendeckel; Abschnitts-Treffer ebenfalls auf den LIVE-Text abgebildet):
+//     agentischer Buch-, Plot- und Ideen-Chat, klassischer Plot-/Ideen-Chat und
 //     der Buch-Block des Seiten-Chats. Macht die häufigste Frageform („wie alt war
 //     X", „wann hat X …") ohne Werkzeug-Runde beantwortbar — die paar Tausend Tokens
 //     hier sind billiger als eine einzige get_chapter_text-Runde.
@@ -133,12 +134,7 @@ async function selectPassagesSemantic(bookId, query, budgetChars, signal, { user
   // Live-Text: Trefferseiten + seit dem Indexlauf geänderte Seiten, eine Ladung.
   const fresh = scoreText ? index.changedPageIds.filter(id => metaById.has(id)) : [];
   const liveIds = [...new Set([...hits.map(h => h.entity_id), ...fresh])];
-  const liveText = new Map();
-  if (liveIds.length) {
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    const loaded = await contentStore.loadPagesBatch(liveIds.map(id => metaById.get(id)), null, { onError: () => null });
-    for (const pd of loaded) liveText.set(pd.id, htmlToText(pd.html || '').trim());
-  }
+  const liveText = await _loadLiveTexts(liveIds, signal);
 
   // Frisch-Seiten nach Keyword-Relevanz; ohne Treffer im Text bleiben sie draussen.
   const freshScored = fresh
@@ -187,6 +183,17 @@ async function selectPassagesSemantic(bookId, query, budgetChars, signal, { user
   return { status: 'ok', selectedPages, usedChars, totalPages: pages.length, freshPages };
 }
 
+// Aktueller Klartext der Seiten `ids` in einer Ladung (Map page_id → Text). Nicht
+// ladbare Seiten fehlen in der Map — ihr Treffer fällt beim Aufrufer weg.
+async function _loadLiveTexts(ids, signal) {
+  const liveText = new Map();
+  if (!ids.length) return liveText;
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  const loaded = await contentStore.loadPagesBatch(ids.map(id => ({ id })), null, { onError: () => null });
+  for (const pd of loaded) liveText.set(pd.id, htmlToText(pd.html || '').trim());
+  return liveText;
+}
+
 // Anteil des RAG-Budgets, den seit dem Indexlauf geänderte Seiten höchstens belegen.
 const FRESH_BUDGET_SHARE = 0.25;
 
@@ -215,7 +222,8 @@ function _livePassage(live, { wide, core }, remaining) {
  *   topK, chars — Default `jobs.book_chat.pre_rag_top_k` / `…pre_rag_chars`; 0 = aus.
  *   excludePageIds — Seiten, die schon vollständig im Prompt stehen (Seiten-Chat).
  * Rückgabe: { hits:[{ kind, entity_id, title, chapter_path?, rank, similarity?, text }],
- * chars, indexIncomplete, stalePages } — `hits` kann leer sein; `indexIncomplete` sagt,
+ * chars, indexIncomplete, stalePages, staleDropped? } — `hits` kann leer sein;
+ * `staleDropped` zählt Abschnitts-Treffer, deren Stelle im Live-Text fehlt; `indexIncomplete` sagt,
  * ob der Index nur einen Teil des Buchs abdeckt (Lauf fehlt/brach ab oder `stalePages`
  * Abschnitte seit dem Lauf neu/geändert). null = abgeschaltet (top_k/chars 0).
  * `rank`/`similarity` (roher Cosinus) sind stabil; der stufenabhängige Pipeline-`score`
@@ -258,13 +266,27 @@ async function preContextPassages(bookId, query, {
     }
   }
 
+  // Abschnitts-Treffer zeigen den LIVE-Text (wie selectPassagesSemantic): der
+  // Index-Chunk kann hinter dem Seitenstand liegen und darf nicht als Buchtext
+  // erscheinen. Findet sich die Stelle nicht mehr, fällt die Passage weg.
+  // Szenen/Figuren/Orte/Fakten sind Analyse-Daten, kein Buchtext — sie bleiben.
+  const liveText = await _loadLiveTexts([...new Set(kept.filter(h => h.kind === 'page').map(h => h.entity_id))], signal);
+
   const hits = [];
   let used = 0;
+  let stale = 0;
   for (const item of _expand(kept)) {
     if (used >= budget) break;
-    const text = _fit(item, budget - used);
-    if (text.length < MIN_PASSAGE_CHARS) continue;
     const h = item.hit;
+    let text;
+    if (h.kind === 'page') {
+      const live = liveText.get(h.entity_id);
+      text = live ? _livePassage(live, item, budget - used) : null;
+      if (!text) { stale++; continue; }
+    } else {
+      text = _fit(item, budget - used);
+    }
+    if (text.length < MIN_PASSAGE_CHARS) continue;
     hits.push({
       kind: h.kind,
       entity_id: h.entity_id,
@@ -275,7 +297,7 @@ async function preContextPassages(bookId, query, {
     });
     used += text.length;
   }
-  return { hits, chars: used, ...status };
+  return { hits, chars: used, ...status, ...(stale ? { staleDropped: stale } : {}) };
 }
 
 /**
@@ -291,7 +313,8 @@ async function agentPreContext(bookId, query, { signal, logger, userEmail = null
     const pre = await preContextPassages(bookId, query, { signal, userEmail });
     if (pre) {
       logger?.info?.(`Erst-Kontext: ${pre.hits.length} Passagen, ${pre.chars} Zeichen`
-        + `${pre.indexIncomplete ? `, Index unvollständig (${pre.stalePages} Abschnitte seit Lauf geändert)` : ''}.`);
+        + `${pre.indexIncomplete ? `, Index unvollständig (${pre.stalePages} Abschnitte seit Lauf geändert)` : ''}`
+        + `${pre.staleDropped ? `, ${pre.staleDropped} veraltete Index-Stellen verworfen` : ''}.`);
     }
     return pre;
   } catch (e) {
