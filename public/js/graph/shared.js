@@ -186,8 +186,9 @@ export const sharedMethods = {
         + `<em>${escHtml(typLabel)}${schichtLabel ? ' · ' + escHtml(schichtLabel) : ''}</em>`
         + (f.beschreibung ? `<p>${escHtml(f.beschreibung)}</p>` : '');
       showTipAt(html, event.clientX, event.clientY);
+      container.style.cursor = 'pointer';   // Knoten ist anklickbar (öffnet die Figur)
     });
-    this._figurenNetwork.on('blurNode', hideTip);
+    this._figurenNetwork.on('blurNode', () => { hideTip(); container.style.cursor = ''; });
 
     this._figurenNetwork.on('hoverEdge', ({ edge, event }) => {
       const e = this._figurenEdges?.get(edge);
@@ -207,5 +208,20 @@ export const sharedMethods = {
     this._figurenNetwork.on('blurEdge', hideTip);
     // Beim Ziehen wegblenden — der Tooltip klebte sonst über der Zugbahn.
     this._figurenNetwork.on('dragStart', hideTip);
+    // Klick auf einen Knoten öffnet die Figur im Reiter «Liste». vis feuert
+    // `click` nur für einen Tap, nicht nach dem Ziehen eines Knotens.
+    this._figurenNetwork.on('click', ({ nodes }) => {
+      const f = nodes?.length === 1 ? byId.get(nodes[0]) : null;
+      if (!f) return;
+      hideTip();
+      this._openFigurFromGraph(f.id);
+    });
+  },
+
+  // Aus dem Vollbild zuerst heraus: die Liste liegt ausserhalb des Graph-Wraps
+  // und wäre hinter dem Vollbild-Element unsichtbar.
+  async _openFigurFromGraph(figId) {
+    if (this.figurenGraphFullscreen) await this.toggleFigurenGraphFullscreen();
+    await window.__app.openFigurById(figId);
   },
 };

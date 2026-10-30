@@ -1,0 +1,61 @@
+{
+  "version": "5.6.0",
+  "date": "2026-10-30",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Figuren-Karte, Reiter «Liste»: Du durchsuchst alle Figuren nach Name, Rolle, Beruf oder Beschreibung und sortierst nach Buchreihenfolge, Name, Typ oder Häufigkeit. Ein Klick auf eine Figur im Graph öffnet sie dort.",
+      "en": "Characters card, \"List\" tab: search all characters by name, role, occupation or description and sort by book order, name, type or frequency. Clicking a character in the graph opens it there."
+    },
+    {
+      "kind": "neu",
+      "de": "Figuren, Schulweg: «Schulwege vorschlagen» sammelt jetzt auch Klassenangaben mit Jahreszahl aus dem Text. Der Steckbrief zeigt, ob jede Angabe zur gerechneten Klasse passt oder ihr widerspricht.",
+      "en": "Characters, school path: \"Suggest school paths\" now also collects grade mentions with a year from your text. The profile shows whether each one matches the calculated grade or contradicts it."
+    },
+    {
+      "kind": "neu",
+      "de": "Bucheinstellungen, Schulsystem: Trag das Handlungsjahr ein, und der Steckbrief zeigt, in welcher Klasse jede Figur in diesem Jahr ist.",
+      "en": "Book settings, school system: enter the year your story takes place, and the profile shows which grade each character is in that year."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figuren, Schulweg: Im Steckbrief trägst du mehrere wiederholte Klassen ein, zur Auswahl stehen nur die Klassen des gewählten Wegs. Beim Wechsel der Schulsystem-Vorlage warnt die App, wenn Figuren ihren Weg verlieren.",
+      "en": "Characters, school path: you can enter several repeated grades in the profile, choosing only from the grades of the selected path. Switching the school system template warns you if characters lose their path."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Bucheinstellungen, Schulsystem Solothurn: Der Standardweg heisst jetzt «Oberstufe → Lehre» und lässt offen, ob die Figur Bez, Sek oder Oberschule besucht hat.",
+      "en": "Book settings, Solothurn school system: the default path is now \"Upper school → apprenticeship\" and leaves open whether the character attended Bez, Sek or Oberschule."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figuren-Karte, Reiter «Alter»: Die Alters-Analyse liest Datumsangaben wie «12.03.1950» zuverlässiger und meldet seltener einen Widerspruch zur Rechnung, den es im Text gar nicht gibt.",
+      "en": "Characters card, \"Age\" tab: the age analysis reads dates like \"12.03.1950\" more reliably and less often reports a contradiction with the calculation that isn't actually in your text."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Kapitelbewertung: Die Bewertung eines Kapitels berücksichtigt nur noch die Figuren, die darin auftreten, und die Befunde genau dieses Kapitels, auch wenn zwei Kapitel gleich heissen.",
+      "en": "Chapter review: a chapter's review now only considers the characters who appear in it and the findings of exactly that chapter, even when two chapters share a name."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Redundanz-Radar: Auch in sehr langen Büchern sucht der Radar jetzt bis zum Schluss nach Doppelungen.",
+      "en": "Redundancy radar: even in very long books the radar now searches for duplicates all the way to the end."
+    },
+    {
+      "kind": "behoben",
+      "de": "Komplettanalyse: Konnte ein Kapitel nicht ausgewertet werden, verschwanden Figuren und Orte, die nur dort vorkamen, aus dem Katalog. Sie bleiben jetzt erhalten.",
+      "en": "Full analysis: if a chapter couldn't be analysed, characters and places that only appeared there vanished from the catalogue. They are now kept."
+    },
+    {
+      "kind": "behoben",
+      "de": "Figuren-Steckbrief: Die Komplettanalyse löschte manchmal bekannte Angaben wie das Geburtsjahr, wenn sie dazu nichts fand. Bestehende Werte bleiben jetzt stehen.",
+      "en": "Character profile: the full analysis sometimes erased known details such as the year of birth when it found nothing about them. Existing values now stay."
+    },
+    {
+      "kind": "behoben",
+      "de": "Offline: «Erneut versuchen» liess Ideen manchmal liegen, obwohl der Hinweis schon verschwunden war. Sie werden jetzt zuverlässig gespeichert.",
+      "en": "Offline: \"Try again\" sometimes left ideas unsaved even though the notice had already disappeared. They are now saved reliably."
+    }
+  ]
+}

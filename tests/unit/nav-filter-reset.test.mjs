@@ -20,19 +20,22 @@ function makeCtx() {
     $store: {
       catalogUi: {
         selectedFigurId: null,
-        figurenFilters: { kapitelId: 1, seiteId: 3, suche: 'fabio' },
+        figurenFilters: { kapitelId: 1, seiteId: 3, suche: 'fabio', typ: 'randfigur', sort: 'name' },
       },
     },
     $nextTick: async () => {},
     _beginNavigation() {},
     _endNavigation() {},
+    _openFigurInListe: appNavigationMethods._openFigurInListe,
   };
 }
 
-test('openFigurById raeumt alle drei Figuren-Filter weg', async () => {
+test('openFigurById raeumt alle ausblendenden Figuren-Filter weg, die Sortierung bleibt', async () => {
   const ctx = makeCtx();
   await appNavigationMethods.openFigurById.call(ctx, '7');
   assert.equal(ctx.$store.catalogUi.figurenFilters.suche, '');
+  assert.equal(ctx.$store.catalogUi.figurenFilters.typ, '');
+  assert.equal(ctx.$store.catalogUi.figurenFilters.sort, 'name', 'Sortierung blendet nichts aus');
   assert.equal(ctx.$store.catalogUi.figurenFilters.kapitelId, '');
   assert.equal(ctx.$store.catalogUi.figurenFilters.seiteId, '');
   assert.equal(ctx.$store.catalogUi.selectedFigurId, 7, 'ID auf Number normalisiert');

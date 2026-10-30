@@ -1,5 +1,6 @@
 import { EVT } from '../events.js';
 import { highlightOccurrenceOnPage } from '../book/passage-highlight.js';
+import { openCardWith, CARD_REQUEST } from '../cards/card-request.js';
 
 // Figuren/Orte/Szenen-IDs sind INTEGER-PKs; aus Volltext-Treffern (FTS5
 // liefert entity_id als String) und aus Deep-Link-Hashes kommen sie als
@@ -50,41 +51,40 @@ export function scrollToWhenReady(target, tries = 60) {
 // History-Eintrag pro logischer Navigation schreibt statt pro Zwischenschritt.
 export const appNavigationMethods = {
   async openFigurById(figId) {
-    this._beginNavigation();
-    try {
-      const fid = _coerceId(figId);
-      // Alle drei Filter zuruecksetzen wie bei Ort/Szene/Ereignis: eine stehende
-      // Namenssuche schneidet die Zielfigur aus `filteredFiguren()`, die Zeile
-      // wird nie gerendert und der Sprung endet sichtbar im Nichts — die Karte
-      // ist offen, aber die geklickte Figur fehlt.
-      this.$store.catalogUi.figurenFilters.suche = '';
-      this.$store.catalogUi.figurenFilters.kapitelId = '';
-      this.$store.catalogUi.figurenFilters.seiteId = '';
-      if (!this.showFiguresCard) {
-        await this.toggleFiguresCard({ skipCardScroll: true });
-      }
-      this.$store.catalogUi.selectedFigurId = fid;
-      await this.$nextTick();
-      scrollToWhenReady(`.figur-item[data-figid="${fid}"]`);
-    } finally {
-      this._endNavigation();
-    }
+    return this._openFigurInListe(figId, '');
   },
 
   // Kapitel per ID (chapter-filter.js): gleichnamige Kapitel sind zwei Kapitel.
   async openFigurMitKapitel(figId, chapterId) {
+    return this._openFigurInListe(figId, chapterId ?? '');
+  },
+
+  // Figur in der Liste aufklappen und hinscrollen. Die Liste ist ein Reiter der
+  // Karte: der Sprung (Verweis, Palette, Graph-Knoten, Hash) muss ihn erst
+  // anwählen, sonst klappt die Zeile in einer ausgeblendeten Liste auf.
+  async _openFigurInListe(figId, kapitelId) {
     this._beginNavigation();
     try {
       const fid = _coerceId(figId);
-      this.$store.catalogUi.figurenFilters.suche = '';
-      this.$store.catalogUi.figurenFilters.kapitelId = chapterId ?? '';
-      this.$store.catalogUi.figurenFilters.seiteId = '';
-      if (!this.showFiguresCard) {
-        await this.toggleFiguresCard({ skipCardScroll: true });
-      }
+      // Alle Filter zuruecksetzen wie bei Ort/Szene/Ereignis: eine stehende
+      // Suche oder ein Typ-Filter schneidet die Zielfigur aus `filteredFiguren()`,
+      // die Zeile wird nie gerendert und der Sprung endet sichtbar im Nichts.
+      // Die Sortierung bleibt — sie blendet nichts aus.
+      const filters = this.$store.catalogUi.figurenFilters;
+      filters.suche = '';
+      filters.typ = '';
+      filters.kapitelId = kapitelId;
+      filters.seiteId = '';
+      await openCardWith(CARD_REQUEST.FIGUREN_TAB, 'liste',
+        () => (this.showFiguresCard ? null : this.toggleFiguresCard({ skipCardScroll: true })));
       this.$store.catalogUi.selectedFigurId = fid;
       await this.$nextTick();
-      scrollToWhenReady(`.figur-item[data-figid="${fid}"]`);
+      // Nur eine sichtbare Zeile: bis der Reiterwechsel gerendert ist, steht die
+      // Zeile in der ausgeblendeten Liste (offsetParent null, Position 0).
+      scrollToWhenReady(() => {
+        const el = document.querySelector(`.figur-item[data-figid="${fid}"]`);
+        return el?.offsetParent ? el : null;
+      });
     } finally {
       this._endNavigation();
     }

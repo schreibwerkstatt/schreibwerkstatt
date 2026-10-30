@@ -63,6 +63,10 @@ module.exports = {
   emptyScopeError: jobsMod.emptyScopeError,
   normalizeGesamtnote: require('./review-validate').normalizeGesamtnote,
   assertChapterAnalysis: require('./review-validate').assertChapterAnalysis,
+  sortEmpfehlungen: require('./review-validate').sortEmpfehlungen,
+  sigHash: require('./review-sig').sigHash,
+  buildChapterPagesSig: require('./review-sig').buildChapterPagesSig,
+  systemChars: require('./review-sig').systemChars,
 
   _modelName: model._modelName,
   applyReviewAiOverrides: model.applyReviewAiOverrides,

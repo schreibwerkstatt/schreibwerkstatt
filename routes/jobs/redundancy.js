@@ -43,7 +43,9 @@ const MAX_THRESHOLD = 0.97;
 // Obergrenze verglichener Chunks. Schützt vor pathologisch grossen Büchern; wird
 // sie überschritten, verarbeiten wir die ersten MAX_CHUNKS in Buchreihenfolge und
 // melden es ehrlich (result.truncatedChunks), statt still Befunde zu verschlucken.
-const MAX_CHUNKS = 6000;
+// Gemessen auf Prod: 6000 Chunks ≈ 47 s; die Laufzeit wächst quadratisch, 15000
+// also ≈ 5 min — genug für ein täglich wachsendes Blog-Buch mit >12000 Chunks.
+const MAX_CHUNKS = 15000;
 const TOP_K = 60;
 // Paare pro Scan-Block, danach einmal an den Event-Loop zurückgeben. Bei
 // ~1000 Dimensionen sind das einige zehn Millisekunden pro Block.

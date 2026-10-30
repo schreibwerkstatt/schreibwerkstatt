@@ -18,7 +18,7 @@ import { EVT } from '../../events.js';
 // Titel-Werkstatt) liegen im Karten-State und laufen ueber `filterScopes` in
 // `setupCardLifecycle` — gleiche Mechanik, anderer Host.
 export const FILTER_SCOPES = [
-  { scope: 'figurenFilters',      key: 'figurenFilters',      defaults: { kapitelId: '', seiteId: '', suche: '' } },
+  { scope: 'figurenFilters',      key: 'figurenFilters',      defaults: { kapitelId: '', seiteId: '', suche: '', typ: '', sort: '' } },
   { scope: 'ereignisseFilters',   key: 'ereignisseFilters',   defaults: { figurId: '', kapitelId: '', seiteId: '', subtyp: '', suche: '' } },
   { scope: 'szenenFilters',       key: 'szenenFilters',       defaults: { wertung: '', figurId: '', kapitelId: '', seiteId: '', ortId: '', suche: '' } },
   { scope: 'orteFilters',         key: 'orteFilters',         defaults: { figurId: '', kapitelId: '', szeneId: '', suche: '' } },

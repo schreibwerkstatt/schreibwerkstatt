@@ -259,6 +259,28 @@ test('Buch-Review: leeres Buch → result.empty', async () => {
   assert.equal(ctx.mockAi.log.length, 0);
 });
 
+test('Buch-Review: nur Stummel-Abschnitte → result.empty, kein AI-Call', async () => {
+  const BOOK_ID = 84;
+  ctx.dbSeed.setBook({
+    chapters: [{ id: 8700, book_id: BOOK_ID, name: 'K' }],
+    pages: [
+      { id: 8701, book_id: BOOK_ID, chapter_id: 8700, name: 'S 1', position: 0 },
+      { id: 8702, book_id: BOOK_ID, chapter_id: 8700, name: 'S 2', position: 1 },
+    ],
+    pageBodies: { 8701: '<p>Notiz.</p>', 8702: '<p>Später ausbauen.</p>' },
+  });
+  ctx.mockAi.on(() => true, reviewResponse(4.0));
+
+  const jobId = ctx.shared.createJob('review', BOOK_ID, 'tester@test.dev', 'job.label.review');
+  ctx.shared.enqueueJob(jobId, () =>
+    ctx.review.runReviewJob(jobId, BOOK_ID, 'Buch', 'tester@test.dev'),
+  );
+  const job = await waitForJob(ctx.shared, jobId);
+  assert.equal(job.status, 'done');
+  assert.equal(job.result.empty, true);
+  assert.equal(ctx.mockAi.log.length, 0, 'kein KI-Call über einen leeren Buchinhalt');
+});
+
 // ── Kapitel-Review ────────────────────────────────────────────────────────────
 
 test('Kapitel-Review: 1 Kapitel → 1 AI-Call, chapter_reviews-Zeile', async () => {
@@ -269,12 +291,15 @@ test('Kapitel-Review: 1 Kapitel → 1 AI-Call, chapter_reviews-Zeile', async () 
     pages: [
       { id: 9200, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 1', position: 0 },
       { id: 9201, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 2', position: 1 },
+      // Stummel unter der Mindestlänge (wie in der Buchbewertung) — zählt nicht.
+      { id: 9202, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 3', position: 2 },
       // Page in different chapter — should be filtered out.
       { id: 9300, book_id: BOOK_ID, chapter_id: 9999, name: 'Andere', position: 0 },
     ],
     pageBodies: {
-      9200: '<p>Anna ging in den Wald.</p>',
-      9201: '<p>Es war kalt.</p>',
+      9200: '<p>Anna ging in den Wald, wo der Nebel zwischen den Stämmen hing.</p>',
+      9201: '<p>Es war kalt, und der Atem stand ihr weiss vor dem Mund.</p>',
+      9202: '<p>Notiz.</p>',
       9300: '<p>nicht relevant</p>',
     },
   });
@@ -312,8 +337,8 @@ test('Kapitel-Review: ausgeschlossenes Kapitel bleibt direkt bewertbar', async (
       { id: 9061, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 2', position: 1 },
     ],
     pageBodies: {
-      9060: '<p>Anna ging in den Wald.</p>',
-      9061: '<p>Es war kalt.</p>',
+      9060: '<p>Anna ging in den Wald, wo der Nebel zwischen den Stämmen hing.</p>',
+      9061: '<p>Es war kalt, und der Atem stand ihr weiss vor dem Mund.</p>',
     },
   });
   // Kapitel ausschliessen — Buch-/Komplettanalyse wuerden es ueberspringen,
@@ -347,8 +372,8 @@ test('Kapitel-Review Cache: Rerun trifft chapter_macro_review_cache → 0 AI-Cal
       { id: 9811, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 2', position: 1, updated_at: '2026-05-01T10:00:00Z' },
     ],
     pageBodies: {
-      9810: '<p>Anna ging in den Wald.</p>',
-      9811: '<p>Es war kalt.</p>',
+      9810: '<p>Anna ging in den Wald, wo der Nebel zwischen den Stämmen hing.</p>',
+      9811: '<p>Es war kalt, und der Atem stand ihr weiss vor dem Mund.</p>',
     },
   });
 
@@ -409,7 +434,7 @@ test('Kapitel-Review: Seite lädt nicht → Lauf bricht ab, kein Cache, kein Ver
       { id: 9660, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 1', position: 0 },
       { id: 9661, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S 2', position: 1 },
     ],
-    pageBodies: { 9660: '<p>Anna ging in den Wald.</p>', 9661: '<p>Es war kalt.</p>' },
+    pageBodies: { 9660: '<p>Anna ging in den Wald, wo der Nebel zwischen den Stämmen hing.</p>', 9661: '<p>Es war kalt, und der Atem stand ihr weiss vor dem Mund.</p>' },
   });
   ctx.mockAi.on(() => true, chapterReviewResponse(4.1));
 
@@ -461,7 +486,7 @@ test('Kapitel-Review: AI ohne gesamtnote → failJob', async () => {
   ctx.dbSeed.setBook({
     chapters: [{ id: CHAPTER_ID, book_id: BOOK_ID, name: 'K' }],
     pages: [{ id: 9700, book_id: BOOK_ID, chapter_id: CHAPTER_ID, name: 'S', position: 0 }],
-    pageBodies: { 9700: '<p>Anna ging in den Wald.</p>' },
+    pageBodies: { 9700: '<p>Anna ging in den Wald, wo der Nebel zwischen den Stämmen hing.</p>' },
   });
 
   ctx.mockAi.on(() => true, { fazit: 'unvollständig' });

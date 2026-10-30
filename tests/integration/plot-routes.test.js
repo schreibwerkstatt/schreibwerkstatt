@@ -251,19 +251,30 @@ test('GET /zeit-vorschlaege: aus dem Text der besten Fundstelle, nur Beats im Bu
   assert.equal(fremd.status, 403);
 });
 
-test('Geburtsjahr: Steckbrief, sonst Alters-Analyse — aber nie aus dem Zeitstrahl oder bei niedriger Konfidenz', async () => {
+test('Geburtsjahr: Steckbrief, sonst Alters-Analyse — aber nie aus dem Zeitstrahl, unsicherem oder widersprochenem Beleg', async () => {
   const B = 9525;
   db.prepare("INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, 'Altersbuch', ?, ?)").run(B, NOW, NOW);
   require('../../db/book-access').grantAccess(B, OWNER, 'editor', OWNER);
   const fig = (fid, name, geb) => db.prepare(`INSERT INTO figures (book_id, user_email, fig_id, name, kurzname, geburtstag, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .run(B, OWNER, fid, name, name, geb, NOW).lastInsertRowid;
-  const age = (id, geb, quelle, konf) => db.prepare(`INSERT INTO figure_ages (figure_id, book_id, geburtsjahr, geburtsjahr_quelle, konfidenz) VALUES (?, ?, ?, ?, ?)`)
-    .run(id, B, geb, quelle, konf);
-  age(fig('fig_st', 'Stefan', '1968'), 1960, 'text', 0.9);   // Steckbrief gewinnt
-  age(fig('fig_re', 'Renate', null), 1970, 'kuratiert', 0.7); // Steckbrief leer → Analyse
-  age(fig('fig_ma', 'Manuel', null), 1988, 'text', 0.75);
-  age(fig('fig_gi', 'Gisela', null), 1988, 'zeitstrahl', 0.75); // Zeitstrahl zählt nicht
-  age(fig('fig_si', 'Silvia', null), 1975, 'text', 0.1);       // zu unsicher
+  // Die Alters-Konfidenz spielt keine Rolle (sie gehört zum Alter): Manuel hat 0,
+  // weil die Zeile kein Alter trägt, sein Geburtsjahr ist trotzdem belegt.
+  const age = (id, geb, quelle, { konf = 0, unsicher = null, widerspruch = null } = {}) => {
+    db.prepare(`INSERT INTO figure_ages (figure_id, book_id, geburtsjahr, geburtsjahr_quelle, konfidenz, widerspruch_json) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(id, B, geb, quelle, konf, widerspruch ? JSON.stringify(widerspruch) : null);
+    if (unsicher != null) {
+      db.prepare(`INSERT INTO figure_age_belege (figure_id, book_id, art, wert, zitat, unsicher, sort_order) VALUES (?, ?, 'geburtsjahr', ?, ?, ?, 0)`)
+        .run(id, B, geb, `geboren ${geb}`, unsicher ? 1 : 0);
+    }
+  };
+  age(fig('fig_st', 'Stefan', '1968'), 1960, 'text', { unsicher: false }); // Steckbrief gewinnt
+  age(fig('fig_re', 'Renate', null), 1970, 'kuratiert');                    // Steckbrief leer → Analyse
+  age(fig('fig_ma', 'Manuel', null), 1988, 'text', { unsicher: false });
+  age(fig('fig_gi', 'Gisela', null), 1988, 'zeitstrahl', { konf: 0.75 });  // Zeitstrahl zählt nicht
+  age(fig('fig_si', 'Silvia', null), 1975, 'text', { unsicher: true });    // nur unsicher belegt
+  age(fig('fig_ka', 'Karin', null), 1950, 'text', {                        // Text nennt zwei Jahre
+    unsicher: false, widerspruch: [{ typ: 'geburtsjahrText', a: 1950, b: 1955 }],
+  });
 
   const board = (await call('GET', `/plot/?book_id=${B}`)).body;
   assert.deepEqual(board.geburtsjahre, { fig_st: 1968, fig_re: 1970, fig_ma: 1988 });

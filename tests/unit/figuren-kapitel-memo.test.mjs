@@ -21,6 +21,7 @@ function setup() {
     catalog: { figuren },
     catalogUi: { figurenFilters: { suche: '', kapitelId: 1, seiteId: '' } },
     nav: { pages },
+    shell: { uiLocale: 'de' },
   };
   const root = {
     $store: stores,

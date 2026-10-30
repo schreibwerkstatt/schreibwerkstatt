@@ -169,9 +169,9 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
     const figuren = db.prepare(`
       SELECT id, fig_id, name, kurzname, typ, geburtstag
       FROM figures
-      WHERE book_id = ? AND user_email = ? AND stale = 0
+      WHERE book_id = ? AND user_email IS ? AND stale = 0
       ORDER BY sort_order, id
-    `).all(bookId, userEmail || '');
+    `).all(bookId, userEmail || null);
     if (!figuren.length) throw i18nError('job.error.figurAlterNoFiguren');
 
     const { chMap, pages } = await loadOrderedBookContents(bookId);
@@ -259,7 +259,9 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
       blocks.push({
         fig: f,
         stellen: picked,
-        chars: picked.reduce((s, c) => s + c.satz.length, 0) + (f.name || '').length + 40,
+        // Satz + Ortslabel „[Kapitel › Abschnitt]" + Nummer je Stelle, wie im Prompt.
+        chars: picked.reduce((s, c) => s + c.satz.length + (c.chapter || '').length + (c.page_name || '').length + 16, 0)
+          + (f.name || '').length + 40,
       });
     }
 
@@ -276,23 +278,28 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
     // dieselbe «Anna», ist die Zuordnung geraten — und eine falsch zugeordnete
     // Altersangabe ist schlimmer als eine fehlende (sie steht mit Beleg in der
     // Tabelle und sieht dadurch besonders glaubwuerdig aus).
+    // Dasselbe gilt fuer zwei Figuren mit gleichem Vollnamen: deren Funde werden
+    // verworfen (`verworfen.figur`), statt still der ersten zuzufallen.
+    const fullCount = new Map();
     const shortCount = new Map();
     for (const f of figuren) {
+      const full = foldWord(f.name);
+      if (full) fullCount.set(full, (fullCount.get(full) || 0) + 1);
       const k = foldWord(f.kurzname);
       if (k) shortCount.set(k, (shortCount.get(k) || 0) + 1);
     }
     const nameLookup = new Map();
     for (const f of figuren) {
       const full = foldWord(f.name);
-      if (full && !nameLookup.has(full)) nameLookup.set(full, f);
+      if (full && fullCount.get(full) === 1) nameLookup.set(full, f);
     }
     for (const f of figuren) {
       const k = foldWord(f.kurzname);
-      if (k && shortCount.get(k) === 1 && !nameLookup.has(k)) nameLookup.set(k, f);
+      if (k && shortCount.get(k) === 1 && !fullCount.has(k)) nameLookup.set(k, f);
     }
 
     const fundeByFigur = new Map();
-    let verworfenZitat = 0, verworfenZahl = 0, verworfenFigur = 0, verworfenWert = 0;
+    let verworfenZitat = 0, verworfenZahl = 0, verworfenFigur = 0, verworfenWert = 0, verworfenBezugsjahr = 0;
 
     // `stellenOf`: Figur → ihre vorgelegten Stellen; `labelOf`: Stelle → ihre
     // Nummer im Prompt („2.3"). Das Modell nennt die Nummer mit — steht dasselbe
@@ -329,10 +336,21 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
         // „belegt" in die Tabelle.
         if (!numbersIn(zitat).has(wert)) { verworfenZahl++; continue; }
 
+        // Bezugsjahr: dieselbe Haltung wie beim Wert — nur ein Jahr, das in der
+        // vorgelegten Stelle steht. Ein aus dem Kontext erschlossenes Jahr waere
+        // eine Rechnung des Modells, und die Rechnungspruefung der Verdichtung
+        // meldete daraus einen Widerspruch, den es im Text nicht gibt. Der Fund
+        // selbst bleibt, nur ohne Bezugsjahr.
+        let bezugsjahr = Number.isFinite(Number(v.bezugsjahr)) ? Math.round(Number(v.bezugsjahr)) : null;
+        if (bezugsjahr != null && (!isPlausibleWert('geburtsjahr', bezugsjahr) || !numbersIn(treffer.satz).has(bezugsjahr))) {
+          bezugsjahr = null;
+          verworfenBezugsjahr++;
+        }
+
         if (!fundeByFigur.has(fig.id)) fundeByFigur.set(fig.id, []);
         fundeByFigur.get(fig.id).push({
           art, wert,
-          bezugsjahr: Number.isFinite(Number(v.bezugsjahr)) && Number(v.bezugsjahr) > 999 ? Math.round(Number(v.bezugsjahr)) : null,
+          bezugsjahr,
           zitat: zitat.slice(0, 400),
           page_id: treffer.page_id ?? null,
           chapter_id: treffer.chapter_id ?? null,
@@ -438,7 +456,7 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
     logger.info(
       `Alters-Analyse fertig: book=${bookId} zeilen=${written.rows} mitAlter=${written.mitAlter} `
       + `belege=${written.belegeTotal} widersprueche=${widersprueche} `
-      + `verworfen(zitat=${verworfenZitat} zahl=${verworfenZahl} wert=${verworfenWert} figur=${verworfenFigur})`,
+      + `verworfen(zitat=${verworfenZitat} zahl=${verworfenZahl} wert=${verworfenWert} figur=${verworfenFigur} bezugsjahr=${verworfenBezugsjahr})`,
     );
 
     completeJob(jobId, {
@@ -448,7 +466,7 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
       widersprueche,
       stellenDropped,
       embedQueries, embedSkipped, embedUsed,
-      verworfen: { zitat: verworfenZitat, zahl: verworfenZahl, wert: verworfenWert, figur: verworfenFigur },
+      verworfen: { zitat: verworfenZitat, zahl: verworfenZahl, wert: verworfenWert, figur: verworfenFigur, bezugsjahr: verworfenBezugsjahr },
       tokensIn: tok.in, tokensOut: tok.out,
     }, tps(tok), `${written.mitAlter}/${figuren.length} Figuren mit Alter`);
   } catch (e) {

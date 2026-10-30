@@ -1,7 +1,8 @@
 // Alpine.data('figurenCard') — Sub-Komponente der Figurenübersicht.
 //
 // Eigener State:
-//   - Graph-Modus (figurenGraphModus, figurenGraphKapitelId, figurenGraphFullscreen)
+//   - Reiter (figurenGraphModus: Liste, drei Graphen, drei Tabellen) und
+//     Graph-State (figurenGraphKapitelId, figurenGraphFullscreen)
 //   - Alterstabelle (figurenAlterData/-Filters/-Loading/-Progress/-Status,
 //     figurenAlterOpenId) — der Index wird erst beim Oeffnen des Reiters geholt
 //   - Lebenslauf (figurenLebenslaufIds/-Filters) — reine Anzeige-Wahl; die Daten
@@ -39,15 +40,31 @@ import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 import { figurPflegeMethods } from '../book/figuren-pflege.js';
 import { figurenSchulwegMethods } from '../book/figuren-schulweg.js';
 
+// Felder, die die Listensuche trifft. Der Typ zählt mit seinem angezeigten
+// Label (`typLabel`), nicht dem Persistenz-Key — gesucht wird, was man liest.
+const SEARCH_FIELDS = ['name', 'kurzname', 'beschreibung', 'rolle', 'beruf'];
+
+function matchesSuche(f, q, typLabel) {
+  for (const k of SEARCH_FIELDS) if ((f[k] ?? '').toLowerCase().includes(q)) return true;
+  if ((f.eigenschaften ?? []).some(e => String(e).toLowerCase().includes(q))) return true;
+  return !!typLabel && (typLabel(f.typ) ?? '').toLowerCase().includes(q);
+}
+
+// Auftritte im ganzen Buch: Summe der Kapitel-Häufigkeiten (wie die Präsenz-Heatmap).
+const auftritte = (f) => (f.kapitel ?? []).reduce((s, k) => s + (k.haeufigkeit || 1), 0);
+
 // Pure Filter+Sort der Figurenliste. Aus dem memoized Wrapper extrahiert, damit
 // sie ohne Alpine-Root testbar bleibt. `chapterIdx(id)` = Lese-Reihenfolge einer
 // Kapitel-ID (root._chapterIdIdx). `kapitelId`/`seiteId` sind die bereits
 // wirksamen Filterwerte (activeFilterId); Kapitel und Abschnitte per ID
 // (chapter-filter.js), Abschnitte aus den Szenen der Figur (f.seiten).
-export function computeFilteredFiguren(figuren, chapterIdx, { suche = '', kapitelId = '', seiteId = '' } = {}) {
+// `sort`: '' (Buchreihenfolge) | 'name' | 'typ' | 'haeufigkeit'; jede Sortierung
+// fällt bei Gleichstand auf die Buchreihenfolge zurück.
+export function computeFilteredFiguren(figuren, chapterIdx, { suche = '', kapitelId = '', seiteId = '', typ = '', sort = '', typLabel = null } = {}) {
   let result = figuren ?? [];
-  const q = (suche || '').toLowerCase();
-  if (q) result = result.filter(f => (f.name ?? '').toLowerCase().includes(q));
+  const q = (suche || '').trim().toLowerCase();
+  if (q) result = result.filter(f => matchesSuche(f, q, typLabel));
+  if (typ) result = result.filter(f => f.typ === typ);
   if (kapitelId) result = result.filter(f => (f.kapitel ?? []).some(k => sameId(k.chapter_id, kapitelId)));
   if (kapitelId && seiteId) result = result.filter(f =>
     (f.seiten ?? []).some(s => sameId(s.chapter_id, kapitelId) && sameId(s.page_id, seiteId)));
@@ -66,7 +83,7 @@ export function computeFilteredFiguren(figuren, chapterIdx, { suche = '', kapite
     minIdx.set(f, m);
     return m;
   };
-  return [...result].sort((a, b) => {
+  const buchFolge = (a, b) => {
     const aK = idxOf(a);
     const bK = idxOf(b);
     if (aK !== bK) return aK - bK;
@@ -74,7 +91,13 @@ export function computeFilteredFiguren(figuren, chapterIdx, { suche = '', kapite
     const bT = typRank(b.typ);
     if (aT !== bT) return aT - bT;
     return compareNames(a.name, b.name);
-  });
+  };
+  const cmp = {
+    name: (a, b) => compareNames(a.name, b.name) || buchFolge(a, b),
+    typ: (a, b) => (typRank(a.typ) - typRank(b.typ)) || buchFolge(a, b),
+    haeufigkeit: (a, b) => (auftritte(b) - auftritte(a)) || buchFolge(a, b),
+  }[sort] ?? buchFolge;
+  return [...result].sort(cmp);
 }
 
 // Pure: Abschnitts-IDs eines Kapitels über alle Figuren (Filter-Combobox).
@@ -98,7 +121,9 @@ export function registerFigurenCard() {
       return formatEventDateParts(ev, (k, p) => window.__app.t(k, p));
     },
     subtypIcon,
-    figurenGraphModus: 'figur',
+    // Aktiver Reiter. 'liste' (Figurenliste) ist der Einstieg; die übrigen sind
+    // Graph- (GRAPH_MODES in graph/constants.js) oder Tabellen-Ansichten.
+    figurenGraphModus: 'liste',
     figurenGraphKapitelId: null,
     figurenGraphFullscreen: false,
     // Alterstabelle (5. Reiter). `figurenAlterData` = { figuren, scan } aus
@@ -130,13 +155,16 @@ export function registerFigurenCard() {
     figurMergeError: '',
     figurPflegeMessage: '',
     // Schullaufbahn (book/figuren-schulweg.js): `figurSchulData` = { schulsystem,
-    // wege } aus GET /figures/:id/schulwege; null = nicht geladen. Bearbeiten wie
-    // die Katalog-Pflege (eine Figur zur Zeit), dazu der Vorschlags-Job.
+    // wege, geburten, handlungsjahr } aus GET /figures/:id/schulwege; null = nicht
+    // geladen. Bearbeiten wie die Katalog-Pflege (eine Figur zur Zeit), dazu der
+    // Vorschlags-Job und die Jahr-Abfrage im Lebenslauf.
     figurSchulData: null,
     figurSchulEditId: null,
     figurSchulDraft: {},
     figurSchulBusy: false,
     figurSchulError: '',
+    figurSchulMessage: '',
+    figurSchulAbfrageJahr: null,
     figurSchulJobLoading: false,
     figurSchulJobProgress: 0,
     figurSchulJobStatus: '',
@@ -215,7 +243,7 @@ export function registerFigurenCard() {
           ctx._resetFigurenAlter();
           ctx._resetFigurPflege();
           ctx._resetFigurSchulweg();
-          ctx.figurenGraphModus = 'figur';
+          ctx.figurenGraphModus = 'liste';
           ctx.figurenGraphKapitelId = null;
           ctx.figurenGraphFullscreen = false;
         },
@@ -343,10 +371,16 @@ export function registerFigurenCard() {
       const figuren = root.$store.catalog.figuren;
       const orderMap = root._chapterIdOrderMap;
       const suche = f.suche ?? '';
+      const typ = f.typ ?? '';
+      const sort = f.sort ?? '';
+      const locale = Alpine.store('shell').uiLocale;
       const kapitelId = this._figurenKapitelFilter();
       const seiteId = kapitelId ? activeFilterId(f.seiteId, this.figurenSeitenOptionen()) : '';
-      return this._memo('filtered', [figuren, orderMap, suche, kapitelId, seiteId],
-        () => computeFilteredFiguren(figuren, id => orderMap?.get(id), { suche, kapitelId, seiteId }));
+      return this._memo('filtered', [figuren, orderMap, suche, typ, sort, locale, kapitelId, seiteId],
+        () => computeFilteredFiguren(figuren, id => orderMap?.get(id), {
+          suche, typ, sort, kapitelId, seiteId,
+          typLabel: (t) => (t ? root.t('figuren.type.' + t) : ''),
+        }));
     },
 
     // i18n aus einer Sub-Methode: `t` haengt am Root, die Karte greift ueber

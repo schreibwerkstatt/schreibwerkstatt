@@ -6,8 +6,9 @@
 // Alle Quellen sind optional: fehlt eine Komplettanalyse, bleibt das Feld leer
 // und der Prompt-Block für diese Quelle wird vom Builder weggelassen.
 
-const { db, getChapterFigures, getChapterFigureRelations, getLatestContinuityCheck,
+const { getChapterFigures, getChapterFigureRelations, getLatestContinuityCheck,
   listWorldFacts, worldFactsScanState } = require('../../db/schema');
+const { listZeitstrahlEvents, listZeitstrahlEventRefs } = require('../../db/zeitstrahl');
 const { getGraph: getMotifGraph } = require('../../db/motifs');
 const { listStructureChecks } = require('../../db/textsorte');
 const { summarizeStrukturChecks } = require('../../lib/struktur-summary');
@@ -36,23 +37,65 @@ function _truncString(s, n) {
   return t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t;
 }
 
-/** Lädt Zeitstrahl-Events aus zeitstrahl_events. Kapitel-Namen kommen via
- *  Junction-Tabelle zeitstrahl_event_chapters → chapters (Migration 74).
- *  Pro Event: kommagetrennte Kapitelnamen in Sort-Order.
- */
+/** Zeitstrahl-Events in Chronologie, je mit den Kapitel-IDs (Scope-Filter) und
+ *  den Kapitelnamen in Bridge-Reihenfolge (Anzeige im Prompt). Die Namens-JOINs
+ *  liegen in db/zeitstrahl.js. */
 function _loadZeitstrahl(bookId, userEmail) {
-  return db.prepare(`
-    SELECT ze.datum, ze.ereignis, ze.typ, ze.bedeutung,
-           (
-             SELECT GROUP_CONCAT(c.chapter_name, ', ')
-               FROM zeitstrahl_event_chapters zec
-               LEFT JOIN chapters c ON c.chapter_id = zec.chapter_id
-              WHERE zec.event_id = ze.id
-           ) AS kapitel
-      FROM zeitstrahl_events ze
-     WHERE ze.book_id = ? AND ze.user_email = ?
-     ORDER BY ze.sort_order, ze.id
-  `).all(bookId, userEmail || '');
+  const events = listZeitstrahlEvents(bookId, userEmail || '');
+  const { chRows } = listZeitstrahlEventRefs(events.map(e => e.id));
+  const chByEvent = new Map();
+  for (const r of chRows) {
+    if (!chByEvent.has(r.event_id)) chByEvent.set(r.event_id, { ids: [], namen: [] });
+    const b = chByEvent.get(r.event_id);
+    b.ids.push(Number(r.chapter_id));
+    if (r.chapter_name) b.namen.push(r.chapter_name);
+  }
+  return events.map(e => ({
+    datum: e.datum, ereignis: e.ereignis, typ: e.typ,
+    chapterIds: chByEvent.get(e.id)?.ids || [],
+    kapitel: chByEvent.get(e.id)?.namen.join(', ') || null,
+  }));
+}
+
+/** Höchstens `max` Einträge, gleichmässig über die ganze Liste verteilt und in
+ *  ihrer Reihenfolge — ein blosses slice(0, max) zeigte bei einem langen Buch nur
+ *  den Anfang des Zeitstrahls. */
+function _spread(list, max) {
+  if (list.length <= max) return list;
+  const step = list.length / max;
+  return Array.from({ length: max }, (_, i) => list[Math.floor(i * step)]);
+}
+
+const SCHWERE_RANG = { kritisch: 0, mittel: 1, niedrig: 2 };
+
+/** Offene Kontinuitätsbefunde, schwerste zuerst. Erledigte und vom Autor als
+ *  «kein Fehler» verworfene fallen raus — sonst drückte ein bekannter Fehlalarm
+ *  auf Kohärenz und Note. */
+function _openContinuityIssues(continuity) {
+  return (continuity?.issues || [])
+    .filter(i => !i.resolved && !i.dismissed)
+    .map((i, idx) => ({ i, idx }))
+    .sort((a, b) => ((SCHWERE_RANG[a.i.schwere] ?? 3) - (SCHWERE_RANG[b.i.schwere] ?? 3)) || a.idx - b.idx)
+    .map(x => x.i);
+}
+
+function _continuityItem(i) {
+  return {
+    schwere: i.schwere,
+    typ: i.typ,
+    beschreibung: _truncString(i.beschreibung, 240),
+    kapitel: (i.kapitel || []).slice(0, 3),
+    figuren: (i.figuren || []).slice(0, 5),
+  };
+}
+
+function _zeitstrahlItem(e) {
+  return {
+    datum: e.datum,
+    ereignis: _truncString(e.ereignis, 160),
+    typ: e.typ || null,
+    kapitel: e.kapitel || null,
+  };
 }
 
 /** Sammelt alle für die Buchreview-Augmentation relevanten Strukturdaten.
@@ -74,49 +117,35 @@ function loadReviewKomplettContext(bookId, userEmail) {
     typ: b.typ,
     beschreibung: _truncString(b.beschreibung, 160),
   }));
-  const continuity  = getLatestContinuityCheck(bookId, userEmail);
-  const continuityIssues = continuity?.issues
-    ? continuity.issues.slice(0, MAX_CONTINUITY).map(i => ({
-        schwere: i.schwere,
-        typ: i.typ,
-        beschreibung: _truncString(i.beschreibung, 240),
-        kapitel: (i.kapitel || []).slice(0, 3),
-        figuren: (i.figuren || []).slice(0, 5),
-      }))
-    : [];
-  const zeitstrahl = _loadZeitstrahl(bookId, userEmail).slice(0, MAX_ZEITSTRAHL).map(e => ({
-    datum: e.datum,
-    ereignis: _truncString(e.ereignis, 160),
-    typ: e.typ || null,
-    kapitel: e.kapitel || null,
-  }));
+  const continuityIssues = _openContinuityIssues(getLatestContinuityCheck(bookId, userEmail))
+    .slice(0, MAX_CONTINUITY).map(_continuityItem);
+  const zeitstrahl = _spread(_loadZeitstrahl(bookId, userEmail), MAX_ZEITSTRAHL).map(_zeitstrahlItem);
 
   return { figuren, beziehungen, continuityIssues, zeitstrahl };
 }
 
 /** Wie loadReviewKomplettContext, aber auf ein Kapitel (bzw. eine Menge von
  *  Kapitel-IDs bei include_subchapters) gescopt. Figuren/Beziehungen kommen aus
- *  den Auftritten in genau diesen Kapiteln; Kontinuitäts-Befunde und Zeitstrahl-
- *  Events werden über die Kapitelnamen gefiltert. So sieht die Kapitelbewertung
+ *  den Auftritten in genau diesen Kapiteln — ohne Rückfall aufs ganze Buch, wenn
+ *  ein Kapitel (noch) keine hat; Kontinuitäts-Befunde und Zeitstrahl-Events
+ *  werden über ihre Kapitel-IDs gefiltert. So sieht die Kapitelbewertung
  *  die Buchwahrheit, die für ihre Achsen `figuren` und `kohaerenz` zählt, statt
  *  das Kapitel isoliert zu beurteilen.
  *
  *  @param {number} bookId
  *  @param {string} userEmail
- *  @param {{chapterIds:Array<number|string>, chapterNames:string[]}} scope
+ *  @param {{chapterIds:Array<number|string>}} scope
  */
-function loadChapterReviewKomplettContext(bookId, userEmail, { chapterIds = [], chapterNames = [] } = {}) {
+function loadChapterReviewKomplettContext(bookId, userEmail, { chapterIds = [] } = {}) {
   const ids = [...new Set(chapterIds.map(Number).filter(Boolean))];
   const empty = { figuren: [], beziehungen: [], continuityIssues: [], zeitstrahl: [] };
   if (!bookId || !ids.length) return empty;
-  const nameSet = new Set(chapterNames.map(n => String(n || '').toLowerCase().trim()).filter(Boolean));
-  const inScope = (kap) => !nameSet.size
-    || (Array.isArray(kap) ? kap : String(kap || '').split(','))
-        .some(k => nameSet.has(String(k).toLowerCase().trim()));
+  const idSet = new Set(ids);
+  const inScope = (chapterIdList) => (chapterIdList || []).some(id => idSet.has(Number(id)));
 
   const figMap = new Map();
   for (const cid of ids) {
-    for (const f of getChapterFigures(bookId, cid, userEmail) || []) {
+    for (const f of getChapterFigures(bookId, cid, userEmail, { bookFallback: false }) || []) {
       if (!figMap.has(f.id)) figMap.set(f.id, f);
     }
   }
@@ -131,7 +160,7 @@ function loadChapterReviewKomplettContext(bookId, userEmail, { chapterIds = [], 
 
   const relMap = new Map();
   for (const cid of ids) {
-    for (const b of getChapterFigureRelations(bookId, cid, userEmail) || []) {
+    for (const b of getChapterFigureRelations(bookId, cid, userEmail, { bookFallback: false }) || []) {
       relMap.set(`${b.von}\u0000${b.zu}\u0000${b.typ}`, b);
     }
   }
@@ -142,25 +171,14 @@ function loadChapterReviewKomplettContext(bookId, userEmail, { chapterIds = [], 
     beschreibung: _truncString(b.beschreibung, 160),
   }));
 
-  const continuity = getLatestContinuityCheck(bookId, userEmail);
-  const continuityIssues = (continuity?.issues || [])
-    .filter(i => inScope(i.kapitel))
-    .slice(0, MAX_CONTINUITY).map(i => ({
-      schwere: i.schwere,
-      typ: i.typ,
-      beschreibung: _truncString(i.beschreibung, 240),
-      kapitel: (i.kapitel || []).slice(0, 3),
-      figuren: (i.figuren || []).slice(0, 5),
-    }));
+  const continuityIssues = _openContinuityIssues(getLatestContinuityCheck(bookId, userEmail))
+    .filter(i => inScope(i.chapter_ids))
+    .slice(0, MAX_CONTINUITY).map(_continuityItem);
 
-  const zeitstrahl = _loadZeitstrahl(bookId, userEmail)
-    .filter(e => e.kapitel && inScope(e.kapitel))
-    .slice(0, MAX_ZEITSTRAHL).map(e => ({
-      datum: e.datum,
-      ereignis: _truncString(e.ereignis, 160),
-      typ: e.typ || null,
-      kapitel: e.kapitel || null,
-    }));
+  const zeitstrahl = _spread(
+    _loadZeitstrahl(bookId, userEmail).filter(e => inScope(e.chapterIds)),
+    MAX_ZEITSTRAHL,
+  ).map(_zeitstrahlItem);
 
   return { figuren, beziehungen, continuityIssues, zeitstrahl };
 }

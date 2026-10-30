@@ -85,7 +85,7 @@ function _withAnchor(beat, occ) {
 // Alters-Chip): fig_id → { name, geburtsjahr, geburtsjahr_quelle, stand }.
 //   geburtsjahr — Steckbrief (figures.geburtstag), sonst das Geburtsjahr der
 //     Alters-Analyse (db/figure-ages.js#listAnalysedBirthYears: aus dem Text
-//     belegt, mindestens mittlere Konfidenz). `geburtsjahr_quelle` sagt welches
+//     sicher belegt, ohne zweites Geburtsjahr im Text). `geburtsjahr_quelle` sagt welches
 //     ('steckbrief' | 'text'). Ein nur aus Zeitstrahl-Ereignissen abgeleitetes
 //     Jahr zählt nicht — „Geburt von X" hängt oft an der falschen Figur.
 //   stand — wo der Text bei der Figur steht: ihr spätestes eigenes, sicher

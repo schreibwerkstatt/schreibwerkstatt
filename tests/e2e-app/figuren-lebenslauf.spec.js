@@ -146,8 +146,9 @@ test('lebenslauf: Phasen-Matrix richtet nach Alter aus, Spalten sind waehlbar', 
 // Schullaufbahn (docs/figur-lebenslauf.md «Schullaufbahn»): mit Schulsystem des
 // Buchs traegt jede datierte Zelle die Klassenstufe — gerechnet in
 // book/school-path.js. Das Schulsystem kommt hier aus einer abgefangenen
-// GET /figures/:id/schulwege-Antwort (Einschulung 1991 als Override), damit das
-// geteilte Wegwerf-Buch keine Bucheinstellung behaelt.
+// GET /figures/:id/schulwege-Antwort (Einschulung 1991 als Override, Geburten wie
+// sie der Server liefert, Handlungsjahr 1999), damit das geteilte Wegwerf-Buch
+// keine Bucheinstellung behaelt.
 test('lebenslauf: Klassenstufe in den Zellen, wenn das Buch ein Schulsystem hat', async ({ page }) => {
   await bootApp(page);
   const bookId = await selectSeededBook(page);
@@ -169,7 +170,14 @@ test('lebenslauf: Klassenstufe in den Zellen, wenn das Buch ein Schulsystem hat'
     status: 200, contentType: 'application/json',
     body: JSON.stringify({
       schulsystem: { vorlage: 'ch_so_1990' },
-      wege: { [seeded.aId]: { fig_id: seeded.aId, weg: 'bez_gym', einschulung_jahr: 1991, repetitionen: [], source: 'autor', vorschlag: null } },
+      wege: { [seeded.aId]: {
+        fig_id: seeded.aId, weg: 'bez_gym', einschulung_jahr: 1991, repetitionen: [], source: 'autor', vorschlag: null,
+        // 1998/99 war Dora in der 2. Bez — die Angabe «3. Bez» widerspricht der Rechnung.
+        klassenangaben: [{ jahr: 1998, monat: 10, stufe: 'bez', klasse: 3, zitat: 'Im Herbst 1998 sass Dora in der 3. Bez', page_id: null }],
+      } },
+      // Die Geburt rechnet der Server (lib/figure-birth.js); der Browser leitet nichts her.
+      geburten: { [seeded.aId]: { y: 1985, quelle: 'steckbrief' }, [seeded.bId]: { y: 1986, quelle: 'steckbrief' } },
+      handlungsjahr: 1999,
     }),
   }));
 
@@ -189,12 +197,30 @@ test('lebenslauf: Klassenstufe in den Zellen, wenn das Buch ein Schulsystem hat'
   // Knopf fuer den KI-Vorschlag erscheint nur mit Schulsystem.
   await expect(card.locator('button', { hasText: 'Schulwege vorschlagen' })).toBeVisible();
 
+  // Jahr-Abfrage: 1999 ohne Monat → Dora im Fruehjahr 2. Bez, im Herbst 1. Obergym.
+  const abfrage = card.locator('.figur-cv-jahr');
+  await abfrage.locator('input').fill('1999');
+  await abfrage.locator('input').blur();
+  const zeilenJahr = abfrage.locator('.figur-cv-jahr-list li');
+  await expect(zeilenJahr).toHaveCount(2);
+  await expect(zeilenJahr.filter({ hasText: A_NAME })).toContainText('2. Bez');
+
   // Steckbrief: Schullaufbahn der Figur mit eigenem Weg und Einschulungs-Override.
   await table.locator('thead th').nth(1).locator('.internal-link').click();
   const schule = card.locator('.figur-schule');
   await expect(schule).toBeVisible();
   await expect(schule).toContainText('Bezirksschule bis zur 2. Bez, dann Obergymnasium');
   await expect(schule).toContainText('1991');
+  await expect(schule).toContainText('Im Handlungsjahr 1999');
+  // Klassenangabe aus dem Text gegen die Rechnung.
+  const angabe = schule.locator('.figur-schule-angabe--widerspruch');
+  await expect(angabe).toBeVisible();
+  await expect(angabe).toContainText('2. Bez');
+  // Bearbeiten: Repetitionen als Chips + Auswahl der Klassen des Wegs.
+  await schule.locator('button', { hasText: 'Schulweg bearbeiten' }).click();
+  await expect(schule.locator('.export-chip')).toHaveCount(0);
+  await expect(schule.locator('.combobox-wrap')).toHaveCount(2);
+  await schule.locator('button', { hasText: 'Abbrechen' }).click();
 
   await page.unroute(`**/figures/${bookId}`);
   await page.evaluate(async ({ id, before }) => {

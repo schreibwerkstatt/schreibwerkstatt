@@ -1,8 +1,9 @@
 <!-- Schulsystem des Buchs (Kontext-Tab). Eingebunden via `<!-- @include book-settings-school -->`
      in book-settings-context.html. Methods: js/book/book-settings/school.js,
      Rechnung: js/book/school-path.js. Eigener Schreibpfad /booksettings/:id/schulsystem;
-     der Header-Speichern-Knopf schreibt ihn mit. -->
-<section class="book-settings-section">
+     der Header-Speichern-Knopf schreibt ihn mit. Fehlt bei Buchtypen ohne
+     Schullaufbahn (school-path.js#SCHULWEG_OHNE_BUCHTYPEN). -->
+<section class="book-settings-section" x-show="schulAbschnittSichtbar()" x-cloak>
   <h3 class="card-section-title" x-text="$app.t('book.settings.section.schule')"></h3>
   <p class="card-hint" x-text="$app.t('book.settings.schule.hint')"></p>
 
@@ -72,6 +73,16 @@
                x-modelable="value" x-model="bookSchulsystem.standard_weg"
                x-effect="options = schulWegOptionen()"></div>
           <p class="card-form-field-note" x-text="$app.t('book.settings.schule.standardWegHint')"></p>
+        </div>
+      </div>
+
+      <div class="card-form-row">
+        <label class="card-form-label" x-text="$app.t('book.settings.schule.handlungsjahr')"></label>
+        <div class="card-form-field">
+          <input type="text" class="form-num"
+                 x-data="numInput({ integer: true, min: 1000, max: 2999, grouping: false })"
+                 x-modelable="value" x-model="bookHandlungsjahr">
+          <p class="card-form-field-note" x-text="$app.t('book.settings.schule.handlungsjahrHint')"></p>
         </div>
       </div>
     </div>

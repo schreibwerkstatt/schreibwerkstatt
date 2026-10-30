@@ -12,7 +12,7 @@ Den vis-network-Unterbau teilt er sich mit der **Motiv-Konstellation** ([docs/mo
 |-------|---------------|
 | `graph/constants.js` | **SSoT für alle Graph-Farben.** `DEFAULT_FONT`, `nodeLabel`, `SCHICHT_COLOR` (inkl. `band`-Streifen + `label`-Textfarbe pro Schicht), `SCHICHT_LEVEL`, `TYP_COLOR` (Node-Füllung), `TIER_COLOR` (Text-/Akzentfarbe), `BZ` (Edge-Styles Figurengraph), `BZ_SOZIO_COLOR`/`BZ_SOZIO_CAT` (Soziogramm), `DIRECTED_TYPES`. |
 | `graph/core.js` | Mode-Switch (`setFigurenGraphModus`), Fullscreen-Toggle, Render-Dispatcher (`renderFigurGraph`), Hash-Cache, vis-Bundle + Theme-Auflösung. |
-| `graph/shared.js` | `_theme` (aufgelöste Canvas-Farben), `_figTypColor`/`_schichtNodeColor`/`_nodeFont` (Paletten, für den Grund nachgeführt), `_baseNode` (gemeinsame vis-Node-Basis), `_figurenGraphSetKapitel` (Kapitel-Filter dim/highlight), `_buildEdges` (Edge-Liste mit Dedup, id→Figur-Map), `_attachTooltip` (Hover-Tooltip mit Escape, id→Figur-Map). |
+| `graph/shared.js` | `_theme` (aufgelöste Canvas-Farben), `_figTypColor`/`_schichtNodeColor`/`_nodeFont` (Paletten, für den Grund nachgeführt), `_baseNode` (gemeinsame vis-Node-Basis), `_figurenGraphSetKapitel` (Kapitel-Filter dim/highlight), `_buildEdges` (Edge-Liste mit Dedup, id→Figur-Map), `_attachTooltip` (Hover-Tooltip mit Escape, id→Figur-Map; Knoten-Klick öffnet die Figur im Reiter «Liste» über `_openFigurFromGraph`). |
 | `graph/layout.js` | **Reine** Swimlane-Berechnung: `computeSwimlaneLayout`, `figureInfo`, `columnWidth`, `importanceBorderWidth` + die Konstanten (`TIER_ORDER`, `ROW_H`, `MIN_DX`). Kein DOM, kein vis → in [tests/unit/graph-layout.test.mjs](../tests/unit/graph-layout.test.mjs) direkt testbar. |
 | `graph/figurengraph.js` | Kapitel-Swimlane (deterministisch, ohne Physics) — zeichnet, was `layout.js` rechnet. |
 | `graph/familiengraph.js` | Hierarchischer Baum, nur Familien-Edges (elternteil/kind/geschwister). |
@@ -121,6 +121,8 @@ vis-network zeichnet auf ein `<canvas>` — dort werden **keine CSS-Custom-Prope
 ## Tooltip (`_attachTooltip`)
 
 Hängt am `#figur-tooltip`-Element (Klasse `.graph-tooltip`, CSS-Komponente — siehe DESIGN.md „Graph-Tooltip"). Listener: `hoverNode`/`blurNode`, `hoverEdge`/`blurEdge`, `dragStart` (ausblenden). Positionierung + Klemmung liefert `createGraphTooltip` aus dem Graph-Kit; die reine Geometrie steckt in `clampTipPos`.
+
+**Knoten-Klick:** Ein Tap auf einen Knoten (nicht das Ziehen) öffnet die Figur über `openFigurById` im Reiter «Liste» der Figuren-Karte; aus dem Vollbild geht es vorher heraus, weil die Liste ausserhalb des Graph-Wraps liegt. Der Klick-Listener für die Kapitel-Kopfzeile im Figurengraph bleibt daneben bestehen (er reagiert nur im Header-Band).
 
 **XSS-Escape-Invariante:** `escHtml()` für jeden eingesetzten Wert (Figurnamen, Beschreibungen, Schicht-/Typ-Labels). Template-Strings setzen Markup-Wrapper, alle Datenwerte vorher escaped.
 

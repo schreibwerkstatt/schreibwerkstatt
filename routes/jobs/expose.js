@@ -23,7 +23,7 @@ const {
   aiCall, getPrompts,
   loadOrderedBookContents, loadPageContents, groupByChapter, splitGroupsIntoChunks, buildSinglePassBookText,
   chunkLimitsFor, BATCH_SIZE, jobAbortControllers, settledAll,
-  _modelName, tps, jsonBody, startBookJob,
+  _modelName, tps, jsonBody, startBookJob, systemChars: _systemChars,
 } = require('./shared');
 const { narrativeLabels } = require('./narrative-labels');
 const { werkstandFor } = require('./review-context');
@@ -38,12 +38,6 @@ const exposeRouter = express.Router();
 const FIGUREN_CAP = 40;
 
 const _sha = (s) => crypto.createHash('sha1').update(String(s)).digest('hex');
-
-// Zeichenlänge eines System-Prompts (String oder Cache-Block-Array).
-function _systemChars(system) {
-  if (Array.isArray(system)) return system.reduce((s, b) => s + (b?.text?.length || 0), 0);
-  return String(system || '').length;
-}
 
 // Teil-Nummer eines zerlegten Kapitels (`<key>__subN`), sonst null.
 function _teilOf(chunkKey, chunkOrder) {

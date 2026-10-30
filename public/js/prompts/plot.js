@@ -13,7 +13,7 @@
 // Severity-Vokabular: kritisch/stark/mittel/schwach/niedrig — matcht
 // .severity-tag--* in DESIGN.md (gleiche Skala wie die Figuren-Werkstatt).
 
-import { _obj, _str } from './schema-utils.js';
+import { _obj, _str, _nullableEnum } from './schema-utils.js';
 import { _jsonOnly } from './state.js';
 import {
   _figurenLinesDetail, _orteLines, _zeitstrahlLines, _kontinuitaetLines, _rechercheLines,
@@ -320,8 +320,8 @@ export function buildPlotConsistencySchema({ delta = false } = {}) {
     vorschlag: _str,
     aktion: _obj({
       art: { type: 'string', enum: AKTION_ART_ENUM },
-      wert: { type: ['string', 'null'], enum: [...STATUS_WERT_ENUM, null] },
-      typ: { type: ['string', 'null'], enum: [...PLOT_AKTION_REL_TYPES, null] },
+      wert: _nullableEnum(STATUS_WERT_ENUM),
+      typ: _nullableEnum(PLOT_AKTION_REL_TYPES),
       ziel_beat_id: { type: ['integer', 'null'] },
     }),
   };

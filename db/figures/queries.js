@@ -21,8 +21,11 @@ require('../migrations');
  *  Kapitel-Figur erscheint ein zweites Mal als angeblich unbekannte Zeile.
  *  `{ withYears: true }` reichert Jahr/Alter aus `computeFigureYears` an — deren
  *  Map ist nach der INTEGER-`figures.id` geschlüsselt, darum geschieht der Lookup
- *  hier, wo beide Kennungen vorliegen, und nicht beim Aufrufer. */
-function getChapterFigures(bookId, chapterId, userEmail, { withYears = false } = {}) {
+ *  hier, wo beide Kennungen vorliegen, und nicht beim Aufrufer.
+ *  `{ bookFallback: false }`: ein Kapitel ohne Auftritte liefert [] statt aller
+ *  Buchfiguren — für Aufrufer, die die Liste als «Figuren DIESES Kapitels» lesen
+ *  (Kapitelbewertung). */
+function getChapterFigures(bookId, chapterId, userEmail, { withYears = false, bookFallback = true } = {}) {
   if (!bookId) return [];
   const em = userEmail || null;
   const cols = 'f.id AS _row_id, f.fig_id AS id, f.name, f.kurzname, f.geschlecht, f.beruf, f.wohnadresse, f.beschreibung, f.typ, f.geburtstag';
@@ -40,7 +43,7 @@ function getChapterFigures(bookId, chapterId, userEmail, { withYears = false } =
       ORDER BY a.h DESC, f.sort_order, f.id
     `).all(chapterId, bookId, em);
   }
-  if (!rows.length) {
+  if (!rows.length && (!chapterId || bookFallback)) {
     rows = db.prepare(`
       SELECT ${cols} FROM figures f
       WHERE f.book_id = ? AND f.user_email IS ? AND f.stale = 0
@@ -136,8 +139,9 @@ function rebuildFigureAppearances(bookId, userEmail, figuren, idMaps) {
 /** Beziehungen zwischen Figuren, die im gegebenen Kapitel gemeinsam auftreten.
  *  Liefert: [{ von, zu, typ, beschreibung }] mit Namen (nicht fig_ids).
  *  Ohne chapterId: alle Beziehungen des Buchs. Nur zwischen aktiven Figuren
- *  (`stale = 0`), aus demselben Grund wie bei getChapterFigures. */
-function getChapterFigureRelations(bookId, chapterId, userEmail) {
+ *  (`stale = 0`), aus demselben Grund wie bei getChapterFigures.
+ *  `{ bookFallback: false }` wie bei getChapterFigures. */
+function getChapterFigureRelations(bookId, chapterId, userEmail, { bookFallback = true } = {}) {
   if (!bookId) return [];
   const em = userEmail || null;
   let rows;
@@ -152,7 +156,7 @@ function getChapterFigureRelations(bookId, chapterId, userEmail) {
         AND EXISTS (SELECT 1 FROM figure_appearances fa WHERE fa.figure_id = ft.id AND fa.chapter_id = ?)
       ORDER BY ff.sort_order, ft.sort_order
     `).all(bookId, em, chapterId, chapterId);
-    if (rows.length > 0) return rows;
+    if (rows.length > 0 || !bookFallback) return rows;
   }
   return db.prepare(`
     SELECT ff.name AS von, ft.name AS zu, r.typ, r.beschreibung

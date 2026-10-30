@@ -173,20 +173,7 @@
   overflow-anchor: none;
 }
 .figur-list-section {
-  margin-top: var(--space-lg);
-  border-top: 0.5px solid var(--color-border);
-  padding-top: var(--space-14);
-}
-.figur-list-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  flex-wrap: wrap;
-  margin-bottom: var(--space-xs);
-}
-.figur-list-header .history-heading {
-  margin-bottom: 0;
+  margin-top: var(--space-md);
 }
 
 

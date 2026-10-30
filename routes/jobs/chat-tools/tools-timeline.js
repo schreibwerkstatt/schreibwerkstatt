@@ -21,7 +21,7 @@ const { listFigureAges, getFigureAgeScan } = require('../../../db/figure-ages');
 const { getBookSettings } = require('../../../db/book-settings');
 const { getDescendantChapterIds } = require('../../../db/book-order');
 const { birthCandidates, resolveBirth } = require('../../../lib/figure-birth');
-const { getBookSchulsystem } = require('../../../db/book-settings');
+const { activeBookSchulsystem } = require('../../../lib/buchtyp');
 const { getSchoolPath } = require('../../../db/figure-school-paths');
 const { schoolPath } = require('../../../lib/esm-bridge');
 const { schoolLabel } = require('../../../lib/school-labels');
@@ -208,7 +208,7 @@ function ageAt(birth, at) {
  *  Geburt (und ohne Einschulungs-Override). Gerechnet in der Rechenschicht
  *  public/js/book/school-path.js (dieselbe wie Figuren-Karte und Lebenslauf). */
 async function _schoolStager(ctx, fig, birth, lang) {
-  const stored = getBookSchulsystem(ctx.bookId);
+  const stored = await activeBookSchulsystem(ctx.bookId);
   if (!stored) return null;
   const sp = await schoolPath();
   const system = sp.resolveSchulsystem(stored);
@@ -235,7 +235,9 @@ async function _schoolStager(ctx, fig, birth, lang) {
   const args = { geburt: birth ? { y: birth.y, m: birth.m, d: birth.d } : null, system, figur };
   return {
     weg: schoolLabel(sp.wegLabelKey(sp.figurWeg(system, figur)), lang),
-    weg_quelle: figur?.weg ? (path.source || 'autor') : 'standard',
+    // Ein Weg-Key, den das System nicht (mehr) kennt, rechnet mit dem Standardweg —
+    // dann heisst die Quelle auch so, statt den Autor zu behaupten.
+    weg_quelle: figur?.weg && sp.wegGueltig(system, figur) ? (path.source || 'autor') : 'standard',
     zumJahr(jahr) {
       const r = sp.schoolStagesForYear({ ...args, jahr });
       return r ? { herbst: fmt(r.herbst), ...(r.fruehjahr ? { fruehjahr: fmt(r.fruehjahr) } : {}) } : null;

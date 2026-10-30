@@ -259,15 +259,24 @@ function restoreAnalysis(bookId, data, ctx) {
   }
 
   // Schulweg je Figur (Autor-Angabe oder übernommener KI-Vorschlag). Ein offener
-  // Vorschlag reist mit — er trägt seinen Beleg selbst.
+  // Vorschlag und die Klassenangaben reisen mit — sie tragen ihren Beleg selbst;
+  // dessen page_id wird wie jede andere umgeschlüsselt.
+  const remapBelege = (json) => {
+    if (!json) return null;
+    let v;
+    try { v = JSON.parse(json); } catch { return null; }
+    const fix = (o) => (o && typeof o === 'object' ? { ...o, page_id: o.page_id != null ? (pageOf(o.page_id) ?? null) : null } : o);
+    return JSON.stringify(Array.isArray(v) ? v.map(fix) : fix(v));
+  };
   const insSchool = db.prepare(`INSERT OR IGNORE INTO figure_school_paths
-    (figure_id,weg,einschulung_jahr,repetitionen_json,source,vorschlag_json,updated_at) VALUES (?,?,?,?,?,?,?)`);
+    (figure_id,weg,einschulung_jahr,repetitionen_json,source,vorschlag_json,klassenangaben_json,updated_at) VALUES (?,?,?,?,?,?,?,?)`);
   for (const r of arr('figureSchoolPaths')) {
     const fid = figMap.get(r.figure_id);
     if (!fid) continue;
     const source = r.source === 'autor' || r.source === 'ki' ? r.source : null;
     const ej = Number.isInteger(r.einschulung_jahr) ? r.einschulung_jahr : null;
-    insSchool.run(fid, r.weg ?? null, ej, r.repetitionen_json ?? null, source, r.vorschlag_json ?? null, r.updated_at || _now());
+    insSchool.run(fid, r.weg ?? null, ej, r.repetitionen_json ?? null, source,
+      remapBelege(r.vorschlag_json), remapBelege(r.klassenangaben_json), r.updated_at || _now());
   }
 
   const insRel = db.prepare(`INSERT OR IGNORE INTO figure_relations

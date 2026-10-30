@@ -82,6 +82,8 @@ export function registerBookSettingsCard() {
     bookSchulsystem: null,
     schulVorlage: '',
     bookSchulsystemLoaded: false,
+    // Handlungsjahr (book_settings.handlungsjahr), im selben Abschnitt und Schreibpfad.
+    bookHandlungsjahr: null,
     schulSaving: false,
     schulError: '',
     // Sharing: Access-Liste + Invite-Form.
@@ -317,6 +319,7 @@ export function registerBookSettingsCard() {
           bookSchulsystem: null,
           schulVorlage: '',
           bookSchulsystemLoaded: false,
+          bookHandlungsjahr: null,
           schulError: '',
         }),
         resetStateView: {

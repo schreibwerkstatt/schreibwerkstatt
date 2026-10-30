@@ -97,6 +97,10 @@ test('Kandidatensaetze werden gefunden, verifizierte Funde landen im Index', asy
   assert.equal(konrad.geburtsjahr, 1888);
   assert.equal(konrad.geburtsjahr_quelle, 'text');
   assert.equal(konrad.alter_von, null, 'kein erfundenes Alter');
+  // Das belegte Textjahr traegt die Plot-Zeit, auch ohne Alter und ohne Zeitlinie
+  // (die Alters-Konfidenz der Zeile ist dann 0 — sie gehoert zum Alter, nicht zum Jahr).
+  const konradId = ctx.dbSchema.db.prepare("SELECT id FROM figures WHERE book_id = ? AND fig_id = 'f_konrad'").get(BOOK_ID).id;
+  assert.equal(require('../../db/figure-ages').listAnalysedBirthYears(BOOK_ID, USER).get(konradId), 1888);
 
   // Lauf-Kopf für „Stand vom" + Delta-Skip.
   const scan = require('../../db/figure-ages').getFigureAgeScan(BOOK_ID, USER);
@@ -307,4 +311,59 @@ test('Mehrdeutiges Zitat: die genannte Stellennummer bestimmt das Sprungziel', a
   assert.equal(job.status, 'done', job.error || '');
   const [row] = require('../../db/figure-ages').listFigureAges(BOOK_ID, USER);
   assert.equal(row.belege[0].page_id, 9821, 'Stelle 1.2 = zweite Seite, nicht die erste Fundstelle');
+});
+
+test('Bezugsjahr nur, wenn es in der vorgelegten Stelle steht', async () => {
+  const BOOK_ID = 990;
+  ctx.dbSeed.setBook({
+    chapters: [{ id: 9910, book_id: BOOK_ID, name: 'Kap 1' }],
+    pages: [{ id: 9920, book_id: BOOK_ID, chapter_id: 9910, name: 'S 1', updated_at: '' }],
+    pageBodies: { 9920: '<p>Im Sommer 1912 war Mara zwölf Jahre alt. Lena war vierzig Jahre alt.</p>' },
+  });
+  seedFiguren(BOOK_ID, [
+    { id: 'f_mara', name: 'Mara', typ: 'hauptfigur' },
+    { id: 'f_lena', name: 'Lena', typ: 'nebenfigur' },
+  ]);
+  ctx.mockAi.on(
+    (e) => e.schemaKeys.includes('funde'),
+    () => ({
+      funde: [
+        { figur: 'Mara', art: 'alter', wert: 12, bezugsjahr: 1912, unsicher: false, zitat: 'Mara zwölf Jahre alt', begruendung: '' },
+        // 1930 steht nirgends in Lenas Stelle — aus dem Kontext erschlossen
+        { figur: 'Lena', art: 'alter', wert: 40, bezugsjahr: 1930, unsicher: false, zitat: 'Lena war vierzig Jahre alt', begruendung: '' },
+      ],
+    }),
+  );
+
+  const job = await runJob(BOOK_ID, { force: true });
+  assert.equal(job.status, 'done', job.error || '');
+  assert.equal(job.result.verworfen.bezugsjahr, 1);
+  const rows = require('../../db/figure-ages').listFigureAges(BOOK_ID, USER);
+  const mara = rows.find(r => r.fig_id === 'f_mara');
+  const lena = rows.find(r => r.fig_id === 'f_lena');
+  assert.equal(mara.belege[0].bezugsjahr, 1912);
+  assert.equal(lena.alter_von, 40, 'der Fund bleibt');
+  assert.equal(lena.belege[0].bezugsjahr, null, 'nur das erschlossene Jahr faellt');
+});
+
+test('Zwei Figuren mit gleichem Vollnamen: Funde werden nicht geraten', async () => {
+  const BOOK_ID = 991;
+  ctx.dbSeed.setBook({
+    chapters: [{ id: 9911, book_id: BOOK_ID, name: 'Kap 1' }],
+    pages: [{ id: 9921, book_id: BOOK_ID, chapter_id: 9911, name: 'S 1', updated_at: '' }],
+    pageBodies: { 9921: '<p>Tom war zwölf Jahre alt.</p>' },
+  });
+  seedFiguren(BOOK_ID, [
+    { id: 'f_t1', name: 'Tom', typ: 'hauptfigur' },
+    { id: 'f_t2', name: 'Tom', typ: 'nebenfigur' },
+  ]);
+  ctx.mockAi.on(
+    (e) => e.schemaKeys.includes('funde'),
+    () => ({ funde: [{ figur: 'Tom', art: 'alter', wert: 12, bezugsjahr: null, unsicher: false, zitat: 'Tom war zwölf Jahre alt', begruendung: '' }] }),
+  );
+
+  const job = await runJob(BOOK_ID, { force: true });
+  assert.equal(job.status, 'done', job.error || '');
+  assert.equal(job.result.verworfen.figur, 1);
+  assert.equal(require('../../db/figure-ages').listFigureAges(BOOK_ID, USER).length, 0);
 });

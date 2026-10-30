@@ -11,7 +11,7 @@ const {
   getPageMotifs,
   loadLektoratCache, saveLektoratCache,
 } = require('../../db/schema');
-const { getPrompts, getBookPrompts, htmlToTextForPrompt, contentHttpError, loadOrderedBookContents } = require('./shared');
+const { getPrompts, getBookPrompts, htmlToTextForPrompt, contentHttpError, loadOrderedBookContents, sigHash: _sigHash } = require('./shared');
 const contentStore = require('../../lib/content-store');
 const { resolveProvider, effectiveProviderClass } = require('../../lib/ai');
 const { narrativeLabels } = require('./narrative-labels');
@@ -25,10 +25,6 @@ const { lektoratProgress } = require('../../lib/lektorat-progress');
 const { hasMsgThread } = require('../../lib/html-text');
 const { textMatch } = require('../../lib/esm-bridge');
 const { checkDialogformat, mergeRegelBefunde, ohneRegelBefunde } = require('../../lib/dialogformat-rules');
-
-function _sigHash(obj) {
-  return crypto.createHash('sha1').update(JSON.stringify(obj ?? null)).digest('hex').slice(0, 12);
-}
 
 // Traegt die Seite Quellennachweise? Steuert den Beleg-Schutzblock im Prompt
 // (siehe prompts/blocks.js#_buildBelegBlock). Indizierter Lookup auf dem

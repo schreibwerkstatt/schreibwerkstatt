@@ -32,11 +32,13 @@ export function computeAlterRows(figuren, ages, { suche = '', typ = '', nur = ''
     // Spalte stehen, damit die Abweichung sichtbar ist statt geglaettet.
     const alterVon = a?.alter_von ?? null;
     const alterBis = a?.alter_bis ?? alterVon;
-    // Der gerechnete Wert kommt aus dem Index, wenn es einen gibt: der Server
-    // kennt dort auch ein NUR IM TEXT gefundenes Geburtsjahr, das `alter_im_roman`
-    // am Katalog per Definition nicht kennt (das liest nur das kuratierte Feld).
-    // Ohne Lauf bleibt der Katalog-Wert — die Tabelle soll ohne Analyse arbeiten.
-    const abgeleitet = a?.gerechnet ?? f.alter_im_roman ?? null;
+    // Gerechneter Wert und Geburtsjahr kommen aus dem Index, wenn es eine Zeile
+    // gibt: der Server kennt dort auch ein NUR IM TEXT gefundenes Geburtsjahr, das
+    // `alter_im_roman` am Katalog per Definition nicht kennt. Auch ein leerer Wert
+    // der Zeile gilt — fiele er auf den Katalog zurueck, stuenden ein Geburtsjahr
+    // aus dem Text und ein Alter aus einem anderen Geburtsjahr in derselben Zeile.
+    // Ohne Lauf bleibt der Katalog — die Tabelle soll ohne Analyse arbeiten.
+    const abgeleitet = a ? (a.gerechnet ?? null) : (f.alter_im_roman ?? null);
     // Ohne Lauf dieselbe Herkunft und Sicherheit, die die Verdichtung vergaebe
     // (lib/figure-age/consolidate.js): ein Geburtsjahr aus dem Steckbrief ist
     // „kuratiert" und das Alter daraus „aus Geburtsjahr" (0.75), nur ein
@@ -52,8 +54,8 @@ export function computeAlterRows(figuren, ages, { suche = '', typ = '', nur = ''
       // Sortierschluessel der Typ-Spalte: die Taxonomie-Reihenfolge, nicht das
       // Alphabet der Typ-Keys (sonst stuende „andere" vor „hauptfigur").
       typ_rank: typRank(f.typ || 'andere'),
-      geburtsjahr: a?.geburtsjahr ?? (f.geburtsjahr ?? null),
-      geburtsjahr_quelle: a?.geburtsjahr_quelle ?? (f.geburtsjahr != null ? (gebKuratiert ? 'kuratiert' : 'zeitstrahl') : null),
+      geburtsjahr: a ? (a.geburtsjahr ?? null) : (f.geburtsjahr ?? null),
+      geburtsjahr_quelle: a ? (a.geburtsjahr_quelle ?? null) : (f.geburtsjahr != null ? (gebKuratiert ? 'kuratiert' : 'zeitstrahl') : null),
       geburtstag: f.geburtstag || null,
       alter_von: alterVon,
       alter_bis: alterBis,
@@ -212,14 +214,16 @@ export const figurenAlterMethods = {
   // Bezugsjahr nur, wenn es ueberhaupt ein Alter gibt. Eine Jahreszahl neben
   // „unbekannt" liest sich wie eine Teilantwort, ist aber bloss das Buchende:
   // `jahr_im_roman` fällt für eine undatierte Figur auf das späteste Jahr des
-  // Buchs zurück (lib/figure-years.js).
+  // Buchs zurück (lib/figure-years.js). Beim Alter aus dem Text nur, was die
+  // Stellen nennen — das Ankerjahr neben einer Spanne aus dem ganzen Buch laese
+  // sich, als gelte sie in diesem einen Jahr.
   figurenAlterBezugLabel(row) {
     if (!row.hatAlter) return '';
     const von = row.bezugsjahr_von, bis = row.bezugsjahr_bis;
     if (von != null && bis != null && von !== bis) return `${von}–${bis}`;
     if (von != null) return String(von);
     if (bis != null) return String(bis);
-    if (row.jahr_im_roman != null) return String(row.jahr_im_roman);
+    if (row.quelle !== 'text' && row.jahr_im_roman != null) return String(row.jahr_im_roman);
     return '';
   },
 

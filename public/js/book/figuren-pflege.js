@@ -100,6 +100,9 @@ export const figurPflegeMethods = {
       this.cancelFigurEdit();
       this.figurPflegeMessage = _t('figuren.edit.saved', { name: fields.name || f.name });
       await window.__app.loadFiguren(bookId);
+      // Die Geburt für die Schullaufbahn rechnet der Server — nach einem neuen
+      // Geburtsdatum neu holen, sonst rechnet der Steckbrief mit dem alten.
+      if ('geburtstag' in fields) this.loadFigurenSchulwege?.();
     } catch (e) {
       console.error('[saveFigurEdit]', e);
       this.figurEditError = e.message || _t('figuren.edit.saveError');

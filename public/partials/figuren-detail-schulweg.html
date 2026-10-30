@@ -16,7 +16,14 @@
           <template x-if="figurSchulRepetitionen(f)">
             <div class="figur-fact"><dt x-text="$app.t('figuren.schule.repetitionen')"></dt><dd x-text="figurSchulRepetitionen(f)"></dd></div>
           </template>
+          <template x-if="figurSchulImHandlungsjahr(f)">
+            <div class="figur-fact">
+              <dt x-text="$app.t('figuren.schule.imHandlungsjahr', { jahr: figurSchulHandlungsjahr() })"></dt>
+              <dd x-text="figurSchulImHandlungsjahr(f)"></dd>
+            </div>
+          </template>
         </dl>
+        <p class="card-hint card-hint--sm" x-show="figurSchulWegUngueltig(f)" x-text="$app.t('figuren.schule.wegUngueltigHint')"></p>
         <div class="figur-detail-actions">
           <button type="button" class="btn-compact" @click.stop="startFigurSchulEdit(f)">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
@@ -50,13 +57,23 @@
           <div class="card-form-row">
             <label class="card-form-label" x-text="$app.t('figuren.schule.repetition.label')"></label>
             <div class="card-form-field">
-              <div x-data="combobox({ placeholder: $app.t('figuren.schule.repetition.stufe'), emptyLabel: $app.t('figuren.schule.repetition.keine'), compact: false })"
-                   x-modelable="value" x-model="figurSchulDraft.rep_stufe"
-                   x-effect="options = figurSchulStufenOptionen()"></div>
-              <input type="text" class="form-num" x-show="figurSchulDraft.rep_stufe"
-                     :aria-label="$app.t('figuren.schule.repetition.klasse')"
-                     x-data="numInput({ integer: true, min: 1, max: 13 })"
-                     x-modelable="value" x-model="figurSchulDraft.rep_klasse">
+              <!-- Eingetragene Repetitionen als entfernbare Chips; hinzufügen nur Klassen,
+                   die der gewählte Weg durchläuft. Eine, die nach einem Wegwechsel nicht
+                   mehr passt, bleibt sichtbar markiert, bis sie entfernt ist. -->
+              <div class="export-chip-row" x-show="(figurSchulDraft.repetitionen || []).length">
+                <template x-for="r in (figurSchulDraft.repetitionen || [])" :key="r.stufe + ':' + r.klasse">
+                  <span class="export-chip" :class="{ 'figur-schule-rep--ungueltig': figurSchulRepUngueltig(r) }">
+                    <span x-text="figurSchulRepLabel(r)"></span>
+                    <button type="button" class="export-chip-remove" :aria-label="$app.t('common.remove')"
+                            @click="removeFigurSchulRepetition(r)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+                  </span>
+                </template>
+              </div>
+              <div x-show="!figurSchulRepVoll()"
+                   x-data="combobox({ placeholder: $app.t('figuren.schule.repetition.add'), compact: false })"
+                   x-modelable="value" x-model="figurSchulDraft.rep_neu"
+                   x-effect="options = figurSchulRepOptionen()"
+                   @combobox-change="addFigurSchulRepetition($event.detail)"></div>
               <p class="card-form-field-note" x-text="$app.t('figuren.schule.repetition.hint')"></p>
             </div>
           </div>
@@ -90,6 +107,29 @@
         </div>
       </div>
     </template>
+
+    <!-- Klassenangaben aus dem Text (Job), geprüft gegen die Rechnung beim Lesen:
+         ein Widerspruch ist ein Befund für den Text oder für den Schulweg. -->
+    <template x-if="figurSchulKlassenangaben(f).length">
+      <div class="figur-schule-angaben">
+        <p class="card-form-section-divider" x-text="$app.t('figuren.schule.angabenTitel')"></p>
+        <template x-for="(a, ai) in figurSchulKlassenangaben(f)" :key="ai">
+          <div class="figur-schule-angabe" :class="'figur-schule-angabe--' + a.urteil">
+            <p class="figur-detail-row">
+              <span x-text="a.label"></span>
+              <span class="figur-schule-urteil" x-text="$app.t('figuren.schule.urteil.' + a.urteil, { gerechnet: a.gerechnet })"></span>
+            </p>
+            <blockquote class="figur-schule-beleg">
+              <span x-text="'«' + a.zitat + '»'"></span>
+              <template x-if="a.page_id">
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: a.page_id }"></button>
+              </template>
+            </blockquote>
+          </div>
+        </template>
+      </div>
+    </template>
+    <p class="card-status" x-show="figurSchulMessage" x-text="figurSchulMessage"></p>
     <p class="card-form-error" x-show="figurSchulError" x-text="figurSchulError"></p>
   </section>
 </template>

@@ -202,22 +202,35 @@ function listFigureAges(bookId, userEmail) {
 }
 
 /** Geburtsjahre aus der Alters-Analyse, die als Ersatz für einen leeren Steckbrief
- *  taugen: aus Text oder damaligem Steckbrief, nicht aus dem Zeitstrahl-
- *  Geburtsereignis (das hängt oft an der falschen Figur), und mit mindestens
- *  mittlerer Konfidenz (Stufen wie figuren-alter.js#konfidenzStufe).
+ *  taugen: aus dem damaligen Steckbrief oder aus dem Text, nicht aus dem
+ *  Zeitstrahl-Geburtsereignis (das hängt oft an der falschen Figur).
+ *
+ *  Ein Textjahr zählt, wenn ein sicherer Beleg (`unsicher = 0`) genau dieses Jahr
+ *  nennt und der Text kein zweites Geburtsjahr dagegenstellt (`geburtsjahrText`).
+ *  Bewusst NICHT über `konfidenz`: die gehört zum Alter der Zeile — ohne
+ *  Altersangabe und ohne Zeitlinie ist sie 0, obwohl das Geburtsjahr belegt ist.
  *  Map<figures.id, geburtsjahr>. */
-const AGE_BIRTH_MIN_KONFIDENZ = 0.6;
 function listAnalysedBirthYears(bookId, userEmail) {
   const rows = db.prepare(`
-    SELECT fa.figure_id, fa.geburtsjahr
+    SELECT fa.figure_id, fa.geburtsjahr, fa.widerspruch_json
     FROM figure_ages fa
     JOIN figures f ON f.id = fa.figure_id
     WHERE fa.book_id = ? AND f.user_email IS ?
       AND fa.geburtsjahr IS NOT NULL
-      AND fa.geburtsjahr_quelle IN ('text', 'kuratiert')
-      AND fa.konfidenz >= ?
-  `).all(bookId, userEmail || null, AGE_BIRTH_MIN_KONFIDENZ);
-  return new Map(rows.map(r => [r.figure_id, r.geburtsjahr]));
+      AND (fa.geburtsjahr_quelle = 'kuratiert'
+           OR (fa.geburtsjahr_quelle = 'text' AND EXISTS (
+                 SELECT 1 FROM figure_age_belege b
+                 WHERE b.figure_id = fa.figure_id AND b.art = 'geburtsjahr'
+                   AND b.wert = fa.geburtsjahr AND b.unsicher = 0)))
+  `).all(bookId, userEmail || null);
+  const out = new Map();
+  for (const r of rows) {
+    let w = null;
+    try { w = r.widerspruch_json ? JSON.parse(r.widerspruch_json) : null; } catch { w = null; }
+    if (Array.isArray(w) && w.some(x => x?.typ === 'geburtsjahrText')) continue;
+    out.set(r.figure_id, r.geburtsjahr);
+  }
+  return out;
 }
 
 module.exports = { replaceFigureAges, getFigureAgeScan, listFigureAges, listAnalysedBirthYears };

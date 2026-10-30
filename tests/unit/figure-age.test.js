@@ -58,6 +58,29 @@ test('numbersIn erkennt Ziffer, Zahlwort UND Kompositum — die Pruefgroesse geg
   assert.ok(!numbersIn('sie war ein Kind').has(12));
 });
 
+test('splitSentences: Datum in Ziffern bleibt ein Satz — Geburtsjahr samt Name', () => {
+  for (const t of ['Anna wurde am 12.03.1950 geboren.', 'Anna, geboren am 12. 3. 1950, lachte.', 'Anna (geb. 12.3.1950) lachte.']) {
+    const s = splitSentences(t);
+    assert.equal(s.length, 1, t);
+    assert.ok(extractAgeSignals(s[0].text).some(x => x.art === 'geburtsjahr' && x.wert === 1950), t);
+  }
+  // Eine Jahreszahl am Satzende bleibt eine Grenze.
+  assert.equal(splitSentences('Anna kam 1912. Sie war zwölf.').length, 2);
+});
+
+test('deutsches „am <Zahl>" ist keine englische Kopula', () => {
+  assert.equal(extractAgeSignals('Sie traf ihn am 12. Mai.').filter(x => x.art === 'alter').length, 0);
+  assert.deepEqual(extractAgeSignals("I am twelve").map(x => x.wert), [12]);
+  assert.deepEqual(extractAgeSignals("I'm 12").map(x => x.wert), [12]);
+});
+
+test('numbersIn: Ordinalwort nur vor Geburtstag/Lebensjahr', () => {
+  const n = numbersIn('Sie war erst zwölf und musste achten');
+  assert.ok(!n.has(1), '„erst" ist keine Eins');
+  assert.ok(!n.has(8), '„achten" ist keine Acht');
+  assert.ok(numbersIn('im neunzehnten Lebensjahr').has(19));
+});
+
 test('splitSentences: Zeile ohne Schlusspunkt bleibt eigener Satz', () => {
   const s = splitSentences('Erster Satz. Zweiter Satz!\nDialogzeile ohne Punkt\nDritter Satz.');
   assert.equal(s.length, 4);
@@ -243,8 +266,8 @@ test('consolidateFigure: Alter sinkt im Buchverlauf → Hinweis', () => {
     ],
   });
   assert.ok(r.widerspruch.some(w => w.typ === 'reihenfolge'));
-  // Widerspruch senkt die Konfidenz, verwirft den Wert aber nicht.
-  assert.ok(r.konfidenz < 0.9 && r.konfidenz > 0);
+  // Rueckblende ist ein Hinweis, kein Zweifel an der Angabe: die Konfidenz bleibt.
+  assert.equal(r.konfidenz, 0.9);
   assert.equal(r.alter_von, 12);
   assert.equal(r.alter_bis, 30);
 });
@@ -256,6 +279,54 @@ test('consolidateFigure: Textangabe gegen Rechnung', () => {
     zeitstrahl: { jahr_im_roman: 1920, geburtsjahr: 1900, alter_im_roman: 20 },
   });
   assert.ok(r.widerspruch.some(w => w.typ === 'rechnung'), 'Text sagt 40, Rechnung 20');
+});
+
+test('consolidateFigure: Textalter frueh im Buch ist kein Widerspruch zum Ankerjahr', () => {
+  // Geboren 1900, „zwoelf" im Jahr 1912, letztes Ereignis der Figur 1940. Text
+  // und Steckbrief stimmen ueberein — die 40 gilt am Anker, nicht an der Stelle.
+  const ohneJahr = consolidateFigure({
+    funde: [{ art: 'alter', wert: 12, zitat: 'zwölf Jahre alt', ordinal: 0, offset: 0 }],
+    kuratiert: { geburtstag: '1900' },
+    zeitstrahl: { jahr_im_roman: 1940, geburtsjahr: 1900 },
+  });
+  assert.equal(ohneJahr.gerechnet, 40);
+  assert.equal(ohneJahr.widerspruch, null);
+  assert.equal(ohneJahr.konfidenz, 0.9);
+  const mitJahr = consolidateFigure({
+    funde: [{ art: 'alter', wert: 12, bezugsjahr: 1912, zitat: '1912, zwölf Jahre alt', ordinal: 0, offset: 0 }],
+    kuratiert: { geburtstag: '1900' },
+    zeitstrahl: { jahr_im_roman: 1940, geburtsjahr: 1900 },
+  });
+  assert.equal(mitJahr.widerspruch, null);
+});
+
+test('consolidateFigure: Rechnung am Bezugsjahr des Belegs', () => {
+  // „1912 war sie zwanzig" bei Geburtsjahr 1900 → dort waere sie zwoelf.
+  const r = consolidateFigure({
+    funde: [{ art: 'alter', wert: 20, bezugsjahr: 1912, zitat: '1912 war sie zwanzig', ordinal: 0, offset: 0, page_id: 3 }],
+    kuratiert: { geburtstag: '1900' },
+  });
+  assert.deepEqual(r.widerspruch.map(w => [w.typ, w.a, w.b, w.page_id]), [['rechnung', 20, 12, 3]]);
+  assert.ok(r.konfidenz < 0.9);
+});
+
+test('consolidateFigure: Textalter ohne eigenes Jahr bekommt nicht das Ankerjahr', () => {
+  const r = consolidateFigure({
+    funde: [{ art: 'alter', wert: 12, zitat: 'zwölf Jahre alt', ordinal: 0, offset: 0 }],
+    zeitstrahl: { jahr_im_roman: 1940, geburtsjahr: null },
+  });
+  assert.equal(r.bezugsjahr_von, null);
+  assert.equal(r.bezugsjahr_bis, null);
+});
+
+test('consolidateFigure: sicherer Geburtsjahr-Fund geht einem unsicheren vor', () => {
+  const r = consolidateFigure({
+    funde: [
+      { art: 'geburtsjahr', wert: 1890, zitat: 'wohl um 1890 geboren', unsicher: true, ordinal: 0, offset: 0 },
+      { art: 'geburtsjahr', wert: 1891, zitat: 'geboren 1891', ordinal: 2, offset: 0 },
+    ],
+  });
+  assert.equal(r.geburtsjahr, 1891);
 });
 
 test('consolidateFigure: nichts bekannt → keine Aussage', () => {

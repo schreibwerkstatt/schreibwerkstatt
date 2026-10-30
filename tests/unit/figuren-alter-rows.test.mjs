@@ -113,3 +113,13 @@ test('typ_rank folgt der Taxonomie, nicht dem Alphabet', () => {
   assert.ok(rank.hauptfigur < rank.antagonist);
   assert.ok(rank.antagonist < rank.andere);
 });
+
+test('Indexzeile ohne gerechneten Wert faellt NICHT auf den Katalog zurueck', () => {
+  // Geburtsjahr aus dem Text, Alter aus einem anderen Geburtsjahr — in einer Zeile
+  // passten die beiden Zahlen nicht zusammen.
+  const ages = idx([{ fig_id: 'fig_1', geburtsjahr: 1971, geburtsjahr_quelle: 'text', gerechnet: null, quelle: null, konfidenz: 0 }]);
+  const [row] = computeAlterRows([figur({ alter_im_roman: 34, geburtsjahr: 1985 })], ages);
+  assert.equal(row.geburtsjahr, 1971);
+  assert.equal(row.alter_abgeleitet, null);
+  assert.equal(row.hatAlter, false);
+});

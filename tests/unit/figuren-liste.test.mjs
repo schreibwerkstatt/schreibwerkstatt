@@ -116,3 +116,51 @@ test('Kapitelfilter trennt gleichnamige Kapitel', () => {
   ];
   assert.deepEqual(computeFilteredFiguren(dup, null, { kapitelId: 8 }).map(f => f.id), ['b']);
 });
+
+// ── Reiter «Liste»: breite Suche, Typ-Filter, wählbare Sortierung ──────────────
+
+const STECKBRIEFE = [
+  { ...fig('s1', 'Lena', 'hauptfigur', ['Zweites Kapitel']), beruf: 'Hebamme', eigenschaften: ['stur'] },
+  { ...fig('s2', 'Otto', 'nebenfigur', ['Erstes Kapitel']), rolle: 'Gegenspieler im Dorf', kurzname: 'Ottl' },
+  { ...fig('s3', 'Mia', 'randfigur', ['Drittes Kapitel']), beschreibung: 'Die Nachbarin mit dem Hund.' },
+];
+const TYP_LABEL = (t) => ({ hauptfigur: 'Hauptfigur', nebenfigur: 'Nebenfigur', randfigur: 'Randfigur' })[t] ?? '';
+
+test('Suche trifft Beruf, Rolle, Kurzname, Beschreibung und Eigenschaften', () => {
+  const namen = (suche) => computeFilteredFiguren(STECKBRIEFE, KAPITEL, { suche }).map(f => f.name);
+  assert.deepEqual(namen('hebamme'), ['Lena']);
+  assert.deepEqual(namen('gegenspieler'), ['Otto']);
+  assert.deepEqual(namen('ottl'), ['Otto']);
+  assert.deepEqual(namen('HUND'), ['Mia']);
+  assert.deepEqual(namen('stur'), ['Lena']);
+  assert.deepEqual(namen('  mia  '), ['Mia'], 'Leerraum um den Suchbegriff zaehlt nicht');
+});
+
+test('Suche trifft das angezeigte Typ-Label, nicht den Schluessel', () => {
+  const out = computeFilteredFiguren(STECKBRIEFE, KAPITEL, { suche: 'randfig', typLabel: TYP_LABEL });
+  assert.deepEqual(out.map(f => f.name), ['Mia']);
+  // ohne Label-Funktion kein Typ-Treffer
+  assert.deepEqual(computeFilteredFiguren(STECKBRIEFE, KAPITEL, { suche: 'randfig' }), []);
+});
+
+test('Typ-Filter behaelt nur Figuren dieses Typs', () => {
+  const out = computeFilteredFiguren(BESETZUNG, KAPITEL, { typ: 'hauptfigur' });
+  assert.deepEqual(out.map(f => f.name), ['Achill', 'Bruno', 'Anna']);
+});
+
+test('Sortierung nach Name, Typ und Haeufigkeit; Gleichstand faellt auf die Buchreihenfolge', () => {
+  const sortiert = (sort, figuren = BESETZUNG) =>
+    computeFilteredFiguren(figuren, KAPITEL, { sort }).map(f => f.name);
+  assert.deepEqual(sortiert('name'), ['Achill', 'Anna', 'Bruno', 'Namenlos', 'Zora']);
+  assert.deepEqual(sortiert('typ'), ['Achill', 'Bruno', 'Anna', 'Zora', 'Namenlos']);
+  const haeufig = [
+    fig('h1', 'Selten', 'hauptfigur', [{ chapter_id: 1, name: 'Erstes Kapitel', haeufigkeit: 1 }]),
+    fig('h2', 'Oft', 'randfigur', [
+      { chapter_id: 2, name: 'Zweites Kapitel', haeufigkeit: 4 },
+      { chapter_id: 3, name: 'Drittes Kapitel', haeufigkeit: 2 }]),
+    fig('h3', 'Auch selten', 'nebenfigur', [{ chapter_id: 1, name: 'Erstes Kapitel', haeufigkeit: 1 }]),
+  ];
+  assert.deepEqual(sortiert('haeufigkeit', haeufig), ['Oft', 'Selten', 'Auch selten']);
+  // unbekannte Sortierung = Buchreihenfolge
+  assert.deepEqual(sortiert('quatsch'), sortiert(''));
+});

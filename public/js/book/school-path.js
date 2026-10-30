@@ -25,6 +25,9 @@
 // ── Vorlagen ────────────────────────────────────────────────────────────────
 // `klasseStart`: Nummer der ersten Klasse der Stufe (Schweiz: jede Stufe ab 1,
 // „1. Bez").
+// `vertritt` an einer Stufe: schultyp-neutrale Stufe, die im Text als eine der
+// genannten erscheinen darf — «3. Bez» widerspricht einer Figur auf dem Weg
+// «Oberstufe» nicht (pruefeKlassenangabe).
 // `bis` am Weg: der Weg verlaesst eine Stufe nach dieser Klasse (Uebertritt vor
 // deren Ende). Gedeckelt durch die eingestellten Jahre der Stufe.
 //
@@ -53,7 +56,7 @@ export const SCHUL_VORLAGEN = Object.freeze({
       { key: 'bez',      jahre: 3 },
       { key: 'sek',      jahre: 3 },
       { key: 'ober',     jahre: 3 },
-      { key: 'oberstufe', jahre: 3 },
+      { key: 'oberstufe', jahre: 3, vertritt: ['bez', 'sek', 'ober'] },
       { key: 'untergym', jahre: 3 },
       { key: 'obergym',  jahre: 4 },
       { key: 'lehre',    jahre: 3 },
@@ -105,6 +108,25 @@ export const SCHUL_GRENZEN = Object.freeze({
   stufeJahre: { min: 1, max: 10 },
   repetitionen: 4,
 });
+
+// Buchtypen ohne Schullaufbahn: keine Figuren-Biografien, also nichts zu rechnen.
+// Dort fehlen Einstellungs-Abschnitt, Steckbrief-Block, KI-Vorschlag und die
+// Klassenstufe im Buch-Chat; ein gespeichertes Schulsystem bleibt liegen und
+// greift wieder, sobald der Buchtyp wechselt. Keys aus prompt-config.json
+// `buchtypen` (tests/unit/buchtyp-drift.test.mjs).
+export const SCHULWEG_OHNE_BUCHTYPEN = Object.freeze([
+  'sachbuch', 'wissenschaft', 'essay', 'lyrik', 'blog', 'journalismus',
+]);
+
+/** Gibt es im Buchtyp eine Schullaufbahn? Unbekannt/null → ja. */
+export function schulwegFuerBuchtyp(buchtyp) {
+  return !buchtyp || !SCHULWEG_OHNE_BUCHTYPEN.includes(buchtyp);
+}
+
+/** Gespeichertes Schulsystem, wenn der Buchtyp eines kennt — sonst null. */
+export function aktivesSchulsystem(stored, buchtyp) {
+  return schulwegFuerBuchtyp(buchtyp) ? (stored ?? null) : null;
+}
 
 // ── i18n-Keys ───────────────────────────────────────────────────────────────
 export const vorlageLabelKey = (k) => `schule.vorlage.${k}`;
@@ -173,7 +195,7 @@ export function resolveSchulsystem(stored) {
   const tpl = SCHUL_VORLAGEN[n.vorlage];
   const stufen = {};
   for (const s of tpl.stufen) {
-    stufen[s.key] = { key: s.key, jahre: n.jahre[s.key], klasseStart: s.klasseStart || 1 };
+    stufen[s.key] = { key: s.key, jahre: n.jahre[s.key], klasseStart: s.klasseStart || 1, vertritt: [...(s.vertritt || [])] };
   }
   return {
     ...n,
@@ -188,39 +210,40 @@ export function wegKeys(system) {
   return s ? s.wege.map(w => w.key) : [];
 }
 
+/** Klassen, die ein Weg tatsaechlich durchlaeuft ([{ stufe, klasse }], in
+ *  Reihenfolge) — nur diese lassen sich repetieren. `bis` am Weg kuerzt eine
+ *  Stufe: auf `bez_gym` gibt es keine 3. Bez. */
+export function repetitionsKlassen(system, wegKey) {
+  return wegAblauf(system, wegKey, []).map(({ stufe, klasse }) => ({ stufe, klasse }));
+}
+
 /** Repetitionen normalisieren: [{ stufe, klasse }], nur Stufen des Systems,
- *  Klasse innerhalb der Stufe, gedeckelt. Klasse = Nummer wie angezeigt
- *  (bei klasseStart 5 also 5..). */
-export function normalizeRepetitionen(raw, system) {
+ *  Klasse innerhalb der Stufe, ohne Dubletten, gedeckelt. Klasse = Nummer wie
+ *  angezeigt (bei klasseStart 5 also 5..). Mit `wegKey` zusaetzlich nur Klassen,
+ *  die dieser Weg durchlaeuft (repetitionsKlassen). Wer wissen muss, ob etwas
+ *  wegfiel, vergleicht die Laengen. */
+export function normalizeRepetitionen(raw, system, wegKey = null) {
   let list = raw;
   if (typeof list === 'string') {
     try { list = JSON.parse(list); } catch { return []; }
   }
   if (!Array.isArray(list)) return [];
   const s = system?.stufen ? system : resolveSchulsystem(system);
+  const erlaubt = wegKey ? new Set(repetitionsKlassen(s, wegKey).map(r => `${r.stufe}:${r.klasse}`)) : null;
   const out = [];
+  const seen = new Set();
   for (const r of list) {
     const st = s?.stufen?.[r?.stufe];
     const k = _int(r?.klasse);
     if (!st || k == null) continue;
     if (k < st.klasseStart || k > st.klasseStart + st.jahre - 1) continue;
+    const id = `${st.key}:${k}`;
+    if (seen.has(id) || (erlaubt && !erlaubt.has(id))) continue;
+    seen.add(id);
     out.push({ stufe: st.key, klasse: k });
     if (out.length >= SCHUL_GRENZEN.repetitionen) break;
   }
   return out;
-}
-
-/** Geburt aus einem Steckbrief-Text: „12.3.1985", „1985-03-12", „März 1985" wird
- *  nicht gelesen (nur Ziffernformen) — dann bleibt das Jahr allein. */
-export function geburtAusText(text, jahr = null) {
-  const s = String(text || '').trim();
-  let m = s.match(/^(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4})$/);
-  if (m) return { y: +m[3], m: +m[2], d: +m[1] };
-  m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (m) return { y: +m[1], m: +m[2], d: +m[3] };
-  m = s.match(/\b(\d{4})\b/);
-  if (m) return { y: +m[1] };
-  return Number.isInteger(jahr) ? { y: jahr } : null;
 }
 
 /** Moegliche Einschulungsjahre bei Geburt { y, m?, d? }, in Reihenfolge der
@@ -276,6 +299,14 @@ export function wegAblauf(system, wegKey, repetitionen = []) {
     }
   }
   return out;
+}
+
+/** Passt der eigene Weg der Figur zum Schulsystem? Ohne eigenen Weg: ja. Nach
+ *  einem Vorlagenwechsel kann ein gespeicherter Weg-Key fremd sein — dann rechnet
+ *  figurWeg mit dem Standardweg, und die Anzeige muss das sagen. */
+export function wegGueltig(system, figur) {
+  if (!figur?.weg) return true;
+  return wegKeys(system).includes(figur.weg);
 }
 
 /** Der wirksame Weg einer Figur: eigener Weg, sonst der Standardweg des Buchs. */
@@ -341,4 +372,42 @@ export function schoolStagesForYear(args) {
   const s = args.system?.stufen ? args.system : resolveSchulsystem(args.system);
   const fruehjahr = schoolStageAt({ ...args, monat: Math.max(1, (s?.schuljahr_beginn || 8) - 1) });
   return fruehjahr && !_same(herbst, fruehjahr) ? { herbst, fruehjahr } : { herbst };
+}
+
+/** Stimmt die Stufe einer Rechnung mit der aus dem Text ueberein? Gleich, oder
+ *  eine schultyp-neutrale Stufe vertritt die andere (`vertritt`). */
+function _stufeGleich(s, a, b) {
+  if (a === b) return true;
+  return !!(s.stufen[a]?.vertritt?.includes(b) || s.stufen[b]?.vertritt?.includes(a));
+}
+
+/**
+ * Ausdrueckliche Klassenangabe aus dem Text gegen die Rechnung pruefen.
+ *
+ * @param {object} p  wie schoolStageAt, dazu `angabe` { jahr, monat?, stufe, klasse }
+ * @returns {object|null}  { urteil: 'stimmt'|'moeglich'|'widerspruch', gerechnet }
+ *   — `stimmt`: die Rechnung ergibt diese Klasse (ohne Monat: im Fruehjahr oder
+ *   Herbst des Jahres); `moeglich`: nur in der Alternative einer unsicheren
+ *   Einschulung; `gerechnet`: die Position(en) der Rechnung zum Vergleich. null,
+ *   wenn sich nichts rechnen laesst (kein System, keine Geburt, kein Jahr).
+ */
+export function pruefeKlassenangabe({ geburt, system, figur = null, angabe }) {
+  const s = system?.stufen ? system : resolveSchulsystem(system);
+  const jahr = _int(angabe?.jahr), klasse = _int(angabe?.klasse);
+  if (!s || jahr == null || klasse == null || !angabe?.stufe) return null;
+  const monat = _int(angabe.monat);
+  let haupt;
+  if (monat != null && monat >= 1 && monat <= 12) {
+    const r = schoolStageAt({ geburt, system: s, figur, jahr, monat });
+    haupt = r ? [r] : [];
+  } else {
+    const r = schoolStagesForYear({ geburt, system: s, figur, jahr });
+    haupt = r ? [r.fruehjahr, r.herbst].filter(Boolean) : [];
+  }
+  if (!haupt.length) return null;
+  const passt = (p) => p?.status === 'schule' && p.klasse === klasse && _stufeGleich(s, p.stufe, angabe.stufe);
+  let urteil = 'widerspruch';
+  if (haupt.some(passt)) urteil = 'stimmt';
+  else if (haupt.some(p => p.unsicher && passt(p.alternative))) urteil = 'moeglich';
+  return { urteil, gerechnet: haupt };
 }

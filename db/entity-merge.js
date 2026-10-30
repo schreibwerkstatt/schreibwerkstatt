@@ -319,9 +319,14 @@ function mergeFigures(bookId, userEmail, sourceId, targetId) {
           .run(targetId, sourceId).changes;
       }
     }
-    // Schulweg (Autor-Daten, figure_school_paths): gleiche Regel — das Ziel hat
-    // Vorrang, fehlt ihm einer, übernimmt es den der Quelle.
-    if (!db.prepare('SELECT 1 FROM figure_school_paths WHERE figure_id = ?').get(targetId)) {
+    // Schulweg (Autor-Daten, figure_school_paths): das Ziel hat Vorrang, aber nur
+    // mit eigenem Schulweg (source gesetzt). Eine Zeile, die bloss einen KI-Lauf
+    // trägt, ist keiner — dann ersetzt die Zeile der Quelle sie, sofern die einen
+    // Schulweg hat. Sonst fällt die der Quelle per CASCADE.
+    const zielHatWeg = db.prepare('SELECT 1 FROM figure_school_paths WHERE figure_id = ? AND source IS NOT NULL').get(targetId);
+    const quelleHatWeg = db.prepare('SELECT 1 FROM figure_school_paths WHERE figure_id = ? AND source IS NOT NULL').get(sourceId);
+    if (!zielHatWeg && quelleHatWeg) {
+      db.prepare('DELETE FROM figure_school_paths WHERE figure_id = ?').run(targetId);
       moved.schoolPath = db.prepare('UPDATE figure_school_paths SET figure_id = ? WHERE figure_id = ?').run(targetId, sourceId).changes;
     }
     if (!db.prepare('SELECT 1 FROM figure_idiolect WHERE figure_id = ?').get(targetId)) {

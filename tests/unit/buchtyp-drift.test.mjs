@@ -102,3 +102,10 @@ test('buchtyp: jedes hartkodierte Code-Literal existiert in prompt-config.json (
       offenders.map((o) => `  '${o.key}' in ${o.file}`).join('\n')
   );
 });
+
+test('buchtyp: Schulweg-Ausschlussliste nennt nur bekannte Buchtypen', async () => {
+  const { de, en } = loadConfigKeys();
+  const { SCHULWEG_OHNE_BUCHTYPEN } = await import(join(ROOT, 'public', 'js', 'book', 'school-path.js'));
+  const unbekannt = SCHULWEG_OHNE_BUCHTYPEN.filter((k) => !de.has(k) || !en.has(k));
+  assert.deepEqual(unbekannt, [], `SCHULWEG_OHNE_BUCHTYPEN kennt: ${unbekannt.join(', ')}`);
+});

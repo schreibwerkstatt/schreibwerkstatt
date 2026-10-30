@@ -27,4 +27,17 @@ function assertChapterAnalysis(ca, name) {
   }
 }
 
-module.exports = { normalizeGesamtnote, assertChapterAnalysis };
+// Empfehlungen nach Priorität (hoch → mittel → niedrig), stabil innerhalb einer
+// Stufe. Der Prompt verlangt die Sortierung, garantiert ist sie damit nicht.
+const PRIO_RANG = { hoch: 0, mittel: 1, niedrig: 2 };
+function sortEmpfehlungen(r) {
+  if (!Array.isArray(r?.empfehlungen)) return r;
+  const rang = (e) => PRIO_RANG[String(e?.prio || '').toLowerCase()] ?? 3;
+  r.empfehlungen = r.empfehlungen
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => (rang(a.e) - rang(b.e)) || a.i - b.i)
+    .map(x => x.e);
+  return r;
+}
+
+module.exports = { normalizeGesamtnote, assertChapterAnalysis, sortEmpfehlungen };

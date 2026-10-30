@@ -31,7 +31,7 @@ const logger = require('../../logger');
 const { runWithContext } = require('../../lib/log-context');
 const { _parseChatResponse } = require('../../routes/jobs/chat/shared');
 const { EMPTY_ANSWER_MARKER, REFUSAL_MARKER } = require('../../routes/jobs/agentic-chat');
-const { normalizeGesamtnote, assertChapterAnalysis } = require('../../routes/jobs/shared/review-validate');
+const { normalizeGesamtnote, assertChapterAnalysis, sortEmpfehlungen } = require('../../routes/jobs/shared/review-validate');
 const { db } = require('../../db/connection');
 
 db.prepare('INSERT OR IGNORE INTO app_users (email) VALUES (?)').run('u@x');
@@ -101,6 +101,16 @@ test('assertChapterAnalysis: leere Teil-Analyse wirft mit Namen', () => {
   assert.doesNotThrow(() => assertChapterAnalysis({ themen: 'Verlust' }, 'K1'));
   assert.throws(() => assertChapterAnalysis({ themen: ' ', funktion_kurz: '' }, 'K1 (2/3)'),
     (e) => e.message === 'job.error.chapterAnalysisEmpty' && e.i18nParams.name === 'K1 (2/3)');
+});
+
+test('sortEmpfehlungen: hoch → mittel → niedrig, stabil; Alt-Strings bleiben stehen', () => {
+  const r = sortEmpfehlungen({ empfehlungen: [
+    { prio: 'niedrig', text: 'a' }, { prio: 'hoch', text: 'b' }, { prio: 'mittel', text: 'c' },
+    { prio: 'Hoch', text: 'd' }, { text: 'e' },
+  ] });
+  assert.deepEqual(r.empfehlungen.map(e => e.text), ['b', 'd', 'c', 'a', 'e']);
+  assert.deepEqual(sortEmpfehlungen({ empfehlungen: ['x', 'y'] }).empfehlungen, ['x', 'y']);
+  assert.deepEqual(sortEmpfehlungen({}), {});
 });
 
 // ── Session-Titel ────────────────────────────────────────────────────────────

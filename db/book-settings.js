@@ -342,6 +342,27 @@ function setBookSchulsystem(bookId, schulsystem) {
   );
 }
 
+// Handlungsjahr (Migration 346): Jahr, in dem die Handlung (überwiegend) spielt.
+// Angabe des Autors, NULL = keine. Geschrieben mit dem Schulsystem
+// (PUT /booksettings/:id/schulsystem), gelesen von Steckbrief und Lebenslauf.
+const _getBookHandlungsjahr = db.prepare('SELECT handlungsjahr FROM book_settings WHERE book_id = ?');
+const _updateBookHandlungsjahr = db.prepare(`
+  INSERT INTO book_settings (book_id, handlungsjahr, updated_at)
+  VALUES (?, ?, ?)
+  ON CONFLICT(book_id) DO UPDATE SET
+    handlungsjahr=excluded.handlungsjahr,
+    updated_at=excluded.updated_at
+`);
+
+function getBookHandlungsjahr(bookId) {
+  const v = _getBookHandlungsjahr.get(parseInt(bookId))?.handlungsjahr;
+  return Number.isInteger(v) ? v : null;
+}
+
+function setBookHandlungsjahr(bookId, jahr) {
+  _updateBookHandlungsjahr.run(parseInt(bookId), Number.isInteger(jahr) ? jahr : null, new Date().toISOString());
+}
+
 /** Querverweis-Einstellungen pro Buch. Eigener Schreibpfad — beruehrt keine
  *  anderen Settings. */
 function setBookXrefSettings(bookId, { figure_numbering, table_numbering } = {}) {
@@ -408,6 +429,8 @@ module.exports = {
   getBookIdeenStages,
   getBookSchulsystem,
   setBookSchulsystem,
+  getBookHandlungsjahr,
+  setBookHandlungsjahr,
   VALID_CITATION_STYLES,
   VALID_CITATION_NOTES,
   VALID_BIBLIOGRAPHY_SCOPES,

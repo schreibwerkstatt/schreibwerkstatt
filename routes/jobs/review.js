@@ -9,11 +9,12 @@ const {
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, contentHttpError,
   aiCall, getPrompts, getBookPrompts,
-  loadOrderedBookContents, loadPageContents, groupByChapter, splitGroupsIntoChunks, pageSigSuffix, buildSinglePassBookText,
+  loadOrderedBookContents, loadPageContents, groupByChapter, splitGroupsIntoChunks, buildSinglePassBookText,
   chunkLimitsFor, BATCH_SIZE, jobAbortControllers, settledAll,
   _modelName, applyReviewAiOverrides, tps,
   jobs, runningJobs, createJob, enqueueJob, jobKey, findActiveJobId,
-  jsonBody, normalizeGesamtnote, assertChapterAnalysis,
+  jsonBody, normalizeGesamtnote, assertChapterAnalysis, sortEmpfehlungen,
+  sigHash: _sigHash, buildChapterPagesSig, systemChars,
 } = require('./shared');
 const { narrativeLabels } = require('./narrative-labels');
 const { loadReviewKomplettContext, loadReviewMotivContext, loadStrukturContext, loadWeltContext, werkstandFor, trailingUnwrittenChapters, loadOpenPlanBeats } = require('./review-context');
@@ -23,33 +24,11 @@ const contentStore = require('../../lib/content-store');
 const { resolveProvider } = require('../../lib/ai');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 
-// Stabile, kurze Signatur für strukturierte Prompt-Vars (narrative,
-// reviewSchwerpunkt, komplettContext). Identischer Inhalt → identische Sig.
-function _sigHash(obj) {
-  return crypto.createHash('sha1').update(JSON.stringify(obj ?? null)).digest('hex').slice(0, 12);
-}
-
-// pages_sig pro Chunk (analog Komplettanalyse): page_id:updated_at sortiert,
-// plus alle Prompt-Vars, die das Kapitelanalyse-Ergebnis beeinflussen. `teil`
-// steht drin, weil der Prompt eines Teil-Abschnitts anders lautet als der eines
-// ganzen Kapitels.
-function buildChapterPagesSig(chunk, { bookName, teil, narrativeSig, systemSig, cacheVersion }) {
-  const pages = chunk.pages.map(p => `${p.id}:${p.updated_at || ''}${pageSigSuffix(p)}`).sort().join('|');
-  const teilSig = teil ? `${teil.nr}/${teil.von}` : '';
-  return `${pages}||${chunk.name}||${bookName}||${teilSig}||${narrativeSig}||${systemSig}||${cacheVersion}`;
-}
-
 // Signatur der Multi-Pass-Synthese: sie hängt nur an den Kapitel-Analysen (deren
 // Signaturen tragen den Seitenstand) und an den Prompt-Vars der Buchbewertung.
 function buildSynthesisSig(chapterSigs, { bookName, optionsSig, cacheVersion }) {
   const h = crypto.createHash('sha1').update(chapterSigs.join('\n')).digest('hex');
   return `multi:${h}||${bookName}||${optionsSig}||${cacheVersion}`;
-}
-
-// Zeichenlänge eines System-Prompts (String oder Cache-Block-Array).
-function _systemChars(system) {
-  if (Array.isArray(system)) return system.reduce((s, b) => s + (b?.text?.length || 0), 0);
-  return String(system || '').length;
 }
 
 // Ordnet jedem Chunk sein Kapitel (1-basiert in Lesereihenfolge) und — bei
@@ -141,6 +120,9 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
         statusParams: { from: i + 1, to: Math.min(i + BATCH_SIZE, total), total },
       });
     }, jobAbortControllers.get(jobId)?.signal);
+    // Nur Stummel (alle Abschnitte unter der Mindestlänge): nichts zu bewerten.
+    // Ohne diesen Ausstieg bewertete das Modell einen leeren Buchinhalt.
+    if (!pageContents.length) { completeJob(jobId, { empty: true }); return; }
 
     // Ist-Befunde des Struktur-Checks (nur journalistische Bücher; sonst null).
     // Erst hier ladbar, weil der Scope über die geladene Seitenliste läuft — und
@@ -190,7 +172,7 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
     if (totalChars <= SINGLE_PASS_LIMIT) {
       bookText = buildSinglePassBookText(groups, groupOrder);
       singlePrompt = buildBookReviewSinglePassPrompt(bookName, pageContents.length, bookText, reviewOptions);
-      const promptChars = singlePrompt.length + _systemChars(SYSTEM_BUCHBEWERTUNG);
+      const promptChars = singlePrompt.length + systemChars(SYSTEM_BUCHBEWERTUNG);
       if (promptChars > INPUT_BUDGET) {
         logger.info(`Single-Pass-Prompt ${promptChars} Zeichen > Budget ${INPUT_BUDGET} – weiche auf Multi-Pass aus.`);
         singlePrompt = null;
@@ -314,6 +296,7 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
     // Auch ein Cache-Treffer läuft durch die Prüfung: Einträge aus der Zeit vor
     // der Normalisierung können eine ungültige Note tragen.
     normalizeGesamtnote(r);
+    sortEmpfehlungen(r);
     // Grundlage + Achsen-Profil ins Ergebnis: das Frontend rendert die Achsen
     // dieses Laufs, nicht die des heute eingestellten Buchtyps — sonst fehlen
     // einer Alt-Bewertung nach einem Buchtyp-Wechsel die Abschnitte.

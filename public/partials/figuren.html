@@ -48,8 +48,9 @@
   <!-- Graph -->
   <div x-show="$store.catalog.figuren.length > 0" class="figur-graph-section">
 
-    <!-- Modus-Toggle -->
+    <!-- Reiter: Liste (Einstieg) · drei Graphen · drei Tabellen -->
     <div class="tabs tabs--fullwidth">
+      <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'liste' }" @click="setFigurenGraphModus('liste')" x-text="$app.t('figuren.modeListe')"></button>
       <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'figur' }" @click="setFigurenGraphModus('figur')" x-text="$app.t('figuren.modeGraph')"></button>
       <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'familie' }" :disabled="!figurenHasFamilyEdges()" @click="setFigurenGraphModus('familie')" x-text="$app.t('figuren.modeFamilie')"></button>
       <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'soziogramm' }" @click="setFigurenGraphModus('soziogramm')" x-text="$app.t('figuren.modeSoziogramm')"></button>
@@ -59,7 +60,7 @@
     </div>
 
     <!-- Graph-Legende (klappbar) — nested Partial im figurenCard-Scope -->
-    <div id="partial-figuren-graph-legend"></div>
+    <div id="partial-figuren-graph-legend" x-show="figurenIsGraphModus()"></div>
 
     <div class="figuren-graph-wrap" x-show="figurenIsGraphModus()" :class="{ 'is-fullscreen': figurenGraphFullscreen }" @keydown.escape.window="figurenGraphFullscreen && toggleFigurenGraphFullscreen()">
       <div class="figuren-graph-toolbar">
@@ -94,34 +95,40 @@
 
 
 
-  <!-- Figurenliste -->
-  <div x-show="$store.catalog.figuren.length > 0" class="figur-list-section">
-    <div class="figur-list-header">
-      <div class="history-heading" x-text="$app.t('figuren.heading')"></div>
-    </div>
+  <!-- Figurenliste (Reiter «Liste») -->
+  <div x-show="$store.catalog.figuren.length > 0 && figurenGraphModus === 'liste'" class="figur-list-section">
     <p class="card-form-saved" x-show="figurPflegeMessage" x-cloak x-text="figurPflegeMessage"></p>
 
-     <!-- Filter -->
-    <div x-show="$store.catalog.figuren.length > 0 && figurenKapitelOptionen().length > 0" class="filter-bar">
+    <!-- Filter: Suche (Name, Kurzname, Beschreibung, Rolle, Beruf, Eigenschaften,
+         Typ) · Typ · Kapitel · Abschnitt · Sortierung -->
+    <div class="filter-bar">
       <span class="filter-search-wrap">
-        <input type="text" x-model="$store.catalogUi.figurenFilters.suche" :placeholder="$app.t('common.search')" :aria-label="$app.t('common.search')" class="filter-search-input">
+        <input type="text" x-model="$store.catalogUi.figurenFilters.suche" :placeholder="$app.t('figuren.searchPlaceholder')" :aria-label="$app.t('common.search')" class="filter-search-input">
         <button type="button" class="search-clear--icon" x-show="$store.catalogUi.figurenFilters.suche" @click="$store.catalogUi.figurenFilters.suche=''" :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
       </span>
-      <div x-data="catalogFilter('chapter')"
+      <div x-data="catalogFilter('figurTyp')"
+          x-modelable="value" x-model="$store.catalogUi.figurenFilters.typ"
+          x-effect="options = figurenAlterTypListe().map(k => ({ value: k, label: $app.t('figuren.type.' + k) }))"
+          @combobox-change="$store.catalogUi.selectedFigurId = null"></div>
+      <div x-show="figurenKapitelOptionen().length > 0" x-data="catalogFilter('chapter')"
           x-modelable="value" x-model="$store.catalogUi.figurenFilters.kapitelId"
           x-effect="options = figurenKapitelOptionen()"
           @combobox-change="$store.catalogUi.figurenFilters.seiteId = ''; $store.catalogUi.selectedFigurId = null"
           >
       </div>
-      <div x-data="catalogFilter('page')"
+      <div x-show="figurenKapitelOptionen().length > 0" x-data="catalogFilter('page')"
           x-modelable="value" x-model="$store.catalogUi.figurenFilters.seiteId"
           x-effect="_disabled = figurenSeitenOptionen().length === 0; options = figurenSeitenOptionen()"
           @combobox-change="$store.catalogUi.selectedFigurId = null"
           :class="{'combobox-wrap--disabled': _disabled}"
           >
       </div>
+      <div x-data="combobox($app.t('figuren.sort.label'), $app.t('figuren.sort.buch'))"
+          x-modelable="value" x-model="$store.catalogUi.figurenFilters.sort"
+          x-effect="options = ['name', 'typ', 'haeufigkeit'].map(k => ({ value: k, label: $app.t('figuren.sort.' + k) }))"></div>
       <span class="filter-count" x-text="filteredFiguren().length + ' / ' + $store.catalog.figuren.length"></span>
     </div>
+    <p class="muted-msg muted-msg--sm" x-show="filteredFiguren().length === 0" x-text="$app.t('figuren.noMatch')"></p>
 
     <template x-for="f in filteredFiguren()" :key="f.id">
       <div>

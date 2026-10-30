@@ -56,7 +56,7 @@ function _figurBlock(f, nr) {
 export function buildFigurAlterPrompt(figuren = [], buchKontext = '', zeit = null) {
   const ctxSeg = (buchKontext || '').trim() ? `\nBUCH-KONTEXT:\n${buchKontext}\n` : '';
   const zeitSeg = (zeit && (zeit.minYear != null || zeit.maxYear != null))
-    ? `\nERZAEHLTE ZEIT (aus dem Zeitstrahl des Buchs): ${zeit.minYear ?? '?'} bis ${zeit.maxYear ?? '?'}. Nimm sie als Bezugsrahmen, aber nur wenn die Stelle selbst kein Jahr nennt.\n`
+    ? `\nERZAEHLTE ZEIT (aus dem Zeitstrahl des Buchs): ${zeit.minYear ?? '?'} bis ${zeit.maxYear ?? '?'}. Nur zur Orientierung, welche Jahreszahlen Ereignisse sind — kein Bezugsjahr fuer einen Fund.\n`
     : '';
   return `Die Autorin will wissen, wie alt ihre Figuren im Buch sind. Unten stehen zu jeder Figur die Textstellen, in denen eine Alters- oder Jahresangabe in ihrer Naehe vorkommt. Lies sie und notiere, was sie ueber DIESE Figur sagen.
 ${ctxSeg}${zeitSeg}
@@ -67,7 +67,7 @@ Regeln:
 - "figur" ist der Name genau so, wie er oben in der Liste steht.
 - "art": "alter" = Alter in Jahren, "geburtsjahr" = Jahr der Geburt, "todesjahr" = Jahr des Todes.
 - "wert" ist eine ganze Zahl. Ein ausgeschriebenes Zahlwort ("zwoelf", "einundvierzig") wird zur Ziffer. Bei "an ihrem sechzehnten Geburtstag" ist der Wert 16.
-- "bezugsjahr": das Jahr, in dem dieses Alter gilt — nur wenn die Stelle es nennt oder der Kontext es eindeutig hergibt. Sonst leer lassen.
+- "bezugsjahr": das Jahr, in dem dieses Alter gilt — nur wenn es als Jahreszahl IN der vorgelegten Stelle steht. Nicht aus der erzaehlten Zeit, dem Buch-Kontext oder einer anderen Stelle ableiten; sonst leer lassen.
 - "stelle" ist die Nummer der Stelle, aus der das Zitat stammt, so wie sie oben in Klammern steht (z.B. "1.3").
 - "zitat" ist ein WOERTLICHES Stueck der oben vorgelegten Stelle (hoechstens 200 Zeichen), in dem die Angabe steht. Nicht umformulieren, nicht zusammensetzen, nicht uebersetzen — die Autorin springt darueber an die Fundstelle, und ein veraendertes Zitat findet sie nicht.
 - "unsicher": true, wenn die Stelle die Angabe nur nahelegt (Pronomen-Bezug unklar, Zahl koennte etwas anderes meinen, Rueckblende ungewiss). Ein unsicherer Fund ist brauchbar, ein als sicher ausgegebener falscher nicht.

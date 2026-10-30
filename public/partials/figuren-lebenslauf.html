@@ -69,6 +69,24 @@
   <div x-show="figurenLebenslaufKandidaten().liste.length && !figurenLebenslaufMatrix().spalten.length"
        class="muted-msg muted-msg--spaced" x-text="$app.t('figuren.lebenslauf.pickHint')"></div>
 
+  <!-- Jahr-Abfrage: «wer war im Jahr Y in welcher Klasse» über die gewählten
+       Spalten — dieselbe Rechnung wie die Zellen (book/figuren-schulweg.js). -->
+  <div class="figur-cv-jahr" x-id="['schul-jahr']" x-show="figurSchulSystem() && figurenLebenslaufMatrix().spalten.length" x-cloak>
+    <label class="card-form-label" :for="$id('schul-jahr')" x-text="$app.t('figuren.schule.abfrageLabel')"></label>
+    <input type="text" class="form-num" :id="$id('schul-jahr')"
+           :placeholder="$app.t('figuren.schule.abfragePlaceholder')"
+           x-data="numInput({ integer: true, min: 1000, max: 2999, grouping: false })"
+           x-modelable="value" x-model="figurSchulAbfrageJahr">
+    <ul class="figur-cv-jahr-list" x-show="figurSchulJahrUebersicht().length">
+      <template x-for="z in figurSchulJahrUebersicht()" :key="z.id">
+        <li>
+          <span class="figur-typ-dot" :class="'figur-typ-dot--' + z.typ"></span>
+          <strong x-text="z.name"></strong>: <span x-text="z.stand"></span>
+        </li>
+      </template>
+    </ul>
+  </div>
+
   <div class="table-scroll" x-show="figurenLebenslaufMatrix().spalten.length">
     <table class="figur-cv-table">
       <thead>

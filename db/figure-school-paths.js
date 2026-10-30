@@ -4,7 +4,7 @@
 //
 // ZWEI SCHREIBER, GETRENNTE SPALTEN: der Autor (Route) setzt weg/einschulung_jahr/
 // repetitionen_json + source; der Job `schulweg-vorschlag` setzt ausschliesslich
-// vorschlag_json. Ein Vorschlag ueberschreibt nie, was der Autor gesetzt hat —
+// vorschlag_json und klassenangaben_json. Ein Vorschlag ueberschreibt nie, was der Autor gesetzt hat —
 // erst «Übernehmen» (Route) kopiert ihn in die Felder.
 //
 // Figuren sind pro (Buch, User): jeder Zugriff geht ueber (book_id, user_email,
@@ -29,6 +29,7 @@ function _row(r) {
     repetitionen: _parse(r.repetitionen_json, []),
     source: r.source || null,
     vorschlag: _parse(r.vorschlag_json, null),
+    klassenangaben: _parse(r.klassenangaben_json, []),
     updated_at: r.updated_at || null,
   };
 }
@@ -61,13 +62,14 @@ function findFigureForSchoolPath(bookId, figId, userEmail) {
 }
 
 const _listFigs = db.prepare(`
-  SELECT f.id, f.fig_id, f.name, f.kurzname, f.geburtstag, sp.source
+  SELECT f.id, f.fig_id, f.name, f.kurzname, f.geburtstag,
+         sp.source, sp.weg, sp.einschulung_jahr, sp.repetitionen_json
   FROM figures f
   LEFT JOIN figure_school_paths sp ON sp.figure_id = f.id
   WHERE f.book_id = ? AND f.user_email IS ? AND f.stale = 0
   ORDER BY f.sort_order, f.id
 `);
-/** Aktive Figuren eines Users im Buch samt Herkunft ihres Schulwegs (Job). */
+/** Aktive Figuren eines Users im Buch samt ihrem Schulweg (Job). */
 function listFiguresForSchoolPath(bookId, userEmail) {
   return _listFigs.all(bookId, userEmail || null);
 }
@@ -90,16 +92,35 @@ function setSchoolPath(figureId, { weg = null, einschulung_jahr = null, repetiti
   return getSchoolPath(figureId);
 }
 
-const _setVorschlag = db.prepare(`
-  INSERT INTO figure_school_paths (figure_id, vorschlag_json, updated_at)
-  VALUES (?, ?, ${NOW_ISO_SQL})
+const _upsertJob = db.prepare(`
+  INSERT INTO figure_school_paths (figure_id, vorschlag_json, klassenangaben_json, updated_at)
+  VALUES (?, ?, ?, ${NOW_ISO_SQL})
   ON CONFLICT(figure_id) DO UPDATE SET
     vorschlag_json = excluded.vorschlag_json,
+    klassenangaben_json = excluded.klassenangaben_json,
     updated_at = excluded.updated_at
 `);
-/** KI-Vorschlag ablegen bzw. mit null verwerfen. Berührt die Autor-Felder nie. */
-function setSchoolPathVorschlag(figureId, vorschlag) {
-  _setVorschlag.run(figureId, vorschlag ? JSON.stringify(vorschlag) : null);
+// Leeren ohne Zeile anzulegen: eine Leerzeile sähe für den Figuren-Merge wie ein
+// Schulweg des Ziels aus.
+const _clearJob = db.prepare(`
+  UPDATE figure_school_paths SET vorschlag_json = NULL, klassenangaben_json = NULL, updated_at = ${NOW_ISO_SQL}
+  WHERE figure_id = ? AND (vorschlag_json IS NOT NULL OR klassenangaben_json IS NOT NULL)
+`);
+/** Ergebnis eines Job-Laufs ablegen: Vorschlag und Klassenangaben ersetzen den
+ *  Stand des letzten Laufs. Berührt die Autor-Felder nie. */
+function setSchoolPathJobErgebnis(figureId, { vorschlag = null, klassenangaben = [] } = {}) {
+  const ka = Array.isArray(klassenangaben) && klassenangaben.length ? JSON.stringify(klassenangaben) : null;
+  if (!vorschlag && !ka) { _clearJob.run(figureId); return; }
+  _upsertJob.run(figureId, vorschlag ? JSON.stringify(vorschlag) : null, ka);
+}
+
+const _setVorschlag = db.prepare(`
+  UPDATE figure_school_paths SET vorschlag_json = ?, updated_at = ${NOW_ISO_SQL} WHERE figure_id = ?
+`);
+/** Offenen KI-Vorschlag verwerfen bzw. nach dem Übernehmen leeren (null). Legt nie
+ *  eine Zeile an; Vorschläge schreibt nur der Job (setSchoolPathJobErgebnis). */
+function clearSchoolPathVorschlag(figureId) {
+  _setVorschlag.run(null, figureId);
 }
 
 module.exports = {
@@ -108,5 +129,6 @@ module.exports = {
   findFigureForSchoolPath,
   listFiguresForSchoolPath,
   setSchoolPath,
-  setSchoolPathVorschlag,
+  setSchoolPathJobErgebnis,
+  clearSchoolPathVorschlag,
 };

@@ -174,6 +174,29 @@ test('Figuren-Merge: Composite-PK-Kollision wirft nicht und hinterlaesst eine Ze
   assert.ok(fkClean());
 });
 
+test('Figuren-Merge: Schulweg der Quelle ersetzt eine Ziel-Zeile, die nur einen KI-Lauf traegt', () => {
+  const sp = (fid) => db.prepare('SELECT weg, source, vorschlag_json FROM figure_school_paths WHERE figure_id = ?').get(fid);
+  // Ziel hat nur einen Job-Stand, Quelle einen Autor-Weg → Quelle gewinnt.
+  let book = newBook();
+  let src = addFigur(book, 'fig_1', 'A');
+  let tgt = addFigur(book, 'fig_2', 'B');
+  db.prepare("INSERT INTO figure_school_paths (figure_id, weg, source) VALUES (?, 'bez', 'autor')").run(src);
+  db.prepare(`INSERT INTO figure_school_paths (figure_id, vorschlag_json) VALUES (?, '{"weg":"sek"}')`).run(tgt);
+  mergeFigures(book, USER, src, tgt);
+  assert.deepEqual({ ...sp(tgt) }, { weg: 'bez', source: 'autor', vorschlag_json: null });
+  assert.ok(fkClean());
+
+  // Ziel hat selbst einen Weg → Ziel bleibt.
+  book = newBook();
+  src = addFigur(book, 'fig_1', 'A');
+  tgt = addFigur(book, 'fig_2', 'B');
+  db.prepare("INSERT INTO figure_school_paths (figure_id, weg, source) VALUES (?, 'bez', 'autor')").run(src);
+  db.prepare("INSERT INTO figure_school_paths (figure_id, weg, source) VALUES (?, 'kanti', 'ki')").run(tgt);
+  mergeFigures(book, USER, src, tgt);
+  assert.equal(sp(tgt).weg, 'kanti');
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM figure_school_paths WHERE figure_id = ?').get(src).n, 0);
+});
+
 test('Figuren-Merge: Kapitel-Haeufigkeit wird summiert, Seiten-Nennungen ebenso', () => {
   const book = newBook();
   const ch = addChapter(book, 'Kapitel 1');

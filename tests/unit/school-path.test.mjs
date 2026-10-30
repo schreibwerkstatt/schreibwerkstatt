@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
   SCHUL_VORLAGEN, normalizeSchulsystem, resolveSchulsystem, schulsystemAusVorlage,
   einschulungsJahre, schoolStageAt, schoolStagesForYear, wegAblauf, normalizeRepetitionen,
-  wegKeys, geburtAusText, schuljahrStart,
+  wegKeys, schuljahrStart, repetitionsKlassen, wegGueltig, pruefeKlassenangabe,
 } from '../../public/js/book/school-path.js';
 
 const SO = schulsystemAusVorlage('ch_so_1990');
@@ -160,12 +160,36 @@ test('HarmoS: Einschulung mit 4 in den Kindergarten', () => {
   assert.deepEqual(wegKeys(h), ['sek', 'sek_lehre', 'sek_gym']);
 });
 
-test('geburtAusText liest Ziffernformen', () => {
-  assert.deepEqual(geburtAusText('12.3.1985'), { y: 1985, m: 3, d: 12 });
-  assert.deepEqual(geburtAusText('1985-03-12'), { y: 1985, m: 3, d: 12 });
-  assert.deepEqual(geburtAusText('Frühling 1985'), { y: 1985 });
-  assert.deepEqual(geburtAusText('', 1990), { y: 1990 });
-  assert.equal(geburtAusText(''), null);
+test('Repetition nur auf Klassen, die der Weg durchlaeuft', () => {
+  const kl = repetitionsKlassen(SO, 'bez_gym').filter(r => r.stufe === 'bez').map(r => r.klasse);
+  assert.deepEqual(kl, [1, 2], 'bez_gym verlaesst die Bez nach der 2. Klasse');
+  const raw = [{ stufe: 'bez', klasse: 3 }, { stufe: 'sek', klasse: 1 }, { stufe: 'primar', klasse: 2 }, { stufe: 'primar', klasse: 2 }];
+  assert.deepEqual(normalizeRepetitionen(raw, SO, 'bez_gym'), [{ stufe: 'primar', klasse: 2 }]);
+  // Ohne Weg nur gegen das System (3. Bez existiert dort), Dubletten fallen trotzdem.
+  assert.equal(normalizeRepetitionen(raw, SO).length, 3);
+});
+
+test('wegGueltig: fremder Weg-Key nach Vorlagenwechsel', () => {
+  assert.equal(wegGueltig(SO, null), true);
+  assert.equal(wegGueltig(SO, { weg: null }), true);
+  assert.equal(wegGueltig(SO, { weg: 'bez' }), true);
+  assert.equal(wegGueltig(schulsystemAusVorlage('ch_harmos'), { weg: 'bez' }), false);
+});
+
+test('pruefeKlassenangabe: stimmt, Widerspruch, neutrale Oberstufe, unsichere Einschulung', () => {
+  const geburt = { y: 1986, m: 2, d: 1 };   // eingeschult Sommer 1992, Bez ab Sommer 1998
+  const p = (angabe, figur = { weg: 'bez' }, g = geburt) => pruefeKlassenangabe({ geburt: g, system: SO, figur, angabe });
+  assert.equal(p({ jahr: 1999, monat: 10, stufe: 'bez', klasse: 2 }).urteil, 'stimmt');
+  assert.equal(p({ jahr: 1999, monat: 10, stufe: 'bez', klasse: 3 }).urteil, 'widerspruch');
+  // Ohne Monat zaehlen Fruehjahr (1. Bez) und Herbst (2. Bez).
+  assert.equal(p({ jahr: 1999, stufe: 'bez', klasse: 1 }).urteil, 'stimmt');
+  assert.equal(p({ jahr: 1999, stufe: 'bez', klasse: 2 }).urteil, 'stimmt');
+  // Standardweg Oberstufe → Lehre: «2. Bez» widerspricht nicht.
+  assert.equal(p({ jahr: 1999, monat: 10, stufe: 'bez', klasse: 2 }, null).urteil, 'stimmt');
+  // Nur Geburtsjahr: die Alternative der Einschulung traegt die Angabe.
+  assert.equal(p({ jahr: 1998, monat: 10, stufe: 'bez', klasse: 1 }, { weg: 'bez' }, { y: 1986 }).urteil, 'moeglich');
+  assert.equal(p({ jahr: null, stufe: 'bez', klasse: 1 }), null);
+  assert.equal(pruefeKlassenangabe({ geburt: null, system: SO, angabe: { jahr: 1999, stufe: 'bez', klasse: 1 } }), null);
 });
 
 test('resolveSchulsystem liefert Stufen mit klasseStart', () => {

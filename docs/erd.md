@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 345, 188 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 346, 188 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -543,6 +543,7 @@ erDiagram
     TEXT    research_domains         "Domain-Eingrenzung der Web-Suche, eine pro Zeile (NULL/leer = offenes Web) → `allowed_domains` am web_search-Werkzeug"
     TEXT    ideen_stages             "aktive Ideen-Stufen, Komma-Text in kanonischer Reihenfolge (offen + erledigt immer; in_arbeit/verworfen zuschaltbar; NULL = alle vier)"
     TEXT    schulsystem_json         "Schulsystem des Buchs (Vorlage, Einschulungsalter, Stichtag, Schuljahresbeginn, Jahre je Stufe, Standardweg; NULL = keins) — normalisiert über public/js/book/school-path.js"
+    INTEGER handlungsjahr            "Jahr, in dem die Handlung (überwiegend) spielt — Angabe des Autors, NULL = keine; Klassenstufe zur Handlungszeit im Steckbrief"
     TEXT    updated_at
   }
   book_snapshots {
@@ -929,6 +930,7 @@ erDiagram
     TEXT    repetitionen_json  "JSON [{stufe,klasse}]"
     TEXT    source             "CHECK IN ('autor','ki') oder NULL — wer die Felder gesetzt hat"
     TEXT    vorschlag_json     "offener KI-Vorschlag mit Beleg (Job schulweg-vorschlag schreibt nur hier)"
+    TEXT    klassenangaben_json "JSON [{jahr,monat,stufe,klasse,zitat,page_id}] — ausdrückliche Klassenangaben aus dem Text (Job), gegen die Rechnung geprüft beim Lesen"
     TEXT    updated_at
   }
   figure_age_belege {

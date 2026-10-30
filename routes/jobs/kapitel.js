@@ -1,14 +1,15 @@
 'use strict';
-const crypto = require('crypto');
 const express = require('express');
 const {
   getBookSettings,
   loadChapterMacroReviewCache, saveChapterMacroReviewCache,
+  loadChapterReviewCache, saveChapterReviewCache,
   insertChapterReview,
 } = require('../../db/schema');
 const {
   makeJobLogger, updateJob, completeJob, failJob, contentHttpError,
-  normalizeGesamtnote, assertChapterAnalysis,
+  normalizeGesamtnote, assertChapterAnalysis, sortEmpfehlungen,
+  sigHash: _sigHash, buildChapterPagesSig, systemChars,
   aiCall, getPrompts, getBookPrompts,
   jobAbortControllers,
   htmlToText, splitGroupsIntoChunks, loadOrderedBookContents,
@@ -27,30 +28,29 @@ const { getDescendantChapterIds } = require('../../db/book-order');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const { setContext } = require('../../lib/log-context');
 
-function _sigHash(obj) {
-  return crypto.createHash('sha1').update(JSON.stringify(obj ?? null)).digest('hex').slice(0, 12);
-}
-
 // Revision des Job-Aufbaus in der Cache-Signatur. Der Wortlaut der Prompt-
 // Builder fliesst nicht in PROMPTS_VERSION (nur Schemas + Locale-Snapshot) —
 // ändert sich Prompt-Aufbau oder Ergebnis-Form, hier hochzählen.
-const CACHE_REV = 2;
+const CACHE_REV = 3;
 
 const kapitelRouter = express.Router();
 
 // ── Job: Kapitel-Review (Makrobewertung eines einzelnen Kapitels) ────────────
+// Mindestlänge eines bewertbaren Abschnitts — wie die Buchbewertung
+// (loadPageContents, 50 Zeichen): beide zählen so dieselben Abschnitte, und die
+// Teil-Analysen sind zwischen den Jobs austauschbar (gleicher Chunk-Inhalt).
+const MIN_PAGE_CHARS = 50;
+
 // Folgt in `laterPages` (Buchreihenfolge) noch Text? Lädt der Reihe nach und
 // hört beim ersten Abschnitt mit Text auf — im Normalfall ein einziger Load.
-// Leere Hüllen werden übersprungen. Mindestlänge wie die Buchbewertung
-// (loadPageContents, 50 Zeichen). Nach SCAN_MAX leeren Abschnitten ohne Befund:
-// null (unbekannt) — dann wird nichts behauptet.
-const FRONT_MIN_CHARS = 50;
+// Leere Hüllen werden übersprungen. Nach SCAN_MAX leeren Abschnitten ohne
+// Befund: null (unbekannt) — dann wird nichts behauptet.
 const FRONT_SCAN_MAX = 40;
 async function _textFollows(laterPages, signal) {
   for (const p of laterPages.slice(0, FRONT_SCAN_MAX)) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     const pd = await contentStore.loadPage(p.id).catch(e => { throw contentHttpError(e); });
-    if (htmlToText(pd.html).trim().length >= FRONT_MIN_CHARS) return true;
+    if (htmlToText(pd.html).trim().length >= MIN_PAGE_CHARS) return true;
   }
   return laterPages.length > FRONT_SCAN_MAX ? null : false;
 }
@@ -80,7 +80,7 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
   const chapterIdInt = parseInt(chapterId);
   const email = userEmail || '';
   const effectiveProvider = resolveProvider({ userEmail });
-  const { singlePass: SINGLE_PASS_LIMIT, perChunk: PER_CHUNK_LIMIT } = chunkLimitsFor(effectiveProvider);
+  const { singlePass: SINGLE_PASS_LIMIT, perChunk: PER_CHUNK_LIMIT, inputBudget: INPUT_BUDGET } = chunkLimitsFor(effectiveProvider);
   const effortSuffix = applyReviewAiOverrides(effectiveProvider, logger);
   const cacheVersion = `${_modelName(effectiveProvider)}${effortSuffix}:${PROMPTS_VERSION || ''}`;
   try {
@@ -102,19 +102,11 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
     if (!pages.length) { completeJob(jobId, { empty: true, chapterName }); return; }
     logger.info(`Start: «${chapterName}» chap=${chapterId}${includeSubchapters ? ' (+Sub-Kapitel)' : ''}, ${pages.length} Seiten`);
 
-    // Kapitelname aus dem Tree-Pfad (letztes Segment) – für Kontext-Scoping
-    // (Kontinuität/Zeitstrahl filtern über Namen) und Nachbar-Anzeige.
-    const _nameOf = (cid) => {
-      const pth = chMap[cid] || chMap[Number(cid)] || '';
-      return pth ? pth.split(' › ').pop() : '';
-    };
-    const chapterNames = [...new Set([...chapterIds].map(_nameOf).concat(chapterName).filter(Boolean))];
-
     // Buchwahrheit (Figuren/Beziehungen/Kontinuität/Zeitstrahl) auf die bewerteten
     // Kapitel gescopt: schärft die Achsen `figuren` und `kohaerenz` gegen die
     // Kartei, statt das Kapitel isoliert zu beurteilen.
     const komplettContext = loadChapterReviewKomplettContext(bookIdInt, email, {
-      chapterIds: [...chapterIds], chapterNames,
+      chapterIds: [...chapterIds],
     });
 
     // Ist-Befunde des Struktur-Checks, auf die Seiten dieses Kapitels gescopt
@@ -198,6 +190,10 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
     const cached = loadChapterMacroReviewCache(bookIdInt, email, chapterIdInt, pagesSig, effectiveProvider);
     if (cached) {
       logger.info(`«${chapterName}» – Cache-HIT (pages_sig match) – spart Kapitel-Review-Call.`);
+      // Auch ein Treffer läuft durch die Prüfung (wie review.js): Einträge aus der
+      // Zeit vor der Normalisierung können eine ungültige Note tragen.
+      normalizeGesamtnote(cached);
+      sortEmpfehlungen(cached);
       updateJob(jobId, { progress: 97, statusText: 'job.phase.checkpointLoaded' });
       // Unverändertes Kapitel → identisches Ergebnis: keinen Doppel-Eintrag in
       // den auf zehn Läufe gedeckelten Verlauf schreiben.
@@ -237,8 +233,10 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
       const results = await Promise.all(batch.map(async p => {
         const pd = await contentStore.loadPage(p.id).catch(e => { throw contentHttpError(e); });
         const text = htmlToText(pd.html).trim();
-        if (!text) return null;
-        return { title: p.name, text, chapterId: p.chapter_id || null };
+        if (text.length < MIN_PAGE_CHARS) return null;
+        // id + updated_at tragen die Cache-Signatur der Teil-Analysen
+        // (buildChapterPagesSig) — derselbe Stempel wie in der Buchbewertung.
+        return { id: p.id, updated_at: pd.updated_at || '', title: p.name, text, chapterId: p.chapter_id || null };
       }));
       for (const v of results) if (v) contents.push(v);
     }
@@ -272,12 +270,26 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
     let r;
     // Grundlage der Note: Volltext des Kapitels oder verdichtete Teil-Analysen.
     let basis;
+    const reviewOptions = { ...narrative, reviewSchwerpunkt, komplettContext, position, werkstand, strukturContext, planContext, ideenContext };
 
+    // Single-Pass nur, wenn der FERTIGE Prompt ins Budget passt (wie review.js):
+    // SINGLE_PASS_LIMIT misst nur den Kapiteltext, Kartei, Plot-Beats, Ideen,
+    // Struktur und das Stilprofil im System-Prompt kommen obendrauf.
+    let singlePrompt = null, chText = null;
     if (totalChars <= SINGLE_PASS_LIMIT) {
-      const chText = _buildText(contents);
+      chText = _buildText(contents);
+      singlePrompt = buildChapterReviewPrompt(chapterName, bookName, contents.length, chText, reviewOptions);
+      const promptChars = singlePrompt.length + systemChars(SYSTEM_KAPITELREVIEW);
+      if (promptChars > INPUT_BUDGET) {
+        logger.info(`Single-Pass-Prompt ${promptChars} Zeichen > Budget ${INPUT_BUDGET} – weiche auf Multi-Pass aus.`);
+        singlePrompt = null;
+      }
+    }
+
+    if (singlePrompt) {
       updateJob(jobId, { progress: 65, statusText: 'job.phase.aiChapterReview' });
       r = await aiCall(jobId, tok,
-        buildChapterReviewPrompt(chapterName, bookName, contents.length, chText, { ...narrative, reviewSchwerpunkt, komplettContext, position, werkstand, strukturContext, planContext, ideenContext }),
+        singlePrompt,
         SYSTEM_KAPITELREVIEW,
         65, 97, 5000, 0.2, null, undefined, SCHEMA_CHAPTER_REVIEW,
       );
@@ -286,12 +298,20 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
       basis = 'single';
     } else {
       // Kapitel sprengt Input-Budget → in Sub-Chunks zerlegen, je Analyse, dann synthetisieren.
-      const groupKey = String(chapterId);
-      const baseGroups = new Map([[groupKey, { name: chapterName, pages: contents }]]);
+      // Gruppenname und Chunk-Keys wie in der Buchbewertung (Kapitelpfad aus
+      // chMap, Key = Kapitel-ID): ohne Unterkapitel sind die Teil-Analysen damit
+      // dieselben wie dort und teilen sich den chapter_review_cache. Mit
+      // Unterkapiteln trägt der Text Zwischenüberschriften — eigener Key (':incl').
+      const groupKey = String(chapterIdInt);
+      const groupName = includeSubchapters ? chapterName : (chMap[chapterIdInt] || chapterName);
+      const baseGroups = new Map([[groupKey, { name: groupName, pages: contents }]]);
       const { chunkOrder, chunks } = splitGroupsIntoChunks(baseGroups, [groupKey], PER_CHUNK_LIMIT);
-      logger.info(`Multi-Pass: ${chunkOrder.length} Teilabschnitte (${totalChars} chars > ${SINGLE_PASS_LIMIT})`);
+      logger.info(`Multi-Pass: ${chunkOrder.length} Teilabschnitte (${totalChars} chars)`);
+      const narrativeSig = _sigHash(narrative);
+      const systemSig = _sigHash(SYSTEM_KAPITELANALYSE);
 
       const subAnalyses = [];
+      let cacheHits = 0;
       for (let i = 0; i < chunkOrder.length; i++) {
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
         const chunk = chunks.get(chunkOrder[i]);
@@ -302,11 +322,18 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
           statusText: 'job.phase.analyzing',
           statusParams: { current: i + 1, total: chunkOrder.length, name: chapterName },
         });
+        const teil = chunkOrder.length > 1 ? { nr: i + 1, von: chunkOrder.length } : null;
+        const cacheKey = includeSubchapters ? `${chunkOrder[i]}:incl` : chunkOrder[i];
+        const chunkSig = buildChapterPagesSig(chunk, { bookName, teil, narrativeSig, systemSig, cacheVersion });
+        const cachedCa = loadChapterReviewCache(bookIdInt, email, cacheKey, chunkSig, effectiveProvider);
+        if (cachedCa) {
+          cacheHits++;
+          subAnalyses.push({ pageCount: chunk.pages.length, ...cachedCa });
+          continue;
+        }
         const chunkText = _buildText(chunk.pages);
         const ca = await aiCall(jobId, tok,
-          buildChapterAnalysisPrompt(chapterName, bookName, chunk.pages.length, chunkText, {
-            ...narrative, teil: chunkOrder.length > 1 ? { nr: i + 1, von: chunkOrder.length } : null,
-          }),
+          buildChapterAnalysisPrompt(chunk.name, bookName, chunk.pages.length, chunkText, { ...narrative, teil }),
           SYSTEM_KAPITELANALYSE,
           fromPct, toPct, 1500, 0.2, null, undefined, SCHEMA_CHAPTER_ANALYSIS,
         );
@@ -316,12 +343,14 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
         // ab hier die einzige Zitatquelle der Kapitelbewertung.
         const droppedQ = applyQuoteVerification(ca, chunkText, 'zitate');
         if (droppedQ) logger.warn(`Abschnitt ${i + 1}: ${droppedQ} Belegzitat(e) nicht im Text gefunden – verworfen.`);
+        saveChapterReviewCache(bookIdInt, email, cacheKey, chunkSig, ca, effectiveProvider);
         subAnalyses.push({ pageCount: chunk.pages.length, ...ca });
       }
+      if (cacheHits > 0) logger.info(`Teil-Analysen: ${cacheHits}/${chunkOrder.length} aus Cache.`);
 
       updateJob(jobId, { progress: 90, statusText: 'job.phase.finalReview' });
       r = await aiCall(jobId, tok,
-        buildChapterReviewMultiPassPrompt(chapterName, bookName, subAnalyses, contents.length, { ...narrative, reviewSchwerpunkt, komplettContext, position, werkstand, strukturContext, planContext, ideenContext }),
+        buildChapterReviewMultiPassPrompt(chapterName, bookName, subAnalyses, contents.length, reviewOptions),
         SYSTEM_KAPITELREVIEW,
         90, 97, 5000, 0.2, null, undefined, SCHEMA_CHAPTER_REVIEW,
       );
@@ -333,6 +362,7 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
     // Pflichtfeld prüfen UND normalisieren (Zahl 1–6), bevor das Ergebnis in den
     // Kapitel-Cache und den Verlauf geht — wie die Buchbewertung (review.js).
     normalizeGesamtnote(r);
+    sortEmpfehlungen(r);
     // Grundlage + Achsen-Profil ins Ergebnis (siehe routes/jobs/review.js).
     r.basis = basis;
     r.profil = profil;

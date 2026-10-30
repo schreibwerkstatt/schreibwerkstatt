@@ -20,7 +20,7 @@ export function registerCatalogUiStore() {
     figurenProgress: 0,
     figurenStatus: '',
     selectedFigurId: null,
-    figurenFilters: { kapitelId: '', seiteId: '', suche: '' },
+    figurenFilters: { kapitelId: '', seiteId: '', suche: '', typ: '', sort: '' },
 
     // Ereignisse: Filter + Selektion (app-navigation schreibt beides).
     selectedEreignisId: null,

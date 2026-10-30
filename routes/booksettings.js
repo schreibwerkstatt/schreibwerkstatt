@@ -10,7 +10,7 @@ const { journalisticBookSettings } = require('../lib/page-guard');
 const { aclParamGuard, sessionEmail } = require('../lib/acl');
 const logger = require('../logger');
 const { captureSnapshot } = require('./snapshots');
-const { getBookSchulsystem, setBookSchulsystem } = require('../db/book-settings');
+const { getBookSchulsystem, setBookSchulsystem, getBookHandlungsjahr, setBookHandlungsjahr } = require('../db/book-settings');
 const { schoolPath } = require('../lib/esm-bridge');
 
 const router = express.Router();
@@ -45,7 +45,7 @@ const BIBLIOGRAPHY_TITLE_MAX = 200;
 router.get('/:book_id', aclParamGuard('viewer'), (req, res) => {
   const bookId = req.bookId;
   const settings = getBookSettings(bookId, sessionEmail(req));
-  res.json({ ...settings, schulsystem: getBookSchulsystem(bookId) });
+  res.json({ ...settings, schulsystem: getBookSchulsystem(bookId), handlungsjahr: getBookHandlungsjahr(bookId) });
 });
 
 /** Speichert Sprache, Region, Buchtyp und Buchkontext für ein Buch. */
@@ -296,6 +296,8 @@ router.put('/:book_id/research', aclParamGuard('editor'), jsonBody, (req, res) =
   res.json({ ok: true, ...saved });
 });
 
+const HANDLUNGSJAHR_MIN = 1000, HANDLUNGSJAHR_MAX = 2999;
+
 /** Schulsystem des Buchs (Schullaufbahn der Figuren, docs/figur-lebenslauf.md).
  *  Eigener Endpunkt wie /research. `schulsystem: null` entfernt es. Normalisiert
  *  wird ausschliesslich über die Rechenschicht (school-path.js, ESM-Bridge) — die
@@ -309,9 +311,20 @@ router.put('/:book_id/schulsystem', aclParamGuard('editor'), jsonBody, async (re
   if (raw != null && !value) {
     return res.status(400).json({ error_code: 'INVALID_VALUE', params: { field: 'schulsystem', allowed: SCHUL_VORLAGE_KEYS.join(', ') } });
   }
+  // Handlungsjahr reist optional mit (gleicher Abschnitt, gleicher Speichern-Knopf);
+  // fehlt der Key, bleibt es unberührt.
+  const hasJahr = Object.prototype.hasOwnProperty.call(req.body || {}, 'handlungsjahr');
+  let jahr = null;
+  if (hasJahr && req.body.handlungsjahr != null && req.body.handlungsjahr !== '') {
+    jahr = Number(req.body.handlungsjahr);
+    if (!Number.isInteger(jahr) || jahr < HANDLUNGSJAHR_MIN || jahr > HANDLUNGSJAHR_MAX) {
+      return res.status(400).json({ error_code: 'INVALID_VALUE', params: { field: 'handlungsjahr', allowed: `${HANDLUNGSJAHR_MIN}–${HANDLUNGSJAHR_MAX}` } });
+    }
+  }
   setBookSchulsystem(bookId, value);
-  logger.info(`[schulsystem] book=${bookId} vorlage=${value?.vorlage || '–'} standardWeg=${value?.standard_weg || '–'}`);
-  res.json({ ok: true, schulsystem: value });
+  if (hasJahr) setBookHandlungsjahr(bookId, jahr);
+  logger.info(`[schulsystem] book=${bookId} vorlage=${value?.vorlage || '–'} standardWeg=${value?.standard_weg || '–'}${hasJahr ? ` handlungsjahr=${jahr ?? '–'}` : ''}`);
+  res.json({ ok: true, schulsystem: value, handlungsjahr: getBookHandlungsjahr(bookId) });
 });
 
 module.exports = router;

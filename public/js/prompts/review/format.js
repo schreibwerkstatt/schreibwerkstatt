@@ -49,7 +49,7 @@ ${rahmen}
 - 4.5:     gut, klare Stärke in mind. zwei Achsen (${namen}).
 - 5.0:     ${tiers.sehrGut}
 - 5.5–6.0: ausgezeichnet bis herausragend.
-- Eine Note über 4.5 verlangt eine konkrete Stärke pro genannter Achse; ohne → maximal 4.5.${kontextzeile}
+- Ab 5.0 braucht JEDE Achse (${namen}) eine konkrete, am Text belegte Stärke – nicht nur die zwei der 4.5-Stufe; fehlt sie in einer Achse → maximal 4.5.${kontextzeile}
 - Halbschritte (.0, .5) bevorzugen; .25 / .75 nur wenn die Bewertung klar zwischen zwei Stufen liegt.
 - Die Note steht im Antwort-JSON ABSICHTLICH zuletzt: schreibe erst die Achsen, lies dann, was dort steht, und leite die Note daraus ab. Nicht umgekehrt.
 - ${_cap(werk)} als Ganzes bekommt EINE Note; sie ist kein Durchschnitt der Achsen, sondern deren gewichtetes Urteil.`;

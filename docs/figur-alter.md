@@ -38,12 +38,20 @@ was im vorgelegten Satz **steht** — samt wörtlichem Zitat.
 Davor fallen Zitate unter acht Zeichen (ein blosses „zwölf" steht in jeder Stelle) und
 unplausible Werte (`isPlausibleWert`: Alter 0–130, Geburts-/Todesjahr 1000–2999 — ein
 „Geburtsjahr 12" ergäbe sonst ein gerechnetes Alter von 1900 Jahren). Der unbestimmte
-Artikel („ein", „eine", „einen" …) zählt in `numbersIn` nicht als Eins.
+Artikel („ein", „eine", „einen" …) zählt in `numbersIn` nicht als Eins, ein Ordinalwort
+nur vor „Geburtstag"/„Lebensjahr" („erst" ist sonst eine Eins, das Verb „achten" eine Acht).
+
+**Bezugsjahr nur aus der Stelle.** Das `bezugsjahr` eines Funds bleibt nur stehen, wenn
+die Jahreszahl in der vorgelegten Stelle steht (und 1000–2999 ist); sonst fällt das
+Jahr weg, der Fund bleibt. Ein aus dem Kontext erschlossenes Jahr wäre eine Rechnung des
+Modells — und die Rechnungsprüfung meldete daraus einen Widerspruch, den es im Text
+nicht gibt. Die Spanne der erzählten Zeit steht im Prompt nur zur Orientierung.
 
 Die Verwerfungs-Zähler stehen im Job-Ergebnis (`verworfen.zitat` / `.zahl` / `.wert` /
-`.figur`) und im Log — ein stiller Filter liest sich wie „mehr gab es nicht". `.wert`
+`.figur` / `.bezugsjahr`) und im Log — ein stiller Filter liest sich wie „mehr gab es nicht". `.wert`
 zählt auch eine ungültige `art` und einen fehlenden Zahlenwert; `.zitat` nur Zitate, die
-zu kurz sind oder in keiner vorgelegten Stelle stehen.
+zu kurz sind oder in keiner vorgelegten Stelle stehen; `.figur` auch Funde zu einem Namen,
+den zwei Figuren tragen (Vollname wie Kurzname) — zugeordnet wird nur Eindeutiges.
 
 **Sprungziel.** Das Modell nennt zu jedem Fund die Nummer der Stelle (`stelle`, „2.3"
 wie im Prompt). Steht dasselbe Zitat in mehreren vorgelegten Stellen, bestimmt sie die
@@ -54,7 +62,9 @@ Seite; ohne passende Nummer gilt die erste Fundstelle.
 `splitSentences` schneidet **nicht** an einem Punkt hinter einer ein- bis dreistelligen
 Zahl vor einem Wort („am 3. Mai 1850", „zum 40. Geburtstag") und nicht hinter Abkürzungen
 und Initialen („geb. 1850", „Dr. Berg") — genau dort stehen Geburts- und Altersangaben.
-Eine Jahreszahl am Satzende bleibt eine Grenze. Ordinal-Geburtstage werden als ganzes
+Ein Datum in Ziffern („12.03.1950", „12. 3. 1950") trennt ebenfalls keinen Satz — sonst
+stünde „geboren" ohne seine Jahreszahl und der Name ohne beides da. Eine Jahreszahl am
+Satzende bleibt eine Grenze. Ordinal-Geburtstage werden als ganzes
 Wort zerlegt („dritten", „ersten", „zwanzigsten", „einundzwanzigsten").
 
 **Absatzgrenzen sind Satzgrenzen.** Der Job baut den Seitentext mit `htmlToTextForPrompt`
@@ -67,7 +77,8 @@ Mustern muss jede Form durchlassen, an der ein Muster greift — auch das blosse
 („Sie war damals zwölf", „im Alter von vierzig"). Er liegt darum neben den Mustern, nicht
 im Scan. Das Kopula-Muster kennt `war/ist/wird/werde/…` mit bis zu zwei Zeitadverbien,
 Ziffer und Zahlwort, Deutsch und Englisch, und lässt Mengen („12 Minuten", „12.30 Uhr")
-und Jahreszahlen liegen.
+und Jahreszahlen liegen. Englisches „am" gilt nur als „I am"/„I'm" — allein griffe es in
+jedem deutschen Datum („am 12. Mai").
 
 **Fenster um die Angabe.** Ein Kandidatensatz geht mit höchstens 320 Zeichen an das
 Modell, geschnitten um die (erste harte) Angabe, nicht ab dem Satzanfang: ein langer
@@ -113,6 +124,14 @@ nicht älter als bei ihrem Tod.
 
 Die buchweite Jahresspanne (`bookYearSpan`) ist deshalb **nur Rahmen für den
 Prompt** und geht nicht in die Verdichtung ein.
+
+**Text gegen Rechnung** (`widerspruch.typ = 'rechnung'`): `gerechnet` gilt am Ankerjahr,
+dem spätesten Punkt der Figur — eine Angabe aus Kapitel 1 ist damit nicht vergleichbar.
+Nennt ein Beleg sein Bezugsjahr, wird dort gerechnet (`wert` gegen `bezugsjahr −
+geburtsjahr`); ohne Bezugsjahr bleibt nur die Richtung: ist `gerechnet` kleiner als das
+höchste Textalter, stimmt etwas nicht. Höher ist der Normalfall.
+
+**Welches Text-Geburtsjahr zählt:** der erste als sicher gemeldete Fund, sonst der erste.
 
 ## Datenmodell (abgeleiteter Index, Full-Replace pro Lauf)
 
@@ -167,7 +186,15 @@ wurde, müsste sonst aktiv gelöscht werden — und genau das vergisst man.
   niemandem ([lib/figure-years.js](../lib/figure-years.js)#`birthYearsFromEvents`).
   Ein falsches Geburtsjahr macht die Mutter in Katalog und Plot-Zeitmessung zum Kind.
 - **„Alter sinkt im Buchverlauf" ist ein Hinweis, kein Fehler.** Rückblenden sind
-  legitim. Das Badge heisst darum `prüfen`, nicht „falsch".
+  legitim. Das Badge heisst darum `prüfen`, nicht „falsch", und die Konfidenz sinkt
+  dadurch nicht — alle anderen Widersprüche ziehen sie eine Stufe herunter.
+- **Bezugsjahr beim Textalter nur aus den Stellen.** Nennt keine Stelle ein Jahr, bleibt
+  die Spalte leer; das Ankerjahr neben einer Spanne aus dem ganzen Buch läse sich, als
+  gelte sie in diesem einen Jahr. Beim gerechneten Alter ist das (ggf. vom Todesjahr
+  gedeckelte) Ankerjahr der Bezugspunkt.
+- **Eine Indexzeile mischt nicht mit dem Katalog.** Hat die Figur eine Zeile, kommen
+  Geburtsjahr und gerechneter Wert nur aus ihr, auch wenn einer davon leer ist — sonst
+  stünden ein Textgeburtsjahr und ein Alter aus einem anderen Geburtsjahr nebeneinander.
 - **Nur die Zeitlinien-Achse ist gegated.** Der gerechnete Wert setzt
   `book_settings.zeitlinie_real` voraus (gleiche Regel wie `alter_im_roman`); eine
   wörtliche Angabe („war zwölf") gilt immer — auch in Büchern ohne Kalender-Zeitlinie.
