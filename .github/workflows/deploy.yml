@@ -15,13 +15,17 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  checks-and-unit:
-    name: Static Checks + Unit-Tests
+  # Ein Job statt drei: auf dem einen Self-hosted-Runner liefen die Jobs ohnehin
+  # nacheinander, und jeder Jobwechsel kostete rund eine Minute Leerlauf, bis
+  # der Runner den naechsten uebernahm. Reihenfolge = billig vor teuer, damit
+  # ein roter Unit-Test nach ~1,5 min meldet statt nach der App-Suite.
+  tests:
+    name: Tests (Checks, Unit, Integration, E2E, App-Specs)
     # Fork-PRs (head.repo.full_name != eigener Repo) laufen auf GitHub-Infra,
     # damit fremder Code nie auf dem Prod-LXC-Runner landet. Eigene PRs und
     # main-Pushes bleiben auf dem self-hosted Runner ( schnell, shared Cache).
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJson('["self-hosted","prod"]') }}
-    timeout-minutes: 5
+    timeout-minutes: 35
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       # Wegwerf-DB auf tmpfs (RAM) statt Ceph-RBD-Storage: eliminiert alle
@@ -151,36 +155,6 @@ jobs:
           if [ $rc -eq 3 ]; then echo "::warning::Client-Repos nicht erreichbar — Kompatibilität ungeprüft"; exit 0; fi
           exit $rc
 
-  e2e:
-    name: Playwright-E2E
-    # Fork-PRs auf GitHub-Infra (siehe checks-and-unit) — fremder Code nie auf
-    # dem Prod-Runner. Eigene PRs/main-Pushes bleiben self-hosted (Browser-Cache).
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJson('["self-hosted","prod"]') }}
-    timeout-minutes: 15
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          clean: false
-
-      - name: Workspace putzen (node_modules bewusst ausgenommen)
-        run: git clean -ffdx -e node_modules
-
-      - name: Deps installieren (nur bei geaendertem Lockfile)
-        run: |
-          set -e
-          stamp=node_modules/.ci-lock-sha
-          want=$(sha256sum package-lock.json | cut -d' ' -f1)
-          if [ "$(cat "$stamp" 2>/dev/null)" = "$want" ]; then
-            echo "node_modules aktuell (${want:0:12}) — Install uebersprungen"
-          else
-            npm ci --prefer-offline --no-audit --no-fund
-            echo "$want" > "$stamp"
-          fi
-
       # Zwei Engines: die Suite läuft auf Chromium, `*.webkit.spec.js` deckt die
       # Fehlerklassen ab, die nur WebKit zeigt (contenteditable-Selektion bei
       # Padding-Summe >= clientHeight) — siehe projects in playwright.config.js.
@@ -199,67 +173,35 @@ jobs:
             npx playwright install --with-deps chromium webkit
           fi
 
-      - name: E2E-Tests ausführen
+      - name: E2E-Tests ausführen (Fixture-Harness)
         run: npx playwright test --reporter=list
 
-  # Echte App (playwright.app.config.js, tests/e2e-app/ inkl. smoke.spec.js):
-  # bootet `node server.js` mit LOCAL_DEV_MODE + Dev-Seed auf Wegwerf-DBs unter
-  # tests/.tmp/ (Ports 8766/8767). Nur diese Schicht faengt Alpine-Expression-
-  # Fehler ueber dem kompletten Template-Baum und die Geometrie-Invarianten, die
-  # am vollen Shell-CSS haengen — das Fixture-Harness oben sieht beides nicht.
-  # Eigener Job statt Step im e2e-Job: ein roter Smoke soll im Checks-Tab als
-  # solcher erkennbar sein. Auf dem einen Self-hosted-Runner laufen die Jobs
-  # ohnehin nacheinander, parallele Port-Kollisionen gibt es dort nicht.
-  #
-  # Nur Chromium: das firefox-Projekt der Config bleibt lokal (`npm run
-  # test:smoke`); SMOKE_ENGINES=chromium laesst auch dessen Server weg.
-  e2e-app:
-    name: Playwright gegen die echte App (Smoke + App-Specs)
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJson('["self-hosted","prod"]') }}
-    timeout-minutes: 25
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          clean: false
-
-      - name: Workspace putzen (node_modules bewusst ausgenommen)
-        run: git clean -ffdx -e node_modules
-
-      - name: Deps installieren (nur bei geaendertem Lockfile)
-        run: |
-          set -e
-          stamp=node_modules/.ci-lock-sha
-          want=$(sha256sum package-lock.json | cut -d' ' -f1)
-          if [ "$(cat "$stamp" 2>/dev/null)" = "$want" ]; then
-            echo "node_modules aktuell (${want:0:12}) — Install uebersprungen"
-          else
-            npm ci --prefer-offline --no-audit --no-fund
-            echo "$want" > "$stamp"
-          fi
-
-      - name: Browser sicherstellen
-        run: |
-          if [ -d "$HOME/.cache/ms-playwright" ]; then
-            npx playwright install chromium
-          else
-            npx playwright install --with-deps chromium
-          fi
-
+      # Echte App (playwright.app.config.js, tests/e2e-app/ inkl. smoke.spec.js):
+      # bootet `node server.js` mit LOCAL_DEV_MODE + Dev-Seed auf Wegwerf-DBs unter
+      # tests/.tmp/. Nur diese Schicht faengt Alpine-Expression-Fehler ueber dem
+      # kompletten Template-Baum und die Geometrie-Invarianten, die am vollen
+      # Shell-CSS haengen — das Fixture-Harness oben sieht beides nicht.
+      # Nur Chromium: das firefox-Projekt der Config bleibt lokal (`npm run
+      # test:smoke`); SMOKE_ENGINES=chromium laesst auch dessen Server weg.
+      #
       # Zwei Shards gleichzeitig, je mit eigenem Server + eigener Wegwerf-DB
       # (SMOKE_SHARD → Ports/DB/outputDir, siehe playwright.app.config.js). Pro
       # Shard bleibt `workers: 1`, die Specs einer Datei-Gruppe teilen weiter
-      # genau einen Seed-Stand. Seriell brauchte die Suite ~4,5 min fast nur
-      # fuer den Grundaufwand pro Test (Browser + SPA-Boot), nicht fuer IO.
-      # Mehr als zwei nicht: ein Shard belegt ~1,3 GB, der LXC teilt seine 6 GB
-      # mit der Prod-App. Ausgabe pro Shard gepuffert und danach am Stueck
-      # ausgegeben, damit die Reports nicht ineinanderlaufen.
+      # genau einen Seed-Stand. Mehr als zwei nicht: ein Shard belegt ~1,3 GB,
+      # der LXC teilt seine 6 GB mit der Prod-App. Ausgabe pro Shard gepuffert
+      # und danach am Stueck ausgegeben, damit die Reports nicht ineinanderlaufen.
+      #
+      # PWTEST_SHARD_WEIGHTS: Playwright schneidet die Shards nach Testanzahl in
+      # Dateireihenfolge, die hinteren Specs (sw-*, Service-Worker) sind aber
+      # pro Test langsamer — gleich viele Tests ergaben 8,7 vs. 10,9 min. Die
+      # Gewichte geben Shard 1 entsprechend mehr Tests. Die Variable ist nicht
+      # dokumentiert (Playwright 1.61, runner#filterForShard); faellt sie bei
+      # einem Upgrade weg, gilt wieder die gleichmaessige Teilung — langsamer,
+      # nicht falsch. Nachjustieren anhand der Zusammenfassungszeile unten.
       - name: App-Specs ausführen (Chromium, 2 Shards)
         env:
           SMOKE_ENGINES: chromium
+          PWTEST_SHARD_WEIGHTS: '56:44'
         run: |
           n=2
           for i in $(seq 1 $n); do
@@ -282,7 +224,7 @@ jobs:
 
   deploy:
     name: Deploy auf Prod-LXC
-    needs: [checks-and-unit, e2e, e2e-app]
+    needs: [tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, prod]
     environment: production
@@ -313,7 +255,7 @@ jobs:
   # rsync + systemctl-Rechte, kein Playwright und kein node_modules im Workspace.
   deploy-demo:
     name: Deploy auf Demo-LXC
-    needs: [checks-and-unit, e2e, e2e-app]
+    needs: [tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, demo]
     # Kein `environment:` wie bei Prod: die Demo braucht keine Repo-Secrets (ihre
