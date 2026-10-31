@@ -107,7 +107,7 @@
   }
   .layout-sidebar > #partial-sidebar > .card::-webkit-scrollbar-thumb {
     background: transparent;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     transition: background var(--transition-slow);
   }
   .layout-sidebar > #partial-sidebar > .card.is-scrolling::-webkit-scrollbar-thumb {
@@ -122,16 +122,19 @@
   height: 100%;
   cursor: col-resize;
   background: transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   transition: background var(--transition-slow);
   z-index: var(--z-base);
   touch-action: none;
 }
 .sidebar-resize-handle:hover,
-.sidebar-resize-handle.dragging,
+.sidebar-resize-handle.dragging {
+  background: var(--color-accent-soft);
+}
 .sidebar-resize-handle:focus-visible {
   background: var(--color-accent-soft);
-  outline: none;
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset-inset);
 }
 @media (max-width: 959.98px) {
   .sidebar-resize-handle { display: none; }

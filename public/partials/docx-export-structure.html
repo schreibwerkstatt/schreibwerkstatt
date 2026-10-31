@@ -2,9 +2,9 @@
 <!-- Struktur (Titelseite / Inhaltsverzeichnis / Kapitel) -->
 <section class="export-tab-panel" x-bind="panel('structure')">
   <p class="card-form-section-divider" x-text="$app.t('docxExport.group.titlePage')"></p>
-  <div class="card-form-row">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.titleMode')"></label>
-    <div x-data="combobox($app.t('docxExport.field.titleMode'))"
+  <div x-id="['fld']" class="card-form-row">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.titleMode')"></label>
+    <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('docxExport.field.titleMode'))"
          x-modelable="value" x-model="activeProfile.config.title.mode"
          x-effect="options = titleModeOptions()"></div>
   </div>
@@ -15,15 +15,15 @@
     </label>
   </div>
   <p class="card-form-section-divider" x-text="$app.t('docxExport.group.toc')"></p>
-  <div class="card-form-row">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.tocMode')"></label>
-    <div x-data="combobox($app.t('docxExport.field.tocMode'))"
+  <div x-id="['fld']" class="card-form-row">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.tocMode')"></label>
+    <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('docxExport.field.tocMode'))"
          x-modelable="value" x-model="activeProfile.config.toc.mode"
          x-effect="options = tocModeOptions()"></div>
   </div>
-  <div class="card-form-row" x-show="activeProfile.config.toc.mode !== 'none'">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.tocDepth')"></label>
-    <div x-data="combobox($app.t('docxExport.field.tocDepth'))"
+  <div x-id="['fld']" class="card-form-row" x-show="activeProfile.config.toc.mode !== 'none'">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.tocDepth')"></label>
+    <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('docxExport.field.tocDepth'))"
          x-modelable="value" x-model="activeProfile.config.toc.depth"
          x-effect="options = tocDepthOptions()"></div>
   </div>
@@ -34,22 +34,22 @@
     </label>
   </div>
   <p class="card-form-section-divider" x-text="$app.t('docxExport.group.chapters')"></p>
-  <div class="card-form-row">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.numbering')"></label>
-    <div x-data="combobox($app.t('docxExport.field.numbering'))"
+  <div x-id="['fld']" class="card-form-row">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.numbering')"></label>
+    <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('docxExport.field.numbering'))"
          x-modelable="value" x-model="activeProfile.config.chapter.numbering"
          x-effect="options = chapterNumberingOptions()"></div>
   </div>
-  <div class="card-form-row" x-show="activeProfile.config.chapter.numbering !== 'none'">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.numberingMode')"></label>
-    <div x-data="combobox($app.t('docxExport.field.numberingMode'))"
+  <div x-id="['fld']" class="card-form-row" x-show="activeProfile.config.chapter.numbering !== 'none'">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.numberingMode')"></label>
+    <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('docxExport.field.numberingMode'))"
          x-modelable="value" x-model="activeProfile.config.chapter.numberingMode"
          x-effect="options = numberingModeOptions()"></div>
   </div>
-  <div class="card-form-row card-form-row--top" x-show="activeProfile.config.chapter.numbering !== 'none'">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.unnumberedChapters')"></label>
+  <div x-id="['fld']" class="card-form-row card-form-row--top" x-show="activeProfile.config.chapter.numbering !== 'none'">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.unnumberedChapters')"></label>
     <div class="card-form-field">
-      <div x-data="combobox({ placeholder: $app.t('docxExport.field.unnumberedPick'), multiple: true })"
+      <div :aria-labelledby="$id('fld')" x-data="combobox({ placeholder: $app.t('docxExport.field.unnumberedPick'), multiple: true })"
            x-modelable="value" x-model="activeProfile.config.chapter.unnumberedChapterIds"
            x-effect="options = unnumberedChapterPickOptions()"></div>
       <div class="export-chip-row" x-show="unnumberedChapterChips().length">
@@ -76,9 +76,9 @@
       <span x-text="$app.t('docxExport.field.breakBeforeSubchapter')"></span>
     </label>
   </div>
-  <div class="card-form-row">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.pageStructure')"></label>
-    <div x-data="combobox($app.t('docxExport.field.pageStructure'))"
+  <div x-id="['fld']" class="card-form-row">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.pageStructure')"></label>
+    <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('docxExport.field.pageStructure'))"
          x-modelable="value" x-model="activeProfile.config.chapter.pageStructure"
          x-effect="options = pageStructureOptions()"></div>
   </div>
@@ -88,9 +88,9 @@
       <span x-text="$app.t('docxExport.field.pageBreakBetweenPages')"></span>
     </label>
   </div>
-  <div class="card-form-row">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.sceneSep')"></label>
-    <div x-data="combobox($app.t('docxExport.field.sceneSep'))"
+  <div x-id="['fld']" class="card-form-row">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.sceneSep')"></label>
+    <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('docxExport.field.sceneSep'))"
          x-modelable="value" x-model="activeProfile.config.chapter.sceneSeparator"
          x-effect="options = sceneSeparatorOptions()"></div>
   </div>

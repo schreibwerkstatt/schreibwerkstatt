@@ -61,7 +61,7 @@
                :placeholder="$app.t('editor.revisions.labelPlaceholder')"
                :aria-label="$app.t('editor.revisions.labelPlaceholder')"
                data-spellcheck="spelling"
-               @keydown.enter.prevent="saveViewerLabel()"
+               @keydown.enter="$enter($event, () => saveViewerLabel())"
                @blur="saveViewerLabel()">
       </div>
 

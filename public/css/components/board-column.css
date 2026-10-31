@@ -13,9 +13,9 @@
 .board-col-count {
   flex: 0 0 auto;
   font-size: var(--font-size-micro);
-  color: var(--color-muted);
+  color: var(--color-tag-text);
   background: var(--color-tag-bg);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: 0 var(--space-xs);
   min-width: 1.4em;
   text-align: center;

@@ -2,33 +2,33 @@
 <!-- Layout / Typografie -->
 <section class="export-tab-panel" x-bind="panel('layout')">
   <p class="card-form-section-divider" x-text="$app.t('docxExport.group.pageFont')"></p>
-  <div class="card-form-row">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.pageSize')"></label>
-    <div x-data="combobox($app.t('docxExport.field.pageSize'))"
+  <div x-id="['fld']" class="card-form-row">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.pageSize')"></label>
+    <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('docxExport.field.pageSize'))"
          x-modelable="value" x-model="activeProfile.config.page.size"
          x-effect="options = pageSizeOptions()"></div>
   </div>
-  <div class="card-form-row">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.fontFamily')"></label>
-    <div x-data="combobox($app.t('docxExport.field.fontFamily'))"
+  <div x-id="['fld']" class="card-form-row">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.fontFamily')"></label>
+    <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('docxExport.field.fontFamily'))"
          x-modelable="value" x-model="activeProfile.config.font.family"
          x-effect="options = fontFamilyOptions()"></div>
   </div>
-  <div class="card-form-row">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.fontSize')"></label>
-    <input type="text" class="card-form-input docx-num"
+  <div x-id="['fld']" class="card-form-row">
+    <label :for="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.fontSize')"></label>
+    <input :id="$id('fld')" type="text" class="card-form-input docx-num"
            x-data="numInput({ integer: true, min: 8, max: 18 })"
            x-modelable="value" x-model="activeProfile.config.font.sizePt">
   </div>
-  <div class="card-form-row">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.lineSpacing')"></label>
-    <div x-data="combobox($app.t('docxExport.field.lineSpacing'))"
+  <div x-id="['fld']" class="card-form-row">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.lineSpacing')"></label>
+    <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('docxExport.field.lineSpacing'))"
          x-modelable="value" x-model="activeProfile.config.font.lineSpacing"
          x-effect="options = lineSpacingOptions()"></div>
   </div>
-  <div class="card-form-row">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.paragraphStyle')"></label>
-    <div x-data="combobox($app.t('docxExport.field.paragraphStyle'))"
+  <div x-id="['fld']" class="card-form-row">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.paragraphStyle')"></label>
+    <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('docxExport.field.paragraphStyle'))"
          x-modelable="value" x-model="activeProfile.config.font.paragraphStyle"
          x-effect="options = paragraphStyleOptions()"></div>
   </div>
@@ -39,15 +39,15 @@
     </label>
   </div>
   <p class="card-form-section-divider" x-text="$app.t('docxExport.group.headerNumbers')"></p>
-  <div class="card-form-row">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.headerMode')"></label>
-    <div x-data="combobox($app.t('docxExport.field.headerMode'))"
+  <div x-id="['fld']" class="card-form-row">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.headerMode')"></label>
+    <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('docxExport.field.headerMode'))"
          x-modelable="value" x-model="activeProfile.config.header.mode"
          x-effect="options = headerModeOptions()"></div>
   </div>
-  <div class="card-form-row">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.pageNumber')"></label>
-    <div x-data="combobox($app.t('docxExport.field.pageNumber'))"
+  <div x-id="['fld']" class="card-form-row">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.pageNumber')"></label>
+    <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('docxExport.field.pageNumber'))"
          x-modelable="value" x-model="activeProfile.config.header.pageNumber"
          x-effect="options = pageNumberOptions()"></div>
   </div>
@@ -59,9 +59,9 @@
   </div>
   <!-- Nachrichtenverlauf (SMS/Chat, div.msg-thread): lib/export-builders/docx-messages.js -->
   <p class="card-form-section-divider" x-text="$app.t('export.messages.group')"></p>
-  <div class="card-form-row">
-    <label class="card-form-label" x-text="$app.t('export.messages.style')"></label>
-    <div x-data="combobox($app.t('export.messages.style'))"
+  <div x-id="['fld']" class="card-form-row">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('export.messages.style')"></label>
+    <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('export.messages.style'))"
          x-modelable="value" x-model="activeProfile.config.messages.style"
          x-effect="options = [{ value: 'plain', label: $app.t('export.messages.style.plain') }, { value: 'bubbles', label: $app.t('export.messages.style.bubblesWord') }]"></div>
   </div>

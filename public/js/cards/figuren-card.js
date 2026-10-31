@@ -254,7 +254,12 @@ export function registerFigurenCard() {
       // gehoert nicht in den heissen Katalog-Fetch). Darum hier und nicht in
       // graph/core.js#setFigurenGraphModus — die Methode teilt sich die Karte mit
       // dem Graph-Modul und weiss nichts von der Tabelle.
+      // Spiegel für den Reiter-Permalink. Einmal sofort: beim Mount durch einen
+      // Deep-Link hat setupCardLifecycle den Reiter schon gesetzt, bevor der
+      // Watcher hängt.
+      Alpine.store('catalogUi').figurenTab = this.figurenGraphModus;
       this.$watch('figurenGraphModus', (mode) => {
+        Alpine.store('catalogUi').figurenTab = mode;
         if (mode === 'alter') this.ensureFigurenAlter();
         if (mode === 'lebenslauf') {
           // Derselbe Index wie der Alter-Reiter, aus demselben einen GET: er

@@ -42,9 +42,8 @@ export const mergeMethods = {
   // karten-lokalen State statt in Alpine.store('catalog'): die drei Entitäten-Karten
   // sind zu den Bucheinstellungen exklusiv und laden beim Öffnen selbst.
   async loadMergeCandidates() {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._selectedBookId();
     if (!bookId) return;
-    const isCurrent = () => String(Alpine.store('nav').selectedBookId) === String(bookId);
     this.mergeLoading = true;
     this.mergeError = '';
     try {
@@ -53,7 +52,7 @@ export const mergeMethods = {
       );
       // Buch inzwischen gewechselt: der book:changed-Reset hat den State schon
       // geleert — die Listen des alten Buchs nicht hineinschreiben.
-      if (!isCurrent()) return;
+      if (!this._isSelectedBook(bookId)) return;
       MERGE_KINDS.forEach((kind, i) => {
         const cfg = MERGE_KIND_CFG[kind];
         const rows = results[i]?.[cfg.list] || [];
@@ -64,9 +63,9 @@ export const mergeMethods = {
       this.mergeCandidatesBookId = String(bookId);
     } catch (e) {
       console.error('[loadMergeCandidates]', e);
-      if (isCurrent()) this.mergeError = window.__app.t('merge.loadError');
+      if (this._isSelectedBook(bookId)) this.mergeError = window.__app.t('merge.loadError');
     } finally {
-      if (isCurrent()) this.mergeLoading = false;
+      if (this._isSelectedBook(bookId)) this.mergeLoading = false;
     }
   },
 
@@ -80,7 +79,7 @@ export const mergeMethods = {
     // dessen Abhängigkeiten — und `loadMergeCandidates` schreibt genau sie, der
     // Effect würde sich also selbst nachtriggern. So hängt er nur am aktiven Tab.
     queueMicrotask(() => {
-      const bookId = Alpine.store('nav').selectedBookId;
+      const bookId = this._selectedBookId();
       if (!bookId || this.mergeCandidatesBookId === String(bookId) || this.mergeLoading) return;
       this.loadMergeCandidates();
     });
@@ -97,7 +96,7 @@ export const mergeMethods = {
 
   async mergeEntity(kind) {
     const cfg = MERGE_KIND_CFG[kind];
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._selectedBookId();
     const sel = this.mergeSel[kind];
     if (!cfg || !bookId || !this.mergeReady(kind)) return;
     const src = this._mergeEntry(kind, sel.source);
@@ -110,8 +109,7 @@ export const mergeMethods = {
       danger: true,
     })) return;
 
-    const isCurrent = () => String(Alpine.store('nav').selectedBookId) === String(bookId);
-    this.mergeBusy = true;
+    this.mergeBusy = kind; // Gattung, deren Knopf den Spinner zeigt; truthy sperrt alle
     this.mergeError = '';
     this.mergeMessage = '';
     try {
@@ -124,7 +122,7 @@ export const mergeMethods = {
       if (!r.ok) throw new Error(window.__app.tError(data));
       // Buch gewechselt, während der Merge lief: er ist geschehen, aber Meldung,
       // Auswahl und Kandidaten gehören dem alten Buch — der Reset hat sie geleert.
-      if (!isCurrent()) return;
+      if (!this._isSelectedBook(bookId)) return;
 
       // `moved` zählt die umgehängten Zeilen pro Brücke — für den User genügt die Summe.
       const moved = Object.values(data?.moved || {}).reduce((a, n) => a + (Number(n) || 0), 0);
@@ -139,12 +137,11 @@ export const mergeMethods = {
       window.__app.loadOrte?.(bookId);
       window.__app.loadSzenen?.(bookId);
       await this.loadMergeCandidates();
-      if (this._mergeMsgTimer) clearTimeout(this._mergeMsgTimer);
-      this._mergeMsgTimer = setTimeout(() => { this.mergeMessage = ''; this._mergeMsgTimer = null; }, 8000);
+      this._flash('mergeMessage', 8000, '');
     } catch (e) {
-      if (isCurrent()) this.mergeError = e.message;
+      if (this._isSelectedBook(bookId)) this.mergeError = e.message;
     } finally {
-      if (isCurrent()) this.mergeBusy = false;
+      if (this._isSelectedBook(bookId)) this.mergeBusy = false;
     }
   },
 };

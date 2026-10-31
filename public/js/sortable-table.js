@@ -10,8 +10,7 @@
 //                    types: { last_seen_at: 'date', acl_count: 'number' },
 //                  })">
 //     <thead><tr>
-//       <th @click="sortBy('email')" :class="sortClass('email')"
-//           :aria-sort="ariaSort('email')">Email</th>
+//       <th x-bind="sortTh('email')">Email</th>
 //       …
 //     </tr></thead>
 //     <tbody>
@@ -28,6 +27,11 @@
 //   - 'number'  → Number(v)-Vergleich, NaN behandelt als 0
 //   - 'date'    → ISO-String/Date-Objekt → ms-Timestamp; null sinkt ans Ende
 //   - 'string'  → localeCompare mit numeric:true (de-CH-faehig)
+//
+// `sortTh(key)` ist der Spread fuer jede sortierbare `<th>`: setzt die
+// Klasse `sortable-th` (+ `--asc`/`--desc`), `aria-sort`, `tabindex=0` und
+// loest `sortBy(key)` per Klick, Enter und Leertaste aus — der Kopf ist damit
+// per Tastatur bedienbar. Weitere Klassen/Attribute bleiben am `<th>` stehen.
 //
 // `persistKey` (optional): merkt key+dir in localStorage unter
 // `sortableTable.<persistKey>`. Ohne Key: kein Persist.
@@ -133,6 +137,18 @@ export function registerSortableTable() {
       ariaSort(key) {
         if (this.sortKey !== key) return 'none';
         return this.sortDir === 'asc' ? 'ascending' : 'descending';
+      },
+
+      // Spread pro sortierbarer <th>: Optik, ARIA und Maus-/Tastatur-Bedienung.
+      sortTh(key) {
+        return {
+          tabindex: 0,
+          [':class']: () => this.sortClass(key),
+          [':aria-sort']: () => this.ariaSort(key),
+          ['@click']: () => this.sortBy(key),
+          ['@keydown.enter.prevent']: () => this.sortBy(key),
+          ['@keydown.space.prevent']: () => this.sortBy(key),
+        };
       },
     };
   });

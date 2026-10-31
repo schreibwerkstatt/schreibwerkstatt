@@ -53,13 +53,13 @@
                                  types: { name: 'string', dachzeile: 'string', titel: 'string', gesetzt: 'number' } })">
     <thead>
       <tr>
-        <th class="sortable-th tw-col-beitrag" :class="sortClass('name')" :aria-sort="ariaSort('name')" @click="sortBy('name')"
+        <th x-bind="sortTh('name')" class="tw-col-beitrag"
             x-text="$app.t('headline.col.beitrag')"></th>
-        <th class="sortable-th tw-col-dach" :class="sortClass('dachzeile')" :aria-sort="ariaSort('dachzeile')" @click="sortBy('dachzeile')"
+        <th x-bind="sortTh('dachzeile')" class="tw-col-dach"
             x-text="$app.t('headline.field.dachzeile')"></th>
-        <th class="sortable-th tw-col-titel" :class="sortClass('titel')" :aria-sort="ariaSort('titel')" @click="sortBy('titel')"
+        <th x-bind="sortTh('titel')" class="tw-col-titel"
             x-text="$app.t('headline.field.titel')"></th>
-        <th class="sortable-th tw-col-num" :class="sortClass('gesetzt')" :aria-sort="ariaSort('gesetzt')" @click="sortBy('gesetzt')"
+        <th x-bind="sortTh('gesetzt')" class="tw-col-num"
             :data-tip="$app.t('headline.col.gesetztTip')" x-text="$app.t('headline.col.gesetzt')"></th>
       </tr>
     </thead>
@@ -100,7 +100,7 @@
                   <template x-if="!twIsLong(feld)">
                     <input type="text" class="tw-input" :id="'tw-' + feld + '-' + row.id"
                            x-model="twDraft[feld]" @blur="twSaveField(row.id, feld)"
-                           @keydown.enter.prevent="$event.target.blur()"
+                           @keydown.enter="$enter($event, () => $event.target.blur())"
                            :placeholder="$app.t('headline.placeholder.' + feld)"
                            autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true"
                            data-form-type="other" data-spellcheck="spelling">
@@ -154,7 +154,7 @@
                   <div class="tw-variant-add">
                     <input type="text" class="tw-input tw-input--sm"
                            x-model="twNewVariant[feld]"
-                           @keydown.enter.prevent="twAddVariant(row.id, feld)"
+                           @keydown.enter="$enter($event, () => twAddVariant(row.id, feld))"
                            :placeholder="$app.t('headline.addVariant')"
                            :aria-label="$app.t('headline.addVariant')"
                            autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true"

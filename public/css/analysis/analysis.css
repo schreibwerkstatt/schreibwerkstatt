@@ -82,7 +82,7 @@
   overflow: hidden;
   white-space: nowrap;
   width: 0;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 .stars-rating--n-1  .stars-rating__fg { width: calc(100% *  1 / 12); }
 .stars-rating--n-2  .stars-rating__fg { width: calc(100% *  2 / 12); }
@@ -110,15 +110,6 @@
 }
 
 .bewertung-section { margin-top: var(--space-14); }
-
-.bewertung-section-title {
-  font-weight: var(--fw-regular);
-  font-size: var(--font-size-sm);
-  color: var(--color-muted);
-  margin-bottom: var(--space-6);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
 
 .bewertung-section-text {
   font-size: var(--font-size-base);
@@ -168,7 +159,7 @@
   padding: var(--space-sm) var(--space-md);
   background: var(--color-bg);
   border-left: 3px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 .zitat-item--staerke   { border-left-color: var(--color-ok-border); }
 .zitat-item--schwaeche { border-left-color: var(--color-err-border); }

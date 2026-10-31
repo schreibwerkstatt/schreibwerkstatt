@@ -141,7 +141,7 @@
   transition: opacity var(--transition-slow), color var(--transition-slow);
 }
 .job-queue-cancel-btn:hover {
-  color: var(--color-err-light);
+  color: var(--color-err-text);
   opacity: 1;
 }
 .job-queue-toggle-btn {
@@ -183,7 +183,7 @@
   }
   .job-queue-cancel-btn {
     padding: var(--space-10) var(--space-sm);
-    margin: -10px -8px -10px 0;
+    margin: calc(-1 * var(--space-10)) calc(-1 * var(--space-sm)) calc(-1 * var(--space-10)) 0;
     font-size: var(--font-size-sm);
     min-width: 44px;
     min-height: 44px;

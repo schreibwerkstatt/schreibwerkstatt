@@ -74,7 +74,7 @@
     height: 18px;
     padding: 0;
     border: none;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: color-mix(in srgb, var(--card-accent-share, var(--color-accent)) 45%, transparent);
     cursor: pointer;
     transition: background var(--transition-fast), transform var(--transition-fast);
@@ -111,7 +111,7 @@
     overflow: visible;
   }
   .book-editor-general__title {
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     font-weight: var(--fw-semibold);
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -156,7 +156,7 @@
   }
   .book-editor-outline::-webkit-scrollbar-thumb {
     background: transparent;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     transition: background var(--transition-slow);
   }
   .book-editor-outline.is-scrolling::-webkit-scrollbar-thumb {
@@ -192,7 +192,7 @@
     font-size: var(--font-size-sm);
     font-weight: var(--fw-medium);
     color: var(--color-text);
-    border-radius: 3px;
+    border-radius: var(--radius-md);
     width: 100%;
   }
   .book-editor-outline-chapter:hover { background: color-mix(in srgb, var(--card-accent, currentColor) 6%, transparent); }
@@ -239,10 +239,10 @@
     cursor: pointer;
     font-size: var(--font-size-sm);
     color: var(--color-muted);
-    border-radius: 3px;
+    border-radius: var(--radius-md);
     width: 100%;
     border-left: 2px solid transparent;
-    margin-inline-start: -2px;
+    margin-inline-start: calc(-1 * var(--space-2xs));
     /* Keine Transition: IO-Updates beim Scrollen sollen instant durchschalten,
        nicht fade — sonst wirkt Active-Wechsel verzögert + ruckelnd. Explizit
        `none`, weil die globale `button`-Regel (buttons-badges.css) sonst
@@ -351,7 +351,7 @@
   .book-editor-page-card::before {
     content: "";
     position: absolute;
-    inset: 0 auto 0 -12px;
+    inset: 0 auto 0 calc(-1 * var(--space-md));
     width: 2px;
     background: transparent;
     transition: background 0.15s ease;
@@ -490,7 +490,7 @@
     color: var(--color-text);
   }
   .book-editor-conflict__icon {
-    font-size: 16px;
+    font-size: var(--font-size-reading);
     color: var(--color-err-text);
     flex-shrink: 0;
   }
@@ -520,8 +520,8 @@
     padding: var(--space-sm);
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: 3px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
     width: 440px;
     max-width: calc(100vw - 2 * var(--space-md));
   }
@@ -535,7 +535,7 @@
     min-width: 0;
     padding: var(--space-xs) var(--space-sm);
     border: 1px solid var(--color-border-input, var(--color-border));
-    border-radius: 3px;
+    border-radius: var(--radius-md);
     background: var(--color-bg);
     color: var(--color-text);
     font-family: var(--font-sans);
@@ -557,7 +557,7 @@
     border: 1px solid var(--color-border);
     background: var(--color-surface);
     color: var(--color-text);
-    border-radius: 3px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     font-size: var(--font-size-sm);
     font-family: var(--font-sans);
@@ -605,8 +605,6 @@
   .card--bookeditor:fullscreen .book-editor-stream {
     max-width: 96ch;
   }
-}
-
 /* Mobile: Outline stapelt sich über den Stream, Stream nutzt ganze Breite.
    Viewport-bezogen — Bucheditor ist Hauptkarte, kein variabler Slot. */
 @media (max-width: 800px) {
@@ -645,7 +643,7 @@
     margin-block-end: var(--space-md);
   }
   .book-editor-stream { max-width: none; padding-inline: var(--space-sm); }
-  .book-editor-page-card::before { inset-inline-start: -8px; }
+  .book-editor-page-card::before { inset-inline-start: calc(-1 * var(--space-sm)); }
 }
 
 /* Media-Query nur für fixed-positionierte Find-Bar — viewport-bezogen,
@@ -653,4 +651,5 @@
 @media (max-width: 600px) {
   .book-editor-find { width: calc(100vw - 24px); right: 12px; bottom: 12px; }
   .book-editor-find-btn--text { min-width: auto; }
+}
 }

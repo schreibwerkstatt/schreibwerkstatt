@@ -123,7 +123,7 @@
         </template>
         <!-- Marker: Einzel-Events (Punkt/Spanne) + gebündelte „+N"-Chips bei dichten Jahren -->
         <template x-for="m in bandModel().markers" :key="m.kind + m.id">
-          <button type="button"
+          <button :aria-pressed="selectedEventIndex() === m.id && m.kind !== 'more'" type="button"
                   class="gz-band-marker"
                   :class="[ m.kind === 'more' ? 'gz-band-marker--more' : '', m.isRange ? 'gz-band-marker--range' : '', (selectedEventIndex() === m.id && m.kind !== 'more') ? 'gz-band-marker--selected' : '' ]"
                   :style="bandMarkerStyle(m)"
@@ -134,7 +134,7 @@
         </template>
       </div>
     </div>
-    <div class="gz-timeline-hint internal-link" x-show="timelineItemCount < filteredEreignisse().length"
+    <div class="gz-timeline-hint internal-link text-link" x-show="timelineItemCount < filteredEreignisse().length"
          @click="scrollToFirstUndated()" :data-tip="$app.t('events.timelineUndatedHint')"
          x-text="$app.t('events.timelineUndated', { count: filteredEreignisse().length - timelineItemCount })"></div>
     <div class="global-zeitstrahl-body global-zeitstrahl-body--card">
@@ -158,7 +158,7 @@
         <div class="gz-content" x-show="eventEditId == null || eventEditId !== ev.id">
           <div class="gz-datum-row">
             <span class="gz-datum"
-                  :class="{ 'gz-datum--unsicher': ev.datum_unsicher && eventHasYear(ev), 'internal-link': eventHasYear(ev) }"
+                  :class="{ 'gz-datum--unsicher': ev.datum_unsicher && eventHasYear(ev), 'internal-link text-link': eventHasYear(ev) }"
                   :title="ev.datum_unsicher && eventHasYear(ev) ? $app.t('events.estimatedHint') : null"
                   :data-tip="eventHasYear(ev) ? $app.t('events.showOnTimeline') : null"
                   @click="eventHasYear(ev) && selectTimelineEvent(i)"
@@ -181,7 +181,7 @@
             </button>
           </div>
           <div class="gz-ereignis"
-               :class="{ 'internal-link': eventHasTarget(ev) }"
+               :class="{ 'internal-link text-link': eventHasTarget(ev) }"
                :data-tip="eventHasTarget(ev) ? $app.t('events.openText') : null"
                @click="eventHasTarget(ev) && openEventText(ev)"
                x-text="ev.ereignis"></div>

@@ -116,17 +116,6 @@
   line-height: 1.5;
 }
 
-/* === Severity-Dots (Wertung/Schwere) === */
-.severity-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.severity-dot--stark    { background: var(--color-stark); }
-.severity-dot--mittel   { background: var(--color-mittel); }
-.severity-dot--schwach  { background: var(--color-schwach); }
-
 /* === Severity-Tag (Anker links in entity-row) ===
    Geteilt zwischen Szenen (stark/mittel/schwach) und Kontinuität
    (kritisch/mittel/niedrig). Text statt nur Farbe → barrierearm. */
@@ -139,9 +128,9 @@
   min-width: 64px;
   text-align: center;
   flex-shrink: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
-/* Farbsemantik folgt der bestehenden severity-dot-Logik:
+/* Farbsemantik (Severity-Achse, tokens/colors.css):
    - stark (Szene gut)     → grün
    - schwach (Szene schwach) → rot
    - kritisch (Konflikt)   → rot
@@ -151,7 +140,7 @@
 .severity-tag--mittel   { color: var(--color-surface); background: var(--color-mittel); }
 .severity-tag--schwach,
 .severity-tag--kritisch { color: var(--color-surface); background: var(--color-schwach); }
-.severity-tag--niedrig  { color: var(--color-muted); background: var(--color-tag-bg); }
+.severity-tag--niedrig  { color: var(--color-tag-text); background: var(--color-tag-bg); }
 
 /* === Skeleton-Loader für Listen-Karten ===
    Genutzt während xxxLoading vor erstem Datensatz. Reusing skeleton-shimmer
@@ -180,7 +169,7 @@
   background: linear-gradient(90deg, var(--color-shimmer-from) 25%, var(--color-neutral-bg) 50%, var(--color-shimmer-from) 75%);
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.4s ease-in-out infinite;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 .entity-skeleton-cell--anchor { width: 60px; flex-shrink: 0; }
 .entity-skeleton-cell--title  { flex: 1; max-width: 60%; }
@@ -297,7 +286,7 @@
 .ort-land-tag {
   background: color-mix(in srgb, var(--card-accent) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--card-accent) 30%, transparent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   color: var(--card-accent);
   font-size: var(--font-size-micro);
   font-weight: var(--fw-semibold);

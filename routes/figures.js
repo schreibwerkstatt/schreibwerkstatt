@@ -1,6 +1,6 @@
 const express = require('express');
 const { db, saveFigurenToDb, getChapterFigures, listFigurenWithDetails } = require('../db/schema');
-const { validateFigurePatch, patchFigure } = require('../db/figures');
+const { validateFigurePatch, patchFigure, deleteStaleFigures } = require('../db/figures');
 const { mergeFigures } = require('../db/entity-merge');
 const { loadOrderedBookContents, idMapsFromContents } = require('./jobs/shared/loader');
 const { recomputeBookFigureMentions } = require('../lib/page-index');
@@ -195,13 +195,7 @@ router.patch('/:book_id/:fig_id', jsonBody, (req, res) => {
 // unberührt. CASCADE räumt die Bridges mit.
 // Muss VOR '/:book_id/:id' stehen, sonst matcht 'stale' als :id.
 router.delete('/:book_id/stale', (req, res) => {
-  const ids = db.prepare(
-    'SELECT id FROM figures WHERE book_id = ? AND user_email IS ? AND stale = 1'
-  ).all(req.bookId, sessionEmail(req)).map(r => r.id);
-  db.transaction(() => {
-    const del = db.prepare('DELETE FROM figures WHERE id = ?');
-    for (const id of ids) del.run(id);
-  })();
+  const ids = deleteStaleFigures(req.bookId, sessionEmail(req));
   for (const id of ids) searchIndex.remove('figure', id);
   res.json({ ok: true, deleted: { figures: ids.length } });
 });

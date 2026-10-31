@@ -19,7 +19,7 @@
      ohne Zeitangabe ist ungeprüft, kein Mangel. -->
 <div x-show="timeChecks.length > 0" class="plot-consistency-panel" x-cloak>
   <div class="plot-consistency-head">
-    <span class="bewertung-section-title" x-text="$app.t('plot.timeCheck.title')"></span>
+    <span class="card-section-title" x-text="$app.t('plot.timeCheck.title')"></span>
   </div>
   <p class="card-hint" x-text="$app.t('plot.timeCheck.hint')"></p>
   <div class="plot-konflikt-list">
@@ -38,7 +38,7 @@
 
 <div x-show="consistencyResult" class="plot-consistency-panel" x-cloak>
   <div class="plot-consistency-head">
-    <span class="bewertung-section-title" x-text="$app.t('plot.consistency.title')"></span>
+    <span class="card-section-title" x-text="$app.t('plot.consistency.title')"></span>
     <button type="button" class="icon-btn icon-btn--ghost plot-icon-btn" @click="dismissConsistency()" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
     </button>
@@ -115,7 +115,7 @@
 <div class="history-bar" x-show="consistencyRuns.length > 0" x-cloak>
   <div class="history-heading" x-text="$app.t('plot.consistency.runs', { count: consistencyRuns.length })"></div>
   <template x-for="r in consistencyRuns" :key="r.id">
-    <div class="history-item hover-reveal-host" :class="{ 'history-item--open': selectedRunId === r.id }"
+    <div class="history-item hover-reveal-host internal-link" :class="{ 'history-item--open': selectedRunId === r.id }"
          @click="openConsistencyRun(r.id)">
       <span class="history-date" x-text="formatRunDate(r.created_at)"></span>
       <span class="tag" x-text="$app.t('plot.consistency.konfliktCount', { n: r.konflikt_count })"></span>
@@ -137,7 +137,7 @@
   <template x-for="r in brainstormRuns" :key="r.id">
     <!-- Lauf eines archivierten Akts: kein Panel im Archiv → Hinweis statt
          stillem Nichts (openBrainstormRunChecked, board-ui.js). -->
-    <div class="history-item hover-reveal-host" :class="{ 'history-item--open': selectedBrainstormRunId === r.id, 'history-item--disabled': r.act_id === null || brainstormRunActArchived(r) }"
+    <div class="history-item hover-reveal-host internal-link" :class="{ 'history-item--open': selectedBrainstormRunId === r.id, 'history-item--disabled': r.act_id === null || brainstormRunActArchived(r) }"
          :data-tip="brainstormRunActArchived(r) ? $app.t('plot.brainstorm.actArchived') : null"
          @click="r.act_id !== null && openBrainstormRunChecked(r)">
       <span class="history-date" x-text="formatRunDate(r.created_at)"></span>

@@ -7,8 +7,7 @@
 // Ausgabewege (PDF, DOCX, EPUB, WordPress, HubSpot) und gehoert damit weder in
 // ein Exportprofil noch in die 18-stellige Positionsliste von saveBookSettings.
 //
-// Der Header-Speichern-Button der Karte schreibt diesen Store mit (siehe
-// saveActiveTab in settings.js) — ein Klick persistiert alle Tabs.
+// Der Kopf-Knopf der Karte schreibt diesen Store mit (save-paths.js).
 
 import { EVT } from './_shared.js';
 import { CITATION_STYLES, DEFAULT_STYLE, formatFull } from '../../sources/format.js';
@@ -54,99 +53,119 @@ export const CITATION_DEFAULTS = Object.freeze({
   bibliography_in_blog: 0,
 });
 
+/** Zitier-Einstellungen aus einem Settings-/PUT-Response, auf gültige Werte gezwungen. */
+function _citationFrom(data) {
+  return {
+    citation_style: CITATION_STYLES.includes(data?.citation_style)
+      ? data.citation_style : DEFAULT_STYLE,
+    citation_notes: CITATION_NOTES.includes(data?.citation_notes)
+      ? data.citation_notes : DEFAULT_NOTES,
+    bibliography_enabled: data?.bibliography_enabled ? 1 : 0,
+    bibliography_title: data?.bibliography_title || '',
+    bibliography_scope: data?.bibliography_scope === 'all' ? 'all' : 'cited',
+    bibliography_in_blog: data?.bibliography_in_blog ? 1 : 0,
+  };
+}
+
 export const citationMethods = {
-  /** Aus dem Settings-Response uebernehmen. Kein eigener Fetch — loadBookSettings
-   *  laedt `/booksettings/:id` bereits und der Response enthaelt die
+  /** Aus dem Settings-Response übernehmen. Kein eigener Fetch — loadBookSettings
+   *  lädt `/booksettings/:id` bereits und der Response enthält die
    *  Quellenfelder. */
   _applyCitationSettings(data) {
-    this.bookCitation = {
-      citation_style: CITATION_STYLES.includes(data?.citation_style)
-        ? data.citation_style : DEFAULT_STYLE,
-      citation_notes: CITATION_NOTES.includes(data?.citation_notes)
-        ? data.citation_notes : DEFAULT_NOTES,
-      bibliography_enabled: data?.bibliography_enabled ? 1 : 0,
-      bibliography_title: data?.bibliography_title || '',
-      bibliography_scope: data?.bibliography_scope === 'all' ? 'all' : 'cited',
-      bibliography_in_blog: data?.bibliography_in_blog ? 1 : 0,
-    };
+    this.bookCitation = _citationFrom(data);
     this.bookXref = _xrefFrom(data);
     this.bookCitationLoaded = true;
+    this._markClean('citation');
+    this._markClean('xref');
+  },
+
+  _citationSnapshot() {
+    const c = this.bookCitation || {};
+    return {
+      citation_style: c.citation_style,
+      citation_notes: c.citation_notes,
+      bibliography_enabled: c.bibliography_enabled ? 1 : 0,
+      bibliography_title: (c.bibliography_title || '').trim() || null,
+      bibliography_scope: c.bibliography_scope,
+      bibliography_in_blog: c.bibliography_in_blog ? 1 : 0,
+    };
+  },
+
+  _xrefSnapshot() {
+    return _xrefFrom(this.bookXref);
   },
 
   /** Abbildungs- und Tabellen-Nummerierung (je eigener Schalter). Eigener Endpunkt (`PUT /booksettings/:id/xrefs`),
    *  weil es keine Zitier-Einstellung ist — es steht nur im selben Tab, weil
-   *  beides zur Fachtext-Ausstattung gehoert und buchweit fuer alle Ausgabewege
-   *  gilt. `saveActiveTab` ruft beide Speicherpfade nebeneinander auf. */
-  async saveXrefSettings() {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId || !this.bookCitationLoaded) return;
+   *  beides zur Fachtext-Ausstattung gehört und buchweit für alle Ausgabewege
+   *  gilt. */
+  async saveXrefSettings(bookId = this._formBookId) {
+    if (!bookId || !this.bookCitationLoaded) return false;
+    this.xrefSaving = true;
+    this.xrefSaved = false;
+    this.xrefError = '';
+    const sent = this._snapKey('xref');
     try {
       const r = await fetch(`/booksettings/${bookId}/xrefs`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(_xrefFrom(this.bookXref)),
+        body: JSON.stringify(this._xrefSnapshot()),
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        throw new Error(window.__app.tError(d) || `HTTP ${r.status}`);
+        throw new Error(window.__app.tError(d));
       }
       const data = await r.json();
-      this.bookXref = _xrefFrom(data);
+      if (this._isFormBook(bookId)) this._settleSave('xref', sent, () => { this.bookXref = _xrefFrom(data); });
+      this.xrefSaved = true;
+      this._flash('xrefSaved');
       window.__app?.invalidateBookSettingsCache?.();
       // Der Ziel-Picker im Editor cacht Abbildungen und Tabellen samt
       // Vorschau-Nummer; ohne Nummerierung zeigt er den Beschriftungstext. Cache verwerfen.
       window.dispatchEvent(new CustomEvent(EVT.XREFS_CHANGED, { detail: { bookId } }));
+      return true;
     } catch (e) {
-      this.citationError = e.message;
+      this.xrefError = e.message;
+      return false;
+    } finally {
+      this.xrefSaving = false;
     }
   },
 
-  async saveCitationSettings() {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId) return;
-    // Nicht speichern, bevor der Stand geladen ist: der Endpunkt ist zwar
-    // PATCH-artig, wir senden aber alle Felder — ein ungeladener Default
-    // wuerde den DB-Stand ueberschreiben. saveActiveTab ruft uns bei JEDEM
-    // Speichern-Klick auf, auch ohne Quellen-Edit.
-    if (!this.bookCitationLoaded) return;
+  async saveCitationSettings(bookId = this._formBookId) {
+    // Nicht speichern, bevor der Stand geladen ist: ein ungeladener Default
+    // würde den DB-Stand überschreiben.
+    if (!bookId || !this.bookCitationLoaded) return false;
     this.citationSaving = true;
     this.citationSaved = false;
     this.citationError = '';
+    const sent = this._snapKey('citation');
     try {
-      const c = this.bookCitation;
       const r = await fetch(`/booksettings/${bookId}/citation`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          citation_style: c.citation_style,
-          citation_notes: c.citation_notes,
-          bibliography_enabled: c.bibliography_enabled ? 1 : 0,
-          bibliography_title: (c.bibliography_title || '').trim() || null,
-          bibliography_scope: c.bibliography_scope,
-          bibliography_in_blog: c.bibliography_in_blog ? 1 : 0,
-        }),
+        body: JSON.stringify(this._citationSnapshot()),
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        throw new Error(window.__app.tError(d) || `HTTP ${r.status}`);
+        throw new Error(window.__app.tError(d));
       }
-      this._applyCitationSettings(await r.json());
+      const data = await r.json();
+      if (this._isFormBook(bookId)) this._settleSave('citation', sent, () => { this.bookCitation = _citationFrom(data); });
       window.__app?.invalidateBookSettingsCache?.();
       this.citationSaved = true;
+      this._flash('citationSaved');
       // Der Kurzbeleg-Chip im Editor formatiert nach `citationStyleForCurrentBook`
       // (Root-State, gesetzt beim Buchwechsel). Nach einem Stilwechsel sofort
-      // spiegeln, sonst schreibt der naechste eingefuegte Chip noch im alten Stil.
-      window.__app.citationStyleForCurrentBook = this.bookCitation.citation_style;
-      // Der Beleg-Picker cacht die Quellenliste je Buch; sein Label haengt am
+      // spiegeln, sonst schreibt der nächste eingefügte Chip noch im alten Stil.
+      if (this._isSelectedBook(bookId)) window.__app.citationStyleForCurrentBook = data.citation_style || DEFAULT_STYLE;
+      // Der Beleg-Picker cacht die Quellenliste je Buch; sein Label hängt am
       // Stil. Cache verwerfen, damit die Trefferliste neu formatiert.
       window.dispatchEvent(new CustomEvent(EVT.SOURCES_CHANGED, { detail: { bookId } }));
-      if (this._citationSavedTimer) clearTimeout(this._citationSavedTimer);
-      this._citationSavedTimer = setTimeout(() => {
-        this.citationSaved = false;
-        this._citationSavedTimer = null;
-      }, 2500);
+      return true;
     } catch (e) {
       this.citationError = e.message;
+      return false;
     } finally {
       this.citationSaving = false;
     }

@@ -92,7 +92,7 @@ test('bookLanguage: Buch-Einstellung, sonst Default des Besitzers, sonst de', ()
   assert.equal(lexiconDb.bookLanguage(1), 'de');
   db.prepare("UPDATE app_users SET default_language = 'en' WHERE email = ?").run(AUTOR);
   assert.equal(lexiconDb.bookLanguage(1), 'en');
-  require('../../db/book-settings').saveBookSettings(1, 'de', 'CH', null, null);
+  require('../../db/book-settings').saveBookSettings(1, { language: 'de', region: 'CH', buchtyp: null, buch_kontext: null });
   assert.equal(lexiconDb.bookLanguage(1), 'de');
   db.prepare("UPDATE app_users SET default_language = NULL WHERE email = ?").run(AUTOR);
 });

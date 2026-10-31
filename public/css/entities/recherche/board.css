@@ -168,7 +168,7 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
 .research-kind-badge {
   display: inline-block;
   padding: 0.1em 0.5em;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-xs);
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
@@ -218,7 +218,7 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   padding: 0;
   background: none;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   cursor: pointer;
   transition: box-shadow 0.12s ease, opacity 0.12s ease;
 }
@@ -231,7 +231,7 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   max-width: 100%;
   max-height: 6rem;
   width: auto;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   align-self: flex-start;
 }
 
@@ -302,7 +302,7 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   align-self: flex-start;
   padding: var(--space-2xs) var(--space-xs);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   color: var(--card-accent);
   font-size: var(--font-size-sm);
   max-width: 100%;
@@ -327,10 +327,10 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
 .research-tag {
   display: inline-block;
   padding: 0.1em 0.5em;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-xs);
   background: var(--color-tag-bg);
-  color: var(--color-muted);
+  color: var(--color-tag-text);
   cursor: pointer;
 }
 .research-tag:hover { color: var(--card-accent); }
@@ -342,7 +342,7 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   gap: var(--space-xs);
   padding: var(--space-sm);
   border: 1px dashed var(--card-accent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-bg);
 }
 .research-suggestions-head {
@@ -395,10 +395,8 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   .research-item-actions { margin-left: 0; }
   .research-item-head { gap: var(--space-2xs); }
   /* iOS-Zoom-Schutz: Prosa-Inputs ≥16px (Klassen-font-size kann darunter liegen). */
-  .recherche-input { font-size: 16px; }
+  .recherche-input { font-size: var(--font-size-reading); }
 }
-}
-
 /* ── Mehrfachauswahl (recherche-bulk-bar.html, book/recherche/bulk.js) ────── */
 .recherche-bulkbar {
   display: flex;
@@ -452,4 +450,5 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   font-size: var(--font-size-xs);
   color: var(--color-warn-text);
   cursor: pointer;
+}
 }

@@ -125,16 +125,16 @@ test('Lektorat-Cache: geänderte Buch-Angaben (buch_kontext) invalidieren den Ca
   });
   ctx.mockAi.on((e) => e.schemaKeys.includes('fehler') && e.schemaKeys.includes('szenen'), lektoratResponse(1));
 
-  ctx.dbSchema.saveBookSettings(BOOK_ID, 'de', 'CH', null, 'Mundart ist gewollt.');
+  ctx.dbSchema.saveBookSettings(BOOK_ID, { language: 'de', region: 'CH', buchtyp: null, buch_kontext: 'Mundart ist gewollt.' });
   await runCheck(BOOK_ID, PAGE_ID);
   await runCheck(BOOK_ID, PAGE_ID);
   assert.equal(ctx.mockAi.log.length, 1, 'gleiche Angaben → HIT');
 
-  ctx.dbSchema.saveBookSettings(BOOK_ID, 'de', 'CH', null, 'Hochdeutsch, keine Mundart.');
+  ctx.dbSchema.saveBookSettings(BOOK_ID, { language: 'de', region: 'CH', buchtyp: null, buch_kontext: 'Hochdeutsch, keine Mundart.' });
   await runCheck(BOOK_ID, PAGE_ID);
   assert.equal(ctx.mockAi.log.length, 2, 'andere Angaben → MISS');
 
-  ctx.dbSchema.saveBookSettings(BOOK_ID, 'de', 'DE', null, 'Hochdeutsch, keine Mundart.');
+  ctx.dbSchema.saveBookSettings(BOOK_ID, { language: 'de', region: 'DE', buchtyp: null, buch_kontext: 'Hochdeutsch, keine Mundart.' });
   await runCheck(BOOK_ID, PAGE_ID);
   assert.equal(ctx.mockAi.log.length, 3, 'andere Region (de-CH → de-DE) → MISS');
 });

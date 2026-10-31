@@ -10,9 +10,10 @@
       <p class="form-lead" x-text="$app.t('book.settings.cite.lead')"></p>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.cite.style')"></label>
+        <label class="card-form-label" id="bs-cite-style-label" x-text="$app.t('book.settings.cite.style')"></label>
         <div class="card-form-field">
           <div x-data="combobox({ placeholder: $app.t('book.settings.cite.style'), compact: false })"
+               aria-labelledby="bs-cite-style-label"
                x-modelable="value" x-model="bookCitation.citation_style"
                x-effect="options = citationStyleOptions()"></div>
           <p class="card-form-field-note" x-text="$app.t('book.settings.cite.style.hint')"></p>
@@ -20,9 +21,10 @@
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.cite.notes')"></label>
+        <label class="card-form-label" id="bs-cite-notes-label" x-text="$app.t('book.settings.cite.notes')"></label>
         <div class="card-form-field">
           <div x-data="combobox({ placeholder: $app.t('book.settings.cite.notes'), compact: false })"
+               aria-labelledby="bs-cite-notes-label"
                x-modelable="value" x-model="bookCitation.citation_notes"
                x-effect="options = citationNotesOptions()"></div>
           <p class="card-form-field-note" x-text="$app.t('book.settings.cite.notes.hint')"></p>
@@ -30,7 +32,7 @@
       </div>
 
       <div class="card-form-row card-form-row--top">
-        <label class="card-form-label" x-text="$app.t('book.settings.cite.preview')"></label>
+        <span class="card-form-label" x-text="$app.t('book.settings.cite.preview')"></span>
         <div class="card-form-field">
           <p class="sources-preview" x-text="citationPreview()"></p>
           <p class="card-form-field-note" x-text="$app.t('book.settings.cite.preview.hint')"></p>
@@ -38,8 +40,8 @@
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.cite.bibliography')"></label>
-        <div class="form-stack">
+        <span class="card-form-label" id="bs-cite-bib-label" x-text="$app.t('book.settings.cite.bibliography')"></span>
+        <div class="form-stack" role="group" aria-labelledby="bs-cite-bib-label">
           <label class="form-check">
             <input type="checkbox" id="bs-bib-enabled" x-model="bookCitation.bibliography_enabled">
             <span>
@@ -69,9 +71,9 @@
       </div>
 
       <div class="card-form-row" x-show="bookCitation.bibliography_enabled" x-cloak>
-        <label class="card-form-label" x-text="$app.t('book.settings.cite.scope')"></label>
+        <label class="card-form-label" id="bs-cite-scope-label" x-text="$app.t('book.settings.cite.scope')"></label>
         <div class="card-form-field">
-          <div x-data="radioGroup()"
+          <div x-data="radioGroup()" aria-labelledby="bs-cite-scope-label"
                x-modelable="value" x-model="bookCitation.bibliography_scope"
                x-effect="options = citationScopeOptions()"></div>
           <p class="card-form-field-note" x-text="$app.t('book.settings.cite.scope.hint')"></p>
@@ -82,8 +84,8 @@
            selben Tab, weil beides zur Fachtext-Ausstattung gehoert und buchweit
            fuer alle Ausgabewege gilt (eigener Endpunkt /booksettings/:id/xrefs). -->
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.xref.group')"></label>
-        <div class="form-stack">
+        <span class="card-form-label" id="bs-xref-label" x-text="$app.t('book.settings.xref.group')"></span>
+        <div class="form-stack" role="group" aria-labelledby="bs-xref-label">
           <label class="form-check">
             <input type="checkbox" id="bs-figure-numbering" x-model="bookXref.figure_numbering">
             <span>
@@ -102,7 +104,7 @@
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.cite.manage')"></label>
+        <span class="card-form-label" x-text="$app.t('book.settings.cite.manage')"></span>
         <div class="card-form-field">
           <button type="button" class="btn-compact" @click="openSourcesCard()">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#quote"/></svg>

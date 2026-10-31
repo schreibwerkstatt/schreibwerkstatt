@@ -32,18 +32,12 @@
            })">
       <thead>
         <tr>
-          <th class="sortable-th" :class="sortClass('email')" :aria-sort="ariaSort('email')"
-              @click="sortBy('email')" x-text="$app.t('admin.users.email')"></th>
-          <th class="sortable-th" :class="sortClass('global_role')" :aria-sort="ariaSort('global_role')"
-              @click="sortBy('global_role')" x-text="$app.t('admin.users.role')"></th>
-          <th class="sortable-th" :class="sortClass('invited_at')" :aria-sort="ariaSort('invited_at')"
-              @click="sortBy('invited_at')" x-text="$app.t('admin.users.invites.invitedAt')"></th>
-          <th class="sortable-th" :class="sortClass('expires_at')" :aria-sort="ariaSort('expires_at')"
-              @click="sortBy('expires_at')" x-text="$app.t('admin.users.invites.expiresAt')"></th>
-          <th class="sortable-th" :class="sortClass('last_clicked_at')" :aria-sort="ariaSort('last_clicked_at')"
-              @click="sortBy('last_clicked_at')" x-text="$app.t('admin.users.invites.clickStatus')"></th>
-          <th class="sortable-th" :class="sortClass('last_reminder_at')" :aria-sort="ariaSort('last_reminder_at')"
-              @click="sortBy('last_reminder_at')" x-text="$app.t('admin.users.invites.reminderStatus')"></th>
+          <th x-bind="sortTh('email')" x-text="$app.t('admin.users.email')"></th>
+          <th x-bind="sortTh('global_role')" x-text="$app.t('admin.users.role')"></th>
+          <th x-bind="sortTh('invited_at')" x-text="$app.t('admin.users.invites.invitedAt')"></th>
+          <th x-bind="sortTh('expires_at')" x-text="$app.t('admin.users.invites.expiresAt')"></th>
+          <th x-bind="sortTh('last_clicked_at')" x-text="$app.t('admin.users.invites.clickStatus')"></th>
+          <th x-bind="sortTh('last_reminder_at')" x-text="$app.t('admin.users.invites.reminderStatus')"></th>
           <th></th>
         </tr>
       </thead>

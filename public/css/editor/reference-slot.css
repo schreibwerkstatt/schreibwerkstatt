@@ -20,7 +20,7 @@
   line-height: 1.4;
   color: var(--color-muted);
   background: var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 
 .reference-body {
@@ -41,7 +41,7 @@
 /* Klickbare Zeile (z.B. Recherche-Schnipsel → Recherche-Karte öffnen). */
 .reference-row--clickable {
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding-inline: var(--space-xs);
   transition: background var(--transition-fast);
 }
@@ -103,7 +103,7 @@
 
 .verwandt-hit {
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   transition: background var(--transition-fast);
 }
 .verwandt-hit:hover { background: var(--color-surface); }

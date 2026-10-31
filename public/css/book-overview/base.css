@@ -1,6 +1,6 @@
 @layer components {
 /* Buch-Übersicht: Tile-Grid + gemeinsame Tile-Atome (Label, Head, Median,
-   internal-link-Override, Trend-Pct-Farben). Tile-spezifische Visuals leben
+   Klick-Hover, Trend-Pct-Farben). Tile-spezifische Visuals leben
    in book-overview/{stats,coverage,review,domain,presence,kapitel,recent-actions}.css. */
 
 /* Tile-Grid: genutzt von der Buch-Übersicht (.book-overview) und der
@@ -41,20 +41,16 @@
   container-type: inline-size;
 }
 
-.overview-tile.internal-link { cursor: pointer; }
-/* Globaler `.internal-link:hover` setzt opacity 0.65 + underline — für Tiles
-   unerwünscht (Karte soll nicht „dimmen" beim Hover). Overrides hier. */
-.overview-tile.internal-link:hover {
-  opacity: 1;
-  text-decoration: none;
+/* Klickbar ist ein Tile als div mit `.internal-link` oder als <button>. */
+.overview-tile:is(.internal-link, button) { cursor: pointer; }
+.overview-tile:is(.internal-link, button):hover {
   border-color: var(--color-border-focus);
   background: var(--color-hover);
   box-shadow: var(--shadow-sm);
 }
-.overview-tile.internal-link:focus-visible {
-  outline: 2px solid var(--color-primary);
+.overview-tile:is(.internal-link, button):focus-visible {
+  outline: var(--focus-ring);
   outline-offset: 1px;
-  text-decoration: none;
 }
 
 .overview-tile--wide { grid-column: 1 / -1; }
@@ -78,7 +74,7 @@
 .overview-notice-text { flex: 1 1 auto; min-width: 0; }
 
 /* CTA-Tile: gestrichelter Rahmen signalisiert „noch leer, hier handeln".
-   Erbt Hover/Focus vom .internal-link-Tile. */
+   Erbt Hover/Focus vom klickbaren Tile. */
 .overview-tile--cta {
   border-style: dashed;
   justify-content: center;
@@ -161,7 +157,7 @@
   font-variant-numeric: tabular-nums;
   color: var(--color-muted);
 }
-.overview-trend-pct--up   { color: var(--color-success); }
+.overview-trend-pct--up   { color: var(--color-ok-text); }
 .overview-trend-pct--down { color: var(--color-err-text); }
 
 @media (max-width: 700px) {

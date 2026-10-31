@@ -14,14 +14,14 @@
         </div>
 
         <div class="card-form-grid">
-          <div class="card-form-row" x-show="uiMode === 'expert'">
-            <label class="card-form-label" x-text="$app.t('pdfExport.print.bleedMm')"></label>
+          <div x-id="['fld']" class="card-form-row" x-show="uiMode === 'expert'">
+            <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.print.bleedMm')"></label>
             <div class="card-form-field">
-              <input type="text" x-data="numInput({ step: 0.5, min: 0, max: 10 })" x-modelable="value" x-model="activeProfile.config.print.bleedMm" class="pdfx-num-input">
+              <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.5, min: 0, max: 10 })" x-modelable="value" x-model="activeProfile.config.print.bleedMm" class="pdfx-num-input">
             </div>
           </div>
           <div class="card-form-row card-form-row--top" x-show="uiMode === 'expert'">
-            <label class="card-form-label">&nbsp;</label>
+            <span class="card-form-label" aria-hidden="true">&nbsp;</span>
             <div class="card-form-field">
               <label class="pdfx-check">
                 <input type="checkbox" x-model="activeProfile.config.print.cropMarks" :disabled="!(activeProfile.config.print.bleedMm > 0)">
@@ -30,14 +30,14 @@
               <p class="card-form-field-note" x-show="!(activeProfile.config.print.bleedMm > 0)" x-text="$app.t('pdfExport.print.cropMarksNeedsBleed')"></p>
             </div>
           </div>
-          <div class="card-form-row" x-show="uiMode === 'expert'">
-            <label class="card-form-label" x-text="$app.t('pdfExport.print.dpiWarnThreshold')"></label>
+          <div x-id="['fld']" class="card-form-row" x-show="uiMode === 'expert'">
+            <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.print.dpiWarnThreshold')"></label>
             <div class="card-form-field">
-              <input type="text" x-data="numInput({ step: 10, min: 72, max: 1200, integer: true })" x-modelable="value" x-model="activeProfile.config.print.dpiWarnThreshold" class="pdfx-num-input">
+              <input :id="$id('fld')" type="text" x-data="numInput({ step: 10, min: 72, max: 1200, integer: true })" x-modelable="value" x-model="activeProfile.config.print.dpiWarnThreshold" class="pdfx-num-input">
             </div>
           </div>
           <div class="card-form-row card-form-row--top" x-show="uiMode === 'expert'">
-            <label class="card-form-label">&nbsp;</label>
+            <span class="card-form-label" aria-hidden="true">&nbsp;</span>
             <div class="card-form-field">
               <label class="pdfx-check">
                 <input type="checkbox" x-model="activeProfile.config.print.padToEvenPages">
@@ -47,7 +47,7 @@
             </div>
           </div>
           <div class="card-form-row card-form-row--top" x-show="uiMode === 'expert'">
-            <label class="card-form-label">&nbsp;</label>
+            <span class="card-form-label" aria-hidden="true">&nbsp;</span>
             <div class="card-form-field">
               <label class="pdfx-check">
                 <input type="checkbox" x-model="activeProfile.config.print.blackTextKOnly" :disabled="activeProfile.config.pdfa.standard === 'pdfa'">
@@ -60,10 +60,10 @@
 
           <!-- PDF-Norm (PDF/A · PDF/X · kein) — Ausgabestandard der Datei. -->
           <p class="card-form-section-divider" x-text="$app.t('pdfExport.print.group.norm')"></p>
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('pdfExport.norm.standard')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.norm.standard')"></label>
             <div class="card-form-field">
-              <div x-data="combobox($app.t('pdfExport.norm.standard'))"
+              <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.norm.standard'))"
                    x-modelable="value" x-model="activeProfile.config.pdfa.standard"
                    x-effect="options = [{ value: 'pdfa', label: $app.t('pdfExport.norm.pdfa') }, { value: 'pdfx', label: $app.t('pdfExport.norm.pdfx') }, { value: 'none', label: $app.t('pdfExport.norm.none') }]"
 ></div>

@@ -43,16 +43,12 @@
            })">
       <thead>
         <tr>
-          <th class="sortable-th" :class="sortClass('email')" :aria-sort="ariaSort('email')"
-              @click="sortBy('email')" x-text="$app.t('admin.users.requests.email')"></th>
-          <th class="sortable-th" :class="sortClass('display_name')" :aria-sort="ariaSort('display_name')"
-              @click="sortBy('display_name')" x-text="$app.t('admin.users.requests.name')"></th>
+          <th x-bind="sortTh('email')" x-text="$app.t('admin.users.requests.email')"></th>
+          <th x-bind="sortTh('display_name')" x-text="$app.t('admin.users.requests.name')"></th>
           <th x-text="$app.t('admin.users.requests.message')"></th>
           <th x-text="$app.t('admin.users.requests.source')"></th>
-          <th class="sortable-th" :class="sortClass('created_at')" :aria-sort="ariaSort('created_at')"
-              @click="sortBy('created_at')" x-text="$app.t('admin.users.requests.createdAt')"></th>
-          <th class="sortable-th" :class="sortClass('status')" :aria-sort="ariaSort('status')"
-              @click="sortBy('status')" x-text="$app.t('admin.users.status')"></th>
+          <th x-bind="sortTh('created_at')" x-text="$app.t('admin.users.requests.createdAt')"></th>
+          <th x-bind="sortTh('status')" x-text="$app.t('admin.users.status')"></th>
           <th></th>
         </tr>
       </thead>

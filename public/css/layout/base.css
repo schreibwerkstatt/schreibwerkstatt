@@ -12,7 +12,7 @@
   background: var(--color-primary);
   color: var(--color-on-primary);
   padding: var(--space-sm) var(--space-14);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-weight: var(--fw-semibold);
   text-decoration: none;
   transition: top var(--transition-slow);
@@ -20,32 +20,22 @@
 .skip-link:focus,
 .skip-link:focus-visible {
   top: 0.5rem;
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 
 /* Tree-Pfeil-Navigation: Page-Items sind tabbar; sichtbarer Fokus muss klar
    abgrenzbar sein vom .selected-Zustand. */
 .page-item:focus-visible,
 .tree-chapter-header:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: -2px;
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset-inset);
 }
 
 /* Findings-Label bekommt bei Tastaturfokus (Alt+J/K) sichtbaren Rahmen. */
 .lektorat-split-findings .finding:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-
-/* Barrierefreiheit: Animationen bei System-Präferenz ausschalten */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 
 /* === Base === */
@@ -132,14 +122,12 @@ kbd {
   background: var(--color-tag-bg);
   color: var(--color-text);
   border: var(--border-thin) solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 
 .site-title {
   display: flex;
   align-items: baseline;
-  gap: var(--space-10);
-  cursor: pointer;
   font-family: var(--font-serif);
   font-weight: var(--fw-semibold);
   font-size: var(--font-size-3xl);
@@ -147,6 +135,15 @@ kbd {
   font-feature-settings: "kern", "liga", "dlig", "calt", "onum", "ss01";
   text-rendering: optimizeLegibility;
   color: var(--color-text);
+}
+
+/* Klickziel im Titel ist ein `.internal-link`-Span (Tastatur über die globale
+   Delegation), nicht das <h1> selbst — die Überschrift behält ihre Rolle. */
+.site-title-link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-10);
+  cursor: pointer;
 }
 
 .site-logo {
@@ -160,7 +157,7 @@ code {
   font-family: monospace;
   background: var(--color-tag-bg);
   padding: var(--space-1) var(--space-5);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-mini);
 }
 

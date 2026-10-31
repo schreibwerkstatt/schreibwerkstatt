@@ -1,6 +1,6 @@
 <!-- Wendungen der Wortschatz-Analyse. Fragment von wortschatz.html (String-Include
      `<!-- @include wortschatz-phrases -->`) — Begründung siehe wortschatz-terms.html. -->
-<div x-show="wortschatzTab === 'phrases'">
+<div role="tabpanel" x-show="wortschatzTab === 'phrases'">
   <p class="wortschatz-list-hint" x-text="$app.t('wortschatz.phrases.hint')"></p>
   <div x-show="!wortschatzNgrams.length" class="muted-msg muted-msg--spaced" x-text="$app.t('wortschatz.phrases.empty')"></div>
   <div class="table-scroll" x-show="wortschatzNgrams.length">
@@ -13,16 +13,11 @@
              types: { count: 'number', n: 'number', chapter_spread: 'number', log_dice: 'number', phrase: 'string' },
            })">
       <thead><tr>
-        <th class="sortable-th" :class="sortClass('phrase')" :aria-sort="ariaSort('phrase')"
-            @click="sortBy('phrase')" x-text="$app.t('wortschatz.col.phrase')"></th>
-        <th class="sortable-th" :class="sortClass('n')" :aria-sort="ariaSort('n')"
-            @click="sortBy('n')" x-text="$app.t('wortschatz.col.n')"></th>
-        <th class="sortable-th" :class="sortClass('count')" :aria-sort="ariaSort('count')"
-            @click="sortBy('count')" x-text="$app.t('wortschatz.col.count')"></th>
-        <th class="sortable-th" :class="sortClass('chapter_spread')" :aria-sort="ariaSort('chapter_spread')"
-            @click="sortBy('chapter_spread')" x-text="$app.t('wortschatz.col.spread')"></th>
-        <th class="sortable-th" :class="sortClass('log_dice')" :aria-sort="ariaSort('log_dice')"
-            @click="sortBy('log_dice')" x-text="$app.t('wortschatz.col.logDice')"></th>
+        <th x-bind="sortTh('phrase')" x-text="$app.t('wortschatz.col.phrase')"></th>
+        <th x-bind="sortTh('n')" x-text="$app.t('wortschatz.col.n')"></th>
+        <th x-bind="sortTh('count')" x-text="$app.t('wortschatz.col.count')"></th>
+        <th x-bind="sortTh('chapter_spread')" x-text="$app.t('wortschatz.col.spread')"></th>
+        <th x-bind="sortTh('log_dice')" x-text="$app.t('wortschatz.col.logDice')"></th>
         <th x-text="$app.t('wortschatz.col.firstPage')"></th>
       </tr></thead>
       <tbody>

@@ -99,7 +99,7 @@ test('I3: saveEdit hat Fokus-Branch, der editMode NICHT räumt', () => {
 // ── I4: resetPage Reset-Reihenfolge ──────────────────────────────────────────
 test('I4: resetPage hält Reset-Reihenfolge: focus → autosave → chat → edit → lektorat', () => {
   const src = read('public/js/app/app-view.js');
-  const m = src.match(/resetPage\s*\(\)\s*\{[\s\S]*?\n  \}/);
+  const m = src.match(/resetPage\s*\([^)]*\)\s*\{[\s\S]*?\n  \}/);
   assert.ok(m, 'resetPage gefunden');
   const body = m[0];
 

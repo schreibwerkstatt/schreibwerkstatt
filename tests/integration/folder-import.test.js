@@ -128,7 +128,9 @@ test('folder-import: Buch ohne Buchtyp wird Tagebuch, gesetzter Typ bleibt', asy
   assert.equal(getBookSettings(untyped.id, userEmail).buchtyp, 'tagebuch');
 
   const memoir = await contentStore.createBook({ name: 'Memoiren', owner_email: userEmail }, session);
-  db.prepare(`INSERT INTO book_settings (book_id, language, region, updated_at, buchtyp) VALUES (?, 'de', 'CH', '2026-01-01T00:00:00.000Z', 'autobiografie')`).run(memoir.id);
+  // createBook legt die book_settings-Zeile schon an → Buchtyp darauf setzen.
+  db.prepare(`INSERT INTO book_settings (book_id, language, region, updated_at, buchtyp) VALUES (?, 'de', 'CH', '2026-01-01T00:00:00.000Z', 'autobiografie')
+              ON CONFLICT(book_id) DO UPDATE SET buchtyp = excluded.buchtyp`).run(memoir.id);
   await run(memoir, 'memoir');
   assert.equal(getBookSettings(memoir.id, userEmail).buchtyp, 'autobiografie');
 });

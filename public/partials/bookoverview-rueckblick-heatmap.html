@@ -41,6 +41,7 @@
                   <button type="button"
                           class="ymheat-cell"
                           :class="'ymheat-cell--lvl' + cell.level + (cell.hasRueckblick ? ' ymheat-cell--has' : '') + (cell.isCurrent ? ' ymheat-cell--current' : '')"
+                          :aria-current="cell.isCurrent ? 'date' : null"
                           @click="$app.openRueckblickFor(cell.key)"
                           :data-tip="rueckblickCellTip(cell)" :aria-label="rueckblickCellTip(cell)"></button>
                 </template>

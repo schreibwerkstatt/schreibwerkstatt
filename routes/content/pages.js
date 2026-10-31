@@ -502,7 +502,8 @@ function register(router) {
       });
     } catch (e) {
       if (/^image-/.test(e.message || '')) {
-        return res.status(400).json({ error_code: 'INVALID_IMAGE', detail: e.message });
+        logger.warn(`POST /content/pages/:id/images: ${e.message}`);
+        return res.status(400).json({ error_code: 'INVALID_IMAGE' });
       }
       _fail(res, e, 'POST /content/pages/:id/images');
     }

@@ -8,11 +8,11 @@
 <div class="chat-history-title" x-text="$app.t('chat.history')"></div>
 <div class="filter-bar chat-hist-search">
   <input type="search" class="filter-search-input" x-model="histQuery"
-         @input="onHistInput()" @keydown.enter.prevent="runHistSearch()" @keydown.escape.stop="clearHistSearch()"
+         @input="onHistInput()" @keydown.enter="$enter($event, () => runHistSearch())" @keydown.escape.stop="clearHistSearch()"
          :placeholder="$app.t('chat.historySearch.placeholder')" :aria-label="$app.t('chat.historySearch.placeholder')">
   <div class="seg-toggle" x-show="histKind === 'page'">
-    <button type="button" :class="{ 'seg-toggle--active': histScope === 'page' }" @click="setHistScope('page')" x-text="$app.t('chat.historySearch.scopePage')"></button>
-    <button type="button" :class="{ 'seg-toggle--active': histScope === 'book' }" @click="setHistScope('book')" x-text="$app.t('chat.historySearch.scopeBook')"></button>
+    <button :aria-pressed="histScope === 'page'" type="button" :class="{ 'seg-toggle--active': histScope === 'page' }" @click="setHistScope('page')" x-text="$app.t('chat.historySearch.scopePage')"></button>
+    <button :aria-pressed="histScope === 'book'" type="button" :class="{ 'seg-toggle--active': histScope === 'book' }" @click="setHistScope('book')" x-text="$app.t('chat.historySearch.scopeBook')"></button>
   </div>
   <span x-show="histLoading" class="spinner chat-session-running" role="status" :aria-label="$app.t('chat.historySearch.searching')"></span>
 </div>
@@ -21,7 +21,7 @@
   <p x-show="histNote" class="card-hint" x-text="histNote"></p>
   <p x-show="!histError && !histHits.length" class="muted-msg" x-text="$app.t('chat.historySearch.empty')"></p>
   <template x-for="hit in histHits" :key="hit.message_id">
-    <div class="chat-session-item chat-hist-hit" @click="openHistHit(hit)">
+    <div class="chat-session-item chat-hist-hit internal-link" @click="openHistHit(hit)">
       <div class="chat-hist-hit-body">
         <div class="chat-hist-hit-head">
           <span class="chat-session-preview" x-text="hit.title || $app.t('chat.previewEmpty')"></span>

@@ -158,7 +158,9 @@ export const lektoratMethods = {
     this._syncPageStatsAfterSave?.({ id: pageId, updated_at: saved?.updated_at || null }, finalHtml);
     // `preHtml` + `savedUpdatedAt`: Grundlage für «Korrekturen rückgängig»
     // (lektorat-undo.js) — der frisch geladene Stand vor dem Übernehmen.
-    return { finalHtml, skipped, pageId, stale, preHtml: page.html, savedUpdatedAt: saved?.updated_at || null };
+    // `savedHtml`: Server-Fassung (mit data-bid) — Basis für Ansicht und nächsten Merge.
+    const savedHtml = typeof saved?.html === 'string' ? saved.html : finalHtml;
+    return { finalHtml, savedHtml, skipped, pageId, stale, preHtml: page.html, savedUpdatedAt: saved?.updated_at || null };
   },
 
 
@@ -406,7 +408,7 @@ export const lektoratMethods = {
       .map(f => ({ f, reason: 'noCorrection' }));
 
     try {
-      const { finalHtml, skipped: applySkipped, pageId, stale, preHtml, savedUpdatedAt } = await this._loadApplyAndSave(selected, (pct, text) => {
+      const { savedHtml, skipped: applySkipped, pageId, stale, preHtml, savedUpdatedAt } = await this._loadApplyAndSave(selected, (pct, text) => {
         this.saveApplying = pct;
         if (text) this.setStatus(text, true);
       });
@@ -486,10 +488,11 @@ export const lektoratMethods = {
       this.lektoratProgress = null;
       this.checkDone = false;
       this.activeHistoryEntryId = null;
-      // Seitenansicht aus dem gerade gespeicherten HTML neu aufbauen
-      this.originalHtml = finalHtml;
-      this.renderedPageHtml = finalHtml;
+      // Seitenansicht aus der gespeicherten Server-Fassung (data-bid) über den
+      // normalen Render-Pfad neu aufbauen (Erwähnungs-Hervorhebung inklusive).
+      this.originalHtml = savedHtml;
       this.analysisOut = '';
+      this.updatePageView();
     } catch (e) {
       console.error('[saveCorrections]', e);
       this.saveApplying = null;

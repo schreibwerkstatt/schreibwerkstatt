@@ -64,8 +64,11 @@ Diese Regeln setzt ein Hook ([.claude/settings.json](.claude/settings.json), [sc
 | Auswahl an einem Element nur als `.picker-popover` (Rahmen, Mechanik, Optik an einem Ort) | [picker-popover-single-place.test.mjs](tests/unit/picker-popover-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
 | Aktionsmenü nur über `menu()` oder `actionMenu`; Rechtsklick immer mit Long-Press | [action-menu-single-place.test.mjs](tests/unit/action-menu-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
 | Rückfrage nur über `appConfirm`/`appAlert`/`appPrompt`, nie natives `confirm()` | [app-confirm-single-place.test.mjs](tests/unit/app-confirm-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
+| Enter an Textfeldern nur über `$enter` (IME-Guard) | [enter-ime-guard.test.mjs](tests/unit/enter-ime-guard.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
+| `@click` auf Nicht-Buttons nur mit `.internal-link` (nie am `<li>`, nie am `<button>`, ohne eigenes Aussehen — Link-Optik ist `.text-link`) oder begründet | [clickable-a11y.test.mjs](tests/unit/clickable-a11y.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
 | Leerzustand nur als `.card-empty` oder `.muted-msg` | [empty-state-single-place.test.mjs](tests/unit/empty-state-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
 | Gruppen-Titel im Formular nur als `.card-form-section-divider` (Erklärsatz: `--note`) | [section-divider-single-place.test.mjs](tests/unit/section-divider-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
+| Abschnitts-Titel (Caps-Zeile, auch in Leseansichten) nur als `.card-section-title` (Label im Fliesstext: `--inline`) | [section-title-single-place.test.mjs](tests/unit/section-title-single-place.test.mjs) | [public/css/CLAUDE.md](public/css/CLAUDE.md) |
 | Klapp-Panel (`x-bind="panel"`) ohne eigenes Box-Styling — Abstand/Layout ans Kind | [collapsible-panel-style.test.mjs](tests/unit/collapsible-panel-style.test.mjs) | [DESIGN.md](DESIGN.md#klappbarer-section-toggle-accordion) |
 | Editor-/Chat-/Kommentar-Mehrdeutigkeit im Prompt | `prompt-disambiguation.js` (injiziert Hinweis) | oben, „Bevor du anfängst" |
 | Nur auf `main` — kein Branch, kein Worktree, kein Subagent mit `isolation: "worktree"` | `main-only-guard.js` **blockt** | unten, „Arbeitsweise" |

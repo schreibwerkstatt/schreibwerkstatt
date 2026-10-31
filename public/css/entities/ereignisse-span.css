@@ -23,7 +23,7 @@
     var(--gz-subtyp-color, var(--color-primary)),
     color-mix(in srgb, var(--gz-subtyp-color, var(--color-primary)) 35%, transparent)
   );
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 
 /* Span-Bar nimmt Platz auch in der globalen Border-Linie ein — leichtes Glow,

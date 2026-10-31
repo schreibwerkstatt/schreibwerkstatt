@@ -6,11 +6,10 @@ import { lsGet, lsSet } from '../safe-storage.js';
 
 export const appChromeMethods = {
   // ── Theme (Hell/Dunkel/Auto) ─────────────────────────────────────────────
+  // Anwenden (data-theme + <meta name="theme-color">) liegt in theme-init.js
+  // (`window.__applyTheme`), damit Boot und Umschaltung dieselbe Stelle nutzen.
   _applyTheme() {
-    const resolved = this.$store.shell.themePref === 'auto'
-      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-      : this.$store.shell.themePref;
-    document.documentElement.setAttribute('data-theme', resolved);
+    window.__applyTheme(this.$store.shell.themePref);
   },
   setTheme(pref) {
     if (pref !== 'auto' && pref !== 'light' && pref !== 'dark') return;

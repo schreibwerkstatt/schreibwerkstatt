@@ -1,6 +1,6 @@
 @layer components {
 /* Sortierbare Tabellen-Header.
-   Pattern: <th @click="sortBy('key')" :class="sortClass('key')" :aria-sort="...">
+   Pattern: <th x-bind="sortTh('key')">
    `sortableTable`-Komponente (public/js/sortable-table.js) liefert die Klassen.
 
    Visuelles Signal: Hover und aktive Sort-Spalte zeigen ein Chevron-Paar an
@@ -35,7 +35,7 @@
 .sortable-th::before {
   /* Pfeil hoch (asc) */
   top: 50%;
-  margin-top: -7px;
+  margin-top: calc(-1 * var(--space-6) - var(--space-1));
   border-bottom: 5px solid currentColor;
 }
 
@@ -67,8 +67,8 @@
   opacity: 0.15;
 }
 
-/* Fokus-Ring fuer Tastatur-Nav (Element wird via tabindex=0 + .internal-link
-   tastatur-erreichbar gemacht). */
+/* Fokus-Ring fuer Tastatur-Nav (`sortTh` setzt tabindex=0, Enter/Leertaste
+   sortieren). */
 .sortable-th:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;

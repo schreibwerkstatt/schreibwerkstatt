@@ -1,28 +1,24 @@
     <div class="card-form-grid" x-bind="panel('sync')" x-cloak>
 
-    <section class="book-settings-section" x-show="bookSettingsIsBlog()" x-cloak
-             x-data="collapsible()" x-modelable="open" x-model="blogSectionOpen">
-      <button type="button" class="collapsible-toggle" x-bind="trigger">
-        <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
-        <span x-text="$app.t('blog.connect.title')"></span>
-      </button>
-
-      <div x-bind="panel" x-cloak>
+    <!-- Der Reiter erscheint nur bei Buchtyp «blog» (_tabAvailable) — kein
+         eigenes Gate und kein Klappen: hier gibt es nichts anderes zu sehen. -->
+    <section class="book-settings-section">
+      <h3 class="card-section-title" x-text="$app.t('blog.connect.title')"></h3>
 
       <div class="card-form-row" x-show="blogConnection">
-        <label class="card-form-label" x-text="$app.t('blog.status.title')"></label>
-        <div class="blog-status-panel">
-          <div class="blog-status-row">
-            <span class="blog-status-label" x-text="$app.t('blog.status.url')"></span>
-            <span class="blog-status-value" x-text="blogConnection?.baseUrl"></span>
+        <span class="card-form-label" x-text="$app.t('blog.status.title')"></span>
+        <div class="sync-status-panel">
+          <div class="sync-status-row">
+            <span class="sync-status-label" x-text="$app.t('blog.status.url')"></span>
+            <span class="sync-status-value" x-text="blogConnection?.baseUrl"></span>
           </div>
-          <div class="blog-status-row">
-            <span class="blog-status-label" x-text="$app.t('blog.status.user')"></span>
-            <span class="blog-status-value" x-text="blogConnection?.username"></span>
+          <div class="sync-status-row">
+            <span class="sync-status-label" x-text="$app.t('blog.status.user')"></span>
+            <span class="sync-status-value" x-text="blogConnection?.username"></span>
           </div>
-          <div class="blog-status-row">
-            <span class="blog-status-label" x-text="$app.t('blog.status.imported')"></span>
-            <span class="blog-status-value">
+          <div class="sync-status-row">
+            <span class="sync-status-label" x-text="$app.t('blog.status.imported')"></span>
+            <span class="sync-status-value">
               <template x-if="blogConnection?.initialImportDoneAt">
                 <span x-text="$app.formatLastRun(blogConnection.initialImportDoneAt)"></span>
               </template>
@@ -31,36 +27,36 @@
               </template>
             </span>
           </div>
-          <div class="blog-status-row">
-            <span class="blog-status-label" x-text="$app.t('blog.status.lastPull')"></span>
-            <span class="blog-status-value" x-text="blogConnection?.lastPullAt ? $app.formatLastRun(blogConnection.lastPullAt) : '—'"></span>
+          <div class="sync-status-row">
+            <span class="sync-status-label" x-text="$app.t('blog.status.lastPull')"></span>
+            <span class="sync-status-value" x-text="blogConnection?.lastPullAt ? $app.formatLastRun(blogConnection.lastPullAt) : '—'"></span>
           </div>
-          <div class="blog-status-row">
-            <span class="blog-status-label" x-text="$app.t('blog.status.lastPush')"></span>
-            <span class="blog-status-value" x-text="blogConnection?.lastPushAt ? $app.formatLastRun(blogConnection.lastPushAt) : '—'"></span>
+          <div class="sync-status-row">
+            <span class="sync-status-label" x-text="$app.t('blog.status.lastPush')"></span>
+            <span class="sync-status-value" x-text="blogConnection?.lastPushAt ? $app.formatLastRun(blogConnection.lastPushAt) : '—'"></span>
           </div>
         </div>
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('blog.connect.url')"></label>
-        <input type="url" class="card-form-input"
+        <label class="card-form-label" for="bs-wp-url" x-text="$app.t('blog.connect.url')"></label>
+        <input type="url" class="card-form-input" id="bs-wp-url"
                x-model="blogForm.baseUrl"
                :placeholder="'https://blog.example.com'"
                :disabled="blogBusy">
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('blog.connect.user')"></label>
-        <input type="text" class="card-form-input"
+        <label class="card-form-label" for="bs-wp-account" x-text="$app.t('blog.connect.user')"></label>
+        <input type="text" class="card-form-input" id="bs-wp-account"
                x-model="blogForm.username"
                autocomplete="username"
                :disabled="blogBusy">
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('blog.connect.password')"></label>
-        <input type="password" class="card-form-input"
+        <label class="card-form-label" for="bs-wp-secret" x-text="$app.t('blog.connect.password')"></label>
+        <input type="password" class="card-form-input" id="bs-wp-secret"
                x-model="blogForm.password"
                autocomplete="current-password"
                :placeholder="blogConnection ? $app.t('blog.connect.passwordReplace') : ''"
@@ -69,15 +65,15 @@
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('blog.connect.defaultStatus')"></label>
-        <div x-data="combobox($app.t('blog.connect.defaultStatus'))"
+        <span class="card-form-label" id="bs-wp-status-label" x-text="$app.t('blog.connect.defaultStatus')"></span>
+        <div aria-labelledby="bs-wp-status-label" x-data="combobox($app.t('blog.connect.defaultStatus'))"
              x-modelable="value" x-model="blogForm.defaultStatus"
              x-effect="options = blogStatusOptions()"></div>
       </div>
 
       <div class="card-form-row card-form-row--top">
         <span class="card-form-label"></span>
-        <div class="blog-actions">
+        <div class="sync-actions">
           <button type="button"
                   @click="testBlogConnection()"
                   :disabled="blogBusy || !blogFormReady()">
@@ -112,7 +108,7 @@
             <span x-show="blogReconcileJobId" class="spinner"></span>
             <span x-text="$app.t('blog.action.reconcile')"></span>
           </button>
-          <button type="button" class="book-settings-btn-danger"
+          <button type="button" class="danger"
                   x-show="blogConnection"
                   @click="disconnectBlog()"
                   :disabled="blogBusy">
@@ -124,37 +120,31 @@
       <p class="card-form-saved" x-show="blogMessage" x-cloak x-transition.opacity.duration.250ms x-text="blogMessage"></p>
       <p class="card-form-error" x-show="blogError" x-text="blogError"></p>
       <p class="card-form-warn" x-show="blogCiteWarning" x-cloak role="status" x-text="blogCiteWarning"></p>
-
-      </div>
     </section>
 
-    <section class="book-settings-section" x-show="bookSettingsIsBlog()" x-cloak
-             x-data="collapsible()" x-modelable="open" x-model="hubspotSectionOpen">
-      <button type="button" class="collapsible-toggle" x-bind="trigger">
-        <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
-        <span x-text="$app.t('hubspot.connect.title')"></span>
-      </button>
-
-      <div x-bind="panel" x-cloak>
+    <!-- Der Reiter erscheint nur bei Buchtyp «blog» (_tabAvailable) — kein
+         eigenes Gate und kein Klappen: hier gibt es nichts anderes zu sehen. -->
+    <section class="book-settings-section">
+      <h3 class="card-section-title" x-text="$app.t('hubspot.connect.title')"></h3>
 
       <div class="card-form-row" x-show="hubspotConnection">
-        <label class="card-form-label" x-text="$app.t('hubspot.status.title')"></label>
-        <div class="hubspot-status-panel">
-          <div class="hubspot-status-row">
-            <span class="hubspot-status-label" x-text="$app.t('hubspot.status.tokenSet')"></span>
-            <span class="hubspot-status-value">••••••••</span>
+        <span class="card-form-label" x-text="$app.t('hubspot.status.title')"></span>
+        <div class="sync-status-panel sync-status-panel--hubspot">
+          <div class="sync-status-row">
+            <span class="sync-status-label" x-text="$app.t('hubspot.status.tokenSet')"></span>
+            <span class="sync-status-value">••••••••</span>
           </div>
-          <div class="hubspot-status-row">
-            <span class="hubspot-status-label" x-text="$app.t('hubspot.status.blog')"></span>
-            <span class="hubspot-status-value" x-text="(hubspotBlogs.find(b => String(b.id) === String(hubspotConnection?.blogId))?.name) || hubspotConnection?.blogId"></span>
+          <div class="sync-status-row">
+            <span class="sync-status-label" x-text="$app.t('hubspot.status.blog')"></span>
+            <span class="sync-status-value" x-text="(hubspotBlogs.find(b => String(b.id) === String(hubspotConnection?.blogId))?.name) || hubspotConnection?.blogId"></span>
           </div>
-          <div class="hubspot-status-row">
-            <span class="hubspot-status-label" x-text="$app.t('hubspot.status.author')"></span>
-            <span class="hubspot-status-value" x-text="(hubspotAuthors.find(a => String(a.id) === String(hubspotConnection?.authorId))?.name) || hubspotConnection?.authorId"></span>
+          <div class="sync-status-row">
+            <span class="sync-status-label" x-text="$app.t('hubspot.status.author')"></span>
+            <span class="sync-status-value" x-text="(hubspotAuthors.find(a => String(a.id) === String(hubspotConnection?.authorId))?.name) || hubspotConnection?.authorId"></span>
           </div>
-          <div class="hubspot-status-row">
-            <span class="hubspot-status-label" x-text="$app.t('hubspot.status.imported')"></span>
-            <span class="hubspot-status-value">
+          <div class="sync-status-row">
+            <span class="sync-status-label" x-text="$app.t('hubspot.status.imported')"></span>
+            <span class="sync-status-value">
               <template x-if="hubspotConnection?.initialImportDoneAt">
                 <span x-text="$app.formatLastRun(hubspotConnection.initialImportDoneAt)"></span>
               </template>
@@ -163,16 +153,16 @@
               </template>
             </span>
           </div>
-          <div class="hubspot-status-row">
-            <span class="hubspot-status-label" x-text="$app.t('hubspot.status.lastPush')"></span>
-            <span class="hubspot-status-value" x-text="hubspotConnection?.lastPushAt ? $app.formatLastRun(hubspotConnection.lastPushAt) : '—'"></span>
+          <div class="sync-status-row">
+            <span class="sync-status-label" x-text="$app.t('hubspot.status.lastPush')"></span>
+            <span class="sync-status-value" x-text="hubspotConnection?.lastPushAt ? $app.formatLastRun(hubspotConnection.lastPushAt) : '—'"></span>
           </div>
         </div>
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('hubspot.connect.token')"></label>
-        <input type="password" class="card-form-input"
+        <label class="card-form-label" for="bs-hs-token" x-text="$app.t('hubspot.connect.token')"></label>
+        <input type="password" class="card-form-input" id="bs-hs-token"
                x-model="hubspotForm.token"
                autocomplete="new-password"
                :placeholder="hubspotConnection ? $app.t('hubspot.connect.tokenReplace') : 'pat-eu1-…'"
@@ -180,22 +170,22 @@
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('hubspot.connect.blog')"></label>
-        <div x-data="combobox($app.t('hubspot.connect.blog'))"
+        <span class="card-form-label" id="bs-hs-blog-label" x-text="$app.t('hubspot.connect.blog')"></span>
+        <div aria-labelledby="bs-hs-blog-label" x-data="combobox($app.t('hubspot.connect.blog'))"
              x-modelable="value" x-model="hubspotForm.blogId"
              x-effect="options = (hubspotBlogs || []).map(b => ({ value: b.id, label: b.name }))"></div>
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('hubspot.connect.author')"></label>
-        <div x-data="combobox($app.t('hubspot.connect.author'))"
+        <span class="card-form-label" id="bs-hs-author-label" x-text="$app.t('hubspot.connect.author')"></span>
+        <div aria-labelledby="bs-hs-author-label" x-data="combobox($app.t('hubspot.connect.author'))"
              x-modelable="value" x-model="hubspotForm.authorId"
              x-effect="options = (hubspotAuthors || []).map(a => ({ value: a.id, label: a.email ? a.name + ' <' + a.email + '>' : a.name }))"></div>
       </div>
 
       <div class="card-form-row card-form-row--top">
         <span class="card-form-label"></span>
-        <div class="hubspot-actions">
+        <div class="sync-actions">
           <button type="button"
                   @click="testHubspotConnection()"
                   :disabled="hubspotBusy">
@@ -223,7 +213,7 @@
             <span x-show="hubspotReconcileJobId" class="spinner"></span>
             <span x-text="$app.t('hubspot.action.reconcile')"></span>
           </button>
-          <button type="button" class="book-settings-btn-danger"
+          <button type="button" class="danger"
                   x-show="hubspotConnection"
                   @click="disconnectHubspot()"
                   :disabled="hubspotBusy">
@@ -234,8 +224,6 @@
 
       <p class="card-form-saved" x-show="hubspotMessage" x-cloak x-transition.opacity.duration.250ms x-text="hubspotMessage"></p>
       <p class="card-form-error" x-show="hubspotError" x-text="hubspotError"></p>
-
-      </div>
     </section>
 
     </div><!-- /tab: sync -->

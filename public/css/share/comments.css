@@ -398,7 +398,7 @@
   cursor: pointer;
 }
 .share-thread__action:hover { color: var(--share-accent); text-decoration: underline; }
-.share-thread__action--danger:hover { color: #c43838; }
+.share-thread__action--danger:hover { color: var(--share-danger); }
 .share-thread__action:disabled { opacity: 0.6; cursor: not-allowed; text-decoration: none; }
 .share-thread__reply-actions { display: flex; align-items: center; gap: 8px; }
 .share-thread__edit .comment-rail__textarea { width: 100%; box-sizing: border-box; }

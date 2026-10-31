@@ -9,6 +9,8 @@
   <link rel="stylesheet" href="/public/css/tokens.css">
   <link rel="stylesheet" href="/public/css/layout/base.css">
   <link rel="stylesheet" href="/public/css/components/buttons-badges.css">
+  <link rel="stylesheet" href="/public/css/components/seg-toggle.css">
+  <link rel="stylesheet" href="/public/css/components/file-btn.css">
   <link rel="stylesheet" href="/public/css/components/card-form/card-shell.css">
   <link rel="stylesheet" href="/public/css/components/card-form/form-elements.css">
   <link rel="stylesheet" href="/public/css/components/card-form/card-actions.css">
@@ -93,7 +95,7 @@
     registerFileDrop();
     // sortableTable — der Statistik-Tab desselben Partials mountet damit seine
     // Job-Statistik-Tabelle. Fehlt die Registrierung, wirft Alpine beim Mount
-    // des Tab-Bundles (sortClass/ariaSort/sorted undefined), obwohl der
+    // des Tab-Bundles (sortTh/sorted undefined), obwohl der
     // Publikation-Tab selbst nichts damit zu tun hat.
     const { registerSortableTable } = await import('/public/js/sortable-table.js');
     registerSortableTable();
@@ -129,12 +131,13 @@
     // Produktion lädt book_publication beim Karten-Öffnen (onShow). Hier ist das
     // Show-Flag schon bei init true, also stösst die Lifecycle-Watch nicht an —
     // loadPublication explizit aufrufen, damit bookPublicationLoaded gesetzt ist
-    // (savePublication speichert sonst bewusst nicht, um keinen leeren Full-
-    // Replace-Upsert auszulösen). Nur diese eine Quelle, nicht der ganze onShow.
+    // (savePublication speichert sonst bewusst nicht) und der Stand als
+    // Vergleichsbasis gilt — gespeichert wird nur, was danach geändert wurde.
+    // Nur diese eine Quelle, nicht der ganze onShow (_loadAll).
     const card = window.Alpine.$data(slot.querySelector('[x-data="bookSettingsCard"]'));
-    // Buchtyp ist Pflichtfeld in saveActiveTab (_taxonomyError) — Produktion lädt
-    // ihn via loadBookSettings. Hier nur loadPublication, also den Buchtyp setzen,
-    // sonst blockt der Save-Gate und savePublication läuft nie.
+    // Buch-Bindung: _loadAll setzt das Formular-Buch, bevor es lädt — Antworten
+    // für ein anderes Buch verwirft jeder Loader (save-paths.js#_isFormBook).
+    card._formBookId = 102;
     card.bookSettingsBuchtyp = 'roman';
     await card.loadPublication();
 

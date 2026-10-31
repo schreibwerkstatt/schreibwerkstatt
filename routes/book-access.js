@@ -117,7 +117,7 @@ router.post('/:book_id/share', aclParamGuard('owner'), jsonBody, (req, res) => {
     res.json({ ok: true, email: target, role });
   } catch (e) {
     logger.error(`POST /books/:id/share fehlgeschlagen: ${e.message}`);
-    res.status(500).json({ error_code: 'SHARE_FAILED', detail: e.message });
+    res.status(500).json({ error_code: 'SHARE_FAILED' });
   }
 });
 
@@ -174,11 +174,11 @@ router.post('/:book_id/transfer-ownership', aclParamGuard('owner'), jsonBody, (r
     logger.info(`Ownership-Transfer: book=${req.bookId} ${previousOwner}→${newOwner}`);
     res.json({ ok: true, previous_owner: previousOwner, new_owner: newOwner });
   } catch (e) {
-    if (e.message === 'transferOwnership: target not in book_access') {
+    if (e.code === 'TARGET_NOT_IN_ACCESS') {
       return res.status(404).json({ error_code: 'TARGET_NOT_IN_ACCESS' });
     }
     logger.error(`Transfer fehlgeschlagen: ${e.message}`);
-    res.status(500).json({ error_code: 'TRANSFER_FAILED', detail: e.message });
+    res.status(500).json({ error_code: 'TRANSFER_FAILED' });
   }
 });
 
@@ -205,7 +205,7 @@ router.put('/:book_id/category', aclParamGuard('editor'), jsonBody, (req, res) =
   } catch (e) {
     if (e.message === 'CATEGORY_NOT_FOUND') return res.status(404).json({ error_code: 'CATEGORY_NOT_FOUND' });
     logger.error(`PUT /books/:id/category: ${e.message}`);
-    res.status(500).json({ error_code: 'UPDATE_FAILED', detail: e.message });
+    res.status(500).json({ error_code: 'UPDATE_FAILED' });
   }
 });
 
@@ -259,7 +259,7 @@ router.post('/pages/:page_id/lock', jsonBody, (req, res) => {
       });
     }
     logger.error(`acquireLock fehlgeschlagen: ${e.message}`);
-    res.status(500).json({ error_code: 'LOCK_FAILED', detail: e.message });
+    res.status(500).json({ error_code: 'LOCK_FAILED' });
   }
 });
 

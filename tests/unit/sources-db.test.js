@@ -344,7 +344,7 @@ test('Verzeichnis-Settings: Defaults, Patch und Enum-Whitelist', () => {
 test('Verzeichnis-Settings beruehren die uebrigen Buch-Settings nicht', () => {
   const bookId = 4007;
   schema.upsertBookByName(bookId, 'Koexistenz');
-  schema.saveBookSettings(bookId, 'en', 'US', 'sachbuch', 'Kontext');
+  schema.saveBookSettings(bookId, { language: 'en', region: 'US', buchtyp: 'sachbuch', buch_kontext: 'Kontext' });
   schema.setBookCitationSettings(bookId, { citation_style: 'chicago-ad', bibliography_enabled: 1 });
 
   const s = schema.getBookSettings(bookId);

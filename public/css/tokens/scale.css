@@ -5,6 +5,7 @@
   --z-sticky:      100;   /* sticky Inhalts-Header in Listen/Heatmaps */
   --z-header:      200;   /* sticky Card-Header, Toolbar-Header */
   --z-spellcheck:  400;   /* LanguageTool-Overlay: ueber Inhalt, unter Popover/Toolbar */
+  --z-dock:        500;   /* schwebende Docks (Vorlesen, Diktat) ueber dem Seitentext samt LT-Overlay, unter Popovern */
   --z-popover:     1000;  /* Synonym-Menu, Figur-Lookup, Combobox-Dropdown, Focus-Counter */
   --z-overlay:     2000;  /* Palette-Overlay, ähnliche Fullscreen-Trigger */
   --z-toolbar:     2100;  /* Edit-Bubble-Toolbar, Slash-Menü, Find-and-Replace — über Fullscreen-Karte */

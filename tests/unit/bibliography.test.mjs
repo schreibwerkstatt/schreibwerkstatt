@@ -74,7 +74,7 @@ function setSettings(bookId, patch) {
     ...patch,
   });
 }
-schema.saveBookSettings(BOOK, 'de', 'CH', null, null);
+schema.saveBookSettings(BOOK, { language: 'de', region: 'CH', buchtyp: null, buch_kontext: null });
 setSettings(BOOK, {});
 
 // ── buildBibliography ────────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ test('Titel: Buch-Einstellung schlaegt Sprach-Default', async () => {
   const de = await buildBibliography({ bookId: BOOK });
   assert.equal(de.title, 'Quellenverzeichnis');
 
-  schema.saveBookSettings(BOOK_EN, 'en', 'US', null, null);
+  schema.saveBookSettings(BOOK_EN, { language: 'en', region: 'US', buchtyp: null, buch_kontext: null });
   setSettings(BOOK_EN, { citation_style: 'apa7' });
   const en = await buildBibliography({ bookId: BOOK_EN });
   assert.equal(en.lang, 'en');

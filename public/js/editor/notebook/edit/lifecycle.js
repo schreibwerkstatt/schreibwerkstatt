@@ -2,6 +2,7 @@
 import { clearDraft, clearNormalSnapshot, editorHost, findInHtml, getActiveEditorContainer, htmlToText, installEditCounter, isNoChange, isPageConflict, mountEditorHtml, readConflictBody, readDraft, readEditorPrefs, savePage, sortByPosition, stripLektoratMarks, writeDraft, writeNormalSnapshot } from './_shared.js';
 import { isLiveEditedElsewhere, startLiveEdit, stopLiveEdit } from '../../live-edit.js';
 import { noteEditStartDuringOutage, noteSaveRecovered } from '../save-outage.js';
+import { claimSaveOwner, ownsSave } from '../save-owner.js';
 
 export const lifecycleMethods = {
   // Container-Lookup: einziger Eintrittspunkt für beide Modi.
@@ -399,6 +400,7 @@ export const lifecycleMethods = {
     // hier schon gefangene Stempel läuft garantiert in einen 409 gegen den
     // eigenen Schreibvorgang.
     app.editSaving = true;
+    const saveOwner = claimSaveOwner();
     const source = app.focusActive ? 'focus' : 'main';
     // Seite beim Save-Start pinnen (siehe _stillEditing): nach jedem `await`
     // kann ein Seitenwechsel `app.currentPage` bereits auf die nächste Seite
@@ -475,7 +477,7 @@ export const lifecycleMethods = {
         app.setStatus(this._noteSaveFailure(e, { offlineKey: 'edit.offlineSaved' }), false, 8000);
       }
     } finally {
-      app.editSaving = false;
+      if (ownsSave(saveOwner)) app.editSaving = false;
     }
   },
 
@@ -524,6 +526,7 @@ export const lifecycleMethods = {
     // (oder exitFocusMode-quickSave + Auto-Save-Timer) den gleichen PUT zweimal
     // absetzen.
     app.editSaving = true;
+    const saveOwner = claimSaveOwner();
     const source = app.focusActive ? 'focus' : 'main';
     // Seite pinnen (siehe saveEdit). Der Draft oben ist schon geschrieben —
     // ein Abbruch nach Seitenwechsel lässt ihn einfach stehen.
@@ -584,7 +587,7 @@ export const lifecycleMethods = {
       const msg = this._noteSaveFailure(e);
       app.setStatus(msg, false, app.saveFailKind === 'network' && !navigator.onLine ? 3000 : 8000);
     } finally {
-      app.editSaving = false;
+      if (ownsSave(saveOwner)) app.editSaving = false;
     }
   },
 };

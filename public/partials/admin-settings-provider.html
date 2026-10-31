@@ -4,7 +4,7 @@
 
       <nav class="admin-settings-subtabs" role="tablist">
         <template x-for="p in ['claude','ollama','openai-compat','profiles']" :key="p">
-          <button type="button" role="tab"
+          <button :aria-selected="adminSettingsProviderSubtab === p" type="button" role="tab"
                   :class="['admin-settings-subtab', adminSettingsProviderSubtab === p ? 'is-active' : '', adminSettingsForm['ai.provider'] === p ? 'is-default-provider' : '']"
                   @click="adminSettingsProviderSubtab = p">
             <span x-text="$app.t('admin.settings.section.' + p)"></span>

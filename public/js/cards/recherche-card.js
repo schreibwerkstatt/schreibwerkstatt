@@ -56,6 +56,7 @@ export function registerRechercheCard() {
     _statusSortables: [],
     // Speicher des EINEN Memo-Helfers der Karte (_memo in recherche/status.js).
     _memos: {},
+    _rechercheLoadSeq: 0,  // Lade-Token (book-guard.js#loadToken)
 
     loading: false,
     // Refetch bei Filter/Sort/Suche (Daten schon vorhanden): Liste bleibt stehen

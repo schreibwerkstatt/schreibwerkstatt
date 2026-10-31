@@ -172,7 +172,7 @@
     <textarea class="chat-input research-chat-input" x-model="researchChatInput" rows="1"
               :placeholder="$app.t('recherche.chat.placeholder')" :aria-label="$app.t('recherche.chat.placeholder')"
               :disabled="researchChatLoading"
-              @keydown.enter="if(!$event.isComposing && $event.keyCode !== 229 && !$event.shiftKey && !$event.ctrlKey && !$event.metaKey) { $event.preventDefault(); sendResearchChatMessage(); }"></textarea>
+              @keydown.enter="$enter($event, () => sendResearchChatMessage(), { multiline: true })"></textarea>
     <button type="button" class="chat-send-btn" @click="sendResearchChatMessage()" :disabled="researchChatLoading || !researchChatInput.trim()" :aria-label="$app.t('chat.send')">
       <span x-show="researchChatLoading" class="spinner"></span>
       <svg x-show="!researchChatLoading" class="icon" aria-hidden="true"><use href="/icons.svg#arrow-up"/></svg>
@@ -181,18 +181,9 @@
   <div class="chat-input-hint" x-text="$app.t('recherche.chat.hint')"></div>
 
   <!-- Session-Historie -->
-  <div x-show="researchChatSessions.length > 0" class="card-history-section">
+  <div x-show="researchChatSessions.length > 0" class="card-history-section"
+       x-data="{ sessionList: { sessions: () => researchChatSessions, activeId: () => researchChatSessionId, running: id => isResearchChatSessionRunning(id), deleteDisabled: id => isResearchChatSessionRunning(id), load: id => loadResearchChatSession(id), remove: id => deleteResearchChatSession(id), untitledKey: 'recherche.chat.untitled' } }">
     <div class="chat-history-title" x-text="$app.t('chat.history')"></div>
-    <template x-for="s in researchChatSessions" :key="s.id">
-      <div
-        class="chat-session-item hover-reveal-host"
-        :class="s.id === researchChatSessionId ? 'chat-session-item--active' : ''"
-        @click="loadResearchChatSession(s.id)"
-      >
-        <div class="chat-session-preview" x-text="(s.title || s.preview || $app.t('recherche.chat.untitled')).slice(0, 80)"></div>
-        <div class="chat-session-meta"><span x-show="isResearchChatSessionRunning(s.id)" class="spinner chat-session-running" role="status" :aria-label="$app.t('chat.sessionRunning')" :data-tip="$app.t('chat.sessionRunning')"></span><span x-text="$app.formatDate(s.last_message_at)"></span></div>
-        <button type="button" class="chat-session-delete btn-card-close hover-reveal" :disabled="isResearchChatSessionRunning(s.id)" @click.stop="deleteResearchChatSession(s.id)" :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
-      </div>
-    </template>
+    <!-- @include chat-session-list -->
   </div>
 </div>

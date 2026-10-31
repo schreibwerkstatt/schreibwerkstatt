@@ -10,7 +10,7 @@
     <template x-for="item in items" :key="item.id">
       <div class="research-item hover-reveal-host" :data-research-id="item.id"
            @contextmenu="if (!busy) openItemMenu($event, 'list', item)" x-long-press :class="{ 'research-item--pinned': item.pinned, 'research-item--archived': item.archived, 'research-item--open': detailItemId === item.id, 'research-item--selected': bulkMode && isBulkSelected(item) }">
-        <div class="research-item-body research-item-body--clickable" @click="onItemBodyClick(item, $event)">
+        <div class="research-item-body research-item-body--clickable internal-link" @click="onItemBodyClick(item, $event)">
           <div class="research-item-head">
             <!-- Mehrfachauswahl: Checkbox nur im Auswahl-Modus (bulk.js). -->
             <input type="checkbox" class="research-item-select" x-show="bulkMode" x-cloak

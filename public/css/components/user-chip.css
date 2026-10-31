@@ -8,7 +8,7 @@
   align-items: center;
   gap: var(--space-6);
   padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-2xs);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-hover, transparent);
   border: 1px solid var(--color-border, transparent);
   font-size: var(--font-size-xs);
@@ -18,7 +18,7 @@
 .user-chip--self {
   border-color: var(--color-accent);
   background: var(--color-accent-soft, transparent);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .user-chip__avatar {
@@ -31,7 +31,7 @@
   font-weight: var(--fw-bold);
   background: hsl(var(--avatar-hue, 220) var(--avatar-bg-sl));
   color: hsl(var(--avatar-hue, 220) var(--avatar-fg-sl));
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   line-height: 1;
 }
 

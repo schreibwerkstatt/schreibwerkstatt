@@ -43,6 +43,8 @@ export const hashSetupMethods = {
     const storeWatched = [
       () => this.$store.nav.selectedBookId,
       () => this.$store.catalogUi.selectedFigurId,
+      // Figuren-Reiter-Permalink: #…/figuren/<reiter> (replace, gleiche Kategorie).
+      () => this.$store.catalogUi.figurenTab,
       () => this.$store.catalogUi.selectedOrtId,
       () => this.$store.catalogUi.selectedSongId,
       () => this.$store.catalogUi.selectedSzeneId,

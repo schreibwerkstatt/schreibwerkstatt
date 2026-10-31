@@ -100,6 +100,9 @@ export function registerDocxExportCard() {
     async loadProfiles() {
       try {
         const r = await fetch('/docx-export/profiles');
+        // 5xx/Netzfehler ≠ „noch keine Profile" — sonst legte jedes Öffnen ein
+        // weiteres Standard-Profil an.
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const d = await r.json();
         this.profiles = d.profiles || [];
         if (!this.profiles.length) {
@@ -240,6 +243,9 @@ export function registerDocxExportCard() {
 
     // ── Export-Trigger ─────────────────────────────────────────────────────
     async exportDocx() {
+      // Doppelklick: der zweite Klick käme während des awaited Saves durch und
+      // startete einen zweiten Job.
+      if (this.exporting || this.saving) return;
       if (this.canEdit() && this.activeProfile) {
         await this.saveProfile();
         if (this.exportError) return;

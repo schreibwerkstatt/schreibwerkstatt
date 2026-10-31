@@ -17,8 +17,10 @@ router.get('/:book_id', aclParamGuard('viewer'), (req, res) => {
   res.json(bp.getMeta(req.bookId));
 });
 
+// Teil-PUT: fehlende Keys behalten den gespeicherten Stand (additiv zum
+// Client-Vertrag — wer bisher den vollen Body schickt, merkt keinen Unterschied).
 router.put('/:book_id', aclParamGuard('editor'), jsonBody, (req, res) => {
-  const meta = bp.upsertMeta(req.bookId, req.body || {});
+  const meta = bp.patchMeta(req.bookId, req.body && typeof req.body === 'object' ? req.body : {});
   // Der Klappentext (description) ist Teil des Buch-Suchtreffers.
   searchIndex.upsertBookMeta(req.bookId);
   res.json(meta);

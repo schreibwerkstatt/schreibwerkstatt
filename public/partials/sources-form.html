@@ -25,10 +25,10 @@
   </div>
 
   <div class="card-form-grid">
-    <div class="card-form-row">
-      <label class="card-form-label" x-text="$app.t('sources.field.cslType')"></label>
+    <div x-id="['fld']" class="card-form-row">
+      <label :id="$id('fld')" class="card-form-label" x-text="$app.t('sources.field.cslType')"></label>
       <div class="card-form-field">
-        <div x-data="combobox({ placeholder: $app.t('sources.field.cslType'), compact: false })"
+        <div :aria-labelledby="$id('fld')" x-data="combobox({ placeholder: $app.t('sources.field.cslType'), compact: false })"
              x-modelable="value" x-model="srcDraft.csl_type"
              x-effect="options = sourceTypeOptions()"></div>
         <p class="card-form-field-note" x-text="$app.t('sources.field.cslType.hint')"></p>
@@ -38,10 +38,10 @@
     <!-- Urheber + Herausgeber. Eine Zeile trägt entweder Nachname/Vorname ODER
          eine Körperschaft; `literal` gefüllt gewinnt (siehe fields.js). -->
     <template x-for="kind in ['authors', 'editors']" :key="kind">
-      <div class="card-form-row card-form-row--top">
-        <label class="card-form-label"
-               x-text="$app.t(kind === 'authors' ? 'sources.field.authors' : 'sources.field.editors')"></label>
-        <div class="pub-repeater">
+      <div x-id="['fld']" class="card-form-row card-form-row--top">
+        <span :id="$id('fld')" class="card-form-label"
+               x-text="$app.t(kind === 'authors' ? 'sources.field.authors' : 'sources.field.editors')"></span>
+        <div class="pub-repeater" role="group" :aria-labelledby="$id('fld')">
           <template x-for="(p, i) in srcDraft[kind]" :key="i">
             <div class="pub-repeater-row sources-person-row">
               <input type="text" x-model="p.family" :placeholder="$app.t('sources.person.family')"
@@ -65,8 +65,8 @@
 
     <!-- Typabhängige Freitext-Felder -->
     <template x-for="f in srcVisibleFields()" :key="f.key">
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t(f.labelKey)"></label>
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t(f.labelKey)"></label>
         <div class="card-form-field">
           <!-- Zwei x-if-Varianten statt eines Inputs mit `:data-spellcheck`:
                der Spellcheck-Dispatcher greift Felder über einen statischen
@@ -76,7 +76,7 @@
                stehenlassen. `f.spell` ist pro Feld-Key konstant, die beiden
                Zweige flippen also nie für denselben Knoten. -->
           <template x-if="f.options">
-            <div x-data="combobox($app.t(f.labelKey), $app.t('sources.oton.unset'))"
+            <div :aria-labelledby="$id('fld')" x-data="combobox($app.t(f.labelKey), $app.t('sources.oton.unset'))"
                  x-modelable="value" x-model="srcDraft[f.key]"
                  x-effect="options = f.options.map(o => ({ value: o, label: $app.t(f.optionPrefix + o) }))"></div>
           </template>
@@ -123,27 +123,27 @@
       </div>
     </div>
 
-    <div class="card-form-row">
-      <label class="card-form-label" x-text="$app.t('sources.field.citekey')"></label>
+    <div x-id="['fld']" class="card-form-row">
+      <label :for="$id('fld')" class="card-form-label" x-text="$app.t('sources.field.citekey')"></label>
       <div class="card-form-field">
-        <input type="text" class="card-form-input" x-model="srcDraft.citekey"
+        <input :id="$id('fld')" type="text" class="card-form-input" x-model="srcDraft.citekey"
                :aria-label="$app.t('sources.field.citekey')" maxlength="500">
         <p class="card-form-field-note" x-text="$app.t('sources.field.citekey.hint')"></p>
       </div>
     </div>
 
-    <div class="card-form-row card-form-row--top">
-      <label class="card-form-label" x-text="$app.t('sources.field.note')"></label>
+    <div x-id="['fld']" class="card-form-row card-form-row--top">
+      <label :for="$id('fld')" class="card-form-label" x-text="$app.t('sources.field.note')"></label>
       <div class="card-form-field">
-        <textarea class="card-form-textarea" x-model="srcDraft.note" rows="3" maxlength="4000"
+        <textarea :id="$id('fld')" class="card-form-textarea" x-model="srcDraft.note" rows="3" maxlength="4000"
                   :aria-label="$app.t('sources.field.note')" data-spellcheck="spelling"></textarea>
         <p class="card-form-field-note" x-text="$app.t('sources.field.note.hint')"></p>
       </div>
     </div>
 
-    <div class="card-form-row">
-      <label class="card-form-label" x-text="$app.t('sources.field.status')"></label>
-      <div class="form-stack">
+    <div x-id="['fld']" class="card-form-row">
+      <span :id="$id('fld')" class="card-form-label" x-text="$app.t('sources.field.status')"></span>
+      <div role="group" :aria-labelledby="$id('fld')" class="form-stack">
         <label class="form-check">
           <input type="checkbox" x-model="srcDraft.archived">
           <span>
@@ -155,7 +155,7 @@
     </div>
 
     <div class="card-form-row card-form-row--top">
-      <label class="card-form-label" x-text="$app.t('sources.preview')"></label>
+      <span class="card-form-label" x-text="$app.t('sources.preview')"></span>
       <div class="card-form-field">
         <p class="sources-preview" x-text="srcPreview()"></p>
         <p class="card-form-field-note" x-text="$app.t('sources.preview.hint')"></p>
@@ -169,9 +169,9 @@
          semantisch indiziert; Upload triggert asynchron den Index-Job, dessen
          Fortschritt die Karte pollt (public/js/sources/doc.js). -->
     <template x-if="srcEditingId === 'new' && srcPdfPendingName">
-      <div class="card-form-row card-form-row--top">
-        <label class="card-form-label" x-text="$app.t('sources.doc.section')"></label>
-        <div class="card-form-field">
+      <div x-id="['fld']" class="card-form-row card-form-row--top">
+        <span :id="$id('fld')" class="card-form-label" x-text="$app.t('sources.doc.section')"></span>
+        <div class="card-form-field" role="group" :aria-labelledby="$id('fld')">
           <div class="sources-doc-attached">
             <span x-text="srcPdfPendingName"></span>
             <button type="button" class="icon-btn icon-btn--ghost" @click="discardPendingPdf()"
@@ -182,9 +182,9 @@
       </div>
     </template>
     <template x-if="srcEditingId !== 'new'">
-      <div class="card-form-row card-form-row--top">
-        <label class="card-form-label" x-text="$app.t('sources.doc.section')"></label>
-        <div class="card-form-field">
+      <div x-id="['fld']" class="card-form-row card-form-row--top">
+        <span :id="$id('fld')" class="card-form-label" x-text="$app.t('sources.doc.section')"></span>
+        <div role="group" :aria-labelledby="$id('fld')" class="card-form-field">
           <template x-if="!srcDraft.has_doc">
             <div class="sources-doc-upload">
               <input type="file" accept="application/pdf"
@@ -195,7 +195,7 @@
           </template>
           <template x-if="srcDraft.has_doc">
             <div class="sources-doc-attached">
-              <button type="button" class="internal-link sources-doc-link" @click="downloadSourceDoc(srcEditingId)">
+              <button type="button" class="text-link sources-doc-link" @click="downloadSourceDoc(srcEditingId)">
                 <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
                 <span x-text="srcDraft.doc_name || $app.t('sources.doc.fallbackName')"></span>
               </button>

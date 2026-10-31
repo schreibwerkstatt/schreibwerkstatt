@@ -13,7 +13,7 @@
       <template x-for="(fd, fi) in figurenPresenceData().findings" :key="fi">
         <li class="figur-presence-finding">
           <span class="figur-presence-finding-dot" :class="'figur-presence-finding-dot--' + fd.kind" aria-hidden="true"></span>
-          <span class="internal-link" @click="$app.openFigurById(fd.figId)" x-text="figurenPresenceFindingText(fd)"></span>
+          <span class="internal-link text-link" @click="$app.openFigurById(fd.figId)" x-text="figurenPresenceFindingText(fd)"></span>
         </li>
       </template>
     </ul>
@@ -34,7 +34,7 @@
         <tbody>
           <template x-for="row in figurenPresenceData().rows" :key="row.id">
             <tr>
-              <th class="heatmap-rowhead internal-link" @click="$app.openFigurById(row.id)">
+              <th class="heatmap-rowhead internal-link text-link" @click="$app.openFigurById(row.id)">
                 <span class="heatmap-rowhead-main" x-text="row.name"></span>
                 <span class="heatmap-rowhead-sub" x-text="$app.t('figuren.type.' + row.typ)"></span>
               </th>

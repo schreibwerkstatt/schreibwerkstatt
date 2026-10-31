@@ -94,14 +94,27 @@ export function findingErklaerungRaw(f) {
   return f?.erklaerung_key ? tRaw(f.erklaerung_key) : (f?.erklaerung || '');
 }
 
+/** Übersetzung von `error.<code>`; ohne Key `null` (der Code geht nur in die
+ *  Konsole — ein roher Code wie NAME_TAKEN oder der Key selbst ist kein Satz
+ *  für den User). Jeder `error_code` aus routes/ und lib/ hat einen Key oder
+ *  steht begründet auf der Allowlist: tests/unit/error-codes-translated.test.mjs. */
+function _errorCodeText(code, params) {
+  const key = 'error.' + code;
+  const msg = tRaw(key, params || {});
+  if (msg !== key) return msg;
+  try { console.warn('[i18n] unübersetzter error_code:', code); } catch { /* ignore */ }
+  return null;
+}
+
 /** Übersetzt eine Backend-Fehlerantwort. Akzeptiert:
- *  - { error_code: 'CODE', params: {...} } → t('error.CODE', params)
+ *  - { error_code: 'CODE', params: {...} } → t('error.CODE', params);
+ *                                            ohne Übersetzung common.unknownError
  *  - { error: 'freier Text' }              → Text direkt (Legacy-Fallback)
  *  - null / undefined / {}                  → common.unknownError
  */
 export function tErrorRaw(response) {
   if (!response) return tRaw('common.unknownError');
-  if (response.error_code) return tRaw('error.' + response.error_code, response.params || {});
+  if (response.error_code) return _errorCodeText(response.error_code, response.params) ?? tRaw('common.unknownError');
   if (response.error)      return response.error;
   return tRaw('common.unknownError');
 }
@@ -116,15 +129,11 @@ export function tFetchError(err) {
 }
 
 /** Fehlertext für einen geworfenen `fetchJson`/`sendJson`-Fehler (utils/net.js):
- *  übersetzter `error_code` (`error.CODE` samt `params`), ohne Übersetzung der
- *  rohe Code, ohne Code die Error-Message. */
+ *  übersetzter `error_code` (`error.CODE` samt `params`), ohne Übersetzung
+ *  common.unknownError (Code nur in der Konsole), ohne Code die Error-Message. */
 export function tFetchErrorRaw(err) {
   const code = err?.code;
-  if (code) {
-    const key = 'error.' + code;
-    const msg = tRaw(key, err.body?.params || {});
-    return msg === key ? code : msg;
-  }
+  if (code) return _errorCodeText(code, err.body?.params) ?? tRaw('common.unknownError');
   return err?.message || tRaw('common.unknownError');
 }
 

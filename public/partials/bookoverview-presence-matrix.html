@@ -28,7 +28,7 @@
     <tbody>
       <template x-for="row in overviewPresence(kind).rows" :key="row.id">
         <tr>
-          <th class="overview-presence-row-head internal-link"
+          <th class="overview-presence-row-head internal-link text-link"
               @click="_openKapitelReview(row.id)"
               :data-tip="$app.t('overview.chapterReviewOpen', { name: row.name })"
               x-text="row.name"></th>

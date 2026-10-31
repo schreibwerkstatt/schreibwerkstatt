@@ -44,12 +44,12 @@
   background: var(--color-bg);
   color: var(--color-text);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-family: inherit;
 }
 .edit-find-input:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-color: var(--color-border-focus);
 }
 .edit-find-count {
   flex: 0 0 auto;
@@ -67,7 +67,7 @@
   background: transparent;
   color: var(--color-text);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: var(--space-3) var(--space-sm);
   font-size: var(--font-size-sm);
   cursor: pointer;

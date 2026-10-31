@@ -96,16 +96,11 @@
            })">
       <thead>
         <tr>
-          <th class="sortable-th" :class="sortClass('_author')" :aria-sort="ariaSort('_author')"
-              @click="sortBy('_author')" x-text="$app.t('sources.col.author')"></th>
-          <th class="sortable-th" :class="sortClass('title')" :aria-sort="ariaSort('title')"
-              @click="sortBy('title')" x-text="$app.t('sources.col.title')"></th>
-          <th class="sortable-th" :class="sortClass('year')" :aria-sort="ariaSort('year')"
-              @click="sortBy('year')" x-text="$app.t('sources.col.year')"></th>
-          <th class="sortable-th" :class="sortClass('_typeLabel')" :aria-sort="ariaSort('_typeLabel')"
-              @click="sortBy('_typeLabel')" x-text="$app.t('sources.col.type')"></th>
-          <th class="sortable-th" :class="sortClass('cite_count')" :aria-sort="ariaSort('cite_count')"
-              @click="sortBy('cite_count')" x-text="$app.t('sources.col.cited')"></th>
+          <th x-bind="sortTh('_author')" x-text="$app.t('sources.col.author')"></th>
+          <th x-bind="sortTh('title')" x-text="$app.t('sources.col.title')"></th>
+          <th x-bind="sortTh('year')" x-text="$app.t('sources.col.year')"></th>
+          <th x-bind="sortTh('_typeLabel')" x-text="$app.t('sources.col.type')"></th>
+          <th x-bind="sortTh('cite_count')" x-text="$app.t('sources.col.cited')"></th>
           <th></th>
         </tr>
       </thead>
@@ -120,7 +115,7 @@
                  Zelle klebt unabhaengig von der Zeilenhoehe oben. -->
             <td class="sources-cell-title">
               <span class="sources-title-stack">
-                <span class="sources-title internal-link" @click="startEditSource(s)" x-text="s.title || $app.t('sources.untitled')"></span>
+                <span class="sources-title internal-link text-link" @click="startEditSource(s)" x-text="s.title || $app.t('sources.untitled')"></span>
                 <span class="sources-container" x-show="s.container_title" x-text="s.container_title"></span>
                 <!-- O-Ton: Rolle der sprechenden Person + Autorisierungsstand.
                      Das Warn-Badge greift nur, wenn der O-Ton auch wirklich im

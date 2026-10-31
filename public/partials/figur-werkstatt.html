@@ -55,14 +55,15 @@
 
       <div class="werkstatt-list" role="list">
         <template x-for="d in drafts" :key="d.id">
-          <button type="button"
-                  class="werkstatt-list-item"
-                  :class="{ 'werkstatt-list-item--selected': d.id === selectedDraftId }"
-                  @click="selectDraft(d.id)"
-                  role="listitem">
-            <span class="werkstatt-list-name" x-text="d.name"></span>
-            <span class="werkstatt-list-archetype" x-show="d.archetype" x-text="archetypeLabel(d.archetype)"></span>
-          </button>
+          <div class="werkstatt-list-entry" role="listitem">
+            <button :aria-pressed="d.id === selectedDraftId" type="button"
+                    class="werkstatt-list-item"
+                    :class="{ 'werkstatt-list-item--selected': d.id === selectedDraftId }"
+                    @click="selectDraft(d.id)">
+              <span class="werkstatt-list-name" x-text="d.name"></span>
+              <span class="werkstatt-list-archetype" x-show="d.archetype" x-text="archetypeLabel(d.archetype)"></span>
+            </button>
+          </div>
         </template>
       </div>
 
@@ -171,10 +172,10 @@
           </div>
         </div>
 
-        <div class="card-form-row">
-          <label class="card-form-label" x-text="$app.t('werkstatt.field.archetype')"></label>
+        <div x-id="['fld']" class="card-form-row">
+          <label :id="$id('fld')" class="card-form-label" x-text="$app.t('werkstatt.field.archetype')"></label>
           <div class="form-stack">
-            <div x-data="combobox($app.t('werkstatt.archetype.placeholder'), $app.t('werkstatt.archetype.frei'))"
+            <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('werkstatt.archetype.placeholder'), $app.t('werkstatt.archetype.frei'))"
                  x-modelable="value"
                  x-model="editArchetype"
                  x-effect="options = [
@@ -343,7 +344,7 @@
               <div class="entity-list entity-list--accented" x-show="consistencyResult && consistencyResult.konflikte.length > 0">
                 <template x-for="(k, idx) in consistencyResult ? consistencyResult.konflikte : []" :key="idx">
                   <div>
-                    <div class="entity-row" :class="{ 'entity-row--selected': selectedKonfliktIdx === idx }"
+                    <div class="entity-row internal-link" :class="{ 'entity-row--selected': selectedKonfliktIdx === idx }"
                          @click.stop="selectedKonfliktIdx = selectedKonfliktIdx === idx ? null : idx">
                       <span class="severity-tag" :class="befundSeverityClass(k.schwere)" x-text="$app.t('werkstatt.severity.' + k.schwere)"></span>
                       <span class="entity-row-title" x-text="k.feld"></span>

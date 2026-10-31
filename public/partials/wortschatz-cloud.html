@@ -5,7 +5,7 @@
      die Ranglisten, nur nach Gewicht skaliert. Zwei Modi, weil die Wortliste zwei
      Auswahlachsen hat (Häufigkeit vs. Keyness, siehe docs/wortschatz.md).
      Layout: d3-cloud, lazy geladen — siehe public/js/book/wortschatz-cloud.js. -->
-<div x-show="wortschatzTab === 'cloud'">
+<div role="tabpanel" x-show="wortschatzTab === 'cloud'">
   <div class="wortschatz-cloud-head">
     <div class="seg-toggle" role="group" :aria-label="$app.t('wortschatz.cloud.modeLabel')">
       <button type="button"

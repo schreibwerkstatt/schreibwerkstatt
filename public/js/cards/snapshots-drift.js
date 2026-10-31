@@ -8,6 +8,7 @@
 // Hinweis kommt erst wieder, wenn sich die Drift-Signatur aendert.
 
 import { fetchJson } from '../utils.js';
+import { isSelectedBook } from './book-guard.js';
 
 export const snapshotsDriftMethods = {
   // Best-effort: bei Fehler bleibt der Hinweis einfach aus.
@@ -15,9 +16,12 @@ export const snapshotsDriftMethods = {
     if (!bookId || !this.snapshots.length) { this.drift = null; return; }
     this.driftLoading = true;
     try {
-      this.drift = await fetchJson(`/snapshots/${bookId}/drift`);
+      const drift = await fetchJson(`/snapshots/${bookId}/drift`);
+      if (!isSelectedBook(bookId)) return;
+      this.drift = drift;
     } catch (e) {
       console.error('[snapshots:drift]', e);
+      if (!isSelectedBook(bookId)) return;
       this.drift = null;
     } finally {
       this.driftLoading = false;

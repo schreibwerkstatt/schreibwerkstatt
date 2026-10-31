@@ -156,7 +156,7 @@ test('GET /time-check: Chronologie pro Lane + geerbte Strang-Hauptfigur', async 
   const B = 9522;
   db.prepare("INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, 'Zeitbuch', ?, ?)").run(B, NOW, NOW);
   require('../../db/book-access').grantAccess(B, OWNER, 'editor', OWNER);
-  require('../../db/book-settings').saveBookSettings(B, 'de', 'CH', null, null, null, null, 0, 0, null, 0, null, null, null, null, 1);
+  require('../../db/book-settings').saveBookSettings(B, { language: 'de', region: 'CH', buchtyp: null, buch_kontext: null, erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 0, daily_goal_chars: null, orte_real: 0, schauplatz_land: null, goal_target_chars: null, goal_deadline: null, stilprofil: null, zeitlinie_real: 1 });
   db.prepare(`INSERT INTO figures (book_id, user_email, fig_id, name, kurzname, geburtstag, updated_at) VALUES (?, ?, 'fig_mara', 'Mara', 'Mara', '1979', ?)`).run(B, OWNER, NOW);
   const act = (await call('POST', '/plot/acts', { book_id: B, name: 'Akt Z' })).body;
   const tA = (await call('POST', '/plot/threads', { book_id: B, name: 'A', figure_id: 'fig_mara' })).body;

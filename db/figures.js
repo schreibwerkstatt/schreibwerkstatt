@@ -10,7 +10,7 @@ const { RELATION_INVERSES, dedupRelations, figIdMaps } = require('./figures/refs
 const { planFigurenMatch, saveFigurenToDb } = require('./figures/save');
 const { activeFigureSql, countActiveFigures } = require('./figures/active');
 const { listFigureAliasesByFigure, addFigureAliases } = require('./figures/aliases');
-const { PATCHABLE_FIELDS, validateFigurePatch, patchFigure } = require('./figures/patch');
+const { PATCHABLE_FIELDS, validateFigurePatch, patchFigure, deleteStaleFigures } = require('./figures/patch');
 const { updateFigurenEvents, updateFigurenSoziogramm, addFigurenBeziehungen } = require('./figures/events');
 const {
   listFigurenWithDetails, getChapterFigures, rebuildFigureAppearances,
@@ -26,6 +26,7 @@ module.exports = {
   PATCHABLE_FIELDS,
   validateFigurePatch,
   patchFigure,
+  deleteStaleFigures,
   RELATION_INVERSES,
   dedupRelations,
   figIdMaps,

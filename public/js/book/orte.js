@@ -2,6 +2,7 @@
 // und der Schauplatz-Karte gerufen). Pflege-Endpunkte: docs/schauplaetze.md.
 
 import { fetchJson } from '../utils.js';
+import { loadToken } from '../cards/book-guard.js';
 
 // Server-`error_code` der Pflege-Routen → i18n-Key; Unbekanntes fällt auf den
 // generischen Speicherfehler.
@@ -23,9 +24,13 @@ async function _send(method, url, body) {
 }
 
 export const orteMethods = {
+  // Buchwechsel-/Doppel-Load-Guard: verspätete Antwort des vorigen Buchs (oder
+  // eines älteren Loads) darf den Katalog nicht überschreiben.
   async loadOrte(bookId) {
+    const isCurrent = loadToken(this, '_orteLoadSeq', bookId);
     try {
       const data = await fetchJson('/locations/' + bookId);
+      if (!isCurrent()) return;
       this.$store.catalog.orte = data?.orte || [];
       this.$store.catalogUi.orteUpdatedAt = data?.updated_at || null;
     } catch (e) {

@@ -15,14 +15,10 @@
            })">
       <thead>
         <tr>
-          <th class="sortable-th" :class="sortClass('name')" :aria-sort="ariaSort('name')"
-              @click="sortBy('name')" x-text="$app.t('snapshots.trash.col.page')"></th>
-          <th class="sortable-th" :class="sortClass('chapter_name')" :aria-sort="ariaSort('chapter_name')"
-              @click="sortBy('chapter_name')" x-text="$app.t('snapshots.trash.col.chapter')"></th>
-          <th class="sortable-th" :class="sortClass('deleted_at')" :aria-sort="ariaSort('deleted_at')"
-              @click="sortBy('deleted_at')" x-text="$app.t('snapshots.trash.col.deletedAt')"></th>
-          <th class="sortable-th" :class="sortClass('deleted_by')" :aria-sort="ariaSort('deleted_by')"
-              @click="sortBy('deleted_by')" x-text="$app.t('snapshots.trash.col.deletedBy')"></th>
+          <th x-bind="sortTh('name')" x-text="$app.t('snapshots.trash.col.page')"></th>
+          <th x-bind="sortTh('chapter_name')" x-text="$app.t('snapshots.trash.col.chapter')"></th>
+          <th x-bind="sortTh('deleted_at')" x-text="$app.t('snapshots.trash.col.deletedAt')"></th>
+          <th x-bind="sortTh('deleted_by')" x-text="$app.t('snapshots.trash.col.deletedBy')"></th>
           <th x-text="$app.t('snapshots.col.actions')"></th>
         </tr>
       </thead>

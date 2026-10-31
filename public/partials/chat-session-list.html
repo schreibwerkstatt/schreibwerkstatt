@@ -1,0 +1,27 @@
+<!-- Sitzungsliste eines Chats (Fragment, string-seitig per Include-Marker in
+     chat.html [Abschnitts- + Buch-Chat], ideen-chat.html, plot-chat.html und
+     recherche-chat.html eingebunden). Geteilt ist nur das Markup; jeder Chat
+     behält seine eigenen Methoden (docs/chats.md). Der Einbinder legt im
+     umgebenden Element `x-data="{ sessionList: { … } }"` die Adapter an:
+       sessions()        → Liste der Sitzungen
+       activeId()        → ID der offenen Sitzung
+       running(id)       → Spinner «läuft» an der Zeile
+       deleteDisabled(id)→ Löschen gesperrt (Job läuft)
+       load(id)          → Sitzung öffnen
+       remove(id)        → Sitzung löschen
+       untitledKey       → i18n-Key für eine Sitzung ohne Titel/Vorschau
+     Die Zeile ist `.internal-link` (Tab/Enter/Leertaste über die globale
+     Delegation, app/boot/internal-links.js); der Löschknopf ist ein eigener
+     Button und stoppt den Klick. -->
+<template x-for="s in sessionList.sessions()" :key="s.id">
+  <div
+    class="chat-session-item hover-reveal-host internal-link"
+    :class="s.id === sessionList.activeId() ? 'chat-session-item--active' : ''"
+    :aria-current="s.id === sessionList.activeId() ? 'true' : null"
+    @click="sessionList.load(s.id)"
+  >
+    <div class="chat-session-preview" x-text="(s.title || s.preview || $app.t(sessionList.untitledKey)).slice(0, 80)"></div>
+    <div class="chat-session-meta"><span x-show="sessionList.running(s.id)" class="spinner chat-session-running" role="status" :aria-label="$app.t('chat.sessionRunning')" :data-tip="$app.t('chat.sessionRunning')"></span><span x-text="$app.formatDate(s.last_message_at)"></span></div>
+    <button type="button" class="chat-session-delete btn-card-close hover-reveal" :disabled="sessionList.deleteDisabled(s.id)" @click.stop="sessionList.remove(s.id)" :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
+  </div>
+</template>

@@ -107,6 +107,8 @@ Der Helper macht:
 | Feld | Zweck |
 |------|-------|
 | `onShow(root)` | Override für `$watch(showFlag)`-Body (z.B. zusätzliche Side-Effects wie Textarea-Fokus, oder Mehrfach-Load). |
+| `onHide(root)` | Läuft, wenn `showFlag` auf `false` geht. Die Komponente lebt weiter und hält ihren State — Ort für «Ungespeichertes speichern oder verwerfen?» (Bucheinstellungen). |
+| `beforeBookChanged(e, ctx, root)` | Wird bei `book:changed` **vor** dem Default-`reset+load` abgewartet; die Karte hält noch den State des alten Buchs (Bucheinstellungen: Rückfrage + Speichern auf das alte Buch). |
 | `onBookChanged(e, ctx, root)` | Override; skipt das Default-`reset+load` (die `timerKeys` räumt der Helper trotzdem vorher ab). Nutzen für Karten mit Coalesce-Logik (Microtask, debounce). |
 | `onViewReset(e, ctx, root)` | Override fürs `view:reset`-Verhalten (die `timerKeys` räumt der Helper trotzdem vorher ab). Nutzen, wenn `view:reset` mehr räumt als `book:changed` (z.B. user-scoped Profile-Liste in PDF-Export). |
 | `resetStateView` | Eigenes Reset-Objekt nur fürs `view:reset` (wenn book vs. view unterschiedlich resetten). |

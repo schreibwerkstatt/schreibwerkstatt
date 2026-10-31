@@ -18,6 +18,7 @@
 import { EVT } from '../events.js';
 import { headingStyleSlice } from './export-heading-style.js';
 import { exportScopeSlice, exportJobSlice, unnumberedChipsSlice, exportSnapshotSlice } from './export-card-base.js';
+import { isSelectedBook, loadToken } from './book-guard.js';
 
 const _EMPTY_META = () => ({
   author_name: '',
@@ -68,6 +69,10 @@ export function registerEpubExportCard() {
 
     pub: _EMPTY_META(),
     pubLoaded: false,
+    // Buch, zu dem `pub` gehört: savePublication schreibt nur dorthin zurück
+    // (Full-Replace-PUT — die Meta eines anderen Buchs wäre ein Datenverlust).
+    _pubBookId: null,
+    _pubLoadSeq: 0,
 
     saving: false,
     savedAt: null,
@@ -94,6 +99,7 @@ export function registerEpubExportCard() {
       this._onBookChanged = async () => {
         this._resetExportRun();
         this.pubLoaded = false;
+        this._pubBookId = null;
         this.exportSnapshotId = '';
         if (window.__app?.showEpubExportCard) { await this.loadPublication(); await this._loadExportSnapshots(); }
         else { this.exportSnapshots = []; }
@@ -105,6 +111,7 @@ export function registerEpubExportCard() {
         if (this._savedAtTimer) { clearTimeout(this._savedAtTimer); this._savedAtTimer = null; }
         this.pub = _EMPTY_META();
         this.pubLoaded = false;
+        this._pubBookId = null;
         this.exportScope = 'book';
         this.exportChapterId = null;
         this.exportPageId = null;
@@ -128,10 +135,14 @@ export function registerEpubExportCard() {
     async loadPublication() {
       const bookId = Alpine.store('nav').selectedBookId;
       if (!bookId) return;
+      const isCurrent = loadToken(this, '_pubLoadSeq', bookId);
       try {
         const r = await fetch(`/publication/${bookId}`);
-        if (!r.ok) return;
-        this.pub = await r.json();
+        if (!r.ok || !isCurrent()) return;
+        const pub = await r.json();
+        if (!isCurrent()) return;
+        this.pub = pub;
+        this._pubBookId = bookId;
         this.pubLoaded = true;
       } catch {}
     },
@@ -145,7 +156,7 @@ export function registerEpubExportCard() {
       // exportEpub ruft uns vor jedem Export auf; schlug loadPublication still
       // fehl oder lief sie nie (Cold-Open), exportieren wir den DB-Stand statt
       // ihn zu loeschen.
-      if (!this.pubLoaded) return;
+      if (!this.pubLoaded || String(this._pubBookId) !== String(bookId)) return;
       this.saving = true;
       this.savedAt = null;
       this.exportError = '';
@@ -165,7 +176,9 @@ export function registerEpubExportCard() {
           this.exportError = window.__app.tError(d) || window.__app.t('epubExport.error.saveFailed');
           return;
         }
-        this.pub = await r.json();
+        const saved = await r.json();
+        if (!isSelectedBook(bookId)) return;
+        this.pub = saved;
         this.savedAt = Date.now();
         if (this._savedAtTimer) clearTimeout(this._savedAtTimer);
         this._savedAtTimer = setTimeout(() => { this.savedAt = null; this._savedAtTimer = null; }, 2500);
@@ -236,6 +249,9 @@ export function registerEpubExportCard() {
 
     // ── Export-Trigger ────────────────────────────────────────────────────
     async exportEpub() {
+      // Doppelklick: der zweite Klick käme während des awaited Saves durch und
+      // startete einen zweiten Job.
+      if (this.exporting || this.saving) return;
       // Settings sind buch-weit und werden serverseitig aus der DB gelesen —
       // vor Export speichern, damit ungespeicherte Änderungen greifen. Nur
       // editor+ darf book_publication schreiben; Viewer exportiert mit DB-Stand.

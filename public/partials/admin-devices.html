@@ -39,20 +39,13 @@
            })">
       <thead>
         <tr>
-          <th class="sortable-th" :class="sortClass('user_email')" :aria-sort="ariaSort('user_email')"
-              @click="sortBy('user_email')" x-text="$app.t('admin.devices.col.user')"></th>
-          <th class="sortable-th" :class="sortClass('device_name')" :aria-sort="ariaSort('device_name')"
-              @click="sortBy('device_name')" x-text="$app.t('admin.devices.col.device')"></th>
-          <th class="sortable-th" :class="sortClass('platform')" :aria-sort="ariaSort('platform')"
-              @click="sortBy('platform')" x-text="$app.t('admin.devices.col.platform')"></th>
-          <th class="sortable-th" :class="sortClass('scopes')" :aria-sort="ariaSort('scopes')"
-              @click="sortBy('scopes')" x-text="$app.t('admin.devices.col.scope')"></th>
-          <th class="sortable-th" :class="sortClass('client_version')" :aria-sort="ariaSort('client_version')"
-              @click="sortBy('client_version')" x-text="$app.t('admin.devices.col.version')"></th>
-          <th class="admin-pool-num sortable-th" :class="sortClass('use_count')" :aria-sort="ariaSort('use_count')"
-              @click="sortBy('use_count')" x-text="$app.t('admin.devices.col.uses')"></th>
-          <th class="sortable-th" :class="sortClass('last_used_at')" :aria-sort="ariaSort('last_used_at')"
-              @click="sortBy('last_used_at')" x-text="$app.t('admin.devices.col.lastUsed')"></th>
+          <th x-bind="sortTh('user_email')" x-text="$app.t('admin.devices.col.user')"></th>
+          <th x-bind="sortTh('device_name')" x-text="$app.t('admin.devices.col.device')"></th>
+          <th x-bind="sortTh('platform')" x-text="$app.t('admin.devices.col.platform')"></th>
+          <th x-bind="sortTh('scopes')" x-text="$app.t('admin.devices.col.scope')"></th>
+          <th x-bind="sortTh('client_version')" x-text="$app.t('admin.devices.col.version')"></th>
+          <th x-bind="sortTh('use_count')" class="admin-pool-num" x-text="$app.t('admin.devices.col.uses')"></th>
+          <th x-bind="sortTh('last_used_at')" x-text="$app.t('admin.devices.col.lastUsed')"></th>
           <th x-text="$app.t('admin.devices.col.lastIp')"></th>
           <th x-text="$app.t('admin.devices.col.status')"></th>
         </tr>

@@ -15,10 +15,10 @@
               </button>
               <div x-bind="panel" x-cloak class="collapsible-section">
                 <div class="card-form-grid">
-                  <div class="card-form-row">
-                    <label class="card-form-label" x-text="$app.t('pdfExport.cover.fit')"></label>
+                  <div x-id="['fld']" class="card-form-row">
+                    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.cover.fit')"></label>
                     <div class="card-form-field">
-                      <div x-data="combobox($app.t('pdfExport.cover.fit'))"
+                      <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.cover.fit'))"
                            x-modelable="value" x-model="activeProfile.config.cover.fit"
                            x-effect="options = [{ value: 'cover', label: $app.t('pdfExport.cover.fitCover') }, { value: 'contain', label: $app.t('pdfExport.cover.fitContain') }]"
 ></div>
@@ -39,46 +39,46 @@
           <div x-bind="panel" x-cloak class="collapsible-section">
             <p class="card-form-field-note" x-text="$app.t('pdfExport.cover.spineHint')"></p>
             <div class="card-form-grid">
-              <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('pdfExport.cover.pageCount')"></label>
+              <div x-id="['fld']" class="card-form-row">
+                <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.cover.pageCount')"></label>
                 <div class="card-form-field">
-                  <input type="text" x-data="numInput({ step: 1, min: 0, max: 5000, integer: true })" x-modelable="value" x-model="activeProfile.config.coverSpec.pageCount" class="pdfx-num-input">
+                  <input :id="$id('fld')" type="text" x-data="numInput({ step: 1, min: 0, max: 5000, integer: true })" x-modelable="value" x-model="activeProfile.config.coverSpec.pageCount" class="pdfx-num-input">
                   <p class="card-form-field-note" x-text="$app.t('pdfExport.cover.pageCountAutoHint')"></p>
                 </div>
               </div>
-              <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('pdfExport.cover.paperType')"></label>
+              <div x-id="['fld']" class="card-form-row">
+                <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.cover.paperType')"></label>
                 <div class="card-form-field">
-                  <div x-data="combobox($app.t('pdfExport.cover.paperTypePlaceholder'))"
+                  <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.cover.paperTypePlaceholder'))"
                        x-modelable="value" x-model="paperPresetSel"
                        x-effect="options = paperPresetOptions()"
                        @combobox-change="applyPaperPreset($event.detail)"
 ></div>
                 </div>
               </div>
-              <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('pdfExport.cover.paperBulk')"></label>
+              <div x-id="['fld']" class="card-form-row">
+                <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.cover.paperBulk')"></label>
                 <div class="card-form-field">
-                  <input type="text" x-data="numInput({ step: 0.5, min: 0, max: 300 })" x-modelable="value" x-model="activeProfile.config.coverSpec.paperBulkMmPer1000" class="pdfx-num-input">
+                  <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.5, min: 0, max: 300 })" x-modelable="value" x-model="activeProfile.config.coverSpec.paperBulkMmPer1000" class="pdfx-num-input">
                   <p class="card-form-field-note" x-text="$app.t('pdfExport.cover.paperBulkHint')"></p>
                 </div>
               </div>
               <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('pdfExport.cover.spineWidth')"></label>
+                <span class="card-form-label" x-text="$app.t('pdfExport.cover.spineWidth')"></span>
                 <div class="card-form-field">
                   <span class="pdfx-spine-width" x-text="coverSpineMm().toFixed(1) + ' mm'"></span>
                 </div>
               </div>
-              <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('pdfExport.cover.spineText')"></label>
+              <div x-id="['fld']" class="card-form-row">
+                <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.cover.spineText')"></label>
                 <div class="card-form-field">
-                  <input x-model="activeProfile.config.coverSpec.spineText" class="pdfx-text-input" data-spellcheck="spelling" :placeholder="$app.t('pdfExport.cover.spineTextPlaceholder')">
+                  <input :id="$id('fld')" x-model="activeProfile.config.coverSpec.spineText" class="pdfx-text-input" data-spellcheck="spelling" :placeholder="$app.t('pdfExport.cover.spineTextPlaceholder')">
                 </div>
               </div>
-              <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('pdfExport.cover.bgColor')"></label>
+              <div x-id="['fld']" class="card-form-row">
+                <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.cover.bgColor')"></label>
                 <div class="card-form-field pdfx-color-field">
-                  <input type="color" class="pdfx-color-picker" x-model="activeProfile.config.coverSpec.backgroundColor">
+                  <input :id="$id('fld')" type="color" class="pdfx-color-picker" x-model="activeProfile.config.coverSpec.backgroundColor">
                   <span class="pdfx-color-text" x-text="activeProfile.config.coverSpec.backgroundColor"></span>
                 </div>
               </div>
@@ -86,7 +86,7 @@
                 <span class="card-form-label" x-text="$app.t('pdfExport.cover.blurb')"></span>
                 <p class="card-form-field-note">
                   <span x-text="$app.t('pdfExport.cover.blurbSource')"></span>
-                  <span class="internal-link" @click="openPublicationSettings()" x-text="$app.t('pdfExport.cover.blurbLink')"></span>
+                  <span class="internal-link text-link" @click="openPublicationSettings()" x-text="$app.t('pdfExport.cover.blurbLink')"></span>
                 </p>
               </div>
             </div>
@@ -102,7 +102,7 @@
               </template>
             </div>
             <div class="pdfx-cover-actions">
-              <div class="pdfx-file-btn"
+              <div class="file-btn"
                    x-data="fileDrop({ accept: 'image/jpeg,image/png,image/webp', drag: false })"
                    @file-drop="uploadSpineImage($event.detail.file)">
                 <span x-text="spineImageUploading ? $app.t('pdfExport.cover.spineUploading') : (activeProfile.has_spine ? $app.t('pdfExport.cover.spineReplace') : $app.t('pdfExport.cover.spineUpload'))"></span>
@@ -124,7 +124,7 @@
               </template>
             </div>
             <div class="pdfx-cover-actions">
-              <div class="pdfx-file-btn"
+              <div class="file-btn"
                    x-data="fileDrop({ accept: 'image/jpeg,image/png,image/webp', drag: false })"
                    @file-drop="uploadBackCover($event.detail.file)">
                 <span x-text="backCoverUploading ? $app.t('pdfExport.cover.backUploading') : (activeProfile.has_back_cover ? $app.t('pdfExport.cover.backReplace') : $app.t('pdfExport.cover.backUpload'))"></span>

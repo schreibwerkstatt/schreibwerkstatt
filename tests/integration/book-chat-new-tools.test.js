@@ -39,7 +39,7 @@ test('get_book_settings: liefert Defaults für leeres Buch', () => {
 test('get_book_settings: löst Buchtyp/POV/Tempus zu Labels auf', () => {
   const BOOK_ID = 8002;
   ctx.dbSchema.upsertBookByName(BOOK_ID, 'Krimi');
-  ctx.dbSchema.saveBookSettings(BOOK_ID, 'de', 'DE', 'krimi', 'Düster, knapp.', 'ich', 'praeteritum', 1, 0, 5000);
+  ctx.dbSchema.saveBookSettings(BOOK_ID, { language: 'de', region: 'DE', buchtyp: 'krimi', buch_kontext: 'Düster, knapp.', erzaehlperspektive: 'ich', erzaehlzeit: 'praeteritum', is_finished: 1, allow_lektor_book_chat: 0, daily_goal_chars: 5000 });
 
   const result = bookChatTools.TOOLS.get_book_settings({}, {
     bookId: BOOK_ID, userEmail: 'alice@example.com',

@@ -11,9 +11,10 @@
 // How a class stays green (i.e. counts as "used"):
 //   - its full name appears as a whole word anywhere in the corpus (HTML/JS/JSON
 //     + server emitters), OR
-//   - it is built by string concatenation: some quoted literal in the corpus that
-//     ends in `-`/`_` is a strict prefix of the class (e.g. `'card--'` keeps every
-//     `.card--xxx` alive, `'severity-tag--'` keeps `.severity-tag--high` alive), OR
+//   - it is built by string concatenation: some literal in the corpus that ends in
+//     `-`/`_` right before a closing quote or a `${…}` interpolation is a strict
+//     prefix of the class (e.g. `'card--' + key` keeps every `.card--xxx` alive,
+//     `severity-tag--${sev}` keeps `.severity-tag--high` alive), OR
 //   - it starts with a vendor prefix in ALLOW_PREFIXES (classes a bundled library
 //     injects into the DOM at runtime and that we only style, never author).
 //
@@ -36,7 +37,12 @@ const PUBLIC = join(ROOT, 'public');
 // override their internals, so these are alive-but-statically-invisible.
 //   - leaflet-*  : Leaflet builds e.g. `'leaflet-popup' + '-content-wrapper'`
 //                  (public/vendor/leaflet-1.9.4); styled in entities/orte-map.css.
-const ALLOW_PREFIXES = ['leaflet-'];
+//   - ms-chapter-- / ms-page-- / ms-page__title-- / share-status-- : Modifier,
+//                  die aus einer Klassen-KONSTANTE plus Suffix entstehen
+//                  (`${o.chapterClass}--d${n}` in public/js/manuscript-render.js,
+//                  `${STATUS_CLASS}--r${rank}` in lib/share-helpers.js) — kein
+//                  Literal im Korpus traegt den Praefix.
+const ALLOW_PREFIXES = ['leaflet-', 'ms-chapter--', 'ms-page--', 'ms-page__title--', 'share-status--'];
 
 // Escape hatch for individual classes that are genuinely live but defeat every
 // heuristic above (e.g. applied only in manuscript content). Add with a one-line
@@ -89,16 +95,12 @@ function buildCorpus() {
     ...walk(join(PUBLIC, 'js'), ['.js', '.mjs', '.json']),
     ...walk(join(PUBLIC, 'partials'), ['.html']),
     ...walk(PUBLIC, ['.html']).filter((p) => !p.includes(`${join(PUBLIC, 'css')}`)),
-    join(ROOT, 'routes/share.js'),
-    join(ROOT, 'routes/auth.js'),
-    join(ROOT, 'routes/jobs/folder-import.js'),
-    join(ROOT, 'lib/wp-html.js'),
-    ...walk(join(ROOT, 'lib/export-builders/epub'), ['.js']),
-    join(ROOT, 'lib/pdf-render/html-walker.js'),
-    // Diagramm-Knoten der SSR-Leseansicht (`mode: 'screen'`): der Server liefert
-    // das gerenderte SVG in BEIDEN Themes aus, die Umschalt-Klassen entstehen
-    // hier und nirgends im Bundle.
-    join(ROOT, 'lib/diagram-export.js'),
+    // Server-seitige HTML-Emitter: Login, Share-Reader-SSR (routes/share/,
+    // lib/share-helpers.js), Importer, WP/EPUB/PDF-Builder, Diagramm-SSR,
+    // Headline-Render. Ganze Baeume statt Einzeldateien — ein neuer Emitter
+    // soll nicht erst als „tote Klasse" auffallen.
+    ...walk(join(ROOT, 'routes'), ['.js']),
+    ...walk(join(ROOT, 'lib'), ['.js']),
   ];
   return [...new Set(files)]
     .filter(existsSync)
@@ -106,11 +108,22 @@ function buildCorpus() {
     .join('\n');
 }
 
-// Quoted string literals that end in `-`/`_` — concatenation prefixes for classes
-// built at runtime (`'card--' + key`). Any class starting with one is kept alive.
+// Concatenation prefixes for classes built at runtime: a class-ish token ending in
+// `-`/`_` that is IMMEDIATELY followed by a closing quote (`'card--' + key`) or a
+// template interpolation (`severity-tag--${sev}`). Any class starting with one is
+// kept alive. The lookahead matters: without it, every quoted class name with a
+// hyphen (`"severity-tag"`) yielded all its own prefixes (`severity-`) and kept
+// unrelated siblings (`.severity-dot`) alive.
 function collectDynamicPrefixes(corpus) {
   const prefixes = new Set();
-  for (const m of corpus.matchAll(/['"`]([a-zA-Z][a-zA-Z0-9_-]*[-_])/g)) prefixes.add(m[1]);
+  for (const m of corpus.matchAll(/(?<![a-zA-Z0-9_-])([a-zA-Z][a-zA-Z0-9_-]*[-_])(?=['"`])/g)) prefixes.add(m[1]);
+  // Auch ein Literal, das mitten im Namen endet, ist ein Praefix, sobald es per
+  // `+` verkettet wird (`'snapshot-reader__chapter--d' + depth`).
+  for (const m of corpus.matchAll(/(?<![a-zA-Z0-9_-])([a-zA-Z][a-zA-Z0-9_]*[-_][a-zA-Z0-9_-]*)(?=['"`]\s*\+)/g)) prefixes.add(m[1]);
+  // `${…}` darf auch mitten im Namen sitzen (`share-toc__item--l${level}`) —
+  // dann muss der Teil davor schon einen Trenner tragen (Klassen-Form), sonst
+  // hielte jedes `p${id}` jede mit `p` beginnende Klasse am Leben.
+  for (const m of corpus.matchAll(/(?<![a-zA-Z0-9_-])([a-zA-Z][a-zA-Z0-9_]*[-_][a-zA-Z0-9_-]*)(?=\$\{)/g)) prefixes.add(m[1]);
   return [...prefixes];
 }
 

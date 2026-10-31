@@ -8,10 +8,10 @@
      drin, `kind='key'` wegen der Auffälligkeit gegen die übrigen Bücher desselben
      Autors. Die zweite Sorte ist per Definition NICHT häufig — ohne die Markierung
      sähe sie wie ein Ausreisser am Tabellenende aus. -->
-<div x-show="wortschatzTab === 'terms'">
+<div role="tabpanel" x-show="wortschatzTab === 'terms'">
   <p class="wortschatz-list-hint">
     <span x-text="$app.t('wortschatz.terms.hint')"></span>
-    <button type="button" class="internal-link wortschatz-stil-link" @click="wsOpenStil()"
+    <button type="button" class="text-link wortschatz-stil-link" @click="wsOpenStil()"
             :title="$app.t('wortschatz.stilLinkTip')" x-text="$app.t('wortschatz.stilLink')"></button>
   </p>
   <p class="wortschatz-list-hint" x-show="wortschatzHasKeyness"
@@ -27,15 +27,10 @@
              types: { count: 'number', chapter_spread: 'number', keyness: 'number', term: 'string' },
            })">
       <thead><tr>
-        <th class="sortable-th" :class="sortClass('term')" :aria-sort="ariaSort('term')"
-            @click="sortBy('term')" x-text="$app.t('wortschatz.col.term')"></th>
-        <th class="sortable-th" :class="sortClass('count')" :aria-sort="ariaSort('count')"
-            @click="sortBy('count')" x-text="$app.t('wortschatz.col.count')"></th>
-        <th class="sortable-th" :class="sortClass('chapter_spread')" :aria-sort="ariaSort('chapter_spread')"
-            @click="sortBy('chapter_spread')" x-text="$app.t('wortschatz.col.spread')"></th>
-        <th class="sortable-th" x-show="wortschatzHasKeyness"
-            :class="sortClass('keyness')" :aria-sort="ariaSort('keyness')"
-            @click="sortBy('keyness')" x-text="$app.t('wortschatz.col.keyness')"></th>
+        <th x-bind="sortTh('term')" x-text="$app.t('wortschatz.col.term')"></th>
+        <th x-bind="sortTh('count')" x-text="$app.t('wortschatz.col.count')"></th>
+        <th x-bind="sortTh('chapter_spread')" x-text="$app.t('wortschatz.col.spread')"></th>
+        <th x-bind="sortTh('keyness')" x-show="wortschatzHasKeyness" x-text="$app.t('wortschatz.col.keyness')"></th>
         <th x-text="$app.t('wortschatz.col.firstPage')"></th>
       </tr></thead>
       <tbody>

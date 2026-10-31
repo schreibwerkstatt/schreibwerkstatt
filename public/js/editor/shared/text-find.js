@@ -131,6 +131,20 @@ export function rangeOf(m) {
   return r;
 }
 
+// Gilt ein gemerkter Treffer noch? Nach der Suche getippter Text verschiebt die
+// Offsets, und `rangeOf` zeigte dann auf anderen Text — Ersetzen träfe die
+// falsche Stelle. Geteilt von Notebook-Finder (editor/find.js) und Bucheditor
+// (cards/book-editor/find.js).
+export function matchStillValid(m, term, caseSensitive) {
+  if (!m?.startNode?.isConnected || !m?.endNode?.isConnected) return false;
+  try {
+    const text = rangeOf(m).toString();
+    return caseSensitive ? text === term : text.toLowerCase() === String(term).toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 // Registriert das Highlight-Paar (alle Treffer / aktueller Treffer) unter zwei
 // CSS-Namen und kapselt das Neuzeichnen. Bewusst eine Factory statt Modul-
 // Singletons: sonst braucht jeder Konsument seine eigene `_hlAll/_hlCurrent`-

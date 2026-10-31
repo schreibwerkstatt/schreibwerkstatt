@@ -21,28 +21,17 @@
          })">
     <thead>
       <tr>
-        <th class="sortable-th" :class="sortClass('label')" :aria-sort="ariaSort('label')"
-            @click="sortBy('label')" x-text="$app.t('admin.usage.chat.kind')"></th>
-        <th class="sortable-th" :class="sortClass('answers')" :aria-sort="ariaSort('answers')"
-            @click="sortBy('answers')" x-text="$app.t('admin.usage.chatQuality.answers')"></th>
-        <th class="sortable-th" :class="sortClass('errors')" :aria-sort="ariaSort('errors')"
-            @click="sortBy('errors')" x-text="$app.t('admin.usage.chatQuality.errors')"></th>
-        <th class="sortable-th" :class="sortClass('errorRate')" :aria-sort="ariaSort('errorRate')"
-            @click="sortBy('errorRate')" x-text="$app.t('admin.usage.chatQuality.errorRate')"></th>
-        <th class="sortable-th" :class="sortClass('cancelled')" :aria-sort="ariaSort('cancelled')"
-            @click="sortBy('cancelled')" x-text="$app.t('admin.usage.chatQuality.cancelled')"></th>
-        <th class="sortable-th" :class="sortClass('feedbackUp')" :aria-sort="ariaSort('feedbackUp')"
-            @click="sortBy('feedbackUp')" x-text="$app.t('admin.usage.chatQuality.up')"></th>
-        <th class="sortable-th" :class="sortClass('feedbackDown')" :aria-sort="ariaSort('feedbackDown')"
-            @click="sortBy('feedbackDown')" x-text="$app.t('admin.usage.chatQuality.down')"></th>
-        <th class="sortable-th" :class="sortClass('upShare')" :aria-sort="ariaSort('upShare')"
-            @click="sortBy('upShare')" x-text="$app.t('admin.usage.chatQuality.upShare')"></th>
-        <th class="sortable-th" :class="sortClass('repeats')" :aria-sort="ariaSort('repeats')"
-            @click="sortBy('repeats')" x-text="$app.t('admin.usage.chatQuality.repeats')"></th>
-        <th class="sortable-th" :class="sortClass('usd')" :aria-sort="ariaSort('usd')"
-            @click="sortBy('usd')" x-text="$app.t('admin.usage.column.cost')"></th>
-        <th class="sortable-th" :class="sortClass('usdPerAnswer')" :aria-sort="ariaSort('usdPerAnswer')"
-            @click="sortBy('usdPerAnswer')" x-text="$app.t('admin.usage.chatQuality.costPerAnswer')"></th>
+        <th x-bind="sortTh('label')" x-text="$app.t('admin.usage.chat.kind')"></th>
+        <th x-bind="sortTh('answers')" x-text="$app.t('admin.usage.chatQuality.answers')"></th>
+        <th x-bind="sortTh('errors')" x-text="$app.t('admin.usage.chatQuality.errors')"></th>
+        <th x-bind="sortTh('errorRate')" x-text="$app.t('admin.usage.chatQuality.errorRate')"></th>
+        <th x-bind="sortTh('cancelled')" x-text="$app.t('admin.usage.chatQuality.cancelled')"></th>
+        <th x-bind="sortTh('feedbackUp')" x-text="$app.t('admin.usage.chatQuality.up')"></th>
+        <th x-bind="sortTh('feedbackDown')" x-text="$app.t('admin.usage.chatQuality.down')"></th>
+        <th x-bind="sortTh('upShare')" x-text="$app.t('admin.usage.chatQuality.upShare')"></th>
+        <th x-bind="sortTh('repeats')" x-text="$app.t('admin.usage.chatQuality.repeats')"></th>
+        <th x-bind="sortTh('usd')" x-text="$app.t('admin.usage.column.cost')"></th>
+        <th x-bind="sortTh('usdPerAnswer')" x-text="$app.t('admin.usage.chatQuality.costPerAnswer')"></th>
       </tr>
     </thead>
     <tbody>

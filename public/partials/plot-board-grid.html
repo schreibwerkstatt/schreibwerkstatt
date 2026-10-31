@@ -31,12 +31,12 @@
                           :data-tip="$app.t('plot.act.color')" :aria-label="$app.t('plot.act.color')"></button>
                   <div class="color-picker__popover" x-show="actColorPickerId === act.id" x-cloak
                        @click.outside="actColorPickerId === act.id && (actColorPickerId = null)">
-                    <button type="button" class="color-picker__opt color-picker__opt--none"
+                    <button :aria-pressed="!act.farbe" type="button" class="color-picker__opt color-picker__opt--none"
                             :class="{ 'color-picker__opt--on': !act.farbe }"
                             @click="setActColor(act, null)"
                             :data-tip="$app.t('plot.act.colorNone')" :aria-label="$app.t('plot.act.colorNone')"></button>
                     <template x-for="key in actPalette()" :key="key">
-                      <button type="button" class="color-picker__opt"
+                      <button :aria-pressed="act.farbe === key" type="button" class="color-picker__opt"
                               :style="{ '--col-accent': 'var(--palette-' + key + ')' }"
                               :class="{ 'color-picker__opt--on': act.farbe === key }"
                               @click="setActColor(act, key)" :aria-label="$app.t('plot.palette.' + key)" :data-tip="$app.t('plot.palette.' + key)"></button>
@@ -58,7 +58,7 @@
                 <template x-if="editingActId === act.id">
                   <input type="text" class="plot-column-title-input" x-model="actDraft"
                          data-spellcheck="spelling"
-                         @keydown.enter="saveEditAct(act)" @keydown="$editKeys($event, { save: () => saveEditAct(act), cancel: () => cancelEditAct() })"
+                         @keydown.enter="$enter($event, () => saveEditAct(act))" @keydown="$editKeys($event, { save: () => saveEditAct(act), cancel: () => cancelEditAct() })"
                          @blur="onActBlur(act, $event)">
                 </template>
                 <div class="plot-column-actions">
@@ -101,7 +101,7 @@
                 <div class="plot-add-act-form">
                   <input type="text" class="plot-new-act-input" x-model="newActName"
                          data-spellcheck="spelling" :placeholder="$app.t('plot.act.namePlaceholder')"
-                         @keydown.enter="addActScoped()" @keydown.escape="cancelAddAct()">
+                         @keydown.enter="$enter($event, () => addActScoped())" @keydown.escape="cancelAddAct()">
                   <div class="plot-add-act-actions">
                     <button type="button" class="btn-compact" @click="addActScoped()" :disabled="busy" x-text="$app.t('plot.act.add')"></button>
                     <button type="button" class="btn-compact btn-compact--ghost" @click="cancelAddAct()" x-text="$app.t('common.cancel')"></button>
@@ -134,12 +134,12 @@
                             :data-tip="$app.t('plot.thread.color')" :aria-label="$app.t('plot.thread.color')"></button>
                     <div class="color-picker__popover" x-show="threadColorPickerId === row.lane.id" x-cloak
                          @click.outside="threadColorPickerId === row.lane.id && (threadColorPickerId = null)">
-                      <button type="button" class="color-picker__opt color-picker__opt--none"
+                      <button :aria-pressed="!row.lane.thread.farbe" type="button" class="color-picker__opt color-picker__opt--none"
                               :class="{ 'color-picker__opt--on': !row.lane.thread.farbe }"
                               @click="setThreadColor(row.lane.thread, null)"
                               :data-tip="$app.t('plot.act.colorNone')" :aria-label="$app.t('plot.act.colorNone')"></button>
                       <template x-for="key in actPalette()" :key="key">
-                        <button type="button" class="color-picker__opt"
+                        <button :aria-pressed="row.lane.thread.farbe === key" type="button" class="color-picker__opt"
                                 :style="{ '--col-accent': 'var(--palette-' + key + ')' }"
                                 :class="{ 'color-picker__opt--on': row.lane.thread.farbe === key }"
                                 @click="setThreadColor(row.lane.thread, key)" :aria-label="$app.t('plot.palette.' + key)" :data-tip="$app.t('plot.palette.' + key)"></button>
@@ -170,7 +170,7 @@
                 <div class="plot-swim-lane-edit" @click.outside="commitEditThread(row.lane.thread)" @keydown="$editKeys($event, { save: () => commitEditThread(row.lane.thread), cancel: () => cancelEditThread() })">
                   <input type="text" class="plot-thread-name-input" x-model="threadDraft.name"
                          data-spellcheck="spelling" :placeholder="$app.t('plot.thread.namePlaceholder')"
-                         @keydown.enter.prevent="commitEditThread(row.lane.thread)">
+                         @keydown.enter="$enter($event, () => commitEditThread(row.lane.thread))">
                   <label class="plot-edit-label" x-show="$store.catalog.figuren.length" x-text="$app.t('plot.thread.bindFigure')"></label>
                   <div x-show="$store.catalog.figuren.length"
                        x-data="entityPicker({ entity: 'figur', placeholder: $app.t('plot.thread.bindFigurePlaceholder'), emptyLabel: $app.t('plot.thread.noFigure') })"
@@ -224,7 +224,7 @@
                   <div class="plot-add-beat" :data-add-beat-cell="act.id + ':' + (row.lane.id === null ? 'null' : row.lane.id)">
                     <textarea class="plot-add-beat-input" x-model="newBeatTitel" rows="1"
                               data-spellcheck="spelling" :placeholder="$app.t('plot.beat.titelPlaceholder')"
-                              @keydown.enter.prevent="saveNewBeatCell(act.id, row.lane.id)" @keydown="$editKeys($event, { save: () => saveNewBeatCell(act.id, row.lane.id), cancel: () => cancelAddBeatCell() })"
+                              @keydown.enter="$enter($event, () => saveNewBeatCell(act.id, row.lane.id))" @keydown="$editKeys($event, { save: () => saveNewBeatCell(act.id, row.lane.id), cancel: () => cancelAddBeatCell() })"
                               @blur="onAddBeatCellBlur(act.id, row.lane.id, $event)"></textarea>
                     <div class="plot-add-beat-actions">
                       <button type="button" class="btn-compact" @click="saveNewBeatCell(act.id, row.lane.id)" :disabled="busy" x-text="$app.t('plot.beat.add')"></button>

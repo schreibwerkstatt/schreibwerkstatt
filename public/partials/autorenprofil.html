@@ -93,7 +93,7 @@
          Ohne Beleg waere es eine Behauptung. -->
     <template x-if="apProfile && !apEditing && apProfile.konstanten.length">
       <div class="ap-findings">
-        <span class="ap-findings-title" x-text="$app.t('autorenprofil.konstanten')"></span>
+        <span class="card-section-title ap-findings-title" x-text="$app.t('autorenprofil.konstanten')"></span>
         <template x-for="(k, i) in apProfile.konstanten" :key="i">
           <p class="ap-finding">
             <span class="ap-finding-aspekt" x-text="k.aspekt"></span>
@@ -105,7 +105,7 @@
 
     <template x-if="apProfile && !apEditing && apProfile.entwicklung.length">
       <div class="ap-findings">
-        <span class="ap-findings-title" x-text="$app.t('autorenprofil.entwicklung')"></span>
+        <span class="card-section-title ap-findings-title" x-text="$app.t('autorenprofil.entwicklung')"></span>
         <template x-for="(e, i) in apProfile.entwicklung" :key="i">
           <p class="ap-finding">
             <span class="ap-finding-aspekt" x-text="e.aspekt"></span>

@@ -9,17 +9,17 @@
      role="tabpanel" id="buchlandkarte-panel-redundanz" aria-labelledby="buchlandkarte-tab-redundanz">
   <div class="buchlandkarte-toolbar" x-show="redundanzAvailable && redundanzHasIndex">
     <div class="tabs redundanz-threshold">
-      <button type="button" class="tabs-btn"
+      <button :aria-pressed="redundanzThreshold === 'strict'" type="button" class="tabs-btn"
               :class="{ 'tabs-btn--active': redundanzThreshold === 'strict' }"
               :disabled="redundanzLoading"
               @click="setRedundanzThreshold('strict')"
               x-text="$app.t('redundanz.threshold.strict')"></button>
-      <button type="button" class="tabs-btn"
+      <button :aria-pressed="redundanzThreshold === 'medium'" type="button" class="tabs-btn"
               :class="{ 'tabs-btn--active': redundanzThreshold === 'medium' }"
               :disabled="redundanzLoading"
               @click="setRedundanzThreshold('medium')"
               x-text="$app.t('redundanz.threshold.medium')"></button>
-      <button type="button" class="tabs-btn"
+      <button :aria-pressed="redundanzThreshold === 'loose'" type="button" class="tabs-btn"
               :class="{ 'tabs-btn--active': redundanzThreshold === 'loose' }"
               :disabled="redundanzLoading"
               @click="setRedundanzThreshold('loose')"

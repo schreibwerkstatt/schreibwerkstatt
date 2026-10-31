@@ -42,8 +42,8 @@
   padding: var(--space-2xs) var(--space-sm);
   font-size: var(--font-size-xs);
   font-weight: var(--fw-medium);
-  border-radius: var(--radius-sm);
-  color: var(--color-accent);
+  border-radius: var(--radius-none);
+  color: var(--color-accent-text);
   background: color-mix(in srgb, var(--color-accent) 12%, var(--color-bg));
   border: 1px solid color-mix(in srgb, var(--color-accent) 28%, transparent);
 }
@@ -89,7 +89,7 @@
 .mystats-effort-bar {
   display: flex;
   height: 14px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   overflow: hidden;
   background: var(--color-tag-bg);
 }
@@ -108,7 +108,7 @@
 .mystats-effort-dot {
   width: 10px;
   height: 10px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   flex: none;
 }
 .mystats-effort-dot--write { background: var(--color-accent); }
@@ -166,9 +166,9 @@
   padding: 0 var(--space-2xs);
   font-size: var(--font-size-xs);
   font-weight: var(--fw-medium);
-  color: var(--color-muted);
+  color: var(--color-tag-text);
   background: var(--color-tag-bg);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   vertical-align: middle;
 }
 /* Geltungs-Tag der Heatmap (letzte 52 Wochen) über dem Raster, rechtsbündig. */
@@ -232,7 +232,7 @@
   gap: var(--space-2xs);
   font-size: var(--font-size-xs);
   font-weight: var(--fw-medium);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 .mystats-goal-reached .icon { width: 0.9em; height: 0.9em; }
 .mystats-goal-stats { margin-top: var(--space-md); }
@@ -273,12 +273,12 @@
   display: inline-block;
   margin-left: var(--space-2xs);
   padding: var(--pad-badge);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-xs);
   font-weight: var(--fw-semibold);
   line-height: 1;
   vertical-align: middle;
-  color: var(--color-success);
+  color: var(--color-ok-text);
   background: color-mix(in srgb, var(--color-success) 14%, transparent);
 }
 .mystats-goals-sub {
@@ -296,7 +296,7 @@
   gap: var(--space-2xs);
   margin-left: var(--space-2xs);
   padding: var(--pad-badge);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-xs);
   font-weight: var(--fw-medium);
   line-height: 1;
@@ -310,7 +310,7 @@
   flex-shrink: 0;
   width: 10px;
   height: 10px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-muted);
 }
 /* Kategorie-Zeile in der „Umfang nach Kategorie"-Liste: Punkt + Name. */
@@ -337,8 +337,8 @@
 
 /* Status-Klartext pro Buch. */
 .mystats-goals-status { font-weight: var(--fw-medium); }
-.mystats-goals-status--reached { color: var(--color-success); }
-.mystats-goals-status--overdue { color: var(--color-schwach); }
+.mystats-goals-status--reached { color: var(--color-ok-text); }
+.mystats-goals-status--overdue { color: var(--color-schwach-text); }
 .mystats-goals-status--due,
 .mystats-goals-status--open { color: var(--color-text); }
 .mystats-goals-status--none { color: var(--color-muted); font-weight: var(--fw-regular); }
@@ -349,8 +349,8 @@
   font-size: var(--font-size-xs);
   color: var(--color-muted);
 }
-.mystats-goals-forecast--ontrack { color: var(--color-success); }
-.mystats-goals-forecast--behind { color: var(--color-schwach); }
+.mystats-goals-forecast--ontrack { color: var(--color-ok-text); }
+.mystats-goals-forecast--behind { color: var(--color-schwach-text); }
 
 /* Gesamt-Prognose ueber alle Buecher mit offenem Ziel (unter der Ziel-Tabelle). */
 .mystats-overall-forecast {
@@ -396,5 +396,101 @@
   }
   /* Tabelle scrollt horizontal (.table-scroll) statt zu quetschen. */
   .mystats-goals-progress { min-width: 110px; }
+}
+
+/* Job-Statistik (Laufzeiten/Tokens je Job-Typ, Drill-Down auf einzelne Läufe):
+   Kachel aus partials/my-stats-jobs.html. */
+.mystats-jobs-controls { display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; }
+.job-stats-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.job-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-mini);
+}
+.job-stats-table th {
+  text-align: left;
+  color: var(--color-muted);
+  font-weight: var(--fw-regular);
+  padding: var(--space-2xs) var(--space-md) var(--space-5) 0;
+  border-bottom: 0.5px solid var(--color-border);
+  white-space: nowrap;
+}
+.job-stats-table td {
+  padding: var(--space-xs) var(--space-md) var(--space-xs) 0;
+  border-bottom: 0.5px solid var(--color-separator-on-dark);
+  white-space: nowrap;
+}
+.job-stats-table tr:last-child td {
+  border-bottom: none;
+}
+.job-stats-errors {
+  color: var(--color-err-text);
+  font-size: var(--font-size-xs);
+}
+.job-stats-row--clickable { cursor: pointer; }
+.job-stats-row--clickable:hover td { background: var(--color-hover); }
+.job-stats-row--open td { background: var(--color-hover); }
+.job-stats-row--clickable .history-chevron { margin-right: var(--space-6); }
+.job-stats-runs-row td {
+  padding: var(--space-6) 0 var(--space-10) var(--space-18);
+  border-bottom: 0.5px solid var(--color-separator-on-dark);
+  background: var(--color-card-bg);
+}
+.job-runs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-xs);
+}
+.job-runs-table th {
+  text-align: left;
+  color: var(--color-muted);
+  font-weight: var(--fw-regular);
+  padding: var(--space-2xs) var(--space-md) var(--space-xs) 0;
+  border-bottom: 0.5px solid var(--color-border);
+  white-space: nowrap;
+}
+.job-runs-table td {
+  padding: var(--space-3) var(--space-md) var(--space-3) 0;
+  white-space: nowrap;
+  vertical-align: top;
+}
+.job-run-status {
+  display: inline-block;
+  padding: var(--space-1) var(--space-6);
+  border-radius: var(--radius-none);
+  font-size: var(--font-size-micro);
+  background: var(--color-tag-bg);
+}
+.job-run-status--done      { color: var(--color-ok-text); }
+.job-run-status--error     { color: var(--color-err-text); }
+.job-run-status--cancelled { color: var(--color-muted); }
+.job-run-status--running,
+.job-run-status--queued    { color: var(--color-muted); }
+.job-run-detail { white-space: normal; max-width: 420px; }
+.job-run-error {
+  color: var(--color-err-text);
+  font-size: var(--font-size-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+.job-run-muted { color: var(--color-muted); }
+@media (max-width: 600px) {
+  .job-stats-table {
+    font-size: var(--font-size-xs);
+  }
+  .job-stats-table th,
+  .job-stats-table td {
+    padding-right: var(--space-sm);
+  }
+  .job-stats-table th:first-child,
+  .job-stats-table td:first-child {
+    position: sticky;
+    left: 0;
+    background: var(--color-card-bg);
+  }
 }
 }

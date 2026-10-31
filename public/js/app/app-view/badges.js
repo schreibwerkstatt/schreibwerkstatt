@@ -8,15 +8,14 @@ export const badgesMethods = {
   // Race-safe: prüft pageId gegen aktuelle Seite vor Set, falls User schnell wechselt.
   async _loadPageBadgeCounts(pageId) {
     try {
+      // Fehler (Netz/5xx) → null statt []: sonst zeigte die Plakette „0 offene
+      // Ideen" und der Tree-Indikator verlöre seinen Punkt. Bei null bleibt der
+      // bisherige Stand stehen.
       const [ideen, sessions] = await Promise.all([
-        fetchJson(`/ideen?page_id=${pageId}`).catch(() => []),
-        fetchJson(`/chat/sessions/${pageId}`).catch(() => []),
+        fetchJson(`/ideen?page_id=${pageId}`).catch(() => null),
+        fetchJson(`/chat/sessions/${pageId}`).catch(() => null),
       ]);
       if (this.currentPage?.id !== pageId) return;
-      // „Offen" = offen ODER in_arbeit (SSoT ideen-shared.js). Eine verworfene
-      // Idee ist keine offene Pendenz und setzt darum keine Plakette.
-      const openCount = (Array.isArray(ideen) ? ideen : []).filter(isOpenIdee).length;
-      this.currentPageIdeenOpenCount = openCount;
       // Recherche-Count aus der buchweit geladenen Map (kein Extra-Request);
       // wird bei Link-Änderungen in der Recherche-Karte frisch gehalten.
       const badges = this.$store.badges;
@@ -25,12 +24,18 @@ export const badgesMethods = {
       this.currentPagePlotBeatCount = (badges.plotBeatCounts || {})[pageId] || 0;
       this.currentPageShareCommentCount = (badges.shareCommentCounts || {})[pageId] || 0;
       this.currentPageShareLinkCount = (badges.shareLinkCounts || {})[pageId] || 0;
-      this.currentPageChatSessionCount = (Array.isArray(sessions) ? sessions : []).length;
-      // Tree-Indikator mit frischer Wahrheit syncen (z.B. bei Cross-Tab-Edits).
-      const next = { ...(badges.ideenCounts || {}) };
-      if (openCount > 0) next[pageId] = openCount;
-      else delete next[pageId];
-      badges.ideenCounts = next;
+      if (Array.isArray(sessions)) this.currentPageChatSessionCount = sessions.length;
+      if (Array.isArray(ideen)) {
+        // „Offen" = offen ODER in_arbeit (SSoT ideen-shared.js). Eine verworfene
+        // Idee ist keine offene Pendenz und setzt darum keine Plakette.
+        const openCount = ideen.filter(isOpenIdee).length;
+        this.currentPageIdeenOpenCount = openCount;
+        // Tree-Indikator mit frischer Wahrheit syncen (z.B. bei Cross-Tab-Edits).
+        const next = { ...(badges.ideenCounts || {}) };
+        if (openCount > 0) next[pageId] = openCount;
+        else delete next[pageId];
+        badges.ideenCounts = next;
+      }
     } catch (e) {
       console.error('[loadPageBadgeCounts]', e);
     }

@@ -24,7 +24,7 @@
     width: 14px; height: 14px;
     padding: 0;
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: var(--col-accent);
     cursor: pointer;
   }
@@ -42,7 +42,7 @@
     padding: var(--space-xs);
     background: var(--color-card-bg);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     box-shadow: var(--shadow-md);
   }
 
@@ -50,7 +50,7 @@
     width: 18px; height: 18px;
     padding: 0;
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: var(--col-accent);
     cursor: pointer;
   }

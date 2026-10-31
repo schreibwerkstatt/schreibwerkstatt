@@ -49,6 +49,9 @@
   overflow-y: auto;
 }
 
+/* Listen-Rolle am Wrapper, der Knopf bleibt Knopf und Flex-Kind der Liste. */
+.werkstatt-list-entry { display: contents; }
+
 .werkstatt-list-item {
   display: flex;
   flex-direction: column;
@@ -165,7 +168,7 @@
   width: 100%;
   height: clamp(420px, 70vh, 760px);
   border: var(--border-thin) solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-surface);
   overflow: hidden;
   position: relative;
@@ -195,7 +198,7 @@
   padding: var(--space-xs);
   background: color-mix(in srgb, var(--color-surface) 88%, transparent);
   border: var(--border-thin) solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(4px);
 }
@@ -213,7 +216,7 @@
   background: var(--color-surface);
   color: var(--color-text);
   border: var(--border-thin) solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-family: var(--font-sans);
   font-size: var(--font-size-base);
   padding: var(--space-6) var(--space-10);
@@ -256,7 +259,7 @@
   line-height: 16px;
   font-size: var(--font-size-base);
   font-weight: var(--fw-semibold);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   border-color: var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);

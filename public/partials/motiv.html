@@ -98,12 +98,12 @@
   <div class="motiv-toolbar">
     <div class="motiv-toolbar-group">
       <input type="text" class="motiv-add-input" x-model="newThemeName" data-spellcheck="spelling"
-             :placeholder="$app.t('motiv.theme.namePlaceholder')" @keydown.enter="addTheme()">
+             :placeholder="$app.t('motiv.theme.namePlaceholder')" @keydown.enter="$enter($event, () => addTheme())">
       <button type="button" class="btn-compact" @click="addTheme()" :disabled="busy || !newThemeName.trim()" x-text="$app.t('motiv.theme.add')"></button>
     </div>
     <div class="motiv-toolbar-group">
       <input type="text" class="motiv-add-input" x-model="newMotifName" data-spellcheck="spelling"
-             :placeholder="$app.t('motiv.motif.namePlaceholder')" @keydown.enter="addMotif()">
+             :placeholder="$app.t('motiv.motif.namePlaceholder')" @keydown.enter="$enter($event, () => addMotif())">
       <div class="motiv-theme-select" x-data="combobox($app.t('motiv.motif.themeOptional'), $app.t('motiv.noTheme'))"
            x-modelable="value" x-model="newMotifThemeId" x-effect="options = themeOptions()"></div>
       <button type="button" class="btn-compact" @click="addMotif()" :disabled="busy || !newMotifName.trim()" x-text="$app.t('motiv.motif.add')"></button>
@@ -185,7 +185,7 @@
   <div class="history-bar" x-show="brainstormRuns.length > 0" x-cloak>
     <div class="history-heading" x-text="$app.t('motiv.brainstorm.runs', { count: brainstormRuns.length })"></div>
     <template x-for="r in brainstormRuns" :key="r.id">
-      <div class="history-item hover-reveal-host" :class="{ 'history-item--open': selectedBrainstormRunId === r.id }"
+      <div class="history-item hover-reveal-host internal-link" :class="{ 'history-item--open': selectedBrainstormRunId === r.id }"
            @click="openBrainstormRun(r)">
         <span class="history-date" x-text="formatRunDate(r.created_at)"></span>
         <span class="tag" x-text="$app.t('motiv.brainstorm.vorschlagCount', { n: r.vorschlag_count })"></span>

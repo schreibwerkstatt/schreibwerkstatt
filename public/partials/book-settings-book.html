@@ -15,15 +15,15 @@
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.language')"></label>
-        <div x-data="radioGroup()" x-modelable="value" x-model="bookSettingsLanguage"
+        <label class="card-form-label" id="bs-language-label" x-text="$app.t('book.settings.language')"></label>
+        <div x-data="radioGroup()" aria-labelledby="bs-language-label" x-modelable="value" x-model="bookSettingsLanguage"
              x-effect="options = bookSettingsLangOptions()"
              @radio-change="bookSettingsRegion = ($event.detail === 'de' ? 'CH' : 'US'); bookSettingsBuchtyp = ''"></div>
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.region')"></label>
-        <div x-data="radioGroup()" x-modelable="value" x-model="bookSettingsRegion"
+        <label class="card-form-label" id="bs-region-label" x-text="$app.t('book.settings.region')"></label>
+        <div x-data="radioGroup()" aria-labelledby="bs-region-label" x-modelable="value" x-model="bookSettingsRegion"
              x-effect="options = (bookSettingsLanguage === 'de'
                ? [{ value: 'CH', label: $app.t('region.de.CH') }, { value: 'DE', label: $app.t('region.de.DE') }]
                : bookSettingsLanguage === 'en'
@@ -36,24 +36,27 @@
       <h3 class="card-section-title" x-text="$app.t('book.settings.section.narrative')"></h3>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.buchtyp')"></label>
+        <label class="card-form-label" id="bs-buchtyp-label" x-text="$app.t('book.settings.buchtyp')"></label>
         <div x-data="combobox($app.t('book.settings.buchtyp'), $app.t('book.settings.buchtyp.none'))"
+             aria-labelledby="bs-buchtyp-label"
              x-modelable="value" x-model="bookSettingsBuchtyp"
              x-effect="options = bookSettingsBuchtypOptions()"
   ></div>
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.pov')"></label>
+        <label class="card-form-label" id="bs-pov-label" x-text="$app.t('book.settings.pov')"></label>
         <div x-data="combobox($app.t('book.settings.pov'), $app.t('book.settings.pov.none'))"
+             aria-labelledby="bs-pov-label"
              x-modelable="value" x-model="bookSettingsErzaehlperspektive"
              x-effect="options = bookSettingsPovOptions()"
   ></div>
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.tempus')"></label>
+        <label class="card-form-label" id="bs-tempus-label" x-text="$app.t('book.settings.tempus')"></label>
         <div x-data="combobox($app.t('book.settings.tempus'), $app.t('book.settings.tempus.none'))"
+             aria-labelledby="bs-tempus-label"
              x-modelable="value" x-model="bookSettingsErzaehlzeit"
              x-effect="options = bookSettingsTempusOptions()"
   ></div>
@@ -68,8 +71,9 @@
       <h3 class="card-section-title" x-text="$app.t('book.settings.section.taxonomy')"></h3>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.category')"></label>
+        <label class="card-form-label" id="bs-category-label" x-text="$app.t('book.category')"></label>
         <div x-data="combobox($app.t('book.category'), $app.t('book.category.none'))"
+             aria-labelledby="bs-category-label"
              x-modelable="value" x-model="bookCategoryId"
              x-effect="options = bookCategoryOptions()"
              @combobox-change="saveBookCategory($event.detail)"></div>

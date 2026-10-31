@@ -17,9 +17,23 @@
   --color-faint: #b8aea2;
   --color-border: rgba(0, 0, 0, 0.12);
   --color-border-input: rgba(0, 0, 0, 0.16);
-  --color-border-focus: rgba(0, 0, 0, 0.4);
+  /* Fokus-Rahmen eines Eingabefelds: 0.5-Alpha = 3.9:1 auf bg/surface (WCAG
+     1.4.11, Nicht-Text-Kontrast >= 3:1). */
+  --color-border-focus: rgba(0, 0, 0, 0.5);
+  /* Tastatur-Fokus-Ring (:focus-visible) — eine Farbe, eine Form fuer jedes
+     fokussierbare Element mit eigenem Fokus-Signal. Marken-Blau, im Dark-Block
+     ueber --color-primary mitgefuehrt. Konsum:
+       outline: var(--focus-ring); outline-offset: var(--focus-ring-offset);
+     innen liegend (Listenzeilen, Menue-Eintraege, Zellen ohne Rand-Luft):
+       outline: var(--focus-ring); outline-offset: var(--focus-ring-offset-inset); */
+  --focus-ring-color: var(--color-primary);
+  --focus-ring: 2px solid var(--focus-ring-color);
   --color-hover: rgba(0, 0, 0, 0.05);
   --color-tag-bg: rgba(0, 0, 0, 0.06);
+  /* Sekundärschrift auf --color-tag-bg (Badge, Chip, Zähler). Light reicht
+     muted; im Dark-Block eigener Wert, weil die aufgehellte Tag-Fläche muted
+     unter 4.5:1 drückt. */
+  --color-tag-text: var(--color-muted);
   /* Ghost-Icon-Chip-Füllung. Light schwächer als Dark — ein dunkler Overlay
      auf hellem Grund wirkt bei gleicher Deckung kräftiger als umgekehrt. */
   --icon-ghost-fill: color-mix(in srgb, var(--color-text) 3.5%, transparent);
@@ -35,7 +49,6 @@
   --color-err-bg: #FCEBEB;
   --color-err-text: #A32D2D;
   --color-err-border: #E24B4A;
-  --color-err-light: #fc8181;
   --color-style-border: #EF9F27;
 
   /* Marken-Blau aus dem Logo: primary = Buchrücken (#1d4b73, AA mit Weiss),
@@ -44,24 +57,30 @@
   --color-primary-hover: #143855;
   --color-primary-light: #2d6a9f;
   --color-on-primary: #ffffff;
-  /* Akzent = Feder-Gold aus dem Logo. */
+  /* Akzent = Feder-Gold aus dem Logo. Vollton nur fuer Flaechen/Raender/Striche
+     (2.4:1 auf Weiss) — als Schrift- oder Icon-Farbe --color-accent-text. */
   --color-accent: #c4a55a;
+  /* success: Vollton-Fuellung (Dots, Balken). Als Text --color-ok-text. */
   --color-success: #34d399;
   --color-success-hover: #1D9E75;
 
   /* === Status-Achse 2: content-severity (Findings, Continuity) ===
      Eigene Shades — semantisch reicher als ok/warn/err und visuell
      getrennt, damit Findings nicht wie System-Banner aussehen.
-     Die Vollton-Werte tragen Dots/Tags (entity-list.css); die weiche
-     -bg/-text-Paarung gibt es nur fuer `schwach` — das ist die einzige
-     Stufe, die als getoentes Feld statt als Vollton-Chip auftritt
-     (szenen.css, search.css). Neue Stufe als weiches Feld => Paar hier
-     ergaenzen, nicht auf Verdacht vorhalten. */
+     Die Vollton-Werte tragen Dots/Tags/Raender (entity-list.css); als
+     Schrift gilt je Stufe das -text-Pendant (unten). Ein weiches -bg-Feld
+     gibt es nur fuer `schwach` — die einzige Stufe, die als getoentes Feld
+     statt als Vollton-Chip auftritt (szenen.css, search.css). Neue Stufe als
+     weiches Feld => -bg hier ergaenzen, nicht auf Verdacht vorhalten. */
   --color-stark: #3a8f3e;
   --color-mittel: #b38600;
   --color-schwach: #c43838;
   --color-schwach-bg: #FFE0E0;
   --color-schwach-text: #8B1E1E;
+  /* Text-Varianten der Volltoene (>= 4.5:1 auf surface/bg): wer eine Stufe als
+     Schrift zeigt, nimmt -text, der Vollton bleibt Dot/Balken/Rand. */
+  --color-mittel-text: #806000;
+  --color-stark-text: #2f6e33;
 
   --color-card-bg: var(--color-surface);
 
@@ -73,8 +92,14 @@
     var(--color-border) 0, var(--color-border) 2px,
     transparent 2px, transparent 6px);
   --color-neutral-bg: #e8e8e8;
+  /* Invertiertes Badge (dunkle Flaeche, helle Schrift; im Dark-Theme hell mit
+     dunkler Schrift) — Sozialschicht «Unterwelt» in Liste und Graph-Legende. */
+  --color-badge-inverse-bg: #3A3A3A;
+  --color-badge-inverse-text: #eeeeee;
+  --palette-unterwelt: var(--palette-dark);
+  --palette-unterwelt-border: var(--color-border-contrast);
   --color-accent-bg: rgba(196, 165, 90, 0.16);
-  --color-accent-text: #8a6a20;
+  --color-accent-text: #85661d;
   --color-accent-hover: rgba(196, 165, 90, 0.10);
   --color-accent-soft: rgba(196, 165, 90, 0.06);
   /* Konsolidiert auf den Signatur-Blau-Ton statt eigenem Hex. */
@@ -102,9 +127,9 @@
   --color-mark-del-bg-hover: rgba(220, 60, 60, 0.18);
   --color-mark-del-border: #d33;
   --color-mark-del-strike: rgba(200, 50, 50, 0.5);
-  --color-mark-del-text: #999;
+  --color-mark-del-text: #6e6a65;
   --color-mark-ins-bg: rgba(34, 170, 90, 0.13);
-  --color-mark-ins-text: #1a7f37;
+  --color-mark-ins-text: #18753a;
 
   /* Historie aktiv (Tönung aus dem Marken-Blau #1d4b73) */
   --color-history-active-bg: rgba(29, 75, 115, 0.08);
@@ -233,7 +258,7 @@
   --card-accent-songs: var(--card-accent-songs-base);
   --card-accent-folderimport-base: #5a7a4a;
   --card-accent-folderimport: var(--card-accent-folderimport-base);
-  --card-accent-onboarding-base: #3a8a6a;
+  --card-accent-onboarding-base: #327d5f;
   --card-accent-onboarding: var(--card-accent-onboarding-base);
   --card-accent-blog-base: #4a7aa0;
   --card-accent-blog: var(--card-accent-blog-base);
@@ -248,8 +273,9 @@
   --card-accent-page-base: #6e7276;
   --card-accent-page: var(--card-accent-page-base);
 
-  /* Event-Subtyp-Akzente (Phase 2): Mapping in card-accents.css.
-     Light-Theme: kräftige Hues für Badge-Background. */
+  /* Event-Subtyp-Akzente: Mapping in card-accents.css.
+     Light-Theme: kräftige Hues für Badge-Background und Zeitleisten-Marker —
+     jeder Hue >= 3:1 gegen surface (Nicht-Text-Kontrast der Marker). */
   --card-accent-event-geburt-base: #4c8a4c;
   --card-accent-event-geburt: var(--card-accent-event-geburt-base);
   --card-accent-event-tod-base: #555c66;
@@ -270,11 +296,11 @@
   --card-accent-event-konflikt: var(--card-accent-event-konflikt-base);
   --card-accent-event-wendepunkt-base: #8e5fbd;
   --card-accent-event-wendepunkt: var(--card-accent-event-wendepunkt-base);
-  --card-accent-event-entdeckung-base: #d18a3a;
+  --card-accent-event-entdeckung-base: #b97a33;
   --card-accent-event-entdeckung: var(--card-accent-event-entdeckung-base);
   --card-accent-event-verlust-base: #7a6478;
   --card-accent-event-verlust: var(--card-accent-event-verlust-base);
-  --card-accent-event-sieg-base: #c8a23a;
+  --card-accent-event-sieg-base: #ad8a2f;
   --card-accent-event-sieg: var(--card-accent-event-sieg-base);
   --card-accent-event-extern_politisch-base: #4a6a8e;
   --card-accent-event-extern_politisch: var(--card-accent-event-extern_politisch-base);
@@ -318,6 +344,13 @@
   /* Kontrast-Border (im Dark-Mode geflippt) */
   --color-border-contrast: #111;
 
+  /* Entitaets-Akzente im Notebook-Editor (Figur-/Ort-Markierung im Text):
+     Vollton fuer Unterstreichung/Rand, -fg fuer Schrift. */
+  --color-accent-figure: #6c8bd7;
+  --color-accent-figure-fg: #2c3e7d;
+  --color-accent-location: #c08a4a;
+  --color-accent-location-fg: #6e4a1f;
+
   /* Mix-Rezepte (figpal) */
   --figpal-bg-mix:     18%;
   --figpal-text-mix:   75%;
@@ -351,6 +384,7 @@
   --color-border-focus: rgba(255, 255, 255, 0.45);
   --color-hover: rgba(255, 255, 255, 0.06);
   --color-tag-bg: rgba(255, 255, 255, 0.08);
+  --color-tag-text: #aca69b;
   --icon-ghost-fill: color-mix(in srgb, var(--color-text) 6%, transparent);
   --icon-ghost-fill-hover: color-mix(in srgb, var(--color-text) 12%, transparent);
 
@@ -377,8 +411,14 @@
   --color-schwach: #e25c5c;
   --color-schwach-bg: rgba(226, 75, 74, 0.18);
   --color-schwach-text: #ff9090;
+  --color-mittel-text: #d8b040;
+  --color-stark-text: #6ac96e;
 
   --color-neutral-bg: #2d2a25;
+  --color-badge-inverse-bg: #d8d3c8;
+  --color-badge-inverse-text: #1f1c18;
+  --palette-unterwelt: var(--palette-gray-light);
+  --palette-unterwelt-border: var(--palette-dark);
   --color-running: #6aa3d4;
   --color-accent-bg: rgba(201, 169, 97, 0.18);
   --color-accent-text: #e0c070;
@@ -400,7 +440,7 @@
   --color-mark-del-bg-hover: rgba(220, 60, 60, 0.35);
   --color-mark-del-border: #e85858;
   --color-mark-del-strike: rgba(255, 120, 120, 0.6);
-  --color-mark-del-text: #8a8580;
+  --color-mark-del-text: #aaa49b;
   --color-mark-ins-bg: rgba(34, 170, 90, 0.25);
   --color-mark-ins-text: #5fd58c;
 
@@ -500,6 +540,11 @@
   --card-accent-event-sonstiges: oklch(from var(--card-accent-event-sonstiges-base) max(var(--accent-dark-floor), calc(l + var(--accent-dark-lift))) calc(c * var(--accent-dark-chroma)) h);
 
   --color-border-contrast: #d8d8d8;
+
+  --color-accent-figure: #8aa5e6;
+  --color-accent-figure-fg: #b3c6f0;
+  --color-accent-location: #d4a474;
+  --color-accent-location-fg: #e6c294;
 
   /* Figuren-Palette — desaturiert + aufgehellt für Dark-BG.
      Mix-Rezepte (figpal-*) bauen daraus Badge-BG/Text/Border. */

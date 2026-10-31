@@ -40,7 +40,7 @@ router.post('/', requireAdmin, jsonBody, (req, res) => {
       return res.status(400).json({ error_code: 'NAME_TOO_LONG' });
     }
     logger.error(`POST /local/categories: ${e.message}`);
-    res.status(500).json({ error_code: 'CREATE_FAILED', detail: e.message });
+    res.status(500).json({ error_code: 'CREATE_FAILED' });
   }
 });
 
@@ -60,7 +60,7 @@ router.put('/:id', requireAdmin, jsonBody, (req, res) => {
     if (/too long/.test(e.message)) return res.status(400).json({ error_code: 'NAME_TOO_LONG' });
     if (/self-parent/.test(e.message)) return res.status(400).json({ error_code: 'SELF_PARENT' });
     logger.error(`PUT /local/categories/:id: ${e.message}`);
-    res.status(500).json({ error_code: 'UPDATE_FAILED', detail: e.message });
+    res.status(500).json({ error_code: 'UPDATE_FAILED' });
   }
 });
 

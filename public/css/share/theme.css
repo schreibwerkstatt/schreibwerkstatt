@@ -22,10 +22,12 @@
   --share-accent: #1d4b73;
   /* Zweiter Ton = Feder-Gold (Autor-Stimme): markiert Autor-Antworten, damit der
      Reviewer Leser-Kommentar vs. Autor-Stimme auf einen Blick unterscheidet. */
-  --share-accent-2: #8a6a20;
+  --share-accent-2: #85661d;
   /* Text auf gefüllter Akzent-Fläche (Buttons). Light: weiss auf dunklem Blau.
      Dark (s.u.): dunkle Tinte auf hellem Blau — analog --color-on-primary. */
   --share-on-accent: #fff;
+  /* Gefahr/Löschen (Hover der Löschen-Aktion) — >= 4.5:1 auf surface. */
+  --share-danger: #c43838;
   --share-border: rgba(0, 0, 0, 0.12);
   --share-hover: rgba(0, 0, 0, 0.05);
   --share-radius: 8px;
@@ -81,6 +83,7 @@ html[data-theme="dark"] {
   --share-accent: #7aa3ca;
   --share-accent-2: #e0c070;
   --share-on-accent: #1a1816;
+  --share-danger: #ff9090;
   --share-border: rgba(255, 255, 255, 0.12);
   --share-hover: rgba(255, 255, 255, 0.06);
   --share-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
@@ -103,6 +106,7 @@ html[data-theme="dark"] {
     --share-accent: #7aa3ca;
     --share-accent-2: #e0c070;
     --share-on-accent: #1a1816;
+    --share-danger: #ff9090;
     --share-border: rgba(255, 255, 255, 0.12);
     --share-hover: rgba(255, 255, 255, 0.06);
     --share-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);

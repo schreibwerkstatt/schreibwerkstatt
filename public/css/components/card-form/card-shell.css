@@ -106,7 +106,7 @@
 .card-title.card-title--input {
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: 0;
   color: inherit;
   width: 100%;
@@ -132,7 +132,7 @@
   border-color: var(--color-border-focus);
   background: var(--color-surface);
   padding: var(--space-2xs) var(--space-6);
-  margin: -3px -7px;
+  margin: calc(-1 * var(--space-2xs)) calc(-1 * var(--space-6));
 }
 .card-title.card-title--input:disabled {
   opacity: 1;

@@ -55,7 +55,7 @@ router.post('/:id/approve', express.json(), (req, res) => {
     invite = appUsers.createInvite({ email: reqRow.email, globalRole: role, invitedBy: actor });
   } catch (e) {
     logger.error(`registration-request approve: createInvite failed: ${e.message}`, { user: actor });
-    return res.status(500).json({ error_code: 'INVITE_FAILED', detail: e.message });
+    return res.status(500).json({ error_code: 'INVITE_FAILED' });
   }
 
   const updated = regRequests.approveRequest(id, { reviewer: actor, inviteId: invite.id });

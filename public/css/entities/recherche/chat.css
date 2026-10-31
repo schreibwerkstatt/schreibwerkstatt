@@ -193,7 +193,7 @@
 .research-chat-query {
   padding: 0 var(--space-2xs);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 
 /* Kontext-Chip über der Eingabe: „für Seite/Kapitel recherchieren" */

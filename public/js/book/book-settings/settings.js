@@ -1,13 +1,18 @@
 // Teil von bookSettingsMethods (siehe Facade book-settings.js).
+// Reiter «Buch» und «Kontext»: book_settings (/booksettings/:id) samt Buchname,
+// Stilprofil und Kategorie. Speichern läuft über save-paths.js.
 import { EVT, contentRepo, countryOptions, fetchJson } from './_shared.js';
+import { DEFAULT_DAILY_GOAL_CHARS } from '../../utils.js';
+import { tFetchError } from '../../i18n.js';
 
 export const settingsMethods = {
-  async loadBookSettings() {
-    if (!Alpine.store('nav').selectedBookId) return;
+  async loadBookSettings(bookId = this._selectedBookId()) {
+    if (!bookId) return;
     this.bookSettingsLoading = true;
     try {
-      const data = await fetchJson(`/booksettings/${Alpine.store('nav').selectedBookId}`);
-      const book = Alpine.store('nav').books.find(b => String(b.id) === String(Alpine.store('nav').selectedBookId));
+      const data = await fetchJson(`/booksettings/${bookId}`);
+      if (!this._isFormBook(bookId)) return;
+      const book = Alpine.store('nav').books.find(b => String(b.id) === String(bookId));
       this.bookSettingsName       = book?.name || '';
       this.bookSettingsLanguage  = data.language    || 'de';
       this.bookSettingsRegion    = data.region      || 'CH';
@@ -18,7 +23,10 @@ export const settingsMethods = {
       this.bookSettingsErzaehlzeit        = data.erzaehlzeit        || '';
       this.bookSettingsIsFinished         = !!data.is_finished;
       this.bookSettingsAllowLektorBookChat = !!data.allow_lektor_book_chat;
-      this.bookSettingsDailyGoalChars     = data.daily_goal_chars != null ? Number(data.daily_goal_chars) : 1500;
+      // NULL = nie gesetzt → Default; 0 = bewusst kein Tagesziel → leeres Feld.
+      this.bookSettingsDailyGoalChars     = data.daily_goal_chars == null
+        ? DEFAULT_DAILY_GOAL_CHARS
+        : (Number(data.daily_goal_chars) > 0 ? Number(data.daily_goal_chars) : null);
       this.bookSettingsGoalTargetChars    = data.goal_target_chars != null ? Number(data.goal_target_chars) : 0;
       this.bookSettingsGoalDeadline       = data.goal_deadline || '';
       this.bookSettingsOrteReal           = !!data.orte_real;
@@ -26,20 +34,127 @@ export const settingsMethods = {
       this.bookSettingsZeitlinieReal      = !!data.zeitlinie_real;
       this.bookSettingsWeltfaktenRealPruefen = !!data.weltfakten_real_pruefen;
       this.bookSettingsExcludeFromStats   = !!data.exclude_from_stats;
-      // Quellen-Tab: derselbe Response traegt Zitierstil + Verzeichnis-Optionen
-      // (kein zweiter Fetch), gespeichert wird sie aber ueber den eigenen
-      // /citation-Endpunkt — siehe book-settings/citation.js.
+      this.bookSettingsLoaded = true;
+      this._markClean('settings');
+      // Derselbe Response trägt Zitierstil, Recherche-Profil und Schulsystem
+      // (kein zweiter Fetch); gespeichert werden sie über ihre eigenen Pfade.
       this._applyCitationSettings(data);
-      // Recherche-Profil: gleicher Response, eigener Schreibpfad
-      // (/booksettings/:id/research) — siehe book-settings/research.js.
       this._applyResearchSettings(data);
-      // Schulsystem: gleicher Response, eigener Schreibpfad (/schulsystem) —
-      // siehe book-settings/school.js.
       this._applySchoolSettings(data);
     } catch (e) {
+      // Ohne geladenen Stand bleibt `bookSettingsLoaded` false — saveBookSettings
+      // schreibt dann nichts, statt das Formular des vorigen Buchs zu speichern.
+      if (this._isFormBook(bookId)) this.bookSettingsError = window.__app.t('book.settings.loadFailed');
       console.error('[book-settings] Laden fehlgeschlagen:', e);
     } finally {
-      this.bookSettingsLoading = false;
+      if (this._isFormBook(bookId)) this.bookSettingsLoading = false;
+    }
+  },
+
+  // Formularstand des Pfads «settings» — Vergleichsbasis UND Request-Body.
+  // `allow_lektor_book_chat` fehlt bewusst: die Freigabe speichert der Reiter
+  // «Teilen» sofort (saveLektorBookChat), nur der Owner darf sie setzen.
+  _settingsSnapshot() {
+    const goal = this.bookSettingsDailyGoalChars;
+    return {
+      name:              (this.bookSettingsName || '').trim(),
+      language:          this.bookSettingsLanguage,
+      region:            this.bookSettingsRegion,
+      buchtyp:           this.bookSettingsBuchtyp              || null,
+      buch_kontext:      this.bookSettingsBuchKontext          || null,
+      stilprofil:        this.bookSettingsStilprofil           || null,
+      erzaehlperspektive: this.bookSettingsErzaehlperspektive  || null,
+      erzaehlzeit:       this.bookSettingsErzaehlzeit          || null,
+      is_finished:       this.bookSettingsIsFinished ? 1 : 0,
+      // Leeres Feld = kein Tagesziel (0); NULL bliebe «Default».
+      daily_goal_chars:  goal === '' || goal == null || !Number.isFinite(Number(goal)) ? 0 : Math.round(Number(goal)),
+      // Ziel < 1000 (inkl. 0/leer) = kein Ziel → null. Deadline leer → null.
+      goal_target_chars: Number(this.bookSettingsGoalTargetChars) >= 1000 ? Math.round(Number(this.bookSettingsGoalTargetChars)) : null,
+      goal_deadline:     this.bookSettingsGoalDeadline || null,
+      orte_real:         this.bookSettingsOrteReal ? 1 : 0,
+      schauplatz_land:   this.bookSettingsSchauplatzLand || null,
+      zeitlinie_real:    this.bookSettingsZeitlinieReal ? 1 : 0,
+      weltfakten_real_pruefen: this.bookSettingsWeltfaktenRealPruefen ? 1 : 0,
+      exclude_from_stats: this.bookSettingsExcludeFromStats ? 1 : 0,
+    };
+  },
+
+  async saveBookSettings(bookId = this._formBookId) {
+    if (!bookId || !this.bookSettingsLoaded) return false;
+    this.bookSettingsSaving = true;
+    this.bookSettingsSaved  = false;
+    this.bookSettingsError  = '';
+    const sent = this._snapKey('settings');
+    try {
+      const nav = Alpine.store('nav');
+      const currentBook = nav.books.find(b => String(b.id) === String(bookId));
+      const { name, ...payload } = this._settingsSnapshot();
+      if (!name) throw new Error(window.__app.t('book.create.errorEmpty'));
+      const renamed = name !== (currentBook?.name || '');
+      if (renamed) await contentRepo.updateBook(bookId, { name });
+      const r = await fetch(`/booksettings/${bookId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        throw new Error(window.__app.tError(data));
+      }
+      this._settleSave('settings', sent);
+      this.bookSettingsSaved = true;
+      this._flash('bookSettingsSaved');
+      if (this._isSelectedBook(bookId)) this._afterSettingsSaved(payload, currentBook, renamed);
+      return true;
+    } catch (e) {
+      this.bookSettingsError = e.message;
+      return false;
+    } finally {
+      this.bookSettingsSaving = false;
+    }
+  },
+
+  // Root-State des gewählten Buchs nachziehen. Nur wenn das gespeicherte Buch
+  // noch das gewählte ist — die Rückfrage beim Buchwechsel speichert das alte.
+  async _afterSettingsSaved(payload, currentBook, renamed) {
+    const app = window.__app;
+    const buchtypChanged = (currentBook?.buchtyp ?? null) !== payload.buchtyp;
+    if (renamed || buchtypChanged) {
+      // Buchtyp-Wechsel MUSS den Pagetree neu laden (skipPages: false), weil
+      // nur loadPages den sidebarMode (Tagebuch → Kalender, sonst Tree) aus
+      // isTagebuch() ableitet. Reiner Rename bleibt metadaten-only.
+      await app.loadBooks?.({ skipPages: !buchtypChanged, fresh: true });
+    }
+    // Header-Donut liest Abschluss + Tagesziel aus Alpine.store('progress').
+    const progress = Alpine.store('progress');
+    progress.dailyProgressIsFinished = !!payload.is_finished;
+    progress.dailyProgressDailyGoalChars = payload.daily_goal_chars;
+    // Belege im Editor formatieren in der Buchsprache.
+    app.citationLangForCurrentBook = payload.language;
+    // Der rohe /booksettings-Stand im geteilten Store ist überholt.
+    app.invalidateBookSettingsCache?.();
+  },
+
+  // Owner-Freigabe «Lektoren dürfen den Buch-Chat nutzen» — sofort gespeichert
+  // (Reiter «Teilen» hat keinen Kopf-Knopf). Der Server übernimmt das Feld nur
+  // vom Owner; bei Fehler springt die Checkbox zurück.
+  async saveLektorBookChat(value) {
+    const bookId = this._formBookId;
+    if (!bookId || !this.bookAccessIsOwner()) return;
+    this.bookAccessError = '';
+    try {
+      const r = await fetch(`/booksettings/${bookId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allow_lektor_book_chat: value ? 1 : 0 }),
+      });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(window.__app.tError(d)); }
+      window.__app.invalidateBookSettingsCache?.();
+    } catch (e) {
+      if (this._isFormBook(bookId)) {
+        this.bookSettingsAllowLektorBookChat = !value;
+        this.bookAccessError = e.message;
+      }
     }
   },
 
@@ -49,7 +164,7 @@ export const settingsMethods = {
   // wird nur das Stilprofil-Feld aus dem Job-Result übernommen — der Rest des
   // Formulars (ggf. ungespeicherte Edits) bleibt unangetastet.
   async generateStilprofil() {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._formBookId;
     if (!bookId || this.stilprofilGenerating) return;
     this.stilprofilGenerating = true;
     this.stilprofilError = '';
@@ -60,7 +175,7 @@ export const settingsMethods = {
         body: JSON.stringify({ book_id: Number(bookId) }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(window.__app.tError(data) || `HTTP ${res.status}`);
+      if (!res.ok) throw new Error(window.__app.tError(data));
       this.stilprofilJobId = data.jobId;
       window.dispatchEvent(new CustomEvent(EVT.JOB_ENQUEUED, { detail: { type: 'stilprofil', jobId: data.jobId } }));
     } catch (e) {
@@ -69,23 +184,37 @@ export const settingsMethods = {
     }
   },
 
+  // job:finished (Handler in der Karte). Das Profil ist serverseitig schon
+  // gespeichert: war der Pfad vorher unverändert, bleibt er es auch danach.
+  onStilprofilJobFinished(detail) {
+    if (!this._isFormBook(detail?.bookId)) return;
+    this.stilprofilGenerating = false;
+    this.stilprofilJobId = null;
+    const job = detail.job;
+    if (job?.status === 'done' && job.result?.stilprofil) {
+      const wasClean = !this._isDirty('settings');
+      this.bookSettingsStilprofil = job.result.stilprofil;
+      if (wasClean) this._markClean('settings');
+    } else if (job?.status === 'error') {
+      this.stilprofilError = window.__app.t('book.settings.stilprofil.genError');
+    }
+  },
 
-  // Autorenprofil in dieses Buch uebernehmen. Fuellt NUR das Formularfeld — der
+
+  // Autorenprofil in dieses Buch übernehmen. Füllt NUR das Formularfeld — der
   // User sieht den Text und speichert selbst. Kein zweiter Schreibpfad auf
-  // book_settings.stilprofil, und kein stilles Ueberschreiben dessen, was im
+  // book_settings.stilprofil, und kein stilles Überschreiben dessen, was im
   // Feld schon steht: der Klick ist die Entscheidung, das Speichern die zweite.
   //
-  // Neu angelegte Buecher bekommen den Text bereits bei der Anlage
-  // (lib/content-store/index.js) — dieser Knopf ist der Weg fuer Buecher, die es
+  // Neu angelegte Bücher bekommen den Text bereits bei der Anlage
+  // (lib/content-store/index.js) — dieser Knopf ist der Weg für Bücher, die es
   // damals noch nicht gab.
   async adoptAuthorProfile() {
     if (this.stilprofilAdopting) return;
     this.stilprofilAdopting = true;
     this.stilprofilError = '';
     try {
-      const res = await fetch('/me/author-profile');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await fetchJson('/me/author-profile');
       const text = (data?.profile?.profil_text || '').trim();
       if (!text) {
         this.stilprofilError = window.__app.t('book.settings.stilprofil.noAuthorProfile');
@@ -93,22 +222,23 @@ export const settingsMethods = {
       }
       this.bookSettingsStilprofil = text;
     } catch (e) {
-      this.stilprofilError = e.message;
+      this.stilprofilError = tFetchError(e);
     } finally {
       this.stilprofilAdopting = false;
     }
   },
 
 
-  // Kategorie. Pool global; pro Buch eine Kategorie (optional).
-  async loadBookCategory() {
-    const bookId = Alpine.store('nav').selectedBookId;
+  // Kategorie. Pool global; pro Buch eine Kategorie (optional). Speichert sofort
+  // bei Auswahl (saveBookCategory), nicht über den Kopf-Knopf.
+  async loadBookCategory(bookId = this._selectedBookId()) {
     if (!bookId) return;
     try {
       const [pool, categoryRes] = await Promise.all([
         fetchJson('/local/categories'),
         fetchJson(`/books/${bookId}/category`),
       ]);
+      if (!this._isFormBook(bookId)) return;
       this.categoryPool = pool.categories || [];
       this.bookCategoryId = categoryRes.category?.id || '';
     } catch (e) {
@@ -123,7 +253,7 @@ export const settingsMethods = {
 
 
   async saveBookCategory(value) {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._formBookId;
     if (!bookId) return;
     // value aus combobox-change-Event-Detail; x-modelable-Sync zu bookCategoryId
     // ist beim Dispatch noch nicht propagiert (stale read).
@@ -137,265 +267,14 @@ export const settingsMethods = {
       });
       if (!r.ok) {
         const data = await r.json().catch(() => ({}));
-        throw new Error(window.__app.tError(data) || `HTTP ${r.status}`);
+        throw new Error(window.__app.tError(data));
       }
+      // Eine zuvor gemeldete «Kategorie fehlt» ist mit der Auswahl erledigt.
+      if (cid && this.bookSettingsError === window.__app.t('book.category.required')) this.bookSettingsError = '';
       await window.__app.loadBooks({ skipPages: true });
     } catch (e) {
       this.bookSettingsError = e.message;
     }
-  },
-
-
-  // Ein Header-Save-Button schreibt ALLE Stores der Karte: book_settings
-  // (/booksettings), book_publication (/publication) und die Quellenverzeichnis-
-  // Felder (/booksettings/:id/citation). Drei unabhängige Writes auf getrennte
-  // Spalten/Tabellen — ein Klick persistiert alles, egal in welchem
-  // Tab editiert wurde (Titelei/Klappentext im Publikation-Tab, Zitierstil im
-  // Quellen-Tab, Sprache/Kontext/Tagesziel in den anderen). Alle laufen
-  // parallel; die Header-Status-
-  // Getter aggregieren über beide. Methoden (keine Getter) — bookSettingsMethods
-  // wird gespreadet, Getter würden beim Spread eval't statt durchgereicht.
-  // Pflichtfelder beim Speichern: Buchtyp immer (alle KI-Jobs ziehen den Genre-
-  // Kontext via getBookPrompts), Kategorie nur wenn der globale Pool nicht leer
-  // ist (sonst gäbe es nichts auszuwählen → Save-Blockade). Liefert den i18n-Key
-  // des ersten verletzten Felds oder null.
-  _taxonomyError() {
-    if (!this.bookSettingsBuchtyp) return 'book.settings.buchtypRequired';
-    if ((this.categoryPool || []).length > 0 && !this.bookCategoryId) return 'book.category.required';
-    return null;
-  },
-
-
-  async saveActiveTab() {
-    const taxErr = this._taxonomyError();
-    if (taxErr) { this.bookSettingsError = window.__app.t(taxErr); return; }
-    await Promise.all([this.saveBookSettings(), this.savePublication(), this.saveCitationSettings(), this.saveXrefSettings(), this.saveResearchSettings(), this.saveSchulsystem(), this.saveExpose()]);
-  },
-
-  headerSaving()   { return this.bookSettingsSaving || this.pubSaving || this.citationSaving || this.researchSaving || this.schulSaving || this.exposeSaving; },
-
-  headerError()    { return this.bookSettingsError || this.pubError || this.citationError || this.researchError || this.schulError; },
-
-  headerSaved()    { return (this.bookSettingsSaved || this.pubSaved || this.citationSaved || this.exposeSaved) && !this.headerError(); },
-
-  headerDisabled() { return this.bookSettingsSaving || this.pubSaving || this.citationSaving || this.researchSaving || this.schulSaving || this.exposeSaving || this.bookSettingsLoading; },
-
-
-  async saveBookSettings() {
-    if (!Alpine.store('nav').selectedBookId) return;
-    this.bookSettingsSaving = true;
-    this.bookSettingsSaved  = false;
-    this.bookSettingsError  = '';
-    try {
-      const bookId = Alpine.store('nav').selectedBookId;
-      const currentBook = Alpine.store('nav').books.find(b => String(b.id) === String(bookId));
-      const newName = (this.bookSettingsName || '').trim();
-      if (!newName) throw new Error(window.__app.t('book.create.errorEmpty'));
-      if (newName !== (currentBook?.name || '')) {
-        await contentRepo.updateBook(bookId, { name: newName });
-      }
-      const r = await fetch(`/booksettings/${Alpine.store('nav').selectedBookId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          language:          this.bookSettingsLanguage,
-          region:            this.bookSettingsRegion,
-          buchtyp:           this.bookSettingsBuchtyp              || null,
-          buch_kontext:      this.bookSettingsBuchKontext          || null,
-          stilprofil:        this.bookSettingsStilprofil           || null,
-          erzaehlperspektive: this.bookSettingsErzaehlperspektive  || null,
-          erzaehlzeit:       this.bookSettingsErzaehlzeit          || null,
-          is_finished:       this.bookSettingsIsFinished ? 1 : 0,
-          allow_lektor_book_chat: this.bookSettingsAllowLektorBookChat ? 1 : 0,
-          daily_goal_chars:  Number.isFinite(Number(this.bookSettingsDailyGoalChars)) ? Number(this.bookSettingsDailyGoalChars) : null,
-          // Ziel < 1000 (inkl. 0/leer) = kein Ziel → null. Deadline leer → null.
-          goal_target_chars: Number(this.bookSettingsGoalTargetChars) >= 1000 ? Math.round(Number(this.bookSettingsGoalTargetChars)) : null,
-          goal_deadline:     this.bookSettingsGoalDeadline || null,
-          orte_real:         this.bookSettingsOrteReal ? 1 : 0,
-          schauplatz_land:   this.bookSettingsSchauplatzLand || null,
-          zeitlinie_real:    this.bookSettingsZeitlinieReal ? 1 : 0,
-          weltfakten_real_pruefen: this.bookSettingsWeltfaktenRealPruefen ? 1 : 0,
-          exclude_from_stats: this.bookSettingsExcludeFromStats ? 1 : 0,
-        }),
-      });
-      if (!r.ok) {
-        let data = null;
-        try { data = await r.json(); } catch (_) {}
-        throw new Error(data ? window.__app.tError(data) : `HTTP ${r.status}`);
-      }
-      this.bookSettingsSaved = true;
-      const newBuchtyp = this.bookSettingsBuchtyp || null;
-      const buchtypChanged = (currentBook?.buchtyp ?? null) !== newBuchtyp;
-      if (newName !== (currentBook?.name || '') || buchtypChanged) {
-        // Buchtyp-Wechsel MUSS den Pagetree neu laden (skipPages: false), weil
-        // nur loadPages den sidebarMode (Tagebuch → Kalender, sonst Tree) aus
-        // isTagebuch() ableitet. Reiner Rename bleibt metadaten-only (skipPages),
-        // damit der Pagetree nicht unnötig flackert.
-        await window.__app.loadBooks?.({ skipPages: !buchtypChanged, fresh: true });
-      }
-      // Header-Donut konsumiert dailyProgressIsFinished + dailyProgressDailyGoalChars
-      // aus Alpine.store('progress') — direkt spiegeln, damit Toggle Buch-Abschluss
-      // und neues Tagesziel ohne Reload greifen.
-      if (window.Alpine) {
-        const progress = window.Alpine.store('progress');
-        progress.dailyProgressIsFinished = !!this.bookSettingsIsFinished;
-        progress.dailyProgressDailyGoalChars = Number.isFinite(Number(this.bookSettingsDailyGoalChars))
-          ? Number(this.bookSettingsDailyGoalChars) : null;
-      }
-      // Der rohe /booksettings-Stand im geteilten Store (Buchtyp, Schreibziel,
-      // Deadline, Zitierstil) ist nach dem Speichern ueberholt.
-      window.__app?.invalidateBookSettingsCache?.();
-      if (this._savedAtTimer) clearTimeout(this._savedAtTimer);
-      this._savedAtTimer = setTimeout(() => { this.bookSettingsSaved = false; this._savedAtTimer = null; }, 2500);
-    } catch (e) {
-      this.bookSettingsError = e.message;
-    } finally {
-      this.bookSettingsSaving = false;
-    }
-  },
-
-
-  // ── Publikation (book_publication: Cover/Titelei/Bio, geteilt mit PDF+EPUB) ──
-  async loadPublication() {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId) return;
-    try {
-      this.bookPublication = await fetchJson(`/publication/${bookId}`);
-      this.bookPublicationLoaded = true;
-    } catch (e) {
-      console.error('[book-settings] Publikation laden fehlgeschlagen:', e);
-    }
-  },
-
-
-  async savePublication() {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId) return;
-    // Nicht speichern, bevor die volle Meta geladen ist — der strikte Full-
-    // Replace-Upsert würde den DB-Stand sonst mit leeren Defaults überschreiben.
-    // saveActiveTab ruft uns auf jedem Save-Klick auf, auch ohne Publikations-Edit.
-    if (!this.bookPublicationLoaded) return;
-    this.pubSaving = true; this.pubSaved = false; this.pubError = '';
-    try {
-      // Volle geladene Meta zurueckschreiben — der strikte Upsert setzt jedes
-      // NICHT gesendete Feld auf Default. Spread statt Hand-Liste: validateMeta
-      // whitelistet serverseitig (Extra-Keys wie has_cover ignoriert), so dass
-      // auch die EPUB-Card-eigenen Felder (Typografie/OPF) erhalten bleiben.
-      const p = this.bookPublication || {};
-      const r = await fetch(`/publication/${bookId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...p }),
-      });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(window.__app.tError(d) || `HTTP ${r.status}`); }
-      this.bookPublication = await r.json();
-      this.pubSaved = true;
-      if (this._pubSavedTimer) clearTimeout(this._pubSavedTimer);
-      this._pubSavedTimer = setTimeout(() => { this.pubSaved = false; this._pubSavedTimer = null; }, 2500);
-    } catch (e) {
-      this.pubError = e.message;
-    } finally {
-      this.pubSaving = false;
-    }
-  },
-
-
-  // Co-Autoren (Schreib-Duos) + freie Vor-/Nachsatz-Seiten: rein lokale Array-
-  // Mutation der geladenen Meta. Persistiert wie alles andere ueber savePublication
-  // (Full-Replace-Spread → der Server validiert/serialisiert via validateMeta).
-  addCoAuthor() {
-    if (!this.bookPublication) return;
-    if (!Array.isArray(this.bookPublication.co_authors)) this.bookPublication.co_authors = [];
-    this.bookPublication.co_authors.push({ name: '', file_as: '' });
-  },
-
-  removeCoAuthor(i) {
-    this.bookPublication?.co_authors?.splice(i, 1);
-  },
-
-  addExtraSection() {
-    if (!this.bookPublication) return;
-    if (!Array.isArray(this.bookPublication.extra_sections)) this.bookPublication.extra_sections = [];
-    this.bookPublication.extra_sections.push({ placement: 'back', title: '', body: '', link_url: '', link_label: '', toc: true });
-  },
-
-  removeExtraSection(i) {
-    this.bookPublication?.extra_sections?.splice(i, 1);
-  },
-
-
-  async uploadPublicationCover(file) {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!file || !bookId) return;
-    this.pubCoverUploading = true; this.pubCoverError = '';
-    try {
-      const r = await fetch(`/publication/${bookId}/cover`, { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); this.pubCoverError = window.__app.tError(d) || window.__app.t('publication.imageInvalid'); return; }
-      this.pubPreviewVersion++;
-      await this.loadPublication();
-    } finally {
-      this.pubCoverUploading = false;
-    }
-  },
-
-
-  async removePublicationCover() {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId) return;
-    const r = await fetch(`/publication/${bookId}/cover`, { method: 'DELETE' });
-    if (!r.ok) return;
-    this.pubPreviewVersion++;
-    await this.loadPublication();
-  },
-
-
-  publicationCoverUrl() {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!this.bookPublication?.has_cover || !bookId) return '';
-    return `/publication/${bookId}/cover?v=${this.pubPreviewVersion}`;
-  },
-
-
-  async uploadPublicationAuthorImage(file) {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!file || !bookId) return;
-    this.pubAuthorUploading = true; this.pubAuthorError = '';
-    try {
-      const r = await fetch(`/publication/${bookId}/author-image`, { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); this.pubAuthorError = window.__app.tError(d) || window.__app.t('publication.imageInvalid'); return; }
-      this.pubPreviewVersion++;
-      await this.loadPublication();
-    } finally {
-      this.pubAuthorUploading = false;
-    }
-  },
-
-
-  async removePublicationAuthorImage() {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId) return;
-    const r = await fetch(`/publication/${bookId}/author-image`, { method: 'DELETE' });
-    if (!r.ok) return;
-    this.pubPreviewVersion++;
-    await this.loadPublication();
-  },
-
-
-  publicationAuthorImageUrl() {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!this.bookPublication?.has_author_image || !bookId) return '';
-    return `/publication/${bookId}/author-image?v=${this.pubPreviewVersion}`;
-  },
-
-
-  bookSettingsLocaleDisplay() {
-    const map = {
-      'de-CH': 'Deutsch (Schweiz)',
-      'de-DE': 'Deutsch (Deutschland)',
-      'en-US': 'English (USA)',
-      'en-GB': 'English (UK)',
-    };
-    return map[`${this.bookSettingsLanguage}-${this.bookSettingsRegion}`] || `${this.bookSettingsLanguage}-${this.bookSettingsRegion}`;
   },
 
 
@@ -412,11 +291,17 @@ export const settingsMethods = {
   },
 
 
-  // Gate für die Blog-/HubSpot-Sync-Sections: liest den im Formular gewählten
-  // Buchtyp (nicht den gespeicherten Nav-Wert), damit die Sections live auf die
-  // Combobox-Auswahl reagieren. SSoT für das 'blog'-Literal im Settings-Scope.
+  // Gate für den Sync-Reiter: liest den im Formular gewählten Buchtyp (nicht
+  // den gespeicherten Nav-Wert), damit der Reiter live auf die Combobox-Auswahl
+  // reagiert. SSoT für das 'blog'-Literal im Settings-Scope.
   bookSettingsIsBlog() {
     return this.bookSettingsBuchtyp === 'blog';
+  },
+
+  // PDF-/EPUB-Export gibt es für Journalismus nicht (feature-registry
+  // `hiddenForBuchtyp`) — die Sprung-Knöpfe im Reiter «Publikation» auch nicht.
+  bookSettingsHasBookExport() {
+    return this.bookSettingsBuchtyp !== 'journalismus';
   },
 
 

@@ -114,14 +114,21 @@ function transferOwnership(bookId, newOwnerEmail, performedBy) {
   if (!Number.isInteger(id) || id <= 0) throw new Error('transferOwnership: invalid bookId');
   if (!e) throw new Error('transferOwnership: invalid email');
   const newRow = _stmtGetRole.get(id, e);
-  if (!newRow) throw new Error('transferOwnership: target not in book_access');
+  if (!newRow) {
+    // `code` statt Message-Vergleich: die Route mappt darauf ihren 404.
+    const err = new Error('transferOwnership: target not in book_access');
+    err.code = 'TARGET_NOT_IN_ACCESS';
+    throw err;
+  }
   const oldOwner = getOwnerEmail(id);
   db.transaction(() => {
     if (oldOwner && oldOwner !== e) {
       _stmtUpsertAccess.run(id, oldOwner, 'editor', _normEmail(performedBy) || 'system');
     }
     _stmtUpsertAccess.run(id, e, 'owner', _normEmail(performedBy) || 'system');
-    db.prepare('UPDATE books SET owner_email = ? WHERE book_id = ?').run(e, id);
+    // books.owner_email nur ueber den Domänen-Helfer; synchron, laeuft also
+    // in derselben Transaktion wie die beiden Grants.
+    require('./books').setBookOwner(id, e);
   })();
   return { previousOwner: oldOwner, newOwner: e };
 }

@@ -50,12 +50,9 @@
                    })">
               <thead>
                 <tr>
-                  <th class="sortable-th" :class="sortClass('ix')" :aria-sort="ariaSort('ix')"
-                      @click="sortBy('ix')" x-text="$app.t('buchlandkarte.col.boundaryAt')"></th>
-                  <th class="sortable-th" :class="sortClass('place')" :aria-sort="ariaSort('place')"
-                      @click="sortBy('place')" x-text="$app.t('buchlandkarte.col.place')"></th>
-                  <th class="sortable-th" :class="sortClass('strengthPct')" :aria-sort="ariaSort('strengthPct')"
-                      @click="sortBy('strengthPct')" x-text="$app.t('buchlandkarte.col.strength')"></th>
+                  <th x-bind="sortTh('ix')" x-text="$app.t('buchlandkarte.col.boundaryAt')"></th>
+                  <th x-bind="sortTh('place')" x-text="$app.t('buchlandkarte.col.place')"></th>
+                  <th x-bind="sortTh('strengthPct')" x-text="$app.t('buchlandkarte.col.strength')"></th>
                 </tr>
               </thead>
               <tbody>
@@ -90,14 +87,10 @@
                    })">
               <thead>
                 <tr>
-                  <th class="sortable-th" :class="sortClass('aName')" :aria-sort="ariaSort('aName')"
-                      @click="sortBy('aName')" x-text="$app.t('buchlandkarte.col.earlier')"></th>
-                  <th class="sortable-th" :class="sortClass('bName')" :aria-sort="ariaSort('bName')"
-                      @click="sortBy('bName')" x-text="$app.t('buchlandkarte.col.later')"></th>
-                  <th class="sortable-th" :class="sortClass('gap')" :aria-sort="ariaSort('gap')"
-                      @click="sortBy('gap')" x-text="$app.t('buchlandkarte.col.gap')"></th>
-                  <th class="sortable-th" :class="sortClass('scorePct')" :aria-sort="ariaSort('scorePct')"
-                      @click="sortBy('scorePct')" x-text="$app.t('buchlandkarte.col.similarity')"></th>
+                  <th x-bind="sortTh('aName')" x-text="$app.t('buchlandkarte.col.earlier')"></th>
+                  <th x-bind="sortTh('bName')" x-text="$app.t('buchlandkarte.col.later')"></th>
+                  <th x-bind="sortTh('gap')" x-text="$app.t('buchlandkarte.col.gap')"></th>
+                  <th x-bind="sortTh('scorePct')" x-text="$app.t('buchlandkarte.col.similarity')"></th>
                 </tr>
               </thead>
               <tbody>

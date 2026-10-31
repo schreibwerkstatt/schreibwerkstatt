@@ -17,7 +17,7 @@
   background: transparent;
   border: none;
   padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   cursor: pointer;
   font-size: var(--font-size-base);
   color: var(--color-text);
@@ -104,7 +104,7 @@
   background: transparent;
   border: none;
   padding: var(--space-3) var(--space-10);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   cursor: pointer;
   text-align: left;
   line-height: 1.3;

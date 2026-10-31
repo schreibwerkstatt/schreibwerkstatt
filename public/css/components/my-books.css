@@ -88,7 +88,7 @@
   font-size: var(--font-size-mini);
   color: var(--color-muted);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: 0 var(--space-xs);
 }
 

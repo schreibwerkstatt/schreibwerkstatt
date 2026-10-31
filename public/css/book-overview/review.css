@@ -7,7 +7,7 @@
   line-height: 1;
 }
 .overview-star { color: var(--color-border); }
-.overview-star--full { color: var(--color-accent); }
+.overview-star--full { color: var(--color-accent-text); }
 /* Halber Stern: linear-gradient als Mask, fallback voll farbig auf 50%. */
 .overview-star--half {
   background: linear-gradient(90deg, var(--color-accent) 50%, var(--color-border) 50%);

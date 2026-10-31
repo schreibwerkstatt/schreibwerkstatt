@@ -4,18 +4,24 @@
 
 import { fetchJson } from '../../utils.js';
 import { memoMethods } from '../../cards/card-memo.js';
+import { loadToken } from '../../cards/book-guard.js';
 
 export const lifecycleMethods = {
   // Memo-Helper (cards/card-memo.js); Reset über this._memos = {}.
   ...memoMethods,
 
+  // Buchwechsel-/Doppel-Load-Guard: eine verspätete Antwort des vorigen Buchs
+  // setzte sonst dessen _savedPositions, und der nächste Drag schriebe das
+  // Layout des alten Buchs unter dem neuen zurück.
   async loadBoard() {
     const bookId = this.$store.nav.selectedBookId;
     if (!bookId) return;
+    const isCurrent = loadToken(this, '_boardLoadSeq', bookId);
     this.loading = true;
     this.errorMessage = '';
     try {
       const data = await fetchJson(`/motifs?book_id=${bookId}`);
+      if (!isCurrent()) return;
       this.themes = data.themes || [];
       this.motifs = data.motifs || [];
       this.relations = data.relations || [];
@@ -45,9 +51,9 @@ export const lifecycleMethods = {
         if (this.motifById(pid)) this.selectMotif(pid);
       }
     } catch (e) {
-      this.errorMessage = window.__app.t('motiv.error.load');
+      if (isCurrent()) this.errorMessage = window.__app.t('motiv.error.load');
     } finally {
-      this.loading = false;
+      if (isCurrent.latest()) this.loading = false;
     }
   },
 

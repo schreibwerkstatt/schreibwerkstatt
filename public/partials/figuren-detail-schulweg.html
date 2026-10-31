@@ -37,26 +37,26 @@
       <div class="figur-edit"
            @keydown="$editKeys($event, { save: () => saveFigurSchulEdit(f), cancel: () => cancelFigurSchulEdit() })">
         <div class="card-form-grid">
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('figuren.schule.weg')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :id="$id('fld')" class="card-form-label" x-text="$app.t('figuren.schule.weg')"></label>
             <div class="card-form-field">
-              <div x-data="combobox({ placeholder: $app.t('figuren.schule.weg'), emptyLabel: $app.t('figuren.schule.wegStandard'), compact: false })"
+              <div :aria-labelledby="$id('fld')" x-data="combobox({ placeholder: $app.t('figuren.schule.weg'), emptyLabel: $app.t('figuren.schule.wegStandard'), compact: false })"
                    x-modelable="value" x-model="figurSchulDraft.weg"
                    x-effect="options = figurSchulWegOptionen()"></div>
             </div>
           </div>
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('figuren.schule.einschulung')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :for="$id('fld')" class="card-form-label" x-text="$app.t('figuren.schule.einschulung')"></label>
             <div class="card-form-field">
-              <input type="text" class="form-num"
+              <input :id="$id('fld')" type="text" class="form-num"
                      x-data="numInput({ integer: true, min: 1000, max: 2999, grouping: false })"
                      x-modelable="value" x-model="figurSchulDraft.einschulung_jahr">
               <p class="card-form-field-note" x-text="$app.t('figuren.schule.einschulungHint')"></p>
             </div>
           </div>
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('figuren.schule.repetition.label')"></label>
-            <div class="card-form-field">
+          <div x-id="['fld']" class="card-form-row">
+            <span :id="$id('fld')" class="card-form-label" x-text="$app.t('figuren.schule.repetition.label')"></span>
+            <div class="card-form-field" role="group" :aria-labelledby="$id('fld')">
               <!-- Eingetragene Repetitionen als entfernbare Chips; hinzufügen nur Klassen,
                    die der gewählte Weg durchläuft. Eine, die nach einem Wegwechsel nicht
                    mehr passt, bleibt sichtbar markiert, bis sie entfernt ist. -->

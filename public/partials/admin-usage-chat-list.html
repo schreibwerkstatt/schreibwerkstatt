@@ -42,26 +42,16 @@
        })">
   <thead>
     <tr>
-      <th class="sortable-th" :class="sortClass('userEmail')" :aria-sort="ariaSort('userEmail')"
-          @click="sortBy('userEmail')" x-text="$app.t('admin.users.email')"></th>
-      <th class="sortable-th" :class="sortClass('sessionKind')" :aria-sort="ariaSort('sessionKind')"
-          @click="sortBy('sessionKind')" x-text="$app.t('admin.usage.chat.kind')"></th>
-      <th class="sortable-th" :class="sortClass('model')" :aria-sort="ariaSort('model')"
-          @click="sortBy('model')" x-text="$app.t('admin.usage.job.model')"></th>
-      <th class="sortable-th" :class="sortClass('feedback')" :aria-sort="ariaSort('feedback')"
-          @click="sortBy('feedback')" x-text="$app.t('admin.usage.chat.feedback')"></th>
-      <th class="sortable-th" :class="sortClass('tokensIn')" :aria-sort="ariaSort('tokensIn')"
-          @click="sortBy('tokensIn')" x-text="$app.t('admin.usage.column.tokensIn')"></th>
-      <th class="sortable-th" :class="sortClass('tokensOut')" :aria-sort="ariaSort('tokensOut')"
-          @click="sortBy('tokensOut')" x-text="$app.t('admin.usage.column.tokensOut')"></th>
-      <th class="sortable-th" :class="sortClass('cacheReadIn')" :aria-sort="ariaSort('cacheReadIn')"
-          @click="sortBy('cacheReadIn')" x-text="$app.t('admin.usage.column.cacheRead')"></th>
-      <th class="sortable-th" :class="sortClass('usd')" :aria-sort="ariaSort('usd')"
-          @click="sortBy('usd')" x-text="$app.t('admin.usage.column.cost')"></th>
-      <th class="sortable-th" :class="sortClass('bookId')" :aria-sort="ariaSort('bookId')"
-          @click="sortBy('bookId')" x-text="$app.t('admin.usage.job.book')"></th>
-      <th class="sortable-th" :class="sortClass('createdAt')" :aria-sort="ariaSort('createdAt')"
-          @click="sortBy('createdAt')" x-text="$app.t('admin.usage.job.queuedAt')"></th>
+      <th x-bind="sortTh('userEmail')" x-text="$app.t('admin.users.email')"></th>
+      <th x-bind="sortTh('sessionKind')" x-text="$app.t('admin.usage.chat.kind')"></th>
+      <th x-bind="sortTh('model')" x-text="$app.t('admin.usage.job.model')"></th>
+      <th x-bind="sortTh('feedback')" x-text="$app.t('admin.usage.chat.feedback')"></th>
+      <th x-bind="sortTh('tokensIn')" x-text="$app.t('admin.usage.column.tokensIn')"></th>
+      <th x-bind="sortTh('tokensOut')" x-text="$app.t('admin.usage.column.tokensOut')"></th>
+      <th x-bind="sortTh('cacheReadIn')" x-text="$app.t('admin.usage.column.cacheRead')"></th>
+      <th x-bind="sortTh('usd')" x-text="$app.t('admin.usage.column.cost')"></th>
+      <th x-bind="sortTh('bookId')" x-text="$app.t('admin.usage.job.book')"></th>
+      <th x-bind="sortTh('createdAt')" x-text="$app.t('admin.usage.job.queuedAt')"></th>
     </tr>
   </thead>
   <tbody>

@@ -50,13 +50,13 @@
 
     <!-- Reiter: Liste (Einstieg) · drei Graphen · drei Tabellen -->
     <div class="tabs tabs--fullwidth">
-      <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'liste' }" @click="setFigurenGraphModus('liste')" x-text="$app.t('figuren.modeListe')"></button>
-      <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'figur' }" @click="setFigurenGraphModus('figur')" x-text="$app.t('figuren.modeGraph')"></button>
-      <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'familie' }" :disabled="!figurenHasFamilyEdges()" @click="setFigurenGraphModus('familie')" x-text="$app.t('figuren.modeFamilie')"></button>
-      <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'soziogramm' }" @click="setFigurenGraphModus('soziogramm')" x-text="$app.t('figuren.modeSoziogramm')"></button>
-      <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'praesenz' }" @click="setFigurenGraphModus('praesenz')" x-text="$app.t('figuren.modePraesenz')"></button>
-      <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'alter' }" @click="setFigurenGraphModus('alter')" x-text="$app.t('figuren.modeAlter')"></button>
-      <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'lebenslauf' }" @click="setFigurenGraphModus('lebenslauf')" x-text="$app.t('figuren.modeLebenslauf')"></button>
+      <button :aria-pressed="figurenGraphModus === 'liste'" type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'liste' }" @click="setFigurenGraphModus('liste')" x-text="$app.t('figuren.modeListe')"></button>
+      <button :aria-pressed="figurenGraphModus === 'figur'" type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'figur' }" @click="setFigurenGraphModus('figur')" x-text="$app.t('figuren.modeGraph')"></button>
+      <button :aria-pressed="figurenGraphModus === 'familie'" type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'familie' }" :disabled="!figurenHasFamilyEdges()" @click="setFigurenGraphModus('familie')" x-text="$app.t('figuren.modeFamilie')"></button>
+      <button :aria-pressed="figurenGraphModus === 'soziogramm'" type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'soziogramm' }" @click="setFigurenGraphModus('soziogramm')" x-text="$app.t('figuren.modeSoziogramm')"></button>
+      <button :aria-pressed="figurenGraphModus === 'praesenz'" type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'praesenz' }" @click="setFigurenGraphModus('praesenz')" x-text="$app.t('figuren.modePraesenz')"></button>
+      <button :aria-pressed="figurenGraphModus === 'alter'" type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'alter' }" @click="setFigurenGraphModus('alter')" x-text="$app.t('figuren.modeAlter')"></button>
+      <button :aria-pressed="figurenGraphModus === 'lebenslauf'" type="button" class="tabs-btn" :class="{ 'tabs-btn--active': figurenGraphModus === 'lebenslauf' }" @click="setFigurenGraphModus('lebenslauf')" x-text="$app.t('figuren.modeLebenslauf')"></button>
     </div>
 
     <!-- Graph-Legende (klappbar) — nested Partial im figurenCard-Scope -->

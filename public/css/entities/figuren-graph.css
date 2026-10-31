@@ -67,7 +67,7 @@
   flex: 1;
   height: auto;
   min-height: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   touch-action: none;
 }
 
@@ -85,7 +85,7 @@
   flex: 1;
   height: auto;
   min-height: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   touch-action: none;
 }
 
@@ -135,11 +135,7 @@
 .figur-legend-dot--migrantenmilieu      { --fig-hue: var(--palette-orange); }
 .figur-legend-dot--prekariat            { --fig-hue: var(--palette-wine); }
 /* Unterwelt: invertierte Darstellung (dunkler Hintergrund, helle Linie) – braucht starken Mix */
-.figur-legend-dot--unterwelt            { --fig-hue: var(--palette-dark); --figpal-bg-mix: 95%; border-color: var(--color-border-contrast); }
-:root[data-theme="dark"] .figur-legend-dot--unterwelt {
-  --fig-hue: var(--palette-gray-light);
-  border-color: var(--palette-dark);
-}
+.figur-legend-dot--unterwelt            { --fig-hue: var(--palette-unterwelt); --figpal-bg-mix: 95%; border-color: var(--palette-unterwelt-border); }
 
 /* === Figuren: Kanten-Legende === */
 .figur-legend--soziogramm { flex-wrap: wrap; row-gap: var(--space-xs); }

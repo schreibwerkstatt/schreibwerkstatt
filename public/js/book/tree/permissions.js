@@ -92,6 +92,7 @@ export const treePermissionsMethods = {
     }
     let role = null;
     let shared = false;
+    let loaded = false;
     try {
       const res = await fetch('/books/' + encodeURIComponent(id) + '/access', {
         headers: { Accept: 'application/json' },
@@ -100,12 +101,17 @@ export const treePermissionsMethods = {
         const data = await res.json();
         role = data?.my_role || null;
         shared = Array.isArray(data?.access) && data.access.length > 1;
+        loaded = true;
       }
     } catch (e) {
       // Netzwerk-Fehler → role bleibt null (Legacy-Fallback: canEdit=true)
     }
-    this.bookRoles[id] = role;
-    this.bookSharedFlags[id] = shared;
+    // Nur eine echte Antwort cachen: ein gecachtes null aus einem Netz-/5xx-
+    // Fehler hiesse für den Rest der Sitzung „canEdit" ohne erneute Abfrage.
+    if (loaded) {
+      this.bookRoles[id] = role;
+      this.bookSharedFlags[id] = shared;
+    }
     if (String(this.$store.nav.selectedBookId) === id) {
       this.currentBookRole = role;
       // Shared-Flag steht jetzt fest → vollen Poll ggf. starten, ohne den schon

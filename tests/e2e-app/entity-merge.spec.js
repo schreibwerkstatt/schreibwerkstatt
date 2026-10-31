@@ -65,7 +65,7 @@ test('merge-panel: Kandidaten laden, Figuren zusammenfuehren, Quelle verschwinde
   await page.locator(`${CARD} .tabs-btn`, { hasText: 'Gefahr' }).click();
 
   // Der Danger-Tab laedt die Kandidatenlisten (x-effect, einmalig).
-  const section = page.locator(`${CARD} .book-settings-danger-section`, { hasText: 'Verwaiste Einträge zusammenführen' }).first();
+  const section = page.locator(`${CARD} .danger-zone-section`, { hasText: 'Verwaiste Einträge zusammenführen' }).first();
   await expect(section).toBeVisible();
   await page.waitForFunction(
     (n) => {
@@ -98,7 +98,7 @@ test('merge-panel: Kandidaten laden, Figuren zusammenfuehren, Quelle verschwinde
   })).toBe([seeded.srcId, seeded.tgtId].join('|'));
 
   // Bestaetigungsdialog: nativer <dialog> im Top-Layer → Confirm-Button klicken.
-  const mergeBtn = figBlock.locator('.book-settings-btn-danger');
+  const mergeBtn = figBlock.locator('.danger-zone-btn');
   await expect(mergeBtn).toBeEnabled();
   await mergeBtn.click();
   await page.locator('#app-confirm-dialog .confirm-dialog-btn--danger').click();

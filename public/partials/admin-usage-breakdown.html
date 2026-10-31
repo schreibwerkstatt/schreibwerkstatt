@@ -24,18 +24,12 @@
            })">
       <thead>
         <tr>
-          <th class="sortable-th" :class="sortClass('label')" :aria-sort="ariaSort('label')"
-              @click="sortBy('label')" x-text="$app.t('admin.usage.job.type')"></th>
-          <th class="sortable-th" :class="sortClass('calls')" :aria-sort="ariaSort('calls')"
-              @click="sortBy('calls')" x-text="$app.t('admin.usage.breakdown.calls')"></th>
-          <th class="sortable-th" :class="sortClass('tokensIn')" :aria-sort="ariaSort('tokensIn')"
-              @click="sortBy('tokensIn')" x-text="$app.t('admin.usage.column.tokensIn')"></th>
-          <th class="sortable-th" :class="sortClass('tokensOut')" :aria-sort="ariaSort('tokensOut')"
-              @click="sortBy('tokensOut')" x-text="$app.t('admin.usage.column.tokensOut')"></th>
-          <th class="sortable-th" :class="sortClass('usd')" :aria-sort="ariaSort('usd')"
-              @click="sortBy('usd')" x-text="$app.t('admin.usage.column.cost')"></th>
-          <th class="sortable-th" :class="sortClass('share')" :aria-sort="ariaSort('share')"
-              @click="sortBy('share')" x-text="$app.t('admin.usage.breakdown.share')"></th>
+          <th x-bind="sortTh('label')" x-text="$app.t('admin.usage.job.type')"></th>
+          <th x-bind="sortTh('calls')" x-text="$app.t('admin.usage.breakdown.calls')"></th>
+          <th x-bind="sortTh('tokensIn')" x-text="$app.t('admin.usage.column.tokensIn')"></th>
+          <th x-bind="sortTh('tokensOut')" x-text="$app.t('admin.usage.column.tokensOut')"></th>
+          <th x-bind="sortTh('usd')" x-text="$app.t('admin.usage.column.cost')"></th>
+          <th x-bind="sortTh('share')" x-text="$app.t('admin.usage.breakdown.share')"></th>
         </tr>
       </thead>
       <tbody>
@@ -73,23 +67,19 @@
              })">
         <thead>
           <tr>
-            <th class="sortable-th" :class="sortClass('label')" :aria-sort="ariaSort('label')"
-                @click="sortBy('label')" x-text="$app.t('admin.users.email')"></th>
+            <th x-bind="sortTh('label')" x-text="$app.t('admin.users.email')"></th>
             <template x-for="(col, i) in adminUsageMatrix().cols" :key="col.key">
-              <th class="sortable-th" :class="sortClass('c' + i)" :aria-sort="ariaSort('c' + i)"
-                  @click="sortBy('c' + i)" x-text="col.label"></th>
+              <th x-bind="sortTh('c' + i)" x-text="col.label"></th>
             </template>
-            <th class="sortable-th" :class="sortClass('other')" :aria-sort="ariaSort('other')"
-                @click="sortBy('other')" x-text="$app.t('admin.usage.breakdown.other')"></th>
-            <th class="sortable-th" :class="sortClass('total')" :aria-sort="ariaSort('total')"
-                @click="sortBy('total')" x-text="$app.t('admin.usage.breakdown.total')"></th>
+            <th x-bind="sortTh('other')" x-text="$app.t('admin.usage.breakdown.other')"></th>
+            <th x-bind="sortTh('total')" x-text="$app.t('admin.usage.breakdown.total')"></th>
           </tr>
         </thead>
         <tbody>
           <template x-for="row in sorted" :key="row.id">
             <tr>
               <td class="admin-usage-cell-email">
-                <span class="internal-link" @click="adminUsageShowBreakdown(row.email)" x-text="row.label"></span>
+                <span class="internal-link text-link" @click="adminUsageShowBreakdown(row.email)" x-text="row.label"></span>
               </td>
               <template x-for="(col, i) in adminUsageMatrix().cols" :key="col.key">
                 <td class="admin-usage-cell-num" :class="row['c' + i] ? '' : 'admin-usage-cell--zero'"

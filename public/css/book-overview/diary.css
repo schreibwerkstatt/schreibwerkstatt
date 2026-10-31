@@ -56,7 +56,7 @@
   min-height: 2px;
   height: var(--progress, 0%);
   background: var(--color-accent);
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  border-radius: var(--radius-none) var(--radius-none) 0 0;
   transition: height 0.18s ease;
 }
 .overview-weekday-count {

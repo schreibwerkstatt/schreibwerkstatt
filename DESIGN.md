@@ -138,15 +138,15 @@ Wiederkehrende Werte gehen über Tokens. Ad-hoc-Werte (`box-shadow: 0 4px 12px .
 | **Transition** | `--transition-fast` (0.1s), `--transition-base` (0.12s), `--transition-slow` (0.15s), `--transition-emphasized` (0.3s) | Standard-Cadence. Emphasized für Modal/Drawer-Slides, Card-Eingang, längere Fades. **NIE als `--x: var(--x)` definieren** — zirkuläre Custom-Property ist invalid → ganze `transition`/`animation`-Property kippt auf Default `0s` → Chevron-Rotationen, `cardFadeIn`, Hover-Tints sind tot, Erweiterungen „wackeln" weil Section snappt ohne Chevron-Maskierung. Definitionen müssen Literalwerte tragen, [public/css/tokens/motion.css](public/css/tokens/motion.css). `prefers-reduced-motion: reduce` flippt alle Transition-Tokens auf `0s` (globaler Override in derselben Datei). **Easing:** `--ease-out` (Quint, `cubic-bezier(0.22, 1, 0.36, 1)`) für Eingänge — `--transition-emphasized` nutzt es bereits; Hover-Tints/Zustandswechsel bleiben auf `ease`. |
 | **Opacity** | `--opacity-disabled` (0.6), `--opacity-muted` (0.5), `--opacity-hint` (0.4), `--opacity-faint` (0.35), `--opacity-strong` (0.75) | Semantische Stufen. `:disabled` immer `--opacity-disabled`. |
 | **Muster** | `--hatch-empty` | Schraffur fuer die leere Raster-Zelle (45°, 2px Strich / 6px Periode, liest `--color-border`). Konsument: `.heatmap-cell--empty`, zusaetzlich `opacity: var(--opacity-disabled)`. Eine Deklaration, damit „nichts da“ ueberall gleich aussieht; keine zweite Schraffur in einer Feature-Datei. |
-| **Focus-Ring** | — | Kein wildcard-`:focus-visible`-Token. Browser-Default-Outline aktiv; per-Element-Fokus-Styles für Tab-Navigation in [base.css](public/css/layout/base.css) (Skip-Link, `.page-item`, `.tree-chapter-header`, `.lektorat-split-findings .finding`). Komponenten mit eigenem Fokus-Signal setzen `outline: none` ohne `!important`. |
-| **Font-Size** | `--font-size-xs` (11px), `--font-size-sm` (13px), `--font-size-base` (14px), `--font-size-md` (15px), `--font-size-lg` (18px), `--font-size-xl` (22px), `--font-size-2xl` (26px) | xs/sm/base/md = UI-Stufen. lg = Sub-Heading. xl = Card-Title-Standard. 2xl = Hero/H1. |
+| **Focus-Ring** | `--focus-ring` (2px solid `--focus-ring-color` = `--color-primary`), `--focus-ring-offset` (2px), `--focus-ring-offset-inset` (-2px); Eingabefelder: `--color-border-focus` | Kein globaler Wildcard-Ring — der Browser-Default bleibt, wo eine Komponente nichts setzt. Wer `outline: none` setzt, liefert im selben Block Ersatz. Siehe „Focus-Visible". |
+| **Font-Size** | `--font-size-micro` (10px), `--font-size-xs` (11px), `--font-size-mini` (12px), `--font-size-sm` (13px), `--font-size-base` (14px), `--font-size-md` (15px), `--font-size-reading` (16px), `--font-size-lg` (18px), `--font-size-xl` (22px), `--font-size-2xl` (26px), `--font-size-3xl` (30px), `--font-size-4xl` (38px) | xs/sm/base/md = UI-Stufen, micro/mini = dichte UI (Caption, Token-Stats). reading = Long-Form (Editor, Seitenansicht) und iOS-Zoom-Schutz (≥ 16px in Eingabefeldern). lg = Sub-Heading. xl = Card-Title-Standard. 2xl = Hero/H1, 3xl/4xl = Hero-Kennzahlen. Roher `px`/`rem`-Wert nur mit Allowlist-Eintrag ([font-size-scale.test.mjs](tests/unit/font-size-scale.test.mjs), Ratsche). |
 | **Font-Family** | `--font-sans` (Inter), `--font-serif` (Source Serif 4) | UI immer `--font-sans`, Reading-Frame + Headings `--font-serif`. |
 | **Font-Weight** | `--fw-regular` (400), `--fw-medium` (500), `--fw-semibold` (600), `--fw-bold` (700) | `font-weight: 600` → `var(--fw-semibold)`. |
 | **Line-Height** | `--lh-tight` (1.2), `--lh-base` (1.45), `--lh-relaxed` (1.6) | Headings/UI tight, Standard base, Reading-Frame relaxed. |
 | **Border-Width** | `--border-thin` (0.5px), `--border-thick` (2px) | Nur die **Abweichungen** vom Standard sind tokenisiert: dezenter Trenner bzw. Akzentband. Der Regelfall 1px steht literal (`border: 1px solid var(--color-border)`) — die Farbe ist das Token, die Breite nicht. |
-| **Radius** | `--radius-sm` (0, hart — Badges/Tags/Pills), `--radius-md` (2px — Cards, Inputs, Buttons), `--radius-lg` (4px — Modal, Drawer, Tooltip, Confirm-Dialog) | Editorial-Eckig bleibt Leitmotiv (Listen-Elemente hart auf 0), grössere Flächen leicht weichgespült. Nicht zu ad-hoc Pixel-Radius greifen. |
-| **Text-Farben** | `--color-text`, `--color-muted`, `--color-subtle`, `--color-faint` | Vier Stufen vom prägnantesten zum dezentesten — Body / sekundär / tertiär / fast unsichtbar. Inverse für dauerhaft dunkle Flächen: `--color-text-inverse`. |
-| **Z-Index** | `--z-base` (1), `--z-sticky` (100), `--z-header` (200), `--z-popover` (1000), `--z-toolbar` (1100), `--z-overlay` (2000), `--z-banner` (10000), `--z-modal` (9500), `--z-modal-front` (11000), `--z-toast` (12000), `--z-boss-screen` (13000) | Stapel-Reihenfolge — siehe Section „Z-Index-Stack" unten. |
+| **Radius** | `--radius-none` (0 — Badges/Tags/Pills, Listen-Elemente), `--radius-md` (3px — Inputs, Buttons), `--radius-lg` (6px — Cards, Popover-Menüs, Status-Banner), `--radius-xl` (10px — Modal, Confirm-Dialog, Shortcuts-Panel) | Editorial-Eckig bleibt Leitmotiv (Listen-Elemente hart auf 0), grössere Flächen leicht weichgespült. Nicht zu ad-hoc Pixel-Radius greifen; `calc()` auf `--radius-none` ist sinnlos (0 bleibt 0). |
+| **Text-Farben** | `--color-text`, `--color-muted`, `--color-subtle`, `--color-faint` | Body / sekundär / tertiär (alle ≥ 4.5:1) / dekorativ. `--color-faint` ist **nie** lesbarer Text (Skeleton, Fokus-Dim) — tertiärer Text ist `--color-subtle`. Inverse für dauerhaft dunkle Flächen: `--color-text-inverse`. **Vollton vs. Schrift:** `--color-success`, `--color-accent`, `--color-pending` und die Severity-Volltöne (`--color-stark/-mittel/-schwach`) sind Flächen-/Rand-/Dot-Farben; als `color:` gilt das `-text`-Pendant (`--color-ok-text`, `--color-accent-text`, `--color-warn-text`, `--color-stark-text`/`-mittel-text`/`-schwach-text`). **Auf `--color-tag-bg`** (Badge, Chip, Zähler) ist Sekundärschrift `--color-tag-text`, nie `--color-muted`/`--color-subtle` — die Tag-Fläche hellt im Dark-Theme auf und drückt muted unter 4.5:1. Gegated: [css-contrast.test.mjs](tests/unit/css-contrast.test.mjs). |
+| **Z-Index** | `--z-base` (1), `--z-sticky` (100), `--z-header` (200), `--z-spellcheck` (400), `--z-dock` (500), `--z-popover` (1000), `--z-overlay` (2000), `--z-toolbar` (2100), `--z-tooltip` (2200), `--z-modal` (9500), `--z-banner` (10000), `--z-modal-front` (11000), `--z-toast` (12000), `--z-boss-screen` (13000) | Stapel-Reihenfolge — siehe Section „Z-Index-Stack" unten. |
 
 ---
 
@@ -156,7 +156,7 @@ Wiederkehrende Werte gehen über Tokens. Ad-hoc-Werte (`box-shadow: 0 4px 12px .
 
 1. **Karten-Eintritt: `cardFadeIn`** (CSS-Keyframe in [card-form.css](public/css/components/card-form/card-shell.css), `--transition-emphasized` = 0.3s `--ease-out`, `translateY(8px)` → 0). Kommt automatisch mit `.card`; kein `x-transition` zusätzlich (siehe „Karten").
 2. **Popover-/Menü-Eintritt: `@starting-style`** — display-getriebene Elemente (Alpine `x-show`, selbst gerenderte Dropdowns) faden rein per `transition: opacity var(--transition-base)` + `@starting-style { .x { opacity: 0; } }`. **Nur Opacity** — kein Transform, damit Flip-/Anchor-Messungen (`offsetHeight` im `$nextTick`) unbeeinflusst bleiben. Austritt bleibt instant (x-show setzt `display:none` direkt; ein CSS-only-Exit-Fade ist mit x-show nicht erreichbar). Referenz: `.context-menu` ([context-menu.css](public/css/components/context-menu.css)), `.combobox-dropdown` ([combobox.css](public/css/components/combobox.css)).
-3. **Kartenwechsel: View Transition** — der generische Karten-Toggle (`_toggleCardGeneric` + Helper `_withCardTransition` in [_shared.js](public/js/app/app-view/_shared.js)) wickelt Flag-Wechsel in `document.startViewTransition` (Cross-Fade der Hauptansicht). Progressive Enhancement: ohne Support läuft der Callback direkt. Regeln: Netzwerk (`_ensurePartial`) **vor** der Transition; DOM-Endzustand (inkl. `$nextTick`) **im** Callback. Reduced-Motion wird in [tokens/motion.css](public/css/tokens/motion.css) via `::view-transition-*`-Override gekappt. Bespoke-Toggles, die den Cross-Fade wollen, nutzen denselben Helper.
+3. **Kartenwechsel: View Transition** — der generische Karten-Toggle (`_toggleCardGeneric` + Helper `_withCardTransition` in [_shared.js](public/js/app/app-view/_shared.js)) wickelt Flag-Wechsel in `document.startViewTransition` (Cross-Fade der Hauptansicht). Progressive Enhancement: ohne Support läuft der Callback direkt. Regeln: Netzwerk (`_ensurePartial`) **vor** der Transition; DOM-Endzustand (inkl. `$nextTick`) **im** Callback. Reduced-Motion wird in [tokens/motion.css](public/css/tokens/motion.css) via `::view-transition-*`-Override gekappt. Bespoke-Toggles, die den Cross-Fade wollen, nutzen denselben Helper (`toggleKapitelReviewCard`, `selectPage` aus einer anderen Karte). Vor dem neuen Snapshot wartet der Helper höchstens 250 ms auf die Lade-Hooks der eben eingeblendeten Karten (`settleShowLoads` in [card-lifecycle.js](public/js/cards/card-lifecycle.js)): die Karte blendet geladen ein statt leer mit nachspringenden Kacheln. Ein `onShow`, das seinen Load per Microtask anstösst, gibt dafür das Promise zurück (Muster: `scheduleLoad` in [book-overview-card.js](public/js/cards/book-overview-card.js)). Abschnitt → Abschnitt läuft ohne Transition: die Editor-Karte bleibt stehen, der alte Text bleibt bis zum neuen sichtbar (`resetPage({ keepView })`, gedimmt via `.page-content-view--swapping`). Gegated: [view-switch-no-gap.spec.js](tests/e2e-app/view-switch-no-gap.spec.js), [notebook-page-skeleton.spec.js](tests/e2e-app/notebook-page-skeleton.spec.js).
 
 **Hover hat zwei sanktionierte Mechaniken** (nicht mischen, nicht neu erfinden): **(A) Alpha-Wash** — `background: var(--color-hover)` bzw. `color-mix`-Tint (Buttons, Listen-Rows, Options, Ghost-Icon-Buttons); **(B) Fill-Flip/Kanten-Signal** — Hintergrund-/Border-Wechsel auf einen benachbarten Flächen-Token (outlined `.icon-btn` → `--color-surface`, Tabs → Textfarbe, `.card` → Akzent-Border). Neue Komponenten wählen A, ausser sie sind outlined-Chips auf Papier-Ton.
 
@@ -200,7 +200,7 @@ Eine eigenständige, per-Boolean klappbare Sektion nutzt **`Alpine.data('collaps
 - `x-bind="trigger"` (setzt `type`, `@click`→toggle, `:aria-expanded`), `x-bind="chevron"` (rotiert via `.open`), `x-bind="panel"` (`x-show` + `x-collapse`). Der `.history-chevron`-Span braucht **keinen** Inhalt (CSS-Mask-Icon) — kein `›`, kein `<svg>`.
 - In `x-for`-Schleifen pro Item eine eigene `x-data="collapsible()"`-Instanz (Default-Wert darf die Loop-Variable lesen, z.B. `collapsible(role === 'body')`).
 
-**Parent-gesteuerter State** (persistiert, oder vom Parent zurückgesetzt — z.B. Reset bei Buchwechsel): zusätzlich `x-modelable="open" x-model="parentVar"` koppeln (analog combobox/numInput). Beispiel: Blog/HubSpot-Sektion in [public/partials/book-settings.html](public/partials/book-settings.html) (Card setzt `blogSectionOpen` bei Buchwechsel zurück).
+**Parent-gesteuerter State** (persistiert, oder vom Parent zurückgesetzt — z.B. Reset bei Buchwechsel): zusätzlich `x-modelable="open" x-model="parentVar"` koppeln (analog combobox/numInput). Beispiel: [public/partials/plot-beat-edit.html](public/partials/plot-beat-edit.html).
 
 `.collapsible-wrap` (block-Container, Spacing pro Section) + `.collapsible-section` (Linie links, Innenabstand) + `.collapse-panel` (setzt der `panel`-Spread automatisch: `display: flow-root`) leben in [public/css/entities/entity-list.css](public/css/entities/entity-list.css).
 
@@ -212,7 +212,7 @@ Eine eigenständige, per-Boolean klappbare Sektion nutzt **`Alpine.data('collaps
   </div>
   ```
   Kind-Margins bleiben in der gemessenen Höhe, weil der Spread dem Panel `.collapse-panel` (`flow-root`) gibt — nichts selbst deklarieren. Einzige Ausnahme ist `.collapsible-section`: sie hält ihre Abstände als Spacer-Pseudoelemente in der animierten Höhe und zeichnet die Linie als Hintergrund; Zusatzklassen daneben nur für Text-Stil (Schrift, Farbe), nie für Box-Geometrie. Gegated statisch durch [tests/unit/collapsible-panel-style.test.mjs](tests/unit/collapsible-panel-style.test.mjs) (jede Klasse direkt am Panel wird gegen das CSS geprüft), am Verlauf durch [tests/e2e-app/collapsible-section-collapse.spec.js](tests/e2e-app/collapsible-section-collapse.spec.js).
-- Das Plugin hält **`overflow: hidden`** auf dem Panel. Absolut positionierte Kinder (Kebab-Menü, Popover) würden darin abgeschnitten — die gehören ohnehin per `x-teleport` in den Top-Layer (siehe „Context-Menu"), nicht ins Panel. **Daraus folgt: keine `combobox` in ein Collapsible-Panel** — sie rendert ihr Dropdown als eigenes Kind und kann es nicht teleportieren; die Optionsliste wäre abgeschnitten und unklickbar (der State sagt trotzdem korrekt „offen"). Braucht eine Sektion eine Auswahl-Combobox, bleibt sie flach.
+- Das Plugin setzt **`overflow: hidden`** auf das Panel, solange es zu ist und während es auf- oder zuklappt; nach dem Aufklappen nimmt es das Inline-`overflow` wieder weg (`after`-Callback von `in()` in [alpine-collapse](public/vendor/alpine-collapse-3.15.12.min.js): `t.style.overflow=null`, sobald die Endhöhe erreicht ist). Absolut positionierte Kinder (Kebab-Menü, Popover) wären also mindestens während der Animation abgeschnitten — die gehören ohnehin per `x-teleport` in den Top-Layer (siehe „Context-Menu"), nicht ins Panel. Eine `combobox` darf ins Panel: ihr Dropdown sitzt per `x-anchor:….fixed` ([combobox.js](public/js/combobox.js)) `position: fixed` und entkommt dem `overflow` jedes Vorfahren — Grenze ist nur ein Vorfahr mit `container-type`/`transform` (siehe css/CLAUDE.md „`container-type` nie über einem Popover").
 - **Kein `x-transition` zusätzlich** aufs Panel (analog `.card`/`cardFadeIn`): zwei konkurrierende Mechaniken auf demselben Element wirken wabbelig. Reduced-Motion braucht keinen Sonderfall — der globale `transition-duration: 0s !important`-Override in [tokens/motion.css](public/css/tokens/motion.css) greift, und Alpines Transition-Helper liest die berechnete Dauer.
 
 **Regeln:**
@@ -313,9 +313,9 @@ Dieselbe Mechanik gilt fuer Bausteine, die kein `.card-section` sind, aber aufei
 
 | Klasse | Rolle | Modifier |
 |---|---|---|
-| `.card-section` | Block im Kartenkörper | `--tight` (enger Anschluss an den Block davor) |
-| `.card-section-head` | Titel links, Aktionen/Zähler rechts | `--baseline` (Text gegen Text), `--flush` (kein Eigenabstand) |
-| `.card-section-title` | gesperrte Caps-Zeile über dem Abschnitt | — |
+| `.card-section` | Block im Kartenkörper | — |
+| `.card-section-head` | Titel links, Aktionen/Zähler rechts | `--baseline` (Text gegen Text) |
+| `.card-section-title` | gesperrte Caps-Zeile über dem Abschnitt — auch in Leseansichten (Review, Lektorat, Figuren-Detail) | `--inline` (Label vor dem Wert im Fliesstext) |
 | `.card-hint` | grauer Erklärsatz | `--sm` (12px), `--right`, `--warn`, `--lead` (Einleitung, 60ch) |
 | `.card-status` | Lade-/Leer-/Fehlerzeile | `--error` |
 | `.muted-msg` | gedämpfte Zustandsmeldung | `--sm`, `--block`, `--spaced` |
@@ -526,7 +526,7 @@ mit `myCardOptions() { return this.cardData.map(...); }` am Karten-Scope.
 
 ## Badges & Tags
 
-**Eckig** (`border-radius: var(--radius-sm)` oder `0`), nie pill-förmig oder rund.
+**Eckig** (`border-radius: var(--radius-none)` oder `0`), nie pill-förmig oder rund.
 
 **Generische Badges** [public/css/components/buttons-badges.css](public/css/components/buttons-badges.css):
 - `.badge-ok` — grün, positive Info
@@ -765,14 +765,14 @@ Kontext-Anpassungen (feste Grösse, Segment-Look, kompaktere Variante) laufen ü
 Neue Aktionen erweitern diese Tabelle und das Sprite (siehe [Icon-System](#icon-system-lucide-sprite)).
 
 **Klassen** (Basis in [public/css/components/icon-btn.css](public/css/components/icon-btn.css), Overlay-Modifier in [public/css/entities/figur-werkstatt.css](public/css/entities/figur-werkstatt.css)):
-- `.icon-btn` — quadratischer Icon-Button (28px min, `--radius-sm`, `--border-thin` solid `--color-border`, `--color-muted` Text, Hover-Tint via `--color-surface`). Innenliegendes `<svg.icon>` zentriert sich automatisch (`line-height: 1`).
+- `.icon-btn` — quadratischer Icon-Button (28px min, `--radius-none`, `--border-thin` solid `--color-border`, `--color-muted` Text, Hover-Tint via `--color-surface`). Innenliegendes `<svg.icon>` zentriert sich automatisch (`line-height: 1`).
 - `.icon-btn--ghost` — Ghost-Variante: `display: inline-flex` zentriert, 28×28 fix, transparent (Rahmen + Fläche), `font-size-base`. Hover/`.is-active`/`[aria-pressed="true"]` blenden `--color-surface`-Fläche + `--color-border`-Rahmen ein; `:disabled` → `opacity: 0.3`. Feature-Marker (`.plot-icon-btn` o.ä.) setzen darauf nur ihre Deltas (Grösse, Hover-Tint, Icon-Grösse).
 - `.icon-btn[aria-pressed="true"]` — aktiver Toggle (Fullscreen ein): `--color-history-active-bg` Hintergrund, `--color-primary` Border + Text. Greift automatisch — Konsument setzt nur `:aria-pressed`.
 - `.stt-dock-btn.is-recording[aria-pressed="true"]` — Recording-State der STT-Diktat-Taste (Notebook-Editor): roter Akzent aus den Fehler-Tokens (`--color-err-border` für Rand/Füllung, `--color-err-text` für die Schrift) + pulsierender `box-shadow` via `@keyframes sttRecPulse` (1.4s; das Abschalten bei `prefers-reduced-motion` kommt aus [components/floating-dock.css](public/css/components/floating-dock.css)). `.is-pending` = `opacity: 0.6` während getUserMedia läuft. Übersteuert den generischen `aria-pressed`-Highlight. Grundform der Taste: `.dock-btn`; CSS des Zustands in [public/css/page/stt-dock.css](public/css/page/stt-dock.css). Verwendung nur Notebook-STT.
 - `.tts-dock` / `.tts-dock-btn` / `.tts-status` — Proof-Listening-Vorlese-Dock (Notebook-Editor), schwebend unten **links** im Edit-Feld (Schwester zum `.stt-dock` unten rechts; gleiche sticky/floating-Mechanik, gespiegelte Ecke → nie kollidierend). `.tts-dock-btn` ist der runde Haupttaster (Kopfhörer→Pause→Play), `.tts-dock-btn--sub` die kleineren Skip/Stop-Taster, `.tts-status` die Fortschritts-Pille. `.tts-dock-btn.is-reading[aria-pressed="true"]` = akzentfarbener Puls via `@keyframes ttsReadPulse` (1.8s, `prefers-reduced-motion` aus). CSS in [public/css/page/tts-dock.css](public/css/page/tts-dock.css). Der gerade vorgelesene Satz wird via `::highlight(tts-sentence)` (CSS Custom Highlight, keine DOM-Mutation) akzentfarben markiert.
 - `.figuren-graph-toolbar` — Inline-Wrapper: `display: flex; justify-content: space-between; gap: --space-sm`, oberhalb/unterhalb der Canvas.
 - `.figuren-graph-toolbar-zoom` — Button-Cluster mit `gap: --space-xs`, `flex-shrink: 0`.
-- `.<viewer>-mindmap-controls--overlay` — Overlay-Wrapper: `position: absolute; top: 8px; right: 8px`, `--color-surface` 88% mit `backdrop-filter: blur(4px)`, `--border-thin` + `--radius-sm` + `--shadow-sm`, `z-index: --z-sticky`. Parent muss `position: relative`.
+- `.<viewer>-mindmap-controls--overlay` — Overlay-Wrapper: `position: absolute; top: 8px; right: 8px`, `--color-surface` 88% mit `backdrop-filter: blur(4px)`, `--border-thin` + `--radius-none` + `--shadow-sm`, `z-index: --z-sticky`. Parent muss `position: relative`.
 
 **Regeln:**
 - **Kein eigenes Button-Vokabular pro Feature.** Neuer Icon-only Button (Viewer, Header, Board, Toolbar) → `.icon-btn` (+ ggf. `--ghost`) wiederverwenden, kontext-spezifisches via Scoping-Klasse `.<feature>-icon-btn`. Kein paralleles `.figuren-zoom-btn` / `.header-icon-btn` / `.btn-icon` o.ä. neu anlegen.
@@ -950,12 +950,27 @@ Neue Aktionen erweitern diese Tabelle und das Sprite (siehe [Icon-System](#icon-
 
 ```html
 <div class="card-form-grid">
-  <div class="card-form-row">
-    <label class="card-form-label" x-text="…"></label>
-    <div class="form-stack">…</div>
+  <div class="card-form-row" x-id="['fld']">
+    <label class="card-form-label" :for="$id('fld')" x-text="…"></label>
+    <input type="text" class="card-form-input" :id="$id('fld')" x-model="…">
+  </div>
+  <div class="card-form-row" x-id="['fld']">
+    <label class="card-form-label" :id="$id('fld')" x-text="…"></label>
+    <div x-data="combobox(…)" :aria-labelledby="$id('fld')" x-modelable="value" x-model="…"></div>
+  </div>
+  <div class="card-form-row card-form-row--top" x-id="['fld']">
+    <span class="card-form-label" :id="$id('fld')" x-text="…"></span>
+    <div class="card-form-field" role="group" :aria-labelledby="$id('fld')">…mehrere Checkboxen…</div>
   </div>
 </div>
 ```
+
+**Label-Zuordnung (Pflicht, A11y):** jedes `<label class="card-form-label">` ist mit seinem Feld verbunden — die Zeile trägt `x-id="['fld']"` (weitere Paare in derselben Zeile: `'fld2'` …):
+- natives Feld (`input`/`textarea`, auch `numInput`, das selbst ein `<input>` ist): `:for="$id('fld')"` am Label, `:id="$id('fld')"` am Feld (hat das Feld eine feste `id`, zeigt `for` darauf);
+- `combobox` / `radioGroup` (Wrapper-`div`, nicht labelbar): `:id="$id('fld')"` am Label, `:aria-labelledby="$id('fld')"` am Wrapper — die Combobox reicht das an ihren Trigger weiter (Name «Feld Wert»);
+- mehrere Felder unter einem Titel (Checkbox-Gruppe, Breite/Höhe-Paar, Repeater): Titel als `<span class="card-form-label" :id>`, Wertspalte `role="group" :aria-labelledby`;
+- Zeile ohne Feld (reine Anzeige) oder leerer Platzhalter: `<span class="card-form-label">` (Platzhalter `aria-hidden="true"`), nie ein `<label>` ins Leere.
+Gegated: [tests/unit/a11y-markup.test.mjs](tests/unit/a11y-markup.test.mjs).
 
 ### Wertspalten-Bausteine (CSS in [public/css/components/card-form.css](public/css/components/card-form/form-elements.css))
 
@@ -1113,7 +1128,7 @@ Referenz: [folder-import.html](public/partials/folder-import.html) (Drop-Modus),
 
 ### In-Form-Repeater (`.pub-repeater`) + Segment-Toggle (`.seg-toggle`)
 
-**Use:** lokal editierbare Liste variabler Länge innerhalb eines Forms, die als Ganzes über den normalen Karten-Save persistiert (kein eigener Server-CRUD-Roundtrip pro Zeile). Eingesetzt im Publikation-Tab (Co-Autoren als Zeilen, freie Vor-/Nachsatz-Seiten als Sub-Karten). CSS: [public/css/book/book-settings.css](public/css/book/book-settings.css).
+**Use:** lokal editierbare Liste variabler Länge innerhalb eines Forms, die als Ganzes über den normalen Karten-Save persistiert (kein eigener Server-CRUD-Roundtrip pro Zeile). Eingesetzt im Publikation-Tab (Co-Autoren als Zeilen, freie Vor-/Nachsatz-Seiten als Sub-Karten). CSS: Repeater [public/css/book/book-settings.css](public/css/book/book-settings.css), Segment-Toggle [public/css/components/seg-toggle.css](public/css/components/seg-toggle.css).
 
 - `.pub-repeater` — flex-column-Container, am Ende ein `.btn-compact`-„Hinzufügen"-Button.
 - `.pub-repeater-row` — flache Zeile (Inputs + `.btn-compact.danger`-Entfernen), Inputs `flex: 1`.
@@ -1403,19 +1418,19 @@ CSS: [public/css/entities/entity-list.css](public/css/entities/entity-list.css).
     <!-- weitere kurze Fakten … -->
   </dl>
   <!-- längere Prosa-Felder als volle Breite: .figur-detail-row mit inline-Label -->
-  <!-- Untersektionen (Listen/Tags/Zeitstrahl) mit .bewertung-section-title -->
+  <!-- Untersektionen (Listen/Tags/Zeitstrahl) mit .card-section-title -->
 </section>
 ```
 
 **Klassen** [public/css/entities/figuren.css](public/css/entities/figuren.css):
 - `.figur-group` — Gruppe mit Top-Trenner; `:first-of-type` ohne Trenner.
-- `.figur-group-title` — fetter Uppercase-Gruppentitel mit `--card-accent`-Tick (Hierarchie-Ebene über `.bewertung-section-title`).
+- `.figur-group-title` — fetter Uppercase-Gruppentitel mit `--card-accent`-Tick (Hierarchie-Ebene über `.card-section-title`).
 - `.figur-steckbrief-grid` — `grid` mit `max-content 1fr`, ab 720px `max-content 1fr max-content 1fr` (zwei Label/Wert-Paare pro Zeile → nutzt Kartenbreite).
 - `.figur-fact` — `display: contents`, damit `dt`/`dd` direkt im Grid fluchten (nötig als `x-if`-Wurzelelement).
 
 **Regeln:**
 - Nur **kurze** Werte ins Raster (Rolle, Beruf, Badges, Adresse). Prosa-Felder (Beschreibungen, Motivation) als volle Breite per `.figur-detail-row` mit inline-Label — sonst zerbricht der lange Text in halbe Zellen.
-- Sub-Sektionstitel innerhalb einer Gruppe bleiben `.bewertung-section-title`; nur die **erste** unter dem Gruppentitel verliert ihren oberen Abstand.
+- Sub-Sektionstitel innerhalb einer Gruppe sind `.card-section-title` (in `.figur-detail` mit zartem Tick auf der Schiene); nur die **erste** unter dem Gruppentitel verliert ihren oberen Abstand. Labels im Fliesstext tragen `--inline` und keinen Tick.
 - Drei Gruppen für Figuren: Steckbrief (Fakten) · Charakter (Innenleben/Entwicklung) · Im Buch (Auftritte/Beziehungen/Zeitstrahl).
 
 **Beispiele:** [public/partials/figuren.html](public/partials/figuren.html)
@@ -1453,7 +1468,7 @@ CSS: [public/css/entities/entity-list.css](public/css/entities/entity-list.css).
 - Ein Link **innerhalb** der Zeile (Sprung zur Figur/Seite) braucht `@click.stop`, sonst klappt derselbe Klick auch die Zeile um.
 - `colspan` von Hand mit der Spaltenzahl des `<thead>` gleichhalten.
 
-**Beispiele:** [public/partials/book-settings-stats.html](public/partials/book-settings-stats.html) (Job-Läufe), [public/partials/figuren-alter.html](public/partials/figuren-alter.html) (Alters-Belege)
+**Beispiele:** [public/partials/my-stats-jobs.html](public/partials/my-stats-jobs.html) (Job-Läufe), [public/partials/figuren-alter.html](public/partials/figuren-alter.html) (Alters-Belege)
 
 ---
 
@@ -1483,7 +1498,7 @@ CSS: [public/css/entities/entity-list.css](public/css/entities/entity-list.css).
 - **`<button>` + `:aria-pressed`**, kein `div` mit `.internal-link` — es ist ein Umschalter, kein Sprung.
 - **Am Deckel wird gesperrt, nicht ignoriert** (`:disabled` auf den nicht gewählten Chips): ein Klick, der wortlos nichts tut, liest sich als Defekt. Die Zählung („3 von max. 6") steht daneben in der `.filter-count`.
 - **Der Deckel kommt aus einer Konstante im Modul**, nicht als Zahl ins Template — zwei Zahlen laufen auseinander.
-- **Eckig** (`--radius-sm`), wie jedes Badge/Tag; die Pillenform gehört dem An/Aus-Schalter.
+- **Eckig** (`--radius-none`), wie jedes Badge/Tag; die Pillenform gehört dem An/Aus-Schalter.
 - **Wer nicht in Frage kommt, erscheint gar nicht** — und wie viele das sind, wird als Hinweis ausgewiesen. Eine stumm gekürzte Liste liest sich als „mehr gibt es nicht".
 - Erste Öffnung wählt selbst vor (die stärksten Kandidaten), statt eine leere Ansicht mit Aufforderung zu zeigen.
 - **Der Abstand hängt am Wrapper, nicht an einem bedingten Kind.** Die Reihe ist ein eigener Arbeitsschritt zwischen Filterleiste und Vergleichsansicht und braucht oben wie unten Luft (`margin: var(--space-md) 0 var(--space-lg)`); der Hinweis darüber ist `x-show`-bedingt, und säße der untere Abstand an ihm, rückten Chips und Tabelle zusammen, sobald er verschwindet. Nach oben **kollabiert** die Wrapper-Margin mit der `margin-bottom` der `.filter-bar` (normaler Fluss) — sie addiert sich nicht.
@@ -1525,10 +1540,8 @@ CSS: [public/css/layout/utilities.css](public/css/layout/utilities.css). `overfl
          types: { last_seen_at: 'date' },
        })">
   <thead><tr>
-    <th class="sortable-th" :class="sortClass('email')" :aria-sort="ariaSort('email')"
-        @click="sortBy('email')" x-text="$app.t('admin.users.email')"></th>
-    <th class="sortable-th" :class="sortClass('last_seen_at')" :aria-sort="ariaSort('last_seen_at')"
-        @click="sortBy('last_seen_at')" x-text="$app.t('admin.users.lastLogin')"></th>
+    <th x-bind="sortTh('email')" x-text="$app.t('admin.users.email')"></th>
+    <th x-bind="sortTh('last_seen_at')" x-text="$app.t('admin.users.lastLogin')"></th>
   </tr></thead>
   <tbody>
     <template x-for="u in sorted" :key="u.email">…</template>
@@ -1537,13 +1550,13 @@ CSS: [public/css/layout/utilities.css](public/css/layout/utilities.css). `overfl
 ```
 
 **Pflicht-Pattern:**
-- `<table>` ist die `x-data`-Wurzel — `sorted`, `sortBy`, `sortClass`, `ariaSort` werden direkt im `<thead>`/`<tbody>` adressiert. Aussere Scope (Karten-State, Methoden) bleibt via Alpine-Scope-Chain erreichbar.
+- `<table>` ist die `x-data`-Wurzel — `sorted` und `sortTh` werden direkt im `<thead>`/`<tbody>` adressiert. Aussere Scope (Karten-State, Methoden) bleibt via Alpine-Scope-Chain erreichbar.
 - `rows` ist eine **Funktion** (Getter), keine Array-Referenz. Reagiert dadurch reaktiv auf Aenderungen der Quelle (z.B. nach `loadAll()`-Refresh oder Filter-Anpassung). Methoden des Karten-Scopes (`ownerlessBooks()`) sind erlaubt.
 - `defaultKey` / `defaultDir` (`asc` | `desc`): Initial-Sort, falls kein persistierter State.
 - `persistKey` (optional): Schluessel unter `localStorage["sortableTable.<persistKey>"]`. Ohne Key wird der Sort-Zustand nicht persistiert.
 - `types` (optional): pro Spalte `number` | `date` | `string`. Ohne Eintrag wird der Typ aus dem ersten Non-Null-Sample-Wert geraten (ISO-Datum, Number, sonst String mit Locale-Compare). `null`/`undefined` sinkt immer ans Ende, unabhaengig von `dir`.
-- `<th>` Pflicht-Attribute: `class="sortable-th"` (Cursor + Chevron-Platz), `:class="sortClass('key')"` (asc/desc-Modifier), `:aria-sort="ariaSort('key')"` (Screen-Reader), `@click="sortBy('key')"` (Toggle asc→desc, oder neuer Key → asc).
-- Spalten ohne Sortier-Sinn (Action-Buttons, ungeordnete Render-Spalten wie „Status mit Badge" wenn Sort darueber nichts bringt): `<th>` ohne `sortable-th` lassen.
+- Jede sortierbare `<th>` nimmt genau einen Spread: `x-bind="sortTh('key')"`. Er setzt `sortable-th` (+ `--asc`/`--desc`, Cursor + Chevron-Platz), `aria-sort` (Screen-Reader), `tabindex="0"` und loest `sortBy('key')` per Klick, **Enter** und **Leertaste** aus (Toggle asc→desc, oder neuer Key → asc). Kein handverdrahtetes `@click`/`:class`/`:aria-sort` daneben — sonst fehlt die Tastatur-Bedienung. Weitere Klassen (z.B. Zahlen-Spalte) und Attribute (`data-tip`) bleiben normal am `<th>`.
+- Spalten ohne Sortier-Sinn (Action-Buttons, ungeordnete Render-Spalten wie „Status mit Badge" wenn Sort darueber nichts bringt): `<th>` ohne `sortTh` lassen.
 
 **CSS:** [public/css/components/sortable-table.css](public/css/components/sortable-table.css). Chevron-Pfeile via CSS-Triangles (currentColor → theme-faehig). Inaktive Spalte zeigt doppeltes Pfeil-Paar gedimmt, aktive Richtung voll opaque.
 
@@ -1593,7 +1606,7 @@ Die Zelle selbst bekommt **kein** `display`. Braucht sie nur Ausrichtung und kei
 
 **Am rechten Rand mitlaufen lassen** (breite Tabelle in `.table-scroll`): `position: sticky; right: 0;` plus eigener `background` und `border-left` gehoeren an die **Zelle** — sticky funktioniert auf `<td>`/`<th>`, und nur dort deckt die Flaeche die volle Zeilenhoehe ab. Beispiel: `.mybooks-table th:last-child, .mybooks-actions` in [my-books.css](public/css/components/my-books.css).
 
-**Kein `sortable-th`** auf dem Kopf der Aktions-Spalte — sie hat keine Sortier-Semantik (siehe [Sortierbare Tabelle](#sortierbare-tabelle-sortabletable)).
+**Kein `sortTh`** auf dem Kopf der Aktions-Spalte — sie hat keine Sortier-Semantik (siehe [Sortierbare Tabelle](#sortierbare-tabelle-sortabletable)).
 
 ## Card-Status / Loading / Empty / Error
 
@@ -1698,25 +1711,28 @@ Kein neuer Marker ohne Eintrag hier.
 | Wert | Rolle | Nutzung |
 |---|---|---|
 | `480px` | Phone-Small (sehr enge Devices, harter Reflow) | 26 |
-| `600px` | Phone-Large — **Default-Mobile-Breakpoint** | 51 |
+| `600px` | Phone-Large — **Default-Mobile-Breakpoint** (Paar-Gegenstück `min-width: 601px`) | 56 |
 | `768px` | Tablet | 10 |
-| `960px` | Desktop — hier schaltet [layout/twocolumn.css](public/css/layout/twocolumn.css) von einspaltig auf Sidebar+Main | 5 |
+| `960px` | Desktop — hier schaltet [layout/twocolumn.css](public/css/layout/twocolumn.css) von einspaltig auf Sidebar+Main (`min-width: 960px` / `max-width: 959.98px`) | 7 |
 
 **Dokumentierte Abweichungen** (bestehend, nicht ausbauen — neue Komponenten nehmen die Leiter oben):
 
 | Wert | Warum | Nutzung |
 |---|---|---|
 | `700px` | dichte Karten-Raster, die schon vor Tablet-Breite umbrechen müssen (Recherche-Dialog, Szenen, Figur-Werkstatt, Kapitel-Übersicht) | 22 |
-| `640px` | schmales Band für Leisten mit fixer Mindestbreite (Share-Reader-Vorlese-Dock + Leseoptionen, Revisions-Viewer, Folder-Import) | 21 |
-| `720px` | Tabellen, die eine Spalte früher als das Tablet-Raster fallen lassen | 7 |
+| `640px` | schmales Band für Leisten mit fixer Mindestbreite (Share-Reader-Vorlese-Dock + Leseoptionen, Revisions-Viewer, Folder-Import) | 20 |
+| `720px` | Tabellen, die eine Spalte früher als das Tablet-Raster fallen lassen; `min-width: 720px` für die 2er-Spans in Kapitel-Dashboard und „Meine Statistik" | 9 |
 | `860px` | Satzbreite des Body (`max-width: 860px` in [layout/base.css](public/css/layout/base.css)) — die Dialoge spiegeln sie | 2 |
-| `1100px` / `1700px` | Kommentar-Schiene des Share-Readers: ab hier ist Platz für die Margin-Rail bzw. für eine zweite Spalte daneben | 6 |
-| `1280px` | breite Übersichts-Raster | 2 |
+| `1100px` / `1700px` | Kommentar-Schiene (Share-Reader, Notebook-Leseansicht, Lektorat-Split): ab hier ist Platz für die Margin-Rail bzw. für eine zweite Spalte daneben (`min-width: 1100px` / `max-width: 1099.98px`) | 7 |
+| `1280px` | breite Übersichts-Raster | 4 |
 | `800px` | Bucheditor-Stream | 1 |
+| `900px` | Landing-Seite ([landing.css](public/css/landing.css)) — Feature-Raster ausserhalb der App-Shell | 1 |
+
+**Container-Queries** (`@container`, messen den Slot statt den Viewport) stehen ausserhalb dieser Leiter, weil ihre Schwelle die Breite der Kachel/Spalte ist: `320px`, `380px`, `480px`, `640px`, `720px`, `40rem` (Ideen-Board-Spalten). Neue Container-Schwellen nach der Breite wählen, ab der der Inhalt nicht mehr passt — nicht nach der Viewport-Leiter.
 
 **Zwei Regeln zur Grenzziehung:**
 - **`min`/`max` am selben Wert überlappen.** `max-width: 600px` und `min-width: 600px` greifen bei exakt 600 px **beide**. Wer ein Paar bildet, nimmt `max-width: N` / `min-width: N+1` (so gelöst in [share/layout.css](public/css/share/layout.css) + [share/comments.css](public/css/share/comments.css)). Ausnahme ist die mobile-first-Leiter ohne Gegenstück (`body`-Padding in [layout/base.css](public/css/layout/base.css)) — dort gibt es kein Paar.
-- **`959.98px` neben `min-width: 960px` ist Absicht**, kein Tippfehler: bei fraktionaler Viewport-Breite (Browser-Zoom, 1.5×-DPI) würden ganzzahlige Grenzen beide oder keine greifen. Nicht „aufräumen".
+- **`959.98px` neben `min-width: 960px` ist Absicht** (ebenso `1099.98px` neben `min-width: 1100px`), kein Tippfehler: bei fraktionaler Viewport-Breite (Browser-Zoom, 1.5×-DPI) würden ganzzahlige Grenzen beide oder keine greifen. Nicht „aufräumen".
 
 `1024px` gibt es nicht — der Wert stand hier lange als Soll, kam im Code aber nie vor; die Desktop-Grenze ist `960px`.
 
@@ -1839,7 +1855,7 @@ CSS: [public/css/components/danger-zone.css](public/css/components/danger-zone.c
 
 **Bestätigung ist Pflicht** und läuft über `appConfirm`/`appPrompt`, nie über native `confirm()`. Bei Aktionen, die nicht nur Daten einer Ansicht, sondern ein ganzes Konto oder Buch treffen, zwei Stufen: Warnung bestätigen, dann ein Wort tippen (`appPrompt`). Beispiel: [user-settings.js#deleteAccount](public/js/user-settings.js).
 
-**Zwei Altbestände**, die dasselbe Muster handkopiert enthalten: `.book-settings-danger-*` ([analysis/kontinuitaet.css](public/css/analysis/kontinuitaet.css), Markup [partials/book-settings-danger.html](public/partials/book-settings-danger.html)) und `.admin-backup-danger*` ([admin/admin-backup.css](public/css/admin/admin-backup.css)). Sie ziehen bei der nächsten Berührung auf `.danger-zone` nach; **neue** Vorkommen nutzen ausschliesslich die generischen Klassen.
+Konsumenten: Profil (Konto löschen, [user-settings.html](public/partials/user-settings.html)), Bucheinstellungen-Reiter «Gefahrenzone» ([book-settings-danger.html](public/partials/book-settings-danger.html) + [book-settings-merge.html](public/partials/book-settings-merge.html), mehrere `.danger-zone-section`), Admin-Backup (Restore, [admin-backup.html](public/partials/admin-backup.html)). Jedes Vorkommen nutzt ausschliesslich die generischen Klassen — keine feature-eigene Kopie.
 
 ---
 
@@ -2709,13 +2725,11 @@ Bekannte Views: `figuren`, `orte`, `szenen`, `ereignisse`, `kontinuitaet`, `bewe
 - Fehler-Hinweis: `.overview-notice` (über dem Grid, `role="status"`) + `.overview-notice-text` — amber Warn-Tokens + linker 3 px-Border + Retry-Button (`btn-compact`). Sichtbar via `overviewLoadErrors.length > 0`, wenn ein Endpoint auch nach Retry ausfiel. Verhindert, dass ein leeres Tile als „keine Daten" fehlgedeutet wird. Ein **403** ist kein Ladefehler (Leser ohne Editor-Recht sehen Figuren/Schauplätze/Szenen/Songs nicht): der Endpoint landet in `overviewForbidden`, das Tile bleibt aus, kein Banner. Die Fehlerliste wird bei jedem Load-Start geleert.
 - Bezugs-Label: `.overview-tile-scope` im Tile-Header, wenn ein Tile andere Daten zählt als seine Nachbarn (Lektorat-Abdeckung „alle Nutzer", Lektoratszeit/Letzte Bewertung „nur deine").
 - Stand-Hinweis: `.card-hint` unter der Hero-Zahl (`overviewSnapshotAsOf()`), solange der Live-Stand unvollständig ist und die Zahlen aus dem letzten Snapshot kommen. Live gilt nur, wenn **jeder** Abschnitt des Buchs einen Schätzwert hat (`completeLiveBookStats`).
-- Leerzustand-CTA: `.overview-tile--cta` (gestrichelter Rahmen, erbt `.internal-link`-Hover) + `.overview-cta-body`/`-text` (muted)/`-action` (Primary-Akzent). Ein **kombiniertes** Tile, wenn das Buch Seiten hat, aber Figuren/Schauplätze/Szenen noch fehlen (`overviewNeedsAnalysis()`), Klick startet die Komplettanalyse. Statt drei leerer Zählkacheln kommentarlos auszublenden. Entfällt, wenn diese Endpoints mit 403 antworteten (Leser) — ein CTA ohne ausführbare Aktion ist kein Leerzustand. Dasselbe gilt für das Wortschatz-Tile ohne Scan, wenn die Wortschatz-Karte nicht geöffnet werden darf.
+- Leerzustand-CTA: `.overview-tile--cta` (gestrichelter Rahmen, erbt den Hover des klickbaren Tiles) + `.overview-cta-body`/`-text` (muted)/`-action` (Primary-Akzent). Ein **kombiniertes** Tile, wenn das Buch Seiten hat, aber Figuren/Schauplätze/Szenen noch fehlen (`overviewNeedsAnalysis()`), Klick startet die Komplettanalyse. Statt drei leerer Zählkacheln kommentarlos auszublenden. Entfällt, wenn diese Endpoints mit 403 antworteten (Leser) — ein CTA ohne ausführbare Aktion ist kein Leerzustand. Dasselbe gilt für das Wortschatz-Tile ohne Scan, wenn die Wortschatz-Karte nicht geöffnet werden darf.
 
 **Ausgeschlossene Kapitel** (`excluded` im Baum, samt Unterkapiteln) fehlen in Kapitel-Verteilung, Präsenz-Matrizen, Befund- und Lektoratszeit-Balken und in allen Medianen; die Kapitelzahl im Hero zählt sie mit. **Median 0:** die Divergenz-Balken skalieren dann nach Wert/Maximum und blenden das Δ%-Label aus.
 
-**Klick-Verhalten:** `.overview-tile.internal-link` öffnet die zugehörige Karte (über globalen `.internal-link`-Handler aus app.js — nicht selbst verdrahten).
-
-**Hover-Override:** Globaler `.internal-link:hover` setzt `opacity: 0.65`. Für Tiles ungewollt — `.overview-tile.internal-link:hover` setzt `opacity: 1` zurück und nutzt Border/Shadow als Affordance.
+**Klick-Verhalten:** klickbar ist ein Tile als `div.overview-tile.internal-link` (Tastatur über die globale Delegation, nicht selbst verdrahten) oder als `button.overview-tile` (Admin-Startseite). Beide zeigen Hover über Border, Hintergrund und Shadow.
 
 **Neuer Tile-Typ:** Bestehende Tile-Klassen wiederverwenden, SVG inline ins Markup, keine externe Vis-Lib für Overview einführen.
 
@@ -2822,18 +2836,21 @@ Kein eigenes `@media print {}` pro Karte einführen — der Aufwand für saubere
 
 ## Z-Index-Stack
 
-**Pflicht-Tokens** ([public/css/tokens.css](public/css/tokens.css)). Hartcoded `z-index: 9999` o.ä. nur, wenn der Layer wirklich neu ist — dann Token ergänzen, nicht ad-hoc setzen.
+**Pflicht-Tokens** ([public/css/tokens/scale.css](public/css/tokens/scale.css)). Die Tabelle spiegelt die Datei 1:1 (gegated: [design-token-tables.test.mjs](tests/unit/design-token-tables.test.mjs)). Hartcoded `z-index: 9999` o.ä. nur, wenn der Layer wirklich neu ist — dann Token ergänzen, nicht ad-hoc setzen.
 
 | Token | Wert | Verwendung |
 |-------|------|-----------|
 | `--z-base` | 1 | In-flow Standard, `position: relative`-Sticky-Anker (z.B. Heatmap-Body-Cells, Book-Overview-Tile-SVG-Layer) |
 | `--z-sticky` | 100 | Sticky Inhalts-Header in Listen/Heatmaps (`.heatmap-table thead`, sticky Filter-Bars) |
 | `--z-header` | 200 | Sticky Card-Header, Toolbar-Header (Avatar-/Komplettstatus-Popover-Panels) |
-| `--z-popover` | 1000 | Tooltip-Layer, Synonym-Menu, Figur-Lookup, Combobox-Dropdown, Focus-Counter, Token-Setup-Inline-Hint, Ideen-Move-Picker |
-| `--z-toolbar` | 1100 | Edit-Bubble-Toolbar (1001), Find-and-Replace (1002) — über Popovers, weil sie auf Selektion reagieren |
-| `--z-overlay` | 2000 | Palette-Overlay, künftige Fullscreen-Trigger ohne Modal-Charakter |
-| `--z-banner` | 10000 | Session-Banner, Dev-Banner (oben fixed, über Karten und Palette, unter Modals) |
+| `--z-spellcheck` | 400 | LanguageTool-Overlay (Unterstreichungen über dem Text) — über Inhalt, unter Docks/Popovern |
+| `--z-dock` | 500 | Schwebende Docks über dem Seitentext: Vorlesen (`.tts-dock`), Diktat (`.stt-dock`) — über dem LT-Overlay, unter Popovern |
+| `--z-popover` | 1000 | Synonym-Menu, Figur-Lookup, Combobox-Dropdown, Focus-Counter, Token-Setup-Inline-Hint, Ideen-Move-Picker, Graph-Tooltip |
+| `--z-overlay` | 2000 | Palette-Overlay, Fokus-Modus-Karte, künftige Fullscreen-Trigger ohne Modal-Charakter |
+| `--z-toolbar` | 2100 | Edit-Bubble-Toolbar, Slash-Menü, Find-and-Replace — über der Vollbild-/Fokus-Karte, weil sie auf Selektion reagieren |
+| `--z-tooltip` | 2200 | Geteilter `[data-tip]`-Layer (`.tip-layer`) — über Vollbild-Karte und Toolbars, deren Knöpfe ihn auslösen |
 | `--z-modal` | 9500 | Confirm-Dialog Overlay-Backdrop |
+| `--z-banner` | 10000 | Session-Banner, Dev-Banner (oben fixed, über Karten und Palette, unter Modal-Panel) |
 | `--z-modal-front` | 11000 | Confirm-Dialog Panel — über Banner und Palette, weil Dialog aus jedem Kontext getriggert werden kann |
 | `--z-toast` | 12000 | Reserviert für künftige Toasts/Snackbars (siehe Section „Toast/Snackbar") |
 | `--z-boss-screen` | 13000 | Chef-Taste-Privacy-Vorhang (`.boss-screen`) — muss alles inkl. Toast/Modal/Banner verdecken |
@@ -2888,7 +2905,7 @@ Eigene Shades bewusst nicht aliased — Achsen optisch trennen. Regel: Lektorats
 
 | Skala | Klassen | Use-Case | CSS |
 |-------|---------|---------|-----|
-| **Findings** (Lektorat-Ergebnisse) | `.finding.error` / `.ok` / `.style` | Output von `runCheck` — Border-Color am Findings-Container | [findings.css](public/css/editor/findings.css) |
+| **Findings** (Lektorat-Ergebnisse) | `.finding.error` / `.ok` / `.style` | Output von `runCheck` — Border-Color am Findings-Container | [findings.css](public/css/editor/notebook/findings.css) |
 | **Severity-Tag** (Listen-Anker, Sortier-Marker) | `.severity-tag--kritisch` / `--stark` / `--mittel` / `--schwach` / `--niedrig` | Inline-Tag in `.entity-list` (Lektorats-Findings, Kontinuitäts-Issues, Fehler-Heatmap, Szenen-Wertung) | [entity-list.css](public/css/entities/entity-list.css) |
 | **Status-Badge** (Job-/Sync-Status) | `.badge-ok` / `.badge-warn` / `.badge-err` | Job-Queue, Sync-Status, allgemeine Inline-Indikatoren | [buttons-badges.css](public/css/components/buttons-badges.css) |
 
@@ -2945,7 +2962,16 @@ Pflicht-Patterns. Verstreute aria-Verwendungen werden hier zentralisiert; neue K
 
 ### Klickbare Nicht-Buttons
 
-`.internal-link` (siehe CLAUDE.md harte Regel) wird global per MutationObserver tastatur-erreichbar gemacht (`role="button"`, `tabindex="0"`, Enter/Space → click). Keine eigene Verdrahtung pro Element.
+`.internal-link` (siehe public/CLAUDE.md) wird global per MutationObserver tastatur-erreichbar gemacht (`role="button"`, `tabindex="0"`, Enter/Space → click). Keine eigene Verdrahtung pro Element. Die Klasse trägt **kein Aussehen** ausser `cursor: pointer` und dem Fokus-Ring ([components/buttons-badges.css](public/css/components/buttons-badges.css)) — das Hover gehört dem Element:
+
+| Element | Hover | Klassen |
+|---|---|---|
+| Klickbarer Text im Fluss (Kapitel-/Figurenname, „in den Einstellungen ändern", Quellen-Titel, Zeilenkopf einer Matrix) | Unterstreichung, keine Farb- oder Deckkraft-Änderung | `internal-link text-link` (span/th) bzw. nur `text-link` (button) |
+| Zeile, Kachel, Akkordeon, Block | eigene Tönung über `--color-hover` bzw. Rahmen/Shadow | `internal-link` + Feature-Klasse mit `:hover` |
+| Badge, Tag, Heatmap-Zelle | eigene Tönung/Outline der Feature-Klasse | `internal-link` + Feature-Klasse |
+| App-Titel, Überschrift | keins, der Cursor genügt | `internal-link` |
+
+Ein `<button>` trägt nie `.internal-link` — er ist schon bedienbar; Link-Aussehen bekommt er über `.text-link`. Deckkraft ist kein Hover-Signal: sie senkt den Kontrast und liest sich als deaktiviert. Gegated: [clickable-a11y.test.mjs](tests/unit/clickable-a11y.test.mjs).
 
 ### Toggle-Sections (Accordion)
 
@@ -2953,7 +2979,7 @@ Pflicht-Patterns. Verstreute aria-Verwendungen werden hier zentralisiert; neue K
 
 ### Combobox
 
-`Alpine.data('combobox')` setzt `role="combobox"` + `aria-controls` + `aria-expanded` automatisch. Liste hat `role="listbox"`, Items `role="option"` mit `aria-selected`. Kein eigenes ARIA-Setup im Konsumenten-Markup.
+`Alpine.data('combobox')` setzt `role="combobox"` + `aria-controls` + `aria-expanded` automatisch. Liste hat `role="listbox"`, Items `role="option"` mit `aria-selected`. Kein eigenes ARIA-Setup im Konsumenten-Markup — ausser dem Namen: der Trigger heisst «Feld Wert», nie nur der Wert. Mit sichtbarem Label `:aria-labelledby` am Wrapper (siehe „Label-Zuordnung" unter Form-Patterns), ohne sichtbares Label die Option `label` (`combobox({ placeholder, label: $app.t('…') })` → «Feld: Wert»).
 
 ### Dialoge / Modale
 
@@ -2980,7 +3006,17 @@ Inputs mit Fehler: `aria-invalid="true"` + `aria-describedby="<id-of-error>"` au
 
 ### Focus-Visible
 
-Globaler `:focus-visible`-Stil in [base.css](public/css/layout/base.css). Karten dürfen nicht per `outline: none` ohne Ersatz überschreiben. Wenn lokal eigener Fokus-Stil nötig: `:focus-visible` mit `box-shadow: 0 0 0 2px var(--color-border-focus)` oder analog.
+Kein globaler Wildcard-Ring: wo eine Komponente nichts setzt, bleibt die Browser-Default-Outline. Per-Element-Fokus für Tab-Navigation (Skip-Link, `.page-item`, `.tree-chapter-header`, `.lektorat-split-findings .finding`) steht in [base.css](public/css/layout/base.css).
+
+**Wer `outline: none` setzt, liefert im selben Regelblock Ersatz** — eine Hover-Tönung allein ist kein Fokus-Signal (Tastatur-Nutzer sehen sie nicht von der Auswahl getrennt):
+
+| Element | Fokus-Signal |
+|---|---|
+| Knopf, Menü-Eintrag, Listenzeile, Griff | `:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-ring-offset); }` — innen liegend (Zeile am Container-Rand, Menü-Eintrag) mit `var(--focus-ring-offset-inset)`. Hover bleibt eine eigene Regel mit Tönung. |
+| Eingabefeld (Input, Textarea, Combobox-Trigger/-Suche) | `:focus { outline: none; border-color: var(--color-border-focus); }` — Rahmen ≥ 3:1 gegen Fläche. Kein Akzent-/Karten-Akzent-Rahmen. |
+| Schreibfläche (contenteditable, Titel im Satzspiegel) | Caret + Tönung; nur mit begründetem Allowlist-Eintrag. |
+
+Tokens: `--focus-ring`, `--focus-ring-color` ([tokens/colors.css](public/css/tokens/colors.css), folgt `--color-primary` in beiden Themes), `--focus-ring-offset`/`-inset` ([tokens/spacing.css](public/css/tokens/spacing.css)). Kein `!important` beim Abschalten. Gegated: [css-focus-ring.test.mjs](tests/unit/css-focus-ring.test.mjs).
 
 ### Tastatur-Navigation in Listen
 
@@ -3015,15 +3051,17 @@ Welche Datei besitzt welche Klassen. Bei neuer Klasse: erst hier prüfen, ob ein
 
 ### Zwei Regeln, die jede Datei betreffen
 
-**1. `@layer components` ist Pflicht.** [tokens.css](public/css/tokens.css) etabliert `@layer base, components, utilities` — **unlayerte Regeln schlagen jeden Layer**, unabhängig von Spezifität. Eine Datei ohne Layer gewinnt also still gegen jede layered Komponentenregel, und der Fehler fällt erst auf, wenn ein gezielter Override nicht greift. Neue Datei ⇒ Inhalt in `@layer components { … }` fassen (Datei-Kopfkommentar davor). Genau **drei** Ausnahmen, jede mit Grund:
+**1. `@layer components` ist Pflicht.** [tokens.css](public/css/tokens.css) etabliert `@layer base, components, utilities` — **unlayerte Regeln schlagen jeden Layer**, unabhängig von Spezifität. Eine Datei ohne Layer gewinnt also still gegen jede layered Komponentenregel, und der Fehler fällt erst auf, wenn ein gezielter Override nicht greift. Neue Datei ⇒ Inhalt in `@layer components { … }` fassen (Datei-Kopfkommentar davor); **alle** Regeln stehen in diesem Block — eine Regel hinter der schliessenden Klammer ist wieder unlayered. Die Ausnahmen, jede mit Grund (gegated: [css-layer.test.mjs](tests/unit/css-layer.test.mjs)):
 
 | Unlayered | Warum |
 |---|---|
 | [tokens/](public/css/tokens/)`*.css` | Custom-Properties sind global; sie konkurrieren nicht über die Kaskade. |
 | [share.css](public/css/share.css) + [share/](public/css/share/)`*.css` | Der Reader überschreibt bewusst die geteilten `components/`-Module (`manuscript-*`, `comment-rail`, `floating-dock`) und gewinnt über den Layer-Rang statt über Spezifitäts-Wettrüsten. |
 | [entities/orte-map.css](public/css/entities/orte-map.css) | `lazy-libs.js` hängt `vendor/leaflet-*/leaflet.css` **zur Laufzeit** an den `<head>` — unlayered und nach allem anderen. Läge unsere Datei in `components`, gewänne Leaflet gegen jeden unserer Overrides. |
+| [entities/figur-werkstatt.css](public/css/entities/figur-werkstatt.css) | Überschreibt `vendor/jsmind-*.css`, das selbst unlayered lädt — gleicher Grund wie Leaflet. |
+| [landing.css](public/css/landing.css) | Standalone-Seiten (Landing, Register, Datenschutz) ausserhalb der SPA-Shell; dort lädt keine Komponentenregel, gegen die ein Layer-Rang zählen könnte. |
 
-**2. Der Share-Reader lädt `tokens.css` nicht.** [share.html](public/share.html) verlinkt nur `share.css` + die geteilten `components/`-Module. Dort sind `--space-*`, `--font-size-*`, `--fw-*`, `--z-*`, `--color-*` **undefiniert**. Daraus folgt für alle Dateien im share-erreichbaren Satz (`share.css`, `share/*`, sowie `components/{icons,manuscript-stream,manuscript-content,comment-rail,floating-dock}.css`):
+**2. Der Share-Reader lädt `tokens.css` nicht.** [share.html](public/share.html) verlinkt nur `share.css` + die geteilten `components/`-Module. `share.css` importiert von den Token-Modulen einzig [tokens/spacing.css](public/css/tokens/spacing.css) — `--space-*`, `--pad-*`, `--radius-*`, `--focus-ring-offset*` sind dort also **definiert**; `--font-size-*`, `--fw-*`, `--z-*`, `--color-*`, `--shadow-*` bleiben **undefiniert**. Daraus folgt für alle Dateien im share-erreichbaren Satz (`share.css`, `share/*`, sowie `components/{icons,manuscript-stream,manuscript-content,comment-rail,floating-dock}.css`):
 - rohe `px`-, `z-index`- und `font-weight`-Werte sind dort **richtig**, nicht nachlässig — sie sind der einzige Weg;
 - geteilte Module, die von beiden Seiten benutzt werden, brauchen entweder einen Fallback (`var(--fw-semibold, 600)`) oder eine neutrale Variable, die der Reader auf sein `--share-*`-Pendant mappt (Muster: `--cr-*` in `comment-rail.css`, `--ms-*` in `manuscript-stream.css`, `--dock-*` in `floating-dock.css`);
 - ein neues geteiltes Modul gehört in **beide** Shells: [public/index.html](public/index.html) und [public/share.html](public/share.html) (plus [tests/fixtures/share-reader-harness.html](tests/fixtures/share-reader-harness.html)).
@@ -3056,11 +3094,11 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 ### tokens/ (Custom-Properties)
 | File | Inhalt |
 |------|--------|
-| [tokens/colors.css](public/css/tokens/colors.css) | Farb-Tokens Light (`:root`) + Dark (`:root[data-theme="dark"]`). Inkl. `--color-text` + `--color-muted` + `--color-subtle` + `--color-faint`, Status-Achsen (content-severity + operational), `--card-accent-*`-Hues. |
-| [tokens/typography.css](public/css/tokens/typography.css) | `--font-sans` / `--font-serif`, `--font-size-xs/sm/base/md/lg/xl/2xl`, `--fw-*`, `--lh-*`, Control-Sizes. |
-| [tokens/spacing.css](public/css/tokens/spacing.css) | `--space-*` (4px-Raster), `--pad-*`, `--border-*`, `--radius-sm/-md/-lg` (0/2/4). |
+| [tokens/colors.css](public/css/tokens/colors.css) | Farb-Tokens Light (`:root`) + Dark (`:root[data-theme="dark"]`). Inkl. `--color-text` + `--color-muted` + `--color-subtle` + `--color-faint`, Status-Achsen (content-severity + operational) samt `-text`-Varianten, `--focus-ring`/`--focus-ring-color`, `--color-badge-inverse-*`, Entitäts-Akzente (`--color-accent-figure*`/`-location*`), `--card-accent-*`-Hues. **Einziger Ort** für Theme-abhängige Werte — kein `[data-theme]`-Selektor in Feature-Dateien (gegated: [css-token-scope.test.mjs](tests/unit/css-token-scope.test.mjs)). |
+| [tokens/typography.css](public/css/tokens/typography.css) | `--font-sans` / `--font-serif` / `--font-mono`, `--font-size-micro/xs/mini/sm/base/md/reading/lg/xl/2xl/3xl/4xl`, `--font-em-*`, `--fw-*`, `--lh-*`, Control-Sizes. |
+| [tokens/spacing.css](public/css/tokens/spacing.css) | `--space-*` (4px-Raster), `--card-gap-*`, `--layout-gap`, `--pad-*`, `--border-*`, `--focus-ring-offset`/`-inset`, `--radius-none/-md/-lg/-xl` (0/3/6/10px). |
 | [tokens/motion.css](public/css/tokens/motion.css) | `--transition-*`, `--shadow-*`, `--opacity-*` + `prefers-reduced-motion`-Override. |
-| [tokens/scale.css](public/css/tokens/scale.css) | `--z-*` Stack. |
+| [tokens/scale.css](public/css/tokens/scale.css) | `--z-*` Stack (siehe „Z-Index-Stack"). |
 
 ### layout/ (Foundation)
 | File | Inhalt |
@@ -3075,7 +3113,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | File | Inhalt |
 |------|--------|
 | [components/card-form/card-shell.css](public/css/components/card-form/card-shell.css) | `.card`, `.card-header*`, `.card-title*`, `.card-eyebrow`, `.card-subline*`, `.card-toolbar`, `cardFadeIn`. Die Karte selbst — was DARIN liegt, steht in `card-blocks.css`. |
-| [components/card-form/card-blocks.css](public/css/components/card-form/card-blocks.css) | **Geteiltes Vokabular des Kartenkörpers** (siehe „Karten-Innenraum“): Vertikalrhythmus (`.card-section` + `--tight`), `.card-section-head` (+ `--baseline`/`--flush`), `.card-section-title`, `.card-hint` (+ `--sm`/`--right`/`--warn`/`--lead`), `.card-status` (+ `--error`), `.muted-msg*`, `.progress-bar*`, `.filter-bar*`/`.filter-count`/`.filter-toggle`/`.filter-search-*`, `.stale-cleanup-row`. Besitzer-Datei für Klassen, die quer durch alle Karten laufen — vorher lagen sie in `figuren.css`, `page-list.css`, `tree-history.css` und `entity-list.css`. |
+| [components/card-form/card-blocks.css](public/css/components/card-form/card-blocks.css) | **Geteiltes Vokabular des Kartenkörpers** (siehe „Karten-Innenraum“): Vertikalrhythmus (`.card-section`), `.card-section-head` (+ `--baseline`), `.card-section-title`, `.card-hint` (+ `--sm`/`--warn`/`--lead`), `.card-status` (+ `--error`), `.muted-msg*`, `.progress-bar*`, `.filter-bar*`/`.filter-count`/`.filter-toggle`/`.filter-search-*`, `.stale-cleanup-row`. Besitzer-Datei für Klassen, die quer durch alle Karten laufen — vorher lagen sie in `figuren.css`, `page-list.css`, `tree-history.css` und `entity-list.css`. |
 | [components/card-form/form-elements.css](public/css/components/card-form/form-elements.css) | Form-Felder (`input`/`select`/`textarea`), `.card-form-*` Grid + Wertspalten-Bausteine (`.form-stack`/`-inline`/`-check`/`-radio-group`), `.card-empty*`. Die **Erscheinung** von `.card-form-hint`/`.card-form-field-note`/`.card-empty-hint` kommt aus `card-blocks.css` (`.card-hint`-Gruppe); hier steht nur noch deren Position im Raster. |
 | [components/card-form/card-actions.css](public/css/components/card-form/card-actions.css) | `.card-actions*`, `.action-group`/`.action-sep`, `.btn-card-close`. |
 | [components/combobox.css](public/css/components/combobox.css) | `.combobox-*` — Searchable-Select-Komponente (Trigger, Dropdown, Optionen, Gruppen-Header, Compact-Variante, Footer-Button). |
@@ -3095,7 +3133,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [components/confirm-dialog.css](public/css/components/confirm-dialog.css) | `.confirm-overlay` / `-dialog`, Shortcuts-Overlay. |
 | [components/offline-rescue.css](public/css/components/offline-rescue.css) | Dialog „Nicht gespeichert“ (`.offline-rescue-*`): abgewiesene Offline-Inhalte + Entwurfs-Sicherungen, Buttons aus confirm-dialog.css. |
 | [components/diff-marks.css](public/css/components/diff-marks.css) | `.diff-add` / `.diff-del` / `.diff-mark--punct` — **einzige** Wort-Diff-Markierung (Klassen aus `public/js/diff/diff-parts.js`): Abschnitts-Historie, Fassungsvergleich und -Leseansicht, Kommentar-Leisten, Konflikt-Auflösung aller drei Editoren, Vorschlagskarten von Abschnitts-, Plot- und Ideen-Chat. Konsumenten-CSS regelt nur Container und Zellen, nie die Markierung. |
-| [components/danger-zone.css](public/css/components/danger-zone.css) | `.danger-zone` + `-title`/`-row`/`-text`/`-actions`/`-section`/`-btn` — abgesetzter Block für unwiderrufliche Aktionen (Konto löschen, Buch löschen, Restore). Fehler-Tokens statt Karten-Akzent. Siehe „Danger-Zone"; zwei handkopierte Altbestände (`.book-settings-danger-*`, `.admin-backup-danger*`) ziehen bei Berührung nach. |
+| [components/danger-zone.css](public/css/components/danger-zone.css) | `.danger-zone` + `-title`/`-row`/`-text`/`-actions`/`-section`/`-btn` — abgesetzter Block für unwiderrufliche Aktionen (Konto löschen, Buch löschen, Restore). Fehler-Tokens statt Karten-Akzent. Siehe „Danger-Zone". |
 | [components/snapshot-reader.css](public/css/components/snapshot-reader.css) | `.snapshot-reader*` — Vollbild-Overlay (Modal-Charakter) zum nur-lesenden Öffnen einer Fassung (`book_snapshots`) im **Bucheditor-Look** (reuse `.book-editor-*` aus `editor/book/book-editor.css`, read-only): Backdrop/Panel/Header, Export-Leiste (Schnell-Formate + PDF-Profil), Status-Badges (`--changed`/`--removed`), Inline-Wort-Diff gegen den aktuellen Buchstand (`.snapshot-reader__diff .diff-line`; Markierung aus `components/diff-marks.css`). |
 | [components/manuscript-stream.css](public/css/components/manuscript-stream.css) | `.ms-chapter` / `.ms-page` / `.ms-page__title` / `.ms-page__body` sowie der **Titel-Kopf eines Beitrags** (`.ms-page--article`, `.ms-page__title--headline`, `.ms-head__kicker`, `.ms-head__lead`; Markup-SSoT [lib/headline-render.js](lib/headline-render.js) — die Seiten-Caption ist sonst eine kleine gesperrte Marginalie, als Schlagzeile wäre das falsch, darum Variantenklassen statt zweitem Renderer) — geteilter **read-only Manuskript-Stream-Look** (Kapitel + Seiten als Fluss), gespiegelt vom Bucheditor (`editor/book/book-editor.css` = editierbare Master-Variante). Markup aus [public/js/manuscript-render.js](public/js/manuscript-render.js). Neutrale `--ms-*`-Variablen, jeder Kontext bridged sie auf seine Tokens (Share: `--share-*` in `share.css`). Nur Stream-Rahmung; Body-Typografie bleibt kontext-spezifisch. Konsument: Share-Reader-SSR. |
 | [components/manuscript-content.css](public/css/components/manuscript-content.css) | **SSoT der Block-Typografie des gespeicherten Seiten-HTML** — jeder Block, den der Notebook-Editor schreiben kann (Überschriften h1–h6, Inline-Auszeichnung `u`/`s`/`sup`/`sub`, Listen, Checkbox-Listen `ul.todo`, Tabellen, Bilder + `figure`/`figcaption`, Trenner inkl. `hr.pagebreak`/`hr.blankpage`, `pre`/`code`, Gedichte `div.poem`) plus die Import-Artefakte (`.callout` + `.pullquote`, orphan `<br>` nach `</blockquote>`). Pendant zu `manuscript-stream.css`: das stylt die *Rahmung*, hier steht der *Inhalt*. Drei Konsumenten rendern dasselbe HTML und teilen die Regeln: `.page-content-view` (Notebook), `.book-editor-page-body` (Bucheditor + Fassungs-Reader), `.share-content` (Share-Reader-SSR). Neutrale `--mc-*`-Variablen, je Kontext auf `--color-*` bzw. `--share-*` gemappt. Kontext-Abweichungen (Absatzmodell, Zitat-Einzug, Reader-Überschriftengrössen, Edit-Modus-Zustände) bleiben beim Konsumenten und überschreiben von dort — in `index.html` **vor** `page-view.css`/`book-editor.css` laden (gleicher `@layer`), Share-Regeln sind unlayered und gewinnen ohnehin. |
@@ -3114,6 +3152,8 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [components/year-month-heatmap.css](public/css/components/year-month-heatmap.css) | `.ymheat-*` — geteiltes Jahr×Monat-Raster (Jahre als Zeilen, 12 Monate als Spalten), Zell-Level 0..4 aus `var(--ymheat-accent)`, `--has`-Eckmarker, `--current`-Innenring, `--active`-Auswahlring. Self-containing (`container-type`). Konsumenten: Rückblick-Karte + Buch-Übersicht. Siehe „Jahr×Monat-Heatmap". |
 | [components/toggle-switch.css](public/css/components/toggle-switch.css) | `.toggle-switch` (Track/Thumb/Label) für das `toggleSwitch`-Primitive — eckiger Boolean-Schalter, Ersatz für `.checkbox-row`. |
 | [components/file-drop.css](public/css/components/file-drop.css) | Generischer Baseline-Style (`cursor: pointer`) für das `fileDrop`-Primitive; Visuals + `is-drag`-Tönung beim Konsumenten. |
+| [components/file-btn.css](public/css/components/file-btn.css) | `.file-btn` — `fileDrop` im Klick-Modus im Look eines kompakten Buttons (Bucheinstellungen «Publikation», PDF-Export «Umschlag»). Siehe „Bild-Upload mit Vorschau + Entfernen". |
+| [components/seg-toggle.css](public/css/components/seg-toggle.css) | `.seg-toggle` (+ `--active`, `:disabled`) — Segment-Umschalter für 2–3 sich ausschliessende Werte; geteilt von Publikation, PDF-Export, Buchlandkarte, Ideen-Board, Kommentar-Leisten, Notebook-Zitat-/Querverweis-Panel, Wortschatz, Referenz, Chat-Verlaufssuche. Siehe „In-Form-Repeater + Segment-Toggle". |
 | [components/folder-import.css](public/css/components/folder-import.css) | Folder-Import-Karte (Drop-Zone, Mode-Toggle, Progress, Result). |
 | [components/btn-close.css](public/css/components/btn-close.css) | `.btn-close` — Primitive der Schliessen-Taste (randlose Fläche, `inline-flex`-Zentrierung des `x`-Icons). Varianz über `--close-size`/`--close-pad`/`--close-color`. Siehe „Icon-Sprache" → Schliessen; acht Altbestände ziehen bei Berührung nach. |
 | [components/status-msg.css](public/css/components/status-msg.css) | `.success-msg` / `.error-msg` (+ `--banner`-Variante mit Fläche) — app-weite Status-Meldungen aus den Status-Tokens. **Eindeutiger Besitzer für zwei generische Klassennamen**, die vorher in `admin/admin-settings.css`, `chat.css` und `page/page-list.css` verteilt lagen; die Darstellung hing dadurch an der Ladereihenfolge unbeteiligter Dateien. Konsumenten: Admin-Einstellungen, API-/Geräte-Token, Chat- und Lektorat-Statusstrings. |
@@ -3221,7 +3261,7 @@ Drei Editoren leben in eigenen Subfoldern (`book/`, `focus/`, `notebook/`); edit
 | File | Inhalt |
 |------|--------|
 | [book/book-create-modal.css](public/css/book/book-create-modal.css) | Buch-Anlage-Modal. |
-| [book/book-settings.css](public/css/book/book-settings.css) | Buch-Einstellungen Job-Stats-Tabellen. |
+| [book/book-settings.css](public/css/book/book-settings.css) | Bucheinstellungen-Karte (`.card--book-settings`): Tab-Abstand + Panel-Einrückung, `.book-settings-section`-Abschnitte, Job-Stats-Tabellen, Sharing-Liste (`.book-share-*`), Sync-Status-Panel (`.sync-status-*`, `--hubspot`), Publikation (Bildvorschau, `.pub-repeater`, `.pub-matter-*`), Kontext-/Stilprofil-/Preset-Zeilen, Merge-Gattungen, Reihe (`.series-*`). Ganze Datei in `@layer components`. |
 | [book/expose.css](public/css/book/expose.css) | Exposé-Reiter der Buch-Einstellungen: Eckdaten als Definitionsliste `.expose-facts` (live aus Formular/Publikation), Figuren-/Gliederungsliste `.expose-list` (Verweis + Text), Laufhistorie `.expose-history`, Hinweise `.expose-warnings`. |
 | [book/header-actions.css](public/css/book/header-actions.css) | `.header-actions`-Cluster, Update-All-Panel. |
 | [book/buchorganizer.css](public/css/book/buchorganizer.css) | Buch-Organisations-Karte. |
@@ -3391,7 +3431,7 @@ Gegated: [tests/unit/empty-state-single-place.test.mjs](tests/unit/empty-state-s
 
 ## Bild-Upload mit Vorschau + Entfernen
 
-**Status:** Etabliert. Zwei Konsumenten: PDF-Export-Karte (Cover/Autorfoto/Rückseite) und BookSettings-Publikation-Tab (Cover/Autorfoto). Jeweils eigene Klassen mit gleichem Aufbau (kein geteiltes Basis-CSS — die Implementierungen sind bewusst entkoppelt, da unterschiedliche Token-Sets/Layout-Slots).
+**Status:** Etabliert. Zwei Konsumenten: PDF-Export-Karte (Cover/Autorfoto/Rückseite) und BookSettings-Publikation-Tab (Cover/Autorfoto). Der Upload-Knopf ist geteilt (`.file-btn`, [components/file-btn.css](public/css/components/file-btn.css)); die Vorschau-Box bleibt je Konsument eigen, weil Grösse und Abstand zum Layout-Slot gehören (PDF 200×280 mit Aussenabstand, Publikation 150×200 mit Innenpolster).
 
 **Pattern:** Vorschau-Box (zeigt Bild oder Leer-Hinweis) + Aktionsreihe mit `fileDrop`-Button (Klick-Modus, im Button-Look) + `<button>` „Entfernen" (nur bei vorhandenem Bild). Der File-Picker läuft über das `fileDrop`-Primitive (siehe „Datei-Auswahl (`fileDrop`)") — kein eigenes `<input type="file">` + `@change`.
 ```html
@@ -3401,7 +3441,7 @@ Gegated: [tests/unit/empty-state-single-place.test.mjs](tests/unit/empty-state-s
     <template x-if="!bookPublication.has_cover"><span x-text="$app.t('publication.noImage')"></span></template>
   </div>
   <div class="pub-image-actions">
-    <div class="pub-upload-btn"
+    <div class="file-btn"
          x-data="fileDrop({ accept: 'image/jpeg,image/png,image/webp', drag: false })"
          @file-drop="uploadPublicationCover($event.detail.file)">
       <span x-text="…uploading ? t('uploading') : (has_cover ? t('replace') : t('upload'))"></span>
@@ -3413,7 +3453,7 @@ Gegated: [tests/unit/empty-state-single-place.test.mjs](tests/unit/empty-state-s
 - Upload-Handler nimmt die Datei direkt entgegen (`uploadPublicationCover(file)`), nicht das DOM-Event — `fileDrop` resettet sein Input selbst.
 - Vorschau-URL trägt `?v=${previewVersion}`-Counter → Cache-Bust nach Upload/Remove (kein veraltetes Bild).
 - Upload via `fetch(POST, body: file)` mit `Content-Type: file.type`; Server härtet durch `prepareCover` (sharp, Magic-Bytes, sRGB-JPEG).
-- CSS: PDF-Export `.pdfx-cover-preview`/`.pdfx-file-btn` ([public/css/book/pdf-export.css](public/css/book/pdf-export.css)), BookSettings `.pub-image-preview`/`.pub-upload-btn` ([public/css/book/book-settings.css](public/css/book/book-settings.css)).
+- CSS: Knopf `.file-btn` ([components/file-btn.css](public/css/components/file-btn.css)); Vorschau PDF-Export `.pdfx-cover-preview` ([public/css/book/pdf-export.css](public/css/book/pdf-export.css)), BookSettings `.pub-image-preview` ([public/css/book/book-settings.css](public/css/book/book-settings.css)).
 
 ---
 

@@ -59,7 +59,7 @@ test.beforeEach(() => {
   const { grantAccess } = require('../../db/book-access');
   grantAccess(BOOK, OWNER, 'owner', OWNER);
   grantAccess(BOOK, EDITOR, 'editor', OWNER);
-  ctx.dbSchema.saveBookSettings(BOOK, 'de', 'CH', 'blog', null, null, null, 0, 0);
+  ctx.dbSchema.saveBookSettings(BOOK, { language: 'de', region: 'CH', buchtyp: 'blog', buch_kontext: null, erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 0 });
   blogs.upsertConnection({
     bookId: BOOK, baseUrl: 'https://wp.test', username: 'owner', password: 'geheim', defaultStatus: 'draft',
   });

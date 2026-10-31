@@ -12,17 +12,17 @@
     </div>
     <div class="card-actions">
       <div class="tabs">
-        <button type="button"
+        <button :aria-pressed="fehlerHeatmapMode === 'open'" type="button"
                 :class="{ 'tabs-btn--active': fehlerHeatmapMode === 'open' }"
                 class="tabs-btn"
                 @click="setFehlerHeatmapMode('open')"
                 x-text="$app.t('fehlerHeatmap.mode.open')"></button>
-        <button type="button"
+        <button :aria-pressed="fehlerHeatmapMode === 'applied'" type="button"
                 :class="{ 'tabs-btn--active': fehlerHeatmapMode === 'applied' }"
                 class="tabs-btn"
                 @click="setFehlerHeatmapMode('applied')"
                 x-text="$app.t('fehlerHeatmap.mode.applied')"></button>
-        <button type="button"
+        <button :aria-pressed="fehlerHeatmapMode === 'all'" type="button"
                 :class="{ 'tabs-btn--active': fehlerHeatmapMode === 'all' }"
                 class="tabs-btn"
                 @click="setFehlerHeatmapMode('all')"
@@ -86,7 +86,7 @@
               <tr>
                 <th class="heatmap-rowhead" scope="row">
                   <span class="heatmap-rowhead-main"
-                        :class="{ 'internal-link': row.chapter.chapter_id != null }"
+                        :class="{ 'internal-link text-link': row.chapter.chapter_id != null }"
                         @click="row.chapter.chapter_id != null && fehlerHeatmapJumpToChapter(row.chapter)"
                         x-text="fehlerHeatmapChapterName(row.chapter)"></span>
                   <span class="heatmap-rowhead-sub" x-text="$app.t('fehlerHeatmap.words', { n: row.wordsLabel })"></span>

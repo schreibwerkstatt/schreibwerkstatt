@@ -29,38 +29,38 @@
                 <p class="muted-msg muted-msg--sm" x-show="aiAccess" x-cloak
                    x-text="aiAccess ? $app.t('profile.aiAccess.activeHint', { provider: $app.t('profile.aiAccess.provider.' + aiAccess.provider), model: aiAccess.model || $app.t('profile.aiAccess.instanceModel') }) : ''"></p>
   
-                <div class="card-form-row">
-                  <label class="card-form-label" x-text="$app.t('profile.aiAccess.providerLabel')"></label>
-                  <div x-data="radioGroup()" x-modelable="value" x-model="aiAccessForm.provider"
+                <div x-id="['fld']" class="card-form-row">
+                  <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.aiAccess.providerLabel')"></label>
+                  <div :aria-labelledby="$id('fld')" x-data="radioGroup()" x-modelable="value" x-model="aiAccessForm.provider"
                        x-effect="options = [
                          { value: 'claude',        label: $app.t('profile.aiAccess.provider.claude') },
                          { value: 'openai-compat', label: $app.t('profile.aiAccess.provider.openai-compat') },
                        ]"></div>
                 </div>
   
-                <div class="card-form-row" x-show="aiAccessForm.provider === 'openai-compat'">
-                  <label class="card-form-label" x-text="$app.t('profile.aiAccess.host')"></label>
+                <div x-id="['fld']" class="card-form-row" x-show="aiAccessForm.provider === 'openai-compat'">
+                  <label :for="$id('fld')" class="card-form-label" x-text="$app.t('profile.aiAccess.host')"></label>
                   <div class="card-form-field">
-                    <input type="url" class="card-form-input" x-model="aiAccessForm.host"
+                    <input :id="$id('fld')" type="url" class="card-form-input" x-model="aiAccessForm.host"
                            placeholder="https://api.openai.com" autocomplete="off">
                     <p class="card-form-field-note" x-text="$app.t('profile.aiAccess.hostHint')"></p>
                   </div>
                 </div>
   
-                <div class="card-form-row">
-                  <label class="card-form-label" x-text="$app.t('profile.aiAccess.model')"></label>
+                <div x-id="['fld']" class="card-form-row">
+                  <label :for="$id('fld')" class="card-form-label" x-text="$app.t('profile.aiAccess.model')"></label>
                   <div class="card-form-field">
-                    <input type="text" class="card-form-input" x-model="aiAccessForm.model" autocomplete="off"
+                    <input :id="$id('fld')" type="text" class="card-form-input" x-model="aiAccessForm.model" autocomplete="off"
                            :placeholder="aiAccessForm.provider === 'claude' ? $app.t('profile.aiAccess.instanceModel') : 'gpt-4.1'">
                     <p class="card-form-field-note"
                        x-text="aiAccessForm.provider === 'claude' ? $app.t('profile.aiAccess.modelHintClaude') : $app.t('profile.aiAccess.modelHintOpenai')"></p>
                   </div>
                 </div>
   
-                <div class="card-form-row">
-                  <label class="card-form-label" x-text="$app.t('profile.aiAccess.apiKey')"></label>
+                <div x-id="['fld']" class="card-form-row">
+                  <label :for="$id('fld')" class="card-form-label" x-text="$app.t('profile.aiAccess.apiKey')"></label>
                   <div class="card-form-field">
-                    <input type="password" class="card-form-input" x-model="aiAccessForm.api_key" autocomplete="off"
+                    <input :id="$id('fld')" type="password" class="card-form-input" x-model="aiAccessForm.api_key" autocomplete="off"
                            :placeholder="aiAccessKeyStored() ? $app.t('profile.aiAccess.keyStored') : ''">
                     <p class="card-form-field-note" x-text="$app.t('profile.aiAccess.keyHint')"></p>
                   </div>
@@ -77,19 +77,19 @@
                   </div>
                 </div>
   
-                <div class="card-form-row">
-                  <label class="card-form-label" x-text="$app.t('profile.aiAccess.contextWindow')"></label>
+                <div x-id="['fld']" class="card-form-row">
+                  <label :for="$id('fld')" class="card-form-label" x-text="$app.t('profile.aiAccess.contextWindow')"></label>
                   <div class="card-form-field">
-                    <input type="text" class="card-form-input" x-data="numInput({ integer: true, min: 2048, max: 2000000 })"
+                    <input :id="$id('fld')" type="text" class="card-form-input" x-data="numInput({ integer: true, min: 2048, max: 2000000 })"
                            x-modelable="value" x-model="aiAccessForm.context_window"
                            :placeholder="$app.t('profile.aiAccess.automatic')">
                   </div>
                 </div>
   
-                <div class="card-form-row">
-                  <label class="card-form-label" x-text="$app.t('profile.aiAccess.maxTokensOut')"></label>
+                <div x-id="['fld']" class="card-form-row">
+                  <label :for="$id('fld')" class="card-form-label" x-text="$app.t('profile.aiAccess.maxTokensOut')"></label>
                   <div class="card-form-field">
-                    <input type="text" class="card-form-input" x-data="numInput({ integer: true, min: 512, max: 200000 })"
+                    <input :id="$id('fld')" type="text" class="card-form-input" x-data="numInput({ integer: true, min: 512, max: 200000 })"
                            x-modelable="value" x-model="aiAccessForm.max_tokens_out"
                            :placeholder="$app.t('profile.aiAccess.automatic')">
                     <p class="card-form-field-note" x-text="$app.t('profile.aiAccess.windowHint')"></p>

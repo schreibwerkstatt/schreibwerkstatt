@@ -4,7 +4,7 @@
 <div x-show="$store.catalog.orte.length > 0 && viewMode === 'list'" class="entity-list entity-list--accented ort-list">
   <template x-for="o in orteFiltered" :key="o.id">
     <div :class="{ 'ort-list-item--child': ortDepth(o.id) > 0 }" :style="{ '--ort-depth': ortDepth(o.id) }">
-      <div class="entity-row" :class="{ 'entity-row--stale': o.stale }" :data-ortid="o.id" @click="$store.catalogUi.selectedOrtId = $store.catalogUi.selectedOrtId === o.id ? null : o.id">
+      <div class="entity-row internal-link" :class="{ 'entity-row--stale': o.stale }" :data-ortid="o.id" @click="$store.catalogUi.selectedOrtId = $store.catalogUi.selectedOrtId === o.id ? null : o.id">
         <span class="tag entity-typ-tag" x-text="ortTypLabel(o.typ)"></span>
         <span class="entity-row-title" x-text="o.name"></span>
         <span x-show="o.manually_created" class="tag ort-manual-tag" :data-tip="$app.t('orte.manualCreatedHint')" x-text="$app.t('orte.manualCreated')"></span>

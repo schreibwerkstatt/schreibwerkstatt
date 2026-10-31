@@ -49,7 +49,7 @@
   background: var(--color-surface);
   color: var(--color-text);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   box-shadow: 0 4px 16px var(--color-shadow-med);
   padding: var(--space-sm);
   max-width: 280px;
@@ -74,7 +74,7 @@
 .lt-popover__badge {
   display: inline-block;
   padding: var(--space-1) var(--space-5);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: color-mix(in srgb, var(--lt-color) 18%, transparent);
   color: var(--lt-color);
   font-size: var(--font-size-micro);
@@ -104,7 +104,7 @@
   height: 24px;
   padding: 0;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: transparent;
   color: var(--color-muted);
   font-size: var(--font-size-md);
@@ -149,7 +149,7 @@
   border: 1px solid var(--color-border);
   background: var(--color-hover);
   color: var(--color-text);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: var(--space-xs) var(--space-sm);
   font-size: var(--font-size-sm);
   cursor: pointer;
@@ -218,7 +218,7 @@
   align-items: center;
   gap: var(--space-xs);
   padding: var(--space-3) var(--space-6);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-muted);
@@ -283,9 +283,9 @@
   min-width: 1.5em;
   padding: 0 var(--space-6);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-tag-bg);
-  color: var(--color-muted);
+  color: var(--color-tag-text);
   font-size: var(--font-size-mini);
   font-variant-numeric: tabular-nums;
   line-height: 1.5;
@@ -303,7 +303,7 @@
   width: 100%;
   padding: var(--pad-badge);
   border: 1px solid var(--color-border-input);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-surface);
   color: var(--color-text);
   font-size: var(--font-size-sm);
@@ -324,7 +324,7 @@
   gap: var(--space-sm);
   padding: var(--space-3) var(--space-6);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-sm);
 }
 
@@ -336,7 +336,7 @@
   appearance: none;
   background: transparent;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   color: var(--color-muted);
   cursor: pointer;
   font-size: var(--font-size-mini);
@@ -359,7 +359,7 @@
   margin-bottom: var(--space-sm);
   background: var(--color-warn-bg);
   border: 1px solid var(--color-style-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   color: var(--color-text);
   font-size: var(--font-size-base);
 }

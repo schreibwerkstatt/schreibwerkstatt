@@ -25,12 +25,12 @@
                         :data-tip="$app.t('motiv.theme.color')" :aria-label="$app.t('motiv.theme.color')"></button>
                 <div class="color-picker__popover" x-show="themeColorPickerId === t.id" x-cloak
                      @click.outside="themeColorPickerId === t.id && (themeColorPickerId = null)">
-                  <button type="button" class="color-picker__opt color-picker__opt--none"
+                  <button :aria-pressed="!t.farbe" type="button" class="color-picker__opt color-picker__opt--none"
                           :class="{ 'color-picker__opt--on': !t.farbe }"
                           @click="setThemeColor(t, null)"
                           :data-tip="$app.t('motiv.theme.colorAuto')" :aria-label="$app.t('motiv.theme.colorAuto')"></button>
                   <template x-for="key in themeColorKeys()" :key="key">
-                    <button type="button" class="color-picker__opt"
+                    <button :aria-pressed="t.farbe === key" type="button" class="color-picker__opt"
                             :style="{ '--col-accent': 'var(--palette-' + key + ')' }"
                             :class="{ 'color-picker__opt--on': t.farbe === key }"
                             @click="setThemeColor(t, key)" :aria-label="key"></button>
@@ -66,7 +66,7 @@
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-left"/></svg>
           </button>
           <input type="text" class="motiv-name-input" x-model="editName" data-spellcheck="spelling"
-                 @keydown.enter="saveMotifEdit()">
+                 @keydown.enter="$enter($event, () => saveMotifEdit())">
           <button type="button" class="icon-btn icon-btn--ghost" @click="deleteMotif(selectedMotif())"
                   :data-tip="$app.t('motiv.motif.delete')" :aria-label="$app.t('motiv.motif.delete')">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
@@ -98,7 +98,7 @@
       <label class="motiv-field-label" x-text="$app.t('motiv.motif.triggers')"></label>
       <input type="text" class="motiv-inline-input" x-model="editTriggers"
              :placeholder="$app.t('motiv.motif.triggersHint')"
-             @keydown.enter="saveMotifEdit()">
+             @keydown.enter="$enter($event, () => saveMotifEdit())">
 
       <!-- Ideen-Plaketten: eigene Pendenzen, die an diesem Motiv hängen.
            Read-only — gesetzt wird die Kante auf der Ideen-Seite. -->

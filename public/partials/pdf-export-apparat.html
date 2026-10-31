@@ -7,9 +7,9 @@
         <p class="card-form-field-note" x-text="$app.t('pdfExport.apparat.hint')"></p>
 
         <div class="card-form-grid">
-          <div class="card-form-row card-form-row--top">
-            <label class="card-form-label" x-text="$app.t('pdfExport.apparat.separator')"></label>
-            <div class="card-form-field">
+          <div x-id="['fld']" class="card-form-row card-form-row--top">
+            <span :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.apparat.separator')"></span>
+            <div role="group" :aria-labelledby="$id('fld')" class="card-form-field">
               <label class="pdfx-check">
                 <input type="checkbox" x-model="activeProfile.config.footnotes.separator">
                 <span x-text="$app.t('pdfExport.apparat.separatorOn')"></span>
@@ -17,39 +17,39 @@
             </div>
           </div>
 
-          <div class="card-form-row" x-show="activeProfile.config.footnotes.separator" x-cloak>
-            <label class="card-form-label" x-text="$app.t('pdfExport.apparat.separatorWidthMm')"></label>
+          <div x-id="['fld']" class="card-form-row" x-show="activeProfile.config.footnotes.separator" x-cloak>
+            <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.apparat.separatorWidthMm')"></label>
             <div class="card-form-field">
-              <input type="text" x-data="numInput({ step: 1, min: 5, max: 200 })"
+              <input :id="$id('fld')" type="text" x-data="numInput({ step: 1, min: 5, max: 200 })"
                      x-modelable="value" x-model="activeProfile.config.footnotes.separatorWidthMm"
                      class="pdfx-num-input">
             </div>
           </div>
 
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('pdfExport.apparat.gapMm')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.apparat.gapMm')"></label>
             <div class="card-form-field">
-              <input type="text" x-data="numInput({ step: 0.5, min: 0, max: 20 })"
+              <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.5, min: 0, max: 20 })"
                      x-modelable="value" x-model="activeProfile.config.footnotes.gapMm"
                      class="pdfx-num-input">
               <p class="card-form-field-note" x-text="$app.t('pdfExport.apparat.gapMm.hint')"></p>
             </div>
           </div>
 
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('pdfExport.apparat.hangMm')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.apparat.hangMm')"></label>
             <div class="card-form-field">
-              <input type="text" x-data="numInput({ step: 0.5, min: 0, max: 20 })"
+              <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.5, min: 0, max: 20 })"
                      x-modelable="value" x-model="activeProfile.config.footnotes.hangMm"
                      class="pdfx-num-input">
               <p class="card-form-field-note" x-text="$app.t('pdfExport.apparat.hangMm.hint')"></p>
             </div>
           </div>
 
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('pdfExport.apparat.maxHeightPct')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.apparat.maxHeightPct')"></label>
             <div class="card-form-field">
-              <input type="text" x-data="numInput({ step: 5, min: 15, max: 70, integer: true })"
+              <input :id="$id('fld')" type="text" x-data="numInput({ step: 5, min: 15, max: 70, integer: true })"
                      x-modelable="value" x-model="activeProfile.config.footnotes.maxHeightPct"
                      class="pdfx-num-input">
               <p class="card-form-field-note" x-text="$app.t('pdfExport.apparat.maxHeightPct.hint')"></p>
@@ -68,29 +68,29 @@
         <p class="card-form-field-note" x-text="$app.t('pdfExport.table.hint')"></p>
 
         <div class="card-form-grid">
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('pdfExport.table.width')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.table.width')"></label>
             <div class="card-form-field">
-              <div x-data="combobox($app.t('pdfExport.table.width'))"
+              <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.table.width'))"
                    x-modelable="value" x-model="activeProfile.config.table.width"
                    x-effect="options = [{ value: 'full', label: $app.t('pdfExport.table.width.full') }, { value: 'auto', label: $app.t('pdfExport.table.width.auto') }]"
 ></div>
             </div>
           </div>
 
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('pdfExport.table.borders')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.table.borders')"></label>
             <div class="card-form-field">
-              <div x-data="combobox($app.t('pdfExport.table.borders'))"
+              <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.table.borders'))"
                    x-modelable="value" x-model="activeProfile.config.table.borders"
                    x-effect="options = [{ value: 'all', label: $app.t('pdfExport.table.borders.all') }, { value: 'horizontal', label: $app.t('pdfExport.table.borders.horizontal') }, { value: 'outer', label: $app.t('pdfExport.table.borders.outer') }, { value: 'none', label: $app.t('pdfExport.table.borders.none') }]"
 ></div>
             </div>
           </div>
 
-          <div class="card-form-row card-form-row--top">
-            <label class="card-form-label" x-text="$app.t('pdfExport.table.rows')"></label>
-            <div class="card-form-field">
+          <div x-id="['fld']" class="card-form-row card-form-row--top">
+            <span :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.table.rows')"></span>
+            <div role="group" :aria-labelledby="$id('fld')" class="card-form-field">
               <label class="pdfx-check">
                 <input type="checkbox" x-model="activeProfile.config.table.zebra">
                 <span x-text="$app.t('pdfExport.table.zebraOn')"></span>
@@ -103,54 +103,54 @@
             </div>
           </div>
 
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('pdfExport.table.fontScale')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.table.fontScale')"></label>
             <div class="card-form-field">
-              <input type="text" x-data="numInput({ step: 0.05, min: 0.6, max: 1.2 })"
+              <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.05, min: 0.6, max: 1.2 })"
                      x-modelable="value" x-model="activeProfile.config.table.fontScale"
                      class="pdfx-num-input">
               <p class="card-form-field-note" x-text="$app.t('pdfExport.table.fontScale.hint')"></p>
             </div>
           </div>
 
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('pdfExport.table.paddingPt')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.table.paddingPt')"></label>
             <div class="card-form-field">
-              <input type="text" x-data="numInput({ step: 0.5, min: 0, max: 20 })"
+              <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.5, min: 0, max: 20 })"
                      x-modelable="value" x-model="activeProfile.config.table.paddingPt"
                      class="pdfx-num-input">
             </div>
           </div>
 
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('pdfExport.table.borderWidthPt')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.table.borderWidthPt')"></label>
             <div class="card-form-field">
-              <input type="text" x-data="numInput({ step: 0.25, min: 0, max: 3 })"
+              <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.25, min: 0, max: 3 })"
                      x-modelable="value" x-model="activeProfile.config.table.borderWidthPt"
                      class="pdfx-num-input">
             </div>
           </div>
 
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('pdfExport.table.borderColor')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.table.borderColor')"></label>
             <div class="card-form-field pdfx-color-field">
-              <input type="color" class="pdfx-color-picker" x-model="activeProfile.config.table.borderColor" :aria-label="$app.t('pdfExport.table.borderColor')">
+              <input :id="$id('fld')" type="color" class="pdfx-color-picker" x-model="activeProfile.config.table.borderColor" :aria-label="$app.t('pdfExport.table.borderColor')">
               <span class="pdfx-color-text" x-text="activeProfile.config.table.borderColor"></span>
             </div>
           </div>
 
-          <div class="card-form-row" x-show="activeProfile.config.table.zebra">
-            <label class="card-form-label" x-text="$app.t('pdfExport.table.zebraColor')"></label>
+          <div x-id="['fld']" class="card-form-row" x-show="activeProfile.config.table.zebra">
+            <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.table.zebraColor')"></label>
             <div class="card-form-field pdfx-color-field">
-              <input type="color" class="pdfx-color-picker" x-model="activeProfile.config.table.zebraColor" :aria-label="$app.t('pdfExport.table.zebraColor')">
+              <input :id="$id('fld')" type="color" class="pdfx-color-picker" x-model="activeProfile.config.table.zebraColor" :aria-label="$app.t('pdfExport.table.zebraColor')">
               <span class="pdfx-color-text" x-text="activeProfile.config.table.zebraColor"></span>
             </div>
           </div>
 
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('pdfExport.table.captionPosition')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.table.captionPosition')"></label>
             <div class="card-form-field">
-              <div x-data="combobox($app.t('pdfExport.table.captionPosition'))"
+              <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.table.captionPosition'))"
                    x-modelable="value" x-model="activeProfile.config.table.captionPosition"
                    x-effect="options = [{ value: 'below', label: $app.t('pdfExport.table.caption.below') }, { value: 'above', label: $app.t('pdfExport.table.caption.above') }]"
 ></div>

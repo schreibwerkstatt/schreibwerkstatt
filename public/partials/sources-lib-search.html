@@ -21,7 +21,7 @@
       <div class="filter-bar filter-bar--inline">
         <span class="filter-search-wrap">
           <input type="text" class="filter-search-input filter-search-input--wide" x-model="srcLibQuery"
-                 @keydown.enter.prevent="searchSourceLibrary()"
+                 @keydown.enter="$enter($event, () => searchSourceLibrary())"
                  :placeholder="$app.t('sources.libSearch.placeholder')" :aria-label="$app.t('sources.libSearch.placeholder')"
                  :disabled="!$store.config.semanticSearchEnabled">
           <button type="button" class="search-clear--icon" x-show="srcLibQuery" @click="srcLibQuery=''; srcLibHits=[]; srcLibRan=false"
@@ -40,7 +40,7 @@
       <ul class="sources-lib-hits" x-show="srcLibHits.length>0" x-cloak>
         <template x-for="h in srcLibHits" :key="h.source_id">
           <li class="sources-lib-hit">
-            <button type="button" class="sources-lib-hit-title internal-link" @click="openLibraryHit(h)">
+            <button type="button" class="sources-lib-hit-title text-link" @click="openLibraryHit(h)">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
               <span x-text="h.title || $app.t('sources.untitled')"></span>
               <span class="sources-lib-hit-citekey" x-show="h.citekey" x-text="h.citekey"></span>

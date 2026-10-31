@@ -33,7 +33,7 @@
         <div class="overview-edit-status-meta">
           <span x-show="overviewEditStatus().chapters > 0"
                 x-text="$app.t('overview.editStatusChapters', { status: overviewEditStatus().doneLabel, n: overviewEditStatus().chaptersDone, total: overviewEditStatus().chapters })"></span>
-          <span class="overview-edit-status-stale internal-link" x-show="overviewEditStatus().finalOpen > 0"
+          <span class="overview-edit-status-stale internal-link text-link" x-show="overviewEditStatus().finalOpen > 0"
                 @click.stop="$app.toggleIdeenBoardCard()"
                 :data-tip="$app.t('overview.editStatusFinalOpenTip')"
                 x-text="$app.t('overview.editStatusFinalOpen', { n: overviewEditStatus().finalOpen, status: overviewEditStatus().doneLabel })"></span>

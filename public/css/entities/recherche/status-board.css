@@ -77,7 +77,7 @@
    (gesetzt an <body> in recherche/status.js). */
 body.research-dnd-active .research-status-cell {
   min-height: 6rem;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   outline: 1px dashed color-mix(in srgb, var(--status-accent) 55%, transparent);
   outline-offset: var(--space-3);
 }
@@ -96,7 +96,7 @@ body.research-dnd-active .research-status-cell {
   background: var(--color-card-bg);
   border: 1px solid var(--color-border);
   border-left: 3px solid var(--status-accent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: var(--space-sm);
   /* Nur transform animieren (Compositor-billig) — dieselbe Ueberlegung wie an
      der Beat-Karte: eine box-shadow-Transition erzwingt beim Scrollen ueber die
@@ -191,7 +191,7 @@ body.research-dnd-active .research-status-cell {
   box-shadow: 0 12px 28px var(--color-shadow);
   background: var(--color-card-bg);
   border: 1px solid var(--card-accent, var(--card-accent-recherche));
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   opacity: 0.95;
   cursor: grabbing;
   transition: none;
@@ -206,7 +206,7 @@ body.research-dnd-active .research-status-cell {
   display: inline-block;
   padding: 0.1em 0.5em;
   border: 1px solid var(--status-accent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-micro);
   font-weight: var(--fw-semibold);
   text-transform: uppercase;

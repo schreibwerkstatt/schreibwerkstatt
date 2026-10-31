@@ -4,7 +4,7 @@
 // Standardweg. Grundlage der Klassenstufen in Figuren-Karte und Buch-Chat.
 //
 // Eigener Schreibpfad `PUT /booksettings/:book_id/schulsystem` (Muster /research);
-// der Header-Speichern-Knopf schreibt ihn mit (saveActiveTab in settings.js).
+// der Kopf-Knopf der Karte schreibt ihn mit (save-paths.js).
 // Normalisiert wird mit derselben Funktion wie auf dem Server
 // (book/school-path.js#normalizeSchulsystem) — die Antwort spiegelt den
 // gespeicherten Stand zurück.
@@ -25,6 +25,14 @@ export const schoolMethods = {
     this.schulVorlage = n?.vorlage || '';
     this.bookHandlungsjahr = Number.isInteger(data?.handlungsjahr) ? data.handlungsjahr : null;
     this.bookSchulsystemLoaded = true;
+    this._markClean('school');
+  },
+
+  _schoolSnapshot() {
+    return {
+      schulsystem: this.bookSchulsystem ? normalizeSchulsystem(this.bookSchulsystem) : null,
+      handlungsjahr: this.bookHandlungsjahr ?? null,
+    };
   },
 
   /** Abschnitt nur bei Buchtypen mit Schullaufbahn — folgt der Auswahl im Formular. */
@@ -72,7 +80,7 @@ export const schoolMethods = {
   /** Figuren mit eigenem Weg, den die neue Vorlage nicht kennt. 0 bei Fehler —
    *  die Rückfrage ist ein Hinweis, kein Schutz, und darf den Wechsel nicht sperren. */
   async _schulFigurenMitEigenemWeg(neueVorlage) {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._formBookId;
     try {
       const r = await fetch(`/figures/${encodeURIComponent(bookId)}/schulwege`);
       if (!r.ok) return 0;
@@ -102,26 +110,28 @@ export const schoolMethods = {
     })) : [];
   },
 
-  async saveSchulsystem() {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId || !this.bookSchulsystemLoaded) return;
+  async saveSchulsystem(bookId = this._formBookId) {
+    if (!bookId || !this.bookSchulsystemLoaded) return false;
     this.schulSaving = true;
+    this.schulSaved = false;
     this.schulError = '';
+    const sent = this._snapKey('school');
     try {
       const r = await fetch(`/booksettings/${bookId}/schulsystem`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          schulsystem: this.bookSchulsystem ? normalizeSchulsystem(this.bookSchulsystem) : null,
-          handlungsjahr: this.bookHandlungsjahr ?? null,
-        }),
+        body: JSON.stringify(this._schoolSnapshot()),
       });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(window.__app.tError(d) || `HTTP ${r.status}`);
-      this._applySchoolSettings(d);
+      if (!r.ok) throw new Error(window.__app.tError(d));
+      if (this._isFormBook(bookId)) this._settleSave('school', sent, () => this._applySchoolSettings(d));
+      this.schulSaved = true;
+      this._flash('schulSaved');
       window.__app?.invalidateBookSettingsCache?.();
+      return true;
     } catch (e) {
       this.schulError = e.message;
+      return false;
     } finally {
       this.schulSaving = false;
     }

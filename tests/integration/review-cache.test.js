@@ -100,11 +100,11 @@ test('Buch-Review Cache: geänderter Buch-Kontext invalidiert den Cache', async 
   seedSmallBook(BOOK_ID, 12200, 12201);
   ctx.mockAi.on(isReview, reviewResponse(4.5));
 
-  ctx.dbSchema.saveBookSettings(BOOK_ID, 'de', 'CH', null, 'Ein stiller Roman.');
+  ctx.dbSchema.saveBookSettings(BOOK_ID, { language: 'de', region: 'CH', buchtyp: null, buch_kontext: 'Ein stiller Roman.' });
   assert.equal((await runReview(BOOK_ID)).status, 'done');
   assert.equal(ctx.mockAi.log.length, 1);
 
-  ctx.dbSchema.saveBookSettings(BOOK_ID, 'de', 'CH', null, 'Ein lauter Roman.');
+  ctx.dbSchema.saveBookSettings(BOOK_ID, { language: 'de', region: 'CH', buchtyp: null, buch_kontext: 'Ein lauter Roman.' });
   assert.equal((await runReview(BOOK_ID)).status, 'done');
   assert.equal(ctx.mockAi.log.length, 2, 'neuer Buch-Kontext = neuer Systemprompt = Cache-Miss');
   assert.match(ctx.mockAi.log[1].system, /Ein lauter Roman\./);

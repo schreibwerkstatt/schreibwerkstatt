@@ -14,7 +14,7 @@
 // eines ISO-Tags formatiert `_isoDayLabel` (cards/tile-format.js) am UTC-Mittag mit `timeZone: 'UTC'`:
 // so zeigt das Label genau den Kalendertag des Strings, egal in welcher Zone
 // Browser und App stehen.
-import { localIsoDate, completeLiveBookStats, CHARS_PER_NORMSEITE } from '../utils.js';
+import { localIsoDate, completeLiveBookStats, resolveDailyGoal } from '../utils.js';
 import { computeTodayRing, makeDayDelta } from '../today-ring.js';
 import { buildStreakGrid } from '../streak-grid.js';
 import { isoAddDays, isoLastDays } from '../utils/iso-day.js';
@@ -264,10 +264,10 @@ export const statsMethods = {
     const tokEsts = window.__app?.tokEsts || {};
     const pages = Alpine.store('nav').pages || [];
     const todayIso = this._todayIso();
-    // Goal: expliziter Buch-Wert (book_settings.daily_goal_chars) vor
-    // Default = eine Normseite/Tag. Auflösung hier statt im Template, damit
-    // das Charts-Partial die Methode argumentlos aufrufen kann.
-    const goal = Math.max(1, Number(goalChars) || this.overviewDailyGoalChars || CHARS_PER_NORMSEITE);
+    // Goal: expliziter Buch-Wert (book_settings.daily_goal_chars), sonst
+    // Default = eine Normseite/Tag (resolveDailyGoal). Auflösung hier statt im
+    // Template, damit das Charts-Partial die Methode argumentlos aufrufen kann.
+    const goal = Math.max(1, Number(goalChars) || resolveDailyGoal(this.overviewDailyGoalChars));
     const newBook = this.overviewIsNewBook();
     return this._memo('todayRing:' + goal, [a, tokEsts, pages, todayIso, newBook], () =>
       computeTodayRing({ stats: a, tokEsts, pages, todayIso, goalChars: goal, r: 28, newBookBaseline: newBook })
@@ -287,7 +287,9 @@ export const statsMethods = {
   },
 
   // Heute-Ring sichtbar: Verlauf vorhanden oder neues Buch mit vollständigem Live-Stand.
+  // Kein Ring, wenn das Buch bewusst kein Tagesziel hat (daily_goal_chars = 0).
   overviewShowTodayRing() {
+    if (resolveDailyGoal(this.overviewDailyGoalChars) === 0) return false;
     return (this.overviewStats || []).length > 0 || this.overviewIsNewBook();
   },
 };

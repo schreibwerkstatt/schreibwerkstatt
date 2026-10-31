@@ -37,9 +37,9 @@ export function renderLektoratAnalysisHtml(t, { szenen, stilanalyse, fazit } = {
           ${s.kommentar ? `<div class="szene-kommentar">${escHtml(s.kommentar)}</div>${discussBtn(t, 'szene', s.kommentar, s.titel || '')}` : ''}
         </div>`
     ).join('');
-    out += `<div class="stilbox"><div class="bewertung-section-title">${escHtml(t('lektorat.section.szenen'))}</div>${rows}</div>`;
+    out += `<div class="stilbox"><div class="card-section-title">${escHtml(t('lektorat.section.szenen'))}</div>${rows}</div>`;
   }
-  if (stilanalyse) out += `<div class="stilbox"><div class="bewertung-section-title">${escHtml(t('lektorat.section.stilanalyse'))}</div>${escHtml(stilanalyse)}${discussBtn(t, 'stil', stilanalyse)}</div>`;
+  if (stilanalyse) out += `<div class="stilbox"><div class="card-section-title">${escHtml(t('lektorat.section.stilanalyse'))}</div>${escHtml(stilanalyse)}${discussBtn(t, 'stil', stilanalyse)}</div>`;
   if (fazit) out += `<div class="fazit">${escHtml(fazit)}${discussBtn(t, 'fazit', fazit)}</div>`;
   return out;
 }

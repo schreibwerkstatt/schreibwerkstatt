@@ -5,7 +5,7 @@
      Delta ohne Begründung wäre eine Behauptung: neben der Zahl stehen die häufigen
      Wörter, die das Kapitel öfter bzw. seltener benutzt als der Rest. Auffällige
      Kapitel (Delta mehr als eine Standardabweichung über dem Mittel) sind markiert. -->
-<div x-show="wortschatzTab === 'chapters'">
+<div role="tabpanel" x-show="wortschatzTab === 'chapters'">
   <p class="wortschatz-list-hint" x-text="$app.t('wortschatz.chapters.hint')"></p>
   <p class="wortschatz-list-hint" x-show="wsDeltaNote()" x-text="wsDeltaNote()"></p>
   <div x-show="!wortschatzChapters.length" class="muted-msg muted-msg--spaced" x-text="$app.t('wortschatz.chapters.empty')"></div>
@@ -19,18 +19,12 @@
              types: { position: 'number', tokens: 'number', mattr: 'number', mtld: 'number', lex_density: 'number', delta: 'number', chapter_name: 'string' },
            })">
       <thead><tr>
-        <th class="sortable-th" :class="sortClass('position')" :aria-sort="ariaSort('position')"
-            @click="sortBy('position')" x-text="$app.t('wortschatz.col.chapter')"></th>
-        <th class="sortable-th" :class="sortClass('tokens')" :aria-sort="ariaSort('tokens')"
-            @click="sortBy('tokens')" x-text="$app.t('wortschatz.kpi.tokens')"></th>
-        <th class="sortable-th" :class="sortClass('mattr')" :aria-sort="ariaSort('mattr')"
-            @click="sortBy('mattr')" x-text="$app.t('wortschatz.kpi.mattr')"></th>
-        <th class="sortable-th" :class="sortClass('mtld')" :aria-sort="ariaSort('mtld')"
-            @click="sortBy('mtld')" x-text="$app.t('wortschatz.kpi.mtld')"></th>
-        <th class="sortable-th" :class="sortClass('lex_density')" :aria-sort="ariaSort('lex_density')"
-            @click="sortBy('lex_density')" x-text="$app.t('wortschatz.kpi.density')"></th>
-        <th class="sortable-th" :class="sortClass('delta')" :aria-sort="ariaSort('delta')"
-            @click="sortBy('delta')" :title="$app.t('wortschatz.col.deltaTip')"
+        <th x-bind="sortTh('position')" x-text="$app.t('wortschatz.col.chapter')"></th>
+        <th x-bind="sortTh('tokens')" x-text="$app.t('wortschatz.kpi.tokens')"></th>
+        <th x-bind="sortTh('mattr')" x-text="$app.t('wortschatz.kpi.mattr')"></th>
+        <th x-bind="sortTh('mtld')" x-text="$app.t('wortschatz.kpi.mtld')"></th>
+        <th x-bind="sortTh('lex_density')" x-text="$app.t('wortschatz.kpi.density')"></th>
+        <th x-bind="sortTh('delta')" :title="$app.t('wortschatz.col.deltaTip')"
             x-text="$app.t('wortschatz.col.delta')"></th>
         <th x-text="$app.t('wortschatz.col.deltaReason')"></th>
       </tr></thead>

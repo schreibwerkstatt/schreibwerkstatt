@@ -59,7 +59,7 @@
     font-size: var(--font-size-sm);
     padding: var(--space-2xs) var(--space-xs);
     border: 1px solid var(--card-accent);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: var(--color-card-bg);
     color: var(--color-text);
   }
@@ -132,7 +132,7 @@
     background: var(--color-card-bg);
     border: 1px solid var(--color-border);
     border-left: 3px solid var(--color-muted);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     padding: var(--space-sm);
     /* Nur transform animieren (Compositor-billig). box-shadow/border-color NICHT
        in die Transition: sie zu animieren erzwingt Repaint pro Frame — beim
@@ -156,7 +156,7 @@
     display: flex;
     gap: var(--space-3);
     background: var(--color-card-bg);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     box-shadow: var(--shadow-sm);
   }
   @media (hover: none) {
@@ -200,7 +200,7 @@
     box-shadow: 0 12px 28px var(--color-shadow);
     background: var(--color-card-bg);
     border: 1px solid var(--card-accent, var(--card-accent-plot));
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     opacity: 0.95;
     cursor: grabbing;
     /* SortableJS positioniert den Fallback-Klon via inline transform:translate3d
@@ -247,8 +247,8 @@
     color: var(--color-muted);
   }
   .plot-beat-warn .icon { width: 14px; height: 14px; }
-  .plot-beat-warn--kritisch { color: var(--color-schwach); }
-  .plot-beat-warn--mittel   { color: var(--color-mittel); }
+  .plot-beat-warn--kritisch { color: var(--color-schwach-text); }
+  .plot-beat-warn--mittel   { color: var(--color-mittel-text); }
   .plot-beat-warn--niedrig  { color: var(--color-muted); }
 
   /* Verankerungs-Badge am Beat — Soll (status) vs. Ist (Fundstellen im Buchtext,
@@ -263,7 +263,7 @@
     height: 18px;
     padding: 0 var(--space-2xs);
     border: 1px solid transparent;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: none;
     cursor: pointer;
     font-size: var(--font-size-xs);
@@ -271,12 +271,12 @@
     line-height: 1;
   }
   .plot-beat-anchor--confirmed {
-    color: var(--color-stark);
+    color: var(--color-stark-text);
     border-color: color-mix(in oklch, var(--color-stark) 40%, transparent);
     background: color-mix(in oklch, var(--color-stark) 12%, transparent);
   }
   .plot-beat-anchor--drift {
-    color: var(--color-schwach);
+    color: var(--color-schwach-text);
     border-color: color-mix(in oklch, var(--color-schwach) 45%, transparent);
     background: color-mix(in oklch, var(--color-schwach) 14%, transparent);
     cursor: default;
@@ -286,7 +286,7 @@
      auf „im Buch" zu setzen). Amber statt Grün/Rot — actionabler Hinweis, kein
      Fehler. Klick öffnet das Fundstellen-Popover mit der Promotion-Aktion. */
   .plot-beat-anchor--promote {
-    color: var(--color-mittel);
+    color: var(--color-mittel-text);
     border-color: color-mix(in oklch, var(--color-mittel) 45%, transparent);
     background: color-mix(in oklch, var(--color-mittel) 14%, transparent);
   }
@@ -310,10 +310,13 @@
     text-align: left;
     cursor: pointer;
   }
-  .plot-occ-item:hover:not(:disabled),
+  .plot-occ-item:hover:not(:disabled) {
+    background: var(--color-hover);
+  }
   .plot-occ-item:focus-visible {
     background: var(--color-hover);
-    outline: none;
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-ring-offset-inset);
   }
   .plot-occ-item:disabled {
     opacity: var(--opacity-disabled);
@@ -404,7 +407,7 @@
     font-size: var(--font-size-sm);
     padding: var(--space-2xs) var(--space-xs);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: var(--color-card-bg);
     color: var(--color-text);
   }
@@ -421,7 +424,7 @@
     font-size: var(--font-size-xs);
     text-align: center;
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     color: var(--color-muted);
   }
   /* Status-Picker signalisiert die Auswahl über die semantische Füllfarbe (s. u.),
@@ -430,7 +433,7 @@
   .plot-status-tabs .tabs-btn::after { content: none; }
   /* Aktive Stufe trägt die semantische Status-Farbe (gleiche Tokens wie Beat-
      Border-Left + Verteilungsbalken-Segment → ein Farb-System). */
-  .plot-status-tabs .tabs-btn--active.plot-status-seg--geplant   { background: var(--color-tag-bg);  color: var(--color-muted);     border-color: var(--color-muted); }
+  .plot-status-tabs .tabs-btn--active.plot-status-seg--geplant   { background: var(--color-tag-bg);  color: var(--color-tag-text);     border-color: var(--color-muted); }
   .plot-status-tabs .tabs-btn--active.plot-status-seg--im_buch   { background: var(--color-ok-bg);   color: var(--color-ok-text);   border-color: var(--color-ok-border); }
   .plot-edit-label {
     font-size: var(--font-size-micro);
@@ -464,7 +467,7 @@
     line-height: 1.45;
     padding: var(--space-xs);
     border: 1px solid var(--card-accent);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: var(--color-card-bg);
     color: var(--color-text);
     resize: vertical;
@@ -478,7 +481,7 @@
     width: 100%;
     padding: var(--space-xs);
     border: 1px dashed var(--color-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: transparent;
     color: var(--color-muted);
     font-size: var(--font-size-xs);
@@ -518,7 +521,7 @@
     font-size: var(--font-size-sm);
     padding: var(--space-xs);
     border: 1px solid var(--card-accent);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: var(--color-card-bg);
     color: var(--color-text);
   }

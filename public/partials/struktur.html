@@ -25,10 +25,10 @@
   <p class="card-hint card-section" x-text="$app.t('struktur.intro')"></p>
 
   <!-- Buch-Default: gilt für jeden Beitrag ohne eigene Angabe -->
-  <div class="card-form-row struktur-default-row card-section">
-    <label class="card-form-label" x-text="$app.t('struktur.bookDefault')"></label>
+  <div x-id="['fld']" class="card-form-row struktur-default-row card-section">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('struktur.bookDefault')"></label>
     <div class="card-form-field">
-      <div x-data="combobox($app.t('struktur.bookDefault'), $app.t('struktur.noTextsorte'))"
+      <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('struktur.bookDefault'), $app.t('struktur.noTextsorte'))"
            x-modelable="value" x-model="strukturBookTextsorte"
            x-effect="options = strukturTextsorteOptions()"
            @combobox-change="setBookTextsorte(strukturBookTextsorte)"></div>
@@ -95,13 +95,10 @@
          })">
     <thead>
       <tr>
-        <th class="sortable-th" :class="sortClass('name')" :aria-sort="ariaSort('name')"
-            @click="sortBy('name')" x-text="$app.t('struktur.col.title')"></th>
-        <th class="sortable-th" :class="sortClass('chapter')" :aria-sort="ariaSort('chapter')"
-            @click="sortBy('chapter')" x-text="$app.t('struktur.col.chapter')"></th>
+        <th x-bind="sortTh('name')" x-text="$app.t('struktur.col.title')"></th>
+        <th x-bind="sortTh('chapter')" x-text="$app.t('struktur.col.chapter')"></th>
         <th x-text="$app.t('struktur.col.textsorte')"></th>
-        <th class="sortable-th" :class="sortClass('_rank')" :aria-sort="ariaSort('_rank')"
-            @click="sortBy('_rank')" x-text="$app.t('struktur.col.urteil')"></th>
+        <th x-bind="sortTh('_rank')" x-text="$app.t('struktur.col.urteil')"></th>
         <th></th>
       </tr>
     </thead>
@@ -109,7 +106,7 @@
       <template x-for="row in sorted" :key="row.id">
         <tr>
           <td class="struktur-cell-title">
-            <span class="internal-link" @click="strukturOpenPage(row)" x-text="row.name || $app.t('struktur.untitled')"></span>
+            <span class="internal-link text-link" @click="strukturOpenPage(row)" x-text="row.name || $app.t('struktur.untitled')"></span>
           </td>
           <td>
             <button type="button" class="entity-ref" x-show="row.chapterId"

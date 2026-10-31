@@ -20,18 +20,12 @@
              })">
         <thead>
           <tr>
-            <th class="sortable-th" :class="sortClass('name')" :aria-sort="ariaSort('name')"
-                @click="sortBy('name')" x-text="$app.t('mystats.bookGoals.book')"></th>
-            <th class="sortable-th mystats-goals-num" :class="sortClass('chars')" :aria-sort="ariaSort('chars')"
-                @click="sortBy('chars')" x-text="$app.t('mystats.bookGoals.written')"></th>
-            <th class="sortable-th mystats-goals-num" :class="sortClass('goal')" :aria-sort="ariaSort('goal')"
-                @click="sortBy('goal')" x-text="$app.t('mystats.bookGoals.goal')"></th>
-            <th class="sortable-th" :class="sortClass('pctRaw')" :aria-sort="ariaSort('pctRaw')"
-                @click="sortBy('pctRaw')" x-text="$app.t('mystats.bookGoals.progress')"></th>
-            <th class="sortable-th" :class="sortClass('daysRemaining')" :aria-sort="ariaSort('daysRemaining')"
-                @click="sortBy('daysRemaining')" x-text="$app.t('mystats.bookGoals.status')"></th>
-            <th class="sortable-th mystats-goals-num" :class="sortClass('charsToday')" :aria-sort="ariaSort('charsToday')"
-                @click="sortBy('charsToday')" x-text="$app.t('mystats.bookGoals.today')"></th>
+            <th x-bind="sortTh('name')" x-text="$app.t('mystats.bookGoals.book')"></th>
+            <th x-bind="sortTh('chars')" class="mystats-goals-num" x-text="$app.t('mystats.bookGoals.written')"></th>
+            <th x-bind="sortTh('goal')" class="mystats-goals-num" x-text="$app.t('mystats.bookGoals.goal')"></th>
+            <th x-bind="sortTh('pctRaw')" x-text="$app.t('mystats.bookGoals.progress')"></th>
+            <th x-bind="sortTh('daysRemaining')" x-text="$app.t('mystats.bookGoals.status')"></th>
+            <th x-bind="sortTh('charsToday')" class="mystats-goals-num" x-text="$app.t('mystats.bookGoals.today')"></th>
           </tr>
         </thead>
         <tbody>

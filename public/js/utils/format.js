@@ -59,6 +59,17 @@ export function fmtBytes(n, uiLocale) {
 // Klassische Normseite (DIN): 30 Zeilen × ~50 Zeichen ≈ 1500 Zeichen.
 // Sekundäre Umfangs-Kennzahl neben Zeichen/Wörter.
 export const CHARS_PER_NORMSEITE = 1500;
+
+// Tagesziel eines Buchs (book_settings.daily_goal_chars): NULL = nie gesetzt →
+// Default eine Normseite/Tag; 0 = bewusst kein Tagesziel. Liefert 0 oder das
+// Ziel in Zeichen — die eine Auflösung für Header-Donut, Übersicht und Formular.
+export const DEFAULT_DAILY_GOAL_CHARS = CHARS_PER_NORMSEITE;
+export function resolveDailyGoal(raw) {
+  if (raw == null || raw === '') return DEFAULT_DAILY_GOAL_CHARS;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 export function charsToNormseiten(chars) {
   const n = Number(chars) || 0;
   return Math.round((n / CHARS_PER_NORMSEITE) * 10) / 10;

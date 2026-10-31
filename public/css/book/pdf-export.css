@@ -19,7 +19,7 @@
   width: 100%;
   padding: var(--space-6) var(--space-sm);
   border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-surface);
   color: var(--color-text);
   font-size: var(--font-size-sm);
@@ -28,7 +28,7 @@
 }
 .pdfx-num-input { max-width: 110px; }
 .pdfx-text-input:focus,
-.pdfx-num-input:focus { outline: none; border-color: var(--color-accent); }
+.pdfx-num-input:focus { outline: none; border-color: var(--color-border-focus); }
 
 .pdfx-inline-pair {
   display: flex;
@@ -89,7 +89,7 @@
   font-size: var(--font-size-xs);
   line-height: 1.2;
   border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-surface);
   color: var(--color-muted);
   cursor: pointer;
@@ -176,7 +176,7 @@
   margin-top: var(--space-10);
   padding: var(--space-sm) var(--space-md);
   border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: #ffffff;
   color: #1a1a1a;
   font-size: var(--font-size-lg);
@@ -196,7 +196,7 @@
   height: 28px;
   padding: 0;
   border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-surface);
   cursor: pointer;
   box-sizing: border-box;
@@ -227,7 +227,7 @@
   width: 200px;
   height: 280px;
   border: 0.5px dashed var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-bg);
   color: var(--color-muted);
   font-size: var(--font-size-sm);
@@ -239,8 +239,6 @@
   height: 100%;
   object-fit: contain;
 }
-/* Niedrig-Auflösungs-Warnung nach Export (Druck-Tab / 300-dpi-Check). */
-.pdfx-lowres-warn { color: var(--color-warn-text); }
 /* KDP-Vorgaben-Block (Druck-Tab): 1-Klick-Preset + Bundsteg-Prüfung. */
 .pdfx-kdp-preset {
   margin: var(--space-6) 0 var(--space-14);
@@ -273,22 +271,6 @@
   margin: var(--space-6) 0 var(--space-10);
   flex-wrap: wrap;
 }
-/* File-Picker-Label im Look eines Standard-Buttons. */
-.pdfx-file-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--size-compact-padding);
-  border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: var(--size-compact-font-size);
-  font-weight: var(--fw-semibold);
-  cursor: pointer;
-  transition: background var(--transition-base), border-color var(--transition-base);
-}
-.pdfx-file-btn:hover { border-color: var(--color-accent); background: var(--color-bg); }
 
 /* === Modus-Leiste (Einfach/Experte) + Ungespeichert-Marke === */
 .pdfx-mode-bar {
@@ -304,7 +286,7 @@
   font-weight: var(--fw-semibold);
   color: var(--color-warn-text);
   background: var(--color-warn-bg);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: var(--space-2xs) var(--space-sm);
 }
 .pdfx-mode-bar .pdfx-dirty-mark { margin-left: auto; }
@@ -335,7 +317,7 @@
   height: auto;
   background: var(--color-bg);
   border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 .pdfx-ss-page { fill: var(--color-surface); stroke: var(--color-muted); stroke-width: 0.6; }
 .pdfx-ss-frame { fill: none; stroke: var(--color-border); stroke-width: 0.5; stroke-dasharray: 2 2; }

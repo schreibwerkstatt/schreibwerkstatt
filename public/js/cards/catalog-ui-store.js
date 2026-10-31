@@ -20,6 +20,9 @@ export function registerCatalogUiStore() {
     figurenProgress: 0,
     figurenStatus: '',
     selectedFigurId: null,
+    // Spiegel des aktiven Reiters (figuren-card.js#figurenGraphModus) für den
+    // Permalink #…/figuren/<reiter>. Geschrieben nur von der Karte.
+    figurenTab: 'liste',
     figurenFilters: { kapitelId: '', seiteId: '', suche: '', typ: '', sort: '' },
 
     // Ereignisse: Filter + Selektion (app-navigation schreibt beides).

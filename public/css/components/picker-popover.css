@@ -35,7 +35,7 @@
     padding: var(--space-sm);
     background: var(--color-surface);
     border: var(--border-thin) solid var(--color-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     box-shadow: var(--shadow-md);
     transition: opacity var(--transition-base);
   }

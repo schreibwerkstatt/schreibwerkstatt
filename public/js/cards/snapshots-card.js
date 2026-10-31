@@ -15,6 +15,7 @@ import { snapshotsDriftMethods } from './snapshots-drift.js';
 import { snapshotsTrashMethods } from './snapshots-trash.js';
 import { snapshotsRestoreMethods } from './snapshots-restore.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { loadToken } from './book-guard.js';
 
 // Modul-Cache fuer Fassungs-Vollzeilen. Das `content_json` einer Fassung kann
 // MB gross sein; es ist aber unveraenderlich pro id (kein retroaktives Update,
@@ -82,6 +83,7 @@ export function registerSnapshotsCard() {
     pdfError: '',
     pdfJobId: null,
     _pdfPollTimer: null,   // transienter Timer-Guard (siehe startPoll)
+    _snapshotsLoadSeq: 0,  // Lade-Token (book-guard.js#loadToken)
     _lifecycle: null,
 
     init() {
@@ -94,7 +96,13 @@ export function registerSnapshotsCard() {
 
       this._lifecycle = setupCardLifecycle(this, {
         name: 'snapshots',
-        onBookChanged: () => this.reset(),
+        // Reset + bei offener Karte gleich das neue Buch laden — sonst bliebe
+        // die Karte leer stehen, bis jemand sie neu öffnet.
+        onBookChanged: () => {
+          this.reset();
+          const bookId = Alpine.store('nav').selectedBookId;
+          if (bookId && window.__app?.showSnapshotsCard) this.loadSnapshots(bookId);
+        },
         onViewReset: () => this.reset(),
         onCardRefresh: () => this.loadSnapshots(Alpine.store('nav').selectedBookId, { fresh: true }),
       });
@@ -139,19 +147,23 @@ export function registerSnapshotsCard() {
 
     async loadSnapshots(bookId, { fresh = false } = {}) {
       if (!bookId) return;
+      const isCurrent = loadToken(this, '_snapshotsLoadSeq', bookId);
       this._bookId = bookId;
       this.loading = true;
       try {
         const url = `/snapshots/${bookId}${fresh ? '?__fresh=1' : ''}`;
         const data = await fetchJson(url);
+        if (!isCurrent()) return;
         this.snapshots = Array.isArray(data?.snapshots) ? data.snapshots : [];
         this._autoSelectCompare();
       } catch (e) {
         console.error('[snapshots:load]', e);
+        if (!isCurrent()) return;
         this.snapshots = [];
       } finally {
-        this.loading = false;
+        if (isCurrent.latest()) this.loading = false;
       }
+      if (!isCurrent()) return;
       // Drift gegen die juengste Fassung nachladen (nur wenn es eine gibt).
       this.loadDrift(bookId);
       this.loadTrash(bookId);

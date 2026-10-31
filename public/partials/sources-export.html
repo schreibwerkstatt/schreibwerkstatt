@@ -15,10 +15,10 @@
     </div>
 
     <div class="card-form-grid">
-      <div class="card-form-row card-form-row--top">
-        <label class="card-form-label" x-text="$app.t('sources.export.books')"></label>
+      <div x-id="['fld']" class="card-form-row card-form-row--top">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('sources.export.books')"></label>
         <div class="card-form-field">
-          <div x-data="combobox({ placeholder: $app.t('sources.export.booksAll'), multiple: true })"
+          <div :aria-labelledby="$id('fld')" x-data="combobox({ placeholder: $app.t('sources.export.booksAll'), multiple: true })"
                x-modelable="value" x-model="srcExportBooks"
                x-effect="options = srcExportBookOptions()"
                @combobox-change="srcExportBooks = $event.detail; loadSourceExportRows()"></div>
@@ -35,10 +35,10 @@
         </div>
       </div>
 
-      <div class="card-form-row card-form-row--top">
-        <label class="card-form-label" x-text="$app.t('sources.export.tags')"></label>
+      <div x-id="['fld']" class="card-form-row card-form-row--top">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('sources.export.tags')"></label>
         <div class="card-form-field">
-          <div x-data="combobox({ placeholder: $app.t('sources.export.tagsAll'), multiple: true })"
+          <div :aria-labelledby="$id('fld')" x-data="combobox({ placeholder: $app.t('sources.export.tagsAll'), multiple: true })"
                x-modelable="value" x-model="srcExportTags"
                x-effect="options = srcExportTagOptions()"></div>
           <div class="export-chip-row" x-show="srcExportTags.length">
@@ -54,9 +54,9 @@
         </div>
       </div>
 
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('sources.export.filter')"></label>
-        <div class="form-stack">
+      <div x-id="['fld']" class="card-form-row">
+        <span :id="$id('fld')" class="card-form-label" x-text="$app.t('sources.export.filter')"></span>
+        <div role="group" :aria-labelledby="$id('fld')" class="form-stack">
           <label class="form-check">
             <input type="checkbox" x-model="srcExportCitedOnly" :disabled="srcExportBooks.length === 0">
             <span class="form-check-title" x-text="$app.t('sources.export.citedOnly')"></span>
@@ -68,20 +68,20 @@
         </div>
       </div>
 
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('sources.export.format')"></label>
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('sources.export.format')"></label>
         <div class="card-form-field">
-          <div x-data="combobox({ placeholder: $app.t('sources.export.format'), compact: false })"
+          <div :aria-labelledby="$id('fld')" x-data="combobox({ placeholder: $app.t('sources.export.format'), compact: false })"
                x-modelable="value" x-model="srcExportFormat"
                x-effect="options = srcExportFormatOptions()"></div>
           <p class="card-form-field-note" x-text="$app.t('sources.export.formatHint.' + srcExportFormat)"></p>
         </div>
       </div>
 
-      <div class="card-form-row" x-show="srcExportIsStyled()">
-        <label class="card-form-label" x-text="$app.t('sources.export.style')"></label>
+      <div x-id="['fld']" class="card-form-row" x-show="srcExportIsStyled()">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('sources.export.style')"></label>
         <div class="card-form-field sources-export-style">
-          <div x-data="combobox({ placeholder: $app.t('sources.export.style'), compact: false })"
+          <div :aria-labelledby="$id('fld')" x-data="combobox({ placeholder: $app.t('sources.export.style'), compact: false })"
                x-modelable="value" x-model="srcExportStyle"
                x-effect="options = srcExportStyleOptions()"></div>
           <div x-data="combobox({ placeholder: $app.t('sources.export.lang'), compact: false })"

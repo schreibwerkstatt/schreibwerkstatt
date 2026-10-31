@@ -2,7 +2,9 @@
 // Submodul-Aufteilung nach Domäne; Methoden teilen sich zur Laufzeit ein
 // gemeinsames `this` (in das Objekt gespreadet). Geteilte Imports/Konstanten
 // in book-settings/_shared.js.
+import { savePathMethods } from './book-settings/save-paths.js';
 import { settingsMethods } from './book-settings/settings.js';
+import { publicationMethods } from './book-settings/publication.js';
 import { citationMethods } from './book-settings/citation.js';
 import { researchMethods } from './book-settings/research.js';
 import { schoolMethods } from './book-settings/school.js';
@@ -15,7 +17,9 @@ import { seriesMethods } from './book-settings/series.js';
 import { exposeMethods } from './book-settings/expose.js';
 
 export const bookSettingsMethods = {
+  ...savePathMethods,
   ...settingsMethods,
+  ...publicationMethods,
   ...citationMethods,
   ...researchMethods,
   ...schoolMethods,

@@ -6,10 +6,11 @@
       <h3 class="card-section-title" x-text="$app.t('book.share.title')"></h3>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.share.lektorBookChatLabel')"></label>
-        <div class="form-stack">
+        <span class="card-form-label" id="bs-share-lektor-label" x-text="$app.t('book.share.lektorBookChatLabel')"></span>
+        <div class="form-stack" role="group" aria-labelledby="bs-share-lektor-label">
           <label class="form-check">
-            <input type="checkbox" x-model="bookSettingsAllowLektorBookChat" :disabled="!bookAccessIsOwner()">
+            <input type="checkbox" x-model="bookSettingsAllowLektorBookChat" :disabled="!bookAccessIsOwner()"
+                   @change="saveLektorBookChat($event.target.checked)">
             <span>
               <span class="form-check-title" x-text="$app.t('book.share.lektorBookChatTitle')"></span>
               <span class="form-check-desc" x-text="$app.t('book.share.lektorBookChatDesc')"></span>
@@ -22,10 +23,10 @@
       <p class="card-form-error" x-show="bookAccessError" x-text="bookAccessError"></p>
 
       <div class="card-form-row card-form-row--top" x-show="!bookAccessLoading && bookAccessList.length">
-        <label class="card-form-label" x-text="$app.t('book.share.membersLabel')"></label>
-        <div class="book-share-list">
+        <span class="card-form-label" id="bs-share-members-label" x-text="$app.t('book.share.membersLabel')"></span>
+        <div class="book-share-list" role="list" aria-labelledby="bs-share-members-label">
           <template x-for="entry in bookAccessList" :key="entry.user_email">
-            <div class="book-share-row" :class="{ 'book-share-row--self': entry.user_email === $store.session.currentUser?.email }">
+            <div class="book-share-row" role="listitem" :class="{ 'book-share-row--self': entry.user_email === $store.session.currentUser?.email }">
               <span class="book-share-avatar" :style="`--avatar-hue: ${$app.userAvatarHue(entry.user_email)}`" x-text="shareInitials(entry)" aria-hidden="true"></span>
               <div class="book-share-row-main">
                 <span class="book-share-displayname">
@@ -42,6 +43,7 @@
                   <div class="book-share-row-controls">
                     <div class="book-share-role-combo"
                          x-data="combobox($app.t('book.share.role.editor'))"
+                         :aria-label="$app.t('book.share.roleLabel')"
                          x-effect="value = entry.role; options = bookAccessRoleOptions()"
                          @combobox-change="if ($event.detail && $event.detail !== entry.role) changeBookAccessRole(entry.user_email, $event.detail)"></div>
                     <button type="button" class="btn-compact book-share-btn-transfer"
@@ -60,10 +62,10 @@
       </div>
 
       <div class="card-form-row card-form-row--top" x-show="bookAccessIsOwner()">
-        <label class="card-form-label" x-text="$app.t('book.share.inviteLabel')"></label>
+        <label class="card-form-label" for="bs-share-invite" x-text="$app.t('book.share.inviteLabel')"></label>
         <div class="book-share-invite-col">
           <div class="book-share-invite-row">
-            <input type="text" class="card-form-input book-share-invite-input"
+            <input type="text" id="bs-share-invite" class="card-form-input book-share-invite-input"
                    x-model="shareEmail"
                    :placeholder="$app.t('book.share.invitePlaceholder')"
                    :disabled="shareBusy"
@@ -76,6 +78,7 @@
                    @keydown.enter.prevent="submitShareInvite()">
             <div class="book-share-role-combo"
                  x-data="combobox({ placeholder: $app.t('book.share.role.editor'), compact: false })"
+                 :aria-label="$app.t('book.share.roleLabel')"
                  x-modelable="value" x-model="shareRole"
                  x-effect="options = bookAccessRoleOptions()"></div>
             <button type="button"

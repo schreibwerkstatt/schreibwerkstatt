@@ -187,13 +187,22 @@ export const historyMethods = {
     document.getElementById('editor-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   },
 
+  // Wie die Kapitelbewertung: Rückfrage, und nur bei bestätigtem DELETE aus der
+  // Liste nehmen (fetchJson wirft auf !ok) — sonst verschwände ein Eintrag, den
+  // der Server noch hat.
   async deleteBookReview(id) {
+    if (!await this.appConfirm({
+      message: this.t('review.deleteConfirm'),
+      confirmLabel: this.t('common.delete'),
+      danger: true,
+    })) return;
     try {
-      await fetch('/history/review/' + id, { method: 'DELETE' });
+      await fetchJson('/history/review/' + id, { method: 'DELETE' });
       this.bookReviewHistory = this.bookReviewHistory.filter(e => e.id !== id);
       if (this.selectedBookReviewId === id) this.selectedBookReviewId = null;
     } catch (e) {
       console.error('[deleteBookReview]', e);
+      this.setStatus(this.t('common.deleteFailed'), false, 5000);
     }
   },
 };

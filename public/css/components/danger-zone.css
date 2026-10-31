@@ -1,9 +1,7 @@
 /* Danger-Zone: abgesetzter Block fuer unwiderrufliche Aktionen (Konto loeschen,
-   Buch loeschen, Restore). Generische Form des Musters, das vorher zweimal
-   handkopiert existierte (.book-settings-danger-* in analysis/kontinuitaet.css,
-   .admin-backup-danger in admin/admin-backup.css) — neue Vorkommen nutzen
-   ausschliesslich diese Klassen, die beiden Altbestaende ziehen bei der naechsten
-   Beruehrung nach. Pattern-Doku: DESIGN.md „Danger-Zone".
+   Buch loeschen, Verlauf zuruecksetzen, Eintraege zusammenfuehren, Backup
+   einspielen). Konsumenten: Profil (Konto loeschen), Bucheinstellungen (Reiter
+   «Gefahrenzone»), Admin-Backup (Restore). Pattern-Doku: DESIGN.md „Danger-Zone".
 
    Farben kommen aus den Fehler-Tokens (--color-err-*), nicht aus dem
    Karten-Akzent: die Bedeutung ist „Achtung", nicht „gehoert zu dieser Karte". */
@@ -13,7 +11,7 @@
     margin-top: var(--space-xl);
     padding: var(--space-md) var(--space-14);
     border: 1px solid var(--color-err-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: var(--color-err-bg);
   }
 
@@ -66,7 +64,7 @@
     font-weight: var(--fw-medium);
     white-space: nowrap;
     border: 1px solid var(--color-err-text);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: var(--color-surface);
     color: var(--color-err-text);
     cursor: pointer;

@@ -183,7 +183,7 @@ textarea:disabled,
 .card-form-saved {
   margin: var(--space-sm) 0 0;
   font-size: var(--font-size-mini);
-  color: var(--color-success);
+  color: var(--color-ok-text);
   font-weight: var(--fw-regular);
   display: inline-flex;
   align-items: center;
@@ -225,7 +225,7 @@ textarea:disabled,
   margin: var(--space-sm) 0 0;
   padding: var(--space-6) var(--space-sm);
   border-left: 3px solid var(--color-warn-text);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-radius: 0 var(--radius-none) var(--radius-none) 0;
   background: var(--color-warn-bg);
   font-size: var(--font-size-mini);
   color: var(--color-warn-text);
@@ -389,7 +389,7 @@ select[aria-invalid="true"],
   font-size: var(--font-size-sm);
   padding: var(--pad-badge);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-surface);
   color: var(--color-text);
   width: 90px;

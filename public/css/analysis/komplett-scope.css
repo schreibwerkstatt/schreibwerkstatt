@@ -134,7 +134,7 @@
 .komplett-scope-core-item .icon {
   width: 0.9em;
   height: 0.9em;
-  color: var(--color-success);
+  color: var(--color-ok-text);
 }
 
 .komplett-scope-step {

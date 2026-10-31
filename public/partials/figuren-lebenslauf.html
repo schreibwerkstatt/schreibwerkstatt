@@ -96,8 +96,8 @@
             <th>
               <span class="figur-cv-col-head">
                 <span class="figur-typ-dot" :class="'figur-typ-dot--' + sp.typ"></span>
-                <span class="internal-link" @click="$app.openFigurById(sp.id)"
-                      :data-tip="$app.t('figuren.alter.openFigur')" x-text="sp.name"></span>
+                <button type="button" class="entity-ref"
+                        x-entity-ref="{ type: 'figur', id: sp.id, label: sp.name }"></button>
                 <span class="figur-cv-col-year"
                       x-text="$app.t('figuren.lebenslauf.born', { jahr: sp.geburtsjahr })"></span>
               </span>
@@ -126,7 +126,7 @@
                         @click="figurenLebenslaufGoto(evt)"
                         @keydown.enter.prevent="figurenLebenslaufGoto(evt)"
                         @keydown.space.prevent="figurenLebenslaufGoto(evt)">
-                      <span class="figur-cv-marke" x-text="figurenLebenslaufMarke(evt, figurenLebenslaufMatrix().spalten[zi])"></span>
+                      <span class="figur-cv-marke" :class="{ 'figur-cv-marke--frei': evt.jahr == null }" x-text="figurenLebenslaufMarke(evt, figurenLebenslaufMatrix().spalten[zi])"></span>
                       <span class="figur-cv-text" x-text="evt.ereignis"></span>
                       <span class="tag figur-cv-subtyp" x-show="evt.subtyp && evt.subtyp !== 'sonstiges'"
                             x-text="figurenLebenslaufSubtypLabel(evt)"></span>

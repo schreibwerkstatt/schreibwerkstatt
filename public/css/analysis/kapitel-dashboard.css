@@ -45,7 +45,7 @@
 .kapitel-dash-kv-label { color: var(--color-muted); }
 /* Befunddichte gegen den Buchwert: weniger ist besser, darum ist „besser"
    gruen und „schlechter" rot — nicht die Richtung des Zahlenwerts. */
-.kapitel-dash-better { color: var(--color-success); }
+.kapitel-dash-better { color: var(--color-ok-text); }
 .kapitel-dash-worse  { color: var(--color-err-text); }
 
 .kapitel-dash-stars { font-size: var(--font-size-xl); line-height: 1; }
@@ -65,7 +65,7 @@
   align-items: center;
   gap: var(--space-sm);
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: var(--space-2xs);
 }
 .kapitel-dash-rank-row:hover {
@@ -79,7 +79,7 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-micro);
   font-weight: var(--fw-semibold);
   color: var(--color-bg);
@@ -93,14 +93,14 @@
 }
 .kapitel-dash-rank-bar {
   height: 6px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-border);
   overflow: hidden;
 }
 .kapitel-dash-rank-fill {
   display: block;
   height: 100%;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--card-accent, var(--color-accent));
 }
 .kapitel-dash-rank-count {
@@ -123,25 +123,18 @@
   align-items: center;
   gap: var(--space-6);
   min-width: 0;
-  cursor: pointer;
   font-size: var(--font-size-sm);
 }
-.kapitel-dash-scene:hover { opacity: 1; text-decoration: none; color: var(--card-accent, var(--color-accent)); }
 .kapitel-dash-scene-dot {
   width: 8px;
   height: 8px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   flex: 0 0 auto;
   background: var(--color-border);
 }
 .kapitel-dash-scene-dot[data-wertung="stark"]   { background: var(--color-success); }
 .kapitel-dash-scene-dot[data-wertung="mittel"]  { background: var(--color-warn-text); }
 .kapitel-dash-scene-dot[data-wertung="schwach"] { background: var(--color-err-text); }
-.kapitel-dash-scene-titel {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 /* ── Entwicklung (Groesse ueber die Zeit) ─────────────────────────────────
    Kurve, Hover-Spalten und Trend-Prozent kommen aus book-overview/stats.css
@@ -193,8 +186,6 @@
   .kapitel-dash-rank-row { grid-template-columns: 22px minmax(0, 1fr) auto; }
   .kapitel-dash-rank-bar { display: none; }
 }
-}
-
 /* ── Fortschritt: Bearbeitungsstand der Abschnitte ────────────────────────── */
 /* Segmente/Legende auf den geteilten `.overview-stacked-*`-Atomen inkl. der
    Rang-Farben `--status<N>` der Buchübersicht (book-overview/domain.css). */
@@ -229,4 +220,5 @@
   color: var(--color-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
 }

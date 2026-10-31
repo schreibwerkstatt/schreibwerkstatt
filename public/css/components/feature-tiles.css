@@ -32,7 +32,7 @@
 .palette-hero:active { transform: none; }
 .palette-hero-icon {
   font-size: var(--font-size-base);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   font-weight: var(--fw-semibold);
 }
 .palette-hero-text {
@@ -43,7 +43,7 @@
   font-size: var(--font-size-xs);
   padding: var(--space-2xs) var(--space-6);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   color: var(--color-muted);
   background: var(--color-surface);
 }
@@ -79,14 +79,14 @@
   background: transparent;
   color: var(--color-text);
   font-family: inherit;
-  outline: none;
   border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 .palette-input::placeholder {
   color: var(--color-muted);
 }
-/* Visuelle Fokus-Signalisierung übernimmt der border-bottom + Palette-Highlight. */
-.palette-input:focus-visible { outline: none; }
+/* Fokus-Signal: Unterkante in --color-border-focus (Eingabefeld-Regel). */
+.palette-input:focus,
+.palette-input:focus-visible { outline: none; border-bottom-color: var(--color-border-focus); }
 .palette-list {
   overflow-y: auto;
   padding: var(--space-6) 0;
@@ -129,9 +129,9 @@
   font-size: var(--font-size-mini);
   font-weight: var(--fw-medium);
   padding: var(--space-1) var(--space-2xs);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   white-space: nowrap;
 }
 .palette-item-desc {
@@ -150,7 +150,7 @@
 }
 .palette-item-preview mark {
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   padding: 0 var(--space-1);
 }
 .palette-item--active {
@@ -164,11 +164,11 @@
 .palette-item:active { transform: none; }
 .palette-item:hover { background: transparent; }
 .palette-item--active:hover { background: var(--color-hover); }
-/* Active-Selection-Highlight (border-left + bg) übernimmt Fokus-Rolle. */
-.palette-item:focus-visible { outline: none; }
+/* Tastatur-Fokus auf einem Eintrag (Tab statt Pfeiltasten): Ring innen. */
+.palette-item:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-ring-offset-inset); }
 .palette-mark {
   background: transparent;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   font-weight: var(--fw-semibold);
   padding: 0;
 }
@@ -196,7 +196,7 @@
   font-size: var(--font-size-micro);
   padding: var(--space-1) var(--space-5);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-surface);
 }
 .palette-legend {
@@ -221,7 +221,7 @@
   font-size: var(--font-size-micro);
   padding: 0 var(--space-xs);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-surface);
   min-width: 12px;
   text-align: center;

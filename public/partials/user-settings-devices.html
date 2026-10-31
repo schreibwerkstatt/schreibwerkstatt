@@ -32,7 +32,7 @@
             <input type="text" x-model="deviceTokensNewName"
                    :placeholder="$app.t('profile.devices.namePlaceholder')"
                    maxlength="100"
-                   @keydown.enter.prevent="deviceTokensCreate()">
+                   @keydown.enter="$enter($event, () => deviceTokensCreate())">
             <div x-data="combobox($app.t('profile.devices.kindPlaceholder'))"
                  x-modelable="value" x-model="deviceTokensNewKind"
                  x-effect="options = [

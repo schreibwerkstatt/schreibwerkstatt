@@ -49,7 +49,8 @@ export const crudMethods = {
   },
   async addTheme() {
     const name = (this.newThemeName || '').trim();
-    if (!name) return;
+    // busy-Guard: Enter + Klick (oder Doppel-Enter) legten sonst zwei Themen an.
+    if (!name || this.busy) return;
     this.busy = true;
     try {
       const theme = await sendJson('/motifs/themes', 'POST', { book_id: this._bookId(), name });
@@ -157,7 +158,7 @@ export const crudMethods = {
   // ── Motive ─────────────────────────────────────────────────────────────
   async addMotif() {
     const name = (this.newMotifName || '').trim();
-    if (!name) return;
+    if (!name || this.busy) return;
     this.busy = true;
     try {
       const body = { book_id: this._bookId(), name };
@@ -178,7 +179,7 @@ export const crudMethods = {
   async addMotifToTheme() {
     const theme = this.selectedTheme();
     const name = (this.newThemeMotifName || '').trim();
-    if (!theme || !name) return;
+    if (!theme || !name || this.busy) return;
     this.busy = true;
     try {
       const m = await sendJson('/motifs', 'POST', { book_id: this._bookId(), name, theme_id: theme.id });

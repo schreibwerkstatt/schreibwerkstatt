@@ -104,7 +104,7 @@
                 <input type="text" class="finding-korrektur-input" data-spellcheck="spelling"
                        x-model="editDraft"
                        x-init="$nextTick(() => $el.focus())"
-                       @keydown.enter.prevent.stop="commitEditKorrektur(i)"
+                       @keydown.enter.stop="$enter($event, () => commitEditKorrektur(i))"
                        @keydown.escape.prevent.stop="cancelEditKorrektur()"
                        :placeholder="$app.t('editor.findings.korrekturPlaceholder')">
                 <span class="finding-korrektur-edit-actions">

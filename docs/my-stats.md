@@ -61,6 +61,7 @@ Wert = zeichengewichteter Schnitt (Lesbarkeit) bzw. Summe (Wortformen) über den
 [goals.js](../public/js/cards/my-stats-compute/goals.js)#`computeBookGoals`:
 
 - **Heute** = Live-Stand minus letzter Snapshot vor heute (≥ 0; ohne Vortags-Snapshot 0).
+- **Tagesziel des Buchs** (`daily_goal_chars`): aufgelöst über `resolveDailyGoal` ([utils/format.js](../public/js/utils/format.js)) wie Header-Donut und Buch-Übersicht — NULL (nie gesetzt) = eine Normseite, 0 = bewusst kein Tagesziel.
 - **Tempo** (`recentDailyChars`) = Zeichen-Zuwachs pro Kalendertag zwischen jüngstem Snapshot und dem Snapshot von vor 30 Tagen; ein jüngeres Buch nimmt seinen ältesten Snapshot (kürzeres Fenster, `paceDays`). Angezeigt als „⌀ n Z/Tag, letzte d Tage".
 - **Prognose** = heute + Restumfang / Tempo (bis ~14 Jahre, sonst „kein Tempo"). Mit Frist zusätzlich „im Plan"/„hinter der Frist" als Text und das nötige Tempo bis zur Frist.
 - **Gesamt-Prognose** ([my-stats-trends.js](../public/js/cards/my-stats-trends.js)#`computeOverallForecast`): Summe der Restumfänge / Summe der Tempi aller Bücher mit offenem Ziel.
@@ -68,3 +69,7 @@ Wert = zeichengewichteter Schnitt (Lesbarkeit) bzw. Summe (Wortformen) über den
 ## Lektorat-Befund
 
 Server-seitig: jüngster `page_checks`-Lauf je Abschnitt; Trend gegen den Stand bis einschliesslich heute − 30 Tage (Schwelle ±0,2 Fundstellen/Abschnitt).
+
+## KI-Jobs
+
+Kachel aus [partials/my-stats-jobs.html](../public/partials/my-stats-jobs.html), Logik [cards/my-stats-jobs-methods.js](../public/js/cards/my-stats-jobs-methods.js): eigene Läufe je Job-Typ (Anzahl, Fehler, Ø Dauer, Ø Tokens, letzter Lauf) aus `job_runs`, über **alle Bücher** oder ein per Combobox gewähltes. Zeile aufklappen → die letzten 20 Läufe des Typs; ohne Buchfilter mit Buchspalte. Endpunkte `GET /jobs/stats` und `GET /jobs/runs` ([routes/jobs/shared/router.js](../routes/jobs/shared/router.js)), `book_id` jeweils optional. Beide filtern auf `user_email` der Session — fremde Läufe in einem geteilten Buch erscheinen nicht, darum braucht der Buchfilter keinen Buch-Guard. Geltungs-Tag «gesamt»: der Zeitraum-Filter der Karte wirkt hier nicht. Zeilenlabel: `JOB_TYPE_LABELS` ([routes/jobs/shared/jobs.js](../routes/jobs/shared/jobs.js)).

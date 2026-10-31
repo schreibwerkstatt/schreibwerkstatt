@@ -64,15 +64,15 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     flex-shrink: 0;
   }
   .admin-logs-livetail--on {
     border-color: var(--color-success);
-    color: var(--color-success);
+    color: var(--color-ok-text);
   }
   .admin-logs-livetail--on .icon {
-    color: var(--color-success);
+    color: var(--color-ok-text);
     animation: adminLogsPulse 1.6s ease-in-out infinite;
   }
   @keyframes adminLogsPulse {
@@ -114,18 +114,18 @@
   .log-badge {
     display: inline-block;
     padding: 0 var(--space-1);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     font-size: var(--font-size-xs);
     font-weight: var(--fw-semibold);
     letter-spacing: 0.04em;
     text-align: center;
     background: var(--color-tag-bg);
-    color: var(--color-muted);
+    color: var(--color-tag-text);
   }
   .log-badge--error { background: var(--color-err-bg); color: var(--color-err-text); }
   .log-badge--warn  { background: var(--color-warn-bg); color: var(--color-warn-text); }
-  .log-badge--info  { background: var(--color-tag-bg); color: var(--color-muted); }
-  .log-badge--debug { background: var(--color-tag-bg); color: var(--color-subtle); }
+  .log-badge--info  { background: var(--color-tag-bg); color: var(--color-tag-text); }
+  .log-badge--debug { background: var(--color-tag-bg); color: var(--color-tag-text); }
 
   .log-row-toggle {
     background: transparent;
@@ -133,7 +133,7 @@
     padding: 0 var(--space-1);
     cursor: pointer;
     color: var(--color-muted);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
   }
   .log-row-toggle[aria-expanded="true"] .icon { transform: rotate(180deg); }
   .log-row-toggle .icon { transition: transform 120ms ease; }
@@ -143,7 +143,7 @@
     margin: var(--space-1) 0 0;
     padding: var(--space-2xs);
     background: var(--color-hover);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     font-size: var(--font-size-xs);
     white-space: pre-wrap;
     word-break: break-word;
@@ -178,7 +178,7 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
   }
 
   /* Container-Query fuer die LISTE: .log-list-wrap hat container-type:inline-size
@@ -203,8 +203,8 @@
     .log-row-toggle{ grid-area: toggle; align-self: start; }
     .log-row-msg   { grid-area: msg; }
     /* User/Book als Mini-Label statt rohe Werte (sonst kein Kontext). */
-    .log-row-user::before  { content: 'user: '; color: var(--color-faint); }
-    .log-row-book::before  { content: 'book: '; color: var(--color-faint); }
+    .log-row-user::before  { content: 'user: '; color: var(--color-subtle); }
+    .log-row-book::before  { content: 'book: '; color: var(--color-subtle); }
   }
 
   @container (max-width: 480px) {

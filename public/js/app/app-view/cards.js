@@ -15,11 +15,11 @@ export const cardsMethods = {
   // abzuräumen. Einziger Anwendungsfall: `selectPage` re-assertet die
   // Exklusivität nach seinen Partial-Awaits — dort ist `resetPage()` bereits
   // gelaufen und würde die halb aufgebaute Editor-Session wieder abbauen.
-  _closeOtherMainCards(keep, { resetPage = true } = {}) {
+  _closeOtherMainCards(keep, { resetPage = true, keepView = false } = {}) {
     for (const c of EXCLUSIVE_CARDS) {
       if (keep !== c.key) this[c.flag] = false;
     }
-    if (resetPage) this.resetPage();
+    if (resetPage) this.resetPage({ keepView });
   },
 
 

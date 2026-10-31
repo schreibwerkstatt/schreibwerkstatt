@@ -50,7 +50,7 @@
   padding: var(--pad-detail);
   background: var(--color-warn-bg);
   border-left: 3px solid var(--card-accent-kontinuitaet);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-radius: 0 var(--radius-none) var(--radius-none) 0;
 }
 .kontinuitaet-empfehlung-label {
   color: var(--card-accent-kontinuitaet);
@@ -73,7 +73,7 @@
 .kontinuitaet-resolved-badge {
   flex-shrink: 0;
   padding: var(--pad-badge);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-xs);
   font-weight: var(--fw-semibold);
   background: var(--color-ok-bg);
@@ -85,7 +85,7 @@
 .kontinuitaet-changed-badge {
   flex-shrink: 0;
   padding: var(--pad-badge);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-xs);
   font-weight: var(--fw-semibold);
   background: var(--color-warn-bg);
@@ -96,7 +96,7 @@
 .kontinuitaet-missing-badge {
   flex-shrink: 0;
   padding: var(--pad-badge);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-xs);
   font-weight: var(--fw-semibold);
   color: var(--color-muted);
@@ -123,7 +123,7 @@
   font-size: var(--font-size-mini);
   font-weight: var(--fw-medium);
   border: 1px solid var(--color-ok-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-surface);
   color: var(--color-ok-text);
   cursor: pointer;
@@ -170,10 +170,10 @@
   border: 1px solid var(--color-border);
 }
 
-/* ── Buch-Einstellungen (spezifische Klassen) ───────────────────────────────────
+/* ── Export-Optionen ────────────────────────────────────────────────────────────
    Generische Form-Klassen .card-form-grid / -row / -label / -field / -hint /
    -section-divider / -saved / -error / -textarea leben in card-form.css. */
-/* Inline-Checkbox mit Label (EPUB-Export-Reflow-Toggles). Radio-Gruppen nutzen
+/* Inline-Checkbox mit Label (EPUB-/DOCX-Export-Toggles, KI-Zugang). Radio-Gruppen nutzen
    den selbst-rendernden .form-radio-group-Baustein in card-form.css. */
 .book-settings-option {
   display: flex;
@@ -182,96 +182,6 @@
   font-size: var(--font-size-sm);
   cursor: pointer;
 }
-.book-settings-kontext-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  min-width: 0;
-}
-.book-settings-danger-zone {
-  margin-top: var(--space-xl);
-  padding: var(--space-md) var(--space-14);
-  border: 1px solid var(--color-err-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-err-bg);
-}
-.book-settings-danger-title {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  font-size: var(--font-size-mini);
-  font-weight: var(--fw-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--color-err-text);
-  margin-bottom: var(--space-sm);
-}
-.book-settings-danger-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-lg);
-  flex-wrap: wrap;
-}
-.book-settings-danger-section + .book-settings-danger-section {
-  margin-top: var(--space-14);
-  padding-top: var(--space-14);
-  border-top: 1px solid var(--color-err-border);
-}
-.book-settings-danger-text {
-  flex: 1;
-  font-size: var(--font-size-mini);
-  color: var(--color-err-text);
-  line-height: 1.4;
-  min-width: 240px;
-}
-.book-settings-btn-danger {
-  padding: var(--space-6) var(--space-md);
-  font-size: var(--font-size-mini);
-  border: 1px solid var(--color-err-text);
-  background: var(--color-surface);
-  color: var(--color-err-text);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-weight: var(--fw-medium);
-  white-space: nowrap;
-}
-.book-settings-btn-danger:hover:not(:disabled) {
-  background: var(--color-err-text);
-  color: var(--color-surface);
-}
-.book-settings-btn-danger:disabled {
-  opacity: var(--opacity-disabled);
-  cursor: not-allowed;
-}
-.book-settings-danger-actions {
-  display: flex;
-  gap: var(--space-sm);
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-@media (max-width: 600px) {
-  .book-settings-kontext-wrap {
-    width: 100%;
-  }
-  .book-settings-danger-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .book-settings-danger-text {
-    min-width: 0;
-  }
-  .book-settings-danger-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .book-settings-btn-danger {
-    width: 100%;
-  }
-}
-}
-
 /* Namens-/Konsistenz-Waechter (Sektion in der Kontinuitaets-Karte) */
 .nameguard-actions {
   margin-bottom: var(--space-md);
@@ -303,11 +213,12 @@
   font-size: var(--font-size-xs);
   padding: var(--pad-badge);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
 }
 .nameguard-accept-btn:hover {
   background: var(--color-hover);
+}
 }

@@ -65,9 +65,9 @@
             <span class="icon-btn-badge" x-show="($store.badges.chapterIdeenCounts[$app.kapitelReviewChapterId] || 0) > 0" x-text="$store.badges.chapterIdeenCounts[$app.kapitelReviewChapterId]"></span>
           </span>
           <div class="context-menu context-menu--dropdown" x-bind="panel" x-cloak>
-            <button type="button" class="context-menu-item context-menu-item--icon"
+            <button :aria-checked="$app.showIdeenCard && $app.ideenScope === 'chapter'" type="button" class="context-menu-item context-menu-item--icon"
                     :class="{ 'context-menu-item--on': $app.showIdeenCard && $app.ideenScope === 'chapter' }"
-                    role="menuitem"
+                    role="menuitemcheckbox"
                     :disabled="!$app.kapitelReviewChapterId"
                     @click="$app.toggleChapterIdeenCard($app.kapitelReviewChapterId)">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#lightbulb"/></svg>
@@ -108,7 +108,7 @@
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
               <span x-text="$app.t('pagetreeCtx.export')"></span>
             </button>
-            <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+            <button :aria-checked="!!kapitelReviewSelectedChapter()?.excluded" type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
                     x-show="$app.canEdit() && $app.kapitelReviewChapterId"
                     :class="{ 'context-menu-item--on': kapitelReviewSelectedChapter()?.excluded }"
                     @click="$app.setChapterExcluded($app.kapitelReviewChapterId, !kapitelReviewSelectedChapter()?.excluded)">
@@ -171,7 +171,7 @@
       <template x-for="(entry, index) in kapitelReviewCurrentHistory()" :key="entry.id">
         <template x-if="index > 0">
           <div>
-            <div class="history-item" :class="{ 'history-item--open': selectedKapitelReviewId === entry.id }"
+            <div class="history-item internal-link" :class="{ 'history-item--open': selectedKapitelReviewId === entry.id }"
                  @click="selectedKapitelReviewId = selectedKapitelReviewId === entry.id ? null : entry.id">
               <span class="history-date" x-text="$app.formatDate(entry.reviewed_at)"></span>
               <span x-show="entry.review_json?.gesamtnote" class="badge badge-ok review-stars"

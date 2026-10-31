@@ -46,7 +46,7 @@
   }
 
   .folder-import-input:focus {
-    border-color: var(--card-accent);
+    border-color: var(--color-border-focus);
     outline: none;
   }
 
@@ -189,7 +189,7 @@
     font-family: var(--font-mono, monospace);
     background: var(--color-bg);
     padding: var(--space-1) var(--space-xs);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
   }
 
   .folder-import-log {
@@ -199,7 +199,7 @@
     font-size: var(--font-size-sm);
     font-family: var(--font-mono, monospace);
     background: var(--color-bg);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     padding: var(--space-sm);
     list-style: none;
   }
@@ -283,7 +283,7 @@
   .folder-import-heading-chip {
     padding: var(--space-1) var(--space-sm);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: var(--color-bg);
   }
 
@@ -294,7 +294,7 @@
     overflow-y: auto;
     list-style: none;
     background: var(--color-bg);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     font-size: var(--font-size-sm);
   }
 

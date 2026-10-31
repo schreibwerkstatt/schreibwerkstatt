@@ -48,9 +48,11 @@
         </div>
       </div>
 
+      <p class="card-form-section-divider" x-text="$app.t('book.settings.group.statusGoals')"></p>
+
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.status')"></label>
-        <div class="form-stack">
+        <span class="card-form-label" id="bs-status-label" x-text="$app.t('book.settings.status')"></span>
+        <div class="form-stack" role="group" aria-labelledby="bs-status-label">
           <label class="form-check">
             <input type="checkbox" id="bs-finished" x-model="bookSettingsIsFinished">
             <span>
@@ -69,9 +71,9 @@
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.dailyGoalChars')"></label>
+        <label class="card-form-label" for="bs-daily-goal" x-text="$app.t('book.settings.dailyGoalChars')"></label>
         <div class="card-form-field">
-          <input type="text" class="form-num"
+          <input type="text" class="form-num" id="bs-daily-goal"
                  x-data="numInput({ step: 100, min: 100, max: 50000 })"
                  x-modelable="value" x-model="bookSettingsDailyGoalChars">
           <p class="card-form-field-note" x-text="$app.t('book.settings.dailyGoalCharsHint')"></p>
@@ -79,9 +81,9 @@
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.goalTargetChars')"></label>
+        <label class="card-form-label" for="bs-goal-target" x-text="$app.t('book.settings.goalTargetChars')"></label>
         <div class="card-form-field">
-          <input type="text" class="form-num"
+          <input type="text" class="form-num" id="bs-goal-target"
                  x-data="numInput({ step: 1000, min: 0, max: 20000000 })"
                  x-modelable="value" x-model="bookSettingsGoalTargetChars">
           <p class="card-form-field-note" x-text="$app.t('book.settings.goalTargetCharsHint')"></p>
@@ -89,16 +91,18 @@
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.goalDeadline')"></label>
+        <label class="card-form-label" for="bs-goal-deadline" x-text="$app.t('book.settings.goalDeadline')"></label>
         <div class="card-form-field">
-          <input type="date" class="card-form-input" x-model="bookSettingsGoalDeadline">
+          <input type="date" class="card-form-input" id="bs-goal-deadline" x-model="bookSettingsGoalDeadline">
           <p class="card-form-field-note" x-text="$app.t('book.settings.goalDeadlineHint')"></p>
         </div>
       </div>
 
+      <p class="card-form-section-divider" x-text="$app.t('book.settings.group.realism')"></p>
+
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.orte')"></label>
-        <div class="form-stack">
+        <span class="card-form-label" id="bs-orte-label" x-text="$app.t('book.settings.orte')"></span>
+        <div class="form-stack" role="group" aria-labelledby="bs-orte-label">
           <label class="form-check">
             <input type="checkbox" id="bs-orte-real" x-model="bookSettingsOrteReal">
             <span>
@@ -110,9 +114,9 @@
       </div>
 
       <div class="card-form-row" x-show="bookSettingsOrteReal" x-cloak>
-        <label class="card-form-label" x-text="$app.t('book.settings.schauplatzLand')"></label>
+        <span class="card-form-label" id="bs-land-label" x-text="$app.t('book.settings.schauplatzLand')"></span>
         <div class="card-form-field">
-          <div x-data="combobox($app.t('book.settings.schauplatzLand.placeholder'), $app.t('book.settings.schauplatzLand.none'))"
+          <div aria-labelledby="bs-land-label" x-data="combobox($app.t('book.settings.schauplatzLand.placeholder'), $app.t('book.settings.schauplatzLand.none'))"
                x-modelable="value" x-model="bookSettingsSchauplatzLand"
                x-effect="options = bookSettingsLandOptions()"></div>
           <p class="card-form-field-note" x-text="$app.t('book.settings.schauplatzLand.hint')"></p>
@@ -120,8 +124,8 @@
       </div>
 
       <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('book.settings.zeitlinie')"></label>
-        <div class="form-stack">
+        <span class="card-form-label" id="bs-zeitlinie-label" x-text="$app.t('book.settings.zeitlinie')"></span>
+        <div class="form-stack" role="group" aria-labelledby="bs-zeitlinie-label">
           <label class="form-check">
             <input type="checkbox" id="bs-zeitlinie-real" x-model="bookSettingsZeitlinieReal">
             <span>

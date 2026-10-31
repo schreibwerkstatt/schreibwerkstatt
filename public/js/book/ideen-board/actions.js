@@ -16,6 +16,7 @@ import {
   columnSortOf, nextColumnSort, compareIdeeManual, cellOrderAfterDrop,
 } from './model.js';
 import { memoMethods } from '../../cards/card-memo.js';
+import { isSelectedBook, loadToken } from '../../cards/book-guard.js';
 import { ideenBoardTreeDrop } from './tree-drop.js';
 import { ideenBoardMove } from './move.js';
 import { EVT } from '../../events.js';
@@ -58,13 +59,16 @@ export const ideenBoardActions = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ book_id: bookId, stages: next }),
       });
+      // Gespeichert ist es; nur nicht in die Karte eines inzwischen gewählten
+      // anderen Buchs übernehmen.
+      if (!isSelectedBook(bookId)) return;
       this.stages = normalizeIdeeStages(data?.stages);
       this.errorMessage = '';
       this._memos = {};
       window.dispatchEvent(new CustomEvent(EVT.IDEEN_STAGES_CHANGED, { detail: { bookId, stages: this.stages } }));
       await this._ensureBoardSortables();
     } catch {
-      this.errorMessage = app.t('ideenBoard.error.save');
+      if (isSelectedBook(bookId)) this.errorMessage = app.t('ideenBoard.error.save');
     } finally {
       this.busy = false;
     }
@@ -189,12 +193,15 @@ export const ideenBoardActions = {
     const app = window.__app;
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) { this.resetBoard(); return; }
+    const isCurrent = loadToken(this, '_boardLoadSeq', bookId);
     this.loading = true;
     this._memos = {};
     try {
       const data = await fetchJson(`/ideen/board?book_id=${bookId}`);
       // Offline vorgemerkte Writes darüberlegen (repo/ideen-queue.js).
-      this.ideen = await overlayPendingIdeen(Array.isArray(data?.ideen) ? data.ideen : [], (r) => String(r.book_id) === String(bookId));
+      const ideen = await overlayPendingIdeen(Array.isArray(data?.ideen) ? data.ideen : [], (r) => String(r.book_id) === String(bookId));
+      if (!isCurrent()) return;
+      this.ideen = ideen;
       this.stages = normalizeIdeeStages(data?.stages);
       this.laneOrder = buildLaneOrder(Alpine.store('nav').tree);
       this.errorMessage = '';
@@ -202,12 +209,15 @@ export const ideenBoardActions = {
       this._memos = {};
       this._pruneSelection();
     } catch {
+      if (!isCurrent()) return;
       this.errorMessage = app.t('ideenBoard.error.load');
       this.ideen = [];
     } finally {
-      this.loading = false;
-      this._memos = {};
-      await this._ensureBoardSortables();
+      if (isCurrent.latest()) {
+        this.loading = false;
+        this._memos = {};
+        await this._ensureBoardSortables();
+      }
     }
   },
 

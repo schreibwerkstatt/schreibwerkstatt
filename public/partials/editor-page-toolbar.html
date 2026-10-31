@@ -181,7 +181,7 @@
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#scan"/></svg>
         <span x-text="t('graph.reset')"></span>
       </button>
-      <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+      <button :aria-checked="pageEditorFitWidth" type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
               :class="{ 'context-menu-item--on': pageEditorFitWidth }"
               @click.stop="togglePageEditorFitWidth()">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#move-horizontal"/></svg>
@@ -190,7 +190,7 @@
       <!-- Steuerzeichen-Anzeige (Absatzmarken ¶ + Soft-Break ↵). Reine
            CSS-Pseudo-Element-Dekoration auf dem contenteditable — kein Markup im
            gespeicherten HTML. State pageEditorShowMarks (in editorPrefs). -->
-      <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+      <button :aria-checked="pageEditorShowMarks" type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
               :class="{ 'context-menu-item--on': pageEditorShowMarks }"
               @click.stop="togglePageEditorShowMarks()">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#pilcrow"/></svg>
@@ -198,7 +198,7 @@
       </button>
       <!-- Titel-Kopf ein-/ausblenden. Nur publizistische Buecher; reine
            Anzeige-Wahl (siehe Inline-Zwilling oben). -->
-      <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+      <button :aria-checked="pageEditorShowHead" type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
               x-show="isJournalistischesBuch()"
               :class="{ 'context-menu-item--on': pageEditorShowHead }"
               @click.stop="togglePageEditorShowHead()">
@@ -209,7 +209,7 @@
       <!-- Entity-Linking-Toggle (Figuren/Orte-Highlights + Szenen/Ereignisse-Panel). Aendert nur die
            Buch-Setting (book_settings.entities_enabled, PUT /booksettings/:id/entities-enabled, Event
            book:settings:updated); der Auf/Zu-Zustand der Klappschiene (entityPanelOpen) bleibt User-Wahl. -->
-      <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+      <button :aria-checked="entitiesEnabledForCurrentBook" type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
               :class="{ 'context-menu-item--on': entitiesEnabledForCurrentBook }"
               @click.stop="toggleEntitiesEnabledForCurrentBook()">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#radio"/></svg>

@@ -40,7 +40,7 @@
 }
 .chat-hist-hit-snippet mark {
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   padding: 0 var(--space-1);
 }
 

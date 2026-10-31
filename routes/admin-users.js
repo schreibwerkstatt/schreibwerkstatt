@@ -137,7 +137,7 @@ router.post('/:email/password-link', express.json(), async (req, res) => {
     });
   } catch (e) {
     logger.error(`password-link: ${e.message}`, { user: actor });
-    return res.status(500).json({ error_code: 'PASSWORD_LINK_FAILED', detail: e.message });
+    return res.status(500).json({ error_code: 'PASSWORD_LINK_FAILED' });
   }
   appUsers.recordAuditEvent(user.email, 'password-link-sent', {
     ip: _clientIp(req),
@@ -186,7 +186,7 @@ router.post('/invite', express.json(), async (req, res) => {
     logger.info(`Admin-Invite ausgestellt: ${email} (${role})`, { user: invitedBy });
   } catch (e) {
     logger.error(`createInvite: ${e.message}`, { user: invitedBy });
-    return res.status(500).json({ error_code: 'INVITE_FAILED', detail: e.message });
+    return res.status(500).json({ error_code: 'INVITE_FAILED' });
   }
   const inviteUrl = buildInviteUrl(invite.invite_token);
   // Mail synchron probieren, damit das UI sofort sieht, ob die Mail rausging
@@ -310,7 +310,8 @@ router.put('/:email', express.json(), (req, res) => {
         });
       }
     } catch (e) {
-      return res.status(400).json({ error_code: 'BUDGET_INVALID', detail: e.message });
+      logger.warn(`Budget ungueltig fuer ${target}: ${e.message}`);
+      return res.status(400).json({ error_code: 'BUDGET_INVALID' });
     }
   }
   // KI-Profil-Zuweisung. NULL/'' = User folgt dem globalen ai.provider samt globaler
@@ -331,7 +332,10 @@ router.put('/:email', express.json(), (req, res) => {
     }
     if (next !== (user.ai_profile_id || null)) {
       try { appUsers.setAiProfile(target, next); }
-      catch (e) { return res.status(400).json({ error_code: 'AI_PROFILE_INVALID', detail: e.message }); }
+      catch (e) {
+        logger.warn(`KI-Profil-Zuordnung ungueltig fuer ${target}: ${e.message}`);
+        return res.status(400).json({ error_code: 'AI_PROFILE_INVALID' });
+      }
       appUsers.recordAuditEvent(target, 'ai-provider-changed', {
         ip, userAgent,
         meta: { from: user.ai_profile_id || null, to: next, by: actor },

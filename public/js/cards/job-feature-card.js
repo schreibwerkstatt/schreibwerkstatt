@@ -7,6 +7,7 @@ import { fetchJson, escHtml } from '../utils.js';
 import { startPoll, runningJobStatus } from './job-helpers.js';
 import { lsSet } from '../safe-storage.js';
 import { tFetchErrorRaw } from '../i18n.js';
+import { isSelectedBook } from './book-guard.js';
 
 // cfg:
 //   name              — logischer Feature-Name (z. B. 'review').
@@ -114,10 +115,15 @@ export function createCardJobFeature(cfg) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cfg.buildPayload.call(this)),
       });
+      // Job-ID unter dem Buch merken, für das er läuft (Reconnect beim nächsten
+      // Öffnen). Inzwischen anderes Buch gewählt: kein Poller in dieser Karte —
+      // er schriebe A's Ergebnis in B's Karte, und sein stop() löschte B's Key.
       lsSet(lsKeyFn(bookId, this), jobId);
+      if (!isSelectedBook(bookId)) return;
       this[names.start](jobId);
     } catch (e) {
       console.error(`[${names.run}]`, e);
+      if (!isSelectedBook(bookId)) return;
       if (out) {
         this[out] = errHtml.call(this, e);
         writeStatus.call(this, '', false);
@@ -134,11 +140,15 @@ export function createCardJobFeature(cfg) {
   // cfg.onOpen für Erst-Initialisierung (z.B. History laden).
   const onVisibleMethod = async function () {
     if (cfg.onOpen) await cfg.onOpen.call(this);
-    if (!this[timerProp] && !this[loading] && Alpine.store('nav').selectedBookId) {
+    const bookId = Alpine.store('nav').selectedBookId;
+    if (!this[timerProp] && !this[loading] && bookId) {
       try {
         const { jobId } = await fetchJson(
-          `/jobs/active?type=${activeType}&book_id=${Alpine.store('nav').selectedBookId}`
+          `/jobs/active?type=${activeType}&book_id=${bookId}`
         );
+        // Buchwechsel während der Abfrage: der Job gehört dem alten Buch.
+        // Ebenso, wenn inzwischen ein anderer Pfad schon pollt/startet.
+        if (!isSelectedBook(bookId) || this[timerProp] || this[loading]) return;
         if (jobId) {
           this[loading] = true;
           if (progress) this[progress] = 0;

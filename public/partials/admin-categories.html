@@ -25,7 +25,7 @@
                class="card-form-input"
                x-model="newCategoryName"
                :placeholder="$app.t('admin.cat.namePlaceholder')"
-               @keydown.enter.prevent="createCategory()"
+               @keydown.enter="$enter($event, () => createCategory())"
                :disabled="busy"
                maxlength="120">
         <button type="button" class="icon-btn icon-btn--ghost" @click="createCategory()" :disabled="busy || !newCategoryName.trim()" :data-tip="$app.t('common.new')" :aria-label="$app.t('common.new')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg></button>
@@ -41,10 +41,8 @@
              })">
         <thead>
           <tr>
-            <th class="sortable-th" :class="sortClass('name')" :aria-sort="ariaSort('name')"
-                @click="sortBy('name')" x-text="$app.t('admin.cat.col.name')"></th>
-            <th class="sortable-th" :class="sortClass('slug')" :aria-sort="ariaSort('slug')"
-                @click="sortBy('slug')" x-text="$app.t('admin.cat.col.slug')"></th>
+            <th x-bind="sortTh('name')" x-text="$app.t('admin.cat.col.name')"></th>
+            <th x-bind="sortTh('slug')" x-text="$app.t('admin.cat.col.slug')"></th>
             <th></th>
           </tr>
         </thead>

@@ -80,4 +80,18 @@ function patchFigure(bookId, userEmail, figId, fields) {
   })();
 }
 
-module.exports = { PATCHABLE_FIELDS, validateFigurePatch, patchFigure };
+/** Bulk-Cleanup (Danger-Zone, DELETE /figures/:book_id/stale): alle STALE Figuren
+ *  eines Buchs/Users loeschen; aktive bleiben. CASCADE raeumt die Bridges mit.
+ *  Gibt die geloeschten INTEGER-PKs zurueck (fuer den Suchindex). Muster
+ *  db/locations-edit.js#deleteStaleLocations. */
+function deleteStaleFigures(bookId, userEmail) {
+  const ids = db.prepare('SELECT id FROM figures WHERE book_id = ? AND user_email IS ? AND stale = 1')
+    .all(bookId, userEmail || null).map(r => r.id);
+  db.transaction(() => {
+    const del = db.prepare('DELETE FROM figures WHERE id = ?');
+    for (const id of ids) del.run(id);
+  })();
+  return ids;
+}
+
+module.exports = { PATCHABLE_FIELDS, validateFigurePatch, patchFigure, deleteStaleFigures };

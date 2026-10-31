@@ -50,9 +50,9 @@
   <p class="card-form-hint" x-text="$app.t('docxExport.hint')"></p>
 
   <!-- Profil-Leiste -->
-  <div class="export-profile-bar">
-    <label class="card-form-label card-form-label--inline" x-text="$app.t('docxExport.profile')"></label>
-    <div class="export-profile-pick"
+  <div x-id="['fld']" class="export-profile-bar">
+    <label :id="$id('fld')" class="card-form-label card-form-label--inline" x-text="$app.t('docxExport.profile')"></label>
+    <div :aria-labelledby="$id('fld')" class="export-profile-pick"
          x-data="combobox({ placeholder: $app.t('docxExport.profile'), compact: false })"
          x-modelable="value" x-model="activeProfileId"
          x-effect="options = profiles.map(p => ({ value: p.id, label: p.name + (p.is_default ? ' (' + $app.t('docxExport.defaultMark') + ')' : '') }))"
@@ -93,7 +93,7 @@
   <div class="export-create-row export-rename-row" x-show="_profileRow === 'rename'" x-cloak>
     <input type="text" class="card-form-input" x-model="renameValue"
            :placeholder="$app.t('docxExport.renamePlaceholder')" maxlength="80"
-           @keydown.enter="renameProfile()" data-spellcheck="spelling">
+           @keydown.enter="$enter($event, () => renameProfile())" data-spellcheck="spelling">
     <button type="button" class="primary" data-label-ok
             :disabled="!renameValue.trim()" @click="renameProfile()"
             x-text="$app.t('common.save')"></button>
@@ -102,7 +102,7 @@
   <div class="export-create-row" x-show="_profileRow === 'create'" x-cloak>
     <input type="text" class="card-form-input" x-model="newProfileName"
            :placeholder="$app.t('docxExport.newProfileName')" maxlength="80"
-           @keydown.enter="createProfile()" data-spellcheck="spelling">
+           @keydown.enter="$enter($event, () => createProfile())" data-spellcheck="spelling">
     <label class="export-create-clone">
       <span class="export-create-clone-label" x-text="$app.t('docxExport.cloneLabel')"></span>
       <div x-data="combobox({ placeholder: $app.t('docxExport.cloneNone'), compact: false })"

@@ -11,9 +11,10 @@
    Theming-Schnittstelle: jeder Kontext setzt die --cr-*-Werte auf seinem
    Rail-/Listen-Container. --cr-* fällt auf die SPA-Tokens (--color-*,
    --card-accent, --shadow-*) zurück, damit die zwei SPA-Leisten ohne Mapping
-   unverändert rendern; der Share-Reader setzt alle --cr-* (share.css). Die
-   Literal-Fallbacks (z. B. 4px) decken die Spacing/Sizing-Tokens ab, die die
-   tokenlose Share-Seite nicht kennt. */
+   unverändert rendern; der Share-Reader setzt alle --cr-* (share.css). Abstände
+   kommen direkt aus der Spacing-Skala (--space-*): share.css importiert
+   tokens/spacing.css (samt Radius), beide Welten kennen sie. Typo- und Motion-Tokens
+   kennt die Share-Seite nicht — dort decken Literal-Fallbacks (z. B. 11px) ab. */
 
 .comment-rail__thread {
   position: relative;
@@ -23,8 +24,8 @@
      Share-Reader setzt --cr-font auf seinen Sans-Stack, statt die Georgia-Body-
      Schrift der Leseseite zu erben — so matchen beide Leisten den Bucheditor. */
   font-family: var(--cr-font, inherit);
-  gap: var(--space-xs, var(--space-xs));
-  padding: var(--space-sm, var(--space-sm)) var(--space-10, var(--space-10));
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-10);
   border: 1px solid transparent;
   border-radius: var(--cr-radius, var(--radius-md, 3px));
   background: var(--cr-surface, var(--color-surface));
@@ -50,9 +51,9 @@
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  padding: var(--space-2xs) var(--space-6, var(--space-6));
+  padding: var(--space-2xs) var(--space-6);
   border-left: 3px solid color-mix(in srgb, var(--cr-accent, var(--card-accent)) 55%, transparent);
-  border-radius: 0 var(--cr-radius-sm, var(--radius-sm, 0)) var(--cr-radius-sm, var(--radius-sm, 0)) 0;
+  border-radius: 0 var(--cr-radius-sm, var(--radius-none, 0)) var(--cr-radius-sm, var(--radius-none, 0)) 0;
   background: color-mix(in srgb, var(--cr-accent, var(--card-accent-share, var(--card-accent))) 10%, transparent);
   font-size: 13px;
   color: var(--cr-muted, var(--color-muted));
@@ -68,7 +69,7 @@
 .comment-rail__changed-badge {
   align-self: flex-start;
   padding: var(--space-1) var(--space-6);
-  border-radius: var(--cr-radius-sm, var(--radius-sm, 0));
+  border-radius: var(--cr-radius-sm, var(--radius-none, 0));
   background: var(--cr-warn-bg, var(--color-warn-bg));
   color: var(--cr-warn-text, var(--color-warn-text));
   font-size: var(--font-size-xs, 11px);
@@ -82,18 +83,18 @@
 
 .comment-rail__comment { font-size: 14px; }
 .comment-rail__comment--reply {
-  margin-left: var(--space-sm, var(--space-sm));
-  padding-left: var(--space-sm, var(--space-sm));
+  margin-left: var(--space-sm);
+  padding-left: var(--space-sm);
   border-left: 2px solid var(--cr-border, var(--color-border));
 }
 .comment-rail__comment--author { border-left-color: var(--cr-accent, var(--card-accent)); }
 .comment-rail__meta {
   display: flex;
   align-items: center;
-  gap: var(--space-6, var(--space-6));
+  gap: var(--space-6);
   font-size: 12px;
   color: var(--cr-muted, var(--color-muted));
-  margin-bottom: var(--space-xs, var(--space-xs));
+  margin-bottom: var(--space-xs);
 }
 /* Initialen-Pip (spiegelt die presence-pip-Optik): eckiger Chip mit
    deterministischer Hue pro Person über --avatar-hue. */
@@ -110,7 +111,7 @@
   background: hsl(var(--avatar-hue, 220) var(--avatar-bg-sl));
   color: hsl(var(--avatar-hue, 220) var(--avatar-fg-sl));
   border: 1px solid hsl(var(--avatar-hue, 220) var(--avatar-border-sl));
-  border-radius: var(--cr-radius-sm, var(--radius-sm, 0));
+  border-radius: var(--cr-radius-sm, var(--radius-none, 0));
 }
 .comment-rail__author { font-weight: var(--fw-semibold, 600); color: var(--cr-text, var(--color-text)); }
 .comment-rail__time { color: var(--cr-muted, var(--color-muted)); }
@@ -123,9 +124,9 @@
 }
 .comment-rail__resolved {
   font-size: 11px;
-  padding: var(--space-1, var(--space-1)) var(--space-6, var(--space-6));
+  padding: var(--space-1) var(--space-6);
   background: var(--cr-tag-bg, var(--color-tag-bg));
-  border-radius: var(--cr-radius-sm, var(--radius-sm, 0));
+  border-radius: var(--cr-radius-sm, var(--radius-none, 0));
 }
 /* „bearbeitet"-Marker an einem nachträglich editierten Kommentar (#4). */
 .comment-rail__edited {
@@ -142,8 +143,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-sm, var(--space-sm));
-  margin-bottom: var(--space-sm, var(--space-sm));
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
 }
 .comment-rail__filter-reviewer { flex: 1 1 140px; min-width: 120px; }
 .comment-rail__filter-empty { padding: var(--space-sm) 0; }
@@ -151,16 +152,16 @@
 .comment-rail__foot {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm, var(--space-sm));
-  margin-top: var(--space-xs, var(--space-xs));
-  padding-top: var(--space-sm, var(--space-sm));
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+  padding-top: var(--space-sm);
   border-top: 1px dashed var(--cr-border, var(--color-border));
 }
-.comment-rail__reply { display: flex; flex-direction: column; gap: var(--space-6, var(--space-6)); }
+.comment-rail__reply { display: flex; flex-direction: column; gap: var(--space-6); }
 .comment-rail__textarea {
   padding: var(--pad-btn-compact, 7px var(--space-10));
   border: 1px solid var(--cr-border-input, var(--color-border-input));
-  border-radius: var(--cr-radius-sm, var(--radius-sm, 0));
+  border-radius: var(--cr-radius-sm, var(--radius-none, 0));
   background: var(--cr-surface, var(--color-surface));
   color: var(--cr-text, var(--color-text));
   font-family: inherit;

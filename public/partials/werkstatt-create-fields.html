@@ -4,7 +4,7 @@
        class="werkstatt-new-name"
        :placeholder="$app.t('werkstatt.field.name')"
        x-model="newName"
-       @keydown.enter.prevent="createDraft()"
+       @keydown.enter="$enter($event, () => createDraft())"
        @keydown.escape.prevent="cancelCreate()"
        :aria-label="$app.t('werkstatt.field.name')">
 <div class="werkstatt-create-row">

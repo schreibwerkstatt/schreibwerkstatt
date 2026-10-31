@@ -206,7 +206,7 @@ test('lebenslauf: Klassenstufe in den Zellen, wenn das Buch ein Schulsystem hat'
   await expect(zeilenJahr.filter({ hasText: A_NAME })).toContainText('2. Bez');
 
   // Steckbrief: Schullaufbahn der Figur mit eigenem Weg und Einschulungs-Override.
-  await table.locator('thead th').nth(1).locator('.internal-link').click();
+  await table.locator('thead th').nth(1).locator('.entity-ref').click();
   const schule = card.locator('.figur-schule');
   await expect(schule).toBeVisible();
   await expect(schule).toContainText('Bezirksschule bis zur 2. Bez, dann Obergymnasium');

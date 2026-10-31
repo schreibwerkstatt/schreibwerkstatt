@@ -40,7 +40,10 @@ export const hashBuildMethods = {
     const parts = ['book', this.$store.nav.selectedBookId];
     if (this.showEditorCard && this.currentPage?.id) {
       parts.push('page', String(this.currentPage.id));
-    } else if (this.showFiguresCard && this.$store.catalogUi.selectedFigurId) {
+    } else if (this.showFiguresCard && this.$store.catalogUi.selectedFigurId
+      && (this.$store.catalogUi.figurenTab || 'liste') === 'liste') {
+      // Figur-Permalink nur im Listen-Reiter: nur dort klappt die Figur auf.
+      // In einem anderen Reiter gewinnt der Reiter-Permalink (unten).
       parts.push('figur', String(this.$store.catalogUi.selectedFigurId));
     } else if (this.showOrteCard && this.$store.catalogUi.selectedOrtId) {
       parts.push('ort', String(this.$store.catalogUi.selectedOrtId));
@@ -60,7 +63,11 @@ export const hashBuildMethods = {
       parts.push('plot', String(this.$store.nav.plotBeatId));
     } else if (this.showRechercheCard && this.$store.nav.rechercheItemId) {
       parts.push('recherche', String(this.$store.nav.rechercheItemId));
-    } else if (this.showFiguresCard) parts.push('figuren');
+    } else if (this.showFiguresCard) {
+      parts.push('figuren');
+      const tab = this.$store.catalogUi.figurenTab;
+      if (tab && tab !== 'liste') parts.push(tab);
+    }
     else if (this.showFigurWerkstattCard) parts.push('werkstatt');
     else if (this.showOrteCard) parts.push('orte');
     else if (this.showSongsCard) parts.push('songs');

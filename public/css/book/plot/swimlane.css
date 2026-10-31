@@ -27,7 +27,7 @@
     font-size: var(--font-size-sm);
     padding: var(--space-2xs) var(--space-xs);
     border: 1px solid var(--card-accent);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: var(--color-card-bg);
     color: var(--color-text);
   }
@@ -37,7 +37,7 @@
     gap: var(--space-2xs);
     padding: var(--space-2xs) var(--space-xs);
     border: 1px dashed var(--color-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: transparent;
     color: var(--color-muted);
     font-size: var(--font-size-xs);
@@ -152,7 +152,7 @@
     align-self: stretch;
     border-left: 3px solid var(--col-accent);
     border-right: 1px solid var(--color-border);
-    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+    border-radius: var(--radius-none) 0 0 var(--radius-none);
     padding: var(--space-xs);
   }
   .plot-swim-row--default .plot-swim-lane { border-left-color: var(--color-border); }
@@ -176,7 +176,7 @@
     font-size: var(--font-size-sm);
     padding: var(--space-2xs) var(--space-xs);
     border: 1px solid var(--card-accent);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: var(--color-card-bg);
     color: var(--color-text);
   }

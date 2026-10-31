@@ -24,7 +24,7 @@ Das Exposé speichert **nur, was neu entsteht**. Alles andere wird live gelesen 
 | **Klappentext** | `book_publication.description` — der einzige Ort ([publikation-export.md](publikation-export.md)) |
 | Figurennamen in der Liste | Figurenkatalog über `fig_id` (`x-entity-ref`) — eine umbenannte Figur heisst auch im Exposé richtig |
 
-Im Reiter ist das Feld «Klappentext des Buchs» dieselbe Spalte wie im Reiter Publikation. «Als Klappentext übernehmen» setzt nur dieses Formularfeld; gespeichert wird es wie alles andere über den Speichern-Knopf der Karte. Die Exposé-Texte (Autorfassung) laufen über denselben Knopf (`saveExpose` in `saveActiveTab`).
+Im Reiter ist das Feld «Klappentext des Buchs» dieselbe Spalte wie im Reiter Publikation. «Als Klappentext übernehmen» setzt nur dieses Formularfeld; gespeichert wird es wie alles andere über den Speichern-Knopf der Karte. Die Exposé-Texte (Autorfassung) laufen über denselben Knopf (`saveExpose`, Pfad `expose` in [save-paths.js](../public/js/book/book-settings/save-paths.js)). Endet ein neuer Lauf, während die Autorfassung ungespeichert ist, bleibt sie offen; der Lauf landet in der Historie (Hinweis `expose.newRunBehindEdits`).
 
 ## Job `POST /jobs/expose` (Mindestrolle editor)
 

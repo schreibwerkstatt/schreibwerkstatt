@@ -403,16 +403,27 @@ test('computeBookGoals: Lösch-Edit heute → charsToday auf 0 geklemmt', () => 
   assert.equal(rows[0].charsToday, 0);
 });
 
-test('computeBookGoals: kein Tagesziel → hasDailyGoal false, charsToday trotzdem berechnet', () => {
+test('computeBookGoals: kein Tagesziel (0) → hasDailyGoal false, charsToday trotzdem berechnet', () => {
   const today = new Date('2026-06-26T12:00:00');
   const history = [{ book_id: 1, recorded_at: '2026-06-25', chars: 12000 }];
   const rows = computeBookGoals([
-    { book_id: 1, chars: 12800, goal_target_chars: 50000, daily_goal_chars: null },
+    { book_id: 1, chars: 12800, goal_target_chars: 50000, daily_goal_chars: 0 },
   ], history, today);
   assert.equal(rows[0].hasDailyGoal, false);
   assert.equal(rows[0].dailyGoalChars, null);
   assert.equal(rows[0].dailyPct, null);
   assert.equal(rows[0].charsToday, 800); // informativ auch ohne Tagesziel
+});
+
+test('computeBookGoals: Tagesziel nie gesetzt (NULL) → Default eine Normseite, wie Header-Donut', () => {
+  const today = new Date('2026-06-26T12:00:00');
+  const history = [{ book_id: 1, recorded_at: '2026-06-25', chars: 12000 }];
+  const rows = computeBookGoals([
+    { book_id: 1, chars: 12750, goal_target_chars: 50000, daily_goal_chars: null },
+  ], history, today);
+  assert.equal(rows[0].hasDailyGoal, true);
+  assert.equal(rows[0].dailyGoalChars, 1500);
+  assert.equal(rows[0].dailyPct, 50);
 });
 
 test('computeBookGoals: ohne Ziel → none, kein Fortschritt', () => {

@@ -17,6 +17,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { parseHTML } from 'linkedom';
 
 import { CITE_SEL, buildCiteHtml } from '../../public/js/sources/cite-html.js';
@@ -233,14 +234,12 @@ test('Buchtyp wissenschaft existiert in beiden Sprachen und ist serverseitig erl
     assert.ok(bt, `buchtypen.${lang}.wissenschaft fehlt`);
     assert.ok(bt.label && bt.zusatz && bt.reviewSchwerpunkt, `Felder unvollstaendig in ${lang}`);
   }
-  const bs = readFileSync(resolve(ROOT, 'routes', 'booksettings.js'), 'utf8');
-  const m = /VALID_BUCHTYPEN\s*=\s*\[([^\]]+)\]/.exec(bs);
-  assert.ok(m);
-  const allowed = m[1].split(',').map(x => x.trim().replace(/^'|'$/g, ''));
-  assert.ok(allowed.includes('wissenschaft'), 'Server wuerde den Buchtyp mit 400 ablehnen');
+  // Server-Liste = lib/book-settings-values.js (abgeleitet aus prompt-config.json).
+  const { validBuchtypen } = createRequire(import.meta.url)(resolve(ROOT, 'lib', 'book-settings-values.js'));
+  assert.ok(validBuchtypen().includes('wissenschaft'), 'Server wuerde den Buchtyp mit 400 ablehnen');
 
   // Alle Config-Typen muessen serverseitig erlaubt sein (und umgekehrt), sonst
   // bietet die UI einen Typ an, den der PUT verwirft.
-  assert.deepEqual(Object.keys(cfg.buchtypen.de).sort(), [...allowed].sort());
+  assert.deepEqual(Object.keys(cfg.buchtypen.de).sort(), [...validBuchtypen()].sort());
   assert.deepEqual(Object.keys(cfg.buchtypen.de).sort(), Object.keys(cfg.buchtypen.en).sort());
 });

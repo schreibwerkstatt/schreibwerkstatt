@@ -13,7 +13,7 @@
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-left"/></svg>
           </button>
           <input type="text" class="motiv-name-input motiv-theme-name-input" x-model="editThemeName" data-spellcheck="spelling"
-                 @keydown.enter="saveThemeEdit()">
+                 @keydown.enter="$enter($event, () => saveThemeEdit())">
           <button type="button" class="icon-btn icon-btn--ghost" @click="deleteTheme(selectedTheme())"
                   :data-tip="$app.t('motiv.graph.menu.deleteTheme')" :aria-label="$app.t('motiv.graph.menu.deleteTheme')">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
@@ -41,12 +41,12 @@
                 :data-tip="$app.t('motiv.theme.color')" :aria-label="$app.t('motiv.theme.color')"></button>
         <div class="color-picker__popover" x-show="themeColorPickerId === selectedThemeId" x-cloak
              @click.outside="themeColorPickerId === selectedThemeId && (themeColorPickerId = null)">
-          <button type="button" class="color-picker__opt color-picker__opt--none"
+          <button :aria-pressed="!selectedTheme().farbe" type="button" class="color-picker__opt color-picker__opt--none"
                   :class="{ 'color-picker__opt--on': !selectedTheme().farbe }"
                   @click="setThemeColor(selectedTheme(), null)"
                   :data-tip="$app.t('motiv.theme.colorAuto')" :aria-label="$app.t('motiv.theme.colorAuto')"></button>
           <template x-for="key in themeColorKeys()" :key="key">
-            <button type="button" class="color-picker__opt"
+            <button :aria-pressed="selectedTheme().farbe === key" type="button" class="color-picker__opt"
                     :style="{ '--col-accent': 'var(--palette-' + key + ')' }"
                     :class="{ 'color-picker__opt--on': selectedTheme().farbe === key }"
                     @click="setThemeColor(selectedTheme(), key)" :aria-label="key"></button>
@@ -66,7 +66,7 @@
       <div class="motiv-theme-addmotif">
         <input type="text" class="motiv-inline-input" x-model="newThemeMotifName" data-spellcheck="spelling"
                :placeholder="$app.t('motiv.theme.addMotifHint')"
-               @keydown.enter="addMotifToTheme()">
+               @keydown.enter="$enter($event, () => addMotifToTheme())">
         <button type="button" class="btn-compact" @click="addMotifToTheme()"
                 :disabled="busy || !newThemeMotifName.trim()" x-text="$app.t('motiv.theme.addMotifBtn')"></button>
       </div>

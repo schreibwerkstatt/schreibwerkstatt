@@ -11,7 +11,7 @@
   overflow-x: auto;
   overflow-y: auto;
   max-height: min(360px, 50vh);
-  margin: 0 -4px;
+  margin: 0 calc(-1 * var(--space-xs));
   padding: 0 var(--space-xs) var(--space-10);
   scrollbar-width: thin;
   scrollbar-color: var(--color-muted) transparent;
@@ -22,11 +22,11 @@
 }
 .overview-presence-wrap::-webkit-scrollbar-track {
   background: var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 .overview-presence-wrap::-webkit-scrollbar-thumb {
   background: var(--color-muted);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 .overview-presence-wrap::-webkit-scrollbar-thumb:hover {
   background: var(--color-text);
@@ -74,7 +74,7 @@
   width: 24px;
   height: 24px;
   padding: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-border);
   cursor: pointer;
   text-align: center;
@@ -91,7 +91,7 @@
 .overview-presence-fill {
   position: absolute;
   inset: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   /* Hue 50 (warmes Gelb) → 142 (kräftiges Grün), Sat 30% → 78%,
      Light leicht abnehmend für satteren High-End. */
   background: hsl(

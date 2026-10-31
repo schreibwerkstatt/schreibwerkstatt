@@ -45,7 +45,7 @@ button.danger:hover { background: var(--color-err-bg); }
   line-height: 1.4;
   background: var(--color-border);
   color: var(--color-text);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   vertical-align: middle;
 }
 button.primary .btn-count {
@@ -65,9 +65,9 @@ button.primary .btn-count {
 .badge-ok   { background: var(--color-ok-bg);   color: var(--color-ok-text); }
 .badge-err     { background: var(--color-err-bg);  color: var(--color-err-text); }
 /* Wertfreie Einordnung (Art/Kategorie), kein Status — siehe DESIGN.md. */
-.badge-neutral { background: var(--color-tag-bg); color: var(--color-muted); }
+.badge-neutral { background: var(--color-tag-bg); color: var(--color-tag-text); }
 /* Source-Marker: importierter Werkstatt-Draft zeigt Herkunfts-Figur. */
-.badge-source { background: var(--color-tag-bg); color: var(--color-muted); }
+.badge-source { background: var(--color-tag-bg); color: var(--color-tag-text); }
 /* Cross-Feature-Marker: klickbares Plot-Beteiligungs-Badge (Werkstatt → Plot).
    Plot-Akzent als linke Kante, damit die Herkunft signalisiert ist. */
 .badge--plot {
@@ -118,5 +118,22 @@ a.btn-compact:hover { background: var(--color-hover); }
    Randlos und gedämpft bis Hover — das Text-Pendant zu .icon-btn--ghost. */
 .btn-compact--ghost { border-color: transparent; color: var(--color-muted); }
 .btn-compact--ghost:hover:not(:disabled) { color: var(--color-text); }
+
+/* === Klickbare Nicht-Buttons und Text-Links ===
+   `.internal-link` macht ein div/span bedienbar (Tastatur über die globale
+   Delegation) und trägt kein Aussehen: Zeilen und Kacheln zeigen Hover über
+   ihren eigenen Hintergrund. Das Link-Aussehen ist `.text-link` — für
+   klickbaren Text im Fluss, auf span wie button. */
+.internal-link { cursor: pointer; }
+.internal-link:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+.text-link { cursor: pointer; }
+.text-link:is(:hover, :focus-visible):not(:disabled) {
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 }

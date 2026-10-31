@@ -23,7 +23,7 @@
             <template x-for="m in bandMotifs()" :key="m.id">
               <tr>
                 <th class="heatmap-rowhead" scope="row">
-                  <span class="heatmap-rowhead-main internal-link" @click="bandSelectMotif(m.id)">
+                  <span class="heatmap-rowhead-main internal-link text-link" @click="bandSelectMotif(m.id)">
                     <span class="motiv-band-swatch" :style="{ background: bandMotifColor(m) }" aria-hidden="true"></span>
                     <span x-text="m.name"></span>
                   </span>

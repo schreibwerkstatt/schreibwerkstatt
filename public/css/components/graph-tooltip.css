@@ -1,6 +1,7 @@
 /* Hover-Tooltip der vis-network-Graphen (Figuren-Graph, Motiv-Konstellation).
    Positioniert wird in JS ([public/js/graph-kit/tooltip.js]); der nächste
    positionierte Vorfahr (der Graph-Wrapper) ist der Bezugsrahmen. */
+@layer components {
 .graph-tooltip {
   display: none;
   position: absolute;
@@ -19,3 +20,4 @@
 .graph-tooltip strong { display: block; margin-bottom: var(--space-2xs); }
 .graph-tooltip em { color: var(--color-muted); font-style: normal; font-size: var(--font-size-xs); }
 .graph-tooltip p { margin: var(--space-xs) 0 0; color: var(--color-text); white-space: pre-wrap; }
+}

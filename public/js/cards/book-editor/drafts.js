@@ -23,6 +23,7 @@ import { setLiveEditPages, isLiveEditedElsewhere, isLiveEditedHere } from '../..
 import { stripLektoratMarks } from '../../editor/shared/html-clean.js';
 import { isNoChange } from '../../editor/shared/save-pipeline.js';
 import { createTimerBag } from '../../editor/shared/timers.js';
+import { isSelectedBook } from '../book-guard.js';
 
 // Gleicher Takt wie der Notebook-Draft (editor/notebook/edit/_shared.js).
 const DRAFT_DEBOUNCE_MS = 500;
@@ -178,6 +179,8 @@ export const bookEditorDraftMethods = {
     try {
       const data = await fetchBookContents(bookId).catch(() => null);
       if (!data || data.offline) return;
+      // Buchwechsel während der Probe: nicht das alte Buch über das neue laden.
+      if (!isSelectedBook(bookId)) return;
       if (this.offlineSource && this.dirtyCount === 0 && this.activePageId == null) await this._load(bookId);
     } finally {
       this._serverProbe = false;

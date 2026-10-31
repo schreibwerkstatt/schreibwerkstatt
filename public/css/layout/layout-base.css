@@ -21,7 +21,7 @@
   color: var(--color-dev-banner-text);
   font-size: var(--font-size-sm);
   font-weight: var(--fw-bold);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   letter-spacing: 0.03em;
 }
 
@@ -50,7 +50,7 @@
   background: var(--color-err-text);
   color: var(--color-surface);
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   text-decoration: none;
   font: inherit;
   font-weight: var(--fw-bold);

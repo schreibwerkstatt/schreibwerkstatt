@@ -93,7 +93,7 @@ body.snapshot-reader-open { overflow: hidden; overscroll-behavior: contain; }
 .snapshot-reader__body::-webkit-scrollbar { width: 10px; }
 .snapshot-reader__body::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   border: 2px solid var(--color-bg);
 }
 .snapshot-reader__body::-webkit-scrollbar-thumb:hover { background: var(--color-muted); }
@@ -110,7 +110,7 @@ body.snapshot-reader-open { overflow: hidden; overscroll-behavior: contain; }
 .snapshot-reader__badge {
   flex: none;
   padding: var(--space-1) var(--space-6);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-xs);
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
@@ -163,8 +163,6 @@ body.snapshot-reader-open { overflow: hidden; overscroll-behavior: contain; }
   .snapshot-reader__header { border-radius: 0; }
   .snapshot-reader__body { padding: var(--space-sm) var(--space-xs) var(--space-xl); }
 }
-}
-
 /* Restore-Knopf je Seite/Kapitel: rechts im Kopf. Kapitel-Kopf dafür als
    Zeile (Name nimmt den Platz, Knopf sitzt auf der Grundlinie daneben); im
    Seiten-Kopf schiebt der Name Badge + Knopf gemeinsam nach rechts. */
@@ -176,3 +174,4 @@ body.snapshot-reader-open { overflow: hidden; overscroll-behavior: contain; }
 .snapshot-reader .book-editor-chapter-header .book-editor-chapter-name { flex: 1; min-width: 0; }
 .snapshot-reader__page .book-editor-page-header .book-editor-page-name { margin-inline-end: auto; }
 .snapshot-reader__restore { flex: none; }
+}

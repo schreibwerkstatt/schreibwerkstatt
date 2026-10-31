@@ -5,7 +5,7 @@
      Zugeordnet ist nur Rede mit eindeutiger Inquit-Formel („…«, sagte Anna."). Die
      Abdeckung steht darum über der Tabelle — sonst liest sich der Ausschnitt als
      die ganze Rede der Figur. -->
-<div x-show="wortschatzTab === 'figures'">
+<div role="tabpanel" x-show="wortschatzTab === 'figures'">
   <p class="wortschatz-list-hint" x-text="$app.t('wortschatz.figures.hint')"></p>
   <p class="wortschatz-list-hint" x-show="wsIdiolectCoverage()" x-text="wsIdiolectCoverage()"></p>
   <div x-show="!wortschatzIdiolect.length" class="muted-msg muted-msg--spaced"
@@ -20,18 +20,12 @@
              types: { name: 'string', utterances: 'number', tokens: 'number', mattr: 'number', mtld: 'number', avg_utterance_len: 'number' },
            })">
       <thead><tr>
-        <th class="sortable-th" :class="sortClass('name')" :aria-sort="ariaSort('name')"
-            @click="sortBy('name')" x-text="$app.t('wortschatz.col.figure')"></th>
-        <th class="sortable-th" :class="sortClass('utterances')" :aria-sort="ariaSort('utterances')"
-            @click="sortBy('utterances')" x-text="$app.t('wortschatz.col.utterances')"></th>
-        <th class="sortable-th" :class="sortClass('tokens')" :aria-sort="ariaSort('tokens')"
-            @click="sortBy('tokens')" x-text="$app.t('wortschatz.kpi.tokens')"></th>
-        <th class="sortable-th" :class="sortClass('avg_utterance_len')" :aria-sort="ariaSort('avg_utterance_len')"
-            @click="sortBy('avg_utterance_len')" x-text="$app.t('wortschatz.col.avgUtterance')"></th>
-        <th class="sortable-th" :class="sortClass('mattr')" :aria-sort="ariaSort('mattr')"
-            @click="sortBy('mattr')" x-text="$app.t('wortschatz.kpi.mattr')"></th>
-        <th class="sortable-th" :class="sortClass('mtld')" :aria-sort="ariaSort('mtld')"
-            @click="sortBy('mtld')" x-text="$app.t('wortschatz.kpi.mtld')"></th>
+        <th x-bind="sortTh('name')" x-text="$app.t('wortschatz.col.figure')"></th>
+        <th x-bind="sortTh('utterances')" x-text="$app.t('wortschatz.col.utterances')"></th>
+        <th x-bind="sortTh('tokens')" x-text="$app.t('wortschatz.kpi.tokens')"></th>
+        <th x-bind="sortTh('avg_utterance_len')" x-text="$app.t('wortschatz.col.avgUtterance')"></th>
+        <th x-bind="sortTh('mattr')" x-text="$app.t('wortschatz.kpi.mattr')"></th>
+        <th x-bind="sortTh('mtld')" x-text="$app.t('wortschatz.kpi.mtld')"></th>
         <th :title="$app.t('wortschatz.col.typicalTip')" x-text="$app.t('wortschatz.col.typical')"></th>
       </tr></thead>
       <tbody>

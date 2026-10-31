@@ -14,12 +14,8 @@ const CARRY_KINDS = ['figuren', 'orte', 'fakten'];
 export const seriesMethods = {
   get seriesCarryKinds() { return CARRY_KINDS; },
 
-  _seriesIsCurrent(bookId) {
-    return String(Alpine.store('nav').selectedBookId) === String(bookId);
-  },
-
   _applySeriesState(bookId, data) {
-    if (!this._seriesIsCurrent(bookId)) return;
+    if (!this._isSelectedBook(bookId)) return;
     this.seriesData = data?.series || null;
     this.seriesJoinable = data?.joinable || [];
     this.seriesPrequels = data?.prequels || [];
@@ -35,7 +31,7 @@ export const seriesMethods = {
   },
 
   async loadSeries() {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._selectedBookId();
     if (!bookId) return;
     this.seriesLoading = true;
     this.seriesError = '';
@@ -43,9 +39,9 @@ export const seriesMethods = {
       this._applySeriesState(bookId, await fetchJson(`/book-series/${bookId}`));
     } catch (e) {
       console.error('[loadSeries]', e);
-      if (this._seriesIsCurrent(bookId)) this.seriesError = window.__app.t('series.loadError');
+      if (this._isSelectedBook(bookId)) this.seriesError = window.__app.t('series.loadError');
     } finally {
-      if (this._seriesIsCurrent(bookId)) this.seriesLoading = false;
+      if (this._isSelectedBook(bookId)) this.seriesLoading = false;
     }
   },
 
@@ -54,14 +50,14 @@ export const seriesMethods = {
   onSeriesTabVisible(tab) {
     if (tab !== 'series') return;
     queueMicrotask(() => {
-      const bookId = Alpine.store('nav').selectedBookId;
+      const bookId = this._selectedBookId();
       if (!bookId || this.seriesBookId === String(bookId) || this.seriesLoading) return;
       this.loadSeries();
     });
   },
 
   async _seriesCall(method, path, body) {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._selectedBookId();
     if (!bookId || this.seriesBusy) return null;
     this.seriesBusy = true;
     this.seriesError = '';
@@ -76,10 +72,10 @@ export const seriesMethods = {
       if (!r.ok) throw new Error(window.__app.tError(data));
       return { bookId, data };
     } catch (e) {
-      if (this._seriesIsCurrent(bookId)) this.seriesError = e.message || window.__app.t('series.saveError');
+      if (this._isSelectedBook(bookId)) this.seriesError = e.message || window.__app.t('series.saveError');
       return null;
     } finally {
-      if (this._seriesIsCurrent(bookId)) this.seriesBusy = false;
+      if (this._isSelectedBook(bookId)) this.seriesBusy = false;
     }
   },
 
@@ -131,7 +127,7 @@ export const seriesMethods = {
 
   // ── Aus Vorband übernehmen ────────────────────────────────────────────────
   async loadCarryCandidates() {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._selectedBookId();
     const sourceId = this.carrySourceId;
     if (!bookId || !sourceId) return;
     this.carryLoading = true;
@@ -139,16 +135,16 @@ export const seriesMethods = {
     this.carryMessage = '';
     try {
       const data = await fetchJson(`/book-series/${bookId}/carryover/${sourceId}`);
-      if (!this._seriesIsCurrent(bookId) || this.carrySourceId !== sourceId) return;
+      if (!this._isSelectedBook(bookId) || this.carrySourceId !== sourceId) return;
       this.carryLists = data;
       // Vorauswahl: alles Gepflegte, das im Band noch fehlt.
       this.carrySel = Object.fromEntries(CARRY_KINDS.map(k => [k,
         (data[k] || []).filter(e => e.gepflegt && !e.vorhanden).map(e => e.id)]));
     } catch (e) {
       console.error('[loadCarryCandidates]', e);
-      if (this._seriesIsCurrent(bookId)) this.carryError = window.__app.t('series.carry.loadError');
+      if (this._isSelectedBook(bookId)) this.carryError = window.__app.t('series.carry.loadError');
     } finally {
-      if (this._seriesIsCurrent(bookId)) this.carryLoading = false;
+      if (this._isSelectedBook(bookId)) this.carryLoading = false;
     }
   },
 
@@ -169,7 +165,7 @@ export const seriesMethods = {
   },
 
   async runCarryover() {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._selectedBookId();
     if (!bookId || !this.carrySourceId || !this.carryCount() || this.carryBusy) return;
     this.carryBusy = true;
     this.carryError = '';
@@ -182,7 +178,7 @@ export const seriesMethods = {
       });
       const data = await r.json().catch(() => null);
       if (!r.ok) throw new Error(window.__app.tError(data));
-      if (!this._seriesIsCurrent(bookId)) return;
+      if (!this._isSelectedBook(bookId)) return;
       this.carryMessage = window.__app.t('series.carry.done', {
         figuren: data.figuren, orte: data.orte, fakten: data.fakten,
       });
@@ -191,9 +187,9 @@ export const seriesMethods = {
       window.__app.loadOrte?.(bookId);
       await this.loadCarryCandidates();
     } catch (e) {
-      if (this._seriesIsCurrent(bookId)) this.carryError = e.message || window.__app.t('series.carry.saveError');
+      if (this._isSelectedBook(bookId)) this.carryError = e.message || window.__app.t('series.carry.saveError');
     } finally {
-      if (this._seriesIsCurrent(bookId)) this.carryBusy = false;
+      if (this._isSelectedBook(bookId)) this.carryBusy = false;
     }
   },
 };

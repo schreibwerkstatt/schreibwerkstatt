@@ -5,7 +5,7 @@
   heisst in beiden Fällen `page`. SSoT, damit die tok-Badge-Statistik nicht
   zwischen beiden Listen driftet.
 -->
-<div class="kapitel-page-row" @click="$app.selectPage(page)" :data-tip="$app.pageStatusTooltip(page).join(' · ')">
+<div class="kapitel-page-row internal-link" @click="$app.selectPage(page)" :data-tip="$app.pageStatusTooltip(page).join(' · ')">
   <span class="kapitel-page-name">
     <span class="page-status-dot" :class="'page-status-' + $app.pageStatus(page)"></span>
     <span x-text="page.name"></span>

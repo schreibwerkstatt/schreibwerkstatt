@@ -69,7 +69,7 @@
           <span class="sources-detect-container" x-show="v.container_title" x-text="v.container_title"></span>
           <!-- Fundstelle: der woertliche Satz aus dem Text, ueber den der Job
                das Werk gefunden hat. Klickbar, wenn die Seite bestimmbar war. -->
-          <button type="button" class="sources-detect-quote internal-link" x-show="v.erwaehnung"
+          <button type="button" class="sources-detect-quote text-link" x-show="v.erwaehnung"
                   :disabled="v.page_id == null" @click="gotoDetected(v)">
             <template x-if="v.chapter_name">
               <span class="entity-ref" x-entity-ref="{ type: 'kapitel', name: v.chapter_name, static: true }"></span>
@@ -105,7 +105,7 @@
     <ul class="sources-detect-run-list">
       <template x-for="run in srcDetectRuns" :key="run.id">
         <li class="sources-detect-run" :class="{ 'sources-detect-run--active': srcDetectRunId === run.id }">
-          <button type="button" class="sources-detect-run-open internal-link"
+          <button type="button" class="sources-detect-run-open text-link"
                   :aria-pressed="srcDetectRunId === run.id"
                   :disabled="srcDetectRunning"
                   @click="openDetectRun(run)">

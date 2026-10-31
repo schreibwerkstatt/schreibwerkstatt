@@ -25,6 +25,17 @@ const SEMANTIC_ERROR_KEYS = {
   LIKE_ENTITY_NOT_FOUND: 'search.semantic.entityNotFound',
 };
 
+// Treffer-Art → Hash-Segment des Buch-Deep-Links (app-hash-router.js, Schema
+// `#book/:bookId/<path>/:id`). `navId`: Figuren/Orte/Szenen adressiert der
+// Router über ihre TEXT-ID (siehe activateHit), nicht über den INTEGER-PK.
+const CROSS_BOOK_SEGMENT = {
+  page:     { path: 'page' },
+  chapter:  { path: 'kapitel' },
+  figure:   { path: 'figur', navId: true },
+  location: { path: 'ort', navId: true },
+  scene:    { path: 'szene', navId: true },
+};
+
 export function registerSearchCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('searchCard', () => ({
@@ -428,6 +439,18 @@ export function registerSearchCard() {
       const root = window.__app;
       if (!root || !hit) return;
       try {
+        // Treffer aus einem anderen Buch (Scope «alle Bücher»): die Root-
+        // Methoden suchen nur im gewählten Buch und liefen ins Leere — der
+        // Deep-Link-Hash wechselt das Buch, lädt es und öffnet dann das Ziel
+        // (gleicher Weg wie fact/research unten).
+        const seg = CROSS_BOOK_SEGMENT[hit.kind];
+        const hitBook = Number(hit.book_id);
+        if (seg && Number.isFinite(hitBook) && hitBook > 0
+            && String(hitBook) !== String(Alpine.store('nav').selectedBookId ?? '')) {
+          const id = seg.navId ? (hit.nav_id ?? hit.entity_id) : hit.entity_id;
+          location.hash = `#book/${hitBook}/${seg.path}/${encodeURIComponent(id)}`;
+          return;
+        }
         switch (hit.kind) {
           case 'page':
             return root.gotoPageById?.(hit.entity_id, { snippet: hit.snippet });

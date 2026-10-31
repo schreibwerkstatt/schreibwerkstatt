@@ -12,6 +12,7 @@ import { fetchJson, autosizeTextarea, mountAutosizeTextarea } from '../utils.js'
 import { createIdee, patchIdee, deleteIdee as removeIdee, overlayPendingIdeen } from '../repo/ideen-queue.js';
 import { IDEE_STATUSES, ideeStatus, isOpenIdee, normalizeIdeeStages, compareIdeeManual, IDEE_MAX_LEN } from './ideen-shared.js';
 import { isTempId as isTempPageId, resolveTempId } from '../repo/structure-queue.js';
+import { loadToken } from '../cards/book-guard.js';
 
 // Aktive Scope-IDs aus Root lesen. Liefert { kind, id } oder null.
 function _activeScope(app) {
@@ -28,6 +29,13 @@ export const ideenMethods = {
     const app = window.__app;
     const scope = _activeScope(app);
     if (!scope) { this.ideen = []; return; }
+    // Abschnitts-/Kapitelwechsel während des Fetch: die Ideen des alten Scopes
+    // dürfen nicht in der Karte des neuen landen (auch nicht als Plaketten-Zahl).
+    const fresh = loadToken(this, '_ideenLoadSeq');
+    const isCurrent = () => {
+      const now = _activeScope(window.__app);
+      return fresh() && now?.kind === scope.kind && String(now.id) === String(scope.id);
+    };
     this.loading = true;
     try {
       // Offline angelegter Abschnitt (negative, temporäre ID): auf dem Server
@@ -39,15 +47,18 @@ export const ideenMethods = {
       const rows = scopeId ? await fetchJson(`/ideen?${qs}`) : [];
       // Offline vorgemerkte Writes darüberlegen (repo/ideen-queue.js).
       const key = scope.kind === 'chapter' ? 'chapter_id' : 'page_id';
-      this.ideen = this._sortIdeen(await overlayPendingIdeen(Array.isArray(rows) ? rows : [], (r) => String(r[key]) === String(scope.id)));
+      const merged = await overlayPendingIdeen(Array.isArray(rows) ? rows : [], (r) => String(r[key]) === String(scope.id));
+      if (!isCurrent()) return;
+      this.ideen = this._sortIdeen(merged);
       this.errorMessage = '';
       this._publishIdeenCount();
       await this._loadStages();
     } catch (e) {
+      if (!isCurrent()) return;
       this.errorMessage = app.t('ideen.error.load');
       this.ideen = [];
     } finally {
-      this.loading = false;
+      if (fresh.latest()) this.loading = false;
     }
   },
 

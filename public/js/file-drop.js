@@ -75,12 +75,29 @@ export function registerFileDrop() {
 
       // Klick öffnet den Picker — ausser auf interaktiven Kindern (z.B. ein
       // "Entfernen"-Button im Slot), die ihre eigene Aktion haben.
+      const open = () => {
+        input.accept = this._resolveAccept(); // reaktiven Filter frisch lesen
+        input.click();
+      };
       el.addEventListener('click', (e) => {
         if (this._isDisabled()) return;
         if (e.target.closest('button, a, input, label')) return;
-        input.accept = this._resolveAccept(); // reaktiven Filter frisch lesen
-        input.click();
+        open();
       });
+
+      // Tastatur: die Fläche ist meist ein <div> — ohne role/tabindex wäre der
+      // Picker nur mit der Maus erreichbar. Enter/Leertaste öffnen ihn, solange
+      // der Fokus auf der Fläche selbst liegt (nicht auf einem Kind-Button).
+      if (el.tagName !== 'BUTTON') {
+        if (!el.hasAttribute('role')) el.setAttribute('role', 'button');
+        if (!el.hasAttribute('tabindex')) el.tabIndex = 0;
+        el.addEventListener('keydown', (e) => {
+          if (e.target !== el || (e.key !== 'Enter' && e.key !== ' ')) return;
+          e.preventDefault();
+          if (!this._isDisabled()) open();
+        });
+      }
+      this.$watch(() => this._isDisabled(), (d) => el.setAttribute('aria-disabled', d ? 'true' : 'false'));
 
       if (!this._cfg.drag) return;
 

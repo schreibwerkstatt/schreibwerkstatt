@@ -34,7 +34,7 @@
         x-cloak
         x-text="t('common.asOf', { date: $store.jobs.alleAktualisierenLastRun })"></span>
   <div class="komplett-status-panel" x-show="showKomplettStatus" x-cloak role="dialog" :aria-label="t('komplett.title')">
-    <div class="komplett-status-title" x-text="t('komplett.title')"></div>
+    <div class="card-section-title" x-text="t('komplett.title')"></div>
     <div class="komplett-status-laststamp" x-show="$store.jobs.alleAktualisierenLastRun" x-cloak
          x-text="t('common.asOf', { date: $store.jobs.alleAktualisierenLastRun })"></div>
     <!-- Ohne Lauf in dieser Sitzung (Fortschritt 0, kein Status) nichts zeigen: ein leerer

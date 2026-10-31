@@ -1,6 +1,7 @@
 /* Autorenprofil — Kennzahlen der eigenen Buecher nebeneinander.
    Karte: public/partials/autorenprofil.html, public/js/cards/autorenprofil-card.js.
    Akzent kommt aus card-accents.css (var(--card-accent)), nicht von hier. */
+@layer components {
 
 .ap-table {
   width: 100%;
@@ -113,15 +114,8 @@
    Beleg steht immer dabei — ohne ihn waere die Zeile eine Behauptung. */
 .ap-findings { margin-bottom: var(--space-md); }
 
-.ap-findings-title {
-  display: block;
-  margin-bottom: var(--space-xs);
-  color: var(--card-accent);
-  font-weight: var(--fw-semibold);
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
+/* Titel ist .card-section-title; das Element ist ein <span> und braucht Block. */
+.ap-findings-title { display: block; }
 
 .ap-finding {
   margin: 0 0 var(--space-xs);
@@ -136,3 +130,4 @@
 .ap-finding-richtung::after { content: ': '; color: var(--color-muted); }
 
 .ap-finding-beleg { color: var(--color-muted); }
+}

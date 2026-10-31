@@ -114,10 +114,10 @@
 .setting-field__key {
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
-  color: var(--color-muted);
+  color: var(--color-tag-text);
   background: var(--color-tag-bg);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: 0 var(--space-xs);
   white-space: nowrap;
 }
@@ -141,9 +141,9 @@
   gap: var(--space-sm);
   background: var(--color-tag-bg);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: var(--space-sm) var(--space-md);
-  color: var(--color-muted);
+  color: var(--color-tag-text);
   font-size: var(--font-size-sm);
   cursor: pointer;
 }
@@ -184,7 +184,7 @@
   padding: var(--space-2xs) var(--space-xs);
   background: var(--card-accent);
   color: var(--color-surface);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-xs);
   font-weight: var(--fw-medium);
   text-transform: uppercase;
@@ -271,7 +271,7 @@
   padding: var(--space-sm) var(--space-md);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-family: var(--font-mono, monospace);
   font-size: var(--font-size-sm);
   word-break: break-all;
@@ -283,7 +283,7 @@
   padding: var(--space-md);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-family: var(--font-mono, monospace);
   font-size: var(--font-size-xs);
   overflow-x: auto;
@@ -349,13 +349,11 @@
   .admin-settings-actions button { flex: 1 0 auto; }
   .admin-api-snippet {
     padding: var(--space-sm);
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     white-space: pre-wrap;
     word-break: break-word;
   }
 }
-}
-
 /* Eingeklappter „Erweitert"-Bereich im Claude-Tab: Toggle trägt den Zähler aktiver
    Abweichungen als Badge, das Panel reiht dieselben Unterabschnitte wie oben. */
 .admin-settings-advanced {
@@ -368,4 +366,5 @@
   display: flex;
   align-items: center;
   gap: var(--space-xs);
+}
 }

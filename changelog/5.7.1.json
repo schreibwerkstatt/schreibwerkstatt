@@ -1,0 +1,41 @@
+{
+  "version": "5.7.1",
+  "date": "2026-10-31",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Bucheinstellungen: Verlässt du die Karte mit ungespeicherten Änderungen, fragt die App, ob sie speichern oder verwerfen soll. Gespeichert wird nur, was du geändert hast – Änderungen anderer am selben Buch bleiben erhalten.",
+      "en": "Book settings: if you leave the card with unsaved changes, the app asks whether to save or discard them. Only what you changed is saved – changes others made to the same book are kept."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Meine Statistik: Die KI-Jobs stehen jetzt hier statt in den Bucheinstellungen, für alle Bücher oder ein gewähltes. Ein Klick auf eine Zeile zeigt die letzten Läufe.",
+      "en": "My statistics: AI jobs now live here instead of in the book settings, for all books or one you pick. Click a row to see the latest runs."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fehlermeldungen: Wo bisher ein Code wie «BOOK_BUSY» stand, liest du jetzt einen verständlichen Satz.",
+      "en": "Error messages: where you used to see a code like \"BOOK_BUSY\", you now read a plain sentence."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Bucheinstellungen → Publikation: Cover und Autorfoto hochladen oder entfernen lässt deine übrigen, noch nicht gespeicherten Eingaben stehen. Vor dem Entfernen fragt die App nach.",
+      "en": "Book settings → Publication: uploading or removing the cover or author photo keeps your other unsaved entries. The app asks before removing."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Tastatur: Tabellen lassen sich mit Tab und Enter sortieren, und klickbare Einträge sind überall per Tastatur erreichbar. Beim Tippen mit einer Eingabehilfe für Japanisch oder Chinesisch schickt Enter nichts mehr vorzeitig ab.",
+      "en": "Keyboard: tables can be sorted with Tab and Enter, and clickable entries are reachable by keyboard everywhere. When typing with a Japanese or Chinese input method, Enter no longer submits too early."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Darstellung: Kontraste, Schriftgrössen und Fokus-Rahmen sind in der ganzen App vereinheitlicht und besser lesbar.",
+      "en": "Appearance: contrast, font sizes and focus outlines are consistent across the app and easier to read."
+    },
+    {
+      "kind": "behoben",
+      "de": "Wechselst du von einer Karte zu einem Abschnitt oder zur Kapitelbewertung, blitzt keine leere Ansicht mehr auf.",
+      "en": "Switching from a card to a section or to the chapter review no longer flashes an empty view."
+    }
+  ]
+}

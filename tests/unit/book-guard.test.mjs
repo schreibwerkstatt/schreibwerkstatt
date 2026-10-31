@@ -8,7 +8,8 @@ const nav = { selectedBookId: '7', tree: [], pages: [] };
 globalThis.window = globalThis.window || {};
 globalThis.window.Alpine = { store: (n) => (n === 'nav' ? nav : {}) };
 
-const { isSelectedBook } = await import('../../public/js/cards/book-guard.js');
+const { isSelectedBook, loadToken } = await import('../../public/js/cards/book-guard.js');
+const { claimSaveOwner, ownsSave } = await import('../../public/js/editor/notebook/save-owner.js');
 const { diaryCalendarMethods } = await import('../../public/js/book/diary-calendar.js');
 const { contentRepo } = await import('../../public/js/repo/content.js');
 
@@ -57,4 +58,35 @@ test('_createDiaryEntry: Buchwechsel nach Jahr-Kapitel bricht die Kette ab', asy
   assert.deepEqual(nav.tree, [], 'Tree des neuen Buchs unberuehrt');
   assert.deepEqual(statuses, [], 'kein Fehler-Status fuer einen selbst ausgeloesten Wechsel');
   assert.equal(ctx._diaryCreatingDate, null);
+});
+
+test('loadToken: jüngerer Load überholt älteren, Buchwechsel macht stale', () => {
+  nav.selectedBookId = '7';
+  const ctx = {};
+  const first = loadToken(ctx, '_seq', 7);
+  assert.equal(first(), true);
+  const second = loadToken(ctx, '_seq', 7);
+  assert.equal(first(), false, 'älterer Load gilt nach jüngerem nicht mehr');
+  assert.equal(first.latest(), false);
+  assert.equal(second(), true);
+  nav.selectedBookId = '8';
+  assert.equal(second(), false, 'Buchwechsel → stale');
+  assert.equal(second.latest(), true, 'latest() prüft nur die Sequenz');
+});
+
+test('loadToken: ohne bookId gilt das beim Aufruf gewählte Buch', () => {
+  nav.selectedBookId = '9';
+  const ctx = {};
+  const tok = loadToken(ctx, '_seq');
+  assert.equal(tok(), true);
+  nav.selectedBookId = '10';
+  assert.equal(tok(), false);
+});
+
+test('save-owner: nur der jüngste Besitzer räumt editSaving', () => {
+  const a = claimSaveOwner();
+  const b = claimSaveOwner(); // Save der neuen Seite übernimmt
+  assert.equal(ownsSave(a), false, 'alter Save darf das Flag der neuen Seite nicht räumen');
+  assert.equal(ownsSave(b), true);
+  assert.equal(ownsSave(b), false, 'einmal geräumt ist geräumt');
 });

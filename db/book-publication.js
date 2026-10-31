@@ -107,6 +107,18 @@ function upsertMeta(bookId, meta) {
   return getMeta(bookId);
 }
 
+/** Teil-Update (PUT /publication/:id): Keys, die `patch` nicht traegt (oder
+ *  `undefined`), behalten den gespeicherten Stand; erst danach wird validiert.
+ *  `upsertMeta` bleibt der Vollersatz (Fassungs-Restore: fehlende Keys = Default). */
+function patchMeta(bookId, patch) {
+  const cur = getMeta(bookId);
+  const merged = {};
+  for (const col of _META_COLS) {
+    merged[col] = patch && patch[col] !== undefined ? patch[col] : cur[col];
+  }
+  return upsertMeta(bookId, merged);
+}
+
 function setCover(bookId, buffer, mime) {
   _stmtEnsureRow.run(parseInt(bookId));
   _stmtSetCover.run(buffer, mime, parseInt(bookId));
@@ -128,7 +140,7 @@ function getAuthorImage(bookId) {
 }
 
 module.exports = {
-  getMeta, upsertMeta,
+  getMeta, upsertMeta, patchMeta,
   setCover, clearCover, getCover,
   setAuthorImage, clearAuthorImage, getAuthorImage,
 };

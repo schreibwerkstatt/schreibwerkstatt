@@ -30,7 +30,7 @@
 .onboarding-alldone {
   margin: 0 0 var(--space-lg);
   padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-accent-bg);
   color: var(--color-accent-text);
   font-size: var(--font-size-sm);
@@ -65,7 +65,7 @@
   justify-content: center;
   width: 1.7em;
   height: 1.7em;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-accent-bg);
   color: var(--color-accent-text);
   font-size: var(--font-size-sm);
@@ -91,7 +91,7 @@
 .onboarding-step-state {
   flex: 0 0 auto;
   padding: var(--space-2xs) var(--space-sm);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-accent-bg);
   color: var(--color-accent-text);
   font-size: var(--font-size-mini);

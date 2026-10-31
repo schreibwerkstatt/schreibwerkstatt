@@ -46,14 +46,13 @@ export function registerPdfExportCard() {
         // spiegeln, die Rückenbreite + KDP-Bundsteg treibt. Nur bei Abweichung
         // schreiben+persistieren, damit ein unveränderter Re-Export nicht speichert.
         // Probeseiten (sample) zählen nur das erste Kapitel — nie übernehmen.
-        const cs = self.activeProfile?.config?.coverSpec;
+        // Nur ins Profil, mit dem exportiert wurde: hat der User während des
+        // Laufs ein anderes gewählt, bleibt die Zahl liegen.
+        const cs = self.activeProfile?.id === self._exportProfileId ? self.activeProfile?.config?.coverSpec : null;
         const pagesCounted = !result.sample && result.target !== 'cover' && result.scope === 'book'
           && Number.isInteger(result.interiorPages) && result.interiorPages > 0
           && cs && cs.pageCount !== result.interiorPages;
-        if (pagesCounted) {
-          cs.pageCount = result.interiorPages;
-          self.saveActiveProfile();
-        }
+        if (pagesCounted) self._persistInteriorPages(result.interiorPages);
         const statusKey = result.sample ? 'pdfExport.sampleDone'
           : self.exportWarnings.length ? 'pdfExport.doneWithWarnings'
           : pagesCounted ? 'pdfExport.donePagesCounted'
@@ -82,6 +81,8 @@ export function registerPdfExportCard() {
     // null-activeProfile und werfen "Cannot read properties of null (reading 'config')".
     _formMounted: false,
     _selectSeq: 0,
+    // Profil, mit dem der laufende Export gestartet wurde (resolveDone).
+    _exportProfileId: null,
     activeTab: 'layout',
 
     fontList: [],
@@ -197,6 +198,9 @@ export function registerPdfExportCard() {
     async loadProfiles() {
       try {
         const r = await fetch('/pdf-export/profiles');
+        // 5xx/Netzfehler ≠ „noch keine Profile" — sonst legte jedes Öffnen ein
+        // weiteres Standard-Profil an.
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const d = await r.json();
         this.profiles = d.profiles || [];
         if (!this.profiles.length) {
@@ -343,6 +347,29 @@ export function registerPdfExportCard() {
       } finally {
         this.saving = false;
       }
+    },
+
+    // Gezählte Innenteil-Seitenzahl persistieren, ohne ungespeicherte Edits
+    // des Profils mitzuspeichern: geschrieben wird der zuletzt gespeicherte
+    // Stand (_savedSnapshot) plus pageCount; im Formular wird nur pageCount
+    // nachgezogen, andere offene Änderungen bleiben „ungespeichert".
+    async _persistInteriorPages(n) {
+      const profile = this.activeProfile;
+      if (!profile || !this._savedSnapshot) return;
+      const base = JSON.parse(this._savedSnapshot);
+      if (!base?.coverSpec) return;
+      base.coverSpec.pageCount = n;
+      profile.config.coverSpec.pageCount = n;
+      const name = this.profiles.find(p => p.id === profile.id)?.name ?? profile.name;
+      try {
+        const r = await fetch(`/pdf-export/profiles/${profile.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, config: base }),
+        });
+        if (!r.ok || this.activeProfile?.id !== profile.id) return;
+        this._savedSnapshot = JSON.stringify(base);
+      } catch {}
     },
 
     // ── Umschlag-Rückseitenbild (separates Cover-PDF) ─────────────────────
@@ -493,6 +520,9 @@ export function registerPdfExportCard() {
     // opts.sample: Probeseiten — der Server rendert nur das erste Kapitel.
     async exportPdf(target = 'interior', opts = {}) {
       if (!this.activeProfile) return;
+      // Doppelklick: der zweite Klick käme während des awaited Saves durch und
+      // startete einen zweiten Job.
+      if (this.exporting || this.saving) return;
       // Vor Export speichern (Config könnte ungespeichert sein).
       await this.saveActiveProfile();
       if (this.exportError) return;
@@ -508,6 +538,7 @@ export function registerPdfExportCard() {
       this.exportHyphenOff = [];
       this.dismissWarnings();
       const sample = target === 'interior' && !!opts.sample;
+      this._exportProfileId = this.activeProfile.id;
       await this._runExportJob({
         ...(sample ? { sample: true } : {}),
         scope: ref.scope,

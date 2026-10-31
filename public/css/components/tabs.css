@@ -34,7 +34,7 @@
     display: inline-flex;
     max-width: 100%;
     border: 0.5px solid var(--color-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background-color: var(--color-surface);
     /* Scrollen statt Clippen. overflow-y bleibt hidden, damit der Radius die
        Buttons weiter beschneidet. */
@@ -156,7 +156,7 @@
     line-height: 1.4;
     background: var(--color-border);
     color: var(--color-text);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     vertical-align: middle;
   }
   .tabs-btn--active .tabs-btn-count,

@@ -72,7 +72,7 @@ const ALLOW = {
 // kein Schlupfloch — wer ein `em` setzt, sagt „relativ zur Schrift".
 const PROP_RE =
   /(?<![\w-])((?:row-|column-)?gap|margin|padding)(-(?:top|bottom|left|right|inline|block)(?:-(?:start|end))?)?(\s*:\s*)([^;{}]+);/g;
-const VAL_RE = /(?<![\w.\-])(\d*\.?\d+)(rem|px)(?![\w-])/g;
+const VAL_RE = /(?<![\w.\-])-?(\d*\.?\d+)(rem|px)(?![\w-])/g;
 
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir)) {

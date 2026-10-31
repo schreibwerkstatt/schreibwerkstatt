@@ -4,7 +4,7 @@
 // auf die Sub-Komponente, Root-Zugriffe via window.__app.
 
 import { getEditEl, attachReflow } from './utils.js';
-import { collectMatches, createHighlightPair, rangeOf } from './shared/text-find.js';
+import { collectMatches, createHighlightPair, rangeOf, matchStillValid } from './shared/text-find.js';
 
 // Match-Suche + Offset-Rückmapping + Highlight-Registrierung liegen in
 // shared/text-find.js — geteilt mit dem Bucheditor (cards/book-editor/find.js).
@@ -176,6 +176,15 @@ export const editorFindCardMethods = {
     if (!m || !m.startNode || !m.endNode) return;
     const editEl = getEditEl();
     if (!editEl) return;
+    // Treffer veraltet (seit der Suche getippt): neu suchen und den Klick nicht
+    // ausführen — der User sieht den aktualisierten Treffer und bestätigt erneut.
+    // Gleiche Prüfung wie im Bucheditor (shared/text-find.js).
+    if (!matchStillValid(m, this.findTerm, this.findCaseSensitive)) {
+      const at = this.findIndex;
+      this.recomputeFindMatches();
+      if (this.findMatches.length > 0) this._selectFindMatch(Math.min(at, this.findMatches.length - 1));
+      return;
+    }
     try {
       const range = rangeOf(m);
       const sel = window.getSelection();

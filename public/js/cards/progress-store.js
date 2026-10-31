@@ -25,7 +25,8 @@
 //                                (Buchtyp, Schreibziel, Deadline) — darum liegt
 //                                die ganze Antwort hier, nicht nur das Destillat.
 //   dailyProgressIsFinished    — abgeschlossenes Buch → kein Donut.
-//   dailyProgressDailyGoalChars— Zielzeichen/Tag (Default 1500, wenn null).
+//   dailyProgressDailyGoalChars— roher daily_goal_chars (null = Default, 0 = kein
+//                                Ziel); aufgelöst via utils/format.js#resolveDailyGoal.
 //   dailyProgressFailed        — Schlüssel der Endpoints, die auch nach Retry
 //                                ausgefallen sind ('stats' | 'settings'); die
 //                                Übersicht zeigt daraus ihren Fehlerhinweis.

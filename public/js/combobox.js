@@ -22,8 +22,14 @@
 // genutzt, damit Spezialisierungen die volle Combobox-Mechanik erben statt
 // sie zu reimplementieren. cfg-Form deckt sich mit der Object-Variante von
 // `combobox(...)` aus den Templates: { placeholder, emptyLabel, compact,
-// multiple, transient, footer, autoOpen }. Sowohl `placeholder` als auch
-// `emptyLabel` duerfen Funktionen sein (fuer reaktive i18n-Aufloesung).
+// multiple, transient, footer, autoOpen, label }. `placeholder`, `emptyLabel`
+// und `label` duerfen Funktionen sein (fuer reaktive i18n-Aufloesung).
+//
+// Zugaenglicher Name des Triggers: «<Feld> <Wert>», nie nur der Wert. Steht
+// ein sichtbares Feld-Label daneben, traegt der Wrapper
+// `:aria-labelledby="$id('fld')"` (Label mit `:id="$id('fld')"`, `x-id` an der
+// Zeile) — der Trigger verweist dann auf Label + Wert-Span. Ohne sichtbares
+// Label nimmt `label` (Object-Form) den Feldnamen: «<label>: <Wert>».
 //
 // `autoOpen` klappt die Liste direkt nach dem Mount auf. Zusammen mit dem
 // `combobox-close`-Event (feuert, wenn eine offene Liste schliesst) erlaubt das
@@ -31,6 +37,8 @@
 // gleich aussehenden Platzhalter-Trigger zu montieren und danach wieder
 // abzubauen — jede Instanz kostet eine Alpine-Komponente mit Trigger-Bindings
 // (Buchorganizer: organizer-page-actions.html).
+let _cbSeq = 0;
+
 export function comboboxData(cfg = {}) {
   if (cfg.compact === undefined) cfg.compact = true;
   // Memo fuer `filtered`/`groupedRows` ausserhalb des reaktiven Objekts: ein
@@ -55,6 +63,11 @@ export function comboboxData(cfg = {}) {
       _multiple: !!cfg.multiple,
       _transient: !!cfg.transient,
       _autoOpen: !!cfg.autoOpen,
+      _label: cfg.label ?? null,
+      // aria-labelledby des Wrappers (ID des sichtbaren Feld-Labels) und
+      // eigene ID des Wert-Spans; beide setzt init().
+      _labelledBy: null,
+      _valId: null,
       _footer: (cfg.footer && typeof cfg.footer.action === 'function') ? cfg.footer : null,
       _onOutside: null,
       _onScroll: null,
@@ -75,6 +88,13 @@ export function comboboxData(cfg = {}) {
         if (typeof window === 'undefined') return false;
         if (window.innerWidth <= 600) return true;
         return window.matchMedia?.('(hover: none) and (pointer: coarse)')?.matches ?? false;
+      },
+
+      // Zugaenglicher Name des Triggers, wenn kein sichtbares Label verweist.
+      get ariaName() {
+        const val = this.selectedLabel || this.placeholder || '';
+        const l = typeof this._label === 'function' ? this._label() : this._label;
+        return l ? (val && val !== l ? `${l}: ${val}` : l) : val;
       },
 
       get placeholder() {
@@ -372,6 +392,12 @@ export function comboboxData(cfg = {}) {
         };
         this._rootEl.addEventListener('focusout', this._onFocusOut);
 
+        this._valId = 'cbv-' + (++_cbSeq);
+        // Das `:aria-labelledby` des Wrappers bindet Alpine erst nach init().
+        const readLabelledBy = () => { this._labelledBy = this._rootEl.getAttribute('aria-labelledby') || null; };
+        readLabelledBy();
+        if (!this._labelledBy) this.$nextTick(readLabelledBy);
+
         this._rootEl.setAttribute('role', 'combobox');
         this._rootEl.setAttribute('aria-haspopup', 'listbox');
         if (this._multiple) {
@@ -385,8 +411,9 @@ export function comboboxData(cfg = {}) {
         const template = [
           '<button type="button" class="combobox-trigger" @click="toggle()" x-ref="cbTrigger"',
           '        :aria-expanded="open ? \'true\' : \'false\'"',
-          '        :aria-label="selectedLabel || placeholder">',
-          '  <span class="combobox-value" x-text="selectedLabel || placeholder"></span>',
+          '        :aria-labelledby="_labelledBy ? (_labelledBy + \' \' + _valId) : null"',
+          '        :aria-label="_labelledBy ? null : ariaName">',
+          '  <span class="combobox-value" :id="_valId" x-text="selectedLabel || placeholder"></span>',
           '  <svg class="combobox-chevron" :class="{\'combobox-chevron--open\': open}" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M1.5 3.5L5 7L8.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
           '</button>',
           // Das Dropdown existiert nur, solange es offen ist (`x-if`, nicht

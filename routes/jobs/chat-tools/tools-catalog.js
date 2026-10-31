@@ -439,7 +439,8 @@ function tool_get_book_settings(_input, ctx) {
     erzaehlzeit_label:        labels.erzaehlzeit,
     buch_kontext:             settings.buch_kontext || null,
     is_finished:              settings.is_finished ? 1 : 0,
-    daily_goal_chars:         settings.daily_goal_chars || null,
+    // 0 = bewusst kein Tagesziel, null = nicht gesetzt — beides bleibt unterscheidbar.
+    daily_goal_chars:         settings.daily_goal_chars ?? null,
   };
 }
 

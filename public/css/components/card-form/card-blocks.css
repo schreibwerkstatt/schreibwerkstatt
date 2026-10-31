@@ -32,11 +32,6 @@
    Nachbar-Selektor traegt immer der FOLGENDE sichtbare Block den Abstand;
    ein ausgeblendeter Nachbar erzeugt keinen. */
 .card-section + .card-section { margin-top: var(--card-gap-section); }
-/* Enger Anschluss: der Block gehoert noch zum vorigen (Unterzeile, Zusatz-
-   Filter, Fussnote der Tabelle darueber). Modifier sagt „der Abstand VOR mir
-   ist eng" — steht darum am folgenden Block. Nach der Basisregel notiert,
-   gleiche Spezifitaet, Quell-Reihenfolge entscheidet. */
-.card-section + .card-section--tight { margin-top: var(--card-gap-tight); }
 
 /* === 2. Abschnitts-Kopfzeile ================================================
    Titel links, Aktionen/Zaehler rechts. War 25x in Feature-Dateien mit fuenf
@@ -52,9 +47,6 @@
   margin-bottom: var(--card-gap-tight);
 }
 .card-section-head--baseline { align-items: baseline; }
-/* Kopfzeile ohne eigenen Abstand — der Inhalt darunter bringt ihn mit
-   (Grid/Flex mit eigenem `gap`), oder der Block ist ein Popover mit Padding. */
-.card-section-head--flush { margin-bottom: 0; }
 
 /* === 3. Abschnitts-Titel ====================================================
    Die gesperrte Caps-Zeile ueber einem Abschnitt — kleine Schwester des
@@ -76,6 +68,8 @@
    die Kopfzeile setzt, ihren eigenen `margin: 0`-Nachtrag. */
 .card-section-head > :is(h1, h2, h3, h4, h5, h6, p),
 .card-section-head .card-section-title { margin-block: 0; }
+/* Als Label im Fliesstext: Caps-Zeile vor dem Wert in derselben Zeile. */
+.card-section-title--inline { display: inline; }
 
 /* === 4. Hinweistext =========================================================
    Der graue Erklaersatz unter einer Ueberschrift oder neben einem Feld. Zwei
@@ -103,7 +97,6 @@
 .card-form-field-note,
 .card-empty-hint { font-size: var(--font-size-mini); }
 /* Rechtsbuendig unter dem Eingabefeld (Zeichenzaehler, Einheit). */
-.card-hint--right,
 .card-form-hint { text-align: right; }
 /* Warnender Hinweis — Bedeutung, nicht Karten-Akzent (wie `status-msg.css`). */
 .card-hint--warn { color: var(--color-warn-text); }

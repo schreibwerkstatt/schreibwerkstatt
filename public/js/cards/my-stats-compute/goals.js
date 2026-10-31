@@ -1,7 +1,7 @@
 // Pro-Buch-Ziele + Fertigstellungs-Prognose. Facade: cards/my-stats-compute.js.
 // Regeln: docs/my-stats.md „Bücher & Ziele / Prognose".
 
-import { localIsoDate, localIsoDaysAgo } from '../../utils.js';
+import { localIsoDate, localIsoDaysAgo, resolveDailyGoal } from '../../utils.js';
 import { isoAddDays, isoDaysBetween, latestSnapshotPerBook, earliestSnapshotPerBook,
          snapshotPerBookOnOrBefore } from './series.js';
 
@@ -53,7 +53,8 @@ export function computeBookGoals(booksDetail, historyRows = [], todayLocal = new
 
     // Tagesziel: heute geschriebene Zeichen vs. daily_goal_chars. Ohne
     // Vortags-Snapshot kein verlaesslicher Tagesstand → 0 (analog today-ring.js).
-    const dailyGoal = Number(b.daily_goal_chars) || 0;
+    // NULL = Default (eine Normseite), 0 = bewusst keins — wie Header und Übersicht.
+    const dailyGoal = resolveDailyGoal(b.daily_goal_chars);
     const hasDailyGoal = dailyGoal > 0;
     const prevChars = baseSnap.has(b.book_id) ? (Number(baseSnap.get(b.book_id).chars) || 0) : null;
     const charsToday = prevChars == null ? 0 : Math.max(0, chars - prevChars);

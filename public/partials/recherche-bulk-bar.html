@@ -13,7 +13,7 @@
          @combobox-change="bulkSetStatus()"></div>
     <span class="recherche-bulkbar__group">
       <input type="text" class="recherche-bulkbar__tag" x-model="bulkTag"
-             @keydown.enter.prevent="bulkAddTag()"
+             @keydown.enter="$enter($event, () => bulkAddTag())"
              :placeholder="$app.t('recherche.bulk.tagPlaceholder')" :aria-label="$app.t('recherche.bulk.tagPlaceholder')">
       <button type="button" class="btn-compact" @click="bulkAddTag()" :disabled="busy || !bulkCount() || !bulkTag.trim()" x-text="$app.t('recherche.bulk.addTag')"></button>
     </span>

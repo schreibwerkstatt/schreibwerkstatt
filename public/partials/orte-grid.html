@@ -11,16 +11,11 @@
          })">
     <thead>
       <tr>
-        <th class="sortable-th" :class="sortClass('typLabelText')" :aria-sort="ariaSort('typLabelText')"
-            @click="sortBy('typLabelText')" x-text="$app.t('orte.col.typ')"></th>
-        <th class="sortable-th" :class="sortClass('name')" :aria-sort="ariaSort('name')"
-            @click="sortBy('name')" x-text="$app.t('orte.col.name')"></th>
-        <th class="sortable-th" :class="sortClass('parentName')" :aria-sort="ariaSort('parentName')"
-            @click="sortBy('parentName')" x-text="$app.t('orte.col.parent')"></th>
-        <th class="sortable-th" :class="sortClass('landLabelText')" :aria-sort="ariaSort('landLabelText')"
-            @click="sortBy('landLabelText')" x-text="$app.t('orte.col.land')"></th>
-        <th class="sortable-th" :class="sortClass('stimmung')" :aria-sort="ariaSort('stimmung')"
-            @click="sortBy('stimmung')" x-text="$app.t('orte.col.stimmung')"></th>
+        <th x-bind="sortTh('typLabelText')" x-text="$app.t('orte.col.typ')"></th>
+        <th x-bind="sortTh('name')" x-text="$app.t('orte.col.name')"></th>
+        <th x-bind="sortTh('parentName')" x-text="$app.t('orte.col.parent')"></th>
+        <th x-bind="sortTh('landLabelText')" x-text="$app.t('orte.col.land')"></th>
+        <th x-bind="sortTh('stimmung')" x-text="$app.t('orte.col.stimmung')"></th>
         <th x-text="$app.t('orte.col.kapitel')"></th>
         <th x-text="$app.t('orte.col.erste')"></th>
         <th x-text="$app.t('orte.col.figuren')"></th>

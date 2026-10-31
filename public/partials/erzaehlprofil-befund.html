@@ -15,7 +15,7 @@
     <!-- Präsenz-Band: pro Hauptfigur eine Zeile mit Präsenz-Zellen über die Kapitel -->
     <template x-if="erzaehlprofilPresenceBand()">
       <div class="erzaehlprofil-section">
-        <div class="erzaehlprofil-section-head" x-text="$app.t('erzaehlprofil.presenceBandTitle')"></div>
+        <div class="card-section-title" x-text="$app.t('erzaehlprofil.presenceBandTitle')"></div>
         <div class="erzaehlprofil-band" role="table">
           <template x-for="(f, fi) in erzaehlprofilPresenceBand().figures" :key="'band:' + f.id">
             <div class="erzaehlprofil-band-row" role="row">
@@ -25,7 +25,7 @@
               </span>
               <div class="erzaehlprofil-band-cells">
                 <template x-for="(cell, ci) in f.present" :key="'bc:' + ci">
-                  <span class="erzaehlprofil-band-cell" :class="{ 'erzaehlprofil-band-cell--on': cell }"
+                  <span class="erzaehlprofil-band-cell" :class="{ 'erzaehlprofil-band-cell--on': cell, 'internal-link': erzaehlprofilPresenceBand().chapters[ci]?.chapter_id != null }"
                         :data-tip="erzaehlprofilPresenceBand().chapters[ci]?.kap || ''"
                         @click="erzaehlprofilPresenceBand().chapters[ci]?.chapter_id != null && $app.openChapterById(erzaehlprofilPresenceBand().chapters[ci].chapter_id)"></span>
                 </template>
@@ -44,7 +44,7 @@
     <!-- KI-Dach-Befund: priorisierte, an den Kennzahlen verankerte Synthese -->
     <template x-if="erzaehlprofilAutorenBefund()">
       <div class="erzaehlprofil-section erzaehlprofil-autoren-befund">
-        <div class="erzaehlprofil-section-head" x-text="$app.t('erzaehlprofil.autorenBefundTitle')"></div>
+        <div class="card-section-title" x-text="$app.t('erzaehlprofil.autorenBefundTitle')"></div>
         <p class="erzaehlprofil-autoren-summary" x-show="erzaehlprofilAutorenBefund().zusammenfassung"
            x-text="erzaehlprofilAutorenBefund().zusammenfassung"></p>
         <div class="entity-list">
@@ -102,7 +102,7 @@
                   <template x-for="f in a.flags" :key="'af:' + f">
                     <span class="erzaehlprofil-flag" x-text="erzaehlprofilFlagLabel(f)"></span>
                   </template>
-                  <span class="erzaehlprofil-befund-detail internal-link" x-show="a.longestGap"
+                  <span class="erzaehlprofil-befund-detail internal-link text-link" x-show="a.longestGap"
                         @click="a.longestGap?.fromChapterId != null && $app.openChapterById(a.longestGap.fromChapterId)"
                         x-text="$app.t('erzaehlprofil.arcGap', { from: a.longestGap?.fromKap, to: a.longestGap?.toKap, n: a.longestGap?.len })"></span>
                 </div>

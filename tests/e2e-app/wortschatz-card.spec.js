@@ -44,13 +44,13 @@ test('Wortschatz: Scan laeuft, alle Reiter rendern mit Daten', async ({ page }) 
   await expect.poll(() => termRows.count()).toBeGreaterThan(0);
 
   // Reiter 2: Wendungen.
-  await card.getByRole('button', { name: /Wendungen/ }).click();
+  await card.getByRole('tab', { name: /Wendungen/ }).click();
   const phraseRows = card.locator('div[x-show="wortschatzTab === \'phrases\'"] tbody tr');
   await expect.poll(() => phraseRows.count()).toBeGreaterThan(0);
 
   // Reiter 3: Einmalwoerter — in der Reihenfolge der Auswahl (Rang-Spalte). Ohne
   // Referenzkorpus gibt es kein „sonst nie", die Auswahl ist dann: laengstes zuerst.
-  await card.getByRole('button', { name: /Einmalwörter/ }).click();
+  await card.getByRole('tab', { name: /Einmalwörter/ }).click();
   const hapaxRows = card.locator('div[x-show="wortschatzTab === \'hapax\'"] tbody tr');
   await expect.poll(() => hapaxRows.count()).toBeGreaterThan(0);
   const hapax = await hapaxRows.evaluateAll(
@@ -65,10 +65,10 @@ test('Wortschatz: Scan laeuft, alle Reiter rendern mit Daten', async ({ page }) 
 
   // Reiter 5 + 6: Kapitel-Band und Figuren-Idiolekt rendern (Figuren darf leer sein —
   // dann steht der Hinweis mit der Mindestmenge da, keine leere Tabelle).
-  await card.getByRole('button', { name: /^Kapitel \(/ }).click();
+  await card.getByRole('tab', { name: /^Kapitel \(/ }).click();
   const chapterRows = card.locator('div[x-show="wortschatzTab === \'chapters\'"] tbody tr');
   await expect.poll(() => chapterRows.count()).toBeGreaterThan(0);
-  await card.getByRole('button', { name: /^Figuren \(/ }).click();
+  await card.getByRole('tab', { name: /^Figuren \(/ }).click();
   const figPane = card.locator('div[x-show="wortschatzTab === \'figures\'"]');
   await expect(figPane).toBeVisible();
   await expect.poll(async () => (await figPane.locator('tbody tr').count())
@@ -78,7 +78,7 @@ test('Wortschatz: Scan laeuft, alle Reiter rendern mit Daten', async ({ page }) 
   // einem Canvas misst — im Fixture-Harness gaebe es nichts zu messen. Der
   // Keyness-Modus ist hier gesperrt (kein Referenzkorpus, siehe oben) und muss
   // sichtbar bleiben statt zu verschwinden.
-  await card.getByRole('button', { name: /^Wolke$/ }).click();
+  await card.getByRole('tab', { name: /^Wolke$/ }).click();
   const words = card.locator('.wortschatz-cloud .wortschatz-cloud-word');
   await expect.poll(() => words.count(), { timeout: 30000 }).toBeGreaterThan(0);
   await expect(card.getByRole('button', { name: /Auffälligkeit/ })).toBeDisabled();

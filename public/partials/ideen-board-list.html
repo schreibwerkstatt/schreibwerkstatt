@@ -29,16 +29,11 @@
           <input type="checkbox" :checked="allVisibleSelected()" @change="toggleSelectAllVisible()"
                  :aria-label="$app.t('ideenBoard.bulk.selectAll')">
         </th>
-        <th class="sortable-th" :class="sortClass('laneIndex')" :aria-sort="ariaSort('laneIndex')"
-            @click="sortBy('laneIndex')" x-text="$app.t('ideenBoard.list.place')"></th>
-        <th class="sortable-th" :class="sortClass('text')" :aria-sort="ariaSort('text')"
-            @click="sortBy('text')" x-text="$app.t('ideenBoard.list.text')"></th>
-        <th class="sortable-th" :class="sortClass('statusRank')" :aria-sort="ariaSort('statusRank')"
-            @click="sortBy('statusRank')" x-text="$app.t('ideenBoard.list.status')"></th>
-        <th class="sortable-th" :class="sortClass('created')" :aria-sort="ariaSort('created')"
-            @click="sortBy('created')" x-text="$app.t('ideenBoard.list.created')"></th>
-        <th class="sortable-th" :class="sortClass('statusAt')" :aria-sort="ariaSort('statusAt')"
-            @click="sortBy('statusAt')" x-text="$app.t('ideenBoard.list.statusAt')"></th>
+        <th x-bind="sortTh('laneIndex')" x-text="$app.t('ideenBoard.list.place')"></th>
+        <th x-bind="sortTh('text')" x-text="$app.t('ideenBoard.list.text')"></th>
+        <th x-bind="sortTh('statusRank')" x-text="$app.t('ideenBoard.list.status')"></th>
+        <th x-bind="sortTh('created')" x-text="$app.t('ideenBoard.list.created')"></th>
+        <th x-bind="sortTh('statusAt')" x-text="$app.t('ideenBoard.list.statusAt')"></th>
       </tr>
     </thead>
     <tbody>

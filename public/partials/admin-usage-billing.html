@@ -59,14 +59,10 @@
              })">
         <thead>
           <tr>
-            <th class="sortable-th" :class="sortClass('key')" :aria-sort="ariaSort('key')"
-                @click="sortBy('key')" x-text="$app.t('admin.usage.job.model')"></th>
-            <th class="sortable-th" :class="sortClass('billedUsd')" :aria-sort="ariaSort('billedUsd')"
-                @click="sortBy('billedUsd')" x-text="$app.t('admin.usage.billing.billed')"></th>
-            <th class="sortable-th" :class="sortClass('ledgerUsd')" :aria-sort="ariaSort('ledgerUsd')"
-                @click="sortBy('ledgerUsd')" x-text="$app.t('admin.usage.billing.ledger')"></th>
-            <th class="sortable-th" :class="sortClass('diffUsd')" :aria-sort="ariaSort('diffUsd')"
-                @click="sortBy('diffUsd')" x-text="$app.t('admin.usage.billing.diff')"></th>
+            <th x-bind="sortTh('key')" x-text="$app.t('admin.usage.job.model')"></th>
+            <th x-bind="sortTh('billedUsd')" x-text="$app.t('admin.usage.billing.billed')"></th>
+            <th x-bind="sortTh('ledgerUsd')" x-text="$app.t('admin.usage.billing.ledger')"></th>
+            <th x-bind="sortTh('diffUsd')" x-text="$app.t('admin.usage.billing.diff')"></th>
           </tr>
         </thead>
         <tbody>
@@ -95,14 +91,10 @@
              })">
         <thead>
           <tr>
-            <th class="sortable-th" :class="sortClass('day')" :aria-sort="ariaSort('day')"
-                @click="sortBy('day')" x-text="$app.t('admin.usage.billing.dayUtc')"></th>
-            <th class="sortable-th" :class="sortClass('billedUsd')" :aria-sort="ariaSort('billedUsd')"
-                @click="sortBy('billedUsd')" x-text="$app.t('admin.usage.billing.billed')"></th>
-            <th class="sortable-th" :class="sortClass('ledgerUsd')" :aria-sort="ariaSort('ledgerUsd')"
-                @click="sortBy('ledgerUsd')" x-text="$app.t('admin.usage.billing.ledger')"></th>
-            <th class="sortable-th" :class="sortClass('diffUsd')" :aria-sort="ariaSort('diffUsd')"
-                @click="sortBy('diffUsd')" x-text="$app.t('admin.usage.billing.diff')"></th>
+            <th x-bind="sortTh('day')" x-text="$app.t('admin.usage.billing.dayUtc')"></th>
+            <th x-bind="sortTh('billedUsd')" x-text="$app.t('admin.usage.billing.billed')"></th>
+            <th x-bind="sortTh('ledgerUsd')" x-text="$app.t('admin.usage.billing.ledger')"></th>
+            <th x-bind="sortTh('diffUsd')" x-text="$app.t('admin.usage.billing.diff')"></th>
           </tr>
         </thead>
         <tbody>

@@ -256,10 +256,10 @@
 .ideen-board-folded {
   align-self: flex-start;
   font-size: var(--font-size-micro);
-  color: var(--color-muted);
+  color: var(--color-tag-text);
   background: var(--color-tag-bg);
   border: 1px dashed color-mix(in srgb, var(--ideen-status-accent, var(--color-border)) 55%, transparent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: 0 var(--space-xs);
   font-variant-numeric: tabular-nums;
 }
@@ -280,7 +280,7 @@
    (Klasse an <body> aus ideen-board/actions.js). */
 body.ideen-dnd-active .ideen-board-cell {
   min-height: 4rem;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   outline: 1px dashed color-mix(in srgb, var(--ideen-status-accent) 55%, transparent);
   outline-offset: var(--space-3);
 }
@@ -292,7 +292,7 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
   background: var(--color-accent-bg);
   outline: 1px dashed var(--color-accent);
   outline-offset: -1px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 
 /* ── Karte ──────────────────────────────────────────────────────────────── */
@@ -303,7 +303,7 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
   background: var(--color-card-bg);
   border: 1px solid var(--color-border);
   border-left: 3px solid var(--ideen-status-accent, var(--color-border));
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: var(--space-xs) var(--space-sm);
   position: relative;
   /* Nur transform animieren (Compositor-billig) — gleiche Ueberlegung wie an
@@ -378,7 +378,7 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
   display: flex;
   gap: var(--space-3);
   background: var(--color-card-bg);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   box-shadow: var(--shadow-sm);
 }
 /* Touch zeigt die Aktionen immer — schwebend laegen sie dauerhaft ueber der
@@ -400,7 +400,7 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
   line-height: 1.4;
   padding: 0 var(--space-xs);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-surface);
   color: var(--color-muted);
   cursor: pointer;
@@ -432,7 +432,7 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
   box-shadow: 0 12px 28px var(--color-shadow);
   background: var(--color-card-bg);
   border: 1px solid var(--card-accent, var(--card-accent-ideen));
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   opacity: 0.95;
   cursor: grabbing;
   transition: none;
@@ -458,7 +458,6 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
     --ideen-col-w: 10rem;
   }
 }
-}
 
 /* ── Stufen pro Buch ────────────────────────────────────────────────────── */
 /* Hinweis am Ende des Stufen-Menues (ideen-board-stages.html): Fliesstext
@@ -472,7 +471,6 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
   color: var(--color-muted);
 }
 
-@layer components {
 /* ── Alter einer offenen Pendenz ─────────────────────────────────────────── */
 .idee-board-age {
   margin-top: var(--space-2xs);

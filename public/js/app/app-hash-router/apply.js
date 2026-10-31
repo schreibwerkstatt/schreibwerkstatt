@@ -6,6 +6,8 @@
 // Anwendung getriggerte Watcher keinen Rueck-Schreibzyklus starten.
 import { EVT } from '../../events.js';
 import { EXCLUSIVE_CARDS } from '../../cards/feature-registry.js';
+import { openCardWith, CARD_REQUEST } from '../../cards/card-request.js';
+import { FIGUREN_TABS } from '../../graph/constants.js';
 
 // Hash-Views, deren Anwendung mechanisch identisch ist: „Karte oeffnen, falls sie
 // nicht offen ist". Nur die Zuordnung Hash-Name → Registry-Key steht hier; Flag und
@@ -52,6 +54,16 @@ const HASH_VIEW_TABS = {
 };
 
 export const hashApplyMethods = {
+  // Figuren-Karte auf einem Reiter öffnen. Der Reiter geht als Karten-Wunsch
+  // (card-request.js) rein: die Karte ist beim Deep-Link evtl. noch nicht gemountet.
+  async _applyFigurenTab(tab) {
+    this.$store.catalogUi.selectedFigurId = null;
+    await openCardWith(CARD_REQUEST.FIGUREN_TAB, tab, async () => {
+      if (!this.showFiguresCard) await this.toggleFiguresCard();
+      else { this._closeOtherMainCards('figures'); this._scrollToCardByKey('figures'); }
+    });
+  },
+
   async _applyHash() {
     const hash = (location.hash || '').replace(/^#/, '');
     if (!hash) {
@@ -248,11 +260,7 @@ export const hashApplyMethods = {
           break;
         case 'figur':
           if (arg) await this.openFigurById(arg);
-          else {
-            this.$store.catalogUi.selectedFigurId = null;
-            if (!this.showFiguresCard) await this.toggleFiguresCard();
-            else { this._closeOtherMainCards('figures'); this._scrollToCardByKey('figures'); }
-          }
+          else await this._applyFigurenTab('liste');
           break;
         case 'ort':
           if (arg) await this.openOrtById(arg);
@@ -276,9 +284,8 @@ export const hashApplyMethods = {
           else { this._closeOtherMainCards('songs'); this._scrollToCardByKey('songs'); }
           break;
         case 'figuren':
-          this.$store.catalogUi.selectedFigurId = null;
-          if (!this.showFiguresCard) await this.toggleFiguresCard();
-          else { this._closeOtherMainCards('figures'); this._scrollToCardByKey('figures'); }
+          // Optionaler Reiter (#…/figuren/<reiter>); ohne Argument die Liste.
+          await this._applyFigurenTab(FIGUREN_TABS.includes(arg) ? arg : 'liste');
           break;
         case 'werkstatt':
           if (!this.showFigurWerkstattCard) await this.toggleFigurWerkstattCard();

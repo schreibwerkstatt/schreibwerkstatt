@@ -57,7 +57,7 @@
 }
 .chat-skeleton-line {
   height: 13px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: linear-gradient(90deg, var(--color-shimmer-from) 25%, var(--color-neutral-bg) 50%, var(--color-shimmer-from) 75%);
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.4s ease-in-out infinite;
@@ -101,7 +101,7 @@
   font-size: var(--font-size-micro);
   background: none;
   border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   color: var(--color-subtle);
   cursor: pointer;
   vertical-align: middle;
@@ -120,7 +120,7 @@
   padding: 0 var(--space-5);
   font-size: var(--font-size-micro);
   border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   color: var(--color-subtle);
   vertical-align: middle;
   line-height: 1.6;
@@ -157,7 +157,7 @@
   font-size: var(--font-em-90);
   background: var(--color-hover-strong);
   padding: var(--space-1) var(--space-5);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 
 .chat-link {
@@ -171,7 +171,7 @@
   padding: var(--space-3) var(--space-10);
   background: var(--color-hover-strong);
   border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   overflow-x: auto;
 }
 .chat-pre code {
@@ -269,6 +269,7 @@
 .chat-vorschlag-diff {
   margin-bottom: var(--space-xs);
 }
+.chat-vorschlag-diff:hover { background: var(--color-hover); }
 .chat-vorschlag-begruendung {
   color: var(--color-muted);
   font-size: var(--font-size-xs);
@@ -452,9 +453,6 @@
     font-size: var(--font-size-reading);
   }
 }
-
-}
-
 /* Im Buch-Chat generierte Bilder (Weltaufbau-/Chat-Visualisierung) */
 .chat-images {
   display: flex;
@@ -473,7 +471,7 @@
   display: block;
   max-width: 100%;
   height: auto;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   border: 1px solid var(--color-border);
 }
 .chat-image-cap {
@@ -536,4 +534,5 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-6);
+}
 }

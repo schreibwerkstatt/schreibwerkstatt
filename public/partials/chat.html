@@ -66,7 +66,7 @@
       :aria-label="$app.t('chat.placeholder')"
       rows="2"
       :disabled="chatLoading"
-      @keydown.enter="if(!$event.isComposing && $event.keyCode !== 229 && !$event.shiftKey && !$event.ctrlKey && !$event.metaKey) { $event.preventDefault(); sendChatMessage(); }"
+      @keydown.enter="$enter($event, () => sendChatMessage(), { multiline: true })"
     ></textarea>
     <button type="button" class="chat-send-btn" @click="sendChatMessage()" :disabled="chatLoading || !chatInput.trim()" :aria-label="$app.t('chat.send')">
       <span x-show="chatLoading" class="spinner"></span>
@@ -77,17 +77,10 @@
 
   <div class="card-history-section" x-data="chatHistorySearch('page')">
     <!-- @include chat-history-search -->
-    <div x-show="!histActive"><template x-for="s in chatSessions" :key="s.id">
-      <div
-        class="chat-session-item hover-reveal-host"
-        :class="s.id === chatSessionId ? 'chat-session-item--active' : ''"
-        @click="loadChatSession(s.id)"
-      >
-        <div class="chat-session-preview" x-text="(s.title || s.preview || $app.t('chat.previewEmpty')).slice(0, 80)"></div>
-        <div class="chat-session-meta"><span x-show="isChatSessionRunning(s.id)" class="spinner chat-session-running" role="status" :aria-label="$app.t('chat.sessionRunning')" :data-tip="$app.t('chat.sessionRunning')"></span><span x-text="$app.formatDate(s.last_message_at)"></span></div>
-        <button type="button" class="chat-session-delete btn-card-close hover-reveal" :disabled="isChatSessionRunning(s.id)" @click.stop="deleteChatSession(s.id)" :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
-      </div>
-    </template></div>
+    <div x-show="!histActive"
+         x-data="{ sessionList: { sessions: () => chatSessions, activeId: () => chatSessionId, running: id => isChatSessionRunning(id), deleteDisabled: id => isChatSessionRunning(id), load: id => loadChatSession(id), remove: id => deleteChatSession(id), untitledKey: 'chat.previewEmpty' } }">
+      <!-- @include chat-session-list -->
+    </div>
   </div>
 </div>
 
@@ -191,7 +184,7 @@
       :aria-label="$app.t('chat.placeholderBook')"
       rows="2"
       :disabled="bookChatLoading"
-      @keydown.enter="if(!$event.isComposing && $event.keyCode !== 229 && !$event.shiftKey && !$event.ctrlKey && !$event.metaKey) { $event.preventDefault(); sendBookChatMessage(); }"
+      @keydown.enter="$enter($event, () => sendBookChatMessage(), { multiline: true })"
     ></textarea>
     <button type="button" class="chat-send-btn" @click="sendBookChatMessage()" :disabled="bookChatLoading || !bookChatInput.trim() || isBookChatSessionActive(bookChatSessionId)" :aria-label="$app.t('chat.send')">
       <span x-show="bookChatLoading" class="spinner"></span>
@@ -202,16 +195,9 @@
 
   <div x-show="bookChatSessions.length > 0" class="card-history-section" x-data="chatHistorySearch('book')">
     <!-- @include chat-history-search -->
-    <div x-show="!histActive"><template x-for="s in bookChatSessions" :key="s.id">
-      <div
-        class="chat-session-item hover-reveal-host"
-        :class="s.id === bookChatSessionId ? 'chat-session-item--active' : ''"
-        @click="loadBookChatSession(s.id)"
-      >
-        <div class="chat-session-preview" x-text="(s.title || s.preview || $app.t('chat.previewEmpty')).slice(0, 80)"></div>
-        <div class="chat-session-meta"><span x-show="isBookChatSessionActive(s.id)" class="spinner chat-session-running" role="status" :aria-label="$app.t('chat.sessionRunning')" :data-tip="$app.t('chat.sessionRunning')"></span><span x-text="$app.formatDate(s.last_message_at)"></span></div>
-        <button type="button" class="chat-session-delete btn-card-close hover-reveal" :disabled="isBookChatSessionRunning(s.id)" @click.stop="deleteBookChatSession(s.id)" :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
-      </div>
-    </template></div>
+    <div x-show="!histActive"
+         x-data="{ sessionList: { sessions: () => bookChatSessions, activeId: () => bookChatSessionId, running: id => isBookChatSessionActive(id), deleteDisabled: id => isBookChatSessionRunning(id), load: id => loadBookChatSession(id), remove: id => deleteBookChatSession(id), untitledKey: 'chat.previewEmpty' } }">
+      <!-- @include chat-session-list -->
+    </div>
   </div>
 </div>

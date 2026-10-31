@@ -2,7 +2,7 @@
 /* === Redundanz-Radar ===
    Buchweite Doppelungs-Suche: Liste von Seiten-Paaren mit Score-Badge + zwei
    nebeneinanderliegenden Passagen-Spalten (eingeklappt auf fünf Zeilen). Akzentfarbe = --card-accent-redundanz
-   (Mapping in card-accents.css). Score-Badges sind eckig (var(--radius-sm)=0).
+   (Mapping in card-accents.css). Score-Badges sind eckig (var(--radius-none)=0).
 */
 
 .redundanz-result {
@@ -49,7 +49,7 @@
   min-width: 3rem;
   text-align: center;
   padding: var(--space-xs) var(--space-6);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-sm);
   font-weight: var(--fw-semibold);
   font-variant-numeric: tabular-nums;
@@ -198,9 +198,6 @@
   background: var(--color-subtle);
   color: var(--color-muted);
 }
-
-}
-
 /* Richtungswahl beim Zusammenführen eines Figuren-Paars: volle Breite unter
    Score-Spalte und Paar, Knöpfe umbrechend (Mobile). */
 .redundanz-merge-choice {
@@ -209,4 +206,5 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-6) var(--space-sm);
+}
 }

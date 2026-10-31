@@ -58,16 +58,19 @@
 
       <!-- Spannungskurve (Intensität 1–5 pro Kapitel) -->
       <div class="erzaehlprofil-section">
-        <div class="erzaehlprofil-section-head" x-text="$app.t('erzaehlprofil.curveTitle')"></div>
+        <div class="card-section-title" x-text="$app.t('erzaehlprofil.curveTitle')"></div>
         <div class="erzaehlprofil-curve" role="list">
           <template x-for="(pt, i) in erzaehlprofilCurve()" :key="'c:' + (pt.chapter_id ?? i)">
-            <button type="button" class="erzaehlprofil-curve-col" role="listitem"
-                    :class="{ 'erzaehlprofil-curve-col--empty': !pt.intensitaet }"
-                    :data-tip="pt.kapitel + (pt.begruendung ? ' — ' + pt.begruendung : '')"
-                    @click="pt.chapter_id != null && $app.openChapterById(pt.chapter_id)">
-              <span class="erzaehlprofil-curve-bar" :style="{ '--bar-h': (pt.intensitaet / 5 * 100) + '%' }"
-                    :data-level="pt.intensitaet"></span>
-            </button>
+            <div class="erzaehlprofil-curve-item" role="listitem">
+              <button type="button" class="erzaehlprofil-curve-col"
+                      :class="{ 'erzaehlprofil-curve-col--empty': !pt.intensitaet }"
+                      :data-tip="pt.kapitel + (pt.begruendung ? ' — ' + pt.begruendung : '')"
+                      :aria-label="pt.intensitaet ? $app.t('erzaehlprofil.curveItem', { kapitel: pt.kapitel, n: pt.intensitaet }) : $app.t('erzaehlprofil.curveItemEmpty', { kapitel: pt.kapitel })"
+                      @click="pt.chapter_id != null && $app.openChapterById(pt.chapter_id)">
+                <span class="erzaehlprofil-curve-bar" :style="{ '--bar-h': (pt.intensitaet / 5 * 100) + '%' }"
+                      :data-level="pt.intensitaet"></span>
+              </button>
+            </div>
           </template>
         </div>
         <div class="erzaehlprofil-curve-legend">
@@ -78,7 +81,7 @@
 
       <!-- Kapitel-Profil-Liste -->
       <div class="erzaehlprofil-section">
-        <div class="erzaehlprofil-section-head" x-text="$app.t('erzaehlprofil.chaptersTitle')"></div>
+        <div class="card-section-title" x-text="$app.t('erzaehlprofil.chaptersTitle')"></div>
         <div class="entity-list entity-list--accented">
           <template x-for="(ch, i) in erzaehlprofilChapters()" :key="erzaehlprofilChapterKey(ch, i)">
             <div class="erzaehlprofil-chapter"

@@ -40,9 +40,11 @@ router.post('/event', jsonBody, (req, res) => {
 
 const VALID_LOCALES   = ['de', 'en'];
 const VALID_THEMES    = ['auto', 'light', 'dark'];
-const VALID_LANGUAGES = ['de', 'en'];
-const VALID_REGIONS   = ['CH', 'DE', 'US', 'GB'];
-const VALID_BUCHTYPEN = ['roman', 'kurzgeschichten', 'gesellschaft', 'krimi', 'historisch', 'fantasy_scifi', 'erotik', 'jugend', 'autobiografie', 'andere'];
+// Sprache/Region/Buchtyp: dieselben Listen wie PUT /booksettings (ein Ort,
+// lib/book-settings-values.js) — ein Default, den das Buch nicht annimmt, waere
+// ein Default, der nie greift.
+const { VALID_LANGUAGES, VALID_REGIONS, validBuchtypen } = require('../lib/book-settings-values');
+const VALID_BUCHTYPEN = validBuchtypen();
 const VALID_FOCUS_GRANULARITIES = ['paragraph', 'sentence', 'window-3', 'typewriter-only'];
 
 const FIELDS = [
@@ -230,7 +232,7 @@ router.post('/onboarding/demo-book', async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (e) {
     logger.error(`Beispielbuch anlegen fehlgeschlagen: ${e.message}`, { user: email });
-    res.status(500).json({ error_code: 'DEMO_BOOK_FAILED', detail: e.message });
+    res.status(500).json({ error_code: 'DEMO_BOOK_FAILED' });
   }
 });
 
@@ -253,7 +255,7 @@ router.post('/invite', jsonBody, (req, res) => {
     res.json({ invite });
   } catch (e) {
     logger.error(`Self-Invite: ${e.message}`, { user: inviter });
-    res.status(500).json({ error_code: 'INVITE_FAILED', detail: e.message });
+    res.status(500).json({ error_code: 'INVITE_FAILED' });
   }
 });
 
@@ -301,7 +303,7 @@ router.post('/device-tokens', jsonBody, (req, res) => {
     res.json({ token: tok });
   } catch (e) {
     logger.error(`Device-Token create: ${e.message}`, { user: email });
-    res.status(500).json({ error_code: 'DEVICE_TOKEN_CREATE_FAILED', detail: e.message });
+    res.status(500).json({ error_code: 'DEVICE_TOKEN_CREATE_FAILED' });
   }
 });
 
@@ -429,10 +431,9 @@ router.delete('/account', jsonBody, async (req, res) => {
         error_code: 'ACCOUNT_DELETE_FAILED',
         reason: e.code,
         failed_books: (e.failedBooks || []).length,
-        detail: e.message,
       });
     }
-    res.status(500).json({ error_code: 'ACCOUNT_DELETE_FAILED', detail: e.message });
+    res.status(500).json({ error_code: 'ACCOUNT_DELETE_FAILED' });
   }
 });
 

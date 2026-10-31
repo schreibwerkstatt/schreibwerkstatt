@@ -13,12 +13,12 @@
               :data-tip="offlineBookTip($store.nav.selectedBookId)" :aria-label="offlineBookTip($store.nav.selectedBookId)">
         <svg class="icon" aria-hidden="true"><use :href="(isBookOffline($store.nav.selectedBookId) || isBookAutoOffline($store.nav.selectedBookId)) ? '/icons.svg#cloud-check' : '/icons.svg#cloud-download'"/></svg>
       </button>
-      <button type="button" class="icon-btn icon-btn--ghost" @click="toggleBookOrganizerCard()" :disabled="!$store.nav.selectedBookId"
+      <button :aria-pressed="showBookOrganizerCard" type="button" class="icon-btn icon-btn--ghost" @click="toggleBookOrganizerCard()" :disabled="!$store.nav.selectedBookId"
               :class="{ 'is-active': showBookOrganizerCard }"
               :data-tip="t('tile.bookOrganizer.title')" :aria-label="t('tile.bookOrganizer')">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#list-tree"/></svg>
       </button>
-      <button type="button" class="icon-btn icon-btn--ghost" @click="toggleBookEditorCard()" :disabled="!$store.nav.pages.length"
+      <button :aria-pressed="showBookEditorCard" type="button" class="icon-btn icon-btn--ghost" @click="toggleBookEditorCard()" :disabled="!$store.nav.pages.length"
               :class="{ 'is-active': showBookEditorCard }"
               :data-tip="t('tile.bookEditor.title')" :aria-label="t('tile.bookEditor')">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#scroll"/></svg>

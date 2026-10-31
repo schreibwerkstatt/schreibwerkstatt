@@ -29,7 +29,7 @@
   padding: var(--space-2xs);
   background: var(--color-hover);
   border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 /* Inner controls fit innerhalb der 28px-Chip-Höhe (= Höhe von Ring + Avatar),
    damit alle Header-Controls gleich hoch sind. min-width/min-height neutralisiert
@@ -53,7 +53,7 @@
   background: var(--color-surface);
   border: 0.5px solid var(--color-border);
   color: var(--color-text);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font: inherit;
   font-size: var(--font-size-sm);
   cursor: pointer;
@@ -129,7 +129,7 @@
   padding: 0;
   background: var(--icon-ghost-fill);
   border: 0.5px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   color: var(--color-text);
   font: inherit;
   font-size: var(--font-size-xs);
@@ -150,7 +150,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: calc(var(--radius-sm) - 1px);
+  border-radius: var(--radius-none);
   display: block;
 }
 
@@ -188,7 +188,7 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-hover);
   color: var(--color-text);
   font-size: var(--font-size-xs);
@@ -200,7 +200,7 @@
 .avatar-menu-header-img {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   object-fit: cover;
   flex-shrink: 0;
   display: block;
@@ -243,14 +243,14 @@
   gap: var(--space-2xs);
   background: var(--color-hover);
   padding: var(--space-2xs);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 .theme-segmented-btn {
   flex: 1;
   background: transparent;
   border: none;
   padding: var(--pad-badge);
-  border-radius: calc(var(--radius-sm) - 2px);
+  border-radius: var(--radius-none);
   font: inherit;
   font-size: var(--font-size-mini);
   color: var(--color-muted);
@@ -280,7 +280,7 @@
   padding: var(--space-sm) var(--space-10);
   background: transparent;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font: inherit;
   font-size: var(--font-size-sm);
   color: var(--color-text);
@@ -298,7 +298,7 @@
   color: var(--color-subtle);
   font-family: var(--font-mono, ui-monospace, monospace);
   border: 0.5px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   padding: 0 var(--space-6);
   line-height: 16px;
   min-width: 18px;
@@ -361,7 +361,7 @@
   padding: 0;
   background: var(--color-surface);
   border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   cursor: pointer;
   transition: background var(--transition-base), border-color var(--transition-base);
 }
@@ -454,7 +454,7 @@
 }
 .today-ring-hero-count { font-size: var(--font-size-sm); color: var(--color-muted); }
 .today-ring-hero-count strong { font-size: var(--font-size-lg); font-weight: var(--fw-bold); color: var(--color-text); }
-.today-ring-hero-streak { font-size: var(--font-size-sm); font-weight: var(--fw-semibold); color: var(--color-accent); }
+.today-ring-hero-streak { font-size: var(--font-size-sm); font-weight: var(--fw-semibold); color: var(--color-accent-text); }
 
 /* 7-Tage-Chart: Balken + Wochentagskürzel unter jedem Balken. */
 .today-ring-week-wrap { display: flex; flex-direction: column; gap: var(--space-xs); }
@@ -481,7 +481,7 @@
   height: var(--bar);
   min-height: 3px;
   background: var(--color-border);
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  border-radius: var(--radius-none) var(--radius-none) 0 0;
   transition: background var(--transition-base);
 }
 .today-ring-week-bar--reached { background: var(--color-success); }
@@ -492,7 +492,7 @@
   text-transform: uppercase;
   color: var(--color-subtle);
 }
-.today-ring-week-day--today { font-weight: var(--fw-bold); color: var(--color-accent); }
+.today-ring-week-day--today { font-weight: var(--fw-bold); color: var(--color-accent-text); }
 /* Kartenbündiger Footer-Link: Trenner über die volle Popover-Breite (negative
    Ränder heben das Popover-Padding auf), Text links, Pfeil rechts (nudget bei
    Hover), accent-getönter Hover — gleiches Muster wie der Entity-Popover-Link. */
@@ -510,7 +510,7 @@
   font: inherit;
   font-size: var(--font-size-sm);
   font-weight: var(--fw-semibold);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   cursor: pointer;
   transition: background var(--transition-base);
 }

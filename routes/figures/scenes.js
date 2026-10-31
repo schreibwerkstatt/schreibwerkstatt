@@ -12,7 +12,7 @@ const express = require('express');
 const { db } = require('../../db/schema');
 const { mergeScenes } = require('../../db/entity-merge');
 const { toIntId } = require('../../lib/validate');
-const { listScenesWithRefs } = require('../../db/scene-catalog');
+const { listScenesWithRefs, deleteStaleScenes } = require('../../db/scene-catalog');
 const { sessionEmail } = require('../../lib/acl');
 const searchIndex = require('../../lib/search');
 const { enqueueEmbedIndexJob } = require('../jobs/embed-index');
@@ -84,13 +84,7 @@ function register(router) {
   // räumt die aufgelaufenen Altlasten. Nur stale wird angefasst. CASCADE räumt die Bridges mit.
   // Muss VOR '/scenes/:book_id/:id' stehen, sonst matcht 'stale' als :id.
   router.delete('/scenes/:book_id/stale', (req, res) => {
-    const ids = db.prepare(
-      'SELECT id FROM figure_scenes WHERE book_id = ? AND user_email IS ? AND stale = 1'
-    ).all(req.bookId, sessionEmail(req)).map(r => r.id);
-    db.transaction(() => {
-      const del = db.prepare('DELETE FROM figure_scenes WHERE id = ?');
-      for (const id of ids) del.run(id);
-    })();
+    const ids = deleteStaleScenes(req.bookId, sessionEmail(req));
     for (const id of ids) searchIndex.remove('scene', id);
     res.json({ ok: true, deleted: { scenes: ids.length } });
   });

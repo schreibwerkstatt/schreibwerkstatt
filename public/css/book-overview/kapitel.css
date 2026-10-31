@@ -19,7 +19,7 @@
   grid-column: 1 / -1;
   align-items: center;
   padding: var(--space-6) var(--space-sm);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   cursor: pointer;
   min-width: 0;
   border-left: 2px solid transparent;
@@ -51,7 +51,7 @@
 }
 .overview-chapter-bar-track {
   height: 8px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-border);
   overflow: visible;
   min-width: 60px;
@@ -61,7 +61,7 @@
   height: 100%;
   background: var(--color-accent);
   transition: width 0.2s ease;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 /* Diverging-Findings: über Median = mehr Befunde als typisch → Warnfarbe.
    Unter Median = weniger als typisch → gemutete Erfolgsfarbe. */
@@ -86,7 +86,7 @@
   top: 0;
   bottom: 0;
   height: auto;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   transition: left 0.2s ease, width 0.2s ease;
 }
 /* Längen-Verteilung: über/unter Median nur in der Deckkraft unterschieden —

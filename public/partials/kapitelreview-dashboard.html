@@ -172,7 +172,11 @@
         </div>
         <ul class="kapitel-dash-rank">
           <template x-for="f in kdFiguren().rows" :key="f.id">
-            <li class="kapitel-dash-rank-row internal-link"
+            <!-- Ranglisten-Zeile (Avatar, Name, Balken, Zahl) ist als Ganzes das
+                 Klickziel und bleibt deshalb .internal-link statt x-entity-ref —
+                 aber am inneren Element: am <li> nähme role=button die
+                 Listen-Semantik weg. -->
+            <li><div class="kapitel-dash-rank-row internal-link"
                 @click="$app.openFigurById(f.id)"
                 :data-tip="f.fullName + (f.extra > 0 ? ' · ' + $app.t('kapitelReview.dash.scenes', { n: f.extra }) : '')">
               <span class="kapitel-dash-rank-avatar" x-text="tileInitials(f.fullName)"></span>
@@ -181,7 +185,7 @@
                 <span class="kapitel-dash-rank-fill" :style="{ width: f.pct + '%' }"></span>
               </span>
               <span class="kapitel-dash-rank-count" x-text="_fmtNum(f.count)"></span>
-            </li>
+            </div></li>
           </template>
         </ul>
         <div class="card-hint" x-text="$app.t('kapitelReview.dash.figurenHint')"></div>
@@ -232,10 +236,9 @@
         </div>
         <ul class="kapitel-dash-scenes">
           <template x-for="s in kdSzenen().list" :key="s.id">
-            <li class="kapitel-dash-scene internal-link"
-                @click="$app.openSzeneById(s.id)" :data-tip="s.titel">
+            <li class="kapitel-dash-scene">
               <span class="kapitel-dash-scene-dot" :data-wertung="s.wertung || 'ohne'" aria-hidden="true"></span>
-              <span class="kapitel-dash-scene-titel" x-text="s.titel"></span>
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'szene', id: s.id, label: s.titel }"></button>
             </li>
           </template>
         </ul>

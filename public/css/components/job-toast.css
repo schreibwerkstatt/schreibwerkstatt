@@ -46,7 +46,7 @@
   cursor: pointer;
   font-size: var(--font-size-reading);
   line-height: 1;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 .job-toast-close:hover { color: var(--color-text); background: var(--color-hover); }
 

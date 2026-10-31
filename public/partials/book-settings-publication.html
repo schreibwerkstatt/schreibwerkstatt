@@ -6,8 +6,8 @@
         <h3 class="card-section-title" x-text="$app.t('publication.section.images')"></h3>
 
         <div class="card-form-row">
-          <label class="card-form-label" x-text="$app.t('publication.cover')"></label>
-          <div class="pub-image-block">
+          <span class="card-form-label" id="pub-cover-label" x-text="$app.t('publication.cover')"></span>
+          <div class="pub-image-block" role="group" aria-labelledby="pub-cover-label">
             <div class="pub-image-preview">
               <template x-if="bookPublication.has_cover">
                 <img :src="publicationCoverUrl()" alt="">
@@ -17,20 +17,21 @@
               </template>
             </div>
             <div class="pub-image-actions">
-              <div class="pub-upload-btn"
-                   x-data="fileDrop({ accept: 'image/jpeg,image/png,image/webp', drag: false })"
+              <div class="file-btn"
+                   x-data="fileDrop({ accept: 'image/jpeg,image/png,image/webp', drag: false, disabled: () => pubCoverUploading })"
+                   :aria-busy="pubCoverUploading ? 'true' : 'false'"
                    @file-drop="uploadPublicationCover($event.detail.file)">
                 <span x-text="pubCoverUploading ? $app.t('publication.uploading') : (bookPublication.has_cover ? $app.t('publication.replace') : $app.t('publication.upload'))"></span>
               </div>
-              <button type="button" class="btn-compact" x-show="bookPublication.has_cover" @click="removePublicationCover()" x-text="$app.t('publication.remove')"></button>
+              <button type="button" class="btn-compact" x-show="bookPublication.has_cover" :disabled="pubCoverUploading" @click="removePublicationCover()" x-text="$app.t('publication.remove')"></button>
             </div>
           </div>
           <p class="card-form-error" x-show="pubCoverError" x-text="pubCoverError"></p>
         </div>
 
         <div class="card-form-row">
-          <label class="card-form-label" x-text="$app.t('publication.authorImage')"></label>
-          <div class="pub-image-block">
+          <span class="card-form-label" id="pub-author-label" x-text="$app.t('publication.authorImage')"></span>
+          <div class="pub-image-block" role="group" aria-labelledby="pub-author-label">
             <div class="pub-image-preview">
               <template x-if="bookPublication.has_author_image">
                 <img :src="publicationAuthorImageUrl()" alt="">
@@ -40,12 +41,13 @@
               </template>
             </div>
             <div class="pub-image-actions">
-              <div class="pub-upload-btn"
-                   x-data="fileDrop({ accept: 'image/jpeg,image/png,image/webp', drag: false })"
+              <div class="file-btn"
+                   x-data="fileDrop({ accept: 'image/jpeg,image/png,image/webp', drag: false, disabled: () => pubAuthorUploading })"
+                   :aria-busy="pubAuthorUploading ? 'true' : 'false'"
                    @file-drop="uploadPublicationAuthorImage($event.detail.file)">
                 <span x-text="pubAuthorUploading ? $app.t('publication.uploading') : (bookPublication.has_author_image ? $app.t('publication.replace') : $app.t('publication.upload'))"></span>
               </div>
-              <button type="button" class="btn-compact" x-show="bookPublication.has_author_image" @click="removePublicationAuthorImage()" x-text="$app.t('publication.remove')"></button>
+              <button type="button" class="btn-compact" x-show="bookPublication.has_author_image" :disabled="pubAuthorUploading" @click="removePublicationAuthorImage()" x-text="$app.t('publication.remove')"></button>
             </div>
           </div>
           <p class="card-form-error" x-show="pubAuthorError" x-text="pubAuthorError"></p>
@@ -66,12 +68,12 @@
           <p class="card-form-hint" x-text="$app.t('publication.authorFileAsHint')"></p>
         </div>
         <div class="card-form-row">
-          <label class="card-form-label" x-text="$app.t('publication.coAuthors')"></label>
-          <div class="pub-repeater">
+          <span class="card-form-label" id="pub-coauthors-label" x-text="$app.t('publication.coAuthors')"></span>
+          <div class="pub-repeater" role="group" aria-labelledby="pub-coauthors-label">
             <template x-for="(c, i) in (bookPublication.co_authors || [])" :key="i">
               <div class="pub-repeater-row">
-                <input type="text" class="card-form-input" x-model="c.name" maxlength="200" :placeholder="$app.t('publication.coAuthorName')" data-spellcheck="spelling">
-                <input type="text" class="card-form-input" x-model="c.file_as" maxlength="200" :placeholder="$app.t('publication.coAuthorFileAs')">
+                <input type="text" class="card-form-input" x-model="c.name" maxlength="200" :placeholder="$app.t('publication.coAuthorName')" :aria-label="$app.t('publication.coAuthorName')" data-spellcheck="spelling">
+                <input type="text" class="card-form-input" x-model="c.file_as" maxlength="200" :placeholder="$app.t('publication.coAuthorFileAs')" :aria-label="$app.t('publication.coAuthorFileAs')">
                 <button type="button" class="btn-compact danger" @click="removeCoAuthor(i)" x-text="$app.t('common.remove')"></button>
               </div>
             </template>
@@ -120,19 +122,19 @@
           <template x-for="(s, i) in (bookPublication.extra_sections || [])" :key="i">
             <div class="pub-matter-card">
               <div class="card-section-head">
-                <div class="seg-toggle">
-                  <button type="button" :class="{ 'seg-toggle--active': (s.placement || 'back') === 'front' }"
+                <div class="seg-toggle" role="group" :aria-label="$app.t('publication.matter.placement')">
+                  <button type="button" :class="{ 'seg-toggle--active': (s.placement || 'back') === 'front' }" :aria-pressed="(s.placement || 'back') === 'front'"
                           @click="s.placement = 'front'" x-text="$app.t('publication.matter.front')"></button>
-                  <button type="button" :class="{ 'seg-toggle--active': (s.placement || 'back') === 'back' }"
+                  <button type="button" :class="{ 'seg-toggle--active': (s.placement || 'back') === 'back' }" :aria-pressed="(s.placement || 'back') === 'back'"
                           @click="s.placement = 'back'" x-text="$app.t('publication.matter.back')"></button>
                 </div>
                 <button type="button" class="btn-compact danger" @click="removeExtraSection(i)" x-text="$app.t('common.remove')"></button>
               </div>
-              <input type="text" class="card-form-input" x-model="s.title" maxlength="200" :placeholder="$app.t('publication.matter.titlePlaceholder')" data-spellcheck="spelling">
-              <textarea class="card-form-textarea" rows="3" x-model="s.body" maxlength="8000" :placeholder="$app.t('publication.matter.bodyPlaceholder')" data-spellcheck="spelling"></textarea>
+              <input type="text" class="card-form-input" x-model="s.title" maxlength="200" :placeholder="$app.t('publication.matter.titlePlaceholder')" :aria-label="$app.t('publication.matter.titlePlaceholder')" data-spellcheck="spelling">
+              <textarea class="card-form-textarea" rows="3" x-model="s.body" maxlength="8000" :placeholder="$app.t('publication.matter.bodyPlaceholder')" :aria-label="$app.t('publication.matter.bodyPlaceholder')" data-spellcheck="spelling"></textarea>
               <div class="pub-matter-link">
-                <input type="text" class="card-form-input" x-model="s.link_url" maxlength="500" :placeholder="$app.t('publication.matter.linkUrlPlaceholder')">
-                <input type="text" class="card-form-input" x-model="s.link_label" maxlength="200" :placeholder="$app.t('publication.matter.linkLabelPlaceholder')" data-spellcheck="spelling">
+                <input type="text" class="card-form-input" x-model="s.link_url" maxlength="500" :placeholder="$app.t('publication.matter.linkUrlPlaceholder')" :aria-label="$app.t('publication.matter.linkUrlPlaceholder')">
+                <input type="text" class="card-form-input" x-model="s.link_label" maxlength="200" :placeholder="$app.t('publication.matter.linkLabelPlaceholder')" :aria-label="$app.t('publication.matter.linkLabelPlaceholder')" data-spellcheck="spelling">
               </div>
               <label class="form-check">
                 <input type="checkbox" x-model="s.toc">
@@ -165,10 +167,10 @@
         </div>
         <!-- Reihe + Bandnummer pflegt nur der Tab «Reihe» (book_series); hier Anzeige. -->
         <div class="card-form-row">
-          <label class="card-form-label" x-text="$app.t('publication.series')"></label>
+          <span class="card-form-label" x-text="$app.t('publication.series')"></span>
           <span class="pub-static-value">
             <span x-text="bookPublication.series ? $app.t('publication.seriesValue', { n: bookPublication.series_index, name: bookPublication.series }) : $app.t('publication.seriesNone')"></span>
-            <span class="internal-link" @click="bookSettingsTab = 'series'" x-text="$app.t('publication.seriesEdit')"></span>
+            <span class="internal-link text-link" @click="bookSettingsTab = 'series'" x-text="$app.t('publication.seriesEdit')"></span>
           </span>
         </div>
         <div class="card-form-row">
@@ -178,7 +180,7 @@
         </div>
       </section>
 
-      <section class="book-settings-section">
+      <section class="book-settings-section" x-show="bookSettingsHasBookExport()" x-cloak>
         <h3 class="card-section-title" x-text="$app.t('publication.section.export')"></h3>
         <p class="card-hint" x-text="$app.t('publication.exportToolsHint')"></p>
         <div class="card-actions">

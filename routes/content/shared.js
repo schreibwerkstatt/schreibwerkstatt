@@ -89,7 +89,6 @@ function _fail(res, e, opName) {
   res.status(status === 401 ? 502 : status).json({
     error_code: 'CONTENT_FAILED',
     status,
-    detail: e.message,
   });
 }
 

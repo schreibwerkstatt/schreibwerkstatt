@@ -119,28 +119,28 @@
       </div>
 
       <!-- Ranglisten ------------------------------------------------------- -->
-      <div class="tabs wortschatz-tabs">
-        <button type="button" class="tabs-btn"
+      <div class="tabs wortschatz-tabs" role="tablist">
+        <button role="tab" :aria-selected="wortschatzTab === 'terms'" type="button" class="tabs-btn"
                 :class="{ 'tabs-btn--active': wortschatzTab === 'terms' }"
                 @click="wortschatzTab = 'terms'"
                 x-text="$app.t('wortschatz.tab.terms', { n: wortschatzTerms.length })"></button>
-        <button type="button" class="tabs-btn"
+        <button role="tab" :aria-selected="wortschatzTab === 'phrases'" type="button" class="tabs-btn"
                 :class="{ 'tabs-btn--active': wortschatzTab === 'phrases' }"
                 @click="wortschatzTab = 'phrases'"
                 x-text="$app.t('wortschatz.tab.phrases', { n: wortschatzNgrams.length })"></button>
-        <button type="button" class="tabs-btn"
+        <button role="tab" :aria-selected="wortschatzTab === 'hapax'" type="button" class="tabs-btn"
                 :class="{ 'tabs-btn--active': wortschatzTab === 'hapax' }"
                 @click="wortschatzTab = 'hapax'"
                 x-text="$app.t('wortschatz.tab.hapax', { n: wortschatzHapax.length })"></button>
-        <button type="button" class="tabs-btn"
+        <button role="tab" :aria-selected="wortschatzTab === 'cloud'" type="button" class="tabs-btn"
                 :class="{ 'tabs-btn--active': wortschatzTab === 'cloud' }"
                 @click="wortschatzTab = 'cloud'"
                 x-text="$app.t('wortschatz.tab.cloud')"></button>
-        <button type="button" class="tabs-btn"
+        <button role="tab" :aria-selected="wortschatzTab === 'chapters'" type="button" class="tabs-btn"
                 :class="{ 'tabs-btn--active': wortschatzTab === 'chapters' }"
                 @click="wortschatzTab = 'chapters'"
                 x-text="$app.t('wortschatz.tab.chapters', { n: wortschatzChapters.length })"></button>
-        <button type="button" class="tabs-btn"
+        <button role="tab" :aria-selected="wortschatzTab === 'figures'" type="button" class="tabs-btn"
                 :class="{ 'tabs-btn--active': wortschatzTab === 'figures' }"
                 @click="wortschatzTab = 'figures'"
                 x-text="$app.t('wortschatz.tab.figures', { n: wortschatzIdiolect.length })"></button>

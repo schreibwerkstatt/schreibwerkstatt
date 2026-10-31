@@ -10,7 +10,7 @@
          :placeholder="$app.t('ideenBoard.addPlaceholder')"
          :aria-label="$app.t('ideenBoard.addPlaceholder')"
          :disabled="busy" data-spellcheck="spelling"
-         @keydown.enter="if(!$event.isComposing && $event.keyCode !== 229) { $event.preventDefault(); addIdee(); }">
+         @keydown.enter="$enter($event, () => addIdee())">
   <button type="button" class="ideen-add-btn btn-compact" @click="addIdee()"
           :disabled="busy || !newLaneKey || !(newContent || '').trim()"
           x-text="$app.t('ideen.add')"></button>

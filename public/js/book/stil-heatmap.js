@@ -91,7 +91,7 @@ export function buildStilRows(chapters, uiLocale) {
       const approx = m.key === 'sentence_len_p90' && c.sentence_len_p90_exact === false && value != null;
       cells[m.key] = {
         text: (approx ? '≈ ' : '') + formatNumber(value, uiLocale, m.decimals ?? 1),
-        cls: `heatmap-cell--${lowData ? 'lowdata' : _cellKind(value, m, range)}${clickable ? ' heatmap-cell--clickable' : ''}`,
+        cls: `heatmap-cell--${lowData ? 'lowdata' : _cellKind(value, m, range)}${clickable ? ' heatmap-cell--clickable internal-link' : ''}`,
         vars: lowData ? {} : _cellVars(value, m, range),
         clickable,
         lowData,

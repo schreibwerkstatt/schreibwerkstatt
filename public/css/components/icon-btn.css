@@ -12,7 +12,7 @@
 .icon-btn {
   background: var(--color-bg);
   border: var(--border-thin) solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   color: var(--color-muted);
   cursor: pointer;
   font-family: var(--font-sans);
@@ -29,7 +29,7 @@
 .icon-btn[aria-pressed="true"] {
   background: var(--color-surface);
   border-color: var(--color-accent);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 /* Ghost-Variante: zentriert, weiche Flächenfüllung im Ruhezustand (Chip-Optik
    für Kontrast ohne Rahmen-Rauschen in dichten Clustern). Der Hintergrund ist
@@ -73,12 +73,12 @@
 /* Success-Variante: grüner Akzent für Bestätigungsaktionen (Speichern,
    Korrekturen übernehmen) als Icon-only Button. */
 .icon-btn--success {
-  color: var(--color-success);
+  color: var(--color-ok-text);
 }
 .icon-btn--success:hover:not(:disabled) {
   background: color-mix(in srgb, var(--color-success) 14%, transparent);
   border-color: var(--color-success);
-  color: var(--color-success);
+  color: var(--color-ok-text);
 }
 
 /* Count-Badge an einem Icon-Button (z.B. Chat-Verläufe, offene Ideen).
@@ -101,7 +101,7 @@
   justify-content: center;
   background: var(--color-primary);
   color: var(--color-text-inverse);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-xs);
   font-weight: var(--fw-semibold);
   line-height: 1;
@@ -122,7 +122,7 @@
   right: 2px;
   width: 6px;
   height: 6px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-primary);
   box-shadow: 0 0 0 2px var(--color-surface);
   pointer-events: none;

@@ -16,7 +16,7 @@
        @click.outside="editingBeatId === beat.id && commitEditBeat(beat)">
     <input type="text" class="plot-beat-edit-titel" x-model="beatDraft.titel"
            data-spellcheck="spelling" :placeholder="$app.t('plot.beat.titelPlaceholder')"
-           @keydown.enter.prevent="commitEditBeat(beat)">
+           @keydown.enter="$enter($event, () => commitEditBeat(beat))">
     <textarea class="plot-beat-edit-desc" x-model="beatDraft.beschreibung" rows="3"
               data-spellcheck="spelling" :placeholder="$app.t('plot.beat.descPlaceholder')"></textarea>
     <div class="tabs plot-status-tabs" role="group" :aria-label="$app.t('plot.beat.statusLabel')">

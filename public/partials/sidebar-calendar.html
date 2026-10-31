@@ -44,7 +44,7 @@
 
   <div class="sidebar-calendar-grid">
     <template x-for="(cell, ci) in diaryCalendarMonthGrid()" :key="ci">
-      <button type="button"
+      <button :aria-current="cell.isToday ? 'date' : null" type="button"
               class="sidebar-calendar-day"
               :class="{
                 'sidebar-calendar-day--out': !cell.inMonth,

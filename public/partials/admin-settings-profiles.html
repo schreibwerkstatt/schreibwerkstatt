@@ -18,13 +18,10 @@
                  })">
             <thead>
               <tr>
-                <th class="sortable-th" :class="sortClass('name')" :aria-sort="ariaSort('name')"
-                    @click="sortBy('name')" x-text="$app.t('admin.profiles.col.name')"></th>
-                <th class="sortable-th" :class="sortClass('provider')" :aria-sort="ariaSort('provider')"
-                    @click="sortBy('provider')" x-text="$app.t('admin.profiles.col.provider')"></th>
+                <th x-bind="sortTh('name')" x-text="$app.t('admin.profiles.col.name')"></th>
+                <th x-bind="sortTh('provider')" x-text="$app.t('admin.profiles.col.provider')"></th>
                 <th x-text="$app.t('admin.profiles.col.model')"></th>
-                <th class="sortable-th" :class="sortClass('user_count')" :aria-sort="ariaSort('user_count')"
-                    @click="sortBy('user_count')" x-text="$app.t('admin.profiles.col.users')"></th>
+                <th x-bind="sortTh('user_count')" x-text="$app.t('admin.profiles.col.users')"></th>
                 <th></th>
               </tr>
             </thead>

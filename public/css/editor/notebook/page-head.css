@@ -203,7 +203,7 @@
     margin: 0;
     padding: 0;
     border: 0;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: transparent;
     color: inherit;
     resize: none;
@@ -254,9 +254,9 @@
   .page-head__field:focus-within .page-head__count,
   .page-head__count--teilweise,
   .page-head__count--zulang { opacity: 1; pointer-events: auto; }
-  .page-head__count--passt     { color: var(--color-success); }
-  .page-head__count--teilweise { color: var(--color-mittel); }
-  .page-head__count--zulang    { color: var(--color-schwach); }
+  .page-head__count--passt     { color: var(--color-ok-text); }
+  .page-head__count--teilweise { color: var(--color-mittel-text); }
+  .page-head__count--zulang    { color: var(--color-schwach-text); }
 
   /* Lineal: dieselbe Regel wie der Zähler — erst bei Fokus, dann dauerhaft
      sobald es reisst. Flacher als der Standard, es soll mitlaufen und nicht
@@ -314,7 +314,7 @@
     text-transform: none;
     color: var(--color-muted);
   }
-  .page-head__error { color: var(--color-schwach); }
+  .page-head__error { color: var(--color-err-text); }
 
   /* Schmale Viewports: die Schlagzeile eine Stufe kleiner, sonst frisst sie
      halbe Bildschirmhöhe. Beide Modi ziehen mit (geteilte Tokens). */

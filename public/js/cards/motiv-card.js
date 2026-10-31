@@ -133,6 +133,7 @@ export function registerMotivCard() {
     _beatsLoaded: false,
     _draftFigurenLoaded: false,
     _memos: {},
+    _boardLoadSeq: 0,  // Lade-Token (book-guard.js#loadToken)
     _motivNetwork: null,
     _motivNodes: null,
     _motivEdges: null,

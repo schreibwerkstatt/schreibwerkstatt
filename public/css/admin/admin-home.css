@@ -13,7 +13,7 @@
 }
 
 /* Tile als Button: Default-Button-Reset, damit das Tile wie ein klickbares
-   Panel wirkt (Hover/Focus liegen auf .overview-tile.internal-link in base). */
+   Panel wirkt (Hover/Focus liegen auf dem klickbaren .overview-tile in book-overview/base.css). */
 button.overview-tile {
   appearance: none;
   background: var(--color-bg);

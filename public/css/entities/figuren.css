@@ -21,12 +21,8 @@
 .figur-schicht-arbeiterschicht      { --badge-hue: var(--palette-brown); }
 .figur-schicht-migrantenmilieu      { --badge-hue: var(--palette-orange); }
 .figur-schicht-prekariat            { --badge-hue: var(--palette-wine); }
-/* Unterwelt: invertierte Darstellung (dunkler Hintergrund, heller Text) */
-.figur-schicht-unterwelt            { --badge-hue: var(--palette-dark); background: var(--palette-dark); color: var(--color-text-inverse); }
-:root[data-theme="dark"] .figur-schicht-unterwelt {
-  background: var(--palette-gray-light);
-  color: var(--palette-dark);
-}
+/* Unterwelt: invertierte Darstellung — Token-Paar kippt im Dark-Theme selbst. */
+.figur-schicht-unterwelt            { --badge-hue: var(--palette-dark); background: var(--color-badge-inverse-bg); color: var(--color-badge-inverse-text); }
 .figur-praesenz-zentral      { --badge-hue: var(--palette-blue); }
 .figur-praesenz-regelmaessig { --badge-hue: var(--palette-green); }
 .figur-praesenz-punktuell    { --badge-hue: var(--palette-orange); }
@@ -74,7 +70,7 @@
   width: var(--figur-rail-w);
   height: 0.9em;
   flex-shrink: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--card-accent);
 }
 
@@ -115,7 +111,7 @@
 .figur-arc-stations li:last-child { margin-bottom: 0; }
 
 /* === Figuren: Detail-Sektionstitel mit zartem Akzent-Tick (an Karten-Identität gekoppelt) === */
-.figur-detail .bewertung-section-title:not(.bewertung-section-title--inline) {
+.figur-detail .card-section-title:not(.card-section-title--inline) {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
@@ -126,16 +122,16 @@
   margin-left: calc(-1 * var(--figur-rail));
 }
 /* Erste Untersektion direkt unter einem Gruppentitel braucht keinen grossen Abstand */
-.figur-group > *:first-child .bewertung-section-title:not(.bewertung-section-title--inline),
-.figur-group > .bewertung-section-title:not(.bewertung-section-title--inline):first-child {
+.figur-group > *:first-child .card-section-title:not(.card-section-title--inline),
+.figur-group > .card-section-title:not(.card-section-title--inline):first-child {
   margin-top: 0;
 }
-.figur-detail .bewertung-section-title:not(.bewertung-section-title--inline)::before {
+.figur-detail .card-section-title:not(.card-section-title--inline)::before {
   content: "";
   width: var(--figur-rail-w);
   height: 0.72em;
   flex-shrink: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: color-mix(in srgb, var(--card-accent) 32%, var(--color-border));
 }
 
@@ -186,7 +182,6 @@
 
 .figur-detail-row { font-size: var(--font-size-sm); line-height: 1.55; margin-bottom: var(--space-md); }
 
-.bewertung-section-title--inline { display: inline; }
 
 .figur-detail-value { font-size: var(--font-size-sm); }
 /* Anker-Ereignis hinter "Jahr / Alter" — gedämpft (das "weil …"). */
@@ -211,19 +206,6 @@
 
 .figur-bz-list { margin-bottom: var(--space-sm); }
 
-.internal-link {
-  cursor: pointer;
-}
-.internal-link:hover {
-  opacity: 0.65;
-  text-decoration: underline;
-}
-.internal-link:focus-visible {
-  outline: 2px solid var(--color-text);
-  outline-offset: 2px;
-  text-decoration: underline;
-}
-
 /* === Figuren-Präsenz (Heatmap-Tab + Pro-Figur-Streifen) === */
 .figur-presence { margin-top: var(--space-10); }
 .figur-presence-note {
@@ -231,7 +213,7 @@
   color: var(--color-text);
   background: var(--color-ok-bg);
   border-left: 3px solid var(--color-ok-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: var(--space-xs) var(--space-sm);
   margin-bottom: var(--space-sm);
 }
@@ -253,7 +235,7 @@
   flex: none;
   width: 8px;
   height: 8px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-muted);
   transform: translateY(1px);
 }
@@ -325,7 +307,7 @@
 .figur-presence-legend-swatch {
   width: 16px;
   height: 12px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   border: 0.5px solid var(--color-border);
   position: relative;
 }
@@ -344,7 +326,7 @@
 .figur-presence-strip-cell {
   width: 16px;
   height: 16px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   border: 0.5px solid var(--color-border);
   cursor: pointer;
 }
@@ -465,9 +447,6 @@
 @media (max-width: 480px) {
   .figur-kapitelauftritte { display: none; }
 }
-
-}
-
 /* Vom Autor gepflegte Figur (figures.manually_edited): die Komplettanalyse
    überschreibt ihre Stammdaten nicht mehr. Ruhig getönt, kein Warnsignal. */
 .tag--curated {
@@ -499,3 +478,4 @@
   padding: var(--space-xs) var(--space-sm) var(--space-sm);
 }
 .figur-merge-panel .card-form-error { flex-basis: 100%; }
+}

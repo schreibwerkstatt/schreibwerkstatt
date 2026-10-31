@@ -2,7 +2,7 @@
 /* === Ideen-Karte ============================================================
    Notizen pro Seite. Offene Ideen werden als Chat-Kontext mitgegeben.
    Layout: Header + Subtitle, Eingabezeile, dann zwei Sections (offen/erledigt).
-   Eckige Status-Badges via var(--radius-sm). */
+   Eckige Status-Badges via var(--radius-none). */
 .ideen-input-row {
   display: flex;
   gap: var(--space-6);
@@ -36,7 +36,7 @@
   background: var(--color-bg);
   padding: var(--space-10) 38px var(--space-10) var(--space-md);
   margin-bottom: var(--space-6);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 .idee-item--erledigt { opacity: var(--opacity-disabled); }
 .idee-item--erledigt .idee-content { text-decoration: line-through; }
@@ -49,7 +49,7 @@
   border: 0.5px solid var(--color-border);
   color: var(--color-muted);
   padding: var(--space-1) var(--space-6);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   margin-bottom: var(--space-6);
 }
 /* Stufen-Farben deckungsgleich mit dem Ideen-Board (entities/ideen-board.css):

@@ -42,7 +42,7 @@ function seedBlogBook(bookId) {
     INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, ?, datetime('now'), datetime('now'))
     ON CONFLICT(book_id) DO UPDATE SET name=excluded.name
   `).run(bookId, `Blog-Test-${bookId}`);
-  ctx.dbSchema.saveBookSettings(bookId, 'de', 'CH', 'blog', null, null, null, 0, 0);
+  ctx.dbSchema.saveBookSettings(bookId, { language: 'de', region: 'CH', buchtyp: 'blog', buch_kontext: null, erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 0 });
   blogs.upsertConnection({
     bookId, baseUrl: 'https://wp.test', username: 'editor', password: 'pw', defaultStatus: 'draft',
   });

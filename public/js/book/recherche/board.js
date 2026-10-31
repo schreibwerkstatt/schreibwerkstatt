@@ -2,6 +2,7 @@
 // und die geteilten Item-Helfer (Listen-Mutation, Indikator-Maps, Labels).
 
 import { fetchJson } from '../../utils.js';
+import { isSelectedBook, loadToken } from '../../cards/book-guard.js';
 import { toggleWrapFullscreen } from '../../fullscreen.js';
 import { KINDS, LINK_KINDS, emptyDraft as _emptyDraft } from './shared.js';
 
@@ -11,6 +12,10 @@ export const rechercheBoardMethods = {
     const app = window.__app;
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) { this.items = []; return; }
+    // Sequenz + Buch-Guard: Filter-/Such-Refetches laufen parallel (jeder
+    // Tastendruck), und eine ältere Antwort — oder die des vorigen Buchs — darf
+    // die jüngere nicht überschreiben.
+    const isCurrent = loadToken(this, '_rechercheLoadSeq', bookId);
     // Skeleton nur beim Erstladen (noch keine Daten). Bei Filter-/Sort-/Such-
     // Refetches bleibt die Liste stehen und wird nur gedimmt (refreshing) — sonst
     // flackert bei jedem Tastendruck das Skeleton auf und wieder weg.
@@ -29,6 +34,7 @@ export const rechercheBoardMethods = {
       if (this.showArchived) qs.set('archived', '1');
       if (this.sortBy && this.sortBy !== 'updated') qs.set('sort', this.sortBy);
       const rows = await fetchJson(`/research?${qs.toString()}`);
+      if (!isCurrent()) return;
       this.items = Array.isArray(rows) ? rows : [];
       this.errorMessage = '';
       this._loadTags();
@@ -37,12 +43,15 @@ export const rechercheBoardMethods = {
       // ohne await: eine fehlende Nebenlesung darf das Board nicht aufhalten.
       this.loadIdeaBacklinks('research');
     } catch (e) {
+      if (!isCurrent()) return;
       this.errorMessage = app.t('recherche.error.load');
       this.items = [];
     } finally {
-      this.loading = false;
-      this.refreshing = false;
+      // Nur der jüngste Load räumt die Ladeanzeige; ein überholter liesse sie
+      // sonst mitten im laufenden Refetch verschwinden.
+      if (isCurrent.latest()) { this.loading = false; this.refreshing = false; }
     }
+    if (!isCurrent()) return;
     // Deep-Link-Ziel (#…/recherche/<itemId>), das vor dem Load ankam, jetzt
     // fokussieren — das Item existiert erst nach diesem Load in `items`.
     if (this._pendingFocusItemId != null) this._focusRechercheItemById(this._pendingFocusItemId);
@@ -53,15 +62,18 @@ export const rechercheBoardMethods = {
     if (!bookId) { this.tagPool = []; return; }
     try {
       const rows = await fetchJson(`/research/tags?book_id=${bookId}`);
+      if (!isSelectedBook(bookId)) return;
       this.tagPool = Array.isArray(rows) ? rows : [];
-    } catch { this.tagPool = []; }
+    } catch { if (isSelectedBook(bookId)) this.tagPool = []; }
   },
 
   async ensureLinkTargets() {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId || this._linkTargetsBookId === bookId) return;
     try {
-      this.linkTargets = await fetchJson(`/research/link-targets?book_id=${bookId}`);
+      const targets = await fetchJson(`/research/link-targets?book_id=${bookId}`);
+      if (!isSelectedBook(bookId)) return;
+      this.linkTargets = targets;
       this._sortLinkTargetsByTree();
       this._linkTargetsBookId = bookId;
     } catch { this.linkTargets = {}; }

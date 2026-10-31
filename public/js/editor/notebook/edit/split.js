@@ -11,6 +11,7 @@
 // neue Abschnitt steht direkt darunter im Baum.
 import { contentRepo, editorHost, isNoChange, isPageConflict, stripLektoratMarks } from './_shared.js';
 import { splitEditorAt } from '../split-html.js';
+import { claimSaveOwner, ownsSave } from '../save-owner.js';
 
 export const splitMethods = {
   // `block`: Schnitt vor diesem Block (Slash-Menü, der leere Trigger-Absatz).
@@ -58,6 +59,8 @@ export const splitMethods = {
     if (!name || !this._stillEditing(pageId)) return;
 
     this._splitBusy = true;
+    let lockOwner = null;
+    let lockedEl = null;
     try {
       if (app.editDirty) await this.quickSave();
       if (!this._stillEditing(pageId)) return;
@@ -70,6 +73,13 @@ export const splitMethods = {
         return;
       }
       app.setStatus(t('editor.split.running'), true);
+      // Editor während der Teilung sperren: danach überschreibt der Kopf das
+      // DOM und die Undo-Baseline — dazwischen Getipptes ginge still verloren.
+      // `editSaving` hält zugleich Autosave, Ctrl+S und weitere Saves fern.
+      app.editSaving = true;
+      lockOwner = claimSaveOwner();
+      lockedEl = el;
+      el.contentEditable = 'false';
       const res = await contentRepo.splitPage(pageId, {
         head_html: stripLektoratMarks(parts.headHtml),
         tail_html: stripLektoratMarks(parts.tailHtml),
@@ -89,6 +99,8 @@ export const splitMethods = {
       console.error('[splitSectionHere]', e);
       app.setStatus(t(isPageConflict(e) ? 'editor.split.conflict' : 'editor.split.failed'), false, 8000);
     } finally {
+      if (lockedEl) lockedEl.contentEditable = 'true';
+      if (lockOwner && ownsSave(lockOwner)) app.editSaving = false;
       this._splitBusy = false;
     }
   },

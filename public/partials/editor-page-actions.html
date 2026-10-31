@@ -63,10 +63,10 @@
           <span class="action-sep" aria-hidden="true"></span>
           <span class="action-group">
             <span class="icon-btn-badge-wrap" x-show="canReview()">
-              <button type="button" class="icon-btn icon-btn--ghost" @click="toggleChatCard()" :class="{ 'is-active': showChatCard }" :disabled="currentPageEmpty" :data-tip="t('editor.btn.chatTitle')" :aria-label="t('editor.btn.chat')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#message-square"/></svg></button>
+              <button :aria-pressed="showChatCard" type="button" class="icon-btn icon-btn--ghost" @click="toggleChatCard()" :class="{ 'is-active': showChatCard }" :disabled="currentPageEmpty" :data-tip="t('editor.btn.chatTitle')" :aria-label="t('editor.btn.chat')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#message-square"/></svg></button>
               <span class="icon-btn-badge" x-show="currentPageChatSessionCount > 0" x-text="currentPageChatSessionCount" :data-tip="t('editor.btn.chatCountTitle', { n: currentPageChatSessionCount })"></span>
             </span>
-            <button type="button" class="icon-btn icon-btn--ghost" @click="toggleReferenceCard()" :class="{ 'is-active': showReferenceCard }" :data-tip="t('editor.btn.referenceTitle')" :aria-label="t('editor.btn.reference')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg></button>
+            <button :aria-pressed="showReferenceCard" type="button" class="icon-btn icon-btn--ghost" @click="toggleReferenceCard()" :class="{ 'is-active': showReferenceCard }" :data-tip="t('editor.btn.referenceTitle')" :aria-label="t('editor.btn.reference')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg></button>
             <span class="icon-btn-badge-wrap" x-show="pageCommentCount > 0">
               <button type="button" class="icon-btn icon-btn--ghost" @click="window.dispatchEvent(new CustomEvent('comments-rail:toggle'))" :class="{ 'is-active': pageCommentRailOpen }" :data-tip="t('share.rail.toggle')" :aria-label="t('share.rail.toggle')" :aria-pressed="pageCommentRailOpen">
                 <svg class="icon" aria-hidden="true"><use href="/icons.svg#users"/></svg>
@@ -84,7 +84,7 @@
                 <span class="icon-btn-badge" x-show="currentPageIdeenOpenCount > 0" x-text="currentPageIdeenOpenCount" :data-tip="t('ideen.openCountTitle', { n: currentPageIdeenOpenCount })"></span>
               </span>
               <div class="context-menu context-menu--dropdown" x-bind="panel" x-cloak>
-                <button type="button" class="context-menu-item context-menu-item--icon" :class="{ 'context-menu-item--on': showIdeenCard }" role="menuitem" @click="toggleIdeenCard()">
+                <button :aria-checked="showIdeenCard" type="button" class="context-menu-item context-menu-item--icon" :class="{ 'context-menu-item--on': showIdeenCard }" role="menuitemcheckbox" @click="toggleIdeenCard()">
                   <svg class="icon" aria-hidden="true"><use href="/icons.svg#lightbulb"/></svg>
                   <span x-text="t('ideen.title')"></span>
                   <span class="btn-count" x-show="currentPageIdeenOpenCount > 0" x-text="currentPageIdeenOpenCount"></span>

@@ -3,8 +3,7 @@
 // Eingrenzung fuer den Recherche-Chat (docs/recherche-chat.md).
 //
 // Eigener Schreibpfad `PUT /booksettings/:book_id/research` — Muster von
-// /citation und /xrefs. Der Header-Speichern-Button der Karte schreibt ihn mit
-// (saveActiveTab in settings.js).
+// /citation und /xrefs. Der Kopf-Knopf der Karte schreibt ihn mit (save-paths.js).
 //
 // Die Domains bearbeitet der User als Text (eine Zeile pro Domain); normalisiert
 // wird ausschliesslich serverseitig (lib/research-profile.js), und die Antwort
@@ -33,6 +32,14 @@ export const researchMethods = {
     this.bookResearchProfile = data?.research_profile || '';
     this.bookResearchDomains = (data?.research_domains || []).join('\n');
     this.bookResearchLoaded = true;
+    this._markClean('research');
+  },
+
+  _researchSnapshot() {
+    return {
+      research_profile: (this.bookResearchProfile || '').trim() || null,
+      research_domains: this.bookResearchDomains || '',
+    };
   },
 
   /** Wie viele Domains der Server aus der aktuellen Eingabe voraussichtlich
@@ -63,35 +70,36 @@ export const researchMethods = {
     this.bookResearchDomains = merged.join('\n');
   },
 
-  async saveResearchSettings() {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId) return;
-    // Nicht speichern, bevor der Stand geladen ist — der Endpunkt ist zwar
-    // PATCH-artig, wir senden aber beide Felder, und ein ungeladener Default
-    // wuerde den DB-Stand leeren. saveActiveTab ruft uns bei JEDEM Klick auf.
-    if (!this.bookResearchLoaded) return;
+  async saveResearchSettings(bookId = this._formBookId) {
+    // Nicht speichern, bevor der Stand geladen ist — ein ungeladener Default
+    // würde den DB-Stand leeren.
+    if (!bookId || !this.bookResearchLoaded) return false;
     this.researchSaving = true;
+    this.researchSaved = false;
     this.researchError = '';
+    const sent = this._snapKey('research');
     try {
       const r = await fetch(`/booksettings/${bookId}/research`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          research_profile: (this.bookResearchProfile || '').trim() || null,
-          research_domains: this.bookResearchDomains || '',
-        }),
+        body: JSON.stringify(this._researchSnapshot()),
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        throw new Error(window.__app.tError(d) || `HTTP ${r.status}`);
+        throw new Error(window.__app.tError(d));
       }
-      // Normalisierten Stand zurueckspiegeln: aus einer eingefuegten URL wird der
-      // Host, eine unbrauchbare Zeile faellt weg. Der User soll das sofort sehen
-      // und nicht erst beim naechsten Oeffnen der Karte.
-      this._applyResearchSettings(await r.json());
+      const data = await r.json();
+      // Normalisierten Stand zurückspiegeln: aus einer eingefügten URL wird der
+      // Host, eine unbrauchbare Zeile fällt weg. Der User soll das sofort sehen
+      // — ausser er hat inzwischen weitergetippt.
+      if (this._isFormBook(bookId)) this._settleSave('research', sent, () => this._applyResearchSettings(data));
+      this.researchSaved = true;
+      this._flash('researchSaved');
       window.__app?.invalidateBookSettingsCache?.();
+      return true;
     } catch (e) {
       this.researchError = e.message;
+      return false;
     } finally {
       this.researchSaving = false;
     }

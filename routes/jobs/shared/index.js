@@ -16,7 +16,7 @@ const router   = require('./router');
 const { getBookSettings } = require('../../../db/schema');
 
 // Buch-Locale-Prompts mit Buchtyp + Buchkontext augmentieren. Liest
-// book_settings, fallback auf User-Defaults wenn `userEmail` gesetzt.
+// book_settings, ohne Zeile mit den Profil-Defaults des Buch-Owners.
 async function getBookPrompts(bookId, userEmail = null) {
   // userEmail waehlt zusaetzlich die Prompt-VARIANTE (cloud/local) nach dem
   // effektiven Provider dieses Users — siehe lib/prompts-loader.js.

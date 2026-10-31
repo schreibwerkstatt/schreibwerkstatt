@@ -40,7 +40,7 @@
   }
 }
 
-@media (max-width: 1099px) {
+@media (max-width: 1099.98px) {
   /* Flex-Spalte statt Block: erlaubt Reihenfolge-Umkehr. Befunde zuerst, damit
      der Korrekturvorschlag direkt nach der Toolbar sichtbar ist – sonst steht
      das Panel hinter der vollhohen Preview (mehrere Tausend px) und ist auf
@@ -69,7 +69,7 @@
   position: relative;
   background: var(--color-mark-bg);
   border-bottom: 2px solid var(--color-mark-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   cursor: pointer;
   transition: background 0.2s;
   scroll-margin-top: 60px;
@@ -100,7 +100,7 @@
   color: var(--color-mark-ins-text);
   font-weight: var(--fw-bold);
   background: var(--color-mark-ins-bg);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: 0 var(--space-2xs);
   margin-left: var(--space-2xs);
 }
@@ -111,7 +111,7 @@
   position: relative;
   background: var(--color-mark-del-bg);
   border-bottom: 2px solid var(--color-mark-del-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   text-decoration: line-through;
   text-decoration-color: var(--color-mark-del-strike);
   color: var(--color-mark-del-text);
@@ -124,7 +124,7 @@
   color: var(--color-mark-ins-text);
   font-weight: var(--fw-bold);
   background: var(--color-mark-ins-bg);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: 0 var(--space-2xs);
   margin-left: var(--space-2xs);
 }

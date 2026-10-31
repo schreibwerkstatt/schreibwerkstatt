@@ -1,17 +1,17 @@
     <div class="card-form-grid" x-bind="panel('danger')" x-cloak>
 
-    <div class="book-settings-danger-zone">
-      <div class="book-settings-danger-title">
+    <div class="danger-zone">
+      <div class="danger-zone-title">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#alert-triangle"/></svg>
         <span x-text="$app.t('book.settings.dangerZone')"></span>
       </div>
 
-      <div class="book-settings-danger-section">
-        <div class="book-settings-danger-row">
-          <div class="book-settings-danger-text" x-text="$app.t('book.settings.dangerText')"></div>
-          <div class="book-settings-danger-actions">
+      <div class="danger-zone-section">
+        <div class="danger-zone-row">
+          <div class="danger-zone-text" x-text="$app.t('book.settings.dangerText')"></div>
+          <div class="danger-zone-actions">
             <button type="button"
-              class="book-settings-btn-danger"
+              class="danger-zone-btn"
               @click="resetBookHistory()"
               :disabled="bookHistoryResetLoading || !$store.nav.selectedBookId">
               <span x-show="bookHistoryResetLoading" class="spinner"></span>
@@ -23,12 +23,12 @@
         <p class="card-form-error" x-show="bookHistoryResetError" x-text="bookHistoryResetError"></p>
       </div>
 
-      <div class="book-settings-danger-section">
-        <div class="book-settings-danger-row">
-          <div class="book-settings-danger-text" x-text="$app.t('book.settings.staleCleanupText')"></div>
-          <div class="book-settings-danger-actions">
+      <div class="danger-zone-section">
+        <div class="danger-zone-row">
+          <div class="danger-zone-text" x-text="$app.t('book.settings.staleCleanupText')"></div>
+          <div class="danger-zone-actions">
             <button type="button"
-              class="book-settings-btn-danger"
+              class="danger-zone-btn"
               @click="deleteStaleEntities()"
               :disabled="staleCleanupLoading || !$store.nav.selectedBookId">
               <span x-show="staleCleanupLoading" class="spinner"></span>
@@ -44,12 +44,12 @@
            überführen, statt seine Verknüpfungen mit ihm zu verlieren. -->
       <!-- @include book-settings-merge -->
 
-      <div class="book-settings-danger-section">
-        <div class="book-settings-danger-row">
-          <div class="book-settings-danger-text" x-text="$app.t('book.settings.deleteBookText')"></div>
-          <div class="book-settings-danger-actions">
+      <div class="danger-zone-section">
+        <div class="danger-zone-row">
+          <div class="danger-zone-text" x-text="$app.t('book.settings.deleteBookText')"></div>
+          <div class="danger-zone-actions">
             <button type="button"
-              class="book-settings-btn-danger"
+              class="danger-zone-btn"
               @click="deleteBook()"
               :disabled="bookDeleteLoading || !$store.nav.selectedBookId">
               <span x-show="bookDeleteLoading" class="spinner"></span>

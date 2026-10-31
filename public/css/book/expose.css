@@ -38,13 +38,6 @@
 .card-form-row + .expose-actions { margin-top: var(--card-gap-section); }
 .expose-pre + .card-hint { margin-top: var(--card-gap-tight); }
 .expose-long { min-height: 20em; }
-/* Die Ergebnis-Sections stecken im x-if-Wrapper: dort ist die erste
-   `:first-of-type` und verlöre sonst Trennlinie und Abstand zu den Eckdaten. */
-.expose-result > .book-settings-section:first-of-type {
-  margin-top: var(--space-2xl);
-  padding-top: var(--space-20);
-  border-top: 0.5px solid var(--color-border);
-}
 /* Erscheinung wie `.card-hint--warn`, nur als Liste ohne Aufzählungszeichen. */
 .expose-warnings {
   list-style: none;

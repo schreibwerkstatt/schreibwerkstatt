@@ -23,10 +23,11 @@
 // Das Panel animiert seine Höhe über `x-collapse` (@alpinejs/collapse, geladen
 // in index.html vor dem Alpine-Core) — die Direktive reist im `panel`-Spread
 // mit, Konsumenten-Markup bleibt unverändert. Drei Folgen, die man wissen muss:
-//   1) Das Plugin hält `overflow: hidden` auf dem Panel. Absolut positionierte
-//      Kinder (Kebab-Menüs, Popover) würden darin abgeschnitten — die gehören
-//      ohnehin per x-teleport in den Top-Layer (Architektur-Regel), nicht ins
-//      Panel.
+//   1) Das Plugin setzt `overflow: hidden`, solange das Panel zu ist oder
+//      klappt, und nimmt es nach dem Aufklappen wieder weg. Absolut
+//      positionierte Kinder (Kebab-Menüs, Popover) wären mindestens während der
+//      Animation abgeschnitten — die gehören ohnehin per x-teleport in den
+//      Top-Layer, nicht ins Panel. Eine combobox darf hinein (Dropdown fixed).
 //   2) Reduced-Motion braucht hier KEINEN Sonderfall: der globale Override in
 //      css/tokens/motion.css setzt `transition-duration: 0s !important`, und
 //      Alpines Transition-Helper liest die berechnete Dauer → klappt instant.

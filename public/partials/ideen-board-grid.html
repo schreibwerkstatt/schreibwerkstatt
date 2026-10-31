@@ -67,7 +67,7 @@
                       :data-tip="foldLaneTip(lane)" :aria-label="foldLaneTip(lane)">
                 <span class="history-chevron" :class="{ open: !lane.collapsed }" aria-hidden="true"></span>
               </button>
-              <button type="button" class="ideen-board-lane-title internal-link"
+              <button type="button" class="ideen-board-lane-title text-link"
                       :class="laneEditStatusClass(lane.lane)"
                       @click="openLane(lane.lane)"
                       :disabled="lane.lane.kind === 'unknown' || lane.lane.kind === 'book'"
@@ -153,7 +153,7 @@
                           <textarea class="ideen-input idee-edit-input idee-board-edit-input" x-model="editingDraft" rows="2" :disabled="busy"
                                     data-spellcheck="spelling" :aria-label="$app.t('ideen.edit')"
                                     x-init="$nextTick(() => mountEditInput($el))" @input="autosizeEditInput($el)"
-                                    @keydown.enter="if(!$event.isComposing && $event.keyCode !== 229 && !$event.shiftKey && !$event.ctrlKey && !$event.metaKey) { $event.preventDefault(); commitEdit(idee); }"></textarea>
+                                    @keydown.enter="$enter($event, () => commitEdit(idee), { multiline: true })"></textarea>
                           <div class="idee-edit-foot">
                             <div class="idee-edit-actions">
                               <button type="button" class="btn-compact btn-compact--ghost" @click="cancelEdit()" :disabled="busy" x-text="$app.t('ideen.cancel')"></button>

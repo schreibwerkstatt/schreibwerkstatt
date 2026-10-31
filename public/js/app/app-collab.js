@@ -508,7 +508,9 @@ export const appCollabMethods = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: 'edit' }),
       });
+      // Späte Antwort (anderer Abschnitt offen): Banner + globaler Lock-State gehören der neuen Session.
       if (r.status === 423) {
+        if (!this.editMode || this.currentPage?.id !== pageId) return null;
         const body = await r.json().catch(() => ({}));
         this.$store.collab.foreignEditLock = {
           user_email: body.locked_by_email || null,
@@ -520,8 +522,8 @@ export const appCollabMethods = {
       }
       if (!r.ok) return null;
       const data = await r.json();
-      // startEdit wartet nicht hierauf: Session schon beendet → freigeben, sonst hielte der Heartbeat den Lock am Leben.
-      if (!this.editMode || this.currentPage?.id !== pageId) { this._releaseEditLock(pageId); return null; }
+      // startEdit wartet nicht hierauf: Session beendet → nur DIESEN Lock löschen, Heartbeat der neuen bleibt.
+      if (!this.editMode || this.currentPage?.id !== pageId) { this._deleteEditLock(pageId); return null; }
       this.$store.collab._currentEditLock = data?.lock || null;
       this.$store.collab.foreignEditLock = null;
       this._startLockHeartbeat(pageId);
@@ -567,6 +569,11 @@ export const appCollabMethods = {
       this.$store.collab._lockHeartbeatTimer = null;
     }
     this.$store.collab._currentEditLock = null;
+    this._deleteEditLock(pageId);
+  },
+
+  // Nur der Server-DELETE, ohne globalen State — für verspätete Lock-Antworten.
+  _deleteEditLock(pageId) {
     if (!pageId) return;
     try {
       fetch('/books/pages/' + pageId + '/lock', { method: 'DELETE' }).catch(() => {});

@@ -214,7 +214,7 @@ export const ACTIONS = [
     aliases: ['help','hotkeys','tasten','keyboard','hilfe','shortcuts'],
     run: (root) => { root.toggleShortcutsOverlay(); } },
   { key: 'action.myStats',        kind: 'action', group: 'app', labelKey: 'mystats.title',           descKey: 'mystats.desc',
-    aliases: ['statistik','stats','gesamt','zeichen','wörter','woerter','words','total','schreibstatistik','overview','profil'],
+    aliases: ['statistik','stats','gesamt','zeichen','wörter','woerter','words','total','schreibstatistik','overview','profil','jobs','laufzeit','tokens','kosten'],
     run: (root) => { root.toggleMyStatsCard(); } },
   { key: 'action.myBooks',        kind: 'action', group: 'app', labelKey: 'mybooks.title',           descKey: 'mybooks.desc',
     aliases: ['buecher','bücher','books','regal','shelf','verwaltung','manage','pin','anheften','archiv','archive','archivieren','fertig','finished','uebersicht','übersicht','bibliothek','library'],
@@ -242,7 +242,6 @@ export const ACTIONS = [
     ['publication', ['publikation','veröffentlichung','publish','klappentext','blurb','isbn','verlag','publisher','cover','vita','autorname']],
     ['series',      ['reihe','serie','band','volume']],
     ['sync',        ['wordpress','hubspot','blog','sync'], { requiresBuchtyp: 'blog' }],
-    ['stats',       ['statistik','stats','zeichen','wörter','words']],
     ['danger',      ['gefahrenzone','löschen','loeschen','delete','danger']],
   ].map(([tab, aliases, extra]) => ({
     key: 'action.bookSettings.' + tab, kind: 'action', group: 'app',

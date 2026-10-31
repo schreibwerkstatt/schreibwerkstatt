@@ -7,17 +7,17 @@
         <p class="card-form-section-divider" x-show="uiMode === 'expert'" x-text="$app.t('pdfExport.frontmatter.group.matter')"></p>
         <p class="card-form-field-note" x-show="uiMode === 'expert'" x-text="$app.t('pdfExport.extras.hint')"></p>
         <div class="card-form-grid" x-show="uiMode === 'expert'">
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('pdfExport.extras.imprintPosition')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.extras.imprintPosition')"></label>
             <div class="card-form-field">
-              <div x-data="combobox($app.t('pdfExport.extras.imprintPosition'))"
+              <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.extras.imprintPosition'))"
                    x-modelable="value" x-model="activeProfile.config.extras.imprintPosition"
                    x-effect="options = [{ value: 'front', label: $app.t('pdfExport.extras.imprintFront') }, { value: 'back', label: $app.t('pdfExport.extras.imprintBack') }]"
 ></div>
             </div>
           </div>
           <div class="card-form-row card-form-row--top">
-            <label class="card-form-label">&nbsp;</label>
+            <span class="card-form-label" aria-hidden="true">&nbsp;</span>
             <div class="card-form-field">
               <label class="pdfx-check">
                 <input type="checkbox" x-model="activeProfile.config.extras.barcode">
@@ -27,7 +27,7 @@
             </div>
           </div>
           <div class="card-form-row card-form-row--top">
-            <label class="card-form-label">&nbsp;</label>
+            <span class="card-form-label" aria-hidden="true">&nbsp;</span>
             <div class="card-form-field">
               <label class="pdfx-check">
                 <input type="checkbox" x-model="activeProfile.config.extras.imprintOnVerso">
@@ -37,7 +37,7 @@
             </div>
           </div>
           <div class="card-form-row card-form-row--top">
-            <label class="card-form-label">&nbsp;</label>
+            <span class="card-form-label" aria-hidden="true">&nbsp;</span>
             <div class="card-form-field">
               <label class="pdfx-check">
                 <input type="checkbox" x-model="activeProfile.config.extras.dedicationOnRecto">
@@ -56,33 +56,33 @@
         <template x-if="activeProfile.config.toc.enabled">
           <div x-show="uiMode === 'expert'">
             <div class="card-form-grid">
-              <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('pdfExport.toc.title')"></label>
+              <div x-id="['fld']" class="card-form-row">
+                <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.toc.title')"></label>
                 <div class="card-form-field">
-                  <input x-model="activeProfile.config.toc.title" class="pdfx-text-input" data-spellcheck="spelling"
+                  <input :id="$id('fld')" x-model="activeProfile.config.toc.title" class="pdfx-text-input" data-spellcheck="spelling"
                          :placeholder="$app.t('pdfExport.toc.titlePlaceholder')">
                 </div>
               </div>
-              <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('pdfExport.toc.titleAlign')"></label>
+              <div x-id="['fld']" class="card-form-row">
+                <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.toc.titleAlign')"></label>
                 <div class="card-form-field">
-                  <div x-data="combobox($app.t('pdfExport.toc.titleAlign'))"
+                  <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.toc.titleAlign'))"
                        x-modelable="value" x-model="activeProfile.config.toc.titleAlign"
                        x-effect="options = [{ value: 'left', label: $app.t('pdfExport.toc.alignLeft') }, { value: 'center', label: $app.t('pdfExport.toc.alignCenter') }, { value: 'right', label: $app.t('pdfExport.toc.alignRight') }]"
 ></div>
                 </div>
               </div>
-              <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('pdfExport.toc.depth')"></label>
+              <div x-id="['fld']" class="card-form-row">
+                <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.toc.depth')"></label>
                 <div class="card-form-field">
-                  <div x-data="combobox($app.t('pdfExport.toc.depth'))"
+                  <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.toc.depth'))"
                        x-modelable="value" x-model="activeProfile.config.toc.depth"
                        x-effect="options = [{ value: 1, label: $app.t('pdfExport.toc.depthChapters') }, { value: 2, label: $app.t('pdfExport.toc.depthChaptersSubs') }, { value: 3, label: $app.t('pdfExport.toc.depthAll') }]"
 ></div>
                 </div>
               </div>
               <div class="card-form-row" x-show="activeProfile.config.chapter.pageStructure === 'nested'">
-                <label class="card-form-label">&nbsp;</label>
+                <span class="card-form-label" aria-hidden="true">&nbsp;</span>
                 <div class="card-form-field">
                   <label class="pdfx-check">
                     <input type="checkbox" x-model="activeProfile.config.toc.includePages">
@@ -91,23 +91,23 @@
                   <p class="card-form-field-note" x-text="$app.t('pdfExport.toc.includePagesHint')"></p>
                 </div>
               </div>
-              <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('pdfExport.toc.indentMm')"></label>
+              <div x-id="['fld']" class="card-form-row">
+                <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.toc.indentMm')"></label>
                 <div class="card-form-field">
-                  <input type="text" x-data="numInput({ step: 0.5, min: 0, max: 40 })" x-modelable="value" x-model="activeProfile.config.toc.indentMm" class="pdfx-num-input">
+                  <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.5, min: 0, max: 40 })" x-modelable="value" x-model="activeProfile.config.toc.indentMm" class="pdfx-num-input">
                 </div>
               </div>
-              <div class="card-form-row">
-                <label class="card-form-label" x-text="$app.t('pdfExport.toc.leader')"></label>
+              <div x-id="['fld']" class="card-form-row">
+                <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.toc.leader')"></label>
                 <div class="card-form-field">
-                  <div x-data="combobox($app.t('pdfExport.toc.leader'))"
+                  <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.toc.leader'))"
                        x-modelable="value" x-model="activeProfile.config.toc.leader"
                        x-effect="options = [{ value: 'none', label: $app.t('pdfExport.toc.leaderNone') }, { value: 'dots', label: $app.t('pdfExport.toc.leaderDots') }, { value: 'line', label: $app.t('pdfExport.toc.leaderLine') }]"
 ></div>
                 </div>
               </div>
               <div class="card-form-row">
-                <label class="card-form-label">&nbsp;</label>
+                <span class="card-form-label" aria-hidden="true">&nbsp;</span>
                 <div class="card-form-field">
                   <label class="pdfx-check">
                     <input type="checkbox" x-model="activeProfile.config.toc.showPageNumbers">
@@ -116,15 +116,15 @@
                 </div>
               </div>
               <template x-if="activeProfile.config.toc.showPageNumbers">
-                <div class="card-form-row">
-                  <label class="card-form-label" x-text="$app.t('pdfExport.toc.pageNumReserveMm')"></label>
+                <div x-id="['fld']" class="card-form-row">
+                  <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.toc.pageNumReserveMm')"></label>
                   <div class="card-form-field">
-                    <input type="text" x-data="numInput({ step: 0.5, min: 6, max: 40 })" x-modelable="value" x-model="activeProfile.config.toc.pageNumReserveMm" class="pdfx-num-input">
+                    <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.5, min: 6, max: 40 })" x-modelable="value" x-model="activeProfile.config.toc.pageNumReserveMm" class="pdfx-num-input">
                   </div>
                 </div>
               </template>
               <div class="card-form-row">
-                <label class="card-form-label">&nbsp;</label>
+                <span class="card-form-label" aria-hidden="true">&nbsp;</span>
                 <div class="card-form-field">
                   <label class="pdfx-check">
                     <input type="checkbox" x-model="activeProfile.config.toc.startOnRecto">
@@ -144,51 +144,51 @@
                         x-text="activeProfile.config.font[role].family + ' : ' + activeProfile.config.font[role].weight"></span>
                 </button>
                 <div x-bind="panel" x-cloak class="collapsible-section">
-                  <div class="card-form-row">
-                    <label class="card-form-label" x-text="$app.t('pdfExport.font.family')"></label>
+                  <div x-id="['fld']" class="card-form-row">
+                    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.font.family')"></label>
                     <div class="card-form-field">
-                      <div x-data="combobox($app.t('pdfExport.font.family'))"
+                      <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.font.family'))"
                            x-modelable="value" x-model="activeProfile.config.font[role].family"
                            x-effect="options = fontList.map(f => ({ value: f.family, label: f.family }))"
                            @combobox-change="onFontPick(role, $event.detail)"
 ></div>
                     </div>
                   </div>
-                  <div class="card-form-row">
-                    <label class="card-form-label" x-text="$app.t('pdfExport.font.weight')"></label>
+                  <div x-id="['fld']" class="card-form-row">
+                    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.font.weight')"></label>
                     <div class="card-form-field">
-                      <div x-data="combobox($app.t('pdfExport.font.weight'))"
+                      <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.font.weight'))"
                            x-modelable="value" x-model="activeProfile.config.font[role].weight"
                            x-effect="options = ((fontList.find(f => f.family === activeProfile?.config?.font?.[role]?.family)?.weights) || [400]).map(w => ({ value: w, label: String(w) }))"
 ></div>
                     </div>
                   </div>
-                  <div class="card-form-row">
-                    <label class="card-form-label" x-text="$app.t('pdfExport.font.sizePt')"></label>
+                  <div x-id="['fld']" class="card-form-row">
+                    <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.font.sizePt')"></label>
                     <div class="card-form-field">
-                      <input type="text" x-data="numInput({ step: 0.5, min: 6, max: 72 })" x-modelable="value" x-model="activeProfile.config.font[role].sizePt" class="pdfx-num-input">
+                      <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.5, min: 6, max: 72 })" x-modelable="value" x-model="activeProfile.config.font[role].sizePt" class="pdfx-num-input">
                     </div>
                   </div>
                   <template x-if="role === 'toc'">
                     <div>
-                      <div class="card-form-row">
-                        <label class="card-form-label" x-text="$app.t('pdfExport.font.lineHeight')"></label>
+                      <div x-id="['fld']" class="card-form-row">
+                        <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.font.lineHeight')"></label>
                         <div class="card-form-field">
-                          <input type="text" x-data="numInput({ step: 0.05, min: 0.8, max: 3 })" x-modelable="value" x-model="activeProfile.config.font.toc.lineHeight" class="pdfx-num-input">
+                          <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.05, min: 0.8, max: 3 })" x-modelable="value" x-model="activeProfile.config.font.toc.lineHeight" class="pdfx-num-input">
                         </div>
                       </div>
-                      <div class="card-form-row">
-                        <label class="card-form-label" x-text="$app.t('pdfExport.font.paragraphGap')"></label>
+                      <div x-id="['fld']" class="card-form-row">
+                        <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.font.paragraphGap')"></label>
                         <div class="card-form-field">
-                          <input type="text" x-data="numInput({ step: 0.05, min: 0, max: 3 })" x-modelable="value" x-model="activeProfile.config.font.toc.paragraphGap" class="pdfx-num-input">
+                          <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.05, min: 0, max: 3 })" x-modelable="value" x-model="activeProfile.config.font.toc.paragraphGap" class="pdfx-num-input">
                         </div>
                       </div>
                     </div>
                   </template>
-                  <div class="card-form-row">
-                    <label class="card-form-label" x-text="$app.t('pdfExport.font.color')"></label>
+                  <div x-id="['fld']" class="card-form-row">
+                    <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.font.color')"></label>
                     <div class="card-form-field pdfx-color-field">
-                      <input type="color" class="pdfx-color-picker" x-model="activeProfile.config.font[role].color">
+                      <input :id="$id('fld')" type="color" class="pdfx-color-picker" x-model="activeProfile.config.font[role].color">
                       <span class="pdfx-color-text" x-text="activeProfile.config.font[role].color"></span>
                     </div>
                   </div>

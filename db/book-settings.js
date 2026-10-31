@@ -46,9 +46,31 @@ const RESEARCH_DEFAULTS = Object.freeze({
 });
 
 const _getBookSettings = db.prepare('SELECT language, region, buchtyp, buch_kontext, stilprofil, erzaehlperspektive, erzaehlzeit, is_finished, allow_lektor_book_chat, daily_goal_chars, goal_target_chars, goal_deadline, entities_enabled, orte_real, schauplatz_land, zeitlinie_real, weltfakten_real_pruefen, exclude_from_stats, citation_style, bibliography_enabled, bibliography_title, bibliography_scope, bibliography_in_blog, citation_notes, figure_numbering, table_numbering, textsorte, research_profile, research_domains, ideen_stages FROM book_settings WHERE book_id = ?');
+
+// Felder, die das Haupt-Formular (PUT /booksettings/:id) und der Bundle-Import
+// ueber saveBookSettings schreiben. Alle anderen Spalten haben eigene Setter.
+const MAIN_FIELDS = Object.freeze([
+  'language', 'region', 'buchtyp', 'buch_kontext', 'stilprofil',
+  'erzaehlperspektive', 'erzaehlzeit', 'is_finished', 'allow_lektor_book_chat',
+  'daily_goal_chars', 'goal_target_chars', 'goal_deadline',
+  'orte_real', 'schauplatz_land', 'zeitlinie_real', 'weltfakten_real_pruefen', 'exclude_from_stats',
+]);
+
+// Stand eines Buchs ohne book_settings-Zeile — ohne Sprache/Region/Buchtyp, die
+// kommen aus den Defaults des Owners (ownerDefaults). Eine Konstante fuer beide
+// Fallback-Pfade, damit sie nicht auseinanderlaufen.
+const SETTINGS_DEFAULTS = Object.freeze({
+  buch_kontext: null, stilprofil: null, erzaehlperspektive: null, erzaehlzeit: null,
+  is_finished: 0, allow_lektor_book_chat: 0,
+  daily_goal_chars: null, goal_target_chars: null, goal_deadline: null,
+  entities_enabled: 0, orte_real: 0, schauplatz_land: null, zeitlinie_real: 0,
+  weltfakten_real_pruefen: 0, exclude_from_stats: 0, textsorte: null,
+  ...RESEARCH_DEFAULTS, ...CITATION_DEFAULTS, ...XREF_DEFAULTS,
+});
+
 const _upsertBookSettings = db.prepare(`
   INSERT INTO book_settings (book_id, language, region, buchtyp, buch_kontext, stilprofil, erzaehlperspektive, erzaehlzeit, is_finished, allow_lektor_book_chat, daily_goal_chars, goal_target_chars, goal_deadline, orte_real, schauplatz_land, zeitlinie_real, weltfakten_real_pruefen, exclude_from_stats, updated_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (@book_id, @language, @region, @buchtyp, @buch_kontext, @stilprofil, @erzaehlperspektive, @erzaehlzeit, @is_finished, @allow_lektor_book_chat, @daily_goal_chars, @goal_target_chars, @goal_deadline, @orte_real, @schauplatz_land, @zeitlinie_real, @weltfakten_real_pruefen, @exclude_from_stats, @updated_at)
   ON CONFLICT(book_id) DO UPDATE SET
     language=excluded.language, region=excluded.region,
     buchtyp=excluded.buchtyp, buch_kontext=excluded.buch_kontext,
@@ -66,6 +88,53 @@ const _upsertBookSettings = db.prepare(`
     exclude_from_stats=excluded.exclude_from_stats,
     updated_at=excluded.updated_at
 `);
+
+// ── Zeile anlegen ────────────────────────────────────────────────────────────
+// Entscheidung: die Zeile entsteht lazy ueber ensureBookSettingsRow, das JEDER
+// Schreibpfad dieses Moduls vorher ruft — und zusaetzlich frueh bei der
+// Buchanlage (lib/content-store#createBook, mit dem Anleger als Owner-Ersatz,
+// weil books.owner_email dort noch nicht gesetzt ist). Keine Migration/kein
+// Backfill: ein Altbuch ohne Zeile liest ueber getBookSettings dieselben
+// Owner-Defaults, die ensureBookSettingsRow beim ersten Schreiben festschreibt —
+// Lesen und Schreiben sehen also denselben Stand, ohne dass ein Backfill die
+// heutigen Profil-Defaults in Altbuecher einfriert.
+//
+// Warum ueberhaupt: ein Teil-Upsert (`INSERT … (book_id, x)`) legte die Zeile mit
+// den Spalten-Defaults an (de/CH, Buchtyp NULL) und ueberschrieb so den Fallback
+// auf die Profil-Defaults — ein englisches Buch wurde durch einen Schalter im
+// Notebook still deutsch.
+const _insertBookSettingsRow = db.prepare(`
+  INSERT INTO book_settings (book_id, language, region, buchtyp, updated_at)
+  VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT(book_id) DO NOTHING
+`);
+
+/** Sprache/Region/Buchtyp aus den Profil-Defaults des Buch-Owners.
+ *  `fallbackEmail` greift nur, solange das Buch (noch) keinen Owner hat — bei
+ *  der Anlage, bevor die Karte den Eigentuemer setzt. Bewusst NICHT der
+ *  Anfragende: sonst saehe ein Lektor das Buch eines Autors in seiner eigenen
+ *  Sprache. */
+function ownerDefaults(bookId, fallbackEmail = null) {
+  const { defaultRegionFor } = require('../lib/book-settings-values');
+  const owner = require('./book-access').getOwnerEmail(bookId) || fallbackEmail || null;
+  const u = owner ? require('./app-users').getUser(owner) : null;
+  const language = u?.default_language || 'de';
+  return {
+    language,
+    region: u?.default_region || defaultRegionFor(language),
+    buchtyp: u?.default_buchtyp || null,
+  };
+}
+
+/** Legt die book_settings-Zeile an, falls sie fehlt (Owner-Defaults fuer
+ *  Sprache/Region/Buchtyp). Idempotent; eine vorhandene Zeile bleibt unberuehrt. */
+function ensureBookSettingsRow(bookId, fallbackEmail = null) {
+  const id = parseInt(bookId);
+  if (_getBookSettings.get(id)) return;
+  const d = ownerDefaults(id, fallbackEmail);
+  _insertBookSettingsRow.run(id, d.language, d.region, d.buchtyp, new Date().toISOString());
+}
+
 const _updateBookSettingsEntitiesEnabled = db.prepare(`
   INSERT INTO book_settings (book_id, entities_enabled, updated_at)
   VALUES (?, ?, ?)
@@ -100,10 +169,8 @@ const _seedBookStilprofil = db.prepare(`
   WHERE book_settings.stilprofil IS NULL OR TRIM(book_settings.stilprofil) = ''
 `);
 // Quellenverzeichnis-Einstellungen als eigener Schreibpfad (Muster
-// entities_enabled/stilprofil) statt als weitere Positionsargumente an
-// saveBookSettings: der Quellen-Tab speichert unabhaengig vom Haupt-Formular,
-// und die 18-stellige Positionsliste von saveBookSettings soll nicht weiter
-// wachsen.
+// entities_enabled/stilprofil) statt als weitere MAIN_FIELDS: der Quellen-Tab
+// speichert unabhaengig vom Haupt-Formular.
 const _updateBookCitationSettings = db.prepare(`
   INSERT INTO book_settings (book_id, citation_style, bibliography_enabled, bibliography_title, bibliography_scope, bibliography_in_blog, citation_notes, updated_at)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -127,21 +194,16 @@ const _updateBookXrefSettings = db.prepare(`
 `);
 
 /** Buchtyp eines Buchs OHNE book_settings-Zeile: der Default-Buchtyp des
- *  anfragenden Users. Eigene Funktion, weil die Buchliste (GET /content/books)
- *  den Typ ohne getBookSettings je Buch liest und sonst einen anderen Typ
- *  meldete als Prompts und Buchübersicht. */
-function fallbackBuchtyp(userEmail) {
-  if (!userEmail) return null;
-  return require('./app-users').getUser(userEmail)?.default_buchtyp || null;
+ *  Owners (Aufrufer reicht dessen E-Mail). Eigene Funktion, weil die Buchliste
+ *  (GET /content/books) den Typ ohne getBookSettings je Buch liest und sonst
+ *  einen anderen Typ meldete als Prompts und Buchübersicht. */
+function fallbackBuchtyp(ownerEmail) {
+  if (!ownerEmail) return null;
+  return require('./app-users').getUser(ownerEmail)?.default_buchtyp || null;
 }
 
-/** Gibt {language, region, buchtyp, buch_kontext, erzaehlperspektive, erzaehlzeit, is_finished, allow_lektor_book_chat, daily_goal_chars, entities_enabled} für ein Buch zurück.
- *  Fehlt die book_settings-Zeile, werden – wenn vorhanden – die User-Defaults
- *  (default_language/region/buchtyp) als Fallback verwendet. `daily_goal_chars`
- *  bleibt NULL, wenn nichts gesetzt — Frontend mappt auf 1500-Default. */
-function getBookSettings(bookId, userEmail = null) {
-  const row = _getBookSettings.get(parseInt(bookId));
-  if (row) return {
+function _mapRow(row) {
+  return {
     ...row,
     is_finished: row.is_finished ? 1 : 0,
     allow_lektor_book_chat: row.allow_lektor_book_chat ? 1 : 0,
@@ -163,48 +225,74 @@ function getBookSettings(bookId, userEmail = null) {
     research_domains: parseDomains(row.research_domains),
     ideen_stages: normalizeIdeeStages(row.ideen_stages),
   };
-  if (userEmail) {
-    const u = require('./app-users').getUser(userEmail);
-    if (u && (u.default_language || u.default_buchtyp)) {
-      const language = u.default_language || 'de';
-      const region   = u.default_region   || (language === 'en' ? 'US' : 'CH');
-      return { language, region, buchtyp: fallbackBuchtyp(userEmail), buch_kontext: null, stilprofil: null, erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 0, daily_goal_chars: null, goal_target_chars: null, goal_deadline: null, entities_enabled: 0, orte_real: 0, schauplatz_land: null, zeitlinie_real: 0, weltfakten_real_pruefen: 0, exclude_from_stats: 0, textsorte: null, ideen_stages: normalizeIdeeStages(null), ...RESEARCH_DEFAULTS, ...CITATION_DEFAULTS, ...XREF_DEFAULTS };
-    }
-  }
-  return { language: 'de', region: 'CH', buchtyp: null, buch_kontext: null, stilprofil: null, erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 0, daily_goal_chars: null, goal_target_chars: null, goal_deadline: null, entities_enabled: 0, orte_real: 0, schauplatz_land: null, zeitlinie_real: 0, weltfakten_real_pruefen: 0, exclude_from_stats: 0, textsorte: null, ideen_stages: normalizeIdeeStages(null), ...RESEARCH_DEFAULTS, ...CITATION_DEFAULTS, ...XREF_DEFAULTS };
+}
+
+/** Alle Buch-Einstellungen. Fehlt die book_settings-Zeile, gelten fuer
+ *  Sprache/Region/Buchtyp die Profil-Defaults des Buch-Owners (ownerDefaults),
+ *  alles andere aus SETTINGS_DEFAULTS. `fallbackEmail` wird nur gelesen, wenn das
+ *  Buch keinen Owner hat (Anlage-Phase) — Aufrufer duerfen die Session-E-Mail
+ *  weiter mitgeben, sie bestimmt das Ergebnis aber nicht mehr.
+ *  `daily_goal_chars`: NULL = nicht gesetzt (Frontend mappt auf 1500), 0 = kein Tagesziel. */
+function getBookSettings(bookId, fallbackEmail = null) {
+  const row = _getBookSettings.get(parseInt(bookId));
+  if (row) return _mapRow(row);
+  return {
+    ...ownerDefaults(bookId, fallbackEmail),
+    ...SETTINGS_DEFAULTS,
+    research_domains: [],
+    ideen_stages: normalizeIdeeStages(null),
+  };
 }
 
 /** Locale-Key für ein Buch: z.B. "de-CH", "en-US". */
-function getBookLocale(bookId, userEmail = null) {
-  const { language, region } = getBookSettings(bookId, userEmail);
+function getBookLocale(bookId, fallbackEmail = null) {
+  const { language, region } = getBookSettings(bookId, fallbackEmail);
   return `${language}-${region}`;
 }
 
-/** Speichert/aktualisiert Sprache, Region, Buchtyp, Buchkontext, Erzählperspektive, Erzählzeit, is_finished, allow_lektor_book_chat, daily_goal_chars.
- *  `entities_enabled` wird hier nicht angefasst — Quick-Toggle aus der Notebook-Toolbar laeuft ueber setBookEntitiesEnabled. */
-function saveBookSettings(bookId, language, region, buchtyp, buchKontext, erzaehlperspektive = null, erzaehlzeit = null, isFinished = 0, allowLektorBookChat = 0, dailyGoalChars = null, orteReal = 0, schauplatzLand = null, goalTargetChars = null, goalDeadline = null, stilprofil = null, zeitlinieReal = 0, excludeFromStats = 0, weltfaktenRealPruefen = 0) {
-  _upsertBookSettings.run(
-    parseInt(bookId), language, region,
-    buchtyp || null, buchKontext || null,
-    stilprofil || null,
-    erzaehlperspektive || null, erzaehlzeit || null,
-    isFinished ? 1 : 0,
-    allowLektorBookChat ? 1 : 0,
-    dailyGoalChars == null ? null : Math.round(Number(dailyGoalChars)),
-    goalTargetChars == null ? null : Math.round(Number(goalTargetChars)),
-    goalDeadline || null,
-    orteReal ? 1 : 0,
-    schauplatzLand || null,
-    zeitlinieReal ? 1 : 0,
-    weltfaktenRealPruefen ? 1 : 0,
-    excludeFromStats ? 1 : 0,
-    new Date().toISOString()
-  );
+/** Speichert die Felder des Haupt-Formulars (MAIN_FIELDS) als Teil-Update:
+ *  ein Key, der in `patch` fehlt (oder `undefined` ist), behaelt den
+ *  gespeicherten Wert; `null`/'' loescht ihn (bzw. setzt den Schalter auf 0).
+ *  Validierung ist Sache des Aufrufers — hier wird nur normalisiert.
+ *  `entities_enabled` und die Tab-Einstellungen (Quellen, Querverweise, …)
+ *  laufen ueber ihre eigenen Setter. Gibt den gespeicherten Stand zurueck. */
+function saveBookSettings(bookId, patch = {}) {
+  const id = parseInt(bookId);
+  ensureBookSettingsRow(id);
+  const cur = getBookSettings(id);
+  const v = (k) => (patch[k] !== undefined ? patch[k] : cur[k]);
+  const str = (x) => (x == null || x === '' ? null : String(x));
+  const int = (x) => (x == null || x === '' || !Number.isFinite(Number(x)) ? null : Math.round(Number(x)));
+  const bit = (x) => (x ? 1 : 0);
+  const language = str(v('language')) || cur.language;
+  _upsertBookSettings.run({
+    book_id: id,
+    language,
+    region: str(v('region')) || cur.region,
+    buchtyp: str(v('buchtyp')),
+    buch_kontext: str(v('buch_kontext')),
+    stilprofil: str(v('stilprofil')),
+    erzaehlperspektive: str(v('erzaehlperspektive')),
+    erzaehlzeit: str(v('erzaehlzeit')),
+    is_finished: bit(v('is_finished')),
+    allow_lektor_book_chat: bit(v('allow_lektor_book_chat')),
+    daily_goal_chars: int(v('daily_goal_chars')),
+    goal_target_chars: int(v('goal_target_chars')),
+    goal_deadline: str(v('goal_deadline')),
+    orte_real: bit(v('orte_real')),
+    schauplatz_land: str(v('schauplatz_land')),
+    zeitlinie_real: bit(v('zeitlinie_real')),
+    weltfakten_real_pruefen: bit(v('weltfakten_real_pruefen')),
+    exclude_from_stats: bit(v('exclude_from_stats')),
+    updated_at: new Date().toISOString(),
+  });
+  return getBookSettings(id);
 }
 
 /** Toggle aus Notebook-Toolbar — Quick-Update nur fuer entities_enabled,
  *  ohne andere Settings anzufassen (Toolbar-Toggle laedt Form nicht). */
 function setBookEntitiesEnabled(bookId, enabled) {
+  ensureBookSettingsRow(bookId);
   _updateBookSettingsEntitiesEnabled.run(
     parseInt(bookId),
     enabled ? 1 : 0,
@@ -212,42 +300,42 @@ function setBookEntitiesEnabled(bookId, enabled) {
   );
 }
 
-/** Quellenverzeichnis-Einstellungen pro Buch (Quellen-Tab der Bucheinstellungen).
- *  Eigener Schreibpfad — beruehrt keine anderen Settings. Enum-Werte werden hier
- *  hart auf die Whitelist gezwungen, damit ein Fremdwert nie in der DB landet
- *  (der Formatter kennt nur diese Stile und wuerde sonst still auf apa7 fallen). */
-// Default-Textsorte des Buchs. Eigener Setter statt eines weiteren Positions-
-// arguments an saveBookSettings — dessen 18-stellige Liste soll nicht wachsen.
+// Default-Textsorte des Buchs. Eigener Setter, gesetzt ueber PUT /:id/textsorte.
 const _updateBookTextsorte = db.prepare(
   'UPDATE book_settings SET textsorte = ?, updated_at = ? WHERE book_id = ?',
 );
-// Buchtyp allein setzen (Ordner-Import legt ein Tagebuch an). UPSERT, weil das
-// frisch angelegte Buch noch keine Zeile hat; Sprache/Region kommen dann aus
-// demselben User-Fallback wie bei getBookSettings, damit die Monatsnamen der
-// Kapitel und die Buch-Locale übereinstimmen.
-const _upsertBookBuchtyp = db.prepare(`
-  INSERT INTO book_settings (book_id, language, region, buchtyp, updated_at)
-  VALUES (?, ?, ?, ?, ?)
-  ON CONFLICT(book_id) DO UPDATE SET buchtyp = excluded.buchtyp, updated_at = excluded.updated_at
-`);
+// Buchtyp allein setzen (Ordner-Import legt ein Tagebuch an). Sprache/Region
+// der neuen Zeile kommen aus denselben Owner-Defaults wie bei getBookSettings
+// (`userEmail` = Anleger, solange das Buch noch keinen Owner hat), damit die
+// Monatsnamen der Kapitel und die Buch-Locale übereinstimmen.
+const _updateBookBuchtyp = db.prepare(
+  'UPDATE book_settings SET buchtyp = ?, updated_at = ? WHERE book_id = ?',
+);
 function setBookBuchtyp(bookId, buchtyp, userEmail = null) {
-  const { language, region } = getBookSettings(bookId, userEmail);
-  _upsertBookBuchtyp.run(parseInt(bookId), language, region, buchtyp || null, new Date().toISOString());
+  ensureBookSettingsRow(bookId, userEmail);
+  _updateBookBuchtyp.run(buchtyp || null, new Date().toISOString(), parseInt(bookId));
 }
 
 function setBookTextsorte(bookId, textsorte) {
   const value = textsorte == null || textsorte === '' ? null : String(textsorte);
-  // Kein UPSERT: ohne book_settings-Zeile gibt es noch keinen Buchtyp, und eine
-  // Textsorte ohne Buchtyp waere eine Angabe ohne Wirkung. Das Formular legt die
-  // Zeile ohnehin beim ersten Speichern an.
+  // Zeile zuerst sicherstellen: ein reines UPDATE traefe ohne Zeile nichts, und
+  // die Route meldete trotzdem ok. Die Route laesst nur publizistische Buecher
+  // durch (Buchtyp aus Zeile oder Owner-Default), die neue Zeile traegt also
+  // denselben Buchtyp, unter dem die Textsorte gilt.
+  ensureBookSettingsRow(bookId);
   _updateBookTextsorte.run(value, new Date().toISOString(), parseInt(bookId));
   return value;
 }
 
+/** Quellenverzeichnis-Einstellungen pro Buch (Quellen-Tab der Bucheinstellungen).
+ *  Eigener Schreibpfad — beruehrt keine anderen Settings. Enum-Werte werden hier
+ *  hart auf die Whitelist gezwungen, damit ein Fremdwert nie in der DB landet
+ *  (der Formatter kennt nur diese Stile und wuerde sonst still auf apa7 fallen). */
 function setBookCitationSettings(bookId, {
   citation_style, bibliography_enabled, bibliography_title, bibliography_scope, bibliography_in_blog,
   citation_notes,
 } = {}) {
+  ensureBookSettingsRow(bookId);
   const style = VALID_CITATION_STYLES.includes(citation_style)
     ? citation_style : CITATION_DEFAULTS.citation_style;
   const scope = VALID_BIBLIOGRAPHY_SCOPES.includes(bibliography_scope)
@@ -264,8 +352,7 @@ function setBookCitationSettings(bookId, {
 }
 
 // Recherche-Profil, eigener Schreibpfad aus demselben Grund wie /citation und
-// /xrefs: es steuert nur den Recherche-Chat und soll die 18-stellige
-// Positionsliste von saveBookSettings nicht weiter verlaengern.
+// /xrefs: es steuert nur den Recherche-Chat.
 const _updateBookResearchSettings = db.prepare(`
   INSERT INTO book_settings (book_id, research_profile, research_domains, updated_at)
   VALUES (?, ?, ?, ?)
@@ -280,6 +367,7 @@ const _updateBookResearchSettings = db.prepare(`
  *  `allowed_domains` bekommt nur, was auch ein Hostname ist.
  *  Gibt den gespeicherten Stand zurueck (Domains als Array). */
 function setBookResearchSettings(bookId, { research_profile, research_domains } = {}) {
+  ensureBookSettingsRow(bookId);
   const profile = normalizeProfile(research_profile);
   const domains = serializeDomains(research_domains);
   _updateBookResearchSettings.run(
@@ -301,6 +389,7 @@ const _updateBookIdeenStages = db.prepare(`
  *  lib/ideen-status.js — `offen`/`erledigt` kommen immer dazu, Unbekanntes
  *  faellt weg. Gibt die gespeicherte Liste zurueck. */
 function setBookIdeenStages(bookId, stages) {
+  ensureBookSettingsRow(bookId);
   const value = serializeIdeeStages(Array.isArray(stages) ? stages : []);
   _updateBookIdeenStages.run(parseInt(bookId), value, new Date().toISOString());
   return normalizeIdeeStages(value);
@@ -337,6 +426,7 @@ function getBookSchulsystem(bookId) {
 
 /** Schulsystem setzen (normalisierte Form) oder mit null entfernen. */
 function setBookSchulsystem(bookId, schulsystem) {
+  ensureBookSettingsRow(bookId);
   _updateBookSchulsystem.run(
     parseInt(bookId), schulsystem ? JSON.stringify(schulsystem) : null, new Date().toISOString(),
   );
@@ -360,12 +450,14 @@ function getBookHandlungsjahr(bookId) {
 }
 
 function setBookHandlungsjahr(bookId, jahr) {
+  ensureBookSettingsRow(bookId);
   _updateBookHandlungsjahr.run(parseInt(bookId), Number.isInteger(jahr) ? jahr : null, new Date().toISOString());
 }
 
 /** Querverweis-Einstellungen pro Buch. Eigener Schreibpfad — beruehrt keine
  *  anderen Settings. */
 function setBookXrefSettings(bookId, { figure_numbering, table_numbering } = {}) {
+  ensureBookSettingsRow(bookId);
   _updateBookXrefSettings.run(
     parseInt(bookId),
     figure_numbering ? 1 : 0,
@@ -379,6 +471,7 @@ function setBookXrefSettings(bookId, { figure_numbering, table_numbering } = {})
  *  damit EIN Schalter: er gilt buchweit und geht in die Prompts, ein zweiter
  *  pro User wuerde diese Aussage zerteilen. */
 function setBookIsFinished(bookId, isFinished) {
+  ensureBookSettingsRow(bookId);
   _updateBookIsFinished.run(
     parseInt(bookId),
     isFinished ? 1 : 0,
@@ -389,6 +482,7 @@ function setBookIsFinished(bookId, isFinished) {
 /** Quick-Update nur fuer stilprofil — der Stilprofil-Extraktions-Job persistiert
  *  sein Ergebnis, ohne die uebrigen Settings (die er nicht geladen hat) zu beruehren. */
 function setBookStilprofil(bookId, stilprofil) {
+  ensureBookSettingsRow(bookId);
   _updateBookStilprofil.run(
     parseInt(bookId),
     stilprofil || null,
@@ -405,14 +499,18 @@ function setBookStilprofil(bookId, stilprofil) {
  *
  * Schreibt nur in eine leere Stelle. Gibt `true` zurueck, wenn vorbelegt wurde.
  */
-function seedBookStilprofil(bookId, stilprofil) {
+function seedBookStilprofil(bookId, stilprofil, authorEmail = null) {
   const text = (stilprofil || '').trim();
   if (!text) return false;
+  // Anlage-Phase: books.owner_email ist noch leer → der Autor steht fuer den Owner.
+  ensureBookSettingsRow(bookId, authorEmail);
   return _seedBookStilprofil.run(parseInt(bookId), text, new Date().toISOString()).changes > 0;
 }
 
 module.exports = {
   getBookSettings,
+  ensureBookSettingsRow,
+  MAIN_FIELDS,
   fallbackBuchtyp,
   seedBookStilprofil,
   getBookLocale,

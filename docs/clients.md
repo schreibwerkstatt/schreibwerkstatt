@@ -143,7 +143,7 @@ Content-Type: application/json
 | `CONFIRM_REQUIRED` | 400 | `confirm` fehlt oder ist nicht exakt `DELETE` |
 | `ACCOUNT_DELETE_FORBIDDEN` | 403 | Konto darf sich nicht selbst löschen: `ADMIN_EMAIL` aus der ENV (wird beim Serverstart neu angelegt) oder letzter aktiver Admin der Instanz |
 | `USER_NOT_FOUND` | 404 | keine `app_users`-Row zu dieser Anmeldung |
-| `ACCOUNT_DELETE_FAILED` | 500 | Löschung abgebrochen; trägt `detail`. Ein zweiter Aufruf räumt den Rest ab (jeder Schritt ist idempotent). Optional `reason: 'OWNED_BOOKS_NOT_DELETED'` + `failed_books` (Anzahl): eigene Bücher liessen sich nicht löschen, das **Konto besteht weiter**, die Device-Tokens sind aber schon widerrufen — ein erneuter Versuch braucht eine neue Anmeldung (bzw. die Web-Sitzung, die gültig bleibt) |
+| `ACCOUNT_DELETE_FAILED` | 500 | Löschung abgebrochen (Ursache nur im Server-Log). Ein zweiter Aufruf räumt den Rest ab (jeder Schritt ist idempotent). Optional `reason: 'OWNED_BOOKS_NOT_DELETED'` + `failed_books` (Anzahl): eigene Bücher liessen sich nicht löschen, das **Konto besteht weiter**, die Device-Tokens sind aber schon widerrufen — ein erneuter Versuch braucht eine neue Anmeldung (bzw. die Web-Sitzung, die gültig bleibt) |
 
 > **Ein 404 OHNE `error_code`** heisst „dieser Server kennt die Route nicht" (ältere Instanz). Der Client fällt dann auf den Browser zurück und öffnet `…/#profil` — dort steht in der Profil-Karte dieselbe Aktion. Jeder **fachliche** Fehler trägt dagegen immer einen `error_code`.
 

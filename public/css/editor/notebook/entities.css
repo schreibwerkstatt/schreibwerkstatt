@@ -31,8 +31,8 @@
     max-height: min(480px, calc(100vh - 24px));
     background: var(--color-bg);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
+    border-radius: var(--radius-none);
+    box-shadow: var(--shadow-md);
     overflow: hidden;
     isolation: isolate;
   }
@@ -76,7 +76,7 @@
     flex: 0 0 auto;
     width: 36px;
     height: 36px;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: color-mix(in srgb, var(--color-accent-figure) 22%, var(--color-neutral-bg));
     color: var(--color-accent-figure-fg);
     display: inline-flex;
@@ -134,7 +134,7 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     padding: var(--space-1) var(--space-6);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: color-mix(in srgb, var(--color-accent-figure) 18%, transparent);
     color: var(--color-accent-figure-fg);
     font-weight: var(--fw-semibold);
@@ -163,7 +163,7 @@
   .entity-popover-tag {
     font-size: 0.7em;
     padding: var(--space-1) var(--space-6);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: var(--color-neutral-bg);
     color: var(--color-subtle);
     text-transform: lowercase;
@@ -181,7 +181,7 @@
     line-height: 1;
     padding: 0 var(--space-xs);
     color: var(--color-subtle);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
   }
 
   .entity-popover-close:hover {
@@ -277,9 +277,9 @@
     border: none;
     cursor: pointer;
     font-size: 0.86em;
-    color: var(--color-accent);
+    color: var(--color-accent-text);
     padding: var(--space-xs) var(--space-6);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     font-weight: var(--fw-medium);
     text-decoration: none;
     white-space: nowrap;
@@ -306,20 +306,4 @@
       min-width: 0;
     }
   }
-}
-
-/* Tokens: Accents pro Entity-Typ. Werden in tokens/colors.css ueberschrieben,
-   falls dort definiert; Fallbacks hier sichern Standalone-Rendering ab. */
-:root {
-  --color-accent-figure: #6c8bd7;
-  --color-accent-figure-fg: #2c3e7d;
-  --color-accent-location: #c08a4a;
-  --color-accent-location-fg: #6e4a1f;
-}
-
-[data-theme="dark"] {
-  --color-accent-figure: #8aa5e6;
-  --color-accent-figure-fg: #b3c6f0;
-  --color-accent-location: #d4a474;
-  --color-accent-location-fg: #e6c294;
 }

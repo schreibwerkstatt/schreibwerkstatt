@@ -3,7 +3,7 @@
   Alpine.data-Sub-Komponente — siehe public/js/cards/book-settings-card.js.
   `showBookSettingsCard` bleibt im Root, fachlicher State in dieser Komponente.
 -->
-<div class="card card--settings" x-data="bookSettingsCard" x-show="$app.showBookSettingsCard" x-cloak
+<div class="card card--settings card--book-settings" x-data="bookSettingsCard" x-show="$app.showBookSettingsCard" x-cloak
      @keydown="$editKeys($event, { save: () => !headerDisabled() && saveActiveTab() })">
   <div class="card-header">
     <div class="card-header-titlebar">
@@ -13,7 +13,10 @@
     <div class="card-actions">
       <span class="card-form-saved" x-show="headerSaved()" x-cloak x-transition.opacity.duration.250ms x-text="$app.t('common.settingsSaved')"></span>
       <span class="card-form-error" x-show="headerError()" x-text="headerError()"></span>
-      <button type="button" data-label-ok @click="saveActiveTab()" :disabled="headerDisabled()">
+      <!-- Nur auf Reitern mit Formular (save-paths.js#HEADER_SAVE_TABS) — oder
+           solange anderswo Ungespeichertes liegt, damit es erreichbar bleibt. -->
+      <button type="button" data-label-ok @click="saveActiveTab()" :disabled="headerDisabled()"
+              x-show="headerSaveVisible() || bookSettingsDirty()">
         <span x-show="headerSaving()" class="spinner"></span>
         <span x-text="headerSaving() ? $app.t('common.saving') : $app.t('common.save')"></span>
       </button>
@@ -23,7 +26,7 @@
   <div x-show="bookSettingsLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
 
   <div x-show="!bookSettingsLoading"
-       x-data="tabs(['book','context','school','sources','share','publication','expose','series','sync','stats','danger'])"
+       x-data="tabs(['book','context','school','sources','share','publication','expose','series','sync','danger'])"
        x-modelable="value" x-model="bookSettingsTab">
 
     <!-- Tabs (DESIGN.md .tabs / Alpine.data('tabs')) -->
@@ -49,8 +52,6 @@
       <button class="tabs-btn" x-bind="tabBtn('sync')"
               x-show="bookSettingsIsBlog()" x-cloak
               x-text="$app.t('book.settings.tab.sync')"></button>
-      <button class="tabs-btn" x-bind="tabBtn('stats')"
-              x-text="$app.t('book.settings.tab.stats')"></button>
       <button class="tabs-btn" x-bind="tabBtn('danger')"
               x-text="$app.t('book.settings.tab.danger')"></button>
     </div>
@@ -75,6 +76,5 @@
 
     <!-- @include book-settings-sync -->
 
-    <!-- @include book-settings-stats -->
   </div>
 </div>

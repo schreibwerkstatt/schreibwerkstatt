@@ -132,7 +132,7 @@
   letter-spacing: 0.04em;
   font-size: var(--font-size-mini);
   padding: var(--pad-badge);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 
 .changelog-entries {
@@ -158,7 +158,7 @@
 .changelog-kind {
   justify-self: start;
   padding: var(--pad-badge);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-mini);
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
@@ -187,7 +187,7 @@
   min-height: 0;
 }
 .header-help-btn[aria-pressed="true"] {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 /* Welcome-Empty-State: Primaer-CTA (Buch anlegen) + Beispielbuch nebeneinander,
@@ -206,7 +206,7 @@
   padding: 0;
   font: inherit;
   font-size: var(--font-size-mini);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -218,7 +218,7 @@
 /* Welcome-Empty-State: 3-Schritt-Ablauf (Schreiben → Analysieren → Überarbeiten)
    + Philosophie-Zeile. Vermittelt früh, dass die KI rückwärtsgewandt arbeitet
    (nie generativ im Text). Links-bündige Liste, als Block in der zentrierten
-   Empty-Card. Schritt-Nummern eckig (var(--radius-sm)). */
+   Empty-Card. Schritt-Nummern eckig (var(--radius-none)). */
 .welcome-steps {
   list-style: none;
   margin: var(--space-sm) 0 0;
@@ -242,7 +242,7 @@
   justify-content: center;
   width: 1.6em;
   height: 1.6em;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-accent-bg);
   color: var(--color-accent-text);
   font-size: var(--font-size-sm);

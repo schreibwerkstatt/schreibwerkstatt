@@ -101,24 +101,15 @@
                })">
           <thead>
             <tr>
-              <th class="sortable-th" :class="sortClass('name')" :aria-sort="ariaSort('name')"
-                  @click="sortBy('name')" x-text="$app.t('mybooks.col.book')"></th>
-              <th class="sortable-th mybooks-num" :class="sortClass('chars')" :aria-sort="ariaSort('chars')"
-                  @click="sortBy('chars')" x-text="$app.t('mybooks.col.volume')"></th>
-              <th class="sortable-th mybooks-num" :class="sortClass('pages')" :aria-sort="ariaSort('pages')"
-                  @click="sortBy('pages')" x-text="$app.t('mybooks.col.structure')"></th>
-              <th class="sortable-th mybooks-num" :class="sortClass('writing_seconds')" :aria-sort="ariaSort('writing_seconds')"
-                  @click="sortBy('writing_seconds')" x-text="$app.t('mybooks.col.time')"></th>
-              <th class="sortable-th mybooks-num" :class="sortClass('snapshots')" :aria-sort="ariaSort('snapshots')"
-                  @click="sortBy('snapshots')" x-text="$app.t('mybooks.col.snapshots')"></th>
-              <th class="sortable-th mybooks-num" :class="sortClass('exports')" :aria-sort="ariaSort('exports')"
-                  @click="sortBy('exports')" x-text="$app.t('mybooks.col.exports')"></th>
-              <th class="sortable-th mybooks-num" :class="sortClass('share_links_active')" :aria-sort="ariaSort('share_links_active')"
-                  @click="sortBy('share_links_active')" x-text="$app.t('mybooks.col.shareLinks')"></th>
-              <th class="sortable-th mybooks-num" :class="sortClass('comments')" :aria-sort="ariaSort('comments')"
-                  @click="sortBy('comments')" x-text="$app.t('mybooks.col.comments')"></th>
-              <th class="sortable-th" :class="sortClass('last_activity_at')" :aria-sort="ariaSort('last_activity_at')"
-                  @click="sortBy('last_activity_at')" x-text="$app.t('mybooks.col.lastActivity')"></th>
+              <th x-bind="sortTh('name')" x-text="$app.t('mybooks.col.book')"></th>
+              <th x-bind="sortTh('chars')" class="mybooks-num" x-text="$app.t('mybooks.col.volume')"></th>
+              <th x-bind="sortTh('pages')" class="mybooks-num" x-text="$app.t('mybooks.col.structure')"></th>
+              <th x-bind="sortTh('writing_seconds')" class="mybooks-num" x-text="$app.t('mybooks.col.time')"></th>
+              <th x-bind="sortTh('snapshots')" class="mybooks-num" x-text="$app.t('mybooks.col.snapshots')"></th>
+              <th x-bind="sortTh('exports')" class="mybooks-num" x-text="$app.t('mybooks.col.exports')"></th>
+              <th x-bind="sortTh('share_links_active')" class="mybooks-num" x-text="$app.t('mybooks.col.shareLinks')"></th>
+              <th x-bind="sortTh('comments')" class="mybooks-num" x-text="$app.t('mybooks.col.comments')"></th>
+              <th x-bind="sortTh('last_activity_at')" x-text="$app.t('mybooks.col.lastActivity')"></th>
               <th x-text="$app.t('mybooks.col.actions')"></th>
             </tr>
           </thead>
@@ -127,7 +118,7 @@
             <template x-for="row in myBooksOrdered(sorted)" :key="row.book_id">
               <tr :class="{ 'mybooks-row--archived': row.archived, 'mybooks-row--pinned': row.pinned }">
                 <td class="mybooks-book">
-                  <button type="button" class="internal-link mybooks-book-name"
+                  <button type="button" class="mybooks-book-name"
                           @click="myBooksOpen(row)" x-text="row.name"></button>
                   <span class="mybooks-book-meta">
                     <span x-show="row.is_finished" class="badge-ok" x-text="$app.t('mybooks.status.finished')"></span>

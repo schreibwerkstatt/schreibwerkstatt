@@ -6,8 +6,8 @@ const {
   db, listChapterReviewHistory, deleteChapterReview,
   listRueckblicke, getRueckblick, searchRueckblickIds, deleteRueckblick,
   listBookReviewHistory, deleteBookReview,
-  deleteReviewCache, deleteChapterMacroReviewCache, deleteRueckblickCache,
 } = require('../../db/schema');
+const { resetBookHistory } = require('../../db/history-reset');
 const { toIntId } = require('../../lib/validate');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const { buildRueckblickCoverage } = require('../jobs/rueckblick-dates');
@@ -47,31 +47,13 @@ function register(router) {
     res.json(row);
   });
 
-  // Kompletter History-Reset für ein Buch: löscht page_checks, book_reviews und
-  // chat_sessions (inkl. Nachrichten via ON DELETE CASCADE) des eingeloggten Users,
-  // dazu die Bewertungs-Caches — sonst lieferte die nächste Bewertung nach dem
-  // Reset wortgleich das alte Ergebnis.
+  // Kompletter History-Reset für ein Buch (eingeloggter User) — Umfang und
+  // Begründung in db/history-reset.js.
   router.delete('/book/:book_id', (req, res) => {
     const user_email = sessionEmail(req);
     const book_id = req.bookId;
 
-    const delChecks     = db.prepare('DELETE FROM page_checks      WHERE book_id = ? AND user_email = ?');
-    const delReviews    = db.prepare('DELETE FROM book_reviews     WHERE book_id = ? AND user_email = ?');
-    const delChReviews  = db.prepare('DELETE FROM chapter_reviews  WHERE book_id = ? AND user_email = ?');
-    const delSessions   = db.prepare('DELETE FROM chat_sessions    WHERE book_id = ? AND user_email = ?');
-    const delWerkRuns   = db.prepare('DELETE FROM werkstatt_runs   WHERE book_id = ? AND user_email = ?');
-    const delRueckblicke = db.prepare('DELETE FROM tagebuch_rueckblicke WHERE book_id = ? AND user_email = ?');
-
-    const result = db.transaction(() => ({
-      page_checks:      delChecks.run(book_id, user_email).changes,
-      book_reviews:     delReviews.run(book_id, user_email).changes,
-      chapter_reviews:  delChReviews.run(book_id, user_email).changes,
-      chat_sessions:    delSessions.run(book_id, user_email).changes,
-      werkstatt_runs:   delWerkRuns.run(book_id, user_email).changes,
-      rueckblicke:      delRueckblicke.run(book_id, user_email).changes,
-      review_cache:     deleteReviewCache(book_id, user_email) + deleteChapterMacroReviewCache(book_id, user_email)
-                        + deleteRueckblickCache(book_id, user_email),
-    }))();
+    const result = resetBookHistory(book_id, user_email);
 
     logger.info(
       `History-Reset: book=${book_id} user=${user_email} ` +

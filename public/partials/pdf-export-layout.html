@@ -2,12 +2,12 @@
            Kopf-/Fusszeile + Seitenzahlen leben im Tab „Kopf & Seitenzahlen". -->
       <div class="export-tab-panel" x-bind="panel('layout')">
         <div class="card-form-grid">
-          <div class="card-form-row card-form-row--top">
-            <label class="card-form-label" x-text="$app.t('pdfExport.layout.trimPreset')"></label>
+          <div x-id="['fld']" class="card-form-row card-form-row--top">
+            <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.layout.trimPreset')"></label>
             <div class="card-form-field">
               <!-- value spiegelt den echten Zustand (Profilwechsel, Vorlage,
                    Handeingabe der Masse) — kein Treffer → «Benutzerdefiniert». -->
-              <div x-data="combobox($app.t('pdfExport.layout.trimPresetPlaceholder'))"
+              <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.layout.trimPresetPlaceholder'))"
                    x-modelable="value" x-model="trimPresetSel"
                    x-effect="options = trimPresetOptions(); value = currentTrimPreset()"
                    @combobox-change="applyTrimPreset($event.detail)"
@@ -18,10 +18,10 @@
 
           <!-- @include pdf-export-satzspiegel -->
 
-          <div class="card-form-row" x-show="uiMode === 'expert'">
-            <label class="card-form-label" x-text="$app.t('pdfExport.layout.pageSize')"></label>
+          <div x-id="['fld']" class="card-form-row" x-show="uiMode === 'expert'">
+            <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.layout.pageSize')"></label>
             <div class="card-form-field">
-              <div x-data="combobox($app.t('pdfExport.layout.pageSize'))"
+              <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.layout.pageSize'))"
                    x-modelable="value" x-model="activeProfile.config.layout.pageSize"
                    x-effect="options = [{ value: 'A4', label: 'A4' }, { value: 'A5', label: 'A5' }, { value: 'A6', label: 'A6' }, { value: 'Letter', label: 'Letter' }, { value: 'custom', label: $app.t('pdfExport.layout.custom') }]"
 ></div>
@@ -29,19 +29,19 @@
           </div>
 
           <template x-if="uiMode === 'expert' && activeProfile.config.layout.pageSize === 'custom'">
-            <div class="card-form-row">
-              <label class="card-form-label" x-text="$app.t('pdfExport.layout.widthMm') + ' / ' + $app.t('pdfExport.layout.heightMm')"></label>
-              <div class="card-form-field pdfx-inline-pair">
+            <div x-id="['fld']" class="card-form-row">
+              <span :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.layout.widthMm') + ' / ' + $app.t('pdfExport.layout.heightMm')"></span>
+              <div role="group" :aria-labelledby="$id('fld')" class="card-form-field pdfx-inline-pair">
                 <input type="text" x-data="numInput({ step: 0.1, min: 50, max: 500 })" x-modelable="value" x-model="activeProfile.config.layout.customWidthMm" class="pdfx-num-input">
                 <input type="text" x-data="numInput({ step: 0.1, min: 50, max: 700 })" x-modelable="value" x-model="activeProfile.config.layout.customHeightMm" class="pdfx-num-input">
               </div>
             </div>
           </template>
 
-          <div class="card-form-row" x-show="uiMode === 'expert'">
-            <label class="card-form-label" x-text="$app.t('pdfExport.layout.columns')"></label>
+          <div x-id="['fld']" class="card-form-row" x-show="uiMode === 'expert'">
+            <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.layout.columns')"></label>
             <div class="card-form-field pdfx-inline-pair">
-              <div x-data="combobox($app.t('pdfExport.layout.columns'))"
+              <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.layout.columns'))"
                    x-modelable="value" x-model="activeProfile.config.layout.columns"
                    x-effect="options = [{ value: 1, label: '1' }, { value: 2, label: '2' }]"
 ></div>

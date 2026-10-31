@@ -1,6 +1,11 @@
 // Teil von appViewMethods (siehe Facade app-view.js).
-import { EVT, clearDraft, contentRepo, decorateMentions, escHtml, fetchJson, getDeviceId, htmlToText, readDraft, setLastPageId } from './_shared.js';
+import { EVT, _withCardTransition, clearDraft, contentRepo, decorateMentions, escHtml, fetchJson, getDeviceId, htmlToText, readDraft, setLastPageId } from './_shared.js';
 import { lsSet, lsRemove } from '../../safe-storage.js';
+
+// Wie lange `selectPage` aus einer anderen Karte auf den Seiteninhalt wartet,
+// bevor es trotzdem umschaltet (dann mit Lade-Skelett). Kurz genug, dass der
+// Klick nicht hängt; lang genug für SW-Cache und lokales Netz.
+const PREFETCH_WAIT_MS = 300;
 
 export const pageMethods = {
   async selectPage(p) {
@@ -22,10 +27,31 @@ export const pageMethods = {
       });
       if (!ok) return;
     }
-    // Alle Buchkarten schliessen + Editor-State resetten – nur eine Ebene
-    // (Buch oder Seite) aktiv. Helper deckt alle showXxxCard-Flags ab und
-    // ruft resetPage(); kein Argument = nichts behalten.
-    this._closeOtherMainCards();
+    // Drei Wege in den Editor, alle ohne leeren Zwischen-Frame:
+    // - `swap` (Abschnitt → Abschnitt aus der Leseansicht): Karte und gerenderter
+    //   Text der alten Seite bleiben stehen, bis der neue Inhalt sie ersetzt
+    //   (gedimmt, falls das dauert). Sonst blendete `showEditorCard` false → true
+    //   die Karte aus und wieder ein (cardFadeIn neu, Skelett blitzt auf).
+    // - `deferClose` (aus einer anderen Karte oder einer leeren Seite): die alte
+    //   Ansicht bleibt stehen, während Partials und Seiteninhalt laden (Inhalt
+    //   höchstens PREFETCH_WAIT_MS lang), dann schaltet ein Schritt im
+    //   Karten-Cross-Fade um — der Editor erscheint mit Text statt leer.
+    // - Edit-/Fokus-Modus: sofort abbauen wie bisher. Dort ist `renderedPageHtml`
+    //   nicht der sichtbare Stand, und eine stehen gelassene Edit-Session nähme
+    //   während des Wartens noch Eingaben an.
+    const swap = !!(this.showEditorCard && this.currentPage && this.renderedPageHtml
+      && !this.editMode && !this.focusActive);
+    const deferClose = !swap && !this.editMode && !this.focusActive;
+    const seq = this._selectPageSeq = (this._selectPageSeq || 0) + 1;
+    if (!deferClose) {
+      // Alle Buchkarten schliessen + Editor-State resetten – nur eine Ebene
+      // (Buch oder Seite) aktiv. Helper deckt alle showXxxCard-Flags ab und
+      // ruft resetPage().
+      this._closeOtherMainCards(null, { keepView: swap });
+      // Synchron setzen, damit kein Render-Tick mit offener Karte ohne Seite liegt.
+      if (swap) this.currentPage = p;
+    }
+    const prefetch = deferClose ? this._prefetchPage(p.id) : null;
     // Editor + Sub-Partials parallel laden. Sub-Karten (toolbar, find, synonyme,
     // figur-lookup, focus) sind Geschwister-Partials, keine nested children —
     // werden vom Cascade-Helper deshalb nicht automatisch mitgezogen.
@@ -36,16 +62,30 @@ export const pageMethods = {
       this._ensurePartial('editor-figur-lookup'),
       this._ensurePartial('editor-synonyme'),
       this._ensurePartial('editor-focus'),
+      prefetch && Promise.race([prefetch.promise, new Promise(r => setTimeout(r, PREFETCH_WAIT_MS))]),
     ]);
-    // Zweite Exklusivitäts-Runde: die Partial-Awaits oben sind Netz-Fetches und
-    // können bei schlechter Verbindung hängen. In dieser Zeit kann ein parallel
-    // laufender Landing-Pfad (`_maybeOpenBookOverview`) eine Buchkarte geöffnet
-    // haben — ohne diesen Re-Assert stünden Übersicht und Editor gleichzeitig
-    // offen. Kein `resetPage()`: das lief oben schon, ein zweiter Lauf würde die
-    // gerade aufgebaute Editor-Session wieder abräumen.
-    this._closeOtherMainCards(null, { resetPage: false });
-    this.currentPage = p;
-    this.showEditorCard = true;
+    // Während der Awaits wurde ein anderer Abschnitt gewählt: dessen Aufruf
+    // besitzt die Ansicht.
+    if (seq !== this._selectPageSeq) return;
+    // Exklusivität (bei `deferClose` die erste Runde, sonst die zweite): die
+    // Awaits oben sind Netz-Fetches und können bei schlechter Verbindung hängen.
+    // In dieser Zeit kann ein parallel laufender Landing-Pfad
+    // (`_maybeOpenBookOverview`) eine Buchkarte geöffnet haben — ohne diesen
+    // Re-Assert stünden Übersicht und Editor gleichzeitig offen. `resetPage`
+    // nur, wenn er oben nicht schon lief: ein zweiter Lauf würde die gerade
+    // aufgebaute Editor-Session wieder abräumen.
+    // `_loadCurrentPageContent` wendet einen schon eingetroffenen Prefetch
+    // synchron an — Umschalten und Inhalt landen im selben Render.
+    let loaded;
+    const flip = () => {
+      this._closeOtherMainCards(null, { resetPage: deferClose });
+      this.currentPage = p;
+      this.showEditorCard = true;
+      this.analysisOut = '';
+      loaded = this._loadCurrentPageContent(p, { prefetch });
+    };
+    if (deferClose) await _withCardTransition(this, flip);
+    else flip();
     this.$nextTick(() => this._scrollToEditorCard());
 
     if (typeof this._trackPageUsage === 'function' && this.$store.nav.selectedBookId) {
@@ -59,11 +99,16 @@ export const pageMethods = {
 
     this._loadPageBadgeCounts(p.id);
 
-    // Seiteninhalt laden und als formatiertes HTML rendern. Fehler landen
-    // nicht still in einer leeren Seite, sondern in einem Retry-Block
-    // (pageLoadError) — inkl. einmaligem stillem Auto-Retry mit Cache-Bypass.
-    this.analysisOut = '';
-    await this._loadCurrentPageContent(p);
+    // Seiteninhalt (oben in `flip` angestossen) abwarten. Fehler landen nicht
+    // still in einer leeren Seite, sondern in einem Retry-Block (pageLoadError)
+    // — inkl. einmaligem stillem Auto-Retry mit Cache-Bypass.
+    await loaded;
+    // Die Leseansicht scrollt intern; beim Swap behielte sie die Position der
+    // alten Seite.
+    if (swap && this.currentPage?.id === p.id) {
+      const view = document.querySelector('#editor-card .page-view-wrap > .page-content-view');
+      if (view) view.scrollTop = 0;
+    }
     // Während der Awaits eine andere Seite geöffnet: der Rest gehört deren
     // eigenem selectPage. Ein hier gestarteter Lektorat-Poll läse seine Seite aus
     // `currentPage` und hinge die Befunde von `p` an die neue.
@@ -136,12 +181,14 @@ export const pageMethods = {
   // Zustände ab (typisch direkt nach Deploy). Schlägt auch der Retry fehl,
   // wird `pageLoadError` gesetzt → View zeigt Retry-Block statt leerer Seite.
   // `auto`=false unterdrückt den stillen Retry (manueller Retry-Button).
-  async _loadCurrentPageContent(p, { auto = true } = {}) {
+  // `prefetch` (aus `_prefetchPage`): ist er schon eingetroffen, wird ohne
+  // await angewendet; sonst wird auf ihn gewartet, statt ein zweites Mal zu laden.
+  async _loadCurrentPageContent(p, { auto = true, prefetch = null } = {}) {
     const pageId = p.id;
     this.pageLoadError = false;
     this.pageContentLoading = true;
     try {
-      let pd = await contentRepo.loadPage(pageId);
+      let pd = prefetch?.pd || (prefetch && await prefetch.promise) || await contentRepo.loadPage(pageId);
       // Während des await kann der User weggewechselt haben → nichts anwenden.
       if (this.currentPage?.id !== pageId) return true;
       // Stale-Check: Wenn der Tree-Eintrag (`p.updated_at`, kann selbst aus
@@ -168,6 +215,8 @@ export const pageMethods = {
         }
       }
       this.pageLoadError = true;
+      // Beim Swap stünde sonst der Text der vorherigen Seite neben dem Retry-Block.
+      this.renderedPageHtml = '';
       this.setStatus(this.t('chat.pageLoadFailed'));
       return false;
     } finally {
@@ -175,6 +224,16 @@ export const pageMethods = {
       // bei schnellem Weiterwechsel besitzt der neuere Load das Flag.
       if (this.currentPage?.id === pageId) this.pageContentLoading = false;
     }
+  },
+
+
+  // Seiteninhalt vorab laden, solange noch die vorherige Ansicht steht.
+  // `pd` ist gesetzt, sobald die Antwort da ist; ein Fehler endet als `null`
+  // und `_loadCurrentPageContent` lädt dann selbst (inkl. Retry-Pfad).
+  _prefetchPage(pageId) {
+    const box = { pd: null, promise: null };
+    box.promise = contentRepo.loadPage(pageId).then(pd => (box.pd = pd), () => null);
+    return box;
   },
 
 
@@ -388,7 +447,11 @@ export const pageMethods = {
 
 
   // Setzt allen Seiten-Level-State zurück (Editor, Lektorat, Chat, History).
-  resetPage() {
+  // `keepView`: nur für den Abschnittswechsel in `selectPage` — Karte bleibt
+  // offen und der gerenderte Text sichtbar, bis der neue Inhalt ihn ersetzt.
+  // `originalHtml` wird trotzdem genullt: daran hängen `startEdit` und die
+  // Reload-Wiederaufnahme, die den alten Text nie der neuen Seite zuordnen dürfen.
+  resetPage({ keepView = false } = {}) {
     // `_checkPollTimer_<pageId>` bewusst NICHT clearen: Poll der verlassenen
     // Seite muss weiterlaufen, damit `onDone` → `markPageChecked` den
     // Sidebar-Status aktualisiert (siehe lektorat.js startCheckPoll). Poll
@@ -431,7 +494,7 @@ export const pageMethods = {
     this.currentPageShareCommentCount = 0;
     this.currentPageShareLinkCount = 0;
     this.currentPageChatSessionCount = 0;
-    this.renderedPageHtml = '';
+    if (!keepView) this.renderedPageHtml = '';
     this.chapterFigures = [];
     this.showChapterFigures = false;
     this.originalHtml = null;
@@ -449,7 +512,7 @@ export const pageMethods = {
     this.pendingDraft = null;
     this.lastAutosaveAt = null;
     this.lastDraftSavedAt = null;
-    this.showEditorCard = false;
+    if (!keepView) this.showEditorCard = false;
     this.analysisOut = '';
     this.status = '';
     this.statusSpinner = false;

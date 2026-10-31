@@ -43,7 +43,7 @@
   padding: var(--space-xs);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-xs);
   overflow-x: auto;
   white-space: nowrap;
@@ -98,25 +98,25 @@
   margin-top: var(--space-xs);
   padding: var(--space-xs);
   background: var(--color-bg);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-size: var(--font-size-xs);
   overflow-x: auto;
   white-space: pre-wrap;
 }
 
-/* Status- + Event-Badges: eckig (var(--radius-sm)), nie pill-foermig */
+/* Status- + Event-Badges: eckig (var(--radius-none)), nie pill-foermig */
 .badge--status-active      { background: var(--color-ok-bg);     color: var(--color-ok-text); }
 .badge--status-suspended   { background: var(--color-warn-bg);   color: var(--color-warn-text); }
 .badge--status-invited     { background: var(--color-accent-bg); color: var(--color-accent-text); }
-.badge--status-deleted     { background: var(--color-tag-bg);    color: var(--color-muted); }
+.badge--status-deleted     { background: var(--color-tag-bg);    color: var(--color-tag-text); }
 
 .badge--event-login        { background: var(--color-ok-bg);     color: var(--color-ok-text); }
-.badge--event-logout       { background: var(--color-tag-bg);    color: var(--color-muted); }
+.badge--event-logout       { background: var(--color-tag-bg);    color: var(--color-tag-text); }
 .badge--event-login-denied { background: var(--color-err-bg);    color: var(--color-err-text); }
 .badge--event-suspended    { background: var(--color-warn-bg);   color: var(--color-warn-text); }
 .badge--event-reactivated  { background: var(--color-ok-bg);     color: var(--color-ok-text); }
 .badge--event-role-changed { background: var(--color-accent-bg); color: var(--color-accent-text); }
-.badge--event-deleted      { background: var(--color-tag-bg);    color: var(--color-muted); }
+.badge--event-deleted      { background: var(--color-tag-bg);    color: var(--color-tag-text); }
 
 /* Tab-Navigation + Requests-Tab */
 .admin-users-tabs {
@@ -158,7 +158,7 @@
 .badge--status-pending  { background: var(--color-warn-bg);  color: var(--color-warn-text); }
 .badge--status-approved { background: var(--color-ok-bg);    color: var(--color-ok-text); }
 .badge--status-denied   { background: var(--color-err-bg);   color: var(--color-err-text); }
-.badge--status-expired  { background: var(--color-tag-bg);   color: var(--color-muted); }
+.badge--status-expired  { background: var(--color-tag-bg);   color: var(--color-tag-text); }
 
 @media (max-width: 768px) {
   .admin-users-table th:nth-child(4),

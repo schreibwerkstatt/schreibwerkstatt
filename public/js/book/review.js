@@ -87,28 +87,28 @@ export function renderReviewHtml(r, axes, translate) {
     if (!r[key]) continue;
     html += `
       <div class="bewertung-section">
-        <div class="bewertung-section-title">${escHtml(translate(i18n))}</div>
+        <div class="card-section-title">${escHtml(translate(i18n))}</div>
         <p class="bewertung-section-text">${escMd(r[key])}</p>
       </div>`;
   }
   if (r.staerken?.length) html += `
       <div class="bewertung-section">
-        <div class="bewertung-section-title">${escHtml(translate('review.strengths'))}</div>
+        <div class="card-section-title">${escHtml(translate('review.strengths'))}</div>
         <ul class="bullet-list pos">${r.staerken.map(s => `<li>${escMd(s)}</li>`).join('')}</ul>
       </div>`;
   if (r.schwaechen?.length) html += `
       <div class="bewertung-section">
-        <div class="bewertung-section-title">${escHtml(translate('review.weaknesses'))}</div>
+        <div class="card-section-title">${escHtml(translate('review.weaknesses'))}</div>
         <ul class="bullet-list neg">${r.schwaechen.map(s => `<li>${escMd(s)}</li>`).join('')}</ul>
       </div>`;
   if (r.empfehlungen?.length) html += `
       <div class="bewertung-section">
-        <div class="bewertung-section-title">${escHtml(translate('review.section.empfehlungen'))}</div>
+        <div class="card-section-title">${escHtml(translate('review.section.empfehlungen'))}</div>
         <ul class="rec-list">${r.empfehlungen.map(e => renderEmpfehlungItem(e, translate)).join('')}</ul>
       </div>`;
   if (r.beispielzitate?.length) html += `
       <div class="bewertung-section">
-        <div class="bewertung-section-title">${escHtml(translate('review.section.zitate'))}</div>
+        <div class="card-section-title">${escHtml(translate('review.section.zitate'))}</div>
         <ul class="zitate-list">${r.beispielzitate.map(z => renderZitatItem(z, translate)).join('')}</ul>
       </div>`;
   if (r.fazit) html += `<div class="fazit fazit--review">${escMd(r.fazit)}</div>`;

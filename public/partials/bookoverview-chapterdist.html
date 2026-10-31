@@ -10,7 +10,7 @@
     </div>
     <ul class="overview-chapter-list">
       <template x-for="ch in overviewChapterDistribution()" :key="ch.id">
-        <li class="overview-chapter-row internal-link"
+        <li><div class="overview-chapter-row internal-link"
             :class="{ 'overview-chapter-row--max': ch.isMax, 'overview-chapter-row--min': ch.isMin }"
             @click="_openKapitelReview(ch.id)"
             :data-tip="$app.t('overview.chapterReviewOpen', { name: ch.name })">
@@ -33,7 +33,7 @@
             <span class="overview-chapter-words" x-text="_fmtNum(ch.words) + ' ' + $app.t('bookstats.unit.w')"></span>
             <span class="overview-chapter-pages" x-text="_fmtNum(ch.pages) + ' ' + $app.t('overview.unit.sections')"></span>
           </span>
-        </li>
+        </div></li>
       </template>
     </ul>
   </div>

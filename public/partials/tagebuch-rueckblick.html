@@ -151,9 +151,9 @@
     <div class="card-section-head">
       <h3 class="card-section-title" x-text="$app.t('rueckblick.history')"></h3>
       <div class="tabs rb-history-tabs">
-        <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': rbHistoryView === 'cal' }"
+        <button :aria-pressed="rbHistoryView === 'cal'" type="button" class="tabs-btn" :class="{ 'tabs-btn--active': rbHistoryView === 'cal' }"
                 @click="rbHistoryView = 'cal'" x-text="$app.t('rueckblick.viewCalendar')"></button>
-        <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': rbHistoryView === 'list' }"
+        <button :aria-pressed="rbHistoryView === 'list'" type="button" class="tabs-btn" :class="{ 'tabs-btn--active': rbHistoryView === 'list' }"
                 @click="rbHistoryView = 'list'" x-text="$app.t('rueckblick.viewList')"></button>
       </div>
     </div>
@@ -171,13 +171,13 @@
           </div>
           <template x-for="row in rueckblickCalendar().years" :key="row.year">
             <div class="ymheat-row">
-              <button type="button" class="ymheat-year"
+              <button :aria-current="row.yearKey === rueckblickZeitraum ? 'true' : null" type="button" class="ymheat-year"
                       :class="{ 'ymheat-year--has': row.hasRueckblick, 'ymheat-year--active': row.yearKey === rueckblickZeitraum }"
                       :disabled="!row.hasRueckblick && !row.hasEntries"
                       @click="openCalendarYear(row)" :data-tip="rbCalYearTip(row)" :aria-label="rbCalYearTip(row)"
                       x-text="row.year"></button>
               <template x-for="cell in row.months" :key="cell.key">
-                <button type="button" class="ymheat-cell"
+                <button :aria-current="cell.key === rueckblickZeitraum ? 'true' : null" type="button" class="ymheat-cell"
                         :class="'ymheat-cell--lvl' + cell.level + (cell.hasRueckblick ? ' ymheat-cell--has' : '') + (cell.isCurrent ? ' ymheat-cell--current' : '') + (cell.key === rueckblickZeitraum ? ' ymheat-cell--active' : '')"
                         :disabled="!cell.hasRueckblick && !cell.hasEntries"
                         @click="openCalendarCell(cell)" :data-tip="rbCalCellTip(cell)" :aria-label="rbCalCellTip(cell)"></button>
@@ -213,7 +213,7 @@
         </span>
       </div>
       <template x-for="entry in filteredRueckblickHistory()" :key="entry.id">
-        <div class="history-item hover-reveal-host" :class="{ 'history-item--active': selectedRueckblickId === entry.id }"
+        <div class="history-item hover-reveal-host internal-link" :class="{ 'history-item--active': selectedRueckblickId === entry.id }"
              @click="openRueckblickHistory(entry)">
           <span class="rb-history-zeitraum" x-text="zeitraumLabel(entry.zeitraum)"></span>
           <span class="history-date" x-text="rueckblickEntryDate(entry.created_at)"></span>

@@ -148,7 +148,7 @@
     <div x-bind="panel" x-cloak>
       <ul class="overview-chapter-list">
         <template x-for="ch in chapterLengthDist()" :key="ch.id">
-          <li class="overview-chapter-row internal-link"
+          <li><div class="overview-chapter-row internal-link"
               :class="{ 'overview-chapter-row--max': ch.isMax, 'overview-chapter-row--min': ch.isMin }"
               @click="jumpToChapter(ch.id)"
               :data-tip="ch.name">
@@ -170,20 +170,27 @@
               <span class="overview-chapter-words" x-text="_fmtNum(ch.words) + ' ' + $app.t('bookstats.unit.w')"></span>
               <span class="overview-chapter-pages" x-text="ch.pages + ' ' + $app.t('bookstats.unit.s')"></span>
             </span>
-          </li>
+          </div></li>
         </template>
       </ul>
     </div>
   </div>
 
   <!-- Konflikt-Diff-Modal (pro Sync-Provider, Logik in cards/sync/sync-core.js):
-       App-Inhalt vs. Remote-Inhalt, User wählt die Quelle. -->
+       App-Inhalt vs. Remote-Inhalt, User wählt die Quelle.
+       Blockierendes Modal ohne natives <dialog> → x-trap (DESIGN.md «Overlay-
+       Focus-Trap»): Tab bleibt drin, Hintergrund `.inert`, Fokus-Restore auf den
+       Auslöser. Esc hängt am Overlay selbst, nicht an `window`: das x-for rendert
+       ein Overlay je Provider, ein Window-Listener feuerte dann je Provider; der
+       Trap hält den Fokus im offenen Overlay, also erreicht Esc genau dieses. -->
   <template x-for="prov in $syncProviders" :key="'conflict-' + prov.key">
   <div class="blog-conflict-overlay" x-show="!!prov.card.conflictOpen" x-cloak
-       @keydown.escape.window="prov.card.closeConflict()">
+       x-trap.inert.noscroll="!!prov.card.conflictOpen"
+       role="dialog" aria-modal="true" :aria-labelledby="'blog-conflict-title-' + prov.key"
+       @keydown.escape.stop="prov.card.closeConflict()">
     <div class="blog-conflict-modal">
       <div class="blog-conflict-header">
-        <span class="card-title" x-text="$app.t(prov.key + '.conflict.title')"></span>
+        <span class="card-title" :id="'blog-conflict-title-' + prov.key" x-text="$app.t(prov.key + '.conflict.title')"></span>
         <button type="button" class="organizer-delete-btn" @click="prov.card.closeConflict()" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
       </div>
       <template x-if="!prov.card.conflictData">

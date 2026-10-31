@@ -11,7 +11,7 @@
     <div class="szenen-uebersicht-grid">
       <!-- Pro Kapitel: gestapelter Balken stark/mittel/schwach, Länge relativ zum grössten Kapitel -->
       <div class="szenen-uebersicht-block szenen-uebersicht-block--kapitel">
-        <div class="bewertung-section-title" x-text="$app.t('szenen.byKapitel')"></div>
+        <div class="card-section-title" x-text="$app.t('szenen.byKapitel')"></div>
         <div class="szenen-kapitel-bars" role="group" :aria-label="$app.t('szenen.byKapitel')">
           <template x-for="k in nachKapitel" :key="k.key">
             <button type="button" class="szenen-kapitel-bar-row"
@@ -35,7 +35,7 @@
       </div>
       <!-- Pro Figur -->
       <div class="szenen-uebersicht-block">
-        <div class="bewertung-section-title" x-text="$app.t('szenen.byFigur')"></div>
+        <div class="card-section-title" x-text="$app.t('szenen.byFigur')"></div>
         <div class="szenen-count-badges" role="group" :aria-label="$app.t('szenen.byFigur')">
           <template x-for="f in nachFigur" :key="f.id">
             <button type="button" class="szenen-count-badge"
@@ -49,7 +49,7 @@
       </div>
       <!-- Pro Seite -->
       <div class="szenen-uebersicht-block" x-show="nachSeite.length > 0">
-        <div class="bewertung-section-title" x-text="$app.t('szenen.bySeite')"></div>
+        <div class="card-section-title" x-text="$app.t('szenen.bySeite')"></div>
         <div class="szenen-count-badges" role="group" :aria-label="$app.t('szenen.bySeite')">
           <template x-for="p in nachSeite" :key="p.key">
             <button type="button" class="szenen-count-badge"

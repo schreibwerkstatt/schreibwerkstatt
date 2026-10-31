@@ -23,7 +23,7 @@
   </button>
   <input type="text" class="organizer-name organizer-name--chapter" :value="ch.name"
          @blur="onRenameChapter(ch.id, $event)"
-         @keydown.enter.prevent="$event.target.blur()"
+         @keydown.enter="$enter($event, () => $event.target.blur())"
          @keydown.escape.stop.prevent="$event.target.value = ch.name; $event.target.blur()"
          @keydown.tab="onChapterTab($event, ch.id)"
          :disabled="organizerSaving"

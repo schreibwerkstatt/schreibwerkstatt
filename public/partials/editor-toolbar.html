@@ -74,15 +74,15 @@
       <!-- Anzeigeform: „Kapitel 3" / „3" / „Kapitel 3: Titel". -->
       <div class="seg-toggle edit-cite-kind" role="group"
            :aria-label="$app.t('editor.toolbar.xrefFmtLabel')">
-        <button type="button" :class="{ 'seg-toggle--active': xrefFmt === 'label' }"
+        <button :aria-pressed="xrefFmt === 'label'" type="button" :class="{ 'seg-toggle--active': xrefFmt === 'label' }"
                 @click="xrefFmt = 'label'"
                 :data-tip="$app.t('editor.toolbar.xrefFmtLabelTip')"
                 x-text="$app.t('editor.toolbar.xrefFmtLabelShort')"></button>
-        <button type="button" :class="{ 'seg-toggle--active': xrefFmt === 'number' }"
+        <button :aria-pressed="xrefFmt === 'number'" type="button" :class="{ 'seg-toggle--active': xrefFmt === 'number' }"
                 @click="xrefFmt = 'number'"
                 :data-tip="$app.t('editor.toolbar.xrefFmtNumberTip')"
                 x-text="$app.t('editor.toolbar.xrefFmtNumberShort')"></button>
-        <button type="button" :class="{ 'seg-toggle--active': xrefFmt === 'title' }"
+        <button :aria-pressed="xrefFmt === 'title'" type="button" :class="{ 'seg-toggle--active': xrefFmt === 'title' }"
                 @click="xrefFmt = 'title'"
                 :data-tip="$app.t('editor.toolbar.xrefFmtTitleTip')"
                 x-text="$app.t('editor.toolbar.xrefFmtTitleShort')"></button>
@@ -137,15 +137,15 @@
            Bloecken verfuegbar (citeBlockOk). -->
       <div class="seg-toggle edit-cite-kind" role="group"
            :aria-label="$app.t('editor.toolbar.citeKindLabel')">
-        <button type="button" :class="{ 'seg-toggle--active': citeKind === 'quote' }"
+        <button :aria-pressed="citeKind === 'quote'" type="button" :class="{ 'seg-toggle--active': citeKind === 'quote' }"
                 @click="citeKind = 'quote'"
                 :data-tip="$app.t('editor.toolbar.citeKindQuoteTip')"
                 x-text="$app.t('editor.toolbar.citeKindQuote')"></button>
-        <button type="button" :class="{ 'seg-toggle--active': citeKind === 'block' }"
+        <button :aria-pressed="citeKind === 'block'" type="button" :class="{ 'seg-toggle--active': citeKind === 'block' }"
                 @click="citeKind = 'block'" :disabled="!citeBlockOk"
                 :data-tip="citeBlockOk ? $app.t('editor.toolbar.citeKindBlockTip') : $app.t('editor.toolbar.citeKindBlockUnavailable')"
                 x-text="$app.t('editor.toolbar.citeKindBlock')"></button>
-        <button type="button" :class="{ 'seg-toggle--active': citeKind === 'paraphrase' }"
+        <button :aria-pressed="citeKind === 'paraphrase'" type="button" :class="{ 'seg-toggle--active': citeKind === 'paraphrase' }"
                 @click="citeKind = 'paraphrase'"
                 :data-tip="$app.t('editor.toolbar.citeKindParaphraseTip')"
                 x-text="$app.t('editor.toolbar.citeKindParaphrase')"></button>

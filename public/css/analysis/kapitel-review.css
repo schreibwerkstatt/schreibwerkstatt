@@ -40,16 +40,8 @@
   margin: var(--space-sm) 0 var(--space-lg);
   padding: var(--space-md) var(--space-14);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-hover-light);
-}
-.kapitel-pages-heading {
-  font-size: var(--font-size-xs);
-  font-weight: var(--fw-semibold);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--color-muted);
-  margin-bottom: var(--space-6);
 }
 .kapitel-pages-list {
   display: flex;
@@ -64,7 +56,7 @@
   justify-content: space-between;
   gap: var(--space-10);
   padding: var(--space-5) var(--space-sm);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   cursor: pointer;
   color: var(--color-text);
   transition: background var(--transition-base);
@@ -101,14 +93,14 @@
   flex: 0 0 auto;
   width: 72px;
   height: 5px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-border);
   overflow: hidden;
 }
 .kapitel-page-bar-fill {
   display: block;
   height: 100%;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--card-accent);
 }
 
@@ -119,7 +111,7 @@
   flex: 0 0 auto;
   min-width: 1.5rem;
   padding: 0 var(--space-5);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   text-align: center;
   font-size: var(--font-size-micro);
   font-weight: var(--fw-semibold);
@@ -130,7 +122,7 @@
   background: var(--color-warn-bg);
 }
 .kapitel-page-findings--clean {
-  color: var(--color-success);
+  color: var(--color-ok-text);
   background: transparent;
 }
 
@@ -208,8 +200,7 @@
   padding: var(--space-sm) var(--space-md);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+  border-radius: var(--radius-none);
 }
 .kapitel-subchapter-header {
   display: flex;
@@ -226,7 +217,7 @@
   color: var(--color-muted);
   display: inline-flex;
   align-items: center;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   flex-shrink: 0;
 }
 .kapitel-subchapter-chevron:hover { background: var(--color-hover-light); color: var(--color-text); }
@@ -241,7 +232,7 @@
   white-space: nowrap;
   cursor: pointer;
   padding: var(--space-2xs) var(--space-6);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 .kapitel-subchapter-name:hover {
   background: var(--color-hover-light);

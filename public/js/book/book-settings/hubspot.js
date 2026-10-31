@@ -12,11 +12,11 @@ export const hubspotMethods = {
   // hubspotImportJobId, hubspotReconcileJobId. Was WordPress genauso macht,
   // steht in ./sync-shared.js.
 
-  async loadHubspotStatus() {
-    const bookId = Alpine.store('nav').selectedBookId;
+  async loadHubspotStatus(bookId = this._selectedBookId()) {
     if (!bookId) return;
     try {
       const data = await fetchJson(`/hubspot/${bookId}/status`);
+      if (!this._isFormBook(bookId)) return;
       this.hubspotConnection = data.connection || null;
       if (this.hubspotConnection) {
         this.hubspotForm.blogId   = this.hubspotConnection.blogId || '';
@@ -25,8 +25,9 @@ export const hubspotMethods = {
         // den aktuellen Wert als Label zeigen können.
         this.loadHubspotLists();
       }
-      [this.hubspotImportJobId, this.hubspotReconcileJobId] =
-        await rehydrateSyncJobs(bookId, ['hubspot-import', 'hubspot-reconcile']);
+      const jobs = await rehydrateSyncJobs(bookId, ['hubspot-import', 'hubspot-reconcile']);
+      if (!this._isFormBook(bookId)) return;
+      [this.hubspotImportJobId, this.hubspotReconcileJobId] = jobs;
     } catch (e) {
       console.error('[hubspot] Status laden fehlgeschlagen:', e);
     }
@@ -68,7 +69,7 @@ export const hubspotMethods = {
 
 
   async testHubspotConnection() {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._selectedBookId();
     if (!bookId) return;
     this._setHubspotBusy('test');
     try {
@@ -84,7 +85,7 @@ export const hubspotMethods = {
 
 
   async loadHubspotLists() {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._selectedBookId();
     if (!bookId) return;
     const body = this._hubspotTokenBody();
     try {
@@ -101,7 +102,7 @@ export const hubspotMethods = {
 
 
   async saveHubspotConnection() {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._selectedBookId();
     if (!bookId || !this.hubspotFormReady()) return;
     this._setHubspotBusy('save');
     try {
@@ -124,7 +125,7 @@ export const hubspotMethods = {
 
 
   async disconnectHubspot() {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._selectedBookId();
     if (!bookId) return;
     if (!await window.__app.appConfirm({ message: window.__app.t('hubspot.connect.disconnectConfirm'), danger: true })) return;
     this._setHubspotBusy('disconnect');
@@ -144,7 +145,7 @@ export const hubspotMethods = {
 
 
   async _startHubspotJob(type, failCode, jobProp) {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._selectedBookId();
     if (!bookId || this[jobProp]) return;
     try {
       this[jobProp] = await startSyncJob(type, bookId, failCode);

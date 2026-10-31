@@ -53,7 +53,7 @@
 .table-dialog-warn {
   margin: 0;
   padding: var(--space-6) var(--space-10);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-warn-bg);
   color: var(--color-warn-text);
   font-size: var(--font-size-sm);
@@ -66,7 +66,7 @@
   min-height: 0;
   max-height: 56vh;
   border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 .table-dialog-grid {
   border-collapse: separate;
@@ -127,7 +127,7 @@
   min-width: 1.6rem;
   padding: var(--space-2xs) var(--space-xs);
   border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-surface);
   color: var(--color-muted);
   font-size: var(--font-size-xs);

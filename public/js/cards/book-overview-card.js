@@ -20,6 +20,9 @@ export function registerBookOverviewCard() {
     _lifecycle: null,
     // Re-Entry-Guard für die Microtask-Koaleszierung unten (kein fachlicher State).
     _pendingBookId: null,
+    // Promise des koaleszierten Loads: ein zweiter Trigger im selben Tick
+    // bekommt dasselbe zurück (Show-Watcher → card-lifecycle#settleShowLoads).
+    _pendingLoad: null,
     // Re-Entry-Guards der Lade-Pipeline (book-overview/load.js). Deklariert,
     // weil Alpine nicht deklarierte Felder beim Schreiben an die äusserste
     // Scope hängt — sie lägen sonst als globaler Zustand auf `$app`.
@@ -42,18 +45,21 @@ export function registerBookOverviewCard() {
       // resetView, `book:changed` async aus _resetBookScopedState). Alle
       // Trigger laufen durch `scheduleLoad`, das per Microtask coalesciert
       // und dedupliziert — sonst Race zwischen Reset und neuem Load.
+      // Liefert das Lade-Promise, damit der Kartenwechsel-Cross-Fade
+      // (_withCardTransition) die Übersicht geladen statt leer einblendet.
       const scheduleLoad = () => {
         const bookId = Alpine.store('nav').selectedBookId || null;
         if (!bookId) { this._pendingBookId = null; return; }
         // Schon gescheduled für diesen Buch → noop, sonst doppelter Load.
-        if (this._pendingBookId === bookId) return;
+        if (this._pendingBookId === bookId) return this._pendingLoad;
         this._pendingBookId = bookId;
-        queueMicrotask(() => {
+        this._pendingLoad = Promise.resolve().then(() => {
           if (!window.__app?.showBookOverviewCard) { this._pendingBookId = null; return; }
           const target = this._pendingBookId;
           this._pendingBookId = null;
-          if (target) this.loadBookOverview(target);
+          if (target) return this.loadBookOverview(target);
         });
+        return this._pendingLoad;
       };
 
       this._lifecycle = setupCardLifecycle(this, {

@@ -76,7 +76,7 @@
   width: 100%;
   min-width: 12px;
   aspect-ratio: 1 / 1;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-tag-bg);
   border: 0.5px solid transparent;
   padding: 0;
@@ -101,7 +101,7 @@
   width: 4px;
   height: 4px;
   background: var(--ymheat-accent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 
 /* Aktueller Monat: dezenter Innen-Ring — Orientierung „wo bin ich jetzt". */

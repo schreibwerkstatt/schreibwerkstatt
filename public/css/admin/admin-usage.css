@@ -24,7 +24,7 @@
 .admin-usage-range input[type="date"] {
   padding: var(--space-2xs) var(--space-xs);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-bg);
   color: var(--color-text);
 }
@@ -50,7 +50,7 @@
 .admin-usage-filter input {
   padding: var(--space-2xs) var(--space-xs);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-bg);
   color: var(--color-text);
   min-width: 16rem;
@@ -71,7 +71,7 @@
   gap: var(--space-2xs);
   padding: var(--space-2xs) var(--space-xs);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-surface);
   color: var(--color-text);
   font-size: var(--font-size-xs);
@@ -109,7 +109,7 @@
   width: 6rem;
   padding: var(--space-2xs) var(--space-xs);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-bg);
   color: var(--color-text);
 }
@@ -211,8 +211,6 @@
   .admin-usage-actions { flex-wrap: wrap; }
   .admin-usage-actions button { width: 100%; }
 }
-}
-
 /* Abrechnungs-Tab (admin-usage-billing.html) */
 .admin-usage-billing-head {
   display: flex;
@@ -258,4 +256,5 @@
 
 .admin-usage-cell--total {
   font-weight: var(--fw-semibold);
+}
 }

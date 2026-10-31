@@ -51,7 +51,7 @@
               <tr>
                 <th class="heatmap-rowhead" scope="row">
                   <span class="heatmap-rowhead-main"
-                        :class="{ 'internal-link': c.key !== '__uncat__' }"
+                        :class="{ 'internal-link text-link': c.key !== '__uncat__' }"
                         @click="c.key !== '__uncat__' && stilJumpToChapter(c.key)"
                         x-text="stilChapterName(c.name)"></span>
                   <span class="heatmap-rowhead-sub" x-text="$app.t('stil.pagesCount', { n: c.pageCount })"></span>
@@ -74,7 +74,7 @@
       <div class="stil-heatmap-foot">
         <span class="heatmap-legend" x-show="stilHasApproxP90()" x-text="$app.t('stil.legendApprox')"></span>
         <!-- Querverweis: Wiederholungen hier zählen pro Seite, buchweit zählt der Wortschatz. -->
-        <button type="button" class="internal-link stil-wortschatz-link" @click="stilOpenWortschatz()"
+        <button type="button" class="text-link stil-wortschatz-link" @click="stilOpenWortschatz()"
                 :data-tip="$app.t('stil.wortschatzLinkTip')" x-text="$app.t('stil.wortschatzLink')"></button>
       </div>
 
@@ -133,7 +133,7 @@
               </div>
             </template>
           </div>
-          <button type="button" class="internal-link stil-wortschatz-link" x-show="stilDetail.metricKey === 'repetition_score'"
+          <button type="button" class="text-link stil-wortschatz-link" x-show="stilDetail.metricKey === 'repetition_score'"
                   @click="stilOpenWortschatz()" :data-tip="$app.t('stil.wortschatzLinkTip')" x-text="$app.t('stil.wortschatzLink')"></button>
         </div>
       </template>
@@ -163,7 +163,7 @@
           <div class="stil-rhythm-row">
             <div class="stil-rhythm-label">
               <span class="stil-rhythm-name"
-                    :class="{ 'internal-link': r.key !== '__uncat__' }"
+                    :class="{ 'internal-link text-link': r.key !== '__uncat__' }"
                     @click="r.key !== '__uncat__' && stilJumpToChapter(r.key)"
                     x-text="stilChapterName(r.name)"></span>
               <span class="stil-rhythm-meta"

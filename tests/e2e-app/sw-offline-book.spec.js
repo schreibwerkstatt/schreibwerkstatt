@@ -36,7 +36,7 @@ test('angeheftetes Buch ist nach Reload ohne Netz lesbar, auch ein nie geöffnet
   // nicht übers Icon suchen. Aus demselben Grund kann `offlineBooks[id].at`
   // schon vor dem Klick stehen: fertig ist erst der Sync der Anheftung.
   await page.evaluate((id) => { location.hash = '#book/' + id; }, bookId);
-  const btn = page.locator('.card-actions button[aria-pressed]');
+  const btn = page.locator('.card-actions button[aria-pressed]:has(use[href*="/icons.svg#cloud-"])');
   await expect(btn).toHaveAttribute('aria-pressed', 'false');
   await btn.click();
   await page.waitForFunction((id) => {

@@ -109,7 +109,8 @@ router.post('/', express.json(), (req, res) => {
     logger.info(`KI-Profil angelegt: ${profile.name} (${profile.provider})`, { user: sessionEmail(req) });
     res.json({ profile });
   } catch (e) {
-    res.status(400).json({ error_code: 'PROFILE_INVALID', detail: e.message });
+    logger.warn(`KI-Profil ungueltig: ${e.message}`, { user: sessionEmail(req) });
+    res.status(400).json({ error_code: 'PROFILE_INVALID' });
   }
 });
 
@@ -129,7 +130,8 @@ router.put('/:id', express.json(), (req, res) => {
     logger.info(`KI-Profil geaendert: ${profile.name} (${profile.provider})`, { user: sessionEmail(req) });
     res.json({ profile });
   } catch (e) {
-    res.status(400).json({ error_code: 'PROFILE_INVALID', detail: e.message });
+    logger.warn(`KI-Profil ungueltig: ${e.message}`, { user: sessionEmail(req) });
+    res.status(400).json({ error_code: 'PROFILE_INVALID' });
   }
 });
 

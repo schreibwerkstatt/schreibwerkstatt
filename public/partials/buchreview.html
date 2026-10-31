@@ -34,7 +34,7 @@
     <div class="history-heading" x-text="$app.t('review.history')"></div>
     <template x-for="entry in $app.bookReviewHistory" :key="entry.id">
       <div>
-        <div class="history-item" :class="{ 'history-item--open': selectedBookReviewId === entry.id }"
+        <div class="history-item internal-link" :class="{ 'history-item--open': selectedBookReviewId === entry.id }"
              @click="selectedBookReviewId = selectedBookReviewId === entry.id ? null : entry.id">
           <span class="history-date" x-text="$app.formatDate(entry.reviewed_at)"></span>
           <span x-show="entry.review_json?.gesamtnote" class="badge badge-ok review-stars"

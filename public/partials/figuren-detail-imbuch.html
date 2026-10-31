@@ -10,7 +10,7 @@
   <h4 class="figur-group-title" x-text="$app.t('figuren.group.imBuch')"></h4>
   <!-- Kapitelauftritte -->
   <div class="figur-kapitelauftritte" x-show="f.kapitel?.length > 1">
-    <div class="bewertung-section-title" x-text="$app.t('figuren.field.kapitelauftritte')"></div>
+    <div class="card-section-title" x-text="$app.t('figuren.field.kapitelauftritte')"></div>
     <!-- Klick setzt den Kapitel-Filter der Figurenliste (bewusst keine Navigation). -->
     <div class="entity-refs figur-tags-row">
       <template x-for="(k, ki) in (f.kapitel || [])" :key="ki">
@@ -23,7 +23,7 @@
   <!-- @include figuren-presence-strip -->
   <!-- Musikgeschmack — abgeleitet aus song_figures-Rollup -->
   <div x-show="$app.songsByFigurId.get(f.id)?.length" class="figur-musikgeschmack">
-    <div class="bewertung-section-title" x-text="$app.t('figuren.field.musikgeschmack')"></div>
+    <div class="card-section-title" x-text="$app.t('figuren.field.musikgeschmack')"></div>
     <div class="figur-tags-row">
       <template x-for="s in ($app.songsByFigurId.get(f.id) || [])" :key="s.id">
         <button type="button" class="entity-ref" x-entity-ref="{ type: 'song', id: s.id, label: (s.titel || '') + (s.interpret ? ' — ' + s.interpret : '') }"></button>
@@ -32,7 +32,7 @@
   </div>
   <!-- Beziehungen -->
   <div x-show="f.beziehungen?.length">
-    <div class="bewertung-section-title" x-text="$app.t('figuren.field.beziehungen')"></div>
+    <div class="card-section-title" x-text="$app.t('figuren.field.beziehungen')"></div>
     <div class="figur-bz-list">
       <template x-for="(bz, i) in (f.beziehungen || [])" :key="i">
         <div class="figur-beziehung-item">
@@ -57,7 +57,7 @@
   </div>
   <!-- Lebensereignisse / Zeitstrahl -->
   <div x-show="f.lebensereignisse?.length">
-    <div class="bewertung-section-title" x-text="$app.t('figuren.field.zeitstrahl')"></div>
+    <div class="card-section-title" x-text="$app.t('figuren.field.zeitstrahl')"></div>
     <div class="global-zeitstrahl-body">
       <template x-for="(ev, i) in (f.lebensereignisse || [])" :key="i">
         <!-- Dieselbe `figure_events`-Zeile wie in der Ereignisse-Karte, aber
@@ -82,7 +82,7 @@
                 <span class="gz-extern-badge" x-text="$app.t('figuren.external')"></span>
               </template>
             </div>
-            <div class="gz-ereignis internal-link" @click="$app.openEreignisseMitFigur(f.id)" x-text="ev.ereignis"></div>
+            <div class="gz-ereignis internal-link text-link" @click="$app.openEreignisseMitFigur(f.id)" x-text="ev.ereignis"></div>
             <div x-show="ev.kapitel || ev.seite" class="entity-refs gz-meta">
               <template x-if="ev.kapitel">
                 <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: ev.chapter_id, name: ev.kapitel }"></button>

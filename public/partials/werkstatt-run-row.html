@@ -2,7 +2,7 @@
      Chevron + Löschen). kind steckt in r.kind → openRun/deleteRun generisch;
      knoten_pfad ist brainstorm-only und via x-show gegated (bei Consistency leer).
      Erwartet `r` aus dem umschliessenden x-for. -->
-<div class="history-item hover-reveal-host" :class="{ 'history-item--open': selectedRunId === r.id }"
+<div class="history-item hover-reveal-host internal-link" :class="{ 'history-item--open': selectedRunId === r.id }"
      @click="openRun(r.id, r.kind)">
   <span class="history-date" x-text="formatRunDate(r.created_at)"></span>
   <span x-show="r.knoten_pfad" class="tag" x-text="r.knoten_pfad"></span>

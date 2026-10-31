@@ -65,7 +65,7 @@
   <div x-show="$store.catalog.songs.length > 0" class="entity-list entity-list--accented song-list">
     <template x-for="s in songsFiltered" :key="s.id">
       <div>
-        <div class="entity-row" :data-song-id="s.id" @click="$store.catalogUi.selectedSongId = $store.catalogUi.selectedSongId === s.id ? null : s.id">
+        <div class="entity-row internal-link" :data-song-id="s.id" @click="$store.catalogUi.selectedSongId = $store.catalogUi.selectedSongId === s.id ? null : s.id">
           <span x-show="s.kontext_typ" class="tag entity-typ-tag" x-text="$app.t('songs.kontextTyp.' + s.kontext_typ, { _default: s.kontext_typ })"></span>
           <span class="entity-row-title">
             <span x-text="s.titel"></span>

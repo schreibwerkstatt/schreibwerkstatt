@@ -14,7 +14,7 @@
   align-self: flex-end;
   margin-right: var(--space-sm);
   margin-top: calc(-1 * (36px + var(--space-sm)));
-  z-index: var(--z-spellcheck);
+  z-index: var(--z-dock);
 }
 
 /* Aktive Aufnahme: rot mit pulsierendem Akzent. */
@@ -45,7 +45,7 @@
 }
 /* Segment wird transkribiert: Akzentfarbe, etwas zuegigerer Puls. */
 .stt-dock .stt-status.is-transcribing {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 .stt-dock .stt-status.is-transcribing::before {

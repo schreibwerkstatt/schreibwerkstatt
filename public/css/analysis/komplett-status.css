@@ -31,18 +31,10 @@
   box-shadow: var(--shadow-md);
   animation: cardFadeIn var(--transition-base) both;
 }
-.komplett-status-title {
-  font-size: var(--font-size-xs);
-  font-weight: var(--fw-bold);
-  color: var(--color-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  margin-bottom: var(--space-sm);
-}
 .komplett-progress-bar-wrap {
   margin-top: 0;
   margin-bottom: var(--space-6);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 .komplett-progress-label {
   display: flex;
@@ -109,7 +101,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: var(--font-size-mini);
   flex-shrink: 0;
 }
 .komplett-phase-item.is-done .komplett-phase-icon {
@@ -129,7 +121,7 @@
   font-size: var(--font-size-mini);
   color: var(--color-warn-text);
   background: var(--color-warn-bg);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: var(--space-2xs) var(--space-sm);
   margin-top: var(--space-2xs);
 }
@@ -192,7 +184,7 @@
   padding: var(--space-6) var(--space-sm);
   background: transparent;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font: inherit;
   font-size: var(--font-size-mini);
   color: var(--color-muted);

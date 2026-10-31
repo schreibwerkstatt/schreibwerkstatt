@@ -32,7 +32,7 @@
   width: 100%;
   padding: var(--space-xs) var(--space-sm);
   border: 1px dashed var(--color-primary);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: transparent;
   color: var(--color-primary);
   font-weight: var(--fw-semibold);
@@ -51,7 +51,7 @@
 .sidebar-calendar-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: var(--space-2xs, var(--space-2xs));
+  gap: var(--space-2xs);
   font-size: var(--font-em-75);
   font-weight: var(--fw-semibold);
   color: var(--color-muted);
@@ -67,13 +67,13 @@
 .sidebar-calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: var(--space-2xs, var(--space-2xs));
+  gap: var(--space-2xs);
 }
 
 .sidebar-calendar-day {
   appearance: none;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-bg);
   color: var(--color-muted);
   padding: 0;

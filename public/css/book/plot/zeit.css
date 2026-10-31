@@ -10,17 +10,17 @@
   .plot-beat-timecheck { cursor: default; }
   .plot-beat-timecheck .icon { width: 11px; height: 11px; }
   .plot-beat-timecheck--kritisch {
-    color: var(--color-schwach);
+    color: var(--color-schwach-text);
     border-color: color-mix(in oklch, var(--color-schwach) 45%, transparent);
     background: color-mix(in oklch, var(--color-schwach) 14%, transparent);
   }
   .plot-beat-timecheck--mittel {
-    color: var(--color-mittel);
+    color: var(--color-mittel-text);
     border-color: color-mix(in oklch, var(--color-mittel) 45%, transparent);
     background: color-mix(in oklch, var(--color-mittel) 14%, transparent);
   }
   .plot-beat-timecheck--niedrig {
-    color: var(--color-muted);
+    color: var(--color-tag-text);
     border-color: var(--color-border);
     background: var(--color-tag-bg);
   }
@@ -43,7 +43,7 @@
     color: var(--color-muted);
     font-variant-numeric: tabular-nums;
   }
-  .plot-zeit-hint--warn { color: var(--color-mittel); }
+  .plot-zeit-hint--warn { color: var(--color-mittel-text); }
 
   .plot-zeit-vorschlag {
     display: flex;

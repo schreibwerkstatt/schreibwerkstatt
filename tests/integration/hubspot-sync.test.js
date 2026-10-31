@@ -33,7 +33,7 @@ function seedBlogBook(bookId) {
     books: [{ id: bookId, name: `Test-Book-${bookId}` }],
     chapters: [], pages: [], pageBodies: {},
   });
-  ctx.dbSchema.saveBookSettings(bookId, 'de', 'CH', 'blog', '', null, null, 0, 0, 1500);
+  ctx.dbSchema.saveBookSettings(bookId, { language: 'de', region: 'CH', buchtyp: 'blog', buch_kontext: '', erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 0, daily_goal_chars: 1500 });
 }
 
 test('hubspot-import: zwei PUBLISHED-Posts → Pages + Jahres-Kapitel + Link-Eintraege', async () => {
@@ -170,7 +170,7 @@ test('hubspot-push: Buchtyp != blog → HUBSPOT_REQUIRES_BLOG_TYPE', async () =>
     books: [{ id: BOOK_ID, name: `Test-Book-${BOOK_ID}` }],
     chapters: [], pages: [], pageBodies: {},
   });
-  ctx.dbSchema.saveBookSettings(BOOK_ID, 'de', 'CH', 'roman', '', null, null, 0, 0, 1500);
+  ctx.dbSchema.saveBookSettings(BOOK_ID, { language: 'de', region: 'CH', buchtyp: 'roman', buch_kontext: '', erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 0, daily_goal_chars: 1500 });
 
   const jobId = ctx.shared.createJob('hubspot-push', BOOK_ID, 'tester@test.dev', 'job.label.hubspotPushCount', { count: 1 });
   ctx.shared.enqueueJob(jobId, () => hubspotSync.runHubspotPushJob(jobId, BOOK_ID, 'tester@test.dev', [1]));

@@ -54,7 +54,7 @@ router.put('/:key', express.json(), (req, res) => {
       return res.status(400).json({ error_code: 'INVALID_VALUE', key, reason: e.reason });
     }
     logger.error(`app-settings put ${key}: ${e.message}`, { user: updatedBy });
-    res.status(500).json({ error_code: 'PUT_FAILED', detail: e.message });
+    res.status(500).json({ error_code: 'PUT_FAILED' });
   }
 });
 

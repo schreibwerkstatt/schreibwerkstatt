@@ -18,7 +18,7 @@
 
   .js-errors-row {
     border: 0.5px solid var(--color-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: var(--color-bg);
   }
 
@@ -38,7 +38,7 @@
 
   .js-errors-kind {
     font-size: var(--font-size-xs);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     padding: 0 var(--space-1);
     white-space: nowrap;
     background: var(--color-err-bg);
@@ -125,7 +125,7 @@
   .js-errors-stack {
     margin: 0;
     padding: var(--space-2xs);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-none);
     background: var(--color-bg);
     font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
     font-size: var(--font-size-xs);

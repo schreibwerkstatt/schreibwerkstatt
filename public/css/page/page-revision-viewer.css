@@ -74,7 +74,7 @@ html:has(.revision-viewer[open]) {
   color: var(--color-text);
   cursor: pointer;
   padding: 0.2rem 0.55rem;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 .revision-viewer__close:hover { background: var(--color-hover); }
 
@@ -93,9 +93,9 @@ html:has(.revision-viewer[open]) {
   font-weight: var(--fw-semibold);
   color: var(--color-muted);
   cursor: pointer;
-  border-top-left-radius: var(--radius-sm);
-  border-top-right-radius: var(--radius-sm);
-  margin-bottom: -1px;
+  border-top-left-radius: var(--radius-none);
+  border-top-right-radius: var(--radius-none);
+  margin-bottom: calc(-1 * var(--space-1));
 }
 .revision-viewer__tab:hover { color: var(--color-text); }
 .revision-viewer__tab.is-active {
@@ -112,7 +112,7 @@ html:has(.revision-viewer[open]) {
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md) 0;
 }
-.revision-viewer__btn.is-active { color: var(--color-accent); }
+.revision-viewer__btn.is-active { color: var(--color-accent-text); }
 .revision-viewer__label { flex: 1 1 16em; min-width: 0; }
 
 /* Vergleichsrichtung ueber dem Diff. */
@@ -166,7 +166,7 @@ html:has(.revision-viewer[open]) {
 
 .revision-viewer__btn {
   padding: 0.45rem 1rem;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);
@@ -216,7 +216,7 @@ html:has(.revision-viewer[open]) {
 
 .revision-diff-body .diff-cell {
   padding: 0.4rem 0.65rem;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   border-left: 3px solid transparent;
   background: var(--color-surface);
   min-height: 1em;

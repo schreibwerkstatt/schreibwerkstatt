@@ -26,25 +26,9 @@
       </button>
     </div>
 
-    <!-- Triage-Filter (#5): Status-Segment + optionaler Reviewer-Filter. -->
-    <div class="comment-rail__filters" x-show="bookComments.length">
-      <div class="seg-toggle comment-rail__filter-status">
-        <button type="button" :class="{ 'seg-toggle--active': commentFilterStatus === 'all' }"
-                @click="_railSetFilter({ status: 'all' })" x-text="$app.t('share.comments.filter.all')"></button>
-        <button type="button" :class="{ 'seg-toggle--active': commentFilterStatus === 'open' }"
-                @click="_railSetFilter({ status: 'open' })" x-text="$app.t('share.comments.filter.open')"></button>
-        <button type="button" :class="{ 'seg-toggle--active': commentFilterStatus === 'resolved' }"
-                @click="_railSetFilter({ status: 'resolved' })" x-text="$app.t('share.comments.filter.resolved')"></button>
-      </div>
-      <div class="comment-rail__filter-reviewer" x-show="_railReviewerNames().length > 1"
-           x-data="combobox($app.t('share.comments.filter.reviewerAll'), $app.t('share.comments.filter.reviewerAll'))"
-           x-modelable="value" x-model="commentFilterReviewer"
-           x-effect="options = _railReviewerNames().map(n => ({ value: n, label: n }))"
-           @combobox-change="_railSetFilter({})"></div>
-    </div>
-
-    <div class="comment-rail__filter-empty muted-msg muted-msg--sm" x-show="!commentThreads.length && !commentGeneralThreads.length"
-         x-text="$app.t('share.comments.filterEmpty')"></div>
+    <!-- Triage-Filter (#5): Status-Segment, Reviewer-Filter, Leer-Hinweis — geteilt mit der
+         anderen Owner-Leiste (book-editor.html). -->
+    <!-- @include comment-rail-filters -->
 
     <div class="comment-rail__layer">
       <template x-for="thread in commentThreads" :key="thread.root.id">

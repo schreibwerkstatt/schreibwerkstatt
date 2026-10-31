@@ -28,7 +28,7 @@
     <!-- Tab-Leiste -->
     <nav class="admin-settings-tabs" role="tablist">
       <template x-for="t in ['auth','provider','smtp','jobs','cron','pdfa','analytics','languagetool','stt','tts','image','embed','geocode','websearch','api','advanced']" :key="t">
-        <button type="button" role="tab"
+        <button :aria-selected="adminSettingsTab === t" type="button" role="tab"
                 :class="['admin-settings-tab', adminSettingsTab === t ? 'is-active' : '']"
                 @click="adminSettingsSwitchTab(t)"
                 x-text="$app.t('admin.settings.tab.' + t)"></button>

@@ -60,7 +60,7 @@
   }
 }
 
-@media (max-width: 1099px) {
+@media (max-width: 1099.98px) {
   /* Gestapelt: Leiste folgt unter dem Text (Kontext zuerst, anders als Lektorat). */
   .editor-body-wrap.comments-split { display: flex; flex-direction: column; }
   .comment-rail { margin-top: var(--space-md); }
@@ -82,7 +82,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: var(--fw-semibold);
   color: var(--color-muted);
   text-transform: uppercase;
@@ -110,21 +110,12 @@
   gap: var(--space-md);
 }
 .comment-rail__section-title {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--color-muted);
   margin-block-end: var(--space-md);
-}
-
-/* Zitat-Schnipsel + Kommentar tragen `.internal-link` nur für die Tastatur-
-   Delegation. Der globale `.internal-link:hover`-Underline ist hier unerwünscht —
-   der Hover signalisiert sich bereits über Quote-Border/Color bzw. die
-   Thread-Box-Shadow. */
-.comment-rail__anchor.internal-link:hover,
-.comment-rail__comment.internal-link:hover {
-  text-decoration: none;
 }
 
 /* Aktions-Cluster (Erledigen/Löschen) rechts in der Meta-Zeile, nur am

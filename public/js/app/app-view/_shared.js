@@ -8,6 +8,7 @@ import { setLastPageId, getLastPageId } from '../../local-prefs.js';
 import { resetFilterScopes, restoreFilterScopes } from '../../filter-persist.js';
 import { getDeviceId } from '../../device-id.js';
 import { EVT } from '../../events.js';
+import { settleShowLoads } from '../../cards/card-lifecycle.js';
 
 // Filterleisten der Katalog-Karten. Sie leben in `Alpine.store('catalogUi')` und
 // werden pro Buch im localStorage gehalten — Mechanik, Spec-Form und die drei
@@ -32,12 +33,22 @@ export const FILTER_SCOPES = [
 // flusht reaktive Änderungen erst im nextTick, darum gehört das Warten (und
 // der Scroll, damit der neue Snapshot die Endposition zeigt) mit hinein.
 // Reduced-Motion wird CSS-seitig gekappt (tokens/motion.css).
+// Vor dem neuen Snapshot wartet der Callback kurz auf die Lade-Hooks der eben
+// eingeblendeten Karten (card-lifecycle.js#settleShowLoads), damit die Karte
+// geladen einblendet statt leer mit nachspringenden Kacheln. Solange zeigt der
+// Browser den alten Stand eingefroren — deshalb der Deckel.
+const SHOW_LOAD_WAIT_MS = 250;
 export async function _withCardTransition(ctx, apply) {
   if (typeof document === 'undefined' || typeof document.startViewTransition !== 'function') {
     await apply();
     return;
   }
-  const run = async () => { await apply(); await ctx.$nextTick?.(); };
+  const run = async () => {
+    await apply();
+    await ctx.$nextTick?.();
+    await settleShowLoads(SHOW_LOAD_WAIT_MS);
+    await ctx.$nextTick?.();
+  };
   const vt = document.startViewTransition(run);
   // `ready`/`finished` rejecten (unbehandelt), wenn der Browser die Transition
   // überspringt — etwa bei verstecktem Tab ("skipped because document

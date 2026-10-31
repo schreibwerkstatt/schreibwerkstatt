@@ -4,10 +4,12 @@
   <!-- Aha-Nudge (Erstkontakt): einmaliger Hinweis, der das KI-Lektorat sichtbar
        macht. Nur im Lese-Modus mit Inhalt, solange Lektorat verfügbar ist und
        weder läuft noch Findings offen sind. Dismiss persistiert in localStorage
-       (Source of Truth) — Template re-mountet pro Seite und liest neu, zeigt nach
+       (Source of Truth) — gelesen bei jedem Abschnittswechsel (`x-effect` auf
+       `currentPage?.id`; beim Swap bleibt das Template gemountet), zeigt nach
        einmaligem Ausblenden nie wieder. Self-contained, kein Root-State. -->
   <template x-if="renderedPageHtml && canReview() && !currentPageEmpty && !checkLoading && !checkDone">
-    <div x-data="{ dismissed: (() => { try { return localStorage.getItem('sw:ahaLektorat') === '1'; } catch (e) { return false; } })(), _dismiss(){ this.dismissed = true; try { localStorage.setItem('sw:ahaLektorat', '1'); } catch (e) {} } }"
+    <div x-data="{ dismissed: false, _read(){ try { return localStorage.getItem('sw:ahaLektorat') === '1'; } catch (e) { return false; } }, _dismiss(){ this.dismissed = true; try { localStorage.setItem('sw:ahaLektorat', '1'); } catch (e) {} } }"
+         x-effect="currentPage?.id; dismissed = _read()"
          x-show="!dismissed" x-cloak class="feature-tip page-aha" role="note">
       <span class="feature-tip__text" x-text="t('page.aha.text')"></span>
       <button type="button" class="feature-tip__action" @click="runCheck(); _dismiss()" x-text="t('page.aha.action')"></button>
@@ -21,10 +23,14 @@
        kann der Haken nicht persistiert werden, also soll er auch nicht wie ein
        Klickziel aussehen (Persistenz-Pfad: page-view.js#_handleViewTodoClick). -->
   <!-- Leerer Abschnitt: kein leeres Papier, an seiner Stelle steht der
-       Empty-State darunter. -->
+       Empty-State darunter.
+       --swapping: beim Abschnittswechsel steht bis zum Eintreffen des neuen
+       Inhalts noch der alte Text (app-view/page.js#selectPage) — gedimmt und
+       inert, damit kein Klick/Kopieren die falsche Seite trifft. -->
   <div x-show="renderedPageHtml && !currentPageEmpty"
        class="page-content-view"
-       :class="{ 'page-content-view--readonly': !canEdit() }"
+       :class="{ 'page-content-view--readonly': !canEdit(), 'page-content-view--swapping': pageContentLoading }"
+       :inert="pageContentLoading"
        x-html="renderedPageHtml"
        @click="handleMarkClick($event)"
        @copy="handleViewCopy($event)"

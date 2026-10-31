@@ -1,11 +1,16 @@
 // Musik-Methoden am Root-Spread (von app-view, toggleSongsCard gerufen).
 
 import { fetchJson } from '../utils.js';
+import { loadToken } from '../cards/book-guard.js';
 
 export const songsMethods = {
+  // Buchwechsel-/Doppel-Load-Guard: verspätete Antwort des vorigen Buchs (oder
+  // eines älteren Loads) darf den Katalog nicht überschreiben.
   async loadSongs(bookId) {
+    const isCurrent = loadToken(this, '_songsLoadSeq', bookId);
     try {
       const data = await fetchJson('/songs/' + bookId);
+      if (!isCurrent()) return;
       this.$store.catalog.songs = data?.songs || [];
       this.$store.catalogUi.songsUpdatedAt = data?.updated_at || null;
     } catch (e) {

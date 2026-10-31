@@ -301,7 +301,7 @@
   border: 1px solid var(--color-err-text);
   background: none;
   color: var(--color-err-text);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   cursor: pointer;
   font-weight: var(--fw-regular);
   opacity: 0.55;
@@ -452,7 +452,7 @@
   .page-revisions-row:focus-within .page-revisions-row__actions > *,
   .page-revisions-row .page-revisions-row__actions > .is-active { opacity: 1; }
 }
-.page-revisions-pin.is-active { color: var(--color-accent); }
+.page-revisions-pin.is-active { color: var(--color-accent-text); }
 
 /* Leeres Buch / leerer Filter in der Sidebar: `.card-empty--compact`,
    linksbuendig an der Baumkante statt zentriert. */

@@ -31,7 +31,7 @@
                           $watch('pageEditorFullscreen', fit);"
                   @input="$el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 'px'"
                   @blur="renameCurrentPage($event)"
-                  @keydown.enter.prevent="$event.target.blur()"
+                  @keydown.enter="$enter($event, () => $event.target.blur())"
                   :disabled="editMode || focusActive"
                   autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other"
                   data-spellcheck="spelling"

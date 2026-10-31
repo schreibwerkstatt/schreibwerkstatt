@@ -140,7 +140,7 @@ test('Sprache: Umstellung auf Englisch → stale, Neu-Scan, eigene Sprach-Refere
   const { saveBookSettings } = require('../../db/book-settings');
   require('../../db/book-access').grantAccess(OTHER_BOOK, OWNER, 'owner', OWNER);
   assert.equal(lexiconDb.getBookLexicon(OTHER_BOOK).language, 'de');
-  saveBookSettings(OTHER_BOOK, 'en', 'US', null, null);
+  saveBookSettings(OTHER_BOOK, { language: 'en', region: 'US', buchtyp: null, buch_kontext: null });
 
   const before = await get(OTHER_BOOK, OWNER);
   assert.equal(before.json.stale, true, 'gespeicherter Scan hat die alte Sprache');
@@ -158,5 +158,5 @@ test('Sprache: Umstellung auf Englisch → stale, Neu-Scan, eigene Sprach-Refere
   const de = await runScan(BOOK);
   assert.equal(de.result.skipped, false);
   assert.equal(de.result.hasReference, false);
-  saveBookSettings(OTHER_BOOK, 'de', 'CH', null, null);
+  saveBookSettings(OTHER_BOOK, { language: 'de', region: 'CH', buchtyp: null, buch_kontext: null });
 });

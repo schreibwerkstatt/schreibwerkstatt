@@ -200,8 +200,8 @@
         <div class="display-contents">
           <div class="verwandt-controls">
             <div class="seg-toggle">
-              <button type="button" :class="{ 'seg-toggle--active': verwandtBasis === 'page' }" @click="verwandtBasis = 'page'" x-text="$app.t('reference.verwandt.basisPage')"></button>
-              <button type="button" :class="{ 'seg-toggle--active': verwandtBasis === 'absatz' }" @click="verwandtBasis = 'absatz'" x-text="$app.t('reference.verwandt.basisAbsatz')"></button>
+              <button :aria-pressed="verwandtBasis === 'page'" type="button" :class="{ 'seg-toggle--active': verwandtBasis === 'page' }" @click="verwandtBasis = 'page'" x-text="$app.t('reference.verwandt.basisPage')"></button>
+              <button :aria-pressed="verwandtBasis === 'absatz'" type="button" :class="{ 'seg-toggle--active': verwandtBasis === 'absatz' }" @click="verwandtBasis = 'absatz'" x-text="$app.t('reference.verwandt.basisAbsatz')"></button>
             </div>
             <button type="button" class="icon-btn verwandt-search-btn" @click="runVerwandt()" :disabled="verwandtLoading"
                     :data-tip="verwandtLoading ? $app.t('reference.verwandt.searching') : $app.t('reference.verwandt.search')"

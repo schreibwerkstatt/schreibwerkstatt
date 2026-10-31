@@ -9,7 +9,7 @@
   align-self: flex-start;
   margin-left: var(--space-sm);
   margin-top: calc(-1 * (36px + var(--space-sm)));
-  z-index: var(--z-spellcheck);
+  z-index: var(--z-dock);
 }
 
 /* Schmale Viewports: sieben Tasten + Pille passen nur kompakt in eine Zeile. */
@@ -23,7 +23,7 @@
 /* Aktive Wiedergabe: akzentfarbene Haupttaste mit ruhigem Puls. */
 .tts-dock-btn.is-reading[aria-pressed="true"] {
   border-color: var(--color-accent);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   background: color-mix(in srgb, var(--color-accent) 10%, transparent);
   animation: ttsReadPulse 1.8s ease-in-out infinite;
 }
@@ -34,7 +34,7 @@
 
 /* Status-Pille rechts vom Vorlese-Button (Satz-Fortschritt / „pausiert"). */
 .tts-dock .tts-status.is-reading {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 .tts-dock .tts-status.is-reading::before {

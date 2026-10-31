@@ -99,6 +99,7 @@ export function registerIdeenBoardCard() {
     _boardSortables: [],
     // Speicher des EINEN Memo-Helfers der Karte (_memo in ideen-board/actions.js).
     _memos: {},
+    _boardLoadSeq: 0,  // Lade-Token (book-guard.js#loadToken)
     _lifecycle: null,
 
     // Ideen-Chat: Panel neben dem Board (chat/ideen-chat.js). Vorschläge des Chats
@@ -112,7 +113,12 @@ export function registerIdeenBoardCard() {
         filterScopes: IDEEN_BOARD_FILTER_SCOPES,
         resetState: { editingId: null, linkPickerIdeeId: null, assigningId: null, busy: false, selectedIds: [] },
         load: async () => { await this.loadBoard(); },
-        onBookChanged: () => { this.resetBoard(); this.resetIdeenChat(); this.ideenChatOpen = false; },
+        // Reset + bei offener Karte gleich das neue Buch laden — sonst bliebe
+        // das Board leer stehen, bis jemand es neu öffnet.
+        onBookChanged: () => {
+          this.resetBoard(); this.resetIdeenChat(); this.ideenChatOpen = false;
+          if (window.__app?.showIdeenBoardCard && Alpine.store('nav').selectedBookId) this.loadBoard();
+        },
         onViewReset: () => { this.resetBoard(); this.resetIdeenChat(); this.ideenChatOpen = false; },
         // Offline vorgemerkte Ideen sind auf dem Server: neu laden, damit die
         // temporären IDs den echten weichen (repo/ideen-queue.js).

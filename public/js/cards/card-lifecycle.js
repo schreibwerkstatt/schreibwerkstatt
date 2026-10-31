@@ -1,6 +1,22 @@
 import { EVT } from '../events.js';
 import { takeCardRequest } from './card-request.js';
 import { ownedFilterKeys, resetFilterScopes, restoreFilterScopes, watchFilterScopes } from '../filter-persist.js';
+
+// Lade-Promises der Karten, die gerade eingeblendet wurden (Show-Watcher unten).
+// `_withCardTransition` (app/app-view/_shared.js) wartet darauf, bevor der
+// Cross-Fade den neuen Zustand aufnimmt — die Karte erscheint dann mit ihrem
+// Inhalt, statt leer aufzugehen und Kacheln nachzuschieben.
+const pendingShowLoads = new Set();
+
+// Wartet auf alle laufenden Show-Loads, höchstens `maxMs` (danach blendet die
+// Karte mit dem bis dahin geladenen Stand ein; der Rest lädt sichtbar nach).
+export function settleShowLoads(maxMs) {
+  if (!pendingShowLoads.size) return Promise.resolve();
+  return Promise.race([
+    Promise.allSettled([...pendingShowLoads]),
+    new Promise(r => setTimeout(r, maxMs)),
+  ]);
+}
 // Shared lifecycle helper for Buch-scoped Karten.
 //
 // Most Cards duplicate the same Pattern: clear timers + reset Meta-Flags on
@@ -35,6 +51,9 @@ import { ownedFilterKeys, resetFilterScopes, restoreFilterScopes, watchFilterSco
 //                              und auf das Event bei schon offener Karte.
 //                              Karten rufen takeCardRequest fuer *_TAB nie
 //                              selbst (gegated: card-tab-request-single-place).
+//   beforeBookChanged(e, ctx, r) — awaited BEFORE the default reset+load on
+//                              `book:changed`; the card still holds the old
+//                              book's state (e.g. ask whether to save it)
 //   onBookChanged(e, ctx, r) — override; skips the default reset+load
 //                              (timerKeys are still cleared first)
 //   onViewReset(e, ctx, r)   — override; skips the default reset
@@ -108,13 +127,15 @@ export function setupCardLifecycle(ctx, cfg) {
       applyTabRequest();
       if (!cfg.load && !cfg.onShow) return;
       if (cfg.showNeedsBookId !== false && !Alpine.store('nav').selectedBookId) return;
-      if (cfg.onShow) await cfg.onShow(root());
-      else await cfg.load(root());
+      const pending = Promise.resolve(cfg.onShow ? cfg.onShow(root()) : cfg.load(root()));
+      pendingShowLoads.add(pending);
+      try { await pending; } finally { pendingShowLoads.delete(pending); }
     });
   }
 
-  const defaultBookChanged = async () => {
+  const defaultBookChanged = async (e) => {
     clearTimers();
+    if (cfg.beforeBookChanged) await cfg.beforeBookChanged(e, ctx, root());
     applyReset('book');
     if (cfg.showFlag && !root()[cfg.showFlag]) return;
     if (!Alpine.store('nav').selectedBookId) return;

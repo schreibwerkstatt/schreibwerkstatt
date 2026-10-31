@@ -7,7 +7,7 @@
 // nur die Bucheditor-Eigenheit: N Block-Roots statt einem, Replace über
 // Range-Mutation (statt execCommand) und die Anbindung an die Save-Queue.
 
-import { collectMatches, collectTextNodes, createHighlightPair, rangeOf } from '../../editor/shared/text-find.js';
+import { collectMatches, collectTextNodes, createHighlightPair, rangeOf, matchStillValid } from '../../editor/shared/text-find.js';
 import { clearRenderedDiagrams, RENDERED_DIAGRAM_SEL } from '../../diagram/mermaid-view.js';
 import { clearCaptionNumbers, XREF_NUM_SEL } from '../../xrefs/caption-preview.js';
 
@@ -210,15 +210,7 @@ export const bookEditorFindMethods = {
     },
 
     _matchStillValid(m) {
-      if (!m.startNode?.isConnected || !m.endNode?.isConnected) return false;
-      try {
-        const text = rangeOf(m).toString();
-        return this.findCaseSensitive
-          ? text === this.findTerm
-          : text.toLowerCase() === this.findTerm.toLowerCase();
-      } catch {
-        return false;
-      }
+      return matchStillValid(m, this.findTerm, this.findCaseSensitive);
     },
 
     replaceAll() {

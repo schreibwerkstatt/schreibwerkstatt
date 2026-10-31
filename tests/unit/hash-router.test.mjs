@@ -42,7 +42,7 @@ function makeCtx({ hash = '', books = [{ id: 42 }, { id: 99 }] } = {}) {
   const nav = { selectedBookId: null, books, pages: [], tree: [], werkstattDraftId: null, plotBeatId: null, rueckblickEntryId: null };
   // selectedXxxId leben in Alpine.store('catalogUi'). Getter/Setter-Aliasse
   // halten die bestehenden c.selectedFigurId-Mutationen am Leben.
-  const catalogUi = { selectedFigurId: null, selectedOrtId: null, selectedSongId: null, selectedSzeneId: null };
+  const catalogUi = { figurenTab: 'liste', selectedFigurId: null, selectedOrtId: null, selectedSongId: null, selectedSzeneId: null };
   return {
     get selectedBookId() { return nav.selectedBookId; },
     set selectedBookId(v) { nav.selectedBookId = v; },
@@ -144,6 +144,25 @@ test('_computeHash: einzelne Figur → #book/X/figur/Y', () => {
   c.selectedBookId = 42;
   c.showFiguresCard = true;
   c.selectedFigurId = 11;
+  assert.equal(c._computeHash(), '#book/42/figur/11');
+});
+
+test('_computeHash: Figuren-Reiter → #book/X/figuren/<reiter>', () => {
+  const c = makeCtx();
+  c.selectedBookId = 42;
+  c.showFiguresCard = true;
+  c.$store.catalogUi.figurenTab = 'soziogramm';
+  assert.equal(c._computeHash(), '#book/42/figuren/soziogramm');
+});
+
+test('_computeHash: Figur gewählt, aber anderer Reiter → Reiter-Permalink', () => {
+  const c = makeCtx();
+  c.selectedBookId = 42;
+  c.showFiguresCard = true;
+  c.selectedFigurId = 11;
+  c.$store.catalogUi.figurenTab = 'alter';
+  assert.equal(c._computeHash(), '#book/42/figuren/alter');
+  c.$store.catalogUi.figurenTab = 'liste';
   assert.equal(c._computeHash(), '#book/42/figur/11');
 });
 
@@ -261,6 +280,22 @@ test('_applyHash: Deep-Link auf #book/42/figuren → setzt Buch + öffnet Figure
   await c._applyHash();
   assert.equal(String(c.selectedBookId), '42');
   assert.equal(c.showFiguresCard, true);
+});
+
+test('_applyHash: Deep-Link auf #book/42/figuren/lebenslauf → Reiter-Wunsch + Karte offen', async () => {
+  events.length = 0;
+  const c = makeCtx({ hash: '#book/42/figuren/lebenslauf' });
+  await c._applyHash();
+  assert.equal(c.showFiguresCard, true);
+  const { takeCardRequest, CARD_REQUEST } = await import('../../public/js/cards/card-request.js');
+  assert.equal(takeCardRequest(CARD_REQUEST.FIGUREN_TAB), 'lebenslauf');
+});
+
+test('_applyHash: unbekannter Figuren-Reiter fällt auf die Liste zurück', async () => {
+  const c = makeCtx({ hash: '#book/42/figuren/quatsch' });
+  await c._applyHash();
+  const { takeCardRequest, CARD_REQUEST } = await import('../../public/js/cards/card-request.js');
+  assert.equal(takeCardRequest(CARD_REQUEST.FIGUREN_TAB), 'liste');
 });
 
 test('_applyHash: Deep-Link auf #book/42/figur/7 → openFigurById', async () => {

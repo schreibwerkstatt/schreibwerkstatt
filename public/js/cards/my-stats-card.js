@@ -15,6 +15,7 @@ import { myStatsTrendMethods } from './my-stats-trends-methods.js';
 import { myStatsChartMethods } from './my-stats-chart-methods.js';
 import { seriesColor } from './chart-style.js';
 import { memoMethods } from './card-memo.js';
+import { myStatsJobsState, myStatsJobsMethods } from './my-stats-jobs-methods.js';
 
 // Meilenstein-Label-Keys pro Kategorie (Wert via {n} interpoliert).
 const MILESTONE_LABELS = {
@@ -29,6 +30,8 @@ export function registerMyStatsCard() {
   window.Alpine.data('myStatsCard', () => ({
     ...myStatsTrendMethods,
     ...myStatsChartMethods,
+    ...myStatsJobsMethods,
+    ...myStatsJobsState(),
     myStatsData: null,
     myStatsHistory: [],
     myStatsWriting: [],
@@ -54,14 +57,14 @@ export function registerMyStatsCard() {
 
     init() {
       this.$watch(() => window.__app.showMyStatsCard, (visible) => {
-        if (visible) this.loadMyStats();
+        if (visible) { this.loadMyStats(); this.loadMyJobStats(); }
         else this._destroyChart();
       });
       // Buchübergreifend: kein Reset bei book:changed/view:reset, Refresh ohne Buch.
       this._lifecycle = setupCardLifecycle(this, {
         name: 'myStats',
         refreshNeedsBookId: false,
-        onCardRefresh: () => this.loadMyStats(),
+        onCardRefresh: () => { this.loadMyStats(); this.loadMyJobStats(); },
       });
     },
 

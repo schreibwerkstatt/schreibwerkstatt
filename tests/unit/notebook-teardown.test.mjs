@@ -148,7 +148,7 @@ test('T2: keepDraft behält den Draft (Seitenwechsel-Pfad)', () => {
 
 test('T2: resetPage delegiert an den Teardown-Helper mit keepDraft', () => {
   const src = fs.readFileSync(path.join(repo, 'public/js/app/app-view/page.js'), 'utf8');
-  const body = src.match(/resetPage\s*\(\)\s*\{[\s\S]*?\n  \}/)[0];
+  const body = src.match(/resetPage\s*\([^)]*\)\s*\{[\s\S]*?\n  \}/)[0];
   assert.match(body, /_teardownEditSession\?\.\(\s*\{\s*keepDraft:\s*true\s*\}\s*\)/,
     'resetPage muss die Session über die SSoT abbauen (sonst leaken Lock + Presence)');
 });

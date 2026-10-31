@@ -51,7 +51,7 @@
   overflow-x: auto;
   padding: var(--space-sm);
   border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-bg);
   color: var(--color-text);
 }
@@ -84,7 +84,7 @@
   justify-content: center;
   padding: var(--space-sm);
   border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-bg);
   overflow: auto;
 }

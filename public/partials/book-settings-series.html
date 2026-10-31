@@ -22,9 +22,10 @@
               </div>
             </div>
             <div class="card-form-row" x-show="seriesJoinable.length">
-              <label class="card-form-label" x-text="$app.t('series.join')"></label>
+              <label class="card-form-label" id="series-join-label" x-text="$app.t('series.join')"></label>
               <div class="series-inline">
                 <div x-data="combobox($app.t('series.joinPlaceholder'))"
+                     aria-labelledby="series-join-label"
                      x-modelable="value" x-model="seriesJoinId"
                      x-effect="options = seriesJoinable.map(s => ({ value: String(s.id), label: s.name + ' (' + s.members.map(m => m.name).join(', ') + ')' }))"></div>
                 <button type="button" @click="joinSeries()" :disabled="seriesBusy || !seriesJoinId"
@@ -48,8 +49,8 @@
               </div>
             </div>
             <div class="card-form-row">
-              <label class="card-form-label" x-text="$app.t('series.volumes')"></label>
-              <ol class="series-members">
+              <span class="card-form-label" id="series-volumes-label" x-text="$app.t('series.volumes')"></span>
+              <ol class="series-members" aria-labelledby="series-volumes-label">
                 <template x-for="(m, i) in seriesData.members" :key="m.book_id">
                   <li class="series-member" :class="{ 'series-member--current': m.position === seriesData.position }">
                     <span class="series-member-pos" x-text="m.position"></span>
@@ -69,7 +70,7 @@
               </ol>
             </div>
             <p class="card-hint" x-text="$app.t('series.epubHint')"></p>
-            <div class="book-settings-danger-actions">
+            <div class="series-actions">
               <button type="button" @click="leaveSeries()" :disabled="seriesBusy" x-text="$app.t('series.leave')"></button>
             </div>
           </div>
@@ -83,9 +84,10 @@
         <h3 class="card-section-title" x-text="$app.t('series.carry.title')"></h3>
         <p class="card-hint" x-text="$app.t('series.carry.intro')"></p>
         <div class="card-form-row">
-          <label class="card-form-label" x-text="$app.t('series.carry.source')"></label>
+          <label class="card-form-label" id="series-carry-source-label" x-text="$app.t('series.carry.source')"></label>
           <div class="series-inline">
             <div x-data="combobox($app.t('series.carry.sourcePlaceholder'))"
+                 aria-labelledby="series-carry-source-label"
                  x-modelable="value" x-model="carrySourceId"
                  @combobox-change="carryLists = null"
                  x-effect="options = seriesPrequels.map(p => ({ value: String(p.book_id), label: $app.t('series.volumeLabel', { n: p.position, name: p.name }) }))"></div>
@@ -106,7 +108,7 @@
                   <button type="button" @click="carrySelectAll(k, false)" x-text="$app.t('series.carry.pickAll')"></button>
                   <button type="button" @click="carrySelectNone(k)" x-text="$app.t('series.carry.pickNone')"></button>
                 </div>
-                <p class="card-hint" x-show="!(carryLists[k] || []).length" x-text="$app.t('series.carry.empty')"></p>
+                <p class="muted-msg muted-msg--sm" x-show="!(carryLists[k] || []).length" x-text="$app.t('series.carry.empty')"></p>
                 <div class="series-carry-list">
                   <template x-for="e in carryLists[k]" :key="e.id">
                     <label class="form-check">
@@ -122,7 +124,7 @@
               </div>
             </template>
             <p class="card-hint" x-text="$app.t('series.carry.hint')"></p>
-            <div class="book-settings-danger-actions">
+            <div class="series-actions">
               <button type="button" @click="runCarryover()" :disabled="carryBusy || !carryCount()">
                 <span x-show="carryBusy" class="spinner"></span>
                 <span x-text="$app.t('series.carry.run', { n: carryCount() })"></span>

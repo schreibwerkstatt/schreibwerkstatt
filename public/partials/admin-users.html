@@ -18,15 +18,15 @@
 
   <!-- Tab-Navigation Users / Invites / Requests -->
   <nav class="admin-users-tabs" role="tablist">
-    <button type="button" role="tab"
+    <button :aria-selected="adminUsersTab === 'users'" type="button" role="tab"
             :class="adminUsersTab === 'users' ? 'is-active' : ''"
             @click="adminUsersTab = 'users'"
             x-text="$app.t('admin.users.tab.users')"></button>
-    <button type="button" role="tab"
+    <button :aria-selected="adminUsersTab === 'invites'" type="button" role="tab"
             :class="adminUsersTab === 'invites' ? 'is-active' : ''"
             @click="adminUsersTab = 'invites'"
             x-text="$app.t('admin.users.tab.invites')"></button>
-    <button type="button" role="tab"
+    <button :aria-selected="adminUsersTab === 'requests'" type="button" role="tab"
             :class="adminUsersTab === 'requests' ? 'is-active' : ''"
             @click="adminUsersTab = 'requests'"
             x-text="$app.t('admin.users.tab.requests')"></button>

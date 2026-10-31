@@ -102,18 +102,22 @@ export const bookCreateMethods = {
       // schlägt es fehl, existiert das Buch trotzdem und die Werte lassen sich in
       // den Settings nachpflegen (wohin wir gleich navigieren) — kein Doppelanlegen.
       try {
+        // Teil-PUT: nur Sprache/Region/Buchtyp — ein bei der Anlage aus dem
+        // Autorenprofil vorbelegtes Stilprofil bleibt stehen.
         const { lang, region } = this._newBookLangRegion();
-        await fetch(`/booksettings/${created.id}`, {
+        const rs = await fetch(`/booksettings/${created.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ language: lang, region, buchtyp: this.bookCreateBuchtyp }),
         });
+        if (!rs.ok) throw new Error(`booksettings HTTP ${rs.status}`);
         if (this.bookCreateCategoryId) {
-          await fetch(`/books/${created.id}/category`, {
+          const rc = await fetch(`/books/${created.id}/category`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ category_id: parseInt(this.bookCreateCategoryId, 10) }),
           });
+          if (!rc.ok) throw new Error(`category HTTP ${rc.status}`);
         }
       } catch (persistErr) {
         console.error('[book-create] Buchtyp/Kategorie persistieren fehlgeschlagen:', persistErr);

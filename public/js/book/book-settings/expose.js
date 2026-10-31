@@ -20,18 +20,20 @@ export const exposeMethods = {
     return exposeProfil(this.bookSettingsBuchtyp || null);
   },
 
-  async loadExpose() {
-    const bookId = Alpine.store('nav').selectedBookId;
+  // `keepDraft`: offene Autorfassung nicht ersetzen — nur Historie und
+  // Normseiten auffrischen (ein neuer Lauf landet dann in der Historie).
+  async loadExpose(bookId = this._selectedBookId(), { keepDraft = false } = {}) {
     if (!bookId) return;
     try {
       const data = await fetchJson(`/expose/${bookId}`);
+      if (!this._isFormBook(bookId)) return;
       this.exposeHistory = data.history || [];
       this.exposeNormseiten = data.normseiten || 0;
-      this._setExposeRun(data.latest || null);
+      if (!keepDraft) this._setExposeRun(data.latest || null);
       this.exposeLoaded = true;
     } catch (e) {
       // 403 für Rollen unter editor: der Reiter bleibt leer, kein Fehlerbanner.
-      if (e?.status !== 403) this.exposeError = tFetchErrorRaw(e);
+      if (e?.status !== 403 && this._isFormBook(bookId)) this.exposeError = tFetchErrorRaw(e);
     }
   },
 
@@ -42,7 +44,7 @@ export const exposeMethods = {
   },
 
   async openExposeRun(id) {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._formBookId;
     if (!bookId || (this.exposeRun?.id === id)) return;
     if (this.exposeDirty && !await window.__app.appConfirm({ message: window.__app.t('expose.discardEdits'), danger: true })) return;
     try {
@@ -53,7 +55,7 @@ export const exposeMethods = {
   },
 
   async generateExpose() {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._formBookId;
     if (!bookId || this.exposeGenerating) return;
     this.exposeGenerating = true;
     this.exposeError = '';
@@ -64,7 +66,7 @@ export const exposeMethods = {
         body: JSON.stringify({ book_id: Number(bookId) }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(window.__app.tError(data) || `HTTP ${res.status}`);
+      if (!res.ok) throw new Error(window.__app.tError(data));
       this.exposeJobId = data.jobId;
       window.dispatchEvent(new CustomEvent(EVT.JOB_ENQUEUED, { detail: { type: 'expose', jobId: data.jobId } }));
     } catch (e) {
@@ -73,8 +75,11 @@ export const exposeMethods = {
     }
   },
 
-  // job:finished (Handler in der Karte).
-  async onExposeJobFinished(job) {
+  // job:finished (Handler in der Karte). Nur Läufe des Buchs im Formular.
+  async onExposeJobFinished(detail) {
+    const bookId = detail?.bookId;
+    if (!this._isFormBook(bookId)) return;
+    const job = detail.job;
     this.exposeGenerating = false;
     this.exposeJobId = null;
     if (job?.status === 'error') {
@@ -85,12 +90,9 @@ export const exposeMethods = {
     if (job.result?.empty) { this.exposeError = window.__app.t('expose.empty'); return; }
     // Ungespeicherte Autorfassung nicht überfahren: ein neuer Lauf öffnet sich
     // nur, wenn nichts offen ist — sonst landet er in der Historie.
-    const keepDraft = this.exposeDirty;
-    const run = this.exposeRun;
-    await this.loadExpose();
-    if (keepDraft && run) {
-      this.exposeError = window.__app.t('expose.newRunBehindEdits');
-    }
+    const keepDraft = this.exposeDirty && !!this.exposeRun;
+    await this.loadExpose(bookId, { keepDraft });
+    if (keepDraft) this.exposeError = window.__app.t('expose.newRunBehindEdits');
     this.exposeUnchanged = !!job.result?.unchanged;
   },
 
@@ -99,12 +101,13 @@ export const exposeMethods = {
     this.exposeSaved = false;
   },
 
-  // Über saveActiveTab (Speichern-Knopf der Karte) mitgespeichert.
-  async saveExpose() {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId || !this.exposeDirty || !this.exposeRun) return;
+  // Über den Kopf-Knopf der Karte mitgespeichert (save-paths.js).
+  async saveExpose(bookId = this._formBookId) {
+    if (!bookId || !this.exposeDirty || !this.exposeRun) return true;
     this.exposeSaving = true;
+    this.exposeSaved = false;
     this.exposeError = '';
+    const sent = JSON.stringify(this.exposeDraft);
     try {
       const res = await fetch(`/expose/${bookId}/${this.exposeRun.id}`, {
         method: 'PATCH',
@@ -112,21 +115,26 @@ export const exposeMethods = {
         body: JSON.stringify({ edited: this.exposeDraft }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(window.__app.tError(data) || `HTTP ${res.status}`);
-      this._setExposeRun(data);
-      this.exposeHistory = this.exposeHistory.map(h => (h.id === data.id ? { ...h, has_edits: !!data.edited } : h));
+      if (!res.ok) throw new Error(window.__app.tError(data));
+      if (this._isFormBook(bookId)) {
+        // Während des Speicherns weitergetippt → Entwurf behalten, bleibt ungespeichert.
+        if (JSON.stringify(this.exposeDraft) === sent) this._setExposeRun(data);
+        else this.exposeRun = data;
+        this.exposeHistory = this.exposeHistory.map(h => (h.id === data.id ? { ...h, has_edits: !!data.edited } : h));
+      }
       this.exposeSaved = true;
-      if (this._exposeSavedTimer) clearTimeout(this._exposeSavedTimer);
-      this._exposeSavedTimer = setTimeout(() => { this.exposeSaved = false; this._exposeSavedTimer = null; }, 2500);
+      this._flash('exposeSaved');
+      return true;
     } catch (e) {
       this.exposeError = e.message;
+      return false;
     } finally {
       this.exposeSaving = false;
     }
   },
 
   async resetExposeToKi() {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._formBookId;
     if (!bookId || !this.exposeRun) return;
     if (!await window.__app.appConfirm({ message: window.__app.t('expose.resetConfirm'), confirmLabel: window.__app.t('expose.resetToKi'), danger: true })) return;
     try {
@@ -136,7 +144,7 @@ export const exposeMethods = {
         body: JSON.stringify({ edited: null }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(window.__app.tError(data) || `HTTP ${res.status}`);
+      if (!res.ok) throw new Error(window.__app.tError(data));
       this._setExposeRun(data);
       this.exposeHistory = this.exposeHistory.map(h => (h.id === data.id ? { ...h, has_edits: false } : h));
     } catch (e) {
@@ -145,13 +153,13 @@ export const exposeMethods = {
   },
 
   async deleteExposeRun(id) {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._formBookId;
     if (!bookId || !await window.__app.appConfirm({ message: window.__app.t('expose.deleteConfirm'), confirmLabel: window.__app.t('expose.history.delete'), danger: true })) return;
     try {
       const res = await fetch(`/expose/${bookId}/${id}`, { method: 'DELETE' });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(window.__app.tError(d) || `HTTP ${res.status}`); }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(window.__app.tError(d)); }
       if (this.exposeRun?.id === id) this._setExposeRun(null);
-      await this.loadExpose();
+      await this.loadExpose(bookId);
     } catch (e) {
       this.exposeError = e.message;
     }
@@ -200,7 +208,7 @@ export const exposeMethods = {
   // Word-Download des angezeigten Laufs (Autorfassung vor KI-Fassung; offene
   // Änderungen erst speichern — der Server kennt nur den gespeicherten Stand).
   exposeDocxUrl() {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._formBookId;
     return bookId && this.exposeRun ? `/expose/${bookId}/${this.exposeRun.id}/docx` : null;
   },
 

@@ -3,6 +3,7 @@
    liegt nahe am 600er-Cap aus CLAUDE.md („File-Limits / Modularität"), der
    maschinell gegated ist. Markup: public/partials/figuren-lebenslauf.html
    Akzentfarbe kommt über var(--card-accent) von .card--figuren. */
+@layer components {
 
 .figur-cv { margin-top: var(--space-10); }
 
@@ -39,9 +40,9 @@
      3px/4px liessen sie bei 2px Gap zu einem Block verschmelzen. */
   padding: var(--pad-badge);
   border: 0.5px solid var(--color-border);
-  /* Eckig, nicht Pille: `--radius-sm` ist 0 und DESIGN.md haelt „Editorial-Eckig"
+  /* Eckig, nicht Pille: `--radius-none` ist 0 und DESIGN.md haelt „Editorial-Eckig"
      fuer Badges/Tags/Chips fest. Rund ist dort dem An/Aus-Schalter vorbehalten. */
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: transparent;
   color: var(--color-text);
   font-size: var(--font-size-mini);
@@ -116,7 +117,7 @@
 .figur-cv-events { list-style: none; margin: 0; padding: 0; }
 .figur-cv-event {
   padding: var(--space-2xs) 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 .figur-cv-event--clickable { cursor: pointer; }
 .figur-cv-event--clickable:hover {
@@ -127,6 +128,14 @@
   font-variant-numeric: tabular-nums;
   margin-right: var(--space-2xs);
   white-space: nowrap;
+}
+/* Ohne Jahr ist die Marke die freie Zeitangabe aus dem Text («Eines Tages …»):
+   sie bricht um, statt in die Nachbarspalte zu laufen, und bleibt gedaempft,
+   damit sie nicht wie ein Link aussieht. */
+.figur-cv-marke--frei {
+  color: var(--color-muted);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .figur-cv-text { color: var(--color-text); }
 .figur-cv-subtyp { margin-left: var(--space-2xs); }
@@ -195,4 +204,5 @@
   padding: 0;
   list-style: none;
   font-size: var(--font-size-sm);
+}
 }

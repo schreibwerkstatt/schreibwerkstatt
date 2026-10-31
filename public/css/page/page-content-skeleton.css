@@ -14,7 +14,7 @@
 }
 .page-content-skeleton__line {
   height: 0.85em;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: linear-gradient(90deg, var(--color-shimmer-from) 25%, var(--color-neutral-bg) 50%, var(--color-shimmer-from) 75%);
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.4s ease-in-out infinite;

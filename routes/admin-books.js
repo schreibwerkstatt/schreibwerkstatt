@@ -163,7 +163,7 @@ router.post('/:book_id/assign-owner', express.json({ limit: '4kb' }), (req, res)
     res.json({ ok: true, book_id: bookId, owner_email: target });
   } catch (e) {
     logger.error(`POST /admin/books/:id/assign-owner: ${e.message}`);
-    res.status(500).json({ error_code: 'ASSIGN_FAILED', detail: e.message });
+    res.status(500).json({ error_code: 'ASSIGN_FAILED' });
   }
 });
 

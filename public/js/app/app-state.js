@@ -153,6 +153,9 @@ const pageState = () => ({
   // Re-Entry-Guard für den manuellen Retry-Button (deaktiviert ihn während des
   // Ladens). Im Template gebunden → muss explizit deklariert sein.
   _retryingPageLoad: false,
+  // Laufnummer des jüngsten `selectPage`-Aufrufs (app-view/page.js): ein
+  // älterer Aufruf, dessen Awaits ein neuerer überholt hat, schaltet nicht mehr um.
+  _selectPageSeq: 0,
   currentPageIdeenOpenCount: 0,
   currentPageRechercheCount: 0,
   // Anzahl nicht-verworfener Plot-Beats im Kapitel der offenen Seite. Speist den

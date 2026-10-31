@@ -46,6 +46,7 @@
     animation-duration: 0.001s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0s !important;
+    scroll-behavior: auto !important;
   }
   /* View Transitions (Kartenwechsel-Cross-Fade) instant statt animiert —
      die Browser-Defaults hängen nicht an den Transition-Tokens oben. */

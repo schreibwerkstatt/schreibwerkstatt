@@ -8,7 +8,7 @@
   <div class="card-header">
     <span class="card-title" x-text="$app.t('admin.logs.title')"></span>
     <div class="card-actions">
-      <button type="button"
+      <button :aria-pressed="adminLogsLiveTail" type="button"
               class="admin-logs-livetail"
               :class="adminLogsLiveTail ? 'admin-logs-livetail--on' : ''"
               @click="adminLogsToggleLiveTail()"

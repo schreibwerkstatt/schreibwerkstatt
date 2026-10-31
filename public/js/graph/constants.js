@@ -119,3 +119,6 @@ export const DIRECTED_TYPES = ['elternteil', 'kind', 'mentor', 'schuetzling', 'p
 // Neuer Reiter ⇒ hier entscheiden, nicht an den Verwendungsstellen.
 export const GRAPH_MODES = ['figur', 'familie', 'soziogramm'];
 export const isGraphMode = (mode) => GRAPH_MODES.includes(mode);
+// Alle Reiter der Figuren-Karte in Anzeige-Reihenfolge. 'liste' ist der Einstieg
+// und steht im Permalink ohne Suffix (#…/figuren); jeder andere als #…/figuren/<reiter>.
+export const FIGUREN_TABS = ['liste', ...GRAPH_MODES, 'praesenz', 'alter', 'lebenslauf'];

@@ -66,10 +66,9 @@ test('Buchtyp `journalismus` existiert in prompt-config.json und in der Route', 
     assert.ok(cfg.buchtypen[lang].journalismus, `${lang}: Buchtyp journalismus fehlt`);
     assert.ok(cfg.buchtypen[lang].journalismus.zusatz, `${lang}: zusatz fehlt`);
   }
-  const routeSrc = fs.readFileSync(path.join(ROOT, 'routes/booksettings.js'), 'utf8');
-  const m = routeSrc.match(/const VALID_BUCHTYPEN = \[([^\]]+)\]/);
-  assert.ok(m, 'VALID_BUCHTYPEN nicht gefunden');
-  assert.ok(m[1].includes("'journalismus'"), 'VALID_BUCHTYPEN kennt journalismus nicht');
+  // Die Route validiert gegen lib/book-settings-values.js (SSoT aus prompt-config.json).
+  const { validBuchtypen } = require(path.join(ROOT, 'lib/book-settings-values.js'));
+  assert.ok(validBuchtypen().includes('journalismus'), 'Server-Liste kennt journalismus nicht');
 });
 
 test('jede Textsorte hat ein Label in beiden Locales', () => {

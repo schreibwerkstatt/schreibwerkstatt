@@ -71,7 +71,7 @@
   right: calc(-1 * clamp(18px, 4vw, 40px) + var(--space-2xs));
   width: 3px;
   background: var(--color-style-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   opacity: 0.7;
 }
 /* Hartes Finding (selected) → roter Stripe statt amber */
@@ -127,6 +127,13 @@
 .page-content-view--readonly ul.todo > li.todo-item > input[type="checkbox"] {
   pointer-events: none;
   cursor: default;
+}
+/* Abschnittswechsel: bis der neue Inhalt da ist, steht der alte Text gedimmt.
+   Die Verzögerung hält schnelle Loads (SW-Cache) ganz ohne Dimmen; das
+   Zurückblenden ist sofort (Transition nur am Modifier). */
+.page-content-view--swapping {
+  opacity: var(--opacity-strong);
+  transition: opacity var(--transition-slow) 0.15s;
 }
 
 /* Pull-Quote: Serif-Schnitt explizit, weil der Notebook-Lesekasten seinen
@@ -313,8 +320,8 @@
   top: 0;
   z-index: 1;
   background: var(--color-surface);
-  margin-inline: -1.25rem;
-  padding: var(--space-sm) 1.25rem var(--space-md);
+  margin-inline: calc(-1 * var(--space-20));
+  padding: var(--space-sm) var(--space-20) var(--space-md);
 }
 /* Im Edit-Modus kein text-wrap:pretty/balance — sonst rebalanciert der Browser
    bei jedem Keystroke die letzten Zeilen, Buchstaben hüpfen sichtbar zwischen
@@ -333,14 +340,14 @@
   .page-content-view p { margin: 0.8em 0; }
 }
 
-/* Display-Chips für @mentions / #channels. Inline, eckig (var(--radius-sm)),
+/* Display-Chips für @mentions / #channels. Inline, eckig (var(--radius-none)),
    subtil getöntem Hintergrund. Render-Pass via `decorateMentions` in
    public/js/utils.js — nicht persistiert, gilt nur im View-Modus. */
 .page-content-view .mention,
 .page-content-view .channel {
   display: inline-block;
   padding: 0 var(--space-xs, 4px);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: var(--font-em-90);
   font-style: normal;
@@ -353,7 +360,7 @@
 }
 .page-content-view .channel {
   background: var(--color-history-active-bg);
-  color: var(--color-stark, var(--color-primary));
+  color: var(--color-stark-text);
 }
 
 /* Lade-Fehler im View-Modus: Seiteninhalt konnte nicht geladen werden. Sitzt

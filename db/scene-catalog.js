@@ -1,5 +1,5 @@
 'use strict';
-// Lesepfad des Szenen-Katalogs (GET /figures/scenes/:book_id): Szenen eines
+// Szenen-Katalog: Lesepfad (GET /figures/scenes/:book_id) mit Szenen eines
 // Buchs/Users mit Kapitel-/Seitennamen und ihren Figuren-/Orts-Brücken. Der
 // Namens-JOIN auf chapters/pages liegt hier und nicht im Route-Handler
 // (CLAUDE.md „Content-Store-Facade als einziger Eintrittspunkt", Muster
@@ -36,4 +36,17 @@ function listScenesWithRefs(bookId, userEmail) {
   return { rows, sfRows, slRows };
 }
 
-module.exports = { listScenesWithRefs };
+/** Bulk-Cleanup (Danger-Zone, DELETE /figures/scenes/:book_id/stale): alle STALE
+ *  Szenen eines Buchs/Users loeschen. CASCADE raeumt die Bridges mit. Gibt die
+ *  geloeschten IDs zurueck (Suchindex). Muster db/locations-edit.js#deleteStaleLocations. */
+function deleteStaleScenes(bookId, userEmail) {
+  const ids = db.prepare('SELECT id FROM figure_scenes WHERE book_id = ? AND user_email IS ? AND stale = 1')
+    .all(bookId, userEmail || null).map(r => r.id);
+  db.transaction(() => {
+    const del = db.prepare('DELETE FROM figure_scenes WHERE id = ?');
+    for (const id of ids) del.run(id);
+  })();
+  return ids;
+}
+
+module.exports = { listScenesWithRefs, deleteStaleScenes };

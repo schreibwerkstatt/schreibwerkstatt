@@ -95,7 +95,7 @@ async function seedBook() {
   ], OWNER);
 
   const bs = require('../../db/book-settings');
-  bs.saveBookSettings(bookId, 'de', 'CH', 'roman', null, null, null, 0, 0, null, 0, null, 50000, null, 'Stil alt', 0, 0, 0);
+  bs.saveBookSettings(bookId, { language: 'de', region: 'CH', buchtyp: 'roman', buch_kontext: null, erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 0, daily_goal_chars: null, orte_real: 0, schauplatz_land: null, goal_target_chars: 50000, goal_deadline: null, stilprofil: 'Stil alt', zeitlinie_real: 0, exclude_from_stats: 0, weltfakten_real_pruefen: 0 });
   bs.setBookCitationSettings(bookId, { citation_style: 'apa7' });
   return { bookId, chA, chB, vorwort, a1, b1, nachwort };
 }
@@ -124,7 +124,7 @@ test('Restore schreibt an Ort und Stelle: IDs, FK-Daten, Settings, ACL bleiben',
   db.prepare(`INSERT INTO share_links (token, kind, page_id, book_id, owner_email, view_count, created_at, show_toc)
               VALUES ('tok-a1', 'page', ?, ?, ?, 0, ?, 0)`).run(s.a1.id, s.bookId, OWNER, NOW);
   const bs = require('../../db/book-settings');
-  bs.saveBookSettings(s.bookId, 'de', 'CH', 'sachbuch', null, null, null, 0, 1, null, 0, null, 99, null, 'Stil neu', 1, 1, 1);
+  bs.saveBookSettings(s.bookId, { language: 'de', region: 'CH', buchtyp: 'sachbuch', buch_kontext: null, erzaehlperspektive: null, erzaehlzeit: null, is_finished: 0, allow_lektor_book_chat: 1, daily_goal_chars: null, orte_real: 0, schauplatz_land: null, goal_target_chars: 99, goal_deadline: null, stilprofil: 'Stil neu', zeitlinie_real: 1, exclude_from_stats: 1, weltfakten_real_pruefen: 1 });
   await cs.updateBook(s.bookId, { name: 'Umbenannt' }, c);
   await cs.updateChapter(s.chB.id, { excluded: false }, c);
 

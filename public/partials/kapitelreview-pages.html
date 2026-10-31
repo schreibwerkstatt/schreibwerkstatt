@@ -8,7 +8,7 @@
   <!-- Seitenstatistik des gewählten Kapitels – klickbar zur Seite -->
   <template x-if="kapitelReviewSelectedChapter()">
     <div class="kapitel-pages-section">
-      <div class="kapitel-pages-heading" x-text="$app.t('kapitelReview.pagesHeading', { n: kapitelReviewSelectedChapter().pages.length })"></div>
+      <div class="card-section-title" x-text="$app.t('kapitelReview.pagesHeading', { n: kapitelReviewSelectedChapter().pages.length })"></div>
       <div class="muted-msg muted-msg--sm kapitel-empty-hint"
            x-show="kapitelReviewSelectedChapter().pages.length === 0 && kapitelReviewSubchapterTree($app.kapitelReviewChapterId).length === 0"
            x-text="$app.t('kapitelReview.emptyHint')"></div>

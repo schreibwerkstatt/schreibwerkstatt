@@ -8,7 +8,7 @@
      eine einzige Spalte muesste sich fuer eine Quelle entscheiden und den
      Widerspruch verschweigen.
 
-     Zeilen-Aufbau wie in book-settings-stats.html: ein <tbody> pro Zeile aus dem
+     Zeilen-Aufbau wie in my-stats-jobs.html: ein <tbody> pro Zeile aus dem
      x-for (mehrere tbody sind gueltiges HTML, ein tbody im tbody nicht), Zeile
      klappt ihre Belege auf. -->
 <div x-show="figurenGraphModus === 'alter'" class="figur-alter" x-cloak>
@@ -67,17 +67,12 @@
            })">
       <thead>
         <tr>
-          <th class="sortable-th" :class="sortClass('name')" :aria-sort="ariaSort('name')"
-              @click="sortBy('name')" x-text="$app.t('figuren.alter.col.figur')"></th>
-          <th class="sortable-th" :class="sortClass('typ_rank')" :aria-sort="ariaSort('typ_rank')"
-              @click="sortBy('typ_rank')" x-text="$app.t('figuren.alter.col.typ')"></th>
-          <th class="sortable-th" :class="sortClass('alter_von')" :aria-sort="ariaSort('alter_von')"
-              @click="sortBy('alter_von')" x-text="$app.t('figuren.alter.col.alter')"></th>
-          <th class="sortable-th" :class="sortClass('geburtsjahr')" :aria-sort="ariaSort('geburtsjahr')"
-              @click="sortBy('geburtsjahr')" x-text="$app.t('figuren.alter.col.birthYear')"></th>
-          <th class="sortable-th" :class="sortClass('alter_abgeleitet')" :aria-sort="ariaSort('alter_abgeleitet')"
-              :data-tip="$app.t('figuren.alter.col.derivedTip')"
-              @click="sortBy('alter_abgeleitet')" x-text="$app.t('figuren.alter.col.derived')"></th>
+          <th x-bind="sortTh('name')" x-text="$app.t('figuren.alter.col.figur')"></th>
+          <th x-bind="sortTh('typ_rank')" x-text="$app.t('figuren.alter.col.typ')"></th>
+          <th x-bind="sortTh('alter_von')" x-text="$app.t('figuren.alter.col.alter')"></th>
+          <th x-bind="sortTh('geburtsjahr')" x-text="$app.t('figuren.alter.col.birthYear')"></th>
+          <th x-bind="sortTh('alter_abgeleitet')"
+              :data-tip="$app.t('figuren.alter.col.derivedTip')" x-text="$app.t('figuren.alter.col.derived')"></th>
           <th x-text="$app.t('figuren.alter.col.reference')"></th>
           <th x-text="$app.t('figuren.alter.col.source')"></th>
           <th x-text="$app.t('figuren.alter.col.evidence')"></th>
@@ -111,7 +106,7 @@
                       :class="{ open: figurenAlterOpenId === row.id, 'figur-alter-chevron--empty': !row.belege.length }"
                       aria-hidden="true"></span>
                 <span class="figur-typ-dot" :class="'figur-typ-dot--' + row.typ"></span>
-                <span class="internal-link" @click.stop="$app.openFigurById(row.id)"
+                <span class="internal-link text-link" @click.stop="$app.openFigurById(row.id)"
                       :data-tip="$app.t('figuren.alter.openFigur')" x-text="row.name"></span>
                 <span class="figur-alter-kurzname" x-show="row.kurzname && row.kurzname !== row.name"
                       x-text="row.kurzname"></span>

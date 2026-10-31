@@ -20,11 +20,9 @@ const jsonBody = express.json();
 // Meilenstein). __i18n:-Marker → Betrachter sieht die Bezeichnung in seiner Locale.
 const AUTO_FINISH_LABEL = '__i18n:snapshots.autoFinishLabel__';
 
-const VALID_LANGUAGES = ['de', 'en'];
-const VALID_REGIONS   = ['CH', 'DE', 'US', 'GB'];
-const VALID_BUCHTYPEN = ['roman', 'kurzgeschichten', 'gesellschaft', 'krimi', 'historisch', 'fantasy_scifi', 'erotik', 'jugend', 'autobiografie', 'tagebuch', 'sachbuch', 'wissenschaft', 'lyrik', 'essay', 'blog', 'satire', 'journalismus', 'andere'];
-const VALID_POV     = ['ich', 'er_sie_personal', 'er_sie_auktorial', 'du', 'wir', 'gemischt'];
-const VALID_TEMPUS  = ['praeteritum', 'praesens', 'gemischt'];
+const {
+  VALID_LANGUAGES, VALID_REGIONS, VALID_POV, VALID_TEMPUS, validBuchtypen,
+} = require('../lib/book-settings-values');
 const BUCH_KONTEXT_MAX = 2000;
 // Stilprofil: KI-destilliert ~1-2k Zeichen; 6000 als grosszuegige Obergrenze
 // gegen versehentliches Einfuegen ganzer Kapitel.
@@ -48,112 +46,138 @@ router.get('/:book_id', aclParamGuard('viewer'), (req, res) => {
   res.json({ ...settings, schulsystem: getBookSchulsystem(bookId), handlungsjahr: getBookHandlungsjahr(bookId) });
 });
 
-/** Speichert Sprache, Region, Buchtyp und Buchkontext für ein Buch. */
+const has = (b, k) => b[k] !== undefined;
+const isEmpty = (x) => x === null || x === '';
+
+/** Echtes Kalenderdatum im strikten ISO-Format (2025-02-30 faellt durch). */
+function isCalendarDate(s) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+/** Ganzzahl im Bereich, `null`/'' = kein Wert. Liefert { value } oder { error }. */
+function intInRange(raw, min, max) {
+  if (isEmpty(raw)) return { value: null };
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < min || n > max) return { error: true };
+  return { value: n };
+}
+
+/** Speichert die Felder des Haupt-Formulars als Teil-PUT: ein fehlender Key
+ *  (undefined) behaelt den gespeicherten Wert, `null`/'' loescht ihn (Text-,
+ *  Enum- und Zielfelder) bzw. schaltet ihn aus. Sprache und Region lassen sich
+ *  nicht loeschen; fehlen sie, bleibt der Stand (ohne Zeile: Owner-Defaults).
+ *  `allow_lektor_book_chat` ist eine Rechte-Freigabe und wird nur vom Owner
+ *  uebernommen — von einem Editor still ignoriert, weil das Formular das Feld
+ *  immer mitschickt. */
 router.put('/:book_id', aclParamGuard('editor'), jsonBody, (req, res) => {
   const bookId = req.bookId;
+  const b = req.body && typeof req.body === 'object' ? req.body : {};
+  const patch = {};
+  const bad = (field, allowed) => res.status(400).json({ error_code: 'INVALID_VALUE', params: { field, allowed } });
 
-  const { language, region, buchtyp, buch_kontext, stilprofil, erzaehlperspektive, erzaehlzeit, is_finished, allow_lektor_book_chat, daily_goal_chars, goal_target_chars, goal_deadline, orte_real, schauplatz_land, zeitlinie_real, weltfakten_real_pruefen, exclude_from_stats } = req.body || {};
-  if (!language || !region) {
-    return res.status(400).json({ error_code: 'LANGUAGE_REGION_REQUIRED' });
+  for (const k of ['language', 'region']) {
+    if (!has(b, k)) continue;
+    if (isEmpty(b[k])) return res.status(400).json({ error_code: 'LANGUAGE_REGION_REQUIRED' });
   }
-  if (!VALID_LANGUAGES.includes(language)) {
-    return res.status(400).json({ error_code: 'INVALID_LANGUAGE', params: { allowed: VALID_LANGUAGES.join(', ') } });
-  }
-  if (!VALID_REGIONS.includes(region)) {
-    return res.status(400).json({ error_code: 'INVALID_REGION', params: { allowed: VALID_REGIONS.join(', ') } });
-  }
-  if (buchtyp && !VALID_BUCHTYPEN.includes(buchtyp)) {
-    return res.status(400).json({ error_code: 'INVALID_BUCHTYP', params: { allowed: VALID_BUCHTYPEN.join(', ') } });
-  }
-  if (buch_kontext && buch_kontext.length > BUCH_KONTEXT_MAX) {
-    return res.status(400).json({ error_code: 'BUCH_KONTEXT_TOO_LONG', params: { max: BUCH_KONTEXT_MAX } });
-  }
-  if (stilprofil && String(stilprofil).length > STILPROFIL_MAX) {
-    return res.status(400).json({ error_code: 'STILPROFIL_TOO_LONG', params: { max: STILPROFIL_MAX } });
-  }
-  if (erzaehlperspektive && !VALID_POV.includes(erzaehlperspektive)) {
-    return res.status(400).json({ error_code: 'INVALID_POV', params: { allowed: VALID_POV.join(', ') } });
-  }
-  if (erzaehlzeit && !VALID_TEMPUS.includes(erzaehlzeit)) {
-    return res.status(400).json({ error_code: 'INVALID_TEMPUS', params: { allowed: VALID_TEMPUS.join(', ') } });
-  }
-  let dailyGoal = null;
-  if (daily_goal_chars !== undefined && daily_goal_chars !== null && daily_goal_chars !== '') {
-    const n = Number(daily_goal_chars);
-    if (!Number.isFinite(n) || !Number.isInteger(n) || n < DAILY_GOAL_MIN || n > DAILY_GOAL_MAX) {
-      return res.status(400).json({ error_code: 'INVALID_VALUE', params: { field: 'daily_goal_chars', allowed: `${DAILY_GOAL_MIN}–${DAILY_GOAL_MAX}` } });
+  if (has(b, 'language')) {
+    if (!VALID_LANGUAGES.includes(b.language)) {
+      return res.status(400).json({ error_code: 'INVALID_LANGUAGE', params: { allowed: VALID_LANGUAGES.join(', ') } });
     }
-    dailyGoal = n;
+    patch.language = b.language;
   }
-
-  // Schreibziel: Zielzeichenzahl (gesamt). NULL/leer = kein Ziel.
-  let goalTarget = null;
-  if (goal_target_chars !== undefined && goal_target_chars !== null && goal_target_chars !== '') {
-    const n = Number(goal_target_chars);
-    if (!Number.isFinite(n) || !Number.isInteger(n) || n < GOAL_TARGET_MIN || n > GOAL_TARGET_MAX) {
-      return res.status(400).json({ error_code: 'INVALID_VALUE', params: { field: 'goal_target_chars', allowed: `${GOAL_TARGET_MIN}–${GOAL_TARGET_MAX}` } });
+  if (has(b, 'region')) {
+    if (!VALID_REGIONS.includes(b.region)) {
+      return res.status(400).json({ error_code: 'INVALID_REGION', params: { allowed: VALID_REGIONS.join(', ') } });
     }
-    goalTarget = n;
+    patch.region = b.region;
   }
-
-  // Abgabedatum: striktes ISO YYYY-MM-DD. NULL/leer = keine Deadline.
-  let goalDeadline = null;
-  if (goal_deadline !== undefined && goal_deadline !== null && goal_deadline !== '') {
-    const s = String(goal_deadline);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(Date.parse(s))) {
-      return res.status(400).json({ error_code: 'INVALID_VALUE', params: { field: 'goal_deadline', allowed: 'YYYY-MM-DD' } });
+  if (has(b, 'buchtyp')) {
+    if (!isEmpty(b.buchtyp) && !validBuchtypen().includes(b.buchtyp)) {
+      return res.status(400).json({ error_code: 'INVALID_BUCHTYP', params: { allowed: validBuchtypen().join(', ') } });
     }
-    goalDeadline = s;
+    patch.buchtyp = b.buchtyp || null;
   }
-
-  let schauplatzLand = null;
-  if (schauplatz_land !== undefined && schauplatz_land !== null && schauplatz_land !== '') {
-    if (!/^[A-Za-z]{2}$/.test(String(schauplatz_land))) {
-      return res.status(400).json({ error_code: 'INVALID_VALUE', params: { field: 'schauplatz_land', allowed: 'ISO-3166-1-alpha-2' } });
+  if (has(b, 'buch_kontext')) {
+    if (b.buch_kontext && String(b.buch_kontext).length > BUCH_KONTEXT_MAX) {
+      return res.status(400).json({ error_code: 'BUCH_KONTEXT_TOO_LONG', params: { max: BUCH_KONTEXT_MAX } });
     }
-    schauplatzLand = String(schauplatz_land).toLowerCase();
+    patch.buch_kontext = b.buch_kontext || null;
   }
-
-  const finished = is_finished ? 1 : 0;
-  const lektorBookChat = allow_lektor_book_chat ? 1 : 0;
-  const orteReal = orte_real ? 1 : 0;
-  const zeitlinieReal = zeitlinie_real ? 1 : 0;
-  const weltfaktenRealPruefen = weltfakten_real_pruefen ? 1 : 0;
-  const excludeStats = exclude_from_stats ? 1 : 0;
+  if (has(b, 'stilprofil')) {
+    if (b.stilprofil && String(b.stilprofil).length > STILPROFIL_MAX) {
+      return res.status(400).json({ error_code: 'STILPROFIL_TOO_LONG', params: { max: STILPROFIL_MAX } });
+    }
+    patch.stilprofil = b.stilprofil || null;
+  }
+  if (has(b, 'erzaehlperspektive')) {
+    if (!isEmpty(b.erzaehlperspektive) && !VALID_POV.includes(b.erzaehlperspektive)) {
+      return res.status(400).json({ error_code: 'INVALID_POV', params: { allowed: VALID_POV.join(', ') } });
+    }
+    patch.erzaehlperspektive = b.erzaehlperspektive || null;
+  }
+  if (has(b, 'erzaehlzeit')) {
+    if (!isEmpty(b.erzaehlzeit) && !VALID_TEMPUS.includes(b.erzaehlzeit)) {
+      return res.status(400).json({ error_code: 'INVALID_TEMPUS', params: { allowed: VALID_TEMPUS.join(', ') } });
+    }
+    patch.erzaehlzeit = b.erzaehlzeit || null;
+  }
+  // Tagesziel: null/'' = nicht gesetzt (Frontend-Default 1500, so stehen Altbuecher
+  // da); 0 = bewusst KEIN Tagesziel (wird als 0 gespeichert, nie als Divisor benutzt).
+  if (has(b, 'daily_goal_chars')) {
+    if (Number(b.daily_goal_chars) === 0 && !isEmpty(b.daily_goal_chars)) {
+      patch.daily_goal_chars = 0;
+    } else {
+      const r = intInRange(b.daily_goal_chars, DAILY_GOAL_MIN, DAILY_GOAL_MAX);
+      if (r.error) return bad('daily_goal_chars', `0, ${DAILY_GOAL_MIN}–${DAILY_GOAL_MAX}`);
+      patch.daily_goal_chars = r.value;
+    }
+  }
+  // Schreibziel: Zielzeichenzahl (gesamt). null/leer = kein Ziel.
+  if (has(b, 'goal_target_chars')) {
+    const r = intInRange(b.goal_target_chars, GOAL_TARGET_MIN, GOAL_TARGET_MAX);
+    if (r.error) return bad('goal_target_chars', `${GOAL_TARGET_MIN}–${GOAL_TARGET_MAX}`);
+    patch.goal_target_chars = r.value;
+  }
+  // Abgabedatum: striktes ISO YYYY-MM-DD und ein echter Kalendertag. null/leer = keine Deadline.
+  if (has(b, 'goal_deadline')) {
+    if (!isEmpty(b.goal_deadline) && !isCalendarDate(String(b.goal_deadline))) {
+      return bad('goal_deadline', 'YYYY-MM-DD');
+    }
+    patch.goal_deadline = isEmpty(b.goal_deadline) ? null : String(b.goal_deadline);
+  }
+  if (has(b, 'schauplatz_land')) {
+    if (!isEmpty(b.schauplatz_land) && !/^[A-Za-z]{2}$/.test(String(b.schauplatz_land))) {
+      return bad('schauplatz_land', 'ISO-3166-1-alpha-2');
+    }
+    patch.schauplatz_land = isEmpty(b.schauplatz_land) ? null : String(b.schauplatz_land).toLowerCase();
+  }
+  for (const k of ['is_finished', 'orte_real', 'zeitlinie_real', 'weltfakten_real_pruefen', 'exclude_from_stats']) {
+    if (has(b, k)) patch[k] = b[k] ? 1 : 0;
+  }
+  if (has(b, 'allow_lektor_book_chat') && req.bookRole === 'owner') {
+    patch.allow_lektor_book_chat = b.allow_lektor_book_chat ? 1 : 0;
+  }
 
   // Vorheriger Fertig-Status fuer die Auto-Fassung beim 0→1-Uebergang.
-  const wasFinished = getBookSettings(bookId, sessionEmail(req))?.is_finished ? 1 : 0;
-
-  saveBookSettings(bookId, language, region, buchtyp || null, buch_kontext || null, erzaehlperspektive || null, erzaehlzeit || null, finished, lektorBookChat, dailyGoal, orteReal, schauplatzLand, goalTarget, goalDeadline, stilprofil || null, zeitlinieReal, excludeStats, weltfaktenRealPruefen);
+  const wasFinished = getBookSettings(bookId)?.is_finished ? 1 : 0;
+  const saved = saveBookSettings(bookId, patch);
 
   // Publikations-Meilenstein: Buch frisch als fertig markiert (0→1) → automatisch
   // eine Fassung festhalten (dedup gegen die juengste, damit kein Duplikat
   // entsteht, falls der Stand bereits festgehalten wurde). Best-effort und
   // fire-and-forget — blockiert das Settings-Speichern nicht und darf nie werfen.
-  if (finished && !wasFinished) {
+  if (saved.is_finished && !wasFinished) {
     captureSnapshot(bookId, req, {
       kind: 'auto_finish', label: AUTO_FINISH_LABEL, dedup: true, userEmail: sessionEmail(req),
     }).catch((e) => logger.warn(`Auto-Fassung beim Fertig-Markieren fehlgeschlagen (book=${bookId}): ${e.message}`));
   }
 
-  res.json({
-    ok: true, language, region,
-    buchtyp: buchtyp || null, buch_kontext: buch_kontext || null,
-    stilprofil: stilprofil || null,
-    erzaehlperspektive: erzaehlperspektive || null,
-    erzaehlzeit: erzaehlzeit || null,
-    is_finished: finished,
-    allow_lektor_book_chat: lektorBookChat,
-    daily_goal_chars: dailyGoal,
-    goal_target_chars: goalTarget,
-    goal_deadline: goalDeadline,
-    orte_real: orteReal,
-    schauplatz_land: schauplatzLand,
-    zeitlinie_real: zeitlinieReal,
-    weltfakten_real_pruefen: weltfaktenRealPruefen,
-    exclude_from_stats: excludeStats,
-    locale: `${language}-${region}`,
-  });
+  // Antwort: der vollstaendige gespeicherte Stand (wie GET), nicht das Echo des
+  // Bodys — bei einem Teil-PUT sieht die Oberflaeche so auch die unveraenderten Felder.
+  res.json({ ok: true, ...saved, locale: `${saved.language}-${saved.region}` });
 });
 
 /** Quick-Toggle aus Notebook-Toolbar — patcht nur entities_enabled,
@@ -299,13 +323,17 @@ router.put('/:book_id/research', aclParamGuard('editor'), jsonBody, (req, res) =
 const HANDLUNGSJAHR_MIN = 1000, HANDLUNGSJAHR_MAX = 2999;
 
 /** Schulsystem des Buchs (Schullaufbahn der Figuren, docs/figur-lebenslauf.md).
- *  Eigener Endpunkt wie /research. `schulsystem: null` entfernt es. Normalisiert
+ *  Eigener Endpunkt wie /research. `schulsystem: null` entfernt es, ein fehlender
+ *  Key laesst es stehen. Normalisiert
  *  wird ausschliesslich über die Rechenschicht (school-path.js, ESM-Bridge) — die
  *  Antwort trägt den gespeicherten Stand, damit die Oberfläche geklemmte Werte
  *  sofort sieht. Eine unbekannte Vorlage ist ein 400, kein stilles null. */
 router.put('/:book_id/schulsystem', aclParamGuard('editor'), jsonBody, async (req, res) => {
   const bookId = req.bookId;
-  const raw = req.body?.schulsystem ?? null;
+  // Teil-PUT wie handlungsjahr: fehlt der Key, bleibt das Schulsystem stehen;
+  // nur ein explizites `null` entfernt es.
+  const hasSys = Object.prototype.hasOwnProperty.call(req.body || {}, 'schulsystem');
+  const raw = hasSys ? (req.body.schulsystem ?? null) : null;
   const { normalizeSchulsystem, SCHUL_VORLAGE_KEYS } = await schoolPath();
   const value = raw == null ? null : normalizeSchulsystem(raw);
   if (raw != null && !value) {
@@ -321,10 +349,11 @@ router.put('/:book_id/schulsystem', aclParamGuard('editor'), jsonBody, async (re
       return res.status(400).json({ error_code: 'INVALID_VALUE', params: { field: 'handlungsjahr', allowed: `${HANDLUNGSJAHR_MIN}–${HANDLUNGSJAHR_MAX}` } });
     }
   }
-  setBookSchulsystem(bookId, value);
+  if (hasSys) setBookSchulsystem(bookId, value);
   if (hasJahr) setBookHandlungsjahr(bookId, jahr);
-  logger.info(`[schulsystem] book=${bookId} vorlage=${value?.vorlage || '–'} standardWeg=${value?.standard_weg || '–'}${hasJahr ? ` handlungsjahr=${jahr ?? '–'}` : ''}`);
-  res.json({ ok: true, schulsystem: value, handlungsjahr: getBookHandlungsjahr(bookId) });
+  const stored = getBookSchulsystem(bookId);
+  logger.info(`[schulsystem] book=${bookId} vorlage=${stored?.vorlage || '–'} standardWeg=${stored?.standard_weg || '–'}${hasJahr ? ` handlungsjahr=${jahr ?? '–'}` : ''}`);
+  res.json({ ok: true, schulsystem: stored, handlungsjahr: getBookHandlungsjahr(bookId) });
 });
 
 module.exports = router;

@@ -67,33 +67,33 @@
   <div class="epubx-body">
     <!-- Typografie -->
     <section class="export-tab-panel" x-bind="panel('typography')">
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('epubExport.cssStyle')"></label>
-        <div x-data="combobox($app.t('epubExport.cssStyle'))"
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.cssStyle')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('epubExport.cssStyle'))"
              x-modelable="value" x-model="pub.epub_css_style"
              x-effect="options = publicationCssOptions()"></div>
       </div>
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.fontSize')"></label>
-        <div x-data="combobox($app.t('epubExport.field.fontSize'))"
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.field.fontSize')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('epubExport.field.fontSize'))"
              x-modelable="value" x-model="pub.epub_font_size"
              x-effect="options = fontSizeOptions()"></div>
       </div>
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.lineHeight')"></label>
-        <div x-data="combobox($app.t('epubExport.field.lineHeight'))"
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.field.lineHeight')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('epubExport.field.lineHeight'))"
              x-modelable="value" x-model="pub.epub_line_height"
              x-effect="options = lineHeightOptions()"></div>
       </div>
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.paragraphStyle')"></label>
-        <div x-data="combobox($app.t('epubExport.field.paragraphStyle'))"
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.field.paragraphStyle')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('epubExport.field.paragraphStyle'))"
              x-modelable="value" x-model="pub.epub_paragraph_style"
              x-effect="options = paragraphStyleOptions()"></div>
       </div>
-      <div class="card-form-row" x-show="pub.epub_paragraph_style !== 'spaced'">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.indentSize')"></label>
-        <div x-data="combobox($app.t('epubExport.field.indentSize'))"
+      <div x-id="['fld']" class="card-form-row" x-show="pub.epub_paragraph_style !== 'spaced'">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.field.indentSize')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('epubExport.field.indentSize'))"
              x-modelable="value" x-model="pub.epub_indent_size"
              x-effect="options = indentSizeOptions()"></div>
       </div>
@@ -115,70 +115,70 @@
           <span x-text="$app.t('epubExport.field.dropCaps')"></span>
         </label>
       </div>
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.headingFont')"></label>
-        <div x-data="combobox($app.t('epubExport.field.headingFont'))"
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.field.headingFont')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('epubExport.field.headingFont'))"
              x-modelable="value" x-model="pub.epub_heading_font"
              x-effect="options = headingFontOptions()"></div>
       </div>
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.headingScale')"></label>
-        <div x-data="combobox($app.t('epubExport.field.headingScale'))"
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.field.headingScale')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('epubExport.field.headingScale'))"
              x-modelable="value" x-model="pub.epub_heading_scale"
              x-effect="options = headingScaleOptions()"></div>
       </div>
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.numerals')"></label>
-        <div x-data="combobox($app.t('epubExport.field.numerals'))"
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.field.numerals')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('epubExport.field.numerals'))"
              x-modelable="value" x-model="pub.epub_numerals"
              x-effect="options = numeralsOptions()"></div>
       </div>
-      <div class="card-form-row"><label class="card-form-label" x-text="$app.t('export.messages.group')"></label>
-        <div x-data="combobox($app.t('export.messages.group'))" x-modelable="value" x-model="pub.epub_msg_style" x-effect="options = [{ value: 'plain', label: $app.t('export.messages.style.plain') }, { value: 'bubbles', label: $app.t('export.messages.style.bubbles') }]"></div></div>
+      <div x-id="['fld']" class="card-form-row"><label :id="$id('fld')" class="card-form-label" x-text="$app.t('export.messages.group')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('export.messages.group'))" x-modelable="value" x-model="pub.epub_msg_style" x-effect="options = [{ value: 'plain', label: $app.t('export.messages.style.plain') }, { value: 'bubbles', label: $app.t('export.messages.style.bubbles') }]"></div></div>
     </section>
 
     <!-- Struktur -->
     <section class="export-tab-panel" x-bind="panel('structure')">
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.titlepageMode')"></label>
-        <div x-data="combobox($app.t('epubExport.field.titlepageMode'))"
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.field.titlepageMode')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('epubExport.field.titlepageMode'))"
              x-modelable="value" x-model="pub.epub_titlepage_mode"
              x-effect="options = titlepageModeOptions()"></div>
       </div>
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.coverFit')"></label>
-        <div x-data="combobox($app.t('epubExport.field.coverFit'))"
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.field.coverFit')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('epubExport.field.coverFit'))"
              x-modelable="value" x-model="pub.epub_cover_fit"
              x-effect="options = coverFitOptions()"></div>
       </div>
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.imprintPosition')"></label>
-        <div x-data="combobox($app.t('epubExport.field.imprintPosition'))"
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.field.imprintPosition')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('epubExport.field.imprintPosition'))"
              x-modelable="value" x-model="pub.epub_imprint_position"
              x-effect="options = imprintPositionOptions()"></div>
       </div>
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.sceneSep')"></label>
-        <div x-data="combobox($app.t('epubExport.field.sceneSep'))"
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.field.sceneSep')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('epubExport.field.sceneSep'))"
              x-modelable="value" x-model="pub.epub_scene_separator"
              x-effect="options = sceneSeparatorOptions()"></div>
       </div>
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.numbering')"></label>
-        <div x-data="combobox($app.t('epubExport.field.numbering'))"
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.field.numbering')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('epubExport.field.numbering'))"
              x-modelable="value" x-model="pub.epub_chapter_numbering"
              x-effect="options = chapterNumberingOptions()"></div>
       </div>
-      <div class="card-form-row" x-show="pub.epub_chapter_numbering !== 'none'">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.numberingMode')"></label>
-        <div x-data="combobox($app.t('epubExport.field.numberingMode'))"
+      <div x-id="['fld']" class="card-form-row" x-show="pub.epub_chapter_numbering !== 'none'">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.field.numberingMode')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('epubExport.field.numberingMode'))"
              x-modelable="value" x-model="pub.epub_chapter_numbering_mode"
              x-effect="options = chapterNumberingModeOptions()"></div>
       </div>
-      <div class="card-form-row card-form-row--top" x-show="pub.epub_chapter_numbering !== 'none'">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.unnumberedChapters')"></label>
+      <div x-id="['fld']" class="card-form-row card-form-row--top" x-show="pub.epub_chapter_numbering !== 'none'">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.field.unnumberedChapters')"></label>
         <div class="card-form-field">
-          <div x-data="combobox({ placeholder: $app.t('epubExport.field.unnumberedPick'), multiple: true })"
+          <div :aria-labelledby="$id('fld')" x-data="combobox({ placeholder: $app.t('epubExport.field.unnumberedPick'), multiple: true })"
                x-modelable="value" x-model="pub.epub_unnumbered_chapter_ids"
                x-effect="options = unnumberedChapterPickOptions()"></div>
           <div class="export-chip-row" x-show="unnumberedChapterChips().length">
@@ -213,9 +213,9 @@
           <span x-text="$app.t('epubExport.field.tocEnabled')"></span>
         </label>
       </div>
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('epubExport.field.tocDepth')"></label>
-        <div x-data="combobox($app.t('epubExport.field.tocDepth'))"
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('epubExport.field.tocDepth')"></label>
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('epubExport.field.tocDepth'))"
              x-modelable="value" x-model="pub.epub_toc_depth"
              x-effect="options = tocDepthOptions()"></div>
       </div>
@@ -274,7 +274,7 @@
     <!-- Persistenter Footer: Speichern gilt für alle Tabs (book_publication) -->
     <p class="card-form-hint">
       <span x-text="$app.t('epubExport.metaHint')"></span>
-      <span class="internal-link" @click="openBookSettings()" x-text="$app.t('epubExport.metaLink')"></span>
+      <span class="internal-link text-link" @click="openBookSettings()" x-text="$app.t('epubExport.metaLink')"></span>
     </p>
 
     <div class="card-actions" x-show="canEditPublication()">

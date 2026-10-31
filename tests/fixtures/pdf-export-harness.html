@@ -9,6 +9,8 @@
   <link rel="stylesheet" href="/public/css/tokens.css">
   <link rel="stylesheet" href="/public/css/layout/base.css">
   <link rel="stylesheet" href="/public/css/components/buttons-badges.css">
+  <link rel="stylesheet" href="/public/css/components/seg-toggle.css">
+  <link rel="stylesheet" href="/public/css/components/file-btn.css">
   <link rel="stylesheet" href="/public/css/components/card-form/card-shell.css">
   <link rel="stylesheet" href="/public/css/components/card-form/form-elements.css">
   <link rel="stylesheet" href="/public/css/components/card-form/card-actions.css">
@@ -95,9 +97,11 @@
     const { registerFileDrop } = await import('/public/js/file-drop.js');
     registerFileDrop();
 
-    // `$editKeys` (Cmd+S am Edit-Formular) — in der App registriert in register-cards.js.
-    const { handleEditPanelKeydown } = await import('/public/js/utils/keys.js');
+    // `$editKeys` (Cmd+S am Edit-Formular) und `$enter` (Enter mit IME-Guard) —
+    // in der App registriert in register-cards.js.
+    const { handleEditPanelKeydown, handleEnterKey } = await import('/public/js/utils/keys.js');
     window.Alpine.magic('editKeys', () => handleEditPanelKeydown);
+    window.Alpine.magic('enter', () => handleEnterKey);
 
     const { registerPdfExportCard } = await import('/public/js/cards/pdf-export-card.js');
     registerPdfExportCard();

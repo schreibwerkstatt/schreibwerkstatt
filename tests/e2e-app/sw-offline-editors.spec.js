@@ -66,7 +66,7 @@ test('nach Reload ohne Netz öffnen Bucheditor, Notebook- und Focus-Editor', asy
 
   // Buch anheften und den Sync abwarten.
   await page.evaluate((id) => { location.hash = '#book/' + id; }, bookId);
-  const btn = page.locator('.card-actions button[aria-pressed]');
+  const btn = page.locator('.card-actions button[aria-pressed]:has(use[href*="/icons.svg#cloud-"])');
   await expect(btn).toHaveAttribute('aria-pressed', 'false');
   await btn.click();
   await page.waitForFunction((id) => {

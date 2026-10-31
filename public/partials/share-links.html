@@ -14,7 +14,7 @@
 
   <!-- Create-Form -->
   <section class="share-create">
-    <h3 class="share-create__title" x-text="$app.t('share.create.title')"></h3>
+    <h3 class="card-section-title" x-text="$app.t('share.create.title')"></h3>
     <div class="share-create__row">
       <div x-data="radioGroup()" x-modelable="value" x-model="createKind"
            x-effect="options = shareKindOptions()"></div>
@@ -73,7 +73,7 @@
 
   <!-- Liste -->
   <section class="share-list">
-    <h3 class="share-list__title" x-text="$app.t('share.list.title')"></h3>
+    <h3 class="card-section-title" x-text="$app.t('share.list.title')"></h3>
     <div x-show="loadingLinks" class="muted-msg" x-text="$app.t('common.loading')"></div>
     <div x-show="!loadingLinks && links.length === 0" class="muted-msg" x-text="$app.t('share.list.empty')"></div>
 

@@ -40,7 +40,7 @@
 .overview-song-dot {
   width: 8px;
   height: 8px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--card-accent, var(--color-accent));
   flex: 0 0 auto;
 }
@@ -70,7 +70,7 @@
 .overview-stacked-bar {
   display: flex;
   height: 10px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   overflow: hidden;
   background: var(--color-border);
 }
@@ -91,7 +91,7 @@
   content: '';
   width: 8px;
   height: 8px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 .overview-stacked-key--stark::before   { background: var(--color-success); }
 .overview-stacked-key--mittel::before  { background: var(--color-warn-text); }

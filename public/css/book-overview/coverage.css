@@ -32,7 +32,7 @@
 }
 .overview-error-bar-track {
   height: 6px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-border);
   overflow: hidden;
 }

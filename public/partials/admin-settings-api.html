@@ -72,15 +72,15 @@
                })">
           <thead>
             <tr>
-              <th class="sortable-th" :class="sortClass('display_name')" :aria-sort="ariaSort('display_name')" @click="sortBy('display_name')"
+              <th x-bind="sortTh('display_name')"
                   x-text="$app.t('admin.settings.api.col.name')"></th>
-              <th class="sortable-th" :class="sortClass('scopes')" :aria-sort="ariaSort('scopes')" @click="sortBy('scopes')"
+              <th x-bind="sortTh('scopes')"
                   x-text="$app.t('admin.settings.api.col.scopes')"></th>
-              <th class="sortable-th" :class="sortClass('created_at')" :aria-sort="ariaSort('created_at')" @click="sortBy('created_at')"
+              <th x-bind="sortTh('created_at')"
                   x-text="$app.t('admin.settings.api.col.created')"></th>
-              <th class="sortable-th" :class="sortClass('last_used_at')" :aria-sort="ariaSort('last_used_at')" @click="sortBy('last_used_at')"
+              <th x-bind="sortTh('last_used_at')"
                   x-text="$app.t('admin.settings.api.col.lastUsed')"></th>
-              <th class="sortable-th" :class="sortClass('expires_at')" :aria-sort="ariaSort('expires_at')" @click="sortBy('expires_at')"
+              <th x-bind="sortTh('expires_at')"
                   x-text="$app.t('admin.settings.api.col.expires')"></th>
               <th x-text="$app.t('admin.settings.api.col.status')"></th>
               <th></th>

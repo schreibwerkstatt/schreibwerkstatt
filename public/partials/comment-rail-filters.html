@@ -1,0 +1,30 @@
+<!-- Triage-Filter der Owner-Kommentarleiste (Fragment, string-seitig per
+     Include-Marker eingebunden): Status-Segment + optionaler Reviewer-Filter
+     + Leer-Hinweis, wenn der Filter alles ausblendet. Geteilt nur zwischen den
+     zwei OWNER-Oberflächen — Notebook-Leseansicht (editor-comments.html) und
+     Bucheditor (book-editor.html); der Share-Reader (Leser-Seite, ohne Alpine)
+     hat seine eigene Leiste (docs/share-link.md). Beide Einbinder stellen über
+     comment-rail-core.js dieselben Felder/Methoden bereit: `bookComments`,
+     `commentThreads`, `commentGeneralThreads`, `commentFilterStatus`,
+     `commentFilterReviewer`, `_railSetFilter`, `_railReviewerNames`. -->
+<div class="comment-rail__filters" x-show="bookComments.length">
+  <div class="seg-toggle comment-rail__filter-status">
+    <button type="button" :class="{ 'seg-toggle--active': commentFilterStatus === 'all' }"
+            :aria-pressed="commentFilterStatus === 'all'"
+            @click="_railSetFilter({ status: 'all' })" x-text="$app.t('share.comments.filter.all')"></button>
+    <button type="button" :class="{ 'seg-toggle--active': commentFilterStatus === 'open' }"
+            :aria-pressed="commentFilterStatus === 'open'"
+            @click="_railSetFilter({ status: 'open' })" x-text="$app.t('share.comments.filter.open')"></button>
+    <button type="button" :class="{ 'seg-toggle--active': commentFilterStatus === 'resolved' }"
+            :aria-pressed="commentFilterStatus === 'resolved'"
+            @click="_railSetFilter({ status: 'resolved' })" x-text="$app.t('share.comments.filter.resolved')"></button>
+  </div>
+  <div class="comment-rail__filter-reviewer" x-show="_railReviewerNames().length > 1"
+       x-data="combobox($app.t('share.comments.filter.reviewerAll'), $app.t('share.comments.filter.reviewerAll'))"
+       x-modelable="value" x-model="commentFilterReviewer"
+       x-effect="options = _railReviewerNames().map(n => ({ value: n, label: n }))"
+       @combobox-change="_railSetFilter({})"></div>
+</div>
+
+<div class="comment-rail__filter-empty muted-msg muted-msg--sm" x-show="!commentThreads.length && !commentGeneralThreads.length"
+     x-text="$app.t('share.comments.filterEmpty')"></div>

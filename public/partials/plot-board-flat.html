@@ -18,12 +18,12 @@
                   :data-tip="$app.t('plot.act.color')" :aria-label="$app.t('plot.act.color')"></button>
           <div class="color-picker__popover" x-show="actColorPickerId === act.id" x-cloak
                @click.outside="actColorPickerId === act.id && (actColorPickerId = null)">
-            <button type="button" class="color-picker__opt color-picker__opt--none"
+            <button :aria-pressed="!act.farbe" type="button" class="color-picker__opt color-picker__opt--none"
                     :class="{ 'color-picker__opt--on': !act.farbe }"
                     @click="setActColor(act, null)"
                     :data-tip="$app.t('plot.act.colorNone')" :aria-label="$app.t('plot.act.colorNone')"></button>
             <template x-for="key in actPalette()" :key="key">
-              <button type="button" class="color-picker__opt"
+              <button :aria-pressed="act.farbe === key" type="button" class="color-picker__opt"
                       :style="{ '--col-accent': 'var(--palette-' + key + ')' }"
                       :class="{ 'color-picker__opt--on': act.farbe === key }"
                       @click="setActColor(act, key)" :aria-label="$app.t('plot.palette.' + key)" :data-tip="$app.t('plot.palette.' + key)"></button>
@@ -38,7 +38,7 @@
         <template x-if="editingActId === act.id">
           <input type="text" class="plot-column-title-input" x-model="actDraft"
                  data-spellcheck="spelling"
-                 @keydown.enter="saveEditAct(act)"
+                 @keydown.enter="$enter($event, () => saveEditAct(act))"
                  @keydown="$editKeys($event, { save: () => saveEditAct(act), cancel: () => cancelEditAct() })"
                  @blur="onActBlur(act, $event)">
         </template>
@@ -115,7 +115,7 @@
           <div class="plot-add-beat" :data-add-beat-act="act.id">
             <textarea class="plot-add-beat-input" x-model="newBeatTitel" rows="1"
                       data-spellcheck="spelling" :placeholder="$app.t('plot.beat.titelPlaceholder')"
-                      @keydown.enter.prevent="saveNewBeat(act.id)"
+                      @keydown.enter="$enter($event, () => saveNewBeat(act.id))"
                       @keydown="$editKeys($event, { save: () => saveNewBeat(act.id), cancel: () => cancelAddBeat() })"
                       @blur="onAddBeatBlur(act.id, $event)"></textarea>
             <div class="plot-add-beat-actions">
@@ -173,7 +173,7 @@
     <div class="plot-add-act-form" x-show="addingAct" x-cloak>
       <input type="text" class="plot-new-act-input" x-model="newActName"
              data-spellcheck="spelling" :placeholder="$app.t('plot.act.namePlaceholder')"
-             @keydown.enter="addAct()" @keydown.escape="addingAct = false; newActName = ''">
+             @keydown.enter="$enter($event, () => addAct())" @keydown.escape="addingAct = false; newActName = ''">
       <div class="plot-add-act-actions">
         <button type="button" class="btn-compact" @click="addAct()" :disabled="busy" x-text="$app.t('plot.act.add')"></button>
         <button type="button" class="btn-compact btn-compact--ghost" @click="addingAct = false; newActName = ''" x-text="$app.t('common.cancel')"></button>

@@ -1,7 +1,7 @@
 // Teil von appViewMethods (siehe Facade app-view.js).
 import { EVT, EXCLUSIVE_CARDS, FILTER_SCOPES, getDeviceId, computeTodayRing, computeWeekBars, computeWritingStreak, fetchJson, fetchJsonRetry, resetFilterScopes, restoreFilterScopes } from './_shared.js';
 import { setLastBookId } from '../../local-prefs.js';
-import { localeTag } from '../../utils.js';
+import { localeTag, resolveDailyGoal } from '../../utils.js';
 
 // In-Flight-Handle von `loadDailyProgress`. Modul-Scope statt Store: ein
 // Promise im reaktiven Alpine-Proxy wird beim `await` mit dem Proxy als `this`
@@ -451,13 +451,18 @@ export const bookscopeMethods = {
   // [public/js/today-ring.js] — beide Donuts driften nie auseinander. `pages`
   // gibt der Rechnung die Seitenliste: ein erst teilweise gefuelltes tokEsts
   // (Buchwechsel) gilt nicht als Live-Stand, sondern faellt auf den Snapshot.
+  // Buch ohne Tagesziel (daily_goal_chars = 0) → kein Header-Donut.
+  headerHasDailyGoal() {
+    return resolveDailyGoal(this.$store.progress.dailyProgressDailyGoalChars) > 0;
+  },
+
   headerTodayRing() {
     const progress = this.$store.progress;
     return computeTodayRing({
       stats: progress.dailyProgressStats,
       tokEsts: this.tokEsts,
       pages: this.$store.nav.pages,
-      goalChars: progress.dailyProgressDailyGoalChars || 1500,
+      goalChars: resolveDailyGoal(progress.dailyProgressDailyGoalChars),
       r: 14,
     });
   },
@@ -470,7 +475,7 @@ export const bookscopeMethods = {
       stats: progress.dailyProgressStats,
       tokEsts: this.tokEsts,
       pages: this.$store.nav.pages,
-      goalChars: progress.dailyProgressDailyGoalChars || 1500,
+      goalChars: resolveDailyGoal(progress.dailyProgressDailyGoalChars),
     });
   },
 
@@ -491,7 +496,7 @@ export const bookscopeMethods = {
       stats: progress.dailyProgressStats,
       tokEsts: this.tokEsts,
       pages: this.$store.nav.pages,
-      goalChars: progress.dailyProgressDailyGoalChars || 1500,
+      goalChars: resolveDailyGoal(progress.dailyProgressDailyGoalChars),
       r: 26,
     });
   },

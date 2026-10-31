@@ -6,7 +6,8 @@
 //   setup.js — Watcher-Lifecycle (haengt die Schreib-Watcher auf/ab)
 //
 // URL-Hash-Permalinks + History-Management.
-// Schema: #profil | #admin/<users|settings|usage[/<tab>]> | #book/:bookId[/page/:pageId|/figur/:figId|/ort/:ortId|/szene/:szeneId|/ereignis/:ereignisId|/werkstatt[/:draftId]|/kapitel[/:chapterId]|/<view>]
+// Schema: #profil | #admin/<users|settings|usage[/<tab>]> | #book/:bookId[/page/:pageId|/figur/:figId|/figuren[/:reiter]|/ort/:ortId|/szene/:szeneId|/ereignis/:ereignisId|/werkstatt[/:draftId]|/kapitel[/:chapterId]|/<view>]
+// Figuren-Reiter: liste (ohne Suffix) | figur | familie | soziogramm | praesenz | alter | lebenslauf
 // Views: figuren, werkstatt, orte, szenen, ereignisse, kontinuitaet, bewertung, kapitel, chat, stats, stil, fehler, suche, einstellungen, finetune, export
 // Admin-Usage-Tabs: users (default, weggelassen) | jobs | chat | summary | features | time
 import { hashBuildMethods } from './app-hash-router/build.js';

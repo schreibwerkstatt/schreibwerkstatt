@@ -13,9 +13,9 @@
     <p class="card-hint" x-text="$app.t('sources.import.hint')"></p>
 
     <div class="card-form-grid">
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('sources.import.file')"></label>
-        <div class="card-form-field sources-import-file">
+      <div x-id="['fld']" class="card-form-row">
+        <span :id="$id('fld')" class="card-form-label" x-text="$app.t('sources.import.file')"></span>
+        <div role="group" :aria-labelledby="$id('fld')" class="card-form-field sources-import-file">
           <input type="file" hidden x-ref="srcImportInput"
                  accept=".bib,.bibtex,.ris,.txt,text/plain,application/x-bibtex,application/x-research-info-systems"
                  @change="readSourceImportFile($event)">
@@ -27,19 +27,19 @@
         </div>
       </div>
 
-      <div class="card-form-row">
-        <label class="card-form-label" x-text="$app.t('sources.import.format')"></label>
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('sources.import.format')"></label>
         <div class="card-form-field">
-          <div x-data="combobox({ placeholder: $app.t('sources.import.format'), compact: false })"
+          <div :aria-labelledby="$id('fld')" x-data="combobox({ placeholder: $app.t('sources.import.format'), compact: false })"
                x-modelable="value" x-model="srcImportFormat"
                x-effect="options = srcImportFormatOptions()"></div>
         </div>
       </div>
 
-      <div class="card-form-row card-form-row--top">
-        <label class="card-form-label" x-text="$app.t('sources.import.text')"></label>
+      <div x-id="['fld']" class="card-form-row card-form-row--top">
+        <label :for="$id('fld')" class="card-form-label" x-text="$app.t('sources.import.text')"></label>
         <div class="card-form-field">
-          <textarea class="card-form-textarea sources-export-preview" rows="8" x-model="srcImportText"
+          <textarea :id="$id('fld')" class="card-form-textarea sources-export-preview" rows="8" x-model="srcImportText"
                     spellcheck="false" :aria-label="$app.t('sources.import.text')"
                     :placeholder="$app.t('sources.import.textPlaceholder')"></textarea>
         </div>

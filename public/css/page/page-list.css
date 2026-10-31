@@ -44,7 +44,7 @@
   height: 60%;
   transform: translateY(-50%);
   background: var(--color-warn-text, var(--color-accent));
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 
 /* Live-Presence: anderer User editiert gerade diese Seite (Heartbeat <90s).
@@ -61,7 +61,7 @@
   background: hsl(var(--avatar-hue, 220) var(--avatar-bg-sl));
   color: hsl(var(--avatar-hue, 220) var(--avatar-fg-sl));
   border: 1px solid hsl(var(--avatar-hue, 220) var(--avatar-border-sl));
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   line-height: 1;
 }
 /* Self-Multi-Device: derselbe User auf einem anderen Geraet. Gestrichelte
@@ -105,7 +105,7 @@
   flex-shrink: 0;
   width: 9px;
   height: 9px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-subtle);
   border: 1px solid transparent;
 }
@@ -158,11 +158,14 @@
   font-size: var(--font-size-xs);
   line-height: 1;
   padding: var(--space-2xs) var(--space-5);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   border: 1px solid var(--color-accent-soft);
   background: transparent;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   font-variant-numeric: tabular-nums;
+}
+.ideen-count-badge.internal-link:hover {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
 }
 
 /* Recherche-Indikator pro Seite: gleiche Outline-Optik wie der Ideen-Marker,
@@ -173,7 +176,7 @@
   font-size: var(--font-size-xs);
   line-height: 1;
   padding: var(--space-2xs) var(--space-5);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   border: 1px solid var(--card-accent-recherche);
   background: transparent;
   color: var(--card-accent-recherche);
@@ -188,9 +191,9 @@
 .tag {
   font-size: var(--font-size-xs);
   background: var(--color-tag-bg);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   padding: var(--space-2xs) var(--space-6);
-  color: var(--color-muted);
+  color: var(--color-tag-text);
 }
 
 /* === Status === */

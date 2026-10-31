@@ -70,7 +70,7 @@
                @focus="ivEditSpeaker(key)"
                @input="ivSpeakerDraft[key] = { ...(ivSpeakerDraft[key] || {}), label: $event.target.value }"
                @blur="ivRenameSpeaker(item.id, key)"
-               @keydown.enter.prevent="$event.target.blur()"
+               @keydown.enter="$enter($event, () => $event.target.blur())"
                :placeholder="$app.t('interview.speakerName')"
                :aria-label="$app.t('interview.speakerName')"
                autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true"
@@ -80,7 +80,7 @@
                @focus="ivEditSpeaker(key)"
                @input="ivSpeakerDraft[key] = { ...(ivSpeakerDraft[key] || {}), rolle: $event.target.value }"
                @blur="ivRenameSpeaker(item.id, key)"
-               @keydown.enter.prevent="$event.target.blur()"
+               @keydown.enter="$enter($event, () => $event.target.blur())"
                :placeholder="$app.t('interview.speakerRole')"
                :aria-label="$app.t('interview.speakerRole')"
                autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true"
@@ -98,7 +98,7 @@
   <ol class="research-transcript__segments" x-show="ivSegments.length">
     <template x-for="seg in ivSegments" :key="'seg-' + seg.id">
       <li class="research-transcript__segment">
-        <button type="button" class="research-transcript__tc internal-link"
+        <button type="button" class="research-transcript__tc text-link"
                 x-show="seg.start_s !== null"
                 @click="if ($refs.ivAudio) { $refs.ivAudio.currentTime = seg.start_s; $refs.ivAudio.play(); }"
                 :data-tip="$app.t('interview.jumpTip')"

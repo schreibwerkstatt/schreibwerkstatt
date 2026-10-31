@@ -5,7 +5,9 @@
     <div class="overview-tile-label" x-text="$app.t('overview.recent')"></div>
     <ul class="overview-recent-list">
       <template x-for="p in overviewRecentPages()" :key="p.id">
-        <li class="overview-recent-item internal-link" @click="$app.selectPage(p)" :data-tip="$app.pageStatusTooltip(p).join(' · ')">
+        <!-- Klickziel am inneren Element: .internal-link am <li> nähme mit
+             role=button die Listen-Semantik weg. -->
+        <li><div class="overview-recent-item internal-link" @click="$app.selectPage(p)" :data-tip="$app.pageStatusTooltip(p).join(' · ')">
           <span class="overview-recent-name">
             <span class="page-status-dot" :class="'page-status-' + $app.pageStatus(p)"></span>
             <span x-text="p.name"></span>
@@ -20,7 +22,7 @@
                   x-text="_fmtNormseiten(overviewPageChars(p.id)) + ' ' + $app.t('bookstats.unit.ns')"></span>
             <span class="overview-recent-chapter" x-show="p.chapterName" :data-tip="p.chapterName" x-text="p.chapterName"></span>
           </span>
-        </li>
+        </div></li>
       </template>
     </ul>
   </div>

@@ -172,4 +172,14 @@ test('quellen: anlegen, filtern, bearbeiten, archivieren, loeschen, Fundstellen 
     const s = await fetch(`/booksettings/${id}`).then(r => r.json());
     return s.citation_style === 'numeric' && s.bibliography_enabled === 1;
   });
+
+  // Aufräumen: eine DB für die ganze App-Suite — sources-export/-pdf-draft
+  // erwarten den Default-Stil in der Vorschau.
+  await page.evaluate(async () => {
+    const id = window.Alpine.store('nav').selectedBookId;
+    await fetch(`/booksettings/${id}/citation`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ citation_style: 'apa7', bibliography_enabled: 0 }),
+    });
+  });
 });

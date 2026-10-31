@@ -50,7 +50,7 @@
           </template>
 
           <div class="card-form-row" x-show="uiMode === 'expert'">
-            <label class="card-form-label">&nbsp;</label>
+            <span class="card-form-label" aria-hidden="true">&nbsp;</span>
             <div class="card-form-field">
               <label class="pdfx-check">
                 <input type="checkbox" x-model="activeProfile.config.layout.headerRule">
@@ -80,53 +80,53 @@
           </div>
 
           <p class="card-form-section-divider" x-text="$app.t('pdfExport.pagination.group.numbering')"></p>
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('pdfExport.layout.pageNumberStart')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.layout.pageNumberStart')"></label>
             <div class="card-form-field">
-              <input type="text" x-data="numInput({ integer: true, min: 1, max: 9999 })" x-modelable="value" x-model="activeProfile.config.layout.pageNumberStart" class="pdfx-num-input">
+              <input :id="$id('fld')" type="text" x-data="numInput({ integer: true, min: 1, max: 9999 })" x-modelable="value" x-model="activeProfile.config.layout.pageNumberStart" class="pdfx-num-input">
               <p class="card-form-field-note" x-text="$app.t('pdfExport.layout.pageNumberStartHint')"></p>
             </div>
           </div>
-          <div class="card-form-row" x-show="uiMode === 'expert'">
-            <label class="card-form-label" x-text="$app.t('pdfExport.layout.pageCountMode')"></label>
+          <div x-id="['fld']" class="card-form-row" x-show="uiMode === 'expert'">
+            <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.layout.pageCountMode')"></label>
             <div class="card-form-field">
-              <div x-data="combobox($app.t('pdfExport.layout.pageCountMode'))"
+              <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.layout.pageCountMode'))"
                    x-modelable="value" x-model="activeProfile.config.layout.pageCountMode"
                    x-effect="options = [{ value: 'body', label: $app.t('pdfExport.layout.pageCountMode.body') }, { value: 'physical', label: $app.t('pdfExport.layout.pageCountMode.physical') }]"
 ></div>
               <p class="card-form-field-note" x-text="$app.t(activeProfile.config.layout.pageCountMode === 'physical' ? 'pdfExport.layout.pageCountModeHintPhysical' : 'pdfExport.layout.pageCountModeHintBody')"></p>
             </div>
           </div>
-          <div class="card-form-row" x-show="uiMode === 'expert'">
-            <label class="card-form-label" x-text="$app.t('pdfExport.layout.pageNumberFirstVisible')"></label>
+          <div x-id="['fld']" class="card-form-row" x-show="uiMode === 'expert'">
+            <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.layout.pageNumberFirstVisible')"></label>
             <div class="card-form-field">
-              <input type="text" x-data="numInput({ integer: true, min: 1, max: 9999 })" x-modelable="value" x-model="activeProfile.config.layout.pageNumberFirstVisible" class="pdfx-num-input">
+              <input :id="$id('fld')" type="text" x-data="numInput({ integer: true, min: 1, max: 9999 })" x-modelable="value" x-model="activeProfile.config.layout.pageNumberFirstVisible" class="pdfx-num-input">
               <p class="card-form-field-note" x-text="$app.t(activeProfile.config.layout.pageCountMode === 'physical' ? 'pdfExport.layout.pageNumberFirstVisibleHintCounted' : 'pdfExport.layout.pageNumberFirstVisibleHint')"></p>
             </div>
           </div>
-          <div class="card-form-row" x-show="uiMode === 'expert'">
-            <label class="card-form-label" x-text="$app.t('pdfExport.layout.frontMatterNumbering')"></label>
+          <div x-id="['fld']" class="card-form-row" x-show="uiMode === 'expert'">
+            <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.layout.frontMatterNumbering')"></label>
             <div class="card-form-field">
-              <div x-data="combobox($app.t('pdfExport.layout.frontMatterNumbering'))"
+              <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.layout.frontMatterNumbering'))"
                    x-modelable="value" x-model="activeProfile.config.layout.frontMatterNumbering"
                    x-effect="options = [{ value: 'none', label: $app.t('pdfExport.layout.frontMatterNum.none') }, { value: 'roman', label: 'i, ii, iii' }, { value: 'arabic', label: '1, 2, 3' }]"
 ></div>
               <p class="card-form-field-note" x-text="$app.t('pdfExport.layout.frontMatterNumberingHint')"></p>
             </div>
           </div>
-          <div class="card-form-row" x-show="uiMode === 'expert' && activeProfile.config.layout.frontMatterNumbering !== 'none'" x-cloak>
-            <label class="card-form-label" x-text="$app.t('pdfExport.layout.frontMatterNumberFirstVisible')"></label>
+          <div x-id="['fld']" class="card-form-row" x-show="uiMode === 'expert' && activeProfile.config.layout.frontMatterNumbering !== 'none'" x-cloak>
+            <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.layout.frontMatterNumberFirstVisible')"></label>
             <div class="card-form-field">
-              <input type="text" x-data="numInput({ integer: true, min: 1, max: 9999 })" x-modelable="value" x-model="activeProfile.config.layout.frontMatterNumberFirstVisible" class="pdfx-num-input">
+              <input :id="$id('fld')" type="text" x-data="numInput({ integer: true, min: 1, max: 9999 })" x-modelable="value" x-model="activeProfile.config.layout.frontMatterNumberFirstVisible" class="pdfx-num-input">
               <p class="card-form-field-note" x-text="$app.t('pdfExport.layout.frontMatterNumberFirstVisibleHint')"></p>
             </div>
           </div>
 
           <p class="card-form-section-divider" x-show="uiMode === 'expert'" x-text="$app.t('pdfExport.pagination.group.skip')"></p>
-          <div class="card-form-row card-form-row--top" x-show="uiMode === 'expert'">
-            <label class="card-form-label" x-text="$app.t('pdfExport.chapter.skipPageCounterChapters')"></label>
+          <div x-id="['fld']" class="card-form-row card-form-row--top" x-show="uiMode === 'expert'">
+            <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.chapter.skipPageCounterChapters')"></label>
             <div class="card-form-field">
-              <div x-data="combobox({ placeholder: $app.t('pdfExport.chapter.skipPageCounterPick'), multiple: true })"
+              <div :aria-labelledby="$id('fld')" x-data="combobox({ placeholder: $app.t('pdfExport.chapter.skipPageCounterPick'), multiple: true })"
                    x-modelable="value" x-model="activeProfile.config.chapter.skipPageCounterChapterIds"
                    x-effect="options = skipPageCounterChapterPickOptions()"></div>
               <div class="export-chip-row" x-show="skipPageCounterChapterChips().length">
@@ -142,10 +142,10 @@
               <p class="card-form-field-note" x-text="$app.t('pdfExport.chapter.skipPageCounterChaptersHint')"></p>
             </div>
           </div>
-          <div class="card-form-row card-form-row--top" x-show="uiMode === 'expert'">
-            <label class="card-form-label" x-text="$app.t('pdfExport.chapter.skipPageCounterPages')"></label>
+          <div x-id="['fld']" class="card-form-row card-form-row--top" x-show="uiMode === 'expert'">
+            <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.chapter.skipPageCounterPages')"></label>
             <div class="card-form-field">
-              <div x-data="combobox({ placeholder: $app.t('pdfExport.chapter.skipPageCounterPagePick'), multiple: true })"
+              <div :aria-labelledby="$id('fld')" x-data="combobox({ placeholder: $app.t('pdfExport.chapter.skipPageCounterPagePick'), multiple: true })"
                    x-modelable="value" x-model="activeProfile.config.chapter.skipPageCounterPageIds"
                    x-effect="options = skipPageCounterPagePickOptions()"></div>
               <div class="export-chip-row" x-show="skipPageCounterPageChips().length">

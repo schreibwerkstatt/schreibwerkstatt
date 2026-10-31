@@ -39,14 +39,21 @@ function register(router) {
     const roleByBook = new Map(accessRows.map(r => [r.book_id, r.role]));
     try {
       const all = await contentStore.listBooks(req);
-      const userFallbackBuchtyp = fallbackBuchtyp(email);
+      // Ohne Settings-Zeile gilt der Default-Buchtyp des OWNERS (wie in
+      // getBookSettings) — memoisiert, die Liste traegt oft dieselben Owner.
+      const ownerBuchtyp = new Map();
+      const fallbackFor = (owner) => {
+        const key = owner || email;
+        if (!ownerBuchtyp.has(key)) ownerBuchtyp.set(key, fallbackBuchtyp(key));
+        return ownerBuchtyp.get(key);
+      };
       const meta = new Map(
         listBookListMeta().map(r => [r.book_id, {
           owner_email: r.owner_email,
           category_id: r.category_id,
-          // Ohne Settings-Zeile derselbe User-Default wie getBookSettings — sonst
+          // Ohne Settings-Zeile derselbe Owner-Default wie getBookSettings — sonst
           // bekäme ein solches Buch Tagebuch-Prompts, aber keinen Kalender.
-          buchtyp: r.has_settings ? r.buchtyp : userFallbackBuchtyp,
+          buchtyp: r.has_settings ? r.buchtyp : fallbackFor(r.owner_email),
         }])
       );
       // Regal-Zustand (angeheftet/archiviert) je Buch fuer DIESEN User. Er
@@ -381,7 +388,7 @@ function register(router) {
     } catch (e) {
       if (e?.code === 'BOOK_OWNER_GRANT_FAILED') {
         logger.warn(`Buch erstellen fehlgeschlagen: Owner-Grant (${e.cause?.message || e.message})`);
-        return res.status(500).json({ error_code: 'CREATE_FAILED', status: 500, detail: e.cause?.message || e.message });
+        return res.status(500).json({ error_code: 'CREATE_FAILED', status: 500 });
       }
       const status = e?.status || 500;
       let detail = '';
@@ -396,7 +403,6 @@ function register(router) {
       res.status(status === 401 ? 502 : status).json({
         error_code: 'CREATE_FAILED',
         status,
-        detail: detail || e.message,
       });
     }
   });

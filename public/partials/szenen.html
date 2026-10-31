@@ -64,14 +64,14 @@
       </span>
       <!-- Zähler ohne stale-Szenen; die stehen unten mit eigenem Hinweis. -->
       <div class="tabs">
-        <button type="button" class="tabs-btn"
+        <button :aria-pressed="$store.catalogUi.szenenFilters.wertung === ''" type="button" class="tabs-btn"
                 :class="{ 'tabs-btn--active': $store.catalogUi.szenenFilters.wertung === '' }"
                 @click="$store.catalogUi.szenenFilters.wertung = ''">
           <span x-text="$app.t('common.all')"></span>
           <span class="tabs-btn-count" x-text="activeCount"></span>
         </button>
         <template x-for="w in ['stark','mittel','schwach']" :key="w">
-          <button type="button" class="tabs-btn"
+          <button :aria-pressed="$store.catalogUi.szenenFilters.wertung === w" type="button" class="tabs-btn"
                   :class="{ 'tabs-btn--active': $store.catalogUi.szenenFilters.wertung === w }"
                   :disabled="wertungCounts[w] === 0 && $store.catalogUi.szenenFilters.wertung !== w"
                   @click="$store.catalogUi.szenenFilters.wertung = $store.catalogUi.szenenFilters.wertung === w ? '' : w">
@@ -115,7 +115,7 @@
     <div x-show="viewMode === 'list'" class="entity-list entity-list--accented">
       <template x-for="s in szenenFiltered" :key="s.id">
         <div>
-          <div class="entity-row"
+          <div class="entity-row internal-link"
                :data-szeneid="s.id"
                :class="{ 'entity-row--selected': $store.catalogUi.selectedSzeneId === s.id, 'entity-row--stale': s.stale }"
                @click="$store.catalogUi.selectedSzeneId = $store.catalogUi.selectedSzeneId === s.id ? null : s.id">

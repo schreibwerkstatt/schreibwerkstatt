@@ -29,6 +29,7 @@
     const { registerBookOrganizerCard } = await import('/public/js/cards/book-organizer-card.js');
     const { registerCollapsible } = await import('/public/js/collapsible.js');
     const { registerHintsStore } = await import('/public/js/cards/hints-store.js');
+    const { handleEnterKey } = await import('/public/js/utils/keys.js');
 
     // ── Mock-Daten: 3 Kapitel-Tiefen + eine kapitellose Seite ──────────────
     // Shape wie tree/load.js#loadPages: nav.tree flach + depth-first, jedes
@@ -77,6 +78,8 @@
       // Sync-Provider-Spalte bleibt leer (Blog/HubSpot nicht Teil des Tests).
       Alpine.magic('syncProviders', () => []);
       Alpine.magic('blog', () => ({ conflictOpen: false, conflictData: null }));
+      // `$enter` (Enter mit IME-Guard) — in der App registriert in register-cards.js.
+      Alpine.magic('enter', () => handleEnterKey);
       Alpine.store('nav', {
         selectedBookId: 7,
         books: [{ id: 7, name: 'Testbuch' }, { id: 8, name: 'Zweitbuch' }],
@@ -118,6 +121,8 @@
     // Sein alpine:init-Listener muss vor Alpine.start registriert sein — sonst
     // registriert der Core einen warnenden Stub → Console-Guard rot.
     await import('/public/vendor/alpine-collapse-3.15.12.min.js');
+    // focus-Plugin (x-trap am Sync-Konflikt-Modal) aus demselben Grund vor dem Core.
+    await import('/public/vendor/alpine-focus-3.15.12.min.js');
     await import('/public/vendor/alpine-3.15.12.min.js');
     // Alpine.initTree laeuft ueber den bereits injizierten DOM; auf das Ende
     // des ersten Ticks warten, damit x-for/x-if-Klone stehen.

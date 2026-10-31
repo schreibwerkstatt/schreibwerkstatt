@@ -29,7 +29,7 @@
       rows="2"
       :disabled="busy"
       data-spellcheck="spelling"
-      @keydown.enter="if(!$event.isComposing && $event.keyCode !== 229 && !$event.shiftKey && !$event.ctrlKey && !$event.metaKey) { $event.preventDefault(); addIdee(); }"
+      @keydown.enter="$enter($event, () => addIdee(), { multiline: true })"
     ></textarea>
     <button type="button"
       class="ideen-add-btn"
@@ -101,7 +101,7 @@
                 <textarea class="ideen-input idee-edit-input" x-model="editingDraft" rows="2" :disabled="busy"
                   data-spellcheck="spelling" :aria-label="$app.t('ideen.edit')"
                   x-init="$nextTick(() => mountIdeeEditInput($el))" @input="autosizeIdeeEditInput($el)"
-                  @keydown.enter="if(!$event.isComposing && $event.keyCode !== 229 && !$event.shiftKey && !$event.ctrlKey && !$event.metaKey) { $event.preventDefault(); commitEditIdee(idee); }"></textarea>
+                  @keydown.enter="$enter($event, () => commitEditIdee(idee), { multiline: true })"></textarea>
                 <div class="idee-edit-foot">
                   <div class="idee-edit-actions">
                     <button type="button" class="btn-compact btn-compact--ghost" @click="cancelEditIdee()" :disabled="busy" x-text="$app.t('ideen.cancel')"></button>

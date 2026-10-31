@@ -315,7 +315,7 @@ body.palette-open { overflow: hidden; overscroll-behavior: contain; }
    und werden unsichtbar. Im Fokus-Modus über das Overlay heben.
    Scope via :has() statt body.focus-mode — Selektor reagiert direkt auf den
    aktiven Focus-Cardroot, ohne globale Body-Class-Kopplung. */
-:root:has(.focus-editor.is-active) :is(.synonym-menu, .synonym-picker, .figur-lookup, .tip-layer, .lt-popover) {
+:root:has(.focus-editor.is-active) :is(.synonym-menu, .synonym-picker, .figur-lookup, .lt-popover) {
   z-index: calc(var(--z-overlay) + 1);
 }
 

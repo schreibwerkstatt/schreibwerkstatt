@@ -35,7 +35,7 @@
   display: block;
   background: color-mix(in srgb, var(--color-err-text) 15%, transparent);
   padding: var(--space-2xs) var(--space-6);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   word-break: break-word;
   width: fit-content;
   max-width: 100%;
@@ -45,7 +45,7 @@
   margin-top: var(--space-3);
   background: color-mix(in srgb, var(--color-success) 15%, transparent);
   padding: var(--space-2xs) var(--space-6);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   word-break: break-word;
   width: fit-content;
   max-width: 100%;
@@ -97,11 +97,11 @@
   font-size: var(--font-size-base);
   padding: var(--space-2xs) var(--space-6);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   background: var(--color-bg);
   color: var(--color-text);
 }
-.finding-korrektur-input:focus { outline: none; border-color: var(--color-accent); }
+.finding-korrektur-input:focus { outline: none; border-color: var(--color-border-focus); }
 .finding-korrektur-edit-actions { display: inline-flex; gap: var(--space-6); }
 
 /* === Belegvorschlag (nur `unbelegt`-Befunde) ===

@@ -71,25 +71,29 @@ sharedRouter.get('/last-run', (req, res) => {
   res.json({ lastRun: row?.ended_at || null });
 });
 
-// Einzelne Job-Läufe pro Typ — für Drill-Down in jobStats-Tabelle.
-// Liefert die letzten N Runs (default 20) für (user, book, type).
+// Einzelne Job-Läufe pro Typ — Drill-Down der Job-Statistik in «Meine
+// Statistik». Liefert die letzten N Runs (default 20) für (user, type), mit
+// `book_id` auf ein Buch eingegrenzt. Nur eigene Läufe (user_email) — darum
+// kein Buch-Guard: das Buch filtert, es gewährt nichts.
 sharedRouter.get('/runs', (req, res) => {
   const userEmail = sessionEmail(req);
   const bookId = toIntId(req.query.book_id);
   const type = req.query.type;
-  if (!type || !bookId) return res.status(400).json({ error_code: 'TYPE_BOOKID_REQUIRED' });
+  if (!type) return res.status(400).json({ error_code: 'TYPE_REQUIRED' });
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+  const bookClause = bookId ? ' AND book_id = ?' : '';
+  const params = bookId ? [userEmail, bookId, type, limit] : [userEmail, type, limit];
   const rows = db.prepare(`
-    SELECT job_id, status, queued_at, started_at, ended_at,
+    SELECT job_id, book_id, status, queued_at, started_at, ended_at,
            tokens_in, tokens_out, error, error_params,
            CASE WHEN started_at IS NOT NULL AND ended_at IS NOT NULL
                 THEN (julianday(ended_at) - julianday(started_at)) * 86400
                 ELSE NULL END AS duration
     FROM job_runs
-    WHERE user_email = ? AND book_id = ? AND type = ?
+    WHERE user_email = ?${bookClause} AND type = ?
     ORDER BY COALESCE(ended_at, started_at, queued_at) DESC
     LIMIT ?
-  `).all(userEmail, bookId, type, limit);
+  `).all(...params);
   res.json(rows.map(r => {
     let errorParams = null;
     if (r.error_params) {
@@ -97,6 +101,7 @@ sharedRouter.get('/runs', (req, res) => {
     }
     return {
       jobId:       r.job_id,
+      bookId:      r.book_id,
       status:      r.status,
       queuedAt:    r.queued_at,
       startedAt:   r.started_at,

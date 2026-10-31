@@ -1,0 +1,22 @@
+/* Datei-Auswahl-Knopf: das `fileDrop`-Primitive im Klick-Modus (drag: false)
+   im Look eines kompakten Standard-Buttons. Geteilt von Bucheinstellungen
+   (Reiter «Publikation», Cover/Autorfoto) und PDF-Export (Reiter «Umschlag»).
+   Mechanik: public/js/file-drop.js, Pattern-Doku: DESIGN.md „Bild-Upload mit
+   Vorschau + Entfernen". */
+@layer components {
+  .file-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--size-compact-padding);
+    border: 0.5px solid var(--color-border);
+    border-radius: var(--radius-none);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: var(--size-compact-font-size);
+    font-weight: var(--fw-semibold);
+    cursor: pointer;
+    transition: background var(--transition-base), border-color var(--transition-base);
+  }
+  .file-btn:hover { border-color: var(--color-accent); background: var(--color-bg); }
+}

@@ -95,7 +95,7 @@
 /* Die Plakette steht unter der Überschrift, nicht unter deren Sortierpfeil —
    darum derselbe rechte Abstand, den `.sortable-th` für den Pfeil freihält. */
 .tw-row-count { justify-self: end; margin-inline-end: calc(var(--space-md) + var(--space-14)); }
-.tw-row-count--0 { background: var(--color-tag-bg); color: var(--color-muted); }
+.tw-row-count--0 { background: var(--color-tag-bg); color: var(--color-tag-text); }
 .tw-row-count--1,
 .tw-row-count--2,
 .tw-row-count--3 { background: var(--color-warn-bg); color: var(--color-warn-text); }
@@ -164,7 +164,7 @@
   gap: 0.35em;
   font-variant-numeric: tabular-nums;
 }
-.tw-channel--fits { background: var(--color-tag-bg); color: var(--color-muted); }
+.tw-channel--fits { background: var(--color-tag-bg); color: var(--color-tag-text); }
 .tw-channel--over { background: var(--color-err-bg); color: var(--color-err-text); }
 .tw-channel-num { font-weight: var(--fw-semibold); }
 
@@ -188,7 +188,7 @@
 /* Plakette wie überall (`.badge` bringt Innenabstand + Blockfluss mit) — ohne
    sie klebte der Herkunftsvermerk ohne Rand am Variantentext. */
 .tw-variant-src { align-self: center; }
-.tw-variant-src--user { background: var(--color-tag-bg); color: var(--color-muted); }
+.tw-variant-src--user { background: var(--color-tag-bg); color: var(--color-tag-text); }
 .tw-variant-src--ki   { background: color-mix(in srgb, var(--card-accent) 18%, transparent); color: var(--card-accent); }
 .tw-variant-text { overflow-wrap: anywhere; }
 .tw-variant-len {

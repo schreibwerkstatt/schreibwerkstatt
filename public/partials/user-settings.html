@@ -21,17 +21,17 @@
   <div x-show="!userSettingsLoading" class="card-form-grid">
 
     <div class="card-form-row">
-      <label class="card-form-label" x-text="$app.t('profile.account')"></label>
+      <span class="card-form-label" x-text="$app.t('profile.account')"></span>
       <div class="user-settings-profile">
         <div><strong x-text="userSettingsProfile?.name || '—'"></strong></div>
         <div class="muted-msg muted-msg--sm" x-text="userSettingsProfile?.email || ''"></div>
       </div>
     </div>
 
-    <div class="card-form-row">
-      <label class="card-form-label" x-text="$app.t('profile.uiLanguage')"></label>
+    <div x-id="['fld']" class="card-form-row">
+      <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.uiLanguage')"></label>
       <div class="card-form-field">
-        <div x-data="radioGroup()"
+        <div :aria-labelledby="$id('fld')" x-data="radioGroup()"
              x-effect="value = $store.shell.uiLocale; options = userSettingsUiLangOptions()"
              @radio-change="$app.changeLocale($event.detail)"></div>
         <p class="card-form-field-note" x-text="$app.t('profile.uiLanguageHint')"></p>
@@ -40,16 +40,16 @@
 
     <p class="card-form-section-divider card-form-section-divider--note" x-text="$app.t('profile.newBooksHint')"></p>
 
-    <div class="card-form-row">
-      <label class="card-form-label" x-text="$app.t('profile.defaultLanguage')"></label>
-      <div x-data="radioGroup()" x-modelable="value" x-model="userSettingsDefaultLanguage"
+    <div x-id="['fld']" class="card-form-row">
+      <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.defaultLanguage')"></label>
+      <div :aria-labelledby="$id('fld')" x-data="radioGroup()" x-modelable="value" x-model="userSettingsDefaultLanguage"
            x-effect="options = userSettingsDefaultLangOptions()"
            @radio-change="userSettingsDefaultRegion = ($event.detail === 'de' ? 'CH' : ($event.detail === 'en' ? 'US' : '')); userSettingsDefaultBuchtyp = ''"></div>
     </div>
 
-    <div class="card-form-row" x-show="userSettingsDefaultLanguage">
-      <label class="card-form-label" x-text="$app.t('profile.defaultRegion')"></label>
-      <div x-data="radioGroup()" x-modelable="value" x-model="userSettingsDefaultRegion"
+    <div x-id="['fld']" class="card-form-row" x-show="userSettingsDefaultLanguage">
+      <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.defaultRegion')"></label>
+      <div :aria-labelledby="$id('fld')" x-data="radioGroup()" x-modelable="value" x-model="userSettingsDefaultRegion"
            x-effect="options = (userSettingsDefaultLanguage === 'de'
              ? [{ value: 'CH', label: $app.t('region.de.CH') }, { value: 'DE', label: $app.t('region.de.DE') }]
              : userSettingsDefaultLanguage === 'en'
@@ -57,9 +57,9 @@
              : [])"></div>
     </div>
 
-    <div class="card-form-row" x-show="userSettingsDefaultLanguage">
-      <label class="card-form-label" x-text="$app.t('profile.defaultBuchtyp')"></label>
-      <div x-data="combobox($app.t('profile.defaultBuchtyp'), $app.t('common.notSet'))"
+    <div x-id="['fld']" class="card-form-row" x-show="userSettingsDefaultLanguage">
+      <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.defaultBuchtyp')"></label>
+      <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('profile.defaultBuchtyp'), $app.t('common.notSet'))"
            x-modelable="value" x-model="userSettingsDefaultBuchtyp"
            x-effect="options = userSettingsBuchtypOptions()"
 ></div>
@@ -67,10 +67,10 @@
 
     <p class="card-form-section-divider" x-text="$app.t('profile.editorSection')"></p>
 
-    <div class="card-form-row">
-      <label class="card-form-label" x-text="$app.t('profile.focusGranularity')"></label>
+    <div x-id="['fld']" class="card-form-row">
+      <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.focusGranularity')"></label>
       <div class="card-form-field">
-        <div x-data="combobox($app.t('profile.focusGranularity'))"
+        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('profile.focusGranularity'))"
              x-modelable="value" x-model="userSettingsFocusGranularity"
              x-effect="options = userSettingsFocusOptions()"
 ></div>
@@ -80,11 +80,11 @@
 
     <p class="card-form-section-divider" x-text="$app.t('profile.writingSection')"></p>
 
-    <div class="card-form-row">
-      <label class="card-form-label" x-text="$app.t('profile.dailyGoal')"></label>
+    <div x-id="['fld']" class="card-form-row">
+      <label :for="$id('fld')" class="card-form-label" x-text="$app.t('profile.dailyGoal')"></label>
       <div class="card-form-field">
         <div class="card-form-goal-edit">
-          <input type="text" class="card-form-goal-input"
+          <input :id="$id('fld')" type="text" class="card-form-goal-input"
                  x-data="numInput({ integer: true, min: 0, max: 1440 })"
                  x-modelable="value" x-model="userSettingsDailyGoal"
                  :aria-label="$app.t('profile.dailyGoal')">

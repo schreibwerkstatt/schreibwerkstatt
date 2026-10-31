@@ -26,3 +26,22 @@ export function handleEditPanelKeydown(event, { save, cancel }) {
     cancel();
   }
 }
+
+// Enter als Absenden/Speichern in einem Textfeld (public/CLAUDE.md «Enter in
+// Textfeldern»): am Feld `@keydown.enter="$enter($event, () => …)"`. Ignoriert
+// Enter, solange eine IME-Komposition läuft (`isComposing`, Safari meldet sie nur
+// als `keyCode 229`) — dort bestätigt Enter die Zeichenwahl und darf weder senden
+// noch per `.prevent` die Übernahme verschlucken. Darum nie `.prevent` am Attribut:
+// der Handler ruft `preventDefault` selbst, und nur dann, wenn er auslöst.
+// `multiline: true` (Textarea): nur reines Enter löst aus, Umschalt-/Ctrl-/Cmd-/
+// Alt+Enter bleiben dem Feld (Zeilenumbruch bzw. globale Kürzel).
+export function isImeComposing(event) {
+  return !!event.isComposing || event.keyCode === 229;
+}
+
+export function handleEnterKey(event, action, { multiline = false } = {}) {
+  if (event.key !== 'Enter' || isImeComposing(event)) return;
+  if (multiline && (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey)) return;
+  event.preventDefault();
+  action(event);
+}

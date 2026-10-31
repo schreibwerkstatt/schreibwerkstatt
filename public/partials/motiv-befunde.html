@@ -113,7 +113,7 @@
   <div class="history-bar" x-show="consistencyRuns.length > 0" x-cloak>
     <div class="history-heading" x-text="$app.t('motiv.consistency.runs', { count: consistencyRuns.length })"></div>
     <template x-for="r in consistencyRuns" :key="r.id">
-      <div class="history-item hover-reveal-host" :class="{ 'history-item--open': selectedConsistencyRunId === r.id }"
+      <div class="history-item hover-reveal-host internal-link" :class="{ 'history-item--open': selectedConsistencyRunId === r.id }"
            @click="openConsistencyRun(r)">
         <span class="history-date" x-text="formatRunDate(r.created_at)"></span>
         <span class="tag" x-text="$app.t('motiv.consistency.konfliktCount', { n: r.konflikt_count })"></span>

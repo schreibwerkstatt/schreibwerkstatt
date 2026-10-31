@@ -28,10 +28,10 @@
                 </button>
 
                 <div x-bind="panel" x-cloak class="collapsible-section">
-                  <div class="card-form-row">
-                    <label class="card-form-label" x-text="$app.t('pdfExport.font.family')"></label>
+                  <div x-id="['fld']" class="card-form-row">
+                    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.font.family')"></label>
                     <div class="card-form-field">
-                      <div x-data="combobox($app.t('pdfExport.font.family'))"
+                      <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.font.family'))"
                            x-modelable="value" x-model="activeProfile.config.font[role].family"
                            x-effect="options = fontList.map(f => ({ value: f.family, label: f.family }))"
                            @combobox-change="onFontPick(role, $event.detail)"
@@ -44,10 +44,10 @@
                     </div>
                   </div>
 
-                  <div class="card-form-row">
-                    <label class="card-form-label" x-text="$app.t('pdfExport.font.weight')"></label>
+                  <div x-id="['fld']" class="card-form-row">
+                    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.font.weight')"></label>
                     <div class="card-form-field">
-                      <div x-data="combobox($app.t('pdfExport.font.weight'))"
+                      <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.font.weight'))"
                            x-modelable="value" x-model="activeProfile.config.font[role].weight"
                            x-effect="options = ((fontList.find(f => f.family === activeProfile?.config?.font?.[role]?.family)?.weights) || [400]).map(w => ({ value: w, label: String(w) }))"
 ></div>
@@ -55,10 +55,10 @@
                   </div>
 
                   <template x-if="role !== 'heading'">
-                    <div class="card-form-row">
-                      <label class="card-form-label" x-text="$app.t('pdfExport.font.sizePt')"></label>
+                    <div x-id="['fld']" class="card-form-row">
+                      <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.font.sizePt')"></label>
                       <div class="card-form-field">
-                        <input type="text" x-data="numInput({ step: 0.5, min: 6, max: 72 })" x-modelable="value" x-model="activeProfile.config.font[role].sizePt" class="pdfx-num-input">
+                        <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.5, min: 6, max: 72 })" x-modelable="value" x-model="activeProfile.config.font[role].sizePt" class="pdfx-num-input">
                       </div>
                     </div>
                   </template>
@@ -73,28 +73,28 @@
 
                   <template x-if="role === 'body'">
                     <div>
-                      <div class="card-form-row">
-                        <label class="card-form-label" x-text="$app.t('pdfExport.font.lineHeight')"></label>
+                      <div x-id="['fld']" class="card-form-row">
+                        <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.font.lineHeight')"></label>
                         <div class="card-form-field">
-                          <input type="text" x-data="numInput({ step: 0.05, min: 0.8, max: 3 })" x-modelable="value" x-model="activeProfile.config.font.body.lineHeight" class="pdfx-num-input">
+                          <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.05, min: 0.8, max: 3 })" x-modelable="value" x-model="activeProfile.config.font.body.lineHeight" class="pdfx-num-input">
                         </div>
                       </div>
-                      <div class="card-form-row" x-show="uiMode === 'expert'">
-                        <label class="card-form-label" x-text="$app.t('pdfExport.font.paragraphGap')"></label>
+                      <div x-id="['fld']" class="card-form-row" x-show="uiMode === 'expert'">
+                        <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.font.paragraphGap')"></label>
                         <div class="card-form-field">
-                          <input type="text" x-data="numInput({ step: 0.05, min: 0, max: 3 })" x-modelable="value" x-model="activeProfile.config.font.body.paragraphGap" class="pdfx-num-input">
+                          <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.05, min: 0, max: 3 })" x-modelable="value" x-model="activeProfile.config.font.body.paragraphGap" class="pdfx-num-input">
                         </div>
                       </div>
-                      <div class="card-form-row" x-show="uiMode === 'expert'">
-                        <label class="card-form-label" x-text="$app.t('pdfExport.font.firstLineIndentMm')"></label>
+                      <div x-id="['fld']" class="card-form-row" x-show="uiMode === 'expert'">
+                        <label :for="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.font.firstLineIndentMm')"></label>
                         <div class="card-form-field">
-                          <input type="text" x-data="numInput({ step: 0.5, min: 0, max: 30 })" x-modelable="value" x-model="activeProfile.config.font.body.firstLineIndentMm" class="pdfx-num-input">
+                          <input :id="$id('fld')" type="text" x-data="numInput({ step: 0.5, min: 0, max: 30 })" x-modelable="value" x-model="activeProfile.config.font.body.firstLineIndentMm" class="pdfx-num-input">
                         </div>
                       </div>
-                      <div class="card-form-row" x-show="uiMode === 'expert'">
-                        <label class="card-form-label" x-text="$app.t('pdfExport.font.numerals')"></label>
+                      <div x-id="['fld']" class="card-form-row" x-show="uiMode === 'expert'">
+                        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('pdfExport.font.numerals')"></label>
                         <div class="card-form-field">
-                          <div x-data="combobox($app.t('pdfExport.font.numerals'))"
+                          <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('pdfExport.font.numerals'))"
                                x-modelable="value" x-model="activeProfile.config.font.body.numerals"
                                x-effect="options = [{ value: 'auto', label: $app.t('pdfExport.font.numerals.auto') }, { value: 'lining', label: $app.t('pdfExport.font.numerals.lining') }, { value: 'oldstyle', label: $app.t('pdfExport.font.numerals.oldstyle') }]"
 ></div>
@@ -103,22 +103,22 @@
                     </div>
                   </template>
 
-                  <div class="card-form-row" x-show="uiMode === 'expert'">
-                    <label class="card-form-label">
+                  <div x-id="['fld']" class="card-form-row" x-show="uiMode === 'expert'">
+                    <label :for="$id('fld')" class="card-form-label">
                       <span x-text="$app.t('pdfExport.font.color')"></span>
                       <template x-if="role === 'heading'">
                         <span class="pdfx-color-hint" x-text="$app.t('pdfExport.font.colorHintRule')"></span>
                       </template>
                     </label>
                     <div class="card-form-field pdfx-color-field">
-                      <input type="color" class="pdfx-color-picker" x-model="activeProfile.config.font[role].color">
+                      <input :id="$id('fld')" type="color" class="pdfx-color-picker" x-model="activeProfile.config.font[role].color">
                       <span class="pdfx-color-text" x-text="activeProfile.config.font[role].color"></span>
                     </div>
                   </div>
 
                   <template x-if="['dedication','frontMatter','authorBio','bibliography','imprint','year'].includes(role)">
                     <div class="card-form-row">
-                      <label class="card-form-label">&nbsp;</label>
+                      <span class="card-form-label" aria-hidden="true">&nbsp;</span>
                       <div class="card-form-field">
                         <label class="pdfx-check">
                           <input type="checkbox" x-model="activeProfile.config.font[role].italic">
@@ -140,10 +140,10 @@
              lib/pdf-render/block-messages.js. Auch im Einfach-Modus sichtbar. -->
         <div class="pdfx-font-group">
           <h4 class="card-section-title" x-text="$app.t('export.messages.group')"></h4>
-          <div class="card-form-row">
-            <label class="card-form-label" x-text="$app.t('export.messages.style')"></label>
+          <div x-id="['fld']" class="card-form-row">
+            <label :id="$id('fld')" class="card-form-label" x-text="$app.t('export.messages.style')"></label>
             <div class="card-form-field">
-              <div x-data="combobox($app.t('export.messages.style'))"
+              <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('export.messages.style'))"
                    x-modelable="value" x-model="activeProfile.config.messages.style"
                    x-effect="options = [{ value: 'plain', label: $app.t('export.messages.style.plain') }, { value: 'bubbles', label: $app.t('export.messages.style.bubbles') }]"></div>
               <p class="card-form-field-note" x-text="$app.t('export.messages.hint')"></p>

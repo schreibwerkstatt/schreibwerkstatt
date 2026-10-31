@@ -61,7 +61,7 @@
 }
 .edit-link-input:focus {
   outline: none;
-  border-color: var(--color-accent, var(--color-text));
+  border-color: var(--color-border-focus);
 }
 .edit-link-btn {
   display: inline-flex;
@@ -103,13 +103,13 @@
 }
 .edit-cite-input:focus {
   outline: none;
-  border-color: var(--color-accent, var(--color-text));
+  border-color: var(--color-border-focus);
 }
 .edit-cite-input--filter { flex: 1 1 auto; min-width: 0; }
 .edit-cite-input--loc    { flex: 0 0 9em; }
 /* Zitat-Art (Kurzzitat / Blockzitat / vgl.) auf Panelbreite verteilt. Das Basis-
-   Pattern `.seg-toggle` ist `inline-flex`; die Zwei-Klassen-Spezifitaet hier ist
-   noetig, weil book-settings.css (Pattern-SSoT) nach dieser Datei geladen wird. */
+   Pattern `.seg-toggle` (components/seg-toggle.css) ist `inline-flex`; die
+   Zwei-Klassen-Spezifitaet hier schlaegt es unabhaengig von der Ladereihenfolge. */
 .edit-cite-panel .edit-cite-kind { display: flex; }
 .edit-cite-panel .edit-cite-kind button { flex: 1 1 0; text-align: center; }
 .edit-cite-hint {
@@ -314,7 +314,7 @@
   width: 11px;
   height: 11px;
   border: 1.5px solid currentColor;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 
 /* Trenner-Gruppe: echte Linien-/Seiten-Vorschau rechts statt Text. */
@@ -332,7 +332,7 @@
   width: 13px;
   height: 17px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 
 .edit-slash-empty { padding: var(--space-5) var(--space-10); }
@@ -344,9 +344,6 @@
 #editor-card.focus-host .edit-link-bar,
 #editor-card.focus-host .edit-cite-panel,
 #editor-card.focus-host .edit-find { display: none !important; }
-
-}
-
 /* Zeilenleiste des Nachrichtenverlaufs (partials/editor-msg-bar.html):
    rechtsbündig über dem Verlauf verankert — `left` ist dessen rechte Kante. */
 .edit-msg-bar {
@@ -374,3 +371,4 @@
 .edit-msg-btn--active { color: var(--color-accent-text); background: var(--color-bg); font-weight: 600; }
 .edit-msg-btn--unwrap { display: inline-flex; align-items: center; border-left: 1px solid var(--color-border); }
 .edit-msg-btn--unwrap .icon { width: 1em; height: 1em; }
+}

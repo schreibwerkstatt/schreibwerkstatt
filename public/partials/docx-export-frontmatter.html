@@ -3,7 +3,7 @@
 <section class="export-tab-panel" x-bind="panel('frontmatter')">
   <p class="card-form-field-note">
     <span x-text="$app.t('docxExport.metaHint')"></span>
-    <span class="internal-link" @click="openBookSettings()" x-text="$app.t('docxExport.metaLink')"></span>
+    <span class="internal-link text-link" @click="openBookSettings()" x-text="$app.t('docxExport.metaLink')"></span>
   </p>
   <div class="card-form-row">
     <label class="book-settings-option">
@@ -29,9 +29,9 @@
       <span x-text="$app.t('docxExport.field.incCopyright')"></span>
     </label>
   </div>
-  <div class="card-form-row" x-show="activeProfile.config.frontmatter.imprint || activeProfile.config.frontmatter.copyright">
-    <label class="card-form-label" x-text="$app.t('docxExport.field.imprintPosition')"></label>
-    <div x-data="combobox($app.t('docxExport.field.imprintPosition'))"
+  <div x-id="['fld']" class="card-form-row" x-show="activeProfile.config.frontmatter.imprint || activeProfile.config.frontmatter.copyright">
+    <label :id="$id('fld')" class="card-form-label" x-text="$app.t('docxExport.field.imprintPosition')"></label>
+    <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('docxExport.field.imprintPosition'))"
          x-modelable="value" x-model="activeProfile.config.frontmatter.imprintPosition"
          x-effect="options = imprintPositionOptions()"></div>
   </div>

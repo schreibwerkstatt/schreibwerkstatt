@@ -1,0 +1,36 @@
+/* Segment-Toggle: zwei bis drei aneinanderliegende Buttons fuer sich gegenseitig
+   ausschliessende Werte, aktiver Zustand getintet. Eckig. Geteilt von
+   Publikation (Vor-/Nachsatz), PDF-Export (Einfach/Experte), Buchlandkarte,
+   Ideen-Board, Kommentar-Leisten, Zitat-/Querverweis-Panel des Notebook-Editors,
+   Wortschatz, Referenz und Chat-Verlaufssuche.
+   Pattern-Doku: DESIGN.md „In-Form-Repeater + Segment-Toggle". */
+@layer components {
+  .seg-toggle { display: inline-flex; }
+  .seg-toggle button {
+    font-size: var(--size-compact-font-size);
+    padding: var(--size-compact-padding);
+    border: 0.5px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-muted);
+    cursor: pointer;
+    transition: background var(--transition-base), border-color var(--transition-base), color var(--transition-base);
+  }
+  .seg-toggle button:first-child { border-radius: var(--radius-none) 0 0 var(--radius-none); }
+  .seg-toggle button:last-child { border-radius: 0 var(--radius-none) var(--radius-none) 0; }
+  /* Innere Naehte zusammenlegen (gilt fuer 2 und 3+ Segmente). */
+  .seg-toggle button:not(:first-child) { border-left-width: 0; }
+  .seg-toggle button.seg-toggle--active {
+    background: var(--color-tag-bg);
+    border-color: var(--color-accent);
+    color: var(--color-accent-text);
+    font-weight: var(--fw-semibold);
+  }
+  /* Gesperrtes Segment: ein Wert, der im aktuellen Kontext nicht setzbar ist
+     (z.B. „Blockzitat", wenn der Caret in einer Liste steht). Sichtbar bleiben statt
+     verschwinden — sonst springt die Reihe in der Breite und der User weiss nicht,
+     dass es die Option gibt. */
+  .seg-toggle button:disabled {
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
+  }
+}

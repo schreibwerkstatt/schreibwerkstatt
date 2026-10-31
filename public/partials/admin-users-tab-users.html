@@ -46,16 +46,12 @@
            })">
       <thead>
         <tr>
-          <th class="sortable-th" :class="sortClass('email')" :aria-sort="ariaSort('email')"
-              @click="sortBy('email')" x-text="$app.t('admin.users.email')"></th>
-          <th class="sortable-th" :class="sortClass('global_role')" :aria-sort="ariaSort('global_role')"
-              @click="sortBy('global_role')" x-text="$app.t('admin.users.role')"></th>
+          <th x-bind="sortTh('email')" x-text="$app.t('admin.users.email')"></th>
+          <th x-bind="sortTh('global_role')" x-text="$app.t('admin.users.role')"></th>
           <th x-text="$app.t('admin.users.aiProfile')"></th>
-          <th class="sortable-th" :class="sortClass('status')" :aria-sort="ariaSort('status')"
-              @click="sortBy('status')" x-text="$app.t('admin.users.status')"></th>
+          <th x-bind="sortTh('status')" x-text="$app.t('admin.users.status')"></th>
           <th x-show="adminUsersAuthMethod === 'local'" x-text="$app.t('admin.users.password')"></th>
-          <th class="sortable-th" :class="sortClass('last_seen_at')" :aria-sort="ariaSort('last_seen_at')"
-              @click="sortBy('last_seen_at')" x-text="$app.t('admin.users.lastLogin')"></th>
+          <th x-bind="sortTh('last_seen_at')" x-text="$app.t('admin.users.lastLogin')"></th>
           <th></th>
         </tr>
       </thead>
@@ -126,12 +122,16 @@
 
     <!-- Passwort-Drawer: Initialpasswort vergeben bzw. ausgestellten Link
          anzeigen (der Weg ohne Mailer). -->
-    <div class="admin-users-audit" x-show="adminUsersPasswordEmail">
+    <div class="admin-users-audit" x-show="adminUsersPasswordEmail"
+         @keydown="$editKeys($event, {
+           save: () => adminUsersPasswordValue && adminUsersPasswordBusy !== adminUsersPasswordEmail && adminUsersPasswordSave(),
+           cancel: () => { adminUsersPasswordEmail = null; adminUsersPasswordValue = ''; } })">
       <h3 x-text="$app.t('admin.users.password.title', { email: adminUsersPasswordEmail })"></h3>
       <div class="admin-users-invite-row">
         <input type="password" x-model="adminUsersPasswordValue" autocomplete="new-password"
                :placeholder="$app.t('admin.users.password.placeholder')"
-               :disabled="adminUsersPasswordBusy === adminUsersPasswordEmail">
+               :disabled="adminUsersPasswordBusy === adminUsersPasswordEmail"
+               @keydown.enter="$enter($event, () => adminUsersPasswordValue && adminUsersPasswordBusy !== adminUsersPasswordEmail && adminUsersPasswordSave())">
         <button type="button" @click="adminUsersPasswordSave()"
                 :disabled="!adminUsersPasswordValue || adminUsersPasswordBusy === adminUsersPasswordEmail"
                 x-text="$app.t('common.save')"></button>

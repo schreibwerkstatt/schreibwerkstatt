@@ -134,6 +134,9 @@ export function registerEditorPageHeadCard() {
       const id = pageId ? parseInt(pageId) : null;
       this.headError = '';
       this.headPageId = id;
+      // Busy-Flags gehören zum alten Abschnitt; dessen laufender Save räumt sie
+      // nach dem Wechsel nicht mehr (headSaveField).
+      this.headSaving = {};
       this.headDraft = EMPTY();
       this.headSaved = EMPTY();
       this.headLoaded = false;
@@ -168,6 +171,11 @@ export function registerEditorPageHeadCard() {
       this.headError = '';
       try {
         const r = await sendJson(`/headline/page/${pageId}`, 'PUT', { [feld]: val });
+        // Titel-Werkstatt-Übersicht frisch halten — gespeichert ist es so oder so.
+        window.dispatchEvent(new CustomEvent(EVT.CARD_REFRESH, { detail: { name: 'titelwerkstatt' } }));
+        // Abschnitt inzwischen gewechselt: die Antwort gehört zum alten, der
+        // Kopf zeigt schon den neuen — nichts übernehmen.
+        if (this.headPageId !== pageId) return;
         // Der Server normalisiert (trimmt, faltet Umbrüche) — der bestätigte
         // Stand ist seine Antwort, nicht die Eingabe.
         const h = r.headline || {};
@@ -175,13 +183,10 @@ export function registerEditorPageHeadCard() {
         for (const f of HEADLINE_HEAD_FIELDS) next[f] = h[f] || '';
         this.headSaved = { ...next };
         this.headDraft = { ...this.headDraft, [feld]: next[feld] };
-        // Die Titel-Werkstatt zeigt dieselben Felder in ihrer Übersicht. Sie ist
-        // eine eigene Karte mit eigenem State — ohne dieses Signal steht dort
-        // der alte Titel, bis jemand die Karte neu lädt.
-        window.dispatchEvent(new CustomEvent(EVT.CARD_REFRESH, { detail: { name: 'titelwerkstatt' } }));
       } catch {
-        this.headError = window.__app.t('headline.saveError');
+        if (this.headPageId === pageId) this.headError = window.__app.t('headline.saveError');
       } finally {
+        if (this.headPageId !== pageId) return;
         const busy = { ...this.headSaving };
         delete busy[feld];
         this.headSaving = busy;

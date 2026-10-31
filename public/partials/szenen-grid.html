@@ -12,14 +12,10 @@
          })">
     <thead>
       <tr>
-        <th class="sortable-th" :class="sortClass('wertung')" :aria-sort="ariaSort('wertung')"
-            @click="sortBy('wertung')" x-text="$app.t('szenen.col.wertung')"></th>
-        <th class="sortable-th" :class="sortClass('titel')" :aria-sort="ariaSort('titel')"
-            @click="sortBy('titel')" x-text="$app.t('szenen.col.titel')"></th>
-        <th class="sortable-th" :class="sortClass('kapitel')" :aria-sort="ariaSort('kapitel')"
-            @click="sortBy('kapitel')" x-text="$app.t('szenen.col.kapitel')"></th>
-        <th class="sortable-th" :class="sortClass('seite')" :aria-sort="ariaSort('seite')"
-            @click="sortBy('seite')" x-text="$app.t('szenen.col.seite')"></th>
+        <th x-bind="sortTh('wertung')" x-text="$app.t('szenen.col.wertung')"></th>
+        <th x-bind="sortTh('titel')" x-text="$app.t('szenen.col.titel')"></th>
+        <th x-bind="sortTh('kapitel')" x-text="$app.t('szenen.col.kapitel')"></th>
+        <th x-bind="sortTh('seite')" x-text="$app.t('szenen.col.seite')"></th>
         <th x-text="$app.t('szenen.col.figuren')"></th>
         <th x-text="$app.t('szenen.col.orte')"></th>
         <th x-text="$app.t('szenen.col.kommentar')"></th>

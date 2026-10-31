@@ -5,7 +5,7 @@
      Die Liste ist gedeckelt, und der Deckel steht als erste Zeile drüber: rund die
      Hälfte aller Wortformen eines Buchs kommt genau einmal vor: ein Ausschnitt, der
      nicht als solcher gekennzeichnet ist, liest sich als Vollständigkeit. -->
-<div x-show="wortschatzTab === 'hapax'">
+<div role="tabpanel" x-show="wortschatzTab === 'hapax'">
   <p class="wortschatz-list-hint" x-text="$app.t('wortschatz.hapax.hint')"></p>
   <p class="wortschatz-list-hint" x-show="wsHapaxCapped()" x-text="wsHapaxCapped()"></p>
   <div x-show="!wortschatzHapax.length" class="muted-msg muted-msg--spaced" x-text="$app.t('wortschatz.hapax.empty')"></div>
@@ -19,13 +19,10 @@
              types: { sort_rank: 'number', len: 'number', term: 'string' },
            })">
       <thead><tr>
-        <th class="sortable-th" :class="sortClass('sort_rank')" :aria-sort="ariaSort('sort_rank')"
-            @click="sortBy('sort_rank')" :title="$app.t('wortschatz.col.rankTip')"
+        <th x-bind="sortTh('sort_rank')" :title="$app.t('wortschatz.col.rankTip')"
             x-text="$app.t('wortschatz.col.rank')"></th>
-        <th class="sortable-th" :class="sortClass('term')" :aria-sort="ariaSort('term')"
-            @click="sortBy('term')" x-text="$app.t('wortschatz.col.term')"></th>
-        <th class="sortable-th" :class="sortClass('len')" :aria-sort="ariaSort('len')"
-            @click="sortBy('len')" x-text="$app.t('wortschatz.col.length')"></th>
+        <th x-bind="sortTh('term')" x-text="$app.t('wortschatz.col.term')"></th>
+        <th x-bind="sortTh('len')" x-text="$app.t('wortschatz.col.length')"></th>
         <th x-text="$app.t('wortschatz.col.firstPage')"></th>
       </tr></thead>
       <tbody>

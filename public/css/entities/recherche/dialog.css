@@ -93,7 +93,7 @@ html:has(.research-dialog[open]) { overflow: hidden; }
   max-height: 60vh;
   width: auto;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
 }
 /* Bildunterschrift trägt die Aktionen zum Bild: „in neuem Tab öffnen“ und das
    Entfernen des Anhangs (Icon-only, Label im Tooltip). */
@@ -212,7 +212,7 @@ textarea.recherche-input--tall { min-height: 40vh; }
   color: var(--color-muted);
   font-size: var(--size-compact-font-size);
 }
-.badge--iv-pending { background: var(--color-tag-bg);  color: var(--color-muted); }
+.badge--iv-pending { background: var(--color-tag-bg);  color: var(--color-tag-text); }
 .badge--iv-running { background: var(--color-warn-bg); color: var(--color-warn-text); }
 .badge--iv-ready   { background: var(--color-ok-bg);   color: var(--color-ok-text); }
 .badge--iv-error   { background: var(--color-err-bg);  color: var(--color-err-text); }
@@ -288,8 +288,6 @@ textarea.recherche-input--tall { min-height: 40vh; }
   .research-transcript__speaker { grid-template-columns: 1fr; }
   .research-transcript__segment { grid-template-columns: auto 1fr; }
 }
-}
-
 /* ── Befunde des Recherche-Abgleichs (recherche-findings.html) ──────────── */
 .research-findings {
   display: flex;
@@ -316,7 +314,7 @@ textarea.recherche-input--tall { min-height: 40vh; }
   background: none;
   border: 0;
   padding: 0;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   text-decoration: underline;
   cursor: pointer;
   font: inherit;
@@ -328,3 +326,4 @@ textarea.recherche-input--tall { min-height: 40vh; }
   font-style: italic;
 }
 .research-finding__why { margin: var(--space-xs) 0 0; font-size: var(--font-size-sm); }
+}

@@ -39,7 +39,7 @@
     --mc-accent-text: var(--color-accent-text);
     --mc-surface-alt: var(--color-bg);
     --mc-radius: var(--radius-md);
-    --mc-radius-sm: var(--radius-sm);
+    --mc-radius-sm: var(--radius-none);
     --mc-callout-info: var(--color-primary);
     --mc-callout-info-bg: var(--color-history-active-bg);
     --mc-callout-info-text: inherit;

@@ -50,11 +50,17 @@
   --border-thin:   0.5px;
   --border-thick:  2px;
 
+  /* === Fokus-Ring-Geometrie === Farbe/Strichstaerke: --focus-ring (tokens/colors.css).
+     offset: Ring mit Luft um das Element; -inset: Ring innen (Listenzeile, Menue-Eintrag,
+     Element am Container-Rand, wo ein aussenliegender Ring abgeschnitten wuerde). */
+  --focus-ring-offset: 2px;
+  --focus-ring-offset-inset: -2px;
+
   /* === Radius-Token-Stufen ===
      Editorial-Eckig bleibt Leitmotiv: Badges/Tags hart auf 0 (Listen-Element-Sprache).
      Buttons/Inputs leicht weich (3px). Cards weicher (6px) — Hover/Shadow sichtbar.
      Modal/Dialog mit echtem Sprung (10px) gegenüber Card. */
-  --radius-sm: 0;      /* Badges, Tags, Pills */
+  --radius-none: 0;    /* Badges, Tags, Pills, Listen-Elemente — hart eckig */
   --radius-md: 3px;    /* Inputs, Buttons, Confirm-Dialog-Inputs */
   --radius-lg: 6px;    /* Cards, Popover-Menus, Status-Banner */
   --radius-xl: 10px;   /* Modal, Confirm-Dialog-Body, Shortcuts-Panel */

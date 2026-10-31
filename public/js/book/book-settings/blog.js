@@ -13,19 +13,20 @@ export const blogMethods = {
   // blogPullJobId, blogReconcileJobId). Was HubSpot genauso macht, steht in
   // ./sync-shared.js.
 
-  async loadBlogStatus() {
-    const bookId = Alpine.store('nav').selectedBookId;
+  async loadBlogStatus(bookId = this._selectedBookId()) {
     if (!bookId) return;
     try {
       const data = await fetchJson(`/blog/${bookId}/status`);
+      if (!this._isFormBook(bookId)) return;
       this.blogConnection = data.connection || null;
       if (this.blogConnection) {
         this.blogForm.baseUrl       = this.blogConnection.baseUrl || '';
         this.blogForm.username      = this.blogConnection.username || '';
         this.blogForm.defaultStatus = this.blogConnection.defaultStatus || 'draft';
       }
-      [this.blogImportJobId, this.blogPullJobId, this.blogReconcileJobId] =
-        await rehydrateSyncJobs(bookId, ['blog-import', 'blog-pull', 'blog-reconcile']);
+      const jobs = await rehydrateSyncJobs(bookId, ['blog-import', 'blog-pull', 'blog-reconcile']);
+      if (!this._isFormBook(bookId)) return;
+      [this.blogImportJobId, this.blogPullJobId, this.blogReconcileJobId] = jobs;
     } catch (e) {
       console.error('[blog] Status laden fehlgeschlagen:', e);
     }
@@ -56,7 +57,7 @@ export const blogMethods = {
 
 
   async testBlogConnection() {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._selectedBookId();
     if (!bookId || !this.blogFormReady()) return;
     this._setBlogBusy('test');
     try {
@@ -75,7 +76,7 @@ export const blogMethods = {
 
 
   async saveBlogConnection() {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._selectedBookId();
     if (!bookId || !this.blogFormReady()) return;
     this._setBlogBusy('save');
     try {
@@ -101,7 +102,7 @@ export const blogMethods = {
 
 
   async disconnectBlog() {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._selectedBookId();
     if (!bookId) return;
     if (!await window.__app.appConfirm({ message: window.__app.t('blog.connect.disconnectConfirm'), danger: true })) return;
     this._setBlogBusy('disconnect');
@@ -119,7 +120,7 @@ export const blogMethods = {
 
 
   async _startBlogJob(type, failCode, jobProp) {
-    const bookId = Alpine.store('nav').selectedBookId;
+    const bookId = this._selectedBookId();
     if (!bookId || this[jobProp]) return;
     try {
       this[jobProp] = await startSyncJob(type, bookId, failCode);
