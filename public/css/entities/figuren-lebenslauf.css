@@ -123,17 +123,22 @@
 .figur-cv-event--clickable:hover {
   background: color-mix(in oklch, var(--card-accent) 10%, transparent);
 }
+/* Die Marke steht als eigene, kleine Zeile über dem Ereignis: mit Klassenstufe
+   («1997 · 12 J. · 6. Primar → 1. Bez») ist sie breiter als eine Figuren-Spalte.
+   «1997 · 12 J.» bleibt am Stueck; die Stufe bricht in sich um — mit offener
+   Einschulung («6. Primar oder 1. Oberstufe → …») ist sie allein zu breit. */
 .figur-cv-marke {
+  display: block;
   color: var(--card-accent);
+  font-size: var(--font-size-mini);
   font-variant-numeric: tabular-nums;
-  margin-right: var(--space-2xs);
-  white-space: nowrap;
 }
+.figur-cv-marke-teil { white-space: nowrap; }
 /* Ohne Jahr ist die Marke die freie Zeitangabe aus dem Text («Eines Tages …»):
-   sie bricht um, statt in die Nachbarspalte zu laufen, und bleibt gedaempft,
-   damit sie nicht wie ein Link aussieht. */
-.figur-cv-marke--frei {
-  color: var(--color-muted);
+   sie bricht auch innerhalb um und bleibt gedaempft, damit sie nicht wie ein
+   Link aussieht. */
+.figur-cv-marke--frei { color: var(--color-muted); }
+.figur-cv-marke--frei .figur-cv-marke-teil {
   white-space: normal;
   overflow-wrap: anywhere;
 }

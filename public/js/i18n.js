@@ -8,8 +8,9 @@
 // Key-Konvention: 'bereich.feld' (z.B. 'header.logout', 'profile.title').
 // Platzhalter: {name} → Parameter-Map: t('foo', { name: 'Anna' }).
 
-import { formatLastRun as _formatLastRunImpl, localeTag } from './utils.js';
+import { formatLastRun as _formatLastRunImpl, localeTag, numberFormat } from './utils.js';
 import { applyUnitTerm, UNIT_SECTION } from './i18n-unit-term.js';
+import { isPageUnloading } from './page-unload.js';
 
 const FALLBACK_LOCALE = 'de';
 const SUPPORTED_LOCALES = ['de', 'en'];
@@ -23,20 +24,6 @@ let _unit = UNIT_SECTION;
 
 /** Gliederungseinheit für alle folgenden Übersetzungen setzen ('section'|'post'|'entry'). */
 export function setUnitTerm(unit) { _unit = unit || UNIT_SECTION; }
-
-// Ein Reload bricht einen laufenden Locale-Fetch der alten Seite ab. Das ist kein
-// Fehler, sondern das Ende dieser Seite — die neue lädt die Locale selbst.
-let _unloading = false;
-if (typeof window !== 'undefined') {
-  window.addEventListener('pagehide', () => { _unloading = true; });
-  // Firefox bricht den Fetch schon beim Navigationsstart ab, vor `pagehide`.
-  // Wird die Navigation abgebrochen (Dirty-Guard), gibt der Timer das Log frei.
-  window.addEventListener('beforeunload', () => {
-    _unloading = true;
-    setTimeout(() => { _unloading = false; }, 2000);
-  });
-  window.addEventListener('pageshow', () => { _unloading = false; });
-}
 
 async function _load(locale) {
   const r = await fetch(`/js/i18n/${locale}.json`);
@@ -54,7 +41,8 @@ export async function configureI18n(locale) {
   } else {
     try { _messages = await _load(locale); _locale = locale; }
     catch (e) {
-      if (!_unloading) console.error('[i18n]', e.message, '– Fallback auf de.');
+      // Ein Reload bricht den Locale-Fetch der alten Seite ab — kein Fehler.
+      if (!isPageUnloading()) console.error('[i18n]', e.message, '– Fallback auf de.');
       _messages = _fallback;
       _locale = FALLBACK_LOCALE;
     }
@@ -76,6 +64,39 @@ export function tRaw(key, params) {
     msg = msg.replace(/\{(\w+)\}/g, (_, k) => (params[k] !== undefined ? params[k] : `{${k}}`));
   }
   return msg;
+}
+
+// Zähl-Texte: Einzahl steht unter `<key>One`, alles andere unter `<key>`.
+// Welche Zahl Einzahl ist, entscheidet Intl.PluralRules der UI-Sprache.
+const _pluralRules = new Map();
+
+/** Key-Variante für die Anzahl `n`: `<key>One` bei Einzahl, sonst `<key>`.
+ *  Für Module, die `t` hineingereicht bekommen; sonst `tn()` nehmen. */
+export function pluralKey(key, n) {
+  let pr = _pluralRules.get(_locale);
+  if (!pr) { pr = new Intl.PluralRules(_locale); _pluralRules.set(_locale, pr); }
+  return pr.select(Number(n) || 0) === 'one' ? key + 'One' : key;
+}
+
+/** Zähl-Text: `<key>One` bzw. `<key>`, `{n}` locale-formatiert. Weitere Platzhalter über `params`. */
+export function tnRaw(key, n, params) {
+  const num = Number(n) || 0;
+  return tRaw(pluralKey(key, num), { ...params, n: numberFormat(_locale).format(num) });
+}
+
+// Textsortierung in der Kollation der UI-Sprache: Umlaute beim Grundbuchstaben,
+// Zahlen numerisch («Kapitel 2» vor «Kapitel 10»), Gross/Klein gleichrangig.
+// Nicht für ISO-Daten oder IDs — die vergleicht man als rohe Strings.
+const _collators = new Map();
+
+/** Vergleich zweier Anzeige-Texte für `Array#sort`; `null`/`undefined` als ''. */
+export function compareText(a, b) {
+  let c = _collators.get(_locale);
+  if (!c) {
+    c = new Intl.Collator(localeTag(_locale), { numeric: true, sensitivity: 'base' });
+    _collators.set(_locale, c);
+  }
+  return c.compare(String(a ?? ''), String(b ?? ''));
 }
 
 /** Key eines server-persistierten `__i18n:bereich.feld__`-Markers, sonst null.
@@ -148,6 +169,13 @@ export const i18nMethods = {
     void this?.$store?.shell?.uiLocale;
     void this?.$store?.shell?.unitTerm;
     return tRaw(key, params);
+  },
+
+  /** Zähl-Text mit Einzahl-Variante. Siehe tnRaw. */
+  tn(key, n, params) {
+    void this?.$store?.shell?.uiLocale;
+    void this?.$store?.shell?.unitTerm;
+    return tnRaw(key, n, params);
   },
 
   /** Erklärung eines Lektorat-Befunds. Siehe findingErklaerungRaw. */

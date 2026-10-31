@@ -65,9 +65,7 @@
            sie stecken als konstanter Sockel in der Kurve. -->
       <span class="kapitel-dash-foot-label" x-show="kdGrowth().untrackedPages > 0" x-cloak
             :data-tip="$app.t('kapitelReview.dash.growthUntrackedTip')"
-            x-text="kdGrowth().untrackedPages === 1
-              ? $app.t('kapitelReview.dash.growthUntrackedOne')
-              : $app.t('kapitelReview.dash.growthUntracked', { n: kdGrowth().untrackedPages })"></span>
+            x-text="$app.tn('kapitelReview.dash.growthUntracked', kdGrowth().untrackedPages)"></span>
     </div>
   </div>
 </template>

@@ -21,6 +21,7 @@ import { normalizeEvent, normalizeEvents, compareEvents, sortEvents, eventGroupK
 import { ereignisEditMethods } from './ereignisse/edit.js';
 import { memoMethods } from './card-memo.js';
 import { activeFilterId, hasId, sameId } from '../chapter-filter.js';
+import { listWindowState, listWindowMethods } from '../list-window.js';
 
 export { hasEventYear, formatEventDateParts };
 export { subtypIcon, bandMarkerColor, eventSpanYears, POINT_SUBTYPES };
@@ -90,6 +91,8 @@ export function registerEreignisseCard() {
     eventEditBusy: false,
     eventEditError: '',
     eventEditMessage: '',
+    // Liste rendert schrittweise (list-window.js): bei ~1000 Ereignissen sonst Sekunden Main-Thread.
+    ...listWindowState(),
 
     init() {
       this._lifecycle = setupCardLifecycle(this, {
@@ -109,6 +112,7 @@ export function registerEreignisseCard() {
           eventEditBusy: false,
           eventEditError: '',
           eventEditMessage: '',
+          ...listWindowState(),
         },
         load: async (root) => {
           this._memos = {};
@@ -124,6 +128,9 @@ export function registerEreignisseCard() {
       // selbst markiert sich im Template direkt ueber die ID — nur die Achse
       // rechnet in Indizes.
       this.$watch(() => Alpine.store('catalogUi').selectedEreignisId, () => this._syncSelectedEreignis());
+      // Ausgewähltes Ereignis (Band-Klick, Deep-Link, Palette) muss im gerenderten
+      // Fenster stehen — sonst findet der Sprung zur Zeile nichts.
+      this.$watch(() => this.selectedEventIndex() ?? -1, (idx) => this.listWindowReveal(idx));
       // Das Jahres-Band rendert deklarativ aus bandModel() (reaktiv über
       // filteredEreignisse) — kein imperativer Render-Pfad, kein Lazy-Lib-Load,
       // kein asynchrones Layout. Damit gibt es keinen Einklapp-/Expandier-Effekt.
@@ -154,6 +161,7 @@ export function registerEreignisseCard() {
     // Memo-Helper (cards/card-memo.js); Reset über this._memos = {} (load-Pfad).
     ...memoMethods,
     ...ereignisEditMethods,
+    ...listWindowMethods,
 
     // Figuren, die in mindestens einem Ereignis vorkommen (Filter-Optionen).
     ereignisseFigurOptionen() {
@@ -267,8 +275,11 @@ export function registerEreignisseCard() {
     // $el auf das geklickte Kind (Band-Marker bzw. Achse-Hinweis), dessen
     // Subtree die Liste nicht enthält — die Suche liefe sonst leer.
     scrollToEventIndex(index) {
-      const node = this.$root?.querySelector(`.global-zeitstrahl-body--card [data-ev-index="${index}"]`);
-      node?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      this.listWindowReveal(index);
+      this.$nextTick(() => {
+        const node = this.$root?.querySelector(`.global-zeitstrahl-body--card [data-ev-index="${index}"]`);
+        node?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
     },
 
     // Index des ersten undatierten Events (kein Kalenderjahr) in der gefilterten

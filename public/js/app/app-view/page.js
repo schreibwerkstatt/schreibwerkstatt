@@ -473,17 +473,14 @@ export const pageMethods = {
     this._stopAutosave?.();
     this._uninstallOnlineRetry?.();
     this.resetChat();
-    this.showChatCard = false;
-    // Ideen-Karte schliessen — gilt für beide Scopes. Page-Scope sitzt im
-    // Editor-Slot, Chapter-Scope ist an Kapitelreview gekoppelt (das via
-    // `_closeOtherMainCards` ebenfalls geschlossen wird).
-    this.showIdeenCard = false;
+    // Leiste schliessen — Chat, Ideen (beide Scopes: Chapter-Scope ist an die
+    // Kapitelbewertung gekoppelt, die `_closeOtherMainCards` ebenfalls
+    // schliesst) und Referenz. Ohne Editor stuende sie sonst auf voller Breite.
+    // Direkt aufs Feld, nicht ueber `_setAside`: der Lektorat-Snapshot gilt der
+    // verlassenen Seite und wird unten verworfen.
+    this.asideSlot = null;
     this.ideenChapterId = null;
     this.ideenScope = 'page';
-    // Referenz-Slot sitzt im selben Editor-Slot (Mutex mit Chat + Ideen) →
-    // beim Verlassen der Seite ebenfalls schliessen, sonst rendert er ohne
-    // Editor-Split-Container auf voller Breite.
-    this.showReferenceCard = false;
     this._checkDoneBeforeChat = false;
     this.currentPage = null;
     this.pageLastEditor = null;

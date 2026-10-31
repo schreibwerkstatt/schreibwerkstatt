@@ -1,0 +1,60 @@
+@layer components {
+/* === Split mit Leiste: Hauptinhalt links, klebende Leiste rechts ===
+   Ein Muster fuer jede Stelle, an der neben einem Hauptinhalt eine schmalere
+   Spalte mitlaeuft: Editor | Chat/Ideen/Referenz, Kapitelreview | Ideen und
+   Board | Chat in Plot-Werkstatt, Ideen-Board und Recherche.
+
+   Markup:
+     <div class="aside-split" :class="{ 'aside-split--on': offen }">
+       …Hauptinhalt…
+       <div class="aside-split-aside">          ← klebt, scrollt als Ganzes
+         … <div class="aside-split-scroll">…</div>  ← innerer Verlauf (optional)
+       </div>
+     </div>
+
+   Die Leiste und ihr Scroll-Bereich duerfen in einem `display: contents`-
+   Wrapper sitzen (Partial-Host der Hauptebene) — darum Nachfahren-, nicht
+   Kind-Selektoren. Verschachtelte Splits gibt es nicht.
+
+   Stellschrauben am Split-Element (nicht an der Leiste):
+     --aside-w            Spaltenbreite (Default tokens/spacing.css, `-wide`
+                          fuer breite Antworten)
+     --aside-scroll-max   Deckel des inneren Verlaufs
+
+   Die Leiste deckelt sich selbst auf die Viewport-Hoehe und scrollt als
+   Ganzes: Kopf, Verlauf und Eingabefeld bleiben auch auf niedrigen
+   Bildschirmen erreichbar, waehrend sie klebt. Ein Deckel nur am inneren
+   Verlauf reicht dafuer nicht — Kopf + Eingabe + Historie kaemen obendrauf. */
+
+/* Schmal: Leiste ueber dem Hauptinhalt statt darunter (sie wird gezielt
+   geoeffnet und soll nicht unter einer langen Liste liegen). */
+.aside-split--aside-first {
+  display: flex;
+  flex-direction: column;
+}
+.aside-split--aside-first .aside-split-aside { order: -1; }
+
+/* Hauptebene (index.html): Leisten sind ganze Karten mit eigenem Kopf. */
+.main-aside-split { --aside-scroll-max: 60vh; }
+
+@media (min-width: 1280px) {
+  .aside-split--on {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--aside-w);
+    column-gap: var(--layout-gap);
+    align-items: start;
+  }
+  .aside-split--on .aside-split-aside {
+    order: 0;
+    position: sticky;
+    top: var(--sticky-top);
+    max-height: calc(100dvh - var(--sticky-top) - var(--sticky-bottom));
+    overflow-y: auto;
+  }
+  .aside-split--on .aside-split-scroll {
+    max-height: var(--aside-scroll-max);
+    overflow-y: auto;
+  }
+}
+
+}

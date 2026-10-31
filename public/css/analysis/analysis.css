@@ -303,4 +303,8 @@
   text-decoration-color: var(--color-subtle);
 }
 
+/* Varianten der Buchbewertung (book/review.js#_renderReviewHtml). */
+.stilbox.stilbox--review-summary { margin-bottom: var(--space-14); }
+.fazit.fazit--review { margin-top: var(--space-lg); }
+
 }

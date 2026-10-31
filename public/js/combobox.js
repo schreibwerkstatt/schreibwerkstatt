@@ -428,7 +428,11 @@ export function comboboxData(cfg = {}) {
           // Position via x-anchor (Floating UI): `.fixed` entkommt overflow-
           // clippenden Vorfahren (Plot-Swimlane-Grid), Flip nach oben passiert
           // automatisch, wenn unten kein Platz ist (auch auf Mobile). Breite via
-          // ddWidth (= Trigger-Breite).
+          // ddWidth (= Trigger-Breite). Platzierung als Modifier
+          // (`x-anchor.bottom-start`), nicht als Wert (`x-anchor:bottom-start`):
+          // das Plugin liest nur die Modifier, ein Wert faellt auf `bottom`
+          // zurueck und zentriert die Liste — sichtbar, sobald sie breiter ist
+          // als der Trigger (kompakte Combobox, Mindestbreite 180 px).
           // `x-id` ist Pflicht und nicht bloss Kosmetik: `$id()` memoisiert pro
           // ELEMENT und zieht ohne einen solchen Scope bei jedem Aufruf auf einem
           // anderen Element eine neue Nummer. `aria-activedescendant` steht am
@@ -438,7 +442,7 @@ export function comboboxData(cfg = {}) {
           // Scope sitzt am Dropdown, weil es beide Seiten umschliesst; pro
           // Combobox-Instanz vergibt Alpine darin genau eine Nummer.
           '<template x-if="open">',
-          '<div class="combobox-dropdown" x-id="[\'cb-opt\']" :style="ddWidth ? { width: ddWidth } : {}" x-anchor:bottom-start.fixed="$refs.cbTrigger">',
+          '<div class="combobox-dropdown" x-id="[\'cb-opt\']" :style="ddWidth ? { width: ddWidth } : {}" x-anchor.bottom-start.fixed="$refs.cbTrigger">',
           '  <input type="text" class="combobox-search" x-model="query" x-ref="cbInput"',
           '         :placeholder="$app.t(\'common.searchShort\')" role="searchbox" :aria-label="$app.t(\'common.searchShort\')">',
           '  <ul class="combobox-list" role="listbox"',

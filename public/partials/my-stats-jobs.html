@@ -2,7 +2,7 @@
      oder ein gewähltes; Zeile aufklappen → letzte Läufe. display:contents-Wrapper
      (.card--mystats .overview-grid > [id^="partial-my-stats-"]) → das Tile bleibt
      direktes Grid-Child. Logik: public/js/cards/my-stats-jobs-methods.js. -->
-<div class="overview-tile overview-tile--wide" x-id="['jobs-title', 'jobs-book']">
+<div class="overview-tile overview-tile--wide mystats-jobs-tile" x-id="['jobs-title', 'jobs-book']">
   <div class="overview-tile-label">
     <span :id="$id('jobs-title')" x-text="$app.t('mystats.jobs.title')"></span>
     <span class="mystats-scope-tag" x-text="myStatsScope('lifetime')"></span>

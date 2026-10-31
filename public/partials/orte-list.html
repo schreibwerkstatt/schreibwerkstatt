@@ -1,8 +1,9 @@
 <!-- Schauplatz-Liste (View-Mode 'list'). Fragment-Include von orte.html, lebt
      im Scope von `orteCard`. Unterorte stehen eingerückt unter ihrem Elternort
      (orte-card.js#_nestByParent); das Detail trägt Auswertung + Pflege. -->
-<div x-show="$store.catalog.orte.length > 0 && viewMode === 'list'" class="entity-list entity-list--accented ort-list">
-  <template x-for="o in orteFiltered" :key="o.id">
+<template x-if="$store.catalog.orte.length > 0 && viewMode === 'list'">
+<div class="entity-list entity-list--accented ort-list">
+  <template x-for="o in listWindowed(orteFiltered)" :key="o.id">
     <div :class="{ 'ort-list-item--child': ortDepth(o.id) > 0 }" :style="{ '--ort-depth': ortDepth(o.id) }">
       <div class="entity-row internal-link" :class="{ 'entity-row--stale': o.stale }" :data-ortid="o.id" @click="$store.catalogUi.selectedOrtId = $store.catalogUi.selectedOrtId === o.id ? null : o.id">
         <span class="tag entity-typ-tag" x-text="ortTypLabel(o.typ)"></span>
@@ -40,4 +41,9 @@
       </div>
     </div>
   </template>
+  <button type="button" class="btn-compact list-window-more"
+          x-show="listWindowRest(orteFiltered) > 0" x-cloak
+          x-list-more="listWindowMore()" @click="listWindowMore()"
+          x-text="$app.t('common.showMore', { n: listWindowRest(orteFiltered) })"></button>
 </div>
+</template>

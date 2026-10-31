@@ -4,10 +4,10 @@
      verwirft (Vorschlagskarten wie im Plot-Chat).
      Scope + Methoden aus ideenBoardCard (chat/ideen-chat.js, chat/ideen-chat-proposals.js).
      Deep-Doc: docs/ideen-chat.md -->
-<div x-show="ideenChatOpen" x-cloak class="ideen-chat">
+<div x-show="ideenChatOpen" x-cloak class="chat-panel ideen-chat">
   <div class="card-section-head">
-    <span class="ideen-chat-title" x-text="$app.t('ideenBoard.chat.heading')"></span>
-    <div class="ideen-chat-head-actions">
+    <span class="chat-panel-title" x-text="$app.t('ideenBoard.chat.heading')"></span>
+    <div class="chat-panel-head-actions">
       <button type="button" class="icon-btn icon-btn--ghost" @click="startNewIdeenChatSession()" :disabled="ideenChatLoading" :data-tip="$app.t('chat.newSessionTitle')" :aria-label="$app.t('chat.newSession')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg></button>
       <button type="button" class="icon-btn icon-btn--ghost" @click="ideenChatOpen = false" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
     </div>
@@ -18,7 +18,7 @@
   </div>
   <div x-show="ideenChatStatus" class="card-status" x-html="ideenChatStatus"></div>
 
-  <div id="ideen-chat-messages" class="chat-messages ideen-chat-messages">
+  <div id="ideen-chat-messages" class="chat-messages ideen-chat-messages aside-split-scroll">
     <!-- Leeres Gespräch: Erklärung + drei Schnellstart-Aufträge (die Kernaufgaben). -->
     <div x-show="ideenChatMessages.length === 0 && !ideenChatLoading" class="card-empty card-empty--compact">
       <p class="card-empty-hint" x-text="$app.t('ideenBoard.chat.empty')"></p>

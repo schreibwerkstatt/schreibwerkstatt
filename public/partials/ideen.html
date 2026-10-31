@@ -7,7 +7,7 @@
      ganze Buch; die Stufen-Achse und die Verknüpfungs-Chips sind darum geteilt
      (public/js/book/ideen-shared.js, ideen-links.js). „Offen" heisst hier wie
      dort `offen` ODER `in_arbeit`. -->
-<div class="card card--ideen" id="ideen-card" x-data="ideenCard" x-show="$app.showIdeenCard" x-cloak>
+<div class="card card--ideen aside-split-aside" id="ideen-card" x-data="ideenCard" x-show="$app.showIdeenCard" x-cloak>
   <div class="card-header card-header--subline">
     <div class="card-header-titlebar">
       <span class="card-title"
@@ -65,7 +65,7 @@
 
   <!-- @include ideen-link-picker -->
 
-  <div class="ideen-list">
+  <div class="ideen-list aside-split-scroll">
     <div x-show="loading" class="ideen-loading" x-text="$app.t('common.loading')"></div>
 
     <div x-show="!loading && ideen.length === 0" class="muted-msg muted-msg--sm muted-msg--block"

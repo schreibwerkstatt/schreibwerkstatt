@@ -12,7 +12,7 @@
   cursor: none;
 }
 
-/* === Layout === */
+/* === Banner: Dev-Kennung + Session-/Offline-/Rettungs-Hinweis (oben fixed) === */
 .dev-banner {
   display: inline-block;
   margin-bottom: var(--space-sm);
@@ -58,11 +58,7 @@
 }
 .session-banner-btn:hover { background: var(--color-session-banner-btn-hover); }
 
-.session-banner--offline {
-  background: var(--color-warn-bg);
-  color: var(--color-warn-text);
-  border-bottom: 2px solid var(--color-warn-text);
-}
+.session-banner--offline,
 .session-banner--rescue {
   background: var(--color-warn-bg);
   color: var(--color-warn-text);
@@ -91,6 +87,7 @@
   cursor: not-allowed;
 }
 
+/* === Kopfzeile der App (Titel, Buchwahl-Mitte, Avatar) === */
 .site-header-row {
   display: flex;
   align-items: center;

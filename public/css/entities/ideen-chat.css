@@ -5,47 +5,10 @@
    Gleiche Geometrie wie der Plot-Chat (book/plot/chat.css). */
 
 /* ── Board + Chat nebeneinander ───────────────────────────────────────────
-   Schmal: Flex-Spalte, der Chat steht per `order` über dem Board. Breit:
-   zweispaltiges Raster; das Board behält seinen eigenen horizontalen Scroll
-   (minmax(0, 1fr) lässt die Spalte schrumpfen). */
-.ideen-split {
-  display: flex;
-  flex-direction: column;
-}
-.ideen-split > .ideen-chat-slot { order: -1; }
+   Geometrie aus layout/aside-split.css (`.aside-split--aside-first`); das Board
+   behält seinen eigenen horizontalen Scroll (minmax(0, 1fr) lässt die Spalte
+   schrumpfen). Panel-Hülle: `.chat-panel` (chat.css). */
 .ideen-main { min-width: 0; }
-
-@media (min-width: 1280px) {
-  .ideen-split--chat {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) clamp(380px, 30vw, 560px);
-    column-gap: var(--space-md);
-    align-items: start;
-  }
-  .ideen-split--chat > .ideen-chat-slot {
-    order: 0;
-    position: sticky;
-    top: 1.5rem;
-    max-height: calc(100vh - 3rem);
-    overflow-y: auto;
-  }
-  .ideen-split--chat .ideen-chat { margin-bottom: 0; }
-  .ideen-split--chat .ideen-chat-messages { max-height: min(52vh, 38rem); }
-}
-
-/* ── Panel ─────────────────────────────────────────────────────────────── */
-.ideen-chat {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-md);
-  padding: var(--space-md);
-  border: 1px solid var(--card-accent);
-  border-radius: var(--radius-md);
-  background: var(--color-bg);
-}
-.ideen-chat-title { font-weight: var(--fw-semibold); }
-.ideen-chat-head-actions { display: flex; gap: var(--space-2xs); }
 .ideen-chat-messages { max-height: 24rem; }
 .card--ideenboard:fullscreen .ideen-chat-messages { max-height: 52vh; }
 

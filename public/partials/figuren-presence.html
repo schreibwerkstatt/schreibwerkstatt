@@ -1,7 +1,8 @@
 <!-- Figuren-Präsenz-Tab: Figuren × Kapitel-Heatmap + deterministische Befunde.
      Nested-Partial der Figuren-Karte (Placeholder `partial-figuren-presence` in
      figuren.html), läuft im figurenCard-Scope. Logik: js/book/figuren-presence.js -->
-<div x-show="figurenGraphModus === 'praesenz'" class="figur-presence" x-cloak>
+<template x-if="figurenGraphModus === 'praesenz'">
+<div class="figur-presence">
   <p class="card-hint card-section" x-text="$app.t('figuren.presence.intro')"></p>
 
   <template x-if="figurenPresenceData().episodic">
@@ -61,3 +62,4 @@
     <span class="figur-presence-legend-entry"><span class="figur-presence-legend-swatch figur-presence-cell--wp"></span><span x-text="$app.t('figuren.presence.legend.wendepunkt')"></span></span>
   </div>
 </div>
+</template>

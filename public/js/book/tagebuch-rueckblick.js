@@ -49,8 +49,7 @@ export const tagebuchRueckblickMethods = {
   },
 
   rbCountLabel(n) {
-    const app = window.__app;
-    return n === 1 ? app.t('rueckblick.entriesOne') : app.t('rueckblick.entries', { n });
+    return window.__app.tn('rueckblick.entries', n);
   },
 
   // Zeiträume mit Einträgen für die Combobox: Monate (feinkörniger) zuerst,

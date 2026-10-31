@@ -236,14 +236,7 @@ export function registerMyStatsCard() {
     },
 
     myStatsMilestoneLabel(category, target) {
-      return this._myStatsPlural(MILESTONE_LABELS[category] || 'mystats.milestone.chars', target);
-    },
-
-    // i18n mit Einzahl: n === 1 → Key + 'One' (Konvention wie sidebar.pagesCountOne).
-    // `{n}` wird locale-formatiert; weitere Parameter via `params`.
-    _myStatsPlural(key, n, params = {}) {
-      const num = Number(n) || 0;
-      return window.__app.t(num === 1 ? key + 'One' : key, { ...params, n: this._myStatsFmt(num) });
+      return window.__app.tn(MILESTONE_LABELS[category] || 'mystats.milestone.chars', target);
     },
 
     // Geltungsbereich einer Kachel als Tag-Text:
@@ -359,7 +352,7 @@ export function registerMyStatsCard() {
       const t = window.__app.t;
       if (row.status === 'reached') return t('mystats.bookGoals.reached');
       if (row.status === 'overdue') return t('mystats.bookGoals.overdue');
-      if (row.status === 'due')     return this._myStatsPlural('mystats.bookGoals.due', row.daysRemaining);
+      if (row.status === 'due')     return window.__app.tn('mystats.bookGoals.due', row.daysRemaining);
       if (row.status === 'open')    return t('mystats.bookGoals.open');
       return t('mystats.bookGoals.none');
     },
@@ -380,7 +373,7 @@ export function registerMyStatsCard() {
     // Das Tempo hinter der Prognose: „⌀ 1’200 Z/Tag, letzte 30 T".
     myStatsPaceLabel(row) {
       if (!row.paceDays || !(row.recentDailyChars > 0)) return '';
-      return this._myStatsPlural('mystats.bookGoals.pace', row.paceDays,
+      return window.__app.tn('mystats.bookGoals.pace', row.paceDays,
         { chars: this._myStatsFmt(row.recentDailyChars), days: row.paceDays });
     },
 

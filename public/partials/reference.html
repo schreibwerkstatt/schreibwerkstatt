@@ -1,8 +1,9 @@
 <!-- Referenz-Slot (read-only Begleitpanel neben dem Notebook-Editor).
      Alpine.data-Sub-Komponente — public/js/cards/reference-card.js.
-     showReferenceCard bleibt am Root; fachlicher State in der Sub.
-     Mutex mit Seiten-Chat + Ideen im selben 420px-Slot. Nie schreibend. -->
-<div class="card card--reference" id="reference-card" x-data="referenceCard" x-show="$app.showReferenceCard" x-cloak>
+     Sichtbarkeit am Root (asideSlot === 'reference', abgeleitet showReferenceCard);
+     fachlicher State in der Sub. Teilt die Leiste neben dem Editor mit Seiten-
+     Chat + Ideen (layout/aside-split.css). Nie schreibend. -->
+<div class="card card--reference aside-split-aside" id="reference-card" x-data="referenceCard" x-show="$app.showReferenceCard" x-cloak>
   <div class="card-header">
     <div class="card-header-titlebar">
       <span class="card-eyebrow" x-text="referenceScope === 'page' && referenceHasContext() ? ($app.currentPage?.name || '') : $app.t('reference.wholeBook')"></span>
@@ -64,7 +65,7 @@
     </div>
   </div>
 
-  <div class="reference-body">
+  <div class="reference-body aside-split-scroll">
     <!-- @include reference-plan -->
 
     <!-- Figuren -->

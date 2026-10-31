@@ -152,6 +152,16 @@ function getFigureAgeScan(bookId, userEmail) {
   ).get(bookId, userEmail || '') || null;
 }
 
+/** Juengster Stand des Figurenstamms (ohne verworfene Figuren) — gegen `scanned_at`
+ *  verglichen zeigt er, ob die Komplettanalyse oder ein Steckbrief-Edit nach dem
+ *  Lauf kam. Bewusst grob (jedes Figurenfeld zaehlt): die Karte meldet „veraltet",
+ *  der Delta-Skip des Jobs bleibt die genaue Pruefung. */
+function latestFigureUpdate(bookId, userEmail) {
+  return db.prepare(
+    'SELECT MAX(updated_at) AS t FROM figures WHERE book_id = ? AND user_email IS ? AND stale = 0'
+  ).get(bookId, userEmail || null)?.t || null;
+}
+
 /** Alters-Zeilen eines Buchs, nach `figures.fig_id` geschluesselt — das ist die
  *  Kennung, die GET /figures/:book_id nach vorne gibt (`id`), und damit die
  *  einzige, an der das Frontend die Tabelle an den Katalog haengen kann. */
@@ -233,4 +243,4 @@ function listAnalysedBirthYears(bookId, userEmail) {
   return out;
 }
 
-module.exports = { replaceFigureAges, getFigureAgeScan, listFigureAges, listAnalysedBirthYears };
+module.exports = { replaceFigureAges, getFigureAgeScan, listFigureAges, listAnalysedBirthYears, latestFigureUpdate };

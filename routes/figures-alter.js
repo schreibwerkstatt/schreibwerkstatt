@@ -11,11 +11,31 @@
 // die schon geladenen Figuren haengen, ohne einen zweiten Namensvergleich.
 
 const express = require('express');
-const { listFigureAges, getFigureAgeScan } = require('../db/figure-ages');
+const { listFigureAges, getFigureAgeScan, latestFigureUpdate } = require('../db/figure-ages');
+const contentStore = require('../lib/content-store');
+const { AGE_ANALYSIS_VERSION } = require('../lib/figure-age');
 const { aclParamGuard, sessionEmail } = require('../lib/acl');
 const { bookParamHandler } = require('../lib/log-context');
 
 const router = express.Router();
+
+// Warum der gespeicherte Lauf nicht mehr zum Buch passt — leer, wenn er passt.
+// Der Index wird nur auf Knopfdruck neu gebaut (nicht von der Komplettanalyse,
+// nicht im Nacht-Cron); ohne diesen Hinweis liest sich ein alter Lauf wie ein
+// aktueller. Grob statt der exakten content_sig des Jobs: die braeuchte den
+// Volltext aller Seiten, und der Leseweg laedt bei jedem Reiter-Wechsel.
+//   version  → Muster/Verdichtung/Prompt haben sich seither geaendert
+//   text     → mindestens ein Abschnitt wurde nach dem Lauf gespeichert
+//   figuren  → Figurenstamm nach dem Lauf geaendert (z.B. Komplettanalyse)
+function staleReasons(bookId, userEmail, scan) {
+  const out = [];
+  if (Number(scan.age_version) !== AGE_ANALYSIS_VERSION) out.push('version');
+  const since = scan.scanned_at;
+  if (since && contentStore.pagesChangedSince(bookId, { since, sinceId: Number.MAX_SAFE_INTEGER }, 1).length) out.push('text');
+  const fig = latestFigureUpdate(bookId, userEmail);
+  if (since && fig && fig > since) out.push('figuren');
+  return out;
+}
 
 // Lesen ab `viewer`: die Frage „wie alt ist die Figur hier" stellt sich beim
 // Lektorieren genauso wie beim Schreiben. Der Scan selbst verlangt `editor`
@@ -36,8 +56,10 @@ router.get('/:book_id/alter', (req, res) => {
       belege_total: scan.belege_total,
       embed_used: !!scan.embed_used,
       model: scan.model,
+      veraltet: staleReasons(bookId, userEmail, scan),
     } : null,
   });
 });
 
 module.exports = router;
+module.exports.staleReasons = staleReasons; // Test-Zugang (tests/integration/figur-alter.test.js)

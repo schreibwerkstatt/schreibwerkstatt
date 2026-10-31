@@ -15,8 +15,10 @@ Den vis-network-Unterbau teilt er sich mit der **Motiv-Konstellation** ([docs/mo
 | `graph/shared.js` | `_theme` (aufgelöste Canvas-Farben), `_figTypColor`/`_schichtNodeColor`/`_nodeFont` (Paletten, für den Grund nachgeführt), `_baseNode` (gemeinsame vis-Node-Basis), `_figurenGraphSetKapitel` (Kapitel-Filter dim/highlight), `_buildEdges` (Edge-Liste mit Dedup, id→Figur-Map), `_attachTooltip` (Hover-Tooltip mit Escape, id→Figur-Map; Knoten-Klick öffnet die Figur im Reiter «Liste» über `_openFigurFromGraph`). |
 | `graph/layout.js` | **Reine** Swimlane-Berechnung: `computeSwimlaneLayout`, `figureInfo`, `columnWidth`, `importanceBorderWidth` + die Konstanten (`TIER_ORDER`, `ROW_H`, `MIN_DX`). Kein DOM, kein vis → in [tests/unit/graph-layout.test.mjs](../tests/unit/graph-layout.test.mjs) direkt testbar. |
 | `graph/figurengraph.js` | Kapitel-Swimlane (deterministisch, ohne Physics) — zeichnet, was `layout.js` rechnet. |
-| `graph/familiengraph.js` | Hierarchischer Baum, nur Familien-Edges (elternteil/kind/geschwister). |
-| `graph/soziogramm.js` | Sozialschicht-Bands, Macht-Sortierung innerhalb Schicht. |
+| `graph/familiengraph.js` | Familienbaum zeichnen (vis). |
+| `graph/family-layout.js` | Rein: Familien-Edges normalisieren, Generationen, Familien als Raster packen. |
+| `graph/soziogramm.js` | Sozialschicht-Bands zeichnen — Positionen aus `soziogramm-layout.js`. |
+| `graph/soziogramm-layout.js` | **Reine** Soziogramm-Rechnung: `computeSoziogrammLayout` (Band-Mitten und -Höhen, Macht-Treppe), `powerScores`, `schichtOf`. In [soziogramm-layout.test.mjs](../tests/unit/soziogramm-layout.test.mjs) direkt testbar. |
 
 ## State auf der Card
 
@@ -37,7 +39,7 @@ _figurenEdges           // vis.DataSet
 ```
 container vorhanden?           → sonst no-op
 vis geladen?                   → sonst loadVis() (lazy-libs), Placeholder währenddessen
-hash = renderSig + modus + locale → match? no-op
+hash = renderSig + Kapitelachse + modus + locale + theme → match? no-op
 network destroyen + null'en
 figuren leer?                  → Placeholder, return
 modus switch:
@@ -47,7 +49,7 @@ modus switch:
 falls figurenGraphKapitel → rAF → _figurenGraphSetKapitel
 ```
 
-`renderSig` deckt pro Figur **alle** layout-/edge-relevanten Felder ab: `id`, `typ` (Tier-Achse), `sozialschicht` (Soziogramm-Band), Kapitel (`name+häufigkeit` → X-Achse + Presence) und Beziehungen (`figur_id+typ+machtverhältnis` → Edges + Macht-Sortierung). Nur die Kapitel zu prüfen würde nach einem Typ-/Schicht-/Beziehungs-Edit den alten Stand zeigen (Hash matcht trotz Datenänderung). Locale ist Teil des Keys, weil Labels (Tier-Pills, Schicht-Labels, Tooltips) lokalisiert sind.
+`renderSig` deckt pro Figur **alle** layout-/edge-relevanten Felder ab: `id`, `typ` (Tier-Achse), `sozialschicht` (Soziogramm-Band), Kapitel (`name+häufigkeit` → X-Achse + Presence) und Beziehungen (`figur_id+typ+machtverhältnis` → Edges + Macht-Sortierung). Nur die Kapitel zu prüfen würde nach einem Typ-/Schicht-/Beziehungs-Edit den alten Stand zeigen (Hash matcht trotz Datenänderung). Locale ist Teil des Keys, weil Labels (Tier-Pills, Schicht-Labels, Tooltips) lokalisiert sind. Die **Kapitelachse** (`figurenKapitelOptionen()`: Reihenfolge + Titel aus dem Baum) ebenfalls — Umsortieren oder Umbenennen eines Kapitels ändert keine Figur, verschiebt aber X-Achse und Kopfzeilen; ein Watcher auf `_chapterIdOrderMap`/`_chapterLabelMap` in [figuren-card.js](../public/js/cards/figuren-card.js) stösst den Render an.
 
 ## Modi
 
@@ -68,20 +70,27 @@ Custom-Canvas-Overlays via `beforeDrawing`/`afterDrawing`:
 3. **Tier-Labels links** in Screen-Koordinaten. Pill-Hintergrund (`roundRect` mit Fallback für ältere Browser).
 4. **Presence-Bar unter jeder Node** in Netzwerk-Koordinaten. Segment pro Kapitel; Alpha skaliert mit Häufigkeit (`0.35 + h/5`, clamped 1). Min-Breite skaliert mit N (`min(220, max(70, N*3))`).
 
-**Click auf Kapitel-Header** (`pointer.canvas.y > Y_TOP + 60`) → Filter setzen/togglen via `_figurenGraphSetKapitel`.
+**Click auf Kapitel-Header** → Filter setzen/togglen via `_figurenGraphSetKapitel`. Getroffen wird in **Bildschirm-Koordinaten** (`layout.js#headerHitColumn`: `pointer.DOM.y` innerhalb der gezeichneten Kopfzeile), weil die Kopfzeile dort gezeichnet wird — in Netz-Koordinaten hinge die Trefferzone am Zoom. Liegt ein Knoten unter dem Klick, gewinnt der Knoten-Klick.
 
 **`fit()` auf Node-IDs** statt Canvas-Bounding-Box: leere Kapitel-Spalten würden die BBox aufblähen → Nodes mikroskopisch.
 
 ### Familiengraph
 
-Filtert Edges auf `['elternteil', 'kind', 'geschwister']`, rendert nur die beteiligten Nodes. Layout: `hierarchical { direction: 'UD', sortMethod: 'directed' }` mit `hierarchicalRepulsion`-Solver. Nach `stabilizationIterationsDone` werden Positionen persistiert + Physics + hierarchisches Layout deaktiviert (User kann frei verschieben).
+Kanten: `elternteil`/`kind`/`geschwister`, dazu `ehepartner`, sofern eine Seite blutsverwandt im Baum steht ([family-layout.js](../public/js/graph/family-layout.js)#`familyEdges`). Eltern-Kind ist in den Daten aus beiden Perspektiven erfasst (`typ` = Rolle von `to`) — gezeichnet wird einheitlich als `kind` von Eltern zu Kind, Pfeil zum Kind, Doppelungen fallen weg.
+
+Layout ohne Physics, in zwei Schritten:
+1. **Generationen selbst berechnen** (`familyLevels`): Geschwister und Ehepartner auf derselben Ebene, Kind = Elternteil + 1; ein Elternteil ohne eigene Eltern rückt an sein Kind heran. vis bekommt die Ebenen als feste `level` und ordnet nur innerhalb der Ebene (Probe-Netz, danach verworfen) — `sortMethod: 'directed'` taugt nicht, es setzt `from` über `to` und stellt Bäume mit gemischter Richtung auf den Kopf.
+2. **Familien als Raster packen** (`packFamilies`): jede zusammenhängende Familie behält ihre innere Lage, die Familien füllen Zeilen nach dem Seitenverhältnis des Containers. Ohne das legt vis viele kleine Familien in eine lange Reihe, und `fit()` macht sie winzig.
+
+Eingepasst wird nach dem ersten Zeichnen (`afterDrawing`). Gegated: [family-layout.test.mjs](../tests/unit/family-layout.test.mjs), [familiengraph.spec.js](../tests/e2e-app/familiengraph.spec.js).
 
 Wenn keine Familien-Edges existieren → Placeholder (`graph.empty.familie`).
 
 ### Soziogramm
 
-- **Y-Position = Sozialschicht-Level** (`SCHICHT_LEVEL`: Wirtschaftselite=0 ↓ Unterwelt=6, `andere=2`).
-- **Sortierung innerhalb Schicht = Macht.** `powerScore(f) = Σ -bz.machtverhaltnis`. Konvention: `bz.machtverhaltnis > 0` heisst, das Gegenüber dominiert; negiert ergibt die eigene Macht. Höhere Macht → kleinerer Y-Offset im Band (oben).
+- **Y-Position = Sozialschicht-Band** in der Reihenfolge von `SCHICHT_LEVEL` (Wirtschaftselite=0 ↓ Unterwelt=6, `andere=2`). Unbekannte Werte zählen als `andere` (`schichtOf`). Teilt sich `andere` die Ebene mit der Mittelschicht, trägt die echte Schicht Farbe und Beschriftung des Bands.
+- **Band-Höhe wächst mit der Schicht.** Standard-Mittenabstand 190; eine Schicht, deren Macht-Treppe (12–34 je Figur) nicht ins Standard-Band passt, bekommt ein höheres Band, die folgenden rücken ab. Leere Ebenen behalten ihre Standardhöhe. Ohne das ragten ab ~19 Figuren die äusseren in das Nachbarband und wirkten wie eine andere Schicht.
+- **Sortierung innerhalb Schicht = Macht** (`powerScores`). Konvention: `bz.machtverhaltnis > 0` an der Beziehung A→B heisst, B dominiert. Beide Seiten zählen (A −m, B +m), damit eine nur bei einer Figur erfasste Beziehung auch die andere einordnet; eine von beiden Seiten erfasste Beziehung (auch als Gegenpaar) zählt einmal. Höhere Macht → kleinerer Y-Offset im Band (oben).
 - **X = Rang innerhalb der Schicht**, zentriert: `(idx - (cnt-1)/2) * NODE_X_GAP`.
 - **`fixed: { x: false, y: true }`** — Schicht-Reihe fixiert; horizontal löst Physics (`repulsion`-Solver) Überlappungen.
 - Nach `stabilizationIterationsDone` → Physics aus (User-Drags bleiben stehen).
@@ -96,7 +105,8 @@ Guard: keine Figur hat eine echte `sozialschicht` (alle `null`/`andere`) → Pla
 
 Gemeinsam für Figurengraph + Soziogramm. Dedupliziert über Pair-Key:
 
-- **Directed-Types** (`elternteil, kind, mentor, schuetzling, patronage`): Key = `from|to|typ` (Richtung zählt).
+- **Gegenläufige Paare** (`elternteil`/`kind`, `mentor`/`schuetzling`, `vorgesetzter`/`untergebener`) sind dieselbe Aussage aus zwei Perspektiven. Vor dem Dedup bringt `canonicalRelation` ([beziehung-typen.js](../public/js/book/beziehung-typen.js)) sie in eine Form: «von» ist die übergeordnete Seite (`kind`, `schuetzling`, `untergebener`); Pfeilziel bleibt dasselbe. Im Soziogramm kehrt sich beim Tausch das Machtverhältnis um. Der Familiengraph nutzt dieselbe Regel.
+- **Directed-Types** (`DIRECTED_TYPES`): Key = `from|to|typ` (Richtung zählt).
 - **Andere Typen:** Key = `sorted(from,to)|typ` (ungerichtet).
 
 Soziogramm-spezifisch: **Edge-Width skaliert mit Machtverhältnis** (`1 + |macht|*1.5`). Arrows: `macht > 0` → `to`, `< 0` → `from`, `= 0` & directed → Standard-Arrow aus `BZ`, sonst keine. Kategorie-Farbe aus `BZ_SOZIO_CAT` → `BZ_SOZIO_COLOR`.
@@ -105,7 +115,7 @@ Figurengraph-Modus: Style aus `BZ`-Tabelle (Farbe, Highlight, Arrows, Dashes).
 
 ## Kapitel-Filter (`_figurenGraphSetKapitel`)
 
-Greift nach dem initialen Render. Mutiert nur Node-Color/Font + Edge-Color via `DataSet.update` — kein Re-Layout, keine Stabilisierung. Figuren, deren `kapitel`-Liste die gewählte `chapter_id` **nicht** enthält, werden gedimmt; ein Wert, den die Kapitelachse nicht anbietet, setzt den Filter zurück statt alles zu dimmen (`theme.dim`, aus der Oberflächenfarbe abgeleitet statt fest hellgrau). Edges werden gedimmt, wenn weder `from` noch `to` aktiv sind.
+Greift nach dem initialen Render. Mutiert nur Node-Color/Font + Edge-Color via `DataSet.update` — kein Re-Layout, keine Stabilisierung. Figuren, deren `kapitel`-Liste die gewählte `chapter_id` **nicht** enthält, werden gedimmt; ein Wert, den die Kapitelachse nicht anbietet, setzt den Filter zurück statt alles zu dimmen (`theme.dim`, aus der Oberflächenfarbe abgeleitet statt fest hellgrau). Edges bleiben nur farbig, wenn **beide** Seiten im Kapitel aktiv sind — mit «eine Seite reicht» bliebe um jede Hauptfigur das halbe Netz bunt.
 
 Modus-aware: im Soziogramm-Modus bleibt die Schichtfarbe (`SCHICHT_COLOR`), sonst Typ-Farbe (`_figTypColor`). Edge-Farben kommen aus `BZ_SOZIO_COLOR` (Soziogramm) bzw. `BZ` (Figurengraph).
 
@@ -122,6 +132,8 @@ vis-network zeichnet auf ein `<canvas>` — dort werden **keine CSS-Custom-Prope
 
 Hängt am `#figur-tooltip`-Element (Klasse `.graph-tooltip`, CSS-Komponente — siehe DESIGN.md „Graph-Tooltip"). Listener: `hoverNode`/`blurNode`, `hoverEdge`/`blurEdge`, `dragStart` (ausblenden). Positionierung + Klemmung liefert `createGraphTooltip` aus dem Graph-Kit; die reine Geometrie steckt in `clampTipPos`.
 
+**Permalink je Reiter:** `#book/<id>/figuren/<reiter>` (`figur`, `familie`, `soziogramm`, `praesenz`, `alter`, `lebenslauf`; die Liste ohne Suffix, eine aufgeklappte Figur als `#book/<id>/figur/<figId>`). Reiterliste: `FIGUREN_TABS` in [graph/constants.js](../public/js/graph/constants.js); die Karte spiegelt `figurenGraphModus` nach `catalogUi.figurenTab`, der Hash-Router öffnet den Reiter über den Karten-Wunsch `FIGUREN_TAB`. Ein Reiterwechsel ersetzt den History-Eintrag (gleiche Kategorie).
+
 **Knoten-Klick:** Ein Tap auf einen Knoten (nicht das Ziehen) öffnet die Figur über `openFigurById` im Reiter «Liste» der Figuren-Karte; aus dem Vollbild geht es vorher heraus, weil die Liste ausserhalb des Graph-Wraps liegt. Der Klick-Listener für die Kapitel-Kopfzeile im Figurengraph bleibt daneben bestehen (er reagiert nur im Header-Band).
 
 **XSS-Escape-Invariante:** `escHtml()` für jeden eingesetzten Wert (Figurnamen, Beschreibungen, Schicht-/Typ-Labels). Template-Strings setzen Markup-Wrapper, alle Datenwerte vorher escaped.
@@ -137,9 +149,9 @@ Hängt am `#figur-tooltip`-Element (Klasse `.graph-tooltip`, CSS-Komponente — 
 - **Keine Farb-Literale im Draw-Pfad** — Chrome-Farben aus `this._theme()`, Paletten aus `constants.js` durch `adaptNodeColor`/`theme.ink()`. Ein hartes `#fff`/`rgba(0,0,0,…)` ist im Dark-Mode ein Leuchtbalken bzw. unsichtbar.
 - **Layout rechnet `layout.js`, nicht der Renderer.** Positionslogik gehört in die reine Schicht (testbar); `figurengraph.js` zeichnet nur.
 - **Network destroyen vor Re-Render.** `renderFigurGraph` cleant `_figurenNetwork` vor Neu-Erzeugung; Card-Lifecycle (`onBookChanged`, `destroy`) ebenso.
-- **Hash-Cache prüft die komplette Render-Signatur** (id, typ, sozialschicht, Kapitel-Häufigkeiten, Beziehungen inkl. Machtverhältnis), nicht nur die Kapitel — sonst zeigt ein Re-Render nach Typ-/Schicht-/Beziehungs-Edit den alten Stand. Modus-, Locale- und Theme-Wechsel erzwingen ebenfalls Re-Render.
+- **Hash-Cache prüft die komplette Render-Signatur** (id, typ, sozialschicht, Kapitel-Häufigkeiten, Beziehungen inkl. Machtverhältnis, Kapitelachse), nicht nur die Kapitel — sonst zeigt ein Re-Render nach Typ-/Schicht-/Beziehungs-Edit den alten Stand. Modus-, Locale- und Theme-Wechsel erzwingen ebenfalls Re-Render.
 - **`fit()` nimmt Node-IDs**, nicht Canvas-Bounding-Box (Figurengraph hat sonst leere Spalten am Rand).
-- **Soziogramm fixiert Y**, Figurengraph läuft komplett ohne Physics (User-Drags bleiben stehen), Familiengraph deaktiviert Physics nach Stabilisierung.
+- **Soziogramm fixiert Y**, Figurengraph läuft komplett ohne Physics (User-Drags bleiben stehen), Familiengraph rechnet die Positionen vorab und läuft ohne Physics.
 
 ## Neuen Modus hinzufügen
 
@@ -154,10 +166,12 @@ Hängt am `#figur-tooltip`-Element (Klasse `.graph-tooltip`, CSS-Komponente — 
 
 ## Neuer Beziehungstyp
 
-Kein Schemawechsel (`figure_relations.typ` ist Freitext). Pflicht:
+Kein Schemawechsel (`figure_relations.typ` ist Freitext). Die Liste steht **einmal** in [public/js/book/beziehung-typen.js](../public/js/book/beziehung-typen.js) (`RELATION_TYPES`); Prompts (`RELATION_TYPES_PROMPT`), Schema-`enum` und die Bereinigung der KI-Ausgabe lesen von dort. Pflicht:
 
-1. `BZ` in `constants.js` ergänzen — Farbe, Highlight, Arrow-Richtung, Dashes.
-2. `BZ_SOZIO_CAT` zuordnen (Kategorie für Soziogramm-Farbe).
-3. `DIRECTED_TYPES` ergänzen, wenn der Typ **gerichtet** ist (sonst landet `(A→B, freund)` und `(B→A, freund)` als zwei separate Edges statt einer).
-4. KI-Prompt: `FIGUREN_BASIS_SCHEMA` in [public/js/prompts/komplett.js](../public/js/prompts/komplett.js).
+1. Typ in `RELATION_TYPES` eintragen (gerichtet? dann auch in dessen `DIRECTED`; hat er ein Gegenstück aus der anderen Perspektive, das Paar in `CANONICAL_INVERSE`); Schreibvarianten ggf. in `SYNONYMS`.
+2. `BZ` in `constants.js` ergänzen — Farbe, Highlight, Arrow-Richtung, Dashes.
+3. `BZ_SOZIO_CAT` zuordnen (Kategorie für Soziogramm-Farbe).
+4. `DIRECTED_TYPES` ergänzen, wenn der Typ **gerichtet** ist (sonst landet `(A→B, freund)` und `(B→A, freund)` als zwei separate Edges statt einer).
 5. i18n: `figuren.bz.<typ>` in beide Locales.
+
+Gegated: [beziehung-typen.test.mjs](../tests/unit/beziehung-typen.test.mjs) (Liste ↔ `BZ`/`BZ_SOZIO_CAT` ↔ i18n, kein Listen-Literal im Prompt). `_buildEdges` zeichnet den bereinigten Typ (`normalizeRelationTyp`), damit Kanten aus älteren Läufen («andere|bekannt», «tante») Farbe und Label bekommen.

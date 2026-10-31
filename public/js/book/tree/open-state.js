@@ -24,9 +24,20 @@ export const treeOpenStateMethods = {
     else if (!filtered) this.toggleChapterOpen(item);
   },
 
+  // Ob die Abschnittszeilen eines Baum-Eintrags gerendert werden. Zugeklappte
+  // Kapitel rendern sie gar nicht (nicht nur per x-show versteckt): bei
+  // Buechern mit tausenden Abschnitten waeren das zehntausende DOM-Knoten samt
+  // reaktiver Bindings, die niemand sieht. SSoT fuer sidebar.html und den
+  // Tab-Stopp (keyboard.js#_syncTreeTabStop).
+  _chapterPagesShown(item) {
+    return !!(item.solo || item.open || this._isSingleSectionChapter(item));
+  },
+
   // Persistenter Collapse-State des Sidebar-Trees pro (User, Buch). Default
-  // ist `open: true` (Erstaufruf). Solo-Items werden nicht persistiert —
-  // sie sind reine Page-Wrapper ohne Toggle.
+  // ohne gespeicherten State: offen, ab TREE_COLLAPSE_MIN_PAGES Abschnitten
+  // zu (book/tree/build.js) — das Kapitel der geoeffneten Seite deckt
+  // _revealPageInTree auf. Solo-Items werden nicht persistiert — sie sind
+  // reine Page-Wrapper ohne Toggle.
   _treeOpenStorageKey(bookId) {
     if (!bookId) return '';
     return `sw:treeOpen:${this.$store.session.currentUser?.email || ''}:${bookId}`;

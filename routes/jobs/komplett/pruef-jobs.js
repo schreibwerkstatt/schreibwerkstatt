@@ -1,6 +1,6 @@
 'use strict';
-// Prüfung nach dem Katalog: Kontinuität und Erzählprofil laufen als EIGENE Jobs, die die
-// Komplettanalyse nach dem Katalog einreiht — nicht mehr als Phasen in ihr.
+// Prüfung nach dem Katalog: Kontinuität, Erzählprofil und Alters-Analyse laufen als EIGENE
+// Jobs, die die Komplettanalyse nach dem Katalog einreiht — nicht als Phasen in ihr.
 //
 // Why: als Phasen hingen sie am Konsolidierungs-Checkpoint der Katalog-Pipeline. Jede
 // Lücke in dessen Signatur (eine Bucheinstellung, die nur die Prüfung liest) schaltete
@@ -35,6 +35,20 @@ function _afterJobEnds(jobId, fn) {
  *  startet sie nicht mehr. */
 function enqueuePruefJobs({ bookId, bookName, userEmail, scope, provider }) {
   const out = {};
+  // Alters-Analyse: liest den frisch geschriebenen Figurenstamm samt Zeitstrahl, schickt
+  // nur Kandidatensätze (nicht das ganze Buch) und läuft mit jeder Provider-Klasse —
+  // darum ausserhalb des Cloud-Gates und ohne Warten auf das Erzählprofil. Ohne `force`:
+  // ihr Delta-Skip greift, wenn Text und Figuren seit dem letzten Lauf gleich sind.
+  if (scope.figurAlter) {
+    const { runFigurAlterJob } = require('../figur-alter');
+    const existing = findActiveJobId('figur-alter', bookId, userEmail);
+    if (existing) out['figur-alter'] = existing;
+    else {
+      const jobId = createJob('figur-alter', bookId, userEmail, 'job.label.figurAlter');
+      enqueueJob(jobId, () => runFigurAlterJob(jobId, bookId, userEmail));
+      out['figur-alter'] = jobId;
+    }
+  }
   if (providerClass(provider) !== 'cloud') return out;
   // Lazy: job.js lädt diese Datei über job-komplett.js — ein Top-Level-require wäre zirkulär.
   const { runKontinuitaetJob } = require('./job-kontinuitaet');

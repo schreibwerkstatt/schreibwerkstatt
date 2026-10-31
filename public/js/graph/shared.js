@@ -1,6 +1,7 @@
 import { escHtml } from '../utils.js';
 import { sameId, activeFilterId } from '../chapter-filter.js';
 import { createGraphTooltip, adaptNodeColor, graphTheme } from '../graph-kit.js';
+import { normalizeRelationTyp, canonicalRelation } from '../book/beziehung-typen.js';
 import {
   DEFAULT_FONT,
   TYP_COLOR,
@@ -11,6 +12,7 @@ import {
   DIRECTED_TYPES,
   nodeLabel,
 } from './constants.js';
+import { schichtOf } from './soziogramm-layout.js';
 
 // Gemeinsame Methoden: Typ-Color, Node-Basis, Edge-Bau, Tooltip, Kapitel-Filter.
 // Werden in graphMethods gespreaded und nutzen `this`-Refs aus Card.
@@ -85,8 +87,10 @@ export const sharedMethods = {
       };
     }));
 
+    // Farbig bleibt nur, was im Kapitel zusammen auftritt: beide Seiten aktiv.
+    // Mit «eine Seite reicht» bliebe um jede Hauptfigur das halbe Netz bunt.
     this._figurenEdges.update(this._figurenEdges.get().map(e => {
-      if (!ch || activeIds.has(e.from) || activeIds.has(e.to)) {
+      if (!ch || (activeIds.has(e.from) && activeIds.has(e.to))) {
         if (soziogrammModus) {
           const color = theme.ink(BZ_SOZIO_COLOR[BZ_SOZIO_CAT[e.typ] || 'sozial']);
           return { id: e.id, color: { color, highlight: color } };
@@ -119,21 +123,29 @@ export const sharedMethods = {
     const addedPairs = new Set();
 
     for (const f of figuren) {
-      for (const bz of (f.beziehungen || [])) {
-        const targetFigur = byId.get(String(bz.figur_id));
+      for (const raw of (f.beziehungen || [])) {
+        // Ältere Analysen speicherten Typen ausserhalb der Liste («andere|bekannt»,
+        // «tante») — gezeichnet wird der Listenwert, sonst fehlen Farbe und Label.
+        const targetFigur = byId.get(String(raw.figur_id));
         if (!targetFigur) continue;
-        const toId = targetFigur.id;
+        // Gegenläufige Paare (elternteil/kind, mentor/schuetzling, …) auf eine
+        // Perspektive bringen — sonst zeichnen beide Seiten derselben Aussage je
+        // einen eigenen Bogen.
+        const { from, to: toId, typ, flipped } =
+          canonicalRelation(f.id, targetFigur.id, normalizeRelationTyp(raw.typ).typ);
+        const bz = { ...raw, typ };
 
         const dedupeKey = DIRECTED_TYPES.includes(bz.typ)
-          ? [f.id, toId, bz.typ].join('|')
-          : [[f.id, toId].sort().join('-'), bz.typ].join('|');
+          ? [from, toId, bz.typ].join('|')
+          : [[from, toId].sort().join('-'), bz.typ].join('|');
         if (addedPairs.has(dedupeKey)) continue;
         addedPairs.add(dedupeKey);
 
         if (soziogrammModus) {
           const cat    = BZ_SOZIO_CAT[bz.typ] || 'sozial';
           const color  = theme.ink(BZ_SOZIO_COLOR[cat]);
-          const macht  = bz.machtverhaltnis ?? 0;
+          // Machtverhältnis ist relativ zu «zu» — nach dem Tausch kehrt es sich um.
+          const macht  = (bz.machtverhaltnis ?? 0) * (flipped ? -1 : 1);
           const width  = 1 + Math.abs(macht) * 1.5;
           let arrows = '';
           if (macht > 0)       arrows = 'to';
@@ -141,7 +153,7 @@ export const sharedMethods = {
           else if (DIRECTED_TYPES.includes(bz.typ)) arrows = BZ[bz.typ]?.arrows || '';
 
           edgeList.push({
-            from: f.id, to: toId,
+            from, to: toId,
             label: '',
             typ: bz.typ,
             beschreibung: bz.beschreibung || '',
@@ -153,7 +165,7 @@ export const sharedMethods = {
         } else {
           const s = BZ[bz.typ] || BZ.andere;
           edgeList.push({
-            from: f.id, to: toId,
+            from, to: toId,
             label: '',
             typ: bz.typ,
             beschreibung: bz.beschreibung || '',
@@ -179,8 +191,8 @@ export const sharedMethods = {
     this._figurenNetwork.on('hoverNode', ({ node, event }) => {
       const f = byId.get(node);
       if (!f) return;
-      const schichtLabel = f.sozialschicht && f.sozialschicht !== 'andere'
-        ? window.__app.t('figuren.schicht.' + f.sozialschicht) : '';
+      const schicht = schichtOf(f);
+      const schichtLabel = schicht !== 'andere' ? window.__app.t('figuren.schicht.' + schicht) : '';
       const typLabel = f.typ ? window.__app.t('figuren.type.' + f.typ) : '';
       const html = `<strong>${escHtml(f.name)}</strong>`
         + `<em>${escHtml(typLabel)}${schichtLabel ? ' · ' + escHtml(schichtLabel) : ''}</em>`

@@ -69,7 +69,7 @@
           </div>
           <div class="overview-substat">
             <span class="overview-substat-value" x-text="_myStatsFmt(myStatsVolume().pages)"></span>
-            <span class="overview-substat-unit" x-text="myStatsVolume().pages === 1 ? $app.t('mystats.pagesOne') : $app.t('mystats.pages')"></span>
+            <span class="overview-substat-unit" x-text="$app.tn('mystats.pages', myStatsVolume().pages)"></span>
           </div>
           <div class="overview-substat">
             <span class="overview-substat-value" x-text="myStatsWritingTime()"></span>
@@ -87,7 +87,7 @@
       <div class="overview-substats mystats-state-row">
         <div class="overview-substat">
           <span class="overview-substat-value" x-text="_myStatsFmt(myStatsData.books)"></span>
-          <span class="overview-substat-unit" x-text="myStatsData.books === 1 ? $app.t('mystats.booksOne') : $app.t('mystats.books')"></span>
+          <span class="overview-substat-unit" x-text="$app.tn('mystats.books', myStatsData.books)"></span>
         </div>
         <div class="overview-substat">
           <span class="overview-substat-value" x-text="_myStatsFmt(myStatsData.chapters)"></span>

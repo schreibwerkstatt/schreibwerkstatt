@@ -43,15 +43,7 @@
   <!-- @include sources-lib-search -->
 
   <!-- Skeleton beim Erst-Laden -->
-  <div x-show="sourcesLoading && sources.length === 0" x-cloak class="entity-skeleton">
-    <template x-for="i in 5" :key="i">
-      <div class="entity-skeleton-row">
-        <span class="entity-skeleton-cell entity-skeleton-cell--anchor"></span>
-        <span class="entity-skeleton-cell entity-skeleton-cell--title"></span>
-        <span class="entity-skeleton-cell entity-skeleton-cell--meta"></span>
-      </div>
-    </template>
-  </div>
+  <div x-show="sourcesLoading && sources.length === 0" x-cloak x-skeleton="5"></div>
 
   <div x-show="!sourcesLoading && sources.length === 0" class="card-empty">
     <p class="card-empty-text" x-text="$app.t('sources.empty')"></p>

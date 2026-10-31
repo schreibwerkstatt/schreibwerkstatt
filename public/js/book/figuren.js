@@ -4,6 +4,7 @@
 
 import { fetchJson } from '../utils.js';
 import { VALID_FIGUR_TYPEN } from './figur-typen.js';
+import { assignCatalogList } from '../cards/catalog-store.js';
 
 export function _cleanStr(v) {
   if (v === null || v === undefined) return null;
@@ -117,8 +118,9 @@ export const figurenMethods = {
     try {
       const data = await fetchJson('/figures/' + bookId, { signal });
       if (!isCurrent()) return;
-      this.$store.catalog.figuren = (data?.figuren || []).map(_sanitizeFigur);
       this.$store.catalogUi.figurenStatus = '';
+      // Identische Antwort: Katalog, Lookup-Index und Zeitstrahl stehen schon.
+      if (!assignCatalogList('figuren', bookId, data?.figuren || [], (l) => l.map(_sanitizeFigur))) return;
       this._figurLookupIndex = null;
       this._buildGlobalZeitstrahl();
     } catch (e) {

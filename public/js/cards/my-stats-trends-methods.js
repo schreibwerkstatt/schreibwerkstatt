@@ -51,8 +51,8 @@ export const myStatsTrendMethods = {
   myStatsOverallForecastLabel() {
     const f = this.myStatsOverallForecast();
     if (!f.hasData) return '';
-    if (f.stalled) return this._myStatsPlural('mystats.overallForecast.stalled', f.booksOpen);
-    return this._myStatsPlural('mystats.overallForecast.eta', f.booksOpen, {
+    if (f.stalled) return window.__app.tn('mystats.overallForecast.stalled', f.booksOpen);
+    return window.__app.tn('mystats.overallForecast.eta', f.booksOpen, {
       date: this.myStatsDateLabel(f.forecastDate),
       chars: this._myStatsFmt(Math.round(f.dailyChars)),
     });
@@ -87,8 +87,8 @@ export const myStatsTrendMethods = {
     const s = this.myStatsStreak();
     return window.__app.t('mystats.streakAria', {
       active: this._myStatsFmt(s.gridActiveDays),
-      current: this._myStatsPlural('mystats.days', s.gridCurrentStreak),
-      longest: this._myStatsPlural('mystats.days', s.gridLongestStreak),
+      current: window.__app.tn('mystats.days', s.gridCurrentStreak),
+      longest: window.__app.tn('mystats.days', s.gridLongestStreak),
     });
   },
   // Aufwands-Balken: beide Anteile, nicht nur das Schreiben.

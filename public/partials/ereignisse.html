@@ -138,7 +138,7 @@
          @click="scrollToFirstUndated()" :data-tip="$app.t('events.timelineUndatedHint')"
          x-text="$app.t('events.timelineUndated', { count: filteredEreignisse().length - timelineItemCount })"></div>
     <div class="global-zeitstrahl-body global-zeitstrahl-body--card">
-    <template x-for="(ev, i) in filteredEreignisse()" :key="ev.id ?? i">
+    <template x-for="(ev, i) in listWindowed(filteredEreignisse())" :key="ev.id ?? i">
       <div class="gz-item"
            :data-ev-index="i"
            :data-event-id="ev.id ?? null"
@@ -206,6 +206,10 @@
         </div>
       </div>
     </template>
+    <button type="button" class="btn-compact list-window-more"
+            x-show="listWindowRest(filteredEreignisse()) > 0" x-cloak
+            x-list-more="listWindowMore()" @click="listWindowMore()"
+            x-text="$app.t('common.showMore', { n: listWindowRest(filteredEreignisse()) })"></button>
     </div>
   </div>
 </div>

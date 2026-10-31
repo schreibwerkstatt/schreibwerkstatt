@@ -2,7 +2,8 @@
      Fragment im Scope von szenenCard (public/js/cards/szenen-card.js).
      `gridRows` liefert je Szene Sortierwerte (Kapitel/Seite = Buchposition,
      Wertung = Rang stark→schwach) und die Szene selbst als `row.s`. -->
-<div x-show="viewMode === 'grid'" class="table-scroll" x-cloak>
+<template x-if="viewMode === 'grid'">
+<div class="table-scroll">
   <table class="entity-grid-table"
          x-data="sortableTable({
            rows: () => gridRows,
@@ -63,3 +64,4 @@
     </tbody>
   </table>
 </div>
+</template>

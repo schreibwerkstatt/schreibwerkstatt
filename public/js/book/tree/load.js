@@ -4,6 +4,8 @@ import { whenStructureQueueReady } from '../../repo/structure-queue.js';
 import { EVT } from '../../events.js';
 import { getLastBookId } from '../../local-prefs.js';
 import { sweepOrphanBookKeys } from '../../storage-sweep.js';
+import { compareText } from '../../i18n.js';
+import { isPageUnloading } from '../../page-unload.js';
 
 // Buch-/Seiten-Laden + Tree-Build, Buchwahl-Combobox, Kapitel-Anlage,
 // Token-Estimate-Backfill (Server-Push + IntersectionObserver-Lazy).
@@ -223,8 +225,8 @@ export const treeLoadMethods = {
       if (p) return p;
       const au = a.group === uncategorized, bu = b.group === uncategorized;
       if (au !== bu) return au ? 1 : -1; // Unkategorisierte ans Ende
-      if (a.group !== b.group) return a.group.localeCompare(b.group);
-      return a.label.localeCompare(b.label);
+      if (a.group !== b.group) return compareText(a.group, b.group);
+      return compareText(a.label, b.label);
     });
   },
 
@@ -360,7 +362,8 @@ export const treeLoadMethods = {
     } catch (e) {
       // AbortError = Buchwechsel hat laufenden Load gekillt — kein User-Fehler.
       // Nachfolge-Call managed treeLoading + Tree selbst, hier nichts touchen.
-      if (e?.name === 'AbortError' || signal.aborted) return;
+      // Ebenso ein Reload, der den Fetch der alten Seite abbricht.
+      if (e?.name === 'AbortError' || signal.aborted || isPageUnloading()) return;
       console.error('[loadPages]', e);
       // Buchwechsel gescheitert (Session expired, Timeout, Netz weg): alten
       // Tree verwerfen. Sonst sieht User Sackgassen-Tree mit Seiten aus dem

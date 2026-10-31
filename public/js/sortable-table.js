@@ -26,7 +26,7 @@
 // `types` ist optional (Auto-Detection via Sample-Wert):
 //   - 'number'  → Number(v)-Vergleich, NaN behandelt als 0
 //   - 'date'    → ISO-String/Date-Objekt → ms-Timestamp; null sinkt ans Ende
-//   - 'string'  → localeCompare mit numeric:true (de-CH-faehig)
+//   - 'string'  → compareText (i18n.js: Kollation der UI-Sprache, numerisch)
 //
 // `sortTh(key)` ist der Spread fuer jede sortierbare `<th>`: setzt die
 // Klasse `sortable-th` (+ `--asc`/`--desc`), `aria-sort`, `tabindex=0` und
@@ -37,8 +37,7 @@
 // `sortableTable.<persistKey>`. Ohne Key: kein Persist.
 
 import { lsGetJSON, lsSetJSON } from './safe-storage.js';
-
-const COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+import { compareText } from './i18n.js';
 
 function detectType(sample) {
   if (sample == null) return null;
@@ -80,7 +79,7 @@ export function sortRows(rows, key, dir, typeHint) {
     if (av === null && bv === null) return 0;
     if (av === null) return 1;
     if (bv === null) return -1;
-    if (type === 'string') return sign * COLLATOR.compare(av, bv);
+    if (type === 'string') return sign * compareText(av, bv);
     if (av < bv) return -1 * sign;
     if (av > bv) return 1 * sign;
     return 0;

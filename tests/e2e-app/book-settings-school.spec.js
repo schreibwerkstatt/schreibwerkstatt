@@ -55,3 +55,22 @@ test('schulsystem: Vorlage waehlen, Jahre editieren, speichern', async ({ page }
     });
   }, bookId);
 });
+
+// Ausschalten setzt bookSchulsystem auf null; die x-model-Bindungen im x-if
+// werten dabei noch einmal aus, bevor das Template abgebaut ist (Prod js_errors:
+// «Cannot read properties of null (reading 'jahre')» beim Buchwechsel).
+test('schulsystem: Ausschalten wirft keine Bindungsfehler', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await bootApp(page);
+  await selectSeededBook(page);
+  await page.evaluate(() => window.__app.toggleBookSettingsCard());
+  const card = page.locator('.card--settings');
+  await card.locator('.tabs-btn', { hasText: 'Schule' }).click();
+  const section = card.locator('.book-settings-section', { hasText: 'Schulsystem' });
+  await section.locator('#bs-schule-aktiv').check();
+  await expect(section.locator('.card-form-label', { hasText: 'Kindergarten' })).toBeVisible();
+  await section.locator('#bs-schule-aktiv').uncheck();
+  await expect(section.locator('.card-form-label', { hasText: 'Kindergarten' })).toHaveCount(0);
+  expect(errors.filter(m => /null/.test(m))).toEqual([]);
+});

@@ -18,6 +18,7 @@
 
 import { fuzzyMatch } from './palette-fuzzy.js';
 import { EVT } from '../events.js';
+import { pluralKey } from '../i18n.js';
 
 const PER_PROVIDER_LIMIT = 8;
 // Wartezeit, bevor die Volltextsuche eine Anfrage stellt — ohne sie ginge jeder
@@ -161,7 +162,7 @@ export const PROVIDERS = [
           key: 'chapter:' + c.id,
           providerKey: 'chapters',
           label,
-          sub: t(pageCount === 1 ? 'palette.chapter.pageCountOne' : 'palette.chapter.pageCountOther', { n: pageCount }),
+          sub: t(pluralKey('palette.chapter.pageCount', pageCount), { n: pageCount }),
           score: m.score,
           indices: m.indices,
           available: true,

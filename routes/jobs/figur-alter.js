@@ -27,7 +27,7 @@ const {
   aiCall, getPrompts, getBookPrompts,
   loadOrderedBookContents, loadPageContents, htmlToTextForPrompt,
   chunkLimitsFor, tps, _modelName,
-  startBookJob,
+  startBookJob, findActiveJobId, bundleBlocks,
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
 const { db } = require('../../db/connection');
@@ -58,6 +58,14 @@ const EMBED_TOP_K = 6;
 // Zeichenbudget eines Figuren-Buendels im Prompt. Unter dem Chunk-Limit des
 // Providers, weil System-Prompt, Buch-Kontext und Antwort dazukommen.
 const BUNDLE_SHARE = 0.5;
+// Antwort-Deckel des KI-Calls und geschaetzte Antwort je Buendel-Block: ein Fund
+// (Zitat bis 200 Zeichen + Begruendung) kostet ~100–130 Tokens, nicht jede Stelle
+// ergibt einen. Bündel bis OUT_SHARE des Deckels, damit der Call nicht am Cap reisst
+// (Prod 2026-10: ein Bündel mit 73–80 Figuren riss bei jedem Lauf).
+const MAX_OUT_TOKENS = 8000;
+const OUT_SHARE = 0.6;
+const OUT_TOK_PRO_FIGUR = 60;
+const OUT_TOK_PRO_STELLE = 45;
 // Ein Zitat unter dieser Laenge ("zwölf") steht in fast jeder vorgelegten Stelle —
 // die Zitat-Pruefung waere dann wirkungslos.
 const MIN_ZITAT_CHARS = 8;
@@ -262,6 +270,7 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
         // Satz + Ortslabel „[Kapitel › Abschnitt]" + Nummer je Stelle, wie im Prompt.
         chars: picked.reduce((s, c) => s + c.satz.length + (c.chapter || '').length + (c.page_name || '').length + 16, 0)
           + (f.name || '').length + 40,
+        outEst: OUT_TOK_PRO_FIGUR + picked.length * OUT_TOK_PRO_STELLE,
       });
     }
 
@@ -362,19 +371,17 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
       }
     }
 
-    // Bündel bilden: so viele Figuren pro Call, wie ins Zeichenbudget passen.
-    const budget = Math.max(4000, Math.floor(PER_CHUNK_LIMIT * BUNDLE_SHARE));
-    const bundles = [];
-    let cur = [], curChars = 0;
-    for (const b of blocks) {
-      if (cur.length && curChars + b.chars > budget) { bundles.push(cur); cur = []; curChars = 0; }
-      cur.push(b); curChars += b.chars;
-    }
-    if (cur.length) bundles.push(cur);
+    // Bündel bilden: so viele Figuren pro Call, wie ins Zeichenbudget und in den
+    // geschätzten Antwort-Deckel passen.
+    const bundles = bundleBlocks(blocks, {
+      charBudget: Math.max(4000, Math.floor(PER_CHUNK_LIMIT * BUNDLE_SHARE)),
+      outBudget: MAX_OUT_TOKENS * OUT_SHARE,
+    });
 
     const AI_FROM = 16, AI_TO = 92;
     logger.info(
       `Alters-Analyse Start: book=${bookId} figuren=${figuren.length} mitStellen=${blocks.length} `
+      + `stellen=${blocks.reduce((n, b) => n + b.stellen.length, 0)} `
       + `buendel=${bundles.length} embedQueries=${embedQueries} stellenVerworfen=${stellenDropped}`,
     );
 
@@ -406,7 +413,7 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
             geburtstag: b.fig.geburtstag,
             stellen: b.stellen.map(s => ({ satz: s.satz, chapter: s.chapter, page_name: s.page_name, indirekt: s.indirekt, semantisch: !!s.semantisch })),
           })), BUCH_KONTEXT, buchJahre),
-          systemPrompt, from, to, 4000, 0.25, 8000, undefined, SCHEMA_FIGUR_ALTER,
+          systemPrompt, from, to, 4000, 0.25, MAX_OUT_TOKENS, undefined, SCHEMA_FIGUR_ALTER,
         );
       } catch (e) {
         if (e?.message === 'job.error.aiTruncated' && bundle.length > 1) {
@@ -478,8 +485,18 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
 const figurAlterRouter = express.Router();
 
 // 'editor': das Ergebnis ist ein Analyse-Index am Buch, kein Lesevorgang.
+// Läuft eine Komplettanalyse, schreibt sie Figurenstamm und Zeitstrahl gerade neu —
+// dann 409 statt eines Laufs auf halbem Stand. Steht `figurAlter` in ihrem Umfang,
+// reiht sie die Alters-Analyse danach selbst ein (komplett/pruef-jobs.js); dieselbe
+// Antwort wie bei Kontinuität/Erzählprofil (komplett/index.js#_komplettDedup).
 figurAlterRouter.post('/figur-alter', jsonBody, (req, res) => startBookJob(req, res, {
   type: 'figur-alter', minRole: 'editor', label: 'job.label.figurAlter',
+  precheck: (bookId, userEmail) => {
+    const komplettId = findActiveJobId('komplett-analyse', bookId, userEmail);
+    return komplettId
+      ? { status: 409, error_code: 'KOMPLETT_ANALYSIS_RUNNING', jobId: komplettId, params: { jobId: komplettId } }
+      : null;
+  },
   run: (jobId, { bookId, userEmail }) => runFigurAlterJob(jobId, bookId, userEmail, { force: req.body?.force === true }),
 }));
 

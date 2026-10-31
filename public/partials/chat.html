@@ -1,9 +1,10 @@
 <!-- Seiten-Chat -->
 <!--
   Alpine.data-Sub-Komponente — siehe public/js/cards/chat-card.js.
-  showChatCard bleibt am Root; fachlicher State in der Sub.
+  Sichtbarkeit am Root (asideSlot === 'chat', abgeleitet showChatCard); fachlicher State in der Sub.
+  Leiste neben dem Editor (layout/aside-split.css).
 -->
-<div class="card card--chat" id="chat-card" x-data="chatCard" x-show="$app.showChatCard" x-cloak>
+<div class="card card--chat aside-split-aside" id="chat-card" x-data="chatCard" x-show="$app.showChatCard" x-cloak>
   <div class="card-header">
     <div class="card-header-titlebar">
       <span class="card-eyebrow" x-text="$app.currentPage?.name || '–'"></span>
@@ -25,7 +26,7 @@
   </div>
   <div x-show="chatStatus" class="card-status" x-html="chatStatus"></div>
 
-  <div id="chat-messages" class="chat-messages" @pointerenter="onChatPointerEnter()">
+  <div id="chat-messages" class="chat-messages aside-split-scroll" @pointerenter="onChatPointerEnter()">
     <div x-show="chatMessages.length === 0" class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('chat.emptyPage', { name: $app.currentPage?.name || '' })"></div>
 
     <template x-for="(msg, msgIdx) in chatMessages" :key="msgIdx">

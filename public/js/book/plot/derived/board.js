@@ -3,6 +3,7 @@
 // Reine Compute aus Board-State (memoized), keine Server-Mutationen.
 
 import { STATUSES, DIST_SEGMENTS, ACT_PALETTE, BEAT_REL_TYPES, classifyBeatAnchor, beatAnchorKnown } from '../constants.js';
+import { compareText } from '../../../i18n.js';
 
 export const boardMethods = {
   // ── Derived (memoized) ──────────────────────────────────────────────────────
@@ -85,7 +86,7 @@ export const boardMethods = {
         _ord: hasTheme ? order.get(m.theme_id) : Number.MAX_SAFE_INTEGER,
       };
     });
-    rows.sort((a, b) => (a._ord - b._ord) || a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
+    rows.sort((a, b) => (a._ord - b._ord) || compareText(a.group, b.group) || compareText(a.label, b.label));
     return rows;
   },
 

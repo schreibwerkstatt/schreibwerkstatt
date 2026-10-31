@@ -3,6 +3,7 @@
 // Greedy-Stapelung, Tier-Höhen) ohne Browser testbar ist.
 
 import { FIGUR_TYPEN } from '../book/figur-typen.js';
+import { compareText } from '../i18n.js';
 
 // Tier-Achse (Y). Reihenfolge ist die Anzeigereihenfolge von oben nach unten;
 // alles ausserhalb landet in 'andere'. Dieselbe Reihenfolge ordnet die
@@ -80,7 +81,7 @@ export function computeSwimlaneLayout(figuren, chapterOrder, containerW) {
     if (ax !== bx) return ax - bx;
     const af = info[a.id].firstCh, bf = info[b.id].firstCh;
     if (af !== bf) return af - bf;
-    return (a.name || '').localeCompare(b.name || '');
+    return compareText(a.name, b.name);
   });
 
   const layoutPerTier = {};
@@ -122,4 +123,14 @@ export function computeSwimlaneLayout(figuren, chapterOrder, containerW) {
 // Border-Stärke als Wichtigkeits-Signal (Summe der Auftritts-Häufigkeiten).
 export function importanceBorderWidth(importance) {
   return Math.min(4, 1 + Math.round(Math.log2(Math.max(1, importance))));
+}
+
+// Kapitel-Kopfzeile: gezeichnet in Bildschirm-Koordinaten am oberen Rand
+// (HEADER_TOP + eine Zeile), darum auch dort getroffen — nicht in Netz-Koordinaten,
+// sonst hinge die Trefferzone am Zoom. Liefert den Spalten-Index oder -1.
+export const HEADER_TOP = 8;
+export function headerHitColumn(domY, canvasX, colW, chapterCount, headerFontPx) {
+  if (!chapterCount || domY < 0 || domY > HEADER_TOP + headerFontPx * 1.4) return -1;
+  const idx = Math.round(canvasX / colW);
+  return idx >= 0 && idx < chapterCount ? idx : -1;
 }

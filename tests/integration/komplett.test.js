@@ -1508,6 +1508,32 @@ test('Komplettanalyse Teil-Lauf: ohne «kontinuitaet» wird keine Prüfung einge
   // Katalog ist vollständig gelaufen, also darf der Marker stehen.
   const marker = ctx.dbSchema.loadCheckpoint('komplett-consolidation', BOOK_ID, email);
   assert.ok(marker?.sig, 'Katalog-Voll-Lauf ohne Prüfung schreibt den Checkpoint');
+
+  // Die Alters-Analyse steht weiter im Umfang (fehlend = an) und wird eingereiht.
+  const alterJobId = job.result.pruefJobs?.['figur-alter'];
+  assert.ok(alterJobId, 'die Alters-Analyse wird nach dem Katalog eingereiht');
+  await waitForJob(ctx.shared, alterJobId, { timeoutMs: 8000 });
+});
+
+test('Prüf-Jobs: Alters-Analyse unabhängig von der Provider-Klasse, abwählbar', async () => {
+  const BOOK_ID = 132;
+  const email = 'tester@test.dev';
+  const { enqueuePruefJobs } = require('../../routes/jobs/komplett/pruef-jobs');
+  const { normalizeKomplettScope } = require('../../lib/komplett-scope');
+
+  // Lokale Klasse: Kontinuität/Erzählprofil fallen weg, die Alters-Analyse nicht.
+  const lokal = enqueuePruefJobs({ bookId: BOOK_ID, bookName: 'Buch', userEmail: email,
+    scope: normalizeKomplettScope(null), provider: 'ollama' });
+  assert.deepEqual(Object.keys(lokal), ['figur-alter']);
+  // Läuft sie schon, bleibt es bei diesem Job.
+  const again = enqueuePruefJobs({ bookId: BOOK_ID, bookName: 'Buch', userEmail: email,
+    scope: normalizeKomplettScope(null), provider: 'ollama' });
+  assert.equal(again['figur-alter'], lokal['figur-alter']);
+  await waitForJob(ctx.shared, lokal['figur-alter'], { timeoutMs: 8000 });
+
+  const ab = enqueuePruefJobs({ bookId: BOOK_ID, bookName: 'Buch', userEmail: email,
+    scope: normalizeKomplettScope({ figurAlter: false }), provider: 'ollama' });
+  assert.equal(ab['figur-alter'], undefined, 'abgewählt wird sie nicht eingereiht');
 });
 
 test('Komplettanalyse Teil-Lauf: abgewählter Katalog-Schritt friert den Konsolidierungs-Checkpoint NICHT ein', async () => {

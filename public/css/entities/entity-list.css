@@ -175,6 +175,15 @@
 .entity-skeleton-cell--title  { flex: 1; max-width: 60%; }
 .entity-skeleton-cell--meta   { width: 80px; flex-shrink: 0; }
 
+/* Kachel-Variante (`x-skeleton.tiles`, public/js/skeleton.js): der Wrapper
+   fällt aus dem Box-Tree, die Platzhalter sind Grid-Items des umgebenden
+   `.overview-grid` und übernehmen Rahmen/Abstand von `.overview-tile`. */
+.skeleton-tiles { display: contents; }
+.skeleton-tile { opacity: var(--opacity-disabled); }
+.skeleton-tile__label { width: 40%; }
+.skeleton-tile__value { width: 55%; height: 22px; }
+.skeleton-tile__line  { width: 80%; }
+
 /* === Mobile-Breakpoints für Listen-Rows ===
    Single-line entity-row sprengt auf <600px. Title bekommt volle Breite,
    Meta + Tags rutschen darunter, Typ-Tag wird schmaler.
@@ -362,6 +371,13 @@
    Stimmung eines Orts ist aber kein Badge-Verhalten. */
 @media (max-width: 480px) {
   .ort-stimmung { display: none; }
+}
+
+/* «Weitere anzeigen» am Ende einer schrittweise gerenderten Liste
+   (public/js/list-window.js) — lädt beim Heranscrollen selbst nach. */
+.list-window-more {
+  display: block;
+  margin: var(--space-md) auto 0;
 }
 
 }

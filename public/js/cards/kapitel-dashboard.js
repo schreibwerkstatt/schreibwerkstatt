@@ -30,6 +30,7 @@ import { komplettHiddenFor } from './feature-registry.js';
 import { computeGrowth } from './kapitel-growth.js';
 import { computeKapitelStil } from './kapitel-stil.js';
 import { computeFortschritt } from './kapitel-fortschritt.js';
+import { compareText } from '../i18n.js';
 
 // Lesegeschwindigkeit fuer die Lesezeit-Angabe des Umfang-Tiles. Bewusst eine
 // runde, konservative Zahl fuer stilles Lesen belletristischer Prosa — die
@@ -109,7 +110,7 @@ export function computeLektorat(heat, ids) {
     per1k: wordsChecked > 0 ? Math.round((findings / wordsChecked) * 1000 * 10) / 10 : null,
     typen: [...typen.entries()]
       .map(([typ, count]) => ({ typ, count }))
-      .sort((a, b) => b.count - a.count || a.typ.localeCompare(b.typ)),
+      .sort((a, b) => b.count - a.count || compareText(a.typ, b.typ)),
   };
 }
 
@@ -143,7 +144,7 @@ export function computeEntityRanking(entities, ids, { limit = 6, extraCounts = n
       extra: extraCounts ? (extraCounts.get(e.id) || 0) : 0,
     });
   }
-  rows.sort((a, b) => b.count - a.count || String(a.name).localeCompare(String(b.name)));
+  rows.sort((a, b) => b.count - a.count || compareText(a.name, b.name));
   const top = rows.slice(0, limit);
   const max = top[0]?.count || 0;
   return {
@@ -199,7 +200,10 @@ export const kapitelDashboardMethods = {
   // Zwei kleine Aggregat-Endpunkte; Figuren/Orte/Szenen kommen aus dem
   // geteilten Catalog-Store und werden nur geholt, wenn sie noch leer sind
   // (gleiches Muster wie `loadDeps` der uebrigen Karten). Ein Ausfall ist
-  // nicht fatal: die betroffene Kachel faellt weg.
+  // nicht fatal: die betroffene Kachel faellt weg. Solange der Erst-Load
+  // laeuft, stehen am Ende des Rasters Skelett-Kacheln (`x-skeleton.tiles`
+  // unter `cardLoading`, partials/kapitelreview-dashboard.html), und der
+  // Bewertungs-Aufruf wartet, bis die Historie da ist.
   async loadKapitelDashboard(bookId, { fresh = false } = {}) {
     if (!bookId) return;
     if (!fresh && this.kdBookId === bookId && this.kdHeat) return;

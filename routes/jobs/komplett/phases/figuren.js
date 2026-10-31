@@ -8,7 +8,7 @@ const { i18nError, i18nErrText, updateJob } = require('../../shared');
 const { buildFigNameLookup, consolidationFitsCap, skippedChapterIds } = require('../utils');
 const {
   preMergeChapterFiguren, applySozialschichtModeVote, mergeDuplicateFiguren,
-  validateBeziehungenDescriptions, backfillFiguren, ensureUniqueFigIds, applyAliasClusters,
+  validateBeziehungenDescriptions, backfillFiguren, dropPseudoFiguren, ensureUniqueFigIds, applyAliasClusters,
   annotateBeziehungenNames, rebindBeziehungenByName,
 } = require('../figuren-merge');
 const { komplettMaxTokens } = require('./tokens');
@@ -18,6 +18,7 @@ const { COST_LABEL, costTier } = require('../cost-labels');
 const { ankerHints, mergeHints } = require('../katalog-anker');
 const { figureHintKey } = require('../../../../lib/entity-match');
 const { PHASE_END } = require('../../../../lib/komplett-scope');
+const { relationTypes } = require('../../../../lib/esm-bridge');
 
 // Riegel gegen einen kollabierten Figuren-Katalog. Der Reconcile mustert jede nicht
 // wiedergefundene Bestandsfigur aus (`onMissing: 'stale'`) — liefert die
@@ -183,6 +184,11 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
   // auch Claude attribuiert gelegentlich eine Beschreibung der falschen Figur zu.
   const { moved, suspicious } = validateBeziehungenDescriptions(figuren);
   if (moved > 0 || suspicious > 0) log.info(`Beziehungs-Beschreibungen geprüft – ${moved} an die genannte Figur verschoben, ${suspicious} fraglich (unverändert gelassen).`);
+  // Typ auf genau einen Listenwert: Modelle schreiben das «a|b»-Schema-Beispiel ab oder
+  // erfinden Typen («tante»), die der Graph weder färbt noch übersetzt.
+  const { normalizeRelationTypes } = await relationTypes();
+  const bzTypFixed = figuren.reduce((n, f) => n + normalizeRelationTypes(f.beziehungen), 0);
+  if (bzTypFixed > 0) log.info(`${bzTypFixed} Beziehungstypen auf die Typenliste abgebildet.`);
   // Sozialschicht-Mehrheitsvotum nur für lokale Modelle: die Cloud-Klasse läuft durch
   // den holistischen Soziogramm-Refine-Call und braucht das nicht.
   if (effectiveProvider && providerClass(effectiveProvider) !== 'cloud') {
@@ -191,6 +197,11 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
   }
   const backfilled = backfillFiguren(figuren, chapterSzenen, chapterAssignments, log);
   if (backfilled > 0) log.info(`${backfilled} Figur(en) aus Szenen/Events nachgetragen (Phase-1-Recall-Lücke).`);
+  // Nach dem Backfill: der trägt Namen aus Szenen/Events nach und brächte sonst eine
+  // «(implizit)»-Figur zurück.
+  const pseudo = dropPseudoFiguren(figuren);
+  figuren = pseudo.figuren;
+  if (pseudo.dropped > 0) log.info(`${pseudo.dropped} Pseudo-Figur(en) verworfen (allgemein/implizit/Metapher).`);
   const reassignedIds = ensureUniqueFigIds(figuren, log);
   if (reassignedIds > 0) log.warn(`${reassignedIds} kollidierende/leere Figuren-IDs neu vergeben (Schutz vor UNIQUE-Verletzung beim Speichern).`);
   // Reconcile statt Full-Replace: bestehende figures.id per Name/Indizien-Match

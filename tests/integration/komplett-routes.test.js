@@ -5,7 +5,7 @@
 //     ohne Leserecht am Buch ebenfalls 404 (kein Existenz-Leak), Viewer → 403.
 //   - Standalone-Kontinuität/-Erzählprofil starten nicht parallel zu einer laufenden
 //     Komplettanalyse: enthält deren Umfang den Schritt → deren Job-ID (existing+komplett),
-//     sonst 409 KOMPLETT_ANALYSIS_RUNNING. Gegenrichtung: die Komplettanalyse startet
+//     sonst 409 KOMPLETT_ANALYSIS_RUNNING (ebenso die Alters-Analyse). Gegenrichtung: die Komplettanalyse startet
 //     nicht, solange ein Standalone-Job eines enthaltenen Schritts läuft (409
 //     KOMPLETT_STEP_JOB_RUNNING).
 //   - DELETE /chapter-cache/:book_id verlangt editor+.
@@ -37,6 +37,7 @@ function startServer() {
     });
     const jobs = express.Router();
     jobs.use(require('../../routes/jobs/komplett').komplettRouter);
+    jobs.use(require('../../routes/jobs/figur-alter').figurAlterRouter);
     app.use('/jobs', jobs);
     server = app.listen(0, () => {
       baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -185,6 +186,16 @@ test('Kontinuität/Erzählprofil: laufende Komplettanalyse (auch MIT dem Schritt
   }
   assert.equal(shared.findActiveJobId('kontinuitaet', BOOK, ME), null, 'kein P8-Job parallel');
   assert.equal(shared.findActiveJobId('erzaehlprofil', BOOK, ME), null, 'kein Erzählprofil-Job parallel');
+});
+
+test('Alters-Analyse: laufende Komplettanalyse → 409, kein Lauf auf halb geschriebenem Figurenstamm', async () => {
+  const shared = require('../../routes/jobs/shared');
+  const komplettId = shared.createJob('komplett-analyse', BOOK, ME, 'job.label.komplett');
+  const r = await api('POST', '/jobs/figur-alter', { book_id: BOOK, force: true });
+  assert.equal(r.status, 409);
+  assert.equal(r.json.error_code, 'KOMPLETT_ANALYSIS_RUNNING');
+  assert.equal(r.json.jobId, komplettId);
+  assert.equal(shared.findActiveJobId('figur-alter', BOOK, ME), null, 'keine Alters-Analyse parallel');
 });
 
 test('Kontinuität: laufende Komplettanalyse OHNE den Schritt → 409 KOMPLETT_ANALYSIS_RUNNING', async () => {

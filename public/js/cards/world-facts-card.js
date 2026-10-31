@@ -11,6 +11,7 @@ import { memoMethods } from './card-memo.js';
 import { activeFilterId, hasId } from '../chapter-filter.js';
 import { startPoll } from './job-helpers.js';
 import { isSelectedBook } from './book-guard.js';
+import { listWindowState, listWindowMethods } from '../list-window.js';
 
 // Harte Kategorie-Gruppierung — SSoT für Reihenfolge + Icon je Key. Spiegelt die
 // Whitelist FAKT_KATEGORIE_WL (db/schema.js) und das Prompt-Enum
@@ -57,12 +58,15 @@ function _normKat(k) {
   return _katRank.has(k) ? k : 'sonstiges';
 }
 
+// Zeilen je Kategorie, bevor «Weitere anzeigen» nachlädt — klein genug, dass die
+// aufgeklappten Gruppen eines grossen Buchs nicht Hunderte Zeilen auf einmal bauen.
+const WF_GROUP_STEP = 40;
+
 export function registerWorldFactsCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('worldFactsCard', () => ({
     fakten: [],
     wfUpdatedAt: null,
-    wfLoading: false,
     // Lief die Komplettanalyse schon? Trennt „nie analysiert" von „analysiert,
     // nichts gefunden" — sonst fordert der Leer-Zustand einen Lauf, der lief.
     wfScanned: false,
@@ -79,6 +83,8 @@ export function registerWorldFactsCard() {
     _wfFcPollTimer: null,
     // Pflegeformular: mode null | 'new' | 'edit' (id = world_facts.id).
     wfEdit: _emptyEdit(),
+    // Gruppen rendern schrittweise (list-window.js), ein Fenster je Kategorie.
+    ...listWindowState(WF_GROUP_STEP),
     _lifecycle: null,
     // _memos: nicht-reaktiver Memo-Cache (lazy via _memo, Reset in loadWorldFacts) —
     // bewusst nicht im reaktiven Initial-State, analog book-overview/load.js.
@@ -89,10 +95,10 @@ export function registerWorldFactsCard() {
         showFlag: 'showWorldFactsCard',
         timerKeys: ['_wfFcPollTimer'],
         resetState: {
-          fakten: [], wfUpdatedAt: null, wfLoading: false, wfScanned: false, wfOpenGroups: {},
+          fakten: [], wfUpdatedAt: null, wfScanned: false, wfOpenGroups: {},
           wfFactcheck: { bookOptIn: false }, wfFcRunning: false, wfFcProgress: 0,
           wfFcStatusKey: '', wfFcStatusParams: null, wfFcResult: null, wfFcError: '',
-          wfEdit: _emptyEdit(),
+          wfEdit: _emptyEdit(), ...listWindowState(WF_GROUP_STEP),
         },
         filterScopes: WF_FILTER_SCOPES,
         load: () => this.loadWorldFacts(),
@@ -106,7 +112,6 @@ export function registerWorldFactsCard() {
     async loadWorldFacts() {
       const bookId = Alpine.store('nav').selectedBookId;
       if (!bookId) return;
-      this.wfLoading = true;
       try {
         const data = await fetchJson('/world-facts/' + bookId);
         this.fakten = data?.fakten || [];
@@ -120,13 +125,12 @@ export function registerWorldFactsCard() {
         this.wfOpenGroups = open;
       } catch (e) {
         console.error('[loadWorldFacts]', e);
-      } finally {
-        this.wfLoading = false;
       }
     },
 
     // Memo-Helper (cards/card-memo.js); Reset bei Reload.
     ...memoMethods,
+    ...listWindowMethods,
 
     // Einmal pro fakten-Satz: Counts je Kategorie + vorhandene Kategorien (kanonisch sortiert).
     get _wfIndex() {

@@ -39,7 +39,7 @@
             <div class="card-form-field">
               <input type="text" class="form-num" id="bs-schule-einschulungsalter"
                      x-data="numInput({ integer: true, min: 3, max: 9 })"
-                     x-modelable="value" x-model="bookSchulsystem.einschulungsalter">
+                     x-modelable="value" x-model="schulForm().einschulungsalter">
             </div>
           </div>
 
@@ -49,10 +49,10 @@
               <div class="book-settings-preset-row" role="group" aria-labelledby="bs-schule-stichtag-label">
                 <input type="text" class="form-num" :aria-label="$app.t('book.settings.schule.stichtagTag')"
                        x-data="numInput({ integer: true, min: 1, max: 31 })"
-                       x-modelable="value" x-model="bookSchulsystem.stichtag.tag">
+                       x-modelable="value" x-model="schulForm().stichtag.tag">
                 <input type="text" class="form-num" :aria-label="$app.t('book.settings.schule.stichtagMonat')"
                        x-data="numInput({ integer: true, min: 1, max: 12 })"
-                       x-modelable="value" x-model="bookSchulsystem.stichtag.monat">
+                       x-modelable="value" x-model="schulForm().stichtag.monat">
               </div>
               <p class="card-form-field-note" x-text="$app.t('book.settings.schule.stichtagHint')"></p>
             </div>
@@ -63,7 +63,7 @@
             <div class="card-form-field">
               <input type="text" class="form-num" id="bs-schule-beginn"
                      x-data="numInput({ integer: true, min: 1, max: 12 })"
-                     x-modelable="value" x-model="bookSchulsystem.schuljahr_beginn">
+                     x-modelable="value" x-model="schulForm().schuljahr_beginn">
               <p class="card-form-field-note" x-text="$app.t('book.settings.schule.beginnHint')"></p>
             </div>
           </div>
@@ -75,7 +75,7 @@
               <div class="card-form-field">
                 <input type="text" class="form-num" :id="'bs-schule-jahre-' + s.key"
                        x-data="numInput({ integer: true, min: 1, max: 10 })"
-                       x-modelable="value" x-model="bookSchulsystem.jahre[s.key]">
+                       x-modelable="value" x-model="schulForm().jahre[s.key]">
               </div>
             </div>
           </template>
@@ -85,7 +85,7 @@
             <div class="card-form-field">
               <div x-data="combobox({ placeholder: $app.t('book.settings.schule.standardWeg'), compact: false })"
                    aria-labelledby="bs-schule-standardweg-label"
-                   x-modelable="value" x-model="bookSchulsystem.standard_weg"
+                   x-modelable="value" x-model="schulForm().standard_weg"
                    x-effect="options = schulWegOptionen()"></div>
               <p class="card-form-field-note" x-text="$app.t('book.settings.schule.standardWegHint')"></p>
             </div>

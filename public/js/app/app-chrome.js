@@ -2,7 +2,7 @@
 // UI-Bereiche, die ausserhalb der normalen Buch-/Seiten-Flows leben und keine
 // Querabhängigkeiten zu Job-Queue oder Hash-Router haben.
 import { bindScrollFade } from '../scroll-fade.js';
-import { lsGet, lsSet } from '../safe-storage.js';
+import { lsGet, lsSet, lsRemove } from '../safe-storage.js';
 
 export const appChromeMethods = {
   // ── Theme (Hell/Dunkel/Auto) ─────────────────────────────────────────────
@@ -57,31 +57,58 @@ export const appChromeMethods = {
   },
   // ── Sidebar-Resize ──────────────────────────────────────────────────────
   // Handle am rechten Rand der `.layout-sidebar`; verändert `--sidebar-w`
-  // auf `.layout`. Editor (1fr) gibt Platz, Chat/Ideen (420px fix) nicht.
+  // auf `.layout`. Die Hauptspalte (1fr) gibt Platz, eine Leiste darin behält
+  // ihre `--aside-w`. Grenzen und Default stehen nur in tokens/spacing.css
+  // (`--sidebar-w-min/-max/-default`); die CSS deckelt zusätzlich auf 40vw.
+  // Nach jedem Setzen wird die tatsächlich gerenderte Breite zurückgeschrieben —
+  // sonst liefe der Wert beim Ziehen über den 40vw-Deckel hinaus, und der Rückweg
+  // hätte eine tote Zone.
   _initSidebarResize() {
     const layout  = document.querySelector('.layout');
     const sidebar = document.querySelector('.layout-sidebar');
     if (!layout || !sidebar) return;
     if (sidebar.querySelector('.sidebar-resize-handle')) return;
 
-    const MIN = 220;
-    const MAX = 600;
-    const apply = (w) => {
-      const clamped = Math.max(MIN, Math.min(MAX, Math.round(w)));
-      layout.style.setProperty('--sidebar-w', clamped + 'px');
-      return clamped;
-    };
-
-    const saved = parseInt(lsGet('sidebar-width'), 10);
-    if (Number.isFinite(saved)) apply(saved);
+    const token = (name) => parseFloat(getComputedStyle(layout).getPropertyValue(name));
+    const MIN = token('--sidebar-w-min');
+    const MAX = token('--sidebar-w-max');
 
     const handle = document.createElement('div');
     handle.className = 'sidebar-resize-handle';
     handle.setAttribute('role', 'separator');
     handle.setAttribute('aria-orientation', 'vertical');
     handle.setAttribute('aria-label', this.t('sidebar.resizeHandle'));
+    handle.setAttribute('aria-valuemin', String(MIN));
+    handle.setAttribute('aria-valuemax', String(MAX));
     handle.tabIndex = 0;
+
+    const rendered = () => Math.round(sidebar.getBoundingClientRect().width);
+    const syncAria = () => handle.setAttribute('aria-valuenow', String(rendered()));
+    const set = (w) => layout.style.setProperty('--sidebar-w', Math.max(MIN, Math.min(MAX, Math.round(w))) + 'px');
+    // Nur bei einer Bewegung des Users: der gespeicherte Wert beim Boot bleibt
+    // stehen, auch wenn das Fenster gerade schmaler ist — beim Verbreitern
+    // kehrt die gewählte Breite zurück.
+    const apply = (w) => {
+      set(w);
+      const actual = rendered();
+      // Unsichtbare Sidebar (Mobile, x-show) misst 0 — dann nichts zurückschreiben.
+      if (actual > 0) layout.style.setProperty('--sidebar-w', actual + 'px');
+      syncAria();
+    };
+    const persist = () => {
+      const cur = parseInt(layout.style.getPropertyValue('--sidebar-w'), 10);
+      if (Number.isFinite(cur)) lsSet('sidebar-width', String(cur));
+    };
+    const reset = () => {
+      layout.style.removeProperty('--sidebar-w');
+      lsRemove('sidebar-width');
+      syncAria();
+    };
+
     sidebar.appendChild(handle);
+    const saved = parseInt(lsGet('sidebar-width'), 10);
+    if (Number.isFinite(saved)) set(saved);
+    syncAria();
 
     let dragging = false;
     let startX = 0;
@@ -90,12 +117,6 @@ export const appChromeMethods = {
     const onMove = (e) => {
       if (!dragging) return;
       apply(startW + (e.clientX - startX));
-    };
-    const persist = () => {
-      const cur = parseInt(getComputedStyle(layout).getPropertyValue('--sidebar-w'), 10);
-      if (Number.isFinite(cur)) {
-        try { lsSet('sidebar-width', String(cur)); } catch {}
-      }
     };
     const onUp = () => {
       if (!dragging) return;
@@ -112,26 +133,31 @@ export const appChromeMethods = {
       e.preventDefault();
       dragging = true;
       startX = e.clientX;
-      startW = sidebar.getBoundingClientRect().width;
+      startW = rendered();
       handle.classList.add('dragging');
       document.body.classList.add('sidebar-resizing');
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
     });
 
+    // Tastatur nach dem ARIA-Muster «Window Splitter»: Pfeile in Schritten
+    // (Umschalt = grob), Home/End an die Grenzen.
     handle.addEventListener('keydown', (e) => {
-      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      let target;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        const step = e.shiftKey ? 32 : 8;
+        target = rendered() + (e.key === 'ArrowRight' ? step : -step);
+      } else if (e.key === 'Home') target = MIN;
+      else if (e.key === 'End') target = MAX;
+      else return;
       e.preventDefault();
-      const cur = sidebar.getBoundingClientRect().width;
-      const step = e.shiftKey ? 32 : 8;
-      apply(cur + (e.key === 'ArrowRight' ? step : -step));
+      apply(target);
       persist();
     });
 
-    handle.addEventListener('dblclick', () => {
-      apply(280);
-      persist();
-    });
+    handle.addEventListener('dblclick', reset);
+    // Fensterbreite ändert den 40vw-Deckel und damit die gerenderte Breite.
+    window.addEventListener('resize', syncAria);
   },
 
   // Scrollbar im Sidebar-Tree initial unsichtbar, erscheint nur während des

@@ -6,6 +6,7 @@
 import { fetchJsonRetry as fetchJsonRetryBase } from '../utils.js';
 import { komplettHiddenFor } from '../cards/feature-registry.js';
 import { memoMethods } from '../cards/card-memo.js';
+import { assignCatalogList } from '../cards/catalog-store.js';
 
 const fetchJsonRetry = (url, opts) => fetchJsonRetryBase(url, opts, 'bookOverview');
 
@@ -170,7 +171,7 @@ export const loadMethods = {
       // Orte-Karte — ohne ihn stünde in der Kachel die loc_-ID. Gleiche Antwort
       // wie loadOrte, also einspeisen, solange der Katalog leer ist.
       if (!orte?.fromCatalog && Array.isArray(orte?.orte) && !Alpine.store('catalog').orte?.length) {
-        Alpine.store('catalog').orte = orte.orte;
+        assignCatalogList('orte', bookId, orte.orte);
         Alpine.store('catalogUi').orteUpdatedAt = orte.updated_at || null;
       }
       this.overviewSongs = Array.isArray(songs?.songs) ? songs.songs : [];

@@ -35,6 +35,9 @@
             x-text="geocodingAll ? $app.t('orte.map.geocoding') : $app.t('orte.map.geocodeAll')"></button>
   </div>
   <div x-show="orteMapStatus" class="card-status" x-text="orteMapStatus"></div>
+  <!-- Nur die Locate-Liste per x-if (läuft über alle Orte): der Leaflet-Container
+       oben bleibt per x-show stehen, die Karten-Instanz hängt an ihm. -->
+  <template x-if="viewMode === 'map'">
   <div class="ort-map-locate-list">
     <template x-for="o in orteFiltered" :key="o.id">
       <div class="ort-map-locate-row" :data-ortid="o.id"
@@ -58,6 +61,7 @@
       </div>
     </template>
   </div>
+  </template>
   <div class="ort-map-footer" x-show="$store.catalog.orte.some(o => o.lat != null && o.lng != null)">
     <button type="button" class="btn-compact danger"
             :disabled="geocodingAll || geocodingId != null"

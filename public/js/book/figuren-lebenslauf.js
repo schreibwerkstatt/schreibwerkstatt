@@ -269,14 +269,15 @@ export const figurenLebenslaufMethods = {
   // Jahr UND Alter in der Zelle: das Jahr verankert im Buch, das Alter erklaert
   // die Zeile. Nur eines von beiden zwaenge den Leser zum Kopfrechnen.
   // Mit Schulsystem des Buchs zusaetzlich die Klassenstufe („1999 · 13 J. ·
-  // 1. Bez") — gerechnet in book/school-path.js, nie geschaetzt.
+  // 1. Bez") — gerechnet in book/school-path.js, nie geschaetzt. Zwei Teile statt
+  // eines Strings: die Zelle bricht zwischen Zeit und Stufe um, nie mitten in
+  // «13 J.» — so passt die Marke auch in schmale Spalten.
   figurenLebenslaufMarke(evt, spalte = null) {
-    if (evt.jahr == null) return evt.datum || '';
-    if (evt.alter == null) return String(evt.jahr);
-    const stufe = spalte ? this.figurSchulStufeFuerEreignis?.(spalte, evt) : '';
-    if (stufe) return this._t('figuren.lebenslauf.markeSchule', { jahr: evt.jahr, alter: evt.alter, stufe });
-    return this._t('figuren.lebenslauf.marke', { jahr: evt.jahr, alter: evt.alter })
-        || `${evt.jahr}`;
+    if (evt.jahr == null) return { zeit: evt.datum || '', stufe: '' };
+    if (evt.alter == null) return { zeit: String(evt.jahr), stufe: '' };
+    const stufe = spalte ? (this.figurSchulStufeFuerEreignis?.(spalte, evt) || '') : '';
+    const zeit = this._t('figuren.lebenslauf.marke', { jahr: evt.jahr, alter: evt.alter }) || `${evt.jahr}`;
+    return { zeit, stufe };
   },
 
   figurenLebenslaufSubtypLabel(evt) {

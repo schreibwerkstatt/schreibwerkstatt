@@ -47,8 +47,9 @@ function countSzenenInDb(bookIdInt, email) {
 // Prüf-Jobs, die den Katalog lesen (Schritt-Key → Job-Typ). Gegenrichtung zu
 // index.js#_komplettDedup: startete die Komplettanalyse, während einer davon läuft, schriebe
 // sie den Katalog unter ihm neu — unabhängig davon, ob der Schritt im Umfang steht.
-// Der Faktencheck gehört dazu: er liest den Welt-Fakten-Index, den die Analyse ersetzt.
-const STEP_JOB_TYPES = { kontinuitaet: 'kontinuitaet', erzaehlprofil: 'erzaehlprofil', faktencheck: 'faktencheck' };
+// Der Faktencheck gehört dazu: er liest den Welt-Fakten-Index, den die Analyse ersetzt;
+// die Alters-Analyse liest Figurenstamm und Zeitstrahl.
+const STEP_JOB_TYPES = { kontinuitaet: 'kontinuitaet', erzaehlprofil: 'erzaehlprofil', faktencheck: 'faktencheck', figurAlter: 'figur-alter' };
 
 /** Laufender/wartender Prüf-Job für Buch + User → `{ jobId, step }`, sonst null. */
 function activeStepJob(bookId, userEmail) {

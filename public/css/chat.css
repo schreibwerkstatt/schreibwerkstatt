@@ -2,6 +2,27 @@
 /* === Diff-Ansicht === */
 /* === Chat === */
 
+/* Chat-Panel innerhalb einer Karte (Plot-, Ideen-, Recherche-Chat neben ihrem
+   Board): eine Huelle fuer alle drei. Die Feature-Klasse daneben (`.plot-chat`
+   usw.) traegt nur Abweichungen. Neben dem Board sitzt das Panel als Leiste
+   eines `.aside-split` (layout/aside-split.css) und braucht dort keinen
+   Abstand nach unten. */
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--card-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+@media (min-width: 1280px) {
+  .aside-split--on .chat-panel { margin-bottom: 0; }
+}
+.chat-panel-title { font-weight: var(--fw-semibold); }
+.chat-panel-head-actions { display: flex; gap: var(--space-2xs); }
+
 /* Nachrichtenliste – scrollbarer Bereich */
 .chat-messages {
   max-height: min(480px, 60dvh);
@@ -62,6 +83,8 @@
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.4s ease-in-out infinite;
 }
+.chat-skeleton-line--wide { width: 72%; }
+.chat-skeleton-line--narrow { width: 48%; }
 @keyframes skeleton-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
 /* Token-Info */

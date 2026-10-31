@@ -3,10 +3,10 @@
      der User EINZELN übernimmt oder verwirft (Vorschlagskarten wie im Seiten-Chat).
      Scope + Methoden aus plotCard (chat/plot-chat.js, chat/plot-chat-proposals.js).
      Deep-Doc: docs/plot-chat.md -->
-<div x-show="plotChatOpen" x-cloak class="plot-chat">
+<div x-show="plotChatOpen" x-cloak class="chat-panel plot-chat">
   <div class="card-section-head">
-    <span class="plot-chat-title" x-text="$app.t('plot.chat.heading')"></span>
-    <div class="plot-chat-head-actions">
+    <span class="chat-panel-title" x-text="$app.t('plot.chat.heading')"></span>
+    <div class="chat-panel-head-actions">
       <button type="button" class="icon-btn icon-btn--ghost" @click="startNewPlotChatSession()" :disabled="plotChatLoading" :data-tip="$app.t('chat.newSessionTitle')" :aria-label="$app.t('chat.newSession')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg></button>
       <button type="button" class="icon-btn icon-btn--ghost" @click="plotChatOpen = false" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
     </div>
@@ -17,7 +17,7 @@
   </div>
   <div x-show="plotChatStatus" class="card-status" x-html="plotChatStatus"></div>
 
-  <div id="plot-chat-messages" class="chat-messages plot-chat-messages">
+  <div id="plot-chat-messages" class="chat-messages plot-chat-messages aside-split-scroll">
     <div x-show="plotChatMessages.length === 0 && !plotChatLoading" class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('plot.chat.empty')"></div>
 
     <template x-for="(msg, msgIdx) in plotChatMessages" :key="msgIdx">

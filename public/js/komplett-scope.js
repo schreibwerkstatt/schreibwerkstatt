@@ -14,6 +14,7 @@ export const KOMPLETT_STEPS = [
   { key: 'kontinuitaet',  group: 'pruefung', cloudOnly: true  },
   { key: 'erzaehlprofil', group: 'pruefung', cloudOnly: true  },
   { key: 'coverage',      group: 'pruefung', cloudOnly: true  },
+  { key: 'figurAlter',    group: 'pruefung', cloudOnly: false },
 ];
 
 export const KOMPLETT_CORE_STEPS = ['seiten', 'extraktion', 'figuren', 'weltfakten'];

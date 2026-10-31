@@ -6,6 +6,7 @@
 
 import { fetchJson } from '../utils.js';
 import { isSelectedBook } from '../cards/book-guard.js';
+import { compareText } from '../i18n.js';
 
 const _POV_KEYS = ['ich', 'du', 'er_sie_personal', 'er_sie_auktorial', 'wir', 'gemischt'];
 const _TEMPUS_KEYS = ['praeteritum', 'praesens', 'gemischt'];
@@ -88,7 +89,7 @@ export const erzaehlprofilMethods = {
       e.count++;
       if (ch.kapitel && !e.kapitel.includes(ch.kapitel)) e.kapitel.push(ch.kapitel);
     }
-    return [...byKey.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    return [...byKey.values()].sort((a, b) => b.count - a.count || compareText(a.name, b.name));
   },
 
   // Spannungskurven-Punkte: pro Kapitel { kapitel, chapter_id, intensitaet(1–5),
@@ -117,7 +118,7 @@ export const erzaehlprofilMethods = {
         if (ch.kapitel && !e.kapitel.includes(ch.kapitel)) e.kapitel.push(ch.kapitel);
       }
     }
-    return [...byKey.values()].sort((a, b) => b.count - a.count || a.thema.localeCompare(b.thema));
+    return [...byKey.values()].sort((a, b) => b.count - a.count || compareText(a.thema, b.thema));
   },
 
   erzaehlprofilChapterKey(ch, i) {

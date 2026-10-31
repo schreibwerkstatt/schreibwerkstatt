@@ -85,9 +85,8 @@ const NON_EXCLUSIVE_WHITELIST = new Set([
   'showBookCard',        // Sidebar-Buch-Auswahl (immer sichtbar)
   'showTreeCard',        // Sidebar-Seitenbaum
   'showEditorCard',      // Editor — gegen-exklusiv via _closeOtherMainCards/selectPage, kein Eintrag
-  'showChatCard',        // Seiten-Chat (Slot neben Editor)
-  'showIdeenCard',       // Seiten-Ideen (Slot neben Editor)
-  'showReferenceCard',   // Referenz-Slot (Slot neben Editor, Mutex mit Chat/Ideen)
+  // Seiten-Chat/-Ideen/Referenz sind kein cardsState-Feld: abgeleitet aus
+  // `asideSlot` (app-root-getters.js), darum hier nicht gelistet.
   // UI-Sentinels, keine eigene Karte:
   'showKomplettStatus',
   'showAvatarMenu',

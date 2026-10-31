@@ -4,10 +4,10 @@
      @include) statt DOM-Placeholder, damit kein zusaetzlicher Wrapper-Div in
      den Karten-Flow kommt; Scope + Methoden kommen aus rechercheCard.
      Deep-Doc: docs/recherche-chat.md -->
-<div x-show="researchChatOpen" x-cloak class="research-chat">
+<div x-show="researchChatOpen" x-cloak class="chat-panel research-chat aside-split-aside">
   <div class="card-section-head">
-    <span class="research-chat-title" x-text="$app.t('recherche.chat.heading')"></span>
-    <div class="research-chat-head-actions">
+    <span class="chat-panel-title" x-text="$app.t('recherche.chat.heading')"></span>
+    <div class="chat-panel-head-actions">
       <button type="button" class="icon-btn icon-btn--ghost" @click="startNewResearchChatSession()" :disabled="researchChatLoading" :data-tip="$app.t('chat.newSessionTitle')" :aria-label="$app.t('chat.newSession')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg></button>
       <button type="button" class="icon-btn icon-btn--ghost" @click="researchChatOpen = false" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
     </div>
@@ -18,7 +18,7 @@
   </div>
   <div x-show="researchChatStatus" class="card-status" x-html="researchChatStatus"></div>
 
-  <div id="research-chat-messages" class="chat-messages research-chat-messages">
+  <div id="research-chat-messages" class="chat-messages research-chat-messages aside-split-scroll">
     <div x-show="researchChatMessages.length === 0 && !researchChatLoading" class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('recherche.chat.empty')"></div>
 
     <template x-for="(msg, msgIdx) in researchChatMessages" :key="msgIdx">

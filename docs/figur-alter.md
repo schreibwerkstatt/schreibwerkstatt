@@ -1,15 +1,20 @@
 # Alters-Analyse der Figuren (Reiter „Alter" der Figuren-Karte)
 
 Beantwortet **„wie alt ist diese Figur im Buch"** — als Tabelle über alle Figuren,
-filterbar nach Figurentyp, mit Belegstelle im Manuskript.
+filterbar nach Figurentyp und Kapitel (Figuren mit Auftritt im Kapitel; die Alterswerte bleiben die des ganzen Buchs), mit Belegstelle im Manuskript.
 
 ## Warum neben der Komplettanalyse
 
 Die Komplettanalyse extrahiert `figures.geburtstag` und die datierten Ereignisse als
 Nebenprodukt eines teuren Gesamtlaufs. Wer danach weiterschreibt, hat ein Alter auf
 dem Stand von damals — **und sieht das nicht**. Dieser Job ist klein genug für einen
-Knopfdruck und liest den heutigen Text; er läuft bewusst **nicht** im Nacht-Cron
-(er kostet KI-Calls, und die Frage stellt sich nicht täglich).
+Knopfdruck und liest den heutigen Text. Ausserdem reiht ihn die Komplettanalyse nach
+dem Katalog als eigenen Job ein (Schritt `figurAlter` im Lauf-Umfang, Default an,
+[docs/komplett.md](komplett.md#katalog-und-prüfung-sind-zwei-jobs)) — dann **ohne**
+`force`: hat sich weder Text noch Figurenstamm geändert, greift der Delta-Skip und der
+Lauf kostet keinen Call. Umgekehrt weist `POST /jobs/figur-alter` einen Start ab, solange
+eine Komplettanalyse läuft (`409 KOMPLETT_ANALYSIS_RUNNING`, die Karte zeigt die
+Meldung): sie schreibt Figurenstamm und Zeitstrahl gerade neu.
 
 ## Drei Schichten, in dieser Reihenfolge
 
@@ -101,7 +106,11 @@ davor, denn wem das Telefon gehört, steht nur in einer Namenszeile.
 
 ## Bündel und Abbruch
 
-Ein Bündel, das am Output-Cap reisst (`aiTruncated`), wird halbiert und erneut gestellt;
+Ein Bündel hat zwei Deckel ([shared/bundles.js](../routes/jobs/shared/bundles.js)#`bundleBlocks`):
+die Eingabe (Zeichen der Stellen) und die geschätzte Antwort (Tokens je Figur und Stelle,
+höchstens 60 % des Output-Caps) — ohne den zweiten passte ein ganzes Buch in ein Bündel,
+und jeder Lauf zahlte einen abgerissenen Call. Gleiches Muster im Schulweg-Vorschlag.
+Reisst ein Bündel trotzdem am Output-Cap (`aiTruncated`), wird es halbiert und erneut gestellt;
 erst eine einzelne Figur, die allein nicht passt, beendet den Lauf mit Fehler. Ein
 **Abbruch wirft** an jeder Schleife und unmittelbar vor dem Schreiben — der Lauf endet
 `cancelled`, und der vorige Index bleibt stehen (ein Teilstand darf den Full-Replace nie
@@ -113,6 +122,9 @@ auslösen).
 datierte Ereignis dieser Figur** ist ([lib/figure-years.js](../lib/figure-years.js)) —
 nicht das Ende des Buchs. Eine Figur, die 1987 aus der Geschichte verschwindet,
 während das Buch bis 2003 läuft, ist fünf und nicht einundzwanzig.
+Ein Ereignis im Geburtsjahr oder davor ist **kein** Ankerjahr: ist die eigene Geburt
+(oft nur aus „Jahrgang 1960") das jüngste datierte Ereignis, gälte die Figur sonst
+als null Jahre alt. Sie zählt dann als undatiert und fällt aufs Buchende zurück.
 
 Gerechnet wird mit dem Geburtsjahr **dieser Zeile** (Steckbrief › Text › Zeitstrahl-
 Geburtsereignis), nicht mit dem fertigen `alter_im_roman`: das stützt sich auf das
@@ -222,6 +234,13 @@ wurde, müsste sonst aktiv gelöscht werden — und genau das vergisst man.
 - Lesen: `GET /figures/:book_id/alter` ([routes/figures-alter.js](../routes/figures-alter.js), ab `viewer`).
   Zeilen sind nach `figures.fig_id` geschlüsselt — die Kennung, die der Katalog als
   `id` nach vorne gibt.
+  `scan.veraltet` nennt, warum der Lauf nicht mehr zum Buch passt (`version` —
+  ältere `AGE_ANALYSIS_VERSION`, `text` — Abschnitt nach dem Lauf gespeichert,
+  `figuren` — Figurenstamm danach geändert, etwa durch die Komplettanalyse); die
+  Karte zeigt dazu einen Hinweis über der Tabelle. Der Index baut sich nur auf
+  Knopfdruck neu — ohne Hinweis läse sich ein alter Lauf wie ein aktueller. Bewusst
+  grob gegen `scanned_at` statt der exakten `content_sig`: die bräuchte den Volltext
+  aller Abschnitte im Leseweg.
 - Analysieren: `POST /jobs/figur-alter` (ab `editor`, nur ein ausdrückliches
   `force: true` überspringt den Delta-Skip — der Knopf der Karte setzt es, manuell
   ausgelöst heisst „ich will jetzt eine Zahl sehen"; ohne Angabe gilt der Delta-Skip).

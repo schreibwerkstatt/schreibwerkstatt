@@ -14,7 +14,8 @@
 //      zugeklapptes Kapitel auf.
 //   5. Ein Reload desselben Buchs (Job/Wake) behält Suche und Baum; ein
 //      gescheiterter Reload leert den Baum nicht und meldet `false`.
-//   6. Ein Ein-Abschnitt-Kapitel führt den Kapitelnamen als Ganzes — der
+//   6. Zugeklappte Kapitel und der Kalendermodus rendern keine Abschnittszeilen.
+//   7. Ein Ein-Abschnitt-Kapitel führt den Kapitelnamen als Ganzes — der
 //      lange Abschnittstitel daneben darf ihn nicht auf zwei Zeilen pressen.
 
 const { test, expect } = require('../e2e/_helpers/fixtures');
@@ -97,6 +98,25 @@ test.describe('Seitenbaum', () => {
     await page.waitForFunction((id) => window.__app.currentPage?.id === id, pid);
     await expect(link).toBeVisible();
     await expect(link).toHaveAttribute('tabindex', '0');
+  });
+
+  // Zugeklappt heisst nicht gerendert: ein Grossbuch (Tagebuch, tausende
+  // Abschnitte) baute sonst jede Zeile samt Bindings auf, nur um sie zu verstecken.
+  test('zugeklapptes Kapitel und Kalendermodus rendern keine Abschnittszeilen', async ({ page }) => {
+    const ch = await chapterByName(page, 'Kapitel 2');
+    const rows = page.locator(ch.pageIds.map(id => `${TREE} a.page-item[data-page-id="${id}"]`).join(', '));
+    await page.evaluate(() => window.__app.setAllChaptersOpen(true));
+    await expect(rows).toHaveCount(ch.pageIds.length);
+    await page.evaluate((id) => {
+      window.__app.setChapterOpen(window.Alpine.store('nav').tree.find(i => i.id === id), false);
+    }, ch.id);
+    await expect(rows).toHaveCount(0);
+    await page.evaluate(() => window.__app.setAllChaptersOpen(true));
+
+    await page.evaluate(() => { window.__app.sidebarMode = 'calendar'; });
+    await expect(page.locator(TREE)).toHaveCount(0);
+    await page.evaluate(() => { window.__app.sidebarMode = 'tree'; });
+    await expect(rows).toHaveCount(ch.pageIds.length);
   });
 
   test('Reload desselben Buchs behält Suche und Baum, auch bei Fehler', async ({ page, consoleGuard }) => {

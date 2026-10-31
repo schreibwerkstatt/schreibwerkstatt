@@ -84,6 +84,17 @@ test('Filter „typ" schneidet auf einen Figurentyp', () => {
   assert.deepEqual(computeAlterRows(figuren, null, { typ: 'randfigur' }).map(r => r.id), ['fig_2']);
 });
 
+test('Filter „kapitelId" waehlt Figuren mit Auftritt im Kapitel (per ID, auch als String)', () => {
+  const figuren = [
+    figur({ kapitel: [{ chapter_id: 7, name: 'Einleitung' }] }),
+    figur({ id: 'fig_2', name: 'Bote', kapitel: [{ chapter_id: 9, name: 'Einleitung' }] }),
+    figur({ id: 'fig_3', name: 'Ohne' }),
+  ];
+  assert.deepEqual(computeAlterRows(figuren, null, { kapitelId: 9 }).map(r => r.id), ['fig_2']);
+  assert.deepEqual(computeAlterRows(figuren, null, { kapitelId: '7' }).map(r => r.id), ['fig_1']);
+  assert.equal(computeAlterRows(figuren, null, { kapitelId: '' }).length, 3);
+});
+
 test('sortiert nach Typ-Tier, dann Name (geteilte Taxonomie)', () => {
   const figuren = [
     figur({ id: '1', name: 'Zora',   typ: 'nebenfigur' }),

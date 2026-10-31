@@ -1711,7 +1711,7 @@ Kein neuer Marker ohne Eintrag hier.
 | Wert | Rolle | Nutzung |
 |---|---|---|
 | `480px` | Phone-Small (sehr enge Devices, harter Reflow) | 26 |
-| `600px` | Phone-Large — **Default-Mobile-Breakpoint** (Paar-Gegenstück `min-width: 601px`) | 56 |
+| `600px` | Phone-Large — **Default-Mobile-Breakpoint** (Paar-Gegenstück `min-width: 600.02px`) | 56 |
 | `768px` | Tablet | 10 |
 | `960px` | Desktop — hier schaltet [layout/twocolumn.css](public/css/layout/twocolumn.css) von einspaltig auf Sidebar+Main (`min-width: 960px` / `max-width: 959.98px`) | 7 |
 
@@ -1724,15 +1724,17 @@ Kein neuer Marker ohne Eintrag hier.
 | `720px` | Tabellen, die eine Spalte früher als das Tablet-Raster fallen lassen; `min-width: 720px` für die 2er-Spans in Kapitel-Dashboard und „Meine Statistik" | 9 |
 | `860px` | Satzbreite des Body (`max-width: 860px` in [layout/base.css](public/css/layout/base.css)) — die Dialoge spiegeln sie | 2 |
 | `1100px` / `1700px` | Kommentar-Schiene (Share-Reader, Notebook-Leseansicht, Lektorat-Split): ab hier ist Platz für die Margin-Rail bzw. für eine zweite Spalte daneben (`min-width: 1100px` / `max-width: 1099.98px`) | 7 |
-| `1280px` | breite Übersichts-Raster | 4 |
+| `1280px` | Split mit Leiste: ab hier steht die Leiste neben dem Hauptinhalt ([layout/aside-split.css](public/css/layout/aside-split.css); die Board-Chat-Hülle in [chat.css](public/css/chat.css) folgt ihr) | 2 |
 | `800px` | Bucheditor-Stream | 1 |
 | `900px` | Landing-Seite ([landing.css](public/css/landing.css)) — Feature-Raster ausserhalb der App-Shell | 1 |
 
 **Container-Queries** (`@container`, messen den Slot statt den Viewport) stehen ausserhalb dieser Leiter, weil ihre Schwelle die Breite der Kachel/Spalte ist: `320px`, `380px`, `480px`, `640px`, `720px`, `40rem` (Ideen-Board-Spalten). Neue Container-Schwellen nach der Breite wählen, ab der der Inhalt nicht mehr passt — nicht nach der Viewport-Leiter.
 
-**Zwei Regeln zur Grenzziehung:**
-- **`min`/`max` am selben Wert überlappen.** `max-width: 600px` und `min-width: 600px` greifen bei exakt 600 px **beide**. Wer ein Paar bildet, nimmt `max-width: N` / `min-width: N+1` (so gelöst in [share/layout.css](public/css/share/layout.css) + [share/comments.css](public/css/share/comments.css)). Ausnahme ist die mobile-first-Leiter ohne Gegenstück (`body`-Padding in [layout/base.css](public/css/layout/base.css)) — dort gibt es kein Paar.
-- **`959.98px` neben `min-width: 960px` ist Absicht** (ebenso `1099.98px` neben `min-width: 1100px`), kein Tippfehler: bei fraktionaler Viewport-Breite (Browser-Zoom, 1.5×-DPI) würden ganzzahlige Grenzen beide oder keine greifen. Nicht „aufräumen".
+**Grenzziehung bei einem Paar:** Die zwei Hälften liegen **0.02px** auseinander, nie 1px und nie auf demselben Wert.
+- Derselbe Wert überlappt: `max-width: 600px` und `min-width: 600px` greifen bei exakt 600 px **beide**.
+- Ein ganzer Pixel lässt eine Lücke: zwischen `max-width: 600px` und `min-width: 601px` greift bei fraktionaler Viewport-Breite (Browser-Zoom, 1.5×-DPI, z. B. 600.5 px) **keine** der beiden Regeln.
+- Darum: Gegenstück zur kanonischen `max-width: N` ist `min-width: N.02px` (Share-Reader: [share/layout.css](public/css/share/layout.css) + [share/dialogs.css](public/css/share/dialogs.css) zu `max-width: 600px` in [share/comments.css](public/css/share/comments.css)); Gegenstück zu `min-width: N` ist `max-width: (N−1).98px` (`959.98px` neben `960px`, `1099.98px` neben `1100px`). Die Nachkommastellen sind Absicht, nicht „aufräumen".
+- Die mobile-first-Leiter ohne Gegenstück (`body`-Padding in [layout/base.css](public/css/layout/base.css)) bildet kein Paar und braucht das nicht.
 
 `1024px` gibt es nicht — der Wert stand hier lange als Soll, kam im Code aber nie vor; die Desktop-Grenze ist `960px`.
 
@@ -1780,15 +1782,49 @@ Listen, Zeilen und Card-Inhalte spannen **immer** die volle verfügbare Card-Bre
 
 ### Zwei-Spalten (Sidebar + Main)
 
-**Use:** Haupt-Editor-Layout (Tree links, Editor mittig, optional Chat rechts).
+**Use:** App-Gerüst ab 960 px: Seitenbaum links, Hauptspalte rechts.
 
 **Klassen** [public/css/layout/twocolumn.css](public/css/layout/twocolumn.css):
-- `.layout` — Grid-Container
-- `.layout-sidebar` — linke Spalte mit Tree
+- `.layout` — Grid-Container (`--no-sidebar`, wenn der Root-Getter `hasSidebar` falsch ist — dieselbe Bedingung steuert das `x-show` der Spalte)
+- `.layout-sidebar` — linke Spalte mit Tree, klebt im Rahmen `--sticky-top` / `--sticky-bottom`
 - `.layout-main` — Hauptbereich
-- `.sidebar-resize-handle` — Drag-Handle, persistiert Spaltenbreite via JS
+- `.sidebar-resize-handle` — Griff (`role="separator"` mit `aria-valuenow/-min/-max`; Pfeile, Umschalt+Pfeile, Home/End; Doppelklick = Default). Schreibt `--sidebar-w` auf `.layout` und persistiert sie
 
-Nur einmal verwendet — nicht neu erfinden für andere Kontexte (Karten haben eigene Modal-Logik via `_closeOtherMainCards`).
+Breite: `clamp(--sidebar-w-min, --sidebar-w, min(--sidebar-w-max, 40vw))` — Grenzen und Default nur in [tokens/spacing.css](public/css/tokens/spacing.css), der Griff liest sie von dort.
+
+Nur einmal verwendet — nicht neu erfinden für andere Kontexte (Karten haben eigene Modal-Logik via `_closeOtherMainCards`). Eine Spalte **neben** einem Hauptinhalt ist der „Split mit Leiste".
+
+### Split mit Leiste (`.aside-split`)
+
+**Use:** Hauptinhalt links, schmalere klebende Spalte rechts, ab 1280 px. Fünf Konsumenten: Editor | Seiten-Chat/Ideen/Referenz und Kapitelbewertung | Kapitel-Ideen (Hauptebene, [index.html](public/index.html)), Board | Chat in Plot-Werkstatt, Ideen-Board und Recherche.
+
+```html
+<div class="aside-split aside-split--aside-first" :class="{ 'aside-split--on': chatOpen }">
+  <div class="plot-main">…Board…</div>
+  <div class="aside-split-aside">
+    <div class="chat-panel plot-chat">
+      … <div class="chat-messages aside-split-scroll">…</div> …
+    </div>
+  </div>
+</div>
+```
+
+CSS: [public/css/layout/aside-split.css](public/css/layout/aside-split.css).
+- `.aside-split--on` schaltet das Raster ein (`minmax(0, 1fr) var(--aside-w)`, Abstand `--layout-gap`). Ohne `--on` (Leiste zu) und unter 1280 px fliesst alles untereinander.
+- `.aside-split--aside-first`: unter 1280 px steht die Leiste **über** dem Hauptinhalt (Board-Chats — sie werden gezielt geöffnet und sollen nicht unter einer langen Liste liegen). Ohne Modifier folgt sie darunter (Hauptebene: Chat unter dem Editor).
+- `.aside-split-aside` klebt (`--sticky-top`), deckelt sich auf `100dvh − --sticky-top − --sticky-bottom` und **scrollt als Ganzes**. Der Deckel gehört an die Leiste, nicht nur an ihren Verlauf: Kopf, Eingabe und Historie kämen sonst obendrauf, und auf einem niedrigen Bildschirm wäre das Eingabefeld erst am Seitenende erreichbar.
+- `.aside-split-scroll` (optional) deckelt den inneren Verlauf auf `--aside-scroll-max`.
+- Leiste und Scroll-Bereich dürfen in einem `display: contents`-Partial-Host sitzen — die Selektoren sind Nachfahren-, nicht Kind-Selektoren. Splits werden nicht verschachtelt.
+
+**Stellschrauben** — am Split-Element, Default in [tokens/spacing.css](public/css/tokens/spacing.css): `--aside-w` (Standard `clamp(380px, 30vw, 560px)`; `--aside-w-wide` = `clamp(420px, 32vw, 620px)` nur für den Recherche-Chat, dessen Web-Antworten Zeilenbreite brauchen), `--aside-scroll-max` (Standard `min(52vh, 38rem)`; Hauptebene `60vh`, Recherche `min(46vh, 34rem)`).
+
+**Klebe-Rahmen:** `--sticky-top` (24 px) und `--sticky-bottom` gelten für Leiste **und** Seitenbaum. `--sticky-bottom` liegt über der festen Job-Leiste: die schreibt ihre Höhe per `x-resize` als `--job-queue-h` auf `<html>` ([components/job-queue.css](public/css/components/job-queue.css)), geschlossen ist sie 0.
+
+**Leiste der Hauptebene = ein Zustand:** Seiten-Chat, Ideen und Referenz teilen sich die Leiste über das Root-Feld `asideSlot` (`'chat' | 'ideen' | 'reference' | null`). `showChatCard`/`showIdeenCard`/`showReferenceCard` sind davon abgeleitete Getter/Setter ([app-root-getters.js](public/js/app/app-root-getters.js)); geöffnet wird über `_setAside(slot)` ([app-view/cards.js](public/js/app/app-view/cards.js)), das auch die Lektorat-Befunde zurückgibt, wenn der Seiten-Chat abgelöst wird. Ob die Spalte steht, sagen `editorAsideOpen` / `kapitelAsideOpen`. Neue Leistenkarte: Wert in `asideSlot` + Flag in `asideFlagDescriptors` + `.aside-split-aside` an der Karte — **keine** Karten-ID in einer Layout-Datei.
+
+**Board-Chat-Hülle:** `.chat-panel` + `.chat-panel-title` / `-head-actions` ([chat.css](public/css/chat.css)); die Feature-Klasse (`.plot-chat`, `.ideen-chat`, `.research-chat`) trägt nur Abweichungen.
+
+Gegated: [tests/unit/aside-split-single-place.test.mjs](tests/unit/aside-split-single-place.test.mjs) — klebende Spalte mit Viewport-Deckel nur hier oder im Seitenbaum, `.aside-split*`-Geometrie nur in aside-split.css, keine Karten-IDs in `layout/`. Ausnahme mit Begründung: das Inhaltsverzeichnis des Bucheditors (eigenes Dreispalten-Raster).
 
 ### Row-Utility
 
@@ -1913,18 +1949,17 @@ Konsumenten: Profil (Konto löschen, [user-settings.html](public/partials/user-s
 
 **Use:** Während Daten laden — verhindert CLS (Layout-Shift), zeigt Strukturhinweis.
 
-**Entity-List** (Listen-Karten):
+**Listen und Kachel-Raster** — ausschliesslich über die Direktive `x-skeleton` ([skeleton.js](public/js/skeleton.js)); sie rendert Zeilen bzw. Kacheln selbst, das Element bleibt leer:
 ```html
-<div class="entity-skeleton" x-show="loading">
-  <template x-for="i in 5">
-    <div class="entity-skeleton-row">
-      <div class="entity-skeleton-cell entity-skeleton-cell--anchor"></div>
-      <div class="entity-skeleton-cell entity-skeleton-cell--title"></div>
-      <div class="entity-skeleton-cell entity-skeleton-cell--meta"></div>
-    </div>
-  </template>
-</div>
+<!-- Liste: n Zeilen (Anker/Titel/Meta), Karten-Akzent optional -->
+<div x-show="cardLoading && items.length === 0" x-skeleton="6" class="entity-list--accented" x-cloak></div>
+<!-- Kachel-Raster: n .overview-tile-Platzhalter als Grid-Items des umgebenden .overview-grid -->
+<div x-show="cardLoading && !kdHeat" x-skeleton.tiles="3"></div>
 ```
+- **Wann:** solange der erste Datensatz unterwegs ist (`… && liste leer`), nicht bei jedem Nachladen über vorhandenem Inhalt.
+- **Flag:** immer `cardLoading` aus `setupCardLifecycle` (vom Helper gesetzt, solange Einblenden/Buchwechsel/Refresh laden — [docs/state-modell.md](docs/state-modell.md)); kein eigenes `xxxLoading` fürs Laden der Liste daneben. Job-Flags (`figurenLoading`, `kontinuitaetLoading`: ein KI-Lauf ist aktiv) sind etwas anderes und bleiben — das Skelett darf sie zusätzlich lesen, wenn ein Lauf ohne Ergebnis Platzhalter zeigen soll.
+- **Leerzustand wartet:** der `.card-empty` daneben trägt `&& !cardLoading` (bzw. das Fetch-Flag), sonst blitzt „noch nichts da" samt CTA auf, solange der Fetch läuft.
+- Gegated: [skeleton-single-place.test.mjs](tests/unit/skeleton-single-place.test.mjs) — kein handgeschriebenes `.entity-skeleton-row`/`.skeleton-tile` in Partials.
 
 **Chat** (mehrzeiliges Schimmer-Pattern):
 - `.chat-skeleton-wrapper` + `.chat-skeleton-line`
@@ -1932,7 +1967,7 @@ Konsumenten: Profil (Konto löschen, [user-settings.html](public/partials/user-s
 
 **Seiteninhalt** (Notebook-Editor Read-Modus, Prosa-Schimmer): `.page-content-skeleton` + n× `.page-content-skeleton__line` (`x-for="i in 8"`). Sitzt anstelle der `.page-content-view`, solange `pageContentLoading && !renderedPageHtml` — verhindert die blanke Fläche bei langsamem Netz / kaltem SW-Cache (ein langsamer Seiten-Load liest sonst wie „Inhalt weg"). An dieselbe Lesebreite ausgerichtet. CSS: [page/page-content-skeleton.css](public/css/page/page-content-skeleton.css).
 
-Kein Skeleton ohne Shimmer-Animation. CSS-File-Referenzen: [entity-list.css](public/css/entities/entity-list.css), [chat.css](public/css/chat.css), [page-content-skeleton.css](public/css/page/page-content-skeleton.css).
+Kein Skeleton ohne Shimmer-Animation. CSS-File-Referenzen: [entity-list.css](public/css/entities/entity-list.css) (Zeilen + Kacheln), [chat.css](public/css/chat.css), [page-content-skeleton.css](public/css/page/page-content-skeleton.css).
 
 ---
 
@@ -3073,7 +3108,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 |------|--------|
 | [tokens.css](public/css/tokens.css) | Cascade-Layer-Order, `@font-face`, `@import` der Token-Module aus `tokens/`. Slim Facade — keine Tokens direkt drin. Unlayered. |
 | [card-accents.css](public/css/card-accents.css) | `.card--<key> { --card-accent: var(--card-accent-<key>); }` — SSoT für Karten-Akzentfarben (alle Karten). |
-| [chat.css](public/css/chat.css) | Abschnitts-/Buch-Chat. |
+| [chat.css](public/css/chat.css) | Abschnitts-/Buch-Chat; `.chat-panel*` als gemeinsame Hülle der drei Board-Chats (Plot, Ideen, Recherche). |
 | [components/chat-history-search.css](public/css/components/chat-history-search.css) | Suche im Verlauf von Abschnitts-/Buch-Chat (Suchzeile, Treffer, angesprungene Nachricht). |
 | [components/chat-tool-log.css](public/css/components/chat-tool-log.css) | Werkzeug-Verlauf der vier agentischen Chats (Buch-, Recherche-, Plot-, Ideen-Chat; Fragmente `chat-tool-log` + `chat-tool-log-row`): Rundenköpfe mit Modell-Notiz, Zeilen (Tätigkeit · Gegenstand · Ergebnis), Sammelzeile gleicher Aufrufe als Klapp-Knopf ohne Versalien, Live-Variante unter dem Antwort-Skelett. |
 | [search.css](public/css/search.css) | Volltext-Suche, Buchwahl. |
@@ -3103,10 +3138,11 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 ### layout/ (Foundation)
 | File | Inhalt |
 |------|--------|
-| [layout/base.css](public/css/layout/base.css) | Reset, `h1`-`h3`, `.skip-link`. |
-| [layout/layout-base.css](public/css/layout/layout-base.css) | `.session-banner`, `.dev-banner` (oben fixed). |
-| [layout/twocolumn.css](public/css/layout/twocolumn.css) | `.layout` / `-sidebar` / `-main` (Editor-Layout). |
-| [layout/utilities.css](public/css/layout/utilities.css) | `.list-header`, Job-Queue-Footer, `.palette-badge`, `.row` Flexbox-Utility, `.batch-status`. |
+| [layout/base.css](public/css/layout/base.css) | Reset, `html`-Tischfläche, `body`-Satzbreite, `h1`, `kbd`, `code`, `.site-title*`, `.skip-link` und der Tab-Fokus für Baum + Befunde. |
+| [layout/layout-base.css](public/css/layout/layout-base.css) | `.boss-screen`, `.dev-banner`, `.session-banner*` (oben fixed), Offline-Dimmung `:root.is-offline`, `.site-header-row`. |
+| [layout/twocolumn.css](public/css/layout/twocolumn.css) | `.layout` / `-sidebar` / `-main` (Seitenbaum + Hauptspalte), klebender Seitenbaum, `.sidebar-resize-handle`. |
+| [layout/aside-split.css](public/css/layout/aside-split.css) | **Split mit Leiste** — `.aside-split` / `--on` / `--aside-first`, `.aside-split-aside`, `.aside-split-scroll`; einzige Quelle für Hauptinhalt + klebende Leiste (siehe „Split mit Leiste"). |
+| [layout/utilities.css](public/css/layout/utilities.css) | Layer `utilities`: `.list-header`, `.palette-badge`, Tabular-Nums-Gruppe, `.display-contents`. Layer `components` (Grundgerüst, das Karten überschreiben): `.row`, `.table-scroll`, `.batch-status`. |
 | [layout/safari-fallback.css](public/css/layout/safari-fallback.css) | Safari < 16.2 `color-mix()`-Fallbacks via `@supports not (...)`. **Wichtig: muss spät in der Cascade geladen werden** (Override-Wirkung), darum eigenes File und nicht in andere Datei gemergt. |
 
 ### components/ (geteilt)
@@ -3156,6 +3192,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [components/seg-toggle.css](public/css/components/seg-toggle.css) | `.seg-toggle` (+ `--active`, `:disabled`) — Segment-Umschalter für 2–3 sich ausschliessende Werte; geteilt von Publikation, PDF-Export, Buchlandkarte, Ideen-Board, Kommentar-Leisten, Notebook-Zitat-/Querverweis-Panel, Wortschatz, Referenz, Chat-Verlaufssuche. Siehe „In-Form-Repeater + Segment-Toggle". |
 | [components/folder-import.css](public/css/components/folder-import.css) | Folder-Import-Karte (Drop-Zone, Mode-Toggle, Progress, Result). |
 | [components/btn-close.css](public/css/components/btn-close.css) | `.btn-close` — Primitive der Schliessen-Taste (randlose Fläche, `inline-flex`-Zentrierung des `x`-Icons). Varianz über `--close-size`/`--close-pad`/`--close-color`. Siehe „Icon-Sprache" → Schliessen; acht Altbestände ziehen bei Berührung nach. |
+| [components/job-queue.css](public/css/components/job-queue.css) | `.job-queue-bar` / `-pill*` / `-cancel-btn` / `-toggle-btn` — feste Job-Leiste unten; schreibt ihre Höhe als `--job-queue-h` auf `<html>` (Grundlage von `--sticky-bottom`). |
 | [components/status-msg.css](public/css/components/status-msg.css) | `.success-msg` / `.error-msg` (+ `--banner`-Variante mit Fläche) — app-weite Status-Meldungen aus den Status-Tokens. **Eindeutiger Besitzer für zwei generische Klassennamen**, die vorher in `admin/admin-settings.css`, `chat.css` und `page/page-list.css` verteilt lagen; die Darstellung hing dadurch an der Ladereihenfolge unbeteiligter Dateien. Konsumenten: Admin-Einstellungen, API-/Geräte-Token, Chat- und Lektorat-Statusstrings. |
 | [components/floating-dock.css](public/css/components/floating-dock.css) | `.dock` / `.dock-btn` (+ `--sub`) / `.dock-status` — schwebender Werkzeug-Dock am Rand der Lesefläche (runde Icon-Taste + Status-Pille mit Punkt-Indikator). Geteilte SSoT für **drei** Konsumenten: `.stt-dock` (Diktat, sticky rechts), `.tts-dock` im Notebook (Vorlesen, sticky links) und `.tts-dock` im Share-Reader (fixed links). Neutrale `--dock-*`-Variablen mit Fallback auf die SPA-Tokens → die zwei SPA-Docks brauchen kein Mapping, der Reader mappt sie in `share/tts.css` auf `--share-*`. Verankerung, Zustandsfarben und Puls-Animationen bleiben beim Konsumenten. |
 | [components/color-picker.css](public/css/components/color-picker.css) | `.color-picker` / `__swatch` / `__popover` / `__opt` (+ `--on`, `--none`) — Farbwähler-Popover für Ordnungsfarben. Geteilt zwischen Motiv-Werkstatt (Themen) und Plot-Werkstatt (Akte, Handlungsstränge). Die Farbe liefert der Konsument per `--col-accent`; das Modul kennt keine Palette, nur die Form. |
@@ -3217,13 +3254,13 @@ Drei Editoren leben in eigenen Subfoldern (`book/`, `focus/`, `notebook/`); edit
 | [entities/entity-grid.css](public/css/entities/entity-grid.css) | Entity-Grid (Matrix-Ansicht für Szenen + Schauplätze): sortierbare Tabelle, View-Toggle (`.entity-view-toggle`, `.entity-grid-*`). |
 | [entities/ideen.css](public/css/entities/ideen.css) | Ideen-Karte. |
 | [entities/ideen-board.css](public/css/entities/ideen-board.css) | Ideen-Board (Raster Bahn × Stufe) + das geteilte Chip-Vokabular der Ideen-Verknüpfungen. |
-| [entities/ideen-chat.css](public/css/entities/ideen-chat.css) | Ideen-Board: Ideen-Chat — Spalten-Layout `.ideen-split` (gleiche Geometrie wie `.plot-split`) und das Panel `.ideen-chat*` samt Schnellstart-Knöpfen und Beleg-Zeile; Vorschlagskarten über die geteilten `.chat-vorschlag*`-Klassen. |
+| [entities/ideen-chat.css](public/css/entities/ideen-chat.css) | Ideen-Board: Ideen-Chat — Nachrichtenhöhe und Panel-Innenteile `.ideen-chat*` (Spalten-Layout: `.aside-split`, Hülle: `.chat-panel`) samt Schnellstart-Knöpfen und Beleg-Zeile; Vorschlagskarten über die geteilten `.chat-vorschlag*`-Klassen. |
 | [entities/entity-list.css](public/css/entities/entity-list.css) | `.entity-list` / `-row`, `.severity-tag*`, `.collapsible-*`, Skeleton, `.ort-*` Schauplätze. |
 | [entities/orte-map.css](public/css/entities/orte-map.css) | Orte-Karte View-Mode `map` (Geo-Karte via Leaflet): `.ort-map*` Container + Geocode-Liste. Nur bei `book_settings.orte_real`. |
 | [entities/recherche/board.css](public/css/entities/recherche/board.css) | Recherche-/Wissensboard (Board-Teil): Toolbar/Filter, Anlege-/Edit-Formular, einspaltige Schnipsel-Liste (`.recherche-list` + `.research-item`), Kind-Badges, Verknüpfungs-/Tag-Chips, KI-Vorschläge, Link-Picker, Link-Zeile (`.research-item-url-row`: Link + „als Quelle übernehmen"-`.icon-btn--ghost`, auf 22px kontext-verkleinert über `.research-url-tosource`, weil 28px die Zeilenhöhe einer `font-size-sm`-Liste bestimmen würde). Native-Vollbild (`.card--recherche:fullscreen`, Toggle via `fullscreen.js` wie Plot-Board) → Liste zentriert mit Lese-Maximalbreite. |
 | [entities/recherche/status-board.css](public/css/entities/recherche/status-board.css) | Recherche-Board, Ansicht „Status": Kanban ueber die Einarbeitungs-Stufen (`.research-status-board` mit vier gleich breiten Spalten, `.research-status-column--<status>` traegt die semantische Stufen-Farbe als `--status-accent`), Karte (`.research-status-card` + Drag-Griff `.research-status-grip`, SortableJS-Zustaende), Stelle-im-Buch-Chips, „eingearbeitet ohne Stelle"-Befund und die Status-Plakette (`.research-status-badge`) fuer Liste + Detailansicht. Laedt NACH board.css und benutzt dessen Vokabular (Kind-Badge, Titel-Button, Link-Chip) weiter. Mobile (≤700px) stapelt die Spalten. |
 | [entities/recherche/dialog.css](public/css/entities/recherche/dialog.css) | Geteilte `<dialog>`-Shell der Recherche-Karte (`.research-dialog*`) für Detailansicht **und** Anlegen-Modal: Panelbreite, stehender `__head`, scrollender `__scroll`, `__bar`-Fussleiste, Mobile als vollflächiges Blatt. `__text` setzt den Volltext in Lesegrösse mit begrenztem Satzspiegel, `__figure`/`__image` zeigen das Bild gross (bis 60vh), `__doc`/`__figcaption` tragen die Anhang-Aktionen. Dazu `textarea.recherche-input--tall` fürs Redigieren langer Funde. |
-| [entities/recherche/chat.css](public/css/entities/recherche/chat.css) | Recherche-Chat derselben Karte: Spalten-Layout `.recherche-split` (ab 1280px Board links / Chat rechts als sticky Spalte `clamp(420px, 32vw, 620px)` — breiter als der 420px-Abschnitts-Chat, weil Web-Such-Antworten und Fundstück-Vorschläge mehr Zeilenbreite brauchen; darunter Flex-Spalte mit `order: -1`, Chat über dem Board) plus das Panel selbst (`.research-chat*`: Kopf, Nachrichtenhöhe, Quellenliste, Suchbegriffe `.research-chat-queries`, Speicher-Vorschläge mit Aktionsspalte + Bearbeiten-Formular, Kontext-Chip `.research-chat-context-chip`). |
+| [entities/recherche/chat.css](public/css/entities/recherche/chat.css) | Recherche-Chat derselben Karte: breite Leistenstufe (`--aside-w-wide` am `.recherche-split`, weil Web-Such-Antworten und Fundstück-Vorschläge mehr Zeilenbreite brauchen; Spalten-Layout: `.aside-split`, Hülle: `.chat-panel`) plus die Panel-Innenteile (`.research-chat*`: Nachrichtenhöhe, Quellenliste, Suchbegriffe `.research-chat-queries`, Speicher-Vorschläge mit Aktionsspalte + Bearbeiten-Formular, Kontext-Chip `.research-chat-context-chip`). |
 | [entities/sources.css](public/css/entities/sources.css) | Quellenverzeichnis-Karte: Toolbar/Filter-Bar (Compact-Höhen-Scope für `.filter-search-input`), Quellen-Tabelle (`.sources-table` via `sortableTable`), Zitier-Badge (`.sources-cite-badge`, Hue aus `--card-accent`), Detail-Formular, Fundstellen-Panel, Zitat-Kennzahlen-Reihe (`.sources-quote-stats` / `-stat` / `-stat-value` / `-stat-label` / `-stats-hint`: Zitat-Anteil + wörtlich/Paraphrase/belegte Quellen — schlichte Wert/Label-Reihe am Tabellenfuss, bewusst kein Tile-Grid). Enthält ausserdem `.sources-preview` (hängend eingerückte Formatter-Vorschau) — **geteilt** mit dem Quellen-Tab der Bucheinstellungen. |
 | [entities/ereignisse-subtyp.css](public/css/entities/ereignisse-subtyp.css) | Event-Subtyp-Badges + Marker-Farbe im Zeitstrahl: Mapping `.gz-item--subtyp-<typ>` auf die gemeinsame `--gz-subtyp-color`-Prop (SSoT der Hues = `--card-accent-event-*` in `tokens/colors.css`), konsumiert von Marker (`.gz-marker`) und Badge. |
 | [entities/ereignisse-span.css](public/css/entities/ereignisse-span.css) | Spannen-Events im Zeitstrahl: `.gz-item--span` verlängert den Marker vertikal proportional zur Jahr-Differenz (CSS-Custom-Prop `--span-years`); reine Punkt-Events unverändert. |
@@ -3269,7 +3306,7 @@ Drei Editoren leben in eigenen Subfoldern (`book/`, `focus/`, `notebook/`); edit
 | [book/plot/board.css](public/css/book/plot/board.css) | Plot-Werkstatt (Beat-Board / Kanban): Board-Layout, Spalten, Beat-Karten, Beat-Edit, Add-Beat/Akt, Vollbild + Mobile. |
 | [book/plot/widgets.css](public/css/book/plot/widgets.css) | Plot-Werkstatt-Widgets: KI-Brainstorm, Consistency-Panel, Coverage, Status-Verteilungsbalken, Akt-Farbpalette, Beat-Intensität, Spannungsbogen. Ergänzt plot/board.css. |
 | [book/plot/swimlane.css](public/css/book/plot/swimlane.css) | Plot-Werkstatt: Swimlane-Grid (Akte × Stränge) + Strang-Leiste. Ergänzt plot/board.css + plot/widgets.css. |
-| [book/plot/chat.css](public/css/book/plot/chat.css) | Plot-Werkstatt: Plot-Chat — Spalten-Layout `.plot-split` (ab 1280px Board links / Chat rechts als sticky Spalte, darunter Chat per `order: -1` über dem Board) und das Panel `.plot-chat*`; die Vorschlagskarten nutzen die geteilten `.chat-vorschlag*`-Klassen aus chat.css, hier nur Innenteile (Meta-Zeile, Feld-Diff-Raster, Hinweis). Ergänzt plot/board.css. |
+| [book/plot/chat.css](public/css/book/plot/chat.css) | Plot-Werkstatt: Plot-Chat — Nachrichtenhöhe und Panel-Innenteile `.plot-chat*` (Spalten-Layout: `.aside-split`, Hülle: `.chat-panel`); die Vorschlagskarten nutzen die geteilten `.chat-vorschlag*`-Klassen aus chat.css, hier nur Innenteile (Meta-Zeile, Feld-Diff-Raster, Hinweis). Ergänzt plot/board.css. |
 | [book/plot/relations.css](public/css/book/plot/relations.css) | Plot-Werkstatt: Beat-zu-Beat-Beziehungen (Kausalität + Setup/Payoff) — read-only Badges auf der Beat-Karte + Beziehungs-Editor (Typ-/Ziel-Combobox + Chips). Ergänzt plot/board.css. |
 | [book/plot/tools.css](public/css/book/plot/tools.css) | Plot-Werkstatt: Board-Werkzeuge — Beat verschieben ohne Drag (Akt/Strang-Combobox + oben/unten im Beat-Edit), Dichte „nur Titel“ (`.plot--compact`), einklappbare Akte (`.plot-column--collapsed` / `.plot-swim-*--collapsed`), Befund-Typ-Filter/-Aktion/„erledigt“ der Konsistenz-Liste. Lädt nach relations.css. |
 | [book/plot/zeit.css](public/css/book/plot/zeit.css) | Plot-Werkstatt: erzählte Zeit am Beat — Befund-Plakette der Zeit-Messung `.plot-beat-timecheck--{kritisch,mittel,niedrig}` (Variante von `.plot-beat-anchor`), gestrichelter Zeit-Tag für unverstandene Angaben (`.tag--zeit-unklar`), „verstanden als“-Hinweis und Zeitvorschlag im Beat-Edit Alters-Chip `.tag--alter`, (`.plot-zeit-hint`, `.plot-zeit-vorschlag`, Herleitung `.plot-zeit-vorschlag-beleg`), Durchsicht der Zeitvorschläge (`.plot-zeit-review*`). Lädt nach tools.css. |
@@ -3408,6 +3445,12 @@ Position: absolute innerhalb `.card`, `background: var(--color-surface) / 0.7` m
 - Ausnahmen, die ihre Leerzeile selbst stylen: das Innenleben der `combobox`, das Spellcheck-Popover (OTA-Editor-Bundle ohne `card-blocks.css`) und der Share-Reader (eigenes Theme).
 
 Gegated: [tests/unit/empty-state-single-place.test.mjs](tests/unit/empty-state-single-place.test.mjs) — jede `…-empty`-Klasse im Markup steht neben `card-empty` oder `muted-msg`, Feature-CSS darauf trägt keine Schrift-/Farb-Optik, `card-empty-*`-Teile nur mit Container.
+
+---
+
+## Lange Listen (schrittweise rendern)
+
+Eine Karten-Liste, die bei grossen Büchern ~1000 Zeilen erreicht (Figuren, Szenen, Schauplätze, Ereignisse, Weltfakten je Kategorie), rendert ein Fenster vom Anfang her und wächst beim Scrollen nach: [list-window.js](public/js/list-window.js) (`listWindowState`/`listWindowMethods`, Direktive `x-list-more`). Am Listenende steht ein `.btn-compact.list-window-more` «Weitere N anzeigen» (`common.showMore`), den die Direktive auslöst, sobald er in die Nähe des Sichtfelds kommt — er bleibt als Tastatur-Weg und Rückfall sichtbar. Gruppierte Listen bekommen ein Fenster je Gruppe (Schlüssel als zweites Argument). Jeder Sprung in eine Zeile (Deep-Link, Auswahl, Band-Klick) ruft vorher `listWindowReveal(index)`, sonst steht die Zeile nicht im DOM. **Why:** tausend Zeilen mit Referenzen und Badges blockierten beim Öffnen der Karte mehrere Sekunden den Main-Thread. **Nicht** für sortierbare Tabellen (`sortableTable` sortiert über alle Zeilen) und nicht für Reiter/Ansichten, die nur ausgeblendet sind — die hängen per `x-if` statt `x-show`, damit Unsichtbares gar nicht erst rendert.
 
 ---
 

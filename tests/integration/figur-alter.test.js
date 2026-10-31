@@ -367,3 +367,34 @@ test('Zwei Figuren mit gleichem Vollnamen: Funde werden nicht geraten', async ()
   assert.equal(job.result.verworfen.figur, 1);
   assert.equal(require('../../db/figure-ages').listFigureAges(BOOK_ID, USER).length, 0);
 });
+
+test('Veraltet-Hinweis: Analyse-Version, spaeterer Text, spaeterer Figurenstamm', async () => {
+  const BOOK_ID = 912;
+  ctx.dbSeed.setBook({
+    chapters: [{ id: 9910, book_id: BOOK_ID, name: 'Kap 1' }],
+    pages: [{ id: 9920, book_id: BOOK_ID, chapter_id: 9910, name: 'S 1', updated_at: '' }],
+    pageBodies: { 9920: '<p>Mara war vierzig Jahre alt, als sie ging.</p>' },
+  });
+  seedFiguren(BOOK_ID, [{ id: 'f_mara', name: 'Mara', typ: 'hauptfigur' }]);
+  ctx.mockAi.on(
+    (e) => e.schemaKeys.includes('funde'),
+    () => ({ funde: [{ figur: 'Mara', art: 'alter', wert: 40, bezugsjahr: null, unsicher: false, zitat: 'Mara war vierzig Jahre alt', begruendung: '' }] }),
+  );
+  const job = await runJob(BOOK_ID, { force: true });
+  assert.equal(job.status, 'done');
+
+  const { staleReasons } = require('../../routes/figures-alter');
+  const { getFigureAgeScan } = require('../../db/figure-ages');
+  const { db } = ctx.dbSchema;
+  const scan = getFigureAgeScan(BOOK_ID, USER);
+  assert.deepEqual(staleReasons(BOOK_ID, USER, scan), [], 'frischer Lauf ist aktuell');
+
+  assert.deepEqual(staleReasons(BOOK_ID, USER, { ...scan, age_version: scan.age_version - 1 }), ['version']);
+
+  const later = new Date(Date.parse(scan.scanned_at) + 60_000).toISOString();
+  db.prepare('UPDATE figures SET updated_at = ? WHERE book_id = ?').run(later, BOOK_ID);
+  assert.deepEqual(staleReasons(BOOK_ID, USER, scan), ['figuren'], 'Komplettanalyse nach dem Lauf');
+
+  db.prepare('UPDATE pages SET updated_at = ?, local_updated_at = ? WHERE page_id = ?').run(later, later, 9920);
+  assert.deepEqual(staleReasons(BOOK_ID, USER, scan), ['text', 'figuren']);
+});

@@ -96,6 +96,13 @@ export const schoolMethods = {
     return SCHUL_GRENZEN;
   },
 
+  /** Bindungsziel der Formularfelder (`x-model="schulForm().…"`). Ausschalten und
+   *  Buchwechsel setzen bookSchulsystem auf null; die Bindungen im x-if werten davor
+   *  noch einmal aus — dann ein Wegwerf-Objekt statt eines TypeErrors. */
+  schulForm() {
+    return this.bookSchulsystem || { stichtag: {}, jahre: {} };
+  },
+
   /** Stufen des gewählten Systems für die Jahre-Felder ({ key, label }). */
   schulStufen() {
     const r = resolveSchulsystem(this.bookSchulsystem);

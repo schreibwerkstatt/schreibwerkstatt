@@ -343,8 +343,6 @@ export const ACTIONS = [
 //                gestartet (Karte sichtbar, Daten laden im Hintergrund),
 //                aber awaited — damit der Aufruf-Promise erst nach Daten resolve't.
 //   `auditEvent` – Event-Name für `logAuditEvent` nach dem Öffnen (`book`-Detail).
-//   `extraRefreshOnOpen` – belt-and-braces: nach Open zusätzlich einmalig
-//                `card:refresh` dispatchen (für $watch-Race-Conditions).
 //   `partial` – Name des HTML-Partials (ohne Endung), das die Karte hostet.
 //                Wird vor `flag = true` lazy via `_ensurePartial` geladen.
 //                Bespoke-Toggles ohne dieses Feld lazy-laden selbst.
@@ -353,7 +351,7 @@ export const EXCLUSIVE_CARDS = [
   { key: 'bookReview',     flag: 'showBookReviewCard',     toggle: 'toggleBookReviewCard',     onReclick: 'refresh', partial: 'buchreview' },
   { key: 'kapitelReview',  flag: 'showKapitelReviewCard',  toggle: 'toggleKapitelReviewCard',  bespoke: true, partial: 'kapitelreview' },
   { key: 'figures',        flag: 'showFiguresCard',        toggle: 'toggleFiguresCard',        onReclick: 'refresh', refreshName: 'figuren', partial: 'figuren', hiddenForBuchtyp: ['journalismus'] },
-  { key: 'figurWerkstatt', flag: 'showFigurWerkstattCard', toggle: 'toggleFigurWerkstattCard', onReclick: 'refresh', requiresBook: true, extraRefreshOnOpen: true, partial: 'figur-werkstatt', hiddenForBuchtyp: ['journalismus', 'tagebuch'] },
+  { key: 'figurWerkstatt', flag: 'showFigurWerkstattCard', toggle: 'toggleFigurWerkstattCard', onReclick: 'refresh', requiresBook: true, partial: 'figur-werkstatt', hiddenForBuchtyp: ['journalismus', 'tagebuch'] },
   { key: 'szenen',         flag: 'showSzenenCard',         toggle: 'toggleSzenenCard',         onReclick: 'refresh', partial: 'szenen', hiddenForBuchtyp: ['journalismus', 'tagebuch'],
     loadDeps: [{ method: 'loadFiguren', skipIfNonEmpty: 'figuren' }, { method: 'loadOrte', skipIfNonEmpty: 'orte' }] },
   { key: 'ereignisse',     flag: 'showEreignisseCard',     toggle: 'toggleEreignisseCard',     onReclick: 'refresh', partial: 'ereignisse', hiddenForBuchtyp: ['journalismus'],
@@ -362,7 +360,7 @@ export const EXCLUSIVE_CARDS = [
     loadDeps: [{ method: 'loadFiguren', skipIfNonEmpty: 'figuren' }] },
   { key: 'motiv',          flag: 'showMotivCard',          toggle: 'toggleMotivCard',          onReclick: 'refresh', requiresBook: true, partial: 'motiv', hiddenForBuchtyp: ['journalismus'],
     loadDeps: [{ method: 'loadFiguren', skipIfNonEmpty: 'figuren' }] },
-  { key: 'weltfakten',     flag: 'showWorldFactsCard',     toggle: 'toggleWorldFactsCard',     onReclick: 'refresh', extraRefreshOnOpen: true, partial: 'world-facts', hiddenForBuchtyp: ['journalismus'] },
+  { key: 'weltfakten',     flag: 'showWorldFactsCard',     toggle: 'toggleWorldFactsCard',     onReclick: 'refresh', partial: 'world-facts', hiddenForBuchtyp: ['journalismus'] },
   { key: 'recherche',      flag: 'showRechercheCard',      toggle: 'toggleRechercheCard',      onReclick: 'refresh', requiresBook: true, partial: 'recherche' },
   { key: 'ideenBoard',     flag: 'showIdeenBoardCard',     toggle: 'toggleIdeenBoardCard',     onReclick: 'refresh', requiresBook: true, partial: 'ideen-board' },
   { key: 'sources',        flag: 'showSourcesCard',        toggle: 'toggleSourcesCard',        onReclick: 'refresh', requiresBook: true, partial: 'sources' },
@@ -379,7 +377,7 @@ export const EXCLUSIVE_CARDS = [
   { key: 'songs',          flag: 'showSongsCard',          toggle: 'toggleSongsCard',          onReclick: 'refresh', partial: 'songs', hiddenForBuchtyp: ['journalismus'],
     loadDeps: [{ method: 'loadFiguren', skipIfNonEmpty: 'figuren' }] },
   { key: 'kontinuitaet',   flag: 'showKontinuitaetCard',   toggle: 'toggleKontinuitaetCard',   onReclick: 'refresh', partial: 'kontinuitaet', requiresCloudModel: true, hiddenForBuchtyp: ['journalismus'] },
-  { key: 'erzaehlprofil',  flag: 'showErzaehlprofilCard',  toggle: 'toggleErzaehlprofilCard',  onReclick: 'refresh', extraRefreshOnOpen: true, partial: 'erzaehlprofil', requiresCloudModel: true, hiddenForBuchtyp: ['journalismus'] },
+  { key: 'erzaehlprofil',  flag: 'showErzaehlprofilCard',  toggle: 'toggleErzaehlprofilCard',  onReclick: 'refresh', partial: 'erzaehlprofil', requiresCloudModel: true, hiddenForBuchtyp: ['journalismus'] },
   { key: 'tagebuchRueckblick', flag: 'showTagebuchRueckblickCard', toggle: 'toggleTagebuchRueckblickCard', onReclick: 'refresh', requiresBook: true, requiresBuchtyp: 'tagebuch', partial: 'tagebuch-rueckblick' },
   { key: 'bookSettings',   flag: 'showBookSettingsCard',   toggle: 'toggleBookSettingsCard',   onReclick: 'close', partial: 'book-settings' },
   { key: 'userSettings',   flag: 'showUserSettingsCard',   toggle: 'toggleUserSettingsCard',   onReclick: 'close', partial: 'user-settings' },

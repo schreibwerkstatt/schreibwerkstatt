@@ -2,7 +2,7 @@
 
 Agentischer Chat als **Panel in der Plot-Werkstatt** (Markup [public/partials/plot-chat.html](../public/partials/plot-chat.html), per `_loadPartials`-Cascade in [plot.html](../public/partials/plot.html); Scope + Methoden aus `plotCard`). Entwickelt das Beat-Board im Gespräch — Akte, Beats, Stränge — und gründet dabei jeden Vorschlag im Board, in den Figuren (Katalog + Werkstatt mit Want/Need/Wound/Lie), im geschriebenen Text, in Szenen, Zeitstrahl und Weltregeln. **Schreibt nie selbst**: Änderungen kommen als Vorschläge, die der User **einzeln** übernimmt oder verwirft. Nie generativ in den Buchtext — Beats sind Struktur-Stichpunkte, keine Prosa (gleiche Invariante wie Brainstorm/Consistency, [plot.md](plot.md)).
 
-**Platzierung:** ab 1280px eigene, sticky Spalte rechts neben dem Board (`.plot-split` in [book/plot/chat.css](../public/css/book/plot/chat.css)); schmaler klappt das Panel per `order: -1` über das Board. Das Board behält seinen horizontalen Scroll.
+**Platzierung:** ab 1280px eigene, sticky Spalte rechts neben dem Board (Split mit Leiste, `.aside-split` in [layout/aside-split.css](../public/css/layout/aside-split.css), siehe [DESIGN.md](../DESIGN.md#split-mit-leiste-aside-split)); schmaler steht das Panel über dem Board (`--aside-first`). Das Board behält seinen horizontalen Scroll.
 
 Liest den Bearbeitungsstand über `get_edit_status` (ein Beat in einem fertigen Kapitel heisst Umbau, [bearbeitungsstand.md](bearbeitungsstand.md)).
 

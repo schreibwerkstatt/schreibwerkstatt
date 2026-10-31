@@ -13,8 +13,10 @@ test('pagetree: Job-Queue-Leiste liegt über der Sidebar, Kontextmenü bleibt be
   const item = page.locator('.layout-sidebar .page-item').first();
   await expect(item).toBeVisible();
 
-  // ── Job-Queue-Leiste über dem Tree ────────────────────────────────────────
-  // Aufgeklappte Leiste mit vielen Jobs wächst nach oben in den Tree hinein.
+  // ── Job-Queue-Leiste: Tree endet darüber, und wo sie doch überlappt, liegt sie oben ──
+  // Aufgeklappte Leiste mit vielen Jobs wächst nach oben. Die Leiste schreibt
+  // ihre Höhe als `--job-queue-h` auf <html>; `--sticky-bottom` hebt das untere
+  // Ende der klebenden Sidebar darüber (tokens/spacing.css).
   await page.evaluate(() => {
     const jobs = window.Alpine.store('jobs');
     jobs.jobQueueItems = Array.from({ length: 16 }, (_, i) => (
@@ -23,6 +25,22 @@ test('pagetree: Job-Queue-Leiste liegt über der Sidebar, Kontextmenü bleibt be
   });
   const bar = page.locator('.job-queue-bar');
   await expect(bar).toBeVisible();
+  // Feste Höhe statt Pill-Zahl: wie hoch 16 Pills werden, hängt an Breite und
+  // Label-Länge. Die Leiste meldet die neue Höhe selbst (x-resize).
+  await bar.evaluate(el => { el.style.maxHeight = 'none'; el.style.height = '300px'; });
+  await expect.poll(() => page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--job-queue-h'))).toBe('300px');
+  const maxH = await page.evaluate(() => ({
+    actual: parseFloat(getComputedStyle(document.querySelector('.layout-sidebar')).maxHeight),
+    // innerHeight − --sticky-top (24) − (Leistenhöhe + --space-sm 8)
+    expected: innerHeight - 24 - (300 + 8),
+  }));
+  expect(maxH.actual, 'klebende Sidebar endet über der Job-Queue-Leiste').toBe(maxH.expected);
+
+  // Überlappung erzwingen (gemeldete Höhe auf 0) — dann muss die Leiste oben
+  // liegen: die sticky Sidebar ist Stacking-Context und darf keinen hohen
+  // z-index haben.
+  await page.evaluate(() => document.documentElement.style.setProperty('--job-queue-h', '0px'));
   const barOnTop = await page.evaluate(() => {
     const side = document.querySelector('.layout-sidebar').getBoundingClientRect();
     const b = document.querySelector('.job-queue-bar').getBoundingClientRect();
@@ -33,6 +51,7 @@ test('pagetree: Job-Queue-Leiste liegt über der Sidebar, Kontextmenü bleibt be
   });
   expect(barOnTop.overlaps, 'Testaufbau: Leiste ragt in die Sidebar').toBe(true);
   expect(barOnTop.onTop, 'Job-Queue-Leiste verdeckt den Tree, nicht umgekehrt').toBe(true);
+  await bar.evaluate(el => { el.style.maxHeight = ''; el.style.height = ''; });
   await page.evaluate(() => { const jobs = window.Alpine.store('jobs'); jobs.jobQueueItems = []; jobs.jobQueueExpanded = false; });
 
   // ── Kontextmenü: am <body>, ganz sichtbar, letzter Eintrag trifft ─────────

@@ -9,7 +9,64 @@
 
 import { aggregateLiveBookStats } from '../utils.js';
 
+// Sichtbarkeit einer Leistenkarte als Sicht auf `asideSlot` (app-state.js).
+// Lesend wie ein gewoehnliches Flag (Templates, `setupCardLifecycle({ showFlag })`,
+// Hash-Router); schreibend belegt `true` die Leiste, `false` raeumt sie nur,
+// wenn sie gerade diese Karte zeigt — ein verspaetetes `showChatCard = false`
+// schliesst also nie die Referenz, die inzwischen dort steht.
+function asideFlag(slot) {
+  return {
+    enumerable: true,
+    configurable: true,
+    get() { return this.asideSlot === slot; },
+    set(v) {
+      if (v) this.asideSlot = slot;
+      else if (this.asideSlot === slot) this.asideSlot = null;
+    },
+  };
+}
+
+export const asideFlagDescriptors = {
+  showChatCard: asideFlag('chat'),
+  showIdeenCard: asideFlag('ideen'),
+  showReferenceCard: asideFlag('reference'),
+};
+
 export const rootGetterDescriptors = {
+  ...asideFlagDescriptors,
+
+  // Splits mit Leiste der Hauptebene (index.html, layout/aside-split.css).
+  // Ideen stehen je nach Scope neben dem Editor ('page') oder neben der
+  // Kapitelbewertung ('chapter') — ideen-card.js haengt die Karte dafuer um.
+  editorAsideOpen: {
+    enumerable: true,
+    configurable: true,
+    get() {
+      const slot = this.asideSlot;
+      return !!(this.showEditorCard && slot && (slot !== 'ideen' || this.ideenScope === 'page'));
+    },
+  },
+  kapitelAsideOpen: {
+    enumerable: true,
+    configurable: true,
+    get() {
+      return !!(this.showKapitelReviewCard && this.asideSlot === 'ideen' && this.ideenScope === 'chapter');
+    },
+  },
+
+  // Seitenbaum-Spalte: nur angemeldet, nicht fuer das Admin-Konto und nicht
+  // ohne ein einziges Buch (der Baum haette nichts zu zeigen). Eine Bedingung
+  // fuer Spalte (`.layout--no-sidebar`) und Inhalt (`x-show`), sonst bliebe
+  // bei Abweichung eine leere Grid-Spalte stehen.
+  hasSidebar: {
+    enumerable: true,
+    configurable: true,
+    get() {
+      return !!this.$store.session.currentUser && !this.isAdminOnly
+        && !(this.booksLoaded && this.$store.nav.books.length === 0);
+    },
+  },
+
   // Sidebar-Σ: identisch zu Hero-Snapshot (overviewLatest) und Server-Total
   // (routes/sync.js#syncBook). Σ per-Seite-Stats — Titel zählen nicht.
   tokTotals: {

@@ -1,0 +1,61 @@
+{
+  "version": "5.7.2",
+  "date": "2026-10-31",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Komplettanalyse: Der neue Schritt «Alter der Figuren» liest nach dem Katalog die Altersangaben mit Beleg aus dem Text. Hat sich nichts geändert, überspringt er sich.",
+      "en": "Full analysis: the new step \"Character ages\" reads age statements with evidence from the text after the catalog. If nothing has changed, it skips itself."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figuren-Karte, Reiter «Familie»: Der Stammbaum ordnet Generationen sauber, zeigt Ehepartner und legt mehrere Familien nebeneinander statt in eine lange Reihe.",
+      "en": "Characters card, \"Family\" tab: the family tree lines up generations cleanly, shows spouses and places several families side by side instead of in one long row."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figuren-Karte, Reiter «Soziogramm»: Schichten mit vielen Figuren bekommen mehr Platz, nichts überlappt mehr. Eine Beziehung ordnet beide beteiligten Figuren nach Macht ein.",
+      "en": "Characters card, \"Sociogram\" tab: classes with many characters get more room, so nothing overlaps. A relationship now ranks both characters involved by power."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figuren-Karte, Reiter «Alter»: Du kannst nach Kapitel filtern. Ist der Stand seit der letzten Analyse überholt, steht ein Hinweis über der Tabelle.",
+      "en": "Characters card, \"Age\" tab: you can filter by chapter. If the results are out of date since the last analysis, a note appears above the table."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figuren-Karte: Jeder Reiter hat einen eigenen Link. Nach dem Neuladen landest du wieder im selben Reiter.",
+      "en": "Characters card: every tab has its own link. After reloading you land in the same tab again."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Komplettanalyse: Namensvarianten wie «Antonie Buddenbrook (Grünlich)» werden zur selben Figur zusammengeführt. Sammeleinträge wie «Gäste (allgemein)» erscheinen nicht mehr als Figur.",
+      "en": "Full analysis: name variants like \"Antonie Buddenbrook (Grünlich)\" are merged into the same character. Collective entries like \"guests (general)\" no longer appear as characters."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Grosse Bücher: Ereignisse, Schauplätze und Welt-Fakten öffnen schneller und laden beim Scrollen nach. Karten zeigen beim Laden Platzhalter statt einer leeren Fläche.",
+      "en": "Large books: events, locations and world facts open faster and load more as you scroll. Cards show placeholders while loading instead of an empty area."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Seitenleiste: Bei Büchern ab 200 Abschnitten starten die Kapitel zugeklappt. Die Breite der Leiste lässt sich auch mit den Pfeiltasten verstellen.",
+      "en": "Sidebar: in books with 200 sections or more, chapters start collapsed. The sidebar width can also be adjusted with the arrow keys."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Listen sortieren «Kapitel 2» vor «Kapitel 10» und Umlaute richtig ein. Zählungen stehen bei genau einem Eintrag überall in der Einzahl.",
+      "en": "Lists sort \"Chapter 2\" before \"Chapter 10\" and handle accented letters correctly. Counts use the singular wherever there is exactly one item."
+    },
+    {
+      "kind": "behoben",
+      "de": "Figuren-Karte, Reiter «Alter»: Eine Figur, deren jüngstes Ereignis ihre eigene Geburt war, galt nicht mehr als null Jahre alt.",
+      "en": "Characters card, \"Age\" tab: a character whose latest event was their own birth is no longer shown as zero years old."
+    },
+    {
+      "kind": "behoben",
+      "de": "Figuren-Karte, Reiter «Figurengraph»: Ein Klick auf eine Kapitelüberschrift im Graph setzt den Kapitelfilter wieder zuverlässig.",
+      "en": "Characters card, \"Character graph\" tab: clicking a chapter heading in the graph reliably sets the chapter filter again."
+    }
+  ]
+}

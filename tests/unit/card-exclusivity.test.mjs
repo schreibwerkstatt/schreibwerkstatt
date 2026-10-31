@@ -8,6 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { appViewMethods } from '../../public/js/app/app-view.js';
+import { asideFlagDescriptors } from '../../public/js/app/app-root-getters.js';
 import { setLastPageId } from '../../public/js/local-prefs.js';
 
 // localStorage-Stub: `getLastPageId`/`setLastPageId` (local-prefs) sind
@@ -33,7 +34,9 @@ function makeCtx() {
   // Nav-State lebt in Alpine.store('nav') (kein Root-Proxy mehr): nav-Objekt
   // unter $store.nav + Getter/Setter-Aliasse fuer c.selectedBookId-Mutationen.
   const nav = { selectedBookId: 42, books: [], pages: [], tree: [] };
-  return {
+  // Leisten-Flags (Chat/Ideen/Referenz) sind wie am echten Root Getter/Setter
+  // auf `asideSlot` (app-root-getters.js), keine eigenen Felder.
+  const ctx = {
     get selectedBookId() { return nav.selectedBookId; },
     set selectedBookId(v) { nav.selectedBookId = v; },
     get pages() { return nav.pages; },
@@ -62,8 +65,8 @@ function makeCtx() {
     showPdfExportCard: false,
     showBookOrganizerCard: false,
     showEditorCard: false,
-    showChatCard: false,
-    showIdeenCard: false,
+    asideSlot: null,
+    ideenScope: 'page',
     showTreeCard: false,
     // resetView-Pflichtdaten
     bookReviewHistory: [],
@@ -104,6 +107,7 @@ function makeCtx() {
     _ensurePartial: async () => true,
     ...appViewMethods,
   };
+  return Object.defineProperties(ctx, asideFlagDescriptors);
 }
 
 test('_closeOtherMainCards: keep="figures" → schliesst alle anderen', () => {
@@ -216,6 +220,28 @@ test('toggleChatCard: schliesst Ideen-Card (gleicher Slot neben Editor)', async 
   assert.equal(c.showChatCard, true);
   assert.equal(c.showIdeenCard, false,
     'Ideen und Chat teilen den Slot – nur eines aktiv');
+});
+
+test('Leiste: Referenz löst Chat ab und gibt die Lektorat-Befunde zurück', async () => {
+  // Der Seiten-Chat verbirgt die Befunde (Snapshot in chat-card.js#onShow);
+  // wer ihn ablöst — hier die Referenz —, stellt sie wieder her.
+  const c = makeCtx();
+  c.lektoratFindings = [{}];
+  await c.toggleChatCard();
+  c._checkDoneBeforeChat = true;
+  c.checkDone = false;
+  await c.toggleReferenceCard();
+  assert.equal(c.asideSlot, 'reference');
+  assert.equal(c.showChatCard, false);
+  assert.equal(c.checkDone, true, 'Befunde wieder sichtbar');
+  assert.equal(c._checkDoneBeforeChat, false);
+});
+
+test('Leiste: verspätetes showChatCard = false schliesst nicht die neue Karte', () => {
+  const c = makeCtx();
+  c.showReferenceCard = true;
+  c.showChatCard = false;
+  assert.equal(c.asideSlot, 'reference');
 });
 
 test('toggleChatCard: ohne currentPage nicht öffnen', async () => {

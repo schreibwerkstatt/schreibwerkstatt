@@ -11,11 +11,12 @@
 /* ── Entwicklungs-Chart (Chart.js, lazy) ─────────────────────────────────── */
 /* `.overview-tile` setzt `container-type: inline-size` und wird damit zum
    Containing-Block für `position:fixed`-Nachfahren. Das via x-anchor (.fixed)
-   verankerte combobox-Dropdown (Entitäts-Auswahl) würde dadurch relativ zu
-   diesem Tile statt zum Viewport positioniert → Dropdown sitzt verschoben, auf
-   allen Viewports. Dieses Tile nutzt keine Container-Queries, daher Containment
-   lösen, damit das Dropdown wieder viewport-relativ ankert. */
-.card--mystats .mystats-chart-tile { container-type: normal; }
+   verankerte combobox-Dropdown (Metrik-Auswahl im Chart, Buch-Auswahl der
+   KI-Läufe) würde dadurch relativ zu diesem Tile statt zum Viewport positioniert
+   → Dropdown sitzt verschoben, auf allen Viewports. Beide Tiles nutzen keine
+   Container-Queries, daher Containment lösen, damit das Dropdown wieder
+   viewport-relativ ankert. */
+.card--mystats :is(.mystats-chart-tile, .mystats-jobs-tile) { container-type: normal; }
 
 .mystats-controls {
   display: flex;
@@ -437,7 +438,6 @@
 .job-stats-runs-row td {
   padding: var(--space-6) 0 var(--space-10) var(--space-18);
   border-bottom: 0.5px solid var(--color-separator-on-dark);
-  background: var(--color-card-bg);
 }
 .job-runs-table {
   width: 100%;
@@ -490,7 +490,8 @@
   .job-stats-table td:first-child {
     position: sticky;
     left: 0;
-    background: var(--color-card-bg);
+    /* deckend im Ton der `.overview-tile`, sonst scheint die gescrollte Zeile durch */
+    background: var(--color-bg);
   }
 }
 }

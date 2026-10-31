@@ -35,6 +35,29 @@ describe('_buildEdges: Dedup', () => {
     assert.strictEqual(edges.length, 2);
   });
 
+  test('gegenläufige Paare aus beiden Perspektiven → eine Kante in kanonischer Richtung', () => {
+    const edges = buildEdges([
+      f('kind', [bz('mama', 'elternteil')]),
+      f('mama', [bz('kind', 'kind')]),
+      f('azubi', [bz('chef', 'vorgesetzter')]),
+      f('chef', [bz('azubi', 'untergebener')]),
+    ]);
+    assert.deepStrictEqual(edges.map(e => [e.from, e.typ, e.to]), [
+      ['mama', 'kind', 'kind'],
+      ['chef', 'untergebener', 'azubi'],
+    ]);
+  });
+
+  test('Soziogramm: gedrehte Kante kehrt das Machtverhältnis um', () => {
+    // azubi sagt: der Chef (zu) dominiert (+2). Kanonisch chef → azubi, also dominiert
+    // jetzt «von»: Pfeil zeigt auf den Chef (from).
+    const [e] = buildEdges([
+      f('azubi', [bz('chef', 'vorgesetzter', { machtverhaltnis: 2 })]),
+      f('chef'),
+    ], true);
+    assert.deepStrictEqual([e.from, e.to, e.arrows], ['chef', 'azubi', 'from']);
+  });
+
   test('verschiedene Typen zwischen demselben Paar bleiben nebeneinander', () => {
     const edges = buildEdges([
       f('a', [bz('b', 'freund'), bz('b', 'kollege')]),
@@ -68,8 +91,11 @@ describe('_buildEdges: Darstellung', () => {
 
   test('unbekannter Beziehungstyp fällt auf "andere" statt zu brechen', () => {
     const [e] = buildEdges([f('a', [bz('b', 'erfunden')]), f('b')]);
-    assert.strictEqual(e.typ, 'erfunden');
+    // Bereinigt auf den Listenwert: Farbe UND Tooltip-Label (figuren.bz.andere) existieren.
+    assert.strictEqual(e.typ, 'andere');
     assert.ok(e.color.color, 'Farbe aus BZ.andere');
+    const [p] = buildEdges([f('a', [bz('b', 'andere|bekannt')]), f('b')]);
+    assert.strictEqual(p.typ, 'bekannt');
   });
 
   test('Soziogramm: Machtverhältnis bestimmt Richtung und Breite', () => {
@@ -81,8 +107,9 @@ describe('_buildEdges: Darstellung', () => {
   });
 
   test('Soziogramm ohne Machtangabe: gerichteter Typ behält seinen Pfeil', () => {
+    // a sagt «b ist Vorgesetzter»; kanonisch b → a (untergebener), Pfeil weiter auf b.
     const [e] = buildEdges([f('a', [bz('b', 'vorgesetzter')]), f('b')], true);
-    assert.strictEqual(e.arrows, 'to');
+    assert.deepStrictEqual([e.from, e.to, e.arrows], ['b', 'a', 'from']);
     const [flat] = buildEdges([f('a', [bz('b', 'freund')]), f('b')], true);
     assert.strictEqual(flat.arrows, '');
   });

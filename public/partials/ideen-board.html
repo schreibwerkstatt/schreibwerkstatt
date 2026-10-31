@@ -26,7 +26,7 @@
 
   <!-- Board links, Ideen-Chat rechts daneben (ab 1280px; schmaler steht der
        Chat per `order` über dem Board). Reine Layout-Klammer. -->
-  <div class="ideen-split" :class="{ 'ideen-split--chat': ideenChatOpen }">
+  <div class="aside-split aside-split--aside-first" :class="{ 'aside-split--on': ideenChatOpen }">
   <div class="ideen-main">
 
   <!-- Feature-Tipp: offene Ideen an Abschnitten/Kapiteln → Erledigt-Check des Ideen-Chats -->
@@ -55,6 +55,6 @@
   </div><!-- /.ideen-main -->
 
   <!-- Ideen-Chat-Panel (ausgelagert; File-Limit) -->
-  <div id="partial-ideen-chat" class="ideen-chat-slot"></div>
-  </div><!-- /.ideen-split -->
+  <div id="partial-ideen-chat" class="aside-split-aside"></div>
+  </div><!-- /.aside-split -->
 </div>

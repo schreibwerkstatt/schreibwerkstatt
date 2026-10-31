@@ -131,7 +131,7 @@ export const treeKeyboardMethods = {
       // Ein-Abschnitt-Kapitel: nur die Abschnittszeile ist sichtbar (sidebar.html).
       const single = this._isSingleSectionChapter(it);
       if (!it.solo && !single) { keys.add('c' + it.id); first ??= 'c' + it.id; }
-      if (it.solo || it.open || single) {
+      if (this._chapterPagesShown(it)) {
         for (const p of it.pages) { keys.add('p' + p.id); first ??= 'p' + p.id; }
       }
     }

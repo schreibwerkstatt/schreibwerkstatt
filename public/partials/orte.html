@@ -10,7 +10,7 @@
     <div class="card-header-titlebar">
       <span class="card-eyebrow" x-text="$app.selectedBookName"></span>
       <span class="card-title" x-text="$app.t('orte.title')"></span>
-      <div class="card-subline" x-show="$store.catalogUi.orteUpdatedAt && !orteLoading">
+      <div class="card-subline" x-show="$store.catalogUi.orteUpdatedAt && !cardLoading">
         <span class="card-timestamp" x-text="$app.t('common.asOf', { date: orteUpdatedLabel() })"></span>
       </div>
     </div>
@@ -38,7 +38,7 @@
     </div>
   </template>
 
-  <div x-show="$store.catalog.orte.length === 0 && !orteLoading && !orteStatus && !ortEdit.mode" class="card-empty">
+  <div x-show="$store.catalog.orte.length === 0 && !cardLoading && !orteStatus && !ortEdit.mode" class="card-empty">
     <p class="card-empty-text" x-text="$app.t('common.noAnalysisYet')"></p>
     <p class="card-empty-hint" x-text="$app.t('empty.orte.hint')"></p>
     <button type="button" class="primary card-empty-cta"
@@ -50,15 +50,7 @@
   </div>
 
   <!-- Skeleton während Loading vor erstem Datensatz -->
-  <div x-show="orteLoading && $store.catalog.orte.length === 0" class="entity-skeleton entity-list--accented" x-cloak>
-    <template x-for="i in 6" :key="i">
-      <div class="entity-skeleton-row">
-        <span class="entity-skeleton-cell entity-skeleton-cell--anchor"></span>
-        <span class="entity-skeleton-cell entity-skeleton-cell--title"></span>
-        <span class="entity-skeleton-cell entity-skeleton-cell--meta"></span>
-      </div>
-    </template>
-  </div>
+  <div x-show="cardLoading && $store.catalog.orte.length === 0" x-skeleton="6" class="entity-list--accented" x-cloak></div>
 
   <!-- Ansicht-Umschalter (Liste / Grid / Karte) — Karte nur bei realen Orten -->
   <div x-show="$store.catalog.orte.length > 0" class="tabs entity-view-toggle" role="tablist" :aria-label="$app.t('orte.viewLabel')">

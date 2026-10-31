@@ -20,6 +20,7 @@
 
 import { fetchJson } from './_shared.js';
 import { figurMergeMessage } from '../figur-merge.js';
+import { compareText } from '../../i18n.js';
 
 // Pro Gattung: Endpunkt-Basis, Listen-Feld der GET-Antwort, Namensfeld und die
 // Body-Schlüssel des POST. Die `id` ist bei Figuren/Schauplätzen die öffentliche
@@ -58,7 +59,7 @@ export const mergeMethods = {
         const rows = results[i]?.[cfg.list] || [];
         this.mergeLists[kind] = rows
           .map(r => ({ id: String(r.id), name: r[cfg.nameKey] || '', stale: !!r.stale }))
-          .sort((a, b) => (b.stale - a.stale) || a.name.localeCompare(b.name));
+          .sort((a, b) => (b.stale - a.stale) || compareText(a.name, b.name));
       });
       this.mergeCandidatesBookId = String(bookId);
     } catch (e) {

@@ -16,6 +16,8 @@
 // CSS-Modifier, Prompt-Enum in prompts/komplett/): ergaenzen ja, umbenennen
 // nein — sonst verlieren bestehende Figuren ihr Label und ihre Farbe.
 
+import { compareText } from '../i18n.js';
+
 export const FIGUR_TYPEN = ['hauptfigur', 'antagonist', 'mentor', 'nebenfigur', 'randfigur', 'andere'];
 
 // Prueft, was aus der KI-Antwort kommt. Unbekanntes wird auf 'andere'
@@ -28,15 +30,8 @@ const RANK = Object.fromEntries(FIGUR_TYPEN.map((t, i) => [t, i]));
 /** Sortierrang eines Typs; Unbekanntes hinten (nicht raus). */
 export const typRank = (typ) => RANK[typ] ?? FIGUR_TYPEN.length;
 
-/** Kollations-Locale der Namenssortierung: die UI-Sprache des Betrachters
- *  (`$store.shell.uiLocale`), ausserhalb von Alpine (Unit-Tests) `de`. */
-export function nameLocale() {
-  try { return globalThis.Alpine?.store?.('shell')?.uiLocale || 'de'; } catch { return 'de'; }
-}
-
-/** Namensvergleich in der Kollation der UI-Sprache. */
-export const compareNames = (a, b, locale = nameLocale()) =>
-  String(a ?? '').localeCompare(String(b ?? ''), locale);
+/** Namensvergleich in der Kollation der UI-Sprache (i18n.js#compareText). */
+export const compareNames = compareText;
 
 /** Der Vergleich, den die Listen ohne eigene Zweitachse teilen: Typ-Tier,
  *  danach Name in der Kollation der UI-Sprache. */

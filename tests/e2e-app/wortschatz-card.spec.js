@@ -45,13 +45,13 @@ test('Wortschatz: Scan laeuft, alle Reiter rendern mit Daten', async ({ page }) 
 
   // Reiter 2: Wendungen.
   await card.getByRole('tab', { name: /Wendungen/ }).click();
-  const phraseRows = card.locator('div[x-show="wortschatzTab === \'phrases\'"] tbody tr');
+  const phraseRows = card.getByRole('tabpanel').locator('tbody tr');
   await expect.poll(() => phraseRows.count()).toBeGreaterThan(0);
 
   // Reiter 3: Einmalwoerter — in der Reihenfolge der Auswahl (Rang-Spalte). Ohne
   // Referenzkorpus gibt es kein „sonst nie", die Auswahl ist dann: laengstes zuerst.
   await card.getByRole('tab', { name: /Einmalwörter/ }).click();
-  const hapaxRows = card.locator('div[x-show="wortschatzTab === \'hapax\'"] tbody tr');
+  const hapaxRows = card.getByRole('tabpanel').locator('tbody tr');
   await expect.poll(() => hapaxRows.count()).toBeGreaterThan(0);
   const hapax = await hapaxRows.evaluateAll(
     (rows) => rows.map((r) => ({
@@ -61,7 +61,7 @@ test('Wortschatz: Scan laeuft, alle Reiter rendern mit Daten', async ({ page }) 
   );
   expect(hapax[0].rank).toBe(1);
   expect(hapax[0].len).toBeGreaterThanOrEqual(hapax[hapax.length - 1].len);
-  await expect(card.locator('div[x-show="wortschatzTab === \'hapax\'"] .wortschatz-kind:visible')).toHaveCount(0);
+  await expect(card.getByRole('tabpanel').locator('.wortschatz-kind:visible')).toHaveCount(0);
 
   // Reiter 5 + 6: Kapitel-Band und Figuren-Idiolekt rendern (Figuren darf leer sein —
   // dann steht der Hinweis mit der Mindestmenge da, keine leere Tabelle).

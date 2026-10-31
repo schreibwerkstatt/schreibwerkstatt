@@ -4,6 +4,7 @@
 import { _isLocal } from '../state.js';
 import { _obj, _str, _num } from '../schema-utils.js';
 import { KONTINUITAET_TYPEN } from './schema-strings.js';
+import { RELATION_TYPES } from '../../book/beziehung-typen.js';
 
 // ═════════════════════════════════════════════════════════════════════════════
 // JSON-Schemas für Grammar-Constrained Decoding (lokale Provider)
@@ -33,9 +34,12 @@ const _arr = (items, max) => (_isLocal
 const _plainArr = (items) => ({ type: 'array', items });
 
 const _bzBeleg = _obj({ kapitel: _str, seite: _str });
+// Beziehungstyp als enum: mit Grammar setzt das Modell genau einen Listenwert statt
+// des abgeschriebenen «a|b»-Beispiels oder eines eigenen Typs.
+const _bzTyp = { type: 'string', enum: RELATION_TYPES };
 const _bzItem = (arr) => _obj(_isLocal
-  ? { figur_id: _str, typ: _str, beschreibung: _str, belege: arr(_bzBeleg, 'belege') }
-  : { figur_id: _str, typ: _str, machtverhaltnis: _num, beschreibung: _str, belege: arr(_bzBeleg, 'belege') }
+  ? { figur_id: _str, typ: _bzTyp, beschreibung: _str, belege: arr(_bzBeleg, 'belege') }
+  : { figur_id: _str, typ: _bzTyp, machtverhaltnis: _num, beschreibung: _str, belege: arr(_bzBeleg, 'belege') }
 );
 
 // Tiefe-Felder (aeusseres/stimme/hintergrund/arc) nur für Claude: lokale Grammar
@@ -237,8 +241,8 @@ function _buildFaktenPassSchema() {
 function _buildBeziehungenSchema() {
   const belegeField = { belege: { type: 'array', items: _bzBeleg } };
   const props = _isLocal
-    ? { von: _str, zu: _str, typ: _str, beschreibung: _str, ...belegeField }
-    : { von: _str, zu: _str, typ: _str, machtverhaltnis: _num, beschreibung: _str, ...belegeField };
+    ? { von: _str, zu: _str, typ: _bzTyp, beschreibung: _str, ...belegeField }
+    : { von: _str, zu: _str, typ: _bzTyp, machtverhaltnis: _num, beschreibung: _str, ...belegeField };
   return _obj({ beziehungen: { type: 'array', items: _obj(props) } });
 }
 

@@ -10,7 +10,8 @@
 
      Die Spaltenzahl ist gedeckelt (LEBENSLAUF_MAX_SPALTEN): breiter als der
      Bildschirm faellt der Vergleich, um den es geht, auseinander. -->
-<div x-show="figurenGraphModus === 'lebenslauf'" class="figur-cv" x-cloak>
+<template x-if="figurenGraphModus === 'lebenslauf'">
+<div class="figur-cv">
   <div class="card-section-head card-section-head--baseline">
     <p class="figur-cv-intro" x-text="$app.t('figuren.lebenslauf.intro')"></p>
     <!-- Schullaufbahn: KI schlaegt je Figur einen Schulweg mit Beleg vor; der Autor
@@ -126,7 +127,11 @@
                         @click="figurenLebenslaufGoto(evt)"
                         @keydown.enter.prevent="figurenLebenslaufGoto(evt)"
                         @keydown.space.prevent="figurenLebenslaufGoto(evt)">
-                      <span class="figur-cv-marke" :class="{ 'figur-cv-marke--frei': evt.jahr == null }" x-text="figurenLebenslaufMarke(evt, figurenLebenslaufMatrix().spalten[zi])"></span>
+                      <span class="figur-cv-marke" :class="{ 'figur-cv-marke--frei': evt.jahr == null }"
+                            x-data="{ get m() { return figurenLebenslaufMarke(evt, figurenLebenslaufMatrix().spalten[zi]); } }">
+                        <span class="figur-cv-marke-teil" x-text="m.zeit"></span>
+                        <template x-if="m.stufe"><span class="figur-cv-marke-stufe" x-text="'·\u00a0' + m.stufe"></span></template>
+                      </span>
                       <span class="figur-cv-text" x-text="evt.ereignis"></span>
                       <span class="tag figur-cv-subtyp" x-show="evt.subtyp && evt.subtyp !== 'sonstiges'"
                             x-text="figurenLebenslaufSubtypLabel(evt)"></span>
@@ -141,3 +146,4 @@
     </table>
   </div>
 </div>
+</template>

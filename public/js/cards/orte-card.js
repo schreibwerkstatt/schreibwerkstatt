@@ -19,11 +19,12 @@ import { orteInsightMethods } from '../book/orte-insights.js';
 import { lsGet, lsSet } from '../safe-storage.js';
 import { formatLastRun } from '../utils/date.js';
 import { plotBacklinkMethods } from '../book/plot-backlinks.js';
+import { listWindowState, listWindowMethods } from '../list-window.js';
+import { compareText } from '../i18n.js';
 
 export function registerOrteCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('orteCard', () => ({
-    orteLoading: false,
     orteProgress: 0,
     orteStatus: '',
     orteError: '',
@@ -53,6 +54,8 @@ export function registerOrteCard() {
     _ortePollTimer: null,
     _geocodeJobTimer: null,   // transienter Poll-Timer fuer den KI-Geocode-Fallback-Job
     _orteMapStatusTimer: null,// Auto-Clear-Timer fuer orteMapStatus
+    // Liste rendert schrittweise (list-window.js): bei ~1000 Orten sonst Sekunden Main-Thread.
+    ...listWindowState(),
     _lifecycle: null,
     // Pflege-Formular (book/orte-edit.js): { mode: null|'new'|'edit', id, draft, busy, error }.
     ortEdit: closedOrtEdit(),
@@ -70,6 +73,14 @@ export function registerOrteCard() {
       // Marker nach Such-/Filteraenderung (inkl. Reset) stehen, waehrend die
       // Locate-Liste schon gefiltert ist. Signatur ueber die gefilterten ids
       // feuert nur bei echter Mengenaenderung (Drag/Geocode rendern selbst).
+      // Ausgewählter Ort (Deep-Link, Palette, Sprung aus einer anderen Karte) muss im
+      // gerenderten Fenster stehen, sonst findet scrollToWhenReady seine Zeile nie.
+      // Beobachtet wird der Index, nicht die ID: beim Kaltstart steht die Auswahl
+      // oft schon, bevor die Liste geladen ist.
+      this.$watch(() => {
+        const id = Alpine.store('catalogUi').selectedOrtId;
+        return id == null ? -1 : this.orteFiltered.findIndex(o => o.id === id);
+      }, (idx) => this.listWindowReveal(idx));
       this.$watch(
         () => this.orteFiltered.map(o => o.id).join(','),
         () => this.refreshOrteMarkersForFilter(),
@@ -78,7 +89,7 @@ export function registerOrteCard() {
         name: 'orte',
         showFlag: 'showOrteCard',
         timerKeys: ['_ortePollTimer', '_geocodeJobTimer', '_orteMapStatusTimer'],
-        resetState: { plotBacklinks: {}, orteLoading: false, orteProgress: 0, orteStatus: '', orteError: '', staleDeleting: false, orteRealEnabled: false, geocodingId: null, geocodingAll: false, highlightOrtId: null, orteMapStatus: '', ortMergeTarget: '' },
+        resetState: { plotBacklinks: {}, orteProgress: 0, orteStatus: '', orteError: '', staleDeleting: false, orteRealEnabled: false, geocodingId: null, geocodingAll: false, highlightOrtId: null, orteMapStatus: '', ortMergeTarget: '', ...listWindowState() },
         load: (root) => { this.loadPlotBacklinks('location'); return root.loadOrte(Alpine.store('nav').selectedBookId); },
         onShow: async (root) => {
           const tasks = [root.loadOrte(Alpine.store('nav').selectedBookId), this.loadOrteReal(), this.loadPlotBacklinks('location')];
@@ -208,7 +219,7 @@ export function registerOrteCard() {
         const aP = root._pageIdIdx(a.erste_erwaehnung_page_id);
         const bP = root._pageIdIdx(b.erste_erwaehnung_page_id);
         if (aP !== bP) return aP - bP;
-        return (a.name || '').localeCompare(b.name || '', 'de');
+        return compareText(a.name, b.name);
       });
     },
 
@@ -217,5 +228,6 @@ export function registerOrteCard() {
     ...orteEditMethods,
     ...orteInsightMethods,
     ...plotBacklinkMethods,
+    ...listWindowMethods,
   }));
 }

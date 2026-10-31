@@ -9,6 +9,7 @@
 
 import { fetchJson } from '../utils.js';
 import { normalizeTagList, hasAnyTag, MAX_TAGS } from './fields.js';
+import { compareText } from '../i18n.js';
 
 export const sourcesTagMethods = {
   /** Schlagworte der eigenen Bibliothek ([{ tag, count }]). Fehler bleiben
@@ -33,7 +34,7 @@ export const sourcesTagMethods = {
       for (const t of s.tags || []) if (!seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
     }
     return [...seen.values()]
-      .sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }))
+      .sort(compareText)
       .map(t => ({ value: t, label: t }));
   },
 

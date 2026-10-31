@@ -14,15 +14,7 @@
   <div x-show="errorMessage" class="card-status card-status--error" x-text="errorMessage"></div>
 
   <!-- Skeleton während Loading vor erstem Datensatz -->
-  <div x-show="loading && drafts.length === 0" class="entity-skeleton" x-cloak>
-    <template x-for="i in 4" :key="i">
-      <div class="entity-skeleton-row">
-        <span class="entity-skeleton-cell entity-skeleton-cell--anchor"></span>
-        <span class="entity-skeleton-cell entity-skeleton-cell--title"></span>
-        <span class="entity-skeleton-cell entity-skeleton-cell--meta"></span>
-      </div>
-    </template>
-  </div>
+  <div x-show="loading && drafts.length === 0" x-skeleton="4" x-cloak></div>
 
   <!-- Empty-State mit CTA — kein Draft vorhanden -->
   <div x-show="!loading && drafts.length === 0 && !creating && !importing" class="card-empty">

@@ -23,7 +23,7 @@
   <div x-show="kontinuitaetStatus" class="card-status" x-html="kontinuitaetStatus"></div>
 
   <!-- Laden der Befunde fehlgeschlagen: eigener Zustand mit Retry, nicht „noch keine Analyse". -->
-  <div x-show="kontinuitaetLoadError && !kontinuitaetResult && !kontinuitaetLoading" class="card-empty" x-cloak>
+  <div x-show="kontinuitaetLoadError && !kontinuitaetResult && !kontinuitaetLoading && !cardLoading" class="card-empty" x-cloak>
     <p class="card-empty-text" x-text="$app.t('kontinuitaet.error.loadFailed')"></p>
     <button type="button" class="secondary card-empty-cta" @click="_loadKontinuitaetHistory()">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
@@ -31,7 +31,7 @@
     </button>
   </div>
 
-  <div x-show="!kontinuitaetResult && !kontinuitaetLoading && !kontinuitaetLoadError" class="card-empty">
+  <div x-show="!kontinuitaetResult && !kontinuitaetLoading && !kontinuitaetLoadError && !cardLoading" class="card-empty">
     <p class="card-empty-text" x-text="$app.t('common.noAnalysisYet')"></p>
     <button type="button" class="primary card-empty-cta"
             @click="$app.alleAktualisieren()"
@@ -65,15 +65,7 @@
   </ul>
 
   <!-- Skeleton während Loading vor erstem Ergebnis -->
-  <div x-show="kontinuitaetLoading && !kontinuitaetResult" class="entity-skeleton entity-list--accented" x-cloak>
-    <template x-for="i in 5" :key="i">
-      <div class="entity-skeleton-row">
-        <span class="entity-skeleton-cell entity-skeleton-cell--anchor"></span>
-        <span class="entity-skeleton-cell entity-skeleton-cell--title"></span>
-        <span class="entity-skeleton-cell entity-skeleton-cell--meta"></span>
-      </div>
-    </template>
-  </div>
+  <div x-show="(cardLoading || kontinuitaetLoading) && !kontinuitaetResult" x-skeleton="5" class="entity-list--accented" x-cloak></div>
 
   <!-- Zusammenfassung (klappbar) — ausserhalb x-if, sonst werden Filter und
        Zusammenfassung beim Result-Wechsel komplett neu gemountet. -->

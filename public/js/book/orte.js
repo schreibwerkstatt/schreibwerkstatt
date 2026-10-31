@@ -3,6 +3,7 @@
 
 import { fetchJson } from '../utils.js';
 import { loadToken } from '../cards/book-guard.js';
+import { assignCatalogList } from '../cards/catalog-store.js';
 
 // Server-`error_code` der Pflege-Routen → i18n-Key; Unbekanntes fällt auf den
 // generischen Speicherfehler.
@@ -31,7 +32,7 @@ export const orteMethods = {
     try {
       const data = await fetchJson('/locations/' + bookId);
       if (!isCurrent()) return;
-      this.$store.catalog.orte = data?.orte || [];
+      assignCatalogList('orte', bookId, data?.orte || []);
       this.$store.catalogUi.orteUpdatedAt = data?.updated_at || null;
     } catch (e) {
       console.error('[loadOrte]', e);

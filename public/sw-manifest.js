@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "6ff05fcb685988dc";
+self.__SHELL_BUILD = "474ba5f57752d088";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -92,6 +92,7 @@ self.__SHELL_MANIFEST = [
   "/css/components/hover-reveal.css",
   "/css/components/icon-btn.css",
   "/css/components/icons.css",
+  "/css/components/job-queue.css",
   "/css/components/job-toast.css",
   "/css/components/manuscript-content.css",
   "/css/components/manuscript-stream.css",
@@ -153,6 +154,7 @@ self.__SHELL_MANIFEST = [
   "/css/entities/szenen.css",
   "/css/entities/world-facts.css",
   "/css/landing.css",
+  "/css/layout/aside-split.css",
   "/css/layout/base.css",
   "/css/layout/layout-base.css",
   "/css/layout/safari-fallback.css",
@@ -269,6 +271,7 @@ self.__SHELL_MANIFEST = [
   "/js/book-overview/szenen.js",
   "/js/book-overview/wortschatz.js",
   "/js/book-snapshot-diff.js",
+  "/js/book/beziehung-typen.js",
   "/js/book/book-create.js",
   "/js/book/book-settings.js",
   "/js/book/book-settings/_shared.js",
@@ -745,9 +748,11 @@ self.__SHELL_MANIFEST = [
   "/js/graph/constants.js",
   "/js/graph/core.js",
   "/js/graph/familiengraph.js",
+  "/js/graph/family-layout.js",
   "/js/graph/figurengraph.js",
   "/js/graph/layout.js",
   "/js/graph/shared.js",
+  "/js/graph/soziogramm-layout.js",
   "/js/graph/soziogramm.js",
   "/js/headline/channels.js",
   "/js/hotkeys.js",
@@ -760,6 +765,7 @@ self.__SHELL_MANIFEST = [
   "/js/interview/timecode.js",
   "/js/komplett-scope.js",
   "/js/lazy-libs.js",
+  "/js/list-window.js",
   "/js/local-prefs.js",
   "/js/manuscript-render.js",
   "/js/manuscript-stream.js",
@@ -769,6 +775,7 @@ self.__SHELL_MANIFEST = [
   "/js/num-input.js",
   "/js/page-revision-diff.js",
   "/js/page-revisions-groups.js",
+  "/js/page-unload.js",
   "/js/password-form.js",
   "/js/picker-popover.js",
   "/js/popover-anchor.js",
@@ -875,6 +882,7 @@ self.__SHELL_MANIFEST = [
   "/js/shared/offline-search.js",
   "/js/shared/stopwords-de.js",
   "/js/shell-protocol.js",
+  "/js/skeleton.js",
   "/js/sortable-dnd.js",
   "/js/sortable-table.js",
   "/js/sources/cite-html.js",

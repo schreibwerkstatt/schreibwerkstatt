@@ -128,26 +128,31 @@ export const cardsMethods = {
   },
 
 
-  // Seiten-Ideen: lebt parallel zum Editor wie Seiten-Chat. Mutually exclusive
-  // mit Chat — nur eines kann gleichzeitig aktiv sein (gleicher Slot).
+  // Leiste neben Editor bzw. Kapitelbewertung belegen ('chat' | 'ideen' |
+  // 'reference' | null). Der Mutex steckt im Feld selbst (`asideSlot`); hier
+  // nur, was beim Verlassen des Seiten-Chats passiert: er verbirgt die
+  // Lektorat-Befunde, solange er offen ist (Snapshot in chat-card.js#onShow),
+  // und gibt sie beim Gehen zurück — egal, welche Leiste ihn ablöst.
+  _setAside(slot) {
+    if (this.asideSlot === 'chat' && slot !== 'chat'
+        && this._checkDoneBeforeChat && this.lektoratFindings?.length > 0) {
+      this.checkDone = true;
+      this._checkDoneBeforeChat = false;
+    }
+    this.asideSlot = slot;
+  },
+
+  // Seiten-Ideen: lebt parallel zum Editor wie Seiten-Chat, in derselben Leiste.
   async toggleIdeenCard() {
     if (this.showIdeenCard && this.ideenScope === 'page') {
-      this.showIdeenCard = false;
+      this._setAside(null);
       return;
     }
     if (!this.currentPage) return;
-    if (this.showChatCard) {
-      this.showChatCard = false;
-      if (this._checkDoneBeforeChat && this.lektoratFindings?.length > 0) {
-        this.checkDone = true;
-        this._checkDoneBeforeChat = false;
-      }
-    }
-    if (this.showReferenceCard) this.showReferenceCard = false;
     await this._ensurePartial('ideen');
     this.ideenScope = 'page';
     this.ideenChapterId = null;
-    this.showIdeenCard = true;
+    this._setAside('ideen');
   },
 
   // „Ähnliche Stellen zu dieser Figur/Szene/Seite" (semantische Suche): öffnet
@@ -168,15 +173,13 @@ export const cardsMethods = {
     const cid = parseInt(chapterId, 10);
     if (!cid) return;
     if (this.showIdeenCard && this.ideenScope === 'chapter' && this.ideenChapterId === cid) {
-      this.showIdeenCard = false;
+      this._setAside(null);
       return;
     }
-    if (this.showChatCard) this.showChatCard = false;
-    if (this.showReferenceCard) this.showReferenceCard = false;
     await this._ensurePartial('ideen');
     this.ideenScope = 'chapter';
     this.ideenChapterId = cid;
-    this.showIdeenCard = true;
+    this._setAside('ideen');
   },
 
   // Sprung von einem Seiten-Indikator (Sidebar/Editor) in die Recherche-Karte,
@@ -256,21 +259,15 @@ export const cardsMethods = {
   // Seiten-Chat: lebt neben dem Editor, schließt NICHT den Editor. Toggle
   // merkt sich checkDone-Snapshot (Chat soll Findings temporär verbergen).
   // checkDoneBeforeChat wird in chat-card.js beim onShow gesetzt.
-  // Mutually exclusive mit Ideen — gleicher Slot neben Editor.
+  // Teilt die Leiste mit Ideen und Referenz (`_setAside`).
   async toggleChatCard() {
     if (this.showChatCard) {
-      this.showChatCard = false;
-      if (this._checkDoneBeforeChat && this.lektoratFindings?.length > 0) {
-        this.checkDone = true;
-        this._checkDoneBeforeChat = false;
-      }
+      this._setAside(null);
       return;
     }
     if (!this.currentPage) return;
-    if (this.showIdeenCard) this.showIdeenCard = false;
-    if (this.showReferenceCard) this.showReferenceCard = false;
     await this._ensurePartial('chat');
-    this.showChatCard = true;
+    this._setAside('chat');
     this.logAuditEvent?.('chatOpened', { book: this.$store.nav.selectedBookId, page: this.currentPage.id });
   },
 
@@ -301,18 +298,16 @@ export const cardsMethods = {
   },
 
   // Referenz-Slot: read-only Begleitpanel (Figuren/Orte/Szenen/Ereignisse/
-  // Recherche/Quellen/Verwandt), Mutex mit Seiten-Chat + Ideen im selben Slot.
+  // Recherche/Quellen/Verwandt), teilt die Leiste mit Seiten-Chat + Ideen.
   // Kein currentPage-Zwang — der Buch-Scope funktioniert auch ohne offene Seite;
   // erreichbar ist der Toggle ohnehin nur aus der Editor-Toolbar.
   async toggleReferenceCard() {
     if (this.showReferenceCard) {
-      this.showReferenceCard = false;
+      this._setAside(null);
       return;
     }
-    if (this.showChatCard) this.showChatCard = false;
-    if (this.showIdeenCard) this.showIdeenCard = false;
     await this._ensurePartial('reference');
-    this.showReferenceCard = true;
+    this._setAside('reference');
   },
 
   // Seitenwechsel: Seiten-Chat resetten (Chat ist pro Seite).

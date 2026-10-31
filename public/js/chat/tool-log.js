@@ -15,6 +15,8 @@
 // Ältere Antworten ohne `view` bekommen eine Sicht aus den Argumenten: Suchbegriffe
 // als Zitat, IDs als Verweis ohne Namen.
 
+import { pluralKey } from '../i18n.js';
+
 // Arten der Server-Sicht, die `x-entity-ref` kennt (englische Kinds über KIND_ALIASES).
 const ENTITY_KINDS = new Set(['page', 'chapter', 'figure', 'location', 'beat', 'thread', 'motif', 'research', 'draft', 'idee']);
 // Ohne Sprungziel aus dem Chat heraus: Idee braucht ihren Ort, der hier fehlt.
@@ -182,7 +184,7 @@ function _finalEntry(tc, t) {
     kind: 'final',
     text: bad
       ? t('chat.toolFinalCitationsBad', { n, bad })
-      : t(n === 1 ? 'chat.toolFinalCitationsOkOne' : 'chat.toolFinalCitationsOk', { n }),
+      : t(pluralKey('chat.toolFinalCitationsOk', n), { n }),
     bad: bad > 0,
   };
 }
@@ -206,7 +208,7 @@ export function toolLogEntries(ci, t, opts = {}) {
 
   const items = [];
   const pre = Number(ci?.pre_context?.count) || 0;
-  if (pre) items.push({ kind: 'pre', text: t(pre === 1 ? 'chat.toolPreContextOne' : 'chat.toolPreContext', { n: pre }) });
+  if (pre) items.push({ kind: 'pre', text: t(pluralKey('chat.toolPreContext', pre), { n: pre }) });
   for (const iter of iters) {
     const roundRows = rows.filter(r => r.iter === iter);
     if (showRounds && iter != null) {

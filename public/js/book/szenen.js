@@ -4,6 +4,7 @@
 
 import { fetchJson } from '../utils.js';
 import { loadToken } from '../cards/book-guard.js';
+import { assignCatalogList } from '../cards/catalog-store.js';
 
 export const szenenMethods = {
   // Buchwechsel-/Doppel-Load-Guard: verspätete Antwort des vorigen Buchs (oder
@@ -13,7 +14,7 @@ export const szenenMethods = {
     try {
       const data = await fetchJson('/figures/scenes/' + bookId);
       if (!isCurrent()) return;
-      this.$store.catalog.szenen = data?.szenen || [];
+      assignCatalogList('szenen', bookId, data?.szenen || []);
       this.$store.catalogUi.szenenUpdatedAt = data?.updated_at || null;
     } catch (e) {
       console.error('[loadSzenen]', e);

@@ -329,9 +329,12 @@ const cardsState = () => ({
   showWortschatzCard: false,
   showStrukturCard: false,
   showTitelwerkstattCard: false,
-  showChatCard: false,
-  showIdeenCard: false,
-  showReferenceCard: false,
+  // Leiste neben dem Editor bzw. der Kapitelbewertung: hoechstens eine von
+  // Seiten-Chat, Ideen, Referenz ('chat' | 'ideen' | 'reference' | null).
+  // showChatCard/showIdeenCard/showReferenceCard sind
+  // davon abgeleitete Getter/Setter (app-root-getters.js) — so ist der Mutex
+  // eine Eigenschaft des Zustands statt einer Regel in jeder Toggle-Funktion.
+  asideSlot: null,
   showBookChatCard: false,
   showBookSettingsCard: false,
   showUserSettingsCard: false,

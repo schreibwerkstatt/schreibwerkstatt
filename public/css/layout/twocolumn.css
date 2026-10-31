@@ -8,7 +8,14 @@
 @media (min-width: 960px) {
   .layout {
     display: grid;
-    grid-template-columns: var(--sidebar-w, 280px) 1fr;
+    /* `--sidebar-w` schreibt der Griff (app-chrome.js) auf `.layout`; ohne
+       Eintrag gilt der Default. Der Deckel auf 40vw haelt der Hauptspalte auch
+       bei schmalem Desktop-Fenster Platz — der Griff misst nach dem Setzen die
+       tatsaechliche Breite und schreibt sie zurueck, damit Wert und Bild nicht
+       auseinanderlaufen. */
+    grid-template-columns:
+      clamp(var(--sidebar-w-min), var(--sidebar-w, var(--sidebar-w-default)), min(var(--sidebar-w-max), 40vw))
+      1fr;
     gap: 0 var(--layout-gap);
     align-items: start;
   }
@@ -52,7 +59,8 @@
    Grid-Gap. JS injiziert das Element in `.layout-sidebar` und schreibt
    `--sidebar-w` auf `.layout`. Persistenz in localStorage('sidebar-width').
    Mobile (<960px) hat keinen Grid → Handle versteckt.
-   Editor schrumpft mit (1fr), Chat/Ideen-Spalte bleibt fix bei 420px. */
+   Hauptspalte schrumpft mit (1fr); eine Leiste darin (layout/aside-split.css)
+   behaelt ihre `--aside-w`. */
 .layout-sidebar {
   position: relative;
 }
@@ -72,10 +80,12 @@
      z-index hier: sie läge sonst über der fixen Job-Queue-Leiste. Was aus der
      Sidebar in die Hauptspalte ragt (Pagetree-Kontextmenü), hängt per
      x-teleport am <body>. */
+  /* Gleicher Klebe-Rahmen wie die Leiste eines `.aside-split`: unten ueber
+     der festen Job-Leiste, sonst laegen die letzten Baum-Eintraege darunter. */
   .layout-sidebar {
     position: sticky;
-    top: 1.5rem;
-    max-height: calc(100dvh - 3rem);
+    top: var(--sticky-top);
+    max-height: calc(100dvh - var(--sticky-top) - var(--sticky-bottom));
     display: flex;
     flex-direction: column;
   }
@@ -145,51 +155,6 @@ body.sidebar-resizing {
 }
 body.sidebar-resizing iframe {
   pointer-events: none;
-}
-
-/* === Editor + Chat side-by-side === */
-@media (min-width: 1280px) {
-  .editor-chat-split,
-  .kapitel-ideen-split {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 420px;
-    gap: 0 var(--layout-gap);
-    align-items: start;
-  }
-  .editor-chat-split #chat-card,
-  .editor-chat-split #ideen-card,
-  .editor-chat-split #reference-card,
-  .kapitel-ideen-split #ideen-card {
-    position: sticky;
-    top: 1.5rem;
-  }
-  .editor-chat-split .chat-messages,
-  .editor-chat-split .ideen-list,
-  .editor-chat-split .reference-body,
-  .kapitel-ideen-split .ideen-list {
-    max-height: 60vh;
-    overflow-y: auto;
-  }
-  .editor-chat-split .lektorat-split {
-    grid-template-columns: 2fr 1fr;
-  }
-}
-
-/* === History-Section (sekundäres Panel, genutzt in Chat/Buchreview) === */
-/* Innerhalb der Card-Padding gehalten, damit die Trennlinie vor der History
-   exakt wie der Border-Bottom im .card-header aussieht (beide inset). */
-.card-history-section {
-  margin-top: var(--space-20);
-  padding-top: var(--space-18);
-  border-top: 1px solid var(--color-border);
-}
-/* Variante ohne Trennlinie: wenn die History direkt auf den Card-Header
-   folgt (kein Output dazwischen), würde der Border-Top doppelt mit dem
-   Header-Border erscheinen. */
-.card-history-section--borderless {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
 }
 
 }

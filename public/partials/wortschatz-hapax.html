@@ -5,7 +5,8 @@
      Die Liste ist gedeckelt, und der Deckel steht als erste Zeile drüber: rund die
      Hälfte aller Wortformen eines Buchs kommt genau einmal vor: ein Ausschnitt, der
      nicht als solcher gekennzeichnet ist, liest sich als Vollständigkeit. -->
-<div role="tabpanel" x-show="wortschatzTab === 'hapax'">
+<template x-if="wortschatzTab === 'hapax'">
+<div role="tabpanel">
   <p class="wortschatz-list-hint" x-text="$app.t('wortschatz.hapax.hint')"></p>
   <p class="wortschatz-list-hint" x-show="wsHapaxCapped()" x-text="wsHapaxCapped()"></p>
   <div x-show="!wortschatzHapax.length" class="muted-msg muted-msg--spaced" x-text="$app.t('wortschatz.hapax.empty')"></div>
@@ -46,3 +47,4 @@
     </table>
   </div>
 </div>
+</template>

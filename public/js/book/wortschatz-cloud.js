@@ -14,6 +14,7 @@
 // misst jedes Wort auf einem Offscreen-Canvas und arbeitet über mehrere Ticks.
 
 import { loadWordCloud } from '../lazy-libs.js';
+import { compareText } from '../i18n.js';
 
 // Zeichenfläche des Layouts. Die Wolke wird per viewBox auf die Kartenbreite
 // skaliert, das Seitenverhältnis bleibt also fix — d3-cloud braucht eine feste
@@ -50,7 +51,7 @@ export function selectCloudWords(terms, mode, limit = CLOUD_MAX_WORDS) {
       rows.push({ term: t.term, weight: v, sign: 1, row: t });
     }
   }
-  rows.sort((a, b) => (b.weight - a.weight) || a.term.localeCompare(b.term));
+  rows.sort((a, b) => (b.weight - a.weight) || compareText(a.term, b.term));
   return rows.slice(0, limit);
 }
 

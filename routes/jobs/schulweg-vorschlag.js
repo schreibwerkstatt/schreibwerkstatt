@@ -28,7 +28,7 @@ const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, jsonBody, jobAbortControllers,
   aiCall, getPrompts, getBookPrompts,
   loadOrderedBookContents, loadPageContents, htmlToTextForPrompt,
-  chunkLimitsFor, tps,
+  chunkLimitsFor, tps, bundleBlocks,
   startBookJob,
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
@@ -62,6 +62,14 @@ const MAX_KLASSENANGABEN_PRO_FIGUR = 6;
 const SATZ_MAX = 320;
 const MIN_ZITAT_CHARS = 8;
 const BUNDLE_SHARE = 0.5;
+// Antwort-Deckel des KI-Calls und geschätzte Antwort je Figur: ein Weg-Vorschlag
+// (Zitat + Begründung) ~150 Tokens, jede Stelle kann eine Klassenangabe tragen.
+// Bündel bis OUT_SHARE des Deckels, damit der Call nicht am Cap reisst (Prod
+// 2026-10: ein Bündel mit 30 Figuren riss).
+const MAX_OUT_TOKENS = 4000;
+const OUT_SHARE = 0.6;
+const OUT_TOK_PRO_FIGUR = 120;
+const OUT_TOK_PRO_STELLE = 25;
 // Einschulungsjahr aus dem Text: höchstens so weit vom eingestellten
 // Einschulungsalter entfernt (Rückstellung, früh eingeschult).
 const EINSCHULUNG_TOLERANZ = 2;
@@ -261,7 +269,11 @@ async function runSchulwegVorschlagJob(jobId, bookId, userEmail) {
     const blocks = figuren
       .map(f => ({ fig: f, stellen: pickStellen(byFig.get(f.id) || []) }))
       .filter(b => b.stellen.length)
-      .map(b => ({ ...b, chars: b.stellen.reduce((n, s) => n + s.satz.length, 0) + 60 }));
+      .map(b => ({
+        ...b,
+        chars: b.stellen.reduce((n, s) => n + s.satz.length, 0) + 60,
+        outEst: OUT_TOK_PRO_FIGUR + b.stellen.length * OUT_TOK_PRO_STELLE,
+      }));
 
     // Modell bekommt Wege und Stufen in der Buchsprache, gelesen aus den Locale-Dateien.
     const stufenKeys = Object.keys(system.stufen);
@@ -275,14 +287,10 @@ async function runSchulwegVorschlagJob(jobId, bookId, userEmail) {
     const systemPrompt = buildSchulwegSystemPrompt();
     const { BUCH_KONTEXT } = await getBookPrompts(bookId, userEmail);
 
-    const budget = Math.max(4000, Math.floor(PER_CHUNK_LIMIT * BUNDLE_SHARE));
-    const queue = [];
-    let cur = [], curChars = 0;
-    for (const b of blocks) {
-      if (cur.length && curChars + b.chars > budget) { queue.push(cur); cur = []; curChars = 0; }
-      cur.push(b); curChars += b.chars;
-    }
-    if (cur.length) queue.push(cur);
+    const queue = bundleBlocks(blocks, {
+      charBudget: Math.max(4000, Math.floor(PER_CHUNK_LIMIT * BUNDLE_SHARE)),
+      outBudget: MAX_OUT_TOKENS * OUT_SHARE,
+    });
 
     // Name → Figur. Kurzname nur, wenn eindeutig (wie bei der Alters-Analyse).
     const shortCount = new Map();
@@ -298,7 +306,7 @@ async function runSchulwegVorschlagJob(jobId, bookId, userEmail) {
     let schonUebernommen = 0;
     const AI_FROM = 15, AI_TO = 92;
     let done = 0;
-    logger.info(`Schulweg-Vorschlag Start: book=${bookId} figuren=${figuren.length} mitStellen=${blocks.length} buendel=${queue.length} ohneJahr=${ohneJahr} autor=${autor}`);
+    logger.info(`Schulweg-Vorschlag Start: book=${bookId} figuren=${figuren.length} mitStellen=${blocks.length} stellen=${blocks.reduce((n, b) => n + b.stellen.length, 0)} buendel=${queue.length} ohneJahr=${ohneJahr} autor=${autor}`);
 
     while (queue.length) {
       throwIfAborted();
@@ -321,7 +329,7 @@ async function runSchulwegVorschlagJob(jobId, bookId, userEmail) {
           systemPrompt,
           AI_FROM + Math.floor((done / total) * (AI_TO - AI_FROM)),
           AI_FROM + Math.floor(((done + 1) / total) * (AI_TO - AI_FROM)),
-          3000, 0.25, 4000, undefined, schema,
+          3000, 0.25, MAX_OUT_TOKENS, undefined, schema,
         );
       } catch (e) {
         if (e?.message === 'job.error.aiTruncated' && bundle.length > 1) {

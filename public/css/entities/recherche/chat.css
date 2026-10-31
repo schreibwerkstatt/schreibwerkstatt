@@ -3,50 +3,14 @@
    Layout neben dem Board + das Panel selbst. Board/Liste: board.css. */
 
 /* ── Board + Chat nebeneinander ───────────────────────────────────────────
-   Schmal: Flex-Spalte, der Chat steht per `order` ueber dem Board (er wird
-   gezielt aufgeklappt und soll dann nicht unter einer langen Liste liegen).
-   Breit: zweispaltiges Raster wie Seiten-Chat neben dem Editor
-   (layout/twocolumn.css), nur breitere Chat-Spalte — Web-Such-Antworten und
-   Fundstueck-Vorschlaege brauchen mehr Zeilenbreite als eine Seiten-Antwort. */
+   Geometrie aus layout/aside-split.css (`.aside-split--aside-first`). Breite
+   Stufe der Leiste: Web-Such-Antworten und Fundstueck-Vorschlaege brauchen mehr
+   Zeilenbreite als eine Abschnitts-Antwort. Panel-Huelle: `.chat-panel` (chat.css). */
 .recherche-split {
-  display: flex;
-  flex-direction: column;
-}
-.recherche-split > .research-chat { order: -1; }
-
-@media (min-width: 1280px) {
-  .recherche-split--chat {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) clamp(420px, 32vw, 620px);
-    column-gap: var(--space-md);
-    align-items: start;
-  }
-  .recherche-split--chat > .research-chat {
-    order: 0;
-    margin-bottom: 0;
-    position: sticky;
-    top: 1.5rem;
-    /* Panel selbst gedeckelt + scrollbar, damit auch die Session-Historie
-       darunter erreichbar bleibt, ohne aus dem Viewport zu laufen. */
-    max-height: calc(100vh - 3rem);
-    overflow-y: auto;
-  }
-  .recherche-split--chat .research-chat-messages { max-height: min(46vh, 34rem); }
+  --aside-w: var(--aside-w-wide);
+  --aside-scroll-max: min(46vh, 34rem);
 }
 
-/* ── Recherche-Chat-Panel (Claude-only, mit Web-Suche) ────────────────────── */
-.research-chat {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-md);
-  padding: var(--space-md);
-  border: 1px solid var(--card-accent);
-  border-radius: var(--radius-md);
-  background: var(--color-bg);
-}
-.research-chat-title { font-weight: var(--fw-semibold); }
-.research-chat-head-actions { display: flex; gap: var(--space-2xs); }
 /* Mitwachsende, aber gedeckelte Chat-Höhe — das Board bleibt darunter sichtbar. */
 .research-chat-messages { max-height: 22rem; }
 .card--recherche:fullscreen .research-chat-messages { max-height: 48vh; }

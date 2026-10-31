@@ -35,7 +35,11 @@
   <!-- Diary-Calendar — eingebettetes Partial. Lädt nested via _loadPartials. -->
   <div id="partial-sidebar-calendar" x-show="sidebarMode === 'calendar'" x-cloak></div>
 
-  <div x-show="sidebarMode !== 'calendar'" class="display-contents">
+  <!-- x-if, nicht x-show: im Kalendermodus (Tagebuch) gibt es den Baum gar
+       nicht — ein versteckter Baum ueber tausende Eintraege kostete Sekunden
+       Main-Thread und hunderte MB Heap beim Buch-Oeffnen. -->
+  <template x-if="sidebarMode !== 'calendar'">
+  <div class="display-contents">
   <div x-show="!pageSearch && tokTotals.any" class="tok-totals">
     <span class="tok-badge tok-neutral" x-text="'∑ ' + tokTotals.chars.toLocaleString(_numLocale) + ' ' + t('bookstats.unit.z')"></span>
     <span class="tok-badge tok-neutral" x-text="'∑ ' + tokTotals.normseiten.toLocaleString(_numLocale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' ' + t('bookstats.unit.ns')"></span>
@@ -97,8 +101,8 @@
           <span class="tag tree-chapter-excluded-tag" x-show="item.excluded" x-text="t('sidebar.excludedBadge')"
                 :data-tip="t('sidebar.excludedTitle', { name: item.name })"></span>
           <span class="tag" x-show="_chapterPageCount(item) >= 1" x-text="t('sidebar.pagesCountShort', { n: _chapterPageCount(item) })"
-                :data-tip="_chapterPageCount(item) === 1 ? t('sidebar.pagesCountOne') : t('sidebar.pagesCount', { n: _chapterPageCount(item) })"
-                :aria-label="_chapterPageCount(item) === 1 ? t('sidebar.pagesCountOne') : t('sidebar.pagesCount', { n: _chapterPageCount(item) })"></span>
+                :data-tip="tn('sidebar.pagesCount', _chapterPageCount(item))"
+                :aria-label="tn('sidebar.pagesCount', _chapterPageCount(item))"></span>
           <template x-if="item.stats">
             <span class="tok-badge tok-neutral"
               x-text="item.stats.badge"
@@ -119,8 +123,8 @@
                 :aria-label="t('recherche.openCountTitle', { n: $store.badges.chapterRechercheCounts[item.id] })"></span>
         </span>
       </div>
-      <div x-show="item.solo || item.open || _isSingleSectionChapter(item)" class="tree-chapter-pages" role="none">
-        <template x-for="page in item.pages" :key="page.id">
+      <div x-show="_chapterPagesShown(item)" class="tree-chapter-pages" role="none">
+        <template x-for="page in (_chapterPagesShown(item) ? item.pages : [])" :key="page.id">
           <!-- Echter Link: Mittelklick/Ctrl-/Cmd-Klick/"In neuem Tab öffnen"/
                "Link kopieren" nutzen die Hash-Route der Seite. Der normale Klick
                bleibt in der App (selectPage, mit Dirty-Rückfrage) — dafür
@@ -225,7 +229,8 @@
       <p class="card-empty-hint" x-show="canEdit()" x-text="t('sidebar.emptyBookCtaHint')"></p>
     </div>
   </template>
-  </div><!-- /sidebarMode !== 'calendar' -->
+  </div>
+  </template><!-- /sidebarMode !== 'calendar' -->
 </div>
 
 <!-- Pagetree-Rechtsklick-Menü — nested Partial (lädt via _loadPartials).

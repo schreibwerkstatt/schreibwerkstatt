@@ -16,16 +16,21 @@
 
 import { fetchJson, dateTimeFormat } from '../utils.js';
 import { startPoll } from '../cards/job-helpers.js';
+import { tFetchError } from '../i18n.js';
 import { typRank, byTypDannName } from './figur-typen.js';
+import { activeFilterId, sameId } from '../chapter-filter.js';
 
 /** Pure Verbindung von Katalog und Alters-Index + Filter + Sortierung.
- *  Ausserhalb von Alpine testbar. `ages` = Map fig_id → Index-Zeile. */
-export function computeAlterRows(figuren, ages, { suche = '', typ = '', nur = '' } = {}) {
+ *  Ausserhalb von Alpine testbar. `ages` = Map fig_id → Index-Zeile.
+ *  `kapitelId` (bereits per activeFilterId bereinigt) waehlt die Figuren, die im
+ *  Kapitel auftreten — die Alterswerte bleiben die des ganzen Buchs. */
+export function computeAlterRows(figuren, ages, { suche = '', typ = '', nur = '', kapitelId = '' } = {}) {
   const q = (suche || '').toLowerCase();
   const rows = [];
   for (const f of (figuren || [])) {
     if (f.stale) continue;
     if (typ && f.typ !== typ) continue;
+    if (kapitelId && !(f.kapitel ?? []).some(k => sameId(k.chapter_id, kapitelId))) continue;
     if (q && !(f.name || '').toLowerCase().includes(q) && !(f.kurzname || '').toLowerCase().includes(q)) continue;
     const a = ages?.get?.(f.id) || null;
     // Textfund gewinnt in der Anzeige; der gerechnete Wert bleibt als eigene
@@ -130,7 +135,8 @@ export const figurenAlterMethods = {
       this._pollFigurenAlter(j.jobId);
     } catch (e) {
       this.figurenAlterLoading = false;
-      this.figurenAlterStatus = this._t('figuren.alter.error');
+      // Abgelehnter Start (z.B. 409 KOMPLETT_ANALYSIS_RUNNING): die Server-Meldung.
+      this.figurenAlterStatus = e?.code ? tFetchError(e) : this._t('figuren.alter.error');
     }
   },
 
@@ -168,9 +174,12 @@ export const figurenAlterMethods = {
     const data = this.figurenAlterData;
     const f = this.figurenAlterFilters;
     const suche = f?.suche ?? '', typ = f?.typ ?? '', nur = f?.nur ?? '';
-    return this._memo('alterRows', [figuren, data, suche, typ, nur], () => {
+    // Optionen wie in der Figurenliste (figurenKapitelOptionen) — wirksam nur ein
+    // angebotener Wert, sonst stuende eine leere Tabelle unter «Alle Kapitel».
+    const kapitelId = activeFilterId(f?.kapitelId, this.figurenKapitelOptionen());
+    return this._memo('alterRows', [figuren, data, suche, typ, nur, kapitelId], () => {
       const ages = new Map((data?.figuren || []).map(r => [r.fig_id, r]));
-      return computeAlterRows(figuren, ages, { suche, typ, nur });
+      return computeAlterRows(figuren, ages, { suche, typ, nur, kapitelId });
     });
   },
 
@@ -273,6 +282,17 @@ export const figurenAlterMethods = {
     // „Frontend-Datums-Display: nur via tzOpts") — dateTimeFormat merged es.
     const date = dateTimeFormat(Alpine.store('shell').uiLocale, { dateStyle: 'medium', timeStyle: 'short' }).format(d);
     return this._t('common.asOf', { date });
+  },
+
+  // Der Index wird nur auf Knopfdruck neu gebaut — nach einer Komplettanalyse, einem
+  // Update der Analyse oder neuem Text zeigt die Tabelle sonst still den alten Stand.
+  // Gruende kommen vom Server (routes/figures-alter.js#staleReasons); die Analyse-
+  // Version geht vor, weil dort auch unveraenderter Text anders ausgewertet wuerde.
+  figurenAlterVeraltetText() {
+    const gruende = this.figurenAlterData?.scan?.veraltet;
+    if (!Array.isArray(gruende) || !gruende.length || this.figurenAlterLoading) return '';
+    const grund = gruende.includes('version') ? 'version' : gruende.includes('text') ? 'text' : 'figuren';
+    return this._t('figuren.alter.veraltet.' + grund);
   },
 
   // Belege einer Zeile auf-/zuklappen. Ein offener Beleg-Block pro Tabelle —

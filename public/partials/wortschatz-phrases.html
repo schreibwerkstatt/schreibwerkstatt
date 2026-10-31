@@ -1,6 +1,7 @@
 <!-- Wendungen der Wortschatz-Analyse. Fragment von wortschatz.html (String-Include
      `<!-- @include wortschatz-phrases -->`) — Begründung siehe wortschatz-terms.html. -->
-<div role="tabpanel" x-show="wortschatzTab === 'phrases'">
+<template x-if="wortschatzTab === 'phrases'">
+<div role="tabpanel">
   <p class="wortschatz-list-hint" x-text="$app.t('wortschatz.phrases.hint')"></p>
   <div x-show="!wortschatzNgrams.length" class="muted-msg muted-msg--spaced" x-text="$app.t('wortschatz.phrases.empty')"></div>
   <div class="table-scroll" x-show="wortschatzNgrams.length">
@@ -38,3 +39,4 @@
     </table>
   </div>
 </div>
+</template>

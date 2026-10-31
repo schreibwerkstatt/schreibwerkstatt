@@ -13,8 +13,10 @@
 //      → editMode/editDirty=false → checkDone=false.
 //  I5  Chat-Snapshot: chat-base#onVisible schreibt _checkDoneBeforeChat = checkDone
 //      bevor checkDone auf false gesetzt wird.
-//  I6  toggleChatCard / toggleIdeenCard restaurieren checkDone aus
-//      _checkDoneBeforeChat beim Schliessen, wenn Findings vorhanden.
+//  I6  Verlässt die Leiste den Seiten-Chat (Schliessen oder Ablösung durch
+//      Ideen/Referenz), restauriert `_setAside` checkDone aus
+//      _checkDoneBeforeChat, wenn Findings vorhanden; alle Leisten-Toggles
+//      laufen darüber.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -144,12 +146,14 @@ test('I5: chat-card#onShow snapshotet checkDone bevor es auf false geht', () => 
     'Snapshot von checkDone MUSS vor dem Clear erfolgen — sonst speichert wir den geräumten Wert');
 });
 
-// ── I6: Restore beim Chat/Ideen-Close ────────────────────────────────────────
-test('I6: toggleChatCard restauriert checkDone aus _checkDoneBeforeChat', () => {
+// ── I6: Restore beim Verlassen des Seiten-Chats ─────────────────────────────
+test('I6: _setAside restauriert checkDone aus _checkDoneBeforeChat', () => {
   const src = read('public/js/app/app-view.js');
-  const m = src.match(/toggleChatCard\s*\(\)\s*\{[\s\S]*?\n  \}/);
-  assert.ok(m, 'toggleChatCard gefunden');
+  const m = src.match(/_setAside\s*\(slot\)\s*\{[\s\S]*?\n  \}/);
+  assert.ok(m, '_setAside gefunden');
   const body = m[0];
+  assert.match(body, /this\.asideSlot\s*===\s*'chat'\s*&&\s*slot\s*!==\s*'chat'/,
+    'Restore nur beim Verlassen des Chats');
   assert.match(body, /_checkDoneBeforeChat\s*&&\s*this\.lektoratFindings/,
     'Restore-Bedingung: nur wenn Snapshot true UND Findings vorhanden');
   assert.match(body, /this\.checkDone\s*=\s*true/,
@@ -158,15 +162,15 @@ test('I6: toggleChatCard restauriert checkDone aus _checkDoneBeforeChat', () => 
     'Snapshot-Flag wird nach Restore zurückgesetzt');
 });
 
-test('I6: toggleIdeenCard restauriert checkDone analog zu Chat', () => {
+test('I6: Leisten-Toggles belegen die Leiste nur über _setAside', () => {
   const src = read('public/js/app/app-view.js');
-  const m = src.match(/toggleIdeenCard\s*\(\)\s*\{[\s\S]*?\n  \}/);
-  assert.ok(m, 'toggleIdeenCard gefunden');
-  const body = m[0];
-  assert.match(body, /_checkDoneBeforeChat\s*&&\s*this\.lektoratFindings/,
-    'Restore-Bedingung wie bei Chat');
-  assert.match(body, /this\.checkDone\s*=\s*true/);
-  assert.match(body, /this\._checkDoneBeforeChat\s*=\s*false/);
+  for (const name of ['toggleChatCard', 'toggleIdeenCard', 'toggleChapterIdeenCard', 'toggleReferenceCard']) {
+    const m = src.match(new RegExp(`${name}\\s*\\([^)]*\\)\\s*\\{[\\s\\S]*?\\n  \\}`));
+    assert.ok(m, `${name} gefunden`);
+    assert.match(m[0], /this\._setAside\(/, `${name} ruft _setAside`);
+    assert.doesNotMatch(m[0], /this\.(show(Chat|Ideen|Reference)Card|asideSlot)\s*=(?!=)/,
+      `${name} schreibt die Leiste nicht an _setAside vorbei`);
+  }
 });
 
 // ── I7: Slice-Disjoint (Post-Split-Drift-Schutz) ─────────────────────────────

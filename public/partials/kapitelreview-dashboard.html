@@ -79,7 +79,7 @@
         </div>
       </div>
     </template>
-    <template x-if="!kdLastReview()">
+    <template x-if="!kdLastReview() && !cardLoading">
       <div class="overview-tile overview-tile--cta internal-link"
            @click="runKapitelReview()"
            :aria-label="$app.t('kapitelReview.start')">
@@ -244,6 +244,6 @@
         </ul>
       </div>
     </template>
-
+    <div x-show="cardLoading && !kdHeat && !kdStilData" x-skeleton.tiles="3"></div>
   </div>
 </template>

@@ -155,7 +155,7 @@ export const diaryMethods = {
   rueckblickCellTip(cell) {
     const app = window.__app;
     const period = `${this.rueckblickMonthLabels()[cell.monthIdx - 1]} ${cell.key.slice(0, 4)}`;
-    const entriesPart = this._tCount('overview.rueckblickHeatmap.tooltip.entries', cell.entries);
+    const entriesPart = window.__app.tn('overview.rueckblickHeatmap.tooltip.entries', cell.entries);
     const rbPart = cell.hasRueckblick
       ? app.t('overview.rueckblickHeatmap.tooltip.hasRueckblick', { date: this.rueckblickCreatedLabel(cell.createdAt) })
       : app.t('overview.rueckblickHeatmap.tooltip.noRueckblick');

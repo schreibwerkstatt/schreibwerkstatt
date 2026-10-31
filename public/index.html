@@ -32,6 +32,7 @@
   <link rel="stylesheet" href="css/layout/base.css">
   <link rel="stylesheet" href="css/layout/layout-base.css">
   <link rel="stylesheet" href="css/layout/twocolumn.css">
+  <link rel="stylesheet" href="css/layout/aside-split.css">
   <link rel="stylesheet" href="css/layout/utilities.css">
   <!-- components -->
   <link rel="stylesheet" href="css/components/icons.css">
@@ -50,6 +51,7 @@
   <link rel="stylesheet" href="css/components/drag-grip.css">
   <link rel="stylesheet" href="css/components/btn-close.css">
   <link rel="stylesheet" href="css/components/status-msg.css">
+  <link rel="stylesheet" href="css/components/job-queue.css">
   <link rel="stylesheet" href="css/components/tabs.css">
   <link rel="stylesheet" href="css/components/device-tokens.css">
   <link rel="stylesheet" href="css/components/ai-access.css">
@@ -415,13 +417,13 @@
 </div>
 
 <div class="session-banner session-banner--offline" role="status" x-show="$store.session.isOffline && !$store.session.sessionExpired && !$store.session.serverOffline" x-cloak>
-  <span class="session-banner-text" x-text="$store.session.pendingSyncCount > 0 ? t($store.session.pendingSyncCount === 1 ? 'session.offlinePendingOne' : 'session.offlinePendingMany', { count: $store.session.pendingSyncCount }) : t('session.offlineMode')"></span>
+  <span class="session-banner-text" x-text="$store.session.pendingSyncCount > 0 ? tn('session.offlinePending', $store.session.pendingSyncCount) : t('session.offlineMode')"></span>
 </div>
 
 <!-- Offline Entstandenes, das der Server abgewiesen hat, und lokale Sicherungen
      (app/app-offline-rescue.js). Nie still verworfen — der Dialog unten. -->
 <div class="session-banner session-banner--rescue" role="status" x-show="offlineRescueCount > 0 && !$store.session.sessionExpired" x-cloak>
-  <span class="session-banner-text" x-text="t(offlineRescueCount === 1 ? 'offline.rescue.bannerOne' : 'offline.rescue.bannerMany', { n: offlineRescueCount })"></span>
+  <span class="session-banner-text" x-text="tn('offline.rescue.banner', offlineRescueCount)"></span>
   <button type="button" class="session-banner-btn" @click="openOfflineRescue()" x-text="t('offline.rescue.open')"></button>
 </div>
 
@@ -640,15 +642,18 @@
 
 <!-- Ohne ein einziges Buch hat der Abschnittsbaum nichts zu zeigen (nur
      ausgegraute Werkzeuge) — die Sidebar fällt dann weg wie beim Admin-Konto. -->
-<div class="layout" :class="{ 'layout--no-sidebar': isAdminOnly || (booksLoaded && $store.nav.books.length === 0) }">
-<div class="layout-sidebar" x-show="$store.session.currentUser && !isAdminOnly && !(booksLoaded && $store.nav.books.length === 0)" x-cloak>
+<div class="layout" :class="{ 'layout--no-sidebar': !hasSidebar }">
+<div class="layout-sidebar" x-show="hasSidebar" x-cloak>
   <div id="partial-sidebar"></div>
 </div><!-- end layout-sidebar -->
 <div class="layout-main" id="main-content" tabindex="-1">
 <div id="partial-admin-home"></div>
 <div id="partial-bookoverview"></div>
 <div id="partial-buchreview"></div>
-<div class="kapitel-ideen-wrap" :class="{ 'kapitel-ideen-split': $app.showKapitelReviewCard && $app.showIdeenCard && $app.ideenScope === 'chapter' }">
+<!-- Splits mit Leiste (layout/aside-split.css): Kapitelreview | Kapitel-Ideen
+     und Editor | Chat/Ideen/Referenz. Ob die Leiste steht, sagen die Root-
+     Getter kapitelAsideOpen / editorAsideOpen (app-root-getters.js). -->
+<div class="aside-split main-aside-split" :class="{ 'aside-split--on': kapitelAsideOpen }">
   <div id="partial-kapitelreview" class="display-contents"></div>
   <div id="kapitel-ideen-slot" class="display-contents"></div>
 </div>
@@ -674,7 +679,7 @@
 <div id="partial-wortschatz"></div>
 <div id="partial-struktur"></div>
 <div id="partial-titelwerkstatt"></div>
-<div class="editor-chat-wrap" :class="{ 'editor-chat-split': $app.showEditorCard && ($app.showChatCard || $app.showIdeenCard || $app.showReferenceCard) }">
+<div class="aside-split main-aside-split" :class="{ 'aside-split--on': editorAsideOpen }">
   <div id="partial-editor-notebook" class="display-contents"></div>
   <div id="partial-chat" class="display-contents"></div>
   <div id="partial-ideen" class="display-contents"></div>
@@ -854,7 +859,8 @@
 </dialog>
 
 <!-- Job-Queue Footer -->
-<div class="job-queue-bar" x-show="$store.jobs.jobQueueItems.length > 0" x-cloak aria-live="polite" aria-atomic="false">
+<div class="job-queue-bar" x-show="$store.jobs.jobQueueItems.length > 0" x-cloak aria-live="polite" aria-atomic="false"
+     x-resize="document.documentElement.style.setProperty('--job-queue-h', $height + 'px')">
   <span class="job-queue-label" x-text="t('jobQueue.label')"></span>
   <template x-for="job in ($store.jobs.jobQueueExpanded ? $store.jobs.jobQueueItems : $store.jobs.jobQueueItems.slice(0, 3))" :key="job.id">
     <div class="job-queue-pill internal-link" :class="'job-queue-pill--' + job.status" @click="navigateToJob(job)" :data-tip="t('jobQueue.jumpTo')">

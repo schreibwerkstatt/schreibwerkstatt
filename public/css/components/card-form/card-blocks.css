@@ -278,4 +278,20 @@
   color: var(--color-muted);
 }
 
+/* === History-Section (sekundaeres Panel unter dem Output) ===
+   Chat, Buch-Chat, Ideen-Chat, Buch- und Kapitelbewertung. Innerhalb des
+   Karten-Paddings, damit die Trennlinie exakt wie der Border-Bottom des
+   `.card-header` sitzt (beide inset). `--borderless`: folgt die History direkt
+   auf den Kopf (kein Output dazwischen), stuende die Linie doppelt. */
+.card-history-section {
+  margin-top: var(--space-20);
+  padding-top: var(--space-18);
+  border-top: 1px solid var(--color-border);
+}
+.card-history-section--borderless {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
 }

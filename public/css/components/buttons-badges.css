@@ -136,4 +136,7 @@ a.btn-compact:hover { background: var(--color-hover); }
   text-underline-offset: 2px;
 }
 
+/* Sterne-Note der Buch-/Kapitelbewertung in der Verlaufsliste. */
+.badge.review-stars { font-size: var(--font-size-xs); }
+
 }

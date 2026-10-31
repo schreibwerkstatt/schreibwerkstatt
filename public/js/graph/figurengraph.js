@@ -1,5 +1,5 @@
 import { DEFAULT_FONT, TIER_COLOR } from './constants.js';
-import { computeSwimlaneLayout, importanceBorderWidth, ROW_H } from './layout.js';
+import { computeSwimlaneLayout, importanceBorderWidth, headerHitColumn, HEADER_TOP, ROW_H } from './layout.js';
 import { parseColor } from '../graph-kit.js';
 import { sameId } from '../chapter-filter.js';
 
@@ -51,6 +51,8 @@ export const figurengraphMethods = {
     const PAD_Y      = 200;
     const Y_TOP      = -PAD_Y;
     const Y_BOT      = lastTierY + PAD_Y;
+    // Schriftgrösse der Kopfzeile aus dem letzten Frame — der Klick prüft dieselbe Zone.
+    let headerFsDrawn = 11;
 
     network.on('beforeDrawing', ctx => {
       // 1) Kapitel-Spalten (Netzwerk-Koordinaten → skalieren mit Zoom)
@@ -80,6 +82,7 @@ export const figurengraphMethods = {
       const cHeightCss  = ctx.canvas.height / dpr;
       const cWidthCss   = ctx.canvas.width / dpr;
       const headerFs    = Math.max(11, Math.min(18, cHeightCss / 55));
+      headerFsDrawn = headerFs;
       const tierFs      = Math.max(10, Math.min(15, cHeightCss / 65));
       const lblMaxChars = cHeightCss > 700 ? 60 : 34;
 
@@ -103,7 +106,7 @@ export const figurengraphMethods = {
           if (dom.x < -120 || dom.x > cWidthCss + 120) continue;
           const raw = `${i + 1}. ${chapterOrder[i].label}`;
           const lbl = raw.length > lblMaxChars ? raw.slice(0, lblMaxChars - 2) + '…' : raw;
-          ctx.fillText(lbl, dom.x * dpr, 8 * dpr);
+          ctx.fillText(lbl, dom.x * dpr, HEADER_TOP * dpr);
         }
         ctx.restore();
       }
@@ -177,12 +180,11 @@ export const figurengraphMethods = {
     }
 
     // Klick auf Kapitel-Header → Filter setzen
-    network.on('click', ({ pointer, event }) => {
-      if (N === 0) return;
-      // pointer.canvas = Netzwerk-Koordinaten; Header-Band liegt über Y_TOP.
-      if (pointer.canvas.y > Y_TOP + 60) return;
-      const idx = Math.round(pointer.canvas.x / COL_W);
-      if (idx < 0 || idx >= N) return;
+    network.on('click', ({ pointer, event, nodes }) => {
+      // Ein Knoten unter der Kopfzeile gehört dem Knoten-Klick (öffnet die Figur).
+      if (nodes?.length) return;
+      const idx = headerHitColumn(pointer.DOM.y, pointer.canvas.x, COL_W, N, headerFsDrawn);
+      if (idx < 0) return;
       const ch = chapterOrder[idx].value;
       this._figurenGraphSetKapitel(sameId(this.figurenGraphKapitelId, ch) ? null : ch);
       event?.preventDefault?.();

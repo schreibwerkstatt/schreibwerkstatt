@@ -13,6 +13,7 @@
 // liegen geblieben.
 import { localDayDiff } from '../utils.js';
 import { statusDistribution } from '../redaktion/status.js';
+import { compareText } from '../i18n.js';
 
 export const BRACH_DAYS = 30;
 
@@ -40,7 +41,7 @@ export function computeFortschritt(pages, byPage, chain,
       brach.push({ page: p, name: p.name, status, days });
     }
   }
-  brach.sort((a, b) => b.days - a.days || String(a.name).localeCompare(String(b.name)));
+  brach.sort((a, b) => b.days - a.days || compareText(a.name, b.name));
 
   return {
     total: list.length,

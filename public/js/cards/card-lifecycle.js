@@ -31,7 +31,7 @@ export function settleShowLoads(maxMs) {
 //       name: 'orte',                 // matches event.detail.name on card:refresh
 //       showFlag: 'showOrteCard',     // root flag to watch
 //       timerKeys: ['_ortePollTimer'],
-//       resetState: { orteLoading: false, orteProgress: 0, orteStatus: '' },
+//       resetState: { orteProgress: 0, orteStatus: '' },
 //       load: (root) => root.loadOrte(Alpine.store('nav').selectedBookId),
 //     });
 //   },
@@ -78,6 +78,14 @@ export function settleShowLoads(maxMs) {
 //                              (sonst gewinnt der Default gegen den
 //                              restaurierten Stand).
 //
+// `ctx.cardLoading` (vom Helper gesetzt, nicht deklarieren): true, solange ein
+// Lade-Hook dieser Karte laeuft — Einblenden (load/onShow), Buchwechsel
+// (Default oder onBookChanged) und card:refresh. Mehrere parallele Hooks
+// zaehlen mit; erst der letzte setzt zurueck. Gedacht fuer das Lade-Skelett
+// (`x-skeleton`, public/js/skeleton.js): `x-show="cardLoading && liste leer"`,
+// und der Leerzustand wartet auf `!cardLoading` — sonst blitzt „noch nichts
+// da" auf, solange der erste Fetch laeuft.
+//
 // Lifecycle returns { signal, destroy } — signal is the AbortController signal
 // used internally; cards can attach their own listeners with `{ signal }` to get
 // cleanup-for-free.
@@ -85,6 +93,17 @@ export function setupCardLifecycle(ctx, cfg) {
   const abort = new AbortController();
   const { signal } = abort;
   const root = () => window.__app;
+
+  let activeLoads = 0;
+  ctx.cardLoading = false;
+  const track = async (run) => {
+    activeLoads += 1;
+    ctx.cardLoading = true;
+    try { return await run(); } finally {
+      activeLoads -= 1;
+      if (activeLoads === 0) ctx.cardLoading = false;
+    }
+  };
 
   const clearTimers = () => {
     for (const k of cfg.timerKeys || []) {
@@ -127,7 +146,7 @@ export function setupCardLifecycle(ctx, cfg) {
       applyTabRequest();
       if (!cfg.load && !cfg.onShow) return;
       if (cfg.showNeedsBookId !== false && !Alpine.store('nav').selectedBookId) return;
-      const pending = Promise.resolve(cfg.onShow ? cfg.onShow(root()) : cfg.load(root()));
+      const pending = track(() => (cfg.onShow ? cfg.onShow(root()) : cfg.load(root())));
       pendingShowLoads.add(pending);
       try { await pending; } finally { pendingShowLoads.delete(pending); }
     });
@@ -139,7 +158,7 @@ export function setupCardLifecycle(ctx, cfg) {
     applyReset('book');
     if (cfg.showFlag && !root()[cfg.showFlag]) return;
     if (!Alpine.store('nav').selectedBookId) return;
-    if (cfg.load) await cfg.load(root());
+    if (cfg.load) await track(() => cfg.load(root()));
   };
   const defaultViewReset = () => {
     clearTimers();
@@ -149,7 +168,7 @@ export function setupCardLifecycle(ctx, cfg) {
   // Overrides ersetzen Reset + Load, NICHT das Timer-Clearing: ein Poller des
   // alten Buchs, der weiterliefe, schriebe sein Ergebnis in die Karte des neuen.
   const onBookChanged = cfg.onBookChanged
-    ? (e) => { clearTimers(); return cfg.onBookChanged(e, ctx, root()); }
+    ? (e) => { clearTimers(); return track(() => cfg.onBookChanged(e, ctx, root())); }
     : defaultBookChanged;
   const onViewReset = cfg.onViewReset
     ? (e) => { clearTimers(); return cfg.onViewReset(e, ctx, root()); }
@@ -157,8 +176,8 @@ export function setupCardLifecycle(ctx, cfg) {
   const onCardRefresh = (e) => {
     if (e.detail?.name !== cfg.name) return;
     if (cfg.refreshNeedsBookId !== false && !Alpine.store('nav').selectedBookId) return;
-    if (cfg.onCardRefresh) cfg.onCardRefresh(e, ctx, root());
-    else if (cfg.load) cfg.load(root());
+    if (cfg.onCardRefresh) track(() => cfg.onCardRefresh(e, ctx, root()));
+    else if (cfg.load) track(() => cfg.load(root()));
   };
 
   // Filter-Persistenz VOR den Karten-Handlern anhaengen: Listener feuern in

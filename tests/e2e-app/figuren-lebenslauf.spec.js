@@ -194,6 +194,17 @@ test('lebenslauf: Klassenstufe in den Zellen, wenn das Buch ein Schulsystem hat'
   // Emil ohne eigenen Weg und nur mit Geburtsjahr: Standardweg, Einschulung
   // unbestimmt → beide Varianten.
   await expect(jugend.locator('td').nth(1).locator('.figur-cv-marke')).toContainText('1999 · 13 J. ·');
+  // Emils Stufe mit beiden Varianten ist breiter als eine schmale Spalte: sie
+  // bricht in der Zelle um, statt in die Nachbarspalte zu laufen.
+  await page.setViewportSize({ width: 760, height: 900 });
+  for (const i of [0, 1]) {
+    const td = jugend.locator('td').nth(i);
+    const [cell, stufe] = await Promise.all([td.boundingBox(), td.locator('.figur-cv-marke-stufe').boundingBox()]);
+    expect(stufe.x + stufe.width).toBeLessThanOrEqual(cell.x + cell.width + 1);
+  }
+  // Sichtkontrolle nur auf Wunsch (CV_SHOT=pfad.png); ein Pfad ohne Bild-Endung
+  // wie /dev/null lässt Playwright mit «unsupported mime type» scheitern.
+  if (process.env.CV_SHOT) await table.screenshot({ path: process.env.CV_SHOT });
   // Knopf fuer den KI-Vorschlag erscheint nur mit Schulsystem.
   await expect(card.locator('button', { hasText: 'Schulwege vorschlagen' })).toBeVisible();
 

@@ -17,11 +17,11 @@ import {
 } from '../book/szenen-stats.js';
 import { lsGet, lsSet } from '../safe-storage.js';
 import { plotBacklinkMethods } from '../book/plot-backlinks.js';
+import { listWindowState, listWindowMethods } from '../list-window.js';
 
 export function registerSzenenCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('szenenCard', () => ({
-    szenenLoading: false,
     szenenError: '',
     staleDeleting: false,
     viewMode: lsGet('szenen.viewMode') === 'grid' ? 'grid' : 'list', // 'list' | 'grid'
@@ -29,8 +29,11 @@ export function registerSzenenCard() {
     _memos: {},
     // Map Szenen-id → Beats, deren Verankerung diese Szene trifft (Detail „Im Plot“).
     plotBacklinks: {},
+    // Liste rendert schrittweise (list-window.js), wie Orte und Ereignisse.
+    ...listWindowState(),
     ...memoMethods,
     ...plotBacklinkMethods,
+    ...listWindowMethods,
 
     get _filters() { return Alpine.store('catalogUi').szenenFilters; },
     get _szenen() { return Alpine.store('catalog').szenen; },
@@ -163,15 +166,19 @@ export function registerSzenenCard() {
 
     init() {
       this.$watch('viewMode', (v) => lsSet('szenen.viewMode', v));
+      // Ausgewählte Szene muss im gerenderten Fenster stehen (Deep-Link, Palette);
+      // beobachtet wird der Index, weil die Auswahl oft vor der Liste steht.
+      this.$watch(() => {
+        const id = Alpine.store('catalogUi').selectedSzeneId;
+        return id == null ? -1 : this.szenenFiltered.findIndex(s => s.id === id);
+      }, (idx) => this.listWindowReveal(idx));
       this._lifecycle = setupCardLifecycle(this, {
         name: 'szenen',
         showFlag: 'showSzenenCard',
-        resetState: () => ({ plotBacklinks: {}, szenenLoading: false, szenenError: '', staleDeleting: false, _memos: {} }),
-        load: async (root) => {
-          this.szenenLoading = true;
+        resetState: () => ({ plotBacklinks: {}, szenenError: '', staleDeleting: false, _memos: {}, ...listWindowState() }),
+        load: (root) => {
           this.loadPlotBacklinks('scene');
-          try { await root.loadSzenen(Alpine.store('nav').selectedBookId); }
-          finally { this.szenenLoading = false; }
+          return root.loadSzenen(Alpine.store('nav').selectedBookId);
         },
       });
     },

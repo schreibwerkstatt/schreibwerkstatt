@@ -9,7 +9,7 @@ const { providerClass, getContextConfigFor } = require('../../../../lib/ai');
 const appSettings = require('../../../../lib/app-settings');
 const { COST_LABEL, costTier } = require('../cost-labels');
 const { PHASE_END } = require('../../../../lib/komplett-scope');
-const { eventModel } = require('../../../../lib/esm-bridge');
+const { eventModel, relationTypes } = require('../../../../lib/esm-bridge');
 const { structuredDatum } = require('../../../../db/event-datum');
 const { groupFigureEvents, withRefIds, attachRefIds } = require('../zeitstrahl-refs');
 
@@ -122,6 +122,7 @@ async function _runPhase3bCall(ctx, figuren, textForPrompt, system) {
   // nicht — der Aufrufer (runNonCritical) meldet das als Degradierung.
   if (!Array.isArray(bzResult?.beziehungen)) throw i18nError('job.error.beziehungenMissing');
   const newBz = bzResult.beziehungen;
+  (await relationTypes()).normalizeRelationTypes(newBz);
   if (newBz.length > 0) addFigurenBeziehungen(bookIdInt, newBz, email, ctx.idMaps);
   log.info(`Phase 3b – ${newBz.length} kapitelübergreifende Beziehungen.`);
 }

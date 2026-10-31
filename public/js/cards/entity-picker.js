@@ -43,6 +43,7 @@
 // Neue Entity-Quelle: in BUILDERS ergänzen (Funktion liefert { deps, build }).
 
 import { comboboxData } from '../combobox.js';
+import { compareText } from '../i18n.js';
 
 function _store(name) { return window.Alpine?.store?.(name) || {}; }
 
@@ -108,7 +109,7 @@ const BUILDERS = {
             for (const ch of chapters) rows.push({ value: f.id, label, group: ch, _ord: order.has(ch) ? order.get(ch) : order.size });
           }
         }
-        rows.sort((a, b) => (a._ord - b._ord) || a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
+        rows.sort((a, b) => (a._ord - b._ord) || compareText(a.group, b.group) || compareText(a.label, b.label));
         return rows;
       },
     };

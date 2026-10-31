@@ -107,6 +107,8 @@ import { registerMenu } from '../menu.js';
 import { registerLongPress } from '../action-menu.js';
 import { registerModal } from '../modal.js';
 import { registerEntityRef } from '../entity-ref.js';
+import { registerSkeleton } from '../skeleton.js';
+import { registerListWindow } from '../list-window.js';
 import { handleEditPanelKeydown, handleEnterKey } from '../utils/keys.js';
 
 // Magics, die Sub-Komponenten/Partials den Zugriff auf Root + Sync-Provider geben.
@@ -253,4 +255,6 @@ export function registerAllCards() {
   registerLongPress();
   registerModal();
   registerEntityRef();
+  registerSkeleton();
+  registerListWindow();
 }

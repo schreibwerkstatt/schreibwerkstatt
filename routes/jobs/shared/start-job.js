@@ -30,7 +30,9 @@ const { enqueueJob } = require('./queue');
  * @param {(bookId:number)=>string|number} [opts.dedupId]  Default: die book_id
  * @param {string} opts.label                i18n-Key des Job-Labels
  * @param {object|null} [opts.labelParams]
- * @param {(bookId:number)=>string|null} [opts.precheck]  liefert einen error_code (400) oder null
+ * @param {(bookId:number, userEmail:string|null)=>string|{status:number,error_code:string}|null} [opts.precheck]
+ *        liefert einen error_code (400), eine fertige Fehlerantwort `{ status, error_code, …rest }`
+ *        (z.B. 409 mit der ID des blockierenden Jobs) oder null
  * @param {(jobId:string, ctx:{bookId:number,userEmail:string})=>any} opts.run
  */
 function startBookJob(req, res, {
@@ -40,11 +42,15 @@ function startBookJob(req, res, {
   const id = toIntId(bookId);
   if (!id) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
   if (!guardBook(req, res, id, minRole)) return;
-  if (precheck) {
-    const code = precheck(id);
-    if (code) return res.status(400).json({ error_code: code });
-  }
   const userEmail = sessionEmail(req);
+  if (precheck) {
+    const code = precheck(id, userEmail);
+    if (typeof code === 'string') return res.status(400).json({ error_code: code });
+    if (code) {
+      const { status = 400, ...body } = code;
+      return res.status(status).json(body);
+    }
+  }
   const dedup = String(dedupId ? dedupId(id) : id);
   const existing = findActiveJobId(type, dedup, userEmail);
   if (existing) return res.json({ jobId: existing, existing: true });

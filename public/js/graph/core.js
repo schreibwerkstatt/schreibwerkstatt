@@ -1,6 +1,8 @@
 import { ensureVis, graphPlaceholder, graphTheme } from '../graph-kit.js';
 import { toggleWrapFullscreen } from '../fullscreen.js';
 import { isGraphMode } from './constants.js';
+import { BLOOD_TYPES } from './family-layout.js';
+import { normalizeRelationTyp } from '../book/beziehung-typen.js';
 
 // Entry-Points: Mode-Switch, Fullscreen, Render-Dispatcher.
 export const coreMethods = {
@@ -30,7 +32,9 @@ export const coreMethods = {
       const ids = new Set(graphFiguren.map(f => String(f.id)));
       for (const f of graphFiguren) {
         for (const bz of (f.beziehungen || [])) {
-          if (['elternteil', 'kind', 'geschwister'].includes(bz.typ) && ids.has(String(bz.figur_id))) return true;
+          // Bereinigter Typ wie in _buildEdges — Alt-Daten mit «vater»/«tochter»
+          // zeichnet der Graph, der Reiter darf dann nicht gesperrt sein.
+          if (BLOOD_TYPES.includes(normalizeRelationTyp(bz.typ).typ) && ids.has(String(bz.figur_id))) return true;
         }
       }
       return false;
@@ -86,9 +90,13 @@ export const coreMethods = {
       return [f.id, f.typ || '', f.sozialschicht || '', f.name || '', f.kurzname || '',
         f.geburtstag || '', f.beschreibung || '', kap, bz].join('::');
     }).join('|');
+    // Kapitelachse (Reihenfolge + Titel aus dem Baum): Umsortieren oder Umbenennen
+    // ändert weder Figuren noch deren Kapitel-Namen, verschiebt aber X-Achse und
+    // Kopfzeilen des Figurengraphen.
+    const axis = this.figurenKapitelOptionen().map(o => o.value + ':' + o.label).join(',');
     // Theme im Key: die Canvas-Farben hängen am aufgelösten Hell/Dunkel-Stand,
     // ohne diesen Anteil bliebe nach einem Theme-Wechsel das alte Bild stehen.
-    const hash = [sig, this.figurenGraphModus, Alpine.store('shell').uiLocale,
+    const hash = [sig, axis, this.figurenGraphModus, Alpine.store('shell').uiLocale,
       this._graphTheme.dark ? 'dark' : 'light'].join('|');
     if (this._figurenNetwork && this._figurenHash === hash) return;
     this._figurenHash = hash;
@@ -97,6 +105,10 @@ export const coreMethods = {
       this._figurenNetwork.destroy();
       this._figurenNetwork = null;
     }
+    // DataSets gehören zum alten Netz — ein Platzhalter-Pfad (keine Familie, keine
+    // Schicht) soll den Kapitel-Filter nicht auf sie anwenden.
+    this._figurenNodes = null;
+    this._figurenEdges = null;
     if (!figuren.length) {
       graphPlaceholder(container, window.__app.t('graph.empty.figuren'));
       return;

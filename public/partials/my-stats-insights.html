@@ -31,11 +31,11 @@
         </div>
         <div class="overview-consistency-grid mystats-goal-stats">
           <div class="overview-consistency-item">
-            <span class="overview-consistency-value" x-text="_myStatsPlural('mystats.days', myStatsGoal().currentStreak)"></span>
+            <span class="overview-consistency-value" x-text="$app.tn('mystats.days', myStatsGoal().currentStreak)"></span>
             <span class="overview-consistency-label" x-text="$app.t('mystats.goal.streak')"></span>
           </div>
           <div class="overview-consistency-item">
-            <span class="overview-consistency-value" x-text="_myStatsPlural('mystats.days', myStatsGoal().longestStreak)"></span>
+            <span class="overview-consistency-value" x-text="$app.tn('mystats.days', myStatsGoal().longestStreak)"></span>
             <span class="overview-consistency-label" x-text="$app.t('mystats.goal.streakLongest')"></span>
           </div>
           <div class="overview-consistency-item">
@@ -189,7 +189,7 @@
           </div>
           <span class="overview-chapter-meta">
             <span class="overview-chapter-chars" x-text="$app.t('mystats.bookGoals.normpages', { n: _myStatsFmt(c.normpages) })"></span>
-            <span class="overview-chapter-chars mystats-goals-muted" x-text="_myStatsPlural('mystats.category.books', c.bookCount)"></span>
+            <span class="overview-chapter-chars mystats-goals-muted" x-text="$app.tn('mystats.category.books', c.bookCount)"></span>
           </span>
         </li>
       </template>

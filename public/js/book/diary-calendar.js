@@ -499,7 +499,7 @@ export const diaryCalendarMethods = {
   },
 
   diaryAnniversaryYearsAgoLabel(yearsAgo) {
-    return yearsAgo === 1 ? this.t('diary.anniversary.oneYearAgo') : this.t('diary.anniversary.yearsAgo', { n: yearsAgo });
+    return this.tn('diary.anniversary.yearsAgo', yearsAgo);
   },
 
   // Aufklapp-Zustand des „An diesem Tag"-Panels pro Buch (+ User) im

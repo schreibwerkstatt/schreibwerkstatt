@@ -50,6 +50,7 @@ Diese Regeln setzt ein Hook ([.claude/settings.json](.claude/settings.json), [sc
 | Kein natives `<select>`/`<input type=number>` — `combobox`/`numInput` | `style-guard.js` warnt | [public/CLAUDE.md](public/CLAUDE.md) |
 | Kein Roh-SQL-Write auf `pages`/`chapters`/`books` ausserhalb der Facade | `style-guard.js` warnt | oben, „Immer gültig" |
 | Jeder String in `de.json` **und** `en.json` | `i18n-check.js` | oben, „Immer gültig" |
+| Zähl-Texte nur über `tn()`/`pluralKey` (`<key>` + `<key>One`), Anzeige-Texte sortiert nur `compareText` | [i18n-plural.test.mjs](tests/unit/i18n-plural.test.mjs) + [compare-text-single-place.test.mjs](tests/unit/compare-text-single-place.test.mjs) | [docs/i18n.md](docs/i18n.md#zähl-texte) |
 | LOC-Caps je Kategorie | `loc-limits-check.js` + [tests/unit/loc-limits.test.mjs](tests/unit/loc-limits.test.mjs) | oben, „Immer gültig" |
 | `public/sw-manifest.js` nach Asset-Änderung regenerieren | `regen-sw-manifest.js` (automatisch) | [docs/caching.md](docs/caching.md) |
 | `npm run squash:regen` + [docs/erd.md](docs/erd.md) nach jeder Migration | `drift-reminders.js` + Drift-Tests | [db/CLAUDE.md](db/CLAUDE.md) |
@@ -69,6 +70,7 @@ Diese Regeln setzt ein Hook ([.claude/settings.json](.claude/settings.json), [sc
 | Leerzustand nur als `.card-empty` oder `.muted-msg` | [empty-state-single-place.test.mjs](tests/unit/empty-state-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
 | Gruppen-Titel im Formular nur als `.card-form-section-divider` (Erklärsatz: `--note`) | [section-divider-single-place.test.mjs](tests/unit/section-divider-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
 | Abschnitts-Titel (Caps-Zeile, auch in Leseansichten) nur als `.card-section-title` (Label im Fliesstext: `--inline`) | [section-title-single-place.test.mjs](tests/unit/section-title-single-place.test.mjs) | [public/css/CLAUDE.md](public/css/CLAUDE.md) |
+| Hauptinhalt + klebende Leiste nur als `.aside-split` (Breite/Deckel per `--aside-w`/`--aside-scroll-max`, keine Karten-ID in `layout/`) | [aside-split-single-place.test.mjs](tests/unit/aside-split-single-place.test.mjs) | [DESIGN.md](DESIGN.md#split-mit-leiste-aside-split) |
 | Klapp-Panel (`x-bind="panel"`) ohne eigenes Box-Styling — Abstand/Layout ans Kind | [collapsible-panel-style.test.mjs](tests/unit/collapsible-panel-style.test.mjs) | [DESIGN.md](DESIGN.md#klappbarer-section-toggle-accordion) |
 | Editor-/Chat-/Kommentar-Mehrdeutigkeit im Prompt | `prompt-disambiguation.js` (injiziert Hinweis) | oben, „Bevor du anfängst" |
 | Nur auf `main` — kein Branch, kein Worktree, kein Subagent mit `isolation: "worktree"` | `main-only-guard.js` **blockt** | unten, „Arbeitsweise" |

@@ -19,6 +19,7 @@ import { renderInline } from '../page-revision-diff.js';
 import { locateRange, resolveCurrentQuote, caretPosFromPoint } from '../share-anchor.js';
 import { groupThreads } from './comment-threads.js';
 import { avatarInitials } from '../avatar.js';
+import { compareText } from '../i18n.js';
 
 function anchorOf(root) {
   return { bid: root.anchor_bid, quote: root.anchor_quote, start: root.anchor_start, end: root.anchor_end };
@@ -311,7 +312,7 @@ export function createCommentRail(cfg) {
       for (const c of (this[K.comments] || [])) {
         if (!c.author_email && !c.parent_id && c.reader_name) set.add(c.reader_name);
       }
-      return [...set].sort((a, b) => a.localeCompare(b));
+      return [...set].sort(compareText);
     },
 
     // Triage-Filter setzen + neu auflösen (#5). status: 'all'|'open'|'resolved',

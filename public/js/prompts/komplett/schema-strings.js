@@ -1,6 +1,10 @@
 // Geteilte Schema-Text- und Regel-Bausteine der Komplett-Pipeline.
 // Reine Strings/Funktionen ohne Provider-State – von extraktion.js, figuren.js,
 // konsolidierung.js und kontinuitaet.js konsumiert.
+import { RELATION_TYPES } from '../../book/beziehung-typen.js';
+
+// Beziehungstypen als «a|b|c»-Auswahl im Schema-Beispiel (Liste: book/beziehung-typen.js).
+export const RELATION_TYPES_PROMPT = RELATION_TYPES.join('|');
 
 // ── Figurenextraktion (Basis – ohne Lebensereignisse) ─────────────────────────
 
@@ -30,7 +34,7 @@ export const FIGUREN_BASIS_SCHEMA = `{
       "erste_erwaehnung": "Kapitelname oder Abschnittsname der ersten Erwähnung (leer wenn unklar)",
       "schluesselzitate": ["Bis zu 5 charakterisierende Zitate, wörtlich aus dem Text – vollständige Sätze in Original-Interpunktion"],
       "kapitel": [{ "name": "Kapitelname" }],
-      "beziehungen": [{ "figur_id": "fig_2", "typ": "elternteil|geschwister|kind|freund|feind|kollege|bekannt|liebesbeziehung|ehepartner|ex_partner|rivale|mentor|schuetzling|patronage|geschaeft|verbuendete|komplize|vorgesetzter|untergebener|andere", "machtverhaltnis": 0, "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (ohne ##-Präfix)", "seite": "Abschnittstitel (ohne ###-Präfix); leer wenn = Kapitel oder unklar" }] }]
+      "beziehungen": [{ "figur_id": "fig_2", "typ": "${RELATION_TYPES_PROMPT}", "machtverhaltnis": 0, "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (ohne ##-Präfix)", "seite": "Abschnittstitel (ohne ###-Präfix); leer wenn = Kapitel oder unklar" }] }]
     }
   ]
 }`;
@@ -66,8 +70,11 @@ export const figurenBasisRules = (kontext = '') => `Regeln:
 - beziehungen.machtverhaltnis: ganzzahlig im Bereich -2 bis 2 (KEIN führendes Plus-Zeichen). Machtasymmetrie: 2=Gegenüber (figur_id) dominiert klar, 1=Gegenüber hat leichten Vorteil, 0=symmetrisch, -1=diese Figur hat leichten Vorteil, -2=diese Figur dominiert klar; weglassen oder 0 wenn unklar
 - beziehungen.belege: HÖCHSTENS 1 Stelle (Kapitelname + Abschnittstitel) an der die Beziehung klar wird. Genau wie im Text stehen lassen; leer lassen wenn unsicher. seite leer lassen wenn identisch mit dem Kapitelnamen (z.B. 1 Abschnitt pro Kapitel) oder unklar. Abschnittsnamen aus ### Überschriften, Kapitelnamen aus ## Überschriften oder dem Prompt-Kontext.
 - Beziehungstypen: typ beschreibt die ROLLE von figur_id (NICHT der aktuellen Figur!). Bei Figur X der Eintrag {figur_id: Y, typ: elternteil} bedeutet: Y IST der Elternteil von X. Konkretes Beispiel: Robert hat Mutter Sandra → bei Robert eintragen {figur_id: «<Sandras fig_id>», typ: elternteil, machtverhaltnis: 2}. patronage=Schutzherrschaft (figur_id = Patron), geschaeft=wirtschaftliche Beziehung, geschwister=ungerichtet, ehepartner=verheiratet/Lebenspartner (ungerichtet), ex_partner=frühere Liebes-/Ehebeziehung (ungerichtet), verbuendete=Verbündete/gemeinsame Sache jenseits blosser Freundschaft (ungerichtet), komplize=gemeinsame (oft illegale) Unternehmung (ungerichtet), vorgesetzter=figur_id ist Vorgesetzte(r), untergebener=figur_id ist unterstellt; liebesbeziehung nur für nicht-eheliche romantische Bindung. Übrige selbsterklärend
+- beziehungen.typ: GENAU EIN Wert aus der Liste im Schema – nie mehrere mit «|» verbinden, keine eigenen Typen. Verwandtschaft ohne eigenen Typ (Tante, Onkel, Cousin, Grosseltern, Schwager) → andere
 - Pro Figurenpaar höchstens EINE Beziehung eintragen – aus der Perspektive EINER Figur. Keine widersprüchlichen Angaben (z.B. nicht gleichzeitig elternteil und kind für dasselbe Paar)
 - Nur fiktive Charaktere oder Figuren die aktiv an der Buchhandlung teilnehmen – keine Orte oder Objekte
+- Nur einzelne Personen: keine Sammelbegriffe («die Vorfahren», «die Familie»), keine Metaphern oder Vergleiche, keine bloss erschlossenen Personen («Vater von X (implizit)»). Eine namenlose Person nur, wenn sie selbst in der Handlung auftritt
+- name: ohne Klammerzusatz und ohne Erklärung – Ruf- oder Kosename gehört in kurzname, ein Geburtsname als «geb. X» ans Ende. Dieselbe Person heisst überall gleich, auch wenn sie im Lauf der Handlung heiratet oder den Namen wechselt
 - KEINE historischen oder realen Personen die nur erwähnt, zitiert oder als Referenz genannt werden (z.B. Napoleon, Einstein, ein Politiker, eine Künstlerin)
 - Sortiert nach Wichtigkeit (zentral zuerst)
 - KONSERVATIV heisst belegt, NICHT knapp: Nur Figuren, Beziehungen und Eigenschaften aufnehmen die im Text belegt sind – aber vorhandene Belege voll ausschöpfen. Unterscheide Spekulation (verboten) von textgestützter Schlussfolgerung (erwünscht – was der Text klar nahelegt, darf benannt werden). Ein leeres Feld ist nur dann richtig, wenn der Text wirklich nichts hergibt; wo Belege da sind, schreibe ausführlich und konkret statt in Stichworten.

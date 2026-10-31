@@ -10,7 +10,7 @@
     <div class="card-header-titlebar">
       <span class="card-eyebrow" x-text="$app.selectedBookName"></span>
       <span class="card-title" x-text="$app.t('szenen.title')"></span>
-      <div class="card-subline" x-show="updatedLabel && !szenenLoading">
+      <div class="card-subline" x-show="updatedLabel && !cardLoading">
         <span class="card-timestamp" x-text="$app.t('common.asOf', { date: updatedLabel })"></span>
       </div>
     </div>
@@ -19,7 +19,7 @@
   <div x-show="szenenError" class="card-status card-status--error" role="alert" x-text="szenenError"></div>
 
   <!-- Leer-Hinweis mit CTA -->
-  <div x-show="!$store.catalog.szenen.length && !szenenLoading" class="card-empty">
+  <div x-show="!$store.catalog.szenen.length && !cardLoading" class="card-empty">
     <p class="card-empty-text" x-text="$app.t('common.noAnalysisYet')"></p>
     <p class="card-empty-hint" x-text="$app.t('empty.szenen.hint')"></p>
     <button type="button" class="primary card-empty-cta"
@@ -31,15 +31,7 @@
   </div>
 
   <!-- Skeleton während des ersten Ladens -->
-  <div x-show="szenenLoading && !$store.catalog.szenen.length" class="entity-skeleton entity-list--accented" x-cloak>
-    <template x-for="i in 6" :key="i">
-      <div class="entity-skeleton-row">
-        <span class="entity-skeleton-cell entity-skeleton-cell--anchor"></span>
-        <span class="entity-skeleton-cell entity-skeleton-cell--title"></span>
-        <span class="entity-skeleton-cell entity-skeleton-cell--meta"></span>
-      </div>
-    </template>
-  </div>
+  <div x-show="cardLoading && !$store.catalog.szenen.length" x-skeleton="6" class="entity-list--accented" x-cloak></div>
 
   <!-- @include szenen-uebersicht -->
 
@@ -112,8 +104,9 @@
               x-text="$app.t('szenen.deleteAllStale')"></button>
     </div>
     <!-- Kompakte Szenen-Liste -->
-    <div x-show="viewMode === 'list'" class="entity-list entity-list--accented">
-      <template x-for="s in szenenFiltered" :key="s.id">
+    <template x-if="viewMode === 'list'">
+    <div class="entity-list entity-list--accented">
+      <template x-for="s in listWindowed(szenenFiltered)" :key="s.id">
         <div>
           <div class="entity-row internal-link"
                :data-szeneid="s.id"
@@ -167,7 +160,12 @@
           </div>
         </div>
       </template>
+      <button type="button" class="btn-compact list-window-more"
+              x-show="listWindowRest(szenenFiltered) > 0" x-cloak
+              x-list-more="listWindowMore()" @click="listWindowMore()"
+              x-text="$app.t('common.showMore', { n: listWindowRest(szenenFiltered) })"></button>
     </div>
+    </template>
 
     <!-- @include szenen-grid -->
   </div>

@@ -2,6 +2,7 @@
 // Beats mit Intensität als Kurve (global + pro Strang), optionaler Figur-Fokus.
 
 import { _intensityBottomPct } from '../constants.js';
+import { compareText } from '../../../i18n.js';
 
 export const tensionMethods = {
   // ── Spannungsbogen ─────────────────────────────────────────────────────────
@@ -99,7 +100,7 @@ export const tensionMethods = {
         const d = this.draftFigurenById?.get(parseInt(id));
         opts.push({ value: `w:${id}`, label: d ? d.name : String(id) });
       }
-      opts.sort((a, b) => a.label.localeCompare(b.label));
+      opts.sort((a, b) => compareText(a.label, b.label));
       return opts;
     });
   },

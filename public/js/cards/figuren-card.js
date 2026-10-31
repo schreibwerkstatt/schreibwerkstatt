@@ -38,6 +38,7 @@ import { activeFilterId, sameId } from '../chapter-filter.js';
 import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 import { figurPflegeMethods } from '../book/figuren-pflege.js';
 import { figurenSchulwegMethods } from '../book/figuren-schulweg.js';
+import { listWindowState, listWindowMethods } from '../list-window.js';
 
 // Felder, die die Listensuche trifft. Der Typ zählt mit seinem angezeigten
 // Label (`typLabel`), nicht dem Persistenz-Key — gesucht wird, was man liest.
@@ -128,7 +129,7 @@ export function registerFigurenCard() {
     // Alterstabelle (5. Reiter). `figurenAlterData` = { figuren, scan } aus
     // GET /figures/:id/alter; null heisst „noch nicht geladen", nicht „leer".
     figurenAlterData: null,
-    figurenAlterFilters: { suche: '', typ: '', nur: '' },
+    figurenAlterFilters: { suche: '', typ: '', nur: '', kapitelId: '' },
     figurenAlterLoading: false,
     figurenAlterProgress: 0,
     figurenAlterStatus: '',
@@ -180,6 +181,8 @@ export function registerFigurenCard() {
     // figurenSeitenOptionen() werden im Template (inkl. Combobox-x-effect) mehrfach pro
     // Render gelesen → Cache mit shallow-Array-Deps. Reset via this._memos = {} im load-Pfad.
     _memos: {},
+    // Liste rendert schrittweise (list-window.js), wie Orte und Ereignisse.
+    ...listWindowState(),
     _lifecycle: null,
 
     init() {
@@ -214,6 +217,7 @@ export function registerFigurenCard() {
         onBookChanged: async (e, ctx, root) => {
           destroyNet();
           ctx._memos = {};
+          Object.assign(ctx, listWindowState());
           ctx.figurenGraphKapitelId = null;
           ctx._resetFigurenAlter();
           ctx._resetFigurPflege();
@@ -239,6 +243,7 @@ export function registerFigurenCard() {
         },
         onViewReset: (e, ctx) => {
           destroyNet();
+          Object.assign(ctx, listWindowState());
           ctx._resetFigurenAlter();
           ctx._resetFigurPflege();
           ctx._resetFigurSchulweg();
@@ -258,6 +263,12 @@ export function registerFigurenCard() {
       // Deep-Link hat setupCardLifecycle den Reiter schon gesetzt, bevor der
       // Watcher hängt.
       Alpine.store('catalogUi').figurenTab = this.figurenGraphModus;
+      // Ausgewählte Figur muss im gerenderten Fenster stehen (Deep-Link, Palette,
+      // Graph-Klick); beobachtet wird der Index, weil die Auswahl oft vor der Liste steht.
+      this.$watch(() => {
+        const id = Alpine.store('catalogUi').selectedFigurId;
+        return id == null ? -1 : this.filteredFiguren().findIndex(f => f.id === id);
+      }, (idx) => this.listWindowReveal(idx));
       this.$watch('figurenGraphModus', (mode) => {
         Alpine.store('catalogUi').figurenTab = mode;
         if (mode === 'alter') this.ensureFigurenAlter();
@@ -290,6 +301,14 @@ export function registerFigurenCard() {
       // das Partial den ganzen Graph-Block ohnehin aus (figuren.length > 0).
       this.$watch(() => Alpine.store('catalog').figuren, (figuren) => {
         if (window.__app.showFiguresCard && figuren?.length) this.renderFigurGraph();
+      });
+
+      // Kapitel umsortiert/umbenannt (tree/build.js setzt beide Maps neu) → Achse
+      // des Figurengraphen neu; die Kapitelachse steht in der Render-Signatur.
+      this.$watch(() => [window.__app._chapterIdOrderMap, window.__app._chapterLabelMap], () => {
+        if (window.__app.showFiguresCard && Alpine.store('catalog').figuren?.length) {
+          this.renderFigurGraph();
+        }
       });
 
       // Theme-Wechsel (Hell/Dunkel) → neu zeichnen. Die Canvas-Farben stecken im
@@ -329,6 +348,9 @@ export function registerFigurenCard() {
       this._themeObserver?.disconnect();
       this._themeObserver = null;
       if (this._figurenNetwork) { this._figurenNetwork.destroy(); this._figurenNetwork = null; }
+      this._figurenNodes = null;
+      this._figurenEdges = null;
+      this._figurenHash = null;
       this._graphTheme = null;
     },
 
@@ -399,7 +421,7 @@ export function registerFigurenCard() {
       this.figurenAlterProgress = 0;
       this.figurenAlterStatus = '';
       this.figurenAlterOpenId = null;
-      this.figurenAlterFilters = { suche: '', typ: '', nur: '' };
+      this.figurenAlterFilters = { suche: '', typ: '', nur: '', kapitelId: '' };
       // Die Spaltenwahl zeigt auf Figuren des alten Buchs — sie muss mit, sonst
       // steht die Matrix beim naechsten Oeffnen leer da, ohne zu sagen warum.
       this.figurenLebenslaufIds = [];
@@ -413,5 +435,6 @@ export function registerFigurenCard() {
     ...plotBacklinkMethods,
     ...figurPflegeMethods,
     ...figurenSchulwegMethods,
+    ...listWindowMethods,
   }));
 }

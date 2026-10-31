@@ -1,7 +1,8 @@
 <!-- Grid (Matrix): sortierbare Tabelle aller gefilterten Schauplätze. Fragment-
      Include von orte.html, Scope `orteCard`. Typ und Land sortieren nach dem
      sichtbaren Label (orte-map.js#orteGridRows). -->
-<div x-show="$store.catalog.orte.length > 0 && viewMode === 'grid'" class="table-scroll" x-cloak>
+<template x-if="$store.catalog.orte.length > 0 && viewMode === 'grid'">
+<div class="table-scroll">
   <table class="entity-grid-table"
          x-data="sortableTable({
            rows: () => orteGridRows(),
@@ -69,3 +70,4 @@
     </tbody>
   </table>
 </div>
+</template>

@@ -1,5 +1,5 @@
 <!-- Alterstabelle-Tab der Figuren-Karte: alle Figuren mit ihrem Alter im Buch,
-     filterbar nach Figurentyp. Nested Partial (Placeholder `partial-figuren-alter`
+     filterbar nach Figurentyp und Kapitel. Nested Partial (Placeholder `partial-figuren-alter`
      in figuren.html), laeuft im figurenCard-Scope. Logik: js/book/figuren-alter.js
 
      ZWEI ALTERS-SPALTEN FUER EINE FRAGE, mit Absicht: „Alter" ist die woertliche
@@ -11,7 +11,8 @@
      Zeilen-Aufbau wie in my-stats-jobs.html: ein <tbody> pro Zeile aus dem
      x-for (mehrere tbody sind gueltiges HTML, ein tbody im tbody nicht), Zeile
      klappt ihre Belege auf. -->
-<div x-show="figurenGraphModus === 'alter'" class="figur-alter" x-cloak>
+<template x-if="figurenGraphModus === 'alter'">
+<div class="figur-alter">
   <div class="card-section-head card-section-head--baseline">
     <p class="figur-alter-intro" x-text="$app.t('figuren.alter.intro')"></p>
     <div class="figur-alter-actions">
@@ -41,6 +42,9 @@
     <div x-data="catalogFilter('figurTyp')"
          x-modelable="value" x-model="figurenAlterFilters.typ"
          x-effect="options = figurenAlterTypListe().map(k => ({ value: k, label: $app.t('figuren.type.' + k) }))"></div>
+    <div x-show="figurenKapitelOptionen().length > 0" x-data="catalogFilter('chapter')"
+         x-modelable="value" x-model="figurenAlterFilters.kapitelId"
+         x-effect="options = figurenKapitelOptionen()"></div>
     <div x-data="catalogFilter('alterStatus')"
          x-modelable="value" x-model="figurenAlterFilters.nur"
          x-effect="options = ['mitAlter', 'ohneAlter', 'beleg', 'widerspruch'].map(k => ({ value: k, label: $app.t('figuren.alter.only.' + k) }))"></div>
@@ -52,6 +56,8 @@
      x-text="$app.t('figuren.alter.widerspruchCount', { n: figurenAlterSummary().widerspruch })"></p>
   <p class="card-hint card-hint--sm card-section" x-show="!figurenAlterData || !figurenAlterData.scan"
      x-text="$app.t('figuren.alter.noScanHint')"></p>
+  <p class="card-hint card-hint--sm card-hint--warn card-section" x-show="figurenAlterVeraltetText()"
+     x-text="figurenAlterVeraltetText()"></p>
 
   <div x-show="!figurenAlterRows().length" class="muted-msg muted-msg--spaced"
        x-text="$app.t('figuren.alter.empty')"></div>
@@ -165,3 +171,4 @@
     </table>
   </div>
 </div>
+</template>

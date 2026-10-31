@@ -38,6 +38,22 @@
      seine Mittellage daraus. Konsumenten: layout/twocolumn.css. */
   --layout-gap: var(--space-lg);  /* 16px */
 
+  /* === Spalten-Geometrie — Seitenbaum, Leiste, Klebe-Abstand ===
+     Seitenbaum: Breite per Griff zwischen min und max, gedeckelt auf 40vw (der
+     Griff in app-chrome.js liest min/max von hier). Leiste: die rechte Spalte
+     eines `.aside-split` (layout/aside-split.css); `-wide` nur, wo die Antworten
+     Zeilenbreite brauchen (Recherche-Chat mit Web-Quellen). Klebe-Abstand: oben
+     wie unten derselbe Rand; unten zusaetzlich ueber der festen Job-Leiste,
+     deren Hoehe sie selbst als `--job-queue-h` auf <html> schreibt. */
+  --sidebar-w-default: 280px;
+  --sidebar-w-min:     220px;
+  --sidebar-w-max:     600px;
+  --aside-w:           clamp(380px, 30vw, 560px);
+  --aside-w-wide:      clamp(420px, 32vw, 620px);
+  --aside-scroll-max:  min(52vh, 38rem);
+  --sticky-top:        var(--space-xl);  /* 24px */
+  --sticky-bottom:     max(var(--sticky-top), calc(var(--job-queue-h, 0px) + var(--space-sm)));
+
   /* === Padding-Tokens — wiederkehrende Zellgrössen === */
   --pad-btn-compact: 7px 10px;       /* compact button */
   --pad-badge:       4px 8px;        /* Badge/Tag/kleiner Pill */

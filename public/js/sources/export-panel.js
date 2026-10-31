@@ -17,6 +17,7 @@ import { fetchJson } from '../utils.js';
 import { CITATION_STYLES } from './format.js';
 import { exportSources, exportFileMeta, EXPORT_FORMATS, STYLED_FORMATS } from './export.js';
 import { hasAnyTag } from './fields.js';
+import { compareText } from '../i18n.js';
 
 function _bookId() {
   return window.Alpine?.store('nav')?.selectedBookId || null;
@@ -146,7 +147,7 @@ export const sourcesExportMethods = {
     }
     for (const t of this.srcExportTags) if (!seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
     return [...seen.values()]
-      .sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }))
+      .sort(compareText)
       .map(t => ({ value: t, label: t }));
   },
 

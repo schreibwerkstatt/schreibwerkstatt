@@ -109,3 +109,21 @@ test('listFigureEventsForTimeline: Ereignisse einer stale Figur fehlen im Zeitst
   assert.ok(rows.some(r => r.fig_id === 'fig_2'));
   assert.equal(rows.some(r => r.fig_id === 'orphan_9'), false);
 });
+
+test('computeFigureYears: ein Ereignis im Geburtsjahr ist kein Ankerjahr (kein Alter 0)', () => {
+  const { computeFigureYears } = require('../../lib/figure-years');
+  // „Jahrgang 1910" ergibt oft das einzige datierte Ereignis der Figur: ihre Geburt.
+  const jg = addFig('fig_jg', 'Jakob Jahrgang', A, { geburtstag: '1910' });
+  db.prepare('INSERT INTO figure_events (figure_id, datum, ereignis, datum_year, datum_unsicher, sort_order) VALUES (?, ?, ?, 1910, 0, 0)')
+    .run(jg, '1910', 'Geburt von Jakob');
+  // Buchende 1930 unabhaengig von den Tests davor (updateFigurenEvents raeumt um).
+  const zeuge = addFig('fig_zeuge', 'Zeuge Spaet', A, { geburtstag: '1890' });
+  db.prepare('INSERT INTO figure_events (figure_id, datum, ereignis, datum_year, datum_unsicher, sort_order) VALUES (?, ?, ?, 1930, 0, 0)')
+    .run(zeuge, '1930', 'Abschied');
+  const y = computeFigureYears(BOOK, A).get(jg);
+  assert.equal(y.jahr_im_roman, 1930, 'Fallback aufs Buchende statt aufs Geburtsjahr');
+  assert.equal(y.alter_im_roman, 20);
+  assert.equal(y.anchor_ereignis, null, 'die Geburt ist kein „weil …"');
+  // Ein spaeteres Ereignis der Figur bleibt ihr Anker.
+  assert.equal(computeFigureYears(BOOK, A).get(zeuge).alter_im_roman, 40);
+});

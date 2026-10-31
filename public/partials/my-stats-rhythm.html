@@ -16,11 +16,11 @@
     </div>
     <div class="overview-consistency-grid">
       <div class="overview-consistency-item">
-        <span class="overview-consistency-value" x-text="_myStatsPlural('mystats.days', myStatsStreak().currentStreak)"></span>
+        <span class="overview-consistency-value" x-text="$app.tn('mystats.days', myStatsStreak().currentStreak)"></span>
         <span class="overview-consistency-label" x-text="$app.t('mystats.streakCurrent')"></span>
       </div>
       <div class="overview-consistency-item">
-        <span class="overview-consistency-value" x-text="_myStatsPlural('mystats.days', myStatsStreak().longestStreak)"></span>
+        <span class="overview-consistency-value" x-text="$app.tn('mystats.days', myStatsStreak().longestStreak)"></span>
         <span class="overview-consistency-label" x-text="$app.t('mystats.streakLongest')"></span>
       </div>
       <div class="overview-consistency-item">

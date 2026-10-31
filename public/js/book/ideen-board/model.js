@@ -5,6 +5,7 @@
 // (tests/unit/ideen-board.test.mjs) und die Karte nur noch State haelt.
 
 import { IDEE_STATUSES, ideeStatus, ideeLaneKey, LANE_BOOK, compareIdeeManual } from '../ideen-shared.js';
+import { compareText } from '../../i18n.js';
 
 export { compareIdeeManual };
 
@@ -119,7 +120,7 @@ export function compareIdeen(sortBy = IDEE_SORT_MANUAL, sortDir = 'asc') {
   const dir = sortDir === 'desc' ? -1 : 1;
   const byId = (a, b) => (a.id || 0) - (b.id || 0);
   if (sortBy === 'title') {
-    return (a, b) => dir * ((a.content || '').localeCompare(b.content || '', undefined, { sensitivity: 'base', numeric: true })
+    return (a, b) => dir * (compareText(a.content, b.content)
       || byId(a, b));
   }
   return (a, b) => {

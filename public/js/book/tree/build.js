@@ -5,6 +5,10 @@ import { buildKapitelLabels } from '../../chapter-filter.js';
 // nav.tree → { len, byId } fuer _chapterExcludedByAncestor.
 const chapterIndexCache = new WeakMap();
 
+// Ab so vielen Abschnitten starten Kapitel ohne gespeicherten Klappzustand
+// zugeklappt (tree/open-state.js): aufgeklappt rendert die Sidebar jede Zeile.
+export const TREE_COLLAPSE_MIN_PAGES = 200;
+
 // Tree-Aufbau aus der `contentRepo.bookTree`-Antwort + Nachladen der
 // Sidebar-Plaketten. Beides aus `loadPages` (tree/load.js) herausgeloest, das
 // sonst Abbruch-Verwaltung, Sidebar-Modus, State-Clearing, Tree-Bau,
@@ -63,6 +67,7 @@ export const treeBuildMethods = {
     this.$store.nav.pages = pages;
 
     const openState = this._loadTreeOpenState(bookId);
+    const defaultOpen = pages.length < TREE_COLLAPSE_MIN_PAGES;
     this.$store.nav.tree = [
       ...pages.filter(p => !p.chapter_id).map(p => ({
         type: 'chapter',
@@ -83,7 +88,7 @@ export const treeBuildMethods = {
         depth: c._depth,
         parent_id: c._parent_id,
         excluded: c.excluded,
-        open: Object.prototype.hasOwnProperty.call(openState, c.id) ? !!openState[c.id] : true,
+        open: Object.prototype.hasOwnProperty.call(openState, c.id) ? !!openState[c.id] : defaultOpen,
         solo: false,
         hasChildren: (childCountMap.get(c.id) || 0) > 0,
         pages: c.pages,

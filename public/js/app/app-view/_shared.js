@@ -60,7 +60,7 @@ export async function _withCardTransition(ctx, apply) {
 }
 
 // Generischer Karten-Toggle. Liest Behavior-Felder aus EXCLUSIVE_CARDS-Entry
-// (onReclick, requiresBook, loadDeps, auditEvent, extraRefreshOnOpen) und
+// (onReclick, requiresBook, loadDeps, auditEvent) und
 // kapselt die Open/Close/Refresh-Pfade. Bespoke-Toggles (kapitelReview, ideen,
 // chat, tree) leben weiterhin als eigene Methoden.
 // `opts.skipCardScroll` unterdrückt den Sprung an den Karten-Anfang. Gesetzt von
@@ -106,9 +106,6 @@ export async function _toggleCardGeneric(entry, opts = {}) {
   });
   if (!opts.skipCardScroll) this._scrollToCardByKey(entry.key);
   if (entry.auditEvent) this.logAuditEvent?.(entry.auditEvent, { book: this.$store.nav.selectedBookId });
-  if (entry.extraRefreshOnOpen) {
-    window.dispatchEvent(new CustomEvent(EVT.CARD_REFRESH, { detail: { name: entry.key } }));
-  }
   if (entry.loadDeps?.length) {
     const tasks = [];
     for (const dep of entry.loadDeps) {

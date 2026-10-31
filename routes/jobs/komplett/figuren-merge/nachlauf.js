@@ -1,6 +1,6 @@
 'use strict';
 // Nachlauf der Figuren-Konsolidierung (Phase 2): Sozialschicht-Mehrheitsvotum,
-// Backfill aus Szenen/Events, ID-Eindeutigkeit, Alias-Cluster. Facade:
+// Backfill aus Szenen/Events, Pseudo-Figuren, ID-Eindeutigkeit, Alias-Cluster. Facade:
 // ../figuren-merge.js.
 
 const { _refToString } = require('../utils');
@@ -217,4 +217,16 @@ function applyAliasClusters(chapterFiguren, clusters, log = null) {
   return { renamed, aliasMap };
 }
 
-module.exports = { applySozialschichtModeVote, backfillFiguren, ensureUniqueFigIds, applyAliasClusters };
+/** Einträge, die das Modell selbst als Nicht-Person kennzeichnet: ein Namenszusatz
+ *  «(allgemein)», «(implizit)» oder «Metapher» («Vorfahren von Thomas (allgemein)»,
+ *  «Gans (Metapher für Tony)»). Bewusst nur diese Marker — eine umschriebene Person
+ *  («Vater von Thomas», «die Wirtin») kann eine echte, namenlose Figur sein und bleibt.
+ *  Kanten zu entfernten Einträgen fallen beim Speichern weg (dedupRelations prüft die
+ *  Ziel-ids). Liefert die bereinigte Liste und die Zahl entfernter Einträge. */
+const PSEUDO_FIGUR_RE = /\((?:[^)]*[^\p{L}])?(?:allgemein|implizit)(?:[^\p{L}][^)]*)?\)|(?<!\p{L})metapher(?!\p{L})/iu;
+function dropPseudoFiguren(figuren) {
+  const kept = (figuren || []).filter(f => !PSEUDO_FIGUR_RE.test(String(f?.name || '')));
+  return { figuren: kept, dropped: (figuren || []).length - kept.length };
+}
+
+module.exports = { applySozialschichtModeVote, backfillFiguren, dropPseudoFiguren, ensureUniqueFigIds, applyAliasClusters };

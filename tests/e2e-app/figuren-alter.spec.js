@@ -65,7 +65,7 @@ test('alterstabelle: Reiter rendert, Filter greifen, Belege klappen auf', async 
     const nav = window.Alpine.store('nav');
     const p = (nav.pages || [])[0];
     const c = (nav.tree || []).find(x => x.type === 'chapter' && String(x.id) === String(p.chapter_id));
-    return { id: p.id, name: p.name, chapter: c && !c.solo ? c.name : null };
+    return { id: p.id, name: p.name, chapterId: p.chapter_id, chapter: c && !c.solo ? c.name : null };
   });
 
   // Leseroute des Alters-Index bedienen: Anna hat eine belegte Spanne MIT
@@ -151,11 +151,38 @@ test('alterstabelle: Reiter rendert, Filter greifen, Belege klappen auf', async 
   }
   await expect(rowA.locator('.figur-alter-beleg').nth(1).locator('.entity-ref')).toHaveCount(0);
 
-  // Filter „nur mit Alter" (zweite Combobox) blendet Bert aus.
+  // Filter „nur mit Alter" (dritte Combobox, nach Typ und Kapitel) blendet Bert aus.
   const boxes = card.locator('.figur-alter .filter-bar .combobox-wrap');
-  await expect(boxes).toHaveCount(2);
+  await expect(boxes).toHaveCount(3);
+
+  // Kapitel-Filter (zweite Combobox): Auftritte entstehen nur in der Analyse
+  // (figure_appearances), darum bekommt Anna ihr Kapitel im Katalog-Store. Die
+  // Optionen sind die Kapitel, in denen Figuren auftreten — per ID, mit Label aus
+  // dem Buchbaum —, und die Auswahl laesst nur Figuren dieses Kapitels stehen.
+  const chap = await page.evaluate(({ aId, chapterId }) => {
+    const store = window.Alpine.store('catalog');
+    store.figuren = store.figuren.map(f => f.id === aId
+      ? { ...f, kapitel: [{ chapter_id: chapterId, name: 'x', haeufigkeit: 1 }] } : f);
+    return window.__app._chapterLabelMap.get(chapterId) ?? window.__app._chapterLabelMap.get(String(chapterId));
+  }, { aId: seeded.aId, chapterId: realPage.chapterId });
+  expect(chap).toBeTruthy();
+  await expect(boxes.nth(1)).toBeVisible();
   await boxes.nth(1).locator('.combobox-trigger').click();
-  await boxes.nth(1).locator('.combobox-option').filter({ hasText: 'Nur mit Alter' }).click();
+  const expected = await page.evaluate(() =>
+    window.Alpine.$data(document.querySelector('.card--figuren')).figurenKapitelOptionen().map(o => o.label));
+  expect(expected).toContain(chap);
+  const opts = boxes.nth(1).locator('.combobox-option');
+  // «Alle Kapitel» + je ein Kapitel mit Auftritt.
+  await expect(opts).toHaveCount(expected.length + 1);
+  await opts.filter({ hasText: chap }).first().click();
+  await expect(rowB).toBeHidden();
+  await expect(rowA).toBeVisible();
+  await boxes.nth(1).locator('.combobox-trigger').click();
+  await opts.first().click();
+  await expect(rowB).toBeVisible();
+
+  await boxes.nth(2).locator('.combobox-trigger').click();
+  await boxes.nth(2).locator('.combobox-option').filter({ hasText: 'Nur mit Alter' }).click();
   await expect(rowB).toBeHidden();
   await expect(rowA).toBeVisible();
 

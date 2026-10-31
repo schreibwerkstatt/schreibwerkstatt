@@ -12,6 +12,7 @@ const ai       = require('./ai');
 const loader   = require('./loader');
 const queries  = require('./queries');
 const router   = require('./router');
+const { bundleBlocks } = require('./bundles');
 
 const { getBookSettings } = require('../../../db/schema');
 
@@ -106,6 +107,7 @@ module.exports = {
   BATCH_SIZE: loader.BATCH_SIZE,
   chunkLimitsFor: loader.chunkLimitsFor,
   resolveExtractSinglePassLimit: loader.resolveExtractSinglePassLimit,
+  bundleBlocks,
 
   jsonBody, jsonBodyLarge,
   sharedRouter: router.sharedRouter,

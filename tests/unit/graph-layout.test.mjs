@@ -3,7 +3,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 
 import {
-  computeSwimlaneLayout, figureInfo, columnWidth, importanceBorderWidth,
+  computeSwimlaneLayout, figureInfo, columnWidth, importanceBorderWidth, headerHitColumn,
   TIER_ORDER, ROW_H, MIN_DX,
 } from '../../public/js/graph/layout.js';
 
@@ -160,5 +160,19 @@ describe('importanceBorderWidth', () => {
   test('wächst monoton', () => {
     const vals = [1, 4, 16, 64, 256].map(importanceBorderWidth);
     for (let i = 1; i < vals.length; i++) assert.ok(vals[i] >= vals[i - 1]);
+  });
+});
+
+describe('headerHitColumn', () => {
+  test('trifft die Kopfzeile in Bildschirm-Koordinaten, unabhängig vom Zoom', () => {
+    // Spalte 2 bei COL_W 200, Klick 10 px unter dem oberen Rand.
+    assert.strictEqual(headerHitColumn(10, 410, 200, 5, 14), 2);
+  });
+  test('Klick unterhalb der Kopfzeile ist kein Kapitel-Klick', () => {
+    assert.strictEqual(headerHitColumn(60, 410, 200, 5, 14), -1);
+  });
+  test('ausserhalb der Kapitelachse → -1', () => {
+    assert.strictEqual(headerHitColumn(10, -300, 200, 5, 14), -1);
+    assert.strictEqual(headerHitColumn(10, 1200, 200, 5, 14), -1);
   });
 });

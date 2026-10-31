@@ -301,3 +301,55 @@ test('preMerge: Name ohne Anrede neben Herr UND Frau → nicht zugeordnet', () =
   ]);
   assert.equal(dupesRemoved, 0);
 });
+
+// ── Namen mit Klammer-/Geburtsnamen-Zusatz ───────────────────────────────────
+// Modelle schreiben Beinamen und Geburtsnamen in Klammern oder hinter ein Komma.
+// Ohne Satzzeichen-Trennung hiessen die Token «(grünlich)»/«buddenbrook,» und
+// keine Teilnamen-Zusammenführung griff (Buddenbrooks: Antonie siebenfach).
+const { nameTokens } = require('../../lib/name-normalize');
+
+test('nameTokens: Klammern, Kommas und «geb.» trennen bzw. fallen weg', () => {
+  assert.deepEqual(nameTokens('Antonie Buddenbrook (Grünlich)'), ['antonie', 'buddenbrook', 'grünlich']);
+  assert.deepEqual(nameTokens('Antonie Buddenbrook, geb. Grünlich'), ['antonie', 'buddenbrook', 'grünlich']);
+  assert.deepEqual(nameTokens('Antonie Permaneder (geb. Buddenbrook)'), ['antonie', 'permaneder', 'buddenbrook']);
+  assert.deepEqual(nameTokens('Hans-Peter Müller'), ['hans', 'peter', 'müller']);
+});
+
+const _bud = (id, name, geschlecht) => ({
+  id, name, typ: 'hauptfigur', geschlecht,
+  kapitel: [{ name: 'K1', haeufigkeit: 3 }, { name: 'K2', haeufigkeit: 1 }], beziehungen: [],
+});
+
+test('mergeDuplicate: Klammer- und Komma-Varianten derselben Person verschmelzen', () => {
+  const { figuren } = mergeDuplicateFiguren([
+    _bud('fig_1', 'Antonie Buddenbrook (Grünlich)', 'weiblich'),
+    _bud('fig_2', 'Antonie Buddenbrook, geb. Grünlich', 'weiblich'),
+    _bud('fig_3', 'Johann Buddenbrook (Hanno)', 'männlich'),
+    _bud('fig_4', 'Hanno Buddenbrook (Justus Johann Kaspar)', 'männlich'),
+  ]);
+  assert.deepEqual(figuren.map(f => f.name).sort(), [
+    'Antonie Buddenbrook (Grünlich)', 'Hanno Buddenbrook (Justus Johann Kaspar)',
+  ]);
+});
+
+test('mergeDuplicate: gleicher Vor- und Nachname, andere Person im Zusatz bleibt getrennt', () => {
+  const { figuren } = mergeDuplicateFiguren([
+    _bud('fig_1', 'Johann Buddenbrook (Hanno)', 'männlich'),
+    _bud('fig_2', 'Johann Buddenbrook (der Senator, Vater von Thomas)', 'männlich'),
+  ]);
+  assert.equal(figuren.length, 2);
+});
+
+test('dropPseudoFiguren: nur vom Modell markierte Nicht-Personen fallen weg', () => {
+  const { dropPseudoFiguren } = require('../../routes/jobs/komplett/figuren-merge');
+  const names = [
+    'Vorfahren von Thomas (allgemein)', 'Vater Hannos (implizit)', 'Gans (Metapher für Tony)',
+    'Mutter Hannos (Gertrud Buddenbrook implizit)',
+    // bleiben: umschriebene Person, Marker nur als Wortteil
+    'Vater von Thomas Buddenbrook', 'Allgemeiner Krankenpfleger', 'Metaphernhändler',
+  ];
+  const { figuren, dropped } = dropPseudoFiguren(names.map(name => ({ name })));
+  assert.equal(dropped, 4);
+  assert.deepEqual(figuren.map(f => f.name),
+    ['Vater von Thomas Buddenbrook', 'Allgemeiner Krankenpfleger', 'Metaphernhändler']);
+});

@@ -6,6 +6,7 @@
 
 import { ORT_TYPEN, ortTypLabel } from './ort-typen.js';
 import { countryOptions } from '../country-codes.js';
+import { compareText } from '../i18n.js';
 
 const EMPTY_DRAFT = { name: '', typ: '', beschreibung: '', stimmung: '', land: '', parent: '' };
 
@@ -44,7 +45,7 @@ export const orteEditMethods = {
     }
     return orte.filter(o => !o.stale && !blocked.has(o.id))
       .map(o => ({ value: o.id, label: o.name }))
-      .sort((a, b) => a.label.localeCompare(b.label));
+      .sort((a, b) => compareText(a.label, b.label));
   },
 
   ortChildren(o) {
@@ -101,7 +102,7 @@ export const orteEditMethods = {
     return Alpine.store('catalog').orte
       .filter(x => x.id !== o.id)
       .map(x => ({ value: x.id, label: x.stale ? `${x.name} (${window.__app.t('orte.staleBadge')})` : x.name }))
-      .sort((a, b) => a.label.localeCompare(b.label));
+      .sort((a, b) => compareText(a.label, b.label));
   },
 
   // Aktueller Ort (Quelle) geht im gewählten Ziel auf.
