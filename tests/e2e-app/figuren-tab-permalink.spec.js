@@ -14,23 +14,42 @@ const modus = (page) => page.evaluate(
 test('figuren: Deep-Link öffnet den Reiter, Reiterwechsel schreibt den Hash', async ({ page }) => {
   await bootApp(page);
   const bookId = await page.evaluate(() => window.Alpine.store('nav').books[0].id);
+  // Die Reiterleiste erscheint erst mit mindestens einer Figur.
+  const before = await page.evaluate(async (id) => {
+    const existing = (await (await fetch(`/figures/${id}`)).json())?.figuren || [];
+    await fetch(`/figures/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ figuren: [...existing,
+        { id: 'fig_tablink_a', name: 'Tablink Anna', typ: 'hauptfigur', beziehungen: [], kapitel: [], eigenschaften: [] }] }),
+    });
+    return existing;
+  }, bookId);
 
-  await page.evaluate((id) => { location.hash = `#book/${id}/figuren/praesenz`; }, bookId);
-  await expect(page.locator(CARD)).toBeVisible();
-  await expect.poll(() => modus(page)).toBe('praesenz');
+  try {
+    await page.evaluate((id) => { location.hash = `#book/${id}/figuren/praesenz`; }, bookId);
+    await expect(page.locator(CARD)).toBeVisible();
+    await expect.poll(() => modus(page)).toBe('praesenz');
 
-  // Reload auf dem Permalink: Karte wird erst durch den Deep-Link gemountet.
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await waitBooted(page);
-  await expect(page.locator(CARD)).toBeVisible();
-  await expect.poll(() => modus(page)).toBe('praesenz');
-  expect(new URL(page.url()).hash).toBe(`#book/${bookId}/figuren/praesenz`);
+    // Reload auf dem Permalink: Karte wird erst durch den Deep-Link gemountet.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitBooted(page);
+    await expect(page.locator(CARD)).toBeVisible();
+    await expect.poll(() => modus(page)).toBe('praesenz');
+    expect(new URL(page.url()).hash).toBe(`#book/${bookId}/figuren/praesenz`);
 
-  // Reiterwechsel per Klick → Hash folgt; zurück auf die Liste → ohne Suffix.
-  // Reiter-Reihenfolge wie FIGUREN_TABS: liste, figur, familie, soziogramm, …
-  const tabs = page.locator(`${CARD} .tabs-btn`);
-  await tabs.nth(3).click();
-  await expect.poll(() => new URL(page.url()).hash).toBe(`#book/${bookId}/figuren/soziogramm`);
-  await tabs.nth(0).click();
-  await expect.poll(() => new URL(page.url()).hash).toBe(`#book/${bookId}/figuren`);
+    // Reiterwechsel per Klick → Hash folgt; zurück auf die Liste → ohne Suffix.
+    // Reiter-Reihenfolge wie FIGUREN_TABS: liste, figur, familie, soziogramm, …
+    const tabs = page.locator(`${CARD} .tabs-btn`);
+    await tabs.nth(3).click();
+    await expect.poll(() => new URL(page.url()).hash).toBe(`#book/${bookId}/figuren/soziogramm`);
+    await tabs.nth(0).click();
+    await expect.poll(() => new URL(page.url()).hash).toBe(`#book/${bookId}/figuren`);
+  } finally {
+    await page.evaluate(async ({ id, before }) => {
+      await fetch(`/figures/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ figuren: before }),
+      });
+    }, { id: bookId, before });
+  }
 });
