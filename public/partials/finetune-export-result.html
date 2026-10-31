@@ -1,0 +1,69 @@
+<!-- Fine-Tuning-Export: Fortschritt, Status, Statistik und Downloads des
+     gespeicherten Sets. Wird in `#partial-finetune-export-result` der Karte
+     finetune-export.html geladen und erbt deren x-data-Scope. -->
+<div x-show="finetuneLoading" class="progress-bar-wrap">
+  <div class="progress-bar" :style="{ '--progress': finetuneProgress + '%' }"></div>
+</div>
+
+<div x-show="finetuneStatus" class="card-status" x-html="finetuneStatus"></div>
+
+<template x-if="finetuneStats && !finetuneLoading">
+  <div class="form-section">
+    <div class="form-stats">
+      <span class="tok-badge tok-neutral" x-text="$app.t('finetune.stats.total', { n: finetuneStats.total })"></span>
+      <span class="tok-badge tok-neutral" x-text="$app.t('finetune.stats.train', { n: finetuneStats.train })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.val > 0" x-text="$app.t('finetune.stats.val', { n: finetuneStats.val })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.styleCount > 0" x-text="$app.t('finetune.stats.style', { n: finetuneStats.styleCount })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.sceneCount > 0" x-text="$app.t('finetune.stats.scene', { n: finetuneStats.sceneCount })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.verbatimCount > 0" x-text="$app.t('finetune.stats.verbatim', { n: finetuneStats.verbatimCount })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.dialogCount > 0" x-text="$app.t('finetune.stats.dialog', { n: finetuneStats.dialogCount })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.authorChatCount > 0" x-text="$app.t('finetune.stats.authorChat', { n: finetuneStats.authorChatCount })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.aiAugmentCount > 0" x-text="$app.t('finetune.stats.aiAugment', { n: finetuneStats.aiAugmentCount })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.readerCount > 0" x-text="$app.t('finetune.stats.reader', { n: finetuneStats.readerCount })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.tokensP95 > 0" x-text="$app.t('finetune.stats.tokensP95', { n: finetuneStats.tokensP95 })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.tokensMax > 0" x-text="$app.t('finetune.stats.tokensMax', { n: finetuneStats.tokensMax })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.recommendedSeqLen > 0" x-text="$app.t('finetune.stats.recommendedSeqLen', { n: finetuneStats.recommendedSeqLen })"></span>
+      <span class="tok-badge tok-med" x-show="finetuneStats.dropped > 0" x-text="$app.t('finetune.stats.dropped', { n: finetuneStats.dropped })"></span>
+      <span class="tok-badge tok-med" x-show="finetuneStats.capped > 0" x-text="$app.t('finetune.stats.capped', { n: finetuneStats.capped })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.deduped > 0" x-text="$app.t('finetune.stats.deduped', { n: finetuneStats.deduped })"></span>
+      <span class="tok-badge tok-med" x-show="finetuneStats.balanced > 0" x-text="$app.t('finetune.stats.balanced', { n: finetuneStats.balanced })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.voiceRewritten > 0" x-text="$app.t('finetune.stats.voiceRewritten', { n: finetuneStats.voiceRewritten })"></span>
+    </div>
+
+    <div class="row">
+      <button type="button" @click="finetuneDownload('train')"
+              :disabled="(finetuneStats.train ?? 0) === 0">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+        <span x-text="$app.t('finetune.download.train')"></span>
+        <span class="form-size-hint" x-text="'(' + finetuneFormatBytes(finetuneStats.trainBytes) + ')'" x-show="finetuneStats.trainBytes > 0"></span>
+      </button>
+      <button type="button" @click="finetuneDownload('val')"
+              :disabled="(finetuneStats.val ?? 0) === 0">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+        <span x-text="$app.t('finetune.download.val')"></span>
+        <span class="form-size-hint" x-text="'(' + finetuneFormatBytes(finetuneStats.valBytes) + ')'" x-show="finetuneStats.valBytes > 0"></span>
+      </button>
+      <button type="button" @click="finetuneDownload('all')" x-show="finetuneStats.allBytes > 0">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+        <span x-text="$app.t('finetune.download.all')"></span>
+        <span class="form-size-hint" x-text="'(' + finetuneFormatBytes(finetuneStats.allBytes) + ')'"></span>
+      </button>
+    </div>
+    <div class="row">
+      <button type="button" @click="finetuneDownloadModelfile()" x-show="finetuneStats.systemPrompt">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+        <span x-text="$app.t('finetune.download.modelfile')"></span>
+      </button>
+      <button type="button" @click="finetuneDownload('eval')" x-show="finetuneStats.evalBytes > 0">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+        <span x-text="$app.t('finetune.download.eval')"></span>
+      </button>
+    </div>
+    <p class="card-form-hint" x-show="finetuneStats.allBytes > 0" x-text="$app.t('finetune.hint.all')"></p>
+
+    <p class="card-form-warn" x-show="finetuneStale" x-cloak role="status" x-text="$app.t('finetune.hint.stale')"></p>
+    <p class="card-form-hint" x-show="finetuneSavedAt" x-text="finetuneSavedLabel()"></p>
+  </div>
+</template>
+
+<div x-show="!finetuneLoading && !finetuneStats && !finetuneStatus" class="muted-msg muted-msg--spaced" x-text="$app.t('finetune.emptyState')"></div>

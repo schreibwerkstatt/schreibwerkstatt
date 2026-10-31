@@ -27,7 +27,7 @@ Kern-Pipeline (Figuren/Orte/Songs/Fakten/Szenen/Zeitstrahl/Kontinuität) — Pha
 
 ## Finetune-Export
 
-Ziel: Buch im Modell **internalisieren** (Stil, Welt, Figuren, Fakten, Plot). Darum **maximal grosszügig extrahieren** — lieber zu viele Trainingssamples als zu wenige. Alles, was sich aus Text/Figuren/Szenen/Schauplätzen/Ereignissen/Lektorats-Findings als Q&A, Stil-Fortsetzung, Dialog, Szenen-Generierung, Fakten-Recall etc. ableiten lässt, mitnehmen. Keine künstlichen Sample-Caps, keine vorsichtigen Limits per Sampler — Modell soll Buch nach Finetune möglichst vollständig „kennen". Neue Sampler/Datenquellen tendenziell hinzufügen, nicht filtern. Code: [routes/jobs/finetune-export/](../../routes/jobs/finetune-export/).
+Ziel: Buch im Modell **internalisieren** (Stil, Welt, Figuren, Fakten, Plot) für ein **Leser-Modell** — das Buch spricht mit Lesern ([docs/finetuning.md](../../docs/finetuning.md#leser-modell)); Werkstattwissen (Lektorat, Buch-Chat, Abschnitts-Gliederung) gehört nicht hinein. Darum **maximal grosszügig extrahieren** — lieber zu viele Trainingssamples als zu wenige. Alles, was sich aus Text/Figuren/Szenen/Schauplätzen/Ereignissen als Q&A, Stil-Fortsetzung, Dialog, Szenen-Generierung, Fakten-Recall etc. ableiten lässt, mitnehmen. Keine künstlichen Sample-Caps, keine vorsichtigen Limits per Sampler — Modell soll Buch nach Finetune möglichst vollständig „kennen". Neue Sampler/Datenquellen tendenziell hinzufügen, nicht filtern. Code: [routes/jobs/finetune-export/](../../routes/jobs/finetune-export/).
 
 ## Chat
 

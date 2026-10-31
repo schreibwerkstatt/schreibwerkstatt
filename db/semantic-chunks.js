@@ -227,8 +227,9 @@ function remove(kind, entityId) {
 // Normen jedes Chunks nicht bei jeder Anfrage neu). Null-Vektoren fallen beim
 // Laden heraus (sie ranken ohnehin nie).
 // Deckel über die Summe der gecachten Chunks (LRU nach Buch): 1024-dim bge-m3
-// ≈ 4 KB je Chunk → 30k Chunks ≈ 120 MB.
-const VEC_CACHE_MAX_CHUNKS = 30000;
+// ≈ 4 KB je Chunk → 60k Chunks ≈ 240 MB. Prod hält rund 20k Chunks über alle
+// Bücher; der Deckel lässt mehrere grosse Bücher gleichzeitig warm.
+const VEC_CACHE_MAX_CHUNKS = 60000;
 const _vecCache = new Map(); // `${bookId}|${model}` → { gen, count, rows }
 let _globalGen = 0;
 const _bookGen = new Map(); // bookId → Zähler

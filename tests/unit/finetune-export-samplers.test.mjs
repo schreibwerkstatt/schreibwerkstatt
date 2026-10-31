@@ -1,11 +1,10 @@
-// Unit: Finetune-Export — Dialog-Erkennung, Typ-Balance, Holdout-Zuordnung der
-// Zitat-Samples und Korrektur-Quelle.
+// Unit: Finetune-Export — Dialog-Erkennung, Typ-Balance und Holdout-Zuordnung
+// der Zitat-Samples.
 //
 // Jede dieser Stellen ist still kaputtgegangen, ohne dass ein Export
 // fehlschlug: die Dialog-Regexes fanden kein typografisches Zitat mehr, die
-// Typ-Balance hielt ihren Anteil nicht, Zitat-Samples ohne Kapitel-`sourceKey`
-// leckten Val-Text ins Training, und abgelehnte KI-Vorschläge landeten als
-// Autor-Prosa im Datensatz.
+// Typ-Balance hielt ihren Anteil nicht, und Zitat-Samples ohne Kapitel-
+// `sourceKey` leckten Val-Text ins Training.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -19,7 +18,6 @@ const { extractDialogs } = require('../../routes/jobs/finetune-export/lib/text.j
 const { balanceCap } = require('../../routes/jobs/finetune-export/finalize.js');
 const { buildDialogSamples } = require('../../routes/jobs/finetune-export/samples/dialog.js');
 const { buildFigureMetaSamples } = require('../../routes/jobs/finetune-export/samples/author-chat/figures.js');
-const { collectAppliedCorrections } = require('../../routes/jobs/finetune-export/samples/correction.js');
 
 test('extractDialogs: alle fünf Schreibweisen, jedes Zitat genau einmal', () => {
   const cases = [
@@ -84,19 +82,4 @@ test('Zitat-Samples tragen den sourceKey ihres Kapitels', () => {
   assert.deepEqual(figVoice.map(s => s.sourceKey).sort(), ['ch:11', 'ch:12']);
   assert.equal(new Set(figVoice.map(s => s.q)).size, figVoice.length, 'keine identische Frage mit verschiedenen Antworten');
   assert.match(figVoice[0].a, /^„.+“/);
-});
-
-test('Korrekturen: nur übernommene Befunde, nicht jeder KI-Vorschlag', () => {
-  const BOOK = 731;
-  const USER = 'ftcorr@test.dev';
-  db.prepare('INSERT OR IGNORE INTO app_users (email) VALUES (?)').run(USER);
-  schema.upsertBookByName(BOOK, 'Finetune-Korrektur');
-  const accepted = { original: 'Er ging langsam nachhause.', korrektur: 'Er ging langsam nach Hause.', erklaerung: 'Getrenntschreibung.' };
-  const rejected = { original: 'Sie lachte laut und herzlich.', korrektur: 'Sie lachte schallend.' };
-  db.prepare('INSERT OR IGNORE INTO pages (page_id, book_id, page_name) VALUES (?, ?, ?)').run(7310, BOOK, 'S1');
-  db.prepare(`INSERT INTO page_checks (page_id, book_id, user_email, checked_at, error_count, errors_json, applied_errors_json)
-              VALUES (7310, ?, ?, '2026-01-01T00:00:00.000Z', 2, ?, ?)`)
-    .run(BOOK, USER, JSON.stringify([accepted, rejected]), JSON.stringify([accepted]));
-  const out = collectAppliedCorrections(BOOK, USER, 4000);
-  assert.deepEqual(out.map(c => c.korr), ['Er ging langsam nach Hause.']);
 });

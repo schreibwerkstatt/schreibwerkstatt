@@ -5,24 +5,28 @@ const { getBookSettings } = require('../../../db/schema');
 const {
   makeJobLogger, updateJob, completeJob, failJob, contentHttpError,
   loadOrderedBookContents, loadPageContents,
-  jobs, createJob, enqueueJob, findActiveJobId,
+  createJob, enqueueJob, findActiveJobId,
   jobAbortControllers, BATCH_SIZE,
   jsonBody,
 } = require('../shared');
 const { buildExportFilename } = require('../../../lib/filenames');
 const { loadFinetuneData } = require('./data-loader');
 const { finalizeFinetuneSamples } = require('./finalize');
-const { finetuneResultStore } = require('./lib/store');
+const { bookFingerprint, finetuneFilePath, saveFinetuneResult, loadFinetuneMeta } = require('./lib/store');
+const { buildEvalPrompts } = require('./lib/eval-prompts');
 
 const { buildStyleSamples } = require('./samples/style');
 const { buildSceneSamples } = require('./samples/scene');
 const { buildVerbatimSamples } = require('./samples/verbatim');
 const { buildDialogSamples } = require('./samples/dialog');
-const { buildCorrectionSamples } = require('./samples/correction');
 const { buildAuthorChatSamples } = require('./samples/author-chat');
 const { buildAiAugmentSamples } = require('./samples/ai-augment');
+const {
+  buildReaderSamples, buildReaderAiSamples, buildReaderConversations, buildReaderSystem,
+} = require('./samples/reader');
 const { guardBook, sessionEmail } = require('../../../lib/acl');
 const { toIntId } = require('../../../lib/validate');
+const { setContext } = require('../../../lib/log-context');
 
 const finetuneExportRouter = express.Router();
 
@@ -55,17 +59,17 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     const valSplit = Math.max(0, Math.min(0.5, Number.isFinite(opts.valSplit) ? opts.valSplit : 0.1));
     const seed = Number.isFinite(opts.valSeed) ? opts.valSeed : 0;
     // `maxSeqTokens`: hartes Token-Limit nach Tekken-V7-Chat-Template-Wrapping.
-    // 0/null = kein Filter. Sweet-Spots für Mistral-Small-3.2-24B:
-    //   • QLoRA 4-bit auf 20-24 GB (RTX 3090/4090):  4096
-    //   • QLoRA 4-bit auf 48 GB (A6000):            8192-16384
+    // 0/null = kein Filter. Sweet-Spots für Ministral-3-8B:
+    //   • QLoRA 4-bit auf 16-20 GB (RTX 4000 Ada):  4096
+    //   • QLoRA 4-bit auf 24 GB (RTX 3090/4090):   8192
+    //   • LoRA 16-bit auf 48 GB (A6000):           8192-16384
     //   • LoRA 16-bit auf 80 GB (A100/H100):       16384-32768
-    //   • Voll-FT auf 80 GB:                        8192 (oder grösser mit FSDP)
     const maxSeqTokens = Math.max(0, Number(opts.maxSeqTokens) || 0);
     const emitText = !!opts.emitText;
     // `fulltext`: aktiviert lange Voll-Kapitel-Samples in scene.js
     // (Voll-Kapitel-Completion, Sliding-Window-Cuts, Kapitel→Kapitel-Continuation).
     // Default an — grösste Hebelwirkung für Memorisierung des Buchtexts und
-    // gerechtfertigt durch Mistral-Small-3.2-Kontextfenster (131072 Tokens).
+    // gerechtfertigt durch das Ministral-3-Kontextfenster (262144 Tokens).
     // Die Slice-Grösse folgt `maxFullChars` (unten), damit sie ins Seq-Budget passt.
     const fulltext = opts.fulltext !== false;
     // `maxFullChars`: Cap für Voll-Kapitel-Slices, Wörtlich-Slices und das
@@ -95,16 +99,16 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     const maxTypeShare = Math.max(0, Math.min(0.95, Number(opts.maxTypeShare) || 0));
 
     // Einheitliche Identität über alle Sample-Typen: Modell soll *eine* Stimme
-    // lernen — die des Buchs — statt mehrerer Personae (Lektor, Dialogschreiber,
-    // literarischer Assistent etc.). Task-Variation steckt im User-Message,
-    // nicht im System-Prompt.
+    // lernen — die des Buchs im Gespräch mit Lesern (docs/finetuning.md#leser-modell)
+    // — statt mehrerer Personae. Task-Variation steckt im User-Message, nicht
+    // im System-Prompt.
     const displayName = bookName || (langIsEn ? 'this book' : 'diesem Buch');
-    const unifiedSys = langIsEn
-      ? `You are the voice of «${displayName}». Write, continue, and answer in the author's style and from within this book's world.`
-      : `Du bist die Stimme von «${displayName}». Schreibe, setze fort und antworte im Stil des Autors und aus der Welt dieses Buchs heraus.`;
+    const unifiedSys = buildReaderSystem(displayName, langIsEn);
 
     const samples = [];
-    const counts = { style: 0, scene: 0, verbatim: 0, dialog: 0, authorChat: 0, correction: 0, aiAugment: 0 };
+    // Analyse-Antworten, die `voiceRewrite` im Buchton neu fasst (author-chat/index.js#pushQA).
+    const voiceTargets = new Map();
+    const counts = { style: 0, scene: 0, verbatim: 0, dialog: 0, authorChat: 0, aiAugment: 0, reader: 0 };
 
     // Normalised opts mit übernommenen Defaults — wird in alle Sub-Module gereicht.
     const optsNorm = { ...opts, minChars, maxChars, valSplit, valSeed: seed, maxSeqTokens, emitText,
@@ -115,8 +119,11 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
       bookId, bookIdInt, bookName, userEmail,
       opts: optsNorm,
       langIsEn, displayName, unifiedSys,
-      counts, samples,
+      counts, samples, voiceTargets,
       pageContents,
+      // Namen aus dem Buchbaum, auch für Abschnitte unter der Mindestlänge
+      // (Verweise auf Kapitel/Abschnitte ohne JOIN auf die Inhaltstabellen).
+      chMap, pageNameById: new Map(pages.map(p => [p.id, p.name])),
       ...data,
     };
 
@@ -151,28 +158,47 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
       if (opts.types.dialog) logger.info(`Sampler «dialog» fertig: ${counts.dialog} Samples.`);
     }
 
-    if (opts.types.correction) {
-      updateJob(jobId, { progress: 88, statusText: 'finetune.phase.correction' });
-      buildCorrectionSamples(ctx);
-      logger.info(`Sampler «correction» fertig: ${counts.correction} Samples.`);
-    }
-
     if (opts.types.authorChat) {
       updateJob(jobId, { progress: 90, statusText: 'finetune.phase.authorChat' });
       buildAuthorChatSamples(ctx);
       logger.info(`Sampler «authorChat» fertig: ${counts.authorChat} Samples.`);
     }
 
-    if (opts.types.aiAugment && (opts.ai?.reversePrompts || opts.ai?.factQA || opts.ai?.reasoningBackfill)) {
+    // Leser-Samples laufen immer: sie tragen das Gespräch mit dem Buch.
+    updateJob(jobId, { progress: 91, statusText: 'finetune.phase.reader' });
+    buildReaderSamples(ctx);
+    logger.info(`Sampler «reader» fertig: ${counts.reader} Samples, ${ctx.readerFigures.length} tragende Figuren.`);
+
+    if (opts.types.aiAugment) {
       updateJob(jobId, { progress: 92, statusText: 'finetune.phase.aiAugment' });
       await buildAiAugmentSamples(ctx);
       logger.info(`Sampler «aiAugment» fertig: ${counts.aiAugment} Samples.`);
     }
 
+    if (opts.ai.persona || opts.ai.deutung) {
+      updateJob(jobId, { progress: 93, statusText: 'finetune.phase.readerAi' });
+      await buildReaderAiSamples(ctx);
+    }
+    // Zuletzt: Gespräche übernehmen die (ggf. im Buchton neu gefassten) Antworten.
+    buildReaderConversations(ctx);
+    logger.info(`Sampler «reader» inkl. KI und Gespräche: ${counts.reader} Samples.`);
+
     updateJob(jobId, { progress: 95, statusText: 'finetune.phase.building' });
 
-    const stats = finalizeFinetuneSamples(jobId, ctx);
-    const sampleBreakdown = `${counts.style}/${counts.scene}/${counts.verbatim}/${counts.dialog}/${counts.authorChat}/${counts.correction}/${counts.aiAugment} (sty/scn/vrb/dlg/ac/cor/aug)`;
+    const { stats, trainJsonl, valJsonl, allJsonl } = finalizeFinetuneSamples(ctx);
+    const evalPrompts = buildEvalPrompts(ctx);
+    const evalJsonl = evalPrompts.map(e => JSON.stringify(e)).join('\n') + (evalPrompts.length ? '\n' : '');
+    // Der System-Prompt reist mit: das Modelfile der Karte muss ihn wörtlich
+    // tragen, sonst verliert das Modell die trainierte Persona.
+    stats.systemPrompt = unifiedSys;
+    stats.voiceRewritten = counts.voiceRewritten || 0;
+    stats.evalCount = evalPrompts.length;
+    stats.evalBytes = Buffer.byteLength(evalJsonl, 'utf8');
+    await saveFinetuneResult(bookId, userEmail, {
+      trainJsonl, valJsonl, allJsonl, evalJsonl,
+      meta: { bookName, createdAt: new Date().toISOString(), fingerprint: bookFingerprint(pages), stats },
+    });
+    const sampleBreakdown = `${counts.style}/${counts.scene}/${counts.verbatim}/${counts.dialog}/${counts.authorChat}/${counts.aiAugment}/${counts.reader} (sty/scn/vrb/dlg/ac/aug/rdr)`;
     completeJob(jobId, { stats }, null,
       `${stats.total} Samples [${sampleBreakdown}], ${stats.train} train + ${stats.val} val, dropped=${stats.dropped}, p95=${stats.tokensP95} tok, max=${stats.tokensMax} tok, recSeq=${stats.recommendedSeqLen}`);
   } catch (e) {
@@ -186,15 +212,20 @@ finetuneExportRouter.post('/finetune-export', jsonBody, (req, res) => {
           max_seq_tokens, emit_text, fulltext, max_full_chars, truncate_long, bias_boost,
           max_type_share, ai } = req.body || {};
   if (!book_id) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
+  setContext({ book: toIntId(book_id) });
   if (!guardBook(req, res, book_id, 'editor')) return;
   const aiOpts = {
     reversePrompts:        !!(ai && ai.reverse_prompts),
     factQA:                !!(ai && ai.fact_qa),
-    reasoningBackfill:     !!(ai && ai.reasoning_backfill),
+    voiceRewrite:          !!(ai && ai.voice_rewrite),
+    persona:               !!(ai && ai.persona),
+    deutung:               !!(ai && ai.deutung),
     reversePromptsPerPage: Number(ai && ai.reverse_prompts_per_page) || 0,
     factQAPerEntity:       Number(ai && ai.fact_qa_per_entity)       || 0,
+    personaPerFigure:      Number(ai && ai.persona_per_figure)       || 0,
+    deutungPerScene:       Number(ai && ai.deutung_per_scene)        || 0,
   };
-  const aiAugmentEnabled = aiOpts.reversePrompts || aiOpts.factQA || aiOpts.reasoningBackfill;
+  const aiAugmentEnabled = aiOpts.reversePrompts || aiOpts.factQA || aiOpts.voiceRewrite;
   const opts = {
     types: {
       style:      !!(types && types.style),
@@ -202,7 +233,6 @@ finetuneExportRouter.post('/finetune-export', jsonBody, (req, res) => {
       verbatim:   !!(types && types.verbatim),
       dialog:     !!(types && types.dialog),
       authorChat: !!(types && types.authorChat),
-      correction: !!(types && types.correction),
       aiAugment:  aiAugmentEnabled,
     },
     minChars: Number(min_chars) || 200,
@@ -218,9 +248,6 @@ finetuneExportRouter.post('/finetune-export', jsonBody, (req, res) => {
     maxTypeShare: Number(max_type_share) || 0,
     ai: aiOpts,
   };
-  if (!Object.values(opts.types).some(v => v)) {
-    return res.status(400).json({ error_code: 'FINETUNE_NO_TYPES' });
-  }
   const userEmail = sessionEmail(req);
   const existing = findActiveJobId('finetune-export', book_id, userEmail);
   if (existing) return res.json({ jobId: existing, existing: true });
@@ -231,31 +258,50 @@ finetuneExportRouter.post('/finetune-export', jsonBody, (req, res) => {
   res.json({ jobId });
 });
 
-finetuneExportRouter.get('/finetune-export/:id/:kind.jsonl', (req, res) => {
-  const userEmail = sessionEmail(req);
-  const job = jobs.get(req.params.id);
-  if (!job) return res.status(404).json({ error_code: 'JOB_NOT_FOUND' });
-  if (job.userEmail !== userEmail) return res.status(403).json({ error_code: 'FORBIDDEN' });
-  if (job.type !== 'finetune-export') return res.status(400).json({ error_code: 'JOB_TYPE_MISMATCH' });
+// Zuletzt gespeichertes Set dieses Users fürs Buch, samt Hinweis, ob sich der
+// Buchstand seither geändert hat (`stale`). Neu generiert wird nur auf Klick.
+finetuneExportRouter.get('/finetune-export/latest', async (req, res) => {
+  const bookId = toIntId(req.query.book_id);
+  if (!bookId) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
+  setContext({ book: bookId });
+  if (!guardBook(req, res, bookId, 'viewer')) return;
+  const meta = loadFinetuneMeta(bookId, sessionEmail(req));
+  if (!meta) return res.json({ export: null });
+  const { pages } = await loadOrderedBookContents(bookId).catch(e => { throw contentHttpError(e); });
+  res.json({ export: { createdAt: meta.createdAt, stats: meta.stats, stale: meta.fingerprint !== bookFingerprint(pages) } });
+});
+
+// Herunterladbare Dateien des gespeicherten Sets und woran man erkennt, dass
+// sie Inhalt haben. `all` (train + val) und `eval` (Testprompts) fehlen in
+// Sets, die vor ihrer Einführung erzeugt wurden.
+const KIND_PRESENT = {
+  train: (st) => st.train > 0,
+  val:   (st) => st.val > 0,
+  all:   (st) => st.allBytes > 0,
+  eval:  (st) => st.evalBytes > 0,
+};
+
+finetuneExportRouter.get('/finetune-export/:kind.jsonl', (req, res) => {
+  const bookId = toIntId(req.query.book_id);
+  if (!bookId) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
+  setContext({ book: bookId });
   // Buchzugriff kann seit dem Export entzogen worden sein.
-  const jobBookId = toIntId(job.bookId);
-  if (jobBookId && !guardBook(req, res, jobBookId, 'viewer')) return;
-  if (job.status !== 'done') return res.status(409).json({ error_code: 'JOB_NOT_DONE' });
+  if (!guardBook(req, res, bookId, 'viewer')) return;
   const kind = req.params.kind;
-  if (kind !== 'train' && kind !== 'val') return res.status(400).json({ error_code: 'INVALID_KIND' });
-  const payload = finetuneResultStore.get(req.params.id);
-  if (!payload) return res.status(410).json({ error_code: 'JSONL_EXPIRED' });
-  const content = kind === 'train' ? payload.trainJsonl : payload.valJsonl;
-  if (!content) return res.status(404).json({ error_code: 'JSONL_EMPTY' });
+  if (!Object.hasOwn(KIND_PRESENT, kind)) return res.status(400).json({ error_code: 'INVALID_KIND' });
+  const userEmail = sessionEmail(req);
+  const meta = loadFinetuneMeta(bookId, userEmail);
+  if (!meta) return res.status(404).json({ error_code: 'JSONL_NOT_FOUND' });
+  if (!KIND_PRESENT[kind](meta.stats || {})) return res.status(404).json({ error_code: 'JSONL_EMPTY' });
   const filename = buildExportFilename({
     prefix: `finetune-${kind}`,
-    slug: payload.bookName || `book${job.bookId}`,
+    slug: meta.bookName || `book${bookId}`,
     ext: 'jsonl',
-    date: new Date(job.endedAt || Date.now()),
+    date: new Date(meta.createdAt || Date.now()),
   });
   res.setHeader('Content-Type', 'application/jsonl; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.send(content);
+  res.sendFile(finetuneFilePath(bookId, userEmail, kind));
 });
 
 module.exports = { finetuneExportRouter };

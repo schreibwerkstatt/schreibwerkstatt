@@ -1,7 +1,7 @@
 'use strict';
 
 const { splitParagraphs } = require('../../lib/text');
-const { escapeRe } = require('../../lib/names');
+const { nameRegex } = require('../../lib/names');
 
 // Block 21: Text-geerdete Figur-Passagen
 function buildFigurePassageSamples(ctx) {
@@ -23,7 +23,7 @@ function buildFigurePassageSamples(ctx) {
       for (const para of paragraphs) {
         if (found.length >= PASSAGE_MAX_PER_FIG) break;
         if (para.length < 120 || para.length > maxChars) continue;
-        const hits = longestFirst.some(n => new RegExp('\\b' + escapeRe(n) + '\\b', 'i').test(para));
+        const hits = longestFirst.some(n => nameRegex(n).test(para));
         if (!hits) continue;
         found.push({ para, page: p });
       }

@@ -5,11 +5,12 @@
 //      Trainings-Antwort immer Autorprosa ist.
 //   2) buildFinetuneFactQAPrompt — synthetische Q&A-Paare aus strukturierten
 //      DB-Feldern (Figuren/Orte/Ereignisse). Trainiert Welt-Wissen.
-//   3) buildFinetuneReasoningBackfillPrompt — Begründung in einem Satz für
-//      eine vorhandene Korrektur (Original→Verbesserung), wenn die ursprüngliche
-//      Lektoratsantwort kein erklaerung-Feld geliefert hat.
+//   3) buildFinetuneVoiceRewritePrompt — Figuren-/Orts-Antwort aus der Analyse
+//      im Erzählton des Buchs neu fassen, Fakten unverändert. Stilvorlage sind
+//      Originalpassagen; ohne sie lernte das Modell auf «Wer ist X?» den Ton
+//      der Analyse statt den des Autors.
 //
-// Locale-aware: alle drei nehmen `langIsEn` als Hinweis fürs Output-Format
+// Locale-aware: alle nehmen `langIsEn` als Hinweis fürs Output-Format
 // (Felder bleiben deutsch, damit Schemas stabil sind, aber die Strings selbst
 // kommen in der Buch-Sprache zurück).
 
@@ -99,28 +100,34 @@ export const SCHEMA_FT_FACT_QA = _obj({
   qa: { type: 'array', items: _obj({ frage: _str, antwort: _str }) },
 });
 
-export function buildFinetuneReasoningBackfillPrompt({ original, korrektur, kontext = '', langIsEn = false }) {
+export function buildFinetuneVoiceRewritePrompt({ entityType, name, text, styleSamples = [], langIsEn = false, bookName = '' }) {
   const lines = langIsEn
     ? [
-        'Explain in one short sentence why the corrected version is better than the original. Concrete, no filler, focus on the actual change (word choice, rhythm, redundancy, register).',
+        `Rewrite the following description of the ${entityType} «${name}» from «${bookName || 'the book'}» so it reads as if the author wrote it in the book's own narrative voice: same tone, rhythm, vocabulary and perspective as the style samples.`,
         '',
-        'Schema:\n{ "begruendung": "..." }',
-        '',
-        `Original:\n${original}`,
-        '',
-        `Correction:\n${korrektur}`,
+        'Rules:',
+        '- Keep every fact of the description; add none, drop none, change none (names, places, chapter titles, relations, occupations stay exactly as given).',
+        '- Prose only — no list, no labels like "Occupation:", no headings.',
+        '- Roughly the same length as the description.',
+        '- Do not copy sentences from the style samples; they only show the voice.',
       ]
     : [
-        'Erkläre in einem kurzen Satz, warum die korrigierte Fassung besser ist als das Original. Konkret, ohne Floskeln, fokussiert auf die tatsächliche Änderung (Wortwahl, Rhythmus, Redundanz, Register).',
+        `Fasse die folgende Beschreibung von ${entityType} «${name}» aus «${bookName || 'dem Buch'}» neu, als hätte der Autor sie in der Erzählstimme des Buchs geschrieben: gleicher Ton, Rhythmus, Wortschatz und Blickwinkel wie in den Stilproben.`,
         '',
-        'Schema:\n{ "begruendung": "..." }',
-        '',
-        `Original:\n${original}`,
-        '',
-        `Korrektur:\n${korrektur}`,
+        'Regeln:',
+        '- Jede Tatsache der Beschreibung bleibt erhalten; keine hinzufügen, keine weglassen, keine ändern (Namen, Orte, Kapiteltitel, Beziehungen, Berufe bleiben genau wie angegeben).',
+        '- Nur Fliesstext — keine Liste, keine Etiketten wie «Beruf:», keine Überschriften.',
+        '- Ungefähr gleich lang wie die Beschreibung.',
+        '- Keine Sätze aus den Stilproben übernehmen; sie zeigen nur die Stimme.',
       ];
-  if (kontext) lines.push('', langIsEn ? `Context (paragraph):\n${kontext}` : `Kontext (Absatz):\n${kontext}`);
+  lines.push('', 'Schema:\n{ "antwort": "..." }', '');
+  if (styleSamples.length) {
+    lines.push(langIsEn ? 'Style samples from the book:' : 'Stilproben aus dem Buch:');
+    for (const s of styleSamples) lines.push('---', s);
+    lines.push('---', '');
+  }
+  lines.push(langIsEn ? 'Description:' : 'Beschreibung:', text);
   return lines.join('\n');
 }
 
-export const SCHEMA_FT_REASONING = _obj({ begruendung: _str });
+export const SCHEMA_FT_VOICE_REWRITE = _obj({ antwort: _str });

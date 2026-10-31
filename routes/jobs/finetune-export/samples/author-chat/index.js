@@ -5,14 +5,15 @@ const { buildFigureBaseSamples, buildFigureMetaSamples } = require('./figures');
 const { buildLocationSamples, buildLocationPassageSamples } = require('./locations');
 const { buildSceneQASamples } = require('./scenes');
 const { buildEventSamples } = require('./events');
+const { buildEventLinkSamples } = require('./event-links');
+const { loadEventData } = require('./event-data');
 const { buildRelationSamples } = require('./relations');
-const { buildFactSamples, buildReverseLookupSamples } = require('./facts');
+const { buildFactSamples } = require('./facts');
 const { buildFigurePassageSamples } = require('./passages');
-const { buildArchitectureSamples } = require('./architecture');
-const { buildReviewSamples } = require('./reviews');
 const { buildWorldFactSamples } = require('./world-facts');
 const { buildSongSamples } = require('./songs');
 const { buildStorylineSamples } = require('./storylines');
+const { buildFigureDepthSamples } = require('./depth');
 
 // Mehr Fragevarianten = Modell lernt dieselbe Buchfakten über viele
 // Formulierungen hinweg assoziieren → schnellere Memorisierung der Welt.
@@ -52,7 +53,7 @@ function buildQuestionPools(langIsEn) {
 }
 
 function buildAuthorChatHelpers(ctx) {
-  const { samples, counts, opts, unifiedSys } = ctx;
+  const { samples, counts, opts, unifiedSys, voiceTargets } = ctx;
   const seed = opts.valSeed;
 
   // Deterministische Auswahl einer Paraphrase pro Entity — bei gleichem Seed
@@ -73,7 +74,10 @@ function buildAuthorChatHelpers(ctx) {
   // `sourceKey` optional: nur dort setzen, wo die Antwort wörtlichen Buchtext
   // reproduziert (z.B. Figur-Passagen), damit der Train/Val-Split auf
   // Quell-Ebene greift. Fakten-/Q&A-Antworten lassen ihn weg → Split per id.
-  const pushQA = (id, q, a, sourceKey) => {
+  // `voice` ({ key, kind, name }) meldet eine Analyse-Antwort für die
+  // Umschreibung im Buchton an (KI-Augment `voiceRewrite`); alle Samples mit
+  // demselben key bekommen dort dieselbe neue Antwort.
+  const pushQA = (id, q, a, sourceKey, voice) => {
     const qq = (q || '').trim();
     const aa = (a || '').trim();
     if (qq.length < 4 || aa.length < 20) return;
@@ -87,6 +91,10 @@ function buildAuthorChatHelpers(ctx) {
       ],
     };
     if (sourceKey) sample.sourceKey = sourceKey;
+    if (voice && voiceTargets) {
+      sample.voiceKey = voice.key;
+      voiceTargets.set(voice.key, { kind: voice.kind, name: voice.name, text: aa });
+    }
     samples.push(sample);
     counts.authorChat++;
   };
@@ -98,23 +106,24 @@ function buildAuthorChatSamples(ctx) {
   const pools = buildQuestionPools(ctx.langIsEn);
   const helpers = buildAuthorChatHelpers(ctx);
   // ctx wird um helpers + pools erweitert; alle sub-modules greifen darauf zu.
-  const subCtx = { ...ctx, ...pools, ...helpers };
+  const baseCtx = { ...ctx, ...pools, ...helpers };
+  // Zeitstrahl einmal angereichert laden: Szenen-, Ereignis- und Figuren-Block teilen ihn.
+  const subCtx = { ...baseCtx, ...loadEventData(baseCtx) };
 
   buildFigureBaseSamples(subCtx);          // Block 1+2: figuren composite + traits
   buildLocationSamples(subCtx);            // Block 3+4: orte einzeln + aggregate
   buildSceneQASamples(subCtx);             // Block 5: szenen
   buildEventSamples(subCtx);               // Block 6-11: zeitstrahl + tripel + paar
+  buildEventLinkSamples(subCtx);           // Block 11b: buchstelle + szenen + strang + zeit
   buildRelationSamples(subCtx);            // Block 12-16: rel + cast + family + power + tag
   buildFigureMetaSamples(subCtx);          // Block 17+18+19: figEvt + figApp + figVoice
   buildFactSamples(subCtx);                // Block 20: chapter_extract_cache facts
   buildFigurePassageSamples(subCtx);       // Block 21: figPass + figPassCh
   buildLocationPassageSamples(subCtx);     // Block 22: ortPass
-  buildReverseLookupSamples(subCtx);       // Block 23: revPage + revChap
-  buildArchitectureSamples(subCtx);        // Block 24+25: kapitel-list + begin/end
-  buildReviewSamples(subCtx);              // Block 26+27+28: book-rev + chap-rev + chat
   buildWorldFactSamples(subCtx);           // Block 29: world_facts (extrahierte Welt-Lore)
   buildSongSamples(subCtx);                // Block 30: songs (Buch-Soundtrack)
   buildStorylineSamples(subCtx);           // Block 31: storylines (Erzählstränge)
+  buildFigureDepthSamples(subCtx);         // Block 32: Tiefe-Felder (Motivation, Konflikt, Bogen …)
 }
 
-module.exports = { buildAuthorChatSamples };
+module.exports = { buildAuthorChatSamples, buildQuestionPools };

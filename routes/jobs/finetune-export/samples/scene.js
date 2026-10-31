@@ -1,7 +1,7 @@
 'use strict';
 
 const { db } = require('../../../../db/schema');
-const { splitAtSentence } = require('../lib/text');
+const { splitAtSentence, clipAtSentence, tailFromSentence, chunkAtSentence } = require('../lib/text');
 const { extractName } = require('../lib/names');
 
 function buildSceneSamples(ctx) {
@@ -30,7 +30,7 @@ function buildSceneSamples(ctx) {
   for (const [pageId, scenes] of scenesByPageId) {
     const txt = pageTextById.get(pageId);
     if (!txt || txt.length < minChars) continue;
-    const completion = txt.length > maxChars ? txt.slice(0, maxChars) : txt;
+    const completion = clipAtSentence(txt, maxChars);
     const meta = [];
     const titel = [...new Set(scenes.map(s => s.titel).filter(Boolean))].join(' / ');
     if (titel) meta.push((langIsEn ? 'Title: ' : 'Titel: ') + titel);
@@ -66,77 +66,94 @@ function buildSceneSamples(ctx) {
   // erhält ein Sample „Seite «X», Kapitel «Y»: schreibe den Inhalt" →
   // Seitentext. Das doppelt sich bewusst mit dem Szenen-Block (dort
   // metadaten-reicher), hier einfacher und vollständig deckend.
+  // Abschnitte über `maxChars` laufen in Satzgrenzen-Teilen durch: ein harter
+  // Zeichen-Schnitt brächte dem Modell bei, mitten im Wort aufzuhören, und der
+  // Rest des Abschnitts fehlte in allen Samples dieses Blocks.
   for (const p of pageContents) {
     if (!p.text || p.text.length < minChars) continue;
     const pageCh = 'ch:' + (p.chapter_id ?? 0);
-    const completion = p.text.length > maxChars ? p.text.slice(0, maxChars) : p.text;
     const metaParts = [];
     if (bookName) metaParts.push(langIsEn ? `Book: «${bookName}»` : `Buch: «${bookName}»`);
     if (p.chapter) metaParts.push(langIsEn ? `Chapter: «${p.chapter}»` : `Kapitel: «${p.chapter}»`);
     if (p.title)   metaParts.push(langIsEn ? `Section: «${p.title}»` : `Abschnitt: «${p.title}»`);
-    const instr = (langIsEn
-      ? 'Write the content of this section:\n'
-      : 'Schreibe den Inhalt dieses Abschnitts:\n') + metaParts.join('\n');
-    samples.push({
-      id: 'page|' + p.id,
-      type: 'scene',
-      sourceKey: pageCh,
-      messages: [
-        { role: 'system', content: unifiedSys },
-        { role: 'user', content: instr },
-        { role: 'assistant', content: completion },
-      ],
-    });
-    counts.scene++;
+    const prefix = metaParts.length ? metaParts.join(' · ') + '\n\n' : '';
+    const chunks = chunkAtSentence(p.text, maxChars);
+    const total = chunks.length;
 
-    // ── Page-Sliding-Window: 3 Cuts (15%, 50%, 80%) ──────────────────────
-    // Anfang/Mitte/Ende decken alle drei narrativen Positionen, damit das
-    // Modell nicht nur eröffnen, sondern auch zur Hälfte und am Ende
-    // weiterschreiben lernt.
-    if (p.text.length >= minChars * 2) {
-      const prefix = metaParts.length ? metaParts.join(' · ') + '\n\n' : '';
-      for (const cut of [0.1, 0.25, 0.4, 0.55, 0.7, 0.85]) {
-        const [opening, rest] = splitAtSentence(completion, cut);
-        if (opening.length < 80 || rest.length < 120) continue;
-        samples.push({
-          id: 'pageCont|' + p.id + '|' + Math.round(cut * 100),
-          type: 'scene',
-          sourceKey: pageCh,
-          messages: [
-            { role: 'system', content: unifiedSys },
-            { role: 'user', content: (langIsEn
-              ? 'Continue this passage:\n\n'
-              : 'Setze diese Passage fort:\n\n') + prefix + opening },
-            { role: 'assistant', content: rest },
-          ],
-        });
-        counts.scene++;
+    for (let ci = 0; ci < total; ci++) {
+      const completion = chunks[ci];
+      const idSuffix = ci ? '|c' + ci : '';
+      if (completion.length < 80) continue;
+      const instr = total === 1
+        ? (langIsEn ? 'Write the content of this section:\n' : 'Schreibe den Inhalt dieses Abschnitts:\n')
+          + metaParts.join('\n')
+        : (langIsEn
+            ? `Write part ${ci + 1} of ${total} of this section:\n`
+            : `Schreibe Teil ${ci + 1} von ${total} dieses Abschnitts:\n`)
+          + metaParts.join('\n')
+          + (ci > 0
+            ? '\n\n' + (langIsEn ? 'Continues from:\n' : 'Anschluss an:\n') + tailFromSentence(chunks[ci - 1], 300)
+            : '');
+      samples.push({
+        id: 'page|' + p.id + idSuffix,
+        type: 'scene',
+        sourceKey: pageCh,
+        // „Teil N von M" gekappt wäre ein falsches Teilstück
+        ...(total > 1 ? { noTruncate: true } : {}),
+        messages: [
+          { role: 'system', content: unifiedSys },
+          { role: 'user', content: instr },
+          { role: 'assistant', content: completion },
+        ],
+      });
+      counts.scene++;
+
+      // ── Sliding-Window: Cuts über den ganzen Teil ─────────────────────
+      // Anfang/Mitte/Ende, damit das Modell nicht nur eröffnen, sondern auch
+      // zur Hälfte und am Ende weiterschreiben lernt.
+      if (completion.length >= minChars * 2) {
+        for (const cut of [0.1, 0.25, 0.4, 0.55, 0.7, 0.85]) {
+          const [opening, rest] = splitAtSentence(completion, cut);
+          if (opening.length < 80 || rest.length < 120) continue;
+          samples.push({
+            id: 'pageCont|' + p.id + '|' + Math.round(cut * 100) + idSuffix,
+            type: 'scene',
+            sourceKey: pageCh,
+            messages: [
+              { role: 'system', content: unifiedSys },
+              { role: 'user', content: (langIsEn
+                ? 'Continue this passage:\n\n'
+                : 'Setze diese Passage fort:\n\n') + prefix + opening },
+              { role: 'assistant', content: rest },
+            ],
+          });
+          counts.scene++;
+        }
       }
-    }
 
-    // ── Cloze-Vervollständigung: Mittelteil herausschneiden ──────────────
-    // Lehrt Inferenz innerhalb einer Passage, multipliziert vorhandenen
-    // Buchtext um Faktor 3 ohne neue Inhalte. Schnitt an Satzgrenzen, damit
-    // Output nicht mit Halbsatz beginnt.
-    if (p.text.length >= minChars * 3) {
-      const [head, midTail] = splitAtSentence(completion, 0.33);
-      const [mid, tail]    = splitAtSentence(midTail, 0.5);
-      if (head.length >= 80 && mid.length >= 80 && tail.length >= 80) {
-        const gap = langIsEn ? '\n\n[…]\n\n' : '\n\n[…]\n\n';
-        const prefix = metaParts.length ? metaParts.join(' · ') + '\n\n' : '';
-        samples.push({
-          id: 'pageCloze|' + p.id,
-          type: 'scene',
-          sourceKey: pageCh,
-          messages: [
-            { role: 'system', content: unifiedSys },
-            { role: 'user', content: (langIsEn
-              ? 'Fill in the missing middle section of this passage:\n\n'
-              : 'Vervollständige den fehlenden Mittelteil dieser Passage:\n\n') + prefix + head + gap + tail },
-            { role: 'assistant', content: mid },
-          ],
-        });
-        counts.scene++;
+      // ── Cloze-Vervollständigung: Mittelteil herausschneiden ────────────
+      // Lehrt Inferenz innerhalb einer Passage, multipliziert vorhandenen
+      // Buchtext um Faktor 3 ohne neue Inhalte. Schnitt an Satzgrenzen, damit
+      // Output nicht mit Halbsatz beginnt.
+      if (completion.length >= minChars * 3) {
+        const [head, midTail] = splitAtSentence(completion, 0.33);
+        const [mid, tail]    = splitAtSentence(midTail, 0.5);
+        if (head.length >= 80 && mid.length >= 80 && tail.length >= 80) {
+          const gap = '\n\n[…]\n\n';
+          samples.push({
+            id: 'pageCloze|' + p.id + idSuffix,
+            type: 'scene',
+            sourceKey: pageCh,
+            messages: [
+              { role: 'system', content: unifiedSys },
+              { role: 'user', content: (langIsEn
+                ? 'Fill in the missing middle section of this passage:\n\n'
+                : 'Vervollständige den fehlenden Mittelteil dieser Passage:\n\n') + prefix + head + gap + tail },
+              { role: 'assistant', content: mid },
+            ],
+          });
+          counts.scene++;
+        }
       }
     }
   }
@@ -153,10 +170,8 @@ function buildSceneSamples(ctx) {
       const prevSlice = pages.slice(Math.max(0, i - 2), i);
       const ctxText = prevSlice.map(p => p.text).join('\n\n');
       if (ctxText.length < minChars) continue;
-      const ctxCapped = ctxText.length > maxFullChars
-        ? ctxText.slice(-maxFullChars)
-        : ctxText;
-      const completion = cur.text.length > maxChars ? cur.text.slice(0, maxChars) : cur.text;
+      const ctxCapped = tailFromSentence(ctxText, maxFullChars);
+      const completion = clipAtSentence(cur.text, maxChars);
       samples.push({
         id: 'pageMulti|' + cur.id,
         type: 'scene',
@@ -222,7 +237,7 @@ function buildSceneSamples(ctx) {
     const text = chapterFullTextByKey.get(k) || '';
     if (text.length < 400) continue;
     const name = chapterNameByKey.get(k);
-    const opening = text.slice(0, Math.min(3000, maxChars, text.length));
+    const opening = clipAtSentence(text, Math.min(3000, maxChars));
     if (opening.length < 200) continue;
     const metaLines = [];
     if (bookName) metaLines.push(langIsEn ? `Book: «${bookName}»` : `Buch: «${bookName}»`);
@@ -237,7 +252,7 @@ function buildSceneSamples(ctx) {
     if (ci > 0) {
       const prevText = chapterFullTextByKey.get(chapterKeys[ci - 1]) || '';
       if (prevText.length > 200) {
-        const prevTail = prevText.slice(-400).trim();
+        const prevTail = tailFromSentence(prevText, 400);
         metaLines.push((langIsEn
           ? `Previous chapter ended with: `
           : `Vorheriges Kapitel endete mit: `) + prevTail);
@@ -266,25 +281,6 @@ function buildSceneSamples(ctx) {
   // damit die Slices ins Sequenz-Budget passen (4096 → ~8000 chars DE).
   // Generiert: (a) chunked-fulltext, (b) Sliding-Window-Cuts auf 1. Slice,
   // (c) Kapitel→Kapitel-Continuation mit gestutztem Vorgänger-Tail.
-  const sliceAtSentence = (text, maxLen) => {
-    if (text.length <= maxLen) return [text];
-    const out = [];
-    let remaining = text;
-    while (remaining.length > maxLen) {
-      const ratio = maxLen / remaining.length;
-      const [head, rest] = splitAtSentence(remaining, ratio);
-      if (!head.length || head.length === remaining.length) {
-        out.push(remaining.slice(0, maxLen));
-        remaining = remaining.slice(maxLen);
-        break;
-      }
-      out.push(head);
-      remaining = rest;
-    }
-    if (remaining.length > 0) out.push(remaining);
-    return out;
-  };
-
   if (fulltext) {
     for (let ci = 0; ci < chapterKeys.length; ci++) {
       const k = chapterKeys[ci];
@@ -306,7 +302,7 @@ function buildSceneSamples(ctx) {
       // total>1 enthält Prompt Part-Label + Vorgänger-Tail (300 chars) als
       // Continuity-Anker, damit Modell die Kette als zusammenhängenden
       // Kapitelfluss lernt statt isolierte Schnipsel.
-      const slices = sliceAtSentence(text, maxFullChars);
+      const slices = chunkAtSentence(text, maxFullChars);
       const total = slices.length;
       for (let si = 0; si < total; si++) {
         const slice = slices[si];
@@ -315,7 +311,7 @@ function buildSceneSamples(ctx) {
           ? (langIsEn ? `Part: ${si + 1} of ${total}` : `Teil: ${si + 1} von ${total}`)
           : null;
         const sliceMeta = partLabel ? [...metaLines, partLabel] : metaLines;
-        const ctxTail = si > 0 ? slices[si - 1].slice(-300).trim() : '';
+        const ctxTail = si > 0 ? tailFromSentence(slices[si - 1], 300) : '';
         const ctxBlock = ctxTail
           ? '\n\n' + (langIsEn ? 'Continues from:\n' : 'Anschluss an:\n') + ctxTail
           : '';
@@ -372,9 +368,7 @@ function buildSceneSamples(ctx) {
         const prevName = chapterNameByKey.get(prevK);
         if (prevText.length >= 400) {
           const prevTailCap = Math.max(800, Math.floor(maxFullChars / 2));
-          const prevCapped = prevText.length > prevTailCap
-            ? prevText.slice(-prevTailCap)
-            : prevText;
+          const prevCapped = tailFromSentence(prevText, prevTailCap);
           const [chHead, chRest] = splitAtSentence(baseSlice, 0.1);
           if (chHead.length >= 100 && chRest.length >= 200) {
             const ctxLabel = langIsEn

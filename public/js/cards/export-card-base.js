@@ -15,6 +15,7 @@
 // `tError` → `error.<code>`) — letzteres bleibt der `errorFor`-Hook.
 
 import { startPoll } from './job-helpers.js';
+import { downloadHref, downloadBlob } from '../utils.js';
 
 // ── Scope-Auswahl (Buch/Kapitel/Seite) ───────────────────────────────────────
 // Vollständig format-unabhängig, keine Config. Liefert State + Methoden +
@@ -270,12 +271,7 @@ export function exportJobSlice(cfg) {
     },
 
     _triggerDownload(jobId, filename) {
-      const a = document.createElement('a');
-      a.href = `${cfg.jobPath}/${jobId}/file`;
-      a.download = filename || cfg.defaultFilename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      downloadHref(`${cfg.jobPath}/${jobId}/file`, filename || cfg.defaultFilename);
     },
 
     async cancelExport() {
@@ -407,14 +403,7 @@ export function profileTransferSlice(cfg) {
         config: this.activeProfile.config,
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${_profileNameSlug(this.activeProfile.name) || 'profil'}.${cfg.type}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `${_profileNameSlug(this.activeProfile.name) || 'profil'}.${cfg.type}.json`);
     },
 
     async importProfileConfig(file) {

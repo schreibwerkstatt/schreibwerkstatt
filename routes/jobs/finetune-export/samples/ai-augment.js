@@ -7,8 +7,9 @@
 //      bleibt der Originaltext der Seite (Stil-Schutz).
 //   2) fact-qa: pro Figur/Ort/Ereignis N Q&A-Paare, gegroundet im strukturierten
 //      JSON aus der DB.
-//   3) reasoning-backfill: für bestehende Korrekturen ohne erklaerung-Feld
-//      eine einsätzige Begründung nachziehen.
+//   3) voice-rewrite: die Figuren-/Orts-Antworten des Autor-Chats (Text der
+//      Analyse) im Erzählton des Buchs neu fassen; ersetzt die Antwort in den
+//      bestehenden Samples, statt neue hinzuzufügen.
 //
 // Cache-Key-Konzept:
 //   sig = sha1(payload-inputs + modelName)
@@ -16,46 +17,22 @@
 //   PROMPTS_VERSION steckt zusätzlich im version-Feld, damit ein Schema-Bump
 //   alte Einträge automatisch invalidiert.
 
-const crypto = require('crypto');
 const {
   loadFinetuneAiCache, saveFinetuneAiCache,
 } = require('../../../../db/schema');
 const { aiCall, _modelName, getPrompts } = require('../../shared');
-const { extractName } = require('../lib/names');
-const { collectAppliedCorrections } = require('./correction');
+const { extractName, nameRegex } = require('../lib/names');
+const { clipAtSentence, splitParagraphs } = require('../lib/text');
 const appSettings = require('../../../../lib/app-settings');
+const { AUGMENT_CONCURRENCY, sha1, trimInstr, pmap } = require('../lib/augment-util');
 
 const REVERSE_PROMPTS_PER_PAGE_DEFAULT = 4;
 const FACT_QA_PER_ENTITY_DEFAULT = 4;
-const AUGMENT_CONCURRENCY = 4;
-
-function sha1(s) {
-  return crypto.createHash('sha1').update(typeof s === 'string' ? s : JSON.stringify(s)).digest('hex');
-}
-
-function trimInstr(s) {
-  return String(s || '').trim().replace(/^["“”„«»‹›']+|["“”„«»‹›']+$/g, '').trim();
-}
-
-// ── Concurrency-limited map (kleiner Pool, damit grosse Bücher den Provider nicht überrennen) ──
-async function pmap(items, limit, fn) {
-  const out = new Array(items.length);
-  let i = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (true) {
-      const idx = i++;
-      if (idx >= items.length) return;
-      out[idx] = await fn(items[idx], idx);
-    }
-  });
-  await Promise.all(workers);
-  return out;
-}
 
 async function buildAiAugmentSamples(ctx) {
   const { opts } = ctx;
   const ai = opts.ai || {};
-  if (!ai.reversePrompts && !ai.factQA && !ai.reasoningBackfill) return;
+  if (!ai.reversePrompts && !ai.factQA && !ai.voiceRewrite) return;
 
   const prompts = await getPrompts(ctx.userEmail);
   const provider = appSettings.get('ai.provider') || 'claude';
@@ -69,7 +46,7 @@ async function buildAiAugmentSamples(ctx) {
 
   if (ai.reversePrompts)     await buildReversePromptSamples(subCtx);
   if (ai.factQA)             await buildFactQASamples(subCtx);
-  if (ai.reasoningBackfill)  await buildReasoningBackfillSamples(subCtx);
+  if (ai.voiceRewrite)       await rewriteAnswersInBookVoice(subCtx);
 }
 
 // ── 1) Reverse-Prompts ───────────────────────────────────────────────────────
@@ -88,7 +65,7 @@ async function buildReversePromptSamples(ctx) {
 
   let processed = 0;
   await pmap(eligible, AUGMENT_CONCURRENCY, async (p) => {
-    const passage = p.text.length > maxChars ? p.text.slice(0, maxChars) : p.text;
+    const passage = clipAtSentence(p.text, maxChars);
     const sig = sha1(passage + '|n=' + n + '|lang=' + (langIsEn ? 'en' : 'de'));
     const scopeKey = `page:${p.id}`;
 
@@ -253,65 +230,65 @@ async function buildFactQASamples(ctx) {
   logger.info(`AI-Augment fact-qa: ${processed}/${entities.length} Entitäten verarbeitet, ${counts.aiAugment || 0} Samples bisher.`);
 }
 
-// ── 3) Reasoning-Backfill für Korrekturen ─────────────────────────────────────
-async function buildReasoningBackfillSamples(ctx) {
-  const {
-    samples, counts, opts, langIsEn, unifiedSys,
-    bookIdInt, userEmail, prompts, augmentSystem, versionTag, jobId, logger, tok,
-  } = ctx;
-  const { maxChars } = opts;
+// ── 3) Antworten im Buchton ───────────────────────────────────────────────────
+const VOICE_SAMPLE_CHARS = 600;
+const VOICE_SAMPLES = 3;
 
-  const userPrefix   = langIsEn
-    ? 'Revise this sentence and explain the change in one sentence:\n\n'
-    : 'Überarbeite diesen Satz und erkläre die Änderung in einem Satz:\n\n';
-  const reasonLabel  = langIsEn ? 'Reason: ' : 'Grund: ';
-
-  // Nur übernommene Korrekturen ohne eigene Begründung (gleiche Quelle wie der
-  // correction-Sampler, siehe collectAppliedCorrections).
-  const targets = collectAppliedCorrections(bookIdInt, userEmail, maxChars)
-    .filter(c => c.erkl.length < 15)
-    .map(({ orig, korr, kontext }) => ({ orig, korr, kontext }));
-  if (!targets.length) return;
-
-  let processed = 0;
-  await pmap(targets, AUGMENT_CONCURRENCY, async (t) => {
-    const sig = sha1(t.orig + '|' + t.korr + '|lang=' + (langIsEn ? 'en' : 'de'));
-    const scopeKey = `corr:${sha1(t.orig + '|' + t.korr).slice(0, 16)}`;
-
-    let result = loadFinetuneAiCache(bookIdInt, userEmail, 'reasoning-backfill', scopeKey, sig, versionTag);
-    if (!result) {
-      const prompt = prompts.buildFinetuneReasoningBackfillPrompt({
-        original: t.orig, korrektur: t.korr, kontext: t.kontext, langIsEn,
-      });
-      try {
-        result = await aiCall(jobId, tok, prompt, augmentSystem, null, null, 200, 0.2, 400, undefined, prompts.SCHEMA_FT_REASONING);
-      } catch (err) {
-        if (err.name === 'AbortError') throw err;
-        logger.warn(`reasoning-backfill: ${scopeKey} fehlgeschlagen: ${err.message}`);
-        return;
-      }
-      if (!result || typeof result.begruendung !== 'string') return;
-      saveFinetuneAiCache(bookIdInt, userEmail, 'reasoning-backfill', scopeKey, sig, versionTag, result);
-    }
-
-    const erkl = (result.begruendung || '').trim();
-    if (erkl.length < 15 || erkl.length > 400) return;
-
-    const idx = counts.aiAugment || 0;
-    samples.push({
-      id: `aiCorr|${scopeKey}|${idx}`,
-      type: 'aiAugment',
-      messages: [
-        { role: 'system', content: unifiedSys },
-        { role: 'user', content: userPrefix + t.orig },
-        { role: 'assistant', content: t.korr + '\n\n' + reasonLabel + erkl },
-      ],
-    });
-    counts.aiAugment = (counts.aiAugment || 0) + 1;
-    processed++;
-  });
-
-  logger.info(`AI-Augment reasoning-backfill: ${processed}/${targets.length} Korrekturen ergänzt, ${counts.aiAugment || 0} Samples bisher.`);
+// Stilproben: Absätze, in denen die Figur bzw. der Ort vorkommt (Stimme und
+// Blick des Buchs auf genau diese Entität), sonst die ersten Absätze des Buchs.
+function voiceStyleSamples(name, paragraphs) {
+  const re = nameRegex(name);
+  const hits = paragraphs.filter(p => p.length >= 200 && re.test(p));
+  const pool = hits.length ? hits : paragraphs.filter(p => p.length >= 200);
+  return pool.slice(0, VOICE_SAMPLES).map(p => clipAtSentence(p, VOICE_SAMPLE_CHARS));
 }
 
-module.exports = { buildAiAugmentSamples };
+async function rewriteAnswersInBookVoice(ctx) {
+  const {
+    samples, langIsEn, bookName, voiceTargets, pageContents,
+    bookIdInt, userEmail, prompts, augmentSystem, versionTag, jobId, logger, tok,
+  } = ctx;
+  if (!voiceTargets?.size) return;
+  const paragraphs = pageContents.flatMap(p => splitParagraphs(p.text || ''));
+  const rewritten = new Map();
+
+  await pmap([...voiceTargets], AUGMENT_CONCURRENCY, async ([key, t]) => {
+    const styleSamples = voiceStyleSamples(t.name, paragraphs);
+    const sig = sha1(JSON.stringify({ text: t.text, styleSamples }) + '|lang=' + (langIsEn ? 'en' : 'de'));
+    let result = loadFinetuneAiCache(bookIdInt, userEmail, 'voice-rewrite', key, sig, versionTag);
+    if (!result) {
+      const prompt = prompts.buildFinetuneVoiceRewritePrompt({
+        entityType: t.kind === 'figure'
+          ? (langIsEn ? 'the character' : 'der Figur')
+          : (langIsEn ? 'the location' : 'dem Ort'),
+        name: t.name, text: t.text, styleSamples, langIsEn, bookName,
+      });
+      try {
+        result = await aiCall(jobId, tok, prompt, augmentSystem, null, null, Math.max(400, t.text.length), 0.3, 1500, undefined, prompts.SCHEMA_FT_VOICE_REWRITE);
+      } catch (err) {
+        if (err.name === 'AbortError') throw err;
+        logger.warn(`voice-rewrite: ${key} fehlgeschlagen: ${err.message}`);
+        return;
+      }
+      if (!result || typeof result.antwort !== 'string') return;
+      saveFinetuneAiCache(bookIdInt, userEmail, 'voice-rewrite', key, sig, versionTag, result);
+    }
+    const a = result.antwort.trim();
+    // Ausreisser (leer, abgeschweift) behalten die Analyse-Antwort: lieber der
+    // falsche Ton als eine Antwort, deren Fakten niemand geprüft hat.
+    if (a.length < 20 || a.length > t.text.length * 3 + 400) return;
+    rewritten.set(key, a);
+  });
+
+  let replaced = 0;
+  for (const s of samples) {
+    const a = s.voiceKey && rewritten.get(s.voiceKey);
+    if (!a) continue;
+    s.messages[s.messages.length - 1].content = a;
+    replaced++;
+  }
+  ctx.counts.voiceRewritten = replaced;
+  logger.info(`AI-Augment voice-rewrite: ${rewritten.size}/${voiceTargets.size} Antworten neu gefasst, ${replaced} Samples ersetzt.`);
+}
+
+module.exports = { buildAiAugmentSamples, rewriteAnswersInBookVoice };

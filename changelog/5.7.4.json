@@ -1,0 +1,36 @@
+{
+  "version": "5.7.4",
+  "date": "2026-10-31",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Fine-Tuning-Export: Die Trainingsdaten bilden jetzt ein Modell, das als dein Buch mit Lesern spricht. Auf Wunsch antworten Figuren in der Ich-Form, und Warum-Fragen zu Szenen bekommen eine Deutung mit Zitat.",
+      "en": "Fine-tuning export: the training data now builds a model that talks to readers as your book. Optionally, characters answer in the first person, and why-questions about scenes get an interpretation with a quote."
+    },
+    {
+      "kind": "neu",
+      "de": "Fine-Tuning-Export: Unter «Profil» wählst du Modell und GPU-Speicher, die Grenzwerte passen sich an. Dazu lädst du die passende Unsloth-Studio-Konfiguration herunter.",
+      "en": "Fine-tuning export: under \"Profile\" you choose the model and GPU memory, and the limits adjust. You can also download the matching Unsloth Studio configuration."
+    },
+    {
+      "kind": "neu",
+      "de": "Fine-Tuning-Export: Neben train und val gibt es all.jsonl, Testprompts und ein fertiges Ollama-Modelfile zum Herunterladen.",
+      "en": "Fine-tuning export: besides train and val you can now download all.jsonl, test prompts and a ready-made Ollama Modelfile."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fine-Tuning-Export: Die erzeugten Dateien bleiben gespeichert, bis du neu generierst. Hat sich das Buch seither geändert, weist dich ein Hinweis darauf hin.",
+      "en": "Fine-tuning export: the generated files stay saved until you generate again. If the book has changed since, a notice tells you."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fine-Tuning-Export: Antworten auf «Wer ist …?» und «Was ist …?» lassen sich im Ton deines Buchs neu fassen, statt im Analyse-Stil.",
+      "en": "Fine-tuning export: answers to \"Who is …?\" and \"What is …?\" can be rewritten in your book's voice instead of the analysis style."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Die semantische Suche bleibt bei mehreren grossen Büchern gleichzeitig schnell.",
+      "en": "Semantic search stays fast with several large books at once."
+    }
+  ]
+}

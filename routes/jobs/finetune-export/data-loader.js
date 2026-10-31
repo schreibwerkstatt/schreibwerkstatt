@@ -15,6 +15,8 @@ const { db } = require('../../../db/schema');
 function loadFinetuneData({ bookIdInt, userEmail, pageContents, langIsEn }) {
   const figRows = db.prepare(`
     SELECT f.fig_id, f.id AS pk, f.name, f.kurzname, f.typ, f.beschreibung, f.beruf, f.geschlecht, f.sozialschicht,
+           f.praesenz, f.rolle, f.motivation, f.konflikt, f.entwicklung, f.arc, f.aeusseres, f.stimme,
+           f.hintergrund, f.schluesselzitate,
            GROUP_CONCAT(DISTINCT ft.tag) AS tags_csv
     FROM figures f
     LEFT JOIN figure_tags ft ON ft.figure_id = f.id
@@ -95,7 +97,9 @@ function loadFinetuneData({ bookIdInt, userEmail, pageContents, langIsEn }) {
 
   // Figuren-Lebensereignisse
   const figEvtRows = db.prepare(`
-    SELECT fe.figure_id, fe.datum, fe.ereignis, fe.bedeutung, fe.typ
+    SELECT fe.figure_id, fe.datum, fe.datum_label, fe.datum_year, fe.datum_month, fe.datum_day,
+           fe.datum_ende_year, fe.datum_ende_month, fe.datum_ende_day, fe.story_tag, fe.datum_unsicher,
+           fe.ereignis, fe.bedeutung, fe.typ, fe.subtyp, fe.storyline_id, fe.chapter_id, fe.page_id
     FROM figure_events fe
     JOIN figures f ON f.id = fe.figure_id
     WHERE f.book_id = ? AND f.user_email = ?
@@ -104,7 +108,7 @@ function loadFinetuneData({ bookIdInt, userEmail, pageContents, langIsEn }) {
   const eventsByFigPk = new Map();
   for (const r of figEvtRows) {
     if (!eventsByFigPk.has(r.figure_id)) eventsByFigPk.set(r.figure_id, []);
-    eventsByFigPk.get(r.figure_id).push({ datum: r.datum, ereignis: r.ereignis, bedeutung: r.bedeutung, typ: r.typ });
+    eventsByFigPk.get(r.figure_id).push(r);
   }
 
   // Figur-Beziehungen (beide Richtungen abrufen, Paare per Smaller-First dedupen)

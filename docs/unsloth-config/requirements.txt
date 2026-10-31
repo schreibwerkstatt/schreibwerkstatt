@@ -1,40 +1,43 @@
 # Getestet auf CUDA 12.1+ / Python 3.11 / RTX 4000 Ada (Ada Lovelace).
-# Pins sind bewusst gesetzt — Unsloth/TRL/transformers/mistral-common müssen
-# als Tupel zusammenpassen, sonst bricht entweder load_in_4bit, das Chat-
-# Template oder train_on_responses_only.
+# Pins folgen dem offiziellen Unsloth-Notebook für Ministral 3
+# (unslothai/notebooks, Ministral_3_VL_(3B)_Vision.ipynb) — Unsloth/TRL/
+# transformers/mistral-common müssen als Tupel zusammenpassen, sonst bricht
+# entweder load_in_4bit, das Chat-Template oder train_on_responses_only.
 #
-# Ziel-Modell: unsloth/Mistral-Small-3.2-24B-Instruct-2506-unsloth-bnb-4bit
-# (Juni-2025-Release, Tekken-V7-Tokenizer, Pixtral-Vision-Encoder).
+# Ziel-Modell: unsloth/Ministral-3-8B-Instruct-2512-unsloth-bnb-4bit
+# (Dezember-2025-Release, Tekken-Tokenizer, Pixtral-Vision-Encoder).
 
-# Kernkomponenten — Mistral-Small-3.2 braucht transformers >= 4.51
-# (Mistral3ForConditionalGeneration + Pixtral-Vision-Tower), TRL >= 0.15
-# für die SFTTrainer-API mit dem neuen Tokenizer.
-torch==2.5.1
-transformers==4.51.3
-trl==0.15.2
-peft==0.14.0
-accelerate==1.4.0
+# Kernkomponenten — Ministral 3 braucht transformers v5
+# (Mistral3ForConditionalGeneration mit Ministral-3-Konfiguration), TRL 0.22
+# für SFTConfig(max_length=…, dataset_text_field=…).
+transformers==5.3.0
+trl==0.22.2
+peft
+accelerate
 
-# Unsloth — Pin auf Dez-2025-Release, der Mistral-Small-3.2 supportet.
+# Unsloth — torch wird als Abhängigkeit passend mitinstalliert.
 # Falls Studio-UI statt CLI: `pip install unsloth` reicht dort separat.
-unsloth @ git+https://github.com/unslothai/unsloth.git@2025.12.4
+# Upgrade bei Modell-Fehlern: pip install --upgrade --force-reinstall --no-cache-dir --no-deps unsloth unsloth_zoo
+unsloth
+unsloth_zoo
 
 # 4-bit Quantisierung
-bitsandbytes==0.45.0
+bitsandbytes
 
-# Mistral-Common Tokenizer (Tekken-V7 für Mistral-Small-3.2)
-mistral-common>=1.6.0
+# Mistral-Common Tokenizer (Tekken für Ministral 3)
+mistral-common>=1.8.6
 
 # Tokenizer / Sentencepiece (Mistral braucht weiterhin protobuf)
-sentencepiece==0.2.0
-protobuf==4.25.5
+sentencepiece
+protobuf
 
 # Dataset-Handling
-datasets==3.2.0
+datasets==4.3.0
+huggingface_hub>=0.34.0
 
 # GGUF-Export (llama.cpp-Backend, wird beim ersten Aufruf automatisch gebaut)
 # Falls du den Build vermeiden willst: `save_pretrained_gguf` auskommentieren
 # und GGUF manuell via `llama.cpp`'s `convert_hf_to_gguf.py` erzeugen.
 
 # Monitoring (optional)
-tensorboard==2.18.0
+tensorboard

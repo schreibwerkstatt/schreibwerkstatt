@@ -1,7 +1,5 @@
 'use strict';
 
-const { splitSentences } = require('../../lib/text');
-
 // Block 20: Fakten aus chapter_extract_cache
 function buildFactSamples(ctx) {
   const { langIsEn, extractCacheRows, pushQA } = ctx;
@@ -49,40 +47,4 @@ function buildFactSamples(ctx) {
   }
 }
 
-// Block 23: Reverse-Lookups (Satz → Seite/Kapitel)
-function buildReverseLookupSamples(ctx) {
-  const { langIsEn, opts, pageContents, pushQA } = ctx;
-
-  // Distinktive Sätze (mittellang, mindestens ein Grossbuchstabe
-  // mittelstellig als Indikator für Eigennamen) pro Seite sammeln und
-  // als Reverse-Samples emittieren: „In welchem Abschnitt steht …?" und
-  // „Welches Kapitel enthält …?". Cap pro Seite, damit Gleichgewicht.
-  const REV_PER_PAGE = 3 * (opts.biasBoost || 1);
-  const looksDistinctive = (sent) => {
-    if (sent.length < 80 || sent.length > 260) return false;
-    // Enthält mindestens einen Grossbuchstaben nach dem ersten Wort
-    const inner = sent.slice(4);
-    return /[A-ZÄÖÜ]/.test(inner);
-  };
-  for (const p of pageContents) {
-    const sents = splitSentences(p.text);
-    let emitted = 0;
-    for (let i = 0; i < sents.length && emitted < REV_PER_PAGE; i++) {
-      const s = sents[i];
-      if (!looksDistinctive(s)) continue;
-      pushQA('authorChat|revPage|' + p.id + '|' + i,
-        langIsEn ? `In which section does this sentence appear: “${s}”` : `In welchem Abschnitt steht dieser Satz: „${s}“`,
-        langIsEn
-          ? `This sentence is in the section «${p.title}»${p.chapter ? ` in chapter «${p.chapter}»` : ''}.`
-          : `Dieser Satz steht im Abschnitt «${p.title}»${p.chapter ? ` im Kapitel «${p.chapter}»` : ''}.`);
-      if (p.chapter) {
-        pushQA('authorChat|revChap|' + p.id + '|' + i,
-          langIsEn ? `Which chapter contains: “${s}”` : `Welches Kapitel enthält: „${s}“`,
-          langIsEn ? `Chapter «${p.chapter}».` : `Kapitel «${p.chapter}».`);
-      }
-      emitted++;
-    }
-  }
-}
-
-module.exports = { buildFactSamples, buildReverseLookupSamples };
+module.exports = { buildFactSamples };

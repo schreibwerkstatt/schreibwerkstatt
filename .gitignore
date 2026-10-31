@@ -29,3 +29,4 @@ assets/icc/*.icc
 
 # Smoke-Test Wegwerf-DB
 tests/.tmp/
+finetune-exports/

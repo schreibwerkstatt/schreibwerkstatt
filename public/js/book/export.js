@@ -1,4 +1,5 @@
 import { EVT } from '../events.js';
+import { downloadBlob } from '../utils.js';
 // Buch/Kapitel/Seite-Export. Methoden in Alpine.data('exportCard') gespreadet;
 // Root-Zugriffe via window.__app.
 
@@ -58,16 +59,7 @@ export const exportMethods = {
     const cd = r.headers.get('content-disposition') || '';
     const m = /filename="?([^";]+)"?/i.exec(cd);
     const filename = m ? m[1] : fallbackName;
-    const blob = await r.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = filename;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+    downloadBlob(await r.blob(), filename);
   },
 
   _exportEntity() {

@@ -12,6 +12,7 @@
 //   markdown.js  — Chat-Markdown → HTML + Mention/Channel-Dekoration
 //   textarea.js  — Textarea-Höhe nach Inhalt (field-sizing-Fallback), Inline-Edit-Mount
 //   keys.js      — Tastatur-Prädikate (Cmd/Ctrl+S)
+//   download.js  — Download per unsichtbarem Anker (URL oder Blob)
 //
 // `export *` re-exportiert Live-Bindings (z.B. das mutable `CHARS_PER_TOKEN`/
 // `appTimezone`), sodass configureTokenEstimate/configureAppTimezone weiterhin
@@ -27,3 +28,4 @@ export * from './utils/html-replace-rich.js';
 export * from './utils/markdown.js';
 export * from './utils/textarea.js';
 export * from './utils/keys.js';
+export * from './utils/download.js';

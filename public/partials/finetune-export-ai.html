@@ -1,0 +1,71 @@
+<!-- Fine-Tuning-Export: KI-Augmentierung, inkl. der KI-Phasen des Leser-Modells
+     (Ich-Form, Deutungen). Wird in `#partial-finetune-export-ai` der Karte
+     finetune-export.html geladen und erbt deren x-data-Scope. -->
+    <p class="card-form-section-divider card-form-section-divider--note" x-text="$app.t('finetune.ai.lead')"></p>
+
+    <div class="card-form-row">
+      <label for="ft-ai-reverse" class="card-form-label" x-text="$app.t('finetune.ai')"></label>
+      <div class="form-stack">
+        <label class="form-check">
+          <input type="checkbox" id="ft-ai-reverse" name="ft-ai-reverse" x-model="finetuneAiReversePrompts">
+          <span>
+            <span class="form-check-title" x-text="$app.t('finetune.ai.reversePrompts')"></span>
+            <span class="form-check-desc" x-text="$app.t('finetune.ai.reversePrompts.desc')"></span>
+          </span>
+        </label>
+        <label class="form-check">
+          <input type="checkbox" id="ft-ai-factqa" name="ft-ai-factqa" x-model="finetuneAiFactQA">
+          <span>
+            <span class="form-check-title" x-text="$app.t('finetune.ai.factQA')"></span>
+            <span class="form-check-desc" x-text="$app.t('finetune.ai.factQA.desc')"></span>
+          </span>
+        </label>
+        <label class="form-check">
+          <input type="checkbox" id="ft-ai-voice" name="ft-ai-voice" x-model="finetuneAiVoiceRewrite">
+          <span>
+            <span class="form-check-title" x-text="$app.t('finetune.ai.voiceRewrite')"></span>
+            <span class="form-check-desc" x-text="$app.t('finetune.ai.voiceRewrite.desc')"></span>
+          </span>
+        </label>
+        <div class="form-inline">
+          <label class="form-inline-field">
+            <span x-text="$app.t('finetune.ai.reversePromptsPerPage')"></span>
+            <input type="text" id="ft-ai-rev-per-page" name="ft-ai-rev-per-page" x-data="numInput({ step: 1, min: 1, max: 8 })" x-modelable="value" x-model="finetuneAiReversePromptsPerPage" class="form-num">
+          </label>
+          <label class="form-inline-field">
+            <span x-text="$app.t('finetune.ai.factQAPerEntity')"></span>
+            <input type="text" id="ft-ai-qa-per-entity" name="ft-ai-qa-per-entity" x-data="numInput({ step: 1, min: 2, max: 8 })" x-modelable="value" x-model="finetuneAiFactQAPerEntity" class="form-num">
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-form-row">
+      <label for="ft-ai-persona" class="card-form-label" x-text="$app.t('finetune.ai.reader')"></label>
+      <div class="form-stack">
+        <label class="form-check">
+          <input type="checkbox" id="ft-ai-persona" name="ft-ai-persona" x-model="finetuneAiPersona">
+          <span>
+            <span class="form-check-title" x-text="$app.t('finetune.ai.persona')"></span>
+            <span class="form-check-desc" x-text="$app.t('finetune.ai.persona.desc')"></span>
+          </span>
+        </label>
+        <label class="form-check">
+          <input type="checkbox" id="ft-ai-deutung" name="ft-ai-deutung" x-model="finetuneAiDeutung">
+          <span>
+            <span class="form-check-title" x-text="$app.t('finetune.ai.deutung')"></span>
+            <span class="form-check-desc" x-text="$app.t('finetune.ai.deutung.desc')"></span>
+          </span>
+        </label>
+        <div class="form-inline">
+          <label class="form-inline-field">
+            <span x-text="$app.t('finetune.ai.personaPerFigure')"></span>
+            <input type="text" id="ft-ai-persona-per-figure" name="ft-ai-persona-per-figure" x-data="numInput({ step: 1, min: 2, max: 16 })" x-modelable="value" x-model="finetuneAiPersonaPerFigure" class="form-num">
+          </label>
+          <label class="form-inline-field">
+            <span x-text="$app.t('finetune.ai.deutungPerScene')"></span>
+            <input type="text" id="ft-ai-deutung-per-scene" name="ft-ai-deutung-per-scene" x-data="numInput({ step: 1, min: 1, max: 6 })" x-modelable="value" x-model="finetuneAiDeutungPerScene" class="form-num">
+          </label>
+        </div>
+      </div>
+    </div>

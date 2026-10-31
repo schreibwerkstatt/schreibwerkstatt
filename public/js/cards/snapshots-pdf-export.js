@@ -8,7 +8,7 @@
 // Der Job baut das Bundle aus dem selbsttragenden Fassungs-Stand (snapshotToBundle)
 // und nutzt die eingefrorene publication_json der Fassung.
 
-import { fetchJson } from '../utils.js';
+import { fetchJson, downloadHref } from '../utils.js';
 import { startPoll } from './job-helpers.js';
 
 export const snapshotsPdfMethods = {
@@ -94,12 +94,7 @@ export const snapshotsPdfMethods = {
   },
 
   _triggerPdfDownload(jobId, filename) {
-    const a = document.createElement('a');
-    a.href = `/jobs/pdf-export/${jobId}/file`;
-    a.download = filename || 'fassung.pdf';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    downloadHref(`/jobs/pdf-export/${jobId}/file`, filename || 'fassung.pdf');
   },
 
   _resetPdfExport() {

@@ -1,6 +1,6 @@
 'use strict';
 
-// Token-Schätzer für Mistral-Small-3.2-24B (Tekken-V7-Tokenizer, vocab=131k).
+// Token-Schätzer für Ministral 3 / Mistral-Small-3.2 (Tekken-Tokenizer, vocab=131k).
 // Empirisch: DE ≈ 3.3 Zeichen/Token, EN ≈ 4.0 Zeichen/Token. Bewusst
 // konservativ (eher aufrunden), damit `maxSeqTokens`-Filter nicht in
 // Truncation läuft. Tekken-V7 ist byte-level-BPE — bei reinem DE-Fliesstext
@@ -11,7 +11,7 @@ function estimateTokens(text, langIsEn) {
   return Math.ceil(text.length / perToken);
 }
 
-// Mistral-Tekken-V7-Chat-Template (offizielles Mistral-Small-3.2-Format).
+// Mistral-Tekken-Chat-Template (Ministral-3- und Mistral-Small-3.2-Format).
 // Layout pro Mistral-Common-Spec:
 //   <s>[SYSTEM_PROMPT]<sys>[/SYSTEM_PROMPT][INST]<user1>[/INST]<asst1></s>[INST]<user2>[/INST]<asst2></s>
 // Alle Marker ([SYSTEM_PROMPT], [/SYSTEM_PROMPT], [INST], [/INST], <s>, </s>)
@@ -44,9 +44,9 @@ function percentile(sortedNums, p) {
 }
 
 // Empfohlene `max_seq_length` für Unsloth/TRL: nächste Potenz von 2 über p95
-// mit ~10 % Puffer fürs Chat-Template. Min 1024, max 32768 — Mistral-Small-3.2
-// hat 131072 native Kontext, aber 32768 ist VRAM-Sweetspot für 24B-Voll-FT
-// auf 80-GB-Karten resp. grossem LoRA. Wer mehr will, override per opts.
+// mit ~10 % Puffer fürs Chat-Template. Min 1024, max 32768 — Ministral 3
+// hat 262144 native Kontext, aber jenseits von 32768 sprengen die
+// Activations jede Einzel-GPU-QLoRA. Wer mehr will, override per opts.
 function recommendSeqLen(p95) {
   const target = Math.ceil(p95 * 1.1);
   let n = 1024;

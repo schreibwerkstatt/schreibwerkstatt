@@ -1,32 +1,35 @@
-# Ollama-Modelfile für das fine-getunete Mistral-Small-3.2-24B.
-# Vor Benutzung: `BOOK_TITLE` im SYSTEM-Feld auf deinen Buchtitel setzen.
+# Ollama-Modelfile für das fine-getunete Ministral-3-8B-Instruct-2512.
+# Die Fine-Tuning-Karte liefert dieselbe Datei mit dem System-Prompt deines
+# Buchs («Ollama-Modelfile herunterladen») — dort ist nichts mehr anzupassen.
+# Diese Fassung ist das Muster; Generator: public/js/book/finetune-modelfile.js,
+# Gleichstand gegated durch tests/unit/finetune-modelfile.test.mjs.
 #
-# Build:
-#   cd runs/mistral-small32-buch/gguf
-#   ollama create buch-autor -f ../../../Modelfile.example
+# Von Hand: SYSTEM wörtlich wie im Training
+# (routes/jobs/finetune-export/samples/reader/system.js; englische Bücher dort
+# die englische Fassung), FROM auf den Dateinamen aus
+# ls runs/ministral3-8b-buch-final/gguf/.
 #
-# Test:
-#   ollama run buch-autor "Schreibe den Anfang eines neuen Kapitels."
+# Template: Tekken-Chat über .Messages (mehrere Runden wie im Training), ohne
+# literales <s> — llama.cpp setzt BOS selbst, ein zweites hiesse <s><s>.
+# Temperatur 0.7–0.85 für Prosa, 0.4 für Faktenfragen (docs/finetuning.md §4).
+#
+# Bauen (Datei neben die .gguf legen, FROM ist relativ):
+#   cp Modelfile.example runs/ministral3-8b-buch-final/gguf/Modelfile
+#   cd runs/ministral3-8b-buch-final/gguf && ollama create buch-leser -f Modelfile
+# Testen: ollama run buch-leser "Worum geht es in dir?"
 
-FROM ./unsloth.Q4_K_M.gguf
+FROM ./unsloth.Q5_K_M.gguf
 
-# Mistral-Tekken-V7-Template (Mistral-Small-3.2-Instruct-2506). Exakt wie im
-# Training: kein Leerzeichen zwischen [/INST] und der Antwort.
-# System-Prompts kapseln in [SYSTEM_PROMPT]/[/SYSTEM_PROMPT], User-Turns in
-# [INST]/[/INST]. Assistant-Antwort folgt direkt nach [/INST] und endet mit
-# </s>. Unterschied zur alten 8B-Mistral-Vorlage: separate System-Tags.
-TEMPLATE """{{ if .System }}<s>[SYSTEM_PROMPT]{{ .System }}[/SYSTEM_PROMPT][INST]{{ .Prompt }}[/INST]{{ else }}<s>[INST]{{ .Prompt }}[/INST]{{ end }}{{ .Response }}</s>"""
+TEMPLATE """{{- range $i, $_ := .Messages }}
+{{- if eq .Role "system" }}[SYSTEM_PROMPT]{{ .Content }}[/SYSTEM_PROMPT]
+{{- else if eq .Role "user" }}[INST]{{ .Content }}[/INST]
+{{- else if eq .Role "assistant" }}{{ .Content }}</s>
+{{- end }}
+{{- end }}"""
 
-PARAMETER temperature       0.8
-PARAMETER top_p             0.95
-PARAMETER repeat_penalty    1.05
-# Mistral-Small-3.2 kann nativ bis 128k. 32k reicht für Buch-Chat + Lektorat-
-# Calls und spart KV-Cache-RAM. Bei sehr langen Dokumenten hochsetzen.
-PARAMETER num_ctx           32768
+PARAMETER temperature 0.8
+PARAMETER top_p 0.95
+PARAMETER repeat_penalty 1.05
+PARAMETER num_ctx 32768
 
-# System-Prompt muss der System-Line aus dem Training wörtlich entsprechen
-# (routes/jobs/finetune-export/index.js, `unifiedSys`) — sonst "verliert" das
-# Modell die internalisierte Persona. Englische Bücher: „You are the voice of
-# «…». Write, continue, and answer in the author's style and from within this
-# book's world."
-SYSTEM """Du bist die Stimme von «Mein Buchtitel». Schreibe, setze fort und antworte im Stil des Autors und aus der Welt dieses Buchs heraus."""
+SYSTEM """Du bist das Buch «Mein Buchtitel». Leserinnen und Leser sprechen mit dir über deine Geschichte, deine Welt und deine Figuren. Antworte im Ton des Buchs und aus seiner Welt heraus. Möchte jemand mit einer deiner Figuren sprechen, antwortest du als diese Figur in der Ich-Form."""

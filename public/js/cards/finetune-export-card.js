@@ -1,13 +1,15 @@
 // Alpine.data('finetuneExportCard') — Sub-Komponente der Finetune-Export-Karte.
 //
-// State: Typ-Toggles, Längenfenster, Val-Split, Loading/Progress/Status, Stats,
-// Job-ID (für Downloads).
+// Trainiert immer das Leser-Modell (docs/finetuning.md#leser-modell).
+//
+// State: Trainingsprofil, Typ-Toggles, Längenfenster, Val-Split, Loading/Progress/Status, Stats,
+// Zeitpunkt + Veraltet-Flag des gespeicherten Sets.
 // `showFinetuneExportCard` bleibt im Root (Hash-Router + Exklusivität).
 //
-// Default-Profil: Unsloth Studio + Mistral-Small-3.2-24B-QLoRA auf 20-GB-GPU
-// (z.B. RTX 4000 Ada). Ableitungen:
-//   maxChars=4000    → p95 ≈ 1500 Tokens → passt in seq_len=4096
-//   maxSeqTokens=4096 → Studio-Empfehlung für 20-GB-QLoRA (bei OOM auf 2048)
+// Export-Vorgaben kommen aus dem gewählten Trainingsprofil
+// (book/finetune-profiles.js: Basismodell × GPU-Speicher, Default
+// Ministral-3-8B auf 20 GB):
+//   maxChars, maxSeqTokens → Sequenz-Budget des Profils
 //   emitText=false   → Studio rendert das Chat-Template selbst auf Basis des
 //                      gewählten Basemodells; ein vorgerenderter text-Feld-
 //                      String würde kollidieren. Nur einschalten, wenn du
@@ -15,40 +17,47 @@
 //                      erwartet.
 
 import { finetuneExportMethods } from '../book/finetune-export.js';
+import { DEFAULT_FINETUNE_PROFILE_ID, finetuneProfileById } from '../book/finetune-profiles.js';
 import { createCardJobFeature } from './job-feature-card.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { runningJobStatus } from './job-helpers.js';
 
 export function registerFinetuneExportCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
+  const defaultProfile = finetuneProfileById(DEFAULT_FINETUNE_PROFILE_ID);
   window.Alpine.data('finetuneExportCard', () => ({
+    finetuneProfileId:      DEFAULT_FINETUNE_PROFILE_ID,
     finetuneTypeStyle:      true,
     finetuneTypeScene:      true,
     finetuneTypeVerbatim:   true,
     finetuneTypeDialog:     true,
     finetuneTypeAuthorChat: true,
-    finetuneTypeCorrection: true,
     finetuneMinChars:     200,
-    finetuneMaxChars:     4000,
+    finetuneMaxChars:     defaultProfile.maxChars,
     finetuneBiasBoost:    1,
     finetuneMaxTypeShare: 0,   // 0 = kein Typ-Cap; sonst Anteil 0.1–0.95 pro Typ
     finetuneValSplit:     0.1,
     finetuneValSeed:      0,
-    finetuneMaxSeqTokens: 4096,   // Sweet-Spot Mistral-Small-3.2-24B-QLoRA @ 20 GB VRAM
+    finetuneMaxSeqTokens: defaultProfile.seq,
     finetuneEmitText:     false,
     finetuneTruncateLong: true,   // Lange Samples kappen statt droppen
 
     finetuneAiReversePrompts:        false,
     finetuneAiFactQA:                false,
-    finetuneAiReasoningBackfill:     false,
+    finetuneAiVoiceRewrite:          true,
     finetuneAiReversePromptsPerPage: 4,
     finetuneAiFactQAPerEntity:       4,
+    finetuneAiPersona:               true,
+    finetuneAiDeutung:               true,
+    finetuneAiPersonaPerFigure:      8,
+    finetuneAiDeutungPerScene:       2,
 
     finetuneLoading:  false,
     finetuneProgress: 0,
     finetuneStatus:   '',
-    finetuneJobId:    null,
     finetuneStats:    null,
+    finetuneSavedAt:  null,
+    finetuneStale:    false,
 
     _finetunePollTimer: null,
     _lifecycle: null,
@@ -65,7 +74,6 @@ export function registerFinetuneExportCard() {
           job.statusText || 'common.analysisRunning', job.tokensIn, job.tokensOut, job.maxTokensOut,
           job.progress, job.tokensPerSec, job.statusParams,
         );
-        this.finetuneJobId = d.jobId;
         this.startFinetuneExportPoll(d.jobId);
       };
 
@@ -77,8 +85,9 @@ export function registerFinetuneExportCard() {
           finetuneLoading: false,
           finetuneProgress: 0,
           finetuneStatus: '',
-          finetuneJobId: null,
           finetuneStats: null,
+          finetuneSavedAt: null,
+          finetuneStale: false,
         },
         extraListeners: [{ type: 'job:reconnect', handler: onJobReconnect }],
       });
@@ -109,9 +118,11 @@ export function registerFinetuneExportCard() {
         alreadyRunning: 'common.analysisAlreadyRunning',
       },
       progressResetDelay: 400,
+      onOpen() { return this.finetuneLoadSaved(); },
       buildPayload() {
         this.finetuneStats = null;
-        this.finetuneJobId = null;
+        this.finetuneSavedAt = null;
+        this.finetuneStale = false;
         return {
           book_id: parseInt(Alpine.store('nav').selectedBookId),
           book_name: window.__app.selectedBookName,
@@ -121,7 +132,6 @@ export function registerFinetuneExportCard() {
             verbatim:   !!this.finetuneTypeVerbatim,
             dialog:     !!this.finetuneTypeDialog,
             authorChat: !!this.finetuneTypeAuthorChat,
-            correction: !!this.finetuneTypeCorrection,
           },
           min_chars:      Number(this.finetuneMinChars) || 200,
           max_chars:      Number(this.finetuneMaxChars) || 4000,
@@ -135,20 +145,25 @@ export function registerFinetuneExportCard() {
           ai: {
             reverse_prompts:          !!this.finetuneAiReversePrompts,
             fact_qa:                  !!this.finetuneAiFactQA,
-            reasoning_backfill:       !!this.finetuneAiReasoningBackfill,
+            voice_rewrite:            !!this.finetuneAiVoiceRewrite,
             reverse_prompts_per_page: Number(this.finetuneAiReversePromptsPerPage) || 4,
             fact_qa_per_entity:       Number(this.finetuneAiFactQAPerEntity)       || 4,
+            persona:                  !!this.finetuneAiPersona,
+            deutung:                  !!this.finetuneAiDeutung,
+            persona_per_figure:       Number(this.finetuneAiPersonaPerFigure)      || 8,
+            deutung_per_scene:        Number(this.finetuneAiDeutungPerScene)       || 2,
           },
         };
       },
       async onDone(job) {
-        this.finetuneJobId = job.id;
         if (job.result?.empty) {
           this.finetuneStatus = window.__app.t('finetune.empty');
           this.finetuneStats = null;
           return;
         }
         this.finetuneStats = job.result?.stats || null;
+        this.finetuneSavedAt = new Date().toISOString();
+        this.finetuneStale = false;
         this.finetuneStatus = window.__app.t('finetune.done', {
           n: this.finetuneStats?.total ?? 0,
           train: this.finetuneStats?.train ?? 0,

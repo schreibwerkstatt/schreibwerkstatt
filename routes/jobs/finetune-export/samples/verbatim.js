@@ -1,6 +1,6 @@
 'use strict';
 
-const { splitAtSentence } = require('../lib/text');
+const { chunkAtSentence, tailFromSentence } = require('../lib/text');
 
 // Wörtliche Rekonstruktion (Verbatim-Recall) — der stärkste Memorisierungs-
 // Sample-Typ. Anders als `scene` (das Seitentext auf `maxChars` kürzt und im
@@ -14,25 +14,6 @@ function buildVerbatimSamples(ctx) {
     pageContents, chapterKeys, chapterFullTextByKey, chapterNameByKey,
   } = ctx;
   const { minChars, maxFullChars } = opts;
-
-  const sliceAtSentence = (text, maxLen) => {
-    if (text.length <= maxLen) return [text];
-    const out = [];
-    let remaining = text;
-    while (remaining.length > maxLen) {
-      const ratio = maxLen / remaining.length;
-      const [head, rest] = splitAtSentence(remaining, ratio);
-      if (!head.length || head.length === remaining.length) {
-        out.push(remaining.slice(0, maxLen));
-        remaining = remaining.slice(maxLen);
-        break;
-      }
-      out.push(head);
-      remaining = rest;
-    }
-    if (remaining.length > 0) out.push(remaining);
-    return out;
-  };
 
   const push = (id, sourceKey, instr, completion) => {
     samples.push({
@@ -55,7 +36,7 @@ function buildVerbatimSamples(ctx) {
   // vollständige Nominalphrase inkl. Artikel (z.B. „die Seite «X»").
   // `sourceKey` gruppiert alle Slices fürs Train/Val-Splitting auf Kapitel-Ebene.
   const emitChunked = (text, noun, idPrefix, sourceKey) => {
-    const slices = sliceAtSentence(text, maxFullChars);
+    const slices = chunkAtSentence(text, maxFullChars);
     const total = slices.length;
     for (let si = 0; si < total; si++) {
       const slice = slices[si];
@@ -63,7 +44,7 @@ function buildVerbatimSamples(ctx) {
       const partLabel = total > 1
         ? (langIsEn ? `\nPart ${si + 1} of ${total}` : `\nTeil ${si + 1} von ${total}`)
         : '';
-      const ctxTail = si > 0 ? slices[si - 1].slice(-300).trim() : '';
+      const ctxTail = si > 0 ? tailFromSentence(slices[si - 1], 300) : '';
       const ctxBlock = ctxTail
         ? '\n\n' + (langIsEn ? 'Continues verbatim from:\n' : 'Wörtlicher Anschluss an:\n') + ctxTail
         : '';

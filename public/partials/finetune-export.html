@@ -17,7 +17,7 @@
     <div class="card-actions">
       <button type="button" class="icon-btn icon-btn--ghost"
               @click="runFinetuneExport()"
-              :disabled="finetuneLoading || !finetuneAnyTypeSelected() || !$store.nav.selectedBookId"
+              :disabled="finetuneLoading || !$store.nav.selectedBookId"
               :data-tip="finetuneLoading ? $app.t('finetune.generating') : $app.t('finetune.generate')"
               :aria-label="$app.t('finetune.generate')">
         <span x-show="finetuneLoading" class="spinner"></span>
@@ -29,6 +29,23 @@
   <p class="form-lead" x-text="$app.t('finetune.lead')"></p>
 
   <div class="card-form-grid">
+
+    <div x-id="['fld']" class="card-form-row">
+      <label :id="$id('fld')" class="card-form-label" x-text="$app.t('finetune.profile')"></label>
+      <div class="form-stack">
+        <div :aria-labelledby="$id('fld')" x-data="combobox({ placeholder: $app.t('finetune.profile'), compact: false })"
+             x-modelable="value" x-model="finetuneProfileId"
+             x-effect="options = finetuneProfileOptions()"
+             @combobox-change="finetuneApplyProfile($event.detail)"></div>
+        <p class="form-check-desc" x-text="$app.t('finetune.profile.desc')"></p>
+        <div class="row">
+          <button type="button" @click="finetuneDownloadStudioConfig()">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+            <span x-text="$app.t('finetune.profile.download')"></span>
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div class="card-form-row">
       <label for="ft-type-style" class="card-form-label" x-text="$app.t('finetune.types')"></label>
@@ -66,13 +83,6 @@
           <span>
             <span class="form-check-title" x-text="$app.t('finetune.type.authorChat')"></span>
             <span class="form-check-desc" x-text="$app.t('finetune.type.authorChat.desc')"></span>
-          </span>
-        </label>
-        <label class="form-check">
-          <input type="checkbox" id="ft-type-correction" name="ft-type-correction" x-model="finetuneTypeCorrection">
-          <span>
-            <span class="form-check-title" x-text="$app.t('finetune.type.correction')"></span>
-            <span class="form-check-desc" x-text="$app.t('finetune.type.correction.desc')"></span>
           </span>
         </label>
       </div>
@@ -135,44 +145,7 @@
       </div>
     </div>
 
-    <p class="card-form-section-divider card-form-section-divider--note" x-text="$app.t('finetune.ai.lead')"></p>
-
-    <div class="card-form-row">
-      <label for="ft-ai-reverse" class="card-form-label" x-text="$app.t('finetune.ai')"></label>
-      <div class="form-stack">
-        <label class="form-check">
-          <input type="checkbox" id="ft-ai-reverse" name="ft-ai-reverse" x-model="finetuneAiReversePrompts">
-          <span>
-            <span class="form-check-title" x-text="$app.t('finetune.ai.reversePrompts')"></span>
-            <span class="form-check-desc" x-text="$app.t('finetune.ai.reversePrompts.desc')"></span>
-          </span>
-        </label>
-        <label class="form-check">
-          <input type="checkbox" id="ft-ai-factqa" name="ft-ai-factqa" x-model="finetuneAiFactQA">
-          <span>
-            <span class="form-check-title" x-text="$app.t('finetune.ai.factQA')"></span>
-            <span class="form-check-desc" x-text="$app.t('finetune.ai.factQA.desc')"></span>
-          </span>
-        </label>
-        <label class="form-check">
-          <input type="checkbox" id="ft-ai-reasoning" name="ft-ai-reasoning" x-model="finetuneAiReasoningBackfill">
-          <span>
-            <span class="form-check-title" x-text="$app.t('finetune.ai.reasoningBackfill')"></span>
-            <span class="form-check-desc" x-text="$app.t('finetune.ai.reasoningBackfill.desc')"></span>
-          </span>
-        </label>
-        <div class="form-inline">
-          <label class="form-inline-field">
-            <span x-text="$app.t('finetune.ai.reversePromptsPerPage')"></span>
-            <input type="text" id="ft-ai-rev-per-page" name="ft-ai-rev-per-page" x-data="numInput({ step: 1, min: 1, max: 8 })" x-modelable="value" x-model="finetuneAiReversePromptsPerPage" class="form-num">
-          </label>
-          <label class="form-inline-field">
-            <span x-text="$app.t('finetune.ai.factQAPerEntity')"></span>
-            <input type="text" id="ft-ai-qa-per-entity" name="ft-ai-qa-per-entity" x-data="numInput({ step: 1, min: 2, max: 8 })" x-modelable="value" x-model="finetuneAiFactQAPerEntity" class="form-num">
-          </label>
-        </div>
-      </div>
-    </div>
+    <div id="partial-finetune-export-ai"></div>
 
     <div class="card-form-row">
       <label for="ft-max-seq-tokens" class="card-form-label" x-text="$app.t('finetune.unsloth')"></label>
@@ -201,54 +174,5 @@
     </div>
   </div>
 
-  <div x-show="finetuneLoading" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': finetuneProgress + '%' }"></div>
-  </div>
-
-  <div x-show="finetuneStatus" class="card-status" x-html="finetuneStatus"></div>
-
-  <template x-if="finetuneStats && !finetuneLoading">
-    <div class="form-section">
-      <div class="form-stats">
-        <span class="tok-badge tok-neutral" x-text="$app.t('finetune.stats.total', { n: finetuneStats.total })"></span>
-        <span class="tok-badge tok-neutral" x-text="$app.t('finetune.stats.train', { n: finetuneStats.train })"></span>
-        <span class="tok-badge tok-neutral" x-show="finetuneStats.val > 0" x-text="$app.t('finetune.stats.val', { n: finetuneStats.val })"></span>
-        <span class="tok-badge tok-neutral" x-show="finetuneStats.styleCount > 0" x-text="$app.t('finetune.stats.style', { n: finetuneStats.styleCount })"></span>
-        <span class="tok-badge tok-neutral" x-show="finetuneStats.sceneCount > 0" x-text="$app.t('finetune.stats.scene', { n: finetuneStats.sceneCount })"></span>
-        <span class="tok-badge tok-neutral" x-show="finetuneStats.verbatimCount > 0" x-text="$app.t('finetune.stats.verbatim', { n: finetuneStats.verbatimCount })"></span>
-        <span class="tok-badge tok-neutral" x-show="finetuneStats.dialogCount > 0" x-text="$app.t('finetune.stats.dialog', { n: finetuneStats.dialogCount })"></span>
-        <span class="tok-badge tok-neutral" x-show="finetuneStats.authorChatCount > 0" x-text="$app.t('finetune.stats.authorChat', { n: finetuneStats.authorChatCount })"></span>
-        <span class="tok-badge tok-neutral" x-show="finetuneStats.correctionCount > 0" x-text="$app.t('finetune.stats.correction', { n: finetuneStats.correctionCount })"></span>
-        <span class="tok-badge tok-neutral" x-show="finetuneStats.aiAugmentCount > 0" x-text="$app.t('finetune.stats.aiAugment', { n: finetuneStats.aiAugmentCount })"></span>
-        <span class="tok-badge tok-neutral" x-show="finetuneStats.tokensP95 > 0" x-text="$app.t('finetune.stats.tokensP95', { n: finetuneStats.tokensP95 })"></span>
-        <span class="tok-badge tok-neutral" x-show="finetuneStats.tokensMax > 0" x-text="$app.t('finetune.stats.tokensMax', { n: finetuneStats.tokensMax })"></span>
-        <span class="tok-badge tok-neutral" x-show="finetuneStats.recommendedSeqLen > 0" x-text="$app.t('finetune.stats.recommendedSeqLen', { n: finetuneStats.recommendedSeqLen })"></span>
-        <span class="tok-badge tok-med" x-show="finetuneStats.dropped > 0" x-text="$app.t('finetune.stats.dropped', { n: finetuneStats.dropped })"></span>
-        <span class="tok-badge tok-med" x-show="finetuneStats.capped > 0" x-text="$app.t('finetune.stats.capped', { n: finetuneStats.capped })"></span>
-        <span class="tok-badge tok-neutral" x-show="finetuneStats.deduped > 0" x-text="$app.t('finetune.stats.deduped', { n: finetuneStats.deduped })"></span>
-        <span class="tok-badge tok-med" x-show="finetuneStats.balanced > 0" x-text="$app.t('finetune.stats.balanced', { n: finetuneStats.balanced })"></span>
-      </div>
-
-      <div class="row">
-        <button type="button"
-                @click="finetuneDownload('train')"
-                :disabled="!finetuneJobId || (finetuneStats.train ?? 0) === 0">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
-          <span x-text="$app.t('finetune.download.train')"></span>
-          <span class="form-size-hint" x-text="'(' + finetuneFormatBytes(finetuneStats.trainBytes) + ')'" x-show="finetuneStats.trainBytes > 0"></span>
-        </button>
-        <button type="button"
-                @click="finetuneDownload('val')"
-                :disabled="!finetuneJobId || (finetuneStats.val ?? 0) === 0">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
-          <span x-text="$app.t('finetune.download.val')"></span>
-          <span class="form-size-hint" x-text="'(' + finetuneFormatBytes(finetuneStats.valBytes) + ')'" x-show="finetuneStats.valBytes > 0"></span>
-        </button>
-      </div>
-
-      <p class="card-form-hint" x-text="$app.t('finetune.hint.expiry')"></p>
-    </div>
-  </template>
-
-  <div x-show="!finetuneLoading && !finetuneStats && !finetuneStatus" class="muted-msg muted-msg--spaced" x-text="$app.t('finetune.emptyState')"></div>
+  <div id="partial-finetune-export-result"></div>
 </div>

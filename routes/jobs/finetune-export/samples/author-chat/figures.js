@@ -1,6 +1,7 @@
 'use strict';
 
 const { hashSplit } = require('../../lib/names');
+const { eventDetailParts, eventWhen } = require('./event-data');
 
 // Enum-Werte der Analyse (figures.sozialschicht / figures.geschlecht) als Prosa —
 // das Modell soll «gehobenes Bürgertum» lernen, nicht den Schlüssel
@@ -41,19 +42,20 @@ function buildFigureBaseSamples(ctx) {
       if (tags) extras.push(langIsEn ? `Traits: ${tags}.` : `Eigenschaften: ${tags}.`);
     }
     const answer = [desc, ...extras].join(' ');
+    const voice = { key: 'fig:' + f.fig_id, kind: 'figure', name: f.name };
     // Alle Paraphrasen pro Figur → gleiche Fakten mehrmals sehen → bessere
     // Memorisierung der Buchwelt (Ziel: Figur als «Realität» akzeptieren).
     const idxs = pickVariants('fig|' + f.fig_id, figQuestions, figQuestions.length);
     for (const idx of idxs) {
       const q = figQuestions[idx].replace('{name}', f.name);
-      pushQA('authorChat|fig|' + f.fig_id + '|' + idx, q, answer);
+      pushQA('authorChat|fig|' + f.fig_id + '|' + idx, q, answer, undefined, voice);
     }
     // Zusatz-Frage mit Kurzname als Zielnamen (wenn vorhanden), damit das
     // Modell beide Namen-Varianten kennt.
     if (f.kurzname && f.kurzname !== f.name && f.kurzname.trim().length >= 2) {
       const altIdx = Math.floor(hashSplit('figAlt|' + f.fig_id, seed) * figQuestions.length);
       const q = figQuestions[altIdx].replace('{name}', f.kurzname);
-      pushQA('authorChat|figAlt|' + f.fig_id, q, answer);
+      pushQA('authorChat|figAlt|' + f.fig_id, q, answer, undefined, voice);
     }
   }
 
@@ -160,7 +162,8 @@ function buildFigureBaseSamples(ctx) {
 
 // Block 17+18+19: Lebensereignisse + Auftritte + Dialogstil
 function buildFigureMetaSamples(ctx) {
-  const { langIsEn, figRows, eventsByFigPk, appearancesByFigPk, dialogsByFigure, pushQA } = ctx;
+  const { langIsEn, figRows, eventsByFigPk, appearancesByFigPk, dialogsByFigure, pushQA,
+          chMap, storylineNameById } = ctx;
 
   // ── Figuren-Lebensereignisse ─────────────────────────────────────────
   // Pro figure_events-Eintrag ein gezielter Fakt + eine aggregierte Antwort
@@ -172,15 +175,42 @@ function buildFigureMetaSamples(ctx) {
     if (!evts.length) continue;
     for (let j = 0; j < evts.length; j++) {
       const e = evts[j];
-      const parts = [e.ereignis];
-      if (e.datum)     parts.push(langIsEn ? `(${e.datum})` : `(${e.datum})`);
-      if (e.bedeutung) parts.push('— ' + e.bedeutung);
+      const ereignis = (e.ereignis || '').trim().replace(/[.\s]+$/, '');
+      if (!ereignis) continue;
+      const kapitel = (e.chapter_id != null && chMap[e.chapter_id]) || '';
+      const when = eventWhen(e, langIsEn).when;
+      const parts = [ereignis + '.', ...eventDetailParts(e, {
+        langIsEn,
+        chapterNames: kapitel ? [kapitel] : [],
+        storyline: storylineNameById.get(e.storyline_id) || '',
+      })];
+      if (e.bedeutung) parts.push((langIsEn ? 'Why it matters: ' : 'Bedeutung: ') + e.bedeutung);
       const answer = parts.join(' ');
       pushQA('authorChat|figEvt|' + f.fig_id + '|' + j,
         langIsEn
-          ? `What happens to ${f.name} ${e.datum ? `around ${e.datum}` : `during the story`}?`
-          : `Was passiert mit ${f.name}${e.datum ? ` (${e.datum})` : ' im Verlauf der Geschichte'}?`,
+          ? `What happens to ${f.name} ${when ? `around ${when}` : `during the story`}?`
+          : `Was passiert mit ${f.name}${when ? ` (${when})` : ' im Verlauf der Geschichte'}?`,
         answer);
+      pushQA('authorChat|figEvtWhat|' + f.fig_id + '|' + j,
+        langIsEn ? `Tell me about «${ereignis}» in ${f.name}'s life.` : `Erzähl mir von «${ereignis}» in ${f.name}s Leben.`,
+        answer);
+      if (kapitel) {
+        pushQA('authorChat|figEvtCh|' + f.fig_id + '|' + j,
+          langIsEn ? `In which chapter does ${f.name} experience «${ereignis}»?` : `In welchem Kapitel erlebt ${f.name} «${ereignis}»?`,
+          langIsEn ? `${f.name} experiences «${ereignis}» in chapter «${kapitel}».` : `${f.name} erlebt «${ereignis}» im Kapitel «${kapitel}».`);
+      }
+      if (when) {
+        pushQA('authorChat|figEvtWhen|' + f.fig_id + '|' + j,
+          langIsEn ? `When does ${f.name} experience «${ereignis}»?` : `Wann erlebt ${f.name} «${ereignis}»?`,
+          `${ereignis}: ${when}.`);
+      }
+      if (when && (e.subtyp === 'geburt' || e.subtyp === 'tod')) {
+        pushQA('authorChat|figLife|' + e.subtyp + '|' + f.fig_id,
+          e.subtyp === 'geburt'
+            ? (langIsEn ? `When was ${f.name} born?` : `Wann wurde ${f.name} geboren?`)
+            : (langIsEn ? `When did ${f.name} die?` : `Wann ist ${f.name} gestorben?`),
+          `${f.name}, ${e.subtyp === 'geburt' ? (langIsEn ? 'born' : 'geboren') : (langIsEn ? 'died' : 'gestorben')}: ${when}.`);
+      }
     }
     const allEvtsList = evts.slice(0, 8)
       .map(e => `${e.datum ? e.datum + ': ' : ''}${e.ereignis}${e.bedeutung ? ' (' + e.bedeutung + ')' : ''}`)

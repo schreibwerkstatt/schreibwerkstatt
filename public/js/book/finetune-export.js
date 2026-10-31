@@ -1,21 +1,94 @@
 // Fine-Tuning-Export: Methods werden in Alpine.data('finetuneExportCard')
 // gespreadet. Root-Zugriffe via window.__app.
 
+import { fetchJson, tzOpts, downloadHref, downloadBlob } from '../utils.js';
+import { FINETUNE_PROFILES, finetuneProfileById, buildStudioYaml } from './finetune-profiles.js';
+import { buildModelfile } from './finetune-modelfile.js';
+
 export const finetuneExportMethods = {
-  finetuneDownload(kind) {
-    if (!this.finetuneJobId) return;
-    if (kind !== 'train' && kind !== 'val') return;
-    const url = `/jobs/finetune-export/${encodeURIComponent(this.finetuneJobId)}/${kind}.jsonl`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+  // Zuletzt gespeichertes Set des Buchs (überlebt Neustarts, liegt serverseitig
+  // auf der Platte). `stale` = Buch seither geändert → Warnung, kein Auto-Rerun.
+  async finetuneLoadSaved() {
+    const bookId = Alpine.store('nav').selectedBookId;
+    if (!bookId) return;
+    try {
+      const { export: saved } = await fetchJson(`/jobs/finetune-export/latest?book_id=${encodeURIComponent(bookId)}`);
+      if (Alpine.store('nav').selectedBookId !== bookId || this.finetuneLoading) return;
+      this.finetuneStats = saved?.stats || null;
+      this.finetuneSavedAt = saved?.createdAt || null;
+      this.finetuneStale = !!saved?.stale;
+    } catch (e) {
+      console.error('[finetune] gespeicherter Export:', e);
+    }
   },
 
-  finetuneAnyTypeSelected() {
-    return !!(this.finetuneTypeStyle || this.finetuneTypeScene || this.finetuneTypeVerbatim || this.finetuneTypeDialog || this.finetuneTypeAuthorChat || this.finetuneTypeCorrection);
+  finetuneSavedLabel() {
+    if (!this.finetuneSavedAt) return '';
+    const date = new Date(this.finetuneSavedAt).toLocaleString(undefined, tzOpts({ dateStyle: 'medium', timeStyle: 'short' }));
+    return window.__app.t('finetune.hint.saved', { date });
+  },
+
+  finetuneDownload(kind) {
+    const bookId = Alpine.store('nav').selectedBookId;
+    if (!bookId || !this.finetuneStats) return;
+    if (!['train', 'val', 'all', 'eval'].includes(kind)) return;
+    downloadHref(`/jobs/finetune-export/${kind}.jsonl?book_id=${encodeURIComponent(bookId)}`);
+  },
+
+  finetuneProfileOptions() {
+    const t = window.__app.t.bind(window.__app);
+    return FINETUNE_PROFILES.map(p => ({
+      value: p.id,
+      label: t('finetune.profile.option', { model: p.name, vram: p.vramGb }),
+    }));
+  },
+
+  // Profilwechsel setzt die Export-Vorgaben, die zum Sequenz-Budget des
+  // Profils passen. Studio rendert das Template selbst → kein text-Feld.
+  // `id` aus dem Event: x-model zieht erst nach `combobox-change` nach.
+  finetuneApplyProfile(id) {
+    this.finetuneProfileId = id;
+    const p = finetuneProfileById(id);
+    this.finetuneMaxSeqTokens = p.seq;
+    this.finetuneMaxChars = p.maxChars;
+    this.finetuneEmitText = false;
+  },
+
+  // max_seq_length folgt dem Export-Feld, nicht dem Profil: Training und
+  // Export-Filter müssen dasselbe Budget sehen, auch wenn der User es
+  // nach der Profilwahl von Hand ändert.
+  finetuneDownloadStudioConfig() {
+    const t = window.__app.t.bind(window.__app);
+    const p = finetuneProfileById(this.finetuneProfileId);
+    const yaml = buildStudioYaml(p, {
+      maxSeqTokens: Number(this.finetuneMaxSeqTokens) || 0,
+      header: [
+        t('finetune.profile.yaml.title', { profile: t('finetune.profile.option', { model: p.name, vram: p.vramGb }) }),
+        t('finetune.profile.yaml.model', { model: p.model }),
+        t('finetune.profile.yaml.order'),
+        t('finetune.profile.yaml.eval'),
+      ],
+    });
+    downloadBlob(new Blob([yaml], { type: 'application/yaml;charset=utf-8' }), 'studio-config.yaml');
+  },
+
+  // System-Prompt aus dem gespeicherten Export (wörtlich wie im Training).
+  // Sets von vor dieser Funktion tragen ihn nicht → Knopf ausgeblendet.
+  finetuneDownloadModelfile() {
+    const st = this.finetuneStats;
+    if (!st?.systemPrompt) return;
+    const t = window.__app.t.bind(window.__app);
+    const p = finetuneProfileById(this.finetuneProfileId);
+    const text = buildModelfile({
+      systemPrompt: st.systemPrompt,
+      header: [
+        t('finetune.modelfile.title', { book: window.__app.selectedBookName || '', model: p.name }),
+        t('finetune.modelfile.from'),
+        t('finetune.modelfile.system'),
+        t('finetune.modelfile.build'),
+      ],
+    });
+    downloadBlob(new Blob([text], { type: 'text/plain;charset=utf-8' }), 'Modelfile');
   },
 
   finetuneFormatBytes(n) {

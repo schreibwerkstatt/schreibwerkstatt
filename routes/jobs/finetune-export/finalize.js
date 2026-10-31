@@ -4,7 +4,6 @@ const crypto = require('crypto');
 const { estimateTokens, renderMistralChat, percentile, recommendSeqLen } = require('./lib/tokens');
 const { hashSplit } = require('./lib/names');
 const { splitAtSentence } = require('./lib/text');
-const { storeFinetuneResult } = require('./lib/store');
 
 const sha1 = (s) => crypto.createHash('sha1').update(s).digest('hex');
 
@@ -28,18 +27,20 @@ function balanceCap(typeCounts, share) {
 
 // Token-Stats berechnen, optional nach `maxSeqTokens` filtern, exakte Dubletten
 // entfernen, optional pro Sample-Typ deckeln, train/val auf Quell-Ebene
-// (`sourceKey`) aufteilen, deterministisch shuffeln, JSONL serialisieren und im
-// Result-Store ablegen.
+// (`sourceKey`) aufteilen, deterministisch shuffeln und JSONL serialisieren.
 //
-// Gibt `stats`-Objekt zurück, das in completeJob gepackt wird.
-function finalizeFinetuneSamples(jobId, ctx) {
-  const { samples, opts, langIsEn, counts, bookName } = ctx;
+// Gibt `{ stats, trainJsonl, valJsonl, allJsonl }` zurück; `stats` geht in
+// completeJob, die JSONL in den Platten-Store (lib/store.js). `allJsonl` ist
+// train + val gemeinsam gemischt — für den zweiten Trainingslauf, der die
+// Holdout-Kapitel mitlernt (docs/finetuning.md §3); leer ohne val.
+function finalizeFinetuneSamples(ctx) {
+  const { samples, opts, langIsEn } = ctx;
   const { valSplit, valSeed, maxSeqTokens, emitText, truncateLong } = opts;
   const maxTypeShare = Math.max(0, Math.min(0.95, Number(opts.maxTypeShare) || 0));
 
   // ── Token-Budget pro Sample (für Stats + Filter) ──────────────────────
   // Pro Sample: Summe aller Nachrichten + fester Template-Overhead. Mistral-
-  // Tekken-V7 (Mistral-Small-3.2) encoded die Marker als atomare Single-
+  // Tekken (Ministral 3 / Mistral-Small-3.2) encoded die Marker als atomare Single-
   // Tokens: <s>=1, [SYSTEM_PROMPT]=1, [/SYSTEM_PROMPT]=1, [INST]=1,
   // [/INST]=1, </s>=1 → real ~6 Tokens. 20 ist 3× konservativ und deckt
   // Newlines/Whitespace-Variationen mit ab.
@@ -169,14 +170,15 @@ function finalizeFinetuneSamples(jobId, ctx) {
     .map(([, s]) => s);
   const trainOut = shuffle(trainArr);
   const valOut = shuffle(valArr);
+  const allOut = valOut.length ? shuffle([...trainArr, ...valArr]) : [];
 
   // Per-Typ-Zählung aus dem FINALEN kept (nach Filter/Dedup/Balance) — das
   // spiegelt, was tatsächlich exportiert wird, nicht die Build-Rohzahlen.
-  const exported = { style: 0, scene: 0, verbatim: 0, dialog: 0, authorChat: 0, correction: 0, aiAugment: 0 };
+  const exported = { style: 0, scene: 0, verbatim: 0, dialog: 0, authorChat: 0, aiAugment: 0, reader: 0 };
   for (const { s } of kept) if (s.type in exported) exported[s.type]++;
 
   // JSONL-Line: immer `messages`-Feld. Mit `emitText=true` zusätzlich ein
-  // vorgerendertes `text`-Feld (Mistral-Tekken-V7-Template, Mistral-Small-3.2-
+  // vorgerendertes `text`-Feld (Mistral-Tekken-Template, Ministral-3-
   // konform), damit Unsloth-Userinnen `SFTTrainer(dataset_text_field="text")`
   // ohne `formatting_func` nutzen können. `messages` bleibt erhalten — manche
   // Tools (TRL ChatML-Loader) wollen das.
@@ -191,6 +193,7 @@ function finalizeFinetuneSamples(jobId, ctx) {
 
   const trainJsonl = toJsonl(trainOut);
   const valJsonl   = toJsonl(valOut);
+  const allJsonl   = toJsonl(allOut);
   const stats = {
     total: kept.length,
     dropped: droppedCount,
@@ -204,10 +207,11 @@ function finalizeFinetuneSamples(jobId, ctx) {
     verbatimCount: exported.verbatim,
     dialogCount: exported.dialog,
     authorChatCount: exported.authorChat,
-    correctionCount: exported.correction,
     aiAugmentCount: exported.aiAugment,
+    readerCount: exported.reader,
     trainBytes: Buffer.byteLength(trainJsonl, 'utf8'),
     valBytes:   Buffer.byteLength(valJsonl,   'utf8'),
+    allBytes:   Buffer.byteLength(allJsonl,   'utf8'),
     tokensP50, tokensP95, tokensMax,
     recommendedSeqLen,
     maxSeqTokens: maxSeqTokens || null,
@@ -215,8 +219,7 @@ function finalizeFinetuneSamples(jobId, ctx) {
     emitText,
   };
 
-  storeFinetuneResult(jobId, { trainJsonl, valJsonl, bookName });
-  return stats;
+  return { stats, trainJsonl, valJsonl, allJsonl };
 }
 
 module.exports = { finalizeFinetuneSamples, balanceCap };

@@ -1,6 +1,6 @@
 'use strict';
 
-const { extractName, escapeRe } = require('../../lib/names');
+const { extractName, nameRegex } = require('../../lib/names');
 const { splitParagraphs } = require('../../lib/text');
 
 // Block 3+4: Orte-Q&A einzeln + Doppel-/Tripel-Verknüpfungen + Reisen
@@ -58,7 +58,8 @@ function buildLocationSamples(ctx) {
     const idxs = pickVariants('ort|' + l.loc_id, ortQuestions, ortQuestions.length);
     for (const idx of idxs) {
       const q = ortQuestions[idx].replace('{name}', l.name);
-      pushQA('authorChat|ort|' + l.loc_id + '|' + idx, q, fullAnswer);
+      pushQA('authorChat|ort|' + l.loc_id + '|' + idx, q, fullAnswer, undefined,
+        { key: 'ort:' + l.loc_id, kind: 'location', name: l.name });
     }
 
     // Spezifische Q&A für jede Facette, damit das Modell gezielt abrufbar lernt.
@@ -252,7 +253,7 @@ function buildLocationPassageSamples(ctx) {
   const PASSAGE_MAX_PER_LOC = 4 * (opts.biasBoost || 1);
   for (const l of locRows) {
     if (!l.name || l.name.length < 3) continue;
-    const nameRe = new RegExp('\\b' + escapeRe(l.name) + '\\b', 'i');
+    const nameRe = nameRegex(l.name);
     const found = [];
     for (const p of pageContents) {
       if (found.length >= PASSAGE_MAX_PER_LOC) break;

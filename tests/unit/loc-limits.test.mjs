@@ -70,7 +70,6 @@ const CATEGORIES = [
       'public/partials/book-editor.html': 358,
       'public/partials/epub-export.html': 298,
       'public/partials/plot-board-grid.html': 289,
-      'public/partials/finetune-export.html': 254,
     },
   },
   {

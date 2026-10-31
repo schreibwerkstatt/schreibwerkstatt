@@ -1,6 +1,14 @@
 'use strict';
 
-const { splitParagraphs, splitSentences, splitAtSentence } = require('../lib/text');
+const { splitParagraphs, splitSentences, splitAtSentence, clipAtSentence, tailFromSentence, chunkAtSentence } = require('../lib/text');
+
+// Fortsetzungs-Instruktion der Stil-Samples; die Testprompts (lib/eval-prompts.js)
+// stellen ihre Fortsetzungsfrage wortgleich.
+function stylePrefix(langIsEn) {
+  return langIsEn
+    ? "Continue the following passage in the author's style:\n\n"
+    : 'Setze den folgenden Abschnitt im Stil des Autors fort:\n\n';
+}
 
 function buildStyleSamples(ctx) {
   const {
@@ -11,9 +19,7 @@ function buildStyleSamples(ctx) {
   } = ctx;
   const { minChars, maxChars } = opts;
 
-  const prefix = langIsEn
-    ? "Continue the following passage in the author's style:\n\n"
-    : 'Setze den folgenden Abschnitt im Stil des Autors fort:\n\n';
+  const prefix = stylePrefix(langIsEn);
   const contextPrefix = langIsEn
     ? "Given this passage, continue in the author's style. Write only the next paragraph:\n\n"
     : 'Setze den folgenden Abschnitt fort. Schreibe nur den nächsten Absatz im Stil des Autors:\n\n';
@@ -32,24 +38,28 @@ function buildStyleSamples(ctx) {
     const pageCh = 'ch:' + (p.chapter_id ?? 0);
 
     // ── Intra-Absatz-Splits (Sliding-Windows) ─────────────────────────
+    // Absätze über `maxChars` laufen in Satzgrenzen-Stücken durch, damit
+    // weder ein Wort abgeschnitten noch der Rest des Absatzes verloren geht.
     for (let pi = 0; pi < paragraphs.length; pi++) {
       const para = paragraphs[pi];
       if (para.length < minChars) continue;
-      const clipped = para.length > maxChars ? para.slice(0, maxChars) : para;
-      for (let ri = 0; ri < splitRatios.length; ri++) {
-        const [first, second] = splitAtSentence(clipped, splitRatios[ri]);
-        if (first.length < 60 || second.length < 60) continue;
-        samples.push({
-          id: 'style|' + p.id + '|' + pi + '|r' + ri,
-          type: 'style',
-          sourceKey: pageCh,
-          messages: [
-            { role: 'system', content: unifiedSys },
-            { role: 'user', content: prefix + first },
-            { role: 'assistant', content: second },
-          ],
-        });
-        counts.style++;
+      const chunks = chunkAtSentence(para, maxChars);
+      for (let ci = 0; ci < chunks.length; ci++) {
+        for (let ri = 0; ri < splitRatios.length; ri++) {
+          const [first, second] = splitAtSentence(chunks[ci], splitRatios[ri]);
+          if (first.length < 60 || second.length < 60) continue;
+          samples.push({
+            id: 'style|' + p.id + '|' + pi + '|r' + ri + (ci ? '|c' + ci : ''),
+            type: 'style',
+            sourceKey: pageCh,
+            messages: [
+              { role: 'system', content: unifiedSys },
+              { role: 'user', content: prefix + first },
+              { role: 'assistant', content: second },
+            ],
+          });
+          counts.style++;
+        }
       }
     }
 
@@ -65,10 +75,8 @@ function buildStyleSamples(ctx) {
       const ctxStart = Math.max(0, i - 3);
       const context = paragraphs.slice(ctxStart, i).join('\n\n');
       if (context.length < 200) continue;
-      const ctxClipped = context.length > CTX_MAX_PROMPT
-        ? context.slice(context.length - CTX_MAX_PROMPT)
-        : context;
-      const completion = next.length > maxChars ? next.slice(0, maxChars) : next;
+      const ctxClipped = tailFromSentence(context, CTX_MAX_PROMPT);
+      const completion = clipAtSentence(next, maxChars);
       if (completion.length < 80) continue;
       samples.push({
         id: 'styleCtx|' + p.id + '|' + i,
@@ -121,8 +129,8 @@ function buildStyleSamples(ctx) {
     const textA = chapterFullTextByKey.get(kA) || '';
     const textB = chapterFullTextByKey.get(kB) || '';
     if (textA.length < 400 || textB.length < 400) continue;
-    const tailA = splitAtSentence(textA.slice(-Math.min(textA.length, 1200)), 0.2)[1] || textA.slice(-600);
-    const headB = splitAtSentence(textB.slice(0, Math.min(textB.length, 1200)), 0.8)[0] || textB.slice(0, 600);
+    const tailA = tailFromSentence(textA, 1000);
+    const headB = clipAtSentence(textB, 1000);
     if (tailA.length < 120 || headB.length < 120) continue;
     const nameA = chapterNameByKey.get(kA);
     const nameB = chapterNameByKey.get(kB);
@@ -140,7 +148,7 @@ function buildStyleSamples(ctx) {
       messages: [
         { role: 'system', content: unifiedSys },
         { role: 'user',   content: prompt },
-        { role: 'assistant', content: headB.length > maxChars ? headB.slice(0, maxChars) : headB },
+        { role: 'assistant', content: clipAtSentence(headB, maxChars) },
       ],
     });
     counts.style++;
@@ -164,8 +172,8 @@ function buildStyleSamples(ctx) {
       const txtB = pageTextById.get(sB.page_id) || '';
       if (txtA.length < 200 || txtB.length < 200) continue;
       if (sA.page_id === sB.page_id) continue;
-      const tailA = txtA.slice(-Math.min(txtA.length, 800));
-      const headB = txtB.slice(0, Math.min(txtB.length, 800));
+      const tailA = tailFromSentence(txtA, 800);
+      const headB = clipAtSentence(txtB, 800);
       const prompt = (langIsEn
         ? `End of scene «${sA.titel || ''}»:\n\n${tailA}\n\nContinue with scene «${sB.titel || ''}»:`
         : `Ende der Szene «${sA.titel || ''}»:\n\n${tailA}\n\nFahre fort mit der Szene «${sB.titel || ''}»:`);
@@ -200,10 +208,8 @@ function buildStyleSamples(ctx) {
       if (next.length < minChars) continue;
       const context = allParas.slice(i - WIN, i).join('\n\n');
       if (context.length < 300) continue;
-      const ctxClipped = context.length > Math.floor(maxChars * 2)
-        ? context.slice(context.length - Math.floor(maxChars * 2))
-        : context;
-      const completion = next.length > maxChars ? next.slice(0, maxChars) : next;
+      const ctxClipped = tailFromSentence(context, Math.floor(maxChars * 2));
+      const completion = clipAtSentence(next, maxChars);
       if (completion.length < 80) continue;
       samples.push({
         id: 'chapWin|' + k + '|' + i,
@@ -220,4 +226,4 @@ function buildStyleSamples(ctx) {
   }
 }
 
-module.exports = { buildStyleSamples };
+module.exports = { buildStyleSamples, stylePrefix };

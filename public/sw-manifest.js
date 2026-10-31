@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "90f6aded00aa0d81";
+self.__SHELL_BUILD = "4faac080e9bdebad";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -313,6 +313,8 @@ self.__SHELL_MANIFEST = [
   "/js/book/figuren-schulweg.js",
   "/js/book/figuren.js",
   "/js/book/finetune-export.js",
+  "/js/book/finetune-modelfile.js",
+  "/js/book/finetune-profiles.js",
   "/js/book/heartbeat-tracker.js",
   "/js/book/heartbeat.js",
   "/js/book/history.js",
@@ -802,6 +804,7 @@ self.__SHELL_MANIFEST = [
   "/js/prompts/expose.js",
   "/js/prompts/figur-alter.js",
   "/js/prompts/figur-werkstatt.js",
+  "/js/prompts/finetune-reader.js",
   "/js/prompts/finetune.js",
   "/js/prompts/geocode.js",
   "/js/prompts/headline.js",
@@ -928,6 +931,7 @@ self.__SHELL_MANIFEST = [
   "/js/utils.js",
   "/js/utils/befund-severity.js",
   "/js/utils/date.js",
+  "/js/utils/download.js",
   "/js/utils/escape.js",
   "/js/utils/format.js",
   "/js/utils/html-container.js",
@@ -1090,6 +1094,8 @@ self.__SHELL_MANIFEST = [
   "/partials/figuren-presence-strip.html",
   "/partials/figuren-presence.html",
   "/partials/figuren.html",
+  "/partials/finetune-export-ai.html",
+  "/partials/finetune-export-result.html",
   "/partials/finetune-export.html",
   "/partials/folder-import-manuscript.html",
   "/partials/folder-import.html",

@@ -96,6 +96,9 @@ RSYNC_EXCLUDES=(
   # Ohne Exclude loescht --delete ihn bei jedem Deploy, und jede Einmal-Migration
   # (veraPDF, Ghostscript, EPUBCheck …) liefe beim naechsten Deploy erneut.
   --exclude='.deploy-migrations-applied'
+  # Gespeicherte Fine-Tuning-Sets (routes/jobs/finetune-export/lib/store.js) —
+  # liegen neben der DB und müssen Deploys überleben wie sie.
+  --exclude='finetune-exports'
 )
 
 # Demo-Instanz: der Golden-Snapshot und die beiden Marker liegen IM

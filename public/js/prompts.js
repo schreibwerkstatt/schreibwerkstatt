@@ -474,11 +474,18 @@ export {
   buildFinetuneAugmentSystem,
   buildFinetuneReversePromptsPrompt,
   buildFinetuneFactQAPrompt,
-  buildFinetuneReasoningBackfillPrompt,
+  buildFinetuneVoiceRewritePrompt,
   SCHEMA_FT_REVERSE_PROMPTS,
   SCHEMA_FT_FACT_QA,
-  SCHEMA_FT_REASONING,
+  SCHEMA_FT_VOICE_REWRITE,
 } from './prompts/finetune.js';
+
+export {
+  buildFinetunePersonaPrompt,
+  buildFinetuneDeutungPrompt,
+  SCHEMA_FT_PERSONA,
+  SCHEMA_FT_DEUTUNG,
+} from './prompts/finetune-reader.js';
 
 export {
   exposeProfil,

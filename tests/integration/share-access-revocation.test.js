@@ -243,12 +243,11 @@ test('GET /share/:token: Reloads desselben Besuchers legen keine neuen share_vie
 
 // ── 2: Downloads + buchgebundene persönliche Zeilen ────────────────────────
 
-test('Export-Downloads prüfen den Buchzugriff erneut (docx/epub/finetune)', async () => {
+test('Export-Downloads prüfen den Buchzugriff erneut (docx/epub)', async () => {
   const { createJob } = require('../../routes/jobs/shared');
   const cases = [
     ['docx-export', (id) => `/jobs/docx-export/${id}/file`],
     ['epub-export', (id) => `/jobs/epub-export/${id}/file`],
-    ['finetune-export', (id) => `/jobs/finetune-export/${id}/train.jsonl`],
   ];
   for (const [type, url] of cases) {
     bookAccess.grantAccess(BOOK, EDITOR, 'editor', OWNER);
@@ -259,6 +258,16 @@ test('Export-Downloads prüfen den Buchzugriff erneut (docx/epub/finetune)', asy
     r = await api('GET', url(id), null, EDITOR);
     assert.equal(r.status, 403, `${type}: ohne Zugriff → 403`);
   }
+});
+
+test('Finetune-Download prüft den Buchzugriff erneut', async () => {
+  const url = `/jobs/finetune-export/train.jsonl?book_id=${BOOK}`;
+  bookAccess.grantAccess(BOOK, EDITOR, 'editor', OWNER);
+  let r = await api('GET', url, null, EDITOR);
+  assert.equal(r.status, 404, 'mit Zugriff → noch kein gespeichertes Set');
+  bookAccess.revokeAccess(BOOK, EDITOR);
+  r = await api('GET', url, null, EDITOR);
+  assert.equal(r.status, 403, 'ohne Zugriff → 403');
 });
 
 test('GET /history/rueckblick-entry/:id und /chat/session/:id: nach Entzug 403', async () => {

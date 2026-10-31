@@ -1,13 +1,14 @@
 'use strict';
 
 const { extractName } = require('../../lib/names');
+const { clipAtSentence } = require('../../lib/text');
 
 // Block 5: Szenen-Q&A + POV-Prosa + Reverse-Lookup + Stimmungs-getrieben
 function buildSceneQASamples(ctx) {
   const {
     langIsEn, opts,
     sceneRows, figsByScene, locsByScene, figById, locById,
-    pageTextById,
+    pageTextById, eventsBySceneId,
     sceneQuestions, pushQA, pickVariants,
   } = ctx;
   const maxChars = opts.maxChars;
@@ -23,6 +24,8 @@ function buildSceneQASamples(ctx) {
     const locNames = locIds.map(id => extractName(id, locById)).filter(Boolean);
     if (locNames.length) parts.push(langIsEn ? `Setting: ${locNames.join(', ')}.` : `Schauplatz: ${locNames.join(', ')}.`);
     if (s.kapitel) parts.push(langIsEn ? `Chapter: ${s.kapitel}.` : `Kapitel: ${s.kapitel}.`);
+    const evts = (eventsBySceneId.get(s.id) || []).map(e => e.ereignis);
+    if (evts.length) parts.push(langIsEn ? `Events: ${evts.join('; ')}.` : `Ereignisse: ${evts.join('; ')}.`);
     const answer = parts.join(' ');
     const idxs = pickVariants('scene|' + s.id, sceneQuestions, sceneQuestions.length);
     for (const idx of idxs) {
@@ -39,7 +42,7 @@ function buildSceneQASamples(ctx) {
     if (!s.titel || !s.page_id) continue;
     const text = pageTextById.get(s.page_id);
     if (!text || text.length < 200) continue;
-    const completion = text.length > maxChars ? text.slice(0, maxChars) : text;
+    const completion = clipAtSentence(text, maxChars);
     const figIds = figsByScene.get(s.id) || [];
     for (const fid of figIds.slice(0, 3)) {
       const fname = extractName(fid, figById);

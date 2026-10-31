@@ -88,6 +88,57 @@ function splitAtSentence(text, ratio) {
 
 const splitHalfAtSentence = (text) => splitAtSentence(text, 0.5);
 
+// Satz- und Absatzgrenzen (Index des ersten Zeichens danach), aufsteigend.
+// Absatzgrenzen zählen mit: eine Überschrift oder ein Dialogabsatz ohne
+// Schlusspunkt ist trotzdem ein sauberer Schnittpunkt.
+function cutIndices(text) {
+  const out = new Set(sentenceBoundaryIndices(text));
+  const re = /\n+/g;
+  let m;
+  while ((m = re.exec(text)) !== null) out.add(m.index + m[0].length);
+  return [...out].sort((a, b) => a - b);
+}
+
+// Kürzt `text` auf höchstens `maxLen` Zeichen, an der letzten Satz-/Absatz-
+// grenze davor. Ein harter Zeichen-Schnitt brächte dem Modell bei, mitten im
+// Wort aufzuhören. Liegt keine Grenze in der hinteren Hälfte, fällt der Schnitt
+// auf die letzte Wortgrenze.
+function clipAtSentence(text, maxLen) {
+  if (!text || text.length <= maxLen) return text || '';
+  let pick = -1;
+  for (const b of cutIndices(text)) { if (b <= maxLen) pick = b; else break; }
+  if (pick >= maxLen * 0.5) return text.slice(0, pick).trim();
+  const ws = text.slice(0, maxLen + 1).search(/\s\S*$/);
+  return (ws >= maxLen * 0.5 ? text.slice(0, ws) : text.slice(0, maxLen)).trim();
+}
+
+// Gegenstück für Text-Enden: höchstens `maxLen` Zeichen vom Ende, beginnend an
+// der ersten Satz-/Absatzgrenze im Fenster (sonst an einer Wortgrenze).
+function tailFromSentence(text, maxLen) {
+  if (!text || text.length <= maxLen) return text || '';
+  const from = text.length - maxLen;
+  const b = cutIndices(text).find(i => i >= from);
+  if (b !== undefined && b <= from + maxLen * 0.5) return text.slice(b).trim();
+  const ws = text.slice(from).search(/\s/);
+  return (ws >= 0 && ws <= maxLen * 0.5 ? text.slice(from + ws) : text.slice(from)).trim();
+}
+
+// Zerlegt `text` an Satzgrenzen in Stücke von höchstens `maxLen` Zeichen
+// (ohne Tail-Verlust). Ein einzelner Satz über `maxLen` wird an einer
+// Wortgrenze geteilt.
+function chunkAtSentence(text, maxLen) {
+  const out = [];
+  let rest = (text || '').trim();
+  while (rest.length > maxLen) {
+    const head = clipAtSentence(rest, maxLen);
+    if (!head) break;
+    out.push(head);
+    rest = rest.slice(head.length).trim();
+  }
+  if (rest) out.push(rest);
+  return out;
+}
+
 // Dialog-Zitate (DE + EN-Typografie + ASCII). Bewusst konservativ — matched nur
 // Zitate innerhalb eines Absatzes (keine Zeilenumbrüche), damit keine
 // mehrseitigen False-Positives entstehen.
@@ -137,5 +188,8 @@ module.exports = {
   splitSentences,
   splitAtSentence,
   splitHalfAtSentence,
+  clipAtSentence,
+  tailFromSentence,
+  chunkAtSentence,
   extractDialogs,
 };

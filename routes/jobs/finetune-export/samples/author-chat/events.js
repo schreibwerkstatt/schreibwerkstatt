@@ -1,196 +1,53 @@
 'use strict';
 
-const { db } = require('../../../../../db/schema');
-const { extractName, escapeRe } = require('../../lib/names');
-
-// Block 6-11: Zeitstrahl-Events + Tripel + Pair-Frames
+// Block 6-11: Zeitstrahl-Events + Tripel + Pair-Frames. Die Ereignisse kommen
+// angereichert aus ./event-data.js (Szenen, Schauplätze, Strang, Zeitspanne).
 function buildEventSamples(ctx) {
-  const {
-    langIsEn,
-    bookIdInt, userEmail,
-    figRows, figById, locRows,
-    chaptersByLocPk,
-    eventQuestions, pushQA, pickVariants,
-  } = ctx;
+  const { langIsEn, events, locRows, eventQuestions, pushQA, pickVariants } = ctx;
+  const enrichedEvents = events;
 
-  // ── Zeitstrahl-Q&A (angereichert) ─────────────────────────────────────
-  // Ereignisse als zweite zentrale Säule der Buchwelt — alle verfügbaren
-  // Felder (typ, figuren, kapitel, seiten) einfliessen lassen und pro
-  // Ereignis mehrere spezialisierte Fragen stellen.
-  const evtRows = db.prepare(
-    'SELECT id, ereignis, datum, typ, bedeutung FROM zeitstrahl_events WHERE book_id = ? AND user_email = ? ORDER BY sort_order'
-  ).all(bookIdInt, userEmail || '');
-  // Junction-Maps (Mig 74): event_id → [chapter_name|page_name|figur_name]
-  const _zeChByEvt = new Map();
-  for (const r of db.prepare(`
-    SELECT zec.event_id, c.chapter_name AS name
-    FROM zeitstrahl_event_chapters zec
-    JOIN zeitstrahl_events ze ON ze.id = zec.event_id
-    LEFT JOIN chapters c ON c.chapter_id = zec.chapter_id
-    WHERE ze.book_id = ? AND ze.user_email = ?
-    ORDER BY zec.event_id, zec.sort_order
-  `).all(bookIdInt, userEmail || '')) {
-    if (!_zeChByEvt.has(r.event_id)) _zeChByEvt.set(r.event_id, []);
-    if (r.name) _zeChByEvt.get(r.event_id).push(r.name);
-  }
-  const _zePgByEvt = new Map();
-  for (const r of db.prepare(`
-    SELECT zep.event_id, p.page_name AS name
-    FROM zeitstrahl_event_pages zep
-    JOIN zeitstrahl_events ze ON ze.id = zep.event_id
-    LEFT JOIN pages p ON p.page_id = zep.page_id
-    WHERE ze.book_id = ? AND ze.user_email = ?
-    ORDER BY zep.event_id, zep.sort_order
-  `).all(bookIdInt, userEmail || '')) {
-    if (!_zePgByEvt.has(r.event_id)) _zePgByEvt.set(r.event_id, []);
-    if (r.name) _zePgByEvt.get(r.event_id).push(r.name);
-  }
-  const _zeFgByEvt = new Map();
-  for (const r of db.prepare(`
-    SELECT zef.event_id, COALESCE(f.name, zef.figur_name) AS name
-    FROM zeitstrahl_event_figures zef
-    JOIN zeitstrahl_events ze ON ze.id = zef.event_id
-    LEFT JOIN figures f ON f.id = zef.figure_id
-    WHERE ze.book_id = ? AND ze.user_email = ?
-    ORDER BY zef.event_id, zef.sort_order
-  `).all(bookIdInt, userEmail || '')) {
-    if (!_zeFgByEvt.has(r.event_id)) _zeFgByEvt.set(r.event_id, []);
-    if (r.name) _zeFgByEvt.get(r.event_id).push(r.name);
-  }
-  for (let i = 0; i < evtRows.length; i++) {
-    const ev = evtRows[i];
-    const ereignis = (ev.ereignis || '').trim();
-    if (!ereignis) continue;
-    const kapitelArr = _zeChByEvt.get(ev.id) || [];
-    const seitenArr  = _zePgByEvt.get(ev.id) || [];
-    const figNames   = _zeFgByEvt.get(ev.id) || [];
-
-    const parts = [ereignis + '.'];
-    if (ev.datum)     parts.push(langIsEn ? `When: ${ev.datum}.` : `Zeitpunkt: ${ev.datum}.`);
-    if (ev.typ)       parts.push(langIsEn ? `Type: ${ev.typ}.` : `Art: ${ev.typ}.`);
-    if (figNames.length) {
-      parts.push(langIsEn
-        ? `Characters involved: ${figNames.slice(0, 8).join(', ')}.`
-        : `Beteiligte Figuren: ${figNames.slice(0, 8).join(', ')}.`);
-    }
-    if (kapitelArr.length) {
-      parts.push(langIsEn
-        ? `In chapter(s): ${kapitelArr.slice(0, 5).join(', ')}.`
-        : `In Kapitel: ${kapitelArr.slice(0, 5).join(', ')}.`);
-    }
-    if (seitenArr.length) {
-      parts.push(langIsEn
-        ? `In section(s): ${seitenArr.slice(0, 5).join(', ')}.`
-        : `In Abschnitt(en): ${seitenArr.slice(0, 5).join(', ')}.`);
-    }
-    if (ev.bedeutung) parts.push((langIsEn ? 'Why it matters: ' : 'Bedeutung: ') + ev.bedeutung);
-    const fullAnswer = parts.join(' ');
-
-    // Haupt-Q&A: mehrere Paraphrasen mit voller Antwort
-    const idxs = pickVariants('evt|' + i, eventQuestions, eventQuestions.length);
-    for (const idx of idxs) {
+  // ── Zeitstrahl-Q&A ───────────────────────────────────────────────────
+  // Pro Ereignis die Vollantwort in mehreren Paraphrasen plus gezielte
+  // Sub-Fragen je Facette.
+  for (const e of events) {
+    const { i, ereignis } = e;
+    for (const idx of pickVariants('evt|' + i, eventQuestions, eventQuestions.length)) {
       const q = eventQuestions[idx].replace('{ereignis}', ereignis);
-      pushQA('authorChat|evt|' + i + '|' + idx, q, fullAnswer);
+      pushQA('authorChat|evt|' + i + '|' + idx, q, e.fullAnswer);
     }
-
-    // Gezielte Sub-Fragen pro Facette
-    if (figNames.length) {
+    if (e.figs.length) {
       pushQA('authorChat|evt-fig|' + i,
         langIsEn ? `Who is involved in «${ereignis}»?` : `Wer ist bei «${ereignis}» dabei?`,
-        figNames.join(', '));
+        e.figs.map(f => f.name).join(', '));
     }
-    if (kapitelArr.length) {
+    if (e.kapitel.length) {
       pushQA('authorChat|evt-ch|' + i,
         langIsEn ? `In which chapter does «${ereignis}» happen?` : `In welchem Kapitel passiert «${ereignis}»?`,
-        kapitelArr.join(', '));
+        langIsEn ? `«${ereignis}» happens in chapter ${e.kapitel.join(', ')}.` : `«${ereignis}» passiert im Kapitel ${e.kapitel.join(', ')}.`);
     }
-    if (ev.datum) {
+    if (e.datum) {
       pushQA('authorChat|evt-when|' + i,
         langIsEn ? `When does «${ereignis}» happen?` : `Wann passiert «${ereignis}»?`,
-        ev.datum);
+        langIsEn ? `«${ereignis}» happens ${e.datum}.` : `«${ereignis}»: ${e.datum}.`);
     }
-    if (ev.bedeutung) {
+    if (e.bedeutung) {
       pushQA('authorChat|evt-sig|' + i,
         langIsEn ? `What's the significance of «${ereignis}»?` : `Welche Bedeutung hat «${ereignis}»?`,
-        ev.bedeutung);
+        e.bedeutung);
     }
-    if (ev.typ) {
+    const art = [e.typ, e.subtypLabel].filter(Boolean).join(', ');
+    if (art) {
       pushQA('authorChat|evt-typ|' + i,
         langIsEn ? `What type of event is «${ereignis}»?` : `Was für eine Art Ereignis ist «${ereignis}»?`,
-        ev.typ);
+        langIsEn ? `«${ereignis}» is an event of the type ${art}.` : `«${ereignis}» ist ein Ereignis der Art ${art}.`);
     }
-  }
-
-  // ── Ereignisse × Orte × Figuren (Doppel-Verknüpfung) ─────────────────
-  // zeitstrahl_events hat kein Orts-Feld → Orte ableiten via:
-  //   (a) Kapitel-Schnittmenge mit location_chapters
-  //   (b) Namens-Erwähnung in ereignis/bedeutung-Text
-  // Ziel: pro Event reiche Tripel (Event, Figur, Ort) als Samples
-  // erzeugen, plus inverse Aggregate (welche Events spielen am Ort X /
-  // welche Events erlebt Figur Y / Schnittmenge Figur×Ort).
-  const locsByChapterName = new Map();
-  for (const l of locRows) {
-    for (const ch of (chaptersByLocPk.get(l.pk) || [])) {
-      const key = (ch || '').toLowerCase();
-      if (!key) continue;
-      if (!locsByChapterName.has(key)) locsByChapterName.set(key, []);
-      locsByChapterName.get(key).push(l);
-    }
-  }
-  // Enriched events: { ereignis, datum, typ, bedeutung, figs:[{fig_id,name}], locs:[{pk,name}], kapitel:[], fullAnswer }
-  const enrichedEvents = [];
-  for (let i = 0; i < evtRows.length; i++) {
-    const ev = evtRows[i];
-    const ereignis = (ev.ereignis || '').trim();
-    if (!ereignis) continue;
-    const kapitelArr = _zeChByEvt.get(ev.id) || [];
-    const figNamesAll = _zeFgByEvt.get(ev.id) || [];
-    const figRefs = figNamesAll.map(name => {
-      const match = figRows.find(f => f.name === name || f.kurzname === name);
-      return match ? { fig_id: match.fig_id, name: match.name } : { fig_id: null, name };
-    });
-    const locSet = new Map();
-    for (const ch of kapitelArr) {
-      for (const l of (locsByChapterName.get(ch.toLowerCase()) || [])) {
-        locSet.set(l.pk, l);
-      }
-    }
-    const haystack = ((ev.ereignis || '') + ' ' + (ev.bedeutung || '')).toLowerCase();
-    for (const l of locRows) {
-      if (!l.name || l.name.length < 3) continue;
-      const re = new RegExp('\\b' + escapeRe(l.name) + '\\b', 'i');
-      if (re.test(haystack)) locSet.set(l.pk, l);
-    }
-    const locs = [...locSet.values()];
-    // Vollantwort wie im Hauptblock (Datum/Typ/Figuren/Kapitel/Seiten/Bedeutung) — gespiegelt.
-    const seitenArr = _zePgByEvt.get(ev.id) || [];
-    const figNames = figRefs.map(f => f.name);
-    const parts = [ereignis + '.'];
-    if (ev.datum)      parts.push(langIsEn ? `When: ${ev.datum}.` : `Zeitpunkt: ${ev.datum}.`);
-    if (ev.typ)        parts.push(langIsEn ? `Type: ${ev.typ}.` : `Art: ${ev.typ}.`);
-    if (figNames.length) parts.push(langIsEn
-      ? `Characters involved: ${figNames.slice(0, 8).join(', ')}.`
-      : `Beteiligte Figuren: ${figNames.slice(0, 8).join(', ')}.`);
-    if (locs.length) parts.push(langIsEn
-      ? `Locations: ${locs.slice(0, 6).map(l => l.name).join(', ')}.`
-      : `Schauplätze: ${locs.slice(0, 6).map(l => l.name).join(', ')}.`);
-    if (kapitelArr.length) parts.push(langIsEn
-      ? `In chapter(s): ${kapitelArr.slice(0, 5).join(', ')}.`
-      : `In Kapitel: ${kapitelArr.slice(0, 5).join(', ')}.`);
-    if (seitenArr.length) parts.push(langIsEn
-      ? `In section(s): ${seitenArr.slice(0, 5).join(', ')}.`
-      : `In Abschnitt(en): ${seitenArr.slice(0, 5).join(', ')}.`);
-    if (ev.bedeutung)  parts.push((langIsEn ? 'Why it matters: ' : 'Bedeutung: ') + ev.bedeutung);
-    const fullAnswer = parts.join(' ');
-    enrichedEvents.push({ i, ereignis, datum: ev.datum, typ: ev.typ, bedeutung: ev.bedeutung,
-                          kapitel: kapitelArr, figs: figRefs, locs, fullAnswer });
   }
 
   // Pro-Event Q&A mit Orts-Bezug
   for (const e of enrichedEvents) {
     // Wo passiert das Ereignis?
     if (e.locs.length) {
-      const locList = e.locs.slice(0, 6).map(l => l.name).join(', ');
+      const locList = e.locs.map(l => l.name).join(', ');
       pushQA('authorChat|evt-loc|' + e.i,
         langIsEn ? `Where does «${e.ereignis}» take place?` : `Wo findet «${e.ereignis}» statt?`,
         locList);
@@ -423,27 +280,6 @@ function buildEventSamples(ctx) {
       chrono);
   }
 
-  // ── POV-Prosa pro Event×Figur ────────────────────────────────────────
-  // Anders als evt-figDetail (das nur fullAnswer wiederholt): Antwort-Frame
-  // erzwingt Ich-/Er-Perspektive in Prosa, Modell soll POV-Verschiebung
-  // lernen. Antwort bleibt fullAnswer, aber Prompt rahmt klar als Prosa-
-  // Aufgabe → Trainings-Signal kommt aus dem Prompt-Framing.
-  for (const e of enrichedEvents) {
-    for (const fg of e.figs.slice(0, 4)) {
-      const fkey = fg.fig_id || fg.name.toLowerCase();
-      pushQA('authorChat|evtPov|' + e.i + '|' + fkey,
-        langIsEn
-          ? `Tell «${e.ereignis}» from ${fg.name}'s point of view.`
-          : `Erzähle «${e.ereignis}» aus ${fg.name}s Sicht.`,
-        e.fullAnswer);
-      pushQA('authorChat|evtPovInner|' + e.i + '|' + fkey,
-        langIsEn
-          ? `What goes through ${fg.name}'s mind during «${e.ereignis}»?`
-          : `Was geht ${fg.name} während «${e.ereignis}» durch den Kopf?`,
-        e.bedeutung || e.fullAnswer);
-    }
-  }
-
   if (persoenlichEvents.length) {
     const personByFig = new Map();
     for (const e of persoenlichEvents) {
@@ -490,9 +326,8 @@ function buildEventSamples(ctx) {
   };
   const fmtWhenWhere = (datum, ortName, bedeutung) => {
     const parts = [];
-    if (datum && ortName)       parts.push(langIsEn ? `In ${datum}, at ${ortName}.` : `Im ${datum}, an ${ortName}.`);
-    else if (datum)             parts.push(langIsEn ? `In ${datum}.` : `Im ${datum}.`);
-    else if (ortName)           parts.push(langIsEn ? `At ${ortName}.` : `An ${ortName}.`);
+    if (datum)                  parts.push(langIsEn ? `When: ${datum}.` : `Zeitpunkt: ${datum}.`);
+    if (ortName)                parts.push(langIsEn ? `Where: ${ortName}.` : `Ort: ${ortName}.`);
     if (bedeutung)              parts.push(bedeutung);
     return parts.join(' ');
   };

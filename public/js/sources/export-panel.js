@@ -13,7 +13,7 @@
 // „Nur belegte" ist buch-skopiert (cite_count der Buchliste) und gilt darum
 // nur mit gewaehlten Buechern.
 
-import { fetchJson } from '../utils.js';
+import { fetchJson, downloadBlob } from '../utils.js';
 import { CITATION_STYLES } from './format.js';
 import { exportSources, exportFileMeta, EXPORT_FORMATS, STYLED_FORMATS } from './export.js';
 import { hasAnyTag } from './fields.js';
@@ -182,15 +182,6 @@ export const sourcesExportMethods = {
       ? this.srcExportTags.join('-')
       : (chips.length === 1 ? chips[0].label : window.__app.t('sources.export.fileBase'));
     const filename = `${_slug(base) || 'quellen'}.${meta.ext}`;
-    const blob = new Blob([r.text], { type: `${meta.mime};charset=utf-8` });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    downloadBlob(new Blob([r.text], { type: `${meta.mime};charset=utf-8` }), filename);
   },
 };
